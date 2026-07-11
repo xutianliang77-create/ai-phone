@@ -95,7 +95,7 @@ class ApiSessionEventSink implements SessionEventSink {
         ...(typeof event.billableSeconds === "number"
           ? { billableSeconds: event.billableSeconds }
           : {}),
-      });
+      }, 3);
     }
   }
 
@@ -103,7 +103,18 @@ class ApiSessionEventSink implements SessionEventSink {
     await this.post("/internal/realtime/segments", body);
   }
 
-  private async post(path: string, body: unknown) {
+  private async post(path: string, body: unknown, attempts = 1) {
+    for (let attempt = 1; attempt <= attempts; attempt += 1) {
+      try {
+        await this.postOnce(path, body);
+        return;
+      } catch (error) {
+        if (attempt === attempts) throw error;
+      }
+    }
+  }
+
+  private async postOnce(path: string, body: unknown) {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), this.options.timeoutMs);
     try {

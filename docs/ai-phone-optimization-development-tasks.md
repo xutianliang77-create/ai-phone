@@ -1,6 +1,6 @@
 # ai phone 优化开发任务清单
 
-版本：v1.0  
+版本：v1.1
 日期：2026-07-11  
 关联：`docs/domestic-app-detailed-functional-design.md`、`docs/ai-phone-translation-technical-design.md`、`docs/domestic-design-review-action-plan.md`
 
@@ -40,6 +40,11 @@
 | OPT-DEP-001 | 服务器+手机两层拓扑 | 统一服务器基地址、删除 Mac 运行依赖 | 无 | 停止 Mac 服务后在线链路仍正常 |
 | OPT-DEP-002 | 单服务器发布单元 | API、Gateway、Worker、LiveKit、模型、数据统一部署 | OPT-DEP-001 | 一份 server.env 可启动和检查全部服务器组件 |
 | OPT-DEP-003 | 手机配置边界门禁 | App 只持有服务器公开地址 | OPT-DEP-001 | App 配置无 Mac IP、模型端口和内部密钥 |
+
+当前实现状态：
+
+- `OPT-RT-001`：代码和自动化门禁完成。
+- `OPT-RT-002`：代码和自动化门禁完成；iPhone 飞行模式、后台终止和弱网真机验收待执行。
 
 ## 3. P1 灰度任务
 

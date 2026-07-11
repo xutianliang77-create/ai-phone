@@ -16,23 +16,28 @@ import type { RealtimeProvider } from "../providers/realtime-provider.js";
 import {
   asrCorrectionTermsForPacks,
   asrHotwordsForTerminology,
-  mergeTerminologyWithDomainPacks,
 } from "../domain/domain-lexicon.js";
 import { createSessionEventSink } from "../sessions/session-event-sink.js";
-import { fetchSessionTerminology } from "../sessions/session-terminology.js";
+import { loadTerminologyForSession } from "../sessions/session-domain-terminology.js";
 import {
-  createSession,
+  attachSession,
   deleteSession,
   getSession,
+  sessionBillableSeconds,
   transitionStatus,
 } from "../sessions/session-manager.js";
 import { createUsageBalanceClient } from "../usage/usage-balance-client.js";
 import { createUsageTickDecision } from "../usage/usage-ticker.js";
 import { HttpTtsSynthesizer } from "../tts/http-tts-synthesizer.js";
 import { emitRealtimeTtsOutputForSession } from "../tts/realtime-tts-output.js";
-import { flushProviderSession, handleControlEvent } from "./session-control-handler.js";
+import { handleControlEvent } from "./session-control-handler.js";
+import { RealtimeSessionFinalizer } from "./realtime-session-finalizer.js";
+import { RealtimeConnectionCleanup } from "./realtime-connection-cleanup.js";
+import { DisconnectFinalizerRegistry } from "../sessions/disconnect-finalizer-registry.js";
+import { RealtimeEventDispatcher } from "./realtime-event-dispatcher.js";
 
 const router = new ProviderRouter();
+const disconnectGraceMs = 45_000;
 
 export { normalizeClientTextLanguage } from "../protocol/client-text-language.js";
 
@@ -49,6 +54,10 @@ export function startWebSocketServer() {
   const sessionEventSink = createSessionEventSink(env);
   const usageBalanceClient = createUsageBalanceClient(env);
   const ttsSynthesizer = new HttpTtsSynthesizer(env);
+  const disconnectFinalizers = new DisconnectFinalizerRegistry(
+    disconnectGraceMs,
+    (error) => realtimeLogger.error({ error }, "Deferred session finalization failed"),
+  );
 
   server.on("connection", async (ws, request) => {
     const url = new URL(request.url ?? "", `http://${request.headers.host}`);
@@ -63,7 +72,18 @@ export function startWebSocketServer() {
       return;
     }
 
-    const session = createSession(claims);
+    const attachment = attachSession(claims);
+    if (!attachment) {
+      send(ws, buildError("bad_event", "Realtime session cannot be resumed", {
+        sessionId: claims.sessionId,
+        stage: "session",
+        retryable: false,
+      }));
+      ws.close();
+      return;
+    }
+    const { session, generation } = attachment;
+    disconnectFinalizers.cancel(session.id);
     let provider: RealtimeProvider;
     try {
       provider = router.selectProvider(env);
@@ -81,8 +101,17 @@ export function startWebSocketServer() {
         asrCorrections,
       });
     } catch {
-      transitionStatus(session.id, "failed");
-      deleteSession(session.id, session);
+      const current = getSession(session.id);
+      if (current === session && current.connectionGeneration === generation) {
+        transitionStatus(session.id, "failed");
+        await sessionEventSink.record({
+          type: "session.ended",
+          sessionId: session.id,
+          reason: "connection_error",
+          billableSeconds: sessionBillableSeconds(session),
+        }).catch(() => undefined);
+        deleteSession(session.id, session);
+      }
       send(ws, buildError("provider_unavailable", "Realtime provider is unavailable", {
         sessionId: session.id,
         stage: "provider",
@@ -93,24 +122,28 @@ export function startWebSocketServer() {
       return;
     }
 
-    const sendRealtime = (event: ServerRealtimeEvent) => {
-      send(ws, event);
-      void sessionEventSink.record(event).catch((error) => {
+    const eventDispatcher = new RealtimeEventDispatcher({
+      sendClient: (event) => send(ws, event),
+      eventSink: sessionEventSink,
+      onSyncError: (event, error) => {
         realtimeLogger.warn({
           error,
           sessionId: "sessionId" in event ? event.sessionId : session.id,
           eventType: event.type,
         }, "Realtime session event sync failed");
-      });
-      emitRealtimeTtsOutputForSession({
-        event,
-        sessionId: session.id,
-        voiceOutput: session.claims.voiceOutput,
-        voice: session.claims.voice,
-        synthesizer: ttsSynthesizer,
-        send: sendRealtime,
-      });
-    };
+      },
+      afterSend: (event) => {
+        emitRealtimeTtsOutputForSession({
+          event,
+          sessionId: session.id,
+          voiceOutput: session.claims.voiceOutput,
+          voice: session.claims.voice,
+          synthesizer: ttsSynthesizer,
+          send: eventDispatcher.send,
+        });
+      },
+    });
+    const sendRealtime = eventDispatcher.send;
 
     sendRealtime({ type: "session.started", sessionId: session.id });
     let controlQueue = Promise.resolve();
@@ -129,27 +162,24 @@ export function startWebSocketServer() {
         }));
       },
     });
+    const finalizer = new RealtimeSessionFinalizer({
+      sessionId: session.id,
+      provider,
+      audioBatcher,
+      send: sendRealtime,
+      drainSessionSync: () => eventDispatcher.drain(),
+      onError: (stage, error) => {
+        realtimeLogger.warn({ error, stage, sessionId: session.id },
+          "Realtime pipeline flush failed during finalization");
+      },
+    });
 
     const endRealtimeSession = async (
       reason: SessionEndReason,
       remainingSeconds?: number,
     ) => {
-      const activeSession = getSession(session.id);
-      if (!activeSession) return;
-      const ending = transitionStatus(session.id, "ending");
-      if (!ending?.transition.accepted || !ending.transition.changed) return;
-      audioBatcher.stopAccepting();
-      await audioBatcher.flush();
-      await flushProviderSession(provider, session.id, sendRealtime);
-      transitionStatus(session.id, "ended");
-      sendRealtime({
-        type: "session.ended",
-        sessionId: session.id,
-        reason,
-        billableSeconds: session.billableSeconds,
-        ...(typeof remainingSeconds === "number" ? { remainingSeconds } : {}),
-      });
-      ws.close();
+      await finalizer.finalize(reason, remainingSeconds);
+      if (ws.readyState === 1) ws.close();
     };
 
     const usageInterval = setInterval(() => {
@@ -232,42 +262,48 @@ export function startWebSocketServer() {
         });
     });
 
-    ws.on("close", async () => {
+    let connectionError = false;
+    const connectionCleanup = new RealtimeConnectionCleanup({
+      session,
+      generation,
+      finalizer,
+      provider,
+      sessionSync: eventDispatcher,
+      disconnectFinalizers,
+      closeClient: () => { if (ws.readyState === 1) ws.close(); },
+      onError: (stage, error) => realtimeLogger.warn(
+        { error, stage, sessionId: session.id },
+        "Realtime connection cleanup failed",
+      ),
+    });
+    const cleanupConnection = async () => {
       clearInterval(usageInterval);
       clearAudioFrameLog(session.id);
       clearTextSegmentLog(session.id);
       ttsSynthesizer.closeSession(session.id);
       await controlQueue.catch(() => undefined);
-      await audioBatcher.close();
-      await provider.closeSession(session.id);
-      deleteSession(session.id, session);
+      const reason: SessionEndReason = connectionError
+        ? "connection_error"
+        : "connection_closed";
+      await connectionCleanup.run(reason);
+    };
+    ws.on("error", (error) => {
+      connectionError = true;
+      realtimeLogger.warn({ error, sessionId: session.id },
+        "Realtime client connection failed");
+      void cleanupConnection();
     });
+    ws.on("close", () => { void cleanupConnection(); });
   });
 
   httpServer.listen(env.port, () => {
     realtimeLogger.info({ port: env.port }, "Realtime gateway started");
   });
-  server.on("close", () => httpServer.close());
+  server.on("close", () => {
+    disconnectFinalizers.close();
+    httpServer.close();
+  });
   return server;
-}
-
-async function loadTerminologyForSession(
-  session: ReturnType<typeof createSession>,
-  env: ReturnType<typeof loadEnv>,
-) {
-  try {
-    return mergeTerminologyWithDomainPacks(
-      await fetchSessionTerminology(session.claims, env),
-      env.domainLexiconPacks,
-    );
-  } catch (error) {
-    realtimeLogger.warn({
-      error,
-      sessionId: session.id,
-      termbaseId: session.claims.termbaseId,
-    }, "Realtime terminology fetch failed");
-    return mergeTerminologyWithDomainPacks([], env.domainLexiconPacks);
-  }
 }
 
 async function handleTextSegment(

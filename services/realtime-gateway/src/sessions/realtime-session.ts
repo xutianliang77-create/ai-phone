@@ -5,7 +5,7 @@ import type {
 
 export type RealtimeSessionStatus = Extract<
   RealtimeSessionState,
-  "active" | "paused" | "ending" | "ended" | "failed"
+  "connecting" | "active" | "paused" | "ending" | "ended" | "failed"
 >;
 
 export interface RealtimeSession {
@@ -14,5 +14,8 @@ export interface RealtimeSession {
   claims: RealtimeTokenClaims;
   status: RealtimeSessionStatus;
   startedAt: number;
+  activeStartedAt?: number;
+  accumulatedActiveMs: number;
+  connectionGeneration: number;
   billableSeconds: number;
 }

@@ -189,6 +189,33 @@ describe("session event sink", () => {
       },
     ]);
   });
+
+  it("retries final session settlement after transient API failures", async () => {
+    var attempts = 0;
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async () => {
+      attempts += 1;
+      return new Response("{}", { status: attempts < 3 ? 503 : 200 });
+    };
+
+    try {
+      const sink = createSessionEventSink({
+        ...baseEnv(),
+        sessionEventSink: "api",
+        apiBaseUrl: "http://127.0.0.1:3100",
+      });
+      await sink.record({
+        type: "session.ended",
+        sessionId: "sess_retry",
+        reason: "connection_closed",
+        billableSeconds: 12,
+      });
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+
+    expect(attempts).toBe(3);
+  });
 });
 
 function baseEnv(): RealtimeEnv {

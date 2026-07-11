@@ -59,6 +59,41 @@ void main() {
     expect(repository.resumedSessionIds, isEmpty);
     expect(provider.startCalls, 1);
   });
+
+  test('finalizes an active session when the app is detached', () async {
+    final repository = _FakeRealtimeRepository();
+    final provider = _LifecycleAsrProvider();
+    final controller = RealtimeController(
+      repository: repository,
+      audioCapture: _NoopAudioCapture(),
+      mobileAsrProvider: provider,
+      config: _deviceAsrConfig(),
+    );
+
+    await controller.start();
+    await controller.handleLifecycleState(AppLifecycleState.detached);
+
+    expect(controller.status, RealtimeStatus.ended);
+    expect(repository.endedSessionIds, <String>['sess_1']);
+    controller.dispose();
+  });
+
+  test('finalizes an active session before controller disposal completes',
+      () async {
+    final repository = _FakeRealtimeRepository();
+    final controller = RealtimeController(
+      repository: repository,
+      audioCapture: _NoopAudioCapture(),
+      mobileAsrProvider: _LifecycleAsrProvider(),
+      config: _deviceAsrConfig(),
+    );
+
+    await controller.start();
+    controller.dispose();
+    await Future<void>.delayed(const Duration(milliseconds: 180));
+
+    expect(repository.endedSessionIds, <String>['sess_1']);
+  });
 }
 
 AppConfig _deviceAsrConfig() {

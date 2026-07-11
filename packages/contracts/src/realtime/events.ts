@@ -53,7 +53,9 @@ export interface UsageTickEvent {
 export type SessionEndReason =
   | "client_request"
   | "quota_exhausted"
-  | "time_limit";
+  | "time_limit"
+  | "connection_closed"
+  | "connection_error";
 
 export interface ClientTextSegmentEvent {
   type: "client.text.segment";
