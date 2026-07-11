@@ -1,6 +1,6 @@
 # ai phone 优化开发任务清单
 
-版本：v2.0
+版本：v2.1
 日期：2026-07-11  
 关联：`docs/domestic-app-detailed-functional-design.md`、`docs/ai-phone-translation-technical-design.md`、`docs/domestic-design-review-action-plan.md`
 
@@ -25,6 +25,9 @@
 | OPT-RT-003 | SegmentAssembler | partial/final、合并窗口、端点、去重、强制输出 | 无 | 被中间切断的句子可合并，超时不会长期无字幕 |
 | OPT-RT-004 | 最后一句 flush 加固 | App、Gateway、ASR flush 统一协议 | OPT-RT-001、OPT-RT-003 | 结束后无正常段落只有原文没有译文 |
 | OPT-RT-005 | 在线 TTS 顺序队列 | session/segment 队列、取消、超时、失败降级 | OPT-RT-001 | 连续 20 句字幕和朗读顺序一致，结束后无残留播放 |
+| OPT-VAD-001 | 服务器 MarbleNet 主 VAD | VAD Provider、ONNX 运行时、固定预处理资产、RMS 降级 | 无 | 低音量可检出，静音和三档非语音噪声不触发，真实在线链路可转写 |
+| OPT-VAD-002 | VAD 观测和故障诊断 | session 指标、fallback 告警、模型 fingerprint、端点原因 | OPT-VAD-001 | 可按 session 判断实际 Provider、概率摘要、fallback 和端点原因；后续由 OPT-OBS-001 汇总 |
+| OPT-VAD-003 | 模式化端点策略 | 对话、聆听、Call Link、PSTN 参数配置和回归语料 | OPT-VAD-001、OPT-RT-003 | 各模式断句和延迟达标，可独立回退统一 1100ms 基线 |
 | OPT-MOB-001 | AudioSessionCoordinator | iOS/Android 采集、播放、耳机、中断统一协调 | OPT-RT-001 | TTS 播放后 ASR 自动恢复，平台插件不争抢音频会话 |
 | OPT-MOB-002 | 回声和播放策略 | 扬声器抑制窗、耳机连续识别、Listening 默认静音 | OPT-MOB-001、OPT-RT-005 | 朗读 20 句不自激、不吞下一句 |
 | OPT-UI-001 | 状态化同传控制栏 | 开始、取消、暂停、继续、结束、再次开始 | OPT-RT-001 | 每个状态只显示当前可执行操作，无无效按钮 |
@@ -43,6 +46,9 @@
 
 当前实现状态：
 
+- `OPT-VAD-001`：`accepted`。Beelink 已上线 MarbleNet ONNX CPU 主 VAD，阈值 0.5；NeMo/ONNX 概率最大误差 `2.38e-7`，低音量真机语音、静音和三档非语音噪声及真实 HTTP ASR 均通过。
+- `OPT-VAD-002`：`todo`。health 已能显示 Provider 和阈值，尚缺 session 级概率摘要、端点原因、fallback 计数和告警。
+- `OPT-VAD-003`：`todo`。当前继续使用 Qwen3-ASR 统一 `1100ms` 安全基线，尚未启用按模式参数。
 - `OPT-RT-001`：代码和自动化门禁完成。
 - `OPT-RT-002`：代码和自动化门禁完成；iPhone 飞行模式、后台终止和弱网真机验收待执行。
 - `OPT-RT-003`：代码和自动化门禁完成；iPhone 在线真实模型中文长句、快速中英切换和 1.8 秒强制输出验收待执行。
@@ -53,8 +59,8 @@
 - `OPT-UI-001`：代码和自动化门禁完成；`idle/connecting/active/paused/ending/ended/failed` 只展示当前可执行操作，主操作固定在同一槽位，连接中可取消且迟到 session 不会恢复同传。iPhone/Android 真机布局与点击体验验收待执行。
 - `OPT-UI-002`：代码和自动化门禁完成；字幕区移除固定 420dp 高度并占满剩余空间，最后一段标记当前句，译文 final 前显示 pending，动态高度字幕可自动跟随并在用户上滑后提供回到底部。iPhone/Android 真机小屏、横屏和 200% 字体验收待执行。
 - `OPT-SPK-001`：统一 contract、Call Link participant track、Session Repository、字幕、历史、review 和导出代码完成；真实双端角色归属验收待执行。
-- `OPT-SPK-002`：HTTP Speaker Provider、ASR 并行旁路、时间对齐和故障降级代码完成；Streaming Sortformer 服务部署、独立语料 DER/JER 评测与 shadow mode 待执行。
-- `OPT-SPK-003`：speaker 强制断句、普通同传字幕标签、历史清单和会话内重命名代码完成；依赖 `OPT-SPK-002` 真实模型和单麦克风真机验收后结项。
+- `OPT-SPK-002`：Streaming Sortformer 已在 Beelink 部署，HTTP Provider、ASR 并行旁路、时间对齐、故障降级和固定双声源测试通过；抢话、重叠、四人和正式真人 RTTM 门禁仍待执行。
+- `OPT-SPK-003`：speaker 强制断句、普通同传字幕标签、历史清单和会话内重命名代码完成，iPhone 已能显示匿名“说话人 1/2”；历史重命名、纪要、导出和完整多人场景验收后结项。
 
 ## 3. P1 灰度任务
 
@@ -74,6 +80,7 @@
 | OPT-DATA-001 | SQLite WAL Repository | account、session、segment、usage、terms、outbox | OPT-RT-002、OPT-LLM-002 | 事务、外键、幂等和 quick_check 通过 |
 | OPT-DATA-002 | SQLite 备份与恢复 | 一致性快照、对象目录批次、损坏阻断 | OPT-DATA-001 | 恢复后 session、ledger 和对象 hash 一致 |
 | OPT-OBS-001 | 体验指标和诊断 | latency、drop、fallback、provider fingerprint | OPT-RT-001 | 每个 session 可生成完整质量报告且日志脱敏 |
+| OPT-VAD-004 | VAD 时间轴与说话人/记录贯通 | segment 保存 speech 起止、端点原因和 VAD fingerprint | OPT-VAD-002、OPT-SPK-003 | 字幕、说话人、历史和 review 使用同一语音时间轴，不持久化 20ms 原始概率 |
 
 ## 4. P2/P3 增强任务
 
@@ -87,6 +94,7 @@
 | OPT-VOICE-001 | VoxCPM2 Hi-Fi 声音克隆 | 录音质量检查、A/B 试听、自然度门禁通过 |
 | OPT-SPK-004 | 授权声纹身份识别 | 声纹注册、置信度门禁、撤回、删除和匿名回退 |
 | OPT-ANDROID-001 | Android 端侧 ASR 候选 | 与系统 ASR、在线 ASR 固定语料对比后决策 |
+| OPT-VAD-005 | 端侧 MarbleNet 候选评测 | CoreML/Android ONNX 与现有端点检测比较低音量召回、误触发、耗电、温升和实时系数，通过后再决定是否集成 |
 | OPT-DATA-003 | PostgreSQL/Redis 后续迁移 | Repository adapter 可迁移，数据校验和回滚通过 |
 
 ## 5. Definition of Done

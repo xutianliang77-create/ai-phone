@@ -1,7 +1,7 @@
 # AI 翻译电话技术方案
 
-版本：v0.2
-日期：2026-07-02  
+版本：v0.3
+日期：2026-07-11
 范围：Call Link、WebRTC/VoIP 通话房间、拨打手机号翻译电话、PSTN 服务商桥接、AI Calling Agent。  
 关联文档：`docs/ai-communication-feature-design.md`、`docs/ai-communication-ui-design.md`、`docs/ai-phone-translation-protocol-design.md`、`docs/ai-phone-translation-data-ops-design.md`
 
@@ -171,13 +171,57 @@ Agent 安全门：
 处理步骤：
 
 1. Audio frame normalize。
-2. VAD 和端点检测。
-3. ASR 与 Speaker Attribution 并行处理。
-4. 按统一时间轴对齐 transcript 与 speaker span。
-5. speaker 变化时强制断句。
+2. 在线模式由 ASR Service 内的 Speech Frontend 重采样至 16kHz。
+3. MarbleNet VAD 输出帧级语音概率，Endpoint State Machine 维护前置缓存、静音端点和最大分段。
+4. ASR 与 Speaker Attribution 并行处理，二者使用统一客户端音频时间轴。
+5. 按时间轴对齐 transcript 与 speaker span，speaker 变化时强制断句。
 6. 自动语种识别和翻译方向选择。
 7. 术语纠错和翻译。
 8. TTS streaming、Jitter buffer 和目标端播放。
+
+### 8.1 VAD 总体设计
+
+在线链路以服务器端 VAD 为权威判断，端侧门控不得提前丢弃低音量语音：
+
+```text
+App PCM16
+  -> Gateway 排序、批处理和重连
+  -> ASR Service Speech Frontend
+       -> PCM16 16kHz normalize
+       -> MarbleNet ONNX VAD
+       -> Endpoint State Machine
+       -> Qwen3-ASR
+  -> transcript.final
+```
+
+| 层 | 职责 | 不负责 |
+| --- | --- | --- |
+| App | 麦克风、AudioSession、保守静音门控、TTS playback gate、AEC | 不做在线链路的权威端点判断 |
+| Gateway | 帧排序、批处理、重连、flush、session 生命周期 | 不执行神经 VAD 推理 |
+| ASR Service | 重采样、MarbleNet、前置缓存、端点、最大分段、RMS 降级 | 不处理 TTS 播放回声策略 |
+| Speaker Provider | 输出独立 speaker spans | 不决定 ASR 是否产生字幕 |
+
+生产基线：
+
+- 主模型：`nvidia/Frame_VAD_Multilingual_MarbleNet_v2.0`。
+- 运行方式：ASR 进程内 ONNX CPU；NeMo 只在部署阶段导出网络和固定 Mel 预处理资产。
+- 默认阈值：`0.5`；`0.7` 仅作为严格噪声档 A/B 候选，不直接替换生产阈值。
+- 滚动上下文：`1000ms`；当前批次使用连续 3 帧平滑，避免单帧噪声尖峰。
+- 降级：模型资产缺失、加载或推理失败时切换 RMS，ASR 不因 VAD 故障中断。
+- 当前状态：服务器 VAD 已通过真机测试并标记 `accepted`；端侧 MarbleNet 仍为候选评测，不进入生产 App。
+
+VAD 只能区分语音和非语音，不能识别设备自身 TTS。扬声器自动朗读仍必须由 `AudioSessionCoordinator + playback gate + AEC` 处理。
+
+### 8.2 端点配置
+
+| 模式 | 默认静音端点 | 前置缓存 | 最大分段 | 说明 |
+| --- | ---: | ---: | ---: | --- |
+| 面对面对话 | 700-900ms | 400ms | 8s | 优先响应速度 |
+| 聆听/会议 | 1000-1200ms | 400ms | 10s | 优先长句完整性 |
+| Call Link | 600-900ms | 300ms | 8s | 配合独立 participant track |
+| PSTN | 500-800ms | 300ms | 8s | 兼容 8kHz 电话音频 |
+
+当前生产 Qwen3-ASR 使用 `1100ms` 端点作为统一安全基线。模式化参数在 `OPT-VAD-003` 完成固定语料门禁后再启用，避免一次上线同时改变模型和断句策略。
 
 说话人归属规则：
 
@@ -191,7 +235,8 @@ Agent 安全门：
 
 | 阶段 | 目标 |
 | --- | --- |
-| VAD endpoint | 600-1200ms |
+| VAD 首次确认 | 60-200ms |
+| VAD endpoint | 600-1200ms，按模式配置 |
 | ASR partial | 300-800ms |
 | 翻译 | 300-1200ms |
 | TTS 首包 | 300-1000ms |
@@ -199,12 +244,13 @@ Agent 安全门：
 
 ## 9. 模型 Provider 策略
 
-| 能力 | MVP/P1 | P2/P3 |
+| 能力 | 国内版生产基线 | P2/P3 |
 | --- | --- | --- |
-| ASR | iOS 端侧、服务端 SenseVoice、云 ASR | 电话场景可用 provider streaming ASR |
-| 翻译 | iOS 系统翻译、LM Studio/OpenAI 兜底 | OpenAI/Gemini/DeepL/自部署路由 |
-| TTS | 系统 TTS 或云 TTS | 低延迟流式 TTS、授权自定义语音 |
-| 摘要 | LM Studio/OpenAI 文本总结 | 成本路由、企业私有模型 |
+| VAD | 在线 MarbleNet v2；端侧现有端点检测 | MarbleNet CoreML/Android ONNX 候选 |
+| ASR | iOS CoreML/Nemotron；在线 Qwen3-ASR-0.6B tuned v3 | FireRedASR2、云 streaming ASR 备选 |
+| 翻译 | iOS 系统翻译；在线 Hy-MT2-1.8B | 国际 Provider 和原生 S2S 路由 |
+| TTS | iOS 系统 TTS；在线 VoxCPM2 | 低延迟流式 TTS、授权自定义语音 |
+| 纠错/摘要 | Qwen3.5-9B no-thinking | 成本路由、企业私有模型 |
 
 原则：
 

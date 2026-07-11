@@ -1,6 +1,6 @@
 # ai phone 优化验收方案
 
-版本：v1.4
+版本：v1.5
 日期：2026-07-11  
 任务来源：`docs/ai-phone-optimization-development-tasks.md`
 
@@ -20,7 +20,7 @@
 | Android | 一台中端真机、一个低内存模拟器、主流系统版本 |
 | 网络 | 稳定 Wi-Fi、蜂窝、100ms 延迟、3% 丢包、断网恢复 |
 | 音频 | 扬声器、有线/蓝牙耳机、安静、咖啡厅噪声、外放语音 |
-| 模型 | 端侧 Nemotron；在线 Qwen3-ASR + Hy-MT2 + TTS；LLM no-thinking |
+| 模型 | 端侧 Nemotron；在线 MarbleNet + Qwen3-ASR + Hy-MT2 + VoxCPM2；LLM no-thinking |
 | Call Link | App Host、Safari/Chrome Guest、微信 WebView 降级路径 |
 
 ## 3. P0 功能验收
@@ -32,6 +32,9 @@
 | AC-RT-003 | OPT-RT-003 | 中文长句在中间停顿 | 语义完整句可合并，不重复、不永久等待 |
 | AC-RT-004 | OPT-RT-004 | 说完立即点结束 | 最后一句原文和译文均保存 |
 | AC-RT-005 | OPT-RT-005 | 20 句长短混合 TTS | 播放顺序与字幕一致，结束后无残留声音 |
+| AC-VAD-001 | OPT-VAD-001 | 低音量真机语音、静音、中等噪声、较大非语音噪声、800ms 音频批次 | 低音量可检出；三类非语音均不产字幕；health 为 marblenet 0.5；无 fallback |
+| AC-VAD-002 | OPT-VAD-002 | 模型资产缺失、ONNX 推理异常、会话正常结束 | 自动切 RMS 且 ASR 继续；session 报告记录 fallback、fingerprint 和 endpoint reason |
+| AC-VAD-003 | OPT-VAD-003 | 对话、聆听、Call Link、8kHz PSTN 固定语料 | 各模式门槛通过，切换模式不污染其他 session，可回退统一基线 |
 | AC-MOB-001 | OPT-MOB-001 | 朗读、电话/闹钟中断、扬声器和有线/蓝牙耳机切换 | 播放完成和中断结束后当前采集源自动恢复，平台插件不争抢音频会话 |
 | AC-MOB-002 | OPT-MOB-002 | 扬声器开启朗读连续说 20 句；有线/蓝牙耳机中交替说话；Listening 继承已保存声音设置 | 扬声器不自激，播放结束后下一句完整；耳机播放期间持续识别；Listening 不输出声音，切回对话后恢复原声音偏好 |
 | AC-UI-001 | OPT-UI-001 | 遍历所有 realtime 状态 | 只显示可执行动作，主按钮稳定不跳位 |
@@ -48,6 +51,8 @@
 | AC-DEP-002 | OPT-DEP-002、OPT-DEP-003 | 检查 App 配置和服务器健康页 | 运行节点只有手机和服务器；App 无内部模型地址 |
 
 当前自动化证据：`AC-UI-001` 已覆盖全部七种 realtime 状态、合法动作集合、主操作横向位置、命令分发和连接中取消竞态。iPhone/Android 真机上的单手点击、动态字体和横竖屏视觉检查仍标记为未执行，不计入完整验收通过。
+
+`AC-VAD-001` 已验收通过：NeMo/ONNX 逐帧概率最大误差 `2.38e-7`；低音量真机样本可检出；静音、中等噪声和较大非语音噪声均返回 `204`；800ms 批次真实 HTTP 链路正确转写；Beelink health 返回 `vadProvider=marblenet`、`vadThreshold=0.5` 且无降级日志。
 
 `AC-UI-002` 已覆盖工作区随页面高度增长、320dp 宽度、横屏、200% 字体、长字幕、当前句、翻译 pending、自动跟随及回到底部。iPhone/Android 真机截图和读屏焦点检查仍标记为未执行。
 
@@ -79,6 +84,20 @@
 | 30 分钟不可恢复断线 | 0 |
 | 字幕/TTS 乱序 | 0 |
 
+### VAD 与端点
+
+| 指标 | P0 门槛 | P1 目标 |
+| --- | ---: | ---: |
+| 低音量语音召回率 | >= 95% | >= 98% |
+| 纯静音误触发率 | <= 0.5% | <= 0.1% |
+| 非语音噪声误触发率 | <= 2% | <= 1% |
+| VAD 首次确认 P95 | <= 200ms | <= 120ms |
+| 对话端点 P95 | <= 1200ms | <= 900ms |
+| VAD fallback 后 ASR 可用率 | 100% | 100% |
+| 自身 TTS 回灌字幕 | 0 | 0 |
+
+TTS 回灌指标由 App playback gate/AEC 验收，不能把 VAD 对合成语音的响应直接判定为模型失败。
+
 ## 5. P1 功能验收
 
 | 验收编号 | 对应任务 | 通过标准 |
@@ -96,6 +115,7 @@
 | AC-DATA-001 | OPT-DATA-001 | 并发 50 个 session 结束、退款、保存不丢数据、不重复结算 |
 | AC-DATA-002 | OPT-DATA-002 | 在线写入时生成快照并恢复 | quick_check 通过，session、ledger、对象 hash 一致 |
 | AC-OBS-001 | OPT-OBS-001 | session 报告包含延迟、失败、fallback 和模型指纹，敏感字段脱敏 |
+| AC-VAD-004 | OPT-VAD-004 | segment、speaker、history、review 的 speechStart/speechEnd 和 endpointReason 一致，不保存逐帧概率 |
 
 ## 6. P2/P3 专项验收
 
@@ -109,6 +129,7 @@
 | AC-VOICE-001 | OPT-VOICE-001 | 盲听自然度、清晰度、相似度达标，录音不合格可识别并重录 |
 | AC-SPK-003 | OPT-SPK-004 | 未授权不生成声纹，低置信度回退匿名，撤回和删除后不能再次命中身份 |
 | AC-ANDROID-001 | OPT-ANDROID-001 | 固定语料、功耗、温升和延迟均有报告，达到门槛后才替换系统 ASR |
+| AC-VAD-005 | OPT-VAD-005 | iOS CoreML、Android ONNX 与现有端点检测使用同一语料评测；低音量、噪声、耗电、温升、包体和实时系数均有报告 |
 | AC-DATA-003 | OPT-DATA-003 | SQLite 迁移 PostgreSQL/Redis 演练 | 数量、余额、幂等键和对象引用一致，可回滚 |
 
 说话人专项证据必须同时包含：Call Link 双端独立音轨、安静双人单麦克风、快速抢话、重叠语音、四人会议、断网重连、30 分钟稳定性、会话内重命名、纪要和三种导出。模型服务不可用时 ASR/翻译仍须继续，UI 显示匿名或未知，不得误显示实名。

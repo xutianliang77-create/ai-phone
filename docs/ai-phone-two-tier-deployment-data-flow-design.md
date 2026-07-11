@@ -1,6 +1,6 @@
 # ai phone 两层部署与数据流设计
 
-版本：v1.1
+版本：v1.2
 日期：2026-07-11  
 状态：已确认约束，进入实施
 
@@ -23,7 +23,7 @@ flowchart LR
 
     Proxy --> API["API Server"]
     Proxy --> Gateway["Realtime Gateway"]
-    Gateway --> ASR["Qwen3-ASR"]
+    Gateway --> ASR["ASR Service<br/>MarbleNet VAD + Qwen3-ASR"]
     Gateway --> Speaker["Streaming Speaker Provider"]
     Gateway --> MT["Hy-MT2"]
     Gateway --> TTS["VoxCPM2 / TTS"]
@@ -58,6 +58,8 @@ speaker-service
 llm-runtime
 ```
 
+`MarbleNet VAD` 是 `asr-service` 内部 Speech Frontend，不增加第三个部署节点或公开端口。ONNX、Mel 预处理资产和 Qwen3-ASR 随同一个服务器发布单元管理。
+
 部署规则：
 
 - 外部只开放 HTTPS/WSS 和 LiveKit 所需端口。
@@ -68,6 +70,8 @@ llm-runtime
 - Tailscale 只用于开发运维和内测访问，不作为正式产品拓扑的一层。
 - Speaker Provider 与 ASR 并行，是可降级旁路；故障不得中断字幕和翻译。
 - App 只提交 speaker 策略，不持有说话人模型地址、密钥或内部端口。
+- 在线 VAD 由 ASR Service 权威执行；App 静音门控必须偏保守，不能因本地 RMS 较低丢弃待上传语音。
+- `/health` 必须返回实际 `vadProvider` 和 `vadThreshold`；发生 `rms_fallback` 时进入诊断告警但不终止会话。
 
 ## 4. 暂时数据存储方案
 
@@ -140,6 +144,7 @@ API -> SQLite: 创建 session、usage hold、幂等键
 API -> App: sessionId、一次性 realtime token、WSS endpoint
 App -> Gateway: WSS 连接和 audio.frame
 Gateway -> ASR: 音频窗口/flush
+ASR Speech Frontend: 16kHz normalize -> MarbleNet VAD -> endpoint/最大分段
 ASR -> Gateway: partial/final、language、confidence
 Gateway -> Speaker Provider: 同时间轴音频帧
 Speaker Provider -> Gateway: anonymous speaker spans

@@ -1,6 +1,6 @@
 # ai phone 优化开发计划
 
-版本：v1.4
+版本：v1.5
 日期：2026-07-11  
 任务来源：`docs/ai-phone-optimization-development-tasks.md`
 
@@ -18,7 +18,7 @@
 | M1 实时稳定 | 第 1–2 周 | 解决漏句、断句、异常结束和朗读打断 | P0 实时链路验收全部通过 |
 | M2 发布级 UI | 第 3 周 | 完成核心同传 UI、设计系统和截图链路 | UI、无障碍和截图门禁通过 |
 | M3 智能记录 | 第 4 周 | 完成 LLM 纠错、三文本、纪要和行业设置 | review 可追溯且无 thinking 污染 |
-| M4 Call Link 与数据 | 第 5–6 周 | 真人双端闭环、PostgreSQL/Redis、观测 | 30 分钟双端测试和并发数据测试通过 |
+| M4 Call Link 与数据 | 第 5–6 周 | 真人双端闭环、SQLite WAL、备份恢复和观测 | 30 分钟双端测试和并发数据测试通过 |
 | M5 灰度发布 | 第 7 周 | 合规、告警、容量、支付前置检查 | 国内灰度门禁 ready |
 | M6 增强路线 | 第 8 周起 | Gemini/PSTN/Agent/声音克隆专项 | 各专项独立评测通过后灰度 |
 
@@ -41,16 +41,21 @@
 
 执行顺序：
 
-1. `OPT-RT-001` 状态机。
-2. `OPT-RT-003` SegmentAssembler。
-3. `OPT-RT-004` flush。
-4. `OPT-RT-002` 异常 finalize。
-5. `OPT-RT-005` TTS 队列。
-6. `OPT-MOB-001` 音频协调和 `OPT-MOB-002` 回声策略。
-7. `OPT-SEC-001/002` 安全加固。
-8. `OPT-DEP-002/003` 单服务器发布单元和手机配置边界。
+1. 冻结已验收的 `OPT-VAD-001` MarbleNet 阈值 0.5，不与后续断句参数同时调整。
+2. `OPT-VAD-002` VAD 观测、fallback 和端点原因。
+3. `OPT-RT-001` 状态机。
+4. `OPT-RT-003` SegmentAssembler。
+5. `OPT-VAD-003` 对话、聆听、Call Link、PSTN 模式端点。
+6. `OPT-RT-004` flush。
+7. `OPT-RT-002` 异常 finalize。
+8. `OPT-RT-005` TTS 队列。
+9. `OPT-MOB-001` 音频协调和 `OPT-MOB-002` 回声策略。
+10. `OPT-SEC-001/002` 安全加固。
+11. `OPT-DEP-002/003` 单服务器发布单元和手机配置边界。
 
 阶段内每天至少跑一次无 TTS 和有 TTS 的 10 句 smoke；阶段末跑 30 分钟 soak。
+
+当前进度：`OPT-VAD-001` 已通过真机测试并标记 `accepted`。生产基线固定为 MarbleNet v2、阈值 0.5、1000ms 滚动窗口、连续 3 帧平滑和 RMS 自动降级。下一步先完成 `OPT-VAD-002`，再通过固定语料开展 `OPT-VAD-003`，不得直接把全局阈值改成 0.7。
 
 ### M2：发布级 UI
 
@@ -65,7 +70,7 @@
 
 M2 不调整模型参数，避免 UI 和模型体验同时变化导致问题难以归因。
 
-当前进度：`OPT-UI-001/002` 已完成代码和自动化门禁。`OPT-SPK-001` 和 `OPT-SPK-003` 的跨端数据链路已完成，`OPT-SPK-002` 已完成 Provider/对齐基础代码；下一步必须在独立 harness 部署并评测 Streaming Sortformer，再进入普通单麦克风真机验收，不能用 mock 结果宣称说话人识别完成。
+当前进度：`OPT-UI-001/002` 已完成代码和自动化门禁。Streaming Sortformer 已在 Beelink 部署，Gateway 对齐和 iPhone 匿名“说话人 1/2”基础测试通过；抢话、重叠、四人、历史重命名、纪要和导出仍待正式验收，因此 `OPT-SPK-002/003` 尚不能整体标记 `accepted`。
 
 ### M3：智能记录
 
@@ -79,6 +84,7 @@ M2 不调整模型参数，避免 UI 和模型体验同时变化导致问题难�
 - App 增加行业包选择，服务端返回实际生效词库版本。
 - 执行 `OPT-SPK-001`，先复用 Call Link 独立音轨角色并贯通字幕、历史和 review。
 - 执行 `OPT-SPK-002/003`，在独立 harness 评测通过后接入单麦克风流式说话人分离。
+- 执行 `OPT-VAD-004`，只持久化 segment 级 VAD 摘要和时间轴，不保存 20ms 原始概率。
 
 ### M4：Call Link 与数据
 
@@ -100,11 +106,13 @@ M2 不调整模型参数，避免 UI 和模型体验同时变化导致问题难�
 - 执行 `OPT-S2S-002`，Gemini Live 只用于国际版候选，不改变国内默认路线。
 - `OPT-S2S-003`、`OPT-PSTN-001`、`OPT-AGENT-001`、`OPT-VOICE-001`、`OPT-ANDROID-001`、`OPT-DATA-003` 分别立项，不互相绑定发布。
 - `OPT-SPK-004` 声纹实名属于单独授权的增强能力，不与匿名说话人分离绑定发布。
+- `OPT-VAD-005` 端侧 MarbleNet 只在独立 iOS/Android harness 评测，通过功耗、温升和召回门禁后再决定是否进入 App。
 
 ## 4. 关键路径
 
 ```text
 状态机
+  -> MarbleNet VAD / Endpoint
   -> SegmentAssembler
   -> flush/finalize
   -> TTS 队列
@@ -130,6 +138,8 @@ LLM 纪要、扫描 UI 和国际模型 Provider 可在 M1 稳定接口冻结后�
 | iOS Debug 包独立启动 | 安装后点击即闪退 | 真机手动测试只安装 Profile/Release，脚本阻断 Debug dylib |
 | 未完成能力过早暴露 | 产品可信度下降 | 通话页按核心/实验分层，未完成入口隐藏 |
 | 模型和 UI 同时调整 | 无法定位回归 | 每个里程碑冻结变量，模型变更必须独立评测 |
+| VAD 阈值过严 | 低音量漏句 | 生产固定 0.5；0.7 仅作为严格档 A/B，不直接替换 |
+| VAD 将 TTS 当真人语音 | 自激和重复字幕 | VAD 不承担回声识别，继续使用 playback gate、AEC 和耳机策略 |
 
 ## 6. 进度管理
 
@@ -138,3 +148,16 @@ LLM 纪要、扫描 UI 和国际模型 Provider 可在 M1 稳定接口冻结后�
 - 每个里程碑结束更新功能完成度矩阵和 `PROGRESS_LOG.md`。
 - 阻塞超过一个工作日必须记录阻塞方、临时降级和恢复条件。
 - 真实模型、真机和远端服务测试必须记录运行版本、环境和时间，避免用旧结果证明新版本。
+
+## 7. VAD 优化执行计划
+
+| 阶段 | 任务 | 预计工作量 | 状态 | 交付与退出条件 |
+| --- | --- | ---: | --- | --- |
+| V0 | `OPT-VAD-001` 服务器主 VAD | 已完成 | accepted | MarbleNet 上线、RMS 降级、真机通过 |
+| V1 | `OPT-VAD-002` session 观测 | 1 天 | todo | 质量报告含 Provider、阈值、speech ratio、endpoint reason、fallback |
+| V2 | `OPT-VAD-003` 模式化端点 | 2 天 | todo | 四种模式固定语料和延迟门禁通过，可一键回退 1100ms |
+| V3 | `OPT-RT-003/004` 联合回归 | 1 天 | todo | 长句、短停顿、立即结束、断网 flush 无回归 |
+| V4 | `OPT-VAD-004` 时间轴贯通 | 1-2 天 | todo | speaker、segment、history、review 使用同一 speech 时间范围 |
+| V5 | `OPT-VAD-005` 端侧候选 | 2-3 天，非当前关键路径 | todo | CoreML/Android ONNX 报告完成，通过后再立项集成 |
+
+近期关键路径为 `V1 -> V2 -> V3`，预计 4 个开发日；`V4` 随说话人和智能记录进入 M3，`V5` 不阻塞国内版在线模式。
