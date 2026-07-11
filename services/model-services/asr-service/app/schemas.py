@@ -42,6 +42,10 @@ class AsrFlushRequest(BaseModel):
     corrections: list[AsrCorrectionTerm] = Field(default_factory=list, max_length=80)
 
 
+class AsrBoundaryRequest(AsrFlushRequest):
+    boundaryMs: int = Field(ge=0)
+
+
 class AsrTranscribeResponse(BaseModel):
     segmentId: str
     text: str

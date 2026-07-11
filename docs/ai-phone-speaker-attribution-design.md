@@ -1,6 +1,6 @@
 # ai phone 说话人归属技术设计
 
-版本：v1.5
+版本：v1.6
 日期：2026-07-11
 
 ## 1. 目标与边界
@@ -15,11 +15,11 @@
 
 ## 2. 当前缺口
 
-- speaker 字段、时间对齐、字幕和历史已经贯通，但说话人归属发生在 ASR 整段输出之后。
-- 一个 ASR 音频段包含多人时，当前 Aligner 只能选择累计覆盖最大的一个 speaker，无法可靠拆分文本。
+- speaker 字段、时间对齐、字幕和历史已经贯通，代码已支持确认换人后按 `boundaryMs` 提交 ASR turn；Beelink 部署和真机快速换人验收尚未执行。
+- 普通 VAD/最大时长恰好先于 speaker boundary 完成时，仍可能由原 ASR 端点先提交；该竞态需在 `OPT-SPK-006` 联合真机验收中量化。
 - SegmentAssembler 已禁止不同 speaker 的 ASR 段继续合并，但无法修复 ASR 段内部已经混入两个人的问题。
 - App 和 API 曾把 conversation 默认写成 2 人，与对话、聆听和会议的多人场景不符。
-- 语言变化还没有独立的混合语种状态，不能把代码切换误当成说话人变化或硬断点。
+- turn 尚未持久化 `dominantLanguage/detectedLanguages/mixedLanguage`，但 SegmentAssembler 已取消语言变化硬断点。
 
 ## 3. 统一数据契约
 
@@ -115,7 +115,7 @@ Call Link/PSTN 独立音轨
 - 固定双声源和 iPhone 基础测试可以显示“说话人 1/2”，短句对齐证据已修复。
 - 模型容量为4人，产品默认已统一为 `maxSpeakers=4`；这不是承诺超过4人的单麦克风实时分离。
 - 抢话、重叠、真人四人、历史重命名、纪要和导出仍待正式验收，不能仅凭基础测试宣称商业发布完成。
-- 当前仍是 ASR 后置归属；`OPT-SPK-005/006` 完成前，连续无停顿的快速换人仍可能落入同一个 ASR 段。
+- `OPT-SPK-005` 代码和自动化门禁已完成；ASR boundary API 可回切 PCM 且不重置连续 VAD，Beelink 部署和 iPhone 快速换人验收待执行。
 - 完整模型证据见 `docs/poc/sortformer-speaker-shadow-evaluation-report.md`。
 
 ## 10. 技术架构
@@ -493,10 +493,15 @@ interface SpeakerRepository {
 - HTTP Speaker Provider 与 ASR 并行，失败时只降级归属，不中断 ASR/翻译。
 - App 实时字幕、Call Link、历史、纪要输入、Markdown/CSV/JSON 导出已消费统一 speaker。
 - 会话内 speaker 清单和重命名 API 已实现，重命名后 review 失效并重新生成。
+- Gateway 已实现 `SpeechTurnCoordinator`：240ms证据、65%占比、0.60置信度、连续两个增长窗口和 overlap 抑制。
+- ASR Service 已实现 `/asr/sessions/:sessionId/boundary`，在 `boundaryMs` 切开 PCM，提交上一 turn 并保留下一 turn，且不重置 VAD Provider 状态。
+- Gateway 支持一次 ASR 调用返回多个有序 transcript；边界 turn 固定携带上一位 `speakerId`，不会被后置对齐改写。
+- SegmentAssembler 不再把语种变化作为硬断点，仍严格禁止跨 speaker 合并。
 
 尚未宣称完成：
 
-- SpeechTurnCoordinator 和 ASR Turn Buffer 尚未开发，ASR 段内部混入多人仍是当前主要缺口。
+- Beelink 真实服务部署、iPhone 无停顿快速换人、ASR 普通端点与 speaker boundary 竞态、30分钟稳定性尚未验收。
+- `OPT-SPK-006` 的2秒诊断环形缓冲、边界命中率和回切丢帧指标尚未完成。
 - 抢话、重叠、真人四人和超过4人的能力边界验收。
 - 授权声纹身份的同意、加密 embedding、撤回和删除闭环。
 
@@ -512,6 +517,8 @@ interface SpeakerRepository {
 6. 语种变化不是硬断点；中英混说、姓名、品牌、型号和字母串保持在同一 speaker turn。
 
 发生 speaker 边界时，ASR Turn Buffer 在 `boundaryMs` 回切已有 PCM：边界前提交上一 speaker，边界后保留给下一 speaker。该操作只结束 turn，不结束 VAD speech lifecycle。
+
+当前代码中 `SpeechTurnCoordinator` 只消费 speaker span，不接收 ASR language；因此语种变化无法进入硬边界状态机。Speaker boundary HTTP 提交失败时降级为原 ASR/VAD 分句，不中断字幕和翻译。
 
 ### 18.2 混合语种
 

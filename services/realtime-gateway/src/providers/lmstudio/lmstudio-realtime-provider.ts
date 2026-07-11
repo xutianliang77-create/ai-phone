@@ -1,7 +1,7 @@
 import type { AudioFrame, ServerRealtimeEvent } from "@translation/contracts";
 import { type LlmProvider, OffLlmProvider } from "@translation/llm";
 import { MockAsrProvider } from "../../asr/mock-asr-provider.js";
-import type { AsrProvider, TranscriptResult } from "../../asr/asr-provider.js";
+import { asrResults, type AsrProvider, type TranscriptResult } from "../../asr/asr-provider.js";
 import { cleanRealtimeText } from "../../protocol/realtime-text.js";
 import type { RealtimeProvider, RealtimeProviderSession, TextSegmentInput } from "../realtime-provider.js";
 import { LmStudioClient } from "./lmstudio-client.js";
@@ -62,9 +62,9 @@ export class LmStudioRealtimeProvider implements RealtimeProvider {
       return;
     }
 
-    let transcript;
+    let transcripts;
     try {
-      transcript = await this.asrProvider.transcribe(frame);
+      transcripts = asrResults(await this.asrProvider.transcribe(frame));
     } catch (error) {
       yield providerError(
         frame.sessionId,
@@ -73,11 +73,11 @@ export class LmStudioRealtimeProvider implements RealtimeProvider {
       );
       return;
     }
-    if (!transcript) {
+    if (transcripts.length === 0) {
       yield* this.flushExpiredSemanticSegments(session);
       return;
     }
-    yield* this.processTranscript(session, transcript);
+    for (const transcript of transcripts) yield* this.processTranscript(session, transcript);
   }
 
   async *sendText(
@@ -126,9 +126,9 @@ export class LmStudioRealtimeProvider implements RealtimeProvider {
       return;
     }
 
-    let transcript;
+    let transcripts;
     try {
-      transcript = await this.asrProvider.flush(sessionId);
+      transcripts = asrResults(await this.asrProvider.flush(sessionId));
     } catch (error) {
       yield providerError(
         sessionId,
@@ -137,9 +137,7 @@ export class LmStudioRealtimeProvider implements RealtimeProvider {
       );
       return;
     }
-    if (transcript) {
-      yield* this.processTranscript(session, transcript);
-    }
+    for (const transcript of transcripts) yield* this.processTranscript(session, transcript);
     yield* this.flushSemanticSegments(session);
   }
 

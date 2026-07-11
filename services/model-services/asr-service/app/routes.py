@@ -3,7 +3,12 @@ from hmac import compare_digest
 from fastapi import APIRouter, Header, HTTPException, Response, status
 
 from app.config import AsrConfig
-from app.schemas import AsrFlushRequest, AsrTranscribeRequest, HealthResponse
+from app.schemas import (
+    AsrBoundaryRequest,
+    AsrFlushRequest,
+    AsrTranscribeRequest,
+    HealthResponse,
+)
 from app.service import AsrService
 
 
@@ -40,6 +45,21 @@ def create_router(service: AsrService, config: AsrConfig) -> APIRouter:
     ):
         require_api_key(config, authorization)
         transcript = await service.flush(session_id, request)
+        if transcript is None:
+            return Response(status_code=status.HTTP_204_NO_CONTENT)
+        return transcript
+
+    @router.post(
+        "/asr/sessions/{session_id}/boundary",
+        status_code=status.HTTP_200_OK,
+    )
+    async def commit_boundary(
+        session_id: str,
+        request: AsrBoundaryRequest,
+        authorization: str | None = Header(default=None),
+    ):
+        require_api_key(config, authorization)
+        transcript = await service.commit_boundary(session_id, request)
         if transcript is None:
             return Response(status_code=status.HTTP_204_NO_CONTENT)
         return transcript

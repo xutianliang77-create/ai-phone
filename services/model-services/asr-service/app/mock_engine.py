@@ -44,6 +44,15 @@ class MockAsrEngine:
     ) -> AsrTranscribeResponse | None:
         return None
 
+    async def commit_boundary(
+        self,
+        session_id: str,
+        boundary_ms: int,
+        source_language: LanguageCode,
+        target_language: TranslationLanguageCode,
+    ) -> AsrTranscribeResponse | None:
+        return None
+
     async def close_session(self, session_id: str) -> None:
         self._seen_sequences.pop(session_id, None)
 

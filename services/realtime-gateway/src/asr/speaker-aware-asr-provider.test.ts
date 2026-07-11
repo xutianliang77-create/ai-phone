@@ -86,6 +86,27 @@ describe("speaker aware asr provider", () => {
       speaker: { speakerId: "speaker_2" },
     });
   });
+
+  it("commits ASR audio when a new speaker boundary becomes stable", async () => {
+    const asr = new BoundaryAwareAsrProvider();
+    const provider = new SpeakerAwareAsrProvider(
+      asr,
+      new SwitchingSpeakerProvider(),
+    );
+    await provider.createSession(session);
+
+    expect(await provider.transcribe({ ...frame, sequence: 1 })).toBeNull();
+    expect(await provider.transcribe({ ...frame, sequence: 2 })).toBeNull();
+    expect(await provider.transcribe({ ...frame, sequence: 3 })).toBeNull();
+    const transcript = await provider.transcribe({ ...frame, sequence: 4 });
+
+    expect(asr.boundaries).toEqual([480]);
+    expect(transcript).toMatchObject({
+      text: "first speaker turn",
+      speaker: { speakerId: "speaker_1" },
+      timing: { startMs: 0, endMs: 480 },
+    });
+  });
 });
 
 class FakeAsrProvider implements AsrProvider {
@@ -154,4 +175,38 @@ class UpdatingSpeakerProvider extends FakeSpeakerProvider {
       final: this.calls > 1,
     }];
   }
+}
+
+class BoundaryAwareAsrProvider extends FakeAsrProvider {
+  readonly boundaries: number[] = [];
+
+  override async transcribe() {
+    return null;
+  }
+
+  async commitBoundary(input: { sessionId: string; boundaryMs: number }) {
+    this.boundaries.push(input.boundaryMs);
+    return {
+      segmentId: "turn_1",
+      text: "first speaker turn",
+      language: "en" as const,
+      timing: { startMs: 0, endMs: input.boundaryMs, source: "client" as const },
+    };
+  }
+}
+
+class SwitchingSpeakerProvider extends FakeSpeakerProvider {
+  private calls = 0;
+
+  override async pushAudio() {
+    this.calls += 1;
+    if (this.calls === 1) return [speakerSpan("speaker_1", 0, 240)];
+    if (this.calls === 2) return [speakerSpan("speaker_1", 0, 480)];
+    if (this.calls === 3) return [speakerSpan("speaker_2", 480, 720)];
+    return [speakerSpan("speaker_2", 480, 960)];
+  }
+}
+
+function speakerSpan(speakerId: string, startMs: number, endMs: number) {
+  return { speakerId, startMs, endMs, confidence: 0.9, final: false };
 }

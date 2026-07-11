@@ -26,6 +26,15 @@ class AsrEngine(Protocol):
     ) -> AsrTranscribeResponse | None:
         ...
 
+    async def commit_boundary(
+        self,
+        session_id: str,
+        boundary_ms: int,
+        source_language: LanguageCode,
+        target_language: TranslationLanguageCode,
+    ) -> AsrTranscribeResponse | None:
+        ...
+
     async def close_session(self, session_id: str) -> None:
         ...
 

@@ -114,8 +114,7 @@ export class SegmentAssembler {
   }
 
   private mustSplit(pending: PendingSegment, transcript: TranscriptResult, nowMs: number) {
-    return pending.parts.at(-1)?.language !== transcript.language ||
-      speakerKey(pending.parts.at(-1)) !== speakerKey(transcript) ||
+    return speakerKey(pending.parts.at(-1)) !== speakerKey(transcript) ||
       nowMs - pending.createdAtMs >= this.maxBufferMs;
   }
 

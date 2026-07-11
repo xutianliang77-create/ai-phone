@@ -94,6 +94,43 @@ def test_realtime_segmenter_ignores_duplicate_sequences() -> None:
     assert duplicate is None
 
 
+def test_realtime_segmenter_commits_audio_at_speaker_boundary() -> None:
+    segmenter = realtime_segmenter(min_audio_ms=1000, endpoint_silence_ms=1000)
+
+    assert segmenter.append(request(1, voice_pcm(), timestamp_ms=1000)) is None
+    assert segmenter.append(request(2, voice_pcm(), timestamp_ms=1040)) is None
+    assert segmenter.append(request(3, voice_pcm(), timestamp_ms=1080)) is None
+
+    previous_turn = segmenter.commit_boundary("sess_1", 1080)
+    next_turn = segmenter.flush("sess_1")
+
+    assert previous_turn is not None
+    assert previous_turn.pcm == voice_pcm() * 2
+    assert previous_turn.start_timestamp_ms == 1000
+    assert previous_turn.end_timestamp_ms == 1080
+    assert next_turn is not None
+    assert next_turn.pcm == voice_pcm()
+    assert next_turn.start_timestamp_ms == 1080
+    assert next_turn.end_timestamp_ms == 1120
+
+
+def test_speaker_boundary_does_not_reset_continuous_vad_state() -> None:
+    vad = TrackingVadProvider()
+    segmenter = RealtimePcmSegmenter(
+        min_audio_ms=1000,
+        endpoint_silence_ms=1000,
+        max_audio_ms=2000,
+        preroll_ms=40,
+        vad_energy_threshold=350,
+        vad_provider=vad,
+    )
+    segmenter.append(request(1, voice_pcm(), timestamp_ms=1000))
+    segmenter.append(request(2, voice_pcm(), timestamp_ms=1040))
+
+    assert segmenter.commit_boundary("sess_1", 1040) is not None
+    assert vad.reset_count == 0
+
+
 def realtime_segmenter(
     min_audio_ms: int = 120,
     endpoint_silence_ms: int = 80,
@@ -116,15 +153,34 @@ def voice_pcm(amplitude: int = 1000) -> bytes:
     return struct.pack("<" + "h" * 960, *([amplitude] * 960))
 
 
-def request(sequence: int, pcm: bytes | None = None) -> AsrTranscribeRequest:
+def request(
+    sequence: int,
+    pcm: bytes | None = None,
+    timestamp_ms: int | None = None,
+) -> AsrTranscribeRequest:
     audio = pcm or silence_pcm()
     return AsrTranscribeRequest(
         sessionId="sess_1",
         sequence=sequence,
-        timestampMs=sequence,
+        timestampMs=timestamp_ms if timestamp_ms is not None else sequence,
         format="pcm16",
         sampleRate=24000,
         data=base64.b64encode(audio).decode("ascii"),
         sourceLanguage="en",
         targetLanguage="zh",
     )
+
+
+class TrackingVadProvider:
+    name = "tracking"
+
+    def __init__(self) -> None:
+        self.reset_count = 0
+
+    def analyze(self, session_id: str, pcm: bytes, sample_rate: int):
+        from app.vad import VadDecision
+
+        return VadDecision(voiced=True, probability=0.9, provider=self.name)
+
+    def reset_session(self, session_id: str) -> None:
+        self.reset_count += 1

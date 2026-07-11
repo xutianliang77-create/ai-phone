@@ -1,6 +1,6 @@
 # ai phone 优化开发任务清单
 
-版本：v2.2
+版本：v2.3
 日期：2026-07-11  
 关联：`docs/domestic-app-detailed-functional-design.md`、`docs/ai-phone-translation-technical-design.md`、`docs/domestic-design-review-action-plan.md`
 
@@ -61,7 +61,9 @@
 - `OPT-SPK-001`：统一 contract、Call Link participant track、Session Repository、字幕、历史、review 和导出代码完成；真实双端角色归属验收待执行。
 - `OPT-SPK-002`：Streaming Sortformer 已在 Beelink 部署，HTTP Provider、ASR 并行旁路、时间对齐、故障降级和固定双声源测试通过；抢话、重叠、四人和正式真人 RTTM 门禁仍待执行。
 - `OPT-SPK-003`：ASR 后置 speaker 对齐、不同 speaker 段禁止合并、字幕标签、历史清单和会话内重命名代码完成，iPhone 已能显示匿名“说话人 1/2”；ASR 段内部按 speaker 切分由 `OPT-SPK-005/006` 负责。
-- `OPT-SPK-005/006/007`：`todo`。当前仍是 ASR 输出后归属 speaker，尚不能在一个 ASR 段内部准确拆分多人文本。
+- `OPT-SPK-005`：代码和自动化门禁完成。稳定 speaker span 可产生单次 `boundaryMs`，标签抖动、低置信度和 overlap 不切段；Beelink/iPhone 验收待执行。
+- `OPT-SPK-006`：`in_progress`。ASR boundary API 已能按时间切开 PCM、保留右侧音频且不重置 VAD；2秒诊断环形缓冲、竞态指标和真机快速换人验收待完成。
+- `OPT-SPK-007`：`todo`。当前仅保证 Gateway 接收边界产生的多个 transcript 不漏失，尚未建立持久化 `turnId + revision` 翻译队列。
 - `OPT-SPK-008`：`in_progress`。App、API 和 Speaker Service 默认人数已统一调整为4；overlap、unknown、revision 和混合语种联合验收待执行。
 
 ## 3. P1 灰度任务

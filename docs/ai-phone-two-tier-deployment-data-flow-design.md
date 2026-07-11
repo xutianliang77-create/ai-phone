@@ -1,6 +1,6 @@
 # ai phone 两层部署与数据流设计
 
-版本：v1.3
+版本：v1.4
 日期：2026-07-11  
 状态：已确认约束，进入实施
 
@@ -156,6 +156,8 @@ Gateway -> App: transcript、translation、speaker.updated、audio.output
 Gateway -> API internal: segment.final 事件
 API -> SQLite: segment 幂等落库
 ```
+
+当前内部协议为 `POST /asr/sessions/:sessionId/boundary`。请求只包含 `boundaryMs`、语言方向和会话热词；speaker 身份由 Gateway 写入返回 transcript，不进入 ASR 模型提示词。
 
 ### 5.2 结束和异常断开
 

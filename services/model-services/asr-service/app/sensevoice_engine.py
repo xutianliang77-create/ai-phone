@@ -103,6 +103,27 @@ class SenseVoiceEngine:
             end_ms=segment.end_timestamp_ms,
         )
 
+    async def commit_boundary(
+        self,
+        session_id: str,
+        boundary_ms: int,
+        source_language: LanguageCode,
+        target_language: TranslationLanguageCode,
+    ) -> AsrTranscribeResponse | None:
+        segment = self.segmenter.commit_boundary(session_id, boundary_ms)
+        if segment is None:
+            return None
+        return await self._transcribe_segment(
+            session_id=session_id,
+            segment_id=f"sensevoice_boundary_{segment.end_sequence}",
+            pcm=segment.pcm,
+            sample_rate=segment.sample_rate,
+            source_language=source_language,
+            target_language=target_language,
+            start_ms=segment.start_timestamp_ms,
+            end_ms=segment.end_timestamp_ms,
+        )
+
     async def close_session(self, session_id: str) -> None:
         self.segmenter.close(session_id)
         self._last_text_by_session.pop(session_id, None)

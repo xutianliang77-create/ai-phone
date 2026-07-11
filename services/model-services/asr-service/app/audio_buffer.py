@@ -49,6 +49,7 @@ class _PcmChunk:
     voiced: bool
     speech_probability: float | None
     timestamp_ms: int
+    sequence: int
 
 
 @dataclass
@@ -109,6 +110,7 @@ class RealtimePcmSegmenter:
             voiced=decision.voiced,
             speech_probability=decision.probability,
             timestamp_ms=request.timestampMs,
+            sequence=request.sequence,
         )
         if not state.has_voice:
             return self._append_waiting_for_voice(state, chunk, request)
@@ -133,6 +135,23 @@ class RealtimePcmSegmenter:
         )
         reset_active_segment(state)
         self.vad_provider.reset_session(session_id)
+        return segment
+
+    def commit_boundary(self, session_id: str, boundary_ms: int) -> PcmAudioSegment | None:
+        state = self._states.get(session_id)
+        if not state or not state.has_voice or not state.chunks or not state.sample_rate:
+            return None
+
+        previous_chunks, next_chunks = split_chunks_at(
+            state.chunks,
+            boundary_ms,
+            state.sample_rate,
+        )
+        if not previous_chunks or not any(chunk.voiced for chunk in previous_chunks):
+            return None
+
+        segment = segment_from_chunks(previous_chunks, state.sample_rate)
+        retain_chunks_after_boundary(state, next_chunks, self.preroll_ms)
         return segment
 
     def close(self, session_id: str) -> None:
@@ -232,3 +251,95 @@ def reset_active_segment(state: _RealtimeSessionState) -> None:
     state.sample_rate = None
     state.last_sequence = 0
     state.has_voice = False
+
+
+def split_chunks_at(chunks: list[_PcmChunk], boundary_ms: int, sample_rate: int):
+    previous: list[_PcmChunk] = []
+    following: list[_PcmChunk] = []
+    for chunk in chunks:
+        chunk_end_ms = chunk.timestamp_ms + chunk.duration_ms
+        if chunk_end_ms <= boundary_ms:
+            previous.append(chunk)
+            continue
+        if chunk.timestamp_ms >= boundary_ms:
+            following.append(chunk)
+            continue
+
+        sample_count = (boundary_ms - chunk.timestamp_ms) * sample_rate // 1000
+        split_byte = max(0, min(len(chunk.pcm), sample_count * 2))
+        left_pcm = chunk.pcm[:split_byte]
+        right_pcm = chunk.pcm[split_byte:]
+        if left_pcm:
+            previous.append(copy_chunk(chunk, left_pcm, chunk.timestamp_ms, sample_rate))
+        if right_pcm:
+            following.append(copy_chunk(chunk, right_pcm, boundary_ms, sample_rate))
+    return previous, following
+
+
+def copy_chunk(
+    source: _PcmChunk,
+    pcm: bytes,
+    timestamp_ms: int,
+    sample_rate: int,
+) -> _PcmChunk:
+    return _PcmChunk(
+        pcm=pcm,
+        duration_ms=audio_duration_ms(pcm, sample_rate),
+        voiced=source.voiced,
+        speech_probability=source.speech_probability,
+        timestamp_ms=timestamp_ms,
+        sequence=source.sequence,
+    )
+
+
+def segment_from_chunks(
+    chunks: list[_PcmChunk],
+    sample_rate: int,
+) -> PcmAudioSegment:
+    return PcmAudioSegment(
+        pcm=b"".join(chunk.pcm for chunk in chunks),
+        sample_rate=sample_rate,
+        end_sequence=chunks[-1].sequence,
+        duration_ms=sum(chunk.duration_ms for chunk in chunks),
+        start_timestamp_ms=chunks[0].timestamp_ms,
+        end_timestamp_ms=chunks[-1].timestamp_ms + chunks[-1].duration_ms,
+    )
+
+
+def retain_chunks_after_boundary(
+    state: _RealtimeSessionState,
+    chunks: list[_PcmChunk],
+    preroll_ms: int,
+) -> None:
+    if not chunks:
+        reset_active_segment(state)
+        return
+
+    state.last_sequence = chunks[-1].sequence
+    first_voice = next(
+        (index for index, chunk in enumerate(chunks) if chunk.voiced),
+        None,
+    )
+    if first_voice is None:
+        state.chunks = []
+        state.preroll = chunks
+        trim_preroll(state, preroll_ms)
+        state.buffered_ms = 0
+        state.trailing_silence_ms = 0
+        state.has_voice = False
+        return
+
+    state.chunks = chunks
+    state.preroll = []
+    state.buffered_ms = sum(chunk.duration_ms for chunk in chunks)
+    state.trailing_silence_ms = trailing_silence_duration(chunks)
+    state.has_voice = True
+
+
+def trailing_silence_duration(chunks: list[_PcmChunk]) -> int:
+    total = 0
+    for chunk in reversed(chunks):
+        if chunk.voiced:
+            break
+        total += chunk.duration_ms
+    return total

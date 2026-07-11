@@ -84,7 +84,7 @@ describe("segment assembler", () => {
     expect(assembler.flush("sess_1")).toEqual([]);
   });
 
-  it("releases the previous language before accepting a language switch", () => {
+  it("keeps a language switch inside the current semantic turn", () => {
     const assembler = new SegmentAssembler();
     assembler.push("sess_1", transcript("zh_1", "接下来", "zh"), 1000);
     const result = assembler.push(
@@ -92,10 +92,12 @@ describe("segment assembler", () => {
       transcript("en_1", "This is a test.", "en"),
       1200,
     );
-    expect(result.ready).toEqual([
-      transcript("zh_1", "接下来", "zh"),
-      transcript("en_1", "This is a test.", "en"),
-    ]);
+    expect(result.ready).toHaveLength(1);
+    expect(result.ready[0]).toMatchObject({
+      segmentId: "zh_1",
+      text: "接下来This is a test.",
+      language: "zh",
+    });
   });
 
   it("never merges speech from different speakers", () => {
@@ -114,6 +116,25 @@ describe("segment assembler", () => {
       attributedTranscript("asr_1", "接下来", "speaker_1"),
       attributedTranscript("asr_2", "我来说明。", "speaker_2"),
     ]);
+  });
+
+  it("does not use a language change as a hard boundary for one speaker", () => {
+    const assembler = new SegmentAssembler();
+
+    expect(assembler.push("sess_1", {
+      ...attributedTranscript("asr_1", "我们使用 Qwen3,", "speaker_1"),
+      language: "zh",
+    }).ready).toEqual([]);
+    const result = assembler.push("sess_1", {
+      ...attributedTranscript("asr_2", "ASR model", "speaker_1"),
+      language: "en",
+    });
+
+    expect(result.ready).toHaveLength(1);
+    expect(result.ready[0]).toMatchObject({
+      text: "我们使用 Qwen3, ASR model",
+      speaker: { speakerId: "speaker_1" },
+    });
   });
 
   it("does not hold an incomplete segment beyond the character limit", () => {

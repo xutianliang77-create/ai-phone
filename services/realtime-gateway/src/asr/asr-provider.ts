@@ -25,10 +25,22 @@ export interface TranscriptResult {
   timing?: SegmentTimingDto;
 }
 
+export interface AsrTurnBoundary {
+  sessionId: string;
+  boundaryMs: number;
+}
+
+export type AsrProviderResult = TranscriptResult | TranscriptResult[] | null;
+
 export interface AsrProvider {
   createSession(session: AsrSession): Promise<void>;
-  transcribe(frame: AudioFrame): Promise<TranscriptResult | null>;
-  flush(sessionId: string): Promise<TranscriptResult | null>;
+  transcribe(frame: AudioFrame): Promise<AsrProviderResult>;
+  flush(sessionId: string): Promise<AsrProviderResult>;
+  commitBoundary?(boundary: AsrTurnBoundary): Promise<AsrProviderResult>;
   closeSession(sessionId: string): Promise<void>;
   healthCheck(): Promise<boolean>;
+}
+
+export function asrResults(result: AsrProviderResult): TranscriptResult[] {
+  return result ? (Array.isArray(result) ? result : [result]) : [];
 }

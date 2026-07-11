@@ -214,6 +214,40 @@ describe("http asr client", () => {
     expect(transcript?.segmentId).toBe("flush_7");
   });
 
+  it("posts confirmed speaker boundaries to the ASR session", async () => {
+    const requests = [];
+    const client = new HttpAsrClient({
+      endpoint: "http://127.0.0.1:8001/asr/transcribe",
+      timeoutMs: 100,
+      fetchFn: (async (url: string, init?: RequestInit) => {
+        requests.push({ url, body: JSON.parse(init?.body as string) });
+        return response(200, {
+          segmentId: "boundary_4",
+          text: "first speaker turn",
+          language: "en",
+        });
+      }) as typeof fetch,
+    });
+
+    await client.commitBoundary({
+      sessionId: "sess_1",
+      boundaryMs: 1480,
+      sourceLanguage: "en",
+      targetLanguage: "zh",
+    });
+
+    expect(requests[0]).toEqual({
+      url: "http://127.0.0.1:8001/asr/sessions/sess_1/boundary",
+      body: {
+        boundaryMs: 1480,
+        sourceLanguage: "en",
+        targetLanguage: "zh",
+        hotwords: [],
+        corrections: [],
+      },
+    });
+  });
+
   it("closes remote ASR sessions", async () => {
     const requests = [];
     const client = new HttpAsrClient({

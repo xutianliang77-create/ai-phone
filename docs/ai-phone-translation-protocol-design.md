@@ -1,6 +1,6 @@
 # AI 翻译电话协议设计
 
-版本：v0.3
+版本：v0.4
 日期：2026-07-11
 关联文档：`docs/ai-phone-translation-technical-design.md`、`docs/ai-phone-translation-data-ops-design.md`
 
@@ -413,6 +413,21 @@ Realtime token 可包含：
 ```
 
 Call Link/PSTN 强制 `participant_track`，按真实音轨参与者处理且不设置 diarization 人数上限；普通在线对话和聆听的 `auto` 默认使用模型容量 `maxSpeakers=4`；端侧无模型时降级为 `language_role` 或 `unknown`。
+
+服务器内部 ASR turn 边界接口：
+
+```ts
+POST /asr/sessions/:sessionId/boundary
+{
+  boundaryMs: number;
+  sourceLanguage: LanguageCode;
+  targetLanguage: TranslationLanguageCode;
+  hotwords: string[];
+  corrections: AsrCorrectionTerm[];
+}
+```
+
+接口只接受 `SpeechTurnCoordinator` 已确认的边界。成功时返回边界前 transcript，边界后 PCM 留在原 session；没有可提交语音时返回 `204`。该接口为服务器内部能力，不暴露给 App。
 
 会话管理接口：
 

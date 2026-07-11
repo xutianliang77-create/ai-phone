@@ -1,5 +1,10 @@
 from app.model_loader import AsrEngine
-from app.schemas import AsrFlushRequest, AsrTranscribeRequest, AsrTranscribeResponse
+from app.schemas import (
+    AsrBoundaryRequest,
+    AsrFlushRequest,
+    AsrTranscribeRequest,
+    AsrTranscribeResponse,
+)
 
 
 class AsrService:
@@ -25,6 +30,18 @@ class AsrService:
     ) -> AsrTranscribeResponse | None:
         return await self.engine.flush(
             session_id=session_id,
+            source_language=request.sourceLanguage,
+            target_language=request.targetLanguage,
+        )
+
+    async def commit_boundary(
+        self,
+        session_id: str,
+        request: AsrBoundaryRequest,
+    ) -> AsrTranscribeResponse | None:
+        return await self.engine.commit_boundary(
+            session_id=session_id,
+            boundary_ms=request.boundaryMs,
             source_language=request.sourceLanguage,
             target_language=request.targetLanguage,
         )

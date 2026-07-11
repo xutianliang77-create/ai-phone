@@ -100,6 +100,17 @@ def test_flush_route_returns_204_when_no_transcript_ready() -> None:
     assert response.content == b""
 
 
+def test_boundary_route_accepts_a_confirmed_speaker_boundary() -> None:
+    client = TestClient(create_app(AsrConfig(mock_emit_every_frames=8)))
+
+    response = client.post(
+        "/asr/sessions/sess_1/boundary",
+        json={**flush_payload(), "boundaryMs": 1200},
+    )
+
+    assert response.status_code == 204
+
+
 def test_close_session_route_clears_session_state() -> None:
     client = TestClient(create_app(AsrConfig(mock_emit_every_frames=1)))
 

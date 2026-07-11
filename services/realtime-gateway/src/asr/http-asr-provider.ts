@@ -51,6 +51,18 @@ export class HttpAsrProvider implements AsrProvider {
     });
   }
 
+  async commitBoundary(input: { sessionId: string; boundaryMs: number }) {
+    const session = this.sessions.get(input.sessionId);
+    if (!session) throw new Error("ASR session was not found");
+    return this.client.commitBoundary({
+      ...input,
+      sourceLanguage: session.sourceLanguage,
+      targetLanguage: session.targetLanguage,
+      hotwords: session.asrHotwords,
+      corrections: session.asrCorrections,
+    });
+  }
+
   async closeSession(sessionId: string) {
     this.sessions.delete(sessionId);
     try {

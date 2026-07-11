@@ -39,6 +39,23 @@ async def test_qwen3_engine_flushes_buffered_transcript() -> None:
     assert runner.last_sample_rate == 16000
 
 
+async def test_qwen3_engine_transcribes_confirmed_speaker_boundary() -> None:
+    runner = FakeQwen3Runner("第一位说话人的完整句子")
+    engine = qwen_engine(runner, min_audio_ms=2000)
+
+    assert await engine.transcribe(frame(sequence=1)) is None
+    assert await engine.transcribe(frame(sequence=2)) is None
+    result = await engine.commit_boundary("sess_1", 1000, "zh", "en")
+
+    assert result is not None
+    assert result.segmentId == "qwen3_boundary_1"
+    assert result.timing == {
+        "startMs": 500,
+        "endMs": 1000,
+        "source": "client",
+    }
+
+
 async def test_qwen3_engine_dedupes_adjacent_transcripts() -> None:
     runner = FakeQwen3Runner("What is your name?")
     engine = qwen_engine(runner, min_audio_ms=200)

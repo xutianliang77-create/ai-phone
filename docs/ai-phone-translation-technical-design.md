@@ -1,6 +1,6 @@
 # AI 翻译电话技术方案
 
-版本：v0.4
+版本：v0.5
 日期：2026-07-11
 范围：Call Link、WebRTC/VoIP 通话房间、拨打手机号翻译电话、PSTN 服务商桥接、AI Calling Agent。  
 关联文档：`docs/ai-communication-feature-design.md`、`docs/ai-communication-ui-design.md`、`docs/ai-phone-translation-protocol-design.md`、`docs/ai-phone-translation-data-ops-design.md`
@@ -199,7 +199,7 @@ App PCM16
 | App | 麦克风、AudioSession、保守静音门控、TTS playback gate、AEC | 不做在线链路的权威端点判断 |
 | Gateway | 帧排序、批处理、重连、flush、session 生命周期 | 不执行神经 VAD 推理 |
 | ASR Service | 重采样、MarbleNet、前置缓存、端点、最大分段、RMS 降级 | 不处理 TTS 播放回声策略 |
-| Speaker Provider | 输出独立 speaker spans | 不决定 ASR 是否产生字幕 |
+| Speaker Provider | 输出独立 speaker spans | 不直接执行 ASR；稳定边界由 Gateway Coordinator 提交给 ASR Service |
 
 生产基线：
 
@@ -231,6 +231,7 @@ VAD 只能区分语音和非语音，不能识别设备自身 TTS。扬声器自
 - VAD 决定语音生命周期；确认的 speaker 变化决定 turn；语义完整决定软分句。
 - 语种变化只决定 `dominantLanguage` 和翻译方向，不是硬断点。中文夹英文、英文夹中文、姓名、品牌、型号和字母串保持同一 speaker turn。
 - 快速抢话通过 `SpeechTurnCoordinator + ASR Turn Buffer` 在 `boundaryMs` 回切 PCM，不能等 ASR 输出后再给整段选择一个主 speaker。
+- ASR Service 内部边界提交只结束 speaker turn，不重置 MarbleNet VAD；边界前后 PCM 均保留在同一 session 时间轴。
 - 单麦克风重叠语音实时阶段只翻译主 speaker 并标记 overlap；独立 participant track 可并行翻译每一路。
 
 说话人归属规则：

@@ -1,6 +1,6 @@
 # ai phone 优化开发计划
 
-版本：v1.6
+版本：v1.7
 日期：2026-07-11  
 任务来源：`docs/ai-phone-optimization-development-tasks.md`
 
@@ -169,11 +169,11 @@ LLM 纪要、扫描 UI 和国际模型 Provider 可在 M1 稳定接口冻结后�
 
 | 阶段 | 任务 | 预计工作量 | 状态 | 退出条件 |
 | --- | --- | ---: | --- | --- |
-| S0 | 多人默认统一为4 | 0.5天 | in_progress | App、API、Speaker Service 和协议一致，旧客户端2人配置被服务器规范化 |
-| S1 | `OPT-SPK-005` 边界协调器 | 1-2天 | todo | participant、VAD、speaker 优先级和防抖测试通过 |
-| S2 | `OPT-SPK-006` ASR Turn Buffer | 2-3天 | todo | 快速换人按 `boundaryMs` 回切 PCM，不重置 VAD |
+| S0 | 多人默认统一为4 | 0.5天 | code_complete | App、API、Speaker Service 和协议一致，旧客户端2人配置被服务器规范化 |
+| S1 | `OPT-SPK-005` 边界协调器 | 1-2天 | code_complete | 240ms/65%/0.60/双窗口、抖动、overlap 和单次边界测试通过；真机待验收 |
+| S2 | `OPT-SPK-006` ASR Turn Buffer | 2-3天 | in_progress | boundary PCM 回切与 VAD 连续性代码通过；2秒诊断缓冲、竞态指标和真机待完成 |
 | S3 | `OPT-SPK-007` 翻译队列 | 1-2天 | todo | 不跨 speaker 翻译，最近 turn 只作上下文，输出顺序稳定 |
 | S4 | `OPT-SPK-008` overlap/混合语种 | 1-2天 | in_progress | 2至4人、中英夹杂、抢话和重叠策略通过 |
 | S5 | 联合真机验收 | 2天 | todo | 对话、聆听、双人、三人、四人、快速换人、混合语种和30分钟稳定性通过 |
 
-完整实现预计7至10个开发日。近期顺序为 `S0 -> S1 -> S2 -> S3 -> S4 -> S5`；不能通过在现有 Aligner 后增加文本规则替代 S1/S2。
+剩余实现预计5至8个开发日。近期顺序为 `S2 -> S3 -> S4 -> S5`；不能通过在现有 Aligner 后增加文本规则替代音频边界回切。

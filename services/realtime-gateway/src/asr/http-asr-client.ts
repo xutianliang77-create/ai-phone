@@ -43,6 +43,10 @@ export interface HttpAsrFlushRequest {
   corrections?: Array<{ fromText: string; toText: string }>;
 }
 
+export interface HttpAsrBoundaryRequest extends HttpAsrFlushRequest {
+  boundaryMs: number;
+}
+
 interface HttpAsrResponse {
   segmentId?: string;
   text?: string;
@@ -96,6 +100,33 @@ export class HttpAsrClient {
     return this.parseTranscript(
       (await response.json()) as HttpAsrResponse,
       "asr_flush",
+    );
+  }
+
+  async commitBoundary(
+    request: HttpAsrBoundaryRequest,
+  ): Promise<TranscriptResult | null> {
+    const response = await this.fetchWithTimeout(
+      this.sessionUrl(request.sessionId) + "/boundary",
+      {
+        method: "POST",
+        headers: this.headers(),
+        body: JSON.stringify({
+          boundaryMs: request.boundaryMs,
+          sourceLanguage: request.sourceLanguage,
+          targetLanguage: request.targetLanguage,
+          hotwords: request.hotwords ?? [],
+          corrections: request.corrections ?? [],
+        }),
+      },
+    );
+    if (response.status === 204) return null;
+    if (!response.ok) {
+      throw new Error(`HTTP ASR boundary returned HTTP ${response.status}`);
+    }
+    return this.parseTranscript(
+      (await response.json()) as HttpAsrResponse,
+      "asr_boundary",
     );
   }
 
