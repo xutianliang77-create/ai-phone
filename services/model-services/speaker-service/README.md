@@ -17,5 +17,10 @@ For Sortformer, install NeMo according to NVIDIA's model card, then run:
 
 ```bash
 SPEAKER_MODEL_PROVIDER=sortformer_shadow \
+  SPEAKER_MODEL_ID=/data/models/translation-model-eval/models/sortformer/diar_streaming_sortformer_4spk-v2.1.nemo \
   .venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8022
 ```
+
+The shadow runtime uses a bounded rolling context and aligns anonymous labels
+across overlapping windows. Keep the Gateway provider disabled until the fixed
+suite and a real-device multi-speaker run both pass.

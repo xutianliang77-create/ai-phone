@@ -29,6 +29,47 @@ export function evaluateSpeakerDiarization(input) {
   };
 }
 
+export function evaluateSpeakerLabelStability(input) {
+  const durationMs = positiveInteger(
+    input.durationMs,
+    inferredDuration(input.reference, input.predicted),
+  );
+  const windowMs = positiveInteger(input.windowMs, 300_000);
+  const predictedSpeakers = uniqueSpeakers(input.predicted);
+  const referenceSpeakers = uniqueSpeakers(input.reference);
+  const assignments = {};
+  let labelDriftEvents = 0;
+  for (const predictedSpeaker of predictedSpeakers) {
+    const windows = [];
+    let previous = null;
+    for (let startMs = 0; startMs < durationMs; startMs += windowMs) {
+      const endMs = Math.min(durationMs, startMs + windowMs);
+      const scores = referenceSpeakers.map((referenceSpeaker) => ({
+        speakerId: referenceSpeaker,
+        overlapMs: speakerWindowOverlap(
+          input.predicted,
+          predictedSpeaker,
+          input.reference,
+          referenceSpeaker,
+          startMs,
+          endMs,
+        ),
+      })).sort((left, right) => right.overlapMs - left.overlapMs);
+      const dominant = scores[0]?.overlapMs > 0 ? scores[0].speakerId : null;
+      if (dominant && previous && dominant !== previous) labelDriftEvents += 1;
+      if (dominant) previous = dominant;
+      windows.push({ startMs, endMs, dominantSpeakerId: dominant });
+    }
+    assignments[predictedSpeaker] = windows;
+  }
+  return {
+    stableSpeakerCount: predictedSpeakers.length,
+    labelDriftEvents,
+    windowMs,
+    windowAssignments: assignments,
+  };
+}
+
 function bestSpeakerMapping(input) {
   if (input.predictedSpeakers.length === 0) return {};
   const candidates = [
@@ -73,13 +114,44 @@ function scoreFrames(input) {
 
 function mappedOverlap(input) {
   let overlap = 0;
-  for (let at = 0; at < input.durationMs; at += input.frameMs) {
-    const reference = activeSpeakers(input.reference, at);
-    for (const predicted of activeSpeakers(input.predicted, at)) {
-      if (reference.has(input.mapping[predicted])) overlap += 1;
+  for (const predicted of input.predicted) {
+    const mappedSpeaker = input.mapping[predicted.speakerId];
+    for (const reference of input.reference) {
+      if (reference.speakerId === mappedSpeaker) {
+        overlap += intervalOverlapMs(predicted, reference);
+      }
     }
   }
   return overlap;
+}
+
+function intervalOverlapMs(left, right) {
+  return Math.max(
+    0,
+    Math.min(left.endMs, right.endMs) - Math.max(left.startMs, right.startMs),
+  );
+}
+
+function speakerWindowOverlap(
+  predicted,
+  predictedSpeaker,
+  reference,
+  referenceSpeaker,
+  windowStart,
+  windowEnd,
+) {
+  let total = 0;
+  for (const left of predicted) {
+    if (left.speakerId !== predictedSpeaker) continue;
+    for (const right of reference) {
+      if (right.speakerId !== referenceSpeaker) continue;
+      total += intervalOverlapMs(
+        { startMs: Math.max(left.startMs, windowStart), endMs: Math.min(left.endMs, windowEnd) },
+        { startMs: Math.max(right.startMs, windowStart), endMs: Math.min(right.endMs, windowEnd) },
+      );
+    }
+  }
+  return total;
 }
 
 function activeSpeakers(spans, atMs) {

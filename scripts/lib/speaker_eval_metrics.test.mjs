@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { evaluateSpeakerDiarization } from "./speaker_eval_metrics.mjs";
+import {
+  evaluateSpeakerDiarization,
+  evaluateSpeakerLabelStability,
+} from "./speaker_eval_metrics.mjs";
 
 describe("speaker diarization metrics", () => {
   it("maps anonymous labels before computing DER", () => {
@@ -33,5 +36,22 @@ describe("speaker diarization metrics", () => {
 
     expect(result.diarizationErrorRate).toBe(1);
     expect(result.referenceSpeakerFrames).toBe(2);
+  });
+
+  it("detects a stable label changing its dominant reference speaker", () => {
+    const result = evaluateSpeakerLabelStability({
+      durationMs: 600_000,
+      windowMs: 300_000,
+      reference: [
+        { speakerId: "alice", startMs: 0, endMs: 300_000 },
+        { speakerId: "bob", startMs: 300_000, endMs: 600_000 },
+      ],
+      predicted: [
+        { speakerId: "speaker_1", startMs: 0, endMs: 600_000 },
+      ],
+    });
+
+    expect(result.stableSpeakerCount).toBe(1);
+    expect(result.labelDriftEvents).toBe(1);
   });
 });

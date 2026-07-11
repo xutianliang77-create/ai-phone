@@ -1,6 +1,6 @@
 # ai phone 说话人归属技术设计
 
-版本：v1.1
+版本：v1.2
 日期：2026-07-11
 
 ## 1. 目标与边界
@@ -100,6 +100,18 @@ Call Link/PSTN 独立音轨
 - speaker 切换 P95 不高于 1.2 秒，同一人 30 分钟标签不无故漂移。
 - speaker 变化处不得被 SegmentAssembler 合并成同一字幕。
 - 身份识别低于阈值显示匿名；未授权场景不生成或持久化声纹。
+
+### 9.1 当前门禁状态（2026-07-11）
+
+- Beelink 已安装独立 NeMo 2.7.3 runtime，并加载本地固定版本
+  `diar_streaming_sortformer_4spk-v2.1.nemo`。
+- 双人、重叠、四人和 30 分钟固定语料通过；30 分钟滚动 shadow DER 为
+  5.44%，稳定说话人数 4，标签漂移 0 次。
+- 1.2 秒双人连续切换语料 DER 为 60.33%，未达到 20% 门槛；降低
+  post-processing 阈值不能解决整段被识别为同一 speaker 的问题。
+- 因固定语料未全部通过，Gateway Speaker Provider 必须保持关闭；iPhone
+  双人、抢话、重叠、四人、历史重命名和纪要导出验收尚未开始。
+- 完整证据见 `docs/poc/sortformer-speaker-shadow-evaluation-report.md`。
 
 ## 10. 技术架构
 
