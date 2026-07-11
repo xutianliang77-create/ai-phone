@@ -24,3 +24,6 @@ SPEAKER_MODEL_PROVIDER=sortformer_shadow \
 The shadow runtime uses a bounded rolling context and aligns anonymous labels
 across overlapping windows. Keep the Gateway provider disabled until the fixed
 suite and a real-device multi-speaker run both pass.
+
+Use `scripts/stream_speaker_service_eval.py --realtime` when the acceptance
+requires wall-clock pacing instead of accelerated audio replay.

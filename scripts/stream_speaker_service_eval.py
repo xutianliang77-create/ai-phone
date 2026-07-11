@@ -3,6 +3,7 @@ import argparse
 import base64
 import json
 from pathlib import Path
+import time
 import urllib.request
 import uuid
 import wave
@@ -16,6 +17,11 @@ def main() -> None:
     parser.add_argument("--api-key")
     parser.add_argument("--frame-ms", type=int, default=1000)
     parser.add_argument("--max-speakers", type=int, default=4)
+    parser.add_argument(
+        "--realtime",
+        action="store_true",
+        help="pace audio frames against wall-clock time",
+    )
     args = parser.parse_args()
 
     session_id = f"shadow-eval-{uuid.uuid4()}"
@@ -41,6 +47,7 @@ def main() -> None:
             frames_per_request = sample_rate * args.frame_ms // 1000
             sequence = 0
             timestamp_ms = 0
+            started_at = time.monotonic()
             while True:
                 pcm = audio.readframes(frames_per_request)
                 if not pcm:
@@ -57,6 +64,9 @@ def main() -> None:
                 })
                 spans.extend(response.get("spans", []))
                 timestamp_ms += len(pcm) * 1000 // (sample_rate * 2)
+                if args.realtime:
+                    target_at = started_at + timestamp_ms / 1000
+                    time.sleep(max(0, target_at - time.monotonic()))
         flushed = request_json(
             args,
             f"/speaker/sessions/{session_id}/flush",
