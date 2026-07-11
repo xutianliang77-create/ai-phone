@@ -17,8 +17,8 @@ void main() {
     expect(find.text('ai phone'), findsOneWidget);
     expect(find.byTooltip('语言'), findsOneWidget);
     expect(find.text('开始'), findsOneWidget);
-    expect(find.text('暂停'), findsOneWidget);
-    expect(find.text('结束'), findsOneWidget);
+    expect(find.text('暂停'), findsNothing);
+    expect(find.text('结束'), findsNothing);
     expect(find.text('同传'), findsOneWidget);
     expect(find.text('通话'), findsOneWidget);
     expect(find.text('扫描'), findsOneWidget);
@@ -53,8 +53,8 @@ void main() {
 
     expect(find.text('ai phone'), findsOneWidget);
     expect(find.text('Start'), findsOneWidget);
-    expect(find.text('Pause'), findsOneWidget);
-    expect(find.text('End'), findsOneWidget);
+    expect(find.text('Pause'), findsNothing);
+    expect(find.text('End'), findsNothing);
   });
 
   testWidgets('switches interface language from home toolbar',
@@ -69,8 +69,8 @@ void main() {
 
     expect(find.text('ai phone'), findsOneWidget);
     expect(find.text('Start'), findsOneWidget);
-    expect(find.text('Pause'), findsOneWidget);
-    expect(find.text('End'), findsOneWidget);
+    expect(find.text('Pause'), findsNothing);
+    expect(find.text('End'), findsNothing);
     expect(find.byTooltip('Language'), findsOneWidget);
   });
 

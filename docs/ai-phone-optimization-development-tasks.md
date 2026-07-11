@@ -1,6 +1,6 @@
 # ai phone 优化开发任务清单
 
-版本：v1.6
+版本：v1.7
 日期：2026-07-11  
 关联：`docs/domestic-app-detailed-functional-design.md`、`docs/ai-phone-translation-technical-design.md`、`docs/domestic-design-review-action-plan.md`
 
@@ -50,6 +50,7 @@
 - `OPT-RT-005`：代码和自动化门禁完成；Gateway 按字幕顺序逐条合成，暂停、结束和断线取消在途及待处理 TTS，App 顺序播放并清空残留。iPhone + VoxCPM2 连续 20 句真实听感验收待执行。
 - `OPT-MOB-001`：代码和自动化门禁完成；iOS/Android 使用统一采集/播放所有权，系统中断结束后恢复在线录音或端侧 ASR，Android TTS/PCM 只在真实播放结束后完成。iPhone/Android 真机中断、耳机和连续朗读验收待执行。
 - `OPT-MOB-002`：代码和自动化门禁完成；扬声器、听筒和未知路由在 TTS 播放期间及 350ms 尾音窗抑制采集，有线/蓝牙耳机保持连续识别，Listening 强制静音但保留对话模式声音偏好。iPhone/Android 连续 20 句、自激和下一句完整性验收待执行。
+- `OPT-UI-001`：代码和自动化门禁完成；`idle/connecting/active/paused/ending/ended/failed` 只展示当前可执行操作，主操作固定在同一槽位，连接中可取消且迟到 session 不会恢复同传。iPhone/Android 真机布局与点击体验验收待执行。
 
 ## 3. P1 灰度任务
 

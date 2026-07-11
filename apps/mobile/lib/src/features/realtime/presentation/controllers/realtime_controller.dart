@@ -35,6 +35,7 @@ part 'realtime_controller_local_translation.dart';
 part 'realtime_controller_lifecycle.dart';
 part 'realtime_controller_segments.dart';
 part 'realtime_controller_speech.dart';
+part 'realtime_controller_start.dart';
 part 'realtime_controller_stop.dart';
 
 class RealtimeController extends ChangeNotifier {
@@ -104,6 +105,8 @@ class RealtimeController extends ChangeNotifier {
   bool _resumeAfterLifecyclePause = false, _stopInFlight = false;
   bool _disposed = false;
   bool _audioSessionRecoveryInFlight = false;
+  int _startGeneration = 0;
+  Future<void>? _startCompletion;
   Future<void>? _failureCleanup;
   final _localPartialFlush = _LocalPartialTranslationFlush();
   final _deviceAsrRecovery = _DeviceAsrRecovery();
@@ -120,49 +123,6 @@ class RealtimeController extends ChangeNotifier {
     _autoSpeakTranslation = enabled;
     if (!enabled) unawaited(_stopSpeaking());
     _notify();
-  }
-
-  Future<void> start() async {
-    _listenForAudioSessionEvents();
-    if (_status == RealtimeStatus.paused) {
-      await _resumeOrFail();
-      return;
-    }
-    if (_status == RealtimeStatus.connecting ||
-        _status == RealtimeStatus.active ||
-        _status == RealtimeStatus.ending) {
-      return;
-    }
-
-    _setStatus(RealtimeStatus.connecting);
-    try {
-      _session = null;
-      _remainingSeconds = null;
-      _lowBalance = false;
-      _gatewayDiagnostic = null;
-      _statusBeforeReconnect = null;
-      _segments.clear();
-      _drafts.clear();
-      _deviceAsrRecovery.reset();
-      if (_usesDeviceAsr) {
-        await _prepareDeviceAsr();
-      }
-      await _eventSubscription?.cancel();
-      _eventSubscription = _repository.events.listen(
-        handleGatewayEvent,
-        onError: (Object error) => _fail(displayRealtimeErrorMessage(error)),
-      );
-      _session = await _repository.startSession();
-      _startSessionTimeout(_session!);
-      if (_usesDeviceAsr) {
-        await _startDeviceAsr();
-      } else {
-        await _startAudioCapture();
-      }
-      _setStatus(RealtimeStatus.active);
-    } catch (error) {
-      _fail(await _failureMessage(error));
-    }
   }
 
   Future<void> pause() async {

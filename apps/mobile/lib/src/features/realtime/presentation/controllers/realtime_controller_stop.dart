@@ -4,12 +4,16 @@ extension RealtimeControllerStop on RealtimeController {
   Future<void> stop() async {
     if (_stopInFlight || isTerminalRealtimeStatus(_status)) return;
     _stopInFlight = true;
-    final session = _session;
+    final pendingStart =
+        _status == RealtimeStatus.connecting ? _startCompletion : null;
+    _startGeneration += 1;
     if (!_setStatus(RealtimeStatus.ending)) {
       _stopInFlight = false;
       return;
     }
     try {
+      await pendingStart;
+      final session = _session;
       await ignoreCleanupError(_audioCapture.stop);
       await ignoreCleanupError(_audioSessionCoordinator.endCapture);
       await ignoreCleanupError(() async => _audioSubscription?.cancel());

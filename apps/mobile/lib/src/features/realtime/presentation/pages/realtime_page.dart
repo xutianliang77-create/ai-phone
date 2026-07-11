@@ -149,7 +149,10 @@ class _RealtimePageState extends State<RealtimePage>
                   ),
                 ),
                 RealtimeControls(
-                  controller: controller,
+                  status: controller.status,
+                  onStart: controller.start,
+                  onPause: controller.pause,
+                  onStop: controller.stop,
                   onBeforeStart: () => _ensureRealtimeStartAllowed(this),
                 ),
               ],

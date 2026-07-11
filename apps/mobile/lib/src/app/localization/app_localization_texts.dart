@@ -27,6 +27,8 @@ const appLocalizationTexts = <String, Map<String, String>>{
   'translateToEnglish': {'zh': '中译英', 'en': 'Chinese to English'},
   'start': {'zh': '开始', 'en': 'Start'},
   'pause': {'zh': '暂停', 'en': 'Pause'},
+  'resume': {'zh': '继续', 'en': 'Resume'},
+  'startAgain': {'zh': '再次开始', 'en': 'Start again'},
   'end': {'zh': '结束', 'en': 'End'},
   'tapStartToBegin': {'zh': '点击开始进行同传', 'en': 'Tap start to begin'},
   'export': {'zh': '导出', 'en': 'Export'},
