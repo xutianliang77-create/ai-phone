@@ -1,6 +1,6 @@
 # AI 翻译电话技术方案
 
-版本：v0.3
+版本：v0.4
 日期：2026-07-11
 范围：Call Link、WebRTC/VoIP 通话房间、拨打手机号翻译电话、PSTN 服务商桥接、AI Calling Agent。  
 关联文档：`docs/ai-communication-feature-design.md`、`docs/ai-communication-ui-design.md`、`docs/ai-phone-translation-protocol-design.md`、`docs/ai-phone-translation-data-ops-design.md`
@@ -174,7 +174,7 @@ Agent 安全门：
 2. 在线模式由 ASR Service 内的 Speech Frontend 重采样至 16kHz。
 3. MarbleNet VAD 输出帧级语音概率，Endpoint State Machine 维护前置缓存、静音端点和最大分段。
 4. ASR 与 Speaker Attribution 并行处理，二者使用统一客户端音频时间轴。
-5. 按时间轴对齐 transcript 与 speaker span，speaker 变化时强制断句。
+5. SpeechTurnCoordinator 确认 speaker 变化后在音频时间轴切分 turn；不同 speaker 的文本禁止合并。
 6. 自动语种识别和翻译方向选择。
 7. 术语纠错和翻译。
 8. TTS streaming、Jitter buffer 和目标端播放。
@@ -222,6 +222,16 @@ VAD 只能区分语音和非语音，不能识别设备自身 TTS。扬声器自
 | PSTN | 500-800ms | 300ms | 8s | 兼容 8kHz 电话音频 |
 
 当前生产 Qwen3-ASR 使用 `1100ms` 端点作为统一安全基线。模式化参数在 `OPT-VAD-003` 完成固定语料门禁后再启用，避免一次上线同时改变模型和断句策略。
+
+### 8.3 多说话人和混合语种
+
+- conversation、meeting、classroom 和 business 均按多人场景设计，不限定为2个说话人。
+- 单麦克风 Streaming Sortformer 当前最多输出4个稳定匿名槽位，因此 App、API 和模型服务默认 `maxSpeakers=4`。
+- Call Link/PSTN 使用 participant track，按房间真实参与者区分，不受单麦克风4人限制。
+- VAD 决定语音生命周期；确认的 speaker 变化决定 turn；语义完整决定软分句。
+- 语种变化只决定 `dominantLanguage` 和翻译方向，不是硬断点。中文夹英文、英文夹中文、姓名、品牌、型号和字母串保持同一 speaker turn。
+- 快速抢话通过 `SpeechTurnCoordinator + ASR Turn Buffer` 在 `boundaryMs` 回切 PCM，不能等 ASR 输出后再给整段选择一个主 speaker。
+- 单麦克风重叠语音实时阶段只翻译主 speaker 并标记 overlap；独立 participant track 可并行翻译每一路。
 
 说话人归属规则：
 

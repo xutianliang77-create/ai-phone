@@ -1,7 +1,7 @@
 # AI 翻译电话协议设计
 
-版本：v0.2
-日期：2026-07-02  
+版本：v0.3
+日期：2026-07-11
 关联文档：`docs/ai-phone-translation-technical-design.md`、`docs/ai-phone-translation-data-ops-design.md`
 
 ## 1. 状态机
@@ -406,13 +406,13 @@ Realtime token 可包含：
 {
   "speakerAttribution": {
     "mode": "auto",
-    "maxSpeakers": 2,
+    "maxSpeakers": 4,
     "allowVoiceIdentity": false
   }
 }
 ```
 
-Call Link/PSTN 强制 `participant_track`；普通在线对话的 `auto` 可路由到流式 diarization；端侧无模型时降级为 `language_role` 或 `unknown`。
+Call Link/PSTN 强制 `participant_track`，按真实音轨参与者处理且不设置 diarization 人数上限；普通在线对话和聆听的 `auto` 默认使用模型容量 `maxSpeakers=4`；端侧无模型时降级为 `language_role` 或 `unknown`。
 
 会话管理接口：
 

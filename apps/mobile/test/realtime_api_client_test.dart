@@ -41,6 +41,11 @@ void main() {
     expect(requestBody?['voiceOutput'], isTrue);
     expect(requestBody?['voice'], {'mode': 'preset'});
     expect(requestBody?['termbaseId'], 'default');
+    expect(requestBody?['speakerAttribution'], {
+      'mode': 'auto',
+      'maxSpeakers': 4,
+      'allowVoiceIdentity': false,
+    });
   });
 
   test('creates sessions with ready My Voice config', () async {

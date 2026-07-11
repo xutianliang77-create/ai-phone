@@ -1,6 +1,6 @@
 # ai phone 优化开发计划
 
-版本：v1.5
+版本：v1.6
 日期：2026-07-11  
 任务来源：`docs/ai-phone-optimization-development-tasks.md`
 
@@ -84,6 +84,9 @@ M2 不调整模型参数，避免 UI 和模型体验同时变化导致问题难�
 - App 增加行业包选择，服务端返回实际生效词库版本。
 - 执行 `OPT-SPK-001`，先复用 Call Link 独立音轨角色并贯通字幕、历史和 review。
 - 执行 `OPT-SPK-002/003`，在独立 harness 评测通过后接入单麦克风流式说话人分离。
+- 执行 `OPT-SPK-005/006`，把确认的 speaker boundary 前移到 ASR 音频提交阶段。
+- 执行 `OPT-SPK-007`，翻译、纠错和 TTS 统一使用 speaker turn，不跨说话人合并。
+- 执行 `OPT-SPK-008`，默认支持模型容量内4人，语种变化不作为硬断点。
 - 执行 `OPT-VAD-004`，只持久化 segment 级 VAD 摘要和时间轴，不保存 20ms 原始概率。
 
 ### M4：Call Link 与数据
@@ -161,3 +164,16 @@ LLM 纪要、扫描 UI 和国际模型 Provider 可在 M1 稳定接口冻结后�
 | V5 | `OPT-VAD-005` 端侧候选 | 2-3 天，非当前关键路径 | todo | CoreML/Android ONNX 报告完成，通过后再立项集成 |
 
 近期关键路径为 `V1 -> V2 -> V3`，预计 4 个开发日；`V4` 随说话人和智能记录进入 M3，`V5` 不阻塞国内版在线模式。
+
+## 8. 说话人驱动同传执行计划
+
+| 阶段 | 任务 | 预计工作量 | 状态 | 退出条件 |
+| --- | --- | ---: | --- | --- |
+| S0 | 多人默认统一为4 | 0.5天 | in_progress | App、API、Speaker Service 和协议一致，旧客户端2人配置被服务器规范化 |
+| S1 | `OPT-SPK-005` 边界协调器 | 1-2天 | todo | participant、VAD、speaker 优先级和防抖测试通过 |
+| S2 | `OPT-SPK-006` ASR Turn Buffer | 2-3天 | todo | 快速换人按 `boundaryMs` 回切 PCM，不重置 VAD |
+| S3 | `OPT-SPK-007` 翻译队列 | 1-2天 | todo | 不跨 speaker 翻译，最近 turn 只作上下文，输出顺序稳定 |
+| S4 | `OPT-SPK-008` overlap/混合语种 | 1-2天 | in_progress | 2至4人、中英夹杂、抢话和重叠策略通过 |
+| S5 | 联合真机验收 | 2天 | todo | 对话、聆听、双人、三人、四人、快速换人、混合语种和30分钟稳定性通过 |
+
+完整实现预计7至10个开发日。近期顺序为 `S0 -> S1 -> S2 -> S3 -> S4 -> S5`；不能通过在现有 Aligner 后增加文本规则替代 S1/S2。

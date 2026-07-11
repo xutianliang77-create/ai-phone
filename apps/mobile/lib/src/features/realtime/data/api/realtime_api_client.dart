@@ -51,7 +51,7 @@ class RealtimeApiClient {
         'voiceOutput': voice != null,
         'speakerAttribution': const <String, Object?>{
           'mode': 'auto',
-          'maxSpeakers': 2,
+          'maxSpeakers': 4,
           'allowVoiceIdentity': false,
         },
         if (voice != null) 'voice': voice,

@@ -1,6 +1,6 @@
 # ai phone 优化开发任务清单
 
-版本：v2.1
+版本：v2.2
 日期：2026-07-11  
 关联：`docs/domestic-app-detailed-functional-design.md`、`docs/ai-phone-translation-technical-design.md`、`docs/domestic-design-review-action-plan.md`
 
@@ -60,7 +60,9 @@
 - `OPT-UI-002`：代码和自动化门禁完成；字幕区移除固定 420dp 高度并占满剩余空间，最后一段标记当前句，译文 final 前显示 pending，动态高度字幕可自动跟随并在用户上滑后提供回到底部。iPhone/Android 真机小屏、横屏和 200% 字体验收待执行。
 - `OPT-SPK-001`：统一 contract、Call Link participant track、Session Repository、字幕、历史、review 和导出代码完成；真实双端角色归属验收待执行。
 - `OPT-SPK-002`：Streaming Sortformer 已在 Beelink 部署，HTTP Provider、ASR 并行旁路、时间对齐、故障降级和固定双声源测试通过；抢话、重叠、四人和正式真人 RTTM 门禁仍待执行。
-- `OPT-SPK-003`：speaker 强制断句、普通同传字幕标签、历史清单和会话内重命名代码完成，iPhone 已能显示匿名“说话人 1/2”；历史重命名、纪要、导出和完整多人场景验收后结项。
+- `OPT-SPK-003`：ASR 后置 speaker 对齐、不同 speaker 段禁止合并、字幕标签、历史清单和会话内重命名代码完成，iPhone 已能显示匿名“说话人 1/2”；ASR 段内部按 speaker 切分由 `OPT-SPK-005/006` 负责。
+- `OPT-SPK-005/006/007`：`todo`。当前仍是 ASR 输出后归属 speaker，尚不能在一个 ASR 段内部准确拆分多人文本。
+- `OPT-SPK-008`：`in_progress`。App、API 和 Speaker Service 默认人数已统一调整为4；overlap、unknown、revision 和混合语种联合验收待执行。
 
 ## 3. P1 灰度任务
 
@@ -73,7 +75,11 @@
 | OPT-TERM-001 | 行业和术语选择 | 商业、科技、医疗、旅游、餐饮、娱乐 | OPT-LLM-002 | App 选择行业后 ASR 热词、翻译术语、LLM 保护字段生效 |
 | OPT-SPK-001 | 说话人统一数据契约 | speaker id、角色、标签、来源和置信度贯通字幕、历史、导出、review | OPT-RT-003 | Call Link 独立音轨可准确显示我/对方，普通同传兼容匿名 speaker |
 | OPT-SPK-002 | 流式说话人分离 Provider | 独立 harness、Streaming Sortformer 评测、时间区间输出 | OPT-SPK-001 | 双人和多人固定语料达到 DER、切换延迟和标签稳定性门槛 |
-| OPT-SPK-003 | 普通同传说话人归属 | 音频/ASR 时间对齐、speaker 强制断句、App 标签和重命名 | OPT-SPK-002 | 单麦克风字幕稳定区分说话人，不跨 speaker 合并文本 |
+| OPT-SPK-003 | 普通同传说话人归属 | 音频/ASR 后置时间对齐、不同 speaker 段禁止合并、App 标签和重命名 | OPT-SPK-002 | 已分开的 ASR 段稳定归属说话人，不跨 speaker 再合并文本 |
+| OPT-SPK-005 | SpeechTurnCoordinator | participant、VAD、speaker span 边界优先级和防抖状态机 | OPT-SPK-002、OPT-VAD-001 | 确认换人可产生稳定 `boundaryMs`，标签抖动不切碎字幕 |
+| OPT-SPK-006 | 说话人驱动 ASR Turn Buffer | 2秒 PCM 环形缓冲、按边界回切、连续 VAD 与 turn 状态分离 | OPT-SPK-005 | 快速换人不进入同一 ASR 段，切 turn 不重置连续 VAD |
+| OPT-SPK-007 | Speaker-turn 翻译队列 | `turnId + revision`、同 speaker 语义合并、上下文翻译和有序输出 | OPT-SPK-006、OPT-LLM-001 | 不跨 speaker 拼接翻译，返回顺序与音频时间轴一致 |
+| OPT-SPK-008 | 多人和混合语种策略 | 默认4人、overlap、unknown、revision、dominant/mixed language | OPT-SPK-005 | 对话和聆听不限定2人，中英混说不触发硬断点或 speaker 切换 |
 | OPT-CALL-001 | Call Link 真人双端闭环 | Host、Guest、Worker、字幕、译音、历史 | OPT-RT-003、OPT-RT-005、OPT-MOB-001 | 双端连续 30 分钟，无乱序和不可恢复断线 |
 | OPT-CALL-002 | 通话页产品分层 | 核心入口、实验入口、不可用能力隐藏 | OPT-UI-004 | 首屏不展示不可用 PSTN 为主要操作 |
 | OPT-SCAN-001 | 扫描流程重构 | 图片预览、识别、翻译、保存、分享渐进流程 | OPT-UI-004 | 未选择图片时不展示无效二级操作 |

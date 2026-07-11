@@ -1,6 +1,6 @@
 # ai phone 优化验收方案
 
-版本：v1.5
+版本：v1.6
 日期：2026-07-11  
 任务来源：`docs/ai-phone-optimization-development-tasks.md`
 
@@ -109,6 +109,10 @@ TTS 回灌指标由 App playback gate/AEC 验收，不能把 VAD 对合成语音
 | AC-TERM-001 | OPT-TERM-001 | 六个行业包中英文词均能用于热词、翻译和保护字段 |
 | AC-SPK-001 | OPT-SPK-001 | Call Link/PSTN 独立音轨角色归属准确，字幕、历史、导出和 review 字段一致 |
 | AC-SPK-002 | OPT-SPK-002、OPT-SPK-003 | 双人/多人固定语料达到 DER、切换延迟和 30 分钟标签稳定性门槛，不跨 speaker 合并 |
+| AC-SPK-004 | OPT-SPK-005 | 新 speaker 证据不足时不切段；达到240ms、65%占比、0.60置信度且连续稳定后产生一次边界 |
+| AC-SPK-005 | OPT-SPK-006 | 两人无停顿快速换人 | ASR 音频在 boundaryMs 切开，上一人和下一人文本不进入同一 turn |
+| AC-SPK-006 | OPT-SPK-007 | 2至4人交替和模型乱序返回 | 翻译按 turn startMs 展示，不跨 speaker 拼接，不重复 TTS 或计费 |
+| AC-SPK-007 | OPT-SPK-008 | 中文夹英文、英文夹中文、姓名、型号、抢话和重叠 | 语种变化不触发硬断点；主 speaker 可翻译；overlap 和 unknown 如实显示 |
 | AC-CALL-001 | OPT-CALL-001 | Host + Guest + Worker 连续 30 分钟，字幕和译音双向可用 |
 | AC-CALL-002 | OPT-CALL-002 | 未完成 PSTN 不作为主入口，实验状态清晰 |
 | AC-SCAN-001 | OPT-SCAN-001 | 40 张图片 OCR、翻译、保存和分享流程完成 |
@@ -132,7 +136,7 @@ TTS 回灌指标由 App playback gate/AEC 验收，不能把 VAD 对合成语音
 | AC-VAD-005 | OPT-VAD-005 | iOS CoreML、Android ONNX 与现有端点检测使用同一语料评测；低音量、噪声、耗电、温升、包体和实时系数均有报告 |
 | AC-DATA-003 | OPT-DATA-003 | SQLite 迁移 PostgreSQL/Redis 演练 | 数量、余额、幂等键和对象引用一致，可回滚 |
 
-说话人专项证据必须同时包含：Call Link 双端独立音轨、安静双人单麦克风、快速抢话、重叠语音、四人会议、断网重连、30 分钟稳定性、会话内重命名、纪要和三种导出。模型服务不可用时 ASR/翻译仍须继续，UI 显示匿名或未知，不得误显示实名。
+说话人专项证据必须同时包含：Call Link 多参与者独立音轨、安静双人、三人和四人单麦克风、快速抢话、重叠语音、中英混说、断网重连、30分钟稳定性、会话内重命名、纪要和三种导出。模型服务不可用时 ASR/翻译仍须继续，UI 显示匿名或未知，不得误显示实名。对话和聆听不得使用固定两人假设；单麦克风超过4人时必须明确能力降级，不伪造稳定身份。
 
 ## 7. UI 专项验收
 

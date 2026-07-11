@@ -99,6 +99,9 @@ export function validateCreateRealtimeSessionRequest(
   if (parsedSpeakerAttribution === false) {
     return invalid("speakerAttribution must be a valid speaker configuration");
   }
+  const resolvedSpeakerAttribution = normalizeSpeakerAttribution(
+    parsedSpeakerAttribution ?? defaultSpeakerAttribution(),
+  );
 
   return {
     ok: true,
@@ -110,9 +113,7 @@ export function validateCreateRealtimeSessionRequest(
       voiceOutput,
       ...(parsedVoice ? { voice: parsedVoice } : {}),
       ...(termbaseId ? { termbaseId } : {}),
-      speakerAttribution: parsedSpeakerAttribution ?? defaultSpeakerAttribution(
-        mode as RealtimeMode,
-      ),
+      speakerAttribution: resolvedSpeakerAttribution,
     },
   };
 }
@@ -142,14 +143,29 @@ function parseSpeakerAttribution(
   };
 }
 
-function defaultSpeakerAttribution(
-  mode: RealtimeMode,
-): SpeakerAttributionOptionsDto {
+function defaultSpeakerAttribution(): SpeakerAttributionOptionsDto {
   return {
     mode: "auto",
-    maxSpeakers: mode === "conversation" ? 2 : 4,
+    maxSpeakers: 4,
     allowVoiceIdentity: false,
   };
+}
+
+function normalizeSpeakerAttribution(
+  options: SpeakerAttributionOptionsDto,
+): SpeakerAttributionOptionsDto {
+  if (options.mode === "participant_track") {
+    return {
+      mode: "participant_track",
+      ...(typeof options.allowVoiceIdentity === "boolean"
+        ? { allowVoiceIdentity: options.allowVoiceIdentity }
+        : {}),
+    };
+  }
+  if (options.mode === "auto" || options.mode === "diarization") {
+    return { ...options, maxSpeakers: 4 };
+  }
+  return options;
 }
 
 function parseVoiceConfig(value: unknown): RealtimeVoiceConfig | null | false {

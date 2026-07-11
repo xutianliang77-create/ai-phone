@@ -1,6 +1,6 @@
 # ai phone 两层部署与数据流设计
 
-版本：v1.2
+版本：v1.3
 日期：2026-07-11  
 状态：已确认约束，进入实施
 
@@ -148,7 +148,9 @@ ASR Speech Frontend: 16kHz normalize -> MarbleNet VAD -> endpoint/最大分段
 ASR -> Gateway: partial/final、language、confidence
 Gateway -> Speaker Provider: 同时间轴音频帧
 Speaker Provider -> Gateway: anonymous speaker spans
-Gateway: 时间对齐，speaker 变化强制断句
+Gateway SpeechTurnCoordinator: participant/VAD/speaker span -> confirmed boundaryMs
+Gateway -> ASR Turn Buffer: commitBoundary(boundaryMs, fromSpeaker, toSpeaker)
+ASR Turn Buffer: 切分 PCM，speaker turn 内运行 Qwen3-ASR
 Gateway -> Translation/TTS: 带 speaker 的 final 文本
 Gateway -> App: transcript、translation、speaker.updated、audio.output
 Gateway -> API internal: segment.final 事件

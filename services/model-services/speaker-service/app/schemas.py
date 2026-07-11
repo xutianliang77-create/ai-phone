@@ -1,12 +1,17 @@
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class SpeakerOptions(BaseModel):
     mode: Literal["auto", "diarization"]
-    maxSpeakers: Literal[2, 3, 4] = 2
+    maxSpeakers: Literal[2, 3, 4] = 4
     allowVoiceIdentity: bool = False
+
+    @field_validator("maxSpeakers", mode="after")
+    @classmethod
+    def use_model_capacity(cls, _: int) -> int:
+        return 4
 
 
 class CreateSpeakerSessionRequest(BaseModel):

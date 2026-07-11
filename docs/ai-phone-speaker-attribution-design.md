@@ -1,6 +1,6 @@
 # ai phone 说话人归属技术设计
 
-版本：v1.4
+版本：v1.5
 日期：2026-07-11
 
 ## 1. 目标与边界
@@ -15,10 +15,11 @@
 
 ## 2. 当前缺口
 
-- 普通 realtime 的 `TranscriptEvent`、`SessionSegmentDto`、App `SubtitleSegment` 和历史记录没有说话人字段。
-- Qwen3-ASR 当前返回文本、语言和置信度，不返回 speaker label 或时间区间。
-- SegmentAssembler 只按语言和语义边界合并，尚未把“说话人变化”作为强制断句条件。
-- Call Link 已有 `speakerRole`，但没有复用到普通同传数据契约。
+- speaker 字段、时间对齐、字幕和历史已经贯通，但说话人归属发生在 ASR 整段输出之后。
+- 一个 ASR 音频段包含多人时，当前 Aligner 只能选择累计覆盖最大的一个 speaker，无法可靠拆分文本。
+- SegmentAssembler 已禁止不同 speaker 的 ASR 段继续合并，但无法修复 ASR 段内部已经混入两个人的问题。
+- App 和 API 曾把 conversation 默认写成 2 人，与对话、聆听和会议的多人场景不符。
+- 语言变化还没有独立的混合语种状态，不能把代码切换误当成说话人变化或硬断点。
 
 ## 3. 统一数据契约
 
@@ -48,9 +49,10 @@ Call Link/PSTN 独立音轨
   -> PCM 16 kHz fan-out
   -> VAD + Streaming Diarization Provider
   -> speaker time spans
-  -> ASR text time spans
-  -> SpeakerSegmentAligner
-  -> SegmentAssembler (speaker change forces split)
+  -> SpeechTurnCoordinator (confirmed speaker boundary)
+  -> ASR Turn Buffer 在 boundaryMs 切分音频
+  -> Qwen3-ASR turn text
+  -> SegmentAssembler (same speaker only)
   -> translation -> subtitle/history
 
 可选实名
@@ -74,7 +76,7 @@ Call Link/PSTN 独立音轨
 ## 6. App 交互
 
 - 字幕顶部显示说话人标签和稳定颜色，同一 speaker 在会话内颜色不变。
-- 默认显示“我/对方”仅限独立音轨或明确手动映射；单麦克风默认“说话人 1/2”。
+- 默认显示“我/对方”仅限独立音轨或明确手动映射；单麦克风动态显示“说话人 1/2/3/4”，不能假设只有两人。
 - 用户可在会话中或历史详情中把匿名标签重命名，但只修改本次会话展示。
 - VoiceOver/TalkBack 按“说话人、原文、译文、状态”顺序朗读。
 - 重叠说话显示主要 speaker，并在诊断字段记录 overlap；不得合并两个 speaker 的文本。
@@ -90,36 +92,31 @@ Call Link/PSTN 独立音轨
 
 1. `OPT-SPK-001`：统一 speaker 数据契约，Call Link 独立音轨先贯通字幕、历史和 review。
 2. `OPT-SPK-002`：独立 harness 部署 Streaming Sortformer，完成双人和多人固定语料评测。
-3. `OPT-SPK-003`：接入普通 realtime，增加时间对齐、speaker 强制断句和 App 标签。
+3. `OPT-SPK-003`：接入普通 realtime，增加 ASR 后置时间对齐、不同 speaker 段禁止合并和 App 标签。
 4. `OPT-SPK-004`：可选声纹实名、授权、撤回、删除和误识别门禁。
+5. `OPT-SPK-005`：SpeechTurnCoordinator、防抖和说话人边界状态机。
+6. `OPT-SPK-006`：ASR Turn Buffer、按 `boundaryMs` 切音频并保留连续 VAD 状态。
+7. `OPT-SPK-007`：按 speaker turn 排队纠错、翻译和 TTS，不跨说话人合并上下文。
+8. `OPT-SPK-008`：多人默认、混合语种、overlap、unknown 和 speaker revision 策略。
 
 ## 9. 验收门槛
 
 - Call Link/PSTN 独立音轨角色归属准确率 100%。
-- 双人安静场景 DER 不高于 15%，噪声场景不高于 25%。
+- 2至4人安静场景分别验收；双人 DER 不高于15%，四人和噪声场景不高于25%。
 - speaker 切换 P95 不高于 1.2 秒，同一人 30 分钟标签不无故漂移。
 - speaker 变化处不得被 SegmentAssembler 合并成同一字幕。
+- 中文夹英文、英文夹中文和专有名词不得触发 speaker 切换或硬断点。
+- conversation、meeting、classroom 和 business 默认允许模型容量内最多4个匿名说话人，不设置2人产品限制。
 - 身份识别低于阈值显示匿名；未授权场景不生成或持久化声纹。
 
 ### 9.1 当前门禁状态（2026-07-11）
 
-- Beelink 已安装独立 NeMo 2.7.3 runtime，并加载本地固定版本
-  `diar_streaming_sortformer_4spk-v2.1.nemo`。
-- 双人、重叠、四人和 30 分钟固定语料通过；30 分钟滚动 shadow DER 为
-  5.44%，稳定说话人数 4，标签漂移 0 次。
-- 首次 1.2 秒重复波形语料 DER 为 60.33%，但复核确认该结果同时受到 30.4 秒
-  高延迟参数、非 stateful shadow 实现和重复波形语料污染，不能作为模型淘汰依据。
-- 官方 1.04 秒低延迟配置在每轮内容不同、0.48 至 1.10 秒自然短句上取得
-  14.96% DER、0 Confusion；模型具备短轮次分离能力。
-- 原生 stateful low-latency streaming 已在独立 8023 candidate 服务实现：每会话持久化 AOSC/FIFO，使用官方 6/1/7 低延迟 profile，并支持 24 kHz 连续重采样。
-- 自然短句 24 kHz HTTP 回放得到 raw DER 14.49%、250ms collar DER 0、Confusion 0；speaker evidence latency P95 为 1.12 秒。
-- 30 分钟加速与真实墙钟状态测试均得到 raw DER 15.33%、Confusion 0、speaker 数 2；真实墙钟为 1,807.34 秒，服务 PID 未变化。该循环语料只作为稳定性证据，不作为自然对话质量证据。
-- stateful v2 已替换 Beelink 8022 旧服务，模型、runtime、工具和结果均位于 `/data/models/translation-model-eval`；Gateway 仍为 `off`。
-- 37.76 分钟未标注真人会议 shadow 无服务错误，输出限制在 4 个槽位；由于没有 RTTM，该结果不计算 DER，也不解除质量门禁。
-- 真人录音门禁尚未完成，因此 Gateway Speaker Provider
-  必须保持关闭；iPhone
-  双人、抢话、重叠、四人、历史重命名和纪要导出验收尚未开始。
-- 完整证据见 `docs/poc/sortformer-speaker-shadow-evaluation-report.md`。
+- Beelink 已运行固定 `diar_streaming_sortformer_4spk-v2.1.nemo` stateful low-latency 服务，Gateway 测试环境已启用。
+- 固定双声源和 iPhone 基础测试可以显示“说话人 1/2”，短句对齐证据已修复。
+- 模型容量为4人，产品默认已统一为 `maxSpeakers=4`；这不是承诺超过4人的单麦克风实时分离。
+- 抢话、重叠、真人四人、历史重命名、纪要和导出仍待正式验收，不能仅凭基础测试宣称商业发布完成。
+- 当前仍是 ASR 后置归属；`OPT-SPK-005/006` 完成前，连续无停顿的快速换人仍可能落入同一个 ASR 段。
+- 完整模型证据见 `docs/poc/sortformer-speaker-shadow-evaluation-report.md`。
 
 ## 10. 技术架构
 
@@ -139,7 +136,8 @@ flowchart LR
     Router["Speaker Attribution Router"]
     Track["Participant Track Provider"]
     Diar["Streaming Diarization Provider"]
-    Align["Speaker Segment Aligner"]
+    Turn["Speech Turn Coordinator"]
+    Buffer["ASR Turn Buffer"]
     ASR["ASR Provider"]
     Assemble["Segment Assembler"]
     MT["Translation Provider"]
@@ -148,14 +146,15 @@ flowchart LR
   end
 
   Capture --> Gateway
-  Gateway --> ASR
+  Gateway --> Buffer
   Gateway --> Router
   Router --> Track
   Router --> Diar
-  ASR --> Align
-  Track --> Align
-  Diar --> Align
-  Align --> Assemble
+  Track --> Turn
+  Diar --> Turn
+  Turn --> Buffer
+  Buffer --> ASR
+  ASR --> Assemble
   Assemble --> MT
   Assemble --> Repo
   MT --> Repo
@@ -174,8 +173,9 @@ flowchart LR
 | Speaker Attribution Router | 根据 session 模式选择独立音轨、diarization、manual 或 off | 回退 `unknown` |
 | Participant Track Provider | 从 LiveKit/PSTN participant metadata 得到稳定角色 | 元数据非法时拒绝角色，不猜测 |
 | Streaming Diarization Provider | 把 PCM 转成带起止时间的匿名 speaker spans | 熔断并旁路，不中断 ASR |
-| Speaker Segment Aligner | 用时间重叠把 ASR segment 绑定到 speaker | 超时先发匿名，允许迟到修正 |
-| Segment Assembler | 合并语义片段；speaker 变化时强制切段 | 不跨 speaker 合并 |
+| Speech Turn Coordinator | 综合 participant、speaker span 和 VAD，确认 turn 边界 | 低置信度不强切，回退 VAD 端点 |
+| ASR Turn Buffer | 保留未提交 PCM，并在 `boundaryMs` 切成上一 turn 和下一 turn | speaker 切段不重置连续 VAD 状态 |
+| Segment Assembler | 只在相同 speaker 内合并语义残句 | 不跨 speaker、overlap 或 unknown 边界合并 |
 | Voice Identity Matcher | 在明确授权后匹配声纹 | 低置信度返回匿名 |
 | Session Repository | 保存 speaker、segment 归属和别名 | 幂等 upsert，保留旧数据兼容 |
 
@@ -209,8 +209,9 @@ Provider 接口与具体模型隔离。`streaming_sortformer` 只是第一候选
 - ASR 结果增加 `startMs/endMs`；模型不返回时由 Gateway 使用输入批次边界估算，并标记 `timingSource=estimated`。
 - diarization 输出使用同一个 session 时间轴。
 - Aligner 按 speaker 聚合同一 ASR 区间内的所有碎片，先合并重复时间区间，再选择累计覆盖最大的 speaker；重叠比例低于门槛时返回 `unknown`。
-- speaker 结果最多等待 300ms，超过后先发送匿名 transcript；迟到结果使用 `speaker.updated` 修正，不重新执行翻译。
+- 后置归属兼容路径最多等待300ms；启用 turn segmentation 后，确认边界直接控制 ASR 音频提交，不依赖事后猜测整段 speaker。
 - streaming provider 在说话持续期间返回 `final=false` 临时 span，闭合或 flush 后用相同 `speakerId + startMs` 返回最终 span；Gateway 采用幂等替换，不能重复累计。
+- 语言检测维护独立的 `dominantLanguage/detectedLanguages/mixedLanguage`，不得参与 speaker ID 或硬断点判断。
 
 ### 10.5 三种运行路径
 
@@ -229,9 +230,10 @@ participant audio track
 
 ```text
 audio batch
-  -> ASR and diarization fan-out
-  -> time alignment
-  -> anonymous speaker segment
+  -> VAD and diarization fan-out
+  -> confirmed speaker boundary
+  -> ASR Turn Buffer split
+  -> anonymous speaker turn
   -> translation and subtitle
 ```
 
@@ -284,9 +286,10 @@ interface SpeakerAttributionOptions {
 }
 ```
 
-- 普通对话默认 `auto`，在线模式可选择 diarization，端侧模式回退 language role。
+- 普通对话、聆听、课堂和商务模式默认 `auto + maxSpeakers=4`；旧客户端发送2或3时，服务器在 auto/diarization 模式规范化为4。
 - Call Link/PSTN 强制 `participant_track`。
-- Listening/会议模式可配置 2 到 4 人。
+- participant track 按房间真实参与者处理，不使用单麦克风 diarization 的4人上限。
+- 单麦克风超过4人时显示已有匿名槽位或未知说话人，不伪造第5人的稳定身份；后续可由批处理 Provider 增强。
 
 ### 11.2.1 当前启用范围
 
@@ -486,13 +489,39 @@ interface SpeakerRepository {
 
 - 共享 `SpeakerAttributionDto`、`SegmentTimingDto`、session speaker 策略和 `speaker.updated` 协议。
 - Call Link/Worker 使用 participant track 生成权威 speaker，并写入统一 Session Repository。
-- ASR 响应携带同一音频时间轴；Gateway 已实现 speaker span 对齐和 speaker 变化强制断句。
+- ASR 响应携带同一音频时间轴；Gateway 已实现 ASR 后置 speaker span 对齐和不同 speaker 段禁止合并。
 - HTTP Speaker Provider 与 ASR 并行，失败时只降级归属，不中断 ASR/翻译。
 - App 实时字幕、Call Link、历史、纪要输入、Markdown/CSV/JSON 导出已消费统一 speaker。
 - 会话内 speaker 清单和重命名 API 已实现，重命名后 review 失效并重新生成。
 
 尚未宣称完成：
 
-- Streaming Sortformer 服务部署、固定双人/多人语料 DER/JER 评测和 shadow mode。
-- 真实单麦克风 speaker 标签真机验收。
+- SpeechTurnCoordinator 和 ASR Turn Buffer 尚未开发，ASR 段内部混入多人仍是当前主要缺口。
+- 抢话、重叠、真人四人和超过4人的能力边界验收。
 - 授权声纹身份的同意、加密 embedding、撤回和删除闭环。
+
+## 18. 说话人驱动的分句、断点和翻译
+
+### 18.1 边界优先级
+
+1. 结束、暂停、异常 finalize 和手动 flush 为最高优先级硬断点。
+2. Call Link/PSTN participant track 变化立即形成硬断点。
+3. MarbleNet 静音端点和最大分段形成硬断点。
+4. diarization 新 speaker 持续不少于240ms、证据占比不低于65%、置信度不低于0.60且连续两个窗口稳定后，形成 speaker 硬断点。
+5. 标点和语义完整只形成软断点。
+6. 语种变化不是硬断点；中英混说、姓名、品牌、型号和字母串保持在同一 speaker turn。
+
+发生 speaker 边界时，ASR Turn Buffer 在 `boundaryMs` 回切已有 PCM：边界前提交上一 speaker，边界后保留给下一 speaker。该操作只结束 turn，不结束 VAD speech lifecycle。
+
+### 18.2 混合语种
+
+每个 turn 保存 `dominantLanguage`、`detectedLanguages` 和 `mixedLanguage`。中文主导的混合句整体中译英，英文主导的混合句整体英译中，原句中的专有词保持保护。只有新语种持续1.2至1.5秒、置信度不低于0.85、前方有300ms停顿且前后都是完整语义时，才允许作为软语义边界。
+
+### 18.3 翻译队列
+
+- 翻译键为 `turnId + revision`，按 `startMs` 排序，不按模型完成顺序展示。
+- 一个 turn 只属于一个 speaker；翻译输入不能拼接其他 speaker 的正文。
+- 可携带最近3至4个已完成 turn 作为代词、姓名和术语上下文，但 Provider 只能输出当前 turn 的译文。
+- 同一 speaker 的未完成短句最多等待300至500ms；确认 speaker 变化后立即提交上一 turn。
+- `overlap=true` 时实时翻译主 speaker，保存其他活跃 speaker 作为诊断；独立 participant tracks 可分别翻译。
+- speaker revision 只更新标签；原文不变时不重复翻译、TTS 或计费。
