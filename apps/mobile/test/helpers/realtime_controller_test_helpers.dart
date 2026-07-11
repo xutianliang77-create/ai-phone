@@ -10,14 +10,19 @@ import 'package:translation_mobile/src/features/realtime/domain/entities/subtitl
 import 'package:translation_mobile/src/features/realtime/presentation/controllers/realtime_controller.dart';
 import 'package:translation_mobile/src/platform/audio/audio_capture.dart';
 import 'package:translation_mobile/src/platform/audio/audio_frame.dart';
+import 'package:translation_mobile/src/platform/speech/pcm_audio_output_player.dart';
 
 RealtimeController realtimeControllerForTest(
   FakeRealtimeRepository repository,
-  FakeAudioCapture audio,
-) {
+  FakeAudioCapture audio, {
+  PcmAudioOutputPlayer? pcmAudioOutputPlayer,
+  bool autoSpeakTranslation = false,
+}) {
   return RealtimeController(
     repository: repository,
     audioCapture: audio,
+    pcmAudioOutputPlayer: pcmAudioOutputPlayer,
+    autoSpeakTranslation: autoSpeakTranslation,
     config: AppConfig(
       apiBaseUrl: Uri.parse('http://127.0.0.1:3100'),
       useMockAudio: false,
@@ -35,8 +40,7 @@ class FakeRealtimeRepository extends RealtimeRepository {
   FakeRealtimeRepository({
     this.emitTailOnEnd = false,
     this.failEndConfirmation = false,
-  })
-      : super(
+  }) : super(
           apiClient: NoopRealtimeApiClient(),
           gatewayClient: NoopRealtimeGatewayClient(),
         );
@@ -100,6 +104,9 @@ class FakeRealtimeRepository extends RealtimeRepository {
   Future<void> closeRealtime() async {
     closeRealtimeCalls += 1;
   }
+
+  @override
+  Future<bool> pauseAndWait(String sessionId) async => true;
 
   void emit(GatewayRealtimeEvent event) {
     _events.add(event);

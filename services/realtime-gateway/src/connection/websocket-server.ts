@@ -26,7 +26,7 @@ import {
 import { createUsageBalanceClient } from "../usage/usage-balance-client.js";
 import { createUsageTickDecision } from "../usage/usage-ticker.js";
 import { HttpTtsSynthesizer } from "../tts/http-tts-synthesizer.js";
-import { emitRealtimeTtsOutputForSession } from "../tts/realtime-tts-output.js";
+import { RealtimeTtsOutputQueue } from "../tts/realtime-tts-output.js";
 import { handleControlEvent } from "./session-control-handler.js";
 import { RealtimeSessionFinalizer } from "./realtime-session-finalizer.js";
 import { RealtimeConnectionCleanup } from "./realtime-connection-cleanup.js";
@@ -51,7 +51,6 @@ export function startWebSocketServer() {
   const server = new WebSocketServer({ server: httpServer, path: "/realtime" });
   const sessionEventSink = createSessionEventSink(env);
   const usageBalanceClient = createUsageBalanceClient(env);
-  const ttsSynthesizer = new HttpTtsSynthesizer(env);
   const disconnectFinalizers = new DisconnectFinalizerRegistry(
     disconnectGraceMs,
     (error) => realtimeLogger.error({ error }, "Deferred session finalization failed"),
@@ -121,6 +120,13 @@ export function startWebSocketServer() {
     }
 
     const flushTracker = new RealtimeFlushTracker();
+    const ttsOutputQueue = new RealtimeTtsOutputQueue({
+      sessionId: session.id,
+      voiceOutput: session.claims.voiceOutput,
+      voice: session.claims.voice,
+      synthesizer: new HttpTtsSynthesizer(env),
+      isSessionActive: () => getSession(session.id)?.status === "active",
+    });
     const eventDispatcher = new RealtimeEventDispatcher({
       sendClient: (event) => send(ws, event),
       eventSink: sessionEventSink,
@@ -133,14 +139,8 @@ export function startWebSocketServer() {
       },
       afterSend: (event) => {
         flushTracker.record(event);
-        emitRealtimeTtsOutputForSession({
-          event,
-          sessionId: session.id,
-          voiceOutput: session.claims.voiceOutput,
-          voice: session.claims.voice,
-          synthesizer: ttsSynthesizer,
-          send: eventDispatcher.send,
-        });
+        if (event.type === "session.paused") ttsOutputQueue.cancelPending();
+        else ttsOutputQueue.enqueue(event, eventDispatcher.send);
       },
     });
     const sendRealtime = eventDispatcher.send;
@@ -281,7 +281,7 @@ export function startWebSocketServer() {
       clearInterval(usageInterval);
       clearAudioFrameLog(session.id);
       clearTextSegmentLog(session.id);
-      ttsSynthesizer.closeSession(session.id);
+      ttsOutputQueue.close();
       await controlQueue.catch(() => undefined);
       const reason: SessionEndReason = connectionError
         ? "connection_error"

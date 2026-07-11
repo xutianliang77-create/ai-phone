@@ -16,6 +16,7 @@ interface TtsResponse {
 
 export class HttpTtsSynthesizer {
   private readonly sequenceBySession = new Map<string, number>();
+  private readonly requestsBySession = new Map<string, Set<AbortController>>();
 
   constructor(private readonly env: RealtimeEnv) {}
 
@@ -32,7 +33,7 @@ export class HttpTtsSynthesizer {
     const text = event.text.trim();
     if (!text) return null;
 
-    const response = await this.fetchWithTimeout(endpoint, {
+    const response = await this.fetchWithTimeout(event.sessionId, endpoint, {
       method: "POST",
       headers: this.headers(),
       body: JSON.stringify({
@@ -69,16 +70,31 @@ export class HttpTtsSynthesizer {
   }
 
   closeSession(sessionId: string) {
+    this.cancelSession(sessionId);
     this.sequenceBySession.delete(sessionId);
   }
 
-  private async fetchWithTimeout(url: string, init: RequestInit) {
+  cancelSession(sessionId: string) {
+    for (const controller of this.requestsBySession.get(sessionId) ?? []) {
+      controller.abort();
+    }
+    this.requestsBySession.delete(sessionId);
+  }
+
+  private async fetchWithTimeout(sessionId: string, url: string, init: RequestInit) {
     const controller = new AbortController();
+    const requests = this.requestsBySession.get(sessionId) ?? new Set<AbortController>();
+    requests.add(controller);
+    this.requestsBySession.set(sessionId, requests);
     const timer = setTimeout(() => controller.abort(), this.env.ttsHttpTimeoutMs);
     try {
       return await fetch(url, { ...init, signal: controller.signal });
     } finally {
       clearTimeout(timer);
+      requests.delete(controller);
+      if (requests.size === 0 && this.requestsBySession.get(sessionId) === requests) {
+        this.requestsBySession.delete(sessionId);
+      }
     }
   }
 
