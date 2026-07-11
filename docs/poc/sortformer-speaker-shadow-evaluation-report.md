@@ -78,11 +78,14 @@
 
 ## 5. 发布判断
 
-当前只允许保持 `sortformer_shadow` 独立服务运行和收集评测证据。
-Gateway 的 `SPEAKER_PROVIDER` 必须保持 `off`；独立 shadow 服务可继续运行评测。
+原门禁要求 `sortformer_shadow` 独立运行、Gateway 的 `SPEAKER_PROVIDER` 保持 `off`。
+2026-07-11 用户决定跳过剩余真人 RTTM 门禁，在测试环境直接启用
+`SPEAKER_PROVIDER=http`。这不是生产发布验收，真人双人、抢话、重叠和四人质量
+风险继续保留在验收清单中。
 
-在完成原生低延迟 stateful streaming、修复 Gateway span 保存/对齐，并用有效
-语料重跑全部门禁之前，不执行：
+原计划要求完成原生低延迟 stateful streaming、修复 Gateway span 保存/对齐并用有效
+语料重跑全部门禁后，再执行以下验收。前两项工程修复已经完成；下列真人验收仍未完成，
+但不再阻塞本次测试环境直接启用：
 
 - iPhone 双人身份归属验收
 - 快速抢话与重叠验收
@@ -100,7 +103,8 @@ Gateway 的 `SPEAKER_PROVIDER` 必须保持 `off`；独立 shadow 服务可继�
 - 持续说话时返回 `final=false` 临时 span，闭合或 flush 后按相同 key 替换为最终 span。
 - Gateway 即使 ASR 当前返回空也保存 speaker span；对齐改为按 speaker 聚合并合并重复时间区间。
 
-候选测试完成后已将最终实现部署到 `0.0.0.0:8022`；Gateway 仍为 `off`。
+候选测试完成后已将最终实现部署到 `0.0.0.0:8022`；测试 Gateway 已按用户决定
+切换为 `http` Provider。
 
 | 项目 | 结果 |
 | --- | ---: |
@@ -122,11 +126,11 @@ Gateway 的 `SPEAKER_PROVIDER` 必须保持 `off`；独立 shadow 服务可继�
 250ms collar 后错误为 0，且没有 speaker confusion。30 分钟输入由自然短句集循环构成，
 只用于验证状态、标签和进程稳定性，不能替代真人中文、中英混说、噪声、重叠和四人质量门禁。
 
-正式启用前剩余：
+生产发布验收仍剩余：
 
 1. 使用真人双人、抢话、重叠和四人 RTTM 录音运行相同 pyannote 门禁。
-2. 通过后仅在测试 Gateway 开启 `SPEAKER_PROVIDER=http`。
-3. 最后执行 iPhone 字幕、历史重命名、纪要和导出验收。
+2. 执行 iPhone 字幕、历史重命名、纪要和导出验收。
+3. 上述项目通过后，才把本次测试环境启用结论升级为生产可发布结论。
 
 额外集成结果：
 

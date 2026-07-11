@@ -288,6 +288,14 @@ interface SpeakerAttributionOptions {
 - Call Link/PSTN 强制 `participant_track`。
 - Listening/会议模式可配置 2 到 4 人。
 
+### 11.2.1 当前启用范围
+
+2026-07-11 起，在线测试环境直接启用 Streaming Sortformer v2.1：Gateway 使用
+`SPEAKER_PROVIDER=http` 连接 Beelink Speaker Service。固定语料、30 分钟稳定性和
+无标注真人 shadow 已完成；用户决定跳过真人 RTTM 质量门禁，先进入真实使用。
+该决定只放开测试环境，不等同于生产发布验收。端侧模式仍不加载说话人模型，
+Call Link/PSTN 的 participant track 仍优先于 diarization。
+
 ### 11.3 管理接口
 
 | 方法 | 路径 | 用途 |

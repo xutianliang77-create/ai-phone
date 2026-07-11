@@ -20,7 +20,7 @@
         "contract": "POST /tts/synthesize returns pcm16 chunks"
       },
       "speaker": {
-        "provider": "off_pending_shadow_gate",
+        "provider": "http_streaming_sortformer",
         "model": "nvidia/diar_streaming_sortformer_4spk-v2.1",
         "contract": "Internal HTTP side path: /speaker/sessions + /speaker/frames"
       },
@@ -40,7 +40,7 @@
           "ASR_HTTP_ENDPOINT": "http://127.0.0.1:8021/asr/transcribe",
           "ASR_HTTP_FLUSH_ENDPOINT": "http://127.0.0.1:8021/asr/sessions/:sessionId/flush",
           "ASR_HTTP_API_KEY": "local-asr-service-api-key",
-          "SPEAKER_PROVIDER": "off",
+          "SPEAKER_PROVIDER": "http",
           "SPEAKER_HTTP_BASE_URL": "http://127.0.0.1:8022",
           "SPEAKER_HTTP_API_KEY": "local-speaker-service-api-key",
           "SPEAKER_HTTP_TIMEOUT_MS": "300",
@@ -133,7 +133,7 @@
         "contract": "POST /tts/synthesize returns pcm16 chunks"
       },
       "speaker": {
-        "provider": "off_pending_shadow_gate",
+        "provider": "http_streaming_sortformer",
         "model": "nvidia/diar_streaming_sortformer_4spk-v2.1",
         "contract": "Internal HTTP side path: /speaker/sessions + /speaker/frames"
       },
@@ -147,7 +147,7 @@
           "ASR_HTTP_ENDPOINT": "http://127.0.0.1:8001/asr/transcribe",
           "ASR_HTTP_FLUSH_ENDPOINT": "http://127.0.0.1:8001/asr/sessions/:sessionId/flush",
           "ASR_HTTP_API_KEY": "local-asr-service-api-key",
-          "SPEAKER_PROVIDER": "off",
+          "SPEAKER_PROVIDER": "http",
           "SPEAKER_HTTP_BASE_URL": "http://127.0.0.1:8022",
           "SPEAKER_HTTP_API_KEY": "local-speaker-service-api-key",
           "SPEAKER_HTTP_TIMEOUT_MS": "300"

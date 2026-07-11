@@ -121,5 +121,7 @@ Translation Worker 不需要改协议即可切换。ASR 服务已补 `Qwen3-ASR-
 和 `FireRedASR2-AED` engine，并通过 `domestic_server_qwen3_hymt2_voxcpm2` profile
 作为服务端主路由；FireRedASR2-AED 和 SenseVoice 保留为服务端 ASR 兜底 profile。
 Speaker Service 位于 `services/model-services/speaker-service`，Gateway 通过可降级旁路接入。
-当前生产 profile 的 `SPEAKER_PROVIDER=off`；只有固定语料、30 分钟稳定性和真机验收通过后，
-才允许改为 `http` 并启用用户可见的匿名说话人标签。
+当前在线测试 profile 的 `SPEAKER_PROVIDER=http`，使用 Streaming Sortformer v2.1
+输出匿名说话人标签；Speaker Service 超时或异常时 ASR、翻译和 TTS 主链路继续运行。
+该启用是用户在 2026-07-11 跳过剩余真人 RTTM 门禁后的测试环境决策，生产发布仍需
+完成真人双人、抢话、重叠、四人和历史导出验收。
