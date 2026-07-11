@@ -9,14 +9,29 @@ def main() -> None:
     parser.add_argument("--suite", required=True)
     parser.add_argument("--predictions", required=True)
     parser.add_argument("--output")
+    parser.add_argument("--max-der", type=float, default=0.20)
+    parser.add_argument("--max-latency-ms", type=int, default=1200)
     args = parser.parse_args()
 
     suite = json.loads(Path(args.suite).read_text())
     prediction_payload = json.loads(Path(args.predictions).read_text())
     cases = prediction_cases(prediction_payload, suite)
-    results = [evaluate_case(case, predictions) for case, predictions in cases]
+    results = [
+        evaluate_case(
+            case,
+            predictions,
+            args.max_der,
+            args.max_latency_ms,
+        )
+        for case, predictions in cases
+    ]
     report = {
         "schemaVersion": 1,
+        "thresholds": {
+            "maxDer": args.max_der,
+            "maxEvidenceLatencyMs": args.max_latency_ms,
+            "maxConfusionSeconds": 0,
+        },
         "cases": results,
         "passed": all(item["passed"] for item in results),
     }
@@ -38,7 +53,7 @@ def prediction_cases(payload, suite):
     return [(next(iter(suite_by_id.values())), payload["predicted"])]
 
 
-def evaluate_case(case, predictions):
+def evaluate_case(case, predictions, max_der: float, max_latency_ms: int):
     from pyannote.metrics.diarization import DiarizationErrorRate
 
     reference = annotation(case["reference"])
@@ -67,9 +82,9 @@ def evaluate_case(case, predictions):
         "speakerCount": len({item["speakerId"] for item in predictions}),
         "evidenceLatencyP95Ms": evidence_p95_ms,
         "passed": (
-            raw_der <= 0.20
+            raw_der <= max_der
             and float(raw["confusion"]) == 0.0
-            and (evidence_p95_ms is None or evidence_p95_ms <= 1200)
+            and (evidence_p95_ms is None or evidence_p95_ms <= max_latency_ms)
         ),
     }
 

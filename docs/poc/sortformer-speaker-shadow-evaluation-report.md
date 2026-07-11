@@ -134,3 +134,34 @@ Gateway 的 `SPEAKER_PROVIDER` 必须保持 `off`；独立 shadow 服务可继�
 - `发送 -> flush -> 60 秒时间戳跳变 -> 继续发送` 正常，恢复片段从 60000ms 开始。
 - 两个 session 交错送入同一模型时均输出 7 个相同边界片段，AOSC/FIFO 状态没有串会话。
 - Beelink 持久化目录统一为 `/data/models/translation-model-eval`；评测工具位于其 `tools/` 子目录。
+
+## 7. 未标注真人会议 Shadow
+
+使用本地已有的 37.76 分钟自然录音进行无标签 shadow。两份源文件 SHA-256 相同，
+只保留一份；转换后的 24 kHz PCM 和全部结果位于：
+
+```text
+/data/models/translation-model-eval/eval/speaker/human-shadow-v1/
+```
+
+首次运行发现旧 decoder 会把“曾经发生过重叠”的整个 speaker span 标为 overlap，
+导致 892 秒重叠假象。修复后 decoder 在 overlap 开始和结束的 80ms 帧边界拆分 span，
+重跑结果如下：
+
+| 项目 | 结果 |
+| --- | ---: |
+| 音频时长 | 2,265.62 秒 |
+| 加速处理墙钟 | 48.08 秒 |
+| 匿名 speaker 槽位 | 4 |
+| 最终片段 | 1,338 |
+| 有语音时间 | 2,048.56 秒 |
+| overlap 标记时间 | 139.44 秒 |
+| 非 overlap 短片段 | 155，11.58% |
+| 首个 speaker evidence | 1.20 秒 |
+| 服务错误或重启 | 0 |
+
+该录音没有 RTTM，无法确认真实人数、标签漂移、身份正确率或 DER；以上只能证明模型在
+自然长录音上可持续运行并严格限制在 4 个槽位，不能作为真人质量门禁通过证据。
+
+正式真人录音、RTTM 和阈值见
+`docs/poc/speaker-human-eval-protocol.md`。Gateway 必须继续保持 `off`。

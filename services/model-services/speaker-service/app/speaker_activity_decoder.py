@@ -63,6 +63,7 @@ class SpeakerActivityDecoder:
 
     def _consume_frame(self, frame: list[float], frame_index: int) -> list[SpeakerSpan]:
         spans = []
+        probabilities = {}
         for speaker in range(self._max_speakers):
             probability = float(frame[speaker]) if speaker < len(frame) else 0.0
             active = self._active.get(speaker)
@@ -74,11 +75,18 @@ class SpeakerActivityDecoder:
                 del self._active[speaker]
                 continue
             if active is not None:
-                active.probability_sum += probability
-                active.probability_count += 1
-        if len(self._active) > 1:
-            for active in self._active.values():
-                active.overlap = True
+                probabilities[speaker] = probability
+        overlap = len(self._active) > 1
+        for speaker, probability in probabilities.items():
+            active = self._active[speaker]
+            if active.probability_count and active.overlap != overlap:
+                spans.append(self._span(speaker, frame_index, final=True))
+                active = _ActiveSpeaker(start_frame=frame_index, overlap=overlap)
+                self._active[speaker] = active
+            else:
+                active.overlap = overlap
+            active.probability_sum += probability
+            active.probability_count += 1
         return spans
 
     def _span(self, speaker: int, end_frame: int, final: bool) -> SpeakerSpan:

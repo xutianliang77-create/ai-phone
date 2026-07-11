@@ -115,6 +115,7 @@ Call Link/PSTN 独立音轨
 - 自然短句 24 kHz HTTP 回放得到 raw DER 14.49%、250ms collar DER 0、Confusion 0；speaker evidence latency P95 为 1.12 秒。
 - 30 分钟加速与真实墙钟状态测试均得到 raw DER 15.33%、Confusion 0、speaker 数 2；真实墙钟为 1,807.34 秒，服务 PID 未变化。该循环语料只作为稳定性证据，不作为自然对话质量证据。
 - stateful v2 已替换 Beelink 8022 旧服务，模型、runtime、工具和结果均位于 `/data/models/translation-model-eval`；Gateway 仍为 `off`。
+- 37.76 分钟未标注真人会议 shadow 无服务错误，输出限制在 4 个槽位；由于没有 RTTM，该结果不计算 DER，也不解除质量门禁。
 - 真人录音门禁尚未完成，因此 Gateway Speaker Provider
   必须保持关闭；iPhone
   双人、抢话、重叠、四人、历史重命名和纪要导出验收尚未开始。

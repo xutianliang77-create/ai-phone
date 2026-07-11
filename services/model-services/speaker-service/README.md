@@ -40,3 +40,8 @@ python scripts/evaluate_speaker_predictions.py \
   --predictions eval/predictions.json \
   --output eval/report.json
 ```
+
+For human recordings, first convert the annotation from RTTM to a suite with
+`scripts/rttm_to_speaker_suite.py`. Recordings without RTTM must use
+`scripts/summarize_speaker_shadow.py`; that report deliberately leaves DER as
+`null` and cannot pass a quality gate.

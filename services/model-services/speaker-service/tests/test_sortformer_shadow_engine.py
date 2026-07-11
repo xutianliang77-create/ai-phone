@@ -21,8 +21,10 @@ def test_decoder_keeps_arrival_order_and_marks_overlap() -> None:
     ], start_frame=0)
 
     assert [(item.speakerId, item.startMs, item.endMs, item.overlap) for item in spans] == [
-        ("speaker_1", 1000, 1240, True),
-        ("speaker_2", 1160, 1320, True),
+        ("speaker_1", 1000, 1160, False),
+        ("speaker_1", 1160, 1240, True),
+        ("speaker_2", 1160, 1240, True),
+        ("speaker_2", 1240, 1320, False),
     ]
 
 
