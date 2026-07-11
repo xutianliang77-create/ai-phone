@@ -67,6 +67,28 @@ void main() {
     expect(audioSession.endCaptureCalls, 1);
   });
 
+  test('reactivates the audio session before resuming online capture',
+      () async {
+    final operations = <String>[];
+    final repository = _ResumeRealtimeRepository();
+    final capture = _OrderedAudioCapture(operations);
+    final audioSession = _OrderedAudioSessionCoordinator(operations);
+    final controller = realtimeControllerForTest(
+      repository,
+      capture,
+      audioSessionCoordinator: audioSession,
+    );
+    addTearDown(controller.dispose);
+
+    await controller.start();
+    await controller.pause();
+    operations.clear();
+    await controller.start();
+
+    expect(controller.status, RealtimeStatus.active);
+    expect(operations, <String>['session.begin', 'capture.resume']);
+  });
+
   test('restarts device ASR after a resumable audio interruption', () async {
     final repository = FakeRealtimeRepository();
     final audioSession = FakeAudioSessionCoordinator();
@@ -135,6 +157,35 @@ void main() {
 
     expect(calls, ['beginCapture', 'endCapture']);
   });
+}
+
+class _OrderedAudioCapture extends FakeAudioCapture {
+  _OrderedAudioCapture(this.operations);
+
+  final List<String> operations;
+
+  @override
+  Future<void> resume() async {
+    operations.add('capture.resume');
+    await super.resume();
+  }
+}
+
+class _ResumeRealtimeRepository extends FakeRealtimeRepository {
+  @override
+  Future<bool> resumeAndWait(String sessionId) async => true;
+}
+
+class _OrderedAudioSessionCoordinator extends FakeAudioSessionCoordinator {
+  _OrderedAudioSessionCoordinator(this.operations);
+
+  final List<String> operations;
+
+  @override
+  Future<void> beginCapture() async {
+    operations.add('session.begin');
+    await super.beginCapture();
+  }
 }
 
 AppConfig deviceAsrConfig() {
