@@ -58,6 +58,7 @@ export function toSessionExport(
 function toPlainText(session: SessionRecord) {
   return session.segments
     .map((segment) => [
+      ...(segment.speaker ? [`Speaker: ${speakerLabel(segment)}`] : []),
       `Original: ${segment.rawText ?? segment.sourceText}`,
       ...(segment.optimizedText ? [`Optimized: ${segment.optimizedText}`] : []),
       `Translation: ${segment.translatedText}`,
@@ -77,6 +78,7 @@ function toMarkdown(session: SessionRecord) {
   appendReview(lines, session);
   for (const segment of session.segments) {
     lines.push(`## ${segment.id}`, "");
+    if (segment.speaker) lines.push(`Speaker: ${speakerLabel(segment)}`, "");
     if (segment.rawText && segment.rawText !== segment.sourceText) {
       lines.push("Raw", "", segment.rawText, "");
       lines.push("Optimized", "", segment.sourceText, "");
@@ -105,6 +107,12 @@ function toCsv(session: SessionRecord) {
       "model",
       "latencyMs",
       "estimatedTotalTokens",
+      "speakerId",
+      "speakerRole",
+      "speakerName",
+      "speakerSource",
+      "startMs",
+      "endMs",
     ],
     ...session.segments.map((segment) => [
       segment.id,
@@ -120,9 +128,21 @@ function toCsv(session: SessionRecord) {
       segment.model ?? segment.providerUsage?.model ?? "",
       String(segment.latencyMs ?? segment.providerUsage?.latencyMs ?? ""),
       String(segment.providerUsage?.estimatedTotalTokens ?? ""),
+      segment.speaker?.speakerId ?? "",
+      segment.speaker?.role ?? "",
+      segment.speaker?.displayName ?? "",
+      segment.speaker?.source ?? "",
+      String(segment.timing?.startMs ?? ""),
+      String(segment.timing?.endMs ?? ""),
     ]),
   ];
   return rows.map((row) => row.map(csvCell).join(",")).join("\n");
+}
+
+function speakerLabel(segment: SessionSegmentDto) {
+  const speaker = segment.speaker;
+  if (!speaker) return "Unknown";
+  return speaker.displayName ?? speaker.speakerId;
 }
 
 function appendSegmentDiagnostics(

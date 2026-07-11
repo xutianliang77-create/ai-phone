@@ -54,6 +54,9 @@ export function createRealtimeSession(
       ...(voice ? { voice } : {}),
       planCode: plan.code,
       ...(input.termbaseId ? { termbaseId: input.termbaseId } : {}),
+      ...(input.speakerAttribution
+        ? { speakerAttribution: input.speakerAttribution }
+        : {}),
       maxDurationSeconds,
       holdSeconds: realtimeStartHoldSeconds,
       issuedAt: now,

@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'call_room_client.dart';
+import '../../../shared/domain/speaker_attribution.dart';
 
 class CallRoomDataPayload {
   const CallRoomDataPayload({this.message, this.caption});
@@ -47,9 +48,21 @@ CallRoomCaption _captionFromPayload(
   final text = _cleanText(_string(payload['text']));
   final sourceText = _cleanText(_string(payload['sourceText']));
   final translatedText = _cleanText(_string(payload['translatedText']));
+  final speakerJson = payload['speaker'];
+  final speakerRole = _string(payload['speakerRole']) ?? 'guest';
+  final speaker = speakerJson is Map
+      ? SpeakerAttribution.fromJson(
+          Map<String, Object?>.from(speakerJson),
+        )
+      : SpeakerAttribution(
+          speakerId: speakerRole,
+          role: speakerRole,
+          source: 'participant_track',
+          confidence: 1,
+        );
   return CallRoomCaption(
     segmentId: _string(payload['segmentId']) ?? '${payload['timestampMs']}',
-    speakerRole: _string(payload['speakerRole']) ?? 'guest',
+    speaker: speaker,
     sourceLanguage: _string(payload['sourceLanguage']) ?? 'auto',
     targetLanguage: _string(payload['targetLanguage']) ?? 'auto',
     timestampMs:

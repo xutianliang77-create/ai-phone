@@ -98,6 +98,24 @@ describe("segment assembler", () => {
     ]);
   });
 
+  it("never merges speech from different speakers", () => {
+    const assembler = new SegmentAssembler();
+    assembler.push(
+      "sess_1",
+      attributedTranscript("asr_1", "接下来", "speaker_1"),
+      1000,
+    );
+    const result = assembler.push(
+      "sess_1",
+      attributedTranscript("asr_2", "我来说明。", "speaker_2"),
+      1200,
+    );
+    expect(result.ready).toEqual([
+      attributedTranscript("asr_1", "接下来", "speaker_1"),
+      attributedTranscript("asr_2", "我来说明。", "speaker_2"),
+    ]);
+  });
+
   it("does not hold an incomplete segment beyond the character limit", () => {
     const assembler = new SegmentAssembler({ maxBufferedCharacters: 4 });
     const result = assembler.push(
@@ -142,4 +160,19 @@ function transcript(
   confidence?: number,
 ) {
   return { segmentId, text, language, ...(confidence === undefined ? {} : { confidence }) };
+}
+
+function attributedTranscript(
+  segmentId: string,
+  text: string,
+  speakerId: string,
+) {
+  return {
+    ...transcript(segmentId, text, "zh"),
+    speaker: {
+      speakerId,
+      role: "speaker" as const,
+      source: "diarization" as const,
+    },
+  };
 }

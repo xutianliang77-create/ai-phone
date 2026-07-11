@@ -1,6 +1,6 @@
 # ai phone 优化开发任务清单
 
-版本：v1.9
+版本：v2.0
 日期：2026-07-11  
 关联：`docs/domestic-app-detailed-functional-design.md`、`docs/ai-phone-translation-technical-design.md`、`docs/domestic-design-review-action-plan.md`
 
@@ -52,6 +52,9 @@
 - `OPT-MOB-002`：代码和自动化门禁完成；扬声器、听筒和未知路由在 TTS 播放期间及 350ms 尾音窗抑制采集，有线/蓝牙耳机保持连续识别，Listening 强制静音但保留对话模式声音偏好。iPhone/Android 连续 20 句、自激和下一句完整性验收待执行。
 - `OPT-UI-001`：代码和自动化门禁完成；`idle/connecting/active/paused/ending/ended/failed` 只展示当前可执行操作，主操作固定在同一槽位，连接中可取消且迟到 session 不会恢复同传。iPhone/Android 真机布局与点击体验验收待执行。
 - `OPT-UI-002`：代码和自动化门禁完成；字幕区移除固定 420dp 高度并占满剩余空间，最后一段标记当前句，译文 final 前显示 pending，动态高度字幕可自动跟随并在用户上滑后提供回到底部。iPhone/Android 真机小屏、横屏和 200% 字体验收待执行。
+- `OPT-SPK-001`：统一 contract、Call Link participant track、Session Repository、字幕、历史、review 和导出代码完成；真实双端角色归属验收待执行。
+- `OPT-SPK-002`：HTTP Speaker Provider、ASR 并行旁路、时间对齐和故障降级代码完成；Streaming Sortformer 服务部署、独立语料 DER/JER 评测与 shadow mode 待执行。
+- `OPT-SPK-003`：speaker 强制断句、普通同传字幕标签、历史清单和会话内重命名代码完成；依赖 `OPT-SPK-002` 真实模型和单麦克风真机验收后结项。
 
 ## 3. P1 灰度任务
 

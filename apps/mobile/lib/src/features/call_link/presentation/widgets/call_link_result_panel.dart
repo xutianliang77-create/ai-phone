@@ -45,7 +45,10 @@ class CallLinkResultPanel extends StatelessWidget {
           const SizedBox(height: 8),
           Text('${l10n.callRoomSaved}：${endResult!.consumedSeconds} 秒'),
         ],
-        CallRoomCaptions(captions: roomSnapshot.captions),
+        CallRoomCaptions(
+          captions: roomSnapshot.captions,
+          localRole: 'host',
+        ),
         if (hostToken != null && endResult == null) ...[
           const SizedBox(height: 12),
           _CallRoomButton(

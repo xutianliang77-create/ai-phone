@@ -15,6 +15,25 @@ export function mergeTranscriptParts(parts: TranscriptResult[]): TranscriptResul
     text,
     language: first.language,
     confidence: mergedConfidence(parts) ?? last.confidence,
+    ...(first.speaker ? { speaker: first.speaker } : {}),
+    ...(mergedTiming(parts) ? { timing: mergedTiming(parts) } : {}),
+  };
+}
+
+function mergedTiming(parts: TranscriptResult[]) {
+  const timings = parts
+    .map((part) => part.timing)
+    .filter((timing): timing is NonNullable<TranscriptResult["timing"]> =>
+      timing !== undefined
+    );
+  if (timings.length === 0) return undefined;
+  return {
+    startMs: Math.min(...timings.map((timing) => timing.startMs)),
+    endMs: Math.max(...timings.map((timing) => timing.endMs)),
+    source: timings.every((timing) => timing.source === timings[0].source)
+      ? timings[0].source
+      : "estimated" as const,
+    ...(timings.some((timing) => timing.overlap) ? { overlap: true } : {}),
   };
 }
 

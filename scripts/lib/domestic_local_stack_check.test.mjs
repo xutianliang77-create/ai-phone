@@ -199,6 +199,11 @@ function fakeFetch(options = {}) {
               contract: "openai-compatible",
             },
             tts: { provider: "voxcpm2", model: "VoxCPM2", contract: "http" },
+            speaker: {
+              provider: "off",
+              model: "nvidia/diar_streaming_sortformer_4spk-v2.1",
+              contract: "internal HTTP side path",
+            },
           },
         ],
         issues: [],
@@ -232,6 +237,11 @@ function writeRoutingConfig(tempDirs) {
           contract: "openai-compatible",
         },
         tts: { provider: "voxcpm2", model: "VoxCPM2", contract: "http" },
+        speaker: {
+          provider: "off",
+          model: "nvidia/diar_streaming_sortformer_4spk-v2.1",
+          contract: "internal HTTP side path",
+        },
         env: {
           gateway: {
             REALTIME_PROVIDER: "hymt2_self_hosted",

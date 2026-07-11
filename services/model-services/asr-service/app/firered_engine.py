@@ -91,6 +91,8 @@ class FireRedAsr2AedEngine:
             sample_rate=segment.sample_rate,
             source_language=request.sourceLanguage,
             target_language=request.targetLanguage,
+            start_ms=segment.start_timestamp_ms,
+            end_ms=segment.end_timestamp_ms,
         )
 
     async def flush(
@@ -109,6 +111,8 @@ class FireRedAsr2AedEngine:
             sample_rate=segment.sample_rate,
             source_language=source_language,
             target_language=target_language,
+            start_ms=segment.start_timestamp_ms,
+            end_ms=segment.end_timestamp_ms,
         )
 
     async def close_session(self, session_id: str) -> None:
@@ -123,6 +127,8 @@ class FireRedAsr2AedEngine:
         sample_rate: int,
         source_language: LanguageCode,
         target_language: TranslationLanguageCode,
+        start_ms: int,
+        end_ms: int,
     ) -> AsrTranscribeResponse | None:
         audio_path = write_temp_wav(pcm, sample_rate)
         try:
@@ -138,6 +144,11 @@ class FireRedAsr2AedEngine:
             text=text,
             language=transcript_language(text, source_language, target_language),
             confidence=None,
+            timing={
+                "startMs": start_ms,
+                "endMs": end_ms,
+                "source": "client",
+            },
         )
 
     def _is_duplicate(self, session_id: str, text: str) -> bool:

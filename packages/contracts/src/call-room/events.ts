@@ -1,3 +1,5 @@
+import type { SpeakerAttributionDto, SpeakerRole } from "../shared/speaker.js";
+
 export const callRoomCaptionTopic = "translation.captions";
 
 export type CallRoomDataEventType =
@@ -6,7 +8,10 @@ export type CallRoomDataEventType =
   | "translation.final"
   | "tts.ready";
 
-export type CallRoomSpeakerRole = "host" | "guest" | "worker";
+export type CallRoomSpeakerRole = Extract<
+  SpeakerRole,
+  "host" | "guest" | "worker"
+>;
 export type CallRoomTranslationLanguage = "zh" | "en";
 export type CallRoomWorkerStage =
   | "worker"
@@ -20,6 +25,7 @@ export interface CallRoomDataEvent {
   roomName: string;
   segmentId: string;
   speakerRole: CallRoomSpeakerRole;
+  speaker: SpeakerAttributionDto;
   sourceLanguage: CallRoomTranslationLanguage;
   targetLanguage: CallRoomTranslationLanguage;
   text: string;
@@ -39,6 +45,17 @@ export interface CallRoomDataEvent {
 export type CallRoomSubmittedEvent =
   Omit<CallRoomDataEvent, "callId" | "roomName">;
 
+export function participantTrackSpeaker(
+  role: CallRoomSpeakerRole,
+): SpeakerAttributionDto {
+  return {
+    speakerId: role,
+    role,
+    source: "participant_track",
+    confidence: 1,
+  };
+}
+
 export function encodeCallRoomEvent(event: CallRoomDataEvent) {
   return new TextEncoder().encode(JSON.stringify(event));
 }
@@ -57,6 +74,7 @@ export function buildCallRoomSmokeEvents(options: {
       roomName: options.roomName,
       segmentId,
       speakerRole: "worker",
+      speaker: participantTrackSpeaker("worker"),
       sourceLanguage: "en",
       targetLanguage: "zh",
       text: "房间翻译 Worker 已连接",
@@ -70,6 +88,7 @@ export function buildCallRoomSmokeEvents(options: {
       roomName: options.roomName,
       segmentId,
       speakerRole: "guest",
+      speaker: participantTrackSpeaker("guest"),
       sourceLanguage: "en",
       targetLanguage: "zh",
       text: "hello, this is a call room translation test",
@@ -82,6 +101,7 @@ export function buildCallRoomSmokeEvents(options: {
       roomName: options.roomName,
       segmentId,
       speakerRole: "guest",
+      speaker: participantTrackSpeaker("guest"),
       sourceLanguage: "en",
       targetLanguage: "zh",
       text: "你好，这是一次通话房间翻译测试。",
@@ -95,6 +115,7 @@ export function buildCallRoomSmokeEvents(options: {
       roomName: options.roomName,
       segmentId,
       speakerRole: "guest",
+      speaker: participantTrackSpeaker("guest"),
       sourceLanguage: "en",
       targetLanguage: "zh",
       text: "你好，这是一次通话房间翻译测试。",

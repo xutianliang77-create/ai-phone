@@ -59,6 +59,9 @@ function remoteReviewSegments(session: SessionRecord) {
       optimizedText: compactReviewText(segment.optimizedText, maxReviewSourceCharacters),
       sourceText: compactReviewText(segment.sourceText, maxReviewSourceCharacters),
       translatedText: compactReviewText(segment.translatedText, maxReviewTranslationCharacters),
+      speaker: segment.speaker?.displayName ?? segment.speaker?.speakerId,
+      startedAtMs: segment.timing?.startMs,
+      endedAtMs: segment.timing?.endMs,
     }));
 }
 
@@ -181,6 +184,7 @@ function textSegments(session: SessionRecord) {
       ).trim(),
       rawText: (segment.rawText ?? "").trim(),
       translatedText: segment.translatedText.trim(),
+      speaker: segment.speaker?.displayName ?? segment.speaker?.speakerId,
     }))
     .filter((segment) => segment.sourceText || segment.translatedText);
 }
@@ -193,7 +197,10 @@ function title(segments: ReturnType<typeof textSegments>) {
 function summary(segments: ReturnType<typeof textSegments>) {
   return segments
     .slice(0, 3)
-    .map((segment) => segment.translatedText || segment.sourceText)
+    .map((segment) => {
+      const text = segment.translatedText || segment.sourceText;
+      return segment.speaker ? `${segment.speaker}：${text}` : text;
+    })
     .filter(Boolean)
     .join("\n");
 }

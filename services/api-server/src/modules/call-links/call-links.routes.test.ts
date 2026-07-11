@@ -216,7 +216,7 @@ describe("call link routes", () => {
       { roomName: `call_${callId}`, type: "tts.ready" },
     ]);
     expect(session.statusCode).toBe(200);
-    expect(session.json().segments).toEqual([
+    expect(session.json().segments).toMatchObject([
       {
         id: expect.stringMatching(/^smoke-/),
         sourceText: "hello, this is a call room translation test",

@@ -26,8 +26,10 @@ import {
   generateSessionReview,
 } from "./session-review.js";
 import { refundSessionUsage } from "./session-usage-refund.js";
+import { registerSessionSpeakerRoutes } from "./session-speakers.routes.js";
 
 export async function registerSessionsRoutes(app: FastifyInstance) {
+  registerSessionSpeakerRoutes(app);
   app.get("/sessions", async (request, reply) => {
     const account = requireAccount(request, reply);
     if (!account) return;

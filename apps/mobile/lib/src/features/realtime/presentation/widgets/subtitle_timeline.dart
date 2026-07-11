@@ -4,6 +4,7 @@ import '../../../../app/localization/app_localizations.dart';
 import '../../../../app/localization/app_realtime_timeline_localizations.dart';
 import '../../../../shared/widgets/auto_follow_scroll_view.dart';
 import '../../../realtime/domain/entities/subtitle_segment.dart';
+import '../../../../shared/domain/speaker_attribution.dart';
 
 class SubtitleTimeline extends StatefulWidget {
   const SubtitleTimeline({required this.segments, super.key});
@@ -77,9 +78,16 @@ class _SubtitleEntry extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final pending = _isTranslationPending(segment);
+    final speaker = segment.speaker;
+    final speakerLabel = speaker?.label(isChinese: context.l10n.isChinese);
     return Semantics(
       container: true,
-      label: isCurrent ? context.l10n.currentSubtitle : null,
+      label: [
+        if (isCurrent) context.l10n.currentSubtitle,
+        if (speakerLabel != null) speakerLabel,
+        segment.sourceText,
+        if (segment.translatedText.trim().isNotEmpty) segment.translatedText,
+      ].join('，'),
       child: ColoredBox(
         color: isCurrent
             ? theme.colorScheme.primaryContainer.withValues(alpha: 0.28)
@@ -89,6 +97,10 @@ class _SubtitleEntry extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
+              if (speaker != null) ...[
+                _SpeakerLabel(speaker: speaker),
+                const SizedBox(height: 6),
+              ],
               if (isCurrent) ...[
                 Text(
                   context.l10n.currentSubtitle,
@@ -119,6 +131,49 @@ class _SubtitleEntry extends StatelessWidget {
       ),
     );
   }
+}
+
+class _SpeakerLabel extends StatelessWidget {
+  const _SpeakerLabel({required this.speaker});
+
+  final SpeakerAttribution speaker;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final color = _speakerColor(theme.colorScheme, speaker.speakerId);
+    return ExcludeSemantics(
+      child: Tooltip(
+        message: speaker.sourceLabel(isChinese: context.l10n.isChinese),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            Icon(Icons.record_voice_over_outlined, size: 16, color: color),
+            const SizedBox(width: 6),
+            Text(
+              speaker.label(isChinese: context.l10n.isChinese),
+              style: theme.textTheme.labelLarge?.copyWith(
+                color: color,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+Color _speakerColor(ColorScheme colors, String speakerId) {
+  const indexes = <int>[0, 1, 2, 3];
+  final index = speakerId.codeUnits.fold<int>(0, (sum, unit) => sum + unit) %
+      indexes.length;
+  return <Color>[
+    colors.primary,
+    colors.tertiary,
+    colors.secondary,
+    colors.error,
+  ][index];
 }
 
 class _TranslationPending extends StatelessWidget {

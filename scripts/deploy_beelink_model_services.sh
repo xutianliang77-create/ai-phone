@@ -6,6 +6,8 @@ BEELINK_HOST="${BEELINK_HOST:-beelink@100.110.127.117}"
 BEELINK_IP="${BEELINK_TAILSCALE_IP:-100.110.127.117}"
 REMOTE_ROOT="${REMOTE_ROOT:-/data/models/translation-model-eval}"
 REMOTE_PYTHON="${REMOTE_PYTHON:-$REMOTE_ROOT/.venv/bin/python}"
+SPEAKER_REMOTE_PYTHON="${SPEAKER_REMOTE_PYTHON:-$REMOTE_ROOT/.venv-speaker/bin/python}"
+SPEAKER_SERVICE_ENABLED="${SPEAKER_SERVICE_ENABLED:-false}"
 
 ASR_SERVICE_PROVIDER="${ASR_SERVICE_PROVIDER:-qwen3_asr}"
 if [ "$ASR_SERVICE_PROVIDER" = "qwen3_asr" ]; then
@@ -24,10 +26,12 @@ ASR_MODEL_VERSION="${ASR_MODEL_VERSION:-$DEFAULT_ASR_MODEL_VERSION}"
 ASR_PORT="${ASR_PORT:-$DEFAULT_ASR_PORT}"
 TRANSLATION_PORT="${TRANSLATION_PORT:-8003}"
 TTS_PORT="${TTS_PORT:-8002}"
+SPEAKER_PORT="${SPEAKER_PORT:-8022}"
 
 ASR_SERVICE_DIR="${ASR_SERVICE_DIR:-$DEFAULT_ASR_SERVICE_DIR}"
 TRANSLATION_SERVICE_DIR="$REMOTE_ROOT/services/translation-service"
 TTS_SERVICE_DIR="$REMOTE_ROOT/services/tts-service"
+SPEAKER_SERVICE_DIR="$REMOTE_ROOT/services/speaker-service"
 
 ASR_MODEL_DIR="${ASR_MODEL_DIR:-$DEFAULT_ASR_MODEL_DIR}"
 TRANSLATION_MODEL_DIR="${TRANSLATION_MODEL_DIR:-$REMOTE_ROOT/data/translation-product-fit/models/hymt2_1_8b}"
@@ -36,6 +40,9 @@ TTS_MODEL_DIR="${TTS_MODEL_DIR:-$REMOTE_ROOT/data/tts-product-fit/models/openbmb
 ASR_SERVICE_API_KEY="${ASR_SERVICE_API_KEY:-local-asr-service-api-key}"
 TRANSLATION_SERVICE_API_KEY="${TRANSLATION_SERVICE_API_KEY:-local-translation-service-api-key}"
 TTS_SERVICE_API_KEY="${TTS_SERVICE_API_KEY:-local-tts-service-api-key}"
+SPEAKER_SERVICE_API_KEY="${SPEAKER_SERVICE_API_KEY:-local-speaker-service-api-key}"
+SPEAKER_MODEL_PROVIDER="${SPEAKER_MODEL_PROVIDER:-sortformer_shadow}"
+SPEAKER_MODEL_ID="${SPEAKER_MODEL_ID:-nvidia/diar_streaming_sortformer_4spk-v2.1}"
 
 ASR_QWEN3_CONTEXT="${ASR_QWEN3_CONTEXT:-}"
 ASR_QWEN3_ENGLISH_CONTEXT="${ASR_QWEN3_ENGLISH_CONTEXT:-}"
@@ -59,24 +66,32 @@ sync_service() {
 sync_service "asr-service" "$ROOT_DIR/services/model-services/asr-service" "$ASR_SERVICE_DIR"
 sync_service "translation-service" "$ROOT_DIR/services/model-services/translation-service" "$TRANSLATION_SERVICE_DIR"
 sync_service "tts-service" "$ROOT_DIR/services/model-services/tts-service" "$TTS_SERVICE_DIR"
+sync_service "speaker-service" "$ROOT_DIR/services/model-services/speaker-service" "$SPEAKER_SERVICE_DIR"
 
 ssh "$BEELINK_HOST" \
   "REMOTE_ROOT='$REMOTE_ROOT' \
    REMOTE_PYTHON='$REMOTE_PYTHON' \
+   SPEAKER_REMOTE_PYTHON='$SPEAKER_REMOTE_PYTHON' \
    ASR_SERVICE_DIR='$ASR_SERVICE_DIR' \
    TRANSLATION_SERVICE_DIR='$TRANSLATION_SERVICE_DIR' \
    TTS_SERVICE_DIR='$TTS_SERVICE_DIR' \
+   SPEAKER_SERVICE_DIR='$SPEAKER_SERVICE_DIR' \
+   SPEAKER_SERVICE_ENABLED='$SPEAKER_SERVICE_ENABLED' \
    ASR_SERVICE_PROVIDER='$ASR_SERVICE_PROVIDER' \
    ASR_MODEL_VERSION='$ASR_MODEL_VERSION' \
    ASR_PORT='$ASR_PORT' \
    TRANSLATION_PORT='$TRANSLATION_PORT' \
    TTS_PORT='$TTS_PORT' \
+   SPEAKER_PORT='$SPEAKER_PORT' \
    ASR_MODEL_DIR='$ASR_MODEL_DIR' \
    TRANSLATION_MODEL_DIR='$TRANSLATION_MODEL_DIR' \
    TTS_MODEL_DIR='$TTS_MODEL_DIR' \
    ASR_SERVICE_API_KEY='$ASR_SERVICE_API_KEY' \
    TRANSLATION_SERVICE_API_KEY='$TRANSLATION_SERVICE_API_KEY' \
    TTS_SERVICE_API_KEY='$TTS_SERVICE_API_KEY' \
+   SPEAKER_SERVICE_API_KEY='$SPEAKER_SERVICE_API_KEY' \
+   SPEAKER_MODEL_PROVIDER='$SPEAKER_MODEL_PROVIDER' \
+   SPEAKER_MODEL_ID='$SPEAKER_MODEL_ID' \
    ASR_QWEN3_CONTEXT='$ASR_QWEN3_CONTEXT' \
    ASR_QWEN3_ENGLISH_CONTEXT='$ASR_QWEN3_ENGLISH_CONTEXT' \
    bash -s" <<'REMOTE'
@@ -89,6 +104,7 @@ start_service() {
   local port="$3"
   local log="$REMOTE_ROOT/logs/$name.log"
   local pid_file="$dir/$name.pid"
+  local python="${4:-$REMOTE_PYTHON}"
 
   cd "$dir"
   if [ -f "$pid_file" ] && kill -0 "$(cat "$pid_file")" 2>/dev/null; then
@@ -110,7 +126,7 @@ start_service() {
   set -a
   . ./.env
   set +a
-  nohup setsid "$REMOTE_PYTHON" -m uvicorn app.main:app \
+  nohup setsid "$python" -m uvicorn app.main:app \
     --host 0.0.0.0 \
     --port "$port" \
     > "$log" 2>&1 < /dev/null &
@@ -174,6 +190,7 @@ shell_quote() {
 asr_key="$(strong_secret "$ASR_SERVICE_API_KEY" "$ASR_SERVICE_DIR/.env" ASR_SERVICE_API_KEY)"
 translation_key="$(strong_secret "$TRANSLATION_SERVICE_API_KEY" "$TRANSLATION_SERVICE_DIR/.env" TRANSLATION_SERVICE_API_KEY)"
 tts_key="$(strong_secret "$TTS_SERVICE_API_KEY" "$TTS_SERVICE_DIR/.env" TTS_SERVICE_API_KEY)"
+speaker_key="$(strong_secret "$SPEAKER_SERVICE_API_KEY" "$SPEAKER_SERVICE_DIR/.env" SPEAKER_SERVICE_API_KEY)"
 
 case "$ASR_SERVICE_PROVIDER" in
   qwen3_asr)
@@ -236,9 +253,27 @@ write_env "$TTS_SERVICE_DIR/.env" \
   "TTS_VOXCPM2_INFERENCE_TIMESTEPS=10" \
   "TTS_VOXCPM2_LOAD_DENOISER=false"
 
+if [ "$SPEAKER_SERVICE_ENABLED" = "true" ]; then
+  if [ ! -x "$SPEAKER_REMOTE_PYTHON" ]; then
+    echo "Speaker Python runtime is missing: $SPEAKER_REMOTE_PYTHON" >&2
+    echo "Install services/model-services/speaker-service with the sortformer extra before enabling it." >&2
+    exit 1
+  fi
+  write_env "$SPEAKER_SERVICE_DIR/.env" \
+    "SPEAKER_MODEL_PROVIDER=$SPEAKER_MODEL_PROVIDER" \
+    "SPEAKER_MODEL_ID=$SPEAKER_MODEL_ID" \
+    "SPEAKER_SERVICE_API_KEY=$speaker_key" \
+    "SPEAKER_INFERENCE_INTERVAL_MS=2240" \
+    "SPEAKER_STABILIZATION_MS=800" \
+    "SPEAKER_MAX_CONTEXT_MS=120000"
+fi
+
 start_service asr-service "$ASR_SERVICE_DIR" "$ASR_PORT"
 start_service translation-service "$TRANSLATION_SERVICE_DIR" "$TRANSLATION_PORT"
 start_service tts-service "$TTS_SERVICE_DIR" "$TTS_PORT"
+if [ "$SPEAKER_SERVICE_ENABLED" = "true" ]; then
+  start_service speaker-service "$SPEAKER_SERVICE_DIR" "$SPEAKER_PORT" "$SPEAKER_REMOTE_PYTHON"
+fi
 
 echo "services started"
 REMOTE
@@ -267,3 +302,6 @@ PY
 check_health "http://$BEELINK_IP:$ASR_PORT/health" false
 check_health "http://$BEELINK_IP:$TRANSLATION_PORT/health" true
 check_health "http://$BEELINK_IP:$TTS_PORT/health" true
+if [ "$SPEAKER_SERVICE_ENABLED" = "true" ]; then
+  check_health "http://$BEELINK_IP:$SPEAKER_PORT/health" false
+fi

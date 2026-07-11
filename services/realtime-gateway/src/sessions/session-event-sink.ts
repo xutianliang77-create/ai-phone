@@ -57,6 +57,8 @@ class ApiSessionEventSink implements SessionEventSink {
           : {}),
         stage: "asr",
         refinement: event.refinement,
+        speaker: event.speaker,
+        timing: event.timing,
       });
       return;
     }
@@ -87,6 +89,21 @@ class ApiSessionEventSink implements SessionEventSink {
               providerUsage: event.providerUsage,
             }
           : {}),
+        ...(event.type === "translation.final" && event.speaker
+          ? { speaker: event.speaker }
+          : {}),
+        ...(event.type === "translation.final" && event.timing
+          ? { timing: event.timing }
+          : {}),
+      });
+      return;
+    }
+    if (event.type === "speaker.updated") {
+      await this.upsertSegment({
+        sessionId: event.sessionId,
+        segmentId: event.segmentId,
+        speaker: event.speaker,
+        timing: event.timing,
       });
       return;
     }

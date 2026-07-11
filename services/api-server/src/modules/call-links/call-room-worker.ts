@@ -74,6 +74,12 @@ export function persistCallRoomDataEvent(
     translatedText: event.translatedText ?? (
       event.type === "translation.final" ? event.text : undefined
     ),
+    speaker: event.speaker,
+    timing: {
+      startMs: event.timestampMs,
+      endMs: event.timestampMs,
+      source: "participant_track",
+    },
   });
 }
 

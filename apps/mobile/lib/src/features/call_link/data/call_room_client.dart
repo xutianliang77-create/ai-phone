@@ -1,4 +1,5 @@
 import 'call_link_api_client.dart';
+import '../../../shared/domain/speaker_attribution.dart';
 
 enum CallRoomConnectionStatus {
   disconnected,
@@ -52,7 +53,7 @@ class CallRoomSnapshot {
 class CallRoomCaption {
   const CallRoomCaption({
     required this.segmentId,
-    required this.speakerRole,
+    required this.speaker,
     required this.sourceLanguage,
     required this.targetLanguage,
     required this.timestampMs,
@@ -68,7 +69,8 @@ class CallRoomCaption {
   });
 
   final String segmentId;
-  final String speakerRole;
+  final SpeakerAttribution speaker;
+  String get speakerRole => speaker.role;
   final String sourceLanguage;
   final String targetLanguage;
   final int timestampMs;
@@ -85,7 +87,7 @@ class CallRoomCaption {
   CallRoomCaption merge(CallRoomCaption next) {
     return CallRoomCaption(
       segmentId: segmentId,
-      speakerRole: next.speakerRole,
+      speaker: next.speaker,
       sourceLanguage: next.sourceLanguage,
       targetLanguage: next.targetLanguage,
       timestampMs: next.timestampMs,

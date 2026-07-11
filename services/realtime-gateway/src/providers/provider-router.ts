@@ -3,6 +3,8 @@ import { createLlmProvider, type LlmConfig } from "@translation/llm";
 import { HttpAsrProvider } from "../asr/http-asr-provider.js";
 import { MockAsrProvider } from "../asr/mock-asr-provider.js";
 import type { AsrProvider } from "../asr/asr-provider.js";
+import { SpeakerAwareAsrProvider } from "../asr/speaker-aware-asr-provider.js";
+import { HttpSpeakerAttributionProvider } from "../speaker/http-speaker-attribution-provider.js";
 import type { RealtimeProvider } from "./realtime-provider.js";
 import { LmStudioRealtimeProvider } from "./lmstudio/lmstudio-realtime-provider.js";
 import { MockRealtimeProvider } from "./mock-realtime-provider.js";
@@ -99,6 +101,24 @@ function assertQwenLiveConfig(env: RealtimeEnv) {
 }
 
 function createAsrProvider(env: RealtimeEnv): AsrProvider {
+  const provider = createBaseAsrProvider(env);
+  if (env.speakerProvider !== "http") return provider;
+  if (!env.speakerHttpBaseUrl) {
+    throw new Error(
+      "SPEAKER_HTTP_BASE_URL is required when SPEAKER_PROVIDER=http",
+    );
+  }
+  return new SpeakerAwareAsrProvider(
+    provider,
+    new HttpSpeakerAttributionProvider({
+      baseUrl: env.speakerHttpBaseUrl,
+      apiKey: env.speakerHttpApiKey,
+      timeoutMs: env.speakerHttpTimeoutMs,
+    }),
+  );
+}
+
+function createBaseAsrProvider(env: RealtimeEnv): AsrProvider {
   if (env.asrProvider === "http") {
     if (!env.asrHttpEndpoint) {
       throw new Error("ASR_HTTP_ENDPOINT is required when ASR_PROVIDER=http");

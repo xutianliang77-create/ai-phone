@@ -90,4 +90,21 @@ describe("realtime events", () => {
     expect(ended.flush?.status).toBe("completed");
     expect(ended.flush?.unresolvedSegmentCount).toBe(0);
   });
+
+  it("supports authoritative and late speaker attribution", () => {
+    const event: ServerRealtimeEvent = {
+      type: "speaker.updated",
+      sessionId: "sess_1",
+      segmentId: "seg_1",
+      speaker: {
+        speakerId: "speaker_2",
+        role: "speaker",
+        source: "diarization",
+        confidence: 0.91,
+      },
+      timing: { startMs: 1000, endMs: 1800, source: "client" },
+    };
+
+    expect(event.speaker.speakerId).toBe("speaker_2");
+  });
 });

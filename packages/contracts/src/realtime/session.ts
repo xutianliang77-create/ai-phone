@@ -2,6 +2,7 @@ import type {
   LanguageCode,
   TranslationLanguageCode,
 } from "../shared/languages.js";
+import type { SpeakerAttributionOptionsDto } from "../shared/speaker.js";
 
 export type RealtimeMode = "conversation" | "meeting" | "classroom" | "business";
 export type RealtimeVoiceMode =
@@ -26,6 +27,7 @@ export interface CreateRealtimeSessionRequest {
   voiceOutput: boolean;
   voice?: RealtimeVoiceConfig;
   termbaseId?: string;
+  speakerAttribution?: SpeakerAttributionOptionsDto;
 }
 
 export interface CreateRealtimeSessionResponse {
@@ -46,6 +48,7 @@ export interface RealtimeTokenClaims {
   voice?: RealtimeVoiceConfig;
   planCode: string;
   termbaseId?: string;
+  speakerAttribution?: SpeakerAttributionOptionsDto;
   maxDurationSeconds: number;
   holdSeconds?: number;
   issuedAt: number;

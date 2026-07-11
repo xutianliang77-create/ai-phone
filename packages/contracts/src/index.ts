@@ -11,3 +11,4 @@ export * from "./realtime/session.js";
 export * from "./realtime/state-machine.js";
 export * from "./shared/log-redaction.js";
 export * from "./shared/languages.js";
+export * from "./shared/speaker.js";

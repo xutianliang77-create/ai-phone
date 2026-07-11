@@ -1,4 +1,7 @@
-import type { CallRoomSubmittedEvent } from "@translation/contracts";
+import {
+  participantTrackSpeaker,
+  type CallRoomSubmittedEvent,
+} from "@translation/contracts";
 import { detectCallLanguage, oppositeCallLanguage } from "./language.js";
 import { cleanCallTranscript } from "./transcript-text-normalizer.js";
 import { normalizeTtsText } from "./tts-text-normalizer.js";
@@ -134,6 +137,7 @@ export class CallTranslationWorker {
       type: "transcript.final",
       segmentId: transcript.segmentId,
       speakerRole,
+      speaker: participantTrackSpeaker(speakerRole),
       sourceLanguage,
       targetLanguage,
       text,
@@ -164,6 +168,7 @@ export class CallTranslationWorker {
         type: "translation.final",
         segmentId: transcript.segmentId,
         speakerRole,
+        speaker: participantTrackSpeaker(speakerRole),
         sourceLanguage,
         targetLanguage,
         text: translatedText,
@@ -194,6 +199,7 @@ export class CallTranslationWorker {
         type: "tts.ready",
         segmentId: transcript.segmentId,
         speakerRole,
+        speaker: participantTrackSpeaker(speakerRole),
         sourceLanguage,
         targetLanguage,
         text: translatedText,
@@ -266,6 +272,7 @@ export class CallTranslationWorker {
       type: "worker.status",
       segmentId,
       speakerRole: "worker",
+      speaker: participantTrackSpeaker("worker"),
       sourceLanguage: "en",
       targetLanguage: "zh",
       text,

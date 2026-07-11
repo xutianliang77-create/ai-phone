@@ -91,6 +91,8 @@ extension RealtimeControllerGatewayEvents on RealtimeController {
           sourceLanguage: event.language,
           confidence: event.confidence,
           stage: 'asr',
+          speaker: event.speaker,
+          timing: event.timing,
         );
       }
     }
@@ -108,6 +110,8 @@ extension RealtimeControllerGatewayEvents on RealtimeController {
           confidence: event.confidence,
           stage: 'asr',
           refinement: event.refinement,
+          speaker: event.speaker,
+          timing: event.timing,
         );
       }
     }
@@ -129,12 +133,21 @@ extension RealtimeControllerGatewayEvents on RealtimeController {
           provider: event.provider,
           model: event.model,
           latencyMs: event.latencyMs,
+          speaker: event.speaker,
+          timing: event.timing,
         );
         if (_usesDeviceAsr) {
           _speakTranslationIfNeeded(
               text, event.language ?? _config.targetLanguage);
         }
       }
+    }
+    if (event.type == 'speaker.updated' && event.segmentId != null) {
+      _upsertSegment(
+        event.segmentId!,
+        speaker: event.speaker,
+        timing: event.timing,
+      );
     }
     if (event.type == 'audio.output') {
       _playAudioOutputIfNeeded(event);

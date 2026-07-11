@@ -109,7 +109,10 @@ class _JoinCallLinkPageState extends State<JoinCallLinkPage> {
               _GuestTokenStatus(ready: _guestToken != null),
               const SizedBox(height: 12),
               _CallRoomStatus(snapshot: _roomSnapshot),
-              CallRoomCaptions(captions: _roomSnapshot.captions),
+              CallRoomCaptions(
+                captions: _roomSnapshot.captions,
+                localRole: 'guest',
+              ),
             ],
             if (_error != null)
               Padding(

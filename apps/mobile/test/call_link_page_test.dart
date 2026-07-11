@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:translation_mobile/src/app/localization/app_localizations.dart';
 import 'package:translation_mobile/src/features/compliance/data/voice_processing_consent_store.dart';
 import 'package:translation_mobile/src/features/call_link/data/call_room_client.dart';
+import 'package:translation_mobile/src/shared/domain/speaker_attribution.dart';
 import 'package:translation_mobile/src/features/call_link/presentation/pages/call_link_page.dart';
 import 'package:translation_mobile/src/features/call_link/presentation/pages/join_call_link_page.dart';
 
@@ -148,7 +149,11 @@ void main() {
       captions: const <CallRoomCaption>[
         CallRoomCaption(
           segmentId: 'segment-1',
-          speakerRole: 'guest',
+          speaker: SpeakerAttribution(
+            speakerId: 'guest',
+            role: 'guest',
+            source: 'participant_track',
+          ),
           sourceLanguage: 'en',
           targetLanguage: 'zh',
           timestampMs: 1,
@@ -192,7 +197,11 @@ void main() {
     final captions = List<CallRoomCaption>.generate(18, (index) {
       return CallRoomCaption(
         segmentId: 'segment-$index',
-        speakerRole: 'guest',
+        speaker: const SpeakerAttribution(
+          speakerId: 'guest',
+          role: 'guest',
+          source: 'participant_track',
+        ),
         sourceLanguage: 'zh',
         targetLanguage: 'en',
         timestampMs: index,

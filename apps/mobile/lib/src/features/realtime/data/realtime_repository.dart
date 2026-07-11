@@ -176,5 +176,7 @@ Map<String, Object?> _segmentToJson(SubtitleSegment segment) {
     if (segment.model != null) 'model': segment.model,
     if (segment.latencyMs != null) 'latencyMs': segment.latencyMs,
     if (segment.refinement != null) 'refinement': segment.refinement,
+    if (segment.speaker != null) 'speaker': segment.speaker!.toJson(),
+    if (segment.timing != null) 'timing': segment.timing!.toJson(),
   };
 }

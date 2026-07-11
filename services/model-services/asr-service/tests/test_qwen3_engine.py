@@ -83,6 +83,7 @@ async def test_qwen3_engine_adds_hotwords_to_context() -> None:
         hotwords=["筑基丹", "灵脉之心", "Hy-MT2"],
         corrections=[{"fromText": "助机单", "toText": "筑基丹"}],
     ))
+    await engine.flush("sess_1", "zh", "en")
 
     assert "优先识别并保留以下热词" in runner.last_context
     assert "筑基丹" in runner.last_context

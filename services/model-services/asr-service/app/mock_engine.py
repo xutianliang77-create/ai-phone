@@ -29,6 +29,11 @@ class MockAsrEngine:
             text=text,
             language=language,
             confidence=0.9,
+            timing={
+                "startMs": request.timestampMs,
+                "endMs": request.timestampMs,
+                "source": "client",
+            },
         )
 
     async def flush(

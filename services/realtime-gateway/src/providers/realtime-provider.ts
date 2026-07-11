@@ -4,6 +4,7 @@ import type {
   TranslationLanguageCode,
   ServerRealtimeEvent,
   TermbaseTermDto,
+  SpeakerAttributionOptionsDto,
 } from "@translation/contracts";
 
 export interface RealtimeProviderSession {
@@ -15,6 +16,7 @@ export interface RealtimeProviderSession {
   terminology?: TermbaseTermDto[];
   asrHotwords?: string[];
   asrCorrections?: Array<{ fromText: string; toText: string }>;
+  speakerAttribution?: SpeakerAttributionOptionsDto;
 }
 
 export interface TextSegmentInput {

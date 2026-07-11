@@ -1,5 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import {
+  isSegmentTiming,
+  isSpeakerAttribution,
   isSupportedLanguage,
   type SessionSegmentStage,
   type UpdateRealtimeSessionStateRequest,
@@ -96,6 +98,8 @@ export async function registerRealtimeRoutes(app: FastifyInstance) {
       latencyMs: body.latencyMs,
       providerUsage: body.providerUsage,
       refinement: body.refinement,
+      speaker: body.speaker,
+      timing: body.timing,
     });
     if (!session)
       return sendError(reply, 404, "session_not_found", "Session not found");
@@ -188,7 +192,9 @@ function isValidSegmentPatch(
     isOptionalString(body.model) &&
     isOptionalNonNegativeNumber(body.latencyMs) &&
     isProviderUsage(body.providerUsage) &&
-    isRefinement(body.refinement)
+    isRefinement(body.refinement) &&
+    (body.speaker === undefined || isSpeakerAttribution(body.speaker)) &&
+    (body.timing === undefined || isSegmentTiming(body.timing))
   );
 }
 
@@ -203,6 +209,8 @@ function hasSegmentDiagnostics(body: Partial<UpsertSessionSegmentRequest>) {
     body.latencyMs,
     body.providerUsage,
     body.refinement,
+    body.speaker,
+    body.timing,
   ].some((value) => value !== undefined);
 }
 

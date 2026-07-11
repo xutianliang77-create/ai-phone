@@ -16,7 +16,7 @@ describe("model routing config", () => {
     }
   });
 
-  test("validates a complete ASR/translation/TTS profile", () => {
+  test("validates a complete speech model profile", () => {
     const file = writeConfig(tempDirs, readyConfig());
 
     const result = checkModelRoutingConfig(file);
@@ -84,7 +84,9 @@ describe("model routing config", () => {
     const result = checkModelRoutingConfig(file);
 
     expect(result.status).toBe("not_ready");
-    expect(result.issues.join("\n")).toContain("ASR, translation, and TTS");
+    expect(result.issues.join("\n")).toContain(
+      "ASR, translation, TTS, and speaker",
+    );
   });
 });
 
@@ -101,6 +103,11 @@ function readyConfig() {
           contract: "openai-compatible",
         },
         tts: { provider: "voxcpm2", model: "VoxCPM2", contract: "http" },
+        speaker: {
+          provider: "off",
+          model: "nvidia/diar_streaming_sortformer_4spk-v2.1",
+          contract: "internal HTTP side path",
+        },
         env: {
           gateway: {
             REALTIME_PROVIDER: "hymt2_self_hosted",

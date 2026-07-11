@@ -17,6 +17,8 @@ extension RealtimeControllerSegments on RealtimeController {
     String? model,
     int? latencyMs,
     Map<String, Object?>? refinement,
+    SpeakerAttribution? speaker,
+    SegmentTiming? timing,
   }) {
     final nextSourceText = _cleanRealtimeText(sourceText);
     final nextTranslatedText = _cleanRealtimeText(translatedText);
@@ -48,6 +50,8 @@ extension RealtimeControllerSegments on RealtimeController {
       model: model,
       latencyMs: latencyMs,
       refinement: refinement,
+      speaker: speaker,
+      timing: timing,
     );
     _replaceSegmentsFromDrafts();
   }

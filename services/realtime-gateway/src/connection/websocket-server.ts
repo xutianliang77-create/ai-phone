@@ -36,7 +36,6 @@ import { RealtimeFlushTracker } from "./realtime-flush-tracker.js";
 
 const router = new ProviderRouter();
 const disconnectGraceMs = 45_000;
-
 export { normalizeClientTextLanguage } from "../protocol/client-text-language.js";
 
 function send(ws: WebSocket, event: ServerRealtimeEvent) {
@@ -93,6 +92,7 @@ export function startWebSocketServer() {
         targetLanguage: session.claims.targetLanguage,
         autoReverseTargetLanguage: session.claims.autoReverseTargetLanguage,
         voiceOutput: session.claims.voiceOutput,
+        speakerAttribution: session.claims.speakerAttribution,
         terminology,
         asrHotwords,
         asrCorrections,

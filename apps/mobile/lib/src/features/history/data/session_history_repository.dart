@@ -108,6 +108,18 @@ class SessionHistoryRepository {
     return _apiClient!.generateReview(sessionId);
   }
 
+  Future<SessionDetail> renameSpeaker(
+    String sessionId,
+    String speakerId,
+    String displayName,
+  ) {
+    final localStore = _localStore;
+    if (localStore != null) {
+      return localStore.renameSpeaker(sessionId, speakerId, displayName);
+    }
+    return _apiClient!.renameSpeaker(sessionId, speakerId, displayName);
+  }
+
   Future<TermbaseTerm> confirmTerm({
     required String sessionId,
     required String sourceText,

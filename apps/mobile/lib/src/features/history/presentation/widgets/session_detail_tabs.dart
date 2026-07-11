@@ -198,10 +198,21 @@ class _TranscriptTab extends StatelessWidget {
       itemBuilder: (context, index) {
         final segment = segments[index];
         return ListTile(
+          leading: segment.speaker == null
+              ? null
+              : const Icon(Icons.record_voice_over_outlined),
           title: Text(segment.sourceText),
           subtitle: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
+              if (segment.speaker != null) ...<Widget>[
+                Text(
+                  '${segment.speaker!.label(isChinese: context.l10n.isChinese)}'
+                  ' · ${segment.speaker!.sourceLabel(isChinese: context.l10n.isChinese)}',
+                  style: Theme.of(context).textTheme.labelMedium,
+                ),
+                const SizedBox(height: 4),
+              ],
               if (_hasOptimization(segment)) ...<Widget>[
                 const SizedBox(height: 6),
                 Text(

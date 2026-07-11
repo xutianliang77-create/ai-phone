@@ -2,6 +2,9 @@ import type {
   AudioFrame,
   LanguageCode,
   TranslationLanguageCode,
+  SegmentTimingDto,
+  SpeakerAttributionDto,
+  SpeakerAttributionOptionsDto,
 } from "@translation/contracts";
 
 export interface AsrSession {
@@ -10,6 +13,7 @@ export interface AsrSession {
   targetLanguage: TranslationLanguageCode;
   asrHotwords?: string[];
   asrCorrections?: Array<{ fromText: string; toText: string }>;
+  speakerAttribution?: SpeakerAttributionOptionsDto;
 }
 
 export interface TranscriptResult {
@@ -17,6 +21,8 @@ export interface TranscriptResult {
   text: string;
   language: TranslationLanguageCode;
   confidence?: number;
+  speaker?: SpeakerAttributionDto;
+  timing?: SegmentTimingDto;
 }
 
 export interface AsrProvider {

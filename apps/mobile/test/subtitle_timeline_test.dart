@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:translation_mobile/src/app/localization/app_localizations.dart';
 import 'package:translation_mobile/src/features/realtime/domain/entities/subtitle_segment.dart';
 import 'package:translation_mobile/src/features/realtime/presentation/widgets/subtitle_timeline.dart';
+import 'package:translation_mobile/src/shared/domain/speaker_attribution.dart';
 
 void main() {
   testWidgets('auto-scrolls to the latest subtitle segment', (tester) async {
@@ -145,6 +146,27 @@ void main() {
 
     expect(tester.takeException(), isNull);
     expect(find.text('Landscape subtitles remain visible.'), findsOneWidget);
+  });
+
+  testWidgets('shows an anonymous speaker without inventing an identity',
+      (tester) async {
+    const segments = <SubtitleSegment>[
+      SubtitleSegment(
+        id: 'speaker_segment',
+        sourceText: '你好',
+        translatedText: 'Hello',
+        speaker: SpeakerAttribution(
+          speakerId: 'speaker_2',
+          role: 'speaker',
+          source: 'diarization',
+          confidence: 0.9,
+        ),
+      ),
+    ];
+
+    await tester.pumpWidget(const _TestApp(segments: segments));
+    expect(find.text('发言者 2'), findsOneWidget);
+    expect(find.text('我'), findsNothing);
   });
 }
 

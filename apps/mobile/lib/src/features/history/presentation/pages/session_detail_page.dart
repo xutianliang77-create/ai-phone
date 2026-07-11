@@ -2,11 +2,13 @@ import 'package:flutter/material.dart';
 
 import '../../../../app/app_config.dart';
 import '../../../../app/localization/app_localizations.dart';
+import '../../../../shared/domain/speaker_attribution.dart';
 import '../../data/session_history_models.dart';
 import '../../data/session_history_repository.dart';
 import '../../data/session_review.dart';
 import '../widgets/session_detail_tabs.dart';
 import '../widgets/session_terms_tab.dart';
+import '../widgets/session_speakers_panel.dart';
 
 class SessionDetailPage extends StatefulWidget {
   const SessionDetailPage({
@@ -113,6 +115,7 @@ class _SessionDetailPageState extends State<SessionDetailPage> {
           }
           return Column(
             children: <Widget>[
+              SessionSpeakersPanel(detail: detail, onRename: _renameSpeaker),
               _MeetingMinutesPanel(
                 hasReview: detail.reviewJson != null,
                 generating: _generatingReview,
@@ -160,6 +163,19 @@ class _SessionDetailPageState extends State<SessionDetailPage> {
     } finally {
       if (mounted) setState(() => _generatingReview = false);
     }
+  }
+
+  Future<void> _renameSpeaker(
+    SpeakerAttribution speaker,
+    String displayName,
+  ) async {
+    final updated = await _repository.renameSpeaker(
+      widget.sessionId,
+      speaker.speakerId,
+      displayName,
+    );
+    if (!mounted) return;
+    setState(() => _detail = Future.value(updated));
   }
 
   Future<void> _confirmTerm(SessionTermSuggestion term) async {

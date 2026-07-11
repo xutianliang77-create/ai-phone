@@ -45,3 +45,5 @@ class AsrTranscribeResponse(BaseModel):
     text: str
     language: TranslationLanguageCode
     confidence: float | None = Field(default=None, ge=0, le=1)
+    speaker: dict[str, object] | None = None
+    timing: dict[str, object] | None = None

@@ -1,3 +1,5 @@
+import '../../../../shared/domain/speaker_attribution.dart';
+
 class SubtitleSegment {
   const SubtitleSegment({
     required this.id,
@@ -13,6 +15,8 @@ class SubtitleSegment {
     this.model,
     this.latencyMs,
     this.refinement,
+    this.speaker,
+    this.timing,
   });
 
   final String id;
@@ -28,4 +32,6 @@ class SubtitleSegment {
   final String? model;
   final int? latencyMs;
   final Map<String, Object?>? refinement;
+  final SpeakerAttribution? speaker;
+  final SegmentTiming? timing;
 }

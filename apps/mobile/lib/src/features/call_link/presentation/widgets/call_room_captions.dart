@@ -17,9 +17,14 @@ String callRoomCaptionsTailKey(List<CallRoomCaption> captions) {
 }
 
 class CallRoomCaptions extends StatelessWidget {
-  const CallRoomCaptions({required this.captions, super.key});
+  const CallRoomCaptions({
+    required this.captions,
+    required this.localRole,
+    super.key,
+  });
 
   final List<CallRoomCaption> captions;
+  final String localRole;
 
   @override
   Widget build(BuildContext context) {
@@ -41,7 +46,10 @@ class CallRoomCaptions extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
                 Text(
-                  _speakerLabel(context.l10n, caption.speakerRole),
+                  caption.speaker.label(
+                    isChinese: context.l10n.isChinese,
+                    localRole: localRole,
+                  ),
                   style: theme.textTheme.labelMedium?.copyWith(
                     color: theme.colorScheme.primary,
                   ),
@@ -86,15 +94,6 @@ class CallRoomCaptions extends StatelessWidget {
           ),
       ],
     );
-  }
-
-  String _speakerLabel(AppLocalizations l10n, String role) {
-    return switch (role) {
-      'host' => l10n.callRoomSpeakerMe,
-      'guest' => l10n.callRoomSpeakerOther,
-      'worker' => l10n.callRoomSpeakerSystem,
-      _ => l10n.callRoomSpeakerOther,
-    };
   }
 
   String _ttsLabel(AppLocalizations l10n, CallRoomCaption caption) {

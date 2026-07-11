@@ -61,5 +61,5 @@ function usage() {
   scripts/check_model_routing_config.mjs --json
   scripts/check_model_routing_config.mjs --file release/domestic/model-routing.json
 
-Validates the unified ASR, translation, and TTS model routing config.`);
+Validates the unified ASR, translation, TTS, and speaker model routing config.`);
 }

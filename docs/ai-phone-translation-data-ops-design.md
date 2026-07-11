@@ -1,6 +1,6 @@
 # AI 翻译电话数据与运维设计
 
-版本：v0.1  
+版本：v0.2
 日期：2026-07-02  
 关联文档：`docs/ai-phone-translation-technical-design.md`、`docs/ai-phone-translation-protocol-design.md`
 
@@ -66,6 +66,24 @@
 | model_cost_usd | decimal | 模型成本 |
 | duration_seconds | int | 时长 |
 | created_at | timestamp | 时间 |
+
+### 1.5 session_speakers 与 segment 归属
+
+普通同传、Call Link、PSTN 和 AI Agent 共用 `SpeakerAttribution`：
+
+| 字段 | 说明 |
+| --- | --- |
+| speaker_id | 会话内稳定键，例如 `speaker_1`、`host` |
+| role | self/peer/host/guest/agent/worker/speaker/unknown |
+| source | participant_track/diarization/voice_identity/language_role/manual/unknown |
+| display_name | 会话内用户别名，可空 |
+| confidence | 归属置信度，可空 |
+
+`call_segments`/`session_segments` 增加 `speaker_id`、`start_ms`、`end_ms`、`timing_source`、`speaker_overlap`。任何跨 speaker 的片段都必须在翻译前拆分。
+
+当前正式数据库未配置时，`Session Repository` 把 speaker 和 timing 作为 segment 嵌套对象写入 JSON store；旧记录缺失字段即视为 `unknown`。后续 SQLite/PostgreSQL Adapter 负责范式化，不改变 API DTO 和 App 模型。
+
+会话内重命名必须在一次 Repository 写事务中更新同一 `speaker_id` 的全部 segment，并使已有 review 失效。声纹 embedding 不得进入 session JSON、日志、导出或 LLM prompt。
 
 ## 2. Redis 缓存
 
@@ -148,6 +166,10 @@ Webhook：
 - asr_error_rate。
 - provider_cost_per_minute。
 - credits_settlement_error_count。
+- speaker_attribution_rate。
+- speaker_switch_latency_ms。
+- speaker_span_dropped。
+- speaker_provider_degraded。
 
 ## 6. 环境变量
 

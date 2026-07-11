@@ -34,6 +34,8 @@ class PcmAudioSegment:
     sample_rate: int
     end_sequence: int
     duration_ms: int
+    start_timestamp_ms: int
+    end_timestamp_ms: int
 
 
 @dataclass(frozen=True)
@@ -41,6 +43,7 @@ class _PcmChunk:
     pcm: bytes
     duration_ms: int
     voiced: bool
+    timestamp_ms: int
 
 
 @dataclass
@@ -88,6 +91,7 @@ class RealtimePcmSegmenter:
             pcm=pcm,
             duration_ms=duration_ms,
             voiced=pcm16_rms(pcm) > self.vad_energy_threshold,
+            timestamp_ms=request.timestampMs,
         )
         if not state.has_voice:
             return self._append_waiting_for_voice(state, chunk, request)
@@ -105,6 +109,10 @@ class RealtimePcmSegmenter:
             sample_rate=state.sample_rate,
             end_sequence=state.last_sequence,
             duration_ms=state.buffered_ms,
+            start_timestamp_ms=state.chunks[0].timestamp_ms,
+            end_timestamp_ms=(
+                state.chunks[-1].timestamp_ms + state.chunks[-1].duration_ms
+            ),
         )
         reset_active_segment(state)
         return segment
@@ -161,6 +169,10 @@ class RealtimePcmSegmenter:
             sample_rate=request.sampleRate,
             end_sequence=request.sequence,
             duration_ms=state.buffered_ms,
+            start_timestamp_ms=state.chunks[0].timestamp_ms,
+            end_timestamp_ms=(
+                state.chunks[-1].timestamp_ms + state.chunks[-1].duration_ms
+            ),
         )
         reset_active_segment(state)
         return segment

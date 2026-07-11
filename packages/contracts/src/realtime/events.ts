@@ -3,6 +3,10 @@ import type { SessionSegmentProviderUsageDto } from "../api/realtime.js";
 import type { SessionSegmentRefinementDto } from "../api/realtime.js";
 import type { RealtimeError, RealtimeErrorStage } from "./errors.js";
 import type { TranslationLanguageCode } from "../shared/languages.js";
+import type {
+  SegmentTimingDto,
+  SpeakerAttributionDto,
+} from "../shared/speaker.js";
 
 export interface SessionStartedEvent {
   type: "session.started";
@@ -19,6 +23,8 @@ export interface TranscriptEvent {
   language: TranslationLanguageCode;
   confidence?: number;
   refinement?: SessionSegmentRefinementDto;
+  speaker?: SpeakerAttributionDto;
+  timing?: SegmentTimingDto;
 }
 
 export interface TranslationEvent {
@@ -29,6 +35,16 @@ export interface TranslationEvent {
   language: TranslationLanguageCode;
   termHits?: string[];
   providerUsage?: SessionSegmentProviderUsageDto;
+  speaker?: SpeakerAttributionDto;
+  timing?: SegmentTimingDto;
+}
+
+export interface SpeakerUpdatedEvent {
+  type: "speaker.updated";
+  sessionId: string;
+  segmentId: string;
+  speaker: SpeakerAttributionDto;
+  timing?: SegmentTimingDto;
 }
 
 export interface TranslationFailedEvent {
@@ -110,6 +126,7 @@ export type ServerRealtimeEvent =
   | SessionStartedEvent
   | TranscriptEvent
   | TranslationEvent
+  | SpeakerUpdatedEvent
   | TranslationFailedEvent
   | AudioOutput
   | UsageTickEvent

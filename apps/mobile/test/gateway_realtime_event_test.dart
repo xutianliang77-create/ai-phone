@@ -21,4 +21,29 @@ void main() {
     expect(event.sequence, 1);
     expect(event.data, 'AA==');
   });
+
+  test('parses speaker attribution and shared timing', () {
+    final event = GatewayRealtimeEvent.fromJson(const <String, Object?>{
+      'type': 'transcript.final',
+      'sessionId': 'sess_1',
+      'segmentId': 'seg_1',
+      'text': '你好',
+      'language': 'zh',
+      'speaker': <String, Object?>{
+        'speakerId': 'speaker_2',
+        'role': 'speaker',
+        'source': 'diarization',
+        'confidence': 0.91,
+      },
+      'timing': <String, Object?>{
+        'startMs': 1000,
+        'endMs': 1800,
+        'source': 'client',
+      },
+    });
+
+    expect(event.speaker?.speakerId, 'speaker_2');
+    expect(event.speaker?.label(isChinese: true), '发言者 2');
+    expect(event.timing?.startMs, 1000);
+  });
 }

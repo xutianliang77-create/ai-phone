@@ -1,4 +1,5 @@
 import '../../domain/entities/subtitle_segment.dart';
+import '../../../../shared/domain/speaker_attribution.dart';
 
 class SegmentDraft {
   const SegmentDraft(
@@ -15,6 +16,8 @@ class SegmentDraft {
     this.model,
     this.latencyMs,
     this.refinement,
+    this.speaker,
+    this.timing,
   });
 
   final String id;
@@ -30,6 +33,8 @@ class SegmentDraft {
   final String? model;
   final int? latencyMs;
   final Map<String, Object?>? refinement;
+  final SpeakerAttribution? speaker;
+  final SegmentTiming? timing;
 
   SegmentDraft copyWith({
     String? sourceText,
@@ -44,6 +49,8 @@ class SegmentDraft {
     String? model,
     int? latencyMs,
     Map<String, Object?>? refinement,
+    SpeakerAttribution? speaker,
+    SegmentTiming? timing,
   }) {
     return SegmentDraft(
       id,
@@ -59,6 +66,8 @@ class SegmentDraft {
       model: model ?? this.model,
       latencyMs: latencyMs ?? this.latencyMs,
       refinement: refinement ?? this.refinement,
+      speaker: speaker ?? this.speaker,
+      timing: timing ?? this.timing,
     );
   }
 
@@ -77,6 +86,8 @@ class SegmentDraft {
       model: model,
       latencyMs: latencyMs,
       refinement: refinement,
+      speaker: speaker,
+      timing: timing,
     );
   }
 }

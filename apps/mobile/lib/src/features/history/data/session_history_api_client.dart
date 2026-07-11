@@ -104,6 +104,24 @@ class SessionHistoryApiClient {
         jsonDecode(response.body) as Map<String, Object?>);
   }
 
+  Future<SessionDetail> renameSpeaker(
+    String sessionId,
+    String speakerId,
+    String displayName,
+  ) async {
+    final response = await _client.patch(
+      _baseUrl.resolve(
+        '/sessions/$sessionId/speakers/${Uri.encodeComponent(speakerId)}',
+      ),
+      headers: await _authHeaders(json: true),
+      body: jsonEncode({'displayName': displayName}),
+    );
+    _ensureOk(response);
+    return SessionDetail.fromJson(
+      jsonDecode(response.body) as Map<String, Object?>,
+    );
+  }
+
   Future<TermbaseTerm> confirmTerm({
     required String sessionId,
     required String sourceText,

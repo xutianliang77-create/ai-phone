@@ -123,6 +123,17 @@ describe("call room worker event routes", () => {
         id: "segment-1",
         sourceText: "hello from guest",
         translatedText: "你好，来自访客。",
+        speaker: {
+          speakerId: "guest",
+          role: "guest",
+          source: "participant_track",
+          confidence: 1,
+        },
+        timing: {
+          startMs: 1,
+          endMs: 1,
+          source: "participant_track",
+        },
       },
     ]);
   });

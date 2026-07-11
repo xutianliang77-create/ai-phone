@@ -1,6 +1,6 @@
 # ai phone 两层部署与数据流设计
 
-版本：v1.0  
+版本：v1.1
 日期：2026-07-11  
 状态：已确认约束，进入实施
 
@@ -24,6 +24,7 @@ flowchart LR
     Proxy --> API["API Server"]
     Proxy --> Gateway["Realtime Gateway"]
     Gateway --> ASR["Qwen3-ASR"]
+    Gateway --> Speaker["Streaming Speaker Provider"]
     Gateway --> MT["Hy-MT2"]
     Gateway --> TTS["VoxCPM2 / TTS"]
     Gateway --> LLM["Qwen3.5 LLM"]
@@ -53,6 +54,7 @@ livekit
 asr-service
 translation-service
 tts-service
+speaker-service
 llm-runtime
 ```
 
@@ -64,6 +66,8 @@ llm-runtime
 - 内部调用使用服务名或 `127.0.0.1`，不得使用 Mac IP。
 - 手机配置不得包含 `localhost`、Mac 局域网 IP、模型端口或内部密钥。
 - Tailscale 只用于开发运维和内测访问，不作为正式产品拓扑的一层。
+- Speaker Provider 与 ASR 并行，是可降级旁路；故障不得中断字幕和翻译。
+- App 只提交 speaker 策略，不持有说话人模型地址、密钥或内部端口。
 
 ## 4. 暂时数据存储方案
 
@@ -137,8 +141,11 @@ API -> App: sessionId、一次性 realtime token、WSS endpoint
 App -> Gateway: WSS 连接和 audio.frame
 Gateway -> ASR: 音频窗口/flush
 ASR -> Gateway: partial/final、language、confidence
-Gateway -> Translation/TTS: final 文本
-Gateway -> App: transcript、translation、audio.output
+Gateway -> Speaker Provider: 同时间轴音频帧
+Speaker Provider -> Gateway: anonymous speaker spans
+Gateway: 时间对齐，speaker 变化强制断句
+Gateway -> Translation/TTS: 带 speaker 的 final 文本
+Gateway -> App: transcript、translation、speaker.updated、audio.output
 Gateway -> API internal: segment.final 事件
 API -> SQLite: segment 幂等落库
 ```

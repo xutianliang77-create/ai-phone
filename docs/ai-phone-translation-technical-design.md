@@ -1,6 +1,6 @@
 # AI 翻译电话技术方案
 
-版本：v0.1  
+版本：v0.2
 日期：2026-07-02  
 范围：Call Link、WebRTC/VoIP 通话房间、拨打手机号翻译电话、PSTN 服务商桥接、AI Calling Agent。  
 关联文档：`docs/ai-communication-feature-design.md`、`docs/ai-communication-ui-design.md`、`docs/ai-phone-translation-protocol-design.md`、`docs/ai-phone-translation-data-ops-design.md`
@@ -38,6 +38,7 @@ Call Orchestrator
         |       +--> Telnyx Media Streaming
         |
         +--> Translation Worker
+                +--> Speaker Attribution Router
                 +--> ASR Provider
                 +--> Translation Provider
                 +--> TTS Provider
@@ -55,6 +56,7 @@ Call Orchestrator
 | LiveKit/WebRTC Layer | App/网页实时音频房间、低延迟传输、音频路由 |
 | PSTN Bridge Adapter | 调 Twilio/Telnyx 或国内 PSTN Bridge 拨号，接收/发送电话音频 |
 | Translation Worker | VAD、ASR、翻译、TTS、字幕事件、摘要材料 |
+| Speaker Attribution Router | 按独立音轨、流式分离或手动模式选择归属来源，并完成时间对齐 |
 | Billing Ledger | credits 预扣、结算、失败回滚、成本记录 |
 | Session Record Service | 保存 transcript、translation、summary、highlights |
 
@@ -170,13 +172,20 @@ Agent 安全门：
 
 1. Audio frame normalize。
 2. VAD 和端点检测。
-3. ASR partial/final。
-4. 自动语种识别。
-5. 翻译方向选择。
-6. 术语纠错。
-7. TTS streaming。
-8. Jitter buffer。
-9. 向目标端播放。
+3. ASR 与 Speaker Attribution 并行处理。
+4. 按统一时间轴对齐 transcript 与 speaker span。
+5. speaker 变化时强制断句。
+6. 自动语种识别和翻译方向选择。
+7. 术语纠错和翻译。
+8. TTS streaming、Jitter buffer 和目标端播放。
+
+说话人归属规则：
+
+- Call Link/PSTN 使用 participant track，角色为 host/guest/agent，不运行 diarization。
+- 面对面单麦克风使用流式 diarization，输出匿名 `speaker_1..4`。
+- 声音身份必须取得单独授权；未授权或低置信度时只显示匿名说话人。
+- LLM 只使用既有 speaker 标签整理纪要，禁止根据文本内容猜身份。
+- 详细接口、数据模型和降级规则见 `docs/ai-phone-speaker-attribution-design.md`。
 
 延迟目标：
 

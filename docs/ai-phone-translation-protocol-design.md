@@ -1,6 +1,6 @@
 # AI 翻译电话协议设计
 
-版本：v0.1  
+版本：v0.2
 日期：2026-07-02  
 关联文档：`docs/ai-phone-translation-technical-design.md`、`docs/ai-phone-translation-data-ops-design.md`
 
@@ -136,6 +136,30 @@ GET /call/{callId}
 - 历史记录 id。
 
 ## 3. WebSocket 事件
+
+所有实时字幕事件使用统一归属对象：
+
+```json
+{
+  "speaker": {
+    "speakerId": "speaker_2",
+    "role": "speaker",
+    "source": "diarization",
+    "displayName": "客户",
+    "confidence": 0.91
+  },
+  "timing": {
+    "startMs": 1200,
+    "endMs": 2480,
+    "source": "client",
+    "overlap": false
+  }
+}
+```
+
+`speakerRole` 仅在旧 Call Room payload 中保留一个兼容周期；新服务和 App 以 `speaker` 为权威字段，缺失时才从 `speakerRole` 迁移为 `participant_track`。
+
+迟到归属使用 `speaker.updated`。该事件只更新 UI 和 Repository，不重复翻译、TTS、结算或 LLM 调用。
 
 客户端连接：
 
@@ -375,6 +399,26 @@ interface PstnMediaWriteRequest {
 LiveKit 播放服务用 `targetSpeakerRole` 发布给房间另一侧；PSTN Bridge 会记住 `/agent-calls` 返回的 `providerCallId/mediaStreamId`，并在配置 `PSTN_BRIDGE_MEDIA_WRITER_ENDPOINT` 后把 `telephonyAudio` 写回对应电话媒体流。
 
 ## 6. Token
+
+Realtime token 可包含：
+
+```json
+{
+  "speakerAttribution": {
+    "mode": "auto",
+    "maxSpeakers": 2,
+    "allowVoiceIdentity": false
+  }
+}
+```
+
+Call Link/PSTN 强制 `participant_track`；普通在线对话的 `auto` 可路由到流式 diarization；端侧无模型时降级为 `language_role` 或 `unknown`。
+
+会话管理接口：
+
+- `GET /sessions/:sessionId/speakers`：返回 speaker 清单、片段数和累计时长。
+- `PATCH /sessions/:sessionId/speakers/:speakerId`：修改本次会话展示名。
+- 声音身份注册/撤回接口在完成独立同意、加密存储与删除审计前不得开放。
 
 - LiveKit/WebRTC token 有效期 30-60 分钟。
 - Guest token 只能加入指定 call room。

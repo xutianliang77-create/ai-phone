@@ -13,6 +13,7 @@ export type RealtimeProviderName =
   | "qwen_live"
   | "tencent_trtc";
 export type AsrProviderName = "mock" | "http";
+export type SpeakerProviderName = "off" | "http";
 export type SessionEventSinkName = "noop" | "api";
 export type RegionEdition = "domestic" | "international";
 export type LlmProviderName = "off" | "mock" | "openai_compatible";
@@ -27,6 +28,7 @@ export interface RealtimeEnv {
   callProviderPolicy: string;
   complianceProfile: string;
   asrProvider: AsrProviderName;
+  speakerProvider: SpeakerProviderName;
   openAiApiKey?: string;
   openAiRealtimeEndpoint: string;
   openAiRealtimeModel: string;
@@ -47,6 +49,9 @@ export interface RealtimeEnv {
   asrHttpHealthUrl?: string;
   asrHttpApiKey?: string;
   asrHttpTimeoutMs: number;
+  speakerHttpBaseUrl?: string;
+  speakerHttpApiKey?: string;
+  speakerHttpTimeoutMs: number;
   ttsHttpEndpoint?: string;
   ttsHttpApiKey?: string;
   ttsHttpTimeoutMs: number;
@@ -89,6 +94,7 @@ export function loadEnv(): RealtimeEnv {
       env.COMPLIANCE_PROFILE ??
       (regionEdition === "domestic" ? "pipl" : "us_ca"),
     asrProvider: parseAsrProviderName(env.ASR_PROVIDER),
+    speakerProvider: env.SPEAKER_PROVIDER === "http" ? "http" : "off",
     openAiApiKey: env.OPENAI_API_KEY,
     openAiRealtimeEndpoint:
       env.OPENAI_REALTIME_ENDPOINT ??
@@ -128,6 +134,9 @@ export function loadEnv(): RealtimeEnv {
     asrHttpHealthUrl: env.ASR_HTTP_HEALTH_URL,
     asrHttpApiKey: env.ASR_HTTP_API_KEY,
     asrHttpTimeoutMs: Number(env.ASR_HTTP_TIMEOUT_MS ?? 10_000),
+    speakerHttpBaseUrl: env.SPEAKER_HTTP_BASE_URL,
+    speakerHttpApiKey: env.SPEAKER_HTTP_API_KEY,
+    speakerHttpTimeoutMs: Number(env.SPEAKER_HTTP_TIMEOUT_MS ?? 5_000),
     ttsHttpEndpoint: env.TTS_HTTP_ENDPOINT,
     ttsHttpApiKey: env.TTS_HTTP_API_KEY,
     ttsHttpTimeoutMs: Number(env.TTS_HTTP_TIMEOUT_MS ?? 30_000),

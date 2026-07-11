@@ -5,6 +5,8 @@ import type {
   SessionSegmentDto,
   SessionSegmentStage,
   SessionSegmentRefinementDto,
+  SegmentTimingDto,
+  SpeakerAttributionDto,
 } from "@translation/contracts";
 import {
   transitionRealtimeSessionState,
@@ -123,6 +125,8 @@ function mergeSegment(
     latencyMs: existing.latencyMs ?? incoming.latencyMs,
     providerUsage: existing.providerUsage ?? incoming.providerUsage,
     refinement: existing.refinement ?? incoming.refinement,
+    speaker: existing.speaker ?? incoming.speaker,
+    timing: existing.timing ?? incoming.timing,
   };
 }
 
@@ -137,6 +141,50 @@ export function saveSessionReview(
   const session = findSession(sessionId);
   if (!session) return null;
   session.review = review;
+  persistStoreSnapshot();
+  return session;
+}
+
+export function listSessionSpeakers(sessionId: string) {
+  const session = findSession(sessionId);
+  if (!session) return null;
+  const speakers = new Map<string, {
+    speaker: SpeakerAttributionDto;
+    segmentCount: number;
+    totalDurationMs: number;
+  }>();
+  for (const segment of session.segments) {
+    if (!segment.speaker) continue;
+    const current = speakers.get(segment.speaker.speakerId) ?? {
+      speaker: segment.speaker,
+      segmentCount: 0,
+      totalDurationMs: 0,
+    };
+    current.segmentCount += 1;
+    current.totalDurationMs += segment.timing
+      ? Math.max(0, segment.timing.endMs - segment.timing.startMs)
+      : 0;
+    if (segment.speaker.displayName) current.speaker = segment.speaker;
+    speakers.set(segment.speaker.speakerId, current);
+  }
+  return [...speakers.values()];
+}
+
+export function renameSessionSpeaker(
+  sessionId: string,
+  speakerId: string,
+  displayName: string,
+) {
+  const session = findSession(sessionId);
+  if (!session) return null;
+  let changed = false;
+  for (const segment of session.segments) {
+    if (segment.speaker?.speakerId !== speakerId) continue;
+    segment.speaker = { ...segment.speaker, displayName };
+    changed = true;
+  }
+  if (!changed) return null;
+  session.review = null;
   persistStoreSnapshot();
   return session;
 }
@@ -158,6 +206,8 @@ export function upsertSegment(
     latencyMs?: number;
     providerUsage?: SessionSegmentProviderUsageDto;
     refinement?: SessionSegmentRefinementDto;
+    speaker?: SpeakerAttributionDto;
+    timing?: SegmentTimingDto;
   },
 ) {
   const session = findSession(sessionId);
@@ -200,6 +250,8 @@ function applySegmentDiagnostics(
     latencyMs?: number;
     providerUsage?: SessionSegmentProviderUsageDto;
     refinement?: SessionSegmentRefinementDto;
+    speaker?: SpeakerAttributionDto;
+    timing?: SegmentTimingDto;
   },
 ) {
   const diagnostics = buildSegmentDiagnostics(patch);
@@ -216,6 +268,8 @@ function applySegmentDiagnostics(
   }
   if (diagnostics.providerUsage) segment.providerUsage = diagnostics.providerUsage;
   if (diagnostics.refinement) segment.refinement = diagnostics.refinement;
+  if (diagnostics.speaker) segment.speaker = diagnostics.speaker;
+  if (diagnostics.timing) segment.timing = diagnostics.timing;
 }
 
 function buildSegmentDiagnostics(patch: {
@@ -228,6 +282,8 @@ function buildSegmentDiagnostics(patch: {
   latencyMs?: number;
   providerUsage?: SessionSegmentProviderUsageDto;
   refinement?: SessionSegmentRefinementDto;
+  speaker?: SpeakerAttributionDto;
+  timing?: SegmentTimingDto;
 }) {
   return {
     ...(patch.sourceLanguage ? { sourceLanguage: patch.sourceLanguage } : {}),
@@ -245,6 +301,8 @@ function buildSegmentDiagnostics(patch: {
       : {}),
     ...(patch.providerUsage ? { providerUsage: patch.providerUsage } : {}),
     ...(patch.refinement ? { refinement: patch.refinement } : {}),
+    ...(patch.speaker ? { speaker: patch.speaker } : {}),
+    ...(patch.timing ? { timing: patch.timing } : {}),
   };
 }
 

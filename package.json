@@ -51,6 +51,7 @@
     "check:model-selection-ready": "node scripts/check_model_selection_readiness.mjs",
     "check:comprehensive-models": "node scripts/check_comprehensive_model_readiness.mjs",
     "model:evaluate": "node scripts/run_model_eval.mjs",
+    "speaker:evaluate": "node scripts/run_speaker_diarization_eval.mjs",
     "iphone14:eval": "node scripts/iphone14_interactive_eval.mjs",
     "iphone14:tts": "node scripts/iphone14_tts_eval.mjs",
     "iphone14:stage:nemotron": "node scripts/iphone14_stage_nemotron_model.mjs",

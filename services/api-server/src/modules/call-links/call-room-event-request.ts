@@ -3,6 +3,7 @@ import type {
   CallRoomDataEvent,
   CallRoomDataEventType,
 } from "./call-room-events.js";
+import { participantTrackSpeaker } from "@translation/contracts";
 
 const eventTypes = new Set<CallRoomDataEventType>([
   "worker.status",
@@ -64,6 +65,9 @@ function parseEvent(raw: unknown, record: CallLinkRecord): CallRoomDataEvent | n
     roomName: record.roomName,
     segmentId,
     speakerRole: speakerRole as CallRoomDataEvent["speakerRole"],
+    speaker: participantTrackSpeaker(
+      speakerRole as CallRoomDataEvent["speakerRole"],
+    ),
     sourceLanguage: sourceLanguage as CallRoomDataEvent["sourceLanguage"],
     targetLanguage: targetLanguage as CallRoomDataEvent["targetLanguage"],
     text,

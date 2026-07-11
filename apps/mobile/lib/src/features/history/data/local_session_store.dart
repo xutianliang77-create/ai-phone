@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:path_provider/path_provider.dart';
 
 import '../../realtime/domain/entities/subtitle_segment.dart';
+import '../../../shared/domain/speaker_attribution.dart';
 import 'session_history_models.dart';
 
 class LocalSessionStore {
@@ -68,6 +69,8 @@ class LocalSessionStore {
                 provider: segment.provider,
                 model: segment.model,
                 latencyMs: segment.latencyMs,
+                speaker: segment.speaker,
+                timing: segment.timing,
               ))
           .toList(),
     );
@@ -104,6 +107,34 @@ class LocalSessionStore {
           .map(_detailToJson)
           .toList(),
     }));
+  }
+
+  Future<SessionDetail> renameSpeaker(
+    String sessionId,
+    String speakerId,
+    String displayName,
+  ) async {
+    final file = await _storageFile();
+    final sessions = await _loadSessions();
+    final index = sessions.indexWhere((item) => item.sessionId == sessionId);
+    if (index < 0) throw LocalSessionNotFoundException(sessionId);
+    final current = sessions[index];
+    final updated = current.copyWithSegments(current.segments.map((segment) {
+      final speaker = segment.speaker;
+      if (speaker?.speakerId != speakerId) return segment;
+      return segment.copyWithSpeaker(SpeakerAttribution(
+        speakerId: speaker!.speakerId,
+        role: speaker.role,
+        source: speaker.source,
+        displayName: displayName,
+        confidence: speaker.confidence,
+      ));
+    }).toList());
+    sessions[index] = updated;
+    await file.writeAsString(jsonEncode({
+      'sessions': sessions.map(_detailToJson).toList(),
+    }));
+    return updated;
   }
 
   Future<File> _storageFile() async {
@@ -160,6 +191,8 @@ Map<String, Object?> _detailToJson(SessionDetail detail) {
         if (segment.provider != null) 'provider': segment.provider,
         if (segment.model != null) 'model': segment.model,
         if (segment.latencyMs != null) 'latencyMs': segment.latencyMs,
+        if (segment.speaker != null) 'speaker': segment.speaker!.toJson(),
+        if (segment.timing != null) 'timing': segment.timing!.toJson(),
       };
     }).toList(),
   };
@@ -174,6 +207,11 @@ String _markdown(SessionDetail detail) {
     ..writeln('- Status: ${detail.status}')
     ..writeln();
   for (final segment in detail.segments) {
+    if (segment.speaker != null) {
+      buffer.writeln(
+        'Speaker: ${segment.speaker!.label(isChinese: true)}',
+      );
+    }
     buffer
       ..writeln('## ${segment.id}')
       ..writeln()

@@ -19,6 +19,11 @@
         "model": "VoxCPM2",
         "contract": "POST /tts/synthesize returns pcm16 chunks"
       },
+      "speaker": {
+        "provider": "off_pending_shadow_gate",
+        "model": "nvidia/diar_streaming_sortformer_4spk-v2.1",
+        "contract": "Internal HTTP side path: /speaker/sessions + /speaker/frames"
+      },
       "llm": {
         "provider": "openai_compatible",
         "correctionModel": "qwen/qwen3.5-9b",
@@ -35,6 +40,10 @@
           "ASR_HTTP_ENDPOINT": "http://127.0.0.1:8021/asr/transcribe",
           "ASR_HTTP_FLUSH_ENDPOINT": "http://127.0.0.1:8021/asr/sessions/:sessionId/flush",
           "ASR_HTTP_API_KEY": "local-asr-service-api-key",
+          "SPEAKER_PROVIDER": "off",
+          "SPEAKER_HTTP_BASE_URL": "http://127.0.0.1:8022",
+          "SPEAKER_HTTP_API_KEY": "local-speaker-service-api-key",
+          "SPEAKER_HTTP_TIMEOUT_MS": "5000",
           "LLM_PROVIDER": "openai_compatible",
           "LLM_BASE_URL": "http://127.0.0.1:1234/v1",
           "LLM_CORRECTION_MODEL": "qwen/qwen3.5-9b",
@@ -90,6 +99,14 @@
           "TTS_MODEL_VERSION": "VoxCPM2",
           "TTS_SERVICE_API_KEY": "local-tts-service-api-key",
           "TTS_VOXCPM2_MODEL_DIR": "/data/models/translation-model-eval/data/tts-product-fit/models/openbmb_voxcpm2"
+        },
+        "speakerService": {
+          "SPEAKER_MODEL_PROVIDER": "sortformer_shadow",
+          "SPEAKER_MODEL_ID": "nvidia/diar_streaming_sortformer_4spk-v2.1",
+          "SPEAKER_SERVICE_API_KEY": "local-speaker-service-api-key",
+          "SPEAKER_INFERENCE_INTERVAL_MS": "2240",
+          "SPEAKER_STABILIZATION_MS": "800",
+          "SPEAKER_MAX_CONTEXT_MS": "120000"
         }
       }
     },
@@ -110,6 +127,11 @@
         "model": "VoxCPM2",
         "contract": "POST /tts/synthesize returns pcm16 chunks"
       },
+      "speaker": {
+        "provider": "off_pending_shadow_gate",
+        "model": "nvidia/diar_streaming_sortformer_4spk-v2.1",
+        "contract": "Internal HTTP side path: /speaker/sessions + /speaker/frames"
+      },
       "env": {
         "gateway": {
           "REALTIME_PROVIDER": "hymt2_self_hosted",
@@ -119,7 +141,11 @@
           "ASR_PROVIDER": "http",
           "ASR_HTTP_ENDPOINT": "http://127.0.0.1:8001/asr/transcribe",
           "ASR_HTTP_FLUSH_ENDPOINT": "http://127.0.0.1:8001/asr/sessions/:sessionId/flush",
-          "ASR_HTTP_API_KEY": "local-asr-service-api-key"
+          "ASR_HTTP_API_KEY": "local-asr-service-api-key",
+          "SPEAKER_PROVIDER": "off",
+          "SPEAKER_HTTP_BASE_URL": "http://127.0.0.1:8022",
+          "SPEAKER_HTTP_API_KEY": "local-speaker-service-api-key",
+          "SPEAKER_HTTP_TIMEOUT_MS": "5000"
         },
         "translationWorker": {
           "TRANSLATION_BASE_URL": "http://127.0.0.1:8003/v1",
@@ -151,6 +177,14 @@
           "TTS_MODEL_VERSION": "VoxCPM2",
           "TTS_SERVICE_API_KEY": "local-tts-service-api-key",
           "TTS_VOXCPM2_MODEL_DIR": "/data/models/translation-model-eval/data/tts-product-fit/models/openbmb_voxcpm2"
+        },
+        "speakerService": {
+          "SPEAKER_MODEL_PROVIDER": "sortformer_shadow",
+          "SPEAKER_MODEL_ID": "nvidia/diar_streaming_sortformer_4spk-v2.1",
+          "SPEAKER_SERVICE_API_KEY": "local-speaker-service-api-key",
+          "SPEAKER_INFERENCE_INTERVAL_MS": "2240",
+          "SPEAKER_STABILIZATION_MS": "800",
+          "SPEAKER_MAX_CONTEXT_MS": "120000"
         }
       }
     },
@@ -170,6 +204,11 @@
         "provider": "voxcpm2",
         "model": "VoxCPM2",
         "contract": "POST /tts/synthesize"
+      },
+      "speaker": {
+        "provider": "off",
+        "model": "none",
+        "contract": "Disabled"
       },
       "env": {
         "asrService": {
@@ -196,6 +235,11 @@
         "model": "AVSpeechSynthesizer",
         "contract": "Flutter MethodChannel device TTS"
       },
+      "speaker": {
+        "provider": "off",
+        "model": "none",
+        "contract": "Disabled on device until a separate mobile gate passes"
+      },
       "env": {
         "mobile": {
           "USE_DEVICE_ASR": "true",
@@ -220,6 +264,11 @@
         "provider": "voxcpm2",
         "model": "VoxCPM2",
         "contract": "POST /tts/synthesize"
+      },
+      "speaker": {
+        "provider": "off",
+        "model": "none",
+        "contract": "Disabled"
       },
       "env": {
         "gateway": {

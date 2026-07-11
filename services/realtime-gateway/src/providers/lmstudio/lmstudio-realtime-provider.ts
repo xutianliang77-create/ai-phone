@@ -156,7 +156,6 @@ export class LmStudioRealtimeProvider implements RealtimeProvider {
       (await this.asrProvider.healthCheck())
     );
   }
-
   private async *processTranscript(
     session: RealtimeProviderSession,
     transcript: TranscriptResult,
@@ -228,6 +227,7 @@ export class LmStudioRealtimeProvider implements RealtimeProvider {
         language: transcript.language,
         confidence: transcript.confidence,
         refinement: refinement.refinement,
+        speaker: transcript.speaker, timing: transcript.timing,
       };
     }
 
@@ -250,6 +250,7 @@ export class LmStudioRealtimeProvider implements RealtimeProvider {
             inputText: text,
             outputText: text,
           }),
+          speaker: transcript.speaker, timing: transcript.timing,
         };
         this.rememberSegment(session.sessionId, {
           rawText: refinement.rawText,
@@ -296,6 +297,7 @@ export class LmStudioRealtimeProvider implements RealtimeProvider {
           inputText: text,
           outputText: translated,
         }),
+        speaker: transcript.speaker, timing: transcript.timing,
       };
       this.rememberSegment(session.sessionId, {
         rawText: refinement.rawText,

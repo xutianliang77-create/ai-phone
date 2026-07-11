@@ -2,8 +2,14 @@ import type {
   AudioFormat,
   LanguageCode,
   TranslationLanguageCode,
+  SegmentTimingDto,
+  SpeakerAttributionDto,
 } from "@translation/contracts";
-import { isTranslationLanguage } from "@translation/contracts";
+import {
+  isSegmentTiming,
+  isSpeakerAttribution,
+  isTranslationLanguage,
+} from "@translation/contracts";
 import { cleanRealtimeText } from "../protocol/realtime-text.js";
 import type { TranscriptResult } from "./asr-provider.js";
 
@@ -42,6 +48,8 @@ interface HttpAsrResponse {
   text?: string;
   language?: string;
   confidence?: number;
+  speaker?: SpeakerAttributionDto;
+  timing?: SegmentTimingDto;
 }
 
 export class HttpAsrClient {
@@ -162,6 +170,8 @@ export class HttpAsrClient {
       text,
       language: body.language,
       confidence: body.confidence,
+      ...(isSpeakerAttribution(body.speaker) ? { speaker: body.speaker } : {}),
+      ...(isSegmentTiming(body.timing) ? { timing: body.timing } : {}),
     };
   }
 }

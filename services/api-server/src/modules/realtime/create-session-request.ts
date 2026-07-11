@@ -7,6 +7,8 @@ import type {
   RealtimeMode,
   RealtimeVoiceConfig,
   RealtimeVoiceMode,
+  SpeakerAttributionMode,
+  SpeakerAttributionOptionsDto,
 } from "@translation/contracts";
 
 const modes = new Set<RealtimeMode>([
@@ -22,6 +24,13 @@ const voiceModes = new Set<RealtimeVoiceMode>([
   "ultimate_clone",
 ]);
 const voiceIdPattern = /^[A-Za-z0-9_-]{1,80}$/;
+const speakerModes = new Set<SpeakerAttributionMode>([
+  "off",
+  "auto",
+  "participant_track",
+  "diarization",
+  "manual",
+]);
 
 interface ValidationError {
   code: string;
@@ -50,6 +59,7 @@ export function validateCreateRealtimeSessionRequest(
   const voiceOutput = input.voiceOutput;
   const voice = input.voice;
   const termbaseId = input.termbaseId;
+  const speakerAttribution = input.speakerAttribution;
 
   if (typeof mode !== "string" || !modes.has(mode as RealtimeMode)) {
     return invalid("mode must be conversation, meeting, classroom, or business");
@@ -85,6 +95,10 @@ export function validateCreateRealtimeSessionRequest(
   if (termbaseId !== undefined && typeof termbaseId !== "string") {
     return invalid("termbaseId must be string when provided");
   }
+  const parsedSpeakerAttribution = parseSpeakerAttribution(speakerAttribution);
+  if (parsedSpeakerAttribution === false) {
+    return invalid("speakerAttribution must be a valid speaker configuration");
+  }
 
   return {
     ok: true,
@@ -96,7 +110,45 @@ export function validateCreateRealtimeSessionRequest(
       voiceOutput,
       ...(parsedVoice ? { voice: parsedVoice } : {}),
       ...(termbaseId ? { termbaseId } : {}),
+      speakerAttribution: parsedSpeakerAttribution ?? defaultSpeakerAttribution(
+        mode as RealtimeMode,
+      ),
     },
+  };
+}
+
+function parseSpeakerAttribution(
+  value: unknown,
+): SpeakerAttributionOptionsDto | null | false {
+  if (value === undefined) return null;
+  if (!isRecord(value) || !speakerModes.has(value.mode as SpeakerAttributionMode)) {
+    return false;
+  }
+  const maxSpeakers = value.maxSpeakers;
+  if (maxSpeakers !== undefined &&
+      maxSpeakers !== 2 && maxSpeakers !== 3 && maxSpeakers !== 4) {
+    return false;
+  }
+  if (value.allowVoiceIdentity !== undefined &&
+      typeof value.allowVoiceIdentity !== "boolean") {
+    return false;
+  }
+  return {
+    mode: value.mode as SpeakerAttributionMode,
+    ...(maxSpeakers ? { maxSpeakers } : {}),
+    ...(typeof value.allowVoiceIdentity === "boolean"
+      ? { allowVoiceIdentity: value.allowVoiceIdentity }
+      : {}),
+  };
+}
+
+function defaultSpeakerAttribution(
+  mode: RealtimeMode,
+): SpeakerAttributionOptionsDto {
+  return {
+    mode: "auto",
+    maxSpeakers: mode === "conversation" ? 2 : 4,
+    allowVoiceIdentity: false,
   };
 }
 

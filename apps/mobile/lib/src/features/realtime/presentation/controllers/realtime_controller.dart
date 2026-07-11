@@ -13,6 +13,7 @@ import '../../../../platform/speech/speech_output_provider.dart';
 import '../../../../platform/speech/speech_text_normalizer.dart';
 import '../../../../platform/translation/mobile_translation_provider.dart';
 import '../../../../platform/translation/supported_translation_language.dart';
+import '../../../../shared/domain/speaker_attribution.dart';
 import '../../data/api/realtime_session.dart';
 import '../../data/gateway/gateway_realtime_event.dart';
 import '../../data/realtime_repository.dart';

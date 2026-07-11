@@ -3,6 +3,10 @@ import type {
   TranslationLanguageCode,
 } from "../shared/languages.js";
 import type { PersistedRealtimeSessionState } from "../realtime/state-machine.js";
+import type {
+  SegmentTimingDto,
+  SpeakerAttributionDto,
+} from "../shared/speaker.js";
 
 export interface SessionStatusResponse {
   sessionId: string;
@@ -29,6 +33,8 @@ export interface SessionSegmentDto {
   latencyMs?: number;
   providerUsage?: SessionSegmentProviderUsageDto;
   refinement?: SessionSegmentRefinementDto;
+  speaker?: SpeakerAttributionDto;
+  timing?: SegmentTimingDto;
 }
 
 export type SessionSegmentStage =
@@ -167,6 +173,8 @@ export interface UpsertSessionSegmentRequest {
   latencyMs?: number;
   providerUsage?: SessionSegmentProviderUsageDto;
   refinement?: SessionSegmentRefinementDto;
+  speaker?: SpeakerAttributionDto;
+  timing?: SegmentTimingDto;
 }
 
 export interface SessionListItem {
@@ -182,6 +190,21 @@ export interface SessionListItem {
 export interface SessionDetailResponse extends SessionListItem {
   segments: SessionSegmentDto[];
   review?: SessionReviewResponse | null;
+}
+
+export interface SessionSpeakerDto {
+  speaker: SpeakerAttributionDto;
+  segmentCount: number;
+  totalDurationMs: number;
+}
+
+export interface SessionSpeakersResponse {
+  sessionId: string;
+  speakers: SessionSpeakerDto[];
+}
+
+export interface RenameSessionSpeakerRequest {
+  displayName: string;
 }
 
 export interface SessionExportResponse {

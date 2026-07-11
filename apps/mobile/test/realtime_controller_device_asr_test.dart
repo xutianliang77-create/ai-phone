@@ -206,17 +206,18 @@ class _FakeRealtimeRepository extends RealtimeRepository {
       maxDurationSeconds: 60,
     );
   }
-
   @override
   bool sendTextSegment(String sessionId, AsrTextSegment segment) {
     sentTextSegments.add(_SentTextSegment(sessionId, segment));
     return true;
   }
+
   @override
   bool pause(String sessionId) {
     pausedSessionIds.add(sessionId);
     return true;
   }
+
   @override
   Future<bool> pauseAndWait(String sessionId) async => pause(sessionId);
   @override

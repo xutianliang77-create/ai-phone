@@ -1,3 +1,5 @@
+import '../../../shared/domain/speaker_attribution.dart';
+
 class SessionListItem {
   const SessionListItem({
     required this.sessionId,
@@ -47,6 +49,8 @@ class SessionSegment {
     this.model,
     this.latencyMs,
     this.refinement,
+    this.speaker,
+    this.timing,
   });
 
   final String id;
@@ -62,6 +66,8 @@ class SessionSegment {
   final String? model;
   final int? latencyMs;
   final Map<String, Object?>? refinement;
+  final SpeakerAttribution? speaker;
+  final SegmentTiming? timing;
 
   factory SessionSegment.fromJson(Map<String, Object?> json) {
     return SessionSegment(
@@ -80,6 +86,36 @@ class SessionSegment {
       refinement: json['refinement'] is Map<String, Object?>
           ? json['refinement']! as Map<String, Object?>
           : null,
+      speaker: json['speaker'] is Map
+          ? SpeakerAttribution.fromJson(
+              Map<String, Object?>.from(json['speaker']! as Map),
+            )
+          : null,
+      timing: json['timing'] is Map
+          ? SegmentTiming.fromJson(
+              Map<String, Object?>.from(json['timing']! as Map),
+            )
+          : null,
+    );
+  }
+
+  SessionSegment copyWithSpeaker(SpeakerAttribution nextSpeaker) {
+    return SessionSegment(
+      id: id,
+      sourceText: sourceText,
+      translatedText: translatedText,
+      rawText: rawText,
+      optimizedText: optimizedText,
+      sourceLanguage: sourceLanguage,
+      targetLanguage: targetLanguage,
+      confidence: confidence,
+      stage: stage,
+      provider: provider,
+      model: model,
+      latencyMs: latencyMs,
+      refinement: refinement,
+      speaker: nextSpeaker,
+      timing: timing,
     );
   }
 }
@@ -118,6 +154,20 @@ class SessionDetail extends SessionListItem {
       reviewJson: json['review'] == null
           ? null
           : (json['review']! as Map<String, Object?>),
+    );
+  }
+
+  SessionDetail copyWithSegments(List<SessionSegment> nextSegments) {
+    return SessionDetail(
+      sessionId: sessionId,
+      mode: mode,
+      status: status,
+      consumedSeconds: consumedSeconds,
+      createdAt: createdAt,
+      endedAt: endedAt,
+      segmentCount: nextSegments.length,
+      segments: nextSegments,
+      reviewJson: reviewJson,
     );
   }
 }

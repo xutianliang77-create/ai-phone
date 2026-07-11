@@ -49,6 +49,11 @@ class RealtimeApiClient {
         if (_autoReverseTargetLanguage)
           'autoReverseTargetLanguage': _autoReverseTargetLanguage,
         'voiceOutput': voice != null,
+        'speakerAttribution': const <String, Object?>{
+          'mode': 'auto',
+          'maxSpeakers': 2,
+          'allowVoiceIdentity': false,
+        },
         if (voice != null) 'voice': voice,
         if (_termbaseId.isNotEmpty) 'termbaseId': _termbaseId,
       }),

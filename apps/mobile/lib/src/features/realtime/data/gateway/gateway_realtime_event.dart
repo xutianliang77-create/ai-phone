@@ -1,3 +1,5 @@
+import '../../../../shared/domain/speaker_attribution.dart';
+
 class GatewayRealtimeEvent {
   const GatewayRealtimeEvent({
     required this.type,
@@ -25,6 +27,8 @@ class GatewayRealtimeEvent {
     this.sequence,
     this.data,
     this.flush,
+    this.speaker,
+    this.timing,
   });
 
   final String type;
@@ -52,6 +56,8 @@ class GatewayRealtimeEvent {
   final int? sequence;
   final String? data;
   final GatewayRealtimeFlushSummary? flush;
+  final SpeakerAttribution? speaker;
+  final SegmentTiming? timing;
 
   const GatewayRealtimeEvent.connection({
     required this.type,
@@ -78,7 +84,9 @@ class GatewayRealtimeEvent {
         sampleRate = null,
         sequence = null,
         data = null,
-        flush = null;
+        flush = null,
+        speaker = null,
+        timing = null;
 
   factory GatewayRealtimeEvent.fromJson(Map<String, Object?> json) {
     final providerUsage = json['providerUsage'] is Map<String, Object?>
@@ -119,6 +127,16 @@ class GatewayRealtimeEvent {
               Map<String, Object?>.from(flushJson),
             )
           : null,
+      speaker: json['speaker'] is Map
+          ? SpeakerAttribution.fromJson(
+              Map<String, Object?>.from(json['speaker']! as Map),
+            )
+          : null,
+      timing: json['timing'] is Map
+          ? SegmentTiming.fromJson(
+              Map<String, Object?>.from(json['timing']! as Map),
+            )
+          : null,
     );
   }
 }
@@ -155,7 +173,8 @@ class GatewayRealtimeFlushSummary {
   factory GatewayRealtimeFlushSummary.fromJson(Map<String, Object?> json) {
     return GatewayRealtimeFlushSummary(
       status: json['status'] as String? ?? 'degraded',
-      transcriptFinalCount: (json['transcriptFinalCount'] as num?)?.toInt() ?? 0,
+      transcriptFinalCount:
+          (json['transcriptFinalCount'] as num?)?.toInt() ?? 0,
       translationFinalCount:
           (json['translationFinalCount'] as num?)?.toInt() ?? 0,
       translationFailedCount:

@@ -85,13 +85,13 @@ class Qwen3AsrEngine:
         self,
         request: AsrTranscribeRequest,
     ) -> AsrTranscribeResponse | None:
-        segment = self.segmenter.append(request)
-        if segment is None:
-            return None
         self._session_prompt_by_session[request.sessionId] = (
             clean_prompt_words(request.hotwords),
             clean_correction_pairs(request.corrections),
         )
+        segment = self.segmenter.append(request)
+        if segment is None:
+            return None
         return await self._transcribe_segment(
             session_id=request.sessionId,
             segment_id=f"qwen3_seg_{segment.end_sequence}",
@@ -101,6 +101,8 @@ class Qwen3AsrEngine:
             target_language=request.targetLanguage,
             hotwords=request.hotwords,
             corrections=request.corrections,
+            start_ms=segment.start_timestamp_ms,
+            end_ms=segment.end_timestamp_ms,
         )
 
     async def flush(
@@ -122,6 +124,8 @@ class Qwen3AsrEngine:
             target_language=target_language,
             hotwords=hotwords,
             corrections=corrections,
+            start_ms=segment.start_timestamp_ms,
+            end_ms=segment.end_timestamp_ms,
         )
 
     async def close_session(self, session_id: str) -> None:
@@ -139,6 +143,8 @@ class Qwen3AsrEngine:
         target_language: TranslationLanguageCode,
         hotwords: list[str],
         corrections: list[object],
+        start_ms: int,
+        end_ms: int,
     ) -> AsrTranscribeResponse | None:
         audio_path = write_temp_wav(pcm, sample_rate)
         try:
@@ -167,6 +173,11 @@ class Qwen3AsrEngine:
             text=text,
             language=transcript_language(text, source_language, target_language),
             confidence=None,
+            timing={
+                "startMs": start_ms,
+                "endMs": end_ms,
+                "source": "client",
+            },
         )
 
     def _is_duplicate(self, session_id: str, text: str) -> bool:
