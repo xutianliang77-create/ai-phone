@@ -8,7 +8,7 @@ final class CoreMlNemotronFluidAudioAdapter {
   typealias SegmentEmitter = ([String: Any]) -> Void
 
   private let modelResolver: CoreMlNemotronModelResolver
-  private let audioInput = CoreMlNemotronAudioInput()
+  private let audioInput: CoreMlNemotronAudioInput
   private var endpointDetector = CoreMlNemotronEndpointDetector()
 
   #if canImport(FluidAudio)
@@ -25,8 +25,14 @@ final class CoreMlNemotronFluidAudioAdapter {
   private var lastPartialText = ""
   private var emitSegment: SegmentEmitter?
 
-  init(modelStore: CoreMlNemotronModelStore) {
+  init(
+    modelStore: CoreMlNemotronModelStore,
+    audioSessionCoordinator: AudioSessionCoordinator
+  ) {
     self.modelResolver = CoreMlNemotronModelResolver(modelStore: modelStore)
+    self.audioInput = CoreMlNemotronAudioInput(
+      audioSessionCoordinator: audioSessionCoordinator
+    )
   }
 
   var runtimeAvailable: Bool {

@@ -1,6 +1,8 @@
 import AVFoundation
 
 final class CoreMlNemotronAudioInput {
+  private let audioSessionCoordinator: AudioSessionCoordinator
+  private let audioSessionOwner = "coreml_nemotron_asr"
   private let engine = AVAudioEngine()
   private let queue = DispatchQueue(label: "translation_mobile.coreml_nemotron.audio")
   private var pendingSamples: [Float] = []
@@ -21,6 +23,10 @@ final class CoreMlNemotronAudioInput {
   private var lastChunkRms = 0.0
   private var lastConversionError: String?
   private let targetSampleRate = 16_000.0
+
+  init(audioSessionCoordinator: AudioSessionCoordinator) {
+    self.audioSessionCoordinator = audioSessionCoordinator
+  }
 
   func start(
     chunkDurationMs: Int,
@@ -161,11 +167,8 @@ final class CoreMlNemotronAudioInput {
   }
 
   private func configureAudioSession() throws {
-    let session = AVAudioSession.sharedInstance()
     do {
-      try session.setCategory(.record, mode: .measurement, options: [.duckOthers])
-      try session.setPreferredSampleRate(targetSampleRate)
-      try session.setActive(true)
+      try audioSessionCoordinator.beginCapture(owner: audioSessionOwner)
       audioSessionActive = true
       audioSessionError = nil
     } catch {
@@ -177,16 +180,9 @@ final class CoreMlNemotronAudioInput {
 
   private func deactivateAudioSession() {
     guard audioSessionActive else { return }
-    do {
-      try AVAudioSession.sharedInstance().setActive(
-        false,
-        options: .notifyOthersOnDeactivation
-      )
-      audioSessionActive = false
-      audioSessionError = nil
-    } catch {
-      audioSessionError = error.localizedDescription
-    }
+    audioSessionCoordinator.endCapture(owner: audioSessionOwner)
+    audioSessionActive = false
+    audioSessionError = nil
   }
 
   private func convert(

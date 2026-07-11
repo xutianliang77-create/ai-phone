@@ -1,0 +1,98 @@
+import 'dart:async';
+
+import 'package:flutter/services.dart';
+
+enum AudioSessionEventType {
+  interruptionBegan,
+  interruptionEnded,
+  routeChanged,
+}
+
+class AudioSessionEvent {
+  const AudioSessionEvent({
+    required this.type,
+    this.shouldResume = false,
+    this.route,
+  });
+
+  final AudioSessionEventType type;
+  final bool shouldResume;
+  final String? route;
+
+  static AudioSessionEvent? tryFromMap(Map<Object?, Object?> map) {
+    final type = switch (map['type']) {
+      'interruption.began' => AudioSessionEventType.interruptionBegan,
+      'interruption.ended' => AudioSessionEventType.interruptionEnded,
+      'route.changed' => AudioSessionEventType.routeChanged,
+      _ => null,
+    };
+    if (type == null) return null;
+    return AudioSessionEvent(
+      type: type,
+      shouldResume: map['shouldResume'] == true,
+      route: map['route'] as String?,
+    );
+  }
+}
+
+abstract interface class AudioSessionCoordinator {
+  Stream<AudioSessionEvent> get events;
+
+  Future<void> beginCapture();
+  Future<void> endCapture();
+  Future<void> dispose();
+}
+
+class NoopAudioSessionCoordinator implements AudioSessionCoordinator {
+  const NoopAudioSessionCoordinator();
+
+  @override
+  Stream<AudioSessionEvent> get events => const Stream.empty();
+
+  @override
+  Future<void> beginCapture() async {}
+
+  @override
+  Future<void> endCapture() async {}
+
+  @override
+  Future<void> dispose() async {}
+}
+
+class SystemAudioSessionCoordinator implements AudioSessionCoordinator {
+  SystemAudioSessionCoordinator({
+    EventChannel? eventChannel,
+    MethodChannel? methodChannel,
+  })  : _eventChannel = eventChannel ?? const EventChannel(_eventChannelName),
+        _methodChannel =
+            methodChannel ?? const MethodChannel(_methodChannelName);
+
+  static const _eventChannelName = 'translation_mobile/audio_session/events';
+  static const _methodChannelName = 'translation_mobile/audio_session';
+
+  final EventChannel _eventChannel;
+  final MethodChannel _methodChannel;
+  Stream<AudioSessionEvent>? _events;
+
+  @override
+  Stream<AudioSessionEvent> get events {
+    return _events ??= _eventChannel
+        .receiveBroadcastStream()
+        .where((event) => event is Map)
+        .map((event) => AudioSessionEvent.tryFromMap(
+              Map<Object?, Object?>.from(event as Map),
+            ))
+        .where((event) => event != null)
+        .cast<AudioSessionEvent>();
+  }
+
+  @override
+  Future<void> beginCapture() =>
+      _methodChannel.invokeMethod<void>('beginCapture');
+
+  @override
+  Future<void> endCapture() => _methodChannel.invokeMethod<void>('endCapture');
+
+  @override
+  Future<void> dispose() async {}
+}

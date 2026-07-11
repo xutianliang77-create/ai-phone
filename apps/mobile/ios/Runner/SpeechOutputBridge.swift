@@ -3,16 +3,21 @@ import Flutter
 import Foundation
 
 final class SpeechOutputBridge: NSObject, AVSpeechSynthesizerDelegate {
+    private let audioSessionCoordinator: AudioSessionCoordinator
+    private let audioSessionOwner = "system_tts"
     private let methodChannelName = "translation_mobile/speech_output"
     private let synthesizer = AVSpeechSynthesizer()
     private var pendingResult: FlutterResult?
     private var pendingResponse: [String: String]?
     private var pendingUtteranceId: UUID?
+    private var pendingUtterance: AVSpeechUtterance?
     private var watchdogTimer: Timer?
 
-    override init() {
+    init(audioSessionCoordinator: AudioSessionCoordinator) {
+        self.audioSessionCoordinator = audioSessionCoordinator
         super.init()
         synthesizer.delegate = self
+        synthesizer.usesApplicationAudioSession = true
     }
 
     func register(messenger: FlutterBinaryMessenger) {
@@ -55,12 +60,16 @@ final class SpeechOutputBridge: NSObject, AVSpeechSynthesizerDelegate {
             stringArgument("language", from: call),
             fallback: "en"
         )
-        try? AVAudioSession.sharedInstance().setCategory(
-            .playAndRecord,
-            mode: .spokenAudio,
-            options: [.allowBluetooth, .defaultToSpeaker, .duckOthers]
-        )
-        try? AVAudioSession.sharedInstance().setActive(true)
+        do {
+            try audioSessionCoordinator.beginPlayback(owner: audioSessionOwner)
+        } catch {
+            result(FlutterError(
+                code: "audio_session_unavailable",
+                message: error.localizedDescription,
+                details: nil
+            ))
+            return
+        }
         if synthesizer.isSpeaking || synthesizer.isPaused {
             synthesizer.stopSpeaking(at: .immediate)
         }
@@ -69,6 +78,7 @@ final class SpeechOutputBridge: NSObject, AVSpeechSynthesizerDelegate {
         utterance.voice = AVSpeechSynthesisVoice(language: voiceLanguage(language))
         utterance.rate = AVSpeechUtteranceDefaultSpeechRate
         pendingUtteranceId = utteranceId
+        pendingUtterance = utterance
         pendingResult = result
         pendingResponse = [
             "provider": "ios_system_tts",
@@ -82,6 +92,7 @@ final class SpeechOutputBridge: NSObject, AVSpeechSynthesizerDelegate {
         _ synthesizer: AVSpeechSynthesizer,
         didFinish utterance: AVSpeechUtterance
     ) {
+        guard pendingUtterance === utterance else { return }
         finishPendingSpeech()
     }
 
@@ -89,6 +100,7 @@ final class SpeechOutputBridge: NSObject, AVSpeechSynthesizerDelegate {
         _ synthesizer: AVSpeechSynthesizer,
         didCancel utterance: AVSpeechUtterance
     ) {
+        guard pendingUtterance === utterance else { return }
         finishPendingSpeech()
     }
 
@@ -133,6 +145,8 @@ final class SpeechOutputBridge: NSObject, AVSpeechSynthesizerDelegate {
         watchdogTimer?.invalidate()
         watchdogTimer = nil
         pendingUtteranceId = nil
+        pendingUtterance = nil
+        audioSessionCoordinator.endPlayback(owner: audioSessionOwner)
         guard let result = pendingResult else { return }
         result(pendingResponse ?? [
             "provider": "ios_system_tts",
@@ -144,11 +158,18 @@ final class SpeechOutputBridge: NSObject, AVSpeechSynthesizerDelegate {
 }
 
 final class PcmAudioOutputBridge: NSObject, AVAudioPlayerDelegate {
+    private let audioSessionCoordinator: AudioSessionCoordinator
+    private let audioSessionOwner = "server_pcm_tts"
     private let methodChannelName = "translation_mobile/audio_output"
     private var player: AVAudioPlayer?
     private var pendingResult: FlutterResult?
     private var pendingResponse: [String: Any]?
     private var watchdogTimer: Timer?
+
+    init(audioSessionCoordinator: AudioSessionCoordinator) {
+        self.audioSessionCoordinator = audioSessionCoordinator
+        super.init()
+    }
 
     func register(messenger: FlutterBinaryMessenger) {
         let channel = FlutterMethodChannel(
@@ -191,12 +212,7 @@ final class PcmAudioOutputBridge: NSObject, AVAudioPlayerDelegate {
 
         stop()
         do {
-            try AVAudioSession.sharedInstance().setCategory(
-                .playAndRecord,
-                mode: .default,
-                options: [.allowBluetooth, .defaultToSpeaker, .mixWithOthers]
-            )
-            try AVAudioSession.sharedInstance().setActive(true)
+            try audioSessionCoordinator.beginPlayback(owner: audioSessionOwner)
             let player = try AVAudioPlayer(data: wavData(fromPcm16: pcm, sampleRate: sampleRate))
             player.delegate = self
             self.player = player
@@ -209,6 +225,7 @@ final class PcmAudioOutputBridge: NSObject, AVAudioPlayerDelegate {
             player.prepareToPlay()
             player.play()
         } catch {
+            audioSessionCoordinator.endPlayback(owner: audioSessionOwner)
             pendingResult = nil
             pendingResponse = nil
             result(FlutterError(
@@ -228,11 +245,13 @@ final class PcmAudioOutputBridge: NSObject, AVAudioPlayerDelegate {
     }
 
     func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
+        guard self.player === player else { return }
         self.player = nil
         finishPending()
     }
 
     func audioPlayerDecodeErrorDidOccur(_ player: AVAudioPlayer, error: Error?) {
+        guard self.player === player else { return }
         self.player = nil
         finishPending()
     }
@@ -251,6 +270,7 @@ final class PcmAudioOutputBridge: NSObject, AVAudioPlayerDelegate {
     private func finishPending() {
         watchdogTimer?.invalidate()
         watchdogTimer = nil
+        audioSessionCoordinator.endPlayback(owner: audioSessionOwner)
         guard let result = pendingResult else { return }
         result(pendingResponse ?? [
             "provider": "server_pcm_tts",

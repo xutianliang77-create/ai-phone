@@ -6,11 +6,18 @@ final class CoreMlNemotronAsrBridge: NSObject, FlutterStreamHandler {
   private let methodChannelName = "translation_mobile/core_ml_nemotron_asr"
   private let eventChannelName = "translation_mobile/core_ml_nemotron_asr/events"
   private let modelStore = CoreMlNemotronModelStore()
+  private let audioSessionCoordinator: AudioSessionCoordinator
   private lazy var fluidAudioAdapter = CoreMlNemotronFluidAudioAdapter(
-    modelStore: modelStore
+    modelStore: modelStore,
+    audioSessionCoordinator: audioSessionCoordinator
   )
   private var eventSink: FlutterEventSink?
   private var loadedBundle: LoadedCoreMlNemotronBundle?
+
+  init(audioSessionCoordinator: AudioSessionCoordinator) {
+    self.audioSessionCoordinator = audioSessionCoordinator
+    super.init()
+  }
 
   func register(messenger: FlutterBinaryMessenger) {
     let methodChannel = FlutterMethodChannel(

@@ -11,6 +11,7 @@ extension RealtimeControllerStop on RealtimeController {
     }
     try {
       await ignoreCleanupError(_audioCapture.stop);
+      await ignoreCleanupError(_audioSessionCoordinator.endCapture);
       await ignoreCleanupError(() async => _audioSubscription?.cancel());
       await ignoreCleanupError(() async => _mobileAsrProvider?.stop());
       await ignoreCleanupError(_stopSpeaking);

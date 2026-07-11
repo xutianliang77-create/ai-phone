@@ -10,6 +10,7 @@ import 'package:translation_mobile/src/features/realtime/domain/entities/subtitl
 import 'package:translation_mobile/src/features/realtime/presentation/controllers/realtime_controller.dart';
 import 'package:translation_mobile/src/platform/audio/audio_capture.dart';
 import 'package:translation_mobile/src/platform/audio/audio_frame.dart';
+import 'package:translation_mobile/src/platform/audio/audio_session_coordinator.dart';
 import 'package:translation_mobile/src/platform/speech/pcm_audio_output_player.dart';
 
 RealtimeController realtimeControllerForTest(
@@ -17,12 +18,14 @@ RealtimeController realtimeControllerForTest(
   FakeAudioCapture audio, {
   PcmAudioOutputPlayer? pcmAudioOutputPlayer,
   bool autoSpeakTranslation = false,
+  AudioSessionCoordinator? audioSessionCoordinator,
 }) {
   return RealtimeController(
     repository: repository,
     audioCapture: audio,
     pcmAudioOutputPlayer: pcmAudioOutputPlayer,
     autoSpeakTranslation: autoSpeakTranslation,
+    audioSessionCoordinator: audioSessionCoordinator,
     config: AppConfig(
       apiBaseUrl: Uri.parse('http://127.0.0.1:3100'),
       useMockAudio: false,
@@ -125,6 +128,7 @@ class FakeAudioCapture implements AudioCapture {
   final bool failStart;
   final bool failStop;
   int stopCalls = 0;
+  int startCalls = 0;
 
   @override
   Stream<AudioFrame> get frames => _frames.stream;
@@ -134,6 +138,7 @@ class FakeAudioCapture implements AudioCapture {
 
   @override
   Future<void> start(AudioCaptureConfig config) async {
+    startCalls += 1;
     if (failStart) throw StateError('microphone start failed');
   }
 

@@ -18,10 +18,12 @@ extension RealtimeControllerDeviceAsrRecovery on RealtimeController {
   }
 
   Future<void> _startMobileAsrProvider() async {
+    await _audioSessionCoordinator.beginCapture();
     try {
       await _mobileAsrProvider?.start(createDeviceAsrConfig(_config));
       _deviceAsrRecovery.markStarted();
     } catch (error) {
+      await ignoreCleanupError(_audioSessionCoordinator.endCapture);
       if (!_shouldRetryDeviceAsrStartup()) rethrow;
       await _retryDeviceAsrStartup();
     }
@@ -87,6 +89,7 @@ extension RealtimeControllerDeviceAsrRecovery on RealtimeController {
         _status == RealtimeStatus.active &&
         _session != null &&
         !_stopInFlight &&
+        !_audioSessionRecoveryInFlight &&
         _deviceAsrRecovery.canRestart &&
         _deviceAsrRecovery.startedWithin(_deviceAsrRecoveryWindow);
   }
@@ -104,9 +107,9 @@ extension RealtimeControllerDeviceAsrRecovery on RealtimeController {
     _message = 'Restarting device ASR';
     _notify();
     await ignoreCleanupError(() async => _mobileAsrProvider?.stop());
+    await ignoreCleanupError(_audioSessionCoordinator.endCapture);
     await _drainDeviceAsrStopEvents();
-    await _mobileAsrProvider?.start(createDeviceAsrConfig(_config));
-    _deviceAsrRecovery.markStarted();
+    await _startMobileAsrProvider();
     if (_status == RealtimeStatus.connecting) {
       _message = null;
       _notify();

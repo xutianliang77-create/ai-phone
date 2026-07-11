@@ -7,6 +7,7 @@ import '../../../../app/app_language.dart';
 import '../../../../app/localization/app_localizations.dart';
 import '../../../../platform/speech/pcm_audio_output_player.dart';
 import '../../../../platform/speech/speech_output_provider.dart';
+import '../../../../platform/audio/audio_session_coordinator.dart';
 import '../../../account/data/account_session_store.dart';
 import '../../../account/presentation/widgets/account_required_panel.dart';
 import '../../../compliance/data/voice_processing_consent_store.dart';

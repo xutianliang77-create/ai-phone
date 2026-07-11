@@ -17,7 +17,11 @@ import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
 import java.util.Locale
 
-class AndroidSystemAsrBridge(private val activity: FlutterActivity) {
+class AndroidSystemAsrBridge(
+    private val activity: FlutterActivity,
+    private val audioSessionCoordinator: AudioSessionCoordinator
+) {
+    private val audioSessionOwner = "android_system_asr"
     private val mainHandler = Handler(Looper.getMainLooper())
     private var recognizer: SpeechRecognizer? = null
     private var eventSink: EventChannel.EventSink? = null
@@ -108,6 +112,12 @@ class AndroidSystemAsrBridge(private val activity: FlutterActivity) {
             return
         }
         currentLanguage = normalizeLanguage(rawLanguage)
+        try {
+            audioSessionCoordinator.beginCapture(audioSessionOwner)
+        } catch (error: RuntimeException) {
+            result.error("audio_session_unavailable", error.localizedMessage, null)
+            return
+        }
         running = true
         ensureRecognizer()
         beginListening()
@@ -120,6 +130,7 @@ class AndroidSystemAsrBridge(private val activity: FlutterActivity) {
         recognizer?.cancel()
         recognizer?.destroy()
         recognizer = null
+        audioSessionCoordinator.endCapture(audioSessionOwner)
     }
 
     private fun ensureRecognizer() {

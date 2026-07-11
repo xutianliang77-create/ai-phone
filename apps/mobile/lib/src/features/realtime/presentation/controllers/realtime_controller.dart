@@ -5,6 +5,7 @@ import 'package:flutter/widgets.dart';
 import '../../../../app/app_config.dart';
 import '../../../../platform/audio/audio_capture.dart';
 import '../../../../platform/audio/audio_frame.dart';
+import '../../../../platform/audio/audio_session_coordinator.dart';
 import '../../../../platform/asr/asr_text_segment.dart';
 import '../../../../platform/asr/mobile_asr_provider.dart';
 import '../../../../platform/speech/pcm_audio_output_player.dart';
@@ -27,6 +28,7 @@ import 'segment_draft.dart';
 export 'realtime_session_state.dart';
 
 part 'realtime_controller_gateway_events.dart';
+part 'realtime_controller_audio_session.dart';
 part 'realtime_controller_device_asr_recovery.dart';
 part 'realtime_controller_local_translation.dart';
 part 'realtime_controller_lifecycle.dart';
@@ -45,6 +47,7 @@ class RealtimeController extends ChangeNotifier {
     MobileTranslationProvider? mobileTranslationProvider,
     SpeechOutputProvider? speechOutputProvider,
     PcmAudioOutputPlayer? pcmAudioOutputPlayer,
+    AudioSessionCoordinator? audioSessionCoordinator,
     bool autoSpeakTranslation = false,
     Duration? speechOutputTimeout,
     AppConfig? config,
@@ -65,6 +68,8 @@ class RealtimeController extends ChangeNotifier {
                 config ?? AppConfig.fromEnvironment()),
         _speechOutputProvider = speechOutputProvider,
         _pcmAudioOutputPlayer = pcmAudioOutputPlayer,
+        _audioSessionCoordinator =
+            audioSessionCoordinator ?? const NoopAudioSessionCoordinator(),
         _autoSpeakTranslation = autoSpeakTranslation,
         _speechOutputTimeout = speechOutputTimeout;
 
@@ -75,6 +80,7 @@ class RealtimeController extends ChangeNotifier {
   final MobileTranslationProvider? _mobileTranslationProvider;
   final SpeechOutputProvider? _speechOutputProvider;
   final PcmAudioOutputPlayer? _pcmAudioOutputPlayer;
+  final AudioSessionCoordinator _audioSessionCoordinator;
   bool _autoSpeakTranslation;
   final Duration? _speechOutputTimeout;
   Future<void> _speechChain = Future<void>.value();
@@ -86,6 +92,7 @@ class RealtimeController extends ChangeNotifier {
   StreamSubscription<GatewayRealtimeEvent>? _eventSubscription;
   StreamSubscription<dynamic>? _audioSubscription;
   StreamSubscription<AsrTextSegment>? _asrSubscription;
+  StreamSubscription<AudioSessionEvent>? _audioSessionSubscription;
   RealtimeSession? _session;
   Timer? _sessionTimeoutTimer;
   String? _message;
@@ -95,6 +102,7 @@ class RealtimeController extends ChangeNotifier {
   RealtimeStatus? _statusBeforeReconnect;
   bool _resumeAfterLifecyclePause = false, _stopInFlight = false;
   bool _disposed = false;
+  bool _audioSessionRecoveryInFlight = false;
   Future<void>? _failureCleanup;
   final _localPartialFlush = _LocalPartialTranslationFlush();
   final _deviceAsrRecovery = _DeviceAsrRecovery();
@@ -114,6 +122,7 @@ class RealtimeController extends ChangeNotifier {
   }
 
   Future<void> start() async {
+    _listenForAudioSessionEvents();
     if (_status == RealtimeStatus.paused) {
       await _resumeOrFail();
       return;
@@ -165,6 +174,7 @@ class RealtimeController extends ChangeNotifier {
       } else {
         await _audioCapture.pause();
       }
+      await _audioSessionCoordinator.endCapture();
       await _stopSpeaking();
       if (!await _repository.pauseAndWait(session.sessionId)) {
         throw StateError('Realtime connection lost');
@@ -195,7 +205,7 @@ class RealtimeController extends ChangeNotifier {
     if (_usesDeviceAsr) {
       await _startMobileAsrProvider();
     } else {
-      await _audioCapture.resume();
+      await _resumeManagedAudioCapture();
     }
     _setStatus(RealtimeStatus.active);
   }
@@ -220,6 +230,7 @@ class RealtimeController extends ChangeNotifier {
     await _audioSubscription?.cancel();
     _audioSubscription = _audioCapture.frames.listen(_sendAudioFrame);
     await _audioCapture.start(const AudioCaptureConfig());
+    await _audioSessionCoordinator.beginCapture();
   }
 
   Future<void> _prepareDeviceAsr() async {
@@ -301,6 +312,7 @@ class RealtimeController extends ChangeNotifier {
   Future<void> _cleanupAfterFailure(RealtimeSession? failedSession) async {
     _sessionTimeoutTimer?.cancel();
     await ignoreCleanupError(_audioCapture.stop);
+    await ignoreCleanupError(_audioSessionCoordinator.endCapture);
     await ignoreCleanupError(() async => _audioSubscription?.cancel());
     await ignoreCleanupError(() async => _mobileAsrProvider?.stop());
     await ignoreCleanupError(_stopSpeaking);

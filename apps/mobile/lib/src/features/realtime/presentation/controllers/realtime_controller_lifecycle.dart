@@ -26,10 +26,13 @@ extension RealtimeControllerLifecycle on RealtimeController {
     await ignoreCleanupError(() async => _eventSubscription?.cancel());
     await ignoreCleanupError(() async => _audioSubscription?.cancel());
     await ignoreCleanupError(() async => _asrSubscription?.cancel());
+    await ignoreCleanupError(() async => _audioSessionSubscription?.cancel());
     await ignoreCleanupError(_audioCapture.dispose);
+    await ignoreCleanupError(_audioSessionCoordinator.endCapture);
     await ignoreCleanupError(() async => _mobileAsrProvider?.dispose());
     await ignoreCleanupError(() async => _mobileTranslationProvider?.dispose());
     await ignoreCleanupError(_stopSpeaking);
+    await ignoreCleanupError(_audioSessionCoordinator.dispose);
     _repository.dispose();
   }
 }

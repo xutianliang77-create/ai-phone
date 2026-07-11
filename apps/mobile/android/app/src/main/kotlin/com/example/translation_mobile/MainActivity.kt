@@ -4,7 +4,6 @@ import android.net.Uri
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
-import android.speech.tts.TextToSpeech
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.text.TextRecognition
 import com.google.mlkit.vision.text.chinese.ChineseTextRecognizerOptions
@@ -13,28 +12,17 @@ import java.io.File
 import java.util.Locale
 
 class MainActivity : FlutterActivity() {
-    private var textToSpeech: TextToSpeech? = null
-    private var textToSpeechReady = false
-    private val systemAsrBridge = AndroidSystemAsrBridge(this)
-    private val pcmAudioOutputBridge = PcmAudioOutputBridge(this)
+    private val audioSessionCoordinator = AudioSessionCoordinator(this)
+    private val systemAsrBridge = AndroidSystemAsrBridge(this, audioSessionCoordinator)
+    private val pcmAudioOutputBridge = PcmAudioOutputBridge(this, audioSessionCoordinator)
+    private val speechOutputBridge = AndroidSpeechOutputBridge(this, audioSessionCoordinator)
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        audioSessionCoordinator.register(flutterEngine.dartExecutor.binaryMessenger)
         systemAsrBridge.register(flutterEngine.dartExecutor.binaryMessenger)
         pcmAudioOutputBridge.register(flutterEngine.dartExecutor.binaryMessenger)
-        MethodChannel(
-            flutterEngine.dartExecutor.binaryMessenger,
-            "translation_mobile/speech_output"
-        ).setMethodCallHandler { call, result ->
-            when (call.method) {
-                "speak" -> speak(call.argument("text"), call.argument("language"), result)
-                "stop" -> {
-                    textToSpeech?.stop()
-                    result.success(null)
-                }
-                else -> result.notImplemented()
-            }
-        }
+        speechOutputBridge.register(flutterEngine.dartExecutor.binaryMessenger)
         MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,
             "translation_mobile/ocr"
@@ -62,67 +50,9 @@ class MainActivity : FlutterActivity() {
     override fun onDestroy() {
         systemAsrBridge.destroy()
         pcmAudioOutputBridge.destroy()
-        textToSpeech?.shutdown()
-        textToSpeech = null
+        speechOutputBridge.destroy()
+        audioSessionCoordinator.destroy()
         super.onDestroy()
-    }
-
-    private fun speak(text: String?, rawLanguage: String?, result: MethodChannel.Result) {
-        val trimmed = text?.trim().orEmpty()
-        if (trimmed.isEmpty()) {
-            result.error("nothing_to_speak", "No text was provided for speech output.", null)
-            return
-        }
-        val language = normalizeLanguage(rawLanguage)
-        ensureTextToSpeech(
-            onReady = { engine ->
-                engine.language = Locale.forLanguageTag(languageTag(language))
-                engine.speak(
-                    trimmed,
-                    TextToSpeech.QUEUE_ADD,
-                    null,
-                    "type_to_speak_${System.currentTimeMillis()}"
-                )
-                result.success(mapOf("provider" to "android_system_tts", "language" to language))
-            },
-            onError = {
-                result.error("text_to_speech_unavailable", "Android TextToSpeech is unavailable.", null)
-            }
-        )
-    }
-
-    private fun ensureTextToSpeech(
-        onReady: (TextToSpeech) -> Unit,
-        onError: () -> Unit
-    ) {
-        val current = textToSpeech
-        if (current != null && textToSpeechReady) {
-            onReady(current)
-            return
-        }
-        textToSpeech = TextToSpeech(this) { status ->
-            val engine = textToSpeech
-            if (status == TextToSpeech.SUCCESS && engine != null) {
-                textToSpeechReady = true
-                onReady(engine)
-            } else {
-                textToSpeechReady = false
-                onError()
-            }
-        }
-    }
-
-    private fun normalizeLanguage(value: String?): String {
-        val normalized = value?.trim()?.lowercase(Locale.US).orEmpty()
-        return when {
-            normalized.startsWith("zh") || normalized.startsWith("cmn") -> "zh"
-            normalized.startsWith("en") -> "en"
-            else -> "en"
-        }
-    }
-
-    private fun languageTag(language: String): String {
-        return if (language == "zh") "zh-CN" else "en-US"
     }
 
     private fun recognizeImage(

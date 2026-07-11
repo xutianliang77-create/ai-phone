@@ -44,5 +44,6 @@ RealtimeController _createRealtimePageController(
         ? state.widget.speechOutputProvider ?? SystemSpeechOutputProvider()
         : null,
     pcmAudioOutputPlayer: SystemPcmAudioOutputPlayer(),
+    audioSessionCoordinator: SystemAudioSessionCoordinator(),
   );
 }
