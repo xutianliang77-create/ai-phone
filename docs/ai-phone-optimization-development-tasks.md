@@ -1,6 +1,6 @@
 # ai phone 优化开发任务清单
 
-版本：v1.1
+版本：v1.2
 日期：2026-07-11  
 关联：`docs/domestic-app-detailed-functional-design.md`、`docs/ai-phone-translation-technical-design.md`、`docs/domestic-design-review-action-plan.md`
 
@@ -45,6 +45,7 @@
 
 - `OPT-RT-001`：代码和自动化门禁完成。
 - `OPT-RT-002`：代码和自动化门禁完成；iPhone 飞行模式、后台终止和弱网真机验收待执行。
+- `OPT-RT-003`：代码和自动化门禁完成；iPhone 在线真实模型中文长句、快速中英切换和 1.8 秒强制输出验收待执行。
 
 ## 3. P1 灰度任务
 

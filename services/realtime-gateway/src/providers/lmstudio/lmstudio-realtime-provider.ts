@@ -3,23 +3,16 @@ import { type LlmProvider, OffLlmProvider } from "@translation/llm";
 import { MockAsrProvider } from "../../asr/mock-asr-provider.js";
 import type { AsrProvider, TranscriptResult } from "../../asr/asr-provider.js";
 import { cleanRealtimeText } from "../../protocol/realtime-text.js";
-import type {
-  RealtimeProvider,
-  RealtimeProviderSession,
-  TextSegmentInput,
-} from "../realtime-provider.js";
+import type { RealtimeProvider, RealtimeProviderSession, TextSegmentInput } from "../realtime-provider.js";
 import { LmStudioClient } from "./lmstudio-client.js";
-import {
-  isUsableTranslation,
-  providerUsage,
-} from "./lmstudio-translation-output.js";
+import { isUsableTranslation, providerUsage } from "./lmstudio-translation-output.js";
 import { transcriptVariantsForTranslation } from "./transcript-chunks.js";
 import {
   appendRecentAsrSegment,
   type RecentAsrSegment,
   refineRealtimeTranscript,
 } from "./lmstudio-asr-refinement.js";
-import { SemanticSegmentAssembler } from "./semantic-segment-assembler.js";
+import { SegmentAssembler } from "../../segments/segment-assembler.js";
 import {
   errorMessage,
   providerError,
@@ -29,10 +22,7 @@ import {
   translationFailed,
 } from "./lmstudio-realtime-helpers.js";
 import { shouldPreserveSpelledIdentifier } from "./spelled-identifier.js";
-import type {
-  LmStudioRealtimeProviderOptions,
-  TranslationClient,
-} from "./lmstudio-realtime-provider-options.js";
+import type { LmStudioRealtimeProviderOptions, TranslationClient } from "./lmstudio-realtime-provider-options.js";
 
 export class LmStudioRealtimeProvider implements RealtimeProvider {
   readonly name: string;
@@ -44,7 +34,7 @@ export class LmStudioRealtimeProvider implements RealtimeProvider {
   private readonly model: string;
   private sessions = new Map<string, RealtimeProviderSession>();
   private recentSegments = new Map<string, RecentAsrSegment[]>();
-  private semanticSegments = new SemanticSegmentAssembler();
+  private semanticSegments = new SegmentAssembler();
 
   constructor(options: LmStudioRealtimeProviderOptions) {
     this.name = options.providerName ?? "lmstudio";
@@ -83,7 +73,10 @@ export class LmStudioRealtimeProvider implements RealtimeProvider {
       );
       return;
     }
-    if (!transcript) return;
+    if (!transcript) {
+      yield* this.flushExpiredSemanticSegments(session);
+      return;
+    }
     yield* this.processTranscript(session, transcript);
   }
 
@@ -101,6 +94,8 @@ export class LmStudioRealtimeProvider implements RealtimeProvider {
     }
     const text = cleanRealtimeText(segment.text);
     if (!text) return;
+
+    yield* this.flushExpiredSemanticSegments(session);
 
     const transcript = {
       segmentId: segment.segmentId,
@@ -191,6 +186,12 @@ export class LmStudioRealtimeProvider implements RealtimeProvider {
   ): AsyncGenerator<ServerRealtimeEvent> {
     for (const transcript of this.semanticSegments.flush(session.sessionId)) {
       yield* this.translateTranscript(session, transcript, emitTranscript);
+    }
+  }
+
+  private async *flushExpiredSemanticSegments(session: RealtimeProviderSession) {
+    for (const transcript of this.semanticSegments.drainExpired(session.sessionId)) {
+      yield* this.translateTranscript(session, transcript);
     }
   }
 
