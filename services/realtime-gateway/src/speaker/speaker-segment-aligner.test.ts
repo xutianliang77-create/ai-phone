@@ -32,6 +32,15 @@ describe("speaker segment aligner", () => {
     )).toBeNull();
   });
 
+  it("aligns short speaker evidence inside an ASR padded window", () => {
+    expect(alignSpeakerSpan(
+      { startMs: 1000, endMs: 11000, source: "client" },
+      [{ speakerId: "speaker_2", startMs: 4800, endMs: 5600 }],
+    )).toMatchObject({
+      speaker: { speakerId: "speaker_2" },
+    });
+  });
+
   it("aggregates fragmented evidence for the same speaker", () => {
     expect(alignSpeakerSpan(
       { startMs: 1000, endMs: 2000, source: "client" },
@@ -53,7 +62,18 @@ describe("speaker segment aligner", () => {
         { speakerId: "speaker_1", startMs: 1000, endMs: 1400 },
         { speakerId: "speaker_1", startMs: 1200, endMs: 1500 },
       ],
-      0.6,
+    )).toMatchObject({
+      speaker: { speakerId: "speaker_1" },
+    });
+  });
+
+  it("returns unknown alignment when no speaker dominates the evidence", () => {
+    expect(alignSpeakerSpan(
+      { startMs: 1000, endMs: 2000, source: "client" },
+      [
+        { speakerId: "speaker_1", startMs: 1000, endMs: 1400 },
+        { speakerId: "speaker_2", startMs: 1600, endMs: 2000 },
+      ],
     )).toBeNull();
   });
 });

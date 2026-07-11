@@ -165,7 +165,7 @@ void main() {
     ];
 
     await tester.pumpWidget(const _TestApp(segments: segments));
-    expect(find.text('发言者 2'), findsOneWidget);
+    expect(find.text('说话人 2'), findsOneWidget);
     expect(find.text('我'), findsNothing);
   });
 }

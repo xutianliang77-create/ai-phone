@@ -12,14 +12,22 @@ export interface SpeakerAlignment {
 export function alignSpeakerSpan(
   timing: SegmentTimingDto | undefined,
   spans: SpeakerSpan[],
-  minimumOverlapRatio = 0.35,
+  minimumEvidenceMs = 160,
+  minimumDominanceRatio = 0.55,
 ): SpeakerAlignment | null {
   if (!timing || spans.length === 0) return null;
-  const duration = Math.max(1, timing.endMs - timing.startMs);
   const ranked = aggregateBySpeaker(timing, spans)
     .sort((left, right) => right.overlapMs - left.overlapMs);
   const best = ranked[0];
-  if (!best || best.overlapMs / duration < minimumOverlapRatio) return null;
+  const totalEvidenceMs = ranked.reduce(
+    (total, evidence) => total + evidence.overlapMs,
+    0,
+  );
+  if (
+    !best ||
+    best.overlapMs < minimumEvidenceMs ||
+    best.overlapMs / Math.max(1, totalEvidenceMs) < minimumDominanceRatio
+  ) return null;
   return {
     speaker: {
       speakerId: best.speakerId,

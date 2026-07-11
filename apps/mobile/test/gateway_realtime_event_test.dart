@@ -43,7 +43,7 @@ void main() {
     });
 
     expect(event.speaker?.speakerId, 'speaker_2');
-    expect(event.speaker?.label(isChinese: true), '发言者 2');
+    expect(event.speaker?.label(isChinese: true), '说话人 2');
     expect(event.timing?.startMs, 1000);
   });
 }

@@ -64,8 +64,8 @@ class SpeakerAttribution {
 
   String _anonymousLabel(bool isChinese) {
     final suffix = RegExp(r'(\d+)$').firstMatch(speakerId)?.group(1);
-    if (suffix == null) return isChinese ? '发言者' : 'Speaker';
-    return isChinese ? '发言者 $suffix' : 'Speaker $suffix';
+    if (suffix == null) return isChinese ? '说话人' : 'Speaker';
+    return isChinese ? '说话人 $suffix' : 'Speaker $suffix';
   }
 }
 
