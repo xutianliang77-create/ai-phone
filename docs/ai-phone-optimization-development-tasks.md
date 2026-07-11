@@ -1,7 +1,7 @@
 # ai phone 优化开发任务清单
 
-版本：v2.3
-日期：2026-07-11  
+版本：v2.4
+日期：2026-07-12
 关联：`docs/domestic-app-detailed-functional-design.md`、`docs/ai-phone-translation-technical-design.md`、`docs/domestic-design-review-action-plan.md`
 
 ## 1. 目标和范围
@@ -10,8 +10,8 @@
 
 优先顺序：
 
-1. 先修实时稳定性和发布级 UI。
-2. 再完成纪要、术语、Call Link 和生产数据基础。
+1. 先完成说话人驱动 ASR 分句、实时稳定性和发布级 UI。
+2. 再完成 speaker-turn 翻译、纪要、术语、Call Link 和生产数据基础。
 3. 最后开发原生语音 Provider、PSTN、AI Agent 和声音克隆增强。
 
 模型实验、ASR/TTS 横评和真机诊断默认使用独立 harness；只有明确进入正式集成和验收时才修改或编译生产 App。
@@ -61,10 +61,28 @@
 - `OPT-SPK-001`：统一 contract、Call Link participant track、Session Repository、字幕、历史、review 和导出代码完成；真实双端角色归属验收待执行。
 - `OPT-SPK-002`：Streaming Sortformer 已在 Beelink 部署，HTTP Provider、ASR 并行旁路、时间对齐、故障降级和固定双声源测试通过；抢话、重叠、四人和正式真人 RTTM 门禁仍待执行。
 - `OPT-SPK-003`：ASR 后置 speaker 对齐、不同 speaker 段禁止合并、字幕标签、历史清单和会话内重命名代码完成，iPhone 已能显示匿名“说话人 1/2”；ASR 段内部按 speaker 切分由 `OPT-SPK-005/006` 负责。
-- `OPT-SPK-005`：代码和自动化门禁完成。稳定 speaker span 可产生单次 `boundaryMs`，标签抖动、低置信度和 overlap 不切段；Beelink/iPhone 验收待执行。
-- `OPT-SPK-006`：`in_progress`。ASR boundary API 已能按时间切开 PCM、保留右侧音频且不重置 VAD；2秒诊断环形缓冲、竞态指标和真机快速换人验收待完成。
+- `OPT-SPK-005`：`in_progress`。Gateway 和 Beelink ASR Service 已部署；稳定 speaker span 可产生单次 `boundaryMs`，标签抖动、低置信度和 overlap 不切段。固定双声源无停顿全链路已正确生成 `speaker_1 -> speaker_2`，iPhone 双人快速换人验收待完成。
+- `OPT-SPK-006`：`in_progress`。ASR boundary API 已部署并通过真实 PCM 回切：左右段时间轴连续、右侧音频保留且 VAD 不重置；2秒诊断环形缓冲、boundary/普通端点竞态指标和真机快速换人验收待完成。
 - `OPT-SPK-007`：`todo`。当前仅保证 Gateway 接收边界产生的多个 transcript 不漏失，尚未建立持久化 `turnId + revision` 翻译队列。
 - `OPT-SPK-008`：`in_progress`。App、API 和 Speaker Service 默认人数已统一调整为4；overlap、unknown、revision 和混合语种联合验收待执行。
+- `OPT-DEP-001`：`in_progress`。模型服务已在 Beelink，当前 API/Gateway 仍使用 Mac 测试节点；该拓扑只用于本轮验收，不满足正式“服务器 + 手机”退出条件。
+- `OPT-DEP-002`：`todo`。待把 API、Gateway、Worker、LiveKit 和模型服务纳入 Beelink 单一发布单元。
+- `OPT-DEP-003`：`in_progress`。App 已不直连模型端口，但仍指向临时 Mac API/Gateway 地址；服务器统一部署后改为唯一公开入口并复验。
+
+### 2.1 当前冲刺任务拆分
+
+| 子任务 | 工作内容 | 预计工作量 | 当前状态 | 验收证据 |
+| --- | --- | ---: | --- | --- |
+| SPK-005-A | iPhone 双人无停顿快速换人 | 0.5天 | in_progress | 两轮四句均切换 speaker，句子不跨人、无丢音，历史一致 |
+| SPK-006-A | 2秒脱敏诊断环形缓冲 | 0.5天 | todo | 仅保存时间、能量、speaker/VAD 摘要，不保存原始 PCM |
+| SPK-006-B | boundary 指标 | 0.5天 | todo | session 报告含 hit/miss、确认延迟、回切时长、丢帧数和 endpoint reason |
+| SPK-006-C | boundary 与普通端点竞态 | 1天 | todo | 同一音频范围只提交一次，左右 turn 时间轴无重叠、无空洞 |
+| SPK-007-A | turn 数据契约 | 0.5天 | todo | segment 持久化 `turnId`、`revision`、`speakerId` 和原始时间范围 |
+| SPK-007-B | 有序翻译队列 | 1天 | todo | 并发返回仍按 turn 时间轴展示，不跨 speaker 合并或覆盖 |
+| SPK-008-A | 多人/混合语种验收 | 1-2天 | todo | 2至4人、抢话、重叠、中英夹杂和 unknown 降级均有记录 |
+| DEP-001-A | Gateway/API 迁入 Beelink | 1天 | todo | 停止 Mac 服务后 iPhone 在线同传、历史和结算仍正常 |
+
+当前关键路径：`SPK-005-A -> SPK-006-A/B/C -> SPK-007-A/B -> SPK-008-A -> DEP-001-A`。`OPT-SPK-005` 只有真机证据通过后才能标记 `accepted`，不能用固定语料结果替代。
 
 ## 3. P1 灰度任务
 

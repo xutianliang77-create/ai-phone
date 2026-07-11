@@ -1,7 +1,7 @@
 # ai phone 优化开发计划
 
-版本：v1.7
-日期：2026-07-11  
+版本：v1.8
+日期：2026-07-12
 任务来源：`docs/ai-phone-optimization-development-tasks.md`
 
 ## 1. 计划口径
@@ -21,6 +21,13 @@
 | M4 Call Link 与数据 | 第 5–6 周 | 真人双端闭环、SQLite WAL、备份恢复和观测 | 30 分钟双端测试和并发数据测试通过 |
 | M5 灰度发布 | 第 7 周 | 合规、告警、容量、支付前置检查 | 国内灰度门禁 ready |
 | M6 增强路线 | 第 8 周起 | Gemini/PSTN/Agent/声音克隆专项 | 各专项独立评测通过后灰度 |
+
+### 当前迭代基线
+
+- `OPT-SPK-005` 已完成代码、自动化、Beelink ASR 部署和固定双声源无停顿全链路验证，当前状态为 `in_progress`，只差 iPhone 双人快速换人验收。
+- `OPT-SPK-006` 的 PCM boundary 回切已部署并通过真实音频连续性验证；诊断缓冲、竞态指标和真机验收仍未完成。
+- 当前临时链路为 iPhone -> Mac API/Gateway -> Beelink 模型服务，只用于联调。正式退出条件仍是 iPhone -> Beelink 唯一公开入口，Mac 不参与运行链路。
+- 下一开发主线固定为：真机 speaker boundary -> Turn Buffer 可观测性与幂等 -> speaker-turn 翻译 -> 多人混合语种 -> Beelink 单服务器收敛。
 
 ## 3. 分阶段任务
 
@@ -55,7 +62,7 @@
 
 阶段内每天至少跑一次无 TTS 和有 TTS 的 10 句 smoke；阶段末跑 30 分钟 soak。
 
-当前进度：`OPT-VAD-001` 已通过真机测试并标记 `accepted`。生产基线固定为 MarbleNet v2、阈值 0.5、1000ms 滚动窗口、连续 3 帧平滑和 RMS 自动降级。下一步先完成 `OPT-VAD-002`，再通过固定语料开展 `OPT-VAD-003`，不得直接把全局阈值改成 0.7。
+当前进度：`OPT-VAD-001` 已通过真机测试并标记 `accepted`。生产基线固定为 MarbleNet v2、阈值 0.5、1000ms 滚动窗口、连续 3 帧平滑和 RMS 自动降级。`OPT-VAD-002` 与 `OPT-SPK-006` 合并建设 session 观测字段，避免分别维护两套时间轴和诊断口径；之后再通过固定语料开展 `OPT-VAD-003`，不得直接把全局阈值改成 0.7。
 
 ### M2：发布级 UI
 
@@ -116,8 +123,11 @@ M2 不调整模型参数，避免 UI 和模型体验同时变化导致问题难�
 ```text
 状态机
   -> MarbleNet VAD / Endpoint
+  -> Streaming Sortformer / SpeechTurnCoordinator
+  -> ASR Turn Buffer
   -> SegmentAssembler
   -> flush/finalize
+  -> speaker-turn 翻译队列
   -> TTS 队列
   -> AudioSessionCoordinator
   -> 状态化 UI
@@ -169,11 +179,26 @@ LLM 纪要、扫描 UI 和国际模型 Provider 可在 M1 稳定接口冻结后�
 
 | 阶段 | 任务 | 预计工作量 | 状态 | 退出条件 |
 | --- | --- | ---: | --- | --- |
-| S0 | 多人默认统一为4 | 0.5天 | code_complete | App、API、Speaker Service 和协议一致，旧客户端2人配置被服务器规范化 |
-| S1 | `OPT-SPK-005` 边界协调器 | 1-2天 | code_complete | 240ms/65%/0.60/双窗口、抖动、overlap 和单次边界测试通过；真机待验收 |
-| S2 | `OPT-SPK-006` ASR Turn Buffer | 2-3天 | in_progress | boundary PCM 回切与 VAD 连续性代码通过；2秒诊断缓冲、竞态指标和真机待完成 |
+| S0 | 多人默认统一为4 | 0.5天 | accepted | App、API、Speaker Service 和协议一致，旧客户端2人配置被服务器规范化 |
+| S1 | `OPT-SPK-005` 边界协调器 | 0.5天剩余 | in_progress | 已部署且固定双声源全链路通过；iPhone 双人无停顿两轮四句待验收 |
+| S2 | `OPT-SPK-006` ASR Turn Buffer | 2天剩余 | in_progress | boundary PCM 回切与 VAD 连续性已通过；补诊断缓冲、竞态指标和真机证据 |
 | S3 | `OPT-SPK-007` 翻译队列 | 1-2天 | todo | 不跨 speaker 翻译，最近 turn 只作上下文，输出顺序稳定 |
 | S4 | `OPT-SPK-008` overlap/混合语种 | 1-2天 | in_progress | 2至4人、中英夹杂、抢话和重叠策略通过 |
 | S5 | 联合真机验收 | 2天 | todo | 对话、聆听、双人、三人、四人、快速换人、混合语种和30分钟稳定性通过 |
+| S6 | `OPT-DEP-001/002/003` 两层部署收敛 | 1天 | in_progress | API/Gateway/Worker/LiveKit/模型统一在 Beelink，Mac 停机后真机链路正常 |
 
-剩余实现预计5至8个开发日。近期顺序为 `S2 -> S3 -> S4 -> S5`；不能通过在现有 Aligner 后增加文本规则替代音频边界回切。
+剩余实现预计6至8个开发日。近期顺序为 `S1 -> S2 -> S3 -> S4 -> S6 -> S5`；不能通过在现有 Aligner 后增加文本规则替代音频边界回切，也不能以 Mac 中转拓扑作为发布验收结果。
+
+## 9. 近期开发日程与门禁
+
+| 开发日 | 主要工作 | 当日门禁 |
+| --- | --- | --- |
+| D1 | iPhone 双人无停顿验收；补 boundary/VAD session 指标 | 四句两轮正确换人；日志可解释每次 hit/miss |
+| D2 | 2秒诊断环形缓冲；普通端点与 speaker boundary 幂等 | 时间轴无重叠、无空洞、无重复 transcript |
+| D3 | `turnId + revision` 数据契约和 Repository 迁移 | 旧历史兼容；新 segment 可追溯 speaker turn |
+| D4 | speaker-turn 有序翻译、纠错和 TTS 输入 | 并发响应不乱序、不跨 speaker 合并 |
+| D5 | 2至4人、快速换人、中英夹杂、抢话和 overlap | 匿名标签稳定；语言变化不作为硬断点 |
+| D6 | API/Gateway/Worker/LiveKit 收敛到 Beelink | 停止 Mac 服务后 iPhone 在线链路通过 |
+| D7-D8 | 30分钟 shadow、异常结束、历史、纪要和导出联合回归 | 无漏句、重复结算、崩溃和不可恢复断线 |
+
+每个开发日只允许一个主变量变化。模型版本、VAD 阈值和 Speaker 防抖参数在 D1 至 D8 冻结；若验收失败，先依据 session 指标定位数据流阶段，再决定是否调参。
