@@ -1,6 +1,6 @@
 # ai phone 优化开发任务清单
 
-版本：v1.8
+版本：v1.9
 日期：2026-07-11  
 关联：`docs/domestic-app-detailed-functional-design.md`、`docs/ai-phone-translation-technical-design.md`、`docs/domestic-design-review-action-plan.md`
 
@@ -62,6 +62,9 @@
 | OPT-LLM-003 | 结构化会后 review | 摘要、决定、待办、事实、风险、问题、证据 | OPT-LLM-002 | API 输出可校验 JSON，结论可回溯 segment |
 | OPT-UI-006 | 历史与纪要重构 | AI 标题、日期、时长、语言、摘要、四视图 | OPT-LLM-003 | 用户可在两步内查看纪要、全文和术语 |
 | OPT-TERM-001 | 行业和术语选择 | 商业、科技、医疗、旅游、餐饮、娱乐 | OPT-LLM-002 | App 选择行业后 ASR 热词、翻译术语、LLM 保护字段生效 |
+| OPT-SPK-001 | 说话人统一数据契约 | speaker id、角色、标签、来源和置信度贯通字幕、历史、导出、review | OPT-RT-003 | Call Link 独立音轨可准确显示我/对方，普通同传兼容匿名 speaker |
+| OPT-SPK-002 | 流式说话人分离 Provider | 独立 harness、Streaming Sortformer 评测、时间区间输出 | OPT-SPK-001 | 双人和多人固定语料达到 DER、切换延迟和标签稳定性门槛 |
+| OPT-SPK-003 | 普通同传说话人归属 | 音频/ASR 时间对齐、speaker 强制断句、App 标签和重命名 | OPT-SPK-002 | 单麦克风字幕稳定区分说话人，不跨 speaker 合并文本 |
 | OPT-CALL-001 | Call Link 真人双端闭环 | Host、Guest、Worker、字幕、译音、历史 | OPT-RT-003、OPT-RT-005、OPT-MOB-001 | 双端连续 30 分钟，无乱序和不可恢复断线 |
 | OPT-CALL-002 | 通话页产品分层 | 核心入口、实验入口、不可用能力隐藏 | OPT-UI-004 | 首屏不展示不可用 PSTN 为主要操作 |
 | OPT-SCAN-001 | 扫描流程重构 | 图片预览、识别、翻译、保存、分享渐进流程 | OPT-UI-004 | 未选择图片时不展示无效二级操作 |
@@ -79,6 +82,7 @@
 | OPT-PSTN-001 | 真实 PSTN 服务商媒体协议 | 普通电话接通、译音回灌、失败退款闭环 |
 | OPT-AGENT-001 | AI Calling Agent 灰度 | 授权、告知、人工接管、禁拨和风险场景通过验收 |
 | OPT-VOICE-001 | VoxCPM2 Hi-Fi 声音克隆 | 录音质量检查、A/B 试听、自然度门禁通过 |
+| OPT-SPK-004 | 授权声纹身份识别 | 声纹注册、置信度门禁、撤回、删除和匿名回退 |
 | OPT-ANDROID-001 | Android 端侧 ASR 候选 | 与系统 ASR、在线 ASR 固定语料对比后决策 |
 | OPT-DATA-003 | PostgreSQL/Redis 后续迁移 | Repository adapter 可迁移，数据校验和回滚通过 |
 

@@ -88,6 +88,8 @@
 | AC-LLM-003 | OPT-LLM-003 | 摘要、决定、待办、事实均有 evidence segment |
 | AC-UI-006 | OPT-UI-006 | 历史列表展示标题、日期、时长、语言和摘要；两步内可查看纪要、全文和术语 |
 | AC-TERM-001 | OPT-TERM-001 | 六个行业包中英文词均能用于热词、翻译和保护字段 |
+| AC-SPK-001 | OPT-SPK-001 | Call Link/PSTN 独立音轨角色归属准确，字幕、历史、导出和 review 字段一致 |
+| AC-SPK-002 | OPT-SPK-002、OPT-SPK-003 | 双人/多人固定语料达到 DER、切换延迟和 30 分钟标签稳定性门槛，不跨 speaker 合并 |
 | AC-CALL-001 | OPT-CALL-001 | Host + Guest + Worker 连续 30 分钟，字幕和译音双向可用 |
 | AC-CALL-002 | OPT-CALL-002 | 未完成 PSTN 不作为主入口，实验状态清晰 |
 | AC-SCAN-001 | OPT-SCAN-001 | 40 张图片 OCR、翻译、保存和分享流程完成 |
@@ -105,6 +107,7 @@
 | AC-PSTN-001 | OPT-PSTN-001 | 真实号码完成拨号、接通、双向译音、结束、结算和失败退款 |
 | AC-AGENT-001 | OPT-AGENT-001 | 告知、授权、禁拨、频控、人工接管和高风险拒绝全部通过 |
 | AC-VOICE-001 | OPT-VOICE-001 | 盲听自然度、清晰度、相似度达标，录音不合格可识别并重录 |
+| AC-SPK-003 | OPT-SPK-004 | 未授权不生成声纹，低置信度回退匿名，撤回和删除后不能再次命中身份 |
 | AC-ANDROID-001 | OPT-ANDROID-001 | 固定语料、功耗、温升和延迟均有报告，达到门槛后才替换系统 ASR |
 | AC-DATA-003 | OPT-DATA-003 | SQLite 迁移 PostgreSQL/Redis 演练 | 数量、余额、幂等键和对象引用一致，可回滚 |
 

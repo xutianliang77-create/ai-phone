@@ -1,6 +1,6 @@
 # ai phone 优化开发计划
 
-版本：v1.2
+版本：v1.3
 日期：2026-07-11  
 任务来源：`docs/ai-phone-optimization-development-tasks.md`
 
@@ -77,6 +77,8 @@ M2 不调整模型参数，避免 UI 和模型体验同时变化导致问题难�
 - 历史列表展示 AI 标题、时长、语言和摘要。
 - 历史详情展示摘要、重点、全文、术语、待办和关键事实。
 - App 增加行业包选择，服务端返回实际生效词库版本。
+- 执行 `OPT-SPK-001`，先复用 Call Link 独立音轨角色并贯通字幕、历史和 review。
+- 执行 `OPT-SPK-002/003`，在独立 harness 评测通过后接入单麦克风流式说话人分离。
 
 ### M4：Call Link 与数据
 
@@ -97,6 +99,7 @@ M2 不调整模型参数，避免 UI 和模型体验同时变化导致问题难�
 - 执行 `OPT-S2S-001`，先实现 `SpeechToSpeechProvider` 契约和独立 harness。
 - 执行 `OPT-S2S-002`，Gemini Live 只用于国际版候选，不改变国内默认路线。
 - `OPT-S2S-003`、`OPT-PSTN-001`、`OPT-AGENT-001`、`OPT-VOICE-001`、`OPT-ANDROID-001`、`OPT-DATA-003` 分别立项，不互相绑定发布。
+- `OPT-SPK-004` 声纹实名属于单独授权的增强能力，不与匿名说话人分离绑定发布。
 
 ## 4. 关键路径
 
