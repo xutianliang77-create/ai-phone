@@ -1,8 +1,12 @@
 import base64
 from dataclasses import dataclass, field
 import struct
+from typing import TYPE_CHECKING
 
 from app.schemas import AsrTranscribeRequest
+
+if TYPE_CHECKING:
+    from app.vad import VadProvider
 
 
 class PcmSessionBuffer:
@@ -43,6 +47,7 @@ class _PcmChunk:
     pcm: bytes
     duration_ms: int
     voiced: bool
+    speech_probability: float | None
     timestamp_ms: int
 
 
@@ -66,12 +71,18 @@ class RealtimePcmSegmenter:
         max_audio_ms: int,
         preroll_ms: int,
         vad_energy_threshold: int,
+        vad_provider: "VadProvider | None" = None,
     ) -> None:
         self.min_audio_ms = min_audio_ms
         self.endpoint_silence_ms = endpoint_silence_ms
         self.max_audio_ms = max_audio_ms
         self.preroll_ms = preroll_ms
         self.vad_energy_threshold = vad_energy_threshold
+        if vad_provider is None:
+            from app.vad import RmsVadProvider
+
+            vad_provider = RmsVadProvider(vad_energy_threshold)
+        self.vad_provider = vad_provider
         self._states: dict[str, _RealtimeSessionState] = {}
 
     def append(self, request: AsrTranscribeRequest) -> PcmAudioSegment | None:
@@ -87,10 +98,16 @@ class RealtimePcmSegmenter:
         if duration_ms <= 0:
             return None
 
+        decision = self.vad_provider.analyze(
+            request.sessionId,
+            pcm,
+            request.sampleRate,
+        )
         chunk = _PcmChunk(
             pcm=pcm,
             duration_ms=duration_ms,
-            voiced=pcm16_rms(pcm) > self.vad_energy_threshold,
+            voiced=decision.voiced,
+            speech_probability=decision.probability,
             timestamp_ms=request.timestampMs,
         )
         if not state.has_voice:
@@ -115,10 +132,12 @@ class RealtimePcmSegmenter:
             ),
         )
         reset_active_segment(state)
+        self.vad_provider.reset_session(session_id)
         return segment
 
     def close(self, session_id: str) -> None:
         self._states.pop(session_id, None)
+        self.vad_provider.reset_session(session_id)
 
     def _append_waiting_for_voice(
         self,
@@ -175,6 +194,7 @@ class RealtimePcmSegmenter:
             ),
         )
         reset_active_segment(state)
+        self.vad_provider.reset_session(request.sessionId)
         return segment
 
 

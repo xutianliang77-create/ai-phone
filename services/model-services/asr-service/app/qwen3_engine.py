@@ -6,6 +6,7 @@ from app.audio_buffer import RealtimePcmSegmenter
 from app.schemas import LanguageCode, TranslationLanguageCode
 from app.schemas import AsrTranscribeRequest, AsrTranscribeResponse
 from app.sensevoice_engine import normalize_transcript, transcript_language, write_temp_wav
+from app.vad import VadProvider
 
 
 class Qwen3Runner(Protocol):
@@ -61,6 +62,7 @@ class Qwen3AsrEngine:
         context: str = "",
         english_context: str = "",
         runner: Qwen3Runner | None = None,
+        vad_provider: VadProvider | None = None,
     ) -> None:
         self.runner = runner or LocalQwen3AsrRunner(
             model_dir=model_dir,
@@ -75,6 +77,7 @@ class Qwen3AsrEngine:
             max_audio_ms=max_audio_ms,
             preroll_ms=preroll_ms,
             vad_energy_threshold=vad_energy_threshold,
+            vad_provider=vad_provider,
         )
         self._last_text_by_session: dict[str, str] = {}
         self._session_prompt_by_session: dict[str, tuple[list[str], list[tuple[str, str]]]] = {}

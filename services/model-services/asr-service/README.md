@@ -23,6 +23,26 @@ uvicorn app.main:app --host 0.0.0.0 --port 8001
 recognized, which is useful before pause or end.
 The default provider is `mock`; SenseVoice can be added behind the same engine interface.
 
+## Server VAD
+
+Production online ASR uses `nvidia/Frame_VAD_Multilingual_MarbleNet_v2.0`
+through an in-process ONNX CPU runtime. NeMo is required only to export the
+ONNX network and its pinned Mel preprocessing assets. RMS remains an automatic
+fallback when assets cannot load or inference fails.
+
+```bash
+ASR_VAD_PROVIDER=marblenet \
+ASR_VAD_MODEL_PATH=/data/models/translation-model-eval/models/frame_vad_multilingual_marblenet_v2/frame_vad_multilingual_marblenet_v2.0.onnx \
+ASR_VAD_ASSETS_PATH=/data/models/translation-model-eval/models/frame_vad_multilingual_marblenet_v2/frame_vad_multilingual_marblenet_v2.0.preprocessor.npz \
+ASR_VAD_THRESHOLD=0.5 \
+ASR_VAD_WINDOW_MS=1000 \
+ASR_VAD_SMOOTHING_FRAMES=3
+```
+
+Use `0.5` as the default threshold. `0.7` remains the stricter deployment
+preset for later noisy-environment comparison. The App must still gate TTS
+playback because VAD alone cannot distinguish device playback from live speech.
+
 ## FireRedASR2-AED
 
 ```bash
@@ -62,7 +82,7 @@ uvicorn app.main:app --host 0.0.0.0 --port 8001
 ```
 
 The SenseVoice provider buffers incoming 24 kHz PCM16 frames, ignores leading
-silence with a simple RMS VAD, emits a segment after endpoint silence, flushes
+silence with the configured VAD provider, emits a segment after endpoint silence, flushes
 long speech at `ASR_SENSEVOICE_MAX_AUDIO_MS`, and suppresses adjacent duplicate
 transcripts.
 

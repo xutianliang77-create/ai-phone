@@ -15,6 +15,8 @@ def test_health_route() -> None:
         "service": "asr-service",
         "provider": "mock",
         "modelVersion": "mock-asr-v0.1.0",
+        "vadProvider": "none",
+        "vadThreshold": 0.5,
     }
 
 

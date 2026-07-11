@@ -13,6 +13,8 @@ class HealthResponse(BaseModel):
     service: Literal["asr-service"]
     provider: str
     modelVersion: str
+    vadProvider: str
+    vadThreshold: float
 
 
 class AsrCorrectionTerm(BaseModel):

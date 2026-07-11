@@ -5,6 +5,7 @@ import tempfile
 from typing import Protocol
 
 from app.audio_buffer import RealtimePcmSegmenter
+from app.vad import VadProvider
 from app.schemas import LanguageCode, TranslationLanguageCode
 from app.schemas import AsrTranscribeRequest, AsrTranscribeResponse
 from app.wav_writer import write_pcm16_wav
@@ -48,6 +49,7 @@ class SenseVoiceEngine:
         max_audio_ms: int = 8_000,
         preroll_ms: int = 200,
         vad_energy_threshold: int = 350,
+        vad_provider: VadProvider | None = None,
         runner: SenseVoiceRunner | None = None,
     ) -> None:
         self.runner = runner or FunAsrSenseVoiceRunner(model_dir, device)
@@ -57,6 +59,7 @@ class SenseVoiceEngine:
             max_audio_ms=max_audio_ms,
             preroll_ms=preroll_ms,
             vad_energy_threshold=vad_energy_threshold,
+            vad_provider=vad_provider,
         )
         self._last_text_by_session: dict[str, str] = {}
 

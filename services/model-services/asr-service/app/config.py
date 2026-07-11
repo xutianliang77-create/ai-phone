@@ -8,6 +8,12 @@ class AsrConfig:
     api_key: str = ""
     mock_emit_every_frames: int = 8
     model_version: str = "mock-asr-v0.1.0"
+    vad_provider: str = "rms"
+    vad_model_path: str = ""
+    vad_assets_path: str = ""
+    vad_threshold: float = 0.5
+    vad_window_ms: int = 1000
+    vad_smoothing_frames: int = 3
     sensevoice_model: str = "iic/SenseVoiceSmall"
     sensevoice_device: str = "cpu"
     sensevoice_min_audio_ms: int = 1200
@@ -43,6 +49,12 @@ def load_config() -> AsrConfig:
         api_key=os.getenv("ASR_SERVICE_API_KEY", "").strip(),
         mock_emit_every_frames=int(os.getenv("ASR_MOCK_EMIT_EVERY_FRAMES", "8")),
         model_version=os.getenv("ASR_MODEL_VERSION", "mock-asr-v0.1.0"),
+        vad_provider=os.getenv("ASR_VAD_PROVIDER", "rms"),
+        vad_model_path=os.getenv("ASR_VAD_MODEL_PATH", ""),
+        vad_assets_path=os.getenv("ASR_VAD_ASSETS_PATH", ""),
+        vad_threshold=float(os.getenv("ASR_VAD_THRESHOLD", "0.5")),
+        vad_window_ms=int(os.getenv("ASR_VAD_WINDOW_MS", "1000")),
+        vad_smoothing_frames=int(os.getenv("ASR_VAD_SMOOTHING_FRAMES", "3")),
         sensevoice_model=os.getenv("ASR_SENSEVOICE_MODEL", "iic/SenseVoiceSmall"),
         sensevoice_device=os.getenv("ASR_SENSEVOICE_DEVICE", "cpu"),
         sensevoice_min_audio_ms=int(os.getenv("ASR_SENSEVOICE_MIN_AUDIO_MS", "1200")),

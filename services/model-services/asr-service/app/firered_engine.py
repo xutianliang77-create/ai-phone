@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Protocol
 
 from app.audio_buffer import RealtimePcmSegmenter
+from app.vad import VadProvider
 from app.schemas import LanguageCode, TranslationLanguageCode
 from app.schemas import AsrTranscribeRequest, AsrTranscribeResponse
 from app.sensevoice_engine import normalize_transcript, transcript_language, write_temp_wav
@@ -65,6 +66,7 @@ class FireRedAsr2AedEngine:
         max_audio_ms: int,
         preroll_ms: int,
         vad_energy_threshold: int,
+        vad_provider: VadProvider | None = None,
         runner: FireRedRunner | None = None,
     ) -> None:
         self.runner = runner or LocalFireRedAedRunner(model_dir, use_gpu, beam_size)
@@ -74,6 +76,7 @@ class FireRedAsr2AedEngine:
             max_audio_ms=max_audio_ms,
             preroll_ms=preroll_ms,
             vad_energy_threshold=vad_energy_threshold,
+            vad_provider=vad_provider,
         )
         self._last_text_by_session: dict[str, str] = {}
 

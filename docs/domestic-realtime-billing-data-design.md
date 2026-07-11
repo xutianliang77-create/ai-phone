@@ -249,7 +249,7 @@ Usage Event 是计费解释层，当前实现以 `usage.tick` 和 session end �
 | --- | --- |
 | 采集 | App 20ms 至 100ms 一帧，弱网可合并但不超过 200ms |
 | 缓冲 | Gateway 批处理上限 800ms，积压超过 2400ms 丢弃旧帧并记录诊断 |
-| VAD | 服务端 ASR provider 优先返回端点，App 端仅做静音门控和 TTS 播放门控 |
+| VAD | 服务端 ASR 使用 MarbleNet v2 主判断，阈值默认 0.5；RMS 仅自动降级，App 端仅做保守静音门控和 TTS 播放门控 |
 | 强制切段 | 连续语音超过 6 至 8 秒必须强制 final，防止长句不翻译 |
 | silence flush | 静音 600 至 900ms 后 flush 当前段 |
 | stop flush | pause/end 前必须 flush pending audio 和 provider |

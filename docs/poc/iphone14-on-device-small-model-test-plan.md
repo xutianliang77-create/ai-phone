@@ -369,6 +369,7 @@ data/model-eval/iphone14-small-models/
 
 1. 先测系统基线：Apple Speech / SpeechAnalyzer、Translation framework、AVSpeechSynthesizer、NaturalLanguage。
 2. 再测 VAD 和语种识别小模型。
+   - TODO：将 `nvidia/Frame_VAD_Multilingual_MarbleNet_v2.0` 导出为 CoreML/ONNX 端侧候选，对比当前端点检测器的低音量召回、噪声误触发、耗电、温升和实时系数；通过前不进入生产 App。
 3. 再测当前 iOS CoreML / Nemotron ASR 与 Whisper Tiny/Base CoreML。
 4. 再测 Streaming-Sortformer-Diar-CoreAI。
 5. 最后才测 LMT 量化、LuxTTS 等更重的实验项。

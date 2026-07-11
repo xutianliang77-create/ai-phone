@@ -6,6 +6,12 @@ class AsrService:
     def __init__(self, engine: AsrEngine) -> None:
         self.engine = engine
 
+    @property
+    def vad_provider_name(self) -> str:
+        segmenter = getattr(self.engine, "segmenter", None)
+        provider = getattr(segmenter, "vad_provider", None)
+        return getattr(provider, "name", "none")
+
     async def transcribe(
         self,
         request: AsrTranscribeRequest,

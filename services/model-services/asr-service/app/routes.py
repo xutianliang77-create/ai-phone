@@ -17,6 +17,8 @@ def create_router(service: AsrService, config: AsrConfig) -> APIRouter:
             service="asr-service",
             provider=config.provider,
             modelVersion=config.model_version,
+            vadProvider=service.vad_provider_name,
+            vadThreshold=config.vad_threshold,
         )
 
     @router.post("/asr/transcribe", status_code=status.HTTP_200_OK)
