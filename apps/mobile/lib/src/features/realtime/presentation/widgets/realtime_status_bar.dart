@@ -57,12 +57,16 @@ class RealtimeStatusBar extends StatelessWidget {
         return l10n.statusIdle;
       case RealtimeStatus.connecting:
         return l10n.statusConnecting;
-      case RealtimeStatus.listening:
+      case RealtimeStatus.active:
         return l10n.statusListening;
       case RealtimeStatus.paused:
         return l10n.statusPaused;
+      case RealtimeStatus.ending:
+        return l10n.statusEnding;
       case RealtimeStatus.ended:
         return l10n.statusEnded;
+      case RealtimeStatus.failed:
+        return l10n.statusFailed;
     }
   }
 }

@@ -1,4 +1,5 @@
 import type {
+  PersistedRealtimeSessionState,
   RealtimeMode,
   SessionReviewResponse,
   SessionSegmentDto,
@@ -10,7 +11,7 @@ export interface SessionRecord {
   id: string;
   userId: string;
   mode: SessionMode;
-  status: "created" | "active" | "paused" | "ended" | "failed";
+  status: PersistedRealtimeSessionState;
   consumedSeconds: number;
   createdAt: string;
   endedAt?: string;

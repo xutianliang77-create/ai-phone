@@ -9,6 +9,7 @@
   ],
   "scripts": {
     "build": "npm run build --workspaces --if-present",
+    "pretest": "npm run build",
     "dev:api": "npm run dev -w @translation/api-server",
     "dev:realtime": "npm run dev -w @translation/realtime-gateway",
     "dev:call-link-worker": "bash scripts/start_call_link_translation_worker.sh",

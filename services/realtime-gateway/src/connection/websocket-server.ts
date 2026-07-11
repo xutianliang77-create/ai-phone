@@ -1,6 +1,6 @@
 import { WebSocketServer, type WebSocket } from "ws";
 import { createServer } from "node:http";
-import type { ClientRealtimeEvent, ClientTextSegmentEvent, SessionEndReason, ServerRealtimeEvent } from "@translation/contracts";
+import type { ClientTextSegmentEvent, SessionEndReason, ServerRealtimeEvent } from "@translation/contracts";
 import { verifyRealtimeToken } from "../auth/realtime-token-verifier.js";
 import { loadEnv } from "../config/env.js";
 import { AudioFrameBatcher } from "./audio-frame-batcher.js";
@@ -20,11 +20,17 @@ import {
 } from "../domain/domain-lexicon.js";
 import { createSessionEventSink } from "../sessions/session-event-sink.js";
 import { fetchSessionTerminology } from "../sessions/session-terminology.js";
-import { createSession, deleteSession, getSession, updateStatus } from "../sessions/session-manager.js";
+import {
+  createSession,
+  deleteSession,
+  getSession,
+  transitionStatus,
+} from "../sessions/session-manager.js";
 import { createUsageBalanceClient } from "../usage/usage-balance-client.js";
 import { createUsageTickDecision } from "../usage/usage-ticker.js";
 import { HttpTtsSynthesizer } from "../tts/http-tts-synthesizer.js";
 import { emitRealtimeTtsOutputForSession } from "../tts/realtime-tts-output.js";
+import { flushProviderSession, handleControlEvent } from "./session-control-handler.js";
 
 const router = new ProviderRouter();
 
@@ -75,6 +81,8 @@ export function startWebSocketServer() {
         asrCorrections,
       });
     } catch {
+      transitionStatus(session.id, "failed");
+      deleteSession(session.id, session);
       send(ws, buildError("provider_unavailable", "Realtime provider is unavailable", {
         sessionId: session.id,
         stage: "provider",
@@ -127,11 +135,13 @@ export function startWebSocketServer() {
       remainingSeconds?: number,
     ) => {
       const activeSession = getSession(session.id);
-      if (!activeSession || activeSession.status === "ended") return;
+      if (!activeSession) return;
+      const ending = transitionStatus(session.id, "ending");
+      if (!ending?.transition.accepted || !ending.transition.changed) return;
       audioBatcher.stopAccepting();
       await audioBatcher.flush();
       await flushProviderSession(provider, session.id, sendRealtime);
-      updateStatus(session.id, "ended");
+      transitionStatus(session.id, "ended");
       sendRealtime({
         type: "session.ended",
         sessionId: session.id,
@@ -260,44 +270,6 @@ async function loadTerminologyForSession(
   }
 }
 
-async function handleControlEvent(
-  event: Exclude<ClientRealtimeEvent, { type: "audio.frame" } | ClientTextSegmentEvent>,
-  sessionId: string,
-  provider: RealtimeProvider,
-  audioBatcher: AudioFrameBatcher,
-  sendEvent: (event: ServerRealtimeEvent) => void,
-  endRealtimeSession: (reason: SessionEndReason) => Promise<void>,
-) {
-  const session = getSession(sessionId);
-  if (!session) {
-    sendEvent(buildError("bad_event", "Realtime session was not found", {
-      sessionId,
-      stage: "session",
-      retryable: false,
-    }));
-    return;
-  }
-
-  if (event.type === "session.pause") {
-    audioBatcher.pauseAccepting();
-    await audioBatcher.flush();
-    await flushProviderSession(provider, session.id, sendEvent);
-    updateStatus(session.id, "paused");
-    sendEvent({ type: "session.paused", sessionId: session.id });
-    return;
-  }
-
-  if (event.type === "session.resume") {
-    updateStatus(session.id, "active");
-    audioBatcher.resumeAccepting();
-    return;
-  }
-
-  if (event.type === "session.end") {
-    await endRealtimeSession("client_request");
-  }
-}
-
 async function handleTextSegment(
   event: ClientTextSegmentEvent,
   expectedSessionId: string,
@@ -337,13 +309,4 @@ async function handleTextSegment(
   })) {
     sendEvent(outgoing);
   }
-}
-
-async function flushProviderSession(
-  provider: RealtimeProvider,
-  sessionId: string,
-  sendEvent: (event: ServerRealtimeEvent) => void,
-) {
-  if (!provider.flushSession) return;
-  for await (const outgoing of provider.flushSession(sessionId)) sendEvent(outgoing);
 }

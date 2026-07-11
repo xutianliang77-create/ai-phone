@@ -32,7 +32,7 @@ void main() {
     await pumpEventQueue();
     await controller.handleLifecycleState(AppLifecycleState.resumed);
 
-    expect(controller.status, RealtimeStatus.ended);
+    expect(controller.status, RealtimeStatus.failed);
     expect(repository.endedSessionIds, <String>['sess_1']);
     expect(repository.resumedSessionIds, isEmpty);
     expect(provider.startCalls, 1);
@@ -111,6 +111,9 @@ class _FakeRealtimeRepository extends RealtimeRepository {
     resumedSessionIds.add(sessionId);
     return true;
   }
+
+  @override
+  Future<bool> resumeAndWait(String sessionId) async => resume(sessionId);
 
   @override
   Future<void> end(String sessionId, List<SubtitleSegment> segments) async {

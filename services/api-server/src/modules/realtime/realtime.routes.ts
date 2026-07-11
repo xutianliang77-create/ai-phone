@@ -2,11 +2,16 @@ import type { FastifyInstance } from "fastify";
 import {
   isSupportedLanguage,
   type SessionSegmentStage,
+  type UpdateRealtimeSessionStateRequest,
   type UpsertSessionSegmentRequest,
 } from "@translation/contracts";
 import { sendError } from "../../infrastructure/http/errors.js";
 import { requireAccount } from "../account/account-auth.js";
-import { findSession, upsertSegment } from "../sessions/sessions.repository.js";
+import {
+  findSession,
+  transitionSessionState,
+  upsertSegment,
+} from "../sessions/sessions.repository.js";
 import { completeSessionWithUsage } from "../sessions/session-completion.js";
 import { validateCreateRealtimeSessionRequest } from "./create-session-request.js";
 import { createRealtimeSession } from "./realtime.service.js";
@@ -96,6 +101,47 @@ export async function registerRealtimeRoutes(app: FastifyInstance) {
       return sendError(reply, 404, "session_not_found", "Session not found");
     return { sessionId: session.id, segmentCount: session.segments.length };
   });
+
+  app.post(
+    "/internal/realtime/sessions/:sessionId/state",
+    async (request, reply) => {
+      if (!isInternalAuthorized(request.headers.authorization)) {
+        return sendError(
+          reply,
+          401,
+          "internal_error",
+          "Unauthorized internal request",
+        );
+      }
+      const params = request.params as { sessionId: string };
+      const body = request.body as Partial<UpdateRealtimeSessionStateRequest>;
+      if (!isInternalRealtimeState(body.status)) {
+        return sendError(
+          reply,
+          400,
+          "invalid_session_state",
+          "Invalid realtime session state",
+        );
+      }
+      const result = transitionSessionState(params.sessionId, body.status);
+      if (!result) {
+        return sendError(reply, 404, "session_not_found", "Session not found");
+      }
+      if (!result.transition.accepted) {
+        return sendError(
+          reply,
+          409,
+          "session_state_conflict",
+          `Cannot change session from ${result.transition.previous} to ${body.status}`,
+        );
+      }
+      return {
+        sessionId: result.session.id,
+        status: result.session.status,
+        changed: result.transition.changed,
+      };
+    },
+  );
 
   app.post(
     "/internal/realtime/sessions/:sessionId/end",
@@ -239,6 +285,12 @@ function isInternalAuthorized(authorization: string | undefined) {
 function parseBillableSeconds(value: unknown) {
   if (typeof value !== "number" || !Number.isFinite(value)) return undefined;
   return Math.max(0, Math.floor(value));
+}
+
+function isInternalRealtimeState(
+  value: unknown,
+): value is UpdateRealtimeSessionStateRequest["status"] {
+  return value === "active" || value === "paused" || value === "failed";
 }
 
 function forbidden(reply: Parameters<typeof sendError>[0]) {

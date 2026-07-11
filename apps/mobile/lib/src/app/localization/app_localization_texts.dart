@@ -52,7 +52,8 @@ const appLocalizationTexts = <String, Map<String, String>>{
   'warning': {'zh': '提示', 'en': 'Warning'},
   'localAddressWarning': {
     'zh': '真机请连接统一服务器地址，不能使用手机本机地址',
-    'en': 'Use the unified server URL on a physical device, not a local-only address',
+    'en':
+        'Use the unified server URL on a physical device, not a local-only address',
   },
   'apiService': {'zh': '服务名称', 'en': 'Service'},
   'serviceVersion': {'zh': '服务版本', 'en': 'Version'},
@@ -115,7 +116,9 @@ const appLocalizationTexts = <String, Map<String, String>>{
   'statusConnecting': {'zh': '连接中', 'en': 'Connecting'},
   'statusListening': {'zh': '同传中', 'en': 'Listening'},
   'statusPaused': {'zh': '已暂停', 'en': 'Paused'},
+  'statusEnding': {'zh': '正在结束', 'en': 'Ending'},
   'statusEnded': {'zh': '已结束', 'en': 'Ended'},
+  'statusFailed': {'zh': '已中断', 'en': 'Failed'},
   'tabLive': {'zh': '同传', 'en': 'Live'},
   'tabCall': {'zh': '通话', 'en': 'Calls'},
   'tabLens': {'zh': '扫描', 'en': 'Lens'},

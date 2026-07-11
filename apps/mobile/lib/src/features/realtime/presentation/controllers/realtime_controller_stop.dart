@@ -2,10 +2,13 @@ part of 'realtime_controller.dart';
 
 extension RealtimeControllerStop on RealtimeController {
   Future<void> stop() async {
-    if (_stopInFlight || _status == RealtimeStatus.ended) return;
+    if (_stopInFlight || isTerminalRealtimeStatus(_status)) return;
     _stopInFlight = true;
     final session = _session;
-    _setStatus(RealtimeStatus.ended);
+    if (!_setStatus(RealtimeStatus.ending)) {
+      _stopInFlight = false;
+      return;
+    }
     try {
       await ignoreCleanupError(_audioCapture.stop);
       await ignoreCleanupError(() async => _audioSubscription?.cancel());
@@ -27,6 +30,7 @@ extension RealtimeControllerStop on RealtimeController {
       }
       _session = null;
       _resumeAfterLifecyclePause = false;
+      _setStatus(RealtimeStatus.ended);
     } finally {
       _stopInFlight = false;
     }

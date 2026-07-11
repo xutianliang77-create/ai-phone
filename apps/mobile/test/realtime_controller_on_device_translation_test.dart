@@ -109,7 +109,7 @@ void main() {
     ));
     await pumpEventQueue();
 
-    expect(controller.status, RealtimeStatus.listening);
+    expect(controller.status, RealtimeStatus.active);
     expect(repository.sentTextSegments, isEmpty);
     expect(controller.segments.single.sourceText, 'hello wor');
     expect(controller.segments.single.translatedText, isEmpty);
@@ -289,6 +289,7 @@ class _FakeMobileAsrProvider implements MobileAsrProvider {
   Future<void> dispose() async {
     await _segments.close();
   }
+
   void emit(AsrTextSegment segment) {
     _segments.add(segment);
   }

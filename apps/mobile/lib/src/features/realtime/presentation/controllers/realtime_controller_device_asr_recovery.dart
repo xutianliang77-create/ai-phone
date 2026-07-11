@@ -38,7 +38,7 @@ extension RealtimeControllerDeviceAsrRecovery on RealtimeController {
   void _sendTextSegment(AsrTextSegment segment) {
     final session = _session;
     if (session == null ||
-        (_status != RealtimeStatus.listening && !_stopInFlight)) {
+        (_status != RealtimeStatus.active && !_stopInFlight)) {
       return;
     }
     if (_isSpeechCaptureGateActive) return;
@@ -61,7 +61,7 @@ extension RealtimeControllerDeviceAsrRecovery on RealtimeController {
       await ignoreCleanupError(() async => _mobileAsrProvider?.stop());
       await _drainDeviceAsrStopEvents();
       await _startMobileAsrProvider();
-      if (_status == RealtimeStatus.listening) {
+      if (_status == RealtimeStatus.active) {
         _message = null;
         _notify();
       }
@@ -84,7 +84,7 @@ extension RealtimeControllerDeviceAsrRecovery on RealtimeController {
 
   bool _shouldRecoverDeviceAsr() {
     return _usesDeviceAsr &&
-        _status == RealtimeStatus.listening &&
+        _status == RealtimeStatus.active &&
         _session != null &&
         !_stopInFlight &&
         _deviceAsrRecovery.canRestart &&

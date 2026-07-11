@@ -2,11 +2,16 @@ import type {
   LanguageCode,
   TranslationLanguageCode,
 } from "../shared/languages.js";
+import type { PersistedRealtimeSessionState } from "../realtime/state-machine.js";
 
 export interface SessionStatusResponse {
   sessionId: string;
-  status: "created" | "active" | "paused" | "ended" | "failed";
+  status: PersistedRealtimeSessionState;
   consumedSeconds: number;
+}
+
+export interface UpdateRealtimeSessionStateRequest {
+  status: Extract<PersistedRealtimeSessionState, "active" | "paused" | "failed">;
 }
 
 export interface SessionSegmentDto {
@@ -167,7 +172,7 @@ export interface UpsertSessionSegmentRequest {
 export interface SessionListItem {
   sessionId: string;
   mode: string;
-  status: "created" | "active" | "paused" | "ended" | "failed";
+  status: PersistedRealtimeSessionState;
   consumedSeconds: number;
   createdAt: string;
   endedAt?: string;

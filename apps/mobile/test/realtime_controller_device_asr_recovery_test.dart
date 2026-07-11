@@ -23,7 +23,7 @@ void main() {
 
     await controller.start();
 
-    expect(controller.status, RealtimeStatus.listening);
+    expect(controller.status, RealtimeStatus.active);
     expect(controller.message, isNull);
     expect(provider.startCalls, 2);
     expect(provider.stopCalls, 1);
@@ -41,7 +41,7 @@ void main() {
     provider.emitError(StateError('native warm-up failed'));
     await _settleAsrRecovery();
 
-    expect(controller.status, RealtimeStatus.listening);
+    expect(controller.status, RealtimeStatus.active);
     expect(controller.message, isNull);
     expect(provider.startCalls, 2);
     expect(provider.stopCalls, 1);
@@ -59,7 +59,7 @@ void main() {
     provider.emitError(StateError('native warm-up failed'));
     await _settleAsrRecovery();
 
-    expect(controller.status, RealtimeStatus.ended);
+    expect(controller.status, RealtimeStatus.failed);
     expect(controller.message, contains('device ASR start failed'));
     expect(provider.startCalls, 2);
     expect(repository.endedSessionIds, <String>['sess_1']);

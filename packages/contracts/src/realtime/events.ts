@@ -78,6 +78,11 @@ export interface SessionPausedEvent {
   sessionId: string;
 }
 
+export interface SessionResumedEvent {
+  type: "session.resumed";
+  sessionId: string;
+}
+
 export type ClientRealtimeEvent =
   | AudioFrame
   | ClientTextSegmentEvent
@@ -93,5 +98,6 @@ export type ServerRealtimeEvent =
   | AudioOutput
   | UsageTickEvent
   | SessionPausedEvent
+  | SessionResumedEvent
   | SessionEndedEvent
   | RealtimeError;

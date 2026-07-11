@@ -30,6 +30,16 @@ class ApiSessionEventSink implements SessionEventSink {
   }) {}
 
   async record(event: ServerRealtimeEvent) {
+    if (
+      event.type === "session.started" ||
+      event.type === "session.paused" ||
+      event.type === "session.resumed"
+    ) {
+      await this.post(`/internal/realtime/sessions/${event.sessionId}/state`, {
+        status: event.type === "session.paused" ? "paused" : "active",
+      });
+      return;
+    }
     if (event.type === "transcript.final") {
       const sourceText = cleanRealtimeText(event.text);
       if (!sourceText) return;

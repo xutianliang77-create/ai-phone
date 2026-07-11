@@ -74,7 +74,7 @@ extension RealtimeControllerLocalTranslation on RealtimeController {
   Future<void> _flushPendingLocalPartialTranslation() async {
     final segment = _localPartialFlush.take();
     if (segment == null || !_config.useLocalSessions) return;
-    if (_status != RealtimeStatus.listening && !_stopInFlight) return;
+    if (_status != RealtimeStatus.active && !_stopInFlight) return;
     await _translateLocalSegment(AsrTextSegment(
       id: segment.id,
       text: segment.text,

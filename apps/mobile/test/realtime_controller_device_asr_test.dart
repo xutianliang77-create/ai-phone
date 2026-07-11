@@ -31,7 +31,7 @@ void main() {
     ));
     await pumpEventQueue();
 
-    expect(controller.status, RealtimeStatus.listening);
+    expect(controller.status, RealtimeStatus.active);
     expect(provider.calls, <String>[
       'availability',
       'prepare',
@@ -61,7 +61,7 @@ void main() {
     expect(repository.sentTextSegments.single.segment.id, 'pause_tail_1');
     await controller.start();
 
-    expect(controller.status, RealtimeStatus.listening);
+    expect(controller.status, RealtimeStatus.active);
     expect(repository.startedSessionIds, <String>['sess_1']);
     expect(repository.pausedSessionIds, <String>['sess_1']);
     expect(repository.resumedSessionIds, <String>['sess_1']);
@@ -79,7 +79,7 @@ void main() {
     await controller.pause();
     await pumpEventQueue();
 
-    expect(controller.status, RealtimeStatus.ended);
+    expect(controller.status, RealtimeStatus.failed);
     expect(controller.message, contains('device ASR stop failed'));
     expect(repository.pausedSessionIds, isEmpty);
     expect(repository.endedSessionIds, <String>['sess_1']);
@@ -98,7 +98,7 @@ void main() {
     await controller.start();
     await pumpEventQueue();
 
-    expect(controller.status, RealtimeStatus.ended);
+    expect(controller.status, RealtimeStatus.failed);
     expect(controller.message, contains('device ASR start failed'));
     expect(repository.startedSessionIds, <String>['sess_1']);
     expect(repository.pausedSessionIds, <String>['sess_1']);
@@ -138,7 +138,7 @@ void main() {
     await controller.start();
     await pumpEventQueue();
 
-    expect(controller.status, RealtimeStatus.ended);
+    expect(controller.status, RealtimeStatus.failed);
     expect(controller.message, contains('device ASR start failed'));
     expect(repository.startedSessionIds, <String>['sess_1']);
     expect(repository.endedSessionIds, <String>['sess_1']);
@@ -212,21 +212,20 @@ class _FakeRealtimeRepository extends RealtimeRepository {
     sentTextSegments.add(_SentTextSegment(sessionId, segment));
     return true;
   }
-
   @override
   bool pause(String sessionId) {
     pausedSessionIds.add(sessionId);
     return true;
   }
-
   @override
   Future<bool> pauseAndWait(String sessionId) async => pause(sessionId);
-
   @override
   bool resume(String sessionId) {
     resumedSessionIds.add(sessionId);
     return true;
   }
+  @override
+  Future<bool> resumeAndWait(String sessionId) async => resume(sessionId);
 
   @override
   Future<void> end(String sessionId, List<SubtitleSegment> segments) async =>

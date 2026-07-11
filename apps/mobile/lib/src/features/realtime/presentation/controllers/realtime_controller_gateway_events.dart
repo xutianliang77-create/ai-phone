@@ -2,7 +2,7 @@ part of 'realtime_controller.dart';
 
 extension RealtimeControllerGatewayEvents on RealtimeController {
   void handleGatewayEvent(GatewayRealtimeEvent event) {
-    if (_status == RealtimeStatus.ended && !_stopInFlight) return;
+    if (isTerminalRealtimeStatus(_status) && !_stopInFlight) return;
     final activeSessionId = _session?.sessionId;
     if (activeSessionId != null &&
         event.sessionId != null &&
@@ -37,15 +37,25 @@ extension RealtimeControllerGatewayEvents on RealtimeController {
       return;
     }
     if (event.type == 'connection.reconnecting') {
+      if (_status == RealtimeStatus.active ||
+          _status == RealtimeStatus.paused) {
+        _statusBeforeReconnect = _status;
+      }
+      _setStatus(RealtimeStatus.connecting);
       _message = event.message;
-      _status = RealtimeStatus.connecting;
       _notify();
       return;
     }
     if (event.type == 'connection.reconnected') {
       _gatewayDiagnostic = null;
+      final previous = _statusBeforeReconnect;
+      _statusBeforeReconnect = null;
+      if (previous == RealtimeStatus.paused) {
+        unawaited(_restorePauseAfterReconnect());
+      } else {
+        _setStatus(RealtimeStatus.active);
+      }
       _message = event.message;
-      _status = RealtimeStatus.listening;
       _notify();
       return;
     }
@@ -62,6 +72,14 @@ extension RealtimeControllerGatewayEvents on RealtimeController {
     if (event.type == 'session.ended') {
       if (_stopInFlight) return;
       _handleRemoteSessionEnded(event);
+      return;
+    }
+    if (event.type == 'session.paused') {
+      _setStatus(RealtimeStatus.paused);
+      return;
+    }
+    if (event.type == 'session.resumed') {
+      _setStatus(RealtimeStatus.active);
       return;
     }
     if (event.type == 'transcript.partial' && event.segmentId != null) {
@@ -160,14 +178,23 @@ extension RealtimeControllerGatewayEvents on RealtimeController {
     _message = _remoteEndMessage(event);
     _remainingSeconds = event.remainingSeconds;
     _lowBalance = false;
-    _status = RealtimeStatus.ended;
+    _setStatus(RealtimeStatus.ended);
     _session = null;
     _resumeAfterLifecyclePause = false;
+    _statusBeforeReconnect = null;
     _localPartialFlush.cancel();
     _deviceAsrRecovery.reset();
     unawaited(_stopSpeaking());
     unawaited(_cleanupAfterRemoteEnd());
     _notify();
+  }
+
+  Future<void> _restorePauseAfterReconnect() async {
+    final session = _session;
+    if (session == null) return;
+    if (!await _repository.pauseAndWait(session.sessionId)) {
+      _fail('Realtime connection lost');
+    }
   }
 
   Future<void> _cleanupAfterRemoteEnd() async {

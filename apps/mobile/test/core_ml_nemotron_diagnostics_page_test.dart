@@ -208,7 +208,7 @@ void main() {
 
     expect(
       find.text(
-        '真机测试时请改用 Mac 局域网 IP，不能使用本机地址',
+        '真机请连接统一服务器地址，不能使用手机本机地址',
         findRichText: true,
       ),
       findsNWidgets(2),

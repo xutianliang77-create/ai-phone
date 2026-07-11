@@ -125,6 +125,28 @@ void main() {
     expect(await pauseFuture, isTrue);
   });
 
+  test('waits for gateway session resume confirmation', () async {
+    final gateway = _FakeRealtimeGatewayClient()
+      ..resumeCompleter = Completer<bool>();
+    final repository = RealtimeRepository(
+      apiClient: _FakeRealtimeApiClient(),
+      gatewayClient: gateway,
+    );
+
+    var completed = false;
+    final resumeFuture = repository.resumeAndWait('sess_1').then((value) {
+      completed = true;
+      return value;
+    });
+    await Future<void>.delayed(Duration.zero);
+
+    expect(gateway.resumedSessionId, 'sess_1');
+    expect(completed, isFalse);
+
+    gateway.resumeCompleter!.complete(true);
+    expect(await resumeFuture, isTrue);
+  });
+
   test('uses target language when sending auto ASR text segments', () {
     final gateway = _FakeRealtimeGatewayClient();
     final repository = RealtimeRepository(
@@ -234,8 +256,10 @@ class _FakeRealtimeGatewayClient extends RealtimeGatewayClient {
   final _events = StreamController<GatewayRealtimeEvent>.broadcast();
   String? endedSessionId;
   String? pausedSessionId;
+  String? resumedSessionId;
   String? sentTextLanguage;
   Completer<bool>? pauseCompleter;
+  Completer<bool>? resumeCompleter;
   Completer<bool>? endCompleter;
 
   @override
@@ -260,6 +284,15 @@ class _FakeRealtimeGatewayClient extends RealtimeGatewayClient {
   }) {
     pausedSessionId = sessionId;
     return pauseCompleter?.future ?? Future<bool>.value(true);
+  }
+
+  @override
+  Future<bool> resumeAndWait(
+    String sessionId, {
+    Duration timeout = const Duration(seconds: 2),
+  }) {
+    resumedSessionId = sessionId;
+    return resumeCompleter?.future ?? Future<bool>.value(true);
   }
 
   @override

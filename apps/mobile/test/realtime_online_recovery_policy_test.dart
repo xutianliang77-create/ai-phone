@@ -15,9 +15,9 @@ void main() {
 
   test('shows recovery for online retryable diagnostics while active', () {
     for (final status in <RealtimeStatus>[
-      RealtimeStatus.listening,
+      RealtimeStatus.active,
       RealtimeStatus.paused,
-      RealtimeStatus.ended,
+      RealtimeStatus.failed,
     ]) {
       expect(
         shouldShowOnlineRecovery(
@@ -34,7 +34,7 @@ void main() {
     expect(
       shouldShowOnlineRecovery(
         processingMode: RealtimeProcessingMode.onDevice,
-        status: RealtimeStatus.listening,
+        status: RealtimeStatus.active,
         diagnostic: diagnostic,
       ),
       isFalse,
@@ -42,7 +42,7 @@ void main() {
     expect(
       shouldShowOnlineRecovery(
         processingMode: RealtimeProcessingMode.online,
-        status: RealtimeStatus.listening,
+        status: RealtimeStatus.active,
         diagnostic: null,
       ),
       isFalse,

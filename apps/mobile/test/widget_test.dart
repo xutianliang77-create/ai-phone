@@ -194,7 +194,7 @@ void main() {
       supportedLocales: AppLocalizations.supportedLocales,
       home: Scaffold(
         body: RealtimeStatusBar(
-          status: RealtimeStatus.listening,
+          status: RealtimeStatus.active,
           remainingSeconds: 15,
           lowBalance: true,
         ),

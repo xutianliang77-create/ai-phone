@@ -125,7 +125,7 @@ void main() {
     ));
     await pumpEventQueue();
 
-    expect(controller.status, RealtimeStatus.ended);
+    expect(controller.status, RealtimeStatus.failed);
     expect(controller.message, contains('ASR 识别'));
     expect(controller.message, contains('hymt2_self_hosted'));
     expect(controller.message, contains('可重试'));
@@ -221,7 +221,7 @@ void main() {
     ));
     await pumpEventQueue();
 
-    expect(controller.status, RealtimeStatus.listening);
+    expect(controller.status, RealtimeStatus.active);
     expect(controller.lowBalance, isTrue);
     expect(controller.remainingSeconds, 15);
 
@@ -247,7 +247,7 @@ void main() {
     await controller.start();
     await pumpEventQueue();
 
-    expect(controller.status, RealtimeStatus.ended);
+    expect(controller.status, RealtimeStatus.failed);
     expect(controller.message, contains('microphone start failed'));
     expect(repository.startedSessionIds, <String>['sess_1']);
     expect(repository.endedSessionIds, <String>['sess_1']);

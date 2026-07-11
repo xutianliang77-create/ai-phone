@@ -7,6 +7,10 @@ import type {
   SessionSegmentRefinementDto,
 } from "@translation/contracts";
 import {
+  transitionRealtimeSessionState,
+  type PersistedRealtimeSessionState,
+} from "@translation/contracts";
+import {
   getStoreSnapshot,
   persistStoreSnapshot,
 } from "../../infrastructure/storage/json-store.js";
@@ -33,10 +37,26 @@ export function endSession(sessionId: string) {
   if (!session) return null;
   const wasAlreadyEnded = session.status === "ended";
   if (wasAlreadyEnded) return { session, wasAlreadyEnded };
+  const transition = transitionRealtimeSessionState(session.status, "ended");
+  if (!transition.accepted) return null;
   session.status = "ended";
   session.endedAt = new Date().toISOString();
   persistStoreSnapshot();
   return { session, wasAlreadyEnded };
+}
+
+export function transitionSessionState(
+  sessionId: string,
+  status: PersistedRealtimeSessionState,
+) {
+  const session = findSession(sessionId);
+  if (!session) return null;
+  const transition = transitionRealtimeSessionState(session.status, status);
+  if (transition.changed) {
+    session.status = status;
+    persistStoreSnapshot();
+  }
+  return { session, transition };
 }
 
 export function listSessions(userId: string, query?: string) {

@@ -1,6 +1,12 @@
-import type { RealtimeTokenClaims } from "@translation/contracts";
+import type {
+  RealtimeSessionState,
+  RealtimeTokenClaims,
+} from "@translation/contracts";
 
-export type RealtimeSessionStatus = "active" | "paused" | "ended";
+export type RealtimeSessionStatus = Extract<
+  RealtimeSessionState,
+  "active" | "paused" | "ending" | "ended" | "failed"
+>;
 
 export interface RealtimeSession {
   id: string;

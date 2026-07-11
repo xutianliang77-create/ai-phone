@@ -1,4 +1,7 @@
-import type { RealtimeTokenClaims } from "@translation/contracts";
+import {
+  transitionRealtimeSessionState,
+  type RealtimeTokenClaims,
+} from "@translation/contracts";
 import type { RealtimeSession } from "./realtime-session.js";
 
 const sessions = new Map<string, RealtimeSession>();
@@ -20,10 +23,15 @@ export function getSession(sessionId: string) {
   return sessions.get(sessionId) ?? null;
 }
 
-export function updateStatus(sessionId: string, status: RealtimeSession["status"]) {
+export function transitionStatus(
+  sessionId: string,
+  status: RealtimeSession["status"],
+) {
   const session = getSession(sessionId);
-  if (session) session.status = status;
-  return session;
+  if (!session) return null;
+  const transition = transitionRealtimeSessionState(session.status, status);
+  if (transition.changed) session.status = status;
+  return { session, transition };
 }
 
 export function deleteSession(sessionId: string, expectedSession?: RealtimeSession) {

@@ -174,7 +174,7 @@ class _RealtimePageState extends State<RealtimePage>
 
   bool get _canChangeSettings {
     return controller.status == RealtimeStatus.idle ||
-        controller.status == RealtimeStatus.ended;
+        isTerminalRealtimeStatus(controller.status);
   }
 
   bool get _canChangeMode => _canChangeSettings;
@@ -234,7 +234,7 @@ class _RealtimePageState extends State<RealtimePage>
   }
 
   bool get _isRunningForRecovery =>
-      controller.status == RealtimeStatus.listening ||
+      controller.status == RealtimeStatus.active ||
       controller.status == RealtimeStatus.paused;
 
   Future<void> _loadSettings() async {

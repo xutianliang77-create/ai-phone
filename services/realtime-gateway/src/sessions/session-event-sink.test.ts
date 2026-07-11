@@ -3,6 +3,46 @@ import { createSessionEventSink } from "./session-event-sink.js";
 import type { RealtimeEnv } from "../config/env.js";
 
 describe("session event sink", () => {
+  it("syncs started, paused, and resumed states to the api", async () => {
+    const calls: Array<{ url: string; body: unknown }> = [];
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async (input, init) => {
+      calls.push({
+        url: String(input),
+        body: init?.body ? JSON.parse(String(init.body)) : null,
+      });
+      return new Response("{}", { status: 200 });
+    };
+
+    try {
+      const sink = createSessionEventSink({
+        ...baseEnv(),
+        sessionEventSink: "api",
+        apiBaseUrl: "http://127.0.0.1:3100",
+      });
+      await sink.record({ type: "session.started", sessionId: "sess_1" });
+      await sink.record({ type: "session.paused", sessionId: "sess_1" });
+      await sink.record({ type: "session.resumed", sessionId: "sess_1" });
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+
+    expect(calls).toEqual([
+      {
+        url: "http://127.0.0.1:3100/internal/realtime/sessions/sess_1/state",
+        body: { status: "active" },
+      },
+      {
+        url: "http://127.0.0.1:3100/internal/realtime/sessions/sess_1/state",
+        body: { status: "paused" },
+      },
+      {
+        url: "http://127.0.0.1:3100/internal/realtime/sessions/sess_1/state",
+        body: { status: "active" },
+      },
+    ]);
+  });
+
   it("posts final transcript, translation, and ended events to the api", async () => {
     const calls: Array<{ url: string; body: unknown }> = [];
     const originalFetch = globalThis.fetch;

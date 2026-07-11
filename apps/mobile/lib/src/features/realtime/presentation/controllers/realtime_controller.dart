@@ -21,7 +21,10 @@ import 'device_asr_failure_message.dart';
 import 'error_display_message.dart';
 import 'realtime_gateway_diagnostic.dart';
 import 'realtime_runtime_factories.dart';
+import 'realtime_session_state.dart';
 import 'segment_draft.dart';
+
+export 'realtime_session_state.dart';
 
 part 'realtime_controller_gateway_events.dart';
 part 'realtime_controller_device_asr_recovery.dart';
@@ -29,8 +32,6 @@ part 'realtime_controller_local_translation.dart';
 part 'realtime_controller_segments.dart';
 part 'realtime_controller_speech.dart';
 part 'realtime_controller_stop.dart';
-
-enum RealtimeStatus { idle, connecting, listening, paused, ended }
 
 class RealtimeController extends ChangeNotifier {
   static const Duration _deviceAsrStopDrain = Duration(milliseconds: 120);
@@ -90,6 +91,7 @@ class RealtimeController extends ChangeNotifier {
   int? _remainingSeconds;
   bool _lowBalance = false;
   RealtimeGatewayDiagnostic? _gatewayDiagnostic;
+  RealtimeStatus? _statusBeforeReconnect;
   bool _resumeAfterLifecyclePause = false, _stopInFlight = false;
   final _localPartialFlush = _LocalPartialTranslationFlush();
   final _deviceAsrRecovery = _DeviceAsrRecovery();
@@ -114,7 +116,8 @@ class RealtimeController extends ChangeNotifier {
       return;
     }
     if (_status == RealtimeStatus.connecting ||
-        _status == RealtimeStatus.listening) {
+        _status == RealtimeStatus.active ||
+        _status == RealtimeStatus.ending) {
       return;
     }
 
@@ -124,6 +127,7 @@ class RealtimeController extends ChangeNotifier {
       _remainingSeconds = null;
       _lowBalance = false;
       _gatewayDiagnostic = null;
+      _statusBeforeReconnect = null;
       _segments.clear();
       _drafts.clear();
       _deviceAsrRecovery.reset();
@@ -142,7 +146,7 @@ class RealtimeController extends ChangeNotifier {
       } else {
         await _startAudioCapture();
       }
-      _setStatus(RealtimeStatus.listening);
+      _setStatus(RealtimeStatus.active);
     } catch (error) {
       _fail(await _failureMessage(error));
     }
@@ -150,7 +154,7 @@ class RealtimeController extends ChangeNotifier {
 
   Future<void> pause() async {
     final session = _session;
-    if (session == null || _status != RealtimeStatus.listening) return;
+    if (session == null || _status != RealtimeStatus.active) return;
     try {
       if (_usesDeviceAsr) {
         await _mobileAsrProvider?.stop();
@@ -176,7 +180,7 @@ class RealtimeController extends ChangeNotifier {
     }
     if ((state == AppLifecycleState.inactive ||
             state == AppLifecycleState.paused) &&
-        _status == RealtimeStatus.listening) {
+        _status == RealtimeStatus.active) {
       _resumeAfterLifecyclePause = true;
       await pause();
     }
@@ -201,7 +205,7 @@ class RealtimeController extends ChangeNotifier {
   Future<void> _resume() async {
     final session = _session;
     if (session == null) return;
-    if (!_repository.resume(session.sessionId)) {
+    if (!await _repository.resumeAndWait(session.sessionId)) {
       throw StateError('Realtime connection lost');
     }
     if (_usesDeviceAsr) {
@@ -209,7 +213,7 @@ class RealtimeController extends ChangeNotifier {
     } else {
       await _audioCapture.resume();
     }
-    _setStatus(RealtimeStatus.listening);
+    _setStatus(RealtimeStatus.active);
   }
 
   Future<void> _resumeOrFail() async {
@@ -266,7 +270,7 @@ class RealtimeController extends ChangeNotifier {
 
   void _sendAudioFrame(AudioFrame frame) {
     final session = _session;
-    if (session == null || _status != RealtimeStatus.listening) return;
+    if (session == null || _status != RealtimeStatus.active) return;
     if (_isSpeechCaptureGateActive) return;
     _repository.sendAudio(session.sessionId, frame);
   }
@@ -274,10 +278,14 @@ class RealtimeController extends ChangeNotifier {
   bool get _isSpeechCaptureGateActive =>
       DateTime.now().isBefore(_speechCaptureGateUntil);
 
-  void _setStatus(RealtimeStatus status) {
-    _status = status;
-    if (status != RealtimeStatus.ended) _message = null;
+  bool _setStatus(RealtimeStatus status) {
+    final transition = transitionRealtimeStatus(_status, status);
+    if (!transition.accepted) return false;
+    if (!transition.changed) return true;
+    _status = transition.current;
+    if (!isTerminalRealtimeStatus(status)) _message = null;
     notifyListeners();
+    return true;
   }
 
   void _notify() {
@@ -294,9 +302,10 @@ class RealtimeController extends ChangeNotifier {
   void _fail(String message) {
     final failedSession = _session;
     _message = message;
-    _status = RealtimeStatus.ended;
+    _setStatus(RealtimeStatus.failed);
     _session = null;
     _resumeAfterLifecyclePause = false;
+    _statusBeforeReconnect = null;
     _localPartialFlush.cancel();
     _deviceAsrRecovery.reset();
     unawaited(_stopSpeaking());

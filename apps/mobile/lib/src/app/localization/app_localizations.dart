@@ -11,10 +11,7 @@ class AppLocalizations {
   static const LocalizationsDelegate<AppLocalizations> delegate =
       _AppLocalizationsDelegate();
 
-  static const List<Locale> supportedLocales = <Locale>[
-    Locale('zh'),
-    Locale('en')
-  ];
+  static const List<Locale> supportedLocales = <Locale>[Locale('zh'), Locale('en')];
 
   static AppLocalizations of(BuildContext context) {
     final localizations =
@@ -104,7 +101,9 @@ class AppLocalizations {
   String get statusConnecting => _text('statusConnecting');
   String get statusListening => _text('statusListening');
   String get statusPaused => _text('statusPaused');
+  String get statusEnding => _text('statusEnding');
   String get statusEnded => _text('statusEnded');
+  String get statusFailed => _text('statusFailed');
   String get tabLive => _text('tabLive');
   String get tabCall => _text('tabCall');
   String get tabLens => _text('tabLens');
