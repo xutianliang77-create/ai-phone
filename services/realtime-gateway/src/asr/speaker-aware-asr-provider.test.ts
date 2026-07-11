@@ -55,6 +55,37 @@ describe("speaker aware asr provider", () => {
     expect(transcript).toMatchObject({ text: "hello" });
     expect(transcript).not.toHaveProperty("speaker");
   });
+
+  it("retains speaker spans produced before ASR emits a transcript", async () => {
+    const provider = new SpeakerAwareAsrProvider(
+      new DelayedAsrProvider(),
+      new OneShotSpeakerProvider(),
+    );
+    await provider.createSession(session);
+
+    expect(await provider.transcribe(frame)).toBeNull();
+    const transcript = await provider.transcribe({ ...frame, sequence: 2 });
+
+    expect(transcript).toMatchObject({
+      text: "hello",
+      speaker: { speakerId: "speaker_2" },
+    });
+  });
+
+  it("replaces a provisional speaker span with its final boundary", async () => {
+    const provider = new SpeakerAwareAsrProvider(
+      new DelayedAsrProvider(),
+      new UpdatingSpeakerProvider(),
+    );
+    await provider.createSession(session);
+
+    expect(await provider.transcribe(frame)).toBeNull();
+    const transcript = await provider.transcribe({ ...frame, sequence: 2 });
+
+    expect(transcript).toMatchObject({
+      speaker: { speakerId: "speaker_2" },
+    });
+  });
 });
 
 class FakeAsrProvider implements AsrProvider {
@@ -91,5 +122,36 @@ class FakeSpeakerProvider implements SpeakerAttributionProvider {
   async closeSession() {}
   async healthCheck() {
     return !this.failStart;
+  }
+}
+
+class DelayedAsrProvider extends FakeAsrProvider {
+  private calls = 0;
+  override async transcribe() {
+    this.calls += 1;
+    return this.calls === 1 ? null : super.transcribe();
+  }
+}
+
+class OneShotSpeakerProvider extends FakeSpeakerProvider {
+  private calls = 0;
+  override async pushAudio() {
+    this.calls += 1;
+    return this.calls === 1
+      ? [{ speakerId: "speaker_2", startMs: 900, endMs: 1900 }]
+      : [];
+  }
+}
+
+class UpdatingSpeakerProvider extends FakeSpeakerProvider {
+  private calls = 0;
+  override async pushAudio() {
+    this.calls += 1;
+    return [{
+      speakerId: "speaker_2",
+      startMs: 900,
+      endMs: this.calls === 1 ? 1200 : 1900,
+      final: this.calls > 1,
+    }];
   }
 }

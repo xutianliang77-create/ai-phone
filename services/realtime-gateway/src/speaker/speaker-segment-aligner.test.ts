@@ -31,4 +31,29 @@ describe("speaker segment aligner", () => {
       [{ speakerId: "speaker_1", startMs: 900, endMs: 1100 }],
     )).toBeNull();
   });
+
+  it("aggregates fragmented evidence for the same speaker", () => {
+    expect(alignSpeakerSpan(
+      { startMs: 1000, endMs: 2000, source: "client" },
+      [
+        { speakerId: "speaker_1", startMs: 1000, endMs: 1250 },
+        { speakerId: "speaker_1", startMs: 1300, endMs: 1600, overlap: true },
+        { speakerId: "speaker_2", startMs: 1600, endMs: 2000 },
+      ],
+    )).toMatchObject({
+      speaker: { speakerId: "speaker_1" },
+      timing: { overlap: true },
+    });
+  });
+
+  it("does not double count overlapping spans from one speaker", () => {
+    expect(alignSpeakerSpan(
+      { startMs: 1000, endMs: 2000, source: "client" },
+      [
+        { speakerId: "speaker_1", startMs: 1000, endMs: 1400 },
+        { speakerId: "speaker_1", startMs: 1200, endMs: 1500 },
+      ],
+      0.6,
+    )).toBeNull();
+  });
 });

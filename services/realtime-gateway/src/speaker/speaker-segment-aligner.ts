@@ -16,25 +16,93 @@ export function alignSpeakerSpan(
 ): SpeakerAlignment | null {
   if (!timing || spans.length === 0) return null;
   const duration = Math.max(1, timing.endMs - timing.startMs);
-  const ranked = spans
-    .map((span) => ({ span, overlapMs: overlapMs(timing, span) }))
+  const ranked = aggregateBySpeaker(timing, spans)
     .sort((left, right) => right.overlapMs - left.overlapMs);
   const best = ranked[0];
   if (!best || best.overlapMs / duration < minimumOverlapRatio) return null;
   return {
     speaker: {
-      speakerId: best.span.speakerId,
+      speakerId: best.speakerId,
       role: "speaker",
       source: "diarization",
-      ...(typeof best.span.confidence === "number"
-        ? { confidence: best.span.confidence }
+      ...(typeof best.confidence === "number"
+        ? { confidence: best.confidence }
         : {}),
     },
     timing: {
       ...timing,
-      ...(best.span.overlap ? { overlap: true } : {}),
+      ...(best.overlap ? { overlap: true } : {}),
     },
   };
+}
+
+interface SpeakerEvidence {
+  speakerId: string;
+  overlapMs: number;
+  confidence?: number;
+  overlap: boolean;
+}
+
+function aggregateBySpeaker(
+  timing: SegmentTimingDto,
+  spans: SpeakerSpan[],
+): SpeakerEvidence[] {
+  const grouped = new Map<string, SpeakerSpan[]>();
+  for (const span of spans) {
+    if (overlapMs(timing, span) === 0) continue;
+    grouped.set(span.speakerId, [...(grouped.get(span.speakerId) ?? []), span]);
+  }
+  return [...grouped.entries()].map(([speakerId, speakerSpans]) => {
+    const intervals = speakerSpans
+      .map((span) => ({
+        startMs: Math.max(timing.startMs, span.startMs),
+        endMs: Math.min(timing.endMs, span.endMs),
+      }))
+      .sort((left, right) => left.startMs - right.startMs);
+    const overlapMs = unionDuration(intervals);
+    const confidenceEvidence = speakerSpans
+      .filter((span) => typeof span.confidence === "number")
+      .map((span) => ({
+        value: span.confidence as number,
+        weight: Math.max(1, Math.min(timing.endMs, span.endMs) - Math.max(timing.startMs, span.startMs)),
+      }));
+    const confidenceWeight = confidenceEvidence.reduce(
+      (total, item) => total + item.weight,
+      0,
+    );
+    return {
+      speakerId,
+      overlapMs,
+      ...(confidenceWeight > 0
+        ? {
+            confidence: confidenceEvidence.reduce(
+              (total, item) => total + item.value * item.weight,
+              0,
+            ) / confidenceWeight,
+          }
+        : {}),
+      overlap: speakerSpans.some((span) => span.overlap === true),
+    };
+  });
+}
+
+function unionDuration(intervals: Array<{ startMs: number; endMs: number }>) {
+  let total = 0;
+  let currentStart: number | null = null;
+  let currentEnd = 0;
+  for (const interval of intervals) {
+    if (currentStart === null) {
+      currentStart = interval.startMs;
+      currentEnd = interval.endMs;
+    } else if (interval.startMs <= currentEnd) {
+      currentEnd = Math.max(currentEnd, interval.endMs);
+    } else {
+      total += currentEnd - currentStart;
+      currentStart = interval.startMs;
+      currentEnd = interval.endMs;
+    }
+  }
+  return currentStart === null ? 0 : total + currentEnd - currentStart;
 }
 
 function overlapMs(

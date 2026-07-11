@@ -11,9 +11,14 @@ def config() -> SpeakerConfig:
         provider="mock",
         model_id="mock-speaker",
         api_key=None,
-        inference_interval_ms=2240,
-        stabilization_ms=800,
-        max_context_ms=120000,
+        chunk_len=6,
+        chunk_left_context=1,
+        chunk_right_context=7,
+        fifo_len=188,
+        spkcache_update_period=144,
+        spkcache_len=188,
+        onset=0.5,
+        offset=0.5,
     )
 
 
@@ -41,4 +46,5 @@ def test_mock_contract_emits_timed_anonymous_speaker() -> None:
         "endMs": 1320,
         "confidence": 0.95,
         "overlap": False,
+        "final": True,
     }]

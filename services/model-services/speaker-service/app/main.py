@@ -4,6 +4,7 @@ from app.config import SpeakerConfig, load_config
 from app.mock_engine import MockSpeakerEngine
 from app.routes import create_router
 from app.sortformer_shadow_engine import SortformerShadowEngine
+from app.sortformer_streaming_runtime import StreamingProfile
 
 
 def create_app(config: SpeakerConfig | None = None) -> FastAPI:
@@ -18,9 +19,16 @@ def create_engine(config: SpeakerConfig):
     if config.provider == "sortformer_shadow":
         return SortformerShadowEngine(
             model_id=config.model_id,
-            inference_interval_ms=config.inference_interval_ms,
-            stabilization_ms=config.stabilization_ms,
-            max_context_ms=config.max_context_ms,
+            profile=StreamingProfile(
+                chunk_len=config.chunk_len,
+                chunk_left_context=config.chunk_left_context,
+                chunk_right_context=config.chunk_right_context,
+                fifo_len=config.fifo_len,
+                spkcache_update_period=config.spkcache_update_period,
+                spkcache_len=config.spkcache_len,
+            ),
+            onset=config.onset,
+            offset=config.offset,
         )
     return MockSpeakerEngine()
 

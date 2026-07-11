@@ -11,9 +11,14 @@ class SpeakerConfig:
     provider: SpeakerProvider
     model_id: str
     api_key: str | None
-    inference_interval_ms: int
-    stabilization_ms: int
-    max_context_ms: int
+    chunk_len: int
+    chunk_left_context: int
+    chunk_right_context: int
+    fifo_len: int
+    spkcache_update_period: int
+    spkcache_len: int
+    onset: float
+    offset: float
 
 
 def load_config() -> SpeakerConfig:
@@ -27,7 +32,12 @@ def load_config() -> SpeakerConfig:
             "nvidia/diar_streaming_sortformer_4spk-v2.1",
         ),
         api_key=os.getenv("SPEAKER_SERVICE_API_KEY") or None,
-        inference_interval_ms=int(os.getenv("SPEAKER_INFERENCE_INTERVAL_MS", "2240")),
-        stabilization_ms=int(os.getenv("SPEAKER_STABILIZATION_MS", "800")),
-        max_context_ms=int(os.getenv("SPEAKER_MAX_CONTEXT_MS", "120000")),
+        chunk_len=int(os.getenv("SPEAKER_CHUNK_LEN", "6")),
+        chunk_left_context=int(os.getenv("SPEAKER_CHUNK_LEFT_CONTEXT", "1")),
+        chunk_right_context=int(os.getenv("SPEAKER_CHUNK_RIGHT_CONTEXT", "7")),
+        fifo_len=int(os.getenv("SPEAKER_FIFO_LEN", "188")),
+        spkcache_update_period=int(os.getenv("SPEAKER_CACHE_UPDATE_PERIOD", "144")),
+        spkcache_len=int(os.getenv("SPEAKER_CACHE_LEN", "188")),
+        onset=float(os.getenv("SPEAKER_ONSET", "0.5")),
+        offset=float(os.getenv("SPEAKER_OFFSET", "0.5")),
     )

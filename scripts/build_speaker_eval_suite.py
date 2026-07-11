@@ -34,7 +34,8 @@ def main() -> None:
     input_dir = Path(args.input_dir)
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
-    clips = [load_clip(input_dir / f"speaker_{index}.wav", index) for index in range(1, 5)]
+    clips = [load_clips(input_dir, index) for index in range(1, 5)]
+    require_clip_count(clips)
     cases = [
         build_two_person(clips[:2]),
         build_fast_switch(clips[:2]),
@@ -42,7 +43,7 @@ def main() -> None:
         build_four_person(clips),
         build_long(clips, max(1, args.long_minutes) * 60_000),
     ]
-    manifest = {"schemaVersion": 1, "sampleRate": SAMPLE_RATE, "cases": []}
+    manifest = {"schemaVersion": 2, "sampleRate": SAMPLE_RATE, "cases": []}
     for case_id, events in cases:
         audio_path = output_dir / f"{case_id}.wav"
         duration_ms = render(audio_path, events)
@@ -50,6 +51,7 @@ def main() -> None:
             "id": case_id,
             "audio": audio_path.name,
             "durationMs": duration_ms,
+            "purpose": "stability_only" if case_id == "long_30m" else "quality",
             "reference": [
                 {
                     "speakerId": event.clip.speaker_id,
@@ -64,6 +66,17 @@ def main() -> None:
     print(manifest_path)
 
 
+def load_clips(input_dir: Path, speaker_index: int) -> list[Clip]:
+    paths = sorted(input_dir.glob(f"speaker_{speaker_index}_*.wav"))
+    paths.extend(sorted((input_dir / f"speaker_{speaker_index}").glob("*.wav")))
+    if not paths:
+        raise ValueError(
+            f"speaker_{speaker_index} requires multiple unique wav files; "
+            f"use speaker_{speaker_index}_01.wav or speaker_{speaker_index}/*.wav",
+        )
+    return [load_clip(path, speaker_index) for path in paths]
+
+
 def load_clip(path: Path, speaker_index: int) -> Clip:
     with wave.open(str(path), "rb") as audio:
         if audio.getnchannels() != 1 or audio.getsampwidth() != 2:
@@ -74,9 +87,19 @@ def load_clip(path: Path, speaker_index: int) -> Clip:
     if sys.byteorder != "little":
         samples.byteswap()
     samples = trim_silence(samples)
-    if len(samples) < SAMPLE_RATE * 3:
-        raise ValueError(f"{path} must contain at least three seconds of speech")
+    if len(samples) < SAMPLE_RATE:
+        raise ValueError(f"{path} must contain at least one second of speech")
     return Clip(speaker_id=f"speaker_{speaker_index}", samples=samples)
+
+
+def require_clip_count(clips: list[list[Clip]]) -> None:
+    minimums = [10, 10, 3, 3]
+    for index, (speaker_clips, minimum) in enumerate(zip(clips, minimums), start=1):
+        if len(speaker_clips) < minimum:
+            raise ValueError(
+                f"speaker_{index} requires at least {minimum} unique clips; "
+                f"found {len(speaker_clips)}",
+            )
 
 
 def trim_silence(samples: array) -> array:
@@ -94,51 +117,70 @@ def trim_silence(samples: array) -> array:
     return samples[first:last]
 
 
-def build_two_person(clips: list[Clip]):
+def build_two_person(clips: list[list[Clip]]):
     events = []
     cursor = 400
     for index in range(8):
-        clip = clips[index % 2]
+        speaker = index % 2
+        clip = clips[speaker][index // 2]
         duration = min(4200, duration_ms(clip.samples))
         events.append(Event(clip, cursor, duration))
         cursor += duration + 450
     return "two_person_turns", events
 
 
-def build_fast_switch(clips: list[Clip]):
+def build_fast_switch(clips: list[list[Clip]]):
     events = []
     cursor = 300
     for index in range(20):
-        events.append(Event(clips[index % 2], cursor, 1200))
-        cursor += 1320
+        speaker = index % 2
+        clip = clips[speaker][index // 2]
+        duration = min(1200, duration_ms(clip.samples))
+        events.append(Event(clip, cursor, duration))
+        cursor += duration + 120
     return "fast_switch", events
 
 
-def build_overlap(clips: list[Clip]):
+def build_overlap(clips: list[list[Clip]]):
+    first = clips[0][0]
+    second = clips[1][0]
+    third = clips[0][1]
+    fourth = clips[1][1]
+    first_duration = min(5000, duration_ms(first.samples))
+    second_duration = min(5000, duration_ms(second.samples))
+    third_duration = min(4200, duration_ms(third.samples))
+    fourth_duration = min(4800, duration_ms(fourth.samples))
     return "overlap", [
-        Event(clips[0], 500, 5000),
-        Event(clips[1], 2800, 5000),
-        Event(clips[0], 8500, 4200),
-        Event(clips[1], 10_300, 4800),
+        Event(first, 500, first_duration),
+        Event(second, 500 + first_duration // 2, second_duration),
+        Event(third, 8500, third_duration),
+        Event(fourth, 8500 + third_duration // 2, fourth_duration),
     ]
 
 
-def build_four_person(clips: list[Clip]):
+def build_four_person(clips: list[list[Clip]]):
     events = []
     cursor = 300
     for index in range(12):
-        events.append(Event(clips[index % 4], cursor, 3000))
-        cursor += 3300
+        speaker = index % 4
+        clip = clips[speaker][index // 4]
+        duration = min(3000, duration_ms(clip.samples))
+        events.append(Event(clip, cursor, duration))
+        cursor += duration + 300
     return "four_person", events
 
 
-def build_long(clips: list[Clip], target_ms: int):
+def build_long(clips: list[list[Clip]], target_ms: int):
     events = []
     cursor = 500
     index = 0
     while cursor + 4200 < target_ms:
-        events.append(Event(clips[index % 4], cursor, 3800))
-        cursor += 4200
+        speaker = index % 4
+        speaker_clips = clips[speaker]
+        clip = speaker_clips[(index // 4) % len(speaker_clips)]
+        duration = min(3800, duration_ms(clip.samples))
+        events.append(Event(clip, cursor, duration))
+        cursor += duration + 400
         index += 1
     return "long_30m", events
 
@@ -149,7 +191,7 @@ def render(path: Path, events: list[Event]) -> int:
     for event in events:
         start = event.start_ms * SAMPLE_RATE // 1000
         length = event.duration_ms * SAMPLE_RATE // 1000
-        source = repeated(event.clip.samples, length)
+        source = event.clip.samples[:length]
         for offset, value in enumerate(source):
             mixed = output[start + offset] + value
             output[start + offset] = max(-32768, min(32767, mixed))
@@ -162,13 +204,6 @@ def render(path: Path, events: list[Event]) -> int:
         audio.setframerate(SAMPLE_RATE)
         audio.writeframes(encoded.tobytes())
     return end_ms
-
-
-def repeated(samples: array, length: int) -> array:
-    result = array("h")
-    while len(result) < length:
-        result.extend(samples[:length - len(result)])
-    return result
 
 
 def duration_ms(samples: array) -> int:

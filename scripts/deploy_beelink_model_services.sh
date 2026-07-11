@@ -42,7 +42,7 @@ TRANSLATION_SERVICE_API_KEY="${TRANSLATION_SERVICE_API_KEY:-local-translation-se
 TTS_SERVICE_API_KEY="${TTS_SERVICE_API_KEY:-local-tts-service-api-key}"
 SPEAKER_SERVICE_API_KEY="${SPEAKER_SERVICE_API_KEY:-local-speaker-service-api-key}"
 SPEAKER_MODEL_PROVIDER="${SPEAKER_MODEL_PROVIDER:-sortformer_shadow}"
-SPEAKER_MODEL_ID="${SPEAKER_MODEL_ID:-nvidia/diar_streaming_sortformer_4spk-v2.1}"
+SPEAKER_MODEL_ID="${SPEAKER_MODEL_ID:-$REMOTE_ROOT/models/sortformer/diar_streaming_sortformer_4spk-v2.1.nemo}"
 
 ASR_QWEN3_CONTEXT="${ASR_QWEN3_CONTEXT:-}"
 ASR_QWEN3_ENGLISH_CONTEXT="${ASR_QWEN3_ENGLISH_CONTEXT:-}"
@@ -259,13 +259,22 @@ if [ "$SPEAKER_SERVICE_ENABLED" = "true" ]; then
     echo "Install services/model-services/speaker-service with the sortformer extra before enabling it." >&2
     exit 1
   fi
+  if [ "$SPEAKER_MODEL_PROVIDER" = "sortformer_shadow" ] && [ ! -f "$SPEAKER_MODEL_ID" ]; then
+    echo "Pinned speaker model is missing: $SPEAKER_MODEL_ID" >&2
+    exit 1
+  fi
   write_env "$SPEAKER_SERVICE_DIR/.env" \
     "SPEAKER_MODEL_PROVIDER=$SPEAKER_MODEL_PROVIDER" \
     "SPEAKER_MODEL_ID=$SPEAKER_MODEL_ID" \
     "SPEAKER_SERVICE_API_KEY=$speaker_key" \
-    "SPEAKER_INFERENCE_INTERVAL_MS=2240" \
-    "SPEAKER_STABILIZATION_MS=800" \
-    "SPEAKER_MAX_CONTEXT_MS=120000"
+    "SPEAKER_CHUNK_LEN=6" \
+    "SPEAKER_CHUNK_LEFT_CONTEXT=1" \
+    "SPEAKER_CHUNK_RIGHT_CONTEXT=7" \
+    "SPEAKER_FIFO_LEN=188" \
+    "SPEAKER_CACHE_UPDATE_PERIOD=144" \
+    "SPEAKER_CACHE_LEN=188" \
+    "SPEAKER_ONSET=0.5" \
+    "SPEAKER_OFFSET=0.5"
 fi
 
 start_service asr-service "$ASR_SERVICE_DIR" "$ASR_PORT"

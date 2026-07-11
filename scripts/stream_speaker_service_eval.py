@@ -38,7 +38,8 @@ def main() -> None:
         },
         expect_json=False,
     )
-    spans = []
+    spans_by_key = {}
+    first_evidence_audio_ms = None
     try:
         with wave.open(args.audio, "rb") as audio:
             if audio.getnchannels() != 1 or audio.getsampwidth() != 2:
@@ -62,7 +63,18 @@ def main() -> None:
                     "sampleRate": sample_rate,
                     "data": base64.b64encode(pcm).decode("ascii"),
                 })
-                spans.extend(response.get("spans", []))
+                if response.get("spans") and first_evidence_audio_ms is None:
+                    first_evidence_audio_ms = timestamp_ms + (
+                        len(pcm) * 1000 // (sample_rate * 2)
+                    )
+                observed_audio_ms = timestamp_ms + (
+                    len(pcm) * 1000 // (sample_rate * 2)
+                )
+                merge_spans(
+                    spans_by_key,
+                    response.get("spans", []),
+                    observed_audio_ms,
+                )
                 timestamp_ms += len(pcm) * 1000 // (sample_rate * 2)
                 if args.realtime:
                     target_at = started_at + timestamp_ms / 1000
@@ -72,7 +84,7 @@ def main() -> None:
             f"/speaker/sessions/{session_id}/flush",
             None,
         )
-        spans.extend(flushed.get("spans", []))
+        merge_spans(spans_by_key, flushed.get("spans", []), timestamp_ms)
     finally:
         request_json(
             args,
@@ -81,19 +93,35 @@ def main() -> None:
             method="DELETE",
             expect_json=False,
         )
+    spans = sorted(
+        spans_by_key.values(),
+        key=lambda span: (span["startMs"], span["speakerId"]),
+    )
     payload = {
         "sessionId": session_id,
         "audio": str(Path(args.audio).resolve()),
         "durationMs": timestamp_ms,
+        "firstEvidenceAudioMs": first_evidence_audio_ms,
         "predicted": spans,
     }
     Path(args.output).write_text(json.dumps(payload, indent=2) + "\n")
     print(json.dumps({
         "sessionId": session_id,
         "durationMs": timestamp_ms,
+        "firstEvidenceAudioMs": first_evidence_audio_ms,
         "segments": len(spans),
         "speakers": sorted({span["speakerId"] for span in spans}),
     }))
+
+
+def merge_spans(index, spans, observed_audio_ms: int) -> None:
+    for span in spans:
+        key = (span["speakerId"], span["startMs"])
+        first_observed = index.get(key, {}).get(
+            "firstObservedAudioMs",
+            observed_audio_ms,
+        )
+        index[key] = {**span, "firstObservedAudioMs": first_observed}
 
 
 def request_json(

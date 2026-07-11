@@ -30,6 +30,7 @@ class SpeakerSpan(BaseModel):
     endMs: int = Field(ge=0)
     confidence: float | None = Field(default=None, ge=0, le=1)
     overlap: bool = False
+    final: bool = True
 
 
 class SpeakerSpansResponse(BaseModel):

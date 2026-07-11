@@ -7,6 +7,7 @@ import type {
 import { alignSpeakerSpan } from "../speaker/speaker-segment-aligner.js";
 
 export class SpeakerAwareAsrProvider implements AsrProvider {
+  private static readonly speakerSpanRetentionMs = 120_000;
   private readonly spansBySession = new Map<string, SpeakerSpan[]>();
   private readonly enabledSessions = new Set<string>();
 
@@ -72,12 +73,28 @@ export class SpeakerAwareAsrProvider implements AsrProvider {
     transcript: TranscriptResult | null,
     nextSpans: SpeakerSpan[],
   ) {
-    if (!transcript) return null;
-    const spans = [...(this.spansBySession.get(sessionId) ?? []), ...nextSpans]
-      .slice(-200);
+    const spans = this.retainRecentSpans(sessionId, nextSpans);
     this.spansBySession.set(sessionId, spans);
+    if (!transcript) return null;
     const alignment = alignSpeakerSpan(transcript.timing, spans);
     return alignment ? { ...transcript, ...alignment } : transcript;
+  }
+
+  private retainRecentSpans(sessionId: string, nextSpans: SpeakerSpan[]) {
+    const indexed = new Map<string, SpeakerSpan>();
+    for (const span of [
+      ...(this.spansBySession.get(sessionId) ?? []),
+      ...nextSpans,
+    ]) {
+      indexed.set(`${span.speakerId}:${span.startMs}`, span);
+    }
+    const spans = [...indexed.values()];
+    const newestEndMs = spans.reduce(
+      (latest, span) => Math.max(latest, span.endMs),
+      0,
+    );
+    const cutoffMs = newestEndMs - SpeakerAwareAsrProvider.speakerSpanRetentionMs;
+    return spans.filter((span) => span.endMs >= cutoffMs);
   }
 
   private async safePush(frame: AudioFrame) {

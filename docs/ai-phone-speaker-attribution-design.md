@@ -1,6 +1,6 @@
 # ai phone 说话人归属技术设计
 
-版本：v1.3
+版本：v1.4
 日期：2026-07-11
 
 ## 1. 目标与边界
@@ -111,7 +111,11 @@ Call Link/PSTN 独立音轨
   高延迟参数、非 stateful shadow 实现和重复波形语料污染，不能作为模型淘汰依据。
 - 官方 1.04 秒低延迟配置在每轮内容不同、0.48 至 1.10 秒自然短句上取得
   14.96% DER、0 Confusion；模型具备短轮次分离能力。
-- 因原生 stateful streaming 和有效语料门禁尚未完成，Gateway Speaker Provider
+- 原生 stateful low-latency streaming 已在独立 8023 candidate 服务实现：每会话持久化 AOSC/FIFO，使用官方 6/1/7 低延迟 profile，并支持 24 kHz 连续重采样。
+- 自然短句 24 kHz HTTP 回放得到 raw DER 14.49%、250ms collar DER 0、Confusion 0；speaker evidence latency P95 为 1.12 秒。
+- 30 分钟加速与真实墙钟状态测试均得到 raw DER 15.33%、Confusion 0、speaker 数 2；真实墙钟为 1,807.34 秒，服务 PID 未变化。该循环语料只作为稳定性证据，不作为自然对话质量证据。
+- stateful v2 已替换 Beelink 8022 旧服务，模型、runtime、工具和结果均位于 `/data/models/translation-model-eval`；Gateway 仍为 `off`。
+- 真人录音门禁尚未完成，因此 Gateway Speaker Provider
   必须保持关闭；iPhone
   双人、抢话、重叠、四人、历史重命名和纪要导出验收尚未开始。
 - 完整证据见 `docs/poc/sortformer-speaker-shadow-evaluation-report.md`。
@@ -192,6 +196,7 @@ interface SpeakerSpan {
   endMs: number;
   confidence?: number;
   overlap?: boolean;
+  final?: boolean;
 }
 ```
 
@@ -202,8 +207,9 @@ Provider 接口与具体模型隔离。`streaming_sortformer` 只是第一候选
 - App 音频帧必须携带 session 内单调递增的 `timestampMs` 和 `sequence`。
 - ASR 结果增加 `startMs/endMs`；模型不返回时由 Gateway 使用输入批次边界估算，并标记 `timingSource=estimated`。
 - diarization 输出使用同一个 session 时间轴。
-- Aligner 选择与 ASR 区间重叠时长最大的 speaker；重叠比例低于门槛时返回 `unknown`。
+- Aligner 按 speaker 聚合同一 ASR 区间内的所有碎片，先合并重复时间区间，再选择累计覆盖最大的 speaker；重叠比例低于门槛时返回 `unknown`。
 - speaker 结果最多等待 300ms，超过后先发送匿名 transcript；迟到结果使用 `speaker.updated` 修正，不重新执行翻译。
+- streaming provider 在说话持续期间返回 `final=false` 临时 span，闭合或 flush 后用相同 `speakerId + startMs` 返回最终 span；Gateway 采用幂等替换，不能重复累计。
 
 ### 10.5 三种运行路径
 
@@ -237,6 +243,8 @@ audio batch
 - ASR/翻译是主链路；diarization 是可降级旁路。
 - speaker 队列满时丢弃最旧的未对齐 span，并记录 `speaker_span_dropped`，不能丢 ASR final。
 - 每个 session 独立维护 speaker cache；重连可在 45 秒 grace 内恢复匿名 speaker 映射。
+- Sortformer 每个 session 持有独立 AOSC/FIFO state；模型调用可串行，但不得通过重复 `diarize()` 重置状态。
+- 手机 24 kHz PCM 必须以有状态 resampler 连续转换为模型 16 kHz 输入，禁止逐帧独立重采样。
 - Provider 不健康时 session 继续运行，speaker source 变为 `unknown`，历史和结算不受影响。
 - Call Link 的 participant track 角色不能被 diarization 或 voiceprint 覆盖。
 

@@ -14,6 +14,7 @@ export interface SpeakerSpan {
   endMs: number;
   confidence?: number;
   overlap?: boolean;
+  final?: boolean;
 }
 
 export interface SpeakerAttributionProvider {

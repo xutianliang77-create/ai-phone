@@ -1,7 +1,7 @@
 # Beelink Sortformer 说话人分离 Shadow 评测报告
 
 日期：2026-07-11
-结论：**旧门禁结果无效，Gateway 继续关闭并等待正确实现重测**
+结论：**stateful v2 短语料、加速和真实墙钟稳定性门禁通过；Gateway 继续关闭，等待真人多人门禁**
 
 ## 1. 运行环境
 
@@ -13,7 +13,7 @@
 - 模型：`nvidia/diar_streaming_sortformer_4spk-v2.1`
 - 本地模型：`/data/models/translation-model-eval/models/sortformer/diar_streaming_sortformer_4spk-v2.1.nemo`
 - 模型 SHA-256：`8abd32832159c6ac1148c926b7276f35ba34582c444e559dce1f1253fea42ef8`
-- Shadow 服务：`127.0.0.1:8022`，与 ASR、翻译和 TTS runtime 隔离
+- Shadow 服务：`0.0.0.0:8022`，与 ASR、翻译和 TTS runtime 隔离
 
 ## 2. 门禁
 
@@ -89,3 +89,48 @@ Gateway 的 `SPEAKER_PROVIDER` 必须保持 `off`；独立 shadow 服务可继�
 - 四人稳定标签验收
 - 历史记录说话人重命名验收
 - 带说话人的会议纪要导出验收
+
+## 6. Stateful low-latency v2 复测
+
+已完成的实现修正：
+
+- 每个 session 持久化 NeMo AOSC/FIFO streaming state，不再重复调用会重置状态的 `diarize()`。
+- 采用官方低延迟 profile：`chunk=6`、`left=1`、`right=7`、`fifo=188`、`update=144`、`cache=188`。
+- 手机 24 kHz PCM 使用连续 soxr stream 转成 16 kHz；16 kHz 和 24 kHz 输出边界完全一致。
+- 持续说话时返回 `final=false` 临时 span，闭合或 flush 后按相同 key 替换为最终 span。
+- Gateway 即使 ASR 当前返回空也保存 speaker span；对齐改为按 speaker 聚合并合并重复时间区间。
+
+候选测试完成后已将最终实现部署到 `0.0.0.0:8022`；Gateway 仍为 `off`。
+
+| 项目 | 结果 |
+| --- | ---: |
+| 自然短句 24 kHz raw DER | 14.49% |
+| 自然短句 250ms collar DER | 0.00% |
+| 自然短句 Confusion | 0.00 秒 |
+| 首个临时 speaker evidence | 1.12 秒音频 |
+| speaker evidence latency P95 | 1.12 秒 |
+| 30 分钟加速 raw DER | 15.33% |
+| 30 分钟加速 250ms collar DER | 0.00% |
+| 30 分钟加速 Confusion | 0.00 秒 |
+| 30 分钟稳定 speaker 数 | 2 |
+| 30 分钟加速处理墙钟 | 37.79 秒 |
+| 30 分钟实时处理墙钟 | 1,807.34 秒 |
+| 30 分钟实时 HTTP 5xx | 0 |
+| candidate 服务 PID | 全程未变化 |
+
+自然短句的 raw DER 全部来自模型把 120ms 人工静音连接到相邻 speech span；
+250ms collar 后错误为 0，且没有 speaker confusion。30 分钟输入由自然短句集循环构成，
+只用于验证状态、标签和进程稳定性，不能替代真人中文、中英混说、噪声、重叠和四人质量门禁。
+
+正式启用前剩余：
+
+1. 使用真人双人、抢话、重叠和四人 RTTM 录音运行相同 pyannote 门禁。
+2. 通过后仅在测试 Gateway 开启 `SPEAKER_PROVIDER=http`。
+3. 最后执行 iPhone 字幕、历史重命名、纪要和导出验收。
+
+额外集成结果：
+
+- 空会话先 flush 后开始送帧，不发生时间轴偏移。
+- `发送 -> flush -> 60 秒时间戳跳变 -> 继续发送` 正常，恢复片段从 60000ms 开始。
+- 两个 session 交错送入同一模型时均输出 7 个相同边界片段，AOSC/FIFO 状态没有串会话。
+- Beelink 持久化目录统一为 `/data/models/translation-model-eval`；评测工具位于其 `tools/` 子目录。

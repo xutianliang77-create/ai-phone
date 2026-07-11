@@ -136,7 +136,7 @@ export function loadEnv(): RealtimeEnv {
     asrHttpTimeoutMs: Number(env.ASR_HTTP_TIMEOUT_MS ?? 10_000),
     speakerHttpBaseUrl: env.SPEAKER_HTTP_BASE_URL,
     speakerHttpApiKey: env.SPEAKER_HTTP_API_KEY,
-    speakerHttpTimeoutMs: Number(env.SPEAKER_HTTP_TIMEOUT_MS ?? 5_000),
+    speakerHttpTimeoutMs: Number(env.SPEAKER_HTTP_TIMEOUT_MS ?? 300),
     ttsHttpEndpoint: env.TTS_HTTP_ENDPOINT,
     ttsHttpApiKey: env.TTS_HTTP_API_KEY,
     ttsHttpTimeoutMs: Number(env.TTS_HTTP_TIMEOUT_MS ?? 30_000),
