@@ -1,0 +1,180 @@
+{
+  "schemaVersion": 1,
+  "status": "selected",
+  "decidedAt": "2026-07-04T07:58:30Z",
+  "decisionScope": "domestic MVP product defaults; Hy-MT2 is the server-side translation main route",
+  "asr": {
+    "default": {
+      "provider": "ios_coreml",
+      "model": "nemotron-3.5-asr-streaming-0.6b",
+      "mode": "local_on_device",
+      "reason": "iPhone CoreML path is verified in app and passes the default smoke fixture for Chinese, English and code-switching."
+    },
+    "gray": {
+      "provider": "fireredasr2_aed",
+      "model": "fireredasr2-aed",
+      "mode": "cross_platform_call",
+      "reason": "Beelink smoke output was accurate with 663 ms latency; keep runtime/checkpoint compatibility patch explicit before wider rollout."
+    },
+    "fallback": {
+      "provider": "qwen3_asr",
+      "model": "qwen3-asr-0.6b",
+      "mode": "offline_or_non_realtime",
+      "reason": "Accurate on smoke audio but Transformers path measured 7259 ms, so it is not the realtime default until vLLM or streaming backend is proven."
+    }
+  },
+  "translation": {
+    "default": {
+      "provider": "hymt2_self_hosted",
+      "model": "tencent/Hy-MT2-1.8B",
+      "mode": "server_self_hosted_main",
+      "reason": "Beelink product-fit evaluation passed 12/12 cases with P50 152 ms and P95 303 ms, so use Hy-MT2 as the domestic server-side translation main model. The 3424 MB max torch VRAM result is retained only as capacity-planning evidence, not a release gate."
+    },
+    "gray": {
+      "provider": "qwen_live",
+      "model": "qwen-plus",
+      "mode": "commercial_quality_fallback",
+      "reason": "Keep Qwen as a quality fallback for difficult context, summaries and AI Agent text tasks, but not as the main release blocker."
+    },
+    "fallback": {
+      "provider": "lmt_candidate",
+      "model": "lmt-60-0.6b",
+      "mode": "self_hosted_low_cost_fallback",
+      "reason": "LMT-60-0.6B stays as a low-cost fallback only after segmentation and de-duplication, because mixed-language input is weaker than Hy-MT2."
+    }
+  },
+  "tts": {
+    "default": {
+      "provider": "ios_system_tts",
+      "model": "ios-system-tts",
+      "mode": "local_on_device",
+      "reason": "System TTS bridge is verified and is safest for MVP on-device playback."
+    },
+    "gray": {
+      "provider": "voxcpm2",
+      "model": "VoxCPM2",
+      "mode": "cross_platform_call",
+      "reason": "Beelink product-fit testing shows audio chunks with 22-32 ms first audio and 0.191-0.193 RTF. Translation Worker now has the VoxCPM2 HTTP TTS identity contract, and the Beelink Tailscale HTTP service passes check:tts-provider. Keep it gated until LiveKit/PSTN playback, concurrency, phone-band, and production HTTPS checks pass."
+    },
+    "fallback": {
+      "provider": "system_tts",
+      "model": "android-system-tts",
+      "mode": "local_on_device",
+      "reason": "Android system TTS remains the practical fallback for cross-platform MVP playback."
+    }
+  },
+  "modes": {
+    "localOnDevice": {
+      "asr": "ios_coreml/nemotron-3.5-asr-streaming-0.6b",
+      "translation": "ios_system_translation",
+      "tts": "ios_system_tts",
+      "releasePolicy": "default MVP route"
+    },
+    "crossPlatformCall": {
+      "asr": "fireredasr2_aed/fireredasr2-aed",
+      "translation": "hymt2_self_hosted/tencent/Hy-MT2-1.8B with qwen_live quality fallback",
+      "tts": "voxcpm2/VoxCPM2 main call TTS contract with system TTS captions fallback; qwen3_tts_candidate remains baseline",
+      "releasePolicy": "gray rollout only; keep VoxCPM2 worker/playback/concurrency/phone-band gates, CosyVoice2 intelligibility/runtime, and FireRed runtime caveats visible"
+    }
+  },
+  "modelEval": {
+    "status": "ready",
+    "fixture": "model-eval/fixtures/cn-en-smoke.json",
+    "requiredGroups": [
+      "zh_meeting",
+      "en_short",
+      "code_switch",
+      "terms_numbers",
+      "tts_phone"
+    ],
+    "comprehensiveFixture": "model-eval/fixtures/cn-en-comprehensive-real.json",
+    "comprehensiveStatus": "not_ready_for_candidate_replacement",
+    "beelinkSummary": ".cache/model-eval/beelink-model-eval-summary.json",
+    "evidence": {
+      "beelinkRemoteRoot": "/data/models/translation-model-eval",
+      "downloadedModels": [
+        "qwen3_asr_0_6b",
+        "fireredasr2_aed",
+        "lmt_60_0_6b",
+        "qwen3_tts_0_6b_customvoice",
+        "cosyvoice2_0_5b",
+        "voxcpm2",
+        "hymt2_1_8b"
+      ],
+      "fireRedAsrLatencyMs": 663,
+      "qwen3AsrLatencyMs": 7259,
+      "qwen3AsrWarmChinesePasses": 2,
+      "qwen3AsrWarmChineseWidebandLatencyMs": 615,
+      "qwen3AsrWarmChinesePhoneLatencyMs": 104,
+      "qwen3TtsNonStreamingLatencyMs": 2347,
+      "qwen3TtsPhoneBandAsrProxyPasses": 3,
+      "qwen3TtsPhoneBandAsrProxyTotal": 3,
+      "lmtTranslationCases": 5,
+      "hyMt2TranslationPasses": 12,
+      "hyMt2TranslationTotal": 12,
+      "hyMt2TranslationP50Ms": 152,
+      "hyMt2TranslationP95Ms": 303,
+      "hyMt2ObservedMaxTorchVramMb": 3424,
+      "cosyVoice2Status": "blocked_pending_intelligibility_fix",
+      "cosyVoice2LoadMs": 6149,
+      "cosyVoice2ZhFirstAudioMs": 1073,
+      "cosyVoice2ZhRtf": 0.286,
+      "cosyVoice2EnFirstAudioMs": 963,
+      "cosyVoice2EnRtf": 0.256,
+      "cosyVoice2IntelligibilityPasses": 0,
+      "cosyVoice2IntelligibilityTotal": 6,
+      "qwen3TtsMeasuredNonStreamingZhReturnedAudioMs": 2334,
+      "qwen3TtsSimulatedStreamingZhReturnedAudioMs": 1926,
+      "qwen3TtsSimulatedStreamingZhDeltaMs": -408,
+      "qwen3TtsSimulatedStreamingEnReturnedAudioMs": 2508,
+      "qwen3TtsSimulatedStreamingEnDeltaMs": -20,
+      "qwen3TtsPublicChunkedAudioStreaming": false,
+      "qwen3TtsStreamingAsrProxyPasses": 2,
+      "qwen3TtsStreamingAsrProxyTotal": 2,
+      "cosyVoice2PromptDiagnosticPasses": 0,
+      "cosyVoice2PromptDiagnosticTotal": 6,
+      "cosyVoice2RuntimeIssue": "Current venv cannot use the official torchaudio/torchcodec/FFmpeg path; prompt/reference/text_frontend/stream variants all failed ASR-proxy intelligibility.",
+      "voxCpm2FirstAudioMsMin": 22,
+      "voxCpm2FirstAudioMsMax": 32,
+      "voxCpm2RtfMin": 0.191,
+      "voxCpm2RtfMax": 0.193,
+      "voxCpm2AsrProxyPasses": 6,
+      "voxCpm2AsrProxyTotal": 9,
+      "voxCpm2Status": "beelink_tailscale_http_service_ready_pending_playback_and_phone_band_acceptance"
+    }
+  },
+  "modelRouting": {
+    "file": "release/domestic/model-routing.json",
+    "activeProfile": "domestic_server_qwen3_hymt2_voxcpm2",
+    "switchCommand": "npm run render:model-routing-env -- --profile domestic_server_qwen3_hymt2_voxcpm2"
+  },
+  "risks": {
+    "licensingReviewed": true,
+    "costReviewed": true,
+    "deploymentReviewed": true,
+    "notes": [
+      "Hy-MT2-1.8B, Qwen3-ASR, FireRedASR2-AED, LMT-60-0.6B, Qwen3-TTS and CosyVoice2 model cards list Apache-2.0 licenses as of this review.",
+      "Default MVP route minimizes server GPU cost by keeping ASR/TTS on device where possible.",
+      "Server-side call translation now uses Hy-MT2-1.8B as the main self-hosted model and requires Beelink or equivalent GPU capacity plus real PSTN/VoIP media integration before paid release.",
+      "Server-side TTS is not fully production-ready yet: VoxCPM2 now has a Beelink Tailscale HTTP service and Worker provider identity checks, but still needs LiveKit/PSTN playback, concurrency, phone-band, production HTTPS, and text-normalization gates before release."
+    ]
+  },
+  "deferredCandidates": [
+    {
+      "provider": "cosyvoice2_candidate",
+      "model": "cosyvoice2-0.5b",
+      "reason": "Official runtime generated 24 kHz streaming audio with good first-audio latency, but baseline ASR-proxy intelligibility passed 0/6 and prompt/reference/runtime diagnostic also passed 0/6. Build an isolated official runtime environment before product use."
+    }
+  ],
+  "sourceUrls": [
+    "https://huggingface.co/Qwen/Qwen3-ASR-0.6B",
+    "https://huggingface.co/FireRedTeam/FireRedASR2-AED",
+    "https://huggingface.co/tencent/Hy-MT2-1.8B",
+    "https://huggingface.co/NiuTrans/LMT-60-0.6B",
+    "https://huggingface.co/Qwen/Qwen3-TTS-12Hz-0.6B-CustomVoice",
+    "https://huggingface.co/FunAudioLLM/CosyVoice2-0.5B",
+    "https://github.com/FunAudioLLM/CosyVoice",
+    "https://qwenlm-qwen3-tts.mintlify.app/guides/streaming",
+    "https://docs.vllm.ai/projects/vllm-omni/en/latest/serving/speech_api/"
+  ]
+}

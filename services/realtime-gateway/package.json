@@ -1,0 +1,21 @@
+{
+  "name": "@translation/realtime-gateway",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "dist/main.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsx src/main.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run src"
+  },
+  "dependencies": {
+    "@translation/contracts": "file:../../packages/contracts",
+    "@translation/llm": "file:../../packages/llm",
+    "pino": "^10.1.0",
+    "ws": "^8.18.3"
+  },
+  "devDependencies": {
+    "@types/ws": "^8.18.1"
+  }
+}

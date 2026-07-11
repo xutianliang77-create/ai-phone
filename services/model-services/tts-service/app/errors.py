@@ -1,0 +1,2 @@
+class TtsUnavailableError(RuntimeError):
+    pass

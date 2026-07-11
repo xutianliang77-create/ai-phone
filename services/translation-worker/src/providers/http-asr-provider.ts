@@ -1,0 +1,121 @@
+import type {
+  AudioFormat,
+  CallRoomTranslationLanguage,
+  LanguageCode,
+} from "@translation/contracts";
+import type {
+  CallAsrProvider,
+  CallAudioFrame,
+  CallAudioSpeakerRole,
+  TranscriptSegment,
+} from "../worker/types.js";
+
+export interface HttpAsrProviderOptions {
+  endpoint: string;
+  flushEndpoint?: string;
+  apiKey?: string;
+  timeoutMs: number;
+  fetchFn?: typeof fetch;
+}
+
+interface AsrResponse {
+  segmentId?: string;
+  text?: string;
+  language?: CallRoomTranslationLanguage;
+  confidence?: number;
+}
+
+export class HttpAsrProvider implements CallAsrProvider {
+  private readonly fetchFn: typeof fetch;
+
+  constructor(private readonly options: HttpAsrProviderOptions) {
+    this.fetchFn = options.fetchFn ?? fetch;
+  }
+
+  async createCall(_callId: string) {}
+
+  async transcribe(frame: CallAudioFrame): Promise<TranscriptSegment | null> {
+    const response = await this.fetchWithTimeout(this.options.endpoint, {
+      method: "POST",
+      headers: this.headers(),
+      body: JSON.stringify({
+        sessionId: asrSessionId(frame.sessionId, frame.speakerRole),
+        sequence: frame.sequence,
+        timestampMs: frame.timestampMs,
+        format: frame.format satisfies AudioFormat,
+        sampleRate: frame.sampleRate,
+        data: frame.data,
+        sourceLanguage: "auto" satisfies LanguageCode,
+        targetLanguage: "zh" satisfies CallRoomTranslationLanguage,
+      }),
+    });
+    if (response.status === 204) return null;
+    if (!response.ok) throw new Error(`HTTP ASR returned HTTP ${response.status}`);
+    return parseAsrResponse(await response.json() as AsrResponse, `asr_${frame.sequence}`);
+  }
+
+  async flush(callId: string, speakerRole: CallAudioSpeakerRole) {
+    const response = await this.fetchWithTimeout(
+      this.flushUrl(asrSessionId(callId, speakerRole)),
+      {
+        method: "POST",
+        headers: this.headers(),
+        body: JSON.stringify({
+          sourceLanguage: "auto" satisfies LanguageCode,
+          targetLanguage: "zh" satisfies CallRoomTranslationLanguage,
+        }),
+      },
+    );
+    if (response.status === 204) return null;
+    if (!response.ok) throw new Error(`HTTP ASR flush returned HTTP ${response.status}`);
+    return parseAsrResponse(await response.json() as AsrResponse, "asr_flush");
+  }
+
+  async closeCall(_callId: string) {}
+
+  private async fetchWithTimeout(url: string, init: RequestInit) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), this.options.timeoutMs);
+    try {
+      return await this.fetchFn(url, { ...init, signal: controller.signal });
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  private headers() {
+    return {
+      "content-type": "application/json",
+      ...(this.options.apiKey ? { authorization: `Bearer ${this.options.apiKey}` } : {}),
+    };
+  }
+
+  private flushUrl(sessionId: string) {
+    if (this.options.flushEndpoint) {
+      return this.options.flushEndpoint.replace(":sessionId", encodeURIComponent(sessionId));
+    }
+    const base = this.options.endpoint.replace(/\/asr\/transcribe$/, "");
+    return `${base}/asr/sessions/${encodeURIComponent(sessionId)}/flush`;
+  }
+}
+
+function asrSessionId(callId: string, speakerRole: CallAudioSpeakerRole) {
+  return `${callId}:${speakerRole}`;
+}
+
+function parseAsrResponse(
+  body: AsrResponse,
+  fallbackSegmentId: string,
+): TranscriptSegment | null {
+  const text = body.text?.trim();
+  if (!text) return null;
+  if (body.language !== "zh" && body.language !== "en") {
+    throw new Error("HTTP ASR returned invalid language");
+  }
+  return {
+    segmentId: body.segmentId ?? fallbackSegmentId,
+    text,
+    language: body.language,
+    confidence: body.confidence,
+  };
+}

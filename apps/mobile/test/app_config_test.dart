@@ -1,0 +1,94 @@
+import 'package:flutter_test/flutter_test.dart';
+import 'package:translation_mobile/src/app/app_config.dart';
+import 'package:translation_mobile/src/app/region_edition_config.dart';
+
+void main() {
+  test('normalizes realtime session language config', () {
+    final config = AppConfig(
+      apiBaseUrl: Uri.parse('http://127.0.0.1:3100'),
+      useMockAudio: false,
+      useDeviceAsr: true,
+      sourceLanguage: 'bad-source',
+      targetLanguage: 'EN',
+      deviceAsrProvider: 'coreml_nemotron',
+      deviceAsrLanguage: 'auto',
+      deviceAsrAutoDownloadModel: false,
+      deviceAsrModelChunkMs: 2240,
+      serverOwnedHistory: true,
+    );
+
+    expect(config.sourceLanguage, 'auto');
+    expect(config.targetLanguage, 'en');
+    expect(config.useLocalSessions, isFalse);
+    expect(config.useOnDeviceTranslation, isFalse);
+    expect(config.onDeviceTranslationProvider, 'ios_system');
+    expect(config.onDeviceTranslationRequired, isFalse);
+    expect(config.autoReverseTargetLanguage, isTrue);
+    expect(config.deviceAsrChunkDurationMs, 320);
+    expect(config.deviceAsrEndpointMinSpeechMs, 600);
+    expect(config.deviceAsrEndpointSilenceMs, 900);
+    expect(config.deviceAsrEndpointSpeechThresholdRms, 0.006);
+    expect(config.realtimeMode, 'conversation');
+    expect(config.region.edition, RegionEdition.domestic);
+    expect(config.region.allowedProviders, contains('hymt2_self_hosted'));
+    expect(config.region.allowedProviders, contains('qwen_live'));
+    expect(config.region.callProviderPolicy, 'call_link_only');
+    expect(config.appErrorReportingEnabled, isTrue);
+    expect(config.appVersion, '0.1.0');
+    expect(config.buildNumber, '1');
+  });
+
+  test('accepts Hy-MT language codes for realtime translation', () {
+    final config = AppConfig(
+      apiBaseUrl: Uri.parse('http://127.0.0.1:3100'),
+      useMockAudio: false,
+      useDeviceAsr: true,
+      sourceLanguage: 'ZH-hant',
+      targetLanguage: 'JA',
+      autoReverseTargetLanguage: false,
+      deviceAsrProvider: 'coreml_nemotron',
+      deviceAsrLanguage: 'auto',
+      deviceAsrAutoDownloadModel: false,
+      deviceAsrModelChunkMs: 2240,
+      serverOwnedHistory: true,
+    );
+
+    expect(config.sourceLanguage, 'zh-Hant');
+    expect(config.targetLanguage, 'ja');
+    expect(config.autoReverseTargetLanguage, isFalse);
+  });
+
+  test('supports international edition overrides', () {
+    final config = RegionEditionConfig.fromRaw(
+      edition: 'international',
+      dataRegion: 'ca',
+      allowedProviders: 'openai, gemini',
+      paymentStack: 'apple_iap, stripe',
+    );
+
+    expect(config.edition, RegionEdition.international);
+    expect(config.defaultCountry, 'US');
+    expect(config.dataRegion, 'ca');
+    expect(config.allowedProviders, <String>['openai', 'gemini']);
+    expect(config.paymentStack, <String>['apple_iap', 'stripe']);
+    expect(config.callProviderPolicy, 'pstn_enabled');
+  });
+
+  test('normalizes realtime mode overrides', () {
+    final baseConfig = AppConfig(
+      apiBaseUrl: Uri.parse('http://127.0.0.1:3100'),
+      useMockAudio: false,
+      useDeviceAsr: true,
+      realtimeMode: 'classroom',
+      deviceAsrProvider: 'coreml_nemotron',
+      deviceAsrLanguage: 'auto',
+      deviceAsrAutoDownloadModel: false,
+      deviceAsrModelChunkMs: 2240,
+      serverOwnedHistory: true,
+    );
+
+    expect(baseConfig.realtimeMode, 'classroom');
+    expect(
+        baseConfig.copyWith(realtimeMode: 'bad').realtimeMode, 'conversation');
+  });
+}

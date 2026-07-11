@@ -1,0 +1,7 @@
+# keytool dname: CN=北京乾坤祥云科技有限公司, O=北京乾坤祥云科技有限公司, C=CN
+applicationId=com.yourcompany.realtimeinterpreter
+namespace=com.yourcompany.realtimeinterpreter
+storeFile=/absolute/path/to/domestic-release.jks
+storePassword=replace-with-keystore-password
+keyAlias=replace-with-key-alias
+keyPassword=replace-with-key-password

@@ -1,0 +1,233 @@
+{
+  "schemaVersion": 1,
+  "activeProfile": "domestic_server_qwen3_hymt2_voxcpm2",
+  "profiles": {
+    "domestic_server_qwen3_hymt2_voxcpm2": {
+      "description": "Domestic server-side high-quality route: original Qwen3-ASR-0.6B ASR, Hy-MT2 translation, VoxCPM2 TTS.",
+      "asr": {
+        "provider": "http_qwen3_asr_original",
+        "model": "Qwen3-ASR-0.6B-original-tuned-v3",
+        "contract": "POST /asr/transcribe + POST /asr/sessions/:sessionId/flush"
+      },
+      "translation": {
+        "provider": "hymt2_self_hosted",
+        "model": "tencent/Hy-MT2-1.8B",
+        "contract": "OpenAI-compatible /v1/chat/completions"
+      },
+      "tts": {
+        "provider": "voxcpm2",
+        "model": "VoxCPM2",
+        "contract": "POST /tts/synthesize returns pcm16 chunks"
+      },
+      "llm": {
+        "provider": "openai_compatible",
+        "correctionModel": "qwen/qwen3.5-9b",
+        "reviewModel": "qwen/qwen3.5-9b",
+        "contract": "OpenAI-compatible /v1/chat/completions"
+      },
+      "env": {
+        "gateway": {
+          "REALTIME_PROVIDER": "hymt2_self_hosted",
+          "TRANSLATION_BASE_URL": "http://127.0.0.1:8003/v1",
+          "TRANSLATION_MODEL": "tencent/Hy-MT2-1.8B",
+          "TRANSLATION_API_KEY": "local-translation-service-api-key",
+          "ASR_PROVIDER": "http",
+          "ASR_HTTP_ENDPOINT": "http://127.0.0.1:8021/asr/transcribe",
+          "ASR_HTTP_FLUSH_ENDPOINT": "http://127.0.0.1:8021/asr/sessions/:sessionId/flush",
+          "ASR_HTTP_API_KEY": "local-asr-service-api-key",
+          "LLM_PROVIDER": "openai_compatible",
+          "LLM_BASE_URL": "http://127.0.0.1:1234/v1",
+          "LLM_CORRECTION_MODEL": "qwen/qwen3.5-9b",
+          "LLM_REVIEW_MODEL": "qwen/qwen3.5-9b",
+          "LLM_REFINEMENT_ENABLED": "true",
+          "LLM_REVIEW_ENABLED": "true",
+          "LLM_CORRECTION_TIMEOUT_MS": "1200",
+          "LLM_REVIEW_TIMEOUT_MS": "30000",
+          "LLM_MIN_CONFIDENCE": "0.72"
+        },
+        "api": {
+          "LLM_PROVIDER": "openai_compatible",
+          "LLM_BASE_URL": "http://127.0.0.1:1234/v1",
+          "LLM_CORRECTION_MODEL": "qwen/qwen3.5-9b",
+          "LLM_REVIEW_MODEL": "qwen/qwen3.5-9b",
+          "LLM_REVIEW_ENABLED": "true",
+          "LLM_REFINEMENT_ENABLED": "true"
+        },
+        "translationWorker": {
+          "TRANSLATION_BASE_URL": "http://127.0.0.1:8003/v1",
+          "TRANSLATION_MODEL": "tencent/Hy-MT2-1.8B",
+          "TRANSLATION_API_KEY": "local-translation-service-api-key",
+          "ASR_HTTP_ENDPOINT": "http://127.0.0.1:8021/asr/transcribe",
+          "ASR_HTTP_FLUSH_ENDPOINT": "http://127.0.0.1:8021/asr/sessions/:sessionId/flush",
+          "ASR_HTTP_API_KEY": "local-asr-service-api-key",
+          "TTS_PROVIDER": "voxcpm2",
+          "TTS_MODEL": "VoxCPM2",
+          "TTS_HTTP_ENDPOINT": "http://127.0.0.1:8002/tts/synthesize",
+          "TTS_HTTP_API_KEY": "local-tts-service-api-key"
+        },
+        "asrService": {
+          "ASR_SERVICE_PROVIDER": "qwen3_asr",
+          "ASR_MODEL_VERSION": "Qwen3-ASR-0.6B-original-tuned-v3",
+          "ASR_SERVICE_API_KEY": "local-asr-service-api-key",
+          "ASR_QWEN3_MODEL_DIR": "/data/models/translation-model-eval/models/qwen3_asr_0_6b",
+          "ASR_QWEN3_DTYPE": "bfloat16",
+          "ASR_QWEN3_DEVICE_MAP": "cuda:0",
+          "ASR_QWEN3_MIN_AUDIO_MS": "1800",
+          "ASR_QWEN3_ENDPOINT_SILENCE_MS": "1100",
+          "ASR_QWEN3_MAX_AUDIO_MS": "10000",
+          "ASR_QWEN3_PREROLL_MS": "400",
+          "ASR_QWEN3_CONTEXT": "",
+          "ASR_QWEN3_ENGLISH_CONTEXT": ""
+        },
+        "translationService": {
+          "TRANSLATION_SERVICE_PROVIDER": "hymt2",
+          "TRANSLATION_MODEL_VERSION": "tencent/Hy-MT2-1.8B",
+          "TRANSLATION_SERVICE_API_KEY": "local-translation-service-api-key",
+          "TRANSLATION_HYMT2_MODEL_DIR": "/data/models/translation-model-eval/data/translation-product-fit/models/hymt2_1_8b"
+        },
+        "ttsService": {
+          "TTS_SERVICE_PROVIDER": "voxcpm2",
+          "TTS_MODEL_VERSION": "VoxCPM2",
+          "TTS_SERVICE_API_KEY": "local-tts-service-api-key",
+          "TTS_VOXCPM2_MODEL_DIR": "/data/models/translation-model-eval/data/tts-product-fit/models/openbmb_voxcpm2"
+        }
+      }
+    },
+    "domestic_server_hymt2_voxcpm2": {
+      "description": "Domestic server-side call route: FireRedASR2-AED ASR, Hy-MT2 translation, VoxCPM2 TTS.",
+      "asr": {
+        "provider": "http_fireredasr2_aed",
+        "model": "FireRedASR2-AED",
+        "contract": "POST /asr/transcribe + POST /asr/sessions/:sessionId/flush"
+      },
+      "translation": {
+        "provider": "hymt2_self_hosted",
+        "model": "tencent/Hy-MT2-1.8B",
+        "contract": "OpenAI-compatible /v1/chat/completions"
+      },
+      "tts": {
+        "provider": "voxcpm2",
+        "model": "VoxCPM2",
+        "contract": "POST /tts/synthesize returns pcm16 chunks"
+      },
+      "env": {
+        "gateway": {
+          "REALTIME_PROVIDER": "hymt2_self_hosted",
+          "TRANSLATION_BASE_URL": "http://127.0.0.1:8003/v1",
+          "TRANSLATION_MODEL": "tencent/Hy-MT2-1.8B",
+          "TRANSLATION_API_KEY": "local-translation-service-api-key",
+          "ASR_PROVIDER": "http",
+          "ASR_HTTP_ENDPOINT": "http://127.0.0.1:8001/asr/transcribe",
+          "ASR_HTTP_FLUSH_ENDPOINT": "http://127.0.0.1:8001/asr/sessions/:sessionId/flush",
+          "ASR_HTTP_API_KEY": "local-asr-service-api-key"
+        },
+        "translationWorker": {
+          "TRANSLATION_BASE_URL": "http://127.0.0.1:8003/v1",
+          "TRANSLATION_MODEL": "tencent/Hy-MT2-1.8B",
+          "TRANSLATION_API_KEY": "local-translation-service-api-key",
+          "ASR_HTTP_ENDPOINT": "http://127.0.0.1:8001/asr/transcribe",
+          "ASR_HTTP_FLUSH_ENDPOINT": "http://127.0.0.1:8001/asr/sessions/:sessionId/flush",
+          "ASR_HTTP_API_KEY": "local-asr-service-api-key",
+          "TTS_PROVIDER": "voxcpm2",
+          "TTS_MODEL": "VoxCPM2",
+          "TTS_HTTP_ENDPOINT": "http://127.0.0.1:8002/tts/synthesize",
+          "TTS_HTTP_API_KEY": "local-tts-service-api-key"
+        },
+        "asrService": {
+          "ASR_SERVICE_PROVIDER": "fireredasr2_aed",
+          "ASR_MODEL_VERSION": "FireRedASR2-AED",
+          "ASR_SERVICE_API_KEY": "local-asr-service-api-key",
+          "ASR_FIRERED_MODEL_DIR": "/data/models/translation-model-eval/models/fireredasr2_aed",
+          "ASR_FIRERED_USE_GPU": "true"
+        },
+        "translationService": {
+          "TRANSLATION_SERVICE_PROVIDER": "hymt2",
+          "TRANSLATION_MODEL_VERSION": "tencent/Hy-MT2-1.8B",
+          "TRANSLATION_SERVICE_API_KEY": "local-translation-service-api-key",
+          "TRANSLATION_HYMT2_MODEL_DIR": "/data/models/translation-model-eval/data/translation-product-fit/models/hymt2_1_8b"
+        },
+        "ttsService": {
+          "TTS_SERVICE_PROVIDER": "voxcpm2",
+          "TTS_MODEL_VERSION": "VoxCPM2",
+          "TTS_SERVICE_API_KEY": "local-tts-service-api-key",
+          "TTS_VOXCPM2_MODEL_DIR": "/data/models/translation-model-eval/data/tts-product-fit/models/openbmb_voxcpm2"
+        }
+      }
+    },
+    "domestic_server_sensevoice_fallback": {
+      "description": "Fallback server ASR route using SenseVoiceSmall when FireRedASR2 is unavailable.",
+      "asr": {
+        "provider": "http_sensevoice",
+        "model": "iic/SenseVoiceSmall",
+        "contract": "POST /asr/transcribe + POST /asr/sessions/:sessionId/flush"
+      },
+      "translation": {
+        "provider": "hymt2_self_hosted",
+        "model": "tencent/Hy-MT2-1.8B",
+        "contract": "OpenAI-compatible /v1/chat/completions"
+      },
+      "tts": {
+        "provider": "voxcpm2",
+        "model": "VoxCPM2",
+        "contract": "POST /tts/synthesize"
+      },
+      "env": {
+        "asrService": {
+          "ASR_SERVICE_PROVIDER": "sensevoice",
+          "ASR_MODEL_VERSION": "iic/SenseVoiceSmall",
+          "ASR_SERVICE_API_KEY": "local-asr-service-api-key"
+        }
+      }
+    },
+    "domestic_ios_on_device": {
+      "description": "iOS local MVP route: CoreML ASR, iOS system translation, iOS system TTS.",
+      "asr": {
+        "provider": "ios_coreml",
+        "model": "nemotron-3.5-asr-streaming-0.6b",
+        "contract": "Flutter MethodChannel device ASR"
+      },
+      "translation": {
+        "provider": "ios_system_translation",
+        "model": "iOS Translation framework",
+        "contract": "Flutter MethodChannel device translation"
+      },
+      "tts": {
+        "provider": "ios_system_tts",
+        "model": "AVSpeechSynthesizer",
+        "contract": "Flutter MethodChannel device TTS"
+      },
+      "env": {
+        "mobile": {
+          "USE_DEVICE_ASR": "true",
+          "DEVICE_ASR_PROVIDER": "coreml_nemotron",
+          "ON_DEVICE_TRANSLATION_PROVIDER": "ios_system"
+        }
+      }
+    },
+    "domestic_qwen_quality_fallback": {
+      "description": "Commercial quality fallback for difficult text tasks and AI Agent summaries.",
+      "asr": {
+        "provider": "http",
+        "model": "current-server-asr",
+        "contract": "POST /asr/transcribe"
+      },
+      "translation": {
+        "provider": "qwen_live",
+        "model": "qwen-plus",
+        "contract": "OpenAI-compatible /v1/chat/completions"
+      },
+      "tts": {
+        "provider": "voxcpm2",
+        "model": "VoxCPM2",
+        "contract": "POST /tts/synthesize"
+      },
+      "env": {
+        "gateway": {
+          "REALTIME_PROVIDER": "qwen_live",
+          "QWEN_BASE_URL": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+          "QWEN_MODEL": "qwen-plus"
+        }
+      }
+    }
+  }
+}

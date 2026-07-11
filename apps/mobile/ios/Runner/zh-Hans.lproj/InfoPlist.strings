@@ -1,0 +1,6 @@
+"CFBundleDisplayName" = "ai phone";
+"CFBundleName" = "ai phone";
+"NSLocalNetworkUsageDescription" = "ai phone 需要连接局域网内的实时翻译服务。";
+"NSMicrophoneUsageDescription" = "ai phone 需要使用麦克风识别语音并翻译。";
+"NSCameraUsageDescription" = "拍照翻译需要使用相机拍摄菜单、合同和表格。";
+"NSPhotoLibraryUsageDescription" = "拍照翻译需要读取相册图片以进行 OCR 识别和翻译。";

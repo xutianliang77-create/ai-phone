@@ -1,0 +1,83 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+MOBILE_DIR="$ROOT_DIR/apps/mobile"
+APP_PATH="$MOBILE_DIR/build/ios/iphoneos/Runner.app"
+
+run_device_command() {
+  local attempt
+  for attempt in 1 2 3; do
+    if "$@"; then
+      return 0
+    fi
+    if [[ "$attempt" -lt 3 ]]; then
+      echo "Device connection failed (attempt $attempt/3); retrying..." >&2
+      sleep 3
+    fi
+  done
+  return 1
+}
+
+DEVICE_ID="${DEVICE_ID:-}"
+SERVER_BASE_URL="${SERVER_BASE_URL:-}"
+
+if [[ -z "$DEVICE_ID" ]]; then
+  echo "DEVICE_ID is required." >&2
+  exit 2
+fi
+
+if [[ -z "$SERVER_BASE_URL" ]]; then
+  echo "SERVER_BASE_URL is required and must point to the server-side deployment." >&2
+  exit 2
+fi
+
+case "$SERVER_BASE_URL" in
+  *://localhost*|*://127.0.0.1*|*://0.0.0.0*|*://\[::1\]*)
+    echo "SERVER_BASE_URL must be reachable from the iPhone and cannot be local-only." >&2
+    exit 2
+    ;;
+esac
+
+if ! curl --fail --silent --show-error \
+  --connect-timeout 3 \
+  --max-time 5 \
+  "$SERVER_BASE_URL/health" >/dev/null; then
+  echo "Server health check failed: $SERVER_BASE_URL/health" >&2
+  echo "Refusing to install an App that points to an unavailable server." >&2
+  exit 2
+fi
+
+cd "$MOBILE_DIR"
+
+flutter build ios --profile \
+  --dart-define="API_BASE_URL=$SERVER_BASE_URL" \
+  --dart-define=SERVER_OWNED_HISTORY=true \
+  --dart-define=USE_MOCK_AUDIO=false
+
+if [[ ! -d "$APP_PATH" ]]; then
+  echo "Profile build did not produce $APP_PATH" >&2
+  exit 1
+fi
+
+if find "$APP_PATH" -name 'Runner.debug.dylib' -print -quit | grep -q .; then
+  echo "Refusing to install a Debug Flutter artifact for standalone testing." >&2
+  exit 1
+fi
+
+BUNDLE_ID="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP_PATH/Info.plist")"
+if [[ -z "$BUNDLE_ID" ]]; then
+  echo "Built App has no bundle identifier." >&2
+  exit 1
+fi
+
+run_device_command xcrun devicectl device install app \
+  --device "$DEVICE_ID" \
+  "$APP_PATH"
+run_device_command xcrun devicectl device process launch \
+  --device "$DEVICE_ID" \
+  --terminate-existing \
+  "$BUNDLE_ID"
+
+echo "Installed and independently launched Profile App: $BUNDLE_ID"
+echo "Manually close and reopen the App from the iPhone home screen to complete launch acceptance."

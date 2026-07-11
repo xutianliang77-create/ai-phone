@@ -1,0 +1,30 @@
+const appHistoryLocalizationTexts = <String, Map<String, String>>{
+  'history': {'zh': '历史记录', 'en': 'History'},
+  'noSessionsYet': {'zh': '还没有历史会话', 'en': 'No sessions yet'},
+  'noSavedSubtitles': {'zh': '没有保存的字幕', 'en': 'No saved subtitles'},
+  'sessionDetail': {'zh': '会话详情', 'en': 'Session detail'},
+  'deleteSession': {'zh': '删除会话', 'en': 'Delete session'},
+  'deleteSessionBody': {
+    'zh': '这条已保存会话将被移除。',
+    'en': 'This saved session will be removed.',
+  },
+  'summary': {'zh': '摘要', 'en': 'Summary'},
+  'highlights': {'zh': '重点', 'en': 'Highlights'},
+  'transcript': {'zh': '全文', 'en': 'Transcript'},
+  'terms': {'zh': '术语', 'en': 'Terms'},
+  'noHighlights': {'zh': '暂无重点', 'en': 'No highlights yet'},
+  'noTerms': {'zh': '暂无术语建议', 'en': 'No term suggestions yet'},
+  'meetingMinutes': {'zh': '会议纪要', 'en': 'Meeting notes'},
+  'meetingMinutesHint': {
+    'zh': '自动整理摘要、结论、待办、重点、风险和术语。',
+    'en': 'Summarize decisions, actions, highlights, risks, and terms.',
+  },
+  'meetingMinutesReady': {
+    'zh': '会议纪要已生成，可在摘要页查看。',
+    'en': 'Meeting notes are ready in the summary tab.',
+  },
+  'generateReview': {'zh': '生成会议纪要', 'en': 'Generate notes'},
+  'regenerateReview': {'zh': '重新生成', 'en': 'Regenerate'},
+  'reviewGenerated': {'zh': '会议纪要已生成', 'en': 'Meeting notes generated'},
+  'viewMeetingMinutes': {'zh': '查看纪要', 'en': 'View notes'},
+};

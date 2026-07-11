@@ -1,0 +1,63 @@
+{
+  "schemaVersion": 1,
+  "status": "todo",
+  "decidedAt": null,
+  "asr": {
+    "default": {
+      "provider": "ios_coreml",
+      "model": "nemotron-3.5-asr-streaming-0.6b"
+    },
+    "gray": {
+      "provider": "qwen3_asr_candidate",
+      "model": "qwen3-asr-0.6b"
+    },
+    "fallback": {
+      "provider": "sensevoice",
+      "model": "iic/SenseVoiceSmall"
+    }
+  },
+  "translation": {
+    "default": {
+      "provider": "hymt2_self_hosted",
+      "model": "tencent/Hy-MT2-1.8B"
+    },
+    "gray": {
+      "provider": "qwen_live",
+      "model": "qwen-plus"
+    },
+    "fallback": {
+      "provider": "lmt_candidate",
+      "model": "lmt-60-0.6b"
+    }
+  },
+  "tts": {
+    "default": {
+      "provider": "system_tts",
+      "model": "ios-system-tts"
+    },
+    "gray": {
+      "provider": "qwen3_tts_candidate",
+      "model": "qwen3-tts-0.6b"
+    },
+    "fallback": {
+      "provider": "system_tts",
+      "model": "android-system-tts"
+    }
+  },
+  "modelEval": {
+    "status": "not_ready",
+    "fixture": "model-eval/fixtures/cn-en-smoke.json",
+    "requiredGroups": [
+      "zh_meeting",
+      "en_short",
+      "code_switch",
+      "terms_numbers",
+      "tts_phone"
+    ]
+  },
+  "risks": {
+    "licensingReviewed": false,
+    "costReviewed": false,
+    "deploymentReviewed": false
+  }
+}

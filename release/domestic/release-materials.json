@@ -1,0 +1,33 @@
+{
+  "appName": "ai phone",
+  "bundleId": "cn.qkxy.realtimeinterpreter",
+  "androidPackageId": "cn.qkxy.realtimeinterpreter",
+  "versionName": "0.1.0",
+  "shortDescription": "中英实时同声传译和通话字幕工具",
+  "keywords": ["同传", "翻译", "会议"],
+  "legalEntity": "北京乾坤祥云科技有限公司",
+  "privacyPolicyUrl": "https://app.qkxy.cn/privacy",
+  "userAgreementUrl": "https://app.qkxy.cn/terms",
+  "refundPolicyUrl": "https://app.qkxy.cn/refund",
+  "accountDeletionUrl": "https://app.qkxy.cn/account/delete",
+  "customerSupportEmail": "support@qkxy.cn",
+  "appIcpFiling": "京ICP备00000000号-1A",
+  "sdkList": ["Flutter", "LiveKit", "StoreKit"],
+  "modelProviderList": ["hymt2_self_hosted", "qwen_live_fallback"],
+  "iosScreenshots": [
+    "release/domestic/screenshots/ios-main.png",
+    "release/domestic/screenshots/ios-call.png",
+    "release/domestic/screenshots/ios-history.png"
+  ],
+  "androidScreenshots": [
+    "release/domestic/screenshots/android-main.png",
+    "release/domestic/screenshots/android-call.png",
+    "release/domestic/screenshots/android-history.png"
+  ],
+  "privacyLabelsCompleted": true,
+  "appStoreChinaReady": true,
+  "releaseOwner": "support@qkxy.cn",
+  "rollbackPlan": "Keep previous build available and rollback within 30 minutes.",
+  "grayReleasePlan": "Start with 5% release, monitor crash and payment metrics, then expand after approval.",
+  "initialGrayPercent": 5
+}

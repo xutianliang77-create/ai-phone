@@ -1,0 +1,66 @@
+{
+  "schemaVersion": 1,
+  "activeProfile": "domestic_server_qwen3_hymt2_voxcpm2",
+  "profiles": {
+    "domestic_server_qwen3_hymt2_voxcpm2": {
+      "description": "Copy this file and replace endpoint values for your environment.",
+      "asr": {
+        "provider": "http_qwen3_asr_original",
+        "model": "Qwen3-ASR-0.6B-original-tuned-v3",
+        "contract": "POST /asr/transcribe"
+      },
+      "translation": {
+        "provider": "hymt2_self_hosted",
+        "model": "tencent/Hy-MT2-1.8B",
+        "contract": "OpenAI-compatible /v1/chat/completions"
+      },
+      "tts": {
+        "provider": "voxcpm2",
+        "model": "VoxCPM2",
+        "contract": "POST /tts/synthesize"
+      },
+      "env": {
+        "gateway": {
+          "REALTIME_PROVIDER": "hymt2_self_hosted",
+          "TRANSLATION_BASE_URL": "https://translation.example.cn/v1",
+          "TRANSLATION_MODEL": "tencent/Hy-MT2-1.8B",
+          "TRANSLATION_API_KEY": "replace-with-hymt2-translation-api-key",
+          "ASR_PROVIDER": "http",
+          "ASR_HTTP_ENDPOINT": "https://asr.example.cn/asr/transcribe",
+          "ASR_HTTP_FLUSH_ENDPOINT": "https://asr.example.cn/asr/sessions/:sessionId/flush",
+          "ASR_HTTP_API_KEY": "replace-with-asr-service-api-key"
+        },
+        "translationWorker": {
+          "TRANSLATION_BASE_URL": "https://translation.example.cn/v1",
+          "TRANSLATION_MODEL": "tencent/Hy-MT2-1.8B",
+          "TRANSLATION_API_KEY": "replace-with-hymt2-translation-api-key",
+          "ASR_HTTP_ENDPOINT": "https://asr.example.cn/asr/transcribe",
+          "ASR_HTTP_FLUSH_ENDPOINT": "https://asr.example.cn/asr/sessions/:sessionId/flush",
+          "ASR_HTTP_API_KEY": "replace-with-asr-service-api-key",
+          "TTS_PROVIDER": "voxcpm2",
+          "TTS_MODEL": "VoxCPM2",
+          "TTS_HTTP_ENDPOINT": "https://tts.example.cn/voxcpm2/synthesize",
+          "TTS_HTTP_API_KEY": "replace-with-voxcpm2-tts-api-key"
+        },
+        "asrService": {
+          "ASR_SERVICE_PROVIDER": "qwen3_asr",
+          "ASR_MODEL_VERSION": "Qwen3-ASR-0.6B-original-tuned-v3",
+          "ASR_SERVICE_API_KEY": "replace-with-asr-service-api-key",
+          "ASR_QWEN3_MODEL_DIR": "/data/models/translation-model-eval/models/qwen3_asr_0_6b"
+        },
+        "translationService": {
+          "TRANSLATION_SERVICE_PROVIDER": "hymt2",
+          "TRANSLATION_MODEL_VERSION": "tencent/Hy-MT2-1.8B",
+          "TRANSLATION_SERVICE_API_KEY": "replace-with-hymt2-translation-api-key",
+          "TRANSLATION_HYMT2_MODEL_DIR": "/data/models/translation-model-eval/data/translation-product-fit/models/hymt2_1_8b"
+        },
+        "ttsService": {
+          "TTS_SERVICE_PROVIDER": "voxcpm2",
+          "TTS_MODEL_VERSION": "VoxCPM2",
+          "TTS_SERVICE_API_KEY": "replace-with-voxcpm2-tts-api-key",
+          "TTS_VOXCPM2_MODEL_DIR": "/data/models/translation-model-eval/data/tts-product-fit/models/openbmb_voxcpm2"
+        }
+      }
+    }
+  }
+}

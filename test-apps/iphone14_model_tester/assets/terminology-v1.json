@@ -1,0 +1,62 @@
+{
+  "version": "iphone14-small-models-v1",
+  "updatedAt": "2026-07-07",
+  "terms": [
+    {
+      "term": "FireRedASR2",
+      "type": "model",
+      "spokenVariants": ["FireRed ASR two", "Fire Red ASR two", "FireRedASR2"],
+      "expectedTranslations": {"zh": "FireRedASR2", "en": "FireRedASR2"},
+      "protected": true
+    },
+    {
+      "term": "Hy-MT2",
+      "type": "model",
+      "spokenVariants": ["Hy M T two", "Hy-MT2", "H Y M T two"],
+      "expectedTranslations": {"zh": "Hy-MT2", "en": "Hy-MT2"},
+      "protected": true
+    },
+    {
+      "term": "VoxCPM2",
+      "type": "model",
+      "spokenVariants": ["Vox C P M two", "VoxCPM2"],
+      "expectedTranslations": {"zh": "VoxCPM2", "en": "VoxCPM2"},
+      "protected": true
+    },
+    {
+      "term": "Nemotron",
+      "type": "model",
+      "spokenVariants": ["Nemotron", "Nemo tron"],
+      "expectedTranslations": {"zh": "Nemotron", "en": "Nemotron"},
+      "protected": true
+    },
+    {
+      "term": "Whisper",
+      "type": "model",
+      "spokenVariants": ["Whisper"],
+      "expectedTranslations": {"zh": "Whisper", "en": "Whisper"},
+      "protected": true
+    },
+    {
+      "term": "iPhone 14",
+      "type": "device",
+      "spokenVariants": ["iPhone fourteen", "iPhone 14"],
+      "expectedTranslations": {"zh": "iPhone 14", "en": "iPhone 14"},
+      "protected": true
+    },
+    {
+      "term": "SKU A-120",
+      "type": "business",
+      "spokenVariants": ["SKU A one twenty", "SKU A-120"],
+      "expectedTranslations": {"zh": "SKU A-120", "en": "SKU A-120"},
+      "protected": true
+    },
+    {
+      "term": "13800138000",
+      "type": "number",
+      "spokenVariants": ["一三八零零一三八零零零", "one three eight zero zero one three eight zero zero zero"],
+      "expectedTranslations": {"zh": "13800138000", "en": "13800138000"},
+      "protected": true
+    }
+  ]
+}

@@ -1,0 +1,194 @@
+import {
+  closeTracks,
+  disconnectRooms,
+  publishDataPacket,
+  publishGuestAudioTrack,
+  publishTranslationTtsTrack,
+  rtcMediaReady,
+  waitForDataPacket,
+  waitForTranslationTtsAudio,
+  waitForWorkerAudio,
+} from "./livekit_room_media_probe.mjs";
+
+export async function checkLiveKitRoomMediaReadiness(options) {
+  const checks = [];
+  const issues = [];
+  const actions = [];
+  const apiBaseUrl = normalizeBaseUrl(options.apiBaseUrl);
+  let created = null;
+  let roomName = null;
+  let rtc = null;
+  const rooms = [];
+  const tracks = [];
+
+  try {
+    const health = await requestJson(options, `${apiBaseUrl}/health`);
+    const callRoomReady = health.body?.callRoomReadiness?.status === "ready";
+    record(checks, "api_call_room_readiness", callRoomReady, {
+      callRoomReadiness: health.body?.callRoomReadiness,
+    });
+    if (!callRoomReady) {
+      issues.push("API callRoomReadiness is not ready for LiveKit media.");
+    }
+
+    created = (await requestJson(options, `${apiBaseUrl}/call-links`, {
+      method: "POST",
+    })).body;
+    roomName = created?.roomName ?? null;
+    record(checks, "call_link_created", Boolean(created?.callId && roomName), {
+      callId: created?.callId,
+      roomName,
+    });
+
+    const hostToken = await createRoomToken(options, apiBaseUrl, created.callId, "host");
+    const guestToken = await createRoomToken(options, apiBaseUrl, created.callId, "guest");
+    const workerToken = (await requestJson(options, `${apiBaseUrl}/internal/call-links/${encodeURIComponent(created.callId)}/worker-room-token`, {
+      method: "POST",
+      body: { participantName: options.workerName ?? "worker-media-readiness" },
+      bearerToken: options.internalApiSecret,
+    })).body;
+    const sameRoom = [hostToken, guestToken, workerToken].every(
+      (token) => token?.roomName === roomName,
+    );
+    record(checks, "room_tokens_created", sameRoom, {
+      hostRole: hostToken?.participantRole,
+      guestRole: guestToken?.participantRole,
+      workerRole: workerToken?.participantRole,
+      roomName,
+    });
+    if (!sameRoom) issues.push("LiveKit room tokens do not target one room.");
+
+    rtc = await loadRtcNode(options);
+    const rtcReady = rtcMediaReady(rtc);
+    record(checks, "livekit_rtc_media_runtime", rtcReady.ok, rtcReady.details);
+    if (!rtcReady.ok) throw new Error("LiveKit RTC media runtime is incomplete.");
+
+    const participants = createParticipantRooms(rtc);
+    rooms.push(...Object.values(participants));
+    const dataReceived = waitForDataPacket(participants.guest, rtc, options);
+    const audioReceived = waitForWorkerAudio(participants.worker, rtc, options);
+
+    await Promise.all([
+      connectRoom(participants.host, hostToken),
+      connectRoom(participants.guest, guestToken),
+      connectRoom(participants.worker, workerToken),
+    ]);
+    record(checks, "participants_joined_room", true, {
+      host: identityOf(participants.host),
+      guest: identityOf(participants.guest),
+      worker: identityOf(participants.worker),
+    });
+
+    await publishDataPacket(participants.host, rtc);
+    const data = await dataReceived;
+    record(checks, "data_channel_received", data.ok, data.details);
+    if (!data.ok) issues.push("Guest participant did not receive host data packet.");
+
+    tracks.push(await publishGuestAudioTrack(participants.guest, rtc));
+    const audio = await audioReceived;
+    record(checks, "worker_audio_subscribed", audio.ok, audio.details);
+    if (!audio.ok) issues.push("Worker participant did not receive guest audio.");
+
+    const ttsAudioReceived = waitForTranslationTtsAudio(participants.guest, rtc, options);
+    tracks.push(await publishTranslationTtsTrack(participants.worker, rtc));
+    const ttsAudio = await ttsAudioReceived;
+    record(checks, "guest_translation_tts_audio_subscribed", ttsAudio.ok, ttsAudio.details);
+    if (!ttsAudio.ok) issues.push("Guest participant did not receive worker TTS audio.");
+  } catch (error) {
+    issues.push(errorMessage(error));
+    record(checks, "unexpected_error", false, { message: errorMessage(error) });
+  } finally {
+    await closeTracks(tracks);
+    await disconnectRooms(rooms);
+    await rtc?.dispose?.();
+  }
+
+  if (issues.length > 0) {
+    actions.push(
+      "Start API with LiveKit env, verify Beelink LiveKit reachability, and rerun media readiness.",
+    );
+  }
+
+  return {
+    status: issues.length === 0 ? "ready" : "not_ready",
+    apiBaseUrl,
+    callId: created?.callId ?? null,
+    roomName,
+    checks,
+    issues,
+    actions,
+  };
+}
+
+async function createRoomToken(options, apiBaseUrl, callId, participantRole) {
+  return (await requestJson(options, `${apiBaseUrl}/call-links/${encodeURIComponent(callId)}/room-token`, {
+    method: "POST",
+    body: { participantRole, participantName: `${participantRole}-media-readiness` },
+  })).body;
+}
+
+function createParticipantRooms(rtc) {
+  return {
+    host: new rtc.Room(),
+    guest: new rtc.Room(),
+    worker: new rtc.Room(),
+  };
+}
+
+async function connectRoom(room, token) {
+  await room.connect(token.wsUrl, token.token, {
+    autoSubscribe: true,
+    dynacast: false,
+  });
+}
+
+async function requestJson(options, url, init = {}) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs(options));
+  try {
+    const response = await (options.fetchFn ?? fetch)(url, {
+      method: init.method ?? "GET",
+      headers: {
+        ...(init.body ? { "content-type": "application/json" } : {}),
+        ...(init.bearerToken ? { authorization: `Bearer ${init.bearerToken}` } : {}),
+      },
+      body: init.body ? JSON.stringify(init.body) : undefined,
+      signal: controller.signal,
+    });
+    const text = await response.text();
+    const body = text ? JSON.parse(text) : null;
+    if (!response.ok) {
+      throw new Error(body?.error?.message ?? `${url} returned HTTP ${response.status}`);
+    }
+    return { status: response.status, body };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function loadRtcNode(options) {
+  if (options.loadRtcNode) return await options.loadRtcNode();
+  const dynamicImport = new Function("name", "return import(name)");
+  return dynamicImport("@livekit/rtc-node");
+}
+
+function identityOf(room) {
+  return room.localParticipant?.identity ?? null;
+}
+
+function timeoutMs(options) {
+  return Number(options.timeoutMs ?? 15000);
+}
+
+function record(checks, name, ok, details = {}) {
+  checks.push({ name, status: ok ? "pass" : "fail", details });
+}
+
+function normalizeBaseUrl(value) {
+  return value.replace(/\/$/, "");
+}
+
+function errorMessage(error) {
+  if (error instanceof Error) return error.message;
+  return String(error);
+}

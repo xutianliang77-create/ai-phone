@@ -1,0 +1,64 @@
+import 'dart:io';
+
+import 'package:flutter_test/flutter_test.dart';
+import 'package:translation_mobile/src/features/history/data/local_session_store.dart';
+import 'package:translation_mobile/src/features/realtime/domain/entities/subtitle_segment.dart';
+
+void main() {
+  late Directory tempDir;
+  late File storeFile;
+
+  setUp(() {
+    tempDir = Directory.systemTemp.createTempSync('local-session-store-');
+    storeFile = File('${tempDir.path}/sessions.json');
+  });
+
+  tearDown(() {
+    tempDir.deleteSync(recursive: true);
+  });
+
+  test('saves, lists, exports, and deletes local sessions', () async {
+    final store = LocalSessionStore(
+      file: storeFile,
+      now: () => DateTime.utc(2026, 6, 28, 12, 0, 10),
+    );
+
+    await store.saveEndedSession(
+      sessionId: 'local_1',
+      createdAt: DateTime.utc(2026, 6, 28, 12),
+      segments: const <SubtitleSegment>[
+        SubtitleSegment(
+          id: 'seg_1',
+          sourceText: 'hello',
+          translatedText: '你好',
+          sourceLanguage: 'en',
+          targetLanguage: 'zh',
+          confidence: 0.88,
+          stage: 'translation',
+          provider: 'ios_system',
+          latencyMs: 120,
+        ),
+        SubtitleSegment(id: 'empty', sourceText: '', translatedText: ''),
+      ],
+    );
+
+    final sessions = await store.listSessions(query: 'hello');
+    expect(sessions.single.sessionId, 'local_1');
+    expect(sessions.single.status, 'ended');
+    expect(sessions.single.consumedSeconds, 10);
+
+    final detail = await store.getSession('local_1');
+    expect(detail.segments, hasLength(1));
+    expect(detail.segments.single.translatedText, '你好');
+    expect(detail.segments.single.provider, 'ios_system');
+    expect(detail.segments.single.confidence, 0.88);
+
+    final export = await store.exportSession('local_1');
+    expect(export.filename, 'translation-session-local_1.md');
+    expect(export.content, contains('hello'));
+    expect(export.content, contains('Provider: ios_system'));
+
+    await store.deleteSession('local_1');
+    expect(await store.listSessions(), isEmpty);
+  });
+}

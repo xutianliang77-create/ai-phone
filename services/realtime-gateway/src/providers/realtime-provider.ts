@@ -1,0 +1,37 @@
+import type {
+  AudioFrame,
+  LanguageCode,
+  TranslationLanguageCode,
+  ServerRealtimeEvent,
+  TermbaseTermDto,
+} from "@translation/contracts";
+
+export interface RealtimeProviderSession {
+  sessionId: string;
+  sourceLanguage: LanguageCode;
+  targetLanguage: TranslationLanguageCode;
+  autoReverseTargetLanguage?: boolean;
+  voiceOutput: boolean;
+  terminology?: TermbaseTermDto[];
+  asrHotwords?: string[];
+  asrCorrections?: Array<{ fromText: string; toText: string }>;
+}
+
+export interface TextSegmentInput {
+  sessionId: string;
+  segmentId: string;
+  text: string;
+  language: TranslationLanguageCode;
+  isFinal: boolean;
+  confidence?: number;
+}
+
+export interface RealtimeProvider {
+  name: string;
+  createSession(session: RealtimeProviderSession): Promise<void>;
+  sendAudio(frame: AudioFrame): AsyncGenerator<ServerRealtimeEvent>;
+  sendText?(segment: TextSegmentInput): AsyncGenerator<ServerRealtimeEvent>;
+  flushSession?(sessionId: string): AsyncGenerator<ServerRealtimeEvent>;
+  closeSession(sessionId: string): Promise<void>;
+  healthCheck(): Promise<boolean>;
+}

@@ -1,0 +1,327 @@
+export function renderCallGuestScript() {
+  return String.raw`(() => {
+  const config = window.__CALL_LINK__ || {};
+  const callId = config.callId || "";
+  const state = {
+    room: null,
+    localRole: "guest",
+    captions: new Map(),
+    followLatest: true,
+    captionsOnly: false,
+    audioUnlocked: false,
+  };
+  const $ = (id) => document.getElementById(id);
+  $("call-id").textContent = callId;
+
+  function status(message, kind = "") {
+    const el = $("status");
+    el.textContent = message;
+    el.className = kind ? "status " + kind : "status";
+  }
+
+  function updateJoinButton() {
+    $("join").disabled = Boolean(state.room) || !$("consent").checked;
+  }
+
+  function detectEnvironment() {
+    const userAgent = navigator.userAgent || "";
+    const isWechat = /MicroMessenger/i.test(userAgent);
+    $("wechat-warning").classList.toggle("hidden", !isWechat);
+    renderCapabilities([
+      capability("系统浏览器", !isWechat, isWechat ? "建议在 Safari/Chrome 打开" : "当前浏览器可继续"),
+      capability("安全上下文", window.isSecureContext || location.hostname === "localhost", "麦克风需要 HTTPS 或 localhost"),
+      capability("麦克风接口", Boolean(navigator.mediaDevices?.getUserMedia), "不可用时可使用仅字幕模式"),
+      capability("LiveKit SDK", Boolean(window.LivekitClient?.Room), "通话 SDK 加载失败时无法入房"),
+      capability("音频解锁", state.audioUnlocked, "点击加入时会自动尝试解锁"),
+    ]);
+    const hints = [];
+    if (isWechat) hints.push("微信内置浏览器可能限制麦克风，请优先在系统浏览器打开");
+    if (!window.isSecureContext && location.hostname !== "localhost") {
+      hints.push("当前页面不是安全上下文，浏览器可能拒绝麦克风");
+    }
+    if (!navigator.mediaDevices?.getUserMedia) {
+      hints.push("当前浏览器未暴露麦克风接口，可使用仅字幕模式");
+    }
+    if (hints.length > 0) status(hints.join("；"), "warn");
+  }
+
+  function capability(label, ok, detail) {
+    return { label, ok, detail };
+  }
+
+  function renderCapabilities(items) {
+    $("capability-status").innerHTML = items.map((item) => {
+      const kind = item.ok ? "ready" : "warn";
+      const value = item.ok ? "可用" : "需处理";
+      return '<div class="capability ' + kind + '"><span>' + item.label + '<br><small>' + item.detail + '</small></span><strong>' + value + '</strong></div>';
+    }).join("");
+  }
+
+  function speakerLabel(role) {
+    if (role === state.localRole) return "我";
+    if (role === "worker") return "系统";
+    return "对方";
+  }
+
+  function updateCaption(event) {
+    if (event.type === "worker.status") {
+      status(workerStatusMessage(event), event.retryable ? "warn" : "ready");
+      return;
+    }
+    const segmentId = event.segmentId || "segment-" + Date.now();
+    const caption = state.captions.get(segmentId) || {
+      segmentId,
+      speakerRole: event.speakerRole || "guest",
+    };
+    caption.speakerRole = event.speakerRole || caption.speakerRole;
+    if (event.type === "transcript.final") {
+      const sourceText = cleanCaptionText(event.sourceText || event.text);
+      if (!sourceText) return;
+      caption.sourceText = sourceText;
+    }
+    if (event.type === "translation.final") {
+      caption.sourceText = cleanCaptionText(event.sourceText) || caption.sourceText || "";
+      caption.translatedText = cleanCaptionText(event.translatedText || event.translation || event.text) || "";
+      if (!caption.sourceText && !caption.translatedText) return;
+    }
+    if (event.type === "tts.ready") {
+      caption.sourceText = cleanCaptionText(event.sourceText) || caption.sourceText || "";
+      caption.translatedText = cleanCaptionText(event.translatedText || event.translation || event.text) || caption.translatedText || "";
+      if (!caption.sourceText && !caption.translatedText) return;
+      caption.ttsReady = true;
+      caption.ttsProvider = event.provider || caption.ttsProvider || "";
+      caption.ttsModel = event.model || caption.ttsModel || "";
+    }
+    state.captions.set(segmentId, caption);
+    renderCaption(caption);
+  }
+
+  function renderCaption(caption) {
+    const timeline = $("timeline");
+    const shouldFollow = state.followLatest || distanceFromPageBottom() <= 120;
+    if (timeline.firstElementChild?.className === "subtle") timeline.textContent = "";
+    let item = Array.from(timeline.children).find((child) => child.dataset.segmentId === caption.segmentId);
+    if (!item) {
+      item = document.createElement("div");
+      item.className = "segment";
+      item.dataset.segmentId = caption.segmentId;
+      item.innerHTML = '<div class="speaker"></div><div class="source"></div><div class="translation"></div><div class="tts"></div>';
+      timeline.appendChild(item);
+    }
+    item.querySelector(".speaker").textContent = speakerLabel(caption.speakerRole);
+    item.querySelector(".source").textContent = caption.sourceText || "";
+    item.querySelector(".translation").textContent = caption.translatedText || "";
+    item.querySelector(".tts").textContent = caption.ttsReady
+      ? "翻译语音已准备" + (caption.ttsProvider ? "：" + caption.ttsProvider : "")
+      : "";
+    if (shouldFollow) scrollToLatest();
+    else updateLatestButton();
+  }
+
+  function distanceFromPageBottom() {
+    const root = document.documentElement;
+    const height = Math.max(root.scrollHeight, document.body.scrollHeight);
+    return height - window.innerHeight - window.scrollY;
+  }
+
+  function updateLatestButton() {
+    $("back-to-latest").classList.toggle("visible", !state.followLatest);
+  }
+
+  function updateFollowLatestFromScroll() {
+    state.followLatest = distanceFromPageBottom() <= 120;
+    updateLatestButton();
+  }
+
+  function scrollToLatest() {
+    state.followLatest = true;
+    updateLatestButton();
+    $("timeline").lastElementChild?.scrollIntoView({ block: "end", behavior: "smooth" });
+  }
+
+  function workerStatusMessage(event) {
+    const stageLabels = { worker: "通话 Worker", asr: "ASR", translation: "翻译", tts: "TTS" };
+    const text = cleanCaptionText(event.text) || "状态更新";
+    const body = event.stage && stageLabels[event.stage]
+      ? stageLabels[event.stage] + "：" + text
+      : text;
+    const meta = [event.provider, event.model, event.retryable ? "可重试" : ""]
+      .filter(Boolean)
+      .join("，");
+    return meta ? body + "（" + meta + "）" : body;
+  }
+
+  function cleanCaptionText(value) {
+    if (typeof value !== "string") return "";
+    const collapsed = value.replace(/\s+/g, " ").trim();
+    const compact = collapsed
+      .toLowerCase()
+      .replace(/(?:<|\[|\()(?:sil|noise|blank|unk)(?:>|\]|\))/g, "")
+      .replace(/[\s,，.。!！?？;；:：、\-_\/]+/g, "");
+    return compact ? collapsed : "";
+  }
+
+  function ttsTrackTargetRole(trackName) {
+    const match = /^translation-tts-(host|guest)-([1-9][0-9]*)$/.exec(trackName || "");
+    return match ? match[1] : null;
+  }
+
+  function audioTrackName(track, publication) {
+    return publication?.name || publication?.trackName || track?.name || "";
+  }
+
+  function shouldAttachAudioTrack(track, publication) {
+    const targetRole = ttsTrackTargetRole(audioTrackName(track, publication));
+    if (!targetRole) return true;
+    return targetRole === state.localRole;
+  }
+
+  function bindRoom(room) {
+    const lk = window.LivekitClient;
+    room.on(lk.RoomEvent.Disconnected, () => {
+      state.room = null;
+      status("通话已断开", "error");
+      $("leave").disabled = true;
+      $("remote-audio").textContent = "";
+      updateJoinButton();
+    });
+    room.on(lk.RoomEvent.TrackSubscribed, (track, publication) => {
+      if (track.kind !== "audio") return;
+      if (!shouldAttachAudioTrack(track, publication)) return;
+      const element = track.attach();
+      element.autoplay = true;
+      element.dataset.trackName = audioTrackName(track, publication);
+      $("remote-audio").appendChild(element);
+    });
+    room.on(lk.RoomEvent.TrackUnsubscribed, (track) => {
+      track.detach().forEach((element) => element.remove());
+    });
+    room.on(lk.RoomEvent.DataReceived, (payload) => {
+      try {
+        const event = JSON.parse(new TextDecoder().decode(payload));
+        if (isCaptionEvent(event)) updateCaption(event);
+      } catch {
+        // Ignore non-caption data packets.
+      }
+    });
+  }
+
+  function isCaptionEvent(event) {
+    return event.type?.includes("transcript") ||
+      event.type?.includes("translation") ||
+      event.type === "worker.status" ||
+      event.type === "tts.ready";
+  }
+
+  async function join() {
+    if (!$("consent").checked) {
+      status("请先确认通话转写和翻译授权", "warn");
+      return;
+    }
+    $("join").disabled = true;
+    state.captionsOnly = $("captions-only").checked;
+    try {
+      await unlockAudioPlayback();
+      status("正在检查通话链接");
+      const linkResponse = await fetch("/call-links/" + encodeURIComponent(callId));
+      if (!linkResponse.ok) throw new Error("通话链接不存在或已过期");
+      const link = await linkResponse.json();
+      $("room-name").textContent = link.roomName || "未配置";
+
+      status("正在申请入会凭证");
+      const tokenResponse = await fetch("/call-links/" + encodeURIComponent(callId) + "/room-token", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          participantRole: "guest",
+          participantName: $("name").value.trim() || "guest",
+        }),
+      });
+      if (!tokenResponse.ok) throw new Error("通话房间暂未配置");
+      const token = await tokenResponse.json();
+      if (!window.LivekitClient?.Room) throw new Error("通话 SDK 未加载");
+
+      if (!state.captionsOnly) {
+        if (!navigator.mediaDevices?.getUserMedia) {
+          throw new Error("当前浏览器无法使用麦克风，可勾选仅字幕模式后加入");
+        }
+        status("正在申请麦克风权限");
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+        stream.getTracks().forEach((track) => track.stop());
+      }
+
+      status("正在连接房间");
+      const room = new window.LivekitClient.Room({ adaptiveStream: true, dynacast: true });
+      bindRoom(room);
+      await room.connect(token.wsUrl, token.token);
+      if (!state.captionsOnly) await room.localParticipant.setMicrophoneEnabled(true);
+      state.room = room;
+      $("leave").disabled = false;
+      status(state.captionsOnly ? "已加入房间，仅接收字幕和翻译语音" : "已加入房间，麦克风已开启", "ready");
+    } catch (error) {
+      status(error.message || "加入失败", "error");
+      updateJoinButton();
+    }
+  }
+
+  async function unlockAudioPlayback() {
+    const AudioContextCtor = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContextCtor || state.audioUnlocked) return;
+    const context = new AudioContextCtor();
+    try {
+      if (context.state === "suspended") await context.resume();
+      state.audioUnlocked = context.state === "running";
+    } finally {
+      await context.close?.();
+      detectEnvironment();
+    }
+  }
+
+  function leave() {
+    state.room?.disconnect();
+    state.room = null;
+    $("remote-audio").textContent = "";
+    $("leave").disabled = true;
+    updateJoinButton();
+    status("已离开通话");
+  }
+
+  function reportCall() {
+    const subject = encodeURIComponent("举报 ai phone 翻译通话");
+    const body = encodeURIComponent("Call ID: " + callId + "\n请描述问题：");
+    window.location.href = "mailto:support@example.cn?subject=" + subject + "&body=" + body;
+  }
+
+  async function copyCallLink() {
+    const link = window.location.href;
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(link);
+      } else {
+        const input = document.createElement("textarea");
+        input.value = link;
+        document.body.appendChild(input);
+        input.select();
+        document.execCommand("copy");
+        input.remove();
+      }
+      $("copy-feedback").textContent = "已复制，请粘贴到系统浏览器打开。";
+    } catch {
+      $("copy-feedback").textContent = "复制失败，请长按地址栏复制链接。";
+    }
+  }
+
+  detectEnvironment();
+  updateJoinButton();
+  $("join").addEventListener("click", join);
+  $("leave").addEventListener("click", leave);
+  $("consent").addEventListener("change", updateJoinButton);
+  $("captions-only").addEventListener("change", () => {
+    state.captionsOnly = $("captions-only").checked;
+  });
+  $("report").addEventListener("click", reportCall);
+  $("copy-link").addEventListener("click", copyCallLink);
+  $("back-to-latest").addEventListener("click", scrollToLatest);
+  window.addEventListener("scroll", updateFollowLatestFromScroll, { passive: true });
+})();`;
+}

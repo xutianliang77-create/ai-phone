@@ -1,0 +1,110 @@
+export const callRoomCaptionTopic = "translation.captions";
+
+export type CallRoomDataEventType =
+  | "worker.status"
+  | "transcript.final"
+  | "translation.final"
+  | "tts.ready";
+
+export type CallRoomSpeakerRole = "host" | "guest" | "worker";
+export type CallRoomTranslationLanguage = "zh" | "en";
+export type CallRoomWorkerStage =
+  | "worker"
+  | "asr"
+  | "translation"
+  | "tts";
+
+export interface CallRoomDataEvent {
+  type: CallRoomDataEventType;
+  callId: string;
+  roomName: string;
+  segmentId: string;
+  speakerRole: CallRoomSpeakerRole;
+  sourceLanguage: CallRoomTranslationLanguage;
+  targetLanguage: CallRoomTranslationLanguage;
+  text: string;
+  sourceText?: string;
+  translatedText?: string;
+  provider?: string;
+  model?: string;
+  voiceMode?: "preset" | "voice_design" | "personal_clone" | "ultimate_clone";
+  voiceProfileId?: string;
+  stage?: CallRoomWorkerStage;
+  retryable?: boolean;
+  firstAudioMs?: number;
+  audioDurationMs?: number;
+  timestampMs: number;
+}
+
+export type CallRoomSubmittedEvent =
+  Omit<CallRoomDataEvent, "callId" | "roomName">;
+
+export function encodeCallRoomEvent(event: CallRoomDataEvent) {
+  return new TextEncoder().encode(JSON.stringify(event));
+}
+
+export function buildCallRoomSmokeEvents(options: {
+  callId: string;
+  roomName: string;
+  nowMs?: number;
+}): CallRoomDataEvent[] {
+  const timestampMs = options.nowMs ?? Date.now();
+  const segmentId = `smoke-${timestampMs}`;
+  return [
+    {
+      type: "worker.status",
+      callId: options.callId,
+      roomName: options.roomName,
+      segmentId,
+      speakerRole: "worker",
+      sourceLanguage: "en",
+      targetLanguage: "zh",
+      text: "房间翻译 Worker 已连接",
+      stage: "worker",
+      retryable: false,
+      timestampMs,
+    },
+    {
+      type: "transcript.final",
+      callId: options.callId,
+      roomName: options.roomName,
+      segmentId,
+      speakerRole: "guest",
+      sourceLanguage: "en",
+      targetLanguage: "zh",
+      text: "hello, this is a call room translation test",
+      sourceText: "hello, this is a call room translation test",
+      timestampMs: timestampMs + 1,
+    },
+    {
+      type: "translation.final",
+      callId: options.callId,
+      roomName: options.roomName,
+      segmentId,
+      speakerRole: "guest",
+      sourceLanguage: "en",
+      targetLanguage: "zh",
+      text: "你好，这是一次通话房间翻译测试。",
+      sourceText: "hello, this is a call room translation test",
+      translatedText: "你好，这是一次通话房间翻译测试。",
+      timestampMs: timestampMs + 2,
+    },
+    {
+      type: "tts.ready",
+      callId: options.callId,
+      roomName: options.roomName,
+      segmentId,
+      speakerRole: "guest",
+      sourceLanguage: "en",
+      targetLanguage: "zh",
+      text: "你好，这是一次通话房间翻译测试。",
+      sourceText: "hello, this is a call room translation test",
+      translatedText: "你好，这是一次通话房间翻译测试。",
+      provider: "smoke-tts",
+      model: "smoke-voice",
+      firstAudioMs: 0,
+      audioDurationMs: 1000,
+      timestampMs: timestampMs + 3,
+    },
+  ];
+}

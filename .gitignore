@@ -1,0 +1,40 @@
+node_modules/
+dist/
+.env
+.env.*
+!.env.example
+!infra/livekit-selfhost/.env.example
+infra/livekit-selfhost/generated/
+infra/livekit-selfhost/caddy_data/
+infra/livekit-selfhost/caddy_config/
+infra/livekit-selfhost/redis_data/
+release/domestic/release.env
+apps/mobile/android/key.properties
+apps/mobile/android/release/*.jks
+apps/mobile/android/release/*.keystore
+.DS_Store
+coverage/
+.dart_tool/
+build/
+.cache/
+ios/Pods/
+android/.gradle/
+*.log
+apps/mobile/ios/Runner/Models/**
+!apps/mobile/ios/Runner/Models/
+!apps/mobile/ios/Runner/Models/README.md
+
+# Local runtimes and generated caches
+**/.venv/
+**/.venv-*/
+**/__pycache__/
+**/.pytest_cache/
+**/.data/
+tmp/
+
+# Runtime/evaluation data may contain transcripts, accounts, or model weights
+data/
+test-audio/
+
+# Local operational history can contain device and private network details
+PROGRESS_LOG.md

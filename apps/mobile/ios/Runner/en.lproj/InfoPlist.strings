@@ -1,0 +1,6 @@
+"CFBundleDisplayName" = "ai phone";
+"CFBundleName" = "ai phone";
+"NSLocalNetworkUsageDescription" = "ai phone needs local network access to connect to the realtime translation service.";
+"NSMicrophoneUsageDescription" = "ai phone needs microphone access to recognize speech and translate it.";
+"NSCameraUsageDescription" = "Photo translation needs camera access to capture menus, contracts, and forms.";
+"NSPhotoLibraryUsageDescription" = "Photo translation needs photo library access to run OCR and translation on selected images.";

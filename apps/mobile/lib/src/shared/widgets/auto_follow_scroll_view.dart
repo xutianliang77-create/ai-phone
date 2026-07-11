@@ -1,0 +1,144 @@
+import 'dart:async';
+
+import 'package:flutter/material.dart';
+
+class AutoFollowScrollView extends StatefulWidget {
+  const AutoFollowScrollView({
+    required this.tailKey,
+    required this.children,
+    required this.jumpToLatestLabel,
+    super.key,
+    this.padding,
+  });
+
+  final String tailKey;
+  final List<Widget> children;
+  final String jumpToLatestLabel;
+  final EdgeInsetsGeometry? padding;
+
+  @override
+  State<AutoFollowScrollView> createState() => _AutoFollowScrollViewState();
+}
+
+class _AutoFollowScrollViewState extends State<AutoFollowScrollView> {
+  static const double _bottomThreshold = 72;
+
+  final _scrollController = ScrollController();
+  String _lastTailKey = '';
+  bool _followLatest = true;
+  bool _showJumpToLatest = false;
+  bool _scrollScheduled = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _lastTailKey = widget.tailKey;
+    if (widget.tailKey.isNotEmpty) _scheduleScrollToLatest();
+  }
+
+  @override
+  void didUpdateWidget(covariant AutoFollowScrollView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.tailKey == _lastTailKey) return;
+    _lastTailKey = widget.tailKey;
+    if (_followLatest || _isNearBottom) {
+      _followLatest = true;
+      _scheduleScrollToLatest();
+    } else if (!_showJumpToLatest) {
+      setState(() => _showJumpToLatest = true);
+    }
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      children: <Widget>[
+        NotificationListener<ScrollNotification>(
+          onNotification: _handleScrollNotification,
+          child: ListView(
+            controller: _scrollController,
+            padding: widget.padding,
+            children: widget.children,
+          ),
+        ),
+        if (_showJumpToLatest)
+          Align(
+            alignment: Alignment.bottomCenter,
+            child: Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: FilledButton.icon(
+                onPressed: _jumpToLatest,
+                icon: const Icon(Icons.keyboard_arrow_down),
+                label: Text(widget.jumpToLatestLabel),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
+  bool _handleScrollNotification(ScrollNotification notification) {
+    if (notification.metrics.axis != Axis.vertical) return false;
+    final nearBottom = notification.metrics.extentAfter <= _bottomThreshold;
+    if (nearBottom == _followLatest && _showJumpToLatest == !nearBottom) {
+      return false;
+    }
+    setState(() {
+      _followLatest = nearBottom;
+      _showJumpToLatest = !nearBottom;
+    });
+    return false;
+  }
+
+  bool get _isNearBottom {
+    if (!_scrollController.hasClients) return true;
+    final position = _scrollController.position;
+    if (!position.hasContentDimensions) return true;
+    return position.extentAfter <= _bottomThreshold;
+  }
+
+  void _jumpToLatest() {
+    setState(() {
+      _followLatest = true;
+      _showJumpToLatest = false;
+    });
+    _scheduleScrollToLatest();
+  }
+
+  void _scheduleScrollToLatest({bool retry = true}) {
+    if (_scrollScheduled) return;
+    _scrollScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _scrollScheduled = false;
+      if (!mounted || !_scrollController.hasClients) return;
+      final position = _scrollController.position;
+      if (!position.hasContentDimensions) {
+        if (retry) _scheduleScrollToLatest(retry: false);
+        return;
+      }
+      final targetOffset = position.maxScrollExtent;
+      if (!targetOffset.isFinite) return;
+      unawaited(
+        _scrollController
+            .animateTo(
+          targetOffset,
+          duration: const Duration(milliseconds: 220),
+          curve: Curves.easeOut,
+        )
+            .then((_) {
+          if (!mounted) return;
+          setState(() {
+            _followLatest = true;
+            _showJumpToLatest = false;
+          });
+        }).catchError((Object _) {}),
+      );
+    });
+  }
+}

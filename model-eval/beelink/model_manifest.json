@@ -1,0 +1,78 @@
+{
+  "version": 1,
+  "models": [
+    {
+      "name": "qwen3_asr_0_6b",
+      "task": "asr",
+      "repo": "Qwen/Qwen3-ASR-0.6B",
+      "notes": "Qwen3 ASR candidate for server-side Mandarin/English recognition."
+    },
+    {
+      "name": "qwen3_asr_0_6b_coreml",
+      "task": "asr_coreml",
+      "repo": "FluidInference/qwen3-asr-0.6b-coreml",
+      "status": "rejected",
+      "notes": "Removed from the isolated iPhone model tester queue after real-device no-caption/no-response tests; do not stage to iPhone unless explicitly re-approved."
+    },
+    {
+      "name": "fireredasr2_aed",
+      "task": "asr",
+      "repo": "FireRedTeam/FireRedASR2-AED",
+      "notes": "FireRedASR2 AED candidate for offline ASR comparison."
+    },
+    {
+      "name": "lmt_60_0_6b",
+      "task": "translation",
+      "repo": "NiuTrans/LMT-60-0.6B",
+      "notes": "Lightweight Chinese-English translation candidate."
+    },
+    {
+      "name": "hymt2_1_8b",
+      "task": "translation",
+      "repo": "tencent/Hy-MT2-1.8B",
+      "notes": "Tencent Hy-MT2 BF16 translation quality baseline."
+    },
+    {
+      "name": "hymt2_1_8b_gguf",
+      "task": "translation",
+      "repo": "tencent/Hy-MT2-1.8B-GGUF",
+      "notes": "Tencent Hy-MT2 GGUF deployment candidate for llama.cpp or LM Studio."
+    },
+    {
+      "name": "lmt_60_1_7b_base",
+      "task": "translation",
+      "repo": "NiuTrans/LMT-60-1.7B-Base",
+      "notes": "LMT larger translation candidate to compare against LMT-60-0.6B."
+    },
+    {
+      "name": "madlad400_3b_mt",
+      "task": "translation",
+      "repo": "google/madlad400-3b-mt",
+      "notes": "MADLAD-400 multilingual text translation baseline."
+    },
+    {
+      "name": "seamless_m4t_v2_large",
+      "task": "translation_multimodal",
+      "repo": "facebook/seamless-m4t-v2-large",
+      "notes": "SeamlessM4T v2 speech/text translation research baseline."
+    },
+    {
+      "name": "qwen3_tts_0_6b_customvoice",
+      "task": "tts",
+      "repo": "Qwen/Qwen3-TTS-12Hz-0.6B-CustomVoice",
+      "notes": "Qwen3 TTS candidate for call-room speech output."
+    },
+    {
+      "name": "cosyvoice2_0_5b",
+      "task": "tts",
+      "repo": "FunAudioLLM/CosyVoice2-0.5B",
+      "notes": "CosyVoice2 candidate for natural bilingual speech output."
+    },
+    {
+      "name": "luxtts",
+      "task": "tts",
+      "repo": "YatharthS/LuxTTS",
+      "notes": "LuxTTS lightweight voice-cloning TTS candidate added to the Beelink product-fit test queue."
+    }
+  ]
+}

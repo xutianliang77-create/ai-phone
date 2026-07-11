@@ -1,0 +1,263 @@
+export interface AsrCorrectionTerm {
+  fromText: string;
+  toText: string;
+}
+
+export type DomainLexiconPack =
+  | "product"
+  | "business"
+  | "technology"
+  | "medical"
+  | "travel"
+  | "dining"
+  | "entertainment"
+  | "cultivation";
+
+type TermRow = [string, string];
+
+export const defaultDomainPacks: DomainLexiconPack[] = ["product"];
+
+const productTerms: TermRow[] = [
+  ["Qwen3 ASR", "Qwen3 ASR"],
+  ["Hy-MT2", "Hy-MT2"],
+  ["VoxCPM2", "VoxCPM2"],
+  ["端侧 ASR", "on-device ASR"],
+  ["在线模型链路", "online model pipeline"],
+  ["同声传译", "simultaneous interpretation"],
+  ["会议纪要", "meeting minutes"],
+  ["自动识别语言", "automatic language detection"],
+  ["自动反向", "auto reverse translation"],
+];
+
+const businessTerms: TermRow[] = [
+  ["会议纪要", "meeting minutes"],
+  ["行动项", "action item"],
+  ["待办事项", "to-do item"],
+  ["截止时间", "deadline"],
+  ["预算", "budget"],
+  ["报价", "quotation"],
+  ["合同", "contract"],
+  ["发票", "invoice"],
+  ["付款方式", "payment method"],
+  ["回款", "payment collection"],
+  ["客单价", "average order value"],
+  ["转化率", "conversion rate"],
+  ["毛利率", "gross margin"],
+  ["交付周期", "delivery cycle"],
+  ["项目排期", "project timeline"],
+  ["风险点", "risk item"],
+];
+
+const technologyTerms: TermRow[] = [
+  ["人工智能", "artificial intelligence"],
+  ["大语言模型", "large language model"],
+  ["语音识别", "speech recognition"],
+  ["语音合成", "speech synthesis"],
+  ["模型部署", "model deployment"],
+  ["在线推理", "online inference"],
+  ["端侧推理", "on-device inference"],
+  ["接口", "API"],
+  ["网关", "gateway"],
+  ["微服务", "microservice"],
+  ["容器", "container"],
+  ["数据库", "database"],
+  ["缓存", "cache"],
+  ["日志", "logs"],
+  ["链路追踪", "distributed tracing"],
+  ["延迟", "latency"],
+  ["吞吐量", "throughput"],
+  ["并发", "concurrency"],
+  ["故障恢复", "failure recovery"],
+  ["灰度发布", "gray release"],
+];
+
+const medicalTerms: TermRow[] = [
+  ["挂号", "registration"],
+  ["门诊", "outpatient clinic"],
+  ["急诊", "emergency department"],
+  ["病历", "medical record"],
+  ["处方", "prescription"],
+  ["化验单", "lab report"],
+  ["影像检查", "imaging exam"],
+  ["超声", "ultrasound"],
+  ["报告", "report"],
+  ["复查", "follow-up exam"],
+  ["过敏史", "allergy history"],
+  ["用药剂量", "medication dosage"],
+  ["副作用", "side effect"],
+  ["禁忌症", "contraindication"],
+  ["血压", "blood pressure"],
+  ["血糖", "blood glucose"],
+  ["体温", "body temperature"],
+  ["甲状腺", "thyroid"],
+  ["结节", "nodule"],
+  ["医保", "medical insurance"],
+];
+
+const travelTerms: TermRow[] = [
+  ["护照", "passport"],
+  ["签证", "visa"],
+  ["登机牌", "boarding pass"],
+  ["值机", "check-in"],
+  ["行李托运", "checked baggage"],
+  ["登机口", "boarding gate"],
+  ["中转", "transfer"],
+  ["延误", "delay"],
+  ["酒店预订", "hotel reservation"],
+  ["入住", "check-in"],
+  ["退房", "check-out"],
+  ["押金", "deposit"],
+  ["景点门票", "attraction ticket"],
+  ["导游", "tour guide"],
+  ["免税店", "duty-free shop"],
+];
+
+const diningTerms: TermRow[] = [
+  ["菜单", "menu"],
+  ["预约", "reservation"],
+  ["排队取号", "queue number"],
+  ["招牌菜", "signature dish"],
+  ["套餐", "set meal"],
+  ["过敏原", "allergen"],
+  ["花生过敏", "peanut allergy"],
+  ["不吃辣", "not spicy"],
+  ["微辣", "mildly spicy"],
+  ["少油少盐", "less oil and less salt"],
+  ["打包", "take away"],
+  ["买单", "check, please"],
+  ["开发票", "issue an invoice"],
+  ["服务费", "service charge"],
+  ["小费", "tip"],
+];
+
+const entertainmentTerms: TermRow[] = [
+  ["演唱会", "concert"],
+  ["电影票", "movie ticket"],
+  ["座位号", "seat number"],
+  ["检票口", "ticket gate"],
+  ["入场时间", "entry time"],
+  ["字幕", "subtitles"],
+  ["配音", "dubbing"],
+  ["预告片", "trailer"],
+  ["直播", "live stream"],
+  ["弹幕", "live comments"],
+  ["会员", "membership"],
+  ["包厢", "private room"],
+  ["剧本杀", "murder mystery game"],
+  ["桌游", "board game"],
+  ["周边", "merchandise"],
+];
+
+const cultivationTerms: TermRow[] = [
+  ["筑基丹", "Foundation Building Pill"],
+  ["筑基", "Foundation Building"],
+  ["半步金丹", "half-step Golden Core"],
+  ["金丹", "Golden Core"],
+  ["灵脉之心", "Heart of the Spiritual Vein"],
+  ["命元丹", "Life Essence Pill"],
+  ["寿元", "lifespan"],
+  ["寿元果", "Lifespan Fruit"],
+  ["雷劫", "thunder tribulation"],
+  ["雷劫功法", "thunder tribulation technique"],
+  ["雷灵根", "Thunder Spirit Root"],
+  ["灵石", "spirit stones"],
+  ["三生花", "Three-Life Flower"],
+  ["妖族", "demon race"],
+  ["冰山雪狐", "Ice Mountain Snow Fox"],
+  ["道友", "fellow Daoist"],
+  ["洞府", "cultivation cave"],
+  ["化形", "transformation"],
+  ["散修", "independent cultivator"],
+  ["大圆满", "Great Perfection"],
+  ["修真", "cultivation"],
+  ["绿皮", "green-skinned one"],
+  ["大圣", "Great Saint"],
+  ["圣王", "Holy King"],
+  ["钟灵", "Zhong Ling"],
+  ["陈家", "Chen family"],
+  ["何家", "He family"],
+  ["何东林", "He Donglin"],
+  ["陈君雪", "Chen Junxue"],
+  ["李大师", "Master Li"],
+  ["易大师", "Master Yi"],
+];
+
+export const domainTermPacks: Record<DomainLexiconPack, TermRow[]> = {
+  product: productTerms,
+  business: businessTerms,
+  technology: technologyTerms,
+  medical: medicalTerms,
+  travel: travelTerms,
+  dining: diningTerms,
+  entertainment: entertainmentTerms,
+  cultivation: cultivationTerms,
+};
+
+export const domainCorrectionPacks: Record<DomainLexiconPack, AsrCorrectionTerm[]> = {
+  product: [
+    { fromText: "Quinn 3 ASR", toText: "Qwen3 ASR" },
+    { fromText: "Quin 3 ASR", toText: "Qwen3 ASR" },
+    { fromText: "HiM T Two", toText: "Hy-MT2" },
+    { fromText: "Vox CPM Two", toText: "VoxCPM2" },
+  ],
+  business: [
+    { fromText: "报价合同", toText: "报价、合同" },
+    { fromText: "客户单价", toText: "客单价" },
+    { fromText: "毛利润", toText: "毛利率" },
+    { fromText: "回款额", toText: "回款" },
+  ],
+  technology: [
+    { fromText: "网官", toText: "网关" },
+    { fromText: "数据裤", toText: "数据库" },
+    { fromText: "灰度发现", toText: "灰度发布" },
+    { fromText: "端侧推里", toText: "端侧推理" },
+    { fromText: "在线推里", toText: "在线推理" },
+    { fromText: "链路追宗", toText: "链路追踪" },
+    { fromText: "微服物", toText: "微服务" },
+  ],
+  medical: [
+    { fromText: "甲状线", toText: "甲状腺" },
+    { fromText: "甲状限", toText: "甲状腺" },
+    { fromText: "节节", toText: "结节" },
+    { fromText: "病力", toText: "病历" },
+    { fromText: "处芳", toText: "处方" },
+    { fromText: "化验但", toText: "化验单" },
+    { fromText: "过敏使", toText: "过敏史" },
+    { fromText: "负作用", toText: "副作用" },
+    { fromText: "用药计量", toText: "用药剂量" },
+  ],
+  travel: [
+    { fromText: "纸机", toText: "值机" },
+    { fromText: "值基", toText: "值机" },
+    { fromText: "托运行李", toText: "行李托运" },
+  ],
+  dining: [
+    { fromText: "花生过名", toText: "花生过敏" },
+    { fromText: "不吃拉", toText: "不吃辣" },
+    { fromText: "麦单", toText: "买单" },
+  ],
+  entertainment: [
+    { fromText: "字母", toText: "字幕" },
+    { fromText: "弹目", toText: "弹幕" },
+    { fromText: "做位号", toText: "座位号" },
+    { fromText: "点票号", toText: "检票口" },
+    { fromText: "点票口", toText: "检票口" },
+    { fromText: "检票号", toText: "检票口" },
+  ],
+  cultivation: [
+    { fromText: "助机单", toText: "筑基丹" },
+    { fromText: "助基丹", toText: "筑基丹" },
+    { fromText: "筑机丹", toText: "筑基丹" },
+    { fromText: "朱基丹", toText: "筑基丹" },
+    { fromText: "命原丹", toText: "命元丹" },
+    { fromText: "名元丹", toText: "命元丹" },
+    { fromText: "雷杰", toText: "雷劫" },
+    { fromText: "雷洁", toText: "雷劫" },
+    { fromText: "狗道化形", toText: "苟到化形" },
+    { fromText: "下万六零石", toText: "三万六灵石" },
+    { fromText: "三万六零石", toText: "三万六灵石" },
+    { fromText: "出机油", toText: "出机缘" },
+    { fromText: "练机一枚", toText: "炼制一枚" },
+    { fromText: "炼机一枚", toText: "炼制一枚" },
+  ],
+};

@@ -1,0 +1,198 @@
+{
+  "version": 1,
+  "description": "Comprehensive model evidence for local on-device mode and cross-platform/call mode. This fixture intentionally includes failing candidates so product gaps are visible.",
+  "thresholds": {
+    "asrCharErrorRate": 0.18,
+    "asrWordErrorRate": 0.28,
+    "asrLatencyMs": 2500,
+    "asrLanguageConfidence": 0.65,
+    "translationSimilarity": 0.5,
+    "translationLatencyMs": 2000,
+    "ttsFirstAudioMs": 1200,
+    "ttsPhoneBandScore": 3.5
+  },
+  "requirements": {
+    "languageConfidence": false
+  },
+  "requiredGroups": [
+    "zh_meeting",
+    "en_short",
+    "code_switch",
+    "terms_numbers",
+    "tts_phone"
+  ],
+  "cases": [
+    {
+      "id": "local-ios-asr-zh-meeting",
+      "type": "asr",
+      "mode": "local_on_device",
+      "group": "zh_meeting",
+      "provider": "ios_coreml",
+      "model": "nemotron-3.5-asr-streaming-0.6b",
+      "expectedLanguage": "zh",
+      "actualLanguage": "zh",
+      "languageConfidence": 0.96,
+      "expectedText": "今天下午三点我们在会议室讨论产品计划，之后我会整理会议记录发给大家。",
+      "actualText": "今天下午三点我们在会议室讨论产品计划，之后我会整理会议记录发给大家。",
+      "latencyMs": 1800
+    },
+    {
+      "id": "local-ios-asr-en-question",
+      "type": "asr",
+      "mode": "local_on_device",
+      "group": "en_short",
+      "provider": "ios_coreml",
+      "model": "nemotron-3.5-asr-streaming-0.6b",
+      "expectedLanguage": "en",
+      "actualLanguage": "en",
+      "languageConfidence": 0.92,
+      "expectedText": "What is your name?",
+      "actualText": "What is your name?",
+      "latencyMs": 1500
+    },
+    {
+      "id": "local-ios-asr-code-switch",
+      "type": "asr",
+      "mode": "local_on_device",
+      "group": "code_switch",
+      "provider": "ios_coreml",
+      "model": "nemotron-3.5-asr-streaming-0.6b",
+      "expectedLanguage": "mixed",
+      "actualLanguage": "mixed",
+      "languageConfidence": 0.78,
+      "expectedText": "What's your name? 你叫什么名字？",
+      "actualText": "What's your name? 你叫什么名字？",
+      "latencyMs": 1900
+    },
+    {
+      "id": "server-qwen3-asr-tts-cn",
+      "type": "asr",
+      "mode": "cross_platform_call",
+      "group": "zh_meeting",
+      "provider": "qwen3_asr",
+      "model": "qwen3-asr-0.6b",
+      "expectedLanguage": "zh",
+      "actualLanguage": "zh",
+      "expectedText": "今天下午三点我们在会议室讨论产品计划。",
+      "actualText": "今天下午三点，我们在会议室讨论产品计划。",
+      "latencyMs": 7259
+    },
+    {
+      "id": "server-fireredasr2-aed-tts-cn",
+      "type": "asr",
+      "mode": "cross_platform_call",
+      "group": "zh_meeting",
+      "provider": "fireredasr2_aed",
+      "model": "fireredasr2-aed",
+      "expectedLanguage": "zh",
+      "actualLanguage": "zh",
+      "expectedText": "今天下午三点我们在会议室讨论产品计划",
+      "actualText": "今天下午三点我们在会议室讨论产品计划",
+      "latencyMs": 663
+    },
+    {
+      "id": "server-lmt-zh-meeting",
+      "type": "translation",
+      "mode": "cross_platform_call",
+      "group": "zh_meeting",
+      "provider": "lmt_candidate",
+      "model": "lmt-60-0.6b",
+      "expectedText": "At three o'clock this afternoon, we will discuss the product plan in the meeting room. After that, I will organize the meeting notes and send them to everyone.",
+      "actualText": "We discussed the product plan in the conference room at 3 p.m. today, and then I will organize the minutes and send them to everyone.",
+      "protectedTerms": [
+        "product plan",
+        "3 p.m."
+      ],
+      "latencyMs": 426
+    },
+    {
+      "id": "server-lmt-terms-numbers",
+      "type": "translation",
+      "mode": "cross_platform_call",
+      "group": "terms_numbers",
+      "provider": "lmt_candidate",
+      "model": "lmt-60-0.6b",
+      "expectedText": "The quotation for SKU A-120 is 20,000 yuan. Please send the customs declaration materials before Friday.",
+      "actualText": "The quotation for SKU A-120 is 20,000 yuan. Please send the customs declaration materials before Friday.",
+      "protectedTerms": [
+        "SKU A-120",
+        "20,000 yuan",
+        "Friday"
+      ],
+      "latencyMs": 203
+    },
+    {
+      "id": "server-lmt-en-business",
+      "type": "translation",
+      "mode": "cross_platform_call",
+      "group": "en_short",
+      "provider": "lmt_candidate",
+      "model": "lmt-60-0.6b",
+      "expectedText": "请确认酒店地址，并在会议结束后把发票发给我。",
+      "actualText": "请确认酒店地址并在我开会后发送发票给我。",
+      "protectedTerms": [
+        "酒店地址",
+        "发票"
+      ],
+      "latencyMs": 94
+    },
+    {
+      "id": "server-lmt-code-switch",
+      "type": "translation",
+      "mode": "cross_platform_call",
+      "group": "code_switch",
+      "provider": "lmt_candidate",
+      "model": "lmt-60-0.6b",
+      "expectedText": "你叫什么名字？",
+      "actualText": "你的名字是什么？你叫什么名字？",
+      "latencyMs": 74
+    },
+    {
+      "id": "server-qwen3-tts-cn",
+      "type": "tts",
+      "mode": "cross_platform_call",
+      "group": "tts_phone",
+      "provider": "qwen3_tts_candidate",
+      "model": "qwen3-tts-0.6b",
+      "producedAudio": true,
+      "firstAudioMs": 1926,
+      "audioDurationMs": 4080,
+      "phoneBandScore": 4,
+      "asrProxy": {
+        "summary": "FireRedASR2 recognized wideband16k, phone8k_up16k and phone8k_up16k_snr15 variants with CER 0.0. Qwen3-ASR also recognized simulated-streaming Chinese and English outputs, but public qwen-tts still returns a complete WAV rather than audio chunks.",
+        "passed": 5,
+        "total": 5,
+        "source": ".cache/model-eval/qwen3-tts-streaming-asr-proxy.json + .cache/model-eval/call-audio-model-eval.json"
+      },
+      "streamingApi": {
+        "publicChunkedAudio": false,
+        "parameter": "non_streaming_mode=False",
+        "source": ".cache/model-eval/qwen3-tts-streaming-eval.json"
+      }
+    },
+    {
+      "id": "server-cosyvoice2-runtime",
+      "type": "tts",
+      "mode": "cross_platform_call",
+      "group": "tts_phone",
+      "provider": "cosyvoice2_candidate",
+      "model": "cosyvoice2-0.5b",
+      "producedAudio": true,
+      "firstAudioMs": 1073,
+      "audioDurationMs": 27200,
+      "phoneBandScore": 1,
+      "outputWav": ".cache/model-eval/cosyvoice2-zh-zero-shot-stream.wav",
+      "asrProxy": {
+        "summary": "Current CosyVoice2 runtime generated WAV files, but baseline Qwen3-ASR intelligibility passed 0/6 and prompt/reference/runtime diagnostic also passed 0/6.",
+        "passed": 0,
+        "total": 6,
+        "source": ".cache/model-eval/cosyvoice2-intelligibility-eval.json + .cache/model-eval/cosyvoice2-prompt-diagnostic.json"
+      },
+      "runtimeDiagnostic": {
+        "passed": 0,
+        "total": 6,
+        "source": ".cache/model-eval/cosyvoice2-prompt-diagnostic.json"
+      }
+    }
+  ]
+}

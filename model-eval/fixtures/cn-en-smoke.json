@@ -1,0 +1,106 @@
+{
+  "version": 1,
+  "description": "Baseline fixture for comparing ASR, translation and TTS candidates on Chinese-English realtime interpretation.",
+  "thresholds": {
+    "asrCharErrorRate": 0.18,
+    "asrWordErrorRate": 0.28,
+    "asrLatencyMs": 2500,
+    "asrLanguageConfidence": 0.65,
+    "translationSimilarity": 0.72,
+    "translationLatencyMs": 2000,
+    "ttsFirstAudioMs": 1200,
+    "ttsPhoneBandScore": 3.5
+  },
+  "requirements": {
+    "languageConfidence": true
+  },
+  "requiredGroups": [
+    "zh_meeting",
+    "en_short",
+    "code_switch",
+    "terms_numbers",
+    "tts_phone"
+  ],
+  "cases": [
+    {
+      "id": "asr-zh-meeting-short",
+      "type": "asr",
+      "group": "zh_meeting",
+      "provider": "ios_coreml",
+      "model": "nemotron-3.5-asr-streaming-0.6b",
+      "expectedLanguage": "zh",
+      "actualLanguage": "zh",
+      "languageConfidence": 0.96,
+      "expectedText": "今天下午三点我们在会议室讨论产品计划，之后我会整理会议记录发给大家。",
+      "actualText": "今天下午三点我们在会议室讨论产品计划，之后我会整理会议记录发给大家。",
+      "latencyMs": 1800
+    },
+    {
+      "id": "asr-en-basic-question",
+      "type": "asr",
+      "group": "en_short",
+      "provider": "ios_coreml",
+      "model": "nemotron-3.5-asr-streaming-0.6b",
+      "expectedLanguage": "en",
+      "actualLanguage": "en",
+      "languageConfidence": 0.92,
+      "expectedText": "What is your name?",
+      "actualText": "What is your name?",
+      "latencyMs": 1500
+    },
+    {
+      "id": "asr-code-switch-question",
+      "type": "asr",
+      "group": "code_switch",
+      "provider": "ios_coreml",
+      "model": "nemotron-3.5-asr-streaming-0.6b",
+      "expectedLanguage": "mixed",
+      "actualLanguage": "mixed",
+      "languageConfidence": 0.78,
+      "expectedText": "What's your name? 你叫什么名字？",
+      "actualText": "What's your name? 你叫什么名字？",
+      "latencyMs": 1900
+    },
+    {
+      "id": "translate-zh-meeting-short",
+      "type": "translation",
+      "group": "zh_meeting",
+      "provider": "lmt_candidate",
+      "model": "lmt-60-0.6b",
+      "expectedText": "At three o'clock this afternoon, we will discuss the product plan in the meeting room. After that, I will organize the meeting notes and send them to everyone.",
+      "actualText": "At three o'clock this afternoon, we will discuss the product plan in the meeting room. After that, I will organize the meeting notes and send them to everyone.",
+      "protectedTerms": [
+        "three o'clock",
+        "product plan",
+        "meeting notes"
+      ],
+      "latencyMs": 900
+    },
+    {
+      "id": "translate-terms-numbers",
+      "type": "translation",
+      "group": "terms_numbers",
+      "provider": "qwen_candidate",
+      "model": "qwen-commercial-route",
+      "expectedText": "The quotation for SKU A-120 is 20,000 yuan. Please send the customs declaration materials before Friday.",
+      "actualText": "The quotation for SKU A-120 is 20,000 yuan. Please send the customs declaration materials before Friday.",
+      "protectedTerms": [
+        "SKU A-120",
+        "20,000 yuan",
+        "Friday"
+      ],
+      "latencyMs": 1100
+    },
+    {
+      "id": "tts-en-short",
+      "type": "tts",
+      "group": "tts_phone",
+      "provider": "qwen3_tts_candidate",
+      "model": "qwen3-tts-0.6b",
+      "producedAudio": true,
+      "firstAudioMs": 420,
+      "audioDurationMs": 1900,
+      "phoneBandScore": 4.1
+    }
+  ]
+}
