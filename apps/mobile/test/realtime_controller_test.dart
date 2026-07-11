@@ -176,6 +176,22 @@ void main() {
     expect(audio.stopCalls, 1);
   });
 
+  test('ends with a warning when final flush is not confirmed', () async {
+    final repository = FakeRealtimeRepository(
+      emitTailOnEnd: true,
+      failEndConfirmation: true,
+    );
+    final controller = realtimeControllerForTest(repository, FakeAudioCapture());
+    addTearDown(controller.dispose);
+
+    await controller.start();
+    await controller.stop();
+
+    expect(controller.status, RealtimeStatus.ended);
+    expect(controller.message, '最后一句处理未完整确认，现有原文和译文已保留');
+    expect(controller.segments.single.sourceText, 'tail audio');
+  });
+
   test('stops locally when gateway ends because usage is exhausted', () async {
     final repository = FakeRealtimeRepository();
     final audio = FakeAudioCapture();

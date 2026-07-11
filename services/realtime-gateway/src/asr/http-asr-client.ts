@@ -76,6 +76,8 @@ export class HttpAsrClient {
         body: JSON.stringify({
           sourceLanguage: request.sourceLanguage,
           targetLanguage: request.targetLanguage,
+          hotwords: request.hotwords ?? [],
+          corrections: request.corrections ?? [],
         }),
       },
     );

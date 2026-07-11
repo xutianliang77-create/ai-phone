@@ -13,10 +13,7 @@ import { buildError, serializeEvent } from "../protocol/outgoing-event-builder.j
 import { normalizeClientTextLanguage } from "../protocol/client-text-language.js";
 import { ProviderRouter } from "../providers/provider-router.js";
 import type { RealtimeProvider } from "../providers/realtime-provider.js";
-import {
-  asrCorrectionTermsForPacks,
-  asrHotwordsForTerminology,
-} from "../domain/domain-lexicon.js";
+import { asrCorrectionTermsForPacks, asrHotwordsForTerminology } from "../domain/domain-lexicon.js";
 import { createSessionEventSink } from "../sessions/session-event-sink.js";
 import { loadTerminologyForSession } from "../sessions/session-domain-terminology.js";
 import {
@@ -35,6 +32,7 @@ import { RealtimeSessionFinalizer } from "./realtime-session-finalizer.js";
 import { RealtimeConnectionCleanup } from "./realtime-connection-cleanup.js";
 import { DisconnectFinalizerRegistry } from "../sessions/disconnect-finalizer-registry.js";
 import { RealtimeEventDispatcher } from "./realtime-event-dispatcher.js";
+import { RealtimeFlushTracker } from "./realtime-flush-tracker.js";
 
 const router = new ProviderRouter();
 const disconnectGraceMs = 45_000;
@@ -122,6 +120,7 @@ export function startWebSocketServer() {
       return;
     }
 
+    const flushTracker = new RealtimeFlushTracker();
     const eventDispatcher = new RealtimeEventDispatcher({
       sendClient: (event) => send(ws, event),
       eventSink: sessionEventSink,
@@ -133,6 +132,7 @@ export function startWebSocketServer() {
         }, "Realtime session event sync failed");
       },
       afterSend: (event) => {
+        flushTracker.record(event);
         emitRealtimeTtsOutputForSession({
           event,
           sessionId: session.id,
@@ -168,6 +168,7 @@ export function startWebSocketServer() {
       audioBatcher,
       send: sendRealtime,
       drainSessionSync: () => eventDispatcher.drain(),
+      flushTracker,
       onError: (stage, error) => {
         realtimeLogger.warn({ error, stage, sessionId: session.id },
           "Realtime pipeline flush failed during finalization");

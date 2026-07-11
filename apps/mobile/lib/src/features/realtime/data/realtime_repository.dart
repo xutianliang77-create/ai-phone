@@ -84,7 +84,7 @@ class RealtimeRepository {
   Future<void> end(String sessionId, List<SubtitleSegment> segments) {
     return _finalizations.putIfAbsent(
       sessionId,
-      () => _endOnce(sessionId, List<SubtitleSegment>.from(segments)),
+      () => _endOnce(sessionId, segments),
     );
   }
 
@@ -92,18 +92,24 @@ class RealtimeRepository {
     String sessionId,
     List<SubtitleSegment> segments,
   ) async {
-    await _gatewayClient.endAndWait(sessionId);
-    if (!_appPersistsSessionOnEnd) return;
-    await _apiClient.saveSegments(
-      sessionId,
-      segments
-          .where((segment) =>
-              segment.sourceText.trim().isNotEmpty ||
-              segment.translatedText.trim().isNotEmpty)
-          .map(_segmentToJson)
-          .toList(),
-    );
-    await _apiClient.endSession(sessionId);
+    final flushConfirmed = await _gatewayClient.endAndWait(sessionId);
+    if (_appPersistsSessionOnEnd) {
+      await _apiClient.saveSegments(
+        sessionId,
+        segments
+            .where((segment) =>
+                segment.sourceText.trim().isNotEmpty ||
+                segment.translatedText.trim().isNotEmpty)
+            .map(_segmentToJson)
+            .toList(),
+      );
+      await _apiClient.endSession(sessionId);
+    }
+    if (!flushConfirmed) {
+      throw const RealtimeFinalizationException(
+        '最后一句处理未完整确认，现有原文和译文已保留',
+      );
+    }
   }
 
   Future<void> closeRealtime() async {
@@ -135,6 +141,15 @@ class RealtimeRepository {
     _gatewayClient.dispose();
     _apiClient.close();
   }
+}
+
+class RealtimeFinalizationException implements Exception {
+  const RealtimeFinalizationException(this.message);
+
+  final String message;
+
+  @override
+  String toString() => message;
 }
 
 bool shouldAutoReverseRealtimeSession(AppConfig config) {

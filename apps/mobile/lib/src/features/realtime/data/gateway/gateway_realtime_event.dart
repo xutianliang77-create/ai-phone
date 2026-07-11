@@ -24,6 +24,7 @@ class GatewayRealtimeEvent {
     this.sampleRate,
     this.sequence,
     this.data,
+    this.flush,
   });
 
   final String type;
@@ -50,6 +51,7 @@ class GatewayRealtimeEvent {
   final int? sampleRate;
   final int? sequence;
   final String? data;
+  final GatewayRealtimeFlushSummary? flush;
 
   const GatewayRealtimeEvent.connection({
     required this.type,
@@ -75,12 +77,14 @@ class GatewayRealtimeEvent {
         format = null,
         sampleRate = null,
         sequence = null,
-        data = null;
+        data = null,
+        flush = null;
 
   factory GatewayRealtimeEvent.fromJson(Map<String, Object?> json) {
     final providerUsage = json['providerUsage'] is Map<String, Object?>
         ? json['providerUsage']! as Map<String, Object?>
         : null;
+    final flushJson = json['flush'];
     return GatewayRealtimeEvent(
       type: json['type']! as String,
       sessionId: json['sessionId'] as String?,
@@ -110,6 +114,57 @@ class GatewayRealtimeEvent {
       sampleRate: (json['sampleRate'] as num?)?.toInt(),
       sequence: (json['sequence'] as num?)?.toInt(),
       data: json['data'] as String?,
+      flush: flushJson is Map
+          ? GatewayRealtimeFlushSummary.fromJson(
+              Map<String, Object?>.from(flushJson),
+            )
+          : null,
+    );
+  }
+}
+
+class GatewayRealtimeFlushSummary {
+  const GatewayRealtimeFlushSummary({
+    required this.status,
+    required this.transcriptFinalCount,
+    required this.translationFinalCount,
+    required this.translationFailedCount,
+    required this.unresolvedSegmentCount,
+    required this.pipelineErrorCount,
+    required this.audioFlushed,
+    required this.providerFlushed,
+  });
+
+  final String status;
+  final int transcriptFinalCount;
+  final int translationFinalCount;
+  final int translationFailedCount;
+  final int unresolvedSegmentCount;
+  final int pipelineErrorCount;
+  final bool audioFlushed;
+  final bool providerFlushed;
+
+  bool get isSuccessful =>
+      (status == 'completed' || status == 'empty') &&
+      audioFlushed &&
+      providerFlushed &&
+      unresolvedSegmentCount == 0 &&
+      translationFailedCount == 0 &&
+      pipelineErrorCount == 0;
+
+  factory GatewayRealtimeFlushSummary.fromJson(Map<String, Object?> json) {
+    return GatewayRealtimeFlushSummary(
+      status: json['status'] as String? ?? 'degraded',
+      transcriptFinalCount: (json['transcriptFinalCount'] as num?)?.toInt() ?? 0,
+      translationFinalCount:
+          (json['translationFinalCount'] as num?)?.toInt() ?? 0,
+      translationFailedCount:
+          (json['translationFailedCount'] as num?)?.toInt() ?? 0,
+      unresolvedSegmentCount:
+          (json['unresolvedSegmentCount'] as num?)?.toInt() ?? 0,
+      pipelineErrorCount: (json['pipelineErrorCount'] as num?)?.toInt() ?? 0,
+      audioFlushed: json['audioFlushed'] as bool? ?? false,
+      providerFlushed: json['providerFlushed'] as bool? ?? false,
     );
   }
 }

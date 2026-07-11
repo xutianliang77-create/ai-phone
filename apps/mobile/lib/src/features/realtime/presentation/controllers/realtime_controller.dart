@@ -309,7 +309,7 @@ class RealtimeController extends ChangeNotifier {
     _asrSubscription = null;
     if (failedSession != null) {
       await ignoreCleanupError(() {
-        return _repository.end(failedSession.sessionId, segments);
+        return _repository.end(failedSession.sessionId, _segments);
       });
     }
     await ignoreCleanupError(_repository.closeRealtime);

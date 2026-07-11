@@ -22,7 +22,7 @@ extension RealtimeControllerStop on RealtimeController {
       _asrSubscription = null;
       if (session != null) {
         try {
-          await _repository.end(session.sessionId, segments);
+          await _repository.end(session.sessionId, _segments);
         } catch (error) {
           _message = error.toString();
           _notify();

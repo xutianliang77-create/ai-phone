@@ -198,6 +198,8 @@ describe("http asr client", () => {
       sessionId: "sess_1",
       sourceLanguage: "en",
       targetLanguage: "zh",
+      hotwords: ["Hy-MT2"],
+      corrections: [{ fromText: "海歪MT", toText: "Hy-MT2" }],
     });
 
     expect(requests[0].url).toBe(
@@ -206,6 +208,8 @@ describe("http asr client", () => {
     expect(requests[0].body).toEqual({
       sourceLanguage: "en",
       targetLanguage: "zh",
+      hotwords: ["Hy-MT2"],
+      corrections: [{ fromText: "海歪MT", toText: "Hy-MT2" }],
     });
     expect(transcript?.segmentId).toBe("flush_7");
   });

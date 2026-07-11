@@ -69,4 +69,25 @@ describe("realtime events", () => {
     expect(tick.lowBalance).toBe(true);
     expect(ended.reason).toBe("quota_exhausted");
   });
+
+  it("supports final flush integrity metadata", () => {
+    const ended: ServerRealtimeEvent = {
+      type: "session.ended",
+      sessionId: "sess_1",
+      reason: "client_request",
+      flush: {
+        status: "completed",
+        transcriptFinalCount: 1,
+        translationFinalCount: 1,
+        translationFailedCount: 0,
+        unresolvedSegmentCount: 0,
+        pipelineErrorCount: 0,
+        audioFlushed: true,
+        providerFlushed: true,
+      },
+    };
+
+    expect(ended.flush?.status).toBe("completed");
+    expect(ended.flush?.unresolvedSegmentCount).toBe(0);
+  });
 });

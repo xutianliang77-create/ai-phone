@@ -57,6 +57,19 @@ export type SessionEndReason =
   | "connection_closed"
   | "connection_error";
 
+export type RealtimeFlushStatus = "completed" | "empty" | "degraded";
+
+export interface RealtimeFlushSummary {
+  status: RealtimeFlushStatus;
+  transcriptFinalCount: number;
+  translationFinalCount: number;
+  translationFailedCount: number;
+  unresolvedSegmentCount: number;
+  pipelineErrorCount: number;
+  audioFlushed: boolean;
+  providerFlushed: boolean;
+}
+
 export interface ClientTextSegmentEvent {
   type: "client.text.segment";
   sessionId: string;
@@ -73,6 +86,7 @@ export interface SessionEndedEvent {
   reason?: SessionEndReason;
   billableSeconds?: number;
   remainingSeconds?: number;
+  flush?: RealtimeFlushSummary;
 }
 
 export interface SessionPausedEvent {

@@ -32,13 +32,17 @@ RealtimeController realtimeControllerForTest(
 }
 
 class FakeRealtimeRepository extends RealtimeRepository {
-  FakeRealtimeRepository({this.emitTailOnEnd = false})
+  FakeRealtimeRepository({
+    this.emitTailOnEnd = false,
+    this.failEndConfirmation = false,
+  })
       : super(
           apiClient: NoopRealtimeApiClient(),
           gatewayClient: NoopRealtimeGatewayClient(),
         );
 
   final bool emitTailOnEnd;
+  final bool failEndConfirmation;
   final _events = StreamController<GatewayRealtimeEvent>.broadcast();
   final startedSessionIds = <String>[];
   final endedSessionIds = <String>[];
@@ -85,6 +89,11 @@ class FakeRealtimeRepository extends RealtimeRepository {
       language: 'zh',
     ));
     await Future<void>.delayed(Duration.zero);
+    if (failEndConfirmation) {
+      throw const RealtimeFinalizationException(
+        '最后一句处理未完整确认，现有原文和译文已保留',
+      );
+    }
   }
 
   @override
