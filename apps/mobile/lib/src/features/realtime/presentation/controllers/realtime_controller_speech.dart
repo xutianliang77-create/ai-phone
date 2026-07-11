@@ -22,7 +22,7 @@ extension RealtimeControllerSpeech on RealtimeController {
     String language,
   ) async {
     final generation = _speechGeneration;
-    _openSpeechCaptureGate();
+    _speechCaptureGate.beginPlayback();
     try {
       await speaker.speak(text: text, language: language).timeout(
             _speechTimeoutFor(text),
@@ -32,7 +32,7 @@ extension RealtimeControllerSpeech on RealtimeController {
     } on Object {
       // A single platform TTS failure must not block later translations.
     } finally {
-      if (generation == _speechGeneration) _coolDownSpeechCaptureGate();
+      if (generation == _speechGeneration) _speechCaptureGate.endPlayback();
     }
   }
 
@@ -45,7 +45,7 @@ extension RealtimeControllerSpeech on RealtimeController {
 
   Future<void> _stopSpeaking() async {
     _speechGeneration += 1;
-    _clearSpeechCaptureGate();
+    _speechCaptureGate.reset();
     await _speechOutputProvider?.stop();
     await _pcmAudioOutputPlayer?.stop();
   }
@@ -74,34 +74,20 @@ extension RealtimeControllerSpeech on RealtimeController {
     int sampleRate,
   ) async {
     final generation = _speechGeneration;
-    _openSpeechCaptureGate();
+    _speechCaptureGate.beginPlayback();
     try {
-      await player.play(
-        data: data,
-        sampleRate: sampleRate,
-      ).timeout(const Duration(seconds: 30));
+      await player
+          .play(
+            data: data,
+            sampleRate: sampleRate,
+          )
+          .timeout(const Duration(seconds: 30));
     } on TimeoutException {
       await ignoreCleanupError(player.stop);
     } on Object {
       // A single service TTS playback failure must not block later captions.
     } finally {
-      if (generation == _speechGeneration) _coolDownSpeechCaptureGate();
+      if (generation == _speechGeneration) _speechCaptureGate.endPlayback();
     }
-  }
-
-  void _openSpeechCaptureGate() {
-    _speechCaptureGateUntil = DateTime.now().add(
-      RealtimeController._speechEchoCooldown,
-    );
-  }
-
-  void _coolDownSpeechCaptureGate() {
-    _speechCaptureGateUntil = DateTime.now().add(
-      RealtimeController._speechEchoCooldown,
-    );
-  }
-
-  void _clearSpeechCaptureGate() {
-    _speechCaptureGateUntil = DateTime.fromMillisecondsSinceEpoch(0);
   }
 }

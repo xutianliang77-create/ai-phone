@@ -70,6 +70,10 @@ final class AudioSessionCoordinator: NSObject, FlutterStreamHandler {
     eventSink events: @escaping FlutterEventSink
   ) -> FlutterError? {
     eventSink = events
+    emit([
+      "type": "route.changed",
+      "route": currentRoute(),
+    ])
     return nil
   }
 

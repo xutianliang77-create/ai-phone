@@ -8,6 +8,7 @@ import 'package:translation_mobile/src/features/realtime/data/gateway/realtime_g
 import 'package:translation_mobile/src/features/realtime/data/realtime_repository.dart';
 import 'package:translation_mobile/src/features/realtime/domain/entities/subtitle_segment.dart';
 import 'package:translation_mobile/src/features/realtime/presentation/controllers/realtime_controller.dart';
+import 'package:translation_mobile/src/features/realtime/presentation/controllers/speech_capture_gate.dart';
 import 'package:translation_mobile/src/platform/audio/audio_capture.dart';
 import 'package:translation_mobile/src/platform/audio/audio_frame.dart';
 import 'package:translation_mobile/src/platform/audio/audio_session_coordinator.dart';
@@ -19,6 +20,7 @@ RealtimeController realtimeControllerForTest(
   PcmAudioOutputPlayer? pcmAudioOutputPlayer,
   bool autoSpeakTranslation = false,
   AudioSessionCoordinator? audioSessionCoordinator,
+  SpeechCaptureGate? speechCaptureGate,
 }) {
   return RealtimeController(
     repository: repository,
@@ -26,6 +28,7 @@ RealtimeController realtimeControllerForTest(
     pcmAudioOutputPlayer: pcmAudioOutputPlayer,
     autoSpeakTranslation: autoSpeakTranslation,
     audioSessionCoordinator: audioSessionCoordinator,
+    speechCaptureGate: speechCaptureGate,
     config: AppConfig(
       apiBaseUrl: Uri.parse('http://127.0.0.1:3100'),
       useMockAudio: false,

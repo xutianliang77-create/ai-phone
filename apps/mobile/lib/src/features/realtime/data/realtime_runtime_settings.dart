@@ -2,7 +2,17 @@ import '../../../app/app_config.dart';
 import '../../../platform/translation/supported_translation_language.dart';
 
 enum RealtimeProcessingMode { onDevice, online }
+
 enum RealtimeVoiceOutputMode { off, natural, myVoice }
+
+bool realtimeModeSupportsVoiceOutput(String realtimeMode) {
+  return realtimeMode == 'conversation';
+}
+
+AppConfig applyRealtimeModeVoicePolicy(AppConfig config) {
+  if (realtimeModeSupportsVoiceOutput(config.realtimeMode)) return config;
+  return config.copyWith(realtimeVoiceOutputMode: 'off');
+}
 
 class RealtimeRuntimeSettings {
   const RealtimeRuntimeSettings({

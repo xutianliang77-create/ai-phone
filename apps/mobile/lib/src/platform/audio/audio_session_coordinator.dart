@@ -8,6 +8,29 @@ enum AudioSessionEventType {
   routeChanged,
 }
 
+enum AudioOutputRoute {
+  speaker,
+  receiver,
+  headphones,
+  bluetooth,
+  other;
+
+  static AudioOutputRoute fromPlatformValue(Object? value) {
+    return switch (value) {
+      'speaker' => AudioOutputRoute.speaker,
+      'receiver' => AudioOutputRoute.receiver,
+      'headphones' => AudioOutputRoute.headphones,
+      'bluetooth' => AudioOutputRoute.bluetooth,
+      _ => AudioOutputRoute.other,
+    };
+  }
+
+  bool get requiresAcousticEchoSuppression {
+    return this != AudioOutputRoute.headphones &&
+        this != AudioOutputRoute.bluetooth;
+  }
+}
+
 class AudioSessionEvent {
   const AudioSessionEvent({
     required this.type,
@@ -17,7 +40,7 @@ class AudioSessionEvent {
 
   final AudioSessionEventType type;
   final bool shouldResume;
-  final String? route;
+  final AudioOutputRoute? route;
 
   static AudioSessionEvent? tryFromMap(Map<Object?, Object?> map) {
     final type = switch (map['type']) {
@@ -30,7 +53,9 @@ class AudioSessionEvent {
     return AudioSessionEvent(
       type: type,
       shouldResume: map['shouldResume'] == true,
-      route: map['route'] as String?,
+      route: type == AudioSessionEventType.routeChanged
+          ? AudioOutputRoute.fromPlatformValue(map['route'])
+          : null,
     );
   }
 }

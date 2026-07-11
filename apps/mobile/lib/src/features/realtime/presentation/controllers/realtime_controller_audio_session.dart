@@ -10,6 +10,11 @@ extension RealtimeControllerAudioSession on RealtimeController {
   }
 
   void _handleAudioSessionEvent(AudioSessionEvent event) {
+    if (event.type == AudioSessionEventType.routeChanged &&
+        event.route != null) {
+      _speechCaptureGate.updateRoute(event.route!);
+      return;
+    }
     if (event.type != AudioSessionEventType.interruptionEnded ||
         !event.shouldResume) {
       return;

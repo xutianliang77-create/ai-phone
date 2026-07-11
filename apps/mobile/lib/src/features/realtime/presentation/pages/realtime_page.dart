@@ -123,7 +123,8 @@ class _RealtimePageState extends State<RealtimePage>
                   message: controller.message,
                   remainingSeconds: controller.remainingSeconds,
                   lowBalance: controller.lowBalance,
-                  autoSpeakTranslation: _settings.autoSpeakTranslation,
+                  autoSpeakTranslation: _realtimeAutoSpeakSupported &&
+                      _settings.autoSpeakTranslation,
                   autoSpeakEnabled: _realtimeAutoSpeakSupported,
                   onAutoSpeakChanged: _toggleAutoSpeakTranslation,
                 ),
@@ -180,7 +181,8 @@ class _RealtimePageState extends State<RealtimePage>
 
   bool get _canChangeMode => _canChangeSettings;
 
-  bool get _realtimeAutoSpeakSupported => true;
+  bool get _realtimeAutoSpeakSupported =>
+      realtimeModeSupportsVoiceOutput(_config.realtimeMode);
 
   List<Widget> _realtimeContent() {
     return <Widget>[

@@ -43,7 +43,7 @@ extension RealtimeControllerDeviceAsrRecovery on RealtimeController {
         (_status != RealtimeStatus.active && !_stopInFlight)) {
       return;
     }
-    if (_isSpeechCaptureGateActive) return;
+    if (_speechCaptureGate.blocksCapture) return;
     unawaited(
       _handleAsrTextSegment(session.sessionId, segment).catchError(
         _handleAsrTextSegmentError,

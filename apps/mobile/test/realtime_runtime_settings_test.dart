@@ -51,6 +51,23 @@ void main() {
     expect(settings.voiceOutputMode, RealtimeVoiceOutputMode.natural);
     expect(settings.toJson()['voiceOutputMode'], 'natural');
   });
+
+  test('forces Listening sessions silent without losing the Talk preference',
+      () {
+    final listening = _baseConfig().copyWith(
+      realtimeMode: 'meeting',
+      realtimeVoiceOutputMode: 'my_voice',
+    );
+
+    final effectiveListening = applyRealtimeModeVoicePolicy(listening);
+    final effectiveTalk = applyRealtimeModeVoicePolicy(
+      listening.copyWith(realtimeMode: 'conversation'),
+    );
+
+    expect(effectiveListening.realtimeVoiceOutputMode, 'off');
+    expect(listening.realtimeVoiceOutputMode, 'my_voice');
+    expect(effectiveTalk.realtimeVoiceOutputMode, 'my_voice');
+  });
 }
 
 AppConfig _baseConfig() {

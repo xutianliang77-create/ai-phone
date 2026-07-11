@@ -77,7 +77,7 @@ void main() {
     expect(speaker.stopCount, greaterThanOrEqualTo(1));
   });
 
-  test('ignores only immediate device ASR echo while translated speech plays',
+  test('blocks speaker echo for full playback then accepts the next sentence',
       () async {
     final firstSpeech = Completer<SpeechOutputResult>();
     final repository = _FakeRealtimeRepository();
@@ -106,14 +106,17 @@ void main() {
     asr.emit(const AsrTextSegment(id: 'asr_2', text: 'second', language: 'en'));
     await pumpEventQueue();
 
-    expect(controller.segments.map((segment) => segment.id),
-        <String>['asr_1', 'asr_2']);
+    expect(controller.segments.map((segment) => segment.id), <String>['asr_1']);
     expect(speaker.spoken, <(String, String)>[('第一句', 'zh')]);
     firstSpeech.complete(const SpeechOutputResult(
       provider: 'fake',
       language: 'zh',
     ));
+    await Future<void>.delayed(const Duration(milliseconds: 400));
+    asr.emit(const AsrTextSegment(id: 'asr_3', text: 'second', language: 'en'));
     await pumpEventQueue();
+    expect(controller.segments.map((segment) => segment.id),
+        <String>['asr_1', 'asr_3']);
     expect(speaker.spoken, <(String, String)>[('第一句', 'zh'), ('第二句', 'zh')]);
   });
 
@@ -162,7 +165,7 @@ void main() {
       provider: 'fake-pcm',
       sampleRate: 24000,
     ));
-    await Future<void>.delayed(const Duration(milliseconds: 750));
+    await Future<void>.delayed(const Duration(milliseconds: 400));
     audioCapture.emitFrame(2);
     await pumpEventQueue();
 

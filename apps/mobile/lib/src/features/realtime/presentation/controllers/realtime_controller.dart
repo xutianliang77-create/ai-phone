@@ -24,6 +24,7 @@ import 'realtime_gateway_diagnostic.dart';
 import 'realtime_runtime_factories.dart';
 import 'realtime_session_state.dart';
 import 'segment_draft.dart';
+import 'speech_capture_gate.dart';
 
 export 'realtime_session_state.dart';
 
@@ -38,8 +39,6 @@ part 'realtime_controller_stop.dart';
 
 class RealtimeController extends ChangeNotifier {
   static const Duration _deviceAsrStopDrain = Duration(milliseconds: 120);
-  static const Duration _speechEchoCooldown = Duration(milliseconds: 700);
-
   RealtimeController({
     RealtimeRepository? repository,
     AudioCapture? audioCapture,
@@ -48,6 +47,7 @@ class RealtimeController extends ChangeNotifier {
     SpeechOutputProvider? speechOutputProvider,
     PcmAudioOutputPlayer? pcmAudioOutputPlayer,
     AudioSessionCoordinator? audioSessionCoordinator,
+    SpeechCaptureGate? speechCaptureGate,
     bool autoSpeakTranslation = false,
     Duration? speechOutputTimeout,
     AppConfig? config,
@@ -70,6 +70,7 @@ class RealtimeController extends ChangeNotifier {
         _pcmAudioOutputPlayer = pcmAudioOutputPlayer,
         _audioSessionCoordinator =
             audioSessionCoordinator ?? const NoopAudioSessionCoordinator(),
+        _speechCaptureGate = speechCaptureGate ?? SpeechCaptureGate(),
         _autoSpeakTranslation = autoSpeakTranslation,
         _speechOutputTimeout = speechOutputTimeout;
 
@@ -85,7 +86,7 @@ class RealtimeController extends ChangeNotifier {
   final Duration? _speechOutputTimeout;
   Future<void> _speechChain = Future<void>.value();
   int _speechGeneration = 0;
-  DateTime _speechCaptureGateUntil = DateTime.fromMillisecondsSinceEpoch(0);
+  final SpeechCaptureGate _speechCaptureGate;
   RealtimeStatus _status = RealtimeStatus.idle;
   final List<SubtitleSegment> _segments = <SubtitleSegment>[];
   final Map<String, SegmentDraft> _drafts = <String, SegmentDraft>{};
@@ -266,12 +267,9 @@ class RealtimeController extends ChangeNotifier {
   void _sendAudioFrame(AudioFrame frame) {
     final session = _session;
     if (session == null || _status != RealtimeStatus.active) return;
-    if (_isSpeechCaptureGateActive) return;
+    if (_speechCaptureGate.blocksCapture) return;
     _repository.sendAudio(session.sessionId, frame);
   }
-
-  bool get _isSpeechCaptureGateActive =>
-      DateTime.now().isBefore(_speechCaptureGateUntil);
 
   bool _setStatus(RealtimeStatus status) {
     final transition = transitionRealtimeStatus(_status, status);

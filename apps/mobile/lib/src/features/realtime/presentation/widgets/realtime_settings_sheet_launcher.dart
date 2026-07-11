@@ -10,7 +10,7 @@ void showRealtimeSettingsSheet({
   required RealtimeRuntimeSettings Function() settings,
   required bool Function() enabled,
   required bool Function() modeEnabled,
-  required bool autoSpeakSupported,
+  required bool Function() autoSpeakSupported,
   required ValueChanged<String> onRealtimeModeChanged,
   required ValueChanged<RealtimeRuntimeSettings> onSettingsChanged,
 }) {
@@ -39,7 +39,7 @@ void showRealtimeSettingsSheet({
                 settings: settings(),
                 enabled: enabled(),
                 modeEnabled: modeEnabled(),
-                autoSpeakSupported: autoSpeakSupported,
+                autoSpeakSupported: autoSpeakSupported(),
                 onRealtimeModeChanged: changeRealtimeMode,
                 onSettingsChanged: changeSettings,
               );

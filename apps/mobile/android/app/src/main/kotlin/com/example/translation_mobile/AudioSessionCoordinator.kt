@@ -128,6 +128,7 @@ class AudioSessionCoordinator(private val activity: FlutterActivity) : EventChan
         if (!owners.add(owner)) return
         try {
             activate()
+            emitRouteChanged()
         } catch (error: RuntimeException) {
             owners.remove(owner)
             throw error
@@ -189,16 +190,31 @@ class AudioSessionCoordinator(private val activity: FlutterActivity) : EventChan
     }
 
     private fun currentRoute(): String {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return "other"
-        val types = audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS).map { it.type }
-        if (types.any { it == AudioDeviceInfo.TYPE_BLUETOOTH_A2DP ||
-                    it == AudioDeviceInfo.TYPE_BLUETOOTH_SCO }) return "bluetooth"
-        if (types.any { it == AudioDeviceInfo.TYPE_WIRED_HEADPHONES ||
-                    it == AudioDeviceInfo.TYPE_WIRED_HEADSET ||
-                    it == AudioDeviceInfo.TYPE_USB_HEADSET }) return "headphones"
-        if (types.contains(AudioDeviceInfo.TYPE_BUILTIN_SPEAKER)) return "speaker"
-        if (types.contains(AudioDeviceInfo.TYPE_BUILTIN_EARPIECE)) return "receiver"
-        return "other"
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            return routeName(audioManager.communicationDevice?.type)
+        }
+        @Suppress("DEPRECATION")
+        if (audioManager.isBluetoothScoOn || audioManager.isBluetoothA2dpOn) {
+            return "bluetooth"
+        }
+        @Suppress("DEPRECATION")
+        if (audioManager.isWiredHeadsetOn) return "headphones"
+        return if (audioManager.isSpeakerphoneOn) "speaker" else "receiver"
+    }
+
+    private fun routeName(type: Int?): String {
+        return when (type) {
+            AudioDeviceInfo.TYPE_BLUETOOTH_A2DP,
+            AudioDeviceInfo.TYPE_BLUETOOTH_SCO,
+            AudioDeviceInfo.TYPE_BLE_HEADSET -> "bluetooth"
+            AudioDeviceInfo.TYPE_WIRED_HEADPHONES,
+            AudioDeviceInfo.TYPE_WIRED_HEADSET,
+            AudioDeviceInfo.TYPE_USB_HEADSET -> "headphones"
+            AudioDeviceInfo.TYPE_BUILTIN_SPEAKER,
+            AudioDeviceInfo.TYPE_BLE_SPEAKER -> "speaker"
+            AudioDeviceInfo.TYPE_BUILTIN_EARPIECE -> "receiver"
+            else -> "other"
+        }
     }
 
     private fun emit(type: String, shouldResume: Boolean = false, route: String? = null) {

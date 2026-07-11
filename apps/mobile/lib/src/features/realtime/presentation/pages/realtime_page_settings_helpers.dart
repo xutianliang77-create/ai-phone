@@ -8,7 +8,7 @@ void _openRealtimeSettingsForPage(_RealtimePageState state) {
     settings: () => state._settings,
     enabled: () => true,
     modeEnabled: () => true,
-    autoSpeakSupported: state._realtimeAutoSpeakSupported,
+    autoSpeakSupported: () => state._realtimeAutoSpeakSupported,
     onRealtimeModeChanged: state._changeRealtimeMode,
     onSettingsChanged: state._changeSettings,
   );

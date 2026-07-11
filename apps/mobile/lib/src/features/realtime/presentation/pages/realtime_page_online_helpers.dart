@@ -35,10 +35,11 @@ RealtimeController _createRealtimePageController(
   _RealtimePageState state,
   AppConfig config,
 ) {
+  final effectiveConfig = applyRealtimeModeVoicePolicy(config);
   final autoSpeakTranslation =
       state._realtimeAutoSpeakSupported && state._settings.autoSpeakTranslation;
   return RealtimeController(
-    config: config,
+    config: effectiveConfig,
     autoSpeakTranslation: autoSpeakTranslation,
     speechOutputProvider: state._realtimeAutoSpeakSupported
         ? state.widget.speechOutputProvider ?? SystemSpeechOutputProvider()

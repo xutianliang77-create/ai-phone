@@ -8,6 +8,7 @@ import 'package:translation_mobile/src/platform/asr/asr_text_segment.dart';
 import 'package:translation_mobile/src/platform/asr/mobile_asr_provider.dart';
 import 'package:translation_mobile/src/platform/audio/audio_session_coordinator.dart';
 
+import 'helpers/fake_audio_session_coordinator.dart';
 import 'helpers/realtime_controller_test_helpers.dart';
 
 void main() {
@@ -107,7 +108,7 @@ void main() {
         'type': 'route.changed',
         'route': 'bluetooth',
       })?.route,
-      'bluetooth',
+      AudioOutputRoute.bluetooth,
     );
     expect(AudioSessionEvent.tryFromMap(const {'type': 'unknown'}), isNull);
   });
@@ -147,30 +148,6 @@ AppConfig deviceAsrConfig() {
     deviceAsrModelChunkMs: 2240,
     serverOwnedHistory: true,
   );
-}
-
-class FakeAudioSessionCoordinator implements AudioSessionCoordinator {
-  final _events = StreamController<AudioSessionEvent>.broadcast();
-  int beginCaptureCalls = 0;
-  int endCaptureCalls = 0;
-
-  @override
-  Stream<AudioSessionEvent> get events => _events.stream;
-
-  void emit(AudioSessionEvent event) => _events.add(event);
-
-  @override
-  Future<void> beginCapture() async {
-    beginCaptureCalls += 1;
-  }
-
-  @override
-  Future<void> endCapture() async {
-    endCaptureCalls += 1;
-  }
-
-  @override
-  Future<void> dispose() => _events.close();
 }
 
 class FakeMobileAsrProvider implements MobileAsrProvider {
