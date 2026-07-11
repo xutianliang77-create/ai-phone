@@ -143,9 +143,12 @@ class _RealtimePageState extends State<RealtimePage>
                     ),
                   ),
                 Expanded(
-                  child: ListView(
-                    padding: EdgeInsets.zero,
-                    children: _realtimeContent(),
+                  child: Padding(
+                    padding: const EdgeInsets.only(top: 12),
+                    child: SubtitleTimeline(
+                      key: const ValueKey('realtime-subtitle-workspace'),
+                      segments: controller.segments,
+                    ),
                   ),
                 ),
                 RealtimeControls(
@@ -186,16 +189,6 @@ class _RealtimePageState extends State<RealtimePage>
 
   bool get _realtimeAutoSpeakSupported =>
       realtimeModeSupportsVoiceOutput(_config.realtimeMode);
-
-  List<Widget> _realtimeContent() {
-    return <Widget>[
-      const SizedBox(height: 12),
-      SizedBox(
-        height: 420,
-        child: SubtitleTimeline(segments: controller.segments),
-      ),
-    ];
-  }
 
   bool get _shouldShowOnlineRecovery {
     return shouldShowOnlineRecovery(

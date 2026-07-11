@@ -40,11 +40,6 @@ void main() {
 
     expect(find.text('ai phone'), findsOneWidget);
     expect(find.byTooltip('语言'), findsOneWidget);
-    await tester.scrollUntilVisible(
-      find.text('点击开始进行同传'),
-      80,
-      scrollable: find.byType(Scrollable).first,
-    );
     expect(find.text('点击开始进行同传'), findsOneWidget);
   });
 
