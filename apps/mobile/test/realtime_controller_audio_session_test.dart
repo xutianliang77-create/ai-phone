@@ -67,12 +67,11 @@ void main() {
     expect(audioSession.endCaptureCalls, 1);
   });
 
-  test('reactivates the audio session before resuming online capture',
+  test('recreates online capture instead of resuming a paused audio engine',
       () async {
-    final operations = <String>[];
     final repository = _ResumeRealtimeRepository();
-    final capture = _OrderedAudioCapture(operations);
-    final audioSession = _OrderedAudioSessionCoordinator(operations);
+    final capture = _RestartOnlyAudioCapture();
+    final audioSession = FakeAudioSessionCoordinator();
     final controller = realtimeControllerForTest(
       repository,
       capture,
@@ -82,11 +81,13 @@ void main() {
 
     await controller.start();
     await controller.pause();
-    operations.clear();
     await controller.start();
 
     expect(controller.status, RealtimeStatus.active);
-    expect(operations, <String>['session.begin', 'capture.resume']);
+    expect(capture.startCalls, 2);
+    expect(capture.stopCalls, 1);
+    expect(audioSession.beginCaptureCalls, 2);
+    expect(audioSession.endCaptureCalls, 1);
   });
 
   test('restarts device ASR after a resumable audio interruption', () async {
@@ -159,33 +160,17 @@ void main() {
   });
 }
 
-class _OrderedAudioCapture extends FakeAudioCapture {
-  _OrderedAudioCapture(this.operations);
-
-  final List<String> operations;
+class _RestartOnlyAudioCapture extends FakeAudioCapture {
+  @override
+  Future<void> pause() => throw StateError('pause must not be used');
 
   @override
-  Future<void> resume() async {
-    operations.add('capture.resume');
-    await super.resume();
-  }
+  Future<void> resume() => throw StateError('resume must not be used');
 }
 
 class _ResumeRealtimeRepository extends FakeRealtimeRepository {
   @override
   Future<bool> resumeAndWait(String sessionId) async => true;
-}
-
-class _OrderedAudioSessionCoordinator extends FakeAudioSessionCoordinator {
-  _OrderedAudioSessionCoordinator(this.operations);
-
-  final List<String> operations;
-
-  @override
-  Future<void> beginCapture() async {
-    operations.add('session.begin');
-    await super.beginCapture();
-  }
 }
 
 AppConfig deviceAsrConfig() {

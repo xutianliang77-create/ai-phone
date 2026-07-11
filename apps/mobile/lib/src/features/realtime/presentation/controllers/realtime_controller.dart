@@ -133,7 +133,7 @@ class RealtimeController extends ChangeNotifier {
         await _mobileAsrProvider?.stop();
         await _drainDeviceAsrStopEvents();
       } else {
-        await _audioCapture.pause();
+        await _audioCapture.stop();
       }
       await _audioSessionCoordinator.endCapture();
       await _stopSpeaking();

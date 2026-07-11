@@ -11,6 +11,7 @@ import 'gateway_realtime_event.dart';
 class RealtimeGatewayClient {
   static const int _maxReconnectAttempts = 3;
   static const Duration _connectTimeout = Duration(seconds: 8);
+  static const Duration _controlTimeout = Duration(seconds: 12);
   static const Duration _endTimeout = Duration(seconds: 12);
 
   final StreamController<GatewayRealtimeEvent> _events =
@@ -85,7 +86,7 @@ class RealtimeGatewayClient {
 
   Future<bool> pauseAndWait(
     String sessionId, {
-    Duration timeout = const Duration(seconds: 2),
+    Duration timeout = _controlTimeout,
   }) {
     final completed = _waitForSessionEvent(
       'session.paused',
@@ -102,7 +103,7 @@ class RealtimeGatewayClient {
 
   Future<bool> resumeAndWait(
     String sessionId, {
-    Duration timeout = const Duration(seconds: 2),
+    Duration timeout = _controlTimeout,
   }) {
     final completed = _waitForSessionEvent(
       'session.resumed',

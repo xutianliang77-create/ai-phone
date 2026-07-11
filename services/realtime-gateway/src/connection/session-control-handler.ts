@@ -49,8 +49,10 @@ export async function handleControlEvent(
     }
     if (paused.transition.changed) {
       audioBatcher.pauseAccepting();
+      sendEvent({ type: "session.paused", sessionId: session.id });
       await audioBatcher.flush();
       await flushProviderSession(provider, session.id, sendEvent);
+      return;
     }
     sendEvent({ type: "session.paused", sessionId: session.id });
     return;

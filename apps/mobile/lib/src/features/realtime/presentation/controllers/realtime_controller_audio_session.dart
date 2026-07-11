@@ -56,10 +56,9 @@ extension RealtimeControllerAudioSession on RealtimeController {
 
   Future<void> _resumeManagedAudioCapture() async {
     try {
-      await _audioSessionCoordinator.beginCapture();
-      await _audioCapture.resume();
+      await _startAudioCapture();
     } catch (_) {
-      await ignoreCleanupError(_audioCapture.pause);
+      await ignoreCleanupError(_audioCapture.stop);
       await ignoreCleanupError(_audioSessionCoordinator.endCapture);
       rethrow;
     }
