@@ -8,7 +8,12 @@ export function mergeTranscriptParts(parts: TranscriptResult[]): TranscriptResul
   const text = parts
     .slice(1)
     .reduce(
-      (merged, part) => mergeText(merged, part.text, first.language),
+      (merged, part, index) => mergeText(
+        merged,
+        part.text,
+        first.language,
+        parts[index].endpointReason === "max_duration",
+      ),
       first.text.trim(),
     );
   const languageProfile = analyzeTurnLanguage(text, first.language);
@@ -22,6 +27,7 @@ export function mergeTranscriptParts(parts: TranscriptResult[]): TranscriptResul
     language: first.language,
     ...languageProfile,
     confidence: mergedConfidence(parts) ?? last.confidence,
+    ...(last.endpointReason ? { endpointReason: last.endpointReason } : {}),
     ...(first.speaker ? { speaker: first.speaker } : {}),
     ...(mergedTiming(parts) ? { timing: mergedTiming(parts) } : {}),
   };
@@ -62,8 +68,15 @@ export function canonicalSegmentText(text: string) {
     .trim();
 }
 
-function mergeText(previousText: string, nextText: string, language: string) {
-  const previous = stripIncompleteJoinPunctuation(previousText.trim(), language);
+function mergeText(
+  previousText: string,
+  nextText: string,
+  language: string,
+  hardContinuation = false,
+) {
+  const previous = hardContinuation
+    ? previousText.trim().replace(/[.。]+$/u, "").trim()
+    : stripIncompleteJoinPunctuation(previousText.trim(), language);
   const next = nextText.trim();
   if (!previous) return next;
   if (!next) return previous;

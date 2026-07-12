@@ -105,6 +105,16 @@ export async function refineAsrWithFallback(
         ]),
       };
     }
+    if (addsUnsupportedContent(local.optimizedText, postProcessed.text)) {
+      return {
+        ...local,
+        fallbackReason: "content_expansion",
+        warnings: unique([
+          ...local.warnings,
+          "llm_refinement_added_unsupported_content",
+        ]),
+      };
+    }
     return {
       ...result,
       optimizedText: postProcessed.text,
@@ -126,6 +136,34 @@ export async function refineAsrWithFallback(
       ]).slice(0, 8),
     };
   }
+}
+
+function addsUnsupportedContent(rawText: string, optimizedText: string) {
+  const raw = comparableCharacters(rawText);
+  const optimized = comparableCharacters(optimizedText);
+  if (optimized.length <= raw.length && optimized === raw) return false;
+  const supported = longestCommonSubsequenceLength(raw, optimized);
+  const added = optimized.length - supported;
+  return added > Math.max(3, Math.ceil(raw.length * 0.15));
+}
+
+function comparableCharacters(value: string) {
+  return Array.from(value.toLowerCase().replace(/[^a-z0-9\u3400-\u9fff]+/gu, ""));
+}
+
+function longestCommonSubsequenceLength(first: string[], second: string[]) {
+  const row = new Uint16Array(second.length + 1);
+  for (const left of first) {
+    let diagonal = 0;
+    for (let index = 1; index <= second.length; index += 1) {
+      const previous = row[index];
+      row[index] = left === second[index - 1]
+        ? diagonal + 1
+        : Math.max(row[index], row[index - 1]);
+      diagonal = previous;
+    }
+  }
+  return row[second.length];
 }
 
 function localResult(

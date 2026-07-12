@@ -2,6 +2,30 @@ import { describe, expect, it } from "vitest";
 import { SegmentAssembler, shouldHoldForNextSegment } from "./segment-assembler.js";
 
 describe("segment assembler", () => {
+  it("merges a max-duration fragment with a short raw continuation", () => {
+    const assembler = new SegmentAssembler({ maxContinuationBufferMs: 5000 });
+    const first = assembler.push("session-1", {
+      segmentId: "qwen3_seg_800",
+      text: "今天下午三点我们讨论产品计划，确认负责。",
+      language: "zh",
+      endpointReason: "max_duration",
+      timing: { startMs: 0, endMs: 10000, source: "client" },
+    }, 10000);
+    const second = assembler.push("session-1", {
+      segmentId: "qwen3_seg_857",
+      text: "负责人和截止日期，然后发送给所有参会人员。",
+      language: "zh",
+      endpointReason: "silence",
+      timing: { startMs: 9600, endMs: 13000, source: "client" },
+    }, 13000);
+
+    expect(first.ready).toEqual([]);
+    expect(second.ready).toHaveLength(1);
+    expect(second.ready[0].text).toBe(
+      "今天下午三点我们讨论产品计划，确认负责人和截止日期，然后发送给所有参会人员。",
+    );
+    expect(second.ready[0].endpointReason).toBe("silence");
+  });
   it("holds obvious continuation endings", () => {
     expect(shouldHoldForNextSegment("会议讨论产品计划之后", "zh")).toBe(true);
     expect(shouldHoldForNextSegment("此时的二人在。", "zh")).toBe(true);

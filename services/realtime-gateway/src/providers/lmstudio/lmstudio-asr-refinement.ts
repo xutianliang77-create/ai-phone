@@ -71,7 +71,9 @@ export async function refineRealtimeTranscript(input: {
 }): Promise<RefinedTranscript> {
   const rawText = input.transcript.text;
   const protectedTerms = protectedTermsFor(input.session);
-  const shouldUseLlm = input.enabled && shouldUseContextualAsrRefinement({
+  const shouldUseLlm = input.enabled &&
+    input.transcript.endpointReason !== "max_duration" &&
+    shouldUseContextualAsrRefinement({
     rawText,
     sourceLanguage: input.transcript.language,
     confidence: input.transcript.confidence,

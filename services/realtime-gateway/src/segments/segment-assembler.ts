@@ -22,6 +22,7 @@ export interface SegmentAssemblerOptions {
   maxBufferedSegments?: number;
   maxBufferedCharacters?: number;
   maxBufferMs?: number;
+  maxContinuationBufferMs?: number;
   maxRememberedFinals?: number;
   duplicateTextWindowMs?: number;
 }
@@ -34,6 +35,7 @@ export interface SegmentPushResult {
 const DEFAULT_MAX_BUFFERED_SEGMENTS = 3;
 const DEFAULT_MAX_BUFFERED_CHARACTERS = 180;
 const DEFAULT_MAX_BUFFER_MS = 1800;
+const DEFAULT_MAX_CONTINUATION_BUFFER_MS = 5000;
 const DEFAULT_MAX_REMEMBERED_FINALS = 64;
 const DEFAULT_DUPLICATE_TEXT_WINDOW_MS = 1200;
 
@@ -41,6 +43,7 @@ export class SegmentAssembler {
   private readonly maxBufferedSegments: number;
   private readonly maxBufferedCharacters: number;
   private readonly maxBufferMs: number;
+  private readonly maxContinuationBufferMs: number;
   private readonly maxRememberedFinals: number;
   private readonly duplicateTextWindowMs: number;
   private readonly sessions = new Map<string, SessionAssemblyState>();
@@ -49,6 +52,8 @@ export class SegmentAssembler {
     this.maxBufferedSegments = options.maxBufferedSegments ?? DEFAULT_MAX_BUFFERED_SEGMENTS;
     this.maxBufferedCharacters = options.maxBufferedCharacters ?? DEFAULT_MAX_BUFFERED_CHARACTERS;
     this.maxBufferMs = options.maxBufferMs ?? DEFAULT_MAX_BUFFER_MS;
+    this.maxContinuationBufferMs = options.maxContinuationBufferMs ??
+      DEFAULT_MAX_CONTINUATION_BUFFER_MS;
     this.maxRememberedFinals = options.maxRememberedFinals ?? DEFAULT_MAX_REMEMBERED_FINALS;
     this.duplicateTextWindowMs = options.duplicateTextWindowMs ?? DEFAULT_DUPLICATE_TEXT_WINDOW_MS;
   }
@@ -86,7 +91,8 @@ export class SegmentAssembler {
 
   drainExpired(sessionId: string, nowMs = Date.now()) {
     const state = this.sessions.get(sessionId);
-    if (!state?.pending || nowMs - state.pending.createdAtMs < this.maxBufferMs) return [];
+    if (!state?.pending ||
+        nowMs - state.pending.createdAtMs < this.bufferMs(state.pending)) return [];
     return this.releasePending(state, nowMs);
   }
 
@@ -106,7 +112,8 @@ export class SegmentAssembler {
   ): SegmentPushResult {
     if (this.isAlreadyEmitted(state, transcript, nowMs)) return { ready: [] };
     if (
-      !shouldHoldForNextSegment(transcript.text, transcript.language) ||
+      !isMaxDuration(transcript) &&
+        !shouldHoldForNextSegment(transcript.text, transcript.language) ||
       this.maxBufferedSegments <= 1 ||
       Array.from(transcript.text).length >= this.maxBufferedCharacters
     ) {
@@ -123,7 +130,7 @@ export class SegmentAssembler {
       isProtectedSpeakerBoundary(transcript) ||
       speakerKey(previous) !== speakerKey(transcript) ||
       turnKey(previous) !== turnKey(transcript) ||
-      nowMs - pending.createdAtMs >= this.maxBufferMs;
+      nowMs - pending.createdAtMs >= this.bufferMs(pending);
   }
 
   private replacePendingRevision(
@@ -150,10 +157,17 @@ export class SegmentAssembler {
   }
 
   private shouldRelease(pending: PendingSegment, merged: TranscriptResult, nowMs: number) {
-    return !shouldHoldForNextSegment(merged.text, merged.language) ||
+    return !isMaxDuration(pending.parts.at(-1)) &&
+        !shouldHoldForNextSegment(merged.text, merged.language) ||
       pending.parts.length >= this.maxBufferedSegments ||
       Array.from(merged.text).length >= this.maxBufferedCharacters ||
-      nowMs - pending.createdAtMs >= this.maxBufferMs;
+      nowMs - pending.createdAtMs >= this.bufferMs(pending);
+  }
+
+  private bufferMs(pending: PendingSegment) {
+    return pending.parts.some(isMaxDuration)
+      ? this.maxContinuationBufferMs
+      : this.maxBufferMs;
   }
 
   private releasePending(state: SessionAssemblyState, nowMs: number) {
@@ -211,6 +225,10 @@ export class SegmentAssembler {
         emitted.fingerprint === fingerprint &&
         nowMs - emitted.emittedAtMs <= this.duplicateTextWindowMs);
   }
+}
+
+function isMaxDuration(transcript: TranscriptResult | undefined) {
+  return transcript?.endpointReason === "max_duration";
 }
 
 function speakerKey(transcript: TranscriptResult | undefined) {

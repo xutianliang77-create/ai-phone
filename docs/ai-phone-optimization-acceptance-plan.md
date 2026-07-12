@@ -1,6 +1,6 @@
 # ai phone 优化验收方案
 
-版本：v1.12
+版本：v1.13
 日期：2026-07-12
 任务来源：`docs/ai-phone-optimization-development-tasks.md`
 
@@ -145,6 +145,10 @@ TTS 回灌指标由 App playback gate/AEC 验收，不能把 VAD 对合成语音
 `AC-SPK-004` 本轮故障证据：失败真机会话 `adf37a32-f102-40ea-9b0b-9812733f99d0` 的7个 segment 均无 speaker/turn，诊断边界计数为0，且 Beelink 没有对应 speaker session 创建记录。修复后 Gateway `/health` 显示 `speakerProvider=http`、`speakerTimeoutMs=2000`；固定双声源会话 `55dfe12e-59bd-4405-aab5-ed43f3d68004` 保存 `turn_1/speaker_1` 和 `turn_2/speaker_2`，`hit=1`、`miss/error/race/drop=0`、确认延迟720ms。真人 iPhone 复验未执行，因此未标记 accepted。
 
 `AC-SPK-007/OPT-RT-002` 最新证据：iPhone 在线模式两名真人无停顿轮流说话，正确显示“说话人 1/2”，并按说话人边界断句。断网 End 已立即进入本地终态；截图中的异常来自字符串形式 `TimeoutException` 绕过对象类型判断和 `connection.closed` 直接展示，现已统一归一化。Beelink `1a1968c` 启动恢复将27个遗留非终态会话转为 ended，并释放18个 active hold；余额部署前后均为29921秒，最新 ledger 未新增恢复扣费。Flutter 260项、API 181项、Node 全仓、analyze/typecheck 门禁通过；Profile 安装 UUID `C64B9E0A-9C32-4837-A8B7-7C578C1B5EBE` 且独立进程存活，待真机复验中文提示。
+
+`AC-RT-002` 已通过新版本真机复验：session `7a576a03-d139-4e42-a473-bb0ee13fb63a` 在断网 End 后先显示本地结束和待同步提示，恢复网络后 durable outbox 自动收敛为 ended；2段字幕完整，`consumedSeconds=21`、`heldSeconds=0`。ledger 仅有 `8cc0204b-b092-46c7-95a1-0f02ff422548` 一条 `-21` 秒记录，幂等键为 `settle:7a576a03-d139-4e42-a473-bb0ee13fb63a`。
+
+`AC-RT-003/004` 当前证据：RT-003B session `f3bb9ac8-8300-4054-8fa5-410ad64e0ec0` 三轮 silence final 均有译文，估算整句延迟全部低于2.5秒；RT-004A session `52861225-aece-42fd-aef0-8fc0d550d0a1` 的最后一句、编号407和提交时间完整保存并翻译。RT-004B session `46b92293-6efd-4d01-9e4c-0ad902bad21f` 在翻译处理中立即结束后完整保留编号408、明天下午三点和完整报告，尾句到 ended 收敛约1.34秒，169帧零丢失，hold=0且仅一条 `-19` 秒 ledger。RT-003A session `7b348952-19ad-4cd9-9a50-57c4c6614b95` 保留为失败回归样本：第二轮硬切段曾被 LLM 扩写未来后缀并与下一 raw 重复；本地修复门禁已通过，尚未部署，不能标记 AC-RT-003 整项通过。
 
 `AC-SPK-002/006/007` 新自动矩阵：固定生成26段四种合成声音，并组成双人轮换、1.2秒快速切换、overlap、四人和一分钟稳定性语料。active Sortformer 结果为：四人 DER `4.44%`、overlap `3.63%`、一分钟 `3.77%`，均无标签漂移并通过；普通双人 DER `22.05%`，因早期同一声音被临时分配到第三槽位略超门槛；快速切换 DER `35.42%`，未通过。失败项保留为阻塞证据，不调整20%门槛。另有 Beelink 全链路会话 `25b48a5c-3cff-490b-8091-929b62d91f2a` 通过，保存 `speaker_1/2`、`turn_1/2`、中英文画像，hit=1、drop/miss/error/race=0、确认延迟880ms。
 
