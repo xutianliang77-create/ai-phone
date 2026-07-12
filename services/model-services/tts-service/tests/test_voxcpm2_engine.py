@@ -25,7 +25,7 @@ def test_low_volume_audio_is_raised_without_clipping() -> None:
     output = normalize_audio_loudness(source)
     rms = math.sqrt(sum(value * value for value in output) / len(output))
 
-    assert 0.08 <= rms <= 0.1
+    assert 0.11 <= rms <= 0.126
     assert max(abs(value) for value in output) <= 0.95
 
 

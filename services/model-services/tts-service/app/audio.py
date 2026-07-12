@@ -79,8 +79,8 @@ def resample_audio(
 def normalize_audio_loudness(
     samples: Iterable[float],
     *,
-    target_rms: float = 0.1,
-    max_gain: float = 6.0,
+    target_rms: float = 0.126,
+    max_gain: float = 8.0,
     peak_ceiling: float = 0.95,
 ) -> list[float]:
     values = [float(value) for value in samples]
