@@ -1,6 +1,6 @@
 # ai phone 优化开发计划
 
-版本：v1.12
+版本：v1.13
 日期：2026-07-12
 任务来源：`docs/ai-phone-optimization-development-tasks.md`
 
@@ -26,13 +26,13 @@
 
 - 2026-07-12 已修复本轮真机暴露的共同故障链：手机网络不可达时在线 session 未创建，因此没有 speaker/turn；同时连接中 End 曾等待未完成的 HTTP 创建请求。App 现本地立即结束、请求 8 秒超时、迟到 session 补偿关闭，最新 Profile 已安装。
 - Beelink Speaker Service 已从 `sortformer_shadow/shadow` 切为 `sortformer/active`。API/Gateway 已按监听端口终止旧 PID 后重启，避免 `screen` 退出但旧 Node 子进程继续占端口导致部署不生效。
-- active 模式固定双声源会话 `36d61d75-5d1d-44b9-a2b8-15a5a289a1a6` 保存 `turn_1/speaker_1` 中文和 `turn_2/speaker_2` 英文，boundary hit=1、miss/error/race=0、确认延迟800ms；真人 iPhone 复验仍未执行。
+- active 模式固定双声源会话 `36d61d75-5d1d-44b9-a2b8-15a5a289a1a6` 保存 `turn_1/speaker_1` 中文和 `turn_2/speaker_2` 英文，boundary hit=1、miss/error/race=0、确认延迟800ms；真人 iPhone 双人无停顿轮流说话已确认说话人标签和断句正确。
 
-- `OPT-SPK-005` 已完成代码、自动化、Beelink ASR/Speaker 部署和固定双声源无停顿全链路验证。真机失败根因已定位为会话未创建 speaker session；Gateway 现对缺失 token 字段使用服务端四人默认值，超时调整为2秒，Provider 失败可观测，Speaker Service 对重复/乱序帧幂等。当前状态仍为 `in_progress`，只差 iPhone 双人快速换人复验。
+- `OPT-SPK-005` 已完成代码、自动化、Beelink ASR/Speaker 部署、固定双声源和 iPhone 真人无停顿全链路验证，状态转为 `accepted`。真机原故障根因是在线 session 未创建 speaker session；Gateway 现对缺失 token 字段使用服务端四人默认值，超时为2秒，Provider 失败可观测，Speaker Service 对重复/乱序帧幂等。
 - `OPT-SPK-006` 的 PCM boundary 回切已通过真实音频连续性验证；合并批次时间轴根因已修复，诊断窗口、竞态指标和 session 持久化已部署。固定双声源真实 session 达到 hit=1、miss/error/race/drop=0、1040ms 确认延迟，等待 iPhone 与多人验收。
 - `OPT-SPK-007` 已完成代码、自动化和固定双声源部署验证：新 session 使用稳定 `turnId + revision`，Gateway 按音频时间处理批量结果，API 和 App 对迟到事件执行字段分域幂等，旧协议不强行生成 turn/revision。当前只差 iPhone 双人/多人验收。
 - 当前临时链路为 iPhone -> Mac API/Gateway -> Beelink 模型服务，只用于联调。正式退出条件仍是 iPhone -> Beelink 唯一公开入口，Mac 不参与运行链路。
-- 下一开发主线固定为：iPhone 双人快速换人和断网结束复验 -> 多人混合语种 -> Beelink 单服务器收敛。固定双声源修复后会话 `55dfe12e-59bd-4405-aab5-ed43f3d68004` 已保存两个 speaker turn，不能替代真人验收。
+- 下一开发主线固定为：断网结束提示复验 -> 多人混合语种 -> Beelink 单服务器收敛。双人快速换人已由固定双声源与真人 iPhone 双重验证，不再占用后续冲刺。
 
 ## 3. 分阶段任务
 
@@ -185,7 +185,7 @@ LLM 纪要、扫描 UI 和国际模型 Provider 可在 M1 稳定接口冻结后�
 | 阶段 | 任务 | 预计工作量 | 状态 | 退出条件 |
 | --- | --- | ---: | --- | --- |
 | S0 | 多人默认统一为4 | 0.5天 | accepted | App、API、Speaker Service 和协议一致，旧客户端2人配置被服务器规范化 |
-| S1 | `OPT-SPK-005` 边界协调器 | 0.5天剩余 | in_progress | 已部署且固定双声源全链路通过；iPhone 双人无停顿两轮四句待验收 |
+| S1 | `OPT-SPK-005` 边界协调器 | 已完成 | accepted | 固定双声源和 iPhone 真人双人无停顿均正确切换 speaker，句子不跨人 |
 | S2 | `OPT-SPK-006` ASR Turn Buffer | 0.5-1天剩余 | in_progress | 时间轴修复和真实 session 指标通过；补 iPhone、断网快照和短停顿竞态证据 |
 | S3 | `OPT-SPK-007` 翻译队列 | 0.5天验收 | in_progress | 固定双声源 turn 持久化和顺序通过；待 iPhone 双人/多人输出顺序验收 |
 | S4 | `OPT-SPK-008` overlap/混合语种 | 1-2天 | in_progress | 2至4人、中英夹杂、抢话和重叠策略通过 |

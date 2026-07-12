@@ -27,6 +27,26 @@ void main() {
     repository.releaseEnd();
     await stopping;
   });
+
+  test('shows a sync warning instead of a raw timeout after local end',
+      () async {
+    final repository = _TimeoutEndRepository();
+    final controller = realtimeControllerForTest(
+      repository,
+      FakeAudioCapture(),
+    );
+    addTearDown(controller.dispose);
+
+    await controller.start();
+    await controller.stop();
+
+    expect(controller.status, RealtimeStatus.ended);
+    expect(
+      controller.message,
+      'Session ended locally; history sync was not confirmed',
+    );
+    expect(controller.message, isNot(contains('TimeoutException')));
+  });
 }
 
 class _DelayedEndRepository extends FakeRealtimeRepository {
@@ -46,4 +66,14 @@ class _DelayedEndRepository extends FakeRealtimeRepository {
   }
 
   void releaseEnd() => _endGate.complete();
+}
+
+class _TimeoutEndRepository extends FakeRealtimeRepository {
+  @override
+  Future<void> end(
+    String sessionId,
+    List<SubtitleSegment> segments,
+  ) async {
+    throw TimeoutException('Future not completed');
+  }
 }

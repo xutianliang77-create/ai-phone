@@ -1,6 +1,6 @@
 # ai phone 优化验收方案
 
-版本：v1.10
+版本：v1.11
 日期：2026-07-12
 任务来源：`docs/ai-phone-optimization-development-tasks.md`
 
@@ -138,13 +138,13 @@ TTS 回灌指标由 App playback gate/AEC 验收，不能把 VAD 对合成语音
 
 说话人专项证据必须同时包含：Call Link 多参与者独立音轨、安静双人、三人和四人单麦克风、快速抢话、重叠语音、中英混说、断网重连、30分钟稳定性、会话内重命名、纪要和三种导出。模型服务不可用时 ASR/翻译仍须继续，UI 显示匿名或未知，不得误显示实名。对话和聆听不得使用固定两人假设；单麦克风超过4人时必须明确能力降级，不伪造稳定身份。
 
-`AC-SPK-005` 当前证据：Gateway 合并批次使用首帧时间戳；boundary 有替代 transcript 时去除重叠普通端点结果，boundary 为空时保留普通端点结果并记录 race；断网 cleanup 前冻结诊断快照；API 白名单保存计数和时长，不接受或持久化原始 PCM/字幕字段。仓库级构建和测试已通过。部署后固定双声源会话 `4296e08a-3b2f-4449-9ebb-0299f142db49` 正确形成两位 speaker，时间轴在边界连续，`hit=1`、`miss/error/race/drop=0`、确认延迟1040ms、回切4240ms，低于1.2秒切换门槛。iPhone 双人验收尚未执行，因此未标记通过。
+`AC-SPK-005` 已通过：Gateway 合并批次使用首帧时间戳；boundary 有替代 transcript 时去除重叠普通端点结果，boundary 为空时保留普通端点结果并记录 race；断网 cleanup 前冻结诊断快照；API 白名单保存计数和时长，不接受或持久化原始 PCM/字幕字段。固定双声源会话 `4296e08a-3b2f-4449-9ebb-0299f142db49` 正确形成两位 speaker，时间轴在边界连续，`hit=1`、`miss/error/race/drop=0`、确认延迟1040ms、回切4240ms；iPhone 真人双人无停顿轮流说话正确显示“说话人 1/2”，断句不跨人。
 
 `AC-SPK-006` 当前证据：contracts、ASR、Gateway、API、Flutter 内存态和本地历史均保留可选 `turnId/revision`；不同 turn 强制释放待合并段；批量 ASR 结果按 `startMs/endMs` 排序；最高 revision 幂等生效；迟到译文可补齐，但旧 speaker、timing、sourceText 和 turnId 不会回滚。Node 全仓、Flutter 255 项、analyze、typecheck 和文件大小门禁通过。部署后固定双声源会话 `8703925d-c08e-4e1e-bff6-36a533a40146` 保存 `turn_1/speaker_1` 中文和 `turn_2/speaker_2` 英文，边界连续，hit=1、miss/error/race/drop=0，确认延迟720ms。iPhone 双人/多人验收尚未执行，因此状态仍为 `in_progress`。
 
 `AC-SPK-004` 本轮故障证据：失败真机会话 `adf37a32-f102-40ea-9b0b-9812733f99d0` 的7个 segment 均无 speaker/turn，诊断边界计数为0，且 Beelink 没有对应 speaker session 创建记录。修复后 Gateway `/health` 显示 `speakerProvider=http`、`speakerTimeoutMs=2000`；固定双声源会话 `55dfe12e-59bd-4405-aab5-ed43f3d68004` 保存 `turn_1/speaker_1` 和 `turn_2/speaker_2`，`hit=1`、`miss/error/race/drop=0`、确认延迟720ms。真人 iPhone 复验未执行，因此未标记 accepted。
 
-`AC-SPK-007/OPT-RT-002` 最新证据：Beelink `/health` 返回 `provider=sortformer`、`mode=active`；重新加载源码后的 Gateway/API PID 分别为 `81487/81486`。固定双声源会话 `36d61d75-5d1d-44b9-a2b8-15a5a289a1a6` 保存两位 speaker、两个 turn 和中英文语言画像，`hit=1`、`miss/error/race=0`、确认延迟800ms。Flutter 258项、Gateway 161项、API 177项、Speaker Service 10项、analyze/typecheck/文件大小门禁通过。断网创建期间 End 的自动化门槛为200ms内进入本地 `ended`；iPhone 手工断网复验待执行。
+`AC-SPK-007/OPT-RT-002` 最新证据：Beelink `/health` 返回 `provider=sortformer`、`mode=active`；重新加载源码后的 Gateway/API PID 分别为 `81487/81486`。固定双声源会话 `36d61d75-5d1d-44b9-a2b8-15a5a289a1a6` 保存两位 speaker、两个 turn 和中英文语言画像，`hit=1`、`miss/error/race=0`、确认延迟800ms。Flutter、Gateway、API、Speaker Service、analyze/typecheck/文件大小门禁通过。iPhone 断网 End 已立即进入本地终态，但暴露了原始 `TimeoutException`；现已增加超时归一化和“历史同步未确认”提示，待新 Profile 复验文案。
 
 ## 7. UI 专项验收
 

@@ -320,6 +320,9 @@ const zhRuntimeMessages = <String, String>{
   'Realtime provider error': '实时翻译服务出错',
   'Realtime connection lost': '实时连接已断开',
   'Realtime connection restored': '实时连接已恢复',
+  'Realtime request timed out': '网络连接超时，请恢复网络后重试',
+  'Session ended locally; history sync was not confirmed':
+      '会话已在本机结束，网络不可用，历史记录同步尚未确认',
   'Translation unavailable': '翻译暂不可用',
   'On-device translation unavailable': '端侧翻译暂不可用',
   'Nemotron Core ML model was not found': '未找到 Nemotron Core ML 模型',

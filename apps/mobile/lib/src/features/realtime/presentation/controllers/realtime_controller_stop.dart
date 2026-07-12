@@ -28,7 +28,7 @@ extension RealtimeControllerStop on RealtimeController {
         try {
           await _repository.end(session.sessionId, _segments);
         } catch (error) {
-          _message = error.toString();
+          _message = displayRealtimeFinalizationWarning(error);
           _notify();
         }
       } else {
