@@ -96,6 +96,7 @@ class FireRedAsr2AedEngine:
             target_language=request.targetLanguage,
             start_ms=segment.start_timestamp_ms,
             end_ms=segment.end_timestamp_ms,
+            endpoint_reason=segment.endpoint_reason,
         )
 
     async def flush(
@@ -116,6 +117,7 @@ class FireRedAsr2AedEngine:
             target_language=target_language,
             start_ms=segment.start_timestamp_ms,
             end_ms=segment.end_timestamp_ms,
+            endpoint_reason=segment.endpoint_reason,
         )
 
     async def commit_boundary(
@@ -137,6 +139,7 @@ class FireRedAsr2AedEngine:
             target_language=target_language,
             start_ms=segment.start_timestamp_ms,
             end_ms=segment.end_timestamp_ms,
+            endpoint_reason=segment.endpoint_reason,
         )
 
     async def close_session(self, session_id: str) -> None:
@@ -153,6 +156,7 @@ class FireRedAsr2AedEngine:
         target_language: TranslationLanguageCode,
         start_ms: int,
         end_ms: int,
+        endpoint_reason: str,
     ) -> AsrTranscribeResponse | None:
         audio_path = write_temp_wav(pcm, sample_rate)
         try:
@@ -173,6 +177,7 @@ class FireRedAsr2AedEngine:
                 "endMs": end_ms,
                 "source": "client",
             },
+            endpointReason=endpoint_reason,
         )
 
     def _is_duplicate(self, session_id: str, text: str) -> bool:

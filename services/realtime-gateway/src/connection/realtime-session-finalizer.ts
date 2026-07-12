@@ -1,5 +1,6 @@
 import type {
   RealtimeFlushSummary,
+  RealtimeSessionDiagnosticsDto,
   ServerRealtimeEvent,
   SessionEndReason,
 } from "@translation/contracts";
@@ -16,7 +17,8 @@ import { RealtimeFlushTracker } from "./realtime-flush-tracker.js";
 interface RealtimeSessionFinalizerOptions {
   sessionId: string;
   provider: RealtimeProvider;
-  audioBatcher: Pick<AudioFrameBatcher, "stopAccepting" | "flush">;
+  audioBatcher: Pick<AudioFrameBatcher, "stopAccepting" | "flush"> &
+    Partial<Pick<AudioFrameBatcher, "diagnostics">>;
   send: (event: ServerRealtimeEvent) => void;
   drainSessionSync: () => Promise<void>;
   flushTracker: RealtimeFlushTracker;
@@ -26,6 +28,7 @@ interface RealtimeSessionFinalizerOptions {
 export class RealtimeSessionFinalizer {
   private flushPromise?: Promise<RealtimeFlushSummary>;
   private finalizePromise?: Promise<void>;
+  private sessionDiagnostics?: RealtimeSessionDiagnosticsDto;
 
   constructor(private readonly options: RealtimeSessionFinalizerOptions) {}
 
@@ -51,6 +54,7 @@ export class RealtimeSessionFinalizer {
       this.options.sessionId,
       this.options.send,
     ));
+    this.sessionDiagnostics ??= this.collectDiagnostics();
     await this.options.drainSessionSync();
     return this.options.flushTracker.summarize({
       audioFlushed,
@@ -76,6 +80,7 @@ export class RealtimeSessionFinalizer {
       reason,
       billableSeconds,
       flush,
+      diagnostics: this.sessionDiagnostics ?? this.collectDiagnostics(),
       ...(typeof remainingSeconds === "number" ? { remainingSeconds } : {}),
     });
     await this.options.drainSessionSync();
@@ -92,5 +97,17 @@ export class RealtimeSessionFinalizer {
       this.options.onError(stage, error);
       return false;
     }
+  }
+
+  private collectDiagnostics(): RealtimeSessionDiagnosticsDto {
+    return {
+      version: 1,
+      audio: this.options.audioBatcher.diagnostics?.() ?? {
+        receivedFrameCount: 0,
+        processedBatchCount: 0,
+        droppedFrameCount: 0,
+      },
+      ...(this.options.provider.diagnostics?.(this.options.sessionId) ?? {}),
+    };
   }
 }

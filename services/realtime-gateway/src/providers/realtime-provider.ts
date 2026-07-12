@@ -5,6 +5,7 @@ import type {
   ServerRealtimeEvent,
   TermbaseTermDto,
   SpeakerAttributionOptionsDto,
+  RealtimeSessionDiagnosticsDto,
 } from "@translation/contracts";
 
 export interface RealtimeProviderSession {
@@ -34,6 +35,7 @@ export interface RealtimeProvider {
   sendAudio(frame: AudioFrame): AsyncGenerator<ServerRealtimeEvent>;
   sendText?(segment: TextSegmentInput): AsyncGenerator<ServerRealtimeEvent>;
   flushSession?(sessionId: string): AsyncGenerator<ServerRealtimeEvent>;
+  diagnostics?(sessionId: string): Partial<RealtimeSessionDiagnosticsDto>;
   closeSession(sessionId: string): Promise<void>;
   healthCheck(): Promise<boolean>;
 }

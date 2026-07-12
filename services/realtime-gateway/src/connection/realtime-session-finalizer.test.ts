@@ -22,6 +22,11 @@ describe("realtime session finalizer", () => {
     const audioBatcher = {
       stopAccepting: vi.fn(),
       flush: vi.fn(async () => undefined),
+      diagnostics: vi.fn(() => ({
+        receivedFrameCount: 10,
+        processedBatchCount: 2,
+        droppedFrameCount: 1,
+      })),
     };
     const provider = providerWithFlush();
     const flushTracker = new RealtimeFlushTracker();
@@ -58,6 +63,16 @@ describe("realtime session finalizer", () => {
       },
     });
     expect(ended[0].billableSeconds).toBeGreaterThanOrEqual(8);
+    expect(ended[0]).toMatchObject({
+      diagnostics: {
+        version: 1,
+        audio: {
+          receivedFrameCount: 10,
+          processedBatchCount: 2,
+          droppedFrameCount: 1,
+        },
+      },
+    });
     expect(getSession(session.id)?.status).toBe("ended");
     expect(drainSessionSync).toHaveBeenCalledTimes(2);
   });
@@ -126,6 +141,56 @@ describe("realtime session finalizer", () => {
         translationFinalCount: 0,
         audioFlushed: true,
         providerFlushed: true,
+      },
+    });
+  });
+
+  it("keeps the flush-time diagnostic snapshot after provider cleanup", async () => {
+    const session = createSession(claims());
+    const events: ServerRealtimeEvent[] = [];
+    let diagnosticsAvailable = true;
+    const provider: RealtimeProvider = {
+      ...providerWithoutTail(),
+      diagnostics: () => diagnosticsAvailable
+        ? {
+          speakerTurns: {
+            confirmedBoundaryCount: 1,
+            commitHitCount: 1,
+            commitMissCount: 0,
+            commitErrorCount: 0,
+            endpointRaceCount: 0,
+            averageConfirmationLatencyMs: 300,
+            maxConfirmationLatencyMs: 300,
+            committedAudioMs: 900,
+            endpointReasons: { speaker_boundary: 1 },
+          },
+        }
+        : {},
+    };
+    const flushTracker = new RealtimeFlushTracker();
+    const finalizer = new RealtimeSessionFinalizer({
+      sessionId: session.id,
+      provider,
+      audioBatcher: {
+        stopAccepting: vi.fn(),
+        flush: vi.fn(async () => undefined),
+      },
+      send: (event) => events.push(event),
+      drainSessionSync: async () => undefined,
+      flushTracker,
+      onError: vi.fn(),
+    });
+
+    await finalizer.flush();
+    diagnosticsAvailable = false;
+    await finalizer.finalize("connection_closed");
+
+    expect(events.find((event) => event.type === "session.ended")).toMatchObject({
+      diagnostics: {
+        speakerTurns: {
+          confirmedBoundaryCount: 1,
+          commitHitCount: 1,
+        },
       },
     });
   });

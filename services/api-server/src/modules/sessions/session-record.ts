@@ -3,6 +3,7 @@ import type {
   RealtimeMode,
   SessionReviewResponse,
   SessionSegmentDto,
+  RealtimeSessionDiagnosticsDto,
 } from "@translation/contracts";
 
 export type SessionMode = RealtimeMode | "call_link";
@@ -17,4 +18,5 @@ export interface SessionRecord {
   endedAt?: string;
   segments: SessionSegmentDto[];
   review?: SessionReviewResponse | null;
+  diagnostics?: RealtimeSessionDiagnosticsDto;
 }

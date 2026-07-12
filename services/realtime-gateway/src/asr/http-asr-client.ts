@@ -1,4 +1,5 @@
 import type {
+  AsrEndpointReason,
   AudioFormat,
   LanguageCode,
   TranslationLanguageCode,
@@ -54,6 +55,7 @@ interface HttpAsrResponse {
   confidence?: number;
   speaker?: SpeakerAttributionDto;
   timing?: SegmentTimingDto;
+  endpointReason?: string;
 }
 
 export class HttpAsrClient {
@@ -203,8 +205,16 @@ export class HttpAsrClient {
       confidence: body.confidence,
       ...(isSpeakerAttribution(body.speaker) ? { speaker: body.speaker } : {}),
       ...(isSegmentTiming(body.timing) ? { timing: body.timing } : {}),
+      ...(isAsrEndpointReason(body.endpointReason)
+        ? { endpointReason: body.endpointReason }
+        : {}),
     };
   }
+}
+
+function isAsrEndpointReason(value: unknown): value is AsrEndpointReason {
+  return value === "silence" || value === "max_duration" || value === "flush" ||
+    value === "speaker_boundary";
 }
 
 export function cleanRealtimeTranscript(text: string | undefined) {

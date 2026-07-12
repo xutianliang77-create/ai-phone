@@ -106,6 +106,61 @@ describe("speaker aware asr provider", () => {
       speaker: { speakerId: "speaker_1" },
       timing: { startMs: 0, endMs: 480 },
     });
+    expect(provider.diagnostics("sess_1")).toMatchObject({
+      confirmedBoundaryCount: 1,
+      commitHitCount: 1,
+      commitMissCount: 0,
+      commitErrorCount: 0,
+      averageConfirmationLatencyMs: 480,
+      committedAudioMs: 480,
+    });
+  });
+
+  it("suppresses a regular endpoint result when boundary audio replaces it", async () => {
+    const asr = new RacingAsrProvider();
+    const provider = new SpeakerAwareAsrProvider(
+      asr,
+      new SwitchingSpeakerProvider(),
+    );
+    await provider.createSession(session);
+
+    await provider.transcribe({ ...frame, sequence: 1 });
+    await provider.transcribe({ ...frame, sequence: 2 });
+    await provider.transcribe({ ...frame, sequence: 3 });
+    const transcript = await provider.transcribe({ ...frame, sequence: 4 });
+
+    expect(transcript).toMatchObject({
+      segmentId: "turn_1",
+      text: "first speaker turn",
+      speaker: { speakerId: "speaker_1" },
+    });
+    expect(provider.diagnostics("sess_1")).toMatchObject({
+      endpointRaceCount: 1,
+      commitHitCount: 1,
+    });
+  });
+
+  it("keeps the regular result but reports the race when boundary commit is empty", async () => {
+    const provider = new SpeakerAwareAsrProvider(
+      new EmptyBoundaryRacingAsrProvider(),
+      new SwitchingSpeakerProvider(),
+    );
+    await provider.createSession(session);
+
+    await provider.transcribe({ ...frame, sequence: 1 });
+    await provider.transcribe({ ...frame, sequence: 2 });
+    await provider.transcribe({ ...frame, sequence: 3 });
+    const transcript = await provider.transcribe({ ...frame, sequence: 4 });
+
+    expect(transcript).toMatchObject({
+      segmentId: "regular_endpoint",
+      text: "mixed speakers",
+    });
+    expect(provider.diagnostics("sess_1")).toMatchObject({
+      endpointRaceCount: 1,
+      commitHitCount: 0,
+      commitMissCount: 1,
+    });
   });
 });
 
@@ -192,6 +247,29 @@ class BoundaryAwareAsrProvider extends FakeAsrProvider {
       language: "en" as const,
       timing: { startMs: 0, endMs: input.boundaryMs, source: "client" as const },
     };
+  }
+}
+
+class RacingAsrProvider extends BoundaryAwareAsrProvider {
+  private calls = 0;
+
+  override async transcribe() {
+    this.calls += 1;
+    if (this.calls !== 4) return null;
+    return {
+      segmentId: "regular_endpoint",
+      text: "mixed speakers",
+      language: "en" as const,
+      timing: { startMs: 0, endMs: 960, source: "client" as const },
+      endpointReason: "silence" as const,
+    };
+  }
+}
+
+class EmptyBoundaryRacingAsrProvider extends RacingAsrProvider {
+  override async commitBoundary(input: { sessionId: string; boundaryMs: number }) {
+    this.boundaries.push(input.boundaryMs);
+    return null;
   }
 }
 

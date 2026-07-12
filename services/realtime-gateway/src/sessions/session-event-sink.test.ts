@@ -216,6 +216,48 @@ describe("session event sink", () => {
 
     expect(attempts).toBe(3);
   });
+
+  it("syncs realtime session diagnostics with final settlement", async () => {
+    let body: unknown;
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async (_input, init) => {
+      body = JSON.parse(String(init?.body));
+      return new Response("{}", { status: 200 });
+    };
+
+    try {
+      const sink = createSessionEventSink({
+        ...baseEnv(),
+        sessionEventSink: "api",
+        apiBaseUrl: "http://127.0.0.1:3100",
+      });
+      await sink.record({
+        type: "session.ended",
+        sessionId: "sess_diagnostics",
+        diagnostics: {
+          version: 1,
+          audio: {
+            receivedFrameCount: 8,
+            processedBatchCount: 2,
+            droppedFrameCount: 0,
+          },
+        },
+      });
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+
+    expect(body).toEqual({
+      diagnostics: {
+        version: 1,
+        audio: {
+          receivedFrameCount: 8,
+          processedBatchCount: 2,
+          droppedFrameCount: 0,
+        },
+      },
+    });
+  });
 });
 
 function baseEnv(): RealtimeEnv {

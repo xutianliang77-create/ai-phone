@@ -112,6 +112,7 @@ class ApiSessionEventSink implements SessionEventSink {
         ...(typeof event.billableSeconds === "number"
           ? { billableSeconds: event.billableSeconds }
           : {}),
+        ...(event.diagnostics ? { diagnostics: event.diagnostics } : {}),
       }, 3);
     }
   }

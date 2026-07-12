@@ -7,6 +7,7 @@ import type {
   SessionSegmentRefinementDto,
   SegmentTimingDto,
   SpeakerAttributionDto,
+  RealtimeSessionDiagnosticsDto,
 } from "@translation/contracts";
 import {
   transitionRealtimeSessionState,
@@ -141,6 +142,17 @@ export function saveSessionReview(
   const session = findSession(sessionId);
   if (!session) return null;
   session.review = review;
+  persistStoreSnapshot();
+  return session;
+}
+
+export function saveSessionDiagnostics(
+  sessionId: string,
+  diagnostics: RealtimeSessionDiagnosticsDto,
+) {
+  const session = findSession(sessionId);
+  if (!session) return null;
+  session.diagnostics = diagnostics;
   persistStoreSnapshot();
   return session;
 }

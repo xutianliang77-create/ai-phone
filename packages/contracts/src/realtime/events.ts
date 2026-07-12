@@ -1,4 +1,5 @@
 import type { AudioFrame, AudioOutput } from "./audio.js";
+import type { RealtimeSessionDiagnosticsDto } from "./diagnostics.js";
 import type { SessionSegmentProviderUsageDto } from "../api/realtime.js";
 import type { SessionSegmentRefinementDto } from "../api/realtime.js";
 import type { RealtimeError, RealtimeErrorStage } from "./errors.js";
@@ -103,6 +104,7 @@ export interface SessionEndedEvent {
   billableSeconds?: number;
   remainingSeconds?: number;
   flush?: RealtimeFlushSummary;
+  diagnostics?: RealtimeSessionDiagnosticsDto;
 }
 
 export interface SessionPausedEvent {

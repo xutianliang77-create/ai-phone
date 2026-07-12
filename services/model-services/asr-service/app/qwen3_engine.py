@@ -106,6 +106,7 @@ class Qwen3AsrEngine:
             corrections=request.corrections,
             start_ms=segment.start_timestamp_ms,
             end_ms=segment.end_timestamp_ms,
+            endpoint_reason=segment.endpoint_reason,
         )
 
     async def flush(
@@ -129,6 +130,7 @@ class Qwen3AsrEngine:
             corrections=corrections,
             start_ms=segment.start_timestamp_ms,
             end_ms=segment.end_timestamp_ms,
+            endpoint_reason=segment.endpoint_reason,
         )
 
     async def commit_boundary(
@@ -153,6 +155,7 @@ class Qwen3AsrEngine:
             corrections=corrections,
             start_ms=segment.start_timestamp_ms,
             end_ms=segment.end_timestamp_ms,
+            endpoint_reason=segment.endpoint_reason,
         )
 
     async def close_session(self, session_id: str) -> None:
@@ -172,6 +175,7 @@ class Qwen3AsrEngine:
         corrections: list[object],
         start_ms: int,
         end_ms: int,
+        endpoint_reason: str,
     ) -> AsrTranscribeResponse | None:
         audio_path = write_temp_wav(pcm, sample_rate)
         try:
@@ -205,6 +209,7 @@ class Qwen3AsrEngine:
                 "endMs": end_ms,
                 "source": "client",
             },
+            endpointReason=endpoint_reason,
         )
 
     def _is_duplicate(self, session_id: str, text: str) -> bool:

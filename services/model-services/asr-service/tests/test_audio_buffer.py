@@ -47,6 +47,7 @@ def test_realtime_segmenter_emits_after_endpoint_silence() -> None:
     assert segment.end_sequence == 3
     assert segment.duration_ms == 120
     assert segment.pcm == voice_pcm() + silence_pcm() * 2
+    assert segment.endpoint_reason == "silence"
 
 
 def test_realtime_segmenter_flushes_at_max_window() -> None:
@@ -62,6 +63,7 @@ def test_realtime_segmenter_flushes_at_max_window() -> None:
 
     assert segment is not None
     assert segment.duration_ms == 120
+    assert segment.endpoint_reason == "max_duration"
 
 
 def test_realtime_segmenter_flushes_active_speech() -> None:
@@ -74,6 +76,7 @@ def test_realtime_segmenter_flushes_active_speech() -> None:
     assert segment.end_sequence == 1
     assert segment.duration_ms == 40
     assert segment.pcm == voice_pcm()
+    assert segment.endpoint_reason == "flush"
 
 
 def test_realtime_segmenter_does_not_flush_leading_silence() -> None:
@@ -108,6 +111,7 @@ def test_realtime_segmenter_commits_audio_at_speaker_boundary() -> None:
     assert previous_turn.pcm == voice_pcm() * 2
     assert previous_turn.start_timestamp_ms == 1000
     assert previous_turn.end_timestamp_ms == 1080
+    assert previous_turn.endpoint_reason == "speaker_boundary"
     assert next_turn is not None
     assert next_turn.pcm == voice_pcm()
     assert next_turn.start_timestamp_ms == 1080

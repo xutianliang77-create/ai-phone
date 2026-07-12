@@ -7,6 +7,7 @@ import type {
   SegmentTimingDto,
   SpeakerAttributionDto,
 } from "../shared/speaker.js";
+import type { RealtimeSessionDiagnosticsDto } from "../realtime/diagnostics.js";
 
 export interface SessionStatusResponse {
   sessionId: string;
@@ -190,6 +191,7 @@ export interface SessionListItem {
 export interface SessionDetailResponse extends SessionListItem {
   segments: SessionSegmentDto[];
   review?: SessionReviewResponse | null;
+  diagnostics?: RealtimeSessionDiagnosticsDto;
 }
 
 export interface SessionSpeakerDto {

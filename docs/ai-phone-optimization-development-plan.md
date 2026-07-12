@@ -1,6 +1,6 @@
 # ai phone 优化开发计划
 
-版本：v1.8
+版本：v1.9
 日期：2026-07-12
 任务来源：`docs/ai-phone-optimization-development-tasks.md`
 
@@ -25,7 +25,7 @@
 ### 当前迭代基线
 
 - `OPT-SPK-005` 已完成代码、自动化、Beelink ASR 部署和固定双声源无停顿全链路验证，当前状态为 `in_progress`，只差 iPhone 双人快速换人验收。
-- `OPT-SPK-006` 的 PCM boundary 回切已部署并通过真实音频连续性验证；诊断缓冲、竞态指标和真机验收仍未完成。
+- `OPT-SPK-006` 的 PCM boundary 回切已通过真实音频连续性验证；合并批次时间轴根因已修复，诊断窗口、竞态指标和 session 持久化已完成代码及仓库级门禁，等待部署后的真实 session 与真机验收。
 - 当前临时链路为 iPhone -> Mac API/Gateway -> Beelink 模型服务，只用于联调。正式退出条件仍是 iPhone -> Beelink 唯一公开入口，Mac 不参与运行链路。
 - 下一开发主线固定为：真机 speaker boundary -> Turn Buffer 可观测性与幂等 -> speaker-turn 翻译 -> 多人混合语种 -> Beelink 单服务器收敛。
 
@@ -167,7 +167,7 @@ LLM 纪要、扫描 UI 和国际模型 Provider 可在 M1 稳定接口冻结后�
 | 阶段 | 任务 | 预计工作量 | 状态 | 交付与退出条件 |
 | --- | --- | ---: | --- | --- |
 | V0 | `OPT-VAD-001` 服务器主 VAD | 已完成 | accepted | MarbleNet 上线、RMS 降级、真机通过 |
-| V1 | `OPT-VAD-002` session 观测 | 1 天 | todo | 质量报告含 Provider、阈值、speech ratio、endpoint reason、fallback |
+| V1 | `OPT-VAD-002` session 观测 | 0.5天剩余 | in_progress | endpoint reason 和丢帧已贯通；补 Provider、阈值、speech ratio、fallback 和 fingerprint |
 | V2 | `OPT-VAD-003` 模式化端点 | 2 天 | todo | 四种模式固定语料和延迟门禁通过，可一键回退 1100ms |
 | V3 | `OPT-RT-003/004` 联合回归 | 1 天 | todo | 长句、短停顿、立即结束、断网 flush 无回归 |
 | V4 | `OPT-VAD-004` 时间轴贯通 | 1-2 天 | todo | speaker、segment、history、review 使用同一 speech 时间范围 |
@@ -181,7 +181,7 @@ LLM 纪要、扫描 UI 和国际模型 Provider 可在 M1 稳定接口冻结后�
 | --- | --- | ---: | --- | --- |
 | S0 | 多人默认统一为4 | 0.5天 | accepted | App、API、Speaker Service 和协议一致，旧客户端2人配置被服务器规范化 |
 | S1 | `OPT-SPK-005` 边界协调器 | 0.5天剩余 | in_progress | 已部署且固定双声源全链路通过；iPhone 双人无停顿两轮四句待验收 |
-| S2 | `OPT-SPK-006` ASR Turn Buffer | 2天剩余 | in_progress | boundary PCM 回切与 VAD 连续性已通过；补诊断缓冲、竞态指标和真机证据 |
+| S2 | `OPT-SPK-006` ASR Turn Buffer | 1天剩余 | in_progress | 时间轴修复、诊断指标和竞态去重自动化通过；补真实 session 指标和真机证据 |
 | S3 | `OPT-SPK-007` 翻译队列 | 1-2天 | todo | 不跨 speaker 翻译，最近 turn 只作上下文，输出顺序稳定 |
 | S4 | `OPT-SPK-008` overlap/混合语种 | 1-2天 | in_progress | 2至4人、中英夹杂、抢话和重叠策略通过 |
 | S5 | 联合真机验收 | 2天 | todo | 对话、聆听、双人、三人、四人、快速换人、混合语种和30分钟稳定性通过 |
@@ -193,8 +193,8 @@ LLM 纪要、扫描 UI 和国际模型 Provider 可在 M1 稳定接口冻结后�
 
 | 开发日 | 主要工作 | 当日门禁 |
 | --- | --- | --- |
-| D1 | iPhone 双人无停顿验收；补 boundary/VAD session 指标 | 四句两轮正确换人；日志可解释每次 hit/miss |
-| D2 | 2秒诊断环形缓冲；普通端点与 speaker boundary 幂等 | 时间轴无重叠、无空洞、无重复 transcript |
+| D1 | 部署最新 API/Gateway/ASR；iPhone 双人无停顿验收 | 四句两轮正确换人；历史保存 diagnostics；日志可解释每次 hit/miss |
+| D2 | 真实 session 竞态复验；补 VAD fallback/fingerprint | 时间轴无重叠、无空洞、无重复 transcript，诊断字段完整 |
 | D3 | `turnId + revision` 数据契约和 Repository 迁移 | 旧历史兼容；新 segment 可追溯 speaker turn |
 | D4 | speaker-turn 有序翻译、纠错和 TTS 输入 | 并发响应不乱序、不跨 speaker 合并 |
 | D5 | 2至4人、快速换人、中英夹杂、抢话和 overlap | 匿名标签稳定；语言变化不作为硬断点 |

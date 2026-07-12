@@ -225,11 +225,12 @@ describe("http asr client", () => {
           segmentId: "boundary_4",
           text: "first speaker turn",
           language: "en",
+          endpointReason: "speaker_boundary",
         });
       }) as typeof fetch,
     });
 
-    await client.commitBoundary({
+    const transcript = await client.commitBoundary({
       sessionId: "sess_1",
       boundaryMs: 1480,
       sourceLanguage: "en",
@@ -246,6 +247,7 @@ describe("http asr client", () => {
         corrections: [],
       },
     });
+    expect(transcript?.endpointReason).toBe("speaker_boundary");
   });
 
   it("closes remote ASR sessions", async () => {

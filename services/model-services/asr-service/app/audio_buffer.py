@@ -1,35 +1,12 @@
 import base64
 from dataclasses import dataclass, field
-import struct
 from typing import TYPE_CHECKING
 
+from app.pcm_audio import PcmSessionBuffer, audio_duration_ms, pcm16_rms
 from app.schemas import AsrTranscribeRequest
 
 if TYPE_CHECKING:
     from app.vad import VadProvider
-
-
-class PcmSessionBuffer:
-    def __init__(self, min_audio_ms: int) -> None:
-        self.min_audio_ms = min_audio_ms
-        self._chunks_by_session: dict[str, list[bytes]] = {}
-        self._seen_sequences: dict[str, set[int]] = {}
-
-    def append(self, request: AsrTranscribeRequest) -> bytes | None:
-        seen = self._seen_sequences.setdefault(request.sessionId, set())
-        if request.sequence in seen:
-            return None
-        seen.add(request.sequence)
-
-        chunk = base64.b64decode(request.data, validate=True)
-        chunks = self._chunks_by_session.setdefault(request.sessionId, [])
-        chunks.append(chunk)
-        if audio_duration_ms(b"".join(chunks), request.sampleRate) < self.min_audio_ms:
-            return None
-
-        audio = b"".join(chunks)
-        self._chunks_by_session[request.sessionId] = []
-        return audio
 
 
 @dataclass(frozen=True)
@@ -40,6 +17,7 @@ class PcmAudioSegment:
     duration_ms: int
     start_timestamp_ms: int
     end_timestamp_ms: int
+    endpoint_reason: str
 
 
 @dataclass(frozen=True)
@@ -132,6 +110,7 @@ class RealtimePcmSegmenter:
             end_timestamp_ms=(
                 state.chunks[-1].timestamp_ms + state.chunks[-1].duration_ms
             ),
+            endpoint_reason="flush",
         )
         reset_active_segment(state)
         self.vad_provider.reset_session(session_id)
@@ -150,7 +129,11 @@ class RealtimePcmSegmenter:
         if not previous_chunks or not any(chunk.voiced for chunk in previous_chunks):
             return None
 
-        segment = segment_from_chunks(previous_chunks, state.sample_rate)
+        segment = segment_from_chunks(
+            previous_chunks,
+            state.sample_rate,
+            endpoint_reason="speaker_boundary",
+        )
         retain_chunks_after_boundary(state, next_chunks, self.preroll_ms)
         return segment
 
@@ -211,31 +194,11 @@ class RealtimePcmSegmenter:
             end_timestamp_ms=(
                 state.chunks[-1].timestamp_ms + state.chunks[-1].duration_ms
             ),
+            endpoint_reason="silence" if has_endpoint else "max_duration",
         )
         reset_active_segment(state)
         self.vad_provider.reset_session(request.sessionId)
         return segment
-
-
-def audio_duration_ms(pcm: bytes, sample_rate: int) -> int:
-    if sample_rate <= 0:
-        return 0
-    return len(pcm) * 1000 // (sample_rate * 2)
-
-
-def pcm16_rms(pcm: bytes) -> int:
-    even_length = len(pcm) - (len(pcm) % 2)
-    if even_length == 0:
-        return 0
-
-    total = 0
-    count = 0
-    for (sample,) in struct.iter_unpack("<h", pcm[:even_length]):
-        total += sample * sample
-        count += 1
-    if count == 0:
-        return 0
-    return int((total / count) ** 0.5)
 
 
 def trim_preroll(state: _RealtimeSessionState, max_ms: int) -> None:
@@ -295,6 +258,7 @@ def copy_chunk(
 def segment_from_chunks(
     chunks: list[_PcmChunk],
     sample_rate: int,
+    endpoint_reason: str,
 ) -> PcmAudioSegment:
     return PcmAudioSegment(
         pcm=b"".join(chunk.pcm for chunk in chunks),
@@ -303,6 +267,7 @@ def segment_from_chunks(
         duration_ms=sum(chunk.duration_ms for chunk in chunks),
         start_timestamp_ms=chunks[0].timestamp_ms,
         end_timestamp_ms=chunks[-1].timestamp_ms + chunks[-1].duration_ms,
+        endpoint_reason=endpoint_reason,
     )
 
 

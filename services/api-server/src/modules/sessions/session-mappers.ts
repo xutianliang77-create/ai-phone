@@ -23,6 +23,7 @@ export function toSessionDetail(session: SessionRecord): SessionDetailResponse {
     ...toSessionListItem(session),
     segments: session.segments,
     review: session.review ?? null,
+    ...(session.diagnostics ? { diagnostics: session.diagnostics } : {}),
   };
 }
 

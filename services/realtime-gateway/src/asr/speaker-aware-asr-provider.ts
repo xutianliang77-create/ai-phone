@@ -13,11 +13,13 @@ import type {
 import { alignSpeakerSpan } from "../speaker/speaker-segment-aligner.js";
 import { SpeechTurnCoordinator } from "../speaker/speech-turn-coordinator.js";
 import { realtimeLogger } from "../metrics/realtime-metrics.js";
+import { SpeakerTurnDiagnostics } from "./speaker-turn-diagnostics.js";
 
 export class SpeakerAwareAsrProvider implements AsrProvider {
   private static readonly speakerSpanRetentionMs = 120_000;
   private readonly spansBySession = new Map<string, SpeakerSpan[]>();
   private readonly enabledSessions = new Set<string>();
+  private readonly turnDiagnostics = new SpeakerTurnDiagnostics();
 
   constructor(
     private readonly asr: AsrProvider,
@@ -54,13 +56,15 @@ export class SpeakerAwareAsrProvider implements AsrProvider {
     ]);
     const spans = this.retainRecentSpans(frame.sessionId, nextSpans);
     this.spansBySession.set(frame.sessionId, spans);
+    this.turnDiagnostics.recordFrame(frame.sessionId, frame, nextSpans.length);
     const boundary = nextSpans.length > 0
       ? this.turnCoordinator.observe(frame.sessionId, spans)
       : null;
-    const committed = boundary
+    const regularTurns = asrResults(transcripts);
+    const commit = boundary
       ? await this.safeCommitBoundary(frame.sessionId, boundary.boundaryMs)
-      : null;
-    const committedTurns = asrResults(committed).map((transcript) => ({
+      : { result: null, error: false };
+    const committedTurns = asrResults(commit.result).map((transcript) => ({
       ...transcript,
       speaker: transcript.speaker ?? {
         speakerId: boundary?.previousSpeakerId ?? "unknown",
@@ -68,7 +72,21 @@ export class SpeakerAwareAsrProvider implements AsrProvider {
         source: "diarization" as const,
       },
     }));
+    const filteredRegularTurns = committedTurns.length > 0
+      ? removeOverlappingTranscripts(regularTurns, committedTurns)
+      : regularTurns;
     if (boundary) {
+      const endpointRaceCount = regularTurns.filter(
+        (item) => crossesBoundary(item, boundary.boundaryMs),
+      ).length;
+      this.turnDiagnostics.recordBoundary(
+        frame.sessionId,
+        boundary,
+        commit.error ? "error" : committedTurns.length > 0 ? "hit" : "miss",
+        committedTurns,
+        endpointRaceCount,
+      );
+      const context = this.turnDiagnostics.boundaryContext(frame.sessionId);
       realtimeLogger.info({
         sessionId: frame.sessionId,
         previousSpeakerId: boundary.previousSpeakerId,
@@ -78,10 +96,15 @@ export class SpeakerAwareAsrProvider implements AsrProvider {
         confidence: boundary.confidence,
         dominanceRatio: boundary.dominanceRatio,
         committedTranscriptCount: committedTurns.length,
+        endpointRaceCount,
+        commitError: commit.error,
+        ...context,
       }, "Confirmed realtime speaker turn boundary");
     }
+    const outgoing = [...filteredRegularTurns, ...committedTurns];
+    this.turnDiagnostics.recordTranscripts(frame.sessionId, outgoing);
     return this.attributedResults(
-      [...asrResults(transcripts), ...committedTurns],
+      outgoing,
       spans,
     );
   }
@@ -95,7 +118,13 @@ export class SpeakerAwareAsrProvider implements AsrProvider {
     ]);
     const spans = this.retainRecentSpans(sessionId, nextSpans);
     this.spansBySession.set(sessionId, spans);
-    return this.attributedResults(asrResults(transcripts), spans);
+    const results = asrResults(transcripts);
+    this.turnDiagnostics.recordTranscripts(sessionId, results);
+    return this.attributedResults(results, spans);
+  }
+
+  diagnostics(sessionId: string) {
+    return this.turnDiagnostics.snapshot(sessionId);
   }
 
   async closeSession(sessionId: string) {
@@ -106,6 +135,7 @@ export class SpeakerAwareAsrProvider implements AsrProvider {
     if (speakerEnabled) {
       await this.speaker.closeSession(sessionId).catch(() => undefined);
     }
+    this.turnDiagnostics.clear(sessionId);
   }
 
   async healthCheck() {
@@ -163,11 +193,35 @@ export class SpeakerAwareAsrProvider implements AsrProvider {
   }
 
   private async safeCommitBoundary(sessionId: string, boundaryMs: number) {
-    if (!this.asr.commitBoundary) return null;
+    if (!this.asr.commitBoundary) return { result: null, error: false };
     try {
-      return await this.asr.commitBoundary({ sessionId, boundaryMs });
+      return {
+        result: await this.asr.commitBoundary({ sessionId, boundaryMs }),
+        error: false,
+      };
     } catch {
-      return null;
+      return { result: null, error: true };
     }
   }
+}
+
+function removeOverlappingTranscripts(
+  regular: TranscriptResult[],
+  committed: TranscriptResult[],
+) {
+  return regular.filter((item) =>
+    !committed.some((boundaryItem) => timingsOverlap(item, boundaryItem))
+  );
+}
+
+function timingsOverlap(left: TranscriptResult, right: TranscriptResult) {
+  if (!left.timing || !right.timing) return false;
+  return left.timing.startMs < right.timing.endMs &&
+    right.timing.startMs < left.timing.endMs;
+}
+
+function crossesBoundary(transcript: TranscriptResult, boundaryMs: number) {
+  if (!transcript.timing) return false;
+  return transcript.timing.startMs < boundaryMs &&
+    transcript.timing.endMs > boundaryMs;
 }

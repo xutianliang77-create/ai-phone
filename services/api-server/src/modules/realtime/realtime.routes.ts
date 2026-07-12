@@ -17,6 +17,7 @@ import {
 import { completeSessionWithUsage } from "../sessions/session-completion.js";
 import { validateCreateRealtimeSessionRequest } from "./create-session-request.js";
 import { createRealtimeSession } from "./realtime.service.js";
+import { parseRealtimeDiagnostics } from "./realtime-diagnostics.js";
 
 export async function registerRealtimeRoutes(app: FastifyInstance) {
   app.post("/realtime/sessions", async (request, reply) => {
@@ -160,11 +161,26 @@ export async function registerRealtimeRoutes(app: FastifyInstance) {
       }
 
       const params = request.params as { sessionId: string };
-      const body = request.body as Partial<{ billableSeconds: unknown }> | undefined;
+      const body = request.body as Partial<{
+        billableSeconds: unknown;
+        diagnostics: unknown;
+      }> | undefined;
       const billableSeconds = parseBillableSeconds(body?.billableSeconds);
+      const diagnostics = parseRealtimeDiagnostics(body?.diagnostics);
+      if (body?.diagnostics !== undefined && !diagnostics) {
+        return sendError(
+          reply,
+          400,
+          "invalid_session_diagnostics",
+          "Invalid realtime session diagnostics",
+        );
+      }
       const session = completeSessionWithUsage(
         params.sessionId,
-        typeof billableSeconds === "number" ? { billableSeconds } : {},
+        {
+          ...(typeof billableSeconds === "number" ? { billableSeconds } : {}),
+          ...(diagnostics ? { diagnostics } : {}),
+        },
       );
       if (!session)
         return sendError(reply, 404, "session_not_found", "Session not found");

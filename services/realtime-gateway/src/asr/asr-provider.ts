@@ -1,4 +1,5 @@
 import type {
+  AsrEndpointReason,
   AudioFrame,
   LanguageCode,
   TranslationLanguageCode,
@@ -23,6 +24,19 @@ export interface TranscriptResult {
   confidence?: number;
   speaker?: SpeakerAttributionDto;
   timing?: SegmentTimingDto;
+  endpointReason?: AsrEndpointReason;
+}
+
+export interface AsrSpeakerTurnDiagnostics {
+  confirmedBoundaryCount: number;
+  commitHitCount: number;
+  commitMissCount: number;
+  commitErrorCount: number;
+  endpointRaceCount: number;
+  averageConfirmationLatencyMs: number;
+  maxConfirmationLatencyMs: number;
+  committedAudioMs: number;
+  endpointReasons: Partial<Record<AsrEndpointReason, number>>;
 }
 
 export interface AsrTurnBoundary {
@@ -37,6 +51,7 @@ export interface AsrProvider {
   transcribe(frame: AudioFrame): Promise<AsrProviderResult>;
   flush(sessionId: string): Promise<AsrProviderResult>;
   commitBoundary?(boundary: AsrTurnBoundary): Promise<AsrProviderResult>;
+  diagnostics?(sessionId: string): AsrSpeakerTurnDiagnostics | undefined;
   closeSession(sessionId: string): Promise<void>;
   healthCheck(): Promise<boolean>;
 }

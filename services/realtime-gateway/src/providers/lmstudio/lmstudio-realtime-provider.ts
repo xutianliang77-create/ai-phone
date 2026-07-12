@@ -148,6 +148,7 @@ export class LmStudioRealtimeProvider implements RealtimeProvider {
     await this.asrProvider.closeSession(sessionId);
   }
 
+  diagnostics(sessionId: string) { const speakerTurns = this.asrProvider.diagnostics?.(sessionId); return speakerTurns ? { speakerTurns } : {}; }
   async healthCheck() {
     return (
       (await this.client.healthCheck()) &&

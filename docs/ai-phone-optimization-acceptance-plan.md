@@ -1,7 +1,7 @@
 # ai phone 优化验收方案
 
-版本：v1.6
-日期：2026-07-11  
+版本：v1.7
+日期：2026-07-12
 任务来源：`docs/ai-phone-optimization-development-tasks.md`
 
 ## 1. 验收原则
@@ -110,7 +110,7 @@ TTS 回灌指标由 App playback gate/AEC 验收，不能把 VAD 对合成语音
 | AC-SPK-001 | OPT-SPK-001 | Call Link/PSTN 独立音轨角色归属准确，字幕、历史、导出和 review 字段一致 |
 | AC-SPK-002 | OPT-SPK-002、OPT-SPK-003 | 双人/多人固定语料达到 DER、切换延迟和 30 分钟标签稳定性门槛，不跨 speaker 合并 |
 | AC-SPK-004 | OPT-SPK-005 | 新 speaker 证据不足时不切段；达到240ms、65%占比、0.60置信度且连续稳定后产生一次边界 |
-| AC-SPK-005 | OPT-SPK-006 | 两人无停顿快速换人 | ASR 音频在 boundaryMs 切开，上一人和下一人文本不进入同一 turn |
+| AC-SPK-005 | OPT-SPK-006 | 两人无停顿快速换人时 ASR 音频在 `boundaryMs` 切开，上一人和下一人文本不进入同一 turn；session 保存 hit/miss/error、确认延迟、回切时长、丢帧、endpoint race 和 endpoint reason；重复 End 不覆盖首份诊断 |
 | AC-SPK-006 | OPT-SPK-007 | 2至4人交替和模型乱序返回 | 翻译按 turn startMs 展示，不跨 speaker 拼接，不重复 TTS 或计费 |
 | AC-SPK-007 | OPT-SPK-008 | 中文夹英文、英文夹中文、姓名、型号、抢话和重叠 | 语种变化不触发硬断点；主 speaker 可翻译；overlap 和 unknown 如实显示 |
 | AC-CALL-001 | OPT-CALL-001 | Host + Guest + Worker 连续 30 分钟，字幕和译音双向可用 |
@@ -137,6 +137,8 @@ TTS 回灌指标由 App playback gate/AEC 验收，不能把 VAD 对合成语音
 | AC-DATA-003 | OPT-DATA-003 | SQLite 迁移 PostgreSQL/Redis 演练 | 数量、余额、幂等键和对象引用一致，可回滚 |
 
 说话人专项证据必须同时包含：Call Link 多参与者独立音轨、安静双人、三人和四人单麦克风、快速抢话、重叠语音、中英混说、断网重连、30分钟稳定性、会话内重命名、纪要和三种导出。模型服务不可用时 ASR/翻译仍须继续，UI 显示匿名或未知，不得误显示实名。对话和聆听不得使用固定两人假设；单麦克风超过4人时必须明确能力降级，不伪造稳定身份。
+
+`AC-SPK-005` 当前自动化证据：Gateway 合并批次使用首帧时间戳；boundary 有替代 transcript 时去除重叠普通端点结果，boundary 为空时保留普通端点结果并记录 race；断网 cleanup 前冻结诊断快照；API 白名单保存计数和时长，不接受或持久化原始 PCM/字幕字段。仓库级构建和测试已通过，Beelink 部署后的真实 session 与 iPhone 双人验收尚未执行，因此未标记通过。
 
 ## 7. UI 专项验收
 

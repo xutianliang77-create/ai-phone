@@ -5,6 +5,7 @@ export * from "./api/plans.js";
 export * from "./api/realtime.js";
 export * from "./call-room/events.js";
 export * from "./realtime/audio.js";
+export * from "./realtime/diagnostics.js";
 export * from "./realtime/errors.js";
 export * from "./realtime/events.js";
 export * from "./realtime/session.js";
