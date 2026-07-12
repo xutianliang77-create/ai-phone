@@ -122,6 +122,31 @@ void main() {
 
     expect(changed?.domainLexiconPack, 'medical');
   });
+
+  testWidgets('groups settings and offers an end action while locked',
+      (tester) async {
+    var endRequested = false;
+    await tester.pumpWidget(_TestApp(
+      child: RealtimeSettingsPanel(
+        settings: const RealtimeRuntimeSettings(
+          processingMode: RealtimeProcessingMode.online,
+          sourceLanguage: 'zh',
+          targetLanguage: 'en',
+          voiceOutputMode: RealtimeVoiceOutputMode.off,
+        ),
+        enabled: false,
+        onChanged: (_) {},
+        onEndRequested: () => endRequested = true,
+      ),
+    ));
+
+    expect(find.text('运行模式'), findsOneWidget);
+    expect(find.text('语言与行业'), findsOneWidget);
+    expect(find.text('声音'), findsOneWidget);
+    expect(find.text('同传中不可切换设置'), findsOneWidget);
+    await tester.tap(find.text('结束后修改'));
+    expect(endRequested, isTrue);
+  });
 }
 
 class _TestApp extends StatelessWidget {

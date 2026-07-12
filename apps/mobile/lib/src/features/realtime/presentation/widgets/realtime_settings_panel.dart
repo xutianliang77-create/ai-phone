@@ -16,6 +16,7 @@ class RealtimeSettingsPanel extends StatelessWidget {
     this.autoSpeakSupported = true,
     this.voicePresets = const <VoicePreset>[],
     this.voicePresetsLoading = false,
+    this.onEndRequested,
     this.padding = const EdgeInsets.fromLTRB(16, 4, 16, 8),
     super.key,
   });
@@ -26,6 +27,7 @@ class RealtimeSettingsPanel extends StatelessWidget {
   final bool autoSpeakSupported;
   final List<VoicePreset> voicePresets;
   final bool voicePresetsLoading;
+  final VoidCallback? onEndRequested;
   final EdgeInsetsGeometry padding;
 
   @override
@@ -37,6 +39,8 @@ class RealtimeSettingsPanel extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
+          _SectionLabel(l10n.processingModeLabel),
+          const SizedBox(height: 6),
           SegmentedButton<RealtimeProcessingMode>(
             showSelectedIcon: false,
             segments: <ButtonSegment<RealtimeProcessingMode>>[
@@ -54,7 +58,9 @@ class RealtimeSettingsPanel extends StatelessWidget {
             selected: <RealtimeProcessingMode>{settings.processingMode},
             onSelectionChanged: enabled ? _changeProcessingMode : null,
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 16),
+          _SectionLabel(l10n.languageSettingsGroupLabel),
+          const SizedBox(height: 6),
           Wrap(
             spacing: 8,
             runSpacing: 8,
@@ -79,22 +85,39 @@ class RealtimeSettingsPanel extends StatelessWidget {
                 enabled: enabled,
                 onChanged: onChanged,
               ),
-              _VoiceOutputSelector(
-                settings: settings,
-                enabled: enabled && autoSpeakSupported,
-                onChanged: onChanged,
-                voicePresets: voicePresets,
-                voicePresetsLoading: voicePresetsLoading,
-              ),
-              if (!enabled)
-                Text(
-                  l10n.settingsLockedHint,
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.outline,
-                  ),
-                ),
             ],
           ),
+          const SizedBox(height: 16),
+          _SectionLabel(l10n.voiceSettingsGroupLabel),
+          const SizedBox(height: 6),
+          _VoiceOutputSelector(
+            settings: settings,
+            enabled: enabled && autoSpeakSupported,
+            onChanged: onChanged,
+            voicePresets: voicePresets,
+            voicePresetsLoading: voicePresetsLoading,
+          ),
+          if (!enabled) ...[
+            const SizedBox(height: 8),
+            Row(
+              children: <Widget>[
+                Expanded(
+                  child: Text(
+                    l10n.settingsLockedHint,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.outline,
+                    ),
+                  ),
+                ),
+                if (onEndRequested != null)
+                  TextButton.icon(
+                    onPressed: onEndRequested,
+                    icon: const Icon(Icons.stop),
+                    label: Text(l10n.endToChangeSettingsLabel),
+                  ),
+              ],
+            ),
+          ],
         ],
       ),
     );
@@ -121,6 +144,17 @@ class RealtimeSettingsPanel extends StatelessWidget {
     onChanged(kind == LanguagePickerKind.source
         ? settings.copyWith(sourceLanguage: selected)
         : settings.copyWith(targetLanguage: selected));
+  }
+}
+
+class _SectionLabel extends StatelessWidget {
+  const _SectionLabel(this.text);
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(text, style: Theme.of(context).textTheme.titleSmall);
   }
 }
 

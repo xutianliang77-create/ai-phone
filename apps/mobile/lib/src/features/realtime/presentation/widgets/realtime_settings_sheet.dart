@@ -16,6 +16,7 @@ class RealtimeSettingsSheet extends StatelessWidget {
     required this.autoSpeakSupported,
     required this.onRealtimeModeChanged,
     required this.onSettingsChanged,
+    this.onEndRequested,
     this.voicePresets = const <VoicePreset>[],
     this.voicePresetsLoading = false,
     super.key,
@@ -28,6 +29,7 @@ class RealtimeSettingsSheet extends StatelessWidget {
   final bool autoSpeakSupported;
   final ValueChanged<String> onRealtimeModeChanged;
   final ValueChanged<RealtimeRuntimeSettings> onSettingsChanged;
+  final VoidCallback? onEndRequested;
   final List<VoicePreset> voicePresets;
   final bool voicePresetsLoading;
 
@@ -51,6 +53,11 @@ class RealtimeSettingsSheet extends StatelessWidget {
             style: theme.textTheme.titleLarge,
           ),
           const SizedBox(height: 12),
+          Text(
+            l10n.conversationModeGroupLabel,
+            style: theme.textTheme.titleSmall,
+          ),
+          const SizedBox(height: 6),
           RealtimeModeSelector(
             mode: realtimeMode,
             enabled: modeEnabled,
@@ -65,6 +72,7 @@ class RealtimeSettingsSheet extends StatelessWidget {
             onChanged: onSettingsChanged,
             voicePresets: voicePresets,
             voicePresetsLoading: voicePresetsLoading,
+            onEndRequested: onEndRequested,
             padding: EdgeInsets.zero,
           ),
         ],

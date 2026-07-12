@@ -14,6 +14,7 @@ void showRealtimeSettingsSheet({
   required bool Function() autoSpeakSupported,
   required ValueChanged<String> onRealtimeModeChanged,
   required ValueChanged<RealtimeRuntimeSettings> onSettingsChanged,
+  VoidCallback? onEndRequested,
   List<VoicePreset> voicePresets = const <VoicePreset>[],
   bool voicePresetsLoading = false,
 }) {
@@ -45,6 +46,7 @@ void showRealtimeSettingsSheet({
                 autoSpeakSupported: autoSpeakSupported(),
                 onRealtimeModeChanged: changeRealtimeMode,
                 onSettingsChanged: changeSettings,
+                onEndRequested: onEndRequested,
                 voicePresets: voicePresets,
                 voicePresetsLoading: voicePresetsLoading,
               );

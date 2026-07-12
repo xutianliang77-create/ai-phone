@@ -1,6 +1,6 @@
 # ai phone 优化开发任务清单
 
-版本：v4.2
+版本：v4.3
 日期：2026-07-12
 关联：`docs/domestic-app-detailed-functional-design.md`、`docs/ai-phone-translation-technical-design.md`、`docs/domestic-design-review-action-plan.md`
 
@@ -65,6 +65,9 @@
 - `OPT-MOB-002`：iPhone `accepted`。iPhone 20句连续采集、蓝牙切换、Listening 静音和声音偏好恢复均通过；Android 真机验收统一列为 TODO，并在 iOS 产品化完成后启动。
 - `OPT-UI-001`：代码和自动化门禁完成；`idle/connecting/active/paused/ending/ended/failed` 只展示当前可执行操作，主操作固定在同一槽位，连接中可取消且迟到 session 不会恢复同传。iPhone/Android 真机布局与点击体验验收待执行。
 - `OPT-UI-002`：代码和自动化门禁完成；字幕区移除固定 420dp 高度并占满剩余空间，最后一段标记当前句，译文 final 前显示 pending，动态高度字幕可自动跟随并在用户上滑后提供回到底部。iPhone/Android 真机小屏、横屏和 200% 字体验收待执行。
+- `OPT-UI-003`：`in_progress（代码完成，真机验收待执行）`。同传设置按使用模式、运行模式、语言与行业、声音分组；运行中真实禁用不可修改控件并显示原因，提供“结束后修改”动作，主页面自动朗读快捷键仍可用。
+- `OPT-UI-004`：`in_progress（代码完成，真机验收待执行）`。新增浅色/深色设计 Token，区分主操作、错误和提醒色；卡片和 segmented control 统一8px圆角，字幕与核心控制保留 Semantics。等待深色、200%字体和 VoiceOver/TalkBack 验收。
+- `OPT-UI-005`：`in_progress（截图链路完成，最终素材待生成）`。现有真实 App 截图脚本和发布门禁保留；最终素材必须从统一 Profile/Release 构建分别生成，不接受 Debug 标识或测试占位图。
 - `OPT-SPK-001`：统一 contract、Call Link participant track、Session Repository、字幕、历史、review 和导出代码完成；真实双端角色归属验收待执行。
 - `OPT-SPK-002`：Streaming Sortformer 已在 Beelink 以正式 `provider=sortformer/mode=active` 部署，HTTP Provider、ASR 并行旁路、时间对齐、故障降级和固定双声源测试通过；抢话、重叠、四人和正式真人 RTTM 门禁仍待执行。
 - `OPT-SPK-003`：ASR 后置 speaker 对齐、不同 speaker 段禁止合并、字幕标签、历史清单和会话内重命名代码完成，iPhone 已能显示匿名“说话人 1/2”；ASR 段内部按 speaker 切分由 `OPT-SPK-005/006` 负责。

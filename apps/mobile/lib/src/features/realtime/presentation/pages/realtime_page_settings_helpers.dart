@@ -6,11 +6,15 @@ void _openRealtimeSettingsForPage(_RealtimePageState state) {
     listenable: state.controller,
     realtimeMode: () => state._config.realtimeMode,
     settings: () => state._settings,
-    enabled: () => true,
-    modeEnabled: () => true,
+    enabled: () => state._canChangeSettings,
+    modeEnabled: () => state._canChangeMode,
     autoSpeakSupported: () => state._realtimeAutoSpeakSupported,
     onRealtimeModeChanged: state._changeRealtimeMode,
     onSettingsChanged: state._changeSettings,
+    onEndRequested: () {
+      Navigator.of(state.context).maybePop();
+      unawaited(state.controller.stop());
+    },
     voicePresets: state._voicePresetCatalog.presets,
     voicePresetsLoading: state._voicePresetsLoading,
   );

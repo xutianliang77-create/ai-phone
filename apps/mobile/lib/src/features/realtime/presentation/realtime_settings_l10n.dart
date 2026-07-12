@@ -6,6 +6,10 @@ import '../data/domain_lexicon_pack.dart';
 extension RealtimeSettingsL10n on AppLocalizations {
   String get realtimeSettingsLabel => isChinese ? '同传设置' : 'Realtime settings';
   String get processingModeLabel => isChinese ? '运行模式' : 'Processing mode';
+  String get conversationModeGroupLabel => isChinese ? '使用模式' : 'Use mode';
+  String get languageSettingsGroupLabel =>
+      isChinese ? '语言与行业' : 'Language and industry';
+  String get voiceSettingsGroupLabel => isChinese ? '声音' : 'Voice';
   String get onDeviceModeLabel => isChinese ? '端侧' : 'On device';
   String get onlineModeLabel => isChinese ? '在线' : 'Online';
   String get sourceLanguageLabel => isChinese ? '源语言' : 'Source';
@@ -29,6 +33,7 @@ extension RealtimeSettingsL10n on AppLocalizations {
       isChinese ? '选择行业词库' : 'Choose industry terms';
   String get settingsLockedHint =>
       isChinese ? '同传中不可切换设置' : 'Locked while running';
+  String get endToChangeSettingsLabel => isChinese ? '结束后修改' : 'End to change';
   String get searchLanguageHint =>
       isChinese ? '搜索语言或代码' : 'Search language or code';
 

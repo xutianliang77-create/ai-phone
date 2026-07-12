@@ -52,6 +52,8 @@ class _TranslationAppState extends State<TranslationApp> {
       localeListResolutionCallback: _resolveLocaleList,
       localeResolutionCallback: _resolveLocale,
       theme: buildAppTheme(),
+      darkTheme: buildAppTheme(brightness: Brightness.dark),
+      themeMode: ThemeMode.system,
       onGenerateRoute: AppRouter.onGenerateRoute,
       builder: (context, child) => AppLanguageScope(
         locale: _locale ?? Localizations.localeOf(context),
