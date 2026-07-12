@@ -15,6 +15,7 @@ export interface SessionRecord {
   status: PersistedRealtimeSessionState;
   consumedSeconds: number;
   createdAt: string;
+  lastActivityAt?: string;
   endedAt?: string;
   segments: SessionSegmentDto[];
   review?: SessionReviewResponse | null;

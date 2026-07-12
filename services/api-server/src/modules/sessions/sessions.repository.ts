@@ -24,6 +24,7 @@ export type { SessionRecord } from "./session-record.js";
 
 export function createSession(record: SessionRecord) {
   const store = getStoreSnapshot();
+  record.lastActivityAt ??= record.createdAt;
   store.sessions = [
     ...store.sessions.filter((session) => session.id !== record.id),
     record,
@@ -45,6 +46,7 @@ export function endSession(sessionId: string) {
   if (!transition.accepted) return null;
   session.status = "ended";
   session.endedAt = new Date().toISOString();
+  session.lastActivityAt = session.endedAt;
   persistStoreSnapshot();
   return { session, wasAlreadyEnded };
 }
@@ -58,6 +60,7 @@ export function transitionSessionState(
   const transition = transitionRealtimeSessionState(session.status, status);
   if (transition.changed) {
     session.status = status;
+    session.lastActivityAt = new Date().toISOString();
     persistStoreSnapshot();
   }
   return { session, transition };
@@ -85,6 +88,7 @@ export function saveSegments(sessionId: string, segments: SessionSegmentDto[]) {
   if (!session) return null;
   session.segments = mergeSessionSegments(session.segments, segments);
   session.review = null;
+  session.lastActivityAt = new Date().toISOString();
   persistStoreSnapshot();
   return session;
 }
@@ -168,6 +172,7 @@ export function upsertSegment(
     session.segments.push(createSessionSegment(patch));
   }
   session.review = null;
+  session.lastActivityAt = new Date().toISOString();
   persistStoreSnapshot();
   return session;
 }
@@ -176,6 +181,7 @@ export function updateConsumedSeconds(sessionId: string, consumedSeconds: number
   const session = findSession(sessionId);
   if (!session) return null;
   session.consumedSeconds = consumedSeconds;
+  session.lastActivityAt = new Date().toISOString();
   persistStoreSnapshot();
   return session;
 }

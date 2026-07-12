@@ -3,6 +3,14 @@ import 'dart:async';
 String displayRealtimeErrorMessage(Object error) {
   if (error is TimeoutException) return 'Realtime request timed out';
   final message = error.toString();
+  if (message.contains('TimeoutException') ||
+      message.contains('Future not completed')) {
+    return 'Realtime request timed out';
+  }
+  if (message.contains('SocketException') ||
+      message.contains('ClientException')) {
+    return 'Realtime connection lost';
+  }
   const prefixes = <String>[
     'Unsupported operation: ',
     'Exception: ',
@@ -16,10 +24,10 @@ String displayRealtimeErrorMessage(Object error) {
 }
 
 String displayRealtimeFinalizationWarning(Object error) {
-  if (error is TimeoutException ||
-      error.toString().contains('ClientException') ||
-      error.toString().contains('SocketException')) {
+  final message = displayRealtimeErrorMessage(error);
+  if (message == 'Realtime request timed out' ||
+      message == 'Realtime connection lost') {
     return 'Session ended locally; history sync was not confirmed';
   }
-  return displayRealtimeErrorMessage(error);
+  return message;
 }

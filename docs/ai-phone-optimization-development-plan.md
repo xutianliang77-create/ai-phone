@@ -152,6 +152,7 @@ LLM 纪要、扫描 UI 和国际模型 Provider 可在 M1 稳定接口冻结后�
 | VoxCPM2 听感不稳定 | 用户关闭朗读 | 默认声音通过门禁后才启用，个人声音独立灰度 |
 | LLM 响应慢或输出 thinking | 字幕延迟和污染 | no-thinking、schema、超时回退，不阻塞原始字幕 |
 | JSON store 并发丢数据 | 历史、结算错误 | M4 迁服务器 SQLite WAL；多实例阶段再迁 PostgreSQL/Redis |
+| 服务重启遗留非终态会话 | 预占不释放、历史长期 active | 每段和状态转换更新 lastActivityAt；启动仅回收超过宽限期的会话，释放 hold 且不按离线墙钟扣费 |
 | Mac 与服务器跨机串联 | 增加延迟和故障面 | 所有运行组件统一部署到服务器，Mac 仅开发运维 |
 | iOS Debug 包独立启动 | 安装后点击即闪退 | 真机手动测试只安装 Profile/Release，脚本阻断 Debug dylib |
 | 未完成能力过早暴露 | 产品可信度下降 | 通话页按核心/实验分层，未完成入口隐藏 |

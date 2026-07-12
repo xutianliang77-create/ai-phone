@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:translation_mobile/src/features/realtime/data/gateway/gateway_realtime_event.dart';
 import 'package:translation_mobile/src/features/realtime/domain/entities/subtitle_segment.dart';
 import 'package:translation_mobile/src/features/realtime/presentation/controllers/realtime_controller.dart';
 
@@ -45,6 +46,27 @@ void main() {
       controller.message,
       'Session ended locally; history sync was not confirmed',
     );
+    expect(controller.message, isNot(contains('TimeoutException')));
+  });
+
+  test('normalizes a serialized timeout emitted by the gateway', () async {
+    final repository = FakeRealtimeRepository();
+    final controller = realtimeControllerForTest(
+      repository,
+      FakeAudioCapture(),
+    );
+    addTearDown(controller.dispose);
+
+    await controller.start();
+    repository.emit(const GatewayRealtimeEvent.connection(
+      type: 'connection.closed',
+      message:
+          'TimeoutException after 0:00:08.000000: Future not completed',
+    ));
+    await pumpEventQueue();
+
+    expect(controller.status, RealtimeStatus.failed);
+    expect(controller.message, 'Realtime request timed out');
     expect(controller.message, isNot(contains('TimeoutException')));
   });
 }

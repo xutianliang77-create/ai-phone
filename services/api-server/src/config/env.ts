@@ -7,6 +7,7 @@ export interface ApiEnv {
   dataRegion: string;
   callProviderPolicy: string;
   complianceProfile: string;
+  realtimeStaleSessionGraceSeconds: number;
 }
 
 export function loadEnv(): ApiEnv {
@@ -24,7 +25,16 @@ export function loadEnv(): ApiEnv {
     complianceProfile:
       process.env.COMPLIANCE_PROFILE ??
       (regionEdition === "domestic" ? "pipl" : "us_ca"),
+    realtimeStaleSessionGraceSeconds: positiveNumber(
+      process.env.REALTIME_STALE_SESSION_GRACE_SECONDS,
+      300,
+    ),
   };
+}
+
+function positiveNumber(value: string | undefined, fallback: number) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback;
 }
 
 function parseRegionEdition(value: string | undefined): ApiEnv["regionEdition"] {

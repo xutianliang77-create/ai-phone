@@ -63,7 +63,9 @@ extension RealtimeControllerGatewayEvents on RealtimeController {
       return;
     }
     if (event.type == 'connection.closed') {
-      _fail(event.message ?? 'Realtime connection lost');
+      _fail(displayRealtimeErrorMessage(
+        event.message ?? 'Realtime connection lost',
+      ));
       return;
     }
     if (event.type == 'usage.tick') {

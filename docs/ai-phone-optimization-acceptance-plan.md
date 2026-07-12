@@ -144,11 +144,11 @@ TTS 回灌指标由 App playback gate/AEC 验收，不能把 VAD 对合成语音
 
 `AC-SPK-004` 本轮故障证据：失败真机会话 `adf37a32-f102-40ea-9b0b-9812733f99d0` 的7个 segment 均无 speaker/turn，诊断边界计数为0，且 Beelink 没有对应 speaker session 创建记录。修复后 Gateway `/health` 显示 `speakerProvider=http`、`speakerTimeoutMs=2000`；固定双声源会话 `55dfe12e-59bd-4405-aab5-ed43f3d68004` 保存 `turn_1/speaker_1` 和 `turn_2/speaker_2`，`hit=1`、`miss/error/race/drop=0`、确认延迟720ms。真人 iPhone 复验未执行，因此未标记 accepted。
 
-`AC-SPK-007/OPT-RT-002` 最新证据：Beelink `/health` 返回 `provider=sortformer`、`mode=active`；重新加载源码后的 Gateway/API PID 分别为 `81487/81486`。固定双声源会话 `36d61d75-5d1d-44b9-a2b8-15a5a289a1a6` 保存两位 speaker、两个 turn 和中英文语言画像，`hit=1`、`miss/error/race=0`、确认延迟800ms。Flutter、Gateway、API、Speaker Service、analyze/typecheck/文件大小门禁通过。iPhone 断网 End 已立即进入本地终态，但暴露了原始 `TimeoutException`；现已增加超时归一化和“历史同步未确认”提示，待新 Profile 复验文案。
+`AC-SPK-007/OPT-RT-002` 最新证据：iPhone 在线模式两名真人无停顿轮流说话，正确显示“说话人 1/2”，并按说话人边界断句。断网 End 已立即进入本地终态；截图中的异常来自字符串形式 `TimeoutException` 绕过对象类型判断和 `connection.closed` 直接展示，现已统一归一化。API 新增启动恢复：超过5分钟无活动的非终态会话转为 ended，过期或未过期的 active hold 都释放，余额和 ledger 不扣费；Flutter、API 测试、analyze/typecheck 门禁通过，待部署和新 Profile 复验中文提示。
 
 `AC-SPK-002/006/007` 新自动矩阵：固定生成26段四种合成声音，并组成双人轮换、1.2秒快速切换、overlap、四人和一分钟稳定性语料。active Sortformer 结果为：四人 DER `4.44%`、overlap `3.63%`、一分钟 `3.77%`，均无标签漂移并通过；普通双人 DER `22.05%`，因早期同一声音被临时分配到第三槽位略超门槛；快速切换 DER `35.42%`，未通过。失败项保留为阻塞证据，不调整20%门槛。另有 Beelink 全链路会话 `25b48a5c-3cff-490b-8091-929b62d91f2a` 通过，保存 `speaker_1/2`、`turn_1/2`、中英文画像，hit=1、drop/miss/error/race=0、确认延迟880ms。
 
-`AC-DEP-001/002` 服务器阶段证据：Beelink 使用 `ai-phone-api` 与 `ai-phone-gateway` 两个 `restart: unless-stopped` 容器运行同一镜像，API `/health` 宣告 `ws://100.110.127.117:3111/realtime`，Gateway 为 Hy-MT2 + HTTP ASR + active Speaker + API history sink 且 release readiness ready。原 Mac JSON store 和7份声音引用已迁移，旧118条历史保留，新 smoke 后为119条；Call Room 和 LLM review health 均 ready。App 切址、Mac 服务停止、手机同传/历史/结算仍是退出条件，当前不得标记完整通过。
+`AC-DEP-001/002` 服务器阶段证据：Beelink 使用 `ai-phone-api` 与 `ai-phone-gateway` 两个 `restart: unless-stopped` 容器运行同一非 root 镜像，API `/health` 宣告 `ws://100.110.127.117:3111/realtime`，Gateway 为 Hy-MT2 + HTTP ASR + active Speaker + API history sink 且 release readiness ready。原 Mac JSON store 和7份声音引用已迁移；iPhone Profile 只包含 Beelink API 地址，Mac `3110/3111` 停止后真机会话 `23705ff5-67ea-4955-84e1-f4b8bfae63e7` 仍上传540帧、结束并保存10段/57秒，证明两层部署和手机配置边界通过。`OPT-DEP-002` 仍需补按 call 启动 Worker 与 VoxCPM2 联合验收。
 
 ## 7. UI 专项验收
 

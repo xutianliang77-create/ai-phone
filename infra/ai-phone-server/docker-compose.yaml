@@ -1,5 +1,6 @@
 x-runtime: &runtime
   image: ai-phone-server:${AI_PHONE_IMAGE_TAG:-local}
+  pull_policy: never
   env_file:
     - ${AI_PHONE_ENV_FILE}
   network_mode: host

@@ -50,7 +50,7 @@
 - `OPT-VAD-002`：`in_progress`。部署后的真实 session 已保存 `speaker_boundary/flush` 端点原因和音频丢帧计数；尚缺 VAD 概率摘要、fallback 计数、模型 fingerprint 和告警。
 - `OPT-VAD-003`：`todo`。当前继续使用 Qwen3-ASR 统一 `1100ms` 安全基线，尚未启用按模式参数。
 - `OPT-RT-001`：代码和自动化门禁完成。
-- `OPT-RT-002`：代码和自动化门禁完成；连接中的 HTTP 创建请求不再阻塞本地 End，API 创建/保存/结束统一 8 秒超时，迟到 session 会补偿关闭。iPhone 断网 End 已确认立即进入本地终态；原始 `TimeoutException` 暴露问题已修为“本地结束、历史同步未确认”，新 Profile 文案复验、后台终止和弱网验收待执行。
+- `OPT-RT-002`：代码和自动化门禁完成；连接中的 HTTP 创建请求不再阻塞本地 End，API 创建/保存/结束统一 8 秒超时，迟到 session 会补偿关闭。iPhone 断网 End 已确认立即进入本地终态；对象和字符串形式的 `TimeoutException` 均归一化为用户文案。API 启动时会回收超过5分钟无活动的遗留会话并释放预占，不按离线墙钟时间扣费；新 Profile 文案、后台终止和弱网验收待执行。
 - `OPT-RT-003`：代码和自动化门禁完成；iPhone 在线真实模型中文长句、快速中英切换和 1.8 秒强制输出验收待执行。
 - `OPT-RT-004`：代码和自动化门禁完成；iPhone 在线真实模型“说完立即结束”及 100 次尾句保存率验收待执行。
 - `OPT-RT-005`：代码和自动化门禁完成；Gateway 按字幕顺序逐条合成，暂停、结束和断线取消在途及待处理 TTS，App 顺序播放并清空残留。iPhone + VoxCPM2 连续 20 句真实听感验收待执行。
@@ -65,9 +65,9 @@
 - `OPT-SPK-006`：`in_progress`。已修复 Gateway 合并批次错误使用末帧时间的问题；ASR boundary API 已通过真实 PCM 回切，左右段时间轴连续、右侧音频保留且 VAD 不重置。2秒脱敏诊断窗口、boundary hit/miss/error、确认延迟、回切时长、endpoint race 和丢帧指标已贯通。iPhone 真人双人换人断句通过；短停顿竞态、多人诊断和断网快照仍待完成。
 - `OPT-SPK-007`：`in_progress`。`turnId + revision` 已贯通 ASR、Gateway 事件、API session、Flutter 字幕和历史；不同 turn 禁止语义合并，批量 ASR 结果按音频时间排序，同 segment 只处理最高 revision。固定双声源和 iPhone 双人输出顺序通过；多人乱序、TTS 和计费幂等仍待联合验收。
 - `OPT-SPK-008`：`in_progress`。App、API 和 Speaker Service 默认人数已统一为4；turn 语言画像、revision、overlap/unknown 保护边界、App 和导出已贯通。新矩阵中四人 DER `4.44%`、重叠 `3.63%`、一分钟稳定性 `3.77%` 通过；普通双人合成语料 `22.05%` 略超20%门槛，1.2秒快速轮换 `35.42%` 未通过，真人三至四人和混合句仍待验收。
-- `OPT-DEP-001`：`in_progress`。API/Gateway 已作为 Docker Compose 发布单元迁入 Beelink `3110/3111`，119条历史和7份声音引用已保留，真实 speaker-turn 全链路通过；App 尚未切换服务器地址，Mac 停机验收未执行。
+- `OPT-DEP-001`：`accepted`。API/Gateway 已作为 Docker Compose 发布单元迁入 Beelink `3110/3111`，119条历史和7份声音引用已保留；iPhone Profile 已切换到 Beelink，Mac `3110/3111` 停止后真机仍上传540帧并保存57秒会话，真实 speaker-turn 全链路通过。
 - `OPT-DEP-002`：`in_progress`。Beelink 已承载 LiveKit、API、Gateway、ASR、Speaker、翻译和 LLM；Translation Worker 已编入同一镜像，但按 call 启动和 VoxCPM2 在线加载仍需联合验收。
-- `OPT-DEP-003`：`in_progress`。App 已不直连模型端口；下一 Profile 改用 `http://100.110.127.117:3110` 后，需检查包内不再出现 Mac 地址并执行 Mac 停机门禁。
+- `OPT-DEP-003`：`accepted`。iPhone Profile 仅包含 `http://100.110.127.117:3110`，构建产物未发现旧 Mac 地址、模型端口或内部密钥；Mac API/Gateway 停止后在线真机链路通过。
 
 ### 2.1 当前冲刺任务拆分
 
@@ -82,9 +82,9 @@
 | SPK-007-A | turn 数据契约 | 已完成 | deployed | segment 持久化 `turnId`、`revision`、`speakerId` 和原始时间范围；真实历史验证通过 |
 | SPK-007-B | 有序翻译队列 | 已完成 | deployed | 批量结果按音频时间排序，不跨 turn 合并；固定双声源事件和历史顺序一致 |
 | SPK-008-A | 多人/混合语种验收 | 1-2天 | in_progress | 四人、重叠和一分钟稳定性模型矩阵通过；短轮次未达标，真人三至四人、中英夹杂和 unknown 待验收 |
-| DEP-001-A | Gateway/API 迁入 Beelink | 0.5天剩余 | in_progress | Docker、数据迁移和服务器全链路通过；待 App 切址并停止 Mac 后复验 |
+| DEP-001-A | Gateway/API 迁入 Beelink | 已完成 | accepted | Docker、数据迁移、App 切址、Mac 停机和服务器真机全链路通过 |
 
-当前关键路径：`App 切换 Beelink -> Mac 停机 + 断网 End 新文案复验 -> SPK-008-A 真人多人/混合语种`。服务器发布单元和双人链路已验证；短轮次矩阵失败项不能通过放宽 DER 门槛结项。
+当前关键路径：`部署遗留会话恢复 -> 断网 End 新文案复验 -> SPK-008-A 真人多人/混合语种`。服务器发布单元、Mac 停机和双人链路已验证；短轮次矩阵失败项不能通过放宽 DER 门槛结项。
 
 ## 3. P1 灰度任务
 

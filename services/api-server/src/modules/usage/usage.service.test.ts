@@ -90,6 +90,23 @@ describe("usage service", () => {
     expect(balance.availableSeconds).toBe(283);
   });
 
+  it("can settle an active hold after its reservation window expires", () => {
+    createUsageHold("guest-user", 60, undefined, {
+      sessionId: "session-1",
+      idempotencyKey: "hold:session-1",
+    });
+    getStoreSnapshot().usageHolds[0].expiresAt =
+      new Date(Date.now() - 1000).toISOString();
+
+    const hold = settleUsageHold("guest-user", "session-1", 17);
+
+    expect(hold).toMatchObject({
+      status: "settled",
+      settledSeconds: 17,
+      sessionId: "session-1",
+    });
+  });
+
   it("refunds consumed usage once for the same idempotency key", () => {
     consumeSeconds("guest-user", 18, undefined, {
       sessionId: "session-1",
