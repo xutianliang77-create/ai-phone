@@ -47,7 +47,7 @@
 当前实现状态：
 
 - `OPT-VAD-001`：`accepted`。Beelink 已上线 MarbleNet ONNX CPU 主 VAD，阈值 0.5；NeMo/ONNX 概率最大误差 `2.38e-7`，低音量真机语音、静音和三档非语音噪声及真实 HTTP ASR 均通过。
-- `OPT-VAD-002`：`in_progress`。session 已保存 `silence/max_duration/flush/speaker_boundary` 端点原因和音频丢帧计数；尚缺 VAD 概率摘要、fallback 计数、模型 fingerprint 和告警。
+- `OPT-VAD-002`：`in_progress`。部署后的真实 session 已保存 `speaker_boundary/flush` 端点原因和音频丢帧计数；尚缺 VAD 概率摘要、fallback 计数、模型 fingerprint 和告警。
 - `OPT-VAD-003`：`todo`。当前继续使用 Qwen3-ASR 统一 `1100ms` 安全基线，尚未启用按模式参数。
 - `OPT-RT-001`：代码和自动化门禁完成。
 - `OPT-RT-002`：代码和自动化门禁完成；iPhone 飞行模式、后台终止和弱网真机验收待执行。
@@ -62,7 +62,7 @@
 - `OPT-SPK-002`：Streaming Sortformer 已在 Beelink 部署，HTTP Provider、ASR 并行旁路、时间对齐、故障降级和固定双声源测试通过；抢话、重叠、四人和正式真人 RTTM 门禁仍待执行。
 - `OPT-SPK-003`：ASR 后置 speaker 对齐、不同 speaker 段禁止合并、字幕标签、历史清单和会话内重命名代码完成，iPhone 已能显示匿名“说话人 1/2”；ASR 段内部按 speaker 切分由 `OPT-SPK-005/006` 负责。
 - `OPT-SPK-005`：`in_progress`。Gateway 和 Beelink ASR Service 已部署；稳定 speaker span 可产生单次 `boundaryMs`，标签抖动、低置信度和 overlap 不切段。固定双声源无停顿全链路已正确生成 `speaker_1 -> speaker_2`，iPhone 双人快速换人验收待完成。
-- `OPT-SPK-006`：`in_progress`。已修复 Gateway 合并批次错误使用末帧时间的问题；ASR boundary API 已通过真实 PCM 回切，左右段时间轴连续、右侧音频保留且 VAD 不重置。2秒脱敏诊断窗口、boundary hit/miss/error、确认延迟、回切时长、endpoint race 和丢帧指标已贯通 `session.ended`、API 与历史详情；真实 session 指标和 iPhone 快速换人验收待完成。
+- `OPT-SPK-006`：`in_progress`。已修复 Gateway 合并批次错误使用末帧时间的问题；ASR boundary API 已通过真实 PCM 回切，左右段时间轴连续、右侧音频保留且 VAD 不重置。2秒脱敏诊断窗口、boundary hit/miss/error、确认延迟、回切时长、endpoint race 和丢帧指标已贯通 `session.ended`、API 与历史详情。部署后固定双声源 session 为 hit=1、miss/error/race/drop=0、确认延迟1040ms；iPhone 快速换人验收待完成。
 - `OPT-SPK-007`：`todo`。当前仅保证 Gateway 接收边界产生的多个 transcript 不漏失，尚未建立持久化 `turnId + revision` 翻译队列。
 - `OPT-SPK-008`：`in_progress`。App、API 和 Speaker Service 默认人数已统一调整为4；overlap、unknown、revision 和混合语种联合验收待执行。
 - `OPT-DEP-001`：`in_progress`。模型服务已在 Beelink，当前 API/Gateway 仍使用 Mac 测试节点；该拓扑只用于本轮验收，不满足正式“服务器 + 手机”退出条件。
@@ -75,9 +75,9 @@
 | --- | --- | ---: | --- | --- |
 | SPK-005-A | iPhone 双人无停顿快速换人 | 0.5天 | in_progress | 两轮四句均切换 speaker，句子不跨人、无丢音，历史一致 |
 | SPK-006-0 | 批量音频时间轴修复 | 已完成 | accepted | 合并帧保留首帧 `timestampMs` 和末帧 sequence，自动化覆盖 |
-| SPK-006-A | 2秒脱敏诊断窗口 | 0.5天 | in_progress | 元数据窗口和白名单持久化已完成；真实 session 复验待执行 |
-| SPK-006-B | boundary 指标 | 0.5天 | in_progress | hit/miss/error、确认延迟、回切时长、丢帧和 endpoint reason 已贯通；部署验收待执行 |
-| SPK-006-C | boundary 与普通端点竞态 | 1天 | in_progress | 有替代结果时去重、空结果时保留原文并记录 race；真实竞态和时间轴验收待执行 |
+| SPK-006-A | 2秒脱敏诊断窗口 | 0.5天 | in_progress | 元数据窗口和白名单持久化已通过真实 session；iPhone/断网复验待执行 |
+| SPK-006-B | boundary 指标 | 0.5天 | in_progress | 真实 session 已保存 hit=1、miss/error=0、1040ms、4240ms回切、drop=0 和 endpoint reason；多人样本待执行 |
+| SPK-006-C | boundary 与普通端点竞态 | 1天 | in_progress | 有替代结果时去重、空结果时保留原文；固定双声源 race=0，仍需真机短停顿构造竞态 |
 | SPK-007-A | turn 数据契约 | 0.5天 | todo | segment 持久化 `turnId`、`revision`、`speakerId` 和原始时间范围 |
 | SPK-007-B | 有序翻译队列 | 1天 | todo | 并发返回仍按 turn 时间轴展示，不跨 speaker 合并或覆盖 |
 | SPK-008-A | 多人/混合语种验收 | 1-2天 | todo | 2至4人、抢话、重叠、中英夹杂和 unknown 降级均有记录 |

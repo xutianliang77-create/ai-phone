@@ -15,8 +15,8 @@
 
 ## 2. 当前缺口
 
-- speaker 字段、时间对齐、字幕和历史已经贯通，代码已支持确认换人后按 `boundaryMs` 提交 ASR turn；Beelink 部署和真机快速换人验收尚未执行。
-- 普通 VAD/最大时长恰好先于 speaker boundary 完成时，仍可能由原 ASR 端点先提交；该竞态需在 `OPT-SPK-006` 联合真机验收中量化。
+- speaker 字段、时间对齐、字幕和历史已经贯通，代码已支持确认换人后按 `boundaryMs` 提交 ASR turn；Beelink ASR 和固定双声源已通过，iPhone 快速换人尚未验收。
+- 普通 VAD/最大时长恰好先于 speaker boundary 完成时可能产生 endpoint race；当前有替代结果时去重，空结果时保留普通端点防止漏句，并把 race/miss 写入 session。固定双声源 race=0，真机短停顿场景仍需量化。
 - SegmentAssembler 已禁止不同 speaker 的 ASR 段继续合并，但无法修复 ASR 段内部已经混入两个人的问题。
 - App 和 API 曾把 conversation 默认写成 2 人，与对话、聆听和会议的多人场景不符。
 - turn 尚未持久化 `dominantLanguage/detectedLanguages/mixedLanguage`，但 SegmentAssembler 已取消语言变化硬断点。
@@ -485,7 +485,7 @@ interface SpeakerRepository {
 
 ## 17. 实施状态
 
-截至 2026-07-11 已完成：
+截至 2026-07-12 已完成：
 
 - 共享 `SpeakerAttributionDto`、`SegmentTimingDto`、session speaker 策略和 `speaker.updated` 协议。
 - Call Link/Worker 使用 participant track 生成权威 speaker，并写入统一 Session Repository。
@@ -497,11 +497,14 @@ interface SpeakerRepository {
 - ASR Service 已实现 `/asr/sessions/:sessionId/boundary`，在 `boundaryMs` 切开 PCM，提交上一 turn 并保留下一 turn，且不重置 VAD Provider 状态。
 - Gateway 支持一次 ASR 调用返回多个有序 transcript；边界 turn 固定携带上一位 `speakerId`，不会被后置对齐改写。
 - SegmentAssembler 不再把语种变化作为硬断点，仍严格禁止跨 speaker 合并。
+- Gateway 音频批次使用首帧时间作为整批 PCM 起点，避免 ASR 与 Speaker 时间轴随批次长度偏移。
+- session diagnostics 已贯通音频帧/批次/丢帧、boundary hit/miss/error、确认延迟、回切时长、endpoint race 和 endpoint reason；重复 End 不覆盖首份证据。
+- 固定双声源真实全链路会话 `4296e08a-3b2f-4449-9ebb-0299f142db49` 正确输出 `speaker_1 -> speaker_2`，边界连续且 hit=1、miss/error/race/drop=0。
 
 尚未宣称完成：
 
-- Beelink 真实服务部署、iPhone 无停顿快速换人、ASR 普通端点与 speaker boundary 竞态、30分钟稳定性尚未验收。
-- `OPT-SPK-006` 的2秒诊断环形缓冲、边界命中率和回切丢帧指标尚未完成。
+- iPhone 无停顿快速换人、短停顿 endpoint race、30分钟稳定性尚未验收。
+- 2秒脱敏元数据窗口已完成；完整 PCM 回溯只在真实 race/miss 证明有必要后启用，不能无证据增加常态延迟和内存。
 - 抢话、重叠、真人四人和超过4人的能力边界验收。
 - 授权声纹身份的同意、加密 embedding、撤回和删除闭环。
 

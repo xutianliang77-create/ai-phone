@@ -25,7 +25,7 @@
 ### 当前迭代基线
 
 - `OPT-SPK-005` 已完成代码、自动化、Beelink ASR 部署和固定双声源无停顿全链路验证，当前状态为 `in_progress`，只差 iPhone 双人快速换人验收。
-- `OPT-SPK-006` 的 PCM boundary 回切已通过真实音频连续性验证；合并批次时间轴根因已修复，诊断窗口、竞态指标和 session 持久化已完成代码及仓库级门禁，等待部署后的真实 session 与真机验收。
+- `OPT-SPK-006` 的 PCM boundary 回切已通过真实音频连续性验证；合并批次时间轴根因已修复，诊断窗口、竞态指标和 session 持久化已部署。固定双声源真实 session 达到 hit=1、miss/error/race/drop=0、1040ms 确认延迟，等待 iPhone 与多人验收。
 - 当前临时链路为 iPhone -> Mac API/Gateway -> Beelink 模型服务，只用于联调。正式退出条件仍是 iPhone -> Beelink 唯一公开入口，Mac 不参与运行链路。
 - 下一开发主线固定为：真机 speaker boundary -> Turn Buffer 可观测性与幂等 -> speaker-turn 翻译 -> 多人混合语种 -> Beelink 单服务器收敛。
 
@@ -181,7 +181,7 @@ LLM 纪要、扫描 UI 和国际模型 Provider 可在 M1 稳定接口冻结后�
 | --- | --- | ---: | --- | --- |
 | S0 | 多人默认统一为4 | 0.5天 | accepted | App、API、Speaker Service 和协议一致，旧客户端2人配置被服务器规范化 |
 | S1 | `OPT-SPK-005` 边界协调器 | 0.5天剩余 | in_progress | 已部署且固定双声源全链路通过；iPhone 双人无停顿两轮四句待验收 |
-| S2 | `OPT-SPK-006` ASR Turn Buffer | 1天剩余 | in_progress | 时间轴修复、诊断指标和竞态去重自动化通过；补真实 session 指标和真机证据 |
+| S2 | `OPT-SPK-006` ASR Turn Buffer | 0.5-1天剩余 | in_progress | 时间轴修复和真实 session 指标通过；补 iPhone、断网快照和短停顿竞态证据 |
 | S3 | `OPT-SPK-007` 翻译队列 | 1-2天 | todo | 不跨 speaker 翻译，最近 turn 只作上下文，输出顺序稳定 |
 | S4 | `OPT-SPK-008` overlap/混合语种 | 1-2天 | in_progress | 2至4人、中英夹杂、抢话和重叠策略通过 |
 | S5 | 联合真机验收 | 2天 | todo | 对话、聆听、双人、三人、四人、快速换人、混合语种和30分钟稳定性通过 |
