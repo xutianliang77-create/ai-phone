@@ -10,6 +10,7 @@ from app.schemas import (
     TtsSynthesizeResponse,
     VoiceReferenceUploadRequest,
     VoiceReferenceUploadResponse,
+    VoicePresetCatalogResponse,
 )
 from app.service import TtsService
 
@@ -30,7 +31,16 @@ def create_router(service: TtsService, config: TtsConfig) -> APIRouter:
             reason=reason,
             modelSampleRate=model_sample_rate,
             outputSampleRate=output_sample_rate,
+            voicePresetCatalogVersion=service.preset_catalog().version,
+            availableVoicePresetCount=len(service.preset_catalog().presets),
         )
+
+    @router.get("/voice-presets", response_model=VoicePresetCatalogResponse)
+    async def voice_presets(
+        authorization: str | None = Header(default=None),
+    ) -> VoicePresetCatalogResponse:
+        require_api_key(config, authorization)
+        return service.preset_catalog()
 
     @router.post(
         "/tts/synthesize",
@@ -44,6 +54,8 @@ def create_router(service: TtsService, config: TtsConfig) -> APIRouter:
         require_api_key(config, authorization)
         try:
             return await service.synthesize(request)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
         except TtsUnavailableError as exc:
             raise HTTPException(status_code=503, detail=str(exc)) from exc
 

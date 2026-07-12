@@ -175,11 +175,13 @@ function parseVoiceConfig(value: unknown): RealtimeVoiceConfig | null | false {
   if (typeof mode !== "string" || !voiceModes.has(mode as RealtimeVoiceMode)) {
     return false;
   }
+  const presetId = optionalVoiceId(value.presetId);
   const voiceProfileId = optionalVoiceId(value.voiceProfileId);
   const referenceAudioId = optionalVoiceId(value.referenceAudioId);
   const referenceTranscript = optionalText(value.referenceTranscript, 1000);
   const controlPrompt = optionalText(value.controlPrompt, 240);
   if (
+    (value.presetId !== undefined && !presetId) ||
     (value.voiceProfileId !== undefined && !voiceProfileId) ||
     (value.referenceAudioId !== undefined && !referenceAudioId) ||
     (value.referenceTranscript !== undefined && !referenceTranscript) ||
@@ -189,6 +191,7 @@ function parseVoiceConfig(value: unknown): RealtimeVoiceConfig | null | false {
   }
   return {
     mode: mode as RealtimeVoiceMode,
+    ...(presetId ? { presetId } : {}),
     ...(voiceProfileId ? { voiceProfileId } : {}),
     ...(referenceAudioId ? { referenceAudioId } : {}),
     ...(referenceTranscript ? { referenceTranscript } : {}),

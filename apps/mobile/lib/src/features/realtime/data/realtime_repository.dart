@@ -35,6 +35,7 @@ class RealtimeRepository {
         targetLanguage: config.targetLanguage,
         autoReverseTargetLanguage: autoReverseTargetLanguage,
         voiceOutputMode: config.realtimeVoiceOutputMode,
+        voicePresetId: config.realtimeVoicePresetId,
       ),
       gatewayClient: RealtimeGatewayClient(),
       finalizationOutbox: FileRealtimeFinalizationOutbox(),

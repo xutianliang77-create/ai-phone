@@ -22,6 +22,7 @@ class MockTtsEngine:
             model="mock-tts-v0.1.0",
             voiceMode=request.voice.mode if request.voice else "preset",
             voiceProfileId=request.voice.voiceProfileId if request.voice else None,
+            presetId=request.voice.presetId if request.voice else None,
             firstAudioMs=1,
             audioDurationMs=duration_ms,
             modelSampleRate=self.sample_rate,

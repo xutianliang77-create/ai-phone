@@ -1,6 +1,6 @@
 # ai phone 优化开发任务清单
 
-版本：v3.4
+版本：v3.5
 日期：2026-07-12
 关联：`docs/domestic-app-detailed-functional-design.md`、`docs/ai-phone-translation-technical-design.md`、`docs/domestic-design-review-action-plan.md`
 
@@ -120,7 +120,7 @@
 | OPT-PSTN-001 | 真实 PSTN 服务商媒体协议 | 普通电话接通、译音回灌、失败退款闭环 |
 | OPT-AGENT-001 | AI Calling Agent 灰度 | 授权、告知、人工接管、禁拨和风险场景通过验收 |
 | OPT-VOICE-001 | VoxCPM2 Hi-Fi 声音克隆 | 录音质量检查、A/B 试听、自然度门禁通过 |
-| OPT-VOICE-002 | 朗读声音预设选择 | App 可选择男声/女声/中性、稳重/活泼、自然对话/播音及 Provider 支持的普通话和英语口音；能力目录由服务端返回，不支持的组合不可选，固定语料自然度、清晰度和跨句音色一致性通过 A/B 门禁 |
+| OPT-VOICE-002 | 朗读声音预设选择 | 已完成版本化 Provider 目录、固定参考音频、App 选择与会话透传；支持男声/女声/中性、稳重/活泼、自然对话/播音、普通话、美式英语、四川话、东北话、粤语和闽南语；不支持或缺少服务端音频资产的预设不下发，固定语料自然度、清晰度、方言可辨识度和跨句音色一致性通过 A/B 后结项 |
 | OPT-SPK-004 | 授权声纹身份识别 | 声纹注册、置信度门禁、撤回、删除和匿名回退 |
 | OPT-ANDROID-001 | Android 端侧 ASR 候选 | 与系统 ASR、在线 ASR 固定语料对比后决策 |
 | OPT-VAD-005 | 端侧 MarbleNet 候选评测 | CoreML/Android ONNX 与现有端点检测比较低音量召回、误触发、耗电、温升和实时系数，通过后再决定是否集成 |

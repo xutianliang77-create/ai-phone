@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../../app/localization/app_localizations.dart';
 import '../../data/realtime_runtime_settings.dart';
+import '../../data/voice_preset_catalog.dart';
 import '../realtime_settings_l10n.dart';
 import 'realtime_mode_selector.dart';
 import 'realtime_settings_panel.dart';
@@ -15,6 +16,8 @@ class RealtimeSettingsSheet extends StatelessWidget {
     required this.autoSpeakSupported,
     required this.onRealtimeModeChanged,
     required this.onSettingsChanged,
+    this.voicePresets = const <VoicePreset>[],
+    this.voicePresetsLoading = false,
     super.key,
   });
 
@@ -25,6 +28,8 @@ class RealtimeSettingsSheet extends StatelessWidget {
   final bool autoSpeakSupported;
   final ValueChanged<String> onRealtimeModeChanged;
   final ValueChanged<RealtimeRuntimeSettings> onSettingsChanged;
+  final List<VoicePreset> voicePresets;
+  final bool voicePresetsLoading;
 
   @override
   Widget build(BuildContext context) {
@@ -58,6 +63,8 @@ class RealtimeSettingsSheet extends StatelessWidget {
             enabled: enabled,
             autoSpeakSupported: autoSpeakSupported,
             onChanged: onSettingsChanged,
+            voicePresets: voicePresets,
+            voicePresetsLoading: voicePresetsLoading,
             padding: EdgeInsets.zero,
           ),
         ],

@@ -3,6 +3,7 @@ export * from "./api/agent-calls.js";
 export * from "./api/model-routing.js";
 export * from "./api/plans.js";
 export * from "./api/realtime.js";
+export * from "./api/voice-presets.js";
 export * from "./call-room/events.js";
 export * from "./realtime/audio.js";
 export * from "./realtime/diagnostics.js";

@@ -49,7 +49,24 @@ void main() {
     });
 
     expect(settings.voiceOutputMode, RealtimeVoiceOutputMode.natural);
+    expect(settings.voicePresetId, 'zh_female_natural');
     expect(settings.toJson()['voiceOutputMode'], 'natural');
+  });
+
+  test('persists the selected natural voice preset', () {
+    final settings = RealtimeRuntimeSettings.fromJson(const {
+      'processingMode': 'online',
+      'sourceLanguage': 'zh',
+      'targetLanguage': 'en',
+      'voiceOutputMode': 'natural',
+      'voicePresetId': 'zh_female_sichuanese',
+    });
+
+    final config = settings.applyTo(_baseConfig());
+
+    expect(settings.voicePresetId, 'zh_female_sichuanese');
+    expect(settings.toJson()['voicePresetId'], 'zh_female_sichuanese');
+    expect(config.realtimeVoicePresetId, 'zh_female_sichuanese');
   });
 
   test('forces Listening sessions silent without losing the Talk preference',

@@ -1,0 +1,126 @@
+{
+  "version": "voxcpm2-presets-2026-07-v1",
+  "defaultPresetId": "zh_female_natural",
+  "presets": [
+    {
+      "id": "zh_female_natural",
+      "labels": { "zh": "温暖女声", "en": "Warm female" },
+      "gender": "female",
+      "tone": "natural",
+      "scenario": "conversation",
+      "accent": "mandarin",
+      "languages": ["zh", "en"],
+      "referenceAudioId": "preset_zh_female_natural",
+      "designPrompt": "An adult woman with a warm, clear and natural voice, standard Mandarin accent, calm conversational delivery, moderate pace",
+      "referenceText": "您好，这是清晰自然的实时翻译语音。今天很高兴和您交流。"
+    },
+    {
+      "id": "zh_male_steady",
+      "labels": { "zh": "稳重男声", "en": "Steady male" },
+      "gender": "male",
+      "tone": "steady",
+      "scenario": "conversation",
+      "accent": "mandarin",
+      "languages": ["zh", "en"],
+      "referenceAudioId": "preset_zh_male_steady",
+      "designPrompt": "A mature man with a steady, clear and trustworthy voice, standard Mandarin accent, composed delivery, moderate pace",
+      "referenceText": "您好，这是清晰稳重的实时翻译语音。我们现在开始交流。"
+    },
+    {
+      "id": "zh_female_broadcast",
+      "labels": { "zh": "播音女声", "en": "Female broadcast" },
+      "gender": "female",
+      "tone": "steady",
+      "scenario": "broadcast",
+      "accent": "mandarin",
+      "languages": ["zh"],
+      "referenceAudioId": "preset_zh_female_broadcast",
+      "designPrompt": "A professional female news presenter, crisp standard Mandarin, precise articulation, confident broadcast delivery, moderate pace",
+      "referenceText": "欢迎收听实时翻译播报。接下来为您提供清晰准确的语音内容。"
+    },
+    {
+      "id": "zh_neutral_lively",
+      "labels": { "zh": "活力中性声", "en": "Lively neutral" },
+      "gender": "neutral",
+      "tone": "lively",
+      "scenario": "conversation",
+      "accent": "mandarin",
+      "languages": ["zh", "en"],
+      "referenceAudioId": "preset_zh_neutral_lively",
+      "designPrompt": "A bright gender-neutral adult voice, friendly and lively, clear standard Mandarin, energetic but not exaggerated, moderately quick pace",
+      "referenceText": "你好，很高兴认识你。让我们轻松自然地开始今天的对话。"
+    },
+    {
+      "id": "en_female_natural",
+      "labels": { "zh": "自然英文女声", "en": "Natural English female" },
+      "gender": "female",
+      "tone": "natural",
+      "scenario": "conversation",
+      "accent": "american_english",
+      "languages": ["en", "zh"],
+      "referenceAudioId": "preset_en_female_natural",
+      "designPrompt": "An adult woman with a warm, clear natural voice, neutral American English accent, relaxed conversational delivery, moderate pace",
+      "referenceText": "Hello, this is a clear and natural voice for real-time translation. It is nice to speak with you today."
+    },
+    {
+      "id": "en_male_broadcast",
+      "labels": { "zh": "英文播音男声", "en": "English male broadcast" },
+      "gender": "male",
+      "tone": "steady",
+      "scenario": "broadcast",
+      "accent": "american_english",
+      "languages": ["en"],
+      "referenceAudioId": "preset_en_male_broadcast",
+      "designPrompt": "A professional male presenter with a clear neutral American English accent, confident broadcast delivery, precise articulation, moderate pace",
+      "referenceText": "Welcome to real-time translation. The following message will be delivered clearly and accurately."
+    },
+    {
+      "id": "zh_female_sichuanese",
+      "labels": { "zh": "四川话女声", "en": "Sichuanese female" },
+      "gender": "female",
+      "tone": "lively",
+      "scenario": "conversation",
+      "accent": "sichuanese",
+      "languages": ["zh"],
+      "referenceAudioId": "preset_zh_female_sichuanese",
+      "designPrompt": "A friendly adult woman speaking natural Sichuanese Chinese, warm and lively conversational tone, clear articulation, moderate pace",
+      "referenceText": "你好嘛，很高兴认识你。我们现在开始摆一哈今天要说的事情。"
+    },
+    {
+      "id": "zh_male_northeastern",
+      "labels": { "zh": "东北话男声", "en": "Northeastern male" },
+      "gender": "male",
+      "tone": "lively",
+      "scenario": "conversation",
+      "accent": "northeastern_mandarin",
+      "languages": ["zh"],
+      "referenceAudioId": "preset_zh_male_northeastern",
+      "designPrompt": "A friendly adult man speaking natural Northeastern Mandarin Chinese, open and lively conversational tone, clear articulation, moderate pace",
+      "referenceText": "你好啊，很高兴认识你。咱们现在就开始聊聊今天要说的事儿。"
+    },
+    {
+      "id": "zh_female_cantonese",
+      "labels": { "zh": "粤语女声", "en": "Cantonese female" },
+      "gender": "female",
+      "tone": "natural",
+      "scenario": "conversation",
+      "accent": "cantonese",
+      "languages": ["zh"],
+      "referenceAudioId": "preset_zh_female_cantonese",
+      "designPrompt": "A friendly adult woman speaking natural Cantonese Chinese, warm conversational tone, clear articulation, moderate pace",
+      "referenceText": "你好，好高兴认识你。我哋而家开始倾下今日要讲嘅事情。"
+    },
+    {
+      "id": "zh_male_minnan",
+      "labels": { "zh": "闽南语男声", "en": "Minnan male" },
+      "gender": "male",
+      "tone": "natural",
+      "scenario": "conversation",
+      "accent": "minnan",
+      "languages": ["zh"],
+      "referenceAudioId": "preset_zh_male_minnan",
+      "designPrompt": "A friendly adult man speaking natural Minnan Chinese, warm conversational tone, clear articulation, moderate pace",
+      "referenceText": "你好，真欢喜认识你。咱今仔日来讲看觅欲讨论的代志。"
+    }
+  ]
+}

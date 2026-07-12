@@ -16,6 +16,7 @@ import '../../../device_asr/presentation/pages/core_ml_nemotron_diagnostics_page
 import '../../../history/presentation/pages/session_history_page.dart';
 import '../../data/realtime_runtime_settings.dart';
 import '../../data/realtime_settings_store.dart';
+import '../../data/voice_preset_catalog.dart';
 import '../controllers/realtime_controller.dart';
 import '../realtime_online_recovery_policy.dart';
 import '../realtime_settings_l10n.dart';
@@ -37,6 +38,7 @@ class RealtimePage extends StatefulWidget {
     this.speechOutputProvider,
     this.voiceConsentStore,
     this.accountSessionStore,
+    this.voicePresetClient,
   });
 
   final AppConfig? config;
@@ -44,6 +46,7 @@ class RealtimePage extends StatefulWidget {
   final SpeechOutputProvider? speechOutputProvider;
   final VoiceProcessingConsentStore? voiceConsentStore;
   final AccountSessionStore? accountSessionStore;
+  final VoicePresetClient? voicePresetClient;
 
   @override
   State<RealtimePage> createState() => _RealtimePageState();
@@ -54,10 +57,14 @@ class _RealtimePageState extends State<RealtimePage>
   late final RealtimeSettingsStore _settingsStore;
   late final VoiceProcessingConsentStore _voiceConsentStore;
   late final AccountSessionStore _accountSessionStore;
+  late final VoicePresetClient _voicePresetClient;
+  late final bool _ownsVoicePresetClient;
   late AppConfig _config;
   late RealtimeRuntimeSettings _settings;
   late RealtimeController controller;
   bool _onlineRecoveryInFlight = false;
+  bool _voicePresetsLoading = true;
+  VoicePresetCatalog _voicePresetCatalog = const VoicePresetCatalog.empty();
   Timer? _finalizationReplayTimer;
 
   @override
@@ -69,6 +76,9 @@ class _RealtimePageState extends State<RealtimePage>
     _accountSessionStore =
         widget.accountSessionStore ?? const FileAccountSessionStore();
     final baseConfig = widget.config ?? AppConfig.fromEnvironment();
+    _ownsVoicePresetClient = widget.voicePresetClient == null;
+    _voicePresetClient = widget.voicePresetClient ??
+        VoicePresetClient(baseUrl: baseConfig.apiBaseUrl);
     _settings = RealtimeRuntimeSettings.fromConfig(baseConfig);
     _config = _settings.applyTo(baseConfig);
     controller = _createRealtimePageController(this, _config);
@@ -79,6 +89,7 @@ class _RealtimePageState extends State<RealtimePage>
       (_) => unawaited(controller.recoverPendingFinalizations()),
     );
     unawaited(_loadSettings());
+    unawaited(_loadVoicePresets());
   }
 
   @override
@@ -86,6 +97,7 @@ class _RealtimePageState extends State<RealtimePage>
     WidgetsBinding.instance.removeObserver(this);
     _finalizationReplayTimer?.cancel();
     controller.dispose();
+    if (_ownsVoicePresetClient) _voicePresetClient.close();
     super.dispose();
   }
 
@@ -255,7 +267,37 @@ class _RealtimePageState extends State<RealtimePage>
     final savedSettings = await _settingsStore.load();
     if (!mounted || savedSettings == null) return;
     if (!_canChangeSettings) return;
-    _replaceSettings(savedSettings);
+    _replaceSettings(_normalizeVoicePreset(savedSettings));
+  }
+
+  Future<void> _loadVoicePresets() async {
+    try {
+      final catalog = await _voicePresetClient.load();
+      if (!mounted) return;
+      setState(() {
+        _voicePresetCatalog = catalog;
+        _voicePresetsLoading = false;
+      });
+      final normalized = _normalizeVoicePreset(_settings);
+      if (normalized.voicePresetId != _settings.voicePresetId) {
+        _replaceSettings(normalized);
+        unawaited(_settingsStore.save(normalized));
+      }
+    } catch (_) {
+      if (mounted) setState(() => _voicePresetsLoading = false);
+    }
+  }
+
+  RealtimeRuntimeSettings _normalizeVoicePreset(
+    RealtimeRuntimeSettings settings,
+  ) {
+    if (_voicePresetCatalog.presets.isEmpty ||
+        _voicePresetCatalog.find(settings.voicePresetId) != null) {
+      return settings;
+    }
+    return settings.copyWith(
+      voicePresetId: _voicePresetCatalog.defaultPresetId,
+    );
   }
 
   void _replaceSettings(RealtimeRuntimeSettings settings) {

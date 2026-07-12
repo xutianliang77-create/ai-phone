@@ -1,5 +1,6 @@
 import '../../../app/app_config.dart';
 import '../../../platform/translation/supported_translation_language.dart';
+import 'voice_preset_catalog.dart';
 
 enum RealtimeProcessingMode { onDevice, online }
 
@@ -20,6 +21,7 @@ class RealtimeRuntimeSettings {
     required this.sourceLanguage,
     required this.targetLanguage,
     required this.voiceOutputMode,
+    this.voicePresetId = defaultRealtimeVoicePresetId,
   });
 
   factory RealtimeRuntimeSettings.fromConfig(AppConfig config) {
@@ -34,6 +36,7 @@ class RealtimeRuntimeSettings {
       voiceOutputMode: realtimeVoiceOutputModeFromString(
         config.realtimeVoiceOutputMode,
       ),
+      voicePresetId: config.realtimeVoicePresetId,
     );
   }
 
@@ -55,6 +58,9 @@ class RealtimeRuntimeSettings {
           : realtimeVoiceOutputModeFromString(
               json['voiceOutputMode'] as String? ?? 'off',
             ),
+      voicePresetId: normalizeVoicePresetId(
+        json['voicePresetId'] as String? ?? defaultRealtimeVoicePresetId,
+      ),
     );
   }
 
@@ -62,6 +68,7 @@ class RealtimeRuntimeSettings {
   final String sourceLanguage;
   final String targetLanguage;
   final RealtimeVoiceOutputMode voiceOutputMode;
+  final String voicePresetId;
 
   bool get autoSpeakTranslation {
     return voiceOutputMode != RealtimeVoiceOutputMode.off;
@@ -85,6 +92,7 @@ class RealtimeRuntimeSettings {
       realtimeVoiceOutputMode: realtimeVoiceOutputModeToString(
         voiceOutputMode,
       ),
+      realtimeVoicePresetId: voicePresetId,
     );
   }
 
@@ -94,6 +102,7 @@ class RealtimeRuntimeSettings {
     String? targetLanguage,
     bool? autoSpeakTranslation,
     RealtimeVoiceOutputMode? voiceOutputMode,
+    String? voicePresetId,
   }) {
     final nextVoiceOutputMode = voiceOutputMode ??
         (autoSpeakTranslation == null
@@ -108,6 +117,9 @@ class RealtimeRuntimeSettings {
           ? this.targetLanguage
           : normalizeTargetSettingCode(targetLanguage),
       voiceOutputMode: nextVoiceOutputMode,
+      voicePresetId: voicePresetId == null
+          ? this.voicePresetId
+          : normalizeVoicePresetId(voicePresetId),
     );
   }
 
@@ -119,6 +131,7 @@ class RealtimeRuntimeSettings {
       'sourceLanguage': sourceLanguage,
       'targetLanguage': targetLanguage,
       'voiceOutputMode': realtimeVoiceOutputModeToString(voiceOutputMode),
+      'voicePresetId': voicePresetId,
       'autoSpeakTranslation': autoSpeakTranslation,
     };
   }
@@ -129,6 +142,13 @@ class RealtimeRuntimeSettings {
         ? RealtimeVoiceOutputMode.natural
         : voiceOutputMode;
   }
+}
+
+String normalizeVoicePresetId(String value) {
+  final cleaned = value.trim();
+  return RegExp(r'^[A-Za-z0-9_-]{1,80}$').hasMatch(cleaned)
+      ? cleaned
+      : defaultRealtimeVoicePresetId;
 }
 
 RealtimeVoiceOutputMode realtimeVoiceOutputModeFromString(String value) {

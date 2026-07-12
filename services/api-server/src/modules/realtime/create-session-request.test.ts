@@ -42,6 +42,32 @@ describe("create realtime session request", () => {
       });
     }
   });
+
+  it("keeps a valid natural voice preset id", () => {
+    const result = validateCreateRealtimeSessionRequest({
+      ...payload("conversation"),
+      voiceOutput: true,
+      voice: { mode: "preset", presetId: "zh_female_natural" },
+    });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.voice).toEqual({
+        mode: "preset",
+        presetId: "zh_female_natural",
+      });
+    }
+  });
+
+  it("rejects an invalid natural voice preset id", () => {
+    const result = validateCreateRealtimeSessionRequest({
+      ...payload("conversation"),
+      voiceOutput: true,
+      voice: { mode: "preset", presetId: "../../voice" },
+    });
+
+    expect(result.ok).toBe(false);
+  });
 });
 
 function payload(mode: string) {

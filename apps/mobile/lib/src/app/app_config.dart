@@ -1,5 +1,6 @@
 import 'region_edition_config.dart';
 import '../platform/translation/supported_translation_language.dart';
+import '../features/realtime/data/voice_preset_catalog.dart';
 
 class AppConfig {
   AppConfig({
@@ -24,6 +25,7 @@ class AppConfig {
     this.onDeviceTranslationRequired = false,
     this.autoReverseTargetLanguage = true,
     String realtimeVoiceOutputMode = 'off',
+    String realtimeVoicePresetId = defaultRealtimeVoicePresetId,
     RegionEditionConfig? region,
     String realtimeMode = 'conversation',
     String sourceLanguage = 'auto',
@@ -31,6 +33,7 @@ class AppConfig {
   })  : realtimeVoiceOutputMode =
             _normalizeRealtimeVoiceOutputMode(realtimeVoiceOutputMode),
         sourceLanguage = _normalizeSourceLanguage(sourceLanguage),
+        realtimeVoicePresetId = _normalizeVoicePresetId(realtimeVoicePresetId),
         targetLanguage = _normalizeTargetLanguage(targetLanguage),
         realtimeMode = _normalizeRealtimeMode(realtimeMode),
         region = region ?? const RegionEditionConfig.domestic();
@@ -55,6 +58,7 @@ class AppConfig {
   final bool onDeviceTranslationRequired;
   final bool autoReverseTargetLanguage;
   final String realtimeVoiceOutputMode;
+  final String realtimeVoicePresetId;
   final bool serverOwnedHistory;
   final bool appErrorReportingEnabled;
   final String appVersion;
@@ -136,6 +140,10 @@ class AppConfig {
       'REALTIME_VOICE_OUTPUT_MODE',
       defaultValue: 'off',
     );
+    const realtimeVoicePresetId = String.fromEnvironment(
+      'REALTIME_VOICE_PRESET_ID',
+      defaultValue: defaultRealtimeVoicePresetId,
+    );
     const appVersion = String.fromEnvironment(
       'APP_VERSION',
       defaultValue: '0.1.0',
@@ -166,6 +174,7 @@ class AppConfig {
       autoReverseTargetLanguage: autoReverseTargetLanguage ||
           targetLanguage == autoReverseTargetLanguageCode,
       realtimeVoiceOutputMode: realtimeVoiceOutputMode,
+      realtimeVoicePresetId: realtimeVoicePresetId,
       serverOwnedHistory: serverOwnedHistory,
       appErrorReportingEnabled: appErrorReportingEnabled,
       appVersion: appVersion,
@@ -183,6 +192,7 @@ class AppConfig {
     bool? useOnDeviceTranslation,
     bool? autoReverseTargetLanguage,
     String? realtimeVoiceOutputMode,
+    String? realtimeVoicePresetId,
   }) {
     return AppConfig(
       apiBaseUrl: apiBaseUrl,
@@ -208,6 +218,8 @@ class AppConfig {
           autoReverseTargetLanguage ?? this.autoReverseTargetLanguage,
       realtimeVoiceOutputMode:
           realtimeVoiceOutputMode ?? this.realtimeVoiceOutputMode,
+      realtimeVoicePresetId:
+          realtimeVoicePresetId ?? this.realtimeVoicePresetId,
       serverOwnedHistory: serverOwnedHistory,
       appErrorReportingEnabled: appErrorReportingEnabled,
       appVersion: appVersion,
@@ -215,6 +227,13 @@ class AppConfig {
       region: region,
     );
   }
+}
+
+String _normalizeVoicePresetId(String value) {
+  final cleaned = value.trim();
+  return RegExp(r'^[A-Za-z0-9_-]{1,80}$').hasMatch(cleaned)
+      ? cleaned
+      : defaultRealtimeVoicePresetId;
 }
 
 String _normalizeRealtimeVoiceOutputMode(String value) {

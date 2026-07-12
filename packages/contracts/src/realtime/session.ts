@@ -13,6 +13,7 @@ export type RealtimeVoiceMode =
 
 export interface RealtimeVoiceConfig {
   mode: RealtimeVoiceMode;
+  presetId?: string;
   voiceProfileId?: string;
   referenceAudioId?: string;
   referenceTranscript?: string;

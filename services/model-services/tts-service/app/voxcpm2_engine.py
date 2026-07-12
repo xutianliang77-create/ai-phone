@@ -105,6 +105,7 @@ class VoxCpm2TtsEngine:
             model="VoxCPM2",
             voiceMode=request.voice.mode if request.voice else "preset",
             voiceProfileId=request.voice.voiceProfileId if request.voice else None,
+            presetId=request.voice.presetId if request.voice else None,
             firstAudioMs=first_audio_ms,
             audioDurationMs=audio_duration_ms,
             modelSampleRate=model_sample_rate,

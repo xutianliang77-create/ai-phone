@@ -16,6 +16,7 @@ void main() {
       sourceLanguage: 'auto',
       targetLanguage: 'en',
       voiceOutputMode: 'natural',
+      voicePresetId: 'zh_male_steady',
       accountSessionStore: _sessionStore(),
       client: MockClient((request) async {
         expect(request.headers['authorization'], 'Bearer test-token');
@@ -40,7 +41,10 @@ void main() {
     expect(requestBody?['targetLanguage'], 'en');
     expect(requestBody?['mode'], 'meeting');
     expect(requestBody?['voiceOutput'], isTrue);
-    expect(requestBody?['voice'], {'mode': 'preset'});
+    expect(requestBody?['voice'], {
+      'mode': 'preset',
+      'presetId': 'zh_male_steady',
+    });
     expect(requestBody?['termbaseId'], 'default');
     expect(requestBody?['speakerAttribution'], {
       'mode': 'auto',

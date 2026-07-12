@@ -9,7 +9,9 @@ from app.schemas import (
     TtsSynthesizeRequest,
     TtsSynthesizeResponse,
     VoiceReferenceUploadResponse,
+    VoicePresetCatalogResponse,
 )
+from app.voice_preset_catalog import VoicePresetCatalog
 
 
 VOICE_ID_PATTERN = re.compile(r"^[A-Za-z0-9_-]{1,80}$")
@@ -17,9 +19,15 @@ MAX_REFERENCE_AUDIO_BYTES = 10 * 1024 * 1024
 
 
 class TtsService:
-    def __init__(self, engine: TtsEngine, voice_reference_dir: str = "") -> None:
+    def __init__(
+        self,
+        engine: TtsEngine,
+        voice_reference_dir: str = "",
+        voice_presets: VoicePresetCatalog | None = None,
+    ) -> None:
         self.engine = engine
         self.voice_reference_dir = Path(voice_reference_dir) if voice_reference_dir else None
+        self.voice_presets = voice_presets or VoicePresetCatalog()
 
     def health(self) -> tuple[bool, str | None]:
         return self.engine.health()
@@ -31,7 +39,10 @@ class TtsService:
         self,
         request: TtsSynthesizeRequest,
     ) -> TtsSynthesizeResponse:
-        return await self.engine.synthesize(request)
+        return await self.engine.synthesize(self.voice_presets.resolve_request(request))
+
+    def preset_catalog(self) -> VoicePresetCatalogResponse:
+        return self.voice_presets.response()
 
     def save_voice_reference_audio(
         self,

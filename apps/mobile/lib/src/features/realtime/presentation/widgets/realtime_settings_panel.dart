@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 
 import '../../../../app/localization/app_localizations.dart';
 import '../../data/realtime_runtime_settings.dart';
+import '../../data/voice_preset_catalog.dart';
 import '../realtime_settings_l10n.dart';
 import 'translation_language_picker.dart';
+import 'voice_preset_picker.dart';
 
 class RealtimeSettingsPanel extends StatelessWidget {
   const RealtimeSettingsPanel({
@@ -11,6 +13,8 @@ class RealtimeSettingsPanel extends StatelessWidget {
     required this.enabled,
     required this.onChanged,
     this.autoSpeakSupported = true,
+    this.voicePresets = const <VoicePreset>[],
+    this.voicePresetsLoading = false,
     this.padding = const EdgeInsets.fromLTRB(16, 4, 16, 8),
     super.key,
   });
@@ -19,6 +23,8 @@ class RealtimeSettingsPanel extends StatelessWidget {
   final bool enabled;
   final ValueChanged<RealtimeRuntimeSettings> onChanged;
   final bool autoSpeakSupported;
+  final List<VoicePreset> voicePresets;
+  final bool voicePresetsLoading;
   final EdgeInsetsGeometry padding;
 
   @override
@@ -71,6 +77,8 @@ class RealtimeSettingsPanel extends StatelessWidget {
                 settings: settings,
                 enabled: enabled && autoSpeakSupported,
                 onChanged: onChanged,
+                voicePresets: voicePresets,
+                voicePresetsLoading: voicePresetsLoading,
               ),
               if (!enabled)
                 Text(
@@ -115,11 +123,15 @@ class _VoiceOutputSelector extends StatelessWidget {
     required this.settings,
     required this.enabled,
     required this.onChanged,
+    required this.voicePresets,
+    required this.voicePresetsLoading,
   });
 
   final RealtimeRuntimeSettings settings;
   final bool enabled;
   final ValueChanged<RealtimeRuntimeSettings> onChanged;
+  final List<VoicePreset> voicePresets;
+  final bool voicePresetsLoading;
 
   @override
   Widget build(BuildContext context) {
@@ -162,8 +174,77 @@ class _VoiceOutputSelector extends StatelessWidget {
                   )
               : null,
         ),
+        if (settings.processingMode == RealtimeProcessingMode.online &&
+            settings.voiceOutputMode == RealtimeVoiceOutputMode.natural) ...[
+          const SizedBox(height: 8),
+          _VoicePresetButton(
+            settings: settings,
+            presets: voicePresets,
+            loading: voicePresetsLoading,
+            enabled: enabled,
+            onChanged: onChanged,
+          ),
+        ],
       ],
     );
+  }
+}
+
+class _VoicePresetButton extends StatelessWidget {
+  const _VoicePresetButton({
+    required this.settings,
+    required this.presets,
+    required this.loading,
+    required this.enabled,
+    required this.onChanged,
+  });
+
+  final RealtimeRuntimeSettings settings;
+  final List<VoicePreset> presets;
+  final bool loading;
+  final bool enabled;
+  final ValueChanged<RealtimeRuntimeSettings> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final selected = _findPreset(settings.voicePresetId);
+    final label = loading
+        ? context.l10n.voicePresetLoadingLabel
+        : selected?.label(chinese: context.l10n.isChinese) ??
+            context.l10n.voicePresetUnavailableLabel;
+    return OutlinedButton.icon(
+      onPressed: enabled && !loading && presets.isNotEmpty
+          ? () => _pick(context)
+          : null,
+      icon: const Icon(Icons.voice_chat_outlined),
+      label: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          Text(context.l10n.voicePresetSettingLabel,
+              style: Theme.of(context).textTheme.labelSmall),
+          Text(label),
+        ],
+      ),
+    );
+  }
+
+  VoicePreset? _findPreset(String id) {
+    for (final preset in presets) {
+      if (preset.id == id) return preset;
+    }
+    return null;
+  }
+
+  Future<void> _pick(BuildContext context) async {
+    final selected = await showVoicePresetPicker(
+      context: context,
+      presets: presets,
+      selectedId: settings.voicePresetId,
+    );
+    if (selected != null) {
+      onChanged(settings.copyWith(voicePresetId: selected));
+    }
   }
 }
 

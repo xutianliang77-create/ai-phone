@@ -39,9 +39,8 @@ describe("http tts synthesizer", () => {
         language: "en",
       },
       {
-        mode: "personal_clone",
-        voiceProfileId: "voice_1",
-        referenceAudioId: "voice_1",
+        mode: "preset",
+        presetId: "zh_female_cantonese",
       },
     );
 
@@ -65,9 +64,8 @@ describe("http tts synthesizer", () => {
         speakerRole: "guest",
         segmentId: "seg_1",
         voice: {
-          mode: "personal_clone",
-          voiceProfileId: "voice_1",
-          referenceAudioId: "voice_1",
+          mode: "preset",
+          presetId: "zh_female_cantonese",
         },
       },
     });

@@ -17,6 +17,7 @@ class RealtimeApiClient {
     String targetLanguage = 'zh',
     bool autoReverseTargetLanguage = false,
     String voiceOutputMode = 'natural',
+    String voicePresetId = 'zh_female_natural',
     String termbaseId = 'default',
     Duration requestTimeout = _defaultRequestTimeout,
     AccountSessionStore accountSessionStore = const FileAccountSessionStore(),
@@ -27,6 +28,7 @@ class RealtimeApiClient {
         _targetLanguage = targetLanguage,
         _autoReverseTargetLanguage = autoReverseTargetLanguage,
         _voiceOutputMode = voiceOutputMode,
+        _voicePresetId = voicePresetId,
         _termbaseId = termbaseId,
         _requestTimeout = requestTimeout,
         _accountSessionStore = accountSessionStore;
@@ -38,6 +40,7 @@ class RealtimeApiClient {
   final String _targetLanguage;
   final bool _autoReverseTargetLanguage;
   final String _voiceOutputMode;
+  final String _voicePresetId;
   final String _termbaseId;
   final Duration _requestTimeout;
   final AccountSessionStore _accountSessionStore;
@@ -140,7 +143,7 @@ class RealtimeApiClient {
   Future<Map<String, Object?>?> _voiceConfigForSession() async {
     switch (_voiceOutputMode) {
       case 'natural':
-        return const {'mode': 'preset'};
+        return {'mode': 'preset', 'presetId': _voicePresetId};
       case 'my_voice':
         return _myVoiceConfig();
       default:

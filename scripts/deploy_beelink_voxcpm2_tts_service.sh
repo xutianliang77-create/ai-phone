@@ -29,6 +29,8 @@ ssh "$BEELINK_HOST" \
    REMOTE_VOICE_REFERENCE_DIR='$REMOTE_VOICE_REFERENCE_DIR' \
    REMOTE_PYTHON='$REMOTE_PYTHON' \
    TTS_SERVICE_PORT='$TTS_SERVICE_PORT' \
+   GENERATE_VOICE_PRESETS='${GENERATE_VOICE_PRESETS:-0}' \
+   FORCE_VOICE_PRESETS='${FORCE_VOICE_PRESETS:-0}' \
    TTS_SERVICE_API_KEY='${TTS_SERVICE_API_KEY:-}' \
    bash -s" <<'REMOTE'
 set -euo pipefail
@@ -54,6 +56,7 @@ TTS_VOXCPM2_CFG_VALUE=2.0
 TTS_VOXCPM2_INFERENCE_TIMESTEPS=10
 TTS_VOXCPM2_LOAD_DENOISER=false
 TTS_VOICE_REFERENCE_DIR=$REMOTE_VOICE_REFERENCE_DIR
+TTS_VOICE_PRESET_MANIFEST=$REMOTE_SERVICE_DIR/voice-presets.json
 EOF
 mv "$tmp_env" .env
 chmod 600 .env
@@ -79,6 +82,18 @@ if ss -ltn 2>/dev/null | grep -q ":$TTS_SERVICE_PORT "; then
     echo "Port $TTS_SERVICE_PORT is already in use by another process." >&2
     exit 1
   fi
+fi
+
+if [ "$GENERATE_VOICE_PRESETS" = "1" ]; then
+  generate_args=(
+    --model-dir "$REMOTE_MODEL_DIR"
+    --manifest "$REMOTE_SERVICE_DIR/voice-presets.json"
+    --output-dir "$REMOTE_VOICE_REFERENCE_DIR"
+  )
+  if [ "$FORCE_VOICE_PRESETS" = "1" ]; then
+    generate_args+=(--force)
+  fi
+  "$REMOTE_PYTHON" scripts/generate_voice_presets.py "${generate_args[@]}"
 fi
 
 set -a

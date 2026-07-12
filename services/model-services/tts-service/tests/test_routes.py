@@ -19,6 +19,8 @@ def test_health_route_mock() -> None:
         "reason": None,
         "modelSampleRate": 16000,
         "outputSampleRate": 16000,
+        "voicePresetCatalogVersion": "unconfigured",
+        "availableVoicePresetCount": 0,
     }
 
 

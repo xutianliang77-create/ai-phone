@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../data/realtime_runtime_settings.dart';
+import '../../data/voice_preset_catalog.dart';
 import 'realtime_settings_sheet.dart';
 
 void showRealtimeSettingsSheet({
@@ -13,6 +14,8 @@ void showRealtimeSettingsSheet({
   required bool Function() autoSpeakSupported,
   required ValueChanged<String> onRealtimeModeChanged,
   required ValueChanged<RealtimeRuntimeSettings> onSettingsChanged,
+  List<VoicePreset> voicePresets = const <VoicePreset>[],
+  bool voicePresetsLoading = false,
 }) {
   showModalBottomSheet<void>(
     context: context,
@@ -42,6 +45,8 @@ void showRealtimeSettingsSheet({
                 autoSpeakSupported: autoSpeakSupported(),
                 onRealtimeModeChanged: changeRealtimeMode,
                 onSettingsChanged: changeSettings,
+                voicePresets: voicePresets,
+                voicePresetsLoading: voicePresetsLoading,
               );
             },
           );
