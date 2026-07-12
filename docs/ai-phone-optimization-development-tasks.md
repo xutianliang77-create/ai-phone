@@ -1,6 +1,6 @@
 # ai phone 优化开发任务清单
 
-版本：v3.6
+版本：v3.7
 日期：2026-07-12
 关联：`docs/domestic-app-detailed-functional-design.md`、`docs/ai-phone-translation-technical-design.md`、`docs/domestic-design-review-action-plan.md`
 
@@ -65,7 +65,7 @@
 - `OPT-SPK-005`：`accepted`。Gateway 和 Beelink ASR/Speaker Service 已部署；Gateway 对旧 token 或缺失字段强制补齐 `auto + maxSpeakers=4`，Speaker Provider 启用状态、配置来源和失败可观测；稳定 speaker span 可产生单次 `boundaryMs`，标签抖动、低置信度和 overlap 不切段。固定双声源会话和 iPhone 真人双人无停顿轮流说话均正确显示“说话人 1/2”，且句子未跨说话人合并。
 - `OPT-SPK-006`：`in_progress`。已修复 Gateway 合并批次错误使用末帧时间的问题；ASR boundary API 已通过真实 PCM 回切，左右段时间轴连续、右侧音频保留且 VAD 不重置。2秒脱敏诊断窗口、boundary hit/miss/error、确认延迟、回切时长、endpoint race 和丢帧指标已贯通。iPhone 真人双人换人断句通过；短停顿竞态、多人诊断和断网快照仍待完成。
 - `OPT-SPK-007`：`in_progress`。`turnId + revision` 已贯通 ASR、Gateway 事件、API session、Flutter 字幕和历史；不同 turn 禁止语义合并，批量 ASR 结果按音频时间排序，同 segment 只处理最高 revision。固定双声源和 iPhone 双人输出顺序通过；多人乱序、TTS 和计费幂等仍待联合验收。
-- `OPT-SPK-008`：`in_progress`。App、API 和 Speaker Service 默认人数已统一为4；turn 语言画像、revision、overlap/unknown 保护边界、App 和导出已贯通。新矩阵中四人 DER `4.44%`、重叠 `3.63%`、一分钟稳定性 `3.77%` 通过；普通双人合成语料 `22.05%` 略超20%门槛，1.2秒快速轮换 `35.42%` 未通过，真人三至四人和混合句仍待验收。
+- `OPT-SPK-008`：`in_progress`。App、API 和 Speaker Service 默认人数已统一为4；turn 语言画像、revision、overlap/unknown 保护边界、App 和导出已贯通。Gateway 已修复短首轮次只出现一个可靠窗口时无法建立基线、以及 Streaming Sortformer 在两个80ms帧内修订起点时候选被错误清空的问题；真实模型矩阵仍显示四人 DER `4.44%`、重叠 `3.63%`、一分钟稳定性 `3.77%` 通过，普通双人 `22.05%`、1.2秒快速轮换 `35.42%` 未通过。快速轮换预测20段全部落入同一模型槽位，属于模型身份区分门禁，不能用语种或文本规则伪造 speaker；真人三至四人和混合句仍待统一验收。
 - `OPT-DEP-001`：`accepted`。API/Gateway 已作为 Docker Compose 发布单元迁入 Beelink `3110/3111`，119条历史和7份声音引用已保留；iPhone Profile 已切换到 Beelink，Mac `3110/3111` 停止后真机仍上传540帧并保存57秒会话，真实 speaker-turn 全链路通过。
 - `OPT-DEP-002`：`in_progress`。Beelink 已承载 LiveKit、API、Gateway、ASR、Speaker、翻译和 LLM；Translation Worker 已编入同一镜像，但按 call 启动和 VoxCPM2 在线加载仍需联合验收。
 - `OPT-DEP-003`：`accepted`。iPhone Profile 仅包含 `http://100.110.127.117:3110`，构建产物未发现旧 Mac 地址、模型端口或内部密钥；Mac API/Gateway 停止后在线真机链路通过。
@@ -88,7 +88,7 @@
 | SPK-006-C | boundary 与普通端点竞态 | 1天 | in_progress | 有替代结果时去重、空结果时保留原文；固定双声源 race=0，仍需真机短停顿构造竞态 |
 | SPK-007-A | turn 数据契约 | 已完成 | deployed | segment 持久化 `turnId`、`revision`、`speakerId` 和原始时间范围；真实历史验证通过 |
 | SPK-007-B | 有序翻译队列 | 已完成 | deployed | 批量结果按音频时间排序，不跨 turn 合并；固定双声源事件和历史顺序一致 |
-| SPK-008-A | 多人/混合语种验收 | 1-2天 | in_progress | 四人、重叠和一分钟稳定性模型矩阵通过；短轮次未达标，真人三至四人、中英夹杂和 unknown 待验收 |
+| SPK-008-A | 多人/混合语种验收 | 1-2天 | in_progress | Gateway 短首轮次和160ms起点修订已修复；四人、重叠和一分钟稳定性模型矩阵通过，模型短轮次仍未达标，真人三至四人、中英夹杂和 unknown 待验收 |
 | DEP-001-A | Gateway/API 迁入 Beelink | 已完成 | accepted | Docker、数据迁移、App 切址、Mac 停机和服务器真机全链路通过 |
 
 当前关键路径：`部署遗留会话恢复 -> 断网 End 新文案复验 -> SPK-008-A 真人多人/混合语种`。服务器发布单元、Mac 停机和双人链路已验证；短轮次矩阵失败项不能通过放宽 DER 门槛结项。

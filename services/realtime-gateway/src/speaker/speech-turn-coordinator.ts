@@ -15,6 +15,7 @@ export interface SpeechTurnCoordinatorOptions {
   minimumConfidence?: number;
   stableWindows?: number;
   tailToleranceMs?: number;
+  candidateStartToleranceMs?: number;
 }
 
 interface CandidateState {
@@ -43,6 +44,7 @@ const DEFAULT_MINIMUM_DOMINANCE_RATIO = 0.65;
 const DEFAULT_MINIMUM_CONFIDENCE = 0.6;
 const DEFAULT_STABLE_WINDOWS = 2;
 const DEFAULT_TAIL_TOLERANCE_MS = 80;
+const DEFAULT_CANDIDATE_START_TOLERANCE_MS = 160;
 
 export class SpeechTurnCoordinator {
   private readonly minimumEvidenceMs: number;
@@ -50,6 +52,7 @@ export class SpeechTurnCoordinator {
   private readonly minimumConfidence: number;
   private readonly stableWindows: number;
   private readonly tailToleranceMs: number;
+  private readonly candidateStartToleranceMs: number;
   private readonly sessions = new Map<string, SessionState>();
 
   constructor(options: SpeechTurnCoordinatorOptions = {}) {
@@ -61,6 +64,8 @@ export class SpeechTurnCoordinator {
       DEFAULT_MINIMUM_CONFIDENCE;
     this.stableWindows = options.stableWindows ?? DEFAULT_STABLE_WINDOWS;
     this.tailToleranceMs = options.tailToleranceMs ?? DEFAULT_TAIL_TOLERANCE_MS;
+    this.candidateStartToleranceMs = options.candidateStartToleranceMs ??
+      DEFAULT_CANDIDATE_START_TOLERANCE_MS;
   }
 
   observe(sessionId: string, spans: SpeakerSpan[]): SpeechTurnBoundary | null {
@@ -74,8 +79,17 @@ export class SpeechTurnCoordinator {
       state.candidate = undefined;
       return null;
     }
+    if (!state.currentSpeakerId) {
+      state.currentSpeakerId = evidence.speakerId;
+      state.candidate = undefined;
+      return null;
+    }
 
-    const candidate = updateCandidate(state.candidate, evidence);
+    const candidate = updateCandidate(
+      state.candidate,
+      evidence,
+      this.candidateStartToleranceMs,
+    );
     state.candidate = candidate;
     if (candidate.observations < this.stableWindows) return null;
 
@@ -117,11 +131,12 @@ export class SpeechTurnCoordinator {
 function updateCandidate(
   current: CandidateState | undefined,
   evidence: TailEvidence,
+  startToleranceMs: number,
 ): CandidateState {
   if (
     !current ||
     current.speakerId !== evidence.speakerId ||
-    current.startMs !== evidence.startMs
+    Math.abs(current.startMs - evidence.startMs) > startToleranceMs
   ) {
     return {
       speakerId: evidence.speakerId,
@@ -133,6 +148,7 @@ function updateCandidate(
   if (evidence.endMs <= current.lastEndMs) return current;
   return {
     ...current,
+    startMs: evidence.startMs,
     lastEndMs: evidence.endMs,
     observations: current.observations + 1,
   };

@@ -1,7 +1,7 @@
 # ai phone 说话人归属技术设计
 
-版本：v1.8
-日期：2026-07-11
+版本：v1.9
+日期：2026-07-12
 
 ## 1. 目标与边界
 
@@ -499,7 +499,7 @@ interface SpeakerRepository {
 - HTTP Speaker Provider 与 ASR 并行，失败时只降级归属，不中断 ASR/翻译。
 - App 实时字幕、Call Link、历史、纪要输入、Markdown/CSV/JSON 导出已消费统一 speaker。
 - 会话内 speaker 清单和重命名 API 已实现，重命名后 review 失效并重新生成。
-- Gateway 已实现 `SpeechTurnCoordinator`：240ms证据、65%占比、0.60置信度、连续两个增长窗口和 overlap 抑制。
+- Gateway 已实现 `SpeechTurnCoordinator`：240ms证据、65%占比、0.60置信度、换人连续两个增长窗口和 overlap 抑制。首个可靠 speaker 只建立基线、不触发切句，因此不额外等待第二窗口；同一候选起点允许两个80ms帧内的流式修订，超过后重新确认。
 - ASR Service 已实现 `/asr/sessions/:sessionId/boundary`，在 `boundaryMs` 切开 PCM，提交上一 turn 并保留下一 turn，且不重置 VAD Provider 状态。
 - Gateway 支持一次 ASR 调用返回多个有序 transcript；边界 turn 固定携带上一位 `speakerId`，不会被后置对齐改写。
 - SegmentAssembler 不再把语种变化作为硬断点，仍严格禁止跨 speaker 合并。
@@ -523,7 +523,7 @@ interface SpeakerRepository {
 1. 结束、暂停、异常 finalize 和手动 flush 为最高优先级硬断点。
 2. Call Link/PSTN participant track 变化立即形成硬断点。
 3. MarbleNet 静音端点和最大分段形成硬断点。
-4. diarization 新 speaker 持续不少于240ms、证据占比不低于65%、置信度不低于0.60且连续两个窗口稳定后，形成 speaker 硬断点。
+4. diarization 首个可靠 speaker 立即建立 session 基线但不形成断点；后续新 speaker 持续不少于240ms、证据占比不低于65%、置信度不低于0.60且连续两个窗口稳定后，形成 speaker 硬断点。候选起点在160ms内的模型回看修订属于同一候选，超过160ms必须重新确认。
 5. 标点和语义完整只形成软断点。
 6. 语种变化不是硬断点；中英混说、姓名、品牌、型号和字母串保持在同一 speaker turn。
 

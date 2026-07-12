@@ -7,8 +7,53 @@ describe("speech turn coordinator", () => {
     const coordinator = new SpeechTurnCoordinator();
 
     expect(coordinator.observe("sess_1", [span("speaker_1", 0, 240)])).toBeNull();
+    expect(coordinator.currentSpeaker("sess_1")).toBe("speaker_1");
     expect(coordinator.observe("sess_1", [span("speaker_1", 0, 480)])).toBeNull();
     expect(coordinator.currentSpeaker("sess_1")).toBe("speaker_1");
+  });
+
+  it("preserves a short first turn before confirming the next speaker", () => {
+    const coordinator = new SpeechTurnCoordinator();
+
+    expect(coordinator.observe("sess_1", [span("speaker_1", 0, 240)])).toBeNull();
+    expect(coordinator.observe("sess_1", [span("speaker_2", 240, 480)])).toBeNull();
+    expect(coordinator.observe("sess_1", [span("speaker_2", 240, 720)])).toEqual({
+      previousSpeakerId: "speaker_1",
+      nextSpeakerId: "speaker_2",
+      boundaryMs: 240,
+      confirmedAtMs: 720,
+      confidence: 0.9,
+      dominanceRatio: 1,
+    });
+  });
+
+  it("keeps a candidate when the streaming model revises its start by two frames", () => {
+    const coordinator = establishedCoordinator();
+
+    expect(coordinator.observe("sess_1", [span("speaker_2", 480, 720)])).toBeNull();
+    expect(coordinator.observe("sess_1", [span("speaker_2", 640, 960)])).toEqual({
+      previousSpeakerId: "speaker_1",
+      nextSpeakerId: "speaker_2",
+      boundaryMs: 640,
+      confirmedAtMs: 960,
+      confidence: 0.9,
+      dominanceRatio: 1,
+    });
+  });
+
+  it("restarts confirmation when the candidate start moves beyond two frames", () => {
+    const coordinator = establishedCoordinator();
+
+    expect(coordinator.observe("sess_1", [span("speaker_2", 480, 720)])).toBeNull();
+    expect(coordinator.observe("sess_1", [span("speaker_2", 720, 1040)])).toBeNull();
+    expect(coordinator.observe("sess_1", [span("speaker_2", 720, 1280)])).toEqual({
+      previousSpeakerId: "speaker_1",
+      nextSpeakerId: "speaker_2",
+      boundaryMs: 720,
+      confirmedAtMs: 1280,
+      confidence: 0.9,
+      dominanceRatio: 1,
+    });
   });
 
   it("emits one boundary after a new speaker is stable for two windows", () => {

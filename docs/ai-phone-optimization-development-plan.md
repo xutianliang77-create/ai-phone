@@ -1,6 +1,6 @@
 # ai phone 优化开发计划
 
-版本：v1.16
+版本：v1.17
 日期：2026-07-12
 任务来源：`docs/ai-phone-optimization-development-tasks.md`
 
@@ -34,7 +34,7 @@
 - `OPT-SPK-006` 的 PCM boundary 回切已通过真实音频连续性验证；合并批次时间轴根因已修复，诊断窗口、竞态指标和 session 持久化已部署。固定双声源真实 session 达到 hit=1、miss/error/race/drop=0、1040ms 确认延迟，等待 iPhone 与多人验收。
 - `OPT-SPK-007` 已完成代码、自动化和固定双声源部署验证：新 session 使用稳定 `turnId + revision`，Gateway 按音频时间处理批量结果，API 和 App 对迟到事件执行字段分域幂等，旧协议不强行生成 turn/revision。当前只差 iPhone 双人/多人验收。
 - Beelink 已新增 Docker Compose API/Gateway 发布单元，服务器侧真实链路 `25b48a5c-3cff-490b-8091-929b62d91f2a` 正确保存两位 speaker、两个 turn、中英文语言画像和 boundary 诊断；迁移后历史119条、声音引用7份。当前只差 App 切址和 Mac 停机证明正式两层拓扑。
-- 新 speaker 矩阵固定输出 DER、miss、false alarm、confusion 和漂移：四人、overlap、一分钟稳定性通过，普通双人合成和1.2秒快速轮换未达标。下一开发主线固定为：App 切换 Beelink -> 断网文案复验 -> 真人多人/混合语种 -> 短轮次专项。
+- 新 speaker 矩阵固定输出 DER、miss、false alarm、confusion 和漂移：四人、overlap、一分钟稳定性通过，普通双人合成和1.2秒快速轮换未达标。Gateway 已先修短首轮次基线和160ms内流式起点修订导致的边界漏切；模型快速轮换20段仍全部落入同一槽位，后续统一验收不得用语种或文本规则掩盖该门禁。
 
 ## 3. 分阶段任务
 
@@ -192,7 +192,7 @@ LLM 纪要、扫描 UI 和国际模型 Provider 可在 M1 稳定接口冻结后�
 | S1 | `OPT-SPK-005` 边界协调器 | 已完成 | accepted | 固定双声源和 iPhone 真人双人无停顿均正确切换 speaker，句子不跨人 |
 | S2 | `OPT-SPK-006` ASR Turn Buffer | 0.5-1天剩余 | in_progress | 时间轴修复和真实 session 指标通过；补 iPhone、断网快照和短停顿竞态证据 |
 | S3 | `OPT-SPK-007` 翻译队列 | 0.5天验收 | in_progress | 固定双声源 turn 持久化和顺序通过；待 iPhone 双人/多人输出顺序验收 |
-| S4 | `OPT-SPK-008` overlap/混合语种 | 1-2天 | in_progress | 自动矩阵四人/重叠/稳定性已过；短轮次失败，真人混合语种待验收 |
+| S4 | `OPT-SPK-008` overlap/混合语种 | 1-2天 | in_progress | Gateway 短首轮次/起点修订漏切已修；自动矩阵四人/重叠/稳定性已过，模型短轮次和真人混合语种待统一验收 |
 | S5 | 联合真机验收 | 2天 | todo | 对话、聆听、双人、三人、四人、快速换人、混合语种和30分钟稳定性通过 |
 | S6 | `OPT-DEP-001/002/003` 两层部署收敛 | 0.5天剩余 | in_progress | Beelink 发布单元和数据迁移通过；待 App 切址、Mac 停机和 Worker 联合验收 |
 
