@@ -10,6 +10,7 @@ import type {
   CallAudioFrame,
   CallAudioSpeakerRole,
   CallRoomEventSink,
+  CallSpeechPipeline,
   CallTtsAudioSink,
   CallTranslationProvider,
   CallTtsProvider,
@@ -26,7 +27,7 @@ export interface CallTranslationWorkerOptions {
   nowMs?: () => number;
 }
 
-export class CallTranslationWorker {
+export class CallTranslationWorker implements CallSpeechPipeline {
   private readonly asrProvider: CallAsrProvider;
   private readonly translationProvider: CallTranslationProvider;
   private readonly ttsProvider?: CallTtsProvider;

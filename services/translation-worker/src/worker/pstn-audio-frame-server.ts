@@ -1,10 +1,10 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
-import type { CallTranslationWorker } from "./call-translation-worker.js";
+import type { CallSpeechPipeline } from "./types.js";
 import type { CallAudioFrame, CallAudioSpeakerRole } from "./types.js";
 
 export interface PstnAudioFrameServerOptions {
   apiKey?: string;
-  worker: Pick<CallTranslationWorker, "startCall" | "processAudioFrame" | "flushSpeaker" | "endCall">;
+  worker: Pick<CallSpeechPipeline, "startCall" | "processAudioFrame" | "flushSpeaker" | "endCall">;
   nowMs?: () => number;
 }
 

@@ -57,6 +57,17 @@ describe("translation worker env", () => {
       controlPrompt: "clear and calm",
     });
   });
+
+  it("defaults to cascade and validates native speech pipeline modes", () => {
+    process.env = {};
+    expect(loadEnv().speechPipelineMode).toBe("cascade");
+
+    process.env = { SPEECH_PIPELINE_MODE: "shadow" };
+    expect(loadEnv().speechPipelineMode).toBe("shadow");
+
+    process.env = { SPEECH_PIPELINE_MODE: "invalid" };
+    expect(() => loadEnv()).toThrow("Unsupported SPEECH_PIPELINE_MODE");
+  });
 });
 
 function writeConfig(tempDirs: string[]) {

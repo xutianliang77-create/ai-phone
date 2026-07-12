@@ -1,6 +1,6 @@
 # ai phone 优化开发计划
 
-版本：v1.20
+版本：v1.21
 日期：2026-07-12
 任务来源：`docs/ai-phone-optimization-development-tasks.md`
 
@@ -38,6 +38,7 @@
 - `OPT-TERM-001` 已完成 App、API、token 和 Gateway 会话级行业包选择代码。客户端单选通用、商业、科技、医疗、旅游、餐饮或娱乐；服务端返回实际选择及词库版本，旧客户端继续回退 `DOMAIN_LEXICON_PACKS`。当前等待统一部署与真机行业语料验收。
 - `OPT-OBS-001` 已完成 session 质量报告代码：API 按账号隔离输出翻译覆盖率、延迟、丢帧、VAD fallback、端点、说话人和 Provider 指纹，不返回字幕正文或音频。当前等待统一部署后用真实会话核对指标并接入告警阈值。
 - `OPT-DATA-001/002` 已完成 SQLite WAL 驱动、实体级并发冲突保护、session-segment 外键、JSON 迁移、quick_check、备份与受维护模式保护的恢复代码。服务器镜像升级到 Node 24 LTS；当前等待 Beelink 停写窗口执行迁移、数据 hash/数量核对和恢复演练。
+- `OPT-S2S-001` 已完成 Provider 能力契约和运行路由：级联路线继续为默认，原生路线可独占或 shadow；shadow 错误隔离，结束时等待旁路任务收敛。Gemini/GPT 具体 Provider 仍需独立账号、地区、成本和隐私评测。
 
 ## 3. 分阶段任务
 
@@ -131,6 +132,8 @@ M2 不调整模型参数，避免 UI 和模型体验同时变化导致问题难�
 - 执行 `OPT-S2S-001`，先实现 `SpeechToSpeechProvider` 契约和独立 harness。
 - 执行 `OPT-S2S-002`，Gemini Live 只用于国际版候选，不改变国内默认路线。
 - `OPT-S2S-003`、`OPT-PSTN-001`、`OPT-AGENT-001`、`OPT-VOICE-001`、`OPT-VOICE-002`、`OPT-DATA-003` 分别立项，不互相绑定发布。
+
+当前进度：`OPT-S2S-001` 契约、路由和自动化已完成。国内默认固定 `SPEECH_PIPELINE_MODE=cascade`；只有真实原生 Provider 注入后才允许 `native/shadow`，避免配置看似启用但实际未生效。
 - `OPT-ANDROID-001` 及所有 Android 真机验收在 iOS 产品化完成后统一立项执行。
 - `OPT-SPK-004` 声纹实名属于单独授权的增强能力，不与匿名说话人分离绑定发布。
 - `OPT-VAD-005` 端侧 MarbleNet 只在独立 iOS/Android harness 评测，通过功耗、温升和召回门禁后再决定是否进入 App。

@@ -1,6 +1,6 @@
 # ai phone 优化开发任务清单
 
-版本：v4.0
+版本：v4.1
 日期：2026-07-12
 关联：`docs/domestic-app-detailed-functional-design.md`、`docs/ai-phone-translation-technical-design.md`、`docs/domestic-design-review-action-plan.md`
 
@@ -125,7 +125,7 @@
 
 | 编号 | 任务 | 完成定义 |
 | --- | --- | --- |
-| OPT-S2S-001 | 新增 `SpeechToSpeechProvider` 能力契约 | 原生语音模型可与级联路线并存并可灰度切换 |
+| OPT-S2S-001 | 新增 `SpeechToSpeechProvider` 能力契约 | `in_progress（代码完成，Provider 评测待执行）`；级联与原生语音统一为 `CallSpeechPipeline`，支持 `cascade/native/shadow`，shadow 失败不影响正式输出，未配置 Provider 时禁止误开 |
 | OPT-S2S-002 | Gemini Live 国际路线 | 固定语料通过质量、成本、地区和隐私评审 |
 | OPT-S2S-003 | GPT-Live 候选接入 | API 正式可用后通过 Provider 评测再上线 |
 | OPT-PSTN-001 | 真实 PSTN 服务商媒体协议 | 普通电话接通、译音回灌、失败退款闭环 |

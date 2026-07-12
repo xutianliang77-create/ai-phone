@@ -271,7 +271,7 @@ Gateway 将段级上下文随 transcript/translation 一起写入 API；App 本�
 | --- | --- | --- |
 | VAD | 在线 MarbleNet v2；端侧现有端点检测 | MarbleNet CoreML/Android ONNX 候选 |
 | ASR | iOS CoreML/Nemotron；在线 Qwen3-ASR-0.6B tuned v3 | FireRedASR2、云 streaming ASR 备选 |
-| 翻译 | iOS 系统翻译；在线 Hy-MT2-1.8B | 国际 Provider 和原生 S2S 路由 |
+| 翻译 | iOS 系统翻译；在线 Hy-MT2-1.8B；通话默认级联 pipeline | 原生 S2S 已具备 `cascade/native/shadow` Provider 路由，国际 Provider 评测通过后注入 |
 | TTS | iOS 系统 TTS；在线 VoxCPM2 | 低延迟流式 TTS、授权自定义语音 |
 | 纠错/摘要 | Qwen3.5-9B no-thinking | 成本路由、企业私有模型 |
 

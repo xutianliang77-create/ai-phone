@@ -1,5 +1,9 @@
 import { mergeModelRoutingEnv } from "./model-routing-env.js";
-import type { TtsVoiceConfig, TtsVoiceMode } from "../worker/types.js";
+import type {
+  SpeechPipelineMode,
+  TtsVoiceConfig,
+  TtsVoiceMode,
+} from "../worker/types.js";
 
 export interface TranslationWorkerEnv {
   apiBaseUrl: string;
@@ -34,6 +38,7 @@ export interface TranslationWorkerEnv {
   pstnBridgeBaseUrl?: string;
   pstnBridgeApiKey?: string;
   pstnBridgeTimeoutMs: number;
+  speechPipelineMode: SpeechPipelineMode;
 }
 
 export function loadEnv(): TranslationWorkerEnv {
@@ -87,7 +92,14 @@ export function loadEnv(): TranslationWorkerEnv {
     pstnBridgeBaseUrl: env.PSTN_BRIDGE_BASE_URL,
     pstnBridgeApiKey: env.PSTN_BRIDGE_API_KEY,
     pstnBridgeTimeoutMs: Number(env.PSTN_BRIDGE_TIMEOUT_MS ?? 10000),
+    speechPipelineMode: parseSpeechPipelineMode(env.SPEECH_PIPELINE_MODE),
   };
+}
+
+function parseSpeechPipelineMode(value: string | undefined): SpeechPipelineMode {
+  if (!value || value === "cascade") return "cascade";
+  if (value === "native" || value === "shadow") return value;
+  throw new Error(`Unsupported SPEECH_PIPELINE_MODE: ${value}`);
 }
 
 function parseAudioSampleRate(value: string | undefined): 16000 | 24000 {

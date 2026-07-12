@@ -1,5 +1,4 @@
-import type { CallAudioSpeakerRole } from "./types.js";
-import type { CallTranslationWorker } from "./call-translation-worker.js";
+import type { CallAudioSpeakerRole, CallSpeechPipeline } from "./types.js";
 import type {
   CallRoomWorkerToken,
   HttpCallRoomTokenClient,
@@ -14,7 +13,7 @@ import {
 export interface LiveKitCallAudioSourceOptions {
   callId: string;
   tokenClient: Pick<HttpCallRoomTokenClient, "createWorkerToken">;
-  worker: CallTranslationWorker;
+  worker: CallSpeechPipeline;
   audioSampleRate: 16000 | 24000;
   audioFrameSizeMs: number;
   loadRtcNode?: () => Promise<RtcNodeModule>;

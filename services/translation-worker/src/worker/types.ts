@@ -90,3 +90,24 @@ export interface CallRoomEventSink {
 export interface CallTtsVoiceSink {
   setTtsVoice(voice: TtsVoiceConfig): void;
 }
+
+export interface CallSpeechPipeline extends CallTtsVoiceSink {
+  startCall(callId: string): Promise<void>;
+  processAudioFrame(frame: CallAudioFrame): Promise<void>;
+  flushSpeaker(callId: string, speakerRole: CallAudioSpeakerRole): Promise<void>;
+  endCall(callId: string): Promise<void>;
+  addTtsAudioSink(sink: CallTtsAudioSink): void;
+}
+
+export interface SpeechToSpeechProvider extends CallSpeechPipeline {
+  readonly providerId: string;
+  readonly model: string;
+  readonly capabilities: {
+    directSpeechTranslation: true;
+    transcriptEvents: boolean;
+    translatedTextEvents: boolean;
+    interruption: boolean;
+  };
+}
+
+export type SpeechPipelineMode = "cascade" | "native" | "shadow";

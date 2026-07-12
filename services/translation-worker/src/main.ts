@@ -9,6 +9,8 @@ import { HttpCallRoomEventClient } from "./worker/call-room-event-client.js";
 import { HttpCallRoomTokenClient } from "./worker/call-room-token-client.js";
 import { CallTranslationWorker } from "./worker/call-translation-worker.js";
 import { LiveKitCallAudioSource } from "./worker/livekit-call-audio-source.js";
+import { SpeechPipelineRouter } from "./worker/speech-pipeline-router.js";
+import type { CallSpeechPipeline, SpeechToSpeechProvider } from "./worker/types.js";
 
 const logger = pino({ name: "translation-worker" });
 
@@ -54,6 +56,21 @@ export function buildDefaultWorker(endpointMode: AsrEndpointMode = "call_link") 
   });
 }
 
+export function buildDefaultSpeechPipeline(
+  endpointMode: AsrEndpointMode = "call_link",
+  native?: SpeechToSpeechProvider,
+): CallSpeechPipeline {
+  const env = loadEnv();
+  return new SpeechPipelineRouter({
+    mode: env.speechPipelineMode,
+    cascade: buildDefaultWorker(endpointMode),
+    ...(native ? { native } : {}),
+    onShadowError: (error) => {
+      logger.warn({ err: error }, "Native speech shadow pipeline failed");
+    },
+  });
+}
+
 async function main() {
   const env = loadEnv();
   if (!env.callId) {
@@ -63,7 +80,7 @@ async function main() {
 
   const source = new LiveKitCallAudioSource({
     callId: env.callId,
-    worker: buildDefaultWorker(),
+    worker: buildDefaultSpeechPipeline(),
     audioSampleRate: env.audioSampleRate,
     audioFrameSizeMs: env.audioFrameSizeMs,
     tokenClient: new HttpCallRoomTokenClient({
