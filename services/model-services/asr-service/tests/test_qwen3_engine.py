@@ -107,6 +107,63 @@ async def test_qwen3_engine_adds_hotwords_to_context() -> None:
     assert "助机单=>筑基丹" in runner.last_context
 
 
+async def test_qwen3_engine_rejects_correction_prompt_echo() -> None:
+    runner = FakeQwen3Runner(
+        "常见误识别纠正：报价合同=>报价、合同；客户单价=>客单价；"
+        "检票号=>检票口。"
+    )
+    engine = qwen_engine(runner, min_audio_ms=200)
+
+    await engine.transcribe(frame(
+        sequence=1,
+        duration_ms=200,
+        corrections=[
+            {"fromText": "报价合同", "toText": "报价、合同"},
+            {"fromText": "客户单价", "toText": "客单价"},
+            {"fromText": "检票号", "toText": "检票口"},
+        ],
+    ))
+    result = await engine.flush("sess_1", "zh", "en")
+
+    assert result is None
+
+
+async def test_qwen3_engine_rejects_partial_context_echo_without_prefix() -> None:
+    runner = FakeQwen3Runner(
+        "报价合同报价合同客户单价客单价检票号检票口"
+    )
+    engine = qwen_engine(runner, min_audio_ms=200)
+
+    await engine.transcribe(frame(
+        sequence=1,
+        duration_ms=200,
+        corrections=[
+            {"fromText": "报价合同", "toText": "报价合同"},
+            {"fromText": "客户单价", "toText": "客单价"},
+            {"fromText": "检票号", "toText": "检票口"},
+        ],
+    ))
+    result = await engine.flush("sess_1", "zh", "en")
+
+    assert result is None
+
+
+async def test_qwen3_engine_keeps_real_speech_with_domain_terms() -> None:
+    runner = FakeQwen3Runner("请检查数据库网关和客单价是否正确")
+    engine = qwen_engine(runner, min_audio_ms=200)
+
+    await engine.transcribe(frame(
+        sequence=1,
+        duration_ms=200,
+        hotwords=["数据库", "网关", "客单价"],
+        corrections=[{"fromText": "客户单价", "toText": "客单价"}],
+    ))
+    result = await engine.flush("sess_1", "zh", "en")
+
+    assert result is not None
+    assert result.text == "请检查数据库网关和客单价是否正确"
+
+
 def qwen_engine(
     runner: FakeQwen3Runner,
     min_audio_ms: int = 500,
