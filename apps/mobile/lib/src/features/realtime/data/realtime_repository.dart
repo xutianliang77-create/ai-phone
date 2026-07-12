@@ -248,6 +248,7 @@ Map<String, Object?> _segmentToJson(SubtitleSegment segment) {
     if (segment.languageProfile != null) ...segment.languageProfile!.toJson(),
     if (segment.speaker != null) 'speaker': segment.speaker!.toJson(),
     if (segment.timing != null) 'timing': segment.timing!.toJson(),
+    if (segment.vadContext != null) 'vadContext': segment.vadContext,
   };
 }
 

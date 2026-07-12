@@ -46,3 +46,18 @@ def uniform_endpoint_policies(
         )
         for mode in ASR_ENDPOINT_MODES
     }
+
+
+def segment_vad_context(
+    diagnostics: dict[str, object],
+    endpoint_reason: str,
+) -> dict[str, object]:
+    policy = diagnostics["endpointPolicy"]
+    return {
+        "endpointReason": endpoint_reason,
+        "endpointPolicyFingerprint": policy["fingerprint"],
+        **(
+            {"vadModelFingerprint": diagnostics["modelFingerprint"]}
+            if diagnostics.get("modelFingerprint") else {}
+        ),
+    }

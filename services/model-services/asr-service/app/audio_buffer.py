@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING
 
 from app.pcm_audio import PcmSessionBuffer, audio_duration_ms, pcm16_rms
 from app.schemas import AsrTranscribeRequest
-from app.endpoint_policy import EndpointPolicy, uniform_endpoint_policies
+from app.endpoint_policy import EndpointPolicy, segment_vad_context, uniform_endpoint_policies
 
 if TYPE_CHECKING:
     from app.vad import VadProvider
@@ -159,12 +159,13 @@ class RealtimePcmSegmenter:
         return segment
 
     def diagnostics(self, session_id: str) -> dict[str, object]:
-        state = self._states.get(session_id)
-        policy = self._policy(state)
         return {
             **self.vad_provider.diagnostics(session_id),
-            "endpointPolicy": policy.diagnostics(),
+            "endpointPolicy": self._policy(self._states.get(session_id)).diagnostics(),
         }
+
+    def segment_vad_context(self, session_id: str, endpoint_reason: str):
+        return segment_vad_context(self.diagnostics(session_id), endpoint_reason)
 
     def close(self, session_id: str) -> None:
         self._states.pop(session_id, None)

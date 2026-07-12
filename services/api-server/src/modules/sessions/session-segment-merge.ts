@@ -6,6 +6,7 @@ import type {
   SessionSegmentRefinementDto,
   SessionSegmentStage,
   SegmentTimingDto,
+  SegmentVadContextDto,
   SpeakerAttributionDto,
 } from "@translation/contracts";
 
@@ -31,6 +32,7 @@ export interface SessionSegmentPatch {
   refinement?: SessionSegmentRefinementDto;
   speaker?: SpeakerAttributionDto;
   timing?: SegmentTimingDto;
+  vadContext?: SegmentVadContextDto;
 }
 
 export function mergeSessionSegments(
@@ -115,6 +117,9 @@ function mergeCompleteSegment(
     timing: incomingIsNewer
       ? incoming.timing ?? existing.timing
       : existing.timing ?? incoming.timing,
+    vadContext: incomingIsNewer
+      ? incoming.vadContext ?? existing.vadContext
+      : existing.vadContext ?? incoming.vadContext,
     dominantLanguage: incomingIsNewer
       ? incoming.dominantLanguage ?? existing.dominantLanguage
       : existing.dominantLanguage ?? incoming.dominantLanguage,
@@ -139,6 +144,7 @@ function applyRecognitionFields(
   if (patch.refinement) segment.refinement = patch.refinement;
   if (patch.speaker) segment.speaker = patch.speaker;
   if (patch.timing) segment.timing = patch.timing;
+  if (patch.vadContext) segment.vadContext = patch.vadContext;
   if (patch.dominantLanguage) segment.dominantLanguage = patch.dominantLanguage;
   if (patch.detectedLanguages) segment.detectedLanguages = patch.detectedLanguages;
   if (typeof patch.mixedLanguage === "boolean") {

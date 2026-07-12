@@ -1,5 +1,8 @@
 import type { AudioFrame, AudioOutput } from "./audio.js";
-import type { RealtimeSessionDiagnosticsDto } from "./diagnostics.js";
+import type {
+  RealtimeSessionDiagnosticsDto,
+  SegmentVadContextDto,
+} from "./diagnostics.js";
 import type { SessionSegmentProviderUsageDto } from "../api/realtime.js";
 import type { SessionSegmentRefinementDto } from "../api/realtime.js";
 import type { RealtimeError, RealtimeErrorStage } from "./errors.js";
@@ -31,6 +34,7 @@ export interface TranscriptEvent {
   refinement?: SessionSegmentRefinementDto;
   speaker?: SpeakerAttributionDto;
   timing?: SegmentTimingDto;
+  vadContext?: SegmentVadContextDto;
 }
 
 export interface TranslationEvent {
@@ -48,6 +52,7 @@ export interface TranslationEvent {
   providerUsage?: SessionSegmentProviderUsageDto;
   speaker?: SpeakerAttributionDto;
   timing?: SegmentTimingDto;
+  vadContext?: SegmentVadContextDto;
 }
 
 export interface SpeakerUpdatedEvent {

@@ -65,6 +65,7 @@ class AsrTranscribeResponse(BaseModel):
         "flush",
         "speaker_boundary",
     ] | None = None
+    vadContext: dict[str, object] | None = None
 
 
 class AsrEndpointPolicyDiagnostics(BaseModel):

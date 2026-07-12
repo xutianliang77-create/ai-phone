@@ -242,6 +242,18 @@ VAD 只能区分语音和非语音，不能识别设备自身 TTS。扬声器自
 - LLM 只使用既有 speaker 标签整理纪要，禁止根据文本内容猜身份。
 - 详细接口、数据模型和降级规则见 `docs/ai-phone-speaker-attribution-design.md`。
 
+### 8.4 统一语音时间轴
+
+每个 final segment 使用同一组不可变语音证据：
+
+- `timing.startMs/endMs`：ASR 实际消费的 speech 区间；speaker 对齐、字幕排序、历史和 review 均复用该区间。
+- `speaker`：只来自 participant track 或 diarization 对齐，不由 LLM 猜测。
+- `vadContext.endpointReason`：`silence/max_duration/flush/speaker_boundary`。
+- `vadContext.vadModelFingerprint`：服务器 VAD 模型文件 SHA-256；RMS 主动模式或模型资产不存在时可缺省。
+- `vadContext.endpointPolicyFingerprint`：该 session 首帧冻结的端点策略 SHA-256。
+
+Gateway 将段级上下文随 transcript/translation 一起写入 API；App 本地 outbox、历史模型、Markdown/CSV 导出和 LLM review 保留相同字段。数据库不保存 PCM、20ms 概率数组或声音身份特征。
+
 延迟目标：
 
 | 阶段 | 目标 |

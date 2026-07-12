@@ -32,6 +32,7 @@ class GatewayRealtimeEvent {
     this.flush,
     this.speaker,
     this.timing,
+    this.vadContext,
     this.languageProfile,
   });
 
@@ -64,6 +65,7 @@ class GatewayRealtimeEvent {
   final GatewayRealtimeFlushSummary? flush;
   final SpeakerAttribution? speaker;
   final SegmentTiming? timing;
+  final Map<String, Object?>? vadContext;
   final TurnLanguageProfile? languageProfile;
 
   const GatewayRealtimeEvent.connection({
@@ -96,6 +98,7 @@ class GatewayRealtimeEvent {
         flush = null,
         speaker = null,
         timing = null,
+        vadContext = null,
         languageProfile = null;
 
   factory GatewayRealtimeEvent.fromJson(Map<String, Object?> json) {
@@ -148,6 +151,9 @@ class GatewayRealtimeEvent {
           ? SegmentTiming.fromJson(
               Map<String, Object?>.from(json['timing']! as Map),
             )
+          : null,
+      vadContext: json['vadContext'] is Map
+          ? Map<String, Object?>.from(json['vadContext']! as Map)
           : null,
       languageProfile: TurnLanguageProfile.fromJson(json),
     );

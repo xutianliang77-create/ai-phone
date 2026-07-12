@@ -20,6 +20,7 @@ class SubtitleSegment {
     this.refinement,
     this.speaker,
     this.timing,
+    this.vadContext,
     this.languageProfile,
   });
 
@@ -40,5 +41,6 @@ class SubtitleSegment {
   final Map<String, Object?>? refinement;
   final SpeakerAttribution? speaker;
   final SegmentTiming? timing;
+  final Map<String, Object?>? vadContext;
   final TurnLanguageProfile? languageProfile;
 }

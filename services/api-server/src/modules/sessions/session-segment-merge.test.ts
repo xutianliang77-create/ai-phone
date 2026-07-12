@@ -16,6 +16,7 @@ describe("session segment revision merge", () => {
       mixedLanguage: false,
       speaker: speaker("speaker_1"),
       timing: timing(0, 500),
+      vadContext: vadContext("max_duration", "a"),
     });
     applySessionSegmentPatch(segment, {
       segmentId: "seg_1",
@@ -26,6 +27,7 @@ describe("session segment revision merge", () => {
       mixedLanguage: true,
       speaker: speaker("speaker_2"),
       timing: timing(0, 540),
+      vadContext: vadContext("silence", "b"),
     });
     applySessionSegmentPatch(segment, {
       segmentId: "seg_1",
@@ -53,6 +55,10 @@ describe("session segment revision merge", () => {
       provider: "hymt2_self_hosted",
       speaker: { speakerId: "speaker_2" },
       timing: { startMs: 0, endMs: 540 },
+      vadContext: {
+        endpointReason: "silence",
+        endpointPolicyFingerprint: "b".repeat(64),
+      },
       dominantLanguage: "zh",
       detectedLanguages: ["zh", "en"],
       mixedLanguage: true,
@@ -70,4 +76,11 @@ function speaker(speakerId: string) {
 
 function timing(startMs: number, endMs: number) {
   return { startMs, endMs, source: "client" as const };
+}
+
+function vadContext(endpointReason: "silence" | "max_duration", value: string) {
+  return {
+    endpointReason,
+    endpointPolicyFingerprint: value.repeat(64),
+  };
 }

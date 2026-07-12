@@ -243,6 +243,7 @@ export class LmStudioRealtimeProvider implements RealtimeProvider {
         confidence: transcript.confidence,
         refinement: refinement.refinement,
         speaker: transcript.speaker, timing: transcript.timing,
+        vadContext: transcript.vadContext,
       };
     }
 
@@ -269,6 +270,7 @@ export class LmStudioRealtimeProvider implements RealtimeProvider {
             outputText: text,
           }),
           speaker: transcript.speaker, timing: transcript.timing,
+          vadContext: transcript.vadContext,
         };
         this.transcriptRefiner.remember(session.sessionId, {
           rawText: refinement.rawText,
@@ -319,6 +321,7 @@ export class LmStudioRealtimeProvider implements RealtimeProvider {
           outputText: translated,
         }),
         speaker: transcript.speaker, timing: transcript.timing,
+        vadContext: transcript.vadContext,
       };
       this.transcriptRefiner.remember(session.sessionId, {
         rawText: refinement.rawText,

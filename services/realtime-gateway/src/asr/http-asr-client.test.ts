@@ -19,6 +19,11 @@ describe("http asr client", () => {
           text: "hello",
           language: "en",
           confidence: 0.88,
+          vadContext: {
+            endpointReason: "silence",
+            vadModelFingerprint: "a".repeat(64),
+            endpointPolicyFingerprint: "b".repeat(64),
+          },
         });
       }) as typeof fetch,
     });
@@ -43,6 +48,11 @@ describe("http asr client", () => {
       text: "hello",
       language: "en",
       confidence: 0.88,
+      vadContext: {
+        endpointReason: "silence",
+        vadModelFingerprint: "a".repeat(64),
+        endpointPolicyFingerprint: "b".repeat(64),
+      },
     });
   });
 

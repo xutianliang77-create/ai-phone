@@ -7,7 +7,10 @@ import type {
   SegmentTimingDto,
   SpeakerAttributionDto,
 } from "../shared/speaker.js";
-import type { RealtimeSessionDiagnosticsDto } from "../realtime/diagnostics.js";
+import type {
+  RealtimeSessionDiagnosticsDto,
+  SegmentVadContextDto,
+} from "../realtime/diagnostics.js";
 
 export interface SessionStatusResponse {
   sessionId: string;
@@ -48,6 +51,7 @@ export interface SessionSegmentDto {
   refinement?: SessionSegmentRefinementDto;
   speaker?: SpeakerAttributionDto;
   timing?: SegmentTimingDto;
+  vadContext?: SegmentVadContextDto;
 }
 
 export type SessionSegmentStage =
@@ -193,6 +197,7 @@ export interface UpsertSessionSegmentRequest {
   refinement?: SessionSegmentRefinementDto;
   speaker?: SpeakerAttributionDto;
   timing?: SegmentTimingDto;
+  vadContext?: SegmentVadContextDto;
 }
 
 export interface SessionListItem {

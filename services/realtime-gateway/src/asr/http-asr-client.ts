@@ -10,6 +10,7 @@ import type {
 } from "@translation/contracts";
 import {
   isSegmentTiming,
+  isSegmentVadContext,
   isSpeakerAttribution,
   isTranslationLanguage,
 } from "@translation/contracts";
@@ -60,6 +61,7 @@ interface HttpAsrResponse {
   speaker?: SpeakerAttributionDto;
   timing?: SegmentTimingDto;
   endpointReason?: string;
+  vadContext?: unknown;
 }
 
 export class HttpAsrClient {
@@ -224,6 +226,9 @@ export class HttpAsrClient {
       ...(isSegmentTiming(body.timing) ? { timing: body.timing } : {}),
       ...(isAsrEndpointReason(body.endpointReason)
         ? { endpointReason: body.endpointReason }
+        : {}),
+      ...(isSegmentVadContext(body.vadContext)
+        ? { vadContext: body.vadContext }
         : {}),
     };
   }

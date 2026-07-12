@@ -98,6 +98,7 @@ extension RealtimeControllerGatewayEvents on RealtimeController {
           stage: 'asr',
           speaker: event.speaker,
           timing: event.timing,
+          vadContext: event.vadContext,
           languageProfile: event.languageProfile,
         );
       }
@@ -120,6 +121,7 @@ extension RealtimeControllerGatewayEvents on RealtimeController {
           refinement: event.refinement,
           speaker: event.speaker,
           timing: event.timing,
+          vadContext: event.vadContext,
           languageProfile: event.languageProfile,
         );
       }
@@ -146,6 +148,7 @@ extension RealtimeControllerGatewayEvents on RealtimeController {
           latencyMs: event.latencyMs,
           speaker: event.speaker,
           timing: event.timing,
+          vadContext: event.vadContext,
           languageProfile: event.languageProfile,
         );
         if (_usesDeviceAsr) {

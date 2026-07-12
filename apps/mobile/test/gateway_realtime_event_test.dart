@@ -47,6 +47,11 @@ void main() {
         'overlap': true,
         'activeSpeakerIds': <String>['speaker_1', 'speaker_2'],
       },
+      'vadContext': <String, Object?>{
+        'endpointReason': 'speaker_boundary',
+        'vadModelFingerprint': 'aaaaaaaa',
+        'endpointPolicyFingerprint': 'bbbbbbbb',
+      },
     });
 
     expect(event.speaker?.speakerId, 'speaker_2');
@@ -59,5 +64,6 @@ void main() {
     expect(event.languageProfile?.dominantLanguage, 'zh');
     expect(event.languageProfile?.detectedLanguages, ['zh', 'en']);
     expect(event.languageProfile?.mixedLanguage, isTrue);
+    expect(event.vadContext?['endpointReason'], 'speaker_boundary');
   });
 }

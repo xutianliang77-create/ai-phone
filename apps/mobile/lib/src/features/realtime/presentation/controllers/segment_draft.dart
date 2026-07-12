@@ -21,6 +21,7 @@ class SegmentDraft {
     this.refinement,
     this.speaker,
     this.timing,
+    this.vadContext,
     this.languageProfile,
   });
 
@@ -41,6 +42,7 @@ class SegmentDraft {
   final Map<String, Object?>? refinement;
   final SpeakerAttribution? speaker;
   final SegmentTiming? timing;
+  final Map<String, Object?>? vadContext;
   final TurnLanguageProfile? languageProfile;
 
   SegmentDraft copyWith({
@@ -60,6 +62,7 @@ class SegmentDraft {
     Map<String, Object?>? refinement,
     SpeakerAttribution? speaker,
     SegmentTiming? timing,
+    Map<String, Object?>? vadContext,
     TurnLanguageProfile? languageProfile,
   }) {
     return SegmentDraft(
@@ -80,6 +83,7 @@ class SegmentDraft {
       refinement: refinement ?? this.refinement,
       speaker: speaker ?? this.speaker,
       timing: timing ?? this.timing,
+      vadContext: vadContext ?? this.vadContext,
       languageProfile: languageProfile ?? this.languageProfile,
     );
   }
@@ -103,6 +107,7 @@ class SegmentDraft {
       refinement: refinement,
       speaker: speaker,
       timing: timing,
+      vadContext: vadContext,
       languageProfile: languageProfile,
     );
   }

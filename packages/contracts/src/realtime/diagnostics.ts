@@ -4,6 +4,28 @@ export type AsrEndpointReason =
   | "flush"
   | "speaker_boundary";
 
+export interface SegmentVadContextDto {
+  endpointReason: AsrEndpointReason;
+  vadModelFingerprint?: string;
+  endpointPolicyFingerprint: string;
+}
+
+export function isSegmentVadContext(
+  value: unknown,
+): value is SegmentVadContextDto {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const candidate = value as Partial<SegmentVadContextDto>;
+  return ["silence", "max_duration", "flush", "speaker_boundary"]
+    .includes(candidate.endpointReason ?? "") &&
+    isSha256(candidate.endpointPolicyFingerprint) &&
+    (candidate.vadModelFingerprint === undefined ||
+      isSha256(candidate.vadModelFingerprint));
+}
+
+function isSha256(value: unknown) {
+  return typeof value === "string" && /^[a-f0-9]{64}$/.test(value);
+}
+
 export interface RealtimeAudioDiagnosticsDto {
   receivedFrameCount: number;
   processedBatchCount: number;

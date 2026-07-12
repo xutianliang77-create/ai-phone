@@ -181,6 +181,17 @@ def test_endpoint_mode_cannot_change_inside_session() -> None:
         raise AssertionError("mode change must be rejected")
 
 
+def test_segment_vad_context_contains_only_segment_fingerprints() -> None:
+    segmenter = realtime_segmenter()
+    segmenter.append(request(1, voice_pcm()))
+
+    context = segmenter.segment_vad_context("sess_1", "flush")
+
+    assert context["endpointReason"] == "flush"
+    assert len(context["endpointPolicyFingerprint"]) == 64
+    assert "probabilityMean" not in context
+
+
 def realtime_segmenter(
     min_audio_ms: int = 120,
     endpoint_silence_ms: int = 80,

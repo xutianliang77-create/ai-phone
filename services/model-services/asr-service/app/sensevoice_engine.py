@@ -167,6 +167,10 @@ class SenseVoiceEngine:
                 "source": "client",
             },
             endpointReason=endpoint_reason,
+            vadContext=self.segmenter.segment_vad_context(
+                session_id,
+                endpoint_reason,
+            ),
         )
 
     def _is_duplicate(self, session_id: str, text: str) -> bool:

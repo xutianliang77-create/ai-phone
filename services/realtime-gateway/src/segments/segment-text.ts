@@ -28,6 +28,7 @@ export function mergeTranscriptParts(parts: TranscriptResult[]): TranscriptResul
     ...languageProfile,
     confidence: mergedConfidence(parts) ?? last.confidence,
     ...(last.endpointReason ? { endpointReason: last.endpointReason } : {}),
+    ...(last.vadContext ? { vadContext: last.vadContext } : {}),
     ...(first.speaker ? { speaker: first.speaker } : {}),
     ...(mergedTiming(parts) ? { timing: mergedTiming(parts) } : {}),
   };

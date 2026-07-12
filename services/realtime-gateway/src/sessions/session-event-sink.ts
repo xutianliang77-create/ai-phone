@@ -66,6 +66,7 @@ class ApiSessionEventSink implements SessionEventSink {
         refinement: event.refinement,
         speaker: event.speaker,
         timing: event.timing,
+        vadContext: event.vadContext,
       });
       return;
     }
@@ -106,6 +107,9 @@ class ApiSessionEventSink implements SessionEventSink {
           : {}),
         ...(event.type === "translation.final" && event.timing
           ? { timing: event.timing }
+          : {}),
+        ...(event.type === "translation.final" && event.vadContext
+          ? { vadContext: event.vadContext }
           : {}),
       });
       return;

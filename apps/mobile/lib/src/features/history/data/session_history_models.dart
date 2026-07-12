@@ -54,6 +54,7 @@ class SessionSegment {
     this.refinement,
     this.speaker,
     this.timing,
+    this.vadContext,
     this.languageProfile,
   });
 
@@ -74,6 +75,7 @@ class SessionSegment {
   final Map<String, Object?>? refinement;
   final SpeakerAttribution? speaker;
   final SegmentTiming? timing;
+  final Map<String, Object?>? vadContext;
   final TurnLanguageProfile? languageProfile;
 
   factory SessionSegment.fromJson(Map<String, Object?> json) {
@@ -105,6 +107,9 @@ class SessionSegment {
               Map<String, Object?>.from(json['timing']! as Map),
             )
           : null,
+      vadContext: json['vadContext'] is Map
+          ? Map<String, Object?>.from(json['vadContext']! as Map)
+          : null,
       languageProfile: TurnLanguageProfile.fromJson(json),
     );
   }
@@ -128,6 +133,7 @@ class SessionSegment {
       refinement: refinement,
       speaker: nextSpeaker,
       timing: timing,
+      vadContext: vadContext,
       languageProfile: languageProfile,
     );
   }

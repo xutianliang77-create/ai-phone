@@ -21,6 +21,7 @@ extension RealtimeControllerSegments on RealtimeController {
     Map<String, Object?>? refinement,
     SpeakerAttribution? speaker,
     SegmentTiming? timing,
+    Map<String, Object?>? vadContext,
     TurnLanguageProfile? languageProfile,
   }) {
     final nextSourceText = _cleanRealtimeText(sourceText);
@@ -66,6 +67,7 @@ extension RealtimeControllerSegments on RealtimeController {
       refinement: canReviseRecognition ? refinement : null,
       speaker: canReviseRecognition ? speaker : null,
       timing: canReviseRecognition ? timing : null,
+      vadContext: canReviseRecognition ? vadContext : null,
       languageProfile: canReviseRecognition ? languageProfile : null,
     );
     _replaceSegmentsFromDrafts();

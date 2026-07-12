@@ -74,6 +74,7 @@ class LocalSessionStore {
                 languageProfile: segment.languageProfile,
                 speaker: segment.speaker,
                 timing: segment.timing,
+                vadContext: segment.vadContext,
               ))
           .toList(),
     );
@@ -200,6 +201,7 @@ Map<String, Object?> _detailToJson(SessionDetail detail) {
           ...segment.languageProfile!.toJson(),
         if (segment.speaker != null) 'speaker': segment.speaker!.toJson(),
         if (segment.timing != null) 'timing': segment.timing!.toJson(),
+        if (segment.vadContext != null) 'vadContext': segment.vadContext,
       };
     }).toList(),
   };

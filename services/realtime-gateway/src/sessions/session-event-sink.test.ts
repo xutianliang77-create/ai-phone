@@ -73,6 +73,11 @@ describe("session event sink", () => {
         detectedLanguages: ["en"],
         mixedLanguage: false,
         confidence: 0.91,
+        vadContext: {
+          endpointReason: "silence",
+          vadModelFingerprint: "a".repeat(64),
+          endpointPolicyFingerprint: "b".repeat(64),
+        },
       });
       await sink.record({
         type: "translation.final",
@@ -119,6 +124,11 @@ describe("session event sink", () => {
           sourceLanguage: "en",
           confidence: 0.91,
           stage: "asr",
+          vadContext: {
+            endpointReason: "silence",
+            vadModelFingerprint: "a".repeat(64),
+            endpointPolicyFingerprint: "b".repeat(64),
+          },
         },
       },
       {

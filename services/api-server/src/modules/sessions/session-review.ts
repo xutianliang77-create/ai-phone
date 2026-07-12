@@ -62,6 +62,7 @@ function remoteReviewSegments(session: SessionRecord) {
       speaker: segment.speaker?.displayName ?? segment.speaker?.speakerId,
       startedAtMs: segment.timing?.startMs,
       endedAtMs: segment.timing?.endMs,
+      endpointReason: segment.vadContext?.endpointReason,
     }));
 }
 

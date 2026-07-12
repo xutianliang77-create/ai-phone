@@ -8,6 +8,7 @@ import type {
   SpeakerAttributionDto,
   SpeakerAttributionOptionsDto,
   RealtimeSessionDiagnosticsDto,
+  SegmentVadContextDto,
 } from "@translation/contracts";
 
 export interface AsrSession {
@@ -33,6 +34,7 @@ export interface TranscriptResult {
   speaker?: SpeakerAttributionDto;
   timing?: SegmentTimingDto;
   endpointReason?: AsrEndpointReason;
+  vadContext?: SegmentVadContextDto;
 }
 
 export interface AsrSpeakerTurnDiagnostics {
