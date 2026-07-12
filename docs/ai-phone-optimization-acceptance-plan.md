@@ -1,6 +1,6 @@
 # ai phone 优化验收方案
 
-版本：v1.16
+版本：v1.17
 日期：2026-07-12
 任务来源：`docs/ai-phone-optimization-development-tasks.md`
 
@@ -17,7 +17,9 @@
 | 类型 | 最低覆盖 |
 | --- | --- |
 | iOS | 当前主测 iPhone、一个小屏设备或等效模拟尺寸、最新稳定 iOS |
-| Android | 一台中端真机、一个低内存模拟器、主流系统版本 |
+| Android | `todo（iOS 产品化后）`：一台中端真机、一个低内存模拟器、主流系统版本 |
+
+当前验收排期：`AC-VOICE-002` 和 `AC-RT-004` 保持 TODO；所有 Android 真机项目在 iOS 产品化完成后统一启动，不阻塞当前 iOS 产品化里程碑。
 | 网络 | 稳定 Wi-Fi、蜂窝、100ms 延迟、3% 丢包、断网恢复 |
 | 音频 | 扬声器、有线/蓝牙耳机、安静、咖啡厅噪声、外放语音 |
 | 模型 | 端侧 Nemotron；在线 MarbleNet + Qwen3-ASR + Hy-MT2 + VoxCPM2；LLM no-thinking |
@@ -30,7 +32,7 @@
 | AC-RT-001 | OPT-RT-001 | 开始、暂停、继续、结束、再次开始 | 状态和按钮完全匹配，无重复会话 |
 | AC-RT-002 | OPT-RT-002 | 断网、杀 App、WS close、重复 End | 点击结束后本地立即进入终态；可用网络下历史可打开，用量只结算一次；网络恢复后待结算任务可收敛 |
 | AC-RT-003 | OPT-RT-003 | 中文长句在中间停顿 | 语义完整句可合并，不重复、不永久等待 |
-| AC-RT-004 | OPT-RT-004 | 说完立即点结束 | 最后一句原文和译文均保存 |
+| AC-RT-004 | OPT-RT-004 | `TODO`：100 次说完立即点结束 | 尾句原文和译文保存率达到既定可靠性门槛 |
 | AC-RT-005 | OPT-RT-005 | 自然声音和“我的声音”固定句、20句长短混合 TTS | 响应明确报告模型/输出采样率；48k 模型 PCM 重采样为24k后样本时长不变、音高正常；播放顺序与字幕一致，结束后无残留声音 |
 | AC-VAD-001 | OPT-VAD-001 | 低音量真机语音、静音、中等噪声、较大非语音噪声、800ms 音频批次 | 低音量可检出；三类非语音均不产字幕；health 为 marblenet 0.5；无 fallback |
 | AC-VAD-002 | OPT-VAD-002 | 模型资产缺失、ONNX 推理异常、会话正常结束 | 自动切 RMS 且 ASR 继续；session 报告记录 fallback、fingerprint 和 endpoint reason |
@@ -131,9 +133,9 @@ TTS 回灌指标由 App playback gate/AEC 验收，不能把 VAD 对合成语音
 | AC-PSTN-001 | OPT-PSTN-001 | 真实号码完成拨号、接通、双向译音、结束、结算和失败退款 |
 | AC-AGENT-001 | OPT-AGENT-001 | 告知、授权、禁拨、频控、人工接管和高风险拒绝全部通过 |
 | AC-VOICE-001 | OPT-VOICE-001 | 盲听自然度、清晰度、相似度达标，录音不合格可识别并重录 |
-| AC-VOICE-002 | OPT-VOICE-002 | App 仅展示服务端实际可用音色；普通话、英语、四川话、东北话、粤语、闽南语均能选择并在新 session 中稳定生效；连续 10 句无随机换声、提示词泄露、唱腔或拖长，未知 `presetId` 被拒绝 |
+| AC-VOICE-002 | OPT-VOICE-002 | `TODO`：App 仅展示服务端实际可用音色；普通话、英语、四川话、东北话、粤语、闽南语均能选择并在新 session 中稳定生效；连续 10 句无随机换声、提示词泄露、唱腔或拖长，未知 `presetId` 被拒绝 |
 | AC-SPK-003 | OPT-SPK-004 | 未授权不生成声纹，低置信度回退匿名，撤回和删除后不能再次命中身份 |
-| AC-ANDROID-001 | OPT-ANDROID-001 | 固定语料、功耗、温升和延迟均有报告，达到门槛后才替换系统 ASR |
+| AC-ANDROID-001 | OPT-ANDROID-001 | `TODO（iOS 产品化后）`：固定语料、功耗、温升和延迟均有报告，达到门槛后才替换系统 ASR |
 | AC-VAD-005 | OPT-VAD-005 | iOS CoreML、Android ONNX 与现有端点检测使用同一语料评测；低音量、噪声、耗电、温升、包体和实时系数均有报告 |
 | AC-DATA-003 | OPT-DATA-003 | SQLite 迁移 PostgreSQL/Redis 演练 | 数量、余额、幂等键和对象引用一致，可回滚 |
 

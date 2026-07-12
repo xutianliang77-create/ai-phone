@@ -1,6 +1,6 @@
 # ai phone 优化开发计划
 
-版本：v1.15
+版本：v1.16
 日期：2026-07-12
 任务来源：`docs/ai-phone-optimization-development-tasks.md`
 
@@ -9,6 +9,8 @@
 计划按 8 周基线制定。若只有一名全栈开发者，周期按 1.5 至 2 倍估算；外部短信、支付、DNS/TLS 和 PSTN 服务商等待时间不计入纯开发工期。
 
 发布策略：每个阶段都形成可独立回归的版本，不把所有任务积压到最后统一测试。
+
+平台顺序：当前先完成 iOS 产品化。Android 真机、Android 端侧 ASR 和 Android 端侧 VAD 验收统一列为 TODO，在 iOS 产品化退出后启动，不作为当前 iOS 里程碑阻塞项。
 
 ## 2. 里程碑
 
@@ -58,7 +60,7 @@
 3. `OPT-RT-001` 状态机。
 4. `OPT-RT-003` SegmentAssembler。
 5. `OPT-VAD-003` 对话、聆听、Call Link、PSTN 模式端点。
-6. `OPT-RT-004` flush。
+6. `OPT-RT-004` flush 代码保留；100 次尾句可靠性验收列为 TODO。
 7. `OPT-RT-002` 异常 finalize。
 8. `OPT-RT-005` TTS 队列。
 9. `OPT-MOB-001` 音频协调和 `OPT-MOB-002` 回声策略。
@@ -119,7 +121,8 @@ M2 不调整模型参数，避免 UI 和模型体验同时变化导致问题难�
 
 - 执行 `OPT-S2S-001`，先实现 `SpeechToSpeechProvider` 契约和独立 harness。
 - 执行 `OPT-S2S-002`，Gemini Live 只用于国际版候选，不改变国内默认路线。
-- `OPT-S2S-003`、`OPT-PSTN-001`、`OPT-AGENT-001`、`OPT-VOICE-001`、`OPT-ANDROID-001`、`OPT-DATA-003` 分别立项，不互相绑定发布。
+- `OPT-S2S-003`、`OPT-PSTN-001`、`OPT-AGENT-001`、`OPT-VOICE-001`、`OPT-VOICE-002`、`OPT-DATA-003` 分别立项，不互相绑定发布。
+- `OPT-ANDROID-001` 及所有 Android 真机验收在 iOS 产品化完成后统一立项执行。
 - `OPT-SPK-004` 声纹实名属于单独授权的增强能力，不与匿名说话人分离绑定发布。
 - `OPT-VAD-005` 端侧 MarbleNet 只在独立 iOS/Android harness 评测，通过功耗、温升和召回门禁后再决定是否进入 App。
 
@@ -175,9 +178,9 @@ LLM 纪要、扫描 UI 和国际模型 Provider 可在 M1 稳定接口冻结后�
 | V0 | `OPT-VAD-001` 服务器主 VAD | 已完成 | accepted | MarbleNet 上线、RMS 降级、真机通过 |
 | V1 | `OPT-VAD-002` session 观测 | 0.5天剩余 | in_progress | endpoint reason 和丢帧已贯通；补 Provider、阈值、speech ratio、fallback 和 fingerprint |
 | V2 | `OPT-VAD-003` 模式化端点 | 2 天 | todo | 四种模式固定语料和延迟门禁通过，可一键回退 1100ms |
-| V3 | `OPT-RT-003/004` 联合回归 | 已完成 | accepted | RT-003A/B 与 RT-004A/B 均通过真机验收；重复句保留、硬切不扩写、尾句完整收敛 |
+| V3 | `OPT-RT-003/004` 联合回归 | RT-003完成；RT-004可靠性待执行 | in_progress | RT-003 accepted；RT-004 A/B 冒烟已通过，100次尾句可靠性保持 TODO |
 | V4 | `OPT-VAD-004` 时间轴贯通 | 1-2 天 | todo | speaker、segment、history、review 使用同一 speech 时间范围 |
-| V5 | `OPT-VAD-005` 端侧候选 | 2-3 天，非当前关键路径 | todo | CoreML/Android ONNX 报告完成，通过后再立项集成 |
+| V5 | `OPT-VAD-005` 端侧候选 | iOS 候选非关键路径；Android 在 iOS 产品化后 | todo | iOS CoreML 可独立评测；Android ONNX 和真机报告后置，通过后再立项集成 |
 
 近期关键路径为 `V1 -> V2 -> V3`，预计 4 个开发日；`V4` 随说话人和智能记录进入 M3，`V5` 不阻塞国内版在线模式。
 

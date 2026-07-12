@@ -1,6 +1,6 @@
 # ai phone 优化开发任务清单
 
-版本：v3.5
+版本：v3.6
 日期：2026-07-12
 关联：`docs/domestic-app-detailed-functional-design.md`、`docs/ai-phone-translation-technical-design.md`、`docs/domestic-design-review-action-plan.md`
 
@@ -52,10 +52,10 @@
 - `OPT-RT-001`：代码和自动化门禁完成。
 - `OPT-RT-002`：`accepted`。App 结束前持久化按 `sessionId` 隔离的 finalization outbox，网络恢复、冷启动和回前台会重试保存与结束；API 校验路径 ID、请求体 ID、账号和幂等键，并对同一 session 串行、不同 session 并行结算。iPhone 断网复验 session `7a576a03-d139-4e42-a473-bb0ee13fb63a` 自动收敛 ended，2段字幕完整、hold=0、仅一条 `-21` 秒 ledger，未暴露原始超时。
 - `OPT-RT-003`：`accepted`。RT-003B 三轮 silence 断句及翻译延迟通过；RT-003A 已禁止 `max_duration` 硬切段使用上下文 LLM、拒绝超出 raw 支持范围的扩写，并按 raw continuation 合并。Qwen3 ASR 去重现仅作用于时间重叠结果，重复讲话不会再被误删；动态纠错 context 回显在 ASR Provider 入口拦截。iPhone session `c7c915b7-d5d2-4ab0-9e3d-58f52adb92ad` 三轮同句产生3段译文，无未来后缀扩写、重复后缀或领域词泄露，427帧零丢失、hold=0、单次结算。
-- `OPT-RT-004`：代码和自动化门禁完成；RT-004A“说完立即结束”和 RT-004B“翻译处理中立即结束”均通过，尾句、编号407/408、时间和报告内容完整保存并翻译，4B 收敛窗口约1.34秒且单次结算；100 次尾句保存率仍待执行。
+- `OPT-RT-004`：`todo（可靠性验收）`。代码和自动化门禁完成，RT-004A“说完立即结束”和 RT-004B“翻译处理中立即结束”冒烟通过；100 次尾句原文和译文保存率尚未执行，完成前不得标记 accepted。
 - `OPT-RT-005`：`accepted`。Gateway 按字幕顺序逐条合成，暂停、结束和断线取消在途及待处理 TTS，App 顺序播放并清空残留。VoxCPM2 已修复48k误标24k、正文控制提示泄露和自然声音音量过低；自然声音与当前个人克隆均达到约 `-18 dBFS`、ASR 回听只有正文。iPhone 两轮真机验收通过：长测 session `99812932-3d12-4675-bc00-b1ae87a65e3f` 连续19段、结束/取消 session `c9251e1b-8cca-45db-bdf5-12766ab2d016` 连续6段，用户确认顺序、取消和结束后残留均正常；两轮均零丢帧、hold=0、单次结算。
-- `OPT-MOB-001`：iPhone `accepted`。iOS/Android 使用统一采集/播放所有权，系统中断结束后恢复在线录音或端侧 ASR，Android TTS/PCM 只在真实播放结束后完成。iPhone 后台、锁屏、来电和蓝牙耳机切换均通过；锁屏恢复使用生命周期专用的 transport suspend/reconnect/resume 状态机，session `62f73a00-35a2-42c5-938c-4ec927be6115` 解锁后继续保存第二句、604帧零丢失、hold=0、单次结算。Android 真机仍待执行。
-- `OPT-MOB-002`：iPhone `accepted`。扬声器、听筒和未知路由在 TTS 播放期间及350ms尾音窗抑制采集，有线/蓝牙耳机保持连续识别，Listening 强制静音但保留对话模式声音偏好。iPhone 20句连续采集 session `9c9d8a5a-995d-4449-87c7-8e4036797a89` 完整识别编号1至20、2197帧零丢失、英文TTS回灌字幕0条；用户确认蓝牙切换、Listening静音及返回对话恢复声音设置均正常。Android 真机仍待执行。
+- `OPT-MOB-001`：iPhone `accepted`。iPhone 后台、锁屏、来电和蓝牙耳机切换均通过；Android 真机验收统一列为 TODO，并在 iOS 产品化完成后启动。
+- `OPT-MOB-002`：iPhone `accepted`。iPhone 20句连续采集、蓝牙切换、Listening 静音和声音偏好恢复均通过；Android 真机验收统一列为 TODO，并在 iOS 产品化完成后启动。
 - `OPT-UI-001`：代码和自动化门禁完成；`idle/connecting/active/paused/ending/ended/failed` 只展示当前可执行操作，主操作固定在同一槽位，连接中可取消且迟到 session 不会恢复同传。iPhone/Android 真机布局与点击体验验收待执行。
 - `OPT-UI-002`：代码和自动化门禁完成；字幕区移除固定 420dp 高度并占满剩余空间，最后一段标记当前句，译文 final 前显示 pending，动态高度字幕可自动跟随并在用户上滑后提供回到底部。iPhone/Android 真机小屏、横屏和 200% 字体验收待执行。
 - `OPT-SPK-001`：统一 contract、Call Link participant track、Session Repository、字幕、历史、review 和导出代码完成；真实双端角色归属验收待执行。
@@ -68,6 +68,12 @@
 - `OPT-DEP-001`：`accepted`。API/Gateway 已作为 Docker Compose 发布单元迁入 Beelink `3110/3111`，119条历史和7份声音引用已保留；iPhone Profile 已切换到 Beelink，Mac `3110/3111` 停止后真机仍上传540帧并保存57秒会话，真实 speaker-turn 全链路通过。
 - `OPT-DEP-002`：`in_progress`。Beelink 已承载 LiveKit、API、Gateway、ASR、Speaker、翻译和 LLM；Translation Worker 已编入同一镜像，但按 call 启动和 VoxCPM2 在线加载仍需联合验收。
 - `OPT-DEP-003`：`accepted`。iPhone Profile 仅包含 `http://100.110.127.117:3110`，构建产物未发现旧 Mac 地址、模型端口或内部密钥；Mac API/Gateway 停止后在线真机链路通过。
+
+当前排期冻结：
+
+- `OPT-VOICE-002`：`todo（真机盲听验收）`。代码、固定音色和 Beelink 部署保留，方言 v2 连续10句尚未验收。
+- `OPT-RT-004`：`todo（100次尾句可靠性）`。已有 A/B 冒烟不替代可靠性门禁。
+- Android 真机：`todo（iOS 产品化后）`。当前 iOS 产品化里程碑不以 Android 真机结果作为退出条件；Android AudioSession、TTS、UI、ASR、VAD 和长稳验收统一后置。
 
 ### 2.1 当前冲刺任务拆分
 
@@ -120,9 +126,9 @@
 | OPT-PSTN-001 | 真实 PSTN 服务商媒体协议 | 普通电话接通、译音回灌、失败退款闭环 |
 | OPT-AGENT-001 | AI Calling Agent 灰度 | 授权、告知、人工接管、禁拨和风险场景通过验收 |
 | OPT-VOICE-001 | VoxCPM2 Hi-Fi 声音克隆 | 录音质量检查、A/B 试听、自然度门禁通过 |
-| OPT-VOICE-002 | 朗读声音预设选择 | 已完成版本化 Provider 目录、固定参考音频、App 选择与会话透传；固定预设使用参考 WAV + 精确参考文本的强风格继承，支持男声/女声/中性、稳重/活泼、自然对话/播音、普通话、美式英语、成都四川话、东北话、广州粤语和厦门闽南语；不支持或缺少服务端音频资产的预设不下发，固定语料自然度、清晰度、方言可辨识度和跨句音色一致性通过 A/B 后结项 |
+| OPT-VOICE-002 | 朗读声音预设选择 | `todo（真机盲听验收）`；版本化 Provider 目录、固定参考音频、App 选择和会话透传已部署，待普通话、英语及四种方言连续10句 A/B 通过后结项 |
 | OPT-SPK-004 | 授权声纹身份识别 | 声纹注册、置信度门禁、撤回、删除和匿名回退 |
-| OPT-ANDROID-001 | Android 端侧 ASR 候选 | 与系统 ASR、在线 ASR 固定语料对比后决策 |
+| OPT-ANDROID-001 | Android 端侧 ASR 候选 | `todo（iOS 产品化后）`；与系统 ASR、在线 ASR 固定语料对比后决策 |
 | OPT-VAD-005 | 端侧 MarbleNet 候选评测 | CoreML/Android ONNX 与现有端点检测比较低音量召回、误触发、耗电、温升和实时系数，通过后再决定是否集成 |
 | OPT-DATA-003 | PostgreSQL/Redis 后续迁移 | Repository adapter 可迁移，数据校验和回滚通过 |
 
