@@ -21,10 +21,7 @@ import {
 import { attachSession, confirmSessionConnection, deleteSession, getSession, sessionBillableSeconds, transitionStatus } from "../sessions/session-manager.js";
 import { createUsageBalanceClient } from "../usage/usage-balance-client.js";
 import { createUsageTickDecision } from "../usage/usage-ticker.js";
-import {
-  extractRealtimeConnectionToken,
-  realtimeProtocol,
-} from "../auth/realtime-connection-token.js";
+import { extractRealtimeConnectionToken, realtimeProtocol } from "../auth/realtime-connection-token.js";
 import { HttpTtsSynthesizer } from "../tts/http-tts-synthesizer.js";
 import { RealtimeTtsOutputQueue } from "../tts/realtime-tts-output.js";
 import { handleControlEvent } from "./session-control-handler.js";
@@ -38,6 +35,7 @@ import {
   resolveSpeakerAttribution,
 } from "./speaker-attribution-config.js";
 import { handleTextSegment } from "./client-text-segment-handler.js";
+import { endpointModeForRealtimeMode } from "./realtime-endpoint-mode.js";
 
 const router = new ProviderRouter();
 export { normalizeClientTextLanguage } from "../protocol/client-text-language.js";
@@ -347,10 +345,4 @@ export function startWebSocketServer() {
     httpServer.close();
   });
   return server;
-}
-
-function endpointModeForRealtimeMode(mode: string | undefined) {
-  return mode === "meeting" || mode === "classroom"
-    ? "listening" as const
-    : "conversation" as const;
 }
