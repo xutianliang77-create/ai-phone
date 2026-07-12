@@ -1,5 +1,5 @@
 {
-  "version": "voxcpm2-presets-2026-07-v1",
+  "version": "voxcpm2-presets-2026-07-v2",
   "defaultPresetId": "zh_female_natural",
   "presets": [
     {
@@ -76,15 +76,17 @@
     },
     {
       "id": "zh_female_sichuanese",
-      "labels": { "zh": "四川话女声", "en": "Sichuanese female" },
+      "labels": { "zh": "成都四川话女声", "en": "Chengdu Sichuanese female" },
       "gender": "female",
       "tone": "lively",
       "scenario": "conversation",
       "accent": "sichuanese",
       "languages": ["zh"],
-      "referenceAudioId": "preset_zh_female_sichuanese",
-      "designPrompt": "A friendly adult woman speaking natural Sichuanese Chinese, warm and lively conversational tone, clear articulation, moderate pace",
-      "referenceText": "你好嘛，很高兴认识你。我们现在开始摆一哈今天要说的事情。"
+      "referenceAudioId": "preset_zh_female_sichuanese_v2",
+      "designPrompt": "成都本地年轻女声，全程说地道四川话，川味明显，语调活泼自然，不使用播音腔或普通话腔，语速适中",
+      "referenceText": "要得嘛，今天天气巴适得很。你莫着急，等哈儿我们一起去吃火锅，摆哈龙门阵。",
+      "designCfgValue": 2.4,
+      "designInferenceTimesteps": 15
     },
     {
       "id": "zh_male_northeastern",
@@ -94,33 +96,39 @@
       "scenario": "conversation",
       "accent": "northeastern_mandarin",
       "languages": ["zh"],
-      "referenceAudioId": "preset_zh_male_northeastern",
-      "designPrompt": "A friendly adult man speaking natural Northeastern Mandarin Chinese, open and lively conversational tone, clear articulation, moderate pace",
-      "referenceText": "你好啊，很高兴认识你。咱们现在就开始聊聊今天要说的事儿。"
+      "referenceAudioId": "preset_zh_male_northeastern_v2",
+      "designPrompt": "东北本地成年男声，全程说地道东北话，东北口音鲜明，开朗爽快，儿化音自然，不使用标准普通话播音腔",
+      "referenceText": "哎呀妈呀，今儿这天儿可真不错。你别着急，咱哥俩一会儿整点儿吃的，好好唠唠嗑。",
+      "designCfgValue": 2.4,
+      "designInferenceTimesteps": 15
     },
     {
       "id": "zh_female_cantonese",
-      "labels": { "zh": "粤语女声", "en": "Cantonese female" },
+      "labels": { "zh": "广州粤语女声", "en": "Guangzhou Cantonese female" },
       "gender": "female",
       "tone": "natural",
       "scenario": "conversation",
       "accent": "cantonese",
       "languages": ["zh"],
-      "referenceAudioId": "preset_zh_female_cantonese",
-      "designPrompt": "A friendly adult woman speaking natural Cantonese Chinese, warm conversational tone, clear articulation, moderate pace",
-      "referenceText": "你好，好高兴认识你。我哋而家开始倾下今日要讲嘅事情。"
+      "referenceAudioId": "preset_zh_female_cantonese_v2",
+      "designPrompt": "广州本地成年女声，全程使用地道广州粤语，粤语声调和韵律鲜明，口语自然，不使用普通话腔",
+      "referenceText": "大家好，今日天气真系几好。我哋一阵去饮茶，慢慢倾下偈，有咩问题你尽管讲啦。",
+      "designCfgValue": 2.4,
+      "designInferenceTimesteps": 15
     },
     {
       "id": "zh_male_minnan",
-      "labels": { "zh": "闽南语男声", "en": "Minnan male" },
+      "labels": { "zh": "厦门闽南语男声", "en": "Xiamen Minnan male" },
       "gender": "male",
       "tone": "natural",
       "scenario": "conversation",
       "accent": "minnan",
       "languages": ["zh"],
-      "referenceAudioId": "preset_zh_male_minnan",
-      "designPrompt": "A friendly adult man speaking natural Minnan Chinese, warm conversational tone, clear articulation, moderate pace",
-      "referenceText": "你好，真欢喜认识你。咱今仔日来讲看觅欲讨论的代志。"
+      "referenceAudioId": "preset_zh_male_minnan_v2",
+      "designPrompt": "厦门本地成年男声，全程使用地道厦门腔闽南语，闽南语声调和韵律鲜明，口语自然，不使用普通话腔",
+      "referenceText": "大家好，今仔日天气真好。咱等一下做伙去食饭，慢慢仔讲，有代志尽管讲。",
+      "designCfgValue": 2.4,
+      "designInferenceTimesteps": 15
     }
   ]
 }

@@ -136,6 +136,36 @@ def test_voxcpm2_kwargs_filter_streaming_wrapper_unknown_keys(tmp_path) -> None:
     assert "control" not in kwargs
 
 
+def test_voxcpm2_preset_uses_prompt_audio_and_transcript(tmp_path) -> None:
+    reference = tmp_path / "preset_cantonese.wav"
+    reference.write_bytes(b"RIFF")
+    request = TtsSynthesizeRequest(
+        text="你好",
+        language="zh",
+        speakerRole="guest",
+        segmentId="seg_preset",
+        voice={
+            "mode": "preset",
+            "presetId": "zh_female_cantonese",
+            "referenceAudioId": "preset_cantonese",
+            "referenceTranscript": "大家好，今日天气真系几好。",
+        },
+    )
+
+    kwargs = voxcpm2_generate_kwargs(
+        lambda **_kwargs: None,
+        text=request.text,
+        request=request,
+        reference_wav_path=reference,
+        cfg_value=2.0,
+        inference_timesteps=10,
+    )
+
+    assert kwargs["prompt_wav_path"] == str(reference)
+    assert kwargs["reference_wav_path"] == str(reference)
+    assert kwargs["prompt_text"] == "大家好，今日天气真系几好。"
+
+
 @pytest.mark.asyncio
 async def test_voxcpm2_engine_resolves_reference_audio_id(tmp_path) -> None:
     reference = tmp_path / "my_voice.wav"

@@ -30,8 +30,8 @@ def main() -> None:
         text = f"({prompt}){preset['referenceText']}"
         audio = model.generate(
             text=text,
-            cfg_value=2.0,
-            inference_timesteps=10,
+            cfg_value=float(preset.get("designCfgValue", 2.0)),
+            inference_timesteps=int(preset.get("designInferenceTimesteps", 10)),
             retry_badcase=True,
             retry_badcase_max_times=3,
             retry_badcase_ratio_threshold=6.0,

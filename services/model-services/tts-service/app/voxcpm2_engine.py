@@ -211,7 +211,7 @@ def voxcpm2_generate_kwargs(
 def clone_voice_kwargs(voice, reference_wav_path: Path | None) -> dict:
     if not voice or not reference_wav_path:
         return {}
-    if voice.mode == "ultimate_clone" and voice.referenceTranscript:
+    if voice.mode in {"ultimate_clone", "preset"} and voice.referenceTranscript:
         return {
             "prompt_wav_path": str(reference_wav_path),
             "prompt_text": voice.referenceTranscript,

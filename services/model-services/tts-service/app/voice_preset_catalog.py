@@ -14,6 +14,7 @@ from app.schemas import (
 class VoicePresetRecord:
     descriptor: VoicePresetDescriptor
     reference_audio_id: str
+    reference_transcript: str
 
 
 class VoicePresetCatalog:
@@ -73,6 +74,7 @@ class VoicePresetCatalog:
             presetId=preset_id,
             voiceProfileId=preset_id,
             referenceAudioId=record.reference_audio_id,
+            referenceTranscript=record.reference_transcript,
         )
         return request.model_copy(update={"voice": resolved_voice})
 
@@ -102,6 +104,7 @@ def parse_record(
     return VoicePresetRecord(
         descriptor=descriptor,
         reference_audio_id=reference_audio_id,
+        reference_transcript=required_text(raw, "referenceText"),
     )
 
 

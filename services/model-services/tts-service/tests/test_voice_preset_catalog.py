@@ -44,6 +44,7 @@ def test_catalog_resolves_default_preset_to_fixed_reference(tmp_path) -> None:
     assert resolved.voice.presetId == "ready"
     assert resolved.voice.voiceProfileId == "ready"
     assert resolved.voice.referenceAudioId == "preset_ready"
+    assert resolved.voice.referenceTranscript == "这是一段参考语音。"
 
 
 def test_catalog_rejects_unknown_preset(tmp_path) -> None:
@@ -69,6 +70,7 @@ def preset(preset_id: str, reference_audio_id: str) -> dict:
         "accent": "mandarin",
         "languages": ["zh", "en"],
         "referenceAudioId": reference_audio_id,
+        "referenceText": "这是一段参考语音。",
     }
 
 
