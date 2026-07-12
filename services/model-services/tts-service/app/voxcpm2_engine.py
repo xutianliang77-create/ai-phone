@@ -1,6 +1,7 @@
 from pathlib import Path
 from inspect import signature
 import json
+import logging
 import time
 
 from app.audio import (
@@ -30,6 +31,7 @@ VOXCPM2_GENERATE_KWARGS = frozenset({
     "streaming",
 })
 OUTPUT_SAMPLE_RATE = 24000
+logger = logging.getLogger("uvicorn.error")
 
 
 class VoxCpm2TtsEngine:
@@ -86,6 +88,18 @@ class VoxCpm2TtsEngine:
         except (RuntimeError, ValueError) as exc:
             raise TtsUnavailableError(f"VoxCPM2 resampling failed: {exc}") from exc
         audio_duration_ms = max(1, round(len(output_audio) / OUTPUT_SAMPLE_RATE * 1000))
+        logger.info(
+            "VoxCPM2 synthesis completed segmentId=%s voiceMode=%s "
+            "textCharacters=%d generationMs=%d audioDurationMs=%d "
+            "modelSampleRate=%d outputSampleRate=%d",
+            request.segmentId,
+            request.voice.mode if request.voice else "preset",
+            len(text),
+            elapsed_ms(started),
+            audio_duration_ms,
+            model_sample_rate,
+            OUTPUT_SAMPLE_RATE,
+        )
         return TtsSynthesizeResponse(
             provider="voxcpm2",
             model="VoxCPM2",
@@ -109,23 +123,18 @@ class VoxCpm2TtsEngine:
         reference_wav_path: Path | None,
         started: float,
     ) -> tuple[list[float], int]:
+        # The HTTP contract returns a complete PCM payload, so model streaming
+        # adds no client latency benefit and disables VoxCPM2 bad-case retries.
+        generate = model.generate
         kwargs = voxcpm2_generate_kwargs(
-            model.generate_streaming if hasattr(model, "generate_streaming") else model.generate,
+            generate,
             text=text,
             request=request,
             reference_wav_path=reference_wav_path,
             cfg_value=self.cfg_value,
             inference_timesteps=self.inference_timesteps,
         )
-        if hasattr(model, "generate_streaming"):
-            chunks = []
-            first_audio_ms = None
-            for chunk in model.generate_streaming(**kwargs):
-                if first_audio_ms is None:
-                    first_audio_ms = elapsed_ms(started)
-                chunks.extend(flatten_numeric_audio(chunk))
-            return chunks, first_audio_ms or elapsed_ms(started)
-        audio = model.generate(**kwargs)
+        audio = generate(**kwargs)
         return flatten_numeric_audio(audio), elapsed_ms(started)
 
     def _reference_wav_path(self, request: TtsSynthesizeRequest) -> Path | None:
@@ -190,6 +199,9 @@ def voxcpm2_generate_kwargs(
             "text": text,
             "cfg_value": cfg_value,
             "inference_timesteps": inference_timesteps,
+            "retry_badcase": True,
+            "retry_badcase_max_times": 3,
+            "retry_badcase_ratio_threshold": 6.0,
             **{key: value for key, value in optional_kwargs.items() if value},
         },
     )

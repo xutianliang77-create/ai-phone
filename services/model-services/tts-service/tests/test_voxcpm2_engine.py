@@ -91,6 +91,9 @@ def test_voxcpm2_kwargs_include_clone_reference_when_supported(tmp_path) -> None
     )
 
     assert kwargs["reference_wav_path"] == str(reference)
+    assert kwargs["retry_badcase"] is True
+    assert kwargs["retry_badcase_max_times"] == 3
+    assert kwargs["retry_badcase_ratio_threshold"] == 6.0
     assert "control" not in kwargs
     assert "control_prompt" not in kwargs
     assert "reference_text" not in kwargs
@@ -211,6 +214,31 @@ async def test_voxcpm2_engine_converts_48k_model_audio_to_24k_protocol(tmp_path)
     assert len(pcm) == 24000 * 2
 
 
+@pytest.mark.asyncio
+async def test_voxcpm2_engine_uses_retryable_complete_generation(tmp_path) -> None:
+    model = FakeStreamingCapableVoxCpmModel()
+    engine = VoxCpm2TtsEngine(
+        model_dir=str(tmp_path),
+        cfg_value=2.0,
+        inference_timesteps=10,
+        load_denoiser=False,
+    )
+    engine._model = model
+
+    await engine.synthesize(TtsSynthesizeRequest(
+        text="Settings.",
+        language="en",
+        speakerRole="guest",
+        segmentId="seg_badcase_guard",
+    ))
+
+    assert model.generate_calls == 1
+    assert model.streaming_calls == 0
+    assert model.kwargs["retry_badcase"] is True
+    assert model.kwargs["retry_badcase_max_times"] == 3
+    assert model.kwargs["retry_badcase_ratio_threshold"] == 6.0
+
+
 class FakeTtsModel:
     def __init__(self, sample_rate: int) -> None:
         self.sample_rate = sample_rate
@@ -230,3 +258,18 @@ class FakeVoxCpmModel:
                 for index in range(self.tts_model.sample_rate * self.duration_seconds)
             ]
         return [0.0, 0.1, -0.1]
+
+
+class FakeStreamingCapableVoxCpmModel(FakeVoxCpmModel):
+    def __init__(self) -> None:
+        super().__init__()
+        self.generate_calls = 0
+        self.streaming_calls = 0
+
+    def generate(self, **kwargs):
+        self.generate_calls += 1
+        return super().generate(**kwargs)
+
+    def generate_streaming(self, **kwargs):
+        self.streaming_calls += 1
+        yield super().generate(**kwargs)
