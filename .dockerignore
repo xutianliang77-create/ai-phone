@@ -1,0 +1,17 @@
+.git
+.cache
+.data
+.dart_tool
+node_modules
+apps
+build
+coverage
+data
+docs
+model-eval
+test-apps
+test-audio
+services/model-services
+**/.venv*
+**/__pycache__
+**/*.log

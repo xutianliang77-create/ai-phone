@@ -1,6 +1,6 @@
 # ai phone 优化开发计划
 
-版本：v1.13
+版本：v1.14
 日期：2026-07-12
 任务来源：`docs/ai-phone-optimization-development-tasks.md`
 
@@ -31,8 +31,8 @@
 - `OPT-SPK-005` 已完成代码、自动化、Beelink ASR/Speaker 部署、固定双声源和 iPhone 真人无停顿全链路验证，状态转为 `accepted`。真机原故障根因是在线 session 未创建 speaker session；Gateway 现对缺失 token 字段使用服务端四人默认值，超时为2秒，Provider 失败可观测，Speaker Service 对重复/乱序帧幂等。
 - `OPT-SPK-006` 的 PCM boundary 回切已通过真实音频连续性验证；合并批次时间轴根因已修复，诊断窗口、竞态指标和 session 持久化已部署。固定双声源真实 session 达到 hit=1、miss/error/race/drop=0、1040ms 确认延迟，等待 iPhone 与多人验收。
 - `OPT-SPK-007` 已完成代码、自动化和固定双声源部署验证：新 session 使用稳定 `turnId + revision`，Gateway 按音频时间处理批量结果，API 和 App 对迟到事件执行字段分域幂等，旧协议不强行生成 turn/revision。当前只差 iPhone 双人/多人验收。
-- 当前临时链路为 iPhone -> Mac API/Gateway -> Beelink 模型服务，只用于联调。正式退出条件仍是 iPhone -> Beelink 唯一公开入口，Mac 不参与运行链路。
-- 下一开发主线固定为：断网结束提示复验 -> 多人混合语种 -> Beelink 单服务器收敛。双人快速换人已由固定双声源与真人 iPhone 双重验证，不再占用后续冲刺。
+- Beelink 已新增 Docker Compose API/Gateway 发布单元，服务器侧真实链路 `25b48a5c-3cff-490b-8091-929b62d91f2a` 正确保存两位 speaker、两个 turn、中英文语言画像和 boundary 诊断；迁移后历史119条、声音引用7份。当前只差 App 切址和 Mac 停机证明正式两层拓扑。
+- 新 speaker 矩阵固定输出 DER、miss、false alarm、confusion 和漂移：四人、overlap、一分钟稳定性通过，普通双人合成和1.2秒快速轮换未达标。下一开发主线固定为：App 切换 Beelink -> 断网文案复验 -> 真人多人/混合语种 -> 短轮次专项。
 
 ## 3. 分阶段任务
 
@@ -188,9 +188,9 @@ LLM 纪要、扫描 UI 和国际模型 Provider 可在 M1 稳定接口冻结后�
 | S1 | `OPT-SPK-005` 边界协调器 | 已完成 | accepted | 固定双声源和 iPhone 真人双人无停顿均正确切换 speaker，句子不跨人 |
 | S2 | `OPT-SPK-006` ASR Turn Buffer | 0.5-1天剩余 | in_progress | 时间轴修复和真实 session 指标通过；补 iPhone、断网快照和短停顿竞态证据 |
 | S3 | `OPT-SPK-007` 翻译队列 | 0.5天验收 | in_progress | 固定双声源 turn 持久化和顺序通过；待 iPhone 双人/多人输出顺序验收 |
-| S4 | `OPT-SPK-008` overlap/混合语种 | 1-2天 | in_progress | 2至4人、中英夹杂、抢话和重叠策略通过 |
+| S4 | `OPT-SPK-008` overlap/混合语种 | 1-2天 | in_progress | 自动矩阵四人/重叠/稳定性已过；短轮次失败，真人混合语种待验收 |
 | S5 | 联合真机验收 | 2天 | todo | 对话、聆听、双人、三人、四人、快速换人、混合语种和30分钟稳定性通过 |
-| S6 | `OPT-DEP-001/002/003` 两层部署收敛 | 1天 | in_progress | API/Gateway/Worker/LiveKit/模型统一在 Beelink，Mac 停机后真机链路正常 |
+| S6 | `OPT-DEP-001/002/003` 两层部署收敛 | 0.5天剩余 | in_progress | Beelink 发布单元和数据迁移通过；待 App 切址、Mac 停机和 Worker 联合验收 |
 
 剩余实现预计5至7个开发日。近期顺序为 `S3部署验收 -> S1/S2/S3真机联合验收 -> S4 -> S6 -> S5`；不能通过在现有 Aligner 后增加文本规则替代音频边界回切，也不能以 Mac 中转拓扑作为发布验收结果。
 
