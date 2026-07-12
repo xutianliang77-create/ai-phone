@@ -6,6 +6,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { dirname, resolve } from "node:path";
+import { SqliteSnapshotStore } from "./sqlite-snapshot-store.js";
 import type { SessionRecord } from "../../modules/sessions/session-record.js";
 import type {
   AppleServerNotificationRecord,
@@ -24,7 +25,7 @@ import type {
 } from "../../modules/account/account-record.js";
 import type { VoiceProfileRecord } from "../../modules/voice-profiles/voice-profile-record.js";
 
-interface AppStoreSnapshot {
+export interface AppStoreSnapshot {
   sessions: SessionRecord[];
   usageBalances: Record<string, number>;
   accounts: AccountRecord[];
@@ -64,7 +65,12 @@ const defaultSnapshot: AppStoreSnapshot = {
   voiceProfiles: [],
 };
 
+export function createEmptyStoreSnapshot() {
+  return structuredClone(defaultSnapshot);
+}
+
 let snapshot: AppStoreSnapshot | null = null;
+let sqliteStore: SqliteSnapshotStore | null = null;
 
 export function getStoreSnapshot() {
   if (!snapshot) snapshot = readSnapshot();
@@ -72,22 +78,59 @@ export function getStoreSnapshot() {
 }
 
 export function persistStoreSnapshot() {
+  if (!snapshot) return;
+  if (storageDriver() === "sqlite") {
+    getSqliteStore().save(snapshot);
+    return;
+  }
   const file = dataFile();
-  if (!file || !snapshot) return;
+  if (!file) return;
   mkdirSync(dirname(file), { recursive: true });
   const tmp = `${file}.tmp`;
   writeFileSync(tmp, JSON.stringify(snapshot, null, 2));
   renameSync(tmp, file);
 }
 
+export function getStorageStatus() {
+  const driver = storageDriver();
+  if (driver !== "sqlite") {
+    return { driver, status: driver === "memory" ? "ephemeral" : "legacy" };
+  }
+  const store = getSqliteStore();
+  return {
+    driver,
+    status: store.quickCheck() === "ok" ? "ready" : "not_ready",
+    journalMode: store.journalMode(),
+  };
+}
+
 function readSnapshot(): AppStoreSnapshot {
+  if (storageDriver() === "sqlite") {
+    const store = getSqliteStore();
+    const stored = store.read();
+    if (!store.isEmpty()) return stored;
+    const legacy = readJsonSnapshot();
+    if (hasSnapshotData(legacy)) store.save(legacy);
+    return legacy;
+  }
+  return readJsonSnapshot();
+}
+
+function readJsonSnapshot(): AppStoreSnapshot {
   const file = dataFile();
   if (!file || !existsSync(file)) return structuredClone(defaultSnapshot);
   try {
-    const raw = JSON.parse(
-      readFileSync(file, "utf8"),
-    ) as Partial<AppStoreSnapshot>;
-    return {
+    return normalizeStoreSnapshot(JSON.parse(readFileSync(file, "utf8")));
+  } catch {
+    return structuredClone(defaultSnapshot);
+  }
+}
+
+export function normalizeStoreSnapshot(value: unknown): AppStoreSnapshot {
+  const raw = value && typeof value === "object"
+    ? value as Partial<AppStoreSnapshot>
+    : {};
+  return {
       sessions: Array.isArray(raw.sessions) ? raw.sessions : [],
       usageBalances: raw.usageBalances ?? {},
       accounts: Array.isArray(raw.accounts) ? raw.accounts : [],
@@ -115,10 +158,34 @@ function readSnapshot(): AppStoreSnapshot {
         ? raw.agentCallDrafts
         : [],
       voiceProfiles: Array.isArray(raw.voiceProfiles) ? raw.voiceProfiles : [],
-    };
-  } catch {
-    return structuredClone(defaultSnapshot);
-  }
+  };
+}
+
+function getSqliteStore() {
+  sqliteStore ??= new SqliteSnapshotStore(
+    sqliteFile(),
+    createEmptyStoreSnapshot(),
+  );
+  return sqliteStore;
+}
+
+function storageDriver() {
+  if (process.env.NODE_ENV === "test" || process.env.VITEST) return "memory";
+  const value = process.env.API_STORAGE_DRIVER?.trim().toLowerCase();
+  if (!value || value === "json") return "json";
+  if (value === "sqlite") return "sqlite";
+  throw new Error(`Unsupported API_STORAGE_DRIVER: ${value}`);
+}
+
+function sqliteFile() {
+  return resolve(process.env.API_SQLITE_FILE ?? ".data/api-store.sqlite");
+}
+
+function hasSnapshotData(value: AppStoreSnapshot) {
+  return value.sessions.length > 0 ||
+    value.accounts.length > 0 ||
+    value.billingLedger.length > 0 ||
+    Object.keys(value.usageBalances).length > 0;
 }
 
 function dataFile() {

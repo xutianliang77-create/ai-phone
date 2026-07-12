@@ -10,6 +10,7 @@ import { diagnosticsAdminStatus } from "../diagnostics/diagnostics-auth.js";
 import { sessionReviewProviderStatus } from "../sessions/session-review.js";
 import { getReleaseMaterialsReadiness } from "./release-materials-readiness.js";
 import { getReleaseReadiness } from "./release-readiness.js";
+import { getStorageStatus } from "../../infrastructure/storage/json-store.js";
 
 export async function registerHealthRoutes(app: FastifyInstance) {
   app.get("/health", async () => {
@@ -31,6 +32,7 @@ export async function registerHealthRoutes(app: FastifyInstance) {
       dataRegion: env.dataRegion,
       callProviderPolicy: env.callProviderPolicy,
       complianceProfile: env.complianceProfile,
+      storage: getStorageStatus(),
       diagnostics: {
         appErrorReporting: "enabled",
         appErrorEndpoint: "/diagnostics/app-errors",

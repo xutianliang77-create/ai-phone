@@ -1,6 +1,6 @@
 # ai phone 优化开发任务清单
 
-版本：v3.9
+版本：v4.0
 日期：2026-07-12
 关联：`docs/domestic-app-detailed-functional-design.md`、`docs/ai-phone-translation-technical-design.md`、`docs/domestic-design-review-action-plan.md`
 
@@ -57,6 +57,8 @@
 - `OPT-RT-005`：`accepted`。Gateway 按字幕顺序逐条合成，暂停、结束和断线取消在途及待处理 TTS，App 顺序播放并清空残留。VoxCPM2 已修复48k误标24k、正文控制提示泄露和自然声音音量过低；自然声音与当前个人克隆均达到约 `-18 dBFS`、ASR 回听只有正文。iPhone 两轮真机验收通过：长测 session `99812932-3d12-4675-bc00-b1ae87a65e3f` 连续19段、结束/取消 session `c9251e1b-8cca-45db-bdf5-12766ab2d016` 连续6段，用户确认顺序、取消和结束后残留均正常；两轮均零丢帧、hold=0、单次结算。
 - `OPT-TERM-001`：`in_progress（代码完成，统一验收待执行）`。App 同传设置已支持通用、商业、科技、医疗、旅游、餐饮、娱乐单选并持久化；API 校验后把选择和词库版本写入 realtime response/token；Gateway 按 session 选择统一生成 ASR hotwords/corrections、翻译 glossary 和 LLM 保护字段，旧客户端继续回退服务器默认包。自动化门禁通过，Beelink 与 iPhone 尚未部署验收。
 - `OPT-OBS-001`：`in_progress（代码完成，统一验收待执行）`。新增账号隔离的 `/sessions/:sessionId/quality-report`，按 session 汇总翻译覆盖率、延迟均值/P95/最大值、丢帧、VAD fallback、端点原因、说话人、overlap 和 Provider 指纹；报告不包含字幕正文、音频或逐帧概率。API 自动化通过，真实 session 报告和告警阈值尚待统一验收。
+- `OPT-DATA-001`：`in_progress（代码完成，迁移验收待执行）`。服务器新增 Node 24 SQLite WAL 存储驱动，按实体 ID 增量提交；不同 ID 不互相覆盖，同 ID 陈旧写入显式冲突。session segment 使用独立表和外键级联，账号、会话、用量、账本、术语、Agent 和声音资料继续复用现有 Repository API。默认本地仍可用 JSON，Beelink 通过受控开关迁移。
+- `OPT-DATA-002`：`in_progress（代码完成，恢复演练待执行）`。新增 JSON→SQLite 一次性迁移、`quick_check`、SQLite online backup 和维护模式 restore；恢复前自动保留 pre-restore 文件，发布脚本仅在 `MIGRATE_SQLITE=true` 时切换现有服务器。
 - `OPT-MOB-001`：iPhone `accepted`。iPhone 后台、锁屏、来电和蓝牙耳机切换均通过；Android 真机验收统一列为 TODO，并在 iOS 产品化完成后启动。
 - `OPT-MOB-002`：iPhone `accepted`。iPhone 20句连续采集、蓝牙切换、Listening 静音和声音偏好恢复均通过；Android 真机验收统一列为 TODO，并在 iOS 产品化完成后启动。
 - `OPT-UI-001`：代码和自动化门禁完成；`idle/connecting/active/paused/ending/ended/failed` 只展示当前可执行操作，主操作固定在同一槽位，连接中可取消且迟到 session 不会恢复同传。iPhone/Android 真机布局与点击体验验收待执行。

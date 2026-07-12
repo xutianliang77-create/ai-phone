@@ -1,6 +1,6 @@
 # ai phone 优化开发计划
 
-版本：v1.19
+版本：v1.20
 日期：2026-07-12
 任务来源：`docs/ai-phone-optimization-development-tasks.md`
 
@@ -37,6 +37,7 @@
 - 新 speaker 矩阵固定输出 DER、miss、false alarm、confusion 和漂移：四人、overlap、一分钟稳定性通过，普通双人合成和1.2秒快速轮换未达标。Gateway 已先修短首轮次基线和160ms内流式起点修订导致的边界漏切；模型快速轮换20段仍全部落入同一槽位，后续统一验收不得用语种或文本规则掩盖该门禁。
 - `OPT-TERM-001` 已完成 App、API、token 和 Gateway 会话级行业包选择代码。客户端单选通用、商业、科技、医疗、旅游、餐饮或娱乐；服务端返回实际选择及词库版本，旧客户端继续回退 `DOMAIN_LEXICON_PACKS`。当前等待统一部署与真机行业语料验收。
 - `OPT-OBS-001` 已完成 session 质量报告代码：API 按账号隔离输出翻译覆盖率、延迟、丢帧、VAD fallback、端点、说话人和 Provider 指纹，不返回字幕正文或音频。当前等待统一部署后用真实会话核对指标并接入告警阈值。
+- `OPT-DATA-001/002` 已完成 SQLite WAL 驱动、实体级并发冲突保护、session-segment 外键、JSON 迁移、quick_check、备份与受维护模式保护的恢复代码。服务器镜像升级到 Node 24 LTS；当前等待 Beelink 停写窗口执行迁移、数据 hash/数量核对和恢复演练。
 
 ## 3. 分阶段任务
 
@@ -115,6 +116,8 @@ M2 不调整模型参数，避免 UI 和模型体验同时变化导致问题难�
 - 数据迁移必须保留回滚脚本和迁移前只读备份。
 
 当前进度：`OPT-OBS-001` 的脱敏质量报告接口和自动化门禁已完成；告警规则在真实 session 基线确认后启用，避免用未经验证的阈值制造误报。
+
+数据进度：`OPT-DATA-001/002` 代码与自动化已完成。统一验收时先备份 JSON，再用 `MIGRATE_SQLITE=true` 部署；核对 session、segment、ledger、hold、账号、术语和声音资料数量，随后从 SQLite backup 恢复到隔离路径并再次执行 `quick_check`。
 
 ### M5：灰度发布
 

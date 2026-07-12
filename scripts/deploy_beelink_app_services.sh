@@ -113,7 +113,9 @@ API_PORT=3110
 REALTIME_PORT=3111
 API_BASE_URL=http://127.0.0.1:3110
 REALTIME_WS_ENDPOINT=ws://$PUBLIC_HOST:3111/realtime
+API_STORAGE_DRIVER=sqlite
 API_DATA_FILE=/data/ai-phone/api-store.json
+API_SQLITE_FILE=/data/ai-phone/api-store.sqlite
 VOICE_PROFILE_REFERENCE_DIR=/data/ai-phone/voice-references
 REALTIME_TOKEN_SECRET=$token_secret
 INTERNAL_API_SECRET=$internal_secret
@@ -153,7 +155,7 @@ LLM_REVIEW_MODEL=qwen/qwen3.5-9b
 LLM_REFINEMENT_ENABLED=true
 LLM_REVIEW_ENABLED=true
 LLM_REASONING_EFFORT=none
-DOMAIN_LEXICON_PACKS=business,technology,medical,tourism,restaurant,entertainment
+DOMAIN_LEXICON_PACKS=business,technology,medical,travel,dining,entertainment
 CALL_ROOM_PROVIDER=livekit
 LIVEKIT_URL=$LIVEKIT_URL
 LIVEKIT_API_KEY=$LIVEKIT_API_KEY
@@ -162,6 +164,22 @@ CALL_ROOM_TOKEN_TTL_SECONDS=${CALL_ROOM_TOKEN_TTL_SECONDS:-3600}
 EOF
 chmod 600 "$env_file"
 REMOTE
+
+if [[ "${MIGRATE_SQLITE:-false}" == "true" ]]; then
+  ssh "$REMOTE_HOST" "ENV_FILE='$REMOTE_RUNTIME/server.env' bash -s" <<'REMOTE'
+set -euo pipefail
+set_env() {
+  local key="$1" value="$2"
+  if grep -q "^${key}=" "$ENV_FILE"; then
+    sed -i "s|^${key}=.*|${key}=${value}|" "$ENV_FILE"
+  else
+    printf '%s=%s\n' "$key" "$value" >>"$ENV_FILE"
+  fi
+}
+set_env API_STORAGE_DRIVER sqlite
+set_env API_SQLITE_FILE /data/ai-phone/api-store.sqlite
+REMOTE
+fi
 
 if [[ "$MODE" == "sync" ]]; then
   echo "Synced ai phone server source to $REMOTE_HOST:$REMOTE_SOURCE"
@@ -172,6 +190,9 @@ remote_compose "up -d --build --remove-orphans"
 for _ in {1..60}; do
   if curl -fsS "http://$PUBLIC_HOST:3110/health" >/dev/null 2>&1 &&
      curl -fsS "http://$PUBLIC_HOST:3111/health" >/dev/null 2>&1; then
+    if [[ "${MIGRATE_SQLITE:-false}" == "true" ]]; then
+      remote_compose "exec -T api npm run storage:check -- /data/ai-phone/api-store.sqlite"
+    fi
     status
     exit 0
   fi
