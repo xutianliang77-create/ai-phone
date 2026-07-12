@@ -160,6 +160,8 @@ TTS 回灌指标由 App playback gate/AEC 验收，不能把 VAD 对合成语音
 
 `AC-MOB-001` 当前真机证据：后台5秒 session `d6f39aef-efb8-4788-8b19-2beea9a301e6` 返回后沿用原 session 保存第二句，565帧零丢失。首次锁屏 session `43b7594d-9d1c-4e81-bfca-db8879c91b59` 因旧 WebSocket resume 超时而失败；提交 `82fc0f4` 改为 pause确认后挂起 transport、解锁后新建 WebSocket 并对同 session resume。复测 session `62f73a00-35a2-42c5-938c-4ec927be6115` 解锁后继续保存第二句，604帧零丢失、110秒单次 ledger、hold=0，用户确认无连接断开。电话/闹钟和耳机路由尚未验收，因此 AC-MOB-001 仍为 `in_progress`。
 
+`AC-MOB-001/002` iPhone 验收通过：用户继续确认来电中断、蓝牙耳机切换、Listening静音及返回对话恢复声音偏好均无问题。扬声器连续20句 session `9c9d8a5a-995d-4449-87c7-8e4036797a89` 完整识别编号1至20，2197帧零丢失，英文TTS回灌字幕0条，单次结算且hold=0；后台和锁屏复测证据同上。iPhone 状态标记 `accepted`，Android 真机仍需独立验收。
+
 `AC-SPK-002/006/007` 新自动矩阵：固定生成26段四种合成声音，并组成双人轮换、1.2秒快速切换、overlap、四人和一分钟稳定性语料。active Sortformer 结果为：四人 DER `4.44%`、overlap `3.63%`、一分钟 `3.77%`，均无标签漂移并通过；普通双人 DER `22.05%`，因早期同一声音被临时分配到第三槽位略超门槛；快速切换 DER `35.42%`，未通过。失败项保留为阻塞证据，不调整20%门槛。另有 Beelink 全链路会话 `25b48a5c-3cff-490b-8091-929b62d91f2a` 通过，保存 `speaker_1/2`、`turn_1/2`、中英文画像，hit=1、drop/miss/error/race=0、确认延迟880ms。
 
 `AC-DEP-001/002` 服务器阶段证据：Beelink 使用 `ai-phone-api` 与 `ai-phone-gateway` 两个 `restart: unless-stopped` 容器运行同一非 root 镜像，API `/health` 宣告 `ws://100.110.127.117:3111/realtime`，Gateway 为 Hy-MT2 + HTTP ASR + active Speaker + API history sink 且 release readiness ready。原 Mac JSON store 和7份声音引用已迁移；iPhone Profile 只包含 Beelink API 地址，Mac `3110/3111` 停止后真机会话 `23705ff5-67ea-4955-84e1-f4b8bfae63e7` 仍上传540帧、结束并保存10段/57秒，证明两层部署和手机配置边界通过。`OPT-DEP-002` 仍需补按 call 启动 Worker 与 VoxCPM2 联合验收。
