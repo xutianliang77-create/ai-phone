@@ -140,7 +140,7 @@ TTS 回灌指标由 App playback gate/AEC 验收，不能把 VAD 对合成语音
 
 `AC-SPK-005` 当前证据：Gateway 合并批次使用首帧时间戳；boundary 有替代 transcript 时去除重叠普通端点结果，boundary 为空时保留普通端点结果并记录 race；断网 cleanup 前冻结诊断快照；API 白名单保存计数和时长，不接受或持久化原始 PCM/字幕字段。仓库级构建和测试已通过。部署后固定双声源会话 `4296e08a-3b2f-4449-9ebb-0299f142db49` 正确形成两位 speaker，时间轴在边界连续，`hit=1`、`miss/error/race/drop=0`、确认延迟1040ms、回切4240ms，低于1.2秒切换门槛。iPhone 双人验收尚未执行，因此未标记通过。
 
-`AC-SPK-006` 当前自动化证据：contracts、ASR、Gateway、API、Flutter 内存态和本地历史均保留可选 `turnId/revision`；不同 turn 强制释放待合并段；批量 ASR 结果按 `startMs/endMs` 排序；最高 revision 幂等生效；迟到译文可补齐，但旧 speaker、timing、sourceText 和 turnId 不会回滚。Node 全仓、Flutter 255 项、analyze、typecheck 和文件大小门禁通过。尚未部署本轮 API/Gateway，也未执行 iPhone 双人/多人验收，因此状态仍为 `in_progress`。
+`AC-SPK-006` 当前证据：contracts、ASR、Gateway、API、Flutter 内存态和本地历史均保留可选 `turnId/revision`；不同 turn 强制释放待合并段；批量 ASR 结果按 `startMs/endMs` 排序；最高 revision 幂等生效；迟到译文可补齐，但旧 speaker、timing、sourceText 和 turnId 不会回滚。Node 全仓、Flutter 255 项、analyze、typecheck 和文件大小门禁通过。部署后固定双声源会话 `8703925d-c08e-4e1e-bff6-36a533a40146` 保存 `turn_1/speaker_1` 中文和 `turn_2/speaker_2` 英文，边界连续，hit=1、miss/error/race/drop=0，确认延迟720ms。iPhone 双人/多人验收尚未执行，因此状态仍为 `in_progress`。
 
 ## 7. UI 专项验收
 

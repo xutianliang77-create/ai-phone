@@ -506,6 +506,7 @@ interface SpeakerRepository {
 - Gateway 音频批次使用首帧时间作为整批 PCM 起点，避免 ASR 与 Speaker 时间轴随批次长度偏移。
 - session diagnostics 已贯通音频帧/批次/丢帧、boundary hit/miss/error、确认延迟、回切时长、endpoint race 和 endpoint reason；重复 End 不覆盖首份证据。
 - 固定双声源真实全链路会话 `4296e08a-3b2f-4449-9ebb-0299f142db49` 正确输出 `speaker_1 -> speaker_2`，边界连续且 hit=1、miss/error/race/drop=0。
+- `turnId/revision` 部署会话 `8703925d-c08e-4e1e-bff6-36a533a40146` 正确保存 `turn_1/speaker_1` 与 `turn_2/speaker_2`，事件和历史顺序一致，确认延迟720ms。
 
 尚未宣称完成：
 

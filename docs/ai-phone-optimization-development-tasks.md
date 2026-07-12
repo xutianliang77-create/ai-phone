@@ -63,7 +63,7 @@
 - `OPT-SPK-003`：ASR 后置 speaker 对齐、不同 speaker 段禁止合并、字幕标签、历史清单和会话内重命名代码完成，iPhone 已能显示匿名“说话人 1/2”；ASR 段内部按 speaker 切分由 `OPT-SPK-005/006` 负责。
 - `OPT-SPK-005`：`in_progress`。Gateway 和 Beelink ASR Service 已部署；稳定 speaker span 可产生单次 `boundaryMs`，标签抖动、低置信度和 overlap 不切段。固定双声源无停顿全链路已正确生成 `speaker_1 -> speaker_2`，iPhone 双人快速换人验收待完成。
 - `OPT-SPK-006`：`in_progress`。已修复 Gateway 合并批次错误使用末帧时间的问题；ASR boundary API 已通过真实 PCM 回切，左右段时间轴连续、右侧音频保留且 VAD 不重置。2秒脱敏诊断窗口、boundary hit/miss/error、确认延迟、回切时长、endpoint race 和丢帧指标已贯通 `session.ended`、API 与历史详情。部署后固定双声源 session 为 hit=1、miss/error/race/drop=0、确认延迟1040ms；iPhone 快速换人验收待完成。
-- `OPT-SPK-007`：`in_progress`。`turnId + revision` 已贯通 ASR、Gateway 事件、API session、Flutter 字幕和历史；不同 turn 禁止语义合并，批量 ASR 结果按音频时间排序，同 segment 只处理最高 revision。迟到的旧 revision 可补译文，但不能回滚说话人、时间轴、原文或稳定 turn。代码和自动化门禁完成，待部署和 iPhone 双人/多人验收。
+- `OPT-SPK-007`：`in_progress`。`turnId + revision` 已贯通 ASR、Gateway 事件、API session、Flutter 字幕和历史；不同 turn 禁止语义合并，批量 ASR 结果按音频时间排序，同 segment 只处理最高 revision。迟到的旧 revision 可补译文，但不能回滚说话人、时间轴、原文或稳定 turn。API/Gateway 已部署，固定双声源真实 session 正确保存 `turn_1/turn_2`；iPhone 双人/多人验收待完成。
 - `OPT-SPK-008`：`in_progress`。App、API 和 Speaker Service 默认人数已统一调整为4；overlap、unknown、revision 和混合语种联合验收待执行。
 - `OPT-DEP-001`：`in_progress`。模型服务已在 Beelink，当前 API/Gateway 仍使用 Mac 测试节点；该拓扑只用于本轮验收，不满足正式“服务器 + 手机”退出条件。
 - `OPT-DEP-002`：`todo`。待把 API、Gateway、Worker、LiveKit 和模型服务纳入 Beelink 单一发布单元。
@@ -78,8 +78,8 @@
 | SPK-006-A | 2秒脱敏诊断窗口 | 0.5天 | in_progress | 元数据窗口和白名单持久化已通过真实 session；iPhone/断网复验待执行 |
 | SPK-006-B | boundary 指标 | 0.5天 | in_progress | 真实 session 已保存 hit=1、miss/error=0、1040ms、4240ms回切、drop=0 和 endpoint reason；多人样本待执行 |
 | SPK-006-C | boundary 与普通端点竞态 | 1天 | in_progress | 有替代结果时去重、空结果时保留原文；固定双声源 race=0，仍需真机短停顿构造竞态 |
-| SPK-007-A | turn 数据契约 | 已完成 | code_complete | segment 持久化 `turnId`、`revision`、`speakerId` 和原始时间范围；旧数据字段保持可选兼容 |
-| SPK-007-B | 有序翻译队列 | 已完成 | code_complete | 批量结果按音频时间排序，不跨 turn 合并；旧 revision 译文可补齐但不回滚归属 |
+| SPK-007-A | turn 数据契约 | 已完成 | deployed | segment 持久化 `turnId`、`revision`、`speakerId` 和原始时间范围；真实历史验证通过 |
+| SPK-007-B | 有序翻译队列 | 已完成 | deployed | 批量结果按音频时间排序，不跨 turn 合并；固定双声源事件和历史顺序一致 |
 | SPK-008-A | 多人/混合语种验收 | 1-2天 | todo | 2至4人、抢话、重叠、中英夹杂和 unknown 降级均有记录 |
 | DEP-001-A | Gateway/API 迁入 Beelink | 1天 | todo | 停止 Mac 服务后 iPhone 在线同传、历史和结算仍正常 |
 
