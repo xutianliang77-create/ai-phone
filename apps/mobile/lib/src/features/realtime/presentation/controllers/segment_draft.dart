@@ -6,6 +6,8 @@ class SegmentDraft {
     this.id, {
     this.sourceText = '',
     this.translatedText = '',
+    this.turnId,
+    this.revision,
     this.rawText,
     this.optimizedText,
     this.sourceLanguage,
@@ -21,6 +23,8 @@ class SegmentDraft {
   });
 
   final String id;
+  final String? turnId;
+  final int? revision;
   final String sourceText;
   final String translatedText;
   final String? rawText;
@@ -39,6 +43,8 @@ class SegmentDraft {
   SegmentDraft copyWith({
     String? sourceText,
     String? translatedText,
+    String? turnId,
+    int? revision,
     String? rawText,
     String? optimizedText,
     String? sourceLanguage,
@@ -56,6 +62,8 @@ class SegmentDraft {
       id,
       sourceText: sourceText ?? this.sourceText,
       translatedText: translatedText ?? this.translatedText,
+      turnId: turnId ?? this.turnId,
+      revision: revision ?? this.revision,
       rawText: rawText ?? this.rawText,
       optimizedText: optimizedText ?? this.optimizedText,
       sourceLanguage: sourceLanguage ?? this.sourceLanguage,
@@ -74,6 +82,8 @@ class SegmentDraft {
   SubtitleSegment toSegment() {
     return SubtitleSegment(
       id: id,
+      turnId: turnId,
+      revision: revision,
       sourceText: sourceText,
       translatedText: translatedText,
       rawText: rawText,

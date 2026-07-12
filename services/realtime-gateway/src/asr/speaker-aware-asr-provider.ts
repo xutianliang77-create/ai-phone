@@ -14,12 +14,14 @@ import { alignSpeakerSpan } from "../speaker/speaker-segment-aligner.js";
 import { SpeechTurnCoordinator } from "../speaker/speech-turn-coordinator.js";
 import { realtimeLogger } from "../metrics/realtime-metrics.js";
 import { SpeakerTurnDiagnostics } from "./speaker-turn-diagnostics.js";
+import { SpeakerTurnAssignment } from "./speaker-turn-assignment.js";
 
 export class SpeakerAwareAsrProvider implements AsrProvider {
   private static readonly speakerSpanRetentionMs = 120_000;
   private readonly spansBySession = new Map<string, SpeakerSpan[]>();
   private readonly enabledSessions = new Set<string>();
   private readonly turnDiagnostics = new SpeakerTurnDiagnostics();
+  private readonly turnAssignment = new SpeakerTurnAssignment();
 
   constructor(
     private readonly asr: AsrProvider,
@@ -41,6 +43,7 @@ export class SpeakerAwareAsrProvider implements AsrProvider {
       this.enabledSessions.add(session.sessionId);
       this.spansBySession.set(session.sessionId, []);
       this.turnCoordinator.clear(session.sessionId);
+      this.turnAssignment.clear(session.sessionId);
     } catch {
       // Speaker attribution is a degradable side path; ASR remains available.
     }
@@ -61,20 +64,33 @@ export class SpeakerAwareAsrProvider implements AsrProvider {
       ? this.turnCoordinator.observe(frame.sessionId, spans)
       : null;
     const regularTurns = asrResults(transcripts);
+    const turnChange = boundary
+      ? this.turnAssignment.advance(frame.sessionId)
+      : null;
+    const currentTurn = turnChange?.previous ??
+      this.turnAssignment.current(frame.sessionId);
     const commit = boundary
       ? await this.safeCommitBoundary(frame.sessionId, boundary.boundaryMs)
       : { result: null, error: false };
     const committedTurns = asrResults(commit.result).map((transcript) => ({
-      ...transcript,
+      ...this.turnAssignment.assign(transcript, currentTurn),
       speaker: transcript.speaker ?? {
         speakerId: boundary?.previousSpeakerId ?? "unknown",
         role: "speaker" as const,
         source: "diarization" as const,
       },
     }));
-    const filteredRegularTurns = committedTurns.length > 0
+    const filteredRegularTurns = (committedTurns.length > 0
       ? removeOverlappingTranscripts(regularTurns, committedTurns)
-      : regularTurns;
+      : regularTurns).map((transcript) => this.turnAssignment.assign(
+        transcript,
+        turnForTranscript(
+          transcript,
+          boundary?.boundaryMs,
+          currentTurn,
+          turnChange?.next,
+        ),
+      ));
     if (boundary) {
       const endpointRaceCount = regularTurns.filter(
         (item) => crossesBoundary(item, boundary.boundaryMs),
@@ -118,7 +134,10 @@ export class SpeakerAwareAsrProvider implements AsrProvider {
     ]);
     const spans = this.retainRecentSpans(sessionId, nextSpans);
     this.spansBySession.set(sessionId, spans);
-    const results = asrResults(transcripts);
+    const currentTurn = this.turnAssignment.current(sessionId);
+    const results = asrResults(transcripts).map((transcript) =>
+      this.turnAssignment.assign(transcript, currentTurn)
+    );
     this.turnDiagnostics.recordTranscripts(sessionId, results);
     return this.attributedResults(results, spans);
   }
@@ -131,6 +150,7 @@ export class SpeakerAwareAsrProvider implements AsrProvider {
     const speakerEnabled = this.enabledSessions.delete(sessionId);
     this.spansBySession.delete(sessionId);
     this.turnCoordinator.clear(sessionId);
+    this.turnAssignment.clear(sessionId);
     await this.asr.closeSession(sessionId);
     if (speakerEnabled) {
       await this.speaker.closeSession(sessionId).catch(() => undefined);
@@ -224,4 +244,15 @@ function crossesBoundary(transcript: TranscriptResult, boundaryMs: number) {
   if (!transcript.timing) return false;
   return transcript.timing.startMs < boundaryMs &&
     transcript.timing.endMs > boundaryMs;
+}
+
+function turnForTranscript(
+  transcript: TranscriptResult,
+  boundaryMs: number | undefined,
+  previous: { turnId: string; revision: number },
+  next: { turnId: string; revision: number } | undefined,
+) {
+  if (!next || boundaryMs === undefined) return previous;
+  if (transcript.timing && transcript.timing.startMs < boundaryMs) return previous;
+  return next;
 }

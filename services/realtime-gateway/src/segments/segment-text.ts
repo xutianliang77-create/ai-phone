@@ -12,6 +12,10 @@ export function mergeTranscriptParts(parts: TranscriptResult[]): TranscriptResul
     );
   return {
     segmentId: first.segmentId,
+    ...(first.turnId ? { turnId: first.turnId } : {}),
+    ...(parts.some((part) => typeof part.revision === "number")
+      ? { revision: Math.max(...parts.map((part) => part.revision ?? 0)) }
+      : {}),
     text,
     language: first.language,
     confidence: mergedConfidence(parts) ?? last.confidence,

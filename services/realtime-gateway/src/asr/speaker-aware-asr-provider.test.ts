@@ -103,6 +103,8 @@ describe("speaker aware asr provider", () => {
     expect(asr.boundaries).toEqual([480]);
     expect(transcript).toMatchObject({
       text: "first speaker turn",
+      turnId: "turn_1",
+      revision: 0,
       speaker: { speakerId: "speaker_1" },
       timing: { startMs: 0, endMs: 480 },
     });
@@ -155,11 +157,33 @@ describe("speaker aware asr provider", () => {
     expect(transcript).toMatchObject({
       segmentId: "regular_endpoint",
       text: "mixed speakers",
+      turnId: "turn_1",
     });
     expect(provider.diagnostics("sess_1")).toMatchObject({
       endpointRaceCount: 1,
       commitHitCount: 0,
       commitMissCount: 1,
+    });
+  });
+
+  it("advances the stable turn only after a confirmed speaker boundary", async () => {
+    const provider = new SpeakerAwareAsrProvider(
+      new BoundaryAndFlushAsrProvider(),
+      new SwitchingSpeakerProvider(),
+    );
+    await provider.createSession(session);
+
+    for (let sequence = 1; sequence <= 4; sequence += 1) {
+      await provider.transcribe({ ...frame, sequence });
+    }
+    const transcript = await provider.flush("sess_1");
+
+    expect(transcript).toMatchObject({
+      segmentId: "turn_2_tail",
+      turnId: "turn_2",
+      revision: 0,
+      text: "second speaker turn",
+      speaker: { speakerId: "speaker_2" },
     });
   });
 });
@@ -262,6 +286,17 @@ class RacingAsrProvider extends BoundaryAwareAsrProvider {
       language: "en" as const,
       timing: { startMs: 0, endMs: 960, source: "client" as const },
       endpointReason: "silence" as const,
+    };
+  }
+}
+
+class BoundaryAndFlushAsrProvider extends BoundaryAwareAsrProvider {
+  override async flush() {
+    return {
+      segmentId: "turn_2_tail",
+      text: "second speaker turn",
+      language: "en" as const,
+      timing: { startMs: 480, endMs: 960, source: "client" as const },
     };
   }
 }

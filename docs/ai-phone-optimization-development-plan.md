@@ -1,6 +1,6 @@
 # ai phone 优化开发计划
 
-版本：v1.9
+版本：v1.10
 日期：2026-07-12
 任务来源：`docs/ai-phone-optimization-development-tasks.md`
 
@@ -26,8 +26,9 @@
 
 - `OPT-SPK-005` 已完成代码、自动化、Beelink ASR 部署和固定双声源无停顿全链路验证，当前状态为 `in_progress`，只差 iPhone 双人快速换人验收。
 - `OPT-SPK-006` 的 PCM boundary 回切已通过真实音频连续性验证；合并批次时间轴根因已修复，诊断窗口、竞态指标和 session 持久化已部署。固定双声源真实 session 达到 hit=1、miss/error/race/drop=0、1040ms 确认延迟，等待 iPhone 与多人验收。
+- `OPT-SPK-007` 已完成代码和自动化：新 session 使用稳定 `turnId + revision`，Gateway 按音频时间处理批量结果，API 和 App 对迟到事件执行字段分域幂等，旧协议不强行生成 turn/revision。待部署后复跑固定双声源，并完成 iPhone 双人/多人验收。
 - 当前临时链路为 iPhone -> Mac API/Gateway -> Beelink 模型服务，只用于联调。正式退出条件仍是 iPhone -> Beelink 唯一公开入口，Mac 不参与运行链路。
-- 下一开发主线固定为：真机 speaker boundary -> Turn Buffer 可观测性与幂等 -> speaker-turn 翻译 -> 多人混合语种 -> Beelink 单服务器收敛。
+- 下一开发主线固定为：部署 speaker-turn 数据链路 -> 固定双声源历史验证 -> iPhone 双人快速换人 -> 多人混合语种 -> Beelink 单服务器收敛。
 
 ## 3. 分阶段任务
 
@@ -182,12 +183,12 @@ LLM 纪要、扫描 UI 和国际模型 Provider 可在 M1 稳定接口冻结后�
 | S0 | 多人默认统一为4 | 0.5天 | accepted | App、API、Speaker Service 和协议一致，旧客户端2人配置被服务器规范化 |
 | S1 | `OPT-SPK-005` 边界协调器 | 0.5天剩余 | in_progress | 已部署且固定双声源全链路通过；iPhone 双人无停顿两轮四句待验收 |
 | S2 | `OPT-SPK-006` ASR Turn Buffer | 0.5-1天剩余 | in_progress | 时间轴修复和真实 session 指标通过；补 iPhone、断网快照和短停顿竞态证据 |
-| S3 | `OPT-SPK-007` 翻译队列 | 1-2天 | todo | 不跨 speaker 翻译，最近 turn 只作上下文，输出顺序稳定 |
+| S3 | `OPT-SPK-007` 翻译队列 | 0.5天验收 | in_progress | 代码和自动化完成；部署后验证 turn 持久化、乱序幂等和 iPhone 双人输出顺序 |
 | S4 | `OPT-SPK-008` overlap/混合语种 | 1-2天 | in_progress | 2至4人、中英夹杂、抢话和重叠策略通过 |
 | S5 | 联合真机验收 | 2天 | todo | 对话、聆听、双人、三人、四人、快速换人、混合语种和30分钟稳定性通过 |
 | S6 | `OPT-DEP-001/002/003` 两层部署收敛 | 1天 | in_progress | API/Gateway/Worker/LiveKit/模型统一在 Beelink，Mac 停机后真机链路正常 |
 
-剩余实现预计6至8个开发日。近期顺序为 `S1 -> S2 -> S3 -> S4 -> S6 -> S5`；不能通过在现有 Aligner 后增加文本规则替代音频边界回切，也不能以 Mac 中转拓扑作为发布验收结果。
+剩余实现预计5至7个开发日。近期顺序为 `S3部署验收 -> S1/S2/S3真机联合验收 -> S4 -> S6 -> S5`；不能通过在现有 Aligner 后增加文本规则替代音频边界回切，也不能以 Mac 中转拓扑作为发布验收结果。
 
 ## 9. 近期开发日程与门禁
 

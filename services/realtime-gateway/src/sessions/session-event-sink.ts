@@ -46,6 +46,8 @@ class ApiSessionEventSink implements SessionEventSink {
       await this.upsertSegment({
         sessionId: event.sessionId,
         segmentId: event.segmentId,
+        turnId: event.turnId,
+        revision: event.revision,
         sourceText,
         rawText: cleanRealtimeText(event.rawText ?? event.text) ?? undefined,
         optimizedText: event.optimizedText
@@ -73,6 +75,8 @@ class ApiSessionEventSink implements SessionEventSink {
       await this.upsertSegment({
         sessionId: event.sessionId,
         segmentId: event.segmentId,
+        turnId: event.turnId,
+        revision: event.revision,
         translatedText,
         targetLanguage: event.language,
         stage: event.type === "translation.failed"
@@ -102,6 +106,8 @@ class ApiSessionEventSink implements SessionEventSink {
       await this.upsertSegment({
         sessionId: event.sessionId,
         segmentId: event.segmentId,
+        turnId: event.turnId,
+        revision: event.revision,
         speaker: event.speaker,
         timing: event.timing,
       });

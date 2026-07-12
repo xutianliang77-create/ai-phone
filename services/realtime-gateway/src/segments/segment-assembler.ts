@@ -15,7 +15,7 @@ interface EmittedSegment {
 interface SessionAssemblyState {
   pending?: PendingSegment;
   emitted: EmittedSegment[];
-  consumedIds: Set<string>;
+  consumedRevisions: Map<string, number>;
 }
 
 export interface SegmentAssemblerOptions {
@@ -115,6 +115,7 @@ export class SegmentAssembler {
 
   private mustSplit(pending: PendingSegment, transcript: TranscriptResult, nowMs: number) {
     return speakerKey(pending.parts.at(-1)) !== speakerKey(transcript) ||
+      turnKey(pending.parts.at(-1)) !== turnKey(transcript) ||
       nowMs - pending.createdAtMs >= this.maxBufferMs;
   }
 
@@ -144,14 +145,22 @@ export class SegmentAssembler {
       fingerprint: canonicalSegmentText(transcript.text),
       emittedAtMs,
     });
-    for (const segmentId of consumedIds) state.consumedIds.add(segmentId);
+    for (const segmentId of consumedIds) {
+      state.consumedRevisions.set(
+        segmentId,
+        Math.max(
+          state.consumedRevisions.get(segmentId) ?? -1,
+          transcript.revision ?? 0,
+        ),
+      );
+    }
     if (state.emitted.length > this.maxRememberedFinals) state.emitted.shift();
   }
 
   private stateFor(sessionId: string) {
     const state = this.sessions.get(sessionId) ?? {
       emitted: [],
-      consumedIds: new Set<string>(),
+      consumedRevisions: new Map<string, number>(),
     };
     this.sessions.set(sessionId, state);
     return state;
@@ -163,8 +172,11 @@ export class SegmentAssembler {
     nowMs: number,
   ) {
     const fingerprint = canonicalSegmentText(transcript.text);
-    return state.consumedIds.has(transcript.segmentId) ||
-      state.emitted.some((emitted) =>
+    const consumedRevision = state.consumedRevisions.get(transcript.segmentId);
+    if (consumedRevision !== undefined) {
+      return consumedRevision >= (transcript.revision ?? 0);
+    }
+    return state.emitted.some((emitted) =>
         fingerprint.length > 0 &&
         emitted.fingerprint === fingerprint &&
         nowMs - emitted.emittedAtMs <= this.duplicateTextWindowMs);
@@ -173,6 +185,10 @@ export class SegmentAssembler {
 
 function speakerKey(transcript: TranscriptResult | undefined) {
   return transcript?.speaker?.speakerId ?? "";
+}
+
+function turnKey(transcript: TranscriptResult | undefined) {
+  return transcript?.turnId ?? "";
 }
 
 function isPendingDuplicate(pending: PendingSegment, transcript: TranscriptResult) {

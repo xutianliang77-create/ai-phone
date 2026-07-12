@@ -86,6 +86,8 @@ export async function registerRealtimeRoutes(app: FastifyInstance) {
 
     const session = upsertSegment(body.sessionId, {
       segmentId: body.segmentId,
+      turnId: body.turnId,
+      revision: body.revision,
       sourceText: body.sourceText,
       rawText: body.rawText,
       optimizedText: body.optimizedText,
@@ -207,6 +209,8 @@ function isValidSegmentPatch(
     isOptionalString(body.provider) &&
     isOptionalString(body.model) &&
     isOptionalNonNegativeNumber(body.latencyMs) &&
+    isOptionalString(body.turnId) &&
+    isOptionalNonNegativeInteger(body.revision) &&
     isProviderUsage(body.providerUsage) &&
     isRefinement(body.refinement) &&
     (body.speaker === undefined || isSpeakerAttribution(body.speaker)) &&
@@ -227,6 +231,8 @@ function hasSegmentDiagnostics(body: Partial<UpsertSessionSegmentRequest>) {
     body.refinement,
     body.speaker,
     body.timing,
+    body.turnId,
+    body.revision,
   ].some((value) => value !== undefined);
 }
 
@@ -252,6 +258,11 @@ function isOptionalString(value: unknown) {
 function isOptionalNonNegativeNumber(value: unknown) {
   return value === undefined ||
     (typeof value === "number" && Number.isFinite(value) && value >= 0);
+}
+
+function isOptionalNonNegativeInteger(value: unknown) {
+  return value === undefined ||
+    (typeof value === "number" && Number.isInteger(value) && value >= 0);
 }
 
 function isProviderUsage(value: unknown) {

@@ -60,6 +60,8 @@ class LocalSessionStore {
               segment.translatedText.trim().isNotEmpty)
           .map((segment) => SessionSegment(
                 id: segment.id,
+                turnId: segment.turnId,
+                revision: segment.revision,
                 sourceText: segment.sourceText,
                 translatedText: segment.translatedText,
                 sourceLanguage: segment.sourceLanguage,
@@ -180,6 +182,8 @@ Map<String, Object?> _detailToJson(SessionDetail detail) {
     'segments': detail.segments.map((segment) {
       return <String, Object?>{
         'id': segment.id,
+        if (segment.turnId != null) 'turnId': segment.turnId,
+        if (segment.revision != null) 'revision': segment.revision,
         'sourceText': segment.sourceText,
         'translatedText': segment.translatedText,
         if (segment.sourceLanguage != null)

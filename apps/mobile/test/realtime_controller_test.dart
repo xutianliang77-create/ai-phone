@@ -107,6 +107,46 @@ void main() {
     expect(controller.segments.single.translatedText, '你好');
   });
 
+  test('late translation cannot roll back a revised speaker label', () async {
+    final repository = FakeRealtimeRepository();
+    final controller =
+        realtimeControllerForTest(repository, FakeAudioCapture());
+    addTearDown(controller.dispose);
+    await controller.start();
+
+    repository.emit(GatewayRealtimeEvent.fromJson(<String, Object?>{
+      'type': 'transcript.final',
+      'sessionId': 'sess_1',
+      'segmentId': 'seg_1',
+      'turnId': 'turn_1',
+      'revision': 0,
+      'text': 'hello',
+      'speaker': speakerJson('speaker_1'),
+    }));
+    repository.emit(GatewayRealtimeEvent.fromJson(<String, Object?>{
+      'type': 'speaker.updated',
+      'sessionId': 'sess_1',
+      'segmentId': 'seg_1',
+      'turnId': 'turn_1',
+      'revision': 1,
+      'speaker': speakerJson('speaker_2'),
+    }));
+    repository.emit(GatewayRealtimeEvent.fromJson(<String, Object?>{
+      'type': 'translation.final',
+      'sessionId': 'sess_1',
+      'segmentId': 'seg_1',
+      'turnId': 'turn_1',
+      'revision': 0,
+      'text': '你好',
+      'speaker': speakerJson('speaker_1'),
+    }));
+    await pumpEventQueue();
+
+    expect(controller.segments.single.translatedText, '你好');
+    expect(controller.segments.single.speaker?.speakerId, 'speaker_2');
+    expect(controller.segments.single.revision, 1);
+  });
+
   test('shows gateway provider error stage in the status message', () async {
     final repository = FakeRealtimeRepository();
     final audio = FakeAudioCapture();
@@ -181,7 +221,8 @@ void main() {
       emitTailOnEnd: true,
       failEndConfirmation: true,
     );
-    final controller = realtimeControllerForTest(repository, FakeAudioCapture());
+    final controller =
+        realtimeControllerForTest(repository, FakeAudioCapture());
     addTearDown(controller.dispose);
 
     await controller.start();
@@ -271,3 +312,9 @@ void main() {
     expect(audio.stopCalls, 1);
   });
 }
+
+Map<String, Object?> speakerJson(String speakerId) => <String, Object?>{
+      'speakerId': speakerId,
+      'role': 'speaker',
+      'source': 'diarization',
+    };

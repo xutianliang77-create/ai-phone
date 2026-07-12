@@ -5,6 +5,8 @@ class GatewayRealtimeEvent {
     required this.type,
     this.sessionId,
     this.segmentId,
+    this.turnId,
+    this.revision,
     this.text,
     this.rawText,
     this.optimizedText,
@@ -34,6 +36,8 @@ class GatewayRealtimeEvent {
   final String type;
   final String? sessionId;
   final String? segmentId;
+  final String? turnId;
+  final int? revision;
   final String? text;
   final String? rawText;
   final String? optimizedText;
@@ -64,6 +68,8 @@ class GatewayRealtimeEvent {
     this.message,
   })  : sessionId = null,
         segmentId = null,
+        turnId = null,
+        revision = null,
         text = null,
         rawText = null,
         optimizedText = null,
@@ -97,6 +103,8 @@ class GatewayRealtimeEvent {
       type: json['type']! as String,
       sessionId: json['sessionId'] as String?,
       segmentId: json['segmentId'] as String?,
+      turnId: json['turnId'] as String?,
+      revision: (json['revision'] as num?)?.toInt(),
       text: json['text'] as String?,
       rawText: json['rawText'] as String?,
       optimizedText: json['optimizedText'] as String?,

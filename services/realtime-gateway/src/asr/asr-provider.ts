@@ -19,6 +19,8 @@ export interface AsrSession {
 
 export interface TranscriptResult {
   segmentId: string;
+  turnId?: string;
+  revision?: number;
   text: string;
   language: TranslationLanguageCode;
   confidence?: number;

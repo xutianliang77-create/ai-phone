@@ -65,6 +65,8 @@ describe("session event sink", () => {
         type: "transcript.final",
         sessionId: "sess_1",
         segmentId: "seg_1",
+        turnId: "turn_1",
+        revision: 0,
         text: "hello",
         language: "en",
         confidence: 0.91,
@@ -73,6 +75,8 @@ describe("session event sink", () => {
         type: "translation.final",
         sessionId: "sess_1",
         segmentId: "seg_1",
+        turnId: "turn_1",
+        revision: 0,
         text: "你好",
         language: "zh",
         providerUsage: {
@@ -99,6 +103,8 @@ describe("session event sink", () => {
         body: {
           sessionId: "sess_1",
           segmentId: "seg_1",
+          turnId: "turn_1",
+          revision: 0,
           sourceText: "hello",
           rawText: "hello",
           sourceLanguage: "en",
@@ -111,6 +117,8 @@ describe("session event sink", () => {
         body: {
           sessionId: "sess_1",
           segmentId: "seg_1",
+          turnId: "turn_1",
+          revision: 0,
           translatedText: "你好",
           targetLanguage: "zh",
           stage: "translation",

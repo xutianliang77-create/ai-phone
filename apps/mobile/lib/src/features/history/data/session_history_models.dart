@@ -39,6 +39,8 @@ class SessionSegment {
     required this.id,
     required this.sourceText,
     required this.translatedText,
+    this.turnId,
+    this.revision,
     this.rawText,
     this.optimizedText,
     this.sourceLanguage,
@@ -54,6 +56,8 @@ class SessionSegment {
   });
 
   final String id;
+  final String? turnId;
+  final int? revision;
   final String sourceText;
   final String translatedText;
   final String? rawText;
@@ -72,6 +76,8 @@ class SessionSegment {
   factory SessionSegment.fromJson(Map<String, Object?> json) {
     return SessionSegment(
       id: json['id']! as String,
+      turnId: json['turnId'] as String?,
+      revision: (json['revision'] as num?)?.toInt(),
       sourceText: json['sourceText']! as String,
       translatedText: json['translatedText']! as String,
       rawText: json['rawText'] as String?,
@@ -102,6 +108,8 @@ class SessionSegment {
   SessionSegment copyWithSpeaker(SpeakerAttribution nextSpeaker) {
     return SessionSegment(
       id: id,
+      turnId: turnId,
+      revision: revision,
       sourceText: sourceText,
       translatedText: translatedText,
       rawText: rawText,

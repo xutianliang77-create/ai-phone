@@ -1,6 +1,6 @@
 # ai phone 说话人归属技术设计
 
-版本：v1.6
+版本：v1.7
 日期：2026-07-11
 
 ## 1. 目标与边界
@@ -260,6 +260,8 @@ interface TranscriptEvent {
   type: "transcript.partial" | "transcript.final";
   sessionId: string;
   segmentId: string;
+  turnId?: string;
+  revision?: number;
   text: string;
   startMs?: number;
   endMs?: number;
@@ -270,11 +272,13 @@ interface SpeakerUpdatedEvent {
   type: "speaker.updated";
   sessionId: string;
   segmentId: string;
+  turnId?: string;
+  revision?: number;
   speaker: SpeakerAttribution;
 }
 ```
 
-`speaker.updated` 只更新归属和界面，不触发 ASR、翻译、TTS 或重复计费。
+`turnId` 是一次稳定发言轮次的不可变标识；`revision` 是该 segment 归属修订版本。`speaker.updated` 只更新归属和界面，不触发 ASR、翻译、TTS 或重复计费。旧客户端不携带这两个字段时保持原有 segment 语义，服务器不得按 `segmentId` 伪造 turn。
 
 ### 11.2 Session 配置
 
@@ -345,6 +349,8 @@ erDiagram
   SEGMENT {
     text id PK
     text session_id FK
+    text turn_id
+    int revision
     text speaker_id FK
     int start_ms
     int end_ms
@@ -393,14 +399,14 @@ erDiagram
 | 字段 | 类型 | 说明 |
 | --- | --- | --- |
 | speaker_id | text nullable | FK 到 session_speakers |
+| turn_id | text nullable | 新 session 内稳定发言轮次；旧数据允许为空 |
+| revision | int nullable | 归属修订版本；新 turn 从0开始，旧数据允许为空 |
 | speaker_source | text nullable | 归属来源快照，便于审计 |
 | speaker_confidence | real nullable | 归属置信度 |
 | speaker_overlap | bool | 是否检测到重叠说话 |
 | start_ms/end_ms | int nullable | session 时间轴区间 |
 | timing_source | text nullable | model/estimated/participant_track |
-| speaker_revision | int | 迟到修正版本，默认 0 |
-
-segment upsert 使用 `(session_id, segment_id)` 幂等键。`speaker.updated` 仅在 revision 更大时覆盖，防止乱序事件把新归属回滚。
+segment upsert 使用 `(session_id, segment_id)` 幂等键。`turn_id` 首次写入后不可被迟到事件改写；较大 revision 可更新原文、说话人和时间轴，较小 revision 不得回滚这些字段。翻译字段独立合并，因此旧 revision 的迟到译文仍可补齐，但不能覆盖新归属。
 
 ### 12.4 voice_identities
 

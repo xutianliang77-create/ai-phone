@@ -29,6 +29,8 @@ void main() {
       segments: const <SubtitleSegment>[
         SubtitleSegment(
           id: 'seg_1',
+          turnId: 'turn_1',
+          revision: 2,
           sourceText: 'hello',
           translatedText: '你好',
           sourceLanguage: 'en',
@@ -50,6 +52,8 @@ void main() {
     final detail = await store.getSession('local_1');
     expect(detail.segments, hasLength(1));
     expect(detail.segments.single.translatedText, '你好');
+    expect(detail.segments.single.turnId, 'turn_1');
+    expect(detail.segments.single.revision, 2);
     expect(detail.segments.single.provider, 'ios_system');
     expect(detail.segments.single.confidence, 0.88);
 

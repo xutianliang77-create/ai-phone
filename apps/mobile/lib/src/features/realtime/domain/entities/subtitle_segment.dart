@@ -5,6 +5,8 @@ class SubtitleSegment {
     required this.id,
     required this.sourceText,
     required this.translatedText,
+    this.turnId,
+    this.revision,
     this.rawText,
     this.optimizedText,
     this.sourceLanguage,
@@ -20,6 +22,8 @@ class SubtitleSegment {
   });
 
   final String id;
+  final String? turnId;
+  final int? revision;
   final String sourceText;
   final String translatedText;
   final String? rawText;

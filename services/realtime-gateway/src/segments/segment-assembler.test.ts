@@ -118,6 +118,42 @@ describe("segment assembler", () => {
     ]);
   });
 
+  it("splits stable turns even when the speaker label is unchanged", () => {
+    const assembler = new SegmentAssembler();
+    assembler.push("sess_1", {
+      ...attributedTranscript("asr_1", "接下来", "speaker_1"),
+      turnId: "turn_1",
+      revision: 0,
+    });
+    const result = assembler.push("sess_1", {
+      ...attributedTranscript("asr_2", "继续说明。", "speaker_1"),
+      turnId: "turn_2",
+      revision: 0,
+    });
+
+    expect(result.ready.map((item) => item.turnId)).toEqual(["turn_1", "turn_2"]);
+  });
+
+  it("accepts a newer revision once and rejects a stale replay", () => {
+    const assembler = new SegmentAssembler();
+    const initial = {
+      ...transcript("asr_1", "测试完成。", "zh"),
+      turnId: "turn_1",
+      revision: 0,
+    };
+    expect(assembler.push("sess_1", initial, 1000).ready).toHaveLength(1);
+    expect(assembler.push("sess_1", {
+      ...initial,
+      revision: 1,
+      speaker: {
+        speakerId: "speaker_2",
+        role: "speaker" as const,
+        source: "diarization" as const,
+      },
+    }, 1100).ready).toHaveLength(1);
+    expect(assembler.push("sess_1", initial, 1200).ready).toEqual([]);
+  });
+
   it("does not use a language change as a hard boundary for one speaker", () => {
     const assembler = new SegmentAssembler();
 

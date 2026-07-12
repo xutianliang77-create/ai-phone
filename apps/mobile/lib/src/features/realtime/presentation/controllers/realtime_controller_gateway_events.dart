@@ -25,6 +25,8 @@ extension RealtimeControllerGatewayEvents on RealtimeController {
       );
       _upsertSegment(
         event.segmentId!,
+        turnId: event.turnId,
+        revision: event.revision,
         translatedText: event.message ?? 'Translation unavailable',
         targetLanguage: event.language,
         stage: event.stage ?? 'translation',
@@ -103,6 +105,8 @@ extension RealtimeControllerGatewayEvents on RealtimeController {
       } else {
         _upsertSegment(
           event.segmentId!,
+          turnId: event.turnId,
+          revision: event.revision,
           sourceText: text,
           rawText: event.rawText,
           optimizedText: event.optimizedText,
@@ -127,6 +131,8 @@ extension RealtimeControllerGatewayEvents on RealtimeController {
         _gatewayDiagnostic = null;
         _upsertSegment(
           event.segmentId!,
+          turnId: event.turnId,
+          revision: event.revision,
           translatedText: text,
           targetLanguage: event.language,
           stage: 'translation',
@@ -145,6 +151,8 @@ extension RealtimeControllerGatewayEvents on RealtimeController {
     if (event.type == 'speaker.updated' && event.segmentId != null) {
       _upsertSegment(
         event.segmentId!,
+        turnId: event.turnId,
+        revision: event.revision,
         speaker: event.speaker,
         timing: event.timing,
       );

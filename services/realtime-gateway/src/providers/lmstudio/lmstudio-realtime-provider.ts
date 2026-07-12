@@ -1,5 +1,5 @@
 import type { AudioFrame, ServerRealtimeEvent } from "@translation/contracts";
-import { type LlmProvider, OffLlmProvider } from "@translation/llm";
+import { OffLlmProvider } from "@translation/llm";
 import { MockAsrProvider } from "../../asr/mock-asr-provider.js";
 import { asrResults, type AsrProvider, type TranscriptResult } from "../../asr/asr-provider.js";
 import { cleanRealtimeText } from "../../protocol/realtime-text.js";
@@ -8,9 +8,7 @@ import { LmStudioClient } from "./lmstudio-client.js";
 import { isUsableTranslation, providerUsage } from "./lmstudio-translation-output.js";
 import { transcriptVariantsForTranslation } from "./transcript-chunks.js";
 import {
-  appendRecentAsrSegment,
-  type RecentAsrSegment,
-  refineRealtimeTranscript,
+  RealtimeTranscriptRefiner,
 } from "./lmstudio-asr-refinement.js";
 import { SegmentAssembler } from "../../segments/segment-assembler.js";
 import {
@@ -23,17 +21,15 @@ import {
 } from "./lmstudio-realtime-helpers.js";
 import { shouldPreserveSpelledIdentifier } from "./spelled-identifier.js";
 import type { LmStudioRealtimeProviderOptions, TranslationClient } from "./lmstudio-realtime-provider-options.js";
+import { orderedTurnTranscripts } from "../../asr/transcript-turn-order.js";
 
 export class LmStudioRealtimeProvider implements RealtimeProvider {
   readonly name: string;
   private readonly client: TranslationClient;
   private readonly asrProvider: AsrProvider;
-  private readonly asrRefinementProvider: LlmProvider;
-  private readonly asrRefinementEnabled: boolean;
-  private readonly asrRefinementMinConfidence: number;
+  private readonly transcriptRefiner: RealtimeTranscriptRefiner;
   private readonly model: string;
   private sessions = new Map<string, RealtimeProviderSession>();
-  private recentSegments = new Map<string, RecentAsrSegment[]>();
   private semanticSegments = new SegmentAssembler();
 
   constructor(options: LmStudioRealtimeProviderOptions) {
@@ -41,9 +37,11 @@ export class LmStudioRealtimeProvider implements RealtimeProvider {
     this.model = options.model;
     this.client = options.translationClient ?? new LmStudioClient(options);
     this.asrProvider = options.asrProvider ?? new MockAsrProvider();
-    this.asrRefinementProvider = options.asrRefinementProvider ?? new OffLlmProvider();
-    this.asrRefinementEnabled = options.asrRefinementEnabled === true;
-    this.asrRefinementMinConfidence = options.asrRefinementMinConfidence ?? 0.72;
+    this.transcriptRefiner = new RealtimeTranscriptRefiner({
+      provider: options.asrRefinementProvider ?? new OffLlmProvider(),
+      enabled: options.asrRefinementEnabled === true,
+      minConfidence: options.asrRefinementMinConfidence ?? 0.72,
+    });
   }
 
   async createSession(session: RealtimeProviderSession) {
@@ -64,7 +62,9 @@ export class LmStudioRealtimeProvider implements RealtimeProvider {
 
     let transcripts;
     try {
-      transcripts = asrResults(await this.asrProvider.transcribe(frame));
+      transcripts = orderedTurnTranscripts(
+        asrResults(await this.asrProvider.transcribe(frame)),
+      );
     } catch (error) {
       yield providerError(
         frame.sessionId,
@@ -128,7 +128,9 @@ export class LmStudioRealtimeProvider implements RealtimeProvider {
 
     let transcripts;
     try {
-      transcripts = asrResults(await this.asrProvider.flush(sessionId));
+      transcripts = orderedTurnTranscripts(
+        asrResults(await this.asrProvider.flush(sessionId)),
+      );
     } catch (error) {
       yield providerError(
         sessionId,
@@ -143,7 +145,7 @@ export class LmStudioRealtimeProvider implements RealtimeProvider {
 
   async closeSession(sessionId: string) {
     this.sessions.delete(sessionId);
-    this.recentSegments.delete(sessionId);
+    this.transcriptRefiner.clear(sessionId);
     this.semanticSegments.clear(sessionId);
     await this.asrProvider.closeSession(sessionId);
   }
@@ -220,6 +222,8 @@ export class LmStudioRealtimeProvider implements RealtimeProvider {
         type: "transcript.final",
         sessionId: session.sessionId,
         segmentId: transcript.segmentId,
+        turnId: transcript.turnId,
+        revision: transcript.revision,
         text,
         rawText: refinement.rawText,
         ...(refinement.optimizedText ? { optimizedText: refinement.optimizedText } : {}),
@@ -240,6 +244,8 @@ export class LmStudioRealtimeProvider implements RealtimeProvider {
           type: "translation.final",
           sessionId: session.sessionId,
           segmentId: transcript.segmentId,
+          turnId: transcript.turnId,
+          revision: transcript.revision,
           text,
           language: targetLanguage,
           providerUsage: providerUsage({
@@ -251,7 +257,7 @@ export class LmStudioRealtimeProvider implements RealtimeProvider {
           }),
           speaker: transcript.speaker, timing: transcript.timing,
         };
-        this.rememberSegment(session.sessionId, {
+        this.transcriptRefiner.remember(session.sessionId, {
           rawText: refinement.rawText,
           optimizedText: refinement.optimizedText,
           translatedText: text,
@@ -271,7 +277,7 @@ export class LmStudioRealtimeProvider implements RealtimeProvider {
         ...(terminology.length > 0 ? { terminology } : {}),
       }));
       if (!isUsableTranslation(translated)) {
-        yield translationFailed(session, transcript.segmentId, targetLanguage, {
+        yield translationFailed(session, transcript, targetLanguage, {
           provider: this.name,
           retryable: true,
         });
@@ -287,6 +293,8 @@ export class LmStudioRealtimeProvider implements RealtimeProvider {
         type: "translation.final",
         sessionId: session.sessionId,
         segmentId: transcript.segmentId,
+        turnId: transcript.turnId,
+        revision: transcript.revision,
         text: translated,
         language: targetLanguage,
         providerUsage: providerUsage({
@@ -298,7 +306,7 @@ export class LmStudioRealtimeProvider implements RealtimeProvider {
         }),
         speaker: transcript.speaker, timing: transcript.timing,
       };
-      this.rememberSegment(session.sessionId, {
+      this.transcriptRefiner.remember(session.sessionId, {
         rawText: refinement.rawText,
         optimizedText: refinement.optimizedText,
         translatedText: translated,
@@ -306,7 +314,7 @@ export class LmStudioRealtimeProvider implements RealtimeProvider {
     } catch (error) {
       yield translationFailed(
         session,
-        transcript.segmentId,
+        transcript,
         targetLanguageForTranscript(session, transcript.language),
         {
           provider: this.name,
@@ -325,24 +333,10 @@ export class LmStudioRealtimeProvider implements RealtimeProvider {
     session: RealtimeProviderSession,
     transcript: TranscriptResult,
   ) {
-    return refineRealtimeTranscript({
-      provider: this.asrRefinementProvider,
-      enabled: this.asrRefinementEnabled,
-      minConfidence: this.asrRefinementMinConfidence,
+    return this.transcriptRefiner.refine(
       session,
       transcript,
-      targetLanguage: targetLanguageForTranscript(session, transcript.language),
-      previousSegments: this.recentSegments.get(session.sessionId) ?? [],
-    });
-  }
-
-  private rememberSegment(
-    sessionId: string,
-    segment: RecentAsrSegment,
-  ) {
-    this.recentSegments.set(
-      sessionId,
-      appendRecentAsrSegment(this.recentSegments.get(sessionId), segment),
+      targetLanguageForTranscript(session, transcript.language),
     );
   }
 }

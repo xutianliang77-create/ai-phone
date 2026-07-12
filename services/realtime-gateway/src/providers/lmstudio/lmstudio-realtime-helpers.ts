@@ -6,6 +6,7 @@ import type {
 } from "@translation/contracts";
 import type { RealtimeProviderSession } from "../realtime-provider.js";
 import { realtimeLogger } from "../../metrics/realtime-metrics.js";
+import type { TranscriptResult } from "../../asr/asr-provider.js";
 
 export function terminologyFor(
   session: RealtimeProviderSession,
@@ -28,7 +29,7 @@ export function targetLanguageForTranscript(
 
 export function translationFailed(
   session: RealtimeProviderSession,
-  segmentId: string,
+  transcript: Pick<TranscriptResult, "segmentId" | "turnId" | "revision">,
   targetLanguage: TranslationLanguageCode,
   diagnostics: {
     provider?: string;
@@ -38,7 +39,9 @@ export function translationFailed(
   return {
     type: "translation.failed",
     sessionId: session.sessionId,
-    segmentId,
+    segmentId: transcript.segmentId,
+    turnId: transcript.turnId,
+    revision: transcript.revision,
     message:
       targetLanguage === "zh" ? "翻译暂不可用" : "Translation unavailable",
     language: targetLanguage,

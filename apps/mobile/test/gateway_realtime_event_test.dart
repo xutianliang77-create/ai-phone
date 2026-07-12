@@ -27,6 +27,8 @@ void main() {
       'type': 'transcript.final',
       'sessionId': 'sess_1',
       'segmentId': 'seg_1',
+      'turnId': 'turn_4',
+      'revision': 2,
       'text': '你好',
       'language': 'zh',
       'speaker': <String, Object?>{
@@ -43,6 +45,8 @@ void main() {
     });
 
     expect(event.speaker?.speakerId, 'speaker_2');
+    expect(event.turnId, 'turn_4');
+    expect(event.revision, 2);
     expect(event.speaker?.label(isChinese: true), '说话人 2');
     expect(event.timing?.startMs, 1000);
   });

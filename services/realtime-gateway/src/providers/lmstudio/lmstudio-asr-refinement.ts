@@ -25,6 +25,41 @@ export interface RefinedTranscript {
   refinement: SessionSegmentRefinementDto;
 }
 
+export class RealtimeTranscriptRefiner {
+  private readonly recentSegments = new Map<string, RecentAsrSegment[]>();
+
+  constructor(private readonly options: {
+    provider: LlmProvider;
+    enabled: boolean;
+    minConfidence: number;
+  }) {}
+
+  refine(
+    session: RealtimeProviderSession,
+    transcript: TranscriptResult,
+    targetLanguage: TranslationLanguageCode,
+  ) {
+    return refineRealtimeTranscript({
+      ...this.options,
+      session,
+      transcript,
+      targetLanguage,
+      previousSegments: this.recentSegments.get(session.sessionId) ?? [],
+    });
+  }
+
+  remember(sessionId: string, segment: RecentAsrSegment) {
+    this.recentSegments.set(
+      sessionId,
+      appendRecentAsrSegment(this.recentSegments.get(sessionId), segment),
+    );
+  }
+
+  clear(sessionId: string) {
+    this.recentSegments.delete(sessionId);
+  }
+}
+
 export async function refineRealtimeTranscript(input: {
   provider: LlmProvider;
   enabled: boolean;

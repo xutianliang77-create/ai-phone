@@ -21,6 +21,8 @@ export interface UpdateRealtimeSessionStateRequest {
 
 export interface SessionSegmentDto {
   id: string;
+  turnId?: string;
+  revision?: number;
   sourceText: string;
   rawText?: string;
   optimizedText?: string;
@@ -161,6 +163,8 @@ export interface SaveTextTranslationSessionRequest {
 export interface UpsertSessionSegmentRequest {
   sessionId: string;
   segmentId: string;
+  turnId?: string;
+  revision?: number;
   sourceText?: string;
   rawText?: string;
   optimizedText?: string;

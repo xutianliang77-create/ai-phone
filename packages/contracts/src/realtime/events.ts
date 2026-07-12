@@ -18,6 +18,8 @@ export interface TranscriptEvent {
   type: "transcript.partial" | "transcript.final";
   sessionId: string;
   segmentId: string;
+  turnId?: string;
+  revision?: number;
   text: string;
   rawText?: string;
   optimizedText?: string;
@@ -32,6 +34,8 @@ export interface TranslationEvent {
   type: "translation.delta" | "translation.final";
   sessionId: string;
   segmentId: string;
+  turnId?: string;
+  revision?: number;
   text: string;
   language: TranslationLanguageCode;
   termHits?: string[];
@@ -44,6 +48,8 @@ export interface SpeakerUpdatedEvent {
   type: "speaker.updated";
   sessionId: string;
   segmentId: string;
+  turnId?: string;
+  revision?: number;
   speaker: SpeakerAttributionDto;
   timing?: SegmentTimingDto;
 }
@@ -52,6 +58,8 @@ export interface TranslationFailedEvent {
   type: "translation.failed";
   sessionId: string;
   segmentId: string;
+  turnId?: string;
+  revision?: number;
   message: string;
   language: TranslationLanguageCode;
   stage?: RealtimeErrorStage;
