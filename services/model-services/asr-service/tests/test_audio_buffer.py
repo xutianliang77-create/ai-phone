@@ -2,6 +2,7 @@ import base64
 import struct
 
 from app.audio_buffer import PcmSessionBuffer, RealtimePcmSegmenter, audio_duration_ms
+from app.endpoint_policy import EndpointPolicy
 from app.schemas import AsrTranscribeRequest
 
 
@@ -135,6 +136,51 @@ def test_speaker_boundary_does_not_reset_continuous_vad_state() -> None:
     assert vad.reset_count == 0
 
 
+def test_endpoint_policy_is_frozen_and_isolated_per_session() -> None:
+    segmenter = RealtimePcmSegmenter(
+        min_audio_ms=40,
+        endpoint_silence_ms=80,
+        max_audio_ms=1000,
+        preroll_ms=40,
+        vad_energy_threshold=350,
+        endpoint_policies={
+            "conversation": EndpointPolicy("conversation", 40, 80, 1000, 40),
+            "listening": EndpointPolicy("listening", 40, 160, 1000, 40),
+            "call_link": EndpointPolicy("call_link", 40, 40, 1000, 40),
+            "pstn": EndpointPolicy("pstn", 40, 120, 1000, 40),
+        },
+    )
+
+    assert segmenter.append(request(1, voice_pcm(), session_id="conversation")) is None
+    assert segmenter.append(request(1, voice_pcm(), session_id="listening", mode="listening")) is None
+    assert segmenter.append(request(1, voice_pcm(), session_id="call", mode="call_link")) is None
+    assert segmenter.append(request(1, voice_pcm(), session_id="pstn", mode="pstn")) is None
+    assert segmenter.append(request(2, silence_pcm(), session_id="conversation")) is None
+    assert segmenter.append(request(2, silence_pcm(), session_id="listening", mode="listening")) is None
+    assert segmenter.append(request(2, silence_pcm(), session_id="call", mode="call_link")) is not None
+    assert segmenter.append(request(2, silence_pcm(), session_id="pstn", mode="pstn")) is None
+    assert segmenter.append(request(3, silence_pcm(), session_id="conversation")) is not None
+    assert segmenter.append(request(3, silence_pcm(), session_id="listening", mode="listening")) is None
+    assert segmenter.append(request(3, silence_pcm(), session_id="pstn", mode="pstn")) is None
+    assert segmenter.append(request(4, silence_pcm(), session_id="pstn", mode="pstn")) is not None
+    assert segmenter.diagnostics("conversation")["endpointPolicy"]["mode"] == "conversation"
+    assert segmenter.diagnostics("listening")["endpointPolicy"]["mode"] == "listening"
+    assert segmenter.diagnostics("call")["endpointPolicy"]["mode"] == "call_link"
+    assert segmenter.diagnostics("pstn")["endpointPolicy"]["mode"] == "pstn"
+
+
+def test_endpoint_mode_cannot_change_inside_session() -> None:
+    segmenter = realtime_segmenter()
+    segmenter.append(request(1, voice_pcm(), mode="conversation"))
+
+    try:
+        segmenter.append(request(2, voice_pcm(), mode="listening"))
+    except ValueError as error:
+        assert "cannot change" in str(error)
+    else:
+        raise AssertionError("mode change must be rejected")
+
+
 def realtime_segmenter(
     min_audio_ms: int = 120,
     endpoint_silence_ms: int = 80,
@@ -161,10 +207,12 @@ def request(
     sequence: int,
     pcm: bytes | None = None,
     timestamp_ms: int | None = None,
+    session_id: str = "sess_1",
+    mode: str = "conversation",
 ) -> AsrTranscribeRequest:
     audio = pcm or silence_pcm()
     return AsrTranscribeRequest(
-        sessionId="sess_1",
+        sessionId=session_id,
         sequence=sequence,
         timestampMs=timestamp_ms if timestamp_ms is not None else sequence,
         format="pcm16",
@@ -172,6 +220,7 @@ def request(
         data=base64.b64encode(audio).decode("ascii"),
         sourceLanguage="en",
         targetLanguage="zh",
+        mode=mode,
     )
 
 
@@ -188,3 +237,9 @@ class TrackingVadProvider:
 
     def reset_session(self, session_id: str) -> None:
         self.reset_count += 1
+
+    def close_session(self, session_id: str) -> None:
+        pass
+
+    def diagnostics(self, session_id: str):
+        return {}

@@ -176,8 +176,8 @@ LLM 纪要、扫描 UI 和国际模型 Provider 可在 M1 稳定接口冻结后�
 | 阶段 | 任务 | 预计工作量 | 状态 | 交付与退出条件 |
 | --- | --- | ---: | --- | --- |
 | V0 | `OPT-VAD-001` 服务器主 VAD | 已完成 | accepted | MarbleNet 上线、RMS 降级、真机通过 |
-| V1 | `OPT-VAD-002` session 观测 | 0.5天剩余 | in_progress | endpoint reason 和丢帧已贯通；补 Provider、阈值、speech ratio、fallback 和 fingerprint |
-| V2 | `OPT-VAD-003` 模式化端点 | 2 天 | todo | 四种模式固定语料和延迟门禁通过，可一键回退 1100ms |
+| V1 | `OPT-VAD-002` session 观测 | 代码完成，验收待执行 | in_progress | Provider、阈值、概率摘要、speech ratio、fallback 和 fingerprint 已贯通；待 Beelink 故障注入 |
+| V2 | `OPT-VAD-003` 模式化端点 | 代码完成，验收待执行 | in_progress | 四模式 session 策略已隔离；待固定语料、延迟门禁和 1100ms 回退复验 |
 | V3 | `OPT-RT-003/004` 联合回归 | RT-003完成；RT-004可靠性待执行 | in_progress | RT-003 accepted；RT-004 A/B 冒烟已通过，100次尾句可靠性保持 TODO |
 | V4 | `OPT-VAD-004` 时间轴贯通 | 1-2 天 | todo | speaker、segment、history、review 使用同一 speech 时间范围 |
 | V5 | `OPT-VAD-005` 端侧候选 | iOS 候选非关键路径；Android 在 iOS 产品化后 | todo | iOS CoreML 可独立评测；Android ONNX 和真机报告后置，通过后再立项集成 |

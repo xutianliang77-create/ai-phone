@@ -1,5 +1,6 @@
 import type {
   AudioFormat,
+  AsrEndpointMode,
   CallRoomTranslationLanguage,
   LanguageCode,
 } from "@translation/contracts";
@@ -15,6 +16,7 @@ export interface HttpAsrProviderOptions {
   flushEndpoint?: string;
   apiKey?: string;
   timeoutMs: number;
+  endpointMode?: AsrEndpointMode;
   fetchFn?: typeof fetch;
 }
 
@@ -47,6 +49,7 @@ export class HttpAsrProvider implements CallAsrProvider {
         data: frame.data,
         sourceLanguage: "auto" satisfies LanguageCode,
         targetLanguage: "zh" satisfies CallRoomTranslationLanguage,
+        mode: this.options.endpointMode ?? "call_link",
       }),
     });
     if (response.status === 204) return null;
@@ -63,6 +66,7 @@ export class HttpAsrProvider implements CallAsrProvider {
         body: JSON.stringify({
           sourceLanguage: "auto" satisfies LanguageCode,
           targetLanguage: "zh" satisfies CallRoomTranslationLanguage,
+          mode: this.options.endpointMode ?? "call_link",
         }),
       },
     );

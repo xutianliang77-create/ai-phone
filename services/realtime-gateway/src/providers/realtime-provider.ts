@@ -1,5 +1,6 @@
 import type {
   AudioFrame,
+  AsrEndpointMode,
   LanguageCode,
   TranslationLanguageCode,
   ServerRealtimeEvent,
@@ -10,6 +11,7 @@ import type {
 
 export interface RealtimeProviderSession {
   sessionId: string;
+  asrEndpointMode?: AsrEndpointMode;
   sourceLanguage: LanguageCode;
   targetLanguage: TranslationLanguageCode;
   autoReverseTargetLanguage?: boolean;
@@ -35,7 +37,9 @@ export interface RealtimeProvider {
   sendAudio(frame: AudioFrame): AsyncGenerator<ServerRealtimeEvent>;
   sendText?(segment: TextSegmentInput): AsyncGenerator<ServerRealtimeEvent>;
   flushSession?(sessionId: string): AsyncGenerator<ServerRealtimeEvent>;
-  diagnostics?(sessionId: string): Partial<RealtimeSessionDiagnosticsDto>;
+  diagnostics?(
+    sessionId: string,
+  ): Promise<Partial<RealtimeSessionDiagnosticsDto>>;
   closeSession(sessionId: string): Promise<void>;
   healthCheck(): Promise<boolean>;
 }

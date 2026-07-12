@@ -45,6 +45,8 @@ export function createRealtimeSession(
     {
       userId,
       sessionId,
+      mode: input.mode,
+      asrEndpointMode: endpointModeForRealtimeMode(input.mode),
       sourceLanguage: input.sourceLanguage,
       targetLanguage: input.targetLanguage,
       ...(input.autoReverseTargetLanguage
@@ -72,6 +74,14 @@ export function createRealtimeSession(
     expiresAt: new Date(expiresAt * 1000).toISOString(),
     maxDurationSeconds,
   };
+}
+
+function endpointModeForRealtimeMode(
+  mode: CreateRealtimeSessionRequest["mode"],
+) {
+  return mode === "meeting" || mode === "classroom"
+    ? "listening" as const
+    : "conversation" as const;
 }
 
 function resolveRealtimeVoice(

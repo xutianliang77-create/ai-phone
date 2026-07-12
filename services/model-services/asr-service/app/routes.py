@@ -8,6 +8,7 @@ from app.schemas import (
     AsrFlushRequest,
     AsrTranscribeRequest,
     HealthResponse,
+    VadDiagnosticsResponse,
 )
 from app.service import AsrService
 
@@ -17,6 +18,7 @@ def create_router(service: AsrService, config: AsrConfig) -> APIRouter:
 
     @router.get("/health", response_model=HealthResponse)
     async def health() -> HealthResponse:
+        vad_health = service.vad_health_diagnostics
         return HealthResponse(
             status="ok",
             service="asr-service",
@@ -24,7 +26,24 @@ def create_router(service: AsrService, config: AsrConfig) -> APIRouter:
             modelVersion=config.model_version,
             vadProvider=service.vad_provider_name,
             vadThreshold=config.vad_threshold,
+            vadConfiguredProvider=str(vad_health["configuredProvider"]),
+            vadFallbackReason=vad_health.get("fallbackReason"),
+            vadModelFingerprint=vad_health.get("modelFingerprint"),
         )
+
+    @router.get(
+        "/asr/sessions/{session_id}/diagnostics",
+        response_model=VadDiagnosticsResponse,
+    )
+    async def diagnostics(
+        session_id: str,
+        authorization: str | None = Header(default=None),
+    ):
+        require_api_key(config, authorization)
+        result = service.vad_diagnostics(session_id)
+        if result is None:
+            raise HTTPException(status_code=404, detail="ASR diagnostics unavailable")
+        return result
 
     @router.post("/asr/transcribe", status_code=status.HTTP_200_OK)
     async def transcribe(

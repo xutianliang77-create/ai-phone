@@ -37,6 +37,7 @@ describe("http asr client", () => {
     expect(requests[0].url).toBe("http://127.0.0.1:8001/asr/transcribe");
     expect(requests[0].authorization).toBe("Bearer test-key");
     expect(requests[0].body.sampleRate).toBe(24000);
+    expect(requests[0].body.mode).toBeUndefined();
     expect(transcript).toEqual({
       segmentId: "seg_1",
       text: "hello",
@@ -200,6 +201,7 @@ describe("http asr client", () => {
       targetLanguage: "zh",
       hotwords: ["Hy-MT2"],
       corrections: [{ fromText: "海歪MT", toText: "Hy-MT2" }],
+      mode: "conversation",
     });
 
     expect(requests[0].url).toBe(
@@ -210,6 +212,7 @@ describe("http asr client", () => {
       targetLanguage: "zh",
       hotwords: ["Hy-MT2"],
       corrections: [{ fromText: "海歪MT", toText: "Hy-MT2" }],
+      mode: "conversation",
     });
     expect(transcript?.segmentId).toBe("flush_7");
   });
@@ -245,6 +248,7 @@ describe("http asr client", () => {
         targetLanguage: "zh",
         hotwords: [],
         corrections: [],
+        mode: "conversation",
       },
     });
     expect(transcript?.endpointReason).toBe("speaker_boundary");
@@ -273,6 +277,36 @@ describe("http asr client", () => {
       method: "DELETE",
       authorization: "Bearer test-key",
     });
+  });
+
+  it("reads session-scoped VAD diagnostics", async () => {
+    const client = new HttpAsrClient({
+      endpoint: "http://127.0.0.1:8001/asr/transcribe",
+      timeoutMs: 100,
+      fetchFn: (async (url: string) => response(200, {
+        configuredProvider: "marblenet",
+        activeProvider: "marblenet",
+        threshold: 0.5,
+        analyzedFrameCount: 2,
+        speechFrameCount: 1,
+        speechFrameRatio: 0.5,
+        fallbackCount: 0,
+        endpointPolicy: {
+          mode: "conversation",
+          minAudioMs: 1800,
+          endpointSilenceMs: 900,
+          maxAudioMs: 10000,
+          prerollMs: 400,
+          fingerprint: "a".repeat(64),
+        },
+        requestedUrl: url,
+      })) as typeof fetch,
+    });
+
+    const diagnostics = await client.diagnostics("sess 1");
+
+    expect(diagnostics.activeProvider).toBe("marblenet");
+    expect(diagnostics.endpointPolicy.mode).toBe("conversation");
   });
 });
 

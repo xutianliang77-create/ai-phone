@@ -3,6 +3,7 @@ import os
 from typing import Protocol
 
 from app.audio_buffer import RealtimePcmSegmenter
+from app.endpoint_policy import EndpointPolicy
 from app.qwen3_context_guard import is_context_echo
 from app.schemas import LanguageCode, TranslationLanguageCode
 from app.schemas import AsrTranscribeRequest, AsrTranscribeResponse
@@ -64,6 +65,7 @@ class Qwen3AsrEngine:
         english_context: str = "",
         runner: Qwen3Runner | None = None,
         vad_provider: VadProvider | None = None,
+        endpoint_policies: dict[str, EndpointPolicy] | None = None,
     ) -> None:
         self.runner = runner or LocalQwen3AsrRunner(
             model_dir=model_dir,
@@ -79,6 +81,7 @@ class Qwen3AsrEngine:
             preroll_ms=preroll_ms,
             vad_energy_threshold=vad_energy_threshold,
             vad_provider=vad_provider,
+            endpoint_policies=endpoint_policies,
         )
         self._recent_text_by_session: dict[str, list[tuple[str, int, int]]] = {}
         self._session_prompt_by_session: dict[str, tuple[list[str], list[tuple[str, str]]]] = {}

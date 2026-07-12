@@ -1,10 +1,12 @@
 import type {
   AsrEndpointReason,
+  AsrEndpointMode,
   AudioFormat,
   LanguageCode,
   TranslationLanguageCode,
   SegmentTimingDto,
   SpeakerAttributionDto,
+  RealtimeVadDiagnosticsDto,
 } from "@translation/contracts";
 import {
   isSegmentTiming,
@@ -32,6 +34,7 @@ export interface HttpAsrRequest {
   data: string;
   sourceLanguage: LanguageCode;
   targetLanguage: TranslationLanguageCode;
+  mode?: AsrEndpointMode;
   hotwords?: string[];
   corrections?: Array<{ fromText: string; toText: string }>;
 }
@@ -40,6 +43,7 @@ export interface HttpAsrFlushRequest {
   sessionId: string;
   sourceLanguage: LanguageCode;
   targetLanguage: TranslationLanguageCode;
+  mode?: AsrEndpointMode;
   hotwords?: string[];
   corrections?: Array<{ fromText: string; toText: string }>;
 }
@@ -90,6 +94,7 @@ export class HttpAsrClient {
         body: JSON.stringify({
           sourceLanguage: request.sourceLanguage,
           targetLanguage: request.targetLanguage,
+          mode: request.mode ?? "conversation",
           hotwords: request.hotwords ?? [],
           corrections: request.corrections ?? [],
         }),
@@ -117,6 +122,7 @@ export class HttpAsrClient {
           boundaryMs: request.boundaryMs,
           sourceLanguage: request.sourceLanguage,
           targetLanguage: request.targetLanguage,
+          mode: request.mode ?? "conversation",
           hotwords: request.hotwords ?? [],
           corrections: request.corrections ?? [],
         }),
@@ -139,6 +145,17 @@ export class HttpAsrClient {
     });
     if (!response.ok)
       throw new Error(`HTTP ASR close returned HTTP ${response.status}`);
+  }
+
+  async diagnostics(sessionId: string): Promise<RealtimeVadDiagnosticsDto> {
+    const response = await this.fetchWithTimeout(
+      this.sessionUrl(sessionId) + "/diagnostics",
+      { method: "GET", headers: this.headers() },
+    );
+    if (!response.ok) {
+      throw new Error(`HTTP ASR diagnostics returned HTTP ${response.status}`);
+    }
+    return (await response.json()) as RealtimeVadDiagnosticsDto;
   }
 
   async healthCheck() {

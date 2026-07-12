@@ -1,9 +1,11 @@
 from dataclasses import dataclass
+from hashlib import sha256
 import logging
 from pathlib import Path
 from typing import Protocol
 
-import numpy as np
+from app.marblenet_runtime import MarbleNetOnnxRuntime
+from app.vad_metrics import VadMetricsStore
 
 
 logger = logging.getLogger(__name__)
@@ -32,14 +34,37 @@ class VadProvider(Protocol):
     def reset_session(self, session_id: str) -> None:
         ...
 
+    def close_session(self, session_id: str) -> None:
+        ...
+
+    def diagnostics(self, session_id: str) -> dict[str, object]:
+        ...
+
+    def health_diagnostics(self) -> dict[str, object]:
+        ...
+
 
 class RmsVadProvider:
-    def __init__(self, energy_threshold: int) -> None:
+    def __init__(
+        self,
+        energy_threshold: int,
+        configured_provider: str = "rms",
+        active_provider: str = "rms",
+        threshold: float = 0.0,
+        fallback_reason: str | None = None,
+        model_fingerprint: str | None = None,
+    ) -> None:
         self.energy_threshold = energy_threshold
+        self.configured_provider = configured_provider
+        self.active_provider = active_provider
+        self.threshold = threshold
+        self.fallback_reason = fallback_reason
+        self.model_fingerprint = model_fingerprint
+        self.metrics = VadMetricsStore()
 
     @property
     def name(self) -> str:
-        return "rms"
+        return self.active_provider
 
     def analyze(
         self,
@@ -47,103 +72,41 @@ class RmsVadProvider:
         pcm: bytes,
         sample_rate: int,
     ) -> VadDecision:
-        del session_id, sample_rate
+        del sample_rate
         from app.audio_buffer import pcm16_rms
 
+        voiced = pcm16_rms(pcm) > self.energy_threshold
+        self.metrics.record(session_id, voiced, None)
         return VadDecision(
-            voiced=pcm16_rms(pcm) > self.energy_threshold,
+            voiced=voiced,
             probability=None,
-            provider="rms",
+            provider=self.active_provider,
         )
 
     def reset_session(self, session_id: str) -> None:
         del session_id
 
+    def close_session(self, session_id: str) -> None:
+        self.metrics.clear(session_id)
 
-class MarbleNetOnnxRuntime:
-    def __init__(self, model_path: str, assets_path: str) -> None:
-        import onnxruntime as ort
-        import torch
+    def diagnostics(self, session_id: str) -> dict[str, object]:
+        return {
+            **self.health_diagnostics(),
+            **self.metrics.snapshot(session_id),
+            "fallbackCount": int(self.fallback_reason is not None),
+        }
 
-        self._torch = torch
-        with np.load(assets_path) as assets:
-            self._window = torch.from_numpy(assets["window"]).float()
-            self._filterbank = torch.from_numpy(assets["filterbank"]).float()
-            self._n_fft = int(assets["n_fft"])
-            self._hop_length = int(assets["hop_length"])
-            self._win_length = int(assets["win_length"])
-            self._preemph = float(assets["preemph"])
-            self._log_guard = float(assets["log_guard"])
-            self._pad_to = int(assets["pad_to"])
-        self._session = ort.InferenceSession(
-            model_path,
-            providers=["CPUExecutionProvider"],
-        )
-
-    def speech_probability(
-        self,
-        pcm: bytes,
-        sample_rate: int,
-        current_duration_ms: int,
-        smoothing_frames: int,
-    ) -> float:
-        samples = pcm16_float_samples(pcm, sample_rate, 16_000)
-        if len(samples) < self._n_fft:
-            return 0.0
-
-        features, valid_feature_frames = self._features(samples)
-        logits = self._session.run(
-            None,
-            {"audio_signal": features.numpy()},
-        )[0]
-        probabilities = softmax(logits[0], axis=-1)[:, 1]
-        valid_output_frames = max(1, (valid_feature_frames + 1) // 2)
-        probabilities = probabilities[:valid_output_frames]
-        current_frames = max(1, round(current_duration_ms / 20))
-        tail = probabilities[-current_frames:]
-        if not len(tail):
-            return 0.0
-        window_size = min(len(tail), max(1, smoothing_frames))
-        smoothed = [
-            float(np.median(tail[index:index + window_size]))
-            for index in range(len(tail) - window_size + 1)
-        ]
-        return max(smoothed)
-
-    def _features(self, samples: np.ndarray):
-        torch = self._torch
-        signal = torch.from_numpy(samples).unsqueeze(0)
-        length = signal.shape[1]
-        signal = torch.cat(
-            (
-                signal[:, :1],
-                signal[:, 1:] - self._preemph * signal[:, :-1],
+    def health_diagnostics(self) -> dict[str, object]:
+        return {
+            "configuredProvider": self.configured_provider,
+            "activeProvider": self.active_provider,
+            "threshold": self.threshold,
+            **({"fallbackReason": self.fallback_reason} if self.fallback_reason else {}),
+            **(
+                {"modelFingerprint": self.model_fingerprint}
+                if self.model_fingerprint else {}
             ),
-            dim=1,
-        )
-        spectrum = torch.stft(
-            signal,
-            n_fft=self._n_fft,
-            hop_length=self._hop_length,
-            win_length=self._win_length,
-            center=True,
-            window=self._window,
-            return_complex=True,
-            pad_mode="constant",
-        ).abs().pow(2)
-        features = torch.matmul(self._filterbank, spectrum)
-        features = torch.log(features + self._log_guard)
-
-        valid_frames = length // self._hop_length
-        if features.shape[-1] > valid_frames:
-            features[:, :, valid_frames:] = 0.0
-        remainder = features.shape[-1] % self._pad_to
-        if remainder:
-            features = torch.nn.functional.pad(
-                features,
-                (0, self._pad_to - remainder),
-            )
-        return features.float(), valid_frames
+        }
 
 
 class MarbleNetVadProvider:
@@ -154,14 +117,19 @@ class MarbleNetVadProvider:
         window_ms: int,
         smoothing_frames: int,
         fallback: VadProvider,
+        model_fingerprint: str = "",
     ) -> None:
         self.runtime = runtime
         self.threshold = threshold
         self.window_ms = window_ms
         self.smoothing_frames = smoothing_frames
         self.fallback = fallback
+        self.model_fingerprint = model_fingerprint
         self._audio_by_session: dict[str, tuple[int, bytes]] = {}
         self._failed = False
+        self._fallback_reason: str | None = None
+        self._fallback_sessions: set[str] = set()
+        self.metrics = VadMetricsStore()
 
     @property
     def name(self) -> str:
@@ -174,7 +142,10 @@ class MarbleNetVadProvider:
         sample_rate: int,
     ) -> VadDecision:
         if self._failed:
-            return self._fallback(session_id, pcm, sample_rate)
+            self._fallback_sessions.add(session_id)
+            decision = self._fallback(session_id, pcm, sample_rate)
+            self.metrics.record(session_id, decision.voiced, None)
+            return decision
 
         previous_rate, previous = self._audio_by_session.get(
             session_id,
@@ -197,17 +168,51 @@ class MarbleNetVadProvider:
         except Exception:
             logger.exception("MarbleNet VAD failed; switching to RMS fallback")
             self._failed = True
+            self._fallback_reason = "runtime_failed"
+            self._fallback_sessions.add(session_id)
             self._audio_by_session.clear()
-            return self._fallback(session_id, pcm, sample_rate)
-        return VadDecision(
+            decision = self._fallback(session_id, pcm, sample_rate)
+            self.metrics.record(session_id, decision.voiced, None)
+            return decision
+        decision = VadDecision(
             voiced=probability >= self.threshold,
             probability=probability,
             provider="marblenet",
         )
+        self.metrics.record(session_id, decision.voiced, probability)
+        return decision
 
     def reset_session(self, session_id: str) -> None:
         self._audio_by_session.pop(session_id, None)
         self.fallback.reset_session(session_id)
+
+    def close_session(self, session_id: str) -> None:
+        self._audio_by_session.pop(session_id, None)
+        self.metrics.clear(session_id)
+        self._fallback_sessions.discard(session_id)
+        self.fallback.close_session(session_id)
+
+    def diagnostics(self, session_id: str) -> dict[str, object]:
+        return {
+            **self.health_diagnostics(),
+            **self.metrics.snapshot(session_id),
+            "fallbackCount": int(session_id in self._fallback_sessions),
+        }
+
+    def health_diagnostics(self) -> dict[str, object]:
+        return {
+            "configuredProvider": "marblenet",
+            "activeProvider": self.name,
+            "threshold": self.threshold,
+            **(
+                {"modelFingerprint": self.model_fingerprint}
+                if self.model_fingerprint else {}
+            ),
+            **(
+                {"fallbackReason": self._fallback_reason}
+                if self._fallback_reason else {}
+            ),
+        }
 
     def _fallback(
         self,
@@ -239,41 +244,39 @@ def create_vad_provider(
         raise ValueError(f"Unsupported VAD provider: {provider}")
     if not Path(model_path).is_file() or not Path(assets_path).is_file():
         logger.error("MarbleNet assets are missing; using RMS fallback")
-        return fallback
+        return RmsVadProvider(
+            fallback_energy_threshold,
+            configured_provider="marblenet",
+            active_provider="rms_fallback",
+            threshold=threshold,
+            fallback_reason="assets_missing",
+        )
+    model_fingerprint = file_fingerprint(model_path)
     try:
         runtime = MarbleNetOnnxRuntime(model_path, assets_path)
     except Exception:
         logger.exception("MarbleNet VAD failed to load; using RMS fallback")
-        return fallback
+        return RmsVadProvider(
+            fallback_energy_threshold,
+            configured_provider="marblenet",
+            active_provider="rms_fallback",
+            threshold=threshold,
+            fallback_reason="load_failed",
+            model_fingerprint=model_fingerprint,
+        )
     return MarbleNetVadProvider(
         runtime=runtime,
         threshold=threshold,
         window_ms=window_ms,
         smoothing_frames=smoothing_frames,
         fallback=fallback,
+        model_fingerprint=model_fingerprint,
     )
 
 
-def pcm16_float_samples(
-    pcm: bytes,
-    source_rate: int,
-    target_rate: int,
-) -> np.ndarray:
-    samples = np.frombuffer(pcm, dtype="<i2").astype(np.float32) / 32768.0
-    if not len(samples) or source_rate == target_rate:
-        return samples
-    output_length = max(1, round(len(samples) * target_rate / source_rate))
-    source_positions = np.arange(len(samples), dtype=np.float32)
-    target_positions = np.linspace(
-        0,
-        len(samples) - 1,
-        output_length,
-        dtype=np.float32,
-    )
-    return np.interp(target_positions, source_positions, samples).astype(np.float32)
-
-
-def softmax(values: np.ndarray, axis: int) -> np.ndarray:
-    shifted = values - np.max(values, axis=axis, keepdims=True)
-    exponent = np.exp(shifted)
-    return exponent / np.sum(exponent, axis=axis, keepdims=True)
+def file_fingerprint(path: str) -> str:
+    digest = sha256()
+    with Path(path).open("rb") as source:
+        while chunk := source.read(1024 * 1024):
+            digest.update(chunk)
+    return digest.hexdigest()

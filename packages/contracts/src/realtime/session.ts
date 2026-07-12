@@ -5,6 +5,11 @@ import type {
 import type { SpeakerAttributionOptionsDto } from "../shared/speaker.js";
 
 export type RealtimeMode = "conversation" | "meeting" | "classroom" | "business";
+export type AsrEndpointMode =
+  | "conversation"
+  | "listening"
+  | "call_link"
+  | "pstn";
 export type RealtimeVoiceMode =
   | "preset"
   | "voice_design"
@@ -42,6 +47,8 @@ export interface CreateRealtimeSessionResponse {
 export interface RealtimeTokenClaims {
   userId: string;
   sessionId: string;
+  mode?: RealtimeMode;
+  asrEndpointMode?: AsrEndpointMode;
   sourceLanguage: LanguageCode;
   targetLanguage: TranslationLanguageCode;
   autoReverseTargetLanguage?: boolean;

@@ -17,6 +17,22 @@ class AsrService:
         provider = getattr(segmenter, "vad_provider", None)
         return getattr(provider, "name", "none")
 
+    @property
+    def vad_health_diagnostics(self) -> dict[str, object]:
+        segmenter = getattr(self.engine, "segmenter", None)
+        provider = getattr(segmenter, "vad_provider", None)
+        health = getattr(provider, "health_diagnostics", None)
+        return health() if health else {
+            "configuredProvider": "rms",
+            "activeProvider": "rms",
+            "threshold": 0.0,
+        }
+
+    def vad_diagnostics(self, session_id: str) -> dict[str, object] | None:
+        segmenter = getattr(self.engine, "segmenter", None)
+        diagnostics = getattr(segmenter, "diagnostics", None)
+        return diagnostics(session_id) if diagnostics else None
+
     async def transcribe(
         self,
         request: AsrTranscribeRequest,

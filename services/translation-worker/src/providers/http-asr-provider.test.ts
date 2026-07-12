@@ -33,6 +33,7 @@ describe("HttpAsrProvider", () => {
       sessionId: "call_1:guest",
       sourceLanguage: "auto",
       targetLanguage: "zh",
+      mode: "call_link",
     });
     expect(transcript).toMatchObject({ segmentId: "seg_1", text: "hello" });
   });
@@ -56,8 +57,38 @@ describe("HttpAsrProvider", () => {
 
     expect(requests[0]).toEqual({
       url: "http://127.0.0.1:8001/asr/sessions/call_1%3Ahost/flush",
-      body: { sourceLanguage: "auto", targetLanguage: "zh" },
+      body: {
+        sourceLanguage: "auto",
+        targetLanguage: "zh",
+        mode: "call_link",
+      },
     });
+  });
+
+  it("uses the PSTN endpoint policy when configured", async () => {
+    const requests = [];
+    const provider = new HttpAsrProvider({
+      endpoint: "http://127.0.0.1:8001/asr/transcribe",
+      endpointMode: "pstn",
+      timeoutMs: 100,
+      fetchFn: (async (_url: string, init?: RequestInit) => {
+        requests.push(JSON.parse(init?.body as string));
+        return response(204);
+      }) as typeof fetch,
+    });
+
+    await provider.transcribe({
+      type: "audio.frame",
+      sessionId: "pstn_1",
+      speakerRole: "host",
+      sequence: 1,
+      timestampMs: 1,
+      format: "pcm16",
+      sampleRate: 16000,
+      data: "AA==",
+    });
+
+    expect(requests[0].mode).toBe("pstn");
   });
 });
 

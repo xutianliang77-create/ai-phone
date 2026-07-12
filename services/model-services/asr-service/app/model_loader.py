@@ -2,6 +2,7 @@ from typing import Protocol
 
 from app.config import AsrConfig
 from app.firered_engine import FireRedAsr2AedEngine
+from app.endpoint_policy import EndpointPolicy
 from app.mock_engine import MockAsrEngine
 from app.qwen3_engine import Qwen3AsrEngine
 from app.qwen3_hf_engine import LocalQwen3HfAsrRunner
@@ -83,6 +84,7 @@ def load_engine(config: AsrConfig) -> AsrEngine:
             context=config.qwen3_context,
             english_context=config.qwen3_english_context,
             vad_provider=vad_provider,
+            endpoint_policies=qwen3_endpoint_policies(config),
         )
     if config.provider == "qwen3_asr_hf":
         vad_provider = load_vad_provider(config, config.qwen3_vad_energy_threshold)
@@ -100,6 +102,7 @@ def load_engine(config: AsrConfig) -> AsrEngine:
             context=config.qwen3_context,
             english_context=config.qwen3_english_context,
             vad_provider=vad_provider,
+            endpoint_policies=qwen3_endpoint_policies(config),
             runner=LocalQwen3HfAsrRunner(
                 model_dir=config.qwen3_model_dir,
                 dtype=config.qwen3_dtype,
@@ -120,3 +123,22 @@ def load_vad_provider(config: AsrConfig, fallback_energy_threshold: int):
         smoothing_frames=config.vad_smoothing_frames,
         fallback_energy_threshold=fallback_energy_threshold,
     )
+
+
+def qwen3_endpoint_policies(config: AsrConfig):
+    silence_by_mode = {
+        "conversation": config.qwen3_conversation_endpoint_silence_ms,
+        "listening": config.qwen3_listening_endpoint_silence_ms,
+        "call_link": config.qwen3_call_link_endpoint_silence_ms,
+        "pstn": config.qwen3_pstn_endpoint_silence_ms,
+    }
+    return {
+        mode: EndpointPolicy(
+            mode=mode,
+            min_audio_ms=config.qwen3_min_audio_ms,
+            endpoint_silence_ms=silence_ms,
+            max_audio_ms=config.qwen3_max_audio_ms,
+            preroll_ms=config.qwen3_preroll_ms,
+        )
+        for mode, silence_ms in silence_by_mode.items()
+    }

@@ -85,6 +85,8 @@ export function startWebSocketServer() {
       const speakerAttribution = resolveSpeakerAttribution(session.claims);
       await provider.createSession({
         sessionId: session.id,
+        asrEndpointMode: session.claims.asrEndpointMode ??
+          endpointModeForRealtimeMode(session.claims.mode),
         sourceLanguage: session.claims.sourceLanguage,
         targetLanguage: session.claims.targetLanguage,
         autoReverseTargetLanguage: session.claims.autoReverseTargetLanguage,
@@ -330,4 +332,10 @@ export function startWebSocketServer() {
     httpServer.close();
   });
   return server;
+}
+
+function endpointModeForRealtimeMode(mode: string | undefined) {
+  return mode === "meeting" || mode === "classroom"
+    ? "listening" as const
+    : "conversation" as const;
 }

@@ -9,7 +9,7 @@ export function buildDefaultPstnAudioFrameSinkServer() {
   const env = loadEnv();
   return buildPstnAudioFrameServer({
     apiKey: env.audioFrameSinkApiKey,
-    worker: buildDefaultWorker(),
+    worker: buildDefaultWorker("pstn"),
   });
 }
 

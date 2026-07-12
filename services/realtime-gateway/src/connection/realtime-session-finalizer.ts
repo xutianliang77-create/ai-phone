@@ -54,7 +54,7 @@ export class RealtimeSessionFinalizer {
       this.options.sessionId,
       this.options.send,
     ));
-    this.sessionDiagnostics ??= this.collectDiagnostics();
+    this.sessionDiagnostics ??= await this.collectDiagnostics();
     await this.options.drainSessionSync();
     return this.options.flushTracker.summarize({
       audioFlushed,
@@ -80,7 +80,7 @@ export class RealtimeSessionFinalizer {
       reason,
       billableSeconds,
       flush,
-      diagnostics: this.sessionDiagnostics ?? this.collectDiagnostics(),
+      diagnostics: this.sessionDiagnostics ?? await this.collectDiagnostics(),
       ...(typeof remainingSeconds === "number" ? { remainingSeconds } : {}),
     });
     await this.options.drainSessionSync();
@@ -99,7 +99,7 @@ export class RealtimeSessionFinalizer {
     }
   }
 
-  private collectDiagnostics(): RealtimeSessionDiagnosticsDto {
+  private async collectDiagnostics(): Promise<RealtimeSessionDiagnosticsDto> {
     return {
       version: 1,
       audio: this.options.audioBatcher.diagnostics?.() ?? {
@@ -107,7 +107,7 @@ export class RealtimeSessionFinalizer {
         processedBatchCount: 0,
         droppedFrameCount: 0,
       },
-      ...(this.options.provider.diagnostics?.(this.options.sessionId) ?? {}),
+      ...(await this.options.provider.diagnostics?.(this.options.sessionId) ?? {}),
     };
   }
 }

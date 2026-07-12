@@ -151,7 +151,7 @@ describe("realtime session finalizer", () => {
     let diagnosticsAvailable = true;
     const provider: RealtimeProvider = {
       ...providerWithoutTail(),
-      diagnostics: () => diagnosticsAvailable
+      diagnostics: async () => diagnosticsAvailable
         ? {
           speakerTurns: {
             confirmedBoundaryCount: 1,

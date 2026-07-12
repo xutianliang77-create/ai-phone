@@ -17,6 +17,7 @@ uvicorn app.main:app --host 0.0.0.0 --port 8001
 - `GET /health`
 - `POST /asr/transcribe`
 - `POST /asr/sessions/{sessionId}/flush`
+- `GET /asr/sessions/{sessionId}/diagnostics`
 
 `POST /asr/transcribe` returns `204 No Content` when no final transcript is ready yet.
 `POST /asr/sessions/{sessionId}/flush` forces the active speech buffer to be
@@ -30,6 +31,11 @@ through an in-process ONNX CPU runtime. NeMo is required only to export the
 ONNX network and its pinned Mel preprocessing assets. RMS remains an automatic
 fallback when assets cannot load or inference fails.
 
+Session diagnostics report the configured and active VAD provider, fallback
+reason/count, speech-frame ratio, probability summary, model fingerprint, and
+the frozen endpoint policy. They never include PCM or frame-level probability
+arrays.
+
 ```bash
 ASR_VAD_PROVIDER=marblenet \
 ASR_VAD_MODEL_PATH=/data/models/translation-model-eval/models/frame_vad_multilingual_marblenet_v2/frame_vad_multilingual_marblenet_v2.0.onnx \
@@ -42,6 +48,12 @@ ASR_VAD_SMOOTHING_FRAMES=3
 Use `0.5` as the default threshold. `0.7` remains the stricter deployment
 preset for later noisy-environment comparison. The App must still gate TTS
 playback because VAD alone cannot distinguish device playback from live speech.
+
+Qwen3 ASR freezes one endpoint policy per session. Realtime `conversation`,
+`listening`, `call_link`, and `pstn` sessions therefore remain isolated even
+when processed concurrently. The deployment defaults use 900, 1400, 900, and
+1100 ms endpoint silence respectively; tune them only through the corresponding
+`ASR_QWEN3_*_ENDPOINT_SILENCE_MS` variables.
 
 ## FireRedASR2-AED
 

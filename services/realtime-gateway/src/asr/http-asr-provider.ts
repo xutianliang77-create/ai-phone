@@ -34,6 +34,7 @@ export class HttpAsrProvider implements AsrProvider {
       data: frame.data,
       sourceLanguage: session.sourceLanguage,
       targetLanguage: session.targetLanguage,
+      mode: session.asrEndpointMode ?? "conversation",
       hotwords: session.asrHotwords,
       corrections: session.asrCorrections,
     });
@@ -46,6 +47,7 @@ export class HttpAsrProvider implements AsrProvider {
       sessionId,
       sourceLanguage: session.sourceLanguage,
       targetLanguage: session.targetLanguage,
+      mode: session.asrEndpointMode ?? "conversation",
       hotwords: session.asrHotwords,
       corrections: session.asrCorrections,
     });
@@ -58,6 +60,7 @@ export class HttpAsrProvider implements AsrProvider {
       ...input,
       sourceLanguage: session.sourceLanguage,
       targetLanguage: session.targetLanguage,
+      mode: session.asrEndpointMode ?? "conversation",
       hotwords: session.asrHotwords,
       corrections: session.asrCorrections,
     });
@@ -69,6 +72,14 @@ export class HttpAsrProvider implements AsrProvider {
       await this.client.closeSession(sessionId);
     } catch {
       // Best-effort cleanup; a dropped ASR service must not break WebSocket close.
+    }
+  }
+
+  async diagnostics(sessionId: string) {
+    try {
+      return { vad: await this.client.diagnostics(sessionId) };
+    } catch {
+      return {};
     }
   }
 

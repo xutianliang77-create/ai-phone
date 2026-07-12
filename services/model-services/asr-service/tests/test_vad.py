@@ -1,6 +1,11 @@
 import struct
 
-from app.vad import MarbleNetVadProvider, RmsVadProvider, VadDecision
+from app.vad import (
+    MarbleNetVadProvider,
+    RmsVadProvider,
+    VadDecision,
+    create_vad_provider,
+)
 
 
 class FakeRuntime:
@@ -63,6 +68,31 @@ def test_marblenet_vad_falls_back_after_runtime_failure() -> None:
     assert first.voiced is True
     assert first.provider == "rms_fallback"
     assert second.provider == "rms_fallback"
+    diagnostics = provider.diagnostics("session")
+    assert diagnostics["activeProvider"] == "rms_fallback"
+    assert diagnostics["fallbackReason"] == "runtime_failed"
+    assert diagnostics["fallbackCount"] == 1
+    assert diagnostics["analyzedFrameCount"] == 2
+
+
+def test_missing_marblenet_assets_are_explicit_fallback(tmp_path) -> None:
+    provider = create_vad_provider(
+        provider="marblenet",
+        model_path=str(tmp_path / "missing.onnx"),
+        assets_path=str(tmp_path / "missing.npz"),
+        threshold=0.7,
+        window_ms=1000,
+        smoothing_frames=3,
+        fallback_energy_threshold=350,
+    )
+
+    provider.analyze("session", voice_pcm(), 24_000)
+    diagnostics = provider.diagnostics("session")
+
+    assert provider.name == "rms_fallback"
+    assert diagnostics["configuredProvider"] == "marblenet"
+    assert diagnostics["fallbackReason"] == "assets_missing"
+    assert diagnostics["speechFrameRatio"] == 1.0
 
 
 def silence_pcm() -> bytes:

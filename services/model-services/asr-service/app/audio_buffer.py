@@ -4,6 +4,7 @@ from typing import TYPE_CHECKING
 
 from app.pcm_audio import PcmSessionBuffer, audio_duration_ms, pcm16_rms
 from app.schemas import AsrTranscribeRequest
+from app.endpoint_policy import EndpointPolicy, uniform_endpoint_policies
 
 if TYPE_CHECKING:
     from app.vad import VadProvider
@@ -40,6 +41,7 @@ class _RealtimeSessionState:
     sample_rate: int | None = None
     last_sequence: int = 0
     has_voice: bool = False
+    endpoint_policy: EndpointPolicy | None = None
 
 
 class RealtimePcmSegmenter:
@@ -51,6 +53,7 @@ class RealtimePcmSegmenter:
         preroll_ms: int,
         vad_energy_threshold: int,
         vad_provider: "VadProvider | None" = None,
+        endpoint_policies: dict[str, EndpointPolicy] | None = None,
     ) -> None:
         self.min_audio_ms = min_audio_ms
         self.endpoint_silence_ms = endpoint_silence_ms
@@ -62,10 +65,24 @@ class RealtimePcmSegmenter:
 
             vad_provider = RmsVadProvider(vad_energy_threshold)
         self.vad_provider = vad_provider
+        self.endpoint_policies = endpoint_policies or uniform_endpoint_policies(
+            min_audio_ms,
+            endpoint_silence_ms,
+            max_audio_ms,
+            preroll_ms,
+        )
         self._states: dict[str, _RealtimeSessionState] = {}
 
     def append(self, request: AsrTranscribeRequest) -> PcmAudioSegment | None:
         state = self._states.setdefault(request.sessionId, _RealtimeSessionState())
+        policy = self.endpoint_policies.get(
+            request.mode,
+            self.endpoint_policies["conversation"],
+        )
+        if state.endpoint_policy is None:
+            state.endpoint_policy = policy
+        elif state.endpoint_policy.mode != policy.mode:
+            raise ValueError("ASR endpoint mode cannot change during a session")
         if request.sequence in state.seen_sequences:
             return None
         state.seen_sequences.add(request.sequence)
@@ -134,12 +151,31 @@ class RealtimePcmSegmenter:
             state.sample_rate,
             endpoint_reason="speaker_boundary",
         )
-        retain_chunks_after_boundary(state, next_chunks, self.preroll_ms)
+        retain_chunks_after_boundary(
+            state,
+            next_chunks,
+            self._policy(state).preroll_ms,
+        )
         return segment
+
+    def diagnostics(self, session_id: str) -> dict[str, object]:
+        state = self._states.get(session_id)
+        policy = self._policy(state)
+        return {
+            **self.vad_provider.diagnostics(session_id),
+            "endpointPolicy": policy.diagnostics(),
+        }
 
     def close(self, session_id: str) -> None:
         self._states.pop(session_id, None)
-        self.vad_provider.reset_session(session_id)
+        self.vad_provider.close_session(session_id)
+
+    def _policy(self, state: _RealtimeSessionState | None) -> EndpointPolicy:
+        return (
+            state.endpoint_policy
+            if state and state.endpoint_policy
+            else self.endpoint_policies["conversation"]
+        )
 
     def _append_waiting_for_voice(
         self,
@@ -149,7 +185,7 @@ class RealtimePcmSegmenter:
     ) -> PcmAudioSegment | None:
         if not chunk.voiced:
             state.preroll.append(chunk)
-            trim_preroll(state, self.preroll_ms)
+            trim_preroll(state, self._policy(state).preroll_ms)
             return None
 
         state.has_voice = True
@@ -178,9 +214,10 @@ class RealtimePcmSegmenter:
         state: _RealtimeSessionState,
         request: AsrTranscribeRequest,
     ) -> PcmAudioSegment | None:
-        has_endpoint = state.trailing_silence_ms >= self.endpoint_silence_ms
-        reached_min = state.buffered_ms >= self.min_audio_ms
-        reached_max = state.buffered_ms >= self.max_audio_ms
+        policy = self._policy(state)
+        has_endpoint = state.trailing_silence_ms >= policy.endpoint_silence_ms
+        reached_min = state.buffered_ms >= policy.min_audio_ms
+        reached_max = state.buffered_ms >= policy.max_audio_ms
         if not ((reached_min and has_endpoint) or reached_max):
             return None
 

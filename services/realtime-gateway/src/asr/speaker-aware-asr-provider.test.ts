@@ -108,13 +108,15 @@ describe("speaker aware asr provider", () => {
       speaker: { speakerId: "speaker_1" },
       timing: { startMs: 0, endMs: 480 },
     });
-    expect(provider.diagnostics("sess_1")).toMatchObject({
-      confirmedBoundaryCount: 1,
-      commitHitCount: 1,
-      commitMissCount: 0,
-      commitErrorCount: 0,
-      averageConfirmationLatencyMs: 480,
-      committedAudioMs: 480,
+    expect(await provider.diagnostics("sess_1")).toMatchObject({
+      speakerTurns: {
+        confirmedBoundaryCount: 1,
+        commitHitCount: 1,
+        commitMissCount: 0,
+        commitErrorCount: 0,
+        averageConfirmationLatencyMs: 480,
+        committedAudioMs: 480,
+      },
     });
   });
 
@@ -136,9 +138,8 @@ describe("speaker aware asr provider", () => {
       text: "first speaker turn",
       speaker: { speakerId: "speaker_1" },
     });
-    expect(provider.diagnostics("sess_1")).toMatchObject({
-      endpointRaceCount: 1,
-      commitHitCount: 1,
+    expect(await provider.diagnostics("sess_1")).toMatchObject({
+      speakerTurns: { endpointRaceCount: 1, commitHitCount: 1 },
     });
   });
 
@@ -159,10 +160,12 @@ describe("speaker aware asr provider", () => {
       text: "mixed speakers",
       turnId: "turn_1",
     });
-    expect(provider.diagnostics("sess_1")).toMatchObject({
-      endpointRaceCount: 1,
-      commitHitCount: 0,
-      commitMissCount: 1,
+    expect(await provider.diagnostics("sess_1")).toMatchObject({
+      speakerTurns: {
+        endpointRaceCount: 1,
+        commitHitCount: 0,
+        commitMissCount: 1,
+      },
     });
   });
 

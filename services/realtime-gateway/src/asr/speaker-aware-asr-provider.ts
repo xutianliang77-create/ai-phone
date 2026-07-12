@@ -143,8 +143,12 @@ export class SpeakerAwareAsrProvider implements AsrProvider {
     return this.attributedResults(results, spans);
   }
 
-  diagnostics(sessionId: string) {
-    return this.turnDiagnostics.snapshot(sessionId);
+  async diagnostics(sessionId: string) {
+    const underlying = await this.asr.diagnostics?.(sessionId) ?? {};
+    return {
+      ...underlying,
+      speakerTurns: this.turnDiagnostics.snapshot(sessionId),
+    };
   }
 
   async closeSession(sessionId: string) {

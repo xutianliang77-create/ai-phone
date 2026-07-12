@@ -1,4 +1,5 @@
 import pino from "pino";
+import type { AsrEndpointMode } from "@translation/contracts";
 import { loadEnv } from "./config/env.js";
 import { HttpAsrProvider } from "./providers/http-asr-provider.js";
 import { HttpTtsAudioSink } from "./providers/http-tts-audio-sink.js";
@@ -11,7 +12,7 @@ import { LiveKitCallAudioSource } from "./worker/livekit-call-audio-source.js";
 
 const logger = pino({ name: "translation-worker" });
 
-export function buildDefaultWorker() {
+export function buildDefaultWorker(endpointMode: AsrEndpointMode = "call_link") {
   const env = loadEnv();
   return new CallTranslationWorker({
     asrProvider: new HttpAsrProvider({
@@ -19,6 +20,7 @@ export function buildDefaultWorker() {
       flushEndpoint: env.asrHttpFlushEndpoint,
       apiKey: env.asrHttpApiKey,
       timeoutMs: env.asrHttpTimeoutMs,
+      endpointMode,
     }),
     translationProvider: new OpenAiCompatibleTranslationProvider({
       baseUrl: env.translationBaseUrl,

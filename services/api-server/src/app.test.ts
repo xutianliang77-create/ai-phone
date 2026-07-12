@@ -77,6 +77,12 @@ describe("api app", () => {
     expect(
       verifyRealtimeToken(body.realtimeToken, "dev-secret")?.holdSeconds,
     ).toBe(30);
+    expect(
+      verifyRealtimeToken(body.realtimeToken, "dev-secret"),
+    ).toMatchObject({
+      mode: "conversation",
+      asrEndpointMode: "conversation",
+    });
   });
 
   it("creates call links for domestic call rooms", async () => {

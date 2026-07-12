@@ -1,15 +1,18 @@
 import type {
   AsrEndpointReason,
+  AsrEndpointMode,
   AudioFrame,
   LanguageCode,
   TranslationLanguageCode,
   SegmentTimingDto,
   SpeakerAttributionDto,
   SpeakerAttributionOptionsDto,
+  RealtimeSessionDiagnosticsDto,
 } from "@translation/contracts";
 
 export interface AsrSession {
   sessionId: string;
+  asrEndpointMode?: AsrEndpointMode;
   sourceLanguage: LanguageCode;
   targetLanguage: TranslationLanguageCode;
   asrHotwords?: string[];
@@ -56,7 +59,9 @@ export interface AsrProvider {
   transcribe(frame: AudioFrame): Promise<AsrProviderResult>;
   flush(sessionId: string): Promise<AsrProviderResult>;
   commitBoundary?(boundary: AsrTurnBoundary): Promise<AsrProviderResult>;
-  diagnostics?(sessionId: string): AsrSpeakerTurnDiagnostics | undefined;
+  diagnostics?(
+    sessionId: string,
+  ): Promise<Partial<RealtimeSessionDiagnosticsDto>>;
   closeSession(sessionId: string): Promise<void>;
   healthCheck(): Promise<boolean>;
 }

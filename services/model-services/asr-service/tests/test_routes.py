@@ -17,7 +17,18 @@ def test_health_route() -> None:
         "modelVersion": "mock-asr-v0.1.0",
         "vadProvider": "none",
         "vadThreshold": 0.5,
+        "vadConfiguredProvider": "rms",
+        "vadFallbackReason": None,
+        "vadModelFingerprint": None,
     }
+
+
+def test_diagnostics_route_reports_unavailable_for_mock_engine() -> None:
+    client = TestClient(create_app(AsrConfig(mock_emit_every_frames=1)))
+
+    response = client.get("/asr/sessions/sess_1/diagnostics")
+
+    assert response.status_code == 404
 
 
 def test_transcribe_route_returns_204_before_transcript_ready() -> None:
