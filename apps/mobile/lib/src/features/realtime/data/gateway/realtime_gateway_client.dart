@@ -21,18 +21,22 @@ class RealtimeGatewayClient {
   Timer? _reconnectTimer;
   RealtimeSession? _session;
   bool _manualClose = false;
+  bool _suspended = false;
   int _reconnectAttempts = 0;
+  int _connectionGeneration = 0;
 
   Stream<GatewayRealtimeEvent> get events => _events.stream;
 
   Future<void> connect(RealtimeSession session) async {
     _session = session;
     _manualClose = false;
+    _suspended = false;
     _reconnectAttempts = 0;
     await _open(session);
   }
 
   Future<void> _open(RealtimeSession session) async {
+    final generation = ++_connectionGeneration;
     final endpoint = session.endpoint.replace(
       queryParameters: <String, String>{
         ...session.endpoint.queryParameters,
@@ -43,10 +47,35 @@ class RealtimeGatewayClient {
     _channel = channel;
     _subscription = channel.stream.listen(
       _handleMessage,
-      onError: _handleDisconnect,
-      onDone: () => _handleDisconnect(),
+      onError: (Object error) => _handleDisconnect(generation, error),
+      onDone: () => _handleDisconnect(generation),
     );
     await channel.ready.timeout(_connectTimeout);
+  }
+
+  Future<void> suspendForLifecycle() async {
+    _suspended = true;
+    _reconnectTimer?.cancel();
+    await _closeTransport();
+  }
+
+  Future<bool> reconnectAndResume(
+    String sessionId, {
+    Duration timeout = _controlTimeout,
+  }) async {
+    final session = _session;
+    if (session == null || session.sessionId != sessionId) return false;
+    _reconnectTimer?.cancel();
+    await _closeTransport();
+    _manualClose = false;
+    _suspended = false;
+    try {
+      await _open(session);
+      _reconnectAttempts = 0;
+      return await resumeAndWait(sessionId, timeout: timeout);
+    } catch (_) {
+      return false;
+    }
   }
 
   bool sendAudio(String sessionId, AudioFrame frame) {
@@ -152,10 +181,9 @@ class RealtimeGatewayClient {
 
   Future<void> close() async {
     _manualClose = true;
+    _suspended = false;
     _reconnectTimer?.cancel();
-    await _subscription?.cancel();
-    await _channel?.sink.close();
-    _channel = null;
+    await _closeTransport();
   }
 
   void dispose() {
@@ -181,9 +209,10 @@ class RealtimeGatewayClient {
     _events.add(event);
   }
 
-  void _handleDisconnect([Object? error]) {
+  void _handleDisconnect(int generation, [Object? error]) {
+    if (generation != _connectionGeneration) return;
     _channel = null;
-    if (_manualClose) return;
+    if (_manualClose || _suspended) return;
     if (_reconnectTimer?.isActive ?? false) return;
     if (_reconnectAttempts >= _maxReconnectAttempts) {
       _events.add(const GatewayRealtimeEvent.connection(
@@ -211,8 +240,18 @@ class RealtimeGatewayClient {
           message: 'Realtime connection restored',
         ));
       } catch (_) {
-        _handleDisconnect();
+        _handleDisconnect(_connectionGeneration);
       }
     });
+  }
+
+  Future<void> _closeTransport() async {
+    _connectionGeneration += 1;
+    final subscription = _subscription;
+    final channel = _channel;
+    _subscription = null;
+    _channel = null;
+    await subscription?.cancel();
+    await channel?.sink.close();
   }
 }

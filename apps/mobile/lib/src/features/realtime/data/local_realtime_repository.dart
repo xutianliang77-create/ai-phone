@@ -59,6 +59,12 @@ class LocalRealtimeRepository extends RealtimeRepository {
   bool resume(String sessionId) => true;
 
   @override
+  Future<void> suspendForLifecycle() async {}
+
+  @override
+  Future<bool> resumeAfterLifecycle(String sessionId) async => true;
+
+  @override
   Future<void> end(String sessionId, List<SubtitleSegment> segments) async {
     await _store.saveEndedSession(
       sessionId: sessionId,

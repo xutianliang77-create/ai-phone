@@ -144,6 +144,12 @@ void main() {
 
     gateway.resumeCompleter!.complete(true);
     expect(await resumeFuture, isTrue);
+
+    await repository.suspendForLifecycle();
+    final resumed = await repository.resumeAfterLifecycle('sess_1');
+    expect(gateway.lifecycleSuspendCalls, 1);
+    expect(gateway.lifecycleResumedSessionId, 'sess_1');
+    expect(resumed, isTrue);
   });
 
   test('uses target language when sending auto ASR text segments', () {
@@ -258,6 +264,8 @@ class _FakeRealtimeGatewayClient extends RealtimeGatewayClient {
   Completer<bool>? pauseCompleter;
   Completer<bool>? resumeCompleter;
   Completer<bool>? endCompleter;
+  int lifecycleSuspendCalls = 0;
+  String? lifecycleResumedSessionId;
 
   @override
   Stream<GatewayRealtimeEvent> get events => _events.stream;
@@ -290,6 +298,20 @@ class _FakeRealtimeGatewayClient extends RealtimeGatewayClient {
   }) {
     resumedSessionId = sessionId;
     return resumeCompleter?.future ?? Future<bool>.value(true);
+  }
+
+  @override
+  Future<void> suspendForLifecycle() async {
+    lifecycleSuspendCalls += 1;
+  }
+
+  @override
+  Future<bool> reconnectAndResume(
+    String sessionId, {
+    Duration timeout = const Duration(seconds: 2),
+  }) async {
+    lifecycleResumedSessionId = sessionId;
+    return true;
   }
 
   @override

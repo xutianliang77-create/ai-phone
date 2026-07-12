@@ -11,7 +11,8 @@ void main() {
       () async {
     final api = _FinalFlushApiClient();
     final gateway = _FinalFlushGatewayClient();
-    final repository = RealtimeRepository(apiClient: api, gatewayClient: gateway);
+    final repository =
+        RealtimeRepository(apiClient: api, gatewayClient: gateway);
     final liveSegments = <SubtitleSegment>[
       const SubtitleSegment(
         id: 'seg_1',
@@ -40,7 +41,8 @@ void main() {
       () async {
     final api = _FinalFlushApiClient();
     final gateway = _FinalFlushGatewayClient();
-    final repository = RealtimeRepository(apiClient: api, gatewayClient: gateway);
+    final repository =
+        RealtimeRepository(apiClient: api, gatewayClient: gateway);
     final ending = repository.end('sess_1', const [
       SubtitleSegment(
         id: 'seg_tail',
@@ -63,15 +65,13 @@ class _FinalFlushApiClient extends RealtimeApiClient {
   String? endedSessionId;
 
   @override
-  Future<void> saveSegments(
-    String sessionId,
-    List<Map<String, Object?>> segments,
-  ) async {
+  Future<void> finalizeSession({
+    required String sessionId,
+    required List<Map<String, Object?>> segments,
+    required int billableSeconds,
+    required String idempotencyKey,
+  }) async {
     savedSegments = segments;
-  }
-
-  @override
-  Future<void> endSession(String sessionId) async {
     endedSessionId = sessionId;
   }
 

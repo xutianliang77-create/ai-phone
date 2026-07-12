@@ -98,6 +98,14 @@ class RealtimeRepository {
     return _gatewayClient.resumeAndWait(sessionId);
   }
 
+  Future<void> suspendForLifecycle() {
+    return _gatewayClient.suspendForLifecycle();
+  }
+
+  Future<bool> resumeAfterLifecycle(String sessionId) {
+    return _gatewayClient.reconnectAndResume(sessionId);
+  }
+
   Future<void> end(String sessionId, List<SubtitleSegment> segments) {
     return _finalizations.putIfAbsent(
       sessionId,

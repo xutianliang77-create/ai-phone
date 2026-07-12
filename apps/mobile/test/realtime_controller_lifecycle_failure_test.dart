@@ -16,6 +16,28 @@ import 'package:translation_mobile/src/platform/audio/audio_capture.dart';
 import 'package:translation_mobile/src/platform/audio/audio_frame.dart';
 
 void main() {
+  test('reconnects the same session after a lifecycle pause', () async {
+    final repository = _FakeRealtimeRepository();
+    final provider = _LifecycleAsrProvider();
+    final controller = RealtimeController(
+      repository: repository,
+      audioCapture: _NoopAudioCapture(),
+      mobileAsrProvider: provider,
+      config: _deviceAsrConfig(),
+    );
+    addTearDown(controller.dispose);
+
+    await controller.start();
+    await controller.handleLifecycleState(AppLifecycleState.inactive);
+    await controller.handleLifecycleState(AppLifecycleState.resumed);
+
+    expect(controller.status, RealtimeStatus.active);
+    expect(repository.lifecycleSuspendedSessionIds, <String>['sess_1']);
+    expect(repository.lifecycleResumedSessionIds, <String>['sess_1']);
+    expect(repository.endedSessionIds, isEmpty);
+    expect(provider.startCalls, 2);
+  });
+
   test('does not resume an old session after lifecycle pause fails', () async {
     final repository = _FakeRealtimeRepository();
     final provider = _LifecycleAsrProvider(failStop: true);
@@ -119,6 +141,8 @@ class _FakeRealtimeRepository extends RealtimeRepository {
   final _events = StreamController<GatewayRealtimeEvent>.broadcast();
   final endedSessionIds = <String>[];
   final resumedSessionIds = <String>[];
+  final lifecycleSuspendedSessionIds = <String>[];
+  final lifecycleResumedSessionIds = <String>[];
   int closeRealtimeCalls = 0;
 
   @override
@@ -149,6 +173,17 @@ class _FakeRealtimeRepository extends RealtimeRepository {
 
   @override
   Future<bool> resumeAndWait(String sessionId) async => resume(sessionId);
+
+  @override
+  Future<void> suspendForLifecycle() async {
+    lifecycleSuspendedSessionIds.add('sess_1');
+  }
+
+  @override
+  Future<bool> resumeAfterLifecycle(String sessionId) async {
+    lifecycleResumedSessionIds.add(sessionId);
+    return true;
+  }
 
   @override
   Future<void> end(String sessionId, List<SubtitleSegment> segments) async {

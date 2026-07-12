@@ -9,7 +9,7 @@ extension RealtimeControllerLifecycle on RealtimeController {
     }
     if (state == AppLifecycleState.resumed && _resumeAfterLifecyclePause) {
       _resumeAfterLifecyclePause = false;
-      await _resumeOrFail();
+      await _resumeAfterLifecycleOrFail();
       return;
     }
     if ((state == AppLifecycleState.inactive ||
@@ -17,6 +17,9 @@ extension RealtimeControllerLifecycle on RealtimeController {
         _status == RealtimeStatus.active) {
       _resumeAfterLifecyclePause = true;
       await pause();
+      if (_status == RealtimeStatus.paused) {
+        await _repository.suspendForLifecycle();
+      }
     }
   }
 

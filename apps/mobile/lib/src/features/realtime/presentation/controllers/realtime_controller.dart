@@ -160,10 +160,13 @@ class RealtimeController extends ChangeNotifier {
     super.dispose();
   }
 
-  Future<void> _resume() async {
+  Future<void> _resume({bool afterLifecycle = false}) async {
     final session = _session;
     if (session == null) return;
-    if (!await _repository.resumeAndWait(session.sessionId)) {
+    final resumed = afterLifecycle
+        ? await _repository.resumeAfterLifecycle(session.sessionId)
+        : await _repository.resumeAndWait(session.sessionId);
+    if (!resumed) {
       throw StateError('Realtime connection lost');
     }
     if (_usesDeviceAsr) {
@@ -177,6 +180,14 @@ class RealtimeController extends ChangeNotifier {
   Future<void> _resumeOrFail() async {
     try {
       await _resume();
+    } catch (error) {
+      _fail(await _failureMessage(error));
+    }
+  }
+
+  Future<void> _resumeAfterLifecycleOrFail() async {
+    try {
+      await _resume(afterLifecycle: true);
     } catch (error) {
       _fail(await _failureMessage(error));
     }
