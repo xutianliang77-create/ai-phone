@@ -65,6 +65,21 @@ if find "$APP_PATH" -name 'Runner.debug.dylib' -print -quit | grep -q .; then
   exit 1
 fi
 
+MODEL_ROOT="$APP_PATH/Models/multilingual/2240ms"
+for model_asset in \
+  metadata.json \
+  tokenizer.json \
+  preprocessor.mlmodelc/coremldata.bin \
+  encoder.mlmodelc/weights/weight.bin \
+  decoder.mlmodelc/weights/weight.bin \
+  joint.mlmodelc/weights/weight.bin \
+  decoder_joint.mlmodelc/weights/weight.bin; do
+  if [[ ! -s "$MODEL_ROOT/$model_asset" ]]; then
+    echo "Refusing to install an App with missing on-device ASR asset: $model_asset" >&2
+    exit 1
+  fi
+done
+
 BUNDLE_ID="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP_PATH/Info.plist")"
 if [[ -z "$BUNDLE_ID" ]]; then
   echo "Built App has no bundle identifier." >&2
