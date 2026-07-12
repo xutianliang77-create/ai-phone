@@ -156,6 +156,8 @@ TTS 回灌指标由 App playback gate/AEC 验收，不能把 VAD 对合成语音
 
 `AC-RT-005` 真机听感子项已通过：用户确认自然声音和“我的声音”均无问题，未再出现无声或提示词泄露。复测会话 `16795fdb-c251-4512-b6c6-68531e4698e3`、`b8aaaeef-71a9-4e17-9c02-ca858b6b0de1`、`0110f888-7bdc-490b-b9ec-232bd96c8447` 均为 ended，合计8段，hold=0，各自仅一条 `settle:{sessionId}` ledger。20句播放顺序、暂停/结束取消和残留声音尚未验收，因此 AC-RT-005 整项仍未通过。
 
+`AC-RT-005` 最终真机验收通过：长测 session `99812932-3d12-4675-bc00-b1ae87a65e3f` 连续产生19段字幕和译文，1719帧零丢失；结束/取消 session `c9251e1b-8cca-45db-bdf5-12766ab2d016` 产生6段，666帧零丢失。用户连续执行两轮后确认 TTS 顺序、播放取消、结束后无残留声音均正常。两个 session 均 ended、hold=0，并分别只有一条 `settle:{sessionId}` ledger，因此 AC-RT-005 标记 `accepted`。
+
 `AC-SPK-002/006/007` 新自动矩阵：固定生成26段四种合成声音，并组成双人轮换、1.2秒快速切换、overlap、四人和一分钟稳定性语料。active Sortformer 结果为：四人 DER `4.44%`、overlap `3.63%`、一分钟 `3.77%`，均无标签漂移并通过；普通双人 DER `22.05%`，因早期同一声音被临时分配到第三槽位略超门槛；快速切换 DER `35.42%`，未通过。失败项保留为阻塞证据，不调整20%门槛。另有 Beelink 全链路会话 `25b48a5c-3cff-490b-8091-929b62d91f2a` 通过，保存 `speaker_1/2`、`turn_1/2`、中英文画像，hit=1、drop/miss/error/race=0、确认延迟880ms。
 
 `AC-DEP-001/002` 服务器阶段证据：Beelink 使用 `ai-phone-api` 与 `ai-phone-gateway` 两个 `restart: unless-stopped` 容器运行同一非 root 镜像，API `/health` 宣告 `ws://100.110.127.117:3111/realtime`，Gateway 为 Hy-MT2 + HTTP ASR + active Speaker + API history sink 且 release readiness ready。原 Mac JSON store 和7份声音引用已迁移；iPhone Profile 只包含 Beelink API 地址，Mac `3110/3111` 停止后真机会话 `23705ff5-67ea-4955-84e1-f4b8bfae63e7` 仍上传540帧、结束并保存10段/57秒，证明两层部署和手机配置边界通过。`OPT-DEP-002` 仍需补按 call 启动 Worker 与 VoxCPM2 联合验收。
