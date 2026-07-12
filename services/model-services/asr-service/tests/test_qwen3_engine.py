@@ -62,12 +62,36 @@ async def test_qwen3_engine_dedupes_adjacent_transcripts() -> None:
 
     await engine.transcribe(frame(sequence=1, duration_ms=200, source_language="en"))
     first = await engine.flush("sess_1", "en", "zh")
-    await engine.transcribe(frame(sequence=2, duration_ms=200, source_language="en"))
+    await engine.transcribe(frame(
+        sequence=2,
+        duration_ms=200,
+        source_language="en",
+        timestamp_ms=300,
+    ))
     second = await engine.flush("sess_1", "en", "zh")
 
     assert first is not None
     assert first.language == "en"
     assert second is None
+
+
+async def test_qwen3_engine_keeps_repeated_non_overlapping_utterances() -> None:
+    runner = FakeQwen3Runner("What is your name?")
+    engine = qwen_engine(runner, min_audio_ms=200)
+
+    await engine.transcribe(frame(sequence=1, duration_ms=200, source_language="en"))
+    first = await engine.flush("sess_1", "en", "zh")
+    await engine.transcribe(frame(
+        sequence=2,
+        duration_ms=200,
+        source_language="en",
+        timestamp_ms=1000,
+    ))
+    second = await engine.flush("sess_1", "en", "zh")
+
+    assert first is not None
+    assert second is not None
+    assert second.text == "What is your name?"
 
 
 def test_qwen3_language_maps_app_language_codes() -> None:
@@ -191,6 +215,7 @@ def frame(
     source_language: str = "zh",
     hotwords: list[str] | None = None,
     corrections: list[dict[str, str]] | None = None,
+    timestamp_ms: int | None = None,
 ) -> AsrTranscribeRequest:
     sample_rate = 16000
     sample_count = sample_rate * duration_ms // 1000
@@ -198,7 +223,7 @@ def frame(
     return AsrTranscribeRequest(
         sessionId="sess_1",
         sequence=sequence,
-        timestampMs=sequence * duration_ms,
+        timestampMs=timestamp_ms if timestamp_ms is not None else sequence * duration_ms,
         format="pcm16",
         sampleRate=sample_rate,
         data=base64.b64encode(pcm).decode("ascii"),

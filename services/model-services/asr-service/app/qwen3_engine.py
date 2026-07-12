@@ -1,9 +1,9 @@
 import asyncio
 import os
-from difflib import SequenceMatcher
 from typing import Protocol
 
 from app.audio_buffer import RealtimePcmSegmenter
+from app.qwen3_context_guard import is_context_echo
 from app.schemas import LanguageCode, TranslationLanguageCode
 from app.schemas import AsrTranscribeRequest, AsrTranscribeResponse
 from app.sensevoice_engine import normalize_transcript, transcript_language, write_temp_wav
@@ -80,7 +80,7 @@ class Qwen3AsrEngine:
             vad_energy_threshold=vad_energy_threshold,
             vad_provider=vad_provider,
         )
-        self._last_text_by_session: dict[str, str] = {}
+        self._recent_text_by_session: dict[str, list[tuple[str, int, int]]] = {}
         self._session_prompt_by_session: dict[str, tuple[list[str], list[tuple[str, str]]]] = {}
         self.context = context
         self.english_context = english_context
@@ -161,7 +161,7 @@ class Qwen3AsrEngine:
 
     async def close_session(self, session_id: str) -> None:
         self.segmenter.close(session_id)
-        self._last_text_by_session.pop(session_id, None)
+        self._recent_text_by_session.pop(session_id, None)
         self._session_prompt_by_session.pop(session_id, None)
 
     async def _transcribe_segment(
@@ -200,7 +200,7 @@ class Qwen3AsrEngine:
         text = text.strip()
         if not text or is_context_echo(text, context):
             return None
-        if self._is_duplicate(session_id, text):
+        if self._is_duplicate(session_id, text, start_ms, end_ms):
             return None
         return AsrTranscribeResponse(
             segmentId=segment_id,
@@ -215,13 +215,23 @@ class Qwen3AsrEngine:
             endpointReason=endpoint_reason,
         )
 
-    def _is_duplicate(self, session_id: str, text: str) -> bool:
+    def _is_duplicate(
+        self,
+        session_id: str,
+        text: str,
+        start_ms: int,
+        end_ms: int,
+    ) -> bool:
         normalized = normalize_transcript(text)
         if not normalized:
             return True
-        if self._last_text_by_session.get(session_id) == normalized:
-            return True
-        self._last_text_by_session[session_id] = normalized
+        recent = self._recent_text_by_session.setdefault(session_id, [])
+        for previous_text, previous_start, previous_end in recent:
+            overlaps = start_ms < previous_end and end_ms > previous_start
+            if overlaps and previous_text == normalized:
+                return True
+        recent.append((normalized, start_ms, end_ms))
+        self._recent_text_by_session[session_id] = recent[-8:]
         return False
 
 
@@ -260,33 +270,6 @@ def hotword_context(hotwords: list[str], corrections: list[object]) -> str:
 
 def join_context(base: str, prompt: str) -> str:
     return "\n".join(part for part in [base.strip(), prompt.strip()] if part)
-
-
-def is_context_echo(text: str, context: str) -> bool:
-    normalized_text = normalize_transcript(text)
-    if len(normalized_text) < 16:
-        return False
-
-    control_prefixes = (
-        normalize_transcript("优先识别并保留以下热词的准确写法"),
-        normalize_transcript("常见误识别纠正"),
-    )
-    if normalized_text.startswith(control_prefixes):
-        return True
-
-    normalized_context = normalize_transcript(context)
-    if len(normalized_context) < 24:
-        return False
-    if normalized_text in normalized_context:
-        return True
-
-    match = SequenceMatcher(
-        None,
-        normalized_text,
-        normalized_context,
-        autojunk=False,
-    ).find_longest_match()
-    return len(normalized_text) >= 24 and match.size / len(normalized_text) >= 0.8
 
 
 def clean_prompt_words(words: list[str]) -> list[str]:
