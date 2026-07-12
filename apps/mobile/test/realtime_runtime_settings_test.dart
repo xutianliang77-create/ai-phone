@@ -69,6 +69,34 @@ void main() {
     expect(config.realtimeVoicePresetId, 'zh_female_sichuanese');
   });
 
+  test('persists and applies the selected domain lexicon pack', () {
+    final settings = RealtimeRuntimeSettings.fromJson(const {
+      'processingMode': 'online',
+      'sourceLanguage': 'zh',
+      'targetLanguage': 'en',
+      'voiceOutputMode': 'off',
+      'domainLexiconPack': 'medical',
+    });
+
+    final config = settings.applyTo(_baseConfig());
+
+    expect(settings.domainLexiconPack, 'medical');
+    expect(settings.toJson()['domainLexiconPack'], 'medical');
+    expect(config.domainLexiconPack, 'medical');
+  });
+
+  test('falls back to the general lexicon for unknown saved values', () {
+    final settings = RealtimeRuntimeSettings.fromJson(const {
+      'processingMode': 'online',
+      'sourceLanguage': 'zh',
+      'targetLanguage': 'en',
+      'voiceOutputMode': 'off',
+      'domainLexiconPack': 'unknown',
+    });
+
+    expect(settings.domainLexiconPack, 'product');
+  });
+
   test('forces Listening sessions silent without losing the Talk preference',
       () {
     final listening = _baseConfig().copyWith(

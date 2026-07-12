@@ -1,6 +1,6 @@
 # ai phone 优化开发计划
 
-版本：v1.17
+版本：v1.18
 日期：2026-07-12
 任务来源：`docs/ai-phone-optimization-development-tasks.md`
 
@@ -35,6 +35,7 @@
 - `OPT-SPK-007` 已完成代码、自动化和固定双声源部署验证：新 session 使用稳定 `turnId + revision`，Gateway 按音频时间处理批量结果，API 和 App 对迟到事件执行字段分域幂等，旧协议不强行生成 turn/revision。当前只差 iPhone 双人/多人验收。
 - Beelink 已新增 Docker Compose API/Gateway 发布单元，服务器侧真实链路 `25b48a5c-3cff-490b-8091-929b62d91f2a` 正确保存两位 speaker、两个 turn、中英文语言画像和 boundary 诊断；迁移后历史119条、声音引用7份。当前只差 App 切址和 Mac 停机证明正式两层拓扑。
 - 新 speaker 矩阵固定输出 DER、miss、false alarm、confusion 和漂移：四人、overlap、一分钟稳定性通过，普通双人合成和1.2秒快速轮换未达标。Gateway 已先修短首轮次基线和160ms内流式起点修订导致的边界漏切；模型快速轮换20段仍全部落入同一槽位，后续统一验收不得用语种或文本规则掩盖该门禁。
+- `OPT-TERM-001` 已完成 App、API、token 和 Gateway 会话级行业包选择代码。客户端单选通用、商业、科技、医疗、旅游、餐饮或娱乐；服务端返回实际选择及词库版本，旧客户端继续回退 `DOMAIN_LEXICON_PACKS`。当前等待统一部署与真机行业语料验收。
 
 ## 3. 分阶段任务
 
@@ -102,6 +103,8 @@ M2 不调整模型参数，避免 UI 和模型体验同时变化导致问题难�
 - 执行 `OPT-SPK-007`，翻译、纠错和 TTS 统一使用 speaker turn，不跨说话人合并。
 - 执行 `OPT-SPK-008`，默认支持模型容量内4人，语种变化不作为硬断点。
 - 执行 `OPT-VAD-004`，只持久化 segment 级 VAD 摘要和时间轴，不保存 20ms 原始概率。
+
+当前进度：行业包选择代码和自动化门禁已完成。验收时逐个行业创建独立 session，确认 response/token 中选择一致，并验证未选择行业的术语不会进入 ASR context、字幕或译文。
 
 ### M4：Call Link 与数据
 

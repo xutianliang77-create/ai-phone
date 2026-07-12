@@ -1,6 +1,7 @@
 import '../../../app/app_config.dart';
 import '../../../platform/translation/supported_translation_language.dart';
 import 'voice_preset_catalog.dart';
+import 'domain_lexicon_pack.dart';
 
 enum RealtimeProcessingMode { onDevice, online }
 
@@ -22,6 +23,7 @@ class RealtimeRuntimeSettings {
     required this.targetLanguage,
     required this.voiceOutputMode,
     this.voicePresetId = defaultRealtimeVoicePresetId,
+    this.domainLexiconPack = defaultDomainLexiconPack,
   });
 
   factory RealtimeRuntimeSettings.fromConfig(AppConfig config) {
@@ -37,6 +39,7 @@ class RealtimeRuntimeSettings {
         config.realtimeVoiceOutputMode,
       ),
       voicePresetId: config.realtimeVoicePresetId,
+      domainLexiconPack: config.domainLexiconPack,
     );
   }
 
@@ -61,6 +64,9 @@ class RealtimeRuntimeSettings {
       voicePresetId: normalizeVoicePresetId(
         json['voicePresetId'] as String? ?? defaultRealtimeVoicePresetId,
       ),
+      domainLexiconPack: normalizeDomainLexiconPack(
+        json['domainLexiconPack'] as String? ?? defaultDomainLexiconPack,
+      ),
     );
   }
 
@@ -69,6 +75,7 @@ class RealtimeRuntimeSettings {
   final String targetLanguage;
   final RealtimeVoiceOutputMode voiceOutputMode;
   final String voicePresetId;
+  final String domainLexiconPack;
 
   bool get autoSpeakTranslation {
     return voiceOutputMode != RealtimeVoiceOutputMode.off;
@@ -93,6 +100,7 @@ class RealtimeRuntimeSettings {
         voiceOutputMode,
       ),
       realtimeVoicePresetId: voicePresetId,
+      domainLexiconPack: domainLexiconPack,
     );
   }
 
@@ -103,6 +111,7 @@ class RealtimeRuntimeSettings {
     bool? autoSpeakTranslation,
     RealtimeVoiceOutputMode? voiceOutputMode,
     String? voicePresetId,
+    String? domainLexiconPack,
   }) {
     final nextVoiceOutputMode = voiceOutputMode ??
         (autoSpeakTranslation == null
@@ -120,6 +129,9 @@ class RealtimeRuntimeSettings {
       voicePresetId: voicePresetId == null
           ? this.voicePresetId
           : normalizeVoicePresetId(voicePresetId),
+      domainLexiconPack: domainLexiconPack == null
+          ? this.domainLexiconPack
+          : normalizeDomainLexiconPack(domainLexiconPack),
     );
   }
 
@@ -132,6 +144,7 @@ class RealtimeRuntimeSettings {
       'targetLanguage': targetLanguage,
       'voiceOutputMode': realtimeVoiceOutputModeToString(voiceOutputMode),
       'voicePresetId': voicePresetId,
+      'domainLexiconPack': domainLexiconPack,
       'autoSpeakTranslation': autoSpeakTranslation,
     };
   }

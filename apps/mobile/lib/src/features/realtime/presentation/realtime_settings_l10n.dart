@@ -1,6 +1,7 @@
 import '../../../app/localization/app_localizations.dart';
 import '../../../platform/translation/supported_translation_language.dart';
 import '../data/voice_preset_catalog.dart';
+import '../data/domain_lexicon_pack.dart';
 
 extension RealtimeSettingsL10n on AppLocalizations {
   String get realtimeSettingsLabel => isChinese ? '同传设置' : 'Realtime settings';
@@ -13,16 +14,19 @@ extension RealtimeSettingsL10n on AppLocalizations {
   String get autoReverseTargetLabel => isChinese ? '自动反向' : 'Auto reverse';
   String get autoSpeakTranslationLabel =>
       isChinese ? '自动朗读译文' : 'Speak translation';
-  String get voiceOutputSettingLabel =>
-      isChinese ? '朗读声音' : 'Spoken voice';
+  String get voiceOutputSettingLabel => isChinese ? '朗读声音' : 'Spoken voice';
   String get voiceOutputOffLabel => isChinese ? '关闭' : 'Off';
   String get voiceOutputNaturalLabel => isChinese ? '自然声音' : 'Natural';
   String get voiceOutputMyVoiceLabel => isChinese ? '我的声音' : 'My Voice';
   String get voicePresetSettingLabel => isChinese ? '自然音色' : 'Natural voice';
   String get voicePresetPickerTitle => isChinese ? '选择朗读音色' : 'Choose voice';
   String get voicePresetLoadingLabel => isChinese ? '正在加载音色' : 'Loading voices';
-  String get voicePresetUnavailableLabel => isChinese ? '暂无可用音色' : 'No voice available';
+  String get voicePresetUnavailableLabel =>
+      isChinese ? '暂无可用音色' : 'No voice available';
   String get languagePickerTitle => isChinese ? '选择语言' : 'Choose language';
+  String get domainLexiconLabel => isChinese ? '行业词库' : 'Industry terms';
+  String get domainLexiconPickerTitle =>
+      isChinese ? '选择行业词库' : 'Choose industry terms';
   String get settingsLockedHint =>
       isChinese ? '同传中不可切换设置' : 'Locked while running';
   String get searchLanguageHint =>
@@ -32,6 +36,19 @@ extension RealtimeSettingsL10n on AppLocalizations {
     if (code == autoSourceLanguageCode) return autoDetectLanguageLabel;
     if (code == autoReverseTargetLanguageCode) return autoReverseTargetLabel;
     return translationLanguageName(code, chinese: isChinese);
+  }
+
+  String domainLexiconDisplayName(String code) {
+    final normalized = normalizeDomainLexiconPack(code);
+    return switch (normalized) {
+      'business' => isChinese ? '商业' : 'Business',
+      'technology' => isChinese ? '科技' : 'Technology',
+      'medical' => isChinese ? '医疗' : 'Medical',
+      'travel' => isChinese ? '旅游' : 'Travel',
+      'dining' => isChinese ? '餐饮' : 'Dining',
+      'entertainment' => isChinese ? '娱乐' : 'Entertainment',
+      _ => isChinese ? '通用' : 'General',
+    };
   }
 
   String voicePresetDescription(VoicePreset preset) {

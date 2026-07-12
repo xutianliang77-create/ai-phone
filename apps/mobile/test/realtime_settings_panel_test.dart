@@ -31,7 +31,8 @@ void main() {
     expect(selector.onSelectionChanged, isNull);
   });
 
-  testWidgets('selects an available online natural voice preset', (tester) async {
+  testWidgets('selects an available online natural voice preset',
+      (tester) async {
     RealtimeRuntimeSettings? changed;
     await tester.pumpWidget(_TestApp(
       child: RealtimeSettingsPanel(
@@ -97,6 +98,29 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(changed?.voicePresetId, 'zh_male_minnan');
+  });
+
+  testWidgets('selects a session domain lexicon pack', (tester) async {
+    RealtimeRuntimeSettings? changed;
+    await tester.pumpWidget(_TestApp(
+      child: RealtimeSettingsPanel(
+        settings: const RealtimeRuntimeSettings(
+          processingMode: RealtimeProcessingMode.online,
+          sourceLanguage: 'zh',
+          targetLanguage: 'en',
+          voiceOutputMode: RealtimeVoiceOutputMode.off,
+        ),
+        enabled: true,
+        onChanged: (settings) => changed = settings,
+      ),
+    ));
+
+    await tester.tap(find.text('通用'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('医疗'));
+    await tester.pumpAndSettle();
+
+    expect(changed?.domainLexiconPack, 'medical');
   });
 }
 

@@ -3,6 +3,7 @@ import type {
   CreateRealtimeSessionRequest,
   CreateRealtimeSessionResponse,
 } from "@translation/contracts";
+import { domainLexiconVersion } from "@translation/contracts";
 import { loadEnv } from "../../config/env.js";
 import { activePlanForUser } from "../plans/plans.service.js";
 import { createSession } from "../sessions/sessions.repository.js";
@@ -56,6 +57,9 @@ export function createRealtimeSession(
       ...(voice ? { voice } : {}),
       planCode: plan.code,
       ...(input.termbaseId ? { termbaseId: input.termbaseId } : {}),
+      ...(input.domainLexiconPacks
+        ? { domainLexiconPacks: input.domainLexiconPacks }
+        : {}),
       ...(input.speakerAttribution
         ? { speakerAttribution: input.speakerAttribution }
         : {}),
@@ -73,6 +77,12 @@ export function createRealtimeSession(
     endpoint: env.realtimeWsEndpoint,
     expiresAt: new Date(expiresAt * 1000).toISOString(),
     maxDurationSeconds,
+    ...(input.domainLexiconPacks
+      ? {
+          domainLexiconPacks: input.domainLexiconPacks,
+          domainLexiconVersion,
+        }
+      : {}),
   };
 }
 

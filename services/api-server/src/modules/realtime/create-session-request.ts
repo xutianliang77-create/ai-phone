@@ -1,9 +1,11 @@
 import {
+  isDomainLexiconPack,
   isSupportedLanguage,
   isTranslationLanguage,
 } from "@translation/contracts";
 import type {
   CreateRealtimeSessionRequest,
+  DomainLexiconPack,
   RealtimeMode,
   RealtimeVoiceConfig,
   RealtimeVoiceMode,
@@ -59,6 +61,7 @@ export function validateCreateRealtimeSessionRequest(
   const voiceOutput = input.voiceOutput;
   const voice = input.voice;
   const termbaseId = input.termbaseId;
+  const domainLexiconPacks = input.domainLexiconPacks;
   const speakerAttribution = input.speakerAttribution;
 
   if (typeof mode !== "string" || !modes.has(mode as RealtimeMode)) {
@@ -95,6 +98,10 @@ export function validateCreateRealtimeSessionRequest(
   if (termbaseId !== undefined && typeof termbaseId !== "string") {
     return invalid("termbaseId must be string when provided");
   }
+  const parsedDomainLexiconPacks = parseDomainLexiconPacks(domainLexiconPacks);
+  if (parsedDomainLexiconPacks === false) {
+    return invalid("domainLexiconPacks must contain supported unique pack codes");
+  }
   const parsedSpeakerAttribution = parseSpeakerAttribution(speakerAttribution);
   if (parsedSpeakerAttribution === false) {
     return invalid("speakerAttribution must be a valid speaker configuration");
@@ -113,9 +120,21 @@ export function validateCreateRealtimeSessionRequest(
       voiceOutput,
       ...(parsedVoice ? { voice: parsedVoice } : {}),
       ...(termbaseId ? { termbaseId } : {}),
+      ...(parsedDomainLexiconPacks
+        ? { domainLexiconPacks: parsedDomainLexiconPacks }
+        : {}),
       speakerAttribution: resolvedSpeakerAttribution,
     },
   };
+}
+
+function parseDomainLexiconPacks(
+  value: unknown,
+): DomainLexiconPack[] | null | false {
+  if (value === undefined) return null;
+  if (!Array.isArray(value) || value.length === 0 || value.length > 8) return false;
+  if (!value.every(isDomainLexiconPack)) return false;
+  return [...new Set(value)];
 }
 
 function parseSpeakerAttribution(

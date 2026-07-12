@@ -1,6 +1,7 @@
 import 'region_edition_config.dart';
 import '../platform/translation/supported_translation_language.dart';
 import '../features/realtime/data/voice_preset_catalog.dart';
+import '../features/realtime/data/domain_lexicon_pack.dart';
 
 class AppConfig {
   AppConfig({
@@ -26,6 +27,7 @@ class AppConfig {
     this.autoReverseTargetLanguage = true,
     String realtimeVoiceOutputMode = 'off',
     String realtimeVoicePresetId = defaultRealtimeVoicePresetId,
+    String domainLexiconPack = defaultDomainLexiconPack,
     RegionEditionConfig? region,
     String realtimeMode = 'conversation',
     String sourceLanguage = 'auto',
@@ -34,6 +36,7 @@ class AppConfig {
             _normalizeRealtimeVoiceOutputMode(realtimeVoiceOutputMode),
         sourceLanguage = _normalizeSourceLanguage(sourceLanguage),
         realtimeVoicePresetId = _normalizeVoicePresetId(realtimeVoicePresetId),
+        domainLexiconPack = normalizeDomainLexiconPack(domainLexiconPack),
         targetLanguage = _normalizeTargetLanguage(targetLanguage),
         realtimeMode = _normalizeRealtimeMode(realtimeMode),
         region = region ?? const RegionEditionConfig.domestic();
@@ -59,6 +62,7 @@ class AppConfig {
   final bool autoReverseTargetLanguage;
   final String realtimeVoiceOutputMode;
   final String realtimeVoicePresetId;
+  final String domainLexiconPack;
   final bool serverOwnedHistory;
   final bool appErrorReportingEnabled;
   final String appVersion;
@@ -144,6 +148,10 @@ class AppConfig {
       'REALTIME_VOICE_PRESET_ID',
       defaultValue: defaultRealtimeVoicePresetId,
     );
+    const domainLexiconPack = String.fromEnvironment(
+      'DOMAIN_LEXICON_PACK',
+      defaultValue: defaultDomainLexiconPack,
+    );
     const appVersion = String.fromEnvironment(
       'APP_VERSION',
       defaultValue: '0.1.0',
@@ -175,6 +183,7 @@ class AppConfig {
           targetLanguage == autoReverseTargetLanguageCode,
       realtimeVoiceOutputMode: realtimeVoiceOutputMode,
       realtimeVoicePresetId: realtimeVoicePresetId,
+      domainLexiconPack: domainLexiconPack,
       serverOwnedHistory: serverOwnedHistory,
       appErrorReportingEnabled: appErrorReportingEnabled,
       appVersion: appVersion,
@@ -193,6 +202,7 @@ class AppConfig {
     bool? autoReverseTargetLanguage,
     String? realtimeVoiceOutputMode,
     String? realtimeVoicePresetId,
+    String? domainLexiconPack,
   }) {
     return AppConfig(
       apiBaseUrl: apiBaseUrl,
@@ -220,6 +230,7 @@ class AppConfig {
           realtimeVoiceOutputMode ?? this.realtimeVoiceOutputMode,
       realtimeVoicePresetId:
           realtimeVoicePresetId ?? this.realtimeVoicePresetId,
+      domainLexiconPack: domainLexiconPack ?? this.domainLexiconPack,
       serverOwnedHistory: serverOwnedHistory,
       appErrorReportingEnabled: appErrorReportingEnabled,
       appVersion: appVersion,

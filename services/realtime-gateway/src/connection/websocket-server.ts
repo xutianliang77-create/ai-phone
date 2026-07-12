@@ -14,7 +14,10 @@ import { ProviderRouter } from "../providers/provider-router.js";
 import type { RealtimeProvider } from "../providers/realtime-provider.js";
 import { asrCorrectionTermsForPacks, asrHotwordsForTerminology } from "../domain/domain-lexicon.js";
 import { createSessionEventSink } from "../sessions/session-event-sink.js";
-import { loadTerminologyForSession } from "../sessions/session-domain-terminology.js";
+import {
+  domainLexiconPacksForSession,
+  loadTerminologyForSession,
+} from "../sessions/session-domain-terminology.js";
 import { attachSession, confirmSessionConnection, deleteSession, getSession, sessionBillableSeconds, transitionStatus } from "../sessions/session-manager.js";
 import { createUsageBalanceClient } from "../usage/usage-balance-client.js";
 import { createUsageTickDecision } from "../usage/usage-ticker.js";
@@ -79,8 +82,9 @@ export function startWebSocketServer() {
     let provider: RealtimeProvider;
     try {
       provider = router.selectProvider(env);
+      const domainLexiconPacks = domainLexiconPacksForSession(session, env);
       const terminology = await loadTerminologyForSession(session, env);
-      const asrCorrections = asrCorrectionTermsForPacks(env.domainLexiconPacks);
+      const asrCorrections = asrCorrectionTermsForPacks(domainLexiconPacks);
       const asrHotwords = asrHotwordsForTerminology(terminology, asrCorrections);
       const speakerAttribution = resolveSpeakerAttribution(session.claims);
       await provider.createSession({

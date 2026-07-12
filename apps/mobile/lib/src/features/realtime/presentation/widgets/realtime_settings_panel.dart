@@ -6,6 +6,7 @@ import '../../data/voice_preset_catalog.dart';
 import '../realtime_settings_l10n.dart';
 import 'translation_language_picker.dart';
 import 'voice_preset_picker.dart';
+import 'domain_lexicon_picker.dart';
 
 class RealtimeSettingsPanel extends StatelessWidget {
   const RealtimeSettingsPanel({
@@ -73,6 +74,11 @@ class RealtimeSettingsPanel extends StatelessWidget {
                 onPressed: () =>
                     _pickLanguage(context, LanguagePickerKind.target),
               ),
+              DomainLexiconButton(
+                settings: settings,
+                enabled: enabled,
+                onChanged: onChanged,
+              ),
               _VoiceOutputSelector(
                 settings: settings,
                 enabled: enabled && autoSpeakSupported,
@@ -136,9 +142,8 @@ class _VoiceOutputSelector extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
-    final selected = enabled
-        ? settings.voiceOutputMode
-        : RealtimeVoiceOutputMode.off;
+    final selected =
+        enabled ? settings.voiceOutputMode : RealtimeVoiceOutputMode.off;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,

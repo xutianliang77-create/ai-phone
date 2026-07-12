@@ -1,17 +1,11 @@
+import type { DomainLexiconPack } from "@translation/contracts";
+
 export interface AsrCorrectionTerm {
   fromText: string;
   toText: string;
 }
 
-export type DomainLexiconPack =
-  | "product"
-  | "business"
-  | "technology"
-  | "medical"
-  | "travel"
-  | "dining"
-  | "entertainment"
-  | "cultivation";
+export type { DomainLexiconPack } from "@translation/contracts";
 
 type TermRow = [string, string];
 

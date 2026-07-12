@@ -10,10 +10,11 @@ export async function loadTerminologyForSession(
   session: RealtimeSession,
   env: RealtimeEnv,
 ) {
+  const packs = domainLexiconPacksForSession(session, env);
   try {
     return mergeTerminologyWithDomainPacks(
       await fetchSessionTerminology(session.claims, env),
-      env.domainLexiconPacks,
+      packs,
     );
   } catch (error) {
     realtimeLogger.warn({
@@ -21,6 +22,13 @@ export async function loadTerminologyForSession(
       sessionId: session.id,
       termbaseId: session.claims.termbaseId,
     }, "Realtime terminology fetch failed");
-    return mergeTerminologyWithDomainPacks([], env.domainLexiconPacks);
+    return mergeTerminologyWithDomainPacks([], packs);
   }
+}
+
+export function domainLexiconPacksForSession(
+  session: RealtimeSession,
+  env: RealtimeEnv,
+) {
+  return session.claims.domainLexiconPacks ?? env.domainLexiconPacks;
 }

@@ -3,6 +3,7 @@ import type {
   TranslationLanguageCode,
 } from "../shared/languages.js";
 import type { SpeakerAttributionOptionsDto } from "../shared/speaker.js";
+import type { DomainLexiconPack } from "../shared/domain-lexicon.js";
 
 export type RealtimeMode = "conversation" | "meeting" | "classroom" | "business";
 export type AsrEndpointMode =
@@ -33,6 +34,7 @@ export interface CreateRealtimeSessionRequest {
   voiceOutput: boolean;
   voice?: RealtimeVoiceConfig;
   termbaseId?: string;
+  domainLexiconPacks?: DomainLexiconPack[];
   speakerAttribution?: SpeakerAttributionOptionsDto;
 }
 
@@ -42,6 +44,8 @@ export interface CreateRealtimeSessionResponse {
   endpoint: string;
   expiresAt: string;
   maxDurationSeconds: number;
+  domainLexiconPacks?: DomainLexiconPack[];
+  domainLexiconVersion?: string;
 }
 
 export interface RealtimeTokenClaims {
@@ -56,6 +60,7 @@ export interface RealtimeTokenClaims {
   voice?: RealtimeVoiceConfig;
   planCode: string;
   termbaseId?: string;
+  domainLexiconPacks?: DomainLexiconPack[];
   speakerAttribution?: SpeakerAttributionOptionsDto;
   maxDurationSeconds: number;
   holdSeconds?: number;

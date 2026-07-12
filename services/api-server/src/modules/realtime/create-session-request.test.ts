@@ -68,6 +68,29 @@ describe("create realtime session request", () => {
 
     expect(result.ok).toBe(false);
   });
+
+  it("keeps supported session-scoped domain lexicon packs", () => {
+    const result = validateCreateRealtimeSessionRequest({
+      ...payload("conversation"),
+      domainLexiconPacks: ["product", "technology", "technology"],
+    });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.domainLexiconPacks).toEqual(["product", "technology"]);
+    }
+  });
+
+  it("rejects unsupported or empty domain lexicon selections", () => {
+    expect(validateCreateRealtimeSessionRequest({
+      ...payload("conversation"),
+      domainLexiconPacks: [],
+    }).ok).toBe(false);
+    expect(validateCreateRealtimeSessionRequest({
+      ...payload("conversation"),
+      domainLexiconPacks: ["legal"],
+    }).ok).toBe(false);
+  });
 });
 
 function payload(mode: string) {

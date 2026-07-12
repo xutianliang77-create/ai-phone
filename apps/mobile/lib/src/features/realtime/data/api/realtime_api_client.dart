@@ -19,6 +19,7 @@ class RealtimeApiClient {
     String voiceOutputMode = 'natural',
     String voicePresetId = 'zh_female_natural',
     String termbaseId = 'default',
+    String domainLexiconPack = 'product',
     Duration requestTimeout = _defaultRequestTimeout,
     AccountSessionStore accountSessionStore = const FileAccountSessionStore(),
   })  : _baseUrl = baseUrl,
@@ -30,6 +31,7 @@ class RealtimeApiClient {
         _voiceOutputMode = voiceOutputMode,
         _voicePresetId = voicePresetId,
         _termbaseId = termbaseId,
+        _domainLexiconPack = domainLexiconPack,
         _requestTimeout = requestTimeout,
         _accountSessionStore = accountSessionStore;
 
@@ -42,6 +44,7 @@ class RealtimeApiClient {
   final String _voiceOutputMode;
   final String _voicePresetId;
   final String _termbaseId;
+  final String _domainLexiconPack;
   final Duration _requestTimeout;
   final AccountSessionStore _accountSessionStore;
 
@@ -65,6 +68,7 @@ class RealtimeApiClient {
             },
             if (voice != null) 'voice': voice,
             if (_termbaseId.isNotEmpty) 'termbaseId': _termbaseId,
+            'domainLexiconPacks': <String>[_domainLexiconPack],
           }),
         )
         .timeout(_requestTimeout);

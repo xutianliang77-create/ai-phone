@@ -1,6 +1,6 @@
 # ai phone 优化开发任务清单
 
-版本：v3.7
+版本：v3.8
 日期：2026-07-12
 关联：`docs/domestic-app-detailed-functional-design.md`、`docs/ai-phone-translation-technical-design.md`、`docs/domestic-design-review-action-plan.md`
 
@@ -55,6 +55,7 @@
 - `OPT-RT-003`：`accepted`。RT-003B 三轮 silence 断句及翻译延迟通过；RT-003A 已禁止 `max_duration` 硬切段使用上下文 LLM、拒绝超出 raw 支持范围的扩写，并按 raw continuation 合并。Qwen3 ASR 去重现仅作用于时间重叠结果，重复讲话不会再被误删；动态纠错 context 回显在 ASR Provider 入口拦截。iPhone session `c7c915b7-d5d2-4ab0-9e3d-58f52adb92ad` 三轮同句产生3段译文，无未来后缀扩写、重复后缀或领域词泄露，427帧零丢失、hold=0、单次结算。
 - `OPT-RT-004`：`todo（可靠性验收）`。代码和自动化门禁完成，RT-004A“说完立即结束”和 RT-004B“翻译处理中立即结束”冒烟通过；100 次尾句原文和译文保存率尚未执行，完成前不得标记 accepted。
 - `OPT-RT-005`：`accepted`。Gateway 按字幕顺序逐条合成，暂停、结束和断线取消在途及待处理 TTS，App 顺序播放并清空残留。VoxCPM2 已修复48k误标24k、正文控制提示泄露和自然声音音量过低；自然声音与当前个人克隆均达到约 `-18 dBFS`、ASR 回听只有正文。iPhone 两轮真机验收通过：长测 session `99812932-3d12-4675-bc00-b1ae87a65e3f` 连续19段、结束/取消 session `c9251e1b-8cca-45db-bdf5-12766ab2d016` 连续6段，用户确认顺序、取消和结束后残留均正常；两轮均零丢帧、hold=0、单次结算。
+- `OPT-TERM-001`：`in_progress（代码完成，统一验收待执行）`。App 同传设置已支持通用、商业、科技、医疗、旅游、餐饮、娱乐单选并持久化；API 校验后把选择和词库版本写入 realtime response/token；Gateway 按 session 选择统一生成 ASR hotwords/corrections、翻译 glossary 和 LLM 保护字段，旧客户端继续回退服务器默认包。自动化门禁通过，Beelink 与 iPhone 尚未部署验收。
 - `OPT-MOB-001`：iPhone `accepted`。iPhone 后台、锁屏、来电和蓝牙耳机切换均通过；Android 真机验收统一列为 TODO，并在 iOS 产品化完成后启动。
 - `OPT-MOB-002`：iPhone `accepted`。iPhone 20句连续采集、蓝牙切换、Listening 静音和声音偏好恢复均通过；Android 真机验收统一列为 TODO，并在 iOS 产品化完成后启动。
 - `OPT-UI-001`：代码和自动化门禁完成；`idle/connecting/active/paused/ending/ended/failed` 只展示当前可执行操作，主操作固定在同一槽位，连接中可取消且迟到 session 不会恢复同传。iPhone/Android 真机布局与点击体验验收待执行。

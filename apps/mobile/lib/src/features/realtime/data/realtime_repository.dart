@@ -36,6 +36,7 @@ class RealtimeRepository {
         autoReverseTargetLanguage: autoReverseTargetLanguage,
         voiceOutputMode: config.realtimeVoiceOutputMode,
         voicePresetId: config.realtimeVoicePresetId,
+        domainLexiconPack: config.domainLexiconPack,
       ),
       gatewayClient: RealtimeGatewayClient(),
       finalizationOutbox: FileRealtimeFinalizationOutbox(),

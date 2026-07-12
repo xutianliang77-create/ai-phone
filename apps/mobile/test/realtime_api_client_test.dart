@@ -17,6 +17,7 @@ void main() {
       targetLanguage: 'en',
       voiceOutputMode: 'natural',
       voicePresetId: 'zh_male_steady',
+      domainLexiconPack: 'technology',
       accountSessionStore: _sessionStore(),
       client: MockClient((request) async {
         expect(request.headers['authorization'], 'Bearer test-token');
@@ -46,6 +47,7 @@ void main() {
       'presetId': 'zh_male_steady',
     });
     expect(requestBody?['termbaseId'], 'default');
+    expect(requestBody?['domainLexiconPacks'], ['technology']);
     expect(requestBody?['speakerAttribution'], {
       'mode': 'auto',
       'maxSpeakers': 4,
