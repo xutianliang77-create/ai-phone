@@ -1,6 +1,6 @@
 # ai phone 优化开发任务清单
 
-版本：v3.2
+版本：v3.3
 日期：2026-07-12
 关联：`docs/domestic-app-detailed-functional-design.md`、`docs/ai-phone-translation-technical-design.md`、`docs/domestic-design-review-action-plan.md`
 
@@ -53,7 +53,7 @@
 - `OPT-RT-002`：`accepted`。App 结束前持久化按 `sessionId` 隔离的 finalization outbox，网络恢复、冷启动和回前台会重试保存与结束；API 校验路径 ID、请求体 ID、账号和幂等键，并对同一 session 串行、不同 session 并行结算。iPhone 断网复验 session `7a576a03-d139-4e42-a473-bb0ee13fb63a` 自动收敛 ended，2段字幕完整、hold=0、仅一条 `-21` 秒 ledger，未暴露原始超时。
 - `OPT-RT-003`：`in_progress`。RT-003B 三轮 silence 断句及翻译延迟通过；RT-003A 发现 `max_duration` 硬切后 LLM 补写未来后缀并与下一 raw 重复。现已禁止硬切段使用上下文 LLM、拒绝超出 raw 支持范围的扩写，并按 raw continuation 等待和去重合并；自动化门禁通过，待部署后用 session `7b348952-19ad-4cd9-9a50-57c4c6614b95` 语料复验 3/3。
 - `OPT-RT-004`：代码和自动化门禁完成；RT-004A“说完立即结束”和 RT-004B“翻译处理中立即结束”均通过，尾句、编号407/408、时间和报告内容完整保存并翻译，4B 收敛窗口约1.34秒且单次结算；100 次尾句保存率仍待执行。
-- `OPT-RT-005`：代码和自动化门禁完成；Gateway 按字幕顺序逐条合成，暂停、结束和断线取消在途及待处理 TTS，App 顺序播放并清空残留。iPhone + VoxCPM2 连续 20 句真实听感验收待执行。
+- `OPT-RT-005`：代码和自动化门禁完成；Gateway 按字幕顺序逐条合成，暂停、结束和断线取消在途及待处理 TTS，App 顺序播放并清空残留。VoxCPM2 已修复48k误标24k、正文控制提示泄露和自然声音音量过低；自然声音与当前个人克隆固定句均达到约 `-18 dBFS` 且 ASR 回听只有正文。iPhone 连续20句顺序与真实听感仍待执行。
 - `OPT-MOB-001`：代码和自动化门禁完成；iOS/Android 使用统一采集/播放所有权，系统中断结束后恢复在线录音或端侧 ASR，Android TTS/PCM 只在真实播放结束后完成。iPhone/Android 真机中断、耳机和连续朗读验收待执行。
 - `OPT-MOB-002`：代码和自动化门禁完成；扬声器、听筒和未知路由在 TTS 播放期间及 350ms 尾音窗抑制采集，有线/蓝牙耳机保持连续识别，Listening 强制静音但保留对话模式声音偏好。iPhone/Android 连续 20 句、自激和下一句完整性验收待执行。
 - `OPT-UI-001`：代码和自动化门禁完成；`idle/connecting/active/paused/ending/ended/failed` 只展示当前可执行操作，主操作固定在同一槽位，连接中可取消且迟到 session 不会恢复同传。iPhone/Android 真机布局与点击体验验收待执行。
