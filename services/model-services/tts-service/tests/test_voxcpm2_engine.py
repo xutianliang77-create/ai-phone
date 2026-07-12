@@ -4,7 +4,7 @@ import math
 
 import pytest
 
-from app.audio import resample_audio
+from app.audio import normalize_audio_loudness, resample_audio
 from app.schemas import TtsSynthesizeRequest
 from app.voxcpm2_engine import (
     VoxCpm2TtsEngine,
@@ -14,13 +14,25 @@ from app.voxcpm2_engine import (
 )
 
 
-def test_voxcpm2_text_uses_language_prompt() -> None:
-    assert build_voxcpm2_text("你好", "zh").startswith(
-        "(A clear, warm Mandarin voice for phone translation)"
-    )
-    assert build_voxcpm2_text("hello", "en").startswith(
-        "(A clear, warm English voice for phone translation)"
-    )
+def test_voxcpm2_text_never_inserts_a_spoken_control_prompt() -> None:
+    assert build_voxcpm2_text("你好", "zh") == "你好"
+    assert build_voxcpm2_text("hello", "en") == "hello"
+
+
+def test_low_volume_audio_is_raised_without_clipping() -> None:
+    source = [0.02 * math.sin(2 * math.pi * 440 * index / 24000) for index in range(24000)]
+
+    output = normalize_audio_loudness(source)
+    rms = math.sqrt(sum(value * value for value in output) / len(output))
+
+    assert 0.08 <= rms <= 0.1
+    assert max(abs(value) for value in output) <= 0.95
+
+
+def test_normal_volume_and_silence_are_not_changed() -> None:
+    normal = [0.5, -0.5, 0.25, -0.25]
+    assert normalize_audio_loudness(normal) == normal
+    assert normalize_audio_loudness([0.0] * 100) == [0.0] * 100
 
 
 def test_parse_model_sample_rate_preserves_real_model_rate() -> None:

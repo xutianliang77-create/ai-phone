@@ -74,3 +74,23 @@ def resample_audio(
     elif len(result) < expected_count:
         result = np.pad(result, (0, expected_count - len(result)))
     return [float(value) for value in result]
+
+
+def normalize_audio_loudness(
+    samples: Iterable[float],
+    *,
+    target_rms: float = 0.1,
+    max_gain: float = 6.0,
+    peak_ceiling: float = 0.95,
+) -> list[float]:
+    values = [float(value) for value in samples]
+    if not values:
+        return values
+    rms = math.sqrt(sum(value * value for value in values) / len(values))
+    peak = max(abs(value) for value in values)
+    if rms <= 1e-8 or peak <= 1e-8 or rms >= target_rms:
+        return values
+    gain = min(max_gain, target_rms / rms, peak_ceiling / peak)
+    if gain <= 1.0:
+        return values
+    return [value * gain for value in values]

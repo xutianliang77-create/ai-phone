@@ -3,7 +3,12 @@ from inspect import signature
 import json
 import time
 
-from app.audio import flatten_numeric_audio, pcm16_base64_from_floats, resample_audio
+from app.audio import (
+    flatten_numeric_audio,
+    normalize_audio_loudness,
+    pcm16_base64_from_floats,
+    resample_audio,
+)
 from app.errors import TtsUnavailableError
 from app.schemas import TtsAudioPayload, TtsSynthesizeRequest, TtsSynthesizeResponse
 
@@ -77,6 +82,7 @@ class VoxCpm2TtsEngine:
                 source_rate=model_sample_rate,
                 target_rate=OUTPUT_SAMPLE_RATE,
             )
+            output_audio = normalize_audio_loudness(output_audio)
         except (RuntimeError, ValueError) as exc:
             raise TtsUnavailableError(f"VoxCPM2 resampling failed: {exc}") from exc
         audio_duration_ms = max(1, round(len(output_audio) / OUTPUT_SAMPLE_RATE * 1000))
@@ -163,10 +169,8 @@ class VoxCpm2TtsEngine:
             raise TtsUnavailableError(self._load_error) from exc
 
 
-def build_voxcpm2_text(text: str, language: str) -> str:
-    if language == "zh":
-        return "(A clear, warm Mandarin voice for phone translation)" + text
-    return "(A clear, warm English voice for phone translation)" + text
+def build_voxcpm2_text(text: str, _language: str) -> str:
+    return text.strip()
 
 
 def voxcpm2_generate_kwargs(
