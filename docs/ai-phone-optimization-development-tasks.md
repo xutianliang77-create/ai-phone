@@ -50,7 +50,7 @@
 - `OPT-VAD-002`：`in_progress`。部署后的真实 session 已保存 `speaker_boundary/flush` 端点原因和音频丢帧计数；尚缺 VAD 概率摘要、fallback 计数、模型 fingerprint 和告警。
 - `OPT-VAD-003`：`todo`。当前继续使用 Qwen3-ASR 统一 `1100ms` 安全基线，尚未启用按模式参数。
 - `OPT-RT-001`：代码和自动化门禁完成。
-- `OPT-RT-002`：代码和自动化门禁完成；连接中的 HTTP 创建请求不再阻塞本地 End，API 创建/保存/结束统一 8 秒超时，迟到 session 会补偿关闭。iPhone 断网 End 已确认立即进入本地终态；对象和字符串形式的 `TimeoutException` 均归一化为用户文案。API 启动时会回收超过5分钟无活动的遗留会话并释放预占，不按离线墙钟时间扣费；新 Profile 文案、后台终止和弱网验收待执行。
+- `OPT-RT-002`：代码和自动化门禁完成；连接中的 HTTP 创建请求不再阻塞本地 End，API 创建/保存/结束统一 8 秒超时，迟到 session 会补偿关闭。iPhone 断网 End 已确认立即进入本地终态；对象和字符串形式的 `TimeoutException` 均归一化为用户文案。API 启动恢复已在 Beelink 回收27个遗留会话、释放18个 active hold，余额保持29921秒且无新增账本扣费；新 Profile 已覆盖安装，中文文案、后台终止和弱网验收待执行。
 - `OPT-RT-003`：代码和自动化门禁完成；iPhone 在线真实模型中文长句、快速中英切换和 1.8 秒强制输出验收待执行。
 - `OPT-RT-004`：代码和自动化门禁完成；iPhone 在线真实模型“说完立即结束”及 100 次尾句保存率验收待执行。
 - `OPT-RT-005`：代码和自动化门禁完成；Gateway 按字幕顺序逐条合成，暂停、结束和断线取消在途及待处理 TTS，App 顺序播放并清空残留。iPhone + VoxCPM2 连续 20 句真实听感验收待执行。
