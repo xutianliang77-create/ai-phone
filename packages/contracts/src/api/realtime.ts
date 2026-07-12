@@ -216,6 +216,56 @@ export interface SessionDetailResponse extends SessionListItem {
   diagnostics?: RealtimeSessionDiagnosticsDto;
 }
 
+export interface SessionQualityProviderDto {
+  stage: string;
+  provider: string;
+  model?: string;
+  segmentCount: number;
+}
+
+export interface SessionQualityReportResponse {
+  version: 1;
+  sessionId: string;
+  generatedAt: string;
+  status: PersistedRealtimeSessionState;
+  consumedSeconds: number;
+  segments: {
+    total: number;
+    translated: number;
+    sourceOnly: number;
+    translationCoverage: number;
+    mixedLanguage: number;
+  };
+  latency: {
+    sampleCount: number;
+    averageMs: number;
+    p95Ms: number;
+    maxMs: number;
+  };
+  audio?: {
+    receivedFrames: number;
+    droppedFrames: number;
+    dropRate: number;
+  };
+  vad?: {
+    configuredProvider: string;
+    activeProvider: string;
+    fallbackCount: number;
+    fallbackReason?: string;
+    speechFrameRatio: number;
+    modelFingerprint?: string;
+    endpointPolicyFingerprint: string;
+  };
+  endpoints: Partial<Record<import("../realtime/diagnostics.js").AsrEndpointReason, number>>;
+  speakers: {
+    identified: number;
+    unknownSegments: number;
+    overlapSegments: number;
+  };
+  providers: SessionQualityProviderDto[];
+  flags: string[];
+}
+
 export interface SessionSpeakerDto {
   speaker: SpeakerAttributionDto;
   segmentCount: number;

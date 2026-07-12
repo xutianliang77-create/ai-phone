@@ -28,6 +28,7 @@ import {
 import { refundSessionUsage } from "./session-usage-refund.js";
 import { registerSessionSpeakerRoutes } from "./session-speakers.routes.js";
 import { withSessionWriteLock } from "./session-write-coordinator.js";
+import { buildSessionQualityReport } from "./session-quality-report.js";
 
 export async function registerSessionsRoutes(app: FastifyInstance) {
   registerSessionSpeakerRoutes(app);
@@ -97,6 +98,17 @@ export async function registerSessionsRoutes(app: FastifyInstance) {
       return sendError(reply, 404, "session_not_found", "Session not found");
     if (session.userId !== account.id) return forbidden(reply);
     return toSessionDetail(session);
+  });
+
+  app.get("/sessions/:sessionId/quality-report", async (request, reply) => {
+    const account = requireAccount(request, reply);
+    if (!account) return;
+    const params = request.params as { sessionId: string };
+    const session = findSession(params.sessionId);
+    if (!session)
+      return sendError(reply, 404, "session_not_found", "Session not found");
+    if (session.userId !== account.id) return forbidden(reply);
+    return buildSessionQualityReport(session);
   });
 
   app.post("/sessions/:sessionId/segments", async (request, reply) => {
