@@ -11,16 +11,25 @@ import { sendError } from "../../infrastructure/http/errors.js";
 import { requireAccount } from "../account/account-auth.js";
 import {
   findSession,
+  saveSegments,
   transitionSessionState,
   upsertSegment,
 } from "../sessions/sessions.repository.js";
 import { completeSessionWithUsage } from "../sessions/session-completion.js";
+import { withSessionWriteLock } from "../sessions/session-write-coordinator.js";
 import { validateCreateRealtimeSessionRequest } from "./create-session-request.js";
 import { createRealtimeSession } from "./realtime.service.js";
 import { parseRealtimeDiagnostics } from "./realtime-diagnostics.js";
 import { isValidTurnLanguageProfile } from "./realtime-language-profile-validation.js";
+import { registerRealtimeFinalizationRoute } from "./realtime-finalization.routes.js";
+import {
+  isInternalAuthorized,
+  isInternalRealtimeState,
+  parseBillableSeconds,
+} from "./realtime-route-validation.js";
 
 export async function registerRealtimeRoutes(app: FastifyInstance) {
+  registerRealtimeFinalizationRoute(app);
   app.post("/realtime/sessions", async (request, reply) => {
     const account = requireAccount(request, reply);
     if (!account) return;
@@ -60,14 +69,16 @@ export async function registerRealtimeRoutes(app: FastifyInstance) {
     const account = requireAccount(request, reply);
     if (!account) return;
     const params = request.params as { sessionId: string };
-    const existing = findSession(params.sessionId);
-    if (!existing)
-      return sendError(reply, 404, "session_not_found", "Session not found");
-    if (existing.userId !== account.id) return forbidden(reply);
-    const session = completeSessionWithUsage(params.sessionId);
-    if (!session)
-      return sendError(reply, 404, "session_not_found", "Session not found");
-    return { sessionId: session.id, status: session.status };
+    return withSessionWriteLock(params.sessionId, () => {
+      const existing = findSession(params.sessionId);
+      if (!existing)
+        return sendError(reply, 404, "session_not_found", "Session not found");
+      if (existing.userId !== account.id) return forbidden(reply);
+      const session = completeSessionWithUsage(params.sessionId);
+      if (!session)
+        return sendError(reply, 404, "session_not_found", "Session not found");
+      return { sessionId: session.id, status: session.status };
+    });
   });
 
   app.post("/internal/realtime/segments", async (request, reply) => {
@@ -85,7 +96,8 @@ export async function registerRealtimeRoutes(app: FastifyInstance) {
       return sendError(reply, 400, "invalid_segments", "Invalid segment patch");
     }
 
-    const session = upsertSegment(body.sessionId, {
+    return withSessionWriteLock(body.sessionId, () => {
+      const session = upsertSegment(body.sessionId, {
       segmentId: body.segmentId,
       turnId: body.turnId,
       revision: body.revision,
@@ -107,10 +119,11 @@ export async function registerRealtimeRoutes(app: FastifyInstance) {
       refinement: body.refinement,
       speaker: body.speaker,
       timing: body.timing,
+      });
+      if (!session)
+        return sendError(reply, 404, "session_not_found", "Session not found");
+      return { sessionId: session.id, segmentCount: session.segments.length };
     });
-    if (!session)
-      return sendError(reply, 404, "session_not_found", "Session not found");
-    return { sessionId: session.id, segmentCount: session.segments.length };
   });
 
   app.post(
@@ -134,23 +147,26 @@ export async function registerRealtimeRoutes(app: FastifyInstance) {
           "Invalid realtime session state",
         );
       }
-      const result = transitionSessionState(params.sessionId, body.status);
-      if (!result) {
-        return sendError(reply, 404, "session_not_found", "Session not found");
-      }
-      if (!result.transition.accepted) {
-        return sendError(
-          reply,
-          409,
-          "session_state_conflict",
-          `Cannot change session from ${result.transition.previous} to ${body.status}`,
-        );
-      }
-      return {
-        sessionId: result.session.id,
-        status: result.session.status,
-        changed: result.transition.changed,
-      };
+      const requestedStatus = body.status;
+      return withSessionWriteLock(params.sessionId, () => {
+        const result = transitionSessionState(params.sessionId, requestedStatus);
+        if (!result) {
+          return sendError(reply, 404, "session_not_found", "Session not found");
+        }
+        if (!result.transition.accepted) {
+          return sendError(
+            reply,
+            409,
+            "session_state_conflict",
+            `Cannot change session from ${result.transition.previous} to ${requestedStatus}`,
+          );
+        }
+        return {
+          sessionId: result.session.id,
+          status: result.session.status,
+          changed: result.transition.changed,
+        };
+      });
     },
   );
 
@@ -181,16 +197,15 @@ export async function registerRealtimeRoutes(app: FastifyInstance) {
           "Invalid realtime session diagnostics",
         );
       }
-      const session = completeSessionWithUsage(
-        params.sessionId,
-        {
+      return withSessionWriteLock(params.sessionId, () => {
+        const session = completeSessionWithUsage(params.sessionId, {
           ...(typeof billableSeconds === "number" ? { billableSeconds } : {}),
           ...(diagnostics ? { diagnostics } : {}),
-        },
-      );
-      if (!session)
-        return sendError(reply, 404, "session_not_found", "Session not found");
-      return { sessionId: session.id, status: session.status };
+        });
+        if (!session)
+          return sendError(reply, 404, "session_not_found", "Session not found");
+        return { sessionId: session.id, status: session.status };
+      });
     },
   );
 }
@@ -318,23 +333,6 @@ const segmentStages = new Set<SessionSegmentStage>([
   "session",
   "provider",
 ]);
-
-function isInternalAuthorized(authorization: string | undefined) {
-  const secret = process.env.INTERNAL_API_SECRET?.trim();
-  if (!secret || secret.length < 16) return false;
-  return authorization === `Bearer ${secret}`;
-}
-
-function parseBillableSeconds(value: unknown) {
-  if (typeof value !== "number" || !Number.isFinite(value)) return undefined;
-  return Math.max(0, Math.floor(value));
-}
-
-function isInternalRealtimeState(
-  value: unknown,
-): value is UpdateRealtimeSessionStateRequest["status"] {
-  return value === "active" || value === "paused" || value === "failed";
-}
 
 function forbidden(reply: Parameters<typeof sendError>[0]) {
   return sendError(

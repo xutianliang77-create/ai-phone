@@ -122,7 +122,90 @@ describe("realtime session state routes", () => {
       }),
     ]);
   });
+
+  it("binds finalization to one session id before any write", async () => {
+    const app = await buildApp();
+    const firstId = await createRealtimeSession(app);
+    const secondId = await createRealtimeSession(app);
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/realtime/sessions/${secondId}/finalize`,
+      payload: finalizationPayload(firstId, 7),
+    });
+
+    expect(response.statusCode).toBe(409);
+    expect(response.json().error.code).toBe(
+      "session_finalization_binding_conflict",
+    );
+    const sessions = getStoreSnapshot().sessions.filter(
+      (session) => session.id === firstId || session.id === secondId,
+    );
+    expect(sessions).toHaveLength(2);
+    expect(sessions.every((session) => session.status === "created")).toBe(true);
+    expect(sessions.every((session) => session.segments.length === 0)).toBe(true);
+    expect(getStoreSnapshot().billingLedger).toHaveLength(0);
+    await app.close();
+  });
+
+  it("finalizes concurrent retries once and releases the hold", async () => {
+    const app = await buildApp();
+    const sessionId = await createRealtimeSession(app);
+
+    const responses = await Promise.all(Array.from({ length: 10 }, () =>
+      app.inject({
+        method: "POST",
+        url: `/realtime/sessions/${sessionId}/finalize`,
+        payload: finalizationPayload(sessionId, 9),
+      })));
+
+    expect(responses.every((response) => response.statusCode === 200)).toBe(true);
+    const store = getStoreSnapshot();
+    const session = store.sessions.find((item) => item.id === sessionId);
+    expect(session).toMatchObject({
+      status: "ended",
+      consumedSeconds: 9,
+      finalizationIdempotencyKey: `finalize:${sessionId}`,
+    });
+    expect(session?.segments).toHaveLength(1);
+    expect(store.billingLedger.filter(
+      (entry) => entry.sessionId === sessionId &&
+        entry.idempotencyKey === `settle:${sessionId}`,
+    )).toHaveLength(1);
+    expect(store.usageHolds.find((hold) => hold.sessionId === sessionId)?.status)
+      .not.toBe("active");
+    await app.close();
+  });
 });
+
+async function createRealtimeSession(
+  app: Awaited<ReturnType<typeof buildApp>>,
+) {
+  const response = await app.inject({
+    method: "POST",
+    url: "/realtime/sessions",
+    payload: {
+      mode: "conversation",
+      sourceLanguage: "en",
+      targetLanguage: "zh",
+      voiceOutput: false,
+    },
+  });
+  return response.json().sessionId as string;
+}
+
+function finalizationPayload(sessionId: string, billableSeconds: number) {
+  return {
+    sessionId,
+    idempotencyKey: `finalize:${sessionId}`,
+    billableSeconds,
+    segments: [{
+      id: "segment-1",
+      sourceText: "hello",
+      translatedText: "你好",
+    }],
+  };
+}
 
 function setState(
   app: Awaited<ReturnType<typeof buildApp>>,

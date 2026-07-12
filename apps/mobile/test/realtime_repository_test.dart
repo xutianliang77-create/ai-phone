@@ -53,13 +53,12 @@ void main() {
     expect(api.endedSessionId, 'sess_1');
   });
 
-  test('can leave history writes to the gateway session event sink', () async {
+  test('persists a durable finalization for server-owned history', () async {
     final api = _FakeRealtimeApiClient();
     final gateway = _FakeRealtimeGatewayClient();
     final repository = RealtimeRepository(
       apiClient: api,
       gatewayClient: gateway,
-      appPersistsSessionOnEnd: false,
     );
 
     await repository.end('sess_1', const [
@@ -71,8 +70,8 @@ void main() {
     ]);
 
     expect(gateway.endedSessionId, 'sess_1');
-    expect(api.savedSegments, isNull);
-    expect(api.endedSessionId, isNull);
+    expect(api.savedSegments?.single['id'], 'seg_1');
+    expect(api.endedSessionId, 'sess_1');
   });
 
   test('waits for gateway session end before saving app-owned history',
@@ -215,15 +214,13 @@ class _FakeRealtimeApiClient extends RealtimeApiClient {
   }
 
   @override
-  Future<void> saveSegments(
-    String sessionId,
-    List<Map<String, Object?>> segments,
-  ) async {
+  Future<void> finalizeSession({
+    required String sessionId,
+    required List<Map<String, Object?>> segments,
+    required int billableSeconds,
+    required String idempotencyKey,
+  }) async {
     savedSegments = segments;
-  }
-
-  @override
-  Future<void> endSession(String sessionId) async {
     endedSessionId = sessionId;
   }
 

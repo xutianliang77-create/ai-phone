@@ -41,6 +41,8 @@ describe("websocket disconnect recovery", () => {
 
     const second = new WebSocket(url);
     await waitForEvent(second, "session.started");
+    second.send(JSON.stringify({ type: "session.resume", sessionId }));
+    await waitForEvent(second, "session.resumed");
     expect(getSession(sessionId)).toMatchObject({
       status: "active",
       connectionGeneration: 2,

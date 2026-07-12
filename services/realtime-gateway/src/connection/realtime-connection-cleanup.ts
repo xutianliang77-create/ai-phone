@@ -39,7 +39,11 @@ export class RealtimeConnectionCleanup {
     const isCurrent = current === session &&
       current.connectionGeneration === generation;
     if (isCurrent && current.status !== "ended") {
+      if (current.status === "active" || current.status === "paused") {
+        current.reconnectStatus = current.status;
+      }
       transitionStatus(session.id, "connecting");
+      this.scheduleDeferredFinalization(reason);
     }
     await this.options.finalizer.flush();
     await this.bestEffort("provider", () =>
@@ -50,17 +54,25 @@ export class RealtimeConnectionCleanup {
       deleteSession(session.id, session);
       return;
     }
-    this.options.disconnectFinalizers.schedule(session.id, async () => {
+    this.options.closeClient();
+  }
+
+  scheduleDeferredFinalization(reason: SessionEndReason) {
+    const { session } = this.options;
+    let deadlineAt = session.disconnectDeadlineAt ??
+      this.options.disconnectFinalizers.deadline(session.id);
+    deadlineAt = this.options.disconnectFinalizers.schedule(session.id, async () => {
       const pending = getSession(session.id);
       if (
         pending !== session ||
-        pending.connectionGeneration !== generation ||
-        pending.status !== "connecting"
+        pending.status !== "connecting" ||
+        pending.disconnectDeadlineAt !== deadlineAt
       ) return;
       await this.options.finalizer.finalize(reason);
       deleteSession(session.id, session);
-    });
-    this.options.closeClient();
+      this.options.closeClient();
+    }, deadlineAt);
+    session.disconnectDeadlineAt = deadlineAt;
   }
 
   private async bestEffort(

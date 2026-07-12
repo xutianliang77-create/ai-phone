@@ -69,6 +69,16 @@ class LocalRealtimeRepository extends RealtimeRepository {
   }
 
   @override
+  Future<void> prepareFinalization(
+    String sessionId,
+    List<SubtitleSegment> segments, {
+    int? billableSeconds,
+  }) async {}
+
+  @override
+  Future<void> recoverPendingFinalizations() async {}
+
+  @override
   Future<void> closeRealtime() async {}
 
   @override

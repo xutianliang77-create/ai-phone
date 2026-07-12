@@ -18,4 +18,6 @@ export interface RealtimeSession {
   accumulatedActiveMs: number;
   connectionGeneration: number;
   billableSeconds: number;
+  reconnectStatus?: Extract<RealtimeSessionStatus, "active" | "paused">;
+  disconnectDeadlineAt?: number;
 }

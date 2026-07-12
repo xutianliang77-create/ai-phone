@@ -17,9 +17,12 @@ export function completeSessionWithUsage(
 ) {
   const result = endSession(sessionId);
   if (!result) return null;
-  if (result.wasAlreadyEnded) return result.session;
-  if (options.diagnostics) {
+  if (options.diagnostics && !result.session.diagnostics) {
     saveSessionDiagnostics(sessionId, options.diagnostics);
+  }
+
+  if (result.wasAlreadyEnded && typeof options.billableSeconds !== "number") {
+    return result.session;
   }
 
   const settlement = settleSessionUsage(

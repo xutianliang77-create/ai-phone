@@ -59,6 +59,8 @@ export interface RealtimeEnv {
   apiBaseUrl: string;
   internalApiSecret?: string;
   sessionSyncTimeoutMs: number;
+  disconnectGraceMs: number;
+  heartbeatIntervalMs: number;
   llmProvider: LlmProviderName;
   llmBaseUrl?: string;
   llmApiKey?: string;
@@ -144,6 +146,8 @@ export function loadEnv(): RealtimeEnv {
     apiBaseUrl: env.API_BASE_URL ?? "http://127.0.0.1:3100",
     internalApiSecret: env.INTERNAL_API_SECRET,
     sessionSyncTimeoutMs: Number(env.SESSION_SYNC_TIMEOUT_MS ?? 5_000),
+    disconnectGraceMs: Number(env.REALTIME_DISCONNECT_GRACE_MS ?? 45_000),
+    heartbeatIntervalMs: Number(env.REALTIME_HEARTBEAT_INTERVAL_MS ?? 15_000),
     llmProvider: parseLlmProviderName(env.LLM_PROVIDER),
     llmBaseUrl: env.LLM_BASE_URL ?? env.SUMMARY_BASE_URL,
     llmApiKey: env.LLM_API_KEY ?? env.SUMMARY_API_KEY,

@@ -22,6 +22,7 @@ import '../../../realtime/domain/entities/subtitle_segment.dart';
 import 'cleanup_guard.dart';
 import 'device_asr_failure_message.dart';
 import 'error_display_message.dart';
+import 'realtime_active_time_clock.dart';
 import 'realtime_gateway_diagnostic.dart';
 import 'realtime_runtime_factories.dart';
 import 'realtime_session_state.dart';
@@ -111,6 +112,7 @@ class RealtimeController extends ChangeNotifier {
   Future<void>? _failureCleanup;
   final _localPartialFlush = _LocalPartialTranslationFlush();
   final _deviceAsrRecovery = _DeviceAsrRecovery();
+  final _activeTimeClock = RealtimeActiveTimeClock();
 
   RealtimeStatus get status => _status;
   List<SubtitleSegment> get segments => List.unmodifiable(_segments);
@@ -236,6 +238,7 @@ class RealtimeController extends ChangeNotifier {
     final transition = transitionRealtimeStatus(_status, status);
     if (!transition.accepted) return false;
     if (!transition.changed) return true;
+    _activeTimeClock.transition(_status, status);
     _status = transition.current;
     if (!isTerminalRealtimeStatus(status)) _message = null;
     _notify();
@@ -280,6 +283,13 @@ class RealtimeController extends ChangeNotifier {
     _asrSubscription = null;
     if (failedSession != null) {
       await ignoreCleanupError(() {
+        return _repository.prepareFinalization(
+          failedSession.sessionId,
+          _segments,
+          billableSeconds: _activeTimeClock.billableSeconds,
+        );
+      });
+      await ignoreCleanupError(() {
         return _repository.end(failedSession.sessionId, _segments);
       });
     }
@@ -298,4 +308,8 @@ class RealtimeController extends ChangeNotifier {
   }
 
   bool get _usesDeviceAsr => _config.useDeviceAsr;
+
+  Future<void> recoverPendingFinalizations() async {
+    await ignoreCleanupError(_repository.recoverPendingFinalizations);
+  }
 }

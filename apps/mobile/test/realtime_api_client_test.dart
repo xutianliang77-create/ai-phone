@@ -106,6 +106,36 @@ void main() {
 
     await expectLater(api.createSession(), throwsA(isA<TimeoutException>()));
   });
+
+  test('binds finalization payload and idempotency key to the URL session',
+      () async {
+    late Uri requestUrl;
+    late Map<String, Object?> requestBody;
+    final api = RealtimeApiClient(
+      baseUrl: Uri.parse('http://127.0.0.1:3100'),
+      accountSessionStore: _sessionStore(),
+      client: MockClient((request) async {
+        requestUrl = request.url;
+        requestBody = jsonDecode(request.body) as Map<String, Object?>;
+        return http.Response('{}', 200);
+      }),
+    );
+
+    await api.finalizeSession(
+      sessionId: 'session-a',
+      segments: const [],
+      billableSeconds: 11,
+      idempotencyKey: 'finalize:session-a',
+    );
+
+    expect(requestUrl.path, '/realtime/sessions/session-a/finalize');
+    expect(requestBody, {
+      'sessionId': 'session-a',
+      'segments': <Object?>[],
+      'billableSeconds': 11,
+      'idempotencyKey': 'finalize:session-a',
+    });
+  });
 }
 
 MemoryAccountSessionStore _sessionStore() {

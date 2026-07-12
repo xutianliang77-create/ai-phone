@@ -27,6 +27,7 @@ import {
 } from "./session-review.js";
 import { refundSessionUsage } from "./session-usage-refund.js";
 import { registerSessionSpeakerRoutes } from "./session-speakers.routes.js";
+import { withSessionWriteLock } from "./session-write-coordinator.js";
 
 export async function registerSessionsRoutes(app: FastifyInstance) {
   registerSessionSpeakerRoutes(app);
@@ -111,12 +112,14 @@ export async function registerSessionsRoutes(app: FastifyInstance) {
         "segments must be an array",
       );
     }
-    const existing = findSession(params.sessionId);
-    if (!existing)
-      return sendError(reply, 404, "session_not_found", "Session not found");
-    if (existing.userId !== account.id) return forbidden(reply);
-    const session = saveSegments(params.sessionId, body.segments);
-    return toSessionDetail(session ?? existing);
+    return withSessionWriteLock(params.sessionId, () => {
+      const existing = findSession(params.sessionId);
+      if (!existing)
+        return sendError(reply, 404, "session_not_found", "Session not found");
+      if (existing.userId !== account.id) return forbidden(reply);
+      const session = saveSegments(params.sessionId, body.segments!);
+      return toSessionDetail(session ?? existing);
+    });
   });
 
   app.post("/sessions/:sessionId/review", async (request, reply) => {
@@ -129,8 +132,14 @@ export async function registerSessionsRoutes(app: FastifyInstance) {
     if (session.userId !== account.id) return forbidden(reply);
     try {
       const review = await generateSessionReview(session);
-      const updated = saveSessionReview(session.id, review);
-      return toSessionDetail(updated ?? session);
+      return withSessionWriteLock(session.id, () => {
+        const current = findSession(session.id);
+        if (!current)
+          return sendError(reply, 404, "session_not_found", "Session not found");
+        if (current.userId !== account.id) return forbidden(reply);
+        const updated = saveSessionReview(current.id, review);
+        return toSessionDetail(updated ?? current);
+      });
     } catch (error) {
       return sendError(
         reply,
@@ -145,15 +154,17 @@ export async function registerSessionsRoutes(app: FastifyInstance) {
     const account = requireAccount(request, reply);
     if (!account) return;
     const params = request.params as { sessionId: string };
-    const session = findSession(params.sessionId);
-    if (!session)
-      return sendError(reply, 404, "session_not_found", "Session not found");
-    if (session.userId !== account.id) return forbidden(reply);
-    if (!deleteSession(params.sessionId)) {
-      return sendError(reply, 404, "session_not_found", "Session not found");
-    }
-    reply.status(204);
-    return null;
+    return withSessionWriteLock(params.sessionId, () => {
+      const session = findSession(params.sessionId);
+      if (!session)
+        return sendError(reply, 404, "session_not_found", "Session not found");
+      if (session.userId !== account.id) return forbidden(reply);
+      if (!deleteSession(params.sessionId)) {
+        return sendError(reply, 404, "session_not_found", "Session not found");
+      }
+      reply.status(204);
+      return null;
+    });
   });
 
   app.get("/sessions/:sessionId/export", async (request, reply) => {
@@ -199,19 +210,21 @@ export async function registerSessionsRoutes(app: FastifyInstance) {
     }
 
     const params = request.params as { sessionId: string };
-    const session = findSession(params.sessionId);
-    if (!session)
-      return sendError(reply, 404, "session_not_found", "Session not found");
     const body = request.body as Partial<{ reason: unknown }> | undefined;
-    const refund = refundSessionUsage(session, { reason: body?.reason });
-    return {
-      sessionId: session.id,
-      refundedSeconds: refund.refundedSeconds,
-      reason: refund.reason,
-      idempotencyKey: refund.idempotencyKey,
-      balance: refund.balance,
-      ledgerId: refund.ledger?.id,
-    };
+    return withSessionWriteLock(params.sessionId, () => {
+      const session = findSession(params.sessionId);
+      if (!session)
+        return sendError(reply, 404, "session_not_found", "Session not found");
+      const refund = refundSessionUsage(session, { reason: body?.reason });
+      return {
+        sessionId: session.id,
+        refundedSeconds: refund.refundedSeconds,
+        reason: refund.reason,
+        idempotencyKey: refund.idempotencyKey,
+        balance: refund.balance,
+        ledgerId: refund.ledger?.id,
+      };
+    });
   });
 }
 

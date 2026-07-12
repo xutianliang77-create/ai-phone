@@ -8,6 +8,7 @@ export interface ApiEnv {
   callProviderPolicy: string;
   complianceProfile: string;
   realtimeStaleSessionGraceSeconds: number;
+  realtimeStaleSessionSweepSeconds: number;
 }
 
 export function loadEnv(): ApiEnv {
@@ -28,6 +29,10 @@ export function loadEnv(): ApiEnv {
     realtimeStaleSessionGraceSeconds: positiveNumber(
       process.env.REALTIME_STALE_SESSION_GRACE_SECONDS,
       300,
+    ),
+    realtimeStaleSessionSweepSeconds: positiveNumber(
+      process.env.REALTIME_STALE_SESSION_SWEEP_SECONDS,
+      30,
     ),
   };
 }

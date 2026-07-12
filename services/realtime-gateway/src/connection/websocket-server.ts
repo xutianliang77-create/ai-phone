@@ -1,22 +1,21 @@
 import { WebSocketServer, type WebSocket } from "ws";
 import { createServer } from "node:http";
-import type { ClientTextSegmentEvent, SessionEndReason, ServerRealtimeEvent } from "@translation/contracts";
+import type { SessionEndReason, ServerRealtimeEvent } from "@translation/contracts";
 import { verifyRealtimeToken } from "../auth/realtime-token-verifier.js";
 import { loadEnv } from "../config/env.js";
 import { AudioFrameBatcher } from "./audio-frame-batcher.js";
 import { clearAudioFrameLog, logAudioFrameReceived } from "../metrics/audio-frame-logger.js";
 import { handleGatewayHttpRequest } from "./gateway-health.js";
 import { realtimeLogger } from "../metrics/realtime-metrics.js";
-import { clearTextSegmentLog, logClientTextSegmentReceived } from "../metrics/text-segment-logger.js";
+import { clearTextSegmentLog } from "../metrics/text-segment-logger.js";
 import { parseIncomingEvent } from "../protocol/incoming-event-parser.js";
 import { buildError, serializeEvent } from "../protocol/outgoing-event-builder.js";
-import { normalizeClientTextLanguage } from "../protocol/client-text-language.js";
 import { ProviderRouter } from "../providers/provider-router.js";
 import type { RealtimeProvider } from "../providers/realtime-provider.js";
 import { asrCorrectionTermsForPacks, asrHotwordsForTerminology } from "../domain/domain-lexicon.js";
 import { createSessionEventSink } from "../sessions/session-event-sink.js";
 import { loadTerminologyForSession } from "../sessions/session-domain-terminology.js";
-import { attachSession, deleteSession, getSession, sessionBillableSeconds, transitionStatus } from "../sessions/session-manager.js";
+import { attachSession, confirmSessionConnection, deleteSession, getSession, sessionBillableSeconds, transitionStatus } from "../sessions/session-manager.js";
 import { createUsageBalanceClient } from "../usage/usage-balance-client.js";
 import { createUsageTickDecision } from "../usage/usage-ticker.js";
 import { HttpTtsSynthesizer } from "../tts/http-tts-synthesizer.js";
@@ -31,9 +30,9 @@ import {
   logSpeakerAttributionConfigured,
   resolveSpeakerAttribution,
 } from "./speaker-attribution-config.js";
+import { handleTextSegment } from "./client-text-segment-handler.js";
 
 const router = new ProviderRouter();
-const disconnectGraceMs = 45_000;
 export { normalizeClientTextLanguage } from "../protocol/client-text-language.js";
 
 function send(ws: WebSocket, event: ServerRealtimeEvent) {
@@ -49,7 +48,7 @@ export function startWebSocketServer() {
   const sessionEventSink = createSessionEventSink(env);
   const usageBalanceClient = createUsageBalanceClient(env);
   const disconnectFinalizers = new DisconnectFinalizerRegistry(
-    disconnectGraceMs,
+    env.disconnectGraceMs,
     (error) => realtimeLogger.error({ error }, "Deferred session finalization failed"),
   );
 
@@ -76,8 +75,7 @@ export function startWebSocketServer() {
       ws.close();
       return;
     }
-    const { session, generation } = attachment;
-    disconnectFinalizers.cancel(session.id);
+    const { session, generation, resumed } = attachment;
     let provider: RealtimeProvider;
     try {
       provider = router.selectProvider(env);
@@ -145,7 +143,9 @@ export function startWebSocketServer() {
     });
     const sendRealtime = eventDispatcher.send;
 
-    sendRealtime({ type: "session.started", sessionId: session.id });
+    const startedEvent = { type: "session.started", sessionId: session.id } as const;
+    if (resumed) send(ws, startedEvent);
+    else sendRealtime(startedEvent);
     let controlQueue = Promise.resolve();
     let usageTickInFlight = false;
     const audioBatcher = new AudioFrameBatcher({
@@ -184,6 +184,12 @@ export function startWebSocketServer() {
     };
 
     const usageInterval = setInterval(() => {
+      if (session.status === "active" || session.status === "paused") {
+        void sessionEventSink.touch(session.id, session.status).catch((error) => {
+          realtimeLogger.warn({ error, sessionId: session.id },
+            "Realtime session heartbeat sync failed");
+        });
+      }
       if (session.status !== "active" || usageTickInFlight) return;
       usageTickInFlight = true;
       controlQueue = controlQueue
@@ -215,6 +221,11 @@ export function startWebSocketServer() {
           retryable: false,
         }));
         return;
+      }
+
+      if (event.sessionId === session.id &&
+          confirmSessionConnection(session.id, generation)) {
+        disconnectFinalizers.cancel(session.id);
       }
 
       if (event.type === "audio.frame") {
@@ -264,6 +275,16 @@ export function startWebSocketServer() {
     });
 
     let connectionError = false;
+    let heartbeatAlive = true;
+    ws.on("pong", () => { heartbeatAlive = true; });
+    const heartbeatInterval = setInterval(() => {
+      if (!heartbeatAlive) {
+        ws.terminate();
+        return;
+      }
+      heartbeatAlive = false;
+      ws.ping();
+    }, env.heartbeatIntervalMs);
     const connectionCleanup = new RealtimeConnectionCleanup({
       session,
       generation,
@@ -277,8 +298,12 @@ export function startWebSocketServer() {
         "Realtime connection cleanup failed",
       ),
     });
+    if (resumed && session.disconnectDeadlineAt !== undefined) {
+      connectionCleanup.scheduleDeferredFinalization("connection_closed");
+    }
     const cleanupConnection = async () => {
       clearInterval(usageInterval);
+      clearInterval(heartbeatInterval);
       clearAudioFrameLog(session.id);
       clearTextSegmentLog(session.id);
       ttsOutputQueue.close();
@@ -305,45 +330,4 @@ export function startWebSocketServer() {
     httpServer.close();
   });
   return server;
-}
-
-async function handleTextSegment(
-  event: ClientTextSegmentEvent,
-  expectedSessionId: string,
-  provider: RealtimeProvider,
-  sendEvent: (event: ServerRealtimeEvent) => void,
-) {
-  const session = getSession(expectedSessionId);
-  if (!session || event.sessionId !== expectedSessionId) {
-    sendEvent(buildError("bad_event", "Realtime session was not found", {
-      sessionId: expectedSessionId,
-      stage: "session",
-      retryable: false,
-    }));
-    return;
-  }
-  if (session.status !== "active") return;
-  if (!provider.sendText) {
-    sendEvent(buildError("bad_event", "Realtime provider does not accept text segments", {
-      sessionId: expectedSessionId,
-      stage: "provider",
-      provider: provider.name,
-      retryable: false,
-    }));
-    return;
-  }
-  const language = normalizeClientTextLanguage(event.language, session.claims.targetLanguage);
-  const normalizedEvent: ClientTextSegmentEvent = { ...event, language };
-  logClientTextSegmentReceived(normalizedEvent);
-
-  for await (const outgoing of provider.sendText({
-    sessionId: normalizedEvent.sessionId,
-    segmentId: normalizedEvent.segmentId,
-    text: normalizedEvent.text,
-    language: normalizedEvent.language,
-    isFinal: normalizedEvent.isFinal !== false,
-    confidence: normalizedEvent.confidence,
-  })) {
-    sendEvent(outgoing);
-  }
 }

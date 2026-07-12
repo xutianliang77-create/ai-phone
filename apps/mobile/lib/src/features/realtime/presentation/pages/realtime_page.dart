@@ -58,6 +58,7 @@ class _RealtimePageState extends State<RealtimePage>
   late RealtimeRuntimeSettings _settings;
   late RealtimeController controller;
   bool _onlineRecoveryInFlight = false;
+  Timer? _finalizationReplayTimer;
 
   @override
   void initState() {
@@ -72,19 +73,33 @@ class _RealtimePageState extends State<RealtimePage>
     _config = _settings.applyTo(baseConfig);
     controller = _createRealtimePageController(this, _config);
     WidgetsBinding.instance.addObserver(this);
+    unawaited(controller.recoverPendingFinalizations());
+    _finalizationReplayTimer = Timer.periodic(
+      const Duration(seconds: 15),
+      (_) => unawaited(controller.recoverPendingFinalizations()),
+    );
     unawaited(_loadSettings());
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _finalizationReplayTimer?.cancel();
     controller.dispose();
     super.dispose();
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    unawaited(controller.handleLifecycleState(state));
+    unawaited(_handleLifecycleState(state));
+  }
+
+  Future<void> _handleLifecycleState(AppLifecycleState state) async {
+    final current = controller;
+    if (state == AppLifecycleState.resumed) {
+      await current.recoverPendingFinalizations();
+    }
+    await current.handleLifecycleState(state);
   }
 
   @override

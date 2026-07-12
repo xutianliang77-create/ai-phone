@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import type { RealtimeTokenClaims } from "@translation/contracts";
 import {
   attachSession,
+  confirmSessionConnection,
   createSession,
   deleteSession,
   sessionBillableSeconds,
@@ -45,6 +46,8 @@ describe("realtime gateway session manager", () => {
 
     expect(attached?.session).toBe(session);
     expect(attached).toMatchObject({ generation: 2, resumed: true });
+    expect(session.status).toBe("connecting");
+    expect(confirmSessionConnection(session.id, 2)).toBe(true);
     expect(session.status).toBe("active");
   });
 

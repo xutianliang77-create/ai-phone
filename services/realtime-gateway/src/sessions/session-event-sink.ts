@@ -7,6 +7,7 @@ import { cleanRealtimeText } from "../protocol/realtime-text.js";
 
 export interface SessionEventSink {
   record(event: ServerRealtimeEvent): Promise<void>;
+  touch(sessionId: string, status: "active" | "paused"): Promise<void>;
 }
 
 export function createSessionEventSink(env: RealtimeEnv): SessionEventSink {
@@ -20,6 +21,7 @@ export function createSessionEventSink(env: RealtimeEnv): SessionEventSink {
 
 class NoopSessionEventSink implements SessionEventSink {
   async record() {}
+  async touch() {}
 }
 
 class ApiSessionEventSink implements SessionEventSink {
@@ -127,6 +129,10 @@ class ApiSessionEventSink implements SessionEventSink {
         ...(event.diagnostics ? { diagnostics: event.diagnostics } : {}),
       }, 3);
     }
+  }
+
+  async touch(sessionId: string, status: "active" | "paused") {
+    await this.post(`/internal/realtime/sessions/${sessionId}/state`, { status });
   }
 
   private async upsertSegment(body: UpsertSessionSegmentRequest) {

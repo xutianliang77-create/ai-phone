@@ -105,6 +105,29 @@ class RealtimeApiClient {
     _client.close();
   }
 
+  Future<void> finalizeSession({
+    required String sessionId,
+    required List<Map<String, Object?>> segments,
+    required int billableSeconds,
+    required String idempotencyKey,
+  }) async {
+    final response = await _client
+        .post(
+          _baseUrl.resolve('/realtime/sessions/$sessionId/finalize'),
+          headers: await _authHeaders(json: true),
+          body: jsonEncode(<String, Object?>{
+            'sessionId': sessionId,
+            'segments': segments,
+            'billableSeconds': billableSeconds,
+            'idempotencyKey': idempotencyKey,
+          }),
+        )
+        .timeout(_requestTimeout);
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw RealtimeApiException('Finalize session failed: ${response.body}');
+    }
+  }
+
   Future<Map<String, String>> _authHeaders({bool json = false}) {
     return accountAuthorizationHeaders(
       _accountSessionStore,

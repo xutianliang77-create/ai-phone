@@ -33,12 +33,27 @@ export function attachSession(claims: RealtimeTokenClaims) {
     return null;
   }
   existing.connectionGeneration += 1;
-  transitionStatus(existing.id, "active");
   return {
     session: existing,
     generation: existing.connectionGeneration,
     resumed: true,
   };
+}
+
+export function confirmSessionConnection(
+  sessionId: string,
+  generation: number,
+) {
+  const session = getSession(sessionId);
+  if (!session || session.connectionGeneration !== generation) return false;
+  if (session.status === "connecting") {
+    const target = session.reconnectStatus ?? "active";
+    const result = transitionStatus(sessionId, target);
+    if (!result?.transition.accepted) return false;
+  }
+  session.reconnectStatus = undefined;
+  session.disconnectDeadlineAt = undefined;
+  return true;
 }
 
 export function getSession(sessionId: string) {

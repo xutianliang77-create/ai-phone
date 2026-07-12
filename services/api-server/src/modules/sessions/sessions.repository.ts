@@ -37,7 +37,7 @@ export function findSession(sessionId: string) {
   return getStoreSnapshot().sessions.find((session) => session.id === sessionId) ?? null;
 }
 
-export function endSession(sessionId: string) {
+export function endSession(sessionId: string, now = new Date()) {
   const session = findSession(sessionId);
   if (!session) return null;
   const wasAlreadyEnded = session.status === "ended";
@@ -45,7 +45,7 @@ export function endSession(sessionId: string) {
   const transition = transitionRealtimeSessionState(session.status, "ended");
   if (!transition.accepted) return null;
   session.status = "ended";
-  session.endedAt = new Date().toISOString();
+  session.endedAt = now.toISOString();
   session.lastActivityAt = session.endedAt;
   persistStoreSnapshot();
   return { session, wasAlreadyEnded };
@@ -58,8 +58,8 @@ export function transitionSessionState(
   const session = findSession(sessionId);
   if (!session) return null;
   const transition = transitionRealtimeSessionState(session.status, status);
-  if (transition.changed) {
-    session.status = status;
+  if (transition.changed) session.status = status;
+  if (transition.accepted) {
     session.lastActivityAt = new Date().toISOString();
     persistStoreSnapshot();
   }
@@ -182,6 +182,19 @@ export function updateConsumedSeconds(sessionId: string, consumedSeconds: number
   if (!session) return null;
   session.consumedSeconds = consumedSeconds;
   session.lastActivityAt = new Date().toISOString();
+  persistStoreSnapshot();
+  return session;
+}
+
+export function markSessionFinalized(
+  sessionId: string,
+  idempotencyKey: string,
+) {
+  const session = findSession(sessionId);
+  if (!session) return null;
+  session.finalizationIdempotencyKey = idempotencyKey;
+  session.finalizedAt = new Date().toISOString();
+  session.lastActivityAt = session.finalizedAt;
   persistStoreSnapshot();
   return session;
 }

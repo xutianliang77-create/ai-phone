@@ -23,6 +23,13 @@ extension RealtimeControllerStop on RealtimeController {
       _audioSubscription = null;
       _asrSubscription = null;
       _resumeAfterLifecyclePause = false;
+      if (session != null) {
+        await _repository.prepareFinalization(
+          session.sessionId,
+          _segments,
+          billableSeconds: _activeTimeClock.billableSeconds,
+        );
+      }
       _setStatus(RealtimeStatus.ended);
       if (session != null) {
         try {

@@ -20,4 +20,6 @@ export interface SessionRecord {
   segments: SessionSegmentDto[];
   review?: SessionReviewResponse | null;
   diagnostics?: RealtimeSessionDiagnosticsDto;
+  finalizationIdempotencyKey?: string;
+  finalizedAt?: string;
 }

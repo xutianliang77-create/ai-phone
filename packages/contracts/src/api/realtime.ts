@@ -15,6 +15,13 @@ export interface SessionStatusResponse {
   consumedSeconds: number;
 }
 
+export interface FinalizeRealtimeSessionRequest {
+  sessionId: string;
+  idempotencyKey: string;
+  billableSeconds: number;
+  segments: SessionSegmentDto[];
+}
+
 export interface UpdateRealtimeSessionStateRequest {
   status: Extract<PersistedRealtimeSessionState, "active" | "paused" | "failed">;
 }

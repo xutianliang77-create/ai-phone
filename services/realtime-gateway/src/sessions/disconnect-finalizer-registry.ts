@@ -1,30 +1,43 @@
 export class DisconnectFinalizerRegistry {
-  private readonly timers = new Map<string, ReturnType<typeof setTimeout>>();
+  private readonly entries = new Map<string, {
+    timer: ReturnType<typeof setTimeout>;
+    deadlineAt: number;
+  }>();
 
   constructor(
     private readonly graceMs: number,
     private readonly onError: (error: unknown) => void,
   ) {}
 
-  schedule(sessionId: string, finalize: () => Promise<void>) {
-    this.cancel(sessionId);
+  schedule(
+    sessionId: string,
+    finalize: () => Promise<void>,
+    deadlineAt = this.entries.get(sessionId)?.deadlineAt ?? Date.now() + this.graceMs,
+  ) {
+    const existing = this.entries.get(sessionId);
+    if (existing) clearTimeout(existing.timer);
     const timer = setTimeout(() => {
-      this.timers.delete(sessionId);
+      this.entries.delete(sessionId);
       void finalize().catch(this.onError);
-    }, this.graceMs);
-    this.timers.set(sessionId, timer);
+    }, Math.max(0, deadlineAt - Date.now()));
+    this.entries.set(sessionId, { timer, deadlineAt });
+    return deadlineAt;
+  }
+
+  deadline(sessionId: string) {
+    return this.entries.get(sessionId)?.deadlineAt;
   }
 
   cancel(sessionId: string) {
-    const timer = this.timers.get(sessionId);
-    if (!timer) return false;
-    clearTimeout(timer);
-    this.timers.delete(sessionId);
+    const entry = this.entries.get(sessionId);
+    if (!entry) return false;
+    clearTimeout(entry.timer);
+    this.entries.delete(sessionId);
     return true;
   }
 
   close() {
-    for (const timer of this.timers.values()) clearTimeout(timer);
-    this.timers.clear();
+    for (const entry of this.entries.values()) clearTimeout(entry.timer);
+    this.entries.clear();
   }
 }

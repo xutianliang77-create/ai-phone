@@ -7,6 +7,7 @@ import {
   listSessionSpeakers,
   renameSessionSpeaker,
 } from "./sessions.repository.js";
+import { withSessionWriteLock } from "./session-write-coordinator.js";
 
 export function registerSessionSpeakerRoutes(app: FastifyInstance) {
   app.get("/sessions/:sessionId/speakers", async (request, reply) => {
@@ -29,10 +30,6 @@ export function registerSessionSpeakerRoutes(app: FastifyInstance) {
       const account = requireAccount(request, reply);
       if (!account) return;
       const params = request.params as { sessionId: string; speakerId: string };
-      const session = findSession(params.sessionId);
-      if (!session)
-        return sendError(reply, 404, "session_not_found", "Session not found");
-      if (session.userId !== account.id) return forbidden(reply);
       const body = request.body;
       const displayName = body && typeof body === "object" &&
         "displayName" in body && typeof body.displayName === "string"
@@ -46,15 +43,21 @@ export function registerSessionSpeakerRoutes(app: FastifyInstance) {
           "displayName must contain 1 to 40 characters",
         );
       }
-      const updated = renameSessionSpeaker(
-        session.id,
-        params.speakerId,
-        displayName,
-      );
-      if (!updated) {
-        return sendError(reply, 404, "speaker_not_found", "Speaker not found");
-      }
-      return toSessionDetail(updated);
+      return withSessionWriteLock(params.sessionId, () => {
+        const session = findSession(params.sessionId);
+        if (!session)
+          return sendError(reply, 404, "session_not_found", "Session not found");
+        if (session.userId !== account.id) return forbidden(reply);
+        const updated = renameSessionSpeaker(
+          session.id,
+          params.speakerId,
+          displayName,
+        );
+        if (!updated) {
+          return sendError(reply, 404, "speaker_not_found", "Speaker not found");
+        }
+        return toSessionDetail(updated);
+      });
     },
   );
 }
