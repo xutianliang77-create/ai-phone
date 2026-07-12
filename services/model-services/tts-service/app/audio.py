@@ -41,3 +41,36 @@ def flatten_numeric_audio(audio) -> list[float]:
                 values.append(float(item))
         return values
     return [float(audio)]
+
+
+def resample_audio(
+    samples: Iterable[float],
+    *,
+    source_rate: int,
+    target_rate: int,
+) -> list[float]:
+    values = [float(value) for value in samples]
+    if source_rate <= 0 or target_rate <= 0:
+        raise ValueError("sample rates must be positive")
+    if not values or source_rate == target_rate:
+        return values
+
+    try:
+        import numpy as np
+        from scipy.signal import resample_poly
+    except ImportError as exc:
+        raise RuntimeError("VoxCPM2 resampling requires numpy and scipy") from exc
+
+    divisor = math.gcd(source_rate, target_rate)
+    result = resample_poly(
+        np.asarray(values, dtype=np.float32),
+        target_rate // divisor,
+        source_rate // divisor,
+        window=("kaiser", 5.0),
+    )
+    expected_count = round(len(values) * target_rate / source_rate)
+    if len(result) > expected_count:
+        result = result[:expected_count]
+    elif len(result) < expected_count:
+        result = np.pad(result, (0, expected_count - len(result)))
+    return [float(value) for value in result]

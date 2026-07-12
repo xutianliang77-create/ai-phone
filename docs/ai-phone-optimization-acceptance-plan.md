@@ -1,6 +1,6 @@
 # ai phone 优化验收方案
 
-版本：v1.13
+版本：v1.14
 日期：2026-07-12
 任务来源：`docs/ai-phone-optimization-development-tasks.md`
 
@@ -31,7 +31,7 @@
 | AC-RT-002 | OPT-RT-002 | 断网、杀 App、WS close、重复 End | 点击结束后本地立即进入终态；可用网络下历史可打开，用量只结算一次；网络恢复后待结算任务可收敛 |
 | AC-RT-003 | OPT-RT-003 | 中文长句在中间停顿 | 语义完整句可合并，不重复、不永久等待 |
 | AC-RT-004 | OPT-RT-004 | 说完立即点结束 | 最后一句原文和译文均保存 |
-| AC-RT-005 | OPT-RT-005 | 20 句长短混合 TTS | 播放顺序与字幕一致，结束后无残留声音 |
+| AC-RT-005 | OPT-RT-005 | 自然声音和“我的声音”固定句、20句长短混合 TTS | 响应明确报告模型/输出采样率；48k 模型 PCM 重采样为24k后样本时长不变、音高正常；播放顺序与字幕一致，结束后无残留声音 |
 | AC-VAD-001 | OPT-VAD-001 | 低音量真机语音、静音、中等噪声、较大非语音噪声、800ms 音频批次 | 低音量可检出；三类非语音均不产字幕；health 为 marblenet 0.5；无 fallback |
 | AC-VAD-002 | OPT-VAD-002 | 模型资产缺失、ONNX 推理异常、会话正常结束 | 自动切 RMS 且 ASR 继续；session 报告记录 fallback、fingerprint 和 endpoint reason |
 | AC-VAD-003 | OPT-VAD-003 | 对话、聆听、Call Link、8kHz PSTN 固定语料 | 各模式门槛通过，切换模式不污染其他 session，可回退统一基线 |
@@ -149,6 +149,8 @@ TTS 回灌指标由 App playback gate/AEC 验收，不能把 VAD 对合成语音
 `AC-RT-002` 已通过新版本真机复验：session `7a576a03-d139-4e42-a473-bb0ee13fb63a` 在断网 End 后先显示本地结束和待同步提示，恢复网络后 durable outbox 自动收敛为 ended；2段字幕完整，`consumedSeconds=21`、`heldSeconds=0`。ledger 仅有 `8cc0204b-b092-46c7-95a1-0f02ff422548` 一条 `-21` 秒记录，幂等键为 `settle:7a576a03-d139-4e42-a473-bb0ee13fb63a`。
 
 `AC-RT-003/004` 当前证据：RT-003B session `f3bb9ac8-8300-4054-8fa5-410ad64e0ec0` 三轮 silence final 均有译文，估算整句延迟全部低于2.5秒；RT-004A session `52861225-aece-42fd-aef0-8fc0d550d0a1` 的最后一句、编号407和提交时间完整保存并翻译。RT-004B session `46b92293-6efd-4d01-9e4c-0ad902bad21f` 在翻译处理中立即结束后完整保留编号408、明天下午三点和完整报告，尾句到 ended 收敛约1.34秒，169帧零丢失，hold=0且仅一条 `-19` 秒 ledger。RT-003A session `7b348952-19ad-4cd9-9a50-57c4c6614b95` 保留为失败回归样本：第二轮硬切段曾被 LLM 扩写未来后缀并与下一 raw 重复；本地修复门禁已通过，尚未部署，不能标记 AC-RT-003 整项通过。
+
+`AC-RT-005` 部署前证据：已定位 VoxCPM2 模型真实输出48k、服务错误标记24k且未重采样，导致声音时长和感知延迟翻倍。修复后本机21项 TTS 测试通过；Beelink 当前推理 Python 使用临时源码验证16/24/48k一秒440Hz波形均输出24000个24k样本，时长仍为1秒且正向过零数439/440/439。自然声音与个人克隆共用统一输出路径；尚未部署和完成 iPhone 听感复验，因此 AC-RT-005 仍未通过。
 
 `AC-SPK-002/006/007` 新自动矩阵：固定生成26段四种合成声音，并组成双人轮换、1.2秒快速切换、overlap、四人和一分钟稳定性语料。active Sortformer 结果为：四人 DER `4.44%`、overlap `3.63%`、一分钟 `3.77%`，均无标签漂移并通过；普通双人 DER `22.05%`，因早期同一声音被临时分配到第三槽位略超门槛；快速切换 DER `35.42%`，未通过。失败项保留为阻塞证据，不调整20%门槛。另有 Beelink 全链路会话 `25b48a5c-3cff-490b-8091-929b62d91f2a` 通过，保存 `speaker_1/2`、`turn_1/2`、中英文画像，hit=1、drop/miss/error/race=0、确认延迟880ms。
 

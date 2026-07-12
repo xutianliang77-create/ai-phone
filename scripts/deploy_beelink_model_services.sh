@@ -321,6 +321,7 @@ fi
 
 start_service asr-service "$ASR_SERVICE_DIR" "$ASR_PORT"
 start_service translation-service "$TRANSLATION_SERVICE_DIR" "$TRANSLATION_PORT"
+"$REMOTE_PYTHON" -c "import numpy; from scipy.signal import resample_poly"
 start_service tts-service "$TTS_SERVICE_DIR" "$TTS_PORT"
 if [ "$SPEAKER_SERVICE_ENABLED" = "true" ]; then
   start_service speaker-service "$SPEAKER_SERVICE_DIR" "$SPEAKER_PORT" "$SPEAKER_REMOTE_PYTHON"

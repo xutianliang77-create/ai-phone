@@ -10,6 +10,9 @@ class TtsEngine(Protocol):
     def health(self) -> tuple[bool, str | None]:
         ...
 
+    def sample_rates(self) -> tuple[int | None, int]:
+        ...
+
     async def synthesize(
         self,
         request: TtsSynthesizeRequest,

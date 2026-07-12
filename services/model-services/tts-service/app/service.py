@@ -24,6 +24,9 @@ class TtsService:
     def health(self) -> tuple[bool, str | None]:
         return self.engine.health()
 
+    def sample_rates(self) -> tuple[int | None, int]:
+        return self.engine.sample_rates()
+
     async def synthesize(
         self,
         request: TtsSynthesizeRequest,

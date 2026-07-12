@@ -17,6 +17,8 @@ def test_health_route_mock() -> None:
         "modelVersion": "mock-tts-v0.1.0",
         "available": True,
         "reason": None,
+        "modelSampleRate": 16000,
+        "outputSampleRate": 16000,
     }
 
 
@@ -30,6 +32,8 @@ def test_synthesize_route_returns_tts_contract() -> None:
     assert body["provider"] == "mock"
     assert body["model"] == "mock-tts-v0.1.0"
     assert body["firstAudioMs"] >= 0
+    assert body["modelSampleRate"] == 16000
+    assert body["outputSampleRate"] == 16000
     assert body["audio"]["format"] == "pcm16"
     assert body["audio"]["sampleRate"] == 16000
     assert body["audio"]["data"]

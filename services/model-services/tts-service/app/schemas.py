@@ -19,6 +19,8 @@ class HealthResponse(BaseModel):
     modelVersion: str
     available: bool
     reason: str | None = None
+    modelSampleRate: int | None = Field(default=None, ge=1)
+    outputSampleRate: SampleRate | None = None
 
 
 class TtsVoiceConfig(BaseModel):
@@ -58,6 +60,8 @@ class TtsSynthesizeResponse(BaseModel):
     voiceProfileId: str | None = None
     firstAudioMs: int = Field(ge=0)
     audioDurationMs: int = Field(ge=1)
+    modelSampleRate: int = Field(ge=1)
+    outputSampleRate: SampleRate
     audio: TtsAudioPayload
 
 

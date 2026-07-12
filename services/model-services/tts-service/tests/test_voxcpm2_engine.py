@@ -1,10 +1,15 @@
+import base64
+import json
+import math
+
 import pytest
 
+from app.audio import resample_audio
 from app.schemas import TtsSynthesizeRequest
 from app.voxcpm2_engine import (
     VoxCpm2TtsEngine,
     build_voxcpm2_text,
-    parse_sample_rate,
+    parse_model_sample_rate,
     voxcpm2_generate_kwargs,
 )
 
@@ -18,9 +23,31 @@ def test_voxcpm2_text_uses_language_prompt() -> None:
     )
 
 
-def test_parse_sample_rate_keeps_supported_rates() -> None:
-    assert parse_sample_rate(16000) == 16000
-    assert parse_sample_rate(24000) == 24000
+def test_parse_model_sample_rate_preserves_real_model_rate() -> None:
+    assert parse_model_sample_rate(16000) == 16000
+    assert parse_model_sample_rate(24000) == 24000
+    assert parse_model_sample_rate(48000) == 48000
+
+
+@pytest.mark.parametrize("source_rate", [16000, 24000, 48000])
+def test_resample_audio_preserves_one_second_tone(source_rate: int) -> None:
+    source = [
+        0.5 * math.sin(2 * math.pi * 440 * index / source_rate)
+        for index in range(source_rate)
+    ]
+
+    output = resample_audio(
+        source,
+        source_rate=source_rate,
+        target_rate=24000,
+    )
+
+    positive_crossings = sum(
+        output[index - 1] <= 0 < output[index]
+        for index in range(1, len(output))
+    )
+    assert len(output) == 24000
+    assert 439 <= positive_crossings <= 441
 
 
 def test_voxcpm2_kwargs_include_clone_reference_when_supported(tmp_path) -> None:
@@ -98,7 +125,7 @@ def test_voxcpm2_kwargs_filter_streaming_wrapper_unknown_keys(tmp_path) -> None:
 async def test_voxcpm2_engine_resolves_reference_audio_id(tmp_path) -> None:
     reference = tmp_path / "my_voice.wav"
     reference.write_bytes(b"RIFF")
-    model = FakeVoxCpmModel()
+    model = FakeVoxCpmModel(sample_rate=48000, duration_seconds=1)
     engine = VoxCpm2TtsEngine(
         model_dir=str(tmp_path),
         cfg_value=2.0,
@@ -122,19 +149,72 @@ async def test_voxcpm2_engine_resolves_reference_audio_id(tmp_path) -> None:
 
     assert response.voiceMode == "personal_clone"
     assert response.voiceProfileId == "my_voice"
+    assert response.modelSampleRate == 48000
+    assert response.outputSampleRate == 24000
+    assert response.audio.sampleRate == 24000
+    assert response.audioDurationMs == 1000
     assert model.kwargs["reference_wav_path"] == str(reference)
 
 
+def test_voxcpm2_health_rates_are_read_from_model_config(tmp_path) -> None:
+    (tmp_path / "config.json").write_text(json.dumps({
+        "audio_vae_config": {
+            "sample_rate": 16000,
+            "out_sample_rate": 48000,
+        },
+    }))
+    engine = VoxCpm2TtsEngine(
+        model_dir=str(tmp_path),
+        cfg_value=2.0,
+        inference_timesteps=10,
+        load_denoiser=False,
+    )
+
+    assert engine.sample_rates() == (48000, 24000)
+
+
+@pytest.mark.asyncio
+async def test_voxcpm2_engine_converts_48k_model_audio_to_24k_protocol(tmp_path) -> None:
+    model = FakeVoxCpmModel(sample_rate=48000, duration_seconds=1)
+    engine = VoxCpm2TtsEngine(
+        model_dir=str(tmp_path),
+        cfg_value=2.0,
+        inference_timesteps=10,
+        load_denoiser=False,
+    )
+    engine._model = model
+
+    response = await engine.synthesize(TtsSynthesizeRequest(
+        text="hello",
+        language="en",
+        speakerRole="guest",
+        segmentId="seg_48k",
+    ))
+
+    pcm = base64.b64decode(response.audio.data)
+    assert response.modelSampleRate == 48000
+    assert response.outputSampleRate == 24000
+    assert response.audio.sampleRate == 24000
+    assert response.audioDurationMs == 1000
+    assert len(pcm) == 24000 * 2
+
+
 class FakeTtsModel:
-    sample_rate = 24000
+    def __init__(self, sample_rate: int) -> None:
+        self.sample_rate = sample_rate
 
 
 class FakeVoxCpmModel:
-    tts_model = FakeTtsModel()
-
-    def __init__(self) -> None:
+    def __init__(self, sample_rate: int = 24000, duration_seconds: int = 0) -> None:
+        self.tts_model = FakeTtsModel(sample_rate)
+        self.duration_seconds = duration_seconds
         self.kwargs = {}
 
     def generate(self, **kwargs):
         self.kwargs = kwargs
+        if self.duration_seconds:
+            return [
+                0.5 * math.sin(2 * math.pi * 440 * index / self.tts_model.sample_rate)
+                for index in range(self.tts_model.sample_rate * self.duration_seconds)
+            ]
         return [0.0, 0.1, -0.1]

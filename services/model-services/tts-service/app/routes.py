@@ -20,6 +20,7 @@ def create_router(service: TtsService, config: TtsConfig) -> APIRouter:
     @router.get("/health", response_model=HealthResponse)
     async def health() -> HealthResponse:
         available, reason = service.health()
+        model_sample_rate, output_sample_rate = service.sample_rates()
         return HealthResponse(
             status="ok" if available else "degraded",
             service="tts-service",
@@ -27,6 +28,8 @@ def create_router(service: TtsService, config: TtsConfig) -> APIRouter:
             modelVersion=config.model_version,
             available=available,
             reason=reason,
+            modelSampleRate=model_sample_rate,
+            outputSampleRate=output_sample_rate,
         )
 
     @router.post(

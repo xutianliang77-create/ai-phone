@@ -33,6 +33,8 @@ set -euo pipefail
 cd "$REMOTE_SERVICE_DIR"
 umask 077
 
+"$REMOTE_PYTHON" -c "import numpy; from scipy.signal import resample_poly"
+
 if [ -z "${TTS_SERVICE_API_KEY:-}" ] && [ -f .env ]; then
   TTS_SERVICE_API_KEY="$(awk -F= '/^TTS_SERVICE_API_KEY=/{print $2}' .env)"
 fi

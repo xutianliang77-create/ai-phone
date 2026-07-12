@@ -17,6 +17,7 @@ test = [
 ]
 voxcpm2 = [
   "numpy>=1.26,<3",
+  "scipy>=1.11,<2",
 ]
 
 [tool.pytest.ini_options]

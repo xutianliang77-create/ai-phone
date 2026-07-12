@@ -37,6 +37,11 @@ uvicorn app.main:app --host 0.0.0.0 --port 8002
 are available. `POST /tts/synthesize` returns `503` instead of fake audio when
 VoxCPM2 cannot load.
 
+VoxCPM2 currently emits 48 kHz PCM. The service uses polyphase resampling to
+produce the 24 kHz realtime protocol payload; it never relabels 48 kHz samples
+as 24 kHz. Health and synthesis responses expose `modelSampleRate` and
+`outputSampleRate` so this invariant can be monitored.
+
 ## Local Contract Smoke
 
 ```bash

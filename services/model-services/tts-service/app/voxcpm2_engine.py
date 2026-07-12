@@ -1,8 +1,9 @@
 from pathlib import Path
 from inspect import signature
+import json
 import time
 
-from app.audio import flatten_numeric_audio, pcm16_base64_from_floats
+from app.audio import flatten_numeric_audio, pcm16_base64_from_floats, resample_audio
 from app.errors import TtsUnavailableError
 from app.schemas import TtsAudioPayload, TtsSynthesizeRequest, TtsSynthesizeResponse
 
@@ -23,6 +24,7 @@ VOXCPM2_GENERATE_KWARGS = frozenset({
     "retry_badcase_ratio_threshold",
     "streaming",
 })
+OUTPUT_SAMPLE_RATE = 24000
 
 
 class VoxCpm2TtsEngine:
@@ -42,25 +44,42 @@ class VoxCpm2TtsEngine:
         self.voice_reference_dir = Path(voice_reference_dir) if voice_reference_dir else None
         self._model = None
         self._load_error: str | None = None
+        self._model_sample_rate = configured_model_sample_rate(self.model_dir)
 
     def health(self) -> tuple[bool, str | None]:
         if self._model is not None:
             return True, None
         return self._can_load()
 
+    def sample_rates(self) -> tuple[int | None, int]:
+        return self._model_sample_rate, OUTPUT_SAMPLE_RATE
+
     async def synthesize(
         self,
         request: TtsSynthesizeRequest,
     ) -> TtsSynthesizeResponse:
         model = self._load()
-        sample_rate = parse_sample_rate(getattr(getattr(model, "tts_model", None), "sample_rate", 24000))
+        model_sample_rate = parse_model_sample_rate(
+            getattr(getattr(model, "tts_model", None), "sample_rate", None)
+            or self._model_sample_rate
+            or OUTPUT_SAMPLE_RATE
+        )
+        self._model_sample_rate = model_sample_rate
         text = build_voxcpm2_text(request.text, request.language)
         reference_wav_path = self._reference_wav_path(request)
         started = time.perf_counter()
         audio, first_audio_ms = self._generate(model, text, request, reference_wav_path, started)
         if not audio:
             raise TtsUnavailableError("VoxCPM2 returned empty audio")
-        audio_duration_ms = max(1, round(len(audio) / sample_rate * 1000))
+        try:
+            output_audio = resample_audio(
+                audio,
+                source_rate=model_sample_rate,
+                target_rate=OUTPUT_SAMPLE_RATE,
+            )
+        except (RuntimeError, ValueError) as exc:
+            raise TtsUnavailableError(f"VoxCPM2 resampling failed: {exc}") from exc
+        audio_duration_ms = max(1, round(len(output_audio) / OUTPUT_SAMPLE_RATE * 1000))
         return TtsSynthesizeResponse(
             provider="voxcpm2",
             model="VoxCPM2",
@@ -68,9 +87,11 @@ class VoxCpm2TtsEngine:
             voiceProfileId=request.voice.voiceProfileId if request.voice else None,
             firstAudioMs=first_audio_ms,
             audioDurationMs=audio_duration_ms,
+            modelSampleRate=model_sample_rate,
+            outputSampleRate=OUTPUT_SAMPLE_RATE,
             audio=TtsAudioPayload(
-                sampleRate=sample_rate,
-                data=pcm16_base64_from_floats(audio),
+                sampleRate=OUTPUT_SAMPLE_RATE,
+                data=pcm16_base64_from_floats(output_audio),
             ),
         )
 
@@ -192,8 +213,24 @@ def supported_kwargs(fn, values: dict) -> dict:
     return {key: value for key, value in values.items() if key in parameters}
 
 
-def parse_sample_rate(value) -> int:
-    return 16000 if int(value) == 16000 else 24000
+def parse_model_sample_rate(value) -> int:
+    try:
+        sample_rate = int(value)
+    except (TypeError, ValueError) as exc:
+        raise TtsUnavailableError(f"Invalid VoxCPM2 sample rate: {value}") from exc
+    if sample_rate < 8000 or sample_rate > 192000:
+        raise TtsUnavailableError(f"Invalid VoxCPM2 sample rate: {sample_rate}")
+    return sample_rate
+
+
+def configured_model_sample_rate(model_dir: Path) -> int | None:
+    try:
+        config = json.loads((model_dir / "config.json").read_text(encoding="utf-8"))
+        audio_config = config.get("audio_vae_config", {})
+        value = audio_config.get("out_sample_rate") or audio_config.get("sample_rate")
+        return parse_model_sample_rate(value) if value else None
+    except (OSError, ValueError, TypeError, json.JSONDecodeError):
+        return None
 
 
 def elapsed_ms(started: float) -> int:
