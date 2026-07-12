@@ -11,6 +11,9 @@ describe("session segment revision merge", () => {
       turnId: "turn_1",
       revision: 0,
       sourceText: "hello",
+      dominantLanguage: "en",
+      detectedLanguages: ["en"],
+      mixedLanguage: false,
       speaker: speaker("speaker_1"),
       timing: timing(0, 500),
     });
@@ -18,6 +21,9 @@ describe("session segment revision merge", () => {
       segmentId: "seg_1",
       turnId: "turn_2",
       revision: 1,
+      dominantLanguage: "zh",
+      detectedLanguages: ["zh", "en"],
+      mixedLanguage: true,
       speaker: speaker("speaker_2"),
       timing: timing(0, 540),
     });
@@ -26,6 +32,9 @@ describe("session segment revision merge", () => {
       turnId: "turn_1",
       revision: 0,
       sourceText: "stale text",
+      dominantLanguage: "en",
+      detectedLanguages: ["en"],
+      mixedLanguage: false,
       translatedText: "你好",
       targetLanguage: "zh",
       stage: "translation",
@@ -44,6 +53,9 @@ describe("session segment revision merge", () => {
       provider: "hymt2_self_hosted",
       speaker: { speakerId: "speaker_2" },
       timing: { startMs: 0, endMs: 540 },
+      dominantLanguage: "zh",
+      detectedLanguages: ["zh", "en"],
+      mixedLanguage: true,
     });
   });
 });

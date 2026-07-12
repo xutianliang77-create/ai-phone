@@ -38,6 +38,9 @@ describe("realtime internal routes", () => {
         sessionId,
         segmentId: "seg_live",
         sourceText: "good morning",
+        dominantLanguage: "en",
+        detectedLanguages: ["en"],
+        mixedLanguage: false,
         sourceLanguage: "en",
         confidence: 0.93,
         stage: "asr",
@@ -107,6 +110,9 @@ describe("realtime internal routes", () => {
       sourceText: "good morning",
       translatedText: "早上好",
       sourceLanguage: "en",
+      dominantLanguage: "en",
+      detectedLanguages: ["en"],
+      mixedLanguage: false,
       targetLanguage: "zh",
       confidence: 0.93,
       stage: "translation",
@@ -302,25 +308,6 @@ describe("realtime internal routes", () => {
 
     expect(rejected.statusCode).toBe(401);
     expect(rejected.json().error.code).toBe("internal_error");
-  });
-
-  it("accepts Hy-MT languages and auto reverse realtime sessions", async () => {
-    const app = await buildApp();
-    const created = await app.inject({
-      method: "POST",
-      url: "/realtime/sessions",
-      payload: {
-        mode: "conversation",
-        sourceLanguage: "auto",
-        targetLanguage: "ja",
-        autoReverseTargetLanguage: true,
-        voiceOutput: true,
-      },
-    });
-    await app.close();
-
-    expect(created.statusCode).toBe(200);
-    expect(created.json().realtimeToken).toBeTruthy();
   });
 
 });

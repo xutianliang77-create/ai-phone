@@ -18,6 +18,7 @@ import { completeSessionWithUsage } from "../sessions/session-completion.js";
 import { validateCreateRealtimeSessionRequest } from "./create-session-request.js";
 import { createRealtimeSession } from "./realtime.service.js";
 import { parseRealtimeDiagnostics } from "./realtime-diagnostics.js";
+import { isValidTurnLanguageProfile } from "./realtime-language-profile-validation.js";
 
 export async function registerRealtimeRoutes(app: FastifyInstance) {
   app.post("/realtime/sessions", async (request, reply) => {
@@ -92,6 +93,9 @@ export async function registerRealtimeRoutes(app: FastifyInstance) {
       rawText: body.rawText,
       optimizedText: body.optimizedText,
       translatedText: body.translatedText,
+      dominantLanguage: body.dominantLanguage,
+      detectedLanguages: body.detectedLanguages,
+      mixedLanguage: body.mixedLanguage,
       sourceLanguage: body.sourceLanguage,
       targetLanguage: body.targetLanguage,
       confidence: body.confidence,
@@ -204,6 +208,7 @@ function isValidSegmentPatch(
       hasSegmentDiagnostics(body)) &&
     isOptionalLanguage(body.sourceLanguage) &&
     isOptionalLanguage(body.targetLanguage) &&
+    isValidTurnLanguageProfile(body) &&
     isOptionalRatio(body.confidence) &&
     isOptionalStage(body.stage) &&
     isOptionalString(body.provider) &&
@@ -233,6 +238,9 @@ function hasSegmentDiagnostics(body: Partial<UpsertSessionSegmentRequest>) {
     body.timing,
     body.turnId,
     body.revision,
+    body.dominantLanguage,
+    body.detectedLanguages,
+    body.mixedLanguage,
   ].some((value) => value !== undefined);
 }
 

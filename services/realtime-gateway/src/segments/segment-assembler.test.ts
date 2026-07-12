@@ -20,12 +20,13 @@ describe("segment assembler", () => {
     const second = assembler.push("sess_1", transcript(
       "asr_2", "我会整理会议记录发给大家", "zh", 0.88,
     ), 1300);
-    expect(second.ready).toEqual([transcript(
+    expect(second.ready).toHaveLength(1);
+    expect(second.ready[0]).toMatchObject(transcript(
       "asr_1",
       "今天下午三点我们讨论产品计划之后我会整理会议记录发给大家",
       "zh",
       0.88,
-    )]);
+    ));
   });
 
   it("replaces a same-id revision instead of appending it", () => {
@@ -36,9 +37,10 @@ describe("segment assembler", () => {
       transcript("asr_1", "we need to verify the result.", "en"),
       1200,
     );
-    expect(result.ready).toEqual([
+    expect(result.ready).toHaveLength(1);
+    expect(result.ready[0]).toMatchObject(
       transcript("asr_1", "we need to verify the result.", "en"),
-    ]);
+    );
   });
 
   it("merges cumulative ASR text without duplicating its prefix", () => {
@@ -78,9 +80,9 @@ describe("segment assembler", () => {
     const assembler = new SegmentAssembler({ maxBufferMs: 500 });
     assembler.push("sess_1", transcript("asr_1", "this is", "en"), 1000);
     expect(assembler.drainExpired("sess_1", 1499)).toEqual([]);
-    expect(assembler.drainExpired("sess_1", 1500)).toEqual([
+    expect(assembler.drainExpired("sess_1", 1500)[0]).toMatchObject(
       transcript("asr_1", "this is", "en"),
-    ]);
+    );
     expect(assembler.flush("sess_1")).toEqual([]);
   });
 
@@ -112,10 +114,13 @@ describe("segment assembler", () => {
       attributedTranscript("asr_2", "我来说明。", "speaker_2"),
       1200,
     );
-    expect(result.ready).toEqual([
+    expect(result.ready).toHaveLength(2);
+    expect(result.ready[0]).toMatchObject(
       attributedTranscript("asr_1", "接下来", "speaker_1"),
+    );
+    expect(result.ready[1]).toMatchObject(
       attributedTranscript("asr_2", "我来说明。", "speaker_2"),
-    ]);
+    );
   });
 
   it("splits stable turns even when the speaker label is unchanged", () => {
@@ -154,6 +159,73 @@ describe("segment assembler", () => {
     expect(assembler.push("sess_1", initial, 1200).ready).toEqual([]);
   });
 
+  it("replaces a pending revision before evaluating its new speaker boundary", () => {
+    const assembler = new SegmentAssembler();
+    assembler.push("sess_1", {
+      ...attributedTranscript("asr_1", "接下来", "speaker_1"),
+      turnId: "turn_1",
+      revision: 0,
+    });
+
+    const result = assembler.push("sess_1", {
+      ...attributedTranscript("asr_1", "接下来由第二位说明。", "speaker_2"),
+      turnId: "turn_2",
+      revision: 1,
+    });
+
+    expect(result.ready).toHaveLength(1);
+    expect(result.ready[0]).toMatchObject({
+      segmentId: "asr_1",
+      turnId: "turn_2",
+      revision: 1,
+      speaker: { speakerId: "speaker_2" },
+    });
+  });
+
+  it("isolates overlap speech from adjacent segments", () => {
+    const assembler = new SegmentAssembler();
+    assembler.push(
+      "sess_1",
+      attributedTranscript("asr_1", "接下来", "speaker_1"),
+    );
+    const result = assembler.push("sess_1", {
+      ...attributedTranscript("asr_2", "两个人同时说话。", "speaker_1"),
+      timing: {
+        startMs: 1000,
+        endMs: 1800,
+        source: "client" as const,
+        overlap: true,
+        activeSpeakerIds: ["speaker_1", "speaker_2"],
+      },
+    });
+
+    expect(result.ready.map((item) => item.segmentId)).toEqual([
+      "asr_1",
+      "asr_2",
+    ]);
+  });
+
+  it("isolates explicit unknown speaker speech", () => {
+    const assembler = new SegmentAssembler();
+    assembler.push("sess_1", {
+      ...transcript("asr_unknown", "接下来", "zh"),
+      speaker: {
+        speakerId: "unknown",
+        role: "unknown" as const,
+        source: "unknown" as const,
+      },
+    });
+    const result = assembler.push(
+      "sess_1",
+      attributedTranscript("asr_known", "现在可以确认。", "speaker_1"),
+    );
+
+    expect(result.ready.map((item) => item.segmentId)).toEqual([
+      "asr_unknown",
+      "asr_known",
+    ]);
+  });
+
   it("does not use a language change as a hard boundary for one speaker", () => {
     const assembler = new SegmentAssembler();
 
@@ -186,9 +258,9 @@ describe("segment assembler", () => {
   it("flushes a pending half sentence exactly once", () => {
     const assembler = new SegmentAssembler();
     assembler.push("sess_1", transcript("asr_1", "this is", "en"));
-    expect(assembler.flush("sess_1")).toEqual([
+    expect(assembler.flush("sess_1")[0]).toMatchObject(
       transcript("asr_1", "this is", "en"),
-    ]);
+    );
     expect(assembler.flush("sess_1")).toEqual([]);
   });
 

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -93,6 +94,17 @@ void main() {
       'referenceAudioId': 'voice_1',
       'referenceTranscript': '你好，我正在创建我的声音。',
     });
+  });
+
+  test('times out session creation when the network never responds', () async {
+    final api = RealtimeApiClient(
+      baseUrl: Uri.parse('http://127.0.0.1:3100'),
+      requestTimeout: const Duration(milliseconds: 20),
+      accountSessionStore: _sessionStore(),
+      client: MockClient((_) => Completer<http.Response>().future),
+    );
+
+    await expectLater(api.createSession(), throwsA(isA<TimeoutException>()));
   });
 }
 

@@ -14,6 +14,7 @@ import '../../../../platform/speech/speech_text_normalizer.dart';
 import '../../../../platform/translation/mobile_translation_provider.dart';
 import '../../../../platform/translation/supported_translation_language.dart';
 import '../../../../shared/domain/speaker_attribution.dart';
+import '../../../../shared/domain/turn_language_profile.dart';
 import '../../data/api/realtime_session.dart';
 import '../../data/gateway/gateway_realtime_event.dart';
 import '../../data/realtime_repository.dart';
@@ -107,7 +108,6 @@ class RealtimeController extends ChangeNotifier {
   bool _disposed = false;
   bool _audioSessionRecoveryInFlight = false;
   int _startGeneration = 0;
-  Future<void>? _startCompletion;
   Future<void>? _failureCleanup;
   final _localPartialFlush = _LocalPartialTranslationFlush();
   final _deviceAsrRecovery = _DeviceAsrRecovery();

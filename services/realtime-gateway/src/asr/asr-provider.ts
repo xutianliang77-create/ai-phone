@@ -23,6 +23,9 @@ export interface TranscriptResult {
   revision?: number;
   text: string;
   language: TranslationLanguageCode;
+  dominantLanguage?: TranslationLanguageCode;
+  detectedLanguages?: TranslationLanguageCode[];
+  mixedLanguage?: boolean;
   confidence?: number;
   speaker?: SpeakerAttributionDto;
   timing?: SegmentTimingDto;

@@ -33,6 +33,8 @@ const appLocalizationTexts = <String, Map<String, String>>{
   'currentSubtitle': {'zh': '当前句', 'en': 'Current'},
   'translationPending': {'zh': '翻译中', 'en': 'Translating'},
   'backToLatest': {'zh': '回到底部', 'en': 'Back to latest'},
+  'overlappingSpeech': {'zh': '多人同时说话', 'en': 'Overlapping speech'},
+  'mixedLanguage': {'zh': '中英混合', 'en': 'Mixed language'},
   'tapStartToBegin': {'zh': '点击开始进行同传', 'en': 'Tap start to begin'},
   'export': {'zh': '导出', 'en': 'Export'},
   'exportDiagnostics': {'zh': '导出诊断', 'en': 'Export diagnostics'},

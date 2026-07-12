@@ -80,11 +80,15 @@ class _SubtitleEntry extends StatelessWidget {
     final pending = _isTranslationPending(segment);
     final speaker = segment.speaker;
     final speakerLabel = speaker?.label(isChinese: context.l10n.isChinese);
+    final overlap = segment.timing?.overlap == true;
+    final mixedLanguage = segment.languageProfile?.mixedLanguage == true;
     return Semantics(
       container: true,
       label: [
         if (isCurrent) context.l10n.currentSubtitle,
         if (speakerLabel != null) speakerLabel,
+        if (overlap) context.l10n.overlappingSpeech,
+        if (mixedLanguage) context.l10n.mixedLanguage,
         segment.sourceText,
         if (segment.translatedText.trim().isNotEmpty) segment.translatedText,
       ].join('，'),
@@ -97,8 +101,12 @@ class _SubtitleEntry extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
-              if (speaker != null) ...[
-                _SpeakerLabel(speaker: speaker),
+              if (speaker != null || overlap || mixedLanguage) ...[
+                _SegmentMetadata(
+                  speaker: speaker,
+                  overlap: overlap,
+                  mixedLanguage: mixedLanguage,
+                ),
                 const SizedBox(height: 6),
               ],
               if (isCurrent) ...[
@@ -133,33 +141,83 @@ class _SubtitleEntry extends StatelessWidget {
   }
 }
 
-class _SpeakerLabel extends StatelessWidget {
-  const _SpeakerLabel({required this.speaker});
+class _SegmentMetadata extends StatelessWidget {
+  const _SegmentMetadata({
+    required this.speaker,
+    required this.overlap,
+    required this.mixedLanguage,
+  });
 
-  final SpeakerAttribution speaker;
+  final SpeakerAttribution? speaker;
+  final bool overlap;
+  final bool mixedLanguage;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final color = _speakerColor(theme.colorScheme, speaker.speakerId);
+    final speaker = this.speaker;
+    final color = _speakerColor(
+      theme.colorScheme,
+      speaker?.speakerId ?? 'unknown',
+    );
     return ExcludeSemantics(
-      child: Tooltip(
-        message: speaker.sourceLabel(isChinese: context.l10n.isChinese),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: <Widget>[
-            Icon(Icons.record_voice_over_outlined, size: 16, color: color),
-            const SizedBox(width: 6),
-            Text(
-              speaker.label(isChinese: context.l10n.isChinese),
-              style: theme.textTheme.labelLarge?.copyWith(
+      child: Wrap(
+        spacing: 14,
+        runSpacing: 6,
+        children: <Widget>[
+          if (speaker != null)
+            Tooltip(
+              message: speaker.sourceLabel(isChinese: context.l10n.isChinese),
+              child: _MetadataItem(
+                icon: Icons.record_voice_over_outlined,
+                label: speaker.label(isChinese: context.l10n.isChinese),
+                color: color,
+              ),
+            ),
+          if (overlap)
+            _MetadataItem(
+              icon: Icons.groups_outlined,
+              label: context.l10n.overlappingSpeech,
+              color: theme.colorScheme.error,
+            ),
+          if (mixedLanguage)
+            _MetadataItem(
+              icon: Icons.translate,
+              label: context.l10n.mixedLanguage,
+              color: theme.colorScheme.tertiary,
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MetadataItem extends StatelessWidget {
+  const _MetadataItem({
+    required this.icon,
+    required this.label,
+    required this.color,
+  });
+
+  final IconData icon;
+  final String label;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: <Widget>[
+        Icon(icon, size: 16, color: color),
+        const SizedBox(width: 6),
+        Text(
+          label,
+          style: Theme.of(context).textTheme.labelLarge?.copyWith(
                 color: color,
                 fontWeight: FontWeight.w600,
               ),
-            ),
-          ],
         ),
-      ),
+      ],
     );
   }
 }

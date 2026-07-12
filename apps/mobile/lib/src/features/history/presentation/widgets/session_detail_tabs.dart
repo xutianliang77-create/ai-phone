@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../../app/localization/app_localizations.dart';
+import '../../../../app/localization/app_realtime_timeline_localizations.dart';
 import '../../data/session_history_models.dart';
 import '../../data/session_review.dart';
 import 'session_terms_tab.dart';
@@ -197,18 +198,25 @@ class _TranscriptTab extends StatelessWidget {
       itemCount: segments.length,
       itemBuilder: (context, index) {
         final segment = segments[index];
+        final metadata = <String>[
+          if (segment.speaker != null)
+            '${segment.speaker!.label(isChinese: context.l10n.isChinese)}'
+                ' · ${segment.speaker!.sourceLabel(isChinese: context.l10n.isChinese)}',
+          if (segment.timing?.overlap == true) context.l10n.overlappingSpeech,
+          if (segment.languageProfile?.mixedLanguage == true)
+            context.l10n.mixedLanguage,
+        ];
         return ListTile(
-          leading: segment.speaker == null
+          leading: metadata.isEmpty
               ? null
               : const Icon(Icons.record_voice_over_outlined),
           title: Text(segment.sourceText),
           subtitle: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
-              if (segment.speaker != null) ...<Widget>[
+              if (metadata.isNotEmpty) ...<Widget>[
                 Text(
-                  '${segment.speaker!.label(isChinese: context.l10n.isChinese)}'
-                  ' · ${segment.speaker!.sourceLabel(isChinese: context.l10n.isChinese)}',
+                  metadata.join(' · '),
                   style: Theme.of(context).textTheme.labelMedium,
                 ),
                 const SizedBox(height: 4),

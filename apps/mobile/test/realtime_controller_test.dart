@@ -121,6 +121,9 @@ void main() {
       'turnId': 'turn_1',
       'revision': 0,
       'text': 'hello',
+      'dominantLanguage': 'en',
+      'detectedLanguages': <String>['en'],
+      'mixedLanguage': false,
       'speaker': speakerJson('speaker_1'),
     }));
     repository.emit(GatewayRealtimeEvent.fromJson(<String, Object?>{
@@ -138,6 +141,9 @@ void main() {
       'turnId': 'turn_1',
       'revision': 0,
       'text': '你好',
+      'dominantLanguage': 'zh',
+      'detectedLanguages': <String>['zh', 'en'],
+      'mixedLanguage': true,
       'speaker': speakerJson('speaker_1'),
     }));
     await pumpEventQueue();
@@ -145,6 +151,8 @@ void main() {
     expect(controller.segments.single.translatedText, '你好');
     expect(controller.segments.single.speaker?.speakerId, 'speaker_2');
     expect(controller.segments.single.revision, 1);
+    expect(controller.segments.single.languageProfile?.dominantLanguage, 'en');
+    expect(controller.segments.single.languageProfile?.mixedLanguage, isFalse);
   });
 
   test('shows gateway provider error stage in the status message', () async {

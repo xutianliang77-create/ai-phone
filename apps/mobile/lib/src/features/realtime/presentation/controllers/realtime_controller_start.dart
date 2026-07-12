@@ -19,20 +19,12 @@ extension RealtimeControllerStart on RealtimeController {
     }
 
     final generation = ++_startGeneration;
-    final completion = Completer<void>();
-    final completionFuture = completion.future;
-    _startCompletion = completionFuture;
     _setStatus(RealtimeStatus.connecting);
     try {
       await _startSession(generation);
     } catch (error) {
       if (_isCurrentStart(generation)) {
         _fail(await _failureMessage(error));
-      }
-    } finally {
-      completion.complete();
-      if (identical(_startCompletion, completionFuture)) {
-        _startCompletion = null;
       }
     }
   }
@@ -56,9 +48,15 @@ extension RealtimeControllerStart on RealtimeController {
       handleGatewayEvent,
       onError: (Object error) => _handleEventStreamError(generation, error),
     );
-    _session = await _repository.startSession();
-    if (!_isCurrentStart(generation)) return;
-    _startSessionTimeout(_session!);
+    final session = await _repository.startSession();
+    if (!_isCurrentStart(generation)) {
+      unawaited(_repository
+          .end(session.sessionId, _segments)
+          .catchError((Object _) {}));
+      return;
+    }
+    _session = session;
+    _startSessionTimeout(session);
     if (_usesDeviceAsr) {
       await _startDeviceAsr();
     } else {

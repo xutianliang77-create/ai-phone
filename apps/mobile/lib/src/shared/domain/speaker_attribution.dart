@@ -75,12 +75,14 @@ class SegmentTiming {
     required this.endMs,
     required this.source,
     this.overlap = false,
+    this.activeSpeakerIds = const <String>[],
   });
 
   final int startMs;
   final int endMs;
   final String source;
   final bool overlap;
+  final List<String> activeSpeakerIds;
 
   factory SegmentTiming.fromJson(Map<String, Object?> json) {
     return SegmentTiming(
@@ -88,6 +90,10 @@ class SegmentTiming {
       endMs: (json['endMs'] as num?)?.toInt() ?? 0,
       source: json['source'] as String? ?? 'estimated',
       overlap: json['overlap'] as bool? ?? false,
+      activeSpeakerIds: (json['activeSpeakerIds'] as List?)
+              ?.whereType<String>()
+              .toList(growable: false) ??
+          const <String>[],
     );
   }
 
@@ -96,5 +102,6 @@ class SegmentTiming {
         'endMs': endMs,
         'source': source,
         if (overlap) 'overlap': true,
+        if (activeSpeakerIds.isNotEmpty) 'activeSpeakerIds': activeSpeakerIds,
       };
 }

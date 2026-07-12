@@ -1,5 +1,6 @@
 import '../../domain/entities/subtitle_segment.dart';
 import '../../../../shared/domain/speaker_attribution.dart';
+import '../../../../shared/domain/turn_language_profile.dart';
 
 class SegmentDraft {
   const SegmentDraft(
@@ -20,6 +21,7 @@ class SegmentDraft {
     this.refinement,
     this.speaker,
     this.timing,
+    this.languageProfile,
   });
 
   final String id;
@@ -39,6 +41,7 @@ class SegmentDraft {
   final Map<String, Object?>? refinement;
   final SpeakerAttribution? speaker;
   final SegmentTiming? timing;
+  final TurnLanguageProfile? languageProfile;
 
   SegmentDraft copyWith({
     String? sourceText,
@@ -57,6 +60,7 @@ class SegmentDraft {
     Map<String, Object?>? refinement,
     SpeakerAttribution? speaker,
     SegmentTiming? timing,
+    TurnLanguageProfile? languageProfile,
   }) {
     return SegmentDraft(
       id,
@@ -76,6 +80,7 @@ class SegmentDraft {
       refinement: refinement ?? this.refinement,
       speaker: speaker ?? this.speaker,
       timing: timing ?? this.timing,
+      languageProfile: languageProfile ?? this.languageProfile,
     );
   }
 
@@ -98,6 +103,7 @@ class SegmentDraft {
       refinement: refinement,
       speaker: speaker,
       timing: timing,
+      languageProfile: languageProfile,
     );
   }
 }

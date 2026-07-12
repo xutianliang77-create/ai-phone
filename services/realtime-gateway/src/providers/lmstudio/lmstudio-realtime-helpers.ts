@@ -29,7 +29,15 @@ export function targetLanguageForTranscript(
 
 export function translationFailed(
   session: RealtimeProviderSession,
-  transcript: Pick<TranscriptResult, "segmentId" | "turnId" | "revision">,
+  transcript: Pick<
+    TranscriptResult,
+    | "segmentId"
+    | "turnId"
+    | "revision"
+    | "dominantLanguage"
+    | "detectedLanguages"
+    | "mixedLanguage"
+  >,
   targetLanguage: TranslationLanguageCode,
   diagnostics: {
     provider?: string;
@@ -45,6 +53,9 @@ export function translationFailed(
     message:
       targetLanguage === "zh" ? "翻译暂不可用" : "Translation unavailable",
     language: targetLanguage,
+    dominantLanguage: transcript.dominantLanguage,
+    detectedLanguages: transcript.detectedLanguages,
+    mixedLanguage: transcript.mixedLanguage,
     stage: "translation",
     ...diagnostics,
   };

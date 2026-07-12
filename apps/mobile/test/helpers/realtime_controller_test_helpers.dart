@@ -46,6 +46,7 @@ class FakeRealtimeRepository extends RealtimeRepository {
   FakeRealtimeRepository({
     this.emitTailOnEnd = false,
     this.failEndConfirmation = false,
+    this.startCompleter,
   }) : super(
           apiClient: NoopRealtimeApiClient(),
           gatewayClient: NoopRealtimeGatewayClient(),
@@ -53,6 +54,7 @@ class FakeRealtimeRepository extends RealtimeRepository {
 
   final bool emitTailOnEnd;
   final bool failEndConfirmation;
+  final Completer<RealtimeSession>? startCompleter;
   final _events = StreamController<GatewayRealtimeEvent>.broadcast();
   final startedSessionIds = <String>[];
   final endedSessionIds = <String>[];
@@ -64,6 +66,12 @@ class FakeRealtimeRepository extends RealtimeRepository {
 
   @override
   Future<RealtimeSession> startSession() async {
+    final pending = startCompleter;
+    if (pending != null) {
+      final session = await pending.future;
+      startedSessionIds.add(session.sessionId);
+      return session;
+    }
     final sessionId = 'sess_${startedSessionIds.length + 1}';
     startedSessionIds.add(sessionId);
     return RealtimeSession(

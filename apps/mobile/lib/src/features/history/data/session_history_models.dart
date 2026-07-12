@@ -1,4 +1,5 @@
 import '../../../shared/domain/speaker_attribution.dart';
+import '../../../shared/domain/turn_language_profile.dart';
 
 class SessionListItem {
   const SessionListItem({
@@ -53,6 +54,7 @@ class SessionSegment {
     this.refinement,
     this.speaker,
     this.timing,
+    this.languageProfile,
   });
 
   final String id;
@@ -72,6 +74,7 @@ class SessionSegment {
   final Map<String, Object?>? refinement;
   final SpeakerAttribution? speaker;
   final SegmentTiming? timing;
+  final TurnLanguageProfile? languageProfile;
 
   factory SessionSegment.fromJson(Map<String, Object?> json) {
     return SessionSegment(
@@ -102,6 +105,7 @@ class SessionSegment {
               Map<String, Object?>.from(json['timing']! as Map),
             )
           : null,
+      languageProfile: TurnLanguageProfile.fromJson(json),
     );
   }
 
@@ -124,6 +128,7 @@ class SessionSegment {
       refinement: refinement,
       speaker: nextSpeaker,
       timing: timing,
+      languageProfile: languageProfile,
     );
   }
 }

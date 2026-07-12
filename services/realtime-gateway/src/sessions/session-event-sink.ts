@@ -53,6 +53,9 @@ class ApiSessionEventSink implements SessionEventSink {
         optimizedText: event.optimizedText
           ? cleanRealtimeText(event.optimizedText) ?? undefined
           : undefined,
+        dominantLanguage: event.dominantLanguage,
+        detectedLanguages: event.detectedLanguages,
+        mixedLanguage: event.mixedLanguage,
         sourceLanguage: event.language,
         ...(typeof event.confidence === "number"
           ? { confidence: event.confidence }
@@ -78,6 +81,9 @@ class ApiSessionEventSink implements SessionEventSink {
         turnId: event.turnId,
         revision: event.revision,
         translatedText,
+        dominantLanguage: event.dominantLanguage,
+        detectedLanguages: event.detectedLanguages,
+        mixedLanguage: event.mixedLanguage,
         targetLanguage: event.language,
         stage: event.type === "translation.failed"
           ? event.stage ?? "translation"

@@ -49,8 +49,14 @@ class RealtimeRepository {
 
   Future<RealtimeSession> startSession() async {
     final session = await _apiClient.createSession();
-    await _gatewayClient.connect(session);
-    return session;
+    try {
+      await _gatewayClient.connect(session);
+      return session;
+    } catch (_) {
+      unawaited(
+          _apiClient.endSession(session.sessionId).catchError((Object _) {}));
+      rethrow;
+    }
   }
 
   bool sendAudio(String sessionId, AudioFrame frame) {
@@ -176,6 +182,7 @@ Map<String, Object?> _segmentToJson(SubtitleSegment segment) {
     if (segment.model != null) 'model': segment.model,
     if (segment.latencyMs != null) 'latencyMs': segment.latencyMs,
     if (segment.refinement != null) 'refinement': segment.refinement,
+    if (segment.languageProfile != null) ...segment.languageProfile!.toJson(),
     if (segment.speaker != null) 'speaker': segment.speaker!.toJson(),
     if (segment.timing != null) 'timing': segment.timing!.toJson(),
   };

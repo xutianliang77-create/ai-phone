@@ -1,4 +1,5 @@
 import '../../../../shared/domain/speaker_attribution.dart';
+import '../../../../shared/domain/turn_language_profile.dart';
 
 class SubtitleSegment {
   const SubtitleSegment({
@@ -19,6 +20,7 @@ class SubtitleSegment {
     this.refinement,
     this.speaker,
     this.timing,
+    this.languageProfile,
   });
 
   final String id;
@@ -38,4 +40,5 @@ class SubtitleSegment {
   final Map<String, Object?>? refinement;
   final SpeakerAttribution? speaker;
   final SegmentTiming? timing;
+  final TurnLanguageProfile? languageProfile;
 }

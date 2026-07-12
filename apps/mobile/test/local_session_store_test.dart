@@ -3,6 +3,8 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:translation_mobile/src/features/history/data/local_session_store.dart';
 import 'package:translation_mobile/src/features/realtime/domain/entities/subtitle_segment.dart';
+import 'package:translation_mobile/src/shared/domain/speaker_attribution.dart';
+import 'package:translation_mobile/src/shared/domain/turn_language_profile.dart';
 
 void main() {
   late Directory tempDir;
@@ -39,6 +41,23 @@ void main() {
           stage: 'translation',
           provider: 'ios_system',
           latencyMs: 120,
+          speaker: SpeakerAttribution(
+            speakerId: 'speaker_2',
+            role: 'speaker',
+            source: 'diarization',
+          ),
+          timing: SegmentTiming(
+            startMs: 1000,
+            endMs: 1800,
+            source: 'client',
+            overlap: true,
+            activeSpeakerIds: <String>['speaker_1', 'speaker_2'],
+          ),
+          languageProfile: TurnLanguageProfile(
+            dominantLanguage: 'en',
+            detectedLanguages: <String>['en', 'zh'],
+            mixedLanguage: true,
+          ),
         ),
         SubtitleSegment(id: 'empty', sourceText: '', translatedText: ''),
       ],
@@ -56,6 +75,14 @@ void main() {
     expect(detail.segments.single.revision, 2);
     expect(detail.segments.single.provider, 'ios_system');
     expect(detail.segments.single.confidence, 0.88);
+    expect(detail.segments.single.speaker?.speakerId, 'speaker_2');
+    expect(detail.segments.single.timing?.overlap, isTrue);
+    expect(
+      detail.segments.single.timing?.activeSpeakerIds,
+      <String>['speaker_1', 'speaker_2'],
+    );
+    expect(detail.segments.single.languageProfile?.dominantLanguage, 'en');
+    expect(detail.segments.single.languageProfile?.mixedLanguage, isTrue);
 
     final export = await store.exportSession('local_1');
     expect(export.filename, 'translation-session-local_1.md');

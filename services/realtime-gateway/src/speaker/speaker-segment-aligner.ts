@@ -23,11 +23,14 @@ export function alignSpeakerSpan(
     (total, evidence) => total + evidence.overlapMs,
     0,
   );
+  const activeSpeakerIds = ranked
+    .filter((evidence) => evidence.overlap)
+    .map((evidence) => evidence.speakerId);
   if (
     !best ||
     best.overlapMs < minimumEvidenceMs ||
     best.overlapMs / Math.max(1, totalEvidenceMs) < minimumDominanceRatio
-  ) return null;
+  ) return unknownAlignment(timing, activeSpeakerIds);
   return {
     speaker: {
       speakerId: best.speakerId,
@@ -40,6 +43,26 @@ export function alignSpeakerSpan(
     timing: {
       ...timing,
       ...(best.overlap ? { overlap: true } : {}),
+      ...(activeSpeakerIds.length > 0 ? { activeSpeakerIds } : {}),
+    },
+  };
+}
+
+function unknownAlignment(
+  timing: SegmentTimingDto,
+  activeSpeakerIds: string[],
+): SpeakerAlignment {
+  return {
+    speaker: {
+      speakerId: "unknown",
+      role: "unknown",
+      source: "unknown",
+    },
+    timing: {
+      ...timing,
+      ...(activeSpeakerIds.length > 0
+        ? { overlap: true, activeSpeakerIds }
+        : {}),
     },
   };
 }

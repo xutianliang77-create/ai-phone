@@ -3,9 +3,10 @@
 Internal speaker-attribution service for ai phone.
 
 - `mock`: protocol and integration tests only.
-- `sortformer_shadow`: runs NVIDIA Streaming Sortformer v2.1 with persistent per-session streaming state and returns anonymous spans.
+- `sortformer`: production-enabled NVIDIA Streaming Sortformer v2.1 with persistent per-session streaming state and anonymous speaker spans.
+- `sortformer_shadow`: runs the same engine for evaluation without claiming user-visible production readiness.
 
-The shadow provider is not a production claim. Enable user-visible labels only after the fixed Chinese, mixed-language, noisy, overlap, four-speaker, and 30-minute gates pass.
+Use `sortformer` only after the fixed Chinese, mixed-language, noisy, overlap, four-speaker, and 30-minute gates pass.
 
 ```bash
 python3.11 -m venv .venv
@@ -16,7 +17,7 @@ python3.11 -m venv .venv
 For Sortformer, install NeMo according to NVIDIA's model card, then run:
 
 ```bash
-SPEAKER_MODEL_PROVIDER=sortformer_shadow \
+SPEAKER_MODEL_PROVIDER=sortformer \
   SPEAKER_MODEL_ID=/data/models/translation-model-eval/models/sortformer/diar_streaming_sortformer_4spk-v2.1.nemo \
   .venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8022
 ```

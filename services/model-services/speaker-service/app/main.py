@@ -16,7 +16,7 @@ def create_app(config: SpeakerConfig | None = None) -> FastAPI:
 
 
 def create_engine(config: SpeakerConfig):
-    if config.provider == "sortformer_shadow":
+    if config.provider in ("sortformer", "sortformer_shadow"):
         return SortformerShadowEngine(
             model_id=config.model_id,
             profile=StreamingProfile(

@@ -114,6 +114,11 @@ function toCsv(session: SessionRecord) {
       "speakerSource",
       "startMs",
       "endMs",
+      "dominantLanguage",
+      "detectedLanguages",
+      "mixedLanguage",
+      "overlap",
+      "activeSpeakerIds",
     ],
     ...session.segments.map((segment) => [
       segment.id,
@@ -135,6 +140,11 @@ function toCsv(session: SessionRecord) {
       segment.speaker?.source ?? "",
       String(segment.timing?.startMs ?? ""),
       String(segment.timing?.endMs ?? ""),
+      segment.dominantLanguage ?? "",
+      segment.detectedLanguages?.join("|") ?? "",
+      String(segment.mixedLanguage ?? ""),
+      String(segment.timing?.overlap ?? ""),
+      segment.timing?.activeSpeakerIds?.join("|") ?? "",
     ]),
   ];
   return rows.map((row) => row.map(csvCell).join(",")).join("\n");
@@ -150,19 +160,28 @@ function appendSegmentDiagnostics(
   lines: string[],
   segment: SessionSegmentDto,
 ) {
-  const diagnostics = [
+  const diagnostics: Array<[
+    string,
+    string | number | boolean | undefined,
+  ]> = [
     ["Source language", segment.sourceLanguage],
     ["Target language", segment.targetLanguage],
+    ["Dominant language", segment.dominantLanguage],
+    ["Detected languages", segment.detectedLanguages?.join(", ")],
+    ["Mixed language", segment.mixedLanguage],
+    ["Overlapping speech", segment.timing?.overlap],
     ["Confidence", segment.confidence],
     ["Stage", segment.stage],
     ["Provider", segment.provider ?? segment.providerUsage?.provider],
     ["Model", segment.model ?? segment.providerUsage?.model],
     ["Latency", formatLatency(segment)],
     ["Refinement", formatRefinement(segment)],
-  ].filter((item): item is [string, string | number] => item[1] !== undefined && item[1] !== "");
-  if (diagnostics.length === 0) return;
+  ];
+  const available = diagnostics.filter(([, value]) =>
+    value !== undefined && value !== "");
+  if (available.length === 0) return;
   lines.push("Diagnostics", "");
-  for (const [label, value] of diagnostics) {
+  for (const [label, value] of available) {
     lines.push(`- ${label}: ${value}`);
   }
   lines.push("");

@@ -1,6 +1,6 @@
 # ai phone 优化开发计划
 
-版本：v1.11
+版本：v1.12
 日期：2026-07-12
 任务来源：`docs/ai-phone-optimization-development-tasks.md`
 
@@ -23,6 +23,10 @@
 | M6 增强路线 | 第 8 周起 | Gemini/PSTN/Agent/声音克隆专项 | 各专项独立评测通过后灰度 |
 
 ### 当前迭代基线
+
+- 2026-07-12 已修复本轮真机暴露的共同故障链：手机网络不可达时在线 session 未创建，因此没有 speaker/turn；同时连接中 End 曾等待未完成的 HTTP 创建请求。App 现本地立即结束、请求 8 秒超时、迟到 session 补偿关闭，最新 Profile 已安装。
+- Beelink Speaker Service 已从 `sortformer_shadow/shadow` 切为 `sortformer/active`。API/Gateway 已按监听端口终止旧 PID 后重启，避免 `screen` 退出但旧 Node 子进程继续占端口导致部署不生效。
+- active 模式固定双声源会话 `36d61d75-5d1d-44b9-a2b8-15a5a289a1a6` 保存 `turn_1/speaker_1` 中文和 `turn_2/speaker_2` 英文，boundary hit=1、miss/error/race=0、确认延迟800ms；真人 iPhone 复验仍未执行。
 
 - `OPT-SPK-005` 已完成代码、自动化、Beelink ASR/Speaker 部署和固定双声源无停顿全链路验证。真机失败根因已定位为会话未创建 speaker session；Gateway 现对缺失 token 字段使用服务端四人默认值，超时调整为2秒，Provider 失败可观测，Speaker Service 对重复/乱序帧幂等。当前状态仍为 `in_progress`，只差 iPhone 双人快速换人复验。
 - `OPT-SPK-006` 的 PCM boundary 回切已通过真实音频连续性验证；合并批次时间轴根因已修复，诊断窗口、竞态指标和 session 持久化已部署。固定双声源真实 session 达到 hit=1、miss/error/race/drop=0、1040ms 确认延迟，等待 iPhone 与多人验收。

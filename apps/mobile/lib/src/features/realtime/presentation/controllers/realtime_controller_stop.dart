@@ -4,15 +4,12 @@ extension RealtimeControllerStop on RealtimeController {
   Future<void> stop() async {
     if (_stopInFlight || isTerminalRealtimeStatus(_status)) return;
     _stopInFlight = true;
-    final pendingStart =
-        _status == RealtimeStatus.connecting ? _startCompletion : null;
     _startGeneration += 1;
     if (!_setStatus(RealtimeStatus.ending)) {
       _stopInFlight = false;
       return;
     }
     try {
-      await pendingStart;
       final session = _session;
       await ignoreCleanupError(_audioCapture.stop);
       await ignoreCleanupError(_audioSessionCoordinator.endCapture);
@@ -34,6 +31,8 @@ extension RealtimeControllerStop on RealtimeController {
           _message = error.toString();
           _notify();
         }
+      } else {
+        await ignoreCleanupError(_repository.closeRealtime);
       }
       _session = null;
     } finally {

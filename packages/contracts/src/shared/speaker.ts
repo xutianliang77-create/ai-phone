@@ -42,6 +42,7 @@ export interface SegmentTimingDto {
   endMs: number;
   source: SegmentTimingSource;
   overlap?: boolean;
+  activeSpeakerIds?: string[];
 }
 
 export type SpeakerAttributionMode =
@@ -93,5 +94,9 @@ export function isSegmentTiming(value: unknown): value is SegmentTimingDto {
       candidate.source === "client" ||
       candidate.source === "participant_track" ||
       candidate.source === "estimated") &&
-    (candidate.overlap === undefined || typeof candidate.overlap === "boolean");
+    (candidate.overlap === undefined || typeof candidate.overlap === "boolean") &&
+    (candidate.activeSpeakerIds === undefined ||
+      (Array.isArray(candidate.activeSpeakerIds) &&
+        candidate.activeSpeakerIds.every((item) =>
+          typeof item === "string" && item.trim().length > 0)));
 }

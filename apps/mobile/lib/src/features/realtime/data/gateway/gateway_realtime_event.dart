@@ -1,4 +1,5 @@
 import '../../../../shared/domain/speaker_attribution.dart';
+import '../../../../shared/domain/turn_language_profile.dart';
 
 class GatewayRealtimeEvent {
   const GatewayRealtimeEvent({
@@ -31,6 +32,7 @@ class GatewayRealtimeEvent {
     this.flush,
     this.speaker,
     this.timing,
+    this.languageProfile,
   });
 
   final String type;
@@ -62,6 +64,7 @@ class GatewayRealtimeEvent {
   final GatewayRealtimeFlushSummary? flush;
   final SpeakerAttribution? speaker;
   final SegmentTiming? timing;
+  final TurnLanguageProfile? languageProfile;
 
   const GatewayRealtimeEvent.connection({
     required this.type,
@@ -92,7 +95,8 @@ class GatewayRealtimeEvent {
         data = null,
         flush = null,
         speaker = null,
-        timing = null;
+        timing = null,
+        languageProfile = null;
 
   factory GatewayRealtimeEvent.fromJson(Map<String, Object?> json) {
     final providerUsage = json['providerUsage'] is Map<String, Object?>
@@ -145,6 +149,7 @@ class GatewayRealtimeEvent {
               Map<String, Object?>.from(json['timing']! as Map),
             )
           : null,
+      languageProfile: TurnLanguageProfile.fromJson(json),
     );
   }
 }

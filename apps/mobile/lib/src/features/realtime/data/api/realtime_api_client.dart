@@ -7,6 +7,8 @@ import '../../../account/data/account_session_store.dart';
 import 'realtime_session.dart';
 
 class RealtimeApiClient {
+  static const Duration _defaultRequestTimeout = Duration(seconds: 8);
+
   RealtimeApiClient({
     required Uri baseUrl,
     http.Client? client,
@@ -16,6 +18,7 @@ class RealtimeApiClient {
     bool autoReverseTargetLanguage = false,
     String voiceOutputMode = 'natural',
     String termbaseId = 'default',
+    Duration requestTimeout = _defaultRequestTimeout,
     AccountSessionStore accountSessionStore = const FileAccountSessionStore(),
   })  : _baseUrl = baseUrl,
         _client = client ?? http.Client(),
@@ -25,6 +28,7 @@ class RealtimeApiClient {
         _autoReverseTargetLanguage = autoReverseTargetLanguage,
         _voiceOutputMode = voiceOutputMode,
         _termbaseId = termbaseId,
+        _requestTimeout = requestTimeout,
         _accountSessionStore = accountSessionStore;
 
   final Uri _baseUrl;
@@ -35,29 +39,32 @@ class RealtimeApiClient {
   final bool _autoReverseTargetLanguage;
   final String _voiceOutputMode;
   final String _termbaseId;
+  final Duration _requestTimeout;
   final AccountSessionStore _accountSessionStore;
 
   Future<RealtimeSession> createSession() async {
     final voice = await _voiceConfigForSession();
-    final response = await _client.post(
-      _baseUrl.resolve('/realtime/sessions'),
-      headers: await _authHeaders(json: true),
-      body: jsonEncode({
-        'mode': _mode,
-        'sourceLanguage': _sourceLanguage,
-        'targetLanguage': _targetLanguage,
-        if (_autoReverseTargetLanguage)
-          'autoReverseTargetLanguage': _autoReverseTargetLanguage,
-        'voiceOutput': voice != null,
-        'speakerAttribution': const <String, Object?>{
-          'mode': 'auto',
-          'maxSpeakers': 4,
-          'allowVoiceIdentity': false,
-        },
-        if (voice != null) 'voice': voice,
-        if (_termbaseId.isNotEmpty) 'termbaseId': _termbaseId,
-      }),
-    );
+    final response = await _client
+        .post(
+          _baseUrl.resolve('/realtime/sessions'),
+          headers: await _authHeaders(json: true),
+          body: jsonEncode({
+            'mode': _mode,
+            'sourceLanguage': _sourceLanguage,
+            'targetLanguage': _targetLanguage,
+            if (_autoReverseTargetLanguage)
+              'autoReverseTargetLanguage': _autoReverseTargetLanguage,
+            'voiceOutput': voice != null,
+            'speakerAttribution': const <String, Object?>{
+              'mode': 'auto',
+              'maxSpeakers': 4,
+              'allowVoiceIdentity': false,
+            },
+            if (voice != null) 'voice': voice,
+            if (_termbaseId.isNotEmpty) 'termbaseId': _termbaseId,
+          }),
+        )
+        .timeout(_requestTimeout);
 
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw RealtimeApiException('Create session failed: ${response.body}');
@@ -70,21 +77,25 @@ class RealtimeApiClient {
     String sessionId,
     List<Map<String, Object?>> segments,
   ) async {
-    final response = await _client.post(
-      _baseUrl.resolve('/sessions/$sessionId/segments'),
-      headers: await _authHeaders(json: true),
-      body: jsonEncode({'segments': segments}),
-    );
+    final response = await _client
+        .post(
+          _baseUrl.resolve('/sessions/$sessionId/segments'),
+          headers: await _authHeaders(json: true),
+          body: jsonEncode({'segments': segments}),
+        )
+        .timeout(_requestTimeout);
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw RealtimeApiException('Save segments failed: ${response.body}');
     }
   }
 
   Future<void> endSession(String sessionId) async {
-    final response = await _client.post(
-      _baseUrl.resolve('/realtime/sessions/$sessionId/end'),
-      headers: await _authHeaders(),
-    );
+    final response = await _client
+        .post(
+          _baseUrl.resolve('/realtime/sessions/$sessionId/end'),
+          headers: await _authHeaders(),
+        )
+        .timeout(_requestTimeout);
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw RealtimeApiException('End session failed: ${response.body}');
     }
@@ -115,10 +126,12 @@ class RealtimeApiClient {
   }
 
   Future<Map<String, Object?>> _myVoiceConfig() async {
-    final response = await _client.get(
-      _baseUrl.resolve('/voice-profiles/me'),
-      headers: await _authHeaders(),
-    );
+    final response = await _client
+        .get(
+          _baseUrl.resolve('/voice-profiles/me'),
+          headers: await _authHeaders(),
+        )
+        .timeout(_requestTimeout);
     final json = jsonDecode(response.body) as Map<String, Object?>;
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw RealtimeApiException('Load My Voice failed: ${response.body}');

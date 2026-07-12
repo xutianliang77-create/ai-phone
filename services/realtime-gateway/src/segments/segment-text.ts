@@ -1,5 +1,6 @@
 import type { TranscriptResult } from "../asr/asr-provider.js";
 import { shouldHoldForNextSegment } from "./segment-boundary.js";
+import { analyzeTurnLanguage } from "./turn-language-profile.js";
 
 export function mergeTranscriptParts(parts: TranscriptResult[]): TranscriptResult {
   const first = parts[0];
@@ -10,6 +11,7 @@ export function mergeTranscriptParts(parts: TranscriptResult[]): TranscriptResul
       (merged, part) => mergeText(merged, part.text, first.language),
       first.text.trim(),
     );
+  const languageProfile = analyzeTurnLanguage(text, first.language);
   return {
     segmentId: first.segmentId,
     ...(first.turnId ? { turnId: first.turnId } : {}),
@@ -18,6 +20,7 @@ export function mergeTranscriptParts(parts: TranscriptResult[]): TranscriptResul
       : {}),
     text,
     language: first.language,
+    ...languageProfile,
     confidence: mergedConfidence(parts) ?? last.confidence,
     ...(first.speaker ? { speaker: first.speaker } : {}),
     ...(mergedTiming(parts) ? { timing: mergedTiming(parts) } : {}),
@@ -38,7 +41,18 @@ function mergedTiming(parts: TranscriptResult[]) {
       ? timings[0].source
       : "estimated" as const,
     ...(timings.some((timing) => timing.overlap) ? { overlap: true } : {}),
+    ...(mergedActiveSpeakerIds(timings).length > 0
+      ? { activeSpeakerIds: mergedActiveSpeakerIds(timings) }
+      : {}),
   };
+}
+
+function mergedActiveSpeakerIds(
+  timings: Array<NonNullable<TranscriptResult["timing"]>>,
+) {
+  return Array.from(new Set(timings.flatMap(
+    (timing) => timing.activeSpeakerIds ?? [],
+  )));
 }
 
 export function canonicalSegmentText(text: string) {

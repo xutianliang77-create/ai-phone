@@ -4,6 +4,7 @@ from fastapi.testclient import TestClient
 
 from app.config import SpeakerConfig
 from app.main import create_app
+from app.routes import speaker_service_mode
 
 
 def config() -> SpeakerConfig:
@@ -48,3 +49,8 @@ def test_mock_contract_emits_timed_anonymous_speaker() -> None:
         "overlap": False,
         "final": True,
     }]
+
+
+def test_sortformer_provider_is_reported_as_active() -> None:
+    assert speaker_service_mode("sortformer") == "active"
+    assert speaker_service_mode("sortformer_shadow") == "shadow"

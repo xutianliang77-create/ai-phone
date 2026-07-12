@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from typing import Literal
 
 
-SpeakerProvider = Literal["mock", "sortformer_shadow"]
+SpeakerProvider = Literal["mock", "sortformer", "sortformer_shadow"]
 
 
 @dataclass(frozen=True)
@@ -23,7 +23,7 @@ class SpeakerConfig:
 
 def load_config() -> SpeakerConfig:
     provider = os.getenv("SPEAKER_MODEL_PROVIDER", "mock")
-    if provider not in ("mock", "sortformer_shadow"):
+    if provider not in ("mock", "sortformer", "sortformer_shadow"):
         raise ValueError(f"Unsupported speaker provider: {provider}")
     return SpeakerConfig(
         provider=provider,

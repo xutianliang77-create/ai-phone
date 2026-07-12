@@ -47,4 +47,4 @@ class HealthResponse(BaseModel):
     service: Literal["speaker-service"]
     provider: str
     model: str
-    mode: Literal["contract", "shadow"]
+    mode: Literal["active", "contract", "shadow"]

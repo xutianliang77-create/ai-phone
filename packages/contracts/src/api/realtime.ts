@@ -27,6 +27,9 @@ export interface SessionSegmentDto {
   rawText?: string;
   optimizedText?: string;
   translatedText: string;
+  dominantLanguage?: TranslationLanguageCode;
+  detectedLanguages?: TranslationLanguageCode[];
+  mixedLanguage?: boolean;
   sourceLanguage?: LanguageCode;
   targetLanguage?: LanguageCode;
   confidence?: number;
@@ -169,6 +172,9 @@ export interface UpsertSessionSegmentRequest {
   rawText?: string;
   optimizedText?: string;
   translatedText?: string;
+  dominantLanguage?: TranslationLanguageCode;
+  detectedLanguages?: TranslationLanguageCode[];
+  mixedLanguage?: boolean;
   sourceLanguage?: LanguageCode;
   targetLanguage?: LanguageCode;
   confidence?: number;

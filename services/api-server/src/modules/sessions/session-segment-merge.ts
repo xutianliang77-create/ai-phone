@@ -1,5 +1,6 @@
 import type {
   LanguageCode,
+  TranslationLanguageCode,
   SessionSegmentDto,
   SessionSegmentProviderUsageDto,
   SessionSegmentRefinementDto,
@@ -16,6 +17,9 @@ export interface SessionSegmentPatch {
   rawText?: string;
   optimizedText?: string;
   translatedText?: string;
+  dominantLanguage?: TranslationLanguageCode;
+  detectedLanguages?: TranslationLanguageCode[];
+  mixedLanguage?: boolean;
   sourceLanguage?: LanguageCode;
   targetLanguage?: LanguageCode;
   confidence?: number;
@@ -111,6 +115,15 @@ function mergeCompleteSegment(
     timing: incomingIsNewer
       ? incoming.timing ?? existing.timing
       : existing.timing ?? incoming.timing,
+    dominantLanguage: incomingIsNewer
+      ? incoming.dominantLanguage ?? existing.dominantLanguage
+      : existing.dominantLanguage ?? incoming.dominantLanguage,
+    detectedLanguages: incomingIsNewer
+      ? incoming.detectedLanguages ?? existing.detectedLanguages
+      : existing.detectedLanguages ?? incoming.detectedLanguages,
+    mixedLanguage: incomingIsNewer
+      ? incoming.mixedLanguage ?? existing.mixedLanguage
+      : existing.mixedLanguage ?? incoming.mixedLanguage,
   };
 }
 
@@ -126,6 +139,11 @@ function applyRecognitionFields(
   if (patch.refinement) segment.refinement = patch.refinement;
   if (patch.speaker) segment.speaker = patch.speaker;
   if (patch.timing) segment.timing = patch.timing;
+  if (patch.dominantLanguage) segment.dominantLanguage = patch.dominantLanguage;
+  if (patch.detectedLanguages) segment.detectedLanguages = patch.detectedLanguages;
+  if (typeof patch.mixedLanguage === "boolean") {
+    segment.mixedLanguage = patch.mixedLanguage;
+  }
   if (patch.stage && patch.stage !== "translation") segment.stage = patch.stage;
 }
 

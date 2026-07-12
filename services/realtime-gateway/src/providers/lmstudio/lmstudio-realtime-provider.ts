@@ -22,6 +22,10 @@ import {
 import { shouldPreserveSpelledIdentifier } from "./spelled-identifier.js";
 import type { LmStudioRealtimeProviderOptions, TranslationClient } from "./lmstudio-realtime-provider-options.js";
 import { orderedTurnTranscripts } from "../../asr/transcript-turn-order.js";
+import {
+  analyzeTurnLanguage,
+  turnLanguageEventFields,
+} from "../../segments/turn-language-profile.js";
 
 export class LmStudioRealtimeProvider implements RealtimeProvider {
   readonly name: string;
@@ -167,6 +171,7 @@ export class LmStudioRealtimeProvider implements RealtimeProvider {
     const assembled = this.semanticSegments.push(session.sessionId, {
       ...transcript,
       text,
+      ...analyzeTurnLanguage(text, transcript.language),
     });
     if (assembled.partial && emitTranscript) {
       yield {
@@ -215,7 +220,11 @@ export class LmStudioRealtimeProvider implements RealtimeProvider {
     transcript: TranscriptResult,
     emitTranscript = true,
   ): AsyncGenerator<ServerRealtimeEvent> {
-    const refinement = await this.refineTranscript(session, transcript);
+    const refinement = await this.transcriptRefiner.refine(
+      session,
+      transcript,
+      targetLanguageForTranscript(session, transcript.language),
+    );
     const text = refinement.text;
     if (emitTranscript) {
       yield {
@@ -228,6 +237,7 @@ export class LmStudioRealtimeProvider implements RealtimeProvider {
         rawText: refinement.rawText,
         ...(refinement.optimizedText ? { optimizedText: refinement.optimizedText } : {}),
         language: transcript.language,
+        ...turnLanguageEventFields(transcript),
         confidence: transcript.confidence,
         refinement: refinement.refinement,
         speaker: transcript.speaker, timing: transcript.timing,
@@ -248,6 +258,7 @@ export class LmStudioRealtimeProvider implements RealtimeProvider {
           revision: transcript.revision,
           text,
           language: targetLanguage,
+          ...turnLanguageEventFields(transcript),
           providerUsage: providerUsage({
             provider: "local_identifier_preserve",
             model: "spelled-identifier",
@@ -297,6 +308,7 @@ export class LmStudioRealtimeProvider implements RealtimeProvider {
         revision: transcript.revision,
         text: translated,
         language: targetLanguage,
+        ...turnLanguageEventFields(transcript),
         providerUsage: providerUsage({
           provider: this.name,
           model: this.model,
@@ -327,16 +339,5 @@ export class LmStudioRealtimeProvider implements RealtimeProvider {
         error,
       );
     }
-  }
-
-  private async refineTranscript(
-    session: RealtimeProviderSession,
-    transcript: TranscriptResult,
-  ) {
-    return this.transcriptRefiner.refine(
-      session,
-      transcript,
-      targetLanguageForTranscript(session, transcript.language),
-    );
   }
 }

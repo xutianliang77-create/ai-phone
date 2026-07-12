@@ -1,6 +1,6 @@
 # ai phone 说话人归属技术设计
 
-版本：v1.7
+版本：v1.8
 日期：2026-07-11
 
 ## 1. 目标与边界
@@ -19,7 +19,7 @@
 - 普通 VAD/最大时长恰好先于 speaker boundary 完成时可能产生 endpoint race；当前有替代结果时去重，空结果时保留普通端点防止漏句，并把 race/miss 写入 session。固定双声源 race=0，真机短停顿场景仍需量化。
 - SegmentAssembler 已禁止不同 speaker 的 ASR 段继续合并，但无法修复 ASR 段内部已经混入两个人的问题。
 - App 和 API 曾把 conversation 默认写成 2 人，与对话、聆听和会议的多人场景不符。
-- turn 尚未持久化 `dominantLanguage/detectedLanguages/mixedLanguage`，但 SegmentAssembler 已取消语言变化硬断点。
+- turn 已持久化 `dominantLanguage/detectedLanguages/mixedLanguage`，SegmentAssembler 不把语种变化作为硬断点；多人、重叠和混合句真人验收仍待执行。
 
 ## 3. 统一数据契约
 
@@ -109,9 +109,9 @@ Call Link/PSTN 独立音轨
 - conversation、meeting、classroom 和 business 默认允许模型容量内最多4个匿名说话人，不设置2人产品限制。
 - 身份识别低于阈值显示匿名；未授权场景不生成或持久化声纹。
 
-### 9.1 当前门禁状态（2026-07-11）
+### 9.1 当前门禁状态（2026-07-12）
 
-- Beelink 已运行固定 `diar_streaming_sortformer_4spk-v2.1.nemo` stateful low-latency 服务，Gateway 测试环境已启用。
+- Beelink 已以 `provider=sortformer/mode=active` 运行固定 `diar_streaming_sortformer_4spk-v2.1.nemo` stateful low-latency 服务，Gateway 在线链路已启用。
 - 固定双声源和 iPhone 基础测试可以显示“说话人 1/2”，短句对齐证据已修复。
 - 模型容量为4人，产品默认已统一为 `maxSpeakers=4`；这不是承诺超过4人的单麦克风实时分离。
 - 抢话、重叠、真人四人、历史重命名、纪要和导出仍待正式验收，不能仅凭基础测试宣称商业发布完成。
@@ -485,8 +485,8 @@ interface SpeakerRepository {
 
 1. 所有 speaker 字段先设为 optional，旧历史读取为 `unknown`，无需批量伪造 speaker。
 2. 先接 Call Link participant track，验证端到端数据契约。
-3. 再启用 diarization shadow mode：计算但不展示，只收集指标。
-4. 达到门槛后按测试账号灰度展示匿名标签。
+3. diarization shadow mode 完成固定语料和基础链路验证。
+4. 当前测试账号已切换 active 模式展示匿名标签，真人门禁未通过前不扩大灰度。
 5. 声纹实名独立开关，不能随 diarization 自动启用。
 
 ## 17. 实施状态
@@ -507,6 +507,7 @@ interface SpeakerRepository {
 - session diagnostics 已贯通音频帧/批次/丢帧、boundary hit/miss/error、确认延迟、回切时长、endpoint race 和 endpoint reason；重复 End 不覆盖首份证据。
 - 固定双声源真实全链路会话 `4296e08a-3b2f-4449-9ebb-0299f142db49` 正确输出 `speaker_1 -> speaker_2`，边界连续且 hit=1、miss/error/race/drop=0。
 - `turnId/revision` 部署会话 `8703925d-c08e-4e1e-bff6-36a533a40146` 正确保存 `turn_1/speaker_1` 与 `turn_2/speaker_2`，事件和历史顺序一致，确认延迟720ms。
+- active 模式会话 `36d61d75-5d1d-44b9-a2b8-15a5a289a1a6` 正确保存两位 speaker、两个 turn 及中英文 `dominantLanguage/detectedLanguages/mixedLanguage`，hit=1、miss/error/race=0、确认延迟800ms。
 
 尚未宣称完成：
 

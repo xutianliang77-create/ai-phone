@@ -21,11 +21,12 @@ void main() {
     expect(controller.status, RealtimeStatus.connecting);
 
     final stop = controller.stop();
-    await pumpEventQueue();
-    expect(controller.status, RealtimeStatus.ending);
+    await stop.timeout(const Duration(milliseconds: 200));
+    expect(controller.status, RealtimeStatus.ended);
 
     repository.releaseStart();
-    await Future.wait([start, stop]);
+    await start;
+    await pumpEventQueue();
 
     expect(controller.status, RealtimeStatus.ended);
     expect(repository.startedSessionIds, <String>['sess_1']);

@@ -22,7 +22,7 @@ def create_router(engine: SpeakerEngine, config: SpeakerConfig) -> APIRouter:
             service="speaker-service",
             provider=config.provider,
             model=config.model_id,
-            mode="shadow" if config.provider == "sortformer_shadow" else "contract",
+            mode=speaker_service_mode(config.provider),
         )
 
     @router.post("/speaker/sessions", status_code=status.HTTP_204_NO_CONTENT)
@@ -66,6 +66,14 @@ def create_router(engine: SpeakerEngine, config: SpeakerConfig) -> APIRouter:
         return Response(status_code=status.HTTP_204_NO_CONTENT)
 
     return router
+
+
+def speaker_service_mode(provider: str) -> str:
+    if provider == "sortformer":
+        return "active"
+    if provider == "sortformer_shadow":
+        return "shadow"
+    return "contract"
 
 
 def require_api_key(config: SpeakerConfig, authorization: str | None) -> None:

@@ -24,6 +24,9 @@ export interface TranscriptEvent {
   rawText?: string;
   optimizedText?: string;
   language: TranslationLanguageCode;
+  dominantLanguage?: TranslationLanguageCode;
+  detectedLanguages?: TranslationLanguageCode[];
+  mixedLanguage?: boolean;
   confidence?: number;
   refinement?: SessionSegmentRefinementDto;
   speaker?: SpeakerAttributionDto;
@@ -38,6 +41,9 @@ export interface TranslationEvent {
   revision?: number;
   text: string;
   language: TranslationLanguageCode;
+  dominantLanguage?: TranslationLanguageCode;
+  detectedLanguages?: TranslationLanguageCode[];
+  mixedLanguage?: boolean;
   termHits?: string[];
   providerUsage?: SessionSegmentProviderUsageDto;
   speaker?: SpeakerAttributionDto;
@@ -62,6 +68,9 @@ export interface TranslationFailedEvent {
   revision?: number;
   message: string;
   language: TranslationLanguageCode;
+  dominantLanguage?: TranslationLanguageCode;
+  detectedLanguages?: TranslationLanguageCode[];
+  mixedLanguage?: boolean;
   stage?: RealtimeErrorStage;
   provider?: string;
   retryable?: boolean;

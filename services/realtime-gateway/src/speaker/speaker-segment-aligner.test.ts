@@ -25,11 +25,13 @@ describe("speaker segment aligner", () => {
     });
   });
 
-  it("returns unknown alignment when overlap evidence is weak", () => {
+  it("returns explicit unknown alignment when overlap evidence is weak", () => {
     expect(alignSpeakerSpan(
       { startMs: 1000, endMs: 2000, source: "client" },
       [{ speakerId: "speaker_1", startMs: 900, endMs: 1100 }],
-    )).toBeNull();
+    )).toMatchObject({
+      speaker: { speakerId: "unknown", role: "unknown", source: "unknown" },
+    });
   });
 
   it("aligns short speaker evidence inside an ASR padded window", () => {
@@ -51,7 +53,10 @@ describe("speaker segment aligner", () => {
       ],
     )).toMatchObject({
       speaker: { speakerId: "speaker_1" },
-      timing: { overlap: true },
+      timing: {
+        overlap: true,
+        activeSpeakerIds: ["speaker_1"],
+      },
     });
   });
 
@@ -67,13 +72,15 @@ describe("speaker segment aligner", () => {
     });
   });
 
-  it("returns unknown alignment when no speaker dominates the evidence", () => {
+  it("returns explicit unknown when no speaker dominates the evidence", () => {
     expect(alignSpeakerSpan(
       { startMs: 1000, endMs: 2000, source: "client" },
       [
         { speakerId: "speaker_1", startMs: 1000, endMs: 1400 },
         { speakerId: "speaker_2", startMs: 1600, endMs: 2000 },
       ],
-    )).toBeNull();
+    )).toMatchObject({
+      speaker: { speakerId: "unknown", role: "unknown", source: "unknown" },
+    });
   });
 });

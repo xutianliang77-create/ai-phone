@@ -31,6 +31,9 @@ void main() {
       'revision': 2,
       'text': '你好',
       'language': 'zh',
+      'dominantLanguage': 'zh',
+      'detectedLanguages': <String>['zh', 'en'],
+      'mixedLanguage': true,
       'speaker': <String, Object?>{
         'speakerId': 'speaker_2',
         'role': 'speaker',
@@ -41,6 +44,8 @@ void main() {
         'startMs': 1000,
         'endMs': 1800,
         'source': 'client',
+        'overlap': true,
+        'activeSpeakerIds': <String>['speaker_1', 'speaker_2'],
       },
     });
 
@@ -49,5 +54,10 @@ void main() {
     expect(event.revision, 2);
     expect(event.speaker?.label(isChinese: true), '说话人 2');
     expect(event.timing?.startMs, 1000);
+    expect(event.timing?.overlap, isTrue);
+    expect(event.timing?.activeSpeakerIds, ['speaker_1', 'speaker_2']);
+    expect(event.languageProfile?.dominantLanguage, 'zh');
+    expect(event.languageProfile?.detectedLanguages, ['zh', 'en']);
+    expect(event.languageProfile?.mixedLanguage, isTrue);
   });
 }

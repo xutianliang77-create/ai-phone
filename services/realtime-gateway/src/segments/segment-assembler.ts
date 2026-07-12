@@ -59,17 +59,21 @@ export class SegmentAssembler {
     const pending = state.pending;
     if (!pending) return this.acceptNew(state, transcript, nowMs);
 
+    const revised = this.replacePendingRevision(
+      state,
+      pending,
+      transcript,
+      nowMs,
+    );
+    if (revised) return revised;
+
     if (this.mustSplit(pending, transcript, nowMs)) {
       const ready = this.releasePending(state, nowMs);
       const current = this.acceptNew(state, transcript, nowMs);
       return { ready: [...ready, ...current.ready], ...(current.partial ? { partial: current.partial } : {}) };
     }
 
-    const existingIndex = pending.parts.findIndex((part) => part.segmentId === transcript.segmentId);
-    if (existingIndex >= 0) {
-      if (sameText(pending.parts[existingIndex].text, transcript.text)) return { ready: [] };
-      pending.parts[existingIndex] = transcript;
-    } else if (isPendingDuplicate(pending, transcript)) {
+    if (isPendingDuplicate(pending, transcript)) {
       return { ready: [] };
     } else {
       pending.parts.push(transcript);
@@ -114,9 +118,35 @@ export class SegmentAssembler {
   }
 
   private mustSplit(pending: PendingSegment, transcript: TranscriptResult, nowMs: number) {
-    return speakerKey(pending.parts.at(-1)) !== speakerKey(transcript) ||
-      turnKey(pending.parts.at(-1)) !== turnKey(transcript) ||
+    const previous = pending.parts.at(-1);
+    return isProtectedSpeakerBoundary(previous) ||
+      isProtectedSpeakerBoundary(transcript) ||
+      speakerKey(previous) !== speakerKey(transcript) ||
+      turnKey(previous) !== turnKey(transcript) ||
       nowMs - pending.createdAtMs >= this.maxBufferMs;
+  }
+
+  private replacePendingRevision(
+    state: SessionAssemblyState,
+    pending: PendingSegment,
+    transcript: TranscriptResult,
+    nowMs: number,
+  ): SegmentPushResult | null {
+    const index = pending.parts.findIndex((part) =>
+      part.segmentId === transcript.segmentId);
+    if (index < 0) return null;
+    const existing = pending.parts[index];
+    if (isStalePendingRevision(existing, transcript) ||
+        sameText(existing.text, transcript.text) &&
+          (transcript.revision ?? 0) <= (existing.revision ?? 0)) {
+      return { ready: [] };
+    }
+    pending.parts[index] = transcript;
+    const merged = mergeTranscriptParts(pending.parts);
+    if (this.shouldRelease(pending, merged, nowMs)) {
+      return { ready: this.releasePending(state, nowMs) };
+    }
+    return { ready: [], partial: merged };
   }
 
   private shouldRelease(pending: PendingSegment, merged: TranscriptResult, nowMs: number) {
@@ -189,6 +219,24 @@ function speakerKey(transcript: TranscriptResult | undefined) {
 
 function turnKey(transcript: TranscriptResult | undefined) {
   return transcript?.turnId ?? "";
+}
+
+function isProtectedSpeakerBoundary(transcript: TranscriptResult | undefined) {
+  const speaker = transcript?.speaker;
+  return transcript?.timing?.overlap === true ||
+    speaker?.speakerId === "unknown" ||
+    speaker?.role === "unknown" ||
+    speaker?.source === "unknown";
+}
+
+function isStalePendingRevision(
+  existing: TranscriptResult,
+  incoming: TranscriptResult,
+) {
+  if (existing.revision === undefined || incoming.revision === undefined) {
+    return false;
+  }
+  return incoming.revision <= existing.revision;
 }
 
 function isPendingDuplicate(pending: PendingSegment, transcript: TranscriptResult) {

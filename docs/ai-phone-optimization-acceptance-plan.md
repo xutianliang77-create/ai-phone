@@ -1,6 +1,6 @@
 # ai phone 优化验收方案
 
-版本：v1.9
+版本：v1.10
 日期：2026-07-12
 任务来源：`docs/ai-phone-optimization-development-tasks.md`
 
@@ -143,6 +143,8 @@ TTS 回灌指标由 App playback gate/AEC 验收，不能把 VAD 对合成语音
 `AC-SPK-006` 当前证据：contracts、ASR、Gateway、API、Flutter 内存态和本地历史均保留可选 `turnId/revision`；不同 turn 强制释放待合并段；批量 ASR 结果按 `startMs/endMs` 排序；最高 revision 幂等生效；迟到译文可补齐，但旧 speaker、timing、sourceText 和 turnId 不会回滚。Node 全仓、Flutter 255 项、analyze、typecheck 和文件大小门禁通过。部署后固定双声源会话 `8703925d-c08e-4e1e-bff6-36a533a40146` 保存 `turn_1/speaker_1` 中文和 `turn_2/speaker_2` 英文，边界连续，hit=1、miss/error/race/drop=0，确认延迟720ms。iPhone 双人/多人验收尚未执行，因此状态仍为 `in_progress`。
 
 `AC-SPK-004` 本轮故障证据：失败真机会话 `adf37a32-f102-40ea-9b0b-9812733f99d0` 的7个 segment 均无 speaker/turn，诊断边界计数为0，且 Beelink 没有对应 speaker session 创建记录。修复后 Gateway `/health` 显示 `speakerProvider=http`、`speakerTimeoutMs=2000`；固定双声源会话 `55dfe12e-59bd-4405-aab5-ed43f3d68004` 保存 `turn_1/speaker_1` 和 `turn_2/speaker_2`，`hit=1`、`miss/error/race/drop=0`、确认延迟720ms。真人 iPhone 复验未执行，因此未标记 accepted。
+
+`AC-SPK-007/OPT-RT-002` 最新证据：Beelink `/health` 返回 `provider=sortformer`、`mode=active`；重新加载源码后的 Gateway/API PID 分别为 `81487/81486`。固定双声源会话 `36d61d75-5d1d-44b9-a2b8-15a5a289a1a6` 保存两位 speaker、两个 turn 和中英文语言画像，`hit=1`、`miss/error/race=0`、确认延迟800ms。Flutter 258项、Gateway 161项、API 177项、Speaker Service 10项、analyze/typecheck/文件大小门禁通过。断网创建期间 End 的自动化门槛为200ms内进入本地 `ended`；iPhone 手工断网复验待执行。
 
 ## 7. UI 专项验收
 

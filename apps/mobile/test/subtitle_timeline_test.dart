@@ -5,6 +5,7 @@ import 'package:translation_mobile/src/app/localization/app_localizations.dart';
 import 'package:translation_mobile/src/features/realtime/domain/entities/subtitle_segment.dart';
 import 'package:translation_mobile/src/features/realtime/presentation/widgets/subtitle_timeline.dart';
 import 'package:translation_mobile/src/shared/domain/speaker_attribution.dart';
+import 'package:translation_mobile/src/shared/domain/turn_language_profile.dart';
 
 void main() {
   testWidgets('auto-scrolls to the latest subtitle segment', (tester) async {
@@ -167,6 +168,40 @@ void main() {
     await tester.pumpWidget(const _TestApp(segments: segments));
     expect(find.text('说话人 2'), findsOneWidget);
     expect(find.text('我'), findsNothing);
+  });
+
+  testWidgets('shows unknown, overlap, and mixed-language metadata',
+      (tester) async {
+    const segments = <SubtitleSegment>[
+      SubtitleSegment(
+        id: 'overlap_segment',
+        sourceText: '你好 and welcome',
+        translatedText: 'Hello，欢迎。',
+        speaker: SpeakerAttribution(
+          speakerId: 'unknown',
+          role: 'unknown',
+          source: 'unknown',
+        ),
+        timing: SegmentTiming(
+          startMs: 1000,
+          endMs: 1800,
+          source: 'client',
+          overlap: true,
+          activeSpeakerIds: <String>['speaker_1', 'speaker_2'],
+        ),
+        languageProfile: TurnLanguageProfile(
+          dominantLanguage: 'zh',
+          detectedLanguages: <String>['zh', 'en'],
+          mixedLanguage: true,
+        ),
+      ),
+    ];
+
+    await tester.pumpWidget(const _TestApp(segments: segments));
+
+    expect(find.text('说话人未知'), findsOneWidget);
+    expect(find.text('多人同时说话'), findsOneWidget);
+    expect(find.text('中英混合'), findsOneWidget);
   });
 }
 

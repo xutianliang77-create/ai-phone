@@ -172,7 +172,15 @@ export class SpeakerAwareAsrProvider implements AsrProvider {
       .map((transcript) => {
         if (transcript.speaker) return transcript;
         const alignment = alignSpeakerSpan(transcript.timing, spans);
-        return alignment ? { ...transcript, ...alignment } : transcript;
+        if (alignment) return { ...transcript, ...alignment };
+        return {
+          ...transcript,
+          speaker: {
+            speakerId: "unknown",
+            role: "unknown" as const,
+            source: "unknown" as const,
+          },
+        };
       })
       .sort((left, right) =>
         (left.timing?.startMs ?? 0) - (right.timing?.startMs ?? 0)

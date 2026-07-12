@@ -71,6 +71,7 @@ class LocalSessionStore {
                 provider: segment.provider,
                 model: segment.model,
                 latencyMs: segment.latencyMs,
+                languageProfile: segment.languageProfile,
                 speaker: segment.speaker,
                 timing: segment.timing,
               ))
@@ -195,6 +196,8 @@ Map<String, Object?> _detailToJson(SessionDetail detail) {
         if (segment.provider != null) 'provider': segment.provider,
         if (segment.model != null) 'model': segment.model,
         if (segment.latencyMs != null) 'latencyMs': segment.latencyMs,
+        if (segment.languageProfile != null)
+          ...segment.languageProfile!.toJson(),
         if (segment.speaker != null) 'speaker': segment.speaker!.toJson(),
         if (segment.timing != null) 'timing': segment.timing!.toJson(),
       };
