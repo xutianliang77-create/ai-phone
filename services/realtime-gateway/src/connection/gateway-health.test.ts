@@ -69,6 +69,7 @@ describe("gateway health", () => {
       translationEndpoint: "http://127.0.0.1:1234/v1",
       translationModel: "tencent/Hy-MT2-1.8B",
       sessionEventSink: "api",
+      tokenTransport: "subprotocol",
       releaseReadiness: {
         status: "not_ready",
         profile: "domestic",
@@ -134,6 +135,19 @@ describe("gateway health", () => {
 
     expect(payload.issues).toContain(
       "Release requires ASR_HTTP_API_KEY with at least 16 characters",
+    );
+  });
+
+  it("blocks release while legacy query token transport is enabled", () => {
+    const payload = gatewayReleaseReadinessPayload({
+      ...env,
+      provider: "hymt2_self_hosted",
+      resolvedProvider: "lmstudio",
+      allowQueryToken: true,
+    });
+
+    expect(payload.issues).toContain(
+      "Release requires REALTIME_ALLOW_QUERY_TOKEN=false",
     );
   });
 

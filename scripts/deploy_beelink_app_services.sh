@@ -118,6 +118,7 @@ API_DATA_FILE=/data/ai-phone/api-store.json
 API_SQLITE_FILE=/data/ai-phone/api-store.sqlite
 VOICE_PROFILE_REFERENCE_DIR=/data/ai-phone/voice-references
 REALTIME_TOKEN_SECRET=$token_secret
+REALTIME_ALLOW_QUERY_TOKEN=false
 INTERNAL_API_SECRET=$internal_secret
 AUTH_OTP_SECRET=$otp_secret
 API_TEST_AUTO_ACCOUNT=true

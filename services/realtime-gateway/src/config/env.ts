@@ -21,6 +21,7 @@ export type LlmProviderName = "off" | "mock" | "openai_compatible";
 export interface RealtimeEnv {
   port: number;
   realtimeTokenSecret: string;
+  allowQueryToken?: boolean;
   provider: RealtimeProviderName;
   resolvedProvider: "mock" | "openai" | "lmstudio" | "qwen_live" | "unsupported";
   regionEdition: RegionEdition;
@@ -85,6 +86,10 @@ export function loadEnv(): RealtimeEnv {
   return {
     port: Number(env.REALTIME_PORT ?? 3001),
     realtimeTokenSecret: env.REALTIME_TOKEN_SECRET ?? "dev-secret",
+    allowQueryToken: parseBoolean(
+      env.REALTIME_ALLOW_QUERY_TOKEN,
+      process.env.NODE_ENV !== "production",
+    ),
     provider,
     resolvedProvider: resolveProviderName(provider),
     regionEdition,

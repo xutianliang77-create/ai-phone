@@ -21,6 +21,10 @@ import {
 import { attachSession, confirmSessionConnection, deleteSession, getSession, sessionBillableSeconds, transitionStatus } from "../sessions/session-manager.js";
 import { createUsageBalanceClient } from "../usage/usage-balance-client.js";
 import { createUsageTickDecision } from "../usage/usage-ticker.js";
+import {
+  extractRealtimeConnectionToken,
+  realtimeProtocol,
+} from "../auth/realtime-connection-token.js";
 import { HttpTtsSynthesizer } from "../tts/http-tts-synthesizer.js";
 import { RealtimeTtsOutputQueue } from "../tts/realtime-tts-output.js";
 import { handleControlEvent } from "./session-control-handler.js";
@@ -47,7 +51,12 @@ export function startWebSocketServer() {
   const httpServer = createServer((request, response) => {
     handleGatewayHttpRequest(request, response, env);
   });
-  const server = new WebSocketServer({ server: httpServer, path: "/realtime" });
+  const server = new WebSocketServer({
+    server: httpServer,
+    path: "/realtime",
+    handleProtocols: (protocols) =>
+      protocols.has(realtimeProtocol) ? realtimeProtocol : false,
+  });
   const sessionEventSink = createSessionEventSink(env);
   const usageBalanceClient = createUsageBalanceClient(env);
   const disconnectFinalizers = new DisconnectFinalizerRegistry(
@@ -56,8 +65,10 @@ export function startWebSocketServer() {
   );
 
   server.on("connection", async (ws, request) => {
-    const url = new URL(request.url ?? "", `http://${request.headers.host}`);
-    const token = url.searchParams.get("token");
+    const token = extractRealtimeConnectionToken(
+      request,
+      env.allowQueryToken === true,
+    );
     const claims = token ? verifyRealtimeToken(token, env.realtimeTokenSecret) : null;
     if (!claims) {
       send(ws, buildError("invalid_token", "Invalid realtime token", {

@@ -20,6 +20,7 @@ export interface GatewayHealthPayload {
   translationEndpoint?: string;
   translationModel?: string;
   sessionEventSink: RealtimeEnv["sessionEventSink"];
+  tokenTransport: "subprotocol" | "subprotocol_with_legacy_query";
   releaseReadiness: GatewayReleaseReadinessPayload;
 }
 
@@ -49,6 +50,9 @@ export function gatewayHealthPayload(env: RealtimeEnv): GatewayHealthPayload {
     translationEndpoint: translationEndpoint(env),
     translationModel: translationModel(env),
     sessionEventSink: env.sessionEventSink,
+    tokenTransport: env.allowQueryToken
+      ? "subprotocol_with_legacy_query"
+      : "subprotocol",
     releaseReadiness: gatewayReleaseReadinessPayload(env),
   };
 }
@@ -86,6 +90,9 @@ function gatewayReleaseReadinessIssues(env: RealtimeEnv) {
   }
   appendAsrIssues(env, issues);
   appendSessionSinkIssues(env, issues);
+  if (env.allowQueryToken) {
+    issues.push("Release requires REALTIME_ALLOW_QUERY_TOKEN=false");
+  }
   return issues;
 }
 

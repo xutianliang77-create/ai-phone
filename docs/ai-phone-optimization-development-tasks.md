@@ -1,6 +1,6 @@
 # ai phone 优化开发任务清单
 
-版本：v4.1
+版本：v4.2
 日期：2026-07-12
 关联：`docs/domestic-app-detailed-functional-design.md`、`docs/ai-phone-translation-technical-design.md`、`docs/domestic-design-review-action-plan.md`
 
@@ -59,6 +59,8 @@
 - `OPT-OBS-001`：`in_progress（代码完成，统一验收待执行）`。新增账号隔离的 `/sessions/:sessionId/quality-report`，按 session 汇总翻译覆盖率、延迟均值/P95/最大值、丢帧、VAD fallback、端点原因、说话人、overlap 和 Provider 指纹；报告不包含字幕正文、音频或逐帧概率。API 自动化通过，真实 session 报告和告警阈值尚待统一验收。
 - `OPT-DATA-001`：`in_progress（代码完成，迁移验收待执行）`。服务器新增 Node 24 SQLite WAL 存储驱动，按实体 ID 增量提交；不同 ID 不互相覆盖，同 ID 陈旧写入显式冲突。session segment 使用独立表和外键级联，账号、会话、用量、账本、术语、Agent 和声音资料继续复用现有 Repository API。默认本地仍可用 JSON，Beelink 通过受控开关迁移。
 - `OPT-DATA-002`：`in_progress（代码完成，恢复演练待执行）`。新增 JSON→SQLite 一次性迁移、`quick_check`、SQLite online backup 和维护模式 restore；恢复前自动保留 pre-restore 文件，发布脚本仅在 `MIGRATE_SQLITE=true` 时切换现有服务器。
+- `OPT-SEC-001`：`in_progress（代码完成，统一验收待执行）`。realtime session 的个人声音配置只从当前账号 ready voice profile 解析，客户端提交的 `voiceProfileId/referenceAudioId` 不直接进入 token；上传完成后才置 ready，删除或跨账号 reference 不可复用。
+- `OPT-SEC-002`：`in_progress（代码完成，统一验收待执行）`。App 使用 WebSocket subprotocol 传 realtime token，URL 不再带 token；Gateway 只回显固定协议名。旧 query token 受 `REALTIME_ALLOW_QUERY_TOKEN` 控制，发布门禁要求为 false。
 - `OPT-MOB-001`：iPhone `accepted`。iPhone 后台、锁屏、来电和蓝牙耳机切换均通过；Android 真机验收统一列为 TODO，并在 iOS 产品化完成后启动。
 - `OPT-MOB-002`：iPhone `accepted`。iPhone 20句连续采集、蓝牙切换、Listening 静音和声音偏好恢复均通过；Android 真机验收统一列为 TODO，并在 iOS 产品化完成后启动。
 - `OPT-UI-001`：代码和自动化门禁完成；`idle/connecting/active/paused/ending/ended/failed` 只展示当前可执行操作，主操作固定在同一槽位，连接中可取消且迟到 session 不会恢复同传。iPhone/Android 真机布局与点击体验验收待执行。

@@ -7,6 +7,10 @@ import type {
 } from "@translation/contracts";
 import { deleteSession } from "../sessions/session-manager.js";
 import { startWebSocketServer } from "./websocket-server.js";
+import {
+  realtimeProtocol,
+  realtimeTokenProtocol,
+} from "../auth/realtime-connection-token.js";
 
 const sessionId = "final-flush-integration-test";
 const secret = "final-flush-test-secret";
@@ -35,10 +39,12 @@ describe("websocket final flush", () => {
       throw new Error("Gateway did not expose a TCP address");
     }
 
-    const ws = new WebSocket(
-      `ws://127.0.0.1:${address.port}/realtime?token=${token()}`,
-    );
+    const ws = new WebSocket(`ws://127.0.0.1:${address.port}/realtime`, [
+      realtimeProtocol,
+      realtimeTokenProtocol(token()),
+    ]);
     await waitForEvent(ws, "session.started");
+    expect(ws.protocol).toBe(realtimeProtocol);
     const finalEvents = collectUntilEnded(ws);
     for (let sequence = 1; sequence <= 8; sequence += 1) {
       ws.send(JSON.stringify(audioFrame(sequence)));

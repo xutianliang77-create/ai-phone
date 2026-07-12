@@ -37,13 +37,10 @@ class RealtimeGatewayClient {
 
   Future<void> _open(RealtimeSession session) async {
     final generation = ++_connectionGeneration;
-    final endpoint = session.endpoint.replace(
-      queryParameters: <String, String>{
-        ...session.endpoint.queryParameters,
-        'token': session.realtimeToken,
-      },
+    final channel = WebSocketChannel.connect(
+      realtimeGatewayEndpoint(session),
+      protocols: realtimeGatewayProtocols(session),
     );
-    final channel = WebSocketChannel.connect(endpoint);
     _channel = channel;
     _subscription = channel.stream.listen(
       _handleMessage,
@@ -255,3 +252,10 @@ class RealtimeGatewayClient {
     await channel?.sink.close();
   }
 }
+
+Uri realtimeGatewayEndpoint(RealtimeSession session) => session.endpoint;
+
+Iterable<String> realtimeGatewayProtocols(RealtimeSession session) => <String>[
+      'ai-phone.realtime.v1',
+      'ai-phone.token.${session.realtimeToken}',
+    ];
