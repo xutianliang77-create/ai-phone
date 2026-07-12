@@ -1,6 +1,6 @@
 # ai phone 优化开发计划
 
-版本：v1.23
+版本：v1.24
 日期：2026-07-12
 任务来源：`docs/ai-phone-optimization-development-tasks.md`
 
@@ -41,6 +41,7 @@
 - `OPT-S2S-001` 已完成 Provider 能力契约和运行路由：级联路线继续为默认，原生路线可独占或 shadow；shadow 错误隔离，结束时等待旁路任务收敛。Gemini/GPT 具体 Provider 仍需独立账号、地区、成本和隐私评测。
 - `OPT-SEC-001/002` 已完成代码：个人声音 reference 由账号 ready profile 决定；realtime token 改由 WebSocket subprotocol 发送，URL 和协商响应不包含原始 token。发布环境必须关闭 legacy query token。
 - `OPT-UI-003/004` 已完成设置分组、运行中锁定/结束动作、浅色与深色设计 Token；`OPT-UI-005` 截图链路已存在，等待最终 Profile/Release 版本统一生成 iOS/Android 素材。
+- `OPT-REL-001` 源码构建门禁已接入 Beelink deploy 并通过；移动端发布门禁当前为 ready。`OPT-IOS-001/002` 只剩最终 Profile/Release 独立安装和20次冷启动证据，不能用 Debug 运行替代。
 
 ## 3. 分阶段任务
 

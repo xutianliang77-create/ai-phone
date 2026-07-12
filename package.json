@@ -69,6 +69,7 @@
     "generate:iphone14-test-audio": "node scripts/generate_iphone14_small_model_test_audio.mjs",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "check:lines": "node tools/check-file-size.mjs",
+    "check:source-build": "node scripts/check_source_build_readiness.mjs",
     "storage:migrate-json": "tsx services/api-server/src/infrastructure/storage/sqlite-store-admin.ts migrate-json",
     "storage:check": "tsx services/api-server/src/infrastructure/storage/sqlite-store-admin.ts check",
     "storage:backup": "tsx services/api-server/src/infrastructure/storage/sqlite-store-admin.ts backup",

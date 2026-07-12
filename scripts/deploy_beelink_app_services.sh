@@ -10,6 +10,10 @@ PUBLIC_HOST="${PUBLIC_HOST:-100.110.127.117}"
 MODE="${1:-deploy}"
 IMAGE_TAG="${AI_PHONE_IMAGE_TAG:-$(git -C "$ROOT_DIR" rev-parse --short HEAD)}"
 
+if [[ "$MODE" != "status" ]]; then
+  npm --prefix "$ROOT_DIR" run check:source-build -- --json
+fi
+
 case "$MODE" in
   sync|deploy|status) ;;
   *) echo "Usage: $0 [sync|deploy|status]" >&2; exit 2 ;;

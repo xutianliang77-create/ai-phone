@@ -1,6 +1,6 @@
 # ai phone 优化开发任务清单
 
-版本：v4.3
+版本：v4.4
 日期：2026-07-12
 关联：`docs/domestic-app-detailed-functional-design.md`、`docs/ai-phone-translation-technical-design.md`、`docs/domestic-design-review-action-plan.md`
 
@@ -61,6 +61,9 @@
 - `OPT-DATA-002`：`in_progress（代码完成，恢复演练待执行）`。新增 JSON→SQLite 一次性迁移、`quick_check`、SQLite online backup 和维护模式 restore；恢复前自动保留 pre-restore 文件，发布脚本仅在 `MIGRATE_SQLITE=true` 时切换现有服务器。
 - `OPT-SEC-001`：`in_progress（代码完成，统一验收待执行）`。realtime session 的个人声音配置只从当前账号 ready voice profile 解析，客户端提交的 `voiceProfileId/referenceAudioId` 不直接进入 token；上传完成后才置 ready，删除或跨账号 reference 不可复用。
 - `OPT-SEC-002`：`in_progress（代码完成，统一验收待执行）`。App 使用 WebSocket subprotocol 传 realtime token，URL 不再带 token；Gateway 只回显固定协议名。旧 query token 受 `REALTIME_ALLOW_QUERY_TOKEN` 控制，发布门禁要求为 false。
+- `OPT-REL-001`：`accepted（代码门禁）`。新增 `check:source-build`，发布前强制从源码构建全部 workspace、核对6个运行入口，并检查 Dockerfile 使用 `npm ci` 且逐项编译 contracts、LLM、API、Gateway、Worker 和 PSTN Bridge；Beelink deploy 在同步前强制执行。
+- `OPT-IOS-001`：`in_progress（发布配置 ready，安装验收待执行）`。移动端发布门禁已确认正式 bundle ID、中文权限说明、Profile/Release 身份配置和非示例包名；最终独立安装仍在统一真机窗口执行。
+- `OPT-IOS-002`：`todo（20次冷启动验收）`。崩溃上报和发布安装链路保留，必须在最终 Profile/Release 包完成20次桌面冷启动并归档 crash report 后结项。
 - `OPT-MOB-001`：iPhone `accepted`。iPhone 后台、锁屏、来电和蓝牙耳机切换均通过；Android 真机验收统一列为 TODO，并在 iOS 产品化完成后启动。
 - `OPT-MOB-002`：iPhone `accepted`。iPhone 20句连续采集、蓝牙切换、Listening 静音和声音偏好恢复均通过；Android 真机验收统一列为 TODO，并在 iOS 产品化完成后启动。
 - `OPT-UI-001`：代码和自动化门禁完成；`idle/connecting/active/paused/ending/ended/failed` 只展示当前可执行操作，主操作固定在同一槽位，连接中可取消且迟到 session 不会恢复同传。iPhone/Android 真机布局与点击体验验收待执行。

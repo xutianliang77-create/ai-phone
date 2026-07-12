@@ -14,7 +14,8 @@ RUN npm ci && \
     npm run build -w @translation/llm && \
     npm run build -w @translation/api-server && \
     npm run build -w @translation/realtime-gateway && \
-    npm run build -w @translation/translation-worker
+    npm run build -w @translation/translation-worker && \
+    npm run build -w @translation/pstn-bridge
 
 ENV NODE_ENV=production
 
