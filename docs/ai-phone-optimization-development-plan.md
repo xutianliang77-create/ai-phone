@@ -1,6 +1,6 @@
 # ai phone 优化开发计划
 
-版本：v1.10
+版本：v1.11
 日期：2026-07-12
 任务来源：`docs/ai-phone-optimization-development-tasks.md`
 
@@ -24,11 +24,11 @@
 
 ### 当前迭代基线
 
-- `OPT-SPK-005` 已完成代码、自动化、Beelink ASR 部署和固定双声源无停顿全链路验证，当前状态为 `in_progress`，只差 iPhone 双人快速换人验收。
+- `OPT-SPK-005` 已完成代码、自动化、Beelink ASR/Speaker 部署和固定双声源无停顿全链路验证。真机失败根因已定位为会话未创建 speaker session；Gateway 现对缺失 token 字段使用服务端四人默认值，超时调整为2秒，Provider 失败可观测，Speaker Service 对重复/乱序帧幂等。当前状态仍为 `in_progress`，只差 iPhone 双人快速换人复验。
 - `OPT-SPK-006` 的 PCM boundary 回切已通过真实音频连续性验证；合并批次时间轴根因已修复，诊断窗口、竞态指标和 session 持久化已部署。固定双声源真实 session 达到 hit=1、miss/error/race/drop=0、1040ms 确认延迟，等待 iPhone 与多人验收。
 - `OPT-SPK-007` 已完成代码、自动化和固定双声源部署验证：新 session 使用稳定 `turnId + revision`，Gateway 按音频时间处理批量结果，API 和 App 对迟到事件执行字段分域幂等，旧协议不强行生成 turn/revision。当前只差 iPhone 双人/多人验收。
 - 当前临时链路为 iPhone -> Mac API/Gateway -> Beelink 模型服务，只用于联调。正式退出条件仍是 iPhone -> Beelink 唯一公开入口，Mac 不参与运行链路。
-- 下一开发主线固定为：部署 speaker-turn 数据链路 -> 固定双声源历史验证 -> iPhone 双人快速换人 -> 多人混合语种 -> Beelink 单服务器收敛。
+- 下一开发主线固定为：iPhone 双人快速换人和断网结束复验 -> 多人混合语种 -> Beelink 单服务器收敛。固定双声源修复后会话 `55dfe12e-59bd-4405-aab5-ed43f3d68004` 已保存两个 speaker turn，不能替代真人验收。
 
 ## 3. 分阶段任务
 

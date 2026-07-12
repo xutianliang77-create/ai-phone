@@ -16,13 +16,7 @@ import type { RealtimeProvider } from "../providers/realtime-provider.js";
 import { asrCorrectionTermsForPacks, asrHotwordsForTerminology } from "../domain/domain-lexicon.js";
 import { createSessionEventSink } from "../sessions/session-event-sink.js";
 import { loadTerminologyForSession } from "../sessions/session-domain-terminology.js";
-import {
-  attachSession,
-  deleteSession,
-  getSession,
-  sessionBillableSeconds,
-  transitionStatus,
-} from "../sessions/session-manager.js";
+import { attachSession, deleteSession, getSession, sessionBillableSeconds, transitionStatus } from "../sessions/session-manager.js";
 import { createUsageBalanceClient } from "../usage/usage-balance-client.js";
 import { createUsageTickDecision } from "../usage/usage-ticker.js";
 import { HttpTtsSynthesizer } from "../tts/http-tts-synthesizer.js";
@@ -33,6 +27,10 @@ import { RealtimeConnectionCleanup } from "./realtime-connection-cleanup.js";
 import { DisconnectFinalizerRegistry } from "../sessions/disconnect-finalizer-registry.js";
 import { RealtimeEventDispatcher } from "./realtime-event-dispatcher.js";
 import { RealtimeFlushTracker } from "./realtime-flush-tracker.js";
+import {
+  logSpeakerAttributionConfigured,
+  resolveSpeakerAttribution,
+} from "./speaker-attribution-config.js";
 
 const router = new ProviderRouter();
 const disconnectGraceMs = 45_000;
@@ -86,17 +84,19 @@ export function startWebSocketServer() {
       const terminology = await loadTerminologyForSession(session, env);
       const asrCorrections = asrCorrectionTermsForPacks(env.domainLexiconPacks);
       const asrHotwords = asrHotwordsForTerminology(terminology, asrCorrections);
+      const speakerAttribution = resolveSpeakerAttribution(session.claims);
       await provider.createSession({
         sessionId: session.id,
         sourceLanguage: session.claims.sourceLanguage,
         targetLanguage: session.claims.targetLanguage,
         autoReverseTargetLanguage: session.claims.autoReverseTargetLanguage,
         voiceOutput: session.claims.voiceOutput,
-        speakerAttribution: session.claims.speakerAttribution,
+        speakerAttribution,
         terminology,
         asrHotwords,
         asrCorrections,
       });
+      logSpeakerAttributionConfigured(env, session, speakerAttribution);
     } catch {
       const current = getSession(session.id);
       if (current === session && current.connectionGeneration === generation) {

@@ -25,6 +25,8 @@ extension RealtimeControllerStop on RealtimeController {
       _sessionTimeoutTimer?.cancel();
       _audioSubscription = null;
       _asrSubscription = null;
+      _resumeAfterLifecyclePause = false;
+      _setStatus(RealtimeStatus.ended);
       if (session != null) {
         try {
           await _repository.end(session.sessionId, _segments);
@@ -34,8 +36,6 @@ extension RealtimeControllerStop on RealtimeController {
         }
       }
       _session = null;
-      _resumeAfterLifecyclePause = false;
-      _setStatus(RealtimeStatus.ended);
     } finally {
       _stopInFlight = false;
     }

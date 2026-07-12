@@ -62,7 +62,8 @@ class SortformerShadowEngine:
     async def push_audio(self, frame: SpeakerAudioFrame) -> list[SpeakerSpan]:
         session = self._session(frame.sessionId)
         async with session.lock:
-            self._append(session, frame)
+            if not self._append(session, frame):
+                return []
             if not self._runtime.ready(session.runtime_state, session.audio):
                 return []
             return await asyncio.to_thread(self._process, session, False)
@@ -80,9 +81,9 @@ class SortformerShadowEngine:
     async def close_session(self, session_id: str) -> None:
         self._sessions.pop(session_id, None)
 
-    def _append(self, session: _Session, frame: SpeakerAudioFrame) -> None:
+    def _append(self, session: _Session, frame: SpeakerAudioFrame) -> bool:
         if frame.sequence <= session.last_sequence:
-            raise ValueError("audio frame sequence must increase")
+            return False
         session.last_sequence = frame.sequence
         if session.timeline_origin_ms is None:
             session.timeline_origin_ms = frame.timestampMs
@@ -100,6 +101,7 @@ class SortformerShadowEngine:
             base64.b64decode(frame.data, validate=True),
             frame.sampleRate,
         )
+        return True
 
     def _process(self, session: _Session, flush: bool) -> list[SpeakerSpan]:
         if session.decoder is None:

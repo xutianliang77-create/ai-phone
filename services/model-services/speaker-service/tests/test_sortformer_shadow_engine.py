@@ -1,9 +1,12 @@
 from array import array
+import base64
 
 import pytest
 
 from app.pcm_stream_buffer import PcmStreamBuffer
 from app.speaker_activity_decoder import SpeakerActivityDecoder
+from app.schemas import SpeakerAudioFrame
+from app.sortformer_shadow_engine import SortformerShadowEngine, _Session
 
 
 def test_decoder_keeps_arrival_order_and_marks_overlap() -> None:
@@ -81,3 +84,29 @@ def test_pcm_buffer_can_reset_input_stream_at_resume_boundary() -> None:
 
     assert buffer.start_sample == 0
     assert buffer.end_sample > boundary
+
+
+def test_sortformer_engine_ignores_duplicate_or_out_of_order_frames() -> None:
+    engine = SortformerShadowEngine.__new__(SortformerShadowEngine)
+    engine._onset = 0.5
+    engine._offset = 0.5
+    session = _Session(max_speakers=4, runtime_state=None)
+
+    assert engine._append(session, _frame(sequence=2)) is True
+    end_sample = session.audio.end_sample
+
+    assert engine._append(session, _frame(sequence=2)) is False
+    assert engine._append(session, _frame(sequence=1)) is False
+    assert session.audio.end_sample == end_sample
+
+
+def _frame(sequence: int) -> SpeakerAudioFrame:
+    return SpeakerAudioFrame(
+        type="audio.frame",
+        sessionId="sess_1",
+        sequence=sequence,
+        timestampMs=sequence * 100,
+        format="pcm16",
+        sampleRate=24000,
+        data=base64.b64encode(array("h", [0] * 2400).tobytes()).decode(),
+    )

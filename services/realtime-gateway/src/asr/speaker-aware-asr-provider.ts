@@ -22,6 +22,7 @@ export class SpeakerAwareAsrProvider implements AsrProvider {
   private readonly enabledSessions = new Set<string>();
   private readonly turnDiagnostics = new SpeakerTurnDiagnostics();
   private readonly turnAssignment = new SpeakerTurnAssignment();
+  private readonly speakerFailureCounts = new Map<string, number>();
 
   constructor(
     private readonly asr: AsrProvider,
@@ -44,8 +45,8 @@ export class SpeakerAwareAsrProvider implements AsrProvider {
       this.spansBySession.set(session.sessionId, []);
       this.turnCoordinator.clear(session.sessionId);
       this.turnAssignment.clear(session.sessionId);
-    } catch {
-      // Speaker attribution is a degradable side path; ASR remains available.
+    } catch (error) {
+      this.recordSpeakerFailure(session.sessionId, "create", error);
     }
   }
 
@@ -151,6 +152,7 @@ export class SpeakerAwareAsrProvider implements AsrProvider {
     this.spansBySession.delete(sessionId);
     this.turnCoordinator.clear(sessionId);
     this.turnAssignment.clear(sessionId);
+    this.speakerFailureCounts.delete(sessionId);
     await this.asr.closeSession(sessionId);
     if (speakerEnabled) {
       await this.speaker.closeSession(sessionId).catch(() => undefined);
@@ -199,7 +201,8 @@ export class SpeakerAwareAsrProvider implements AsrProvider {
   private async safePush(frame: AudioFrame) {
     try {
       return await this.speaker.pushAudio(frame);
-    } catch {
+    } catch (error) {
+      this.recordSpeakerFailure(frame.sessionId, "frame", error);
       return [];
     }
   }
@@ -207,7 +210,8 @@ export class SpeakerAwareAsrProvider implements AsrProvider {
   private async safeFlush(sessionId: string) {
     try {
       return await this.speaker.flush(sessionId);
-    } catch {
+    } catch (error) {
+      this.recordSpeakerFailure(sessionId, "flush", error);
       return [];
     }
   }
@@ -222,6 +226,22 @@ export class SpeakerAwareAsrProvider implements AsrProvider {
     } catch {
       return { result: null, error: true };
     }
+  }
+
+  private recordSpeakerFailure(
+    sessionId: string,
+    stage: "create" | "frame" | "flush",
+    error: unknown,
+  ) {
+    const count = (this.speakerFailureCounts.get(sessionId) ?? 0) + 1;
+    this.speakerFailureCounts.set(sessionId, count);
+    if (count !== 1 && count % 25 !== 0) return;
+    realtimeLogger.warn({
+      sessionId,
+      stage,
+      count,
+      error,
+    }, "Speaker attribution side path failed");
   }
 }
 

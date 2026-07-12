@@ -3,6 +3,7 @@ part of 'realtime_controller.dart';
 extension RealtimeControllerStart on RealtimeController {
   Future<void> start() async {
     _listenForAudioSessionEvents();
+    if (_stopInFlight) return;
     if (_status == RealtimeStatus.paused) {
       await _resumeOrFail();
       return;

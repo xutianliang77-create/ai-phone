@@ -28,7 +28,7 @@ describe("realtime gateway env", () => {
     expect(env.lmStudioModel).toBe("tencent/Hy-MT2-1.8B");
     expect(env.asrProvider).toBe("http");
     expect(env.asrHttpEndpoint).toBe("http://models.local:8001/asr/transcribe");
-    expect(env.speakerHttpTimeoutMs).toBe(300);
+    expect(env.speakerHttpTimeoutMs).toBe(2000);
   });
 
   it("lets explicit environment variables override model routing defaults", () => {

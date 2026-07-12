@@ -1,6 +1,6 @@
 # ai phone 优化开发任务清单
 
-版本：v2.6
+版本：v2.7
 日期：2026-07-12
 关联：`docs/domestic-app-detailed-functional-design.md`、`docs/ai-phone-translation-technical-design.md`、`docs/domestic-design-review-action-plan.md`
 
@@ -50,7 +50,7 @@
 - `OPT-VAD-002`：`in_progress`。部署后的真实 session 已保存 `speaker_boundary/flush` 端点原因和音频丢帧计数；尚缺 VAD 概率摘要、fallback 计数、模型 fingerprint 和告警。
 - `OPT-VAD-003`：`todo`。当前继续使用 Qwen3-ASR 统一 `1100ms` 安全基线，尚未启用按模式参数。
 - `OPT-RT-001`：代码和自动化门禁完成。
-- `OPT-RT-002`：代码和自动化门禁完成；iPhone 飞行模式、后台终止和弱网真机验收待执行。
+- `OPT-RT-002`：代码和自动化门禁完成；点击结束在本地采集清理后立即进入终态，Gateway flush、历史保存和单次结算继续异步收敛，断网不再把界面锁在 ending。iPhone 飞行模式、后台终止和弱网真机验收待执行。
 - `OPT-RT-003`：代码和自动化门禁完成；iPhone 在线真实模型中文长句、快速中英切换和 1.8 秒强制输出验收待执行。
 - `OPT-RT-004`：代码和自动化门禁完成；iPhone 在线真实模型“说完立即结束”及 100 次尾句保存率验收待执行。
 - `OPT-RT-005`：代码和自动化门禁完成；Gateway 按字幕顺序逐条合成，暂停、结束和断线取消在途及待处理 TTS，App 顺序播放并清空残留。iPhone + VoxCPM2 连续 20 句真实听感验收待执行。
@@ -61,7 +61,7 @@
 - `OPT-SPK-001`：统一 contract、Call Link participant track、Session Repository、字幕、历史、review 和导出代码完成；真实双端角色归属验收待执行。
 - `OPT-SPK-002`：Streaming Sortformer 已在 Beelink 部署，HTTP Provider、ASR 并行旁路、时间对齐、故障降级和固定双声源测试通过；抢话、重叠、四人和正式真人 RTTM 门禁仍待执行。
 - `OPT-SPK-003`：ASR 后置 speaker 对齐、不同 speaker 段禁止合并、字幕标签、历史清单和会话内重命名代码完成，iPhone 已能显示匿名“说话人 1/2”；ASR 段内部按 speaker 切分由 `OPT-SPK-005/006` 负责。
-- `OPT-SPK-005`：`in_progress`。Gateway 和 Beelink ASR Service 已部署；稳定 speaker span 可产生单次 `boundaryMs`，标签抖动、低置信度和 overlap 不切段。固定双声源无停顿全链路已正确生成 `speaker_1 -> speaker_2`，iPhone 双人快速换人验收待完成。
+- `OPT-SPK-005`：`in_progress`。Gateway 和 Beelink ASR Service 已部署；Gateway 对旧 token 或缺失字段强制补齐 `auto + maxSpeakers=4`，Speaker Provider 启用状态、配置来源和失败可观测；稳定 speaker span 可产生单次 `boundaryMs`，标签抖动、低置信度和 overlap 不切段。修复后固定双声源无停顿会话 `55dfe12e-59bd-4405-aab5-ed43f3d68004` 已正确生成 `turn_1/speaker_1 -> turn_2/speaker_2`，iPhone 双人快速换人复验待完成。
 - `OPT-SPK-006`：`in_progress`。已修复 Gateway 合并批次错误使用末帧时间的问题；ASR boundary API 已通过真实 PCM 回切，左右段时间轴连续、右侧音频保留且 VAD 不重置。2秒脱敏诊断窗口、boundary hit/miss/error、确认延迟、回切时长、endpoint race 和丢帧指标已贯通 `session.ended`、API 与历史详情。部署后固定双声源 session 为 hit=1、miss/error/race/drop=0、确认延迟1040ms；iPhone 快速换人验收待完成。
 - `OPT-SPK-007`：`in_progress`。`turnId + revision` 已贯通 ASR、Gateway 事件、API session、Flutter 字幕和历史；不同 turn 禁止语义合并，批量 ASR 结果按音频时间排序，同 segment 只处理最高 revision。迟到的旧 revision 可补译文，但不能回滚说话人、时间轴、原文或稳定 turn。API/Gateway 已部署，固定双声源真实 session 正确保存 `turn_1/turn_2`；iPhone 双人/多人验收待完成。
 - `OPT-SPK-008`：`in_progress`。App、API 和 Speaker Service 默认人数已统一调整为4；overlap、unknown、revision 和混合语种联合验收待执行。
@@ -74,6 +74,7 @@
 | 子任务 | 工作内容 | 预计工作量 | 当前状态 | 验收证据 |
 | --- | --- | ---: | --- | --- |
 | SPK-005-A | iPhone 双人无停顿快速换人 | 0.5天 | in_progress | 两轮四句均切换 speaker，句子不跨人、无丢音，历史一致 |
+| SPK-005-B | Speaker Provider 启用和容错 | 已完成 | deployed | Gateway 缺省配置兜底、2秒推理超时、失败日志、重复/乱序帧幂等；固定双声源产生两个 turn |
 | SPK-006-0 | 批量音频时间轴修复 | 已完成 | accepted | 合并帧保留首帧 `timestampMs` 和末帧 sequence，自动化覆盖 |
 | SPK-006-A | 2秒脱敏诊断窗口 | 0.5天 | in_progress | 元数据窗口和白名单持久化已通过真实 session；iPhone/断网复验待执行 |
 | SPK-006-B | boundary 指标 | 0.5天 | in_progress | 真实 session 已保存 hit=1、miss/error=0、1040ms、4240ms回切、drop=0 和 endpoint reason；多人样本待执行 |

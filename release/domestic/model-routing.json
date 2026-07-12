@@ -43,7 +43,7 @@
           "SPEAKER_PROVIDER": "http",
           "SPEAKER_HTTP_BASE_URL": "http://127.0.0.1:8022",
           "SPEAKER_HTTP_API_KEY": "local-speaker-service-api-key",
-          "SPEAKER_HTTP_TIMEOUT_MS": "300",
+          "SPEAKER_HTTP_TIMEOUT_MS": "2000",
           "LLM_PROVIDER": "openai_compatible",
           "LLM_BASE_URL": "http://127.0.0.1:1234/v1",
           "LLM_CORRECTION_MODEL": "qwen/qwen3.5-9b",
@@ -150,7 +150,7 @@
           "SPEAKER_PROVIDER": "http",
           "SPEAKER_HTTP_BASE_URL": "http://127.0.0.1:8022",
           "SPEAKER_HTTP_API_KEY": "local-speaker-service-api-key",
-          "SPEAKER_HTTP_TIMEOUT_MS": "300"
+          "SPEAKER_HTTP_TIMEOUT_MS": "2000"
         },
         "translationWorker": {
           "TRANSLATION_BASE_URL": "http://127.0.0.1:8003/v1",

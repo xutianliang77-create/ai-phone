@@ -1,6 +1,6 @@
 # ai phone 优化验收方案
 
-版本：v1.8
+版本：v1.9
 日期：2026-07-12
 任务来源：`docs/ai-phone-optimization-development-tasks.md`
 
@@ -28,7 +28,7 @@
 | 验收编号 | 对应任务 | 场景 | 通过标准 |
 | --- | --- | --- | --- |
 | AC-RT-001 | OPT-RT-001 | 开始、暂停、继续、结束、再次开始 | 状态和按钮完全匹配，无重复会话 |
-| AC-RT-002 | OPT-RT-002 | 断网、杀 App、WS close、重复 End | 历史可打开，用量只结算一次 |
+| AC-RT-002 | OPT-RT-002 | 断网、杀 App、WS close、重复 End | 点击结束后本地立即进入终态；可用网络下历史可打开，用量只结算一次；网络恢复后待结算任务可收敛 |
 | AC-RT-003 | OPT-RT-003 | 中文长句在中间停顿 | 语义完整句可合并，不重复、不永久等待 |
 | AC-RT-004 | OPT-RT-004 | 说完立即点结束 | 最后一句原文和译文均保存 |
 | AC-RT-005 | OPT-RT-005 | 20 句长短混合 TTS | 播放顺序与字幕一致，结束后无残留声音 |
@@ -109,7 +109,7 @@ TTS 回灌指标由 App playback gate/AEC 验收，不能把 VAD 对合成语音
 | AC-TERM-001 | OPT-TERM-001 | 六个行业包中英文词均能用于热词、翻译和保护字段 |
 | AC-SPK-001 | OPT-SPK-001 | Call Link/PSTN 独立音轨角色归属准确，字幕、历史、导出和 review 字段一致 |
 | AC-SPK-002 | OPT-SPK-002、OPT-SPK-003 | 双人/多人固定语料达到 DER、切换延迟和 30 分钟标签稳定性门槛，不跨 speaker 合并 |
-| AC-SPK-004 | OPT-SPK-005 | 新 speaker 证据不足时不切段；达到240ms、65%占比、0.60置信度且连续稳定后产生一次边界 |
+| AC-SPK-004 | OPT-SPK-005 | 旧 token 或未传 speaker 配置仍由服务器启用四人默认值；Provider 失败可从日志定位；重复/乱序帧不破坏会话；新 speaker 证据不足时不切段，达到240ms、65%占比、0.60置信度且连续稳定后产生一次边界 |
 | AC-SPK-005 | OPT-SPK-006 | 两人无停顿快速换人时 ASR 音频在 `boundaryMs` 切开，上一人和下一人文本不进入同一 turn；session 保存 hit/miss/error、确认延迟、回切时长、丢帧、endpoint race 和 endpoint reason；重复 End 不覆盖首份诊断 |
 | AC-SPK-006 | OPT-SPK-007 | 2至4人交替和模型乱序返回时，翻译按 turn startMs 展示，不跨 speaker 拼接，不重复 TTS 或计费；旧 revision 可补译文但不能回滚归属 |
 | AC-SPK-007 | OPT-SPK-008 | 中文夹英文、英文夹中文、姓名、型号、抢话和重叠时，语种变化不触发硬断点；主 speaker 可翻译；overlap 和 unknown 如实显示 |
@@ -141,6 +141,8 @@ TTS 回灌指标由 App playback gate/AEC 验收，不能把 VAD 对合成语音
 `AC-SPK-005` 当前证据：Gateway 合并批次使用首帧时间戳；boundary 有替代 transcript 时去除重叠普通端点结果，boundary 为空时保留普通端点结果并记录 race；断网 cleanup 前冻结诊断快照；API 白名单保存计数和时长，不接受或持久化原始 PCM/字幕字段。仓库级构建和测试已通过。部署后固定双声源会话 `4296e08a-3b2f-4449-9ebb-0299f142db49` 正确形成两位 speaker，时间轴在边界连续，`hit=1`、`miss/error/race/drop=0`、确认延迟1040ms、回切4240ms，低于1.2秒切换门槛。iPhone 双人验收尚未执行，因此未标记通过。
 
 `AC-SPK-006` 当前证据：contracts、ASR、Gateway、API、Flutter 内存态和本地历史均保留可选 `turnId/revision`；不同 turn 强制释放待合并段；批量 ASR 结果按 `startMs/endMs` 排序；最高 revision 幂等生效；迟到译文可补齐，但旧 speaker、timing、sourceText 和 turnId 不会回滚。Node 全仓、Flutter 255 项、analyze、typecheck 和文件大小门禁通过。部署后固定双声源会话 `8703925d-c08e-4e1e-bff6-36a533a40146` 保存 `turn_1/speaker_1` 中文和 `turn_2/speaker_2` 英文，边界连续，hit=1、miss/error/race/drop=0，确认延迟720ms。iPhone 双人/多人验收尚未执行，因此状态仍为 `in_progress`。
+
+`AC-SPK-004` 本轮故障证据：失败真机会话 `adf37a32-f102-40ea-9b0b-9812733f99d0` 的7个 segment 均无 speaker/turn，诊断边界计数为0，且 Beelink 没有对应 speaker session 创建记录。修复后 Gateway `/health` 显示 `speakerProvider=http`、`speakerTimeoutMs=2000`；固定双声源会话 `55dfe12e-59bd-4405-aab5-ed43f3d68004` 保存 `turn_1/speaker_1` 和 `turn_2/speaker_2`，`hit=1`、`miss/error/race/drop=0`、确认延迟720ms。真人 iPhone 复验未执行，因此未标记 accepted。
 
 ## 7. UI 专项验收
 

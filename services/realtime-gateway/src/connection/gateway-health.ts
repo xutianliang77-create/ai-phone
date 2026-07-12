@@ -12,6 +12,9 @@ export interface GatewayHealthPayload {
   callProviderPolicy: string;
   complianceProfile: string;
   asrProvider: RealtimeEnv["asrProvider"];
+  speakerProvider: RealtimeEnv["speakerProvider"];
+  speakerEndpoint?: string;
+  speakerTimeoutMs: number;
   asrEndpoint?: string;
   asrHealthUrl?: string;
   translationEndpoint?: string;
@@ -38,6 +41,9 @@ export function gatewayHealthPayload(env: RealtimeEnv): GatewayHealthPayload {
     callProviderPolicy: env.callProviderPolicy,
     complianceProfile: env.complianceProfile,
     asrProvider: env.asrProvider,
+    speakerProvider: env.speakerProvider,
+    speakerEndpoint: env.speakerHttpBaseUrl,
+    speakerTimeoutMs: env.speakerHttpTimeoutMs,
     asrEndpoint: env.asrHttpEndpoint,
     asrHealthUrl: env.asrHttpHealthUrl,
     translationEndpoint: translationEndpoint(env),
