@@ -148,7 +148,7 @@ TTS 回灌指标由 App playback gate/AEC 验收，不能把 VAD 对合成语音
 
 `AC-RT-002` 已通过新版本真机复验：session `7a576a03-d139-4e42-a473-bb0ee13fb63a` 在断网 End 后先显示本地结束和待同步提示，恢复网络后 durable outbox 自动收敛为 ended；2段字幕完整，`consumedSeconds=21`、`heldSeconds=0`。ledger 仅有 `8cc0204b-b092-46c7-95a1-0f02ff422548` 一条 `-21` 秒记录，幂等键为 `settle:7a576a03-d139-4e42-a473-bb0ee13fb63a`。
 
-`AC-RT-003/004` 当前证据：RT-003B session `f3bb9ac8-8300-4054-8fa5-410ad64e0ec0` 三轮 silence final 均有译文，估算整句延迟全部低于2.5秒；RT-004A session `52861225-aece-42fd-aef0-8fc0d550d0a1` 的最后一句、编号407和提交时间完整保存并翻译。RT-004B session `46b92293-6efd-4d01-9e4c-0ad902bad21f` 在翻译处理中立即结束后完整保留编号408、明天下午三点和完整报告，尾句到 ended 收敛约1.34秒，169帧零丢失，hold=0且仅一条 `-19` 秒 ledger。RT-003A session `7b348952-19ad-4cd9-9a50-57c4c6614b95` 保留为失败回归样本：第二轮硬切段曾被 LLM 扩写未来后缀并与下一 raw 重复；本地修复门禁已通过，尚未部署，不能标记 AC-RT-003 整项通过。
+`AC-RT-003/004` 已通过：RT-003B session `f3bb9ac8-8300-4054-8fa5-410ad64e0ec0` 三轮 silence final 均有译文，估算整句延迟全部低于2.5秒。RT-003A 最终 session `c7c915b7-d5d2-4ab0-9e3d-58f52adb92ad` 三轮同句产生3段字幕和3段译文，无硬切未来后缀扩写、真实 suffix 重复或领域词 context 泄露；427帧零丢失，44秒仅一条 settle ledger，hold=0。第三轮 ASR 少开头时间短语属于识别召回质量，不属于 SegmentAssembler 扩写/重复缺陷。失败 session `7b348952-19ad-4cd9-9a50-57c4c6614b95` 继续保留为回归样本。RT-004A session `52861225-aece-42fd-aef0-8fc0d550d0a1` 的最后一句、编号407和提交时间完整保存并翻译；RT-004B session `46b92293-6efd-4d01-9e4c-0ad902bad21f` 在翻译处理中立即结束后完整保留编号408、明天下午三点和完整报告，尾句到 ended 收敛约1.34秒，169帧零丢失，hold=0且仅一条 `-19` 秒 ledger。
 
 `AC-RT-005` 部署前证据：已定位 VoxCPM2 模型真实输出48k、服务错误标记24k且未重采样，导致声音时长和感知延迟翻倍。修复后本机21项 TTS 测试通过；Beelink 当前推理 Python 使用临时源码验证16/24/48k一秒440Hz波形均输出24000个24k样本，时长仍为1秒且正向过零数439/440/439。自然声音与个人克隆共用统一输出路径；尚未部署和完成 iPhone 听感复验，因此 AC-RT-005 仍未通过。
 

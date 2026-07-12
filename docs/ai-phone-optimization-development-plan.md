@@ -175,7 +175,7 @@ LLM 纪要、扫描 UI 和国际模型 Provider 可在 M1 稳定接口冻结后�
 | V0 | `OPT-VAD-001` 服务器主 VAD | 已完成 | accepted | MarbleNet 上线、RMS 降级、真机通过 |
 | V1 | `OPT-VAD-002` session 观测 | 0.5天剩余 | in_progress | endpoint reason 和丢帧已贯通；补 Provider、阈值、speech ratio、fallback 和 fingerprint |
 | V2 | `OPT-VAD-003` 模式化端点 | 2 天 | todo | 四种模式固定语料和延迟门禁通过，可一键回退 1100ms |
-| V3 | `OPT-RT-003/004` 联合回归 | 1 天 | in_progress | RT-003B 与 RT-004A 已通过；RT-003A 保守纠错和 raw continuation 修复待部署后 3/3 复验 |
+| V3 | `OPT-RT-003/004` 联合回归 | 已完成 | accepted | RT-003A/B 与 RT-004A/B 均通过真机验收；重复句保留、硬切不扩写、尾句完整收敛 |
 | V4 | `OPT-VAD-004` 时间轴贯通 | 1-2 天 | todo | speaker、segment、history、review 使用同一 speech 时间范围 |
 | V5 | `OPT-VAD-005` 端侧候选 | 2-3 天，非当前关键路径 | todo | CoreML/Android ONNX 报告完成，通过后再立项集成 |
 
