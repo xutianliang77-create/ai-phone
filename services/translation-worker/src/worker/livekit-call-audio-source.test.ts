@@ -128,7 +128,7 @@ describe("LiveKitCallAudioSource", () => {
     expect(worker.frames).toEqual([]);
   });
 
-  it("attaches a LiveKit TTS audio sink when local track publishing is available", async () => {
+  it("attaches a LiveKit TTS audio sink after local track publishing becomes available", async () => {
     const worker = new RecordingWorker();
     const rtc = createFakeRtcNode({ localPublishing: true });
     const source = new LiveKitCallAudioSource({
@@ -286,14 +286,10 @@ function createFakeRtcNode(options: { localPublishing?: boolean } = {}) {
 
 class FakeRoom {
   connected: unknown = null;
-  readonly localParticipant?: { publishTrack(track: unknown, options: unknown): Promise<unknown> };
+  localParticipant?: { publishTrack(track: unknown, options: unknown): Promise<unknown> };
   private readonly listeners = new Map<string, Array<(...args: unknown[]) => void>>();
 
-  constructor(localPublishing = false) {
-    if (localPublishing) {
-      this.localParticipant = { publishTrack: async () => ({}) };
-    }
-  }
+  constructor(private readonly localPublishing = false) {}
 
   on(event: string, listener: (...args: unknown[]) => void) {
     this.listeners.set(event, [...(this.listeners.get(event) ?? []), listener]);
@@ -302,6 +298,9 @@ class FakeRoom {
 
   async connect(url: string, token: string, opts: unknown) {
     this.connected = { url, token, opts };
+    if (this.localPublishing) {
+      this.localParticipant = { publishTrack: async () => ({}) };
+    }
   }
 
   async disconnect() {

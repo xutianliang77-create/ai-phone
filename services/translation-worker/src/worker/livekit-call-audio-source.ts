@@ -62,7 +62,6 @@ export class LiveKitCallAudioSource {
     this.room = room;
 
     if (token.ttsVoice) this.options.worker.setTtsVoice(token.ttsVoice);
-    this.attachLiveKitTtsSink(room, rtc);
     await this.options.worker.startCall(this.options.callId);
     room
       .on(rtc.RoomEvent.TrackSubscribed, (track, publication, participant) => {
@@ -75,6 +74,7 @@ export class LiveKitCallAudioSource {
       autoSubscribe: true,
       dynacast: false,
     });
+    this.attachLiveKitTtsSink(room, rtc);
     return token;
   }
 
