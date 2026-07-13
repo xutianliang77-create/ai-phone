@@ -13,7 +13,7 @@ void main() {
     expect(callRoomTtsTrackTargetRole('microphone'), isNull);
   });
 
-  test('allows only target-role TTS tracks while keeping normal audio', () {
+  test('allows only target-role TTS tracks', () {
     expect(
       shouldSubscribeCallRoomAudioTrack(
         trackName: 'translation-tts-host-16000',
@@ -33,7 +33,7 @@ void main() {
         trackName: 'participant-microphone',
         localRole: 'host',
       ),
-      isTrue,
+      isFalse,
     );
   });
 }

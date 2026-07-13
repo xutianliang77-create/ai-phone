@@ -175,7 +175,7 @@ export function renderCallGuestScript() {
 
   function shouldAttachAudioTrack(track, publication) {
     const targetRole = ttsTrackTargetRole(audioTrackName(track, publication));
-    if (!targetRole) return true;
+    if (!targetRole) return false;
     return targetRole === state.localRole;
   }
 

@@ -24,6 +24,6 @@ bool shouldSubscribeCallRoomAudioTrack({
   required String localRole,
 }) {
   final targetRole = callRoomTtsTrackTargetRole(trackName);
-  if (targetRole == null) return true;
+  if (targetRole == null) return false;
   return targetRole == localRole;
 }
