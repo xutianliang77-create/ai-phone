@@ -2,6 +2,10 @@ FROM node:24-bookworm-slim
 
 WORKDIR /app
 
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends ca-certificates && \
+    rm -rf /var/lib/apt/lists/*
+
 COPY package.json package-lock.json tsconfig.base.json ./
 COPY packages ./packages
 COPY services/api-server ./services/api-server
@@ -17,7 +21,8 @@ RUN npm ci && \
     npm run build -w @translation/translation-worker && \
     npm run build -w @translation/pstn-bridge
 
-ENV NODE_ENV=production
+ENV NODE_ENV=production \
+    SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt
 
 USER node
 

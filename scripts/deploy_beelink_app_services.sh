@@ -7,6 +7,9 @@ REMOTE_ROOT="${REMOTE_ROOT:-/data/models/ai-phone-server}"
 REMOTE_SOURCE="$REMOTE_ROOT/source"
 REMOTE_RUNTIME="$REMOTE_ROOT/runtime"
 PUBLIC_HOST="${PUBLIC_HOST:-100.110.127.117}"
+CALL_HTTPS_DOMAIN="${CALL_HTTPS_DOMAIN:-beelink.tail1e9cec.ts.net}"
+CALL_PUBLIC_BASE_URL="${CALL_PUBLIC_BASE_URL:-https://$CALL_HTTPS_DOMAIN}"
+CALL_LIVEKIT_URL="${CALL_LIVEKIT_URL:-wss://$CALL_HTTPS_DOMAIN}"
 MODE="${1:-deploy}"
 IMAGE_TAG="${AI_PHONE_IMAGE_TAG:-$(git -C "$ROOT_DIR" rev-parse --short HEAD)}"
 
@@ -93,7 +96,11 @@ if [[ "${MIGRATE_LOCAL_DATA:-false}" == "true" ]]; then
     "$REMOTE_HOST:$REMOTE_RUNTIME/data/"
 fi
 
-ssh "$REMOTE_HOST" "REMOTE_RUNTIME='$REMOTE_RUNTIME' PUBLIC_HOST='$PUBLIC_HOST' bash -s" <<'REMOTE'
+ssh "$REMOTE_HOST" \
+  "REMOTE_RUNTIME='$REMOTE_RUNTIME' \
+   PUBLIC_HOST='$PUBLIC_HOST' \
+   CALL_PUBLIC_BASE_URL='$CALL_PUBLIC_BASE_URL' \
+   CALL_LIVEKIT_URL='$CALL_LIVEKIT_URL' bash -s" <<'REMOTE'
 set -euo pipefail
 env_file="$REMOTE_RUNTIME/server.env"
 if [[ -f "$env_file" ]]; then
@@ -117,6 +124,7 @@ API_PORT=3110
 REALTIME_PORT=3111
 API_BASE_URL=http://127.0.0.1:3110
 REALTIME_WS_ENDPOINT=ws://$PUBLIC_HOST:3111/realtime
+PUBLIC_CALL_BASE_URL=$CALL_PUBLIC_BASE_URL
 API_STORAGE_DRIVER=sqlite
 API_DATA_FILE=/data/ai-phone/api-store.json
 API_SQLITE_FILE=/data/ai-phone/api-store.sqlite
@@ -163,13 +171,35 @@ LLM_REVIEW_ENABLED=true
 LLM_REASONING_EFFORT=none
 DOMAIN_LEXICON_PACKS=business,technology,medical,travel,dining,entertainment
 CALL_ROOM_PROVIDER=livekit
-LIVEKIT_URL=$LIVEKIT_URL
+LIVEKIT_URL=$CALL_LIVEKIT_URL
 LIVEKIT_API_KEY=$LIVEKIT_API_KEY
 LIVEKIT_API_SECRET=$LIVEKIT_API_SECRET
 CALL_ROOM_TOKEN_TTL_SECONDS=${CALL_ROOM_TOKEN_TTL_SECONDS:-3600}
 EOF
 chmod 600 "$env_file"
 REMOTE
+
+ssh "$REMOTE_HOST" \
+  "ENV_FILE='$REMOTE_RUNTIME/server.env' \
+   CALL_PUBLIC_BASE_URL='$CALL_PUBLIC_BASE_URL' \
+   CALL_LIVEKIT_URL='$CALL_LIVEKIT_URL' bash -s" <<'REMOTE'
+set -euo pipefail
+set_env() {
+  local key="$1" value="$2"
+  if grep -q "^${key}=" "$ENV_FILE"; then
+    sed -i "s|^${key}=.*|${key}=${value}|" "$ENV_FILE"
+  else
+    printf '%s=%s\n' "$key" "$value" >>"$ENV_FILE"
+  fi
+}
+set_env PUBLIC_CALL_BASE_URL "$CALL_PUBLIC_BASE_URL"
+set_env LIVEKIT_URL "$CALL_LIVEKIT_URL"
+REMOTE
+
+ssh "$REMOTE_HOST" "set -euo pipefail
+tailscale serve --bg --https=443 --set-path=/ http://127.0.0.1:3110
+tailscale serve --bg --https=443 --set-path=/rtc http://127.0.0.1:7880/rtc
+tailscale serve --bg --https=443 --set-path=/twirp http://127.0.0.1:7880/twirp"
 
 if [[ "${MIGRATE_SQLITE:-false}" == "true" ]]; then
   ssh "$REMOTE_HOST" "ENV_FILE='$REMOTE_RUNTIME/server.env' bash -s" <<'REMOTE'
@@ -195,7 +225,8 @@ fi
 remote_compose "up -d --build --remove-orphans"
 for _ in {1..60}; do
   if curl -fsS "http://$PUBLIC_HOST:3110/health" >/dev/null 2>&1 &&
-     curl -fsS "http://$PUBLIC_HOST:3111/health" >/dev/null 2>&1; then
+     curl -fsS "http://$PUBLIC_HOST:3111/health" >/dev/null 2>&1 &&
+     NO_PROXY='*' no_proxy='*' curl -fsS "$CALL_PUBLIC_BASE_URL/health" >/dev/null 2>&1; then
     if [[ "${MIGRATE_SQLITE:-false}" == "true" ]]; then
       remote_compose "exec -T api npm run storage:check -- /data/ai-phone/api-store.sqlite"
     fi
