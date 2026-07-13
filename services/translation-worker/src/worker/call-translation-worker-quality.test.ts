@@ -107,6 +107,37 @@ describe("CallTranslationWorker quality pipeline", () => {
     expect(audioSink.played.map((item) => item.segmentId)).toEqual(["tts_1", "tts_2"]);
   });
 
+  it("drops translated speech recaptured by the target participant", async () => {
+    const asr = new SequenceAsrProvider([
+      segment("source_1", "你能看到我的屏幕吗？", "silence"),
+      {
+        segmentId: "echo_1",
+        text: "Can you see my screen?",
+        language: "en",
+        endpointReason: "silence",
+      },
+    ]);
+    const sink = new RecordingSink();
+    const audioSink = new BlockingTtsAudioSink();
+    const worker = newWorker(
+      asr,
+      sink,
+      new FakeTtsProvider(),
+      audioSink,
+      { async translate() { return "Can you see my screen?"; } },
+    );
+
+    await worker.processAudioFrame(frame("call_echo", "host", 1));
+    await audioSink.playbackStarted;
+    await worker.processAudioFrame(frame("call_echo", "guest", 2));
+
+    expect(sink.eventsFor("call_echo")
+      .filter((event) => event.type === "transcript.final")
+      .map((event) => event.segmentId)).toEqual(["source_1"]);
+    audioSink.releasePlayback();
+    await worker.endCall("call_echo");
+  });
+
   it("releases the local turn buffer even when remote ASR flush fails", async () => {
     const asr = new SequenceAsrProvider([
       segment("tail_1", "最后一句仍需保存，", "max_duration"),

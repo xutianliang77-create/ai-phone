@@ -89,11 +89,15 @@ export function persistCallRoomDataEvent(
     sourceText: event.sourceText ?? (
       event.type === "transcript.final" ? event.text : undefined
     ),
+    rawText: event.rawText,
+    optimizedText: event.optimizedText,
     translatedText: event.translatedText ?? (
       event.type === "translation.final" ? event.text : undefined
     ),
+    confidence: event.confidence,
+    refinement: event.refinement,
     speaker: event.speaker,
-    timing: {
+    timing: event.timing ?? {
       startMs: event.timestampMs,
       endMs: event.timestampMs,
       source: "participant_track",

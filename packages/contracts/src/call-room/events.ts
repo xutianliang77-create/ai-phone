@@ -1,4 +1,9 @@
-import type { SpeakerAttributionDto, SpeakerRole } from "../shared/speaker.js";
+import type {
+  SegmentTimingDto,
+  SpeakerAttributionDto,
+  SpeakerRole,
+} from "../shared/speaker.js";
+import type { SessionSegmentRefinementDto } from "../api/realtime.js";
 
 export const callRoomCaptionTopic = "translation.captions";
 
@@ -30,7 +35,12 @@ export interface CallRoomDataEvent {
   targetLanguage: CallRoomTranslationLanguage;
   text: string;
   sourceText?: string;
+  rawText?: string;
+  optimizedText?: string;
   translatedText?: string;
+  confidence?: number;
+  refinement?: SessionSegmentRefinementDto;
+  timing?: SegmentTimingDto;
   provider?: string;
   model?: string;
   voiceMode?: "preset" | "voice_design" | "personal_clone" | "ultimate_clone";

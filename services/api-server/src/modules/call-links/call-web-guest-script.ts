@@ -1,3 +1,5 @@
+import { renderCallWebTtsCaptureFunctions } from "./call-web-tts-capture-script.js";
+
 export function renderCallGuestScript() {
   return String.raw`(() => {
   const config = window.__CALL_LINK__ || {};
@@ -9,6 +11,9 @@ export function renderCallGuestScript() {
     followLatest: true,
     captionsOnly: false,
     audioUnlocked: false,
+    captureBlockedUntil: 0,
+    captureTimer: null,
+    gatedTtsSegments: new Set(),
   };
   const $ = (id) => document.getElementById(id);
   $("call-id").textContent = callId;
@@ -91,6 +96,7 @@ export function renderCallGuestScript() {
       caption.ttsReady = true;
       caption.ttsProvider = event.provider || caption.ttsProvider || "";
       caption.ttsModel = event.model || caption.ttsModel || "";
+      blockMicrophoneForTts(event);
     }
     state.captions.set(segmentId, caption);
     renderCaption(caption);
@@ -178,10 +184,12 @@ export function renderCallGuestScript() {
     if (!targetRole) return false;
     return targetRole === state.localRole;
   }
+${renderCallWebTtsCaptureFunctions()}
 
   function bindRoom(room) {
     const lk = window.LivekitClient;
     room.on(lk.RoomEvent.Disconnected, () => {
+      resetTtsCaptureGate();
       state.room = null;
       status("通话已断开", "error");
       $("leave").disabled = true;
@@ -281,6 +289,7 @@ export function renderCallGuestScript() {
   }
 
   function leave() {
+    resetTtsCaptureGate();
     state.room?.disconnect();
     state.room = null;
     $("remote-audio").textContent = "";

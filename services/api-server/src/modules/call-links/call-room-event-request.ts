@@ -3,7 +3,11 @@ import type {
   CallRoomDataEvent,
   CallRoomDataEventType,
 } from "./call-room-events.js";
-import { participantTrackSpeaker } from "@translation/contracts";
+import {
+  isSegmentTiming,
+  participantTrackSpeaker,
+  type SessionSegmentRefinementDto,
+} from "@translation/contracts";
 
 const eventTypes = new Set<CallRoomDataEventType>([
   "worker.status",
@@ -72,7 +76,12 @@ function parseEvent(raw: unknown, record: CallLinkRecord): CallRoomDataEvent | n
     targetLanguage: targetLanguage as CallRoomDataEvent["targetLanguage"],
     text,
     sourceText: optionalString(raw.sourceText),
+    rawText: optionalString(raw.rawText),
+    optimizedText: optionalString(raw.optimizedText),
     translatedText: optionalString(raw.translatedText),
+    confidence: optionalRatio(raw.confidence),
+    refinement: optionalRefinement(raw.refinement),
+    timing: isSegmentTiming(raw.timing) ? raw.timing : undefined,
     provider: optionalString(raw.provider),
     model: optionalString(raw.model),
     voiceMode: optionalVoiceMode(raw.voiceMode),
@@ -107,6 +116,47 @@ function optionalString(value: unknown) {
 
 function optionalNumber(value: unknown) {
   return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+
+function optionalRatio(value: unknown) {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0 && value <= 1
+    ? value
+    : undefined;
+}
+
+function optionalRefinement(value: unknown): SessionSegmentRefinementDto | undefined {
+  if (!isObject(value)) return undefined;
+  const operations = optionalStringArray(value.operations);
+  const protectedTermsKept = optionalStringArray(value.protectedTermsKept);
+  const warnings = optionalStringArray(value.warnings);
+  const confidence = optionalRatio(value.confidence);
+  const latencyMs = optionalNumber(value.latencyMs);
+  if (
+    typeof value.provider !== "string" ||
+    typeof value.promptVersion !== "string" ||
+    confidence === undefined ||
+    latencyMs === undefined ||
+    !operations ||
+    !protectedTermsKept ||
+    !warnings
+  ) return undefined;
+  return {
+    provider: value.provider,
+    model: optionalString(value.model),
+    promptVersion: value.promptVersion,
+    confidence,
+    latencyMs,
+    operations,
+    protectedTermsKept,
+    warnings,
+    fallbackReason: optionalString(value.fallbackReason),
+  };
+}
+
+function optionalStringArray(value: unknown) {
+  return Array.isArray(value) && value.every((item) => typeof item === "string")
+    ? value as string[]
+    : undefined;
 }
 
 function optionalBoolean(value: unknown) {

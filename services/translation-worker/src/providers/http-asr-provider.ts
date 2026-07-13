@@ -29,7 +29,7 @@ interface AsrResponse {
   segmentId?: string;
   text?: string;
   language?: CallRoomTranslationLanguage;
-  confidence?: number;
+  confidence?: number | null;
   timing?: SegmentTimingDto;
   endpointReason?: string;
   vadContext?: unknown;
@@ -128,11 +128,12 @@ function parseAsrResponse(
   if (body.language !== "zh" && body.language !== "en") {
     throw new Error("HTTP ASR returned invalid language");
   }
+  const confidence = normalizeConfidence(body.confidence);
   return {
     segmentId: body.segmentId ?? fallbackSegmentId,
     text,
     language: body.language,
-    confidence: body.confidence,
+    ...(confidence === undefined ? {} : { confidence }),
     ...(isSegmentTiming(body.timing) ? { timing: body.timing } : {}),
     ...(isAsrEndpointReason(body.endpointReason)
       ? { endpointReason: body.endpointReason }
@@ -141,6 +142,12 @@ function parseAsrResponse(
       ? { vadContext: body.vadContext }
       : {}),
   };
+}
+
+function normalizeConfidence(value: number | null | undefined) {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0 && value <= 1
+    ? value
+    : undefined;
 }
 
 function isAsrEndpointReason(value: unknown): value is AsrEndpointReason {

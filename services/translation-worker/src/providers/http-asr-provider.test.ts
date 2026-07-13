@@ -133,6 +133,32 @@ describe("HttpAsrProvider", () => {
 
     expect(requests[0].mode).toBe("pstn");
   });
+
+  it("treats null and invalid confidence as unknown", async () => {
+    for (const confidence of [null, -0.1, 1.1]) {
+      const provider = new HttpAsrProvider({
+        endpoint: "http://127.0.0.1:8001/asr/transcribe",
+        timeoutMs: 100,
+        fetchFn: (async () => response(200, {
+          segmentId: "seg_confidence",
+          text: "hello",
+          language: "en",
+          confidence,
+        })) as typeof fetch,
+      });
+
+      expect(await provider.transcribe({
+        type: "audio.frame",
+        sessionId: "call_confidence",
+        speakerRole: "guest",
+        sequence: 1,
+        timestampMs: 1,
+        format: "pcm16",
+        sampleRate: 24000,
+        data: "AA==",
+      })).not.toHaveProperty("confidence");
+    }
+  });
 });
 
 function response(status: number, body?: unknown) {

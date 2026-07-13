@@ -1,9 +1,18 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import {
+  participantTrackSpeaker,
+  type CallRoomDataEvent,
+} from "@translation/contracts";
 import { getStoreSnapshot } from "../../infrastructure/storage/json-store.js";
+import {
+  createSession,
+  findSession,
+} from "../sessions/sessions.repository.js";
 import type { CallLinkRecord } from "./call-links.service.js";
 import { buildCallRoomSmokeEvents } from "./call-room-events.js";
 import {
   isLiveKitAlreadyExistsError,
+  persistCallRoomDataEvent,
   publishCallRoomDataEvents,
   setCallRoomDataPublisherForTests,
   type CallRoomDataPublisher,
@@ -58,6 +67,57 @@ describe("call room worker publisher", () => {
     expect(isLiveKitAlreadyExistsError({ message: "network failed" })).toBe(
       false,
     );
+  });
+
+  it("persists raw, optimized, refinement, and model timing metadata", () => {
+    const record = fakeCallLinkRecord("call_metadata");
+    createSession({
+      id: record.sessionId,
+      userId: "user_1",
+      mode: "call_link",
+      status: "active",
+      consumedSeconds: 0,
+      createdAt: record.createdAt,
+      segments: [],
+    });
+    persistCallRoomDataEvent(record, {
+      type: "transcript.final",
+      callId: record.callId,
+      roomName: record.roomName,
+      segmentId: "segment_1",
+      speakerRole: "host",
+      speaker: participantTrackSpeaker("host"),
+      sourceLanguage: "zh",
+      targetLanguage: "en",
+      text: "会议纪要。",
+      sourceText: "会议纪要。",
+      rawText: "会议既要。",
+      optimizedText: "会议纪要。",
+      confidence: 0.82,
+      refinement: {
+        provider: "openai_compatible",
+        model: "qwen/qwen3.5-9b",
+        promptVersion: "asr_refine_v2",
+        confidence: 0.94,
+        latencyMs: 320,
+        operations: ["term_correction"],
+        protectedTermsKept: ["会议纪要"],
+        warnings: [],
+      },
+      timing: { startMs: 100, endMs: 900, source: "model" },
+      timestampMs: 1000,
+    } satisfies CallRoomDataEvent);
+
+    expect(findSession(record.sessionId)?.segments[0]).toMatchObject({
+      rawText: "会议既要。",
+      optimizedText: "会议纪要。",
+      confidence: 0.82,
+      refinement: {
+        provider: "openai_compatible",
+        model: "qwen/qwen3.5-9b",
+      },
+      timing: { startMs: 100, endMs: 900, source: "model" },
+    });
   });
 });
 

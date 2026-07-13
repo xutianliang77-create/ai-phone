@@ -4,15 +4,18 @@ import {
 } from "@translation/contracts";
 import { detectCallLanguage, oppositeCallLanguage } from "./language.js";
 import { CallTranscriptRefiner } from "./call-transcript-refiner.js";
-import { CallTtsPlaybackQueue } from "./call-tts-playback-queue.js";
+import { createCallTtsPlaybackQueue } from "./call-tts-playback-runtime.js";
+import type { CallTtsPlaybackQueue } from "./call-tts-playback-queue.js";
 import { KeyedAsyncQueue } from "./keyed-async-queue.js";
 import { isMeaninglessSpeechFragment } from "./meaningless-speech-fragment.js";
 import {
   ParticipantTurnBuffer,
   type BufferedCallTranscript,
 } from "./participant-turn-buffer.js";
+import { callRecognitionMetadata } from "./call-recognition-metadata.js";
 import { cleanCallTranscript } from "./transcript-text-normalizer.js";
 import { normalizeTtsText } from "./tts-text-normalizer.js";
+import { RecentTtsEchoFilter } from "./recent-tts-echo-filter.js";
 import type {
   CallAsrProvider,
   CallAudioFrame,
@@ -25,7 +28,6 @@ import type {
   TranscriptSegment,
   TtsVoiceConfig,
 } from "./types.js";
-
 export interface CallTranslationWorkerOptions {
   asrProvider: CallAsrProvider;
   translationProvider: CallTranslationProvider;
@@ -35,7 +37,6 @@ export interface CallTranslationWorkerOptions {
   transcriptRefiner?: CallTranscriptRefiner;
   nowMs?: () => number;
 }
-
 export class CallTranslationWorker implements CallSpeechPipeline {
   private readonly asrProvider: CallAsrProvider;
   private readonly translationProvider: CallTranslationProvider;
@@ -46,9 +47,9 @@ export class CallTranslationWorker implements CallSpeechPipeline {
   private readonly turnBuffer = new ParticipantTurnBuffer();
   private readonly processingQueue = new KeyedAsyncQueue();
   private readonly playbackQueue: CallTtsPlaybackQueue;
+  private readonly recentTtsEchoes = new RecentTtsEchoFilter();
   private readonly publishedSegments = new Set<string>();
   private ttsVoice?: TtsVoiceConfig;
-
   constructor(options: CallTranslationWorkerOptions) {
     this.asrProvider = options.asrProvider;
     this.translationProvider = options.translationProvider;
@@ -56,30 +57,23 @@ export class CallTranslationWorker implements CallSpeechPipeline {
     this.eventSink = options.eventSink;
     this.transcriptRefiner = options.transcriptRefiner;
     this.nowMs = options.nowMs ?? Date.now;
-    this.playbackQueue = new CallTtsPlaybackQueue(async (input) => {
-      await this.eventSink.publish(input.callId, [
-        this.statusEvent(`tts-playback-failed-${input.segmentId}`, "TTS 播放失败，已继续显示字幕", {
-          stage: "tts",
-          provider: input.speech.provider,
-          model: input.speech.model,
-          retryable: true,
-        }),
-      ]);
+    this.playbackQueue = createCallTtsPlaybackQueue({
+      eventSink: this.eventSink,
+      recentTtsEchoes: this.recentTtsEchoes,
+      nowMs: this.nowMs,
     });
     if (options.ttsAudioSink) this.playbackQueue.addSink(options.ttsAudioSink);
   }
-
   addTtsAudioSink(sink: CallTtsAudioSink) {
     this.playbackQueue.addSink(sink);
   }
-
   setTtsVoice(voice: TtsVoiceConfig) {
     this.ttsVoice = voice;
   }
-
   async startCall(callId: string) {
     this.turnBuffer.clear(callId);
     this.transcriptRefiner?.clear(callId);
+    this.recentTtsEchoes.clear(callId);
     this.clearPublishedSegments(callId);
     try {
       await this.asrProvider.createCall(callId);
@@ -161,6 +155,7 @@ export class CallTranslationWorker implements CallSpeechPipeline {
     ]);
     this.turnBuffer.clear(callId);
     this.transcriptRefiner?.clear(callId);
+    this.recentTtsEchoes.clear(callId);
     this.clearPublishedSegments(callId);
   }
 
@@ -171,6 +166,9 @@ export class CallTranslationWorker implements CallSpeechPipeline {
   ) {
     const text = cleanCallTranscript(transcript.text);
     if (!text || isMeaninglessSpeechFragment(text)) return;
+    if (this.recentTtsEchoes.matches(callId, speakerRole, text, this.nowMs())) {
+      return;
+    }
     const language = transcript.language ?? detectCallLanguage(text);
     const ready = this.turnBuffer.push(callId, speakerRole, {
       ...transcript,
@@ -207,6 +205,7 @@ export class CallTranslationWorker implements CallSpeechPipeline {
       targetLanguage,
     );
     const text = refined?.text ?? transcript.text;
+    const recognitionMetadata = callRecognitionMetadata(transcript, refined);
     const transcriptEvent: CallRoomSubmittedEvent = {
       type: "transcript.final",
       segmentId: transcript.segmentId,
@@ -216,6 +215,7 @@ export class CallTranslationWorker implements CallSpeechPipeline {
       targetLanguage,
       text,
       sourceText: text,
+      ...recognitionMetadata,
       timestampMs: this.nowMs(),
     };
     let translatedText: string;
@@ -252,6 +252,7 @@ export class CallTranslationWorker implements CallSpeechPipeline {
         text: translatedText,
         sourceText: text,
         translatedText,
+        ...recognitionMetadata,
         timestampMs: this.nowMs(),
       },
     ];
@@ -283,6 +284,7 @@ export class CallTranslationWorker implements CallSpeechPipeline {
         text: translatedText,
         sourceText: text,
         translatedText,
+        ...recognitionMetadata,
         provider: speech.provider,
         model: speech.model,
         voiceMode: speech.voiceMode,
@@ -297,6 +299,7 @@ export class CallTranslationWorker implements CallSpeechPipeline {
         segmentId: transcript.segmentId,
         speakerRole,
         targetLanguage,
+        translatedText,
         speech,
       });
       this.transcriptRefiner?.remember(callId, speakerRole, {

@@ -24,6 +24,11 @@ describe("CallTranscriptRefiner", () => {
     }, "en");
 
     expect(result.text).toBe("确认负责人。");
+    expect(result.refinement).toMatchObject({
+      provider: "off",
+      promptVersion: "asr_refine_v2",
+      fallbackReason: "content_expansion",
+    });
   });
 });
 

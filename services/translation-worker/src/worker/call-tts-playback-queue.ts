@@ -11,7 +11,12 @@ interface PlaybackInput {
   segmentId: string;
   speakerRole: CallAudioSpeakerRole;
   targetLanguage: CallRoomTranslationLanguage;
+  translatedText: string;
   speech: SynthesizedSpeech;
+}
+
+interface PlaybackStartedInput extends PlaybackInput {
+  targetSpeakerRole: CallAudioSpeakerRole;
 }
 
 export class CallTtsPlaybackQueue {
@@ -20,6 +25,7 @@ export class CallTtsPlaybackQueue {
 
   constructor(
     private readonly onPlaybackError: (input: PlaybackInput) => Promise<void>,
+    private readonly onPlaybackStarted?: (input: PlaybackStartedInput) => void,
   ) {}
 
   addSink(sink: CallTtsAudioSink) {
@@ -30,13 +36,15 @@ export class CallTtsPlaybackQueue {
     if (this.sinks.length === 0 || !input.speech.audio) return;
     void this.queue.enqueue(input.callId, async () => {
       let failed = false;
+      const targetSpeakerRole = oppositeSpeakerRole(input.speakerRole);
+      this.onPlaybackStarted?.({ ...input, targetSpeakerRole });
       for (const sink of this.sinks) {
         try {
           await sink.play({
             callId: input.callId,
             segmentId: input.segmentId,
             sourceSpeakerRole: input.speakerRole,
-            targetSpeakerRole: oppositeSpeakerRole(input.speakerRole),
+            targetSpeakerRole,
             language: input.targetLanguage,
             speech: input.speech,
           });

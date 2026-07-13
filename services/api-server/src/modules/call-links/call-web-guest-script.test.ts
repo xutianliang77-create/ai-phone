@@ -38,5 +38,9 @@ describe("call web guest script", () => {
     expect(script).toContain("AudioContext");
     expect(script).toContain("系统浏览器");
     expect(script).toContain("copyCallLink");
+    expect(script).toContain("blockMicrophoneForTts(event)");
+    expect(script).toContain("event.speakerRole === state.localRole");
+    expect(script).toContain("setMicrophoneEnabled(false)");
+    expect(script).toContain("setMicrophoneEnabled(true)");
   });
 });

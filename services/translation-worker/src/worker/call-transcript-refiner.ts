@@ -1,5 +1,6 @@
 import type {
   CallRoomTranslationLanguage,
+  SessionSegmentRefinementDto,
   TermbaseTermDto,
 } from "@translation/contracts";
 import {
@@ -70,6 +71,7 @@ export class CallTranscriptRefiner {
     return {
       rawText: transcript.text,
       text: result.optimizedText || transcript.text,
+      refinement: asRefinement(result),
     };
   }
 
@@ -89,6 +91,22 @@ export class CallTranscriptRefiner {
     this.recentSegments.delete(participantKey(callId, "host"));
     this.recentSegments.delete(participantKey(callId, "guest"));
   }
+}
+
+function asRefinement(
+  result: Awaited<ReturnType<typeof refineAsrWithFallback>>,
+): SessionSegmentRefinementDto {
+  return {
+    provider: result.usage.provider,
+    model: result.usage.model,
+    promptVersion: result.usage.promptVersion,
+    confidence: result.confidence,
+    latencyMs: result.usage.latencyMs,
+    operations: result.operations,
+    protectedTermsKept: result.protectedTermsKept,
+    warnings: result.warnings,
+    fallbackReason: result.fallbackReason,
+  };
 }
 
 function participantKey(callId: string, speakerRole: CallAudioSpeakerRole) {

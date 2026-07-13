@@ -6,6 +6,7 @@ import 'call_link_api_client.dart';
 import 'call_room_audio_track_policy.dart';
 import 'call_room_data_event.dart';
 import 'call_room_client.dart';
+import 'call_room_tts_capture_gate.dart';
 
 class LiveKitCallRoomClient implements CallRoomClient {
   final StreamController<CallRoomSnapshot> _snapshots =
@@ -13,6 +14,10 @@ class LiveKitCallRoomClient implements CallRoomClient {
 
   livekit.Room? _room;
   livekit.EventsListener<livekit.RoomEvent>? _listener;
+  final CallRoomTtsCaptureGate _ttsCaptureGate = CallRoomTtsCaptureGate();
+  final Set<String> _gatedTtsSegments = <String>{};
+  Timer? _ttsCaptureTimer;
+  int _ttsCaptureGeneration = 0;
   CallRoomSnapshot _current = const CallRoomSnapshot.disconnected();
   bool _disposed = false;
 
@@ -121,7 +126,7 @@ class LiveKitCallRoomClient implements CallRoomClient {
         ));
       })
       ..on<livekit.DataReceivedEvent>((event) {
-        _handleDataMessage(room, event.data);
+        _handleDataMessage(room, event.data, localRole: localRole);
       })
       ..on<livekit.RoomDisconnectedEvent>((event) {
         _emit(CallRoomSnapshot.disconnected(
@@ -190,14 +195,74 @@ class LiveKitCallRoomClient implements CallRoomClient {
     );
   }
 
-  void _handleDataMessage(livekit.Room room, List<int> data) {
+  void _handleDataMessage(
+    livekit.Room room,
+    List<int> data, {
+    required String localRole,
+  }) {
     final payload = parseCallRoomData(data);
     final caption = payload.caption;
+    if (caption != null &&
+        caption.ttsReady &&
+        caption.speakerRole != localRole &&
+        caption.audioDurationMs != null) {
+      unawaited(_blockCaptureForTts(room, caption));
+    }
     _emit(_snapshotFromRoom(
       room,
       message: payload.message,
       captions: caption == null ? null : _mergeCaption(caption),
     ));
+  }
+
+  Future<void> _blockCaptureForTts(
+    livekit.Room room,
+    CallRoomCaption caption,
+  ) async {
+    if (!_gatedTtsSegments.add(caption.segmentId)) return;
+    if (_gatedTtsSegments.length > 100) {
+      _gatedTtsSegments.remove(_gatedTtsSegments.first);
+    }
+    final playbackMs = caption.audioDurationMs!.clamp(200, 30000);
+    final remaining = _ttsCaptureGate.blockFor(
+      Duration(milliseconds: playbackMs),
+    );
+    final generation = ++_ttsCaptureGeneration;
+    _ttsCaptureTimer?.cancel();
+    try {
+      await room.localParticipant?.setMicrophoneEnabled(false);
+    } catch (_) {
+      return;
+    }
+    if (_room != room || generation != _ttsCaptureGeneration) return;
+    _emit(_snapshotFromRoom(room, microphoneEnabled: false));
+    _ttsCaptureTimer = Timer(
+      remaining,
+      () => unawaited(_restoreCaptureAfterTts(room, generation)),
+    );
+  }
+
+  Future<void> _restoreCaptureAfterTts(
+    livekit.Room room,
+    int generation,
+  ) async {
+    if (_room != room || generation != _ttsCaptureGeneration) return;
+    final remaining = _ttsCaptureGate.remaining;
+    if (remaining > Duration.zero) {
+      _ttsCaptureTimer = Timer(
+        remaining,
+        () => unawaited(_restoreCaptureAfterTts(room, generation)),
+      );
+      return;
+    }
+    try {
+      await room.localParticipant?.setMicrophoneEnabled(true);
+    } catch (_) {
+      return;
+    }
+    if (_room == room && generation == _ttsCaptureGeneration) {
+      _emit(_snapshotFromRoom(room, microphoneEnabled: true));
+    }
   }
 
   List<CallRoomCaption> _mergeCaption(CallRoomCaption caption) {
@@ -214,6 +279,11 @@ class LiveKitCallRoomClient implements CallRoomClient {
   }
 
   Future<void> _disposeRoom({required bool disconnectFirst}) async {
+    _ttsCaptureGeneration += 1;
+    _ttsCaptureTimer?.cancel();
+    _ttsCaptureTimer = null;
+    _ttsCaptureGate.reset();
+    _gatedTtsSegments.clear();
     final listener = _listener;
     final room = _room;
     _listener = null;
