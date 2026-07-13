@@ -3,6 +3,14 @@ import {
   type CallRoomSubmittedEvent,
 } from "@translation/contracts";
 import { detectCallLanguage, oppositeCallLanguage } from "./language.js";
+import { CallTranscriptRefiner } from "./call-transcript-refiner.js";
+import { CallTtsPlaybackQueue } from "./call-tts-playback-queue.js";
+import { KeyedAsyncQueue } from "./keyed-async-queue.js";
+import { isMeaninglessSpeechFragment } from "./meaningless-speech-fragment.js";
+import {
+  ParticipantTurnBuffer,
+  type BufferedCallTranscript,
+} from "./participant-turn-buffer.js";
 import { cleanCallTranscript } from "./transcript-text-normalizer.js";
 import { normalizeTtsText } from "./tts-text-normalizer.js";
 import type {
@@ -24,6 +32,7 @@ export interface CallTranslationWorkerOptions {
   ttsProvider?: CallTtsProvider;
   ttsAudioSink?: CallTtsAudioSink;
   eventSink: CallRoomEventSink;
+  transcriptRefiner?: CallTranscriptRefiner;
   nowMs?: () => number;
 }
 
@@ -31,9 +40,12 @@ export class CallTranslationWorker implements CallSpeechPipeline {
   private readonly asrProvider: CallAsrProvider;
   private readonly translationProvider: CallTranslationProvider;
   private readonly ttsProvider?: CallTtsProvider;
-  private readonly ttsAudioSinks: CallTtsAudioSink[] = [];
   private readonly eventSink: CallRoomEventSink;
+  private readonly transcriptRefiner?: CallTranscriptRefiner;
   private readonly nowMs: () => number;
+  private readonly turnBuffer = new ParticipantTurnBuffer();
+  private readonly processingQueue = new KeyedAsyncQueue();
+  private readonly playbackQueue: CallTtsPlaybackQueue;
   private readonly publishedSegments = new Set<string>();
   private ttsVoice?: TtsVoiceConfig;
 
@@ -41,13 +53,24 @@ export class CallTranslationWorker implements CallSpeechPipeline {
     this.asrProvider = options.asrProvider;
     this.translationProvider = options.translationProvider;
     this.ttsProvider = options.ttsProvider;
-    if (options.ttsAudioSink) this.ttsAudioSinks.push(options.ttsAudioSink);
     this.eventSink = options.eventSink;
+    this.transcriptRefiner = options.transcriptRefiner;
     this.nowMs = options.nowMs ?? Date.now;
+    this.playbackQueue = new CallTtsPlaybackQueue(async (input) => {
+      await this.eventSink.publish(input.callId, [
+        this.statusEvent(`tts-playback-failed-${input.segmentId}`, "TTS 播放失败，已继续显示字幕", {
+          stage: "tts",
+          provider: input.speech.provider,
+          model: input.speech.model,
+          retryable: true,
+        }),
+      ]);
+    });
+    if (options.ttsAudioSink) this.playbackQueue.addSink(options.ttsAudioSink);
   }
 
   addTtsAudioSink(sink: CallTtsAudioSink) {
-    this.ttsAudioSinks.push(sink);
+    this.playbackQueue.addSink(sink);
   }
 
   setTtsVoice(voice: TtsVoiceConfig) {
@@ -55,6 +78,9 @@ export class CallTranslationWorker implements CallSpeechPipeline {
   }
 
   async startCall(callId: string) {
+    this.turnBuffer.clear(callId);
+    this.transcriptRefiner?.clear(callId);
+    this.clearPublishedSegments(callId);
     try {
       await this.asrProvider.createCall(callId);
     } catch (error) {
@@ -87,12 +113,21 @@ export class CallTranslationWorker implements CallSpeechPipeline {
       ]);
       return;
     }
-    if (!transcript) return;
-    await this.publishTranscript(frame.sessionId, frame.speakerRole, transcript);
+    await this.enqueueProcessing(frame.sessionId, async () => {
+      if (transcript) {
+        await this.acceptTranscript(frame.sessionId, frame.speakerRole, transcript);
+        return;
+      }
+      await this.publishReady(this.turnBuffer.drainExpired(
+        frame.sessionId,
+        frame.speakerRole,
+        this.nowMs(),
+      ), frame.sessionId);
+    });
   }
 
   async flushSpeaker(callId: string, speakerRole: CallAudioSpeakerRole) {
-    let transcript: TranscriptSegment | null;
+    let transcript: TranscriptSegment | null = null;
     try {
       transcript = await this.asrProvider.flush(callId, speakerRole);
     } catch {
@@ -102,38 +137,76 @@ export class CallTranslationWorker implements CallSpeechPipeline {
           retryable: true,
         }),
       ]);
-      return;
     }
-    if (!transcript) return;
-    await this.publishTranscript(callId, speakerRole, transcript);
+    await this.enqueueProcessing(callId, async () => {
+      if (transcript) await this.acceptTranscript(callId, speakerRole, transcript);
+      await this.publishReady(
+        this.turnBuffer.flush(callId, speakerRole, this.nowMs()),
+        callId,
+      );
+    });
   }
 
   async endCall(callId: string) {
     await this.flushSpeaker(callId, "host");
     await this.flushSpeaker(callId, "guest");
+    await this.processingQueue.drain(callId);
     await this.asrProvider.closeCall(callId);
+    await this.playbackQueue.drain(callId);
     await this.eventSink.publish(callId, [
       this.statusEvent("worker-ended", "通话翻译 Worker 已结束", {
         stage: "worker",
         retryable: false,
       }),
     ]);
+    this.turnBuffer.clear(callId);
+    this.transcriptRefiner?.clear(callId);
+    this.clearPublishedSegments(callId);
   }
 
-  private async publishTranscript(
+  private async acceptTranscript(
     callId: string,
     speakerRole: CallAudioSpeakerRole,
     transcript: TranscriptSegment,
   ) {
     const text = cleanCallTranscript(transcript.text);
-    if (!text) return;
+    if (!text || isMeaninglessSpeechFragment(text)) return;
+    const language = transcript.language ?? detectCallLanguage(text);
+    const ready = this.turnBuffer.push(callId, speakerRole, {
+      ...transcript,
+      text,
+      language,
+    }, this.nowMs());
+    await this.publishReady(ready, callId);
+  }
 
+  private async publishReady(
+    ready: BufferedCallTranscript[],
+    callId: string,
+  ) {
+    for (const item of ready) {
+      await this.publishTranscript(callId, item.speakerRole, item.transcript);
+    }
+  }
+
+  private async publishTranscript(
+    callId: string,
+    speakerRole: CallAudioSpeakerRole,
+    transcript: BufferedCallTranscript["transcript"],
+  ) {
     const dedupeKey = `${callId}:${speakerRole}:${transcript.segmentId}`;
     if (this.publishedSegments.has(dedupeKey)) return;
     this.publishedSegments.add(dedupeKey);
 
-    const sourceLanguage = transcript.language ?? detectCallLanguage(text);
+    const sourceLanguage = transcript.language;
     const targetLanguage = oppositeCallLanguage(sourceLanguage);
+    const refined = await this.transcriptRefiner?.refine(
+      callId,
+      speakerRole,
+      transcript,
+      targetLanguage,
+    );
+    const text = refined?.text ?? transcript.text;
     const transcriptEvent: CallRoomSubmittedEvent = {
       type: "transcript.final",
       segmentId: transcript.segmentId,
@@ -160,6 +233,10 @@ export class CallTranslationWorker implements CallSpeechPipeline {
           retryable: true,
         }),
       ]);
+      this.transcriptRefiner?.remember(callId, speakerRole, {
+        rawText: refined?.rawText ?? transcript.text,
+        optimizedText: text,
+      });
       return;
     }
 
@@ -215,53 +292,38 @@ export class CallTranslationWorker implements CallSpeechPipeline {
         timestampMs: this.nowMs(),
       });
       await this.eventSink.publish(callId, events);
-      const playbackError = await this.playSpeech({
+      this.playbackQueue.enqueue({
         callId,
         segmentId: transcript.segmentId,
         speakerRole,
         targetLanguage,
         speech,
       });
-      if (playbackError) {
-        await this.eventSink.publish(callId, [playbackError]);
-      }
+      this.transcriptRefiner?.remember(callId, speakerRole, {
+        rawText: refined?.rawText ?? transcript.text,
+        optimizedText: text,
+        translatedText,
+      });
       return;
     }
 
     await this.eventSink.publish(callId, events);
+    this.transcriptRefiner?.remember(callId, speakerRole, {
+      rawText: refined?.rawText ?? transcript.text,
+      optimizedText: text,
+      translatedText,
+    });
   }
 
-  private async playSpeech(input: {
-    callId: string;
-    segmentId: string;
-    speakerRole: CallAudioSpeakerRole;
-    targetLanguage: NonNullable<TranscriptSegment["language"]>;
-    speech: NonNullable<Awaited<ReturnType<CallTtsProvider["synthesize"]>>>;
-  }) {
-    if (this.ttsAudioSinks.length === 0 || !input.speech.audio) return null;
-    let failed = false;
-    for (const sink of this.ttsAudioSinks) {
-      try {
-        await sink.play({
-          callId: input.callId,
-          segmentId: input.segmentId,
-          sourceSpeakerRole: input.speakerRole,
-          targetSpeakerRole: oppositeSpeakerRole(input.speakerRole),
-          language: input.targetLanguage,
-          speech: input.speech,
-        });
-      } catch {
-        failed = true;
-      }
+  private enqueueProcessing(callId: string, operation: () => Promise<void>) {
+    return this.processingQueue.enqueue(callId, operation);
+  }
+
+  private clearPublishedSegments(callId: string) {
+    const prefix = `${callId}:`;
+    for (const key of this.publishedSegments) {
+      if (key.startsWith(prefix)) this.publishedSegments.delete(key);
     }
-    return failed
-      ? this.statusEvent(`tts-playback-failed-${input.segmentId}`, "TTS 播放失败，已继续显示字幕", {
-        stage: "tts",
-        provider: input.speech.provider,
-        model: input.speech.model,
-        retryable: true,
-      })
-      : null;
   }
 
   private statusEvent(
@@ -281,8 +343,4 @@ export class CallTranslationWorker implements CallSpeechPipeline {
       timestampMs: this.nowMs(),
     };
   }
-}
-
-function oppositeSpeakerRole(role: CallAudioSpeakerRole): CallAudioSpeakerRole {
-  return role === "host" ? "guest" : "host";
 }

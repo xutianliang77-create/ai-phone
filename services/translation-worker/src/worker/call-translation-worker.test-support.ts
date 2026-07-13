@@ -1,5 +1,6 @@
 import type { CallRoomSubmittedEvent, CallRoomTranslationLanguage } from "@translation/contracts";
 import { CallTranslationWorker } from "./call-translation-worker.js";
+import type { CallTranscriptRefiner } from "./call-transcript-refiner.js";
 import type {
   CallAsrProvider,
   CallAudioFrame,
@@ -18,6 +19,7 @@ export function newWorker(
   ttsProvider?: CallTtsProvider,
   ttsAudioSink?: CallTtsAudioSink,
   translationProvider: CallTranslationProvider = new FakeTranslationProvider(),
+  transcriptRefiner?: CallTranscriptRefiner,
 ) {
   return new CallTranslationWorker({
     asrProvider: asr,
@@ -25,6 +27,7 @@ export function newWorker(
     ttsProvider,
     ttsAudioSink,
     eventSink: sink,
+    transcriptRefiner,
     nowMs: () => 1000,
   });
 }

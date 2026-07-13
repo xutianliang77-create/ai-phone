@@ -12,6 +12,7 @@
   "dependencies": {
     "@translation/contracts": "file:../../packages/contracts",
     "@translation/llm": "file:../../packages/llm",
+    "@translation/speech-quality": "file:../../packages/speech-quality",
     "pino": "^10.1.0",
     "ws": "^8.18.3"
   },

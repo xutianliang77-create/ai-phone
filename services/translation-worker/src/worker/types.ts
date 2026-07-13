@@ -1,8 +1,11 @@
 import type {
+  AsrEndpointReason,
   AudioFrame,
   CallRoomSpeakerRole,
   CallRoomSubmittedEvent,
   CallRoomTranslationLanguage,
+  SegmentTimingDto,
+  SegmentVadContextDto,
 } from "@translation/contracts";
 
 export type CallAudioSpeakerRole = Exclude<CallRoomSpeakerRole, "worker">;
@@ -13,9 +16,14 @@ export interface CallAudioFrame extends AudioFrame {
 
 export interface TranscriptSegment {
   segmentId: string;
+  turnId?: string;
+  revision?: number;
   text: string;
   language?: CallRoomTranslationLanguage;
   confidence?: number;
+  timing?: SegmentTimingDto;
+  endpointReason?: AsrEndpointReason;
+  vadContext?: SegmentVadContextDto;
 }
 
 export interface CallAsrProvider {

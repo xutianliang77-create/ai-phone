@@ -1,5 +1,11 @@
 import pino from "pino";
 import type { AsrEndpointMode } from "@translation/contracts";
+import { createLlmProvider } from "@translation/llm";
+import {
+  asrCorrectionTermsForPacks,
+  asrHotwordsForTerminology,
+  domainTerminologyForPacks,
+} from "@translation/speech-quality";
 import { loadEnv } from "./config/env.js";
 import { HttpAsrProvider } from "./providers/http-asr-provider.js";
 import { HttpTtsAudioSink } from "./providers/http-tts-audio-sink.js";
@@ -8,6 +14,7 @@ import { OpenAiCompatibleTranslationProvider } from "./providers/openai-compatib
 import { HttpCallRoomEventClient } from "./worker/call-room-event-client.js";
 import { HttpCallRoomTokenClient } from "./worker/call-room-token-client.js";
 import { CallTranslationWorker } from "./worker/call-translation-worker.js";
+import { CallTranscriptRefiner } from "./worker/call-transcript-refiner.js";
 import { LiveKitCallAudioSource } from "./worker/livekit-call-audio-source.js";
 import { SpeechPipelineRouter } from "./worker/speech-pipeline-router.js";
 import type { CallSpeechPipeline, SpeechToSpeechProvider } from "./worker/types.js";
@@ -16,6 +23,8 @@ const logger = pino({ name: "translation-worker" });
 
 export function buildDefaultWorker(endpointMode: AsrEndpointMode = "call_link") {
   const env = loadEnv();
+  const terminology = domainTerminologyForPacks(env.domainLexiconPacks);
+  const corrections = asrCorrectionTermsForPacks(env.domainLexiconPacks);
   return new CallTranslationWorker({
     asrProvider: new HttpAsrProvider({
       endpoint: env.asrHttpEndpoint,
@@ -23,6 +32,8 @@ export function buildDefaultWorker(endpointMode: AsrEndpointMode = "call_link") 
       apiKey: env.asrHttpApiKey,
       timeoutMs: env.asrHttpTimeoutMs,
       endpointMode,
+      hotwords: asrHotwordsForTerminology(terminology, corrections),
+      corrections,
     }),
     translationProvider: new OpenAiCompatibleTranslationProvider({
       baseUrl: env.translationBaseUrl,
@@ -52,6 +63,12 @@ export function buildDefaultWorker(endpointMode: AsrEndpointMode = "call_link") 
       apiBaseUrl: env.apiBaseUrl,
       internalApiSecret: env.internalApiSecret,
       timeoutMs: env.apiTimeoutMs,
+    }),
+    transcriptRefiner: new CallTranscriptRefiner({
+      provider: createLlmProvider(env.llmConfig),
+      enabled: env.llmConfig.refinementEnabled,
+      minConfidence: env.llmConfig.minConfidence,
+      terminology,
     }),
   });
 }

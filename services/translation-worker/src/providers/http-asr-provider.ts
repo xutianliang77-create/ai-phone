@@ -1,9 +1,12 @@
 import type {
+  AsrEndpointReason,
   AudioFormat,
   AsrEndpointMode,
   CallRoomTranslationLanguage,
   LanguageCode,
+  SegmentTimingDto,
 } from "@translation/contracts";
+import { isSegmentTiming, isSegmentVadContext } from "@translation/contracts";
 import type {
   CallAsrProvider,
   CallAudioFrame,
@@ -17,6 +20,8 @@ export interface HttpAsrProviderOptions {
   apiKey?: string;
   timeoutMs: number;
   endpointMode?: AsrEndpointMode;
+  hotwords?: string[];
+  corrections?: Array<{ fromText: string; toText: string }>;
   fetchFn?: typeof fetch;
 }
 
@@ -25,6 +30,9 @@ interface AsrResponse {
   text?: string;
   language?: CallRoomTranslationLanguage;
   confidence?: number;
+  timing?: SegmentTimingDto;
+  endpointReason?: string;
+  vadContext?: unknown;
 }
 
 export class HttpAsrProvider implements CallAsrProvider {
@@ -50,6 +58,8 @@ export class HttpAsrProvider implements CallAsrProvider {
         sourceLanguage: "auto" satisfies LanguageCode,
         targetLanguage: "zh" satisfies CallRoomTranslationLanguage,
         mode: this.options.endpointMode ?? "call_link",
+        hotwords: this.options.hotwords ?? [],
+        corrections: this.options.corrections ?? [],
       }),
     });
     if (response.status === 204) return null;
@@ -67,6 +77,8 @@ export class HttpAsrProvider implements CallAsrProvider {
           sourceLanguage: "auto" satisfies LanguageCode,
           targetLanguage: "zh" satisfies CallRoomTranslationLanguage,
           mode: this.options.endpointMode ?? "call_link",
+          hotwords: this.options.hotwords ?? [],
+          corrections: this.options.corrections ?? [],
         }),
       },
     );
@@ -121,5 +133,17 @@ function parseAsrResponse(
     text,
     language: body.language,
     confidence: body.confidence,
+    ...(isSegmentTiming(body.timing) ? { timing: body.timing } : {}),
+    ...(isAsrEndpointReason(body.endpointReason)
+      ? { endpointReason: body.endpointReason }
+      : {}),
+    ...(isSegmentVadContext(body.vadContext)
+      ? { vadContext: body.vadContext }
+      : {}),
   };
+}
+
+function isAsrEndpointReason(value: unknown): value is AsrEndpointReason {
+  return value === "silence" || value === "max_duration" || value === "flush" ||
+    value === "speaker_boundary";
 }

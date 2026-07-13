@@ -14,6 +14,8 @@
   "dependencies": {
     "@livekit/rtc-node": "^0.13.30",
     "@translation/contracts": "file:../../packages/contracts",
+    "@translation/llm": "file:../../packages/llm",
+    "@translation/speech-quality": "file:../../packages/speech-quality",
     "pino": "^10.1.0"
   }
 }

@@ -1,4 +1,9 @@
 import { mergeModelRoutingEnv } from "./model-routing-env.js";
+import { loadLlmConfig, type LlmConfig } from "@translation/llm";
+import {
+  parseDomainLexiconPacks,
+  type DomainLexiconPack,
+} from "@translation/speech-quality";
 import type {
   SpeechPipelineMode,
   TtsVoiceConfig,
@@ -39,6 +44,8 @@ export interface TranslationWorkerEnv {
   pstnBridgeApiKey?: string;
   pstnBridgeTimeoutMs: number;
   speechPipelineMode: SpeechPipelineMode;
+  domainLexiconPacks: DomainLexiconPack[];
+  llmConfig: LlmConfig;
 }
 
 export function loadEnv(): TranslationWorkerEnv {
@@ -93,6 +100,8 @@ export function loadEnv(): TranslationWorkerEnv {
     pstnBridgeApiKey: env.PSTN_BRIDGE_API_KEY,
     pstnBridgeTimeoutMs: Number(env.PSTN_BRIDGE_TIMEOUT_MS ?? 10000),
     speechPipelineMode: parseSpeechPipelineMode(env.SPEECH_PIPELINE_MODE),
+    domainLexiconPacks: parseDomainLexiconPacks(env.DOMAIN_LEXICON_PACKS),
+    llmConfig: loadLlmConfig(env),
   };
 }
 
