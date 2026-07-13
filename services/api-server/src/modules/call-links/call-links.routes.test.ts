@@ -5,18 +5,26 @@ import {
   setCallRoomDataPublisherForTests,
   type CallRoomDataPublisher,
 } from "./call-room-worker.js";
+import {
+  setCallLinkWorkerSupervisorForTests,
+  type CallLinkWorkerRuntime,
+} from "./call-link-worker-supervisor.js";
 
 describe("call link routes", () => {
   let previousEnv: Record<string, string | undefined>;
+  let workerRuntime: FakeCallLinkWorkerRuntime;
 
   beforeEach(() => {
     previousEnv = captureEnv();
     clearEnv();
     resetStore();
+    workerRuntime = new FakeCallLinkWorkerRuntime();
+    setCallLinkWorkerSupervisorForTests(workerRuntime);
   });
 
   afterEach(() => {
     setCallRoomDataPublisherForTests(null);
+    setCallLinkWorkerSupervisorForTests(null);
     restoreEnv(previousEnv);
   });
 
@@ -55,68 +63,6 @@ describe("call link routes", () => {
       status: "created",
       segmentCount: 0,
     });
-  });
-
-  it("issues LiveKit room tokens when the room provider is configured", async () => {
-    configureCallRoomEnv();
-    const app = await buildApp();
-    const created = await app.inject({ method: "POST", url: "/call-links" });
-    const callId = created.json().callId as string;
-    const response = await app.inject({
-      method: "POST",
-      url: `/call-links/${callId}/room-token`,
-      payload: { participantRole: "host", participantName: "Host" },
-    });
-    await app.close();
-
-    const body = response.json();
-    const payload = decodeJwtPayload(body.token);
-    expect(response.statusCode).toBe(200);
-    expect(body).toMatchObject({
-      callId,
-      provider: "livekit",
-      participantRole: "host",
-      roomName: `call_${callId}`,
-      wsUrl: "wss://livekit.example.cn",
-    });
-    expect(payload.iss).toBe("lk_key");
-    expect(payload.video).toMatchObject({
-      room: `call_${callId}`,
-      roomJoin: true,
-      canPublish: true,
-      canSubscribe: true,
-    });
-  });
-
-  it("rejects room tokens when LiveKit is not configured", async () => {
-    const app = await buildApp();
-    const created = await app.inject({ method: "POST", url: "/call-links" });
-    const response = await app.inject({
-      method: "POST",
-      url: `/call-links/${created.json().callId}/room-token`,
-      payload: { participantRole: "guest" },
-    });
-    await app.close();
-
-    expect(response.statusCode).toBe(503);
-    expect(response.json().error.code).toBe(
-      "call_room_provider_not_configured",
-    );
-  });
-
-  it("rejects invalid room participant roles", async () => {
-    configureCallRoomEnv();
-    const app = await buildApp();
-    const created = await app.inject({ method: "POST", url: "/call-links" });
-    const response = await app.inject({
-      method: "POST",
-      url: `/call-links/${created.json().callId}/room-token`,
-      payload: { participantRole: "speaker" },
-    });
-    await app.close();
-
-    expect(response.statusCode).toBe(400);
-    expect(response.json().error.code).toBe("invalid_call_room_participant");
   });
 
   it("serves the Web Guest join page", async () => {
@@ -273,8 +219,26 @@ describe("call link routes", () => {
       idempotencyKey: `settle:${callId}`,
       note: "call_link_usage",
     });
+    expect(workerRuntime.stoppedCallIds).toEqual([callId, callId]);
   });
 });
+
+class FakeCallLinkWorkerRuntime implements CallLinkWorkerRuntime {
+  readonly ensuredCallIds: string[] = [];
+  readonly readyCallIds: string[] = [];
+  readonly stoppedCallIds: string[] = [];
+
+  async ensure(callId: string) {
+    this.ensuredCallIds.push(callId);
+  }
+  markReady(callId: string) {
+    this.readyCallIds.push(callId);
+  }
+  stop(callId: string) {
+    this.stoppedCallIds.push(callId);
+  }
+  shutdown() {}
+}
 
 const envKeys = [
   "PUBLIC_CALL_BASE_URL",
@@ -337,9 +301,4 @@ function ageSession(sessionId: string, ageMs: number) {
   );
   if (!session) throw new Error(`Missing test session ${sessionId}`);
   session.createdAt = new Date(Date.now() - ageMs).toISOString();
-}
-
-function decodeJwtPayload(token: string) {
-  const payload = token.split(".")[1] ?? "";
-  return JSON.parse(Buffer.from(payload, "base64url").toString("utf8"));
 }

@@ -47,7 +47,6 @@ class _CallLinkPageState extends State<CallLinkPage> {
       widget.voiceConsentStore ?? const FileVoiceProcessingConsentStore();
   StreamSubscription<CallRoomSnapshot>? _roomSubscription;
   CallLink? _link;
-  CallRoomToken? _hostToken;
   CallLinkEndResult? _endResult;
   CallRoomSnapshot _roomSnapshot = const CallRoomSnapshot.disconnected();
   Object? _error;
@@ -94,7 +93,6 @@ class _CallLinkPageState extends State<CallLinkPage> {
             if (_link != null)
               CallLinkResultPanel(
                 link: _link!,
-                hostToken: _hostToken,
                 roomSnapshot: _roomSnapshot,
                 roomBusy: _roomLoading,
                 endResult: _endResult,
@@ -130,7 +128,6 @@ class _CallLinkPageState extends State<CallLinkPage> {
       _loading = true;
       _error = null;
       _link = null;
-      _hostToken = null;
       _endResult = null;
       _roomSnapshot = const CallRoomSnapshot.disconnected();
     });
@@ -138,17 +135,7 @@ class _CallLinkPageState extends State<CallLinkPage> {
       await _roomClient.disconnect();
       final link = await _client.createCallLink();
       if (!mounted) return;
-      setState(() {
-        _link = link;
-        _hostToken = null;
-      });
-      final hostToken = await _client.createRoomToken(
-        callId: link.callId,
-        participantRole: 'host',
-        participantName: 'host',
-      );
-      if (!mounted) return;
-      setState(() => _hostToken = hostToken);
+      setState(() => _link = link);
     } catch (error) {
       if (mounted) setState(() => _error = error);
     } finally {
@@ -157,8 +144,8 @@ class _CallLinkPageState extends State<CallLinkPage> {
   }
 
   Future<void> _enterRoom() async {
-    final token = _hostToken;
-    if (token == null || _roomLoading) return;
+    final link = _link;
+    if (link == null || _roomLoading) return;
     if (!await _ensureVoiceConsent()) return;
     if (!mounted) return;
     setState(() {
@@ -166,6 +153,11 @@ class _CallLinkPageState extends State<CallLinkPage> {
       _error = null;
     });
     try {
+      final token = await _client.createRoomToken(
+        callId: link.callId,
+        participantRole: 'host',
+        participantName: 'host',
+      );
       await _roomClient.connect(token);
     } catch (error) {
       if (mounted) setState(() => _error = error);

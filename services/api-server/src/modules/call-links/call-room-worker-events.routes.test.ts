@@ -41,7 +41,9 @@ describe("call room worker event routes", () => {
           stage: event.stage,
           retryable: event.retryable,
           ...(event.voiceMode ? { voiceMode: event.voiceMode } : {}),
-          ...(event.voiceProfileId ? { voiceProfileId: event.voiceProfileId } : {}),
+          ...(event.voiceProfileId
+            ? { voiceProfileId: event.voiceProfileId }
+            : {}),
         });
       },
     } satisfies CallRoomDataPublisher);
@@ -84,7 +86,12 @@ describe("call room worker event routes", () => {
       sessionId: callId,
       roomName: `call_${callId}`,
       topic: "translation.captions",
-      publishedEvents: ["worker.status", "transcript.final", "translation.final", "tts.ready"],
+      publishedEvents: [
+        "worker.status",
+        "transcript.final",
+        "translation.final",
+        "tts.ready",
+      ],
     });
     expect(published).toEqual([
       {

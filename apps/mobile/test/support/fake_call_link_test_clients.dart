@@ -13,6 +13,7 @@ class FakeCallLinkApiClient extends CallLinkApiClient {
   final bool tokenFails;
   final bool authRequired;
   int createCount = 0;
+  int tokenCreateCount = 0;
   final List<String> fetchedCallIds = <String>[];
   final List<String> endedCallIds = <String>[];
 
@@ -53,6 +54,7 @@ class FakeCallLinkApiClient extends CallLinkApiClient {
     String participantRole = 'host',
     String? participantName,
   }) async {
+    tokenCreateCount += 1;
     if (tokenFails) {
       throw const CallLinkApiException('Create room token failed: 503');
     }

@@ -28,9 +28,9 @@ void main() {
 
     expect(find.text('https://call.example.cn/join/call_1'), findsOneWidget);
     expect(find.text('房间：call_call_1'), findsOneWidget);
-    expect(find.text('主持人入会凭证已准备'), findsOneWidget);
     expect(find.textContaining('未入房'), findsOneWidget);
     expect(find.text('secret-room-token'), findsNothing);
+    expect(find.text('进入房间'), findsOneWidget);
 
     await tester.tap(find.text('分享链接'));
     await tester.pumpAndSettle();
@@ -107,9 +107,11 @@ void main() {
 
     await tester.tap(find.text('生成链接'));
     await tester.pumpAndSettle();
+    expect(apiClient.tokenCreateCount, 0);
     await tester.tap(find.text('进入房间'));
     await tester.pumpAndSettle();
 
+    expect(apiClient.tokenCreateCount, 1);
     expect(roomClient.connectedToken?.token, 'secret-room-token');
     expect(find.textContaining('已入房，麦克风已发布'), findsOneWidget);
     expect(find.text('对方人数：1'), findsOneWidget);
@@ -228,7 +230,7 @@ void main() {
     expect(tester.getBottomLeft(latest).dy, lessThan(600));
   });
 
-  testWidgets('keeps the link when host room token is unavailable',
+  testWidgets('keeps the link when room startup fails on entry',
       (WidgetTester tester) async {
     await tester.pumpWidget(_TestApp(
       child: CallLinkPage(
@@ -242,8 +244,10 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('https://call.example.cn/join/call_1'), findsOneWidget);
-    expect(find.text('主持人入会凭证未准备'), findsOneWidget);
-    expect(find.text('进入房间'), findsNothing);
+    expect(find.text('进入房间'), findsOneWidget);
+    await tester.tap(find.text('进入房间'));
+    await tester.pumpAndSettle();
+
     expect(find.text('准备通话房间失败，请检查 LiveKit 配置'), findsOneWidget);
   });
 

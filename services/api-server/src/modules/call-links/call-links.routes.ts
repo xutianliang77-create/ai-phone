@@ -16,17 +16,21 @@ import {
 } from "./call-links.service.js";
 import { completeSessionWithUsage } from "../sessions/session-completion.js";
 import { getReadyVoiceProfileTtsConfig } from "../voice-profiles/voice-profiles.service.js";
-import {
-  type CallRoomParticipantRole,
-  createCallRoomToken,
-} from "./call-room-token.js";
+import { createCallRoomToken } from "./call-room-token.js";
 import {
   publishCallRoomDataEvents,
   publishCallRoomSmokeCaptions,
 } from "./call-room-worker.js";
 import { parseCallRoomEventRequest } from "./call-room-event-request.js";
+import { getCallLinkWorkerSupervisor } from "./call-link-worker-supervisor.js";
+import { registerCallRoomEntryRoute } from "./call-room-entry.routes.js";
 
 export async function registerCallLinkRoutes(app: FastifyInstance) {
+  app.addHook("onClose", async () => {
+    getCallLinkWorkerSupervisor().shutdown();
+  });
+  registerCallRoomEntryRoute(app);
+
   app.get("/join/:callId", async (request, reply) => {
     const params = request.params as { callId: string };
     return reply
@@ -76,57 +80,6 @@ export async function registerCallLinkRoutes(app: FastifyInstance) {
         "Call link not found",
       );
     return toPublicCallLink(record);
-  });
-
-  app.post("/call-links/:callId/room-token", async (request, reply) => {
-    const params = request.params as { callId: string };
-    const record = findCallLink(params.callId);
-    if (!record)
-      return sendError(
-        reply,
-        404,
-        "call_link_not_found",
-        "Call link not found",
-      );
-    if (Date.now() > Date.parse(record.expiresAt)) {
-      return sendError(reply, 410, "call_link_expired", "Call link expired");
-    }
-    const body = (request.body ?? {}) as Partial<{
-      participantName: string;
-      participantRole: string;
-      role: string;
-    }>;
-    const participantRole = parseParticipantRole(
-      body.participantRole ?? body.role,
-    );
-    if (!participantRole) {
-      return sendError(
-        reply,
-        400,
-        "invalid_call_room_participant",
-        "Invalid participant role",
-      );
-    }
-    if (participantRole === "host") {
-      const account = requireAccount(request, reply);
-      if (!account) return;
-      if (record.userId !== account.id) return forbidden(reply);
-    }
-    const token = createCallRoomToken({
-      callId: record.callId,
-      roomName: record.roomName,
-      participantRole,
-      participantName: body.participantName,
-    });
-    if (!token.ok) {
-      return sendError(
-        reply,
-        503,
-        "call_room_provider_not_configured",
-        "Call room provider not configured",
-      );
-    }
-    return token;
   });
 
   app.post(
@@ -185,6 +138,7 @@ export async function registerCallLinkRoutes(app: FastifyInstance) {
     if (!session)
       return sendError(reply, 404, "session_not_found", "Session not found");
     markCallLinkEnded(record.callId, session.endedAt);
+    getCallLinkWorkerSupervisor().stop(record.callId);
     return {
       callId: record.callId,
       sessionId: session.id,
@@ -226,6 +180,15 @@ export async function registerCallLinkRoutes(app: FastifyInstance) {
         "call_room_provider_not_configured",
         "Call room provider not configured",
       );
+    }
+    if (
+      parsed.events.some(
+        (event) =>
+          event.type === "worker.status" &&
+          event.segmentId === "worker-started",
+      )
+    ) {
+      getCallLinkWorkerSupervisor().markReady(record.callId);
     }
     return {
       callId: record.callId,
@@ -282,11 +245,6 @@ export async function registerCallLinkRoutes(app: FastifyInstance) {
       };
     },
   );
-}
-
-function parseParticipantRole(value: unknown): CallRoomParticipantRole | null {
-  if (value === undefined || value === "guest") return "guest";
-  return value === "host" ? "host" : null;
 }
 
 function isInternalAuthorized(authorization: string | undefined) {

@@ -9,7 +9,6 @@ import 'call_room_captions.dart';
 class CallLinkResultPanel extends StatelessWidget {
   const CallLinkResultPanel({
     required this.link,
-    required this.hostToken,
     required this.roomSnapshot,
     required this.roomBusy,
     required this.endResult,
@@ -20,7 +19,6 @@ class CallLinkResultPanel extends StatelessWidget {
   });
 
   final CallLink link;
-  final CallRoomToken? hostToken;
   final CallRoomSnapshot roomSnapshot;
   final bool roomBusy;
   final CallLinkEndResult? endResult;
@@ -37,8 +35,6 @@ class CallLinkResultPanel extends StatelessWidget {
         Text('${l10n.callRoomName}：${link.roomName}'),
         const SizedBox(height: 4),
         Text('${l10n.callRoomProvider}：${link.roomProvider}'),
-        const SizedBox(height: 8),
-        _HostTokenStatus(ready: hostToken != null),
         const SizedBox(height: 12),
         _CallRoomStatus(snapshot: roomSnapshot),
         if (endResult != null) ...[
@@ -49,7 +45,7 @@ class CallLinkResultPanel extends StatelessWidget {
           captions: roomSnapshot.captions,
           localRole: 'host',
         ),
-        if (hostToken != null && endResult == null) ...[
+        if (endResult == null) ...[
           const SizedBox(height: 12),
           _CallRoomButton(
             snapshot: roomSnapshot,
@@ -65,34 +61,6 @@ class CallLinkResultPanel extends StatelessWidget {
           onPressed: () => onShare(link.joinUrl),
           icon: const Icon(Icons.ios_share),
           label: Text(l10n.shareCallLink),
-        ),
-      ],
-    );
-  }
-}
-
-class _HostTokenStatus extends StatelessWidget {
-  const _HostTokenStatus({required this.ready});
-
-  final bool ready;
-
-  @override
-  Widget build(BuildContext context) {
-    final l10n = context.l10n;
-    final color = ready
-        ? Theme.of(context).colorScheme.primary
-        : Theme.of(context).colorScheme.error;
-    return Row(
-      children: <Widget>[
-        Icon(
-          ready ? Icons.check_circle : Icons.error_outline,
-          size: 18,
-          color: color,
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          child:
-              Text(ready ? l10n.hostRoomTokenReady : l10n.hostRoomTokenMissing),
         ),
       ],
     );

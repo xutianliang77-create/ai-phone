@@ -36,6 +36,24 @@ export async function publishCallRoomSmokeCaptions(record: CallLinkRecord):
   );
 }
 
+export async function ensureCallRoom(
+  record: CallLinkRecord,
+): Promise<{ ok: true; roomName: string } | { ok: false; issues: string[] }> {
+  const config = getLiveKitRoomConfig();
+  if (!config.ok) return { ok: false, issues: config.issues };
+  const publisher =
+    testPublisher ?? new LiveKitRoomDataPublisher(config.config);
+  try {
+    await publisher.ensureRoom?.(record.roomName);
+    return { ok: true, roomName: record.roomName };
+  } catch (error) {
+    return {
+      ok: false,
+      issues: [error instanceof Error ? error.message : String(error)],
+    };
+  }
+}
+
 export async function publishCallRoomDataEvents(
   record: CallLinkRecord,
   events: CallRoomDataEvent[],
