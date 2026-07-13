@@ -31,7 +31,9 @@ describe("call web guest script", () => {
     expect(script).toContain("support@example.cn");
     expect(script).toContain("/call-links/");
     expect(script).toContain("shouldAttachAudioTrack");
-    expect(script).toContain("distanceFromPageBottom");
+    expect(script).toContain("distanceFromTimelineBottom");
+    expect(script).toContain('document.querySelector(".bottom")?.offsetHeight');
+    expect(script).toContain('behavior: "auto"');
     expect(script).toContain("AudioContext");
     expect(script).toContain("系统浏览器");
     expect(script).toContain("copyCallLink");

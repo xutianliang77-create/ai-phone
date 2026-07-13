@@ -98,7 +98,7 @@ export function renderCallGuestScript() {
 
   function renderCaption(caption) {
     const timeline = $("timeline");
-    const shouldFollow = state.followLatest || distanceFromPageBottom() <= 120;
+    const shouldFollow = state.followLatest || distanceFromTimelineBottom() <= 120;
     if (timeline.firstElementChild?.className === "subtle") timeline.textContent = "";
     let item = Array.from(timeline.children).find((child) => child.dataset.segmentId === caption.segmentId);
     if (!item) {
@@ -118,10 +118,10 @@ export function renderCallGuestScript() {
     else updateLatestButton();
   }
 
-  function distanceFromPageBottom() {
-    const root = document.documentElement;
-    const height = Math.max(root.scrollHeight, document.body.scrollHeight);
-    return height - window.innerHeight - window.scrollY;
+  function distanceFromTimelineBottom() {
+    const timelineBottom = $("timeline").getBoundingClientRect().bottom;
+    const controlsHeight = document.querySelector(".bottom")?.offsetHeight || 0;
+    return timelineBottom - (window.innerHeight - controlsHeight - 12);
   }
 
   function updateLatestButton() {
@@ -129,14 +129,17 @@ export function renderCallGuestScript() {
   }
 
   function updateFollowLatestFromScroll() {
-    state.followLatest = distanceFromPageBottom() <= 120;
+    state.followLatest = distanceFromTimelineBottom() <= 120;
     updateLatestButton();
   }
 
   function scrollToLatest() {
     state.followLatest = true;
     updateLatestButton();
-    $("timeline").lastElementChild?.scrollIntoView({ block: "end", behavior: "smooth" });
+    const controlsHeight = document.querySelector(".bottom")?.offsetHeight || 0;
+    const timelineBottom = $("timeline").getBoundingClientRect().bottom;
+    const target = window.scrollY + timelineBottom - window.innerHeight + controlsHeight + 12;
+    window.scrollTo({ top: Math.max(0, target), behavior: "auto" });
   }
 
   function workerStatusMessage(event) {
