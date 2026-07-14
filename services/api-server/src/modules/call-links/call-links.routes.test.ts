@@ -177,14 +177,16 @@ describe("call link routes", () => {
     const callId = created.json().callId as string;
     ageSession(callId, 8_000);
     const before = await app.inject({ method: "GET", url: "/usage/balance" });
-    const ended = await app.inject({
-      method: "POST",
-      url: `/call-links/${callId}/end`,
-    });
-    const repeated = await app.inject({
-      method: "POST",
-      url: `/call-links/${callId}/end`,
-    });
+    const [ended, repeated] = await Promise.all([
+      app.inject({
+        method: "POST",
+        url: `/call-links/${callId}/end`,
+      }),
+      app.inject({
+        method: "POST",
+        url: `/call-links/${callId}/end`,
+      }),
+    ]);
     const after = await app.inject({ method: "GET", url: "/usage/balance" });
     const ledger = await app.inject({ method: "GET", url: "/billing/ledger" });
     const fetched = await app.inject({
@@ -219,7 +221,30 @@ describe("call link routes", () => {
       idempotencyKey: `settle:${callId}`,
       note: "call_link_usage",
     });
-    expect(workerRuntime.stoppedCallIds).toEqual([callId, callId]);
+    expect(workerRuntime.stoppedCallIds).toEqual([callId]);
+    expect(getStoreSnapshot().outboxEvents.filter(
+      (event) => event.sessionId === callId && event.eventType === "call_room.data"
+    )).toHaveLength(1);
+  });
+
+  it("rejects an end request bound to a different call id", async () => {
+    const app = await buildApp();
+    const created = await app.inject({ method: "POST", url: "/call-links" });
+    const callId = created.json().callId as string;
+    const response = await app.inject({
+      method: "POST",
+      url: `/call-links/${callId}/end`,
+      payload: { callId: "another-call" },
+    });
+    const fetched = await app.inject({
+      method: "GET",
+      url: `/call-links/${callId}`,
+    });
+    await app.close();
+
+    expect(response.statusCode).toBe(409);
+    expect(response.json().error.code).toBe("call_link_binding_conflict");
+    expect(fetched.json().status).toBe("created");
   });
 });
 
@@ -293,6 +318,8 @@ function resetStore() {
   store.appleServerNotifications = [];
   store.appErrorReports = [];
   store.voiceProfiles = [];
+  store.inboxEvents = [];
+  store.outboxEvents = [];
 }
 
 function ageSession(sessionId: string, ageMs: number) {

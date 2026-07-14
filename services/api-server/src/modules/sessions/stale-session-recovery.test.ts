@@ -100,6 +100,47 @@ describe("stale realtime session recovery", () => {
     expect(store.billingLedger).toHaveLength(0);
   });
 
+  it("ends active call legs when recovering a stale call link", async () => {
+    const store = getStoreSnapshot();
+    store.sessions.push({
+      id: "stale-call",
+      userId: "guest-user",
+      mode: "call_link",
+      status: "active",
+      consumedSeconds: 0,
+      createdAt: "2026-07-12T00:00:00.000Z",
+      segments: [],
+      callLink: {
+        roomName: "call_stale-call",
+        roomProvider: "livekit",
+        joinUrl: "https://call.example.cn/join/stale-call",
+        hostUrl: "https://call.example.cn/host/stale-call",
+        expiresAt: "2026-07-12T01:00:00.000Z",
+      },
+      callLegs: [{
+        id: "stale-call:guest:one",
+        participantIdentity: "stale-call:guest:one",
+        participantRole: "guest",
+        joinType: "web",
+        status: "active",
+        joinedAt: "2026-07-12T00:00:01.000Z",
+      }],
+    });
+
+    await recoverStaleRealtimeSessions({
+      now: new Date("2026-07-12T02:00:00.000Z"),
+      graceSeconds: 300,
+    });
+
+    expect(store.sessions[0]).toMatchObject({
+      status: "ended",
+      callLegs: [{
+        status: "ended",
+        endedAt: "2026-07-12T02:00:00.000Z",
+      }],
+    });
+  });
+
   it("runs periodically instead of only during server startup", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-07-12T01:00:00.000Z"));

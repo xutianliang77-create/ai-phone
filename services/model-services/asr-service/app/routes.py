@@ -3,6 +3,7 @@ from hmac import compare_digest
 from fastapi import APIRouter, Header, HTTPException, Response, status
 
 from app.config import AsrConfig
+from app.audio_buffer import FrameVadDecision
 from app.schemas import (
     AsrBoundaryRequest,
     AsrFlushRequest,
@@ -48,12 +49,18 @@ def create_router(service: AsrService, config: AsrConfig) -> APIRouter:
     @router.post("/asr/transcribe", status_code=status.HTTP_200_OK)
     async def transcribe(
         request: AsrTranscribeRequest,
+        response: Response,
         authorization: str | None = Header(default=None),
     ):
         require_api_key(config, authorization)
         transcript = await service.transcribe(request)
+        headers = frame_vad_headers(service.frame_vad_decision(request.sessionId))
         if transcript is None:
-            return Response(status_code=status.HTTP_204_NO_CONTENT)
+            return Response(
+                status_code=status.HTTP_204_NO_CONTENT,
+                headers=headers,
+            )
+        response.headers.update(headers)
         return transcript
 
     @router.post("/asr/sessions/{session_id}/flush", status_code=status.HTTP_200_OK)
@@ -105,3 +112,22 @@ def require_api_key(config: AsrConfig, authorization: str | None) -> None:
         raise HTTPException(status_code=401, detail="Invalid ASR service auth scheme")
     if not compare_digest(authorization[len(prefix):], config.api_key):
         raise HTTPException(status_code=403, detail="Invalid ASR service API key")
+
+
+def frame_vad_headers(decision: FrameVadDecision | None) -> dict[str, str]:
+    if decision is None:
+        return {}
+    headers = {
+        "x-asr-vad-voiced": "true" if decision.voiced else "false",
+        "x-asr-vad-provider": decision.provider,
+        "x-asr-vad-sequence": str(decision.sequence),
+        "x-asr-vad-timestamp-ms": str(decision.timestamp_ms),
+        "x-asr-vad-duration-ms": str(decision.duration_ms),
+        "x-asr-vad-preroll-ms": str(decision.preroll_ms),
+        "x-asr-vad-fallback": (
+            "true" if decision.provider == "rms_fallback" else "false"
+        ),
+    }
+    if decision.speech_probability is not None:
+        headers["x-asr-vad-probability"] = str(decision.speech_probability)
+    return headers

@@ -39,6 +39,15 @@ describe("call room worker publisher", () => {
       callId: record.callId,
       roomName: record.roomName,
     });
+    createSession({
+      id: record.sessionId,
+      userId: "user_1",
+      mode: "call_link",
+      status: "active",
+      consumedSeconds: 0,
+      createdAt: record.createdAt,
+      segments: [],
+    });
 
     setCallRoomDataPublisherForTests({
       async ensureRoom(roomName) {
@@ -166,6 +175,8 @@ function resetStore() {
   store.billingLedger = [];
   store.appleServerNotifications = [];
   store.appErrorReports = [];
+  store.inboxEvents = [];
+  store.outboxEvents = [];
 }
 
 function fakeCallLinkRecord(callId: string): CallLinkRecord {
@@ -178,6 +189,7 @@ function fakeCallLinkRecord(callId: string): CallLinkRecord {
     joinUrl: `https://call.example.cn/join/${callId}`,
     hostUrl: `https://call.example.cn/host/${callId}`,
     status: "created",
+    version: 1,
     mode: "call_link",
     createdAt: now,
     expiresAt: now,

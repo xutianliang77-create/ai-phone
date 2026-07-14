@@ -8,7 +8,11 @@ import type {
   StartAiCallingAgentCallRequest,
   UpdateAiCallingAgentCallStatusRequest,
 } from "@translation/contracts";
-import { getStoreSnapshot, persistStoreSnapshot } from "../../infrastructure/storage/json-store.js";
+import {
+  getStoreSnapshot,
+  persistStoreSnapshot,
+  runStoreTransaction,
+} from "../../infrastructure/storage/json-store.js";
 import {
   consumeSeconds,
   createUsageHold,
@@ -18,6 +22,17 @@ import {
 import { AGENT_CALL_MINIMUM_START_SECONDS } from "./agent-call-usage-readiness.js";
 import { classifyAgentCallRisk } from "./agent-call-risk.js";
 import type { AgentCallRecord } from "./agent-call-record.js";
+import { evaluateAgentCallStartPolicy } from "./agent-call-gray-policy.js";
+import {
+  cleanText,
+  defaultScript,
+  isPreAuthorizationCancellable,
+  isScenario,
+  isStartedStatus,
+  isTerminalWorkerStatus,
+  isWorkerStatus,
+  normalizedSeconds,
+} from "./agent-call-repository-helpers.js";
 
 export function createAgentCallDraft(
   userId: string,
@@ -120,6 +135,9 @@ export function authorizeAgentCallDraft(
   }
   draft.status = "authorized";
   draft.consentPromptVersion = cleanText(request.consentPromptVersion, 80);
+  draft.recipientDisclosureConfirmed = request.recipientDisclosureConfirmed === true;
+  draft.disclosurePromptVersion = cleanText(request.disclosurePromptVersion, 80) ||
+    undefined;
   draft.authorizedAt = new Date().toISOString();
   draft.updatedAt = draft.authorizedAt;
   persistStoreSnapshot();
@@ -166,11 +184,29 @@ export function startAgentCallDraft(
   draftId: string,
   request: StartAiCallingAgentCallRequest,
 ) {
+  return runStoreTransaction(() => startAgentCallDraftTransaction(userId, draftId, request));
+}
+
+function startAgentCallDraftTransaction(
+  userId: string,
+  draftId: string,
+  request: StartAiCallingAgentCallRequest,
+) {
   const draft = findAgentCallDraft(userId, draftId);
   if (!draft) return { status: "not_found" as const };
   if (isStartedStatus(draft.status)) return { status: "already_started" as const, draft };
   if (draft.status !== "authorized") return { status: "invalid_state" as const, draft };
   if (!cleanText(draft.targetPhone, 32)) return { status: "missing_target" as const, draft };
+  const policy = evaluateAgentCallStartPolicy({
+    userId,
+    targetPhone: draft.targetPhone!,
+    drafts: listAgentCallDrafts(userId),
+  });
+  if (!policy.allowed) return { status: "policy_denied" as const, draft, policy };
+  if (process.env.AGENT_CALL_GRAY_ENABLED === "true" &&
+      (!draft.recipientDisclosureConfirmed || !draft.disclosurePromptVersion)) {
+    return { status: "disclosure_required" as const, draft };
+  }
   if (cleanText(request.consentPromptVersion, 80) &&
     request.consentPromptVersion !== draft.consentPromptVersion) {
     return { status: "invalid_consent" as const, draft };
@@ -296,44 +332,4 @@ function settleUsageOnce(
     settleUsageHold(userId, sessionId, options.billableSeconds);
   }
   draft.usageSettledAt = options.settledAt;
-}
-
-function normalizedSeconds(value: unknown) {
-  return typeof value === "number" && Number.isFinite(value) && value >= 0
-    ? Math.ceil(value)
-    : null;
-}
-
-function cleanText(value: unknown, maxLength: number) {
-  return typeof value === "string" ? value.trim().slice(0, maxLength) : "";
-}
-
-function defaultScript(objective: string) {
-  return `您好，我想咨询：${objective}`;
-}
-
-function isScenario(value: string): value is CreateAiCallingAgentDraftRequest["scenario"] {
-  return value === "booking" ||
-    value === "customer_support" ||
-    value === "business_inquiry" ||
-    value === "custom";
-}
-
-function isPreAuthorizationCancellable(status: string) {
-  return status === "draft" || status === "requires_human_takeover";
-}
-
-function isStartedStatus(status: string) {
-  return status === "queued" ||
-    status === "in_progress" ||
-    status === "completed" ||
-    status === "failed";
-}
-
-function isWorkerStatus(status: string): status is UpdateAiCallingAgentCallStatusRequest["status"] {
-  return status === "in_progress" || status === "completed" || status === "failed";
-}
-
-function isTerminalWorkerStatus(status: UpdateAiCallingAgentCallStatusRequest["status"]) {
-  return status === "completed" || status === "failed";
 }

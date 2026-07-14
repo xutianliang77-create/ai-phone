@@ -5,6 +5,7 @@ import { MockAsrProvider } from "../asr/mock-asr-provider.js";
 import type { AsrProvider } from "../asr/asr-provider.js";
 import { SpeakerAwareAsrProvider } from "../asr/speaker-aware-asr-provider.js";
 import { HttpSpeakerAttributionProvider } from "../speaker/http-speaker-attribution-provider.js";
+import { ApiVoiceIdentityMatcher } from "../speaker/voice-identity-matcher.js";
 import type { RealtimeProvider } from "./realtime-provider.js";
 import { LmStudioRealtimeProvider } from "./lmstudio/lmstudio-realtime-provider.js";
 import { MockRealtimeProvider } from "./mock-realtime-provider.js";
@@ -113,6 +114,12 @@ function createAsrProvider(env: RealtimeEnv): AsrProvider {
     new HttpSpeakerAttributionProvider({
       baseUrl: env.speakerHttpBaseUrl,
       apiKey: env.speakerHttpApiKey,
+      timeoutMs: env.speakerHttpTimeoutMs,
+    }),
+    undefined,
+    new ApiVoiceIdentityMatcher({
+      apiBaseUrl: env.apiBaseUrl,
+      internalApiSecret: env.internalApiSecret,
       timeoutMs: env.speakerHttpTimeoutMs,
     }),
   );

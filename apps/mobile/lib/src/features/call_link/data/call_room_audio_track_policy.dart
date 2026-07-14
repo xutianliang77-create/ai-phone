@@ -1,17 +1,20 @@
+import 'dart:convert';
+
 const _ttsTrackPrefix = 'translation-tts-';
-const _hostRole = 'host';
-const _guestRole = 'guest';
+final _ttsTrackPattern = RegExp(
+  r'^translation-tts-(host|guest)-([1-9][0-9]*)(?:\.([A-Za-z0-9_-]+))?$',
+);
 
 String? callRoomTtsTrackTargetRole(String trackName) {
-  final parts = trackName.split('-');
-  if (parts.length != 4 ||
-      parts[0] != 'translation' ||
-      parts[1] != 'tts' ||
-      (parts[2] != _hostRole && parts[2] != _guestRole)) {
-    return null;
-  }
-  final sampleRate = int.tryParse(parts[3]);
-  return sampleRate == null || sampleRate <= 0 ? null : parts[2];
+  return _ttsTrackPattern.firstMatch(trackName)?.group(1);
+}
+
+String? callRoomTtsTrackTargetLegToken(String trackName) {
+  return _ttsTrackPattern.firstMatch(trackName)?.group(3);
+}
+
+String callRoomLegToken(String participantIdentity) {
+  return base64Url.encode(utf8.encode(participantIdentity)).replaceAll('=', '');
 }
 
 bool isCallRoomTtsTrackName(String trackName) {
@@ -22,8 +25,13 @@ bool isCallRoomTtsTrackName(String trackName) {
 bool shouldSubscribeCallRoomAudioTrack({
   required String trackName,
   required String localRole,
+  String? localParticipantIdentity,
 }) {
   final targetRole = callRoomTtsTrackTargetRole(trackName);
   if (targetRole == null) return false;
-  return targetRole == localRole;
+  if (targetRole != localRole) return false;
+  final targetLegToken = callRoomTtsTrackTargetLegToken(trackName);
+  return targetLegToken == null ||
+      (localParticipantIdentity != null &&
+          targetLegToken == callRoomLegToken(localParticipantIdentity));
 }

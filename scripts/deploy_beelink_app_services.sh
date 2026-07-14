@@ -12,6 +12,7 @@ CALL_PUBLIC_BASE_URL="${CALL_PUBLIC_BASE_URL:-https://$CALL_HTTPS_DOMAIN}"
 CALL_LIVEKIT_URL="${CALL_LIVEKIT_URL:-wss://$CALL_HTTPS_DOMAIN}"
 MODE="${1:-deploy}"
 IMAGE_TAG="${AI_PHONE_IMAGE_TAG:-$(git -C "$ROOT_DIR" rev-parse --short HEAD)}"
+CALL_FULL_DUPLEX_ENABLED="${CALL_FULL_DUPLEX_ENABLED:-false}"
 
 if [[ "$MODE" != "status" ]]; then
   npm --prefix "$ROOT_DIR" run check:source-build -- --json
@@ -154,6 +155,8 @@ SPEAKER_PROVIDER=http
 SPEAKER_HTTP_BASE_URL=http://127.0.0.1:8022
 SPEAKER_HTTP_API_KEY=$SPEAKER_SERVICE_API_KEY
 SPEAKER_HTTP_TIMEOUT_MS=2000
+VOICE_IDENTITY_HTTP_BASE_URL=http://127.0.0.1:8022
+VOICE_IDENTITY_HTTP_TIMEOUT_MS=15000
 TRANSLATION_BASE_URL=http://127.0.0.1:8003/v1
 TRANSLATION_MODEL=tencent/Hy-MT2-1.8B
 TRANSLATION_API_KEY=$TRANSLATION_SERVICE_API_KEY
@@ -182,7 +185,8 @@ REMOTE
 ssh "$REMOTE_HOST" \
   "ENV_FILE='$REMOTE_RUNTIME/server.env' \
    CALL_PUBLIC_BASE_URL='$CALL_PUBLIC_BASE_URL' \
-   CALL_LIVEKIT_URL='$CALL_LIVEKIT_URL' bash -s" <<'REMOTE'
+   CALL_LIVEKIT_URL='$CALL_LIVEKIT_URL' \
+   CALL_FULL_DUPLEX_ENABLED='$CALL_FULL_DUPLEX_ENABLED' bash -s" <<'REMOTE'
 set -euo pipefail
 set_env() {
   local key="$1" value="$2"
@@ -194,6 +198,13 @@ set_env() {
 }
 set_env PUBLIC_CALL_BASE_URL "$CALL_PUBLIC_BASE_URL"
 set_env LIVEKIT_URL "$CALL_LIVEKIT_URL"
+set_env CALL_FULL_DUPLEX_ENABLED "$CALL_FULL_DUPLEX_ENABLED"
+set_env CALL_BARGE_IN_MIN_SPEECH_MS "240"
+set_env CALL_BARGE_IN_MIN_PROBABILITY "0.5"
+set_env CALL_BARGE_IN_COOLDOWN_MS "800"
+set_env CALL_BARGE_IN_PRE_ROLL_MS "400"
+set_env VOICE_IDENTITY_HTTP_BASE_URL "http://127.0.0.1:8022"
+set_env VOICE_IDENTITY_HTTP_TIMEOUT_MS "15000"
 REMOTE
 
 ssh "$REMOTE_HOST" "set -euo pipefail
@@ -201,7 +212,46 @@ tailscale serve --bg --https=443 --set-path=/ http://127.0.0.1:3110
 tailscale serve --bg --https=443 --set-path=/rtc http://127.0.0.1:7880/rtc
 tailscale serve --bg --https=443 --set-path=/twirp http://127.0.0.1:7880/twirp"
 
+if [[ "$MODE" == "sync" ]]; then
+  echo "Synced ai phone server source to $REMOTE_HOST:$REMOTE_SOURCE"
+  exit 0
+fi
+
+remote_compose "build"
+
 if [[ "${MIGRATE_SQLITE:-false}" == "true" ]]; then
+  backup_stamp="$(date -u +%Y%m%dT%H%M%SZ)"
+  previous_driver="$(ssh "$REMOTE_HOST" \
+    "awk -F= '/^API_STORAGE_DRIVER=/{print \$2}' '$REMOTE_RUNTIME/server.env' | tail -1")"
+  remote_compose "stop gateway api"
+  migration_services_stopped=true
+  recover_migration_services() {
+    if [[ "$migration_services_stopped" == "true" ]]; then
+      remote_compose "start api gateway" || true
+    fi
+  }
+  trap recover_migration_services ERR
+  ssh "$REMOTE_HOST" \
+    "set -euo pipefail; test -s '$REMOTE_RUNTIME/data/api-store.json'; \
+     cp --reflink=auto '$REMOTE_RUNTIME/data/api-store.json' \
+       '$REMOTE_RUNTIME/data/api-store.json.backup-$backup_stamp'"
+  if [[ "$previous_driver" != "sqlite" ]]; then
+    ssh "$REMOTE_HOST" \
+      "if test -e '$REMOTE_RUNTIME/data/api-store.sqlite'; then \
+         mv '$REMOTE_RUNTIME/data/api-store.sqlite' \
+           '$REMOTE_RUNTIME/data/api-store.sqlite.pre-migration-$backup_stamp'; \
+       fi"
+    remote_compose \
+      "run --rm --no-deps api npm run storage:migrate-json -- \
+       /data/ai-phone/api-store.json /data/ai-phone/api-store.sqlite"
+  fi
+  remote_compose \
+    "run --rm --no-deps api npm run storage:check -- \
+     /data/ai-phone/api-store.sqlite"
+  remote_compose \
+    "run --rm --no-deps api npm run storage:backup -- \
+     /data/ai-phone/api-store.sqlite \
+     /data/ai-phone/api-store.sqlite.backup-$backup_stamp"
   ssh "$REMOTE_HOST" "ENV_FILE='$REMOTE_RUNTIME/server.env' bash -s" <<'REMOTE'
 set -euo pipefail
 set_env() {
@@ -217,12 +267,11 @@ set_env API_SQLITE_FILE /data/ai-phone/api-store.sqlite
 REMOTE
 fi
 
-if [[ "$MODE" == "sync" ]]; then
-  echo "Synced ai phone server source to $REMOTE_HOST:$REMOTE_SOURCE"
-  exit 0
+remote_compose "up -d --no-build --remove-orphans"
+if [[ "${MIGRATE_SQLITE:-false}" == "true" ]]; then
+  migration_services_stopped=false
+  trap - ERR
 fi
-
-remote_compose "up -d --build --remove-orphans"
 for _ in {1..60}; do
   if curl -fsS "http://$PUBLIC_HOST:3110/health" >/dev/null 2>&1 &&
      curl -fsS "http://$PUBLIC_HOST:3111/health" >/dev/null 2>&1 &&

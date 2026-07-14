@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:translation_mobile/src/features/history/data/session_history_models.dart';
 import 'package:translation_mobile/src/features/history/data/session_history_repository.dart';
@@ -13,11 +15,16 @@ void main() {
     final controller = ScanTranslationController(
       ocrProvider: const _FakeOcrProvider('你好'),
       translationProvider: translator,
-      pickImagePath: (_) async => '/tmp/menu.jpg',
+      pickImagePath: (_) async => _picked('/tmp/menu.jpg'),
       historyRepository: history,
     );
 
-    await controller.scan(ScanImageSource.gallery);
+    await controller.selectImage(ScanImageSource.gallery);
+    expect(controller.status, ScanTranslationStatus.imageSelected);
+    expect(controller.recognizedText, isEmpty);
+    await controller.recognizeSelectedImage();
+    expect(controller.status, ScanTranslationStatus.recognized);
+    await controller.translateRecognizedText();
     await controller.save();
 
     expect(controller.status, ScanTranslationStatus.saved);
@@ -35,11 +42,13 @@ void main() {
     final controller = ScanTranslationController(
       ocrProvider: const _FakeOcrProvider('未收录菜单'),
       translationProvider: _FakeTranslationProvider(),
-      pickImagePath: (_) async => '/tmp/menu.jpg',
+      pickImagePath: (_) async => _picked('/tmp/menu.jpg'),
       historyRepository: _FakeSessionHistoryRepository(),
     );
 
-    await controller.scan(ScanImageSource.camera);
+    await controller.selectImage(ScanImageSource.camera);
+    await controller.recognizeSelectedImage();
+    await controller.translateRecognizedText();
 
     expect(controller.status, ScanTranslationStatus.recognized);
     expect(controller.recognizedText, '未收录菜单');
@@ -50,15 +59,56 @@ void main() {
     final controller = ScanTranslationController(
       ocrProvider: const _FakeOcrProvider(''),
       translationProvider: _FakeTranslationProvider(),
-      pickImagePath: (_) async => '/tmp/blank.jpg',
+      pickImagePath: (_) async => _picked('/tmp/blank.jpg'),
       historyRepository: _FakeSessionHistoryRepository(),
     );
 
-    await controller.scan(ScanImageSource.gallery);
+    await controller.selectImage(ScanImageSource.gallery);
+    await controller.recognizeSelectedImage();
 
     expect(controller.status, ScanTranslationStatus.failed);
     expect(controller.message, 'scan_no_text');
   });
+
+  test('reports image picker failures without remaining busy', () async {
+    final controller = ScanTranslationController(
+      ocrProvider: const _FakeOcrProvider(''),
+      translationProvider: _FakeTranslationProvider(),
+      pickImagePath: (_) => Future<PickedScanImage?>.error(
+        StateError('photo permission denied'),
+      ),
+      historyRepository: _FakeSessionHistoryRepository(),
+    );
+
+    await controller.selectImage(ScanImageSource.gallery);
+
+    expect(controller.status, ScanTranslationStatus.failed);
+    expect(controller.message, 'scan_image_pick_failed');
+    expect(controller.isBusy, isFalse);
+  });
+
+  test('keeps OCR text when the translation provider throws', () async {
+    final controller = ScanTranslationController(
+      ocrProvider: const _FakeOcrProvider('菜单'),
+      translationProvider: _ThrowingTranslationProvider(),
+      pickImagePath: (_) async => _picked('/tmp/menu.jpg'),
+      historyRepository: _FakeSessionHistoryRepository(),
+    );
+
+    await controller.selectImage(ScanImageSource.gallery);
+    await controller.recognizeSelectedImage();
+    await controller.translateRecognizedText();
+
+    expect(controller.status, ScanTranslationStatus.recognized);
+    expect(controller.recognizedText, '菜单');
+    expect(controller.message, 'scan_translation_unavailable');
+    expect(controller.isBusy, isFalse);
+  });
+}
+
+PickedScanImage _picked(String path) {
+  return PickedScanImage(
+      path: path, previewBytes: Uint8List.fromList(<int>[1]));
 }
 
 class _FakeSessionHistoryRepository extends SessionHistoryRepository {
@@ -118,7 +168,21 @@ class _FakeOcrProvider implements MobileOcrProvider {
 
   @override
   Future<MobileOcrResult?> recognizeImage(String imagePath) async {
-    return MobileOcrResult(text: text, provider: 'fake');
+    return MobileOcrResult(
+      text: text,
+      provider: 'fake',
+      blocks: text.isEmpty
+          ? const <MobileOcrBlock>[]
+          : <MobileOcrBlock>[
+              MobileOcrBlock(
+                text: text,
+                left: 0.1,
+                top: 0.2,
+                width: 0.5,
+                height: 0.2,
+              ),
+            ],
+    );
   }
 }
 
@@ -140,5 +204,18 @@ class _FakeTranslationProvider implements MobileTranslationProvider {
       return const MobileTranslationResult(text: 'Hello', provider: 'fake');
     }
     return null;
+  }
+}
+
+class _ThrowingTranslationProvider implements MobileTranslationProvider {
+  @override
+  Future<void> dispose() async {}
+
+  @override
+  Future<MobileTranslationResult?> translate(
+    String text,
+    MobileTranslationConfig config,
+  ) {
+    throw StateError('translation provider offline');
   }
 }

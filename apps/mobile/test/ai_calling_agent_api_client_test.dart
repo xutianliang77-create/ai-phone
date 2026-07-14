@@ -62,6 +62,8 @@ void main() {
     final draft = await client.authorizeDraft(
       draftId: 'draft_1',
       consentPromptVersion: 'domestic-ai-agent-consent-v1',
+      recipientDisclosureConfirmed: true,
+      disclosurePromptVersion: 'domestic-ai-agent-disclosure-v1',
     );
 
     expect(draft.requiresHumanTakeover, isTrue);

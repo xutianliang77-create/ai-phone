@@ -11,6 +11,11 @@ import type {
 } from "./types.js";
 
 export class FonosterPstnProvider implements PstnProvider {
+  readonly playbackCapabilities = {
+    bidirectionalMedia: false,
+    streamingWrite: false,
+    clearPlayback: false,
+  } as const;
   private readonly callRoutes = new Map<string, {
     providerCallId?: string;
     mediaStreamId?: string;
@@ -60,9 +65,13 @@ export class FonosterPstnProvider implements PstnProvider {
     const result = normalizeAudioResult(body);
     const mediaWrite = await this.mediaWriter.write({
       callId: request.callId,
+      sessionId: request.sessionId,
       providerCallId,
       mediaStreamId,
       segmentId: request.segmentId,
+      playbackId: request.playbackId,
+      generation: request.generation,
+      targetLegId: request.targetLegId,
       targetSpeakerRole: request.targetSpeakerRole,
       language: request.language,
       telephonyAudio,

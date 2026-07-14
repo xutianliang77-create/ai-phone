@@ -30,6 +30,10 @@ describe("call web guest script", () => {
     expect(script).toContain("tts.ready");
     expect(script).toContain("support@example.cn");
     expect(script).toContain("/call-links/");
+    expect(script).toContain("/room-connected");
+    expect(script).toContain("await confirmRoomConnection(token)");
+    expect(script).toContain("已进入房间，等待发起方加入");
+    expect(script).toContain('link.status === "active"');
     expect(script).toContain("shouldAttachAudioTrack");
     expect(script).toContain("if (!targetRole) return false;");
     expect(script).toContain("distanceFromTimelineBottom");
@@ -42,5 +46,9 @@ describe("call web guest script", () => {
     expect(script).toContain("event.speakerRole === state.localRole");
     expect(script).toContain("setMicrophoneEnabled(false)");
     expect(script).toContain("setMicrophoneEnabled(true)");
+    expect(script).toContain("token.fullDuplexEnabled === true");
+    expect(script).toContain("state.fullDuplexEnabled && !state.duplexDegraded");
+    expect(script).toContain('event.type === "pipeline.degraded"');
+    expect(script).toContain("echoCancellation: true");
   });
 });

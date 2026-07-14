@@ -29,6 +29,10 @@ const _remoteAsrUploadMode = String.fromEnvironment(
   'REMOTE_ASR_UPLOAD_MODE',
   defaultValue: 'whole_clip',
 );
+const _coreMlNemotronModelChunkMs = int.fromEnvironment(
+  'COREML_NEMOTRON_MODEL_CHUNK_MS',
+  defaultValue: 2240,
+);
 
 void main() {
   runApp(const ModelTesterApp());
@@ -160,23 +164,24 @@ class _TestHomePageState extends State<TestHomePage> {
       'timestampMs': DateTime.now().millisecondsSinceEpoch,
     });
     try {
-      final response = await _native.invokeMapMethod<String, Object?>(
-        'startSpeech',
-        <String, Object?>{
-          'sessionId': _runId,
-          'localeId': _localeId,
-          'language': _localeId,
-          'sourceLanguage': sourceLanguage,
-          'targetLanguage': targetLanguage,
-          'providerId': _selectedProvider.id,
-          'modelId': _selectedProvider.modelId,
-          'remoteAsrEndpoint': _remoteAsrEndpoint,
-          'remoteAsrFlushEndpoint': _remoteAsrFlushEndpoint,
-          'remoteAsrApiKey': _remoteAsrApiKey,
-          'remoteAsrUploadMode': _remoteAsrUploadMode,
-          'chunkDurationMs': _remoteAsrChunkMs,
-        },
-      );
+      final response = await _native
+          .invokeMapMethod<String, Object?>('startSpeech', <String, Object?>{
+            'sessionId': _runId,
+            'localeId': _localeId,
+            'language': _localeId,
+            'sourceLanguage': sourceLanguage,
+            'targetLanguage': targetLanguage,
+            'providerId': _selectedProvider.id,
+            'modelId': _selectedProvider.modelId,
+            'remoteAsrEndpoint': _remoteAsrEndpoint,
+            'remoteAsrFlushEndpoint': _remoteAsrFlushEndpoint,
+            'remoteAsrApiKey': _remoteAsrApiKey,
+            'remoteAsrUploadMode': _remoteAsrUploadMode,
+            'chunkDurationMs': _remoteAsrChunkMs,
+            'modelChunkMs': _selectedProvider.id == 'coreml_nemotron'
+                ? _coreMlNemotronModelChunkMs
+                : null,
+          });
       final started = response?['started'] == true;
       setState(() {
         _recording = started;

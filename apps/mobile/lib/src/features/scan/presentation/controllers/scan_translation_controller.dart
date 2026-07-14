@@ -10,6 +10,7 @@ enum ScanImageSource { camera, gallery }
 enum ScanTranslationStatus {
   idle,
   picking,
+  imageSelected,
   recognizing,
   recognized,
   translating,
@@ -19,7 +20,28 @@ enum ScanTranslationStatus {
   failed,
 }
 
-typedef ScanImagePicker = Future<String?> Function(ScanImageSource source);
+class PickedScanImage {
+  const PickedScanImage({
+    required this.path,
+    required this.previewBytes,
+    this.aspectRatio = 4 / 3,
+  });
+
+  final String path;
+  final Uint8List previewBytes;
+  final double aspectRatio;
+}
+
+class ScanTranslatedBlock {
+  const ScanTranslatedBlock({required this.source, required this.translation});
+
+  final MobileOcrBlock source;
+  final String translation;
+}
+
+typedef ScanImagePicker = Future<PickedScanImage?> Function(
+  ScanImageSource source,
+);
 
 class ScanTranslationController extends ChangeNotifier {
   ScanTranslationController({
@@ -39,8 +61,12 @@ class ScanTranslationController extends ChangeNotifier {
 
   ScanTranslationStatus status = ScanTranslationStatus.idle;
   String imagePath = '';
+  Uint8List? imagePreviewBytes;
+  double imageAspectRatio = 4 / 3;
   String recognizedText = '';
   String translatedText = '';
+  List<MobileOcrBlock> recognizedBlocks = const <MobileOcrBlock>[];
+  List<ScanTranslatedBlock> translatedBlocks = const <ScanTranslatedBlock>[];
   String sourceLanguage = 'auto';
   String targetLanguage = 'zh';
   String? message;
@@ -57,28 +83,54 @@ class ScanTranslationController extends ChangeNotifier {
     return recognizedText.trim().isNotEmpty || translatedText.trim().isNotEmpty;
   }
 
-  Future<void> scan(ScanImageSource source) async {
+  Future<void> selectImage(ScanImageSource source) async {
     status = ScanTranslationStatus.picking;
     message = null;
     notifyListeners();
 
-    final path = await _pickImagePath(source);
-    if (path == null || path.trim().isEmpty) {
+    PickedScanImage? image;
+    try {
+      image = await _pickImagePath(source);
+    } on Object {
+      status = ScanTranslationStatus.failed;
+      message = 'scan_image_pick_failed';
+      notifyListeners();
+      return;
+    }
+    if (image == null || image.path.trim().isEmpty) {
       status = ScanTranslationStatus.idle;
       notifyListeners();
       return;
     }
 
-    imagePath = path;
+    imagePath = image.path;
+    imagePreviewBytes = image.previewBytes;
+    imageAspectRatio = image.aspectRatio > 0 ? image.aspectRatio : 4 / 3;
     recognizedText = '';
     translatedText = '';
+    recognizedBlocks = const <MobileOcrBlock>[];
+    translatedBlocks = const <ScanTranslatedBlock>[];
     savedSessionId = null;
+    status = ScanTranslationStatus.imageSelected;
+    notifyListeners();
+  }
+
+  Future<void> recognizeSelectedImage() async {
+    final path = imagePath.trim();
+    if (path.isEmpty) {
+      status = ScanTranslationStatus.failed;
+      message = 'scan_pick_image_first';
+      notifyListeners();
+      return;
+    }
     status = ScanTranslationStatus.recognizing;
+    message = null;
     notifyListeners();
 
     try {
       final result = await _ocrProvider.recognizeImage(path);
       recognizedText = result?.text.trim() ?? '';
+      recognizedBlocks = result?.blocks ?? const <MobileOcrBlock>[];
     } on Object {
       status = ScanTranslationStatus.failed;
       message = 'scan_ocr_failed';
@@ -95,7 +147,6 @@ class ScanTranslationController extends ChangeNotifier {
 
     status = ScanTranslationStatus.recognized;
     notifyListeners();
-    await translateRecognizedText();
   }
 
   Future<void> translateRecognizedText() async {
@@ -114,15 +165,31 @@ class ScanTranslationController extends ChangeNotifier {
     message = null;
     notifyListeners();
 
-    final result = await _translationProvider.translate(
-      text,
-      MobileTranslationConfig(
-        sourceLanguage: sourceLanguage,
-        targetLanguage: targetLanguage,
-      ),
-    );
-
-    translatedText = result?.text.trim() ?? '';
+    try {
+      if (recognizedBlocks.isEmpty) {
+        translatedText = await _translateText(text, sourceLanguage);
+        translatedBlocks = const <ScanTranslatedBlock>[];
+      } else {
+        final blocks = <ScanTranslatedBlock>[];
+        for (final block in recognizedBlocks) {
+          final blockLanguage = detectTextLanguage(block.text);
+          final translation = await _translateText(block.text, blockLanguage);
+          if (translation.isNotEmpty) {
+            blocks.add(ScanTranslatedBlock(
+              source: block,
+              translation: translation,
+            ));
+          }
+        }
+        translatedBlocks = List<ScanTranslatedBlock>.unmodifiable(blocks);
+        translatedText = blocks.map((block) => block.translation).join('\n');
+      }
+    } on Object {
+      status = ScanTranslationStatus.recognized;
+      message = 'scan_translation_unavailable';
+      notifyListeners();
+      return;
+    }
     if (translatedText.isEmpty) {
       status = ScanTranslationStatus.recognized;
       message = 'scan_translation_unavailable';
@@ -130,6 +197,17 @@ class ScanTranslationController extends ChangeNotifier {
       status = ScanTranslationStatus.translated;
     }
     notifyListeners();
+  }
+
+  Future<String> _translateText(String text, String detectedLanguage) async {
+    final result = await _translationProvider.translate(
+      text,
+      MobileTranslationConfig(
+        sourceLanguage: detectedLanguage,
+        targetLanguage: detectedLanguage == 'zh' ? 'en' : 'zh',
+      ),
+    );
+    return result?.text.trim() ?? '';
   }
 
   Future<void> save() async {

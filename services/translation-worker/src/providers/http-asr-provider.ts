@@ -11,6 +11,7 @@ import type {
   CallAsrProvider,
   CallAudioFrame,
   CallAudioSpeakerRole,
+  CallVadDecisionSink,
   TranscriptSegment,
 } from "../worker/types.js";
 
@@ -37,12 +38,17 @@ interface AsrResponse {
 
 export class HttpAsrProvider implements CallAsrProvider {
   private readonly fetchFn: typeof fetch;
+  private vadDecisionSink: CallVadDecisionSink | null = null;
 
   constructor(private readonly options: HttpAsrProviderOptions) {
     this.fetchFn = options.fetchFn ?? fetch;
   }
 
   async createCall(_callId: string) {}
+
+  setVadDecisionSink(sink: CallVadDecisionSink | null) {
+    this.vadDecisionSink = sink;
+  }
 
   async transcribe(frame: CallAudioFrame): Promise<TranscriptSegment | null> {
     const response = await this.fetchWithTimeout(this.options.endpoint, {
@@ -62,6 +68,7 @@ export class HttpAsrProvider implements CallAsrProvider {
         corrections: this.options.corrections ?? [],
       }),
     });
+    this.emitVadDecision(response, frame);
     if (response.status === 204) return null;
     if (!response.ok) throw new Error(`HTTP ASR returned HTTP ${response.status}`);
     return parseAsrResponse(await response.json() as AsrResponse, `asr_${frame.sequence}`);
@@ -88,6 +95,36 @@ export class HttpAsrProvider implements CallAsrProvider {
   }
 
   async closeCall(_callId: string) {}
+
+  private emitVadDecision(response: Response, frame: CallAudioFrame) {
+    const headers = response.headers as Headers | undefined;
+    const voiced = parseBooleanHeader(headers?.get("x-asr-vad-voiced"));
+    const provider = headers?.get("x-asr-vad-provider")?.trim();
+    const sequence = parseIntegerHeader(headers?.get("x-asr-vad-sequence"));
+    if (voiced === undefined || !provider || sequence !== frame.sequence) return;
+    const probability = parseRatioHeader(headers?.get("x-asr-vad-probability"));
+    const timestampMs = parseIntegerHeader(
+      headers?.get("x-asr-vad-timestamp-ms"),
+    ) ?? frame.timestampMs;
+    const durationMs = parseIntegerHeader(
+      headers?.get("x-asr-vad-duration-ms"),
+    ) ?? frameDurationMs(frame);
+    const preRollMs = parseIntegerHeader(
+      headers?.get("x-asr-vad-preroll-ms"),
+    ) ?? 0;
+    this.vadDecisionSink?.({
+      callId: frame.sessionId,
+      speakerRole: frame.speakerRole,
+      sequence,
+      timestampMs,
+      durationMs,
+      voiced,
+      ...(probability === undefined ? {} : { probability }),
+      provider,
+      fallback: parseBooleanHeader(headers?.get("x-asr-vad-fallback")) === true,
+      preRollMs,
+    });
+  }
 
   private async fetchWithTimeout(url: string, init: RequestInit) {
     const controller = new AbortController();
@@ -153,4 +190,29 @@ function normalizeConfidence(value: number | null | undefined) {
 function isAsrEndpointReason(value: unknown): value is AsrEndpointReason {
   return value === "silence" || value === "max_duration" || value === "flush" ||
     value === "speaker_boundary";
+}
+
+function parseBooleanHeader(value: string | null | undefined) {
+  if (value === "true") return true;
+  if (value === "false") return false;
+  return undefined;
+}
+
+function parseIntegerHeader(value: string | null | undefined) {
+  if (!value) return undefined;
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed >= 0 ? parsed : undefined;
+}
+
+function parseRatioHeader(value: string | null | undefined) {
+  if (!value) return undefined;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed >= 0 && parsed <= 1
+    ? parsed
+    : undefined;
+}
+
+function frameDurationMs(frame: CallAudioFrame) {
+  const byteLength = Buffer.from(frame.data, "base64").byteLength;
+  return Math.max(0, Math.round(byteLength * 1000 / (frame.sampleRate * 2)));
 }

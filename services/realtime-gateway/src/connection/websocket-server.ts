@@ -98,6 +98,7 @@ export function startWebSocketServer() {
       const speakerAttribution = resolveSpeakerAttribution(session.claims);
       await provider.createSession({
         sessionId: session.id,
+        userId: session.userId,
         asrEndpointMode: session.claims.asrEndpointMode ??
           endpointModeForRealtimeMode(session.claims.mode),
         sourceLanguage: session.claims.sourceLanguage,

@@ -11,6 +11,7 @@ import type {
 
 export interface RealtimeProviderSession {
   sessionId: string;
+  userId?: string;
   asrEndpointMode?: AsrEndpointMode;
   sourceLanguage: LanguageCode;
   targetLanguage: TranslationLanguageCode;

@@ -16,6 +16,8 @@ test = [
   "soxr>=0.5",
 ]
 sortformer = ["numpy>=1.26", "soxr>=0.5", "torch>=2.3"]
+voice-identity = ["cryptography>=42", "numpy>=1.26", "torch>=2.3"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["."]

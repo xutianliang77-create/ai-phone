@@ -79,10 +79,40 @@ export function buildSessionQualityReport(
       overlapSegments: segments.filter((segment) => segment.timing?.overlap).length,
     },
     providers: providerSummary(segments),
+    ...playbackSummary(session),
     flags: [],
   };
   report.flags = qualityFlags(report);
   return report;
+}
+
+function playbackSummary(session: SessionRecord) {
+  const playbacks = session.playbacks ?? [];
+  if (playbacks.length === 0) return {};
+  const stopLatencies = playbacks
+    .map((playback) => playback.bargeIn?.stopLatencyMs)
+    .filter((value): value is number =>
+      typeof value === "number" && Number.isFinite(value) && value >= 0
+    )
+    .sort((left, right) => left - right);
+  const latency = latencySummary(stopLatencies);
+  return {
+    playback: {
+      total: playbacks.length,
+      completed: playbacks.filter((item) => item.status === "completed").length,
+      interrupted: playbacks.filter((item) => item.status === "interrupted").length,
+      failed: playbacks.filter((item) => item.status === "failed").length,
+      bargeInInterruptions: playbacks.filter((item) =>
+        item.interruptReason === "barge_in"
+      ).length,
+    },
+    bargeIn: {
+      sampleCount: latency.sampleCount,
+      averageStopLatencyMs: latency.averageMs,
+      p95StopLatencyMs: latency.p95Ms,
+      maxStopLatencyMs: latency.maxMs,
+    },
+  };
 }
 
 function hasSourceText(segment: SessionSegmentDto) {
@@ -173,5 +203,9 @@ function qualityFlags(report: SessionQualityReportResponse) {
   if (report.speakers.unknownSegments > 0) flags.push("unknown_speaker");
   if (report.latency.p95Ms > 2500) flags.push("high_translation_latency");
   if ((report.endpoints.max_duration ?? 0) > 0) flags.push("max_duration_endpoint");
+  if ((report.playback?.failed ?? 0) > 0) flags.push("playback_failed");
+  if ((report.bargeIn?.p95StopLatencyMs ?? 0) > 300) {
+    flags.push("slow_barge_in_stop");
+  }
   return flags;
 }

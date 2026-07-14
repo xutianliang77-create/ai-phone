@@ -24,6 +24,7 @@ void main() {
             'joinUrl': 'https://call.example.cn/join/call_1',
             'hostUrl': 'https://call.example.cn/host/call_1',
             'status': 'created',
+            'activeGuestCount': 1,
             'expiresAt': '2026-07-02T12:00:00.000Z',
           }),
           200,
@@ -40,6 +41,7 @@ void main() {
     expect(link.roomProvider, 'livekit');
     expect(link.joinUrl, 'https://call.example.cn/join/call_1');
     expect(link.status, 'created');
+    expect(link.activeGuestCount, 1);
   });
 
   test('creates host room tokens from API', () async {
@@ -58,8 +60,10 @@ void main() {
             'provider': 'livekit',
             'roomName': 'call_call_1',
             'wsUrl': 'wss://livekit.example.cn',
+            'participantIdentity': 'call_1:host:test',
             'participantRole': 'host',
             'token': 'secret-room-token',
+            'fullDuplexEnabled': true,
             'expiresAt': '2026-07-02T13:00:00.000Z',
           }),
           200,
@@ -74,6 +78,39 @@ void main() {
     expect(token.roomName, 'call_call_1');
     expect(token.token, 'secret-room-token');
     expect(token.wsUrl, 'wss://livekit.example.cn');
+    expect(token.fullDuplexEnabled, isTrue);
+  });
+
+  test('confirms LiveKit connection with the issued participant token',
+      () async {
+    final client = CallLinkApiClient(
+      baseUrl: Uri.parse('http://127.0.0.1:3100'),
+      accountSessionStore: _sessionStore(),
+      client: MockClient((request) async {
+        expect(request.method, 'POST');
+        expect(request.url.path, '/call-links/call_1/room-connected');
+        expect(request.headers['authorization'], 'Bearer test-token');
+        final body = jsonDecode(request.body) as Map<String, Object?>;
+        expect(body, {
+          'participantIdentity': 'call_1:host:test',
+          'participantRole': 'host',
+          'token': 'secret-room-token',
+        });
+        return http.Response('{}', 200);
+      }),
+    );
+    final token = CallRoomToken(
+      callId: 'call_1',
+      provider: 'livekit',
+      roomName: 'call_call_1',
+      wsUrl: 'wss://livekit.example.cn',
+      participantIdentity: 'call_1:host:test',
+      participantRole: 'host',
+      token: 'secret-room-token',
+      expiresAt: DateTime.utc(2026, 7, 2, 13),
+    );
+
+    await client.confirmRoomConnected(token);
   });
 
   test('ends call links from API', () async {

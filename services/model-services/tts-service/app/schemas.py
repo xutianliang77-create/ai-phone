@@ -44,6 +44,7 @@ class TtsVoiceConfig(BaseModel):
     referenceAudioId: str | None = Field(default=None, pattern=VOICE_ID_PATTERN)
     referenceTranscript: str | None = Field(default=None, min_length=1, max_length=1000)
     controlPrompt: str | None = Field(default=None, min_length=1, max_length=240)
+    quality: Literal["standard", "hifi"] = "standard"
 
     @model_validator(mode="after")
     def validate_voice_mode(self) -> "TtsVoiceConfig":

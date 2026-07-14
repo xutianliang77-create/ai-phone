@@ -12,6 +12,7 @@ export function getAgentCallExecutionReadiness() {
     agentWorker:
       process.env.AGENT_CALL_WORKER_ENABLED === "true" ? "enabled" : "disabled",
     pstnReadiness,
+    grayMode: process.env.AGENT_CALL_GRAY_ENABLED === "true" ? "allowlist" : "open",
     issues,
   };
 }

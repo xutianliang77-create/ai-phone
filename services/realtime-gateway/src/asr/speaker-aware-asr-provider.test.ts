@@ -1,28 +1,19 @@
-import { describe, expect, it } from "vitest";
-import type { AudioFrame } from "@translation/contracts";
-import type { AsrProvider, AsrSession } from "./asr-provider.js";
+import { describe, expect, it, vi } from "vitest";
 import { SpeakerAwareAsrProvider } from "./speaker-aware-asr-provider.js";
-import type {
-  SpeakerAttributionProvider,
-  SpeakerSessionInput,
-} from "../speaker/speaker-attribution-provider.js";
-
-const frame: AudioFrame = {
-  type: "audio.frame",
-  sessionId: "sess_1",
-  sequence: 1,
-  timestampMs: 1000,
-  format: "pcm16",
-  sampleRate: 24000,
-  data: "AA==",
-};
-
-const session: AsrSession = {
-  sessionId: "sess_1",
-  sourceLanguage: "auto",
-  targetLanguage: "zh",
-  speakerAttribution: { mode: "diarization", maxSpeakers: 2 },
-};
+import {
+  BoundaryAndFlushAsrProvider,
+  BoundaryAwareAsrProvider,
+  DelayedAsrProvider,
+  EmptyBoundaryRacingAsrProvider,
+  FakeAsrProvider,
+  FakeSpeakerProvider,
+  frame,
+  OneShotSpeakerProvider,
+  RacingAsrProvider,
+  session,
+  SwitchingSpeakerProvider,
+  UpdatingSpeakerProvider,
+} from "./speaker-aware-asr-provider.test-support.js";
 
 describe("speaker aware asr provider", () => {
   it("aligns diarization spans without changing ASR text", async () => {
@@ -189,140 +180,55 @@ describe("speaker aware asr provider", () => {
       speaker: { speakerId: "speaker_2" },
     });
   });
-});
 
-class FakeAsrProvider implements AsrProvider {
-  async createSession() {}
-  async transcribe() {
-    return {
-      segmentId: "seg_1",
+  it("replaces a diarized label with an authorized voice identity", async () => {
+    const match = vi.fn().mockResolvedValue({
+      speakerId: "identity_1",
+      role: "speaker" as const,
+      source: "voice_identity" as const,
+      displayName: "张经理",
+      confidence: 0.93,
+    });
+    const provider = new SpeakerAwareAsrProvider(
+      new FakeAsrProvider(),
+      new FakeSpeakerProvider(),
+      undefined,
+      { match },
+    );
+    await provider.createSession({
+      ...session,
+      userId: "user_1",
+      speakerAttribution: {
+        mode: "diarization",
+        maxSpeakers: 2,
+        allowVoiceIdentity: true,
+      },
+    });
+    const audioFrame = {
+      ...frame,
+      data: Buffer.alloc(24000 * 2 * 2).toString("base64"),
+    };
+
+    const first = await provider.transcribe(audioFrame);
+    const second = await provider.transcribe({
+      ...audioFrame,
+      sequence: 2,
+      timestampMs: 3000,
+    });
+
+    expect(first).toMatchObject({
       text: "hello",
-      language: "en" as const,
-      timing: { startMs: 1000, endMs: 1800, source: "client" as const },
-    };
-  }
-  async flush() {
-    return null;
-  }
-  async closeSession() {}
-  async healthCheck() {
-    return true;
-  }
-}
-
-class FakeSpeakerProvider implements SpeakerAttributionProvider {
-  readonly name = "fake";
-  constructor(private readonly failStart = false) {}
-  async createSession(_input: SpeakerSessionInput) {
-    if (this.failStart) throw new Error("speaker unavailable");
-  }
-  async pushAudio() {
-    return [{ speakerId: "speaker_2", startMs: 900, endMs: 1900 }];
-  }
-  async flush() {
-    return [];
-  }
-  async closeSession() {}
-  async healthCheck() {
-    return !this.failStart;
-  }
-}
-
-class DelayedAsrProvider extends FakeAsrProvider {
-  private calls = 0;
-  override async transcribe() {
-    this.calls += 1;
-    return this.calls === 1 ? null : super.transcribe();
-  }
-}
-
-class OneShotSpeakerProvider extends FakeSpeakerProvider {
-  private calls = 0;
-  override async pushAudio() {
-    this.calls += 1;
-    return this.calls === 1
-      ? [{ speakerId: "speaker_2", startMs: 900, endMs: 1900 }]
-      : [];
-  }
-}
-
-class UpdatingSpeakerProvider extends FakeSpeakerProvider {
-  private calls = 0;
-  override async pushAudio() {
-    this.calls += 1;
-    return [{
-      speakerId: "speaker_2",
-      startMs: 900,
-      endMs: this.calls === 1 ? 1200 : 1900,
-      final: this.calls > 1,
-    }];
-  }
-}
-
-class BoundaryAwareAsrProvider extends FakeAsrProvider {
-  readonly boundaries: number[] = [];
-
-  override async transcribe() {
-    return null;
-  }
-
-  async commitBoundary(input: { sessionId: string; boundaryMs: number }) {
-    this.boundaries.push(input.boundaryMs);
-    return {
-      segmentId: "turn_1",
-      text: "first speaker turn",
-      language: "en" as const,
-      timing: { startMs: 0, endMs: input.boundaryMs, source: "client" as const },
-    };
-  }
-}
-
-class RacingAsrProvider extends BoundaryAwareAsrProvider {
-  private calls = 0;
-
-  override async transcribe() {
-    this.calls += 1;
-    if (this.calls !== 4) return null;
-    return {
-      segmentId: "regular_endpoint",
-      text: "mixed speakers",
-      language: "en" as const,
-      timing: { startMs: 0, endMs: 960, source: "client" as const },
-      endpointReason: "silence" as const,
-    };
-  }
-}
-
-class BoundaryAndFlushAsrProvider extends BoundaryAwareAsrProvider {
-  override async flush() {
-    return {
-      segmentId: "turn_2_tail",
-      text: "second speaker turn",
-      language: "en" as const,
-      timing: { startMs: 480, endMs: 960, source: "client" as const },
-    };
-  }
-}
-
-class EmptyBoundaryRacingAsrProvider extends RacingAsrProvider {
-  override async commitBoundary(input: { sessionId: string; boundaryMs: number }) {
-    this.boundaries.push(input.boundaryMs);
-    return null;
-  }
-}
-
-class SwitchingSpeakerProvider extends FakeSpeakerProvider {
-  private calls = 0;
-
-  override async pushAudio() {
-    this.calls += 1;
-    if (this.calls === 1) return [speakerSpan("speaker_1", 0, 240)];
-    if (this.calls === 2) return [speakerSpan("speaker_1", 0, 480)];
-    if (this.calls === 3) return [speakerSpan("speaker_2", 480, 720)];
-    return [speakerSpan("speaker_2", 480, 960)];
-  }
-}
-
-function speakerSpan(speakerId: string, startMs: number, endMs: number) {
-  return { speakerId, startMs, endMs, confidence: 0.9, final: false };
-}
+      speaker: {
+        speakerId: "identity_1",
+        source: "voice_identity",
+        displayName: "张经理",
+        confidence: 0.93,
+      },
+    });
+    expect(second).toMatchObject({ speaker: { speakerId: "identity_1" } });
+    expect(match).toHaveBeenCalledOnce();
+    expect(match.mock.calls[0][0].userId).toBe("user_1");
+    expect(Buffer.from(match.mock.calls[0][0].audioBase64, "base64")
+      .subarray(0, 4).toString("ascii")).toBe("RIFF");
+  });
+});

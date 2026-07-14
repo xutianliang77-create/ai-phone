@@ -217,11 +217,14 @@ describe("CallTranslationWorker", () => {
     const worker = newWorker(asr, sink, new FakeTtsProvider(), audioSink);
 
     await worker.processAudioFrame(frame("call_1", "host"));
+    await worker.endCall("call_1");
 
     expect(audioSink.played).toHaveLength(1);
     expect(audioSink.played[0]).toMatchObject({
       callId: "call_1",
       segmentId: "seg_1",
+      playbackId: "pb_seg_1_1",
+      generation: 1,
       sourceSpeakerRole: "host",
       targetSpeakerRole: "guest",
       language: "en",
@@ -254,10 +257,22 @@ describe("CallTranslationWorker", () => {
       "transcript.final",
       "translation.final",
       "tts.ready",
+      "playback.queued",
+      "playback.started",
     ]);
 
     audioSink.releasePlayback();
     await pending;
+    await worker.endCall("call_1");
+    expect(sink.eventsFor("call_1").map((event) => event.type)).toEqual([
+      "transcript.final",
+      "translation.final",
+      "tts.ready",
+      "playback.queued",
+      "playback.started",
+      "playback.ended",
+      "worker.status",
+    ]);
   });
 
   it("keeps captions when synthesized speech playback fails", async () => {
@@ -274,14 +289,21 @@ describe("CallTranslationWorker", () => {
     });
 
     await worker.processAudioFrame(frame("call_1", "guest"));
+    await worker.endCall("call_1");
 
     expect(sink.eventsFor("call_1").map((event) => event.type)).toEqual([
       "transcript.final",
       "translation.final",
       "tts.ready",
+      "playback.queued",
+      "playback.started",
+      "playback.failed",
+      "worker.status",
       "worker.status",
     ]);
-    expect(sink.eventsFor("call_1")[3]).toMatchObject({
+    expect(sink.eventsFor("call_1").find(
+      (event) => event.segmentId === "tts-playback-failed-seg_1",
+    )).toMatchObject({
       segmentId: "tts-playback-failed-seg_1",
       text: "TTS 播放失败，已继续显示字幕",
       provider: "fake-tts",

@@ -11,13 +11,23 @@ export type CallRoomDataEventType =
   | "worker.status"
   | "transcript.final"
   | "translation.final"
-  | "tts.ready";
+  | "tts.ready"
+  | "playback.queued"
+  | "playback.started"
+  | "playback.interrupted"
+  | "playback.ended"
+  | "playback.failed"
+  | "barge_in.detected"
+  | "barge_in.confirmed"
+  | "pipeline.degraded"
+  | "pipeline.restored";
 
 export type CallRoomSpeakerRole = Extract<
   SpeakerRole,
   "host" | "guest" | "worker"
 >;
 export type CallRoomTranslationLanguage = "zh" | "en";
+export type CallRoomDuplexMode = "full_duplex" | "half_duplex" | "captions_only";
 export type CallRoomWorkerStage =
   | "worker"
   | "asr"
@@ -25,10 +35,15 @@ export type CallRoomWorkerStage =
   | "tts";
 
 export interface CallRoomDataEvent {
+  eventId?: string;
   type: CallRoomDataEventType;
   callId: string;
   roomName: string;
   segmentId: string;
+  sourceLegId?: string;
+  targetLegId?: string;
+  playbackId?: string;
+  generation?: number;
   speakerRole: CallRoomSpeakerRole;
   speaker: SpeakerAttributionDto;
   sourceLanguage: CallRoomTranslationLanguage;
@@ -49,6 +64,14 @@ export interface CallRoomDataEvent {
   retryable?: boolean;
   firstAudioMs?: number;
   audioDurationMs?: number;
+  playbackReason?: string;
+  duplexMode?: CallRoomDuplexMode;
+  degradationReason?: string;
+  vadProvider?: string;
+  vadProbability?: number;
+  speechDurationMs?: number;
+  preRollMs?: number;
+  stopLatencyMs?: number;
   timestampMs: number;
 }
 

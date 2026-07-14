@@ -16,6 +16,7 @@ class TtsConfig:
     voxcpm2_model_dir: str = DEFAULT_VOXCPM2_MODEL_DIR
     voxcpm2_cfg_value: float = 2.0
     voxcpm2_inference_timesteps: int = 10
+    voxcpm2_hifi_inference_timesteps: int = 15
     voxcpm2_load_denoiser: bool = False
     voice_reference_dir: str = ""
     voice_preset_manifest_path: str = ""
@@ -30,6 +31,9 @@ def load_config() -> TtsConfig:
         voxcpm2_model_dir=os.getenv("TTS_VOXCPM2_MODEL_DIR", DEFAULT_VOXCPM2_MODEL_DIR),
         voxcpm2_cfg_value=float(os.getenv("TTS_VOXCPM2_CFG_VALUE", "2.0")),
         voxcpm2_inference_timesteps=int(os.getenv("TTS_VOXCPM2_INFERENCE_TIMESTEPS", "10")),
+        voxcpm2_hifi_inference_timesteps=int(
+            os.getenv("TTS_VOXCPM2_HIFI_INFERENCE_TIMESTEPS", "15")
+        ),
         voxcpm2_load_denoiser=env_bool("TTS_VOXCPM2_LOAD_DENOISER", False),
         voice_reference_dir=os.getenv("TTS_VOICE_REFERENCE_DIR", "").strip(),
         voice_preset_manifest_path=os.getenv("TTS_VOICE_PRESET_MANIFEST", "").strip(),

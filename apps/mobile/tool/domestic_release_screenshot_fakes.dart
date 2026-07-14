@@ -159,6 +159,7 @@ class FakeCallLinkApiClient extends CallLinkApiClient {
       provider: 'livekit',
       roomName: 'call_release',
       wsUrl: 'wss://livekit.example.cn',
+      participantIdentity: '$callId:$participantRole:screenshot',
       participantRole: participantRole,
       token: 'release-room-token',
       expiresAt: DateTime.utc(2026, 7, 4, 13),

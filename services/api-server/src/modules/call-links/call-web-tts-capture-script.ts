@@ -2,6 +2,7 @@ export function renderCallWebTtsCaptureFunctions() {
   return String.raw`
   function blockMicrophoneForTts(event) {
     if (state.captionsOnly || event.speakerRole === state.localRole || !state.room) return;
+    if (state.fullDuplexEnabled && !state.duplexDegraded) return;
     const durationMs = Number(event.audioDurationMs);
     if (!Number.isFinite(durationMs) || durationMs <= 0) return;
     const segmentId = event.segmentId || "";
@@ -42,6 +43,14 @@ export function renderCallWebTtsCaptureFunctions() {
     state.captureTimer = null;
     state.captureBlockedUntil = 0;
     state.gatedTtsSegments.clear();
+  }
+
+  function callAudioCaptureOptions() {
+    return {
+      echoCancellation: true,
+      noiseSuppression: true,
+      autoGainControl: true,
+    };
   }
 `;
 }

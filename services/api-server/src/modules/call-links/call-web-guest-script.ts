@@ -1,4 +1,8 @@
 import { renderCallWebTtsCaptureFunctions } from "./call-web-tts-capture-script.js";
+import { renderCallWebRoomConfirmationFunctions } from "./call-web-room-confirmation-script.js";
+import { renderCallWebPageActionFunctions } from "./call-web-page-actions-script.js";
+import { renderCallWebActivationFunctions } from "./call-web-activation-script.js";
+import { renderCallWebEnvironmentFunctions } from "./call-web-environment-script.js";
 
 export function renderCallGuestScript() {
   return String.raw`(() => {
@@ -7,12 +11,16 @@ export function renderCallGuestScript() {
   const state = {
     room: null,
     localRole: "guest",
+    localParticipantIdentity: "",
     captions: new Map(),
     followLatest: true,
     captionsOnly: false,
     audioUnlocked: false,
+    fullDuplexEnabled: false,
+    duplexDegraded: false,
     captureBlockedUntil: 0,
     captureTimer: null,
+    activationTimer: null,
     gatedTtsSegments: new Set(),
   };
   const $ = (id) => document.getElementById(id);
@@ -28,39 +36,8 @@ export function renderCallGuestScript() {
     $("join").disabled = Boolean(state.room) || !$("consent").checked;
   }
 
-  function detectEnvironment() {
-    const userAgent = navigator.userAgent || "";
-    const isWechat = /MicroMessenger/i.test(userAgent);
-    $("wechat-warning").classList.toggle("hidden", !isWechat);
-    renderCapabilities([
-      capability("系统浏览器", !isWechat, isWechat ? "建议在 Safari/Chrome 打开" : "当前浏览器可继续"),
-      capability("安全上下文", window.isSecureContext || location.hostname === "localhost", "麦克风需要 HTTPS 或 localhost"),
-      capability("麦克风接口", Boolean(navigator.mediaDevices?.getUserMedia), "不可用时可使用仅字幕模式"),
-      capability("LiveKit SDK", Boolean(window.LivekitClient?.Room), "通话 SDK 加载失败时无法入房"),
-      capability("音频解锁", state.audioUnlocked, "点击加入时会自动尝试解锁"),
-    ]);
-    const hints = [];
-    if (isWechat) hints.push("微信内置浏览器可能限制麦克风，请优先在系统浏览器打开");
-    if (!window.isSecureContext && location.hostname !== "localhost") {
-      hints.push("当前页面不是安全上下文，浏览器可能拒绝麦克风");
-    }
-    if (!navigator.mediaDevices?.getUserMedia) {
-      hints.push("当前浏览器未暴露麦克风接口，可使用仅字幕模式");
-    }
-    if (hints.length > 0) status(hints.join("；"), "warn");
-  }
-
-  function capability(label, ok, detail) {
-    return { label, ok, detail };
-  }
-
-  function renderCapabilities(items) {
-    $("capability-status").innerHTML = items.map((item) => {
-      const kind = item.ok ? "ready" : "warn";
-      const value = item.ok ? "可用" : "需处理";
-      return '<div class="capability ' + kind + '"><span>' + item.label + '<br><small>' + item.detail + '</small></span><strong>' + value + '</strong></div>';
-    }).join("");
-  }
+${renderCallWebActivationFunctions()}
+${renderCallWebEnvironmentFunctions()}
 
   function speakerLabel(role) {
     if (role === state.localRole) return "我";
@@ -100,6 +77,20 @@ export function renderCallGuestScript() {
     }
     state.captions.set(segmentId, caption);
     renderCaption(caption);
+  }
+
+  function handlePipelineEvent(event) {
+    if (event.type === "pipeline.degraded") {
+      state.duplexDegraded = true;
+      status("全双工抢话已降级为半双工", "warn");
+      return true;
+    }
+    if (event.type === "pipeline.restored") {
+      state.duplexDegraded = false;
+      status("全双工抢话已恢复", "ready");
+      return true;
+    }
+    return false;
   }
 
   function renderCaption(caption) {
@@ -171,24 +162,34 @@ export function renderCallGuestScript() {
   }
 
   function ttsTrackTargetRole(trackName) {
-    const match = /^translation-tts-(host|guest)-([1-9][0-9]*)$/.exec(trackName || "");
+    const match = /^translation-tts-(host|guest)-([1-9][0-9]*)(?:\.([A-Za-z0-9_-]+))?$/.exec(trackName || "");
     return match ? match[1] : null;
   }
 
+  function ttsTrackTargetLegToken(trackName) {
+    const match = /^translation-tts-(host|guest)-([1-9][0-9]*)(?:\.([A-Za-z0-9_-]+))?$/.exec(trackName || "");
+    return match ? match[3] || "" : null;
+  }
+  function legToken(identity) { return btoa(identity).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, ""); }
   function audioTrackName(track, publication) {
     return publication?.name || publication?.trackName || track?.name || "";
   }
-
   function shouldAttachAudioTrack(track, publication) {
-    const targetRole = ttsTrackTargetRole(audioTrackName(track, publication));
+    const trackName = audioTrackName(track, publication);
+    const targetRole = ttsTrackTargetRole(trackName);
     if (!targetRole) return false;
-    return targetRole === state.localRole;
+    if (targetRole !== state.localRole) return false;
+    const targetLeg = ttsTrackTargetLegToken(trackName);
+    return !targetLeg || targetLeg === legToken(state.localParticipantIdentity);
   }
 ${renderCallWebTtsCaptureFunctions()}
+${renderCallWebRoomConfirmationFunctions()}
+${renderCallWebPageActionFunctions()}
 
   function bindRoom(room) {
     const lk = window.LivekitClient;
     room.on(lk.RoomEvent.Disconnected, () => {
+      stopActivationPolling();
       resetTtsCaptureGate();
       state.room = null;
       status("通话已断开", "error");
@@ -210,6 +211,7 @@ ${renderCallWebTtsCaptureFunctions()}
     room.on(lk.RoomEvent.DataReceived, (payload) => {
       try {
         const event = JSON.parse(new TextDecoder().decode(payload));
+        if (handlePipelineEvent(event)) return;
         if (isCaptionEvent(event)) updateCaption(event);
       } catch {
         // Ignore non-caption data packets.
@@ -250,6 +252,9 @@ ${renderCallWebTtsCaptureFunctions()}
       });
       if (!tokenResponse.ok) throw new Error("通话房间暂未配置");
       const token = await tokenResponse.json();
+      state.localParticipantIdentity = token.participantIdentity || "";
+      state.fullDuplexEnabled = token.fullDuplexEnabled === true;
+      state.duplexDegraded = false;
       if (!window.LivekitClient?.Room) throw new Error("通话 SDK 未加载");
 
       if (!state.captionsOnly) {
@@ -257,7 +262,10 @@ ${renderCallWebTtsCaptureFunctions()}
           throw new Error("当前浏览器无法使用麦克风，可勾选仅字幕模式后加入");
         }
         status("正在申请麦克风权限");
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+        const stream = await navigator.mediaDevices.getUserMedia({
+          audio: callAudioCaptureOptions(),
+          video: false,
+        });
         stream.getTracks().forEach((track) => track.stop());
       }
 
@@ -265,10 +273,21 @@ ${renderCallWebTtsCaptureFunctions()}
       const room = new window.LivekitClient.Room({ adaptiveStream: true, dynacast: true });
       bindRoom(room);
       await room.connect(token.wsUrl, token.token);
-      if (!state.captionsOnly) await room.localParticipant.setMicrophoneEnabled(true);
-      state.room = room;
+      try {
+        const activation = await confirmRoomConnection(token);
+        if (!state.captionsOnly) {
+          await room.localParticipant.setMicrophoneEnabled(
+            true,
+            callAudioCaptureOptions(),
+          );
+        }
+        state.room = room;
+        showActivationState(activation);
+      } catch (error) {
+        room.disconnect();
+        throw error;
+      }
       $("leave").disabled = false;
-      status(state.captionsOnly ? "已加入房间，仅接收字幕和翻译语音" : "已加入房间，麦克风已开启", "ready");
     } catch (error) {
       status(error.message || "加入失败", "error");
       updateJoinButton();
@@ -289,38 +308,16 @@ ${renderCallWebTtsCaptureFunctions()}
   }
 
   function leave() {
+    stopActivationPolling();
     resetTtsCaptureGate();
     state.room?.disconnect();
     state.room = null;
+    state.fullDuplexEnabled = false;
+    state.duplexDegraded = false;
     $("remote-audio").textContent = "";
     $("leave").disabled = true;
     updateJoinButton();
     status("已离开通话");
-  }
-
-  function reportCall() {
-    const subject = encodeURIComponent("举报 ai phone 翻译通话");
-    const body = encodeURIComponent("Call ID: " + callId + "\n请描述问题：");
-    window.location.href = "mailto:support@example.cn?subject=" + subject + "&body=" + body;
-  }
-
-  async function copyCallLink() {
-    const link = window.location.href;
-    try {
-      if (navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText(link);
-      } else {
-        const input = document.createElement("textarea");
-        input.value = link;
-        document.body.appendChild(input);
-        input.select();
-        document.execCommand("copy");
-        input.remove();
-      }
-      $("copy-feedback").textContent = "已复制，请粘贴到系统浏览器打开。";
-    } catch {
-      $("copy-feedback").textContent = "复制失败，请长按地址栏复制链接。";
-    }
   }
 
   detectEnvironment();

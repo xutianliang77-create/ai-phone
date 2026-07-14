@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { isLiveKitTtsAudioSupported, LiveKitTtsAudioSink } from "./livekit-tts-audio-sink.js";
+import {
+  isLiveKitTtsAudioSupported,
+  LiveKitTtsAudioSink,
+  liveKitTtsTrackName,
+} from "./livekit-tts-audio-sink.js";
 
 describe("LiveKitTtsAudioSink", () => {
   it("publishes a target-role audio track and captures PCM frames", async () => {
@@ -10,6 +14,10 @@ describe("LiveKitTtsAudioSink", () => {
     await sink.play({
       callId: "call_1",
       segmentId: "seg_1",
+      playbackId: "pb_1",
+      generation: 1,
+      sourceLegId: "host-leg",
+      targetLegId: "guest-leg",
       sourceSpeakerRole: "host",
       targetSpeakerRole: "guest",
       language: "en",
@@ -22,11 +30,12 @@ describe("LiveKitTtsAudioSink", () => {
           data: pcm16([1, -1, 2, -2, 3, -3, 4, -4, 5, -5, 6, -6, 7, -7, 8, -8, 9]),
         },
       },
+      signal: new AbortController().signal,
     });
 
     expect(room.published).toMatchObject([
       {
-        track: { name: "translation-tts-guest-16000" },
+        track: { name: liveKitTtsTrackName("guest", 16000, "guest-leg") },
         options: { source: "microphone" },
       },
     ]);
@@ -46,18 +55,28 @@ describe("LiveKitTtsAudioSink", () => {
     await sink.play({
       callId: "call_1",
       segmentId: "seg_1",
+      playbackId: "pb_1",
+      generation: 1,
+      sourceLegId: "host-leg",
+      targetLegId: "guest-leg",
       sourceSpeakerRole: "host",
       targetSpeakerRole: "guest",
       language: "en",
       speech,
+      signal: new AbortController().signal,
     });
     await sink.play({
       callId: "call_1",
       segmentId: "seg_2",
+      playbackId: "pb_2",
+      generation: 2,
+      sourceLegId: "host-leg",
+      targetLegId: "guest-leg",
       sourceSpeakerRole: "host",
       targetSpeakerRole: "guest",
       language: "en",
       speech,
+      signal: new AbortController().signal,
     });
 
     expect(room.published).toHaveLength(1);
@@ -72,6 +91,10 @@ describe("LiveKitTtsAudioSink", () => {
     const first = sink.play({
       callId: "call_1",
       segmentId: "seg_1",
+      playbackId: "pb_1",
+      generation: 1,
+      sourceLegId: "host-leg",
+      targetLegId: "guest-leg",
       sourceSpeakerRole: "host",
       targetSpeakerRole: "guest",
       language: "en",
@@ -82,16 +105,22 @@ describe("LiveKitTtsAudioSink", () => {
           data: pcm16([1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 17]),
         },
       },
+      signal: new AbortController().signal,
     });
     const second = sink.play({
       callId: "call_1",
       segmentId: "seg_2",
+      playbackId: "pb_2",
+      generation: 2,
+      sourceLegId: "host-leg",
+      targetLegId: "guest-leg",
       sourceSpeakerRole: "host",
       targetSpeakerRole: "guest",
       language: "en",
       speech: {
         audio: { format: "pcm16", sampleRate: 16000, data: pcm16([101]) },
       },
+      signal: new AbortController().signal,
     });
 
     await Promise.all([first, second]);
@@ -101,6 +130,46 @@ describe("LiveKitTtsAudioSink", () => {
       17,
       101,
     ]);
+  });
+
+  it("clears only the matching target leg and rejects its late frames", async () => {
+    const rtc = createFakeRtc({ captureDelayMs: 5 });
+    const sink = new LiveKitTtsAudioSink({ room: new FakeRoom(), rtc, frameSizeMs: 1 });
+    const controller = new AbortController();
+    const playback = sink.play({
+      callId: "call_1",
+      segmentId: "seg_1",
+      playbackId: "pb_1",
+      generation: 1,
+      sourceLegId: "host-leg",
+      targetLegId: "guest-leg",
+      sourceSpeakerRole: "host",
+      targetSpeakerRole: "guest",
+      language: "en",
+      speech: {
+        audio: { format: "pcm16", sampleRate: 16000, data: pcm16(new Array(64).fill(1)) },
+      },
+      signal: controller.signal,
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 1));
+    controller.abort();
+    const interrupted = await sink.interrupt({
+      callId: "call_1",
+      playbackId: "pb_1",
+      generation: 1,
+      targetLegId: "guest-leg",
+      targetSpeakerRole: "guest",
+      reason: "barge_in",
+      idempotencyKey: "interrupt:pb_1:1",
+    });
+
+    await expect(playback).rejects.toThrow("interrupted");
+    expect(interrupted).toEqual({ cleared: true });
+    expect(rtc.sources[0].cleared).toBeGreaterThanOrEqual(1);
+    const framesAfterClear = rtc.sources[0].captured.length;
+    await new Promise((resolve) => setTimeout(resolve, 12));
+    expect(rtc.sources[0].captured).toHaveLength(framesAfterClear);
   });
 
   it("reports support only when room and rtc can publish audio", () => {
@@ -133,6 +202,7 @@ function createFakeRtc(options: { captureDelayMs?: number } = {}) {
   class FakeAudioSource {
     readonly captured: FakeAudioFrame[] = [];
     waited = 0;
+    cleared = 0;
 
     constructor(readonly sampleRate: number, readonly channels: number) {
       sources.push(this);
@@ -147,6 +217,10 @@ function createFakeRtc(options: { captureDelayMs?: number } = {}) {
 
     async waitForPlayout() {
       this.waited += 1;
+    }
+
+    clearQueue() {
+      this.cleared += 1;
     }
   }
   return {

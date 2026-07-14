@@ -1,3 +1,5 @@
+import 'dart:ui' as ui;
+
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:share_plus/share_plus.dart';
@@ -11,6 +13,7 @@ import '../../../../platform/translation/ios_system_translation_provider.dart';
 import '../../../../platform/translation/mobile_translation_provider.dart';
 import '../../../../platform/translation/phrasebook_translation_provider.dart';
 import '../controllers/scan_translation_controller.dart';
+import '../widgets/scan_image_translation_view.dart';
 
 class ScanTranslationPage extends StatefulWidget {
   const ScanTranslationPage({
@@ -74,45 +77,41 @@ class _ScanTranslationPageState extends State<ScanTranslationPage> {
                     FilledButton.icon(
                       onPressed: _controller.isBusy
                           ? null
-                          : () => _controller.scan(ScanImageSource.camera),
+                          : () =>
+                              _controller.selectImage(ScanImageSource.camera),
                       icon: const Icon(Icons.photo_camera_outlined),
                       label: Text(l10n.scanCamera),
                     ),
                     OutlinedButton.icon(
                       onPressed: _controller.isBusy
                           ? null
-                          : () => _controller.scan(ScanImageSource.gallery),
+                          : () =>
+                              _controller.selectImage(ScanImageSource.gallery),
                       icon: const Icon(Icons.photo_library_outlined),
                       label: Text(l10n.scanGallery),
-                    ),
-                    OutlinedButton.icon(
-                      onPressed: _canTranslate
-                          ? _controller.translateRecognizedText
-                          : null,
-                      icon: const Icon(Icons.translate),
-                      label: Text(l10n.translate),
-                    ),
-                    OutlinedButton.icon(
-                      onPressed:
-                          _controller.canShare ? () => _share(l10n) : null,
-                      icon: const Icon(Icons.ios_share_outlined),
-                      label: Text(l10n.export),
-                    ),
-                    OutlinedButton.icon(
-                      onPressed: _canSave ? _controller.save : null,
-                      icon: const Icon(Icons.save_outlined),
-                      label: Text(l10n.saveToHistory),
                     ),
                   ],
                 ),
                 const SizedBox(height: 16),
                 _StatusLine(controller: _controller),
                 if (_controller.imagePath.isNotEmpty) ...<Widget>[
-                  const SizedBox(height: 8),
-                  _InfoRow(
-                    label: l10n.scanImageSelected,
-                    value: _controller.imagePath.split('/').last,
+                  const SizedBox(height: 12),
+                  FilledButton.icon(
+                    onPressed: _controller.isBusy
+                        ? null
+                        : _controller.recognizeSelectedImage,
+                    icon: const Icon(Icons.document_scanner_outlined),
+                    label: Text(l10n.recognizedText),
                   ),
+                  if (_controller.imagePreviewBytes != null) ...<Widget>[
+                    const SizedBox(height: 12),
+                    ScanImageTranslationView(
+                      imageBytes: _controller.imagePreviewBytes!,
+                      aspectRatio: _controller.imageAspectRatio,
+                      translatedBlocks: _controller.translatedBlocks,
+                      translatedText: _controller.translatedText,
+                    ),
+                  ],
                 ],
                 if (_controller.message != null) ...<Widget>[
                   const SizedBox(height: 12),
@@ -121,20 +120,48 @@ class _ScanTranslationPageState extends State<ScanTranslationPage> {
                     style: TextStyle(color: _messageColor(context)),
                   ),
                 ],
-                const SizedBox(height: 20),
-                _TextSection(
-                  title: l10n.recognizedText,
-                  text: _controller.recognizedText.isEmpty
-                      ? l10n.scanPickImage
-                      : _controller.recognizedText,
-                ),
-                const SizedBox(height: 20),
-                _TextSection(
-                  title: l10n.translatedText,
-                  text: _controller.translatedText.isEmpty
-                      ? l10n.typeToSpeakNoTranslation
-                      : _controller.translatedText,
-                ),
+                if (_controller.recognizedText.isNotEmpty &&
+                    _controller.translatedText.isEmpty) ...<Widget>[
+                  const SizedBox(height: 20),
+                  _TextSection(
+                    title: l10n.recognizedText,
+                    text: _controller.recognizedText,
+                  ),
+                  const SizedBox(height: 12),
+                  FilledButton.icon(
+                    onPressed: _canTranslate
+                        ? _controller.translateRecognizedText
+                        : null,
+                    icon: const Icon(Icons.translate),
+                    label: Text(l10n.translate),
+                  ),
+                ],
+                if (_controller.translatedText.isNotEmpty) ...<Widget>[
+                  const SizedBox(height: 20),
+                  ScanTextComparisonView(
+                    sourceText: _controller.recognizedText,
+                    translatedText: _controller.translatedText,
+                    translatedBlocks: _controller.translatedBlocks,
+                  ),
+                  const SizedBox(height: 12),
+                  Wrap(
+                    spacing: 12,
+                    runSpacing: 8,
+                    children: <Widget>[
+                      OutlinedButton.icon(
+                        onPressed:
+                            _controller.canShare ? () => _share(l10n) : null,
+                        icon: const Icon(Icons.ios_share_outlined),
+                        label: Text(l10n.export),
+                      ),
+                      FilledButton.icon(
+                        onPressed: _canSave ? _controller.save : null,
+                        icon: const Icon(Icons.save_outlined),
+                        label: Text(l10n.saveToHistory),
+                      ),
+                    ],
+                  ),
+                ],
               ],
             );
           },
@@ -167,14 +194,25 @@ class _ScanTranslationPageState extends State<ScanTranslationPage> {
     );
   }
 
-  Future<String?> _pickImagePath(ScanImageSource source) async {
+  Future<PickedScanImage?> _pickImagePath(ScanImageSource source) async {
     final image = await _picker.pickImage(
       source: source == ScanImageSource.camera
           ? ImageSource.camera
           : ImageSource.gallery,
       imageQuality: 92,
     );
-    return image?.path;
+    if (image == null) return null;
+    final bytes = await image.readAsBytes();
+    final codec = await ui.instantiateImageCodec(bytes);
+    final frame = await codec.getNextFrame();
+    final aspectRatio = frame.image.width / frame.image.height;
+    frame.image.dispose();
+    codec.dispose();
+    return PickedScanImage(
+      path: image.path,
+      previewBytes: bytes,
+      aspectRatio: aspectRatio,
+    );
   }
 
   Future<void> _share(AppLocalizations l10n) async {
@@ -210,6 +248,7 @@ class _StatusLine extends StatelessWidget {
     final status = switch (controller.status) {
       ScanTranslationStatus.idle => l10n.scanPickImage,
       ScanTranslationStatus.picking => l10n.open,
+      ScanTranslationStatus.imageSelected => l10n.scanImageSelected,
       ScanTranslationStatus.recognizing => l10n.scanRecognizing,
       ScanTranslationStatus.recognized => l10n.recognizedText,
       ScanTranslationStatus.translating => l10n.translate,
@@ -246,20 +285,5 @@ class _TextSection extends StatelessWidget {
         SelectableText(text, style: Theme.of(context).textTheme.bodyLarge),
       ],
     );
-  }
-}
-
-class _InfoRow extends StatelessWidget {
-  const _InfoRow({
-    required this.label,
-    required this.value,
-  });
-
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) {
-    return Text('$label: $value');
   }
 }

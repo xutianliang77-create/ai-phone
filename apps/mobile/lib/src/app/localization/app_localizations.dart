@@ -1,6 +1,5 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
-
 import 'app_localization_texts.dart';
 
 class AppLocalizations {
@@ -11,7 +10,10 @@ class AppLocalizations {
   static const LocalizationsDelegate<AppLocalizations> delegate =
       _AppLocalizationsDelegate();
 
-  static const List<Locale> supportedLocales = <Locale>[Locale('zh'), Locale('en')];
+  static const List<Locale> supportedLocales = <Locale>[
+    Locale('zh'),
+    Locale('en')
+  ];
 
   static AppLocalizations of(BuildContext context) {
     final localizations =
@@ -318,7 +320,6 @@ class AppLocalizations {
     return message;
   }
 }
-
 extension AppLocalizationsBuildContext on BuildContext {
   AppLocalizations get l10n => AppLocalizations.of(this);
 }

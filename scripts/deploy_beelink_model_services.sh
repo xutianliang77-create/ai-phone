@@ -8,6 +8,7 @@ REMOTE_ROOT="${REMOTE_ROOT:-/data/models/translation-model-eval}"
 REMOTE_PYTHON="${REMOTE_PYTHON:-$REMOTE_ROOT/.venv/bin/python}"
 SPEAKER_REMOTE_PYTHON="${SPEAKER_REMOTE_PYTHON:-$REMOTE_ROOT/.venv-speaker/bin/python}"
 SPEAKER_SERVICE_ENABLED="${SPEAKER_SERVICE_ENABLED:-false}"
+VOICE_IDENTITY_ENABLED="${VOICE_IDENTITY_ENABLED:-false}"
 
 ASR_SERVICE_PROVIDER="${ASR_SERVICE_PROVIDER:-qwen3_asr}"
 if [ "$ASR_SERVICE_PROVIDER" = "qwen3_asr" ]; then
@@ -44,6 +45,8 @@ TTS_SERVICE_API_KEY="${TTS_SERVICE_API_KEY:-local-tts-service-api-key}"
 SPEAKER_SERVICE_API_KEY="${SPEAKER_SERVICE_API_KEY:-local-speaker-service-api-key}"
 SPEAKER_MODEL_PROVIDER="${SPEAKER_MODEL_PROVIDER:-sortformer_shadow}"
 SPEAKER_MODEL_ID="${SPEAKER_MODEL_ID:-$REMOTE_ROOT/models/sortformer/diar_streaming_sortformer_4spk-v2.1.nemo}"
+VOICE_IDENTITY_MODEL_ID="${VOICE_IDENTITY_MODEL_ID:-nvidia/speakerverification_en_titanet_large}"
+VOICE_IDENTITY_STORE_DIR="${VOICE_IDENTITY_STORE_DIR:-/data/ai-phone/speaker-identities}"
 
 ASR_QWEN3_CONTEXT="${ASR_QWEN3_CONTEXT:-}"
 ASR_QWEN3_ENGLISH_CONTEXT="${ASR_QWEN3_ENGLISH_CONTEXT:-}"
@@ -86,6 +89,7 @@ ssh "$BEELINK_HOST" \
    TTS_SERVICE_DIR='$TTS_SERVICE_DIR' \
    SPEAKER_SERVICE_DIR='$SPEAKER_SERVICE_DIR' \
    SPEAKER_SERVICE_ENABLED='$SPEAKER_SERVICE_ENABLED' \
+   VOICE_IDENTITY_ENABLED='$VOICE_IDENTITY_ENABLED' \
    ASR_SERVICE_PROVIDER='$ASR_SERVICE_PROVIDER' \
    ASR_MODEL_VERSION='$ASR_MODEL_VERSION' \
    ASR_PORT='$ASR_PORT' \
@@ -102,6 +106,8 @@ ssh "$BEELINK_HOST" \
    SPEAKER_SERVICE_API_KEY='$SPEAKER_SERVICE_API_KEY' \
    SPEAKER_MODEL_PROVIDER='$SPEAKER_MODEL_PROVIDER' \
    SPEAKER_MODEL_ID='$SPEAKER_MODEL_ID' \
+   VOICE_IDENTITY_MODEL_ID='$VOICE_IDENTITY_MODEL_ID' \
+   VOICE_IDENTITY_STORE_DIR='$VOICE_IDENTITY_STORE_DIR' \
    ASR_QWEN3_CONTEXT='$ASR_QWEN3_CONTEXT' \
    ASR_QWEN3_ENGLISH_CONTEXT='$ASR_QWEN3_ENGLISH_CONTEXT' \
    ASR_VAD_PROVIDER='$ASR_VAD_PROVIDER' \
@@ -115,6 +121,7 @@ ssh "$BEELINK_HOST" \
 set -euo pipefail
 mkdir -p "$REMOTE_ROOT/logs"
 mkdir -p "$TTS_VOICE_REFERENCE_DIR"
+mkdir -p "$VOICE_IDENTITY_STORE_DIR"
 
 start_service() {
   local name="$1"
@@ -209,6 +216,17 @@ asr_key="$(strong_secret "$ASR_SERVICE_API_KEY" "$ASR_SERVICE_DIR/.env" ASR_SERV
 translation_key="$(strong_secret "$TRANSLATION_SERVICE_API_KEY" "$TRANSLATION_SERVICE_DIR/.env" TRANSLATION_SERVICE_API_KEY)"
 tts_key="$(strong_secret "$TTS_SERVICE_API_KEY" "$TTS_SERVICE_DIR/.env" TTS_SERVICE_API_KEY)"
 speaker_key="$(strong_secret "$SPEAKER_SERVICE_API_KEY" "$SPEAKER_SERVICE_DIR/.env" SPEAKER_SERVICE_API_KEY)"
+voice_identity_key=""
+voice_identity_provider="off"
+if [ "$VOICE_IDENTITY_ENABLED" = "true" ]; then
+  voice_identity_provider="nemo_titanet"
+  voice_identity_key="$(awk -F= '/^VOICE_IDENTITY_ENCRYPTION_KEY=/{print $2}' \
+    "$SPEAKER_SERVICE_DIR/.env" 2>/dev/null | tail -1)"
+  if [ -z "$voice_identity_key" ]; then
+    voice_identity_key="$($SPEAKER_REMOTE_PYTHON -c \
+      'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())')"
+  fi
+fi
 
 if [ "$ASR_VAD_PROVIDER" = "marblenet" ]; then
   if [ ! -x "$SPEAKER_REMOTE_PYTHON" ]; then
@@ -300,6 +318,7 @@ write_env "$TTS_SERVICE_DIR/.env" \
   "TTS_VOXCPM2_MODEL_DIR=$TTS_MODEL_DIR" \
   "TTS_VOXCPM2_CFG_VALUE=2.0" \
   "TTS_VOXCPM2_INFERENCE_TIMESTEPS=10" \
+  "TTS_VOXCPM2_HIFI_INFERENCE_TIMESTEPS=15" \
   "TTS_VOXCPM2_LOAD_DENOISER=false" \
   "TTS_VOICE_REFERENCE_DIR=$TTS_VOICE_REFERENCE_DIR"
 
@@ -313,6 +332,10 @@ if [ "$SPEAKER_SERVICE_ENABLED" = "true" ]; then
     echo "Pinned speaker model is missing: $SPEAKER_MODEL_ID" >&2
     exit 1
   fi
+  if [ "$VOICE_IDENTITY_ENABLED" = "true" ]; then
+    "$SPEAKER_REMOTE_PYTHON" -c \
+      "from cryptography.fernet import Fernet; Fernet('$voice_identity_key'.encode())"
+  fi
   write_env "$SPEAKER_SERVICE_DIR/.env" \
     "SPEAKER_MODEL_PROVIDER=$SPEAKER_MODEL_PROVIDER" \
     "SPEAKER_MODEL_ID=$SPEAKER_MODEL_ID" \
@@ -324,7 +347,11 @@ if [ "$SPEAKER_SERVICE_ENABLED" = "true" ]; then
     "SPEAKER_CACHE_UPDATE_PERIOD=144" \
     "SPEAKER_CACHE_LEN=188" \
     "SPEAKER_ONSET=0.5" \
-    "SPEAKER_OFFSET=0.5"
+    "SPEAKER_OFFSET=0.5" \
+    "VOICE_IDENTITY_PROVIDER=$voice_identity_provider" \
+    "VOICE_IDENTITY_MODEL_ID=$VOICE_IDENTITY_MODEL_ID" \
+    "VOICE_IDENTITY_STORE_DIR=$VOICE_IDENTITY_STORE_DIR" \
+    "VOICE_IDENTITY_ENCRYPTION_KEY=$voice_identity_key"
 fi
 
 start_service asr-service "$ASR_SERVICE_DIR" "$ASR_PORT"

@@ -23,6 +23,7 @@ export interface LiveKitTtsRoom {
 
 interface LiveKitAudioSource {
   captureFrame(frame: unknown): Promise<void>;
+  clearQueue?: () => void;
   waitForPlayout?: () => Promise<void>;
 }
 
@@ -32,8 +33,14 @@ interface PublishedAudioTrack {
 }
 
 export class LiveKitTtsAudioSink implements CallTtsAudioSink {
+  readonly capabilities = {
+    bidirectionalMedia: true,
+    streamingWrite: true,
+    clearPlayback: true,
+  } as const;
   private readonly tracks = new Map<string, Promise<PublishedAudioTrack>>();
   private readonly playQueues = new Map<string, Promise<void>>();
+  private readonly generations = new Map<string, number>();
 
   constructor(private readonly options: {
     room: LiveKitTtsRoom;
@@ -43,7 +50,7 @@ export class LiveKitTtsAudioSink implements CallTtsAudioSink {
 
   async play(input: Parameters<CallTtsAudioSink["play"]>[0]) {
     if (!input.speech.audio) throw new Error("LiveKit TTS sink requires PCM audio");
-    const key = trackKey(input.targetSpeakerRole, input.speech.audio.sampleRate);
+    const key = trackKey(input.targetLegId, input.speech.audio.sampleRate);
     const previous = this.playQueues.get(key) ?? Promise.resolve();
     const next = previous
       .catch(() => {})
@@ -54,44 +61,77 @@ export class LiveKitTtsAudioSink implements CallTtsAudioSink {
     } finally {
       if (this.playQueues.get(key) === next) this.playQueues.delete(key);
     }
+    return { status: "played" as const };
+  }
+
+  async interrupt(input: Parameters<NonNullable<CallTtsAudioSink["interrupt"]>>[0]) {
+    if (this.generations.get(input.targetLegId) !== input.generation) {
+      return { cleared: false };
+    }
+    const matching = [...this.tracks.entries()].filter(([key]) =>
+      key.startsWith(`${input.targetLegId}:`)
+    );
+    if (matching.length === 0) return { cleared: false };
+    const tracks = await Promise.all(matching.map(([, track]) => track));
+    if (tracks.some((track) => !track.source.clearQueue)) {
+      return { cleared: false };
+    }
+    this.generations.set(input.targetLegId, input.generation + 1);
+    for (const track of tracks) track.source.clearQueue?.();
+    return { cleared: true };
   }
 
   private async playOnTrack(input: Parameters<CallTtsAudioSink["play"]>[0]) {
     const audio = input.speech.audio;
     if (!audio) throw new Error("LiveKit TTS sink requires PCM audio");
-    const track = await this.trackFor(input.targetSpeakerRole, audio.sampleRate);
+    const latest = this.generations.get(input.targetLegId) ?? 0;
+    if (input.generation < latest) throw new Error("Stale LiveKit playback generation");
+    this.generations.set(input.targetLegId, input.generation);
+    const track = await this.trackFor(
+      input.targetSpeakerRole,
+      input.targetLegId,
+      audio.sampleRate,
+    );
     for (const chunk of chunkSamples(audio, this.options.frameSizeMs ?? 100)) {
+      assertCurrentPlayback(this.generations, input);
       await track.source.captureFrame(new this.options.rtc.AudioFrame(
         chunk,
         track.sampleRate,
         1,
         chunk.length,
       ));
+      if (input.signal.aborted ||
+        this.generations.get(input.targetLegId) !== input.generation) {
+        track.source.clearQueue?.();
+        throw new Error("LiveKit playback interrupted");
+      }
     }
     await track.source.waitForPlayout?.();
   }
 
   private async trackFor(
     targetSpeakerRole: "host" | "guest",
+    targetLegId: string,
     sampleRate: 16000 | 24000,
   ) {
-    const key = trackKey(targetSpeakerRole, sampleRate);
+    const key = trackKey(targetLegId, sampleRate);
     const existing = this.tracks.get(key);
     if (existing) return existing;
-    const created = this.publishTrack(targetSpeakerRole, sampleRate);
+    const created = this.publishTrack(targetSpeakerRole, targetLegId, sampleRate);
     this.tracks.set(key, created);
     return created;
   }
 
   private async publishTrack(
     targetSpeakerRole: "host" | "guest",
+    targetLegId: string,
     sampleRate: 16000 | 24000,
   ): Promise<PublishedAudioTrack> {
     const participant = this.options.room.localParticipant;
     if (!participant) throw new Error("LiveKit room has no local participant");
     const source = new this.options.rtc.AudioSource(sampleRate, 1);
     const track = this.options.rtc.LocalAudioTrack.createAudioTrack(
-      `translation-tts-${targetSpeakerRole}-${sampleRate}`,
+      liveKitTtsTrackName(targetSpeakerRole, sampleRate, targetLegId),
       source,
     );
     const publishOptions = new this.options.rtc.TrackPublishOptions();
@@ -101,8 +141,18 @@ export class LiveKitTtsAudioSink implements CallTtsAudioSink {
   }
 }
 
-function trackKey(targetSpeakerRole: "host" | "guest", sampleRate: 16000 | 24000) {
-  return `${targetSpeakerRole}:${sampleRate}`;
+function trackKey(targetLegId: string, sampleRate: 16000 | 24000) {
+  return `${targetLegId}:${sampleRate}`;
+}
+
+export function liveKitTtsTrackName(
+  targetSpeakerRole: "host" | "guest",
+  sampleRate: 16000 | 24000,
+  targetLegId: string,
+) {
+  return `translation-tts-${targetSpeakerRole}-${sampleRate}.${
+    Buffer.from(targetLegId).toString("base64url")
+  }`;
 }
 
 export function isLiveKitTtsAudioSupported(
@@ -140,4 +190,14 @@ function pcm16Base64ToSamples(data: string) {
     samples[index] = buffer.readInt16LE(index * 2);
   }
   return samples;
+}
+
+function assertCurrentPlayback(
+  generations: Map<string, number>,
+  input: Parameters<CallTtsAudioSink["play"]>[0],
+) {
+  if (input.signal.aborted ||
+    generations.get(input.targetLegId) !== input.generation) {
+    throw new Error("LiveKit playback interrupted");
+  }
 }

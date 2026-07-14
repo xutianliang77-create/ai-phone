@@ -98,6 +98,7 @@ void main() {
       '你好，我正在创建我的声音，用于翻译后的语音播报。',
     );
 
+    expect(find.text('试听自然声音'), findsOneWidget);
     await tester.tap(find.text('试听我的声音'));
     await tester.pumpAndSettle();
 
@@ -183,6 +184,7 @@ class _FakeVoiceProfileClient implements VoiceProfileClient {
   Future<VoiceProfileTestAudio> testMyVoice({
     String language = 'zh',
     String? text,
+    String variant = 'clone',
   }) async {
     testVoiceCalled = true;
     return const VoiceProfileTestAudio(

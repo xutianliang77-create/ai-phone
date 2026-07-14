@@ -1,7 +1,7 @@
 # ai phone 优化验收方案
 
-版本：v1.17
-日期：2026-07-12
+版本：v1.19
+日期：2026-07-14
 任务来源：`docs/ai-phone-optimization-development-tasks.md`
 
 ## 1. 验收原则
@@ -102,6 +102,21 @@
 
 TTS 回灌指标由 App playback gate/AEC 验收，不能把 VAD 对合成语音的响应直接判定为模型失败。
 
+### 通话播放与抢话
+
+| 指标 | P1 门槛 | 灰度目标 |
+| --- | ---: | ---: |
+| 抢话到目标端停播 P95 | <= 300ms | <= 220ms |
+| 首音节前置语音丢失 | <= 100ms 且不可感知 | <= 60ms |
+| 30分钟纯 TTS 回声字幕 | 0 | 0 |
+| 30分钟纯 TTS 误抢话 | 0 | 0 |
+| 双向同时说话交叉取消 | 0 | 0 |
+| cancel/restart 后旧 generation 音频 | 0帧 | 0帧 |
+| playback 事件重复或乱序导致的重复播放 | 0 | 0 |
+| AEC/sink 故障自动降级成功率 | 100% | 100% |
+
+中断延迟从服务器确认 `barge_in.detected` 到目标 playback sink 确认 stop/clear 计算；只隐藏 UI 或静音本地播放器不算通过。首音节使用抢话前 300-500ms pre-roll 的固定语料和波形对齐测量。
+
 ## 5. P1 功能验收
 
 | 验收编号 | 对应任务 | 通过标准 |
@@ -119,11 +134,19 @@ TTS 回灌指标由 App playback gate/AEC 验收，不能把 VAD 对合成语音
 | AC-SPK-007 | OPT-SPK-008 | 中文夹英文、英文夹中文、姓名、型号、抢话和重叠时，语种变化不触发硬断点；主 speaker 可翻译；overlap 和 unknown 如实显示 |
 | AC-CALL-001 | OPT-CALL-001 | Host + Guest + Worker 连续 30 分钟，字幕和译音双向可用 |
 | AC-CALL-002 | OPT-CALL-002 | 未完成 PSTN 不作为主入口，实验状态清晰 |
-| AC-SCAN-001 | OPT-SCAN-001 | 40 张图片 OCR、翻译、保存和分享流程完成 |
+| AC-CALL-003 | OPT-CALL-003 | API 重启后原 Call Link 可查询、可继续加入；call legs、参与者和历史不丢；Worker 重启后旧译音不自动重播 |
+| AC-CALL-004 | OPT-CALL-004 | `queued/started/interrupted/ended/failed` 状态合法且终态不可逆；`tts.ready` 兼容但不冒充已播放；重复和乱序事件无副作用 |
+| AC-CALL-005 | OPT-CALL-005 | host->guest 与 guest->host 同时生成和播放；取消一个 target leg 不阻塞、不清空另一 leg；旧 generation 音频0帧 |
+| AC-CALL-006 | OPT-CALL-006 | 耳机、扬声器各执行100次 TTS 中抢话；停播P95<=300ms、首音节无明显丢失；30分钟纯TTS无回声字幕和误抢话 |
+| AC-CALL-007 | OPT-CALL-007 | 注入 AEC、TTS、LiveKit sink、网络和 Worker 重启故障；会话自动降级或恢复，历史/结算正确且无残留播放 |
+| AC-SCAN-001 | OPT-SCAN-001 | 40张菜单、表格、文档和横竖屏图片完成 OCR、翻译、原图/译图切换、按坐标回贴、逐块对照、保存和分享；叠加不越界、不遮挡无关区域，无坐标时正确降级 |
 | AC-DATA-001 | OPT-DATA-001 | 并发 50 个 session 结束、退款、保存不丢数据、不重复结算 |
 | AC-DATA-002 | OPT-DATA-002 | 在线写入时生成快照并恢复 | quick_check 通过，session、ledger、对象 hash 一致 |
+| AC-DATA-004 | OPT-DATA-004 | 50个并发 session 混合执行 segment、playback、End、webhook 和 cancel；同 session 构造版本冲突 | 不跨 session/user 写入；冲突可检测；每 session 一条 settle；hold归零；inbox/outbox无重复或丢失 |
 | AC-OBS-001 | OPT-OBS-001 | session 报告包含延迟、失败、fallback 和模型指纹，敏感字段脱敏 |
 | AC-VAD-004 | OPT-VAD-004 | segment、speaker、history、review 的 speechStart/speechEnd 和 endpointReason 一致，不保存逐帧概率 |
+
+当前自动化证据（2026-07-14）：`AC-CALL-004` 已覆盖同一 target 串行且 generation 递增、相反 target 并行、合法生命周期、终态不可逆、重复批次幂等、跨绑定冲突和 End 中断收敛；`AC-CALL-005` 已覆盖数据库确认的 leg 绑定、两个 target leg 并行、精确取消单侧、LiveKit `clearQueue()`、旧 generation 迟到帧0输出、App/Web 精确 participant 订阅，以及 PSTN 无 clear 能力时409降级；`AC-CALL-006` 已覆盖 MarbleNet 连续240ms和0.5概率门禁、400ms pre-roll、乱序/间断帧拒绝、只中断当前 target leg、相反方向持续播放、排队旧 route epoch 取消和 clear 后帧数不再增长；`AC-CALL-007` 已覆盖 VAD fallback、clear 不支持/失败时降级、恢复事件、精确 barge-in generation 持久化和质量报告停止延迟。Node 全仓、ASR 54项、Flutter analyze 和281项移动端测试均通过。上述 Call 任务仍需 Beelink feature flag 灰度、iPhone+Web 真实双端、100次抢话和30分钟回声长稳后才能标记 accepted；PSTN 还必须接入支持 clear 的真实 Provider 才能验收全双工。
 
 ## 6. P2/P3 专项验收
 
@@ -133,6 +156,7 @@ TTS 回灌指标由 App playback gate/AEC 验收，不能把 VAD 对合成语音
 | AC-S2S-002 | OPT-S2S-002 | Gemini Live 固定语料的质量、延迟、成本、地区和隐私评审通过 |
 | AC-S2S-003 | OPT-S2S-003 | GPT-Live API 正式可用，Provider 合同与固定语料评测通过 |
 | AC-PSTN-001 | OPT-PSTN-001 | 真实号码完成拨号、接通、双向译音、结束、结算和失败退款 |
+| AC-PSTN-002 | OPT-PSTN-002 | Provider 启动时报告双向媒体、流式写入和 clear 能力；支持 clear 的真实8kHz电话执行100次抢话，不支持者验证半双工/纯字幕降级，禁止伪报全双工 |
 | AC-AGENT-001 | OPT-AGENT-001 | 告知、授权、禁拨、频控、人工接管和高风险拒绝全部通过 |
 | AC-VOICE-001 | OPT-VOICE-001 | 盲听自然度、清晰度、相似度达标，录音不合格可识别并重录 |
 | AC-VOICE-002 | OPT-VOICE-002 | `TODO`：App 仅展示服务端实际可用音色；普通话、英语、四川话、东北话、粤语、闽南语均能选择并在新 session 中稳定生效；连续 10 句无随机换声、提示词泄露、唱腔或拖长，未知 `presetId` 被拒绝 |
@@ -140,6 +164,13 @@ TTS 回灌指标由 App playback gate/AEC 验收，不能把 VAD 对合成语音
 | AC-ANDROID-001 | OPT-ANDROID-001 | `TODO（iOS 产品化后）`：固定语料、功耗、温升和延迟均有报告，达到门槛后才替换系统 ASR |
 | AC-VAD-005 | OPT-VAD-005 | iOS CoreML、Android ONNX 与现有端点检测使用同一语料评测；低音量、噪声、耗电、温升、包体和实时系数均有报告 |
 | AC-DATA-003 | OPT-DATA-003 | SQLite 迁移 PostgreSQL/Redis 演练 | 数量、余额、幂等键和对象引用一致，可回滚 |
+
+当前产品化自动化证据（2026-07-14）：
+
+- `AC-AGENT-001` 已覆盖灰度白名单、紧急/禁拨号码、小时频控、高风险人工接管、重复 Start 幂等，以及并发限额下仅一个请求获得预扣；真实 PSTN 沙箱告知、接管和完整结算仍待验收。
+- `AC-VOICE-001` 已覆盖 PCM16 WAV 时长、响度、削波、静音、直流偏置门禁，标准/Hi-Fi 参数路由及16/24/48k输入统一输出24k且时长不变；Beelink 真实个人声音 A/B 和 iPhone 盲听仍待验收。
+- `AC-SPK-003` 已覆盖未同意不得创建、embedding 不出现在客户端、跨账号不可见、低置信度匿名回退、注册与撤回并发、Provider 删除失败后的周期补偿；Beelink 真实注册、命中、撤回和重启后不再命中仍待验收。
+- `AC-SCAN-001` 已覆盖 iOS/Android OCR block 坐标桥接、逐块翻译顺序、图片叠加层、原图/译图切换和无坐标降级；iPhone 40张真实图片视觉验收仍待执行。
 
 说话人专项证据必须同时包含：Call Link 多参与者独立音轨、安静双人、三人和四人单麦克风、快速抢话、重叠语音、中英混说、断网重连、30分钟稳定性、会话内重命名、纪要和三种导出。模型服务不可用时 ASR/翻译仍须继续，UI 显示匿名或未知，不得误显示实名。对话和聆听不得使用固定两人假设；单麦克风超过4人时必须明确能力降级，不伪造稳定身份。
 
@@ -225,15 +256,18 @@ acceptance/<version>/
 - 所有 P0 自动化和真机验收通过。
 - 无 P0 崩溃、漏最后一句、TTS 打断 ASR、重复扣费问题。
 - 可保留 Call Link、PSTN、Agent、我的声音为实验或隐藏状态。
+- 全双工 feature flag 默认关闭，除非 AC-DATA-004、AC-CALL-003 至 007 全部通过。
 
 ### 灰度版
 
 - P0 全部通过。
 - P1 的 LLM、历史、行业词、Call Link、数据和观测全部通过。
+- VoIP 全双工仅对通过 AEC、误触发、抢话延迟、重启恢复门禁的设备组合开放；其他组合自动半双工。
 - 完成容量、成本、合规、告警和生产配置检查。
 
 ### 商业版
 
 - 灰度至少运行两周且核心 SLO 达标。
 - 支付、退款、PSTN、AI 告知、投诉举报和数据删除均有真实闭环。
+- PSTN 只有在 AC-PSTN-001/002 通过且 Provider 真实支持 clear/stop 后才能标为全双工通话；否则产品文案必须明确半双工或字幕模式。
 - 不存在开发占位备案号、测试密钥、Tailscale 测试地址或 Debug 构建素材。

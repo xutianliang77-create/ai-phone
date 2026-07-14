@@ -18,6 +18,7 @@ export function buildPstnProvider(config: PstnBridgeEnv, fetchFn: typeof fetch =
 }
 
 export class MockPstnProvider implements PstnProvider {
+  readonly playbackCapabilities = noClearPlaybackCapabilities();
   async placeCall(request: AgentCallBridgeRequest): Promise<AgentCallBridgeResult> {
     return {
       status: "in_progress",
@@ -36,6 +37,7 @@ export class MockPstnProvider implements PstnProvider {
 }
 
 export class HttpPstnProvider implements PstnProvider {
+  readonly playbackCapabilities = noClearPlaybackCapabilities();
   private readonly callRoutes = new Map<string, {
     providerCallId?: string;
     mediaStreamId?: string;
@@ -87,9 +89,13 @@ export class HttpPstnProvider implements PstnProvider {
     const result = normalizeAudioResult(body);
     const mediaWrite = await this.mediaWriter.write({
       callId: request.callId,
+      sessionId: request.sessionId,
       providerCallId,
       mediaStreamId,
       segmentId: request.segmentId,
+      playbackId: request.playbackId,
+      generation: request.generation,
+      targetLegId: request.targetLegId,
       targetSpeakerRole: request.targetSpeakerRole,
       language: request.language,
       telephonyAudio,
@@ -129,6 +135,14 @@ export class HttpPstnProvider implements PstnProvider {
       mediaStreamId: result.mediaStreamId,
     });
   }
+}
+
+function noClearPlaybackCapabilities() {
+  return {
+    bidirectionalMedia: false,
+    streamingWrite: false,
+    clearPlayback: false,
+  } as const;
 }
 
 async function readJson(response: Response) {

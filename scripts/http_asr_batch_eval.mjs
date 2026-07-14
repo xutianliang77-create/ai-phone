@@ -42,8 +42,12 @@ if (summary.total === 0 || summary.pass === 0) process.exitCode = 1;
 async function evaluateSample(sample) {
   const sessionId = `${providerSlug(providerId)}-${sample.id}-${Date.now()}`;
   const wav = prepareWav(audioPathForSample(sample));
-  const { pcm, sampleRate } = readPcm16MonoWav(wav.path);
+  let { pcm, sampleRate } = readPcm16MonoWav(wav.path);
   if (wav.temporary) rmSync(wav.path, { force: true });
+  if (sampleRate === 8000) {
+    pcm = upsamplePcm16By2(pcm);
+    sampleRate = 16000;
+  }
 
   const rows = [];
   const responses = [];
@@ -121,7 +125,7 @@ async function postJson(url, payload) {
 
 function prepareWav(path) {
   const header = readPcm16MonoWav(path, { headerOnly: true });
-  if (header.sampleRate === 16000 || header.sampleRate === 24000) {
+  if (header.sampleRate === 8000 || header.sampleRate === 16000 || header.sampleRate === 24000) {
     return { path, temporary: false };
   }
   const outPath = join(runDir, `.tmp-${Date.now()}-${Math.random().toString(16).slice(2)}.wav`);
@@ -130,7 +134,8 @@ function prepareWav(path) {
     "-i", path, "-ac", "1", "-ar", "16000", "-sample_fmt", "s16", outPath,
   ], { stdio: "pipe" });
   if (result.status !== 0) {
-    throw new Error(`ffmpeg failed for ${path}: ${result.stderr.toString()}`);
+    const detail = result.error?.message ?? result.stderr?.toString() ?? "unknown error";
+    throw new Error(`ffmpeg failed for ${path}: ${detail}`);
   }
   return { path: outPath, temporary: true };
 }
@@ -165,6 +170,17 @@ function readPcm16MonoWav(path, options = {}) {
   if (options.headerOnly) return { sampleRate: fmt.sampleRate };
   if (!data) throw new Error(`Missing wav data chunk: ${path}`);
   return { sampleRate: fmt.sampleRate, pcm: data };
+}
+
+function upsamplePcm16By2(pcm) {
+  const samples = pcm.length / 2;
+  const output = Buffer.alloc(samples * 4);
+  for (let index = 0; index < samples; index += 1) {
+    const value = pcm.readInt16LE(index * 2);
+    output.writeInt16LE(value, index * 4);
+    output.writeInt16LE(value, index * 4 + 2);
+  }
+  return output;
 }
 
 function eventRow(sample, sessionId, type, event) {

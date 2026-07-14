@@ -12,24 +12,29 @@ import {
   type CallLinkRecord,
   createCallLink,
   findCallLink,
-  markCallLinkEnded,
+  persistedCallRoomHumanPresence,
 } from "./call-links.service.js";
 import { completeSessionWithUsage } from "../sessions/session-completion.js";
-import { getReadyVoiceProfileTtsConfig } from "../voice-profiles/voice-profiles.service.js";
-import { createCallRoomToken } from "./call-room-token.js";
 import {
-  publishCallRoomDataEvents,
+  deliverPendingCallRoomDataEvents,
   publishCallRoomSmokeCaptions,
+  readCallRoomHumanPresence,
 } from "./call-room-worker.js";
-import { parseCallRoomEventRequest } from "./call-room-event-request.js";
 import { getCallLinkWorkerSupervisor } from "./call-link-worker-supervisor.js";
 import { registerCallRoomEntryRoute } from "./call-room-entry.routes.js";
+import {
+  endCallLegs,
+} from "../sessions/sessions.repository.js";
+import { withSessionWriteLock } from "../sessions/session-write-coordinator.js";
+import { runStoreTransaction } from "../../infrastructure/storage/json-store.js";
+import { registerCallLinkInternalRoutes } from "./call-link-internal.routes.js";
 
 export async function registerCallLinkRoutes(app: FastifyInstance) {
   app.addHook("onClose", async () => {
     getCallLinkWorkerSupervisor().shutdown();
   });
   registerCallRoomEntryRoute(app);
+  registerCallLinkInternalRoutes(app);
 
   app.get("/join/:callId", async (request, reply) => {
     const params = request.params as { callId: string };
@@ -79,7 +84,11 @@ export async function registerCallLinkRoutes(app: FastifyInstance) {
         "call_link_not_found",
         "Call link not found",
       );
-    return toPublicCallLink(record);
+    const livePresence = await readCallRoomHumanPresence(record);
+    return toPublicCallLink(
+      record,
+      livePresence.ok ? livePresence.presence : undefined,
+    );
   });
 
   app.post(
@@ -90,33 +99,35 @@ export async function registerCallLinkRoutes(app: FastifyInstance) {
         return sendError(reply, auth.statusCode, auth.code, auth.message);
       }
       const params = request.params as { callId: string };
-      const record = findCallLink(params.callId);
-      if (!record)
-        return sendError(
-          reply,
-          404,
-          "call_link_not_found",
-          "Call link not found",
-        );
-      if (Date.now() > Date.parse(record.expiresAt)) {
-        return sendError(reply, 410, "call_link_expired", "Call link expired");
-      }
-      const result = await publishCallRoomSmokeCaptions(record);
-      if (!result.ok) {
-        return sendError(
-          reply,
-          503,
-          "call_room_provider_not_configured",
-          "Call room provider not configured",
-        );
-      }
-      return {
-        callId: record.callId,
-        sessionId: record.sessionId,
-        roomName: result.roomName,
-        topic: result.topic,
-        publishedEvents: result.events.map((event) => event.type),
-      };
+      return withSessionWriteLock(params.callId, async () => {
+        const record = findCallLink(params.callId);
+        if (!record)
+          return sendError(
+            reply,
+            404,
+            "call_link_not_found",
+            "Call link not found",
+          );
+        if (Date.now() > Date.parse(record.expiresAt)) {
+          return sendError(reply, 410, "call_link_expired", "Call link expired");
+        }
+        const result = await publishCallRoomSmokeCaptions(record);
+        if (!result.ok) {
+          return sendError(
+            reply,
+            503,
+            "call_room_provider_not_configured",
+            "Call room provider not configured",
+          );
+        }
+        return {
+          callId: record.callId,
+          sessionId: record.sessionId,
+          roomName: result.roomName,
+          topic: result.topic,
+          publishedEvents: result.events.map((event) => event.type),
+        };
+      });
     },
   );
 
@@ -124,93 +135,7 @@ export async function registerCallLinkRoutes(app: FastifyInstance) {
     const account = requireAccount(request, reply);
     if (!account) return;
     const params = request.params as { callId: string };
-    const record = findCallLink(params.callId);
-    if (!record)
-      return sendError(
-        reply,
-        404,
-        "call_link_not_found",
-        "Call link not found",
-      );
-    if (record.userId !== account.id) return forbidden(reply);
-
-    const session = completeSessionWithUsage(record.sessionId);
-    if (!session)
-      return sendError(reply, 404, "session_not_found", "Session not found");
-    markCallLinkEnded(record.callId, session.endedAt);
-    getCallLinkWorkerSupervisor().stop(record.callId);
-    return {
-      callId: record.callId,
-      sessionId: session.id,
-      status: session.status,
-      consumedSeconds: session.consumedSeconds,
-      endedAt: session.endedAt,
-    };
-  });
-
-  app.post("/internal/call-links/:callId/events", async (request, reply) => {
-    if (!isInternalAuthorized(request.headers.authorization)) {
-      return sendError(
-        reply,
-        401,
-        "internal_error",
-        "Unauthorized internal request",
-      );
-    }
-    const params = request.params as { callId: string };
-    const record = findCallLink(params.callId);
-    if (!record)
-      return sendError(
-        reply,
-        404,
-        "call_link_not_found",
-        "Call link not found",
-      );
-    if (Date.now() > Date.parse(record.expiresAt)) {
-      return sendError(reply, 410, "call_link_expired", "Call link expired");
-    }
-
-    const parsed = parseCallRoomEventRequest(request.body, record);
-    if (!parsed.ok) return sendError(reply, 400, parsed.code, parsed.message);
-    const result = await publishCallRoomDataEvents(record, parsed.events);
-    if (!result.ok) {
-      return sendError(
-        reply,
-        503,
-        "call_room_provider_not_configured",
-        "Call room provider not configured",
-      );
-    }
-    if (
-      parsed.events.some(
-        (event) =>
-          event.type === "worker.status" &&
-          event.segmentId === "worker-started",
-      )
-    ) {
-      getCallLinkWorkerSupervisor().markReady(record.callId);
-    }
-    return {
-      callId: record.callId,
-      sessionId: record.sessionId,
-      roomName: result.roomName,
-      topic: result.topic,
-      publishedEvents: result.events.map((event) => event.type),
-    };
-  });
-
-  app.post(
-    "/internal/call-links/:callId/worker-room-token",
-    async (request, reply) => {
-      if (!isInternalAuthorized(request.headers.authorization)) {
-        return sendError(
-          reply,
-          401,
-          "internal_error",
-          "Unauthorized internal request",
-        );
-      }
-      const params = request.params as { callId: string };
+    return withSessionWriteLock(params.callId, async () => {
       const record = findCallLink(params.callId);
       if (!record)
         return sendError(
@@ -219,41 +144,38 @@ export async function registerCallLinkRoutes(app: FastifyInstance) {
           "call_link_not_found",
           "Call link not found",
         );
-      if (Date.now() > Date.parse(record.expiresAt)) {
-        return sendError(reply, 410, "call_link_expired", "Call link expired");
+      if (record.userId !== account.id) return forbidden(reply);
+      if (!matchesOptionalCallBinding(request.body, record)) {
+        return bindingConflict(reply);
       }
-      const body = (request.body ?? {}) as Partial<{ participantName: string }>;
-      const token = createCallRoomToken({
-        callId: record.callId,
-        roomName: record.roomName,
-        participantRole: "worker",
-        participantName: body.participantName ?? "translation-worker",
+
+      const wasEnded = record.status === "ended";
+      const session = runStoreTransaction(() => {
+        const completed = completeSessionWithUsage(record.sessionId);
+        if (completed?.endedAt) endCallLegs(completed.id, completed.endedAt);
+        return completed;
       });
-      if (!token.ok) {
-        return sendError(
-          reply,
-          503,
-          "call_room_provider_not_configured",
-          "Call room provider not configured",
-        );
-      }
-      const ttsVoice = getReadyVoiceProfileTtsConfig(record.userId);
+      if (!session)
+        return sendError(reply, 404, "session_not_found", "Session not found");
+      await deliverPendingCallRoomDataEvents(record);
+      if (!wasEnded) getCallLinkWorkerSupervisor().stop(record.callId);
       return {
-        ...token,
-        sessionId: record.sessionId,
-        ...(ttsVoice ? { ttsVoice } : {}),
+        callId: record.callId,
+        sessionId: session.id,
+        status: session.status,
+        version: session.version ?? 1,
+        consumedSeconds: session.consumedSeconds,
+        endedAt: session.endedAt,
       };
-    },
-  );
+    });
+  });
+
 }
 
-function isInternalAuthorized(authorization: string | undefined) {
-  const secret = process.env.INTERNAL_API_SECRET?.trim();
-  if (!secret || secret.length < 16) return false;
-  return authorization === `Bearer ${secret}`;
-}
-
-function toPublicCallLink(record: CallLinkRecord) {
+function toPublicCallLink(
+  record: CallLinkRecord,
+  presence = persistedCallRoomHumanPresence(record.callId),
+) {
   return {
     callId: record.callId,
     sessionId: record.sessionId,
@@ -262,9 +184,11 @@ function toPublicCallLink(record: CallLinkRecord) {
     joinUrl: record.joinUrl,
     hostUrl: record.hostUrl,
     status: record.status,
+    version: record.version,
     mode: record.mode,
     expiresAt: record.expiresAt,
     createdAt: record.createdAt,
+    ...presence,
     ...(record.endedAt ? { endedAt: record.endedAt } : {}),
   };
 }
@@ -275,5 +199,27 @@ function forbidden(reply: Parameters<typeof sendError>[0]) {
     403,
     "account_forbidden",
     "Account cannot access this resource",
+  );
+}
+
+function matchesOptionalCallBinding(body: unknown, record: CallLinkRecord) {
+  if (body === undefined || body === null) return true;
+  if (typeof body !== "object") return false;
+  const value = body as Record<string, unknown>;
+  return matchesOptionalString(value.callId, record.callId) &&
+    matchesOptionalString(value.sessionId, record.sessionId) &&
+    matchesOptionalString(value.roomName, record.roomName);
+}
+
+function matchesOptionalString(value: unknown, expected: string) {
+  return value === undefined || value === expected;
+}
+
+function bindingConflict(reply: Parameters<typeof sendError>[0]) {
+  return sendError(
+    reply,
+    409,
+    "call_link_binding_conflict",
+    "Request binding does not match the requested call link",
   );
 }

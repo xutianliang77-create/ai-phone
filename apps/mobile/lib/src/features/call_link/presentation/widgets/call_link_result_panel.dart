@@ -36,7 +36,10 @@ class CallLinkResultPanel extends StatelessWidget {
         const SizedBox(height: 4),
         Text('${l10n.callRoomProvider}：${link.roomProvider}'),
         const SizedBox(height: 12),
-        _CallRoomStatus(snapshot: roomSnapshot),
+        _CallRoomStatus(
+          snapshot: roomSnapshot,
+          waitingGuestCount: link.activeGuestCount,
+        ),
         if (endResult != null) ...[
           const SizedBox(height: 8),
           Text('${l10n.callRoomSaved}：${endResult!.consumedSeconds} 秒'),
@@ -68,9 +71,13 @@ class CallLinkResultPanel extends StatelessWidget {
 }
 
 class _CallRoomStatus extends StatelessWidget {
-  const _CallRoomStatus({required this.snapshot});
+  const _CallRoomStatus({
+    required this.snapshot,
+    required this.waitingGuestCount,
+  });
 
   final CallRoomSnapshot snapshot;
+  final int waitingGuestCount;
 
   @override
   Widget build(BuildContext context) {
@@ -82,7 +89,7 @@ class _CallRoomStatus extends StatelessWidget {
         const SizedBox(height: 4),
         Text(
           '${l10n.callRoomRemoteParticipants}：'
-          '${snapshot.remoteParticipantCount}',
+          '${_remoteParticipantCount()}',
         ),
         if (snapshot.message != null) ...[
           const SizedBox(height: 4),
@@ -90,6 +97,17 @@ class _CallRoomStatus extends StatelessWidget {
         ],
       ],
     );
+  }
+
+  int _remoteParticipantCount() {
+    return switch (snapshot.status) {
+      CallRoomConnectionStatus.disconnected ||
+      CallRoomConnectionStatus.connecting =>
+        waitingGuestCount,
+      CallRoomConnectionStatus.connected ||
+      CallRoomConnectionStatus.reconnecting =>
+        snapshot.remoteParticipantCount,
+    };
   }
 
   String _statusText(AppLocalizations l10n) {

@@ -1,7 +1,9 @@
 from fastapi.testclient import TestClient
 
 from app.config import AsrConfig
+from app.audio_buffer import FrameVadDecision
 from app.main import create_app
+from app.routes import frame_vad_headers
 
 
 def test_health_route() -> None:
@@ -48,6 +50,29 @@ def test_transcribe_route_returns_transcript() -> None:
     assert response.status_code == 200
     assert response.json()["text"] == "hello, this is a realtime translation test"
     assert response.json()["language"] == "en"
+
+
+def test_frame_vad_headers_preserve_marblenet_signal() -> None:
+    headers = frame_vad_headers(FrameVadDecision(
+        sequence=9,
+        timestamp_ms=1200,
+        duration_ms=100,
+        voiced=True,
+        speech_probability=0.72,
+        provider="marblenet",
+        preroll_ms=400,
+    ))
+
+    assert headers == {
+        "x-asr-vad-voiced": "true",
+        "x-asr-vad-provider": "marblenet",
+        "x-asr-vad-sequence": "9",
+        "x-asr-vad-timestamp-ms": "1200",
+        "x-asr-vad-duration-ms": "100",
+        "x-asr-vad-preroll-ms": "400",
+        "x-asr-vad-fallback": "false",
+        "x-asr-vad-probability": "0.72",
+    }
 
 
 def test_transcribe_route_accepts_hotwords_and_corrections() -> None:

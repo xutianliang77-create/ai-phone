@@ -6,7 +6,10 @@ import {
   writeFileSync,
 } from "node:fs";
 import { dirname, resolve } from "node:path";
-import { SqliteSnapshotStore } from "./sqlite-snapshot-store.js";
+import {
+  SqliteSnapshotStore,
+  StorageConflictError,
+} from "./sqlite-snapshot-store.js";
 import type { SessionRecord } from "../../modules/sessions/session-record.js";
 import type {
   AppleServerNotificationRecord,
@@ -24,6 +27,11 @@ import type {
   SmsOtpChallengeRecord,
 } from "../../modules/account/account-record.js";
 import type { VoiceProfileRecord } from "../../modules/voice-profiles/voice-profile-record.js";
+import type { VoiceIdentityRecord } from "../../modules/voice-identities/voice-identity-record.js";
+import type {
+  InboxEventRecord,
+  OutboxEventRecord,
+} from "../../modules/events/event-record.js";
 
 export interface AppStoreSnapshot {
   sessions: SessionRecord[];
@@ -43,6 +51,9 @@ export interface AppStoreSnapshot {
   termbaseTerms: TermbaseTermRecord[];
   agentCallDrafts: AgentCallRecord[];
   voiceProfiles: VoiceProfileRecord[];
+  voiceIdentities: VoiceIdentityRecord[];
+  inboxEvents: InboxEventRecord[];
+  outboxEvents: OutboxEventRecord[];
 }
 
 const defaultSnapshot: AppStoreSnapshot = {
@@ -63,6 +74,9 @@ const defaultSnapshot: AppStoreSnapshot = {
   termbaseTerms: [],
   agentCallDrafts: [],
   voiceProfiles: [],
+  voiceIdentities: [],
+  inboxEvents: [],
+  outboxEvents: [],
 };
 
 export function createEmptyStoreSnapshot() {
@@ -71,6 +85,8 @@ export function createEmptyStoreSnapshot() {
 
 let snapshot: AppStoreSnapshot | null = null;
 let sqliteStore: SqliteSnapshotStore | null = null;
+let transactionDepth = 0;
+let transactionDirty = false;
 
 export function getStoreSnapshot() {
   if (!snapshot) snapshot = readSnapshot();
@@ -78,9 +94,46 @@ export function getStoreSnapshot() {
 }
 
 export function persistStoreSnapshot() {
+  if (transactionDepth > 0) {
+    transactionDirty = true;
+    return;
+  }
+  persistStoreSnapshotNow();
+}
+
+export function runStoreTransaction<T>(operation: () => T): T {
+  if (transactionDepth > 0) return operation();
+  const before = structuredClone(getStoreSnapshot());
+  transactionDepth = 1;
+  transactionDirty = false;
+  try {
+    const result = operation();
+    if (isPromiseLike(result)) {
+      throw new Error("Store transactions must be synchronous");
+    }
+    if (transactionDirty) persistStoreSnapshotNow();
+    return result;
+  } catch (error) {
+    snapshot = storageDriver() === "sqlite" && error instanceof StorageConflictError
+      ? getSqliteStore().read()
+      : before;
+    throw error;
+  } finally {
+    transactionDepth = 0;
+    transactionDirty = false;
+  }
+}
+
+function persistStoreSnapshotNow() {
   if (!snapshot) return;
   if (storageDriver() === "sqlite") {
-    getSqliteStore().save(snapshot);
+    const store = getSqliteStore();
+    try {
+      store.save(snapshot);
+    } catch (error) {
+      snapshot = store.read();
+      throw error;
+    }
     return;
   }
   const file = dataFile();
@@ -89,6 +142,11 @@ export function persistStoreSnapshot() {
   const tmp = `${file}.tmp`;
   writeFileSync(tmp, JSON.stringify(snapshot, null, 2));
   renameSync(tmp, file);
+}
+
+function isPromiseLike(value: unknown): value is PromiseLike<unknown> {
+  return typeof value === "object" && value !== null &&
+    "then" in value && typeof value.then === "function";
 }
 
 export function getStorageStatus() {
@@ -158,6 +216,9 @@ export function normalizeStoreSnapshot(value: unknown): AppStoreSnapshot {
         ? raw.agentCallDrafts
         : [],
       voiceProfiles: Array.isArray(raw.voiceProfiles) ? raw.voiceProfiles : [],
+      voiceIdentities: Array.isArray(raw.voiceIdentities) ? raw.voiceIdentities : [],
+      inboxEvents: Array.isArray(raw.inboxEvents) ? raw.inboxEvents : [],
+      outboxEvents: Array.isArray(raw.outboxEvents) ? raw.outboxEvents : [],
   };
 }
 

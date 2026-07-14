@@ -51,7 +51,7 @@ void main() {
     expect(requestBody?['speakerAttribution'], {
       'mode': 'auto',
       'maxSpeakers': 4,
-      'allowVoiceIdentity': false,
+      'allowVoiceIdentity': true,
     });
   });
 

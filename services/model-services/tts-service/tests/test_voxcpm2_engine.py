@@ -201,6 +201,45 @@ async def test_voxcpm2_engine_resolves_reference_audio_id(tmp_path) -> None:
     assert model.kwargs["reference_wav_path"] == str(reference)
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("quality", "expected_steps"), [
+    ("standard", 10),
+    ("hifi", 18),
+])
+async def test_voxcpm2_engine_selects_quality_inference_steps(
+    tmp_path,
+    quality: str,
+    expected_steps: int,
+) -> None:
+    reference = tmp_path / "my_voice.wav"
+    reference.write_bytes(b"RIFF")
+    model = FakeVoxCpmModel()
+    engine = VoxCpm2TtsEngine(
+        model_dir=str(tmp_path),
+        cfg_value=2.0,
+        inference_timesteps=10,
+        hifi_inference_timesteps=18,
+        load_denoiser=False,
+        voice_reference_dir=str(tmp_path),
+    )
+    engine._model = model
+
+    await engine.synthesize(TtsSynthesizeRequest(
+        text="hello",
+        language="en",
+        speakerRole="guest",
+        segmentId=f"seg_{quality}",
+        voice={
+            "mode": "personal_clone",
+            "voiceProfileId": "my_voice",
+            "referenceAudioId": "my_voice",
+            "quality": quality,
+        },
+    ))
+
+    assert model.kwargs["inference_timesteps"] == expected_steps
+
+
 def test_voxcpm2_health_rates_are_read_from_model_config(tmp_path) -> None:
     (tmp_path / "config.json").write_text(json.dumps({
         "audio_vae_config": {

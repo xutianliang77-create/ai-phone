@@ -4,6 +4,7 @@ import {
 } from "@translation/contracts";
 import { detectCallLanguage, oppositeCallLanguage } from "./language.js";
 import { CallTranscriptRefiner } from "./call-transcript-refiner.js";
+import { CallInterruptionController } from "./call-interruption-controller.js";
 import { createCallTtsPlaybackQueue } from "./call-tts-playback-runtime.js";
 import type { CallTtsPlaybackQueue } from "./call-tts-playback-queue.js";
 import { KeyedAsyncQueue } from "./keyed-async-queue.js";
@@ -16,6 +17,11 @@ import { callRecognitionMetadata } from "./call-recognition-metadata.js";
 import { cleanCallTranscript } from "./transcript-text-normalizer.js";
 import { normalizeTtsText } from "./tts-text-normalizer.js";
 import { RecentTtsEchoFilter } from "./recent-tts-echo-filter.js";
+import {
+  callWorkerStatusEvent as statusEvent,
+  disabledCallDuplexConfig,
+} from "./call-worker-runtime-events.js";
+import type { CallTranslationWorkerOptions } from "./call-translation-worker-options.js";
 import type {
   CallAsrProvider,
   CallAudioFrame,
@@ -28,15 +34,6 @@ import type {
   TranscriptSegment,
   TtsVoiceConfig,
 } from "./types.js";
-export interface CallTranslationWorkerOptions {
-  asrProvider: CallAsrProvider;
-  translationProvider: CallTranslationProvider;
-  ttsProvider?: CallTtsProvider;
-  ttsAudioSink?: CallTtsAudioSink;
-  eventSink: CallRoomEventSink;
-  transcriptRefiner?: CallTranscriptRefiner;
-  nowMs?: () => number;
-}
 export class CallTranslationWorker implements CallSpeechPipeline {
   private readonly asrProvider: CallAsrProvider;
   private readonly translationProvider: CallTranslationProvider;
@@ -47,6 +44,7 @@ export class CallTranslationWorker implements CallSpeechPipeline {
   private readonly turnBuffer = new ParticipantTurnBuffer();
   private readonly processingQueue = new KeyedAsyncQueue();
   private readonly playbackQueue: CallTtsPlaybackQueue;
+  private readonly interruptionController: CallInterruptionController;
   private readonly recentTtsEchoes = new RecentTtsEchoFilter();
   private readonly publishedSegments = new Set<string>();
   private ttsVoice?: TtsVoiceConfig;
@@ -62,6 +60,15 @@ export class CallTranslationWorker implements CallSpeechPipeline {
       recentTtsEchoes: this.recentTtsEchoes,
       nowMs: this.nowMs,
     });
+    this.interruptionController = new CallInterruptionController({
+      config: options.duplexConfig ?? disabledCallDuplexConfig,
+      playbackQueue: this.playbackQueue,
+      eventSink: this.eventSink,
+      nowMs: this.nowMs,
+    });
+    this.asrProvider.setVadDecisionSink?.((decision) =>
+      this.interruptionController.observe(decision)
+    );
     if (options.ttsAudioSink) this.playbackQueue.addSink(options.ttsAudioSink);
   }
   addTtsAudioSink(sink: CallTtsAudioSink) {
@@ -71,6 +78,7 @@ export class CallTranslationWorker implements CallSpeechPipeline {
     this.ttsVoice = voice;
   }
   async startCall(callId: string) {
+    this.interruptionController.clear(callId);
     this.turnBuffer.clear(callId);
     this.transcriptRefiner?.clear(callId);
     this.recentTtsEchoes.clear(callId);
@@ -79,7 +87,7 @@ export class CallTranslationWorker implements CallSpeechPipeline {
       await this.asrProvider.createCall(callId);
     } catch (error) {
       await this.eventSink.publish(callId, [
-        this.statusEvent("asr-start-failed", "ASR 启动失败", {
+        statusEvent("asr-start-failed", "ASR 启动失败", this.nowMs(), {
           stage: "asr",
           retryable: true,
         }),
@@ -87,7 +95,7 @@ export class CallTranslationWorker implements CallSpeechPipeline {
       throw error;
     }
     await this.eventSink.publish(callId, [
-      this.statusEvent("worker-started", "通话翻译 Worker 已启动", {
+      statusEvent("worker-started", "通话翻译 Worker 已启动", this.nowMs(), {
         stage: "worker",
         retryable: false,
       }),
@@ -99,8 +107,12 @@ export class CallTranslationWorker implements CallSpeechPipeline {
     try {
       transcript = await this.asrProvider.transcribe(frame);
     } catch {
+      this.interruptionController.notifyVadUnavailable(
+        frame.sessionId,
+        frame.speakerRole,
+      );
       await this.eventSink.publish(frame.sessionId, [
-        this.statusEvent(`asr-failed-${frame.speakerRole}-${frame.sequence}`, "ASR 识别失败，已继续监听", {
+        statusEvent(`asr-failed-${frame.speakerRole}-${frame.sequence}`, "ASR 识别失败，已继续监听", this.nowMs(), {
           stage: "asr",
           retryable: true,
         }),
@@ -126,7 +138,7 @@ export class CallTranslationWorker implements CallSpeechPipeline {
       transcript = await this.asrProvider.flush(callId, speakerRole);
     } catch {
       await this.eventSink.publish(callId, [
-        this.statusEvent(`asr-flush-failed-${speakerRole}`, "ASR 尾音刷新失败，已继续结束流程", {
+        statusEvent(`asr-flush-failed-${speakerRole}`, "ASR 尾音刷新失败，已继续结束流程", this.nowMs(), {
           stage: "asr",
           retryable: true,
         }),
@@ -148,7 +160,7 @@ export class CallTranslationWorker implements CallSpeechPipeline {
     await this.asrProvider.closeCall(callId);
     await this.playbackQueue.drain(callId);
     await this.eventSink.publish(callId, [
-      this.statusEvent("worker-ended", "通话翻译 Worker 已结束", {
+      statusEvent("worker-ended", "通话翻译 Worker 已结束", this.nowMs(), {
         stage: "worker",
         retryable: false,
       }),
@@ -157,6 +169,7 @@ export class CallTranslationWorker implements CallSpeechPipeline {
     this.transcriptRefiner?.clear(callId);
     this.recentTtsEchoes.clear(callId);
     this.clearPublishedSegments(callId);
+    this.interruptionController.clear(callId);
   }
 
   private async acceptTranscript(
@@ -228,7 +241,7 @@ export class CallTranslationWorker implements CallSpeechPipeline {
     } catch {
       await this.eventSink.publish(callId, [
         transcriptEvent,
-        this.statusEvent(`translation-failed-${transcript.segmentId}`, "翻译失败，已保留原文字幕", {
+        statusEvent(`translation-failed-${transcript.segmentId}`, "翻译失败，已保留原文字幕", this.nowMs(), {
           stage: "translation",
           retryable: true,
         }),
@@ -266,7 +279,7 @@ export class CallTranslationWorker implements CallSpeechPipeline {
         ...(this.ttsVoice ? { voice: this.ttsVoice } : {}),
       }) ?? null;
     } catch {
-      events.push(this.statusEvent(`tts-synthesis-failed-${transcript.segmentId}`, "TTS 合成失败，已继续显示字幕", {
+      events.push(statusEvent(`tts-synthesis-failed-${transcript.segmentId}`, "TTS 合成失败，已继续显示字幕", this.nowMs(), {
         stage: "tts",
         retryable: true,
       }));
@@ -329,21 +342,4 @@ export class CallTranslationWorker implements CallSpeechPipeline {
     }
   }
 
-  private statusEvent(
-    segmentId: string,
-    text: string,
-    diagnostics: Pick<CallRoomSubmittedEvent, "stage" | "provider" | "model" | "retryable"> = {},
-  ): CallRoomSubmittedEvent {
-    return {
-      type: "worker.status",
-      segmentId,
-      speakerRole: "worker",
-      speaker: participantTrackSpeaker("worker"),
-      sourceLanguage: "en",
-      targetLanguage: "zh",
-      text,
-      ...diagnostics,
-      timestampMs: this.nowMs(),
-    };
-  }
 }

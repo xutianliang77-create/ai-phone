@@ -33,6 +33,11 @@ class AsrService:
         diagnostics = getattr(segmenter, "diagnostics", None)
         return diagnostics(session_id) if diagnostics else None
 
+    def frame_vad_decision(self, session_id: str):
+        segmenter = getattr(self.engine, "segmenter", None)
+        decision = getattr(segmenter, "frame_vad_decision", None)
+        return decision(session_id) if decision else None
+
     async def transcribe(
         self,
         request: AsrTranscribeRequest,

@@ -199,6 +199,7 @@ function parseVoiceConfig(value: unknown): RealtimeVoiceConfig | null | false {
   const referenceAudioId = optionalVoiceId(value.referenceAudioId);
   const referenceTranscript = optionalText(value.referenceTranscript, 1000);
   const controlPrompt = optionalText(value.controlPrompt, 240);
+  const quality = value.quality === "hifi" ? "hifi" as const : "standard" as const;
   if (
     (value.presetId !== undefined && !presetId) ||
     (value.voiceProfileId !== undefined && !voiceProfileId) ||
@@ -215,6 +216,7 @@ function parseVoiceConfig(value: unknown): RealtimeVoiceConfig | null | false {
     ...(referenceAudioId ? { referenceAudioId } : {}),
     ...(referenceTranscript ? { referenceTranscript } : {}),
     ...(controlPrompt ? { controlPrompt } : {}),
+    quality,
   };
 }
 

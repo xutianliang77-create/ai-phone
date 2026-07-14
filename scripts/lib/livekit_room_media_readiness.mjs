@@ -6,9 +6,11 @@ import {
   publishTranslationTtsTrack,
   rtcMediaReady,
   waitForDataPacket,
+  waitForCallRoomCaption,
   waitForTranslationTtsAudio,
   waitForWorkerAudio,
 } from "./livekit_room_media_probe.mjs";
+import { confirmRoomConnection } from "./livekit_room_activation_probe.mjs";
 
 export async function checkLiveKitRoomMediaReadiness(options) {
   const checks = [];
@@ -42,18 +44,12 @@ export async function checkLiveKitRoomMediaReadiness(options) {
 
     const hostToken = await createRoomToken(options, apiBaseUrl, created.callId, "host");
     const guestToken = await createRoomToken(options, apiBaseUrl, created.callId, "guest");
-    const workerToken = (await requestJson(options, `${apiBaseUrl}/internal/call-links/${encodeURIComponent(created.callId)}/worker-room-token`, {
-      method: "POST",
-      body: { participantName: options.workerName ?? "worker-media-readiness" },
-      bearerToken: options.internalApiSecret,
-    })).body;
-    const sameRoom = [hostToken, guestToken, workerToken].every(
+    const sameRoom = [hostToken, guestToken].every(
       (token) => token?.roomName === roomName,
     );
     record(checks, "room_tokens_created", sameRoom, {
       hostRole: hostToken?.participantRole,
       guestRole: guestToken?.participantRole,
-      workerRole: workerToken?.participantRole,
       roomName,
     });
     if (!sameRoom) issues.push("LiveKit room tokens do not target one room.");
@@ -65,25 +61,102 @@ export async function checkLiveKitRoomMediaReadiness(options) {
 
     const participants = createParticipantRooms(rtc);
     rooms.push(...Object.values(participants));
-    const dataReceived = waitForDataPacket(participants.guest, rtc, options);
-    const audioReceived = waitForWorkerAudio(participants.worker, rtc, options);
 
-    await Promise.all([
-      connectRoom(participants.host, hostToken),
-      connectRoom(participants.guest, guestToken),
-      connectRoom(participants.worker, workerToken),
-    ]);
+    await connectRoom(participants.guest, guestToken);
+    const guestConfirmation = (await confirmRoomConnection(
+      requestJson,
+      options,
+      apiBaseUrl,
+      created.callId,
+      guestToken,
+    )).body;
+    record(checks, "single_participant_waits", guestConfirmation?.status === "waiting", {
+      status: guestConfirmation?.status,
+      workerReady: guestConfirmation?.workerReady,
+    });
+    if (guestConfirmation?.status !== "waiting") {
+      issues.push("Call room activated before both human participants connected.");
+    }
+
+    await connectRoom(participants.host, hostToken);
+    const hostConfirmation = (await confirmRoomConnection(
+      requestJson,
+      options,
+      apiBaseUrl,
+      created.callId,
+      hostToken,
+    )).body;
+    const pairActivated = hostConfirmation?.status === "active" &&
+      hostConfirmation?.workerReady === true;
+    record(checks, "human_pair_activates_worker", pairActivated, {
+      status: hostConfirmation?.status,
+      workerReady: hostConfirmation?.workerReady,
+    });
+    if (!pairActivated) {
+      issues.push("Call room did not activate after both human participants connected.");
+    }
+
+    const workerToken = (await requestJson(options, `${apiBaseUrl}/internal/call-links/${encodeURIComponent(created.callId)}/worker-room-token`, {
+      method: "POST",
+      body: { participantName: options.workerName ?? "worker-media-readiness" },
+      bearerToken: options.internalApiSecret,
+    })).body;
+    const workerTokenMatches = workerToken?.roomName === roomName &&
+      workerToken?.participantRole === "worker";
+    record(checks, "worker_test_token_created", workerTokenMatches, {
+      workerRole: workerToken?.participantRole,
+      roomName: workerToken?.roomName,
+    });
+    if (!workerTokenMatches) issues.push("Worker test token targets the wrong room.");
+
+    await connectRoom(participants.worker, workerToken);
     record(checks, "participants_joined_room", true, {
       host: identityOf(participants.host),
       guest: identityOf(participants.guest),
       worker: identityOf(participants.worker),
     });
 
+    const dataReceived = waitForDataPacket(participants.guest, rtc, options);
     await publishDataPacket(participants.host, rtc);
     const data = await dataReceived;
     record(checks, "data_channel_received", data.ok, data.details);
     if (!data.ok) issues.push("Guest participant did not receive host data packet.");
 
+    const serverSegmentId = `server-caption-${Date.now()}`;
+    const serverCaptionReceived = waitForCallRoomCaption(
+      participants.guest,
+      rtc,
+      serverSegmentId,
+      options,
+    );
+    const serverCaption = {
+      type: "transcript.final",
+      segmentId: serverSegmentId,
+      speakerRole: "host",
+      sourceLanguage: "zh",
+      targetLanguage: "en",
+      text: "服务器字幕广播检查。",
+      sourceText: "服务器字幕广播检查。",
+      timestampMs: Date.now(),
+    };
+    if (options.submitServerCaption) {
+      await options.submitServerCaption(serverCaption);
+    } else {
+      await requestJson(
+        options,
+        `${apiBaseUrl}/internal/call-links/${encodeURIComponent(created.callId)}/events`,
+        {
+          method: "POST",
+          bearerToken: options.internalApiSecret,
+          body: { events: [serverCaption] },
+        },
+      );
+    }
+    const serverData = await serverCaptionReceived;
+    record(checks, "server_caption_data_received", serverData.ok, serverData.details);
+    if (!serverData.ok) issues.push("Guest participant did not receive API server caption.");
+
+    const audioReceived = waitForWorkerAudio(participants.worker, rtc, options);
     tracks.push(await publishGuestAudioTrack(participants.guest, rtc));
     const audio = await audioReceived;
     record(checks, "worker_audio_subscribed", audio.ok, audio.details);
@@ -101,6 +174,13 @@ export async function checkLiveKitRoomMediaReadiness(options) {
     await closeTracks(tracks);
     await disconnectRooms(rooms);
     await rtc?.dispose?.();
+    if (created?.callId) {
+      await requestJson(
+        options,
+        `${apiBaseUrl}/call-links/${encodeURIComponent(created.callId)}/end`,
+        { method: "POST" },
+      ).catch(() => undefined);
+    }
   }
 
   if (issues.length > 0) {

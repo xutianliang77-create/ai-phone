@@ -157,7 +157,13 @@ class _JoinCallLinkPageState extends State<JoinCallLinkPage> {
         _link = link;
         _guestToken = token;
       });
-      await _roomClient.connect(token);
+      try {
+        await _roomClient.connect(token);
+        await _client.confirmRoomConnected(token);
+      } catch (_) {
+        await _roomClient.disconnect();
+        rethrow;
+      }
     } catch (error) {
       if (mounted) setState(() => _error = error);
     } finally {

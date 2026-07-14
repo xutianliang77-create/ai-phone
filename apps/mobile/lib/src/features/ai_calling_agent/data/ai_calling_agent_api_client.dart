@@ -177,6 +177,8 @@ class AiCallingAgentApiClient {
   Future<AiCallingAgentDraft> authorizeDraft({
     required String draftId,
     required String consentPromptVersion,
+    required bool recipientDisclosureConfirmed,
+    required String disclosurePromptVersion,
   }) async {
     final response = await _client.post(
       _baseUrl.resolve('/ai-calling-agent/drafts/$draftId/authorize'),
@@ -184,6 +186,8 @@ class AiCallingAgentApiClient {
       body: jsonEncode({
         'userConfirmed': true,
         'consentPromptVersion': consentPromptVersion,
+        'recipientDisclosureConfirmed': recipientDisclosureConfirmed,
+        'disclosurePromptVersion': disclosurePromptVersion,
       }),
     );
     if (!_isSuccess(response) && response.statusCode != 409) {

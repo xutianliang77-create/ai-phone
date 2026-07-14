@@ -192,6 +192,30 @@ def test_segment_vad_context_contains_only_segment_fingerprints() -> None:
     assert "probabilityMean" not in context
 
 
+def test_latest_frame_vad_decision_survives_segment_emission() -> None:
+    vad = TrackingVadProvider()
+    segmenter = RealtimePcmSegmenter(
+        min_audio_ms=40,
+        endpoint_silence_ms=40,
+        max_audio_ms=80,
+        preroll_ms=40,
+        vad_energy_threshold=350,
+        vad_provider=vad,
+    )
+
+    segmenter.append(request(7, voice_pcm(), timestamp_ms=1200))
+    decision = segmenter.frame_vad_decision("sess_1")
+
+    assert decision is not None
+    assert decision.sequence == 7
+    assert decision.timestamp_ms == 1200
+    assert decision.duration_ms == 40
+    assert decision.voiced is True
+    assert decision.speech_probability == 0.9
+    assert decision.provider == "tracking"
+    assert decision.preroll_ms == 40
+
+
 def realtime_segmenter(
     min_audio_ms: int = 120,
     endpoint_silence_ms: int = 80,

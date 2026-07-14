@@ -5,6 +5,7 @@ import {
   type DomainLexiconPack,
 } from "@translation/speech-quality";
 import type {
+  CallDuplexConfig,
   SpeechPipelineMode,
   TtsVoiceConfig,
   TtsVoiceMode,
@@ -34,6 +35,7 @@ export interface TranslationWorkerEnv {
   ttsModel?: string;
   ttsVoice?: TtsVoiceConfig;
   ttsAudioSinkEndpoint?: string;
+  ttsAudioSinkInterruptEndpoint?: string;
   ttsAudioSinkApiKey?: string;
   ttsAudioSinkTimeoutMs: number;
   audioFrameSinkPort: number;
@@ -46,6 +48,7 @@ export interface TranslationWorkerEnv {
   speechPipelineMode: SpeechPipelineMode;
   domainLexiconPacks: DomainLexiconPack[];
   llmConfig: LlmConfig;
+  duplexConfig: CallDuplexConfig;
 }
 
 export function loadEnv(): TranslationWorkerEnv {
@@ -90,6 +93,7 @@ export function loadEnv(): TranslationWorkerEnv {
     ttsModel: env.TTS_MODEL,
     ttsVoice: parseTtsVoiceConfig(env),
     ttsAudioSinkEndpoint: env.TTS_AUDIO_SINK_ENDPOINT,
+    ttsAudioSinkInterruptEndpoint: env.TTS_AUDIO_SINK_INTERRUPT_ENDPOINT,
     ttsAudioSinkApiKey: env.TTS_AUDIO_SINK_API_KEY,
     ttsAudioSinkTimeoutMs: Number(env.TTS_AUDIO_SINK_TIMEOUT_MS ?? 5000),
     audioFrameSinkPort: Number(env.TRANSLATION_WORKER_AUDIO_FRAME_SINK_PORT ?? 3312),
@@ -102,7 +106,41 @@ export function loadEnv(): TranslationWorkerEnv {
     speechPipelineMode: parseSpeechPipelineMode(env.SPEECH_PIPELINE_MODE),
     domainLexiconPacks: parseDomainLexiconPacks(env.DOMAIN_LEXICON_PACKS),
     llmConfig: loadLlmConfig(env),
+    duplexConfig: parseDuplexConfig(env),
   };
+}
+
+function parseDuplexConfig(
+  env: Record<string, string | undefined>,
+): CallDuplexConfig {
+  return {
+    enabled: parseBoolean(env.CALL_FULL_DUPLEX_ENABLED),
+    minSpeechMs: boundedNumber(env.CALL_BARGE_IN_MIN_SPEECH_MS, 240, 80, 1000),
+    minProbability: boundedNumber(
+      env.CALL_BARGE_IN_MIN_PROBABILITY,
+      0.5,
+      0,
+      1,
+    ),
+    cooldownMs: boundedNumber(env.CALL_BARGE_IN_COOLDOWN_MS, 800, 0, 5000),
+    preRollMs: boundedNumber(env.CALL_BARGE_IN_PRE_ROLL_MS, 400, 0, 2000),
+  };
+}
+
+function parseBoolean(value: string | undefined) {
+  return value?.trim().toLowerCase() === "true";
+}
+
+function boundedNumber(
+  value: string | undefined,
+  fallback: number,
+  minimum: number,
+  maximum: number,
+) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed >= minimum && parsed <= maximum
+    ? parsed
+    : fallback;
 }
 
 function parseSpeechPipelineMode(value: string | undefined): SpeechPipelineMode {

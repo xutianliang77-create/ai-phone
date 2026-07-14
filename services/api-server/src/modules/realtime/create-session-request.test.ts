@@ -55,6 +55,7 @@ describe("create realtime session request", () => {
       expect(result.value.voice).toEqual({
         mode: "preset",
         presetId: "zh_female_natural",
+        quality: "standard",
       });
     }
   });

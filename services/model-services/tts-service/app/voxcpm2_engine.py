@@ -41,12 +41,14 @@ class VoxCpm2TtsEngine:
         model_dir: str,
         cfg_value: float,
         inference_timesteps: int,
+        hifi_inference_timesteps: int = 15,
         load_denoiser: bool,
         voice_reference_dir: str = "",
     ) -> None:
         self.model_dir = Path(model_dir)
         self.cfg_value = cfg_value
         self.inference_timesteps = inference_timesteps
+        self.hifi_inference_timesteps = hifi_inference_timesteps
         self.load_denoiser = load_denoiser
         self.voice_reference_dir = Path(voice_reference_dir) if voice_reference_dir else None
         self._model = None
@@ -133,7 +135,11 @@ class VoxCpm2TtsEngine:
             request=request,
             reference_wav_path=reference_wav_path,
             cfg_value=self.cfg_value,
-            inference_timesteps=self.inference_timesteps,
+            inference_timesteps=(
+                self.hifi_inference_timesteps
+                if request.voice and request.voice.quality == "hifi"
+                else self.inference_timesteps
+            ),
         )
         audio = generate(**kwargs)
         return flatten_numeric_audio(audio), elapsed_ms(started)

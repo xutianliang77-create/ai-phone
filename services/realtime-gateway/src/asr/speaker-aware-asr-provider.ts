@@ -15,6 +15,8 @@ import { SpeechTurnCoordinator } from "../speaker/speech-turn-coordinator.js";
 import { realtimeLogger } from "../metrics/realtime-metrics.js";
 import { SpeakerTurnDiagnostics } from "./speaker-turn-diagnostics.js";
 import { SpeakerTurnAssignment } from "./speaker-turn-assignment.js";
+import { RecentPcmAudioBuffer } from "../speaker/recent-pcm-audio-buffer.js";
+import type { VoiceIdentityMatcher } from "../speaker/voice-identity-matcher.js";
 
 export class SpeakerAwareAsrProvider implements AsrProvider {
   private static readonly speakerSpanRetentionMs = 120_000;
@@ -23,11 +25,18 @@ export class SpeakerAwareAsrProvider implements AsrProvider {
   private readonly turnDiagnostics = new SpeakerTurnDiagnostics();
   private readonly turnAssignment = new SpeakerTurnAssignment();
   private readonly speakerFailureCounts = new Map<string, number>();
+  private readonly identitySessions = new Map<string, string>();
+  private readonly identityAudio = new Map<string, RecentPcmAudioBuffer>();
+  private readonly identitiesBySpeaker = new Map<
+    string,
+    Map<string, NonNullable<TranscriptResult["speaker"]>>
+  >();
 
   constructor(
     private readonly asr: AsrProvider,
     private readonly speaker: SpeakerAttributionProvider,
     private readonly turnCoordinator = new SpeechTurnCoordinator(),
+    private readonly identityMatcher?: VoiceIdentityMatcher,
   ) {}
 
   async createSession(session: AsrSession) {
@@ -45,6 +54,11 @@ export class SpeakerAwareAsrProvider implements AsrProvider {
       this.spansBySession.set(session.sessionId, []);
       this.turnCoordinator.clear(session.sessionId);
       this.turnAssignment.clear(session.sessionId);
+      if (options.allowVoiceIdentity && session.userId && this.identityMatcher) {
+        this.identitySessions.set(session.sessionId, session.userId);
+        this.identityAudio.set(session.sessionId, new RecentPcmAudioBuffer());
+        this.identitiesBySpeaker.set(session.sessionId, new Map());
+      }
     } catch (error) {
       this.recordSpeakerFailure(session.sessionId, "create", error);
     }
@@ -54,6 +68,7 @@ export class SpeakerAwareAsrProvider implements AsrProvider {
     if (!this.enabledSessions.has(frame.sessionId)) {
       return this.asr.transcribe(frame);
     }
+    this.identityAudio.get(frame.sessionId)?.push(frame);
     const [transcripts, nextSpans] = await Promise.all([
       this.asr.transcribe(frame),
       this.safePush(frame),
@@ -120,10 +135,8 @@ export class SpeakerAwareAsrProvider implements AsrProvider {
     }
     const outgoing = [...filteredRegularTurns, ...committedTurns];
     this.turnDiagnostics.recordTranscripts(frame.sessionId, outgoing);
-    return this.attributedResults(
-      outgoing,
-      spans,
-    );
+    const attributed = asrResults(this.attributedResults(outgoing, spans));
+    return providerResult(await this.applyVoiceIdentities(frame.sessionId, attributed));
   }
 
   async flush(sessionId: string) {
@@ -140,7 +153,8 @@ export class SpeakerAwareAsrProvider implements AsrProvider {
       this.turnAssignment.assign(transcript, currentTurn)
     );
     this.turnDiagnostics.recordTranscripts(sessionId, results);
-    return this.attributedResults(results, spans);
+    const attributed = asrResults(this.attributedResults(results, spans));
+    return providerResult(await this.applyVoiceIdentities(sessionId, attributed));
   }
 
   async diagnostics(sessionId: string) {
@@ -157,6 +171,10 @@ export class SpeakerAwareAsrProvider implements AsrProvider {
     this.turnCoordinator.clear(sessionId);
     this.turnAssignment.clear(sessionId);
     this.speakerFailureCounts.delete(sessionId);
+    this.identitySessions.delete(sessionId);
+    this.identityAudio.get(sessionId)?.clear();
+    this.identityAudio.delete(sessionId);
+    this.identitiesBySpeaker.delete(sessionId);
     await this.asr.closeSession(sessionId);
     if (speakerEnabled) {
       await this.speaker.closeSession(sessionId).catch(() => undefined);
@@ -242,7 +260,7 @@ export class SpeakerAwareAsrProvider implements AsrProvider {
 
   private recordSpeakerFailure(
     sessionId: string,
-    stage: "create" | "frame" | "flush",
+    stage: "create" | "frame" | "flush" | "identity",
     error: unknown,
   ) {
     const count = (this.speakerFailureCounts.get(sessionId) ?? 0) + 1;
@@ -255,6 +273,38 @@ export class SpeakerAwareAsrProvider implements AsrProvider {
       error,
     }, "Speaker attribution side path failed");
   }
+
+  private async applyVoiceIdentities(
+    sessionId: string,
+    transcripts: TranscriptResult[],
+  ) {
+    const userId = this.identitySessions.get(sessionId);
+    const matcher = this.identityMatcher;
+    const audio = this.identityAudio.get(sessionId);
+    if (!userId || !matcher || !audio) return transcripts;
+    const cache = this.identitiesBySpeaker.get(sessionId)!;
+    return await Promise.all(transcripts.map(async (transcript) => {
+      const diarizedId = transcript.speaker?.speakerId ?? "unknown";
+      const cached = cache.get(diarizedId);
+      if (cached) return { ...transcript, speaker: cached };
+      const audioBase64 = audio.wavBase64(transcript.timing);
+      if (!audioBase64) return transcript;
+      try {
+        const identity = await matcher.match({ userId, audioBase64 });
+        if (!identity) return transcript;
+        if (diarizedId !== "unknown") cache.set(diarizedId, identity);
+        return { ...transcript, speaker: identity };
+      } catch (error) {
+        this.recordSpeakerFailure(sessionId, "identity", error);
+        return transcript;
+      }
+    }));
+  }
+}
+
+function providerResult(results: TranscriptResult[]): AsrProviderResult {
+  if (results.length === 0) return null;
+  return results.length === 1 ? results[0] : results;
 }
 
 function removeOverlappingTranscripts(

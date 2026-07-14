@@ -19,6 +19,10 @@ class SpeakerConfig:
     spkcache_len: int
     onset: float
     offset: float
+    voice_identity_provider: str = "off"
+    voice_identity_model_id: str = "nvidia/speakerverification_en_titanet_large"
+    voice_identity_store_dir: str = "/data/ai-phone/speaker-identities"
+    voice_identity_encryption_key: str = ""
 
 
 def load_config() -> SpeakerConfig:
@@ -40,4 +44,17 @@ def load_config() -> SpeakerConfig:
         spkcache_len=int(os.getenv("SPEAKER_CACHE_LEN", "188")),
         onset=float(os.getenv("SPEAKER_ONSET", "0.5")),
         offset=float(os.getenv("SPEAKER_OFFSET", "0.5")),
+        voice_identity_provider=os.getenv("VOICE_IDENTITY_PROVIDER", "off"),
+        voice_identity_model_id=os.getenv(
+            "VOICE_IDENTITY_MODEL_ID",
+            "nvidia/speakerverification_en_titanet_large",
+        ),
+        voice_identity_store_dir=os.getenv(
+            "VOICE_IDENTITY_STORE_DIR",
+            "/data/ai-phone/speaker-identities",
+        ),
+        voice_identity_encryption_key=os.getenv(
+            "VOICE_IDENTITY_ENCRYPTION_KEY",
+            "",
+        ).strip(),
     )

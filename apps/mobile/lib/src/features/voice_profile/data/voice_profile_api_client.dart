@@ -20,6 +20,7 @@ abstract class VoiceProfileClient {
   Future<VoiceProfileTestAudio> testMyVoice({
     String language = 'zh',
     String? text,
+    String variant = 'clone',
   });
   Future<VoiceProfile> deleteMyProfile();
 }
@@ -33,6 +34,7 @@ class VoiceProfile {
     required this.createdAt,
     required this.updatedAt,
     this.referenceAudioId,
+    this.referenceQuality,
   });
 
   final String id;
@@ -42,6 +44,7 @@ class VoiceProfile {
   final DateTime createdAt;
   final DateTime updatedAt;
   final String? referenceAudioId;
+  final VoiceReferenceQuality? referenceQuality;
 
   bool get ready => status == 'ready';
 
@@ -54,6 +57,37 @@ class VoiceProfile {
       createdAt: DateTime.parse(json['createdAt'] as String),
       updatedAt: DateTime.parse(json['updatedAt'] as String),
       referenceAudioId: json['referenceAudioId'] as String?,
+      referenceQuality: json['referenceQuality'] is Map
+          ? VoiceReferenceQuality.fromJson(
+              Map<String, Object?>.from(json['referenceQuality'] as Map),
+            )
+          : null,
+    );
+  }
+}
+
+class VoiceReferenceQuality {
+  const VoiceReferenceQuality({
+    required this.accepted,
+    required this.durationMs,
+    required this.rmsDbfs,
+    required this.clippingRatio,
+    required this.silenceRatio,
+  });
+
+  final bool accepted;
+  final int durationMs;
+  final double rmsDbfs;
+  final double clippingRatio;
+  final double silenceRatio;
+
+  factory VoiceReferenceQuality.fromJson(Map<String, Object?> json) {
+    return VoiceReferenceQuality(
+      accepted: json['accepted'] == true,
+      durationMs: (json['durationMs'] as num).toInt(),
+      rmsDbfs: (json['rmsDbfs'] as num).toDouble(),
+      clippingRatio: (json['clippingRatio'] as num).toDouble(),
+      silenceRatio: (json['silenceRatio'] as num).toDouble(),
     );
   }
 }
@@ -165,11 +199,13 @@ class VoiceProfileApiClient implements VoiceProfileClient {
   Future<VoiceProfileTestAudio> testMyVoice({
     String language = 'zh',
     String? text,
+    String variant = 'clone',
   }) async {
     final json = await _postJson(
       '/voice-profiles/me/test-audio',
       <String, Object?>{
         'language': language,
+        'variant': variant,
         if (text != null) 'text': text,
       },
     );

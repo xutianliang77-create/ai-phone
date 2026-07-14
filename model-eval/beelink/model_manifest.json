@@ -15,6 +15,29 @@
       "notes": "Removed from the isolated iPhone model tester queue after real-device no-caption/no-response tests; do not stage to iPhone unless explicitly re-approved."
     },
     {
+      "name": "frame_vad_multilingual_marblenet_v2",
+      "task": "vad",
+      "repo": "nvidia/Frame_VAD_Multilingual_MarbleNet_v2.0",
+      "status": "tested",
+      "notes": "Beelink VAD A/B complete. MarbleNet probability threshold 0.5/0.7 detected 6/6 speech and rejected silence/medium/loud non-speech noise; only self TTS echo remains a playback-gate problem."
+    },
+    {
+      "name": "nemotron_3_5_asr_streaming_0_6b",
+      "task": "asr_streaming",
+      "repo": "nvidia/nemotron-3.5-asr-streaming-0.6b",
+      "status": "tested",
+      "localPath": "/data/models/translation-model-eval/models/nemotron_3_5_asr_streaming_0_6b_transformers",
+      "resultPath": "data/model-eval/asr-model-sweep/nemotron_3_5_asr_streaming_0_6b/nvidia_official_streaming_20260711T130552Z",
+      "notes": "Official Transformers 5.13 path tested on Beelink with NVIDIA streaming settings: known language 80/320/1120ms plus auto 320ms. Best mode stream_known_1120 passed 27/28; stream_known_320 and stream_auto_320 passed 24/28. Mixed technical model-name sample remains weak."
+    },
+    {
+      "name": "diar_streaming_sortformer_4spk_v2_1",
+      "task": "speaker_diarization",
+      "repo": "nvidia/diar_streaming_sortformer_4spk-v2.1",
+      "status": "tested",
+      "notes": "Already evaluated in the Beelink speaker-service shadow harness; do not re-queue as untested. 30-minute shadow passed; rapid switching moved to stateful low-latency engine optimization."
+    },
+    {
       "name": "fireredasr2_aed",
       "task": "asr",
       "repo": "FireRedTeam/FireRedASR2-AED",

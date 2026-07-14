@@ -34,6 +34,7 @@
     "scaffold:domestic-release-env": "node scripts/scaffold_domestic_release_env.mjs",
     "check:call-link-livekit-worker": "node scripts/check_call_link_livekit_worker_readiness.mjs",
     "check:livekit-room-media": "node scripts/check_livekit_room_media_readiness.mjs",
+    "check:livekit-duplex-playback": "npm run build -w @translation/translation-worker && node scripts/check_livekit_duplex_playback.mjs",
     "render:livekit-selfhost": "node scripts/render_livekit_selfhost_config.mjs",
     "check:livekit-selfhost-config": "node scripts/check_livekit_selfhost_config.mjs",
     "check:agent-call-worker": "node scripts/check_agent_call_worker_readiness.mjs",

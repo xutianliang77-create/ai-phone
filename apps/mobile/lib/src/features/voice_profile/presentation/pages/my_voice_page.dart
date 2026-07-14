@@ -7,11 +7,11 @@ import '../../../../app/app_config.dart';
 import '../../../../app/localization/app_localizations.dart';
 import '../../../../platform/diagnostics/app_error_reporter.dart';
 import '../../../../platform/speech/pcm_audio_output_player.dart';
-import '../../../account/data/account_auth_headers.dart';
 import '../../data/voice_profile_api_client.dart';
 import '../../data/voice_reference_recorder.dart';
 import 'my_voice_constants.dart';
 import 'my_voice_diagnostics.dart';
+import 'my_voice_page_messages.dart';
 import 'my_voice_recording_errors.dart';
 import 'my_voice_status_tile.dart';
 
@@ -110,6 +110,12 @@ class _MyVoicePageState extends State<MyVoicePage> {
                 title: l10n.myVoicePendingReference,
                 value: _profile!.status,
               ),
+            if (_profile?.referenceQuality != null)
+              MyVoiceStatusTile(
+                icon: Icons.multiline_chart,
+                title: l10n.text('myVoiceQuality'),
+                value: l10n.text('myVoiceQualityPassed'),
+              ),
             if (_profile != null && !_profile!.ready) ...<Widget>[
               const SizedBox(height: 12),
               Text(l10n.text('myVoiceReferencePrompt')),
@@ -142,9 +148,18 @@ class _MyVoicePageState extends State<MyVoicePage> {
             ],
             if (_profile?.ready == true) ...<Widget>[
               const SizedBox(height: 8),
+              OutlinedButton.icon(
+                onPressed: _loading || _recording || _testingVoice
+                    ? null
+                    : () => _testVoice('natural'),
+                icon: const Icon(Icons.volume_up_outlined),
+                label: Text(l10n.text('myVoiceTestNatural')),
+              ),
+              const SizedBox(height: 8),
               FilledButton.tonalIcon(
-                onPressed:
-                    _loading || _recording || _testingVoice ? null : _testVoice,
+                onPressed: _loading || _recording || _testingVoice
+                    ? null
+                    : () => _testVoice('clone'),
                 icon: Icon(
                     _testingVoice ? Icons.hourglass_empty : Icons.play_arrow),
                 label: Text(
@@ -179,7 +194,7 @@ class _MyVoicePageState extends State<MyVoicePage> {
       setState(() => _profile = profile);
     } on Object catch (error) {
       if (!mounted) return;
-      setState(() => _message = _friendlyError(error));
+      setState(() => _message = myVoicePageFriendlyError(context.l10n, error));
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -203,7 +218,7 @@ class _MyVoicePageState extends State<MyVoicePage> {
       });
     } on Object catch (error) {
       if (!mounted) return;
-      setState(() => _message = _friendlyError(error));
+      setState(() => _message = myVoicePageFriendlyError(context.l10n, error));
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -224,7 +239,7 @@ class _MyVoicePageState extends State<MyVoicePage> {
       });
     } on Object catch (error) {
       if (!mounted) return;
-      setState(() => _message = _friendlyError(error));
+      setState(() => _message = myVoicePageFriendlyError(context.l10n, error));
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -269,7 +284,10 @@ class _MyVoicePageState extends State<MyVoicePage> {
       final recording = await _recorder.stop();
       if (!mounted) return;
       setState(() => _recording = false);
-      final durationError = _durationError(recording.durationMs);
+      final durationError = voiceReferenceDurationError(
+        l10n,
+        recording.durationMs,
+      );
       if (durationError != null) {
         setState(() => _message = durationError);
         return;
@@ -304,14 +322,14 @@ class _MyVoicePageState extends State<MyVoicePage> {
     }
   }
 
-  Future<void> _testVoice() async {
+  Future<void> _testVoice(String variant) async {
     final l10n = context.l10n;
     setState(() {
       _testingVoice = true;
       _message = l10n.text('myVoiceTesting');
     });
     try {
-      final result = await _client.testMyVoice();
+      final result = await _client.testMyVoice(variant: variant);
       await _audioPlayer.play(
         data: result.audio.data,
         sampleRate: result.audio.sampleRate,
@@ -324,22 +342,5 @@ class _MyVoicePageState extends State<MyVoicePage> {
     } finally {
       if (mounted) setState(() => _testingVoice = false);
     }
-  }
-
-  String? _durationError(int durationMs) {
-    final l10n = context.l10n;
-    if (durationMs < voiceReferenceMinDurationMs) {
-      return l10n.text('myVoiceRecordTooShort');
-    }
-    if (durationMs > voiceReferenceMaxDurationMs) {
-      return l10n.text('myVoiceRecordTooLong');
-    }
-    return null;
-  }
-
-  String _friendlyError(Object error) {
-    final l10n = context.l10n;
-    if (error is AccountAuthRequiredException) return l10n.myVoiceAuthRequired;
-    return l10n.myVoiceLoadFailed;
   }
 }

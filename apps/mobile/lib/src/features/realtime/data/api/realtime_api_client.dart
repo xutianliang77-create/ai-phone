@@ -64,7 +64,7 @@ class RealtimeApiClient {
             'speakerAttribution': const <String, Object?>{
               'mode': 'auto',
               'maxSpeakers': 4,
-              'allowVoiceIdentity': false,
+              'allowVoiceIdentity': true,
             },
             if (voice != null) 'voice': voice,
             if (_termbaseId.isNotEmpty) 'termbaseId': _termbaseId,

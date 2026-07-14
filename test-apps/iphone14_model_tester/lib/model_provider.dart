@@ -19,6 +19,10 @@ class ModelProviderSpec {
 }
 
 class ModelProviderCatalog {
+  static const coreMlNemotronModelId = String.fromEnvironment(
+    'COREML_NEMOTRON_MODEL_ID',
+    defaultValue: 'nemotron_coreml_2240ms',
+  );
   static const remoteAsrModelId = String.fromEnvironment(
     'REMOTE_ASR_MODEL_ID',
     defaultValue: 'Qwen3-ASR-0.6B-original-tuned-v3',
@@ -42,7 +46,7 @@ class ModelProviderCatalog {
     id: 'coreml_nemotron',
     name: 'CoreML Nemotron',
     kind: 'asr',
-    modelId: 'nemotron_coreml_2240ms',
+    modelId: coreMlNemotronModelId,
     resultMode: 'coreml_nemotron_asr',
     available: true,
     description: '独立测试 App 的端侧模型诊断与后续真实 CoreML ASR 入口',
@@ -68,11 +72,7 @@ class ModelProviderCatalog {
     description: '已从 iPhone 14 端侧测试队列剔除：int8 输出乱码且延迟过高',
   );
 
-  static const all = [
-    appleSpeech,
-    coreMlNemotron,
-    remoteAsr,
-  ];
+  static const all = [appleSpeech, coreMlNemotron, remoteAsr];
 
   static ModelProviderSpec byId(String? id) {
     for (final provider in all) {

@@ -134,6 +134,49 @@ describe("HttpAsrProvider", () => {
     expect(requests[0].mode).toBe("pstn");
   });
 
+  it("forwards MarbleNet frame VAD decisions even without a transcript", async () => {
+    const decisions: unknown[] = [];
+    const provider = new HttpAsrProvider({
+      endpoint: "http://127.0.0.1:8001/asr/transcribe",
+      timeoutMs: 100,
+      fetchFn: (async () => response(204, undefined, {
+        "x-asr-vad-voiced": "true",
+        "x-asr-vad-provider": "marblenet",
+        "x-asr-vad-sequence": "7",
+        "x-asr-vad-timestamp-ms": "1000",
+        "x-asr-vad-duration-ms": "100",
+        "x-asr-vad-probability": "0.82",
+        "x-asr-vad-preroll-ms": "400",
+        "x-asr-vad-fallback": "false",
+      })) as typeof fetch,
+    });
+    provider.setVadDecisionSink((decision) => decisions.push(decision));
+
+    await provider.transcribe({
+      type: "audio.frame",
+      sessionId: "call_vad",
+      speakerRole: "guest",
+      sequence: 7,
+      timestampMs: 1000,
+      format: "pcm16",
+      sampleRate: 24000,
+      data: "AA==",
+    });
+
+    expect(decisions).toEqual([{
+      callId: "call_vad",
+      speakerRole: "guest",
+      sequence: 7,
+      timestampMs: 1000,
+      durationMs: 100,
+      voiced: true,
+      probability: 0.82,
+      provider: "marblenet",
+      fallback: false,
+      preRollMs: 400,
+    }]);
+  });
+
   it("treats null and invalid confidence as unknown", async () => {
     for (const confidence of [null, -0.1, 1.1]) {
       const provider = new HttpAsrProvider({
@@ -161,10 +204,15 @@ describe("HttpAsrProvider", () => {
   });
 });
 
-function response(status: number, body?: unknown) {
+function response(
+  status: number,
+  body?: unknown,
+  headers: Record<string, string> = {},
+) {
   return {
     ok: status >= 200 && status < 300,
     status,
+    headers: new Headers(headers),
     json: async () => body,
   } as Response;
 }

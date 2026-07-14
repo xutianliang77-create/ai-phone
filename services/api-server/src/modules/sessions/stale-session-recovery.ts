@@ -1,7 +1,11 @@
 import { isTerminalRealtimeSessionState } from "@translation/contracts";
 import { getStoreSnapshot } from "../../infrastructure/storage/json-store.js";
 import { releaseUsageHold } from "../usage/usage.service.js";
-import { endSession, findSession } from "./sessions.repository.js";
+import {
+  endCallLegs,
+  endSession,
+  findSession,
+} from "./sessions.repository.js";
 import { withSessionWriteLock } from "./session-write-coordinator.js";
 
 export interface StaleSessionRecoveryResult {
@@ -38,6 +42,9 @@ export async function recoverStaleRealtimeSessions(options: {
 
       const result = endSession(session.id, now);
       if (!result || result.wasAlreadyEnded) return;
+      if (result.session.endedAt) {
+        endCallLegs(result.session.id, result.session.endedAt);
+      }
       recoveredCount += 1;
       if (releaseUsageHold(session.userId, session.id)) {
         releasedHoldCount += 1;

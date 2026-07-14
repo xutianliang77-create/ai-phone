@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -5,6 +7,7 @@ import 'package:translation_mobile/src/app/localization/app_localizations.dart';
 import 'package:translation_mobile/src/features/history/data/session_history_models.dart';
 import 'package:translation_mobile/src/features/history/data/session_history_repository.dart';
 import 'package:translation_mobile/src/features/scan/presentation/pages/scan_translation_page.dart';
+import 'package:translation_mobile/src/features/scan/presentation/controllers/scan_translation_controller.dart';
 import 'package:translation_mobile/src/platform/ocr/mobile_ocr_provider.dart';
 import 'package:translation_mobile/src/platform/sharing/file_share_service.dart';
 import 'package:translation_mobile/src/platform/translation/mobile_translation_provider.dart';
@@ -19,17 +22,35 @@ void main() {
         ocrProvider: const _FakeOcrProvider('你好'),
         translationProvider: _FakeTranslationProvider(),
         historyRepository: history,
-        pickImagePath: (_) async => '/tmp/menu.jpg',
+        pickImagePath: (_) async => _picked('/tmp/menu.jpg'),
         shareText: (text) async => sharedText = text,
       ),
     ));
 
     await tester.tap(find.text('相册'));
     await tester.pumpAndSettle();
+    await tester.tap(find.text('识别文字'));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.text('翻译'),
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.tap(find.text('翻译'));
+    await tester.pumpAndSettle();
 
     expect(find.text('你好'), findsOneWidget);
-    expect(find.text('Hello'), findsOneWidget);
+    expect(find.text('Hello'), findsNWidgets(2));
+    expect(find.text('图片对照'), findsOneWidget);
+    expect(find.text('文字对照'), findsOneWidget);
 
+    await tester.scrollUntilVisible(
+      find.text('导出'),
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.drag(find.byType(ListView), const Offset(0, -80));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('导出'));
     await tester.pumpAndSettle();
 
@@ -37,6 +58,13 @@ void main() {
     expect(sharedText, contains('你好'));
     expect(sharedText, contains('Hello'));
 
+    await tester.scrollUntilVisible(
+      find.text('保存记录'),
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.drag(find.byType(ListView), const Offset(0, -80));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('保存记录'));
     await tester.pumpAndSettle();
 
@@ -54,15 +82,31 @@ void main() {
         ocrProvider: const _FakeOcrProvider(''),
         translationProvider: _FakeTranslationProvider(),
         historyRepository: _FakeSessionHistoryRepository(),
-        pickImagePath: (_) async => '/tmp/blank.jpg',
+        pickImagePath: (_) async => _picked('/tmp/blank.jpg'),
       ),
     ));
 
     await tester.tap(find.text('拍照'));
     await tester.pumpAndSettle();
+    await tester.tap(find.text('识别文字'));
+    await tester.pumpAndSettle();
 
+    await tester.scrollUntilVisible(
+      find.text('未识别到文字，请换一张更清晰的图片'),
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
     expect(find.text('未识别到文字，请换一张更清晰的图片'), findsOneWidget);
   });
+}
+
+PickedScanImage _picked(String path) {
+  return PickedScanImage(
+    path: path,
+    previewBytes: base64Decode(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
+    ),
+  );
 }
 
 class _TestApp extends StatelessWidget {
@@ -96,7 +140,21 @@ class _FakeOcrProvider implements MobileOcrProvider {
 
   @override
   Future<MobileOcrResult?> recognizeImage(String imagePath) async {
-    return MobileOcrResult(text: text, provider: 'fake');
+    return MobileOcrResult(
+      text: text,
+      provider: 'fake',
+      blocks: text.isEmpty
+          ? const <MobileOcrBlock>[]
+          : <MobileOcrBlock>[
+              MobileOcrBlock(
+                text: text,
+                left: 0.1,
+                top: 0.2,
+                width: 0.5,
+                height: 0.2,
+              ),
+            ],
+    );
   }
 }
 

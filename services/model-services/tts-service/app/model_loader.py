@@ -28,6 +28,7 @@ def load_engine(config: TtsConfig) -> TtsEngine:
             model_dir=config.voxcpm2_model_dir,
             cfg_value=config.voxcpm2_cfg_value,
             inference_timesteps=config.voxcpm2_inference_timesteps,
+            hifi_inference_timesteps=config.voxcpm2_hifi_inference_timesteps,
             load_denoiser=config.voxcpm2_load_denoiser,
             voice_reference_dir=config.voice_reference_dir,
         )

@@ -55,6 +55,7 @@ export function buildDefaultWorker(endpointMode: AsrEndpointMode = "call_link") 
     ttsAudioSink: env.ttsAudioSinkEndpoint
       ? new HttpTtsAudioSink({
         endpoint: env.ttsAudioSinkEndpoint,
+        interruptEndpoint: env.ttsAudioSinkInterruptEndpoint,
         apiKey: env.ttsAudioSinkApiKey,
         timeoutMs: env.ttsAudioSinkTimeoutMs,
       })
@@ -70,6 +71,7 @@ export function buildDefaultWorker(endpointMode: AsrEndpointMode = "call_link") 
       minConfidence: env.llmConfig.minConfidence,
       terminology,
     }),
+    duplexConfig: env.duplexConfig,
   });
 }
 

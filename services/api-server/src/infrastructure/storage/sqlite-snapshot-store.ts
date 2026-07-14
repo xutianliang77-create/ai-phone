@@ -3,6 +3,8 @@ import { dirname } from "node:path";
 import { backup, DatabaseSync } from "node:sqlite";
 import type { SessionRecord } from "../../modules/sessions/session-record.js";
 import type { AppStoreSnapshot } from "./json-store.js";
+import { SqliteEventStore } from "./sqlite-event-store.js";
+import { SqliteSessionChildrenStore } from "./sqlite-session-children-store.js";
 
 interface CollectionSpec {
   namespace: keyof AppStoreSnapshot;
@@ -23,6 +25,9 @@ const collectionSpecs: CollectionSpec[] = [
   spec("termbaseTerms", "id"),
   spec("agentCallDrafts", "id"),
   spec("voiceProfiles", "id"),
+  spec("voiceIdentities", "id"),
+  spec("inboxEvents", "eventId"),
+  spec("outboxEvents", "idempotencyKey"),
 ];
 
 const mapNamespaces: (keyof AppStoreSnapshot)[] = [
@@ -41,6 +46,8 @@ export class StorageConflictError extends Error {
 
 export class SqliteSnapshotStore {
   private readonly db: DatabaseSync;
+  private readonly eventStore: SqliteEventStore;
+  private readonly sessionChildren: SqliteSessionChildrenStore;
   private baseline: AppStoreSnapshot;
 
   constructor(
@@ -49,6 +56,8 @@ export class SqliteSnapshotStore {
   ) {
     mkdirSync(dirname(file), { recursive: true });
     this.db = new DatabaseSync(file);
+    this.eventStore = new SqliteEventStore(this.db);
+    this.sessionChildren = new SqliteSessionChildrenStore(this.db);
     this.configure();
     this.createSchema();
     this.baseline = this.readDatabase();
@@ -63,12 +72,15 @@ export class SqliteSnapshotStore {
   save(snapshot: AppStoreSnapshot) {
     const current = flatten(snapshot);
     const baseline = flatten(this.baseline);
+    const changes = [...new Set([...current.keys(), ...baseline.keys()])]
+      .filter((key) => current.get(key) !== baseline.get(key))
+      .sort((left, right) => deletionPriority(left, current) -
+        deletionPriority(right, current));
     this.db.exec("BEGIN IMMEDIATE");
     try {
-      for (const compoundKey of new Set([...current.keys(), ...baseline.keys()])) {
+      for (const compoundKey of changes) {
         const next = current.get(compoundKey);
         const previous = baseline.get(compoundKey);
-        if (next === previous) continue;
         const [namespace, key] = splitCompoundKey(compoundKey);
         const stored = this.readEntity(namespace, key);
         if (stored !== previous) throw new StorageConflictError(namespace, key);
@@ -132,21 +144,9 @@ export class SqliteSnapshotStore {
         updated_at TEXT NOT NULL,
         PRIMARY KEY (namespace, record_key)
       ) STRICT;
-      CREATE TABLE IF NOT EXISTS session_segments (
-        session_namespace TEXT NOT NULL DEFAULT 'sessions'
-          CHECK (session_namespace = 'sessions'),
-        session_id TEXT NOT NULL,
-        segment_id TEXT NOT NULL,
-        position INTEGER NOT NULL CHECK (position >= 0),
-        payload TEXT NOT NULL,
-        PRIMARY KEY (session_id, segment_id),
-        UNIQUE (session_id, position),
-        FOREIGN KEY (session_namespace, session_id)
-          REFERENCES app_records(namespace, record_key) ON DELETE CASCADE
-      ) STRICT;
-      CREATE INDEX IF NOT EXISTS idx_session_segments_order
-        ON session_segments(session_id, position);
     `);
+    this.sessionChildren.createSchema();
+    this.eventStore.createSchema();
   }
 
   private readDatabase() {
@@ -160,10 +160,17 @@ export class SqliteSnapshotStore {
         : JSON.parse(row.payload);
       assignRecord(snapshot, row.namespace, row.record_key, value);
     }
+    this.eventStore.readInto(snapshot);
     return snapshot;
   }
 
   private readEntity(namespace: string, key: string) {
+    const event = this.eventStore.readEntity(namespace, key);
+    if (event.handled) {
+      return event.value === undefined
+        ? undefined
+        : stableJson(JSON.parse(event.value));
+    }
     const row = this.db.prepare(
       "SELECT payload FROM app_records WHERE namespace = ? AND record_key = ?",
     ).get(namespace, key) as { payload: string } | undefined;
@@ -171,24 +178,25 @@ export class SqliteSnapshotStore {
     const value = namespace === "sessions"
       ? this.readSession(key, row.payload)
       : JSON.parse(row.payload);
-    return JSON.stringify(value);
+    return stableJson(value);
   }
 
   private readSession(sessionId: string, metadataJson: string): SessionRecord {
-    const metadata = JSON.parse(metadataJson) as Omit<SessionRecord, "segments">;
-    const segmentRows = this.db.prepare(
-      "SELECT payload FROM session_segments WHERE session_id = ? ORDER BY position",
-    ).all(sessionId) as { payload: string }[];
+    const metadata = JSON.parse(metadataJson) as Omit<
+      SessionRecord,
+      "segments" | "callLegs" | "playbacks"
+    >;
     return {
       ...metadata,
-      segments: segmentRows.map((row) => JSON.parse(row.payload)),
+      ...this.sessionChildren.read(sessionId),
     };
   }
 
   private writeEntity(namespace: string, key: string, valueJson: string) {
+    if (this.eventStore.writeEntity(namespace, key, valueJson)) return;
     const value = JSON.parse(valueJson);
     const payload = namespace === "sessions"
-      ? JSON.stringify(withoutSegments(value as SessionRecord))
+      ? JSON.stringify(withoutSessionCollections(value as SessionRecord))
       : valueJson;
     this.db.prepare(`
       INSERT INTO app_records(namespace, record_key, payload, updated_at)
@@ -197,22 +205,13 @@ export class SqliteSnapshotStore {
         payload = excluded.payload,
         updated_at = excluded.updated_at
     `).run(namespace, key, payload, new Date().toISOString());
-    if (namespace === "sessions") this.writeSegments(value as SessionRecord);
-  }
-
-  private writeSegments(session: SessionRecord) {
-    this.db.prepare("DELETE FROM session_segments WHERE session_id = ?")
-      .run(session.id);
-    const insert = this.db.prepare(`
-      INSERT INTO session_segments(session_id, segment_id, position, payload)
-      VALUES (?, ?, ?, ?)
-    `);
-    session.segments.forEach((segment, position) => {
-      insert.run(session.id, segment.id, position, JSON.stringify(segment));
-    });
+    if (namespace === "sessions") {
+      this.sessionChildren.write(value as SessionRecord);
+    }
   }
 
   private deleteEntity(namespace: string, key: string) {
+    if (this.eventStore.deleteEntity(namespace, key)) return;
     this.db.prepare(
       "DELETE FROM app_records WHERE namespace = ? AND record_key = ?",
     ).run(namespace, key);
@@ -232,16 +231,41 @@ function flatten(snapshot: AppStoreSnapshot) {
     const values = snapshot[spec.namespace] as unknown[];
     for (const value of values) {
       const key = spec.key(value as Record<string, unknown>);
-      records.set(compoundKey(String(spec.namespace), key), JSON.stringify(value));
+      const comparable = spec.namespace === "sessions"
+        ? normalizedSession(value as SessionRecord)
+        : value;
+      records.set(compoundKey(String(spec.namespace), key), stableJson(comparable));
     }
   }
   for (const namespace of mapNamespaces) {
     const values = snapshot[namespace] as Record<string, unknown>;
     for (const [key, value] of Object.entries(values)) {
-      records.set(compoundKey(String(namespace), key), JSON.stringify(value));
+      records.set(compoundKey(String(namespace), key), stableJson(value));
     }
   }
   return records;
+}
+
+function normalizedSession(session: SessionRecord): SessionRecord {
+  const normalized = structuredClone(session);
+  normalized.segments ??= [];
+  if (!normalized.callLegs?.length) delete normalized.callLegs;
+  if (!normalized.playbacks?.length) delete normalized.playbacks;
+  return normalized;
+}
+
+function stableJson(value: unknown) {
+  return JSON.stringify(sortJsonKeys(value));
+}
+
+function sortJsonKeys(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(sortJsonKeys);
+  if (!value || typeof value !== "object") return value;
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([key, item]) => [key, sortJsonKeys(item)]),
+  );
 }
 
 function assignRecord(
@@ -258,8 +282,13 @@ function assignRecord(
   if (spec) (snapshot[spec.namespace] as unknown[]).push(value);
 }
 
-function withoutSegments(session: SessionRecord) {
-  const { segments: _segments, ...metadata } = session;
+function withoutSessionCollections(session: SessionRecord) {
+  const {
+    segments: _segments,
+    callLegs: _callLegs,
+    playbacks: _playbacks,
+    ...metadata
+  } = session;
   return metadata;
 }
 
@@ -270,4 +299,10 @@ function compoundKey(namespace: string, key: string) {
 function splitCompoundKey(value: string) {
   const separator = value.indexOf("\u0000");
   return [value.slice(0, separator), value.slice(separator + 1)] as const;
+}
+
+function deletionPriority(key: string, current: Map<string, string>) {
+  if (current.has(key)) return 1;
+  const [namespace] = splitCompoundKey(key);
+  return namespace === "inboxEvents" || namespace === "outboxEvents" ? 0 : 1;
 }

@@ -36,4 +36,25 @@ void main() {
       isFalse,
     );
   });
+
+  test('allows a leg-bound TTS track only for its exact participant', () {
+    const identity = 'call-1:guest:participant-1';
+    final token = callRoomLegToken(identity);
+    expect(
+      shouldSubscribeCallRoomAudioTrack(
+        trackName: 'translation-tts-guest-24000.$token',
+        localRole: 'guest',
+        localParticipantIdentity: identity,
+      ),
+      isTrue,
+    );
+    expect(
+      shouldSubscribeCallRoomAudioTrack(
+        trackName: 'translation-tts-guest-24000.$token',
+        localRole: 'guest',
+        localParticipantIdentity: 'call-1:guest:participant-2',
+      ),
+      isFalse,
+    );
+  });
 }

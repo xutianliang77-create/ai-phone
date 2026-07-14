@@ -52,7 +52,54 @@ describe("session quality report", () => {
     });
     expect(report.flags).toEqual(["no_segments", "missing_audio_diagnostics"]);
   });
+
+  it("summarizes playback and barge-in stop latency", () => {
+    const session = sampleSession();
+    session.playbacks = [
+      playback("one", "interrupted", 120),
+      playback("two", "interrupted", 350),
+      playback("three", "failed"),
+    ];
+
+    const report = buildSessionQualityReport(session, new Date(0));
+
+    expect(report.playback).toEqual({
+      total: 3,
+      completed: 0,
+      interrupted: 2,
+      failed: 1,
+      bargeInInterruptions: 2,
+    });
+    expect(report.bargeIn).toEqual({
+      sampleCount: 2,
+      averageStopLatencyMs: 235,
+      p95StopLatencyMs: 350,
+      maxStopLatencyMs: 350,
+    });
+    expect(report.flags).toEqual(expect.arrayContaining([
+      "playback_failed",
+      "slow_barge_in_stop",
+    ]));
+  });
 });
+
+function playback(
+  id: string,
+  status: "interrupted" | "failed",
+  stopLatencyMs?: number,
+) {
+  return {
+    id,
+    segmentId: `segment-${id}`,
+    sourceLegId: "host-leg",
+    targetLegId: "guest-leg",
+    generation: id === "one" ? 1 : id === "two" ? 2 : 3,
+    status,
+    interruptReason: status === "interrupted" ? "barge_in" as const : "failure" as const,
+    queuedAt: new Date(0).toISOString(),
+    ...(stopLatencyMs === undefined ? {} : { bargeIn: { stopLatencyMs } }),
+  };
+}
 
 function sampleSession(): SessionRecord {
   return {

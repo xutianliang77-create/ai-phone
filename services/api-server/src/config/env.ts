@@ -9,6 +9,7 @@ export interface ApiEnv {
   complianceProfile: string;
   realtimeStaleSessionGraceSeconds: number;
   realtimeStaleSessionSweepSeconds: number;
+  callFullDuplexEnabled: boolean;
 }
 
 export function loadEnv(): ApiEnv {
@@ -34,7 +35,12 @@ export function loadEnv(): ApiEnv {
       process.env.REALTIME_STALE_SESSION_SWEEP_SECONDS,
       30,
     ),
+    callFullDuplexEnabled: parseBoolean(process.env.CALL_FULL_DUPLEX_ENABLED),
   };
+}
+
+function parseBoolean(value: string | undefined) {
+  return value?.trim().toLowerCase() === "true";
 }
 
 function positiveNumber(value: string | undefined, fallback: number) {

@@ -77,4 +77,22 @@ void main() {
     expect(payload.caption?.firstAudioMs, 320);
     expect(payload.caption?.audioDurationMs, 1200);
   });
+
+  test('parses full duplex degradation and recovery controls', () {
+    final degraded = parseCallRoomData(utf8.encode(jsonEncode({
+      'type': 'pipeline.degraded',
+      'duplexMode': 'half_duplex',
+      'degradationReason': 'vad_fallback',
+    })));
+    final restored = parseCallRoomData(utf8.encode(jsonEncode({
+      'type': 'pipeline.restored',
+      'duplexMode': 'full_duplex',
+    })));
+
+    expect(degraded.duplexMode, 'half_duplex');
+    expect(degraded.degradationReason, 'vad_fallback');
+    expect(degraded.message, '全双工抢话已降级为半双工');
+    expect(restored.duplexMode, 'full_duplex');
+    expect(restored.message, '全双工抢话已恢复');
+  });
 }

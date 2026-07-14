@@ -1,5 +1,4 @@
 import { DataPacket_Kind, RoomServiceClient } from "livekit-server-sdk";
-import { upsertSegment } from "../sessions/sessions.repository.js";
 import type { CallLinkRecord } from "./call-links.service.js";
 import {
   buildCallRoomSmokeEvents,
@@ -8,10 +7,25 @@ import {
   type CallRoomDataEvent,
 } from "./call-room-events.js";
 import { getLiveKitRoomConfig, type LiveKitRoomConfig } from "./call-room-readiness.js";
+import {
+  completeCallRoomDataEvent,
+  failCallRoomDataEvent,
+  pendingCallRoomDataEvents,
+  stageCallRoomDataEvents,
+} from "./call-room-reliable-events.js";
+export { persistCallRoomDataEvent } from "./call-room-event-persistence.js";
 
 export interface CallRoomDataPublisher {
   ensureRoom?(roomName: string): Promise<void>;
+  hasParticipant?(roomName: string, participantIdentity: string): Promise<boolean>;
+  listParticipantIdentities?(roomName: string): Promise<string[]>;
   publish(roomName: string, event: CallRoomDataEvent): Promise<void>;
+}
+
+export interface CallRoomHumanPresence {
+  activeHostCount: number;
+  activeGuestCount: number;
+  activeHumanParticipantCount: number;
 }
 
 let testPublisher: CallRoomDataPublisher | null = null;
@@ -54,55 +68,121 @@ export async function ensureCallRoom(
   }
 }
 
+export async function confirmCallRoomParticipant(
+  record: CallLinkRecord,
+  participantIdentity: string,
+): Promise<{ ok: true; connected: boolean } | { ok: false; issues: string[] }> {
+  const config = getLiveKitRoomConfig();
+  if (!config.ok) return { ok: false, issues: config.issues };
+  const publisher = testPublisher ?? new LiveKitRoomDataPublisher(config.config);
+  if (!publisher.hasParticipant) return { ok: true, connected: true };
+  try {
+    for (let attempt = 0; attempt < 4; attempt += 1) {
+      if (await publisher.hasParticipant(record.roomName, participantIdentity)) {
+        return { ok: true, connected: true };
+      }
+      if (attempt < 3) await delay(75);
+    }
+    return { ok: true, connected: false };
+  } catch (error) {
+    return { ok: false, issues: [errorMessage(error)] };
+  }
+}
+
+export async function readCallRoomHumanPresence(
+  record: CallLinkRecord,
+): Promise<
+  | { ok: true; presence: CallRoomHumanPresence }
+  | { ok: false; issues: string[] }
+> {
+  const config = getLiveKitRoomConfig();
+  if (!config.ok) return { ok: false, issues: config.issues };
+  const publisher = testPublisher ?? new LiveKitRoomDataPublisher(config.config);
+  if (!publisher.listParticipantIdentities) {
+    return { ok: false, issues: ["Call room presence is unavailable"] };
+  }
+  try {
+    const identities = await publisher.listParticipantIdentities(record.roomName);
+    const roles = identities
+      .map((identity) => callRoomParticipantRole(record.callId, identity))
+      .filter((role): role is "host" | "guest" => role !== null);
+    const activeHostCount = roles.filter((role) => role === "host").length;
+    const activeGuestCount = roles.filter((role) => role === "guest").length;
+    return {
+      ok: true,
+      presence: {
+        activeHostCount,
+        activeGuestCount,
+        activeHumanParticipantCount: activeHostCount + activeGuestCount,
+      },
+    };
+  } catch (error) {
+    return { ok: false, issues: [errorMessage(error)] };
+  }
+}
+
 export async function publishCallRoomDataEvents(
   record: CallLinkRecord,
   events: CallRoomDataEvent[],
+  options: { expectedVersion?: number } = {},
 ):
   Promise<
-    | { ok: true; roomName: string; topic: string; events: CallRoomDataEvent[] }
-    | { ok: false; issues: string[] }
+    | {
+      ok: true;
+      roomName: string;
+      topic: string;
+      events: CallRoomDataEvent[];
+      duplicateCount: number;
+      sessionVersion: number;
+    }
+    | { ok: false; issues: string[]; sessionVersion: number }
   > {
-  const config = getLiveKitRoomConfig();
-  if (!config.ok) return { ok: false, issues: config.issues };
-
-  const publisher = testPublisher ?? new LiveKitRoomDataPublisher(config.config);
-  await publisher.ensureRoom?.(record.roomName);
-  for (const event of events) {
-    await publisher.publish(record.roomName, event);
-    persistCallRoomDataEvent(record, event);
+  const staged = stageCallRoomDataEvents({
+    record,
+    events,
+    expectedVersion: options.expectedVersion,
+  });
+  const delivered = await deliverPendingCallRoomDataEvents(record);
+  if (!delivered.ok) {
+    return { ...delivered, sessionVersion: staged.sessionVersion };
   }
   return {
     ok: true,
     roomName: record.roomName,
     topic: callRoomCaptionTopic,
     events,
+    duplicateCount: staged.duplicateCount,
+    sessionVersion: staged.sessionVersion,
   };
 }
 
-export function persistCallRoomDataEvent(
+export async function deliverPendingCallRoomDataEvents(
   record: CallLinkRecord,
-  event: CallRoomDataEvent,
+  now?: Date,
 ) {
-  if (event.type === "worker.status") return null;
-  return upsertSegment(record.sessionId, {
-    segmentId: event.segmentId,
-    sourceText: event.sourceText ?? (
-      event.type === "transcript.final" ? event.text : undefined
-    ),
-    rawText: event.rawText,
-    optimizedText: event.optimizedText,
-    translatedText: event.translatedText ?? (
-      event.type === "translation.final" ? event.text : undefined
-    ),
-    confidence: event.confidence,
-    refinement: event.refinement,
-    speaker: event.speaker,
-    timing: event.timing ?? {
-      startMs: event.timestampMs,
-      endMs: event.timestampMs,
-      source: "participant_track",
-    },
-  });
+  const config = getLiveKitRoomConfig();
+  if (!config.ok) return { ok: false as const, issues: config.issues };
+
+  const publisher = testPublisher ?? new LiveKitRoomDataPublisher(config.config);
+  try {
+    await publisher.ensureRoom?.(record.roomName);
+  } catch (error) {
+    return { ok: false as const, issues: [errorMessage(error)] };
+  }
+  for (const pending of pendingCallRoomDataEvents(record.sessionId, now)) {
+    try {
+      await publisher.publish(record.roomName, pending.event);
+      completeCallRoomDataEvent(pending.record.idempotencyKey);
+    } catch (error) {
+      failCallRoomDataEvent(pending.record.idempotencyKey, error);
+      return { ok: false as const, issues: [errorMessage(error)] };
+    }
+  }
+  return {
+    ok: true as const,
+    roomName: record.roomName,
+    topic: callRoomCaptionTopic,
+  };
 }
 
 class LiveKitRoomDataPublisher implements CallRoomDataPublisher {
@@ -131,6 +211,18 @@ class LiveKitRoomDataPublisher implements CallRoomDataPublisher {
     this.ensuredRooms.add(roomName);
   }
 
+  async hasParticipant(roomName: string, participantIdentity: string) {
+    const participants = await this.client.listParticipants(roomName);
+    return participants.some(
+      (participant) => participant.identity === participantIdentity,
+    );
+  }
+
+  async listParticipantIdentities(roomName: string) {
+    const participants = await this.client.listParticipants(roomName);
+    return participants.map((participant) => participant.identity);
+  }
+
   async publish(roomName: string, event: CallRoomDataEvent) {
     await this.client.sendData(
       roomName,
@@ -139,6 +231,12 @@ class LiveKitRoomDataPublisher implements CallRoomDataPublisher {
       { topic: callRoomCaptionTopic },
     );
   }
+}
+
+function callRoomParticipantRole(callId: string, identity: string) {
+  const [identityCallId, role] = identity.split(":", 3);
+  if (identityCallId !== callId) return null;
+  return role === "host" || role === "guest" ? role : null;
 }
 
 export function liveKitApiUrl(livekitUrl: string) {
@@ -160,4 +258,12 @@ export function isLiveKitAlreadyExistsError(error: unknown) {
       typeof candidate.message === "string" &&
       candidate.message.toLowerCase().includes("already exists")
     );
+}
+
+function errorMessage(error: unknown) {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function delay(milliseconds: number) {
+  return new Promise<void>((resolve) => setTimeout(resolve, milliseconds));
 }

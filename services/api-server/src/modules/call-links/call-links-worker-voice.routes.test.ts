@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { buildApp } from "../../app.js";
 import { getStoreSnapshot } from "../../infrastructure/storage/json-store.js";
+import { wavFixture } from "../voice-profiles/voice-profiles.test-support.js";
 
 describe("call link worker voice route", () => {
   let previousEnv: Record<string, string | undefined>;
@@ -17,14 +18,23 @@ describe("call link worker voice route", () => {
 
   it("returns the host ready voice profile to translation workers", async () => {
     const app = await buildApp();
-    await app.inject({
+    const voiceProfile = await app.inject({
       method: "POST",
       url: "/voice-profiles/me",
       payload: {
         displayName: "我的声音",
         consentAccepted: true,
         consentVersion: "domestic-voice-profile-v1",
-        referenceAudioId: "voice_ref_1",
+      },
+    });
+    const referenceAudioId = voiceProfile.json().profile.id as string;
+    await app.inject({
+      method: "POST",
+      url: "/voice-profiles/me/reference-audio",
+      payload: {
+        mimeType: "audio/wav",
+        durationMs: 5000,
+        audioBase64: wavFixture().toString("base64"),
         referenceTranscript: "你好，我正在创建我的声音。",
       },
     });
@@ -44,8 +54,9 @@ describe("call link worker voice route", () => {
       sessionId: callId,
       ttsVoice: {
         mode: "ultimate_clone",
-        referenceAudioId: "voice_ref_1",
+        referenceAudioId,
         referenceTranscript: "你好，我正在创建我的声音。",
+        quality: "hifi",
       },
     });
     expect(response.json().ttsVoice.voiceProfileId).toEqual(expect.any(String));

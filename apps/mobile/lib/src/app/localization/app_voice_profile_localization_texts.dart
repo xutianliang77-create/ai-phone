@@ -60,6 +60,9 @@ const appVoiceProfileLocalizationTexts = <String, Map<String, String>>{
   'myVoiceRecording': {'zh': '录音中', 'en': 'Recording'},
   'myVoiceUploadSuccess': {'zh': '参考音频已上传', 'en': 'Reference audio uploaded'},
   'myVoiceTest': {'zh': '试听我的声音', 'en': 'Preview My Voice'},
+  'myVoiceTestNatural': {'zh': '试听自然声音', 'en': 'Preview Natural Voice'},
+  'myVoiceQuality': {'zh': '录音质量', 'en': 'Recording quality'},
+  'myVoiceQualityPassed': {'zh': '已通过服务端质量检查', 'en': 'Server quality check passed'},
   'myVoiceTesting': {'zh': '正在生成试听音频', 'en': 'Generating voice preview'},
   'myVoiceTestSuccess': {
     'zh': '试听完成。如果不像你的声音，请重新录制。',

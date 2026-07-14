@@ -167,7 +167,7 @@ function audioTrackName(track: unknown, publication: unknown) {
 }
 
 function isTranslationTtsTrackName(trackName: string) {
-  return /^translation-tts-(host|guest)-[1-9][0-9]*$/.test(trackName);
+  return /^translation-tts-(host|guest)-[1-9][0-9]*(?:\.[A-Za-z0-9_-]+)?$/.test(trackName);
 }
 
 function participantRole(participant: unknown): CallAudioSpeakerRole | null {

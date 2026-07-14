@@ -1,5 +1,9 @@
 import { participantTrackSpeaker, type CallRoomSubmittedEvent } from "@translation/contracts";
-import { CallTtsPlaybackQueue } from "./call-tts-playback-queue.js";
+import {
+  CallTtsPlaybackQueue,
+  type PlaybackLifecycle,
+  type PlaybackLifecycleInput,
+} from "./call-tts-playback-queue.js";
 import type { RecentTtsEchoFilter } from "./recent-tts-echo-filter.js";
 import type { CallRoomEventSink } from "./types.js";
 
@@ -29,7 +33,43 @@ export function createCallTtsPlaybackQueue(options: {
         options.nowMs() + playbackMs + 8_000,
       );
     },
+  async (state, input) => {
+      const result = await options.eventSink.publish(input.callId, [
+        playbackEvent(state, input, options.nowMs()),
+      ]);
+      return result?.playbackBindings?.find((binding) =>
+        binding.playbackId === input.playbackId &&
+        binding.generation === input.generation
+      );
+    },
   );
+}
+
+function playbackEvent(
+  state: PlaybackLifecycle,
+  input: PlaybackLifecycleInput,
+  timestampMs: number,
+): CallRoomSubmittedEvent {
+  const sourceLanguage = input.targetLanguage === "zh" ? "en" : "zh";
+  return {
+    type: `playback.${state}`,
+    segmentId: input.segmentId,
+    playbackId: input.playbackId,
+    generation: input.generation,
+    sourceLegId: input.sourceLegId,
+    targetLegId: input.targetLegId,
+    speakerRole: input.speakerRole,
+    speaker: participantTrackSpeaker(input.speakerRole),
+    sourceLanguage,
+    targetLanguage: input.targetLanguage,
+    text: input.translatedText,
+    translatedText: input.translatedText,
+    provider: input.speech.provider,
+    model: input.speech.model,
+    audioDurationMs: input.speech.audioDurationMs,
+    ...(input.playbackReason ? { playbackReason: input.playbackReason } : {}),
+    timestampMs,
+  };
 }
 
 function statusEvent(

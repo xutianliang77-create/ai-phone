@@ -22,6 +22,27 @@ export function waitForDataPacket(room, rtc, options) {
   }), timeoutMs(options), "Timed out waiting for LiveKit data packet");
 }
 
+export function waitForCallRoomCaption(room, rtc, segmentId, options) {
+  return withTimeout(new Promise((resolve) => {
+    room.on(rtc.RoomEvent.DataReceived, (data, participant) => {
+      try {
+        const event = JSON.parse(Buffer.from(data).toString("utf8"));
+        if (event.type !== "transcript.final" || event.segmentId !== segmentId) return;
+        resolve({
+          ok: true,
+          details: {
+            bytes: data.byteLength,
+            segmentId: event.segmentId,
+            from: participant?.identity ?? null,
+          },
+        });
+      } catch {
+        // Ignore unrelated data packets while waiting for the server caption.
+      }
+    });
+  }), timeoutMs(options), "Timed out waiting for server call-room caption");
+}
+
 export function waitForWorkerAudio(room, rtc, options) {
   return withTimeout(new Promise((resolve, reject) => {
     room.on(rtc.RoomEvent.TrackSubscribed, (track, _publication, participant) => {

@@ -27,6 +27,8 @@ export interface CreateAiCallingAgentDraftRequest {
 export interface AuthorizeAiCallingAgentRequest {
   userConfirmed: boolean;
   consentPromptVersion: string;
+  recipientDisclosureConfirmed?: boolean;
+  disclosurePromptVersion?: string;
 }
 
 export interface RequestAiCallingAgentTakeoverRequest {
@@ -39,6 +41,8 @@ export interface CancelAiCallingAgentDraftRequest {
 
 export interface StartAiCallingAgentCallRequest {
   consentPromptVersion?: string;
+  disclosurePromptVersion?: string;
+  recipientDisclosureConfirmed?: boolean;
 }
 
 export interface UpdateAiCallingAgentCallStatusRequest {
@@ -67,6 +71,8 @@ export interface AiCallingAgentDraftDto {
   riskLevel: "low" | "requires_human_takeover";
   riskReasons: string[];
   consentPromptVersion?: string;
+  recipientDisclosureConfirmed?: boolean;
+  disclosurePromptVersion?: string;
   authorizedAt?: string;
   takeoverRequestedAt?: string;
   takeoverReason?: string;

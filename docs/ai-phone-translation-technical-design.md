@@ -1,7 +1,7 @@
 # AI 翻译电话技术方案
 
-版本：v0.5
-日期：2026-07-11
+版本：v0.7
+日期：2026-07-14
 范围：Call Link、WebRTC/VoIP 通话房间、拨打手机号翻译电话、PSTN 服务商桥接、AI Calling Agent。  
 关联文档：`docs/ai-communication-feature-design.md`、`docs/ai-communication-ui-design.md`、`docs/ai-phone-translation-protocol-design.md`、`docs/ai-phone-translation-data-ops-design.md`
 
@@ -39,9 +39,11 @@ Call Orchestrator
         |
         +--> Translation Worker
                 +--> Speaker Attribution Router
+                +--> Speech Turn Coordinator
                 +--> ASR Provider
                 +--> Translation Provider
                 +--> TTS Provider
+                +--> Playback / Interruption Controller
                 +--> Summary Provider
 ```
 
@@ -57,6 +59,8 @@ Call Orchestrator
 | PSTN Bridge Adapter | 调 Twilio/Telnyx 或国内 PSTN Bridge 拨号，接收/发送电话音频 |
 | Translation Worker | VAD、ASR、翻译、TTS、字幕事件、摘要材料 |
 | Speaker Attribution Router | 按独立音轨、流式分离或手动模式选择归属来源，并完成时间对齐 |
+| Speech Turn Coordinator | 按 participant、VAD 和 speaker 边界形成稳定 turn，禁止跨人合并 |
+| Playback / Interruption Controller | 按目标通话腿排队、播放、取消 TTS，并处理抢话和降级 |
 | Billing Ledger | credits 预扣、结算、失败回滚、成本记录 |
 | Session Record Service | 保存 transcript、translation、summary、highlights |
 
@@ -97,14 +101,14 @@ Call Orchestrator
 
 ```text
 1. 用户创建 Call Link
-2. API 创建 call_session 和 LiveKit room
+2. API 创建唯一 translation_session、host/guest call legs 和 LiveKit room
 3. API 签发 host token 和 guest token
 4. 用户分享链接
 5. 对方打开 Web Guest，授权麦克风
 6. 双方发布原始音频轨道
-7. Translation Worker 订阅双方音频
-8. Worker 产生字幕和译文
-9. Worker 发布目标语言 TTS 音频轨道
+7. Translation Worker 按 participant track 订阅双方音频，每条 source leg 独立进入 ASR/翻译队列
+8. Worker 产生带 sourceLegId/targetLegId 的字幕和译文
+9. Worker 为目标 leg 创建可取消 playback，发布目标语言 TTS 音频轨道
 10. App/Web 只播放翻译轨道，原始音频可低音量或默认不播
 11. 结束后生成记录和摘要
 ```
@@ -115,6 +119,8 @@ Call Orchestrator
 - 原始对方音频默认静音或低音量，提供设置开关。
 - Worker 必须能订阅原始音频。
 - 字幕事件走 Realtime Gateway 或 Call Event WebSocket。
+- Call Link 不运行单麦克风 diarization；host/guest 身份只来自独立 participant track。
+- 双向翻译队列互相独立；一侧 TTS 阻塞或取消不得阻塞另一侧 ASR、翻译和播放。
 
 ## 6. 拨打手机号数据流
 
@@ -126,8 +132,8 @@ Call Orchestrator
 5. 服务商回调 ringing / answered / completed
 6. answered 后开启双向 media stream
 7. PSTN Bridge 收到对方电话音频
-8. Worker 翻译对方音频，TTS 发布给 App
-9. Worker 接收 App 音频，翻译后 TTS 送回 PSTN
+8. Worker 翻译对方音频，建立 callee -> host playback 并发布给 App
+9. Worker 接收 App 音频，建立 host -> callee playback 并送回 PSTN
 10. 结束后按真实时长结算 credits，保存记录
 ```
 
@@ -137,6 +143,7 @@ Call Orchestrator
 - 对方不需要安装 App，接普通电话。
 - PSTN provider call id 必须入库。
 - 拨号前必须展示费用预估和录音/AI 翻译提示。
+- Provider 必须声明 `bidirectionalMedia`、`streamingWrite` 和 `clearPlayback` 能力；缺少清除播放能力时只能使用半双工或纯字幕降级，不能宣称支持实时抢话。
 
 ## 7. AI Calling Agent 数据流
 
@@ -160,6 +167,19 @@ Agent 安全门：
 - `PSTN_BRIDGE_BASE_URL` 未配置时不得伪造成功。
 - 付款、身份验证、法律/医疗/金融决定必须请求接管。
 - Agent 每次敏感操作要记录 reason 和 user_confirmed。
+
+### 7.1 产品化能力集成
+
+本阶段的 Agent、声音克隆、授权声纹和扫描翻译都复用现有 Provider、账号和会话边界，不另建客户端直连模型链路。
+
+| 能力 | 主链路 | 安全和降级边界 |
+| --- | --- | --- |
+| Agent 灰度 | 草稿 -> 明示告知 -> 用户授权 -> 灰度策略 -> 原子预扣 -> PSTN 队列 | 白名单、紧急/禁拨号码、小时频控和高风险接管均在 API 事务内复核；客户端预检不作为权威 |
+| Hi-Fi 声音克隆 | PCM16 WAV 质量分析 -> Voice Profile -> VoxCPM2 `hifi` -> 48k 模型输出重采样为24k协议音频 | 不合格录音不可置为 ready；提示词不拼入朗读正文；Provider 失败继续字幕 |
+| 授权声纹 | 显式同意 -> 注册参考音频 -> Speaker Provider embedding -> 账号内匹配 -> 低置信度匿名 | embedding 只存模型服务引用，不回传 App、不进入字幕/LLM/导出；撤回立即停止命中，远端删除失败由周期补偿收敛 |
+| 扫描翻译 | 系统 OCR block -> 逐块翻译 -> 原图坐标叠加 -> 原译逐块对照 -> 保存/分享 | OCR 坐标使用左上原点归一化值；无坐标时只做整段半透明叠加，不猜测文本位置 |
+
+扫描页以原图作为空间真值。iOS Vision 的左下原点坐标在原生桥接层转换为左上原点；Android ML Kit 的像素矩形在桥接层按图片宽高归一化。Flutter 不重新推断版面，只按 `left/top/width/height` 回贴译文，从而保持菜单、表格、票据和文档的可对照性。
 
 ## 8. 音频处理链路
 
@@ -265,6 +285,58 @@ Gateway 将段级上下文随 transcript/translation 一起写入 API；App 本�
 | TTS 首包 | 300-1000ms |
 | 端到端可感知延迟 | 2-5s |
 
+### 8.5 全双工播放与抢话架构
+
+目标是让 Call Link、VoIP 和具备媒体清除能力的 PSTN 通话接近自然电话：TTS 播放期间继续采集双方语音，用户开口后只中断其即将听到的译音，不停止另一方向的识别、翻译或播放。
+
+```text
+capture call leg
+  -> capture + 300-500ms pre-roll
+  -> AEC(reference = exact playback PCM sent to this same leg)
+  -> MarbleNet VAD
+  -> SpeechTurnCoordinator
+  -> ASR -> conservative correction -> ordered translation
+  -> target call leg playback queue
+  -> TTS stream -> playback sink
+
+the same call leg capture while receiving translated playback
+  -> InterruptionController
+       -> barge_in.detected
+       -> cancel target playback generation
+       -> preserve pre-roll and continue ASR
+```
+
+核心约束：
+
+- `translation_session` 是唯一会话聚合，Call Link 的 `callId` 与 `sessionId` 使用同一 ID；不得再维护只存在内存的平行通话真值。
+- 每位参与者、PSTN 媒体流或 Agent 使用一个 `call_leg`。ASR/翻译队列按 `sourceLegId` 隔离，TTS 队列和取消按 `targetLegId` 隔离。
+- 每次译音创建独立 `playbackId` 和单调递增 `generation`。播放状态为 `queued -> streaming -> completed`，中断进入 `interrupting -> interrupted`，异常进入 `failed`。
+- 取消必须同时停止 TTS 生成、丢弃未发送帧、调用 LiveKit/PSTN sink 的 stop/clear，并拒绝旧 generation 的迟到音频。
+- InterruptionController 只在 AEC 后语音满足 VAD 连续时长、能量和置信度门槛时触发；单个噪声尖峰、键盘声和播放回声不能触发抢话。
+- 抢话后的 ASR 使用 300-500ms pre-roll，避免丢失首音节；中断事件不直接结束当前 session，也不触发结算。
+- 同一 target leg 同时只允许一个 active playback；不同 target leg 可并行，不能用 callId 作为全房间单队列键。
+- 纯 TTS 播放、字幕写入、playback 状态和 usage 事件均通过幂等事件写入；音频 PCM、AEC reference 和 VAD 帧仅保存在 Worker 环形缓冲，不落库。
+
+模式策略：
+
+| 场景 | 生产策略 | 降级策略 |
+| --- | --- | --- |
+| LiveKit App/Web + 耳机 | AEC 全双工，允许抢话 | AEC 异常时切半双工并提示 |
+| LiveKit App/Web + 扬声器 | AEC + exact TTS reference + playback generation | 回声置信度异常时暂停本 leg 播放期间的识别，不影响另一 leg |
+| PSTN 支持 clear/stop | 双向媒体 + provider clear，允许抢话 | clear 失败时终止旧 generation 并切半双工 |
+| PSTN 不支持 clear/stop | 不开启全双工抢话 | 半双工或纯字幕 |
+
+首期不使用 LLM 判定抢话。LLM 只处理已经确认的 ASR 文本，不能参与 300ms 级音频中断控制。
+
+当前实现边界（2026-07-14）：
+
+- `CALL_FULL_DUPLEX_ENABLED=false` 为安全默认值；API token 和 Worker 使用同一发布环境开关，未灰度客户端继续执行半双工采集保护。
+- iPhone 与 Web 由 WebRTC 音频栈启用 echo cancellation、noise suppression 和 auto gain control；Worker 不自行用 RMS 或文本相似度冒充抢话检测。
+- ASR Service 在每个音频帧响应头返回 MarbleNet voiced/probability/provider/pre-roll；HTTP ASR Provider 只把同 call、同 speaker、单调 sequence 的结果送入 `CallInterruptionController`。
+- 控制器确认抢话后只推进当前 target route epoch、Abort 当前 generation 并调用 LiveKit `AudioSource.clearQueue()`；另一 target leg 保持并行。LiveKit sink 在每帧写入前后校验 generation，clear 完成后不再接受旧代次帧。
+- VAD fallback、概率缺失、pre-roll 不足或 playback clear 失败立即发布 `pipeline.degraded`；App/Web 切回 TTS 期间暂停采集。健康链路恢复后发布 `pipeline.restored`，但不重放旧 PCM。
+- PSTN 的能力合同已经具备，但 Mock、HTTP 和 Fonoster adapter 当前均声明 `clearPlayback=false`。在真实服务商提供并验证 clear/stop 前，PSTN 只能半双工或纯字幕。
+
 ## 9. 模型 Provider 策略
 
 | 能力 | 国内版生产基线 | P2/P3 |
@@ -335,20 +407,21 @@ Gateway 将段级上下文随 transcript/translation 一起写入 API；App 本�
 | PSTN media stream 断开 | 结束电话并保存已完成片段 |
 | ASR 失败 | 降级到备用 ASR 或提示 |
 | TTS 失败 | 继续字幕，关闭语音播放 |
+| AEC 不可用或回声升高 | 当前 leg 降级半双工，另一方向保持运行并记录 `pipeline.degraded` |
+| playback cancel/clear 失败 | 提升 generation、丢弃迟到帧，PSTN 切半双工并告警 |
+| Worker 重启 | 从持久化 session/call legs/playback 终态恢复；未确认 playback 标记 interrupted，不自动重放旧语音 |
 | 翻译超时 | 显示原文，后台补译 |
 
 ## 13. 推荐落地顺序
 
-1. Call domain 数据模型和 API。
-2. LiveKit POC：App 和 Web Guest 加入同一房间。
-3. Translation Worker 订阅音频并输出字幕。
-4. TTS 轨道回放。
-5. Call Link 产品闭环：创建、分享、加入、结束、历史。
-6. Twilio outbound + bidirectional Media Streams POC。
-7. Telnyx 对比 POC。
-8. PSTN 拨号页和 credits 预扣。
-9. 电话双向翻译闭环。
-10. AI Calling Agent。
+1. 数据基础：统一 translation_session、call legs、事务、inbox/outbox、幂等和重启恢复，不改变现有半双工行为。
+2. 播放域：playbackId/generation、按 target leg 队列、stop/clear 合同和事件协议。
+3. LiveKit 全双工：AEC、TTS reference、pre-roll 和 InterruptionController，先以 feature flag 灰度。
+4. 故障恢复：API/Worker 重启、重复事件、迟到音频和降级收敛。
+5. Call Link 产品闭环：创建、分享、自动 Worker 入房、结束、历史和质量报告。
+6. PSTN Provider 能力适配：先验证 bidirectional media、streaming write、clear playback。
+7. 真实 PSTN 双向翻译和 credits 闭环。
+8. AI Calling Agent 复用同一 call leg/playback/settlement 模型。
 
 ## 14. POC 验收
 
@@ -356,6 +429,9 @@ Call Link POC：
 
 - 两台手机或手机 + 浏览器可通话。
 - 双方字幕和译文出现。
+- 双方同时说话时两条方向独立，不互相取消。
+- 一方在译音播放中开口，目标端播放 P95 300ms 内停止，首音节无明显丢失。
+- 连续 30 分钟仅播放 TTS 时不得产生回声字幕或误抢话。
 - 可结束并保存记录。
 
 PSTN POC：
@@ -364,6 +440,7 @@ PSTN POC：
 - 对方接普通电话。
 - 对方说英文，App 看到中文字幕。
 - 用户说中文，对方听到英文 TTS。
+- Provider 支持 clear 时，抢话 P95 300ms 内停止旧译音；不支持时明确进入半双工。
 - 10 分钟内不掉线。
 - 历史记录包含 provider call id、时长、费用。
 

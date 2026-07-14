@@ -60,7 +60,12 @@ function audioRequest(options: {
   });
   return {
     callId: "call-1",
+    sessionId: "call-1",
     segmentId: "seg-1",
+    playbackId: "playback-1",
+    generation: 1,
+    sourceLegId: "host-leg",
+    targetLegId: "guest-leg",
     sourceSpeakerRole: "host",
     targetSpeakerRole: "guest",
     language: "en",

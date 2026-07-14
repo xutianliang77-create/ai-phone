@@ -112,6 +112,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(apiClient.tokenCreateCount, 1);
+    expect(apiClient.connectionConfirmCount, 1);
     expect(roomClient.connectedToken?.token, 'secret-room-token');
     expect(find.textContaining('已入房，麦克风已发布'), findsOneWidget);
     expect(find.text('对方人数：1'), findsOneWidget);
@@ -124,6 +125,28 @@ void main() {
     expect(find.textContaining('未入房'), findsOneWidget);
     expect(find.text('通话记录已保存：8 秒'), findsOneWidget);
     expect(find.text('进入房间'), findsNothing);
+  });
+
+  testWidgets('shows waiting Web guests before the host enters',
+      (WidgetTester tester) async {
+    final apiClient = FakeCallLinkApiClient(activeGuestCountAfterFetch: 1);
+    await tester.pumpWidget(_TestApp(
+      child: CallLinkPage(
+        client: apiClient,
+        roomClient: FakeCallRoomClient(),
+        voiceConsentStore: MemoryVoiceProcessingConsentStore.accepted(),
+      ),
+    ));
+
+    await tester.tap(find.text('生成链接'));
+    await tester.pumpAndSettle();
+    expect(find.text('对方人数：0'), findsOneWidget);
+
+    await tester.pump(const Duration(seconds: 2));
+    await tester.pump();
+
+    expect(find.text('对方人数：1'), findsOneWidget);
+    expect(apiClient.fetchedCallIds, contains('call_1'));
   });
 
   testWidgets('shows LiveKit room data messages', (WidgetTester tester) async {
@@ -270,6 +293,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(apiClient.fetchedCallIds, <String>['call_1']);
+    expect(apiClient.connectionConfirmCount, 1);
     expect(roomClient.connectedToken?.participantRole, 'guest');
     expect(roomClient.connectedToken?.token, 'secret-room-token');
     expect(find.text('访客入会凭证已准备'), findsOneWidget);

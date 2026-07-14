@@ -1,4 +1,5 @@
 import { createHmac, randomUUID } from "node:crypto";
+import { TokenVerifier } from "livekit-server-sdk";
 import { getLiveKitRoomConfig } from "./call-room-readiness.js";
 
 export type CallRoomParticipantRole = "host" | "guest" | "worker";
@@ -9,9 +10,11 @@ export interface CallRoomTokenResult {
   provider: "livekit";
   roomName: string;
   wsUrl: string;
+  participantIdentity: string;
   participantRole: CallRoomParticipantRole;
   token: string;
   expiresAt: string;
+  fullDuplexEnabled: boolean;
 }
 
 export function callRoomName(callId: string) {
@@ -23,6 +26,7 @@ export function createCallRoomToken(options: {
   roomName: string;
   participantRole: CallRoomParticipantRole;
   participantName?: string;
+  fullDuplexEnabled?: boolean;
   now?: Date;
 }): CallRoomTokenResult | { ok: false; issues: string[] } {
   const config = getLiveKitRoomConfig();
@@ -44,6 +48,7 @@ export function createCallRoomToken(options: {
     metadata: JSON.stringify({
       callId: options.callId,
       participantRole: options.participantRole,
+      fullDuplexEnabled: options.fullDuplexEnabled === true,
     }),
     video: {
       room: options.roomName,
@@ -58,10 +63,37 @@ export function createCallRoomToken(options: {
     provider: "livekit",
     roomName: options.roomName,
     wsUrl: config.config.livekitUrl,
+    participantIdentity,
     participantRole: options.participantRole,
     token: signJwt(payload, config.config.apiSecret),
     expiresAt: new Date(expiresAtSeconds * 1000).toISOString(),
+    fullDuplexEnabled: options.fullDuplexEnabled === true,
   };
+}
+
+export async function verifyCallRoomConnectionToken(options: {
+  token: string;
+  callId: string;
+  roomName: string;
+  participantIdentity: string;
+  participantRole: "host" | "guest";
+}): Promise<boolean> {
+  const config = getLiveKitRoomConfig();
+  if (!config.ok) return false;
+  try {
+    const grants = await new TokenVerifier(
+      config.config.apiKey,
+      config.config.apiSecret,
+    ).verify(options.token);
+    const metadata = JSON.parse(grants.metadata ?? "{}") as Record<string, unknown>;
+    return grants.sub === options.participantIdentity
+      && grants.video?.room === options.roomName
+      && grants.video.roomJoin === true
+      && metadata.callId === options.callId
+      && metadata.participantRole === options.participantRole;
+  } catch {
+    return false;
+  }
 }
 
 function signJwt(payload: Record<string, unknown>, secret: string) {

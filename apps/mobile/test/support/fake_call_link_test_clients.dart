@@ -8,12 +8,15 @@ class FakeCallLinkApiClient extends CallLinkApiClient {
   FakeCallLinkApiClient({
     this.tokenFails = false,
     this.authRequired = false,
+    this.activeGuestCountAfterFetch = 0,
   }) : super(baseUrl: Uri.parse('http://localhost'));
 
   final bool tokenFails;
   final bool authRequired;
+  final int activeGuestCountAfterFetch;
   int createCount = 0;
   int tokenCreateCount = 0;
+  int connectionConfirmCount = 0;
   final List<String> fetchedCallIds = <String>[];
   final List<String> endedCallIds = <String>[];
 
@@ -45,6 +48,7 @@ class FakeCallLinkApiClient extends CallLinkApiClient {
       hostUrl: 'https://call.example.cn/host/$callId',
       status: 'created',
       expiresAt: DateTime.utc(2026, 7, 2, 12),
+      activeGuestCount: activeGuestCountAfterFetch,
     );
   }
 
@@ -63,10 +67,16 @@ class FakeCallLinkApiClient extends CallLinkApiClient {
       provider: 'livekit',
       roomName: 'call_$callId',
       wsUrl: 'wss://livekit.example.cn',
+      participantIdentity: '$callId:$participantRole:test',
       participantRole: participantRole,
       token: 'secret-room-token',
       expiresAt: DateTime.utc(2026, 7, 2, 13),
     );
+  }
+
+  @override
+  Future<void> confirmRoomConnected(CallRoomToken token) async {
+    connectionConfirmCount += 1;
   }
 
   @override

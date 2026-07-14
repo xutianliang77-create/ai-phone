@@ -5,13 +5,15 @@ from app.mock_engine import MockSpeakerEngine
 from app.routes import create_router
 from app.sortformer_shadow_engine import SortformerShadowEngine
 from app.sortformer_streaming_runtime import StreamingProfile
+from app.voice_identity import DisabledVoiceIdentityEngine, NemoVoiceIdentityEngine
 
 
 def create_app(config: SpeakerConfig | None = None) -> FastAPI:
     resolved = config or load_config()
     engine = create_engine(resolved)
     app = FastAPI(title="ai phone Speaker Service", version="0.1.0")
-    app.include_router(create_router(engine, resolved))
+    identity_engine = create_voice_identity_engine(resolved)
+    app.include_router(create_router(engine, identity_engine, resolved))
     return app
 
 
@@ -31,6 +33,16 @@ def create_engine(config: SpeakerConfig):
             offset=config.offset,
         )
     return MockSpeakerEngine()
+
+
+def create_voice_identity_engine(config: SpeakerConfig):
+    if config.voice_identity_provider == "nemo_titanet":
+        return NemoVoiceIdentityEngine(
+            config.voice_identity_model_id,
+            config.voice_identity_store_dir,
+            config.voice_identity_encryption_key,
+        )
+    return DisabledVoiceIdentityEngine()
 
 
 app = create_app()

@@ -46,12 +46,14 @@ class _CallLinkPageState extends State<CallLinkPage> {
   late final VoiceProcessingConsentStore _voiceConsentStore =
       widget.voiceConsentStore ?? const FileVoiceProcessingConsentStore();
   StreamSubscription<CallRoomSnapshot>? _roomSubscription;
+  Timer? _linkRefreshTimer;
   CallLink? _link;
   CallLinkEndResult? _endResult;
   CallRoomSnapshot _roomSnapshot = const CallRoomSnapshot.disconnected();
   Object? _error;
   bool _loading = false;
   bool _roomLoading = false;
+  bool _linkRefreshInFlight = false;
 
   @override
   void initState() {
@@ -64,6 +66,7 @@ class _CallLinkPageState extends State<CallLinkPage> {
 
   @override
   void dispose() {
+    _linkRefreshTimer?.cancel();
     unawaited(_roomSubscription?.cancel());
     if (_ownsRoomClient) unawaited(_roomClient.dispose());
     if (_ownsClient) _client.close();
@@ -136,10 +139,34 @@ class _CallLinkPageState extends State<CallLinkPage> {
       final link = await _client.createCallLink();
       if (!mounted) return;
       setState(() => _link = link);
+      _startLinkRefresh();
     } catch (error) {
       if (mounted) setState(() => _error = error);
     } finally {
       if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  void _startLinkRefresh() {
+    _linkRefreshTimer?.cancel();
+    _linkRefreshTimer = Timer.periodic(
+      const Duration(seconds: 2),
+      (_) => unawaited(_refreshLink()),
+    );
+  }
+
+  Future<void> _refreshLink() async {
+    final link = _link;
+    if (link == null || _endResult != null || _linkRefreshInFlight) return;
+    _linkRefreshInFlight = true;
+    try {
+      final refreshed = await _client.getCallLink(callId: link.callId);
+      if (!mounted || _link?.callId != refreshed.callId) return;
+      setState(() => _link = refreshed);
+    } catch (_) {
+      // Presence refresh is best-effort; room entry remains available.
+    } finally {
+      _linkRefreshInFlight = false;
     }
   }
 
@@ -158,7 +185,13 @@ class _CallLinkPageState extends State<CallLinkPage> {
         participantRole: 'host',
         participantName: 'host',
       );
-      await _roomClient.connect(token);
+      try {
+        await _roomClient.connect(token);
+        await _client.confirmRoomConnected(token);
+      } catch (_) {
+        await _roomClient.disconnect();
+        rethrow;
+      }
     } catch (error) {
       if (mounted) setState(() => _error = error);
     } finally {
@@ -176,6 +209,7 @@ class _CallLinkPageState extends State<CallLinkPage> {
     try {
       await _roomClient.disconnect();
       final result = await _client.endCallLink(callId: link.callId);
+      _linkRefreshTimer?.cancel();
       if (mounted) setState(() => _endResult = result);
     } catch (error) {
       if (mounted) setState(() => _error = error);

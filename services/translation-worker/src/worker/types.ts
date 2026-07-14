@@ -26,12 +26,36 @@ export interface TranscriptSegment {
   vadContext?: SegmentVadContextDto;
 }
 
+export interface CallVadDecision {
+  callId: string;
+  speakerRole: CallAudioSpeakerRole;
+  sequence: number;
+  timestampMs: number;
+  durationMs: number;
+  voiced: boolean;
+  probability?: number;
+  provider: string;
+  fallback: boolean;
+  preRollMs: number;
+}
+
+export type CallVadDecisionSink = (decision: CallVadDecision) => void;
+
+export interface CallDuplexConfig {
+  enabled: boolean;
+  minSpeechMs: number;
+  minProbability: number;
+  cooldownMs: number;
+  preRollMs: number;
+}
+
 export interface CallAsrProvider {
   createCall(callId: string): Promise<void>;
   transcribe(frame: CallAudioFrame): Promise<TranscriptSegment | null>;
   flush(callId: string, speakerRole: CallAudioSpeakerRole):
     Promise<TranscriptSegment | null>;
   closeCall(callId: string): Promise<void>;
+  setVadDecisionSink?(sink: CallVadDecisionSink | null): void;
 }
 
 export interface CallTranslationProvider {
@@ -68,6 +92,7 @@ export interface TtsVoiceConfig {
   referenceAudioId?: string;
   referenceTranscript?: string;
   controlPrompt?: string;
+  quality?: "standard" | "hifi";
 }
 
 export interface CallTtsProvider {
@@ -81,18 +106,63 @@ export interface CallTtsProvider {
 }
 
 export interface CallTtsAudioSink {
+  readonly capabilities?: PlaybackSinkCapabilities;
   play(input: {
     callId: string;
     segmentId: string;
+    playbackId: string;
+    generation: number;
+    sourceLegId: string;
+    targetLegId: string;
     sourceSpeakerRole: CallAudioSpeakerRole;
     targetSpeakerRole: CallAudioSpeakerRole;
     language: CallRoomTranslationLanguage;
     speech: SynthesizedSpeech;
-  }): Promise<void>;
+    signal: AbortSignal;
+  }): Promise<CallTtsPlaybackSinkResult | void>;
+  interrupt?(input: CallTtsPlaybackInterruptInput):
+    Promise<CallTtsPlaybackInterruptResult>;
+}
+
+export interface PlaybackSinkCapabilities {
+  bidirectionalMedia: boolean;
+  streamingWrite: boolean;
+  clearPlayback: boolean;
+}
+
+export interface CallTtsPlaybackSinkResult {
+  status: "queued" | "played";
+  providerPlaybackId?: string;
+}
+
+export interface CallTtsPlaybackInterruptInput {
+  callId: string;
+  playbackId: string;
+  generation: number;
+  targetLegId: string;
+  targetSpeakerRole: CallAudioSpeakerRole;
+  reason: "barge_in" | "session_end" | "superseded" | "failure";
+  idempotencyKey: string;
+}
+
+export interface CallTtsPlaybackInterruptResult {
+  cleared: boolean;
+}
+
+export interface CallPlaybackBinding {
+  playbackId: string;
+  generation: number;
+  sourceLegId: string;
+  targetLegId: string;
+}
+
+export interface CallRoomPublishResult {
+  playbackBindings?: CallPlaybackBinding[];
 }
 
 export interface CallRoomEventSink {
-  publish(callId: string, events: CallRoomSubmittedEvent[]): Promise<void>;
+  publish(callId: string, events: CallRoomSubmittedEvent[]):
+    Promise<CallRoomPublishResult | void>;
 }
 
 export interface CallTtsVoiceSink {

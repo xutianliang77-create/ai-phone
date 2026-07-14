@@ -68,6 +68,35 @@ describe("translation worker env", () => {
     process.env = { SPEECH_PIPELINE_MODE: "invalid" };
     expect(() => loadEnv()).toThrow("Unsupported SPEECH_PIPELINE_MODE");
   });
+
+  it("keeps full duplex disabled by default and validates its thresholds", () => {
+    process.env = {};
+    expect(loadEnv().duplexConfig).toEqual({
+      enabled: false,
+      minSpeechMs: 240,
+      minProbability: 0.5,
+      cooldownMs: 800,
+      preRollMs: 400,
+    });
+
+    process.env = {
+      CALL_FULL_DUPLEX_ENABLED: "true",
+      CALL_BARGE_IN_MIN_SPEECH_MS: "300",
+      CALL_BARGE_IN_MIN_PROBABILITY: "0.7",
+      CALL_BARGE_IN_COOLDOWN_MS: "900",
+      CALL_BARGE_IN_PRE_ROLL_MS: "500",
+    };
+    expect(loadEnv().duplexConfig).toEqual({
+      enabled: true,
+      minSpeechMs: 300,
+      minProbability: 0.7,
+      cooldownMs: 900,
+      preRollMs: 500,
+    });
+
+    process.env.CALL_BARGE_IN_MIN_PROBABILITY = "1.1";
+    expect(loadEnv().duplexConfig.minProbability).toBe(0.5);
+  });
 });
 
 function writeConfig(tempDirs: string[]) {

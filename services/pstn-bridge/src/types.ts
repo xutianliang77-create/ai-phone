@@ -23,7 +23,12 @@ export interface AgentCallBridgeResult {
 
 export interface TtsAudioSinkRequest {
   callId: string;
+  sessionId: string;
   segmentId: string;
+  playbackId: string;
+  generation: number;
+  sourceLegId: string;
+  targetLegId: string;
   sourceSpeakerRole: "host" | "guest";
   targetSpeakerRole: "host" | "guest";
   language: "zh" | "en";
@@ -46,6 +51,22 @@ export interface TtsAudioSinkResult {
   mediaWriteId?: string;
   failureReason?: string;
   nextStep?: string;
+}
+
+export interface PlaybackSinkCapabilities {
+  bidirectionalMedia: boolean;
+  streamingWrite: boolean;
+  clearPlayback: boolean;
+}
+
+export interface PlaybackInterruptRequest {
+  callId: string;
+  sessionId: string;
+  playbackId: string;
+  generation: number;
+  targetLegId: string;
+  reason: "barge_in" | "session_end" | "superseded" | "failure";
+  idempotencyKey: string;
 }
 
 export interface TelephonyAudio {
@@ -90,9 +111,13 @@ export interface AudioFrameSinkResult {
 
 export interface MediaWriteRequest {
   callId: string;
+  sessionId: string;
   providerCallId?: string;
   mediaStreamId?: string;
   segmentId: string;
+  playbackId: string;
+  generation: number;
+  targetLegId: string;
   targetSpeakerRole: "host" | "guest";
   language: "zh" | "en";
   telephonyAudio: TelephonyAudio;
@@ -158,4 +183,7 @@ export interface PstnStatusWebhookSink {
 export interface PstnProvider {
   placeCall(request: AgentCallBridgeRequest): Promise<AgentCallBridgeResult>;
   playTranslatedAudio(request: TtsAudioSinkRequest): Promise<TtsAudioSinkResult>;
+  playbackCapabilities?: PlaybackSinkCapabilities;
+  interruptPlayback?(request: PlaybackInterruptRequest):
+    Promise<{ cleared: boolean }>;
 }

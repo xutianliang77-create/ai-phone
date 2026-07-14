@@ -15,6 +15,7 @@ class CallLink {
     required this.hostUrl,
     required this.status,
     required this.expiresAt,
+    this.activeGuestCount = 0,
   });
 
   final String callId;
@@ -25,6 +26,7 @@ class CallLink {
   final String hostUrl;
   final String status;
   final DateTime expiresAt;
+  final int activeGuestCount;
 
   factory CallLink.fromJson(Map<String, Object?> json) {
     return CallLink(
@@ -36,6 +38,7 @@ class CallLink {
       hostUrl: json['hostUrl']! as String,
       status: json['status']! as String,
       expiresAt: DateTime.parse(json['expiresAt']! as String),
+      activeGuestCount: (json['activeGuestCount'] as num?)?.toInt() ?? 0,
     );
   }
 }
@@ -73,18 +76,22 @@ class CallRoomToken {
     required this.provider,
     required this.roomName,
     required this.wsUrl,
+    required this.participantIdentity,
     required this.participantRole,
     required this.token,
     required this.expiresAt,
+    this.fullDuplexEnabled = false,
   });
 
   final String callId;
   final String provider;
   final String roomName;
   final String wsUrl;
+  final String participantIdentity;
   final String participantRole;
   final String token;
   final DateTime expiresAt;
+  final bool fullDuplexEnabled;
 
   factory CallRoomToken.fromJson(Map<String, Object?> json) {
     return CallRoomToken(
@@ -92,9 +99,11 @@ class CallRoomToken {
       provider: json['provider']! as String,
       roomName: json['roomName']! as String,
       wsUrl: json['wsUrl']! as String,
+      participantIdentity: json['participantIdentity']! as String,
       participantRole: json['participantRole']! as String,
       token: json['token']! as String,
       expiresAt: DateTime.parse(json['expiresAt']! as String),
+      fullDuplexEnabled: json['fullDuplexEnabled'] == true,
     );
   }
 }
@@ -153,6 +162,25 @@ class CallLinkApiClient {
     }
     final json = jsonDecode(response.body) as Map<String, Object?>;
     return CallRoomToken.fromJson(json);
+  }
+
+  Future<void> confirmRoomConnected(CallRoomToken token) async {
+    final response = await _client.post(
+      _baseUrl.resolve('/call-links/${token.callId}/room-connected'),
+      headers: token.participantRole == 'host'
+          ? await _authHeaders(json: true)
+          : const {'content-type': 'application/json'},
+      body: jsonEncode({
+        'participantIdentity': token.participantIdentity,
+        'participantRole': token.participantRole,
+        'token': token.token,
+      }),
+    );
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw CallLinkApiException(
+        'Confirm room connection failed: ${response.body}',
+      );
+    }
   }
 
   Future<CallLinkEndResult> endCallLink({required String callId}) async {

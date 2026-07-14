@@ -91,6 +91,153 @@ describe("sqlite snapshot store", () => {
     expect(reader.quickCheck()).toBe("ok");
     reader.close();
   });
+
+  it("persists call metadata and call legs with the owning session", () => {
+    const fixture = createFixture();
+    const writer = fixture.open();
+    const snapshot = writer.read();
+    snapshot.sessions.push(callSession("call-a"));
+    writer.save(snapshot);
+    writer.close();
+
+    const reader = fixture.open();
+    expect(reader.read().sessions[0]).toMatchObject({
+      id: "call-a",
+      mode: "call_link",
+      callLink: {
+        roomName: "call_call-a",
+        roomProvider: "livekit",
+      },
+      callLegs: [{
+        id: "call-a:host:one",
+        participantIdentity: "call-a:host:one",
+        participantRole: "host",
+        status: "active",
+      }],
+    });
+    reader.close();
+  });
+
+  it("allows sequential updates after session children change JSON field order", () => {
+    const fixture = createFixture();
+    const store = fixture.open();
+    const snapshot = store.read();
+    snapshot.sessions.push(callSession("call-sequential"));
+    store.save(snapshot);
+
+    snapshot.sessions[0]!.status = "active";
+    expect(() => store.save(snapshot)).not.toThrow();
+    store.close();
+
+    const reader = fixture.open();
+    expect(reader.read().sessions[0]).toMatchObject({
+      id: "call-sequential",
+      status: "active",
+      callLegs: [{ participantRole: "host" }],
+    });
+    reader.close();
+  });
+
+  it("treats empty optional call collections like omitted child rows", () => {
+    const fixture = createFixture();
+    const store = fixture.open();
+    const snapshot = store.read();
+    const call = callSession("call-first-leg");
+    call.callLegs = [];
+    call.playbacks = [];
+    snapshot.sessions.push(call);
+    store.save(snapshot);
+
+    call.callLegs.push({
+      id: "call-first-leg:worker:one",
+      participantIdentity: "call-first-leg:worker:one",
+      participantRole: "worker",
+      joinType: "worker",
+      status: "active",
+      joinedAt: "2026-07-13T00:00:02.000Z",
+    });
+    expect(() => store.save(snapshot)).not.toThrow();
+    store.close();
+
+    const reader = fixture.open();
+    expect(reader.read().sessions[0]?.callLegs).toMatchObject([
+      { participantRole: "worker", status: "active" },
+    ]);
+    reader.close();
+  });
+
+  it("persists playback with its session, segment, and call-leg bindings", () => {
+    const fixture = createFixture();
+    const writer = fixture.open();
+    const snapshot = writer.read();
+    snapshot.sessions.push(callSessionWithPlayback("call-playback"));
+    writer.save(snapshot);
+    writer.close();
+
+    const reader = fixture.open();
+    expect(reader.read().sessions[0]).toMatchObject({
+      id: "call-playback",
+      segments: [{ id: "call-playback:segment:one" }],
+      callLegs: [
+        { id: "call-playback:host:one", participantRole: "host" },
+        { id: "call-playback:guest:one", participantRole: "guest" },
+      ],
+      playbacks: [{
+        id: "call-playback:playback:one",
+        segmentId: "call-playback:segment:one",
+        sourceLegId: "call-playback:host:one",
+        targetLegId: "call-playback:guest:one",
+        generation: 1,
+        status: "completed",
+      }],
+    });
+    reader.close();
+  });
+
+  it("persists inbox and outbox records and removes them with the session", () => {
+    const fixture = createFixture();
+    const writer = fixture.open();
+    const snapshot = writer.read();
+    snapshot.sessions.push(callSession("call-events"));
+    snapshot.inboxEvents.push({
+      eventId: "event-1",
+      sessionId: "call-events",
+      eventType: "translation.final",
+      payloadHash: "hash-1",
+      receivedAt: "2026-07-13T00:00:01.000Z",
+      processedAt: "2026-07-13T00:00:01.000Z",
+    });
+    snapshot.outboxEvents.push({
+      idempotencyKey: "outbox:event-1",
+      sessionId: "call-events",
+      eventType: "call_room.data",
+      payload: { type: "translation.final" },
+      attempts: 0,
+      availableAt: "2026-07-13T00:00:01.000Z",
+      createdAt: "2026-07-13T00:00:01.000Z",
+    });
+    writer.save(snapshot);
+    writer.close();
+
+    const reader = fixture.open();
+    const stored = reader.read();
+    expect(stored.inboxEvents).toHaveLength(1);
+    expect(stored.outboxEvents).toHaveLength(1);
+    stored.sessions = [];
+    stored.inboxEvents = [];
+    stored.outboxEvents = [];
+    reader.save(stored);
+    reader.close();
+
+    const finalReader = fixture.open();
+    expect(finalReader.read()).toMatchObject({
+      sessions: [],
+      inboxEvents: [],
+      outboxEvents: [],
+    });
+    expect(finalReader.quickCheck()).toBe("ok");
+    finalReader.close();
+  });
 });
 
 function createFixture() {
@@ -120,4 +267,61 @@ function segment(id: string) {
     sourceText: `source-${id}`,
     translatedText: `translation-${id}`,
   };
+}
+
+function callSession(id: string): AppStoreSnapshot["sessions"][number] {
+  return {
+    id,
+    userId: "user-a",
+    mode: "call_link",
+    status: "created",
+    consumedSeconds: 0,
+    createdAt: "2026-07-13T00:00:00.000Z",
+    segments: [],
+    callLink: {
+      roomName: `call_${id}`,
+      roomProvider: "livekit",
+      joinUrl: `https://call.example.cn/join/${id}`,
+      hostUrl: `https://call.example.cn/host/${id}`,
+      expiresAt: "2026-07-13T01:00:00.000Z",
+    },
+    callLegs: [{
+      id: `${id}:host:one`,
+      participantIdentity: `${id}:host:one`,
+      participantRole: "host",
+      joinType: "app",
+      status: "active",
+      joinedAt: "2026-07-13T00:00:01.000Z",
+    }],
+  };
+}
+
+function callSessionWithPlayback(
+  id: string,
+): AppStoreSnapshot["sessions"][number] {
+  const value = callSession(id);
+  value.segments = [segment(`${id}:segment:one`)];
+  value.callLegs = [
+    ...(value.callLegs ?? []),
+    {
+      id: `${id}:guest:one`,
+      participantIdentity: `${id}:guest:one`,
+      participantRole: "guest",
+      joinType: "web",
+      status: "active",
+      joinedAt: "2026-07-13T00:00:02.000Z",
+    },
+  ];
+  value.playbacks = [{
+    id: `${id}:playback:one`,
+    segmentId: `${id}:segment:one`,
+    sourceLegId: `${id}:host:one`,
+    targetLegId: `${id}:guest:one`,
+    generation: 1,
+    status: "completed",
+    queuedAt: "2026-07-13T00:00:03.000Z",
+    startedAt: "2026-07-13T00:00:04.000Z",
+    endedAt: "2026-07-13T00:00:05.000Z",
+  }];
+  return value;
 }

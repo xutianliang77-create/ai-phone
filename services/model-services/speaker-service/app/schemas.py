@@ -48,3 +48,24 @@ class HealthResponse(BaseModel):
     provider: str
     model: str
     mode: Literal["active", "contract", "shadow"]
+    voiceIdentityProvider: str = "off"
+    voiceIdentityAvailable: bool = False
+
+
+class VoiceIdentityEnrollRequest(BaseModel):
+    audioBase64: str = Field(min_length=1)
+
+
+class VoiceIdentityEnrollResponse(BaseModel):
+    embeddingRef: str
+
+
+class VoiceIdentityMatchRequest(BaseModel):
+    audioBase64: str = Field(min_length=1)
+    candidateRefs: list[str] = Field(min_length=1, max_length=20)
+    threshold: float = Field(default=0.72, ge=0.5, le=0.99)
+
+
+class VoiceIdentityMatchResponse(BaseModel):
+    embeddingRef: str | None = None
+    confidence: float = Field(ge=0, le=1)

@@ -24,6 +24,7 @@ export interface RealtimeVoiceConfig {
   referenceAudioId?: string;
   referenceTranscript?: string;
   controlPrompt?: string;
+  quality?: "standard" | "hifi";
 }
 
 export interface CreateRealtimeSessionRequest {

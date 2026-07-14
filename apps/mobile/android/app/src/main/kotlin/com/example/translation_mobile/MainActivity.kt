@@ -75,8 +75,9 @@ class MainActivity : FlutterActivity() {
             ?.takeIf { it.isNotEmpty() }
             ?: listOf("chinese", "latin")
         val texts = mutableListOf<String>()
+        val blocks = mutableListOf<Map<String, Any>>()
         val usedScripts = mutableListOf<String>()
-        recognizeScript(image, scripts, 0, texts, usedScripts, result)
+        recognizeScript(image, scripts, 0, texts, blocks, usedScripts, result)
     }
 
     private fun recognizeScript(
@@ -84,6 +85,7 @@ class MainActivity : FlutterActivity() {
         scripts: List<String>,
         index: Int,
         texts: MutableList<String>,
+        blocks: MutableList<Map<String, Any>>,
         usedScripts: MutableList<String>,
         result: MethodChannel.Result
     ) {
@@ -92,7 +94,8 @@ class MainActivity : FlutterActivity() {
                 mapOf(
                     "text" to texts.joinToString("\n\n"),
                     "provider" to "android_mlkit",
-                    "scripts" to usedScripts
+                    "scripts" to usedScripts,
+                    "blocks" to blocks
                 )
             )
             return
@@ -108,14 +111,50 @@ class MainActivity : FlutterActivity() {
             .addOnSuccessListener { recognizedText ->
                 val text = normalizeOcrText(recognizedText.text)
                 if (text.isNotEmpty()) mergeOcrText(texts, text)
+                appendOcrBlocks(
+                    blocks,
+                    recognizedText.textBlocks.mapNotNull { block ->
+                        val bounds = block.boundingBox ?: return@mapNotNull null
+                        val blockText = normalizeOcrText(block.text)
+                        if (blockText.isEmpty()) return@mapNotNull null
+                        mapOf(
+                            "text" to blockText,
+                            "left" to bounds.left.toDouble() / image.width,
+                            "top" to bounds.top.toDouble() / image.height,
+                            "width" to bounds.width().toDouble() / image.width,
+                            "height" to bounds.height().toDouble() / image.height
+                        )
+                    }
+                )
                 usedScripts.add(script)
                 recognizer.close()
-                recognizeScript(image, scripts, index + 1, texts, usedScripts, result)
+                recognizeScript(
+                    image,
+                    scripts,
+                    index + 1,
+                    texts,
+                    blocks,
+                    usedScripts,
+                    result
+                )
             }
             .addOnFailureListener { error ->
                 recognizer.close()
                 result.error("ocr_failed", error.localizedMessage, null)
             }
+    }
+
+    private fun appendOcrBlocks(
+        target: MutableList<Map<String, Any>>,
+        incoming: List<Map<String, Any>>
+    ) {
+        incoming.forEach { block ->
+            val text = block["text"] as? String ?: return@forEach
+            val compact = compactOcrText(text)
+            if (target.none { compactOcrText(it["text"] as? String ?: "") == compact }) {
+                target.add(block)
+            }
+        }
     }
 
     private fun mergeOcrText(texts: MutableList<String>, next: String) {

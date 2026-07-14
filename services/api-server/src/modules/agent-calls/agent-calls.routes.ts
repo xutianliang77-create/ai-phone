@@ -10,6 +10,7 @@ import { sendError } from "../../infrastructure/http/errors.js";
 import { requireAccount } from "../account/account-auth.js";
 import { registerAgentCallInternalRoutes } from "./agent-call-internal.routes.js";
 import { getAgentCallExecutionReadiness } from "./agent-call-execution-readiness.js";
+import { evaluateAgentCallStartPolicy } from "./agent-call-gray-policy.js";
 import { registerAgentCallPstnWebhookRoutes } from "./agent-call-pstn-webhook.routes.js";
 import {
   isStarted,
@@ -214,6 +215,28 @@ export async function registerAgentCallRoutes(app: FastifyInstance) {
         });
       }
 
+      const startPolicy = evaluateAgentCallStartPolicy({
+        userId: account.id,
+        targetPhone: draft.targetPhone,
+        drafts: listAgentCallDrafts(account.id),
+      });
+      if (!startPolicy.allowed) {
+        return reply.status(startPolicy.statusCode).send({
+          error: { code: `agent_call_${startPolicy.code}`, message: startPolicy.message },
+          draft: toDto(draft),
+        });
+      }
+      if (process.env.AGENT_CALL_GRAY_ENABLED === "true" &&
+        (!draft.recipientDisclosureConfirmed || !draft.disclosurePromptVersion)) {
+        return reply.status(409).send({
+          error: {
+            code: "agent_call_disclosure_required",
+            message: "Recipient AI disclosure confirmation is required",
+          },
+          draft: toDto(draft),
+        });
+      }
+
       const readiness = getAgentCallExecutionReadiness();
       if (readiness.status !== "ready") {
         return reply.status(503).send({
@@ -241,6 +264,24 @@ export async function registerAgentCallRoutes(app: FastifyInstance) {
         draftId,
         request.body as StartAiCallingAgentCallRequest,
       );
+      if (result.status === "policy_denied") {
+        return reply.status(result.policy.statusCode).send({
+          error: {
+            code: `agent_call_${result.policy.code}`,
+            message: result.policy.message,
+          },
+          draft: toDto(result.draft),
+        });
+      }
+      if (result.status === "disclosure_required") {
+        return reply.status(409).send({
+          error: {
+            code: "agent_call_disclosure_required",
+            message: "Recipient AI disclosure confirmation is required",
+          },
+          draft: toDto(result.draft),
+        });
+      }
       if (result.status === "not_found") {
         return sendError(
           reply,

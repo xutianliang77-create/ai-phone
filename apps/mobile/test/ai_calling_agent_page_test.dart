@@ -19,6 +19,7 @@ void main() {
     );
 
     await tester.enterText(find.byType(TextField).at(2), '预约牙医复诊');
+    await tester.tap(find.text('外呼接通后先告知对方正在与 AI 通话'));
     await tester.tap(find.text('生成话术草稿'));
     await tester.pumpAndSettle();
 
@@ -58,6 +59,7 @@ void main() {
     await _pumpAgentPage(tester, client: client, voiceConsentStore: store);
 
     await tester.enterText(find.byType(TextField).at(2), '预约牙医复诊');
+    await tester.tap(find.text('外呼接通后先告知对方正在与 AI 通话'));
     await tester.tap(find.text('生成话术草稿'));
     await tester.pumpAndSettle();
     await tester.drag(find.byType(ListView), const Offset(0, -260));
@@ -213,6 +215,8 @@ class _FakeAiCallingAgentClient extends AiCallingAgentApiClient {
   Future<AiCallingAgentDraft> authorizeDraft({
     required String draftId,
     required String consentPromptVersion,
+    required bool recipientDisclosureConfirmed,
+    required String disclosurePromptVersion,
   }) async {
     authorizedDraftIds.add(draftId);
     return _draft(status: 'authorized');

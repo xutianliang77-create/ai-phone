@@ -62,15 +62,15 @@ final class OcrBridge: NSObject {
         return
       }
       let observations = (request.results as? [VNRecognizedTextObservation]) ?? []
-      let lines = observations
+      let blocks = observations
         .sorted(by: self.readingOrder)
-        .compactMap { $0.topCandidates(1).first?.string.trimmingCharacters(in: .whitespacesAndNewlines) }
-        .filter { !$0.isEmpty }
+        .compactMap(self.resultBlock)
       DispatchQueue.main.async {
         result([
-          "text": lines.joined(separator: "\n"),
+          "text": blocks.compactMap { $0["text"] as? String }.joined(separator: "\n"),
           "provider": "ios_vision",
           "scripts": scripts,
+          "blocks": blocks,
         ])
       }
     }
@@ -89,6 +89,22 @@ final class OcrBridge: NSObject {
         ))
       }
     }
+  }
+
+  private func resultBlock(_ observation: VNRecognizedTextObservation) -> [String: Any]? {
+    guard let text = observation.topCandidates(1).first?.string
+      .trimmingCharacters(in: .whitespacesAndNewlines),
+      !text.isEmpty else {
+      return nil
+    }
+    let bounds = observation.boundingBox
+    return [
+      "text": text,
+      "left": bounds.minX,
+      "top": 1 - bounds.maxY,
+      "width": bounds.width,
+      "height": bounds.height,
+    ]
   }
 
   private func normalizedScripts(_ rawScripts: Any?) -> [String] {

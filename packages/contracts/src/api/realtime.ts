@@ -210,8 +210,51 @@ export interface SessionListItem {
   segmentCount: number;
 }
 
+export type CallPlaybackStatus =
+  | "queued"
+  | "streaming"
+  | "interrupting"
+  | "interrupted"
+  | "completed"
+  | "failed";
+
+export type CallPlaybackInterruptReason =
+  | "barge_in"
+  | "session_end"
+  | "superseded"
+  | "failure"
+  | "recovery";
+
+export interface CallPlaybackBargeInDto {
+  detectedAt?: string;
+  confirmedAt?: string;
+  stopLatencyMs?: number;
+  speechDurationMs?: number;
+  vadProvider?: string;
+  vadProbability?: number;
+  preRollMs?: number;
+}
+
+export interface CallPlaybackDto {
+  id: string;
+  segmentId: string;
+  sourceLegId: string;
+  targetLegId: string;
+  generation: number;
+  status: CallPlaybackStatus;
+  provider?: string;
+  model?: string;
+  audioDurationMs?: number;
+  interruptReason?: CallPlaybackInterruptReason;
+  bargeIn?: CallPlaybackBargeInDto;
+  queuedAt: string;
+  startedAt?: string;
+  endedAt?: string;
+}
+
 export interface SessionDetailResponse extends SessionListItem {
   segments: SessionSegmentDto[];
+  playbacks?: CallPlaybackDto[];
   review?: SessionReviewResponse | null;
   diagnostics?: RealtimeSessionDiagnosticsDto;
 }
@@ -263,9 +306,21 @@ export interface SessionQualityReportResponse {
     overlapSegments: number;
   };
   providers: SessionQualityProviderDto[];
+  playback?: {
+    total: number;
+    completed: number;
+    interrupted: number;
+    failed: number;
+    bargeInInterruptions: number;
+  };
+  bargeIn?: {
+    sampleCount: number;
+    averageStopLatencyMs: number;
+    p95StopLatencyMs: number;
+    maxStopLatencyMs: number;
+  };
   flags: string[];
 }
-
 export interface SessionSpeakerDto {
   speaker: SpeakerAttributionDto;
   segmentCount: number;

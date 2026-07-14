@@ -4,10 +4,17 @@ import 'call_room_client.dart';
 import '../../../shared/domain/speaker_attribution.dart';
 
 class CallRoomDataPayload {
-  const CallRoomDataPayload({this.message, this.caption});
+  const CallRoomDataPayload({
+    this.message,
+    this.caption,
+    this.duplexMode,
+    this.degradationReason,
+  });
 
   final String? message;
   final CallRoomCaption? caption;
+  final String? duplexMode;
+  final String? degradationReason;
 }
 
 CallRoomDataPayload parseCallRoomData(List<int> data) {
@@ -22,6 +29,14 @@ CallRoomDataPayload parseCallRoomData(List<int> data) {
     if (type == 'worker.status') {
       return CallRoomDataPayload(
         message: _workerStatusMessage(payload, text),
+      );
+    }
+    if (type == 'pipeline.degraded' || type == 'pipeline.restored') {
+      final degraded = type == 'pipeline.degraded';
+      return CallRoomDataPayload(
+        message: degraded ? '全双工抢话已降级为半双工' : '全双工抢话已恢复',
+        duplexMode: degraded ? 'half_duplex' : 'full_duplex',
+        degradationReason: _string(payload['degradationReason']),
       );
     }
     if (type == 'transcript.final' ||

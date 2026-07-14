@@ -6,7 +6,9 @@ import { InMemoryProviderEventDeduper, type ProviderEventDeduper } from "./provi
 import { handleProviderMediaEvent } from "./provider-media-events.js";
 import { handleProviderStatusEvent } from "./provider-status-events.js";
 import { buildPstnProvider } from "./providers.js";
+import { handlePstnPlaybackControl } from "./pstn-playback-control.js";
 import { buildStatusWebhookSink } from "./status-webhook-sink.js";
+import { parseTranslatedAudioRequest } from "./translated-audio-request.js";
 import type {
   AgentCallBridgeRequest,
   PstnAudioFrameSink,
@@ -88,6 +90,7 @@ async function handleRequest(context: {
     await handleTranslatedAudio({ request, response, config, provider });
     return;
   }
+  if (await handlePstnPlaybackControl({ request, response, config, provider })) return;
   if (request.method === "POST" && request.url === "/media-frames") {
     await handleMediaFrame(context);
     return;
@@ -210,47 +213,6 @@ function parseAgentCallRequest(input: unknown): AgentCallBridgeRequest | null {
   };
 }
 
-function parseTranslatedAudioRequest(input: unknown): TtsAudioSinkRequest | null {
-  if (!input || typeof input !== "object") return null;
-  const body = input as Record<string, unknown>;
-  const callId = text(body.callId, 120);
-  const segmentId = text(body.segmentId, 120);
-  const sourceSpeakerRole = speakerRole(body.sourceSpeakerRole);
-  const targetSpeakerRole = speakerRole(body.targetSpeakerRole);
-  const language = languageCode(body.language);
-  const audio = parseAudio(body.audio);
-  if (!callId || !segmentId || !sourceSpeakerRole || !targetSpeakerRole || !language || !audio) {
-    return null;
-  }
-  if (sourceSpeakerRole === targetSpeakerRole) return null;
-  return {
-    callId,
-    segmentId,
-    sourceSpeakerRole,
-    targetSpeakerRole,
-    language,
-    audio,
-    ...optionalText("providerCallId", body.providerCallId, 160),
-    ...optionalText("mediaStreamId", body.mediaStreamId, 160),
-    ...optionalText("provider", body.provider, 80),
-    ...optionalText("model", body.model, 120),
-    ...optionalNumber("firstAudioMs", body.firstAudioMs),
-    ...optionalNumber("audioDurationMs", body.audioDurationMs),
-  };
-}
-
-function parseAudio(input: unknown): TtsAudioSinkRequest["audio"] | null {
-  if (!input || typeof input !== "object") return null;
-  const audio = input as Record<string, unknown>;
-  const data = text(audio.data, 2_000_000);
-  const sampleRate = audio.sampleRate === 16000 || audio.sampleRate === 24000
-    ? audio.sampleRate
-    : null;
-  return audio.format === "pcm16" && sampleRate && data
-    ? { format: "pcm16", sampleRate, data }
-    : null;
-}
-
 function parseMediaFrameRequest(input: unknown): PstnMediaFrameRequest | null {
   if (!input || typeof input !== "object") return null;
   const body = input as Record<string, unknown>;
@@ -326,10 +288,6 @@ function text(value: unknown, maxLength: number) {
 
 function speakerRole(value: unknown): TtsAudioSinkRequest["sourceSpeakerRole"] | null {
   return value === "host" || value === "guest" ? value : null;
-}
-
-function languageCode(value: unknown): TtsAudioSinkRequest["language"] | null {
-  return value === "zh" || value === "en" ? value : null;
 }
 
 function errorMessage(error: unknown) {

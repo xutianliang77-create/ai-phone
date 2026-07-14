@@ -7,11 +7,9 @@ import {
 } from "../../infrastructure/storage/json-store.js";
 import type { VoiceProfileRecord } from "./voice-profile-record.js";
 import { syncVoiceReferenceAudio } from "./voice-reference-sync.js";
+import { analyzeWavReference } from "./wav-reference-quality.js";
 
-const voiceIdPattern = /^[A-Za-z0-9_-]{1,80}$/;
 const maxReferenceAudioBytes = 10 * 1024 * 1024;
-const minReferenceAudioDurationMs = 3000;
-const maxReferenceAudioDurationMs = 30000;
 
 export function getMyVoiceProfile(userId: string) {
   return toVoiceProfileDto(findActiveVoiceProfile(userId));
@@ -30,6 +28,7 @@ export function getReadyVoiceProfileTtsConfig(userId: string) {
     voiceProfileId: profile.id,
     referenceAudioId: profile.referenceAudioId,
     ...(referenceTranscript ? { referenceTranscript } : {}),
+    quality: "hifi" as const,
   };
 }
 
@@ -44,11 +43,6 @@ export function createMyVoiceProfile(
   if (!consentVersion) {
     return { ok: false as const, code: "invalid_consent_version" };
   }
-  const referenceAudioId = optionalVoiceId(body.referenceAudioId);
-  if (body.referenceAudioId !== undefined && !referenceAudioId) {
-    return { ok: false as const, code: "invalid_reference_audio_id" };
-  }
-
   const now = new Date().toISOString();
   const existing = findActiveVoiceProfile(userId);
   const profile = existing ?? newVoiceProfile(userId, now);
@@ -56,15 +50,9 @@ export function createMyVoiceProfile(
   profile.consentVersion = consentVersion;
   profile.consentAcceptedAt = isoOrNow(body.consentAcceptedAt, now);
   profile.updatedAt = now;
-  profile.status = referenceAudioId ? "ready" : "pending_reference_audio";
-  if (referenceAudioId) profile.referenceAudioId = referenceAudioId;
-  if (body.referenceTranscript !== undefined) {
-    const referenceTranscript = cleanReferenceTranscript(
-      body.referenceTranscript,
-    );
-    if (referenceTranscript) profile.referenceTranscript = referenceTranscript;
-    else delete profile.referenceTranscript;
-  }
+  profile.status = profile.referenceAudioId
+    ? "ready"
+    : "pending_reference_audio";
   if (!existing) getStoreSnapshot().voiceProfiles.push(profile);
   persistStoreSnapshot();
   return { ok: true as const, profile: toVoiceProfileDto(profile)! };
@@ -90,13 +78,7 @@ export async function attachVoiceProfileReferenceAudio(
   if (!isSupportedWavMime(body.mimeType)) {
     return { ok: false as const, code: "unsupported_reference_audio_type" };
   }
-  const durationMs = numericDurationMs(body.durationMs);
-  if (
-    durationMs < minReferenceAudioDurationMs ||
-    durationMs > maxReferenceAudioDurationMs
-  ) {
-    return { ok: false as const, code: "invalid_reference_audio_duration" };
-  }
+  const claimedDurationMs = numericDurationMs(body.durationMs);
   const audio = decodeReferenceAudio(body.audioBase64);
   if (!audio) return { ok: false as const, code: "invalid_reference_audio" };
   if (audio.byteLength > maxReferenceAudioBytes) {
@@ -104,6 +86,17 @@ export async function attachVoiceProfileReferenceAudio(
   }
   if (!isWav(audio)) {
     return { ok: false as const, code: "invalid_reference_audio_format" };
+  }
+  const quality = analyzeWavReference(audio);
+  if (!quality) {
+    return { ok: false as const, code: "invalid_reference_audio_format" };
+  }
+  const durationTolerance = Math.max(750, quality.durationMs * 0.2);
+  if (Math.abs(claimedDurationMs - quality.durationMs) > durationTolerance) {
+    return { ok: false as const, code: "reference_audio_duration_mismatch", quality };
+  }
+  if (!quality.accepted) {
+    return { ok: false as const, code: quality.issues[0], quality };
   }
 
   const referenceAudioId = profile.id;
@@ -120,6 +113,7 @@ export async function attachVoiceProfileReferenceAudio(
 
   const now = new Date().toISOString();
   profile.referenceAudioId = referenceAudioId;
+  profile.referenceQuality = quality;
   const referenceTranscript = cleanReferenceTranscript(body.referenceTranscript);
   if (referenceTranscript) profile.referenceTranscript = referenceTranscript;
   else delete profile.referenceTranscript;
@@ -173,6 +167,7 @@ function toVoiceProfileDto(profile: VoiceProfileRecord | null) {
       ? { referenceAudioId: profile.referenceAudioId }
       : {}),
     ...(referenceTranscript ? { referenceTranscript } : {}),
+    ...(profile.referenceQuality ? { referenceQuality: profile.referenceQuality } : {}),
     ...(profile.deletedAt ? { deletedAt: profile.deletedAt } : {}),
   };
 }
@@ -186,11 +181,6 @@ function cleanReferenceTranscript(value: unknown) {
     .replace(/^请用自然语速朗读[:：]\s*/u, "")
     .replace(/^Read naturally:\s*/iu, "")
     .trim();
-}
-
-function optionalVoiceId(value: unknown) {
-  const cleaned = cleanText(value, 80);
-  return cleaned && voiceIdPattern.test(cleaned) ? cleaned : null;
 }
 
 function isoOrNow(value: unknown, fallback: string) {

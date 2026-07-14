@@ -13,6 +13,7 @@ import type {
 
 export interface AsrSession {
   sessionId: string;
+  userId?: string;
   asrEndpointMode?: AsrEndpointMode;
   sourceLanguage: LanguageCode;
   targetLanguage: TranslationLanguageCode;

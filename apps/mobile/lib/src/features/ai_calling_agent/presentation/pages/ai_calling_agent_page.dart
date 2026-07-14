@@ -8,6 +8,7 @@ import '../../data/ai_calling_agent_api_client.dart';
 import '../widgets/ai_calling_agent_draft_panel.dart';
 
 const _consentPromptVersion = 'domestic-ai-agent-consent-v1';
+const _disclosurePromptVersion = 'domestic-ai-agent-disclosure-v1';
 
 class AiCallingAgentPage extends StatefulWidget {
   const AiCallingAgentPage({
@@ -32,17 +33,20 @@ class _AiCallingAgentPageState extends State<AiCallingAgentPage> {
   final TextEditingController _targetNameController = TextEditingController();
   final TextEditingController _targetPhoneController = TextEditingController();
   final TextEditingController _objectiveController = TextEditingController();
+  final ScrollController _scrollController = ScrollController();
   String _scenario = 'booking';
   AiCallingAgentDraft? _draft;
   String? _notice;
   Object? _error;
   bool _loading = false;
+  bool _recipientDisclosureConfirmed = false;
 
   @override
   void dispose() {
     _targetNameController.dispose();
     _targetPhoneController.dispose();
     _objectiveController.dispose();
+    _scrollController.dispose();
     if (_ownsClient) _client.close();
     super.dispose();
   }
@@ -53,6 +57,7 @@ class _AiCallingAgentPageState extends State<AiCallingAgentPage> {
       appBar: AppBar(title: const Text('AI 代打电话')),
       body: SafeArea(
         child: ListView(
+          controller: _scrollController,
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
           children: <Widget>[
             const Text('先生成话术草稿，用户确认授权后才进入拨号队列。'),
@@ -79,6 +84,18 @@ class _AiCallingAgentPageState extends State<AiCallingAgentPage> {
               controller: _targetNameController,
               decoration: const InputDecoration(labelText: '联系人或机构'),
               textInputAction: TextInputAction.next,
+            ),
+            CheckboxListTile(
+              contentPadding: EdgeInsets.zero,
+              value: _recipientDisclosureConfirmed,
+              onChanged: _loading
+                  ? null
+                  : (value) => setState(
+                        () => _recipientDisclosureConfirmed = value ?? false,
+                      ),
+              title: const Text('外呼接通后先告知对方正在与 AI 通话'),
+              subtitle: const Text('未完成告知确认时不会进入拨号队列。'),
+              controlAffinity: ListTileControlAffinity.leading,
             ),
             const SizedBox(height: 12),
             TextField(
@@ -170,11 +187,17 @@ class _AiCallingAgentPageState extends State<AiCallingAgentPage> {
     final draft = _draft;
     if (draft == null) return;
     if (!await _ensureVoiceConsent()) return;
+    if (!_recipientDisclosureConfirmed) {
+      setState(() => _error = '请先确认接通后向对方告知 AI 身份');
+      return;
+    }
     if (!mounted) return;
     await _run(() async {
       final next = await _client.authorizeDraft(
         draftId: draft.id,
         consentPromptVersion: _consentPromptVersion,
+        recipientDisclosureConfirmed: true,
+        disclosurePromptVersion: _disclosurePromptVersion,
       );
       _draft = next;
       _notice =
@@ -237,8 +260,22 @@ class _AiCallingAgentPageState extends State<AiCallingAgentPage> {
     } catch (error) {
       _error = error;
     } finally {
-      if (mounted) setState(() => _loading = false);
+      if (mounted) {
+        setState(() => _loading = false);
+        if (_draft != null) _scrollToDraft();
+      }
     }
+  }
+
+  void _scrollToDraft() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!_scrollController.hasClients) return;
+      _scrollController.animateTo(
+        _scrollController.position.maxScrollExtent,
+        duration: const Duration(milliseconds: 220),
+        curve: Curves.easeOut,
+      );
+    });
   }
 
   String _errorMessage(Object error) {

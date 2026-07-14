@@ -39,12 +39,10 @@ export async function registerVoiceProfileRoutes(app: FastifyInstance) {
         result.code === "voice_reference_sync_failed" ? 503 : 400;
       const message =
         "message" in result ? result.message ?? result.code : result.code;
-      return sendError(
-        reply,
-        statusCode,
-        result.code,
-        message,
-      );
+      return reply.status(statusCode).send({
+        error: { code: result.code, message },
+        ...("quality" in result ? { quality: result.quality } : {}),
+      });
     }
     return { profile: result.profile };
   });

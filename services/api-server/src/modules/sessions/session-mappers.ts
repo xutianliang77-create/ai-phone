@@ -22,6 +22,7 @@ export function toSessionDetail(session: SessionRecord): SessionDetailResponse {
   return {
     ...toSessionListItem(session),
     segments: session.segments,
+    ...(session.playbacks?.length ? { playbacks: session.playbacks } : {}),
     review: session.review ?? null,
     ...(session.diagnostics ? { diagnostics: session.diagnostics } : {}),
   };

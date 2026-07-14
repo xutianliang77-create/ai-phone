@@ -6,6 +6,7 @@ import '../../../account/presentation/pages/account_page.dart';
 import '../../../billing/presentation/pages/wallet_page.dart';
 import '../../../compliance/presentation/pages/compliance_center_page.dart';
 import '../../../voice_profile/presentation/pages/my_voice_page.dart';
+import '../../../voice_identity/presentation/pages/voice_identity_page.dart';
 
 class SettingsHomePage extends StatelessWidget {
   const SettingsHomePage({required this.config, super.key});
@@ -46,6 +47,19 @@ class SettingsHomePage extends StatelessWidget {
               onTap: () => _open(
                 context,
                 MyVoicePage(apiBaseUrl: config.apiBaseUrl),
+              ),
+            ),
+            _FeatureAction(
+              icon: Icons.fingerprint,
+              title: _localized(l10n, zh: '声音身份', en: 'Voice identities'),
+              subtitle: _localized(
+                l10n,
+                zh: '经授权录入声纹，在同传中显示说话人姓名',
+                en: 'Identify consented speakers in live translation',
+              ),
+              onTap: () => _open(
+                context,
+                VoiceIdentityPage(apiBaseUrl: config.apiBaseUrl),
               ),
             ),
             _FeatureAction(
