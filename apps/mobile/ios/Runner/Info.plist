@@ -7,7 +7,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>ai phone</string>
+	<string>无界AI</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -15,7 +15,7 @@
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
-	<string>ai phone</string>
+	<string>无界AI</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
@@ -34,11 +34,11 @@
 		<true/>
 	</dict>
 	<key>NSLocalNetworkUsageDescription</key>
-	<string>ai phone 在内测环境需要连接统一测试服务器以进行实时翻译。</string>
+	<string>无界AI在内测环境需要连接统一测试服务以进行实时翻译。</string>
 	<key>NSCameraUsageDescription</key>
 	<string>拍照翻译需要使用相机拍摄菜单、截图、合同和表格。</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>ai phone 需要使用麦克风识别语音并翻译。</string>
+	<string>无界AI需要使用麦克风识别语音并翻译。</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>拍照翻译需要读取相册图片以进行 OCR 识别和翻译。</string>
 	<key>UIApplicationSceneManifest</key>

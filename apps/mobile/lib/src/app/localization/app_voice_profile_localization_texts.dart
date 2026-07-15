@@ -79,9 +79,9 @@ const appVoiceProfileLocalizationTexts = <String, Map<String, String>>{
   },
   'myVoiceRecordingFailed': {'zh': '录音失败，请重试', 'en': 'Recording failed'},
   'myVoiceMicrophonePermissionDenied': {
-    'zh': '麦克风权限被拒绝，请到系统设置中允许 ai phone 使用麦克风。',
+    'zh': '麦克风权限被拒绝，请到系统设置中允许无界AI使用麦克风。',
     'en':
-        'Microphone permission is denied. Allow ai phone to use the microphone in system Settings.',
+        'Microphone permission is denied. Allow Wujie AI to use the microphone in system Settings.',
   },
   'myVoiceWavUnsupported': {
     'zh': '当前设备不支持 WAV 录音',

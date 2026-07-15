@@ -276,7 +276,7 @@ class _AccountPageState extends State<AccountPage> {
   String _errorMessage(Object error) {
     final text = error.toString();
     if (text.contains('network_timeout')) {
-      return '网络请求超时，请确认手机可以访问 ai phone 服务器。';
+      return '网络请求超时，请确认手机可以访问无界AI服务。';
     }
     if (text.contains('network_error')) {
       return '网络连接失败，请检查网络和服务器地址。';

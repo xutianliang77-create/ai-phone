@@ -10,7 +10,7 @@ const appLocalizationTexts = <String, Map<String, String>>{
   ...appHistoryLocalizationTexts,
   ...appScanLocalizationTexts,
   ...appVoiceProfileLocalizationTexts,
-  'appTitle': {'zh': 'ai phone', 'en': 'ai phone'},
+  'appTitle': {'zh': '无界AI', 'en': '无界AI'},
   'realtimeSubtitle': {
     'zh': '中英实时同声传译',
     'en': 'Chinese-English realtime interpretation',
