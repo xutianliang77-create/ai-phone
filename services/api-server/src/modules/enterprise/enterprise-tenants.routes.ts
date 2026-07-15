@@ -10,10 +10,8 @@ import {
 } from "@translation/contracts";
 import { sendError } from "../../infrastructure/http/errors.js";
 import { requireAccount } from "../account/account-auth.js";
-import {
-  canManageEnterpriseMembers,
-  requireEnterpriseContext,
-} from "./enterprise-auth.js";
+import { requireEnterpriseScope } from "./enterprise-auth.js";
+import { enterpriseScopesForRole } from "./enterprise-rbac.js";
 import {
   addEnterpriseMember,
   createEnterpriseTenant,
@@ -47,16 +45,17 @@ export async function registerEnterpriseTenantRoutes(app: FastifyInstance) {
   });
 
   app.get("/enterprise/v1/me", async (request, reply) => {
-    const context = requireEnterpriseContext(request, reply);
+    const context = requireEnterpriseScope(request, reply, "tenant:read");
     if (!context) return;
     return {
       tenant: toTenantDto(context.tenant),
       member: toMemberDto(context.member),
+      scopes: enterpriseScopesForRole(context.member.role),
     };
   });
 
   app.get("/enterprise/v1/members", async (request, reply) => {
-    const context = requireEnterpriseContext(request, reply);
+    const context = requireEnterpriseScope(request, reply, "member:read");
     if (!context) return;
     return {
       members: listEnterpriseMembers(context.tenant.id).map(toMemberDto),
@@ -64,11 +63,8 @@ export async function registerEnterpriseTenantRoutes(app: FastifyInstance) {
   });
 
   app.post("/enterprise/v1/members", async (request, reply) => {
-    const context = requireEnterpriseContext(request, reply);
+    const context = requireEnterpriseScope(request, reply, "member:write");
     if (!context) return;
-    if (!canManageEnterpriseMembers(context.member.role)) {
-      return sendError(reply, 403, "member_management_denied", "Member management denied");
-    }
     const body = (request.body ?? {}) as Partial<CreateEnterpriseMemberRequest>;
     if (tenantMismatch(body.tenantId, context.tenant.id)) {
       return sendError(reply, 409, "tenant_context_mismatch", "Tenant context mismatch");
@@ -92,11 +88,8 @@ export async function registerEnterpriseTenantRoutes(app: FastifyInstance) {
   });
 
   app.patch("/enterprise/v1/members/:memberId", async (request, reply) => {
-    const context = requireEnterpriseContext(request, reply);
+    const context = requireEnterpriseScope(request, reply, "member:write");
     if (!context) return;
-    if (!canManageEnterpriseMembers(context.member.role)) {
-      return sendError(reply, 403, "member_management_denied", "Member management denied");
-    }
     const body = (request.body ?? {}) as Partial<UpdateEnterpriseMemberRequest>;
     if (tenantMismatch(body.tenantId, context.tenant.id)) {
       return sendError(reply, 409, "tenant_context_mismatch", "Tenant context mismatch");

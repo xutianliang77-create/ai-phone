@@ -41,6 +41,7 @@ describe("enterprise tenant routes", () => {
     expect(context.json()).toMatchObject({
       tenant: { id: tenantId, name: "Acme Global" },
       member: { userId: "user-a", role: "owner" },
+      scopes: expect.arrayContaining(["tenant:read", "member:write"]),
     });
   });
 
@@ -152,7 +153,7 @@ describe("enterprise tenant routes", () => {
     expect(ambiguous.statusCode).toBe(400);
     expect(ambiguous.json().error.code).toBe("tenant_selection_required");
     expect(denied.statusCode).toBe(403);
-    expect(denied.json().error.code).toBe("member_management_denied");
+    expect(denied.json().error.code).toBe("enterprise_scope_denied");
   });
 });
 

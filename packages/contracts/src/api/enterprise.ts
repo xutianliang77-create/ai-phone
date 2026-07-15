@@ -20,6 +20,28 @@ export const enterpriseMemberStatuses = [
 
 export type EnterpriseMemberStatus = typeof enterpriseMemberStatuses[number];
 
+export const enterpriseScopes = [
+  "tenant:read",
+  "tenant:write",
+  "member:read",
+  "member:write",
+  "knowledge:read",
+  "knowledge:publish",
+  "campaign:read",
+  "campaign:write",
+  "campaign:approve",
+  "support:read",
+  "support:manage",
+  "support:takeover",
+  "meeting:read",
+  "meeting:write",
+  "screen_share:stop",
+  "audit:read",
+  "audit:export",
+] as const;
+
+export type EnterpriseScope = typeof enterpriseScopes[number];
+
 export interface CreateEnterpriseTenantRequest {
   name: string;
   homeRegion: string;
@@ -49,4 +71,9 @@ export function isEnterpriseMemberStatus(
 ): value is EnterpriseMemberStatus {
   return typeof value === "string" &&
     enterpriseMemberStatuses.includes(value as EnterpriseMemberStatus);
+}
+
+export function isEnterpriseScope(value: unknown): value is EnterpriseScope {
+  return typeof value === "string" &&
+    enterpriseScopes.includes(value as EnterpriseScope);
 }

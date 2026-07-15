@@ -45,6 +45,24 @@ tenant_subscriptions(
 
 唯一约束：`enterprise_members(tenant_id, user_id)`。
 
+#### 2.1.1 RBAC scope
+
+服务端只从当前 active membership 的 role 推导 scope；客户端提交的 role、scope 或权限头不能扩权。guard 先解析 tenant membership，再校验 scope，最后由 tenant-scoped Repository 查询资源。
+
+| 角色 | 服务端授予的 scope |
+| --- | --- |
+| 企业所有者 | 全部 enterprise scope |
+| 企业管理员 | 全部 enterprise scope |
+| 营销主管 | `tenant:read`、`knowledge:read/publish`、`campaign:read/write/approve` |
+| 营销人员 | `tenant:read`、`knowledge:read`、`campaign:read/write` |
+| 客服主管 | `tenant:read`、`knowledge:read/publish`、`support:read/manage/takeover` |
+| 客服坐席 | `tenant:read`、`knowledge:read`、`support:read/takeover` |
+| 会议主持人 | `tenant:read`、`meeting:read/write`、`screen_share:stop` |
+| 普通成员 | `tenant:read`、`meeting:read` |
+| 审计员 | `tenant:read`、`member:read`、`knowledge:read`、`campaign:read`、`support:read`、`meeting:read`、`audit:read/export` |
+
+完整 scope 集合为 `tenant:read/write`、`member:read/write`、`knowledge:read/publish`、`campaign:read/write/approve`、`support:read/manage/takeover`、`meeting:read/write`、`screen_share:stop` 和 `audit:read/export`。owner/admin 的“全部”仅指该版本声明的集合，不隐含未声明权限。
+
 ### 2.2 外呼营销
 
 ```text
