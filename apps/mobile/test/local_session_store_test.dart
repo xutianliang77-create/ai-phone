@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -87,9 +88,60 @@ void main() {
     final export = await store.exportSession('local_1');
     expect(export.filename, 'translation-session-local_1.md');
     expect(export.content, contains('hello'));
-    expect(export.content, contains('Provider: ios_system'));
+    expect(export.content, isNot(contains('Provider: ios_system')));
 
     await store.deleteSession('local_1');
     expect(await store.listSessions(), isEmpty);
+  });
+
+  test('persists action item completion across store instances', () async {
+    await storeFile.writeAsString(jsonEncode(<String, Object?>{
+      'sessions': <Object?>[
+        <String, Object?>{
+          'sessionId': 'review_1',
+          'mode': 'meeting',
+          'status': 'ended',
+          'consumedSeconds': 60,
+          'createdAt': '2026-07-15T10:00:00.000Z',
+          'endedAt': '2026-07-15T10:01:00.000Z',
+          'segmentCount': 1,
+          'kind': 'realtime',
+          'review': <String, Object?>{
+            'summary': '讨论后续安排',
+            'actionItems': <Object?>[
+              <String, Object?>{
+                'text': '发送会议纪要',
+                'completed': false,
+              },
+            ],
+          },
+          'segments': <Object?>[
+            <String, Object?>{
+              'id': 'segment_1',
+              'sourceText': '请发送会议纪要',
+              'translatedText': 'Please send the meeting notes',
+            },
+          ],
+        },
+      ],
+    }));
+
+    final store = LocalSessionStore(file: storeFile);
+    final updated = await store.updateActionItem('review_1', 0, true);
+    expect(
+      (updated.reviewJson!['actionItems'] as List<Object?>)
+          .cast<Map<String, Object?>>()
+          .single['completed'],
+      isTrue,
+    );
+
+    final reloaded =
+        await LocalSessionStore(file: storeFile).getSession('review_1');
+    expect(
+      (reloaded.reviewJson!['actionItems'] as List<Object?>)
+          .cast<Map<String, Object?>>()
+          .single['completed'],
+      isTrue,
+    );
   });
 }

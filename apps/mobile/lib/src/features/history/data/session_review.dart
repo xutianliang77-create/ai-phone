@@ -27,11 +27,13 @@ class SessionReview {
 class SessionActionItem {
   const SessionActionItem({
     required this.text,
+    this.completed = false,
     this.owner,
     this.dueDate,
   });
 
   final String text;
+  final bool completed;
   final String? owner;
   final String? dueDate;
 }
@@ -92,6 +94,7 @@ SessionReview? _serverReview(Map<String, Object?>? json) {
       .whereType<Map<String, Object?>>()
       .map((item) => SessionActionItem(
             text: item['text'] as String? ?? '',
+            completed: item['completed'] as bool? ?? false,
             owner: item['owner'] as String?,
             dueDate: item['dueDate'] as String?,
           ))

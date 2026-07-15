@@ -4,13 +4,11 @@ import '../../../../app/app_config.dart';
 import '../../../../app/localization/app_localizations.dart';
 import '../../data/session_history_models.dart';
 import '../../data/session_history_repository.dart';
+import '../widgets/session_history_sections.dart';
 import 'session_detail_page.dart';
 
 class SessionHistoryPage extends StatefulWidget {
-  const SessionHistoryPage({
-    this.repository,
-    super.key,
-  });
+  const SessionHistoryPage({this.repository, super.key});
 
   final SessionHistoryRepository? repository;
 
@@ -24,6 +22,9 @@ class _SessionHistoryPageState extends State<SessionHistoryPage> {
   late final bool _ownsRepository = widget.repository == null;
   final TextEditingController _searchController = TextEditingController();
   late Future<List<SessionListItem>> _sessions = _repository.listSessions();
+  SessionHistoryKind _kind = SessionHistoryKind.realtime;
+  bool _showSearch = false;
+  bool _endedOnly = true;
 
   @override
   void dispose() {
@@ -39,32 +40,46 @@ class _SessionHistoryPageState extends State<SessionHistoryPage> {
         title: Text(context.l10n.history),
         actions: <Widget>[
           IconButton(
-            onPressed: _reload,
-            icon: const Icon(Icons.refresh),
-            tooltip: context.l10n.refresh,
+            onPressed: () => setState(() => _showSearch = !_showSearch),
+            icon: Icon(_showSearch ? Icons.close : Icons.search),
+            tooltip: _showSearch ? context.l10n.clear : context.l10n.search,
+          ),
+          PopupMenuButton<bool>(
+            icon: const Icon(Icons.filter_alt_outlined),
+            tooltip: _text('筛选', 'Filter'),
+            initialValue: _endedOnly,
+            onSelected: (value) => setState(() => _endedOnly = value),
+            itemBuilder: (context) => <PopupMenuEntry<bool>>[
+              PopupMenuItem(value: true, child: Text(_text('已结束', 'Ended'))),
+              PopupMenuItem(value: false, child: Text(_text('全部状态', 'All'))),
+            ],
           ),
         ],
       ),
       body: Column(
         children: <Widget>[
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-            child: TextField(
-              controller: _searchController,
-              decoration: InputDecoration(
-                prefixIcon: const Icon(Icons.search),
-                suffixIcon: _searchController.text.isEmpty
-                    ? null
-                    : IconButton(
-                        onPressed: _clearSearch,
-                        icon: const Icon(Icons.clear),
-                        tooltip: context.l10n.clear,
+          SessionHistoryKindSelector(
+            selected: _kind,
+            onSelected: (kind) => setState(() => _kind = kind),
+          ),
+          AnimatedSwitcher(
+            duration: const Duration(milliseconds: 180),
+            child: !_showSearch
+                ? const SizedBox.shrink()
+                : Padding(
+                    key: const ValueKey('history-search'),
+                    padding: const EdgeInsets.fromLTRB(16, 4, 16, 10),
+                    child: TextField(
+                      controller: _searchController,
+                      autofocus: true,
+                      decoration: InputDecoration(
+                        prefixIcon: const Icon(Icons.search),
+                        hintText: context.l10n.search,
                       ),
-                hintText: context.l10n.search,
-              ),
-              textInputAction: TextInputAction.search,
-              onChanged: (_) => _reload(),
-            ),
+                      textInputAction: TextInputAction.search,
+                      onChanged: (_) => _reload(),
+                    ),
+                  ),
           ),
           Expanded(
             child: FutureBuilder<List<SessionListItem>>(
@@ -78,18 +93,19 @@ class _SessionHistoryPageState extends State<SessionHistoryPage> {
                     child: Text(context.l10n.errorMessage(snapshot.error!)),
                   );
                 }
-                final sessions = snapshot.data!;
+                final sessions = snapshot.data!
+                    .where((session) => session.kind == _kind.name)
+                    .where(
+                        (session) => !_endedOnly || session.status == 'ended')
+                    .toList(growable: false);
                 if (sessions.isEmpty) {
-                  return Center(child: Text(context.l10n.noSessionsYet));
+                  return SessionHistoryEmptyState(kind: _kind);
                 }
-                return ListView.builder(
-                  itemCount: sessions.length,
-                  itemBuilder: (context, index) => _SessionTile(
-                    session: sessions[index],
-                    onDeleted: _deleteSession,
-                    onOpened: _openSession,
-                    onReviewOpened: _openReview,
-                  ),
+                return SessionHistorySections(
+                  sessions: sessions,
+                  onOpened: _openSession,
+                  onReviewOpened: _openReview,
+                  onDeleted: _deleteSession,
                 );
               },
             ),
@@ -99,39 +115,32 @@ class _SessionHistoryPageState extends State<SessionHistoryPage> {
     );
   }
 
+  String _text(String zh, String en) => context.l10n.isChinese ? zh : en;
+
   void _reload() {
     setState(() {
       _sessions = _repository.listSessions(query: _searchController.text);
     });
   }
 
-  void _clearSearch() {
-    _searchController.clear();
-    _reload();
-  }
-
   Future<void> _openSession(String sessionId) async {
-    await Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) => SessionDetailPage(
-          sessionId: sessionId,
-          repository: _repository,
-        ),
+    await Navigator.of(context).push(MaterialPageRoute<void>(
+      builder: (_) => SessionDetailPage(
+        sessionId: sessionId,
+        repository: _repository,
       ),
-    );
+    ));
     if (mounted) _reload();
   }
 
   Future<void> _openReview(String sessionId) async {
-    await Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) => SessionDetailPage(
-          sessionId: sessionId,
-          repository: _repository,
-          autoGenerateReview: true,
-        ),
+    await Navigator.of(context).push(MaterialPageRoute<void>(
+      builder: (_) => SessionDetailPage(
+        sessionId: sessionId,
+        repository: _repository,
+        autoGenerateReview: true,
       ),
-    );
+    ));
     if (mounted) _reload();
   }
 
@@ -156,70 +165,5 @@ class _SessionHistoryPageState extends State<SessionHistoryPage> {
     if (confirmed != true) return;
     await _repository.deleteSession(sessionId);
     if (mounted) _reload();
-  }
-}
-
-class _SessionTile extends StatelessWidget {
-  const _SessionTile({
-    required this.session,
-    required this.onDeleted,
-    required this.onOpened,
-    required this.onReviewOpened,
-  });
-
-  final SessionListItem session;
-  final ValueChanged<String> onDeleted;
-  final ValueChanged<String> onOpened;
-  final ValueChanged<String> onReviewOpened;
-
-  @override
-  Widget build(BuildContext context) {
-    final l10n = context.l10n;
-    return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      child: ListTile(
-        title: Text(session.createdAt.toLocal().toString()),
-        subtitle: Padding(
-          padding: const EdgeInsets.only(top: 4),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              Text(
-                l10n.sessionSummary(
-                  status: session.status,
-                  consumedSeconds: session.consumedSeconds,
-                  segmentCount: session.segmentCount,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 8,
-                runSpacing: 4,
-                children: <Widget>[
-                  TextButton.icon(
-                    onPressed: session.segmentCount == 0
-                        ? null
-                        : () => onReviewOpened(session.sessionId),
-                    icon: const Icon(Icons.summarize_outlined),
-                    label: Text(l10n.meetingMinutes),
-                  ),
-                  TextButton.icon(
-                    onPressed: () => onOpened(session.sessionId),
-                    icon: const Icon(Icons.subject_outlined),
-                    label: Text(l10n.transcript),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-        trailing: IconButton(
-          onPressed: () => onDeleted(session.sessionId),
-          icon: const Icon(Icons.delete_outline),
-          tooltip: l10n.delete,
-        ),
-        onTap: () => onOpened(session.sessionId),
-      ),
-    );
   }
 }

@@ -108,6 +108,18 @@ class SessionHistoryRepository {
     return _apiClient!.generateReview(sessionId);
   }
 
+  Future<SessionDetail> updateActionItem(
+    String sessionId,
+    int actionIndex,
+    bool completed,
+  ) {
+    final localStore = _localStore;
+    if (localStore != null) {
+      return localStore.updateActionItem(sessionId, actionIndex, completed);
+    }
+    return _apiClient!.updateActionItem(sessionId, actionIndex, completed);
+  }
+
   Future<SessionDetail> renameSpeaker(
     String sessionId,
     String speakerId,

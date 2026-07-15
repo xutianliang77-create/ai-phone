@@ -10,6 +10,11 @@ class SessionListItem {
     required this.createdAt,
     required this.segmentCount,
     this.endedAt,
+    this.kind = 'realtime',
+    this.title,
+    this.sourceLanguage,
+    this.targetLanguage,
+    this.speakerCount = 0,
   });
 
   final String sessionId;
@@ -19,6 +24,11 @@ class SessionListItem {
   final DateTime createdAt;
   final DateTime? endedAt;
   final int segmentCount;
+  final String kind;
+  final String? title;
+  final String? sourceLanguage;
+  final String? targetLanguage;
+  final int speakerCount;
 
   factory SessionListItem.fromJson(Map<String, Object?> json) {
     return SessionListItem(
@@ -31,6 +41,12 @@ class SessionListItem {
           ? null
           : DateTime.parse(json['endedAt']! as String),
       segmentCount: json['segmentCount']! as int,
+      kind: json['kind'] as String? ??
+          _sessionKindFromMode(json['mode']! as String),
+      title: json['title'] as String?,
+      sourceLanguage: json['sourceLanguage'] as String?,
+      targetLanguage: json['targetLanguage'] as String?,
+      speakerCount: (json['speakerCount'] as num?)?.toInt() ?? 0,
     );
   }
 }
@@ -150,6 +166,11 @@ class SessionDetail extends SessionListItem {
     required this.segments,
     this.reviewJson,
     super.endedAt,
+    super.kind,
+    super.title,
+    super.sourceLanguage,
+    super.targetLanguage,
+    super.speakerCount,
   });
 
   final List<SessionSegment> segments;
@@ -166,6 +187,12 @@ class SessionDetail extends SessionListItem {
           ? null
           : DateTime.parse(json['endedAt']! as String),
       segmentCount: json['segmentCount']! as int,
+      kind: json['kind'] as String? ??
+          _sessionKindFromMode(json['mode']! as String),
+      title: json['title'] as String?,
+      sourceLanguage: json['sourceLanguage'] as String?,
+      targetLanguage: json['targetLanguage'] as String?,
+      speakerCount: (json['speakerCount'] as num?)?.toInt() ?? 0,
       segments: (json['segments']! as List<dynamic>)
           .cast<Map<String, Object?>>()
           .map(SessionSegment.fromJson)
@@ -187,8 +214,36 @@ class SessionDetail extends SessionListItem {
       segmentCount: nextSegments.length,
       segments: nextSegments,
       reviewJson: reviewJson,
+      kind: kind,
+      title: title,
+      sourceLanguage: sourceLanguage,
+      targetLanguage: targetLanguage,
+      speakerCount: speakerCount,
     );
   }
+
+  SessionDetail copyWithReview(Map<String, Object?> nextReview) {
+    return SessionDetail(
+      sessionId: sessionId,
+      mode: mode,
+      status: status,
+      consumedSeconds: consumedSeconds,
+      createdAt: createdAt,
+      endedAt: endedAt,
+      segmentCount: segmentCount,
+      segments: segments,
+      reviewJson: nextReview,
+      kind: kind,
+      title: title,
+      sourceLanguage: sourceLanguage,
+      targetLanguage: targetLanguage,
+      speakerCount: speakerCount,
+    );
+  }
+}
+
+String _sessionKindFromMode(String mode) {
+  return mode == 'call_link' ? 'call' : 'realtime';
 }
 
 class SessionExport {

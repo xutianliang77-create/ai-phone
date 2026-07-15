@@ -141,6 +141,35 @@ class LocalSessionStore {
     return updated;
   }
 
+  Future<SessionDetail> updateActionItem(
+    String sessionId,
+    int actionIndex,
+    bool completed,
+  ) async {
+    final file = await _storageFile();
+    final sessions = await _loadSessions();
+    final index = sessions.indexWhere((item) => item.sessionId == sessionId);
+    if (index < 0) throw LocalSessionNotFoundException(sessionId);
+    final current = sessions[index];
+    final review = current.reviewJson;
+    final actionItems = (review?['actionItems'] as List<dynamic>? ?? const [])
+        .map((item) => Map<String, Object?>.from(item as Map))
+        .toList();
+    if (actionIndex < 0 || actionIndex >= actionItems.length) {
+      throw StateError('Action item not found');
+    }
+    actionItems[actionIndex]['completed'] = completed;
+    final updated = current.copyWithReview(<String, Object?>{
+      ...review!,
+      'actionItems': actionItems,
+    });
+    sessions[index] = updated;
+    await file.writeAsString(jsonEncode({
+      'sessions': sessions.map(_detailToJson).toList(),
+    }));
+    return updated;
+  }
+
   Future<File> _storageFile() async {
     final file = _file;
     if (file != null) return file;
@@ -169,7 +198,56 @@ SessionListItem _toListItem(SessionDetail detail) {
     createdAt: detail.createdAt,
     endedAt: detail.endedAt,
     segmentCount: detail.segmentCount,
+    kind: _localSessionKind(detail),
+    title: detail.title ?? _localSessionTitle(detail),
+    sourceLanguage: detail.sourceLanguage ?? _firstSourceLanguage(detail),
+    targetLanguage: detail.targetLanguage ?? _firstTargetLanguage(detail),
+    speakerCount: _localSpeakerCount(detail),
   );
+}
+
+String _localSessionKind(SessionDetail detail) {
+  if (detail.segments.any((segment) => segment.provider == 'scan')) {
+    return 'scan';
+  }
+  if (detail.mode == 'call_link' ||
+      detail.segments.any((segment) => segment.provider == 'type_to_speak')) {
+    return 'call';
+  }
+  return 'realtime';
+}
+
+String? _localSessionTitle(SessionDetail detail) {
+  for (final segment in detail.segments) {
+    final title = segment.sourceText.trim().isNotEmpty
+        ? segment.sourceText.trim()
+        : segment.translatedText.trim();
+    if (title.isEmpty) continue;
+    return title.length <= 36 ? title : '${title.substring(0, 35)}…';
+  }
+  return null;
+}
+
+String? _firstSourceLanguage(SessionDetail detail) {
+  for (final segment in detail.segments) {
+    if (segment.sourceLanguage != null) return segment.sourceLanguage;
+  }
+  return null;
+}
+
+String? _firstTargetLanguage(SessionDetail detail) {
+  for (final segment in detail.segments) {
+    if (segment.targetLanguage != null) return segment.targetLanguage;
+  }
+  return null;
+}
+
+int _localSpeakerCount(SessionDetail detail) {
+  return detail.segments
+      .map((segment) => segment.speaker?.speakerId)
+      .whereType<String>()
+      .toSet()
+      .length;
 }
 
 Map<String, Object?> _detailToJson(SessionDetail detail) {
@@ -181,6 +259,12 @@ Map<String, Object?> _detailToJson(SessionDetail detail) {
     'createdAt': detail.createdAt.toIso8601String(),
     'endedAt': detail.endedAt?.toIso8601String(),
     'segmentCount': detail.segments.length,
+    'kind': detail.kind,
+    if (detail.title != null) 'title': detail.title,
+    if (detail.sourceLanguage != null) 'sourceLanguage': detail.sourceLanguage,
+    if (detail.targetLanguage != null) 'targetLanguage': detail.targetLanguage,
+    'speakerCount': detail.speakerCount,
+    if (detail.reviewJson != null) 'review': detail.reviewJson,
     'segments': detail.segments.map((segment) {
       return <String, Object?>{
         'id': segment.id,
@@ -241,8 +325,6 @@ void _writeSegmentDiagnostics(StringBuffer buffer, SessionSegment segment) {
       'Target language: ${segment.targetLanguage}',
     if (segment.confidence != null) 'Confidence: ${segment.confidence}',
     if (segment.stage != null) 'Stage: ${segment.stage}',
-    if (segment.provider != null) 'Provider: ${segment.provider}',
-    if (segment.model != null) 'Model: ${segment.model}',
     if (segment.latencyMs != null) 'Latency: ${segment.latencyMs}ms',
   ];
   if (diagnostics.isEmpty) return;

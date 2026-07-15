@@ -17,21 +17,64 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('历史记录'), findsOneWidget);
-    expect(find.text('会议纪要'), findsOneWidget);
+    expect(find.text('07月09日'), findsOneWidget);
+    await tester.tap(find.byTooltip('更多操作'));
+    await tester.pumpAndSettle();
+    expect(find.text('生成会议纪要'), findsOneWidget);
 
-    await tester.tap(find.widgetWithText(TextButton, '会议纪要'));
+    await tester.tap(find.text('生成会议纪要'));
     await tester.pumpAndSettle();
 
     expect(repository.generatedReview, isTrue);
     expect(find.text('会话详情'), findsOneWidget);
+    await tester.tap(find.widgetWithText(Tab, '纪要'));
+    await tester.pumpAndSettle();
     expect(find.textContaining('服务端摘要', findRichText: true), findsOneWidget);
+  });
+
+  testWidgets('filters all record kinds at narrow width and large text',
+      (WidgetTester tester) async {
+    tester.view.physicalSize = const Size(320, 568);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final repository = _FakeSessionHistoryRepository();
+
+    await tester.pumpWidget(_TestApp(
+      textScale: 2,
+      child: SessionHistoryPage(repository: repository),
+    ));
+    await tester.pumpAndSettle();
+    expect(find.text('同传记录'), findsOneWidget);
+
+    await tester.tap(find.text('通话'));
+    await tester.pumpAndSettle();
+    expect(find.text('通话记录'), findsOneWidget);
+
+    await tester.tap(find.text('扫描'));
+    await tester.pumpAndSettle();
+    expect(find.text('扫描记录'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('shows a localized offline state', (WidgetTester tester) async {
+    final repository = _FakeSessionHistoryRepository(
+      listError: Exception('ClientException: failed host lookup'),
+    );
+
+    await tester.pumpWidget(_TestApp(
+      child: SessionHistoryPage(repository: repository),
+    ));
+    await tester.pumpAndSettle();
+
+    expect(find.text('网络连接失败，请检查 API 服务是否可用'), findsOneWidget);
   });
 }
 
 class _TestApp extends StatelessWidget {
-  const _TestApp({required this.child});
+  const _TestApp({required this.child, this.textScale = 1});
 
   final Widget child;
+  final double textScale;
 
   @override
   Widget build(BuildContext context) {
@@ -44,19 +87,27 @@ class _TestApp extends StatelessWidget {
         GlobalWidgetsLocalizations.delegate,
       ],
       supportedLocales: AppLocalizations.supportedLocales,
+      builder: (context, child) => MediaQuery(
+        data: MediaQuery.of(context).copyWith(
+          textScaler: TextScaler.linear(textScale),
+        ),
+        child: child!,
+      ),
       home: child,
     );
   }
 }
 
 class _FakeSessionHistoryRepository extends SessionHistoryRepository {
-  _FakeSessionHistoryRepository()
+  _FakeSessionHistoryRepository({this.listError})
       : super(shareService: _FakeFileShareService());
 
+  final Object? listError;
   bool generatedReview = false;
 
   @override
   Future<List<SessionListItem>> listSessions({String query = ''}) async {
+    if (listError != null) throw listError!;
     return <SessionListItem>[
       SessionListItem(
         sessionId: 's1',
@@ -66,6 +117,29 @@ class _FakeSessionHistoryRepository extends SessionHistoryRepository {
         createdAt: DateTime.utc(2026, 7, 9, 12),
         endedAt: DateTime.utc(2026, 7, 9, 12, 1),
         segmentCount: 2,
+        title: '同传记录',
+      ),
+      SessionListItem(
+        sessionId: 'call_1',
+        mode: 'call_link',
+        kind: 'call',
+        status: 'ended',
+        consumedSeconds: 90,
+        createdAt: DateTime.utc(2026, 7, 8, 12),
+        endedAt: DateTime.utc(2026, 7, 8, 12, 1, 30),
+        segmentCount: 3,
+        title: '通话记录',
+      ),
+      SessionListItem(
+        sessionId: 'scan_1',
+        mode: 'conversation',
+        kind: 'scan',
+        status: 'ended',
+        consumedSeconds: 0,
+        createdAt: DateTime.utc(2026, 7, 7, 12),
+        endedAt: DateTime.utc(2026, 7, 7, 12),
+        segmentCount: 1,
+        title: '扫描记录',
       ),
     ];
   }

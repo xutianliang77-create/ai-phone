@@ -6,6 +6,7 @@ import '../../../../shared/domain/speaker_attribution.dart';
 import '../../data/session_history_models.dart';
 import '../../data/session_history_repository.dart';
 import '../../data/session_review.dart';
+import '../widgets/session_detail_overview.dart';
 import '../widgets/session_detail_tabs.dart';
 import '../widgets/session_terms_tab.dart';
 import '../widgets/session_speakers_panel.dart';
@@ -31,10 +32,12 @@ class _SessionDetailPageState extends State<SessionDetailPage> {
       SessionHistoryRepository.fromConfig(AppConfig.fromEnvironment());
   late final bool _ownsRepository = widget.repository == null;
   late Future<SessionDetail> _detail;
+  SessionDetail? _currentDetail;
   bool _exporting = false;
   bool _generatingReview = false;
   final Map<String, String> _confirmedTermIds = <String, String>{};
   final Set<String> _pendingTermKeys = <String>{};
+  final Set<int> _pendingActionIndexes = <int>{};
   bool _queuedInitialReview = false;
 
   @override
@@ -101,33 +104,38 @@ class _SessionDetailPageState extends State<SessionDetailPage> {
       body: FutureBuilder<SessionDetail>(
         future: _detail,
         builder: (context, snapshot) {
-          if (snapshot.connectionState != ConnectionState.done) {
+          if (_currentDetail == null &&
+              snapshot.connectionState != ConnectionState.done) {
             return const Center(child: CircularProgressIndicator());
           }
-          if (snapshot.hasError) {
+          if (_currentDetail == null && snapshot.hasError) {
             return Center(
               child: Text(context.l10n.errorMessage(snapshot.error!)),
             );
           }
-          final detail = snapshot.data!;
+          final detail = _currentDetail ?? snapshot.data!;
           if (detail.segments.isEmpty) {
             return Center(child: Text(context.l10n.noSavedSubtitles));
           }
           return Column(
             children: <Widget>[
-              SessionSpeakersPanel(detail: detail, onRename: _renameSpeaker),
-              _MeetingMinutesPanel(
-                hasReview: detail.reviewJson != null,
-                generating: _generatingReview,
-                onGenerate: _generateReview,
+              SessionDetailOverview(
+                detail: detail,
+                onManageSpeakers: detail.speakerCount == 0
+                    ? null
+                    : () => _showSpeakers(detail),
               ),
               Expanded(
                 child: SessionDetailTabs(
                   detail: detail,
                   confirmedTermIds: _confirmedTermIds,
                   pendingTermKeys: _pendingTermKeys,
+                  pendingActionIndexes: _pendingActionIndexes,
                   onConfirmTerm: _confirmTerm,
                   onRevokeTerm: _revokeTerm,
+                  onUpdateActionItem: _updateActionItem,
+                  onGenerateReview: _generateReview,
+                  generatingReview: _generatingReview,
                 ),
               ),
             ],
@@ -151,7 +159,7 @@ class _SessionDetailPageState extends State<SessionDetailPage> {
     try {
       final detail = await _repository.generateReview(widget.sessionId);
       if (!mounted) return;
-      setState(() => _detail = Future.value(detail));
+      setState(() => _currentDetail = detail);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(context.l10n.reviewGenerated)),
       );
@@ -175,7 +183,36 @@ class _SessionDetailPageState extends State<SessionDetailPage> {
       displayName,
     );
     if (!mounted) return;
-    setState(() => _detail = Future.value(updated));
+    setState(() => _currentDetail = updated);
+  }
+
+  Future<void> _updateActionItem(int index, bool completed) async {
+    setState(() => _pendingActionIndexes.add(index));
+    try {
+      final updated = await _repository.updateActionItem(
+        widget.sessionId,
+        index,
+        completed,
+      );
+      if (!mounted) return;
+      setState(() => _currentDetail = updated);
+    } catch (error) {
+      if (mounted) _showError(error);
+    } finally {
+      if (mounted) setState(() => _pendingActionIndexes.remove(index));
+    }
+  }
+
+  Future<void> _showSpeakers(SessionDetail detail) {
+    return showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+        child: SingleChildScrollView(
+          child: SessionSpeakersPanel(detail: detail, onRename: _renameSpeaker),
+        ),
+      ),
+    );
   }
 
   Future<void> _confirmTerm(SessionTermSuggestion term) async {
@@ -225,76 +262,6 @@ class _SessionDetailPageState extends State<SessionDetailPage> {
   void _showError(Object error) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(context.l10n.errorMessage(error))),
-    );
-  }
-}
-
-class _MeetingMinutesPanel extends StatelessWidget {
-  const _MeetingMinutesPanel({
-    required this.hasReview,
-    required this.generating,
-    required this.onGenerate,
-  });
-
-  final bool hasReview;
-  final bool generating;
-  final VoidCallback onGenerate;
-
-  @override
-  Widget build(BuildContext context) {
-    final l10n = context.l10n;
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          border: Border.all(color: Theme.of(context).colorScheme.outline),
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              const Padding(
-                padding: EdgeInsets.only(top: 4),
-                child: Icon(Icons.summarize_outlined),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: <Widget>[
-                    Text(
-                      l10n.meetingMinutes,
-                      style: Theme.of(context).textTheme.titleMedium,
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      hasReview
-                          ? l10n.meetingMinutesReady
-                          : l10n.meetingMinutesHint,
-                      style: Theme.of(context).textTheme.bodySmall,
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 8),
-              FilledButton.icon(
-                onPressed: generating ? null : onGenerate,
-                icon: generating
-                    ? const SizedBox.square(
-                        dimension: 16,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.auto_awesome_outlined),
-                label: Text(
-                  hasReview ? l10n.regenerateReview : l10n.generateReview,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
     );
   }
 }
