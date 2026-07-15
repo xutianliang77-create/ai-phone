@@ -1,5 +1,6 @@
 export * from "./api/auth.js";
 export * from "./api/agent-calls.js";
+export * from "./api/enterprise.js";
 export * from "./api/model-routing.js";
 export * from "./api/plans.js";
 export * from "./api/realtime.js";

@@ -2,7 +2,7 @@
 
 版本：v1.0
 日期：2026-07-15
-状态：SaaS 基线待排期
+状态：E0 开发中
 
 ## 1. 状态定义
 
@@ -16,7 +16,7 @@
 
 | 编号 | 任务 | 依赖 | 交付物 | 完成定义 | 状态 |
 | --- | --- | --- | --- | --- | --- |
-| ENT-CORE-001 | Tenant 和 Member | 无 | tenant/member schema、Repository、API | 所有企业资源强制 tenant scope | todo |
+| ENT-CORE-001 | Tenant 和 Member | 无 | tenant/member schema、Repository、API | 所有企业资源强制 tenant scope | ready_for_acceptance |
 | ENT-CORE-002 | RBAC | CORE-001 | 角色、scope、服务端 guard | 越权矩阵全部拒绝 | todo |
 | ENT-CORE-003 | 企业 Web 壳 | CORE-001 | 登录、导航、错误和空状态 | 可按角色显示入口，服务端仍权威 | todo |
 | ENT-CORE-004 | 企业知识版本 | CORE-001 | source/version/chunk/publish | 未发布和过期知识不可检索 | todo |

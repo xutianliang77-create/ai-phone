@@ -25,7 +25,7 @@ enterprise_tenants(
 )
 
 enterprise_members(
-  tenant_id, user_id, role, status, joined_at, updated_at, version
+  id, tenant_id, user_id, role, status, joined_at, updated_at, version
 )
 
 enterprise_api_credentials(

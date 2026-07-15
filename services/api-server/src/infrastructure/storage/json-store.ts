@@ -32,6 +32,10 @@ import type {
   InboxEventRecord,
   OutboxEventRecord,
 } from "../../modules/events/event-record.js";
+import type {
+  EnterpriseMemberRecord,
+  EnterpriseTenantRecord,
+} from "../../modules/enterprise/enterprise-tenant-record.js";
 
 export interface AppStoreSnapshot {
   sessions: SessionRecord[];
@@ -52,6 +56,8 @@ export interface AppStoreSnapshot {
   agentCallDrafts: AgentCallRecord[];
   voiceProfiles: VoiceProfileRecord[];
   voiceIdentities: VoiceIdentityRecord[];
+  enterpriseTenants: EnterpriseTenantRecord[];
+  enterpriseMembers: EnterpriseMemberRecord[];
   inboxEvents: InboxEventRecord[];
   outboxEvents: OutboxEventRecord[];
 }
@@ -75,6 +81,8 @@ const defaultSnapshot: AppStoreSnapshot = {
   agentCallDrafts: [],
   voiceProfiles: [],
   voiceIdentities: [],
+  enterpriseTenants: [],
+  enterpriseMembers: [],
   inboxEvents: [],
   outboxEvents: [],
 };
@@ -217,6 +225,12 @@ export function normalizeStoreSnapshot(value: unknown): AppStoreSnapshot {
         : [],
       voiceProfiles: Array.isArray(raw.voiceProfiles) ? raw.voiceProfiles : [],
       voiceIdentities: Array.isArray(raw.voiceIdentities) ? raw.voiceIdentities : [],
+      enterpriseTenants: Array.isArray(raw.enterpriseTenants)
+        ? raw.enterpriseTenants
+        : [],
+      enterpriseMembers: Array.isArray(raw.enterpriseMembers)
+        ? raw.enterpriseMembers
+        : [],
       inboxEvents: Array.isArray(raw.inboxEvents) ? raw.inboxEvents : [],
       outboxEvents: Array.isArray(raw.outboxEvents) ? raw.outboxEvents : [],
   };
@@ -245,6 +259,7 @@ function sqliteFile() {
 function hasSnapshotData(value: AppStoreSnapshot) {
   return value.sessions.length > 0 ||
     value.accounts.length > 0 ||
+    value.enterpriseTenants.length > 0 ||
     value.billingLedger.length > 0 ||
     Object.keys(value.usageBalances).length > 0;
 }
