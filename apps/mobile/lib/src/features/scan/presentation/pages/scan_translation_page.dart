@@ -9,6 +9,7 @@ import '../../../../app/localization/app_localizations.dart';
 import '../../../history/data/session_history_repository.dart';
 import '../../../../platform/ocr/mobile_ocr_provider.dart';
 import '../../../../platform/ocr/platform_ocr_provider.dart';
+import '../../../../platform/translation/api_translation_provider.dart';
 import '../../../../platform/translation/ios_system_translation_provider.dart';
 import '../../../../platform/translation/mobile_translation_provider.dart';
 import '../../../../platform/translation/phrasebook_translation_provider.dart';
@@ -68,8 +69,22 @@ class _ScanTranslationPageState extends State<ScanTranslationPage> {
             return ListView(
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
               children: <Widget>[
-                Text(l10n.scanDomesticBody),
+                Text(
+                  l10n.isChinese ? '看懂眼前的文字' : 'Understand what you see',
+                  style: Theme.of(context).textTheme.headlineSmall,
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  l10n.isChinese
+                      ? '拍照或选择图片，译文会贴合原文位置显示。'
+                      : 'Take or choose a photo. Translation stays aligned with the original.',
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                ),
                 const SizedBox(height: 12),
+                _LanguageDirectionBar(controller: _controller),
+                const SizedBox(height: 16),
                 Wrap(
                   spacing: 12,
                   runSpacing: 8,
@@ -123,9 +138,15 @@ class _ScanTranslationPageState extends State<ScanTranslationPage> {
                 if (_controller.recognizedText.isNotEmpty &&
                     _controller.translatedText.isEmpty) ...<Widget>[
                   const SizedBox(height: 20),
-                  _TextSection(
-                    title: l10n.recognizedText,
-                    text: _controller.recognizedText,
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      Text(l10n.recognizedText,
+                          style: Theme.of(context).textTheme.titleMedium),
+                      const SizedBox(height: 8),
+                      SelectableText(_controller.recognizedText,
+                          style: Theme.of(context).textTheme.bodyLarge),
+                    ],
                   ),
                   const SizedBox(height: 12),
                   FilledButton.icon(
@@ -148,6 +169,14 @@ class _ScanTranslationPageState extends State<ScanTranslationPage> {
                     spacing: 12,
                     runSpacing: 8,
                     children: <Widget>[
+                      OutlinedButton.icon(
+                        onPressed: _controller.isBusy
+                            ? null
+                            : () =>
+                                _controller.selectImage(ScanImageSource.camera),
+                        icon: const Icon(Icons.refresh),
+                        label: const Text('重拍'),
+                      ),
                       OutlinedButton.icon(
                         onPressed:
                             _controller.canShare ? () => _share(l10n) : null,
@@ -189,8 +218,12 @@ class _ScanTranslationPageState extends State<ScanTranslationPage> {
   }
 
   MobileTranslationProvider _defaultTranslator() {
+    final config = AppConfig.fromEnvironment();
     return IosSystemTranslationProvider(
-      fallback: PhrasebookTranslationProvider(),
+      fallback: ApiTranslationProvider(
+        baseUrl: config.apiBaseUrl,
+        fallback: PhrasebookTranslationProvider(),
+      ),
     );
   }
 
@@ -266,23 +299,44 @@ class _StatusLine extends StatelessWidget {
   }
 }
 
-class _TextSection extends StatelessWidget {
-  const _TextSection({
-    required this.title,
-    required this.text,
-  });
+class _LanguageDirectionBar extends StatelessWidget {
+  const _LanguageDirectionBar({required this.controller});
 
-  final String title;
-  final String text;
+  final ScanTranslationController controller;
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    final chinese = context.l10n.isChinese;
+    return Wrap(
+      spacing: 8,
+      runSpacing: 4,
+      crossAxisAlignment: WrapCrossAlignment.center,
       children: <Widget>[
-        Text(title, style: Theme.of(context).textTheme.titleMedium),
-        const SizedBox(height: 8),
-        SelectableText(text, style: Theme.of(context).textTheme.bodyLarge),
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            const Icon(Icons.auto_awesome_outlined, size: 18),
+            const SizedBox(width: 8),
+            Text(chinese ? '自动识别' : 'Auto detect'),
+          ],
+        ),
+        const Icon(Icons.arrow_forward, size: 18),
+        PopupMenuButton<String>(
+          enabled: !controller.isBusy,
+          initialValue: controller.targetLanguage,
+          onSelected: controller.setTargetLanguage,
+          itemBuilder: (context) => const <PopupMenuEntry<String>>[
+            PopupMenuItem(value: 'en', child: Text('English')),
+            PopupMenuItem(value: 'zh', child: Text('中文')),
+          ],
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              Text(controller.targetLanguage == 'zh' ? '中文' : 'English'),
+              const Icon(Icons.arrow_drop_down),
+            ],
+          ),
+        ),
       ],
     );
   }

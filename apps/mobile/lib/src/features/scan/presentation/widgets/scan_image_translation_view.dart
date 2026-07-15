@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 
 import '../../../../app/localization/app_localizations.dart';
+import '../../../../platform/ocr/mobile_ocr_provider.dart';
 import '../controllers/scan_translation_controller.dart';
 
 class ScanImageTranslationView extends StatefulWidget {
@@ -25,7 +26,13 @@ class ScanImageTranslationView extends StatefulWidget {
 }
 
 class _ScanImageTranslationViewState extends State<ScanImageTranslationView> {
+  static const double _minScale = 1;
+  static const double _maxScale = 5;
+
+  final TransformationController _transformationController =
+      TransformationController();
   bool _showTranslation = false;
+  double _scale = _minScale;
 
   bool get _hasTranslation => widget.translatedText.trim().isNotEmpty;
 
@@ -35,6 +42,12 @@ class _ScanImageTranslationViewState extends State<ScanImageTranslationView> {
     if (oldWidget.translatedText.isEmpty && _hasTranslation) {
       _showTranslation = true;
     }
+  }
+
+  @override
+  void dispose() {
+    _transformationController.dispose();
+    super.dispose();
   }
 
   @override
@@ -78,16 +91,48 @@ class _ScanImageTranslationViewState extends State<ScanImageTranslationView> {
           borderRadius: BorderRadius.circular(8),
           child: AspectRatio(
             aspectRatio: widget.aspectRatio,
-            child: Stack(
-              fit: StackFit.expand,
-              children: <Widget>[
-                Image.memory(
-                  widget.imageBytes,
-                  fit: BoxFit.fill,
-                  semanticLabel: l10n.scanImageSelected,
-                ),
-                if (_showTranslation) _translationLayer(context),
-              ],
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final viewport = constraints.biggest;
+                return Stack(
+                  fit: StackFit.expand,
+                  children: <Widget>[
+                    InteractiveViewer(
+                      transformationController: _transformationController,
+                      minScale: _minScale,
+                      maxScale: _maxScale,
+                      onInteractionUpdate: (_) => _syncScale(),
+                      child: SizedBox(
+                        width: viewport.width,
+                        height: viewport.height,
+                        child: Stack(
+                          fit: StackFit.expand,
+                          children: <Widget>[
+                            Image.memory(
+                              widget.imageBytes,
+                              fit: BoxFit.fill,
+                              semanticLabel: l10n.scanImageSelected,
+                            ),
+                            if (_showTranslation) _translationLayer(context),
+                          ],
+                        ),
+                      ),
+                    ),
+                    Positioned(
+                      right: 8,
+                      bottom: 8,
+                      child: _ZoomControls(
+                        scale: _scale,
+                        minScale: _minScale,
+                        maxScale: _maxScale,
+                        onZoomOut: () => _setScale(_scale / 1.5, viewport),
+                        onReset: () => _setScale(_minScale, viewport),
+                        onZoomIn: () => _setScale(_scale * 1.5, viewport),
+                      ),
+                    ),
+                  ],
+                );
+              },
             ),
           ),
         ),
@@ -114,27 +159,27 @@ class _ScanImageTranslationViewState extends State<ScanImageTranslationView> {
       builder: (context, constraints) {
         return Stack(
           children: widget.translatedBlocks.map((block) {
-            final bounds = block.source;
+            final rect = _translationRect(block.source, constraints.biggest);
             return Positioned(
-              left: bounds.left * constraints.maxWidth,
-              top: bounds.top * constraints.maxHeight,
-              width: bounds.width * constraints.maxWidth,
-              height: bounds.height * constraints.maxHeight,
+              left: rect.left,
+              top: rect.top,
+              width: rect.width,
+              height: rect.height,
               child: Container(
                 color: Theme.of(context)
                     .colorScheme
                     .surface
-                    .withValues(alpha: 0.92),
-                padding: const EdgeInsets.symmetric(horizontal: 2),
-                child: FittedBox(
-                  fit: BoxFit.scaleDown,
-                  alignment: Alignment.centerLeft,
-                  child: Text(
-                    block.translation,
-                    style: TextStyle(
-                      color: Theme.of(context).colorScheme.onSurface,
-                      fontWeight: FontWeight.w600,
-                    ),
+                    .withValues(alpha: 0.88),
+                padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 2),
+                child: Text(
+                  block.translation,
+                  maxLines: 2,
+                  overflow: TextOverflow.fade,
+                  style: TextStyle(
+                    color: Theme.of(context).colorScheme.onSurface,
+                    fontSize: 14,
+                    height: 1.1,
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
               ),
@@ -142,6 +187,87 @@ class _ScanImageTranslationViewState extends State<ScanImageTranslationView> {
           }).toList(growable: false),
         );
       },
+    );
+  }
+
+  Rect _translationRect(MobileOcrBlock bounds, Size canvas) {
+    final left = (bounds.left * canvas.width).clamp(0.0, canvas.width);
+    final top = (bounds.top * canvas.height).clamp(0.0, canvas.height);
+    final availableWidth = canvas.width - left;
+    final availableHeight = canvas.height - top;
+    final sourceWidth = bounds.width * canvas.width;
+    final sourceHeight = bounds.height * canvas.height;
+    final width = sourceWidth.clamp(
+      availableWidth < 72 ? availableWidth : 72.0,
+      availableWidth,
+    );
+    final height = sourceHeight.clamp(
+      availableHeight < 24 ? availableHeight : 24.0,
+      availableHeight,
+    );
+    return Rect.fromLTWH(left, top, width, height);
+  }
+
+  void _syncScale() {
+    final nextScale = _transformationController.value.getMaxScaleOnAxis();
+    if ((nextScale - _scale).abs() < 0.01 || !mounted) return;
+    setState(() => _scale = nextScale);
+  }
+
+  void _setScale(double requestedScale, Size viewport) {
+    final targetScale = requestedScale.clamp(_minScale, _maxScale);
+    final focalPoint = viewport.center(Offset.zero);
+    final scenePoint = _transformationController.toScene(focalPoint);
+    _transformationController.value = Matrix4.identity()
+      ..translateByDouble(focalPoint.dx, focalPoint.dy, 0, 1)
+      ..scaleByDouble(targetScale, targetScale, 1, 1)
+      ..translateByDouble(-scenePoint.dx, -scenePoint.dy, 0, 1);
+    setState(() => _scale = targetScale);
+  }
+}
+
+class _ZoomControls extends StatelessWidget {
+  const _ZoomControls({
+    required this.scale,
+    required this.minScale,
+    required this.maxScale,
+    required this.onZoomOut,
+    required this.onReset,
+    required this.onZoomIn,
+  });
+
+  final double scale;
+  final double minScale;
+  final double maxScale;
+  final VoidCallback onZoomOut;
+  final VoidCallback onReset;
+  final VoidCallback onZoomIn;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.92),
+      borderRadius: BorderRadius.circular(6),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          IconButton(
+            tooltip: '缩小图片',
+            onPressed: scale > minScale ? onZoomOut : null,
+            icon: const Icon(Icons.zoom_out),
+          ),
+          IconButton(
+            tooltip: '恢复原始大小',
+            onPressed: scale > minScale ? onReset : null,
+            icon: const Icon(Icons.center_focus_strong),
+          ),
+          IconButton(
+            tooltip: '放大图片',
+            onPressed: scale < maxScale ? onZoomIn : null,
+            icon: const Icon(Icons.zoom_in),
+          ),
+        ],
+      ),
     );
   }
 }

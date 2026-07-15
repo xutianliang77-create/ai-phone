@@ -36,6 +36,8 @@ void main() {
       200,
       scrollable: find.byType(Scrollable).first,
     );
+    await tester.ensureVisible(find.text('翻译'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('翻译'));
     await tester.pumpAndSettle();
 
@@ -98,6 +100,60 @@ void main() {
     );
     expect(find.text('未识别到文字，请换一张更清晰的图片'), findsOneWidget);
   });
+
+  testWidgets(
+      'keeps target language controls usable on a narrow large-text screen',
+      (WidgetTester tester) async {
+    tester.view.physicalSize = const Size(320, 568);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(_TestApp(
+      textScale: 2,
+      child: ScanTranslationPage(
+        ocrProvider: const _FakeOcrProvider('你好'),
+        translationProvider: _FakeTranslationProvider(),
+        historyRepository: _FakeSessionHistoryRepository(),
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('English'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('中文').last);
+    await tester.pumpAndSettle();
+
+    expect(find.text('中文'), findsOneWidget);
+    expect(find.text('拍照'), findsOneWidget);
+    expect(find.text('相册'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('keeps recognized text when translation is unavailable',
+      (WidgetTester tester) async {
+    await tester.pumpWidget(_TestApp(
+      child: ScanTranslationPage(
+        ocrProvider: const _FakeOcrProvider('你好'),
+        translationProvider: _FakeTranslationProvider(fail: true),
+        historyRepository: _FakeSessionHistoryRepository(),
+        pickImagePath: (_) async => _picked('/tmp/offline.jpg'),
+      ),
+    ));
+
+    await tester.tap(find.text('相册'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('识别文字'));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.text('翻译'),
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.tap(find.text('翻译'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('你好'), findsOneWidget);
+    expect(find.text('翻译暂不可用，已保留识别文字'), findsOneWidget);
+  });
 }
 
 PickedScanImage _picked(String path) {
@@ -110,9 +166,10 @@ PickedScanImage _picked(String path) {
 }
 
 class _TestApp extends StatelessWidget {
-  const _TestApp({required this.child});
+  const _TestApp({required this.child, this.textScale = 1});
 
   final Widget child;
+  final double textScale;
 
   @override
   Widget build(BuildContext context) {
@@ -125,6 +182,12 @@ class _TestApp extends StatelessWidget {
         GlobalWidgetsLocalizations.delegate,
       ],
       supportedLocales: AppLocalizations.supportedLocales,
+      builder: (context, child) => MediaQuery(
+        data: MediaQuery.of(context).copyWith(
+          textScaler: TextScaler.linear(textScale),
+        ),
+        child: child!,
+      ),
       home: child,
     );
   }
@@ -159,6 +222,10 @@ class _FakeOcrProvider implements MobileOcrProvider {
 }
 
 class _FakeTranslationProvider implements MobileTranslationProvider {
+  _FakeTranslationProvider({this.fail = false});
+
+  final bool fail;
+
   @override
   Future<void> dispose() async {}
 
@@ -167,6 +234,7 @@ class _FakeTranslationProvider implements MobileTranslationProvider {
     String text,
     MobileTranslationConfig config,
   ) async {
+    if (fail) throw StateError('translation provider offline');
     if (text == '你好') {
       return const MobileTranslationResult(text: 'Hello', provider: 'fake');
     }

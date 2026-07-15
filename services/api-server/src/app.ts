@@ -16,6 +16,7 @@ import { registerPlansRoutes } from "./modules/plans/plans.routes.js";
 import { registerRealtimeRoutes } from "./modules/realtime/realtime.routes.js";
 import { registerSessionsRoutes } from "./modules/sessions/sessions.routes.js";
 import { registerTermsRoutes } from "./modules/terms/terms.routes.js";
+import { registerTextTranslationRoutes } from "./modules/translation/text-translation.routes.js";
 import { registerVoiceProfileRoutes } from "./modules/voice-profiles/voice-profiles.routes.js";
 import { registerVoiceIdentityRoutes } from "./modules/voice-identities/voice-identities.routes.js";
 
@@ -48,6 +49,7 @@ export async function buildApp() {
   await registerRealtimeRoutes(app);
   await registerSessionsRoutes(app);
   await registerTermsRoutes(app);
+  await registerTextTranslationRoutes(app);
   await registerVoiceProfileRoutes(app);
   await registerVoiceIdentityRoutes(app);
   return app;

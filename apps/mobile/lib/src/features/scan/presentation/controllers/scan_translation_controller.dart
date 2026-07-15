@@ -68,7 +68,7 @@ class ScanTranslationController extends ChangeNotifier {
   List<MobileOcrBlock> recognizedBlocks = const <MobileOcrBlock>[];
   List<ScanTranslatedBlock> translatedBlocks = const <ScanTranslatedBlock>[];
   String sourceLanguage = 'auto';
-  String targetLanguage = 'zh';
+  String targetLanguage = 'en';
   String? message;
   String? savedSessionId;
 
@@ -81,6 +81,16 @@ class ScanTranslationController extends ChangeNotifier {
 
   bool get canShare {
     return recognizedText.trim().isNotEmpty || translatedText.trim().isNotEmpty;
+  }
+
+  void setTargetLanguage(String language) {
+    if (isBusy || (language != 'zh' && language != 'en')) return;
+    targetLanguage = language;
+    translatedText = '';
+    translatedBlocks = const <ScanTranslatedBlock>[];
+    savedSessionId = null;
+    if (recognizedText.isNotEmpty) status = ScanTranslationStatus.recognized;
+    notifyListeners();
   }
 
   Future<void> selectImage(ScanImageSource source) async {
@@ -159,7 +169,9 @@ class ScanTranslationController extends ChangeNotifier {
     }
 
     sourceLanguage = detectTextLanguage(text);
-    targetLanguage = sourceLanguage == 'zh' ? 'en' : 'zh';
+    if (sourceLanguage == targetLanguage) {
+      targetLanguage = sourceLanguage == 'zh' ? 'en' : 'zh';
+    }
     status = ScanTranslationStatus.translating;
     savedSessionId = null;
     message = null;
@@ -200,11 +212,12 @@ class ScanTranslationController extends ChangeNotifier {
   }
 
   Future<String> _translateText(String text, String detectedLanguage) async {
+    if (detectedLanguage == targetLanguage) return text;
     final result = await _translationProvider.translate(
       text,
       MobileTranslationConfig(
         sourceLanguage: detectedLanguage,
-        targetLanguage: detectedLanguage == 'zh' ? 'en' : 'zh',
+        targetLanguage: targetLanguage,
       ),
     );
     return result?.text.trim() ?? '';
