@@ -90,7 +90,6 @@ export interface SessionReviewHighlightDto {
   type: "time" | "money" | "todo" | "location" | "number" | "custom";
   text: string;
 }
-
 export interface SessionReviewTermDto {
   sourceText: string;
   translatedText: string;
@@ -103,7 +102,6 @@ export interface SessionReviewActionItemDto {
   dueDate?: string;
   evidenceSegmentIds: string[];
 }
-
 export interface SessionReviewKeyFactDto {
   type: "time" | "money" | "location" | "number" | "custom";
   text: string;
@@ -215,7 +213,6 @@ export interface SessionListItem {
   endedAt?: string;
   segmentCount: number;
 }
-
 export type CallPlaybackStatus =
   | "queued"
   | "streaming"
@@ -223,14 +220,12 @@ export type CallPlaybackStatus =
   | "interrupted"
   | "completed"
   | "failed";
-
 export type CallPlaybackInterruptReason =
   | "barge_in"
   | "session_end"
   | "superseded"
   | "failure"
   | "recovery";
-
 export interface CallPlaybackBargeInDto {
   detectedAt?: string;
   confirmedAt?: string;
@@ -240,7 +235,6 @@ export interface CallPlaybackBargeInDto {
   vadProbability?: number;
   preRollMs?: number;
 }
-
 export interface CallPlaybackDto {
   id: string;
   segmentId: string;

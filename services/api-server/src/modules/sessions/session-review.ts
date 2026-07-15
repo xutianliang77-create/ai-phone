@@ -9,6 +9,14 @@ import type {
   SessionReviewTermDto,
 } from "@translation/contracts";
 import type { SessionRecord } from "./session-record.js";
+import {
+  recordRemoteReviewFailure,
+  recordRemoteReviewSuccess,
+} from "./session-review-provider-status.js";
+export {
+  resetSessionReviewProviderRuntimeStatusForTest,
+  sessionReviewProviderStatus,
+} from "./session-review-provider-status.js";
 
 const maxRemoteReviewSegments = 40;
 const maxReviewSourceCharacters = 180;
@@ -28,24 +36,22 @@ export async function generateSessionReview(
     const provider = createLlmProvider(config, options.fetchFn);
     const health = await provider.healthCheck();
     if (health.status !== "ready") {
-      return localSessionReviewFallback(
-        session,
-        options.now,
-        health.issues.join("; ") || "LLM review provider unavailable",
-      );
+      const reason =
+        health.issues.join("; ") || "LLM review provider unavailable";
+      recordRemoteReviewFailure(config, reason, options.now);
+      return localSessionReviewFallback(session, options.now, reason);
     }
     try {
       const review = await provider.generateReview({
         sessionId: session.id,
         segments: remoteReviewSegments(session),
       });
+      recordRemoteReviewSuccess(config, options.now);
       return toSessionReviewResponse(review, options.now);
     } catch (error) {
-      return localSessionReviewFallback(
-        session,
-        options.now,
-        error instanceof Error ? error.message : String(error),
-      );
+      const reason = error instanceof Error ? error.message : String(error);
+      recordRemoteReviewFailure(config, reason, options.now);
+      return localSessionReviewFallback(session, options.now, reason);
     }
   }
   return localSessionReview(session, options.now);
@@ -93,21 +99,6 @@ function compactReviewText(value: string | undefined, maxLength: number) {
   if (!text) return undefined;
   if (text.length <= maxLength) return text;
   return `${text.slice(0, maxLength - 3).trim()}...`;
-}
-
-export function sessionReviewProviderStatus() {
-  const config = loadLlmConfig();
-  if (!config.reviewEnabled || config.provider === "off") {
-    return { provider: "local", status: "ready", issues: [] };
-  }
-  const provider = createLlmProvider(config);
-  void provider;
-  const issues = reviewConfigIssues(config);
-  return {
-    provider: config.provider === "openai_compatible" ? "openai_compatible" : "local",
-    status: issues.length === 0 ? "ready" : "configuration_required",
-    issues,
-  };
 }
 
 export function localSessionReview(
@@ -284,13 +275,4 @@ function looksLikeTerm(source: string) {
   if (source.length < 2 || source.length > 24) return false;
   if (/[，。！？,.!?]/.test(source)) return false;
   return /[\u4e00-\u9fffA-Za-z]/.test(source);
-}
-
-function reviewConfigIssues(config: ReturnType<typeof loadLlmConfig>) {
-  const issues: string[] = [];
-  if (config.provider === "openai_compatible") {
-    if (!config.baseUrl) issues.push("llm missing LLM_BASE_URL");
-    if (!config.reviewModel) issues.push("llm missing LLM_REVIEW_MODEL");
-  }
-  return issues;
 }

@@ -1,5 +1,10 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { localSessionReview, generateSessionReview } from "./session-review.js";
+import {
+  generateSessionReview,
+  localSessionReview,
+  resetSessionReviewProviderRuntimeStatusForTest,
+  sessionReviewProviderStatus,
+} from "./session-review.js";
 import type { SessionRecord } from "./session-record.js";
 
 describe("session review", () => {
@@ -7,6 +12,7 @@ describe("session review", () => {
 
   afterEach(() => {
     process.env = { ...previousEnv };
+    resetSessionReviewProviderRuntimeStatusForTest();
   });
 
   it("builds local summaries, highlights, and terms", () => {
@@ -88,6 +94,11 @@ describe("session review", () => {
       sourceText: "字幕",
       translatedText: "subtitles",
     }]);
+    expect(sessionReviewProviderStatus()).toMatchObject({
+      status: "ready",
+      issues: [],
+      lastCheckedAt: "2026-07-03T00:00:00.000Z",
+    });
   });
 
   it("compacts long sessions before sending review input to the provider", async () => {
@@ -143,6 +154,11 @@ describe("session review", () => {
       provider: "local",
       summary: expect.stringContaining("Meeting at three this afternoon"),
       risks: [expect.stringContaining("LLM 纪要暂不可用")],
+    });
+    expect(sessionReviewProviderStatus()).toMatchObject({
+      status: "degraded",
+      issues: [expect.stringContaining("fetch failed")],
+      lastCheckedAt: "2026-07-03T00:00:00.000Z",
     });
   });
 });
