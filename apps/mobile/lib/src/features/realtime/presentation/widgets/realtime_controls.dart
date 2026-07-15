@@ -69,10 +69,12 @@ class RealtimeControls extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final layout = realtimeControlLayout(status);
+    final controlHeight =
+        (66 + MediaQuery.textScalerOf(context).scale(16)).clamp(92.0, 126.0);
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+      padding: const EdgeInsets.fromLTRB(24, 10, 24, 16),
       child: SizedBox(
-        height: 52,
+        height: controlHeight,
         child: Row(
           children: <Widget>[
             Expanded(child: _primarySlot(context, layout)),
@@ -88,11 +90,19 @@ class RealtimeControls extends StatelessWidget {
     if (layout.busy) {
       return Semantics(
         label: context.l10n.statusEnding,
-        child: const Center(
-          child: SizedBox.square(
-            dimension: 24,
-            child: CircularProgressIndicator(strokeWidth: 2.5),
-          ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: <Widget>[
+            const SizedBox.square(
+              dimension: 56,
+              child: Padding(
+                padding: EdgeInsets.all(16),
+                child: CircularProgressIndicator(strokeWidth: 2.5),
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(context.l10n.statusEnding),
+          ],
         ),
       );
     }
@@ -107,21 +117,57 @@ class RealtimeControls extends StatelessWidget {
     if (action == null) return const SizedBox.shrink();
     final label = _label(context, action);
     final icon = _icon(action);
+    final colors = Theme.of(context).colorScheme;
     Future<void> onPressed() => _run(action);
-    if (primary && action != RealtimeControlAction.cancel) {
-      return FilledButton.icon(
-        key: const ValueKey('realtime-primary-action'),
-        onPressed: onPressed,
-        icon: Icon(icon),
-        label: Text(label),
-      );
-    }
-    return OutlinedButton.icon(
-      key: ValueKey(
-          primary ? 'realtime-primary-action' : 'realtime-secondary-action'),
-      onPressed: onPressed,
-      icon: Icon(icon),
-      label: Text(label),
+    final button = primary && action != RealtimeControlAction.cancel
+        ? FilledButton(
+            key: const ValueKey('realtime-primary-action'),
+            onPressed: onPressed,
+            style: FilledButton.styleFrom(
+              fixedSize: const Size.square(60),
+              padding: EdgeInsets.zero,
+              shape: const CircleBorder(),
+              backgroundColor: colors.inverseSurface,
+              foregroundColor: colors.onInverseSurface,
+            ),
+            child: Icon(icon, size: 28),
+          )
+        : OutlinedButton(
+            key: ValueKey(primary
+                ? 'realtime-primary-action'
+                : 'realtime-secondary-action'),
+            onPressed: onPressed,
+            style: OutlinedButton.styleFrom(
+              fixedSize: const Size.square(60),
+              padding: EdgeInsets.zero,
+              shape: const CircleBorder(),
+            ),
+            child: Icon(icon, size: 26),
+          );
+    return Semantics(
+      button: true,
+      label: label,
+      excludeSemantics: true,
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: <Widget>[
+          Tooltip(message: label, child: button),
+          const SizedBox(height: 6),
+          GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: onPressed,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.labelMedium,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 

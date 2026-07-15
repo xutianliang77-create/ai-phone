@@ -37,6 +37,23 @@ void main() {
         findsOneWidget);
   });
 
+  testWidgets('realtime page fits 320dp at 200 percent text', (tester) async {
+    _configureView(tester, const Size(320, 568));
+    tester.platformDispatcher.textScaleFactorTestValue = 2;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+      tester.platformDispatcher.clearTextScaleFactorTestValue();
+    });
+
+    await _pumpApp(tester);
+
+    expect(tester.takeException(), isNull);
+    expect(find.byKey(const ValueKey('realtime-subtitle-workspace')),
+        findsOneWidget);
+    expect(find.bySemanticsLabel('开始'), findsOneWidget);
+  });
+
   testWidgets('realtime page fits landscape without fixed subtitle height',
       (tester) async {
     _configureView(tester, const Size(844, 390));

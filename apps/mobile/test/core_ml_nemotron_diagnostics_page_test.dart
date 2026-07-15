@@ -2,10 +2,11 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:translation_mobile/src/app/app.dart';
-import 'package:translation_mobile/src/features/compliance/data/compliance_consent_store.dart';
+import 'package:translation_mobile/src/app/localization/app_localizations.dart';
+import 'package:translation_mobile/src/features/device_asr/presentation/pages/core_ml_nemotron_diagnostics_page.dart';
 import 'package:translation_mobile/src/features/realtime/data/api/api_health_client.dart';
 
 import 'helpers/core_ml_nemotron_diagnostics_test_helpers.dart';
@@ -41,11 +42,17 @@ void main() {
       );
     });
 
-    await tester.pumpWidget(TranslationApp(
-      complianceConsentStore: MemoryComplianceConsentStore.accepted(),
+    await tester.pumpWidget(const MaterialApp(
+      locale: Locale('zh'),
+      localizationsDelegates: <LocalizationsDelegate<dynamic>>[
+        AppLocalizations.delegate,
+        GlobalMaterialLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+      ],
+      supportedLocales: AppLocalizations.supportedLocales,
+      home: CoreMlNemotronDiagnosticsPage(),
     ));
-    await tester.pump();
-    await tester.tap(find.byTooltip('模型链路诊断').first);
     await tester.pumpAndSettle();
 
     expect(find.text('模型链路诊断'), findsOneWidget);

@@ -12,8 +12,6 @@ import '../../../account/data/account_session_store.dart';
 import '../../../account/presentation/widgets/account_required_panel.dart';
 import '../../../compliance/data/voice_processing_consent_store.dart';
 import '../../../compliance/presentation/widgets/voice_processing_consent_dialog.dart';
-import '../../../device_asr/presentation/pages/core_ml_nemotron_diagnostics_page.dart';
-import '../../../history/presentation/pages/session_history_page.dart';
 import '../../data/realtime_runtime_settings.dart';
 import '../../data/realtime_settings_store.dart';
 import '../../data/voice_preset_catalog.dart';
@@ -120,22 +118,27 @@ class _RealtimePageState extends State<RealtimePage>
     final languageScope = AppLanguageScope.of(context);
     return Scaffold(
       appBar: AppBar(
-        title: Text(l10n.appTitle),
+        toolbarHeight: 76,
+        titleSpacing: 0,
+        title: AnimatedBuilder(
+          animation: controller,
+          builder: (context, _) => RealtimeStatusBar(
+            status: controller.status,
+            routeLabel: _routeLabel(l10n),
+            message: controller.message,
+            remainingSeconds: controller.remainingSeconds,
+            lowBalance: controller.lowBalance,
+            autoSpeakTranslation:
+                _realtimeAutoSpeakSupported && _settings.autoSpeakTranslation,
+            autoSpeakEnabled: _realtimeAutoSpeakSupported,
+            onAutoSpeakChanged: _toggleAutoSpeakTranslation,
+          ),
+        ),
         actions: <Widget>[
           RealtimeLanguageMenu(
             locale: languageScope.locale,
             onLocaleChanged: languageScope.onChanged,
             onOpenRealtimeSettings: _openRealtimeSettings,
-          ),
-          IconButton(
-            onPressed: _openDeviceAsrDiagnostics,
-            icon: const Icon(Icons.health_and_safety_outlined),
-            tooltip: l10n.deviceAsrDiagnostics,
-          ),
-          IconButton(
-            onPressed: _openHistory,
-            icon: const Icon(Icons.history),
-            tooltip: l10n.history,
           ),
         ],
       ),
@@ -145,16 +148,6 @@ class _RealtimePageState extends State<RealtimePage>
           builder: (context, _) {
             return Column(
               children: <Widget>[
-                RealtimeStatusBar(
-                  status: controller.status,
-                  message: controller.message,
-                  remainingSeconds: controller.remainingSeconds,
-                  lowBalance: controller.lowBalance,
-                  autoSpeakTranslation: _realtimeAutoSpeakSupported &&
-                      _settings.autoSpeakTranslation,
-                  autoSpeakEnabled: _realtimeAutoSpeakSupported,
-                  onAutoSpeakChanged: _toggleAutoSpeakTranslation,
-                ),
                 RealtimeOnlineRecoveryActions(
                   visible:
                       _shouldShowOnlineRecovery && !_onlineRecoveryInFlight,
@@ -175,6 +168,10 @@ class _RealtimePageState extends State<RealtimePage>
                     child: SubtitleTimeline(
                       key: const ValueKey('realtime-subtitle-workspace'),
                       segments: controller.segments,
+                      visualizerActive:
+                          controller.status == RealtimeStatus.active,
+                      visualizerPaused:
+                          controller.status == RealtimeStatus.paused,
                     ),
                   ),
                 ),
@@ -193,18 +190,10 @@ class _RealtimePageState extends State<RealtimePage>
     );
   }
 
-  void _openHistory() {
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(builder: (_) => const SessionHistoryPage()),
-    );
-  }
-
-  void _openDeviceAsrDiagnostics() {
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) => const CoreMlNemotronDiagnosticsPage(),
-      ),
-    );
+  String _routeLabel(AppLocalizations l10n) {
+    final source = l10n.languageDisplayName(_settings.sourceLanguage);
+    final target = l10n.languageDisplayName(_settings.targetLanguage);
+    return '$source  →  $target';
   }
 
   bool get _canChangeSettings {

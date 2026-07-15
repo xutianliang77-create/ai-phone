@@ -14,9 +14,16 @@ void main() {
       (WidgetTester tester) async {
     await pumpAcceptedApp(tester);
 
-    expect(find.text('无界AI'), findsOneWidget);
+    expect(find.text('无界AI'), findsNothing);
     expect(find.byTooltip('语言'), findsOneWidget);
     expect(find.text('开始'), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byType(AppBar),
+        matching: find.byType(RealtimeStatusBar),
+      ),
+      findsOneWidget,
+    );
     expect(find.text('暂停'), findsNothing);
     expect(find.text('结束'), findsNothing);
     expect(find.text('同传'), findsOneWidget);
@@ -38,7 +45,7 @@ void main() {
 
     await pumpAcceptedApp(tester, locale: null);
 
-    expect(find.text('无界AI'), findsOneWidget);
+    expect(find.text('无界AI'), findsNothing);
     expect(find.byTooltip('语言'), findsOneWidget);
     expect(find.text('点击开始进行同传'), findsOneWidget);
   });
@@ -46,7 +53,7 @@ void main() {
   testWidgets('can render English interface', (WidgetTester tester) async {
     await pumpAcceptedApp(tester, locale: const Locale('en'));
 
-    expect(find.text('无界AI'), findsOneWidget);
+    expect(find.text('无界AI'), findsNothing);
     expect(find.text('Start'), findsOneWidget);
     expect(find.text('Pause'), findsNothing);
     expect(find.text('End'), findsNothing);
@@ -62,7 +69,7 @@ void main() {
     await tester.tap(find.text('英文').last);
     await tester.pumpAndSettle();
 
-    expect(find.text('无界AI'), findsOneWidget);
+    expect(find.text('无界AI'), findsNothing);
     expect(find.text('Start'), findsOneWidget);
     expect(find.text('Pause'), findsNothing);
     expect(find.text('End'), findsNothing);
@@ -153,7 +160,7 @@ void main() {
     expect(store.record?.version, complianceConsentVersion);
     expect(uploader.records.single.consentType, 'initial_privacy');
     expect(uploader.records.single.scene, 'app_start');
-    expect(find.text('无界AI'), findsOneWidget);
+    expect(find.text('无界AI'), findsNothing);
     expect(find.text('开始'), findsOneWidget);
   });
 

@@ -175,7 +175,7 @@ void main() {
 
     expect(controller.status, RealtimeStatus.failed);
     expect(controller.message, contains('ASR 识别'));
-    expect(controller.message, contains('hymt2_self_hosted'));
+    expect(controller.message, isNot(contains('hymt2_self_hosted')));
     expect(controller.message, contains('可重试'));
   });
 

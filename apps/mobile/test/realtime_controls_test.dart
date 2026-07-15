@@ -127,6 +127,26 @@ void main() {
     expect(stops, 2);
     expect(preflights, 2);
   });
+
+  testWidgets('keeps active controls accessible at 320dp and 200 percent text',
+      (tester) async {
+    tester.view.physicalSize = const Size(320, 568);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(const _TestApp(
+      status: RealtimeStatus.active,
+      textScale: 2,
+    ));
+
+    expect(tester.takeException(), isNull);
+    expect(find.bySemanticsLabel('暂停'), findsOneWidget);
+    expect(find.bySemanticsLabel('结束'), findsOneWidget);
+    final primarySize =
+        tester.getSize(find.byKey(const ValueKey('realtime-primary-action')));
+    expect(primarySize.width, greaterThanOrEqualTo(60));
+    expect(primarySize.height, greaterThanOrEqualTo(60));
+  });
 }
 
 class _TestApp extends StatelessWidget {
@@ -136,6 +156,7 @@ class _TestApp extends StatelessWidget {
     this.onPause,
     this.onStop,
     this.onBeforeStart,
+    this.textScale = 1,
   });
 
   final RealtimeStatus status;
@@ -143,6 +164,7 @@ class _TestApp extends StatelessWidget {
   final Future<void> Function()? onPause;
   final Future<void> Function()? onStop;
   final Future<bool> Function()? onBeforeStart;
+  final double textScale;
 
   @override
   Widget build(BuildContext context) {
@@ -155,6 +177,12 @@ class _TestApp extends StatelessWidget {
         GlobalWidgetsLocalizations.delegate,
       ],
       supportedLocales: AppLocalizations.supportedLocales,
+      builder: (context, child) => MediaQuery(
+        data: MediaQuery.of(context).copyWith(
+          textScaler: TextScaler.linear(textScale),
+        ),
+        child: child!,
+      ),
       home: Scaffold(
         body: RealtimeControls(
           status: status,

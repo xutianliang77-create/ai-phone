@@ -178,11 +178,8 @@ extension RealtimeControllerGatewayEvents on RealtimeController {
     );
     final stage = _gatewayErrorStageLabel(event.stage);
     if (stage == null) return message;
-    final provider = event.provider;
-    final source =
-        provider == null || provider.isEmpty ? stage : '$stage（$provider）';
     final retry = event.retryable == true ? '，可重试' : '';
-    return '$source：$message$retry';
+    return '$stage：$message$retry';
   }
 
   String? _gatewayErrorStageLabel(String? stage) {
