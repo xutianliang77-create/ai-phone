@@ -2,11 +2,14 @@ import 'package:flutter/material.dart';
 
 import '../../../../app/app_config.dart';
 import '../../../../app/localization/app_localizations.dart';
+import '../../../account/data/account_session_store.dart';
 import '../../../account/presentation/pages/account_page.dart';
 import '../../../billing/presentation/pages/wallet_page.dart';
 import '../../../compliance/presentation/pages/compliance_center_page.dart';
-import '../../../voice_profile/presentation/pages/my_voice_page.dart';
+import '../../../realtime/presentation/pages/realtime_preferences_page.dart';
 import '../../../voice_identity/presentation/pages/voice_identity_page.dart';
+import '../../../voice_profile/presentation/pages/my_voice_page.dart';
+import 'help_feedback_page.dart';
 
 class SettingsHomePage extends StatelessWidget {
   const SettingsHomePage({required this.config, super.key});
@@ -20,74 +23,64 @@ class SettingsHomePage extends StatelessWidget {
       appBar: AppBar(title: Text(l10n.tabMe)),
       body: SafeArea(
         child: ListView(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
           children: <Widget>[
-            _EditionStatus(config: config),
-            const SizedBox(height: 16),
-            _FeatureAction(
-              icon: Icons.account_circle_outlined,
-              title: _localized(l10n, zh: '账号与登录', en: 'Account & Login'),
-              subtitle: _localized(
-                l10n,
-                zh: '手机号登录、个人信息导出、退出和注销',
-                en: 'Phone login, data export, logout, and deletion',
+            _AccountHeader(onTap: () => _open(context, const AccountPage())),
+            const SizedBox(height: 20),
+            _SettingsAction(
+              icon: Icons.tune,
+              title: '同传设置',
+              onTap: () => _open(
+                context,
+                const RealtimePreferencesPage(title: '同传设置'),
               ),
-              onTap: () => _open(context, const AccountPage()),
             ),
-            _FeatureAction(
-              icon: Icons.account_balance_wallet_outlined,
-              title: l10n.walletTitle,
-              subtitle: l10n.walletBody,
-              onTap: () => _open(context, const WalletPage()),
+            _SettingsAction(
+              icon: Icons.language_outlined,
+              title: '语言与行业',
+              onTap: () => _open(
+                context,
+                const RealtimePreferencesPage(title: '语言与行业'),
+              ),
             ),
-            _FeatureAction(
-              icon: Icons.record_voice_over_outlined,
+            _SettingsAction(
+              icon: Icons.volume_up_outlined,
+              title: '朗读声音',
+              onTap: () => _open(
+                context,
+                const RealtimePreferencesPage(title: '朗读声音'),
+              ),
+            ),
+            _SettingsAction(
+              icon: Icons.graphic_eq_outlined,
               title: l10n.myVoiceTitle,
-              subtitle: l10n.myVoiceBody,
               onTap: () => _open(
                 context,
                 MyVoicePage(apiBaseUrl: config.apiBaseUrl),
               ),
             ),
-            _FeatureAction(
+            _SettingsAction(
               icon: Icons.fingerprint,
-              title: _localized(l10n, zh: '声音身份', en: 'Voice identities'),
-              subtitle: _localized(
-                l10n,
-                zh: '经授权录入声纹，在同传中显示说话人姓名',
-                en: 'Identify consented speakers in live translation',
-              ),
+              title: '声音身份',
               onTap: () => _open(
                 context,
                 VoiceIdentityPage(apiBaseUrl: config.apiBaseUrl),
               ),
             ),
-            _FeatureAction(
+            _SettingsAction(
               icon: Icons.privacy_tip_outlined,
-              title: _localized(l10n, zh: '隐私与合规', en: 'Privacy & Compliance'),
-              subtitle: _localized(
-                l10n,
-                zh: '隐私政策、用户协议、SDK 和模型服务商清单',
-                en: 'Privacy policy, terms, SDKs, and model providers',
-              ),
+              title: '隐私与安全',
               onTap: () => _open(context, const ComplianceCenterPage()),
             ),
-            _InfoRow(label: l10n.dataRegion, value: config.region.dataRegion),
-            _InfoRow(
-              label: l10n.callProviderPolicy,
-              value: config.region.callProviderPolicy,
+            _SettingsAction(
+              icon: Icons.account_balance_wallet_outlined,
+              title: '订阅与用量',
+              onTap: () => _open(context, const WalletPage()),
             ),
-            _InfoRow(
-              label: l10n.complianceProfile,
-              value: config.region.complianceProfile,
-            ),
-            _InfoRow(
-              label: l10n.modelProviders,
-              value: config.region.allowedProviders.join(', '),
-            ),
-            _InfoRow(
-              label: l10n.paymentStack,
-              value: config.region.paymentStack.join(', '),
+            _SettingsAction(
+              icon: Icons.help_outline,
+              title: '帮助与反馈',
+              onTap: () => _open(context, const HelpFeedbackPage()),
             ),
           ],
         ),
@@ -98,84 +91,62 @@ class SettingsHomePage extends StatelessWidget {
   void _open(BuildContext context, Widget page) {
     Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => page));
   }
-
-  String _localized(AppLocalizations l10n,
-      {required String zh, required String en}) {
-    return l10n.isChinese ? zh : en;
-  }
 }
 
-class _EditionStatus extends StatelessWidget {
-  const _EditionStatus({required this.config});
+class _AccountHeader extends StatelessWidget {
+  const _AccountHeader({required this.onTap});
 
-  final AppConfig config;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    final l10n = context.l10n;
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Row(
-          children: <Widget>[
-            const Icon(Icons.verified_user_outlined),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                config.region.isDomestic
-                    ? l10n.domesticEditionStatus
-                    : l10n.internationalEditionStatus,
-              ),
-            ),
-          ],
-        ),
-      ),
+    return FutureBuilder<AccountSession?>(
+      future: const FileAccountSessionStore().load(),
+      builder: (context, snapshot) {
+        final signedIn = snapshot.data != null;
+        return ListTile(
+          contentPadding: const EdgeInsets.symmetric(vertical: 8),
+          leading: const CircleAvatar(
+            radius: 26,
+            child: Icon(Icons.person_outline),
+          ),
+          title: Text(
+            signedIn ? '已登录' : '登录无界 AI',
+            style: Theme.of(context).textTheme.titleLarge,
+          ),
+          subtitle: Text(signedIn ? '个人版' : '同步记录、用量和在线服务'),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: onTap,
+        );
+      },
     );
   }
 }
 
-class _FeatureAction extends StatelessWidget {
-  const _FeatureAction({
+class _SettingsAction extends StatelessWidget {
+  const _SettingsAction({
     required this.icon,
     required this.title,
-    required this.subtitle,
-    this.onTap,
+    required this.onTap,
   });
 
   final IconData icon;
   final String title;
-  final String subtitle;
-  final VoidCallback? onTap;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    return ListTile(
-      leading: Icon(icon),
-      title: Text(title),
-      subtitle: Text(subtitle),
-      trailing: onTap == null ? null : const Icon(Icons.chevron_right),
-      onTap: onTap,
-      contentPadding: const EdgeInsets.symmetric(vertical: 4),
-    );
-  }
-}
-
-class _InfoRow extends StatelessWidget {
-  const _InfoRow({required this.label, required this.value});
-
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) {
-    return ListTile(
-      title: Text(label),
-      subtitle: Text(value),
-      contentPadding: EdgeInsets.zero,
+    return Column(
+      children: <Widget>[
+        ListTile(
+          contentPadding: const EdgeInsets.symmetric(vertical: 3),
+          leading: Icon(icon),
+          title: Text(title),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: onTap,
+        ),
+        const Divider(indent: 48, height: 1),
+      ],
     );
   }
 }

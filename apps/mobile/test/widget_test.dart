@@ -14,9 +14,16 @@ void main() {
       (WidgetTester tester) async {
     await pumpAcceptedApp(tester);
 
-    expect(find.text('ai phone'), findsOneWidget);
+    expect(find.text('无界AI'), findsNothing);
     expect(find.byTooltip('语言'), findsOneWidget);
     expect(find.text('开始'), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byType(AppBar),
+        matching: find.byType(RealtimeStatusBar),
+      ),
+      findsOneWidget,
+    );
     expect(find.text('暂停'), findsNothing);
     expect(find.text('结束'), findsNothing);
     expect(find.text('同传'), findsOneWidget);
@@ -38,7 +45,7 @@ void main() {
 
     await pumpAcceptedApp(tester, locale: null);
 
-    expect(find.text('ai phone'), findsOneWidget);
+    expect(find.text('无界AI'), findsNothing);
     expect(find.byTooltip('语言'), findsOneWidget);
     expect(find.text('点击开始进行同传'), findsOneWidget);
   });
@@ -46,7 +53,7 @@ void main() {
   testWidgets('can render English interface', (WidgetTester tester) async {
     await pumpAcceptedApp(tester, locale: const Locale('en'));
 
-    expect(find.text('ai phone'), findsOneWidget);
+    expect(find.text('无界AI'), findsNothing);
     expect(find.text('Start'), findsOneWidget);
     expect(find.text('Pause'), findsNothing);
     expect(find.text('End'), findsNothing);
@@ -62,7 +69,7 @@ void main() {
     await tester.tap(find.text('英文').last);
     await tester.pumpAndSettle();
 
-    expect(find.text('ai phone'), findsOneWidget);
+    expect(find.text('无界AI'), findsNothing);
     expect(find.text('Start'), findsOneWidget);
     expect(find.text('Pause'), findsNothing);
     expect(find.text('End'), findsNothing);
@@ -75,10 +82,10 @@ void main() {
     await tester.tap(find.text('通话'));
     await tester.pumpAndSettle();
 
-    expect(find.text('国内版 · 中英优先 · PSTN 暂未开放'), findsOneWidget);
+    expect(find.text('跨语言沟通'), findsOneWidget);
     expect(find.text('发起翻译电话'), findsOneWidget);
     expect(find.text('输入并朗读'), findsOneWidget);
-    expect(find.text('拨打手机号'), findsOneWidget);
+    expect(find.text('拨打手机号'), findsNothing);
     expect(find.text('AI 代打电话'), findsOneWidget);
     expect(find.text('加入通话链接'), findsOneWidget);
   });
@@ -88,8 +95,10 @@ void main() {
 
     await tester.tap(find.text('我的'));
     await tester.pumpAndSettle();
-    expect(find.text('账号与登录'), findsOneWidget);
-    await tester.tap(find.text('隐私与合规'));
+    expect(find.text('登录无界 AI'), findsOneWidget);
+    await tester.drag(find.byType(ListView).last, const Offset(0, -240));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('隐私与安全'));
     await tester.pumpAndSettle();
 
     expect(find.text('隐私政策'), findsOneWidget);
@@ -117,9 +126,10 @@ void main() {
     await tester.tap(find.text('通话'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('AI 代打电话'));
-    await tester.pumpAndSettle();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
 
-    expect(find.text('先生成话术草稿，用户确认授权后才进入拨号队列。'), findsOneWidget);
+    expect(find.text('授权后才进入拨号队列，高风险任务转人工处理。'), findsOneWidget);
     expect(find.text('生成话术草稿'), findsOneWidget);
   });
 
@@ -150,7 +160,7 @@ void main() {
     expect(store.record?.version, complianceConsentVersion);
     expect(uploader.records.single.consentType, 'initial_privacy');
     expect(uploader.records.single.scene, 'app_start');
-    expect(find.text('ai phone'), findsOneWidget);
+    expect(find.text('无界AI'), findsNothing);
     expect(find.text('开始'), findsOneWidget);
   });
 
