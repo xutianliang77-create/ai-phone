@@ -165,6 +165,22 @@ export function saveSessionReview(
   return session;
 }
 
+export function updateSessionReviewActionItem(
+  sessionId: string,
+  actionIndex: number,
+  completed: boolean,
+) {
+  const session = findSession(sessionId);
+  const actionItems = session?.review?.actionItems;
+  if (!session || !actionItems?.[actionIndex]) return null;
+  actionItems[actionIndex] = {
+    ...actionItems[actionIndex],
+    completed,
+  };
+  persistSessionMutation(session);
+  return session;
+}
+
 export function saveSessionDiagnostics(
   sessionId: string,
   diagnostics: RealtimeSessionDiagnosticsDto,

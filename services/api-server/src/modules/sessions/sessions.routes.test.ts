@@ -111,4 +111,49 @@ describe("sessions routes", () => {
       }
     }
   });
+
+  it("returns productized list metadata for scan sessions", async () => {
+    const app = await buildApp();
+    const created = await app.inject({
+      method: "POST",
+      url: "/realtime/sessions",
+      payload: {
+        mode: "meeting",
+        sourceLanguage: "zh",
+        targetLanguage: "en",
+        voiceOutput: false,
+      },
+    });
+    const sessionId = created.json().sessionId as string;
+    await app.inject({
+      method: "POST",
+      url: `/sessions/${sessionId}/segments`,
+      payload: {
+        segments: [
+          {
+            id: "scan_1",
+            sourceText: "菜单翻译",
+            translatedText: "Menu translation",
+            sourceLanguage: "zh",
+            targetLanguage: "en",
+            provider: "scan",
+            speaker: { speakerId: "speaker_1" },
+          },
+        ],
+      },
+    });
+
+    const list = await app.inject({ method: "GET", url: "/sessions" });
+    await app.close();
+
+    expect(list.statusCode).toBe(200);
+    expect(list.json().sessions[0]).toMatchObject({
+      sessionId,
+      kind: "scan",
+      title: "菜单翻译",
+      sourceLanguage: "zh",
+      targetLanguage: "en",
+      speakerCount: 1,
+    });
+  });
 });

@@ -27,11 +27,13 @@ import {
 } from "./session-review.js";
 import { refundSessionUsage } from "./session-usage-refund.js";
 import { registerSessionSpeakerRoutes } from "./session-speakers.routes.js";
+import { registerSessionReviewActionRoutes } from "./session-review-actions.routes.js";
 import { withSessionWriteLock } from "./session-write-coordinator.js";
 import { buildSessionQualityReport } from "./session-quality-report.js";
 
 export async function registerSessionsRoutes(app: FastifyInstance) {
   registerSessionSpeakerRoutes(app);
+  registerSessionReviewActionRoutes(app);
   app.get("/sessions", async (request, reply) => {
     const account = requireAccount(request, reply);
     if (!account) return;

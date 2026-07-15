@@ -5,12 +5,14 @@ import type {
   SessionSegmentDto,
 } from "@translation/contracts";
 import type { SessionRecord } from "./sessions.repository.js";
+import { sessionListSummary } from "./session-list-summary.js";
 
 export function toSessionListItem(session: SessionRecord): SessionListItem {
   return {
     sessionId: session.id,
     mode: session.mode,
     status: session.status,
+    ...sessionListSummary(session),
     consumedSeconds: session.consumedSeconds,
     createdAt: session.createdAt,
     ...(session.endedAt ? { endedAt: session.endedAt } : {}),

@@ -69,10 +69,63 @@ describe("session review routes", () => {
       sourceText: "字幕",
       translatedText: "subtitles",
     });
-    expect(detail.json().review.highlights.map((item: { type: string }) => item.type))
-      .toContain("money");
+    expect(
+      detail
+        .json()
+        .review.highlights.map((item: { type: string }) => item.type),
+    ).toContain("money");
     expect(exported.json().content).toContain("## Summary");
     expect(exported.json().content).toContain("## Terms");
+  });
+
+  it("updates and persists a generated action item", async () => {
+    const app = await buildApp();
+    const created = await app.inject({
+      method: "POST",
+      url: "/realtime/sessions",
+      payload: {
+        mode: "meeting",
+        sourceLanguage: "zh",
+        targetLanguage: "en",
+        voiceOutput: false,
+      },
+    });
+    const sessionId = created.json().sessionId as string;
+    await app.inject({
+      method: "POST",
+      url: `/sessions/${sessionId}/segments`,
+      payload: {
+        segments: [
+          {
+            id: "todo_1",
+            sourceText: "请整理会议记录",
+            translatedText: "Please organize the meeting notes",
+          },
+        ],
+      },
+    });
+    await app.inject({
+      method: "POST",
+      url: `/sessions/${sessionId}/review`,
+    });
+
+    const updated = await app.inject({
+      method: "PATCH",
+      url: `/sessions/${sessionId}/action-items/0`,
+      payload: { completed: true },
+    });
+    const detail = await app.inject({
+      method: "GET",
+      url: `/sessions/${sessionId}`,
+    });
+    await app.close();
+
+    expect(updated.statusCode).toBe(200);
+    expect(updated.json().review.actionItems[0]).toMatchObject({
+      text: expect.stringContaining("请整理会议记录"),
+      completed: true,
+    });
+    expect(detail.json().review.actionItems[0].completed).toBe(true);
   });
 
   it("falls back to a local review when OpenAI-compatible review is misconfigured", async () => {

@@ -98,6 +98,7 @@ export interface SessionReviewTermDto {
 
 export interface SessionReviewActionItemDto {
   text: string;
+  completed?: boolean;
   owner?: string;
   dueDate?: string;
   evidenceSegmentIds: string[];
@@ -204,6 +205,11 @@ export interface SessionListItem {
   sessionId: string;
   mode: string;
   status: PersistedRealtimeSessionState;
+  kind?: "realtime" | "call" | "scan";
+  title?: string;
+  sourceLanguage?: LanguageCode;
+  targetLanguage?: LanguageCode;
+  speakerCount?: number;
   consumedSeconds: number;
   createdAt: string;
   endedAt?: string;
