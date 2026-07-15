@@ -1,8 +1,8 @@
 # AI Phone 企业版设计文档索引
 
-版本：v1.0
+版本：v1.1
 日期：2026-07-15
-状态：SaaS 设计基线
+状态：SaaS 详细设计基线
 
 ## 1. 产品边界
 
@@ -26,6 +26,14 @@
 | [企业版开发方案与计划](./enterprise-edition-development-plan.md) | 阶段、依赖、里程碑、风险和发布策略 |
 | [企业版开发任务](./enterprise-edition-development-tasks.md) | 可执行任务、完成定义和依赖关系 |
 | [企业版验收任务与计划](./enterprise-edition-acceptance-plan.md) | 功能、真机、并发、合规和放行门禁 |
+
+### 2.1 三份核心设计的阅读顺序
+
+1. [企业版详细功能设计](./enterprise-edition-functional-design.md)：先确认产品边界、角色、页面、四条核心流程和异常状态。
+2. [企业版技术架构](./enterprise-edition-technical-architecture.md)：再确认控制面/区域数据面、业务/实时/媒体路径、逻辑组件和当前仓库映射。
+3. [企业版详细技术设计](./enterprise-edition-technical-design.md)：最后落到 API 契约、数据模型、事务、幂等、Provider readiness、安全和测试门禁。
+
+三份文档共同使用成熟度语义 `designed`、`implemented`、`verified`、`production_ready`，运行时 readiness 另用 `not_configured`、`checking`、`ready`、`degraded`、`not_ready`；SQLite 环境固定报告 `demo_only`。文档中的目标组件不自动代表代码已经实现；当前实现和任务状态以开发任务表、代码、测试和环境证据为准。
 
 ## 3. 继承文档
 

@@ -1,8 +1,8 @@
 # AI Phone 企业版详细技术设计
 
-版本：v1.0
+版本：v1.1
 日期：2026-07-15
-状态：SaaS 基线待评审
+状态：SaaS 详细技术方案基线待评审
 
 ## 1. 设计原则
 
@@ -12,6 +12,18 @@
 - 所有状态迁移由服务端执行；客户端只提交命令。
 - LLM 输出使用 JSON Schema，并在进入业务状态机前校验。
 - 外部 Provider 必须通过 Adapter 和能力声明接入。
+
+### 1.1 当前实现边界
+
+| 能力 | 当前状态 | 说明 |
+| --- | --- | --- |
+| Tenant/Member | `ready_for_acceptance` | 已有契约、记录、Repository、租户与 owner 原子创建及成员 API |
+| RBAC | `ready_for_acceptance` | 已有17个 scope、九角色矩阵、统一服务端 guard 和越权测试 |
+| PostgreSQL/控制面/业务聚合 | `designed` | 本文为目标方案，不能从设计文档推导为已实现 |
+| SQLite | `demo_only` | 仅本地开发、自动化和封闭演示，不承载真实企业试点数据 |
+| PSTN/CRM/Calendar/OCR | `not_ready` 或按环境探测 | 未配置必须明确降级，不生成虚假外部对象或成功状态 |
+
+状态含义统一为：`designed` 仅完成设计，`implemented` 表示代码存在，`verified` 表示自动化/环境证据通过，`production_ready` 还要求真实 Provider、容量、安全、备份和运维门禁。
 
 ## 2. 核心数据模型
 
@@ -53,15 +65,26 @@ tenant_subscriptions(
 | --- | --- |
 | 企业所有者 | 全部 enterprise scope |
 | 企业管理员 | 全部 enterprise scope |
-| 营销主管 | `tenant:read`、`knowledge:read/publish`、`campaign:read/write/approve` |
-| 营销人员 | `tenant:read`、`knowledge:read`、`campaign:read/write` |
-| 客服主管 | `tenant:read`、`knowledge:read/publish`、`support:read/manage/takeover` |
-| 客服坐席 | `tenant:read`、`knowledge:read`、`support:read/takeover` |
-| 会议主持人 | `tenant:read`、`meeting:read/write`、`screen_share:stop` |
+| 营销主管 | `tenant:read`、`knowledge:read`、`knowledge:publish`、`campaign:read`、`campaign:write`、`campaign:approve` |
+| 营销人员 | `tenant:read`、`knowledge:read`、`campaign:read`、`campaign:write` |
+| 客服主管 | `tenant:read`、`knowledge:read`、`knowledge:publish`、`support:read`、`support:manage`、`support:takeover` |
+| 客服坐席 | `tenant:read`、`knowledge:read`、`support:read`、`support:takeover` |
+| 会议主持人 | `tenant:read`、`meeting:read`、`meeting:write`、`screen_share:stop` |
 | 普通成员 | `tenant:read`、`meeting:read` |
-| 审计员 | `tenant:read`、`member:read`、`knowledge:read`、`campaign:read`、`support:read`、`meeting:read`、`audit:read/export` |
+| 审计员 | `tenant:read`、`member:read`、`knowledge:read`、`campaign:read`、`support:read`、`meeting:read`、`audit:read`、`audit:export` |
 
-完整 scope 集合为 `tenant:read/write`、`member:read/write`、`knowledge:read/publish`、`campaign:read/write/approve`、`support:read/manage/takeover`、`meeting:read/write`、`screen_share:stop` 和 `audit:read/export`。owner/admin 的“全部”仅指该版本声明的集合，不隐含未声明权限。
+完整 scope 集合以 `packages/contracts/src/api/enterprise.ts` 的 `enterpriseScopes` 为唯一代码真值。owner/admin 的“全部”仅指该版本声明的17个 scope，不隐含未声明权限。
+
+| 资源 | scope | 受控操作 |
+| --- | --- | --- |
+| tenant | `tenant:read`、`tenant:write` | 查看租户/readiness；修改允许的租户设置 |
+| member | `member:read`、`member:write` | 成员列表；邀请、角色和状态变更 |
+| knowledge | `knowledge:read`、`knowledge:publish` | 查看知识；审核/发布版本 |
+| campaign | `campaign:read`、`campaign:write`、`campaign:approve` | 查看；编辑/控制；审批活动 |
+| support | `support:read`、`support:manage`、`support:takeover` | 查看会话；队列策略；人工接管 |
+| meeting | `meeting:read`、`meeting:write` | 查看/入会；创建、主持和材料发布 |
+| screen_share | `screen_share:stop` | 主持人或管理员强制停止共享 |
+| audit | `audit:read`、`audit:export` | 查询审计；受控导出 |
 
 ### 2.2 外呼营销
 
@@ -197,7 +220,49 @@ POST   /saas/v1/tenants/:tenantId/export
 POST   /saas/v1/tenants/:tenantId/delete
 ```
 
-### 3.1 企业基础
+### 3.1 通用请求契约
+
+| 项目 | 规则 |
+| --- | --- |
+| `Authorization` | 用户访问令牌或租户 API credential；两者必须在服务端解析 actor 和有效 scope |
+| `X-Tenant-Id` | 多 membership 账号选择租户；只能选择已有 active membership，不能授予访问权 |
+| route document | 数据面校验 tenant、homeRegion、cell、过期时间和签名；错误区域的写入返回 route mismatch |
+| `Idempotency-Key` | 所有可重试写命令必填；同 tenant、actor、route 和 request hash 返回同一结果 |
+| `If-Match`/`expectedVersion` | 更新和状态迁移携带期望版本；冲突返回当前 version，不做 last-write-wins |
+| `traceparent`/`X-Request-Id` | 贯通 API、outbox、Worker、Provider 和 ledger；响应回传可安全展示的 trace ID |
+| 时间和分页 | 时间使用 UTC ISO-8601；分页 cursor 签名并绑定 tenant、过滤器、排序键和过期时间 |
+
+成功响应统一返回资源或 job；异步副作用使用 `202`：
+
+```json
+{
+  "job": {
+    "id": "job_uuid",
+    "type": "knowledge.publish",
+    "status": "processing",
+    "resourceId": "resource_uuid",
+    "submittedAt": "ISO-8601"
+  }
+}
+```
+
+错误响应不返回 SQL、内部 Provider 地址或跨租户资源存在性：
+
+```json
+{
+  "error": {
+    "code": "enterprise_scope_denied",
+    "message": "Enterprise scope denied",
+    "retryable": false,
+    "traceId": "trace_id",
+    "details": {}
+  }
+}
+```
+
+`details` 只包含客户端可行动字段，例如当前 version、缺失 capability 或字段校验结果；敏感策略和其他租户 ID 不进入响应。
+
+### 3.2 企业基础
 
 ```text
 GET    /enterprise/v1/me
@@ -210,7 +275,7 @@ POST   /enterprise/v1/knowledge/sources/:id/publish
 GET    /enterprise/v1/audit-events
 ```
 
-### 3.2 外呼营销
+### 3.3 外呼营销
 
 ```text
 POST   /enterprise/v1/campaigns
@@ -227,7 +292,7 @@ GET    /enterprise/v1/campaigns/:campaignId/analytics
 POST   /enterprise/v1/suppression
 ```
 
-### 3.3 AI 客服
+### 3.4 AI 客服
 
 ```text
 POST   /enterprise/v1/support/channels
@@ -242,7 +307,7 @@ GET    /enterprise/v1/support/cases
 PATCH  /enterprise/v1/support/cases/:caseId
 ```
 
-### 3.4 企业会议
+### 3.5 企业会议
 
 ```text
 POST   /enterprise/v1/meetings
@@ -457,6 +522,43 @@ OCR Worker 每 1 至 2 秒获取低码率关键帧，先计算感知 hash；变�
 - entitlement 由服务端读取和缓存，缓存失效时采取保守策略；客户端不得自行开启未购买功能。
 - 租户级并发 semaphore、速率限制和预算在 claim/dispatch 前再次校验。
 
+### 11.1 PostgreSQL 租户隔离
+
+- 所有 tenant-owned 表的 `tenant_id` 为 `NOT NULL`；主键可使用全局 UUID，但同时建立 `UNIQUE (tenant_id, id)`。
+- tenant-owned 关系使用复合外键，例如 `(tenant_id, campaign_id)` 引用 `marketing_campaigns(tenant_id, id)`，数据库层拒绝跨租户关联。
+- 高频查询索引以 `tenant_id` 开头，再包含状态、时间和稳定排序键；禁止仅按业务状态建立全租户扫描入口。
+- Repository 必须接收不可变 `TenantContext`，SQL 模板显式包含 `tenant_id = $n`。无 tenant context 的方法只允许控制面目录和平台级审计模块使用。
+- PostgreSQL RLS 作为纵深防御：事务开始后 `SET LOCAL app.tenant_id`，policy 校验当前 tenant；运行时角色不得拥有 `BYPASSRLS` 或表 owner 权限。
+- migration、备份、恢复和平台级运维使用独立受审计角色；应用凭证不能执行 DDL 或关闭 RLS。
+- RLS 不代替 Repository 条件、复合外键和自动化越权测试，三层门禁必须同时存在。
+
+### 11.2 事务和一致性边界
+
+| 命令 | 单事务必须提交 | 事务外处理 |
+| --- | --- | --- |
+| 创建租户 | tenant、owner member、provision saga、审计/outbox | 区域 provision、计费客户创建 |
+| 发布知识 | version 状态 CAS、发布快照、审计/outbox | embedding、索引预热、旧版本回收 |
+| 审批/启动活动 | campaign version、策略/线索/预算快照、任务或 outbox | Scheduler claim、PSTN dispatch |
+| marketing task 终态 | task/outcome、hold settle/release、ledger、outbox | CRM 同步、分析聚合 |
+| 坐席 claim | session version、assigned user、lease、审计 | 实时通知、外部工单同步 |
+| screen share acquire/stop | share lease、generation、meeting version、审计 | token 签发/撤销、RTC track 收敛 |
+| 工具执行请求 | request hash、确认状态、idempotency、outbox | Adapter 调用；结果再以 inbox 事务落库 |
+| 租户删除 | tombstone、删除范围快照、审计/outbox | 对象删除、Provider 清理、最终校验 |
+
+不能把数据库事务跨越 LLM、PSTN、CRM、对象存储或模型网络调用。外部调用前先提交 outbox；调用结果以带去重键的 inbox 进入新事务。
+
+### 11.3 Idempotency 记录
+
+```text
+idempotency_keys(
+  tenant_id, actor_id, route, idempotency_key,
+  request_hash, status, response_code, response_body_ref,
+  resource_id, created_at, expires_at
+)
+```
+
+同一个 key 和相同 request hash 返回原结果；同 key 不同 hash 返回 `idempotency_conflict`。处理中请求返回相同 job/resource 引用，不能并行执行第二次副作用。
+
 ## 12. SaaS 租户开通和路由
 
 ```text
@@ -542,3 +644,77 @@ SaaS 计量形成三层记录：原始 usage event、不可变 ledger、账期�
 - 屏幕共享必须满足 LiveKit、短期 token 和主持人策略 readiness。
 - 客服工具必须有 schema、权限和幂等策略。
 - SaaS 试点必须使用 PostgreSQL、正式域名、TLS、租户限流、备份和账单审计；SQLite 环境必须报告 `environment=demo_only`。
+
+## 17. 服务身份、密钥和数据分类
+
+### 17.1 服务间认证
+
+- API、Gateway、Worker、Scheduler、Agent 和 Adapter 使用短期 workload credential；不共享一个永久内部 token。
+- 服务凭证声明允许的 caller、audience、tenant 范围和操作；接收方仍执行 tenant、resource 和 purpose 校验。
+- 对象存储使用短期签名 URL，绑定 tenant、object、content type、大小、操作和过期时间。
+- PSTN/CRM/Calendar webhook 保存 provider event ID、签名验证结果和接收时间；失败签名不进入业务 inbox。
+
+### 17.2 数据分类
+
+| 级别 | 示例 | 默认处理 |
+| --- | --- | --- |
+| L1 公开 | 产品帮助、公开状态页 | 可缓存，不包含 tenant 数据 |
+| L2 企业内部 | 活动名称、会议标题、聚合指标 | tenant 加密存储，按 RBAC 访问 |
+| L3 敏感 | 电话、客户资料、字幕、授权证据、工具参数 | 字段/对象加密，日志脱敏，导出审计 |
+| L4 高敏/生物特征 | 原始音频、屏幕录制、声纹 embedding、付款/身份材料 | 单独授权、最短保留、严格 purpose 限制，不进入普通日志/分析 |
+
+模型输入遵循最小化原则；不需要的 L3/L4 字段在进入 Provider 前删除或标记化。Provider 是否允许训练、保存多久、处理区域和删除能力属于 capability/readiness 门禁。
+
+## 18. Provider readiness
+
+每个 Adapter 暴露统一 capability document：
+
+```json
+{
+  "provider": "provider_name",
+  "capability": "pstn.outbound",
+  "status": "not_ready",
+  "region": "ap-southeast",
+  "checkedAt": "ISO-8601",
+  "expiresAt": "ISO-8601",
+  "reasonCode": "credentials_missing",
+  "features": {},
+  "fingerprint": "redacted-version"
+}
+```
+
+状态只允许 `not_configured`、`checking`、`ready`、`degraded`、`not_ready`。业务命令在执行时重新校验 capability 和过期时间，不能只依赖控制台上一次绿色状态。
+
+- `not_configured/not_ready`：阻断依赖该能力的新任务，并返回明确原因。
+- `degraded`：只开放声明仍安全的子能力，例如保留字幕但关闭 TTS。
+- `ready`：只表示 Provider 探测通过，不代表 PostgreSQL、合规、预算和人工接管等整体产品门禁通过。
+- 外部创建结果必须有可验证 provider reference；没有 reference 时只能保持 pending/failed，不能伪造 success。
+
+## 19. 错误、重试和客户端动作
+
+| 错误类 | HTTP/协议语义 | 是否重试 | 客户端动作 |
+| --- | --- | --- | --- |
+| authentication/tenant/scope denied | 401/403 或资源隐藏时404 | 否 | 重新登录/选择有权租户，不自动换 tenant |
+| validation/policy denied | 400/422 | 修正后 | 展示字段或策略原因，不重复原请求 |
+| version/idempotency conflict | 409/412 | 刷新后 | 获取当前资源；相同命令复用原 key |
+| entitlement/quota/rate limit | 402/403/429 | 按策略 | 展示套餐/预算/重试时间，保留安全结束能力 |
+| provider not ready | 424/503 | readiness 恢复后 | 明确降级或阻断，不显示假成功 |
+| transient dependency | 502/503/504 | 有界退避 | 服务端 outbox 优先；客户端只重试幂等请求 |
+| accepted async job | 202 | 轮询/订阅 | 使用 job ID 查询，不重复提交命令 |
+
+所有自动重试都有次数、截止时间、抖动退避和 dead-letter/人工处理路径。高风险动作不得由客户端无限重试。
+
+## 20. 测试与验收映射
+
+| 设计不变量 | 自动化门禁 | 真实环境门禁 |
+| --- | --- | --- |
+| tenant/RBAC 不越权 | 九角色×全部 scope、跨租户 ID、伪造 header/body、RLS/复合 FK 测试 | 两真实租户并发攻击演练 |
+| 命令幂等 | 相同 key 重放100次、不同 hash 冲突、API 重启恢复 | Provider webhook 重放和网络超时演练 |
+| 单一状态机 | 非法迁移、CAS 冲突、迟到事件/generation 测试 | Worker/API 重启、断网恢复 |
+| 不重复外部副作用 | inbox/outbox、claim、ledger 唯一约束和故障注入 | PSTN/CRM sandbox 或真实白名单账号 |
+| Provider 不伪造成功 | 未配置、超时、部分响应、错误 reference contract test | 真实 credentials/readiness 证据 |
+| 屏幕共享可停止 | lease、双 acquire、revoke 后旧 track 测试 | Web/iOS/Android 真机与弱网 |
+| AI 不越权 | JSON Schema、Policy deny、知识无答案、工具风险矩阵 | 坐席接管和高风险人工流程 |
+| 生产数据门禁 | migration、RLS、backup/restore、负载和数据对账 | PostgreSQL/PITR/cell 恢复演练 |
+
+设计评审通过不等于功能验收。任务只有在代码、自动化、目标环境证据和 `enterprise-edition-acceptance-plan.md` 对应条目齐全后才能从 `ready_for_acceptance` 进入 `accepted`。

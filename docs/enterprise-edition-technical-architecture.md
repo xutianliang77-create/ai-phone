@@ -1,8 +1,8 @@
 # AI Phone 企业版技术架构
 
-版本：v1.0
+版本：v1.1
 日期：2026-07-15
-状态：SaaS 基线待评审
+状态：SaaS 详细架构基线待评审
 
 ## 1. 架构目标
 
@@ -95,6 +95,18 @@ flowchart TB
     API --> Audit
 ```
 
+### 2.1 控制、业务和媒体路径
+
+| 路径 | 入口 | 同步职责 | 异步职责 | 禁止事项 |
+| --- | --- | --- | --- | --- |
+| 控制面 | `/saas/v1` | 租户发现、订阅/权益读取、route document | provision、暂停、导出、删除、账期聚合 | 不转发实时音频，不直接写区域业务表 |
+| 业务数据面 | `/enterprise/v1` | tenant/RBAC、命令校验、查询、短期 token | outbox、导入、发布、调度、材料生成 | 不信任客户端 tenantId，不跨 region 漂移数据 |
+| 实时信令 | WSS/Realtime Gateway | session、track、字幕和播放控制 | 质量事件、降级事件 | 不作为长期业务状态真值 |
+| 媒体面 | LiveKit/SIP/PSTN Bridge | 音频和 screen track 转发 | 录制/OCR 旁路（需授权） | 不直接写业务数据库或决定结算 |
+| Provider/Adapter | 服务器内部接口 | 能力探测、模型推理、工具调用 | webhook inbox、CRM/日历 outbox | 不向客户端暴露密钥和内部地址 |
+
+命令成功仅表示业务状态已经持久化；需要外部副作用的操作返回 `accepted/processing`，由 outbox 驱动。客户端不得把 HTTP 超时解释为命令失败后换新幂等键重试。
+
 ## 3. SaaS 拓扑和部署边界
 
 ### 3.1 控制面和区域数据面
@@ -141,9 +153,37 @@ object-storage
 
 本地开发和封闭演示允许多个逻辑模块运行在同一 Node/Python 进程。真实企业 SaaS 试点必须使用 PostgreSQL、正式域名、HTTPS/WSS、租户限流、备份和监控；不能把单机 SQLite 演示环境直接升级为付费服务。
 
+#### 3.3.1 与当前仓库的映射
+
+| 逻辑能力 | 当前代码落点 | 演进方式 |
+| --- | --- | --- |
+| 账号、Tenant、RBAC、企业命令 | `services/api-server` | 先按 domain module 隔离；只有独立扩缩容或故障域需要时才拆服务 |
+| 实时信令、字幕和 playback 控制 | `services/realtime-gateway` | 保持无业务数据库直写，通过 API/事件提交业务结果 |
+| ASR、翻译、TTS、Agent call worker | `services/translation-worker` | 按 track/任务横向扩展，Provider 继续通过 Adapter |
+| PSTN 媒体桥 | `services/pstn-bridge` | 只处理 Provider 媒体/状态协议，不承载 Campaign 真值 |
+| 共享契约和事件 | `packages/contracts` | 客户端/服务端共同编译，版本变更保持向后兼容 |
+| Campaign/Support/Meeting Orchestrator | 尚未实现的逻辑模块 | 初期进入 API/Worker 内的独立 module，不预先制造微服务 |
+| SaaS 控制面、PostgreSQL、对象存储 | 尚未通过生产门禁 | 试点前按 `ENT-CORE-009/010/011`、`ENT-DATA-001` 实现和验收 |
+
+架构图中的逻辑组件不等于当前已经存在的可部署服务。文档和 readiness 必须区分 `designed`、`implemented`、`verified` 与 `production_ready`。
+
 ### 3.4 SaaS cell
 
 一个区域可以包含多个 cell。每个租户在同一时刻只属于一个 cell，控制面目录记录 `tenantId -> homeRegion -> cellId`。cell 故障切换或迁移必须校验数据库、对象、ledger 和审计 hash，不能依靠 DNS 随机把同一租户写入两个数据面。
+
+### 3.5 扩缩容单元
+
+| 组件 | 主要负载指标 | 扩缩容键 | 不可依赖的本地状态 |
+| --- | --- | --- | --- |
+| API Server | RPS、DB pool、P95 | HTTP 请求 | tenant context、job 进度、幂等结果 |
+| Realtime Gateway | 连接数、事件率、发送积压 | tenant/session | 当前业务状态、用量余额 |
+| Translation Worker | 活跃 track、音频实时率、Provider 并发 | session/track | 唯一任务所有权、结算真值 |
+| Scheduler | due task 数、claim 延迟 | tenant/campaign shard | “已拨号”标记、全局当前租户 |
+| Agent Runtime | turn 并发、token、超时率 | session/turn | 工具执行结果、审批状态 |
+| OCR Worker | frame rate、像素量、队列时延 | screen share | 共享租约、会议状态 |
+| Adapter Worker | outbox backlog、Provider 限流 | provider/tenant | 外部同步完成真值 |
+
+所有 claim 使用数据库 CAS、lease 或 inbox/outbox；进程退出后，另一实例能够在租约超时后继续，且不会重复产生外部副作用。
 
 ## 4. 领域边界
 
@@ -297,3 +337,61 @@ tenantId -> campaign/support/meeting id -> sessionId -> callLegId
 | 屏幕共享 | LiveKit screen track + CAS 共享租约 |
 | OCR | 可选旁路，失败不影响共享 |
 | 多租户 | 所有企业聚合根强制 tenantId，不用客户端过滤代替服务端隔离 |
+
+## 13. 信任区和服务身份
+
+```text
+public internet
+  -> edge/WAF/rate limit
+  -> client API and RTC entry
+  -> workload-authenticated service network
+  -> PostgreSQL/object storage/secrets
+  -> outbound Provider egress
+```
+
+- 客户端凭证只能访问公开 API/RTC，不得直接访问 Worker、数据库、对象存储或模型服务。
+- 内部网络位置不代表可信；服务间调用使用短期 workload identity 或 mTLS，并携带 tenant、actor、purpose 和 trace context。
+- API 是业务数据库唯一写入方。Scheduler/Worker 只通过带 workload identity 的内部命令接口提交结果，不持有业务表写凭证；migration、备份和恢复另用受审计的专用角色。
+- Provider webhook 在 edge 校验签名、时间窗口和重放，再以 inbox event 进入业务事务。
+- Provider egress 使用域名/端口 allowlist；租户配置只引用 secret ID，不保存或回传明文密钥。
+
+## 14. 高可用和故障域
+
+| 故障 | 架构处理 | 用户可见结果 |
+| --- | --- | --- |
+| 单个 API/Gateway 实例退出 | 负载均衡摘除，无状态实例接管 | 短暂重连，已提交命令不丢失 |
+| Worker 退出 | lease 超时后重新 claim，generation 拒绝旧输出 | 字幕/译音短暂降级，不重复结算 |
+| Provider 故障 | capability 熔断、备用路由或明确降级 | 页面和会话显示具体不可用能力 |
+| PostgreSQL 主库故障 | 托管故障切换/PITR；写入在主库不确定时停止 | 保留安全结束能力，不接受高风险新命令 |
+| 对象存储故障 | 元数据事务保留 pending，outbox 重试 | 上传/导出显示 processing，不伪造完成 |
+| 控制面故障 | 有效 route/token 的区域会话短时自治 | 不能新开通/改套餐，进行中会话可安全结束 |
+| 单 cell 故障 | 按已演练的迁移/恢复计划切换 | 未完成一致性校验前不双写另一个 cell |
+
+正式环境的 stateless 入口至少跨两个故障单元部署；PostgreSQL 备份、PITR、RPO/RTO 和 cell 恢复只有在 `ENT-REL-003` 演练通过后才能对外承诺。
+
+## 15. 容量和服务目标
+
+以下是必须采集的内部 SLI，不直接等同客户 SLA：
+
+| 层 | SLI |
+| --- | --- |
+| 控制面 | route 成功率/延迟、provision 成功率、entitlement 新鲜度 |
+| API | 按 route/tenant/command 的成功率、P50/P95/P99、冲突率和限流率 |
+| RTC | 入会成功率、重连时间、track publish/subscribe 成功率、audio frame drop |
+| AI 管线 | 首段字幕、最终字幕、翻译、首音频延迟及 Provider 超时/降级率 |
+| 外呼 | claim 延迟、拨号重复数、webhook backlog、接通/失败分类 |
+| 客服 | 队列等待、claim 冲突、接管延迟、AI 停止音频延迟 |
+| 屏幕共享 | acquire 延迟、track 首帧、lease 过期、OCR backlog |
+| 数据 | DB pool、锁等待、事务冲突、outbox age、备份和恢复校验 |
+| 成本 | tenant/feature/provider 的分钟、token、字符、帧和单位业务结果成本 |
+
+每个租户都有并发、速率、预算和队列上限。容量测试按“小租户突发、大租户持续、单 Provider 故障、单 cell 降级”四类场景执行；未获得测试证据前不标注具体并发或 SLA 数字。
+
+## 16. 不可破坏的架构不变量
+
+1. 请求中的 tenantId 不能决定权限，membership、route document 和服务端 guard 才是权限真值。
+2. 任何企业资源查询都先带 tenant scope，不先按裸 resource ID 查询再内存过滤。
+3. 客户端、Gateway、Worker、Provider 和 LLM 都不能直接修改业务终态。
+4. 外部副作用必须有幂等键、inbox/outbox 或 Provider event 去重。
+5. 余额、授权、禁拨、审批、主持人停止和人工接管优先于迟到的 AI/媒体输出。
+6. SQLite 只能报告 `demo_only`；PostgreSQL、备份和隔离未验收时不能宣称企业试点 ready。
