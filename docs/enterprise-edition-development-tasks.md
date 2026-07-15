@@ -1,0 +1,117 @@
+# AI Phone 企业版开发任务
+
+版本：v1.0
+日期：2026-07-15
+状态：SaaS 基线待排期
+
+## 1. 状态定义
+
+- `todo`：未开始。
+- `in_progress`：开发或自动化尚未结束。
+- `blocked`：仅限真实外部账号、法律确认或硬件阻塞。
+- `ready_for_acceptance`：代码和自动化完成，等待真实验收。
+- `accepted`：完成定义和验收证据全部通过。
+
+## 2. P0 企业公共底座
+
+| 编号 | 任务 | 依赖 | 交付物 | 完成定义 | 状态 |
+| --- | --- | --- | --- | --- | --- |
+| ENT-CORE-001 | Tenant 和 Member | 无 | tenant/member schema、Repository、API | 所有企业资源强制 tenant scope | todo |
+| ENT-CORE-002 | RBAC | CORE-001 | 角色、scope、服务端 guard | 越权矩阵全部拒绝 | todo |
+| ENT-CORE-003 | 企业 Web 壳 | CORE-001 | 登录、导航、错误和空状态 | 可按角色显示入口，服务端仍权威 | todo |
+| ENT-CORE-004 | 企业知识版本 | CORE-001 | source/version/chunk/publish | 未发布和过期知识不可检索 | todo |
+| ENT-CORE-005 | 企业术语和话术 | CORE-004 | term pack、script template | ASR/翻译/LLM 使用同一版本引用 | todo |
+| ENT-CORE-006 | 审计事件 | CORE-001 | append-only audit API | 高风险操作都有 actor/target/result | todo |
+| ENT-CORE-007 | 企业用量与预算 | CORE-001 | ledger category、budget、alert | 重试不重复 hold/settle | todo |
+| ENT-CORE-008 | Provider readiness | 无 | PSTN/CRM/Calendar/Channel capability | 缺配置明确 not_ready，不伪造成功 | todo |
+| ENT-CORE-009 | SaaS 租户生命周期 | CORE-001 | signup/provision/suspend/export/delete saga | 重试不重复租户，失败不标 active | todo |
+| ENT-CORE-010 | 套餐和 Entitlement | CORE-001/007 | plan、subscription、seat、entitlement | 服务端按版本执行权益和限额 | todo |
+| ENT-CORE-011 | Tenant Directory | CORE-009 | homeRegion/cell、签名 route document | 区域错误时拒绝业务写入 | todo |
+| ENT-CORE-012 | SaaS 计量聚合 | CORE-007/010 | usage event、账期聚合、调整流水 | 不修改原始 ledger，账单可对账 | todo |
+| ENT-DATA-001 | 企业 PostgreSQL schema | CORE-001 | schema、migration、FK、backup | 真实企业试点数据库门禁通过 | todo |
+| ENT-DATA-002 | Tenant-scoped Repository | DATA-001 | Repository context 和 lint/test | 不存在无 tenant 查询入口 | todo |
+| ENT-DATA-003 | Inbox/Outbox | DATA-001 | 幂等收件、事务发件、重试 | 重放100次仅一次副作用 | todo |
+| ENT-OBS-001 | 企业链路追踪 | CORE-006 | trace IDs、质量和成本报告 | session 到 ledger/tool 可追踪 | todo |
+
+## 3. P0 企业会议
+
+| 编号 | 任务 | 依赖 | 交付物 | 完成定义 | 状态 |
+| --- | --- | --- | --- | --- | --- |
+| ENT-MTG-001 | Meeting 聚合 | CORE-001、DATA-003 | meeting/participant/artifact schema | 重启后会议状态可恢复 | todo |
+| ENT-MTG-002 | 创建和入会 | MTG-001 | API、短期 token、Web/Flutter 入口 | host/guest/member 权限正确 | todo |
+| ENT-MTG-003 | 企业实时翻译 | MTG-002 | Worker 路由、个人字幕语言 | 四人字幕和译音不串轨 | todo |
+| ENT-MTG-004 | 屏幕共享租约 | MTG-002 | acquire/pause/resume/stop、CAS | 同时共享只成功一个 | todo |
+| ENT-MTG-005 | Web 屏幕共享 | MTG-004 | getDisplayMedia、布局、控制 | screen/window/tab 可用 | todo |
+| ENT-MTG-006 | iOS ReplayKit | MTG-004 | Broadcast Extension、Flutter bridge | 离开 App 后持续共享且可停止 | todo |
+| ENT-MTG-007 | Android MediaProjection | MTG-004 | 平台桥接、前台服务 | iOS 产品化后进入真机门禁 | todo |
+| ENT-MTG-008 | 共享系统音频 | MTG-005/006 | 独立 audio track 和策略 | 不进入错误 ASR，不形成回声环 | todo |
+| ENT-MTG-009 | 共享自适应布局 | MTG-005 | simulcast、画面/字幕布局 | 小屏横屏大字体无重叠 | todo |
+| ENT-MTG-010 | 主持人共享控制 | MTG-004 | grant/revoke/force stop | 撤销后旧 track 不恢复 | todo |
+| ENT-MTG-011 | 会后材料 | MTG-003、CORE-004 | transcript/review/action items | 结论可回溯 segment | todo |
+| ENT-MTG-012 | 屏幕 OCR 翻译 | MTG-005、CORE-004 | keyframe/hash/OCR/layout events | 默认关闭，失败不影响共享 | todo |
+| ENT-MTG-013 | 日历 Adapter | MTG-001、CORE-008 | contract、mock、首个 Provider | 重试不重复创建会议 | todo |
+
+## 4. P1 AI 客服
+
+| 编号 | 任务 | 依赖 | 交付物 | 完成定义 | 状态 |
+| --- | --- | --- | --- | --- | --- |
+| ENT-CS-001 | 客服领域模型 | CORE-001、DATA-003 | channel/queue/session/case/tool schema | 状态机和重启恢复通过 | todo |
+| ENT-CS-002 | 呼入 Channel Adapter | CS-001、CORE-008 | PSTN/Web/App contract | 三渠道创建统一 session | todo |
+| ENT-CS-003 | Tenant RAG | CORE-004、CS-001 | 检索过滤、引用、无答案路径 | 不跨租户、不无依据回答 | todo |
+| ENT-CS-004 | Support Agent | CS-003 | 状态机、JSON schema、上下文压缩 | thinking 不泄露，超时可降级 | todo |
+| ENT-CS-005 | Tool Registry | CS-001 | 工具 schema、风险和权限 | 未注册工具不可执行 | todo |
+| ENT-CS-006 | 只读工具 | CS-005 | order/logistics/inventory mock adapter | 权限和客户归属校验通过 | todo |
+| ENT-CS-007 | 可逆写工具 | CS-005 | ticket/callback/note adapter | 未确认不执行，重复只执行一次 | todo |
+| ENT-CS-008 | 高风险接管 | CS-005 | refund/payment/identity policy | AI 永不自动完成高风险动作 | todo |
+| ENT-CS-009 | 坐席队列 | CS-001 | routing、SLA、claim/release | 两坐席不能同时接管同一会话 | todo |
+| ENT-CS-010 | 坐席工作台 | CS-009、CS-004 | 字幕、客户、知识和通话控制 | 接管上下文完整且 AI 停止发言 | todo |
+| ENT-CS-011 | 工单和回拨 | CS-007 | case、callback、outbox | 外部失败可重试且不阻塞结束 | todo |
+| ENT-CS-012 | 质检分析 | CS-004、OBS-001 | quality rules、dashboard | 能定位错误回答和未告知 | todo |
+
+## 5. P1/P2 出海外呼营销
+
+| 编号 | 任务 | 依赖 | 交付物 | 完成定义 | 状态 |
+| --- | --- | --- | --- | --- | --- |
+| ENT-MKT-001 | Campaign 聚合 | CORE-001、DATA-003 | campaign/status/approval | 未审批活动不能调度 | todo |
+| ENT-MKT-002 | 线索导入 | MKT-001 | CSV/API、E.164、去重、错误报告 | 批次可回滚且不重复线索 | todo |
+| ENT-MKT-003 | 授权证据 | MKT-002 | consent schema/object/hash | 无有效授权任务数为零 | todo |
+| ENT-MKT-004 | 禁拨名单 | MKT-002 | tenant/global scope、撤回 | 拒绝后立即阻断全部待任务 | todo |
+| ENT-MKT-005 | Country Policy | MKT-003/004 | 时间、频控、告知、语音信箱策略 | 版本过期时活动阻断 | todo |
+| ENT-MKT-006 | 活动审批 | MKT-005、CORE-002 | validate/approve/reject | 审批固化策略和数据快照 | todo |
+| ENT-MKT-007 | Scheduler | MKT-006、CORE-007 | due query、CAS claim、并发 | 50并发不重复 claim | todo |
+| ENT-MKT-008 | PSTN dispatch | MKT-007、CORE-008 | Provider adapter、webhook、hold | 重放不重复拨号/扣费 | blocked |
+| ENT-MKT-009 | Marketing Agent | MKT-008、CORE-004 | 话术状态机、知识和告知 | 无依据不承诺，拒绝立即结束 | todo |
+| ENT-MKT-010 | 实时监控 | MKT-008、OBS-001 | dashboard、字幕、风险 | 状态延迟和失败可观测 | todo |
+| ENT-MKT-011 | 人工接管 | MKT-009、CS-009 | handoff、超时和回拨 | 接管后 AI 音频立即停止 | todo |
+| ENT-MKT-012 | Outcome | MKT-009 | disposition、intent、next action | 有证据且不重复生成任务 | todo |
+| ENT-MKT-013 | CRM Adapter | MKT-012、CORE-008 | contract、outbox、首个 Provider | 外部失败恢复后只同步一次 | blocked |
+| ENT-MKT-014 | 活动分析 | MKT-012、OBS-001 | funnel、cost、complaint | 指标可按国家/活动/版本拆分 | todo |
+
+`blocked` 只表示真实服务商账号未提供；Adapter、mock、contract test 和 UI 降级仍必须开发。
+
+## 6. P2 企业发布
+
+| 编号 | 任务 | 依赖 | 交付物 | 完成定义 | 状态 |
+| --- | --- | --- | --- | --- | --- |
+| ENT-DATA-004 | SQLite 演示数据导入 | DATA-002/003 | demo export/import/reconcile | 只用于迁移内部演示数据，不承载生产 | todo |
+| ENT-DATA-005 | Cell 数据迁移和回滚 | CORE-011、DATA-001 | export/import/reconcile/rollback | 记录、ledger、hash 全量一致 | todo |
+| ENT-DATA-006 | 多实例协调 | DATA-001/003 | lease/queue、无全局内存真值 | Worker 故障不重复执行 | todo |
+| ENT-REL-001 | 企业安全门禁 | CORE-002/006 | SAST、依赖、密钥和渗透测试 | P0/P1 问题清零 | todo |
+| ENT-REL-002 | 数据生命周期 | DATA-001/003 | retention/export/delete jobs | 删除可审计且对象最终收敛 | todo |
+| ENT-REL-003 | 备份和灾备 | DATA-005 | PITR、对象备份、演练 | 达到约定 RPO/RTO | todo |
+| ENT-REL-004 | 灰度和熔断 | OBS-001 | tenant flag、kill switch、runbook | 单租户异常可隔离停止 | todo |
+| ENT-REL-005 | 企业发布材料 | 全部 | 文档、SLA、隐私、管理员手册 | 发布清单全部有证据 | todo |
+| ENT-REL-006 | SaaS 控制面高可用 | CORE-009/010/011 | directory、provisioning、status | 控制面故障不破坏进行中会话 | todo |
+| ENT-REL-007 | 租户限流和熔断 | CORE-010、OBS-001 | quota、concurrency、kill switch | 单租户异常不拖垮共享 cell | todo |
+| ENT-REL-008 | 订阅和欠费状态 | CORE-010/012 | renew/past_due/suspend/resume | 不误停进行中安全链路，不漏账 | todo |
+
+## 7. Definition of Done
+
+- 代码遵循现有模块边界，不出现超大文件。
+- 数据模型、API、事件和 UI 状态一致。
+- 单元、集成、contract、E2E 和故障测试通过。
+- 每个企业写入按 tenant/user/resource 隔离，并有并发测试。
+- 敏感日志脱敏，token、号码、声纹、音频和屏幕内容不入普通日志。
+- 外部 Provider 未配置时明确降级，不显示假成功。
+- 需要真实媒体、真机或真实 Provider 的任务必须附证据。
+- 文档、配置、迁移、运行手册和 `PROGRESS_LOG.md` 同步。
