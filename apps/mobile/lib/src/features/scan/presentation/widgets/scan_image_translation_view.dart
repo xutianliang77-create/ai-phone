@@ -3,8 +3,8 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 
 import '../../../../app/localization/app_localizations.dart';
-import '../../../../platform/ocr/mobile_ocr_provider.dart';
 import '../controllers/scan_translation_controller.dart';
+import 'scan_translation_overlay_layout.dart';
 
 class ScanImageTranslationView extends StatefulWidget {
   const ScanImageTranslationView({
@@ -56,13 +56,14 @@ class _ScanImageTranslationViewState extends State<ScanImageTranslationView> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
-        Row(
+        Wrap(
+          spacing: 12,
+          runSpacing: 8,
+          crossAxisAlignment: WrapCrossAlignment.center,
           children: <Widget>[
-            Expanded(
-              child: Text(
-                l10n.scanStatusMessage('scanImageComparison'),
-                style: Theme.of(context).textTheme.titleMedium,
-              ),
+            Text(
+              l10n.scanStatusMessage('scanImageComparison'),
+              style: Theme.of(context).textTheme.titleMedium,
             ),
             if (_hasTranslation)
               SegmentedButton<bool>(
@@ -157,55 +158,49 @@ class _ScanImageTranslationViewState extends State<ScanImageTranslationView> {
     }
     return LayoutBuilder(
       builder: (context, constraints) {
+        final placements = layoutScanTranslationOverlays(
+          blocks: widget.translatedBlocks,
+          canvas: constraints.biggest,
+          textDirection: Directionality.of(context),
+          textScaler: MediaQuery.textScalerOf(context),
+        );
         return Stack(
-          children: widget.translatedBlocks.map((block) {
-            final rect = _translationRect(block.source, constraints.biggest);
-            return Positioned(
-              left: rect.left,
-              top: rect.top,
-              width: rect.width,
-              height: rect.height,
-              child: Container(
-                color: Theme.of(context)
-                    .colorScheme
-                    .surface
-                    .withValues(alpha: 0.88),
-                padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 2),
-                child: Text(
-                  block.translation,
-                  maxLines: 2,
-                  overflow: TextOverflow.fade,
-                  style: TextStyle(
-                    color: Theme.of(context).colorScheme.onSurface,
-                    fontSize: 14,
-                    height: 1.1,
-                    fontWeight: FontWeight.w600,
+          children: <Widget>[
+            for (var index = 0; index < placements.length; index++)
+              Builder(builder: (context) {
+                final placement = placements[index];
+                final rect = placement.rect;
+                return Positioned(
+                  left: rect.left,
+                  top: rect.top,
+                  width: rect.width,
+                  height: rect.height,
+                  child: Container(
+                    key: ValueKey('scan-translation-overlay-$index'),
+                    color: Theme.of(context)
+                        .colorScheme
+                        .surface
+                        .withValues(alpha: 0.88),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 3, vertical: 2),
+                    child: Text(
+                      placement.block.translation,
+                      maxLines: 3,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.onSurface,
+                        fontSize: placement.fontSize,
+                        height: 1.1,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
                   ),
-                ),
-              ),
-            );
-          }).toList(growable: false),
+                );
+              }),
+          ],
         );
       },
     );
-  }
-
-  Rect _translationRect(MobileOcrBlock bounds, Size canvas) {
-    final left = (bounds.left * canvas.width).clamp(0.0, canvas.width);
-    final top = (bounds.top * canvas.height).clamp(0.0, canvas.height);
-    final availableWidth = canvas.width - left;
-    final availableHeight = canvas.height - top;
-    final sourceWidth = bounds.width * canvas.width;
-    final sourceHeight = bounds.height * canvas.height;
-    final width = sourceWidth.clamp(
-      availableWidth < 72 ? availableWidth : 72.0,
-      availableWidth,
-    );
-    final height = sourceHeight.clamp(
-      availableHeight < 24 ? availableHeight : 24.0,
-      availableHeight,
-    );
-    return Rect.fromLTWH(left, top, width, height);
   }
 
   void _syncScale() {
