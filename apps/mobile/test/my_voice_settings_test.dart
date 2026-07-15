@@ -136,7 +136,7 @@ void main() {
     await tester.tap(find.text('开始录音'));
     await tester.pumpAndSettle();
 
-    expect(find.text('麦克风权限被拒绝，请到系统设置中允许 ai phone 使用麦克风。'), findsOneWidget);
+    expect(find.text('麦克风权限被拒绝，请到系统设置中允许无界AI使用麦克风。'), findsOneWidget);
   });
 }
 
