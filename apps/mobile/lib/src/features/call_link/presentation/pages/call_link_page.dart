@@ -84,7 +84,11 @@ class _CallLinkPageState extends State<CallLinkPage> {
           jumpToLatestLabel: l10n.isChinese ? '回到底部' : 'Back to latest',
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
           children: <Widget>[
-            Text(l10n.callLinkDomesticBody),
+            Text(
+              l10n.isChinese
+                  ? '生成邀请链接，双方进入后即可看到双语字幕并听到译音。'
+                  : 'Create an invitation. Once both sides join, bilingual captions and audio begin.',
+            ),
             const SizedBox(height: 16),
             FilledButton.icon(
               onPressed: _loading ? null : _createLink,

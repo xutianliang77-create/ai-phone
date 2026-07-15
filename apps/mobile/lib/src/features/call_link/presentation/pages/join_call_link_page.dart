@@ -77,7 +77,11 @@ class _JoinCallLinkPageState extends State<JoinCallLinkPage> {
           jumpToLatestLabel: l10n.isChinese ? '回到底部' : 'Back to latest',
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
           children: <Widget>[
-            Text(l10n.joinCallDomesticBody),
+            Text(
+              l10n.isChinese
+                  ? '粘贴邀请链接或通话编号，进入对方创建的翻译通话。'
+                  : 'Paste an invitation or call ID to join the translated call.',
+            ),
             const SizedBox(height: 16),
             TextField(
               controller: _controller,
@@ -102,9 +106,10 @@ class _JoinCallLinkPageState extends State<JoinCallLinkPage> {
             const SizedBox(height: 16),
             if (_loading) const LinearProgressIndicator(),
             if (_link != null) ...[
-              Text('${l10n.callRoomName}：${_link!.roomName}'),
-              const SizedBox(height: 4),
-              Text('${l10n.callRoomProvider}：${_link!.roomProvider}'),
+              Text(
+                l10n.isChinese ? '无界AI 通话服务' : 'Call service',
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
               const SizedBox(height: 8),
               _GuestTokenStatus(ready: _guestToken != null),
               const SizedBox(height: 12),

@@ -80,7 +80,7 @@ class CallRoomCaptions extends StatelessWidget {
                       const SizedBox(width: 4),
                       Flexible(
                         child: Text(
-                          _ttsLabel(context.l10n, caption),
+                          _ttsLabel(context.l10n),
                           style: theme.textTheme.labelMedium?.copyWith(
                             color: theme.colorScheme.primary,
                           ),
@@ -96,9 +96,7 @@ class CallRoomCaptions extends StatelessWidget {
     );
   }
 
-  String _ttsLabel(AppLocalizations l10n, CallRoomCaption caption) {
-    final provider = caption.ttsProvider;
-    if (provider == null) return l10n.callRoomTtsReady;
-    return '${l10n.callRoomTtsReady}：$provider';
+  String _ttsLabel(AppLocalizations l10n) {
+    return l10n.callRoomTtsReady;
   }
 }

@@ -27,7 +27,8 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('https://call.example.cn/join/call_1'), findsOneWidget);
-    expect(find.text('房间：call_call_1'), findsOneWidget);
+    expect(find.text('无界AI 通话服务已准备'), findsOneWidget);
+    expect(find.textContaining('livekit'), findsNothing);
     expect(find.textContaining('未入房'), findsOneWidget);
     expect(find.text('secret-room-token'), findsNothing);
     expect(find.text('进入房间'), findsOneWidget);
@@ -209,7 +210,8 @@ void main() {
       findsOneWidget,
     );
     expect(find.text('你好，这是一次通话房间翻译测试。'), findsOneWidget);
-    expect(find.text('翻译语音已准备：qwen-tts'), findsOneWidget);
+    expect(find.text('翻译语音已准备'), findsOneWidget);
+    expect(find.textContaining('qwen-tts'), findsNothing);
   });
 
   testWidgets('auto-scrolls call room captions to the latest entry',
@@ -271,7 +273,7 @@ void main() {
     await tester.tap(find.text('进入房间'));
     await tester.pumpAndSettle();
 
-    expect(find.text('准备通话房间失败，请检查 LiveKit 配置'), findsOneWidget);
+    expect(find.text('准备通话失败，请稍后重试'), findsOneWidget);
   });
 
   testWidgets('joins a pasted call link as guest', (WidgetTester tester) async {

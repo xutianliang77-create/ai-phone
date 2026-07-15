@@ -32,9 +32,19 @@ class CallLinkResultPanel extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
-        Text('${l10n.callRoomName}：${link.roomName}'),
-        const SizedBox(height: 4),
-        Text('${l10n.callRoomProvider}：${link.roomProvider}'),
+        Row(
+          children: <Widget>[
+            Icon(Icons.verified_outlined,
+                size: 20, color: Theme.of(context).colorScheme.primary),
+            const SizedBox(width: 8),
+            Flexible(
+              child: Text(
+                l10n.isChinese ? '无界AI 通话服务已准备' : 'Call service ready',
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+            ),
+          ],
+        ),
         const SizedBox(height: 12),
         _CallRoomStatus(
           snapshot: roomSnapshot,
@@ -58,7 +68,12 @@ class CallLinkResultPanel extends StatelessWidget {
           ),
         ],
         const SizedBox(height: 12),
-        SelectableText(link.joinUrl),
+        SelectableText(
+          link.joinUrl,
+          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+        ),
         const SizedBox(height: 12),
         OutlinedButton.icon(
           onPressed: () => onShare(link.joinUrl),
