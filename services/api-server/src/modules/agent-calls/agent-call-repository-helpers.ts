@@ -20,27 +20,38 @@ export function defaultScript(objective: string) {
 export function isScenario(
   value: string,
 ): value is CreateAiCallingAgentDraftRequest["scenario"] {
-  return value === "booking" ||
+  return (
+    value === "booking" ||
     value === "customer_support" ||
     value === "business_inquiry" ||
-    value === "custom";
+    value === "custom"
+  );
 }
 
-export function isPreAuthorizationCancellable(status: string) {
-  return status === "draft" || status === "requires_human_takeover";
+export function isAgentCallCancellable(status: string) {
+  return (
+    status === "draft" ||
+    status === "authorized" ||
+    status === "requires_human_takeover" ||
+    status === "takeover_requested"
+  );
 }
 
 export function isStartedStatus(status: string) {
-  return status === "queued" ||
+  return (
+    status === "queued" ||
     status === "in_progress" ||
     status === "completed" ||
-    status === "failed";
+    status === "failed"
+  );
 }
 
 export function isWorkerStatus(
   status: string,
 ): status is UpdateAiCallingAgentCallStatusRequest["status"] {
-  return status === "in_progress" || status === "completed" || status === "failed";
+  return (
+    status === "in_progress" || status === "completed" || status === "failed"
+  );
 }
 
 export function isTerminalWorkerStatus(

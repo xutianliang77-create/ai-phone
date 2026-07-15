@@ -11,8 +11,11 @@ export function evaluateAgentCallStartPolicy(input: {
   if (!isGrayUserAllowed(input.userId)) {
     return denied("gray_not_allowed", "Account is not in the AI calling gray allowlist");
   }
-  const phone = normalizePhone(input.targetPhone);
-  if (!phone || blockedNumbers().has(phone) || emergencyNumbers.has(phone)) {
+  const phone = normalizeAgentCallPhone(input.targetPhone);
+  if (!isValidAgentCallPhone(phone)) {
+    return denied("invalid_target", "Target phone number is invalid");
+  }
+  if (blockedNumbers().has(phone) || emergencyNumbers.has(phone)) {
     return denied("do_not_call", "Target number is blocked from AI calling");
   }
   const limit = positiveInteger(process.env.AGENT_CALL_RATE_LIMIT_PER_HOUR, 3);
@@ -42,11 +45,19 @@ function isGrayUserAllowed(userId: string) {
 }
 
 function blockedNumbers() {
-  return new Set(csv(process.env.AGENT_CALL_DO_NOT_CALL_NUMBERS).map(normalizePhone));
+  return new Set(csv(process.env.AGENT_CALL_DO_NOT_CALL_NUMBERS).map(normalizeAgentCallPhone));
 }
 
-function normalizePhone(value: string) {
+export function normalizeAgentCallPhone(value: string) {
   return value.trim().replace(/[^\d+]/g, "").replace(/^\+86/, "");
+}
+
+export function isValidAgentCallPhone(value: string) {
+  const phone = normalizeAgentCallPhone(value);
+  if (/^\+[1-9]\d{7,14}$/.test(phone)) return true;
+  if (/^1[3-9]\d{9}$/.test(phone)) return true;
+  if (/^0\d{9,11}$/.test(phone)) return true;
+  return /^(?:10|95|96)\d{3,4}$/.test(phone);
 }
 
 function csv(value: string | undefined) {

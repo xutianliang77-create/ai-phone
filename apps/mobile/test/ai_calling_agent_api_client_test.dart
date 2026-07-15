@@ -160,7 +160,7 @@ void main() {
     expect(draft.resultSummary, '已完成预约。');
   });
 
-  test('cancels drafts before authorization', () async {
+  test('cancels drafts with the user cancellation reason', () async {
     final client = AiCallingAgentApiClient(
       baseUrl: Uri.parse('http://127.0.0.1:3100'),
       accountSessionStore: _sessionStore(),
@@ -169,7 +169,7 @@ void main() {
         expect(request.method, 'POST');
         expect(request.url.path, '/ai-calling-agent/drafts/draft_1/cancel');
         final body = jsonDecode(request.body) as Map<String, Object?>;
-        expect(body['reason'], 'user_cancelled_before_authorization');
+        expect(body['reason'], 'user_cancelled');
         return _jsonResponse(
           {'draft': _draftJson(status: 'cancelled')},
           200,

@@ -63,33 +63,22 @@ describe("agent call routes", () => {
     });
   });
 
-  it("cancels drafts before authorization and blocks later authorization", async () => {
+  it("rejects malformed target phones before creating a draft", async () => {
     const app = await buildApp();
-    const created = await app.inject({
+    const response = await app.inject({
       method: "POST",
       url: "/ai-calling-agent/drafts",
-      payload: { scenario: "booking", objective: "预约牙医复诊" },
-    });
-    const draftId = created.json().draft.id as string;
-    const cancelled = await app.inject({
-      method: "POST",
-      url: `/ai-calling-agent/drafts/${draftId}/cancel`,
-      payload: { reason: "用户确认前取消" },
-    });
-    const authorized = await app.inject({
-      method: "POST",
-      url: `/ai-calling-agent/drafts/${draftId}/authorize`,
-      payload: { userConfirmed: true, consentPromptVersion: "cn-agent-v1" },
+      payload: {
+        scenario: "booking",
+        objective: "预约会议室",
+        targetPhone: "1380000000",
+      },
     });
     await app.close();
 
-    expect(cancelled.json().draft).toMatchObject({
-      status: "cancelled",
-      cancellationReason: "用户确认前取消",
-    });
-    expect(cancelled.json().draft.cancelledAt).toEqual(expect.any(String));
-    expect(authorized.statusCode).toBe(409);
-    expect(authorized.json().error.code).toBe("agent_call_cancelled");
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error.code).toBe("invalid_agent_call_draft");
+    expect(getStoreSnapshot().agentCallDrafts).toHaveLength(0);
   });
 
   it("requires human takeover for high risk agent call drafts", async () => {
@@ -127,31 +116,6 @@ describe("agent call routes", () => {
       status: "takeover_requested",
       takeoverReason: "涉及付款和身份验证，用户人工接管",
     });
-  });
-
-  it("does not cancel authorized drafts with the pre-authorization endpoint", async () => {
-    const app = await buildApp();
-    const created = await app.inject({
-      method: "POST",
-      url: "/ai-calling-agent/drafts",
-      payload: { scenario: "custom", objective: "咨询营业时间" },
-    });
-    const draftId = created.json().draft.id as string;
-    await app.inject({
-      method: "POST",
-      url: `/ai-calling-agent/drafts/${draftId}/authorize`,
-      payload: { userConfirmed: true, consentPromptVersion: "cn-agent-v1" },
-    });
-    const cancelled = await app.inject({
-      method: "POST",
-      url: `/ai-calling-agent/drafts/${draftId}/cancel`,
-      payload: { reason: "too_late" },
-    });
-    await app.close();
-
-    expect(cancelled.statusCode).toBe(409);
-    expect(cancelled.json().error.code).toBe("agent_call_cannot_cancel");
-    expect(cancelled.json().draft.status).toBe("authorized");
   });
 
   it("does not start authorized drafts when execution is not configured", async () => {
@@ -232,14 +196,16 @@ describe("agent call routes", () => {
     expect(balance.json().remainingSeconds).toBe(283);
     expect(balance.json().heldSeconds).toBe(0);
     expect(balance.json().availableSeconds).toBe(283);
-    expect(ledger.json().ledger).toContainEqual(expect.objectContaining({
-      type: "usage",
-      deltaSeconds: -17,
-      balanceAfter: 283,
-      sessionId: queued.json().draft.callId,
-      note: "agent_call_usage",
-      idempotencyKey: `settle:${queued.json().draft.callId}`,
-    }));
+    expect(ledger.json().ledger).toContainEqual(
+      expect.objectContaining({
+        type: "usage",
+        deltaSeconds: -17,
+        balanceAfter: 283,
+        sessionId: queued.json().draft.callId,
+        note: "agent_call_usage",
+        idempotencyKey: `settle:${queued.json().draft.callId}`,
+      }),
+    );
   });
 
   it("protects worker execution updates with the internal secret", async () => {
@@ -270,7 +236,10 @@ describe("agent call routes", () => {
       payload: { scenario: "custom", objective: "咨询营业时间" },
     });
     const draftId = created.json().draft.id as string;
-    const list = await app.inject({ method: "GET", url: "/ai-calling-agent/drafts" });
+    const list = await app.inject({
+      method: "GET",
+      url: "/ai-calling-agent/drafts",
+    });
     const detail = await app.inject({
       method: "GET",
       url: `/ai-calling-agent/drafts/${draftId}`,
@@ -328,22 +297,25 @@ describe("agent call routes", () => {
     const firstId = await createAuthorizedDraft(app, true);
     const secondId = await createAuthorizedDraft(app, true);
 
-    const responses = await Promise.all([firstId, secondId].map((draftId) =>
-      app.inject({
-        method: "POST",
-        url: `/ai-calling-agent/drafts/${draftId}/start`,
-        payload: { consentPromptVersion: "cn-agent-v1" },
-      })
-    ));
+    const responses = await Promise.all(
+      [firstId, secondId].map((draftId) =>
+        app.inject({
+          method: "POST",
+          url: `/ai-calling-agent/drafts/${draftId}/start`,
+          payload: { consentPromptVersion: "cn-agent-v1" },
+        }),
+      ),
+    );
     await app.close();
 
     expect(responses.map((response) => response.statusCode).sort()).toEqual([
-      200,
-      429,
+      200, 429,
     ]);
     expect(getStoreSnapshot().usageHolds).toHaveLength(1);
-    expect(getStoreSnapshot().agentCallDrafts.filter(
-      (draft) => draft.status === "queued",
-    )).toHaveLength(1);
+    expect(
+      getStoreSnapshot().agentCallDrafts.filter(
+        (draft) => draft.status === "queued",
+      ),
+    ).toHaveLength(1);
   });
 });

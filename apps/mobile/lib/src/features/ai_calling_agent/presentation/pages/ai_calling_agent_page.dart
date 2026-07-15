@@ -5,7 +5,12 @@ import '../../../account/presentation/widgets/account_required_panel.dart';
 import '../../../compliance/data/voice_processing_consent_store.dart';
 import '../../../compliance/presentation/widgets/voice_processing_consent_dialog.dart';
 import '../../data/ai_calling_agent_api_client.dart';
+import '../ai_calling_agent_policy.dart';
 import '../widgets/ai_calling_agent_draft_panel.dart';
+import '../widgets/ai_calling_agent_form.dart';
+import '../widgets/ai_calling_agent_intro.dart';
+import '../widgets/ai_calling_agent_stage_bar.dart';
+import '../widgets/ai_calling_agent_task_list.dart';
 
 const _consentPromptVersion = 'domestic-ai-agent-consent-v1';
 const _disclosurePromptVersion = 'domestic-ai-agent-disclosure-v1';
@@ -33,20 +38,27 @@ class _AiCallingAgentPageState extends State<AiCallingAgentPage> {
   final TextEditingController _targetNameController = TextEditingController();
   final TextEditingController _targetPhoneController = TextEditingController();
   final TextEditingController _objectiveController = TextEditingController();
-  final ScrollController _scrollController = ScrollController();
+  final GlobalKey _draftPanelKey = GlobalKey();
   String _scenario = 'booking';
   AiCallingAgentDraft? _draft;
+  List<AiCallingAgentDraft> _drafts = const <AiCallingAgentDraft>[];
   String? _notice;
   Object? _error;
+  Object? _draftsError;
   bool _loading = false;
+  bool _draftsLoading = false;
   bool _recipientDisclosureConfirmed = false;
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _loadDrafts());
+  }
 
   @override
   void dispose() {
     _targetNameController.dispose();
     _targetPhoneController.dispose();
     _objectiveController.dispose();
-    _scrollController.dispose();
     if (_ownsClient) _client.close();
     super.dispose();
   }
@@ -57,67 +69,24 @@ class _AiCallingAgentPageState extends State<AiCallingAgentPage> {
       appBar: AppBar(title: const Text('AI 代打电话')),
       body: SafeArea(
         child: ListView(
-          controller: _scrollController,
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
           children: <Widget>[
-            const Text('先生成话术草稿，用户确认授权后才进入拨号队列。'),
-            const SizedBox(height: 4),
-            const Text('涉及付款、身份验证、合同、医疗、法律、金融时必须人工接管。'),
+            const AiCallingAgentIntro(),
             const SizedBox(height: 16),
-            DropdownButtonFormField<String>(
-              initialValue: _scenario,
-              decoration: const InputDecoration(labelText: '场景'),
-              items: const <DropdownMenuItem<String>>[
-                DropdownMenuItem(value: 'booking', child: Text('预约')),
-                DropdownMenuItem(
-                    value: 'customer_support', child: Text('客服查询')),
-                DropdownMenuItem(
-                    value: 'business_inquiry', child: Text('外贸询价')),
-                DropdownMenuItem(value: 'custom', child: Text('自定义')),
-              ],
-              onChanged: _loading
-                  ? null
-                  : (value) => setState(() => _scenario = value!),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _targetNameController,
-              decoration: const InputDecoration(labelText: '联系人或机构'),
-              textInputAction: TextInputAction.next,
-            ),
-            CheckboxListTile(
-              contentPadding: EdgeInsets.zero,
-              value: _recipientDisclosureConfirmed,
-              onChanged: _loading
-                  ? null
-                  : (value) => setState(
-                        () => _recipientDisclosureConfirmed = value ?? false,
-                      ),
-              title: const Text('外呼接通后先告知对方正在与 AI 通话'),
-              subtitle: const Text('未完成告知确认时不会进入拨号队列。'),
-              controlAffinity: ListTileControlAffinity.leading,
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _targetPhoneController,
-              decoration: const InputDecoration(labelText: '电话号码'),
-              keyboardType: TextInputType.phone,
-              textInputAction: TextInputAction.next,
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _objectiveController,
-              decoration: const InputDecoration(
-                labelText: '本次电话目标',
-                hintText: '例如：预约明天下午的牙医复诊',
+            AiCallingAgentStageBar(status: _draft?.status),
+            const SizedBox(height: 20),
+            AiCallingAgentForm(
+              scenario: _scenario,
+              targetNameController: _targetNameController,
+              targetPhoneController: _targetPhoneController,
+              objectiveController: _objectiveController,
+              disclosureConfirmed: _recipientDisclosureConfirmed,
+              busy: _loading,
+              onScenarioChanged: (value) => setState(() => _scenario = value),
+              onDisclosureChanged: (value) => setState(
+                () => _recipientDisclosureConfirmed = value,
               ),
-              maxLines: 3,
-            ),
-            const SizedBox(height: 16),
-            FilledButton.icon(
-              onPressed: _loading ? null : _createDraft,
-              icon: const Icon(Icons.description_outlined),
-              label: const Text('生成话术草稿'),
+              onCreateDraft: _createDraft,
             ),
             if (_loading) ...[
               const SizedBox(height: 12),
@@ -140,7 +109,7 @@ class _AiCallingAgentPageState extends State<AiCallingAgentPage> {
                       },
                     )
                   : Text(
-                      _errorMessage(_error!),
+                      agentCallErrorMessage(_error!),
                       style: TextStyle(
                         color: Theme.of(context).colorScheme.error,
                       ),
@@ -149,6 +118,7 @@ class _AiCallingAgentPageState extends State<AiCallingAgentPage> {
             if (_draft != null) ...[
               const SizedBox(height: 16),
               AiCallingAgentDraftPanel(
+                key: _draftPanelKey,
                 draft: _draft!,
                 busy: _loading,
                 onAuthorize: _authorizeDraft,
@@ -158,6 +128,16 @@ class _AiCallingAgentPageState extends State<AiCallingAgentPage> {
                 onCancel: _cancelDraft,
               ),
             ],
+            const SizedBox(height: 16),
+            const Divider(),
+            AiCallingAgentTaskList(
+              drafts: _drafts,
+              loading: _draftsLoading,
+              error: _draftsError,
+              selectedDraftId: _draft?.id,
+              onRefresh: _loadDrafts,
+              onSelect: _selectDraft,
+            ),
           ],
         ),
       ),
@@ -166,8 +146,13 @@ class _AiCallingAgentPageState extends State<AiCallingAgentPage> {
 
   Future<void> _createDraft() async {
     final objective = _objectiveController.text.trim();
+    final targetPhone = _targetPhoneController.text.trim();
     if (objective.isEmpty) {
       setState(() => _error = '请先填写本次电话目标');
+      return;
+    }
+    if (targetPhone.isNotEmpty && !isValidAgentCallPhone(targetPhone)) {
+      setState(() => _error = '请输入有效电话号码');
       return;
     }
     await _run(() async {
@@ -175,9 +160,9 @@ class _AiCallingAgentPageState extends State<AiCallingAgentPage> {
         scenario: _scenario,
         objective: objective,
         targetName: _targetNameController.text.trim(),
-        targetPhone: _targetPhoneController.text.trim(),
+        targetPhone: targetPhone,
       );
-      _draft = draft;
+      _setDraft(draft);
       _notice =
           draft.requiresHumanTakeover ? '已识别高风险内容，请人工接管。' : '话术草稿已生成，请确认授权。';
     });
@@ -199,7 +184,7 @@ class _AiCallingAgentPageState extends State<AiCallingAgentPage> {
         recipientDisclosureConfirmed: true,
         disclosurePromptVersion: _disclosurePromptVersion,
       );
-      _draft = next;
+      _setDraft(next);
       _notice =
           next.requiresHumanTakeover ? '风险内容需要人工接管，暂不自动外呼。' : '已授权，可开始执行。';
     });
@@ -211,10 +196,10 @@ class _AiCallingAgentPageState extends State<AiCallingAgentPage> {
     if (!await _ensureVoiceConsent()) return;
     if (!mounted) return;
     await _run(() async {
-      _draft = await _client.startDraft(
+      _setDraft(await _client.startDraft(
         draftId: draft.id,
         consentPromptVersion: _consentPromptVersion,
-      );
+      ));
       _notice = '已进入执行队列，可刷新查看进度。';
     });
   }
@@ -223,7 +208,7 @@ class _AiCallingAgentPageState extends State<AiCallingAgentPage> {
     final draft = _draft;
     if (draft == null) return;
     await _run(() async {
-      _draft = await _client.getDraft(draftId: draft.id);
+      _setDraft(await _client.getDraft(draftId: draft.id));
       _notice = '状态已刷新。';
     });
   }
@@ -232,10 +217,10 @@ class _AiCallingAgentPageState extends State<AiCallingAgentPage> {
     final draft = _draft;
     if (draft == null) return;
     await _run(() async {
-      _draft = await _client.requestTakeover(
+      _setDraft(await _client.requestTakeover(
         draftId: draft.id,
         reason: 'user_requested_takeover',
-      );
+      ));
       _notice = '已记录人工接管请求。';
     });
   }
@@ -244,9 +229,44 @@ class _AiCallingAgentPageState extends State<AiCallingAgentPage> {
     final draft = _draft;
     if (draft == null) return;
     await _run(() async {
-      _draft = await _client.cancelDraft(draftId: draft.id);
+      _setDraft(await _client.cancelDraft(draftId: draft.id));
       _notice = '已取消任务，未发起拨号。';
     });
+  }
+
+  Future<void> _loadDrafts() async {
+    if (_draftsLoading) return;
+    setState(() {
+      _draftsLoading = true;
+      _draftsError = null;
+    });
+    try {
+      final drafts = await _client.listDrafts();
+      if (!mounted) return;
+      setState(() => _drafts = drafts);
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _draftsError = error);
+    } finally {
+      if (mounted) setState(() => _draftsLoading = false);
+    }
+  }
+
+  void _selectDraft(AiCallingAgentDraft draft) {
+    setState(() {
+      _draft = draft;
+      _error = null;
+      _notice = '已打开任务。';
+    });
+    _scrollToDraft();
+  }
+
+  void _setDraft(AiCallingAgentDraft draft) {
+    _draft = draft;
+    _drafts = <AiCallingAgentDraft>[
+      draft,
+      ..._drafts.where((item) => item.id != draft.id),
+    ];
   }
 
   Future<void> _run(Future<void> Function() action) async {
@@ -269,26 +289,14 @@ class _AiCallingAgentPageState extends State<AiCallingAgentPage> {
 
   void _scrollToDraft() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!_scrollController.hasClients) return;
-      _scrollController.animateTo(
-        _scrollController.position.maxScrollExtent,
+      final context = _draftPanelKey.currentContext;
+      if (context == null) return;
+      Scrollable.ensureVisible(
+        context,
         duration: const Duration(milliseconds: 220),
         curve: Curves.easeOut,
       );
     });
-  }
-
-  String _errorMessage(Object error) {
-    final message = error.toString();
-    if (message.contains('Create agent draft failed')) {
-      return '创建任务失败，请检查 API 服务。';
-    }
-    if (message.contains('Authorize agent draft failed')) return '授权失败，请稍后重试。';
-    if (message.contains('Start agent call failed')) return '拨号执行服务未配置，暂不外呼。';
-    if (message.contains('Get agent draft failed')) return '刷新状态失败，请稍后重试。';
-    if (message.contains('Request takeover failed')) return '接管请求失败，请稍后重试。';
-    if (message.contains('Cancel agent draft failed')) return '取消任务失败，请稍后重试。';
-    return message.replaceFirst('Exception: ', '');
   }
 
   Future<bool> _ensureVoiceConsent() {

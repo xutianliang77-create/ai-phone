@@ -22,11 +22,15 @@ import {
 import { AGENT_CALL_MINIMUM_START_SECONDS } from "./agent-call-usage-readiness.js";
 import { classifyAgentCallRisk } from "./agent-call-risk.js";
 import type { AgentCallRecord } from "./agent-call-record.js";
-import { evaluateAgentCallStartPolicy } from "./agent-call-gray-policy.js";
+import {
+  evaluateAgentCallStartPolicy,
+  isValidAgentCallPhone,
+  normalizeAgentCallPhone,
+} from "./agent-call-gray-policy.js";
 import {
   cleanText,
   defaultScript,
-  isPreAuthorizationCancellable,
+  isAgentCallCancellable,
   isScenario,
   isStartedStatus,
   isTerminalWorkerStatus,
@@ -40,6 +44,8 @@ export function createAgentCallDraft(
 ) {
   const objective = cleanText(request.objective, 500);
   if (!objective || !isScenario(request.scenario)) return null;
+  const targetPhone = cleanText(request.targetPhone, 32);
+  if (targetPhone && !isValidAgentCallPhone(targetPhone)) return null;
   const suggestedScript = cleanText(request.suggestedScript, 800) ||
     defaultScript(objective);
   const risk = classifyAgentCallRisk({ objective, suggestedScript });
@@ -57,7 +63,7 @@ export function createAgentCallDraft(
     createdAt: now,
     updatedAt: now,
     ...(cleanText(request.targetName, 80) ? { targetName: cleanText(request.targetName, 80) } : {}),
-    ...(cleanText(request.targetPhone, 32) ? { targetPhone: cleanText(request.targetPhone, 32) } : {}),
+    ...(targetPhone ? { targetPhone: normalizeAgentCallPhone(targetPhone) } : {}),
   };
   getStoreSnapshot().agentCallDrafts.push(draft);
   persistStoreSnapshot();
@@ -165,18 +171,20 @@ export function cancelAgentCallDraft(
   draftId: string,
   request: CancelAiCallingAgentDraftRequest,
 ) {
-  const draft = findAgentCallDraft(userId, draftId);
-  if (!draft) return { status: "not_found" as const };
-  if (!isPreAuthorizationCancellable(draft.status)) {
-    return { status: "invalid_state" as const, draft };
-  }
-  const now = new Date().toISOString();
-  draft.status = "cancelled";
-  draft.cancellationReason = cleanText(request.reason, 200) || "user_cancelled_before_authorization";
-  draft.cancelledAt = now;
-  draft.updatedAt = now;
-  persistStoreSnapshot();
-  return { status: "cancelled" as const, draft };
+  return runStoreTransaction(() => {
+    const draft = findAgentCallDraft(userId, draftId);
+    if (!draft) return { status: "not_found" as const };
+    if (!isAgentCallCancellable(draft.status)) {
+      return { status: "invalid_state" as const, draft };
+    }
+    const now = new Date().toISOString();
+    draft.status = "cancelled";
+    draft.cancellationReason = cleanText(request.reason, 200) || "user_cancelled";
+    draft.cancelledAt = now;
+    draft.updatedAt = now;
+    persistStoreSnapshot();
+    return { status: "cancelled" as const, draft };
+  });
 }
 
 export function startAgentCallDraft(

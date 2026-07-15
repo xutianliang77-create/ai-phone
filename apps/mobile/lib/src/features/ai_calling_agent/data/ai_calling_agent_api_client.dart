@@ -231,7 +231,7 @@ class AiCallingAgentApiClient {
 
   Future<AiCallingAgentDraft> cancelDraft({
     required String draftId,
-    String reason = 'user_cancelled_before_authorization',
+    String reason = 'user_cancelled',
   }) async {
     final response = await _client.post(
       _baseUrl.resolve('/ai-calling-agent/drafts/$draftId/cancel'),

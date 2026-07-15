@@ -30,8 +30,10 @@ class AiCallingAgentDraftPanel extends StatelessWidget {
     final canRefresh = _startedStatus(draft.status);
     final canTakeover =
         draft.requiresHumanTakeover && draft.status != 'takeover_requested';
-    final canCancel =
-        draft.status == 'draft' || draft.status == 'requires_human_takeover';
+    final canCancel = draft.status == 'draft' ||
+        draft.status == 'authorized' ||
+        draft.status == 'requires_human_takeover' ||
+        draft.status == 'takeover_requested';
     return DecoratedBox(
       decoration: BoxDecoration(
         border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
