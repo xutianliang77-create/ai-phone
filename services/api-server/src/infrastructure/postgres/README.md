@@ -4,6 +4,12 @@
 和备份归档 smoke。它不把当前 API 的 SQLite 存储切换为 PostgreSQL；Repository
 切换属于 `ENT-DATA-002`。
 
+`ENT-DATA-002` 首批已提供 immutable tenant context 和 scoped transaction
+session：事务内设置 `app.tenant_id`，Repository query 自动把 tenant 注入 `$1`，
+并拒绝没有显式 tenant predicate、注释绕过或 tenant INSERT 参数错位。当前成员、
+审计和 lifecycle job claim/finalize 已强制使用 context；完整 PostgreSQL CRUD
+Repository、运行时 driver 切换及数据迁移/对账仍未完成。
+
 当前六段 migration 中，`0004` 增加 tenant lifecycle 状态和 job，`0005` 增加
 导出/删除执行所需的 scope snapshot、attempt、lease、retry、receipt 和终态约束，
 `0006` 为 audit events 增加 result/details 约束、tenant-first 查询索引和拒绝

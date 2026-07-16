@@ -15,18 +15,22 @@ import type {
 import {
   auditEnterpriseTenantJob,
 } from "./enterprise-tenant-audit.js";
+import type {
+  EnterpriseTenantContext,
+} from "./enterprise-tenant-context.js";
 
 const leaseDurationMs = 30_000;
 const retryDelayMs = 5_000;
 const maxAutomaticAttempts = 5;
 
 export function claimEnterpriseTenantLifecycleJob(input: {
+  context: EnterpriseTenantContext;
   jobId: string;
   now: Date;
   force: boolean;
 }) {
   return runStoreTransaction(() => {
-    const records = lifecycleRecords(input.jobId);
+    const records = lifecycleRecords(input.context, input.jobId);
     if (!records) return { status: "not_found" as const };
     const { tenant, member, job } = records;
     if (!executableJob(job)) return { status: "unchanged" as const, ...records };
@@ -78,13 +82,14 @@ export function claimEnterpriseTenantLifecycleJob(input: {
 }
 
 export function finalizeEnterpriseTenantLifecycleJob(input: {
+  context: EnterpriseTenantContext;
   jobId: string;
   attempt: number;
   result: TenantLifecycleExecutionResult;
   now: Date;
 }) {
   return runStoreTransaction(() => {
-    const records = lifecycleRecords(input.jobId);
+    const records = lifecycleRecords(input.context, input.jobId);
     if (!records) return { status: "not_found" as const };
     const { tenant, member, job } = records;
     if (
@@ -134,7 +139,7 @@ export function finalizeEnterpriseTenantLifecycleJob(input: {
   });
 }
 
-export function pendingEnterpriseTenantLifecycleJobIds(now = new Date()) {
+export function pendingEnterpriseTenantLifecycleJobRefs(now = new Date()) {
   return getStoreSnapshot().enterpriseTenantJobs
     .filter((job) =>
       executableJob(job) &&
@@ -145,16 +150,27 @@ export function pendingEnterpriseTenantLifecycleJobIds(now = new Date()) {
     .sort((left, right) =>
       left.updatedAt.localeCompare(right.updatedAt) || left.id.localeCompare(right.id)
     )
-    .map((job) => job.id);
+    .map((job) => ({
+      jobId: job.id,
+      tenantId: job.tenantId,
+      actorUserId: job.actorUserId,
+    }));
 }
 
-function lifecycleRecords(jobId: string): {
+function lifecycleRecords(
+  context: EnterpriseTenantContext,
+  jobId: string,
+): {
   tenant: EnterpriseTenantRecord;
   member: EnterpriseMemberRecord;
   job: EnterpriseTenantJobRecord;
 } | null {
   const store = getStoreSnapshot();
-  const job = store.enterpriseTenantJobs.find((item) => item.id === jobId);
+  const job = store.enterpriseTenantJobs.find((item) =>
+    item.id === jobId &&
+    item.tenantId === context.tenantId &&
+    item.actorUserId === context.actorUserId
+  );
   const tenant = job &&
     store.enterpriseTenants.find((item) => item.id === job.tenantId);
   const member = job && store.enterpriseMembers.find((item) =>

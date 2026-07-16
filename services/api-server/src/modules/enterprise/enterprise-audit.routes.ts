@@ -12,6 +12,9 @@ import type {
   EnterpriseAuditCursorService,
 } from "./enterprise-audit-cursor.js";
 import { requireEnterpriseScope } from "./enterprise-auth.js";
+import {
+  createEnterpriseTenantContext,
+} from "./enterprise-tenant-context.js";
 
 interface AuditQuery {
   action?: string;
@@ -49,6 +52,12 @@ export async function registerEnterpriseAuditRoutes(
       resourceType: parsed.resourceType,
       result: parsed.result,
     };
+    const repositoryContext = createEnterpriseTenantContext({
+      tenantId: context.tenant.id,
+      actorUserId: context.account.id,
+      actorRole: context.member.role,
+      traceId: String(request.id),
+    });
     let before;
     if (parsed.cursor) {
       const verified = cursorService.verify(parsed.cursor, binding);
@@ -65,7 +74,7 @@ export async function registerEnterpriseAuditRoutes(
       before = verified.position;
     }
     const listed = listEnterpriseAuditEvents({
-      tenantId: context.tenant.id,
+      context: repositoryContext,
       limit: parsed.limit,
       action: parsed.action,
       resourceType: parsed.resourceType,

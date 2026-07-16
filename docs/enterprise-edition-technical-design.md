@@ -1,6 +1,6 @@
 # AI Phone 企业版详细技术设计
 
-版本：v1.2
+版本：v1.3
 日期：2026-07-15
 状态：SaaS 详细技术方案基线待评审
 
@@ -22,7 +22,8 @@
 | SaaS tenant lifecycle | `ready_for_acceptance` | 已有幂等开通、暂停、导出/删除执行器、租约、有界恢复和 receipt 校验；真实对象存储/Provider 清理服务尚待验收 |
 | Append-only audit | `ready_for_acceptance` | 已有 tenant-scoped 查询、HMAC cursor、成员/RBAC/租户生命周期埋点和 SQLite/PostgreSQL 不可变约束；受控导出和真实 PostgreSQL 验收尚待后续任务 |
 | PostgreSQL schema | `implemented` | 已有六段可逆 migration、tenant-first 索引、复合 FK、强制 RLS、checksum/锁和归档 smoke；尚无真实 migrate/restore/PITR 证据 |
-| PostgreSQL Repository/控制面/业务聚合 | `designed` | `ENT-DATA-002` 及后续任务范围，不能从 schema 代码推导为已实现 |
+| Tenant-scoped Repository | `in_progress` | 已有 immutable branded `TenantContext`、成员/审计/生命周期 job context guard、Repository export 分类测试和 PostgreSQL scoped transaction session；真实 PostgreSQL CRUD/runtime driver 切换尚未完成 |
+| PostgreSQL 控制面/业务聚合 | `designed` | 后续 `ENT-DATA-002` 与领域任务范围，不能从 context 基础代码推导为已实现 |
 | SQLite | `demo_only` | 仅本地开发、自动化和封闭演示，不承载真实企业试点数据 |
 | PSTN/CRM/Calendar/OCR | `not_ready` 或按环境探测 | 未配置必须明确降级，不生成虚假外部对象或成功状态 |
 
@@ -551,6 +552,21 @@ OCR Worker 每 1 至 2 秒获取低码率关键帧，先计算感知 hash；变�
 - PostgreSQL RLS 作为纵深防御：事务开始后 `SET LOCAL app.tenant_id`，policy 校验当前 tenant；运行时角色不得拥有 `BYPASSRLS` 或表 owner 权限。
 - migration、备份、恢复和平台级运维使用独立受审计角色；应用凭证不能执行 DDL 或关闭 RLS。
 - RLS 不代替 Repository 条件、复合外键和自动化越权测试，三层门禁必须同时存在。
+
+当前首批实现通过工厂创建带私有 brand 的 frozen `TenantContext`，绑定
+`tenantId + actorUserId + actorRole + traceId`；业务代码不能用普通对象替代。
+成员和审计 Repository 的所有 tenant-owned 入口，以及生命周期 Worker 的
+claim/finalize，都必须接收该 context。后台 sweep 只允许平台级发现
+`tenantId + jobId + actorUserId` 引用，随后为单个 job 创建 context，不能仅按
+全局 jobId 执行。
+
+PostgreSQL scoped session 在独立事务中执行
+`set_config('app.tenant_id', tenantId, true)`，只向 Repository 暴露自动把 tenant
+注入 `$1` 的 query 方法。SELECT/UPDATE/DELETE 缺少显式 `tenant_id = $1`、
+仅在 SQL 注释中伪造 predicate，或 INSERT 的 `tenant_id` 未对应 `$1` 时均在发往
+数据库前拒绝；异常路径回滚并释放连接。该层仍是 `ENT-DATA-002` 基础门禁，
+尚未把当前 SQLite/JSON 企业 CRUD 全量切换到真实 PostgreSQL，不能据此宣称
+运行时 PostgreSQL Repository 已完成。
 
 ### 11.2 事务和一致性边界
 

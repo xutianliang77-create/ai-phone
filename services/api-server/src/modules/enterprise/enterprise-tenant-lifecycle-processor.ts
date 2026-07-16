@@ -1,23 +1,35 @@
 import {
   claimEnterpriseTenantLifecycleJob,
   finalizeEnterpriseTenantLifecycleJob,
-  pendingEnterpriseTenantLifecycleJobIds,
+  pendingEnterpriseTenantLifecycleJobRefs,
 } from "./enterprise-tenant-job.repository.js";
 import type {
   TenantLifecycleExecutor,
   TenantLifecycleExecutionResult,
 } from "./enterprise-tenant-lifecycle-executor.js";
+import {
+  createEnterpriseTenantContext,
+} from "./enterprise-tenant-context.js";
+import type {
+  EnterpriseTenantJobRecord,
+} from "./enterprise-tenant-record.js";
 
 const recoveryConcurrency = 4;
 
 export async function processEnterpriseTenantLifecycleJob(
-  jobId: string,
+  jobRef: EnterpriseTenantLifecycleJobRef,
   executor: TenantLifecycleExecutor,
   options: { now?: Date; force?: boolean } = {},
 ) {
   const now = options.now ?? new Date();
+  const context = createEnterpriseTenantContext({
+    tenantId: jobRef.tenantId,
+    actorUserId: jobRef.actorUserId,
+    traceId: `tenant-job:${jobRef.jobId}`,
+  });
   const claimed = claimEnterpriseTenantLifecycleJob({
-    jobId,
+    context,
+    jobId: jobRef.jobId,
     now,
     force: options.force ?? false,
   });
@@ -29,7 +41,8 @@ export async function processEnterpriseTenantLifecycleJob(
     result = { status: "retry", reason: "executor_unavailable" };
   }
   return finalizeEnterpriseTenantLifecycleJob({
-    jobId,
+    context,
+    jobId: jobRef.jobId,
     attempt: claimed.execution.job.attempt,
     result,
     now,
@@ -40,14 +53,14 @@ export async function recoverPendingEnterpriseTenantLifecycleJobs(
   executor: TenantLifecycleExecutor,
   now = new Date(),
 ) {
-  const jobIds = pendingEnterpriseTenantLifecycleJobIds(now);
+  const jobRefs = pendingEnterpriseTenantLifecycleJobRefs(now);
   let completedCount = 0;
   let failedCount = 0;
   let processingCount = 0;
-  for (let index = 0; index < jobIds.length; index += recoveryConcurrency) {
+  for (let index = 0; index < jobRefs.length; index += recoveryConcurrency) {
     const results = await Promise.all(
-      jobIds.slice(index, index + recoveryConcurrency).map((jobId) =>
-        processEnterpriseTenantLifecycleJob(jobId, executor, { now })
+      jobRefs.slice(index, index + recoveryConcurrency).map((jobRef) =>
+        processEnterpriseTenantLifecycleJob(jobRef, executor, { now })
       ),
     );
     for (const result of results) {
@@ -58,10 +71,26 @@ export async function recoverPendingEnterpriseTenantLifecycleJobs(
     }
   }
   return {
-    inspectedCount: jobIds.length,
+    inspectedCount: jobRefs.length,
     completedCount,
     failedCount,
     processingCount,
+  };
+}
+
+export interface EnterpriseTenantLifecycleJobRef {
+  jobId: string;
+  tenantId: string;
+  actorUserId: string;
+}
+
+export function enterpriseTenantLifecycleJobRef(
+  job: Pick<EnterpriseTenantJobRecord, "id" | "tenantId" | "actorUserId">,
+): EnterpriseTenantLifecycleJobRef {
+  return {
+    jobId: job.id,
+    tenantId: job.tenantId,
+    actorUserId: job.actorUserId,
   };
 }
 

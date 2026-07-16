@@ -31,6 +31,9 @@ import type {
   EnterpriseMemberRecord,
   EnterpriseTenantRecord,
 } from "./enterprise-tenant-record.js";
+import {
+  createEnterpriseTenantContext,
+} from "./enterprise-tenant-context.js";
 
 export async function registerEnterpriseTenantRoutes(
   app: FastifyInstance,
@@ -69,8 +72,14 @@ export async function registerEnterpriseTenantRoutes(
   app.get("/enterprise/v1/members", async (request, reply) => {
     const context = requireEnterpriseScope(request, reply, "member:read");
     if (!context) return;
+    const repositoryContext = createEnterpriseTenantContext({
+      tenantId: context.tenant.id,
+      actorUserId: context.account.id,
+      actorRole: context.member.role,
+      traceId: String(request.id),
+    });
     return {
-      members: listEnterpriseMembers(context.tenant.id).map(toMemberDto),
+      members: listEnterpriseMembers(repositoryContext).map(toMemberDto),
     };
   });
 
@@ -95,11 +104,14 @@ export async function registerEnterpriseTenantRoutes(
       return sendError(reply, 400, "invalid_member", "Invalid member");
     }
     const result = addEnterpriseMember({
-      tenantId: context.tenant.id,
+      context: createEnterpriseTenantContext({
+        tenantId: context.tenant.id,
+        actorUserId: context.account.id,
+        actorRole: context.member.role,
+        traceId: String(request.id),
+      }),
       userId,
       role: body.role,
-      actorUserId: context.account.id,
-      traceId: String(request.id),
     });
     if (result.status === "account_not_found") {
       return sendError(reply, 404, "account_not_found", "Account not found");
@@ -136,12 +148,15 @@ export async function registerEnterpriseTenantRoutes(
       return sendError(reply, 400, "invalid_member_update", "Invalid member update");
     }
     const result = updateEnterpriseMember({
-      tenantId: context.tenant.id,
+      context: createEnterpriseTenantContext({
+        tenantId: context.tenant.id,
+        actorUserId: context.account.id,
+        actorRole: context.member.role,
+        traceId: String(request.id),
+      }),
       memberId: params.memberId,
       role,
       status,
-      actorUserId: context.account.id,
-      traceId: String(request.id),
     });
     if (result.status === "not_found") {
       return sendError(reply, 404, "member_not_found", "Member not found");

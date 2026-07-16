@@ -10,6 +10,9 @@ import {
 import type {
   EnterpriseAuditEventRecord,
 } from "./enterprise-tenant-record.js";
+import type {
+  EnterpriseTenantContext,
+} from "./enterprise-tenant-context.js";
 
 export interface EnterpriseAuditPosition {
   createdAt: string;
@@ -17,26 +20,24 @@ export interface EnterpriseAuditPosition {
 }
 
 export function appendEnterpriseAuditEvent(input: {
-  tenantId: string;
-  actorUserId?: string;
+  context: EnterpriseTenantContext;
   action: string;
   resourceType: string;
   resourceId?: string;
   result: EnterpriseAuditResult;
   details?: Record<string, unknown>;
-  traceId: string;
   createdAt?: string;
 }) {
   const event: EnterpriseAuditEventRecord = {
     id: randomUUID(),
-    tenantId: requiredText(input.tenantId, 128),
-    actorUserId: optionalText(input.actorUserId, 128),
+    tenantId: input.context.tenantId,
+    actorUserId: input.context.actorUserId,
     action: requiredIdentifier(input.action),
     resourceType: requiredIdentifier(input.resourceType),
     resourceId: optionalText(input.resourceId, 128),
     result: input.result,
     details: safeDetails(input.details),
-    traceId: requiredText(input.traceId, 160),
+    traceId: input.context.traceId,
     createdAt: input.createdAt ?? new Date().toISOString(),
   };
   getStoreSnapshot().enterpriseAuditEvents.push(event);
@@ -45,7 +46,7 @@ export function appendEnterpriseAuditEvent(input: {
 }
 
 export function listEnterpriseAuditEvents(input: {
-  tenantId: string;
+  context: EnterpriseTenantContext;
   limit: number;
   action?: string;
   resourceType?: string;
@@ -54,7 +55,7 @@ export function listEnterpriseAuditEvents(input: {
 }) {
   const matching = getStoreSnapshot().enterpriseAuditEvents
     .filter((event) =>
-      event.tenantId === input.tenantId &&
+      event.tenantId === input.context.tenantId &&
       (!input.action || event.action === input.action) &&
       (!input.resourceType || event.resourceType === input.resourceType) &&
       (!input.result || event.result === input.result) &&

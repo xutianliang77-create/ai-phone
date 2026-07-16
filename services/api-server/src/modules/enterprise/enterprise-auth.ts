@@ -6,6 +6,9 @@ import { hasEnterpriseScope } from "./enterprise-rbac.js";
 import {
   appendEnterpriseAuditEvent,
 } from "./enterprise-audit.repository.js";
+import {
+  createEnterpriseTenantContext,
+} from "./enterprise-tenant-context.js";
 import { resolveEnterpriseContext } from "./enterprise-tenants.repository.js";
 
 export function requireEnterpriseContext(
@@ -42,8 +45,12 @@ export function requireEnterpriseScope(
   if (!hasEnterpriseScope(context.member.role, scope)) {
     if (audit) {
       appendEnterpriseAuditEvent({
-        tenantId: context.tenant.id,
-        actorUserId: context.account.id,
+        context: createEnterpriseTenantContext({
+          tenantId: context.tenant.id,
+          actorUserId: context.account.id,
+          actorRole: context.member.role,
+          traceId: String(request.id),
+        }),
         action: audit.action,
         resourceType: audit.resourceType,
         resourceId: audit.resourceId,
@@ -52,7 +59,6 @@ export function requireEnterpriseScope(
           reasonCode: "enterprise_scope_denied",
           scope,
         },
-        traceId: String(request.id),
       });
     }
     sendError(reply, 403, "enterprise_scope_denied", "Enterprise scope denied");

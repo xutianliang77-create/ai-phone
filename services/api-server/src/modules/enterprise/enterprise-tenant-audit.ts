@@ -7,6 +7,9 @@ import {
 import type {
   EnterpriseTenantJobRecord,
 } from "./enterprise-tenant-record.js";
+import {
+  createEnterpriseTenantContext,
+} from "./enterprise-tenant-context.js";
 
 export function auditEnterpriseTenantJob(
   job: EnterpriseTenantJobRecord,
@@ -15,8 +18,12 @@ export function auditEnterpriseTenantJob(
   createdAt: string,
 ) {
   appendEnterpriseAuditEvent({
-    tenantId: job.tenantId,
-    actorUserId: job.actorUserId,
+    context: createEnterpriseTenantContext({
+      tenantId: job.tenantId,
+      actorUserId: job.actorUserId,
+      actorRole: job.scopeSnapshot?.actor.role,
+      traceId,
+    }),
     action: job.type,
     resourceType: "tenant",
     resourceId: job.tenantId,
@@ -28,7 +35,6 @@ export function auditEnterpriseTenantJob(
       attempts: job.attempts,
       errorCode: job.errorCode,
     },
-    traceId,
     createdAt,
   });
 }
@@ -40,13 +46,15 @@ export function auditEnterpriseTenantLifecycleDenied(input: {
   traceId: string;
 }) {
   appendEnterpriseAuditEvent({
-    tenantId: input.tenantId,
-    actorUserId: input.actorUserId,
+    context: createEnterpriseTenantContext({
+      tenantId: input.tenantId,
+      actorUserId: input.actorUserId,
+      traceId: input.traceId,
+    }),
     action: input.action,
     resourceType: "tenant",
     resourceId: input.tenantId,
     result: "denied",
     details: { reasonCode: "manager_membership_required" },
-    traceId: input.traceId,
   });
 }

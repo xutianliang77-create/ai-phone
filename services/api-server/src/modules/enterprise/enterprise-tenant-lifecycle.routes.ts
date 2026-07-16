@@ -19,6 +19,7 @@ import type {
   TenantLifecycleExecutor,
 } from "./enterprise-tenant-lifecycle-executor.js";
 import {
+  enterpriseTenantLifecycleJobRef,
   processEnterpriseTenantLifecycleJob,
 } from "./enterprise-tenant-lifecycle-processor.js";
 
@@ -106,7 +107,7 @@ export async function registerEnterpriseTenantLifecycleRoutes(
         return sendLifecycleResult(reply, started);
       }
       const processed = await processEnterpriseTenantLifecycleJob(
-        started.job.id,
+        enterpriseTenantLifecycleJobRef(started.job),
         lifecycleExecutor,
         { force: true },
       );

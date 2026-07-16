@@ -1,6 +1,6 @@
 # AI Phone 企业版开发任务
 
-版本：v1.3
+版本：v1.4
 日期：2026-07-16
 状态：E0 开发中，已对齐 UI v1.0
 
@@ -18,6 +18,7 @@
 
 - `ENT-CORE-001/002/003` 已完成代码和自动化，等待验收；生产 Web 应用位于 `apps/enterprise-web`。
 - `ENT-DATA-001` 已有六段可逆 PostgreSQL migration、tenant-first 索引、复合 FK、强制 RLS、checksum/锁和备份归档 smoke；`0006` 增加 audit result/details 约束与 UPDATE/DELETE 拒绝触发器。本机无 PostgreSQL/`pg_dump`，真实 migrate/restore/PITR 证据未完成，保持 `in_progress`。
+- `ENT-DATA-002` 首批已建立只能经工厂创建的 branded immutable `TenantContext`，成员/审计 Repository 和 lifecycle claim/finalize 强制接收 context；后台恢复先发现 tenant/job/actor ref，再进入 tenant scope。PostgreSQL scoped session 使用事务内 `set_config`，并拒绝缺少显式 `tenant_id = $1` 或错误 tenant INSERT 绑定的 SQL。真实 PostgreSQL CRUD Repository、运行时 driver 切换和数据迁移对账尚未完成，保持 `in_progress`。
 - `ENT-CORE-009` 已完成租户创建/区域开通幂等、失败重试、暂停、导出和删除执行器；导出固化 tenant/member/job 与 actor scope 快照，执行使用租约、有界重试和 receipt hash，删除只在 receipt 校验后进入 `deleted`，等待真实生命周期服务与对象存储验收。
 - `ENT-CORE-011` 已完成按 active membership 签发短期 HMAC route document、公开端点校验和企业写入区域 guard，等待正式域名/密钥验收。
 - `ENT-CORE-008` 已完成 PSTN/CRM/Calendar/Channel 统一 capability document、实时 probe contract、敏感配置过滤和明确降级，等待真实 Provider 验收。
@@ -44,7 +45,7 @@
 | ENT-CORE-011 | Tenant Directory | CORE-009 | homeRegion/cell、签名 route document | 区域错误时拒绝业务写入 | ready_for_acceptance |
 | ENT-CORE-012 | SaaS 计量聚合 | CORE-007/010 | usage event、账期聚合、调整流水 | 不修改原始 ledger，账单可对账 | todo |
 | ENT-DATA-001 | 企业 PostgreSQL schema | CORE-001 | schema、migration、FK、backup | 真实企业试点数据库门禁通过 | in_progress |
-| ENT-DATA-002 | Tenant-scoped Repository | DATA-001 | Repository context 和 lint/test | 不存在无 tenant 查询入口 | todo |
+| ENT-DATA-002 | Tenant-scoped Repository | DATA-001 | Repository context 和 lint/test | 不存在无 tenant 查询入口 | in_progress |
 | ENT-DATA-003 | Inbox/Outbox | DATA-001 | 幂等收件、事务发件、重试 | 重放100次仅一次副作用 | todo |
 | ENT-OBS-001 | 企业链路追踪 | CORE-006 | trace IDs、质量和成本报告 | session 到 ledger/tool 可追踪 | todo |
 

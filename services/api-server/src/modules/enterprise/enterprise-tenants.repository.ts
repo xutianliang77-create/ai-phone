@@ -15,6 +15,9 @@ import type {
 import {
   appendEnterpriseAuditEvent,
 } from "./enterprise-audit.repository.js";
+import type {
+  EnterpriseTenantContext,
+} from "./enterprise-tenant-context.js";
 
 export function resolveEnterpriseContext(
   userId: string,
@@ -41,9 +44,9 @@ export function resolveEnterpriseContext(
   return { status: "resolved" as const, ...active[0]! };
 }
 
-export function listEnterpriseMembers(tenantId: string) {
+export function listEnterpriseMembers(context: EnterpriseTenantContext) {
   return getStoreSnapshot().enterpriseMembers
-    .filter((member) => member.tenantId === tenantId)
+    .filter((member) => member.tenantId === context.tenantId)
     .sort((left, right) => left.createdAt.localeCompare(right.createdAt));
 }
 
@@ -57,11 +60,9 @@ export function listEnterpriseMemberships(userId: string) {
 }
 
 export function addEnterpriseMember(input: {
-  tenantId: string;
+  context: EnterpriseTenantContext;
   userId: string;
   role: EnterpriseMemberRole;
-  actorUserId: string;
-  traceId: string;
 }) {
   return runStoreTransaction(() => {
     const store = getStoreSnapshot();
@@ -70,13 +71,14 @@ export function addEnterpriseMember(input: {
     );
     if (!account) return { status: "account_not_found" as const };
     const existing = store.enterpriseMembers.find((member) =>
-      member.tenantId === input.tenantId && member.userId === input.userId
+      member.tenantId === input.context.tenantId &&
+      member.userId === input.userId
     );
     if (existing) return { status: "already_exists" as const, member: existing };
     const now = new Date().toISOString();
     const member: EnterpriseMemberRecord = {
       id: randomUUID(),
-      tenantId: input.tenantId,
+      tenantId: input.context.tenantId,
       userId: input.userId,
       role: input.role,
       status: "active",
@@ -87,8 +89,7 @@ export function addEnterpriseMember(input: {
     };
     store.enterpriseMembers.push(member);
     appendEnterpriseAuditEvent({
-      tenantId: input.tenantId,
-      actorUserId: input.actorUserId,
+      context: input.context,
       action: "member.create",
       resourceType: "member",
       resourceId: member.id,
@@ -98,7 +99,6 @@ export function addEnterpriseMember(input: {
         role: member.role,
         status: member.status,
       },
-      traceId: input.traceId,
       createdAt: now,
     });
     persistStoreSnapshot();
@@ -107,16 +107,14 @@ export function addEnterpriseMember(input: {
 }
 
 export function updateEnterpriseMember(input: {
-  tenantId: string;
+  context: EnterpriseTenantContext;
   memberId: string;
   role?: EnterpriseMemberRole;
   status?: EnterpriseMemberStatus;
-  actorUserId: string;
-  traceId: string;
 }) {
   return runStoreTransaction(() => {
     const member = getStoreSnapshot().enterpriseMembers.find((item) =>
-      item.tenantId === input.tenantId && item.id === input.memberId
+      item.tenantId === input.context.tenantId && item.id === input.memberId
     );
     if (!member) return { status: "not_found" as const };
     if (member.role === "owner") return { status: "owner_protected" as const };
@@ -126,8 +124,7 @@ export function updateEnterpriseMember(input: {
     member.updatedAt = now;
     member.version += 1;
     appendEnterpriseAuditEvent({
-      tenantId: input.tenantId,
-      actorUserId: input.actorUserId,
+      context: input.context,
       action: "member.update",
       resourceType: "member",
       resourceId: member.id,
@@ -138,7 +135,6 @@ export function updateEnterpriseMember(input: {
         status: member.status,
         version: member.version,
       },
-      traceId: input.traceId,
       createdAt: now,
     });
     persistStoreSnapshot();
