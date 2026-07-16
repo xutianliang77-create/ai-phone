@@ -13,7 +13,8 @@ import {
 
 const { Client } = pg;
 export const enterpriseTenantTableNames = [
-  "members", "api_credentials", "entitlements", "subscriptions",
+  "members", "user_tenant_directory", "api_credentials", "entitlements",
+  "subscriptions",
   "knowledge_sources", "knowledge_versions", "term_packs",
   "policy_decisions", "audit_events", "usage_ledger", "idempotency_keys",
   "inbox_events", "outbox_events", "marketing_campaigns", "marketing_leads",

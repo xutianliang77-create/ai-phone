@@ -3,11 +3,15 @@ import {
   isEnterpriseMemberRole,
   isEnterpriseMemberStatus,
   type EnterpriseAuditDetailValue,
+  type EnterpriseTenantJobStatus,
+  type EnterpriseTenantJobType,
   type EnterpriseTenantStatus,
 } from "@translation/contracts";
 import type {
   EnterpriseAuditEventRecord,
   EnterpriseMemberRecord,
+  EnterpriseTenantJobRecord,
+  EnterpriseTenantLifecycleSnapshot,
   EnterpriseTenantRecord,
 } from "../../modules/enterprise/enterprise-tenant-record.js";
 
@@ -51,6 +55,27 @@ export interface EnterpriseAuditPostgresRow extends Record<string, unknown> {
   created_at: unknown;
 }
 
+export interface EnterpriseTenantJobPostgresRow
+  extends Record<string, unknown> {
+  id: unknown;
+  tenant_id: unknown;
+  actor_id: unknown;
+  job_type: unknown;
+  idempotency_key: unknown;
+  request_hash: unknown;
+  status: unknown;
+  attempts: unknown;
+  error_code: unknown;
+  lease_expires_at: unknown;
+  next_attempt_at: unknown;
+  scope_snapshot: unknown;
+  receipt_ref: unknown;
+  receipt_hash: unknown;
+  completed_at: unknown;
+  created_at: unknown;
+  updated_at: unknown;
+}
+
 const tenantStatuses = new Set<EnterpriseTenantStatus>([
   "provisioning",
   "provisioning_failed",
@@ -58,6 +83,17 @@ const tenantStatuses = new Set<EnterpriseTenantStatus>([
   "suspended",
   "deletion_requested",
   "deleted",
+]);
+const tenantJobTypes = new Set<EnterpriseTenantJobType>([
+  "tenant.provision",
+  "tenant.suspend",
+  "tenant.export",
+  "tenant.delete",
+]);
+const tenantJobStatuses = new Set<EnterpriseTenantJobStatus>([
+  "processing",
+  "completed",
+  "failed",
 ]);
 
 export function mapEnterpriseTenantRow(
@@ -140,6 +176,50 @@ export function mapEnterpriseAuditRow(
   };
 }
 
+export function mapEnterpriseTenantJobRow(
+  row: EnterpriseTenantJobPostgresRow,
+  tenantId: string,
+): EnterpriseTenantJobRecord {
+  const rowTenantId = text(row.tenant_id);
+  assertTenantMatch(rowTenantId, tenantId);
+  const type = text(row.job_type);
+  const status = text(row.status);
+  if (!tenantJobTypes.has(type as EnterpriseTenantJobType)) {
+    throw new Error("Invalid enterprise tenant job type");
+  }
+  if (!tenantJobStatuses.has(status as EnterpriseTenantJobStatus)) {
+    throw new Error("Invalid enterprise tenant job status");
+  }
+  const errorCode = optionalText(row.error_code);
+  const leaseExpiresAt = optionalIso(row.lease_expires_at);
+  const nextAttemptAt = optionalIso(row.next_attempt_at);
+  const scopeSnapshot = optionalJsonObject<EnterpriseTenantLifecycleSnapshot>(
+    row.scope_snapshot,
+  );
+  const receiptRef = optionalText(row.receipt_ref);
+  const receiptHash = optionalText(row.receipt_hash);
+  const completedAt = optionalIso(row.completed_at);
+  return {
+    id: text(row.id),
+    tenantId: rowTenantId,
+    actorUserId: text(row.actor_id),
+    type: type as EnterpriseTenantJobType,
+    idempotencyKey: text(row.idempotency_key),
+    requestHash: text(row.request_hash),
+    status: status as EnterpriseTenantJobStatus,
+    attempts: nonNegativeInteger(row.attempts),
+    ...(errorCode ? { errorCode } : {}),
+    ...(leaseExpiresAt ? { leaseExpiresAt } : {}),
+    ...(nextAttemptAt ? { nextAttemptAt } : {}),
+    ...(scopeSnapshot ? { scopeSnapshot } : {}),
+    ...(receiptRef ? { receiptRef } : {}),
+    ...(receiptHash ? { receiptHash } : {}),
+    ...(completedAt ? { completedAt } : {}),
+    createdAt: iso(row.created_at),
+    updatedAt: iso(row.updated_at),
+  };
+}
+
 function assertTenantMatch(value: string, tenantId: string) {
   if (value !== tenantId) {
     throw new Error("Enterprise PostgreSQL row tenant mismatch");
@@ -178,6 +258,23 @@ function positiveInteger(value: unknown) {
     throw new Error("Invalid enterprise PostgreSQL positive integer");
   }
   return parsed;
+}
+
+function nonNegativeInteger(value: unknown) {
+  const parsed = Number(value);
+  if (!Number.isSafeInteger(parsed) || parsed < 0) {
+    throw new Error("Invalid enterprise PostgreSQL non-negative integer");
+  }
+  return parsed;
+}
+
+function optionalJsonObject<T>(value: unknown): T | undefined {
+  if (value === null || value === undefined) return undefined;
+  const parsed = typeof value === "string" ? JSON.parse(value) : value;
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new Error("Invalid enterprise PostgreSQL JSON object");
+  }
+  return structuredClone(parsed) as T;
 }
 
 function auditDetails(value: unknown) {

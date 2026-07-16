@@ -4,24 +4,29 @@
 和备份归档 smoke。它不把当前 API 的 SQLite 存储切换为 PostgreSQL；Repository
 切换属于 `ENT-DATA-002`。
 
-`ENT-DATA-002` 首批已提供 immutable tenant context 和 scoped transaction
-session：事务内设置 `app.tenant_id`，Repository query 自动把 tenant 注入 `$1`，
-并拒绝没有显式 tenant predicate、注释绕过或 tenant INSERT 参数错位。当前成员、
-审计和 lifecycle job claim/finalize 已强制使用 context；完整 PostgreSQL CRUD
-Repository、运行时 driver 切换及数据迁移/对账仍未完成。
+`ENT-DATA-002` 已提供两类 transaction-local session：
 
-第二批已提供 Tenant/Member/Audit 异步 PostgreSQL unit-of-work。tenant 根记录只能
-通过限制为 `enterprise.tenants WHERE id = $1` 的专用查询读取；成员支持
-tenant-scoped insert 和 expectedVersion CAS update，审计支持同事务 append 与倒序
-分页。所有输入记录和返回行都会再次核对 tenant。该代码尚未接入 API runtime：
-Tenant Directory、lifecycle/events 和数据迁移未完成前，不允许单独把成员或审计
-端点切到 PostgreSQL。
+- tenant session 设置 `app.tenant_id`，把 tenant 注入 `$1`，拒绝缺少 tenant
+  predicate、注释绕过、错位 INSERT，以及 tenant 根表的 JOIN/子查询/UNION/OR。
+- directory session 设置 `app.user_id`，只允许从
+  `enterprise.user_tenant_directory` 单表读取显式 `user_id = $1` 的本人记录。
 
-当前七段 migration 中，`0004` 增加 tenant lifecycle 状态和 job，`0005` 增加
+forced RLS 下不能用普通 tenant session 扫描 members 来发现 membership，也不能给
+应用运行角色 `BYPASSRLS`。因此目录只返回本人 active `tenantId + memberId` 引用，
+再逐租户创建隔离 session，重新核对 tenant/member/user/status。成员写入和租户暂停
+会在同一 transaction 内同步目录投影。
+
+Tenant/Member/Audit、lifecycle、Inbox/Outbox Repository 已可组合到一个异步
+PostgreSQL unit-of-work。它们提供 tenant 根记录安全查询、成员 CAS、审计分页、
+lifecycle job 锁/CAS、inbox/outbox 幂等返回、outbox lease claim/finalize 和
+snake_case 行映射；输入与返回行都会再次核对 tenant。该代码尚未接入 API runtime。
+
+当前八段 migration 中，`0004` 增加 tenant lifecycle 状态和 job，`0005` 增加
 导出/删除执行所需的 scope snapshot、attempt、lease、retry、receipt 和终态约束，
 `0006` 为 audit events 增加 result/details 约束、tenant-first 查询索引和拒绝
 UPDATE/DELETE 的 append-only 触发器，`0007` 为 enterprise inbox/outbox 增加
-trace、lease、错误码和 tenant-first recovery 索引。这些结构支持控制面代码和
+trace、lease、错误码和 tenant-first recovery 索引，`0008` 增加 user-context
+Tenant Directory、self/tenant policies 和受控 backfill。这些结构支持控制面代码和
 自动化，不代表真实 PostgreSQL、Provider 或对象存储验收已经完成。
 
 ## Migration
@@ -57,6 +62,12 @@ ENTERPRISE_DATABASE_URL='postgresql://...' \
 - API 运行时角色不得是表 owner、superuser，也不得拥有 `BYPASSRLS`。
 - Repository 事务必须先执行 `SET LOCAL app.tenant_id = $1`；这属于
   `ENT-DATA-002`，RLS 不能替代 Repository 中的 tenant 条件。
+- Tenant Directory 使用单独的 `SET LOCAL app.user_id = $1` 和 self policy；目录
+  查询不得 JOIN tenant-owned 表，候选记录必须再进入 tenant session 复核。
+
+HTTP runtime、平台级跨租户 pending reference 发现、当前账号 subject ID 到
+PostgreSQL identity 列的映射/迁移，以及 SQLite/JSON 数据对账仍未完成。完成前禁止
+局部切换或双写；平台 Worker 也不得使用 `BYPASSRLS` 应用角色扫描并修改全租户数据。
 
 ## Backup smoke
 

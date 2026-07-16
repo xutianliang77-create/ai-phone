@@ -48,6 +48,7 @@ describe("enterprise PostgreSQL tenant repository", () => {
       async (repository) => {
         const tenant = await repository.findTenant();
         const members = await repository.listMembers();
+        const memberByUser = await repository.findMemberByUserId(userId);
         const inserted = await repository.insertMember(memberRecord());
         const updated = await repository.updateMember({
           memberId,
@@ -64,7 +65,7 @@ describe("enterprise PostgreSQL tenant repository", () => {
             id: "00000000-0000-4000-8000-000000000099",
           },
         });
-        return { tenant, members, inserted, updated, audit };
+        return { tenant, members, memberByUser, inserted, updated, audit };
       },
     );
 
@@ -74,6 +75,7 @@ describe("enterprise PostgreSQL tenant repository", () => {
       version: 3,
     });
     expect(result.members).toEqual([memberRecord()]);
+    expect(result.memberByUser).toEqual(memberRecord());
     expect(result.inserted).toEqual({
       status: "created",
       member: memberRecord(),
@@ -92,6 +94,9 @@ describe("enterprise PostgreSQL tenant repository", () => {
     expect(fixture.calls.find(({ sql }) =>
       sql.includes("INSERT INTO enterprise.members")
     )?.values?.slice(0, 3)).toEqual([tenantId, memberId, userId]);
+    expect(fixture.calls.filter(({ sql }) =>
+      sql.includes("INSERT INTO enterprise.user_tenant_directory")
+    )).toHaveLength(2);
     expect(fixture.calls.find(({ sql }) =>
       sql.includes("FROM enterprise.audit_events")
     )?.values).toEqual([
@@ -205,6 +210,22 @@ describe("enterprise PostgreSQL tenant repository", () => {
     expect(fixture.calls.at(-1)?.sql).toBe("ROLLBACK");
   });
 
+  it("rejects a member-by-user row for a different user", async () => {
+    const fixture = poolFixture((sql) =>
+      sql.includes("FROM enterprise.members")
+        ? [memberRow({
+            user_id: "00000000-0000-4000-8000-000000000099",
+          })]
+        : []
+    );
+
+    await expect(withEnterpriseTenantPostgresRepository(
+      fixture.pool,
+      context(),
+      (repository) => repository.findMemberByUserId(userId),
+    )).rejects.toThrow("user mismatch");
+  });
+
   it("rolls back an appended audit event when later work fails", async () => {
     const fixture = poolFixture(() => []);
 
@@ -222,7 +243,6 @@ describe("enterprise PostgreSQL tenant repository", () => {
     expect(fixture.calls.at(-1)?.sql).toBe("ROLLBACK");
   });
 });
-
 function context() {
   return createEnterpriseTenantContext({
     tenantId,
@@ -231,7 +251,6 @@ function context() {
     traceId: "trace-a",
   });
 }
-
 function memberRecord(): EnterpriseMemberRecord {
   return {
     id: memberId,
@@ -245,7 +264,6 @@ function memberRecord(): EnterpriseMemberRecord {
     version: 1,
   };
 }
-
 function auditRecord(): EnterpriseAuditEventRecord {
   return {
     id: auditId,
@@ -260,7 +278,6 @@ function auditRecord(): EnterpriseAuditEventRecord {
     createdAt: now,
   };
 }
-
 function tenantRow(overrides: Record<string, unknown> = {}) {
   return {
     id: tenantId,
@@ -278,7 +295,6 @@ function tenantRow(overrides: Record<string, unknown> = {}) {
     ...overrides,
   };
 }
-
 function memberRow(overrides: Record<string, unknown> = {}) {
   return {
     id: memberId,
@@ -293,7 +309,6 @@ function memberRow(overrides: Record<string, unknown> = {}) {
     ...overrides,
   };
 }
-
 function auditRow(overrides: Record<string, unknown> = {}) {
   return {
     id: auditId,

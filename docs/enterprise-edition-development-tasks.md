@@ -1,6 +1,6 @@
 # AI Phone 企业版开发任务
 
-版本：v1.6
+版本：v1.7
 日期：2026-07-17
 状态：E0 开发中，已对齐 UI v1.0
 
@@ -17,8 +17,8 @@
 ### 1.1 当前状态快照
 
 - `ENT-CORE-001/002/003` 已完成代码和自动化，等待验收；生产 Web 应用位于 `apps/enterprise-web`。
-- `ENT-DATA-001` 已有七段可逆 PostgreSQL migration、tenant-first 索引、复合 FK、强制 RLS、checksum/锁和备份归档 smoke；`0006` 增加 audit 不可变约束，`0007` 增加 enterprise inbox/outbox trace、lease、错误码和 recovery 索引。本机无 PostgreSQL/`pg_dump`，真实 migrate/restore/PITR 证据未完成，保持 `in_progress`。
-- `ENT-DATA-002` 已建立 branded immutable `TenantContext`、Repository export 分类和 PostgreSQL scoped session；成员/审计/lifecycle claim/finalize 均强制 tenant context。第二批新增异步 PostgreSQL Tenant/Member/Audit unit-of-work，支持 tenant 根记录专用查询、成员 insert/CAS update、审计 append/cursor 分页、snake_case 行映射与输入/返回行双向 tenant 校验。Tenant Directory、lifecycle/events PostgreSQL Repository、运行时 driver 切换和数据迁移对账尚未完成，保持 `in_progress`。
+- `ENT-DATA-001` 已有八段可逆 PostgreSQL migration、tenant-first 索引、复合 FK、强制 RLS、checksum/锁和备份归档 smoke；`0006` 增加 audit 不可变约束，`0007` 增加 enterprise inbox/outbox 投递字段，`0008` 增加 forced-RLS user tenant directory。本机无 PostgreSQL/`pg_dump`，真实 migrate/restore/PITR 证据未完成，保持 `in_progress`。
+- `ENT-DATA-002` 已建立 branded immutable `TenantContext`、tenant/user scoped session 和异步 PostgreSQL unit-of-work。Tenant/Member/Audit、Tenant Directory、lifecycle、Inbox/Outbox Repository 已实现：目录发现只在 `app.user_id` 的 forced RLS 下返回本人 active membership 引用，再逐租户使用独立 tenant session 加载；成员投影、生命周期状态、inbox/outbox、claim/finalize 和领域写入可在同一事务内提交。HTTP runtime driver、平台级跨租户恢复发现、当前账号 subject ID 到 PostgreSQL identity 列的映射/迁移和全量数据对账尚未完成，保持 `in_progress`。
 - `ENT-DATA-003` 已完成 tenant-scoped inbox 去重、稳定 JSON hash、领域写入/inbox/outbox 同事务、outbox 内容不可变、lease claim、指数退避和恢复处理；100 次相同事件重放只执行一次领域副作用，跨租户 provider ID/idempotency key 相互隔离。SQLite 证据仅用于自动化和封闭演示，真实 PostgreSQL 并发 claim 与 Provider sandbox 仍待正式验收。
 - `ENT-CORE-009` 已完成租户创建/区域开通幂等、失败重试、暂停、导出和删除执行器；导出固化 tenant/member/job 与 actor scope 快照，执行使用租约、有界重试和 receipt hash，删除只在 receipt 校验后进入 `deleted`，等待真实生命周期服务与对象存储验收。
 - `ENT-CORE-011` 已完成按 active membership 签发短期 HMAC route document、公开端点校验和企业写入区域 guard，等待正式域名/密钥验收。
@@ -27,7 +27,7 @@
 - `ENT-UI-001` 已完成生产颜色/字号/尺寸/圆角令牌、Material Icons 语义注册表、Flutter 对照和依赖扫描，等待验收。
 - `ENT-UI-002` 已完成 active membership 租户选择、共享 role/scope 真值、九角色 route discovery、scope 导航、直接/嵌套路由 guard 及签名 route document 联调，等待验收。
 - `ENT-UI-003` 已完成八态注册表、语义图标、ARIA live/alert、trace ID、可行动入口和组件矩阵，并接入服务端 Provider capability、租户生命周期 job 及 409/412 冲突映射，等待验收。
-- PostgreSQL schema 代码已实现但真实数据库门禁未通过；生命周期 HTTP 执行器尚未接入真实对象存储/Provider 清理服务。基础 append-only 审计已实现，但受控审计导出、retention/对象清单和 Provider 删除收敛仍属于 `ENT-UI-008/ENT-REL-002`，企业业务聚合和外部 Provider 仍未通过实现或真实环境门禁。
+- PostgreSQL schema 和本批 Repository 代码已实现但尚未接入 HTTP runtime，真实数据库门禁也未通过；生命周期 HTTP 执行器尚未接入真实对象存储/Provider 清理服务。基础 append-only 审计已实现，但受控审计导出、retention/对象清单和 Provider 删除收敛仍属于 `ENT-UI-008/ENT-REL-002`，企业业务聚合和外部 Provider 仍未通过实现或真实环境门禁。
 
 ## 2. P0 企业公共底座
 

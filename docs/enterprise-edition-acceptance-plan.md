@@ -1,7 +1,7 @@
 # AI Phone 企业版验收任务与计划
 
-版本：v1.1
-日期：2026-07-16
+版本：v1.2
+日期：2026-07-17
 状态：可执行验收计划，已对齐 UI v1.0
 
 ## 1. 验收目标
@@ -143,6 +143,8 @@ Mock 只能验证协议，不能替代 iPhone/Web、真实 LiveKit、真实模�
 - 期望所有读写返回无权限或不存在，日志不泄露资源是否存在。
 - 并发运行 50 个 A/B 任务，查询、列表、分页和导出均不串租户。
 - 租户 A 持续高负载时，租户 B 的登录、会议和客服仍满足限流后的服务目标。
+- 使用无 `BYPASSRLS`、非表 owner 的真实应用角色：仅设置 `app.user_id` 时只能读取本人 Tenant Directory；不能 JOIN/子查询 members，也不能读取其他 user 的目录。
+- 从本人目录获得 tenant 引用后必须逐租户重新校验 active tenant/member；伪造 selected tenant 时不得先泄露 tenant 是否存在。
 
 ### 6.2 RBAC
 
@@ -161,6 +163,7 @@ Mock 只能验证协议，不能替代 iPhone/Web、真实 LiveKit、真实模�
 - session 终态、hold release、ledger 和 outbox 原子提交。
 - API 重启后余额、任务和审计保持一致。
 - 在真实 PostgreSQL 上并发 claim 同一 outbox，只有一个 Worker 获得有效 lease；进程在 claim、Provider 返回和 finalize 三处故障后均可恢复。
+- lifecycle 和 outbox 的平台恢复发现只返回最小 tenant/job/event 引用；实际 claim/finalize 必须在对应 tenant RLS transaction 内完成。
 - Provider 已完成但响应丢失时，重试必须携带同一 idempotency key 并获得同一结果；没有 sandbox 或白名单 Provider 证据时，不能把自动化结果升级为 `accepted`。
 
 ## 7. A1 企业会议验收
@@ -338,6 +341,7 @@ Mock 只能验证协议，不能替代 iPhone/Web、真实 LiveKit、真实模�
 - accounts、tenant、session、segment、campaign、support、meeting、ledger 和 object hash 数量一致。
 - 迁移窗口发生错误时可回滚旧系统。
 - PostgreSQL PITR 和对象存储恢复演练。
+- migration 后使用普通应用角色验证 `FORCE ROW LEVEL SECURITY`；确认 user directory self policy、tenant projection policy、成员投影同步和跨租户拒绝均生效。
 - 恢复后余额、审计、禁拨和授权证据一致。
 - 租户迁移 cell 后旧 cell 拒绝新写入，route document 指向新 cell。
 

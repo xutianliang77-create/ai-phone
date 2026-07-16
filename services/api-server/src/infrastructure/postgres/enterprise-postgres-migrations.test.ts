@@ -18,6 +18,7 @@ describe("enterprise PostgreSQL migrations", () => {
       "0005_enterprise_tenant_lifecycle_executor",
       "0006_enterprise_audit_append_only",
       "0007_enterprise_outbox_delivery",
+      "0008_enterprise_user_tenant_directory",
     ]);
     for (const migration of migrations) {
       expect(migration.up.trim()).not.toBe("");
@@ -55,6 +56,10 @@ describe("enterprise PostgreSQL migrations", () => {
     expect(sql).toContain("lease_expires_at");
     expect(sql).toContain("outbox_events_tenant_recovery_idx");
     expect(sql).toContain("enterprise_outbox_delivery_content_immutable");
+    expect(sql).toContain("CREATE TABLE enterprise.user_tenant_directory");
+    expect(sql).toContain("user_tenant_directory_self_read");
+    expect(sql).toContain("user_tenant_directory_tenant_read");
+    expect(sql).toContain("enterprise.current_user_id()");
   });
 
   it("applies each migration once and records its checksum", async () => {

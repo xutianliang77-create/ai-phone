@@ -86,27 +86,34 @@ function assertTenantScopedSql(sql: string) {
 
 function assertTenantRecordSql(sql: string) {
   const normalized = normalizedSql(sql);
-  if (!/^select\b/i.test(normalized) ||
-    !/\bfrom\s+enterprise\.tenants\b/i.test(normalized)) {
+  const isSelect = /^select\b/i.test(normalized);
+  const isUpdate = /^update\s+enterprise\.tenants\b/i.test(normalized);
+  if (!isSelect && !isUpdate) {
     throw new Error(
-      "Enterprise tenant record SQL must select from enterprise.tenants",
+      "Enterprise tenant record SQL must target enterprise.tenants",
     );
   }
   const enterpriseTables = [...normalized.matchAll(
     /\benterprise\.([a-z_][a-z0-9_]*)\b/gi,
   )].map((match) => match[1]!.toLowerCase());
-  const fromCount = normalized.match(/\bfrom\b/gi)?.length ?? 0;
-  const tenantFrom = normalized.match(
-    /\bfrom\s+enterprise\.tenants\b([\s\S]*?)\bwhere\b/i,
-  );
-  const tenantAlias = tenantFrom?.[1]?.trim() ?? "";
+  if (!enterpriseTables.includes("tenants")) {
+    throw new Error(
+      "Enterprise tenant record SQL must target enterprise.tenants",
+    );
+  }
   if (
     enterpriseTables.some((table) => table !== "tenants") ||
-    fromCount !== 1 ||
-    !tenantFrom ||
-    (tenantAlias !== "" && !/^[a-z_][a-z0-9_]*$/i.test(tenantAlias)) ||
     /\bjoin\b/i.test(normalized) ||
+    /\b(?:or|union)\b/i.test(normalized) ||
     normalized.includes(";")
+  ) {
+    throw new Error("Enterprise tenant record SQL cannot join other tables");
+  }
+  if (isSelect) assertTenantRecordSelect(normalized);
+  if (
+    isUpdate &&
+    (/\bfrom\b/i.test(normalized) ||
+      (normalized.match(/\bselect\b/gi)?.length ?? 0) > 0)
   ) {
     throw new Error("Enterprise tenant record SQL cannot join other tables");
   }
@@ -114,6 +121,24 @@ function assertTenantRecordSql(sql: string) {
     normalized,
   )) {
     throw new Error("Enterprise tenant record SQL must contain id = $1");
+  }
+}
+
+function assertTenantRecordSelect(normalized: string) {
+  const fromCount = normalized.match(/\bfrom\b/gi)?.length ?? 0;
+  const selectCount = normalized.match(/\bselect\b/gi)?.length ?? 0;
+  const tenantFrom = normalized.match(
+    /\bfrom\s+enterprise\.tenants\b([\s\S]*?)\bwhere\b/i,
+  );
+  const tenantAlias = tenantFrom?.[1]?.trim() ?? "";
+  if (
+    fromCount !== 1 ||
+    selectCount !== 1 ||
+    !tenantFrom ||
+    (tenantAlias !== "" &&
+      !/^(?:as\s+)?[a-z_][a-z0-9_]*$/i.test(tenantAlias))
+  ) {
+    throw new Error("Enterprise tenant record SQL cannot join other tables");
   }
 }
 

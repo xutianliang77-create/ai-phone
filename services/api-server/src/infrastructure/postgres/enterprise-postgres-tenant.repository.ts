@@ -33,6 +33,7 @@ export interface EnterprisePostgresAuditPosition {
 export interface EnterpriseTenantPostgresRepository {
   findTenant(): Promise<EnterpriseTenantRecord | null>;
   listMembers(): Promise<EnterpriseMemberRecord[]>;
+  findMemberByUserId(userId: string): Promise<EnterpriseMemberRecord | null>;
   insertMember(member: EnterpriseMemberRecord): Promise<
     | { status: "created"; member: EnterpriseMemberRecord }
     | { status: "already_exists" }
@@ -70,8 +71,14 @@ export function withEnterpriseTenantPostgresRepository<T>(
   return withEnterpriseTenantPostgresSession(
     pool,
     context,
-    (session) => operation(new PostgresTenantRepository(session)),
+    (session) => operation(createEnterpriseTenantPostgresRepository(session)),
   );
+}
+
+export function createEnterpriseTenantPostgresRepository(
+  session: EnterpriseTenantPostgresSession,
+): EnterpriseTenantPostgresRepository {
+  return new PostgresTenantRepository(session);
 }
 
 class PostgresTenantRepository implements EnterpriseTenantPostgresRepository {
@@ -105,6 +112,24 @@ class PostgresTenantRepository implements EnterpriseTenantPostgresRepository {
     );
   }
 
+  async findMemberByUserId(userId: string) {
+    const result = await this.session.query<EnterpriseMemberPostgresRow>(`
+      SELECT id, tenant_id, user_id, role, status, joined_at,
+        created_at, updated_at, version
+      FROM enterprise.members
+      WHERE tenant_id = $1 AND user_id = $2
+    `, [userId]);
+    if (!result.rows[0]) return null;
+    const member = mapEnterpriseMemberRow(
+      result.rows[0],
+      this.session.context.tenantId,
+    );
+    if (member.userId !== userId) {
+      throw new Error("Enterprise PostgreSQL member user mismatch");
+    }
+    return member;
+  }
+
   async insertMember(member: EnterpriseMemberRecord) {
     assertTenantMatch(member.tenantId, this.session.context.tenantId);
     const result = await this.session.query<EnterpriseMemberPostgresRow>(`
@@ -126,15 +151,17 @@ class PostgresTenantRepository implements EnterpriseTenantPostgresRepository {
       member.updatedAt,
       member.version,
     ]);
-    return result.rows[0]
-      ? {
-          status: "created" as const,
-          member: mapEnterpriseMemberRow(
-            result.rows[0],
-            this.session.context.tenantId,
-          ),
-        }
-      : { status: "already_exists" as const };
+    if (!result.rows[0]) {
+      const existing = await this.findMemberByUserId(member.userId);
+      if (existing) await this.upsertDirectory(existing);
+      return { status: "already_exists" as const };
+    }
+    const created = mapEnterpriseMemberRow(
+      result.rows[0],
+      this.session.context.tenantId,
+    );
+    await this.upsertDirectory(created);
+    return { status: "created" as const, member: created };
   }
 
   async updateMember(input: {
@@ -183,15 +210,13 @@ class PostgresTenantRepository implements EnterpriseTenantPostgresRepository {
       input.memberId,
       input.expectedVersion,
     ]);
-    return result.rows[0]
-      ? {
-          status: "updated" as const,
-          member: mapEnterpriseMemberRow(
-            result.rows[0],
-            this.session.context.tenantId,
-          ),
-        }
-      : { status: "conflict" as const };
+    if (!result.rows[0]) return { status: "conflict" as const };
+    const updated = mapEnterpriseMemberRow(
+      result.rows[0],
+      this.session.context.tenantId,
+    );
+    await this.upsertDirectory(updated);
+    return { status: "updated" as const, member: updated };
   }
 
   async appendAuditEvent(event: EnterpriseAuditEventRecord) {
@@ -266,6 +291,26 @@ class PostgresTenantRepository implements EnterpriseTenantPostgresRepository {
         ? { createdAt: last.createdAt, id: last.id }
         : undefined,
     };
+  }
+
+  private async upsertDirectory(member: EnterpriseMemberRecord) {
+    await this.session.query(`
+      INSERT INTO enterprise.user_tenant_directory(
+        tenant_id, user_id, member_id, member_status, created_at, updated_at
+      )
+      VALUES ($1, $2, $3, $4, $5, $6)
+      ON CONFLICT (user_id, tenant_id) DO UPDATE SET
+        member_id = excluded.member_id,
+        member_status = excluded.member_status,
+        updated_at = excluded.updated_at
+      WHERE enterprise.user_tenant_directory.tenant_id = $1
+    `, [
+      member.userId,
+      member.id,
+      member.status,
+      member.createdAt,
+      member.updatedAt,
+    ]);
   }
 }
 

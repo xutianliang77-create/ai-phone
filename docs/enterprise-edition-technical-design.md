@@ -1,6 +1,6 @@
 # AI Phone 企业版详细技术设计
 
-版本：v1.5
+版本：v1.6
 日期：2026-07-17
 状态：SaaS 详细技术方案基线待评审
 
@@ -21,8 +21,8 @@
 | RBAC | `ready_for_acceptance` | 已有17个 scope、九角色矩阵、统一服务端 guard 和越权测试 |
 | SaaS tenant lifecycle | `ready_for_acceptance` | 已有幂等开通、暂停、导出/删除执行器、租约、有界恢复和 receipt 校验；真实对象存储/Provider 清理服务尚待验收 |
 | Append-only audit | `ready_for_acceptance` | 已有 tenant-scoped 查询、HMAC cursor、成员/RBAC/租户生命周期埋点和 SQLite/PostgreSQL 不可变约束；受控导出和真实 PostgreSQL 验收尚待后续任务 |
-| PostgreSQL schema | `implemented` | 已有七段可逆 migration、tenant-first 索引、复合 FK、强制 RLS、checksum/锁和归档 smoke；尚无真实 migrate/restore/PITR 证据 |
-| Tenant-scoped Repository | `in_progress` | 已有 immutable branded `TenantContext`、Repository 分类、PostgreSQL scoped transaction，以及 Tenant/Member/Audit 异步 unit-of-work、CAS 和行映射；Directory、lifecycle/events 及 runtime driver 尚未完成 |
+| PostgreSQL schema | `implemented` | 已有八段可逆 migration、tenant-first 索引、复合 FK、强制 RLS、user directory、checksum/锁和归档 smoke；尚无真实 migrate/restore/PITR 证据 |
+| Tenant-scoped Repository | `in_progress` | 已有 tenant/user scoped transaction，以及 Tenant/Member/Audit、Directory、lifecycle、Inbox/Outbox Repository 和共享 unit-of-work；runtime、平台恢复发现、identity 映射和迁移对账尚未完成 |
 | Enterprise Inbox/Outbox | `ready_for_acceptance` | 已有 tenant-scoped 去重、稳定 payload hash、领域/inbox/outbox 原子提交、lease/retry/recovery 和100次重放门禁；真实 PostgreSQL 并发与 Provider sandbox 尚待验收 |
 | PostgreSQL 控制面/业务聚合 | `designed` | 后续 `ENT-DATA-002` 与领域任务范围，不能从 context 基础代码推导为已实现 |
 | SQLite | `demo_only` | 仅本地开发、自动化和封闭演示，不承载真实企业试点数据 |
@@ -571,15 +571,33 @@ PostgreSQL scoped session 在独立事务中执行
 
 第二批实现新增 Tenant/Member/Audit 的异步 PostgreSQL unit-of-work。tenant 根表
 没有 `tenant_id` 列，因此只能使用专用 `queryTenantRecord`，并强制
-`enterprise.tenants + id = $1`、单一 FROM、无 JOIN/子查询；其他表继续要求显式
+`enterprise.tenants + id = $1`、单一 FROM、无 JOIN/子查询/UNION/OR；其他表继续要求显式
 `tenant_id = $1`。Repository 支持当前 tenant 读取、成员列表、tenant-scoped
 insert、expectedVersion CAS update、append-only audit 写入和与 HMAC cursor
 一致的倒序分页。PostgreSQL bigint/timestamptz/jsonb 行会转换为现有领域记录，
 输入记录和数据库返回行都再次核对 tenant，防止错误 SQL 或测试替身绕过 context。
 
-该 unit-of-work 尚未接入 HTTP runtime。Tenant Directory 仍需要安全的跨 membership
-发现方案，tenant lifecycle、enterprise inbox/outbox 也尚未迁移到 PostgreSQL；
-在这些路径统一迁移并完成数据对账前，禁止只切换成员/审计端点形成双写或分裂真值。
+forced RLS 带来的关键安全发现是：普通 tenant session 只能看到一个
+`app.tenant_id`，不能直接扫描 `members` 来发现用户属于哪些 tenant；为目录查询授予
+`BYPASSRLS`、表 owner 或平台 migration 角色会破坏应用运行角色边界。`0008` 因此增加
+`user_tenant_directory` 投影和 `current_user_id()`。目录会话只设置 transaction-local
+`app.user_id`，只允许单表、单 SELECT、显式 `user_id = $1` 的查询，并由 forced RLS
+再次限制为本人记录。目录只返回 `tenantId + memberId` 候选引用；随后为每个候选创建
+独立 tenant session，重新读取 tenant/member，并核对 active 状态、userId 和 memberId。
+请求指定的 tenant 不在本人目录时直接拒绝，不先探测该 tenant 是否存在。
+
+成员 insert/CAS update 和租户暂停会在同一 tenant transaction 内同步目录投影。
+第三批同时增加 tenant lifecycle、enterprise Inbox/Outbox PostgreSQL Repository：
+job 幂等冲突返回原记录供 request hash 比对，job/tenant/member 更新使用锁或 CAS；
+inbox/outbox 重复键返回原事件，outbox claim 使用 due/lease 条件原子递增 attempt，
+finalize 使用 attempt CAS。Tenant、lifecycle 和 event Repository 可由同一
+PostgreSQL unit-of-work 组合，任一领域错误都会整体回滚。
+
+这些 Repository 尚未接入 HTTP runtime。forced RLS 下的平台 Worker 仍需要受审计的
+跨租户 pending reference 发现机制，再逐租户 claim；不能使用应用角色全表扫描。
+此外，当前账号 subject ID 与 PostgreSQL identity 列的 UUID 约束需要在 runtime
+切换前冻结映射/迁移契约。上述路径、启动 schema verify 和数据对账完成前，禁止局部
+切换形成 SQLite/PostgreSQL 双写或分裂真值。
 
 ### 11.2 事务和一致性边界
 
@@ -598,6 +616,9 @@ insert、expectedVersion CAS update、append-only audit 写入和与 HMAC cursor
 
 当前 `ENT-DATA-003` 实现要求 inbox 处理器同步完成：领域状态、已处理 inbox 和
 待发送 outbox 由同一个本地存储事务提交，回调抛错或返回 Promise 均整体回滚。
+PostgreSQL 版本通过共享 tenant unit-of-work 提供同一原子边界，但尚未接入 runtime；
+平台级恢复只允许先发现最小 tenant/event/job 引用，再进入独立 tenant transaction，
+不能用 `BYPASSRLS` 应用角色直接执行跨租户领域更新。
 provider payload 先转换为键排序的有限深度 JSON 并计算 SHA-256；相同
 `tenant + source + sourceEventId` 的相同 payload 返回 duplicate，不再次执行领域
 逻辑，payload 或 event type 改变则返回冲突。outbox 的
@@ -814,7 +835,7 @@ SaaS 计量形成三层记录：原始 usage event、不可变 ledger、账期�
 
 | 设计不变量 | 自动化门禁 | 真实环境门禁 |
 | --- | --- | --- |
-| tenant/RBAC 不越权 | 九角色×全部 scope、跨租户 ID、伪造 header/body、RLS/复合 FK 测试 | 两真实租户并发攻击演练 |
+| tenant/RBAC 不越权 | 九角色×全部 scope、跨租户 ID、伪造 header/body、forced-RLS user directory、RLS/复合 FK 测试 | 两真实租户并发攻击演练 |
 | 命令幂等 | 相同 key 重放100次、不同 hash 冲突、API 重启恢复 | Provider webhook 重放和网络超时演练 |
 | 单一状态机 | 非法迁移、CAS 冲突、迟到事件/generation 测试 | Worker/API 重启、断网恢复 |
 | 不重复外部副作用 | inbox/outbox、claim、ledger 唯一约束和故障注入 | PSTN/CRM sandbox 或真实白名单账号 |

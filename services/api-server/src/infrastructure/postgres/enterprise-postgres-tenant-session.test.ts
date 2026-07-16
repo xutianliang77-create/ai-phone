@@ -18,6 +18,10 @@ describe("enterprise PostgreSQL tenant session", () => {
         await session.queryTenantRecord(
           "SELECT id FROM enterprise.tenants WHERE id = $1",
         );
+        await session.queryTenantRecord(
+          "UPDATE enterprise.tenants SET status = $2 WHERE id = $1 RETURNING id",
+          ["suspended"],
+        );
         await session.query(
           "SELECT id FROM enterprise.members WHERE tenant_id = $1 AND id = $2",
           ["member-a"],
@@ -40,6 +44,10 @@ describe("enterprise PostgreSQL tenant session", () => {
       {
         sql: "SELECT id FROM enterprise.tenants WHERE id = $1",
         values: ["tenant-a"],
+      },
+      {
+        sql: "UPDATE enterprise.tenants SET status = $2 WHERE id = $1 RETURNING id",
+        values: ["tenant-a", "suspended"],
       },
       {
         sql: "SELECT id FROM enterprise.members WHERE tenant_id = $1 AND id = $2",
@@ -96,6 +104,32 @@ describe("enterprise PostgreSQL tenant session", () => {
         ["tenant-a"],
       ),
     )).rejects.toThrow("id = $1");
+
+    const unsafeUpdate = poolFixture();
+    await expect(withEnterpriseTenantPostgresSession(
+      unsafeUpdate.pool,
+      tenantContext(),
+      (session) => session.queryTenantRecord(
+        "UPDATE enterprise.tenants SET status = $1 WHERE version = $2",
+        [1],
+      ),
+    )).rejects.toThrow("id = $1");
+
+    for (const sql of [
+      "SELECT id FROM enterprise.tenants WHERE id = $1 OR true",
+      "SELECT id FROM enterprise.tenants WHERE id = $1 UNION SELECT $1",
+      "UPDATE enterprise.tenants SET status = $2 WHERE id = $1 OR true",
+      `UPDATE enterprise.tenants
+       SET status = CASE WHEN (SELECT true) THEN $2 ELSE status END
+       WHERE id = $1`,
+    ]) {
+      const ambiguous = poolFixture();
+      await expect(withEnterpriseTenantPostgresSession(
+        ambiguous.pool,
+        tenantContext(),
+        (session) => session.queryTenantRecord(sql, ["suspended"]),
+      )).rejects.toThrow("tenant record SQL");
+    }
   });
 
   it("rejects tenant-owned SQL without an explicit tenant predicate", async () => {
