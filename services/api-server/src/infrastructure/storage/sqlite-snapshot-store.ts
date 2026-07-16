@@ -28,6 +28,7 @@ const collectionSpecs: CollectionSpec[] = [
   spec("voiceIdentities", "id"),
   spec("enterpriseTenants", "id"),
   spec("enterpriseMembers", "id"),
+  spec("enterpriseTenantJobs", "id"),
   spec("inboxEvents", "eventId"),
   spec("outboxEvents", "idempotencyKey"),
 ];

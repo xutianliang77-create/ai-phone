@@ -1,6 +1,8 @@
 import type {
   EnterpriseMemberRole,
   EnterpriseMemberStatus,
+  EnterpriseTenantJobStatus,
+  EnterpriseTenantJobType,
   EnterpriseTenantStatus,
 } from "@translation/contracts";
 
@@ -29,4 +31,17 @@ export interface EnterpriseMemberRecord {
   createdAt: string;
   updatedAt: string;
   version: number;
+}
+
+export interface EnterpriseTenantJobRecord {
+  id: string;
+  tenantId: string;
+  actorUserId: string;
+  type: EnterpriseTenantJobType;
+  idempotencyKey: string;
+  requestHash: string;
+  status: EnterpriseTenantJobStatus;
+  errorCode?: string;
+  createdAt: string;
+  updatedAt: string;
 }

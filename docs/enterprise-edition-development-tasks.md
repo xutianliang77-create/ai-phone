@@ -17,11 +17,12 @@
 ### 1.1 当前状态快照
 
 - `ENT-CORE-001/002/003` 已完成代码和自动化，等待验收；生产 Web 应用位于 `apps/enterprise-web`。
-- `ENT-DATA-001` 已有三段可逆 PostgreSQL migration、tenant-first 索引、复合 FK、强制 RLS、checksum/锁和备份归档 smoke；本机无 PostgreSQL/`pg_dump`，真实 migrate/restore/PITR 证据未完成，保持 `in_progress`。
+- `ENT-DATA-001` 已有四段可逆 PostgreSQL migration、tenant-first 索引、复合 FK、强制 RLS、checksum/锁和备份归档 smoke；本机无 PostgreSQL/`pg_dump`，真实 migrate/restore/PITR 证据未完成，保持 `in_progress`。
+- `ENT-CORE-009` 已完成租户创建/区域开通幂等、失败重试、暂停和 job 状态骨架；导出与删除仍缺真实执行器，只保持 `processing`，任务保持 `in_progress`。
 - `ENT-UI-001` 已完成生产颜色/字号/尺寸/圆角令牌、Material Icons 语义注册表、Flutter 对照和依赖扫描，等待验收。
 - `ENT-UI-002` 已完成 active membership 租户选择、共享 role/scope 真值、九角色 route discovery、scope 导航及直接/嵌套路由 guard；签名 route document 仍等待 `ENT-CORE-011`，保持 `in_progress`。
 - `ENT-UI-003` 已完成八态注册表、语义图标、ARIA live/alert、trace ID、可行动入口和组件矩阵；Provider/冲突/job 的真实业务联调仍等待 `ENT-CORE-008` 及领域 API，保持 `in_progress`。
-- PostgreSQL schema 代码已实现但真实数据库门禁未通过；SaaS 控制面、企业业务聚合和外部 Provider 仍未通过实现或真实环境门禁。
+- PostgreSQL schema 代码已实现但真实数据库门禁未通过；SaaS 生命周期尚缺导出/删除执行器，企业业务聚合和外部 Provider 仍未通过实现或真实环境门禁。
 
 ## 2. P0 企业公共底座
 
@@ -35,7 +36,7 @@
 | ENT-CORE-006 | 审计事件 | CORE-001 | append-only audit API | 高风险操作都有 actor/target/result | todo |
 | ENT-CORE-007 | 企业用量与预算 | CORE-001 | ledger category、budget、alert | 重试不重复 hold/settle | todo |
 | ENT-CORE-008 | Provider readiness | 无 | PSTN/CRM/Calendar/Channel capability | 缺配置明确 not_ready，不伪造成功 | todo |
-| ENT-CORE-009 | SaaS 租户生命周期 | CORE-001 | signup/provision/suspend/export/delete saga | 重试不重复租户，失败不标 active | todo |
+| ENT-CORE-009 | SaaS 租户生命周期 | CORE-001 | signup/provision/suspend/export/delete saga | 重试不重复租户，失败不标 active | in_progress |
 | ENT-CORE-010 | 套餐和 Entitlement | CORE-001/007 | plan、subscription、seat、entitlement | 服务端按版本执行权益和限额 | todo |
 | ENT-CORE-011 | Tenant Directory | CORE-009 | homeRegion/cell、签名 route document | 区域错误时拒绝业务写入 | todo |
 | ENT-CORE-012 | SaaS 计量聚合 | CORE-007/010 | usage event、账期聚合、调整流水 | 不修改原始 ledger，账单可对账 | todo |

@@ -21,6 +21,7 @@ const expectedTenantTables = [
   "support_sessions", "support_cases", "tool_executions", "meetings",
   "meeting_participants", "meeting_screen_shares", "meeting_artifacts",
   "meeting_action_items",
+  "tenant_jobs",
 ] as const;
 
 const [action] = process.argv.slice(2);
@@ -81,7 +82,7 @@ export async function verifyEnterprisePostgresSchema(client: PostgresMigrationCl
   `);
   if (missing.length > 0) throw new Error(`Missing enterprise tables: ${missing.join(", ")}`);
   if (unsafe.length > 0) throw new Error(`RLS not forced: ${unsafe.join(", ")}`);
-  if (Number(migrations.rows[0]?.count) !== 3) throw new Error("Migration count is not 3");
+  if (Number(migrations.rows[0]?.count) !== 4) throw new Error("Migration count is not 4");
   if (Number(foreignKeys.rows[0]?.count) < 12) {
     throw new Error("Composite tenant foreign key count is below the contract");
   }

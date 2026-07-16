@@ -212,6 +212,7 @@ SaaS 控制面使用 `/saas/v1`，只负责租户发现、开通、套餐和区�
 
 ```text
 POST   /saas/v1/tenants
+POST   /saas/v1/tenants/:tenantId/provision
 GET    /saas/v1/tenants/:tenantId/route
 POST   /saas/v1/tenants/:tenantId/invitations
 GET    /saas/v1/tenants/:tenantId/entitlements
@@ -219,6 +220,7 @@ POST   /saas/v1/tenants/:tenantId/subscription/change
 POST   /saas/v1/tenants/:tenantId/suspend
 POST   /saas/v1/tenants/:tenantId/export
 POST   /saas/v1/tenants/:tenantId/delete
+GET    /saas/v1/tenant-jobs/:jobId
 ```
 
 ### 3.1 通用请求契约
@@ -570,6 +572,11 @@ Signup -> verify enterprise admin -> create tenant
 ```
 
 开通使用 saga + outbox。控制面已创建但区域数据面失败时，租户保持 `provisioning_failed`，不得标记 active。重复开通请求使用相同 idempotency key 返回同一 tenant。
+
+区域映射由控制面配置提供；当前实现读取 `ENTERPRISE_REGION_CELLS_JSON` 的
+`homeRegion -> cellId` 映射。缺失、格式错误或区域未配置时必须返回
+`not_ready`，不得生成临时 cell 或把租户标为 active。暂停可在控制面原子完成；
+导出和删除只有外部执行器确认后才能把对应 job 标为 completed。
 
 客户端登录后先从控制面获取短期 route document：
 

@@ -33,6 +33,17 @@ describe("enterprise tenant storage", () => {
         updatedAt: "2026-07-15T00:00:00.000Z",
         version: 1,
       });
+      snapshot.enterpriseTenantJobs.push({
+        id: "job-a",
+        tenantId: "tenant-a",
+        actorUserId: "user-a",
+        type: "tenant.export",
+        idempotencyKey: "export-a",
+        requestHash: "hash-a",
+        status: "processing",
+        createdAt: "2026-07-15T00:00:00.000Z",
+        updatedAt: "2026-07-15T00:00:00.000Z",
+      });
       const writer = new SqliteSnapshotStore(file, createEmptyStoreSnapshot());
       writer.save(snapshot);
       writer.close();
@@ -43,6 +54,7 @@ describe("enterprise tenant storage", () => {
 
       expect(stored.enterpriseTenants).toEqual(snapshot.enterpriseTenants);
       expect(stored.enterpriseMembers).toEqual(snapshot.enterpriseMembers);
+      expect(stored.enterpriseTenantJobs).toEqual(snapshot.enterpriseTenantJobs);
     } finally {
       rmSync(directory, { recursive: true, force: true });
     }

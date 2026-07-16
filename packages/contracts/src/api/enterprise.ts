@@ -93,10 +93,20 @@ export const enterpriseRoleScopes = {
 } as const satisfies Record<EnterpriseMemberRole, readonly EnterpriseScope[]>;
 
 export type EnterpriseTenantStatus =
+  | "provisioning"
+  | "provisioning_failed"
   | "active"
   | "suspended"
   | "deletion_requested"
   | "deleted";
+
+export type EnterpriseTenantJobType =
+  | "tenant.provision"
+  | "tenant.suspend"
+  | "tenant.export"
+  | "tenant.delete";
+
+export type EnterpriseTenantJobStatus = "processing" | "completed" | "failed";
 
 export interface EnterpriseTenantDto {
   id: string;
@@ -122,6 +132,23 @@ export interface EnterpriseMemberDto {
   createdAt: string;
   updatedAt: string;
   version: number;
+}
+
+export interface EnterpriseTenantJobDto {
+  id: string;
+  tenantId: string;
+  actorUserId: string;
+  type: EnterpriseTenantJobType;
+  status: EnterpriseTenantJobStatus;
+  errorCode?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface EnterpriseTenantLifecycleResponse {
+  tenant: EnterpriseTenantDto;
+  member: EnterpriseMemberDto;
+  job: EnterpriseTenantJobDto;
 }
 
 export interface EnterpriseMembershipDto {

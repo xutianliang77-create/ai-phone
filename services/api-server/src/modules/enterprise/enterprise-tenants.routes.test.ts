@@ -9,15 +9,16 @@ describe("enterprise tenant routes", () => {
     store.authSessions = [];
     store.enterpriseTenants = [];
     store.enterpriseMembers = [];
+    store.enterpriseTenantJobs = [];
   });
 
   it("creates a tenant with an owner and resolves enterprise context", async () => {
     seedAccount("user-a", "token-a");
-    const app = await buildApp();
+    const app = await buildEnterpriseTestApp();
     const created = await app.inject({
       method: "POST",
       url: "/saas/v1/tenants",
-      headers: auth("token-a"),
+      headers: { ...auth("token-a"), "idempotency-key": "create-acme" },
       payload: { name: "Acme Global", homeRegion: "cn" },
     });
     const tenantId = created.json().tenant.id as string;
@@ -48,7 +49,7 @@ describe("enterprise tenant routes", () => {
   it("rejects cross-tenant reads and client tenant spoofing", async () => {
     seedAccount("user-a", "token-a");
     seedAccount("user-b", "token-b");
-    const app = await buildApp();
+    const app = await buildEnterpriseTestApp();
     const tenantA = await createTenant(app, "token-a", "Tenant A");
     const tenantB = await createTenant(app, "token-b", "Tenant B");
     const crossTenantRead = await app.inject({
@@ -80,7 +81,7 @@ describe("enterprise tenant routes", () => {
     seedAccount("owner-a", "token-a");
     seedAccount("owner-b", "token-b");
     seedAccount("member-user", "token-member");
-    const app = await buildApp();
+    const app = await buildEnterpriseTestApp();
     const tenantA = await createTenant(app, "token-a", "Tenant A");
     const tenantB = await createTenant(app, "token-b", "Tenant B");
     const added = await app.inject({
@@ -127,7 +128,7 @@ describe("enterprise tenant routes", () => {
     seedAccount("owner-user", "owner-token");
     seedAccount("member-user", "member-token");
     seedAccount("other-user", "other-token");
-    const app = await buildApp();
+    const app = await buildEnterpriseTestApp();
     const tenantA = await createTenant(app, "owner-token", "Tenant A");
     await createTenant(app, "owner-token", "Tenant B");
     const added = await app.inject({
@@ -159,7 +160,7 @@ describe("enterprise tenant routes", () => {
   it("discovers only the signed-in account active memberships", async () => {
     seedAccount("owner-user", "owner-token");
     seedAccount("other-user", "other-token");
-    const app = await buildApp();
+    const app = await buildEnterpriseTestApp();
     const tenantA = await createTenant(app, "owner-token", "Tenant A");
     await createTenant(app, "owner-token", "Tenant B");
     await createTenant(app, "other-token", "Other Tenant");
@@ -189,6 +190,7 @@ describe("enterprise tenant routes", () => {
     expect(JSON.stringify(discovered.json())).not.toContain("Other Tenant");
     expect(unauthorized.statusCode).toBe(401);
   });
+
 });
 
 function seedAccount(userId: string, token: string) {
@@ -219,14 +221,41 @@ async function createTenant(
   token: string,
   name: string,
 ) {
-  const response = await app.inject({
-    method: "POST",
-    url: "/saas/v1/tenants",
-    headers: auth(token),
-    payload: { name, homeRegion: "cn" },
-  });
+  const response = await createTenantResponse(
+    app,
+    token,
+    name,
+    `create-${token}-${name.replace(/[^A-Za-z0-9]/g, "-")}`,
+  );
   expect(response.statusCode).toBe(201);
   return response.json().tenant.id as string;
+}
+
+function createTenantResponse(
+  app: Awaited<ReturnType<typeof buildApp>>,
+  token: string,
+  name: string,
+  idempotencyKey: string,
+) {
+  return app.inject({
+    method: "POST",
+    url: "/saas/v1/tenants",
+    headers: { ...auth(token), "idempotency-key": idempotencyKey },
+    payload: { name, homeRegion: "cn" },
+  });
+}
+
+function buildEnterpriseTestApp() {
+  return buildApp({
+    tenantProvisioner: {
+      async provision(input) {
+        return {
+          status: "ready",
+          cellId: `${input.homeRegion}-cell-01`,
+        } as const;
+      },
+    },
+  });
 }
 
 async function withoutTestAccount<T>(operation: () => Promise<T>) {

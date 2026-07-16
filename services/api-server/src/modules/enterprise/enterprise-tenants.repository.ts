@@ -13,43 +13,6 @@ import type {
   EnterpriseTenantRecord,
 } from "./enterprise-tenant-record.js";
 
-export function createEnterpriseTenant(input: {
-  ownerUserId: string;
-  name: string;
-  homeRegion: string;
-}) {
-  return runStoreTransaction(() => {
-    const now = new Date().toISOString();
-    const tenant: EnterpriseTenantRecord = {
-      id: randomUUID(),
-      name: input.name,
-      status: "active",
-      homeRegion: input.homeRegion,
-      planCode: "enterprise_trial",
-      dataRetentionDays: 30,
-      createdAt: now,
-      updatedAt: now,
-      version: 1,
-    };
-    const member: EnterpriseMemberRecord = {
-      id: randomUUID(),
-      tenantId: tenant.id,
-      userId: input.ownerUserId,
-      role: "owner",
-      status: "active",
-      joinedAt: now,
-      createdAt: now,
-      updatedAt: now,
-      version: 1,
-    };
-    const store = getStoreSnapshot();
-    store.enterpriseTenants.push(tenant);
-    store.enterpriseMembers.push(member);
-    persistStoreSnapshot();
-    return { tenant, member };
-  });
-}
-
 export function resolveEnterpriseContext(
   userId: string,
   selectedTenantId?: string,

@@ -34,6 +34,7 @@ import type {
 } from "../../modules/events/event-record.js";
 import type {
   EnterpriseMemberRecord,
+  EnterpriseTenantJobRecord,
   EnterpriseTenantRecord,
 } from "../../modules/enterprise/enterprise-tenant-record.js";
 
@@ -58,6 +59,7 @@ export interface AppStoreSnapshot {
   voiceIdentities: VoiceIdentityRecord[];
   enterpriseTenants: EnterpriseTenantRecord[];
   enterpriseMembers: EnterpriseMemberRecord[];
+  enterpriseTenantJobs: EnterpriseTenantJobRecord[];
   inboxEvents: InboxEventRecord[];
   outboxEvents: OutboxEventRecord[];
 }
@@ -83,6 +85,7 @@ const defaultSnapshot: AppStoreSnapshot = {
   voiceIdentities: [],
   enterpriseTenants: [],
   enterpriseMembers: [],
+  enterpriseTenantJobs: [],
   inboxEvents: [],
   outboxEvents: [],
 };
@@ -231,6 +234,9 @@ export function normalizeStoreSnapshot(value: unknown): AppStoreSnapshot {
       enterpriseMembers: Array.isArray(raw.enterpriseMembers)
         ? raw.enterpriseMembers
         : [],
+      enterpriseTenantJobs: Array.isArray(raw.enterpriseTenantJobs)
+        ? raw.enterpriseTenantJobs
+        : [],
       inboxEvents: Array.isArray(raw.inboxEvents) ? raw.inboxEvents : [],
       outboxEvents: Array.isArray(raw.outboxEvents) ? raw.outboxEvents : [],
   };
@@ -260,6 +266,7 @@ function hasSnapshotData(value: AppStoreSnapshot) {
   return value.sessions.length > 0 ||
     value.accounts.length > 0 ||
     value.enterpriseTenants.length > 0 ||
+    value.enterpriseTenantJobs.length > 0 ||
     value.billingLedger.length > 0 ||
     Object.keys(value.usageBalances).length > 0;
 }

@@ -14,6 +14,7 @@ describe("enterprise PostgreSQL migrations", () => {
       "0001_enterprise_foundation",
       "0002_enterprise_business",
       "0003_enterprise_rls",
+      "0004_enterprise_tenant_lifecycle",
     ]);
     for (const migration of migrations) {
       expect(migration.up.trim()).not.toBe("");
@@ -39,6 +40,8 @@ describe("enterprise PostgreSQL migrations", () => {
     expect(sql).toContain("ENABLE ROW LEVEL SECURITY");
     expect(sql).toContain("FORCE ROW LEVEL SECURITY");
     expect(sql).toContain("enterprise.current_tenant_id()");
+    expect(sql).toContain("CREATE TABLE enterprise.tenant_jobs");
+    expect(sql).toContain("'provisioning_failed'");
   });
 
   it("applies each migration once and records its checksum", async () => {

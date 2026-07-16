@@ -1,7 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import type {
   CreateEnterpriseMemberRequest,
-  CreateEnterpriseTenantRequest,
   UpdateEnterpriseMemberRequest,
 } from "@translation/contracts";
 import {
@@ -14,36 +13,22 @@ import { requireEnterpriseScope } from "./enterprise-auth.js";
 import { enterpriseScopesForRole } from "./enterprise-rbac.js";
 import {
   addEnterpriseMember,
-  createEnterpriseTenant,
   listEnterpriseMemberships,
   listEnterpriseMembers,
   updateEnterpriseMember,
 } from "./enterprise-tenants.repository.js";
+import { registerEnterpriseTenantLifecycleRoutes } from "./enterprise-tenant-lifecycle.routes.js";
+import type { TenantProvisioner } from "./enterprise-tenant-provisioner.js";
 import type {
   EnterpriseMemberRecord,
   EnterpriseTenantRecord,
 } from "./enterprise-tenant-record.js";
 
-export async function registerEnterpriseTenantRoutes(app: FastifyInstance) {
-  app.post("/saas/v1/tenants", async (request, reply) => {
-    const account = requireAccount(request, reply);
-    if (!account) return;
-    const body = (request.body ?? {}) as Partial<CreateEnterpriseTenantRequest>;
-    const name = cleanText(body.name, 120);
-    const homeRegion = regionValue(body.homeRegion);
-    if (!name || name.length < 2 || !homeRegion) {
-      return sendError(reply, 400, "invalid_tenant", "Invalid tenant");
-    }
-    const created = createEnterpriseTenant({
-      ownerUserId: account.id,
-      name,
-      homeRegion,
-    });
-    return reply.status(201).send({
-      tenant: toTenantDto(created.tenant),
-      member: toMemberDto(created.member),
-    });
-  });
+export async function registerEnterpriseTenantRoutes(
+  app: FastifyInstance,
+  tenantProvisioner: TenantProvisioner,
+) {
+  await registerEnterpriseTenantLifecycleRoutes(app, tenantProvisioner);
 
   app.get("/enterprise/v1/me", async (request, reply) => {
     const context = requireEnterpriseScope(request, reply, "tenant:read");
@@ -132,11 +117,6 @@ export async function registerEnterpriseTenantRoutes(app: FastifyInstance) {
 
 function cleanText(value: unknown, maxLength: number) {
   return typeof value === "string" ? value.trim().slice(0, maxLength) : "";
-}
-
-function regionValue(value: unknown) {
-  const region = cleanText(value, 32).toLowerCase();
-  return /^[a-z][a-z0-9-]{1,31}$/.test(region) ? region : null;
 }
 
 function tenantMismatch(value: unknown, tenantId: string) {

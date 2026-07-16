@@ -11,6 +11,10 @@ import { registerBillingRoutes } from "./modules/billing/billing.routes.js";
 import { registerCallLinkRoutes } from "./modules/call-links/call-links.routes.js";
 import { registerDiagnosticsRoutes } from "./modules/diagnostics/diagnostics.routes.js";
 import { registerEnterpriseTenantRoutes } from "./modules/enterprise/enterprise-tenants.routes.js";
+import {
+  createEnvironmentTenantProvisioner,
+  type TenantProvisioner,
+} from "./modules/enterprise/enterprise-tenant-provisioner.js";
 import { registerHealthRoutes } from "./modules/health/health.routes.js";
 import { registerModelRoutes } from "./modules/models/models.routes.js";
 import { registerPlansRoutes } from "./modules/plans/plans.routes.js";
@@ -21,7 +25,9 @@ import { registerTextTranslationRoutes } from "./modules/translation/text-transl
 import { registerVoiceProfileRoutes } from "./modules/voice-profiles/voice-profiles.routes.js";
 import { registerVoiceIdentityRoutes } from "./modules/voice-identities/voice-identities.routes.js";
 
-export async function buildApp() {
+export async function buildApp(dependencies: {
+  tenantProvisioner?: TenantProvisioner;
+} = {}) {
   const app = Fastify({
     logger: {
       level: process.env.LOG_LEVEL ?? "info",
@@ -46,7 +52,10 @@ export async function buildApp() {
   await registerBillingRoutes(app);
   await registerCallLinkRoutes(app);
   await registerDiagnosticsRoutes(app);
-  await registerEnterpriseTenantRoutes(app);
+  await registerEnterpriseTenantRoutes(
+    app,
+    dependencies.tenantProvisioner ?? createEnvironmentTenantProvisioner(),
+  );
   await registerPlansRoutes(app);
   await registerRealtimeRoutes(app);
   await registerSessionsRoutes(app);

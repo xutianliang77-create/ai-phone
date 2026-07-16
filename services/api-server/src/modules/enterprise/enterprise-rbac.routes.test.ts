@@ -18,6 +18,7 @@ describe("enterprise RBAC route guard", () => {
     store.authSessions = [];
     store.enterpriseTenants = [];
     store.enterpriseMembers = [];
+    store.enterpriseTenantJobs = [];
   });
 
   it("enforces every role across tenant and member operations", async () => {
@@ -25,7 +26,13 @@ describe("enterprise RBAC route guard", () => {
       seedAccount(roleUser(role), roleToken(role));
       seedAccount(candidateUser(role), `candidate-${role}-token`);
     }
-    const app = await buildApp();
+    const app = await buildApp({
+      tenantProvisioner: {
+        async provision() {
+          return { status: "ready", cellId: "cn-cell-01" } as const;
+        },
+      },
+    });
     const tenantId = await createTenant(app);
     let updateTargetId = "";
     for (const role of enterpriseMemberRoles) {
@@ -103,7 +110,10 @@ async function createTenant(app: Awaited<ReturnType<typeof buildApp>>) {
   const response = await app.inject({
     method: "POST",
     url: "/saas/v1/tenants",
-    headers: auth(roleToken("owner")),
+    headers: {
+      ...auth(roleToken("owner")),
+      "idempotency-key": "create-rbac-tenant",
+    },
     payload: { name: "RBAC Tenant", homeRegion: "cn" },
   });
   expect(response.statusCode).toBe(201);
