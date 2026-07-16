@@ -1,7 +1,7 @@
 # AI Phone 企业版详细技术设计
 
-版本：v1.4
-日期：2026-07-16
+版本：v1.5
+日期：2026-07-17
 状态：SaaS 详细技术方案基线待评审
 
 ## 1. 设计原则
@@ -22,7 +22,7 @@
 | SaaS tenant lifecycle | `ready_for_acceptance` | 已有幂等开通、暂停、导出/删除执行器、租约、有界恢复和 receipt 校验；真实对象存储/Provider 清理服务尚待验收 |
 | Append-only audit | `ready_for_acceptance` | 已有 tenant-scoped 查询、HMAC cursor、成员/RBAC/租户生命周期埋点和 SQLite/PostgreSQL 不可变约束；受控导出和真实 PostgreSQL 验收尚待后续任务 |
 | PostgreSQL schema | `implemented` | 已有七段可逆 migration、tenant-first 索引、复合 FK、强制 RLS、checksum/锁和归档 smoke；尚无真实 migrate/restore/PITR 证据 |
-| Tenant-scoped Repository | `in_progress` | 已有 immutable branded `TenantContext`、成员/审计/生命周期 job context guard、Repository export 分类测试和 PostgreSQL scoped transaction session；真实 PostgreSQL CRUD/runtime driver 切换尚未完成 |
+| Tenant-scoped Repository | `in_progress` | 已有 immutable branded `TenantContext`、Repository 分类、PostgreSQL scoped transaction，以及 Tenant/Member/Audit 异步 unit-of-work、CAS 和行映射；Directory、lifecycle/events 及 runtime driver 尚未完成 |
 | Enterprise Inbox/Outbox | `ready_for_acceptance` | 已有 tenant-scoped 去重、稳定 payload hash、领域/inbox/outbox 原子提交、lease/retry/recovery 和100次重放门禁；真实 PostgreSQL 并发与 Provider sandbox 尚待验收 |
 | PostgreSQL 控制面/业务聚合 | `designed` | 后续 `ENT-DATA-002` 与领域任务范围，不能从 context 基础代码推导为已实现 |
 | SQLite | `demo_only` | 仅本地开发、自动化和封闭演示，不承载真实企业试点数据 |
@@ -568,6 +568,18 @@ PostgreSQL scoped session 在独立事务中执行
 数据库前拒绝；异常路径回滚并释放连接。该层仍是 `ENT-DATA-002` 基础门禁，
 尚未把当前 SQLite/JSON 企业 CRUD 全量切换到真实 PostgreSQL，不能据此宣称
 运行时 PostgreSQL Repository 已完成。
+
+第二批实现新增 Tenant/Member/Audit 的异步 PostgreSQL unit-of-work。tenant 根表
+没有 `tenant_id` 列，因此只能使用专用 `queryTenantRecord`，并强制
+`enterprise.tenants + id = $1`、单一 FROM、无 JOIN/子查询；其他表继续要求显式
+`tenant_id = $1`。Repository 支持当前 tenant 读取、成员列表、tenant-scoped
+insert、expectedVersion CAS update、append-only audit 写入和与 HMAC cursor
+一致的倒序分页。PostgreSQL bigint/timestamptz/jsonb 行会转换为现有领域记录，
+输入记录和数据库返回行都再次核对 tenant，防止错误 SQL 或测试替身绕过 context。
+
+该 unit-of-work 尚未接入 HTTP runtime。Tenant Directory 仍需要安全的跨 membership
+发现方案，tenant lifecycle、enterprise inbox/outbox 也尚未迁移到 PostgreSQL；
+在这些路径统一迁移并完成数据对账前，禁止只切换成员/审计端点形成双写或分裂真值。
 
 ### 11.2 事务和一致性边界
 

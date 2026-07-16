@@ -1,7 +1,7 @@
 # AI Phone 企业版开发任务
 
-版本：v1.5
-日期：2026-07-16
+版本：v1.6
+日期：2026-07-17
 状态：E0 开发中，已对齐 UI v1.0
 
 ## 1. 状态定义
@@ -18,7 +18,7 @@
 
 - `ENT-CORE-001/002/003` 已完成代码和自动化，等待验收；生产 Web 应用位于 `apps/enterprise-web`。
 - `ENT-DATA-001` 已有七段可逆 PostgreSQL migration、tenant-first 索引、复合 FK、强制 RLS、checksum/锁和备份归档 smoke；`0006` 增加 audit 不可变约束，`0007` 增加 enterprise inbox/outbox trace、lease、错误码和 recovery 索引。本机无 PostgreSQL/`pg_dump`，真实 migrate/restore/PITR 证据未完成，保持 `in_progress`。
-- `ENT-DATA-002` 首批已建立只能经工厂创建的 branded immutable `TenantContext`，成员/审计 Repository 和 lifecycle claim/finalize 强制接收 context；后台恢复先发现 tenant/job/actor ref，再进入 tenant scope。PostgreSQL scoped session 使用事务内 `set_config`，并拒绝缺少显式 `tenant_id = $1` 或错误 tenant INSERT 绑定的 SQL。真实 PostgreSQL CRUD Repository、运行时 driver 切换和数据迁移对账尚未完成，保持 `in_progress`。
+- `ENT-DATA-002` 已建立 branded immutable `TenantContext`、Repository export 分类和 PostgreSQL scoped session；成员/审计/lifecycle claim/finalize 均强制 tenant context。第二批新增异步 PostgreSQL Tenant/Member/Audit unit-of-work，支持 tenant 根记录专用查询、成员 insert/CAS update、审计 append/cursor 分页、snake_case 行映射与输入/返回行双向 tenant 校验。Tenant Directory、lifecycle/events PostgreSQL Repository、运行时 driver 切换和数据迁移对账尚未完成，保持 `in_progress`。
 - `ENT-DATA-003` 已完成 tenant-scoped inbox 去重、稳定 JSON hash、领域写入/inbox/outbox 同事务、outbox 内容不可变、lease claim、指数退避和恢复处理；100 次相同事件重放只执行一次领域副作用，跨租户 provider ID/idempotency key 相互隔离。SQLite 证据仅用于自动化和封闭演示，真实 PostgreSQL 并发 claim 与 Provider sandbox 仍待正式验收。
 - `ENT-CORE-009` 已完成租户创建/区域开通幂等、失败重试、暂停、导出和删除执行器；导出固化 tenant/member/job 与 actor scope 快照，执行使用租约、有界重试和 receipt hash，删除只在 receipt 校验后进入 `deleted`，等待真实生命周期服务与对象存储验收。
 - `ENT-CORE-011` 已完成按 active membership 签发短期 HMAC route document、公开端点校验和企业写入区域 guard，等待正式域名/密钥验收。

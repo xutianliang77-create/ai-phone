@@ -15,6 +15,9 @@ describe("enterprise PostgreSQL tenant session", () => {
       fixture.pool,
       tenantContext(),
       async (session) => {
+        await session.queryTenantRecord(
+          "SELECT id FROM enterprise.tenants WHERE id = $1",
+        );
         await session.query(
           "SELECT id FROM enterprise.members WHERE tenant_id = $1 AND id = $2",
           ["member-a"],
@@ -35,6 +38,10 @@ describe("enterprise PostgreSQL tenant session", () => {
         values: ["tenant-a"],
       },
       {
+        sql: "SELECT id FROM enterprise.tenants WHERE id = $1",
+        values: ["tenant-a"],
+      },
+      {
         sql: "SELECT id FROM enterprise.members WHERE tenant_id = $1 AND id = $2",
         values: ["tenant-a", "member-a"],
       },
@@ -45,6 +52,50 @@ describe("enterprise PostgreSQL tenant session", () => {
       { sql: "COMMIT", values: undefined },
     ]);
     expect(fixture.released).toBe(true);
+  });
+
+  it("rejects tenant root queries that join or omit id parameter one", async () => {
+    const wrongTable = poolFixture();
+    await expect(withEnterpriseTenantPostgresSession(
+      wrongTable.pool,
+      tenantContext(),
+      (session) => session.queryTenantRecord(
+        "SELECT id FROM enterprise.members WHERE id = $1",
+      ),
+    )).rejects.toThrow("enterprise.tenants");
+
+    const joined = poolFixture();
+    await expect(withEnterpriseTenantPostgresSession(
+      joined.pool,
+      tenantContext(),
+      (session) => session.queryTenantRecord(`
+        SELECT tenant.id
+        FROM enterprise.tenants tenant
+        JOIN enterprise.members member ON member.tenant_id = tenant.id
+        WHERE tenant.id = $1
+      `),
+    )).rejects.toThrow("cannot join");
+
+    const subquery = poolFixture();
+    await expect(withEnterpriseTenantPostgresSession(
+      subquery.pool,
+      tenantContext(),
+      (session) => session.queryTenantRecord(`
+        SELECT id
+        FROM enterprise.tenants
+        WHERE id = $1 AND EXISTS (SELECT 1 FROM members)
+      `),
+    )).rejects.toThrow("cannot join");
+
+    const wrongParameter = poolFixture();
+    await expect(withEnterpriseTenantPostgresSession(
+      wrongParameter.pool,
+      tenantContext(),
+      (session) => session.queryTenantRecord(
+        "SELECT id FROM enterprise.tenants WHERE id = $2",
+        ["tenant-a"],
+      ),
+    )).rejects.toThrow("id = $1");
   });
 
   it("rejects tenant-owned SQL without an explicit tenant predicate", async () => {

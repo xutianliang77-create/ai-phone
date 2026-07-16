@@ -16,6 +16,10 @@ export interface EnterpriseTenantPostgresPool {
 
 export interface EnterpriseTenantPostgresSession {
   readonly context: EnterpriseTenantContext;
+  queryTenantRecord<Row extends Record<string, unknown>>(
+    sql: string,
+    values?: unknown[],
+  ): Promise<{ rows: Row[] }>;
   query<Row extends Record<string, unknown>>(
     sql: string,
     values?: unknown[],
@@ -38,6 +42,13 @@ export async function withEnterpriseTenantPostgresSession<T>(
     );
     const session = Object.freeze({
       context,
+      queryTenantRecord<Row extends Record<string, unknown>>(
+        sql: string,
+        values: unknown[] = [],
+      ) {
+        assertTenantRecordSql(sql);
+        return client.query<Row>(sql, [context.tenantId, ...values]);
+      },
       query<Row extends Record<string, unknown>>(
         sql: string,
         values: unknown[] = [],
@@ -64,17 +75,54 @@ export async function withEnterpriseTenantPostgresSession<T>(
 }
 
 function assertTenantScopedSql(sql: string) {
-  const normalized = sql
-    .replace(/--.*$/gm, "")
-    .replace(/\/\*[\s\S]*?\*\//g, "")
-    .replace(/\s+/g, " ")
-    .trim();
+  const normalized = normalizedSql(sql);
   const tenantPredicate = /\btenant_id\s*=\s*\$1\b/i;
   if (!tenantPredicate.test(normalized) && !hasTenantInsert(normalized)) {
     throw new Error(
       "Enterprise tenant SQL must contain tenant_id = $1 or insert tenant_id as $1",
     );
   }
+}
+
+function assertTenantRecordSql(sql: string) {
+  const normalized = normalizedSql(sql);
+  if (!/^select\b/i.test(normalized) ||
+    !/\bfrom\s+enterprise\.tenants\b/i.test(normalized)) {
+    throw new Error(
+      "Enterprise tenant record SQL must select from enterprise.tenants",
+    );
+  }
+  const enterpriseTables = [...normalized.matchAll(
+    /\benterprise\.([a-z_][a-z0-9_]*)\b/gi,
+  )].map((match) => match[1]!.toLowerCase());
+  const fromCount = normalized.match(/\bfrom\b/gi)?.length ?? 0;
+  const tenantFrom = normalized.match(
+    /\bfrom\s+enterprise\.tenants\b([\s\S]*?)\bwhere\b/i,
+  );
+  const tenantAlias = tenantFrom?.[1]?.trim() ?? "";
+  if (
+    enterpriseTables.some((table) => table !== "tenants") ||
+    fromCount !== 1 ||
+    !tenantFrom ||
+    (tenantAlias !== "" && !/^[a-z_][a-z0-9_]*$/i.test(tenantAlias)) ||
+    /\bjoin\b/i.test(normalized) ||
+    normalized.includes(";")
+  ) {
+    throw new Error("Enterprise tenant record SQL cannot join other tables");
+  }
+  if (!/\bwhere\b[\s\S]*\b(?:[a-z_][a-z0-9_]*\.)?id\s*=\s*\$1\b/i.test(
+    normalized,
+  )) {
+    throw new Error("Enterprise tenant record SQL must contain id = $1");
+  }
+}
+
+function normalizedSql(sql: string) {
+  return sql
+    .replace(/--.*$/gm, "")
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function hasTenantInsert(sql: string) {
