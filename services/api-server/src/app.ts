@@ -19,6 +19,11 @@ import {
   createEnvironmentTenantRouteService,
   type TenantRouteService,
 } from "./modules/enterprise/enterprise-tenant-route.js";
+import {
+  createEnterpriseProviderReadinessService,
+  type EnterpriseProviderReadinessService,
+} from "./modules/enterprise/enterprise-provider-readiness.js";
+import { registerEnterpriseProviderReadinessRoutes } from "./modules/enterprise/enterprise-provider-readiness.routes.js";
 import { registerHealthRoutes } from "./modules/health/health.routes.js";
 import { registerModelRoutes } from "./modules/models/models.routes.js";
 import { registerPlansRoutes } from "./modules/plans/plans.routes.js";
@@ -32,6 +37,7 @@ import { registerVoiceIdentityRoutes } from "./modules/voice-identities/voice-id
 export async function buildApp(dependencies: {
   tenantProvisioner?: TenantProvisioner;
   tenantRouteService?: TenantRouteService;
+  providerReadinessService?: EnterpriseProviderReadinessService;
 } = {}) {
   const app = Fastify({
     logger: {
@@ -61,6 +67,11 @@ export async function buildApp(dependencies: {
     app,
     dependencies.tenantProvisioner ?? createEnvironmentTenantProvisioner(),
     dependencies.tenantRouteService ?? createEnvironmentTenantRouteService(),
+  );
+  await registerEnterpriseProviderReadinessRoutes(
+    app,
+    dependencies.providerReadinessService ??
+      createEnterpriseProviderReadinessService(),
   );
   await registerPlansRoutes(app);
   await registerRealtimeRoutes(app);

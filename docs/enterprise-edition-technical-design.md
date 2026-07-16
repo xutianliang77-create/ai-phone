@@ -221,6 +221,7 @@ POST   /saas/v1/tenants/:tenantId/suspend
 POST   /saas/v1/tenants/:tenantId/export
 POST   /saas/v1/tenants/:tenantId/delete
 GET    /saas/v1/tenant-jobs/:jobId
+GET    /enterprise/v1/provider-capabilities
 ```
 
 ### 3.1 通用请求契约
@@ -705,6 +706,13 @@ SaaS 计量形成三层记录：原始 usage event、不可变 ledger、账期�
 - `degraded`：只开放声明仍安全的子能力，例如保留字幕但关闭 TTS。
 - `ready`：只表示 Provider 探测通过，不代表 PostgreSQL、合规、预算和人工接管等整体产品门禁通过。
 - 外部创建结果必须有可验证 provider reference；没有 reference 时只能保持 pending/failed，不能伪造 success。
+
+控制面通过 `GET /enterprise/v1/provider-capabilities` 返回 PSTN、CRM、Calendar
+和 Channel 四类文档。已配置 Adapter 必须提供 HTTPS health probe 和服务凭据；
+只有实时 probe 返回合法 `ready` 才能显示 ready。mock、缺配置、非 2xx、超时或
+错误 schema 分别返回明确的 `not_ready/not_configured` 原因。probe URL、凭据和
+未列入白名单的响应字段永不返回客户端；features 只保留每类能力的布尔白名单，
+文档 60 秒过期，业务命令仍需重新校验。
 
 ## 19. 错误、重试和客户端动作
 

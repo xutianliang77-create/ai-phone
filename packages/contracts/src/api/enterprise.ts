@@ -162,6 +162,35 @@ export interface EnterpriseTenantRouteDocument {
   signature: string;
 }
 
+export type EnterpriseProviderCapability =
+  | "pstn.outbound"
+  | "crm.sync"
+  | "calendar.meetings"
+  | "channel.messaging";
+
+export type EnterpriseProviderCapabilityStatus =
+  | "not_configured"
+  | "checking"
+  | "ready"
+  | "degraded"
+  | "not_ready";
+
+export interface EnterpriseProviderCapabilityDocument {
+  provider: string;
+  capability: EnterpriseProviderCapability;
+  status: EnterpriseProviderCapabilityStatus;
+  region: string;
+  checkedAt: string;
+  expiresAt: string;
+  reasonCode?: string;
+  features: Record<string, boolean>;
+  fingerprint: string;
+}
+
+export interface EnterpriseProviderCapabilitiesResponse {
+  capabilities: EnterpriseProviderCapabilityDocument[];
+}
+
 export interface EnterpriseMembershipDto {
   tenant: EnterpriseTenantDto;
   member: EnterpriseMemberDto;
