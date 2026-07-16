@@ -7,6 +7,10 @@ import {
 import { buildApp } from "../../app.js";
 import { getStoreSnapshot } from "../../infrastructure/storage/json-store.js";
 import {
+  createTenantRouteService,
+  encodeTenantRouteDocument,
+} from "./enterprise-tenant-route.js";
+import {
   enterpriseScopesForRole,
   hasEnterpriseScope,
 } from "./enterprise-rbac.js";
@@ -32,6 +36,7 @@ describe("enterprise RBAC route guard", () => {
           return { status: "ready", cellId: "cn-cell-01" } as const;
         },
       },
+      tenantRouteService,
     });
     const tenantId = await createTenant(app);
     let updateTargetId = "";
@@ -153,5 +158,26 @@ function auth(token: string) {
 }
 
 function tenantAuth(token: string, tenantId: string) {
-  return { ...auth(token), "x-tenant-id": tenantId };
+  const route = tenantRouteService.issue({
+    tenantId,
+    homeRegion: "cn",
+    cellId: "cn-cell-01",
+  });
+  if (route.status !== "ready") throw new Error("Test tenant route is not ready");
+  return {
+    ...auth(token),
+    "x-tenant-id": tenantId,
+    "x-enterprise-route-document": encodeTenantRouteDocument(route.document),
+  };
 }
+
+const tenantRouteService = createTenantRouteService({
+  signingSecret: "test-route-signing-secret-32-bytes-minimum",
+  publicRoutes: {
+    "cn-cell-01": {
+      homeRegion: "cn",
+      apiBaseUrl: "https://api-cn.enterprise.example",
+      rtcUrl: "wss://rtc-cn.enterprise.example",
+    },
+  },
+});

@@ -578,6 +578,14 @@ Signup -> verify enterprise admin -> create tenant
 `not_ready`，不得生成临时 cell 或把租户标为 active。暂停可在控制面原子完成；
 导出和删除只有外部执行器确认后才能把对应 job 标为 completed。
 
+公开路由配置使用 `ENTERPRISE_PUBLIC_ROUTES_JSON`，以 `cellId` 为键保存
+`homeRegion`、HTTPS API 域名和 WSS RTC 域名；签名密钥使用至少 32 字节的
+`ENTERPRISE_ROUTE_SIGNING_SECRET`，有效期由 60 至 900 秒之间的
+`ENTERPRISE_ROUTE_TTL_SECONDS` 控制。原始 IP、localhost、`.local`、`.internal`
+及非 HTTPS/WSS 端点不得进入 route document。企业数据面写入通过
+`X-Enterprise-Route-Document` 携带 base64url 文档；缺失、篡改、过期或
+tenant/homeRegion/cell 不匹配均在副作用前拒绝。
+
 客户端登录后先从控制面获取短期 route document：
 
 ```json

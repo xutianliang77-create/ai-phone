@@ -19,6 +19,11 @@ import {
 } from "./enterprise-tenants.repository.js";
 import { registerEnterpriseTenantLifecycleRoutes } from "./enterprise-tenant-lifecycle.routes.js";
 import type { TenantProvisioner } from "./enterprise-tenant-provisioner.js";
+import {
+  registerEnterpriseTenantRouteRoutes,
+  requireTenantRouteDocument,
+} from "./enterprise-tenant-route.routes.js";
+import type { TenantRouteService } from "./enterprise-tenant-route.js";
 import type {
   EnterpriseMemberRecord,
   EnterpriseTenantRecord,
@@ -27,8 +32,10 @@ import type {
 export async function registerEnterpriseTenantRoutes(
   app: FastifyInstance,
   tenantProvisioner: TenantProvisioner,
+  tenantRouteService: TenantRouteService,
 ) {
   await registerEnterpriseTenantLifecycleRoutes(app, tenantProvisioner);
+  await registerEnterpriseTenantRouteRoutes(app, tenantRouteService);
 
   app.get("/enterprise/v1/me", async (request, reply) => {
     const context = requireEnterpriseScope(request, reply, "tenant:read");
@@ -62,6 +69,12 @@ export async function registerEnterpriseTenantRoutes(
   app.post("/enterprise/v1/members", async (request, reply) => {
     const context = requireEnterpriseScope(request, reply, "member:write");
     if (!context) return;
+    if (!requireTenantRouteDocument(
+      request,
+      reply,
+      tenantRouteService,
+      context.tenant,
+    )) return;
     const body = (request.body ?? {}) as Partial<CreateEnterpriseMemberRequest>;
     if (tenantMismatch(body.tenantId, context.tenant.id)) {
       return sendError(reply, 409, "tenant_context_mismatch", "Tenant context mismatch");
@@ -87,6 +100,12 @@ export async function registerEnterpriseTenantRoutes(
   app.patch("/enterprise/v1/members/:memberId", async (request, reply) => {
     const context = requireEnterpriseScope(request, reply, "member:write");
     if (!context) return;
+    if (!requireTenantRouteDocument(
+      request,
+      reply,
+      tenantRouteService,
+      context.tenant,
+    )) return;
     const body = (request.body ?? {}) as Partial<UpdateEnterpriseMemberRequest>;
     if (tenantMismatch(body.tenantId, context.tenant.id)) {
       return sendError(reply, 409, "tenant_context_mismatch", "Tenant context mismatch");

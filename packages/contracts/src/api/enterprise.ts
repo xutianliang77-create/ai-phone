@@ -151,6 +151,17 @@ export interface EnterpriseTenantLifecycleResponse {
   job: EnterpriseTenantJobDto;
 }
 
+export interface EnterpriseTenantRouteDocument {
+  tenantId: string;
+  homeRegion: string;
+  cellId: string;
+  apiBaseUrl: string;
+  rtcUrl: string;
+  issuedAt: string;
+  expiresAt: string;
+  signature: string;
+}
+
 export interface EnterpriseMembershipDto {
   tenant: EnterpriseTenantDto;
   member: EnterpriseMemberDto;

@@ -1,6 +1,10 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { buildApp } from "../../app.js";
 import { getStoreSnapshot } from "../../infrastructure/storage/json-store.js";
+import {
+  createTenantRouteService,
+  encodeTenantRouteDocument,
+} from "./enterprise-tenant-route.js";
 
 describe("enterprise tenant routes", () => {
   beforeEach(() => {
@@ -60,13 +64,21 @@ describe("enterprise tenant routes", () => {
     const spoofedWrite = await app.inject({
       method: "POST",
       url: "/enterprise/v1/members",
-      headers: { ...auth("token-a"), "x-tenant-id": tenantA },
+      headers: {
+        ...auth("token-a"),
+        "x-tenant-id": tenantA,
+        ...routeHeader(tenantA),
+      },
       payload: { tenantId: tenantB, userId: "user-b", role: "member" },
     });
     const membersA = await app.inject({
       method: "GET",
       url: "/enterprise/v1/members",
-      headers: { ...auth("token-a"), "x-tenant-id": tenantA },
+      headers: {
+        ...auth("token-a"),
+        "x-tenant-id": tenantA,
+        ...routeHeader(tenantA),
+      },
     });
     await app.close();
 
@@ -87,26 +99,42 @@ describe("enterprise tenant routes", () => {
     const added = await app.inject({
       method: "POST",
       url: "/enterprise/v1/members",
-      headers: { ...auth("token-a"), "x-tenant-id": tenantA },
+      headers: {
+        ...auth("token-a"),
+        "x-tenant-id": tenantA,
+        ...routeHeader(tenantA),
+      },
       payload: { userId: "member-user", role: "member" },
     });
     const memberId = added.json().member.id as string;
     const duplicate = await app.inject({
       method: "POST",
       url: "/enterprise/v1/members",
-      headers: { ...auth("token-a"), "x-tenant-id": tenantA },
+      headers: {
+        ...auth("token-a"),
+        "x-tenant-id": tenantA,
+        ...routeHeader(tenantA),
+      },
       payload: { userId: "member-user", role: "auditor" },
     });
     const wrongTenantUpdate = await app.inject({
       method: "PATCH",
       url: `/enterprise/v1/members/${memberId}`,
-      headers: { ...auth("token-b"), "x-tenant-id": tenantB },
+      headers: {
+        ...auth("token-b"),
+        "x-tenant-id": tenantB,
+        ...routeHeader(tenantB),
+      },
       payload: { status: "suspended" },
     });
     const updated = await app.inject({
       method: "PATCH",
       url: `/enterprise/v1/members/${memberId}`,
-      headers: { ...auth("token-a"), "x-tenant-id": tenantA },
+      headers: {
+        ...auth("token-a"),
+        "x-tenant-id": tenantA,
+        ...routeHeader(tenantA),
+      },
       payload: { role: "auditor" },
     });
     await app.close();
@@ -134,7 +162,11 @@ describe("enterprise tenant routes", () => {
     const added = await app.inject({
       method: "POST",
       url: "/enterprise/v1/members",
-      headers: { ...auth("owner-token"), "x-tenant-id": tenantA },
+      headers: {
+        ...auth("owner-token"),
+        "x-tenant-id": tenantA,
+        ...routeHeader(tenantA),
+      },
       payload: { userId: "member-user", role: "member" },
     });
     const ambiguous = await app.inject({
@@ -255,8 +287,32 @@ function buildEnterpriseTestApp() {
         } as const;
       },
     },
+    tenantRouteService,
   });
 }
+
+function routeHeader(tenantId: string) {
+  const result = tenantRouteService.issue({
+    tenantId,
+    homeRegion: "cn",
+    cellId: "cn-cell-01",
+  });
+  if (result.status !== "ready") throw new Error("Test tenant route is not ready");
+  return {
+    "x-enterprise-route-document": encodeTenantRouteDocument(result.document),
+  };
+}
+
+const tenantRouteService = createTenantRouteService({
+  signingSecret: "test-route-signing-secret-32-bytes-minimum",
+  publicRoutes: {
+    "cn-cell-01": {
+      homeRegion: "cn",
+      apiBaseUrl: "https://api-cn.enterprise.example",
+      rtcUrl: "wss://rtc-cn.enterprise.example",
+    },
+  },
+});
 
 async function withoutTestAccount<T>(operation: () => Promise<T>) {
   const previous = process.env.API_TEST_AUTO_ACCOUNT;
