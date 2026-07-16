@@ -3,7 +3,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 import { pathToFileURL } from "node:url";
-import pg from "pg";
+import {
+  createEnterprisePostgresClient,
+  enterprisePostgresConnectionConfig,
+  requiredEnterprisePostgresDatabaseUrl,
+} from "./enterprise-postgres-client.js";
 import {
   loadEnterprisePostgresMigrations,
   migrateEnterprisePostgres,
@@ -11,7 +15,6 @@ import {
   type PostgresMigrationClient,
 } from "./enterprise-postgres-migrations.js";
 
-const { Client } = pg;
 export const enterpriseTenantTableNames = [
   "members", "user_tenant_directory", "platform_pending_work",
   "api_credentials", "entitlements", "subscriptions",
@@ -50,19 +53,19 @@ export async function runEnterprisePostgresAdmin(command: string | undefined) {
   if (!command || !["migrate", "rollback", "verify"].includes(command)) {
     throw new Error("Usage: enterprise-postgres-admin <migrate|rollback|verify|backup-smoke>");
   }
-  const connectionString = requiredDatabaseUrl();
-  const client = new Client({ connectionString, ssl: sslConfiguration() });
+  const client = createEnterprisePostgresClient(
+    enterprisePostgresConnectionConfig(),
+  );
   await client.connect();
-  const migrationClient = adaptClient(client);
   try {
-    if (command === "migrate") await migrateEnterprisePostgres(migrationClient);
+    if (command === "migrate") await migrateEnterprisePostgres(client);
     if (command === "rollback") {
       if (process.env.ENTERPRISE_POSTGRES_ALLOW_DOWN !== "true") {
         throw new Error("Set ENTERPRISE_POSTGRES_ALLOW_DOWN=true for one migration rollback");
       }
-      await rollbackEnterprisePostgres(migrationClient);
+      await rollbackEnterprisePostgres(client);
     }
-    const evidence = await verifyEnterprisePostgresSchema(migrationClient);
+    const evidence = await verifyEnterprisePostgresSchema(client);
     process.stdout.write(`${JSON.stringify({ status: "verified", ...evidence })}\n`);
   } finally {
     await client.end();
@@ -137,17 +140,8 @@ export async function verifyEnterprisePostgresSchema(client: PostgresMigrationCl
   };
 }
 
-function adaptClient(client: InstanceType<typeof Client>): PostgresMigrationClient {
-  return {
-    async query<Row extends Record<string, unknown>>(sql: string, values?: unknown[]) {
-      const result = await client.query(sql, values);
-      return { rows: result.rows as Row[] };
-    },
-  };
-}
-
 function runBackupArchiveSmoke() {
-  const connectionString = requiredDatabaseUrl();
+  const connectionString = requiredEnterprisePostgresDatabaseUrl();
   const directory = mkdtempSync(join(tmpdir(), "wujie-enterprise-pg-"));
   const archive = join(directory, "enterprise-schema.dump");
   try {
@@ -166,16 +160,4 @@ function runBinary(command: string, args: string[]) {
   const result = spawnSync(command, args, { stdio: "pipe", encoding: "utf8" });
   if (result.error) throw new Error(`${command} is unavailable`);
   if (result.status !== 0) throw new Error(`${command} failed: ${result.stderr.trim()}`);
-}
-
-function requiredDatabaseUrl() {
-  const value = process.env.ENTERPRISE_DATABASE_URL?.trim();
-  if (!value) throw new Error("ENTERPRISE_DATABASE_URL is required");
-  return value;
-}
-
-function sslConfiguration() {
-  return process.env.ENTERPRISE_DATABASE_SSL === "disable"
-    ? false
-    : { rejectUnauthorized: true };
 }

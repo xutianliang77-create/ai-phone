@@ -1,6 +1,6 @@
 # AI Phone 企业版开发任务
 
-版本：v1.9
+版本：v1.10
 日期：2026-07-17
 状态：E0 开发中，已对齐 UI v1.0
 
@@ -18,7 +18,7 @@
 
 - `ENT-CORE-001/002/003` 已完成代码和自动化，等待验收；生产 Web 应用位于 `apps/enterprise-web`。
 - `ENT-DATA-001` 已有十段 PostgreSQL up/down migration、tenant-first 索引、复合 FK、强制 RLS、checksum/锁和备份归档 smoke；`0008` 增加 user directory，`0009` 增加 cell pending-work projection，`0010` 把 user/actor identity 从 UUID 修正为受约束的 opaque subject text，并为不兼容 actor 提供显式 rollback 阻断。本机无 PostgreSQL/`pg_dump`，真实 migrate/restore/PITR 证据未完成，保持 `in_progress`。
-- `ENT-DATA-002` 已建立 tenant/user/cell scoped session、异步 PostgreSQL unit-of-work 和 subject ID guard。账号 subject 严格使用 `user_<uuid>`；审计/幂等 actor 允许账号或 `system:*` 等受约束命名空间。Tenant/Member/Audit、Directory、lifecycle、Inbox/Outbox、pending discovery 已实现，schema verify 会拒绝遗留 UUID identity 列。HTTP/Worker runtime driver、启动迁移、SQLite/JSON 导入和全量数据对账尚未完成，保持 `in_progress`。
+- `ENT-DATA-002` 已建立 tenant/user/cell scoped session、异步 PostgreSQL unit-of-work 和 subject ID guard。账号 subject 严格使用 `user_<uuid>`；审计/幂等 actor 允许账号或 `system:*` 等受约束命名空间。Tenant/Member/Audit、Directory、lifecycle、Inbox/Outbox、pending discovery 已实现，schema verify 会拒绝遗留 UUID identity 列。API 启动门禁默认禁用，显式 `verify` 只校验，显式 `migrate_verify` 才迁移后校验；失败发生在恢复任务和监听端口之前。HTTP/Worker Repository driver、Worker cell 配置、SQLite/JSON 导入和全量数据对账尚未完成，保持 `in_progress`。
 - `ENT-DATA-003` 已完成 tenant-scoped inbox 去重、稳定 JSON hash、领域写入/inbox/outbox 同事务、outbox 内容不可变、lease claim、指数退避和恢复处理；100 次相同事件重放只执行一次领域副作用，跨租户 provider ID/idempotency key 相互隔离。SQLite 证据仅用于自动化和封闭演示，真实 PostgreSQL 并发 claim 与 Provider sandbox 仍待正式验收。
 - `ENT-CORE-009` 已完成租户创建/区域开通幂等、失败重试、暂停、导出和删除执行器；导出固化 tenant/member/job 与 actor scope 快照，执行使用租约、有界重试和 receipt hash，删除只在 receipt 校验后进入 `deleted`，等待真实生命周期服务与对象存储验收。
 - `ENT-CORE-011` 已完成按 active membership 签发短期 HMAC route document、公开端点校验和企业写入区域 guard，等待正式域名/密钥验收。

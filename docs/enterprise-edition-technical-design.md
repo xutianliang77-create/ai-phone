@@ -1,6 +1,6 @@
 # AI Phone 企业版详细技术设计
 
-版本：v1.8
+版本：v1.9
 日期：2026-07-17
 状态：SaaS 详细技术方案基线待评审
 
@@ -22,7 +22,7 @@
 | SaaS tenant lifecycle | `ready_for_acceptance` | 已有幂等开通、暂停、导出/删除执行器、租约、有界恢复和 receipt 校验；真实对象存储/Provider 清理服务尚待验收 |
 | Append-only audit | `ready_for_acceptance` | 已有 tenant-scoped 查询、HMAC cursor、成员/RBAC/租户生命周期埋点和 SQLite/PostgreSQL 不可变约束；受控导出和真实 PostgreSQL 验收尚待后续任务 |
 | PostgreSQL schema | `implemented` | 已有十段 up/down migration、tenant-first 索引、复合 FK、强制 RLS、user directory、cell pending projection、opaque subject identity、受保护回滚、checksum/锁和归档 smoke；尚无真实 migrate/restore/PITR 证据 |
-| Tenant-scoped Repository | `in_progress` | 已有 tenant/user/cell scoped transaction、subject guard，以及 Tenant/Member/Audit、Directory、lifecycle、Inbox/Outbox、pending discovery 和共享 unit-of-work；runtime 和迁移对账尚未完成 |
+| Tenant-scoped Repository | `in_progress` | 已有 tenant/user/cell scoped transaction、subject guard、API 启动门禁，以及 Tenant/Member/Audit、Directory、lifecycle、Inbox/Outbox、pending discovery 和共享 unit-of-work；HTTP/Worker driver 和迁移对账尚未完成 |
 | Enterprise Inbox/Outbox | `ready_for_acceptance` | 已有 tenant-scoped 去重、稳定 payload hash、领域/inbox/outbox 原子提交、lease/retry/recovery 和100次重放门禁；真实 PostgreSQL 并发与 Provider sandbox 尚待验收 |
 | PostgreSQL 控制面/业务聚合 | `designed` | 后续 `ENT-DATA-002` 与领域任务范围，不能从 context 基础代码推导为已实现 |
 | SQLite | `demo_only` | 仅本地开发、自动化和封闭演示，不承载真实企业试点数据 |
@@ -624,9 +624,16 @@ migration 只有在全部 actor 都仍是 account subject 时才允许还原，�
 user/actor 列均为 text；Directory、Member、Audit、Lifecycle 和 Pending Repository
 在发 SQL 前及读取返回行时再次验证 subject。
 
-这些 Repository 和 discovery 尚未接入 HTTP/Worker runtime。启动 migration/schema
-verify、单一真值切换和数据对账完成前，禁止局部切换形成 SQLite/PostgreSQL 双写或
-分裂真值。
+第六批增加 API fail-closed PostgreSQL 启动门禁。默认
+`ENTERPRISE_POSTGRES_STARTUP_MODE=disabled`，不会读取连接串或连接数据库；
+`verify` 只连接并执行 schema verify；只有显式 `migrate_verify` 才先运行 checksum、
+advisory lock 和事务 migration，再执行相同 verify。非法 mode、缺连接串、连接失败、
+migration checksum/schema/RLS/identity 列不满足均在任何恢复任务、Fastify 构建和
+端口监听之前终止进程。校验结束后连接立即关闭，不把管理连接复用为应用连接池。
+
+该门禁只解决启动 migration/schema 前置条件，不表示 Repository runtime 已切换。
+这些 Repository 和 discovery 尚未接入 HTTP/Worker runtime。Worker cell 配置、
+单一真值切换和数据对账完成前，禁止局部切换形成 SQLite/PostgreSQL 双写或分裂真值。
 
 ### 11.2 事务和一致性边界
 

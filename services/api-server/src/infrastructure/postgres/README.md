@@ -34,6 +34,29 @@ identity 使用 opaque subject，而不是资源 UUID：
 - Repository 在 SQL 前和行映射时校验；schema verify 确认所有12个 identity 列均为
   text。raw UUID、`user-a` 和 system actor 写入 user 列都会失败闭合。
 
+## API startup gate
+
+默认 `ENTERPRISE_POSTGRES_STARTUP_MODE=disabled`，API 不读取连接串，也不连接
+PostgreSQL。需要只验证已部署 schema 时：
+
+```bash
+ENTERPRISE_POSTGRES_STARTUP_MODE=verify \
+ENTERPRISE_DATABASE_URL='postgresql://...' \
+  npm run dev -w @translation/api-server
+```
+
+只有明确允许启动时执行 migration，才使用：
+
+```bash
+ENTERPRISE_POSTGRES_STARTUP_MODE=migrate_verify \
+ENTERPRISE_DATABASE_URL='postgresql://...' \
+  npm run dev -w @translation/api-server
+```
+
+两种启用模式都在恢复任务、Fastify 构建和端口监听前失败闭合，并在校验后关闭连接。
+`verify` 不写 migration；`migrate_verify` 始终在 migration 后执行相同 schema verify。
+该门禁不代表 HTTP/Worker Repository driver 或单一真值切换已经完成。
+
 当前十段 migration 中，`0004` 增加 tenant lifecycle 状态和 job，`0005` 增加
 导出/删除执行所需的 scope snapshot、attempt、lease、retry、receipt 和终态约束，
 `0006` 为 audit events 增加 result/details 约束、tenant-first 查询索引和拒绝
@@ -83,9 +106,9 @@ ENTERPRISE_DATABASE_URL='postgresql://...' \
 - 平台恢复使用 `SET LOCAL app.cell_id = $1` 的 forced-RLS projection；projection
   不含 payload，发现引用在 claim 前必须重新进入 tenant session 核对当前 cell。
 
-HTTP/Worker runtime、启动 migration/schema verify 和 SQLite/JSON 数据对账仍未
-完成。完成前禁止局部切换或双写；平台 Worker 不得使用 `BYPASSRLS` 应用角色扫描或
-修改全租户数据。
+HTTP/Worker Repository driver、Worker cell 配置和 SQLite/JSON 数据对账仍未完成。
+完成前禁止局部切换或双写；平台 Worker 不得使用 `BYPASSRLS` 应用角色扫描或修改
+全租户数据。
 
 ## Backup smoke
 

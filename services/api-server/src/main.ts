@@ -19,13 +19,23 @@ import {
   recoverPendingEnterpriseTenantLifecycleJobs,
   startEnterpriseTenantLifecycleRecovery,
 } from "./modules/enterprise/enterprise-tenant-lifecycle-processor.js";
+import {
+  runEnterprisePostgresStartupGate,
+} from "./infrastructure/postgres/enterprise-postgres-startup-gate.js";
 
+const enterprisePostgresStartup = await runEnterprisePostgresStartupGate();
 const env = loadEnv();
 const recovery = await recoverStaleRealtimeSessions({
   graceSeconds: env.realtimeStaleSessionGraceSeconds,
 });
 const tenantLifecycleExecutor = createEnvironmentTenantLifecycleExecutor();
 const app = await buildApp({ tenantLifecycleExecutor });
+if (enterprisePostgresStartup.status === "verified") {
+  app.log.info(
+    { enterprisePostgresStartup },
+    "Enterprise PostgreSQL startup gate verified",
+  );
+}
 const outboxRecovery = await recoverPendingCallRoomOutbox();
 const voiceIdentityRecovery = await recoverPendingVoiceIdentityDeletions();
 const tenantLifecycleRecovery =
