@@ -1,6 +1,6 @@
 # AI Phone 企业版开发方案与计划
 
-版本：v1.8
+版本：v1.9
 日期：2026-07-17
 状态：E0 执行计划，已对齐 UI v1.0
 
@@ -20,7 +20,8 @@
 - `ENT-CORE-001/002/003` 已到 `ready_for_acceptance`；Tenant/Member、RBAC 和 `apps/enterprise-web` 生产应用基础可供后续任务复用。
 - Enterprise Web 已冻结 React 19、TypeScript 5.9、Vite 8、React Router 7 和 Vitest/Testing Library 技术基线，并实现真实登录、会话恢复和租户上下文。
 - `ENT-DATA-001` 已实现十段 PostgreSQL up/down migration、复合 FK、强制 RLS、migration runner、schema verify 和归档 smoke；`0010` 将 opaque user/actor subject 与资源 UUID 分离，真实 PostgreSQL migrate/restore/PITR 尚无环境证据，任务保持 `in_progress`。
-- `ENT-DATA-002` 已实现 Tenant/Member/Audit、Directory、lifecycle、Inbox/Outbox、cell pending discovery、共享 unit-of-work、subject guard 和 API fail-closed PostgreSQL 启动门禁。门禁默认禁用，`verify` 只校验，`migrate_verify` 才迁移后校验；当前仍不启用 HTTP/Worker Repository driver，下一步是 Worker cell 配置、单一真值切换和数据对账。
+- `ENT-DATA-002` 已完成单一 `legacy|postgres` Repository runtime、HTTP 全链路注入、fail-closed 启动选择和独立 cell Worker。PostgreSQL 模式不回退、不双写；API 不执行跨租户恢复扫描，Worker 通过 cell forced RLS 发现最小引用后进入 tenant transaction 复核并 claim/finalize。代码和本地自动化进入 `ready_for_acceptance`，真实 PostgreSQL 并发、容量和恢复仍待 H3。
+- `ENT-DATA-004` 已完成 JSON/SQLite 源读取、SQLite 副本 `quick_check`、空目标事务导入和六集合 count/SHA-256 读回对账；不一致回滚，且明确只用于内部演示数据迁移。真实 PostgreSQL import/reconcile 证据仍待 H3。
 - `ENT-DATA-003` 已完成 tenant-scoped Inbox/Outbox、事务内领域提交、100次重放去重、lease/retry/recovery 和 SQLite/迁移自动化，进入 `ready_for_acceptance`；真实 PostgreSQL 并发 claim 和 Provider sandbox 仍是验收门禁。
 - `ENT-UI-001` 已完成生产令牌、Material Icons 注册表、Flutter 对照和浏览器验证，等待验收；`ENT-UI-002` 已完成共享 scope 真值、九角色导航矩阵及嵌套路由 guard，仍等待 `ENT-CORE-011` 签名 route document；`ENT-UI-003` 已完成八态组件矩阵，仍等待 `ENT-CORE-008` 和领域 API 的 Provider/冲突/job 真值联调。
 - PostgreSQL、SaaS 控制面、对象存储、正式域名、真实 Provider 和目标国家合规确认均未通过门禁。
@@ -93,7 +94,7 @@ CORE-001/002 验收
 | 波次 | 主要任务 | 可并行工作 | 退出证据 |
 | --- | --- | --- | --- |
 | E0-W0 | CORE-001/002 验收、CORE-003 技术选型、DATA-001 schema | UI-001 主题/图标、威胁模型、验收环境 | 决策记录、干净构建、PostgreSQL migration 测试 |
-| E0-W1 | DATA-002/003、CORE-009/011 | UI-002/003、CORE-006/008 | 两租户攻击、幂等重放、路由签名、统一错误页 |
+| E0-W1 | DATA-002/003/004、CORE-009/011 | UI-002/003、CORE-006/008 | 两租户攻击、单一 runtime、cell Worker、导入对账、幂等重放、路由签名、统一错误页 |
 | E0-W2 | CORE-007/010/012、CORE-004/005 | UI-004/005/006/007、OBS-001 | entitlement/ledger 对账、知识版本、工作台真值 |
 | E0-W3 | UI-008/009/010/011、REL-001 前置 | 对象存储恢复、控制面故障演练 | A0、AC-UI、A1 适用项和生产 Web 构建 |
 
@@ -273,4 +274,4 @@ CORE-001/002 验收
 
 E0 完成后再启动 `ENT-MTG-001` 主链；允许提前做协议 spike，但不能把未接入真实 tenant/data/readiness 的会议页面计为 E1 完成。
 
-当前进展：第2项 `ENT-CORE-003` 已完成并等待验收；第3项 `ENT-DATA-001` 已完成十段 schema 与本地自动化，等待真实 PostgreSQL migrate/restore/PITR 证据；第4项已完成 Repository、pending discovery、subject identity 契约和 API 启动门禁，但 HTTP/Worker driver、Worker cell 配置和数据对账未完成；第6项 `ENT-UI-001/002/003` 已进入验收。
+当前进展：第2项 `ENT-CORE-003` 已完成并等待验收；第3项 `ENT-DATA-001` 已完成十段 schema 与本地自动化，等待真实 PostgreSQL migrate/restore/PITR 证据；第4项已完成单一 Repository runtime、HTTP 注入、cell Worker、subject identity、启动门禁和 JSON/SQLite count/hash 对账，`ENT-DATA-002/003/004` 进入验收，但尚无真实 PostgreSQL 环境证据；第6项 `ENT-UI-001/002/003` 已进入验收。

@@ -1,7 +1,7 @@
 # AI Phone 企业版技术架构
 
-版本：v1.1
-日期：2026-07-15
+版本：v1.2
+日期：2026-07-17
 状态：SaaS 详细架构基线待评审
 
 ## 1. 架构目标
@@ -37,6 +37,7 @@ flowchart TB
 
     subgraph Business["企业业务服务"]
       API["API Server"]
+      RepoWorker["Enterprise Repository Cell Worker"]
       Gateway["Realtime Gateway"]
       Worker["Translation/Call Worker"]
       Campaign["Campaign Scheduler"]
@@ -90,6 +91,8 @@ flowchart TB
     Agent --> CRM
     Meeting --> OCR
     API --> DB
+    RepoWorker --> DB
+    Outbox --> RepoWorker
     API --> Objects
     API --> Outbox
     API --> Audit
@@ -133,6 +136,7 @@ SaaS 控制面保存租户目录、套餐、区域归属、全局功能版本和
 ```text
 reverse-proxy
 api-server
+enterprise-repository-worker
 realtime-gateway
 translation-worker
 livekit
@@ -158,6 +162,7 @@ object-storage
 | 逻辑能力 | 当前代码落点 | 演进方式 |
 | --- | --- | --- |
 | 账号、Tenant、RBAC、企业命令 | `services/api-server` | 先按 domain module 隔离；只有独立扩缩容或故障域需要时才拆服务 |
+| Enterprise Repository runtime/cell Worker | `services/api-server/src/modules/enterprise`、`services/api-server/src/infrastructure/postgres` | API 使用单一 `legacy|postgres` runtime；独立启动的 cell Worker 仅以 cell discovery 和 tenant transaction 角色 claim/finalize |
 | 实时信令、字幕和 playback 控制 | `services/realtime-gateway` | 保持无业务数据库直写，通过 API/事件提交业务结果 |
 | ASR、翻译、TTS、Agent call worker | `services/translation-worker` | 按 track/任务横向扩展，Provider 继续通过 Adapter |
 | PSTN 媒体桥 | `services/pstn-bridge` | 只处理 Provider 媒体/状态协议，不承载 Campaign 真值 |
@@ -351,7 +356,7 @@ public internet
 
 - 客户端凭证只能访问公开 API/RTC，不得直接访问 Worker、数据库、对象存储或模型服务。
 - 内部网络位置不代表可信；服务间调用使用短期 workload identity 或 mTLS，并携带 tenant、actor、purpose 和 trace context。
-- API 是业务数据库唯一写入方。Scheduler/Worker 只通过带 workload identity 的内部命令接口提交结果，不持有业务表写凭证；migration、备份和恢复另用受审计的专用角色。
+- API 与受限的 Enterprise Repository cell Worker 是业务数据库的直接写入方。cell Worker 只允许 cell-scoped pending discovery 和重新建立的 tenant-scoped claim/finalize transaction，不得拥有 DDL、表 owner 或 `BYPASSRLS`；Translation/Call/OCR、Scheduler、Agent 等通用 Worker 仍只通过带 workload identity 的内部命令或事件接口提交结果，不持有业务表写凭证。migration、导入、备份和恢复另用受审计的专用 maintenance 角色。
 - Provider webhook 在 edge 校验签名、时间窗口和重放，再以 inbox event 进入业务事务。
 - Provider egress 使用域名/端口 allowlist；租户配置只引用 secret ID，不保存或回传明文密钥。
 

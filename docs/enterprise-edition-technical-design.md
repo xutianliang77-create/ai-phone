@@ -1,6 +1,6 @@
 # AI Phone 企业版详细技术设计
 
-版本：v1.9
+版本：v1.10
 日期：2026-07-17
 状态：SaaS 详细技术方案基线待评审
 
@@ -22,9 +22,10 @@
 | SaaS tenant lifecycle | `ready_for_acceptance` | 已有幂等开通、暂停、导出/删除执行器、租约、有界恢复和 receipt 校验；真实对象存储/Provider 清理服务尚待验收 |
 | Append-only audit | `ready_for_acceptance` | 已有 tenant-scoped 查询、HMAC cursor、成员/RBAC/租户生命周期埋点和 SQLite/PostgreSQL 不可变约束；受控导出和真实 PostgreSQL 验收尚待后续任务 |
 | PostgreSQL schema | `implemented` | 已有十段 up/down migration、tenant-first 索引、复合 FK、强制 RLS、user directory、cell pending projection、opaque subject identity、受保护回滚、checksum/锁和归档 smoke；尚无真实 migrate/restore/PITR 证据 |
-| Tenant-scoped Repository | `in_progress` | 已有 tenant/user/cell scoped transaction、subject guard、API 启动门禁，以及 Tenant/Member/Audit、Directory、lifecycle、Inbox/Outbox、pending discovery 和共享 unit-of-work；HTTP/Worker driver 和迁移对账尚未完成 |
+| Tenant-scoped Repository | `ready_for_acceptance` | 已有 tenant/user/cell scoped transaction、subject guard、单一 `legacy|postgres` runtime、HTTP 全链路注入、独立 cell Worker，以及 Tenant/Member/Audit、Directory、lifecycle、Inbox/Outbox、pending discovery 和共享 unit-of-work；尚无真实 PostgreSQL H3 证据 |
 | Enterprise Inbox/Outbox | `ready_for_acceptance` | 已有 tenant-scoped 去重、稳定 payload hash、领域/inbox/outbox 原子提交、lease/retry/recovery 和100次重放门禁；真实 PostgreSQL 并发与 Provider sandbox 尚待验收 |
-| PostgreSQL 控制面/业务聚合 | `designed` | 后续 `ENT-DATA-002` 与领域任务范围，不能从 context 基础代码推导为已实现 |
+| SQLite/JSON 演示数据导入 | `ready_for_acceptance` | 已有维护窗口、SQLite 临时副本与 quick_check、空目标事务导入、六集合 count/SHA-256 读回对账和不一致回滚；仅限内部演示数据 |
+| PostgreSQL 控制面/业务聚合 | `designed` | 后续 CORE/MTG/CS/MKT 领域任务范围，不能从公共 Repository runtime 推导为已实现 |
 | SQLite | `demo_only` | 仅本地开发、自动化和封闭演示，不承载真实企业试点数据 |
 | PSTN/CRM/Calendar/OCR | `not_ready` 或按环境探测 | 未配置必须明确降级，不生成虚假外部对象或成功状态 |
 
@@ -565,9 +566,9 @@ PostgreSQL scoped session 在独立事务中执行
 `set_config('app.tenant_id', tenantId, true)`，只向 Repository 暴露自动把 tenant
 注入 `$1` 的 query 方法。SELECT/UPDATE/DELETE 缺少显式 `tenant_id = $1`、
 仅在 SQL 注释中伪造 predicate，或 INSERT 的 `tenant_id` 未对应 `$1` 时均在发往
-数据库前拒绝；异常路径回滚并释放连接。该层仍是 `ENT-DATA-002` 基础门禁，
-尚未把当前 SQLite/JSON 企业 CRUD 全量切换到真实 PostgreSQL，不能据此宣称
-运行时 PostgreSQL Repository 已完成。
+数据库前拒绝；异常路径回滚并释放连接。该层是 `ENT-DATA-002` 的 SQL 和事务
+基础门禁；是否启用 PostgreSQL 由唯一 runtime driver 决定，不能由单个 Repository
+或路由自行选择。
 
 第二批实现新增 Tenant/Member/Audit 的异步 PostgreSQL unit-of-work。tenant 根表
 没有 `tenant_id` 列，因此只能使用专用 `queryTenantRecord`，并强制
@@ -631,9 +632,31 @@ advisory lock 和事务 migration，再执行相同 verify。非法 mode、缺�
 migration checksum/schema/RLS/identity 列不满足均在任何恢复任务、Fastify 构建和
 端口监听之前终止进程。校验结束后连接立即关闭，不把管理连接复用为应用连接池。
 
-该门禁只解决启动 migration/schema 前置条件，不表示 Repository runtime 已切换。
-这些 Repository 和 discovery 尚未接入 HTTP/Worker runtime。Worker cell 配置、
-单一真值切换和数据对账完成前，禁止局部切换形成 SQLite/PostgreSQL 双写或分裂真值。
+第七批完成 Enterprise Repository runtime。`ENTERPRISE_REPOSITORY_DRIVER` 只接受
+`legacy|postgres`，默认 `legacy`；选择 `postgres` 时必须先得到启动 gate 的
+`verified` 结果，再创建一个应用连接池并把同一 runtime 注入 tenant、member、
+RBAC、audit、route 和 lifecycle 路由。不存在按路由选择、失败回退、shadow read、
+双写或 `dual_write` 模式。PostgreSQL 创建租户使用
+`ownerUserId + idempotencyKey` 的确定性 UUID，以便 forced RLS 下不做全租户 job
+扫描也能恢复同一 provision 事务；同 key 不同 request hash 返回冲突。
+
+API 在 PostgreSQL 模式不启动平台级 lifecycle sweep。独立
+`enterprise-postgres-worker` 必须显式配置 `cellId + workerId`，poll、batch 和 lease
+都有上限；它先用 cell session 读取 `platform_pending_work` 最小引用，再以 tenant
+session 锁定并复核 tenant 当前 cell，随后 claim/finalize lifecycle 或 outbox。
+单条记录异常只计入 failed，不阻断同批其他记录；poll 失败会报告并继续下一轮。
+Outbox publisher 必须是无内嵌凭证的 HTTPS URL 且配置 token，使用 event ID 作为
+稳定幂等键；未配置时 Worker 启动失败，不伪造投递成功。
+
+第八批完成 `ENT-DATA-004` 演示数据导入。维护工具只处理当前已实现的
+Tenant、Member、TenantJob、Audit、Inbox 和 Outbox 六类记录。JSON 直接读取；
+SQLite 在 API/Worker 停止的维护窗口复制主文件及 WAL/SHM 到临时目录，执行
+`quick_check` 后读取，原文件不被打开或修改。导入使用独立受审计的 maintenance
+数据库角色（允许受审计的 `BYPASSRLS`，不得复用应用凭证）和 serializable
+transaction，获取 advisory lock，要求目标六集合为空，
+按依赖顺序写入，再在同一事务读回。源和目标均按稳定键排序、规范化 timestamptz，
+分别计算每集合 count/SHA-256 与总 hash；任一差异或约束失败即 rollback。
+该工具不是客户生产迁移通道，也不替代全域 `ENT-DATA-005`、PITR 或真实 H3 演练。
 
 ### 11.2 事务和一致性边界
 
@@ -652,8 +675,9 @@ migration checksum/schema/RLS/identity 列不满足均在任何恢复任务、Fa
 
 当前 `ENT-DATA-003` 实现要求 inbox 处理器同步完成：领域状态、已处理 inbox 和
 待发送 outbox 由同一个本地存储事务提交，回调抛错或返回 Promise 均整体回滚。
-PostgreSQL 版本通过共享 tenant unit-of-work 提供同一原子边界，但尚未接入 runtime。
-平台恢复使用 cell-scoped forced-RLS 投影先发现最小 tenant/event/job 引用，再进入
+PostgreSQL 版本通过共享 tenant unit-of-work 提供同一原子边界，并由单一 runtime
+接入 HTTP 与 cell Worker。平台恢复使用 cell-scoped forced-RLS 投影先发现最小
+tenant/event/job 引用，再进入
 独立 tenant transaction 复核 cell 并 claim；应用角色不使用 `BYPASSRLS`，projection
 也不包含 payload 或领域结果。
 provider payload 先转换为键排序的有限深度 JSON 并计算 SHA-256；相同

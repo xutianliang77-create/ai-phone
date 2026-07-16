@@ -1,7 +1,7 @@
 # AI Phone 企业版设计文档索引
 
-版本：v1.3
-日期：2026-07-16
+版本：v1.4
+日期：2026-07-17
 状态：SaaS 详细设计基线
 
 ## 1. 产品边界
@@ -36,6 +36,10 @@
 4. [企业版详细技术设计](./enterprise-edition-technical-design.md)：最后落到 API 契约、数据模型、事务、幂等、Provider readiness、安全和测试门禁。
 
 四份文档共同使用成熟度语义 `designed`、`implemented`、`verified`、`production_ready`，运行时 readiness 另用 `not_configured`、`checking`、`ready`、`degraded`、`not_ready`；SQLite 环境固定报告 `demo_only`。文档中的目标组件不自动代表代码已经实现；当前实现和任务状态以开发任务表、代码、测试和环境证据为准。
+
+当前 `ENT-DATA-002/004` 已具备单一 Enterprise Repository runtime、独立 PostgreSQL
+cell Worker 和 JSON/SQLite 演示数据 count/hash 对账代码，状态为等待真实 PostgreSQL
+验收；这不等于 `ENT-DATA-001`、PITR、容量、安全或企业生产门禁已经通过。
 
 ## 3. 继承文档
 

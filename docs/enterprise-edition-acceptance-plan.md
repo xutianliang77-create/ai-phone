@@ -1,6 +1,6 @@
 # AI Phone 企业版验收任务与计划
 
-版本：v1.5
+版本：v1.6
 日期：2026-07-17
 状态：可执行验收计划，已对齐 UI v1.0
 
@@ -75,6 +75,9 @@ Mock 只能验证协议，不能替代 iPhone/Web、真实 LiveKit、真实模�
 | AC-ENT-0006 | schema/contract | API、事件、工具和 Provider schema 测试通过 |
 | AC-ENT-0007 | SaaS 交付边界 | 构建和文档不包含客户侧服务端安装路径 |
 | AC-ENT-0008 | 环境门禁 | SQLite 环境报告 demo_only，不能创建真实 SaaS 租户 |
+| AC-ENT-0009 | Repository runtime | `legacy|postgres` 单一 driver；PostgreSQL 未通过 startup verify 时拒绝；无 fallback、双写或路由级混用 |
+| AC-ENT-0010 | Cell Worker 启动 | 非 PostgreSQL driver、缺 cell/worker、越界 poll/batch/lease、缺 HTTPS publisher/token 均失败闭合 |
+| AC-ENT-0011 | 演示数据导入 | 仅维护窗口和空目标允许；JSON/SQLite 导入后六集合 count/hash 一致，不一致整体回滚 |
 
 ### 4.1 企业 UI 与前端工程验收
 
@@ -348,6 +351,10 @@ Mock 只能验证协议，不能替代 iPhone/Web、真实 LiveKit、真实模�
 - PostgreSQL PITR 和对象存储恢复演练。
 - migration 后使用普通应用角色验证 `FORCE ROW LEVEL SECURITY`；确认 user directory self policy、tenant projection policy、成员投影同步和跨租户拒绝均生效。
 - 使用独立 cell Worker 角色验证 pending projection forced RLS、trigger 同步、空 cell 失败闭合、旧 cell 拒绝和 tenant transaction 原子 claim。
+- 使用 API 应用角色验证 PostgreSQL runtime 只在 startup gate `verified` 后创建；非法或 `dual_write` driver、连接/校验失败均不得监听端口，也不得回退到 legacy。
+- 停止 API/Worker 后，分别从 JSON 和 SQLite 导入 Tenant/Member/Job/Audit/Inbox/Outbox；确认 SQLite 原文件 hash 不变、目标非空时导入拒绝、每集合 count/SHA-256 与总 hash 一致。
+- 人为改变一条记录、漏写一个集合和制造数据库约束错误，确认 import transaction rollback；独立 `reconcile` 使用 repeatable-read 只读快照并报告具体不匹配集合。
+- Worker 同 cell 多实例并发时验证只有一个有效 claim；单条 finalize 失败不阻断同批其他记录，poll 故障后继续下一轮，所有 Provider 投递复用 event ID 幂等键。
 - 验证 `0010` 将旧 UUID identity 规范化为 `user_<uuid>`，Directory self RLS 仍生效，system actor 可审计且 user 列拒绝 system actor。
 - 分别执行 disabled、verify、migrate_verify 和非法启动模式；确认 disabled 无连接、verify 无写 migration、migrate_verify 顺序正确，所有失败均无 HTTP 监听或后台恢复任务。
 - 恢复后余额、审计、禁拨和授权证据一致。

@@ -1,6 +1,6 @@
 # AI Phone 企业版开发任务
 
-版本：v1.10
+版本：v1.11
 日期：2026-07-17
 状态：E0 开发中，已对齐 UI v1.0
 
@@ -18,7 +18,8 @@
 
 - `ENT-CORE-001/002/003` 已完成代码和自动化，等待验收；生产 Web 应用位于 `apps/enterprise-web`。
 - `ENT-DATA-001` 已有十段 PostgreSQL up/down migration、tenant-first 索引、复合 FK、强制 RLS、checksum/锁和备份归档 smoke；`0008` 增加 user directory，`0009` 增加 cell pending-work projection，`0010` 把 user/actor identity 从 UUID 修正为受约束的 opaque subject text，并为不兼容 actor 提供显式 rollback 阻断。本机无 PostgreSQL/`pg_dump`，真实 migrate/restore/PITR 证据未完成，保持 `in_progress`。
-- `ENT-DATA-002` 已建立 tenant/user/cell scoped session、异步 PostgreSQL unit-of-work 和 subject ID guard。账号 subject 严格使用 `user_<uuid>`；审计/幂等 actor 允许账号或 `system:*` 等受约束命名空间。Tenant/Member/Audit、Directory、lifecycle、Inbox/Outbox、pending discovery 已实现，schema verify 会拒绝遗留 UUID identity 列。API 启动门禁默认禁用，显式 `verify` 只校验，显式 `migrate_verify` 才迁移后校验；失败发生在恢复任务和监听端口之前。HTTP/Worker Repository driver、Worker cell 配置、SQLite/JSON 导入和全量数据对账尚未完成，保持 `in_progress`。
+- `ENT-DATA-002` 已完成单一 `legacy|postgres` Enterprise Repository runtime adapter，Tenant/Member/Audit、Directory、lifecycle 和 HTTP 路由均通过同一 runtime；PostgreSQL 只有在启动 schema gate 已验证时才允许选中，不存在 fallback、双写或局部切换。独立 cell Worker 已实现 cell/worker/poll/batch/lease 配置、forced-RLS pending discovery、tenant transaction 二次复核、lifecycle/outbox claim/finalize、失败隔离和显式 publisher 降级。代码与本地自动化完成，进入 `ready_for_acceptance`；真实 PostgreSQL、并发 claim、容量和恢复证据仍属于 H3 门禁。
+- `ENT-DATA-004` 已实现 JSON/SQLite 六类企业记录源读取、SQLite 临时副本与 `quick_check`、维护窗口空目标导入、事务内读回，以及逐集合 count/SHA-256 和总 hash 对账；任何不一致整体回滚。该工具只迁移当前 Tenant/Member/Job/Audit/Inbox/Outbox 演示数据，不是客户生产迁移通道，进入 `ready_for_acceptance`。
 - `ENT-DATA-003` 已完成 tenant-scoped inbox 去重、稳定 JSON hash、领域写入/inbox/outbox 同事务、outbox 内容不可变、lease claim、指数退避和恢复处理；100 次相同事件重放只执行一次领域副作用，跨租户 provider ID/idempotency key 相互隔离。SQLite 证据仅用于自动化和封闭演示，真实 PostgreSQL 并发 claim 与 Provider sandbox 仍待正式验收。
 - `ENT-CORE-009` 已完成租户创建/区域开通幂等、失败重试、暂停、导出和删除执行器；导出固化 tenant/member/job 与 actor scope 快照，执行使用租约、有界重试和 receipt hash，删除只在 receipt 校验后进入 `deleted`，等待真实生命周期服务与对象存储验收。
 - `ENT-CORE-011` 已完成按 active membership 签发短期 HMAC route document、公开端点校验和企业写入区域 guard，等待正式域名/密钥验收。
@@ -27,7 +28,7 @@
 - `ENT-UI-001` 已完成生产颜色/字号/尺寸/圆角令牌、Material Icons 语义注册表、Flutter 对照和依赖扫描，等待验收。
 - `ENT-UI-002` 已完成 active membership 租户选择、共享 role/scope 真值、九角色 route discovery、scope 导航、直接/嵌套路由 guard 及签名 route document 联调，等待验收。
 - `ENT-UI-003` 已完成八态注册表、语义图标、ARIA live/alert、trace ID、可行动入口和组件矩阵，并接入服务端 Provider capability、租户生命周期 job 及 409/412 冲突映射，等待验收。
-- PostgreSQL schema 和本批 Repository 代码已实现但尚未接入 HTTP runtime，真实数据库门禁也未通过；生命周期 HTTP 执行器尚未接入真实对象存储/Provider 清理服务。基础 append-only 审计已实现，但受控审计导出、retention/对象清单和 Provider 删除收敛仍属于 `ENT-UI-008/ENT-REL-002`，企业业务聚合和外部 Provider 仍未通过实现或真实环境门禁。
+- PostgreSQL runtime、cell Worker 和演示数据导入对账代码已接通，但尚未在真实 PostgreSQL 上执行 migrate/import/reconcile、并发租约、恢复或容量门禁，不能据此宣称企业试点或生产可用。生命周期执行器也尚未接入真实对象存储/Provider 清理服务。基础 append-only 审计已实现，但受控审计导出、retention/对象清单和 Provider 删除收敛仍属于 `ENT-UI-008/ENT-REL-002`，企业业务聚合和外部 Provider 仍未通过实现或真实环境门禁。
 
 ## 2. P0 企业公共底座
 
@@ -46,7 +47,7 @@
 | ENT-CORE-011 | Tenant Directory | CORE-009 | homeRegion/cell、签名 route document | 区域错误时拒绝业务写入 | ready_for_acceptance |
 | ENT-CORE-012 | SaaS 计量聚合 | CORE-007/010 | usage event、账期聚合、调整流水 | 不修改原始 ledger，账单可对账 | todo |
 | ENT-DATA-001 | 企业 PostgreSQL schema | CORE-001 | schema、migration、FK、backup | 真实企业试点数据库门禁通过 | in_progress |
-| ENT-DATA-002 | Tenant-scoped Repository | DATA-001 | Repository context 和 lint/test | 不存在无 tenant 查询入口 | in_progress |
+| ENT-DATA-002 | Tenant-scoped Repository | DATA-001 | Repository context、runtime adapter、cell Worker 和 lint/test | 不存在无 tenant 查询入口、fallback 或双写 | ready_for_acceptance |
 | ENT-DATA-003 | Inbox/Outbox | DATA-001 | 幂等收件、事务发件、重试 | 重放100次仅一次副作用 | ready_for_acceptance |
 | ENT-OBS-001 | 企业链路追踪 | CORE-006 | trace IDs、质量和成本报告 | session 到 ledger/tool 可追踪 | todo |
 
@@ -129,7 +130,7 @@
 
 | 编号 | 任务 | 依赖 | 交付物 | 完成定义 | 状态 |
 | --- | --- | --- | --- | --- | --- |
-| ENT-DATA-004 | SQLite 演示数据导入 | DATA-002/003 | demo export/import/reconcile | 只用于迁移内部演示数据，不承载生产 | todo |
+| ENT-DATA-004 | SQLite/JSON 演示数据导入 | DATA-002/003 | source copy/check、empty-target import、count/hash reconcile | 不一致回滚；只迁移内部演示数据，不承载生产 | ready_for_acceptance |
 | ENT-DATA-005 | Cell 数据迁移和回滚 | CORE-011、DATA-001 | export/import/reconcile/rollback | 记录、ledger、hash 全量一致 | todo |
 | ENT-DATA-006 | 多实例协调 | DATA-001/003 | lease/queue、无全局内存真值 | Worker 故障不重复执行 | todo |
 | ENT-REL-001 | 企业安全门禁 | CORE-002/006 | SAST、依赖、密钥和渗透测试 | P0/P1 问题清零 | todo |
