@@ -1,6 +1,6 @@
 # AI Phone 企业版开发方案与计划
 
-版本：v1.1
+版本：v1.2
 日期：2026-07-16
 状态：E0 执行计划，已对齐 UI v1.0
 
@@ -17,9 +17,9 @@
 
 ### 1.1 当前基线
 
-- `ENT-CORE-001/002` 已到 `ready_for_acceptance`，Tenant/Member 和 RBAC 服务端基础可供后续任务复用。
-- 企业 UI 视觉、图标、布局和页面状态已有 v1.0 设计基线与静态原型，但仓库当前只有 Flutter `apps/mobile`，尚无生产企业 Web 应用。
-- `ENT-CORE-003/ENT-UI-001` 因设计已启动标记为 `in_progress`；生产脚手架、前端主题包、登录和自动化仍未完成。
+- `ENT-CORE-001/002/003` 已到 `ready_for_acceptance`；Tenant/Member、RBAC 和 `apps/enterprise-web` 生产应用基础可供后续任务复用。
+- Enterprise Web 已冻结 React 19、TypeScript 5.9、Vite 8、React Router 7 和 Vitest/Testing Library 技术基线，并实现真实登录、会话恢复和租户上下文。
+- `ENT-UI-001/002/003` 已进入生产实现，但完整组件令牌、九角色路由矩阵、route document、业务状态联调和视觉回归仍未完成。
 - PostgreSQL、SaaS 控制面、对象存储、正式域名、真实 Provider 和目标国家合规确认均未通过门禁。
 - 当前开发必须继续使用独立企业 worktree；个人版声纹和部署 WIP 不进入企业提交。
 
@@ -269,3 +269,5 @@ CORE-001/002 验收
 | 10 | `ENT-UI-004..010` | 完成公共页面、响应式、无障碍、E2E 和 Web 发布门禁 |
 
 E0 完成后再启动 `ENT-MTG-001` 主链；允许提前做协议 spike，但不能把未接入真实 tenant/data/readiness 的会议页面计为 E1 完成。
+
+当前进展：第2项 `ENT-CORE-003` 已完成并等待验收；第6项已有主题、Material Icons、租户选择、scope 导航和统一状态的基础实现，但 `ENT-UI-001/002/003` 尚未结项。下一条数据主线为第3项 `ENT-DATA-001`。

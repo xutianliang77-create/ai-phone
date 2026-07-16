@@ -81,6 +81,15 @@ export function listEnterpriseMembers(tenantId: string) {
     .sort((left, right) => left.createdAt.localeCompare(right.createdAt));
 }
 
+export function listEnterpriseMemberships(userId: string) {
+  const store = getStoreSnapshot();
+  return store.enterpriseMembers.flatMap((member) => {
+    if (member.userId !== userId || member.status !== "active") return [];
+    const tenant = activeTenant(member.tenantId);
+    return tenant ? [{ tenant, member }] : [];
+  });
+}
+
 export function addEnterpriseMember(input: {
   tenantId: string;
   userId: string;

@@ -1,6 +1,6 @@
 # AI Phone 企业版开发任务
 
-版本：v1.1
+版本：v1.2
 日期：2026-07-16
 状态：E0 开发中，已对齐 UI v1.0
 
@@ -16,9 +16,9 @@
 
 ### 1.1 当前状态快照
 
-- `ENT-CORE-001/002` 已完成代码和自动化，等待验收。
-- `ENT-CORE-003` 已有 UI 设计基线和静态原型，但仓库尚无企业 Web 应用，状态为 `in_progress`。
-- `ENT-UI-001` 已完成设计令牌和图标映射的文档/原型验证，生产主题包尚未实现，状态为 `in_progress`。
+- `ENT-CORE-001/002/003` 已完成代码和自动化，等待验收；生产 Web 应用位于 `apps/enterprise-web`。
+- `ENT-UI-001` 已有生产设计令牌和自托管 Material Icons 基础，完整组件令牌注册表与视觉回归仍在进行。
+- `ENT-UI-002/003` 已有 active membership 租户选择、scope 导航、guarded route 和统一状态组件基础；九角色路由矩阵、route document 和业务状态联调尚未完成。
 - PostgreSQL、SaaS 控制面、企业业务聚合和外部 Provider 仍未通过实现或真实环境门禁。
 
 ## 2. P0 企业公共底座
@@ -27,7 +27,7 @@
 | --- | --- | --- | --- | --- | --- |
 | ENT-CORE-001 | Tenant 和 Member | 无 | tenant/member schema、Repository、API | 所有企业资源强制 tenant scope | ready_for_acceptance |
 | ENT-CORE-002 | RBAC | CORE-001 | 角色、scope、服务端 guard | 越权矩阵全部拒绝 | ready_for_acceptance |
-| ENT-CORE-003 | 企业 Web 应用基础 | CORE-001/002 | 技术选型、应用脚手架、登录会话、路由和构建 | 干净环境可构建；登录失败不进入壳；不包含模型/Provider 地址 | in_progress |
+| ENT-CORE-003 | 企业 Web 应用基础 | CORE-001/002 | 技术选型、应用脚手架、登录会话、路由和构建 | 干净环境可构建；登录失败不进入壳；不包含模型/Provider 地址 | ready_for_acceptance |
 | ENT-CORE-004 | 企业知识版本 | CORE-001 | source/version/chunk/publish | 未发布和过期知识不可检索 | todo |
 | ENT-CORE-005 | 企业术语和话术 | CORE-004 | term pack、script template | ASR/翻译/LLM 使用同一版本引用 | todo |
 | ENT-CORE-006 | 审计事件 | CORE-001 | append-only audit API | 高风险操作都有 actor/target/result | todo |
@@ -47,8 +47,8 @@
 | 编号 | 任务 | 依赖 | 交付物 | 完成定义 | 状态 |
 | --- | --- | --- | --- | --- | --- |
 | ENT-UI-001 | 视觉令牌与图标注册表 | CORE-003 | Web theme、Material Icons 映射、组件令牌 | 颜色/字号/8px圆角与 Flutter 一致；不混用图标库 | in_progress |
-| ENT-UI-002 | 租户选择与权限导航 | CORE-002/003/011 | route discovery、tenant picker、scope nav、guarded route | 九角色入口正确；直接 URL 仍由服务端拒绝 | todo |
-| ENT-UI-003 | 统一页面状态 | CORE-003/008 | loading/empty/not_ready/degraded/forbidden/conflict/processing/failed 组件 | 不出现空白页、假成功或覆盖冲突版本 | todo |
+| ENT-UI-002 | 租户选择与权限导航 | CORE-002/003/011 | route discovery、tenant picker、scope nav、guarded route | 九角色入口正确；直接 URL 仍由服务端拒绝 | in_progress |
+| ENT-UI-003 | 统一页面状态 | CORE-003/008 | loading/empty/not_ready/degraded/forbidden/conflict/processing/failed 组件 | 不出现空白页、假成功或覆盖冲突版本 | in_progress |
 | ENT-UI-004 | 企业工作台 | UI-002/003、CORE-007/008/010/012、OBS-001 | readiness、待办、业务状态、用量和告警 | 所有状态来自服务端；无真实样本不绘制趋势 | todo |
 | ENT-UI-005 | 成员与角色设置 | UI-002/003、CORE-001/002 | 成员列表、邀请、角色/状态编辑、scope 说明 | 角色变更与服务端 scopes 一致；越权入口不可执行 | todo |
 | ENT-UI-006 | 知识与术语管理 | UI-003、CORE-004/005 | source/version/publish、term pack、script template 页面 | 未发布/过期内容明确标识且不能被错误发布 | todo |
@@ -59,7 +59,7 @@
 | ENT-UI-011 | Flutter 企业入口 | UI-001/002、CORE-002 | 工作台、会议、接管、告警和我的入口 | 不复制批量管理；离线/越权不显示乐观成功 | todo |
 | ENT-UI-012 | Web 访客参会壳 | CORE-003、MTG-002 | guest token 入会、设备检查、字幕和共享入口 | token 仅访问指定 meeting；不暴露租户导航和成员数据 | todo |
 
-`ENT-UI-001/CORE-003` 的 `in_progress` 只表示 UI 设计和原型已经启动；静态 HTML 不进入生产构建，也不满足 Web 应用完成定义。
+`ENT-CORE-003` 的生产脚手架、登录和构建已完成；`ENT-UI-001/002/003` 仍需分别完成组件令牌、九角色路由矩阵、route document 和业务状态联调。静态 HTML 原型不进入生产构建，也不能替代这些任务的验收。
 
 ## 4. P0 企业会议
 

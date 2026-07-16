@@ -1,13 +1,8 @@
 import type {
   EnterpriseMemberRole,
   EnterpriseMemberStatus,
+  EnterpriseTenantStatus,
 } from "@translation/contracts";
-
-export type EnterpriseTenantStatus =
-  | "active"
-  | "suspended"
-  | "deletion_requested"
-  | "deleted";
 
 export interface EnterpriseTenantRecord {
   id: string;

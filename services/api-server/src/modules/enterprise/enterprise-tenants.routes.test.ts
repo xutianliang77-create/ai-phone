@@ -155,6 +155,40 @@ describe("enterprise tenant routes", () => {
     expect(denied.statusCode).toBe(403);
     expect(denied.json().error.code).toBe("enterprise_scope_denied");
   });
+
+  it("discovers only the signed-in account active memberships", async () => {
+    seedAccount("owner-user", "owner-token");
+    seedAccount("other-user", "other-token");
+    const app = await buildApp();
+    const tenantA = await createTenant(app, "owner-token", "Tenant A");
+    await createTenant(app, "owner-token", "Tenant B");
+    await createTenant(app, "other-token", "Other Tenant");
+    const ownerMembership = getStoreSnapshot().enterpriseMembers.find(
+      (member) => member.userId === "owner-user" && member.tenantId === tenantA,
+    );
+    if (!ownerMembership) throw new Error("Owner membership was not created");
+    ownerMembership.status = "suspended";
+
+    const discovered = await app.inject({
+      method: "GET",
+      url: "/enterprise/v1/tenants",
+      headers: auth("owner-token"),
+    });
+    const unauthorized = await withoutTestAccount(() => app.inject({
+      method: "GET",
+      url: "/enterprise/v1/tenants",
+    }));
+    await app.close();
+
+    expect(discovered.statusCode).toBe(200);
+    expect(discovered.json().tenants).toHaveLength(1);
+    expect(discovered.json().tenants[0]).toMatchObject({
+      tenant: { name: "Tenant B", status: "active" },
+      member: { userId: "owner-user", status: "active" },
+    });
+    expect(JSON.stringify(discovered.json())).not.toContain("Other Tenant");
+    expect(unauthorized.statusCode).toBe(401);
+  });
 });
 
 function seedAccount(userId: string, token: string) {
@@ -193,4 +227,18 @@ async function createTenant(
   });
   expect(response.statusCode).toBe(201);
   return response.json().tenant.id as string;
+}
+
+async function withoutTestAccount<T>(operation: () => Promise<T>) {
+  const previous = process.env.API_TEST_AUTO_ACCOUNT;
+  process.env.API_TEST_AUTO_ACCOUNT = "false";
+  try {
+    return await operation();
+  } finally {
+    if (previous === undefined) {
+      delete process.env.API_TEST_AUTO_ACCOUNT;
+    } else {
+      process.env.API_TEST_AUTO_ACCOUNT = previous;
+    }
+  }
 }

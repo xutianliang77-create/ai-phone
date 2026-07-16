@@ -1,8 +1,8 @@
 # 无界AI企业版 UI 详细设计
 
-版本：v1.0
+版本：v1.1
 日期：2026-07-16
-状态：设计基线，未表示 `ENT-CORE-003` 已实现
+状态：设计基线；`ENT-CORE-003` 已实现，页面级 UI 任务仍在开发
 
 ## 1. 设计范围
 
@@ -305,4 +305,4 @@ readiness 卡必须把 PostgreSQL、PSTN、CRM、Calendar、LiveKit 和策略版
 
 设计评审原型应包含工作台、外呼活动、客服坐席台、企业会议、知识、审计和成员设置，并使用同一导航、颜色、圆角和 Material Icons。原型数据必须标注“设计示例”。
 
-`ENT-CORE-003` 只有在真实 Web 壳、登录、租户切换、按 scope 导航、loading/empty/not_ready/degraded/forbidden/conflict/processing/failed 状态、自动化和服务端 guard 联调完成后，才能进入 `ready_for_acceptance`。本文和静态原型本身不满足该完成定义。
+`ENT-CORE-003` 负责真实 Web 壳、登录会话、路由和生产构建，现已实现并进入 `ready_for_acceptance`。租户切换与 scope 导航归 `ENT-UI-002`，统一状态归 `ENT-UI-003`，完整 Web 自动化和发布门禁归 `ENT-UI-010`；当前脚手架中的基础实现不自动完成这些后续任务。本文和静态原型本身仍不能作为生产验收证据。

@@ -42,6 +42,51 @@ export const enterpriseScopes = [
 
 export type EnterpriseScope = typeof enterpriseScopes[number];
 
+export type EnterpriseTenantStatus =
+  | "active"
+  | "suspended"
+  | "deletion_requested"
+  | "deleted";
+
+export interface EnterpriseTenantDto {
+  id: string;
+  name: string;
+  status: EnterpriseTenantStatus;
+  homeRegion: string;
+  cellId?: string;
+  planCode: string;
+  trialEndsAt?: string;
+  dataRetentionDays: number;
+  createdAt: string;
+  updatedAt: string;
+  version: number;
+}
+
+export interface EnterpriseMemberDto {
+  id: string;
+  tenantId: string;
+  userId: string;
+  role: EnterpriseMemberRole;
+  status: EnterpriseMemberStatus;
+  joinedAt?: string;
+  createdAt: string;
+  updatedAt: string;
+  version: number;
+}
+
+export interface EnterpriseMembershipDto {
+  tenant: EnterpriseTenantDto;
+  member: EnterpriseMemberDto;
+}
+
+export interface EnterpriseContextResponse extends EnterpriseMembershipDto {
+  scopes: readonly EnterpriseScope[];
+}
+
+export interface EnterpriseTenantListResponse {
+  tenants: EnterpriseMembershipDto[];
+}
+
 export interface CreateEnterpriseTenantRequest {
   name: string;
   homeRegion: string;

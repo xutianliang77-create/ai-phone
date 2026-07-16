@@ -15,6 +15,7 @@ import { enterpriseScopesForRole } from "./enterprise-rbac.js";
 import {
   addEnterpriseMember,
   createEnterpriseTenant,
+  listEnterpriseMemberships,
   listEnterpriseMembers,
   updateEnterpriseMember,
 } from "./enterprise-tenants.repository.js";
@@ -51,6 +52,17 @@ export async function registerEnterpriseTenantRoutes(app: FastifyInstance) {
       tenant: toTenantDto(context.tenant),
       member: toMemberDto(context.member),
       scopes: enterpriseScopesForRole(context.member.role),
+    };
+  });
+
+  app.get("/enterprise/v1/tenants", async (request, reply) => {
+    const account = requireAccount(request, reply);
+    if (!account) return;
+    return {
+      tenants: listEnterpriseMemberships(account.id).map(({ tenant, member }) => ({
+        tenant: toTenantDto(tenant),
+        member: toMemberDto(member),
+      })),
     };
   });
 
