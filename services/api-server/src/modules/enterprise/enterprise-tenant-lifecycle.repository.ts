@@ -7,10 +7,12 @@ import {
 } from "../../infrastructure/storage/json-store.js";
 import type {
   EnterpriseMemberRecord,
+  EnterpriseTenantLifecycleSnapshot,
   EnterpriseTenantJobRecord,
   EnterpriseTenantRecord,
 } from "./enterprise-tenant-record.js";
 import type { TenantProvisionResult } from "./enterprise-tenant-provisioner.js";
+import { enterpriseScopesForRole } from "./enterprise-rbac.js";
 
 export function beginEnterpriseTenantCreation(input: {
   ownerUserId: string;
@@ -114,6 +116,7 @@ export function finalizeEnterpriseTenantProvision(
       tenant.status = "active";
       tenant.cellId = result.cellId;
       job.status = "completed";
+      job.completedAt = now;
     } else {
       tenant.status = "provisioning_failed";
       job.status = "failed";
@@ -151,6 +154,12 @@ export function startEnterpriseTenantLifecycleJob(input: {
     if (!allowsLifecycleAction(tenant)) {
       return { status: "invalid_state" as const, tenant };
     }
+    if (
+      input.type === "tenant.delete" &&
+      hasProcessingTenantExport(input.tenantId)
+    ) {
+      return { status: "pending_jobs" as const, tenant };
+    }
     const now = new Date().toISOString();
     const job = createJob(
       tenant.id,
@@ -160,15 +169,20 @@ export function startEnterpriseTenantLifecycleJob(input: {
       requestHash,
       now,
     );
+    const store = getStoreSnapshot();
     if (input.type === "tenant.suspend") {
       tenant.status = "suspended";
       job.status = "completed";
+      job.completedAt = now;
     } else if (input.type === "tenant.delete") {
       tenant.status = "deletion_requested";
     }
     tenant.updatedAt = now;
     tenant.version += 1;
-    getStoreSnapshot().enterpriseTenantJobs.push(job);
+    if (input.type === "tenant.export" || input.type === "tenant.delete") {
+      job.scopeSnapshot = lifecycleSnapshot(store, tenant, member, job, now);
+    }
+    store.enterpriseTenantJobs.push(job);
     persistStoreSnapshot();
     return { status: "created" as const, tenant, member, job };
   });
@@ -176,7 +190,8 @@ export function startEnterpriseTenantLifecycleJob(input: {
 
 export function findEnterpriseTenantJob(jobId: string, userId: string) {
   const job = getStoreSnapshot().enterpriseTenantJobs.find((item) => item.id === jobId);
-  if (!job || !findManagerMembership(job.tenantId, userId)) return null;
+  if (!job || (job.actorUserId !== userId &&
+    !findManagerMembership(job.tenantId, userId))) return null;
   return job;
 }
 
@@ -230,7 +245,57 @@ function createJob(
 ): EnterpriseTenantJobRecord {
   return {
     id: randomUUID(), tenantId, actorUserId, type, idempotencyKey,
-    requestHash, status: "processing", createdAt: now, updatedAt: now,
+    requestHash, status: "processing", attempts: 0,
+    createdAt: now, updatedAt: now,
+  };
+}
+
+function lifecycleSnapshot(
+  store: ReturnType<typeof getStoreSnapshot>,
+  tenant: EnterpriseTenantRecord,
+  member: EnterpriseMemberRecord,
+  job: EnterpriseTenantJobRecord,
+  now: string,
+): EnterpriseTenantLifecycleSnapshot {
+  const { billingCustomerRef: _billingCustomerRef, ...safeTenant } = tenant;
+  return {
+    requestedAt: now,
+    actor: {
+      userId: member.userId,
+      role: managerRole(member.role),
+      scopes: [...enterpriseScopesForRole(member.role)],
+    },
+    tenant: structuredClone(safeTenant),
+    members: structuredClone(
+      store.enterpriseMembers
+        .filter((item) => item.tenantId === tenant.id)
+        .sort((left, right) => left.id.localeCompare(right.id)),
+    ),
+    tenantJobs: [...store.enterpriseTenantJobs
+      .filter((item) => item.tenantId === tenant.id), job]
+      .sort((left, right) => left.id.localeCompare(right.id))
+      .map(safeJobSnapshot),
+  };
+}
+
+function managerRole(role: EnterpriseMemberRecord["role"]) {
+  return role === "admin" ? "admin" as const : "owner" as const;
+}
+
+function safeJobSnapshot(job: EnterpriseTenantJobRecord) {
+  return {
+    id: job.id,
+    tenantId: job.tenantId,
+    actorUserId: job.actorUserId,
+    type: job.type,
+    status: job.status,
+    attempts: job.attempts,
+    errorCode: job.errorCode,
+    receiptRef: job.receiptRef,
+    receiptHash: job.receiptHash,
+    completedAt: job.completedAt,
+    createdAt: job.createdAt,
+    updatedAt: job.updatedAt,
   };
 }
 
@@ -248,4 +313,12 @@ function safeErrorCode(value: string) {
 
 function allowsLifecycleAction(tenant: EnterpriseTenantRecord) {
   return tenant.status === "active" || tenant.status === "suspended";
+}
+
+function hasProcessingTenantExport(tenantId: string) {
+  return getStoreSnapshot().enterpriseTenantJobs.some((job) =>
+    job.tenantId === tenantId &&
+    job.type === "tenant.export" &&
+    job.status === "processing"
+  );
 }

@@ -140,7 +140,11 @@ export interface EnterpriseTenantJobDto {
   actorUserId: string;
   type: EnterpriseTenantJobType;
   status: EnterpriseTenantJobStatus;
+  attempts: number;
   errorCode?: string;
+  receiptRef?: string;
+  receiptHash?: string;
+  completedAt?: string;
   createdAt: string;
   updatedAt: string;
 }

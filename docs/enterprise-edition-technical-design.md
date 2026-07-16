@@ -19,7 +19,8 @@
 | --- | --- | --- |
 | Tenant/Member | `ready_for_acceptance` | 已有契约、记录、Repository、租户与 owner 原子创建及成员 API |
 | RBAC | `ready_for_acceptance` | 已有17个 scope、九角色矩阵、统一服务端 guard 和越权测试 |
-| PostgreSQL schema | `implemented` | 已有三段可逆 migration、tenant-first 索引、复合 FK、强制 RLS、checksum/锁和归档 smoke；尚无真实 migrate/restore/PITR 证据 |
+| SaaS tenant lifecycle | `ready_for_acceptance` | 已有幂等开通、暂停、导出/删除执行器、租约、有界恢复和 receipt 校验；真实对象存储/Provider 清理服务尚待验收 |
+| PostgreSQL schema | `implemented` | 已有五段可逆 migration、tenant-first 索引、复合 FK、强制 RLS、checksum/锁和归档 smoke；尚无真实 migrate/restore/PITR 证据 |
 | PostgreSQL Repository/控制面/业务聚合 | `designed` | `ENT-DATA-002` 及后续任务范围，不能从 schema 代码推导为已实现 |
 | SQLite | `demo_only` | 仅本地开发、自动化和封闭演示，不承载真实企业试点数据 |
 | PSTN/CRM/Calendar/OCR | `not_ready` 或按环境探测 | 未配置必须明确降级，不生成虚假外部对象或成功状态 |
@@ -577,7 +578,30 @@ Signup -> verify enterprise admin -> create tenant
 区域映射由控制面配置提供；当前实现读取 `ENTERPRISE_REGION_CELLS_JSON` 的
 `homeRegion -> cellId` 映射。缺失、格式错误或区域未配置时必须返回
 `not_ready`，不得生成临时 cell 或把租户标为 active。暂停可在控制面原子完成；
-导出和删除只有外部执行器确认后才能把对应 job 标为 completed。
+导出和删除只有执行器确认后才能把对应 job 标为 completed。
+
+导出/删除提交时固化去敏后的 tenant、member、tenant job，以及 actor role/scope
+快照。每次执行先获取30秒 job lease；并发重复请求返回同一 job，不启动第二次
+副作用。`processing` job 由启动恢复和5秒 sweep 继续执行；临时故障按有界退避
+最多自动尝试5次，超过后进入 `executor_retry_exhausted`，原 idempotency key
+仍可在配置恢复后人工重试同一个 job。
+
+生产执行器由 `ENTERPRISE_TENANT_LIFECYCLE_EXECUTOR_URL` 和
+`ENTERPRISE_TENANT_LIFECYCLE_EXECUTOR_TOKEN` 配置，只允许 HTTPS。执行器完成
+回执必须匹配 tenantId/jobId，并返回不含 URL/密钥的 opaque `receiptRef` 和
+SHA-256 `receiptHash`；不匹配、错误 schema 或拒绝响应均不能完成 job。
+`ENTERPRISE_TENANT_LIFECYCLE_LOCAL_DIR` 只用于非生产封闭演示：导出原子写入
+0600 JSON artifact，删除清理该目录下的租户 artifact 并写 receipt；
+`NODE_ENV=production` 会明确拒绝本地执行器。未配置任何执行器时 job 返回
+`executor_not_configured`，不得无限 processing 或伪造完成。
+
+删除请求先把 tenant 置为 `deletion_requested`；只有 receipt 校验通过后才置为
+`deleted` 并停用成员关系。仍有 processing export 时删除返回
+`tenant_lifecycle_pending`，避免删除完成后迟到导出重新生成 artifact。执行器失败时
+tombstone 保留且可重试。完整审计事件、
+retention 窗口、业务表/对象清单和 Provider 删除收敛继续由
+`ENT-CORE-006/ENT-REL-002` 完成，不能仅凭基础 lifecycle job 宣称数据生命周期
+生产门禁通过。
 
 公开路由配置使用 `ENTERPRISE_PUBLIC_ROUTES_JSON`，以 `cellId` 为键保存
 `homeRegion`、HTTPS API 域名和 WSS RTC 域名；签名密钥使用至少 32 字节的

@@ -138,6 +138,7 @@ function tenantJob() {
     actorUserId: "user-a",
     type: "tenant.export" as const,
     status: "processing" as const,
+    attempts: 1,
     createdAt: "2026-07-16T00:00:00Z",
     updatedAt: "2026-07-16T00:00:00Z",
   };

@@ -1,6 +1,9 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { buildApp } from "../../app.js";
 import { getStoreSnapshot } from "../../infrastructure/storage/json-store.js";
+import type {
+  TenantLifecycleExecutor,
+} from "./enterprise-tenant-lifecycle-executor.js";
 
 describe("enterprise tenant lifecycle routes", () => {
   beforeEach(() => {
@@ -107,10 +110,20 @@ describe("enterprise tenant lifecycle routes", () => {
     const suspended = await lifecycleRequest(app, tenantId, "suspend", "suspend-1");
     const repeated = await lifecycleRequest(app, tenantId, "suspend", "suspend-1");
     const exported = await lifecycleRequest(app, tenantId, "export", "export-1");
-    const deleted = await lifecycleRequest(app, tenantId, "delete", "delete-1");
+    const deleteTenant = await createTenant(
+      app,
+      "Delete Lifecycle",
+      "create-delete-lifecycle",
+    );
+    const deleted = await lifecycleRequest(
+      app,
+      deleteTenant.json().tenant.id,
+      "delete",
+      "delete-1",
+    );
     const invalidResuspend = await lifecycleRequest(
       app,
-      tenantId,
+      deleteTenant.json().tenant.id,
       "suspend",
       "suspend-after-delete",
     );
@@ -216,12 +229,19 @@ function auth(token: string) {
   return { authorization: `Bearer ${token}` };
 }
 
-function readyApp() {
+function readyApp(
+  tenantLifecycleExecutor: TenantLifecycleExecutor = {
+    async execute() {
+      return { status: "processing" };
+    },
+  },
+) {
   return buildApp({
     tenantProvisioner: {
       async provision() {
         return { status: "ready", cellId: "cn-cell-01" } as const;
       },
     },
+    tenantLifecycleExecutor,
   });
 }

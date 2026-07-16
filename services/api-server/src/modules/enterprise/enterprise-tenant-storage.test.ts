@@ -41,6 +41,7 @@ describe("enterprise tenant storage", () => {
         idempotencyKey: "export-a",
         requestHash: "hash-a",
         status: "processing",
+        attempts: 0,
         createdAt: "2026-07-15T00:00:00.000Z",
         updatedAt: "2026-07-15T00:00:00.000Z",
       });

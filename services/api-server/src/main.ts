@@ -12,14 +12,24 @@ import {
   recoverPendingVoiceIdentityDeletions,
   startVoiceIdentityDeletionRecovery,
 } from "./modules/voice-identities/voice-identity-deletion-recovery.js";
+import {
+  createEnvironmentTenantLifecycleExecutor,
+} from "./modules/enterprise/enterprise-tenant-lifecycle-executor.js";
+import {
+  recoverPendingEnterpriseTenantLifecycleJobs,
+  startEnterpriseTenantLifecycleRecovery,
+} from "./modules/enterprise/enterprise-tenant-lifecycle-processor.js";
 
 const env = loadEnv();
 const recovery = await recoverStaleRealtimeSessions({
   graceSeconds: env.realtimeStaleSessionGraceSeconds,
 });
-const app = await buildApp();
+const tenantLifecycleExecutor = createEnvironmentTenantLifecycleExecutor();
+const app = await buildApp({ tenantLifecycleExecutor });
 const outboxRecovery = await recoverPendingCallRoomOutbox();
 const voiceIdentityRecovery = await recoverPendingVoiceIdentityDeletions();
+const tenantLifecycleRecovery =
+  await recoverPendingEnterpriseTenantLifecycleJobs(tenantLifecycleExecutor);
 const stopRecovery = startStaleRealtimeSessionRecovery({
   intervalSeconds: env.realtimeStaleSessionSweepSeconds,
   graceSeconds: env.realtimeStaleSessionGraceSeconds,
@@ -46,10 +56,26 @@ const stopVoiceIdentityRecovery = startVoiceIdentityDeletionRecovery({
     "Voice identity deletion recovery failed",
   ),
 });
+const stopTenantLifecycleRecovery = startEnterpriseTenantLifecycleRecovery({
+  executor: tenantLifecycleExecutor,
+  onResult: (result) => {
+    if (result.completedCount > 0 || result.failedCount > 0) {
+      app.log.info(
+        { tenantLifecycleRecovery: result },
+        "Processed tenant lifecycle jobs",
+      );
+    }
+  },
+  onError: (error) => app.log.error(
+    { error },
+    "Tenant lifecycle recovery failed",
+  ),
+});
 app.addHook("onClose", async () => {
   stopRecovery();
   stopOutboxRecovery();
   stopVoiceIdentityRecovery();
+  stopTenantLifecycleRecovery();
 });
 
 if (recovery.recoveredCount > 0) {
@@ -62,6 +88,15 @@ if (voiceIdentityRecovery.deletedCount > 0) {
   app.log.warn(
     { voiceIdentityRecovery },
     "Recovered pending voice identity deletions",
+  );
+}
+if (
+  tenantLifecycleRecovery.completedCount > 0 ||
+  tenantLifecycleRecovery.failedCount > 0
+) {
+  app.log.info(
+    { tenantLifecycleRecovery },
+    "Recovered tenant lifecycle jobs",
   );
 }
 

@@ -235,7 +235,12 @@ export function normalizeStoreSnapshot(value: unknown): AppStoreSnapshot {
         ? raw.enterpriseMembers
         : [],
       enterpriseTenantJobs: Array.isArray(raw.enterpriseTenantJobs)
-        ? raw.enterpriseTenantJobs
+        ? raw.enterpriseTenantJobs.map((job) => ({
+            ...job,
+            attempts: Number.isInteger(job.attempts) && job.attempts >= 0
+              ? job.attempts
+              : 0,
+          }))
         : [],
       inboxEvents: Array.isArray(raw.inboxEvents) ? raw.inboxEvents : [],
       outboxEvents: Array.isArray(raw.outboxEvents) ? raw.outboxEvents : [],

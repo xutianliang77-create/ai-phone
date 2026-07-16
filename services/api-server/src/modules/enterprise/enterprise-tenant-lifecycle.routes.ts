@@ -15,10 +15,17 @@ import type {
   EnterpriseTenantRecord,
 } from "./enterprise-tenant-record.js";
 import type { TenantProvisioner } from "./enterprise-tenant-provisioner.js";
+import type {
+  TenantLifecycleExecutor,
+} from "./enterprise-tenant-lifecycle-executor.js";
+import {
+  processEnterpriseTenantLifecycleJob,
+} from "./enterprise-tenant-lifecycle-processor.js";
 
 export async function registerEnterpriseTenantLifecycleRoutes(
   app: FastifyInstance,
   provisioner: TenantProvisioner,
+  lifecycleExecutor: TenantLifecycleExecutor,
 ) {
   app.post("/saas/v1/tenants", async (request, reply) => {
     const account = requireAccount(request, reply);
@@ -73,19 +80,34 @@ export async function registerEnterpriseTenantLifecycleRoutes(
       const idempotencyKey = requireIdempotencyKey(request, reply);
       if (!idempotencyKey) return;
       const { tenantId } = request.params as { tenantId: string };
-      const result = startEnterpriseTenantLifecycleJob({
+      const started = startEnterpriseTenantLifecycleJob({
         tenantId,
         actorUserId: account.id,
         type: `tenant.${action}`,
         idempotencyKey,
       });
-      if (result.status === "conflict") return idempotencyConflict(reply);
-      if (result.status === "not_found") return tenantNotFound(reply);
-      if (result.status === "invalid_state") {
+      if (started.status === "conflict") return idempotencyConflict(reply);
+      if (started.status === "not_found") return tenantNotFound(reply);
+      if (started.status === "invalid_state") {
         return sendError(reply, 409, "tenant_state_conflict", "Tenant state conflict");
       }
-      const statusCode = result.job.status === "processing" ? 202 : 200;
-      return reply.status(statusCode).send(lifecycleDto(result));
+      if (started.status === "pending_jobs") {
+        return sendError(
+          reply,
+          409,
+          "tenant_lifecycle_pending",
+          "Tenant lifecycle jobs are still processing",
+        );
+      }
+      if (action === "suspend") {
+        return sendLifecycleResult(reply, started);
+      }
+      const processed = await processEnterpriseTenantLifecycleJob(
+        started.job.id,
+        lifecycleExecutor,
+        { force: true },
+      );
+      return sendLifecycleResult(reply, processed);
     });
   }
 
@@ -147,6 +169,22 @@ function sendProvisionResult(
   return reply.status(statusCode).send(body);
 }
 
+function sendLifecycleResult(reply: FastifyReply, result: LifecycleResult) {
+  if (!hasLifecycleRecords(result)) return tenantNotFound(reply);
+  const body = lifecycleDto(result);
+  if (result.job.status === "failed") {
+    return reply.status(503).send({
+      ...body,
+      error: {
+        code: "tenant_lifecycle_failed",
+        message: "Tenant lifecycle job failed",
+      },
+    });
+  }
+  const statusCode = result.job.status === "processing" ? 202 : 200;
+  return reply.status(statusCode).send(body);
+}
+
 type LifecycleResult = {
   status: string;
   tenant?: EnterpriseTenantRecord;
@@ -180,7 +218,14 @@ function toTenantDto(tenant: EnterpriseTenantRecord) {
 }
 
 function toJobDto(job: EnterpriseTenantJobRecord) {
-  const { idempotencyKey: _idempotencyKey, requestHash: _requestHash, ...dto } = job;
+  const {
+    idempotencyKey: _idempotencyKey,
+    requestHash: _requestHash,
+    leaseExpiresAt: _leaseExpiresAt,
+    nextAttemptAt: _nextAttemptAt,
+    scopeSnapshot: _scopeSnapshot,
+    ...dto
+  } = job;
   return dto;
 }
 

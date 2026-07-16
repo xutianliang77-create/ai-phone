@@ -19,6 +19,9 @@ import {
 } from "./enterprise-tenants.repository.js";
 import { registerEnterpriseTenantLifecycleRoutes } from "./enterprise-tenant-lifecycle.routes.js";
 import type { TenantProvisioner } from "./enterprise-tenant-provisioner.js";
+import type {
+  TenantLifecycleExecutor,
+} from "./enterprise-tenant-lifecycle-executor.js";
 import {
   registerEnterpriseTenantRouteRoutes,
   requireTenantRouteDocument,
@@ -33,8 +36,13 @@ export async function registerEnterpriseTenantRoutes(
   app: FastifyInstance,
   tenantProvisioner: TenantProvisioner,
   tenantRouteService: TenantRouteService,
+  tenantLifecycleExecutor: TenantLifecycleExecutor,
 ) {
-  await registerEnterpriseTenantLifecycleRoutes(app, tenantProvisioner);
+  await registerEnterpriseTenantLifecycleRoutes(
+    app,
+    tenantProvisioner,
+    tenantLifecycleExecutor,
+  );
   await registerEnterpriseTenantRouteRoutes(app, tenantRouteService);
 
   app.get("/enterprise/v1/me", async (request, reply) => {
