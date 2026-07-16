@@ -3,6 +3,9 @@ import type { EnterpriseScope } from "@translation/contracts";
 import { sendError } from "../../infrastructure/http/errors.js";
 import { requireAccount } from "../account/account-auth.js";
 import { hasEnterpriseScope } from "./enterprise-rbac.js";
+import {
+  appendEnterpriseAuditEvent,
+} from "./enterprise-audit.repository.js";
 import { resolveEnterpriseContext } from "./enterprise-tenants.repository.js";
 
 export function requireEnterpriseContext(
@@ -28,10 +31,30 @@ export function requireEnterpriseScope(
   request: FastifyRequest,
   reply: FastifyReply,
   scope: EnterpriseScope,
+  audit?: {
+    action: string;
+    resourceType: string;
+    resourceId?: string;
+  },
 ) {
   const context = requireEnterpriseContext(request, reply);
   if (!context) return null;
   if (!hasEnterpriseScope(context.member.role, scope)) {
+    if (audit) {
+      appendEnterpriseAuditEvent({
+        tenantId: context.tenant.id,
+        actorUserId: context.account.id,
+        action: audit.action,
+        resourceType: audit.resourceType,
+        resourceId: audit.resourceId,
+        result: "denied",
+        details: {
+          reasonCode: "enterprise_scope_denied",
+          scope,
+        },
+        traceId: String(request.id),
+      });
+    }
     sendError(reply, 403, "enterprise_scope_denied", "Enterprise scope denied");
     return null;
   }

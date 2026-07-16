@@ -4,9 +4,11 @@
 和备份归档 smoke。它不把当前 API 的 SQLite 存储切换为 PostgreSQL；Repository
 切换属于 `ENT-DATA-002`。
 
-当前五段 migration 中，`0004` 增加 tenant lifecycle 状态和 job，`0005` 增加
-导出/删除执行所需的 scope snapshot、attempt、lease、retry、receipt 和终态约束。
-这些列支持控制面代码和自动化，不代表真实 PostgreSQL 或对象存储验收已经完成。
+当前六段 migration 中，`0004` 增加 tenant lifecycle 状态和 job，`0005` 增加
+导出/删除执行所需的 scope snapshot、attempt、lease、retry、receipt 和终态约束，
+`0006` 为 audit events 增加 result/details 约束、tenant-first 查询索引和拒绝
+UPDATE/DELETE 的 append-only 触发器。这些结构支持控制面代码和自动化，不代表
+真实 PostgreSQL、对象存储或审计保留策略验收已经完成。
 
 ## Migration
 

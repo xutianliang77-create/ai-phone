@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import type { EnterpriseTenantJobType } from "@translation/contracts";
 import {
   getStoreSnapshot,
@@ -13,12 +13,24 @@ import type {
 } from "./enterprise-tenant-record.js";
 import type { TenantProvisionResult } from "./enterprise-tenant-provisioner.js";
 import { enterpriseScopesForRole } from "./enterprise-rbac.js";
+import {
+  auditEnterpriseTenantJob,
+  auditEnterpriseTenantLifecycleDenied,
+} from "./enterprise-tenant-audit.js";
+import {
+  allowsLifecycleAction,
+  hasProcessingTenantExport,
+  hashRequest,
+  safeErrorCode,
+  validCellId,
+} from "./enterprise-tenant-lifecycle-values.js";
 
 export function beginEnterpriseTenantCreation(input: {
   ownerUserId: string;
   name: string;
   homeRegion: string;
   idempotencyKey: string;
+  traceId: string;
 }) {
   const requestHash = hashRequest([input.name, input.homeRegion]);
   return runStoreTransaction(() => {
@@ -54,6 +66,7 @@ export function beginEnterpriseTenantCreation(input: {
     store.enterpriseTenants.push(tenant);
     store.enterpriseMembers.push(member);
     store.enterpriseTenantJobs.push(job);
+    auditEnterpriseTenantJob(job, "accepted", input.traceId, now);
     persistStoreSnapshot();
     return { status: "created" as const, tenant, member, job };
   });
@@ -63,6 +76,7 @@ export function beginEnterpriseTenantRetry(input: {
   tenantId: string;
   actorUserId: string;
   idempotencyKey: string;
+  traceId: string;
 }) {
   const requestHash = hashRequest([input.tenantId]);
   return runStoreTransaction(() => {
@@ -74,7 +88,16 @@ export function beginEnterpriseTenantRetry(input: {
     if (existing) return existingResult(existing, requestHash);
     const tenant = findTenant(input.tenantId);
     const member = findManagerMembership(input.tenantId, input.actorUserId);
-    if (!tenant || !member) return { status: "not_found" as const };
+    if (!tenant) return { status: "not_found" as const };
+    if (!member) {
+      auditEnterpriseTenantLifecycleDenied({
+        tenantId: tenant.id,
+        actorUserId: input.actorUserId,
+        action: "tenant.provision",
+        traceId: input.traceId,
+      });
+      return { status: "not_found" as const };
+    }
     if (tenant.status !== "provisioning_failed") {
       return { status: "invalid_state" as const, tenant };
     }
@@ -91,6 +114,7 @@ export function beginEnterpriseTenantRetry(input: {
       now,
     );
     getStoreSnapshot().enterpriseTenantJobs.push(job);
+    auditEnterpriseTenantJob(job, "accepted", input.traceId, now);
     persistStoreSnapshot();
     return { status: "created" as const, tenant, member, job };
   });
@@ -127,6 +151,12 @@ export function finalizeEnterpriseTenantProvision(
     tenant.updatedAt = now;
     tenant.version += 1;
     job.updatedAt = now;
+    auditEnterpriseTenantJob(
+      job,
+      job.status === "completed" ? "completed" : "failed",
+      `tenant-job:${job.id}`,
+      now,
+    );
     persistStoreSnapshot();
     return { status: "updated" as const, tenant, member, job };
   });
@@ -137,6 +167,7 @@ export function startEnterpriseTenantLifecycleJob(input: {
   actorUserId: string;
   type: Exclude<EnterpriseTenantJobType, "tenant.provision">;
   idempotencyKey: string;
+  traceId: string;
 }) {
   const requestHash = hashRequest([input.tenantId, input.type]);
   return runStoreTransaction(() => {
@@ -148,7 +179,16 @@ export function startEnterpriseTenantLifecycleJob(input: {
     if (existing) return existingResult(existing, requestHash);
     const tenant = findTenant(input.tenantId);
     const member = findManagerMembership(input.tenantId, input.actorUserId);
-    if (!tenant || !member || tenant.status === "deleted") {
+    if (!tenant || tenant.status === "deleted") {
+      return { status: "not_found" as const };
+    }
+    if (!member) {
+      auditEnterpriseTenantLifecycleDenied({
+        tenantId: tenant.id,
+        actorUserId: input.actorUserId,
+        action: input.type,
+        traceId: input.traceId,
+      });
       return { status: "not_found" as const };
     }
     if (!allowsLifecycleAction(tenant)) {
@@ -183,6 +223,12 @@ export function startEnterpriseTenantLifecycleJob(input: {
       job.scopeSnapshot = lifecycleSnapshot(store, tenant, member, job, now);
     }
     store.enterpriseTenantJobs.push(job);
+    auditEnterpriseTenantJob(
+      job,
+      job.status === "completed" ? "completed" : "accepted",
+      input.traceId,
+      now,
+    );
     persistStoreSnapshot();
     return { status: "created" as const, tenant, member, job };
   });
@@ -297,28 +343,4 @@ function safeJobSnapshot(job: EnterpriseTenantJobRecord) {
     createdAt: job.createdAt,
     updatedAt: job.updatedAt,
   };
-}
-
-function hashRequest(parts: string[]) {
-  return createHash("sha256").update(JSON.stringify(parts)).digest("hex");
-}
-
-function validCellId(value: string) {
-  return /^[a-zA-Z0-9][a-zA-Z0-9_-]{1,63}$/.test(value);
-}
-
-function safeErrorCode(value: string) {
-  return /^[a-z][a-z0-9_]{1,63}$/.test(value) ? value : "provisioning_not_ready";
-}
-
-function allowsLifecycleAction(tenant: EnterpriseTenantRecord) {
-  return tenant.status === "active" || tenant.status === "suspended";
-}
-
-function hasProcessingTenantExport(tenantId: string) {
-  return getStoreSnapshot().enterpriseTenantJobs.some((job) =>
-    job.tenantId === tenantId &&
-    job.type === "tenant.export" &&
-    job.status === "processing"
-  );
 }

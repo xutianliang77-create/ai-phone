@@ -42,6 +42,17 @@ export const enterpriseScopes = [
 
 export type EnterpriseScope = typeof enterpriseScopes[number];
 
+export const enterpriseAuditResults = [
+  "accepted",
+  "completed",
+  "failed",
+  "denied",
+] as const;
+
+export type EnterpriseAuditResult = typeof enterpriseAuditResults[number];
+
+export type EnterpriseAuditDetailValue = string | number | boolean | null;
+
 export const enterpriseRoleScopes = {
   owner: enterpriseScopes,
   admin: enterpriseScopes,
@@ -153,6 +164,24 @@ export interface EnterpriseTenantJobResponse {
   job: EnterpriseTenantJobDto;
 }
 
+export interface EnterpriseAuditEventDto {
+  id: string;
+  tenantId: string;
+  actorUserId?: string;
+  action: string;
+  resourceType: string;
+  resourceId?: string;
+  result: EnterpriseAuditResult;
+  details: Record<string, EnterpriseAuditDetailValue>;
+  traceId: string;
+  createdAt: string;
+}
+
+export interface EnterpriseAuditEventsResponse {
+  events: EnterpriseAuditEventDto[];
+  nextCursor?: string;
+}
+
 export interface EnterpriseTenantLifecycleResponse {
   tenant: EnterpriseTenantDto;
   member: EnterpriseMemberDto;
@@ -241,6 +270,13 @@ export function isEnterpriseMemberStatus(
 ): value is EnterpriseMemberStatus {
   return typeof value === "string" &&
     enterpriseMemberStatuses.includes(value as EnterpriseMemberStatus);
+}
+
+export function isEnterpriseAuditResult(
+  value: unknown,
+): value is EnterpriseAuditResult {
+  return typeof value === "string" &&
+    enterpriseAuditResults.includes(value as EnterpriseAuditResult);
 }
 
 export function isEnterpriseScope(value: unknown): value is EnterpriseScope {

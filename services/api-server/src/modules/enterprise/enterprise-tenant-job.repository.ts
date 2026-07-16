@@ -12,6 +12,9 @@ import type {
   EnterpriseTenantJobRecord,
   EnterpriseTenantRecord,
 } from "./enterprise-tenant-record.js";
+import {
+  auditEnterpriseTenantJob,
+} from "./enterprise-tenant-audit.js";
 
 const leaseDurationMs = 30_000;
 const retryDelayMs = 5_000;
@@ -34,6 +37,12 @@ export function claimEnterpriseTenantLifecycleJob(input: {
       job.status = "failed";
       job.errorCode = "scope_snapshot_missing";
       job.updatedAt = input.now.toISOString();
+      auditEnterpriseTenantJob(
+        job,
+        "failed",
+        `tenant-job:${job.id}:${job.attempts}`,
+        input.now.toISOString(),
+      );
       persistStoreSnapshot();
       return { status: "invalid" as const, ...records };
     }
@@ -101,6 +110,24 @@ export function finalizeEnterpriseTenantLifecycleJob(input: {
       job.nextAttemptAt = new Date(
         input.now.getTime() + retryDelayMs,
       ).toISOString();
+    }
+    if (input.result.status === "completed") {
+      auditEnterpriseTenantJob(
+        job,
+        "completed",
+        `tenant-job:${job.id}:${job.attempts}`,
+        now,
+      );
+    } else if (
+      input.result.status === "failed" ||
+      (input.result.status === "retry" && job.attempts >= maxAutomaticAttempts)
+    ) {
+      auditEnterpriseTenantJob(
+        job,
+        "failed",
+        `tenant-job:${job.id}:${job.attempts}`,
+        now,
+      );
     }
     persistStoreSnapshot();
     return { status: "updated" as const, tenant, member, job };

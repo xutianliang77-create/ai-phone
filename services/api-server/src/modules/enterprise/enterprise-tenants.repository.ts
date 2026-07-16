@@ -12,6 +12,9 @@ import type {
   EnterpriseMemberRecord,
   EnterpriseTenantRecord,
 } from "./enterprise-tenant-record.js";
+import {
+  appendEnterpriseAuditEvent,
+} from "./enterprise-audit.repository.js";
 
 export function resolveEnterpriseContext(
   userId: string,
@@ -57,6 +60,8 @@ export function addEnterpriseMember(input: {
   tenantId: string;
   userId: string;
   role: EnterpriseMemberRole;
+  actorUserId: string;
+  traceId: string;
 }) {
   return runStoreTransaction(() => {
     const store = getStoreSnapshot();
@@ -81,6 +86,21 @@ export function addEnterpriseMember(input: {
       version: 1,
     };
     store.enterpriseMembers.push(member);
+    appendEnterpriseAuditEvent({
+      tenantId: input.tenantId,
+      actorUserId: input.actorUserId,
+      action: "member.create",
+      resourceType: "member",
+      resourceId: member.id,
+      result: "completed",
+      details: {
+        targetUserId: member.userId,
+        role: member.role,
+        status: member.status,
+      },
+      traceId: input.traceId,
+      createdAt: now,
+    });
     persistStoreSnapshot();
     return { status: "created" as const, member };
   });
@@ -91,6 +111,8 @@ export function updateEnterpriseMember(input: {
   memberId: string;
   role?: EnterpriseMemberRole;
   status?: EnterpriseMemberStatus;
+  actorUserId: string;
+  traceId: string;
 }) {
   return runStoreTransaction(() => {
     const member = getStoreSnapshot().enterpriseMembers.find((item) =>
@@ -100,8 +122,25 @@ export function updateEnterpriseMember(input: {
     if (member.role === "owner") return { status: "owner_protected" as const };
     if (input.role) member.role = input.role;
     if (input.status) member.status = input.status;
-    member.updatedAt = new Date().toISOString();
+    const now = new Date().toISOString();
+    member.updatedAt = now;
     member.version += 1;
+    appendEnterpriseAuditEvent({
+      tenantId: input.tenantId,
+      actorUserId: input.actorUserId,
+      action: "member.update",
+      resourceType: "member",
+      resourceId: member.id,
+      result: "completed",
+      details: {
+        targetUserId: member.userId,
+        role: member.role,
+        status: member.status,
+        version: member.version,
+      },
+      traceId: input.traceId,
+      createdAt: now,
+    });
     persistStoreSnapshot();
     return { status: "updated" as const, member };
   });

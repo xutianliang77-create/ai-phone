@@ -75,7 +75,10 @@ export async function registerEnterpriseTenantRoutes(
   });
 
   app.post("/enterprise/v1/members", async (request, reply) => {
-    const context = requireEnterpriseScope(request, reply, "member:write");
+    const context = requireEnterpriseScope(request, reply, "member:write", {
+      action: "member.create",
+      resourceType: "member",
+    });
     if (!context) return;
     if (!requireTenantRouteDocument(
       request,
@@ -95,6 +98,8 @@ export async function registerEnterpriseTenantRoutes(
       tenantId: context.tenant.id,
       userId,
       role: body.role,
+      actorUserId: context.account.id,
+      traceId: String(request.id),
     });
     if (result.status === "account_not_found") {
       return sendError(reply, 404, "account_not_found", "Account not found");
@@ -106,7 +111,12 @@ export async function registerEnterpriseTenantRoutes(
   });
 
   app.patch("/enterprise/v1/members/:memberId", async (request, reply) => {
-    const context = requireEnterpriseScope(request, reply, "member:write");
+    const params = request.params as { memberId: string };
+    const context = requireEnterpriseScope(request, reply, "member:write", {
+      action: "member.update",
+      resourceType: "member",
+      resourceId: params.memberId,
+    });
     if (!context) return;
     if (!requireTenantRouteDocument(
       request,
@@ -125,12 +135,13 @@ export async function registerEnterpriseTenantRoutes(
       (status !== undefined && !isEnterpriseMemberStatus(status))) {
       return sendError(reply, 400, "invalid_member_update", "Invalid member update");
     }
-    const params = request.params as { memberId: string };
     const result = updateEnterpriseMember({
       tenantId: context.tenant.id,
       memberId: params.memberId,
       role,
       status,
+      actorUserId: context.account.id,
+      traceId: String(request.id),
     });
     if (result.status === "not_found") {
       return sendError(reply, 404, "member_not_found", "Member not found");

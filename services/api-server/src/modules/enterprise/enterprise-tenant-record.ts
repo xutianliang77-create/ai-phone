@@ -1,4 +1,6 @@
 import type {
+  EnterpriseAuditDetailValue,
+  EnterpriseAuditResult,
   EnterpriseMemberRole,
   EnterpriseMemberStatus,
   EnterpriseScope,
@@ -6,6 +8,19 @@ import type {
   EnterpriseTenantJobType,
   EnterpriseTenantStatus,
 } from "@translation/contracts";
+
+export interface EnterpriseAuditEventRecord {
+  id: string;
+  tenantId: string;
+  actorUserId?: string;
+  action: string;
+  resourceType: string;
+  resourceId?: string;
+  result: EnterpriseAuditResult;
+  details: Record<string, EnterpriseAuditDetailValue>;
+  traceId: string;
+  createdAt: string;
+}
 
 export interface EnterpriseTenantRecord {
   id: string;

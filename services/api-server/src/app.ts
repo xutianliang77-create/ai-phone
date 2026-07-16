@@ -28,6 +28,13 @@ import {
   createEnvironmentTenantLifecycleExecutor,
   type TenantLifecycleExecutor,
 } from "./modules/enterprise/enterprise-tenant-lifecycle-executor.js";
+import {
+  createEnvironmentEnterpriseAuditCursorService,
+  type EnterpriseAuditCursorService,
+} from "./modules/enterprise/enterprise-audit-cursor.js";
+import {
+  registerEnterpriseAuditRoutes,
+} from "./modules/enterprise/enterprise-audit.routes.js";
 import { registerHealthRoutes } from "./modules/health/health.routes.js";
 import { registerModelRoutes } from "./modules/models/models.routes.js";
 import { registerPlansRoutes } from "./modules/plans/plans.routes.js";
@@ -43,6 +50,7 @@ export async function buildApp(dependencies: {
   tenantRouteService?: TenantRouteService;
   tenantLifecycleExecutor?: TenantLifecycleExecutor;
   providerReadinessService?: EnterpriseProviderReadinessService;
+  auditCursorService?: EnterpriseAuditCursorService;
 } = {}) {
   const app = Fastify({
     logger: {
@@ -79,6 +87,11 @@ export async function buildApp(dependencies: {
     app,
     dependencies.providerReadinessService ??
       createEnterpriseProviderReadinessService(),
+  );
+  await registerEnterpriseAuditRoutes(
+    app,
+    dependencies.auditCursorService ??
+      createEnvironmentEnterpriseAuditCursorService(),
   );
   await registerPlansRoutes(app);
   await registerRealtimeRoutes(app);

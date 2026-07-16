@@ -43,6 +43,7 @@ export async function registerEnterpriseTenantLifecycleRoutes(
       name,
       homeRegion,
       idempotencyKey,
+      traceId: String(request.id),
     });
     if (begun.status === "conflict") return idempotencyConflict(reply);
     if (begun.status !== "created") {
@@ -62,6 +63,7 @@ export async function registerEnterpriseTenantLifecycleRoutes(
       tenantId,
       actorUserId: account.id,
       idempotencyKey,
+      traceId: String(request.id),
     });
     if (begun.status === "conflict") return idempotencyConflict(reply);
     if (begun.status === "not_found") return tenantNotFound(reply);
@@ -85,6 +87,7 @@ export async function registerEnterpriseTenantLifecycleRoutes(
         actorUserId: account.id,
         type: `tenant.${action}`,
         idempotencyKey,
+        traceId: String(request.id),
       });
       if (started.status === "conflict") return idempotencyConflict(reply);
       if (started.status === "not_found") return tenantNotFound(reply);

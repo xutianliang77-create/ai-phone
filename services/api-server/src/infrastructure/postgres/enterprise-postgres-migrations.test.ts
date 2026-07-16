@@ -16,6 +16,7 @@ describe("enterprise PostgreSQL migrations", () => {
       "0003_enterprise_rls",
       "0004_enterprise_tenant_lifecycle",
       "0005_enterprise_tenant_lifecycle_executor",
+      "0006_enterprise_audit_append_only",
     ]);
     for (const migration of migrations) {
       expect(migration.up.trim()).not.toBe("");
@@ -48,6 +49,8 @@ describe("enterprise PostgreSQL migrations", () => {
     expect(sql).toMatch(
       /tenant_jobs_recovery_idx[\s\S]*tenant_id, status, next_attempt_at/,
     );
+    expect(sql).toContain("enterprise_reject_audit_event_mutation");
+    expect(sql).toContain("enterprise_audit_events_append_only");
   });
 
   it("applies each migration once and records its checksum", async () => {

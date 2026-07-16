@@ -1,6 +1,6 @@
 # AI Phone 企业版详细技术设计
 
-版本：v1.1
+版本：v1.2
 日期：2026-07-15
 状态：SaaS 详细技术方案基线待评审
 
@@ -20,7 +20,8 @@
 | Tenant/Member | `ready_for_acceptance` | 已有契约、记录、Repository、租户与 owner 原子创建及成员 API |
 | RBAC | `ready_for_acceptance` | 已有17个 scope、九角色矩阵、统一服务端 guard 和越权测试 |
 | SaaS tenant lifecycle | `ready_for_acceptance` | 已有幂等开通、暂停、导出/删除执行器、租约、有界恢复和 receipt 校验；真实对象存储/Provider 清理服务尚待验收 |
-| PostgreSQL schema | `implemented` | 已有五段可逆 migration、tenant-first 索引、复合 FK、强制 RLS、checksum/锁和归档 smoke；尚无真实 migrate/restore/PITR 证据 |
+| Append-only audit | `ready_for_acceptance` | 已有 tenant-scoped 查询、HMAC cursor、成员/RBAC/租户生命周期埋点和 SQLite/PostgreSQL 不可变约束；受控导出和真实 PostgreSQL 验收尚待后续任务 |
+| PostgreSQL schema | `implemented` | 已有六段可逆 migration、tenant-first 索引、复合 FK、强制 RLS、checksum/锁和归档 smoke；尚无真实 migrate/restore/PITR 证据 |
 | PostgreSQL Repository/控制面/业务聚合 | `designed` | `ENT-DATA-002` 及后续任务范围，不能从 schema 代码推导为已实现 |
 | SQLite | `demo_only` | 仅本地开发、自动化和封闭演示，不承载真实企业试点数据 |
 | PSTN/CRM/Calendar/OCR | `not_ready` 或按环境探测 | 未配置必须明确降级，不生成虚假外部对象或成功状态 |
@@ -279,6 +280,20 @@ POST   /enterprise/v1/knowledge/sources
 POST   /enterprise/v1/knowledge/sources/:id/publish
 GET    /enterprise/v1/audit-events
 ```
+
+审计查询要求 `audit:read`，只读取服务端解析出的当前 tenant。支持
+`action/resourceType/result` 等值筛选和最多100项的 cursor 分页；cursor 使用
+`ENTERPRISE_AUDIT_CURSOR_SECRET`（至少32字节）签名，并绑定 tenant、筛选条件、
+`createdAt/id` 排序键和有效期。缺少签名密钥时接口明确返回
+`audit_cursor_not_configured`，不生成无签名 cursor。
+
+审计事件只允许原子追加，不提供 POST/PATCH/DELETE API。details 只接受有限数量的
+白名单 primitive 字段，并拒绝 token、secret、authorization、idempotency、phone
+和 URL 类字段名。当前埋点覆盖成员新增/更新及其 scope deny，租户开通/重试/暂停/
+导出/删除的 accepted/completed/failed/denied 结果；重复幂等请求返回原 job，
+不重复生成 accepted/terminal 事件。SQLite 使用独立表和 UPDATE/DELETE 拒绝触发器；
+PostgreSQL `0006_enterprise_audit_append_only` 增加结果/JSON 对象约束、tenant-first
+查询索引和相同不可变触发器。
 
 ### 3.3 外呼营销
 
@@ -598,10 +613,10 @@ SHA-256 `receiptHash`；不匹配、错误 schema 或拒绝响应均不能完成
 删除请求先把 tenant 置为 `deletion_requested`；只有 receipt 校验通过后才置为
 `deleted` 并停用成员关系。仍有 processing export 时删除返回
 `tenant_lifecycle_pending`，避免删除完成后迟到导出重新生成 artifact。执行器失败时
-tombstone 保留且可重试。完整审计事件、
-retention 窗口、业务表/对象清单和 Provider 删除收敛继续由
-`ENT-CORE-006/ENT-REL-002` 完成，不能仅凭基础 lifecycle job 宣称数据生命周期
-生产门禁通过。
+tombstone 保留且可重试。当前生命周期请求、终态和越权尝试已追加审计事件；
+retention 窗口、业务表/对象清单、受控审计导出和 Provider 删除收敛继续由
+`ENT-UI-008/ENT-REL-002` 完成，不能仅凭基础 lifecycle job 和本地审计代码宣称
+数据生命周期生产门禁通过。
 
 公开路由配置使用 `ENTERPRISE_PUBLIC_ROUTES_JSON`，以 `cellId` 为键保存
 `homeRegion`、HTTPS API 域名和 WSS RTC 域名；签名密钥使用至少 32 字节的

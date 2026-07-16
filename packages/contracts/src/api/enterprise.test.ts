@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
+  enterpriseAuditResults,
   enterpriseScopes,
+  isEnterpriseAuditResult,
   isEnterpriseMemberRole,
   isEnterpriseScope,
 } from "./enterprise.js";
@@ -13,5 +15,12 @@ describe("enterprise contracts", () => {
       expect(isEnterpriseScope(scope)).toBe(true);
     }
     expect(isEnterpriseScope("member:delete")).toBe(false);
+  });
+
+  it("recognizes only declared audit results", () => {
+    for (const result of enterpriseAuditResults) {
+      expect(isEnterpriseAuditResult(result)).toBe(true);
+    }
+    expect(isEnterpriseAuditResult("success")).toBe(false);
   });
 });

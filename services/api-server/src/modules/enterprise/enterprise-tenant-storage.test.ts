@@ -45,6 +45,18 @@ describe("enterprise tenant storage", () => {
         createdAt: "2026-07-15T00:00:00.000Z",
         updatedAt: "2026-07-15T00:00:00.000Z",
       });
+      snapshot.enterpriseAuditEvents.push({
+        id: "audit-a",
+        tenantId: "tenant-a",
+        actorUserId: "user-a",
+        action: "tenant.export",
+        resourceType: "tenant",
+        resourceId: "tenant-a",
+        result: "accepted",
+        details: { jobId: "job-a" },
+        traceId: "trace-a",
+        createdAt: "2026-07-15T00:00:00.000Z",
+      });
       const writer = new SqliteSnapshotStore(file, createEmptyStoreSnapshot());
       writer.save(snapshot);
       writer.close();
@@ -56,6 +68,40 @@ describe("enterprise tenant storage", () => {
       expect(stored.enterpriseTenants).toEqual(snapshot.enterpriseTenants);
       expect(stored.enterpriseMembers).toEqual(snapshot.enterpriseMembers);
       expect(stored.enterpriseTenantJobs).toEqual(snapshot.enterpriseTenantJobs);
+      expect(stored.enterpriseAuditEvents).toEqual(snapshot.enterpriseAuditEvents);
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects SQLite audit event updates and deletions", () => {
+    const directory = mkdtempSync(join(tmpdir(), "ai-phone-enterprise-audit-"));
+    const file = join(directory, "store.sqlite");
+    try {
+      const writer = new SqliteSnapshotStore(file, createEmptyStoreSnapshot());
+      const snapshot = writer.read();
+      snapshot.enterpriseAuditEvents.push({
+        id: "audit-immutable",
+        tenantId: "tenant-a",
+        actorUserId: "user-a",
+        action: "member.create",
+        resourceType: "member",
+        resourceId: "member-a",
+        result: "completed",
+        details: {},
+        traceId: "trace-immutable",
+        createdAt: "2026-07-15T00:00:00.000Z",
+      });
+      writer.save(snapshot);
+      snapshot.enterpriseAuditEvents[0]!.result = "failed";
+      expect(() => writer.save(snapshot)).toThrow("append-only");
+      writer.close();
+
+      const remover = new SqliteSnapshotStore(file, createEmptyStoreSnapshot());
+      const stored = remover.read();
+      stored.enterpriseAuditEvents = [];
+      expect(() => remover.save(stored)).toThrow("append-only");
+      remover.close();
     } finally {
       rmSync(directory, { recursive: true, force: true });
     }

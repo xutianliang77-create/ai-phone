@@ -4,6 +4,7 @@ import { backup, DatabaseSync } from "node:sqlite";
 import type { SessionRecord } from "../../modules/sessions/session-record.js";
 import type { AppStoreSnapshot } from "./json-store.js";
 import { SqliteEventStore } from "./sqlite-event-store.js";
+import { SqliteAuditStore } from "./sqlite-audit-store.js";
 import { SqliteSessionChildrenStore } from "./sqlite-session-children-store.js";
 
 interface CollectionSpec {
@@ -29,6 +30,7 @@ const collectionSpecs: CollectionSpec[] = [
   spec("enterpriseTenants", "id"),
   spec("enterpriseMembers", "id"),
   spec("enterpriseTenantJobs", "id"),
+  spec("enterpriseAuditEvents", "id"),
   spec("inboxEvents", "eventId"),
   spec("outboxEvents", "idempotencyKey"),
 ];
@@ -50,6 +52,7 @@ export class StorageConflictError extends Error {
 export class SqliteSnapshotStore {
   private readonly db: DatabaseSync;
   private readonly eventStore: SqliteEventStore;
+  private readonly auditStore: SqliteAuditStore;
   private readonly sessionChildren: SqliteSessionChildrenStore;
   private baseline: AppStoreSnapshot;
 
@@ -60,6 +63,7 @@ export class SqliteSnapshotStore {
     mkdirSync(dirname(file), { recursive: true });
     this.db = new DatabaseSync(file);
     this.eventStore = new SqliteEventStore(this.db);
+    this.auditStore = new SqliteAuditStore(this.db);
     this.sessionChildren = new SqliteSessionChildrenStore(this.db);
     this.configure();
     this.createSchema();
@@ -103,7 +107,9 @@ export class SqliteSnapshotStore {
 
   isEmpty() {
     const row = this.db.prepare(
-      "SELECT COUNT(*) AS count FROM app_records",
+      `SELECT
+        (SELECT COUNT(*) FROM app_records) +
+        (SELECT COUNT(*) FROM enterprise_audit_events) AS count`,
     ).get() as { count: number };
     return Number(row.count) === 0;
   }
@@ -150,6 +156,7 @@ export class SqliteSnapshotStore {
     `);
     this.sessionChildren.createSchema();
     this.eventStore.createSchema();
+    this.auditStore.createSchema();
   }
 
   private readDatabase() {
@@ -164,10 +171,17 @@ export class SqliteSnapshotStore {
       assignRecord(snapshot, row.namespace, row.record_key, value);
     }
     this.eventStore.readInto(snapshot);
+    this.auditStore.readInto(snapshot);
     return snapshot;
   }
 
   private readEntity(namespace: string, key: string) {
+    const audit = this.auditStore.readEntity(namespace, key);
+    if (audit.handled) {
+      return audit.value === undefined
+        ? undefined
+        : stableJson(JSON.parse(audit.value));
+    }
     const event = this.eventStore.readEntity(namespace, key);
     if (event.handled) {
       return event.value === undefined
@@ -196,6 +210,7 @@ export class SqliteSnapshotStore {
   }
 
   private writeEntity(namespace: string, key: string, valueJson: string) {
+    if (this.auditStore.writeEntity(namespace, valueJson)) return;
     if (this.eventStore.writeEntity(namespace, key, valueJson)) return;
     const value = JSON.parse(valueJson);
     const payload = namespace === "sessions"
@@ -214,6 +229,7 @@ export class SqliteSnapshotStore {
   }
 
   private deleteEntity(namespace: string, key: string) {
+    if (this.auditStore.deleteEntity(namespace)) return;
     if (this.eventStore.deleteEntity(namespace, key)) return;
     this.db.prepare(
       "DELETE FROM app_records WHERE namespace = ? AND record_key = ?",

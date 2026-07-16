@@ -33,6 +33,7 @@ import type {
   OutboxEventRecord,
 } from "../../modules/events/event-record.js";
 import type {
+  EnterpriseAuditEventRecord,
   EnterpriseMemberRecord,
   EnterpriseTenantJobRecord,
   EnterpriseTenantRecord,
@@ -60,6 +61,7 @@ export interface AppStoreSnapshot {
   enterpriseTenants: EnterpriseTenantRecord[];
   enterpriseMembers: EnterpriseMemberRecord[];
   enterpriseTenantJobs: EnterpriseTenantJobRecord[];
+  enterpriseAuditEvents: EnterpriseAuditEventRecord[];
   inboxEvents: InboxEventRecord[];
   outboxEvents: OutboxEventRecord[];
 }
@@ -86,6 +88,7 @@ const defaultSnapshot: AppStoreSnapshot = {
   enterpriseTenants: [],
   enterpriseMembers: [],
   enterpriseTenantJobs: [],
+  enterpriseAuditEvents: [],
   inboxEvents: [],
   outboxEvents: [],
 };
@@ -242,6 +245,9 @@ export function normalizeStoreSnapshot(value: unknown): AppStoreSnapshot {
               : 0,
           }))
         : [],
+      enterpriseAuditEvents: Array.isArray(raw.enterpriseAuditEvents)
+        ? raw.enterpriseAuditEvents
+        : [],
       inboxEvents: Array.isArray(raw.inboxEvents) ? raw.inboxEvents : [],
       outboxEvents: Array.isArray(raw.outboxEvents) ? raw.outboxEvents : [],
   };
@@ -272,6 +278,7 @@ function hasSnapshotData(value: AppStoreSnapshot) {
     value.accounts.length > 0 ||
     value.enterpriseTenants.length > 0 ||
     value.enterpriseTenantJobs.length > 0 ||
+    value.enterpriseAuditEvents.length > 0 ||
     value.billingLedger.length > 0 ||
     Object.keys(value.usageBalances).length > 0;
 }
