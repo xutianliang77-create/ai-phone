@@ -57,6 +57,7 @@ export async function listEnterprisePostgresMemberships(input: {
   pool: EnterpriseTenantPostgresPool;
   userId: string;
   traceId: string;
+  includeInactiveTenants?: boolean;
 }) {
   const refs = await listActiveEnterpriseMembershipRefs(
     input.pool,
@@ -107,6 +108,7 @@ async function loadMembership(
     pool: EnterpriseTenantPostgresPool;
     userId: string;
     traceId: string;
+    includeInactiveTenants?: boolean;
   },
   ref: { tenantId: string; memberId: string },
 ) {
@@ -124,7 +126,11 @@ async function loadMembership(
       if (member.id !== ref.memberId) {
         throw new Error("Enterprise directory membership mismatch");
       }
-      return tenant.status === "active" && member.status === "active"
+      return (
+          (input.includeInactiveTenants || tenant.status === "active") &&
+          tenant.status !== "deleted" &&
+          member.status === "active"
+        )
         ? { tenant, member }
         : null;
     },

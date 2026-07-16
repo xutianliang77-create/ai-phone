@@ -6,17 +6,24 @@ import {
   decodeTenantRouteDocument,
   type TenantRouteService,
 } from "./enterprise-tenant-route.js";
-import { resolveEnterpriseContext } from "./enterprise-tenants.repository.js";
+import type {
+  EnterpriseRepositoryRuntime,
+} from "./enterprise-repository-runtime.js";
 
 export async function registerEnterpriseTenantRouteRoutes(
   app: FastifyInstance,
   routeService: TenantRouteService,
+  runtime: EnterpriseRepositoryRuntime,
 ) {
   app.get("/saas/v1/tenants/:tenantId/route", async (request, reply) => {
     const account = requireAccount(request, reply);
     if (!account) return;
     const { tenantId } = request.params as { tenantId: string };
-    const context = resolveEnterpriseContext(account.id, tenantId);
+    const context = await runtime.resolveContext({
+      userId: account.id,
+      selectedTenantId: tenantId,
+      traceId: String(request.id),
+    });
     if (context.status !== "resolved") {
       return sendError(reply, 404, "tenant_route_not_found", "Tenant route not found");
     }

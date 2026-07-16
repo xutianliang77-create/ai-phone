@@ -4,7 +4,6 @@ import type {
 import type {
   EnterpriseMemberRecord,
   EnterpriseTenantJobRecord,
-  EnterpriseTenantRecord,
 } from "../../modules/enterprise/enterprise-tenant-record.js";
 import type {
   EnterpriseTenantContext,
@@ -25,45 +24,18 @@ import {
 import {
   enterprisePostgresAccountSubjectId,
 } from "./enterprise-postgres-subject-id.js";
-
-export interface EnterpriseLifecyclePostgresRepository {
-  insertJob(job: EnterpriseTenantJobRecord): Promise<
-    | { status: "created"; job: EnterpriseTenantJobRecord }
-    | { status: "already_exists"; job: EnterpriseTenantJobRecord }
-  >;
-  lockJob(jobId: string): Promise<EnterpriseTenantJobRecord | null>;
-  claimJob(input: {
-    jobId: string;
-    now: string;
-    leaseExpiresAt: string;
-  }): Promise<
-    | { status: "claimed"; job: EnterpriseTenantJobRecord }
-    | { status: "busy" }
-  >;
-  listRecoverableJobs(input: {
-    now: string;
-    limit: number;
-  }): Promise<EnterpriseTenantJobRecord[]>;
-  updateJob(input: {
-    job: EnterpriseTenantJobRecord;
-    expectedUpdatedAt: string;
-  }): Promise<
-    | { status: "updated"; job: EnterpriseTenantJobRecord }
-    | { status: "conflict" }
-  >;
-  updateTenantStatus(input: {
-    status: EnterpriseTenantStatus;
-    expectedVersion: number;
-    updatedAt: string;
-  }): Promise<
-    | { status: "updated"; tenant: EnterpriseTenantRecord }
-    | { status: "conflict" }
-  >;
-  suspendMembers(updatedAt: string): Promise<
-    | { status: "updated"; members: EnterpriseMemberRecord[] }
-    | { status: "unchanged"; members: [] }
-  >;
-}
+import {
+  findEnterpriseLifecycleJob,
+  findEnterpriseLifecycleJobByIdempotency,
+  hasEnterpriseProcessingJob,
+  listEnterpriseLifecycleJobs,
+} from "./enterprise-postgres-lifecycle-queries.js";
+import type {
+  EnterpriseLifecyclePostgresRepository,
+} from "./enterprise-postgres-lifecycle-repository-types.js";
+export type {
+  EnterpriseLifecyclePostgresRepository,
+} from "./enterprise-postgres-lifecycle-repository-types.js";
 
 export function withEnterpriseLifecyclePostgresRepository<T>(
   pool: EnterpriseTenantPostgresPool,
@@ -123,6 +95,29 @@ class PostgresLifecycleRepository
     return { status: "already_exists" as const, job: existing };
   }
 
+  async findJob(jobId: string) {
+    return findEnterpriseLifecycleJob(this.session, jobId);
+  }
+
+  async findJobByIdempotency(
+    type: EnterpriseTenantJobRecord["type"],
+    idempotencyKey: string,
+  ) {
+    return findEnterpriseLifecycleJobByIdempotency(
+      this.session,
+      type,
+      idempotencyKey,
+    );
+  }
+
+  async listJobs() {
+    return listEnterpriseLifecycleJobs(this.session);
+  }
+
+  async hasProcessingJob(type: EnterpriseTenantJobRecord["type"]) {
+    return hasEnterpriseProcessingJob(this.session, type);
+  }
+
   async lockJob(jobId: string) {
     const actorUserId = this.accountActorUserId();
     const result = await this.session.query<EnterpriseTenantJobPostgresRow>(`
@@ -143,6 +138,7 @@ class PostgresLifecycleRepository
     jobId: string;
     now: string;
     leaseExpiresAt: string;
+    force?: boolean;
   }) {
     const actorUserId = this.accountActorUserId();
     const result = await this.session.query<EnterpriseTenantJobPostgresRow>(`
@@ -155,13 +151,14 @@ class PostgresLifecycleRepository
         AND job_type IN ('tenant.export', 'tenant.delete')
         AND scope_snapshot IS NOT NULL
         AND COALESCE(lease_expires_at, '-infinity'::timestamptz) <= $3
-        AND COALESCE(next_attempt_at, '-infinity'::timestamptz) <= $3
+        AND ($6 OR COALESCE(next_attempt_at, '-infinity'::timestamptz) <= $3)
       RETURNING *
     `, [
       input.jobId,
       input.now,
       input.leaseExpiresAt,
       actorUserId,
+      input.force === true,
     ]);
     return result.rows[0]
       ? {
@@ -240,17 +237,25 @@ class PostgresLifecycleRepository
     status: EnterpriseTenantStatus;
     expectedVersion: number;
     updatedAt: string;
+    cellId?: string;
   }) {
     const result = await this.session.queryTenantRecord<
       EnterpriseTenantPostgresRow
     >(`
       UPDATE enterprise.tenants
-      SET status = $2, updated_at = $3, version = version + 1
-      WHERE id = $1 AND version = $4
+      SET status = $2, updated_at = $3,
+        cell_id = COALESCE($4, cell_id),
+        version = version + 1
+      WHERE id = $1 AND version = $5
       RETURNING id, name, status, home_region, cell_id, plan_code,
         trial_ends_at, billing_customer_ref, data_retention_days,
         created_at, updated_at, version
-    `, [input.status, input.updatedAt, input.expectedVersion]);
+    `, [
+      input.status,
+      input.updatedAt,
+      input.cellId ?? null,
+      input.expectedVersion,
+    ]);
     return result.rows[0]
       ? {
           status: "updated" as const,
@@ -295,25 +300,6 @@ class PostgresLifecycleRepository
     ) {
       throw new Error("Enterprise lifecycle job tenant or actor mismatch");
     }
-  }
-
-  private async findJobByIdempotency(
-    type: EnterpriseTenantJobRecord["type"],
-    idempotencyKey: string,
-  ) {
-    const actorUserId = this.accountActorUserId();
-    const result = await this.session.query<EnterpriseTenantJobPostgresRow>(`
-      SELECT *
-      FROM enterprise.tenant_jobs
-      WHERE tenant_id = $1 AND actor_id = $2
-        AND job_type = $3 AND idempotency_key = $4
-    `, [actorUserId, type, idempotencyKey]);
-    return result.rows[0]
-      ? mapEnterpriseTenantJobRow(
-          result.rows[0],
-          this.session.context.tenantId,
-        )
-      : null;
   }
 
   private accountActorUserId() {

@@ -5,9 +5,6 @@ import {
 } from "@translation/contracts";
 import { sendError } from "../../infrastructure/http/errors.js";
 import {
-  listEnterpriseAuditEvents,
-} from "./enterprise-audit.repository.js";
-import type {
   EnterpriseAuditCursorBinding,
   EnterpriseAuditCursorService,
 } from "./enterprise-audit-cursor.js";
@@ -15,6 +12,9 @@ import { requireEnterpriseScope } from "./enterprise-auth.js";
 import {
   createEnterpriseTenantContext,
 } from "./enterprise-tenant-context.js";
+import type {
+  EnterpriseRepositoryRuntime,
+} from "./enterprise-repository-runtime.js";
 
 interface AuditQuery {
   action?: string;
@@ -27,12 +27,19 @@ interface AuditQuery {
 export async function registerEnterpriseAuditRoutes(
   app: FastifyInstance,
   cursorService: EnterpriseAuditCursorService,
+  runtime: EnterpriseRepositoryRuntime,
 ) {
   app.get("/enterprise/v1/audit-events", async (request, reply) => {
-    const context = requireEnterpriseScope(request, reply, "audit:read", {
-      action: "audit.read",
-      resourceType: "audit_event",
-    });
+    const context = await requireEnterpriseScope(
+      request,
+      reply,
+      runtime,
+      "audit:read",
+      {
+        action: "audit.read",
+        resourceType: "audit_event",
+      },
+    );
     if (!context) return;
     if (!cursorService.ready) {
       return sendError(
@@ -73,7 +80,7 @@ export async function registerEnterpriseAuditRoutes(
       }
       before = verified.position;
     }
-    const listed = listEnterpriseAuditEvents({
+    const listed = await runtime.listAudit({
       context: repositoryContext,
       limit: parsed.limit,
       action: parsed.action,

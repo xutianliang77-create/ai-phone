@@ -8,7 +8,7 @@ const policies = {
       "appendEnterpriseAuditEvent",
       "listEnterpriseAuditEvents",
     ],
-    platform: [],
+    platform: ["createEnterpriseAuditEvent"],
   },
   "enterprise-tenant-job.repository.ts": {
     scoped: [

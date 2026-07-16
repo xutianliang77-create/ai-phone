@@ -4,21 +4,25 @@ import { sendError } from "../../infrastructure/http/errors.js";
 import { requireAccount } from "../account/account-auth.js";
 import { hasEnterpriseScope } from "./enterprise-rbac.js";
 import {
-  appendEnterpriseAuditEvent,
-} from "./enterprise-audit.repository.js";
-import {
   createEnterpriseTenantContext,
 } from "./enterprise-tenant-context.js";
-import { resolveEnterpriseContext } from "./enterprise-tenants.repository.js";
+import type {
+  EnterpriseRepositoryRuntime,
+} from "./enterprise-repository-runtime.js";
 
-export function requireEnterpriseContext(
+export async function requireEnterpriseContext(
   request: FastifyRequest,
   reply: FastifyReply,
+  runtime: EnterpriseRepositoryRuntime,
 ) {
   const account = requireAccount(request, reply);
   if (!account) return null;
   const selectedTenantId = headerValue(request.headers["x-tenant-id"]);
-  const result = resolveEnterpriseContext(account.id, selectedTenantId);
+  const result = await runtime.resolveContext({
+    userId: account.id,
+    selectedTenantId,
+    traceId: String(request.id),
+  });
   if (result.status === "access_denied") {
     sendError(reply, 403, "tenant_access_denied", "Tenant access denied");
     return null;
@@ -30,9 +34,10 @@ export function requireEnterpriseContext(
   return { account, tenant: result.tenant, member: result.member };
 }
 
-export function requireEnterpriseScope(
+export async function requireEnterpriseScope(
   request: FastifyRequest,
   reply: FastifyReply,
+  runtime: EnterpriseRepositoryRuntime,
   scope: EnterpriseScope,
   audit?: {
     action: string;
@@ -40,11 +45,11 @@ export function requireEnterpriseScope(
     resourceId?: string;
   },
 ) {
-  const context = requireEnterpriseContext(request, reply);
+  const context = await requireEnterpriseContext(request, reply, runtime);
   if (!context) return null;
   if (!hasEnterpriseScope(context.member.role, scope)) {
     if (audit) {
-      appendEnterpriseAuditEvent({
+      await runtime.appendAudit({
         context: createEnterpriseTenantContext({
           tenantId: context.tenant.id,
           actorUserId: context.account.id,

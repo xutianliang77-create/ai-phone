@@ -1,7 +1,7 @@
-import {
-  type EnterpriseAuditResult,
-  type EnterpriseMemberRole,
-  type EnterpriseMemberStatus,
+import type {
+  EnterpriseAuditResult,
+  EnterpriseMemberRole,
+  EnterpriseMemberStatus,
 } from "@translation/contracts";
 import type {
   EnterpriseAuditEventRecord,
@@ -28,46 +28,18 @@ import {
   type EnterpriseMemberPostgresRow,
   type EnterpriseTenantPostgresRow,
 } from "./enterprise-postgres-row-mappers.js";
-
-export interface EnterprisePostgresAuditPosition {
-  createdAt: string;
-  id: string;
-}
-
-export interface EnterpriseTenantPostgresRepository {
-  findTenant(options?: {
-    lock?: boolean;
-  }): Promise<EnterpriseTenantRecord | null>;
-  listMembers(): Promise<EnterpriseMemberRecord[]>;
-  findMemberByUserId(userId: string): Promise<EnterpriseMemberRecord | null>;
-  insertMember(member: EnterpriseMemberRecord): Promise<
-    | { status: "created"; member: EnterpriseMemberRecord }
-    | { status: "already_exists" }
-  >;
-  updateMember(input: {
-    memberId: string;
-    expectedVersion: number;
-    role?: EnterpriseMemberRole;
-    status?: EnterpriseMemberStatus;
-    updatedAt: string;
-  }): Promise<
-    | { status: "updated"; member: EnterpriseMemberRecord }
-    | { status: "not_found" }
-    | { status: "owner_protected"; member: EnterpriseMemberRecord }
-    | { status: "conflict" }
-  >;
-  appendAuditEvent(event: EnterpriseAuditEventRecord): Promise<void>;
-  listAuditEvents(input: {
-    limit: number;
-    action?: string;
-    resourceType?: string;
-    result?: EnterpriseAuditResult;
-    before?: EnterprisePostgresAuditPosition;
-  }): Promise<{
-    events: EnterpriseAuditEventRecord[];
-    nextPosition?: EnterprisePostgresAuditPosition;
-  }>;
-}
+import {
+  findEnterpriseMemberById,
+  insertEnterpriseTenantRecord,
+} from "./enterprise-postgres-tenant-record-queries.js";
+import type {
+  EnterprisePostgresAuditPosition,
+  EnterpriseTenantPostgresRepository,
+} from "./enterprise-postgres-tenant-repository-types.js";
+export type {
+  EnterprisePostgresAuditPosition,
+  EnterpriseTenantPostgresRepository,
+} from "./enterprise-postgres-tenant-repository-types.js";
 
 export function withEnterpriseTenantPostgresRepository<T>(
   pool: EnterpriseTenantPostgresPool,
@@ -89,6 +61,10 @@ export function createEnterpriseTenantPostgresRepository(
 
 class PostgresTenantRepository implements EnterpriseTenantPostgresRepository {
   constructor(private readonly session: EnterpriseTenantPostgresSession) {}
+
+  async insertTenant(tenant: EnterpriseTenantRecord) {
+    return insertEnterpriseTenantRecord(this.session, tenant);
+  }
 
   async findTenant(options: { lock?: boolean } = {}) {
     const result = await this.session.queryTenantRecord<
@@ -117,6 +93,13 @@ class PostgresTenantRepository implements EnterpriseTenantPostgresRepository {
     return result.rows.map((row) =>
       mapEnterpriseMemberRow(row, this.session.context.tenantId)
     );
+  }
+
+  async findMemberById(
+    memberId: string,
+    options: { lock?: boolean } = {},
+  ) {
+    return findEnterpriseMemberById(this.session, memberId, options);
   }
 
   async findMemberByUserId(userId: string) {

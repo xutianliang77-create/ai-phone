@@ -35,6 +35,10 @@ import {
 import {
   registerEnterpriseAuditRoutes,
 } from "./modules/enterprise/enterprise-audit.routes.js";
+import {
+  legacyEnterpriseRepositoryRuntime,
+  type EnterpriseRepositoryRuntime,
+} from "./modules/enterprise/enterprise-repository-runtime.js";
 import { registerHealthRoutes } from "./modules/health/health.routes.js";
 import { registerModelRoutes } from "./modules/models/models.routes.js";
 import { registerPlansRoutes } from "./modules/plans/plans.routes.js";
@@ -51,6 +55,7 @@ export async function buildApp(dependencies: {
   tenantLifecycleExecutor?: TenantLifecycleExecutor;
   providerReadinessService?: EnterpriseProviderReadinessService;
   auditCursorService?: EnterpriseAuditCursorService;
+  enterpriseRepositoryRuntime?: EnterpriseRepositoryRuntime;
 } = {}) {
   const app = Fastify({
     logger: {
@@ -68,6 +73,8 @@ export async function buildApp(dependencies: {
       },
     },
   });
+  const enterpriseRepositoryRuntime = dependencies.enterpriseRepositoryRuntime ??
+    legacyEnterpriseRepositoryRuntime;
   await app.register(cors, { origin: true });
   await registerAccountRoutes(app);
   await registerAgentCallRoutes(app);
@@ -82,16 +89,19 @@ export async function buildApp(dependencies: {
     dependencies.tenantRouteService ?? createEnvironmentTenantRouteService(),
     dependencies.tenantLifecycleExecutor ??
       createEnvironmentTenantLifecycleExecutor(),
+    enterpriseRepositoryRuntime,
   );
   await registerEnterpriseProviderReadinessRoutes(
     app,
     dependencies.providerReadinessService ??
       createEnterpriseProviderReadinessService(),
+    enterpriseRepositoryRuntime,
   );
   await registerEnterpriseAuditRoutes(
     app,
     dependencies.auditCursorService ??
       createEnvironmentEnterpriseAuditCursorService(),
+    enterpriseRepositoryRuntime,
   );
   await registerPlansRoutes(app);
   await registerRealtimeRoutes(app);

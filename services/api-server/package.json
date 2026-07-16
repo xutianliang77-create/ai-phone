@@ -6,6 +6,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.json && node ../../scripts/copy_enterprise_postgres_migrations.mjs",
     "dev": "tsx src/main.ts",
+    "dev:enterprise-worker": "tsx src/enterprise-postgres-worker-main.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run src --maxWorkers=2"
   },

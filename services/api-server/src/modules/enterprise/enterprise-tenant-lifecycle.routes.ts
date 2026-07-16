@@ -2,13 +2,6 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { CreateEnterpriseTenantRequest } from "@translation/contracts";
 import { sendError } from "../../infrastructure/http/errors.js";
 import { requireAccount } from "../account/account-auth.js";
-import {
-  beginEnterpriseTenantCreation,
-  beginEnterpriseTenantRetry,
-  finalizeEnterpriseTenantProvision,
-  findEnterpriseTenantJob,
-  startEnterpriseTenantLifecycleJob,
-} from "./enterprise-tenant-lifecycle.repository.js";
 import type {
   EnterpriseMemberRecord,
   EnterpriseTenantJobRecord,
@@ -22,11 +15,15 @@ import {
   enterpriseTenantLifecycleJobRef,
   processEnterpriseTenantLifecycleJob,
 } from "./enterprise-tenant-lifecycle-processor.js";
+import type {
+  EnterpriseRepositoryRuntime,
+} from "./enterprise-repository-runtime.js";
 
 export async function registerEnterpriseTenantLifecycleRoutes(
   app: FastifyInstance,
   provisioner: TenantProvisioner,
   lifecycleExecutor: TenantLifecycleExecutor,
+  runtime: EnterpriseRepositoryRuntime,
 ) {
   app.post("/saas/v1/tenants", async (request, reply) => {
     const account = requireAccount(request, reply);
@@ -39,7 +36,7 @@ export async function registerEnterpriseTenantLifecycleRoutes(
     if (!name || name.length < 2 || !homeRegion) {
       return sendError(reply, 400, "invalid_tenant", "Invalid tenant");
     }
-    const begun = beginEnterpriseTenantCreation({
+    const begun = await runtime.beginTenantCreation({
       ownerUserId: account.id,
       name,
       homeRegion,
@@ -50,7 +47,13 @@ export async function registerEnterpriseTenantLifecycleRoutes(
     if (begun.status !== "created") {
       return sendExistingProvision(reply, begun, 200);
     }
-    const completed = await provisionTenant(provisioner, begun.tenant, begun.job.id);
+    if (!hasLifecycleRecords(begun)) return tenantNotFound(reply);
+    const completed = await provisionTenant(
+      runtime,
+      provisioner,
+      begun.tenant,
+      begun.job,
+    );
     return sendProvisionResult(reply, completed, 201);
   });
 
@@ -60,7 +63,7 @@ export async function registerEnterpriseTenantLifecycleRoutes(
     const idempotencyKey = requireIdempotencyKey(request, reply);
     if (!idempotencyKey) return;
     const { tenantId } = request.params as { tenantId: string };
-    const begun = beginEnterpriseTenantRetry({
+    const begun = await runtime.beginTenantRetry({
       tenantId,
       actorUserId: account.id,
       idempotencyKey,
@@ -72,7 +75,13 @@ export async function registerEnterpriseTenantLifecycleRoutes(
       return sendError(reply, 409, "tenant_state_conflict", "Tenant state conflict");
     }
     if (begun.status === "existing") return sendExistingProvision(reply, begun, 200);
-    const completed = await provisionTenant(provisioner, begun.tenant, begun.job.id);
+    if (!hasLifecycleRecords(begun)) return tenantNotFound(reply);
+    const completed = await provisionTenant(
+      runtime,
+      provisioner,
+      begun.tenant,
+      begun.job,
+    );
     return sendProvisionResult(reply, completed, 200);
   });
 
@@ -83,7 +92,7 @@ export async function registerEnterpriseTenantLifecycleRoutes(
       const idempotencyKey = requireIdempotencyKey(request, reply);
       if (!idempotencyKey) return;
       const { tenantId } = request.params as { tenantId: string };
-      const started = startEnterpriseTenantLifecycleJob({
+      const started = await runtime.startTenantLifecycleJob({
         tenantId,
         actorUserId: account.id,
         type: `tenant.${action}`,
@@ -106,10 +115,11 @@ export async function registerEnterpriseTenantLifecycleRoutes(
       if (action === "suspend") {
         return sendLifecycleResult(reply, started);
       }
+      if (!started.job) return tenantNotFound(reply);
       const processed = await processEnterpriseTenantLifecycleJob(
         enterpriseTenantLifecycleJobRef(started.job),
         lifecycleExecutor,
-        { force: true },
+        { force: true, runtime },
       );
       return sendLifecycleResult(reply, processed);
     });
@@ -119,27 +129,42 @@ export async function registerEnterpriseTenantLifecycleRoutes(
     const account = requireAccount(request, reply);
     if (!account) return;
     const { jobId } = request.params as { jobId: string };
-    const job = findEnterpriseTenantJob(jobId, account.id);
+    const job = await runtime.findTenantJob({
+      jobId,
+      userId: account.id,
+      traceId: String(request.id),
+    });
     if (!job) return sendError(reply, 404, "tenant_job_not_found", "Tenant job not found");
     return { job: toJobDto(job) };
   });
 }
 
 async function provisionTenant(
+  runtime: EnterpriseRepositoryRuntime,
   provisioner: TenantProvisioner,
   tenant: EnterpriseTenantRecord,
-  jobId: string,
+  job: EnterpriseTenantJobRecord,
 ) {
   try {
     const result = await provisioner.provision({
       tenantId: tenant.id,
       homeRegion: tenant.homeRegion,
     });
-    return finalizeEnterpriseTenantProvision(jobId, result);
+    return runtime.finalizeTenantProvision({
+      tenantId: tenant.id,
+      actorUserId: job.actorUserId,
+      jobId: job.id,
+      result,
+    });
   } catch {
-    return finalizeEnterpriseTenantProvision(jobId, {
-      status: "not_ready",
-      reason: "provisioner_unavailable",
+    return runtime.finalizeTenantProvision({
+      tenantId: tenant.id,
+      actorUserId: job.actorUserId,
+      jobId: job.id,
+      result: {
+        status: "not_ready",
+        reason: "provisioner_unavailable",
+      },
     });
   }
 }

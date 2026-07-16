@@ -88,7 +88,8 @@ function assertTenantRecordSql(sql: string) {
   const normalized = normalizedSql(sql);
   const isSelect = /^select\b/i.test(normalized);
   const isUpdate = /^update\s+enterprise\.tenants\b/i.test(normalized);
-  if (!isSelect && !isUpdate) {
+  const isInsert = /^insert\s+into\s+enterprise\.tenants\b/i.test(normalized);
+  if (!isSelect && !isUpdate && !isInsert) {
     throw new Error(
       "Enterprise tenant record SQL must target enterprise.tenants",
     );
@@ -111,11 +112,20 @@ function assertTenantRecordSql(sql: string) {
   }
   if (isSelect) assertTenantRecordSelect(normalized);
   if (
-    isUpdate &&
+    (isUpdate || isInsert) &&
     (/\bfrom\b/i.test(normalized) ||
       (normalized.match(/\bselect\b/gi)?.length ?? 0) > 0)
   ) {
     throw new Error("Enterprise tenant record SQL cannot join other tables");
+  }
+  if (isInsert) {
+    const match = normalized.match(/\(([^)]*)\)\s*values\s*\(([^)]*)\)/i);
+    const columns = match?.[1]?.split(",").map((value) => value.trim()) ?? [];
+    const values = match?.[2]?.split(",").map((value) => value.trim()) ?? [];
+    if (columns[0]?.toLowerCase() !== "id" || values[0] !== "$1") {
+      throw new Error("Enterprise tenant record INSERT must use id = $1");
+    }
+    return;
   }
   if (!/\bwhere\b[\s\S]*\b(?:[a-z_][a-z0-9_]*\.)?id\s*=\s*\$1\b/i.test(
     normalized,

@@ -22,14 +22,24 @@ import {
 import {
   runEnterprisePostgresStartupGate,
 } from "./infrastructure/postgres/enterprise-postgres-startup-gate.js";
+import {
+  createEnvironmentEnterpriseRepositoryRuntime,
+} from "./modules/enterprise/enterprise-repository-runtime-factory.js";
 
 const enterprisePostgresStartup = await runEnterprisePostgresStartupGate();
+const enterpriseRepositoryRuntime =
+  createEnvironmentEnterpriseRepositoryRuntime({
+    postgresStartupVerified: enterprisePostgresStartup.status === "verified",
+  });
 const env = loadEnv();
 const recovery = await recoverStaleRealtimeSessions({
   graceSeconds: env.realtimeStaleSessionGraceSeconds,
 });
 const tenantLifecycleExecutor = createEnvironmentTenantLifecycleExecutor();
-const app = await buildApp({ tenantLifecycleExecutor });
+const app = await buildApp({
+  tenantLifecycleExecutor,
+  enterpriseRepositoryRuntime,
+});
 if (enterprisePostgresStartup.status === "verified") {
   app.log.info(
     { enterprisePostgresStartup },
@@ -38,8 +48,20 @@ if (enterprisePostgresStartup.status === "verified") {
 }
 const outboxRecovery = await recoverPendingCallRoomOutbox();
 const voiceIdentityRecovery = await recoverPendingVoiceIdentityDeletions();
-const tenantLifecycleRecovery =
-  await recoverPendingEnterpriseTenantLifecycleJobs(tenantLifecycleExecutor);
+const legacyTenantLifecycleRecovery =
+  enterpriseRepositoryRuntime.driver === "legacy";
+const tenantLifecycleRecovery = legacyTenantLifecycleRecovery
+  ? await recoverPendingEnterpriseTenantLifecycleJobs(
+      tenantLifecycleExecutor,
+      new Date(),
+      enterpriseRepositoryRuntime,
+    )
+  : {
+      inspectedCount: 0,
+      completedCount: 0,
+      failedCount: 0,
+      processingCount: 0,
+    };
 const stopRecovery = startStaleRealtimeSessionRecovery({
   intervalSeconds: env.realtimeStaleSessionSweepSeconds,
   graceSeconds: env.realtimeStaleSessionGraceSeconds,
@@ -66,26 +88,30 @@ const stopVoiceIdentityRecovery = startVoiceIdentityDeletionRecovery({
     "Voice identity deletion recovery failed",
   ),
 });
-const stopTenantLifecycleRecovery = startEnterpriseTenantLifecycleRecovery({
-  executor: tenantLifecycleExecutor,
-  onResult: (result) => {
-    if (result.completedCount > 0 || result.failedCount > 0) {
-      app.log.info(
-        { tenantLifecycleRecovery: result },
-        "Processed tenant lifecycle jobs",
-      );
-    }
-  },
-  onError: (error) => app.log.error(
-    { error },
-    "Tenant lifecycle recovery failed",
-  ),
-});
+const stopTenantLifecycleRecovery = legacyTenantLifecycleRecovery
+  ? startEnterpriseTenantLifecycleRecovery({
+      executor: tenantLifecycleExecutor,
+      runtime: enterpriseRepositoryRuntime,
+      onResult: (result) => {
+        if (result.completedCount > 0 || result.failedCount > 0) {
+          app.log.info(
+            { tenantLifecycleRecovery: result },
+            "Processed tenant lifecycle jobs",
+          );
+        }
+      },
+      onError: (error) => app.log.error(
+        { error },
+        "Tenant lifecycle recovery failed",
+      ),
+    })
+  : () => {};
 app.addHook("onClose", async () => {
   stopRecovery();
   stopOutboxRecovery();
   stopVoiceIdentityRecovery();
   stopTenantLifecycleRecovery();
+  await enterpriseRepositoryRuntime.close();
 });
 
 if (recovery.recoveredCount > 0) {

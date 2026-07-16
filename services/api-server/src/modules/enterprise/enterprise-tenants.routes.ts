@@ -11,12 +11,6 @@ import { sendError } from "../../infrastructure/http/errors.js";
 import { requireAccount } from "../account/account-auth.js";
 import { requireEnterpriseScope } from "./enterprise-auth.js";
 import { enterpriseScopesForRole } from "./enterprise-rbac.js";
-import {
-  addEnterpriseMember,
-  listEnterpriseMemberships,
-  listEnterpriseMembers,
-  updateEnterpriseMember,
-} from "./enterprise-tenants.repository.js";
 import { registerEnterpriseTenantLifecycleRoutes } from "./enterprise-tenant-lifecycle.routes.js";
 import type { TenantProvisioner } from "./enterprise-tenant-provisioner.js";
 import type {
@@ -34,22 +28,32 @@ import type {
 import {
   createEnterpriseTenantContext,
 } from "./enterprise-tenant-context.js";
+import type {
+  EnterpriseRepositoryRuntime,
+} from "./enterprise-repository-runtime.js";
 
 export async function registerEnterpriseTenantRoutes(
   app: FastifyInstance,
   tenantProvisioner: TenantProvisioner,
   tenantRouteService: TenantRouteService,
   tenantLifecycleExecutor: TenantLifecycleExecutor,
+  runtime: EnterpriseRepositoryRuntime,
 ) {
   await registerEnterpriseTenantLifecycleRoutes(
     app,
     tenantProvisioner,
     tenantLifecycleExecutor,
+    runtime,
   );
-  await registerEnterpriseTenantRouteRoutes(app, tenantRouteService);
+  await registerEnterpriseTenantRouteRoutes(app, tenantRouteService, runtime);
 
   app.get("/enterprise/v1/me", async (request, reply) => {
-    const context = requireEnterpriseScope(request, reply, "tenant:read");
+    const context = await requireEnterpriseScope(
+      request,
+      reply,
+      runtime,
+      "tenant:read",
+    );
     if (!context) return;
     return {
       tenant: toTenantDto(context.tenant),
@@ -62,7 +66,10 @@ export async function registerEnterpriseTenantRoutes(
     const account = requireAccount(request, reply);
     if (!account) return;
     return {
-      tenants: listEnterpriseMemberships(account.id).map(({ tenant, member }) => ({
+      tenants: (await runtime.listMemberships({
+        userId: account.id,
+        traceId: String(request.id),
+      })).map(({ tenant, member }) => ({
         tenant: toTenantDto(tenant),
         member: toMemberDto(member),
       })),
@@ -70,7 +77,12 @@ export async function registerEnterpriseTenantRoutes(
   });
 
   app.get("/enterprise/v1/members", async (request, reply) => {
-    const context = requireEnterpriseScope(request, reply, "member:read");
+    const context = await requireEnterpriseScope(
+      request,
+      reply,
+      runtime,
+      "member:read",
+    );
     if (!context) return;
     const repositoryContext = createEnterpriseTenantContext({
       tenantId: context.tenant.id,
@@ -79,15 +91,21 @@ export async function registerEnterpriseTenantRoutes(
       traceId: String(request.id),
     });
     return {
-      members: listEnterpriseMembers(repositoryContext).map(toMemberDto),
+      members: (await runtime.listMembers(repositoryContext)).map(toMemberDto),
     };
   });
 
   app.post("/enterprise/v1/members", async (request, reply) => {
-    const context = requireEnterpriseScope(request, reply, "member:write", {
-      action: "member.create",
-      resourceType: "member",
-    });
+    const context = await requireEnterpriseScope(
+      request,
+      reply,
+      runtime,
+      "member:write",
+      {
+        action: "member.create",
+        resourceType: "member",
+      },
+    );
     if (!context) return;
     if (!requireTenantRouteDocument(
       request,
@@ -103,7 +121,7 @@ export async function registerEnterpriseTenantRoutes(
     if (!userId || !isEnterpriseMemberRole(body.role) || body.role === "owner") {
       return sendError(reply, 400, "invalid_member", "Invalid member");
     }
-    const result = addEnterpriseMember({
+    const result = await runtime.addMember({
       context: createEnterpriseTenantContext({
         tenantId: context.tenant.id,
         actorUserId: context.account.id,
@@ -124,11 +142,17 @@ export async function registerEnterpriseTenantRoutes(
 
   app.patch("/enterprise/v1/members/:memberId", async (request, reply) => {
     const params = request.params as { memberId: string };
-    const context = requireEnterpriseScope(request, reply, "member:write", {
-      action: "member.update",
-      resourceType: "member",
-      resourceId: params.memberId,
-    });
+    const context = await requireEnterpriseScope(
+      request,
+      reply,
+      runtime,
+      "member:write",
+      {
+        action: "member.update",
+        resourceType: "member",
+        resourceId: params.memberId,
+      },
+    );
     if (!context) return;
     if (!requireTenantRouteDocument(
       request,
@@ -147,7 +171,7 @@ export async function registerEnterpriseTenantRoutes(
       (status !== undefined && !isEnterpriseMemberStatus(status))) {
       return sendError(reply, 400, "invalid_member_update", "Invalid member update");
     }
-    const result = updateEnterpriseMember({
+    const result = await runtime.updateMember({
       context: createEnterpriseTenantContext({
         tenantId: context.tenant.id,
         actorUserId: context.account.id,
@@ -163,6 +187,9 @@ export async function registerEnterpriseTenantRoutes(
     }
     if (result.status === "owner_protected") {
       return sendError(reply, 409, "owner_member_protected", "Owner member is protected");
+    }
+    if (result.status === "conflict") {
+      return sendError(reply, 409, "member_version_conflict", "Member version conflict");
     }
     return { member: toMemberDto(result.member) };
   });

@@ -19,7 +19,7 @@ export interface EnterpriseAuditPosition {
   id: string;
 }
 
-export function appendEnterpriseAuditEvent(input: {
+export interface EnterpriseAuditAppendInput {
   context: EnterpriseTenantContext;
   action: string;
   resourceType: string;
@@ -27,8 +27,12 @@ export function appendEnterpriseAuditEvent(input: {
   result: EnterpriseAuditResult;
   details?: Record<string, unknown>;
   createdAt?: string;
-}) {
-  const event: EnterpriseAuditEventRecord = {
+}
+
+export function createEnterpriseAuditEvent(
+  input: EnterpriseAuditAppendInput,
+): EnterpriseAuditEventRecord {
+  return {
     id: randomUUID(),
     tenantId: input.context.tenantId,
     actorUserId: input.context.actorUserId,
@@ -40,6 +44,12 @@ export function appendEnterpriseAuditEvent(input: {
     traceId: input.context.traceId,
     createdAt: input.createdAt ?? new Date().toISOString(),
   };
+}
+
+export function appendEnterpriseAuditEvent(
+  input: EnterpriseAuditAppendInput & { context: EnterpriseTenantContext },
+) {
+  const event = createEnterpriseAuditEvent(input);
   getStoreSnapshot().enterpriseAuditEvents.push(event);
   persistStoreSnapshot();
   return event;

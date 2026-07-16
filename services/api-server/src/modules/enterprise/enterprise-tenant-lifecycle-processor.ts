@@ -1,8 +1,3 @@
-import {
-  claimEnterpriseTenantLifecycleJob,
-  finalizeEnterpriseTenantLifecycleJob,
-  pendingEnterpriseTenantLifecycleJobRefs,
-} from "./enterprise-tenant-job.repository.js";
 import type {
   TenantLifecycleExecutor,
   TenantLifecycleExecutionResult,
@@ -13,34 +8,43 @@ import {
 import type {
   EnterpriseTenantJobRecord,
 } from "./enterprise-tenant-record.js";
+import {
+  legacyEnterpriseRepositoryRuntime,
+  type EnterpriseRepositoryRuntime,
+} from "./enterprise-repository-runtime.js";
 
 const recoveryConcurrency = 4;
 
 export async function processEnterpriseTenantLifecycleJob(
   jobRef: EnterpriseTenantLifecycleJobRef,
   executor: TenantLifecycleExecutor,
-  options: { now?: Date; force?: boolean } = {},
+  options: {
+    now?: Date;
+    force?: boolean;
+    runtime?: EnterpriseRepositoryRuntime;
+  } = {},
 ) {
   const now = options.now ?? new Date();
+  const runtime = options.runtime ?? legacyEnterpriseRepositoryRuntime;
   const context = createEnterpriseTenantContext({
     tenantId: jobRef.tenantId,
     actorUserId: jobRef.actorUserId,
     traceId: `tenant-job:${jobRef.jobId}`,
   });
-  const claimed = claimEnterpriseTenantLifecycleJob({
+  const claimed = await runtime.claimTenantLifecycleJob({
     context,
     jobId: jobRef.jobId,
     now,
     force: options.force ?? false,
   });
-  if (claimed.status !== "claimed") return claimed;
+  if (claimed.status !== "claimed" || !claimed.execution) return claimed;
   let result: TenantLifecycleExecutionResult;
   try {
     result = await executor.execute(claimed.execution);
   } catch {
     result = { status: "retry", reason: "executor_unavailable" };
   }
-  return finalizeEnterpriseTenantLifecycleJob({
+  return runtime.finalizeTenantLifecycleJob({
     context,
     jobId: jobRef.jobId,
     attempt: claimed.execution.job.attempt,
@@ -52,15 +56,16 @@ export async function processEnterpriseTenantLifecycleJob(
 export async function recoverPendingEnterpriseTenantLifecycleJobs(
   executor: TenantLifecycleExecutor,
   now = new Date(),
+  runtime: EnterpriseRepositoryRuntime = legacyEnterpriseRepositoryRuntime,
 ) {
-  const jobRefs = pendingEnterpriseTenantLifecycleJobRefs(now);
+  const jobRefs = await runtime.pendingTenantLifecycleJobRefs(now);
   let completedCount = 0;
   let failedCount = 0;
   let processingCount = 0;
   for (let index = 0; index < jobRefs.length; index += recoveryConcurrency) {
     const results = await Promise.all(
       jobRefs.slice(index, index + recoveryConcurrency).map((jobRef) =>
-        processEnterpriseTenantLifecycleJob(jobRef, executor, { now })
+        processEnterpriseTenantLifecycleJob(jobRef, executor, { now, runtime })
       ),
     );
     for (const result of results) {
@@ -96,6 +101,7 @@ export function enterpriseTenantLifecycleJobRef(
 
 export function startEnterpriseTenantLifecycleRecovery(options: {
   executor: TenantLifecycleExecutor;
+  runtime?: EnterpriseRepositoryRuntime;
   intervalMs?: number;
   onResult?: (
     result: Awaited<
@@ -105,7 +111,11 @@ export function startEnterpriseTenantLifecycleRecovery(options: {
   onError?: (error: unknown) => void;
 }) {
   const timer = setInterval(() => {
-    void recoverPendingEnterpriseTenantLifecycleJobs(options.executor)
+    void recoverPendingEnterpriseTenantLifecycleJobs(
+      options.executor,
+      new Date(),
+      options.runtime,
+    )
       .then((result) => options.onResult?.(result))
       .catch((error) => options.onError?.(error));
   }, Math.max(1_000, options.intervalMs ?? 5_000));
