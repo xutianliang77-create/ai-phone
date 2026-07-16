@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { routeAllowed } from "./AppShell.js";
+import { routeAllowed } from "../navigation.js";
 
 describe("enterprise scope navigation", () => {
   it("uses the server scopes for route visibility", () => {

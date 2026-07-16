@@ -81,3 +81,13 @@ export function canAccessNavigation(
 ) {
   return item.anyScope.some((scope) => scopes.includes(scope));
 }
+
+export function discoverEnterpriseNavigation(scopes: readonly EnterpriseScope[]) {
+  return enterpriseNavigation.filter((item) => canAccessNavigation(scopes, item));
+}
+
+export function routeAllowed(scopes: readonly EnterpriseScope[], path: string) {
+  const normalized = path === "/" ? "/" : `/${path.split("/").filter(Boolean)[0] ?? ""}`;
+  const item = enterpriseNavigation.find((candidate) => candidate.path === normalized);
+  return item ? canAccessNavigation(scopes, item) : false;
+}

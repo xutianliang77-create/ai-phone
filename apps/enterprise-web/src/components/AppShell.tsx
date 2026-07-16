@@ -1,10 +1,11 @@
 import { NavLink, Route, Routes } from "react-router-dom";
-import type { EnterpriseContextResponse, EnterpriseScope } from "@translation/contracts";
+import type { EnterpriseContextResponse } from "@translation/contracts";
 import brandIconUrl from "../../../mobile/ios/Runner/Assets.xcassets/AppIcon.appiconset/Icon-App-76x76@2x.png";
 import { useAuth } from "../auth/AuthContext.js";
 import { enterpriseIcons } from "../icon-registry.js";
 import {
   canAccessNavigation,
+  discoverEnterpriseNavigation,
   enterpriseNavigation,
   type EnterpriseNavigationItem,
 } from "../navigation.js";
@@ -14,9 +15,7 @@ import { StatusPanel } from "./StatusPanel.js";
 export function AppShell() {
   const { state, selectTenant, logout } = useAuth();
   if (state.status !== "ready") return null;
-  const visibleNavigation = enterpriseNavigation.filter((item) =>
-    canAccessNavigation(state.context.scopes, item)
-  );
+  const visibleNavigation = discoverEnterpriseNavigation(state.context.scopes);
 
   return (
     <div className="app-shell">
@@ -77,7 +76,7 @@ export function AppShell() {
           {enterpriseNavigation.slice(1).map((item) => (
             <Route
               key={item.path}
-              path={item.path}
+              path={`${item.path}/*`}
               element={<GuardedPlaceholder item={item} context={state.context} />}
             />
           ))}
@@ -165,9 +164,4 @@ function PageFrame({
 
 function planLabel(planCode: string) {
   return planCode === "enterprise_trial" ? "trial" : planCode;
-}
-
-export function routeAllowed(scopes: readonly EnterpriseScope[], path: string) {
-  const item = enterpriseNavigation.find((candidate) => candidate.path === path);
-  return item ? canAccessNavigation(scopes, item) : false;
 }

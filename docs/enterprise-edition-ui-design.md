@@ -305,4 +305,4 @@ readiness 卡必须把 PostgreSQL、PSTN、CRM、Calendar、LiveKit 和策略版
 
 设计评审原型应包含工作台、外呼活动、客服坐席台、企业会议、知识、审计和成员设置，并使用同一导航、颜色、圆角和 Material Icons。原型数据必须标注“设计示例”。
 
-`ENT-CORE-003` 负责真实 Web 壳、登录会话、路由和生产构建，`ENT-UI-001` 负责生产令牌与 Material Icons 注册表，两项现已进入 `ready_for_acceptance`。租户切换与 scope 导航归 `ENT-UI-002`，统一状态归 `ENT-UI-003`，完整 Web 自动化和发布门禁归 `ENT-UI-010`；当前基础实现不自动完成这些后续任务。本文和静态原型本身仍不能作为生产验收证据。
+`ENT-CORE-003` 负责真实 Web 壳、登录会话、路由和生产构建，`ENT-UI-001` 负责生产令牌与 Material Icons 注册表，两项现已进入 `ready_for_acceptance`。`ENT-UI-002` 已实现 active membership 切换、共享 scope 真值、九角色导航和直接/嵌套路由 guard，但签名 route document 仍依赖 `ENT-CORE-011`，因此保持 `in_progress`。统一状态归 `ENT-UI-003`，完整 Web 自动化和发布门禁归 `ENT-UI-010`；当前基础实现不自动完成这些后续任务。本文和静态原型本身仍不能作为生产验收证据。
