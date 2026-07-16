@@ -15,8 +15,8 @@ body {
   background: var(--color-surface);
   color: var(--color-on-surface);
   font-family: var(--font-sans);
-  font-size: 14px;
-  line-height: 1.5;
+  font-size: var(--font-body-medium-size);
+  line-height: var(--font-body-medium-line);
   text-rendering: optimizeLegibility;
 }
 
@@ -54,18 +54,21 @@ p {
 
 .eyebrow {
   color: var(--color-primary);
-  font-size: 12px;
-  font-weight: 700;
+  font-size: var(--font-label-medium-size);
+  line-height: var(--font-label-medium-line);
+  font-weight: var(--font-label-medium-weight);
   letter-spacing: 0.12em;
   text-transform: uppercase;
 }
 
 .button {
-  min-height: 48px;
+  min-height: var(--control-height);
   padding: 0 20px;
   border: 1px solid transparent;
   border-radius: var(--radius);
-  font-weight: 700;
+  font-size: var(--font-label-large-size);
+  line-height: var(--font-label-large-line);
+  font-weight: var(--font-label-large-weight);
 }
 
 .button--primary {
@@ -84,7 +87,7 @@ p {
 }
 
 .text-button {
-  min-height: 44px;
+  min-height: var(--touch-target);
   padding: 0 8px;
   border: 0;
   background: transparent;
@@ -98,7 +101,7 @@ p {
   display: inline-block;
   font-style: normal;
   font-weight: normal;
-  font-size: 20px;
+  font-size: var(--icon-size);
   line-height: 1;
   letter-spacing: normal;
   text-transform: none;

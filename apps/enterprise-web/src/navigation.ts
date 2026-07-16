@@ -1,10 +1,11 @@
 import type { EnterpriseScope } from "@translation/contracts";
+import type { EnterpriseNavigationIcon } from "./icon-registry.js";
 
 export interface EnterpriseNavigationItem {
   path: string;
   label: string;
   description: string;
-  icon: string;
+  icon: EnterpriseNavigationIcon;
   anyScope: readonly EnterpriseScope[];
 }
 
@@ -20,21 +21,21 @@ export const enterpriseNavigation: readonly EnterpriseNavigationItem[] = [
     path: "/campaigns",
     label: "外呼营销",
     description: "活动、线索、授权与任务",
-    icon: "campaign",
+    icon: "campaigns",
     anyScope: ["campaign:read"],
   },
   {
     path: "/support",
     label: "AI 客服",
     description: "队列、会话与人工接管",
-    icon: "support_agent",
+    icon: "support",
     anyScope: ["support:read"],
   },
   {
     path: "/meetings",
     label: "企业会议",
     description: "会议、字幕、共享与材料",
-    icon: "groups",
+    icon: "meetings",
     anyScope: ["meeting:read"],
   },
   {
@@ -48,21 +49,21 @@ export const enterpriseNavigation: readonly EnterpriseNavigationItem[] = [
     path: "/knowledge",
     label: "知识与术语",
     description: "知识版本、发布与术语包",
-    icon: "menu_book",
+    icon: "knowledge",
     anyScope: ["knowledge:read"],
   },
   {
     path: "/analytics",
     label: "数据分析",
     description: "质量、成本与业务分析",
-    icon: "query_stats",
+    icon: "analytics",
     anyScope: ["campaign:read", "support:read", "meeting:read"],
   },
   {
     path: "/audit",
     label: "合规与审计",
     description: "策略、授权、操作与导出",
-    icon: "policy",
+    icon: "audit",
     anyScope: ["audit:read"],
   },
   {

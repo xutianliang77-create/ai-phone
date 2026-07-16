@@ -150,8 +150,9 @@
 
 .page-heading h1 {
   margin-bottom: 2px;
-  font-size: 24px;
-  line-height: 30px;
+  font-size: var(--font-headline-small-size);
+  line-height: var(--font-headline-small-line);
+  font-weight: var(--font-headline-small-weight);
 }
 
 .page-heading p {
@@ -190,7 +191,9 @@
 
 .truth-card strong {
   overflow: hidden;
-  font-size: 20px;
+  font-size: var(--font-title-large-size);
+  line-height: var(--font-title-large-line);
+  font-weight: var(--font-title-large-weight);
   text-overflow: ellipsis;
 }
 
@@ -211,7 +214,7 @@
   border-radius: var(--radius);
   background: var(--color-surface-high);
   color: var(--color-outline);
-  font-size: 32px;
+  font-size: var(--icon-empty-size);
 }
 
 .status-panel h2 {

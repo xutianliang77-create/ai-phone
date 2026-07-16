@@ -2,6 +2,7 @@ import { NavLink, Route, Routes } from "react-router-dom";
 import type { EnterpriseContextResponse, EnterpriseScope } from "@translation/contracts";
 import brandIconUrl from "../../../mobile/ios/Runner/Assets.xcassets/AppIcon.appiconset/Icon-App-76x76@2x.png";
 import { useAuth } from "../auth/AuthContext.js";
+import { enterpriseIcons } from "../icon-registry.js";
 import {
   canAccessNavigation,
   enterpriseNavigation,
@@ -47,7 +48,10 @@ export function AppShell() {
             >
               {({ isActive }) => (
                 <>
-                  <MaterialIcon name={item.icon} outlined={!isActive} />
+                  <MaterialIcon
+                    name={enterpriseIcons.navigation[item.icon][isActive ? "filled" : "outlined"]}
+                    outlined={!isActive}
+                  />
                   <span>{item.label}</span>
                 </>
               )}

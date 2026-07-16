@@ -20,7 +20,7 @@
 - `ENT-CORE-001/002/003` 已到 `ready_for_acceptance`；Tenant/Member、RBAC 和 `apps/enterprise-web` 生产应用基础可供后续任务复用。
 - Enterprise Web 已冻结 React 19、TypeScript 5.9、Vite 8、React Router 7 和 Vitest/Testing Library 技术基线，并实现真实登录、会话恢复和租户上下文。
 - `ENT-DATA-001` 已实现 PostgreSQL schema、up/down migration、复合 FK、强制 RLS、migration runner、schema verify 和归档 smoke；真实 PostgreSQL migrate/restore/PITR 尚无环境证据，任务保持 `in_progress`。
-- `ENT-UI-001/002/003` 已进入生产实现，但完整组件令牌、九角色路由矩阵、route document、业务状态联调和视觉回归仍未完成。
+- `ENT-UI-001` 已完成生产令牌、Material Icons 注册表、Flutter 对照和浏览器验证，等待验收；`ENT-UI-002/003` 的九角色矩阵、route document 和业务状态联调继续进行。
 - PostgreSQL、SaaS 控制面、对象存储、正式域名、真实 Provider 和目标国家合规确认均未通过门禁。
 - 当前开发必须继续使用独立企业 worktree；个人版声纹和部署 WIP 不进入企业提交。
 
@@ -271,4 +271,4 @@ CORE-001/002 验收
 
 E0 完成后再启动 `ENT-MTG-001` 主链；允许提前做协议 spike，但不能把未接入真实 tenant/data/readiness 的会议页面计为 E1 完成。
 
-当前进展：第2项 `ENT-CORE-003` 已完成并等待验收；第3项 `ENT-DATA-001` 已完成 schema 与本地自动化，等待真实 PostgreSQL migrate/restore/PITR 证据；第6项已有主题、Material Icons、租户选择、scope 导航和统一状态基础，`ENT-UI-001/002/003` 继续收口。
+当前进展：第2项 `ENT-CORE-003` 已完成并等待验收；第3项 `ENT-DATA-001` 已完成 schema 与本地自动化，等待真实 PostgreSQL migrate/restore/PITR 证据；第6项的 `ENT-UI-001` 已等待验收，`ENT-UI-002/003` 继续收口。
