@@ -1,8 +1,8 @@
 # AI Phone 企业版开发任务
 
-版本：v1.0
-日期：2026-07-15
-状态：E0 开发中
+版本：v1.1
+日期：2026-07-16
+状态：E0 开发中，已对齐 UI v1.0
 
 ## 1. 状态定义
 
@@ -12,13 +12,22 @@
 - `ready_for_acceptance`：代码和自动化完成，等待真实验收。
 - `accepted`：完成定义和验收证据全部通过。
 
+任务已有设计稿或静态原型但生产代码、自动化或环境证据未完成时，状态仍为 `in_progress`，不能进入 `ready_for_acceptance`。
+
+### 1.1 当前状态快照
+
+- `ENT-CORE-001/002` 已完成代码和自动化，等待验收。
+- `ENT-CORE-003` 已有 UI 设计基线和静态原型，但仓库尚无企业 Web 应用，状态为 `in_progress`。
+- `ENT-UI-001` 已完成设计令牌和图标映射的文档/原型验证，生产主题包尚未实现，状态为 `in_progress`。
+- PostgreSQL、SaaS 控制面、企业业务聚合和外部 Provider 仍未通过实现或真实环境门禁。
+
 ## 2. P0 企业公共底座
 
 | 编号 | 任务 | 依赖 | 交付物 | 完成定义 | 状态 |
 | --- | --- | --- | --- | --- | --- |
 | ENT-CORE-001 | Tenant 和 Member | 无 | tenant/member schema、Repository、API | 所有企业资源强制 tenant scope | ready_for_acceptance |
 | ENT-CORE-002 | RBAC | CORE-001 | 角色、scope、服务端 guard | 越权矩阵全部拒绝 | ready_for_acceptance |
-| ENT-CORE-003 | 企业 Web 壳 | CORE-001 | 登录、导航、错误和空状态 | 可按角色显示入口，服务端仍权威 | todo |
+| ENT-CORE-003 | 企业 Web 应用基础 | CORE-001/002 | 技术选型、应用脚手架、登录会话、路由和构建 | 干净环境可构建；登录失败不进入壳；不包含模型/Provider 地址 | in_progress |
 | ENT-CORE-004 | 企业知识版本 | CORE-001 | source/version/chunk/publish | 未发布和过期知识不可检索 | todo |
 | ENT-CORE-005 | 企业术语和话术 | CORE-004 | term pack、script template | ASR/翻译/LLM 使用同一版本引用 | todo |
 | ENT-CORE-006 | 审计事件 | CORE-001 | append-only audit API | 高风险操作都有 actor/target/result | todo |
@@ -33,7 +42,26 @@
 | ENT-DATA-003 | Inbox/Outbox | DATA-001 | 幂等收件、事务发件、重试 | 重放100次仅一次副作用 | todo |
 | ENT-OBS-001 | 企业链路追踪 | CORE-006 | trace IDs、质量和成本报告 | session 到 ledger/tool 可追踪 | todo |
 
-## 3. P0 企业会议
+## 3. P0 企业 Web 与客户端体验
+
+| 编号 | 任务 | 依赖 | 交付物 | 完成定义 | 状态 |
+| --- | --- | --- | --- | --- | --- |
+| ENT-UI-001 | 视觉令牌与图标注册表 | CORE-003 | Web theme、Material Icons 映射、组件令牌 | 颜色/字号/8px圆角与 Flutter 一致；不混用图标库 | in_progress |
+| ENT-UI-002 | 租户选择与权限导航 | CORE-002/003/011 | route discovery、tenant picker、scope nav、guarded route | 九角色入口正确；直接 URL 仍由服务端拒绝 | todo |
+| ENT-UI-003 | 统一页面状态 | CORE-003/008 | loading/empty/not_ready/degraded/forbidden/conflict/processing/failed 组件 | 不出现空白页、假成功或覆盖冲突版本 | todo |
+| ENT-UI-004 | 企业工作台 | UI-002/003、CORE-007/008/010/012、OBS-001 | readiness、待办、业务状态、用量和告警 | 所有状态来自服务端；无真实样本不绘制趋势 | todo |
+| ENT-UI-005 | 成员与角色设置 | UI-002/003、CORE-001/002 | 成员列表、邀请、角色/状态编辑、scope 说明 | 角色变更与服务端 scopes 一致；越权入口不可执行 | todo |
+| ENT-UI-006 | 知识与术语管理 | UI-003、CORE-004/005 | source/version/publish、term pack、script template 页面 | 未发布/过期内容明确标识且不能被错误发布 | todo |
+| ENT-UI-007 | 区域、Provider、套餐与用量 | UI-003、CORE-007/008/010/011/012 | region/route、capability、entitlement、budget、billing 页面 | homeRegion 只读；不回显密钥；未配置显示 not_ready | todo |
+| ENT-UI-008 | 审计与分析 | UI-003、CORE-006、OBS-001 | 审计筛选/详情/导出、质量和成本下钻 | 敏感字段脱敏；导出有目的、范围、到期和审计 | todo |
+| ENT-UI-009 | 响应式、深色和无障碍 | UI-001..008 | 320/600/960/1280 布局、dark mode、键盘和动态字体 | 无横向溢出；WCAG AA；200%缩放核心操作可达 | todo |
+| ENT-UI-010 | Web 自动化与发布门禁 | UI-002..009 | unit、contract、E2E、视觉回归、bundle 和错误监控 | 角色×页面×状态矩阵通过；生产构建无示例数据 | todo |
+| ENT-UI-011 | Flutter 企业入口 | UI-001/002、CORE-002 | 工作台、会议、接管、告警和我的入口 | 不复制批量管理；离线/越权不显示乐观成功 | todo |
+| ENT-UI-012 | Web 访客参会壳 | CORE-003、MTG-002 | guest token 入会、设备检查、字幕和共享入口 | token 仅访问指定 meeting；不暴露租户导航和成员数据 | todo |
+
+`ENT-UI-001/CORE-003` 的 `in_progress` 只表示 UI 设计和原型已经启动；静态 HTML 不进入生产构建，也不满足 Web 应用完成定义。
+
+## 4. P0 企业会议
 
 | 编号 | 任务 | 依赖 | 交付物 | 完成定义 | 状态 |
 | --- | --- | --- | --- | --- | --- |
@@ -51,7 +79,7 @@
 | ENT-MTG-012 | 屏幕 OCR 翻译 | MTG-005、CORE-004 | keyframe/hash/OCR/layout events | 默认关闭，失败不影响共享 | todo |
 | ENT-MTG-013 | 日历 Adapter | MTG-001、CORE-008 | contract、mock、首个 Provider | 重试不重复创建会议 | todo |
 
-## 4. P1 AI 客服
+## 5. P1 AI 客服
 
 | 编号 | 任务 | 依赖 | 交付物 | 完成定义 | 状态 |
 | --- | --- | --- | --- | --- | --- |
@@ -68,7 +96,7 @@
 | ENT-CS-011 | 工单和回拨 | CS-007 | case、callback、outbox | 外部失败可重试且不阻塞结束 | todo |
 | ENT-CS-012 | 质检分析 | CS-004、OBS-001 | quality rules、dashboard | 能定位错误回答和未告知 | todo |
 
-## 5. P1/P2 出海外呼营销
+## 6. P1/P2 出海外呼营销
 
 | 编号 | 任务 | 依赖 | 交付物 | 完成定义 | 状态 |
 | --- | --- | --- | --- | --- | --- |
@@ -89,7 +117,7 @@
 
 `blocked` 只表示真实服务商账号未提供；Adapter、mock、contract test 和 UI 降级仍必须开发。
 
-## 6. P2 企业发布
+## 7. P2 企业发布
 
 | 编号 | 任务 | 依赖 | 交付物 | 完成定义 | 状态 |
 | --- | --- | --- | --- | --- | --- |
@@ -105,7 +133,22 @@
 | ENT-REL-007 | 租户限流和熔断 | CORE-010、OBS-001 | quota、concurrency、kill switch | 单租户异常不拖垮共享 cell | todo |
 | ENT-REL-008 | 订阅和欠费状态 | CORE-010/012 | renew/past_due/suspend/resume | 不误停进行中安全链路，不漏账 | todo |
 
-## 7. Definition of Done
+## 8. 任务到验收的映射
+
+| 任务域 | 必须通过的验收组 |
+| --- | --- |
+| `ENT-CORE-*` | `AC-ENT-*`、SaaS 控制面、A1 租户/RBAC/幂等 |
+| `ENT-UI-*` | `AC-UI-*`、对应业务验收、浏览器/真机和无障碍 |
+| `ENT-DATA-*` | A1 数据隔离、H1 故障注入、H3 PostgreSQL/Cell/灾备 |
+| `ENT-MTG-*` | `AC-MTG-*`、`AC-SHARE-*`、会后材料和真实媒体 |
+| `ENT-CS-*` | `AC-CS-*`、RAG、工具、人工接管和 CRM 故障 |
+| `ENT-MKT-*` | A3 合规预检、并发、真实白名单通话和结算 |
+| `ENT-OBS-*` | H1 长稳、链路证据、告警和成本追踪 |
+| `ENT-REL-*` | H1/H2/H3、发布材料、值班和 kill switch |
+
+任务从 `ready_for_acceptance` 进入 `accepted` 时，提交说明或任务记录必须列出对应 acceptance ID、证据路径和阻塞项；不能只引用一次全量测试结果。
+
+## 9. Definition of Done
 
 - 代码遵循现有模块边界，不出现超大文件。
 - 数据模型、API、事件和 UI 状态一致。

@@ -1,8 +1,8 @@
 # AI Phone 企业版开发方案与计划
 
-版本：v1.0
-日期：2026-07-15
-状态：SaaS 基线待排期
+版本：v1.1
+日期：2026-07-16
+状态：E0 执行计划，已对齐 UI v1.0
 
 ## 1. 开发原则
 
@@ -15,17 +15,60 @@
 - 真实 PSTN、CRM 或日历账号阻塞时，完成 Adapter、contract test、mock harness 和清晰降级，不伪造可用。
 - 每项任务只有代码、自动化、真实环境证据和文档同时完成才可结项。
 
+### 1.1 当前基线
+
+- `ENT-CORE-001/002` 已到 `ready_for_acceptance`，Tenant/Member 和 RBAC 服务端基础可供后续任务复用。
+- 企业 UI 视觉、图标、布局和页面状态已有 v1.0 设计基线与静态原型，但仓库当前只有 Flutter `apps/mobile`，尚无生产企业 Web 应用。
+- `ENT-CORE-003/ENT-UI-001` 因设计已启动标记为 `in_progress`；生产脚手架、前端主题包、登录和自动化仍未完成。
+- PostgreSQL、SaaS 控制面、对象存储、正式域名、真实 Provider 和目标国家合规确认均未通过门禁。
+- 当前开发必须继续使用独立企业 worktree；个人版声纹和部署 WIP 不进入企业提交。
+
 ## 2. 里程碑总览
 
 | 阶段 | 目标 | 建议工作量 | 退出条件 |
 | --- | --- | ---: | --- |
-| E0 | SaaS 控制面和企业公共底座 | 3-4周 | 开通、区域、tenant/RBAC、entitlement、审计和计量通过 |
-| E1 | 企业会议 MVP | 3-4周 | Web/iPhone 入会、字幕、屏幕共享和纪要闭环 |
-| E2 | AI 客服 MVP | 4-5周 | 呼入、RAG、坐席接管、低风险工具和工单闭环 |
-| E3 | 出海外呼受控试点 | 5-7周 | 合法线索、国家策略、PSTN、接管、禁拨和结算闭环 |
-| E4 | SaaS 发布硬化 | 3-4周 | 多实例、隔离、安全、灾备、SLA 和发布门禁通过 |
+| E0 | SaaS 控制面和企业公共底座 | 5-7周 | 开通、区域、tenant/RBAC、Web 壳、entitlement、审计、计量和 PostgreSQL 通过 |
+| E1 | 企业会议 MVP | 4-5周 | Web/iPhone 入会、字幕、屏幕共享和纪要闭环 |
+| E2 | AI 客服 MVP | 5-6周 | 呼入、RAG、坐席接管、低风险工具和工单闭环 |
+| E3 | 出海外呼受控试点 | 6-8周 | 合法线索、国家策略、PSTN、接管、禁拨和结算闭环 |
+| E4 | SaaS 发布硬化 | 4-6周 | 多实例、隔离、安全、灾备、SLA 和发布门禁通过 |
 
-工作量是依赖齐全情况下的工程估算，不包含服务商商务签约和各目标国家的法律审查时间。
+工作量假设至少有 Backend/Data、Web、Flutter、RTC/AI、QA/SRE 五条执行轨并行；不是单人串行工期或对外承诺。估算不包含服务商商务签约、账号审批和各目标国家法律审查时间。
+
+### 2.1 关键路径
+
+```text
+CORE-001/002 验收
+  -> DATA-001 PostgreSQL
+  -> DATA-002/003 Repository + Inbox/Outbox
+  -> CORE-009/010/011 租户生命周期、权益和区域路由
+  -> CORE-006/007/008/012 审计、用量、readiness 和计量
+  -> UI-002/003/004/005/007/010 企业壳和公共页面
+  -> MTG-001/002/004/005 企业会议 MVP
+  -> CS-001/003/004/009/010 AI 客服 MVP
+  -> MKT-001..014 外呼受控试点
+  -> REL-* 正式发布
+```
+
+任何依赖真实外部副作用的任务都不能绕开 `DATA-003`、审计、幂等、readiness 和预算门禁直接进入 Provider 联调。
+
+### 2.2 并行执行轨
+
+| 执行轨 | E0 重点 | E1-E3 重点 | 合并门禁 |
+| --- | --- | --- | --- |
+| Backend/Data | PostgreSQL、Repository、控制面、权益、审计、outbox | Meeting/Support/Campaign 聚合和状态机 | migration、tenant isolation、幂等和 API contract |
+| Web | CORE-003、UI-001..010 | 会议、坐席、营销、知识和审计页面 | role×route×state E2E、bundle 和视觉回归 |
+| Flutter | UI-011、企业会话入口 | ReplayKit、会议、告警和接管 | analyze/test、真机、动态字体和横竖屏 |
+| RTC/AI | Provider capability、LiveKit 契约 | 翻译、共享、RAG、Agent、PSTN | 真实媒体、Provider fingerprint 和降级证据 |
+| QA/SRE/Security | 测试环境、证据模板、威胁模型 | 并发、故障、长稳、安全和灾备 | acceptance ID、日志/截图、trace/ledger 对账 |
+
+### 2.3 阶段门禁规则
+
+- 阶段入口：上游数据契约冻结；阻塞的外部账号有明确 owner、替代 mock 和降级 UI。
+- 任务入口：依赖达到任务表要求；接口契约、失败语义和验收 ID 已确定。
+- 合并入口：定向测试、受影响 workspace 测试、typecheck、文件大小和 diff 门禁通过。
+- 阶段退出：功能、真实环境、故障恢复、文档和运行手册证据齐全；仅有静态原型不算退出。
+- 发布入口：上一放行等级通过，且不存在 P0/P1 安全、串租户、误拨、重复结算或无法停止共享问题。
 
 ## 3. E0 SaaS 控制面和企业公共底座
 
@@ -37,11 +80,23 @@
 - 控制面 tenant directory 和区域 route document。
 - 服务端 tenant context 和 Repository 强制隔离。
 - 企业 Web 控制台壳、导航和登录。
+- 与 Flutter 一致的 Web 主题、Material Icons、统一页面状态、权限导航和响应式门禁。
 - 企业知识源、版本、术语包和发布流程。
 - 企业审计、usage ledger、预算和 Provider readiness。
 - PostgreSQL migration、备份、inbox/outbox 和幂等。
 
-### 3.2 退出门禁
+### 3.2 执行波次
+
+| 波次 | 主要任务 | 可并行工作 | 退出证据 |
+| --- | --- | --- | --- |
+| E0-W0 | CORE-001/002 验收、CORE-003 技术选型、DATA-001 schema | UI-001 主题/图标、威胁模型、验收环境 | 决策记录、干净构建、PostgreSQL migration 测试 |
+| E0-W1 | DATA-002/003、CORE-009/011 | UI-002/003、CORE-006/008 | 两租户攻击、幂等重放、路由签名、统一错误页 |
+| E0-W2 | CORE-007/010/012、CORE-004/005 | UI-004/005/006/007、OBS-001 | entitlement/ledger 对账、知识版本、工作台真值 |
+| E0-W3 | UI-008/009/010/011、REL-001 前置 | 对象存储恢复、控制面故障演练 | A0、AC-UI、A1 适用项和生产 Web 构建 |
+
+每个波次可以按完成情况滚动，不以日历周强制切换；未通过数据和权限门禁的页面不能用前端 mock 标记“已完成”。
+
+### 3.3 退出门禁
 
 - 两个租户并发读写不能看到或修改对方资源。
 - 角色越权全部被服务端拒绝。
@@ -50,6 +105,8 @@
 - PostgreSQL 和对象存储恢复后租户、知识、ledger 和对象 hash 一致。
 
 ## 4. E1 企业会议 MVP
+
+入口条件：E0 的 Tenant/RBAC、PostgreSQL、Inbox/Outbox、Web 壳、审计和基础用量达到 `ready_for_acceptance`；LiveKit capability 可探测。
 
 ### 4.1 交付顺序
 
@@ -72,6 +129,8 @@
 - 纪要结论可回溯 segment，不能补写不存在的决定。
 
 ## 5. E2 AI 客服 MVP
+
+入口条件：企业知识版本、Provider readiness、审计、用量、Web 公共状态和至少一种真实呼入渠道可验收；没有真实 PSTN 时先以 Web/App 完成非 PSTN 路径。
 
 ### 5.1 交付顺序
 
@@ -102,6 +161,7 @@
 - 企业禁拨名单和国家策略。
 - 人工接管坐席可用。
 - 计费、审计、投诉和停止机制通过。
+- E2 人工队列和接管已通过真实链路验收，不能为外呼单独复制另一套接管状态。
 
 ### 6.2 交付顺序
 
@@ -123,6 +183,8 @@
 - webhook 重放、Worker 重启和网络重试不重复拨号或扣费。
 
 ## 7. E4 SaaS 发布硬化
+
+入口条件：E1-E3 已按目标放行等级完成；任何 `blocked` Provider 或法律条目都有正式“不开放范围”，不能用功能开关掩盖未知风险。
 
 - 多实例 Scheduler/Worker 的数据库租约或队列协调。
 - SaaS 控制面高可用、区域路由、cell 隔离和受控迁移。
@@ -155,6 +217,15 @@
 - 外呼先单国家、单 Provider、低并发、白名单；达到门禁后逐步扩大。
 - 屏幕 OCR、自动工具写入和营销 A/B 默认关闭。
 
+### 9.1 单任务交付流程
+
+1. 从任务表选择一个依赖已满足的 `ENT-*`，在开始时标记 `in_progress`。
+2. 先补失败/越权/降级测试，再实现最小代码，不顺手重构无关模块。
+3. 运行定向测试、受影响 workspace 全量、typecheck、文件大小和 `git diff --check`。
+4. 更新任务状态、验收 ID、设计/技术文档和 `PROGRESS_LOG.md`。
+5. 只暂存该任务文件，使用包含任务号的独立提交并推送。
+6. 真实环境证据未齐时最多进入 `ready_for_acceptance`，不能标记 `accepted`。
+
 ## 10. 风险和处理
 
 | 风险 | 处理 |
@@ -181,3 +252,20 @@
 - 真实 Beelink/服务器和 iPhone/Web 验收记录。
 - 指标看板、告警和运行手册。
 - `PROGRESS_LOG.md` 会话交接状态。
+
+## 12. E0 立即执行清单
+
+| 顺序 | 任务 | 结果 |
+| ---: | --- | --- |
+| 1 | 验收 `ENT-CORE-001/002` | 冻结 Tenant/Member/RBAC 作为所有企业接口权限基线 |
+| 2 | `ENT-CORE-003` | 决定 Web 技术栈并建立生产脚手架、构建和登录壳 |
+| 3 | `ENT-DATA-001` | 建立 PostgreSQL schema、migration、复合 FK、RLS 和备份 smoke |
+| 4 | `ENT-DATA-002/003` | 强制 tenant Repository，建立 inbox/outbox 和幂等重放门禁 |
+| 5 | `ENT-CORE-009/011` | 完成开通 saga、homeRegion/cell 和签名 route document |
+| 6 | `ENT-UI-001/002/003` | 把设计令牌、Material Icons、租户权限导航和统一状态变为生产组件 |
+| 7 | `ENT-CORE-006/008` | 完成审计和 Provider capability/readiness 真值 |
+| 8 | `ENT-CORE-007/010/012` | 完成套餐、entitlement、预算、ledger 和账期聚合 |
+| 9 | `ENT-CORE-004/005` | 完成知识、术语和话术版本闭环 |
+| 10 | `ENT-UI-004..010` | 完成公共页面、响应式、无障碍、E2E 和 Web 发布门禁 |
+
+E0 完成后再启动 `ENT-MTG-001` 主链；允许提前做协议 spike，但不能把未接入真实 tenant/data/readiness 的会议页面计为 E1 完成。
