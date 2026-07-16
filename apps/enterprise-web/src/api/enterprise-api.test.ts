@@ -38,4 +38,21 @@ describe("enterprise API client", () => {
       code: "invalid_code",
     } satisfies Partial<EnterpriseApiError>);
   });
+
+  it("loads the signed route document from the SaaS control plane", async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(
+      JSON.stringify({ tenantId: "tenant-a", signature: "signed" }),
+      { status: 200 },
+    ));
+    const api = createEnterpriseApi(fetcher, "/api");
+
+    await api.getTenantRoute("token-a", "tenant-a");
+
+    expect(fetcher.mock.calls[0]?.[0]).toBe(
+      "/api/saas/v1/tenants/tenant-a/route",
+    );
+    expect(fetcher.mock.calls[0]?.[1]?.headers).toMatchObject({
+      authorization: "Bearer token-a",
+    });
+  });
 });

@@ -38,6 +38,7 @@ describe("enterprise application entry", () => {
     expect(await screen.findByRole("navigation", { name: "企业版主导航" })).toBeVisible();
     expect(screen.getByRole("heading", { name: "工作台" })).toBeVisible();
     expect(screen.getByText("Tenant A")).toBeVisible();
+    expect(screen.getByText(/cn-cell-01/)).toBeVisible();
   });
 
   it("requires an explicit choice when the account has multiple tenants", async () => {
@@ -52,7 +53,24 @@ describe("enterprise application entry", () => {
     await user.click(screen.getByRole("button", { name: "进入所选企业" }));
 
     await waitFor(() => expect(api.getContext).toHaveBeenCalledWith("token-a", "tenant-b"));
+    expect(api.getTenantRoute).toHaveBeenCalledWith("token-a", "tenant-b");
     expect(await screen.findByRole("heading", { name: "工作台" })).toBeVisible();
+  });
+
+  it("does not enter the shell when the route document mismatches the tenant", async () => {
+    const api = fakeApi();
+    api.getTenantRoute = vi.fn().mockResolvedValue({
+      ...routeDocument("tenant-a"),
+      tenantId: "tenant-b",
+    });
+    const storage = new MemoryStorage();
+    writeSession(storage, "tenant-a");
+    renderApp(api, storage, ["/"]);
+
+    expect(await screen.findByText("无法进入所选企业，请重新登录或联系企业管理员。"))
+      .toBeVisible();
+    expect(screen.queryByRole("navigation", { name: "企业版主导航" }))
+      .not.toBeInTheDocument();
   });
 });
 
@@ -71,9 +89,24 @@ function fakeApi(tenants = [membership("tenant-a", "Tenant A")]): EnterpriseApi 
     requestCode: vi.fn(),
     login: vi.fn(),
     listTenants: vi.fn().mockResolvedValue({ tenants }),
+    getTenantRoute: vi.fn().mockImplementation(async (_token: string, tenantId: string) =>
+      routeDocument(tenantId)),
     getContext: vi.fn().mockImplementation(async (_token: string, tenantId: string) =>
       context(tenants.find(({ tenant }) => tenant.id === tenantId) ?? tenants[0]!)),
     logout: vi.fn(),
+  };
+}
+
+function routeDocument(tenantId: string) {
+  return {
+    tenantId,
+    homeRegion: "cn",
+    cellId: "cn-cell-01",
+    apiBaseUrl: "https://api-cn.enterprise.example",
+    rtcUrl: "wss://rtc-cn.enterprise.example",
+    issuedAt: "2026-07-16T00:00:00Z",
+    expiresAt: "2099-07-16T00:05:00Z",
+    signature: "signed-route-document",
   };
 }
 
@@ -85,6 +118,7 @@ function membership(id: string, name: string): EnterpriseMembershipDto {
       name,
       status: "active",
       homeRegion: "cn",
+      cellId: "cn-cell-01",
       planCode: "enterprise_trial",
       dataRetentionDays: 30,
       createdAt: now,

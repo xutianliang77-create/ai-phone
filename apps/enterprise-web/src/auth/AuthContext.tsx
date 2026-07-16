@@ -10,6 +10,7 @@ import {
 import type {
   EnterpriseContextResponse,
   EnterpriseMembershipDto,
+  EnterpriseTenantRouteDocument,
   PhoneCodeRequestResponse,
 } from "@translation/contracts";
 import {
@@ -33,6 +34,7 @@ type AuthState =
       session: EnterpriseSession;
       tenants: EnterpriseMembershipDto[];
       context: EnterpriseContextResponse;
+      routeDocument: EnterpriseTenantRouteDocument;
     };
 
 interface AuthContextValue {
@@ -150,10 +152,20 @@ async function activateTenant(
   if (!selected) throw new Error("Selected tenant is not an active membership");
   setState({ status: "checking" });
   try {
+    const routeDocument = await api.getTenantRoute(session.token, tenantId);
     const context = await api.getContext(session.token, tenantId);
+    if (!routeMatchesContext(routeDocument, context)) {
+      throw new Error("Tenant route document mismatch");
+    }
     const selectedSession = { ...session, tenantId };
     store.write(selectedSession);
-    setState({ status: "ready", session: selectedSession, tenants, context });
+    setState({
+      status: "ready",
+      session: selectedSession,
+      tenants,
+      context,
+      routeDocument,
+    });
   } catch (error) {
     if (error instanceof EnterpriseApiError && error.status === 401) {
       store.clear();
@@ -165,6 +177,32 @@ async function activateTenant(
       session,
       message: "无法进入所选企业，请重新登录或联系企业管理员。",
     });
+  }
+}
+
+function routeMatchesContext(
+  route: EnterpriseTenantRouteDocument,
+  context: EnterpriseContextResponse,
+) {
+  return route.tenantId === context.tenant.id &&
+    route.homeRegion === context.tenant.homeRegion &&
+    Boolean(context.tenant.cellId) && route.cellId === context.tenant.cellId &&
+    Date.parse(route.expiresAt) > Date.now() &&
+    validPublicUrl(route.apiBaseUrl, "https:") &&
+    validPublicUrl(route.rtcUrl, "wss:") &&
+    Boolean(route.signature);
+}
+
+function validPublicUrl(value: string, protocol: "https:" | "wss:") {
+  try {
+    const url = new URL(value);
+    const host = url.hostname.toLowerCase();
+    return url.protocol === protocol && !url.username && !url.password &&
+      host.includes(".") && !/^\d+(\.\d+){3}$/.test(host) &&
+      !host.endsWith(".local") && !host.endsWith(".internal") &&
+      host !== "localhost";
+  } catch {
+    return false;
   }
 }
 

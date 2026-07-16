@@ -68,6 +68,16 @@ function fakeApi(role: EnterpriseMemberRole): EnterpriseApi {
     requestCode: vi.fn(),
     login: vi.fn(),
     listTenants: vi.fn().mockResolvedValue({ tenants: [value] }),
+    getTenantRoute: vi.fn().mockResolvedValue({
+      tenantId: "tenant-a",
+      homeRegion: "cn",
+      cellId: "cn-cell-01",
+      apiBaseUrl: "https://api-cn.enterprise.example",
+      rtcUrl: "wss://rtc-cn.enterprise.example",
+      issuedAt: "2026-07-16T00:00:00Z",
+      expiresAt: "2099-07-16T00:05:00Z",
+      signature: "signed-route-document",
+    }),
     getContext: vi.fn().mockResolvedValue({
       ...value,
       scopes: enterpriseRoleScopes[role],
@@ -81,6 +91,7 @@ function membership(role: EnterpriseMemberRole): EnterpriseMembershipDto {
   return {
     tenant: {
       id: "tenant-a", name: "Tenant A", status: "active", homeRegion: "cn",
+      cellId: "cn-cell-01",
       planCode: "enterprise_trial", dataRetentionDays: 30,
       createdAt: now, updatedAt: now, version: 1,
     },

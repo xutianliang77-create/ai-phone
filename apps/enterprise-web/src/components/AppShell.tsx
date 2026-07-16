@@ -64,7 +64,9 @@ export function AppShell() {
       </aside>
       <div className="workspace">
         <header className="topbar">
-          <span className="topbar__context">{state.context.tenant.homeRegion}</span>
+          <span className="topbar__context">
+            {state.routeDocument.homeRegion} · {state.routeDocument.cellId}
+          </span>
           <span className="environment-badge">
             <MaterialIcon name="verified_user" />
             {planLabel(state.context.tenant.planCode)}
@@ -115,7 +117,7 @@ function Dashboard({ context }: { context: EnterpriseContextResponse }) {
         <article className="truth-card">
           <span>数据区域</span>
           <strong>{context.tenant.homeRegion}</strong>
-          <small>homeRegion 只读</small>
+          <small>签名 route document 已校验</small>
         </article>
       </section>
       <StatusPanel

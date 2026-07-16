@@ -1,6 +1,7 @@
 import type {
   EnterpriseContextResponse,
   EnterpriseTenantListResponse,
+  EnterpriseTenantRouteDocument,
   PhoneCodeRequestResponse,
   PhoneLoginResponse,
 } from "@translation/contracts";
@@ -20,6 +21,7 @@ export interface EnterpriseApi {
   requestCode(phone: string): Promise<PhoneCodeRequestResponse>;
   login(phone: string, code: string): Promise<PhoneLoginResponse>;
   listTenants(token: string): Promise<EnterpriseTenantListResponse>;
+  getTenantRoute(token: string, tenantId: string): Promise<EnterpriseTenantRouteDocument>;
   getContext(token: string, tenantId: string): Promise<EnterpriseContextResponse>;
   logout(token: string): Promise<void>;
 }
@@ -41,6 +43,10 @@ export function createEnterpriseApi(
     listTenants: (token) => request("/enterprise/v1/tenants", {
       headers: authorization(token),
     }),
+    getTenantRoute: (token, tenantId) => request(
+      `/saas/v1/tenants/${encodeURIComponent(tenantId)}/route`,
+      { headers: authorization(token) },
+    ),
     getContext: (token, tenantId) => request("/enterprise/v1/me", {
       headers: { ...authorization(token), "x-tenant-id": tenantId },
     }),
