@@ -7,10 +7,13 @@ import {
   canAccessNavigation,
   discoverEnterpriseNavigation,
   enterpriseNavigation,
+  routeAllowed,
   type EnterpriseNavigationItem,
 } from "../navigation.js";
 import { MaterialIcon } from "./MaterialIcon.js";
 import { StatusPanel } from "./StatusPanel.js";
+import { ProviderReadinessPanel } from "./ProviderReadinessPanel.js";
+import { TenantJobPage } from "../pages/TenantJobPage.js";
 
 export function AppShell() {
   const { state, selectTenant, logout } = useAuth();
@@ -74,7 +77,28 @@ export function AppShell() {
           <span className="topbar__account">{state.session.account.phoneMasked}</span>
         </header>
         <Routes>
-          <Route path="/" element={<Dashboard context={state.context} />} />
+          <Route
+            path="/"
+            element={
+              <Dashboard
+                context={state.context}
+                providerCapabilities={state.providerCapabilities}
+              />
+            }
+          />
+          <Route
+            path="/settings/jobs/:jobId"
+            element={routeAllowed(state.context.scopes, "/settings")
+              ? <TenantJobPage />
+              : (
+                <PageFrame title="租户任务" description="服务端生命周期 job 状态">
+                  <StatusPanel
+                    state="forbidden"
+                    description="当前账号缺少读取租户任务所需的 scope。"
+                  />
+                </PageFrame>
+              )}
+          />
           {enterpriseNavigation.slice(1).map((item) => (
             <Route
               key={item.path}
@@ -100,7 +124,13 @@ export function AppShell() {
   );
 }
 
-function Dashboard({ context }: { context: EnterpriseContextResponse }) {
+function Dashboard({
+  context,
+  providerCapabilities,
+}: {
+  context: EnterpriseContextResponse;
+  providerCapabilities: Parameters<typeof ProviderReadinessPanel>[0]["capabilities"];
+}) {
   return (
     <PageFrame title="工作台" description="企业上下文与基础接入状态">
       <section className="truth-grid" aria-label="企业上下文">
@@ -120,6 +150,7 @@ function Dashboard({ context }: { context: EnterpriseContextResponse }) {
           <small>签名 route document 已校验</small>
         </article>
       </section>
+      <ProviderReadinessPanel capabilities={providerCapabilities} />
       <StatusPanel
         state="not_ready"
         title="业务数据尚未接入"

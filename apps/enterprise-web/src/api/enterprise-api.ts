@@ -1,6 +1,8 @@
 import type {
   EnterpriseContextResponse,
+  EnterpriseProviderCapabilitiesResponse,
   EnterpriseTenantListResponse,
+  EnterpriseTenantJobResponse,
   EnterpriseTenantRouteDocument,
   PhoneCodeRequestResponse,
   PhoneLoginResponse,
@@ -22,7 +24,12 @@ export interface EnterpriseApi {
   login(phone: string, code: string): Promise<PhoneLoginResponse>;
   listTenants(token: string): Promise<EnterpriseTenantListResponse>;
   getTenantRoute(token: string, tenantId: string): Promise<EnterpriseTenantRouteDocument>;
+  getProviderCapabilities(
+    token: string,
+    tenantId: string,
+  ): Promise<EnterpriseProviderCapabilitiesResponse>;
   getContext(token: string, tenantId: string): Promise<EnterpriseContextResponse>;
+  getTenantJob(token: string, jobId: string): Promise<EnterpriseTenantJobResponse>;
   logout(token: string): Promise<void>;
 }
 
@@ -47,9 +54,17 @@ export function createEnterpriseApi(
       `/saas/v1/tenants/${encodeURIComponent(tenantId)}/route`,
       { headers: authorization(token) },
     ),
+    getProviderCapabilities: (token, tenantId) => request(
+      "/enterprise/v1/provider-capabilities",
+      { headers: { ...authorization(token), "x-tenant-id": tenantId } },
+    ),
     getContext: (token, tenantId) => request("/enterprise/v1/me", {
       headers: { ...authorization(token), "x-tenant-id": tenantId },
     }),
+    getTenantJob: (token, jobId) => request(
+      `/saas/v1/tenant-jobs/${encodeURIComponent(jobId)}`,
+      { headers: authorization(token) },
+    ),
     logout: async (token) => {
       await request("/auth/logout", {
         method: "POST",

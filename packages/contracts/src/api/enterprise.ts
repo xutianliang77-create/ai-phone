@@ -145,6 +145,10 @@ export interface EnterpriseTenantJobDto {
   updatedAt: string;
 }
 
+export interface EnterpriseTenantJobResponse {
+  job: EnterpriseTenantJobDto;
+}
+
 export interface EnterpriseTenantLifecycleResponse {
   tenant: EnterpriseTenantDto;
   member: EnterpriseMemberDto;

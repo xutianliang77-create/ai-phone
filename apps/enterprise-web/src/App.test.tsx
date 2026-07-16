@@ -39,6 +39,8 @@ describe("enterprise application entry", () => {
     expect(screen.getByRole("heading", { name: "工作台" })).toBeVisible();
     expect(screen.getByText("Tenant A")).toBeVisible();
     expect(screen.getByText(/cn-cell-01/)).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Provider readiness" })).toBeVisible();
+    expect(screen.getAllByText("not_configured")).toHaveLength(4);
   });
 
   it("requires an explicit choice when the account has multiple tenants", async () => {
@@ -72,6 +74,18 @@ describe("enterprise application entry", () => {
     expect(screen.queryByRole("navigation", { name: "企业版主导航" }))
       .not.toBeInTheDocument();
   });
+
+  it("renders a real processing tenant job from a direct guarded route", async () => {
+    const api = fakeApi();
+    const storage = new MemoryStorage();
+    writeSession(storage, "tenant-a");
+    renderApp(api, storage, ["/settings/jobs/job-a"]);
+
+    expect(await screen.findByRole("heading", { name: "租户任务" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "正在处理" })).toBeVisible();
+    expect(screen.getByText(/tenant\.export/)).toBeVisible();
+    expect(api.getTenantJob).toHaveBeenCalledWith("token-a", "job-a");
+  });
 });
 
 function renderApp(api: EnterpriseApi, storage: MemoryStorage, entries: string[]) {
@@ -91,9 +105,41 @@ function fakeApi(tenants = [membership("tenant-a", "Tenant A")]): EnterpriseApi 
     listTenants: vi.fn().mockResolvedValue({ tenants }),
     getTenantRoute: vi.fn().mockImplementation(async (_token: string, tenantId: string) =>
       routeDocument(tenantId)),
+    getProviderCapabilities: vi.fn().mockResolvedValue({
+      capabilities: providerCapabilities(),
+    }),
     getContext: vi.fn().mockImplementation(async (_token: string, tenantId: string) =>
       context(tenants.find(({ tenant }) => tenant.id === tenantId) ?? tenants[0]!)),
+    getTenantJob: vi.fn().mockResolvedValue({ job: tenantJob() }),
     logout: vi.fn(),
+  };
+}
+
+function providerCapabilities() {
+  return ["pstn.outbound", "crm.sync", "calendar.meetings", "channel.messaging"].map(
+    (capability) => ({
+      provider: "not_configured",
+      capability,
+      status: "not_configured" as const,
+      region: "cn",
+      checkedAt: "2026-07-16T00:00:00Z",
+      expiresAt: "2099-07-16T00:01:00Z",
+      reasonCode: "provider_not_configured",
+      features: {},
+      fingerprint: "unconfigured",
+    }),
+  );
+}
+
+function tenantJob() {
+  return {
+    id: "job-a",
+    tenantId: "tenant-a",
+    actorUserId: "user-a",
+    type: "tenant.export" as const,
+    status: "processing" as const,
+    createdAt: "2026-07-16T00:00:00Z",
+    updatedAt: "2026-07-16T00:00:00Z",
   };
 }
 

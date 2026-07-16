@@ -31,4 +31,4 @@ npm run dev -w @translation/enterprise-web
 
 现有账号 API 只提供 Bearer token，因此 Web 当前把 token 保存在 `sessionStorage`，关闭标签页后不长期保留。每次恢复会话都会重新请求企业成员关系、短期签名 route document 和 `/enterprise/v1/me`；route document 的 tenant、homeRegion、cell、有效期或公开 URL 协议不匹配时不会进入工作台。过期或 401 会立即清理本地会话。若服务端后续提供 SameSite HttpOnly Cookie，应迁移到服务端会话并保持这层状态机不变。
 
-业务页面仍以 `尚未就绪` 明示，不注入设计示例、Provider 地址或伪造成功状态。
+工作台从 `/enterprise/v1/provider-capabilities` 读取 capability document，只展示服务端返回的 `ready/checking/degraded/not_configured/not_ready` 真值，不回显 Provider 地址或敏感配置。`/settings/jobs/:jobId` 展示租户生命周期 job 的 `processing/failed/completed` 终态，409/412 统一映射为冲突状态；其余尚未接入的业务页面继续以 `尚未就绪` 明示，不注入设计示例或伪造成功状态。

@@ -78,10 +78,12 @@ function fakeApi(role: EnterpriseMemberRole): EnterpriseApi {
       expiresAt: "2099-07-16T00:05:00Z",
       signature: "signed-route-document",
     }),
+    getProviderCapabilities: vi.fn().mockResolvedValue({ capabilities: [] }),
     getContext: vi.fn().mockResolvedValue({
       ...value,
       scopes: enterpriseRoleScopes[role],
     } satisfies EnterpriseContextResponse),
+    getTenantJob: vi.fn(),
     logout: vi.fn(),
   };
 }

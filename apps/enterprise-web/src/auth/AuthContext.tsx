@@ -10,6 +10,8 @@ import {
 import type {
   EnterpriseContextResponse,
   EnterpriseMembershipDto,
+  EnterpriseProviderCapabilityDocument,
+  EnterpriseTenantJobResponse,
   EnterpriseTenantRouteDocument,
   PhoneCodeRequestResponse,
 } from "@translation/contracts";
@@ -35,6 +37,7 @@ type AuthState =
       tenants: EnterpriseMembershipDto[];
       context: EnterpriseContextResponse;
       routeDocument: EnterpriseTenantRouteDocument;
+      providerCapabilities: EnterpriseProviderCapabilityDocument[] | null;
     };
 
 interface AuthContextValue {
@@ -42,6 +45,7 @@ interface AuthContextValue {
   requestCode(phone: string): Promise<PhoneCodeRequestResponse>;
   login(phone: string, code: string): Promise<void>;
   selectTenant(tenantId: string): Promise<void>;
+  getTenantJob(jobId: string): Promise<EnterpriseTenantJobResponse>;
   logout(): Promise<void>;
 }
 
@@ -126,6 +130,10 @@ export function AuthProvider({
         setState,
       );
     },
+    getTenantJob: async (jobId) => {
+      if (!("session" in state)) throw new Error("Enterprise session unavailable");
+      return api.getTenantJob(state.session.token, jobId);
+    },
     logout: async () => {
       const session = "session" in state ? state.session : null;
       try {
@@ -158,6 +166,11 @@ async function activateTenant(
       throw new Error("Tenant route document mismatch");
     }
     const selectedSession = { ...session, tenantId };
+    const providerCapabilities = await loadProviderCapabilities(
+      api,
+      session.token,
+      tenantId,
+    );
     store.write(selectedSession);
     setState({
       status: "ready",
@@ -165,6 +178,7 @@ async function activateTenant(
       tenants,
       context,
       routeDocument,
+      providerCapabilities,
     });
   } catch (error) {
     if (error instanceof EnterpriseApiError && error.status === 401) {
@@ -177,6 +191,19 @@ async function activateTenant(
       session,
       message: "无法进入所选企业，请重新登录或联系企业管理员。",
     });
+  }
+}
+
+async function loadProviderCapabilities(
+  api: EnterpriseApi,
+  token: string,
+  tenantId: string,
+) {
+  try {
+    return (await api.getProviderCapabilities(token, tenantId)).capabilities;
+  } catch (error) {
+    if (error instanceof EnterpriseApiError && error.status === 401) throw error;
+    return null;
   }
 }
 

@@ -55,4 +55,24 @@ describe("enterprise API client", () => {
       authorization: "Bearer token-a",
     });
   });
+
+  it("loads provider capabilities and tenant jobs with tenant authentication", async () => {
+    const fetcher = vi.fn<typeof fetch>().mockImplementation(async () => new Response(
+      JSON.stringify({ capabilities: [], job: { id: "job-a" } }),
+      { status: 200 },
+    ));
+    const api = createEnterpriseApi(fetcher, "/api");
+
+    await api.getProviderCapabilities("token-a", "tenant-a");
+    await api.getTenantJob("token-a", "job-a");
+
+    expect(fetcher.mock.calls[0]?.[0]).toBe(
+      "/api/enterprise/v1/provider-capabilities",
+    );
+    expect(fetcher.mock.calls[0]?.[1]?.headers).toMatchObject({
+      authorization: "Bearer token-a",
+      "x-tenant-id": "tenant-a",
+    });
+    expect(fetcher.mock.calls[1]?.[0]).toBe("/api/saas/v1/tenant-jobs/job-a");
+  });
 });
