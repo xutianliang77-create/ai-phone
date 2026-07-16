@@ -62,13 +62,17 @@ p {
 }
 
 .button {
+  display: inline-flex;
   min-height: var(--control-height);
+  align-items: center;
+  justify-content: center;
   padding: 0 20px;
   border: 1px solid transparent;
   border-radius: var(--radius);
   font-size: var(--font-label-large-size);
   line-height: var(--font-label-large-line);
   font-weight: var(--font-label-large-weight);
+  text-decoration: none;
 }
 
 .button--primary {

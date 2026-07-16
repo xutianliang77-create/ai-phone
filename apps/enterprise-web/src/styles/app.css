@@ -229,14 +229,50 @@
 }
 
 .status-panel--not_ready > .material-icons-outlined,
-.status-panel--failed > .material-icons-outlined,
 .status-panel--forbidden > .material-icons-outlined {
   background: color-mix(in srgb, var(--color-signal) 10%, transparent);
   color: var(--color-signal);
 }
 
+.status-panel--failed > .material-icons-outlined {
+  background: color-mix(in srgb, var(--color-error) 10%, transparent);
+  color: var(--color-error);
+}
+
+.status-panel--degraded > .material-icons-outlined,
+.status-panel--conflict > .material-icons-outlined {
+  background: color-mix(in srgb, var(--color-tertiary) 10%, transparent);
+  color: var(--color-tertiary);
+}
+
+.status-panel--loading > .material-icons-outlined,
+.status-panel--processing > .material-icons-outlined {
+  background: color-mix(in srgb, var(--color-primary) 10%, transparent);
+  color: var(--color-primary);
+}
+
+.status-panel--loading > .material-icons-outlined {
+  animation: status-spin 1.2s linear infinite;
+}
+
+.status-panel__trace {
+  margin-top: 10px;
+  font-size: var(--font-label-medium-size);
+}
+
+.status-panel__trace code {
+  color: var(--color-on-surface);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
 .status-panel__action {
   margin-top: 16px;
+}
+
+@keyframes status-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 @media (max-width: 959px) {

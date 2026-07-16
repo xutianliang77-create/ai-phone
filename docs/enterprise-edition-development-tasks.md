@@ -20,7 +20,7 @@
 - `ENT-DATA-001` 已有三段可逆 PostgreSQL migration、tenant-first 索引、复合 FK、强制 RLS、checksum/锁和备份归档 smoke；本机无 PostgreSQL/`pg_dump`，真实 migrate/restore/PITR 证据未完成，保持 `in_progress`。
 - `ENT-UI-001` 已完成生产颜色/字号/尺寸/圆角令牌、Material Icons 语义注册表、Flutter 对照和依赖扫描，等待验收。
 - `ENT-UI-002` 已完成 active membership 租户选择、共享 role/scope 真值、九角色 route discovery、scope 导航及直接/嵌套路由 guard；签名 route document 仍等待 `ENT-CORE-011`，保持 `in_progress`。
-- `ENT-UI-003` 已有统一状态组件基础；完整状态矩阵和业务状态联调尚未完成。
+- `ENT-UI-003` 已完成八态注册表、语义图标、ARIA live/alert、trace ID、可行动入口和组件矩阵；Provider/冲突/job 的真实业务联调仍等待 `ENT-CORE-008` 及领域 API，保持 `in_progress`。
 - PostgreSQL schema 代码已实现但真实数据库门禁未通过；SaaS 控制面、企业业务聚合和外部 Provider 仍未通过实现或真实环境门禁。
 
 ## 2. P0 企业公共底座

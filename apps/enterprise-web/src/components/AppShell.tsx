@@ -1,4 +1,4 @@
-import { NavLink, Route, Routes } from "react-router-dom";
+import { Link, NavLink, Route, Routes } from "react-router-dom";
 import type { EnterpriseContextResponse } from "@translation/contracts";
 import brandIconUrl from "../../../mobile/ios/Runner/Assets.xcassets/AppIcon.appiconset/Icon-App-76x76@2x.png";
 import { useAuth } from "../auth/AuthContext.js";
@@ -84,7 +84,11 @@ export function AppShell() {
             path="*"
             element={
               <PageFrame title="页面不存在" description="当前地址没有对应的企业功能。">
-                <StatusPanel state="failed" description="请从左侧导航返回可用页面。" />
+                <StatusPanel
+                  state="failed"
+                  description="当前地址没有对应功能，未执行任何写操作。"
+                  action={<Link className="button button--secondary" to="/">返回工作台</Link>}
+                />
               </PageFrame>
             }
           />
@@ -138,6 +142,7 @@ function GuardedPlaceholder({
         description={allowed
           ? "该业务模块尚未接入生产实现，当前页面不展示设计示例数据。"
           : "当前账号缺少访问该模块所需的服务端 scope。"}
+        action={<Link className="button button--secondary" to="/">返回工作台</Link>}
       />
     </PageFrame>
   );
