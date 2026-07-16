@@ -17,6 +17,7 @@ describe("enterprise PostgreSQL migrations", () => {
       "0004_enterprise_tenant_lifecycle",
       "0005_enterprise_tenant_lifecycle_executor",
       "0006_enterprise_audit_append_only",
+      "0007_enterprise_outbox_delivery",
     ]);
     for (const migration of migrations) {
       expect(migration.up.trim()).not.toBe("");
@@ -51,6 +52,9 @@ describe("enterprise PostgreSQL migrations", () => {
     );
     expect(sql).toContain("enterprise_reject_audit_event_mutation");
     expect(sql).toContain("enterprise_audit_events_append_only");
+    expect(sql).toContain("lease_expires_at");
+    expect(sql).toContain("outbox_events_tenant_recovery_idx");
+    expect(sql).toContain("enterprise_outbox_delivery_content_immutable");
   });
 
   it("applies each migration once and records its checksum", async () => {

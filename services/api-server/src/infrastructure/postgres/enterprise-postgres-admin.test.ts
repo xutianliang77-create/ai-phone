@@ -10,11 +10,11 @@ import type {
 describe("enterprise PostgreSQL schema verification", () => {
   it("accepts the current migration count", async () => {
     const evidence = await verifyEnterprisePostgresSchema(
-      new VerifyClient("6"),
+      new VerifyClient("7"),
     );
 
     expect(evidence).toEqual({
-      migrations: 6,
+      migrations: 7,
       tenantTables: enterpriseTenantTableNames.length,
       compositeForeignKeys: 12,
       rls: "forced",
@@ -22,8 +22,8 @@ describe("enterprise PostgreSQL schema verification", () => {
   });
 
   it("rejects a stale migration count", async () => {
-    await expect(verifyEnterprisePostgresSchema(new VerifyClient("4")))
-      .rejects.toThrow("Migration count is not 6");
+    await expect(verifyEnterprisePostgresSchema(new VerifyClient("6")))
+      .rejects.toThrow("Migration count is not 7");
   });
 });
 

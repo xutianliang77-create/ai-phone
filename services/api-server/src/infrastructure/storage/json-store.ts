@@ -38,6 +38,10 @@ import type {
   EnterpriseTenantJobRecord,
   EnterpriseTenantRecord,
 } from "../../modules/enterprise/enterprise-tenant-record.js";
+import type {
+  EnterpriseInboxEventRecord,
+  EnterpriseOutboxEventRecord,
+} from "../../modules/enterprise/enterprise-event-record.js";
 
 export interface AppStoreSnapshot {
   sessions: SessionRecord[];
@@ -62,6 +66,8 @@ export interface AppStoreSnapshot {
   enterpriseMembers: EnterpriseMemberRecord[];
   enterpriseTenantJobs: EnterpriseTenantJobRecord[];
   enterpriseAuditEvents: EnterpriseAuditEventRecord[];
+  enterpriseInboxEvents: EnterpriseInboxEventRecord[];
+  enterpriseOutboxEvents: EnterpriseOutboxEventRecord[];
   inboxEvents: InboxEventRecord[];
   outboxEvents: OutboxEventRecord[];
 }
@@ -89,6 +95,8 @@ const defaultSnapshot: AppStoreSnapshot = {
   enterpriseMembers: [],
   enterpriseTenantJobs: [],
   enterpriseAuditEvents: [],
+  enterpriseInboxEvents: [],
+  enterpriseOutboxEvents: [],
   inboxEvents: [],
   outboxEvents: [],
 };
@@ -248,6 +256,12 @@ export function normalizeStoreSnapshot(value: unknown): AppStoreSnapshot {
       enterpriseAuditEvents: Array.isArray(raw.enterpriseAuditEvents)
         ? raw.enterpriseAuditEvents
         : [],
+      enterpriseInboxEvents: Array.isArray(raw.enterpriseInboxEvents)
+        ? raw.enterpriseInboxEvents
+        : [],
+      enterpriseOutboxEvents: Array.isArray(raw.enterpriseOutboxEvents)
+        ? raw.enterpriseOutboxEvents
+        : [],
       inboxEvents: Array.isArray(raw.inboxEvents) ? raw.inboxEvents : [],
       outboxEvents: Array.isArray(raw.outboxEvents) ? raw.outboxEvents : [],
   };
@@ -279,6 +293,8 @@ function hasSnapshotData(value: AppStoreSnapshot) {
     value.enterpriseTenants.length > 0 ||
     value.enterpriseTenantJobs.length > 0 ||
     value.enterpriseAuditEvents.length > 0 ||
+    value.enterpriseInboxEvents.length > 0 ||
+    value.enterpriseOutboxEvents.length > 0 ||
     value.billingLedger.length > 0 ||
     Object.keys(value.usageBalances).length > 0;
 }

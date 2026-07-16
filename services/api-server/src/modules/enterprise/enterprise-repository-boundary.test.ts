@@ -17,6 +17,20 @@ const policies = {
     ],
     platform: ["pendingEnterpriseTenantLifecycleJobRefs"],
   },
+  "enterprise-outbox.repository.ts": {
+    scoped: [
+      "claimEnterpriseOutboxEvent",
+      "finalizeEnterpriseOutboxEvent",
+    ],
+    platform: ["pendingEnterpriseOutboxEventRefs"],
+  },
+  "enterprise-reliable-events.repository.ts": {
+    scoped: [
+      "processEnterpriseInboxEvent",
+      "enqueueEnterpriseOutboxEvent",
+    ],
+    platform: [],
+  },
   "enterprise-tenant-lifecycle.repository.ts": {
     scoped: [],
     platform: [

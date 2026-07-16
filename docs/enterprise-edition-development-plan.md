@@ -1,6 +1,6 @@
 # AI Phone 企业版开发方案与计划
 
-版本：v1.2
+版本：v1.3
 日期：2026-07-16
 状态：E0 执行计划，已对齐 UI v1.0
 
@@ -20,6 +20,7 @@
 - `ENT-CORE-001/002/003` 已到 `ready_for_acceptance`；Tenant/Member、RBAC 和 `apps/enterprise-web` 生产应用基础可供后续任务复用。
 - Enterprise Web 已冻结 React 19、TypeScript 5.9、Vite 8、React Router 7 和 Vitest/Testing Library 技术基线，并实现真实登录、会话恢复和租户上下文。
 - `ENT-DATA-001` 已实现 PostgreSQL schema、up/down migration、复合 FK、强制 RLS、migration runner、schema verify 和归档 smoke；真实 PostgreSQL migrate/restore/PITR 尚无环境证据，任务保持 `in_progress`。
+- `ENT-DATA-003` 已完成 tenant-scoped Inbox/Outbox、事务内领域提交、100次重放去重、lease/retry/recovery 和 SQLite/迁移自动化，进入 `ready_for_acceptance`；真实 PostgreSQL 并发 claim 和 Provider sandbox 仍是验收门禁。
 - `ENT-UI-001` 已完成生产令牌、Material Icons 注册表、Flutter 对照和浏览器验证，等待验收；`ENT-UI-002` 已完成共享 scope 真值、九角色导航矩阵及嵌套路由 guard，仍等待 `ENT-CORE-011` 签名 route document；`ENT-UI-003` 已完成八态组件矩阵，仍等待 `ENT-CORE-008` 和领域 API 的 Provider/冲突/job 真值联调。
 - PostgreSQL、SaaS 控制面、对象存储、正式域名、真实 Provider 和目标国家合规确认均未通过门禁。
 - 当前开发必须继续使用独立企业 worktree；个人版声纹和部署 WIP 不进入企业提交。

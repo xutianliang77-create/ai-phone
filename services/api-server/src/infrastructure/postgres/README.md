@@ -10,11 +10,12 @@ session：事务内设置 `app.tenant_id`，Repository query 自动把 tenant �
 审计和 lifecycle job claim/finalize 已强制使用 context；完整 PostgreSQL CRUD
 Repository、运行时 driver 切换及数据迁移/对账仍未完成。
 
-当前六段 migration 中，`0004` 增加 tenant lifecycle 状态和 job，`0005` 增加
+当前七段 migration 中，`0004` 增加 tenant lifecycle 状态和 job，`0005` 增加
 导出/删除执行所需的 scope snapshot、attempt、lease、retry、receipt 和终态约束，
 `0006` 为 audit events 增加 result/details 约束、tenant-first 查询索引和拒绝
-UPDATE/DELETE 的 append-only 触发器。这些结构支持控制面代码和自动化，不代表
-真实 PostgreSQL、对象存储或审计保留策略验收已经完成。
+UPDATE/DELETE 的 append-only 触发器，`0007` 为 enterprise inbox/outbox 增加
+trace、lease、错误码和 tenant-first recovery 索引。这些结构支持控制面代码和
+自动化，不代表真实 PostgreSQL、Provider 或对象存储验收已经完成。
 
 ## Migration
 

@@ -1,7 +1,7 @@
 # AI Phone 企业版详细技术设计
 
-版本：v1.3
-日期：2026-07-15
+版本：v1.4
+日期：2026-07-16
 状态：SaaS 详细技术方案基线待评审
 
 ## 1. 设计原则
@@ -21,8 +21,9 @@
 | RBAC | `ready_for_acceptance` | 已有17个 scope、九角色矩阵、统一服务端 guard 和越权测试 |
 | SaaS tenant lifecycle | `ready_for_acceptance` | 已有幂等开通、暂停、导出/删除执行器、租约、有界恢复和 receipt 校验；真实对象存储/Provider 清理服务尚待验收 |
 | Append-only audit | `ready_for_acceptance` | 已有 tenant-scoped 查询、HMAC cursor、成员/RBAC/租户生命周期埋点和 SQLite/PostgreSQL 不可变约束；受控导出和真实 PostgreSQL 验收尚待后续任务 |
-| PostgreSQL schema | `implemented` | 已有六段可逆 migration、tenant-first 索引、复合 FK、强制 RLS、checksum/锁和归档 smoke；尚无真实 migrate/restore/PITR 证据 |
+| PostgreSQL schema | `implemented` | 已有七段可逆 migration、tenant-first 索引、复合 FK、强制 RLS、checksum/锁和归档 smoke；尚无真实 migrate/restore/PITR 证据 |
 | Tenant-scoped Repository | `in_progress` | 已有 immutable branded `TenantContext`、成员/审计/生命周期 job context guard、Repository export 分类测试和 PostgreSQL scoped transaction session；真实 PostgreSQL CRUD/runtime driver 切换尚未完成 |
+| Enterprise Inbox/Outbox | `ready_for_acceptance` | 已有 tenant-scoped 去重、稳定 payload hash、领域/inbox/outbox 原子提交、lease/retry/recovery 和100次重放门禁；真实 PostgreSQL 并发与 Provider sandbox 尚待验收 |
 | PostgreSQL 控制面/业务聚合 | `designed` | 后续 `ENT-DATA-002` 与领域任务范围，不能从 context 基础代码推导为已实现 |
 | SQLite | `demo_only` | 仅本地开发、自动化和封闭演示，不承载真实企业试点数据 |
 | PSTN/CRM/Calendar/OCR | `not_ready` 或按环境探测 | 未配置必须明确降级，不生成虚假外部对象或成功状态 |
@@ -582,6 +583,20 @@ PostgreSQL scoped session 在独立事务中执行
 | 租户删除 | tombstone、删除范围快照、审计/outbox | 对象删除、Provider 清理、最终校验 |
 
 不能把数据库事务跨越 LLM、PSTN、CRM、对象存储或模型网络调用。外部调用前先提交 outbox；调用结果以带去重键的 inbox 进入新事务。
+
+当前 `ENT-DATA-003` 实现要求 inbox 处理器同步完成：领域状态、已处理 inbox 和
+待发送 outbox 由同一个本地存储事务提交，回调抛错或返回 Promise 均整体回滚。
+provider payload 先转换为键排序的有限深度 JSON 并计算 SHA-256；相同
+`tenant + source + sourceEventId` 的相同 payload 返回 duplicate，不再次执行领域
+逻辑，payload 或 event type 改变则返回冲突。outbox 的
+`tenant + idempotencyKey` 唯一，聚合、事件、payload、trace 和创建时间不可在
+投递阶段修改。
+
+outbox Worker 使用30秒 lease，过期后可恢复；失败按1秒起步、最长5分钟的指数
+退避重试。数据库内保证同一 inbox 只产生一次领域提交和一条 outbox，但网络调用
+仍是至少一次投递：若 Provider 已完成副作用而确认前连接中断，Worker 会再次使用
+同一 idempotency key 投递，因此 Adapter 和 Provider 必须返回同一结果。当前未
+接入默认或伪造 publisher；未配置真实 Adapter 时保持 not_ready。
 
 ### 11.3 Idempotency 记录
 

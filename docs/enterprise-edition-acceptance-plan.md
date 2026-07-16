@@ -160,6 +160,8 @@ Mock 只能验证协议，不能替代 iPhone/Web、真实 LiveKit、真实模�
 - webhook 乱序、重复和延迟不重复拨号、工具执行、导出或结算。
 - session 终态、hold release、ledger 和 outbox 原子提交。
 - API 重启后余额、任务和审计保持一致。
+- 在真实 PostgreSQL 上并发 claim 同一 outbox，只有一个 Worker 获得有效 lease；进程在 claim、Provider 返回和 finalize 三处故障后均可恢复。
+- Provider 已完成但响应丢失时，重试必须携带同一 idempotency key 并获得同一结果；没有 sandbox 或白名单 Provider 证据时，不能把自动化结果升级为 `accepted`。
 
 ## 7. A1 企业会议验收
 

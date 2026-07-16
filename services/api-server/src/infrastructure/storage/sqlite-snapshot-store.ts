@@ -5,6 +5,9 @@ import type { SessionRecord } from "../../modules/sessions/session-record.js";
 import type { AppStoreSnapshot } from "./json-store.js";
 import { SqliteEventStore } from "./sqlite-event-store.js";
 import { SqliteAuditStore } from "./sqlite-audit-store.js";
+import {
+  SqliteEnterpriseEventStore,
+} from "./sqlite-enterprise-event-store.js";
 import { SqliteSessionChildrenStore } from "./sqlite-session-children-store.js";
 
 interface CollectionSpec {
@@ -31,6 +34,8 @@ const collectionSpecs: CollectionSpec[] = [
   spec("enterpriseMembers", "id"),
   spec("enterpriseTenantJobs", "id"),
   spec("enterpriseAuditEvents", "id"),
+  spec("enterpriseInboxEvents", "id"),
+  spec("enterpriseOutboxEvents", "id"),
   spec("inboxEvents", "eventId"),
   spec("outboxEvents", "idempotencyKey"),
 ];
@@ -53,6 +58,7 @@ export class SqliteSnapshotStore {
   private readonly db: DatabaseSync;
   private readonly eventStore: SqliteEventStore;
   private readonly auditStore: SqliteAuditStore;
+  private readonly enterpriseEventStore: SqliteEnterpriseEventStore;
   private readonly sessionChildren: SqliteSessionChildrenStore;
   private baseline: AppStoreSnapshot;
 
@@ -64,6 +70,7 @@ export class SqliteSnapshotStore {
     this.db = new DatabaseSync(file);
     this.eventStore = new SqliteEventStore(this.db);
     this.auditStore = new SqliteAuditStore(this.db);
+    this.enterpriseEventStore = new SqliteEnterpriseEventStore(this.db);
     this.sessionChildren = new SqliteSessionChildrenStore(this.db);
     this.configure();
     this.createSchema();
@@ -109,7 +116,9 @@ export class SqliteSnapshotStore {
     const row = this.db.prepare(
       `SELECT
         (SELECT COUNT(*) FROM app_records) +
-        (SELECT COUNT(*) FROM enterprise_audit_events) AS count`,
+        (SELECT COUNT(*) FROM enterprise_audit_events) +
+        (SELECT COUNT(*) FROM enterprise_inbox_events) +
+        (SELECT COUNT(*) FROM enterprise_outbox_events) AS count`,
     ).get() as { count: number };
     return Number(row.count) === 0;
   }
@@ -157,6 +166,7 @@ export class SqliteSnapshotStore {
     this.sessionChildren.createSchema();
     this.eventStore.createSchema();
     this.auditStore.createSchema();
+    this.enterpriseEventStore.createSchema();
   }
 
   private readDatabase() {
@@ -172,6 +182,7 @@ export class SqliteSnapshotStore {
     }
     this.eventStore.readInto(snapshot);
     this.auditStore.readInto(snapshot);
+    this.enterpriseEventStore.readInto(snapshot);
     return snapshot;
   }
 
@@ -187,6 +198,12 @@ export class SqliteSnapshotStore {
       return event.value === undefined
         ? undefined
         : stableJson(JSON.parse(event.value));
+    }
+    const enterpriseEvent = this.enterpriseEventStore.readEntity(namespace, key);
+    if (enterpriseEvent.handled) {
+      return enterpriseEvent.value === undefined
+        ? undefined
+        : stableJson(JSON.parse(enterpriseEvent.value));
     }
     const row = this.db.prepare(
       "SELECT payload FROM app_records WHERE namespace = ? AND record_key = ?",
@@ -212,6 +229,7 @@ export class SqliteSnapshotStore {
   private writeEntity(namespace: string, key: string, valueJson: string) {
     if (this.auditStore.writeEntity(namespace, valueJson)) return;
     if (this.eventStore.writeEntity(namespace, key, valueJson)) return;
+    if (this.enterpriseEventStore.writeEntity(namespace, valueJson)) return;
     const value = JSON.parse(valueJson);
     const payload = namespace === "sessions"
       ? JSON.stringify(withoutSessionCollections(value as SessionRecord))
@@ -231,6 +249,7 @@ export class SqliteSnapshotStore {
   private deleteEntity(namespace: string, key: string) {
     if (this.auditStore.deleteEntity(namespace)) return;
     if (this.eventStore.deleteEntity(namespace, key)) return;
+    if (this.enterpriseEventStore.deleteEntity(namespace)) return;
     this.db.prepare(
       "DELETE FROM app_records WHERE namespace = ? AND record_key = ?",
     ).run(namespace, key);
