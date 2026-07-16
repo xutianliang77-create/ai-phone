@@ -5,13 +5,14 @@ import { spawnSync } from "node:child_process";
 import { pathToFileURL } from "node:url";
 import pg from "pg";
 import {
+  loadEnterprisePostgresMigrations,
   migrateEnterprisePostgres,
   rollbackEnterprisePostgres,
   type PostgresMigrationClient,
 } from "./enterprise-postgres-migrations.js";
 
 const { Client } = pg;
-const expectedTenantTables = [
+export const enterpriseTenantTableNames = [
   "members", "api_credentials", "entitlements", "subscriptions",
   "knowledge_sources", "knowledge_versions", "term_packs",
   "policy_decisions", "audit_events", "usage_ledger", "idempotency_keys",
@@ -62,8 +63,8 @@ export async function verifyEnterprisePostgresSchema(client: PostgresMigrationCl
     WHERE n.nspname = 'enterprise' AND c.relkind = 'r'
   `);
   const byName = new Map(tables.rows.map((row) => [row.table_name, row]));
-  const missing = expectedTenantTables.filter((name) => !byName.has(name));
-  const unsafe = expectedTenantTables.filter((name) => {
+  const missing = enterpriseTenantTableNames.filter((name) => !byName.has(name));
+  const unsafe = enterpriseTenantTableNames.filter((name) => {
     const row = byName.get(name);
     return row && (!row.rls || !row.force_rls);
   });
@@ -82,13 +83,16 @@ export async function verifyEnterprisePostgresSchema(client: PostgresMigrationCl
   `);
   if (missing.length > 0) throw new Error(`Missing enterprise tables: ${missing.join(", ")}`);
   if (unsafe.length > 0) throw new Error(`RLS not forced: ${unsafe.join(", ")}`);
-  if (Number(migrations.rows[0]?.count) !== 4) throw new Error("Migration count is not 4");
+  const expectedMigrationCount = loadEnterprisePostgresMigrations().length;
+  if (Number(migrations.rows[0]?.count) !== expectedMigrationCount) {
+    throw new Error(`Migration count is not ${expectedMigrationCount}`);
+  }
   if (Number(foreignKeys.rows[0]?.count) < 12) {
     throw new Error("Composite tenant foreign key count is below the contract");
   }
   return {
     migrations: Number(migrations.rows[0]?.count),
-    tenantTables: expectedTenantTables.length,
+    tenantTables: enterpriseTenantTableNames.length,
     compositeForeignKeys: Number(foreignKeys.rows[0]?.count),
     rls: "forced",
   };
