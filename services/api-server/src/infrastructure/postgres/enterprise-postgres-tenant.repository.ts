@@ -17,6 +17,10 @@ import {
   type EnterpriseTenantPostgresSession,
 } from "./enterprise-postgres-tenant-session.js";
 import {
+  enterprisePostgresAccountSubjectId,
+  enterprisePostgresActorSubjectId,
+} from "./enterprise-postgres-subject-id.js";
+import {
   mapEnterpriseAuditRow,
   mapEnterpriseMemberRow,
   mapEnterpriseTenantRow,
@@ -116,18 +120,19 @@ class PostgresTenantRepository implements EnterpriseTenantPostgresRepository {
   }
 
   async findMemberByUserId(userId: string) {
+    const accountSubjectId = enterprisePostgresAccountSubjectId(userId);
     const result = await this.session.query<EnterpriseMemberPostgresRow>(`
       SELECT id, tenant_id, user_id, role, status, joined_at,
         created_at, updated_at, version
       FROM enterprise.members
       WHERE tenant_id = $1 AND user_id = $2
-    `, [userId]);
+    `, [accountSubjectId]);
     if (!result.rows[0]) return null;
     const member = mapEnterpriseMemberRow(
       result.rows[0],
       this.session.context.tenantId,
     );
-    if (member.userId !== userId) {
+    if (member.userId !== accountSubjectId) {
       throw new Error("Enterprise PostgreSQL member user mismatch");
     }
     return member;
@@ -135,6 +140,7 @@ class PostgresTenantRepository implements EnterpriseTenantPostgresRepository {
 
   async insertMember(member: EnterpriseMemberRecord) {
     assertTenantMatch(member.tenantId, this.session.context.tenantId);
+    enterprisePostgresAccountSubjectId(member.userId);
     const result = await this.session.query<EnterpriseMemberPostgresRow>(`
       INSERT INTO enterprise.members(
         tenant_id, id, user_id, role, status, joined_at,
@@ -224,6 +230,9 @@ class PostgresTenantRepository implements EnterpriseTenantPostgresRepository {
 
   async appendAuditEvent(event: EnterpriseAuditEventRecord) {
     assertTenantMatch(event.tenantId, this.session.context.tenantId);
+    const actorUserId = event.actorUserId === undefined
+      ? null
+      : enterprisePostgresActorSubjectId(event.actorUserId);
     await this.session.query(`
       INSERT INTO enterprise.audit_events(
         tenant_id, id, actor_id, action, resource_type, resource_id,
@@ -232,7 +241,7 @@ class PostgresTenantRepository implements EnterpriseTenantPostgresRepository {
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
     `, [
       event.id,
-      event.actorUserId ?? null,
+      actorUserId,
       event.action,
       event.resourceType,
       event.resourceId ?? null,

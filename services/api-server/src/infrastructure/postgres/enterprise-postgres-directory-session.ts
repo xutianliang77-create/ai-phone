@@ -1,6 +1,9 @@
 import type {
   EnterpriseTenantPostgresPool,
 } from "./enterprise-postgres-tenant-session.js";
+import {
+  enterprisePostgresAccountSubjectId,
+} from "./enterprise-postgres-subject-id.js";
 
 export interface EnterpriseDirectoryPostgresSession {
   readonly userId: string;
@@ -86,9 +89,5 @@ function assertDirectorySql(sql: string) {
 }
 
 function requiredUserId(value: string) {
-  const cleaned = typeof value === "string" ? value.trim() : "";
-  if (!cleaned || cleaned.length > 128) {
-    throw new Error("Invalid enterprise directory userId");
-  }
-  return cleaned;
+  return enterprisePostgresAccountSubjectId(value);
 }

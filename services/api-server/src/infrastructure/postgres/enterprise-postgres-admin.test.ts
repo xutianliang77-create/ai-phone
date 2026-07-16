@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  enterpriseSubjectColumns,
   enterpriseTenantTableNames,
   verifyEnterprisePostgresSchema,
 } from "./enterprise-postgres-admin.js";
@@ -10,25 +11,35 @@ import type {
 describe("enterprise PostgreSQL schema verification", () => {
   it("accepts the current migration count", async () => {
     const evidence = await verifyEnterprisePostgresSchema(
-      new VerifyClient("9"),
+      new VerifyClient("10"),
     );
 
     expect(evidence).toEqual({
-      migrations: 9,
+      migrations: 10,
       tenantTables: enterpriseTenantTableNames.length,
       compositeForeignKeys: 12,
+      subjectColumns: enterpriseSubjectColumns.length,
       rls: "forced",
     });
   });
 
   it("rejects a stale migration count", async () => {
-    await expect(verifyEnterprisePostgresSchema(new VerifyClient("8")))
-      .rejects.toThrow("Migration count is not 9");
+    await expect(verifyEnterprisePostgresSchema(new VerifyClient("9")))
+      .rejects.toThrow("Migration count is not 10");
+  });
+
+  it("rejects stale UUID subject columns", async () => {
+    await expect(verifyEnterprisePostgresSchema(
+      new VerifyClient("10", "uuid"),
+    )).rejects.toThrow("subject columns are not text");
   });
 });
 
 class VerifyClient implements PostgresMigrationClient {
-  constructor(private readonly migrationCount: string) {}
+  constructor(
+    private readonly migrationCount: string,
+    private readonly subjectType = "text",
+  ) {}
 
   async query<Row extends Record<string, unknown>>(sql: string) {
     if (sql.includes("FROM pg_class")) {
@@ -45,6 +56,15 @@ class VerifyClient implements PostgresMigrationClient {
     }
     if (sql.includes("FROM pg_constraint")) {
       return { rows: [{ count: "12" }] as Row[] };
+    }
+    if (sql.includes("information_schema.columns")) {
+      return {
+        rows: enterpriseSubjectColumns.map(([table_name, column_name]) => ({
+          table_name,
+          column_name,
+          data_type: this.subjectType,
+        })) as Row[],
+      };
     }
     throw new Error(`Unexpected verification query: ${sql}`);
   }

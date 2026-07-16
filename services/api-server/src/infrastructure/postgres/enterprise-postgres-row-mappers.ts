@@ -14,6 +14,10 @@ import type {
   EnterpriseTenantLifecycleSnapshot,
   EnterpriseTenantRecord,
 } from "../../modules/enterprise/enterprise-tenant-record.js";
+import {
+  enterprisePostgresAccountSubjectId,
+  optionalEnterprisePostgresActorSubjectId,
+} from "./enterprise-postgres-subject-id.js";
 
 export interface EnterpriseTenantPostgresRow extends Record<string, unknown> {
   id: unknown;
@@ -141,7 +145,7 @@ export function mapEnterpriseMemberRow(
   return {
     id: text(row.id),
     tenantId: rowTenantId,
-    userId: text(row.user_id),
+    userId: enterprisePostgresAccountSubjectId(row.user_id),
     role: row.role,
     status: row.status,
     ...(joinedAt ? { joinedAt } : {}),
@@ -160,7 +164,7 @@ export function mapEnterpriseAuditRow(
   if (!isEnterpriseAuditResult(row.result)) {
     throw new Error("Invalid enterprise audit row result");
   }
-  const actorUserId = optionalText(row.actor_id);
+  const actorUserId = optionalEnterprisePostgresActorSubjectId(row.actor_id);
   const resourceId = optionalText(row.resource_id);
   return {
     id: text(row.id),
@@ -202,7 +206,7 @@ export function mapEnterpriseTenantJobRow(
   return {
     id: text(row.id),
     tenantId: rowTenantId,
-    actorUserId: text(row.actor_id),
+    actorUserId: enterprisePostgresAccountSubjectId(row.actor_id),
     type: type as EnterpriseTenantJobType,
     idempotencyKey: text(row.idempotency_key),
     requestHash: text(row.request_hash),

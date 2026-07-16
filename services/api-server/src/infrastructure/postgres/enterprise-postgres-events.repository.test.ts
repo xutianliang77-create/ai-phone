@@ -15,7 +15,7 @@ import type {
 } from "../../modules/enterprise/enterprise-event-record.js";
 
 const tenantId = "00000000-0000-4000-8000-000000000001";
-const actorId = "00000000-0000-4000-8000-000000000002";
+const actorId = "user_00000000-0000-4000-8000-000000000002";
 const inboxId = "00000000-0000-4000-8000-000000000003";
 const outboxId = "00000000-0000-4000-8000-000000000004";
 const aggregateId = "00000000-0000-4000-8000-000000000005";

@@ -1,6 +1,6 @@
 # AI Phone 企业版详细技术设计
 
-版本：v1.7
+版本：v1.8
 日期：2026-07-17
 状态：SaaS 详细技术方案基线待评审
 
@@ -21,8 +21,8 @@
 | RBAC | `ready_for_acceptance` | 已有17个 scope、九角色矩阵、统一服务端 guard 和越权测试 |
 | SaaS tenant lifecycle | `ready_for_acceptance` | 已有幂等开通、暂停、导出/删除执行器、租约、有界恢复和 receipt 校验；真实对象存储/Provider 清理服务尚待验收 |
 | Append-only audit | `ready_for_acceptance` | 已有 tenant-scoped 查询、HMAC cursor、成员/RBAC/租户生命周期埋点和 SQLite/PostgreSQL 不可变约束；受控导出和真实 PostgreSQL 验收尚待后续任务 |
-| PostgreSQL schema | `implemented` | 已有九段可逆 migration、tenant-first 索引、复合 FK、强制 RLS、user directory、cell pending projection、checksum/锁和归档 smoke；尚无真实 migrate/restore/PITR 证据 |
-| Tenant-scoped Repository | `in_progress` | 已有 tenant/user/cell scoped transaction，以及 Tenant/Member/Audit、Directory、lifecycle、Inbox/Outbox、pending discovery 和共享 unit-of-work；runtime、identity 映射和迁移对账尚未完成 |
+| PostgreSQL schema | `implemented` | 已有十段 up/down migration、tenant-first 索引、复合 FK、强制 RLS、user directory、cell pending projection、opaque subject identity、受保护回滚、checksum/锁和归档 smoke；尚无真实 migrate/restore/PITR 证据 |
+| Tenant-scoped Repository | `in_progress` | 已有 tenant/user/cell scoped transaction、subject guard，以及 Tenant/Member/Audit、Directory、lifecycle、Inbox/Outbox、pending discovery 和共享 unit-of-work；runtime 和迁移对账尚未完成 |
 | Enterprise Inbox/Outbox | `ready_for_acceptance` | 已有 tenant-scoped 去重、稳定 payload hash、领域/inbox/outbox 原子提交、lease/retry/recovery 和100次重放门禁；真实 PostgreSQL 并发与 Provider sandbox 尚待验收 |
 | PostgreSQL 控制面/业务聚合 | `designed` | 后续 `ENT-DATA-002` 与领域任务范围，不能从 context 基础代码推导为已实现 |
 | SQLite | `demo_only` | 仅本地开发、自动化和封闭演示，不承载真实企业试点数据 |
@@ -609,10 +609,24 @@ unit-of-work，重新读取 tenant 并核对其当前 `cellId`；路由已迁移
 回滚。复核使用 `SELECT ... FOR UPDATE` 锁定 tenant 路由行，避免 cell 迁移在检查与
 claim 之间穿透；通过复核后，lifecycle/outbox 才分别执行 attempts/lease 原子 claim。
 
-这些 Repository 和 discovery 尚未接入 HTTP/Worker runtime。此外，当前账号 subject
-ID 与 PostgreSQL identity 列的 UUID 约束需要在 runtime 切换前冻结映射/迁移契约。
-启动 schema verify、单一真值切换和数据对账完成前，禁止局部切换形成
-SQLite/PostgreSQL 双写或分裂真值。
+第五批冻结 identity 契约。账号 ID 的代码真值是 `user_<uuid>`，审计、策略和幂等
+还需要 `system:enterprise-outbox` 等非用户 actor；因此 identity 是 opaque subject，
+不能继续误建模为资源 UUID，也不采用不可逆 hash/UUID 映射表。`0010` 将 members、
+Directory、created/owner/assigned/host/participant user references、tenant job actor、
+pending actor、policy/audit/idempotency actor 改为 text。账号引用由数据库函数和
+Repository 双层强制 `user_<uuid>`；通用 actor 允许账号 subject 或长度受限的
+namespace subject。
+
+`current_user_id()` 同步改为 text，因此 Directory forced RLS 直接比较完整账号
+subject，不剥离前缀或产生碰撞。迁移会把旧 UUID 值规范化为 `user_<uuid>`；down
+migration 只有在全部 actor 都仍是 account subject 时才允许还原，存在 `system:*`
+等非账号 actor 时以明确错误阻断，避免丢失身份语义。schema verify 逐列确认12个
+user/actor 列均为 text；Directory、Member、Audit、Lifecycle 和 Pending Repository
+在发 SQL 前及读取返回行时再次验证 subject。
+
+这些 Repository 和 discovery 尚未接入 HTTP/Worker runtime。启动 migration/schema
+verify、单一真值切换和数据对账完成前，禁止局部切换形成 SQLite/PostgreSQL 双写或
+分裂真值。
 
 ### 11.2 事务和一致性边界
 

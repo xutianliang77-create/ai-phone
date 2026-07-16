@@ -11,7 +11,7 @@ import type {
 
 const cellId = "cn-cell-01";
 const tenantId = "00000000-0000-4000-8000-000000000001";
-const actorId = "00000000-0000-4000-8000-000000000002";
+const actorId = "user_00000000-0000-4000-8000-000000000002";
 const jobId = "00000000-0000-4000-8000-000000000003";
 const outboxId = "00000000-0000-4000-8000-000000000004";
 const now = "2026-07-17T03:00:00.000Z";
@@ -72,7 +72,7 @@ describe("enterprise PostgreSQL pending work", () => {
         traceId: "trace-invalid-row",
         now,
         limit: 10,
-      })).rejects.toThrow(/pending work/);
+      })).rejects.toThrow(/pending work|account subject/);
       expect(fixture.calls.at(-1)?.sql).toBe("ROLLBACK");
     }
   });
@@ -171,6 +171,14 @@ describe("enterprise PostgreSQL pending work", () => {
         ref: lifecycleRef(),
         leaseExpiresAt: now,
       },
+      {
+        cellId,
+        ref: {
+          ...lifecycleRef(),
+          actorUserId: "system:lifecycle-worker",
+        },
+        leaseExpiresAt,
+      },
     ]) {
       const fixture = poolFixture(() => []);
       await expect(claimEnterprisePostgresPendingWork({
@@ -178,7 +186,7 @@ describe("enterprise PostgreSQL pending work", () => {
         ...input,
         now,
         traceId: "trace-invalid",
-      })).rejects.toThrow(/cell mismatch|lease/);
+      })).rejects.toThrow(/cell mismatch|lease|account subject/);
       expect(fixture.calls).toEqual([]);
     }
   });

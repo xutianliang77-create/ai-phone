@@ -7,7 +7,7 @@ import type {
   EnterpriseTenantPostgresPool,
 } from "./enterprise-postgres-tenant-session.js";
 
-const userId = "00000000-0000-4000-8000-000000000001";
+const userId = "user_00000000-0000-4000-8000-000000000001";
 
 describe("enterprise PostgreSQL directory session", () => {
   it("sets transaction-local user state and injects user as parameter one", async () => {
@@ -60,6 +60,16 @@ describe("enterprise PostgreSQL directory session", () => {
       )).rejects.toThrow("directory SQL");
       expect(fixture.calls.at(-1)?.sql).toBe("ROLLBACK");
     }
+  });
+
+  it("rejects a non-canonical account subject before connecting", async () => {
+    const fixture = poolFixture();
+    await expect(withEnterpriseDirectoryPostgresSession(
+      fixture.pool,
+      "user-a",
+      async () => undefined,
+    )).rejects.toThrow("account subject");
+    expect(fixture.calls).toEqual([]);
   });
 });
 

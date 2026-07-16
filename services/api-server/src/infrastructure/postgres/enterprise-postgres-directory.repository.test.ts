@@ -9,7 +9,7 @@ import type {
   EnterpriseTenantPostgresPool,
 } from "./enterprise-postgres-tenant-session.js";
 
-const userId = "00000000-0000-4000-8000-000000000001";
+const userId = "user_00000000-0000-4000-8000-000000000001";
 const tenantId = "00000000-0000-4000-8000-000000000002";
 const memberId = "00000000-0000-4000-8000-000000000003";
 
@@ -34,7 +34,7 @@ describe("enterprise PostgreSQL directory repository", () => {
   it("rejects a row for a different user or inactive membership", async () => {
     for (const row of [
       {
-        user_id: "00000000-0000-4000-8000-000000000099",
+        user_id: "user_00000000-0000-4000-8000-000000000099",
         tenant_id: tenantId,
         member_id: memberId,
         member_status: "active",

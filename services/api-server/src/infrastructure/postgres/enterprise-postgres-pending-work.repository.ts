@@ -10,6 +10,9 @@ import {
 import type {
   EnterpriseTenantPostgresPool,
 } from "./enterprise-postgres-tenant-session.js";
+import {
+  enterprisePostgresAccountSubjectId,
+} from "./enterprise-postgres-subject-id.js";
 
 interface PendingWorkRow extends Record<string, unknown> {
   cell_id: unknown;
@@ -86,7 +89,7 @@ export async function claimEnterprisePostgresPendingWork(input: {
     throw new Error("Enterprise pending work cell mismatch");
   }
   const actorUserId = input.ref.workKind === "tenant_lifecycle"
-    ? input.ref.actorUserId
+    ? enterprisePostgresAccountSubjectId(input.ref.actorUserId)
     : "system:enterprise-outbox";
   return withEnterprisePostgresUnitOfWork(
     input.pool,
@@ -138,7 +141,7 @@ function mapPendingWorkRow(
       tenantId,
       workKind: row.work_kind,
       resourceId,
-      actorUserId: requiredText(row.actor_id),
+      actorUserId: enterprisePostgresAccountSubjectId(row.actor_id),
     };
   }
   if (row.work_kind === "outbox" && row.actor_id == null) {

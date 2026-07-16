@@ -18,7 +18,7 @@ import type {
 } from "../../modules/enterprise/enterprise-event-record.js";
 
 const tenantId = "00000000-0000-4000-8000-000000000001";
-const actorId = "00000000-0000-4000-8000-000000000002";
+const actorId = "user_00000000-0000-4000-8000-000000000002";
 const now = "2026-07-17T03:00:00.000Z";
 
 describe("enterprise PostgreSQL unit of work", () => {

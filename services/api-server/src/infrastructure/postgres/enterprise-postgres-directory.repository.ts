@@ -10,6 +10,9 @@ import {
 import type {
   EnterpriseTenantPostgresPool,
 } from "./enterprise-postgres-tenant-session.js";
+import {
+  enterprisePostgresAccountSubjectId,
+} from "./enterprise-postgres-subject-id.js";
 
 interface DirectoryRow extends Record<string, unknown> {
   user_id: unknown;
@@ -37,7 +40,8 @@ export function listActiveEnterpriseMembershipRefs(
         throw new Error("Enterprise directory membership limit exceeded");
       }
       return result.rows.map((row) => {
-        if (row.user_id !== session.userId || row.member_status !== "active") {
+        const rowUserId = enterprisePostgresAccountSubjectId(row.user_id);
+        if (rowUserId !== session.userId || row.member_status !== "active") {
           throw new Error("Invalid enterprise directory row");
         }
         return {

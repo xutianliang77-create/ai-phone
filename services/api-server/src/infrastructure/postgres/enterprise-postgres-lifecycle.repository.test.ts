@@ -14,7 +14,7 @@ import type {
 } from "../../modules/enterprise/enterprise-tenant-record.js";
 
 const tenantId = "00000000-0000-4000-8000-000000000001";
-const actorId = "00000000-0000-4000-8000-000000000002";
+const actorId = "user_00000000-0000-4000-8000-000000000002";
 const jobId = "00000000-0000-4000-8000-000000000003";
 const memberId = "00000000-0000-4000-8000-000000000004";
 const now = "2026-07-17T01:00:00.000Z";
@@ -178,7 +178,7 @@ describe("enterprise PostgreSQL lifecycle repository", () => {
       },
       {
         ...jobRecord(),
-        actorUserId: "00000000-0000-4000-8000-000000000098",
+        actorUserId: "user_00000000-0000-4000-8000-000000000098",
       },
     ]) {
       const fixture = poolFixture(() => []);
@@ -190,12 +190,22 @@ describe("enterprise PostgreSQL lifecycle repository", () => {
       expect(fixture.calls.at(-1)?.sql).toBe("ROLLBACK");
     }
   });
+
+  it("rejects service actors for account-owned lifecycle jobs", async () => {
+    const fixture = poolFixture(() => []);
+    await expect(withEnterpriseLifecyclePostgresRepository(
+      fixture.pool,
+      context("system:lifecycle-worker"),
+      (repository) => repository.lockJob(jobId),
+    )).rejects.toThrow("account subject");
+    expect(fixture.calls.at(-1)?.sql).toBe("ROLLBACK");
+  });
 });
 
-function context() {
+function context(actorUserId = actorId) {
   return createEnterpriseTenantContext({
     tenantId,
-    actorUserId: actorId,
+    actorUserId,
     actorRole: "owner",
     traceId: "trace-a",
   });

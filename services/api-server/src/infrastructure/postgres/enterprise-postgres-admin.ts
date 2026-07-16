@@ -25,6 +25,20 @@ export const enterpriseTenantTableNames = [
   "meeting_action_items",
   "tenant_jobs",
 ] as const;
+export const enterpriseSubjectColumns = [
+  ["members", "user_id"],
+  ["user_tenant_directory", "user_id"],
+  ["knowledge_sources", "created_by"],
+  ["marketing_campaigns", "owner_user_id"],
+  ["support_sessions", "assigned_user_id"],
+  ["meetings", "host_user_id"],
+  ["meeting_participants", "user_id"],
+  ["tenant_jobs", "actor_id"],
+  ["platform_pending_work", "actor_id"],
+  ["policy_decisions", "actor_id"],
+  ["audit_events", "actor_id"],
+  ["idempotency_keys", "actor_id"],
+] as const;
 
 const [action] = process.argv.slice(2);
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
@@ -82,6 +96,15 @@ export async function verifyEnterprisePostgresSchema(client: PostgresMigrationCl
       AND cardinality(constraint_record.conkey) = 2
       AND cardinality(constraint_record.confkey) = 2
   `);
+  const subjectColumns = await client.query<{
+    table_name: string;
+    column_name: string;
+    data_type: string;
+  }>(`
+    SELECT table_name, column_name, data_type
+    FROM information_schema.columns
+    WHERE table_schema = 'enterprise'
+  `);
   if (missing.length > 0) throw new Error(`Missing enterprise tables: ${missing.join(", ")}`);
   if (unsafe.length > 0) throw new Error(`RLS not forced: ${unsafe.join(", ")}`);
   const expectedMigrationCount = loadEnterprisePostgresMigrations().length;
@@ -91,10 +114,25 @@ export async function verifyEnterprisePostgresSchema(client: PostgresMigrationCl
   if (Number(foreignKeys.rows[0]?.count) < 12) {
     throw new Error("Composite tenant foreign key count is below the contract");
   }
+  const subjectTypes = new Map(subjectColumns.rows.map((row) => [
+    `${row.table_name}.${row.column_name}`,
+    row.data_type,
+  ]));
+  const invalidSubjects = enterpriseSubjectColumns.filter(([table, column]) =>
+    subjectTypes.get(`${table}.${column}`) !== "text"
+  );
+  if (invalidSubjects.length > 0) {
+    throw new Error(
+      `Enterprise subject columns are not text: ${
+        invalidSubjects.map(([table, column]) => `${table}.${column}`).join(", ")
+      }`,
+    );
+  }
   return {
     migrations: Number(migrations.rows[0]?.count),
     tenantTables: enterpriseTenantTableNames.length,
     compositeForeignKeys: Number(foreignKeys.rows[0]?.count),
+    subjectColumns: enterpriseSubjectColumns.length,
     rls: "forced",
   };
 }

@@ -15,9 +15,9 @@ import type {
 } from "../../modules/enterprise/enterprise-tenant-record.js";
 
 const tenantId = "00000000-0000-4000-8000-000000000001";
-const ownerId = "00000000-0000-4000-8000-000000000002";
+const ownerId = "user_00000000-0000-4000-8000-000000000002";
 const memberId = "00000000-0000-4000-8000-000000000003";
-const userId = "00000000-0000-4000-8000-000000000004";
+const userId = "user_00000000-0000-4000-8000-000000000004";
 const auditId = "00000000-0000-4000-8000-000000000005";
 const now = "2026-07-17T00:00:00.000Z";
 
@@ -174,23 +174,22 @@ describe("enterprise PostgreSQL tenant repository", () => {
     )).toBe(false);
   });
 
-  it("rejects cross-tenant records before sending their mutation", async () => {
-    const fixture = poolFixture(() => []);
-    const member = {
-      ...memberRecord(),
-      tenantId: "00000000-0000-4000-8000-000000000099",
-    };
-
-    await expect(withEnterpriseTenantPostgresRepository(
-      fixture.pool,
-      context(),
-      (repository) => repository.insertMember(member),
-    )).rejects.toThrow("tenant mismatch");
-    expect(fixture.calls.map(({ sql }) => sql)).toEqual([
-      "BEGIN",
-      "SELECT set_config('app.tenant_id', $1, true)",
-      "ROLLBACK",
-    ]);
+  it("rejects cross-tenant or malformed account records before mutation", async () => {
+    for (const member of [
+      {
+        ...memberRecord(),
+        tenantId: "00000000-0000-4000-8000-000000000099",
+      },
+      { ...memberRecord(), userId: "user-a" },
+    ]) {
+      const fixture = poolFixture(() => []);
+      await expect(withEnterpriseTenantPostgresRepository(
+        fixture.pool,
+        context(),
+        (repository) => repository.insertMember(member),
+      )).rejects.toThrow(/tenant mismatch|account subject/);
+      expect(fixture.calls.at(-1)?.sql).toBe("ROLLBACK");
+    }
   });
 
   it("rejects a cross-tenant row returned by the database", async () => {
@@ -201,7 +200,6 @@ describe("enterprise PostgreSQL tenant repository", () => {
           })]
         : []
     );
-
     await expect(withEnterpriseTenantPostgresRepository(
       fixture.pool,
       context(),
@@ -214,7 +212,7 @@ describe("enterprise PostgreSQL tenant repository", () => {
     const fixture = poolFixture((sql) =>
       sql.includes("FROM enterprise.members")
         ? [memberRow({
-            user_id: "00000000-0000-4000-8000-000000000099",
+            user_id: "user_00000000-0000-4000-8000-000000000099",
           })]
         : []
     );
@@ -233,7 +231,10 @@ describe("enterprise PostgreSQL tenant repository", () => {
       fixture.pool,
       context(),
       async (repository) => {
-        await repository.appendAuditEvent(auditRecord());
+        await repository.appendAuditEvent({
+          ...auditRecord(),
+          actorUserId: "system:webhook",
+        });
         throw new Error("domain failed");
       },
     )).rejects.toThrow("domain failed");

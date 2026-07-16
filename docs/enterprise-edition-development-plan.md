@@ -1,6 +1,6 @@
 # AI Phone 企业版开发方案与计划
 
-版本：v1.6
+版本：v1.7
 日期：2026-07-17
 状态：E0 执行计划，已对齐 UI v1.0
 
@@ -19,8 +19,8 @@
 
 - `ENT-CORE-001/002/003` 已到 `ready_for_acceptance`；Tenant/Member、RBAC 和 `apps/enterprise-web` 生产应用基础可供后续任务复用。
 - Enterprise Web 已冻结 React 19、TypeScript 5.9、Vite 8、React Router 7 和 Vitest/Testing Library 技术基线，并实现真实登录、会话恢复和租户上下文。
-- `ENT-DATA-001` 已实现九段 PostgreSQL up/down migration、复合 FK、强制 RLS、migration runner、schema verify 和归档 smoke；`0008` 增加 user-context Tenant Directory，`0009` 增加 cell pending-work projection，真实 PostgreSQL migrate/restore/PITR 尚无环境证据，任务保持 `in_progress`。
-- `ENT-DATA-002` 已实现 Tenant/Member/Audit、Tenant Directory、lifecycle、Inbox/Outbox PostgreSQL Repository、共享 unit-of-work 和 cell-scoped pending discovery。cell Worker 只能读取最小引用，claim 前必须逐租户复核当前 cell；当前仍不启用 runtime driver，下一步是账号 identity 映射、单一真值切换和迁移对账。
+- `ENT-DATA-001` 已实现十段 PostgreSQL up/down migration、复合 FK、强制 RLS、migration runner、schema verify 和归档 smoke；`0010` 将 opaque user/actor subject 与资源 UUID 分离，真实 PostgreSQL migrate/restore/PITR 尚无环境证据，任务保持 `in_progress`。
+- `ENT-DATA-002` 已实现 Tenant/Member/Audit、Directory、lifecycle、Inbox/Outbox、cell pending discovery、共享 unit-of-work 和 subject guard。schema verify 会拒绝遗留 UUID identity 列；当前仍不启用 runtime driver，下一步是启动迁移、单一真值切换和数据对账。
 - `ENT-DATA-003` 已完成 tenant-scoped Inbox/Outbox、事务内领域提交、100次重放去重、lease/retry/recovery 和 SQLite/迁移自动化，进入 `ready_for_acceptance`；真实 PostgreSQL 并发 claim 和 Provider sandbox 仍是验收门禁。
 - `ENT-UI-001` 已完成生产令牌、Material Icons 注册表、Flutter 对照和浏览器验证，等待验收；`ENT-UI-002` 已完成共享 scope 真值、九角色导航矩阵及嵌套路由 guard，仍等待 `ENT-CORE-011` 签名 route document；`ENT-UI-003` 已完成八态组件矩阵，仍等待 `ENT-CORE-008` 和领域 API 的 Provider/冲突/job 真值联调。
 - PostgreSQL、SaaS 控制面、对象存储、正式域名、真实 Provider 和目标国家合规确认均未通过门禁。
@@ -273,4 +273,4 @@ CORE-001/002 验收
 
 E0 完成后再启动 `ENT-MTG-001` 主链；允许提前做协议 spike，但不能把未接入真实 tenant/data/readiness 的会议页面计为 E1 完成。
 
-当前进展：第2项 `ENT-CORE-003` 已完成并等待验收；第3项 `ENT-DATA-001` 已完成九段 schema 与本地自动化，等待真实 PostgreSQL migrate/restore/PITR 证据；第4项已完成 Tenant/Member/Audit、Directory、lifecycle、Inbox/Outbox 和 cell pending discovery，但 runtime/identity 迁移/数据对账未完成；第6项 `ENT-UI-001/002/003` 已进入验收。
+当前进展：第2项 `ENT-CORE-003` 已完成并等待验收；第3项 `ENT-DATA-001` 已完成十段 schema 与本地自动化，等待真实 PostgreSQL migrate/restore/PITR 证据；第4项已完成 Repository、pending discovery 和 subject identity 契约，但 runtime/启动迁移/数据对账未完成；第6项 `ENT-UI-001/002/003` 已进入验收。

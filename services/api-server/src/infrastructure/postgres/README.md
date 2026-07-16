@@ -1,6 +1,6 @@
 # Enterprise PostgreSQL schema
 
-`ENT-DATA-001` 在这里提供企业 schema、可逆 migration、复合外键、强制 RLS
+`ENT-DATA-001` 在这里提供企业 schema、up/down migration、受保护回滚、复合外键、强制 RLS
 和备份归档 smoke。它不把当前 API 的 SQLite 存储切换为 PostgreSQL；Repository
 切换属于 `ENT-DATA-002`。
 
@@ -26,15 +26,24 @@ cell/tenant/kind/resource 和必要 actor，随后进入 tenant unit-of-work 复
 并以 `FOR UPDATE` 锁定路由行后执行 lifecycle/outbox 原子 claim。该代码尚未接入
 API/Worker runtime。
 
-当前九段 migration 中，`0004` 增加 tenant lifecycle 状态和 job，`0005` 增加
+identity 使用 opaque subject，而不是资源 UUID：
+
+- account subject 必须是规范的 `user_<uuid>`。
+- audit/policy/idempotency actor 可以是 account subject，或
+  `system:enterprise-outbox` 形式的受约束 namespace subject。
+- Repository 在 SQL 前和行映射时校验；schema verify 确认所有12个 identity 列均为
+  text。raw UUID、`user-a` 和 system actor 写入 user 列都会失败闭合。
+
+当前十段 migration 中，`0004` 增加 tenant lifecycle 状态和 job，`0005` 增加
 导出/删除执行所需的 scope snapshot、attempt、lease、retry、receipt 和终态约束，
 `0006` 为 audit events 增加 result/details 约束、tenant-first 查询索引和拒绝
 UPDATE/DELETE 的 append-only 触发器，`0007` 为 enterprise inbox/outbox 增加
 trace、lease、错误码和 tenant-first recovery 索引，`0008` 增加 user-context
 Tenant Directory、self/tenant policies 和受控 backfill，`0009` 增加
 `platform_pending_work`、cell/tenant policies、受控 backfill 和 job/outbox/cell
-同步 trigger。这些结构支持控制面代码和自动化，不代表真实 PostgreSQL、Provider
-或对象存储验收已经完成。
+同步 trigger，`0010` 将 user/actor identity 修正为受约束 text 并保护不兼容
+rollback。这些结构支持控制面代码和自动化，不代表真实 PostgreSQL、Provider 或
+对象存储验收已经完成。
 
 ## Migration
 
@@ -74,9 +83,9 @@ ENTERPRISE_DATABASE_URL='postgresql://...' \
 - 平台恢复使用 `SET LOCAL app.cell_id = $1` 的 forced-RLS projection；projection
   不含 payload，发现引用在 claim 前必须重新进入 tenant session 核对当前 cell。
 
-HTTP/Worker runtime、当前账号 subject ID 到 PostgreSQL identity 列的映射/迁移，
-以及 SQLite/JSON 数据对账仍未完成。完成前禁止局部切换或双写；平台 Worker 不得使用
-`BYPASSRLS` 应用角色扫描或修改全租户数据。
+HTTP/Worker runtime、启动 migration/schema verify 和 SQLite/JSON 数据对账仍未
+完成。完成前禁止局部切换或双写；平台 Worker 不得使用 `BYPASSRLS` 应用角色扫描或
+修改全租户数据。
 
 ## Backup smoke
 

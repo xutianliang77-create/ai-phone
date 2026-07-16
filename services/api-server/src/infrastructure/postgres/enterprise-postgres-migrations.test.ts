@@ -20,6 +20,7 @@ describe("enterprise PostgreSQL migrations", () => {
       "0007_enterprise_outbox_delivery",
       "0008_enterprise_user_tenant_directory",
       "0009_enterprise_platform_pending_work",
+      "0010_enterprise_subject_ids",
     ]);
     for (const migration of migrations) {
       expect(migration.up.trim()).not.toBe("");
@@ -29,9 +30,11 @@ describe("enterprise PostgreSQL migrations", () => {
   });
 
   it("declares tenant-first keys, composite foreign keys and forced RLS", () => {
-    const sql = loadEnterprisePostgresMigrations()
+    const migrations = loadEnterprisePostgresMigrations();
+    const sql = migrations
       .map(({ up }) => up)
       .join("\n");
+    const rollbackSql = migrations.map(({ down }) => down).join("\n");
 
     expect(sql).toContain("CREATE SCHEMA IF NOT EXISTS enterprise");
     expect(sql).toMatch(/tenant_id uuid NOT NULL/g);
@@ -67,6 +70,15 @@ describe("enterprise PostgreSQL migrations", () => {
     expect(sql).toContain("enterprise_tenant_job_pending_work");
     expect(sql).toContain("enterprise_outbox_pending_work");
     expect(sql).toContain("enterprise_pending_work_cell");
+    expect(sql).toContain("enterprise.is_account_subject_id");
+    expect(sql).toContain("enterprise.is_actor_subject_id");
+    expect(sql).toContain("ALTER COLUMN user_id TYPE text");
+    expect(sql).toContain("ALTER COLUMN owner_user_id TYPE text");
+    expect(sql).toContain("ALTER COLUMN actor_id TYPE text");
+    expect(sql).toMatch(
+      /FUNCTION enterprise\.current_user_id\(\)[\s\S]*RETURNS text/,
+    );
+    expect(rollbackSql).toContain("cannot rollback enterprise subject IDs");
     expect(sql).not.toContain("BYPASSRLS");
   });
 

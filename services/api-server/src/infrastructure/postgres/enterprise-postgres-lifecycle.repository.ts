@@ -22,6 +22,9 @@ import {
   type EnterpriseTenantPostgresPool,
   type EnterpriseTenantPostgresSession,
 } from "./enterprise-postgres-tenant-session.js";
+import {
+  enterprisePostgresAccountSubjectId,
+} from "./enterprise-postgres-subject-id.js";
 
 export interface EnterpriseLifecyclePostgresRepository {
   insertJob(job: EnterpriseTenantJobRecord): Promise<
@@ -121,12 +124,13 @@ class PostgresLifecycleRepository
   }
 
   async lockJob(jobId: string) {
+    const actorUserId = this.accountActorUserId();
     const result = await this.session.query<EnterpriseTenantJobPostgresRow>(`
       SELECT *
       FROM enterprise.tenant_jobs
       WHERE tenant_id = $1 AND id = $2 AND actor_id = $3
       FOR UPDATE
-    `, [jobId, this.session.context.actorUserId]);
+    `, [jobId, actorUserId]);
     return result.rows[0]
       ? mapEnterpriseTenantJobRow(
           result.rows[0],
@@ -140,6 +144,7 @@ class PostgresLifecycleRepository
     now: string;
     leaseExpiresAt: string;
   }) {
+    const actorUserId = this.accountActorUserId();
     const result = await this.session.query<EnterpriseTenantJobPostgresRow>(`
       UPDATE enterprise.tenant_jobs
       SET attempts = attempts + 1, lease_expires_at = $4,
@@ -156,7 +161,7 @@ class PostgresLifecycleRepository
       input.jobId,
       input.now,
       input.leaseExpiresAt,
-      this.session.context.actorUserId,
+      actorUserId,
     ]);
     return result.rows[0]
       ? {
@@ -282,9 +287,11 @@ class PostgresLifecycleRepository
   }
 
   private assertJobScope(job: EnterpriseTenantJobRecord) {
+    const actorUserId = this.accountActorUserId();
+    enterprisePostgresAccountSubjectId(job.actorUserId);
     if (
       job.tenantId !== this.session.context.tenantId ||
-      job.actorUserId !== this.session.context.actorUserId
+      job.actorUserId !== actorUserId
     ) {
       throw new Error("Enterprise lifecycle job tenant or actor mismatch");
     }
@@ -294,18 +301,25 @@ class PostgresLifecycleRepository
     type: EnterpriseTenantJobRecord["type"],
     idempotencyKey: string,
   ) {
+    const actorUserId = this.accountActorUserId();
     const result = await this.session.query<EnterpriseTenantJobPostgresRow>(`
       SELECT *
       FROM enterprise.tenant_jobs
       WHERE tenant_id = $1 AND actor_id = $2
         AND job_type = $3 AND idempotency_key = $4
-    `, [this.session.context.actorUserId, type, idempotencyKey]);
+    `, [actorUserId, type, idempotencyKey]);
     return result.rows[0]
       ? mapEnterpriseTenantJobRow(
           result.rows[0],
           this.session.context.tenantId,
         )
       : null;
+  }
+
+  private accountActorUserId() {
+    return enterprisePostgresAccountSubjectId(
+      this.session.context.actorUserId,
+    );
   }
 }
 
