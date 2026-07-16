@@ -33,6 +33,7 @@ void main() {
     expect(config.region.allowedProviders, contains('hymt2_self_hosted'));
     expect(config.region.allowedProviders, contains('qwen_live'));
     expect(config.region.callProviderPolicy, 'call_link_only');
+    expect(config.region.isPstnEnabled, isFalse);
     expect(config.appErrorReportingEnabled, isTrue);
     expect(config.appVersion, '0.1.0');
     expect(config.buildNumber, '1');
@@ -72,6 +73,16 @@ void main() {
     expect(config.allowedProviders, <String>['openai', 'gemini']);
     expect(config.paymentStack, <String>['apple_iap', 'stripe']);
     expect(config.callProviderPolicy, 'pstn_enabled');
+    expect(config.isPstnEnabled, isTrue);
+  });
+
+  test('accepts domestic PSTN bridge policy as enabled', () {
+    final config = RegionEditionConfig.fromRaw(
+      edition: 'domestic',
+      callProviderPolicy: 'domestic_pstn_bridge',
+    );
+
+    expect(config.isPstnEnabled, isTrue);
   });
 
   test('normalizes realtime mode overrides', () {

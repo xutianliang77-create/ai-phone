@@ -61,6 +61,10 @@ class RegionEditionConfig {
 
   bool get isDomestic => edition == RegionEdition.domestic;
 
+  bool get isPstnEnabled =>
+      callProviderPolicy == 'domestic_pstn_bridge' ||
+      callProviderPolicy == 'pstn_enabled';
+
   static RegionEditionConfig fromEnvironment() {
     const edition = String.fromEnvironment(
       'REGION_EDITION',

@@ -85,7 +85,8 @@ void main() {
     expect(find.text('跨语言沟通'), findsOneWidget);
     expect(find.text('发起翻译电话'), findsOneWidget);
     expect(find.text('输入并朗读'), findsOneWidget);
-    expect(find.text('拨打手机号'), findsNothing);
+    expect(find.text('拨打手机号'), findsOneWidget);
+    expect(find.textContaining('P2 灰度中'), findsOneWidget);
     expect(find.text('AI 代打电话'), findsOneWidget);
     expect(find.text('加入通话链接'), findsOneWidget);
   });
@@ -111,6 +112,13 @@ void main() {
     await pumpAcceptedApp(tester);
 
     await tester.tap(find.text('通话'));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.text('输入并朗读'),
+      180,
+      scrollable: find.byType(Scrollable).last,
+    );
+    await tester.drag(find.byType(ListView).last, const Offset(0, -120));
     await tester.pumpAndSettle();
     await tester.tap(find.text('输入并朗读'));
     await tester.pumpAndSettle();
