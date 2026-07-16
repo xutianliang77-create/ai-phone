@@ -123,6 +123,101 @@ void main() {
 
     expect(controller.segments.map((segment) => segment.id),
         <String>['asr_1', 'asr_2']);
+    final ttsBegin = asr.diagnosticEvents.firstWhere(
+      (event) => event['type'] == 'tts.begin',
+    );
+    expect(
+      (ttsBegin['payload']!
+          as Map<String, Object?>)['requiresAcousticEchoSuppression'],
+      isFalse,
+    );
+    playback.complete(const SpeechOutputResult(
+      provider: 'fake',
+      language: 'zh',
+    ));
+    await pumpEventQueue();
+  });
+
+  test('drops speaker echo whose final arrives after playback', () async {
+    final playback = Completer<SpeechOutputResult>();
+    final repository = FakeRealtimeRepository();
+    final asr = _DeviceAsrProvider();
+    final controller = RealtimeController(
+      repository: repository,
+      audioCapture: FakeAudioCapture(),
+      mobileAsrProvider: asr,
+      mobileTranslationProvider: _TranslationProvider(),
+      speechOutputProvider: FakeSpeechOutputProvider(
+        firstSpeakCompleter: playback,
+      ),
+      autoSpeakTranslation: true,
+      config: _deviceConfig(),
+    );
+    addTearDown(controller.dispose);
+    await controller.start();
+
+    asr.emit(const AsrTextSegment(id: 'asr_1', text: 'first', language: 'en'));
+    await pumpEventQueue();
+    asr.emit(const AsrTextSegment(
+      id: 'speaker_echo',
+      text: '译文 first',
+      language: 'zh',
+      isFinal: false,
+    ));
+    await pumpEventQueue();
+
+    expect(controller.segments.map((segment) => segment.id), <String>['asr_1']);
+    playback.complete(const SpeechOutputResult(
+      provider: 'fake',
+      language: 'zh',
+    ));
+    await pumpEventQueue();
+
+    asr.emit(const AsrTextSegment(
+      id: 'speaker_echo',
+      text: '译文 first',
+      language: 'zh',
+      isFinal: true,
+    ));
+    await pumpEventQueue();
+    expect(controller.segments.map((segment) => segment.id), <String>['asr_1']);
+
+    asr.emit(const AsrTextSegment(
+      id: 'same_meaning',
+      text: 'first',
+      language: 'en',
+    ));
+    await pumpEventQueue();
+
+    expect(controller.segments.map((segment) => segment.id),
+        <String>['asr_1', 'same_meaning']);
+  });
+
+  test('accepts opposite-language barge-in and stops speaker TTS', () async {
+    final playback = Completer<SpeechOutputResult>();
+    final repository = FakeRealtimeRepository();
+    final asr = _DeviceAsrProvider();
+    final speaker = FakeSpeechOutputProvider(firstSpeakCompleter: playback);
+    final controller = RealtimeController(
+      repository: repository,
+      audioCapture: FakeAudioCapture(),
+      mobileAsrProvider: asr,
+      mobileTranslationProvider: _TranslationProvider(),
+      speechOutputProvider: speaker,
+      autoSpeakTranslation: true,
+      config: _deviceConfig(),
+    );
+    addTearDown(controller.dispose);
+    await controller.start();
+
+    asr.emit(const AsrTextSegment(id: 'asr_1', text: 'first', language: 'en'));
+    await pumpEventQueue();
+    asr.emit(const AsrTextSegment(id: 'asr_2', text: 'second', language: 'en'));
+    await pumpEventQueue();
+
+    expect(controller.segments.map((segment) => segment.id),
+        <String>['asr_1', 'asr_2']);
+    expect(speaker.stopCount, greaterThanOrEqualTo(1));
     playback.complete(const SpeechOutputResult(
       provider: 'fake',
       language: 'zh',
@@ -153,12 +248,15 @@ AppConfig _deviceConfig() {
     deviceAsrLanguage: 'auto',
     deviceAsrAutoDownloadModel: false,
     deviceAsrModelChunkMs: 2240,
+    deviceAsrDiagnosticCaptureEnabled: true,
     serverOwnedHistory: false,
   );
 }
 
-class _DeviceAsrProvider implements MobileAsrProvider {
+class _DeviceAsrProvider
+    implements MobileAsrProvider, MobileAsrDiagnosticTimeline {
   final _segments = StreamController<AsrTextSegment>.broadcast();
+  final diagnosticEvents = <Map<String, Object?>>[];
 
   @override
   Stream<AsrTextSegment> get segments => _segments.stream;
@@ -173,6 +271,17 @@ class _DeviceAsrProvider implements MobileAsrProvider {
 
   @override
   Future<void> stop() async {}
+
+  @override
+  Future<void> recordDiagnosticEvent(
+    String type, {
+    Map<String, Object?> payload = const <String, Object?>{},
+  }) async {
+    diagnosticEvents.add(<String, Object?>{
+      'type': type,
+      'payload': payload,
+    });
+  }
 
   @override
   Future<void> dispose() => _segments.close();

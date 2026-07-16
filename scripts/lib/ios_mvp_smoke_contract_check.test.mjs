@@ -259,6 +259,8 @@ segment.text.length
   write(root, "apps/mobile/lib/src/features/realtime/presentation/controllers/realtime_controller.dart", `
 _deviceAsrStopDrain
 await _drainDeviceAsrStopEvents();
+_asrTextChain
+await _drainAsrTextSegments();
 `);
   write(root, "scripts/lib/ios_nemotron_report_evidence.mjs", overrides.reportEvidence ?? `
 smokeStructuredResultIssues

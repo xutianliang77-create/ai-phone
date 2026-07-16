@@ -16,7 +16,18 @@ class AudioStatsRows extends StatelessWidget {
     const keys = <String>[
       'sessionActive',
       'sessionError',
+      'voiceProcessingPolicy',
+      'voiceProcessingAttempted',
+      'lastVoiceProcessingEnabled',
+      'lastVoiceProcessingAgcEnabled',
+      'voiceProcessingError',
       'processingError',
+      'vadConfiguredProvider',
+      'vadActiveProvider',
+      'vadFallbackReason',
+      'vadFallbackCount',
+      'vadLastProbability',
+      'vadPreRollSamples',
       'inputBuffers',
       'convertedSamples',
       'conversionFailures',
@@ -71,7 +82,15 @@ class AudioStatsRows extends StatelessWidget {
   String? _diagnosticHint(AppLocalizations l10n, String? issue) {
     return switch (issue) {
       'audio_session_error' => l10n.audioSessionErrorHint,
+      'voice_processing_error' => l10n.isChinese
+          ? 'Apple 语音处理未启用，端侧 ASR 已停止，以避免无回声消除和系统降噪录音。'
+          : 'Apple voice processing is unavailable. Device ASR stopped '
+              'instead of recording without echo cancellation and noise suppression.',
       'asr_processing_error' => l10n.asrProcessingErrorHint,
+      'vad_fallback' => l10n.isChinese
+          ? 'FluidAudio VAD 未能加载或推理，当前已明确降级到 RMS；可继续识别，但本轮不满足神经 VAD 验收。'
+          : 'FluidAudio VAD failed to load or infer and explicitly fell '
+              'back to RMS. ASR remains available, but neural VAD is not accepted.',
       'no_microphone_input' => l10n.audioNoInputHint,
       'audio_conversion_failed' => l10n.audioConversionFailureHint,
       'no_converted_samples' => l10n.audioNoConvertedSamplesHint,

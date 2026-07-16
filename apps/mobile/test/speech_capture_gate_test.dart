@@ -44,4 +44,46 @@ void main() {
     gate.reset();
     expect(gate.blocksCapture, isFalse);
   });
+
+  test('drops matching speaker echo but allows opposite-language barge-in', () {
+    final gate = SpeechCaptureGate();
+
+    gate.beginPlayback(text: 'Hello, where are you?', language: 'en');
+
+    expect(
+      gate.shouldDropDeviceAsr(text: 'hello where are you', language: 'en'),
+      isTrue,
+    );
+    expect(
+      gate.shouldDropDeviceAsr(text: '你好，我在这里', language: 'zh'),
+      isFalse,
+    );
+  });
+
+  test('echo tail only drops similar text after playback completes', () {
+    var now = DateTime(2026);
+    final gate = SpeechCaptureGate(now: () => now);
+    gate.beginPlayback(text: 'It has been posted here', language: 'en');
+    gate.endPlayback();
+
+    expect(
+      gate.shouldDropDeviceAsr(
+        text: 'It has been posted here a seven',
+        language: 'en',
+      ),
+      isTrue,
+    );
+    expect(
+      gate.shouldDropDeviceAsr(text: 'Where are you going', language: 'en'),
+      isFalse,
+    );
+    now = now.add(const Duration(milliseconds: 351));
+    expect(
+      gate.shouldDropDeviceAsr(
+        text: 'It has been posted here',
+        language: 'en',
+      ),
+      isFalse,
+    );
+  });
 }

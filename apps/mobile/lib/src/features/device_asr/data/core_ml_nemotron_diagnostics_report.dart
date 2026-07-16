@@ -79,6 +79,19 @@ class CoreMlNemotronDiagnosticsReport {
         'deviceAsrLanguage': config.deviceAsrLanguage,
         'deviceAsrAutoDownloadModel': config.deviceAsrAutoDownloadModel,
         'deviceAsrModelChunkMs': config.deviceAsrModelChunkMs,
+        'deviceAsrChunkDurationMs': config.deviceAsrChunkDurationMs,
+        'deviceAsrEndpointMinSpeechMs':
+            config.deviceAsrEndpointMinSpeechMs,
+        'deviceAsrEndpointSilenceMs': config.deviceAsrEndpointSilenceMs,
+        'deviceAsrEndpointSpeechThresholdRms':
+            config.deviceAsrEndpointSpeechThresholdRms,
+        'deviceAsrVadProvider': config.deviceAsrVadProvider,
+        'deviceAsrVadThreshold': config.deviceAsrVadThreshold,
+        'deviceAsrVadNegativeThreshold':
+            config.deviceAsrVadNegativeThreshold,
+        'deviceAsrVadPreRollMs': config.deviceAsrVadPreRollMs,
+        'deviceAsrDiagnosticCaptureEnabled':
+            config.deviceAsrDiagnosticCaptureEnabled,
         'useLocalSessions': config.useLocalSessions,
         'useOnDeviceTranslation': config.useOnDeviceTranslation,
         'onDeviceTranslationProvider': config.onDeviceTranslationProvider,

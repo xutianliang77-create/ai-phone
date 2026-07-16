@@ -4,6 +4,10 @@
 日期：2026-07-14
 关联：`docs/domestic-app-detailed-functional-design.md`、`docs/ai-phone-translation-technical-design.md`、`docs/domestic-design-review-action-plan.md`
 
+新增统一架构任务来源：`docs/architecture/06-implementation-roadmap.md`。
+现有 OPT 任务继续保留，新增 ARC 任务先通过 adapter 和 feature flag 落地，
+不得直接覆盖已验收的实时同传和端侧 ASR 链路。
+
 ## 1. 目标和范围
 
 本清单落实已确认的产品、技术和 UI 优化方案。当前 Flutter + Node/TypeScript + Python + LiveKit 架构继续保留，不在 P0/P1 重写客户端或拆分 Go 微服务。
@@ -134,7 +138,7 @@
 | OPT-CALL-005 | 按 target leg 可取消播放 | source/target leg 队列、TTS cancel、LiveKit stop、迟到帧拒绝 | OPT-CALL-004、OPT-RT-005 | 两个方向可并行；取消一侧不阻塞或取消另一侧 |
 | OPT-CALL-006 | VoIP 全双工抢话 | AEC exact reference、MarbleNet VAD、300-500ms pre-roll、InterruptionController、feature flag | OPT-CALL-005、OPT-MOB-001、OPT-VAD-001 | TTS 播放中可自然开口，P95 300ms 内停播且首音节保留，无回声误触发 |
 | OPT-CALL-007 | 全双工降级、恢复与观测 | AEC/clear 故障降级、Worker 重启收敛、playback/barge 指标和质量报告 | OPT-CALL-006、OPT-OBS-001 | 故障自动切半双工或字幕，不残留旧音频、不丢历史、不重复结算 |
-| OPT-SCAN-001 | 扫描流程重构 | `in_progress（代码完成，iPhone 视觉验收待执行）`；图片预览、原图/译图切换、OCR 坐标叠加、逐块原译对照、保存和分享渐进流程 | OPT-UI-004 | 译文按原图区域回贴；无坐标 Provider 明确降级为整段叠加，不产生错位假象 |
+| OPT-SCAN-001 | 扫描流程重构 | `todo（主链路真机通过，复杂版面回贴优化待完成）`；OCR、Hy-MT2 翻译、原图/译图切换和整图缩放可用，仍需优化译文框碰撞、字号自适应及表格/斜拍版面回贴 | OPT-UI-004 | 译文按原图区域回贴；无坐标 Provider 明确降级为整段叠加，不产生错位假象；复杂版面无明显遮挡或重叠 |
 | OPT-DATA-001 | SQLite WAL Repository | account、session、segment、usage、terms、outbox | OPT-RT-002、OPT-LLM-002 | 事务、外键、幂等和 quick_check 通过 |
 | OPT-DATA-002 | SQLite 备份与恢复 | 一致性快照、对象目录批次、损坏阻断 | OPT-DATA-001 | 恢复后 session、ledger 和对象 hash 一致 |
 | OPT-DATA-004 | 通话事务、inbox/outbox 和并发隔离 | call legs、playbacks、inbox、outbox、版本/CAS、唯一约束 | OPT-DATA-001 | 50并发 session 不串写；同 session 冲突可检测；结束、settle、hold release、outbox 原子提交 |
@@ -150,10 +154,10 @@
 | OPT-S2S-003 | GPT-Live 候选接入 | API 正式可用后通过 Provider 评测再上线 |
 | OPT-PSTN-001 | 真实 PSTN 服务商媒体协议 | 普通电话接通、译音回灌、失败退款闭环 |
 | OPT-PSTN-002 | PSTN 播放能力与抢话适配 | Provider 声明 bidirectional/streaming/clear；支持者完成 stop/clear，不支持者强制半双工或字幕降级 |
-| OPT-AGENT-001 | AI Calling Agent 灰度 | `in_progress（代码完成，真实 PSTN 灰度待执行）`；灰度白名单、AI 告知、授权、禁拨/紧急号码拒绝、小时频控、人工接管、并发原子预扣已完成 |
-| OPT-VOICE-001 | VoxCPM2 Hi-Fi 声音克隆 | `in_progress（代码完成，Beelink/iPhone 盲听待执行）`；参考音频质量门禁、标准/Hi-Fi 路由、试听、48k→24k 高质量重采样和响度规范化已完成 |
+| OPT-AGENT-001 | AI Calling Agent 灰度 | `in_progress（任务管理完成，真实 PSTN 灰度待执行）`；灰度白名单、AI 告知、授权、禁拨/紧急号码拒绝、小时频控、人工接管、历史任务恢复、授权后取消、按 userId 隔离和开始/取消并发原子化已完成 |
+| OPT-VOICE-001 | VoxCPM2 Hi-Fi 声音克隆 | `in_progress（相似度与20次稳定生成通过，自然度优化 TODO）`；个人声音相似本人，但自然度和语速弱于自然预置音色；参考音频质量门禁、标准/Hi-Fi 路由、试听、48k→24k 高质量重采样和响度规范化已完成 |
 | OPT-VOICE-002 | 朗读声音预设选择 | `todo（真机盲听验收）`；版本化 Provider 目录、固定参考音频、App 选择和会话透传已部署，待普通话、英语及四种方言连续10句 A/B 通过后结项 |
-| OPT-SPK-004 | 授权声纹身份识别 | `in_progress（代码完成，Beelink/iPhone 真机待执行）`；显式同意、注册、账号隔离匹配、置信度门禁、撤回/删除、失败补偿和匿名回退已完成 |
+| OPT-SPK-004 | 授权声纹身份识别 | `todo（非阻断）`；录入链路已通过，但本人匹配未达到0.72阈值；后续补匹配置信度诊断、本人/陌生人样本复测和阈值评估，不阻塞当前产品化主线 |
 | OPT-ANDROID-001 | Android 端侧 ASR 候选 | `todo（iOS 产品化后）`；与系统 ASR、在线 ASR 固定语料对比后决策 |
 | OPT-VAD-005 | 端侧 MarbleNet 候选评测 | CoreML/Android ONNX 与现有端点检测比较低音量召回、误触发、耗电、温升和实时系数，通过后再决定是否集成 |
 | OPT-DATA-003 | PostgreSQL/Redis 后续迁移 | Repository adapter 可迁移，数据校验和回滚通过 |

@@ -9,7 +9,10 @@ final class CoreMlNemotronFluidAudioAdapter {
 
   private let modelResolver: CoreMlNemotronModelResolver
   private let audioInput: CoreMlNemotronAudioInput
-  private var endpointDetector = CoreMlNemotronEndpointDetector()
+  private let diagnosticRecorder = CoreMlNemotronDiagnosticRecorder()
+  private let playbackEchoState = CoreMlNemotronPlaybackEchoState()
+  private var vadPipeline: CoreMlNemotronFluidVad?
+  private var languageRouter: CoreMlNemotronLanguageRouter?
 
   #if canImport(FluidAudio)
   private var manager: StreamingNemotronMultilingualAsrManager?
@@ -58,7 +61,12 @@ final class CoreMlNemotronFluidAudioAdapter {
       "running": running,
       "model": modelResolver.payload(),
       "audio": audioInput.payload(),
-      "endpoint": endpointDetector.payload()
+      "vad": vadPipeline?.payload() ?? ["activeProvider": "not_prepared"],
+      "endpoint": vadPipeline?.payload()["endpoint"] ?? [:],
+      "languageRouting":
+        languageRouter?.payload() ?? ["mode": "not_started"],
+      "playbackEcho": playbackEchoState.payload(),
+      "diagnosticCapture": diagnosticRecorder.payload()
     ]
     #if canImport(FluidAudio)
     let retainedProcessingError = processingError ?? lastProcessingError
@@ -77,7 +85,12 @@ final class CoreMlNemotronFluidAudioAdapter {
     if running {
       try await stop()
     }
-    let languageCode = normalizedLanguage(options.language)
+    playbackEchoState.reset()
+    let router = CoreMlNemotronLanguageRouter(
+      language: options.language,
+      turnPolicy: options.turnRoutingPolicy
+    )
+    let languageCode = router.currentPrompt
     let key = preparationKey(options: options, language: languageCode)
     if manager == nil || preparedKey != key {
       try await prepare(options: options)
@@ -90,7 +103,8 @@ final class CoreMlNemotronFluidAudioAdapter {
     }
     await manager.setLanguage(languageCode)
     await manager.setPartialCallback { [weak self] text in
-      self?.emit(text: text, language: languageCode, isFinal: false)
+      guard let self else { return }
+      self.emit(text: text, language: self.language, isFinal: false)
     }
 
     self.manager = manager
@@ -100,19 +114,40 @@ final class CoreMlNemotronFluidAudioAdapter {
     self.running = true
     self.segmentId = UUID().uuidString
     self.language = languageCode
+    self.languageRouter = router
     self.lastPartialText = ""
     self.emitSegment = emitSegment
-    self.endpointDetector = CoreMlNemotronEndpointDetector(
-      speechThresholdRms: options.endpointSpeechThresholdRms,
-      minSpeechMs: options.endpointMinSpeechMs,
-      endpointSilenceMs: options.endpointSilenceMs
+    if self.vadPipeline == nil {
+      let pipeline = CoreMlNemotronFluidVad(
+        options: options,
+        playbackEchoState: playbackEchoState
+      )
+      await pipeline.prepare()
+      self.vadPipeline = pipeline
+    }
+    await self.vadPipeline?.resetSegment()
+    diagnosticRecorder.start(
+      enabled: options.diagnosticCaptureEnabled,
+      sessionId: options.diagnosticSessionId,
+      configuration: diagnosticConfiguration(
+        options: options,
+        prompt: languageCode
+      ),
+      modelDirectory: modelResolver.payload()["lastResolvedPath"] as? String
     )
-    self.endpointDetector.reset()
 
     do {
-      try audioInput.start(chunkDurationMs: options.audioChunkDurationMs) { [weak self] samples in
-        self?.enqueue(samples: samples)
-      }
+      try audioInput.start(
+        chunkDurationMs: options.audioChunkDurationMs,
+        onRuntimeError: { [weak self] code, message in
+          self?.handleRuntimeError(code: code, message: message)
+        },
+        onChunk: { [weak self] samples in
+          guard let self else { return }
+          self.diagnosticRecorder.appendAudio(samples)
+          self.enqueue(samples: samples)
+        }
+      )
     } catch {
       self.running = false
       _ = self.audioInput.stop()
@@ -120,6 +155,11 @@ final class CoreMlNemotronFluidAudioAdapter {
       self.manager = nil
       self.preparedKey = nil
       self.emitSegment = nil
+      self.diagnosticRecorder.record(
+        type: "session.start_failed",
+        payload: ["message": error.localizedDescription]
+      )
+      self.diagnosticRecorder.finish()
       throw error
     }
     #else
@@ -133,7 +173,10 @@ final class CoreMlNemotronFluidAudioAdapter {
   func prepare(options: CoreMlNemotronRuntimeOptions) async throws {
     #if canImport(FluidAudio)
     if running { return }
-    let languageCode = normalizedLanguage(options.language)
+    let languageCode = CoreMlNemotronLanguageRouter(
+      language: options.language,
+      turnPolicy: options.turnRoutingPolicy
+    ).currentPrompt
     let key = preparationKey(options: options, language: languageCode)
     if manager != nil && preparedKey == key { return }
     if let manager {
@@ -147,7 +190,13 @@ final class CoreMlNemotronFluidAudioAdapter {
     let preparedManager = StreamingNemotronMultilingualAsrManager()
     try await preparedManager.loadModels(from: modelDirectory)
     await preparedManager.setLanguage(languageCode)
+    let preparedVad = CoreMlNemotronFluidVad(
+      options: options,
+      playbackEchoState: playbackEchoState
+    )
+    await preparedVad.prepare()
     manager = preparedManager
+    vadPipeline = preparedVad
     preparedKey = key
     language = languageCode
     lastProcessingError = nil
@@ -197,11 +246,15 @@ final class CoreMlNemotronFluidAudioAdapter {
     if !keepPrepared || stopError != nil {
       manager = nil
       preparedKey = nil
+      vadPipeline = nil
     }
     processingTask = nil
     emitSegment = nil
     lastPartialText = ""
-    endpointDetector.reset()
+    languageRouter = nil
+    await vadPipeline?.resetSegment()
+    diagnosticRecorder.finish()
+    playbackEchoState.reset()
     if let stopError {
       throw stopError
     }
@@ -212,31 +265,96 @@ final class CoreMlNemotronFluidAudioAdapter {
 
   #if canImport(FluidAudio)
   private func enqueue(samples: [Float]) {
-    let endpoint = endpointDetector.accept(samples: samples)
     let previousTask = processingTask
-    processingTask = Task { [weak self, previousTask, endpoint] in
+    processingTask = Task { [weak self, previousTask] in
       await previousTask?.value
-      guard let self, self.running, let manager = self.manager else { return }
+      guard
+        let self,
+        self.running,
+        let manager = self.manager,
+        let vadPipeline = self.vadPipeline
+      else { return }
+      guard self.processingError == nil else { return }
       do {
-        _ = try await manager.process(samples: samples)
-        if endpoint.shouldFinalize {
-          try await self.finalizeCurrentSegment(manager: manager)
+        let decision = await vadPipeline.accept(samples: samples)
+        for event in decision.diagnosticEvents {
+          self.diagnosticRecorder.record(type: "vad.frame", payload: event)
+        }
+        if decision.speechStarted {
+          self.diagnosticRecorder.record(
+            type: "vad.speech_start",
+            payload: [
+              "forwardedSamples": decision.samplesToProcess.count,
+              "provider": vadPipeline.payload()["activeProvider"] as Any,
+              "bargeIn": decision.bargeIn
+            ]
+          )
+        }
+        if !decision.samplesToProcess.isEmpty {
+          self.diagnosticRecorder.record(
+            type: "asr.audio_forwarded",
+            payload: ["samples": decision.samplesToProcess.count]
+          )
+          _ = try await manager.process(samples: decision.samplesToProcess)
+        }
+        if decision.shouldFinalize {
+          self.diagnosticRecorder.record(
+            type: "endpoint.finalize",
+            payload: [
+              "reason": decision.endpointReason ?? "unknown",
+              "segmentId": self.segmentId
+            ]
+          )
+          let final = try await self.finalizeCurrentSegment(manager: manager)
           await manager.reset()
+          let nextLanguage = self.languageRouter?.routeAfterFinal(
+            text: final.text,
+            detectedLanguage: final.detectedLanguage
+          ) ?? self.language
+          self.language = nextLanguage
+          await manager.setLanguage(nextLanguage)
+          self.diagnosticRecorder.record(
+            type: "language.route",
+            payload: [
+              "nextPrompt": nextLanguage,
+              "routing": self.languageRouter?.payload() ?? [:]
+            ]
+          )
+          await vadPipeline.resetSegment()
         }
       } catch {
-        self.processingError = error
-        self.lastProcessingError = error
+        self.handleRuntimeError(
+          code: "asr_processing_failed",
+          message: error.localizedDescription
+        )
       }
     }
   }
 
+  private func handleRuntimeError(code: String, message: String) {
+    guard processingError == nil else { return }
+    let error = adapterError(code: code, message: message)
+    processingError = error
+    lastProcessingError = error
+    diagnosticRecorder.record(
+      type: "runtime.error",
+      payload: ["code": code, "message": message]
+    )
+    emitSegment?([
+      "type": "runtime.error",
+      "code": code,
+      "message": message
+    ])
+  }
+
   private func finalizeCurrentSegment(
     manager: StreamingNemotronMultilingualAsrManager
-  ) async throws {
+  ) async throws -> (text: String, detectedLanguage: String?) {
     let text = try await manager.finish()
-    let detectedLanguage = await manager.detectedLanguage() ?? language
-    emit(text: text, language: detectedLanguage, isFinal: true)
+    let detectedLanguage = await manager.detectedLanguage()
+    emit(text: text, language: detectedLanguage ?? language, isFinal: true)
     rotateSegment()
+    return (text, detectedLanguage)
   }
   #endif
 
@@ -247,6 +365,14 @@ final class CoreMlNemotronFluidAudioAdapter {
     if !isFinal {
       lastPartialText = trimmed
     }
+    diagnosticRecorder.record(
+      type: isFinal ? "asr.final" : "asr.partial",
+      payload: [
+        "segmentId": segmentId,
+        "text": trimmed,
+        "language": language
+      ]
+    )
     emitSegment?([
       "id": segmentId,
       "text": trimmed,
@@ -267,21 +393,15 @@ final class CoreMlNemotronFluidAudioAdapter {
     [
       language,
       String(options.modelChunkMs),
-      String(options.autoDownloadModel)
+      String(options.autoDownloadModel),
+      options.vadProvider,
+      String(options.vadThreshold),
+      String(options.vadNegativeThreshold),
+      String(options.vadPreRollMs),
+      options.turnRoutingPolicy,
+      String(options.endpointMinSpeechMs),
+      String(options.endpointSilenceMs)
     ].joined(separator: "|")
-  }
-
-  private func normalizedLanguage(_ rawLanguage: String) -> String {
-    switch rawLanguage.lowercased() {
-    case "zh", "zh-cn", "cmn", "cmn-hans-cn":
-      return "zh-CN"
-    case "en", "en-us":
-      return "en-US"
-    case "auto":
-      return "auto"
-    default:
-      return rawLanguage
-    }
   }
 
   private func gatewayLanguageCode(_ rawLanguage: String) -> String {
@@ -292,6 +412,46 @@ final class CoreMlNemotronFluidAudioAdapter {
       return "en"
     }
     return rawLanguage
+  }
+
+  func recordDiagnosticEvent(type: String, payload: [String: Any]) {
+    var recordedPayload = payload
+    if type.hasPrefix("tts.") {
+      let state = playbackEchoState.record(type: type, payload: payload)
+      recordedPayload["nativePlaybackActive"] = state.playbackActive
+      recordedPayload["nativeEchoTailActive"] = state.echoTailActive
+      recordedPayload["nativeEchoProtectionActive"] =
+        state.echoProtectionActive
+      recordedPayload["nativeEchoTailRemainingMs"] = state.tailRemainingMs
+    }
+    diagnosticRecorder.record(type: type, payload: recordedPayload)
+  }
+
+  private func diagnosticConfiguration(
+    options: CoreMlNemotronRuntimeOptions,
+    prompt: String
+  ) -> [String: Any] {
+    [
+      "asrModel": "nvidia/nemotron-asr-streaming-multilingual-0.6b",
+      "modelChunkMs": options.modelChunkMs,
+      "audioChunkDurationMs": options.audioChunkDurationMs,
+      "configuredLanguage": options.language,
+      "initialPrompt": prompt,
+      "endpointMinSpeechMs": options.endpointMinSpeechMs,
+      "endpointSilenceMs": options.endpointSilenceMs,
+      "endpointSpeechThresholdRms": options.endpointSpeechThresholdRms,
+      "vadProvider": options.vadProvider,
+      "vadModel": "silero-vad-unified-256ms-v6.0.0",
+      "vadThreshold": options.vadThreshold,
+      "vadNegativeThreshold": options.vadNegativeThreshold,
+      "vadPreRollMs": options.vadPreRollMs,
+      "echoBargeInRmsThreshold": options.endpointSpeechThresholdRms,
+      "echoTailMs": CoreMlNemotronPlaybackEchoState.tailMs,
+      "turnRoutingPolicy": options.turnRoutingPolicy,
+      "sampleRate": 16_000,
+      "voiceProcessing": "apple_voice_processing_aec_ns",
+      "agcEnabled": false
+    ]
   }
 
   private func adapterError(code: String, message: String) -> NSError {

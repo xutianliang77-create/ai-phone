@@ -10,6 +10,7 @@ Future<String?> showTranslationLanguagePicker({
   required BuildContext context,
   required LanguagePickerKind kind,
   required String selectedCode,
+  Set<String>? supportedCodes,
 }) {
   return showModalBottomSheet<String>(
     context: context,
@@ -19,6 +20,7 @@ Future<String?> showTranslationLanguagePicker({
       return _TranslationLanguagePicker(
         kind: kind,
         selectedCode: selectedCode,
+        supportedCodes: supportedCodes,
       );
     },
   );
@@ -28,10 +30,12 @@ class _TranslationLanguagePicker extends StatefulWidget {
   const _TranslationLanguagePicker({
     required this.kind,
     required this.selectedCode,
+    this.supportedCodes,
   });
 
   final LanguagePickerKind kind;
   final String selectedCode;
+  final Set<String>? supportedCodes;
 
   @override
   State<_TranslationLanguagePicker> createState() {
@@ -122,7 +126,10 @@ class _TranslationLanguagePickerState
           autoReverseTargetLanguageCode,
           l10n.autoReverseTargetLabel,
         ),
-      ...supportedHyMtLanguages.map((language) {
+      ...supportedHyMtLanguages
+          .where((language) =>
+              widget.supportedCodes?.contains(language.code) ?? true)
+          .map((language) {
         final label =
             l10n.isChinese ? language.chineseName : language.englishName;
         return _LanguageChoice(language.code, label);

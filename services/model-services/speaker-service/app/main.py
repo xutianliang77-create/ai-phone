@@ -37,11 +37,13 @@ def create_engine(config: SpeakerConfig):
 
 def create_voice_identity_engine(config: SpeakerConfig):
     if config.voice_identity_provider == "nemo_titanet":
-        return NemoVoiceIdentityEngine(
+        engine = NemoVoiceIdentityEngine(
             config.voice_identity_model_id,
             config.voice_identity_store_dir,
             config.voice_identity_encryption_key,
         )
+        engine.load()
+        return engine
     return DisabledVoiceIdentityEngine()
 
 

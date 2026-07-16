@@ -84,7 +84,9 @@
     "ios:nemotron:detect-lan-ip": "node scripts/detect_mac_lan_ip.mjs",
     "ios:nemotron:check-lmstudio": "node scripts/check_lmstudio_translation_provider.mjs",
     "ios:nemotron:run": "bash scripts/ios_nemotron_run_mvp.sh",
-    "ios:nemotron:report": "node scripts/ios_nemotron_mvp_report.mjs"
+    "ios:nemotron:report": "node scripts/ios_nemotron_mvp_report.mjs",
+    "ios:vad:stage": "node scripts/download_ios_silero_vad_bundle.mjs --stage",
+    "ios:asr:language-ab": "node scripts/run_nemotron_language_ab.mjs"
   },
   "devDependencies": {
     "@types/node": "^24.10.1",

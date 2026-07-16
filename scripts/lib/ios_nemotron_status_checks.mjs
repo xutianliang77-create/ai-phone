@@ -141,6 +141,7 @@ function checkBuiltApp(name, appPath, missingMessage) {
 function checkBuiltModel(root, name, appPath) {
   const result = runScript(root, "scripts/check_ios_models_resource.mjs", [
     "--require-ready-model",
+    "--require-vad-model",
     appPath,
   ]);
   const payload = parseJson(result.stdout);

@@ -97,6 +97,21 @@ void main() {
     expect(settings.domainLexiconPack, 'product');
   });
 
+  test('normalizes unsupported saved features for on-device mode', () {
+    final settings = RealtimeRuntimeSettings.fromJson(const {
+      'processingMode': 'onDevice',
+      'sourceLanguage': 'fr',
+      'targetLanguage': 'ja',
+      'voiceOutputMode': 'my_voice',
+      'domainLexiconPack': 'medical',
+    });
+
+    expect(settings.sourceLanguage, autoSourceLanguageCode);
+    expect(settings.targetLanguage, autoReverseTargetLanguageCode);
+    expect(settings.voiceOutputMode, RealtimeVoiceOutputMode.natural);
+    expect(settings.domainLexiconPack, 'product');
+  });
+
   test('forces Listening sessions silent without losing the Talk preference',
       () {
     final listening = _baseConfig().copyWith(

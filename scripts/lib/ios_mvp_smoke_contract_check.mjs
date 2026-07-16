@@ -188,6 +188,7 @@ export function checkIosMvpSmokeContract(root) {
   requireContains(checks, root, "apps/mobile/lib/src/features/realtime/presentation/controllers/realtime_controller.dart", [
     ["_deviceAsrStopDrain", "controller drains native ASR stop tail events"],
     ["await _drainDeviceAsrStopEvents();", "controller drains before canceling ASR subscription"],
+    ["_asrTextChain", "controller serializes on-device translation work"], ["await _drainAsrTextSegments();", "controller drains translations before finalization"],
   ]);
   requireContains(checks, root, "scripts/lib/ios_nemotron_report_evidence.mjs", [
     ["smokeStructuredResultIssues", "report derives issues from structured smoke results"],

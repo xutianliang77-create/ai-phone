@@ -23,7 +23,6 @@ void main() {
     final translator = _FakeTranslationProvider('你好');
     final controller = _controller(repository, asr, translator);
     addTearDown(controller.dispose);
-
     await controller.start();
     asr.emit(const AsrTextSegment(
       id: 'asr_1',
@@ -49,7 +48,6 @@ void main() {
       _FakeTranslationProvider(null),
     );
     addTearDown(controller.dispose);
-
     await controller.start();
     asr.emit(const AsrTextSegment(
       id: 'asr_1',
@@ -74,7 +72,6 @@ void main() {
       useLocalSessions: true,
     );
     addTearDown(controller.dispose);
-
     await controller.start();
     asr.emit(const AsrTextSegment(
       id: 'asr_1',
@@ -99,7 +96,6 @@ void main() {
       useLocalSessions: true,
     );
     addTearDown(controller.dispose);
-
     await controller.start();
     asr.emit(const AsrTextSegment(
       id: 'asr_1',
@@ -115,7 +111,7 @@ void main() {
     expect(controller.segments.single.translatedText, isEmpty);
   });
 
-  test('translates stable local partial ASR text without native final',
+  test('does not translate or speak partial ASR text before native final',
       () async {
     final repository = _FakeRealtimeRepository();
     final asr = _FakeMobileAsrProvider();
@@ -126,7 +122,6 @@ void main() {
       useLocalSessions: true,
     );
     addTearDown(controller.dispose);
-
     await controller.start();
     asr.emit(const AsrTextSegment(
       id: 'asr_1',
@@ -139,7 +134,7 @@ void main() {
 
     expect(repository.sentTextSegments, isEmpty);
     expect(controller.segments.single.sourceText, 'hello');
-    expect(controller.segments.single.translatedText, '你好');
+    expect(controller.segments.single.translatedText, isEmpty);
   });
 
   test('flushes pending local partial before saving history on stop', () async {
@@ -152,7 +147,6 @@ void main() {
       useLocalSessions: true,
     );
     addTearDown(controller.dispose);
-
     await controller.start();
     asr.emit(const AsrTextSegment(
       id: 'asr_1',
@@ -176,7 +170,6 @@ void main() {
     final controller =
         _controller(repository, asr, translator, useLocalSessions: true);
     addTearDown(controller.dispose);
-
     await controller.start();
     asr.emit(const AsrTextSegment(
       id: 'asr_zh',
@@ -197,7 +190,7 @@ void main() {
 
     expect(translator.configs.map((config) {
       return '${config.sourceLanguage}->${config.targetLanguage}';
-    }), <String>['zh->en', 'en->zh', 'en->zh', 'zh->en']);
+    }), <String>['zh->en', 'en->zh', 'en->zh']);
   });
 }
 
@@ -309,7 +302,12 @@ class _FakeTranslationProvider implements MobileTranslationProvider {
     configs.add(config);
     final translated = this.text;
     if (translated == null) return null;
-    return MobileTranslationResult(text: translated, provider: 'fake');
+    final markers =
+        RegExp(r'XTLKEEP\d+QXZ').allMatches(text).map((m) => m[0]).join(' ');
+    return MobileTranslationResult(
+      text: '$translated $markers'.trim(),
+      provider: 'fake',
+    );
   }
 
   @override

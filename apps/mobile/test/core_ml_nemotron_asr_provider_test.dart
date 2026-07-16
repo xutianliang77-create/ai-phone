@@ -99,6 +99,13 @@ void main() {
         endpointMinSpeechMs: 800,
         endpointSilenceMs: 1400,
         endpointSpeechThresholdRms: 0.004,
+        vadProvider: 'fluidaudio_silero',
+        vadThreshold: 0.65,
+        vadNegativeThreshold: 0.4,
+        vadPreRollMs: 960,
+        turnRoutingPolicy: 'sticky',
+        diagnosticCaptureEnabled: true,
+        diagnosticSessionId: 'session-1',
       ),
     );
 
@@ -110,6 +117,13 @@ void main() {
     expect((arguments! as Map)['endpointMinSpeechMs'], 800);
     expect((arguments! as Map)['endpointSilenceMs'], 1400);
     expect((arguments! as Map)['endpointSpeechThresholdRms'], 0.004);
+    expect((arguments! as Map)['vadProvider'], 'fluidaudio_silero');
+    expect((arguments! as Map)['vadThreshold'], 0.65);
+    expect((arguments! as Map)['vadNegativeThreshold'], 0.4);
+    expect((arguments! as Map)['vadPreRollMs'], 960);
+    expect((arguments! as Map)['turnRoutingPolicy'], 'sticky');
+    expect((arguments! as Map)['diagnosticCaptureEnabled'], isTrue);
+    expect((arguments! as Map)['diagnosticSessionId'], 'session-1');
   });
 
   test('ignores malformed native ASR stream events', () async {
@@ -138,6 +152,66 @@ void main() {
     await pumpEventQueue();
 
     expect(received, <String>['hello']);
+  });
+
+  test('surfaces native runtime errors through the ASR stream', () async {
+    const eventChannel =
+        EventChannel('translation_mobile/core_ml_nemotron_asr/runtime_errors');
+    final controller = StreamController<Object?>.broadcast();
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockStreamHandler(
+      eventChannel,
+      _TestStreamHandler(controller.stream),
+    );
+    addTearDown(controller.close);
+    provider = CoreMlNemotronAsrProvider(
+      methodChannel: channel,
+      eventChannel: eventChannel,
+    );
+
+    final error = Completer<Object>();
+    final subscription = provider.segments.listen(
+      (_) {},
+      onError: (Object value) => error.complete(value),
+    );
+    addTearDown(subscription.cancel);
+
+    controller.add(const <String, Object?>{
+      'type': 'runtime.error',
+      'code': 'asr_processing_failed',
+      'message': 'Core ML inference failed',
+    });
+
+    final received = await error.future;
+    expect(received, isA<PlatformException>());
+    expect((received as PlatformException).code, 'asr_processing_failed');
+    expect(received.message, 'Core ML inference failed');
+  });
+
+  test('forwards controller timeline events to native diagnostics', () async {
+    MethodCall? received;
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (call) async {
+      received = call;
+      return null;
+    });
+
+    await provider.recordDiagnosticEvent(
+      'tts.begin',
+      payload: const <String, Object?>{
+        'language': 'en',
+        'text': 'Hello',
+      },
+    );
+
+    expect(received?.method, 'recordDiagnosticEvent');
+    expect(received?.arguments, <String, Object?>{
+      'type': 'tts.begin',
+      'payload': <String, Object?>{
+        'language': 'en',
+        'text': 'Hello',
+      },
+    });
   });
 }
 

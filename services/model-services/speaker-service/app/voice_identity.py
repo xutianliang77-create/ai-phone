@@ -5,6 +5,13 @@ import tempfile
 from typing import Protocol
 
 
+def require_local_checkpoint(model_id: str) -> Path:
+    path = Path(model_id)
+    if not path.is_file():
+        raise FileNotFoundError(f"Voice identity checkpoint is missing: {model_id}")
+    return path
+
+
 class VoiceIdentityEngine(Protocol):
     @property
     def available(self) -> bool: ...
@@ -29,8 +36,6 @@ class DisabledVoiceIdentityEngine:
 
 
 class NemoVoiceIdentityEngine:
-    available = True
-
     def __init__(self, model_id: str, store_dir: str, encryption_key: str) -> None:
         if not encryption_key:
             raise ValueError("VOICE_IDENTITY_ENCRYPTION_KEY is required")
@@ -40,6 +45,13 @@ class NemoVoiceIdentityEngine:
         self._model_id = model_id
         self._store = Path(store_dir)
         self._model = None
+
+    @property
+    def available(self) -> bool:
+        return self._model is not None
+
+    def load(self) -> None:
+        self._load_model()
 
     async def enroll(self, identity_id: str, audio_base64: str) -> str:
         embedding = self._embedding(audio_base64)
@@ -91,14 +103,10 @@ class NemoVoiceIdentityEngine:
     def _load_model(self):
         if self._model is not None:
             return self._model
+        path = require_local_checkpoint(self._model_id)
         from nemo.collections.asr.models import EncDecSpeakerLabelModel
 
-        path = Path(self._model_id)
-        self._model = (
-            EncDecSpeakerLabelModel.restore_from(str(path))
-            if path.exists()
-            else EncDecSpeakerLabelModel.from_pretrained(self._model_id)
-        )
+        self._model = EncDecSpeakerLabelModel.restore_from(str(path))
         self._model.eval()
         return self._model
 

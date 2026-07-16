@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -82,6 +83,62 @@ void main() {
       ),
       throwsA(isA<VoiceIdentityApiException>()),
     );
+  });
+
+  test('preserves voice quality details from a 422 response', () async {
+    final client = VoiceIdentityApiClient(
+      baseUrl: Uri.parse('http://127.0.0.1:3100'),
+      accountSessionStore: _sessionStore(),
+      client: MockClient((_) async => http.Response(
+            jsonEncode({
+              'error': {'code': 'voice_reference_too_quiet'},
+              'quality': {
+                'issues': ['voice_reference_too_quiet'],
+              },
+            }),
+            422,
+          )),
+    );
+
+    await expectLater(
+      client.enroll(identityId: 'identity_1', audioBase64: 'UklGRg=='),
+      throwsA(isA<VoiceIdentityApiException>().having(
+        (error) => error.body['quality'],
+        'quality',
+        isA<Map>(),
+      )),
+    );
+  });
+
+  test('times out a stalled voice identity request', () async {
+    final client = VoiceIdentityApiClient(
+      baseUrl: Uri.parse('http://127.0.0.1:3100'),
+      accountSessionStore: _sessionStore(),
+      requestTimeout: const Duration(milliseconds: 20),
+      client: MockClient((_) => Completer<http.Response>().future),
+    );
+
+    await expectLater(client.list(), throwsA(isA<TimeoutException>()));
+  });
+
+  test('uses a longer timeout for voice enrollment', () async {
+    final client = VoiceIdentityApiClient(
+      baseUrl: Uri.parse('http://127.0.0.1:3100'),
+      accountSessionStore: _sessionStore(),
+      requestTimeout: const Duration(milliseconds: 20),
+      enrollmentTimeout: const Duration(milliseconds: 100),
+      client: MockClient((request) async {
+        await Future<void>.delayed(const Duration(milliseconds: 40));
+        return _identityResponse('ready');
+      }),
+    );
+
+    final identity = await client.enroll(
+      identityId: 'identity_1',
+      audioBase64: 'UklGRg==',
+    );
+
+    expect(identity.ready, isTrue);
   });
 }
 

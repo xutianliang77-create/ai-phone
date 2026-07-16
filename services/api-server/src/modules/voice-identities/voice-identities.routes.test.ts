@@ -132,6 +132,38 @@ describe("voice identity routes", () => {
     expect(getStoreSnapshot().voiceIdentities[0].status).toBe("revoked");
   });
 
+  it("deletes a pending identity without requiring an embedding", async () => {
+    const app = await buildApp();
+    const created = await app.inject({
+      method: "POST",
+      url: "/voice-identities",
+      headers: auth("token-a"),
+      payload: {
+        displayName: "未完成录入",
+        consentAccepted: true,
+        consentVersion: "voice-identity-v1",
+      },
+    });
+    const identityId = created.json().identity.id as string;
+
+    const deleted = await app.inject({
+      method: "DELETE",
+      url: `/voice-identities/${identityId}`,
+      headers: auth("token-a"),
+    });
+    const listed = await app.inject({
+      method: "GET",
+      url: "/voice-identities",
+      headers: auth("token-a"),
+    });
+    await app.close();
+
+    expect(deleted.statusCode).toBe(200);
+    expect(deleted.json().identity.status).toBe("deleted");
+    expect(listed.json().identities).toEqual([]);
+    expect(provider.remove).not.toHaveBeenCalled();
+  });
+
   it("keeps a hidden deletion reference and retries after provider recovery", async () => {
     const app = await buildApp();
     const created = await app.inject({

@@ -139,7 +139,7 @@ TTS 回灌指标由 App playback gate/AEC 验收，不能把 VAD 对合成语音
 | AC-CALL-005 | OPT-CALL-005 | host->guest 与 guest->host 同时生成和播放；取消一个 target leg 不阻塞、不清空另一 leg；旧 generation 音频0帧 |
 | AC-CALL-006 | OPT-CALL-006 | 耳机、扬声器各执行100次 TTS 中抢话；停播P95<=300ms、首音节无明显丢失；30分钟纯TTS无回声字幕和误抢话 |
 | AC-CALL-007 | OPT-CALL-007 | 注入 AEC、TTS、LiveKit sink、网络和 Worker 重启故障；会话自动降级或恢复，历史/结算正确且无残留播放 |
-| AC-SCAN-001 | OPT-SCAN-001 | 40张菜单、表格、文档和横竖屏图片完成 OCR、翻译、原图/译图切换、按坐标回贴、逐块对照、保存和分享；叠加不越界、不遮挡无关区域，无坐标时正确降级 |
+| AC-SCAN-001 | OPT-SCAN-001 | `TODO（翻译准确，复杂版面译文回贴仍有瑕疵）`：40张菜单、表格、文档和横竖屏图片完成 OCR、翻译、原图/译图切换、按坐标回贴、逐块对照、保存和分享；叠加不越界、不遮挡无关区域，无坐标时正确降级 |
 | AC-DATA-001 | OPT-DATA-001 | 并发 50 个 session 结束、退款、保存不丢数据、不重复结算 |
 | AC-DATA-002 | OPT-DATA-002 | 在线写入时生成快照并恢复 | quick_check 通过，session、ledger、对象 hash 一致 |
 | AC-DATA-004 | OPT-DATA-004 | 50个并发 session 混合执行 segment、playback、End、webhook 和 cancel；同 session 构造版本冲突 | 不跨 session/user 写入；冲突可检测；每 session 一条 settle；hold归零；inbox/outbox无重复或丢失 |
@@ -157,18 +157,18 @@ TTS 回灌指标由 App playback gate/AEC 验收，不能把 VAD 对合成语音
 | AC-S2S-003 | OPT-S2S-003 | GPT-Live API 正式可用，Provider 合同与固定语料评测通过 |
 | AC-PSTN-001 | OPT-PSTN-001 | 真实号码完成拨号、接通、双向译音、结束、结算和失败退款 |
 | AC-PSTN-002 | OPT-PSTN-002 | Provider 启动时报告双向媒体、流式写入和 clear 能力；支持 clear 的真实8kHz电话执行100次抢话，不支持者验证半双工/纯字幕降级，禁止伪报全双工 |
-| AC-AGENT-001 | OPT-AGENT-001 | 告知、授权、禁拨、频控、人工接管和高风险拒绝全部通过 |
+| AC-AGENT-001 | OPT-AGENT-001 | 告知、授权、禁拨、频控、人工接管和高风险拒绝全部通过；重启后可恢复历史任务，未入执行队列的授权/接管任务可取消，跨账号不可取消，并发开始/取消仅一个成功且无预占泄漏 |
 | AC-VOICE-001 | OPT-VOICE-001 | 盲听自然度、清晰度、相似度达标，录音不合格可识别并重录 |
 | AC-VOICE-002 | OPT-VOICE-002 | `TODO`：App 仅展示服务端实际可用音色；普通话、英语、四川话、东北话、粤语、闽南语均能选择并在新 session 中稳定生效；连续 10 句无随机换声、提示词泄露、唱腔或拖长，未知 `presetId` 被拒绝 |
-| AC-SPK-003 | OPT-SPK-004 | 未授权不生成声纹，低置信度回退匿名，撤回和删除后不能再次命中身份 |
+| AC-SPK-003 | OPT-SPK-004 | `TODO（非阻断）`：未授权不生成声纹，低置信度回退匿名；补置信度诊断后复验本人命中、陌生人匿名及撤回/删除后不再命中 |
 | AC-ANDROID-001 | OPT-ANDROID-001 | `TODO（iOS 产品化后）`：固定语料、功耗、温升和延迟均有报告，达到门槛后才替换系统 ASR |
 | AC-VAD-005 | OPT-VAD-005 | iOS CoreML、Android ONNX 与现有端点检测使用同一语料评测；低音量、噪声、耗电、温升、包体和实时系数均有报告 |
 | AC-DATA-003 | OPT-DATA-003 | SQLite 迁移 PostgreSQL/Redis 演练 | 数量、余额、幂等键和对象引用一致，可回滚 |
 
 当前产品化自动化证据（2026-07-14）：
 
-- `AC-AGENT-001` 已覆盖灰度白名单、紧急/禁拨号码、小时频控、高风险人工接管、重复 Start 幂等，以及并发限额下仅一个请求获得预扣；真实 PSTN 沙箱告知、接管和完整结算仍待验收。
-- `AC-VOICE-001` 已覆盖 PCM16 WAV 时长、响度、削波、静音、直流偏置门禁，标准/Hi-Fi 参数路由及16/24/48k输入统一输出24k且时长不变；Beelink 真实个人声音 A/B 和 iPhone 盲听仍待验收。
+- `AC-AGENT-001` 已覆盖灰度白名单、紧急/禁拨号码、小时频控、高风险人工接管、重复 Start 幂等、历史任务恢复、授权后取消、跨账号写隔离，以及并发开始/取消仅一个成功且预占一致；真实 PSTN 沙箱告知、接管和完整结算仍待验收。
+- `AC-VOICE-001` 已覆盖 PCM16 WAV 时长、响度、削波、静音、直流偏置门禁，标准/Hi-Fi 参数路由及16/24/48k输入统一输出24k且时长不变；Beelink 连续20次个人声音生成无失败，iPhone 盲听确认本人相似度通过，但个人声音自然度和语速弱于自然预置音色，保持 TODO，优化后复验。
 - `AC-SPK-003` 已覆盖未同意不得创建、embedding 不出现在客户端、跨账号不可见、低置信度匿名回退、注册与撤回并发、Provider 删除失败后的周期补偿；Beelink 真实注册、命中、撤回和重启后不再命中仍待验收。
 - `AC-SCAN-001` 已覆盖 iOS/Android OCR block 坐标桥接、逐块翻译顺序、图片叠加层、原图/译图切换和无坐标降级；iPhone 40张真实图片视觉验收仍待执行。
 

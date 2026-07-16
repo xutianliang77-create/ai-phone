@@ -20,6 +20,11 @@ class AppConfig {
     this.deviceAsrEndpointMinSpeechMs = 600,
     this.deviceAsrEndpointSilenceMs = 900,
     this.deviceAsrEndpointSpeechThresholdRms = 0.006,
+    this.deviceAsrVadProvider = 'fluidaudio_silero',
+    this.deviceAsrVadThreshold = 0.6,
+    this.deviceAsrVadNegativeThreshold = 0.35,
+    this.deviceAsrVadPreRollMs = 800,
+    this.deviceAsrDiagnosticCaptureEnabled = false,
     this.useLocalSessions = false,
     this.useOnDeviceTranslation = false,
     this.onDeviceTranslationProvider = 'ios_system',
@@ -55,6 +60,11 @@ class AppConfig {
   final int deviceAsrEndpointMinSpeechMs;
   final int deviceAsrEndpointSilenceMs;
   final double deviceAsrEndpointSpeechThresholdRms;
+  final String deviceAsrVadProvider;
+  final double deviceAsrVadThreshold;
+  final double deviceAsrVadNegativeThreshold;
+  final int deviceAsrVadPreRollMs;
+  final bool deviceAsrDiagnosticCaptureEnabled;
   final bool useLocalSessions;
   final bool useOnDeviceTranslation;
   final String onDeviceTranslationProvider;
@@ -126,6 +136,29 @@ class AppConfig {
     );
     final deviceAsrEndpointSpeechThresholdRms =
         double.tryParse(deviceAsrEndpointSpeechThresholdRmsRaw) ?? 0.006;
+    const deviceAsrVadProvider = String.fromEnvironment(
+      'DEVICE_ASR_VAD_PROVIDER',
+      defaultValue: 'fluidaudio_silero',
+    );
+    const deviceAsrVadThresholdRaw = String.fromEnvironment(
+      'DEVICE_ASR_VAD_THRESHOLD',
+      defaultValue: '0.6',
+    );
+    final deviceAsrVadThreshold =
+        double.tryParse(deviceAsrVadThresholdRaw) ?? 0.6;
+    const deviceAsrVadNegativeThresholdRaw = String.fromEnvironment(
+      'DEVICE_ASR_VAD_NEGATIVE_THRESHOLD',
+      defaultValue: '0.35',
+    );
+    final deviceAsrVadNegativeThreshold =
+        double.tryParse(deviceAsrVadNegativeThresholdRaw) ?? 0.35;
+    const deviceAsrVadPreRollMs = int.fromEnvironment(
+      'DEVICE_ASR_VAD_PRE_ROLL_MS',
+      defaultValue: 800,
+    );
+    const deviceAsrDiagnosticCaptureEnabled = bool.fromEnvironment(
+      'DEVICE_ASR_DIAGNOSTIC_CAPTURE',
+    );
     const useOnDeviceTranslation =
         bool.fromEnvironment('USE_ON_DEVICE_TRANSLATION');
     const useLocalSessions = bool.fromEnvironment('USE_LOCAL_SESSIONS');
@@ -175,6 +208,12 @@ class AppConfig {
       deviceAsrEndpointMinSpeechMs: deviceAsrEndpointMinSpeechMs,
       deviceAsrEndpointSilenceMs: deviceAsrEndpointSilenceMs,
       deviceAsrEndpointSpeechThresholdRms: deviceAsrEndpointSpeechThresholdRms,
+      deviceAsrVadProvider: deviceAsrVadProvider,
+      deviceAsrVadThreshold: deviceAsrVadThreshold,
+      deviceAsrVadNegativeThreshold: deviceAsrVadNegativeThreshold,
+      deviceAsrVadPreRollMs: deviceAsrVadPreRollMs,
+      deviceAsrDiagnosticCaptureEnabled:
+          deviceAsrDiagnosticCaptureEnabled,
       useLocalSessions: useLocalSessions,
       useOnDeviceTranslation: useOnDeviceTranslation,
       onDeviceTranslationProvider: onDeviceTranslationProvider,
@@ -219,6 +258,12 @@ class AppConfig {
       deviceAsrEndpointMinSpeechMs: deviceAsrEndpointMinSpeechMs,
       deviceAsrEndpointSilenceMs: deviceAsrEndpointSilenceMs,
       deviceAsrEndpointSpeechThresholdRms: deviceAsrEndpointSpeechThresholdRms,
+      deviceAsrVadProvider: deviceAsrVadProvider,
+      deviceAsrVadThreshold: deviceAsrVadThreshold,
+      deviceAsrVadNegativeThreshold: deviceAsrVadNegativeThreshold,
+      deviceAsrVadPreRollMs: deviceAsrVadPreRollMs,
+      deviceAsrDiagnosticCaptureEnabled:
+          deviceAsrDiagnosticCaptureEnabled,
       useLocalSessions: useLocalSessions ?? this.useLocalSessions,
       useOnDeviceTranslation:
           useOnDeviceTranslation ?? this.useOnDeviceTranslation,

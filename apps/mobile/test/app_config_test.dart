@@ -28,6 +28,11 @@ void main() {
     expect(config.deviceAsrEndpointMinSpeechMs, 600);
     expect(config.deviceAsrEndpointSilenceMs, 900);
     expect(config.deviceAsrEndpointSpeechThresholdRms, 0.006);
+    expect(config.deviceAsrVadProvider, 'fluidaudio_silero');
+    expect(config.deviceAsrVadThreshold, 0.6);
+    expect(config.deviceAsrVadNegativeThreshold, 0.35);
+    expect(config.deviceAsrVadPreRollMs, 800);
+    expect(config.deviceAsrDiagnosticCaptureEnabled, isFalse);
     expect(config.realtimeMode, 'conversation');
     expect(config.region.edition, RegionEdition.domestic);
     expect(config.region.allowedProviders, contains('hymt2_self_hosted'));

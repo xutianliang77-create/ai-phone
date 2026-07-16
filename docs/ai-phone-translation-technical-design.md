@@ -5,6 +5,9 @@
 范围：Call Link、WebRTC/VoIP 通话房间、拨打手机号翻译电话、PSTN 服务商桥接、AI Calling Agent。  
 关联文档：`docs/ai-communication-feature-design.md`、`docs/ai-communication-ui-design.md`、`docs/ai-phone-translation-protocol-design.md`、`docs/ai-phone-translation-data-ops-design.md`
 
+统一架构基线：`docs/architecture/README.md`。本文件继续描述翻译电话专项，
+统一 session、Agent Runtime、LiveKit 安全和容量设计以架构目录为准。
+
 ## 1. 目标
 
 实现三类通话能力：

@@ -1,5 +1,6 @@
 import 'app_billing_localization_texts.dart';
 import 'app_call_link_localization_texts.dart';
+import 'app_device_asr_diagnostics_localization.dart';
 import 'app_history_localization_texts.dart';
 import 'app_scan_localization_texts.dart';
 import 'app_voice_profile_localization_texts.dart';
@@ -193,6 +194,7 @@ const zhDiagnosticsLabels = <String, String>{
   'audio.running': '录音运行中',
   'audio.sessionActive': '音频会话',
   'audio.sessionError': '音频会话错误',
+  ...zhDeviceAsrDiagnosticsLabels,
   'audio.processingError': 'ASR 处理错误',
   'audio.pendingSamples': '待处理采样',
   'audio.inputBuffers': '输入缓冲数',
@@ -281,6 +283,7 @@ const zhDiagnosticsValues = <String, String>{
   'no_converted_samples': '未输出转换采样',
   'no_asr_chunks': '尚未形成 ASR 音频块',
   'audio_session_error': '音频会话错误',
+  ...zhDeviceAsrDiagnosticsValues,
   'asr_processing_error': 'ASR 处理错误',
   'ios_system': 'iOS 系统翻译',
   'phrasebook': '短语兜底',
@@ -310,6 +313,7 @@ const zhRuntimeMessages = <String, String>{
   'Device ASR model ready. Connecting realtime session':
       '端侧 ASR 模型已就绪，正在连接实时会话',
   'Device ASR model ready. Starting local session': '端侧 ASR 模型已就绪，正在启动本地会话',
+  ...zhDeviceAsrRuntimeMessages,
   'Restarting device ASR': '正在重启端侧 ASR',
   'Starting device ASR self-test': '正在启动端侧 ASR 自测',
   'Listening for ASR segments': '正在监听端侧 ASR 识别结果',

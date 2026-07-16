@@ -30,6 +30,13 @@ abstract class MobileAsrRuntimeInspector {
   Future<Map<String, Object?>> nativeAvailability();
 }
 
+abstract class MobileAsrDiagnosticTimeline {
+  Future<void> recordDiagnosticEvent(
+    String type, {
+    Map<String, Object?> payload = const <String, Object?>{},
+  });
+}
+
 class MobileAsrConfig {
   const MobileAsrConfig({
     required this.language,
@@ -39,6 +46,13 @@ class MobileAsrConfig {
     this.endpointMinSpeechMs = 600,
     this.endpointSilenceMs = 900,
     this.endpointSpeechThresholdRms = 0.006,
+    this.vadProvider = 'fluidaudio_silero',
+    this.vadThreshold = 0.6,
+    this.vadNegativeThreshold = 0.35,
+    this.vadPreRollMs = 800,
+    this.turnRoutingPolicy = 'alternate',
+    this.diagnosticCaptureEnabled = false,
+    this.diagnosticSessionId,
   });
 
   final String language;
@@ -48,6 +62,13 @@ class MobileAsrConfig {
   final int endpointMinSpeechMs;
   final int endpointSilenceMs;
   final double endpointSpeechThresholdRms;
+  final String vadProvider;
+  final double vadThreshold;
+  final double vadNegativeThreshold;
+  final int vadPreRollMs;
+  final String turnRoutingPolicy;
+  final bool diagnosticCaptureEnabled;
+  final String? diagnosticSessionId;
 }
 
 class MobileAsrAvailability {

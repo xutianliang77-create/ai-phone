@@ -61,6 +61,8 @@ final class CoreMlNemotronAsrBridge: NSObject, FlutterStreamHandler {
       prepare(call: call, result: result)
     case "start":
       start(call: call, result: result)
+    case "recordDiagnosticEvent":
+      recordDiagnosticEvent(call: call, result: result)
     case "stop":
       stop(result: result)
     default:
@@ -147,6 +149,24 @@ final class CoreMlNemotronAsrBridge: NSObject, FlutterStreamHandler {
         }
       }
     }
+  }
+
+  private func recordDiagnosticEvent(
+    call: FlutterMethodCall,
+    result: FlutterResult
+  ) {
+    let arguments = call.arguments as? [String: Any]
+    guard let type = arguments?["type"] as? String, !type.isEmpty else {
+      result(FlutterError(
+        code: "diagnostic_event_invalid",
+        message: "Diagnostic event type is required",
+        details: nil
+      ))
+      return
+    }
+    let payload = arguments?["payload"] as? [String: Any] ?? [:]
+    fluidAudioAdapter.recordDiagnosticEvent(type: type, payload: payload)
+    result(nil)
   }
 
   private func stopAfterStreamCancel() {
@@ -249,7 +269,17 @@ final class CoreMlNemotronAsrBridge: NSObject, FlutterStreamHandler {
       endpointMinSpeechMs: intArgument("endpointMinSpeechMs", from: call) ?? 600,
       endpointSilenceMs: intArgument("endpointSilenceMs", from: call) ?? 900,
       endpointSpeechThresholdRms:
-        doubleArgument("endpointSpeechThresholdRms", from: call) ?? 0.006
+        doubleArgument("endpointSpeechThresholdRms", from: call) ?? 0.006,
+      vadProvider: stringArgument("vadProvider", from: call) ?? "fluidaudio_silero",
+      vadThreshold: doubleArgument("vadThreshold", from: call) ?? 0.6,
+      vadNegativeThreshold:
+        doubleArgument("vadNegativeThreshold", from: call) ?? 0.35,
+      vadPreRollMs: intArgument("vadPreRollMs", from: call) ?? 800,
+      turnRoutingPolicy:
+        stringArgument("turnRoutingPolicy", from: call) ?? "alternate",
+      diagnosticCaptureEnabled:
+        boolArgument("diagnosticCaptureEnabled", from: call) ?? false,
+      diagnosticSessionId: stringArgument("diagnosticSessionId", from: call)
     )
   }
 
