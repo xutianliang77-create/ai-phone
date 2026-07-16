@@ -1,0 +1,14 @@
+DROP TABLE IF EXISTS enterprise.outbox_events;
+DROP TABLE IF EXISTS enterprise.inbox_events;
+DROP TABLE IF EXISTS enterprise.idempotency_keys;
+DROP TABLE IF EXISTS enterprise.usage_ledger;
+DROP TABLE IF EXISTS enterprise.audit_events;
+DROP TABLE IF EXISTS enterprise.policy_decisions;
+DROP TABLE IF EXISTS enterprise.term_packs;
+DROP TABLE IF EXISTS enterprise.knowledge_versions;
+DROP TABLE IF EXISTS enterprise.knowledge_sources;
+DROP TABLE IF EXISTS enterprise.subscriptions;
+DROP TABLE IF EXISTS enterprise.entitlements;
+DROP TABLE IF EXISTS enterprise.api_credentials;
+DROP TABLE IF EXISTS enterprise.members;
+DROP TABLE IF EXISTS enterprise.tenants;

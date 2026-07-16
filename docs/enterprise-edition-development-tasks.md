@@ -17,9 +17,10 @@
 ### 1.1 当前状态快照
 
 - `ENT-CORE-001/002/003` 已完成代码和自动化，等待验收；生产 Web 应用位于 `apps/enterprise-web`。
+- `ENT-DATA-001` 已有三段可逆 PostgreSQL migration、tenant-first 索引、复合 FK、强制 RLS、checksum/锁和备份归档 smoke；本机无 PostgreSQL/`pg_dump`，真实 migrate/restore/PITR 证据未完成，保持 `in_progress`。
 - `ENT-UI-001` 已有生产设计令牌和自托管 Material Icons 基础，完整组件令牌注册表与视觉回归仍在进行。
 - `ENT-UI-002/003` 已有 active membership 租户选择、scope 导航、guarded route 和统一状态组件基础；九角色路由矩阵、route document 和业务状态联调尚未完成。
-- PostgreSQL、SaaS 控制面、企业业务聚合和外部 Provider 仍未通过实现或真实环境门禁。
+- PostgreSQL schema 代码已实现但真实数据库门禁未通过；SaaS 控制面、企业业务聚合和外部 Provider 仍未通过实现或真实环境门禁。
 
 ## 2. P0 企业公共底座
 
@@ -37,7 +38,7 @@
 | ENT-CORE-010 | 套餐和 Entitlement | CORE-001/007 | plan、subscription、seat、entitlement | 服务端按版本执行权益和限额 | todo |
 | ENT-CORE-011 | Tenant Directory | CORE-009 | homeRegion/cell、签名 route document | 区域错误时拒绝业务写入 | todo |
 | ENT-CORE-012 | SaaS 计量聚合 | CORE-007/010 | usage event、账期聚合、调整流水 | 不修改原始 ledger，账单可对账 | todo |
-| ENT-DATA-001 | 企业 PostgreSQL schema | CORE-001 | schema、migration、FK、backup | 真实企业试点数据库门禁通过 | todo |
+| ENT-DATA-001 | 企业 PostgreSQL schema | CORE-001 | schema、migration、FK、backup | 真实企业试点数据库门禁通过 | in_progress |
 | ENT-DATA-002 | Tenant-scoped Repository | DATA-001 | Repository context 和 lint/test | 不存在无 tenant 查询入口 | todo |
 | ENT-DATA-003 | Inbox/Outbox | DATA-001 | 幂等收件、事务发件、重试 | 重放100次仅一次副作用 | todo |
 | ENT-OBS-001 | 企业链路追踪 | CORE-006 | trace IDs、质量和成本报告 | session 到 ledger/tool 可追踪 | todo |

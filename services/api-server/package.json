@@ -4,7 +4,7 @@
   "type": "module",
   "main": "dist/main.js",
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.json && node ../../scripts/copy_enterprise_postgres_migrations.mjs",
     "dev": "tsx src/main.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run src --maxWorkers=2"
@@ -16,6 +16,10 @@
     "fastify": "^5.6.2",
     "livekit-client": "^2.20.0",
     "livekit-server-sdk": "^2.16.0",
+    "pg": "^8.22.0",
     "pino": "^10.1.0"
+  },
+  "devDependencies": {
+    "@types/pg": "^8.20.0"
   }
 }

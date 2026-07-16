@@ -19,7 +19,8 @@
 | --- | --- | --- |
 | Tenant/Member | `ready_for_acceptance` | 已有契约、记录、Repository、租户与 owner 原子创建及成员 API |
 | RBAC | `ready_for_acceptance` | 已有17个 scope、九角色矩阵、统一服务端 guard 和越权测试 |
-| PostgreSQL/控制面/业务聚合 | `designed` | 本文为目标方案，不能从设计文档推导为已实现 |
+| PostgreSQL schema | `implemented` | 已有三段可逆 migration、tenant-first 索引、复合 FK、强制 RLS、checksum/锁和归档 smoke；尚无真实 migrate/restore/PITR 证据 |
+| PostgreSQL Repository/控制面/业务聚合 | `designed` | `ENT-DATA-002` 及后续任务范围，不能从 schema 代码推导为已实现 |
 | SQLite | `demo_only` | 仅本地开发、自动化和封闭演示，不承载真实企业试点数据 |
 | PSTN/CRM/Calendar/OCR | `not_ready` 或按环境探测 | 未配置必须明确降级，不生成虚假外部对象或成功状态 |
 

@@ -76,6 +76,7 @@
     "storage:check": "tsx services/api-server/src/infrastructure/storage/sqlite-store-admin.ts check",
     "storage:backup": "tsx services/api-server/src/infrastructure/storage/sqlite-store-admin.ts backup",
     "storage:restore": "tsx services/api-server/src/infrastructure/storage/sqlite-store-admin.ts restore",
+    "enterprise:postgres": "tsx services/api-server/src/infrastructure/postgres/enterprise-postgres-admin.ts",
     "ios:nemotron:services": "bash scripts/ios_nemotron_start_services.sh",
     "ios:nemotron:smoke": "bash scripts/ios_nemotron_mvp_smoke.sh",
     "ios:nemotron:status": "node scripts/ios_nemotron_mvp_status.mjs",

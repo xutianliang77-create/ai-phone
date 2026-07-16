@@ -1,0 +1,16 @@
+DROP TABLE IF EXISTS enterprise.meeting_action_items;
+DROP TABLE IF EXISTS enterprise.meeting_artifacts;
+DROP TABLE IF EXISTS enterprise.meeting_screen_shares;
+DROP TABLE IF EXISTS enterprise.meeting_participants;
+DROP TABLE IF EXISTS enterprise.meetings;
+DROP TABLE IF EXISTS enterprise.tool_executions;
+DROP TABLE IF EXISTS enterprise.support_cases;
+DROP TABLE IF EXISTS enterprise.support_sessions;
+DROP TABLE IF EXISTS enterprise.customer_profiles;
+DROP TABLE IF EXISTS enterprise.support_channels;
+DROP TABLE IF EXISTS enterprise.marketing_outcomes;
+DROP TABLE IF EXISTS enterprise.marketing_call_tasks;
+DROP TABLE IF EXISTS enterprise.suppression_entries;
+DROP TABLE IF EXISTS enterprise.contact_consents;
+DROP TABLE IF EXISTS enterprise.marketing_leads;
+DROP TABLE IF EXISTS enterprise.marketing_campaigns;
