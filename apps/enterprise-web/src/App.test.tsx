@@ -82,7 +82,7 @@ describe("enterprise application entry", () => {
     renderApp(api, storage, ["/settings/jobs/job-a"]);
 
     expect(await screen.findByRole("heading", { name: "租户任务" })).toBeVisible();
-    expect(screen.getByRole("heading", { name: "正在处理" })).toBeVisible();
+    expect(await screen.findByRole("heading", { name: "正在处理" })).toBeVisible();
     expect(screen.getByText(/tenant\.export/)).toBeVisible();
     expect(api.getTenantJob).toHaveBeenCalledWith("token-a", "job-a");
   });
