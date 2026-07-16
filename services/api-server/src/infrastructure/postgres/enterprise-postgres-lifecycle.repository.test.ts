@@ -24,6 +24,13 @@ describe("enterprise PostgreSQL lifecycle repository", () => {
     const fixture = poolFixture((sql) => {
       if (sql.includes("INSERT INTO enterprise.tenant_jobs")) return [jobRow()];
       if (sql.includes("FROM enterprise.tenant_jobs")) return [jobRow()];
+      if (sql.includes("attempts = attempts + 1")) {
+        return [jobRow({
+          attempts: 1,
+          lease_expires_at: "2026-07-17T01:00:30.000Z",
+          updated_at: now,
+        })];
+      }
       if (sql.includes("UPDATE enterprise.tenant_jobs")) {
         return [jobRow({
           status: "completed",
@@ -47,6 +54,11 @@ describe("enterprise PostgreSQL lifecycle repository", () => {
       async (repository) => {
         const inserted = await repository.insertJob(jobRecord());
         const locked = await repository.lockJob(jobId);
+        const claimed = await repository.claimJob({
+          jobId,
+          now,
+          leaseExpiresAt: "2026-07-17T01:00:30.000Z",
+        });
         const recoverable = await repository.listRecoverableJobs({
           now,
           limit: 10,
@@ -67,12 +79,24 @@ describe("enterprise PostgreSQL lifecycle repository", () => {
           updatedAt: now,
         });
         const members = await repository.suspendMembers(now);
-        return { inserted, locked, recoverable, updated, tenant, members };
+        return {
+          inserted,
+          locked,
+          claimed,
+          recoverable,
+          updated,
+          tenant,
+          members,
+        };
       },
     );
 
     expect(result.inserted).toMatchObject({ status: "created" });
     expect(result.locked).toEqual(jobRecord());
+    expect(result.claimed).toMatchObject({
+      status: "claimed",
+      job: { attempts: 1, leaseExpiresAt: expect.any(String) },
+    });
     expect(result.recoverable).toEqual([jobRecord()]);
     expect(result.updated).toMatchObject({
       status: "updated",
@@ -105,6 +129,11 @@ describe("enterprise PostgreSQL lifecycle repository", () => {
       async (repository) => ({
         inserted: await repository.insertJob(jobRecord()),
         locked: await repository.lockJob(jobId),
+        claimed: await repository.claimJob({
+          jobId,
+          now,
+          leaseExpiresAt: "2026-07-17T01:00:30.000Z",
+        }),
         updated: await repository.updateJob({
           job: jobRecord(),
           expectedUpdatedAt: "2026-07-17T00:00:00.000Z",
@@ -121,6 +150,7 @@ describe("enterprise PostgreSQL lifecycle repository", () => {
     expect(result).toEqual({
       inserted: { status: "already_exists", job: jobRecord() },
       locked: jobRecord(),
+      claimed: { status: "busy" },
       updated: { status: "conflict" },
       tenant: { status: "conflict" },
       members: { status: "unchanged", members: [] },

@@ -1,6 +1,6 @@
 # AI Phone 企业版开发任务
 
-版本：v1.7
+版本：v1.8
 日期：2026-07-17
 状态：E0 开发中，已对齐 UI v1.0
 
@@ -17,8 +17,8 @@
 ### 1.1 当前状态快照
 
 - `ENT-CORE-001/002/003` 已完成代码和自动化，等待验收；生产 Web 应用位于 `apps/enterprise-web`。
-- `ENT-DATA-001` 已有八段可逆 PostgreSQL migration、tenant-first 索引、复合 FK、强制 RLS、checksum/锁和备份归档 smoke；`0006` 增加 audit 不可变约束，`0007` 增加 enterprise inbox/outbox 投递字段，`0008` 增加 forced-RLS user tenant directory。本机无 PostgreSQL/`pg_dump`，真实 migrate/restore/PITR 证据未完成，保持 `in_progress`。
-- `ENT-DATA-002` 已建立 branded immutable `TenantContext`、tenant/user scoped session 和异步 PostgreSQL unit-of-work。Tenant/Member/Audit、Tenant Directory、lifecycle、Inbox/Outbox Repository 已实现：目录发现只在 `app.user_id` 的 forced RLS 下返回本人 active membership 引用，再逐租户使用独立 tenant session 加载；成员投影、生命周期状态、inbox/outbox、claim/finalize 和领域写入可在同一事务内提交。HTTP runtime driver、平台级跨租户恢复发现、当前账号 subject ID 到 PostgreSQL identity 列的映射/迁移和全量数据对账尚未完成，保持 `in_progress`。
+- `ENT-DATA-001` 已有九段可逆 PostgreSQL migration、tenant-first 索引、复合 FK、强制 RLS、checksum/锁和备份归档 smoke；`0008` 增加 forced-RLS user tenant directory，`0009` 增加 cell-scoped platform pending-work projection、自动同步 trigger 和最小引用索引。本机无 PostgreSQL/`pg_dump`，真实 migrate/restore/PITR 证据未完成，保持 `in_progress`。
+- `ENT-DATA-002` 已建立 branded immutable `TenantContext`、tenant/user/cell scoped session 和异步 PostgreSQL unit-of-work。Tenant/Member/Audit、Tenant Directory、lifecycle、Inbox/Outbox Repository 已实现；平台恢复通过 forced-RLS `platform_pending_work` 仅按 cell 发现最小 job/event 引用，记录 transaction-local worker/trace，再逐租户复核当前 cell 并执行 lifecycle/outbox 原子 claim。HTTP/Worker runtime driver、当前账号 subject ID 到 PostgreSQL identity 列的映射/迁移和全量数据对账尚未完成，保持 `in_progress`。
 - `ENT-DATA-003` 已完成 tenant-scoped inbox 去重、稳定 JSON hash、领域写入/inbox/outbox 同事务、outbox 内容不可变、lease claim、指数退避和恢复处理；100 次相同事件重放只执行一次领域副作用，跨租户 provider ID/idempotency key 相互隔离。SQLite 证据仅用于自动化和封闭演示，真实 PostgreSQL 并发 claim 与 Provider sandbox 仍待正式验收。
 - `ENT-CORE-009` 已完成租户创建/区域开通幂等、失败重试、暂停、导出和删除执行器；导出固化 tenant/member/job 与 actor scope 快照，执行使用租约、有界重试和 receipt hash，删除只在 receipt 校验后进入 `deleted`，等待真实生命周期服务与对象存储验收。
 - `ENT-CORE-011` 已完成按 active membership 签发短期 HMAC route document、公开端点校验和企业写入区域 guard，等待正式域名/密钥验收。

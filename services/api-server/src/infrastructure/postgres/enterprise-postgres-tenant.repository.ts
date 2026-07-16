@@ -31,7 +31,9 @@ export interface EnterprisePostgresAuditPosition {
 }
 
 export interface EnterpriseTenantPostgresRepository {
-  findTenant(): Promise<EnterpriseTenantRecord | null>;
+  findTenant(options?: {
+    lock?: boolean;
+  }): Promise<EnterpriseTenantRecord | null>;
   listMembers(): Promise<EnterpriseMemberRecord[]>;
   findMemberByUserId(userId: string): Promise<EnterpriseMemberRecord | null>;
   insertMember(member: EnterpriseMemberRecord): Promise<
@@ -84,7 +86,7 @@ export function createEnterpriseTenantPostgresRepository(
 class PostgresTenantRepository implements EnterpriseTenantPostgresRepository {
   constructor(private readonly session: EnterpriseTenantPostgresSession) {}
 
-  async findTenant() {
+  async findTenant(options: { lock?: boolean } = {}) {
     const result = await this.session.queryTenantRecord<
       EnterpriseTenantPostgresRow
     >(`
@@ -93,6 +95,7 @@ class PostgresTenantRepository implements EnterpriseTenantPostgresRepository {
         created_at, updated_at, version
       FROM enterprise.tenants
       WHERE id = $1
+      ${options.lock ? "FOR UPDATE" : ""}
     `);
     return result.rows[0]
       ? mapEnterpriseTenantRow(result.rows[0], this.session.context.tenantId)

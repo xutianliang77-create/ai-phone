@@ -19,6 +19,7 @@ describe("enterprise PostgreSQL migrations", () => {
       "0006_enterprise_audit_append_only",
       "0007_enterprise_outbox_delivery",
       "0008_enterprise_user_tenant_directory",
+      "0009_enterprise_platform_pending_work",
     ]);
     for (const migration of migrations) {
       expect(migration.up.trim()).not.toBe("");
@@ -60,6 +61,13 @@ describe("enterprise PostgreSQL migrations", () => {
     expect(sql).toContain("user_tenant_directory_self_read");
     expect(sql).toContain("user_tenant_directory_tenant_read");
     expect(sql).toContain("enterprise.current_user_id()");
+    expect(sql).toContain("CREATE TABLE enterprise.platform_pending_work");
+    expect(sql).toContain("platform_pending_work_cell_read");
+    expect(sql).toContain("enterprise.current_cell_id()");
+    expect(sql).toContain("enterprise_tenant_job_pending_work");
+    expect(sql).toContain("enterprise_outbox_pending_work");
+    expect(sql).toContain("enterprise_pending_work_cell");
+    expect(sql).not.toContain("BYPASSRLS");
   });
 
   it("applies each migration once and records its checksum", async () => {

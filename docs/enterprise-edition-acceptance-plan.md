@@ -1,6 +1,6 @@
 # AI Phone 企业版验收任务与计划
 
-版本：v1.2
+版本：v1.3
 日期：2026-07-17
 状态：可执行验收计划，已对齐 UI v1.0
 
@@ -164,6 +164,8 @@ Mock 只能验证协议，不能替代 iPhone/Web、真实 LiveKit、真实模�
 - API 重启后余额、任务和审计保持一致。
 - 在真实 PostgreSQL 上并发 claim 同一 outbox，只有一个 Worker 获得有效 lease；进程在 claim、Provider 返回和 finalize 三处故障后均可恢复。
 - lifecycle 和 outbox 的平台恢复发现只返回最小 tenant/job/event 引用；实际 claim/finalize 必须在对应 tenant RLS transaction 内完成。
+- cell Worker 仅设置自己的 `app.cell_id`，并记录 worker/trace；不得读取其他 cell、未分配 cell 的记录、payload、request hash 或 Provider reference。
+- tenant 迁移 cell 后，旧 cell 的已发现引用在 claim 前复核失败；复核和 claim 使用同一事务及 tenant route row lock，新 cell projection 更新后才能 claim。伪造 tenant/ref 不得绕过该复核。
 - Provider 已完成但响应丢失时，重试必须携带同一 idempotency key 并获得同一结果；没有 sandbox 或白名单 Provider 证据时，不能把自动化结果升级为 `accepted`。
 
 ## 7. A1 企业会议验收
@@ -342,6 +344,7 @@ Mock 只能验证协议，不能替代 iPhone/Web、真实 LiveKit、真实模�
 - 迁移窗口发生错误时可回滚旧系统。
 - PostgreSQL PITR 和对象存储恢复演练。
 - migration 后使用普通应用角色验证 `FORCE ROW LEVEL SECURITY`；确认 user directory self policy、tenant projection policy、成员投影同步和跨租户拒绝均生效。
+- 使用独立 cell Worker 角色验证 pending projection forced RLS、trigger 同步、空 cell 失败闭合、旧 cell 拒绝和 tenant transaction 原子 claim。
 - 恢复后余额、审计、禁拨和授权证据一致。
 - 租户迁移 cell 后旧 cell 拒绝新写入，route document 指向新 cell。
 

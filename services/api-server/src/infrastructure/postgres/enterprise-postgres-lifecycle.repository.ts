@@ -29,6 +29,14 @@ export interface EnterpriseLifecyclePostgresRepository {
     | { status: "already_exists"; job: EnterpriseTenantJobRecord }
   >;
   lockJob(jobId: string): Promise<EnterpriseTenantJobRecord | null>;
+  claimJob(input: {
+    jobId: string;
+    now: string;
+    leaseExpiresAt: string;
+  }): Promise<
+    | { status: "claimed"; job: EnterpriseTenantJobRecord }
+    | { status: "busy" }
+  >;
   listRecoverableJobs(input: {
     now: string;
     limit: number;
@@ -125,6 +133,40 @@ class PostgresLifecycleRepository
           this.session.context.tenantId,
         )
       : null;
+  }
+
+  async claimJob(input: {
+    jobId: string;
+    now: string;
+    leaseExpiresAt: string;
+  }) {
+    const result = await this.session.query<EnterpriseTenantJobPostgresRow>(`
+      UPDATE enterprise.tenant_jobs
+      SET attempts = attempts + 1, lease_expires_at = $4,
+        next_attempt_at = NULL, error_code = NULL, receipt_ref = NULL,
+        receipt_hash = NULL, completed_at = NULL, updated_at = $3
+      WHERE tenant_id = $1 AND id = $2 AND actor_id = $5
+        AND status = 'processing'
+        AND job_type IN ('tenant.export', 'tenant.delete')
+        AND scope_snapshot IS NOT NULL
+        AND COALESCE(lease_expires_at, '-infinity'::timestamptz) <= $3
+        AND COALESCE(next_attempt_at, '-infinity'::timestamptz) <= $3
+      RETURNING *
+    `, [
+      input.jobId,
+      input.now,
+      input.leaseExpiresAt,
+      this.session.context.actorUserId,
+    ]);
+    return result.rows[0]
+      ? {
+          status: "claimed" as const,
+          job: mapEnterpriseTenantJobRow(
+            result.rows[0],
+            this.session.context.tenantId,
+          ),
+        }
+      : { status: "busy" as const };
   }
 
   async listRecoverableJobs(input: { now: string; limit: number }) {
