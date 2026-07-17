@@ -1,5 +1,6 @@
 from collections.abc import Mapping
 from pathlib import Path
+from threading import Thread
 
 from app.config import TranslationConfig
 from app.engines import TranslationEngine, TranslationInput
@@ -28,7 +29,13 @@ class HyMt2Engine(TranslationEngine):
             raise RuntimeError(self._load_error or "Hy-MT2 model is not loaded")
         import torch
 
-        prompt = build_prompt(request.text, request.target_language)
+        prompt = build_prompt(
+            request.text,
+            request.target_language,
+            previous_segments=request.previous_segments,
+            glossary=request.glossary,
+            protected_entities=request.protected_entities,
+        )
         messages = [{"role": "user", "content": prompt}]
         inputs = self.tokenizer.apply_chat_template(
             messages,
@@ -51,6 +58,57 @@ class HyMt2Engine(TranslationEngine):
             skip_special_tokens=True,
         )
         return response.strip()
+
+    def translate_stream(self, request: TranslationInput):
+        if self._load_error or self.tokenizer is None or self.model is None:
+            raise RuntimeError(self._load_error or "Hy-MT2 model is not loaded")
+        import torch
+        from transformers import TextIteratorStreamer
+
+        prompt = build_prompt(
+            request.text,
+            request.target_language,
+            previous_segments=request.previous_segments,
+            glossary=request.glossary,
+            protected_entities=request.protected_entities,
+        )
+        inputs = self.tokenizer.apply_chat_template(
+            [{"role": "user", "content": prompt}],
+            add_generation_prompt=True,
+            return_tensors="pt",
+        ).to(self.model.device)
+        model_inputs = as_model_inputs(inputs)
+        streamer = TextIteratorStreamer(
+            self.tokenizer,
+            skip_prompt=True,
+            skip_special_tokens=True,
+        )
+        errors: list[Exception] = []
+
+        def generate() -> None:
+            try:
+                with torch.no_grad():
+                    self.model.generate(
+                        **model_inputs,
+                        streamer=streamer,
+                        max_new_tokens=min(request.max_tokens, self.config.max_new_tokens),
+                        temperature=self.config.temperature,
+                        top_p=self.config.top_p,
+                        top_k=self.config.top_k,
+                        repetition_penalty=self.config.repetition_penalty,
+                    )
+            except Exception as exc:  # pragma: no cover - hardware runtime path.
+                errors.append(exc)
+                streamer.on_finalized_text("", stream_end=True)
+
+        thread = Thread(target=generate, daemon=True)
+        thread.start()
+        for chunk in streamer:
+            if chunk:
+                yield chunk
+        thread.join()
+        if errors:
+            raise RuntimeError(f"Hy-MT2 streaming generation failed: {errors[0]}")
 
     def _load(self) -> None:
         model_dir = Path(self.config.hymt2_model_dir)
@@ -80,12 +138,39 @@ class HyMt2Engine(TranslationEngine):
         self.model.eval()
 
 
-def build_prompt(text: str, target_language: str) -> str:
+def build_prompt(
+    text: str,
+    target_language: str,
+    *,
+    previous_segments: tuple[tuple[str, str], ...] = (),
+    glossary: tuple[tuple[str, str], ...] = (),
+    protected_entities: tuple[str, ...] = (),
+) -> str:
     target = TARGET_LANGUAGE_NAMES.get(target_language, target_language)
-    return (
-        f"将以下文本翻译为 {target}，注意只需要输出翻译后的结果，不要额外解释：\n\n"
-        f"{text}"
-    )
+    sections: list[str] = []
+    references = [*glossary, *((entity, entity) for entity in protected_entities)]
+    if references:
+        terms = "\n".join(
+            f"{source} 翻译成 {translated}"
+            for source, translated in references
+        )
+        sections.append(f"参考下面的翻译：\n{terms}")
+    if previous_segments:
+        context = "\n".join(
+            f"{source}\n对应译文：{translated}"
+            for source, translated in previous_segments[-2:]
+        )
+        sections.append(
+            f"【背景信息】\n{context}\n\n"
+            f"请结合背景信息将以下文本翻译为 {target}，注意只需要输出翻译后的结果，"
+            f"不要额外解释：\n\n【待翻译文本】\n{text}"
+        )
+    else:
+        sections.append(
+            f"将以下文本翻译为 {target}，注意只需要输出翻译后的结果，不要额外解释："
+            f"\n\n{text}"
+        )
+    return "\n".join(sections)
 
 
 def as_model_inputs(inputs):

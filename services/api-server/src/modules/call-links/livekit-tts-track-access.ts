@@ -35,7 +35,7 @@ export class LiveKitTtsTrackAccessController {
     trackSid: string;
     trackName: string;
   }) {
-    const participants = await this.client.listParticipants(input.roomName);
+    const participants = await this.waitForTrackBinding(input);
     const worker = participants.find(
       (participant) => participant.identity === input.workerIdentity,
     );
@@ -60,4 +60,33 @@ export class LiveKitTtsTrackAccessController {
     ));
     return { participantCount: recipients.length };
   }
+
+  private async waitForTrackBinding(input: {
+    roomName: string;
+    workerIdentity: string;
+    targetLegId: string;
+    trackSid: string;
+    trackName: string;
+  }) {
+    let participants: RoomParticipant[] = [];
+    for (let attempt = 0; attempt < 4; attempt += 1) {
+      participants = await this.client.listParticipants(input.roomName);
+      const worker = participants.find(
+        (participant) => participant.identity === input.workerIdentity,
+      );
+      const published = worker?.tracks.some((track) =>
+        track.sid === input.trackSid && track.name === input.trackName
+      );
+      const targetPresent = participants.some(
+        (participant) => participant.identity === input.targetLegId,
+      );
+      if (published && targetPresent) return participants;
+      if (attempt < 3) await delay(50);
+    }
+    return participants;
+  }
+}
+
+function delay(milliseconds: number) {
+  return new Promise<void>((resolve) => setTimeout(resolve, milliseconds));
 }

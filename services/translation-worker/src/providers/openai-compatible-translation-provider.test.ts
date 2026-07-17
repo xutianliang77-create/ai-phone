@@ -160,7 +160,58 @@ describe("OpenAiCompatibleTranslationProvider", () => {
     await expect(pending).rejects.toMatchObject({ name: "AbortError" });
     expect(requestSignal?.aborted).toBe(true);
   });
+
+  it("emits deltas, sentence-stable prefixes and a context-clean final", async () => {
+    let requestBody: Record<string, unknown> | undefined;
+    const provider = new OpenAiCompatibleTranslationProvider({
+      baseUrl: "http://127.0.0.1:8003/v1",
+      model: "hymt2",
+      timeoutMs: 1000,
+      maxTokens: 80,
+      streaming: true,
+      fetchFn: async (_url, init) => {
+        requestBody = JSON.parse(init?.body as string);
+        return new Response([
+          sse("Previous sentence. "),
+          sse("Current translation."),
+          "data: [DONE]\n\n",
+        ].join(""), {
+          status: 200,
+          headers: { "content-type": "text/event-stream" },
+        });
+      },
+    });
+
+    const events = [];
+    for await (const event of provider.translateStream!({
+      text: "当前句。",
+      sourceLanguage: "zh",
+      targetLanguage: "en",
+      signal: new AbortController().signal,
+      previousSegments: [{
+        sourceText: "上一句。",
+        translatedText: "Previous sentence.",
+      }],
+      glossary: [{ sourceText: "中继", translatedText: "trunk" }],
+      protectedEntities: ["A-120"],
+    })) events.push(event);
+
+    expect(requestBody?.stream).toBe(true);
+    expect(JSON.stringify(requestBody)).toContain("READ_ONLY_CONTEXT");
+    expect(events).toContainEqual({
+      type: "stable_prefix",
+      text: "Previous sentence.",
+    });
+    expect(events.at(-1)).toEqual({
+      type: "final",
+      text: "Current translation.",
+    });
+  });
 });
+
+function sse(content: string) {
+  return `data: ${JSON.stringify({ choices: [{ delta: { content } }] })}\n\n`;
+}
 
 function response(status: number, body: unknown) {
   return new Response(JSON.stringify(body), {

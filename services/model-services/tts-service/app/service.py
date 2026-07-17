@@ -1,5 +1,7 @@
 import base64
 import binascii
+import asyncio
+import time
 from pathlib import Path
 import re
 
@@ -28,6 +30,8 @@ class TtsService:
         self.engine = engine
         self.voice_reference_dir = Path(voice_reference_dir) if voice_reference_dir else None
         self.voice_presets = voice_presets or VoicePresetCatalog()
+        self._warmup_lock = asyncio.Lock()
+        self._warmup_result: dict[str, object] | None = None
 
     def health(self) -> tuple[bool, str | None]:
         return self.engine.health()
@@ -40,6 +44,24 @@ class TtsService:
         request: TtsSynthesizeRequest,
     ) -> TtsSynthesizeResponse:
         return await self.engine.synthesize(self.voice_presets.resolve_request(request))
+
+    async def warmup(self, request: TtsSynthesizeRequest) -> dict[str, object]:
+        if self._warmup_result is not None:
+            return {**self._warmup_result, "cached": True}
+        async with self._warmup_lock:
+            if self._warmup_result is not None:
+                return {**self._warmup_result, "cached": True}
+            started = time.perf_counter()
+            speech = await self.synthesize(request)
+            self._warmup_result = {
+                "status": "ok",
+                "cached": False,
+                "elapsedMs": round((time.perf_counter() - started) * 1000),
+                "firstAudioMs": speech.firstAudioMs,
+                "provider": speech.provider,
+                "model": speech.model,
+            }
+            return self._warmup_result
 
     def preset_catalog(self) -> VoicePresetCatalogResponse:
         return self.voice_presets.response()

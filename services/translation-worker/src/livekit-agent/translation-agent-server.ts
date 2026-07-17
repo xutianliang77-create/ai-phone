@@ -2,10 +2,9 @@ import { fileURLToPath } from "node:url";
 import {
   cli,
   ServerOptions,
-  WorkerPermissions,
 } from "@livekit/agents";
-import { TrackSource } from "@livekit/protocol";
 import { parseWorkerDispatchMetadata } from "./worker-dispatch-runtime-client.js";
+import { createTranslationAgentPermissions } from "./translation-agent-permissions.js";
 
 const workerLiveKitUrl = process.env.LIVEKIT_WORKER_URL?.trim();
 if (workerLiveKitUrl) process.env.LIVEKIT_URL = workerLiveKitUrl;
@@ -29,14 +28,7 @@ cli.runApp(new ServerOptions({
     integerEnv("LIVEKIT_AGENT_INITIALIZE_TIMEOUT_SECONDS", 20, 5, 120) * 1000,
   jobMemoryWarnMB: integerEnv("LIVEKIT_AGENT_JOB_MEMORY_WARN_MB", 768, 128, 8192),
   jobMemoryLimitMB: integerEnv("LIVEKIT_AGENT_JOB_MEMORY_LIMIT_MB", 1024, 256, 16384),
-  permissions: new WorkerPermissions(
-    true,
-    true,
-    false,
-    false,
-    [TrackSource.MICROPHONE],
-    true,
-  ),
+  permissions: createTranslationAgentPermissions(),
   requestFunc: async (request) => {
     const ticket = parseWorkerDispatchMetadata(request.job.metadata);
     if (!ticket || request.agentName !== agentName ||

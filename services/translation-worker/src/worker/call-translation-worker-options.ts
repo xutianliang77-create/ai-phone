@@ -1,4 +1,5 @@
 import type { CallTranscriptRefiner } from "./call-transcript-refiner.js";
+import type { TermbaseTermDto } from "@translation/contracts";
 import type {
   CallAsrProvider,
   CallDuplexConfig,
@@ -17,4 +18,5 @@ export interface CallTranslationWorkerOptions {
   transcriptRefiner?: CallTranscriptRefiner;
   duplexConfig?: CallDuplexConfig;
   nowMs?: () => number;
+  terminology?: TermbaseTermDto[];
 }

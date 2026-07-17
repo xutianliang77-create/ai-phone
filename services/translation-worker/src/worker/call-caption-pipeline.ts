@@ -2,6 +2,7 @@ import {
   participantTrackSpeaker,
   type CallRoomSubmittedEvent,
   type SpeechPipelineTimingDto,
+  type TermbaseTermDto,
 } from "@translation/contracts";
 import { isAborted, runAbortable } from "./abortable-operation.js";
 import { callRecognitionMetadata } from "./call-recognition-metadata.js";
@@ -19,11 +20,13 @@ import type {
   CallTtsProvider,
   TtsVoiceConfig,
 } from "./types.js";
+import { CallTranslationContextStore } from "./translation-context.js";
 
 export class CallCaptionPipeline {
   private readonly state = new CallPipelineVersionState();
   private readonly ttsQueue: CallTtsSynthesisQueue;
   private readonly translationTasks = new Map<string, Set<Promise<void>>>();
+  private readonly translationContext: CallTranslationContextStore;
 
   constructor(private readonly options: {
     translationProvider: CallTranslationProvider;
@@ -32,7 +35,9 @@ export class CallCaptionPipeline {
     ttsProvider?: CallTtsProvider;
     playbackQueue: CallTtsPlaybackQueue;
     nowMs: () => number;
+    terminology?: TermbaseTermDto[];
   }) {
+    this.translationContext = new CallTranslationContextStore(options.terminology);
     this.ttsQueue = new CallTtsSynthesisQueue({
       provider: options.ttsProvider,
       eventSink: options.eventSink,
@@ -43,6 +48,10 @@ export class CallCaptionPipeline {
 
   setTtsVoice(voice: TtsVoiceConfig) {
     this.ttsQueue.setVoice(voice);
+  }
+
+  warmupTts(signal: AbortSignal) {
+    return this.ttsQueue.warmup(signal);
   }
 
   async drain(callId: string) {
@@ -63,6 +72,7 @@ export class CallCaptionPipeline {
     this.cancel(callId);
     this.options.transcriptRefiner?.clear(callId);
     this.state.clear(callId);
+    this.translationContext.clear(callId);
   }
 
   async publish(
@@ -132,8 +142,14 @@ export class CallCaptionPipeline {
     input.pipelineTiming.translationStartedAtMs = this.options.nowMs();
     let translatedText: string;
     try {
-      translatedText = await runAbortable(input.signal, () =>
-        this.options.translationProvider.translate({
+      const context = this.translationContext.prepare({
+        callId: input.callId,
+        speakerRole: input.speakerRole,
+        text: input.text,
+        sourceLanguage: input.sourceLanguage,
+        targetLanguage: input.targetLanguage,
+      });
+      const translationInput = {
           text: input.text,
           sourceLanguage: input.sourceLanguage,
           targetLanguage: input.targetLanguage,
@@ -142,7 +158,12 @@ export class CallCaptionPipeline {
           revision: input.identity.revision,
           pipelineGeneration: input.identity.generation,
           signal: input.signal,
-        })
+          ...context,
+      };
+      translatedText = await runAbortable(input.signal, () =>
+        this.options.translationProvider.translateStream
+          ? translateIncrementally(this.options.translationProvider, translationInput)
+          : this.options.translationProvider.translate(translationInput)
       );
     } catch (error) {
       if (isAborted(error, input.signal) ||
@@ -185,6 +206,14 @@ export class CallCaptionPipeline {
       input.refinedRawText,
       translatedText,
     );
+    this.translationContext.remember({
+      callId: input.callId,
+      speakerRole: input.speakerRole,
+      sourceText: input.text,
+      translatedText,
+      sourceLanguage: input.sourceLanguage,
+      targetLanguage: input.targetLanguage,
+    });
     this.ttsQueue.enqueue({
       callId: input.callId,
       speakerRole: input.speakerRole,
@@ -226,6 +255,20 @@ export class CallCaptionPipeline {
       ...(translatedText ? { translatedText } : {}),
     });
   }
+}
+
+async function translateIncrementally(
+  provider: CallTranslationProvider,
+  input: Parameters<CallTranslationProvider["translate"]>[0],
+) {
+  if (!provider.translateStream) throw new Error("Translation stream is unavailable");
+  let finalText = "";
+  for await (const event of provider.translateStream(input)) {
+    if (input.signal.aborted) throw input.signal.reason ?? new Error("Translation aborted");
+    if (event.type === "final") finalText = event.text;
+  }
+  if (!finalText.trim()) throw new Error("Translation stream returned no final text");
+  return finalText;
 }
 
 interface CaptionTranslationInput {

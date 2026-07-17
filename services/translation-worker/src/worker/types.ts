@@ -71,7 +71,27 @@ export interface CallTranslationProvider {
     revision: number;
     pipelineGeneration: number;
     signal: AbortSignal;
+    previousSegments?: TranslationContextSegment[];
+    glossary?: TranslationGlossaryTerm[];
+    protectedEntities?: string[];
   }): Promise<string>;
+  translateStream?(input: Parameters<CallTranslationProvider["translate"]>[0]):
+    AsyncIterable<TranslationStreamEvent>;
+}
+
+export type TranslationStreamEvent =
+  | { type: "delta"; text: string }
+  | { type: "stable_prefix"; text: string }
+  | { type: "final"; text: string };
+
+export interface TranslationContextSegment {
+  sourceText: string;
+  translatedText: string;
+}
+
+export interface TranslationGlossaryTerm {
+  sourceText: string;
+  translatedText: string;
 }
 
 export interface SynthesizedSpeech {
@@ -116,6 +136,27 @@ export interface CallTtsProvider {
     signal: AbortSignal;
     voice?: TtsVoiceConfig;
   }): Promise<SynthesizedSpeech | null>;
+  synthesizeStream?(input: Parameters<CallTtsProvider["synthesize"]>[0]):
+    AsyncIterable<TtsStreamEvent>;
+  warmup?(input: { signal: AbortSignal; voice?: TtsVoiceConfig }):
+    Promise<TtsWarmupResult>;
+}
+
+export type TtsStreamEvent =
+  | { type: "metadata"; speech: SynthesizedSpeech }
+  | {
+    type: "audio_chunk";
+    sequence: number;
+    audio: NonNullable<SynthesizedSpeech["audio"]>;
+  }
+  | { type: "final" };
+
+export interface TtsWarmupResult {
+  cached: boolean;
+  elapsedMs: number;
+  firstAudioMs?: number;
+  provider?: string;
+  model?: string;
 }
 
 export interface CallTtsAudioSink {

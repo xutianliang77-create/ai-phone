@@ -30,6 +30,7 @@ import type {
   TranscriptSegment,
   TtsVoiceConfig,
 } from "./types.js";
+import { TurnCoordinator } from "./turn-coordinator.js";
 export class CallTranslationWorker implements CallSpeechPipeline {
   private readonly asrProvider: CallAsrProvider;
   private readonly eventSink: CallRoomEventSink;
@@ -40,6 +41,11 @@ export class CallTranslationWorker implements CallSpeechPipeline {
   private readonly captionPipeline: CallCaptionPipeline;
   private readonly interruptionController: CallInterruptionController;
   private readonly recentTtsEchoes = new RecentTtsEchoFilter();
+  private readonly turnCoordinator = new TurnCoordinator();
+  private readonly ttsWarmups = new Map<string, {
+    controller: AbortController;
+    task: Promise<void>;
+  }>();
   constructor(options: CallTranslationWorkerOptions) {
     this.asrProvider = options.asrProvider;
     this.eventSink = options.eventSink;
@@ -56,6 +62,7 @@ export class CallTranslationWorker implements CallSpeechPipeline {
       ttsProvider: options.ttsProvider,
       playbackQueue: this.playbackQueue,
       nowMs: this.nowMs,
+      terminology: options.terminology,
     });
     this.interruptionController = new CallInterruptionController({
       config: options.duplexConfig ?? disabledCallDuplexConfig,
@@ -77,10 +84,12 @@ export class CallTranslationWorker implements CallSpeechPipeline {
     this.captionPipeline.setTtsVoice(voice);
   }
   async startCall(callId: string) {
+    await this.stopTtsWarmup(callId);
     this.interruptionController.clear(callId);
     this.turnBuffer.clear(callId);
     this.recentTtsEchoes.clear(callId);
     this.captionPipeline.clear(callId);
+    this.turnCoordinator.clear(callId);
     try {
       await this.asrProvider.createCall(callId);
     } catch (error) {
@@ -92,6 +101,7 @@ export class CallTranslationWorker implements CallSpeechPipeline {
       ]);
       throw error;
     }
+    this.startTtsWarmup(callId);
     await this.eventSink.publish(callId, [
       statusEvent("worker-started", "通话翻译 Worker 已启动", this.nowMs(), {
         stage: "worker",
@@ -178,6 +188,7 @@ export class CallTranslationWorker implements CallSpeechPipeline {
   }
 
   async endCall(callId: string) {
+    await this.stopTtsWarmup(callId);
     try {
       await this.flushSpeaker(callId, "host");
       await this.flushSpeaker(callId, "guest");
@@ -198,7 +209,43 @@ export class CallTranslationWorker implements CallSpeechPipeline {
       this.recentTtsEchoes.clear(callId);
       this.captionPipeline.clear(callId);
       this.interruptionController.clear(callId);
+      this.turnCoordinator.clear(callId);
     }
+  }
+
+  private startTtsWarmup(callId: string) {
+    const controller = new AbortController();
+    const runtime = {
+      controller,
+      task: Promise.resolve() as Promise<void>,
+    };
+    runtime.task = Promise.resolve()
+      .then(() => this.captionPipeline.warmupTts(controller.signal))
+      .then(() => undefined)
+      .catch(async () => {
+        if (controller.signal.aborted) return;
+        await this.eventSink.publish(callId, [
+          statusEvent("tts-warmup-failed", "TTS 预热未通过，首句可能降级为冷启动", this.nowMs(), {
+            stage: "tts",
+            retryable: true,
+          }),
+        ]);
+      })
+      .catch(() => undefined)
+      .finally(() => {
+        if (this.ttsWarmups.get(callId) === runtime) {
+          this.ttsWarmups.delete(callId);
+        }
+      });
+    this.ttsWarmups.set(callId, runtime);
+  }
+
+  private async stopTtsWarmup(callId: string) {
+    const runtime = this.ttsWarmups.get(callId);
+    if (!runtime) return;
+    this.ttsWarmups.delete(callId);
+    runtime.controller.abort(new Error("Call ended during TTS warmup"));
+    await runtime.task;
   }
 
   private async acceptTranscript(
@@ -211,12 +258,20 @@ export class CallTranslationWorker implements CallSpeechPipeline {
     if (this.recentTtsEchoes.matches(callId, speakerRole, text, this.nowMs())) {
       return;
     }
-    const language = transcript.language ?? detectCallLanguage(text);
+    const language = this.turnCoordinator.stabilizeLanguage({
+      callId,
+      speakerRole,
+      text,
+      fallbackLanguage: transcript.language ?? detectCallLanguage(text),
+    });
     const ready = this.turnBuffer.push(callId, speakerRole, {
       ...transcript,
       text,
       language,
     }, this.nowMs());
+    if (this.turnCoordinator.isHardBoundary(transcript)) {
+      ready.push(...this.turnBuffer.flush(callId, speakerRole, this.nowMs()));
+    }
     await this.publishReady(ready, callId);
   }
 

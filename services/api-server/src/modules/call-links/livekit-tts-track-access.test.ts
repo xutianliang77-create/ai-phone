@@ -36,6 +36,27 @@ describe("LiveKitTtsTrackAccessController", () => {
     })).rejects.toThrow("binding not found");
     expect(client.updateSubscriptions).not.toHaveBeenCalled();
   });
+
+  it("rechecks a newly published Worker track before failing closed", async () => {
+    const client = fakeClient();
+    const visible = await client.listParticipants();
+    client.listParticipants
+      .mockResolvedValueOnce(visible.map((participant) => ({
+        ...participant,
+        tracks: participant.identity.includes(":worker:") ? [] : participant.tracks,
+      })))
+      .mockResolvedValue(visible);
+    const controller = new LiveKitTtsTrackAccessController(config(), client);
+
+    await expect(controller.authorize({
+      roomName: "call_1",
+      workerIdentity: "call_1:worker:worker-1",
+      targetLegId: "call_1:guest:sip:op_1",
+      trackSid: "TR_1",
+      trackName: "translation-tts-guest-24000.token",
+    })).resolves.toEqual({ participantCount: 3 });
+    expect(client.listParticipants).toHaveBeenCalledTimes(3);
+  });
 });
 
 function fakeClient() {

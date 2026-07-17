@@ -1,4 +1,5 @@
 from fastapi.testclient import TestClient
+import json
 
 from app.config import TtsConfig
 from app.main import create_app
@@ -57,6 +58,31 @@ def test_synthesize_route_accepts_voice_design_contract() -> None:
     body = response.json()
     assert body["voiceMode"] == "voice_design"
     assert body["voiceProfileId"] == "warm_zh_001"
+
+
+def test_stream_route_returns_metadata_pcm_chunks_and_final() -> None:
+    client = TestClient(create_app(TtsConfig()))
+
+    response = client.post("/tts/stream", json=payload())
+
+    messages = [json.loads(line) for line in response.text.splitlines()]
+    assert response.status_code == 200
+    assert messages[0]["type"] == "metadata"
+    assert messages[1]["type"] == "audio_chunk"
+    assert messages[1]["format"] == "pcm16"
+    assert messages[-1] == {"type": "final"}
+
+
+def test_warmup_route_is_cached_after_first_synthesis() -> None:
+    client = TestClient(create_app(TtsConfig()))
+
+    first = client.post("/tts/warmup", json=payload())
+    second = client.post("/tts/warmup", json=payload())
+
+    assert first.status_code == 200
+    assert first.json()["cached"] is False
+    assert second.json()["cached"] is True
+    assert second.json()["provider"] == "mock"
 
 
 def test_synthesize_route_rejects_clone_without_reference_audio() -> None:

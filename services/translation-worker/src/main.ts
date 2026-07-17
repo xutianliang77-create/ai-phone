@@ -32,6 +32,8 @@ export function buildDefaultWorker(endpointMode: AsrEndpointMode = "call_link") 
     asrProvider: new HttpAsrProvider({
       endpoint: env.asrHttpEndpoint,
       flushEndpoint: env.asrHttpFlushEndpoint,
+      streamEndpoint: env.asrStreamEndpoint,
+      streamFallbackToHttp: env.asrStreamFallbackToHttp,
       apiKey: env.asrHttpApiKey,
       timeoutMs: env.asrHttpTimeoutMs,
       endpointMode,
@@ -44,10 +46,14 @@ export function buildDefaultWorker(endpointMode: AsrEndpointMode = "call_link") 
       apiKey: env.translationApiKey,
       timeoutMs: env.translationTimeoutMs,
       maxTokens: env.translationMaxTokens,
+      streaming: env.translationStreamingEnabled,
     }),
     ttsProvider: env.ttsHttpEndpoint
       ? new HttpTtsProvider({
         endpoint: env.ttsHttpEndpoint,
+        streamEndpoint: env.ttsStreamEndpoint,
+        warmupEndpoint: env.ttsWarmupEndpoint,
+        warmupMaxMs: env.ttsWarmupMaxMs,
         apiKey: env.ttsHttpApiKey,
         timeoutMs: env.ttsHttpTimeoutMs,
         provider: env.ttsProvider,
@@ -75,6 +81,7 @@ export function buildDefaultWorker(endpointMode: AsrEndpointMode = "call_link") 
       terminology,
     }),
     duplexConfig: env.duplexConfig,
+    terminology,
   });
 }
 

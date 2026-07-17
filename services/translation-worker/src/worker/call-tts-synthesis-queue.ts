@@ -14,6 +14,7 @@ import type {
   CallAudioSpeakerRole,
   CallRoomEventSink,
   CallTtsProvider,
+  SynthesizedSpeech,
   TtsVoiceConfig,
 } from "./types.js";
 
@@ -47,6 +48,14 @@ export class CallTtsSynthesisQueue {
     this.voice = voice;
   }
 
+  warmup(signal: AbortSignal) {
+    if (!this.options.provider?.warmup) return Promise.resolve(undefined);
+    return this.options.provider.warmup({
+      signal,
+      ...(this.voice ? { voice: this.voice } : {}),
+    });
+  }
+
   enqueue(input: CallTtsSynthesisInput) {
     if (!this.options.provider) return;
     const task: QueuedTtsSynthesisInput = {
@@ -71,7 +80,8 @@ export class CallTtsSynthesisQueue {
     let speech: Awaited<ReturnType<CallTtsProvider["synthesize"]>>;
     try {
       speech = await runAbortable(input.signal, () =>
-        input.provider.synthesize({
+        input.provider.synthesizeStream
+          ? synthesizeIncrementally(input.provider, {
           text: normalizeTtsText(input.translatedText, input.targetLanguage),
           language: input.targetLanguage,
           speakerRole: input.speakerRole,
@@ -83,6 +93,18 @@ export class CallTtsSynthesisQueue {
           signal: input.signal,
           ...(input.voice ? { voice: input.voice } : {}),
         })
+          : input.provider.synthesize({
+            text: normalizeTtsText(input.translatedText, input.targetLanguage),
+            language: input.targetLanguage,
+            speakerRole: input.speakerRole,
+            segmentId: input.segmentId,
+            speechId: input.identity.speechId,
+            turnId: input.identity.turnId,
+            revision: input.identity.revision,
+            pipelineGeneration: input.identity.generation,
+            signal: input.signal,
+            ...(input.voice ? { voice: input.voice } : {}),
+          })
       );
     } catch (error) {
       if (isAborted(error, input.signal) || !input.isCurrent()) return;
@@ -133,6 +155,49 @@ export class CallTtsSynthesisQueue {
       speech,
     });
   }
+}
+
+async function synthesizeIncrementally(
+  provider: CallTtsProvider,
+  input: Parameters<CallTtsProvider["synthesize"]>[0],
+) {
+  if (!provider.synthesizeStream) throw new Error("TTS stream is unavailable");
+  let metadata: SynthesizedSpeech | undefined;
+  const chunks: Buffer[] = [];
+  let sampleRate: 16000 | 24000 | undefined;
+  let expectedSequence = 1;
+  let completed = false;
+  for await (const event of provider.synthesizeStream(input)) {
+    if (input.signal.aborted) throw input.signal.reason ?? new Error("TTS aborted");
+    if (event.type === "metadata") {
+      metadata = event.speech;
+      continue;
+    }
+    if (event.type === "audio_chunk") {
+      if (event.sequence !== expectedSequence) {
+        throw new Error(`TTS stream sequence gap: expected ${expectedSequence}`);
+      }
+      expectedSequence += 1;
+      if (sampleRate && sampleRate !== event.audio.sampleRate) {
+        throw new Error("TTS stream sample rate changed");
+      }
+      sampleRate = event.audio.sampleRate;
+      chunks.push(Buffer.from(event.audio.data, "base64"));
+      continue;
+    }
+    completed = true;
+  }
+  if (!completed || !metadata || !sampleRate || chunks.length === 0) {
+    throw new Error("TTS stream ended before final audio");
+  }
+  return {
+    ...metadata,
+    audio: {
+      format: "pcm16" as const,
+      sampleRate,
+      data: Buffer.concat(chunks).toString("base64"),
+    },
+  };
 }
 
 interface QueuedTtsSynthesisInput extends CallTtsSynthesisInput {

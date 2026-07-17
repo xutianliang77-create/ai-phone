@@ -22,6 +22,8 @@ export interface TranslationWorkerEnv {
   audioIngestMaxFrames: number;
   asrHttpEndpoint: string;
   asrHttpFlushEndpoint?: string;
+  asrStreamEndpoint?: string;
+  asrStreamFallbackToHttp: boolean;
   asrHttpApiKey?: string;
   asrHttpTimeoutMs: number;
   translationBaseUrl: string;
@@ -29,7 +31,11 @@ export interface TranslationWorkerEnv {
   translationApiKey?: string;
   translationTimeoutMs: number;
   translationMaxTokens: number;
+  translationStreamingEnabled: boolean;
   ttsHttpEndpoint?: string;
+  ttsStreamEndpoint?: string;
+  ttsWarmupEndpoint?: string;
+  ttsWarmupMaxMs: number;
   ttsHttpApiKey?: string;
   ttsHttpTimeoutMs: number;
   ttsProvider?: string;
@@ -74,6 +80,9 @@ export function loadEnv(): TranslationWorkerEnv {
     asrHttpEndpoint:
       env.ASR_HTTP_ENDPOINT ?? "http://127.0.0.1:8001/asr/transcribe",
     asrHttpFlushEndpoint: env.ASR_HTTP_FLUSH_ENDPOINT,
+    asrStreamEndpoint: env.ASR_STREAM_ENDPOINT?.trim() || undefined,
+    asrStreamFallbackToHttp: env.ASR_STREAM_FALLBACK_TO_HTTP?.trim().toLowerCase() !==
+      "false",
     asrHttpApiKey: env.ASR_HTTP_API_KEY,
     asrHttpTimeoutMs: Number(env.ASR_HTTP_TIMEOUT_MS ?? 10000),
     translationBaseUrl:
@@ -95,7 +104,12 @@ export function loadEnv(): TranslationWorkerEnv {
         env.LMSTUDIO_MAX_TOKENS ??
         512,
     ),
+    translationStreamingEnabled: env.TRANSLATION_STREAMING_ENABLED?.trim().toLowerCase() ===
+      "true",
     ttsHttpEndpoint: env.TTS_HTTP_ENDPOINT,
+    ttsStreamEndpoint: env.TTS_STREAM_ENDPOINT?.trim() || undefined,
+    ttsWarmupEndpoint: env.TTS_WARMUP_ENDPOINT?.trim() || undefined,
+    ttsWarmupMaxMs: boundedInteger(env.TTS_WARMUP_MAX_MS, 15000, 100, 120000),
     ttsHttpApiKey: env.TTS_HTTP_API_KEY,
     ttsHttpTimeoutMs: Number(env.TTS_HTTP_TIMEOUT_MS ?? 10000),
     ttsProvider: env.TTS_PROVIDER,

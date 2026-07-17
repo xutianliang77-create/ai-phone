@@ -78,6 +78,27 @@ describe("CallTranslationWorker", () => {
     ]);
   });
 
+  it("starts listening without waiting for TTS warmup", async () => {
+    const asr = new FakeAsrProvider(null);
+    const sink = new RecordingSink();
+    const tts = new BlockingWarmupTtsProvider();
+    const worker = newWorker(asr, sink, tts);
+
+    await worker.startCall("call_1");
+    await tts.started;
+
+    expect(sink.eventsFor("call_1")).toMatchObject([{
+      type: "worker.status",
+      segmentId: "worker-started",
+    }]);
+
+    await worker.endCall("call_1");
+    await expect(tts.aborted).resolves.toBeUndefined();
+    expect(sink.eventsFor("call_1").some(
+      (event) => event.segmentId === "tts-warmup-failed",
+    )).toBe(false);
+  });
+
   it("flushes tail speech through the same translation path", async () => {
     const asr = new FakeAsrProvider(null, {
       segmentId: "flush_1",
@@ -261,6 +282,36 @@ class BlockingTranslationProvider implements CallTranslationProvider {
 
   release() {
     this.resolveReleased();
+  }
+}
+
+class BlockingWarmupTtsProvider {
+  readonly started: Promise<void>;
+  readonly aborted: Promise<void>;
+  private resolveStarted!: () => void;
+  private resolveAborted!: () => void;
+
+  constructor() {
+    this.started = new Promise((resolve) => {
+      this.resolveStarted = resolve;
+    });
+    this.aborted = new Promise((resolve) => {
+      this.resolveAborted = resolve;
+    });
+  }
+
+  async synthesize() {
+    return null;
+  }
+
+  warmup(input: { signal: AbortSignal }) {
+    this.resolveStarted();
+    return new Promise<never>((_resolve, reject) => {
+      input.signal.addEventListener("abort", () => {
+        this.resolveAborted();
+        reject(input.signal.reason);
+      }, { once: true });
+    });
   }
 }
 

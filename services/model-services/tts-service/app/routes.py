@@ -1,6 +1,9 @@
 from hmac import compare_digest
+import base64
+import json
 
 from fastapi import APIRouter, Header, HTTPException, status
+from fastapi.responses import StreamingResponse
 
 from app.config import TtsConfig
 from app.errors import TtsUnavailableError
@@ -59,6 +62,37 @@ def create_router(service: TtsService, config: TtsConfig) -> APIRouter:
         except TtsUnavailableError as exc:
             raise HTTPException(status_code=503, detail=str(exc)) from exc
 
+    @router.post("/tts/stream", status_code=status.HTTP_200_OK)
+    async def synthesize_stream(
+        request: TtsSynthesizeRequest,
+        authorization: str | None = Header(default=None),
+    ):
+        require_api_key(config, authorization)
+        try:
+            speech = await service.synthesize(request)
+            return StreamingResponse(
+                tts_ndjson_stream(speech),
+                media_type="application/x-ndjson",
+                headers={"cache-control": "no-cache", "x-accel-buffering": "no"},
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        except TtsUnavailableError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+    @router.post("/tts/warmup", status_code=status.HTTP_200_OK)
+    async def warmup(
+        request: TtsSynthesizeRequest,
+        authorization: str | None = Header(default=None),
+    ):
+        require_api_key(config, authorization)
+        try:
+            return await service.warmup(request)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        except TtsUnavailableError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+
     @router.put(
         "/voice-references/{reference_audio_id}",
         response_model=VoiceReferenceUploadResponse,
@@ -81,6 +115,23 @@ def create_router(service: TtsService, config: TtsConfig) -> APIRouter:
             raise HTTPException(status_code=503, detail=str(exc)) from exc
 
     return router
+
+
+async def tts_ndjson_stream(speech: TtsSynthesizeResponse):
+    body = speech.model_dump(exclude={"audio"}, exclude_none=True)
+    yield json.dumps({"type": "metadata", **body}) + "\n"
+    pcm = base64.b64decode(speech.audio.data)
+    bytes_per_chunk = max(2, int(speech.audio.sampleRate * 2 * 0.1))
+    for offset in range(0, len(pcm), bytes_per_chunk):
+        chunk = pcm[offset:offset + bytes_per_chunk]
+        yield json.dumps({
+            "type": "audio_chunk",
+            "format": "pcm16",
+            "sampleRate": speech.audio.sampleRate,
+            "sequence": offset // bytes_per_chunk + 1,
+            "data": base64.b64encode(chunk).decode("ascii"),
+        }) + "\n"
+    yield json.dumps({"type": "final"}) + "\n"
 
 
 def require_api_key(config: TtsConfig, authorization: str | None) -> None:

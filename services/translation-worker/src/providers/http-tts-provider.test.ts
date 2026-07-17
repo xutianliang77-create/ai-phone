@@ -222,6 +222,80 @@ describe("HttpTtsProvider", () => {
     await expect(pending).rejects.toMatchObject({ name: "AbortError" });
     expect(requestSignal?.aborted).toBe(true);
   });
+
+  it("parses ordered NDJSON PCM chunks from the streaming endpoint", async () => {
+    const provider = new HttpTtsProvider({
+      endpoint: "https://tts.example.com/synthesize",
+      streamEndpoint: "https://tts.example.com/stream",
+      timeoutMs: 1000,
+      fetchFn: async (url) => {
+        expect(url).toBe("https://tts.example.com/stream");
+        return new Response([
+          JSON.stringify({
+            type: "metadata",
+            provider: "voxcpm2",
+            model: "VoxCPM2",
+            firstAudioMs: 210,
+            audioDurationMs: 400,
+          }),
+          JSON.stringify({
+            type: "audio_chunk",
+            sequence: 1,
+            format: "pcm16",
+            sampleRate: 24000,
+            data: "AAE=",
+          }),
+          JSON.stringify({
+            type: "audio_chunk",
+            sequence: 2,
+            format: "pcm16",
+            sampleRate: 24000,
+            data: "AgM=",
+          }),
+          JSON.stringify({ type: "final" }),
+        ].join("\n") + "\n", {
+          status: 200,
+          headers: { "content-type": "application/x-ndjson" },
+        });
+      },
+    });
+
+    const events = [];
+    for await (const event of provider.synthesizeStream!({
+      text: "你好",
+      language: "zh",
+      speakerRole: "guest",
+      segmentId: "seg_stream",
+      signal: new AbortController().signal,
+    })) events.push(event);
+
+    expect(events.map((event) => event.type)).toEqual([
+      "metadata",
+      "audio_chunk",
+      "audio_chunk",
+      "final",
+    ]);
+  });
+
+  it("enforces the warmup latency gate", async () => {
+    const provider = new HttpTtsProvider({
+      endpoint: "https://tts.example.com/synthesize",
+      warmupEndpoint: "https://tts.example.com/warmup",
+      warmupMaxMs: 500,
+      timeoutMs: 1000,
+      fetchFn: async () => response(200, {
+        cached: false,
+        elapsedMs: 800,
+        firstAudioMs: 700,
+        provider: "voxcpm2",
+        model: "VoxCPM2",
+      }),
+    });
+
+    await expect(provider.warmup!({
+      signal: new AbortController().signal,
+    })).rejects.toThrow("warmup exceeded 500ms");
+  });
 });
 
 function response(status: number, body: unknown) {
