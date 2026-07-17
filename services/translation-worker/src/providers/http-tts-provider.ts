@@ -37,14 +37,15 @@ export class HttpTtsProvider implements CallTtsProvider {
 
   async synthesize(input: Parameters<CallTtsProvider["synthesize"]>[0]) {
     const startedAt = Date.now();
+    const { signal, ...request } = input;
     const response = await this.fetchWithTimeout(this.options.endpoint, {
       method: "POST",
       headers: this.headers(),
       body: JSON.stringify({
-        ...input,
+        ...request,
         voice: input.voice ?? this.options.voice,
       }),
-    });
+    }, signal);
     if (response.status === 204) return null;
     if (!response.ok) throw new Error(`HTTP TTS returned HTTP ${response.status}`);
     return normalizeSpeech(
@@ -57,13 +58,21 @@ export class HttpTtsProvider implements CallTtsProvider {
     );
   }
 
-  private async fetchWithTimeout(url: string, init: RequestInit) {
+  private async fetchWithTimeout(
+    url: string,
+    init: RequestInit,
+    externalSignal: AbortSignal,
+  ) {
     const controller = new AbortController();
+    const abort = () => controller.abort(externalSignal.reason);
+    if (externalSignal.aborted) abort();
+    externalSignal.addEventListener("abort", abort, { once: true });
     const timer = setTimeout(() => controller.abort(), this.options.timeoutMs);
     try {
       return await this.fetchFn(url, { ...init, signal: controller.signal });
     } finally {
       clearTimeout(timer);
+      externalSignal.removeEventListener("abort", abort);
     }
   }
 

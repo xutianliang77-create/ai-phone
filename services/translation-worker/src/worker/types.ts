@@ -70,6 +70,7 @@ export interface CallTranslationProvider {
     turnId: string;
     revision: number;
     pipelineGeneration: number;
+    signal: AbortSignal;
   }): Promise<string>;
 }
 
@@ -112,6 +113,7 @@ export interface CallTtsProvider {
     turnId: string;
     revision: number;
     pipelineGeneration: number;
+    signal: AbortSignal;
     voice?: TtsVoiceConfig;
   }): Promise<SynthesizedSpeech | null>;
 }

@@ -1,4 +1,5 @@
 import type { CallRoomTranslationLanguage } from "@translation/contracts";
+import { runAbortable } from "./abortable-operation.js";
 import { KeyedAsyncQueue } from "./keyed-async-queue.js";
 import type {
   CallAudioSpeakerRole,
@@ -212,6 +213,24 @@ export class CallTtsPlaybackQueue {
     this.targetKeys.delete(callId);
   }
 
+  async cancelCall(callId: string, reason: PlaybackInterruptReason) {
+    for (const role of ["host", "guest"] as const) {
+      this.advanceRouteEpoch(targetRouteKey(callId, role));
+    }
+    const active = [...this.active.values()].filter(
+      (item) => item.input.callId === callId,
+    );
+    if (!this.supportsInterruption()) {
+      for (const item of active) item.controller.abort();
+      return;
+    }
+    await Promise.all(active.map((item) => this.interruptTarget({
+      callId,
+      targetLegId: item.input.targetLegId,
+      reason,
+    })));
+  }
+
   private async play(input: PlaybackStartedInput) {
     const key = targetQueueKey(input.callId, input.targetLegId);
     const controller = new AbortController();
@@ -222,19 +241,19 @@ export class CallTtsPlaybackQueue {
     let queuedOnly = false;
     for (const sink of this.sinks) {
       try {
-        const result = await sink.play({
-          callId: input.callId,
-          segmentId: input.segmentId,
-          playbackId: input.playbackId,
-          generation: input.generation,
-          sourceLegId: input.sourceLegId,
-          targetLegId: input.targetLegId,
-          sourceSpeakerRole: input.speakerRole,
-          targetSpeakerRole: input.targetSpeakerRole,
-          language: input.targetLanguage,
-          speech: input.speech,
-          signal: controller.signal,
-        });
+        const result = await runAbortable(controller.signal, () => sink.play({
+            callId: input.callId,
+            segmentId: input.segmentId,
+            playbackId: input.playbackId,
+            generation: input.generation,
+            sourceLegId: input.sourceLegId,
+            targetLegId: input.targetLegId,
+            sourceSpeakerRole: input.speakerRole,
+            targetSpeakerRole: input.targetSpeakerRole,
+            language: input.targetLanguage,
+            speech: input.speech,
+            signal: controller.signal,
+          }));
         queuedOnly ||= result?.status === "queued";
       } catch {
         if (!controller.signal.aborted) failed = true;

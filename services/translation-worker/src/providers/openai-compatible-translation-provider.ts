@@ -56,7 +56,7 @@ export class OpenAiCompatibleTranslationProvider implements CallTranslationProvi
           { role: "user", content: sourceTextPayload(input.text) },
         ],
       }),
-    });
+    }, input.signal);
     if (!response.ok) {
       throw new Error(`Translation provider returned HTTP ${response.status}`);
     }
@@ -65,13 +65,21 @@ export class OpenAiCompatibleTranslationProvider implements CallTranslationProvi
     return stripThinking(message?.content ?? "");
   }
 
-  private async fetchWithTimeout(url: string, init: RequestInit) {
+  private async fetchWithTimeout(
+    url: string,
+    init: RequestInit,
+    externalSignal: AbortSignal,
+  ) {
     const controller = new AbortController();
+    const abort = () => controller.abort(externalSignal.reason);
+    if (externalSignal.aborted) abort();
+    externalSignal.addEventListener("abort", abort, { once: true });
     const timer = setTimeout(() => controller.abort(), this.options.timeoutMs);
     try {
       return await this.fetchFn(url, { ...init, signal: controller.signal });
     } finally {
       clearTimeout(timer);
+      externalSignal.removeEventListener("abort", abort);
     }
   }
 

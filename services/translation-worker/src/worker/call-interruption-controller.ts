@@ -28,6 +28,10 @@ export class CallInterruptionController {
     playbackQueue: CallTtsPlaybackQueue;
     eventSink: CallRoomEventSink;
     nowMs: () => number;
+    onBargeIn?: (
+      callId: string,
+      targetSpeakerRole: CallAudioSpeakerRole,
+    ) => void;
   }) {}
 
   observe(decision: CallVadDecision) {
@@ -68,6 +72,7 @@ export class CallInterruptionController {
       now - state.lastBargeInMs < this.options.config.cooldownMs ||
       this.inFlight.has(key)) return;
 
+    this.options.onBargeIn?.(decision.callId, decision.speakerRole);
     this.inFlight.add(key);
     void this.interrupt(decision, state).finally(() => {
       this.inFlight.delete(key);

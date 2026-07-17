@@ -35,6 +35,7 @@ describe("HttpTtsProvider", () => {
       language: "zh",
       speakerRole: "guest",
       segmentId: "seg_1",
+      signal: new AbortController().signal,
     })).resolves.toEqual({
       provider: "qwen3-tts",
       model: "qwen3-tts-0.6b",
@@ -89,6 +90,7 @@ describe("HttpTtsProvider", () => {
       language: "zh",
       speakerRole: "guest",
       segmentId: "seg_1",
+      signal: new AbortController().signal,
     })).resolves.toMatchObject({
       provider: "voxcpm2",
       model: "VoxCPM2",
@@ -109,6 +111,7 @@ describe("HttpTtsProvider", () => {
       language: "en",
       speakerRole: "host",
       segmentId: "seg_1",
+      signal: new AbortController().signal,
     })).resolves.toBeNull();
   });
 
@@ -133,6 +136,7 @@ describe("HttpTtsProvider", () => {
       language: "en",
       speakerRole: "guest",
       segmentId: "seg_1",
+      signal: new AbortController().signal,
     })).resolves.toMatchObject({
       provider: "voxcpm2",
       model: "VoxCPM2",
@@ -162,6 +166,7 @@ describe("HttpTtsProvider", () => {
       language: "en",
       speakerRole: "host",
       segmentId: "seg_1",
+      signal: new AbortController().signal,
     })).rejects.toThrow("HTTP TTS returned unexpected provider: qwen3-tts");
   });
 
@@ -185,7 +190,37 @@ describe("HttpTtsProvider", () => {
       language: "en",
       speakerRole: "host",
       segmentId: "seg_1",
+      signal: new AbortController().signal,
     })).rejects.toThrow("HTTP TTS returned no playable PCM audio");
+  });
+
+  it("propagates pipeline cancellation to the active HTTP request", async () => {
+    const controller = new AbortController();
+    let requestSignal: AbortSignal | null = null;
+    const provider = new HttpTtsProvider({
+      endpoint: "https://tts.example.com/synthesize",
+      timeoutMs: 1000,
+      fetchFn: async (_url, init) => {
+        requestSignal = init?.signal as AbortSignal;
+        return await new Promise<Response>((_resolve, reject) =>
+          requestSignal!.addEventListener("abort", () =>
+            reject(new DOMException("aborted", "AbortError")), { once: true })
+        );
+      },
+    });
+
+    const pending = provider.synthesize({
+      text: "你好",
+      language: "zh",
+      speakerRole: "guest",
+      segmentId: "seg_1",
+      signal: controller.signal,
+    });
+    await Promise.resolve();
+    controller.abort();
+
+    await expect(pending).rejects.toMatchObject({ name: "AbortError" });
+    expect(requestSignal?.aborted).toBe(true);
   });
 });
 

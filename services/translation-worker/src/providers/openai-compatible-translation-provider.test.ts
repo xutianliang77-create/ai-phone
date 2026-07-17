@@ -17,6 +17,7 @@ describe("OpenAiCompatibleTranslationProvider", () => {
       text: "那我等会儿给你发图纸。",
       sourceLanguage: "zh",
       targetLanguage: "en",
+      signal: new AbortController().signal,
     })).resolves.toBe("I'll send you the drawings later.");
   });
 
@@ -39,6 +40,7 @@ describe("OpenAiCompatibleTranslationProvider", () => {
       text: "再读一读。",
       sourceLanguage: "zh",
       targetLanguage: "en",
+      signal: new AbortController().signal,
     })).resolves.toBe("Read it again.");
 
     const body = requestBody as { messages: Array<{ role: string; content: string }> };
@@ -79,6 +81,7 @@ describe("OpenAiCompatibleTranslationProvider", () => {
       text: "再读一读。",
       sourceLanguage: "zh",
       targetLanguage: "en",
+      signal: new AbortController().signal,
     })).resolves.toBe("Read it again.");
 
     expect(requests).toHaveLength(2);
@@ -101,6 +104,7 @@ describe("OpenAiCompatibleTranslationProvider", () => {
       text: "那我等会儿给你发图纸。",
       sourceLanguage: "zh",
       targetLanguage: "en",
+      signal: new AbortController().signal,
     })).rejects.toThrow("Translation provider returned empty text");
   });
 
@@ -123,7 +127,38 @@ describe("OpenAiCompatibleTranslationProvider", () => {
       text: "再读一读。",
       sourceLanguage: "zh",
       targetLanguage: "en",
+      signal: new AbortController().signal,
     })).rejects.toThrow("assistant-style non-translation");
+  });
+
+  it("propagates pipeline cancellation to the active HTTP request", async () => {
+    const controller = new AbortController();
+    let requestSignal: AbortSignal | null = null;
+    const provider = new OpenAiCompatibleTranslationProvider({
+      baseUrl: "http://127.0.0.1:1234/v1",
+      model: "qwen",
+      timeoutMs: 1000,
+      maxTokens: 80,
+      fetchFn: async (_url, init) => {
+        requestSignal = init?.signal as AbortSignal;
+        return await new Promise<Response>((_resolve, reject) =>
+          requestSignal!.addEventListener("abort", () =>
+            reject(new DOMException("aborted", "AbortError")), { once: true })
+        );
+      },
+    });
+
+    const pending = provider.translate({
+      text: "你好",
+      sourceLanguage: "zh",
+      targetLanguage: "en",
+      signal: controller.signal,
+    });
+    await Promise.resolve();
+    controller.abort();
+
+    await expect(pending).rejects.toMatchObject({ name: "AbortError" });
+    expect(requestSignal?.aborted).toBe(true);
   });
 });
 
