@@ -9,12 +9,20 @@ import {
   persistStoreSnapshot,
   runStoreTransaction,
 } from "../../infrastructure/storage/json-store.js";
+import {
+  findAgentRun,
+  isActiveAgentRunStatus,
+} from "./agent-orchestration-queries.js";
 
-const activeRunStatuses = new Set<AgentRunStatus>([
-  "ready",
-  "running",
-  "takeover_requested",
-]);
+export {
+  findActiveAgentRun,
+  findAgentRun,
+  findAgentStepByIdempotency,
+  findAgentToolExecution,
+  hasAgentAmdCategory,
+  hasAgentRuntimeEvent,
+  hasAgentStepDecision,
+} from "./agent-orchestration-queries.js";
 
 export function beginAgentRun(input: {
   taskId: string;
@@ -28,7 +36,7 @@ export function beginAgentRun(input: {
     const store = getStoreSnapshot();
     const existing = store.agentRuns.find((run) =>
       run.taskId === input.taskId && run.mode === input.mode &&
-      activeRunStatuses.has(run.status)
+      isActiveAgentRunStatus(run.status)
     );
     if (existing) return { status: "existing" as const, run: existing };
     const attempt = store.agentRuns
@@ -323,66 +331,6 @@ function updateAgentHandoffById(
     persistStoreSnapshot();
     return handoff;
   });
-}
-
-export function findAgentRun(runId: string) {
-  return getStoreSnapshot().agentRuns.find((run) => run.id === runId) ?? null;
-}
-
-export function findActiveAgentRun(taskId: string, mode: AgentExecutionMode) {
-  return getStoreSnapshot().agentRuns.find((run) =>
-    run.taskId === taskId && run.mode === mode && activeRunStatuses.has(run.status)
-  ) ?? null;
-}
-
-export function findAgentStepByIdempotency(runId: string, idempotencyKey: string) {
-  return getStoreSnapshot().agentSteps.find((step) =>
-    step.runId === runId && step.idempotencyKey === idempotencyKey
-  ) ?? null;
-}
-
-export function hasAgentStepDecision(
-  runId: string,
-  decisionType: AgentStepDecisionType,
-) {
-  return getStoreSnapshot().agentSteps.some((step) =>
-    step.runId === runId && step.decisionType === decisionType &&
-    step.status === "executed"
-  );
-}
-
-export function hasAgentRuntimeEvent(runId: string, event: string) {
-  return getStoreSnapshot().agentSteps.some((step) => {
-    if (step.runId !== runId || step.status !== "executed" ||
-      !step.outputSummary) return false;
-    try {
-      const value = JSON.parse(step.outputSummary) as Record<string, unknown>;
-      return value.event === event;
-    } catch {
-      return false;
-    }
-  });
-}
-
-export function hasAgentAmdCategory(runId: string, categories: string[]) {
-  return getStoreSnapshot().agentSteps.some((step) => {
-    if (step.runId !== runId || step.status !== "executed" ||
-      !step.outputSummary) return false;
-    try {
-      const value = JSON.parse(step.outputSummary) as Record<string, unknown>;
-      return value.event === "amd_classified" &&
-        typeof value.amdCategory === "string" &&
-        categories.includes(value.amdCategory);
-    } catch {
-      return false;
-    }
-  });
-}
-
-export function findAgentToolExecution(executionId: string) {
-  return getStoreSnapshot().agentToolExecutions.find(
-    (execution) => execution.id === executionId,
-  ) ?? null;
 }
 
 function canTransition(current: AgentRunStatus, next: AgentRunStatus) {

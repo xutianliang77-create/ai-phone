@@ -14,6 +14,7 @@ const legacyRepositories = new Set([
   "modules/recordings/recording-artifacts.repository.ts",
   "modules/ingress/ingress.repository.ts",
   "modules/agent-calls/agent-orchestration.repository.ts",
+  "modules/agent-calls/agent-orchestration-queries.ts",
   "modules/agent-calls/agent-consult.repository.ts",
 ]);
 const snapshotAllowlist = new Set([

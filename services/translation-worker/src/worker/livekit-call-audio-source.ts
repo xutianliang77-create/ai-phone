@@ -1,102 +1,33 @@
-import type {
-  CallAudioFrame,
-  CallAudioSpeakerRole,
-  CallSpeechPipeline,
-} from "./types.js";
-import {
-  AudioIngestRingBuffer,
-  type AudioIngestMetrics,
-} from "./audio-ingest-ring-buffer.js";
+import type { CallAudioSpeakerRole } from "./types.js";
 import {
   isCallRoomEndedError,
   type CallRoomEndedError,
 } from "./call-room-event-client.js";
-import type { HttpCallRoomTokenClient } from "./call-room-token-client.js";
 import {
   isLiveKitTtsAudioSupported,
   LiveKitTtsAudioSink,
   type LiveKitTtsRtcModule,
-  type LiveKitTtsRoom,
 } from "./livekit-tts-audio-sink.js";
-import type {
-  CallSipStatusReporter,
-  LiveKitSipCallStatus,
-} from "./call-sip-status-client.js";
-import {
-  isAnsweredSipStatus,
-  liveKitSipParticipant,
-  participantRole,
-  sipCallStatus,
-} from "./livekit-call-participant.js";
-import type { CallTtsTrackAccessAuthorizer } from "./call-tts-track-access-client.js";
-import type { TtsVoiceConfig } from "./types.js";
+import { participantRole } from "./livekit-call-participant.js";
 import {
   deferred,
-  int16Base64,
   isRemoteAudioTrack,
-  normalizeSampleRate,
   shouldForwardAudioTrack,
 } from "./livekit-call-audio-utils.js";
+import { LiveKitCallAudioTrackRuntime } from "./livekit-call-audio-track-runtime.js";
+import { LiveKitCallSipTrackGate } from "./livekit-call-sip-track-gate.js";
+import type {
+  LiveKitCallAudioSourceOptions,
+  RtcNodeModule,
+  RtcRoom,
+  StartInRoomInput,
+} from "./livekit-call-audio-source-types.js";
 
-export interface LiveKitCallAudioSourceOptions {
-  callId: string;
-  tokenClient?: Pick<HttpCallRoomTokenClient, "createWorkerToken">;
-  worker: CallSpeechPipeline;
-  audioSampleRate: 16000 | 24000;
-  audioFrameSizeMs: number;
-  audioIngestMaxFrames?: number;
-  sipStatusClient?: CallSipStatusReporter;
-  ttsTrackAccessClient?: CallTtsTrackAccessAuthorizer;
-  onError?: (error: unknown) => void;
-  onCallEnded?: (error: CallRoomEndedError) => void;
-  onIngestMetrics?: (metrics: AudioIngestMetrics) => void;
-  loadRtcNode?: () => Promise<RtcNodeModule>;
-  nowMs?: () => number;
-}
-
-export interface RtcNodeModule extends Partial<LiveKitTtsRtcModule> {
-  Room: new () => RtcRoom;
-  RoomEvent: {
-    TrackSubscribed: string;
-    Disconnected: string;
-    ParticipantAttributesChanged?: string;
-  };
-  AudioStream: new (
-    track: unknown,
-    options: { sampleRate: number; numChannels: number; frameSizeMs: number },
-  ) => ReadableStream<RtcAudioFrame>;
-  RemoteAudioTrack?: new (...args: unknown[]) => object;
-  dispose?: () => Promise<void>;
-}
-
-export interface RtcRoom extends LiveKitTtsRoom {
-  on(event: string, listener: (...args: unknown[]) => void): RtcRoom;
-  connect(url: string, token: string, opts: {
-    autoSubscribe: boolean;
-    dynacast: boolean;
-  }): Promise<void>;
-  disconnect(): Promise<void>;
-  remoteParticipants?: Map<string, {
-    trackPublications?: Map<string, { track?: unknown }>;
-  }>;
-}
-
-interface RtcAudioFrame {
-  data: Int16Array;
-  sampleRate: number;
-}
-
-interface PendingSipTrack {
-  track: unknown;
-  speakerRole: CallAudioSpeakerRole;
-  identity: string;
-  rtc: RtcNodeModule;
-}
-
-interface AudioTrackRuntime {
-  reader: ReadableStreamDefaultReader<RtcAudioFrame>;
-  queue: AudioIngestRingBuffer<CallAudioFrame>;
-}
+export type {
+  LiveKitCallAudioSourceOptions,
+  RtcNodeModule,
+  RtcRoom,
+} from "./livekit-call-audio-source-types.js";
 
 const DEFAULT_AUDIO_INGEST_MAX_FRAMES = 20;
 
@@ -117,15 +48,22 @@ export class LiveKitCallAudioSource {
   private fatalError: unknown;
   private workerStarted = false;
   private ownsRoomConnection = false;
-  private readonly pendingSipTracks = new Map<unknown, PendingSipTrack>();
   private readonly startedTracks = new Set<unknown>();
-  private readonly reportedSipStatuses = new Set<string>();
-  private readonly trackRuntimes = new Set<AudioTrackRuntime>();
+  private readonly trackRuntimes = new Set<LiveKitCallAudioTrackRuntime>();
   private readonly trackTasks = new Set<Promise<void>>();
   private readonly disconnected = deferred<void>();
   private readonly pipelineReady = deferred<void>();
+  private readonly sipTrackGate: LiveKitCallSipTrackGate;
 
-  constructor(private readonly options: LiveKitCallAudioSourceOptions) {}
+  constructor(private readonly options: LiveKitCallAudioSourceOptions) {
+    this.sipTrackGate = new LiveKitCallSipTrackGate({
+      callId: options.callId,
+      statusClient: options.sipStatusClient,
+      reportError: (error) => this.reportError(error),
+      startAudioTrack: (track, speakerRole, rtc) =>
+        this.startAudioTrack(track, speakerRole, rtc),
+    });
+  }
 
   async start() {
     if (!this.options.tokenClient) throw new Error("Worker room token client is required");
@@ -154,12 +92,7 @@ export class LiveKitCallAudioSource {
     return token;
   }
 
-  async startInRoom(input: {
-    room: RtcRoom;
-    rtc: RtcNodeModule;
-    participantIdentity: string;
-    ttsVoice?: TtsVoiceConfig;
-  }) {
+  async startInRoom(input: StartInRoomInput) {
     this.room = input.room;
     this.rtc = input.rtc;
     if (input.ttsVoice) this.options.worker.setTtsVoice(input.ttsVoice);
@@ -234,66 +167,19 @@ export class LiveKitCallAudioSource {
     const speakerRole = participantRole(participant);
     if (!speakerRole || !isRemoteAudioTrack(track, rtc.RemoteAudioTrack)) return;
 
-    const sipParticipant = liveKitSipParticipant(participant);
-    if (sipParticipant) {
-      const status = sipCallStatus(participant);
-      if (!isAnsweredSipStatus(status) ||
-        !await this.reportSipStatus(sipParticipant, participant, status)) {
-        this.pendingSipTracks.set(track, {
-          track,
-          speakerRole,
-          identity: sipParticipant.identity,
-          rtc,
-        });
-        return;
-      }
-    }
+    if (!await this.sipTrackGate.allowTrack({
+      track,
+      speakerRole,
+      participant,
+      rtc,
+    })) return;
     await this.startAudioTrack(track, speakerRole, rtc);
   }
 
   private async handleParticipantAttributesChanged(
     participant: unknown,
   ) {
-    const sipParticipant = liveKitSipParticipant(participant);
-    const status = sipCallStatus(participant);
-    if (!sipParticipant || !status ||
-      !await this.reportSipStatus(sipParticipant, participant, status) ||
-      !isAnsweredSipStatus(status)) return;
-    for (const [track, pending] of this.pendingSipTracks) {
-      if (pending.identity !== sipParticipant.identity) continue;
-      this.pendingSipTracks.delete(track);
-      await this.startAudioTrack(pending.track, pending.speakerRole, pending.rtc);
-    }
-  }
-
-  private async reportSipStatus(
-    binding: { identity: string; operationId: string },
-    participant: unknown,
-    status: LiveKitSipCallStatus,
-  ) {
-    if (!this.options.sipStatusClient) return false;
-    const reportKey = `${binding.identity}:${status}`;
-    if (this.reportedSipStatuses.has(reportKey)) return true;
-    const value = participant as {
-      sid?: unknown;
-      attributes?: Record<string, string>;
-    };
-    try {
-      await this.options.sipStatusClient.reportStatus(this.options.callId, {
-        operationId: binding.operationId,
-        participantIdentity: binding.identity,
-        callStatus: status,
-        ...(typeof value.sid === "string" ? { participantSid: value.sid } : {}),
-        ...(value.attributes?.["sip.callID"]
-          ? { sipCallId: value.attributes["sip.callID"] }
-          : {}),
-      });
-    } catch (error) {
-      this.reportError(error);
-      return false;
-    }
-    this.reportedSipStatuses.add(reportKey);
-    return true;
+    await this.sipTrackGate.handleParticipantAttributesChanged(participant);
   }
 
   private async startAudioTrack(
@@ -310,79 +196,28 @@ export class LiveKitCallAudioSource {
       frameSizeMs: this.options.audioFrameSizeMs,
     });
     const legId = `${speakerRole}:${++this.legCountByRole[speakerRole]}`;
-    const reader = stream.getReader();
-    const runtime: AudioTrackRuntime = {
-      reader,
-      queue: new AudioIngestRingBuffer<CallAudioFrame>({
-        callId: this.options.callId,
-        legId,
-        speakerRole,
-        capacityFrames: this.audioIngestMaxFrames(),
-        onMetrics: this.options.onIngestMetrics,
-      }),
-    };
+    const runtime = new LiveKitCallAudioTrackRuntime({
+      callId: this.options.callId,
+      legId,
+      speakerRole,
+      stream,
+      capacityFrames: this.audioIngestMaxFrames(),
+      pipelineReady: this.pipelineReady.promise,
+      worker: this.options.worker,
+      nextSequence: () => ++this.sequenceByRole[speakerRole],
+      isStopped: () => this.ingestStopped,
+      onMetrics: this.options.onIngestMetrics,
+      nowMs: this.options.nowMs,
+    });
     this.trackRuntimes.add(runtime);
     let task!: Promise<void>;
-    task = this.runAudioTrack(runtime, speakerRole)
+    task = runtime.run()
       .catch((error) => this.handleAudioTrackError(error))
       .finally(() => {
         this.trackRuntimes.delete(runtime);
         this.trackTasks.delete(task);
       });
     this.trackTasks.add(task);
-  }
-
-  private async runAudioTrack(
-    runtime: AudioTrackRuntime,
-    speakerRole: CallAudioSpeakerRole,
-  ) {
-    await this.pipelineReady.promise;
-    await Promise.all([
-      this.readAudioStream(runtime, speakerRole),
-      this.consumeAudio(runtime.queue),
-    ]);
-    if (!this.ingestStopped) runtime.queue.report("drained");
-  }
-
-  private async readAudioStream(
-    runtime: AudioTrackRuntime,
-    speakerRole: CallAudioSpeakerRole,
-  ) {
-    try {
-      while (!this.ingestStopped) {
-        const result = await runtime.reader.read();
-        if (result.done) break;
-        runtime.queue.enqueue({
-          type: "audio.frame",
-          sessionId: this.options.callId,
-          speakerRole,
-          sequence: ++this.sequenceByRole[speakerRole],
-          timestampMs: this.options.nowMs?.() ?? Date.now(),
-          format: "pcm16",
-          sampleRate: normalizeSampleRate(result.value.sampleRate),
-          data: int16Base64(result.value.data),
-        });
-      }
-    } catch (error) {
-      if (!this.ingestStopped) throw error;
-    } finally {
-      runtime.queue.close({ discardPending: this.ingestStopped });
-      runtime.reader.releaseLock();
-    }
-  }
-
-  private async consumeAudio(queue: AudioIngestRingBuffer<CallAudioFrame>) {
-    while (!this.ingestStopped) {
-      const frame = await queue.dequeue();
-      if (!frame) return;
-      try {
-        await this.options.worker.processAudioFrame(frame);
-        queue.markProcessed(frame);
-      } catch (error) {
-        queue.markFailed();
-        throw error;
-      }
-    }
   }
 
   private handleAudioTrackError(error: unknown) {
@@ -409,8 +244,7 @@ export class LiveKitCallAudioSource {
   private stopIngest(discardPending: boolean) {
     this.ingestStopped = true;
     for (const runtime of this.trackRuntimes) {
-      runtime.queue.close({ discardPending });
-      void runtime.reader.cancel().catch(() => undefined);
+      runtime.stop(discardPending);
     }
   }
 
@@ -448,7 +282,7 @@ export class LiveKitCallAudioSource {
           .catch((error) => this.handleAudioTrackError(error));
       })
       .on(rtc.RoomEvent.Disconnected, () => {
-        this.pendingSipTracks.clear();
+        this.sipTrackGate.clear();
         this.stopIngest(true);
         this.disconnected.resolve();
       });

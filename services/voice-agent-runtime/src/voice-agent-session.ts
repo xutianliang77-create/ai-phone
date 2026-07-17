@@ -21,6 +21,10 @@ import {
   type VoiceAgentUserData,
 } from "./runtime-tools.js";
 import { parseVoiceAgentControl } from "./voice-agent-control.js";
+import {
+  buildVoiceAgentModels,
+  voiceAgentInstructions,
+} from "./voice-agent-session-config.js";
 
 const logger = pino({ name: "voice-agent-session" });
 const controlTopic = "voice-agent.control.v1";
@@ -53,9 +57,12 @@ export class ManagedVoiceAgentSession {
       resultReported: false,
       takeoverRequested: false,
     };
-    const models = buildModels(this.input.env, this.input.snapshot.language);
+    const models = buildVoiceAgentModels(
+      this.input.env,
+      this.input.snapshot.language,
+    );
     const agent = new voice.Agent<VoiceAgentUserData>({
-      instructions: instructions(this.input.snapshot),
+      instructions: voiceAgentInstructions(this.input.snapshot),
       tools: buildVoiceAgentTools(userData),
       ...models,
     });
@@ -319,34 +326,4 @@ export class ManagedVoiceAgentSession {
       ...extra,
     });
   }
-}
-
-function buildModels(env: VoiceAgentRuntimeEnv, language: "zh" | "en") {
-  const gateway = {
-    ...(env.inferenceUrl ? { baseURL: env.inferenceUrl } : {}),
-    apiKey: env.inferenceApiKey,
-    apiSecret: env.inferenceApiSecret,
-  };
-  return {
-    stt: new inference.STT({ model: env.sttModel, language, ...gateway }),
-    llm: new inference.LLM({
-      model: env.llmModel,
-      modelOptions: { temperature: 0, max_tokens: 512, parallel_tool_calls: false },
-      ...gateway,
-    }),
-    tts: new inference.TTS({
-      model: env.ttsModel,
-      voice: env.ttsVoice,
-      language,
-      ...gateway,
-    }),
-  };
-}
-
-function instructions(snapshot: VoiceAgentRuntimeSnapshotDto) {
-  return `You are an outbound voice agent operating under explicit user authorization.
-Language: ${snapshot.language}. Scenario: ${snapshot.scenario}.
-Approved objective: ${snapshot.objective}
-Approved script: ${snapshot.approvedScript}
-Rules: disclose that you are an AI before task discussion with a human; never request or repeat passwords, OTPs, payment credentials, identity numbers, or binding commitments; never claim a tool succeeded unless its result says so; use one DTMF digit only after an IVR prompt; request human takeover for sensitive, ambiguous, or unauthorized actions; record a structured result with evidence and unresolved items before declaring completion.`;
 }
