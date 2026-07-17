@@ -51,7 +51,7 @@ describe("pstn readiness", () => {
       "pstn invalid PSTN_WEBHOOK_BASE_URL:https_required",
       "pstn invalid PSTN_WEBHOOK_BASE_URL:public_host_required",
       "pstn invalid PSTN_WEBHOOK_SECRET",
-      "pstn invalid PSTN_MAX_CALL_MINUTES",
+      "pstn invalid PSTN_MAX_CALL_MINUTES:must_be_1_120",
     ]));
   });
 
@@ -76,6 +76,20 @@ describe("pstn readiness", () => {
     expect(readiness.pstnReadiness.issues).toContain("pstn missing PSTN_PROVIDER");
     expect(readiness.issues).toContain("pstn missing PSTN_PROVIDER");
   });
+
+  it("keeps LiveKit SIP blocked until translated-track media routing is gated", () => {
+    process.env.CALL_PROVIDER_POLICY = "pstn_enabled";
+    configureLiveKitSipEnv();
+
+    expect(getPstnReadiness()).toMatchObject({
+      status: "not_ready",
+      provider: "livekit_sip",
+      issues: ["pstn livekit sip media routing is not release-enabled"],
+    });
+
+    process.env.LIVEKIT_SIP_MEDIA_ROUTING_MODE = "translated_tracks_only";
+    expect(getPstnReadiness()).toMatchObject({ status: "ready", issues: [] });
+  });
 });
 
 const envKeys = [
@@ -88,6 +102,13 @@ const envKeys = [
   "PSTN_CONSENT_PROMPT_VERSION",
   "PSTN_RECORDING_DISCLOSURE_ENABLED",
   "PSTN_MAX_CALL_MINUTES",
+  "LIVEKIT_URL",
+  "LIVEKIT_API_KEY",
+  "LIVEKIT_API_SECRET",
+  "LIVEKIT_SIP_OUTBOUND_TRUNK_ID",
+  "LIVEKIT_WEBHOOK_URL",
+  "LIVEKIT_SIP_MEDIA_ROUTING_MODE",
+  "INTERNAL_API_SECRET",
 ];
 
 function configurePstnEnv() {
@@ -99,6 +120,19 @@ function configurePstnEnv() {
   process.env.PSTN_CONSENT_PROMPT_VERSION = "cn-pstn-consent-v1";
   process.env.PSTN_RECORDING_DISCLOSURE_ENABLED = "true";
   process.env.PSTN_MAX_CALL_MINUTES = "30";
+}
+
+function configureLiveKitSipEnv() {
+  process.env.PSTN_PROVIDER = "livekit_sip";
+  process.env.LIVEKIT_URL = "wss://livekit.qkxy.cn";
+  process.env.LIVEKIT_API_KEY = "livekit-key";
+  process.env.LIVEKIT_API_SECRET = "livekit-secret-with-at-least-32-chars";
+  process.env.LIVEKIT_SIP_OUTBOUND_TRUNK_ID = "ST_testtrunk";
+  process.env.LIVEKIT_WEBHOOK_URL = "https://api.qkxy.cn/webhooks/livekit";
+  process.env.INTERNAL_API_SECRET = "internal-secret-with-16-chars";
+  process.env.PSTN_CONSENT_PROMPT_VERSION = "livekit-sip-v1";
+  process.env.PSTN_RECORDING_DISCLOSURE_ENABLED = "true";
+  process.env.PSTN_MAX_CALL_MINUTES = "60";
 }
 
 function captureEnv() {

@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { HttpCallRoomEventClient } from "./call-room-event-client.js";
+import {
+  CallRoomEndedError,
+  HttpCallRoomEventClient,
+} from "./call-room-event-client.js";
 
 describe("HttpCallRoomEventClient", () => {
   it("posts submitted events to the internal call link event API", async () => {
@@ -69,6 +72,33 @@ describe("HttpCallRoomEventClient", () => {
         timestampMs: 1,
       },
     ])).rejects.toThrow("Call room event API returned HTTP 503");
+  });
+
+  it("turns HTTP 410 into a terminal call signal and suppresses later requests", async () => {
+    let requestCount = 0;
+    const client = new HttpCallRoomEventClient({
+      apiBaseUrl: "http://127.0.0.1:3100",
+      timeoutMs: 100,
+      fetchFn: (async () => {
+        requestCount += 1;
+        return response(410);
+      }) as typeof fetch,
+    });
+    const event = {
+      type: "worker.status" as const,
+      segmentId: "worker",
+      speakerRole: "worker" as const,
+      sourceLanguage: "en" as const,
+      targetLanguage: "zh" as const,
+      text: "ending",
+      timestampMs: 1,
+    };
+
+    await expect(client.publish("call_ended", [event]))
+      .rejects.toBeInstanceOf(CallRoomEndedError);
+    await expect(client.publish("call_ended", [event]))
+      .rejects.toMatchObject({ code: "call_room_ended" });
+    expect(requestCount).toBe(1);
   });
 
   it("returns the server-persisted playback leg binding", async () => {

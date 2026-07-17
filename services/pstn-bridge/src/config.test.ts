@@ -27,6 +27,7 @@ describe("pstn bridge config", () => {
       PSTN_BRIDGE_AUDIO_FRAME_SINK_API_KEY: "sink-secret",
       PSTN_BRIDGE_PROVIDER_WEBHOOK_SECRET: "webhook-secret",
       PSTN_RECORDING_DISCLOSURE_ENABLED: "true",
+      PSTN_PROVIDER_IDEMPOTENCY_GUARANTEED: "true",
     }));
 
     expect(readiness).toEqual({ status: "ready", issues: [] });
@@ -53,6 +54,7 @@ describe("pstn bridge config", () => {
       PSTN_BRIDGE_AUDIO_FRAME_SINK_API_KEY: "sink-secret",
       PSTN_BRIDGE_PROVIDER_WEBHOOK_SECRET: "webhook-secret",
       PSTN_RECORDING_DISCLOSURE_ENABLED: "true",
+      PSTN_PROVIDER_IDEMPOTENCY_GUARANTEED: "true",
     }));
 
     expect(readiness).toEqual({ status: "ready", issues: [] });
@@ -74,6 +76,7 @@ describe("pstn bridge config", () => {
       PSTN_BRIDGE_AUDIO_FRAME_SINK_API_KEY: "sink-secret",
       PSTN_BRIDGE_PROVIDER_WEBHOOK_SECRET: "webhook-secret",
       PSTN_RECORDING_DISCLOSURE_ENABLED: "true",
+      PSTN_PROVIDER_IDEMPOTENCY_GUARANTEED: "true",
     }));
 
     expect(readiness).toEqual({ status: "ready", issues: [] });

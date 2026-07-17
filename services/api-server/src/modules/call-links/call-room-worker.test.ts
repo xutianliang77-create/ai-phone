@@ -78,7 +78,7 @@ describe("call room worker publisher", () => {
     );
   });
 
-  it("persists raw, optimized, refinement, and model timing metadata", () => {
+  it("persists raw, optimized, refinement, and model timing metadata", async () => {
     const record = fakeCallLinkRecord("call_metadata");
     createSession({
       id: record.sessionId,
@@ -89,7 +89,7 @@ describe("call room worker publisher", () => {
       createdAt: record.createdAt,
       segments: [],
     });
-    persistCallRoomDataEvent(record, {
+    await persistCallRoomDataEvent(record, {
       type: "transcript.final",
       callId: record.callId,
       roomName: record.roomName,
@@ -144,7 +144,7 @@ function configureCallRoomEnv() {
   process.env.LIVEKIT_URL = "wss://livekit.example.cn";
   process.env.LIVEKIT_API_KEY = "lk_key";
   process.env.LIVEKIT_API_SECRET = "lk_secret";
-  process.env.CALL_ROOM_TOKEN_TTL_SECONDS = "3600";
+  process.env.CALL_ROOM_TOKEN_TTL_SECONDS = "120";
   process.env.INTERNAL_API_SECRET = "internal-secret-123";
 }
 

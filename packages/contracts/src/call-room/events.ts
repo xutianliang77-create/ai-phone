@@ -4,6 +4,7 @@ import type {
   SpeakerRole,
 } from "../shared/speaker.js";
 import type { SessionSegmentRefinementDto } from "../api/realtime.js";
+import type { SpeechPipelineTimingDto } from "../realtime/diagnostics.js";
 
 export const callRoomCaptionTopic = "translation.captions";
 
@@ -40,6 +41,11 @@ export interface CallRoomDataEvent {
   callId: string;
   roomName: string;
   segmentId: string;
+  speechId?: string;
+  turnId?: string;
+  revision?: number;
+  pipelineGeneration?: number;
+  pipelineTiming?: SpeechPipelineTimingDto;
   sourceLegId?: string;
   targetLegId?: string;
   playbackId?: string;

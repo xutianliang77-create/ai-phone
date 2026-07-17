@@ -1,6 +1,6 @@
 # AI 通讯平台统一架构设计
 
-版本：v1.0
+版本：v1.1
 日期：2026-07-17
 状态：评审基线
 
@@ -54,7 +54,12 @@ Unified Session Data + Ledger + Events
 | `03-livekit-security-review.md` | LiveKit 源码、依赖、当前接入和部署安全审计 |
 | `04-translation-and-agent-runtime.md` | 翻译主线与语音 AI Agent 的统一运行时 |
 | `05-speech-media-performance-reliability.md` | ASR/TTS/VAD、媒体、高并发、SLO 和故障降级 |
-| `06-implementation-roadmap.md` | 分阶段开发任务、测试、发布门槛和回滚 |
+| `06-implementation-roadmap.md` | 统一架构阶段路线、基础测试和回滚原则 |
+| `07-livekit-integration-blueprint.md` | 八个 LiveKit 仓库的采用边界、adapter 和兼容策略 |
+| `08-production-data-architecture.md` | 生产关系模型、可靠事件、对象存储和迁移方案 |
+| `09-performance-reliability-capacity.md` | 容量准入、背压、故障域、SLO 和规模化设计 |
+| `10-development-task-plan.md` | ARC/OPT 映射、开发批次、依赖和完成定义 |
+| `11-platform-acceptance-plan.md` | 安全、数据、SIP、Dispatch、Egress/Ingress 和容量验收 |
 
 ## 3. 当前代码依据
 
@@ -83,6 +88,10 @@ LiveKit 参考范围：
 - `livekit/client-sdk-flutter`
 - `livekit/egress`
 - `livekit/ingress`
+
+近期线程 `019f2378-979b-7b40-b497-897752639718` 的 LiveKit、端云模型和隔离
+评测研究已纳入 07–11 文档；本仓库仍是无界AI生产代码，独立的“语见AI”目录
+不作为本次代码依赖或迁移来源。
 
 ## 4. 本阶段不做
 

@@ -29,6 +29,9 @@ describe("checkCallLinkLiveKitWorkerReadiness", () => {
     ]);
     expect(requests.find((request) => request.url.endsWith("/worker-room-token"))
       .headers.authorization).toBe("Bearer internal-secret");
+    expect(requests.find((request) =>
+      request.url.endsWith("/room-token") && request.body?.participantRole === "guest"
+    ).body.guestTicket).toBe("guest-ticket-1");
     expect(requests.find((request) => request.url.endsWith("/worker-smoke-caption"))
       .headers.authorization).toBe("Bearer admin-token");
   });
@@ -112,6 +115,7 @@ function fakeFetch(requests, options = {}) {
         callId: "call-1",
         sessionId: "call-1",
         roomName: "call_call-1",
+        joinUrl: "https://example.test/call/call-1?ticket=guest-ticket-1",
       });
     }
     if (path.endsWith("/room-token") && body?.participantRole === "worker") {

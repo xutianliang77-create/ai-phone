@@ -2,6 +2,7 @@ export type PstnBridgeProviderName = "mock" | "http" | "fonoster";
 export type PstnBridgeCallStatus = "in_progress" | "completed" | "failed";
 
 export interface AgentCallBridgeRequest {
+  idempotencyKey: string;
   draftId: string;
   callId: string;
   targetName?: string;
@@ -155,6 +156,7 @@ export interface PstnBridgeEnv {
   providerWebhookSecret?: string;
   providerWebhookMaxSkewMs: number;
   recordingDisclosureEnabled: boolean;
+  providerIdempotencyGuaranteed?: boolean;
 }
 
 export interface PstnAudioFrameSink {

@@ -177,6 +177,45 @@ describe("LiveKitTtsAudioSink", () => {
     expect(isLiveKitTtsAudioSupported({}, createFakeRtc())).toBe(false);
     expect(isLiveKitTtsAudioSupported(new FakeRoom(), {})).toBe(false);
   });
+
+  it("authorizes the target subscription before capturing any TTS audio", async () => {
+    const rtc = createFakeRtc();
+    const requests: unknown[] = [];
+    const sink = new LiveKitTtsAudioSink({
+      room: new FakeRoom(),
+      rtc,
+      trackAccess: {
+        async authorizeTrack(request) {
+          expect(rtc.sources[0].captured).toEqual([]);
+          requests.push(request);
+        },
+      },
+    });
+
+    await sink.play({
+      callId: "call_1",
+      segmentId: "seg_1",
+      playbackId: "pb_1",
+      generation: 1,
+      sourceLegId: "host-leg",
+      targetLegId: "guest-leg",
+      sourceSpeakerRole: "host",
+      targetSpeakerRole: "guest",
+      language: "en",
+      speech: {
+        audio: { format: "pcm16", sampleRate: 16000, data: pcm16([1, 2]) },
+      },
+      signal: new AbortController().signal,
+    });
+
+    expect(requests).toEqual([{
+      targetLegId: "guest-leg",
+      targetSpeakerRole: "guest",
+      trackSid: "TR_1",
+      trackName: liveKitTtsTrackName("guest", 16000, "guest-leg"),
+    }]);
+    expect(rtc.sources[0].captured).toHaveLength(1);
+  });
 });
 
 class FakeRoom {
@@ -184,7 +223,7 @@ class FakeRoom {
   readonly localParticipant = {
     publishTrack: async (track: unknown, options: unknown) => {
       this.published.push({ track, options });
-      return {};
+      return { sid: "TR_1" };
     },
   };
 }

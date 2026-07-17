@@ -10,6 +10,7 @@ import type {
 import type {
   RealtimeSessionDiagnosticsDto,
   SegmentVadContextDto,
+  SpeechPipelineTimingDto,
 } from "../realtime/diagnostics.js";
 
 export interface SessionStatusResponse {
@@ -31,8 +32,11 @@ export interface UpdateRealtimeSessionStateRequest {
 
 export interface SessionSegmentDto {
   id: string;
+  speechId?: string;
   turnId?: string;
   revision?: number;
+  pipelineGeneration?: number;
+  pipelineTiming?: SpeechPipelineTimingDto;
   sourceText: string;
   rawText?: string;
   optimizedText?: string;
@@ -176,8 +180,11 @@ export interface SaveTextTranslationSessionRequest {
 export interface UpsertSessionSegmentRequest {
   sessionId: string;
   segmentId: string;
+  speechId?: string;
   turnId?: string;
   revision?: number;
+  pipelineGeneration?: number;
+  pipelineTiming?: SpeechPipelineTimingDto;
   sourceText?: string;
   rawText?: string;
   optimizedText?: string;

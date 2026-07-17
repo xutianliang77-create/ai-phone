@@ -4,9 +4,14 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:translation_mobile/src/app/app_config.dart';
 import 'package:translation_mobile/src/app/localization/app_localizations.dart';
 import 'package:translation_mobile/src/app/region_edition_config.dart';
+import 'package:translation_mobile/src/features/call_link/data/call_link_api_client.dart';
+import 'package:translation_mobile/src/features/call_link/data/call_room_client.dart';
+import 'package:translation_mobile/src/features/compliance/data/voice_processing_consent_store.dart';
 import 'package:translation_mobile/src/features/pstn_call/data/pstn_call_readiness_client.dart';
 import 'package:translation_mobile/src/features/pstn_call/presentation/pages/pstn_call_page.dart';
 import 'package:translation_mobile/src/features/shell/presentation/pages/call_home_page.dart';
+
+import 'support/fake_call_link_test_clients.dart';
 
 void main() {
   testWidgets('opens direct phone call preparation from call home',
@@ -75,13 +80,62 @@ void main() {
         status: 'ready',
         policy: 'pstn_enabled',
         enabled: true,
-        provider: 'telnyx',
+        provider: 'livekit_sip',
         issues: <String>[],
       ),
     );
 
     expect(find.text('PSTN 链路已就绪'), findsOneWidget);
-    expect(find.textContaining('App 直拨调度接口'), findsOneWidget);
+    expect(find.textContaining('确认信息后可开始拨打'), findsOneWidget);
+  });
+
+  testWidgets('connects the host room before starting one SIP outbound call',
+      (tester) async {
+    final apiClient = FakeCallLinkApiClient();
+    final roomClient = FakeCallRoomClient();
+    await _pumpPage(
+      tester,
+      config: _config(const RegionEditionConfig.international()),
+      apiClient: apiClient,
+      roomClient: roomClient,
+      voiceConsentStore: MemoryVoiceProcessingConsentStore.accepted(),
+      fetcher: (_) async => const PstnCallReadiness(
+        status: 'ready',
+        policy: 'pstn_enabled',
+        enabled: true,
+        provider: 'livekit_sip',
+        issues: <String>[],
+      ),
+    );
+
+    await tester.enterText(
+      find.byKey(const Key('pstn-phone-field')),
+      '+8613800138000',
+    );
+    await tester.scrollUntilVisible(
+      find.byType(CheckboxListTile),
+      240,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.tap(find.byType(CheckboxListTile));
+    await tester.scrollUntilVisible(
+      find.text('检查拨号信息'),
+      180,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.tap(find.text('检查拨号信息'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('开始拨打'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('开始拨打'));
+    await tester.pumpAndSettle();
+
+    expect(apiClient.createCount, 1);
+    expect(apiClient.tokenCreateCount, 1);
+    expect(apiClient.connectionConfirmCount, 1);
+    expect(apiClient.sipOutboundCount, 1);
+    expect(roomClient.connectedToken?.participantRole, 'host');
+    expect(find.text('电话已接通'), findsOneWidget);
   });
 
   testWidgets('rejects invalid number and missing disclosure', (tester) async {
@@ -142,9 +196,18 @@ Future<void> _pumpPage(
   WidgetTester tester, {
   required AppConfig config,
   PstnCallReadinessFetcher fetcher = _unusedFetcher,
+  CallLinkApiClient? apiClient,
+  CallRoomClient? roomClient,
+  VoiceProcessingConsentStore? voiceConsentStore,
 }) async {
   await tester.pumpWidget(_testApp(
-    PstnCallPage(config: config, readinessFetcher: fetcher),
+    PstnCallPage(
+      config: config,
+      readinessFetcher: fetcher,
+      apiClient: apiClient,
+      roomClient: roomClient,
+      voiceConsentStore: voiceConsentStore,
+    ),
   ));
   await tester.pumpAndSettle();
 }

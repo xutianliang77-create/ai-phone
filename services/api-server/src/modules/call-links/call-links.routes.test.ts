@@ -42,7 +42,9 @@ describe("call link routes", () => {
       roomProvider: "livekit",
       sessionId: body.callId,
       roomName: `call_${body.callId}`,
-      joinUrl: `https://call.example.cn/join/${body.callId}`,
+      joinUrl: expect.stringMatching(
+        `^https://call\\.example\\.cn/join/${body.callId}\\?ticket=g1\\.`,
+      ),
       hostUrl: `https://call.example.cn/host/${body.callId}`,
     });
   });
@@ -67,14 +69,17 @@ describe("call link routes", () => {
 
   it("serves the Web Guest join page", async () => {
     const app = await buildApp();
+    const created = await app.inject({ method: "POST", url: "/call-links" });
     const response = await app.inject({
       method: "GET",
-      url: "/join/call_1",
+      url: `/join/${created.json().callId}`,
     });
     await app.close();
 
     expect(response.statusCode).toBe(200);
     expect(response.headers["content-type"]).toContain("text/html");
+    expect(response.headers["cache-control"]).toBe("no-store");
+    expect(response.headers["referrer-policy"]).toBe("no-referrer");
     expect(response.body).toContain("翻译通话");
     expect(response.body).toContain("/call-web/livekit-client.umd.js");
     expect(response.body).toContain("/call-web/guest.js");
@@ -301,7 +306,7 @@ function configureCallRoomEnv() {
   process.env.LIVEKIT_URL = "wss://livekit.example.cn";
   process.env.LIVEKIT_API_KEY = "lk_key";
   process.env.LIVEKIT_API_SECRET = "lk_secret";
-  process.env.CALL_ROOM_TOKEN_TTL_SECONDS = "3600";
+  process.env.CALL_ROOM_TOKEN_TTL_SECONDS = "120";
   process.env.INTERNAL_API_SECRET = "internal-secret-123";
 }
 

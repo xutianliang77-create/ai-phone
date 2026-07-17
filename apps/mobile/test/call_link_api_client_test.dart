@@ -81,6 +81,62 @@ void main() {
     expect(token.fullDuplexEnabled, isTrue);
   });
 
+  test('redeems guest room tokens with the one-time ticket', () async {
+    final client = CallLinkApiClient(
+      baseUrl: Uri.parse('http://127.0.0.1:3100'),
+      client: MockClient((request) async {
+        expect(request.headers['authorization'], isNull);
+        final body = jsonDecode(request.body) as Map<String, Object?>;
+        expect(body['participantRole'], 'guest');
+        expect(body['guestTicket'], 'g1.nonce.secret');
+        return http.Response(
+          jsonEncode({
+            'callId': 'call_1',
+            'provider': 'livekit',
+            'roomName': 'call_call_1',
+            'wsUrl': 'wss://livekit.example.cn',
+            'participantIdentity': 'call_1:guest:test',
+            'participantRole': 'guest',
+            'token': 'secret-room-token',
+            'expiresAt': '2026-07-02T13:00:00.000Z',
+          }),
+          200,
+        );
+      }),
+    );
+
+    final token = await client.createRoomToken(
+      callId: 'call_1',
+      participantRole: 'guest',
+      guestTicket: 'g1.nonce.secret',
+    );
+
+    expect(token.participantRole, 'guest');
+  });
+
+  test('rotates guest tickets with account authorization', () async {
+    final client = CallLinkApiClient(
+      baseUrl: Uri.parse('http://127.0.0.1:3100'),
+      accountSessionStore: _sessionStore(),
+      client: MockClient((request) async {
+        expect(request.url.path, '/call-links/call_1/guest-ticket');
+        expect(request.headers['authorization'], 'Bearer test-token');
+        return http.Response(
+          jsonEncode({
+            'callId': 'call_1',
+            'joinUrl': 'https://call.example.cn/join/call_1?ticket=rotated',
+            'expiresAt': '2026-07-02T13:00:00.000Z',
+          }),
+          200,
+        );
+      }),
+    );
+
+    final joinUrl = await client.rotateGuestTicket(callId: 'call_1');
+
+    expect(joinUrl, contains('ticket=rotated'));
+  });
+
   test('confirms LiveKit connection with the issued participant token',
       () async {
     final client = CallLinkApiClient(
@@ -111,6 +167,51 @@ void main() {
     );
 
     await client.confirmRoomConnected(token);
+  });
+
+  test('starts a LiveKit SIP outbound participant with account authorization',
+      () async {
+    final client = CallLinkApiClient(
+      baseUrl: Uri.parse('http://127.0.0.1:3100'),
+      accountSessionStore: _sessionStore(),
+      client: MockClient((request) async {
+        expect(request.method, 'POST');
+        expect(request.url.path, '/call-links/call_1/sip-outbound');
+        expect(request.headers['authorization'], 'Bearer test-token');
+        expect(jsonDecode(request.body), <String, Object?>{
+          'targetPhone': '+8613800000000',
+          'sourceLanguage': 'zh',
+          'targetLanguage': 'en',
+          'disclosureConfirmed': true,
+        });
+        return http.Response(
+          jsonEncode(<String, Object?>{
+            'callId': 'call_1',
+            'sessionId': 'call_1',
+            'roomName': 'call_call_1',
+            'operationId': 'op_1',
+            'provider': 'livekit_sip',
+            'status': 'accepted',
+            'replayed': false,
+            'participantIdentity': 'call_1:guest:sip:op_1',
+            'providerCallId': 'sip-call-1',
+          }),
+          202,
+        );
+      }),
+    );
+
+    final result = await client.startSipOutbound(
+      callId: 'call_1',
+      targetPhone: '+8613800000000',
+      sourceLanguage: 'zh',
+      targetLanguage: 'en',
+      disclosureConfirmed: true,
+    );
+
+    expect(result.status, 'accepted');
+    expect(result.provider, 'livekit_sip');
+    expect(result.operationId, 'op_1');
   });
 
   test('ends call links from API', () async {

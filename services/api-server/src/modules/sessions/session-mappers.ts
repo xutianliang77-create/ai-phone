@@ -4,7 +4,7 @@ import type {
   SessionListItem,
   SessionSegmentDto,
 } from "@translation/contracts";
-import type { SessionRecord } from "./sessions.repository.js";
+import type { SessionRecord } from "./session-record.js";
 import { sessionListSummary } from "./session-list-summary.js";
 
 export function toSessionListItem(session: SessionRecord): SessionListItem {

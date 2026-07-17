@@ -11,8 +11,13 @@ import {
   newWorker,
 } from "./call-translation-worker.test-support.js";
 import type {
+  CallAsrProvider,
+  CallAudioFrame,
+  CallAudioSpeakerRole,
   CallTtsProvider,
+  CallTranslationProvider,
   SynthesizedSpeech,
+  TranscriptSegment,
   TtsVoiceConfig,
 } from "./types.js";
 
@@ -45,6 +50,38 @@ describe("CallTranslationWorker", () => {
       translatedText: "hello",
       text: "hello",
     });
+  });
+
+  it("publishes the final transcript before translation completes", async () => {
+    const asr = new FakeAsrProvider({
+      segmentId: "seg_1",
+      text: "你好",
+      language: "zh",
+    });
+    const sink = new RecordingSink();
+    const translation = new BlockingTranslationProvider();
+    const worker = newWorker(asr, sink, undefined, undefined, translation);
+
+    const processing = worker.processAudioFrame(frame("call_1", "host"));
+    await translation.started;
+    const eventsBeforeTranslation = sink.eventsFor("call_1");
+    translation.release();
+    await processing;
+
+    expect(eventsBeforeTranslation.map((event) => event.type)).toEqual([
+      "transcript.final",
+    ]);
+    expect(eventsBeforeTranslation[0]).toMatchObject({
+      sourceText: "你好",
+      pipelineTiming: {
+        transcriptReadyAtMs: 1000,
+        eventPublishStartedAtMs: 1000,
+      },
+    });
+    expect(sink.eventsFor("call_1").map((event) => event.type)).toEqual([
+      "transcript.final",
+      "translation.final",
+    ]);
   });
 
   it("flushes tail speech through the same translation path", async () => {
@@ -93,6 +130,91 @@ describe("CallTranslationWorker", () => {
     ]);
   });
 
+  it("publishes newer revisions with stable speech identity and a new generation", async () => {
+    const asr = new SequencedAsrProvider([
+      {
+        segmentId: "seg_1",
+        turnId: "turn_1",
+        revision: 0,
+        text: "call fifteen",
+        language: "en",
+      },
+      {
+        segmentId: "seg_1",
+        turnId: "turn_1",
+        revision: 1,
+        text: "call fifty",
+        language: "en",
+      },
+    ]);
+    const sink = new RecordingSink();
+    const translation = new RecordingPipelineTranslationProvider();
+    const worker = newWorker(asr, sink, undefined, undefined, translation);
+
+    await worker.processAudioFrame(frame("call_1", "guest", 1));
+    await worker.processAudioFrame(frame("call_1", "guest", 2));
+
+    const transcripts = sink.eventsFor("call_1").filter(
+      (event) => event.type === "transcript.final",
+    );
+    expect(transcripts).toMatchObject([
+      {
+        segmentId: "seg_1",
+        speechId: "speech:guest:turn_1",
+        turnId: "turn_1",
+        revision: 0,
+        pipelineGeneration: 1,
+        sourceText: "call fifteen",
+        pipelineTiming: {
+          asrStartedAtMs: 1000,
+          asrFinalAtMs: 1000,
+          processingQueueEnteredAtMs: 1000,
+          processingQueueReleasedAtMs: 1000,
+          turnBufferReleasedAtMs: 1000,
+          transcriptReadyAtMs: 1000,
+          eventPublishStartedAtMs: 1000,
+        },
+      },
+      {
+        segmentId: "seg_1",
+        speechId: "speech:guest:turn_1",
+        turnId: "turn_1",
+        revision: 1,
+        pipelineGeneration: 2,
+        sourceText: "call fifty",
+      },
+    ]);
+    expect(sink.eventsFor("call_1").filter(
+      (event) => event.type === "translation.final",
+    )[0]).toMatchObject({
+      pipelineTiming: {
+        transcriptReadyAtMs: 1000,
+        translationStartedAtMs: 1000,
+        translationFinalAtMs: 1000,
+        eventPublishStartedAtMs: 1000,
+      },
+    });
+    expect(translation.requests.map((request) => ({
+      speechId: request.speechId,
+      turnId: request.turnId,
+      revision: request.revision,
+      pipelineGeneration: request.pipelineGeneration,
+    }))).toEqual([
+      {
+        speechId: "speech:guest:turn_1",
+        turnId: "turn_1",
+        revision: 0,
+        pipelineGeneration: 1,
+      },
+      {
+        speechId: "speech:guest:turn_1",
+        turnId: "turn_1",
+        revision: 1,
+        pipelineGeneration: 2,
+      },
+    ]);
+  });
+
   it("keeps transcript captions when translation fails", async () => {
     const asr = new FakeAsrProvider({
       segmentId: "seg_1",
@@ -130,8 +252,9 @@ describe("CallTranslationWorker", () => {
     const worker = newWorker(asr, sink, new FakeTtsProvider());
 
     await worker.processAudioFrame(frame("call_1", "guest"));
+    await worker.endCall("call_1");
 
-    expect(sink.eventsFor("call_1").map((event) => event.type)).toEqual([
+    expect(sink.eventsFor("call_1").slice(0, 3).map((event) => event.type)).toEqual([
       "transcript.final",
       "translation.final",
       "tts.ready",
@@ -150,6 +273,41 @@ describe("CallTranslationWorker", () => {
     });
   });
 
+  it("does not block captions on TTS synthesis and drains TTS at call end", async () => {
+    const asr = new FakeAsrProvider({
+      segmentId: "seg_1",
+      text: "hello",
+      language: "en",
+    });
+    const sink = new RecordingSink();
+    const tts = new BlockingTtsProvider();
+    const worker = newWorker(asr, sink, tts);
+
+    const processing = worker.processAudioFrame(frame("call_1", "guest"));
+    await tts.started;
+    const ending = worker.endCall("call_1");
+    const [processingSettled, endingSettled] = await Promise.all([
+      settlesWithin(processing),
+      settlesWithin(ending),
+    ]);
+    const eventsBeforeTts = sink.eventsFor("call_1");
+    tts.release();
+    await Promise.all([processing, ending]);
+
+    expect(processingSettled).toBe(true);
+    expect(endingSettled).toBe(false);
+    expect(eventsBeforeTts.map((event) => event.type)).toEqual([
+      "transcript.final",
+      "translation.final",
+    ]);
+    expect(sink.eventsFor("call_1").map((event) => event.type)).toEqual([
+      "transcript.final",
+      "translation.final",
+      "tts.ready",
+      "worker.status",
+    ]);
+  });
+
   it("passes the configured caller voice profile to TTS synthesis", async () => {
     const asr = new FakeAsrProvider({
       segmentId: "seg_1",
@@ -166,6 +324,7 @@ describe("CallTranslationWorker", () => {
     });
 
     await worker.processAudioFrame(frame("call_1", "guest"));
+    await worker.endCall("call_1");
 
     expect(tts.requests).toMatchObject([
       {
@@ -192,8 +351,9 @@ describe("CallTranslationWorker", () => {
     const worker = newWorker(asr, sink, new FailingTtsProvider());
 
     await worker.processAudioFrame(frame("call_1", "guest"));
+    await worker.endCall("call_1");
 
-    expect(sink.eventsFor("call_1").map((event) => event.type)).toEqual([
+    expect(sink.eventsFor("call_1").slice(0, 3).map((event) => event.type)).toEqual([
       "transcript.final",
       "translation.final",
       "worker.status",
@@ -339,4 +499,92 @@ class RecordingVoiceTtsProvider implements CallTtsProvider {
       },
     };
   }
+}
+
+class BlockingTranslationProvider implements CallTranslationProvider {
+  readonly started: Promise<void>;
+  private resolveStarted!: () => void;
+  private readonly released: Promise<void>;
+  private resolveReleased!: () => void;
+
+  constructor() {
+    this.started = new Promise((resolve) => {
+      this.resolveStarted = resolve;
+    });
+    this.released = new Promise((resolve) => {
+      this.resolveReleased = resolve;
+    });
+  }
+
+  async translate() {
+    this.resolveStarted();
+    await this.released;
+    return "hello";
+  }
+
+  release() {
+    this.resolveReleased();
+  }
+}
+
+class BlockingTtsProvider implements CallTtsProvider {
+  readonly started: Promise<void>;
+  private resolveStarted!: () => void;
+  private readonly released: Promise<void>;
+  private resolveReleased!: () => void;
+
+  constructor() {
+    this.started = new Promise((resolve) => {
+      this.resolveStarted = resolve;
+    });
+    this.released = new Promise((resolve) => {
+      this.resolveReleased = resolve;
+    });
+  }
+
+  async synthesize(): Promise<SynthesizedSpeech> {
+    this.resolveStarted();
+    await this.released;
+    return {
+      provider: "fake-tts",
+      model: "fake-voice",
+      audio: { format: "pcm16", sampleRate: 24000, data: "AAE=" },
+    };
+  }
+
+  release() {
+    this.resolveReleased();
+  }
+}
+
+class SequencedAsrProvider implements CallAsrProvider {
+  constructor(private readonly transcripts: TranscriptSegment[]) {}
+
+  async createCall(_callId: string) {}
+
+  async transcribe(_frame: CallAudioFrame) {
+    return this.transcripts.shift() ?? null;
+  }
+
+  async flush(_callId: string, _speakerRole: CallAudioSpeakerRole) {
+    return null;
+  }
+
+  async closeCall(_callId: string) {}
+}
+
+class RecordingPipelineTranslationProvider implements CallTranslationProvider {
+  readonly requests: Parameters<CallTranslationProvider["translate"]>[0][] = [];
+
+  async translate(input: Parameters<CallTranslationProvider["translate"]>[0]) {
+    this.requests.push(input);
+    return input.text;
+  }
+}
+
+async function settlesWithin(promise: Promise<unknown>, timeoutMs = 20) {
+  return await Promise.race([
+    promise.then(() => true, () => true),
+    new Promise<false>((resolve) => setTimeout(() => resolve(false), timeoutMs)),
+  ]);
 }

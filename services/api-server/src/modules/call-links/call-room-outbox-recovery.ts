@@ -8,7 +8,7 @@ export async function recoverPendingCallRoomOutbox(now = new Date()) {
   const failedSessionIds: string[] = [];
   for (const sessionId of pendingCallRoomSessionIds(now)) {
     await withSessionWriteLock(sessionId, async () => {
-      const record = findCallLink(sessionId);
+      const record = await findCallLink(sessionId);
       if (!record) return;
       const result = await deliverPendingCallRoomDataEvents(record, now);
       if (result.ok) {

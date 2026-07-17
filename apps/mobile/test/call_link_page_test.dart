@@ -14,9 +14,10 @@ void main() {
   testWidgets('creates and shares a call link', (WidgetTester tester) async {
     var sharedText = '';
     final roomClient = FakeCallRoomClient();
+    final apiClient = FakeCallLinkApiClient();
     await tester.pumpWidget(_TestApp(
       child: CallLinkPage(
-        client: FakeCallLinkApiClient(),
+        client: apiClient,
         roomClient: roomClient,
         voiceConsentStore: MemoryVoiceProcessingConsentStore.accepted(),
         shareText: (text) async => sharedText = text,
@@ -26,7 +27,10 @@ void main() {
     await tester.tap(find.text('生成链接'));
     await tester.pumpAndSettle();
 
-    expect(find.text('https://call.example.cn/join/call_1'), findsOneWidget);
+    expect(
+      find.text('https://call.example.cn/join/call_1?ticket=guest-ticket'),
+      findsOneWidget,
+    );
     expect(find.text('无界AI 通话服务已准备'), findsOneWidget);
     expect(find.textContaining('livekit'), findsNothing);
     expect(find.textContaining('未入房'), findsOneWidget);
@@ -36,7 +40,11 @@ void main() {
     await tester.tap(find.text('分享链接'));
     await tester.pumpAndSettle();
 
-    expect(sharedText, 'https://call.example.cn/join/call_1');
+    expect(
+      sharedText,
+      'https://call.example.cn/join/call_1?ticket=rotated-ticket',
+    );
+    expect(apiClient.ticketRotateCount, 1);
   });
 
   testWidgets('requires voice consent before creating a call link',
@@ -61,7 +69,10 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(apiClient.createCount, 0);
-    expect(find.text('https://call.example.cn/join/call_1'), findsNothing);
+    expect(
+      find.text('https://call.example.cn/join/call_1?ticket=guest-ticket'),
+      findsNothing,
+    );
 
     await tester.tap(find.text('生成链接'));
     await tester.pumpAndSettle();
@@ -72,7 +83,10 @@ void main() {
 
     expect(store.record?.version, voiceProcessingConsentVersion);
     expect(apiClient.createCount, 1);
-    expect(find.text('https://call.example.cn/join/call_1'), findsOneWidget);
+    expect(
+      find.text('https://call.example.cn/join/call_1?ticket=guest-ticket'),
+      findsOneWidget,
+    );
   });
 
   testWidgets('shows login guidance before creating account-owned call links',
@@ -268,7 +282,10 @@ void main() {
     await tester.tap(find.text('生成链接'));
     await tester.pumpAndSettle();
 
-    expect(find.text('https://call.example.cn/join/call_1'), findsOneWidget);
+    expect(
+      find.text('https://call.example.cn/join/call_1?ticket=guest-ticket'),
+      findsOneWidget,
+    );
     expect(find.text('进入房间'), findsOneWidget);
     await tester.tap(find.text('进入房间'));
     await tester.pumpAndSettle();
@@ -289,12 +306,13 @@ void main() {
 
     await tester.enterText(
       find.byType(TextField),
-      'https://call.example.cn/join/call_1',
+      'https://call.example.cn/join/call_1?ticket=guest-ticket',
     );
     await tester.tap(find.text('加入房间'));
     await tester.pumpAndSettle();
 
     expect(apiClient.fetchedCallIds, <String>['call_1']);
+    expect(apiClient.lastGuestTicket, 'guest-ticket');
     expect(apiClient.connectionConfirmCount, 1);
     expect(roomClient.connectedToken?.participantRole, 'guest');
     expect(roomClient.connectedToken?.token, 'secret-room-token');

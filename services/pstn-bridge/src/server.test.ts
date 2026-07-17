@@ -272,6 +272,7 @@ describe("pstn bridge server", () => {
 
 function agentCall() {
   return {
+    idempotencyKey: "pstn:place:call-1",
     draftId: "draft-1",
     callId: "call-1",
     targetPhone: "13800138000",
@@ -333,6 +334,10 @@ async function requestJson(url: string, options: {
     headers: {
       ...(options.body ? { "content-type": "application/json" } : {}),
       ...(options.bearerToken ? { authorization: `Bearer ${options.bearerToken}` } : {}),
+      ...(options.body && typeof options.body === "object" &&
+          "idempotencyKey" in options.body
+        ? { "idempotency-key": String(options.body.idempotencyKey) }
+        : {}),
     },
     body: options.body ? JSON.stringify(options.body) : undefined,
   });

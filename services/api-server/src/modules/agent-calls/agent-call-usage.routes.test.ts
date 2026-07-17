@@ -95,6 +95,10 @@ async function createAuthorizedDraft(app: Awaited<ReturnType<typeof buildApp>>) 
 
 const envKeys = [
   "AGENT_CALL_WORKER_ENABLED",
+  "AGENT_CALL_PROVIDER_ADAPTER",
+  "AGENT_CALL_WORKER_LEASE_SECONDS",
+  "AGENT_CALL_RECONCILIATION_TIMEOUT_SECONDS",
+  "PSTN_PROVIDER_IDEMPOTENCY_GUARANTEED",
   "CALL_PROVIDER_POLICY",
   "INTERNAL_API_SECRET",
   "PSTN_PROVIDER",
@@ -109,6 +113,10 @@ const envKeys = [
 
 function configureAgentExecutionEnv() {
   process.env.AGENT_CALL_WORKER_ENABLED = "true";
+  process.env.AGENT_CALL_PROVIDER_ADAPTER = "pstn_http";
+  process.env.AGENT_CALL_WORKER_LEASE_SECONDS = "45";
+  process.env.AGENT_CALL_RECONCILIATION_TIMEOUT_SECONDS = "7200";
+  process.env.PSTN_PROVIDER_IDEMPOTENCY_GUARANTEED = "true";
   process.env.CALL_PROVIDER_POLICY = "domestic_pstn_bridge";
   process.env.INTERNAL_API_SECRET = "internal-secret-for-agent";
   process.env.PSTN_PROVIDER = "domestic_bridge";

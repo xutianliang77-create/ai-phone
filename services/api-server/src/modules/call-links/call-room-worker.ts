@@ -1,4 +1,3 @@
-import { DataPacket_Kind, RoomServiceClient } from "livekit-server-sdk";
 import type { CallLinkRecord } from "./call-links.service.js";
 import {
   buildCallRoomSmokeEvents,
@@ -13,6 +12,11 @@ import {
   pendingCallRoomDataEvents,
   stageCallRoomDataEvents,
 } from "./call-room-reliable-events.js";
+import { LiveKitRoomProviderAdapter } from "./livekit-room-provider-adapter.js";
+export {
+  isLiveKitAlreadyExistsError,
+  liveKitApiUrl,
+} from "./livekit-room-provider-adapter.js";
 export { persistCallRoomDataEvent } from "./call-room-event-persistence.js";
 
 export interface CallRoomDataPublisher {
@@ -137,7 +141,7 @@ export async function publishCallRoomDataEvents(
     }
     | { ok: false; issues: string[]; sessionVersion: number }
   > {
-  const staged = stageCallRoomDataEvents({
+  const staged = await stageCallRoomDataEvents({
     record,
     events,
     expectedVersion: options.expectedVersion,
@@ -186,50 +190,39 @@ export async function deliverPendingCallRoomDataEvents(
 }
 
 class LiveKitRoomDataPublisher implements CallRoomDataPublisher {
-  private readonly client: RoomServiceClient;
-  private readonly ensuredRooms = new Set<string>();
+  private readonly adapter: LiveKitRoomProviderAdapter;
 
   constructor(config: LiveKitRoomConfig) {
-    this.client = new RoomServiceClient(
-      liveKitApiUrl(config.livekitUrl),
-      config.apiKey,
-      config.apiSecret,
-    );
+    this.adapter = new LiveKitRoomProviderAdapter(config);
   }
 
   async ensureRoom(roomName: string) {
-    if (this.ensuredRooms.has(roomName)) return;
-    try {
-      await this.client.createRoom({
-        name: roomName,
-        emptyTimeout: 300,
-        maxParticipants: 16,
-      });
-    } catch (error) {
-      if (!isLiveKitAlreadyExistsError(error)) throw error;
-    }
-    this.ensuredRooms.add(roomName);
+    const result = await this.adapter.ensureRoom({
+      operationId: `room:ensure:${roomName}`,
+      sessionId: roomName.replace(/^call_/, ""),
+      expectedVersion: 1,
+      idempotencyKey: `room:ensure:${roomName}`,
+      deadlineAt: new Date(Date.now() + 10_000).toISOString(),
+      payload: { roomName },
+    });
+    if (!result.ok) throw new Error(`LiveKit room ensure failed: ${result.errorClass}`);
   }
 
   async hasParticipant(roomName: string, participantIdentity: string) {
-    const participants = await this.client.listParticipants(roomName);
-    return participants.some(
-      (participant) => participant.identity === participantIdentity,
-    );
+    return this.adapter.hasParticipant(roomName, participantIdentity);
   }
 
   async listParticipantIdentities(roomName: string) {
-    const participants = await this.client.listParticipants(roomName);
-    return participants.map((participant) => participant.identity);
+    return this.adapter.listParticipantIdentities(roomName);
   }
 
   async publish(roomName: string, event: CallRoomDataEvent) {
-    await this.client.sendData(
-      roomName,
-      encodeCallRoomEvent(event),
-      DataPacket_Kind.RELIABLE,
-      { topic: callRoomCaptionTopic },
-    );
+    const data = encodeCallRoomEvent(event);
+    const config = getLiveKitRoomConfig();
+    if (!config.ok || data.byteLength > config.config.resourceLimits.maxDataPacketBytes) {
+      throw new Error("Call room data packet exceeds the configured limit");
+    }
+    await this.adapter.publish(roomName, data, callRoomCaptionTopic);
   }
 }
 
@@ -237,27 +230,6 @@ function callRoomParticipantRole(callId: string, identity: string) {
   const [identityCallId, role] = identity.split(":", 3);
   if (identityCallId !== callId) return null;
   return role === "host" || role === "guest" ? role : null;
-}
-
-export function liveKitApiUrl(livekitUrl: string) {
-  const url = new URL(livekitUrl);
-  if (url.protocol === "wss:") url.protocol = "https:";
-  if (url.protocol === "ws:") url.protocol = "http:";
-  return url.toString().replace(/\/$/, "");
-}
-
-export function isLiveKitAlreadyExistsError(error: unknown) {
-  const candidate = error as {
-    code?: unknown;
-    status?: unknown;
-    message?: unknown;
-  };
-  return candidate.code === "already_exists" ||
-    candidate.status === 409 ||
-    (
-      typeof candidate.message === "string" &&
-      candidate.message.toLowerCase().includes("already exists")
-    );
 }
 
 function errorMessage(error: unknown) {

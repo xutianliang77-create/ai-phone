@@ -20,6 +20,7 @@ import {
   mergeSessionSegments,
   type SessionSegmentPatch,
 } from "./session-segment-merge.js";
+import { assertNewSessionPlacementAllowed } from "../../infrastructure/platform/platform-session-routing.js";
 
 export type { SessionRecord } from "./session-record.js";
 
@@ -38,8 +39,12 @@ export class SessionVersionConflictError extends Error {
 
 export function createSession(record: SessionRecord) {
   const store = getStoreSnapshot();
+  const routing = assertNewSessionPlacementAllowed();
   record.version ??= 1;
   record.lastActivityAt ??= record.createdAt;
+  record.homeRegion ??= routing.homeRegion;
+  record.homeCellId ??= routing.homeCellId;
+  record.routingGeneration ??= routing.routingGeneration;
   store.sessions = [
     ...store.sessions.filter((session) => session.id !== record.id),
     record,

@@ -9,6 +9,7 @@ export interface ApiEnv {
   complianceProfile: string;
   realtimeStaleSessionGraceSeconds: number;
   realtimeStaleSessionSweepSeconds: number;
+  livekitSipReconciliationGraceSeconds: number;
   callFullDuplexEnabled: boolean;
 }
 
@@ -33,6 +34,10 @@ export function loadEnv(): ApiEnv {
     ),
     realtimeStaleSessionSweepSeconds: positiveNumber(
       process.env.REALTIME_STALE_SESSION_SWEEP_SECONDS,
+      30,
+    ),
+    livekitSipReconciliationGraceSeconds: positiveNumber(
+      process.env.LIVEKIT_SIP_RECONCILIATION_GRACE_SECONDS,
       30,
     ),
     callFullDuplexEnabled: parseBoolean(process.env.CALL_FULL_DUPLEX_ENABLED),

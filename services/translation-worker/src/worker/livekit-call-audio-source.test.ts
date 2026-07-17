@@ -1,11 +1,18 @@
 import { describe, expect, it } from "vitest";
-import { LiveKitCallAudioSource } from "./livekit-call-audio-source.js";
+import {
+  LiveKitCallAudioSource,
+  type LiveKitCallAudioSourceOptions,
+} from "./livekit-call-audio-source.js";
+import { CallRoomEndedError } from "./call-room-event-client.js";
+import type { AudioIngestMetrics } from "./audio-ingest-ring-buffer.js";
 import type { CallAudioFrame, CallAudioSpeakerRole } from "./types.js";
 
 describe("LiveKitCallAudioSource", () => {
   it("joins the room with a worker token and forwards remote audio frames", async () => {
-    const worker = new RecordingWorker();
     const rtc = createFakeRtcNode();
+    const worker = new RecordingWorker(() => {
+      expect(rtc.room.connected).not.toBeNull();
+    });
     const source = new LiveKitCallAudioSource({
       callId: "call_1",
       worker: worker as never,
@@ -198,6 +205,102 @@ describe("LiveKitCallAudioSource", () => {
       referenceAudioId: "voice-profile-1",
     });
   });
+
+  it("keeps reading RTC audio while slow ASR drops the oldest bounded backlog", async () => {
+    const rtc = createFakeRtcNode({ frameCount: 5 });
+    let releaseFirstFrame: (() => void) | undefined;
+    const firstFrameGate = new Promise<void>((resolve) => {
+      releaseFirstFrame = resolve;
+    });
+    const worker = new RecordingWorker(undefined, async (frame) => {
+      if (frame.sequence === 1) await firstFrameGate;
+    });
+    const metrics: AudioIngestMetrics[] = [];
+    const source = sourceForTest(rtc, worker, {
+      audioIngestMaxFrames: 2,
+      onIngestMetrics: (snapshot) => metrics.push(snapshot),
+    });
+
+    await source.start();
+    rtc.room.emit(
+      "trackSubscribed",
+      new rtc.RemoteAudioTrack(),
+      {},
+      { metadata: JSON.stringify({ participantRole: "guest" }) },
+    );
+    await eventually(() =>
+      metrics.some((item) =>
+        item.event === "backpressure" && item.receivedFrames === 5
+      )
+    );
+
+    expect(worker.frames.map((frame) => frame.sequence)).toEqual([1]);
+    const pressure = metrics.filter((item) => item.event === "backpressure").at(-1)!;
+    expect(pressure).toMatchObject({
+      legId: "guest:1",
+      capacityFrames: 2,
+      highWatermarkFrames: 2,
+      receivedFrames: 5,
+      droppedFrames: 2,
+      overflowDroppedFrames: 2,
+      backpressureEvents: 2,
+    });
+
+    releaseFirstFrame?.();
+    await eventually(() => worker.frames.length === 3);
+    await source.stop();
+
+    expect(worker.frames.map((frame) => frame.sequence)).toEqual([1, 4, 5]);
+    expect(metrics).toContainEqual(expect.objectContaining({
+      event: "sequence_gap",
+      sequenceGapFrames: 2,
+      lastProcessedSequence: 4,
+    }));
+    expect(metrics).toContainEqual(expect.objectContaining({
+      event: "drained",
+      receivedFrames: 5,
+      processedFrames: 3,
+      droppedFrames: 2,
+      queueDepthFrames: 0,
+    }));
+  });
+
+  it("treats call-ended publication as a clean terminal signal", async () => {
+    const rtc = createFakeRtcNode();
+    const ended: CallRoomEndedError[] = [];
+    const metrics: AudioIngestMetrics[] = [];
+    const worker = new CallEndedWorker();
+    const source = sourceForTest(rtc, worker, {
+      onCallEnded: (error) => ended.push(error),
+      onIngestMetrics: (snapshot) => metrics.push(snapshot),
+    });
+
+    await source.start();
+    rtc.room.emit(
+      "trackSubscribed",
+      new rtc.RemoteAudioTrack(),
+      {},
+      { metadata: JSON.stringify({ participantRole: "guest" }) },
+    );
+    await source.waitUntilDisconnected();
+    await expect(Promise.all([source.stop(), source.stop()])).resolves.toBeDefined();
+
+    expect(ended).toHaveLength(1);
+    expect(ended[0]).toMatchObject({
+      code: "call_room_ended",
+      callId: "call_1",
+    });
+    expect(worker.endAttempts).toBe(1);
+    expect(metrics).toContainEqual(expect.objectContaining({
+      event: "stopped",
+      receivedFrames: 1,
+      dequeuedFrames: 1,
+      processedFrames: 0,
+      failedFrames: 1,
+      inFlightFrames: 0,
+      droppedFrames: 0,
+    }));
+  });
 });
 
 class RecordingWorker {
@@ -207,12 +310,19 @@ class RecordingWorker {
   readonly ttsSinks: unknown[] = [];
   ttsVoice: unknown = null;
 
+  constructor(
+    private readonly onStart?: () => void,
+    private readonly onFrame?: (frame: CallAudioFrame) => Promise<void> | void,
+  ) {}
+
   async startCall(callId: string) {
+    this.onStart?.();
     this.started.push(callId);
   }
 
   async processAudioFrame(frame: CallAudioFrame) {
     this.frames.push(frame);
+    await this.onFrame?.(frame);
   }
 
   async flushSpeaker(_callId: string, _speakerRole: CallAudioSpeakerRole) {}
@@ -230,13 +340,67 @@ class RecordingWorker {
   }
 }
 
-function createFakeRtcNode(options: { localPublishing?: boolean } = {}) {
+class CallEndedWorker extends RecordingWorker {
+  endAttempts = 0;
+
+  override async processAudioFrame(frame: CallAudioFrame) {
+    await super.processAudioFrame(frame);
+    throw new CallRoomEndedError(frame.sessionId);
+  }
+
+  override async endCall(callId: string) {
+    this.endAttempts += 1;
+    throw new CallRoomEndedError(callId);
+  }
+}
+
+function sourceForTest(
+  rtc: ReturnType<typeof createFakeRtcNode>,
+  worker: RecordingWorker,
+  overrides: Pick<
+    LiveKitCallAudioSourceOptions,
+    "audioIngestMaxFrames" | "onCallEnded" | "onIngestMetrics"
+  > = {},
+) {
+  return new LiveKitCallAudioSource({
+    callId: "call_1",
+    worker: worker as never,
+    audioSampleRate: 24000,
+    audioFrameSizeMs: 100,
+    tokenClient: {
+      async createWorkerToken() {
+        return {
+          callId: "call_1",
+          sessionId: "call_1",
+          provider: "livekit" as const,
+          roomName: "call_call_1",
+          wsUrl: "wss://livekit.example.cn",
+          participantRole: "worker" as const,
+          token: "worker-token",
+          expiresAt: "2026-07-17T00:00:00.000Z",
+        };
+      },
+    },
+    loadRtcNode: async () => rtc.module,
+    ...overrides,
+  });
+}
+
+function createFakeRtcNode(options: {
+  localPublishing?: boolean;
+  frameCount?: number;
+} = {}) {
   class RemoteAudioTrack {}
   class FakeAudioStream extends ReadableStream<{ data: Int16Array; sampleRate: number }> {
     constructor() {
       super({
         start(controller) {
-          controller.enqueue({ data: new Int16Array([1, -1]), sampleRate: 24000 });
+          for (let index = 0; index < (options.frameCount ?? 1); index += 1) {
+            controller.enqueue({
+              data: new Int16Array([index + 1, -(index + 1)]),
+              sampleRate: 24000,
+            });
+          }
           controller.close();
         },
       });
@@ -286,7 +450,9 @@ function createFakeRtcNode(options: { localPublishing?: boolean } = {}) {
 
 class FakeRoom {
   connected: unknown = null;
-  localParticipant?: { publishTrack(track: unknown, options: unknown): Promise<unknown> };
+  localParticipant?: {
+    publishTrack(track: unknown, options: unknown): Promise<{ sid: string }>;
+  };
   private readonly listeners = new Map<string, Array<(...args: unknown[]) => void>>();
 
   constructor(private readonly localPublishing = false) {}
@@ -299,7 +465,7 @@ class FakeRoom {
   async connect(url: string, token: string, opts: unknown) {
     this.connected = { url, token, opts };
     if (this.localPublishing) {
-      this.localParticipant = { publishTrack: async () => ({}) };
+      this.localParticipant = { publishTrack: async () => ({ sid: "TR_1" }) };
     }
   }
 

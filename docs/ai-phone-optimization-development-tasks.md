@@ -4,9 +4,23 @@
 日期：2026-07-14
 关联：`docs/domestic-app-detailed-functional-design.md`、`docs/ai-phone-translation-technical-design.md`、`docs/domestic-design-review-action-plan.md`
 
-新增统一架构任务来源：`docs/architecture/06-implementation-roadmap.md`。
+新增统一架构任务来源：
+
+- `docs/architecture/06-implementation-roadmap.md`
+- `docs/architecture/10-development-task-plan.md`
+
 现有 OPT 任务继续保留，新增 ARC 任务先通过 adapter 和 feature flag 落地，
 不得直接覆盖已验收的实时同传和端侧 ASR 链路。
+
+2026-07-17 Platform P0 第一批已开始：兼容矩阵、communication/Provider Adapter
+合同、官方 SDK 最小权限房间 token 和 App/Web 可信消息代码已完成自动化；真实
+部署和真机证据未执行，状态详见
+`docs/architecture/10-development-task-plan.md`，不得按 accepted 统计。
+
+2026-07-17 Batch 0B 已补 Guest 一次性 ticket、nonce/ticket 摘要持久化、原子核销、
+Host 分享前轮换、Call Room 人数/时长/data 大小与频率上限，以及 LiveKit room 和
+HTTP/Fonoster/mock PSTN 生产 adapter。当前证据仍为 H1；公共 CORS/Gateway 上限、
+多节点共享存储竞争和真实 SIP 不在本批完成范围。
 
 ## 1. 目标和范围
 

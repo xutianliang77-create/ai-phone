@@ -1,6 +1,6 @@
 # 统一架构实施与测试计划
 
-版本：v1.0
+版本：v1.1
 日期：2026-07-17
 
 ## 1. 迁移原则
@@ -10,6 +10,17 @@
 - 每一步都有 feature flag、shadow 证据和回滚路径。
 - 不同时切换 LiveKit runtime、数据库和模型。
 - 生产 App 的模型实验继续使用独立测试 App。
+
+本文件保留阶段级路线。详细 LiveKit 采用边界、数据模型、开发任务和验收门禁见：
+
+- `07-livekit-integration-blueprint.md`
+- `08-production-data-architecture.md`
+- `09-performance-reliability-capacity.md`
+- `10-development-task-plan.md`
+- `11-platform-acceptance-plan.md`
+
+任务状态仍以 `docs/ai-phone-optimization-development-tasks.md` 的 `OPT-*` 为产品
+真值；`ARC-*` 只提供跨模块实施视图。
 
 ## 2. Phase A：安全和合同冻结
 
@@ -67,6 +78,11 @@
 | ARC-AGENT-005 | DTMF/IVR | 扩展号和菜单流程通过 |
 | ARC-AGENT-006 | warm transfer | 成功、拒绝、无人接三条流程 |
 | ARC-AGENT-007 | structured result | 结果、证据、未解决项完整 |
+
+本地静态实现已覆盖独立 runtime、披露、AMD/IVR、结构化结果和用户同房接管的
+接受/拒绝/超时路径；`ARC-AGENT-006` 已增加独立私密 consult room、外部 operator
+SIP leg、接受后的 room move、拒绝/无人接、未知 move 对账和 App 三方确认流程。
+该功能默认关闭，未连接真实 LiveKit/模型/SIP/trunk/真机，不得标记 accepted。
 
 先上线 Agent Assist，再灰度 Autonomous Agent。
 
@@ -174,3 +190,15 @@ POSTGRES_PRIMARY_STORE
 3. Worker 可调度、预热、限容、drain 和崩溃恢复。
 4. ASR/MT/TTS/LLM 有可观测 fallback 和容量策略。
 5. 安全、并发、长稳、真机和账本门禁全部有证据包。
+
+## 12. 当前建议优先顺序
+
+1. 完成 Platform P0：兼容矩阵、Provider Adapter、最小权限 token、可信消息和
+   Communication Contract。
+2. 在隔离环境接入 LiveKit SIP 出站翻译电话，保持旧 PSTN provider 可回退且
+   同一 session 只执行一个拨号控制器。
+3. 引入显式 Dispatch，把 Translation Worker 包装为 job，并补 prewarm、load、
+   drain 和 crash recovery。
+4. 补 provider operations、Egress 录音/记录闭环和 PostgreSQL 增量模型。
+5. 先灰度 Agent Assist，再开发 Autonomous Agent。
+6. 最后进入 Ingress、分布式 HA、100 并发和多地域。

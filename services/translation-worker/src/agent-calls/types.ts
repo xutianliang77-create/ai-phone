@@ -1,4 +1,5 @@
 import type {
+  AgentCallWorkerClaimDto,
   AiCallingAgentDraftDto,
   UpdateAiCallingAgentCallStatusRequest,
 } from "@translation/contracts";
@@ -6,15 +7,18 @@ import type {
 export type AgentCallWorkerStatus = UpdateAiCallingAgentCallStatusRequest["status"];
 
 export interface AgentCallApi {
-  listQueued(limit: number): Promise<AiCallingAgentDraftDto[]>;
+  claim(workerId: string, limit: number): Promise<AgentCallWorkerClaimDto[]>;
   updateStatus(
-    draftId: string,
+    claim: AgentCallWorkerClaimDto,
     request: UpdateAiCallingAgentCallStatusRequest,
   ): Promise<AiCallingAgentDraftDto>;
 }
 
 export interface PstnBridgeCallResult {
   status?: AgentCallWorkerStatus;
+  providerOperationStatus?: UpdateAiCallingAgentCallStatusRequest[
+    "providerOperationStatus"
+  ];
   providerCallId?: string;
   resultSummary?: string;
   failureReason?: string;
@@ -22,5 +26,5 @@ export interface PstnBridgeCallResult {
 }
 
 export interface PstnBridge {
-  placeCall(draft: AiCallingAgentDraftDto): Promise<PstnBridgeCallResult>;
+  placeCall(claim: AgentCallWorkerClaimDto): Promise<PstnBridgeCallResult>;
 }

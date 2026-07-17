@@ -30,6 +30,7 @@ describe("CallTranslationWorker TTS normalization", () => {
     });
 
     await worker.processAudioFrame(frame("call_1"));
+    await worker.endCall("call_1");
 
     expect(tts.texts).toEqual([
       "Order SKU A one two zero costs 31.50 dollars, call one three eight zero zero one three eight zero zero zero.",

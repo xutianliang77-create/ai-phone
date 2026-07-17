@@ -19,11 +19,19 @@ import {
 } from "./call-links.service.js";
 import { withSessionWriteLock } from "../sessions/session-write-coordinator.js";
 import { loadEnv } from "../../config/env.js";
+import { findSession } from "../sessions/sessions-runtime.repository.js";
+import {
+  inspectCallGuestTicket,
+  type GuestTicketFailure,
+} from "./call-guest-ticket.js";
+import { consumeCallGuestTicket } from "./call-guest-ticket-runtime.js";
+import { getCallRoomResourceLimits } from "./call-room-resource-limits.js";
 
 export function registerCallRoomEntryRoute(app: FastifyInstance) {
   app.post("/call-links/:callId/room-token", async (request, reply) => {
     const params = request.params as { callId: string };
     const body = (request.body ?? {}) as Partial<{
+      guestTicket: string;
       participantName: string;
       participantRole: string;
       role: string;
@@ -43,41 +51,72 @@ export function registerCallRoomEntryRoute(app: FastifyInstance) {
       ? requireAccount(request, reply)
       : null;
     if (participantRole === "host" && !account) return;
+    const participantName = parseParticipantName(body.participantName);
+    if (!participantName.ok) {
+      return sendError(
+        reply,
+        400,
+        "invalid_call_room_participant_name",
+        "Participant name exceeds the configured limit",
+      );
+    }
 
-    const initial = await withSessionWriteLock(params.callId, () =>
-      validateEntry(params.callId, participantRole, account?.id));
-    if (!initial.ok) return sendEntryError(reply, initial);
+    return withSessionWriteLock(params.callId, async () => {
+      const initial = await validateEntry(
+        params.callId,
+        participantRole,
+        account?.id,
+      );
+      if (!initial.ok) return sendEntryError(reply, initial);
+      if (participantRole === "guest") {
+        const inspected = inspectCallGuestTicket({
+          callId: initial.record.callId,
+          sessionId: initial.record.sessionId,
+          ticket: body.guestTicket ?? "",
+          record: (await findSession(initial.record.sessionId))?.callLink?.guestTicket,
+        });
+        if (!inspected.ok) return sendGuestTicketError(reply, inspected.code);
+      }
 
-    const token = createCallRoomToken({
-      callId: initial.record.callId,
-      roomName: initial.record.roomName,
-      participantRole,
-      participantName: body.participantName,
-      fullDuplexEnabled: loadEnv().callFullDuplexEnabled,
+      const token = await createCallRoomToken({
+        callId: initial.record.callId,
+        roomName: initial.record.roomName,
+        participantRole,
+        participantName: participantName.value,
+        fullDuplexEnabled: loadEnv().callFullDuplexEnabled,
+      });
+      if (!token.ok) {
+        return sendError(
+          reply,
+          503,
+          "call_room_provider_not_configured",
+          "Call room provider not configured",
+        );
+      }
+
+      const room = await ensureCallRoom(initial.record);
+      if (!room.ok) {
+        request.log.error(
+          { callId: initial.record.callId, issues: room.issues },
+          "Call room creation failed",
+        );
+        return sendError(
+          reply,
+          503,
+          "call_room_start_failed",
+          "Call room could not be created",
+        );
+      }
+      if (participantRole === "guest") {
+        const consumed = await consumeCallGuestTicket({
+          callId: initial.record.callId,
+          sessionId: initial.record.sessionId,
+          ticket: body.guestTicket ?? "",
+        });
+        if (!consumed.ok) return sendGuestTicketError(reply, consumed.code);
+      }
+      return reply.header("cache-control", "no-store").send(token);
     });
-    if (!token.ok) {
-      return sendError(
-        reply,
-        503,
-        "call_room_provider_not_configured",
-        "Call room provider not configured",
-      );
-    }
-
-    const room = await ensureCallRoom(initial.record);
-    if (!room.ok) {
-      request.log.error(
-        { callId: initial.record.callId, issues: room.issues },
-        "Call room creation failed",
-      );
-      return sendError(
-        reply,
-        503,
-        "call_room_start_failed",
-        "Call room could not be created",
-      );
-    }
-    return token;
   });
 
   app.post("/call-links/:callId/room-connected", async (request, reply) => {
@@ -144,10 +183,14 @@ export function registerCallRoomEntryRoute(app: FastifyInstance) {
       );
     }
 
-    const committed = await withSessionWriteLock(params.callId, () => {
-      const current = validateEntry(params.callId, participantRole, account?.id);
+    const committed = await withSessionWriteLock(params.callId, async () => {
+      const current = await validateEntry(
+        params.callId,
+        participantRole,
+        account?.id,
+      );
       if (!current.ok) return current;
-      registerCallLeg({
+      await registerCallLeg({
         callId: current.record.callId,
         participantIdentity: body.participantIdentity!,
         participantRole,
@@ -155,8 +198,8 @@ export function registerCallRoomEntryRoute(app: FastifyInstance) {
       });
       return {
         ...current,
-        ready: hasActiveHumanCallPair(current.record.callId),
-        workerPresent: hasActiveCallWorker(current.record.callId),
+        ready: await hasActiveHumanCallPair(current.record.callId),
+        workerPresent: await hasActiveCallWorker(current.record.callId),
       };
     });
     if (!committed.ok) return sendEntryError(reply, committed);
@@ -200,12 +243,12 @@ type EntryValidation =
     message: string;
   };
 
-function validateEntry(
+async function validateEntry(
   callId: string,
   participantRole: "host" | "guest",
   accountId?: string,
-): EntryValidation {
-  const record = findCallLink(callId);
+): Promise<EntryValidation> {
+  const record = await findCallLink(callId);
   if (!record) {
     return {
       ok: false,
@@ -230,6 +273,14 @@ function validateEntry(
       message: "Account cannot access this resource",
     };
   }
+  if (participantRole === "guest" && record.purpose === "voice_agent") {
+    return {
+      ok: false,
+      status: 404,
+      code: "call_link_not_found",
+      message: "Call link not found",
+    };
+  }
   return { ok: true, record };
 }
 
@@ -243,4 +294,29 @@ function sendEntryError(
 function parseParticipantRole(value: unknown) {
   if (value === undefined || value === "guest") return "guest" as const;
   return value === "host" ? ("host" as const) : null;
+}
+
+function parseParticipantName(value: unknown):
+  | { ok: true; value?: string }
+  | { ok: false } {
+  if (value === undefined) return { ok: true };
+  if (typeof value !== "string") return { ok: false };
+  const normalized = value.trim();
+  return Array.from(normalized).length <=
+      getCallRoomResourceLimits().maxParticipantNameCharacters
+    ? { ok: true, ...(normalized ? { value: normalized } : {}) }
+    : { ok: false };
+}
+
+function sendGuestTicketError(
+  reply: Parameters<typeof sendError>[0],
+  code: GuestTicketFailure,
+) {
+  if (code === "guest_ticket_expired") {
+    return sendError(reply, 410, code, "Guest ticket expired");
+  }
+  if (code === "guest_ticket_already_used") {
+    return sendError(reply, 409, code, "Guest ticket was already used");
+  }
+  return sendError(reply, 403, code, "Guest ticket is invalid");
 }

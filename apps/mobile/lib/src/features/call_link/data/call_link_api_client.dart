@@ -4,6 +4,9 @@ import 'package:http/http.dart' as http;
 
 import '../../account/data/account_auth_headers.dart';
 import '../../account/data/account_session_store.dart';
+import 'sip_call_models.dart';
+
+export 'sip_call_models.dart';
 
 class CallLink {
   const CallLink({
@@ -27,6 +30,18 @@ class CallLink {
   final String status;
   final DateTime expiresAt;
   final int activeGuestCount;
+
+  CallLink withJoinUrl(String value) => CallLink(
+        callId: callId,
+        sessionId: sessionId,
+        roomName: roomName,
+        roomProvider: roomProvider,
+        joinUrl: value,
+        hostUrl: hostUrl,
+        status: status,
+        expiresAt: expiresAt,
+        activeGuestCount: activeGuestCount,
+      );
 
   factory CallLink.fromJson(Map<String, Object?> json) {
     return CallLink(
@@ -146,6 +161,7 @@ class CallLinkApiClient {
     required String callId,
     String participantRole = 'host',
     String? participantName,
+    String? guestTicket,
   }) async {
     final response = await _client.post(
       _baseUrl.resolve('/call-links/$callId/room-token'),
@@ -155,6 +171,8 @@ class CallLinkApiClient {
       body: jsonEncode({
         'participantRole': participantRole,
         if (participantName != null) 'participantName': participantName,
+        if (participantRole == 'guest' && guestTicket != null)
+          'guestTicket': guestTicket,
       }),
     );
     if (response.statusCode < 200 || response.statusCode >= 300) {
@@ -162,6 +180,20 @@ class CallLinkApiClient {
     }
     final json = jsonDecode(response.body) as Map<String, Object?>;
     return CallRoomToken.fromJson(json);
+  }
+
+  Future<String> rotateGuestTicket({required String callId}) async {
+    final response = await _client.post(
+      _baseUrl.resolve('/call-links/$callId/guest-ticket'),
+      headers: await _authHeaders(),
+    );
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw CallLinkApiException(
+        'Rotate guest ticket failed: ${response.body}',
+      );
+    }
+    final json = jsonDecode(response.body) as Map<String, Object?>;
+    return json['joinUrl']! as String;
   }
 
   Future<void> confirmRoomConnected(CallRoomToken token) async {
@@ -181,6 +213,78 @@ class CallLinkApiClient {
         'Confirm room connection failed: ${response.body}',
       );
     }
+  }
+
+  Future<SipOutboundCall> startSipOutbound({
+    required String callId,
+    required String targetPhone,
+    required String sourceLanguage,
+    required String targetLanguage,
+    required bool disclosureConfirmed,
+  }) async {
+    final response = await _client.post(
+      _baseUrl.resolve('/call-links/$callId/sip-outbound'),
+      headers: await _authHeaders(json: true),
+      body: jsonEncode({
+        'targetPhone': targetPhone,
+        'sourceLanguage': sourceLanguage,
+        'targetLanguage': targetLanguage,
+        'disclosureConfirmed': disclosureConfirmed,
+      }),
+    );
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw CallLinkApiException(
+        'Start SIP outbound failed: ${response.body}',
+      );
+    }
+    final json = jsonDecode(response.body) as Map<String, Object?>;
+    return SipOutboundCall.fromJson(json);
+  }
+
+  Future<SipControlResult> sendSipDtmf({
+    required String callId,
+    required String digit,
+    required String idempotencyKey,
+  }) {
+    return _sipControl(
+      callId: callId,
+      action: 'dtmf',
+      body: {'digit': digit, 'idempotencyKey': idempotencyKey},
+    );
+  }
+
+  Future<SipControlResult> transferSip({
+    required String callId,
+    required String targetPhone,
+    required String idempotencyKey,
+  }) {
+    return _sipControl(
+      callId: callId,
+      action: 'transfer',
+      body: {'targetPhone': targetPhone, 'idempotencyKey': idempotencyKey},
+    );
+  }
+
+  Future<SipControlResult> hangupSip({required String callId}) {
+    return _sipControl(callId: callId, action: 'hangup', body: const {});
+  }
+
+  Future<SipControlResult> _sipControl({
+    required String callId,
+    required String action,
+    required Map<String, Object?> body,
+  }) async {
+    final response = await _client.post(
+      _baseUrl.resolve('/call-links/$callId/sip-$action'),
+      headers: await _authHeaders(json: true),
+      body: jsonEncode(body),
+    );
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw CallLinkApiException('SIP $action failed: ${response.body}');
+    }
+    return SipControlResult.fromJson(
+      jsonDecode(response.body) as Map<String, Object?>,
+    );
   }
 
   Future<CallLinkEndResult> endCallLink({required String callId}) async {

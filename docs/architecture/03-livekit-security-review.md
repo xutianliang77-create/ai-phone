@@ -1,6 +1,6 @@
 # LiveKit 与当前接入安全审计
 
-版本：v1.0
+版本：v1.2
 日期：2026-07-17
 范围：LiveKit Server、SIP、Agents、Node/Flutter SDK、当前产品接入和自托管部署。
 
@@ -27,7 +27,7 @@ LiveKit 可以作为产品媒体和 Agent 调度底座，但不能按默认权�
 
 ### SEC-LK-001 客户端可伪造字幕和状态
 
-当前 token 只设置 `canPublish=true`，没有设置 `canPublishData=false`。LiveKit
+修复前 token 只设置 `canPublish=true`，没有设置 `canPublishData=false`。LiveKit
 源码中 `canPublishData` 未设置时继承 `canPublish`，因此 host/guest 可以向
 data channel 发布消息。
 
@@ -40,32 +40,34 @@ Flutter 当前处理 `DataReceivedEvent` 时只解析 payload，没有验证：
 
 影响：房间中的恶意 Guest 可以伪造字幕、Worker 状态、降级提示或 TTS ready。
 
-修复：
+当前本地代码状态：`in_progress（代码和自动化完成，部署验收待执行）`。
 
-1. 使用 `livekit-server-sdk` 的 `AccessToken` 生成 token，停止手写 JWT。
-2. host/guest/worker token 显式 `canPublishData=false`。
-3. host/guest 只允许 `canPublishSources=["microphone"]`。
-4. Worker TTS 只允许发布指定 audio source/track naming。
-5. App/Web 只接受可信 server-injected data，校验 topic 和 sender。
-6. 对关键控制事件增加 API 签名或仅通过 HTTPS/Event Stream 下发。
+- 已改用 `livekit-server-sdk` 的 `AccessToken`。
+- host/guest/worker 显式 `canPublishData=false`，只允许 microphone source。
+- App/Web 只接受 `translation.captions`、Server API sender、当前 call/room
+  binding 的消息；未知和畸形 payload 不展示。
+- Worker TTS 继续使用受限 microphone source 和目标 leg track naming。
+- 关键控制事件迁移到独立 HTTPS 可靠流仍是后续任务。
 
 ### SEC-LK-002 房间 token 过期时间过长
 
-当前默认 `CALL_ROOM_TOKEN_TTL_SECONDS=3600`。LiveKit 官方说明自托管 token
+修复前默认 `CALL_ROOM_TOKEN_TTL_SECONDS=3600`。LiveKit 官方说明自托管 token
 无法实时吊销，移除 participant 后旧 token 在过期前仍可能重连。
 
-修复：
+当前本地代码状态：`ready_for_acceptance（本地代码和自动化完成）`。
 
-- 入房 token 默认 120 秒，最大 300 秒。
+- 入房 token 已改为默认 120 秒、最大 300 秒；超限 readiness 失败。
 - token 只用于首次连接；重连由 SDK 当前连接完成。
-- 分享链接换取一次性 Guest join ticket，再签发 LiveKit token。
-- Guest ticket 绑定 call、角色、nonce、设备摘要和使用次数。
-- End/踢人后 API 禁止再次签发，并主动 RemoveParticipant。
+- 分享链接携带 300 秒一次性 Guest ticket；只保存 ticket/nonce SHA-256 摘要。
+- Guest ticket 绑定 call、session、guest 角色、nonce、有效期和单次使用；过期、
+  跨 call、轮换前票据和并发重放均拒绝。
+- 核销在 session write lock 和持久化 transaction 内完成；Host 分享前轮换票据。
+- End 后 API 禁止再次签发；主动 RemoveParticipant/过期房间清理仍待 staging 实现。
 
 ### SEC-LK-003 部署凭据和镜像不可复现
 
-当前已渲染 `livekit.yaml` 被 `.gitignore` 排除，但文件权限为 `0644`，且 Compose
-使用 `livekit/livekit-server:latest`。
+当前兼容矩阵和 self-host readiness 已禁止 `latest`，并要求 tag +
+`@sha256`；现有私有 `.env` 和已渲染目录尚未迁移，发布仍保持阻断。
 
 修复：
 
@@ -79,6 +81,15 @@ Flutter 当前处理 `DataReceivedEvent` 时只解析 payload，没有验证：
 
 当前 API CORS 为任意 origin；Gateway `WebSocketServer` 未设置 `maxPayload`；
 未看到统一 API/room-token 限流。
+
+当前本地代码状态：`in_progress（Call Room 边界完成，公共 API/Gateway 待补）`。
+
+- LiveKit room 默认最多 3 participants、empty timeout 300 秒。
+- Call Link 最长 3600 秒，Guest ticket 300 秒，participant name 最多 80 字符。
+- Server data packet 最大 12288 bytes、每批最多 20 events、每 session 每秒最多
+  40 个 event request；配置超界时 readiness 失败并回落安全默认值。
+- 公网 API CORS allowlist、IP/设备分布式限流、Gateway `maxPayload` 和代理连接上限
+  尚未完成，不能把本批视为 SEC-LK-004 全部关闭。
 
 修复：
 
@@ -193,7 +204,7 @@ LiveKit SIP <-> Trunk Provider
 
 - [ ] room token 最小权限和短 TTL。
 - [ ] App/Web 验证 data sender/topic。
-- [ ] Guest one-time ticket、人数限制和限流。
+- [x] Guest one-time ticket、Call Room 人数/事件大小/频率限制（本地 H1）。
 - [ ] SIP provider IP allowlist、TLS/SRTP 和并发上限。
 - [ ] 所有镜像固定 digest。
 - [ ] secret 权限、轮换和泄漏扫描。

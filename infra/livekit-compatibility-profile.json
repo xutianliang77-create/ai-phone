@@ -1,0 +1,57 @@
+{
+  "schemaVersion": 1,
+  "profileVersion": "2026-07-17-livekit-sip-candidate",
+  "packages": {
+    "serverSdk": {
+      "package": "livekit-server-sdk",
+      "version": "2.16.0",
+      "status": "verified"
+    },
+    "browserClient": {
+      "package": "livekit-client",
+      "version": "2.20.0",
+      "status": "verified"
+    },
+    "rtcNode": {
+      "package": "@livekit/rtc-node",
+      "version": "0.13.30",
+      "status": "verified"
+    },
+    "flutterClient": {
+      "package": "livekit_client",
+      "version": "2.8.1",
+      "status": "verified"
+    },
+    "agentsJs": {
+      "package": "@livekit/agents",
+      "version": "1.5.0",
+      "status": "candidate_unverified"
+    }
+  },
+  "images": {
+    "server": {
+      "repository": "livekit/livekit-server",
+      "tag": "v1.13.3",
+      "platform": "linux/amd64",
+      "digest": "sha256:8ef3ee244ded8477d5b40d9dff4b084e1809a9fa0e4d9ed8d29943b3c6322998",
+      "status": "candidate_unverified"
+    },
+    "sip": {
+      "repository": "livekit/sip",
+      "tag": "v1.7.0",
+      "platform": "linux/amd64",
+      "digest": "sha256:dd1e556f9d1f66b09f2440974ec73400e7b969a21f5e937eb6fe924287124ae7",
+      "status": "candidate_unverified"
+    },
+    "egress": {
+      "repository": "livekit/egress",
+      "platform": "linux/amd64",
+      "status": "deferred_runtime_probe"
+    },
+    "ingress": {
+      "repository": "livekit/ingress",
+      "platform": "linux/amd64",
+      "status": "deferred_runtime_probe"
+    }
+  }
+}

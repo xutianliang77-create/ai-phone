@@ -2,14 +2,17 @@ import type {
   AsrEndpointReason,
   SegmentTimingDto,
   SegmentVadContextDto,
+  SpeechPipelineTimingDto,
   SpeakerAttributionDto,
   TranslationLanguageCode,
 } from "@translation/contracts";
 
 export interface SpeechTranscript {
   segmentId: string;
+  speechId?: string;
   turnId?: string;
   revision?: number;
+  pipelineTiming?: SpeechPipelineTimingDto;
   text: string;
   language: TranslationLanguageCode;
   dominantLanguage?: TranslationLanguageCode;

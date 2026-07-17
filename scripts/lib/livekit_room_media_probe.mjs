@@ -1,27 +1,3 @@
-export async function publishDataPacket(room) {
-  const payload = new TextEncoder().encode("livekit-media-readiness");
-  await room.localParticipant.publishData(payload, {
-    reliable: true,
-    topic: "translation.media.readiness",
-  });
-}
-
-export function waitForDataPacket(room, rtc, options) {
-  return withTimeout(new Promise((resolve) => {
-    room.on(rtc.RoomEvent.DataReceived, (data, participant) => {
-      const text = Buffer.from(data).toString("utf8");
-      if (text !== "livekit-media-readiness") return;
-      resolve({
-        ok: true,
-        details: {
-          bytes: data.byteLength,
-          from: participant?.identity ?? null,
-        },
-      });
-    });
-  }), timeoutMs(options), "Timed out waiting for LiveKit data packet");
-}
-
 export function waitForCallRoomCaption(room, rtc, segmentId, options) {
   return withTimeout(new Promise((resolve) => {
     room.on(rtc.RoomEvent.DataReceived, (data, participant) => {

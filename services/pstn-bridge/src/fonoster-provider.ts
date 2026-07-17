@@ -30,7 +30,10 @@ export class FonosterPstnProvider implements PstnProvider {
   async placeCall(request: AgentCallBridgeRequest): Promise<AgentCallBridgeResult> {
     const response = await this.fetchWithTimeout(this.callUrl(), {
       method: "POST",
-      headers: this.headers(),
+      headers: {
+        ...this.headers(),
+        "idempotency-key": request.idempotencyKey,
+      },
       body: JSON.stringify(this.callBody(request)),
     });
     const body = await readJson(response);
@@ -52,6 +55,8 @@ export class FonosterPstnProvider implements PstnProvider {
       headers: this.headers(),
       body: JSON.stringify({
         provider: "fonoster",
+        idempotencyKey:
+          `tts:${request.callId}:${request.playbackId}:${request.generation}`,
         ...request,
         providerCallId,
         mediaStreamId,

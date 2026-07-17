@@ -10,7 +10,7 @@ import {
   findSession,
   markSessionFinalized,
   saveSegments,
-} from "../sessions/sessions.repository.js";
+} from "../sessions/sessions-runtime.repository.js";
 import { withSessionWriteLock } from "../sessions/session-write-coordinator.js";
 
 export function registerRealtimeFinalizationRoute(app: FastifyInstance) {
@@ -35,8 +35,8 @@ export function registerRealtimeFinalizationRoute(app: FastifyInstance) {
         "billableSeconds must be a non-negative number");
     }
 
-    return withSessionWriteLock(params.sessionId, () => {
-      const existing = findSession(params.sessionId);
+    return withSessionWriteLock(params.sessionId, async () => {
+      const existing = await findSession(params.sessionId);
       if (!existing) {
         return sendError(reply, 404, "session_not_found", "Session not found");
       }
@@ -52,14 +52,14 @@ export function registerRealtimeFinalizationRoute(app: FastifyInstance) {
           "Session was finalized with another idempotency key");
       }
 
-      saveSegments(params.sessionId, body.segments!);
-      const session = completeSessionWithUsage(params.sessionId, {
+      await saveSegments(params.sessionId, body.segments!);
+      const session = await completeSessionWithUsage(params.sessionId, {
         billableSeconds,
       });
       if (!session) {
         return sendError(reply, 404, "session_not_found", "Session not found");
       }
-      markSessionFinalized(params.sessionId, idempotencyKey);
+      await markSessionFinalized(params.sessionId, idempotencyKey);
       return response(session, idempotencyKey);
     });
   });

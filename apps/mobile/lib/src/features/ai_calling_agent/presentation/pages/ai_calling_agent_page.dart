@@ -11,6 +11,7 @@ import '../widgets/ai_calling_agent_form.dart';
 import '../widgets/ai_calling_agent_intro.dart';
 import '../widgets/ai_calling_agent_stage_bar.dart';
 import '../widgets/ai_calling_agent_task_list.dart';
+import 'agent_call_takeover_page.dart';
 
 const _consentPromptVersion = 'domestic-ai-agent-consent-v1';
 const _disclosurePromptVersion = 'domestic-ai-agent-disclosure-v1';
@@ -215,14 +216,33 @@ class _AiCallingAgentPageState extends State<AiCallingAgentPage> {
 
   Future<void> _requestTakeover() async {
     final draft = _draft;
-    if (draft == null) return;
-    await _run(() async {
-      _setDraft(await _client.requestTakeover(
-        draftId: draft.id,
-        reason: 'user_requested_takeover',
-      ));
-      _notice = '已记录人工接管请求。';
-    });
+    if (draft == null || !await _ensureVoiceConsent()) return;
+    if (draft.status != 'takeover_requested') {
+      await _run(() async {
+        _setDraft(await _client.requestTakeover(
+          draftId: draft.id,
+          reason: 'user_requested_takeover',
+        ));
+        _notice = '已记录人工接管请求。';
+      });
+    }
+    final current = _draft;
+    final takeoverCallId = current?.callId;
+    if (!mounted ||
+        current == null ||
+        takeoverCallId == null ||
+        current.status != 'takeover_requested') {
+      return;
+    }
+    final takeover = current;
+    await Navigator.of(context).push(MaterialPageRoute<void>(
+      builder: (_) => AgentCallTakeoverPage(
+        draftId: takeover.id,
+        callId: takeoverCallId,
+        takeoverReadyAt: takeover.takeoverReadyAt,
+      ),
+    ));
+    if (mounted) await _refreshDraft();
   }
 
   Future<void> _cancelDraft() async {

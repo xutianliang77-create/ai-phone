@@ -19,6 +19,7 @@ export interface TranslationWorkerEnv {
   participantName: string;
   audioSampleRate: 16000 | 24000;
   audioFrameSizeMs: number;
+  audioIngestMaxFrames: number;
   asrHttpEndpoint: string;
   asrHttpFlushEndpoint?: string;
   asrHttpApiKey?: string;
@@ -42,6 +43,8 @@ export interface TranslationWorkerEnv {
   audioFrameSinkApiKey?: string;
   agentCallWorkerBatchSize: number;
   agentCallWorkerPollIntervalMs: number;
+  agentCallWorkerId?: string;
+  agentCallProviderAdapter?: string;
   pstnBridgeBaseUrl?: string;
   pstnBridgeApiKey?: string;
   pstnBridgeTimeoutMs: number;
@@ -62,6 +65,12 @@ export function loadEnv(): TranslationWorkerEnv {
       "translation-worker",
     audioSampleRate: parseAudioSampleRate(env.TRANSLATION_WORKER_AUDIO_SAMPLE_RATE),
     audioFrameSizeMs: Number(env.TRANSLATION_WORKER_AUDIO_FRAME_SIZE_MS ?? 100),
+    audioIngestMaxFrames: boundedInteger(
+      env.TRANSLATION_WORKER_AUDIO_INGEST_MAX_FRAMES,
+      20,
+      4,
+      200,
+    ),
     asrHttpEndpoint:
       env.ASR_HTTP_ENDPOINT ?? "http://127.0.0.1:8001/asr/transcribe",
     asrHttpFlushEndpoint: env.ASR_HTTP_FLUSH_ENDPOINT,
@@ -100,6 +109,8 @@ export function loadEnv(): TranslationWorkerEnv {
     audioFrameSinkApiKey: env.TRANSLATION_WORKER_AUDIO_FRAME_SINK_API_KEY,
     agentCallWorkerBatchSize: Number(env.AGENT_CALL_WORKER_BATCH_SIZE ?? 5),
     agentCallWorkerPollIntervalMs: Number(env.AGENT_CALL_WORKER_POLL_INTERVAL_MS ?? 5000),
+    agentCallWorkerId: env.AGENT_CALL_WORKER_ID?.trim() || undefined,
+    agentCallProviderAdapter: env.AGENT_CALL_PROVIDER_ADAPTER?.trim() || undefined,
     pstnBridgeBaseUrl: env.PSTN_BRIDGE_BASE_URL,
     pstnBridgeApiKey: env.PSTN_BRIDGE_API_KEY,
     pstnBridgeTimeoutMs: Number(env.PSTN_BRIDGE_TIMEOUT_MS ?? 10000),
@@ -139,6 +150,18 @@ function boundedNumber(
 ) {
   const parsed = Number(value);
   return Number.isFinite(parsed) && parsed >= minimum && parsed <= maximum
+    ? parsed
+    : fallback;
+}
+
+function boundedInteger(
+  value: string | undefined,
+  fallback: number,
+  minimum: number,
+  maximum: number,
+) {
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed >= minimum && parsed <= maximum
     ? parsed
     : fallback;
 }

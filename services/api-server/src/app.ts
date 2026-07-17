@@ -19,6 +19,8 @@ import { registerTermsRoutes } from "./modules/terms/terms.routes.js";
 import { registerTextTranslationRoutes } from "./modules/translation/text-translation.routes.js";
 import { registerVoiceProfileRoutes } from "./modules/voice-profiles/voice-profiles.routes.js";
 import { registerVoiceIdentityRoutes } from "./modules/voice-identities/voice-identities.routes.js";
+import { registerIngressRoutes } from "./modules/ingress/ingress.routes.js";
+import { registerPlatformTelemetryHooks } from "./infrastructure/observability/platform-telemetry.js";
 
 export async function buildApp() {
   const app = Fastify({
@@ -37,10 +39,12 @@ export async function buildApp() {
       },
     },
   });
+  registerPlatformTelemetryHooks(app);
   await app.register(cors, { origin: true });
   await registerAccountRoutes(app);
   await registerAgentCallRoutes(app);
   await registerHealthRoutes(app);
+  registerIngressRoutes(app);
   await registerModelRoutes(app);
   await registerBillingRoutes(app);
   await registerCallLinkRoutes(app);

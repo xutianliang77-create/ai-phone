@@ -5,8 +5,7 @@ import type {
   CreateAiCallingAgentDraftRequest,
   PstnAgentCallWebhookRequest,
   RequestAiCallingAgentTakeoverRequest,
-  StartAiCallingAgentCallRequest,
-  UpdateAiCallingAgentCallStatusRequest,
+  VoiceAgentStructuredResultDto,
 } from "@translation/contracts";
 import {
   getStoreSnapshot,
@@ -14,16 +13,11 @@ import {
   runStoreTransaction,
 } from "../../infrastructure/storage/json-store.js";
 import {
-  consumeSeconds,
-  createUsageHold,
   releaseUsageHold,
-  settleUsageHold,
 } from "../usage/usage.service.js";
-import { AGENT_CALL_MINIMUM_START_SECONDS } from "./agent-call-usage-readiness.js";
 import { classifyAgentCallRisk } from "./agent-call-risk.js";
 import type { AgentCallRecord } from "./agent-call-record.js";
 import {
-  evaluateAgentCallStartPolicy,
   isValidAgentCallPhone,
   normalizeAgentCallPhone,
 } from "./agent-call-gray-policy.js";
@@ -32,11 +26,19 @@ import {
   defaultScript,
   isAgentCallCancellable,
   isScenario,
-  isStartedStatus,
-  isTerminalWorkerStatus,
-  isWorkerStatus,
-  normalizedSeconds,
 } from "./agent-call-repository-helpers.js";
+import {
+  createAgentHandoff,
+  findActiveAgentRun,
+} from "./agent-orchestration.repository.js";
+import { applyAgentCallStatusUpdate } from "./agent-call-status-update.js";
+import {
+  clearAgentCallLease,
+  reconcileAgentCallProviderOperation,
+} from "./agent-call-lease.repository.js";
+import { findProviderOperation } from
+  "../provider-operations/provider-operations.repository.js";
+import { tryAcquireAgentCallMutation } from "./agent-call-mutation-lock.js";
 
 export function createAgentCallDraft(
   userId: string,
@@ -79,15 +81,6 @@ export function listAgentCallDrafts(userId: string) {
 export function listQueuedAgentCallDrafts(userId: string, limit = 10) {
   return getStoreSnapshot().agentCallDrafts
     .filter((draft) => draft.userId === userId && draft.status === "queued")
-    .sort((left, right) => (left.queuedAt ?? left.updatedAt).localeCompare(
-      right.queuedAt ?? right.updatedAt,
-    ))
-    .slice(0, Math.max(1, Math.min(limit, 50)));
-}
-
-export function listQueuedAgentCallDraftsForWorker(limit = 10) {
-  return getStoreSnapshot().agentCallDrafts
-    .filter((draft) => draft.status === "queued")
     .sort((left, right) => (left.queuedAt ?? left.updatedAt).localeCompare(
       right.queuedAt ?? right.updatedAt,
     ))
@@ -157,11 +150,24 @@ export function requestAgentCallTakeover(
 ) {
   const draft = findAgentCallDraft(userId, draftId);
   if (!draft) return null;
+  if (!["requires_human_takeover", "in_progress", "takeover_requested"]
+    .includes(draft.status)) return draft;
   const now = new Date().toISOString();
   draft.status = "takeover_requested";
+  draft.takeoverReadyAt = undefined;
+  draft.takeoverResolvedAt = undefined;
   draft.takeoverReason = cleanText(request.reason, 200) || "user_requested";
   draft.takeoverRequestedAt = now;
   draft.updatedAt = now;
+  const run = findActiveAgentRun(draft.id, "autonomous");
+  if (run) {
+    createAgentHandoff({
+      runId: run.id,
+      reason: draft.takeoverReason,
+      redactedSummary: "User requested takeover",
+      target: "user",
+    });
+  }
   persistStoreSnapshot();
   return draft;
 }
@@ -171,97 +177,68 @@ export function cancelAgentCallDraft(
   draftId: string,
   request: CancelAiCallingAgentDraftRequest,
 ) {
+  const releaseMutation = tryAcquireAgentCallMutation(draftId);
+  if (!releaseMutation) return { status: "mutation_conflict" as const };
+  try {
+    return runStoreTransaction(() => {
+      const draft = findAgentCallDraft(userId, draftId);
+      if (!draft) return { status: "not_found" as const };
+      if (!isAgentCallCancellable(draft.status)) {
+        return { status: "invalid_state" as const, draft };
+      }
+      const now = new Date().toISOString();
+      const releaseHeldUsage = draft.status === "queued";
+      draft.status = "cancelled";
+      draft.cancellationReason = cleanText(request.reason, 200) || "user_cancelled";
+      draft.cancelledAt = now;
+      draft.updatedAt = now;
+      if (releaseHeldUsage && draft.callId) {
+        releaseUsageHold(userId, draft.callId);
+        draft.usageSettledAt = now;
+      }
+      persistStoreSnapshot();
+      return { status: "cancelled" as const, draft };
+    });
+  } finally {
+    releaseMutation();
+  }
+}
+
+export function markAgentCallTakeoverReady(draftId: string) {
+  return runStoreTransaction(() => {
+    const draft = findAgentCallDraftById(draftId);
+    if (!draft || draft.status !== "takeover_requested") return draft;
+    draft.takeoverReadyAt ??= new Date().toISOString();
+    draft.updatedAt = draft.takeoverReadyAt;
+    persistStoreSnapshot();
+    return draft;
+  });
+}
+
+export function resumeAgentCallAfterTakeover(userId: string, draftId: string) {
   return runStoreTransaction(() => {
     const draft = findAgentCallDraft(userId, draftId);
-    if (!draft) return { status: "not_found" as const };
-    if (!isAgentCallCancellable(draft.status)) {
-      return { status: "invalid_state" as const, draft };
-    }
-    const now = new Date().toISOString();
-    draft.status = "cancelled";
-    draft.cancellationReason = cleanText(request.reason, 200) || "user_cancelled";
-    draft.cancelledAt = now;
-    draft.updatedAt = now;
+    if (!draft || draft.status !== "takeover_requested") return null;
+    draft.status = "in_progress";
+    draft.takeoverResolvedAt ??= new Date().toISOString();
+    draft.updatedAt = draft.takeoverResolvedAt;
     persistStoreSnapshot();
-    return { status: "cancelled" as const, draft };
+    return draft;
   });
 }
 
-export function startAgentCallDraft(
-  userId: string,
-  draftId: string,
-  request: StartAiCallingAgentCallRequest,
-) {
-  return runStoreTransaction(() => startAgentCallDraftTransaction(userId, draftId, request));
-}
-
-function startAgentCallDraftTransaction(
-  userId: string,
-  draftId: string,
-  request: StartAiCallingAgentCallRequest,
-) {
-  const draft = findAgentCallDraft(userId, draftId);
-  if (!draft) return { status: "not_found" as const };
-  if (isStartedStatus(draft.status)) return { status: "already_started" as const, draft };
-  if (draft.status !== "authorized") return { status: "invalid_state" as const, draft };
-  if (!cleanText(draft.targetPhone, 32)) return { status: "missing_target" as const, draft };
-  const policy = evaluateAgentCallStartPolicy({
-    userId,
-    targetPhone: draft.targetPhone!,
-    drafts: listAgentCallDrafts(userId),
+export function resolveAgentCallTakeover(draftId: string) {
+  return runStoreTransaction(() => {
+    const draft = findAgentCallDraftById(draftId);
+    if (!draft || draft.status !== "takeover_requested") return null;
+    draft.takeoverResolvedAt = new Date().toISOString();
+    draft.updatedAt = draft.takeoverResolvedAt;
+    persistStoreSnapshot();
+    return draft;
   });
-  if (!policy.allowed) return { status: "policy_denied" as const, draft, policy };
-  if (process.env.AGENT_CALL_GRAY_ENABLED === "true" &&
-      (!draft.recipientDisclosureConfirmed || !draft.disclosurePromptVersion)) {
-    return { status: "disclosure_required" as const, draft };
-  }
-  if (cleanText(request.consentPromptVersion, 80) &&
-    request.consentPromptVersion !== draft.consentPromptVersion) {
-    return { status: "invalid_consent" as const, draft };
-  }
-
-  const now = new Date().toISOString();
-  const callId = draft.callId ?? randomUUID();
-  const hold = createUsageHold(userId, AGENT_CALL_MINIMUM_START_SECONDS, undefined, {
-    sessionId: callId,
-    idempotencyKey: `hold:${callId}`,
-    note: "agent_call_session_hold",
-    ttlSeconds: 2 * 60 * 60,
-  });
-  if (hold.status !== "held") {
-    return { status: "insufficient_balance" as const, draft, usage: hold };
-  }
-  draft.status = "queued";
-  draft.callId = callId;
-  draft.executionProvider = cleanText(process.env.PSTN_PROVIDER, 80) || "domestic_bridge";
-  draft.queuedAt = now;
-  draft.updatedAt = now;
-  persistStoreSnapshot();
-  return { status: "queued" as const, draft };
 }
 
-export function updateAgentCallExecutionStatus(
-  userId: string,
-  draftId: string,
-  request: UpdateAiCallingAgentCallStatusRequest,
-) {
-  const draft = findAgentCallDraft(userId, draftId);
-  if (!draft) return { status: "not_found" as const };
-  const result = applyStatusUpdate(userId, draft, request);
-  if (result.status === "updated") persistStoreSnapshot();
-  return result;
-}
-
-export function updateAgentCallExecutionStatusById(
-  draftId: string,
-  request: UpdateAiCallingAgentCallStatusRequest,
-) {
-  const draft = findAgentCallDraftById(draftId);
-  if (!draft) return { status: "not_found" as const };
-  const result = applyStatusUpdate(draft.userId, draft, request);
-  if (result.status === "updated") persistStoreSnapshot();
-  return result;
-}
+export { startAgentCallDraft } from "./agent-call-start.js";
 
 export function updateAgentCallFromPstnWebhook(
   request: PstnAgentCallWebhookRequest,
@@ -275,69 +252,68 @@ export function updateAgentCallFromPstnWebhook(
   if (!draft) return { status: "not_found" as const };
   const seen = draft.providerWebhookEventIds ?? [];
   if (seen.includes(eventId)) return { status: "duplicate" as const, draft };
-  const result = applyStatusUpdate(draft.userId, draft, request);
+  const statusRequest = {
+    ...request,
+    providerOperationStatus: request.status === "in_progress" ? "accepted"
+      : request.status === "completed" ? "succeeded" : "failed",
+  } as const;
+  const result = applyAgentCallStatusUpdate(draft.userId, draft, statusRequest);
   if (result.status !== "updated") return result;
+  reconcileAgentCallProviderOperation(draft, statusRequest);
+  clearAgentCallLease(draft);
   draft.providerWebhookEventIds = [...seen, eventId].slice(-100);
   persistStoreSnapshot();
   return { status: "updated" as const, draft };
 }
 
-function applyStatusUpdate(
-  userId: string,
-  draft: AgentCallRecord,
-  request: UpdateAiCallingAgentCallStatusRequest,
+export function recordAgentCallRuntimeResult(
+  draftId: string,
+  result: VoiceAgentStructuredResultDto,
 ) {
-  if (!isWorkerStatus(request.status)) return { status: "invalid" as const };
-  if (draft.status !== "queued" && draft.status !== "in_progress") {
-    return { status: "invalid_state" as const, draft };
-  }
-
-  const now = new Date().toISOString();
-  draft.status = request.status;
-  if (request.status === "in_progress") draft.startedAt = draft.startedAt ?? now;
-  if (request.status === "completed") draft.completedAt = now;
-  if (request.status === "failed") draft.failedAt = now;
-  const consumedSeconds = normalizedSeconds(request.consumedSeconds);
-  if (consumedSeconds !== null) {
-    draft.consumedSeconds = consumedSeconds;
-  }
-  if (isTerminalWorkerStatus(request.status)) {
-    settleUsageOnce(userId, draft, {
-      billableSeconds: request.status === "failed" ? 0 : consumedSeconds ?? 0,
-      releaseHold: request.status === "failed",
-      settledAt: now,
-    });
-  }
-  draft.providerCallId = cleanText(request.providerCallId, 120) || draft.providerCallId;
-  draft.resultSummary = cleanText(request.resultSummary, 800) || draft.resultSummary;
-  draft.failureReason = cleanText(request.failureReason, 300) || draft.failureReason;
-  draft.nextStep = cleanText(request.nextStep, 300) || draft.nextStep;
-  draft.updatedAt = now;
-  return { status: "updated" as const, draft };
+  return runStoreTransaction(() => {
+    const draft = findAgentCallDraftById(draftId);
+    if (!draft) return null;
+    draft.resultSummary = cleanText(result.summary, 800) || draft.resultSummary;
+    draft.nextStep = cleanText(result.nextStep, 300) ||
+      cleanText(result.unresolvedItems.join("；"), 300) || draft.nextStep;
+    draft.updatedAt = new Date().toISOString();
+    persistStoreSnapshot();
+    return draft;
+  });
 }
 
-function settleUsageOnce(
-  userId: string,
-  draft: AgentCallRecord,
-  options: {
-    billableSeconds: number;
-    releaseHold: boolean;
-    settledAt: string;
-  },
-) {
-  if (draft.usageSettledAt) return;
-  const sessionId = draft.callId ?? draft.id;
-  if (options.billableSeconds > 0) {
-    consumeSeconds(userId, options.billableSeconds, undefined, {
-      note: "agent_call_usage",
-      sessionId,
-      idempotencyKey: `settle:${sessionId}`,
+export function failAgentCallRuntime(draftId: string, failureReason: string) {
+  return runStoreTransaction(() => {
+    const draft = findAgentCallDraftById(draftId);
+    if (!draft) return null;
+    const operation = draft.providerOperationId
+      ? findProviderOperation(draft.providerOperationId)
+      : null;
+    if (operation && ["accepted", "active", "unknown"]
+      .includes(operation.status)) {
+      draft.status = "reconciliation_required";
+      draft.failureReason = cleanText(failureReason, 300) ||
+        "voice_agent_runtime_failed";
+      draft.nextStep = "已请求挂断；等待 LiveKit SIP 终态后按实际时长结算。";
+      draft.updatedAt = new Date().toISOString();
+      clearAgentCallLease(draft);
+      persistStoreSnapshot();
+      return draft;
+    }
+    const result = applyAgentCallStatusUpdate(draft.userId, draft, {
+      status: "failed",
+      providerOperationStatus: "failed",
+      failureReason: cleanText(failureReason, 300) || "voice_agent_runtime_failed",
+      nextStep: "检查 Voice Agent runtime、模型与 LiveKit 事件后再重试。",
     });
-  }
-  if (options.releaseHold) {
-    releaseUsageHold(userId, sessionId);
-  } else {
-    settleUsageHold(userId, sessionId, options.billableSeconds);
-  }
-  draft.usageSettledAt = options.settledAt;
+    if (result.status === "updated") {
+      reconcileAgentCallProviderOperation(draft, {
+        status: "failed",
+        providerOperationStatus: "failed",
+        failureReason: draft.failureReason,
+      });
+      persistStoreSnapshot();
+    }
+    return draft;
+  });
 }

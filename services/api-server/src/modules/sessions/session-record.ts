@@ -31,4 +31,7 @@ export interface SessionRecord {
   diagnostics?: RealtimeSessionDiagnosticsDto;
   finalizationIdempotencyKey?: string;
   finalizedAt?: string;
+  homeRegion?: string;
+  homeCellId?: string;
+  routingGeneration?: number;
 }

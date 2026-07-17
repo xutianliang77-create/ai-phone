@@ -4,6 +4,14 @@
 日期：2026-07-14
 任务来源：`docs/ai-phone-optimization-development-tasks.md`
 
+LiveKit SIP、Dispatch、Egress/Ingress、PostgreSQL 和规模化验收补充见
+`docs/architecture/11-platform-acceptance-plan.md`。该补充计划不改变本文已
+验收或待执行的 AC 状态。
+
+2026-07-17 Platform P0 Batch 0A/0B 仅形成本地 H0/H1 自动化证据；Guest ticket
+重放/过期/跨 call/并发核销和 Call Room 上限已有自动化，staging、真机、外部
+恶意 Guest、多节点共享存储、镜像 digest 和 SIP 均未执行。
+
 ## 1. 验收原则
 
 - 自动化测试证明协议和边界，真机测试证明用户体验。

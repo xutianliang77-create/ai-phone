@@ -16,7 +16,7 @@ import {
   listSessions,
   saveSessionReview,
   saveSegments,
-} from "./sessions.repository.js";
+} from "./sessions-runtime.repository.js";
 import {
   toSessionDetail,
   toSessionExport,
@@ -39,7 +39,7 @@ export async function registerSessionsRoutes(app: FastifyInstance) {
     if (!account) return;
     const query = request.query as { q?: string };
     return {
-      sessions: listSessions(account.id, query.q).map(toSessionListItem),
+      sessions: (await listSessions(account.id, query.q)).map(toSessionListItem),
     };
   });
 
@@ -60,7 +60,7 @@ export async function registerSessionsRoutes(app: FastifyInstance) {
       .status(201)
       .send(
         toSessionDetail(
-          createTextTranslationSession(account.id, body, "type_to_speak"),
+          await createTextTranslationSession(account.id, body, "type_to_speak"),
         ),
       );
   });
@@ -82,7 +82,7 @@ export async function registerSessionsRoutes(app: FastifyInstance) {
       .status(201)
       .send(
         toSessionDetail(
-          createTextTranslationSession(
+          await createTextTranslationSession(
             account.id,
             body,
             body.sourceKind ?? "text",
@@ -95,7 +95,7 @@ export async function registerSessionsRoutes(app: FastifyInstance) {
     const account = requireAccount(request, reply);
     if (!account) return;
     const params = request.params as { sessionId: string };
-    const session = findSession(params.sessionId);
+    const session = await findSession(params.sessionId);
     if (!session)
       return sendError(reply, 404, "session_not_found", "Session not found");
     if (session.userId !== account.id) return forbidden(reply);
@@ -106,7 +106,7 @@ export async function registerSessionsRoutes(app: FastifyInstance) {
     const account = requireAccount(request, reply);
     if (!account) return;
     const params = request.params as { sessionId: string };
-    const session = findSession(params.sessionId);
+    const session = await findSession(params.sessionId);
     if (!session)
       return sendError(reply, 404, "session_not_found", "Session not found");
     if (session.userId !== account.id) return forbidden(reply);
@@ -126,12 +126,12 @@ export async function registerSessionsRoutes(app: FastifyInstance) {
         "segments must be an array",
       );
     }
-    return withSessionWriteLock(params.sessionId, () => {
-      const existing = findSession(params.sessionId);
+    return withSessionWriteLock(params.sessionId, async () => {
+      const existing = await findSession(params.sessionId);
       if (!existing)
         return sendError(reply, 404, "session_not_found", "Session not found");
       if (existing.userId !== account.id) return forbidden(reply);
-      const session = saveSegments(params.sessionId, body.segments!);
+      const session = await saveSegments(params.sessionId, body.segments!);
       return toSessionDetail(session ?? existing);
     });
   });
@@ -140,18 +140,18 @@ export async function registerSessionsRoutes(app: FastifyInstance) {
     const account = requireAccount(request, reply);
     if (!account) return;
     const params = request.params as { sessionId: string };
-    const session = findSession(params.sessionId);
+    const session = await findSession(params.sessionId);
     if (!session)
       return sendError(reply, 404, "session_not_found", "Session not found");
     if (session.userId !== account.id) return forbidden(reply);
     try {
       const review = await generateSessionReview(session);
-      return withSessionWriteLock(session.id, () => {
-        const current = findSession(session.id);
+      return withSessionWriteLock(session.id, async () => {
+        const current = await findSession(session.id);
         if (!current)
           return sendError(reply, 404, "session_not_found", "Session not found");
         if (current.userId !== account.id) return forbidden(reply);
-        const updated = saveSessionReview(current.id, review);
+        const updated = await saveSessionReview(current.id, review);
         return toSessionDetail(updated ?? current);
       });
     } catch (error) {
@@ -168,12 +168,12 @@ export async function registerSessionsRoutes(app: FastifyInstance) {
     const account = requireAccount(request, reply);
     if (!account) return;
     const params = request.params as { sessionId: string };
-    return withSessionWriteLock(params.sessionId, () => {
-      const session = findSession(params.sessionId);
+    return withSessionWriteLock(params.sessionId, async () => {
+      const session = await findSession(params.sessionId);
       if (!session)
         return sendError(reply, 404, "session_not_found", "Session not found");
       if (session.userId !== account.id) return forbidden(reply);
-      if (!deleteSession(params.sessionId)) {
+      if (!await deleteSession(params.sessionId)) {
         return sendError(reply, 404, "session_not_found", "Session not found");
       }
       reply.status(204);
@@ -186,7 +186,7 @@ export async function registerSessionsRoutes(app: FastifyInstance) {
     if (!account) return;
     const params = request.params as { sessionId: string };
     const query = request.query as { format?: string };
-    const session = findSession(params.sessionId);
+    const session = await findSession(params.sessionId);
     if (!session)
       return sendError(reply, 404, "session_not_found", "Session not found");
     if (session.userId !== account.id) return forbidden(reply);
@@ -225,8 +225,8 @@ export async function registerSessionsRoutes(app: FastifyInstance) {
 
     const params = request.params as { sessionId: string };
     const body = request.body as Partial<{ reason: unknown }> | undefined;
-    return withSessionWriteLock(params.sessionId, () => {
-      const session = findSession(params.sessionId);
+    return withSessionWriteLock(params.sessionId, async () => {
+      const session = await findSession(params.sessionId);
       if (!session)
         return sendError(reply, 404, "session_not_found", "Session not found");
       const refund = refundSessionUsage(session, { reason: body?.reason });

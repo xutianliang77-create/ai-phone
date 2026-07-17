@@ -2,6 +2,7 @@ import type { FastifyInstance } from "fastify";
 import {
   isSegmentTiming,
   isSegmentVadContext,
+  isSpeechPipelineTiming,
   isSpeakerAttribution,
   isSupportedLanguage,
   type SessionSegmentStage,
@@ -15,7 +16,7 @@ import {
   saveSegments,
   transitionSessionState,
   upsertSegment,
-} from "../sessions/sessions.repository.js";
+} from "../sessions/sessions-runtime.repository.js";
 import { completeSessionWithUsage } from "../sessions/session-completion.js";
 import { withSessionWriteLock } from "../sessions/session-write-coordinator.js";
 import { validateCreateRealtimeSessionRequest } from "./create-session-request.js";
@@ -39,7 +40,7 @@ export async function registerRealtimeRoutes(app: FastifyInstance) {
       return sendError(reply, 400, parsed.error.code, parsed.error.message);
     }
 
-    const result = createRealtimeSession(account.id, parsed.value);
+    const result = await createRealtimeSession(account.id, parsed.value);
     if (!result) {
       return sendError(
         reply,
@@ -55,7 +56,7 @@ export async function registerRealtimeRoutes(app: FastifyInstance) {
     const account = requireAccount(request, reply);
     if (!account) return;
     const params = request.params as { sessionId: string };
-    const session = findSession(params.sessionId);
+    const session = await findSession(params.sessionId);
     if (!session)
       return sendError(reply, 404, "session_not_found", "Session not found");
     if (session.userId !== account.id) return forbidden(reply);
@@ -70,12 +71,12 @@ export async function registerRealtimeRoutes(app: FastifyInstance) {
     const account = requireAccount(request, reply);
     if (!account) return;
     const params = request.params as { sessionId: string };
-    return withSessionWriteLock(params.sessionId, () => {
-      const existing = findSession(params.sessionId);
+    return withSessionWriteLock(params.sessionId, async () => {
+      const existing = await findSession(params.sessionId);
       if (!existing)
         return sendError(reply, 404, "session_not_found", "Session not found");
       if (existing.userId !== account.id) return forbidden(reply);
-      const session = completeSessionWithUsage(params.sessionId);
+      const session = await completeSessionWithUsage(params.sessionId);
       if (!session)
         return sendError(reply, 404, "session_not_found", "Session not found");
       return { sessionId: session.id, status: session.status };
@@ -97,11 +98,14 @@ export async function registerRealtimeRoutes(app: FastifyInstance) {
       return sendError(reply, 400, "invalid_segments", "Invalid segment patch");
     }
 
-    return withSessionWriteLock(body.sessionId, () => {
-      const session = upsertSegment(body.sessionId, {
+    return withSessionWriteLock(body.sessionId, async () => {
+      const session = await upsertSegment(body.sessionId, {
       segmentId: body.segmentId,
+      speechId: body.speechId,
       turnId: body.turnId,
       revision: body.revision,
+      pipelineGeneration: body.pipelineGeneration,
+      pipelineTiming: body.pipelineTiming,
       sourceText: body.sourceText,
       rawText: body.rawText,
       optimizedText: body.optimizedText,
@@ -150,8 +154,8 @@ export async function registerRealtimeRoutes(app: FastifyInstance) {
         );
       }
       const requestedStatus = body.status;
-      return withSessionWriteLock(params.sessionId, () => {
-        const result = transitionSessionState(params.sessionId, requestedStatus);
+      return withSessionWriteLock(params.sessionId, async () => {
+        const result = await transitionSessionState(params.sessionId, requestedStatus);
         if (!result) {
           return sendError(reply, 404, "session_not_found", "Session not found");
         }
@@ -199,8 +203,8 @@ export async function registerRealtimeRoutes(app: FastifyInstance) {
           "Invalid realtime session diagnostics",
         );
       }
-      return withSessionWriteLock(params.sessionId, () => {
-        const session = completeSessionWithUsage(params.sessionId, {
+      return withSessionWriteLock(params.sessionId, async () => {
+        const session = await completeSessionWithUsage(params.sessionId, {
           ...(typeof billableSeconds === "number" ? { billableSeconds } : {}),
           ...(diagnostics ? { diagnostics } : {}),
         });
@@ -231,8 +235,12 @@ function isValidSegmentPatch(
     isOptionalString(body.provider) &&
     isOptionalString(body.model) &&
     isOptionalNonNegativeNumber(body.latencyMs) &&
+    isOptionalString(body.speechId) &&
     isOptionalString(body.turnId) &&
     isOptionalNonNegativeInteger(body.revision) &&
+    isOptionalPositiveInteger(body.pipelineGeneration) &&
+    (body.pipelineTiming === undefined ||
+      isSpeechPipelineTiming(body.pipelineTiming)) &&
     isProviderUsage(body.providerUsage) &&
     isRefinement(body.refinement) &&
     (body.speaker === undefined || isSpeakerAttribution(body.speaker)) &&
@@ -255,8 +263,11 @@ function hasSegmentDiagnostics(body: Partial<UpsertSessionSegmentRequest>) {
     body.speaker,
     body.timing,
     body.vadContext,
+    body.speechId,
     body.turnId,
     body.revision,
+    body.pipelineGeneration,
+    body.pipelineTiming,
     body.dominantLanguage,
     body.detectedLanguages,
     body.mixedLanguage,
@@ -290,6 +301,11 @@ function isOptionalNonNegativeNumber(value: unknown) {
 function isOptionalNonNegativeInteger(value: unknown) {
   return value === undefined ||
     (typeof value === "number" && Number.isInteger(value) && value >= 0);
+}
+
+function isOptionalPositiveInteger(value: unknown) {
+  return value === undefined ||
+    typeof value === "number" && Number.isInteger(value) && value >= 1;
 }
 
 function isProviderUsage(value: unknown) {

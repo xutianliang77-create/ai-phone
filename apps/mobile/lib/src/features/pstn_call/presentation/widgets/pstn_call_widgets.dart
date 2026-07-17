@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
 import '../../../../platform/translation/supported_translation_language.dart';
+import '../../../call_link/data/call_link_api_client.dart';
+import '../../../call_link/data/call_room_client.dart';
 import '../../data/pstn_call_readiness_client.dart';
 
 class PstnCallLanguageField extends StatelessWidget {
@@ -24,6 +26,7 @@ class PstnCallLanguageField extends StatelessWidget {
       isExpanded: true,
       decoration: InputDecoration(labelText: label),
       items: supportedHyMtLanguages
+          .where((language) => language.code == 'zh' || language.code == 'en')
           .map((language) => DropdownMenuItem<String>(
                 value: language.code,
                 child: Text(
@@ -129,8 +132,8 @@ class PstnCallAvailabilityCard extends StatelessWidget {
     }
     return ready
         ? _text(
-            '服务商和合规配置已通过，还需完成 App 直拨调度接口。',
-            'Provider and compliance checks passed. The app dial orchestration endpoint is still required.',
+            '服务商和合规配置已通过，确认信息后可开始拨打。',
+            'Provider and compliance checks passed. Review the details to start calling.',
           )
         : _text(
             '可先完成号码、语言和告知检查，待服务商接入后开放外呼。',
@@ -148,6 +151,8 @@ class PstnCallReviewCard extends StatelessWidget {
     required this.calleeLanguage,
     required this.canDial,
     required this.chinese,
+    required this.busy,
+    required this.onDial,
     super.key,
   });
 
@@ -156,6 +161,8 @@ class PstnCallReviewCard extends StatelessWidget {
   final String calleeLanguage;
   final bool canDial;
   final bool chinese;
+  final bool busy;
+  final VoidCallback? onDial;
 
   @override
   Widget build(BuildContext context) {
@@ -176,12 +183,14 @@ class PstnCallReviewCard extends StatelessWidget {
             SizedBox(
               width: double.infinity,
               child: FilledButton.icon(
-                onPressed: null,
+                onPressed: canDial && !busy ? onDial : null,
                 icon: const Icon(Icons.phone_forwarded_outlined),
-                label: Text(canDial
+                label: Text(busy
+                    ? _text('正在建立安全通话', 'Starting secure call')
+                    : canDial
                     ? _text(
-                        '直拨调度待接入',
-                        'Dial orchestration pending',
+                        '开始拨打',
+                        'Start call',
                       )
                     : _text(
                         '当前不发起真实外呼',
@@ -189,6 +198,109 @@ class PstnCallReviewCard extends StatelessWidget {
                       )),
               ),
             ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _text(String zh, String en) => chinese ? zh : en;
+}
+
+class PstnActiveCallCard extends StatelessWidget {
+  const PstnActiveCallCard({
+    required this.call,
+    required this.roomSnapshot,
+    required this.busy,
+    required this.chinese,
+    required this.onEnd,
+    required this.onDtmf,
+    required this.onTransfer,
+    this.endResult,
+    this.error,
+    super.key,
+  });
+
+  final SipOutboundCall call;
+  final CallRoomSnapshot roomSnapshot;
+  final bool busy;
+  final bool chinese;
+  final VoidCallback onEnd;
+  final ValueChanged<String> onDtmf;
+  final VoidCallback onTransfer;
+  final CallLinkEndResult? endResult;
+  final Object? error;
+
+  @override
+  Widget build(BuildContext context) {
+    final connected = roomSnapshot.remoteParticipantCount > 0;
+    final status = endResult != null
+        ? _text('通话已结束', 'Call ended')
+        : connected
+            ? _text('电话已接通', 'Phone connected')
+            : call.status == 'unknown'
+                ? _text('拨号结果对账中', 'Reconciling dial result')
+                : _text('正在等待对方接听', 'Waiting for answer');
+    return Card(
+      margin: const EdgeInsets.only(top: 16),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Text(status, style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 6),
+            Text(_text(
+              '房间、字幕、译音和计费已绑定到本次通话。',
+              'The room, captions, translated audio, and billing are bound to this call.',
+            )),
+            if (error != null) ...<Widget>[
+              const SizedBox(height: 8),
+              Text(
+                error.toString(),
+                style: TextStyle(color: Theme.of(context).colorScheme.error),
+              ),
+            ],
+            if (endResult == null) ...<Widget>[
+              const SizedBox(height: 12),
+              Text(
+                _text('拨号键盘', 'Keypad'),
+                style: Theme.of(context).textTheme.labelLarge,
+              ),
+              const SizedBox(height: 8),
+              GridView.count(
+                crossAxisCount: 3,
+                mainAxisSpacing: 8,
+                crossAxisSpacing: 8,
+                childAspectRatio: 2.1,
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                children: '123456789*0#'.split('').map((digit) {
+                  return OutlinedButton(
+                    onPressed: busy || !connected ? null : () => onDtmf(digit),
+                    child: Text(digit),
+                  );
+                }).toList(growable: false),
+              ),
+              const SizedBox(height: 8),
+              SizedBox(
+                width: double.infinity,
+                child: TextButton.icon(
+                  onPressed: busy || !connected ? null : onTransfer,
+                  icon: const Icon(Icons.phone_forwarded_outlined),
+                  label: Text(_text('转接电话', 'Transfer call')),
+                ),
+              ),
+              const SizedBox(height: 4),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: busy ? null : onEnd,
+                  icon: const Icon(Icons.call_end_outlined),
+                  label: Text(_text('结束通话', 'End call')),
+                ),
+              ),
+            ],
           ],
         ),
       ),

@@ -87,6 +87,8 @@ class AiCallingAgentTaskList extends StatelessWidget {
       'draft' => '待确认',
       'authorized' => '已授权',
       'queued' => '排队中',
+      'dispatching' => '正在拨号',
+      'reconciliation_required' => '等待对账',
       'in_progress' => '通话中',
       'completed' => '已完成',
       'failed' => '失败',

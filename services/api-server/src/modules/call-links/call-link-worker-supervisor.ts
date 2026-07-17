@@ -1,5 +1,17 @@
 import { spawn } from "node:child_process";
 import { resolve } from "node:path";
+import { CallLinkWorkerDispatchRuntime } from "../worker-dispatches/call-link-worker-dispatch-runtime.js";
+import {
+  getLiveKitDispatchConfig,
+  workerRuntimeProvider,
+} from "../worker-dispatches/livekit-dispatch-readiness.js";
+import type { WorkerDispatchTicketPayload } from "../worker-dispatches/worker-dispatch-ticket.js";
+
+export interface WorkerRuntimeClaim {
+  generation: number;
+  workerId?: string;
+  jobId?: string;
+}
 
 export interface ManagedCallLinkWorkerProcess {
   onceExit(
@@ -11,9 +23,12 @@ export interface ManagedCallLinkWorkerProcess {
 
 export interface CallLinkWorkerRuntime {
   ensure(callId: string): Promise<void>;
-  markReady(callId: string): void;
-  stop(callId: string): void;
-  shutdown(): void;
+  markReady(callId: string, claim?: WorkerRuntimeClaim): void;
+  heartbeat?(callId: string, claim: WorkerRuntimeClaim): unknown;
+  reportFailure?(callId: string, claim: WorkerRuntimeClaim, errorClass?: string): void;
+  verifyTicket?(ticket: string): WorkerDispatchTicketPayload | null;
+  stop(callId: string): void | Promise<void>;
+  shutdown(): void | Promise<void>;
 }
 
 type WorkerLauncher = (callId: string) => ManagedCallLinkWorkerProcess;
@@ -107,10 +122,27 @@ export class CallLinkWorkerSupervisor implements CallLinkWorkerRuntime {
 }
 
 const defaultSupervisor = new CallLinkWorkerSupervisor();
+let defaultDispatchRuntime: CallLinkWorkerDispatchRuntime | null = null;
 let testSupervisor: CallLinkWorkerRuntime | null = null;
 
-export function getCallLinkWorkerSupervisor() {
-  return testSupervisor ?? defaultSupervisor;
+export function getCallLinkWorkerSupervisor(): CallLinkWorkerRuntime {
+  if (testSupervisor) return testSupervisor;
+  if (workerRuntimeProvider() === "local_process") return defaultSupervisor;
+  if (defaultDispatchRuntime) return defaultDispatchRuntime;
+  const config = getLiveKitDispatchConfig();
+  if (!config.ok) return new UnavailableCallLinkWorkerRuntime(config.issues);
+  defaultDispatchRuntime = new CallLinkWorkerDispatchRuntime(config.config);
+  return defaultDispatchRuntime;
+}
+
+class UnavailableCallLinkWorkerRuntime implements CallLinkWorkerRuntime {
+  constructor(private readonly issues: string[]) {}
+  ensure() {
+    return Promise.reject(new Error(`LiveKit dispatch is not ready: ${this.issues.join("; ")}`));
+  }
+  markReady() {}
+  stop() {}
+  shutdown() {}
 }
 
 export function setCallLinkWorkerSupervisorForTests(

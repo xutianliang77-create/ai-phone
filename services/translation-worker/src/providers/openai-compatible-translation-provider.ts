@@ -23,11 +23,9 @@ export class OpenAiCompatibleTranslationProvider implements CallTranslationProvi
     this.fetchFn = options.fetchFn ?? fetch;
   }
 
-  async translate(input: {
-    text: string;
-    sourceLanguage: CallRoomTranslationLanguage;
-    targetLanguage: CallRoomTranslationLanguage;
-  }) {
+  async translate(
+    input: Parameters<CallTranslationProvider["translate"]>[0],
+  ) {
     const first = await this.requestTranslation(input, false);
     const firstValidation = validateTranslation(first);
     if (firstValidation.ok) return firstValidation.text;
@@ -39,11 +37,10 @@ export class OpenAiCompatibleTranslationProvider implements CallTranslationProvi
     throw new Error(retryValidation.message);
   }
 
-  private async requestTranslation(input: {
-    text: string;
-    sourceLanguage: CallRoomTranslationLanguage;
-    targetLanguage: CallRoomTranslationLanguage;
-  }, repairAttempt: boolean) {
+  private async requestTranslation(
+    input: Parameters<CallTranslationProvider["translate"]>[0],
+    repairAttempt: boolean,
+  ) {
     const response = await this.fetchWithTimeout(this.chatUrl(), {
       method: "POST",
       headers: this.headers(),

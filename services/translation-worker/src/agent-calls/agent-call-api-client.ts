@@ -1,7 +1,8 @@
 import type {
+  AgentCallWorkerClaimDto,
+  AgentCallWorkerClaimsResponse,
   AiCallingAgentDraftDto,
   AiCallingAgentDraftResponse,
-  AiCallingAgentDraftsResponse,
   UpdateAiCallingAgentCallStatusRequest,
 } from "@translation/contracts";
 import type { AgentCallApi } from "./types.js";
@@ -20,27 +21,35 @@ export class HttpAgentCallApiClient implements AgentCallApi {
     this.fetchFn = options.fetchFn ?? fetch;
   }
 
-  async listQueued(limit: number): Promise<AiCallingAgentDraftDto[]> {
+  async claim(workerId: string, limit: number): Promise<AgentCallWorkerClaimDto[]> {
     const response = await this.fetchWithTimeout(
-      `${this.internalBaseUrl()}/queued?limit=${encodeURIComponent(String(limit))}`,
-      { method: "GET", headers: this.headers() },
+      `${this.internalBaseUrl()}/claims`,
+      {
+        method: "POST",
+        headers: this.headers(),
+        body: JSON.stringify({ workerId, limit }),
+      },
     );
     if (!response.ok) {
       throw new Error(`Agent call queue API returned HTTP ${response.status}`);
     }
-    const body = await response.json() as AiCallingAgentDraftsResponse;
-    return body.drafts ?? [];
+    const body = await response.json() as AgentCallWorkerClaimsResponse;
+    return body.claims ?? [];
   }
 
   async updateStatus(
-    draftId: string,
+    claim: AgentCallWorkerClaimDto,
     request: UpdateAiCallingAgentCallStatusRequest,
   ) {
     const response = await this.fetchWithTimeout(
-      `${this.internalBaseUrl()}/${encodeURIComponent(draftId)}/status`,
+      `${this.internalBaseUrl()}/${encodeURIComponent(claim.draft.id)}/status`,
       {
         method: "POST",
-        headers: this.headers(),
+        headers: {
+          ...this.headers(),
+          "x-agent-worker-id": claim.workerId,
+          "x-agent-call-lease-token": claim.leaseToken,
+        },
         body: JSON.stringify(request),
       },
     );

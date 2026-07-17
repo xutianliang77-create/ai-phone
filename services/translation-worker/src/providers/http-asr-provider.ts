@@ -28,6 +28,9 @@ export interface HttpAsrProviderOptions {
 
 interface AsrResponse {
   segmentId?: string;
+  speechId?: string;
+  turnId?: string;
+  revision?: number;
   text?: string;
   language?: CallRoomTranslationLanguage;
   confidence?: number | null;
@@ -168,6 +171,9 @@ function parseAsrResponse(
   const confidence = normalizeConfidence(body.confidence);
   return {
     segmentId: body.segmentId ?? fallbackSegmentId,
+    ...(validIdentifier(body.speechId) ? { speechId: body.speechId.trim() } : {}),
+    ...(validIdentifier(body.turnId) ? { turnId: body.turnId.trim() } : {}),
+    ...(validRevision(body.revision) ? { revision: body.revision } : {}),
     text,
     language: body.language,
     ...(confidence === undefined ? {} : { confidence }),
@@ -179,6 +185,14 @@ function parseAsrResponse(
       ? { vadContext: body.vadContext }
       : {}),
   };
+}
+
+function validIdentifier(value: unknown): value is string {
+  return typeof value === "string" && value.trim().length > 0 && value.length <= 160;
+}
+
+function validRevision(value: unknown): value is number {
+  return typeof value === "number" && Number.isInteger(value) && value >= 0;
 }
 
 function normalizeConfidence(value: number | null | undefined) {

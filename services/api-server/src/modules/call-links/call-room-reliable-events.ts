@@ -2,39 +2,35 @@ import {
   listPendingOutboxEvents,
   markOutboxFailed,
   markOutboxPublished,
-  processInboxEvent,
+  processInboxEventAsync,
+  hasInboxEvent,
 } from "../events/reliable-events.repository.js";
 import {
   assertSessionVersion,
   findSession,
-} from "../sessions/sessions.repository.js";
-import {
-  getStoreSnapshot,
-  runStoreTransaction,
-} from "../../infrastructure/storage/json-store.js";
+} from "../sessions/sessions-runtime.repository.js";
 import { persistCallRoomDataEvent } from "./call-room-event-persistence.js";
 import type { CallLinkRecord } from "./call-links.service.js";
 import type { CallRoomDataEvent } from "./call-room-events.js";
 
 const callRoomOutboxEventType = "call_room.data";
 
-export function stageCallRoomDataEvents(options: {
+export async function stageCallRoomDataEvents(options: {
   record: CallLinkRecord;
   events: CallRoomDataEvent[];
   expectedVersion?: number;
 }) {
-  return runStoreTransaction(() => {
-    const duplicateOnly = options.events.every((event) =>
-      hasInboxEvent(eventId(options.record, event))
-    );
-    if (!duplicateOnly) {
-      assertSessionVersion(options.record.sessionId, options.expectedVersion);
-    }
-    let duplicateCount = 0;
-    for (const submitted of options.events) {
-      const id = eventId(options.record, submitted);
-      const event = { ...submitted, eventId: id };
-      const staged = processInboxEvent({
+  const duplicateOnly = options.events.every((event) =>
+    hasInboxEvent(eventId(options.record, event))
+  );
+  if (!duplicateOnly) {
+    await assertSessionVersion(options.record.sessionId, options.expectedVersion);
+  }
+  let duplicateCount = 0;
+  for (const submitted of options.events) {
+    const id = eventId(options.record, submitted);
+    const event = { ...submitted, eventId: id };
+    const staged = await processInboxEventAsync({
         eventId: id,
         sessionId: options.record.sessionId,
         eventType: event.type,
@@ -46,14 +42,13 @@ export function stageCallRoomDataEvents(options: {
           eventType: callRoomOutboxEventType,
           payload: event,
         },
-      });
-      if (staged.duplicate) duplicateCount += 1;
-    }
-    return {
-      duplicateCount,
-      sessionVersion: findSession(options.record.sessionId)?.version ?? 1,
-    };
-  });
+    });
+    if (staged.duplicate) duplicateCount += 1;
+  }
+  return {
+    duplicateCount,
+    sessionVersion: (await findSession(options.record.sessionId))?.version ?? 1,
+  };
 }
 
 export function pendingCallRoomDataEvents(sessionId: string, now?: Date) {
@@ -89,9 +84,10 @@ function eventId(record: CallLinkRecord, event: CallRoomDataEvent) {
     event.type,
     event.playbackId ?? event.segmentId,
     ...(event.generation ? [event.generation] : []),
+    ...(event.pipelineGeneration
+      ? [`pipeline-${event.pipelineGeneration}`]
+      : event.revision !== undefined
+        ? [`revision-${event.revision}`]
+        : []),
   ].join(":");
-}
-
-function hasInboxEvent(eventId: string) {
-  return getStoreSnapshot().inboxEvents.some((event) => event.eventId === eventId);
 }

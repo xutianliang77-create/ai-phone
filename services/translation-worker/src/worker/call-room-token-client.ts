@@ -6,6 +6,7 @@ export interface CallRoomWorkerToken {
   provider: "livekit";
   roomName: string;
   wsUrl: string;
+  participantIdentity: string;
   participantRole: "worker";
   token: string;
   expiresAt: string;

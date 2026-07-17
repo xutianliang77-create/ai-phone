@@ -6,6 +6,7 @@ import type {
   CallRoomTranslationLanguage,
   SegmentTimingDto,
   SegmentVadContextDto,
+  SpeechPipelineTimingDto,
 } from "@translation/contracts";
 
 export type CallAudioSpeakerRole = Exclude<CallRoomSpeakerRole, "worker">;
@@ -16,8 +17,10 @@ export interface CallAudioFrame extends AudioFrame {
 
 export interface TranscriptSegment {
   segmentId: string;
+  speechId?: string;
   turnId?: string;
   revision?: number;
+  pipelineTiming?: SpeechPipelineTimingDto;
   text: string;
   language?: CallRoomTranslationLanguage;
   confidence?: number;
@@ -63,6 +66,10 @@ export interface CallTranslationProvider {
     text: string;
     sourceLanguage: CallRoomTranslationLanguage;
     targetLanguage: CallRoomTranslationLanguage;
+    speechId: string;
+    turnId: string;
+    revision: number;
+    pipelineGeneration: number;
   }): Promise<string>;
 }
 
@@ -101,6 +108,10 @@ export interface CallTtsProvider {
     language: CallRoomTranslationLanguage;
     speakerRole: CallAudioSpeakerRole;
     segmentId: string;
+    speechId: string;
+    turnId: string;
+    revision: number;
+    pipelineGeneration: number;
     voice?: TtsVoiceConfig;
   }): Promise<SynthesizedSpeech | null>;
 }

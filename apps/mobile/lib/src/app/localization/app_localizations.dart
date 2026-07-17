@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
+import 'app_call_link_error_localizations.dart';
 import 'app_localization_texts.dart';
 
 class AppLocalizations {
@@ -242,14 +243,10 @@ class AppLocalizations {
     if (message.startsWith('Create session failed')) {
       return '创建实时会话失败';
     }
-    if (message.startsWith('Create room token failed')) {
-      return '准备通话失败，请稍后重试';
-    }
+    final callLinkError = appCallLinkErrorMessage(message);
+    if (callLinkError != null) return callLinkError;
     if (message.startsWith('Connect call room failed')) {
       return '进入通话失败，请检查网络后重试';
-    }
-    if (message.startsWith('End call link failed')) {
-      return '结束并保存通话失败';
     }
     if (message.startsWith('Save segments failed')) {
       return '保存字幕失败';

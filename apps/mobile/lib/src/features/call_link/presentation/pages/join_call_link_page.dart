@@ -135,8 +135,8 @@ class _JoinCallLinkPageState extends State<JoinCallLinkPage> {
 
   Future<void> _join() async {
     if (_loading) return;
-    final callId = _callIdFromInput(_controller.text);
-    if (callId == null) {
+    final invitation = _invitationFromInput(_controller.text);
+    if (invitation == null) {
       setState(() => _error = context.l10n.joinCallLinkInvalid);
       return;
     }
@@ -151,11 +151,12 @@ class _JoinCallLinkPageState extends State<JoinCallLinkPage> {
     });
     try {
       await _roomClient.disconnect();
-      final link = await _client.getCallLink(callId: callId);
+      final link = await _client.getCallLink(callId: invitation.callId);
       final token = await _client.createRoomToken(
         callId: link.callId,
         participantRole: 'guest',
         participantName: 'guest',
+        guestTicket: invitation.guestTicket,
       );
       if (!mounted) return;
       setState(() {
@@ -261,23 +262,31 @@ class _CallRoomStatus extends StatelessWidget {
   }
 }
 
-String? _callIdFromInput(String input) {
+_CallLinkInvitation? _invitationFromInput(String input) {
   final trimmed = input.trim();
   if (trimmed.isEmpty) return null;
   final uri = Uri.tryParse(trimmed);
   final segments = uri?.pathSegments ?? const <String>[];
   final joinIndex = segments.indexOf('join');
   if (joinIndex >= 0 && joinIndex + 1 < segments.length) {
-    return _validCallId(segments[joinIndex + 1]);
+    final callId = _validCallId(segments[joinIndex + 1]);
+    final guestTicket = uri?.queryParameters['ticket'];
+    if (callId != null && guestTicket != null && guestTicket.isNotEmpty) {
+      return _CallLinkInvitation(callId, guestTicket);
+    }
   }
-  if (segments.isNotEmpty && uri?.hasScheme == true) {
-    return _validCallId(segments.last);
-  }
-  return _validCallId(trimmed);
+  return null;
 }
 
 String? _validCallId(String value) {
   final cleaned = value.trim();
   if (RegExp(r'^[A-Za-z0-9_-]{3,120}$').hasMatch(cleaned)) return cleaned;
   return null;
+}
+
+class _CallLinkInvitation {
+  const _CallLinkInvitation(this.callId, this.guestTicket);
+
+  final String callId;
+  final String guestTicket;
 }

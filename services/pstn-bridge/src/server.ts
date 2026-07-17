@@ -7,6 +7,10 @@ import { handleProviderMediaEvent } from "./provider-media-events.js";
 import { handleProviderStatusEvent } from "./provider-status-events.js";
 import { buildPstnProvider } from "./providers.js";
 import { handlePstnPlaybackControl } from "./pstn-playback-control.js";
+import {
+  InMemoryPstnDialGate,
+  type PstnDialGate,
+} from "./pstn-dial-gate.js";
 import { buildStatusWebhookSink } from "./status-webhook-sink.js";
 import { parseTranslatedAudioRequest } from "./translated-audio-request.js";
 import type {
@@ -25,6 +29,7 @@ export interface PstnBridgeServerOptions {
   audioFrameSink?: PstnAudioFrameSink;
   statusWebhookSink?: PstnStatusWebhookSink;
   providerEventDeduper?: ProviderEventDeduper;
+  dialGate?: PstnDialGate;
   fetchFn?: typeof fetch;
 }
 
@@ -34,6 +39,7 @@ export function buildPstnBridgeServer(options: PstnBridgeServerOptions = {}) {
   const audioFrameSink = options.audioFrameSink ?? buildAudioFrameSink(config, options.fetchFn);
   const statusWebhookSink = options.statusWebhookSink ?? buildStatusWebhookSink(config, options.fetchFn);
   const providerEventDeduper = options.providerEventDeduper ?? new InMemoryProviderEventDeduper();
+  const dialGate = options.dialGate ?? new InMemoryPstnDialGate();
   return createServer(async (request, response) => {
     try {
       await handleRequest({
@@ -44,6 +50,7 @@ export function buildPstnBridgeServer(options: PstnBridgeServerOptions = {}) {
         audioFrameSink,
         statusWebhookSink,
         providerEventDeduper,
+        dialGate,
         hasAudioFrameSink: Boolean(options.audioFrameSink || config.audioFrameSinkEndpoint),
         hasStatusWebhookSink: Boolean(options.statusWebhookSink || config.statusWebhookEndpoint),
       });
@@ -63,6 +70,7 @@ async function handleRequest(context: {
   audioFrameSink: PstnAudioFrameSink;
   statusWebhookSink: PstnStatusWebhookSink;
   providerEventDeduper: ProviderEventDeduper;
+  dialGate: PstnDialGate;
   hasAudioFrameSink: boolean;
   hasStatusWebhookSink: boolean;
 }) {
@@ -83,7 +91,7 @@ async function handleRequest(context: {
     return;
   }
   if (request.method === "POST" && request.url === "/agent-calls") {
-    await handleAgentCall({ request, response, config, provider });
+    await handleAgentCall({ request, response, config, provider, dialGate: context.dialGate });
     return;
   }
   if (request.method === "POST" && request.url === "/translated-audio") {
@@ -111,6 +119,7 @@ async function handleAgentCall(context: {
   response: ServerResponse;
   config: PstnBridgeEnv;
   provider: PstnProvider;
+  dialGate: PstnDialGate;
 }) {
   if (!context.config.apiKey) {
     sendError(context.response, 503, "pstn_bridge_not_configured", "PSTN_BRIDGE_API_KEY is required");
@@ -125,7 +134,14 @@ async function handleAgentCall(context: {
     sendError(context.response, 400, "invalid_agent_call", "invalid agent call payload");
     return;
   }
-  const result = await context.provider.placeCall(body);
+  if (context.request.headers["idempotency-key"] !== body.idempotencyKey) {
+    sendError(context.response, 400, "invalid_idempotency_key", "idempotency key mismatch");
+    return;
+  }
+  const result = await context.dialGate.execute(
+    body,
+    () => context.provider.placeCall(body),
+  );
   sendJson(context.response, 200, { status: result.status ?? "in_progress", ...result });
 }
 
@@ -192,16 +208,19 @@ async function handleMediaFrame(context: {
 function parseAgentCallRequest(input: unknown): AgentCallBridgeRequest | null {
   if (!input || typeof input !== "object") return null;
   const body = input as Record<string, unknown>;
+  const idempotencyKey = text(body.idempotencyKey, 160);
   const draftId = text(body.draftId, 120);
   const callId = text(body.callId, 120);
   const targetPhone = text(body.targetPhone, 80);
   const objective = text(body.objective, 800);
   const suggestedScript = text(body.suggestedScript, 1200);
   const language = text(body.language, 20);
-  if (!draftId || !callId || !targetPhone || !objective || !suggestedScript || !language) {
+  if (!idempotencyKey || !draftId || !callId || !targetPhone || !objective ||
+    !suggestedScript || !language) {
     return null;
   }
   return {
+    idempotencyKey,
     draftId,
     callId,
     targetPhone,

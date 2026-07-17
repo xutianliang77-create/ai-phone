@@ -6,7 +6,7 @@ import {
   findSession,
   listSessionSpeakers,
   renameSessionSpeaker,
-} from "./sessions.repository.js";
+} from "./sessions-runtime.repository.js";
 import { withSessionWriteLock } from "./session-write-coordinator.js";
 
 export function registerSessionSpeakerRoutes(app: FastifyInstance) {
@@ -14,13 +14,13 @@ export function registerSessionSpeakerRoutes(app: FastifyInstance) {
     const account = requireAccount(request, reply);
     if (!account) return;
     const params = request.params as { sessionId: string };
-    const session = findSession(params.sessionId);
+    const session = await findSession(params.sessionId);
     if (!session)
       return sendError(reply, 404, "session_not_found", "Session not found");
     if (session.userId !== account.id) return forbidden(reply);
     return {
       sessionId: session.id,
-      speakers: listSessionSpeakers(session.id) ?? [],
+      speakers: await listSessionSpeakers(session.id) ?? [],
     };
   });
 
@@ -43,12 +43,12 @@ export function registerSessionSpeakerRoutes(app: FastifyInstance) {
           "displayName must contain 1 to 40 characters",
         );
       }
-      return withSessionWriteLock(params.sessionId, () => {
-        const session = findSession(params.sessionId);
+      return withSessionWriteLock(params.sessionId, async () => {
+        const session = await findSession(params.sessionId);
         if (!session)
           return sendError(reply, 404, "session_not_found", "Session not found");
         if (session.userId !== account.id) return forbidden(reply);
-        const updated = renameSessionSpeaker(
+        const updated = await renameSessionSpeaker(
           session.id,
           params.speakerId,
           displayName,

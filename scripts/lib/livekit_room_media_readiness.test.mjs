@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { checkLiveKitRoomMediaReadiness } from "./livekit_room_media_readiness.mjs";
 
 describe("checkLiveKitRoomMediaReadiness", () => {
-  it("connects host, guest, and worker through data and audio media", async () => {
+  it("connects host, guest, and worker through trusted caption and audio media", async () => {
     const rtc = createFakeRtcNode();
     const result = await checkLiveKitRoomMediaReadiness({
       apiBaseUrl: "http://127.0.0.1:3410",
@@ -18,7 +18,6 @@ describe("checkLiveKitRoomMediaReadiness", () => {
     expect(check(result, "single_participant_waits").status).toBe("pass");
     expect(check(result, "human_pair_activates_worker").status).toBe("pass");
     expect(check(result, "participants_joined_room").status).toBe("pass");
-    expect(check(result, "data_channel_received").status).toBe("pass");
     expect(check(result, "server_caption_data_received").status).toBe("pass");
     expect(check(result, "worker_audio_subscribed")).toMatchObject({
       status: "pass",
@@ -74,6 +73,7 @@ async function fakeFetch(url, init = {}) {
       callId: "call_1",
       sessionId: "call_1",
       roomName: "call_call_1",
+      joinUrl: "https://example.test/call/call_1?ticket=guest-ticket-1",
     });
   }
   if (path.endsWith("/room-token") && init.method === "POST") {
@@ -149,13 +149,6 @@ function createFakeRtcNode() {
       this.room = room;
       this.rooms = rooms;
       this.identity = `call_1:${role}:fake`;
-    }
-
-    async publishData(data) {
-      for (const room of this.rooms) {
-        if (room === this.room) continue;
-        room.emit("dataReceived", data, this);
-      }
     }
 
     async publishTrack(track) {

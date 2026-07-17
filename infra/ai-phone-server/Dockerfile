@@ -12,6 +12,9 @@ COPY services/api-server ./services/api-server
 COPY services/realtime-gateway ./services/realtime-gateway
 COPY services/translation-worker ./services/translation-worker
 COPY services/pstn-bridge ./services/pstn-bridge
+COPY services/srt-ingress-bridge ./services/srt-ingress-bridge
+COPY services/voice-agent-runtime ./services/voice-agent-runtime
+COPY infra/postgres ./infra/postgres
 
 RUN npm ci && \
     npm run build -w @translation/contracts && \
@@ -19,7 +22,8 @@ RUN npm ci && \
     npm run build -w @translation/api-server && \
     npm run build -w @translation/realtime-gateway && \
     npm run build -w @translation/translation-worker && \
-    npm run build -w @translation/pstn-bridge
+    npm run build -w @translation/pstn-bridge && \
+    npm run build -w @translation/voice-agent-runtime
 
 ENV NODE_ENV=production \
     SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt
