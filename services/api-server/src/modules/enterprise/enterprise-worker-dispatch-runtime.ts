@@ -142,10 +142,12 @@ function payloadFor(
     .EnterpriseWorkerDispatchGrantRecord,
 ): EnterpriseWorkerDispatchTicketPayload {
   return {
-    v: 1,
+    v: 2,
     ticketId: grant.id,
     tenantId: grant.tenantId,
     communicationSessionId: grant.communicationSessionId,
+    policySnapshotId: grant.policySnapshotId,
+    policyVersion: grant.policyVersion,
     cellId: grant.cellId,
     routeEpoch: grant.routeEpoch,
     generation: grant.generation,

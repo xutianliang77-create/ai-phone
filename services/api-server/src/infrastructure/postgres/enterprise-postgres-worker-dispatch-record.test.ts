@@ -22,6 +22,10 @@ describe("enterprise worker dispatch fence", () => {
     ["generation", { generation: 4 }, "stale_generation"],
     ["capability", { capability: "voice_agent_runtime" },
       "capability_mismatch"],
+    ["policy snapshot", {
+      policySnapshotId: "00000000-0000-4000-8000-000000000099",
+    }, "policy_mismatch"],
+    ["policy version", { policyVersion: "policy-2" }, "policy_mismatch"],
     ["expiry", { expiresAt: "2026-07-18T05:01:00.000Z" }, "expired"],
   ])("rejects a mismatched %s fence", (_name, change, expected) => {
     expect(evaluateEnterpriseWorkerDispatchFence({
@@ -72,10 +76,12 @@ function decide(input: {
 
 function payload(): EnterpriseWorkerDispatchTicketPayload {
   return {
-    v: 1,
+    v: 2,
     ticketId: "00000000-0000-4000-8000-000000000011",
     tenantId: "00000000-0000-4000-8000-000000000001",
     communicationSessionId: "enterprise-session-1",
+    policySnapshotId: "00000000-0000-4000-8000-000000000021",
+    policyVersion: "policy-1",
     cellId: "cn-cell-01",
     routeEpoch: 7,
     generation: 3,
@@ -90,6 +96,8 @@ function grant(): EnterpriseWorkerDispatchGrantRecord {
     id: payload().ticketId,
     tenantId: payload().tenantId,
     communicationSessionId: payload().communicationSessionId,
+    policySnapshotId: payload().policySnapshotId,
+    policyVersion: payload().policyVersion,
     dispatchId: "dispatch-1",
     capacityReservationId: "capacity-1",
     capability: "translation_runtime",

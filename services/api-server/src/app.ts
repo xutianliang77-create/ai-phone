@@ -25,6 +25,9 @@ import {
 } from "./modules/enterprise/enterprise-provider-readiness.js";
 import { registerEnterpriseProviderReadinessRoutes } from "./modules/enterprise/enterprise-provider-readiness.routes.js";
 import {
+  registerEnterpriseCommunicationPolicyRoutes,
+} from "./modules/enterprise/enterprise-communication-policy.routes.js";
+import {
   createEnvironmentTenantLifecycleExecutor,
   type TenantLifecycleExecutor,
 } from "./modules/enterprise/enterprise-tenant-lifecycle-executor.js";
@@ -77,6 +80,8 @@ export async function buildApp(dependencies: {
   });
   const enterpriseRepositoryRuntime = dependencies.enterpriseRepositoryRuntime ??
     legacyEnterpriseRepositoryRuntime;
+  const tenantRouteService = dependencies.tenantRouteService ??
+    createEnvironmentTenantRouteService();
   registerPlatformTelemetryHooks(app);
   await app.register(cors, { origin: true });
   await registerAccountRoutes(app);
@@ -90,9 +95,14 @@ export async function buildApp(dependencies: {
   await registerEnterpriseTenantRoutes(
     app,
     dependencies.tenantProvisioner ?? createEnvironmentTenantProvisioner(),
-    dependencies.tenantRouteService ?? createEnvironmentTenantRouteService(),
+    tenantRouteService,
     dependencies.tenantLifecycleExecutor ??
       createEnvironmentTenantLifecycleExecutor(),
+    enterpriseRepositoryRuntime,
+  );
+  await registerEnterpriseCommunicationPolicyRoutes(
+    app,
+    tenantRouteService,
     enterpriseRepositoryRuntime,
   );
   await registerEnterpriseProviderReadinessRoutes(

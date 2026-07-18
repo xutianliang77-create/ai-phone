@@ -11,6 +11,7 @@ import type {
 import {
   EnterpriseWorkerDispatchPostgresRepository,
 } from "./enterprise-postgres-worker-dispatch.repository.js";
+import { policyRow } from "./enterprise-postgres-worker-dispatch-policy-fixture.test-helper.js";
 
 const tenantId = "00000000-0000-4000-8000-000000000001";
 const now = new Date("2026-07-18T05:00:00.000Z");
@@ -125,19 +126,28 @@ function issueInput() {
   };
 }
 
-function issueFixture(input: { used?: number } = {}) {
+function issueFixture(input: {
+  used?: number;
+  policy?: Record<string, unknown> | null;
+} = {}) {
   const calls: Call[] = [];
   const session = baseSession(calls, {
     query(sql, values) {
       if (sql.includes("idempotency_key = $2")) return [];
       if (sql.includes("communication_session_bindings")) return [bindingRow()];
+      if (sql.includes("communication_policy_snapshots")) {
+        const policy = Object.hasOwn(input, "policy") ? input.policy : policyRow();
+        return policy ? [policy] : [];
+      }
       if (sql.includes("capability = $3") && sql.includes("generation = $4")) return [];
       if (sql.includes("INSERT INTO enterprise.worker_dispatch_grants")) {
         return [grantRow({
           id: values?.[0],
           dispatch_id: values?.[2],
           capacity_reservation_id: values?.[3],
-          request_hash: values?.[9],
+          policy_snapshot_id: values?.[8],
+          policy_version: values?.[9],
+          request_hash: values?.[11],
           status: "issued",
           lease_owner: null,
           lease_expires_at: null,
@@ -166,6 +176,7 @@ function lifecycleFixture(input: { bindingGeneration?: number } = {}) {
       if (sql.includes("communication_session_bindings")) {
         return [bindingRow({ generation: String(input.bindingGeneration ?? 3) })];
       }
+      if (sql.includes("communication_policy_snapshots")) return [policyRow()];
       if (sql.includes("UPDATE enterprise.worker_dispatch_grants")) {
         const status = sql.includes("'cancelled'") ? "cancelled"
           : sql.includes("'accepted'") ? "accepted" : "completed";
@@ -254,10 +265,12 @@ function baseSession(calls: Call[], handlers: {
 
 function payload(): EnterpriseWorkerDispatchTicketPayload {
   return {
-    v: 1,
+    v: 2,
     ticketId: "00000000-0000-4000-8000-000000000011",
     tenantId,
     communicationSessionId: "enterprise-session-1",
+    policySnapshotId: "00000000-0000-4000-8000-000000000021",
+    policyVersion: "policy-1",
     cellId: "cn-cell-01",
     routeEpoch: 7,
     generation: 3,
@@ -272,6 +285,8 @@ function grantRow(change: Record<string, unknown> = {}) {
     id: payload().ticketId,
     tenant_id: tenantId,
     communication_session_id: payload().communicationSessionId,
+    policy_snapshot_id: payload().policySnapshotId,
+    policy_version: payload().policyVersion,
     dispatch_id: "dispatch-1",
     capacity_reservation_id: "capacity-1",
     capability: payload().capability,

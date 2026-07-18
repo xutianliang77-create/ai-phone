@@ -1,6 +1,6 @@
 # 无界AI企业版技术架构
 
-版本：v1.6
+版本：v1.7
 日期：2026-07-18
 状态：SaaS 详细架构基线，已对齐统一通讯平台和 PostgreSQL Primary
 
@@ -79,7 +79,8 @@ flowchart TB
     Proxy --> Gateway
     LiveKit --> Worker
     API --> Session
-    Session --> Dispatch
+    Session --> Policy
+    Policy --> Dispatch
     Dispatch --> Worker
     API --> Campaign
     API --> Support
@@ -175,8 +176,8 @@ object-storage
 | --- | --- | --- |
 | 账号、Tenant、RBAC、企业命令 | `services/api-server` | 先按 domain module 隔离；只有独立扩缩容或故障域需要时才拆服务 |
 | Enterprise Repository runtime/cell Worker | `services/api-server/src/modules/enterprise`、`services/api-server/src/infrastructure/postgres` | API 使用单一 `legacy|postgres` runtime；独立启动的 cell Worker 仅以 cell discovery 和 tenant transaction 角色 claim/finalize |
-| Communication Session、Provider Operation、Dispatch、Recording 和 Usage | 上游稳定提交 `fe1c3c2` 已导入企业分支，`ENT-DATA-008/CORE-013/014` 已补 tenant scope、企业业务绑定和签名 dispatch fence | 公共 runtime 已成为代码基线；设备/声音/录制策略仍由 `ENT-CORE-015` 完成 |
-| PostgreSQL Primary 基础 | 公共31段 migration/Primary Runtime 与企业现有12段 migration | 已收敛为一个 Storage Driver/启动编排和两个有序 manifest；按 tenant/directory/cell/migration/maintenance 使用最小权限连接，等待真实 H3 验收 |
+| Communication Session、Provider Operation、Dispatch、Recording 和 Usage | 上游稳定提交 `fe1c3c2` 已导入企业分支，`ENT-DATA-008/CORE-013/014/015` 已补 tenant scope、企业业务绑定、签名 dispatch fence 和企业运行策略快照 | 公共 runtime 已成为代码基线；dispatch 必须先通过服务端 policy snapshot 与授权 fence，真实 Provider/设备仍待验收 |
+| PostgreSQL Primary 基础 | 公共31段 migration/Primary Runtime 与企业现有13段 migration | 已收敛为一个 Storage Driver/启动编排和两个有序 manifest；按 tenant/directory/cell/migration/maintenance 使用最小权限连接，等待真实 H3 验收 |
 | 实时信令、字幕和 playback 控制 | `services/realtime-gateway` | 保持无业务数据库直写，通过 API/事件提交业务结果 |
 | ASR、翻译、TTS、Agent call worker | `services/translation-worker`，后续接入统一 dispatch/runtime | 按 session/track/任务横向扩展，Provider 继续通过 Adapter；API 进程不运行媒体或 LLM 循环 |
 | PSTN 媒体桥 | `services/pstn-bridge` | 只处理 Provider 媒体/状态协议，不承载 Campaign 真值 |
@@ -313,7 +314,8 @@ flowchart LR
 - session 结束、hold 释放、ledger 和 outbox 必须同事务提交。
 - Enterprise Repository 以 forced-RLS tenant transaction 原子写公共 dispatch/capacity 与企业 grant；
   通用媒体 Worker 只持有短期签名 ticket，不持有数据库凭证。每次 accept、heartbeat、结果提交都
-  由 Repository 重读当前 binding、grant 和 capacity lease，旧 cell/route/generation 只能被拒绝。
+  由 Repository 重读当前 binding、grant、capacity lease 和不可变 policy snapshot；旧
+  cell/route/generation、过期 readiness、失效授权或未允许 capability 只能被拒绝。
 
 ### 9.2 存储阶段
 
@@ -324,6 +326,8 @@ flowchart LR
 | 多实例 | PostgreSQL + Redis ephemeral coordination | 多 Gateway/Worker、分布式租约 |
 
 对象存储保存授权证据、知识文档、导出、参考声音和经授权的录音。数据库只保存归属、hash、版本和对象引用。
+声纹、录音和诊断音频的授权证据按 purpose 分离；撤回事件通过数据库约束使活动策略快照失效，
+Worker 无权依据缓存继续执行敏感能力。
 
 ### 9.3 公共和企业数据边界
 

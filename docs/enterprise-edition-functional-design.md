@@ -1,6 +1,6 @@
 # 无界AI企业版详细功能设计
 
-版本：v1.4
+版本：v1.5
 日期：2026-07-18
 状态：SaaS 详细设计基线，已对齐统一通讯平台
 
@@ -333,9 +333,17 @@ LLM 只能提出结构化工具请求；Policy Engine 校验租户、客户、�
 - 客户端必须展示 `dispatching`、`ready`、`draining`、`cancelled`、`degraded`、
   `captions_only` 和 `half_duplex` 等真实运行状态，不把已受理误显示为已执行。
 - 管理员可配置租户允许的端侧/云端 ASR、翻译、TTS、声纹、录音和诊断策略；
-  会话开始时冻结实际策略、模型和 Provider fingerprint。
+  每次发布生成不可变 tenant policy version。端侧/云端执行偏好支持仅端侧、优先端侧、
+  优先云端、仅云端和禁用；服务端依据当时有效的 capability/readiness 决定实际路径。
+- 会话 dispatch 前生成不可变策略快照，冻结 policy version、route epoch、generation、
+  ASR/翻译/TTS 引擎、Provider/device fingerprint、readiness 到期时间、允许的 Worker capability
+  和实际降级状态；短期 Worker ticket 必须绑定该快照，客户端不能自行声明能力可用。
+- 缺少配置、fingerprint、有效 readiness 或授权证据时只能进入 `captions_only`、
+  `half_duplex`、`blocked` 等真实状态，不能生成虚假 ready、声纹命中、录音或诊断成功。
 - 企业声纹、参考音频和诊断证据必须有独立目的、授权、保存期限和删除路径；
-  个人声纹不能默认进入企业租户，企业声纹不能跨租户共享。
+  个人声纹不能默认进入企业租户，企业声纹不能跨租户共享。声纹、录音和诊断音频分别
+  绑定 purpose-specific authorization；证据缺失、过期或撤回时立即阻断新 dispatch，并使
+  仍在运行的策略快照失效，但不得改写快照中已经冻结的历史决策字段。
 - 工作台分别展示数据库 primary readiness、Provider readiness、容量、依赖安全例外和
   灾备状态；任一子项 ready 不代表企业整体 production ready。
 

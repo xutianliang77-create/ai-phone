@@ -23,6 +23,7 @@ describe("enterprise PostgreSQL migrations", () => {
       "0010_enterprise_subject_ids",
       "0011_enterprise_communication_bindings",
       "0012_enterprise_worker_dispatch_grants",
+      "0013_enterprise_communication_runtime_policy",
     ]);
     for (const migration of migrations) {
       expect(migration.up.trim()).not.toBe("");
@@ -89,6 +90,12 @@ describe("enterprise PostgreSQL migrations", () => {
     expect(sql).toContain("CREATE TABLE enterprise.worker_dispatch_grants");
     expect(sql).toContain("worker_dispatch_grants_tenant_isolation");
     expect(sql).toContain("worker_dispatch_grant_identity_immutable");
+    expect(sql).toContain("CREATE TABLE enterprise.communication_policy_versions");
+    expect(sql).toContain("CREATE TABLE enterprise.communication_authorization_evidence");
+    expect(sql).toContain("CREATE TABLE enterprise.communication_policy_snapshots");
+    expect(sql).toContain("table_name || '_tenant_isolation'");
+    expect(sql).toContain("communication_authorization_invalidate_snapshot");
+    expect(sql).toContain("policy_snapshot_id uuid");
     expect(sql).toMatch(
       /FOREIGN KEY \(scope_type, scope_id, dispatch_id\)[\s\S]*REFERENCES ai_phone\.worker_dispatches \(scope_type, scope_id, id\)/,
     );
@@ -104,6 +111,9 @@ describe("enterprise PostgreSQL migrations", () => {
     );
     expect(rollbackSql).toContain(
       "DROP TABLE IF EXISTS enterprise.worker_dispatch_grants",
+    );
+    expect(rollbackSql).toContain(
+      "DROP TABLE IF EXISTS enterprise.communication_policy_snapshots",
     );
     expect(sql).not.toContain("BYPASSRLS");
   });

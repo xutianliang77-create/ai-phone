@@ -17,6 +17,8 @@ export interface EnterpriseWorkerDispatchGrantRecord {
   id: string;
   tenantId: string;
   communicationSessionId: string;
+  policySnapshotId: string;
+  policyVersion: string;
   dispatchId: string;
   capacityReservationId: string;
   capability: EnterpriseWorkerCapability;
@@ -41,6 +43,8 @@ export interface EnterpriseWorkerDispatchGrantRow
   id: unknown;
   tenant_id: unknown;
   communication_session_id: unknown;
+  policy_snapshot_id: unknown;
+  policy_version: unknown;
   dispatch_id: unknown;
   capacity_reservation_id: unknown;
   capability: unknown;
@@ -81,6 +85,8 @@ export function mapEnterpriseWorkerDispatchGrantRow(
     id: required(row.id, "id"),
     tenantId,
     communicationSessionId: required(row.communication_session_id, "session"),
+    policySnapshotId: required(row.policy_snapshot_id, "policy snapshot"),
+    policyVersion: required(row.policy_version, "policy version"),
     dispatchId: required(row.dispatch_id, "dispatch"),
     capacityReservationId: required(row.capacity_reservation_id, "capacity"),
     capability: capability as EnterpriseWorkerCapability,
@@ -105,6 +111,7 @@ export type EnterpriseWorkerFenceResult =
   | { status: "authorized" }
   | { status: "tenant_mismatch" | "session_mismatch" | "cell_mismatch" }
   | { status: "capability_mismatch" | "stale_route" | "stale_generation" }
+  | { status: "policy_mismatch" }
   | { status: "expired" | "cancelled" | "not_accepted" }
   | { status: "lease_conflict" | "lease_expired" };
 
@@ -124,6 +131,11 @@ export function evaluateEnterpriseWorkerDispatchFence(input: {
     payload.ticketId !== grant.id) return { status: "session_mismatch" };
   if (payload.capability !== grant.capability) {
     return { status: "capability_mismatch" };
+  }
+  if (payload.policySnapshotId !== grant.policySnapshotId ||
+    payload.policyVersion !== grant.policyVersion ||
+    grant.policyVersion !== binding.policyVersion) {
+    return { status: "policy_mismatch" };
   }
   if (payload.cellId !== input.workerCellId || payload.cellId !== grant.cellId ||
     payload.cellId !== binding.cellId) return { status: "cell_mismatch" };

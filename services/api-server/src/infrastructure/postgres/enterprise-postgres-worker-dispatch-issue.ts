@@ -17,6 +17,10 @@ import {
   type EnterpriseWorkerDispatchGrantRecord,
   type EnterpriseWorkerDispatchGrantRow,
 } from "./enterprise-postgres-worker-dispatch-record.js";
+import {
+  mapEnterpriseCommunicationPolicySnapshot,
+  type EnterpriseCommunicationPolicySnapshotRow,
+} from "./enterprise-postgres-communication-policy-record.js";
 
 export interface IssueEnterpriseWorkerDispatchInput {
   communicationSessionId: string;
@@ -35,6 +39,7 @@ export interface IssueEnterpriseWorkerDispatchInput {
 export type IssueEnterpriseWorkerDispatchResult =
   | { status: "created" | "replayed"; grant: EnterpriseWorkerDispatchGrantRecord }
   | { status: "not_found" | "terminal" | "dispatch_conflict" }
+  | { status: "policy_unresolved" | "policy_denied" }
   | { status: "idempotency_conflict" }
   | { status: "capacity_exhausted"; used: number; limit: number };
 
@@ -52,15 +57,10 @@ export class EnterpriseWorkerDispatchIssuePostgresRepository {
       SELECT * FROM enterprise.worker_dispatch_grants
       WHERE tenant_id = $1 AND idempotency_key = $2 FOR UPDATE
     `, [normalized.idempotencyKey]);
-    if (replay.rows[0]) {
-      const grant = mapEnterpriseWorkerDispatchGrantRow(
-        replay.rows[0],
-        this.session.context.tenantId,
-      );
-      return grant.requestHash === normalized.requestHash
-        ? { status: "replayed", grant }
-        : { status: "idempotency_conflict" };
-    }
+    const replayedGrant = replay.rows[0] ? mapEnterpriseWorkerDispatchGrantRow(
+      replay.rows[0],
+      this.session.context.tenantId,
+    ) : null;
     const bindingResult = await this.session.query<
       EnterpriseCommunicationBindingPostgresRow
     >(`
@@ -75,6 +75,37 @@ export class EnterpriseWorkerDispatchIssuePostgresRepository {
     );
     if (isTerminalEnterpriseCommunicationStatus(binding.status)) {
       return { status: "terminal" };
+    }
+    const policyResult = await this.session.query<
+      EnterpriseCommunicationPolicySnapshotRow
+    >(`
+      SELECT * FROM enterprise.communication_policy_snapshots
+      WHERE tenant_id = $1 AND communication_session_id = $2
+        AND generation = $3 AND policy_version = $4 FOR UPDATE
+    `, [
+      normalized.communicationSessionId,
+      binding.generation,
+      binding.policyVersion,
+    ]);
+    const policy = policyResult.rows[0]
+      ? mapEnterpriseCommunicationPolicySnapshot(
+          policyResult.rows[0],
+          this.session.context.tenantId,
+        )
+      : null;
+    if (!policy || policy.status !== "active" ||
+      policy.routeEpoch !== binding.routeEpoch ||
+      Date.parse(policy.readinessExpiresAt) <= normalized.now.getTime()) {
+      return { status: "policy_unresolved" };
+    }
+    if (!policy.allowedCapabilities.includes(normalized.capability)) {
+      return { status: "policy_denied" };
+    }
+    if (replayedGrant) {
+      return replayedGrant.requestHash === normalized.requestHash &&
+          replayedGrant.policySnapshotId === policy.id
+        ? { status: "replayed", grant: replayedGrant }
+        : { status: "idempotency_conflict" };
     }
     const existingGrant = await this.session.query<
       EnterpriseWorkerDispatchGrantRow
@@ -152,11 +183,11 @@ export class EnterpriseWorkerDispatchIssuePostgresRepository {
       INSERT INTO enterprise.worker_dispatch_grants(
         tenant_id, id, communication_session_id, dispatch_id,
         capacity_reservation_id, capability, cell_id, route_epoch,
-        generation, status, idempotency_key, request_hash, issued_at,
-        expires_at, updated_at, version
+        generation, policy_snapshot_id, policy_version, status,
+        idempotency_key, request_hash, issued_at, expires_at, updated_at, version
       ) VALUES (
-        $1, $2, $3, $4, $5, $6, $7, $8, $9, 'issued',
-        $10, $11, $12, $13, $12, 1
+        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'issued',
+        $12, $13, $14, $15, $14, 1
       ) RETURNING *
     `, [
       grantId,
@@ -167,6 +198,8 @@ export class EnterpriseWorkerDispatchIssuePostgresRepository {
       binding.cellId,
       binding.routeEpoch,
       binding.generation,
+      policy.id,
+      policy.policyVersion,
       normalized.idempotencyKey,
       normalized.requestHash,
       issuedAt,

@@ -16,6 +16,13 @@ import {
   type EnterpriseWorkerDispatchGrantRow,
   type EnterpriseWorkerFenceResult,
 } from "./enterprise-postgres-worker-dispatch-record.js";
+import {
+  type EnterpriseCommunicationPolicySnapshotRecord,
+} from "./enterprise-postgres-communication-policy-record.js";
+import {
+  evaluateEnterpriseWorkerPolicyFence,
+  type EnterpriseWorkerPolicyRejectStatus,
+} from "./enterprise-postgres-worker-policy-fence.js";
 
 type RejectStatus = Exclude<
   EnterpriseWorkerFenceResult["status"],
@@ -24,12 +31,14 @@ type RejectStatus = Exclude<
 
 export type EnterpriseWorkerDispatchLifecycleResult =
   | { status: "accepted" | "authorized" | "completed" | "failed" | "cancelled";
-      grant: EnterpriseWorkerDispatchGrantRecord }
-  | { status: RejectStatus };
+      grant: EnterpriseWorkerDispatchGrantRecord;
+      policy?: EnterpriseCommunicationPolicySnapshotRecord }
+  | { status: RejectStatus | EnterpriseWorkerPolicyRejectStatus };
 
 type InspectResult =
-  | { grant: EnterpriseWorkerDispatchGrantRecord }
-  | { rejected: RejectStatus };
+  | { grant: EnterpriseWorkerDispatchGrantRecord;
+      policy: EnterpriseCommunicationPolicySnapshotRecord }
+  | { rejected: RejectStatus | EnterpriseWorkerPolicyRejectStatus };
 
 export class EnterpriseWorkerDispatchLifecyclePostgresRepository {
   constructor(private readonly session: EnterpriseTenantPostgresSession) {}
@@ -94,7 +103,7 @@ export class EnterpriseWorkerDispatchLifecyclePostgresRepository {
     const inspected = await this.inspect({ ...input, now, requireAccepted: true });
     return "rejected" in inspected
       ? { status: inspected.rejected }
-      : { status: "authorized", grant: inspected.grant };
+      : { status: "authorized", grant: inspected.grant, policy: inspected.policy };
   }
 
   async finalize(input: {
@@ -203,8 +212,15 @@ export class EnterpriseWorkerDispatchLifecyclePostgresRepository {
       binding,
     });
     if (fence.status !== "authorized") return { rejected: fence.status };
+    const policy = await evaluateEnterpriseWorkerPolicyFence({
+      session: this.session,
+      grant,
+      payload: input.payload,
+      now: input.now,
+    });
+    if ("rejected" in policy) return policy;
     const publicFence = await this.publicFence(grant, input.payload, input.now);
-    return publicFence ?? { grant };
+    return publicFence ?? { grant, policy: policy.policy };
   }
 
   private async lockBinding(sessionId: string) {

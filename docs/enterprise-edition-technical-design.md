@@ -1,6 +1,6 @@
 # 无界AI企业版详细技术设计
 
-版本：v1.15
+版本：v1.16
 日期：2026-07-18
 状态：统一通讯平台与 PostgreSQL Primary 收敛详细技术方案
 
@@ -21,14 +21,15 @@
 | RBAC | `ready_for_acceptance` | 已有17个 scope、九角色矩阵、统一服务端 guard 和越权测试 |
 | SaaS tenant lifecycle | `ready_for_acceptance` | 已有幂等开通、暂停、导出/删除执行器、租约、有界恢复和 receipt 校验；真实对象存储/Provider 清理服务尚待验收 |
 | Append-only audit | `ready_for_acceptance` | 已有 tenant-scoped 查询、HMAC cursor、成员/RBAC/租户生命周期埋点和 SQLite/PostgreSQL 不可变约束；受控导出和真实 PostgreSQL 验收尚待后续任务 |
-| PostgreSQL schema | `implemented` | 已有十二段 up/down migration、tenant-first 索引、复合 FK、强制 RLS、user directory、cell pending projection、opaque subject identity、企业通讯绑定和 Worker dispatch grant、受保护回滚、checksum/锁和归档 smoke；尚无真实 migrate/restore/PITR 证据 |
+| PostgreSQL schema | `implemented` | 已有十三段 up/down migration、tenant-first 索引、复合 FK、强制 RLS、user directory、cell pending projection、opaque subject identity、企业通讯绑定、Worker dispatch grant 和通讯运行策略快照、受保护回滚、checksum/锁和归档 smoke；尚无真实 migrate/restore/PITR 证据 |
 | Tenant-scoped Repository | `ready_for_acceptance` | 已有 tenant/user/cell scoped transaction、subject guard、单一 `legacy|postgres` runtime、HTTP 全链路注入、独立 cell Worker，以及 Tenant/Member/Audit、Directory、lifecycle、Inbox/Outbox、pending discovery 和共享 unit-of-work；尚无真实 PostgreSQL H3 证据 |
 | Enterprise Inbox/Outbox | `ready_for_acceptance` | 已有 tenant-scoped 去重、稳定 payload hash、领域/inbox/outbox 原子提交、lease/retry/recovery 和100次重放门禁；真实 PostgreSQL 并发与 Provider sandbox 尚待验收 |
 | SQLite/JSON 演示数据导入 | `ready_for_acceptance` | 已有维护窗口、SQLite 临时副本与 quick_check、空目标事务导入、六集合 count/SHA-256 读回对账和不一致回滚；仅限内部演示数据 |
-| 公共 Primary Runtime 收敛 | `ready_for_acceptance` | 已合入上游稳定提交 `fe1c3c2`；公共31段与 enterprise 12段 manifest 由一个启动编排验证，driver、数据库身份和分权连接失败均在监听前闭合；尚无真实 PostgreSQL H3 证据 |
+| 公共 Primary Runtime 收敛 | `ready_for_acceptance` | 已合入上游稳定提交 `fe1c3c2`；公共31段与 enterprise 13段 manifest 由一个启动编排验证，driver、数据库身份和分权连接失败均在监听前闭合；尚无真实 PostgreSQL H3 证据 |
 | 公共通讯 tenant scope | `ready_for_acceptance` | 公共 manifest 已增至31段；12张通讯资源表具有不可空 scope、复合 FK、写入 guard 和 forced RLS，企业 unit-of-work 只暴露 tenant-bound 白名单 Repository；尚无真实双租户 A1/H3 证据 |
 | 企业统一通讯会话绑定 | `ready_for_acceptance` | enterprise `0011` 和 tenant unit-of-work 已建立 Meeting/Support/Marketing 唯一绑定、route/policy/entitlement 快照及 generation/event-sequence 收敛状态机；尚无真实多实例、cell 迁移和 A1/H3 证据 |
 | Tenant-aware Worker Dispatch | `ready_for_acceptance` | enterprise `0012` 以 scope FK/RLS 绑定公共 dispatch/capacity；短期 HMAC ticket、租户容量、lease/heartbeat、cancel/finalize 和二次 binding fence 已实现；仅有自动化和一次性本地 PostgreSQL 16 证据，尚无真实多实例/H3 容量证据 |
+| 企业设备、声音和录制策略 | `ready_for_acceptance` | enterprise `0013`、发布 API、策略解析、purpose-specific 授权和 Worker policy fence 已实现；仅有自动化和一次性本地 PostgreSQL 16 机制证据，尚无真实设备/Provider、A1/H2/H3 证据 |
 | PostgreSQL 控制面/业务聚合 | `designed` | 后续 CORE/MTG/CS/MKT 领域任务范围，不能从公共 Repository runtime 推导为已实现 |
 | SQLite | `demo_only` | 仅本地开发、自动化和封闭演示，不承载真实企业试点数据 |
 | PSTN/CRM/Calendar/OCR | `not_ready` 或按环境探测 | 未配置必须明确降级，不生成虚假外部对象或成功状态 |
@@ -243,6 +244,24 @@ enterprise.communication_session_bindings(
   last_event_sequence, started_at, ended_at, version
 )
 
+enterprise.communication_policy_versions(
+  id, tenant_id, version, status, execution_config,
+  sensitive_feature_config, published_by, published_at, retired_at
+)
+
+enterprise.communication_authorization_evidence(
+  id, tenant_id, purpose, subject_ref, evidence_hash,
+  granted_at, expires_at, revoked_at, policy_version
+)
+
+enterprise.communication_policy_snapshots(
+  id, tenant_id, binding_id, policy_id, policy_version,
+  route_epoch, generation, asr_engine, translation_engine, tts_engine,
+  voice_identity_enabled, recording_enabled, diagnostic_audio_enabled,
+  authorization_evidence_ids, allowed_capabilities, runtime_state,
+  provider_fingerprints, readiness_expires_at, status, invalidated_at
+)
+
 session_participants(
   session_id, participant_id, scope_type, scope_id,
   subject_id, role, locale, joined_at, left_at
@@ -275,6 +294,11 @@ tts_playbacks(
 TenantContext.tenantId`。所有父子关系使用包含 scope 的复合唯一键/外键；按 session、
 provider reference、playback 或 dispatch ID 查询时也必须带 scope。Provider 返回的 ID
 只能作为 binding，不能成为平台资源主键或授权凭据。
+
+每次 dispatch 只引用一个与 binding generation/route epoch 完全匹配的不可变策略快照。
+策略发布后只能退役，授权证据只能撤回；撤回 trigger 会立即 invalidated 引用该证据的活动快照。
+快照保留当时的引擎选择、敏感能力决策、Provider/device fingerprint 和 readiness 有效期，
+以便 Worker 重启后仍能验证原决策，而不是重新解释客户端配置。
 
 主产品的通用 Product Records 若只提供可选 `owner_id`，不能直接承载企业授权；必须先由
 `ENT-DATA-008` 增加不可省略的 scope 契约、forced RLS 和跨租户负向测试。主产品按
@@ -354,7 +378,12 @@ GET    /enterprise/v1/knowledge/sources
 POST   /enterprise/v1/knowledge/sources
 POST   /enterprise/v1/knowledge/sources/:id/publish
 GET    /enterprise/v1/audit-events
+POST   /enterprise/v1/communication-policies
 ```
+
+通讯策略发布要求 `tenant:write` 和有效签名 route document；请求体 tenant 与当前 membership
+不一致时拒绝。接口只在 verified PostgreSQL runtime 可用，legacy/SQLite 明确返回
+`enterprise_postgres_required`，不会把内存或演示写入伪装为已发布企业策略。
 
 审计查询要求 `audit:read`，只读取服务端解析出的当前 tenant。支持
 `action/resourceType/result` 等值筛选和最多100项的 cursor 分页；cursor 使用
@@ -632,7 +661,7 @@ OCR Worker 每 1 至 2 秒获取低码率关键帧，先计算感知 hash；变�
 - 每个 access token 固化 `tenantId + homeRegion + cellId + roles + entitlementVersion`；区域不匹配时拒绝写入并要求重新发现路由。
 - entitlement 由服务端读取和缓存，缓存失效时采取保守策略；客户端不得自行开启未购买功能。
 - 租户级并发 semaphore、速率限制和预算在 claim/dispatch 前再次校验。
-- Worker dispatch ticket 必须携带服务端签名的 `tenantId + communicationSessionId + cellId + routeEpoch + generation + capability + expiresAt`；Worker 不接受缺 scope、过期或跨 cell 的裸任务。
+- Worker dispatch ticket 必须携带服务端签名的 `tenantId + communicationSessionId + cellId + routeEpoch + generation + capability + policySnapshotId + policyVersion + expiresAt`；Worker 不接受缺 scope、过期、跨 cell、策略不匹配或授权失效的裸任务。
 
 ### 11.1 PostgreSQL 租户隔离
 
@@ -824,6 +853,25 @@ generation、过期 lease、取消或终态均不能更新公共状态。取消�
 dispatch 置为 failed 并释放 capacity；迟到 finalize 只返回 fenced 状态。一次性本地 PostgreSQL 16
 普通角色验证了 `created -> accepted -> authorized -> cancelled`、错误 cell、取消后迟到结果、跨租户
 RLS 0行可见/0行可写及 `0012` down/forward；该证据不是目标 H3、多实例或生产容量验收。
+
+第十三批完成 `ENT-CORE-015` 企业设备、声音和录制运行策略。enterprise `0013` 新增
+`communication_policy_versions`、`communication_authorization_evidence` 和
+`communication_policy_snapshots` 三张 forced-RLS tenant 表，并把 dispatch grant 升级为必须引用
+具体 policy snapshot/version。策略版本发布后不可改写，只允许 published 到 retired；授权证据按
+`voice_identity`、`recording`、`diagnostic_audio` 三种 purpose 保存 hash、期限和撤回状态，不能跨目的复用。
+
+`POST /enterprise/v1/communication-policies` 只允许 `tenant:write`，校验 membership、请求 tenant 和签名
+route document，并在 PostgreSQL unit-of-work 内原子发布版本与审计事件。策略解析器以当前 binding 的
+route epoch/generation、有效 Provider/device readiness 和 purpose-specific 授权生成不可变快照；端侧/云端
+ASR、翻译、TTS 缺配置、fingerprint 或 readiness 过期时只返回 `captions_only`、`half_duplex` 或 `blocked`，
+不能伪造可用。legacy/SQLite 接口失败闭合为 `enterprise_postgres_required`。
+
+Worker dispatch ticket 升级为 v2，并将 `policySnapshotId + policyVersion` 纳入 HMAC。签发、accept、heartbeat、
+副作用授权和 finalize 都重读策略快照；快照失效、readiness 过期、capability 未授权或敏感授权撤回时，
+在 capacity/dispatch 副作用前拒绝。数据库 revoke trigger 会立即 invalidated 引用证据的活动快照，同时保留
+历史冻结字段以供审计。一次性本地 PostgreSQL 16 普通角色验证了 13 段 forward、forced RLS 跨租户 0 行、
+撤回即失效、不可变 trigger、`0013` 单段 down/forward 和恢复校验；该证据只说明机制可执行，不代表真实
+设备/Provider、双租户 A1、H2/H3、企业试点或生产门禁通过。
 
 ### 11.2 事务和一致性边界
 
@@ -1089,6 +1137,7 @@ SaaS 计量形成三层记录：原始 usage event、不可变 ledger、账期�
 | 生产数据门禁 | migration、RLS、backup/restore、负载和数据对账 | PostgreSQL/PITR/cell 恢复演练 |
 | 公共 Primary 收敛 | 双 manifest checksum、单 driver、无 fallback/双写、角色池和启动 fail-closed | 隔离企业库全量 migrate/verify/cutover/rollback 演练 |
 | 统一通讯 tenant scope | session/leg/dispatch/provider/playback 复合约束、forced RLS、伪造 scope 和可选 owner 负向测试 | 两租户同时通话、取消、迟到事件和 cell 迁移攻击演练 |
+| 企业通讯运行策略 | policy version/snapshot 不可变、readiness/fingerprint 过期、capability deny、授权缺失/过期/撤回和 ticket policy mismatch 测试 | 真实端侧/云端 ASR/翻译/TTS 与声纹/录音/诊断 purpose 撤回演练 |
 | 企业账单归属 | tenant billing account、跨租户账单 ID、ledger/adjustment 幂等和对账测试 | 支付 sandbox、账期关闭和财务抽样对账 |
 | 生产韧性 | writer fence、route epoch、旧 Worker generation、备份清单和恢复脚本测试 | 跨故障域自动切换、旧主隔离、异地主机不可变备份和 PITR |
 

@@ -42,6 +42,9 @@ import {
   resolveEnterpriseContext,
   updateEnterpriseMember,
 } from "./enterprise-tenants.repository.js";
+import type {
+  EnterpriseCommunicationPolicyVersion,
+} from "./enterprise-communication-policy.js";
 
 export type EnterpriseContextResult =
   | { status: "resolved"; tenant: EnterpriseTenantRecord; member: EnterpriseMemberRecord }
@@ -108,6 +111,16 @@ export interface EnterpriseRepositoryRuntime {
     events: import("./enterprise-tenant-record.js").EnterpriseAuditEventRecord[];
     nextPosition?: EnterpriseAuditPosition;
   }>;
+  publishCommunicationPolicy?(input: {
+    context: EnterpriseTenantContext;
+    policy: Omit<EnterpriseCommunicationPolicyVersion, "tenantId"> & {
+      publishedAt: string;
+    };
+  }): Promise<
+    | { status: "created"; id: string }
+    | { status: "version_conflict" }
+    | { status: "storage_required" }
+  >;
   beginTenantCreation(input: {
     ownerUserId: string;
     name: string;
@@ -180,6 +193,9 @@ export const legacyEnterpriseRepositoryRuntime: EnterpriseRepositoryRuntime = {
   },
   async listAudit(input) {
     return listEnterpriseAuditEvents(input);
+  },
+  async publishCommunicationPolicy() {
+    return { status: "storage_required" };
   },
   async beginTenantCreation(input) {
     return beginEnterpriseTenantCreation(input);

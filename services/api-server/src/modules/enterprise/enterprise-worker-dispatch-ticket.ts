@@ -9,10 +9,12 @@ export type EnterpriseWorkerCapability =
   (typeof enterpriseWorkerCapabilities)[number];
 
 export interface EnterpriseWorkerDispatchTicketPayload {
-  v: 1;
+  v: 2;
   ticketId: string;
   tenantId: string;
   communicationSessionId: string;
+  policySnapshotId: string;
+  policyVersion: string;
   cellId: string;
   routeEpoch: number;
   generation: number;
@@ -74,7 +76,8 @@ function validPayload(
   const item = value as Record<string, unknown>;
   const issuedAt = isoTime(item.issuedAt);
   const expiresAt = isoTime(item.expiresAt);
-  return item.v === 1 && uuid(item.ticketId) && uuid(item.tenantId) &&
+  return item.v === 2 && uuid(item.ticketId) && uuid(item.tenantId) &&
+    uuid(item.policySnapshotId) && bounded(item.policyVersion, 128) &&
     bounded(item.communicationSessionId, 200) && code(item.cellId) &&
     positive(item.routeEpoch) && positive(item.generation) &&
     enterpriseWorkerCapabilities.includes(

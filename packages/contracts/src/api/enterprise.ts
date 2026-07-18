@@ -42,6 +42,38 @@ export const enterpriseScopes = [
 
 export type EnterpriseScope = typeof enterpriseScopes[number];
 
+export const enterpriseExecutionPreferences = [
+  "device_only",
+  "prefer_device",
+  "prefer_cloud",
+  "cloud_only",
+  "disabled",
+] as const;
+
+export type EnterpriseExecutionPreference =
+  (typeof enterpriseExecutionPreferences)[number];
+
+export const enterpriseSensitiveFeatureModes = [
+  "disabled",
+  "consent_required",
+] as const;
+
+export type EnterpriseSensitiveFeatureMode =
+  (typeof enterpriseSensitiveFeatureModes)[number];
+
+export interface PublishEnterpriseCommunicationPolicyRequest {
+  tenantId?: string;
+  policyVersion: string;
+  asrPreference: EnterpriseExecutionPreference;
+  translationPreference: EnterpriseExecutionPreference;
+  ttsPreference: EnterpriseExecutionPreference;
+  voiceIdentityMode: EnterpriseSensitiveFeatureMode;
+  recordingMode: EnterpriseSensitiveFeatureMode;
+  diagnosticAudioMode: EnterpriseSensitiveFeatureMode;
+  allowCaptionsOnly: boolean;
+  allowHalfDuplex: boolean;
+}
+
 export const enterpriseAuditResults = [
   "accepted",
   "completed",
@@ -283,4 +315,20 @@ export function isEnterpriseAuditResult(
 export function isEnterpriseScope(value: unknown): value is EnterpriseScope {
   return typeof value === "string" &&
     enterpriseScopes.includes(value as EnterpriseScope);
+}
+
+export function isEnterpriseExecutionPreference(
+  value: unknown,
+): value is EnterpriseExecutionPreference {
+  return typeof value === "string" && enterpriseExecutionPreferences.includes(
+    value as EnterpriseExecutionPreference,
+  );
+}
+
+export function isEnterpriseSensitiveFeatureMode(
+  value: unknown,
+): value is EnterpriseSensitiveFeatureMode {
+  return typeof value === "string" && enterpriseSensitiveFeatureModes.includes(
+    value as EnterpriseSensitiveFeatureMode,
+  );
 }

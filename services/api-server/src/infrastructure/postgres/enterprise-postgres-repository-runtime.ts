@@ -179,6 +179,26 @@ export function createPostgresEnterpriseRepositoryRuntime(
         (repository) => repository.listAuditEvents(input),
       );
     },
+    publishCommunicationPolicy(input) {
+      return withEnterprisePostgresUnitOfWork(
+        pool,
+        input.context,
+        async (unit) => {
+          const result = await unit.communicationPolicies.publish(input.policy);
+          if (result.status !== "created") return result;
+          await unit.tenant.appendAuditEvent(createEnterpriseAuditEvent({
+            context: input.context,
+            action: "communication_policy.publish",
+            resourceType: "communication_policy",
+            resourceId: result.id,
+            result: "completed",
+            details: { policyVersion: input.policy.policyVersion },
+            createdAt: input.policy.publishedAt,
+          }));
+          return result;
+        },
+      );
+    },
     beginTenantCreation(input) {
       return beginPostgresTenantCreation(pool, input);
     },
