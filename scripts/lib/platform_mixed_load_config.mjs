@@ -9,6 +9,11 @@ const PHASES = new Map([
   [50, 10],
   [100, 30],
 ]);
+const FAILURE_PROFILES = new Map([
+  ["translation_worker_sigkill", ["translation-worker", "sigkill"]],
+  ["model_provider_timeout", ["model-provider", "timeout"]],
+  ["livekit_node_drain", ["livekit", "node-drain"]],
+]);
 
 export function loadPlatformMixedLoadConfig(options = {}) {
   const root = options.root ?? process.cwd();
@@ -174,7 +179,9 @@ function validateFailures(failures, issues) {
     return;
   }
   for (const failure of failures) {
+    const profile = FAILURE_PROFILES.get(failure?.name);
     if (!validName(failure?.name) ||
+      !profile || failure?.target !== profile[0] || failure?.fault !== profile[1] ||
       !new Set(["capacity-25", "capacity-50", "capacity-100", "soak", "admission"])
         .has(failure?.phase) ||
       !integer(failure?.atSeconds, 0, 10_800) ||

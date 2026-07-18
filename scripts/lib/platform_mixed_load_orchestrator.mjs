@@ -161,6 +161,9 @@ async function runSession(context) {
     targetConcurrency: context.concurrentSessions,
     durationMs: context.phaseDurationMs,
     apiBaseUrl: context.config.safety.apiBaseUrl,
+    allowedApiHosts: context.config.safety.allowedApiHosts,
+    environment: context.config.environment,
+    mode: context.config.mode,
     signal: context.signal,
   });
   const issues = validateMixedLoadAttestation(attestation, context);
@@ -192,19 +195,55 @@ async function runFailureInjection(context) {
       targetConcurrency: context.concurrentSessions,
       signal: context.signal,
     });
-    const passed = value?.status === "passed" && value?.recovered === true &&
-      Number(value?.observedRecoverySeconds) <= context.failure.recoveryTimeoutSeconds;
+    const issues = validateFailureAttestation(value, context);
+    const passed = issues.length === 0;
     context.emit({
       type: "failure_injection.completed",
       phase: context.name,
       failure: context.failure.name,
       status: passed ? "passed" : "failed",
     });
-    return passed ? { name: context.failure.name, ...value } :
-      failureResult(context.failure.name, "recovery attestation failed");
+    return passed ? { ...value, name: context.failure.name } :
+      failureResult(context.failure.name, issues.join("; "));
   } catch (error) {
     return failureResult(context.failure.name, errorMessage(error));
   }
+}
+
+function validateFailureAttestation(value, context) {
+  const issues = [];
+  if (value?.schemaVersion !== 1) issues.push("invalid failure schemaVersion");
+  if (value?.status !== "passed" || value?.recovered !== true) {
+    issues.push("failure did not recover");
+  }
+  const seconds = Number(value?.observedRecoverySeconds);
+  if (!Number.isFinite(seconds) || seconds < 0 ||
+    seconds > context.failure.recoveryTimeoutSeconds) {
+    issues.push("failure recovery exceeded its bound");
+  }
+  if (value?.failureName !== context.failure.name ||
+    value?.target !== context.failure.target || value?.fault !== context.failure.fault) {
+    issues.push("failure attestation binding mismatch");
+  }
+  if (context.config.mode === "real") {
+    if (value?.environment !== "staging" || value?.realProviderTraffic !== true) {
+      issues.push("failure attestation is not real staging");
+    }
+    if (value?.injectionObserved !== true || !nonEmptyStrings(value?.providerEvidence) ||
+      !nonEmptyStrings(value?.recoveryEvidence)) {
+      issues.push("failure evidence is incomplete");
+    }
+    if (value?.providerSideEffectDuplicates !== 0) {
+      issues.push("failure controller replay duplicated a side effect");
+    }
+  }
+  return issues;
+}
+
+function nonEmptyStrings(value) {
+  return Array.isArray(value) && value.length > 0 && value.length <= 64 &&
+    value.every((item) => typeof item === "string" && item.length > 0 &&
+      item.length <= 512);
 }
 
 function assignScenarios(scenarios, count) {

@@ -64,6 +64,22 @@ describe("platform mixed-load orchestrator", () => {
     expect(run.result.status).toBe("failed");
     expect(run.phases[0].sessions[0].issues).toContain("missing provider evidence: api");
   });
+
+  it("fails a real run when the failure controller omits recovery evidence", async () => {
+    const run = await runPlatformMixedLoad({
+      config: config("real"),
+      driver: new FakeDriver({ omitFailureEvidence: true }),
+      runId: "capacity-test-004",
+      topologySha256: "c".repeat(64),
+      environment: {
+        MIXED_LOAD_STAGING_ACK: "WUJIE_STAGING_LOAD_ONLY",
+        MIXED_LOAD_PSTN_ALLOWLIST: "+8613800138000",
+      },
+    });
+
+    expect(run.result.status).toBe("failed");
+    expect(run.result.failureInjection.status).toBe("failed");
+  });
 });
 
 class FakeDriver {
@@ -108,8 +124,22 @@ class FakeDriver {
     };
   }
 
-  async injectFailure() {
-    return { status: "passed", recovered: true, observedRecoverySeconds: 5 };
+  async injectFailure(context) {
+    return {
+      schemaVersion: 1,
+      status: "passed",
+      environment: "staging",
+      realProviderTraffic: context.failure.realProviderTraffic ?? false,
+      failureName: context.failure.name,
+      target: context.failure.target,
+      fault: context.failure.fault,
+      injectionObserved: true,
+      providerEvidence: this.options.omitFailureEvidence ? [] : ["operation-1"],
+      recovered: true,
+      recoveryEvidence: this.options.omitFailureEvidence ? [] : ["replacement-1"],
+      observedRecoverySeconds: 5,
+      providerSideEffectDuplicates: 0,
+    };
   }
 
   async sampleSystem(context) {
@@ -172,7 +202,10 @@ function config(mode) {
       },
     ],
     failureInjections: [{
-      name: "worker_sigkill",
+      name: "translation_worker_sigkill",
+      target: "translation-worker",
+      fault: "sigkill",
+      realProviderTraffic,
       phase: "capacity-100",
       atSeconds: 0,
       recoveryTimeoutSeconds: 30,

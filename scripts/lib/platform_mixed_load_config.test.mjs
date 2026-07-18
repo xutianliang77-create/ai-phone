@@ -32,6 +32,16 @@ describe("platform mixed-load config", () => {
       "Scenario telephony_agent command must use an executable and argument array",
     );
   });
+
+  it("rejects a failure name paired with the wrong target or fault", () => {
+    const config = validConfig("real");
+    config.failureInjections[0].target = "livekit";
+
+    const checked = validatePlatformMixedLoadConfig(config);
+
+    expect(checked.status).toBe("not_ready");
+    expect(checked.issues).toContain("Failure injection metadata is invalid");
+  });
 });
 
 function validConfig(mode) {
@@ -83,7 +93,9 @@ function validConfig(mode) {
       },
     ],
     failureInjections: [{
-      name: "worker_sigkill",
+      name: "translation_worker_sigkill",
+      target: "translation-worker",
+      fault: "sigkill",
       phase: "capacity-100",
       atSeconds: 300,
       recoveryTimeoutSeconds: 120,

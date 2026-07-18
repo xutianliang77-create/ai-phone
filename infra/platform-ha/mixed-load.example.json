@@ -71,32 +71,38 @@
   "failureInjections": [
     {
       "name": "translation_worker_sigkill",
+      "target": "translation-worker",
+      "fault": "sigkill",
       "phase": "capacity-100",
       "atSeconds": 600,
       "recoveryTimeoutSeconds": 120,
       "command": {
-        "file": "replace-with-staging-failure-runner",
-        "args": ["--target", "translation-worker", "--fault", "sigkill", "--json"]
+        "file": "node",
+        "args": ["scripts/run_platform_failure_injection.mjs"]
       }
     },
     {
       "name": "model_provider_timeout",
+      "target": "model-provider",
+      "fault": "timeout",
       "phase": "soak",
       "atSeconds": 1800,
       "recoveryTimeoutSeconds": 120,
       "command": {
-        "file": "replace-with-staging-failure-runner",
-        "args": ["--target", "model-provider", "--fault", "timeout", "--json"]
+        "file": "node",
+        "args": ["scripts/run_platform_failure_injection.mjs"]
       }
     },
     {
       "name": "livekit_node_drain",
+      "target": "livekit",
+      "fault": "node-drain",
       "phase": "soak",
       "atSeconds": 3600,
       "recoveryTimeoutSeconds": 300,
       "command": {
-        "file": "replace-with-staging-failure-runner",
-        "args": ["--target", "livekit", "--fault", "node-drain", "--json"]
+        "file": "node",
+        "args": ["scripts/run_platform_failure_injection.mjs"]
       }
     }
   ]
