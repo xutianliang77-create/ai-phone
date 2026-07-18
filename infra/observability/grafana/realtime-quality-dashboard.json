@@ -123,6 +123,35 @@
         "format": "table",
         "instant": true
       }]
+    },
+    {
+      "type": "timeseries",
+      "title": "Translation admission",
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 35 },
+      "targets": [
+        { "refId": "A", "expr": "wujie_translation_active", "legendFormat": "active" },
+        { "refId": "B", "expr": "wujie_translation_waiting", "legendFormat": "waiting" },
+        { "refId": "C", "expr": "wujie_translation_pending", "legendFormat": "pending batch" }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Translation capacity failures",
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 35 },
+      "targets": [
+        { "refId": "A", "expr": "rate(wujie_translation_rejected_total[5m])", "legendFormat": "rejected/s" },
+        { "refId": "B", "expr": "rate(wujie_translation_timed_out_total[5m])", "legendFormat": "timed out/s" }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Translation micro-batch size",
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 35 },
+      "targets": [{
+        "refId": "A",
+        "expr": "rate(wujie_translation_completed_total[5m]) / clamp_min(rate(wujie_translation_batches_total[5m]), 0.001)",
+        "legendFormat": "requests/batch"
+      }]
     }
   ],
   "refresh": "30s",

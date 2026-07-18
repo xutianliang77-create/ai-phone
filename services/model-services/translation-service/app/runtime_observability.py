@@ -58,6 +58,7 @@ def require_metrics_token(
 def prometheus_model_metrics(
     identity: RuntimeIdentity,
     available: bool,
+    capacity: dict[str, int] | None = None,
 ) -> str:
     labels = ",".join([
         f'service="{_escape(identity.service)}"',
@@ -66,15 +67,26 @@ def prometheus_model_metrics(
         f'runtime_fingerprint="{identity.fingerprint}"',
         f'signature_version="{identity.signature_version}"',
     ])
-    return "\n".join([
+    lines = [
         "# HELP wujie_model_service_info Model runtime identity selected at startup.",
         "# TYPE wujie_model_service_info gauge",
         f"wujie_model_service_info{{{labels}}} 1",
         "# HELP wujie_model_service_up Whether the selected model runtime is available.",
         "# TYPE wujie_model_service_up gauge",
         f"wujie_model_service_up{{{labels}}} {1 if available else 0}",
-        "",
-    ])
+    ]
+    if capacity is not None:
+        for name in ("active", "waiting", "pending"):
+            lines.extend([
+                f"# TYPE wujie_translation_{name} gauge",
+                f"wujie_translation_{name} {capacity[name]}",
+            ])
+        for name in ("batches", "completed", "rejected", "timed_out"):
+            lines.extend([
+                f"# TYPE wujie_translation_{name}_total counter",
+                f"wujie_translation_{name}_total {capacity[name]}",
+            ])
+    return "\n".join([*lines, ""])
 
 
 def _escape(value: str) -> str:

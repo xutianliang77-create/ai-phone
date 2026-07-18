@@ -28,6 +28,13 @@ TRANSLATION_HYMT2_MODEL_DIR=/data/models/translation-model-eval/data/translation
 uvicorn app.main:app --host 0.0.0.0 --port 8003
 ```
 
+Production admission defaults are one concurrent model execution, a bounded queue of 64,
+a 2-second queue timeout, and non-streaming micro-batches of up to four requests collected
+for 8 ms. Configure them with `TRANSLATION_MAX_CONCURRENCY`,
+`TRANSLATION_MAX_QUEUE_SIZE`, `TRANSLATION_QUEUE_TIMEOUT_MS`,
+`TRANSLATION_MICRO_BATCH_SIZE`, and `TRANSLATION_MICRO_BATCH_WINDOW_MS`.
+Streaming requests share the same execution limit but are never mixed into a batch.
+
 Then point Gateway and Translation Worker at it:
 
 ```bash

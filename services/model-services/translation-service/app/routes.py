@@ -23,6 +23,10 @@ from app.runtime_observability import (
     require_metrics_token,
 )
 from app.service import TranslationService
+from app.translation_runtime import (
+    TranslationExecutionLease,
+    TranslationRuntime,
+)
 
 
 def create_router(
@@ -31,6 +35,7 @@ def create_router(
     runtime_identity: RuntimeIdentity,
 ) -> APIRouter:
     router = APIRouter()
+    runtime = TranslationRuntime(service, config)
 
     @router.get("/health", response_model=HealthResponse)
     async def health() -> HealthResponse:
@@ -53,7 +58,11 @@ def create_router(
         require_metrics_token(config.metrics_bearer_token, authorization)
         available, _reason = service.health()
         return Response(
-            content=prometheus_model_metrics(runtime_identity, available),
+            content=prometheus_model_metrics(
+                runtime_identity,
+                available,
+                runtime.metrics(),
+            ),
             media_type="text/plain; version=0.0.4",
         )
 
@@ -73,12 +82,18 @@ def create_router(
         require_api_key(config, authorization)
         try:
             if request.stream:
+                lease = await runtime.acquire_stream()
                 return StreamingResponse(
-                    openai_sse_stream(service, request, config.model_version),
+                    openai_sse_stream(
+                        service,
+                        request,
+                        config.model_version,
+                        lease,
+                    ),
                     media_type="text/event-stream",
                     headers={"cache-control": "no-cache", "x-accel-buffering": "no"},
                 )
-            translated = await asyncio.to_thread(service.translate_chat, request)
+            translated = await runtime.translate(request)
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         except RuntimeError as exc:
@@ -100,14 +115,32 @@ def create_router(
     return router
 
 
-def openai_sse_stream(
+async def openai_sse_stream(
     service: TranslationService,
     request: ChatCompletionRequest,
     model: str,
+    lease: TranslationExecutionLease,
 ):
     completion_id = f"chatcmpl-{uuid4().hex}"
     created = int(time())
-    for chunk in service.translate_chat_stream(request):
+    iterator = None
+    try:
+        iterator = iter(service.translate_chat_stream(request))
+        while True:
+            available, chunk = await next_chunk_async(iterator)
+            if not available:
+                break
+            yield "data: " + json.dumps({
+                "id": completion_id,
+                "object": "chat.completion.chunk",
+                "created": created,
+                "model": model,
+                "choices": [{
+                    "index": 0,
+                    "delta": {"content": chunk},
+                    "finish_reason": None,
+                }],
+            }, ensure_ascii=False) + "\n\n"
         yield "data: " + json.dumps({
             "id": completion_id,
             "object": "chat.completion.chunk",
@@ -115,22 +148,34 @@ def openai_sse_stream(
             "model": model,
             "choices": [{
                 "index": 0,
-                "delta": {"content": chunk},
-                "finish_reason": None,
+                "delta": {},
+                "finish_reason": "stop",
             }],
-        }, ensure_ascii=False) + "\n\n"
-    yield "data: " + json.dumps({
-        "id": completion_id,
-        "object": "chat.completion.chunk",
-        "created": created,
-        "model": model,
-        "choices": [{
-            "index": 0,
-            "delta": {},
-            "finish_reason": "stop",
-        }],
-    }) + "\n\n"
-    yield "data: [DONE]\n\n"
+        }) + "\n\n"
+        yield "data: [DONE]\n\n"
+    finally:
+        close = getattr(iterator, "close", None) if iterator is not None else None
+        if close:
+            close()
+        await lease.release()
+
+
+def next_chunk(iterator) -> tuple[bool, str]:
+    try:
+        return True, next(iterator)
+    except StopIteration:
+        return False, ""
+
+
+async def next_chunk_async(iterator) -> tuple[bool, str]:
+    task = asyncio.create_task(asyncio.to_thread(next_chunk, iterator))
+    try:
+        return await asyncio.shield(task)
+    except asyncio.CancelledError:
+        try:
+            await task
+        finally:
+            raise
 
 
 def require_api_key(config: TranslationConfig, authorization: str | None) -> None:

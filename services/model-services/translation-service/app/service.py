@@ -16,6 +16,9 @@ class TranslationService:
     def translate_chat(self, request: ChatCompletionRequest) -> str:
         return self.engine.translate(self.translation_input(request))
 
+    def translate_batch(self, requests: list[TranslationInput]) -> list[str]:
+        return self.engine.translate_batch(requests)
+
     def translate_chat_stream(self, request: ChatCompletionRequest):
         return self.engine.translate_stream(self.translation_input(request))
 

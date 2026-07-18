@@ -18,6 +18,13 @@ const REQUIRED_TARGETS = [
 const DASHBOARD_METRICS = [
   "wujie_model_service_up",
   "wujie_model_service_info",
+  "wujie_translation_active",
+  "wujie_translation_waiting",
+  "wujie_translation_pending",
+  "wujie_translation_rejected_total",
+  "wujie_translation_timed_out_total",
+  "wujie_translation_batches_total",
+  "wujie_translation_completed_total",
   "wujie_realtime_runtime_count",
   "wujie_realtime_audio_frames",
   "wujie_realtime_backpressure_events",

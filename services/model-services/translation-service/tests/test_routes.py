@@ -39,6 +39,8 @@ def test_metrics_exposes_runtime_identity_without_secrets() -> None:
 
     assert response.status_code == 200
     assert "wujie_model_service_info" in response.text
+    assert "wujie_translation_active 0" in response.text
+    assert "wujie_translation_pending 0" in response.text
     assert client.get("/health").json()["runtimeFingerprint"] in response.text
     assert "translation-secret" not in response.text
     assert "metrics-secret" not in response.text

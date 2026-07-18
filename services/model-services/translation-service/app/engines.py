@@ -20,5 +20,8 @@ class TranslationEngine:
     def translate(self, request: TranslationInput) -> str:
         raise NotImplementedError
 
+    def translate_batch(self, requests: list[TranslationInput]) -> list[str]:
+        return [self.translate(request) for request in requests]
+
     def translate_stream(self, request: TranslationInput):
         yield self.translate(request)
