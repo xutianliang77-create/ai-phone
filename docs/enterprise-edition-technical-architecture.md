@@ -1,6 +1,6 @@
 # 无界AI企业版技术架构
 
-版本：v1.10
+版本：v1.11
 日期：2026-07-18
 状态：SaaS 详细架构基线，已对齐统一通讯平台和 PostgreSQL Primary
 
@@ -359,6 +359,11 @@ Worker 无权依据缓存继续执行敏感能力。
 
 启动顺序固定为公共 manifest、企业 manifest、双 schema verify、RLS/identity/role verify，
 全部通过后才创建应用池和监听端口。任一失败都不回退 legacy，也不开放部分 PostgreSQL 路径。
+
+生产 PostgreSQL 启动还必须验证企业签名 cutover evidence：证据绑定 staging 环境、
+commit、image digest、topology hash、目标 logical ID、system identifier/OID、公共31段与
+企业16段 manifest，并证明源库 writer fence、旧 API/Worker 角色会话为0、目标可写和
+二次全量 hash 一致。本地逻辑恢复证据不提升为跨故障域 HA/PITR 结论。
 
 ## 10. 安全架构
 

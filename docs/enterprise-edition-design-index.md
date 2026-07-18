@@ -1,6 +1,6 @@
 # 无界AI企业版设计文档索引
 
-版本：v1.12
+版本：v1.13
 日期：2026-07-18
 状态：SaaS 详细设计基线，已纳入统一通讯平台和 PostgreSQL Primary 演进
 
@@ -38,16 +38,19 @@ Speech/Translation/Voice Agent Runtime、Provider Adapter 和可靠事件能力�
 
 四份文档共同使用成熟度语义 `designed`、`implemented`、`verified`、`production_ready`，运行时 readiness 另用 `not_configured`、`checking`、`ready`、`degraded`、`not_ready`；SQLite 环境固定报告 `demo_only`。文档中的目标组件不自动代表代码已经实现；当前实现和任务状态以开发任务表、代码、测试和环境证据为准。
 
-当前 `ENT-DATA-002/004` 已具备单一 Enterprise Repository runtime、独立 PostgreSQL
-cell Worker 和 JSON/SQLite 演示数据 count/hash 对账代码，状态为等待真实 PostgreSQL
-验收；这不等于 `ENT-DATA-001`、PITR、容量、安全或企业生产门禁已经通过。
+当前 `ENT-DATA-002/004/009` 已具备单一 Enterprise Repository runtime、独立 PostgreSQL
+cell Worker、JSON/SQLite 演示导入，以及全业务表 Primary 切换/恢复签名证据工具。
+一次性本地 PostgreSQL 16 双库、writer fence、逻辑恢复和篡改负测已通过机制验证；
+这不等于 `ENT-DATA-001`、异地主机 WAL/PITR、容量、安全或企业生产门禁已经通过。
 
 无界AI主产品公共 PostgreSQL migration、Primary Runtime、可靠 Inbox/Outbox、
 fencing、Billing/Product Records、verify-full 和韧性代码已形成稳定提交 `fe1c3c2`，并由
 `ENT-DATA-007` 合入企业分支。企业版已经完成单 driver、双 manifest、同库身份和分权
 连接的本地自动化，当前 manifest 为公共31段、enterprise 16段；`ENT-DATA-008` 和
 `ENT-CORE-013/014/015` 已完成公共通讯 tenant scope、企业业务会话绑定、签名 Worker dispatch fence
-及设备/声音/录制策略快照的代码/本地自动化，但不能继承主产品 staging 验收。`ENT-DATA-009`、
+及设备/声音/录制策略快照的代码/本地自动化，但不能继承主产品 staging 验收。`ENT-DATA-009` 已增加
+31+16 migration manifest、全表主键分页 count/hash、WAL 水位、writer fence、签名 cutover/restore
+证据和 production startup 绑定门禁；
 `ENT-CORE-007/010/012` 已增加 tenant usage budget、幂等 hold/settle、tenant billing account、
 不可变 plan/subscription/entitlement 版本、原始 usage event、append-only adjustment、账期
 count/hash 聚合和 dispatch 服务端限额。真实设备/Provider、支付账务环境、关账、A1/H2/H3 仍待完成。

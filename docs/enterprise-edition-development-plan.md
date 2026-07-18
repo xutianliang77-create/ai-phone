@@ -1,6 +1,6 @@
 # 无界AI企业版开发方案与计划
 
-版本：v1.17
+版本：v1.18
 日期：2026-07-18
 状态：E0 执行计划，已对齐统一通讯平台和 PostgreSQL Primary 收敛
 
@@ -28,7 +28,7 @@
 - `ENT-UI-001` 已完成生产令牌、Material Icons 注册表、Flutter 对照和浏览器验证，等待验收；`ENT-UI-002` 已完成共享 scope 真值、九角色导航矩阵、嵌套路由 guard 和 `ENT-CORE-011` 签名 route document；`ENT-UI-003` 已完成八态组件矩阵及 Provider/冲突/job 真值联调，均等待验收。
 - PostgreSQL、SaaS 控制面、对象存储、正式域名、真实 Provider 和目标国家合规确认均未通过门禁。
 - 当前开发必须继续使用独立企业 worktree；个人版声纹和部署 WIP 不进入企业提交。
-- 公共 PostgreSQL Primary、统一通讯、Billing 和 Product Records 的稳定代码基线已导入；`ENT-DATA-008` 和 `ENT-CORE-013/014/015` 已完成代码与本地自动化，`ENT-DATA-009` 仍须产出切换和对账证据，不能继承主产品环境验收。
+- 公共 PostgreSQL Primary、统一通讯、Billing 和 Product Records 的稳定代码基线已导入；`ENT-DATA-008` 和 `ENT-CORE-013/014/015` 已完成代码与本地自动化。`ENT-DATA-009` 已产出全表切换/对账/逻辑恢复工具、签名证据和一次性本地 PostgreSQL 16 演练，进入 `ready_for_acceptance`；不能继承主产品环境验收，也未通过异地 PITR/H3。
 
 ## 2. 里程碑总览
 
@@ -285,9 +285,9 @@ CORE-001/002 验收
 | 9 | `ENT-CORE-006/008` | 完成审计和 Provider capability/readiness 真值 |
 | 10 | `ENT-CORE-007/010/012` | 完成 tenant billing account、套餐、entitlement、预算、ledger 和账期聚合 |
 | 11 | `ENT-CORE-004/005` | 完成知识、术语和话术版本闭环 |
-| 12 | `ENT-DATA-009` | 完成全量/增量 hash、writer fence、切换、回滚和旧写入者清退证据 |
+| 12 | `ENT-DATA-009` | 验收 staging 全量/增量 hash、writer fence、切换/回滚和旧写入者清退证据；本地机制代码已完成 |
 | 13 | `ENT-UI-004..010` | 完成公共页面、响应式、无障碍、E2E 和 Web 发布门禁 |
 
 E0 完成后再启动 `ENT-MTG-001` 主链；允许提前做协议 spike，但不能把未接入真实 tenant/data/readiness 的会议页面计为 E1 完成。
 
-当前进展：`ENT-CORE-003` 已完成并等待验收；`ENT-DATA-001` 已完成十六段 schema 与本地自动化，等待真实 PostgreSQL migrate/restore/PITR 证据；`ENT-DATA-002/003/004/007/008` 已完成 Repository、可靠事件、演示导入、统一 Primary Runtime 和公共通讯 tenant scope 的代码与自动化；`ENT-CORE-013/014/015` 已完成企业统一通讯绑定、签名 Worker dispatch fence 及设备/声音/录制运行策略并进入验收；`ENT-CORE-007/010/012` 已完成 tenant budget、billing account、版本化 plan/subscription/entitlement、不可变 usage event/ledger/adjustment、账期 count/hash 聚合与 dispatch 服务端限额自动化并进入验收；`ENT-UI-001/002/003` 已进入验收。下一优先级为 `ENT-DATA-009` 的最终切换和全量对账证据，以及 `ENT-CORE-004/005` 企业知识与术语版本。
+当前进展：`ENT-CORE-003` 已完成并等待验收；`ENT-DATA-001` 已完成十六段 schema 与本地自动化，等待真实 PostgreSQL migrate/restore/PITR 证据；`ENT-DATA-002/003/004/007/008/009` 已完成 Repository、可靠事件、演示导入、统一 Primary Runtime、公共通讯 tenant scope，以及全库签名切换/恢复证据代码与本地 PostgreSQL 16 演练；`ENT-CORE-013/014/015` 已完成企业统一通讯绑定、签名 Worker dispatch fence 及设备/声音/录制运行策略并进入验收；`ENT-CORE-007/010/012` 已完成 tenant budget、billing account、版本化 plan/subscription/entitlement、不可变 usage event/ledger/adjustment、账期 count/hash 聚合与 dispatch 服务端限额自动化并进入验收；`ENT-UI-001/002/003` 已进入验收。下一优先级为 staging `ENT-DATA-009` 验收、`ENT-REL-003` 跨故障域/PITR，以及 `ENT-CORE-004/005` 企业知识与术语版本。

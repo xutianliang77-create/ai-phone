@@ -1,6 +1,6 @@
 # 无界AI企业版详细功能设计
 
-版本：v1.8
+版本：v1.9
 日期：2026-07-18
 状态：SaaS 详细设计基线，已对齐统一通讯平台
 
@@ -346,6 +346,9 @@ LLM 只能提出结构化工具请求；Policy Engine 校验租户、客户、�
   仍在运行的策略快照失效，但不得改写快照中已经冻结的历史决策字段。
 - 工作台分别展示数据库 primary readiness、Provider readiness、容量、依赖安全例外和
   灾备状态；任一子项 ready 不代表企业整体 production ready。
+- 数据库 readiness 必须区分 schema 已验证、切换证据已验证、逻辑恢复已验证和异地
+  PITR 已验证；证据需显示环境、commit/image/topology、cutover ID 和最近验证时间。
+  本地或同故障域恢复只能显示“机制已验证”，不能显示“生产灾备就绪”。
 
 ### 8.2 企业用量预算
 

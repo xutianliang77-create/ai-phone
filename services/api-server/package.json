@@ -8,6 +8,7 @@
     "dev": "tsx src/main.ts",
     "dev:enterprise-worker": "tsx src/enterprise-postgres-worker-main.ts",
     "enterprise:postgres-data": "tsx src/infrastructure/postgres/enterprise-postgres-data-admin.ts",
+    "enterprise:postgres-cutover": "tsx src/infrastructure/postgres/enterprise-postgres-cutover-admin.ts",
     "postgres:migrate": "tsx src/infrastructure/storage/postgres-admin.ts migrate",
     "postgres:check": "tsx src/infrastructure/storage/postgres-admin.ts check",
     "postgres:import": "tsx src/infrastructure/storage/postgres-admin.ts import",

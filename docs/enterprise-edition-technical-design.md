@@ -1,6 +1,6 @@
 # 无界AI企业版详细技术设计
 
-版本：v1.19
+版本：v1.20
 日期：2026-07-18
 状态：统一通讯平台与 PostgreSQL Primary 收敛详细技术方案
 
@@ -33,6 +33,7 @@
 | 企业用量预算 | `ready_for_acceptance` | enterprise `0014` 已实现 tenant/category/unit/UTC period 预算、hold/settle、阈值告警和 ledger 不可变约束；真实并发与账务抽样待验收 |
 | 租户账务和 Entitlement | `ready_for_acceptance` | enterprise `0015` 已实现 tenant billing account、不可变 plan/subscription/entitlement version、服务端账期及 binding/dispatch entitlement fence；真实支付 Provider、关账对账和 A1/H3 待验收 |
 | SaaS 计量聚合 | `ready_for_acceptance` | enterprise `0016` 已实现 tenant usage event、event/ledger 一致性、append-only adjustment、负数净额保护及 count/hash/watermark 账期聚合；真实关账、支付对账和 A1/H3 待验收 |
+| Primary 全量切换/恢复证据 | `ready_for_acceptance` | 已实现31+16 manifest、81张业务表主键分页整行 hash、WAL 水位、writer fence、旧角色会话清退、HMAC cutover/restore evidence 与 production startup 绑定；仅完成本地 PostgreSQL 16 逻辑恢复机制证据，异地 WAL/PITR/H3 未通过 |
 | PostgreSQL 控制面/业务聚合 | `designed` | 后续 CORE/MTG/CS/MKT 领域任务范围，不能从公共 Repository runtime 推导为已实现 |
 | SQLite | `demo_only` | 仅本地开发、自动化和封闭演示，不承载真实企业试点数据 |
 | PSTN/CRM/Calendar/OCR | `not_ready` 或按环境探测 | 未配置必须明确降级，不生成虚假外部对象或成功状态 |
@@ -875,6 +876,29 @@ Worker dispatch ticket 升级为 v2，并将 `policySnapshotId + policyVersion` 
 历史冻结字段以供审计。一次性本地 PostgreSQL 16 普通角色验证了 13 段 forward、forced RLS 跨租户 0 行、
 撤回即失效、不可变 trigger、`0013` 单段 down/forward 和恢复校验；该证据只说明机制可执行，不代表真实
 设备/Provider、双租户 A1、H2/H3、企业试点或生产门禁通过。
+
+#### 11.1.2 Primary 全量切换、对账与恢复证据
+
+`ENT-DATA-009` 的维护工具在 `REPEATABLE READ READ ONLY` 快照内枚举 `ai_phone` 与
+`enterprise` 全部业务表（排除 migration 元表），要求每张表存在主键，按复合主键
+keyset pagination 读取 `to_jsonb(row)` 规范文本。每行以字节长度前缀加入 SHA-256，
+形成 table count/hash/last-key hash，再汇总公共31段、企业16段 checksum、8张关键表、
+总行数和全库 hash。维护账号必须是受审计的 superuser 或 `BYPASSRLS` 全读角色，不能复用
+tenant/directory/cell 应用凭证。
+
+证据分为 `baseline`、`cutover`、`restore` 三类，并用独立 HMAC key 签名、以 `0600`
+临时文件原子替换。证据身份包含 run/cutover ID、local/staging 环境、Git commit、image digest、
+topology hash、数据库 system identifier/OID、snapshot 和 WAL LSN。`cutover` 必须引用已验签
+baseline 文件 hash，验证源库默认只读、写探针返回 SQLSTATE `25006`、旧 writer 角色在集群中
+无会话、目标默认可写且写探针成功，再对源/目标执行第二次全量 manifest。任何表缺失、数量、
+整行 hash、主键、migration 或 server version 不一致都会生成签名 `mismatch` 并以非零退出。
+
+生产 startup gate 只接受 `environment=staging` 的 matched cutover evidence，且运行时
+commit/image/topology、cutover ID、target logical ID、当前 system identifier/OID 和31+16
+manifest 必须逐项一致。本地 PostgreSQL 16 演练已验证81张表、8张含记录关键表、增量后17行
+全库 hash、writer fence、隔离 `pg_dump/pg_restore` 和单行篡改失败；证据见
+`docs/evidence/ent-data-009-local-drill-2026-07-18.md`。这只证明机制可执行，不是异地主机
+不可变 WAL/PITR、跨故障域自动选主或 RPO/RTO 证据，后者仍属于 `ENT-REL-003`/H3。
 
 ### 11.2 事务和一致性边界
 

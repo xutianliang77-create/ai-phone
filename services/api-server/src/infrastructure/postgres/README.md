@@ -31,7 +31,7 @@ identity 使用 opaque subject，而不是资源 UUID：
 - account subject 必须是规范的 `user_<uuid>`。
 - audit/policy/idempotency actor 可以是 account subject，或
   `system:enterprise-outbox` 形式的受约束 namespace subject。
-- Repository 在 SQL 前和行映射时校验；schema verify 确认所有12个 identity 列均为
+- Repository 在 SQL 前和行映射时校验；schema verify 确认所有15个 identity 列均为
   text。raw UUID、`user-a` 和 system actor 写入 user 列都会失败闭合。
 
 ## API startup gate
@@ -55,7 +55,7 @@ ENTERPRISE_MIGRATION_DATABASE_URL='postgresql://...' \
 
 两种启用模式都在恢复任务、Fastify 构建和端口监听前失败闭合，并在校验后关闭连接。
 `verify` 不写 migration；`migrate_verify` 始终在 migration 后执行相同 schema verify。
-统一启动编排先验证公共30段 manifest 和签名 cutover evidence，再验证 enterprise 10段
+统一启动编排先验证公共31段 manifest 和签名 cutover evidence，再验证 enterprise 16段
 manifest，并核对两个 verdict 的 database name/OID；任一失败都关闭已创建资源且不监听。
 
 当前十段 migration 中，`0004` 增加 tenant lifecycle 状态和 job，`0005` 增加
@@ -128,3 +128,26 @@ ENTERPRISE_MAINTENANCE_DATABASE_URL='postgresql://...' \
 随后删除本地临时文件。它不等于 PITR 或隔离环境恢复演练；真实 restore、数据对账、
 RPO/RTO 和对象存储恢复证据仍属于 H3 门禁。在这些证据齐全前，
 `ENT-DATA-001` 保持 `in_progress`，不能宣称 PostgreSQL 企业生产就绪。
+
+## Full cutover and restore evidence
+
+`ENT-DATA-009` 使用维护角色对 `ai_phone` 与 `enterprise` 的全部业务表按主键分页，
+对规范化整行计算 SHA-256，并保存公共/企业 migration manifest、数据库
+system identifier、OID、WAL LSN、关键表清单和总 hash。三阶段命令为：
+
+```bash
+npm run enterprise:postgres-cutover -- baseline
+npm run enterprise:postgres-cutover -- cutover
+npm run enterprise:postgres-cutover -- restore-verify
+```
+
+切换阶段要求 `ENTERPRISE_CUTOVER_BASELINE_FILE`、至少32字符的独立 HMAC key、
+commit/image/topology 身份、源/目标逻辑 ID 和 `ENTERPRISE_CUTOVER_OLD_WRITER_ROLES`。
+运维系统必须先把源库默认事务设为只读并清退旧 API/Worker；工具只验证 source 写探针返回
+SQLSTATE `25006`、旧 writer 会话为0、target 可写和二次全量 hash 相等，不替运维系统执行
+危险的自动 promote/fence。证据以 `0600` 原子写入。
+
+生产启动只接受 `environment=staging` 的 `cutover/matched` 签名证据，并绑定当前
+commit、image digest、topology hash、目标 logical ID、数据库 system identifier/OID 和
+31+16 migration manifest。本地同机 `pg_dump/pg_restore` 只能证明逻辑恢复与对账机制；
+跨故障域自动切换、异地主机不可变 WAL/PITR 和 RPO/RTO 仍由 `ENT-REL-003`/H3 验收。

@@ -35,7 +35,7 @@ export function enterprisePostgresConnectionConfig(
 ): EnterprisePostgresConnectionConfig {
   return {
     connectionString: requiredEnterprisePostgresDatabaseUrl(env, role),
-    ssl: enterprisePostgresSsl(env),
+    ssl: enterprisePostgresSslConfig(env),
   };
 }
 
@@ -144,7 +144,7 @@ function enterprisePostgresRoleVariable(role: EnterprisePostgresConnectionRole) 
   }
 }
 
-function enterprisePostgresSsl(
+export function enterprisePostgresSslConfig(
   env: NodeJS.ProcessEnv,
 ): EnterprisePostgresConnectionConfig["ssl"] {
   const mode = env.POSTGRES_SSL_MODE?.trim().toLowerCase();

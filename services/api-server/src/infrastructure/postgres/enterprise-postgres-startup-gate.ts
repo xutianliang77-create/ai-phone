@@ -10,6 +10,9 @@ import {
 import {
   migrateEnterprisePostgres,
 } from "./enterprise-postgres-migrations.js";
+import {
+  assertEnterprisePostgresCutoverStartup,
+} from "./enterprise-postgres-cutover-startup.js";
 
 export type EnterprisePostgresStartupMode =
   | "disabled"
@@ -35,7 +38,8 @@ export async function runEnterprisePostgresStartupGate(options: {
       await migrateEnterprisePostgres(client);
     }
     const evidence = await verifyEnterprisePostgresSchema(client);
-    return { status: "verified" as const, mode, evidence };
+    const cutover = await assertEnterprisePostgresCutoverStartup(client, env);
+    return { status: "verified" as const, mode, evidence, cutover };
   } finally {
     await client.end();
   }

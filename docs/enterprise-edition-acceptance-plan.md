@@ -1,6 +1,6 @@
 # 无界AI企业版验收任务与计划
 
-版本：v1.14
+版本：v1.15
 日期：2026-07-18
 状态：可执行验收计划，已对齐统一通讯平台和 PostgreSQL Primary 收敛
 
@@ -89,6 +89,7 @@ Mock 只能验证协议，不能替代 iPhone/Web、真实 LiveKit、真实模�
 | AC-ENT-0017 | 企业用量预算 | tenant/category/unit/UTC period 唯一预算；并发 reserve 不超卖；相同 hold/settle key 同 hash 精确重放、不同 hash 拒绝；超限不产生副作用；ledger/alert 不可更新删除，跨租户 ID 不可见不可写 |
 | AC-ENT-0018 | 租户账务和 Entitlement | tenant billing account 唯一；同时最多一个活动 subscription；plan/snapshot/version 不可改写删除；套餐变更只接受服务端 plan 并由服务端生成账期；跨租户、过期/错订阅、席位超限、旧 entitlement、客户端伪造 limit/maxUnits 全部拒绝且不产生 dispatch 副作用 |
 | AC-ENT-0019 | 不可变 Usage Accounting | raw event 与 settle ledger 同事务且逐字段一致；event/ledger/adjustment 不可更新删除；同键精确重放、异载荷拒绝；adjustment 只追加并引用原 settle、累计净额不得为负；UTC period 聚合的 settle/adjustment/net、usage event/settlement/adjustment/ledger count、SHA-256 hash 和 watermark 可重建，历史 ledger-only 缺口可见；跨租户读写与租户自助冲正均拒绝 |
+| AC-ENT-0020 | Primary 切换与恢复证据 | 公共31段/企业16段 manifest、全部业务表 count/整行 hash、关键 tenant/session/ledger/audit/consent/suppression/object 清单和增量 WAL 水位一致；源 writer fence 与 SQLSTATE 25006 写拒绝、旧 API/Worker 角色会话为0、目标写探针成功；baseline/cutover/restore evidence 验签并绑定 commit/image/topology/system identifier/OID；任意单行篡改失败闭合 |
 
 ### 4.1 企业 UI 与前端工程验收
 
@@ -384,6 +385,7 @@ schema 测试及 session/leg/dispatch/provider/playback/participant 六资源跨
 - 使用普通应用角色验证 billing account/plan/subscription/entitlement/change history forced RLS、活动 subscription 唯一、plan/snapshot/change 不可变，以及 entitlement projection/binding/grant 的 tenant 复合 FK；按跨租户、停用 account、过期账期、错 subscription/plan/version、席位超限、幂等漂移和客户端 limit 伪造执行负向矩阵。
 - accounts、tenant、communication session、segment、campaign、support、meeting、ledger 和 object hash 数量与规范化 SHA-256 一致。
 - 全量复制后记录增量水位，切换时获取 writer fence、清退旧 API/Worker、重放剩余 inbox/outbox，再做第二次 count/hash；切换或对账失败可按书面决策回滚，旧 writer 不能继续写入。
+- staging startup 必须拒绝 local evidence、签名篡改、错误 cutover/target ID、错误 commit/image/topology、错误 system identifier/OID、缺 baseline 引用、未清退 writer 或任一31+16 migration 漂移。维护工具只验证 fence，不自动执行 promote 或隔离旧主。
 - migration 后使用普通应用角色验证 `FORCE ROW LEVEL SECURITY`；确认 user directory self policy、tenant projection policy、成员投影同步和跨租户拒绝均生效。
 - 使用独立 cell Worker 角色验证 pending projection forced RLS、trigger 同步、空 cell 失败闭合、旧 cell 拒绝和 tenant transaction 原子 claim。
 - 使用 API 应用角色验证 PostgreSQL runtime 只在 startup gate `verified` 后创建；非法或 `dual_write` driver、连接/校验失败均不得监听端口，也不得回退到 legacy。
@@ -397,6 +399,10 @@ schema 测试及 session/leg/dispatch/provider/playback/participant 六资源跨
 - 在不同物理故障域部署主备，执行自动 leader election；网络分区/主机掉电后旧主必须被 fencing，旧 route epoch 和旧 Worker generation 的写入/副作用全部拒绝，原主重新加入前先校验 timeline/数据一致性。
 - base backup 与 WAL 加密保存到异地主机不可变存储，执行指定时间点恢复并核对 tenant、session、ledger、audit、suppression、consent 和 object manifest；同机副本、人工 promote 或只验证归档文件存在均不算通过。
 - 主产品 staging、同机复制、个人账单或可选 owner Product Records 的结果不能继承为本 H3 证据；每份证据必须绑定企业 commit、image digest、数据库 manifest checksum 和环境拓扑。
+
+`ENT-DATA-009` 的本地 PostgreSQL 16 同机双库、`pg_dump/pg_restore`、writer fence 和
+篡改负测只满足 `AC-ENT-0020` 的机制/自动化前置条件，不满足上述不同物理故障域、
+异地主机不可变 WAL/PITR、自动选主、RPO/RTO 或完整 H3 放行条件。
 
 具体 RPO/RTO 由企业 SLA 确定；未确定前不能在材料中承诺数值。
 
