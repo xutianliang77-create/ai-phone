@@ -4,14 +4,18 @@ import {
   ServerOptions,
 } from "@livekit/agents";
 import { parseWorkerDispatchMetadata } from "./worker-dispatch-runtime-client.js";
+import {
+  enterpriseMeetingRoomName,
+  parseEnterpriseMeetingDispatchMetadata,
+} from "./enterprise-meeting-runtime-client.js";
 import { createTranslationAgentPermissions } from "./translation-agent-permissions.js";
 
 const workerLiveKitUrl = process.env.LIVEKIT_WORKER_URL?.trim();
 if (workerLiveKitUrl) process.env.LIVEKIT_URL = workerLiveKitUrl;
 
 const maxJobs = integerEnv("LIVEKIT_AGENT_MAX_JOBS_PER_NODE", 4, 1, 32);
-const agentName = process.env.LIVEKIT_TRANSLATION_AGENT_NAME?.trim() ||
-  "translation-runtime";
+const agentName = process.env.LIVEKIT_ENTERPRISE_TRANSLATION_AGENT_NAME?.trim() ||
+  process.env.LIVEKIT_TRANSLATION_AGENT_NAME?.trim() || "translation-runtime";
 
 cli.runApp(new ServerOptions({
   agent: fileURLToPath(new URL("./translation-agent-definition.js", import.meta.url)),
@@ -30,6 +34,33 @@ cli.runApp(new ServerOptions({
   jobMemoryLimitMB: integerEnv("LIVEKIT_AGENT_JOB_MEMORY_LIMIT_MB", 1024, 256, 16384),
   permissions: createTranslationAgentPermissions(),
   requestFunc: async (request) => {
+    const enterpriseTicket = parseEnterpriseMeetingDispatchMetadata(
+      request.job.metadata,
+    );
+    if (enterpriseTicket) {
+      if (request.agentName !== agentName || request.room?.name !==
+        enterpriseMeetingRoomName(enterpriseTicket.communicationSessionId)) {
+        await request.reject();
+        return;
+      }
+      await request.accept(
+        "Enterprise Translation Runtime",
+        `enterprise-${enterpriseTicket.communicationSessionId.slice(0, 12)}-g${
+          enterpriseTicket.generation
+        }`,
+        JSON.stringify({
+          participantRole: "worker",
+          dispatchGeneration: enterpriseTicket.generation,
+          communicationSessionId: enterpriseTicket.communicationSessionId,
+        }),
+        {
+          "translation.role": "worker",
+          "translation.scope": "enterprise_meeting",
+          "translation.generation": String(enterpriseTicket.generation),
+        },
+      );
+      return;
+    }
     const ticket = parseWorkerDispatchMetadata(request.job.metadata);
     if (!ticket || request.agentName !== agentName ||
       request.room?.name !== ticket.roomName || ticket.agentName !== agentName) {

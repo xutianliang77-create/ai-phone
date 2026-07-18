@@ -1,6 +1,6 @@
 # 无界AI企业版开发方案与计划
 
-版本：v1.32
+版本：v1.33
 日期：2026-07-19
 状态：E0 执行计划，已对齐统一通讯平台和 PostgreSQL Primary 收敛
 
@@ -20,7 +20,7 @@
 
 - `ENT-CORE-001/002/003` 已到 `ready_for_acceptance`；Tenant/Member、RBAC 和 `apps/enterprise-web` 生产应用基础可供后续任务复用。
 - Enterprise Web 已冻结 React 19、TypeScript 5.9、Vite 8、React Router 7 和 Vitest/Testing Library 技术基线，并实现真实登录、会话恢复和租户上下文。
-- `ENT-DATA-001` 已实现二十二段 PostgreSQL up/down migration、复合 FK、强制 RLS、migration runner、schema verify 和归档 smoke；`0017..0022` 分别增加知识版本、术语/话术版本、企业 trace、受控审计导出、Meeting 聚合约束和创建幂等/policy 约束。历史本地 PostgreSQL 16 验证不替代当前31+22 staging migrate/restore/PITR，任务保持 `in_progress`。
+- `ENT-DATA-001` 已实现二十三段 PostgreSQL up/down migration、复合 FK、强制 RLS、migration runner、schema verify 和归档 smoke；`0017..0023` 分别增加知识版本、术语/话术版本、企业 trace、受控审计导出、Meeting 聚合约束、创建幂等/policy 约束和定向会议翻译事件。历史本地 PostgreSQL 16 验证不替代当前31+23 staging migrate/restore/PITR，任务保持 `in_progress`。
 - `ENT-CORE-005` 已完成版本化术语包、话术模板、审核发布、有效时间解析、统一运行时引用和租户隔离矩阵，进入 `ready_for_acceptance`；真实 ASR/翻译/LLM Worker 消费和 A1/H3 仍待验收。
 - `ENT-DATA-002` 已完成单一 `legacy|postgres` Repository runtime、HTTP 全链路注入、fail-closed 启动选择和独立 cell Worker。PostgreSQL 模式不回退、不双写；API 不执行跨租户恢复扫描，Worker 通过 cell forced RLS 发现最小引用后进入 tenant transaction 复核并 claim/finalize。代码和本地自动化进入 `ready_for_acceptance`，真实 PostgreSQL 并发、容量和恢复仍待 H3。
 - `ENT-DATA-004` 已完成 JSON/SQLite 源读取、SQLite 副本 `quick_check`、空目标事务导入和六集合 count/SHA-256 读回对账；不一致回滚，且明确只用于内部演示数据迁移。真实 PostgreSQL import/reconcile 证据仍待 H3。
@@ -134,7 +134,7 @@ CORE-001/002 验收
 
 1. meeting/participant/artifact 数据契约。
 2. 创建、邀请、join token、开始和结束状态机。
-3. 复用个人版 LiveKit 翻译 Worker。
+3. 复用稳定 Speech Pipeline，但由 tenant-aware dispatch ticket、每 participant track 独立管线和服务端定向投递包裹，禁止复用个人会话身份或全局译音轨。
 4. Web 企业会议页和移动端会议入口。
 5. 屏幕共享租约和 Web `getDisplayMedia`。
 6. iOS ReplayKit 和 Android MediaProjection 接口；Android 真机仍按 iOS 产品化后的既定顺序验收。
@@ -301,4 +301,4 @@ CORE-001/002 验收
 
 E0 基线完成后已形成 `ENT-MTG-001/002` 代码候选；未通过真实 PostgreSQL、tenant/RBAC/token 攻击、Provider、浏览器与真机门禁，仍不能计为 E1 完成。
 
-当前进展：`ENT-CORE-003/004/005` 已完成并等待验收；`ENT-DATA-001` 已完成二十二段 schema 代码，等待 staging PostgreSQL migrate/restore/PITR 证据；`ENT-DATA-002/003/004/007/008/009` 已完成 Repository、可靠事件、演示导入、统一 Primary Runtime、公共通讯 tenant scope，以及全库签名切换/恢复工具；`ENT-CORE-013/014/015`、`ENT-CORE-007/010/012` 已完成代码和自动化并进入验收；`ENT-UI-001/002/003/005/006/007` 已进入验收。`ENT-OBS-001`、`ENT-UI-004/008/009/010/011/012` 和 `ENT-MTG-001/002` 已形成代码候选，但因测试暂缓、migration/真实恢复、Provider、浏览器或真机门禁未完成保持 `in_progress`。下一优先级实施 `ENT-MTG-003` tenant-aware 实时翻译主链；恢复测试时先补齐 MTG-001/002 的 API/RBAC/跨租户/token/forced-RLS/Flutter/浏览器/重启恢复矩阵。staging `ENT-DATA-009` 和 `ENT-REL-002/003` 的对象清理、跨故障域/PITR 仍未通过。
+当前进展：`ENT-CORE-003/004/005` 已完成并等待验收；`ENT-DATA-001` 已完成二十三段 schema 代码，等待 staging PostgreSQL migrate/restore/PITR 证据；`ENT-DATA-002/003/004/007/008/009` 已完成 Repository、可靠事件、演示导入、统一 Primary Runtime、公共通讯 tenant scope，以及全库签名切换/恢复工具；`ENT-CORE-013/014/015`、`ENT-CORE-007/010/012` 已完成代码和自动化并进入验收；`ENT-UI-001/002/003/005/006/007` 已进入验收。`ENT-MTG-003` 已形成 tenant-aware dispatch、独立 participant track 翻译、append-only 定向字幕事件、Web/Flutter 可信消费和个人偏好代码候选；定向 TTS 明确 not_ready。因测试暂缓、migration/真实恢复、真实 LiveKit/ASR/翻译 Provider、四人媒体、浏览器或真机门禁未完成，`ENT-OBS-001`、`ENT-UI-004/008/009/010/011/012` 和 `ENT-MTG-001/002/003` 继续保持 `in_progress`。恢复测试时先补齐 MTG-001..003 的 API/RBAC/跨租户/ticket/forced-RLS/幂等/旧 generation/Flutter/浏览器/四人媒体/重启恢复矩阵。staging `ENT-DATA-009` 和 `ENT-REL-002/003` 的对象清理、跨故障域/PITR 仍未通过。

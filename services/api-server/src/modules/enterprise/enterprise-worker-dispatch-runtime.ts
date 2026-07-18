@@ -63,6 +63,31 @@ export function createEnterpriseWorkerDispatchRuntime(input: {
           now: request.now,
         }));
     },
+    async refresh(request: WorkerTicketRequest & {
+      leaseSeconds: number;
+      ticketTtlSeconds: number;
+    }) {
+      const result = await runTicketOperation(
+        input.pool,
+        signingSecret,
+        request,
+        (unit, payload) => unit.workerDispatches.refresh({
+          payload,
+          workerCellId: request.workerCellId,
+          workerId: request.workerId,
+          leaseSeconds: request.leaseSeconds,
+          ticketTtlSeconds: request.ticketTtlSeconds,
+          now: request.now,
+        }),
+      );
+      if (!("grant" in result) || result.status !== "accepted") return result;
+      const payload = payloadFor(result.grant);
+      return {
+        ...result,
+        payload,
+        ticket: issueEnterpriseWorkerDispatchTicket({ payload, signingSecret }),
+      };
+    },
     authorizeEffect(request: WorkerTicketRequest) {
       return runTicketOperation(input.pool, signingSecret, request, (unit, payload) =>
         unit.workerDispatches.authorize({

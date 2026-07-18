@@ -1,4 +1,7 @@
-import type { EnterpriseMeetingPolicyDto } from "@translation/contracts";
+import type {
+  EnterpriseMeetingCaptionLanguage,
+  EnterpriseMeetingPolicyDto,
+} from "@translation/contracts";
 import type { EnterpriseCommunicationBindingRecord } from
   "./enterprise-communication-session.js";
 
@@ -48,6 +51,9 @@ export interface EnterpriseMeetingParticipantRecord {
   externalIdentity?: string;
   role: EnterpriseMeetingParticipantRole;
   language?: string;
+  captionLanguage: EnterpriseMeetingCaptionLanguage;
+  translatedAudioEnabled: boolean;
+  playbackGeneration: number;
   displayName: string;
   joinedAt?: string;
   leftAt?: string;

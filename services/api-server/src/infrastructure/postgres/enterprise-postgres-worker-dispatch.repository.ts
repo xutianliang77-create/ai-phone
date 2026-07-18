@@ -7,14 +7,20 @@ import {
 import {
   EnterpriseWorkerDispatchLifecyclePostgresRepository,
 } from "./enterprise-postgres-worker-dispatch-lifecycle.js";
+import { EnterpriseWorkerDispatchLeasePostgresRepository } from
+  "./enterprise-postgres-worker-dispatch-lease.js";
 
 export class EnterpriseWorkerDispatchPostgresRepository {
   private readonly issuer: EnterpriseWorkerDispatchIssuePostgresRepository;
   private readonly lifecycle: EnterpriseWorkerDispatchLifecyclePostgresRepository;
+  private readonly lease: EnterpriseWorkerDispatchLeasePostgresRepository;
 
   constructor(session: EnterpriseTenantPostgresSession) {
     this.issuer = new EnterpriseWorkerDispatchIssuePostgresRepository(session);
     this.lifecycle = new EnterpriseWorkerDispatchLifecyclePostgresRepository(session);
+    this.lease = new EnterpriseWorkerDispatchLeasePostgresRepository(
+      session, this.lifecycle,
+    );
   }
 
   issue(...args: Parameters<EnterpriseWorkerDispatchIssuePostgresRepository["issue"]>) {
@@ -23,8 +29,13 @@ export class EnterpriseWorkerDispatchPostgresRepository {
   accept(...args: Parameters<EnterpriseWorkerDispatchLifecyclePostgresRepository["accept"]>) {
     return this.lifecycle.accept(...args);
   }
-  heartbeat(...args: Parameters<EnterpriseWorkerDispatchLifecyclePostgresRepository["accept"]>) {
-    return this.lifecycle.accept(...args);
+  heartbeat(
+    ...args: Parameters<EnterpriseWorkerDispatchLeasePostgresRepository["heartbeat"]>
+  ) {
+    return this.lease.heartbeat(...args);
+  }
+  refresh(...args: Parameters<EnterpriseWorkerDispatchLeasePostgresRepository["refresh"]>) {
+    return this.lease.refresh(...args);
   }
   authorize(
     ...args: Parameters<EnterpriseWorkerDispatchLifecyclePostgresRepository["authorize"]>

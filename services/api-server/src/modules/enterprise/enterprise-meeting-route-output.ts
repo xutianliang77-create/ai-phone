@@ -29,7 +29,7 @@ export function enterpriseMeetingDto(
       ...(value.meeting.endedAt ? { endedAt: value.meeting.endedAt } : {}),
       version: value.meeting.version,
     },
-    participants: value.participants.map(participantDto),
+    participants: value.participants.map(enterpriseMeetingParticipantDto),
     artifacts: value.artifacts.map(artifactDto),
     ...(binding ? { communication: {
       status: binding.status,
@@ -39,7 +39,7 @@ export function enterpriseMeetingDto(
   };
 }
 
-function participantDto(
+export function enterpriseMeetingParticipantDto(
   value: EnterpriseMeetingAggregate["participants"][number],
 ): EnterpriseMeetingParticipantDto {
   return {
@@ -47,6 +47,9 @@ function participantDto(
     meetingId: value.meetingId,
     role: value.role,
     ...(value.language ? { language: value.language } : {}),
+    captionLanguage: value.captionLanguage,
+    translatedAudioEnabled: value.translatedAudioEnabled,
+    playbackGeneration: value.playbackGeneration,
     displayName: value.displayName,
     ...(value.joinedAt ? { joinedAt: value.joinedAt } : {}),
     ...(value.leftAt ? { leftAt: value.leftAt } : {}),

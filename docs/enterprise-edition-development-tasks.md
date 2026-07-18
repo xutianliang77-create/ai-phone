@@ -1,6 +1,6 @@
 # 无界AI企业版开发任务
 
-版本：v1.35
+版本：v1.36
 日期：2026-07-19
 状态：E0 开发中，已对齐统一通讯平台和 PostgreSQL Primary 收敛
 
@@ -17,14 +17,14 @@
 ### 1.1 当前状态快照
 
 - `ENT-CORE-001/002/003` 已完成代码和自动化，等待验收；生产 Web 应用位于 `apps/enterprise-web`。
-- `ENT-DATA-001` 已有二十二段 PostgreSQL up/down migration、tenant-first 索引、复合 FK、强制 RLS、checksum/锁和备份归档 smoke；`0017` 增加知识版本，`0018` 增加术语/话术版本，`0019` 增加可信 trace，`0020` 增加受控审计导出 job，`0021` 固化 Meeting 聚合状态/身份/恢复约束，`0022` 增加入会幂等键与 Meeting policy 约束。一次性历史本地 PostgreSQL 16 验证不替代当前31+22 staging migrate/restore/PITR 证据，任务保持 `in_progress`。
+- `ENT-DATA-001` 已有二十三段 PostgreSQL up/down migration、tenant-first 索引、复合 FK、强制 RLS、checksum/锁和备份归档 smoke；`0017` 增加知识版本，`0018` 增加术语/话术版本，`0019` 增加可信 trace，`0020` 增加受控审计导出 job，`0021` 固化 Meeting 聚合状态/身份/恢复约束，`0022` 增加入会幂等键与 Meeting policy 约束，`0023` 增加个人字幕偏好、playback generation 和 append-only 定向翻译事件。一次性历史本地 PostgreSQL 16 验证不替代当前31+23 staging migrate/restore/PITR 证据，任务保持 `in_progress`。
 - `ENT-DATA-002` 已完成单一 `legacy|postgres` Enterprise Repository runtime adapter，Tenant/Member/Audit、Directory、lifecycle 和 HTTP 路由均通过同一 runtime；PostgreSQL 只有在启动 schema gate 已验证时才允许选中，不存在 fallback、双写或局部切换。独立 cell Worker 已实现 cell/worker/poll/batch/lease 配置、forced-RLS pending discovery、tenant transaction 二次复核、lifecycle/outbox claim/finalize、失败隔离和显式 publisher 降级。代码与本地自动化完成，进入 `ready_for_acceptance`；真实 PostgreSQL、并发 claim、容量和恢复证据仍属于 H3 门禁。
 - `ENT-DATA-004` 已实现 JSON/SQLite 六类企业记录源读取、SQLite 临时副本与 `quick_check`、维护窗口空目标导入、事务内读回，以及逐集合 count/SHA-256 和总 hash 对账；任何不一致整体回滚。该工具只迁移当前 Tenant/Member/Job/Audit/Inbox/Outbox 演示数据，不是客户生产迁移通道，进入 `ready_for_acceptance`。
 - `ENT-DATA-003` 已完成 tenant-scoped inbox 去重、稳定 JSON hash、领域写入/inbox/outbox 同事务、outbox 内容不可变、lease claim、指数退避和恢复处理；100 次相同事件重放只执行一次领域副作用，跨租户 provider ID/idempotency key 相互隔离。SQLite 证据仅用于自动化和封闭演示，真实 PostgreSQL 并发 claim 与 Provider sandbox 仍待正式验收。
-- `ENT-DATA-007` 已把上游稳定提交 `fe1c3c2` 的公共 Primary Runtime 纳入企业分支，并以 `API_STORAGE_DRIVER` 作为唯一进程级 driver。统一启动编排现验证公共31段和 enterprise 22段 manifest，核对数据库 name/OID 后才创建企业 runtime；API tenant pool 复用公共 Primary pool，directory、cell、migration 和 maintenance 使用分权连接配置，Worker 不获取 directory 凭证。代码和本地自动化完成，进入 `ready_for_acceptance`；真实 PostgreSQL 双 manifest、最小权限角色、并发和恢复证据仍属于 H3。
+- `ENT-DATA-007` 已把上游稳定提交 `fe1c3c2` 的公共 Primary Runtime 纳入企业分支，并以 `API_STORAGE_DRIVER` 作为唯一进程级 driver。统一启动编排现验证公共31段和 enterprise 23段 manifest，核对数据库 name/OID 后才创建企业 runtime；API tenant pool 复用公共 Primary pool，directory、cell、migration 和 maintenance 使用分权连接配置，Worker 不获取 directory 凭证。代码和本地自动化完成，进入 `ready_for_acceptance`；真实 PostgreSQL 双 manifest、最小权限角色、并发和恢复证据仍属于 H3。
 - `ENT-OBS-001` 已进入开发：平台 `x-trace-id` 现注入 Enterprise TenantContext 和 PostgreSQL `app.trace_id`，`0019` 把会话绑定、usage event 与不可变 ledger 的 trace 固化并建立 tenant-first 索引；新增按 tenant scope 的会话报告契约/API，返回真实 segment 覆盖率/延迟、Provider operation、usage/ledger 和关联审计。当前无单位价格表，货币成本固定返回 `pricing_not_configured`，不把用量冒充金额。按本轮要求尚未执行测试矩阵、migration 和双租户负测，状态保持 `in_progress`。
 - `ENT-DATA-008` 已新增公共 migration `031_communication_resource_scope`：session、leg、transcript、playback、Provider operation、dispatch/capacity、participant consent、recording 和 ingress 共12张表具有不可空 `scope_type + scope_id`、复合 scope FK、写入 scope trigger 和 forced RLS。企业 tenant transaction 同时设置 `app.tenant_id/app.scope_type/app.scope_id`，只向企业 unit-of-work 暴露六类白名单、单 SELECT、显式 scope predicate 的通讯 Repository；跨租户返回行会被二次拒绝。代码和本地自动化完成，进入 `ready_for_acceptance`；真实双租户 PostgreSQL CRUD/迟到事件攻击仍属于 A1/H3。
-- `ENT-DATA-009` 已实现动态双 manifest、全业务表主键分页整行 count/SHA-256、关键 tenant/session/ledger/audit/consent/suppression/object 清单、WAL 水位、HMAC baseline/cutover/restore evidence、源库 SQLSTATE `25006` writer fence、旧 writer 会话清退和 production startup 身份绑定。提交 `c9b5be2` 的历史本地证据覆盖公共31段/企业16段与81张表；当前代码为31+22和86张表，旧签名证据会被 startup gate 拒绝，必须在 staging 重新生成。任务保持 `ready_for_acceptance`；跨故障域自动选主、异地主机不可变 WAL/PITR 和 RPO/RTO 仍待 `ENT-REL-003`/H3。
+- `ENT-DATA-009` 已实现动态双 manifest、全业务表主键分页整行 count/SHA-256、关键 tenant/session/ledger/audit/consent/suppression/object 清单、WAL 水位、HMAC baseline/cutover/restore evidence、源库 SQLSTATE `25006` writer fence、旧 writer 会话清退和 production startup 身份绑定。提交 `c9b5be2` 的历史本地证据覆盖公共31段/企业16段与81张表；当前代码为31+23和87张表，旧签名证据会被 startup gate 拒绝，必须在 staging 重新生成。任务保持 `ready_for_acceptance`；跨故障域自动选主、异地主机不可变 WAL/PITR 和 RPO/RTO 仍待 `ENT-REL-003`/H3。
 - `ENT-CORE-004` 已新增 enterprise `0017`、共享契约、tenant Knowledge Repository/runtime 和七个服务端路由：source、递增 revision、一次性 chunk 集、review、publish、列表和检索均绑定 membership/RBAC/route document。服务端生成 chunk/content SHA-256 与 citation；数据库要求 review+非空 chunk 才能发布，并冻结 published version/chunk。检索强制 tenant/locale/country/product/effective-time，只取每个 source 最新有效 published revision；review、过期和跨租户数据返回空。代码、定向矩阵及一次性 PostgreSQL 16 普通角色 forced-RLS/down-up 验证完成，进入 `ready_for_acceptance`；embedding Provider、真实对象存储、恶意文档扫描和生产 A1/H3 尚未验收。
 - `ENT-CORE-005` 已新增 enterprise `0018`、共享契约、Term Pack/Script Template Repository/runtime 和十三个服务端路由。稳定资源下的 revision 由服务端行锁递增，内容规范化后生成 SHA-256，review 后内容/hash 与 published 版本不可修改；resolver 强制 tenant/source-target locale/country/product/purpose/effective-time，只返回有效 published 版本，并给 ASR、翻译、LLM 同一 `termPackVersionId`，可选话术只给 LLM。代码、定向矩阵和一次性 PostgreSQL 16 非 owner/非 BYPASSRLS 普通角色 down-forward 验证完成，进入 `ready_for_acceptance`；真实 Worker/Provider、A1/H3 尚未验收。
 - `ENT-CORE-009` 已完成租户创建/区域开通幂等、失败重试、暂停、导出和删除执行器；导出固化 tenant/member/job 与 actor scope 快照，执行使用租约、有界重试和 receipt hash，删除只在 receipt 校验后进入 `deleted`，等待真实生命周期服务与对象存储验收。
@@ -97,7 +97,7 @@
 | ENT-UI-011 | Flutter 企业入口 | UI-001/002、CORE-002 | 工作台、会议、接管、告警和我的入口 | 不复制批量管理；离线/越权不显示乐观成功 | in_progress |
 | ENT-UI-012 | Web 访客参会壳 | CORE-003、MTG-002 | guest token 入会、设备检查、字幕和共享入口 | token 仅访问指定 meeting；不暴露租户导航和成员数据 | in_progress |
 
-`ENT-CORE-003` 的生产脚手架、登录和构建已完成；`ENT-UI-001/002/003/005/006/007` 已进入验收，`ENT-UI-004/008/009/010/011/012` 因暂缓测试或依赖未完成保持开发中。Provider capability、租户生命周期 job、成员关系、知识/术语/话术版本、区域、权益、预算和用量聚合已使用服务端真值；Flutter 企业会议与 Web guest session 已接 MTG-002 代码候选，接管、字幕与共享未完成时继续明确显示未就绪。静态 HTML 原型、未执行的测试定义和静态无障碍检查不进入生产验收，也不能替代浏览器、键盘、axe、视觉回归和真机矩阵。
+`ENT-CORE-003` 的生产脚手架、登录和构建已完成；`ENT-UI-001/002/003/005/006/007` 已进入验收，`ENT-UI-004/008/009/010/011/012` 因暂缓测试或依赖未完成保持开发中。Provider capability、租户生命周期 job、成员关系、知识/术语/话术版本、区域、权益、预算和用量聚合已使用服务端真值；Flutter 企业会议与 Web guest session 已接 MTG-003 的个人字幕偏好和服务端定向字幕消费代码候选，Provider/Worker 未就绪时继续明确降级，定向 TTS 与共享尚未开放。静态 HTML 原型、未执行的测试定义和静态无障碍检查不进入生产验收，也不能替代浏览器、键盘、axe、视觉回归和真机矩阵。
 
 ## 4. P0 企业会议
 
@@ -105,7 +105,7 @@
 | --- | --- | --- | --- | --- | --- |
 | ENT-MTG-001 | Meeting 聚合 | CORE-013、DATA-003/008 | meeting/participant/artifact schema、communication session binding | 重启后会议和统一会话状态可恢复 | in_progress |
 | ENT-MTG-002 | 创建和入会 | MTG-001 | API、短期 token、Web/Flutter 入口 | host/guest/member 权限正确 | in_progress |
-| ENT-MTG-003 | 企业实时翻译 | MTG-002、CORE-014 | tenant-aware Worker 路由、个人字幕语言 | 四人字幕和译音不串轨，旧 Worker 不恢复播放 | todo |
+| ENT-MTG-003 | 企业实时翻译 | MTG-002、CORE-014 | tenant-aware Worker 路由、个人字幕语言 | 四人字幕和译音不串轨，旧 Worker 不恢复播放 | in_progress |
 | ENT-MTG-004 | 屏幕共享租约 | MTG-002 | acquire/pause/resume/stop、CAS | 同时共享只成功一个 | todo |
 | ENT-MTG-005 | Web 屏幕共享 | MTG-004 | getDisplayMedia、布局、控制 | screen/window/tab 可用 | todo |
 | ENT-MTG-006 | iOS ReplayKit | MTG-004 | Broadcast Extension、Flutter bridge | 离开 App 后持续共享且可停止 | todo |

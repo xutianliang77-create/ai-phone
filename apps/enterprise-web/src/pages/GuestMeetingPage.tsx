@@ -9,11 +9,19 @@ import {
   EnterpriseMeetingRoomClient,
   type EnterpriseMeetingRoomSnapshot,
 } from "../meeting/enterprise-meeting-room.js";
+import { MeetingTranslationPanel } from
+  "../meeting/MeetingTranslationPanel.js";
 
 const disconnected: EnterpriseMeetingRoomSnapshot = {
   status: "disconnected",
   microphoneEnabled: false,
   remoteParticipantCount: 0,
+  translationStatus: "not_ready",
+  translationReasonCode: "not_joined",
+  captionLanguage: "zh",
+  translatedAudioEnabled: false,
+  translatedAudioAvailable: false,
+  captions: [],
 };
 
 export function GuestMeetingPage() {
@@ -22,6 +30,8 @@ export function GuestMeetingPage() {
   const [room, setRoom] = useState(disconnected);
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
+  const [captionLanguage, setCaptionLanguage] = useState<"zh" | "en">("zh");
+  const [translatedAudioEnabled, setTranslatedAudioEnabled] = useState(false);
   const roomClient = useRef<EnterpriseMeetingRoomClient | null>(null);
 
   useEffect(() => {
@@ -37,7 +47,7 @@ export function GuestMeetingPage() {
     try {
       const grant = await createEnterpriseApi().joinMeetingAsGuest(
         invitation.meetingId,
-        invitation.token,
+        { token: invitation.token, captionLanguage, translatedAudioEnabled },
       );
       await roomClient.current.connect(grant);
     } catch {
@@ -99,8 +109,11 @@ export function GuestMeetingPage() {
           ) : null}
         </div>
         <aside className="guest-meeting-side" aria-label="会议能力">
-          <GuestFeature icon={enterpriseIcons.guest.captions} title="实时字幕"
-            description="ENT-MTG-003 完成后才订阅租户隔离字幕；当前不伪造字幕结果。" />
+          <MeetingTranslationPanel room={room} captionLanguage={captionLanguage}
+            translatedAudioEnabled={translatedAudioEnabled}
+            editable={room.status === "disconnected"}
+            onCaptionLanguage={setCaptionLanguage}
+            onTranslatedAudioEnabled={setTranslatedAudioEnabled} />
           <GuestFeature icon={enterpriseIcons.action.shareScreen} title="共享屏幕"
             description="当前短期凭据明确禁止屏幕发布；共享能力由后续租约控制。" />
         </aside>

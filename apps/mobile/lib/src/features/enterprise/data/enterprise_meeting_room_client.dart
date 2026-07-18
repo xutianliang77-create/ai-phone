@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:livekit_client/livekit_client.dart' as livekit;
 
@@ -16,16 +17,34 @@ class EnterpriseMeetingRoomSnapshot {
     required this.status,
     required this.microphoneEnabled,
     required this.remoteParticipantCount,
+    required this.translationStatus,
+    required this.translationReasonCode,
+    required this.captionLanguage,
+    required this.translatedAudioEnabled,
+    required this.translatedAudioAvailable,
+    required this.captions,
   });
 
   const EnterpriseMeetingRoomSnapshot.disconnected()
       : status = EnterpriseMeetingRoomStatus.disconnected,
         microphoneEnabled = false,
-        remoteParticipantCount = 0;
+        remoteParticipantCount = 0,
+        translationStatus = 'not_ready',
+        translationReasonCode = 'not_joined',
+        captionLanguage = 'zh',
+        translatedAudioEnabled = false,
+        translatedAudioAvailable = false,
+        captions = const <EnterpriseMobileMeetingCaption>[];
 
   final EnterpriseMeetingRoomStatus status;
   final bool microphoneEnabled;
   final int remoteParticipantCount;
+  final String translationStatus;
+  final String translationReasonCode;
+  final String captionLanguage;
+  final bool translatedAudioEnabled;
+  final bool translatedAudioAvailable;
+  final List<EnterpriseMobileMeetingCaption> captions;
 }
 
 class EnterpriseMeetingRoomClient {
@@ -33,6 +52,9 @@ class EnterpriseMeetingRoomClient {
       StreamController<EnterpriseMeetingRoomSnapshot>.broadcast();
   livekit.Room? _room;
   livekit.EventsListener<livekit.RoomEvent>? _listener;
+  EnterpriseMobileMeetingJoinGrant? _grant;
+  List<EnterpriseMobileMeetingCaption> _captions = const [];
+  final Set<String> _seenEventIds = <String>{};
   bool _disposed = false;
 
   Stream<EnterpriseMeetingRoomSnapshot> get snapshots => _snapshots.stream;
@@ -40,10 +62,19 @@ class EnterpriseMeetingRoomClient {
   Future<void> connect(EnterpriseMobileMeetingJoinGrant grant) async {
     if (_disposed) return;
     await _disposeRoom();
-    _emit(const EnterpriseMeetingRoomSnapshot(
+    _grant = grant;
+    _captions = const [];
+    _seenEventIds.clear();
+    _emit(EnterpriseMeetingRoomSnapshot(
       status: EnterpriseMeetingRoomStatus.connecting,
       microphoneEnabled: false,
       remoteParticipantCount: 0,
+      translationStatus: grant.translation.status,
+      translationReasonCode: grant.translation.reasonCode,
+      captionLanguage: grant.translation.captionLanguage,
+      translatedAudioEnabled: grant.translation.translatedAudioEnabled,
+      translatedAudioAvailable: grant.translation.translatedAudioAvailable,
+      captions: const [],
     ));
     final room = livekit.Room(
       roomOptions: const livekit.RoomOptions(
@@ -106,6 +137,10 @@ class EnterpriseMeetingRoomClient {
       })
       ..on<livekit.ParticipantConnectedEvent>((_) => _emit(_snapshot(room)))
       ..on<livekit.ParticipantDisconnectedEvent>((_) => _emit(_snapshot(room)))
+      ..on<livekit.DataReceivedEvent>((event) {
+        if (event.participant != null) return;
+        _handleCaption(room, event.data, event.topic);
+      })
       ..on<livekit.RoomDisconnectedEvent>((_) {
         _emit(const EnterpriseMeetingRoomSnapshot.disconnected());
       });
@@ -119,7 +154,43 @@ class EnterpriseMeetingRoomClient {
       status: status,
       microphoneEnabled: room.localParticipant?.isMicrophoneEnabled() ?? false,
       remoteParticipantCount: room.remoteParticipants.length,
+      translationStatus: _grant?.translation.status ?? 'not_ready',
+      translationReasonCode: _grant?.translation.reasonCode ?? 'not_joined',
+      captionLanguage: _grant?.translation.captionLanguage ?? 'zh',
+      translatedAudioEnabled:
+          _grant?.translation.translatedAudioEnabled ?? false,
+      translatedAudioAvailable:
+          _grant?.translation.translatedAudioAvailable ?? false,
+      captions: List<EnterpriseMobileMeetingCaption>.unmodifiable(_captions),
     );
+  }
+
+  void _handleCaption(livekit.Room room, List<int> data, String? topic) {
+    final grant = _grant;
+    if (grant == null ||
+        topic != grant.translation.topic ||
+        data.length > 12000) {
+      return;
+    }
+    try {
+      final decoded = jsonDecode(utf8.decode(data));
+      if (decoded is! Map<String, Object?>) return;
+      final caption = EnterpriseMobileMeetingCaption.fromJson(decoded, grant);
+      if (!_seenEventIds.add(caption.eventId)) return;
+      if (_seenEventIds.length > 200) _seenEventIds.remove(_seenEventIds.first);
+      _captions = <EnterpriseMobileMeetingCaption>[
+        ..._captions,
+        caption,
+      ]
+          .reversed
+          .take(50)
+          .toList(growable: false)
+          .reversed
+          .toList(growable: false);
+      _emit(_snapshot(room));
+    } catch (_) {
+      // Malformed, stale, cross-target, or participant-sent packets are ignored.
+    }
   }
 
   Future<void> _disposeRoom() async {
@@ -132,6 +203,9 @@ class EnterpriseMeetingRoomClient {
       await _ignore(room.disconnect);
       await _ignore(room.dispose);
     }
+    _grant = null;
+    _captions = const [];
+    _seenEventIds.clear();
   }
 
   Future<void> _ignore(Future<dynamic> Function() action) async {

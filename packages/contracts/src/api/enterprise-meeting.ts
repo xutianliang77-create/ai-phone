@@ -8,6 +8,10 @@ export type EnterpriseMeetingStatus =
   | "failed";
 
 export type EnterpriseMeetingParticipantRole = "host" | "member" | "guest";
+export type EnterpriseMeetingCaptionLanguage = "zh" | "en";
+
+export const enterpriseMeetingTranslationTopic =
+  "wujie.enterprise.meeting.translation.v1";
 
 export interface EnterpriseMeetingPolicyDto {
   allowGuests: boolean;
@@ -35,6 +39,9 @@ export interface EnterpriseMeetingParticipantDto {
   meetingId: string;
   role: EnterpriseMeetingParticipantRole;
   language?: string;
+  captionLanguage: EnterpriseMeetingCaptionLanguage;
+  translatedAudioEnabled: boolean;
+  playbackGeneration: number;
   displayName: string;
   joinedAt?: string;
   leftAt?: string;
@@ -106,6 +113,16 @@ export interface EnterpriseMeetingJoinTokenResponse {
   accessToken: string;
   expiresAt: string;
   communicationStatus: string;
+  translation: {
+    status: "ready" | "captions_only" | "not_ready";
+    reasonCode: string;
+    topic: typeof enterpriseMeetingTranslationTopic;
+    generation: number;
+    captionLanguage: EnterpriseMeetingCaptionLanguage;
+    translatedAudioEnabled: boolean;
+    translatedAudioAvailable: boolean;
+    playbackGeneration: number;
+  };
   capabilities: {
     microphone: true;
     subscribe: true;
@@ -117,10 +134,53 @@ export interface EnterpriseMeetingJoinTokenResponse {
 
 export interface JoinEnterpriseMeetingGuestRequest {
   token: string;
+  captionLanguage?: EnterpriseMeetingCaptionLanguage;
+  translatedAudioEnabled?: boolean;
 }
 
 export interface JoinEnterpriseMeetingMemberRequest {
   tenantId?: string;
   displayName?: string;
   language?: string;
+  captionLanguage?: EnterpriseMeetingCaptionLanguage;
+  translatedAudioEnabled?: boolean;
+}
+
+export interface UpdateEnterpriseMeetingTranslationPreferenceRequest {
+  tenantId?: string;
+  captionLanguage: EnterpriseMeetingCaptionLanguage;
+  translatedAudioEnabled: boolean;
+  expectedVersion: number;
+}
+
+export interface EnterpriseMeetingTranslationPreferenceResponse {
+  participant: EnterpriseMeetingParticipantDto;
+}
+
+export interface EnterpriseMeetingCaptionEvent {
+  v: 1;
+  eventId: string;
+  type: "transcript.final" | "translation.final";
+  meetingId: string;
+  communicationSessionId: string;
+  targetParticipantId: string;
+  sourceParticipantId: string;
+  sourceDisplayName: string;
+  sourceTrackSid: string;
+  generation: number;
+  segmentId: string;
+  revision: number;
+  sourceLanguage: EnterpriseMeetingCaptionLanguage;
+  targetLanguage: EnterpriseMeetingCaptionLanguage;
+  sourceText: string;
+  text: string;
+  translated: boolean;
+  final: true;
+  occurredAt: string;
+  translatedAudio: {
+    enabled: boolean;
+    available: boolean;
+    status: "disabled" | "not_ready" | "queued";
+    playbackGeneration: number;
+  };
 }

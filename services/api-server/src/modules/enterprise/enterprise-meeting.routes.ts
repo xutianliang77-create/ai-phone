@@ -14,26 +14,34 @@ import {
   parseGuestJoin,
   parseMeetingCreate,
   parseMemberJoin,
+  parseTranslationPreference,
   requestIdempotencyKey,
   routeUuid,
   tenantMatches,
 } from "./enterprise-meeting-route-input.js";
-import { enterpriseMeetingDto } from "./enterprise-meeting-route-output.js";
-import { createEnterpriseMeetingRtcToken } from "./enterprise-meeting-rtc-token.js";
-import type {
-  EnterpriseMeetingJoinAuthorization,
-} from "./enterprise-meeting-runtime.js";
+import {
+  enterpriseMeetingDto,
+  enterpriseMeetingParticipantDto,
+} from "./enterprise-meeting-route-output.js";
+import { issueEnterpriseMeetingJoinToken } from
+  "./enterprise-meeting-join-token.js";
+import type { EnterpriseMeetingTranslationDispatchService } from
+  "./enterprise-meeting-translation-dispatch.js";
 import type { EnterpriseRepositoryRuntime } from
   "./enterprise-repository-runtime.js";
 import { createEnterpriseTenantContext } from "./enterprise-tenant-context.js";
 import { requireTenantRouteDocument } from "./enterprise-tenant-route.routes.js";
 import type { TenantRouteService } from "./enterprise-tenant-route.js";
+import { registerEnterpriseMeetingTranslationWorkerRoutes } from
+  "./enterprise-meeting-translation-worker.routes.js";
 export async function registerEnterpriseMeetingRoutes(
   app: FastifyInstance,
   routeService: TenantRouteService,
   runtime: EnterpriseRepositoryRuntime,
   inviteTokens: EnterpriseMeetingInviteTokenService,
+  translationDispatch: EnterpriseMeetingTranslationDispatchService,
 ) {
+  registerEnterpriseMeetingTranslationWorkerRoutes(app, runtime);
   app.get("/enterprise/v1/meetings", async (request, reply) => {
     const access = await meetingAccess(
       request, reply, routeService, runtime, "meeting:read", "meeting.list",
@@ -176,6 +184,41 @@ export async function registerEnterpriseMeetingRoutes(
       }, ...(result.status === "replayed" ? { replayed: true } : {}) });
     },
   );
+  app.put<{ Params: { meetingId: string } }>(
+    "/enterprise/v1/meetings/:meetingId/translation-preference",
+    async (request, reply) => {
+      const access = await meetingAccess(
+        request, reply, routeService, runtime, "meeting:read",
+        "meeting.translation_preference.update",
+      );
+      if (!access) return;
+      if (!runtime.updateMeetingTranslationPreference) return postgresRequired(reply);
+      const meetingId = routeUuid(request.params.meetingId);
+      const body = parseTranslationPreference(request.body);
+      if (!meetingId || !body) return invalid(reply, "invalid_translation_preference");
+      if (!tenantMatches(body.tenantId, access.tenant.id)) return mismatch(reply);
+      const result = await runtime.updateMeetingTranslationPreference({
+        context: context(access, request),
+        meetingId,
+        captionLanguage: body.captionLanguage,
+        translatedAudioEnabled: body.translatedAudioEnabled,
+        expectedVersion: body.expectedVersion,
+      });
+      if (result.status === "not_found") return notFound(reply);
+      if (result.status === "forbidden") {
+        return sendError(reply, 403, "translation_preference_forbidden",
+          "Translation preference denied");
+      }
+      if (result.status === "conflict") {
+        return sendError(reply, 409, "translation_preference_conflict",
+          "Translation preference version conflict");
+      }
+      if (result.status !== "updated") return joinRejected(reply, result.status);
+      return reply.send({
+        participant: enterpriseMeetingParticipantDto(result.participant),
+      });
+    },
+  );
   app.post<{ Params: { meetingId: string } }>(
     "/enterprise/v1/meetings/:meetingId/join",
     async (request, reply) => {
@@ -195,11 +238,17 @@ export async function registerEnterpriseMeetingRoutes(
         participantId: randomUUID(),
         displayName: body.displayName,
         ...(body.language ? { language: body.language } : {}),
+        ...(body.captionLanguage
+          ? { captionLanguage: body.captionLanguage } : {}),
+        ...(body.translatedAudioEnabled !== undefined
+          ? { translatedAudioEnabled: body.translatedAudioEnabled } : {}),
         now: new Date().toISOString(),
       });
       if (result.status === "storage_required") return postgresRequired(reply);
       if (result.status !== "authorized") return joinRejected(reply, result.status);
-      return issueJoinToken(reply, routeService, runtime, tenantContext,
+      return issueEnterpriseMeetingJoinToken(
+        reply, routeService, runtime, translationDispatch,
+        tenantContext,
         result.authorization);
     },
   );
@@ -226,72 +275,20 @@ export async function registerEnterpriseMeetingRoutes(
         context: tenantContext,
         meetingId,
         participantId: verified.claims.participantId,
+        ...(body.captionLanguage
+          ? { captionLanguage: body.captionLanguage } : {}),
+        ...(body.translatedAudioEnabled !== undefined
+          ? { translatedAudioEnabled: body.translatedAudioEnabled } : {}),
         now: new Date().toISOString(),
       });
       if (result.status === "storage_required") return postgresRequired(reply);
       if (result.status !== "authorized") return joinRejected(reply, result.status);
-      return issueJoinToken(reply, routeService, runtime, tenantContext,
+      return issueEnterpriseMeetingJoinToken(
+        reply, routeService, runtime, translationDispatch,
+        tenantContext,
         result.authorization);
     },
   );
-}
-async function issueJoinToken(
-  reply: FastifyReply,
-  routeService: TenantRouteService,
-  runtime: EnterpriseRepositoryRuntime,
-  tenantContext: ReturnType<typeof createEnterpriseTenantContext>,
-  authorization: EnterpriseMeetingJoinAuthorization,
-) {
-  const route = routeService.issue({
-    tenantId: tenantContext.tenantId,
-    ...authorization.routing,
-  });
-  if (route.status === "not_ready") return joinTokenFailure(
-    reply, runtime, tenantContext, authorization, "route_not_ready",
-  );
-  const result = await createEnterpriseMeetingRtcToken({
-    tenantId: tenantContext.tenantId,
-    meetingId: authorization.aggregate.meeting.id,
-    communicationSessionId: authorization.binding.communicationSessionId,
-    communicationStatus: authorization.binding.status,
-    participantId: authorization.participant.id,
-    participantRole: authorization.participant.role,
-    participantName: authorization.participant.displayName,
-    rtcUrl: route.document.rtcUrl,
-  });
-  if (result.status === "not_ready") return joinTokenFailure(
-    reply, runtime, tenantContext, authorization, result.reason,
-  );
-  await runtime.appendAudit({
-    context: tenantContext,
-    action: "meeting.join_token",
-    resourceType: "meeting",
-    resourceId: authorization.aggregate.meeting.id,
-    result: "completed",
-    details: {
-      participantId: authorization.participant.id,
-      role: authorization.participant.role,
-      communicationStatus: authorization.binding.status,
-    },
-  });
-  return reply.send(result.token);
-}
-async function joinTokenFailure(
-  reply: FastifyReply,
-  runtime: EnterpriseRepositoryRuntime,
-  tenantContext: ReturnType<typeof createEnterpriseTenantContext>,
-  authorization: EnterpriseMeetingJoinAuthorization,
-  reasonCode: string,
-) {
-  await runtime.appendAudit({
-    context: tenantContext,
-    action: "meeting.join_token",
-    resourceType: "meeting",
-    resourceId: authorization.aggregate.meeting.id,
-    result: "failed",
-    details: { participantId: authorization.participant.id, reasonCode },
-  });
-  return meetingNotReady(reply, reasonCode);
 }
 async function meetingAccess(
   request: FastifyRequest,

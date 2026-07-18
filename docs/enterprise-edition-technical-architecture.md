@@ -250,6 +250,20 @@ source leg
 ## 6. 企业会议和屏幕共享架构
 
 ```mermaid
+flowchart LR
+    Tracks["LiveKit participant audio tracks"] --> Cell["Tenant-aware Translation Agent"]
+    Cell --> Fence["Ticket + policy + route/generation guard"]
+    Fence --> Store["Forced-RLS append-only target events"]
+    Store --> Data["LiveKit server directed data"]
+    Data --> Web["Web target participant"]
+    Data --> Mobile["Flutter target participant"]
+```
+
+会议翻译按 participant track 隔离，不复用个人 Call Link 的 host/guest 身份。Translation Agent 不持有数据库凭证；
+所有 final 事件经 API/Repository 复核 tenant、meeting、session、cell、policy、grant、lease 和 generation 后才落库，
+再按个人字幕语言定向投递。定向 TTS 能力未就绪时只保留字幕，不创建共享译音轨。
+
+```mermaid
 sequenceDiagram
     participant P as Presenter Client
     participant A as API/Meeting Orchestrator

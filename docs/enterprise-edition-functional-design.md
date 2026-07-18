@@ -306,6 +306,8 @@ LLM 只能提出结构化工具请求；Policy Engine 校验租户、客户、�
 - 支持抢话、重叠、主持人静音、姓名修正和重点标记。
 - 用户可标记决策、待办、风险和稍后讨论。
 
+当前 `ENT-MTG-003` 代码候选把每个 LiveKit participant audio track 作为独立翻译源，参会者在入会前选择中文或英文字幕，服务端只把匹配语言的 final 原文/译文投递到该参与者 identity。偏好变更递增独立 `playbackGeneration`，旧 Worker ticket、旧 communication generation 或旧播放 generation 均不得恢复结果。定向 TTS 尚未实现，用户请求译音时必须显示 `not_ready`，不能把一条全局音轨冒充个人译音。
+
 ### 7.3 屏幕共享
 
 - Web 支持共享整个屏幕、窗口或浏览器标签页。

@@ -78,13 +78,18 @@ class EnterpriseMobileApiClient {
 
   Future<EnterpriseMobileMeetingJoinGrant> joinMeeting(
     EnterpriseMobileWorkspace workspace,
-    String meetingId,
-  ) async {
+    String meetingId, {
+    required String captionLanguage,
+    required bool translatedAudioEnabled,
+  }) async {
     final json = await _contentRequest(
       workspace,
       '/enterprise/v1/meetings/${Uri.encodeComponent(meetingId)}/join',
       method: 'POST',
-      body: const <String, Object?>{},
+      body: <String, Object?>{
+        'captionLanguage': captionLanguage,
+        'translatedAudioEnabled': translatedAudioEnabled,
+      },
     );
     final grant = EnterpriseMobileMeetingJoinGrant.fromJson(json);
     if (grant.meetingId != meetingId ||

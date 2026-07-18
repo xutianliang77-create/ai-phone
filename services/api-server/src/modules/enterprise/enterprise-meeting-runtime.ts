@@ -9,6 +9,31 @@ import type {
 } from "./enterprise-meeting.js";
 import type { EnterpriseCommunicationBindingRecord } from
   "./enterprise-communication-session.js";
+import type {
+  EnterpriseMeetingTranslationDelivery,
+  EnterpriseMeetingWorkerCaptionInput,
+} from "./enterprise-meeting-translation.js";
+
+export interface EnterpriseMeetingTranslationDispatch {
+  ticket: string;
+  meetingId: string;
+  communicationSessionId: string;
+  roomName: string;
+  agentName: string;
+  generation: number;
+  expiresAt: string;
+  runtimeState: "full" | "captions_only" | "half_duplex";
+  reasonCode: string;
+}
+
+export interface EnterpriseMeetingTranslationWorkerSnapshot {
+  meetingId: string;
+  communicationSessionId: string;
+  roomName: string;
+  generation: number;
+  runtimeState: EnterpriseMeetingTranslationDispatch["runtimeState"];
+  reasonCode: string;
+}
 
 type StorageRequired = { status: "storage_required" };
 
@@ -84,9 +109,11 @@ export interface EnterpriseMeetingRepositoryRuntime {
   authorizeMemberMeetingJoin?(input: {
     context: EnterpriseTenantContext;
     meetingId: string;
-    participantId: string;
+    participantId?: string;
     displayName: string;
     language?: string;
+    captionLanguage?: "zh" | "en";
+    translatedAudioEnabled?: boolean;
     now: string;
   }): Promise<
     | { status: "authorized"; authorization: EnterpriseMeetingJoinAuthorization }
@@ -97,10 +124,83 @@ export interface EnterpriseMeetingRepositoryRuntime {
     context: EnterpriseTenantContext;
     meetingId: string;
     participantId: string;
+    captionLanguage?: "zh" | "en";
+    translatedAudioEnabled?: boolean;
     now: string;
   }): Promise<
     | { status: "authorized"; authorization: EnterpriseMeetingJoinAuthorization }
     | { status: "not_found" | "not_started" | "not_joinable" | "not_ready" }
     | StorageRequired
   >;
+  prepareMeetingTranslation?(input: {
+    context: EnterpriseTenantContext;
+    meetingId: string;
+    now: string;
+  }): Promise<
+    | { status: "ready"; dispatch: EnterpriseMeetingTranslationDispatch }
+    | { status: "not_ready"; reasonCode: string }
+    | StorageRequired
+  >;
+  updateMeetingTranslationPreference?(input: {
+    context: EnterpriseTenantContext;
+    meetingId: string;
+    participantId?: string;
+    captionLanguage: "zh" | "en";
+    translatedAudioEnabled: boolean;
+    expectedVersion?: number;
+    joinedAt?: string;
+  }): Promise<
+    | { status: "updated"; participant: EnterpriseMeetingParticipantRecord }
+    | { status: "not_found" | "forbidden" | "conflict" | "not_joinable" }
+    | StorageRequired
+  >;
+  acceptMeetingTranslationWorker?(input: {
+    ticket: string;
+    workerCellId: string;
+    workerId: string;
+    traceId: string;
+    leaseSeconds: number;
+    now?: Date;
+  }): Promise<
+    | { status: "accepted"; snapshot: EnterpriseMeetingTranslationWorkerSnapshot }
+    | { status: string }
+  >;
+  heartbeatMeetingTranslationWorker?(input: {
+    ticket: string;
+    workerCellId: string;
+    workerId: string;
+    traceId: string;
+    leaseSeconds: number;
+    now?: Date;
+  }): Promise<{ status: string }>;
+  refreshMeetingTranslationWorker?(input: {
+    ticket: string;
+    workerCellId: string;
+    workerId: string;
+    traceId: string;
+    leaseSeconds: number;
+    ticketTtlSeconds: number;
+    now?: Date;
+  }): Promise<{ status: string; ticket?: string; expiresAt?: string }>;
+  publishMeetingTranslationEvents?(input: {
+    ticket: string;
+    workerCellId: string;
+    workerId: string;
+    traceId: string;
+    sourceParticipantId: string;
+    sourceTrackSid: string;
+    events: EnterpriseMeetingWorkerCaptionInput[];
+    now?: Date;
+  }): Promise<
+    | { status: "authorized"; deliveries: EnterpriseMeetingTranslationDelivery[] }
+    | { status: string }
+  >;
+  finalizeMeetingTranslationWorker?(input: {
+    ticket: string;
+    workerCellId: string;
+    workerId: string;
+    traceId: string;
+    outcome: "completed" | "failed";
+    now?: Date;
+  }): Promise<{ status: string }>;
 }

@@ -1,5 +1,6 @@
 import { AccessToken, TrackSource } from "livekit-server-sdk";
 import type {
+  EnterpriseMeetingCaptionLanguage,
   EnterpriseMeetingJoinTokenResponse,
   EnterpriseMeetingParticipantRole,
 } from "@translation/contracts";
@@ -17,6 +18,16 @@ export async function createEnterpriseMeetingRtcToken(input: {
   participantRole: EnterpriseMeetingParticipantRole;
   participantName: string;
   rtcUrl: string;
+  translation: {
+    status: "ready" | "captions_only" | "not_ready";
+    reasonCode: string;
+    topic: "wujie.enterprise.meeting.translation.v1";
+    generation: number;
+    captionLanguage: EnterpriseMeetingCaptionLanguage;
+    translatedAudioEnabled: boolean;
+    translatedAudioAvailable: boolean;
+    playbackGeneration: number;
+  };
 }): Promise<EnterpriseMeetingRtcTokenResult> {
   const config = configFor(input.rtcUrl);
   if (config.status === "not_ready") return config;
@@ -64,6 +75,7 @@ export async function createEnterpriseMeetingRtcToken(input: {
       accessToken: await accessToken.toJwt(),
       expiresAt: new Date(Date.now() + config.ttlSeconds * 1_000).toISOString(),
       communicationStatus: input.communicationStatus,
+      translation: input.translation,
       capabilities: {
         microphone: true,
         subscribe: true,

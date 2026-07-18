@@ -2,12 +2,10 @@ import { randomUUID } from "node:crypto";
 import { getStoreSnapshot } from "../storage/json-store.js";
 import { createEnterpriseAuditEvent } from
   "../../modules/enterprise/enterprise-audit.repository.js";
-import type {
-  EnterpriseRepositoryRuntime,
-} from "../../modules/enterprise/enterprise-repository-runtime.js";
-import type {
-  EnterpriseMemberRecord,
-} from "../../modules/enterprise/enterprise-tenant-record.js";
+import type { EnterpriseRepositoryRuntime } from
+  "../../modules/enterprise/enterprise-repository-runtime.js";
+import type { EnterpriseMemberRecord } from
+  "../../modules/enterprise/enterprise-tenant-record.js";
 import {
   listEnterprisePostgresMemberships,
   resolveEnterprisePostgresContext,
@@ -37,6 +35,8 @@ import { createEnterprisePostgresTerminologyRuntime } from
 import { createEnterprisePostgresObservabilityRuntime } from "./enterprise-postgres-observability-runtime.js";
 import { createEnterprisePostgresAuditExportRuntime } from "./enterprise-postgres-audit-export-runtime.js";
 import { createEnterprisePostgresMeetingRuntime } from "./enterprise-postgres-meeting-runtime.js";
+import { createEnterprisePostgresMeetingTranslationRuntime } from
+  "./enterprise-postgres-meeting-translation-runtime.js";
 export function createPostgresEnterpriseRepositoryRuntime(
   pools: EnterprisePostgresPool | {
     tenantPool: EnterprisePostgresPool;
@@ -54,9 +54,12 @@ export function createPostgresEnterpriseRepositoryRuntime(
   const pool = split.tenantPool;
   return {
     driver: "postgres",
-    ...createEnterprisePostgresKnowledgeRuntime(pool), ...createEnterprisePostgresTerminologyRuntime(pool),
+    ...createEnterprisePostgresKnowledgeRuntime(pool),
+    ...createEnterprisePostgresTerminologyRuntime(pool),
     ...createEnterprisePostgresObservabilityRuntime(pool),
-    ...createEnterprisePostgresAuditExportRuntime(pool), ...createEnterprisePostgresMeetingRuntime(pool),
+    ...createEnterprisePostgresAuditExportRuntime(pool),
+    ...createEnterprisePostgresMeetingRuntime(pool),
+    ...createEnterprisePostgresMeetingTranslationRuntime(pool),
     resolveContext(input) {
       return resolveEnterprisePostgresContext({
         pool: split.directoryPool,
@@ -339,11 +342,7 @@ export function createPostgresEnterpriseRepositoryRuntime(
     finalizeTenantLifecycleJob(input) {
       return finalizePostgresTenantLifecycleJob(pool, input);
     },
-    async pendingTenantLifecycleJobRefs() {
-      return [];
-    },
-    async close() {
-      await split.close();
-    },
+    async pendingTenantLifecycleJobRefs() { return []; },
+    async close() { await split.close(); },
   };
 }

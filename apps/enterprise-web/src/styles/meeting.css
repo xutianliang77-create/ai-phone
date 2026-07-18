@@ -65,6 +65,92 @@
   align-items: center;
 }
 
+.meeting-translation {
+  display: grid;
+  gap: 16px;
+  padding: 20px;
+  border: 1px solid var(--color-outline-variant);
+  border-radius: var(--radius);
+  background: var(--color-container);
+}
+
+.meeting-translation > header,
+.meeting-caption-feed article > div,
+.meeting-translation__audio {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.meeting-translation > header > .material-icons-outlined {
+  color: var(--color-primary);
+}
+
+.meeting-translation h2,
+.meeting-translation p,
+.meeting-caption-feed article p {
+  margin: 0;
+}
+
+.meeting-translation header p,
+.meeting-translation__audio small,
+.meeting-caption-feed article span,
+.meeting-caption-feed__empty {
+  color: var(--color-outline);
+}
+
+.meeting-translation__preferences {
+  display: grid;
+  grid-template-columns: minmax(180px, 0.8fr) minmax(260px, 1.2fr);
+  gap: 12px;
+}
+
+.meeting-translation__preferences > label:not(.meeting-translation__audio) {
+  display: grid;
+  gap: 6px;
+}
+
+.meeting-translation__audio {
+  min-height: var(--control-height);
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  background: var(--color-surface-high);
+}
+
+.meeting-translation__audio input {
+  margin-top: 3px;
+}
+
+.meeting-translation__audio span {
+  display: grid;
+  gap: 2px;
+}
+
+.meeting-caption-feed {
+  display: grid;
+  gap: 8px;
+  min-height: 96px;
+  padding: 12px;
+  border-radius: var(--radius);
+  background: var(--color-surface-high);
+}
+
+.meeting-caption-feed article {
+  display: grid;
+  gap: 4px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--color-outline-variant);
+}
+
+.meeting-caption-feed article > div {
+  justify-content: space-between;
+}
+
+.meeting-caption-feed article:last-child {
+  padding-bottom: 0;
+  border-bottom: 0;
+}
+
 .meeting-card header > .material-icons-outlined {
   padding: 9px;
   border-radius: var(--radius);
@@ -112,6 +198,10 @@
   }
 
   .meeting-card dl {
+    grid-template-columns: 1fr;
+  }
+
+  .meeting-translation__preferences {
     grid-template-columns: 1fr;
   }
 }

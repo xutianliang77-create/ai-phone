@@ -7,6 +7,7 @@ import '../../data/enterprise_meeting_room_client.dart';
 import '../../data/enterprise_mobile_api_client.dart';
 import '../../data/enterprise_mobile_models.dart';
 import '../widgets/enterprise_mobile_status_panel.dart';
+import '../widgets/enterprise_meeting_translation_card.dart';
 
 class EnterpriseMeetingsPage extends StatefulWidget {
   const EnterpriseMeetingsPage({
@@ -32,6 +33,8 @@ class _EnterpriseMeetingsPageState extends State<EnterpriseMeetingsPage> {
   String? _error;
   bool _loading = true;
   bool _joining = false;
+  String _captionLanguage = 'zh';
+  bool _translatedAudioEnabled = false;
 
   @override
   void initState() {
@@ -71,6 +74,15 @@ class _EnterpriseMeetingsPageState extends State<EnterpriseMeetingsPage> {
       ]);
     }
     return _PageBody(children: <Widget>[
+      EnterpriseMeetingTranslationCard(
+        snapshot: _room,
+        captionLanguage: _captionLanguage,
+        translatedAudioEnabled: _translatedAudioEnabled,
+        editable: _room.status == EnterpriseMeetingRoomStatus.disconnected,
+        onCaptionLanguage: (value) => setState(() => _captionLanguage = value),
+        onTranslatedAudio: (value) =>
+            setState(() => _translatedAudioEnabled = value),
+      ),
       if (_room.status != EnterpriseMeetingRoomStatus.disconnected)
         _RoomCard(
           snapshot: _room,
@@ -178,8 +190,12 @@ class _EnterpriseMeetingsPageState extends State<EnterpriseMeetingsPage> {
       _error = null;
     });
     try {
-      final grant =
-          await widget.client.joinMeeting(widget.workspace, meetingId);
+      final grant = await widget.client.joinMeeting(
+        widget.workspace,
+        meetingId,
+        captionLanguage: _captionLanguage,
+        translatedAudioEnabled: _translatedAudioEnabled,
+      );
       await _roomClient.connect(grant);
       if (mounted) setState(() => _activeMeetingId = meetingId);
     } catch (error) {

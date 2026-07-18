@@ -20,11 +20,18 @@ import { CallTranscriptRefiner } from "./worker/call-transcript-refiner.js";
 import { LiveKitCallAudioSource } from "./worker/livekit-call-audio-source.js";
 import type { AudioIngestMetrics } from "./worker/audio-ingest-ring-buffer.js";
 import { SpeechPipelineRouter } from "./worker/speech-pipeline-router.js";
-import type { CallSpeechPipeline, SpeechToSpeechProvider } from "./worker/types.js";
+import type {
+  CallRoomEventSink,
+  CallSpeechPipeline,
+  SpeechToSpeechProvider,
+} from "./worker/types.js";
 
 const logger = pino({ name: "translation-worker" });
 
-export function buildDefaultWorker(endpointMode: AsrEndpointMode = "call_link") {
+export function buildDefaultWorker(
+  endpointMode: AsrEndpointMode = "call_link",
+  options: { eventSink?: CallRoomEventSink; ttsEnabled?: boolean } = {},
+) {
   const env = loadEnv();
   const terminology = domainTerminologyForPacks(env.domainLexiconPacks);
   const corrections = asrCorrectionTermsForPacks(env.domainLexiconPacks);
@@ -48,7 +55,7 @@ export function buildDefaultWorker(endpointMode: AsrEndpointMode = "call_link") 
       maxTokens: env.translationMaxTokens,
       streaming: env.translationStreamingEnabled,
     }),
-    ttsProvider: env.ttsHttpEndpoint
+    ttsProvider: options.ttsEnabled !== false && env.ttsHttpEndpoint
       ? new HttpTtsProvider({
         endpoint: env.ttsHttpEndpoint,
         streamEndpoint: env.ttsStreamEndpoint,
@@ -61,7 +68,7 @@ export function buildDefaultWorker(endpointMode: AsrEndpointMode = "call_link") 
         voice: env.ttsVoice,
       })
       : undefined,
-    ttsAudioSink: env.ttsAudioSinkEndpoint
+    ttsAudioSink: options.ttsEnabled !== false && env.ttsAudioSinkEndpoint
       ? new HttpTtsAudioSink({
         endpoint: env.ttsAudioSinkEndpoint,
         interruptEndpoint: env.ttsAudioSinkInterruptEndpoint,
@@ -69,11 +76,11 @@ export function buildDefaultWorker(endpointMode: AsrEndpointMode = "call_link") 
         timeoutMs: env.ttsAudioSinkTimeoutMs,
       })
       : undefined,
-    eventSink: new HttpCallRoomEventClient({
-      apiBaseUrl: env.apiBaseUrl,
-      internalApiSecret: env.internalApiSecret,
-      timeoutMs: env.apiTimeoutMs,
-    }),
+    eventSink: options.eventSink ?? new HttpCallRoomEventClient({
+        apiBaseUrl: env.apiBaseUrl,
+        internalApiSecret: env.internalApiSecret,
+        timeoutMs: env.apiTimeoutMs,
+      }),
     transcriptRefiner: new CallTranscriptRefiner({
       provider: createLlmProvider(env.llmConfig),
       enabled: env.llmConfig.refinementEnabled,

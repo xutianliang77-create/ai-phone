@@ -1,4 +1,4 @@
-import { AutoSubscribe, defineAgent } from "@livekit/agents";
+import { AutoSubscribe, defineAgent, type JobContext } from "@livekit/agents";
 import * as rtc from "@livekit/rtc-node";
 import pino from "pino";
 import { loadEnv, type TranslationWorkerEnv } from "../config/env.js";
@@ -16,6 +16,14 @@ import {
   parseWorkerDispatchMetadata,
   WorkerDispatchRuntimeClient,
 } from "./worker-dispatch-runtime-client.js";
+import {
+  EnterpriseMeetingRuntimeClient,
+  enterpriseMeetingRoomName,
+  parseEnterpriseMeetingDispatchMetadata,
+  type EnterpriseMeetingDispatchTicket,
+} from "./enterprise-meeting-runtime-client.js";
+import { EnterpriseMeetingAudioSource } from
+  "./enterprise-meeting-audio-source.js";
 import { attachSipControlHandler } from "./sip-control-handler.js";
 
 const logger = pino({ name: "translation-livekit-agent" });
@@ -33,6 +41,13 @@ export default defineAgent<TranslationAgentProcessData>({
     };
   },
   async entry(ctx) {
+    const enterpriseTicket = parseEnterpriseMeetingDispatchMetadata(
+      ctx.job.metadata,
+    );
+    if (enterpriseTicket) {
+      await runEnterpriseMeetingAgent(ctx, enterpriseTicket);
+      return;
+    }
     const ticket = parseWorkerDispatchMetadata(ctx.job.metadata);
     if (!ticket || ctx.job.agentName !== ticket.agentName ||
       ctx.job.room?.name !== ticket.roomName) {
@@ -152,6 +167,116 @@ export default defineAgent<TranslationAgentProcessData>({
     }
   },
 });
+
+async function runEnterpriseMeetingAgent(
+  ctx: JobContext<TranslationAgentProcessData>,
+  ticket: EnterpriseMeetingDispatchTicket,
+) {
+  const roomName = enterpriseMeetingRoomName(ticket.communicationSessionId);
+  if (ctx.job.agentName !== (process.env.LIVEKIT_ENTERPRISE_TRANSLATION_AGENT_NAME
+      ?.trim() || process.env.LIVEKIT_TRANSLATION_AGENT_NAME?.trim() ||
+      "translation-runtime") || ctx.job.room?.name !== roomName) {
+    throw new Error("Enterprise LiveKit dispatch metadata binding failed");
+  }
+  const env = ctx.proc.userData.env;
+  const client = new EnterpriseMeetingRuntimeClient({
+    apiBaseUrl: env.apiBaseUrl,
+    internalApiSecret: env.internalApiSecret,
+    timeoutMs: env.apiTimeoutMs,
+    ticket,
+    workerId: ctx.workerId,
+  });
+  await ctx.connect(undefined, AutoSubscribe.AUDIO_ONLY);
+  const snapshot = await client.snapshot();
+  if (snapshot.communicationSessionId !== ticket.communicationSessionId ||
+    snapshot.roomName !== roomName || snapshot.generation !== ticket.generation) {
+    throw new Error("Enterprise Worker runtime snapshot binding failed");
+  }
+  const source = new EnterpriseMeetingAudioSource({
+    room: ctx.room as unknown as RtcRoom,
+    rtc: rtc as unknown as RtcNodeModule,
+    snapshot,
+    client,
+    sampleRate: env.audioSampleRate,
+    frameSizeMs: env.audioFrameSizeMs,
+    capacityFrames: env.audioIngestMaxFrames,
+    maxTracks: boundedInteger(
+      process.env.ENTERPRISE_MEETING_MAX_AUDIO_TRACKS, 32, 2, 256,
+    ),
+    onError: (error) => logger.warn({ err: error },
+      "Enterprise meeting audio track failed"),
+  });
+  let heartbeat: NodeJS.Timeout | undefined;
+  let refresh: NodeJS.Timeout | undefined;
+  let outcome: "completed" | "failed" = "completed";
+  let finishing: Promise<void> | null = null;
+  const finish = (next: "completed" | "failed") => {
+    if (next === "failed") outcome = "failed";
+    finishing ??= (async () => {
+      if (heartbeat) clearInterval(heartbeat);
+      if (refresh) clearInterval(refresh);
+      await source.stop();
+      await client.finalize(outcome);
+    })();
+    return finishing;
+  };
+  const failClosed = (error: unknown, operation: string) => {
+    outcome = "failed";
+    logger.error({ err: error, operation },
+      "Enterprise meeting Worker lost its runtime fence");
+    void source.stop();
+  };
+  ctx.addShutdownCallback(async () => {
+    await finish(outcome).catch((error) => logger.warn({ err: error },
+      "Enterprise meeting Worker finalization failed"));
+  });
+  try {
+    source.start();
+    heartbeat = guardedInterval(
+      () => client.heartbeat(),
+      boundedInteger(process.env.LIVEKIT_DISPATCH_HEARTBEAT_SECONDS, 15, 5, 60)
+        * 1_000,
+      (error) => failClosed(error, "heartbeat"),
+    );
+    refresh = guardedInterval(
+      () => client.refresh(),
+      refreshInterval(ticket.expiresAt),
+      (error) => failClosed(error, "refresh"),
+    );
+    logger.info({
+      meetingId: snapshot.meetingId,
+      communicationSessionId: snapshot.communicationSessionId,
+      generation: snapshot.generation,
+      runtimeState: snapshot.runtimeState,
+    }, "Enterprise meeting Translation Agent joined room");
+    await source.waitUntilDisconnected();
+  } catch (error) {
+    outcome = "failed";
+    throw error;
+  } finally {
+    await finish(outcome);
+  }
+}
+
+function guardedInterval(
+  operation: () => Promise<unknown>,
+  intervalMs: number,
+  onError: (error: unknown) => void,
+) {
+  let running = false;
+  return setInterval(() => {
+    if (running) return;
+    running = true;
+    void operation().catch(onError).finally(() => {
+      running = false;
+    });
+  }, intervalMs);
+}
+
+function refreshInterval(expiresAt: string) {
+  const remaining = Date.parse(expiresAt) - Date.now();
+  return Math.max(10_000, Math.min(120_000, Math.floor(remaining / 2)));
+}
 
 function startHeartbeat(
   client: WorkerDispatchRuntimeClient,

@@ -26,11 +26,16 @@ export function parseGuestInvitation(value: unknown) {
   const body = object(value);
   const displayName = bounded(body?.displayName, 120);
   const language = optionalLanguage(body?.language);
-  if (!body || !displayName || !optionalTenant(body.tenantId) || language === null) {
+  const captionLanguage = optionalCaptionLanguage(body?.captionLanguage);
+  const translatedAudioEnabled = optionalBoolean(body?.translatedAudioEnabled);
+  if (!body || !displayName || !optionalTenant(body.tenantId) || language === null ||
+    captionLanguage === null || translatedAudioEnabled === null) {
     return null;
   }
   return { tenantId: body.tenantId as string | undefined, displayName,
-    ...(language ? { language } : {}) };
+    ...(language ? { language } : {}),
+    ...(captionLanguage ? { captionLanguage } : {}),
+    ...(translatedAudioEnabled !== undefined ? { translatedAudioEnabled } : {}) };
 }
 
 export function parseMemberJoin(value: unknown) {
@@ -38,18 +43,47 @@ export function parseMemberJoin(value: unknown) {
   const displayName = body?.displayName === undefined
     ? "企业成员" : bounded(body.displayName, 120);
   const language = optionalLanguage(body?.language);
-  if (!body || !displayName || !optionalTenant(body.tenantId) || language === null) {
+  const captionLanguage = optionalCaptionLanguage(body?.captionLanguage);
+  const translatedAudioEnabled = optionalBoolean(body?.translatedAudioEnabled);
+  if (!body || !displayName || !optionalTenant(body.tenantId) || language === null ||
+    captionLanguage === null || translatedAudioEnabled === null) {
     return null;
   }
   return { tenantId: body.tenantId as string | undefined, displayName,
-    ...(language ? { language } : {}) };
+    ...(language ? { language } : {}),
+    ...(captionLanguage ? { captionLanguage } : {}),
+    ...(translatedAudioEnabled !== undefined ? { translatedAudioEnabled } : {}) };
 }
 
 export function parseGuestJoin(value: unknown) {
   const body = object(value);
   const token = typeof body?.token === "string" ? body.token.trim() : "";
+  const captionLanguage = optionalCaptionLanguage(body?.captionLanguage);
+  const translatedAudioEnabled = optionalBoolean(body?.translatedAudioEnabled);
   return token.length >= 64 && token.length <= 4_096 &&
-    /^[A-Za-z0-9._-]+$/.test(token) ? { token } : null;
+    /^[A-Za-z0-9._-]+$/.test(token) && captionLanguage !== null &&
+      translatedAudioEnabled !== null
+    ? { token, ...(captionLanguage ? { captionLanguage } : {}),
+        ...(translatedAudioEnabled !== undefined ? { translatedAudioEnabled } : {}) }
+    : null;
+}
+
+export function parseTranslationPreference(value: unknown) {
+  const body = object(value);
+  const captionLanguage = optionalCaptionLanguage(body?.captionLanguage);
+  const translatedAudioEnabled = optionalBoolean(body?.translatedAudioEnabled);
+  const expectedVersion = body?.expectedVersion;
+  if (!body || !optionalTenant(body.tenantId) || !captionLanguage ||
+    typeof translatedAudioEnabled !== "boolean" ||
+    !Number.isSafeInteger(expectedVersion) || Number(expectedVersion) < 1) {
+    return null;
+  }
+  return {
+    tenantId: body.tenantId as string | undefined,
+    captionLanguage,
+    translatedAudioEnabled,
+    expectedVersion: Number(expectedVersion),
+  };
 }
 
 export function requestIdempotencyKey(request: FastifyRequest) {
@@ -126,6 +160,13 @@ function optionalLanguage(value: unknown): string | undefined | null {
   return typeof value === "string" &&
     /^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/.test(value)
     ? value : null;
+}
+function optionalCaptionLanguage(value: unknown): "zh" | "en" | undefined | null {
+  if (value === undefined) return undefined;
+  return value === "zh" || value === "en" ? value : null;
+}
+function optionalBoolean(value: unknown) {
+  return value === undefined ? undefined : typeof value === "boolean" ? value : null;
 }
 function optionalTenant(value: unknown) {
   return value === undefined || uuid(value);

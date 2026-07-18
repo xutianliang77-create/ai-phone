@@ -299,12 +299,28 @@ Primary runtime adapter、recoverable aggregate、创建/邀请/成员与访客�
 
 ### 7.2 字幕、翻译和说话人
 
+| 编号 | 场景 | 通过标准 |
+| --- | --- | --- |
+| AC-MTG-006 | 四人独立音轨 | 每个 source participant/track 独立分段，姓名、原文和译文不串轨 |
+| AC-MTG-007 | 个人字幕语言 | 中文选择只收到中文 final，英文选择只收到英文 final，切换后旧 playback generation 被拒绝 |
+| AC-MTG-008 | 定向投递 | 服务端数据包只发往目标 LiveKit identity；客户端拒绝 participant 发送、错误 target/session/meeting/topic |
+| AC-MTG-009 | Worker fencing | 过期 ticket、错误 cell、旧 route epoch/generation、失效 policy snapshot 均不能写入或投递 |
+| AC-MTG-010 | 重放和恢复 | 同一事件重试只保留一条 tenant/meeting/target event；API/Worker 重启不重复字幕 |
+| AC-MTG-011 | 译音降级 | 定向 TTS 未配置时明确 `not_ready`，不发布全局译音轨，不显示假成功 |
+| AC-MTG-012 | Web/Flutter 消费 | Web 与 Flutter 只显示通过完整绑定校验的 final 字幕，最多保留有界窗口且 eventId 去重 |
+
 - 两人无停顿轮流说话，字幕不跨人合并。
 - 四人顺序和随机发言，标签不固定错误归到同一人。
 - 中英夹杂不因语言切换产生硬断点。
 - 30分钟会议 audio frame drop 为零或有明确网络诊断。
 - final 字幕首屏 P95 不高于2.5秒；译文在 final 后 P95 不高于1.5秒。
 - TTS 顺序与 turn 一致，抢话只取消目标腿当前播放。
+
+`ENT-MTG-003` 当前已形成 `0023`、tenant-aware Worker snapshot/heartbeat/refresh/events/finalize API、
+每 participant track 独立 Speech Pipeline、append-only target event、LiveKit server-only destination identity
+投递，以及 Web/Flutter 个人语言选择和可信字幕消费代码候选。按本轮要求未运行任何测试，也未执行 migration、
+forced-RLS、跨租户/ticket 攻击、事件重放、四人真实媒体、浏览器或真机矩阵；真实 ASR/翻译/LiveKit Provider
+也未配置，定向 TTS 保持 `not_ready`。因此 AC-MTG-006..012 和 A1 均未通过，任务保持 `in_progress`。
 
 ### 7.3 屏幕共享
 
@@ -464,7 +480,7 @@ Primary runtime adapter、recoverable aggregate、创建/邀请/成员与访客�
 
 - PostgreSQL 作为所有真实 SaaS 租户的初始真源。
 - 内部 SQLite 演示数据可以迁移，但不能作为客户生产迁移路径的必要依赖。
-- 验收 commit 锁定的公共31段 manifest（基线从 `fe1c3c2` 演进）与 enterprise 22段 migration manifest 在隔离企业数据库从空库完整执行；两个 manifest 的顺序、checksum、schema verify 和 down/forward 策略均有证据，不能只跑其中一套。
+- 验收 commit 锁定的公共31段 manifest（基线从 `fe1c3c2` 演进）与 enterprise 23段 migration manifest 在隔离企业数据库从空库完整执行；两个 manifest 的顺序、checksum、schema verify 和 down/forward 策略均有证据，不能只跑其中一套。
 - 每个进程只有一个 Storage Driver 和 startup verdict；HTTP、企业 Repository、统一通讯会话和 cell Worker 使用同一 verified Primary Runtime，不存在 fallback、shadow read、dual write 或按路由混用。
 - 应用 tenant、user directory、cell discovery、migration、maintenance 分别使用最小权限角色；生产 TLS 使用 `verify-full`。应用角色没有 `BYPASSRLS`、表 owner、DDL 或关闭 RLS 权限。
 - 公共 communication session、participant、media leg、dispatch、Provider operation、playback 和相关账本全部具有 tenant scope、复合 FK 和 `FORCE ROW LEVEL SECURITY`；使用跨租户 ID、缺 scope、伪造 owner/user 过滤做负向验证。
@@ -473,7 +489,7 @@ Primary runtime adapter、recoverable aggregate、创建/邀请/成员与访客�
 - 使用普通应用角色验证 billing account/plan/subscription/entitlement/change history forced RLS、活动 subscription 唯一、plan/snapshot/change 不可变，以及 entitlement projection/binding/grant 的 tenant 复合 FK；按跨租户、停用 account、过期账期、错 subscription/plan/version、席位超限、幂等漂移和客户端 limit 伪造执行负向矩阵。
 - accounts、tenant、communication session、segment、campaign、support、meeting、ledger 和 object hash 数量与规范化 SHA-256 一致。
 - 全量复制后记录增量水位，切换时获取 writer fence、清退旧 API/Worker、重放剩余 inbox/outbox，再做第二次 count/hash；切换或对账失败可按书面决策回滚，旧 writer 不能继续写入。
-- staging startup 必须拒绝 local evidence、签名篡改、错误 cutover/target ID、错误 commit/image/topology、错误 system identifier/OID、缺 baseline 引用、未清退 writer 或任一31+22 migration 漂移。维护工具只验证 fence，不自动执行 promote 或隔离旧主。
+- staging startup 必须拒绝 local evidence、签名篡改、错误 cutover/target ID、错误 commit/image/topology、错误 system identifier/OID、缺 baseline 引用、未清退 writer 或任一31+23 migration 漂移。维护工具只验证 fence，不自动执行 promote 或隔离旧主。
 - migration 后使用普通应用角色验证 `FORCE ROW LEVEL SECURITY`；确认 user directory self policy、tenant projection policy、成员投影同步和跨租户拒绝均生效。
 - 使用独立 cell Worker 角色验证 pending projection forced RLS、trigger 同步、空 cell 失败闭合、旧 cell 拒绝和 tenant transaction 原子 claim。
 - 使用 API 应用角色验证 PostgreSQL runtime 只在 startup gate `verified` 后创建；非法或 `dual_write` driver、连接/校验失败均不得监听端口，也不得回退到 legacy。

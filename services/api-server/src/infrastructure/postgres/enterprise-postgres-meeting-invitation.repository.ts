@@ -21,14 +21,15 @@ export class EnterpriseMeetingInvitationPostgresRepository {
     const inserted = await this.session.query<ParticipantRow>(`
       INSERT INTO enterprise.meeting_participants(
         tenant_id, id, meeting_id, external_identity, role,
-        language, display_name, version, invitation_key,
+        language, caption_language, translated_audio_enabled,
+        playback_generation, display_name, version, invitation_key,
         invitation_request_hash
-      ) VALUES ($1, $2, $3, $4, 'guest', $5, $6, 1, $7, $8)
+      ) VALUES ($1, $2, $3, $4, 'guest', $5, $6, false, 1, $7, 1, $8, $9)
       ON CONFLICT DO NOTHING
       RETURNING *
     `, [
       value.id, value.meetingId, value.externalIdentity,
-      value.language ?? null, value.displayName,
+      value.language ?? null, captionLanguage(value.language), value.displayName,
       value.idempotencyKey, value.requestHash,
     ]);
     if (inserted.rows[0]) {
@@ -74,6 +75,9 @@ function mapParticipant(
     id: row.id, tenantId, meetingId: row.meeting_id,
     externalIdentity: row.external_identity, role: "guest",
     language: row.language ?? undefined, displayName: row.display_name,
+    captionLanguage: row.caption_language,
+    translatedAudioEnabled: row.translated_audio_enabled,
+    playbackGeneration: Number(row.playback_generation),
     joinedAt: optionalTime(row.joined_at), leftAt: optionalTime(row.left_at),
     version: Number(row.version),
   };
@@ -102,10 +106,15 @@ function code(value: unknown, max: number) {
 function optionalTime(value: string | Date | null) {
   return value ? new Date(value).toISOString() : undefined;
 }
+function captionLanguage(value: string | undefined) {
+  return value?.toLowerCase().startsWith("en") ? "en" : "zh";
+}
 
 interface ParticipantRow extends Record<string, unknown> {
   id: string; tenant_id: string; meeting_id: string; user_id: string | null;
   external_identity: string; role: "guest"; language: string | null;
+  caption_language: "zh" | "en"; translated_audio_enabled: boolean;
+  playback_generation: string | number;
   display_name: string; joined_at: string | Date | null;
   left_at: string | Date | null; version: string | number;
   invitation_request_hash: string;

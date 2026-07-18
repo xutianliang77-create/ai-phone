@@ -48,7 +48,6 @@ export class EnterpriseMeetingPostgresRepository {
     }
     return { status: "replayed" as const, meeting: existing.meeting };
   }
-
   async findByCreationKey(idempotencyKey: string) {
     const result = await this.session.query<MeetingRow>(`
       SELECT * FROM enterprise.meetings
@@ -57,7 +56,6 @@ export class EnterpriseMeetingPostgresRepository {
     const row = result.rows[0];
     return row ? { meeting: mapMeeting(row), requestHash: row.creation_request_hash } : null;
   }
-
   async find(meetingId: string, lock = false) {
     const result = await this.session.query<MeetingRow>(`
       SELECT * FROM enterprise.meetings
@@ -66,7 +64,6 @@ export class EnterpriseMeetingPostgresRepository {
     `, [requiredUuid(meetingId)]);
     return result.rows[0] ? mapMeeting(result.rows[0]) : null;
   }
-
   async list(recoverableOnly = false) {
     const result = await this.session.query<MeetingRow>(`
       SELECT * FROM enterprise.meetings
@@ -79,7 +76,6 @@ export class EnterpriseMeetingPostgresRepository {
     `);
     return result.rows.map(mapMeeting);
   }
-
   async transition(input: {
     meetingId: string;
     status: EnterpriseMeetingStatus;
@@ -116,7 +112,6 @@ export class EnterpriseMeetingPostgresRepository {
       ? { status: "updated" as const, meeting: mapMeeting(result.rows[0]) }
       : { status: "conflict" as const };
   }
-
   async addParticipant(input: AddEnterpriseMeetingParticipantInput) {
     const value = normalizeParticipant(input);
     const meeting = await this.find(value.meetingId, true);
@@ -127,21 +122,21 @@ export class EnterpriseMeetingPostgresRepository {
     const result = await this.session.query<ParticipantRow>(`
       INSERT INTO enterprise.meeting_participants(
         tenant_id, id, meeting_id, user_id, external_identity,
-        role, language, display_name, version
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 1)
+        role, language, caption_language, translated_audio_enabled,
+        playback_generation, display_name, version
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, false, 1, $9, 1)
       ON CONFLICT DO NOTHING
       RETURNING *
     `, [
       value.id, value.meetingId,
       value.userId ? enterprisePostgresAccountSubjectId(value.userId) : null,
       value.externalIdentity ?? null, value.role, value.language ?? null,
-      value.displayName,
+      value.captionLanguage, value.displayName,
     ]);
     return result.rows[0]
       ? { status: "created" as const, participant: mapParticipant(result.rows[0]) }
       : { status: "conflict" as const };
   }
-
   async addArtifact(input: AddEnterpriseMeetingArtifactInput) {
     const value = normalizeArtifact(input);
     const meeting = await this.find(value.meetingId, true);
@@ -161,7 +156,6 @@ export class EnterpriseMeetingPostgresRepository {
       ? { status: "created" as const, artifact: mapArtifact(result.rows[0]) }
       : { status: "conflict" as const };
   }
-
   async participants(meetingId: string) {
     const result = await this.session.query<ParticipantRow>(`
       SELECT * FROM enterprise.meeting_participants
@@ -170,7 +164,6 @@ export class EnterpriseMeetingPostgresRepository {
     `, [requiredUuid(meetingId)]);
     return result.rows.map(mapParticipant);
   }
-
   async participantById(meetingId: string, participantId: string) {
     const result = await this.session.query<ParticipantRow>(`
       SELECT * FROM enterprise.meeting_participants
@@ -178,7 +171,6 @@ export class EnterpriseMeetingPostgresRepository {
     `, [requiredUuid(meetingId), requiredUuid(participantId)]);
     return result.rows[0] ? mapParticipant(result.rows[0]) : null;
   }
-
   async participantByUser(meetingId: string, userId: string) {
     const result = await this.session.query<ParticipantRow>(`
       SELECT * FROM enterprise.meeting_participants
@@ -186,7 +178,6 @@ export class EnterpriseMeetingPostgresRepository {
     `, [requiredUuid(meetingId), enterprisePostgresAccountSubjectId(userId)]);
     return result.rows[0] ? mapParticipant(result.rows[0]) : null;
   }
-
   async artifacts(meetingId: string) {
     const result = await this.session.query<ArtifactRow>(`
       SELECT * FROM enterprise.meeting_artifacts
@@ -229,6 +220,7 @@ function normalizeParticipant(input: AddEnterpriseMeetingParticipantInput) {
   return {
     ...input, id: requiredUuid(input.id), meetingId: requiredUuid(input.meetingId),
     userId, externalIdentity, language: input.language ? code(input.language, 35) : undefined,
+    captionLanguage: captionLanguage(input.language),
     displayName: bounded(input.displayName, 120),
   };
 }
@@ -296,6 +288,9 @@ function requiredIso(value: unknown) {
 function optionalIso(value: unknown) { return value == null ? undefined : requiredIso(value); }
 function iso(value: string | Date) { return new Date(value).toISOString(); }
 function optionalDate(value: string | Date | null) { return value ? iso(value) : undefined; }
+function captionLanguage(value: string | undefined) {
+  return value?.toLowerCase().startsWith("en") ? "en" as const : "zh" as const;
+}
 
 function mapMeeting(row: MeetingRow): EnterpriseMeetingRecord {
   return {
@@ -312,6 +307,9 @@ function mapParticipant(row: ParticipantRow): EnterpriseMeetingParticipantRecord
     id: row.id, tenantId: row.tenant_id, meetingId: row.meeting_id,
     userId: row.user_id ?? undefined, externalIdentity: row.external_identity ?? undefined,
     role: row.role, language: row.language ?? undefined, displayName: row.display_name,
+    captionLanguage: row.caption_language,
+    translatedAudioEnabled: row.translated_audio_enabled,
+    playbackGeneration: Number(row.playback_generation),
     joinedAt: optionalDate(row.joined_at), leftAt: optionalDate(row.left_at),
     version: Number(row.version),
   };
@@ -338,6 +336,8 @@ interface ParticipantRow extends Record<string, unknown> {
   id: string; tenant_id: string; meeting_id: string; user_id: string | null;
   external_identity: string | null; role: EnterpriseMeetingParticipantRole;
   language: string | null; display_name: string; joined_at: string | Date | null;
+  caption_language: "zh" | "en"; translated_audio_enabled: boolean;
+  playback_generation: string | number;
   left_at: string | Date | null; version: string | number;
 }
 interface ArtifactRow extends Record<string, unknown> {

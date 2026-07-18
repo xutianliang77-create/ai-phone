@@ -33,6 +33,7 @@ describe("enterprise PostgreSQL migrations", () => {
       "0020_enterprise_audit_exports",
       "0021_enterprise_meeting_aggregates",
       "0022_enterprise_meeting_entry",
+      "0023_enterprise_meeting_translation",
     ]);
     for (const migration of migrations) {
       expect(migration.up.trim()).not.toBe("");

@@ -5,6 +5,7 @@ import type {
   EnterpriseMeetingJoinTokenResponse,
   EnterpriseMeetingResponse,
   EnterpriseMeetingsResponse,
+  JoinEnterpriseMeetingGuestRequest,
   JoinEnterpriseMeetingMemberRequest,
 } from "@translation/contracts";
 import type { EnterpriseContentRequestContext } from "./enterprise-api.js";
@@ -33,7 +34,7 @@ export interface EnterpriseMeetingApi {
   ): Promise<EnterpriseMeetingJoinTokenResponse>;
   joinMeetingAsGuest(
     meetingId: string,
-    token: string,
+    input: JoinEnterpriseMeetingGuestRequest,
   ): Promise<EnterpriseMeetingJoinTokenResponse>;
 }
 
@@ -68,10 +69,10 @@ export function createEnterpriseMeetingApi(
       meetingId,
       context.routeDocument.rtcUrl,
     ),
-    joinMeetingAsGuest: async (meetingId, token) => validateJoinGrant(
+    joinMeetingAsGuest: async (meetingId, input) => validateJoinGrant(
       await request<unknown>(
         `/enterprise/v1/meetings/${encodeURIComponent(meetingId)}/guest-join`,
-        { method: "POST", body: JSON.stringify({ token }) },
+        { method: "POST", body: JSON.stringify(input) },
       ),
       meetingId,
     ),
@@ -86,6 +87,7 @@ function validateJoinGrant(
   if (!value || typeof value !== "object") throw new Error("Invalid meeting grant");
   const grant = value as Partial<EnterpriseMeetingJoinTokenResponse>;
   const capabilities = grant.capabilities;
+  const translation = grant.translation;
   const expiresAt = typeof grant.expiresAt === "string"
     ? Date.parse(grant.expiresAt) : Number.NaN;
   if (grant.meetingId !== meetingId || grant.provider !== "livekit" ||
@@ -99,7 +101,17 @@ function validateJoinGrant(
     expiresAt > Date.now() + 330_000 || !capabilities ||
     capabilities.microphone !== true || capabilities.subscribe !== true ||
     capabilities.camera !== false || capabilities.data !== false ||
-    capabilities.screenShare !== false) throw new Error("Invalid meeting grant");
+    capabilities.screenShare !== false || !translation ||
+    !["ready", "captions_only", "not_ready"].includes(String(translation.status)) ||
+    typeof translation.reasonCode !== "string" ||
+    translation.reasonCode.length < 1 || translation.reasonCode.length > 160 ||
+    translation.topic !== "wujie.enterprise.meeting.translation.v1" ||
+    !Number.isSafeInteger(translation.generation) || translation.generation < 1 ||
+    !["zh", "en"].includes(String(translation.captionLanguage)) ||
+    typeof translation.translatedAudioEnabled !== "boolean" ||
+    translation.translatedAudioAvailable !== false ||
+    !Number.isSafeInteger(translation.playbackGeneration) ||
+    translation.playbackGeneration < 1) throw new Error("Invalid meeting grant");
   return grant as EnterpriseMeetingJoinTokenResponse;
 }
 

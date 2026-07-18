@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { createEnterpriseAuditEvent } from
   "../../modules/enterprise/enterprise-audit.repository.js";
 import { isTerminalEnterpriseCommunicationStatus } from
@@ -142,7 +143,7 @@ export function createEnterprisePostgresMeetingRuntime(
         );
         if (!participant) {
           const added = await unit.meetings.addParticipant({
-            id: input.participantId,
+            id: input.participantId ?? randomUUID(),
             meetingId: meeting.id,
             userId: input.context.actorUserId,
             role: meeting.hostUserId === input.context.actorUserId ? "host" : "member",
@@ -155,7 +156,16 @@ export function createEnterprisePostgresMeetingRuntime(
             );
         }
         if (!participant) return { status: "not_ready" };
-        return authorize(unit, meeting, participant);
+        const preference = await unit.meetingTranslations.updatePreference({
+          meetingId: meeting.id,
+          participantId: participant.id,
+          captionLanguage: input.captionLanguage ?? participant.captionLanguage,
+          translatedAudioEnabled: input.translatedAudioEnabled ??
+            participant.translatedAudioEnabled,
+          joinedAt: input.now,
+        });
+        if (preference.status !== "updated") return { status: "not_ready" };
+        return authorize(unit, meeting, preference.participant);
       });
     },
     authorizeGuestMeetingJoin(input) {
@@ -174,7 +184,16 @@ export function createEnterprisePostgresMeetingRuntime(
           input.context.actorUserId !== `guest:${participant.id}`) {
           return { status: "not_found" };
         }
-        return authorize(unit, meeting, participant);
+        const preference = await unit.meetingTranslations.updatePreference({
+          meetingId: meeting.id,
+          participantId: participant.id,
+          captionLanguage: input.captionLanguage ?? participant.captionLanguage,
+          translatedAudioEnabled: input.translatedAudioEnabled ??
+            participant.translatedAudioEnabled,
+          joinedAt: input.now,
+        });
+        if (preference.status !== "updated") return { status: "not_ready" };
+        return authorize(unit, meeting, preference.participant);
       });
     },
   };

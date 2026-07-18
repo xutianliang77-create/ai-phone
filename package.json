@@ -18,6 +18,7 @@
     "dev:enterprise-worker": "npm run dev:enterprise-worker -w @translation/api-server",
     "dev:realtime": "npm run dev -w @translation/realtime-gateway",
     "dev:call-link-worker": "bash scripts/start_call_link_translation_worker.sh",
+    "dev:enterprise-meeting-worker": "bash scripts/start_enterprise_meeting_translation_worker.sh dev",
     "dev:agent-calls": "npm run dev:agent-calls -w @translation/translation-worker",
     "dev:voice-agent": "npm run dev -w @translation/voice-agent-runtime",
     "dev:srt-ingress": "npm run dev -w @translation/srt-ingress-bridge",

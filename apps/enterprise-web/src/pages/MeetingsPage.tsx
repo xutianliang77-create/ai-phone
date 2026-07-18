@@ -16,6 +16,8 @@ import {
   EnterpriseMeetingRoomClient,
   type EnterpriseMeetingRoomSnapshot,
 } from "../meeting/enterprise-meeting-room.js";
+import { MeetingTranslationPanel } from
+  "../meeting/MeetingTranslationPanel.js";
 
 type LoadState =
   | { status: "loading" }
@@ -26,6 +28,12 @@ const disconnected: EnterpriseMeetingRoomSnapshot = {
   status: "disconnected",
   microphoneEnabled: false,
   remoteParticipantCount: 0,
+  translationStatus: "not_ready",
+  translationReasonCode: "not_joined",
+  captionLanguage: "zh",
+  translatedAudioEnabled: false,
+  translatedAudioAvailable: false,
+  captions: [],
 };
 
 export function MeetingsPage() {
@@ -36,6 +44,8 @@ export function MeetingsPage() {
   const [notice, setNotice] = useState<string | null>(null);
   const [room, setRoom] = useState(disconnected);
   const [activeMeetingId, setActiveMeetingId] = useState<string | null>(null);
+  const [captionLanguage, setCaptionLanguage] = useState<"zh" | "en">("zh");
+  const [translatedAudioEnabled, setTranslatedAudioEnabled] = useState(false);
   const roomClient = useRef<EnterpriseMeetingRoomClient | null>(null);
   const ready = state.status === "ready" ? state : null;
   const requestContext = useMemo(() => ready ? ({
@@ -96,10 +106,14 @@ export function MeetingsPage() {
     try {
       const grant = await api.joinMeeting(requestContext, meeting.meeting.id, {
         displayName: ready?.context.tenant.name ?? "企业成员",
+        captionLanguage,
+        translatedAudioEnabled,
       });
       await roomClient.current.connect(grant);
       setActiveMeetingId(meeting.meeting.id);
-      setNotice("已使用企业专用短期凭据进入音频会议；字幕与译音等待 ENT-MTG-003。");
+      setNotice(grant.translation.status === "not_ready"
+        ? `已进入音频会议；字幕未就绪（${grant.translation.reasonCode}）。`
+        : "已进入音频会议；字幕按个人语言偏好定向投递。");
     } catch (error) {
       setNotice(`入会失败：${errorStateLabel(error)}`);
     } finally {
@@ -163,6 +177,11 @@ export function MeetingsPage() {
             onClick={() => void leaveMeeting()}>离开会议</button>
         </section>
       ) : null}
+      <MeetingTranslationPanel room={room} captionLanguage={captionLanguage}
+        translatedAudioEnabled={translatedAudioEnabled}
+        editable={room.status === "disconnected"}
+        onCaptionLanguage={setCaptionLanguage}
+        onTranslatedAudioEnabled={setTranslatedAudioEnabled} />
       <MeetingList load={load} busy={busy} canJoin={canJoin} canWrite={canWrite}
         activeMeetingId={activeMeetingId} refresh={refresh}
         joinMeeting={joinMeeting} inviteGuest={inviteGuest} />
