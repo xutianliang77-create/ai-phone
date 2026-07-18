@@ -40,6 +40,30 @@ describe("translation room load media", () => {
     collector.close();
   });
 
+  it("matches the latest refined transcript generation", async () => {
+    const room = new FakeRoom();
+    const collector = createCallRoomEventCollector(room, rtc, {
+      sleep: immediateSleep,
+    });
+    room.emit("data", packet(event("transcript.final", 1)), undefined, 0,
+      "translation.captions");
+    for (const type of ["transcript.final", "translation.final", "tts.ready"]) {
+      room.emit("data", packet(event(type, 2)), undefined, 0,
+        "translation.captions");
+    }
+
+    const cycle = await collector.waitForCycle({
+      afterIndex: 0,
+      speakerRole: "host",
+      timeoutMs: 100,
+    });
+
+    expect(cycle.transcript.event.pipelineGeneration).toBe(2);
+    expect(cycle.translation.event.pipelineGeneration).toBe(2);
+    expect(cycle.tts.event.pipelineGeneration).toBe(2);
+    collector.close();
+  });
+
   it("publishes PCM frames, endpoint silence, and observes target TTS audio", async () => {
     const room = new FakeRoom();
     const published = await publishWavAudioTrack(room, rtc, {
@@ -127,14 +151,14 @@ const rtc = {
   TrackSource: { SOURCE_MICROPHONE: "microphone" },
 };
 
-function event(type) {
+function event(type, pipelineGeneration = 1) {
   return {
     type,
     segmentId: "segment-1",
     speechId: "speech-1",
     turnId: "turn-1",
     revision: 1,
-    pipelineGeneration: 1,
+    pipelineGeneration,
     speakerRole: "host",
     provider: "real-tts",
     model: "tts-model",

@@ -151,19 +151,24 @@ async function waitForFinalCycle(events, input, options) {
   let matched;
   await waitUntil(() => {
     const candidates = events.slice(input.afterIndex);
-    const transcript = candidates.find((item) =>
+    const transcripts = candidates.filter((item) =>
       item.event.type === "transcript.final" &&
       item.event.speakerRole === input.speakerRole
     );
-    if (!transcript) return false;
-    const sameSegment = (item, type) => item.event.type === type &&
-      item.event.segmentId === transcript.event.segmentId &&
-      item.event.pipelineGeneration === transcript.event.pipelineGeneration;
-    const translation = candidates.find((item) => sameSegment(item, "translation.final"));
-    const tts = candidates.find((item) => sameSegment(item, "tts.ready"));
-    if (!translation || !tts) return false;
-    matched = { transcript, translation, tts };
-    return true;
+    for (let index = transcripts.length - 1; index >= 0; index -= 1) {
+      const transcript = transcripts[index];
+      const sameSegment = (item, type) => item.event.type === type &&
+        item.event.segmentId === transcript.event.segmentId &&
+        item.event.pipelineGeneration === transcript.event.pipelineGeneration;
+      const translation = candidates.find((item) =>
+        sameSegment(item, "translation.final")
+      );
+      const tts = candidates.find((item) => sameSegment(item, "tts.ready"));
+      if (!translation || !tts) continue;
+      matched = { transcript, translation, tts };
+      return true;
+    }
+    return false;
   }, input.timeoutMs, "Timed out waiting for ASR, MT, and TTS final events", options);
   return matched;
 }
