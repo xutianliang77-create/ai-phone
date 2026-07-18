@@ -90,21 +90,32 @@ export async function createEnterpriseMeetingRtcToken(input: {
 function configFor(expectedRtcUrl: string):
   | { status: "ready"; apiKey: string; apiSecret: string; ttlSeconds: number }
   | { status: "not_ready"; reason: string } {
+  const credentials = enterpriseMeetingRtcCredentialsFor(expectedRtcUrl);
+  const ttlSeconds = Number(
+    process.env.ENTERPRISE_MEETING_RTC_TOKEN_TTL_SECONDS || 120,
+  );
+  if (credentials.status === "not_ready" || !Number.isInteger(ttlSeconds) ||
+    ttlSeconds < 60 || ttlSeconds > 300) {
+    return { status: "not_ready", reason: "meeting_rtc_not_configured" };
+  }
+  return { status: "ready", apiKey: credentials.apiKey,
+    apiSecret: credentials.apiSecret, ttlSeconds };
+}
+
+export function enterpriseMeetingRtcCredentialsFor(expectedRtcUrl: string):
+  | { status: "ready"; apiKey: string; apiSecret: string }
+  | { status: "not_ready"; reason: string } {
   const provider = process.env.CALL_ROOM_PROVIDER?.trim() || "livekit";
   const rtcUrl = process.env.LIVEKIT_URL?.trim() ||
     process.env.LIVEKIT_WS_URL?.trim() || "";
   const apiKey = process.env.LIVEKIT_API_KEY?.trim() || "";
   const apiSecret = process.env.LIVEKIT_API_SECRET?.trim() || "";
-  const ttlSeconds = Number(
-    process.env.ENTERPRISE_MEETING_RTC_TOKEN_TTL_SECONDS || 120,
-  );
   if (provider !== "livekit" || !validRtcUrl(rtcUrl) ||
     canonicalUrl(rtcUrl) !== canonicalUrl(expectedRtcUrl) || !apiKey ||
-    Buffer.byteLength(apiSecret) < 32 || !Number.isInteger(ttlSeconds) ||
-    ttlSeconds < 60 || ttlSeconds > 300) {
+    Buffer.byteLength(apiSecret) < 32) {
     return { status: "not_ready", reason: "meeting_rtc_not_configured" };
   }
-  return { status: "ready", apiKey, apiSecret, ttlSeconds };
+  return { status: "ready", apiKey, apiSecret };
 }
 
 function validRtcUrl(value: string) {

@@ -21,6 +21,10 @@ import {
 } from "./modules/enterprise/enterprise-tenant-lifecycle-executor.js";
 import { createEnvironmentAuditExportArtifactStore } from
   "./modules/enterprise/enterprise-audit-export-artifact-store.js";
+import { createEnvironmentEnterpriseMeetingScreenShareProvider } from
+  "./modules/enterprise/enterprise-meeting-screen-share-provider.js";
+import { createEnterpriseMeetingScreenShareOutboxPublisher } from
+  "./modules/enterprise/enterprise-meeting-screen-share-outbox.js";
 
 if (process.argv[1] &&
   import.meta.url === pathToFileURL(process.argv[1]).href) {
@@ -62,7 +66,11 @@ export async function runEnterprisePostgresWorkerMain() {
       runtime: primaryRuntime.enterprise,
       config,
       lifecycleExecutor: createEnvironmentTenantLifecycleExecutor(),
-      outboxPublisher: createEnvironmentEnterpriseOutboxPublisher(),
+      outboxPublisher: createEnterpriseMeetingScreenShareOutboxPublisher({
+        provider: createEnvironmentEnterpriseMeetingScreenShareProvider(),
+        fallback: createEnvironmentEnterpriseOutboxPublisher(),
+        rtcUrl: (process.env.LIVEKIT_URL ?? process.env.LIVEKIT_WS_URL ?? "").trim(),
+      }),
       auditExportArtifactStore,
       signal: controller.signal,
       onBatch: (result) => {

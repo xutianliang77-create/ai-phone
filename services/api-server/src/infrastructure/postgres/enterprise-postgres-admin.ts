@@ -31,6 +31,7 @@ export const enterpriseTenantTableNames = [
   "support_sessions", "support_cases", "tool_executions", "meetings",
   "meeting_participants", "meeting_screen_shares", "meeting_artifacts",
   "meeting_action_items", "meeting_translation_events",
+  "meeting_screen_share_commands",
   "communication_session_bindings",
   "worker_dispatch_grants", "communication_policy_versions",
   "communication_authorization_evidence", "communication_policy_snapshots",

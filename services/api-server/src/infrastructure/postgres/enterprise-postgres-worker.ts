@@ -110,6 +110,7 @@ async function processRef(
     traceId,
   });
   if (claimed.result.status !== "claimed") return "busy";
+  if (claimed.workKind === "screen_share") return "completed";
   if (claimed.workKind === "tenant_lifecycle") {
     const job = claimed.result.job;
     const execution = {

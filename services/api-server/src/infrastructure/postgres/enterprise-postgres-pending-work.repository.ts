@@ -13,6 +13,8 @@ import type {
 import {
   enterprisePostgresAccountSubjectId,
 } from "./enterprise-postgres-subject-id.js";
+import { enterpriseMeetingScreenShareMaxPauseSeconds } from
+  "./enterprise-postgres-meeting-screen-share-runtime.js";
 
 interface PendingWorkRow extends Record<string, unknown> {
   cell_id: unknown;
@@ -42,6 +44,12 @@ export type EnterprisePostgresPendingWorkRef =
       workKind: "audit_export";
       resourceId: string;
       actorUserId: string;
+    }
+  | {
+      cellId: string;
+      tenantId: string;
+      workKind: "screen_share";
+      resourceId: string;
     };
 
 export function listEnterprisePostgresPendingWork(input: {
@@ -95,9 +103,11 @@ export async function claimEnterprisePostgresPendingWork(input: {
   if (input.ref.cellId !== input.cellId) {
     throw new Error("Enterprise pending work cell mismatch");
   }
-  const actorUserId = input.ref.workKind !== "outbox"
+  const actorUserId = input.ref.workKind === "tenant_lifecycle" ||
+    input.ref.workKind === "audit_export"
     ? enterprisePostgresAccountSubjectId(input.ref.actorUserId)
-    : "system:enterprise-outbox";
+    : input.ref.workKind === "outbox"
+    ? "system:enterprise-outbox" : "system:enterprise-screen-share";
   return withEnterprisePostgresUnitOfWork(
     input.pool,
     createEnterpriseTenantContext({
@@ -128,6 +138,29 @@ export async function claimEnterprisePostgresPendingWork(input: {
             now: input.now,
             leaseExpiresAt: input.leaseExpiresAt,
           }),
+        };
+      }
+      if (input.ref.workKind === "screen_share") {
+        const result = await unit.meetingScreenShares.current({
+          meetingId: input.ref.resourceId,
+          now: new Date(input.now),
+          maxPauseSeconds: enterpriseMeetingScreenShareMaxPauseSeconds(),
+        });
+        for (const item of result.revoked) {
+          await unit.events.insertOutbox({
+            id: randomUUID(), tenantId: input.ref.tenantId,
+            aggregateType: "screen_share", aggregateId: item.shareId,
+            eventType: "meeting.screen_share.revoke.requested",
+            idempotencyKey: `screen-share-revoke:${item.shareId}:g${item.generation}`,
+            payload: item, traceId: input.traceId, attempts: 0,
+            availableAt: input.now, createdAt: input.now,
+          });
+        }
+        return {
+          workKind: input.ref.workKind,
+          result: result.revoked.length > 0
+            ? { status: "claimed" as const }
+            : { status: "busy" as const },
         };
       }
       return {
@@ -161,7 +194,8 @@ function mapPendingWorkRow(
       actorUserId: enterprisePostgresAccountSubjectId(row.actor_id),
     };
   }
-  if (row.work_kind === "outbox" && row.actor_id == null) {
+  if ((row.work_kind === "outbox" || row.work_kind === "screen_share") &&
+    row.actor_id == null) {
     return { cellId, tenantId, workKind: row.work_kind, resourceId };
   }
   throw new Error("Invalid enterprise pending work row");
@@ -191,3 +225,4 @@ function assertCellId(value: string) {
     throw new Error("Invalid enterprise pending work cellId");
   }
 }
+import { randomUUID } from "node:crypto";

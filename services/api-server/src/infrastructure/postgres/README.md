@@ -175,6 +175,14 @@ SQLSTATE `25006`、旧 writer 会话为0、target 可写和二次全量 hash 相
 
 生产启动只接受 `environment=staging` 的 `cutover/matched` 签名证据，并绑定当前
 commit、image digest、topology hash、目标 logical ID、数据库 system identifier/OID 和
-31+18 migration manifest。`c9b5be2` 的31+16本地证据在 `0017/0018` 后会被门禁拒绝，必须重新生成；
+31+24 migration manifest。`c9b5be2` 的31+16本地证据会被门禁拒绝，必须重新生成；
 本地同机 `pg_dump/pg_restore` 只能证明逻辑恢复与对账机制；
 跨故障域自动切换、异地主机不可变 WAL/PITR 和 RPO/RTO 仍由 `ENT-REL-003`/H3 验收。
+
+## Meeting screen-share leases
+
+`ENT-MTG-004` 由 migration `0024` 增强 `meeting_screen_shares`，新增 communication binding、route epoch、
+generation、acquire 幂等/hash、严格状态时间约束、append-only 命令账本以及 cell-scoped 到期 pending-work。
+API 使用 expected-version CAS 和短期最小权限 LiveKit grant；pause/stop/route fence/到期通过同一幂等 outbox
+撤销旧发布 identity。cell Worker 即使在客户端消失后也会把到期租约收敛为 expired。Provider 未配置或移除失败
+保持 retry/pending，不生成假成功。当前未执行 migration、forced-RLS、并发或真实 LiveKit 验收。

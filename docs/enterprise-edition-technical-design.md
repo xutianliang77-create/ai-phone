@@ -1,6 +1,6 @@
 # 无界AI企业版详细技术设计
 
-版本：v1.31
+版本：v1.32
 日期：2026-07-19
 状态：统一通讯平台与 PostgreSQL Primary 收敛详细技术方案
 
@@ -21,11 +21,11 @@
 | RBAC | `ready_for_acceptance` | 已有17个 scope、九角色矩阵、统一服务端 guard 和越权测试 |
 | SaaS tenant lifecycle | `ready_for_acceptance` | 已有幂等开通、暂停、导出/删除执行器、租约、有界恢复和 receipt 校验；真实对象存储/Provider 清理服务尚待验收 |
 | Append-only audit | `ready_for_acceptance` | 已有 tenant-scoped 查询、HMAC cursor、成员/RBAC/租户生命周期埋点和 SQLite/PostgreSQL 不可变约束；受控导出已进入 UI-008 开发，真实 PostgreSQL 验收仍待执行 |
-| PostgreSQL schema | `implemented` | 已有二十三段 up/down migration、tenant-first 索引、复合 FK、强制 RLS、user directory、cell pending projection、opaque subject identity、企业通讯/dispatch/策略、usage/billing、knowledge/terminology、observability trace、受控审计导出、Meeting 聚合/创建幂等和定向翻译事件；尚无真实 migrate/restore/PITR 证据 |
+| PostgreSQL schema | `implemented` | 已有二十四段 up/down migration、tenant-first 索引、复合 FK、强制 RLS、user directory、cell pending projection、opaque subject identity、企业通讯/dispatch/策略、usage/billing、knowledge/terminology、observability trace、受控审计导出、Meeting 聚合/创建/翻译和屏幕共享租约；尚无真实 migrate/restore/PITR 证据 |
 | Tenant-scoped Repository | `ready_for_acceptance` | 已有 tenant/user/cell scoped transaction、subject guard、单一 `legacy|postgres` runtime、HTTP 全链路注入、独立 cell Worker，以及 Tenant/Member/Audit、Directory、lifecycle、Inbox/Outbox、budget、billing/entitlement、usage accounting、knowledge、terminology 和共享 unit-of-work；尚无真实 PostgreSQL H3 证据 |
 | Enterprise Inbox/Outbox | `ready_for_acceptance` | 已有 tenant-scoped 去重、稳定 payload hash、领域/inbox/outbox 原子提交、lease/retry/recovery 和100次重放门禁；真实 PostgreSQL 并发与 Provider sandbox 尚待验收 |
 | SQLite/JSON 演示数据导入 | `ready_for_acceptance` | 已有维护窗口、SQLite 临时副本与 quick_check、空目标事务导入、六集合 count/SHA-256 读回对账和不一致回滚；仅限内部演示数据 |
-| 公共 Primary Runtime 收敛 | `ready_for_acceptance` | 已合入上游稳定提交 `fe1c3c2`；公共31段与 enterprise 23段 manifest 由一个启动编排验证，driver、数据库身份和分权连接失败均在监听前闭合；尚无真实 PostgreSQL H3 证据 |
+| 公共 Primary Runtime 收敛 | `ready_for_acceptance` | 已合入上游稳定提交 `fe1c3c2`；公共31段与 enterprise 24段 manifest 由一个启动编排验证，driver、数据库身份和分权连接失败均在监听前闭合；尚无真实 PostgreSQL H3 证据 |
 | 企业链路追踪 | `in_progress` | 平台 trace 已进入 tenant context、PostgreSQL session、communication binding、usage event/ledger 与会话报告；本轮未执行测试和真实 PostgreSQL 门禁，货币成本因无价格表明确 not configured |
 | 企业工作台真值投影 | `in_progress` | Web 已读取 tenant/route、Provider、subscription、budget、usage aggregate 和显式 session trace report；业务聚合与价格表缺失时明确 not ready/not configured，本轮未执行自动化、浏览器或 PostgreSQL 门禁 |
 | 审计与分析 | `in_progress` | Web 已接入审计筛选/详情、显式 session 下钻和受控 JSONL 导出；`0020`、Repository/API/cell Worker/加密对象存储边界已实现，本轮未执行 migration、双租户、对象存储或浏览器测试；业务聚合/价格表与物理对象清理仍未完成 |
@@ -38,7 +38,7 @@
 | SaaS 计量聚合 | `ready_for_acceptance` | enterprise `0016` 已实现 tenant usage event、event/ledger 一致性、append-only adjustment、负数净额保护及 count/hash/watermark 账期聚合；真实关账、支付对账和 A1/H3 待验收 |
 | 企业知识版本 | `ready_for_acceptance` | enterprise `0017`、Knowledge Repository/runtime/API 已实现 source/revision/chunk/review/publish、发布后不可变、四维时间检索和稳定 citation；当前仅有确定性文本检索，本地普通角色验证不代表 embedding Provider、对象存储、恶意文档或 A1/H3 已通过 |
 | 企业术语与话术版本 | `ready_for_acceptance` | enterprise `0018`、共享契约、Term Pack/Script Template Repository/runtime/API 已实现稳定资源、递增 revision、review/publish、有效期解析、hash 校验和同一术语版本运行时引用；仅有自动化和本地 PostgreSQL 16 普通角色证据，真实 Worker/Provider、A1/H3 未通过 |
-| Primary 全量切换/恢复证据 | `ready_for_acceptance` | 工具按运行时动态校验 manifest/全业务表；`c9b5be2` 历史证据为31+16/81张表，当前31+23/87张表必须重新生成签名证据；异地 WAL/PITR/H3 未通过 |
+| Primary 全量切换/恢复证据 | `ready_for_acceptance` | 工具按运行时动态校验 manifest/全业务表；`c9b5be2` 历史证据为31+16/81张表，当前31+24/88张表必须重新生成签名证据；异地 WAL/PITR/H3 未通过 |
 | PostgreSQL 控制面/业务聚合 | `designed` | 后续 CORE/MTG/CS/MKT 领域任务范围，不能从公共 Repository runtime 推导为已实现 |
 | SQLite | `demo_only` | 仅本地开发、自动化和封闭演示，不承载真实企业试点数据 |
 | PSTN/CRM/Calendar/OCR | `not_ready` 或按环境探测 | 未配置必须明确降级，不生成虚假外部对象或成功状态 |
@@ -213,9 +213,18 @@ meeting_translation_events(
 )
 
 meeting_screen_shares(
-  id, tenant_id, meeting_id, participant_id, track_sid,
+  id, tenant_id, meeting_id, participant_id, communication_session_id,
+  route_epoch, generation, track_sid,
   source_type, includes_system_audio, quality_mode,
-  status, lease_expires_at, started_at, paused_at, ended_at, version
+  status, lease_expires_at, started_at, paused_at, ended_at,
+  idempotency_key, request_hash, created_at, updated_at, version
+)
+
+meeting_screen_share_commands(
+  id, tenant_id, meeting_id, share_id, command, actor_id,
+  idempotency_key, request_hash, expected_version,
+  result_status, result_version, result_generation,
+  revoked_generation, created_at
 )
 
 meeting_artifacts(
@@ -989,7 +998,7 @@ baseline 文件 hash，验证源库默认只读、写探针返回 SQLSTATE `2500
 整行 hash、主键、migration 或 server version 不一致都会生成签名 `mismatch` 并以非零退出。
 
 生产 startup gate 只接受 `environment=staging` 的 matched cutover evidence，且运行时
-commit/image/topology、cutover ID、target logical ID、当前 system identifier/OID 和31+23
+commit/image/topology、cutover ID、target logical ID、当前 system identifier/OID 和31+24
 manifest 必须逐项一致。本地 PostgreSQL 16 演练已验证81张表、8张含记录关键表、增量后17行
 全库 hash、writer fence、隔离 `pg_dump/pg_restore` 和单行篡改失败；证据见
 `docs/evidence/ent-data-009-local-drill-2026-07-18.md`。这只证明机制可执行，不是异地主机
@@ -1436,7 +1445,8 @@ query token 一律拒绝，避免被服务端 access log/referrer 捕获；fragm
 meeting ID 与路径一致、未过期，并声明 microphone/subscribe=true、camera/data/screenShare=false；随后独立
 `EnterpriseMeetingRoomClient` 才连接 RTC 并申请麦克风。原始异常、token 和 access token 均不显示或记录。
 字幕现由 `ENT-MTG-003` 的 tenant-aware topic、target participant 和 generation 绑定消费；运行时未就绪时明确
-`not_ready`，不生成示例字幕。共享仍禁用直到 `ENT-MTG-004` 提供租约。当前未执行 token/ticket 攻击、四人媒体、
+`not_ready`，不生成示例字幕。服务端租约由 `ENT-MTG-004` 提供，但共享采集仍禁用直到 `ENT-MTG-005/006`
+接入 Web/ReplayKit。当前未执行 token/ticket 攻击、四人媒体、
 浏览器权限、弱网、axe 或设备矩阵，`ENT-UI-012` 保持 `in_progress`。
 
 ### 19.7 Meeting 创建、邀请和短期入会授权
@@ -1500,6 +1510,43 @@ topic、meeting、communication session、target participant、generation、play
 翻译事件写 `not_ready`，Worker 禁用 TTS provider，禁止复用全局 TTS track。以上仅是代码候选：本轮按要求未运行测试，
 也未执行 `0023`、forced-RLS、跨租户/旧 ticket/重放、真实四人 LiveKit、ASR/翻译 Provider、浏览器和真机验收，
 `ENT-MTG-003` 保持 `in_progress`。
+
+### 19.9 屏幕共享租约与发布撤销
+
+`0024_enterprise_meeting_screen_share_leases` 把早期 screen-share 骨架升级为 tenant-scoped 租约模型：记录绑定
+`meeting + participant + communicationSessionId + routeEpoch`，以 `generation` 形成发布 fencing，并增加 acquire
+幂等键/hash、严格状态/时间约束、同会议 active/paused 条件唯一索引和 append-only 命令账本。命令账本保存 actor、
+expected version、结果状态/version/generation 及被撤销 generation；身份字段和 generation/version 单调性由数据库
+trigger 保护。新表与 pending-work 均使用 forced RLS，participant、binding、share 的复合外键拒绝跨会议或跨租户拼接。
+
+成员 API 固定为：
+
+- `GET /enterprise/v1/meetings/:meetingId/screen-shares/current`
+- `POST /enterprise/v1/meetings/:meetingId/screen-shares/acquire`
+- `POST /enterprise/v1/meetings/:meetingId/screen-shares/:shareId/{pause|resume|renew|stop}`
+
+所有入口先验证 Bearer、active membership、`meeting:read` 和签名 route document；mutation 必须携带
+`Idempotency-Key` 与 expected meeting/share version。acquire 在 tenant/meeting 行锁内重读 active participant、
+`screenShareRole`、当前 communication binding、route epoch 和 `meeting.screen_share.concurrent` entitlement；
+system audio 还必须有独立 entitlement。相同 key/hash 返回原结果，不同 hash 返回冲突；同会议已有租约或租户并发
+达到限额时不创建第二条记录。pause 和 stop 递增 generation 并撤销旧 identity；resume 使用暂停后新 generation；
+renew 只允许 active 状态，首次可绑定 track SID，之后拒绝替换成另一轨道。
+
+发布 identity 为 `ent-share:<shareId>:g<generation>`。LiveKit grant 只允许加入绑定 room 并发布
+`SCREEN_SHARE`，显式禁止 microphone、camera、data 和 subscribe；只有 entitlement 允许时才附加
+`SCREEN_SHARE_AUDIO`。token TTL 不超过租约剩余时间。RTC URL、API key/secret 或 route 不匹配时，在数据库 mutation
+前返回 `screen_share_provider_not_ready`；不会生成调试 token 或假 Provider reference。
+
+active 租约按短周期续期；pause 直接把到期时间推进到服务端最大暂停窗口且不能继续 renew。share trigger 把当前
+到期时间同步到 cell-scoped `platform_pending_work`。即使客户端崩溃或停止请求，cell Worker 到期后仍在 tenant
+transaction 内把租约改为 expired、递增 generation，并原子写 `meeting.screen_share.revoke.requested` outbox。
+API 的 pause/stop/fence 也写同一幂等撤销事件并立即尝试 LiveKit `removeParticipant`；Worker outbox publisher 负责重试。
+404 视为幂等完成，未配置、超时或 Provider 错误保持 `pending/retry`，不能对客户端宣称已撤销。
+
+本任务不采集或存储屏幕帧，也不实现 Web `getDisplayMedia`、ReplayKit、MediaProjection、simulcast、系统音频处理、
+主持人 force-stop UI 或 OCR；这些仍属于 `ENT-MTG-005..010/012`。本轮按要求只完成静态门禁，未执行 `0024`
+up/down、forced-RLS、双 acquire/CAS、Worker 到期、outbox 重放、真实 LiveKit 撤销、浏览器或真机测试，
+因此 `ENT-MTG-004` 保持 `in_progress`，不代表 A1 或企业生产门禁通过。
 
 ## 20. 错误、重试和客户端动作
 

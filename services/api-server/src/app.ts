@@ -63,6 +63,12 @@ import { registerEnterpriseAuditExportRoutes } from
   "./modules/enterprise/enterprise-audit-export.routes.js";
 import { registerEnterpriseMeetingRoutes } from
   "./modules/enterprise/enterprise-meeting.routes.js";
+import { registerEnterpriseMeetingScreenShareRoutes } from
+  "./modules/enterprise/enterprise-meeting-screen-share.routes.js";
+import {
+  createEnvironmentEnterpriseMeetingScreenShareProvider,
+  type EnterpriseMeetingScreenShareProvider,
+} from "./modules/enterprise/enterprise-meeting-screen-share-provider.js";
 import {
   createEnvironmentEnterpriseMeetingInviteTokenService,
   type EnterpriseMeetingInviteTokenService,
@@ -102,6 +108,7 @@ export async function buildApp(dependencies: {
   enterpriseMeetingInviteTokenService?: EnterpriseMeetingInviteTokenService;
   enterpriseMeetingTranslationDispatchService?:
     EnterpriseMeetingTranslationDispatchService;
+  enterpriseMeetingScreenShareProvider?: EnterpriseMeetingScreenShareProvider;
 } = {}) {
   const app = Fastify({
     logger: {
@@ -206,6 +213,13 @@ export async function buildApp(dependencies: {
       createEnvironmentEnterpriseMeetingInviteTokenService(),
     dependencies.enterpriseMeetingTranslationDispatchService ??
       createEnvironmentEnterpriseMeetingTranslationDispatchService(),
+  );
+  registerEnterpriseMeetingScreenShareRoutes(
+    app,
+    tenantRouteService,
+    enterpriseRepositoryRuntime,
+    dependencies.enterpriseMeetingScreenShareProvider ??
+      createEnvironmentEnterpriseMeetingScreenShareProvider(),
   );
   await registerPlansRoutes(app);
   await registerRealtimeRoutes(app);

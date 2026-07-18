@@ -13,6 +13,8 @@ import type {
   EnterpriseMeetingTranslationDelivery,
   EnterpriseMeetingWorkerCaptionInput,
 } from "./enterprise-meeting-translation.js";
+import type { EnterpriseMeetingScreenShareRuntime } from
+  "./enterprise-meeting-screen-share-runtime.js";
 
 export interface EnterpriseMeetingTranslationDispatch {
   ticket: string;
@@ -44,7 +46,8 @@ export interface EnterpriseMeetingJoinAuthorization {
   routing: { homeRegion: string; cellId: string; routeEpoch: number };
 }
 
-export interface EnterpriseMeetingRepositoryRuntime {
+export interface EnterpriseMeetingRepositoryRuntime
+  extends EnterpriseMeetingScreenShareRuntime {
   createMeeting?(input: {
     context: EnterpriseTenantContext;
     meeting: CreateEnterpriseMeetingInput;

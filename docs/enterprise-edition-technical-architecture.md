@@ -1,6 +1,6 @@
 # 无界AI企业版技术架构
 
-版本：v1.16
+版本：v1.17
 日期：2026-07-19
 状态：SaaS 详细架构基线，已对齐统一通讯平台和 PostgreSQL Primary
 
@@ -283,6 +283,12 @@ sequenceDiagram
 ```
 
 屏幕共享使用租约控制同一会议的唯一活跃共享者。租约写入数据库并带 `version`；仅依赖客户端按钮状态不能防止并发覆盖。
+
+`ENT-MTG-004` 当前把租约、幂等命令账本和到期 pending-work 放入 forced-RLS PostgreSQL。API 先在 tenant
+transaction 内完成 participant/policy/entitlement/route fence 与 CAS，再签发只能发布屏幕源的代际 LiveKit grant；
+pause/stop/route fence/到期均写撤销 outbox。cell Worker 到期扫描负责在客户端消失后把租约收敛为 expired，
+Worker 内置的撤销 publisher 幂等移除旧发布 identity；Provider 未配置时保持 retry/pending。该服务端闭环不代表
+Web `getDisplayMedia`、ReplayKit、MediaProjection、系统音频或真实 LiveKit 已验收。
 
 ## 7. 外呼营销架构
 

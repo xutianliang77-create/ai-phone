@@ -1,6 +1,6 @@
 # 无界AI企业版设计文档索引
 
-版本：v1.24
+版本：v1.25
 日期：2026-07-19
 状态：SaaS 详细设计基线，已纳入统一通讯平台和 PostgreSQL Primary 演进
 
@@ -46,11 +46,11 @@ cell Worker、JSON/SQLite 演示导入，以及全业务表 Primary 切换/恢�
 无界AI主产品公共 PostgreSQL migration、Primary Runtime、可靠 Inbox/Outbox、
 fencing、Billing/Product Records、verify-full 和韧性代码已形成稳定提交 `fe1c3c2`，并由
 `ENT-DATA-007` 合入企业分支。企业版已经完成单 driver、双 manifest、同库身份和分权
-连接的本地自动化，当前 manifest 为公共31段、enterprise 23段；`ENT-DATA-008` 和
+连接的本地自动化，当前 manifest 为公共31段、enterprise 24段；`ENT-DATA-008` 和
 `ENT-CORE-013/014/015` 已完成公共通讯 tenant scope、企业业务会话绑定、签名 Worker dispatch fence
 及设备/声音/录制策略快照的代码/本地自动化，但不能继承主产品 staging 验收。`ENT-DATA-009` 已增加
 31+16 migration manifest 的历史本地证据、全表主键分页 count/hash、WAL 水位、writer fence、签名
-cutover/restore 证据和 production startup 绑定门禁；当前 `0017..0023` 必须按31+23重新生成切换证据。
+cutover/restore 证据和 production startup 绑定门禁；当前 `0017..0024` 必须按31+24重新生成切换证据。
 `ENT-CORE-004` 已增加 tenant-scoped source/version/chunk、草稿审核发布状态机、发布后不可变约束、
 locale/country/product/effective-time 检索和知识引用 ID；
 `ENT-CORE-005` 已增加版本化 term pack/script template、审核发布和生效窗口、发布后不可变约束，
@@ -81,8 +81,9 @@ query/非法凭据/清除失败均拒绝；访客可显式用加密邀请换取�
 Repository/runtime 和包含 communication binding 的恢复聚合读取。`ENT-MTG-002` 已形成创建/邀请/成员与访客入会、
 加密邀请、短期 LiveKit grant、Web/Flutter 入口代码候选。`ENT-MTG-003` 新增 `0023`、tenant-aware Worker
 snapshot/heartbeat/refresh/finalize、每 participant track 独立 ASR/翻译、append-only target event、LiveKit 服务端
-定向字幕和 Web/Flutter 可信消费；定向 TTS 明确 not_ready。当前按要求未执行测试、migration、RLS、RBAC/ticket 攻击、
-四人媒体、浏览器、真机与重启恢复，因此三项任务均保持 `in_progress`。
+定向字幕和 Web/Flutter 可信消费；定向 TTS 明确 not_ready。`ENT-MTG-004` 新增 `0024`、屏幕共享租约/命令账本、
+最小权限代际 grant、cell 到期回收和 LiveKit 撤销 outbox。当前按要求未执行测试、migration、RLS、RBAC/ticket 攻击、
+并发共享、Worker/Provider、四人媒体、浏览器、真机与重启恢复，因此四项任务均保持 `in_progress`。
 
 ## 3. 继承文档
 
@@ -95,6 +96,7 @@ snapshot/heartbeat/refresh/finalize、每 participant track 独立 ASR/翻译、
 - [说话人归属设计](./ai-phone-speaker-attribution-design.md)
 - [实时翻译协议设计](./ai-phone-translation-protocol-design.md)
 - [ENT-MTG-003 实现与静态门禁证据](./evidence/ent-mtg-003-enterprise-realtime-translation-2026-07-19.md)
+- [ENT-MTG-004 屏幕共享租约实现与静态门禁证据](./evidence/ent-mtg-004-screen-share-lease-2026-07-19.md)
 
 ## 4. 统一约束
 

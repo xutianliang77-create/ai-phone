@@ -1,6 +1,6 @@
 # 无界AI企业版详细功能设计
 
-版本：v1.12
+版本：v1.13
 日期：2026-07-19
 状态：SaaS 详细设计基线，已对齐统一通讯平台
 
@@ -317,6 +317,12 @@ LLM 只能提出结构化工具请求；Policy Engine 校验租户、客户、�
 - 支持自动、流畅和高清画质。
 - 支持可用平台上的系统音频共享，并与麦克风音轨分离。
 - 网络变差时优先保证语音和字幕，再降低共享画质。
+
+当前 `ENT-MTG-004` 服务端代码候选已提供成员当前共享查询以及 acquire、pause、resume、renew、stop 命令。
+每个命令要求签名 tenant route、当前会议 participant、策略/entitlement、幂等键和 expected version；同一会议只保留
+一个 active/paused 租约。每代共享使用独立发布 identity 和仅允许 screen-share source 的短期 grant；暂停、停止、
+租约到期或 route fence 会撤销旧 identity。Provider 未配置或撤销暂时失败时返回 `pending` 并由 outbox 重试，
+不显示假成功。Web、iOS、Android 的实际采集入口仍分别等待 `ENT-MTG-005/006/007`，因此当前客户端不可宣称可用。
 
 共享布局提供：
 

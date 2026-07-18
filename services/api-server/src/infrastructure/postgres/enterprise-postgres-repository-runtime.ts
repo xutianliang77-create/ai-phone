@@ -28,15 +28,15 @@ import {
   finalizePostgresTenantLifecycleJob,
   finalizePostgresTenantProvision,
 } from "./enterprise-postgres-runtime-lifecycle-process.js";
-import { createEnterprisePostgresKnowledgeRuntime } from
-  "./enterprise-postgres-knowledge-runtime.js";
-import { createEnterprisePostgresTerminologyRuntime } from
-  "./enterprise-postgres-terminology-runtime.js";
+import { createEnterprisePostgresKnowledgeRuntime } from "./enterprise-postgres-knowledge-runtime.js";
+import { createEnterprisePostgresTerminologyRuntime } from "./enterprise-postgres-terminology-runtime.js";
 import { createEnterprisePostgresObservabilityRuntime } from "./enterprise-postgres-observability-runtime.js";
 import { createEnterprisePostgresAuditExportRuntime } from "./enterprise-postgres-audit-export-runtime.js";
 import { createEnterprisePostgresMeetingRuntime } from "./enterprise-postgres-meeting-runtime.js";
 import { createEnterprisePostgresMeetingTranslationRuntime } from
   "./enterprise-postgres-meeting-translation-runtime.js";
+import { createEnterprisePostgresMeetingScreenShareRuntime } from
+  "./enterprise-postgres-meeting-screen-share-runtime.js";
 export function createPostgresEnterpriseRepositoryRuntime(
   pools: EnterprisePostgresPool | {
     tenantPool: EnterprisePostgresPool;
@@ -60,6 +60,7 @@ export function createPostgresEnterpriseRepositoryRuntime(
     ...createEnterprisePostgresAuditExportRuntime(pool),
     ...createEnterprisePostgresMeetingRuntime(pool),
     ...createEnterprisePostgresMeetingTranslationRuntime(pool),
+    ...createEnterprisePostgresMeetingScreenShareRuntime(pool),
     resolveContext(input) {
       return resolveEnterprisePostgresContext({
         pool: split.directoryPool,

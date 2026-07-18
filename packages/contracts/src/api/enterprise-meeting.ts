@@ -157,6 +157,78 @@ export interface EnterpriseMeetingTranslationPreferenceResponse {
   participant: EnterpriseMeetingParticipantDto;
 }
 
+export type EnterpriseMeetingScreenShareSource = "screen" | "window" | "tab";
+export type EnterpriseMeetingScreenShareQuality = "auto" | "smooth" | "high";
+export type EnterpriseMeetingScreenShareStatus =
+  "active" | "paused" | "ended" | "expired";
+
+export interface EnterpriseMeetingScreenShareDto {
+  id: string;
+  meetingId: string;
+  participantId: string;
+  communicationSessionId: string;
+  sourceType: EnterpriseMeetingScreenShareSource;
+  includesSystemAudio: boolean;
+  qualityMode: EnterpriseMeetingScreenShareQuality;
+  status: EnterpriseMeetingScreenShareStatus;
+  generation: number;
+  publisherIdentity: string;
+  trackSid?: string;
+  leaseExpiresAt?: string;
+  startedAt: string;
+  pausedAt?: string;
+  endedAt?: string;
+  createdAt: string;
+  updatedAt: string;
+  version: number;
+}
+
+export interface AcquireEnterpriseMeetingScreenShareRequest {
+  sourceType: EnterpriseMeetingScreenShareSource;
+  includesSystemAudio: boolean;
+  qualityMode: EnterpriseMeetingScreenShareQuality;
+  expectedMeetingVersion: number;
+}
+
+export interface ControlEnterpriseMeetingScreenShareRequest {
+  expectedVersion: number;
+}
+
+export interface RenewEnterpriseMeetingScreenShareRequest
+  extends ControlEnterpriseMeetingScreenShareRequest {
+  trackSid?: string;
+}
+
+export interface EnterpriseMeetingScreenShareGrant {
+  provider: "livekit";
+  roomName: string;
+  rtcUrl: string;
+  publisherIdentity: string;
+  accessToken: string;
+  expiresAt: string;
+  generation: number;
+  capabilities: {
+    screenShare: true;
+    screenShareAudio: boolean;
+    microphone: false;
+    camera: false;
+    data: false;
+    subscribe: false;
+  };
+}
+
+export interface EnterpriseMeetingScreenShareResponse {
+  share: EnterpriseMeetingScreenShareDto;
+  grant?: EnterpriseMeetingScreenShareGrant;
+  replayed?: boolean;
+  revocation: "not_required" | "completed" | "pending";
+}
+
+export interface EnterpriseMeetingCurrentScreenShareResponse {
+  share: EnterpriseMeetingScreenShareDto | null;
+  revocation: "not_required" | "completed" | "pending";
+}
+
 export interface EnterpriseMeetingCaptionEvent {
   v: 1;
   eventId: string;
