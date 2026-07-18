@@ -1,6 +1,6 @@
 # 无界AI企业版详细技术设计
 
-版本：v1.21
+版本：v1.22
 日期：2026-07-18
 状态：统一通讯平台与 PostgreSQL Primary 收敛详细技术方案
 
@@ -21,11 +21,11 @@
 | RBAC | `ready_for_acceptance` | 已有17个 scope、九角色矩阵、统一服务端 guard 和越权测试 |
 | SaaS tenant lifecycle | `ready_for_acceptance` | 已有幂等开通、暂停、导出/删除执行器、租约、有界恢复和 receipt 校验；真实对象存储/Provider 清理服务尚待验收 |
 | Append-only audit | `ready_for_acceptance` | 已有 tenant-scoped 查询、HMAC cursor、成员/RBAC/租户生命周期埋点和 SQLite/PostgreSQL 不可变约束；受控导出和真实 PostgreSQL 验收尚待后续任务 |
-| PostgreSQL schema | `implemented` | 已有十七段 up/down migration、tenant-first 索引、复合 FK、强制 RLS、user directory、cell pending projection、opaque subject identity、企业通讯/dispatch/策略、usage budget、版本化 billing/entitlement、usage accounting 和 knowledge chunk/publish guard；尚无真实 migrate/restore/PITR 证据 |
-| Tenant-scoped Repository | `ready_for_acceptance` | 已有 tenant/user/cell scoped transaction、subject guard、单一 `legacy|postgres` runtime、HTTP 全链路注入、独立 cell Worker，以及 Tenant/Member/Audit、Directory、lifecycle、Inbox/Outbox、budget、billing/entitlement、usage accounting、knowledge 和共享 unit-of-work；尚无真实 PostgreSQL H3 证据 |
+| PostgreSQL schema | `implemented` | 已有十八段 up/down migration、tenant-first 索引、复合 FK、强制 RLS、user directory、cell pending projection、opaque subject identity、企业通讯/dispatch/策略、usage budget、版本化 billing/entitlement、usage accounting、knowledge 和 terminology 发布守卫；尚无真实 migrate/restore/PITR 证据 |
+| Tenant-scoped Repository | `ready_for_acceptance` | 已有 tenant/user/cell scoped transaction、subject guard、单一 `legacy|postgres` runtime、HTTP 全链路注入、独立 cell Worker，以及 Tenant/Member/Audit、Directory、lifecycle、Inbox/Outbox、budget、billing/entitlement、usage accounting、knowledge、terminology 和共享 unit-of-work；尚无真实 PostgreSQL H3 证据 |
 | Enterprise Inbox/Outbox | `ready_for_acceptance` | 已有 tenant-scoped 去重、稳定 payload hash、领域/inbox/outbox 原子提交、lease/retry/recovery 和100次重放门禁；真实 PostgreSQL 并发与 Provider sandbox 尚待验收 |
 | SQLite/JSON 演示数据导入 | `ready_for_acceptance` | 已有维护窗口、SQLite 临时副本与 quick_check、空目标事务导入、六集合 count/SHA-256 读回对账和不一致回滚；仅限内部演示数据 |
-| 公共 Primary Runtime 收敛 | `ready_for_acceptance` | 已合入上游稳定提交 `fe1c3c2`；公共31段与 enterprise 17段 manifest 由一个启动编排验证，driver、数据库身份和分权连接失败均在监听前闭合；尚无真实 PostgreSQL H3 证据 |
+| 公共 Primary Runtime 收敛 | `ready_for_acceptance` | 已合入上游稳定提交 `fe1c3c2`；公共31段与 enterprise 18段 manifest 由一个启动编排验证，driver、数据库身份和分权连接失败均在监听前闭合；尚无真实 PostgreSQL H3 证据 |
 | 公共通讯 tenant scope | `ready_for_acceptance` | 公共 manifest 已增至31段；12张通讯资源表具有不可空 scope、复合 FK、写入 guard 和 forced RLS，企业 unit-of-work 只暴露 tenant-bound 白名单 Repository；尚无真实双租户 A1/H3 证据 |
 | 企业统一通讯会话绑定 | `ready_for_acceptance` | enterprise `0011` 和 tenant unit-of-work 已建立 Meeting/Support/Marketing 唯一绑定、route/policy/entitlement 快照及 generation/event-sequence 收敛状态机；尚无真实多实例、cell 迁移和 A1/H3 证据 |
 | Tenant-aware Worker Dispatch | `ready_for_acceptance` | enterprise `0012` 以 scope FK/RLS 绑定公共 dispatch/capacity；短期 HMAC ticket、租户容量、lease/heartbeat、cancel/finalize 和二次 binding fence 已实现；仅有自动化和一次性本地 PostgreSQL 16 证据，尚无真实多实例/H3 容量证据 |
@@ -34,7 +34,8 @@
 | 租户账务和 Entitlement | `ready_for_acceptance` | enterprise `0015` 已实现 tenant billing account、不可变 plan/subscription/entitlement version、服务端账期及 binding/dispatch entitlement fence；真实支付 Provider、关账对账和 A1/H3 待验收 |
 | SaaS 计量聚合 | `ready_for_acceptance` | enterprise `0016` 已实现 tenant usage event、event/ledger 一致性、append-only adjustment、负数净额保护及 count/hash/watermark 账期聚合；真实关账、支付对账和 A1/H3 待验收 |
 | 企业知识版本 | `ready_for_acceptance` | enterprise `0017`、Knowledge Repository/runtime/API 已实现 source/revision/chunk/review/publish、发布后不可变、四维时间检索和稳定 citation；当前仅有确定性文本检索，本地普通角色验证不代表 embedding Provider、对象存储、恶意文档或 A1/H3 已通过 |
-| Primary 全量切换/恢复证据 | `ready_for_acceptance` | 工具按运行时动态校验 manifest/全业务表；`c9b5be2` 历史证据为31+16/81张表，新增 `0017` 后当前31+17/82张表必须重新生成签名证据；异地 WAL/PITR/H3 未通过 |
+| 企业术语与话术版本 | `ready_for_acceptance` | enterprise `0018`、共享契约、Term Pack/Script Template Repository/runtime/API 已实现稳定资源、递增 revision、review/publish、有效期解析、hash 校验和同一术语版本运行时引用；仅有自动化和本地 PostgreSQL 16 普通角色证据，真实 Worker/Provider、A1/H3 未通过 |
+| Primary 全量切换/恢复证据 | `ready_for_acceptance` | 工具按运行时动态校验 manifest/全业务表；`c9b5be2` 历史证据为31+16/81张表，新增 `0017/0018` 后当前31+18/85张表必须重新生成签名证据；异地 WAL/PITR/H3 未通过 |
 | PostgreSQL 控制面/业务聚合 | `designed` | 后续 CORE/MTG/CS/MKT 领域任务范围，不能从公共 Repository runtime 推导为已实现 |
 | SQLite | `demo_only` | 仅本地开发、自动化和封闭演示，不承载真实企业试点数据 |
 | PSTN/CRM/Calendar/OCR | `not_ready` 或按环境探测 | 未配置必须明确降级，不生成虚假外部对象或成功状态 |
@@ -222,6 +223,9 @@ meeting_action_items(
 enterprise_knowledge_sources
 enterprise_knowledge_versions
 enterprise_term_packs
+enterprise_term_pack_versions
+enterprise_script_templates
+enterprise_script_template_versions
 policy_decisions
 audit_events
 usage_ledger
@@ -386,6 +390,19 @@ POST   /enterprise/v1/knowledge/sources/:sourceId/versions
 PUT    /enterprise/v1/knowledge/versions/:versionId/chunks
 POST   /enterprise/v1/knowledge/versions/:versionId/publish
 POST   /enterprise/v1/knowledge/search
+GET    /enterprise/v1/terminology/packs
+POST   /enterprise/v1/terminology/packs
+GET    /enterprise/v1/terminology/packs/:packId/versions
+POST   /enterprise/v1/terminology/packs/:packId/versions
+PUT    /enterprise/v1/terminology/pack-versions/:versionId/content
+POST   /enterprise/v1/terminology/pack-versions/:versionId/publish
+GET    /enterprise/v1/script-templates
+POST   /enterprise/v1/script-templates
+GET    /enterprise/v1/script-templates/:templateId/versions
+POST   /enterprise/v1/script-templates/:templateId/versions
+PUT    /enterprise/v1/script-template-versions/:versionId/content
+POST   /enterprise/v1/script-template-versions/:versionId/publish
+POST   /enterprise/v1/runtime-terminology/resolve
 GET    /enterprise/v1/audit-events
 POST   /enterprise/v1/communication-policies
 ```
@@ -638,6 +655,26 @@ document；请求体中的 tenantId 只允许与服务端上下文相同。legac
 chunk 审核和发布分别使用 source/version 行锁及 expectedVersion，冲突不产生半成品。Repository SQL
 除 forced RLS 外仍显式包含 `tenant_id = $1`；批量 `INSERT ... SELECT` 也通过 tenant scope 子查询满足
 SQL fence。任何 Provider 未配置、检索无证据或结果为空时，上层必须明确降级并提供人工路径。
+
+### 8.5 术语包、话术模板和统一运行时引用
+
+`term_packs` 和 `script_templates` 是租户内稳定资源；`term_pack_versions` 与
+`script_template_versions` 保存不可复用 revision。创建 version 时分别锁定稳定资源行并由服务端
+分配 revision；客户端不能指定 revision、tenant、审核/发布 actor 或 content hash。
+
+术语版本以 `sourceLocale + targetLocale + countryCode + productCode + usageScope` 解析，最多500条、
+总 JSON 不超过1MB；term ID 和原词在包内唯一。话术版本以 `locale + countryCode + productCode` 解析，
+模板稳定资源另存 purpose；提示文本、必说语、禁语和变量经过数量、大小、重复和交叉冲突校验。
+服务端规范化内容并计算 SHA-256。
+
+两类版本只允许 `draft -> review -> published`。评审时一次性写入内容、hash、review actor/time；发布
+要求 expectedVersion、审核元数据、publisher、effectiveFrom 和合法 expiresAt。数据库 trigger 冻结
+身份/维度/revision，禁止评审后更改内容或 hash，并禁止更新/删除 published/expired 版本。
+
+运行时 resolver 强制叠加 `tenantId + locale + country + product + purpose + serverNow`，只选择当前有效
+published revision 并重新计算内容 hash。返回 context 的顶层、`asr`、`translation` 和 `llm` 使用同一
+`termPackVersionId`；可选 `scriptTemplateVersionId` 只进入 LLM 引用。任一资源处于 draft/review、未来、
+过期、跨租户、用途不匹配或 hash 不一致时失败闭合，不回退旧草稿，也不把未配置外部 Provider 标记成功。
 
 ## 9. 工具调用安全
 
@@ -937,7 +974,7 @@ baseline 文件 hash，验证源库默认只读、写探针返回 SQLSTATE `2500
 整行 hash、主键、migration 或 server version 不一致都会生成签名 `mismatch` 并以非零退出。
 
 生产 startup gate 只接受 `environment=staging` 的 matched cutover evidence，且运行时
-commit/image/topology、cutover ID、target logical ID、当前 system identifier/OID 和31+17
+commit/image/topology、cutover ID、target logical ID、当前 system identifier/OID 和31+18
 manifest 必须逐项一致。本地 PostgreSQL 16 演练已验证81张表、8张含记录关键表、增量后17行
 全库 hash、writer fence、隔离 `pg_dump/pg_restore` 和单行篡改失败；证据见
 `docs/evidence/ent-data-009-local-drill-2026-07-18.md`。这只证明机制可执行，不是异地主机

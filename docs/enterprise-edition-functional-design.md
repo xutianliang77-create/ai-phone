@@ -1,6 +1,6 @@
 # 无界AI企业版详细功能设计
 
-版本：v1.10
+版本：v1.11
 日期：2026-07-18
 状态：SaaS 详细设计基线，已对齐统一通讯平台
 
@@ -240,6 +240,21 @@ chunk 顺序和内容生成 SHA-256，并把回答引用固定为 `knowledgeVers
 source 当前满足条件的最高 published revision。draft、processing、review、failed、尚未生效和已过期
 版本均返回空。当前未配置 embedding Provider 时使用确定性的受限文本检索，不把 pending embedding
 伪装为向量检索成功。
+
+### 6.3.1 企业术语与话术版本
+
+- 术语包是租户内稳定资源，每次修改创建独立 revision；版本维度包含源/目标语言、国家、产品和
+  `marketing|support|meeting|all` 使用范围。
+- 术语条目保存稳定 term ID、原词、译词、别名、可选发音、大小写敏感和禁止替换标记；服务端生成
+  内容 SHA-256，客户端不能指定 hash 或 revision。
+- 话术模板按用途建立稳定资源，版本保存目标语言、国家、产品、提示文本、必说语、禁语和变量名；
+  必说语与禁语冲突时禁止进入审核。
+- 两类内容都遵循 `draft -> review -> published`，发布必须携带 expectedVersion 和有效时间窗；
+  已审核内容、hash 和已发布版本不能改写，修订必须创建新 revision。
+- 运行前由服务端按 tenant、语言、国家、产品、用途和当前时间解析当前有效 published 版本。
+  同一运行上下文中的 ASR、翻译和 LLM 必须引用完全相同的 `termPackVersionId`；话术版本只附加给
+  LLM。review、未生效、过期、跨租户或内容 hash 不一致时明确返回 not ready，不回退到草稿或
+  伪造 Provider 成功。
 
 ### 6.4 工具调用
 

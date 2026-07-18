@@ -28,6 +28,7 @@ describe("enterprise PostgreSQL migrations", () => {
       "0015_enterprise_billing_entitlements",
       "0016_enterprise_usage_accounting",
       "0017_enterprise_knowledge_versions",
+      "0018_enterprise_terminology_scripts",
     ]);
     for (const migration of migrations) {
       expect(migration.up.trim()).not.toBe("");
@@ -122,6 +123,16 @@ describe("enterprise PostgreSQL migrations", () => {
     expect(sql).toContain("enterprise_knowledge_chunk_guard");
     expect(sql).toContain("knowledge_chunks_tenant_isolation");
     expect(sql).toContain("OR NOT EXISTS (");
+    expect(sql).toContain("CREATE TABLE enterprise.term_pack_versions");
+    expect(sql).toContain("CREATE TABLE enterprise.script_templates");
+    expect(sql).toContain("CREATE TABLE enterprise.script_template_versions");
+    expect(sql).toContain("enterprise_term_pack_version_guard");
+    expect(sql).toContain("enterprise_script_template_version_guard");
+    expect(sql).toContain("ALTER TABLE enterprise.term_packs DISABLE ROW LEVEL SECURITY");
+    expect(sql).toContain("enterprise term pack review metadata is immutable");
+    expect(sql).toContain("enterprise script review metadata is immutable");
+    expect(sql).toContain("'term_pack_versions', 'script_templates', 'script_template_versions'");
+    expect(sql).toContain("table_name || '_tenant_isolation'");
     expect(sql).toContain("enterprise_usage_event_append_only");
     expect(sql).toContain("enterprise_usage_adjustment_append_only");
     expect(sql).toContain("enterprise_usage_period_aggregate_guard");
@@ -153,6 +164,8 @@ describe("enterprise PostgreSQL migrations", () => {
       "DROP TABLE IF EXISTS enterprise.tenant_usage_events",
     );
     expect(rollbackSql).toContain("DROP TABLE IF EXISTS enterprise.knowledge_chunks");
+    expect(rollbackSql).toContain("DROP TABLE IF EXISTS enterprise.term_pack_versions");
+    expect(rollbackSql).toContain("DROP TABLE IF EXISTS enterprise.script_template_versions");
     expect(sql).not.toContain("BYPASSRLS");
   });
 

@@ -43,6 +43,12 @@ import {
 import {
   EnterpriseKnowledgePostgresRepository,
 } from "./enterprise-postgres-knowledge.repository.js";
+import {
+  EnterpriseTermPackPostgresRepository,
+} from "./enterprise-postgres-term-pack.repository.js";
+import {
+  EnterpriseScriptTemplatePostgresRepository,
+} from "./enterprise-postgres-script-template.repository.js";
 
 export interface EnterprisePostgresUnitOfWork {
   tenant: EnterpriseTenantPostgresRepository;
@@ -55,6 +61,8 @@ export interface EnterprisePostgresUnitOfWork {
   usageBudgets: EnterpriseUsageBudgetPostgresRepository;
   usageAccounting: EnterpriseUsageAccountingPostgresRepository;
   knowledge: EnterpriseKnowledgePostgresRepository;
+  termPacks: EnterpriseTermPackPostgresRepository;
+  scriptTemplates: EnterpriseScriptTemplatePostgresRepository;
   workerDispatches: EnterpriseWorkerDispatchPostgresRepository;
 }
 
@@ -80,6 +88,8 @@ export function withEnterprisePostgresUnitOfWork<T>(
       usageBudgets: new EnterpriseUsageBudgetPostgresRepository(session),
       usageAccounting: new EnterpriseUsageAccountingPostgresRepository(session),
       knowledge: new EnterpriseKnowledgePostgresRepository(session),
+      termPacks: new EnterpriseTermPackPostgresRepository(session),
+      scriptTemplates: new EnterpriseScriptTemplatePostgresRepository(session),
       workerDispatches: new EnterpriseWorkerDispatchPostgresRepository(session),
     }),
   );

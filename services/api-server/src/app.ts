@@ -40,6 +40,12 @@ import {
   registerEnterpriseKnowledgeRoutes,
 } from "./modules/enterprise/enterprise-knowledge.routes.js";
 import {
+  registerEnterpriseTerminologyRoutes,
+} from "./modules/enterprise/enterprise-terminology.routes.js";
+import {
+  registerEnterpriseScriptTemplateRoutes,
+} from "./modules/enterprise/enterprise-script-template.routes.js";
+import {
   createEnvironmentTenantLifecycleExecutor,
   type TenantLifecycleExecutor,
 } from "./modules/enterprise/enterprise-tenant-lifecycle-executor.js";
@@ -136,6 +142,12 @@ export async function buildApp(dependencies: {
     app,
     tenantRouteService,
     enterpriseRepositoryRuntime,
+  );
+  await registerEnterpriseTerminologyRoutes(
+    app, tenantRouteService, enterpriseRepositoryRuntime,
+  );
+  await registerEnterpriseScriptTemplateRoutes(
+    app, tenantRouteService, enterpriseRepositoryRuntime,
   );
   await registerEnterpriseProviderReadinessRoutes(
     app,

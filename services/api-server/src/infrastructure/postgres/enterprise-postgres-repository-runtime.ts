@@ -1,10 +1,7 @@
 import { randomUUID } from "node:crypto";
-import {
-  getStoreSnapshot,
-} from "../storage/json-store.js";
-import {
-  createEnterpriseAuditEvent,
-} from "../../modules/enterprise/enterprise-audit.repository.js";
+import { getStoreSnapshot } from "../storage/json-store.js";
+import { createEnterpriseAuditEvent } from
+  "../../modules/enterprise/enterprise-audit.repository.js";
 import type {
   EnterpriseRepositoryRuntime,
 } from "../../modules/enterprise/enterprise-repository-runtime.js";
@@ -15,9 +12,7 @@ import {
   listEnterprisePostgresMemberships,
   resolveEnterprisePostgresContext,
 } from "./enterprise-postgres-directory.repository.js";
-import type {
-  EnterprisePostgresPool,
-} from "./enterprise-postgres-client.js";
+import type { EnterprisePostgresPool } from "./enterprise-postgres-client.js";
 import {
   withEnterpriseTenantPostgresRepository,
 } from "./enterprise-postgres-tenant.repository.js";
@@ -35,9 +30,10 @@ import {
   finalizePostgresTenantLifecycleJob,
   finalizePostgresTenantProvision,
 } from "./enterprise-postgres-runtime-lifecycle-process.js";
-import {
-  createEnterprisePostgresKnowledgeRuntime,
-} from "./enterprise-postgres-knowledge-runtime.js";
+import { createEnterprisePostgresKnowledgeRuntime } from
+  "./enterprise-postgres-knowledge-runtime.js";
+import { createEnterprisePostgresTerminologyRuntime } from
+  "./enterprise-postgres-terminology-runtime.js";
 
 export function createPostgresEnterpriseRepositoryRuntime(
   pools: EnterprisePostgresPool | {
@@ -57,6 +53,7 @@ export function createPostgresEnterpriseRepositoryRuntime(
   return {
     driver: "postgres",
     ...createEnterprisePostgresKnowledgeRuntime(pool),
+    ...createEnterprisePostgresTerminologyRuntime(pool),
     resolveContext(input) {
       return resolveEnterprisePostgresContext({
         pool: split.directoryPool,
