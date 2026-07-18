@@ -1,6 +1,6 @@
 # 无界AI企业版设计文档索引
 
-版本：v1.20
+版本：v1.21
 日期：2026-07-19
 状态：SaaS 详细设计基线，已纳入统一通讯平台和 PostgreSQL Primary 演进
 
@@ -70,6 +70,9 @@ axe、视觉回归或真机验收，不能据此宣称 WCAG AA 或生产门禁�
 `ENT-UI-010` 已定义三引擎 Playwright 角色/路由/响应式/主题/键盘/axe/视觉门禁、固定 release matrix、
 bundle 敏感信息与 clean commit 扫描，以及签名租户上下文中的脱敏客户端错误/性能事件。测试和视觉基线本轮
 未执行，任务保持 `in_progress`，不能据此宣称 AC-UI 或 Web release gate 已通过。
+`ENT-UI-011` 已增加与个人主导航隔离的 Flutter 企业入口，重新校验账号、active membership、签名 route、
+region/cell/scope 和 Provider document，并按 scope 发现工作台、会议、接管、告警、我的；会议/接管 API 未闭合时
+明确 not_ready，离线与上下文不一致失败闭合。当前只通过 Flutter 静态分析，测试、构建和真机门禁未执行。
 
 ## 3. 继承文档
 

@@ -1,6 +1,6 @@
 # 无界AI企业版详细技术设计
 
-版本：v1.27
+版本：v1.28
 日期：2026-07-19
 状态：统一通讯平台与 PostgreSQL Primary 收敛详细技术方案
 
@@ -1389,6 +1389,25 @@ actorRole/traceId 后写结构化 error/info 日志。遥测传输失败被吞�
 
 当前只完成自动化与门禁实现、typecheck、生产构建和静态扫描；未运行测试、未生成视觉基线、未验证 CI artifact，
 因此 `ENT-UI-010` 保持 `in_progress`。
+
+### 19.5 Flutter 企业工作区入口
+
+个人版 `MainShellPage` 继续保留同传、通话、Lens、记录和我的导航；企业版不替换个人导航，而是从“我的”进入独立
+`EnterpriseEntryPage`。入口只复用账号 Bearer 会话，不复用个人同传、Call Link 或 AI 代打的资源与成功状态。
+会话不存在、格式无效、过期或 API 返回401时，客户端同时清理账号会话和已选 tenant；网络错误不恢复缓存工作区。
+
+进入状态机依次读取 `/enterprise/v1/tenants`、短期 `/saas/v1/tenants/:tenantId/route`、tenant-scoped
+`/enterprise/v1/me` 和 `/enterprise/v1/provider-capabilities`。单一 active membership 可自动进入；多租户在没有仍然
+有效的本地选择时必须显式选择。工作区创建前核对 selected/context member identity、active 状态、tenant、region、
+cell、route epoch、expiry、非本地 HTTPS/WSS URL、非空签名和 capability region/status；任一不一致失败闭合。本地只在
+完整校验成功后持久化 tenant ID，scope 与 route document 不落本地作为授权真值。
+
+`EnterpriseShellPage` 由工作台、会议、接管、告警和我的组成，统一使用 Material `NavigationBar` 和 outlined/filled
+图标对。会议只在 `meeting:read` 时发现，接管只在 `support:takeover` 时发现；入口隐藏不替代服务端 guard。当前
+工作台只展示 tenant/route/scope/Provider document，告警只从 tenant 状态和非 ready capability 派生。tenant-scoped
+会议列表与接管队列 API 尚未实现，两页固定 `not_ready`，不读取个人数据或提交副作用。
+
+本批仅通过 Flutter 静态分析；未运行 test、build、真机、动态字体或横竖屏，故 `ENT-UI-011` 保持 `in_progress`。
 
 ## 20. 错误、重试和客户端动作
 

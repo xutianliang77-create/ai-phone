@@ -1,6 +1,6 @@
 # 无界AI企业版验收任务与计划
 
-版本：v1.25
+版本：v1.26
 日期：2026-07-19
 状态：可执行验收计划，已对齐统一通讯平台和 PostgreSQL Primary 收敛
 
@@ -146,6 +146,13 @@ JavaScript/CSS 预算、无 source map、无本地/内部地址、私钥、cloud
 必须嵌入 bundle、匹配 clean HEAD。错误上报 body 不接收 tenantId/message/stack/token，服务端以 membership、
 `tenant:read` 和签名 route document 重建 tenant/region/cell/epoch 后写结构化日志。按本轮指令未运行 Vitest、API、
 Playwright、axe 或视觉回归，也未生成/审批截图基线，因此 AC-UI-001..012 和正式 release gate 均未通过。
+
+`ENT-UI-011` 当前 Flutter 代码候选把企业入口与个人主导航隔离，每次进入重新校验账号有效期、active membership、
+所选 tenant、短期签名 route document、region/cell/epoch、`/enterprise/v1/me` scopes 和 Provider capability；401 会清理
+会话与企业选择，离线或上下文不一致不显示缓存工作区。五入口使用 Material Icons；会议和接管分别按
+`meeting:read`、`support:takeover` 发现，tenant-scoped API 未实现时明确 `not_ready`，不复用个人同传、Call Link 或
+AI 代打。当前只通过 `flutter analyze`，未运行 Flutter test、构建、动态字体、横竖屏或真机矩阵，因此该候选不能
+作为 AC-UI-001..006/008..011、A1 或移动端生产放行证据，任务保持 `in_progress`。
 
 `ENT-UI-006` 当前代码候选覆盖知识源、术语包、话术模板三类稳定资源和修订列表，显式显示
 draft/review/published/expired、生效范围和只读快照；所有内容请求携带当前 tenant 与签名 route document，

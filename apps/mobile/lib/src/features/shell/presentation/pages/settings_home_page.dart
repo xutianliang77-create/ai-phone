@@ -6,6 +6,7 @@ import '../../../account/data/account_session_store.dart';
 import '../../../account/presentation/pages/account_page.dart';
 import '../../../billing/presentation/pages/wallet_page.dart';
 import '../../../compliance/presentation/pages/compliance_center_page.dart';
+import '../../../enterprise/presentation/pages/enterprise_entry_page.dart';
 import '../../../realtime/presentation/pages/realtime_preferences_page.dart';
 import '../../../voice_identity/presentation/pages/voice_identity_page.dart';
 import '../../../voice_profile/presentation/pages/my_voice_page.dart';
@@ -27,6 +28,11 @@ class SettingsHomePage extends StatelessWidget {
           children: <Widget>[
             _AccountHeader(onTap: () => _open(context, const AccountPage())),
             const SizedBox(height: 20),
+            _SettingsAction(
+              icon: Icons.domain_outlined,
+              title: '企业工作区',
+              onTap: () => _open(context, EnterpriseEntryPage(config: config)),
+            ),
             _SettingsAction(
               icon: Icons.tune,
               title: '同传设置',
