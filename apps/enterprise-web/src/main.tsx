@@ -12,6 +12,7 @@ import "./styles/knowledge.css";
 import "./styles/members.css";
 import "./styles/settings.css";
 import "./styles/audit.css";
+import "./styles/guest.css";
 import "./styles/accessibility.css";
 
 const root = document.getElementById("root");

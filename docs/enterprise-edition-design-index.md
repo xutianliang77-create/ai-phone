@@ -1,6 +1,6 @@
 # 无界AI企业版设计文档索引
 
-版本：v1.21
+版本：v1.22
 日期：2026-07-19
 状态：SaaS 详细设计基线，已纳入统一通讯平台和 PostgreSQL Primary 演进
 
@@ -73,6 +73,9 @@ bundle 敏感信息与 clean commit 扫描，以及签名租户上下文中的�
 `ENT-UI-011` 已增加与个人主导航隔离的 Flutter 企业入口，重新校验账号、active membership、签名 route、
 region/cell/scope 和 Provider document，并按 scope 发现工作台、会议、接管、告警、我的；会议/接管 API 未闭合时
 明确 not_ready，离线与上下文不一致失败闭合。当前只通过 Flutter 静态分析，测试、构建和真机门禁未执行。
+`ENT-UI-012` 已增加独立于成员 AuthProvider/AppShell 的 Web 访客参会壳，fragment guest token 清除后只驻留内存，
+query/非法凭据/清除失败均拒绝；用户可显式检查麦克风，字幕与共享在无企业 meeting session/lease 时保持 not_ready。
+`ENT-MTG-001/002` 尚未实现，当前不发送 token、不连接 RTC，测试与浏览器设备门禁未执行。
 
 ## 3. 继承文档
 

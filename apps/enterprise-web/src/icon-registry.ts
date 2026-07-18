@@ -67,6 +67,12 @@ export const enterpriseIcons = {
     light: "light_mode",
     dark: "dark_mode",
   },
+  guest: {
+    privateMeeting: "lock",
+    devices: "devices",
+    microphone: "mic",
+    captions: "closed_caption",
+  },
   status: {
     loading: "autorenew",
     empty: "inbox",

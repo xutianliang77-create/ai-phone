@@ -1,6 +1,6 @@
 # 无界AI企业版验收任务与计划
 
-版本：v1.26
+版本：v1.27
 日期：2026-07-19
 状态：可执行验收计划，已对齐统一通讯平台和 PostgreSQL Primary 收敛
 
@@ -153,6 +153,13 @@ Playwright、axe 或视觉回归，也未生成/审批截图基线，因此 AC-U
 `meeting:read`、`support:takeover` 发现，tenant-scoped API 未实现时明确 `not_ready`，不复用个人同传、Call Link 或
 AI 代打。当前只通过 `flutter analyze`，未运行 Flutter test、构建、动态字体、横竖屏或真机矩阵，因此该候选不能
 作为 AC-UI-001..006/008..011、A1 或移动端生产放行证据，任务保持 `in_progress`。
+
+`ENT-UI-012` 当前 Web 代码候选把 `/join/:meetingId` 放在成员 `AuthProvider/AppShell` 外，不读取账号、membership、
+tenant 导航或成员数据。guest token 只接受 URL fragment，query token、非法 meeting/token、地址栏清理失败均拒绝；
+有效凭据清除地址后只驻留页面内存，不进入 storage、日志或 UI。麦克风检查仅由用户点击触发并立即停止 track，
+共享只探测浏览器能力，不在无 session/lease 时调用 `getDisplayMedia`。`ENT-MTG-001/002` 未实现，本批不发送 token、
+不连接 RTC，字幕和共享保持 `not_ready`。当前仅有 typecheck/build/bundle 静态证据，未运行 token 攻击测试、浏览器、
+权限、设备、axe 或视觉矩阵，不能满足 token 单会议约束、AC-UI-004/005/008..012、AC-MTG 或 A1。
 
 `ENT-UI-006` 当前代码候选覆盖知识源、术语包、话术模板三类稳定资源和修订列表，显式显示
 draft/review/published/expired、生效范围和只读快照；所有内容请求携带当前 tenant 与签名 route document，

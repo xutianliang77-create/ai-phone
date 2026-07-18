@@ -1,6 +1,6 @@
 # 无界AI企业版开发任务
 
-版本：v1.32
+版本：v1.33
 日期：2026-07-19
 状态：E0 开发中，已对齐统一通讯平台和 PostgreSQL Primary 收敛
 
@@ -48,6 +48,7 @@
 - `ENT-UI-009` 已增加持久化 system/light/dark 主题、与 Flutter 对齐的浅深色令牌、可见主题/租户控件、320/600/960/1280 收敛规则、移动端可滚动带文字导航、跳至主内容、路由焦点恢复、可聚焦横向表格、表格 caption、真实按钮语义和 `rem` 动态字号。浅色风险小字使用独立 AA 前景令牌，品牌 Signal 颜色不变。当前只完成 typecheck/构建/静态门禁，未执行浏览器尺寸、200% 缩放、键盘、axe、视觉回归或真机矩阵，状态保持 `in_progress`。
 - `ENT-UI-010` 已增加独立 Playwright 三引擎配置、九角色 route 矩阵、320/600/960/1280/1440 双主题截图、动态字体/键盘/axe/客户端遥测用例、固定 release matrix、生产 bundle 体积/源码映射/敏感信息/fixture/发布元数据扫描和 Node 24 CI release-candidate job。浏览器异常只在本地生成 SHA-256 截断 fingerprint，携带 path/app version/commit，经 Bearer、tenant 与签名 route document 上报；服务端拒绝额外字段并只写结构化日志。当前只完成 typecheck、生产构建和静态 bundle 门禁，按要求未运行 unit/API/Playwright/axe/视觉回归，且视觉基线未生成，任务保持 `in_progress`。
 - `ENT-UI-011` 已在个人版“我的”中增加独立企业工作区入口，并实现账号过期清理、active membership 发现、显式多租户选择、短期签名 route/region/cell/scope/Provider document 重新校验，以及工作台、会议、接管、告警、我的五入口。会议只向 `meeting:read` 显示，接管只向 `support:takeover` 显示；两类 tenant-scoped 业务 API 尚未完成时固定 `not_ready`，不回退个人同传、Call Link 或 AI 代打。离线、401、跨成员/租户/区域和无效路由均不进入工作区。当前只完成 `flutter analyze` 静态门禁，按要求未运行 Flutter test、构建、真机、动态字体或横竖屏验证，任务保持 `in_progress`。
+- `ENT-UI-012` 已增加完全位于成员 `AuthProvider/AppShell` 之外的 `/join/:meetingId` Web 访客壳，不发起账号、membership 或 tenant 请求，也不渲染租户导航和成员数据。邀请只接受 `#token=` fragment，拒绝 query token、非法 meeting ID/token，并立即从地址栏清除后只存页面内存；清除失败即拒绝。页面可由用户显式检查麦克风且立即停止 track，只探测屏幕共享能力，不在缺 meeting session/lease 时请求共享。`ENT-MTG-001/002` 尚未实现，当前不发送 token、不连接 RTC，字幕和共享保持 `not_ready`。仅完成 typecheck、生产构建、bundle 与文件规模静态门禁，测试和浏览器设备矩阵按要求未执行，任务保持 `in_progress`。
 - PostgreSQL runtime、cell Worker 和演示数据导入对账代码已接通，但尚未在真实 PostgreSQL 上执行 migrate/import/reconcile、并发租约、恢复或容量门禁，不能据此宣称企业试点或生产可用。受控审计导出已实现到期拒绝和对象过期元数据，但物理删除、对象清单对账、Provider 删除收敛仍属于 `ENT-REL-002`；会议/客服/营销业务聚合和外部 Provider 仍未通过实现或真实环境门禁。
 - 主产品稳定提交 `fe1c3c2` 已作为 `ENT-DATA-007` 基线合入企业分支；后续个人工作区 WIP 仍不得直接进入企业提交。公共通讯 tenant scope 已完成本地代码门禁，切换/对账证据仍由 `ENT-DATA-009` 完成，主产品 staging 结果不能继承为企业验收证据。
 
@@ -92,9 +93,9 @@
 | ENT-UI-009 | 响应式、深色和无障碍 | UI-001..008 | 320/600/960/1280 布局、dark mode、键盘和动态字体 | 无横向溢出；WCAG AA；200%缩放核心操作可达 | in_progress |
 | ENT-UI-010 | Web 自动化与发布门禁 | UI-002..009 | unit、contract、E2E、视觉回归、bundle 和错误监控 | 角色×页面×状态矩阵通过；生产构建无示例数据 | in_progress |
 | ENT-UI-011 | Flutter 企业入口 | UI-001/002、CORE-002 | 工作台、会议、接管、告警和我的入口 | 不复制批量管理；离线/越权不显示乐观成功 | in_progress |
-| ENT-UI-012 | Web 访客参会壳 | CORE-003、MTG-002 | guest token 入会、设备检查、字幕和共享入口 | token 仅访问指定 meeting；不暴露租户导航和成员数据 | todo |
+| ENT-UI-012 | Web 访客参会壳 | CORE-003、MTG-002 | guest token 入会、设备检查、字幕和共享入口 | token 仅访问指定 meeting；不暴露租户导航和成员数据 | in_progress |
 
-`ENT-CORE-003` 的生产脚手架、登录和构建已完成；`ENT-UI-001/002/003/005/006/007` 已进入验收，`ENT-UI-004/008/009/010/011` 因暂缓测试保持开发中。Provider capability、租户生命周期 job、成员关系、知识/术语/话术版本、区域、权益、预算和用量聚合已使用服务端真值；Flutter 企业会议和接管 API 未完成时继续明确显示未就绪。静态 HTML 原型、未执行的测试定义和静态无障碍检查不进入生产验收，也不能替代浏览器、键盘、axe、视觉回归和真机矩阵。
+`ENT-CORE-003` 的生产脚手架、登录和构建已完成；`ENT-UI-001/002/003/005/006/007` 已进入验收，`ENT-UI-004/008/009/010/011/012` 因暂缓测试或依赖未完成保持开发中。Provider capability、租户生命周期 job、成员关系、知识/术语/话术版本、区域、权益、预算和用量聚合已使用服务端真值；Flutter 企业会议/接管和 Web guest session API 未完成时继续明确显示未就绪。静态 HTML 原型、未执行的测试定义和静态无障碍检查不进入生产验收，也不能替代浏览器、键盘、axe、视觉回归和真机矩阵。
 
 ## 4. P0 企业会议
 

@@ -1,6 +1,6 @@
 # 无界AI企业版 UI 详细设计
 
-版本：v1.7
+版本：v1.8
 日期：2026-07-19
 状态：设计基线；企业 Web 公共组件、首批设置/工作台和响应式/主题/无障碍代码候选已实现，正式验收仍在开发
 
@@ -235,6 +235,9 @@ budget、usage aggregate 和显式 session trace report。卡片沿用同一 Mat
 - 会中布局支持画面优先、字幕优先、并排和移动端浮动字幕。
 - 共享控制使用 `screen_share_outlined`；主持人强制停止显示共享者、generation 和影响说明。
 - OCR 未启用或失败时保留原共享画面，不显示空白翻译层。
+- Web 访客页只显示品牌、邀请状态、设备检查、字幕和共享能力，不显示企业侧栏、tenant selector 或成员资料。
+- 访客邀请只接受 fragment，地址清除失败显示无效；没有 guest session 时字幕和共享入口禁用并显示“尚未就绪”。
+- 麦克风检查必须由用户点击，检查完成立即停止 track；共享在取得服务端租约前不得调用屏幕权限。
 
 ### 8.5 客户与线索
 
@@ -322,4 +325,4 @@ budget、usage aggregate 和显式 session trace report。卡片沿用同一 Mat
 
 设计评审原型应包含工作台、外呼活动、客服坐席台、企业会议、知识、审计和成员设置，并使用同一导航、颜色、圆角和 Material Icons。原型数据必须标注“设计示例”。
 
-`ENT-CORE-003` 负责真实 Web 壳、登录会话、路由和生产构建，`ENT-UI-001` 负责生产令牌与 Material Icons 注册表，两项现已进入 `ready_for_acceptance`。`ENT-UI-002` 已实现 active membership 切换、共享 scope 真值、九角色导航和直接/嵌套路由 guard；`ENT-UI-003` 已实现 loading、empty、not_ready、degraded、forbidden、conflict、processing、failed 八态注册表、ARIA 语义、trace ID 与行动入口。`ENT-UI-009` 已形成响应式、主题、动态字号和键盘语义代码候选；`ENT-UI-010` 已定义三浏览器引擎、角色×路由、五档宽度、双主题、键盘、axe、视觉和 bundle/遥测门禁；`ENT-UI-011` 已形成重新校验企业上下文、scope-aware 五入口和失败闭合的 Flutter 代码候选。三项因未运行完整浏览器/Flutter test、动态字体、键盘、axe、视觉回归或真机矩阵仍保持 `in_progress`。本文、未执行的自动化定义、静态原型和静态检查本身仍不能作为生产验收证据。
+`ENT-CORE-003` 负责真实 Web 壳、登录会话、路由和生产构建，`ENT-UI-001` 负责生产令牌与 Material Icons 注册表，两项现已进入 `ready_for_acceptance`。`ENT-UI-002` 已实现 active membership 切换、共享 scope 真值、九角色导航和直接/嵌套路由 guard；`ENT-UI-003` 已实现 loading、empty、not_ready、degraded、forbidden、conflict、processing、failed 八态注册表、ARIA 语义、trace ID 与行动入口。`ENT-UI-009` 已形成响应式、主题、动态字号和键盘语义代码候选；`ENT-UI-010` 已定义三浏览器引擎、角色×路由、五档宽度、双主题、键盘、axe、视觉和 bundle/遥测门禁；`ENT-UI-011` 已形成重新校验企业上下文、scope-aware 五入口和失败闭合的 Flutter 代码候选；`ENT-UI-012` 已形成 AuthProvider 隔离、fragment 凭据清理、设备检查和明确 not_ready 的 Web 访客壳。后四项因未运行完整浏览器/Flutter test、token 攻击、设备权限、动态字体、键盘、axe、视觉回归或真机矩阵，且 MTG-001/002 未实现，仍保持 `in_progress`。本文、未执行的自动化定义、静态原型和静态检查本身仍不能作为生产验收证据。

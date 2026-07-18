@@ -4,6 +4,7 @@ import { AppShell } from "./components/AppShell.js";
 import { StatusPanel } from "./components/StatusPanel.js";
 import { BlockedPage } from "./pages/BlockedPage.js";
 import { LoginPage } from "./pages/LoginPage.js";
+import { GuestMeetingPage } from "./pages/GuestMeetingPage.js";
 import { TenantPickerPage } from "./pages/TenantPickerPage.js";
 import { EnterpriseThemeProvider } from "./enterprise-theme.js";
 
@@ -11,11 +12,21 @@ export function EnterpriseApp() {
   return (
     <BrowserRouter>
       <EnterpriseThemeProvider>
-        <AuthProvider>
-          <AppRoutes />
-        </AuthProvider>
+        <Routes>
+          <Route path="/join/:meetingId" element={<GuestMeetingPage />} />
+          <Route path="/join/*" element={<GuestMeetingPage />} />
+          <Route path="*" element={<MemberEntry />} />
+        </Routes>
       </EnterpriseThemeProvider>
     </BrowserRouter>
+  );
+}
+
+function MemberEntry() {
+  return (
+    <AuthProvider>
+      <AppRoutes />
+    </AuthProvider>
   );
 }
 

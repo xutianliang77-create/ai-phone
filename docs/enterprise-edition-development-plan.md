@@ -1,6 +1,6 @@
 # 无界AI企业版开发方案与计划
 
-版本：v1.29
+版本：v1.30
 日期：2026-07-19
 状态：E0 执行计划，已对齐统一通讯平台和 PostgreSQL Primary 收敛
 
@@ -35,6 +35,7 @@
 - `ENT-UI-009` 已实现持久化 system/light/dark 主题选择、浅深色品牌令牌、响应式租户/导航/页面收敛、动态字号、路由焦点、跳转主内容、可聚焦横向数据区和真实按钮/表格语义。当前仅形成静态代码候选；320/600/960/1280/1440、200% 缩放、键盘、axe、视觉回归和真机仍待 `ENT-UI-010` 恢复测试后验收，因此保持 `in_progress`。
 - `ENT-UI-010` 已实现三浏览器引擎、九角色、五档宽度、双主题、键盘、axe 和视觉回归的 Playwright 门禁定义，以及 release matrix、bundle 体积/敏感信息/fixture/元数据扫描、clean HEAD 约束和脱敏客户端错误/性能事件链路。CI 已对齐 Node 24 并上传失败证据；本轮未运行 unit/API/E2E 或生成视觉基线，release gate 仍会失败闭合，任务保持 `in_progress`。
 - `ENT-UI-011` 已实现与个人主导航隔离的 Flutter 企业入口：每次进入重新读取账号、active membership、签名 route document、`/enterprise/v1/me` scopes 和 Provider capability，严格核对 member/tenant/region/cell/route epoch/公开 URL/有效期。工作台与告警只展示已取得的服务端真值，会议/接管按 scope 发现且在 tenant-scoped API 未实现时明确 `not_ready`，不复用个人版路径。当前仅通过 `flutter analyze`，Flutter test、构建、真机、动态字体和横竖屏按要求未执行，任务保持 `in_progress`。
+- `ENT-UI-012` 已实现公开 `/join/:meetingId` 访客壳并放在成员 AuthProvider 之外；邀请凭据只接受 fragment、清除地址后只驻留内存，query/格式错误/历史清理失败均拒绝。设备检查只在用户点击后短时打开麦克风并立即停止，屏幕共享仅探测能力；访客壳不读取 tenant/member，不调用个人 Call Link。由于 `ENT-MTG-001/002` 未实现，本批不交换 guest token、不连接 RTC，字幕和共享明确 `not_ready`。当前仅通过 typecheck、生产构建、bundle 和文件规模静态门禁，任务保持 `in_progress`。
 - PostgreSQL、SaaS 控制面、对象存储、正式域名、真实 Provider 和目标国家合规确认均未通过门禁。
 - 当前开发必须继续使用独立企业 worktree；个人版声纹和部署 WIP 不进入企业提交。
 - 公共 PostgreSQL Primary、统一通讯、Billing 和 Product Records 的稳定代码基线已导入；`ENT-DATA-008` 和 `ENT-CORE-013/014/015` 已完成代码与本地自动化。`ENT-DATA-009` 已产出全表切换/对账/逻辑恢复工具、签名证据和一次性本地 PostgreSQL 16 演练，进入 `ready_for_acceptance`；不能继承主产品环境验收，也未通过异地 PITR/H3。
@@ -295,8 +296,8 @@ CORE-001/002 验收
 | 10 | `ENT-CORE-007/010/012` | 完成 tenant billing account、套餐、entitlement、预算、ledger 和账期聚合 |
 | 11 | `ENT-CORE-004/005` | 知识、术语和话术版本闭环均已完成代码与本地机制验证，进入验收 |
 | 12 | `ENT-DATA-009` | 验收 staging 全量/增量 hash、writer fence、切换/回滚和旧写入者清退证据；本地机制代码已完成 |
-| 13 | `ENT-UI-004..011` | 完成公共页面、响应式、无障碍、Web 发布门禁和 Flutter 企业入口代码候选 |
+| 13 | `ENT-UI-004..012` | 完成公共页面、响应式、无障碍、Web 发布门禁、Flutter 企业入口和访客参会壳代码候选 |
 
 E0 完成后再启动 `ENT-MTG-001` 主链；允许提前做协议 spike，但不能把未接入真实 tenant/data/readiness 的会议页面计为 E1 完成。
 
-当前进展：`ENT-CORE-003/004/005` 已完成并等待验收；`ENT-DATA-001` 已完成二十段 schema 代码，等待 staging PostgreSQL migrate/restore/PITR 证据；`ENT-DATA-002/003/004/007/008/009` 已完成 Repository、可靠事件、演示导入、统一 Primary Runtime、公共通讯 tenant scope，以及全库签名切换/恢复工具；`ENT-CORE-013/014/015`、`ENT-CORE-007/010/012` 已完成代码和自动化并进入验收；`ENT-UI-001/002/003/005/006/007` 已进入验收。`ENT-OBS-001`、`ENT-UI-004/008/009/010/011` 已分别实现会话报告、工作台真值、审计/分析/受控导出、响应式/主题/无障碍、Web release gate 和 Flutter 企业入口代码候选，但因本轮暂缓测试保持 `in_progress`。下一优先级为实施 `ENT-UI-012` Web 访客参会壳；恢复测试时补齐前述 UI 任务的 API/component/RBAC/forced-RLS/Flutter/浏览器/axe/视觉矩阵并生成视觉基线。staging `ENT-DATA-009` 和 `ENT-REL-002/003` 的对象清理、跨故障域/PITR 仍未通过。
+当前进展：`ENT-CORE-003/004/005` 已完成并等待验收；`ENT-DATA-001` 已完成二十段 schema 代码，等待 staging PostgreSQL migrate/restore/PITR 证据；`ENT-DATA-002/003/004/007/008/009` 已完成 Repository、可靠事件、演示导入、统一 Primary Runtime、公共通讯 tenant scope，以及全库签名切换/恢复工具；`ENT-CORE-013/014/015`、`ENT-CORE-007/010/012` 已完成代码和自动化并进入验收；`ENT-UI-001/002/003/005/006/007` 已进入验收。`ENT-OBS-001`、`ENT-UI-004/008/009/010/011/012` 已分别实现会话报告、工作台真值、审计/分析/受控导出、响应式/主题/无障碍、Web release gate、Flutter 企业入口和访客参会壳代码候选，但因本轮暂缓测试或 MTG 依赖未完成保持 `in_progress`。下一优先级进入 `ENT-MTG-001` Meeting 聚合与 `ENT-MTG-002` 创建/入会服务端主链；恢复测试时补齐前述 UI 任务的 API/component/RBAC/forced-RLS/Flutter/浏览器/axe/视觉矩阵并生成视觉基线。staging `ENT-DATA-009` 和 `ENT-REL-002/003` 的对象清理、跨故障域/PITR 仍未通过。

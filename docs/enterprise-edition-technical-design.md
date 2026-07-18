@@ -1,6 +1,6 @@
 # 无界AI企业版详细技术设计
 
-版本：v1.28
+版本：v1.29
 日期：2026-07-19
 状态：统一通讯平台与 PostgreSQL Primary 收敛详细技术方案
 
@@ -1408,6 +1408,23 @@ cell、route epoch、expiry、非本地 HTTPS/WSS URL、非空签名和 capabili
 会议列表与接管队列 API 尚未实现，两页固定 `not_ready`，不读取个人数据或提交副作用。
 
 本批仅通过 Flutter 静态分析；未运行 test、build、真机、动态字体或横竖屏，故 `ENT-UI-011` 保持 `in_progress`。
+
+### 19.6 Web 访客参会壳
+
+公开路由固定为 `/join/:meetingId#token=<opaque>`，在 React 路由最外层优先匹配，完全绕过成员
+`AuthProvider/AppShell`。因此访客页不会恢复账号 session、请求 membership/tenant route、渲染企业导航或暴露成员数据。
+meeting ID 只接受8至128位 URL-safe 标识；guest token 只接受32至4096位不含空白的 URL-safe opaque 值。
+query token 一律拒绝，避免被服务端 access log/referrer 捕获；fragment 读取后立即用 `history.replaceState` 清除地址栏，
+清除失败即失败闭合。凭据只驻留当前 JavaScript 内存，不写 local/session storage、不显示、不记录。
+
+设备检查不等于入会。麦克风只在访客点击后调用 `getUserMedia({audio:true,video:false})`，获得后立即停止全部 track；
+错误只映射为 permission denied/unavailable，不显示原始异常。屏幕共享只探测 `getDisplayMedia` 是否存在，不调用；
+真正共享必须等待 meeting participant、主持人策略与服务端 lease。字幕和共享按钮在 meeting session 建立前禁用。
+
+`ENT-MTG-001/002` 尚未实现 Meeting Repository/runtime、guest token exchange 和 participant/RTC grant，本批不会把
+个人 Call Link guest-ticket 当作企业会议凭据，也不会向不存在的接口发送 token。页面对有效邀请明确显示
+`not_ready`，没有任何入会成功状态。服务端主链完成后必须把 token 绑定单一 tenant/meeting/participant/role/expiry/
+track permission，并由客户端复核响应 meeting ID 后才能进入 RTC。当前 `ENT-UI-012` 保持 `in_progress`。
 
 ## 20. 错误、重试和客户端动作
 
