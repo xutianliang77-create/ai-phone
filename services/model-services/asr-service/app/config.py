@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from hashlib import sha256
 import os
 
 
@@ -6,6 +7,7 @@ import os
 class AsrConfig:
     provider: str = "mock"
     api_key: str = ""
+    metrics_bearer_token: str = ""
     mock_emit_every_frames: int = 8
     model_version: str = "mock-asr-v0.1.0"
     vad_provider: str = "rms"
@@ -46,11 +48,64 @@ class AsrConfig:
     qwen3_context: str = ""
     qwen3_english_context: str = ""
 
+    def runtime_parameters(self) -> dict[str, object]:
+        common: dict[str, object] = {
+            "vadProvider": self.vad_provider,
+            "vadThreshold": self.vad_threshold,
+            "vadWindowMs": self.vad_window_ms,
+            "vadSmoothingFrames": self.vad_smoothing_frames,
+        }
+        if self.provider == "mock":
+            return {**common, "emitEveryFrames": self.mock_emit_every_frames}
+        if self.provider == "sensevoice":
+            return {
+                **common,
+                "model": self.sensevoice_model,
+                "device": self.sensevoice_device,
+                "minAudioMs": self.sensevoice_min_audio_ms,
+                "endpointSilenceMs": self.sensevoice_endpoint_silence_ms,
+                "maxAudioMs": self.sensevoice_max_audio_ms,
+                "prerollMs": self.sensevoice_preroll_ms,
+                "vadEnergyThreshold": self.sensevoice_vad_energy_threshold,
+            }
+        if self.provider == "fireredasr2_aed":
+            return {
+                **common,
+                "useGpu": self.firered_use_gpu,
+                "beamSize": self.firered_beam_size,
+                "minAudioMs": self.firered_min_audio_ms,
+                "endpointSilenceMs": self.firered_endpoint_silence_ms,
+                "maxAudioMs": self.firered_max_audio_ms,
+                "prerollMs": self.firered_preroll_ms,
+                "vadEnergyThreshold": self.firered_vad_energy_threshold,
+            }
+        return {
+            **common,
+            "dtype": self.qwen3_dtype,
+            "deviceMap": self.qwen3_device_map,
+            "maxInferenceBatchSize": self.qwen3_max_inference_batch_size,
+            "maxNewTokens": self.qwen3_max_new_tokens,
+            "minAudioMs": self.qwen3_min_audio_ms,
+            "endpointSilenceMs": self.qwen3_endpoint_silence_ms,
+            "endpointSilenceByMode": {
+                "conversation": self.qwen3_conversation_endpoint_silence_ms,
+                "listening": self.qwen3_listening_endpoint_silence_ms,
+                "call_link": self.qwen3_call_link_endpoint_silence_ms,
+                "pstn": self.qwen3_pstn_endpoint_silence_ms,
+            },
+            "maxAudioMs": self.qwen3_max_audio_ms,
+            "prerollMs": self.qwen3_preroll_ms,
+            "vadEnergyThreshold": self.qwen3_vad_energy_threshold,
+            "contextSha256": _text_fingerprint(self.qwen3_context),
+            "englishContextSha256": _text_fingerprint(self.qwen3_english_context),
+        }
+
 
 def load_config() -> AsrConfig:
     return AsrConfig(
         provider=os.getenv("ASR_SERVICE_PROVIDER", "mock"),
         api_key=os.getenv("ASR_SERVICE_API_KEY", "").strip(),
+        metrics_bearer_token=os.getenv("METRICS_BEARER_TOKEN", "").strip(),
         mock_emit_every_frames=int(os.getenv("ASR_MOCK_EMIT_EVERY_FRAMES", "8")),
         model_version=os.getenv("ASR_MODEL_VERSION", "mock-asr-v0.1.0"),
         vad_provider=os.getenv("ASR_VAD_PROVIDER", "rms"),
@@ -119,3 +174,7 @@ def load_config() -> AsrConfig:
         qwen3_context=os.getenv("ASR_QWEN3_CONTEXT", ""),
         qwen3_english_context=os.getenv("ASR_QWEN3_ENGLISH_CONTEXT", ""),
     )
+
+
+def _text_fingerprint(value: str) -> str:
+    return sha256(value.encode("utf-8")).hexdigest()

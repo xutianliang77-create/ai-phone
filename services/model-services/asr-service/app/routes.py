@@ -16,10 +16,19 @@ from app.schemas import (
     HealthResponse,
     VadDiagnosticsResponse,
 )
+from app.runtime_observability import (
+    RuntimeIdentity,
+    prometheus_model_metrics,
+    require_metrics_token,
+)
 from app.service import AsrService
 
 
-def create_router(service: AsrService, config: AsrConfig) -> APIRouter:
+def create_router(
+    service: AsrService,
+    config: AsrConfig,
+    runtime_identity: RuntimeIdentity,
+) -> APIRouter:
     router = APIRouter()
 
     @router.get("/health", response_model=HealthResponse)
@@ -35,6 +44,18 @@ def create_router(service: AsrService, config: AsrConfig) -> APIRouter:
             vadConfiguredProvider=str(vad_health["configuredProvider"]),
             vadFallbackReason=vad_health.get("fallbackReason"),
             vadModelFingerprint=vad_health.get("modelFingerprint"),
+            runtimeSignatureVersion=runtime_identity.signature_version,
+            runtimeFingerprint=runtime_identity.fingerprint,
+        )
+
+    @router.get("/metrics")
+    async def metrics(
+        authorization: str | None = Header(default=None),
+    ) -> Response:
+        require_metrics_token(config.metrics_bearer_token, authorization)
+        return Response(
+            content=prometheus_model_metrics(runtime_identity, True),
+            media_type="text/plain; version=0.0.4",
         )
 
     @router.get(

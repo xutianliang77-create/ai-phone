@@ -10,14 +10,62 @@ def test_health_route_mock() -> None:
     response = client.get("/health")
 
     assert response.status_code == 200
-    assert response.json() == {
+    body = response.json()
+    fingerprint = body.pop("runtimeFingerprint")
+    assert len(fingerprint) == 64
+    assert body == {
         "status": "ok",
         "service": "translation-service",
         "provider": "mock",
         "modelVersion": "tencent/Hy-MT2-1.8B",
         "available": True,
         "reason": None,
+        "runtimeSignatureVersion": 1,
     }
+
+
+def test_metrics_exposes_runtime_identity_without_secrets() -> None:
+    client = TestClient(create_app(TranslationConfig(
+        api_key="translation-secret",
+        metrics_bearer_token="metrics-secret",
+        hymt2_model_dir="/secret/model/path",
+    )))
+
+    assert client.get("/metrics").status_code == 401
+    response = client.get(
+        "/metrics",
+        headers={"authorization": "Bearer metrics-secret"},
+    )
+
+    assert response.status_code == 200
+    assert "wujie_model_service_info" in response.text
+    assert client.get("/health").json()["runtimeFingerprint"] in response.text
+    assert "translation-secret" not in response.text
+    assert "metrics-secret" not in response.text
+    assert "/secret/model/path" not in response.text
+
+
+def test_runtime_fingerprint_changes_with_effective_parameters() -> None:
+    first = TestClient(create_app(TranslationConfig(
+        provider="hymt2",
+        hymt2_model_dir="/missing/model",
+        max_new_tokens=64,
+    )))
+    second = TestClient(create_app(TranslationConfig(
+        provider="hymt2",
+        hymt2_model_dir="/missing/model",
+        max_new_tokens=128,
+    )))
+
+    assert first.get("/health").json()["runtimeFingerprint"] != (
+        second.get("/health").json()["runtimeFingerprint"]
+    )
+
+
+def test_metrics_fails_closed_without_a_bearer_token() -> None:
+    client = TestClient(create_app(TranslationConfig()))
+
+    assert client.get("/metrics").status_code == 503
 
 
 def test_models_route_is_openai_compatible() -> None:

@@ -3,7 +3,7 @@ import asyncio
 from time import time
 from uuid import uuid4
 
-from fastapi import APIRouter, Header, HTTPException, status
+from fastapi import APIRouter, Header, HTTPException, Response, status
 from fastapi.responses import StreamingResponse
 import json
 
@@ -17,10 +17,19 @@ from app.schemas import (
     ModelCard,
     ModelsResponse,
 )
+from app.runtime_observability import (
+    RuntimeIdentity,
+    prometheus_model_metrics,
+    require_metrics_token,
+)
 from app.service import TranslationService
 
 
-def create_router(service: TranslationService, config: TranslationConfig) -> APIRouter:
+def create_router(
+    service: TranslationService,
+    config: TranslationConfig,
+    runtime_identity: RuntimeIdentity,
+) -> APIRouter:
     router = APIRouter()
 
     @router.get("/health", response_model=HealthResponse)
@@ -33,6 +42,19 @@ def create_router(service: TranslationService, config: TranslationConfig) -> API
             modelVersion=config.model_version,
             available=available,
             reason=reason,
+            runtimeSignatureVersion=runtime_identity.signature_version,
+            runtimeFingerprint=runtime_identity.fingerprint,
+        )
+
+    @router.get("/metrics")
+    async def metrics(
+        authorization: str | None = Header(default=None),
+    ) -> Response:
+        require_metrics_token(config.metrics_bearer_token, authorization)
+        available, _reason = service.health()
+        return Response(
+            content=prometheus_model_metrics(runtime_identity, available),
+            media_type="text/plain; version=0.0.4",
         )
 
     @router.get("/v1/models", response_model=ModelsResponse)

@@ -2,7 +2,7 @@ from hmac import compare_digest
 import base64
 import json
 
-from fastapi import APIRouter, Header, HTTPException, status
+from fastapi import APIRouter, Header, HTTPException, Response, status
 from fastapi.responses import StreamingResponse
 
 from app.config import TtsConfig
@@ -15,10 +15,19 @@ from app.schemas import (
     VoiceReferenceUploadResponse,
     VoicePresetCatalogResponse,
 )
+from app.runtime_observability import (
+    RuntimeIdentity,
+    prometheus_model_metrics,
+    require_metrics_token,
+)
 from app.service import TtsService
 
 
-def create_router(service: TtsService, config: TtsConfig) -> APIRouter:
+def create_router(
+    service: TtsService,
+    config: TtsConfig,
+    runtime_identity: RuntimeIdentity,
+) -> APIRouter:
     router = APIRouter()
 
     @router.get("/health", response_model=HealthResponse)
@@ -36,6 +45,19 @@ def create_router(service: TtsService, config: TtsConfig) -> APIRouter:
             outputSampleRate=output_sample_rate,
             voicePresetCatalogVersion=service.preset_catalog().version,
             availableVoicePresetCount=len(service.preset_catalog().presets),
+            runtimeSignatureVersion=runtime_identity.signature_version,
+            runtimeFingerprint=runtime_identity.fingerprint,
+        )
+
+    @router.get("/metrics")
+    async def metrics(
+        authorization: str | None = Header(default=None),
+    ) -> Response:
+        require_metrics_token(config.metrics_bearer_token, authorization)
+        available, _reason = service.health()
+        return Response(
+            content=prometheus_model_metrics(runtime_identity, available),
+            media_type="text/plain; version=0.0.4",
         )
 
     @router.get("/voice-presets", response_model=VoicePresetCatalogResponse)

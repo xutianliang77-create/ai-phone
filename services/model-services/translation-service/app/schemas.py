@@ -1,3 +1,5 @@
+from typing import Literal
+
 from pydantic import BaseModel, Field
 
 
@@ -8,6 +10,8 @@ class HealthResponse(BaseModel):
     modelVersion: str
     available: bool
     reason: str | None = None
+    runtimeSignatureVersion: Literal[1] = 1
+    runtimeFingerprint: str = Field(pattern=r"^[a-f0-9]{64}$")
 
 
 class ChatMessage(BaseModel):

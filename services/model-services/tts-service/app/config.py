@@ -12,6 +12,7 @@ class TtsConfig:
     provider: str = "mock"
     model_version: str = "mock-tts-v0.1.0"
     api_key: str = ""
+    metrics_bearer_token: str = ""
     mock_sample_rate: int = 16000
     voxcpm2_model_dir: str = DEFAULT_VOXCPM2_MODEL_DIR
     voxcpm2_cfg_value: float = 2.0
@@ -21,12 +22,23 @@ class TtsConfig:
     voice_reference_dir: str = ""
     voice_preset_manifest_path: str = ""
 
+    def runtime_parameters(self) -> dict[str, object]:
+        if self.provider == "mock":
+            return {"sampleRate": self.mock_sample_rate}
+        return {
+            "cfgValue": self.voxcpm2_cfg_value,
+            "inferenceTimesteps": self.voxcpm2_inference_timesteps,
+            "hifiInferenceTimesteps": self.voxcpm2_hifi_inference_timesteps,
+            "loadDenoiser": self.voxcpm2_load_denoiser,
+        }
+
 
 def load_config() -> TtsConfig:
     return TtsConfig(
         provider=os.getenv("TTS_SERVICE_PROVIDER", "mock"),
         model_version=os.getenv("TTS_MODEL_VERSION", "mock-tts-v0.1.0"),
         api_key=os.getenv("TTS_SERVICE_API_KEY", "").strip(),
+        metrics_bearer_token=os.getenv("METRICS_BEARER_TOKEN", "").strip(),
         mock_sample_rate=int(os.getenv("TTS_MOCK_SAMPLE_RATE", "16000")),
         voxcpm2_model_dir=os.getenv("TTS_VOXCPM2_MODEL_DIR", DEFAULT_VOXCPM2_MODEL_DIR),
         voxcpm2_cfg_value=float(os.getenv("TTS_VOXCPM2_CFG_VALUE", "2.0")),

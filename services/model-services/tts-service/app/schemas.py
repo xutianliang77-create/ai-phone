@@ -35,6 +35,8 @@ class HealthResponse(BaseModel):
     outputSampleRate: SampleRate | None = None
     voicePresetCatalogVersion: str | None = None
     availableVoicePresetCount: int = Field(default=0, ge=0)
+    runtimeSignatureVersion: Literal[1] = 1
+    runtimeFingerprint: str = Field(pattern=r"^[a-f0-9]{64}$")
 
 
 class TtsVoiceConfig(BaseModel):

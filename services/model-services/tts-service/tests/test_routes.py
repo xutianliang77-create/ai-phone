@@ -11,7 +11,10 @@ def test_health_route_mock() -> None:
     response = client.get("/health")
 
     assert response.status_code == 200
-    assert response.json() == {
+    body = response.json()
+    fingerprint = body.pop("runtimeFingerprint")
+    assert len(fingerprint) == 64
+    assert body == {
         "status": "ok",
         "service": "tts-service",
         "provider": "mock",
@@ -22,7 +25,44 @@ def test_health_route_mock() -> None:
         "outputSampleRate": 16000,
         "voicePresetCatalogVersion": "unconfigured",
         "availableVoicePresetCount": 0,
+        "runtimeSignatureVersion": 1,
     }
+
+
+def test_metrics_exposes_runtime_identity_without_secrets() -> None:
+    client = TestClient(create_app(TtsConfig(
+        api_key="tts-secret",
+        metrics_bearer_token="metrics-secret",
+        voxcpm2_model_dir="/secret/model/path",
+    )))
+
+    assert client.get("/metrics").status_code == 401
+    response = client.get(
+        "/metrics",
+        headers={"authorization": "Bearer metrics-secret"},
+    )
+
+    assert response.status_code == 200
+    assert "wujie_model_service_up" in response.text
+    assert client.get("/health").json()["runtimeFingerprint"] in response.text
+    assert "tts-secret" not in response.text
+    assert "metrics-secret" not in response.text
+    assert "/secret/model/path" not in response.text
+
+
+def test_runtime_fingerprint_changes_with_effective_parameters() -> None:
+    first = TestClient(create_app(TtsConfig(mock_sample_rate=16000)))
+    second = TestClient(create_app(TtsConfig(mock_sample_rate=24000)))
+
+    assert first.get("/health").json()["runtimeFingerprint"] != (
+        second.get("/health").json()["runtimeFingerprint"]
+    )
+
+
+def test_metrics_fails_closed_without_a_bearer_token() -> None:
+    client = TestClient(create_app(TtsConfig()))
+
+    assert client.get("/metrics").status_code == 503
 
 
 def test_synthesize_route_returns_tts_contract() -> None:

@@ -19,6 +19,8 @@ class HealthResponse(BaseModel):
     vadConfiguredProvider: str
     vadFallbackReason: str | None = None
     vadModelFingerprint: str | None = None
+    runtimeSignatureVersion: Literal[1] = 1
+    runtimeFingerprint: str = Field(pattern=r"^[a-f0-9]{64}$")
 
 
 class AsrCorrectionTerm(BaseModel):

@@ -14,7 +14,10 @@ def test_health_route() -> None:
     response = client.get("/health")
 
     assert response.status_code == 200
-    assert response.json() == {
+    body = response.json()
+    fingerprint = body.pop("runtimeFingerprint")
+    assert len(fingerprint) == 64
+    assert body == {
         "status": "ok",
         "service": "asr-service",
         "provider": "mock",
@@ -24,7 +27,43 @@ def test_health_route() -> None:
         "vadConfiguredProvider": "rms",
         "vadFallbackReason": None,
         "vadModelFingerprint": None,
+        "runtimeSignatureVersion": 1,
     }
+
+
+def test_runtime_fingerprint_changes_with_effective_parameters() -> None:
+    first = TestClient(create_app(AsrConfig(mock_emit_every_frames=1)))
+    second = TestClient(create_app(AsrConfig(mock_emit_every_frames=2)))
+
+    assert first.get("/health").json()["runtimeFingerprint"] != (
+        second.get("/health").json()["runtimeFingerprint"]
+    )
+
+
+def test_metrics_exposes_runtime_identity_without_secrets() -> None:
+    client = TestClient(create_app(AsrConfig(
+        api_key="asr-secret",
+        metrics_bearer_token="metrics-secret",
+    )))
+
+    unauthorized = client.get("/metrics")
+    response = client.get(
+        "/metrics",
+        headers={"authorization": "Bearer metrics-secret"},
+    )
+
+    assert unauthorized.status_code == 401
+    assert response.status_code == 200
+    assert "wujie_model_service_info" in response.text
+    assert client.get("/health").json()["runtimeFingerprint"] in response.text
+    assert "asr-secret" not in response.text
+    assert "metrics-secret" not in response.text
+
+
+def test_metrics_fails_closed_without_a_bearer_token() -> None:
+    client = TestClient(create_app(AsrConfig()))
+
+    assert client.get("/metrics").status_code == 503
 
 
 def test_diagnostics_route_reports_unavailable_for_mock_engine() -> None:
