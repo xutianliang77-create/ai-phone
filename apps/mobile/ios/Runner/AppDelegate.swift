@@ -16,6 +16,7 @@ import UIKit
   )
   private let ocrBridge = OcrBridge()
   private let storeKitBridge = StoreKitBridge()
+  private let enterpriseReplayKitBridge = EnterpriseReplayKitBridge()
 
   override func application(
     _ application: UIApplication,
@@ -60,6 +61,11 @@ import UIKit
       forPlugin: "StoreKitBridge"
     ) {
       storeKitBridge.register(messenger: registrar.messenger())
+    }
+    if let registrar = engineBridge.pluginRegistry.registrar(
+      forPlugin: "EnterpriseReplayKitBridge"
+    ) {
+      enterpriseReplayKitBridge.register(messenger: registrar.messenger())
     }
   }
 }

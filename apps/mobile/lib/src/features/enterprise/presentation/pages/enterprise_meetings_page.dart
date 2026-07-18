@@ -4,8 +4,11 @@ import 'package:flutter/material.dart';
 
 import '../../data/enterprise_meeting_models.dart';
 import '../../data/enterprise_meeting_room_client.dart';
+import '../../data/enterprise_meeting_screen_share_controller.dart';
 import '../../data/enterprise_mobile_api_client.dart';
 import '../../data/enterprise_mobile_models.dart';
+import '../widgets/enterprise_meeting_room_card.dart';
+import '../widgets/enterprise_meeting_screen_share_card.dart';
 import '../widgets/enterprise_mobile_status_panel.dart';
 import '../widgets/enterprise_meeting_translation_card.dart';
 
@@ -35,6 +38,11 @@ class _EnterpriseMeetingsPageState extends State<EnterpriseMeetingsPage> {
   bool _joining = false;
   String _captionLanguage = 'zh';
   bool _translatedAudioEnabled = false;
+  EnterpriseMeetingScreenShareController? _screenShareController;
+  EnterpriseMeetingScreenShareSnapshot _screenShare =
+      const EnterpriseMeetingScreenShareSnapshot.idle();
+  String? _activeParticipantId;
+  bool _canShareScreen = false;
 
   @override
   void initState() {
@@ -50,8 +58,11 @@ class _EnterpriseMeetingsPageState extends State<EnterpriseMeetingsPage> {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.workspace.context.tenant.id !=
         widget.workspace.context.tenant.id) {
+      unawaited(_screenShareController?.dispose());
+      _screenShareController = null;
       unawaited(_roomClient.disconnect());
       _activeMeetingId = null;
+      _activeParticipantId = null;
       unawaited(_load());
     }
   }
@@ -59,6 +70,7 @@ class _EnterpriseMeetingsPageState extends State<EnterpriseMeetingsPage> {
   @override
   void dispose() {
     unawaited(_roomSubscription?.cancel());
+    unawaited(_screenShareController?.dispose());
     unawaited(_roomClient.dispose());
     super.dispose();
   }
@@ -84,12 +96,21 @@ class _EnterpriseMeetingsPageState extends State<EnterpriseMeetingsPage> {
             setState(() => _translatedAudioEnabled = value),
       ),
       if (_room.status != EnterpriseMeetingRoomStatus.disconnected)
-        _RoomCard(
+        EnterpriseMeetingRoomCard(
           snapshot: _room,
           onMicrophone: () => _roomClient.setMicrophoneEnabled(
             !_room.microphoneEnabled,
           ),
           onLeave: _leave,
+        ),
+      if (_screenShareController != null && _activeParticipantId != null)
+        EnterpriseMeetingScreenShareCard(
+          snapshot: _screenShare,
+          participantId: _activeParticipantId!,
+          canShare: _canShareScreen,
+          supported: _screenShareController!.isSupported,
+          onStart: _screenShareController!.start,
+          onStop: _screenShareController!.stop,
         ),
       if (_loading)
         const EnterpriseMobileStatusPanel(
@@ -153,7 +174,7 @@ class _EnterpriseMeetingsPageState extends State<EnterpriseMeetingsPage> {
             ),
             const SizedBox(height: 14),
             FilledButton.icon(
-              onPressed: canJoin && !_joining && _activeMeetingId != meeting.id
+              onPressed: canJoin && !_joining && _activeMeetingId == null
                   ? () => _join(meeting.id)
                   : null,
               icon: const Icon(Icons.login),
@@ -185,19 +206,49 @@ class _EnterpriseMeetingsPageState extends State<EnterpriseMeetingsPage> {
   }
 
   Future<void> _join(String meetingId) async {
+    final workspace = widget.workspace;
+    final tenantId = workspace.context.tenant.id;
     setState(() {
       _joining = true;
       _error = null;
     });
     try {
+      final meeting = _meetings
+          .firstWhere((value) => value.meeting.id == meetingId)
+          .meeting;
       final grant = await widget.client.joinMeeting(
-        widget.workspace,
+        workspace,
         meetingId,
         captionLanguage: _captionLanguage,
         translatedAudioEnabled: _translatedAudioEnabled,
       );
       await _roomClient.connect(grant);
-      if (mounted) setState(() => _activeMeetingId = meetingId);
+      if (!mounted || widget.workspace.context.tenant.id != tenantId) {
+        await _roomClient.disconnect();
+        return;
+      }
+      final canShare = grant.participantRole == 'host' ||
+          meeting.screenShareRole == 'members' &&
+              grant.participantRole == 'member';
+      final controller = EnterpriseMeetingScreenShareController(
+        api: widget.client,
+        workspace: workspace,
+        meetingId: meetingId,
+        participantId: grant.participantId,
+        onSnapshot: (snapshot) {
+          if (mounted) setState(() => _screenShare = snapshot);
+        },
+      );
+      _screenShareController = controller;
+      controller.startPolling();
+      if (mounted) {
+        setState(() {
+          _activeMeetingId = meetingId;
+          _activeParticipantId = grant.participantId;
+          _canShareScreen = canShare;
+          _screenShare = const EnterpriseMeetingScreenShareSnapshot.idle();
+        });
+      }
     } catch (error) {
       if (mounted) setState(() => _error = _errorLabel(error));
     } finally {
@@ -206,48 +257,21 @@ class _EnterpriseMeetingsPageState extends State<EnterpriseMeetingsPage> {
   }
 
   Future<void> _leave() async {
+    final screenShare = _screenShareController;
+    _screenShareController = null;
+    if (screenShare != null) {
+      await screenShare.stop();
+      await screenShare.dispose();
+    }
     await _roomClient.disconnect();
-    if (mounted) setState(() => _activeMeetingId = null);
-  }
-}
-
-class _RoomCard extends StatelessWidget {
-  const _RoomCard({
-    required this.snapshot,
-    required this.onMicrophone,
-    required this.onLeave,
-  });
-
-  final EnterpriseMeetingRoomSnapshot snapshot;
-  final Future<void> Function() onMicrophone;
-  final Future<void> Function() onLeave;
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(18),
-        child: Wrap(
-          spacing: 10,
-          runSpacing: 10,
-          crossAxisAlignment: WrapCrossAlignment.center,
-          children: <Widget>[
-            Text('${_roomStatus(snapshot.status)} · '
-                '${snapshot.remoteParticipantCount} 位远端参会者'),
-            OutlinedButton.icon(
-              onPressed: onMicrophone,
-              icon:
-                  Icon(snapshot.microphoneEnabled ? Icons.mic : Icons.mic_off),
-              label: Text(snapshot.microphoneEnabled ? '静音' : '打开麦克风'),
-            ),
-            OutlinedButton(
-              onPressed: onLeave,
-              child: const Text('离开会议'),
-            ),
-          ],
-        ),
-      ),
-    );
+    if (mounted) {
+      setState(() {
+        _activeMeetingId = null;
+        _activeParticipantId = null;
+        _canShareScreen = false;
+        _screenShare = const EnterpriseMeetingScreenShareSnapshot.idle();
+      });
+    }
   }
 }
 
@@ -283,13 +307,6 @@ String _statusLabel(String status) => switch (status) {
       'cancelled' => '已取消',
       'failed' => '失败',
       _ => status,
-    };
-
-String _roomStatus(EnterpriseMeetingRoomStatus status) => switch (status) {
-      EnterpriseMeetingRoomStatus.connecting => '正在连接',
-      EnterpriseMeetingRoomStatus.connected => '已连接',
-      EnterpriseMeetingRoomStatus.reconnecting => '正在重连',
-      EnterpriseMeetingRoomStatus.disconnected => '已断开',
     };
 
 String _meetingTime(EnterpriseMobileMeeting meeting) {

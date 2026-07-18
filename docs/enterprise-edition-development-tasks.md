@@ -1,6 +1,6 @@
 # 无界AI企业版开发任务
 
-版本：v1.38
+版本：v1.39
 日期：2026-07-19
 状态：E0 开发中，已对齐统一通讯平台和 PostgreSQL Primary 收敛
 
@@ -32,6 +32,7 @@
 - `ENT-CORE-013` 已新增 enterprise `0011` 统一会话绑定表和事务型 Repository：Meeting/Support/Marketing 使用同一 tenant-scoped 公共 session，数据库复合 FK 固定唯一业务归属，route epoch、policy/entitlement 版本和区域快照不可变。状态机覆盖 dispatch/ready/active/degraded/draining/terminal，使用 version、generation 和 event sequence 拒绝旧路由、旧 Worker、重放与非法倒退；代码、定向矩阵和一次性本地 PostgreSQL 16 普通角色 RLS/down-up 验证完成，进入 `ready_for_acceptance`，不代表 A1/H3 或生产门禁通过。
 - `ENT-CORE-014` 已新增 enterprise `0012` Worker dispatch grant、短期 HMAC ticket 和运行时 Adapter。签发从当前 binding 派生 tenant/session/cell/route epoch/generation/capability，capacity reserve 与 dispatch/grant 原子提交；accept/heartbeat/副作用授权/finalize 都重读 binding/grant/lease，cancel 同事务释放容量，旧 route/generation 和迟到结果失败闭合。代码、负向矩阵和一次性本地 PostgreSQL 16 普通角色验证完成，进入 `ready_for_acceptance`，不代表真实多实例、H3 容量或生产门禁通过。
 - `ENT-CORE-015` 已新增 enterprise `0013` 通讯策略版本、purpose-specific 授权证据和不可变运行快照，发布 API 由 `tenant:write` 与签名 route document 双重保护；device/cloud ASR、翻译、TTS 依据有效 readiness/fingerprint 解析，声纹、录音和诊断音频无独立有效授权即禁用。Worker ticket v2 绑定 policy snapshot/version，签发与 lifecycle 都对失效快照、过期 readiness、未允许 capability 和撤回授权失败闭合。代码、负向矩阵和一次性本地 PostgreSQL 16 普通角色 RLS/down-forward 机制验证完成，进入 `ready_for_acceptance`；不代表真实设备/Provider、A1/H2/H3 或生产门禁通过。
+- `ENT-MTG-006` 已形成 iOS ReplayKit 代码候选：Broadcast Upload Extension 通过 App Group Unix socket 向主 App 传递视频样本，App Group 控制清单只保存 share/generation/publisher/lease/nonce，不保存 RTC token；Flutter 使用独立最小权限 publisher Room、25秒激活超时、10秒租约续期和系统停止回收，并按会议策略守卫入口。当前只通过 Flutter/Swift/Xcode 工程静态检查，未构建或安装 App，也未执行真机、真实 LiveKit、后台、网络切换或租约攻击测试，保持 `in_progress`。
 - `ENT-CORE-007` 已新增 enterprise `0014` tenant usage budget、usage hold 和 append-only threshold alert，并增强 `usage_ledger` 的 budget/hold/source/hash 归属。reserve 在 tenant 行锁内汇总已结算量和有效 hold，settle 只追加 ledger 并单向结束 hold；同幂等键不同 hash 拒绝，预算超限在副作用前失败闭合。代码和自动化完成，进入 `ready_for_acceptance`；真实 PostgreSQL 并发、长稳和账务抽样仍待验收。
 - `ENT-CORE-010` 已新增 enterprise `0015` tenant billing account、不可变 plan version、活动 subscription 唯一约束、不可变 entitlement snapshot 和 append-only change history。套餐变更只引用服务端 plan，账期由服务端生成；communication binding/Worker ticket v3 固化 entitlement version，dispatch 从活动 account/subscription/snapshot 读取 limit，不接受客户端 `maxUnits`。代码、定向矩阵和一次性本地 PostgreSQL 16 forced-RLS/down-forward 机制验证完成，进入 `ready_for_acceptance`；未接支付 Provider，也不代表 A1/H3 或生产账务门禁通过。
 - `ENT-CORE-012` 已新增 enterprise `0016` tenant usage event、event/ledger 双向一致性、append-only adjustment、目标净额非负保护和按 UTC period 重建的 count/SHA-256 hash/watermark 聚合。budget settle 已接入原始 event；租户只开放 `usage:read` 聚合列表，冲正仅限内部 runtime 并追加审计。代码、定向测试和一次性本地 PostgreSQL 16 普通角色 forced-RLS/一致性/负数 guard 验证完成，进入 `ready_for_acceptance`；未执行真实关账、支付 Provider、A1/H3 或生产账务门禁。
@@ -110,7 +111,7 @@
 | ENT-MTG-003 | 企业实时翻译 | MTG-002、CORE-014 | tenant-aware Worker 路由、个人字幕语言 | 四人字幕和译音不串轨，旧 Worker 不恢复播放 | in_progress |
 | ENT-MTG-004 | 屏幕共享租约 | MTG-002 | acquire/pause/resume/renew/stop、CAS、短期发布 grant、cell lease reaper、LiveKit 撤销 | 同时共享只成功一个；停止续租后服务端自行回收 | in_progress |
 | ENT-MTG-005 | Web 屏幕共享 | MTG-004 | getDisplayMedia、独立发布房间、代际订阅过滤、布局与控制 | screen/window/tab 真实来源、暂停恢复和原生停止在浏览器/LiveKit 门禁通过 | in_progress |
-| ENT-MTG-006 | iOS ReplayKit | MTG-004 | Broadcast Extension、Flutter bridge | 离开 App 后持续共享且可停止 | todo |
+| ENT-MTG-006 | iOS ReplayKit | MTG-004 | Broadcast Extension、App Group 无令牌交接、独立 publisher Room、Flutter bridge | 离开 App 后持续共享且可停止 | in_progress |
 | ENT-MTG-007 | Android MediaProjection | MTG-004 | 平台桥接、前台服务 | iOS 产品化后进入真机门禁 | todo |
 | ENT-MTG-008 | 共享系统音频 | MTG-005/006 | 独立 audio track 和策略 | 不进入错误 ASR，不形成回声环 | todo |
 | ENT-MTG-009 | 共享自适应布局 | MTG-005 | simulcast、画面/字幕布局 | 小屏横屏大字体无重叠 | todo |

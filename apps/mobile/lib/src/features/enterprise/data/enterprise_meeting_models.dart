@@ -4,6 +4,8 @@ class EnterpriseMobileMeeting {
     required this.title,
     required this.status,
     required this.allowGuests,
+    required this.screenShareRole,
+    required this.version,
     required this.createdAt,
     this.scheduledAt,
   });
@@ -12,13 +14,20 @@ class EnterpriseMobileMeeting {
   final String title;
   final String status;
   final bool allowGuests;
+  final String screenShareRole;
+  final int version;
   final DateTime createdAt;
   final DateTime? scheduledAt;
 
   factory EnterpriseMobileMeeting.fromJson(Map<String, Object?> json) {
     final policy = _map(json, 'policy');
     final allowGuests = policy['allowGuests'];
-    if (allowGuests is! bool) {
+    final screenShareRole = policy['screenShareRole'];
+    final version = json['version'];
+    if (allowGuests is! bool ||
+        !const <String>{'host_only', 'members'}.contains(screenShareRole) ||
+        version is! int ||
+        version < 1) {
       throw const FormatException('Invalid enterprise meeting policy');
     }
     return EnterpriseMobileMeeting(
@@ -26,6 +35,8 @@ class EnterpriseMobileMeeting {
       title: _text(json, 'title'),
       status: _text(json, 'status'),
       allowGuests: allowGuests,
+      screenShareRole: screenShareRole as String,
+      version: version,
       createdAt: DateTime.parse(_text(json, 'createdAt')),
       scheduledAt: _optionalTime(json, 'scheduledAt'),
     );

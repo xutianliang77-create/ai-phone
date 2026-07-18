@@ -1,6 +1,6 @@
 # 无界AI企业版设计文档索引
 
-版本：v1.26
+版本：v1.27
 日期：2026-07-19
 状态：SaaS 详细设计基线，已纳入统一通讯平台和 PostgreSQL Primary 演进
 
@@ -83,9 +83,11 @@ Repository/runtime 和包含 communication binding 的恢复聚合读取。`ENT-
 snapshot/heartbeat/refresh/finalize、每 participant track 独立 ASR/翻译、append-only target event、LiveKit 服务端
 定向字幕和 Web/Flutter 可信消费；定向 TTS 明确 not_ready。`ENT-MTG-004` 新增 `0024`、屏幕共享租约/命令账本、
 最小权限代际 grant、cell 到期回收和 LiveKit 撤销 outbox。`ENT-MTG-005` 已增加 Web 用户手势采集、实际
-display surface 识别、独立发布房间、track SID 续租、代际订阅过滤及开始/暂停/恢复/停止界面。当前按要求未执行
+display surface 识别、独立发布房间、track SID 续租、代际订阅过滤及开始/暂停/恢复/停止界面。`ENT-MTG-006`
+已增加 iOS ReplayKit Broadcast Upload Extension、App Group 无令牌控制清单、独立 Flutter publisher Room、租约续期、
+系统停止回收及成员角色/画质界面；扩展只向主 App 的 Unix socket 发送视频帧，不持有 RTC token。当前按要求未执行
 测试、migration、RLS、RBAC/ticket 攻击、并发共享、Worker/Provider、四人媒体、浏览器、真机与重启恢复，
-因此五项任务均保持 `in_progress`。
+因此六项任务均保持 `in_progress`。
 
 ## 3. 继承文档
 
@@ -100,6 +102,7 @@ display surface 识别、独立发布房间、track SID 续租、代际订阅过
 - [ENT-MTG-003 实现与静态门禁证据](./evidence/ent-mtg-003-enterprise-realtime-translation-2026-07-19.md)
 - [ENT-MTG-004 屏幕共享租约实现与静态门禁证据](./evidence/ent-mtg-004-screen-share-lease-2026-07-19.md)
 - [ENT-MTG-005 Web 屏幕共享实现与静态门禁证据](./evidence/ent-mtg-005-web-screen-share-2026-07-19.md)
+- [ENT-MTG-006 iOS ReplayKit 实现与静态门禁证据](./evidence/ent-mtg-006-ios-replaykit-2026-07-19.md)
 
 ## 4. 统一约束
 

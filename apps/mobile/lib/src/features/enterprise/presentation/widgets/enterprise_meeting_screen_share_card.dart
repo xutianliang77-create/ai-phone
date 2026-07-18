@@ -1,0 +1,177 @@
+import 'package:flutter/material.dart';
+
+import '../../data/enterprise_meeting_screen_share_controller.dart';
+
+class EnterpriseMeetingScreenShareCard extends StatefulWidget {
+  const EnterpriseMeetingScreenShareCard({
+    required this.snapshot,
+    required this.participantId,
+    required this.canShare,
+    required this.supported,
+    required this.onStart,
+    required this.onStop,
+    super.key,
+  });
+
+  final EnterpriseMeetingScreenShareSnapshot snapshot;
+  final String participantId;
+  final bool canShare;
+  final bool supported;
+  final Future<void> Function(String qualityMode) onStart;
+  final Future<void> Function() onStop;
+
+  @override
+  State<EnterpriseMeetingScreenShareCard> createState() =>
+      _EnterpriseMeetingScreenShareCardState();
+}
+
+class _EnterpriseMeetingScreenShareCardState
+    extends State<EnterpriseMeetingScreenShareCard> {
+  String _qualityMode = 'auto';
+
+  @override
+  Widget build(BuildContext context) {
+    final share = widget.snapshot.share;
+    final ownsShare = share?.participantId == widget.participantId;
+    final live = share != null &&
+        const <String>{'active', 'paused'}.contains(share.status);
+    final waiting = ownsShare &&
+        widget.snapshot.operation ==
+            EnterpriseMeetingScreenShareOperation.waitingForBroadcast;
+    final stopping = widget.snapshot.operation ==
+        EnterpriseMeetingScreenShareOperation.stopping;
+    final canStart =
+        widget.supported && widget.canShare && !live && !waiting && !stopping;
+    final canStop = ownsShare && (live || waiting || stopping);
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(18),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Row(children: <Widget>[
+              Icon(
+                Icons.mobile_screen_share_outlined,
+                color: Theme.of(context).colorScheme.primary,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  '共享 iPhone 屏幕',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+              ),
+              _StatusChip(label: _statusLabel(widget.snapshot, ownsShare)),
+            ]),
+            const SizedBox(height: 10),
+            Text(_description(widget, ownsShare)),
+            const SizedBox(height: 14),
+            DropdownButtonFormField<String>(
+              initialValue: _qualityMode,
+              decoration: const InputDecoration(
+                labelText: '共享画质',
+                prefixIcon: Icon(Icons.high_quality_outlined),
+                border: OutlineInputBorder(),
+              ),
+              items: const <DropdownMenuItem<String>>[
+                DropdownMenuItem(value: 'auto', child: Text('自动')),
+                DropdownMenuItem(value: 'smooth', child: Text('流畅')),
+                DropdownMenuItem(value: 'high', child: Text('高清')),
+              ],
+              onChanged: canStart
+                  ? (value) {
+                      if (value != null) setState(() => _qualityMode = value);
+                    }
+                  : null,
+            ),
+            const SizedBox(height: 14),
+            Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              children: <Widget>[
+                FilledButton.icon(
+                  onPressed:
+                      canStart ? () => widget.onStart(_qualityMode) : null,
+                  icon: const Icon(Icons.mobile_screen_share_outlined),
+                  label: const Text('开始共享'),
+                ),
+                OutlinedButton.icon(
+                  onPressed: canStop ? widget.onStop : null,
+                  icon: const Icon(Icons.stop_screen_share_outlined),
+                  label: const Text('停止共享'),
+                ),
+              ],
+            ),
+            if (widget.snapshot.errorCode != null) ...<Widget>[
+              const SizedBox(height: 12),
+              Text(
+                _errorLabel(widget.snapshot.errorCode!),
+                style: TextStyle(color: Theme.of(context).colorScheme.error),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _StatusChip extends StatelessWidget {
+  const _StatusChip({required this.label});
+  final String label;
+
+  @override
+  Widget build(BuildContext context) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.primaryContainer,
+          borderRadius: BorderRadius.circular(999),
+        ),
+        child: Text(label, style: Theme.of(context).textTheme.labelMedium),
+      );
+}
+
+String _statusLabel(
+  EnterpriseMeetingScreenShareSnapshot snapshot,
+  bool ownsShare,
+) =>
+    switch (snapshot.operation) {
+      EnterpriseMeetingScreenShareOperation.waitingForBroadcast => '等待系统确认',
+      EnterpriseMeetingScreenShareOperation.active =>
+        ownsShare ? '共享中' : '他人共享中',
+      EnterpriseMeetingScreenShareOperation.paused => '已暂停',
+      EnterpriseMeetingScreenShareOperation.stopping => '停止中',
+      EnterpriseMeetingScreenShareOperation.failed => '未就绪',
+      EnterpriseMeetingScreenShareOperation.idle => '未共享',
+    };
+
+String _description(EnterpriseMeetingScreenShareCard widget, bool ownsShare) {
+  if (!widget.supported) return '当前版本仅在 iOS 上启用 ReplayKit 屏幕共享。';
+  if (!widget.canShare) return '当前会议角色不允许发起屏幕共享。';
+  if (widget.snapshot.revocation == 'pending') {
+    return '旧发布身份正在服务端撤销；完成前不会发放新共享权限。';
+  }
+  if (widget.snapshot.operation ==
+      EnterpriseMeetingScreenShareOperation.waitingForBroadcast) {
+    return '请在系统弹窗中选择“无界AI企业版”并开始广播；离开 App 后仍可持续共享。';
+  }
+  if (widget.snapshot.share != null && !ownsShare) {
+    return '另一位参会者正在共享，结束后你才能发起共享。';
+  }
+  if (ownsShare && widget.snapshot.share?.status == 'paused') {
+    return '该共享已暂停；iOS 当前可安全停止，不提供伪造的恢复入口。';
+  }
+  if (ownsShare && widget.snapshot.share?.status == 'active') {
+    return 'ReplayKit 正在共享整个屏幕，不包含系统音频。';
+  }
+  return '共享整个 iPhone 屏幕；凭证只保留在主 App，不会写入扩展。';
+}
+
+String _errorLabel(String code) => switch (code) {
+      'replaykit_not_configured' => 'ReplayKit 扩展或 App Group 尚未配置。',
+      'replaykit_activation_timeout' => '未在系统弹窗中开始广播，本次共享已安全结束。',
+      'screen_share_conflict' => '当前已有参会者正在共享屏幕。',
+      'screen_share_forbidden' => '当前会议角色无权共享屏幕。',
+      'screen_share_revocation_pending' => '发布身份仍在撤销，服务端将继续处理。',
+      _ => '屏幕共享请求失败，未伪造成功状态。',
+    };

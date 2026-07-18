@@ -1,6 +1,6 @@
 # 无界AI企业版详细技术设计
 
-版本：v1.33
+版本：v1.34
 日期：2026-07-19
 状态：统一通讯平台与 PostgreSQL Primary 收敛详细技术方案
 
@@ -1447,7 +1447,7 @@ meeting ID 与路径一致、未过期，并声明 microphone/subscribe=true、c
 `EnterpriseMeetingRoomClient` 才连接 RTC 并申请麦克风。原始异常、token 和 access token 均不显示或记录。
 字幕现由 `ENT-MTG-003` 的 tenant-aware topic、target participant 和 generation 绑定消费；运行时未就绪时明确
 `not_ready`，不生成示例字幕。`ENT-MTG-005` 只向已认证成员 Web 接入共享采集；访客 grant 继续固定
-`screenShare=false`，ReplayKit 仍等待 `ENT-MTG-006`。当前未执行 token/ticket 攻击、四人媒体、
+`screenShare=false`；`ENT-MTG-006` 只向已认证 Flutter 成员会议接入 ReplayKit，访客仍不能发布共享。当前未执行 token/ticket 攻击、四人媒体、
 浏览器权限、弱网、axe 或设备矩阵，`ENT-UI-012` 保持 `in_progress`。
 
 ### 19.7 Meeting 创建、邀请和短期入会授权
@@ -1576,6 +1576,34 @@ pending 文案，由服务端 outbox 最终收敛。发布或续租建立阶段�
 本实现只覆盖已认证成员 Web。访客发布、系统音频、ReplayKit、MediaProjection、simulcast/自适应布局、主持人强停和
 OCR 分别由 `ENT-MTG-006..010/012` 交付。按本轮要求未执行 unit/API/Playwright、screen/window/tab、多浏览器权限、
 弱网/重连、多发布者竞争或真实 LiveKit 测试，因此 `ENT-MTG-005` 保持 `in_progress`。
+
+### 19.11 iOS ReplayKit 屏幕共享
+
+Flutter 在已加入企业会议并取得 participant ID 后创建租约控制器。入口按 meeting `screenShareRole` 与 participant role
+共同守卫；当前仅 iOS 可用，系统音频固定为 false。启动顺序为：确认原生 bridge/App Group 配置、读取最新 meeting
+version、acquire `sourceType=screen` 租约、原子写入 token-free 控制清单、以 generation 专属 grant 连接独立
+`Room(autoSubscribe:false)`、调起 ReplayKit 系统选择器。25秒未收到广播/track、用户离会或任一步失败都会 fail closed。
+
+主会议 Room 的成员 token 继续固定 `screenShare=false`。由于锁定的 `livekit_client 2.8.1` 没有公开导出
+`BroadcastManager`，客户端在固定版本边界内使用该管理器的实现入口关闭全局自动发布，再只在独立 publisher Room
+手动启用 `ScreenShareCaptureOptions(useiOSBroadcastExtension:true, captureScreenAudio:false)`。屏幕 track SID 首次发布后
+立即 renew 绑定，之后每10秒 renew；每次响应严格校验 RTC URL、room、publisher identity、generation、JWT 形状、
+到期时间和只允许 screen video 的能力集合。服务端 current share 改变或 generation 前移时立即停止本地发布。
+
+Runner 与 `EnterpriseBroadcast` target 共享 `group.$(TRANSLATION_IOS_BUNDLE_ID)` entitlement。主 App MethodChannel
+`translation_mobile/enterprise_replaykit` 只写 `shareId/generation/publisherIdentity/leaseExpiresAt/controlNonce/enabled`，
+不写 access token、API key、route document 或 tenant credential。renew 必须匹配旧 share/generation/nonce；clear 也只
+删除匹配清单，避免旧控制器清掉新一代广播。
+
+Broadcast Upload Extension 只处理 ReplayKit video sample，忽略 app/mic audio，通过 App Group 内 `rtc_SSFD` Unix
+socket 发送序列化 JPEG frame 给主 App 的 WebRTC 捕获端。扩展启动和每秒处理时重读控制清单；清单过期、删除、
+publisher 公式不符、generation/nonce 改变或主 App 发出 `iOS_BroadcastRequestStop` 时结束广播。扩展日志只记录通用结束
+事件，不记录 socket 全路径、帧内容或凭据。主 App 的 active audio background mode 是离开 App 后继续会议与续租的
+前提，不额外申请任意后台执行能力。
+
+本实现当前只有 Flutter analyze、plist/PBX 解析、Xcode build setting 和扩展 Swift typecheck 静态证据；未构建或安装
+生产 App，未执行真机系统选择器、后台/锁屏、内存压力、网络切换、真实 LiveKit 首帧/续租/撤销或多发布者竞争。
+因此 `ENT-MTG-006` 保持 `in_progress`，不代表 AC-SHARE-002、A1 或企业生产门禁通过。
 
 ## 20. 错误、重试和客户端动作
 

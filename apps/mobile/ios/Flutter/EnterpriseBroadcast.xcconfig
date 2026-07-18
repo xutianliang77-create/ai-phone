@@ -3,5 +3,4 @@ TRANSLATION_IOS_DEVELOPMENT_TEAM=5YR3BKMQ62
 TRANSLATION_IOS_APP_GROUP_ID=group.$(TRANSLATION_IOS_BUNDLE_ID)
 TRANSLATION_IOS_BROADCAST_EXTENSION_ID=$(TRANSLATION_IOS_BUNDLE_ID).EnterpriseBroadcast
 #include? "LocalIdentity.xcconfig"
-#include? "../Pods/Target Support Files/Pods-Runner/Pods-Runner.release.xcconfig"
 #include "Generated.xcconfig"

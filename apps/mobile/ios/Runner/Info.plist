@@ -41,6 +41,10 @@
 	<string>无界AI需要使用麦克风识别语音并翻译。</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>拍照翻译需要读取相册图片以进行 OCR 识别和翻译。</string>
+	<key>RTCAppGroupIdentifier</key>
+	<string>$(TRANSLATION_IOS_APP_GROUP_ID)</string>
+	<key>RTCScreenSharingExtension</key>
+	<string>$(TRANSLATION_IOS_BROADCAST_EXTENSION_ID)</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

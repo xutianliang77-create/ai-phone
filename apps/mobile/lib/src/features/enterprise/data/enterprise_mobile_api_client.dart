@@ -59,7 +59,7 @@ class EnterpriseMobileApiClient {
   Future<List<EnterpriseMobileMeetingAggregate>> listMeetings(
     EnterpriseMobileWorkspace workspace,
   ) async {
-    final json = await _contentRequest(
+    final json = await contentRequest(
       workspace,
       '/enterprise/v1/meetings',
       method: 'GET',
@@ -82,7 +82,7 @@ class EnterpriseMobileApiClient {
     required String captionLanguage,
     required bool translatedAudioEnabled,
   }) async {
-    final json = await _contentRequest(
+    final json = await contentRequest(
       workspace,
       '/enterprise/v1/meetings/${Uri.encodeComponent(meetingId)}/join',
       method: 'POST',
@@ -133,11 +133,12 @@ class EnterpriseMobileApiClient {
     return _decode(response);
   }
 
-  Future<Map<String, Object?>> _contentRequest(
+  Future<Map<String, Object?>> contentRequest(
     EnterpriseMobileWorkspace workspace,
     String path, {
     required String method,
     Map<String, Object?>? body,
+    String? idempotencyKey,
   }) async {
     http.Response response;
     try {
@@ -151,6 +152,7 @@ class EnterpriseMobileApiClient {
                   .encode(utf8.encode(jsonEncode(workspace.route.toJson())))
                   .replaceAll('=', ''),
               if (body != null) 'content-type': 'application/json',
+              if (idempotencyKey != null) 'idempotency-key': idempotencyKey,
             });
       if (body != null) request.body = jsonEncode(body);
       response = await http.Response.fromStream(await _client.send(request))

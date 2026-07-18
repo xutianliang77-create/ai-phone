@@ -1,6 +1,6 @@
 # 无界AI企业版验收任务与计划
 
-版本：v1.31
+版本：v1.32
 日期：2026-07-19
 状态：可执行验收计划，已对齐统一通讯平台和 PostgreSQL Primary 收敛
 
@@ -350,6 +350,12 @@ track SID 绑定与周期续租、当前 generation identity 过滤、视频布�
 生产 Web build 和非 release bundle 检查只能证明可编译和体积边界；按要求未运行 unit/API/Playwright，也未验证
 Chrome/Edge/Safari/Firefox 的 screen/window/tab 权限、用户拒绝、浏览器原生停止、暂停恢复、网络重连、旧 identity
 迟到、两人竞争或真实 LiveKit 首帧/撤销。因此 AC-SHARE-001/003/005/006/007/009/010 仍未通过，不能进入 A1 放行。
+
+`ENT-MTG-006` 当前已形成 iOS Broadcast Upload Extension、App Group entitlement、无令牌租约清单、Flutter bridge、
+独立最小权限 publisher Room、25秒系统确认超时、10秒续租和系统停止回收代码候选。静态 analyze、plist/PBX 解析、
+build setting 检查与扩展 Swift typecheck 不替代真机：必须在目标 iPhone 上验证系统广播选择器、离开 App/锁屏持续、
+返回状态一致、系统控制中心停止、来电/音频中断、Wi-Fi/蜂窝切换、后台续租、扩展被杀、清单过期、旧 generation/nonce、
+真实 LiveKit 首帧和服务端撤销。当前未构建或安装 App，也未运行上述矩阵，因此 AC-SHARE-002/006/009/010 和 A1 均未通过。
 
 ### 7.4 屏幕 OCR 翻译
 

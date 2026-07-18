@@ -1,6 +1,6 @@
 # 无界AI企业版技术架构
 
-版本：v1.18
+版本：v1.19
 日期：2026-07-19
 状态：SaaS 详细架构基线，已对齐统一通讯平台和 PostgreSQL Primary
 
@@ -295,6 +295,13 @@ Web `getDisplayMedia`、ReplayKit、MediaProjection、系统音频或真实 Live
 业务服务器或对象存储，只直接发布到 LiveKit；API 只保存 source/quality/track SID/租约元数据。主 Room 的订阅层
 同时比对 `Track.Source.ScreenShare` 与服务端当前 `publisherIdentity`，旧 generation participant 即使仍在房间也不进入
 React video。暂停/停止先断发布传输，服务端 revoke/outbox 负责最终 fencing；当前仅有代码和静态构建证据。
+
+`ENT-MTG-006` 的 iOS 路径把职责分成主 App 与 Broadcast Upload Extension。主 App 保留 tenant context、RTC token、
+独立屏幕 publisher Room 和租约续期；扩展没有网络 grant，只通过 App Group 内固定 Unix socket `rtc_SSFD` 把 ReplayKit
+视频样本交给主 App。两者共享的控制清单只包含 share ID、generation、publisher identity、lease expiry 和随机 nonce，
+使用原子替换；扩展每秒复核并在过期、删除或不匹配时失败闭合。系统 stop 使用 Darwin notification 汇合到同一停止路径。
+会议主音频 Room 仍使用禁止 screen-share 的成员 token；LiveKit 广播管理器关闭自动发布，避免主 Room 与独立 publisher
+Room 同时发布。后台持续依赖活跃会议音频会话，尚未经过真机/锁屏/网络切换验证，不提升架构状态为 production ready。
 
 ## 7. 外呼营销架构
 

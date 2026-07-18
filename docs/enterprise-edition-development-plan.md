@@ -1,6 +1,6 @@
 # 无界AI企业版开发方案与计划
 
-版本：v1.35
+版本：v1.36
 日期：2026-07-19
 状态：E0 执行计划，已对齐统一通讯平台和 PostgreSQL Primary 收敛
 
@@ -39,6 +39,7 @@
 - `ENT-MTG-001` 已实现 Meeting/Participant/Artifact 领域模型、CAS 状态机、`0021` 数据库状态/身份/时间/恢复约束、tenant-scoped Repository 和 Primary runtime adapter。聚合读取把 meeting、participant、artifact 与唯一 communication binding 合并，恢复入口只返回 provisioning/active/ending；缺 binding 可见而不伪造。当前只通过 API typecheck、文件规模和 diff 门禁，未运行 migration、forced-RLS、并发 CAS、重启恢复或自动化，保持 `in_progress`。
 - `ENT-MTG-004` 已形成 `0024`、单会议活动租约唯一约束、acquire/pause/resume/renew/stop 幂等 CAS、代际发布身份、最小权限 LiveKit grant、cell Worker 到期回收和撤销 outbox 代码候选。Web/iOS/Android 采集仍分别属于 MTG-005/006/007；本轮未运行 migration、并发、forced-RLS、Worker 或真实 LiveKit 测试，保持 `in_progress`。
 - `ENT-MTG-005` 已形成成员 Web 屏幕共享代码候选：浏览器用户手势选择内容后读取真实 `displaySurface`，再申请租约并用独立 Room 发布；首次续租绑定 track SID，后续按10秒续租；观看端只接受服务端当前 publisher identity，暂停/停止先断本地发布且撤销 pending 保持可见。系统音频、访客发布、iOS/Android、simulcast 和主持人强停不在本任务内；本轮未运行测试或真实 LiveKit/浏览器门禁，保持 `in_progress`。
+- `ENT-MTG-006` 已形成 iOS ReplayKit 代码候选：主 App 持有短期发布 grant 并维持独立屏幕 Room，Broadcast Upload Extension 只经 App Group Unix socket 发送视频样本；token-free 控制清单以 share/generation/nonce 和 lease expiry 失败闭合，系统停止、超时和离会均先清理本地再收敛服务端租约。当前未构建/安装 App，未执行真机后台、真实 LiveKit、网络切换和权限矩阵，保持 `in_progress`。
 - PostgreSQL、SaaS 控制面、对象存储、正式域名、真实 Provider 和目标国家合规确认均未通过门禁。
 - 当前开发必须继续使用独立企业 worktree；个人版声纹和部署 WIP 不进入企业提交。
 - 公共 PostgreSQL Primary、统一通讯、Billing 和 Product Records 的稳定代码基线已导入；`ENT-DATA-008` 和 `ENT-CORE-013/014/015` 已完成代码与本地自动化。`ENT-DATA-009` 已产出全表切换/对账/逻辑恢复工具、签名证据和一次性本地 PostgreSQL 16 演练，进入 `ready_for_acceptance`；不能继承主产品环境验收，也未通过异地 PITR/H3。
