@@ -565,6 +565,35 @@ drain、独立镜像/profile、`external_bridge_id` projection 以及 bridge+Liv
 cell 粘滞路由和 aggregate fencing token。它们不等于实现了 PostgreSQL 写主、
 TURN/SFU 多节点、100 并发或 2 小时长稳；现有会话禁止跨区漂移，故障转移只接新会话。
 
+P2-A1 已补充逐轮 MT 首 token 与 TTS 首音频实际到达 Worker 的时间点，并从持久化
+`speechId/turnId/pipelineTiming` 生成 ASR、处理队列、turn buffer、MT、TTS、字幕端到端、
+音频 ready 和 playback start 的 p50/p95 分布；本地阈值标记为 ASR final 1400ms、MT final
+500ms、TTS first audio 600ms。流式 TTS 记录首 chunk 实际到达时间，整块 TTS 只能记录完整
+响应可用时间。该结果是代码级质量门禁。
+
+P2-A2 已完成代码级实现：Translation Worker 从 `@livekit/rtc-node` 的真实
+`Room.getRtcStats()` 周期采集 RTT、jitter 和累计收包/丢包；每条音频 leg 在结束时上报
+ring buffer 容量、received/dequeued/processed/failed、overflow/shutdown drop、sequence gap、
+high-watermark 和 backpressure。单 runtime 最多保留 120 个 RTC 样本并显式记录被丢弃的
+旧样本；API 校验计数不变量、限制 128 KiB 请求、以 `runtimeId` 幂等合并最多 16 个 runtime，
+且允许 call ended 后的晚到诊断完成落库。质量报告跨节点重算 RTC p50/p95、最新累计包损率、
+ingest 总量和模型 fingerprint 分布，并标记 sequence gap、backpressure、RTC 不可用和混合
+模型版本。fingerprint 仅包含 Worker 实际生效的非敏感路由/管线参数，不包含密钥、endpoint、
+文本、音频或 voice identity。
+
+P2-A3 已完成代码级实现：ASR、MT、TTS 在服务启动后对实际生效的非敏感参数生成 canonical
+JSON SHA-256 签名，并通过 health 和 bearer-protected Prometheus `/metrics` 暴露；签名排除密钥、
+URL、模型路径、请求内容与 voice identity，ASR context 只包含内容哈希。API 将 P2-A2 的 bounded
+诊断窗口转换为低基数 Prometheus gauges，重试上报按 `runtimeId` 替换而不重复累加，最多保留
+4096 个 runtime。OTel Collector 配置覆盖 API/ASR/MT/TTS 四个 scrape job，经 memory limiter、
+resource 和 batch processor 输出 OTLP/HTTP；Grafana dashboard 覆盖模型版本/签名、RTC 分位数、
+包损、ingest drop/backpressure 和样本可用性。metrics token 未配置时所有新增端点 fail closed。
+
+当前仍是本地代码级验收：API gauges 是各进程 bounded window 的重算值，不替代持久化质量报告；
+模型服务签名描述启动参数，不是模型权重 checksum；Collector 只完成静态合同校验，尚未实际启动。
+RTT/jitter/loss、重连/TURN、drop/backpressure 的生产阈值仍为空，必须在隔离 staging、真机与
+10/25/50/100 并发实测后校准，不得用单元测试或本地分位数替代真实负载验收。
+
 ## 11. 建议批次
 
 ### Batch 0：2–4 天

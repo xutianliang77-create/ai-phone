@@ -1,0 +1,139 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "liveNow": false,
+  "panels": [
+    {
+      "type": "text",
+      "title": "Acceptance boundary",
+      "gridPos": { "h": 4, "w": 24, "x": 0, "y": 0 },
+      "options": {
+        "mode": "markdown",
+        "content": "RTC RTT, jitter and packet-loss alert thresholds are intentionally unset. Calibrate them with isolated staging and owned real-device evidence before adding alert rules."
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Model service availability",
+      "gridPos": { "h": 6, "w": 8, "x": 0, "y": 4 },
+      "targets": [{
+        "refId": "A",
+        "expr": "min by (service, provider, model_version, runtime_fingerprint) (wujie_model_service_up)",
+        "legendFormat": "{{service}} {{provider}} {{model_version}}"
+      }],
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] } }
+    },
+    {
+      "type": "stat",
+      "title": "Runtime fingerprint variants",
+      "gridPos": { "h": 6, "w": 8, "x": 8, "y": 4 },
+      "targets": [{
+        "refId": "A",
+        "expr": "count by (service) (count by (service, runtime_fingerprint) (wujie_model_service_info))",
+        "legendFormat": "{{service}}"
+      }],
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] } }
+    },
+    {
+      "type": "stat",
+      "title": "Retained Worker runtimes",
+      "gridPos": { "h": 6, "w": 8, "x": 16, "y": 4 },
+      "targets": [{
+        "refId": "A",
+        "expr": "sum by (worker_node) (wujie_realtime_runtime_count)",
+        "legendFormat": "{{worker_node}}"
+      }],
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] } }
+    },
+    {
+      "type": "timeseries",
+      "title": "RTC p95 RTT",
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 10 },
+      "fieldConfig": { "defaults": { "unit": "ms" }, "overrides": [] },
+      "targets": [{
+        "refId": "A",
+        "expr": "max by (worker_node) (wujie_realtime_rtc_rtt_ms{quantile=\"0.95\"})",
+        "legendFormat": "{{worker_node}}"
+      }]
+    },
+    {
+      "type": "timeseries",
+      "title": "RTC p95 jitter",
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 10 },
+      "fieldConfig": { "defaults": { "unit": "ms" }, "overrides": [] },
+      "targets": [{
+        "refId": "A",
+        "expr": "max by (worker_node) (wujie_realtime_rtc_jitter_ms{quantile=\"0.95\"})",
+        "legendFormat": "{{worker_node}}"
+      }]
+    },
+    {
+      "type": "timeseries",
+      "title": "RTC packet loss",
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 10 },
+      "fieldConfig": { "defaults": { "unit": "percentunit", "min": 0 }, "overrides": [] },
+      "targets": [{
+        "refId": "A",
+        "expr": "max by (worker_node) (wujie_realtime_rtc_packet_loss_ratio)",
+        "legendFormat": "{{worker_node}}"
+      }]
+    },
+    {
+      "type": "timeseries",
+      "title": "Audio drop ratio",
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 18 },
+      "fieldConfig": { "defaults": { "unit": "percentunit", "min": 0 }, "overrides": [] },
+      "targets": [{
+        "refId": "A",
+        "expr": "sum by (worker_node) (wujie_realtime_audio_frames{state=\"dropped\"}) / clamp_min(sum by (worker_node) (wujie_realtime_audio_frames{state=\"received\"}), 1)",
+        "legendFormat": "{{worker_node}}"
+      }]
+    },
+    {
+      "type": "timeseries",
+      "title": "Backpressure events",
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 18 },
+      "targets": [{
+        "refId": "A",
+        "expr": "sum by (worker_node) (wujie_realtime_backpressure_events)",
+        "legendFormat": "{{worker_node}}"
+      }]
+    },
+    {
+      "type": "timeseries",
+      "title": "RTC sample availability",
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 18 },
+      "targets": [{
+        "refId": "A",
+        "expr": "sum by (worker_node, state) (wujie_realtime_rtc_samples)",
+        "legendFormat": "{{worker_node}} {{state}}"
+      }]
+    },
+    {
+      "type": "table",
+      "title": "Worker model configuration fingerprints",
+      "gridPos": { "h": 9, "w": 24, "x": 0, "y": 26 },
+      "targets": [{
+        "refId": "A",
+        "expr": "wujie_realtime_model_config_info",
+        "format": "table",
+        "instant": true
+      }]
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 39,
+  "tags": ["wujie-ai", "realtime", "p2-a3"],
+  "templating": { "list": [] },
+  "time": { "from": "now-6h", "to": "now" },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "无界AI Realtime Quality",
+  "uid": "wujie-realtime-quality",
+  "version": 1,
+  "weekStart": ""
+}

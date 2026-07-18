@@ -43,6 +43,12 @@ TTS_VOICE_PRESET_MANIFEST="${TTS_VOICE_PRESET_MANIFEST:-$TTS_SERVICE_DIR/voice-p
 ASR_SERVICE_API_KEY="${ASR_SERVICE_API_KEY:-local-asr-service-api-key}"
 TRANSLATION_SERVICE_API_KEY="${TRANSLATION_SERVICE_API_KEY:-local-translation-service-api-key}"
 TTS_SERVICE_API_KEY="${TTS_SERVICE_API_KEY:-local-tts-service-api-key}"
+METRICS_BEARER_TOKEN="${METRICS_BEARER_TOKEN:-}"
+if [ -n "$METRICS_BEARER_TOKEN" ] &&
+  [[ ! "$METRICS_BEARER_TOKEN" =~ ^[A-Za-z0-9._~-]{32,256}$ ]]; then
+  echo "METRICS_BEARER_TOKEN must contain 32-256 URL-safe characters." >&2
+  exit 1
+fi
 SPEAKER_SERVICE_API_KEY="${SPEAKER_SERVICE_API_KEY:-local-speaker-service-api-key}"
 SPEAKER_MODEL_PROVIDER="${SPEAKER_MODEL_PROVIDER:-sortformer_shadow}"
 SPEAKER_MODEL_ID="${SPEAKER_MODEL_ID:-$REMOTE_ROOT/models/sortformer/diar_streaming_sortformer_4spk-v2.1.nemo}"
@@ -105,6 +111,7 @@ ssh "$BEELINK_HOST" \
    ASR_SERVICE_API_KEY='$ASR_SERVICE_API_KEY' \
    TRANSLATION_SERVICE_API_KEY='$TRANSLATION_SERVICE_API_KEY' \
    TTS_SERVICE_API_KEY='$TTS_SERVICE_API_KEY' \
+   METRICS_BEARER_TOKEN='$METRICS_BEARER_TOKEN' \
    SPEAKER_SERVICE_API_KEY='$SPEAKER_SERVICE_API_KEY' \
    SPEAKER_MODEL_PROVIDER='$SPEAKER_MODEL_PROVIDER' \
    SPEAKER_MODEL_ID='$SPEAKER_MODEL_ID' \
@@ -240,6 +247,13 @@ shell_quote() {
 asr_key="$(strong_secret "$ASR_SERVICE_API_KEY" "$ASR_SERVICE_DIR/.env" ASR_SERVICE_API_KEY)"
 translation_key="$(strong_secret "$TRANSLATION_SERVICE_API_KEY" "$TRANSLATION_SERVICE_DIR/.env" TRANSLATION_SERVICE_API_KEY)"
 tts_key="$(strong_secret "$TTS_SERVICE_API_KEY" "$TTS_SERVICE_DIR/.env" TTS_SERVICE_API_KEY)"
+metrics_token="$METRICS_BEARER_TOKEN"
+if [ -z "$metrics_token" ]; then
+  metrics_token="$(existing_secret "$ASR_SERVICE_DIR/.env" METRICS_BEARER_TOKEN)"
+fi
+if [ -z "$metrics_token" ]; then
+  metrics_token="$(openssl rand -hex 24)"
+fi
 speaker_key="$(strong_secret "$SPEAKER_SERVICE_API_KEY" "$SPEAKER_SERVICE_DIR/.env" SPEAKER_SERVICE_API_KEY)"
 voice_identity_key=""
 voice_identity_provider="off"
@@ -283,6 +297,7 @@ case "$ASR_SERVICE_PROVIDER" in
       "ASR_SERVICE_PROVIDER=qwen3_asr" \
       "ASR_MODEL_VERSION=$ASR_MODEL_VERSION" \
       "ASR_SERVICE_API_KEY=$asr_key" \
+      "METRICS_BEARER_TOKEN=$metrics_token" \
       "ASR_QWEN3_MODEL_DIR=$ASR_MODEL_DIR" \
       "ASR_QWEN3_DTYPE=bfloat16" \
       "ASR_QWEN3_DEVICE_MAP=cuda:0" \
@@ -311,6 +326,7 @@ case "$ASR_SERVICE_PROVIDER" in
       "ASR_SERVICE_PROVIDER=fireredasr2_aed" \
       "ASR_MODEL_VERSION=${ASR_MODEL_VERSION:-FireRedASR2-AED}" \
       "ASR_SERVICE_API_KEY=$asr_key" \
+      "METRICS_BEARER_TOKEN=$metrics_token" \
       "ASR_FIRERED_MODEL_DIR=$ASR_MODEL_DIR" \
       "ASR_FIRERED_USE_GPU=true" \
       "ASR_FIRERED_BEAM_SIZE=1" \
@@ -336,6 +352,7 @@ write_env "$TRANSLATION_SERVICE_DIR/.env" \
   "TRANSLATION_SERVICE_PROVIDER=hymt2" \
   "TRANSLATION_MODEL_VERSION=tencent/Hy-MT2-1.8B" \
   "TRANSLATION_SERVICE_API_KEY=$translation_key" \
+  "METRICS_BEARER_TOKEN=$metrics_token" \
   "TRANSLATION_HYMT2_MODEL_DIR=$TRANSLATION_MODEL_DIR" \
   "TRANSLATION_HYMT2_DTYPE=bfloat16" \
   "TRANSLATION_HYMT2_DEVICE_MAP=auto" \
@@ -349,6 +366,7 @@ write_env "$TTS_SERVICE_DIR/.env" \
   "TTS_SERVICE_PROVIDER=voxcpm2" \
   "TTS_MODEL_VERSION=VoxCPM2" \
   "TTS_SERVICE_API_KEY=$tts_key" \
+  "METRICS_BEARER_TOKEN=$metrics_token" \
   "TTS_VOXCPM2_MODEL_DIR=$TTS_MODEL_DIR" \
   "TTS_VOXCPM2_CFG_VALUE=2.0" \
   "TTS_VOXCPM2_INFERENCE_TIMESTEPS=10" \

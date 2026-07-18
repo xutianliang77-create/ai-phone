@@ -1,8 +1,16 @@
 import { timingSafeEqual } from "node:crypto";
 import type { FastifyInstance } from "fastify";
 import { sendError } from "../../infrastructure/http/errors.js";
+import { observeRealtimeRuntime } from
+  "../../infrastructure/observability/realtime-prometheus.js";
 import { findWorkerDispatch } from
   "../worker-dispatches/worker-dispatch-runtime.repository.js";
+import { parseRealtimeNodeDiagnostics } from
+  "../realtime/realtime-node-diagnostics.js";
+import { mergeSessionNodeDiagnostics } from
+  "../sessions/session-diagnostics-runtime.repository.js";
+import { withSessionWriteLock } from
+  "../sessions/session-write-coordinator.js";
 import { getReadyVoiceProfileTtsConfig } from
   "../voice-profiles/voice-profiles-runtime.service.js";
 import { findCallLink, registerCallLeg } from "./call-links.service.js";
@@ -17,6 +25,43 @@ type RuntimeEventRequest = {
 };
 
 export function registerWorkerDispatchRuntimeRoutes(app: FastifyInstance) {
+  app.post("/internal/call-links/:callId/diagnostics", {
+    bodyLimit: 128 * 1024,
+  }, async (request, reply) => {
+    if (!isInternalAuthorized(request.headers.authorization)) {
+      return sendError(reply, 401, "internal_error", "Unauthorized internal request");
+    }
+    const params = request.params as { callId: string };
+    const body = request.body as { version?: unknown; node?: unknown } | undefined;
+    const node = body?.version === 1
+      ? parseRealtimeNodeDiagnostics(body.node) : undefined;
+    if (!node) {
+      return sendError(
+        reply,
+        400,
+        "invalid_worker_diagnostics",
+        "Invalid Worker diagnostics",
+      );
+    }
+    const call = await findCallLink(params.callId);
+    if (!call) {
+      return sendError(reply, 404, "call_link_not_found", "Call link not found");
+    }
+    return withSessionWriteLock(call.sessionId, async () => {
+      const session = await mergeSessionNodeDiagnostics(call.sessionId, node);
+      if (!session) {
+        return sendError(reply, 404, "session_not_found", "Session not found");
+      }
+      observeRealtimeRuntime(node);
+      return {
+        callId: call.callId,
+        sessionId: call.sessionId,
+        runtimeId: node.runtimeId,
+        nodeCount: session.diagnostics?.nodes?.length ?? 0,
+      };
+    });
+  });
+
   app.post("/internal/call-links/:callId/worker-snapshot", async (request, reply) => {
     if (!isInternalAuthorized(request.headers.authorization)) {
       return sendError(reply, 401, "internal_error", "Unauthorized internal request");

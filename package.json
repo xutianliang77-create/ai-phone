@@ -63,6 +63,7 @@
     "check:translation-worker-pstn-audio-sink": "node scripts/check_translation_worker_pstn_audio_sink_readiness.mjs",
     "check:pstn-internal-media-loop": "node scripts/check_pstn_internal_media_loop_readiness.mjs",
     "check:diagnostics-alerting": "node scripts/check_diagnostics_alerting_readiness.mjs",
+    "check:realtime-observability": "node scripts/check_realtime_observability_assets.mjs",
     "check:domestic-payment-callbacks": "node scripts/check_domestic_payment_callbacks_readiness.mjs",
     "check:tts-provider": "node scripts/check_tts_provider_readiness.mjs",
     "check:translation-provider": "node scripts/check_lmstudio_translation_provider.mjs",

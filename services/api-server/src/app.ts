@@ -21,6 +21,8 @@ import { registerVoiceProfileRoutes } from "./modules/voice-profiles/voice-profi
 import { registerVoiceIdentityRoutes } from "./modules/voice-identities/voice-identities.routes.js";
 import { registerIngressRoutes } from "./modules/ingress/ingress.routes.js";
 import { registerPlatformTelemetryHooks } from "./infrastructure/observability/platform-telemetry.js";
+import { registerPlatformMetricsRoutes } from
+  "./infrastructure/observability/platform-metrics.routes.js";
 
 export async function buildApp() {
   const app = Fastify({
@@ -40,6 +42,7 @@ export async function buildApp() {
     },
   });
   registerPlatformTelemetryHooks(app);
+  registerPlatformMetricsRoutes(app);
   await app.register(cors, { origin: true });
   await registerAccountRoutes(app);
   await registerAgentCallRoutes(app);

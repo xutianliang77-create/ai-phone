@@ -1,0 +1,83 @@
+extensions:
+  health_check:
+    endpoint: 0.0.0.0:13133
+
+receivers:
+  prometheus/realtime:
+    config:
+      scrape_configs:
+        - job_name: wujie-api-realtime
+          scrape_interval: 15s
+          metrics_path: /metrics
+          authorization:
+            type: Bearer
+            credentials: "${env:METRICS_BEARER_TOKEN}"
+          static_configs:
+            - targets: ["${env:API_METRICS_TARGET}"]
+        - job_name: wujie-asr-model
+          scrape_interval: 15s
+          metrics_path: /metrics
+          authorization:
+            type: Bearer
+            credentials: "${env:METRICS_BEARER_TOKEN}"
+          static_configs:
+            - targets: ["${env:ASR_METRICS_TARGET}"]
+        - job_name: wujie-translation-model
+          scrape_interval: 15s
+          metrics_path: /metrics
+          authorization:
+            type: Bearer
+            credentials: "${env:METRICS_BEARER_TOKEN}"
+          static_configs:
+            - targets: ["${env:TRANSLATION_METRICS_TARGET}"]
+        - job_name: wujie-tts-model
+          scrape_interval: 15s
+          metrics_path: /metrics
+          authorization:
+            type: Bearer
+            credentials: "${env:METRICS_BEARER_TOKEN}"
+          static_configs:
+            - targets: ["${env:TTS_METRICS_TARGET}"]
+
+processors:
+  memory_limiter:
+    check_interval: 5s
+    limit_mib: 256
+    spike_limit_mib: 64
+  resource/realtime:
+    attributes:
+      - key: service.namespace
+        value: wujie-ai
+        action: upsert
+      - key: deployment.environment
+        value: "${env:DEPLOYMENT_ENVIRONMENT}"
+        action: upsert
+      - key: cloud.region
+        value: "${env:PLATFORM_REGION}"
+        action: upsert
+  batch:
+    timeout: 5s
+    send_batch_size: 1024
+    send_batch_max_size: 2048
+
+exporters:
+  otlphttp/metrics:
+    metrics_endpoint: "${env:OTEL_METRICS_EXPORT_ENDPOINT}"
+    headers:
+      Authorization: "${env:OTEL_METRICS_EXPORT_AUTHORIZATION}"
+    sending_queue:
+      enabled: true
+      queue_size: 2048
+    retry_on_failure:
+      enabled: true
+      initial_interval: 1s
+      max_interval: 30s
+      max_elapsed_time: 300s
+
+service:
+  extensions: [health_check]
+  pipelines:
+    metrics/realtime:
+      receivers: [prometheus/realtime]
+      processors: [memory_limiter, resource/realtime, batch]
+      exporters: [otlphttp/metrics]

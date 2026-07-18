@@ -20,6 +20,8 @@ import { getAutonomousAgentReadiness } from "../agent-calls/autonomous-agent-pol
 import { getLiveKitIngressReadiness } from "../ingress/livekit-ingress-readiness.js";
 import { getPlatformScaleReadiness } from "../../infrastructure/platform/platform-scale-readiness.js";
 import { getPlatformTelemetryReadiness } from "../../infrastructure/observability/platform-telemetry.js";
+import { getPlatformMetricsReadiness } from
+  "../../infrastructure/observability/platform-metrics.routes.js";
 import { getVoiceAgentRuntimeReadiness } from
   "../agent-calls/voice-agent-runtime-readiness.js";
 import { getAgentConsultReadiness } from
@@ -44,6 +46,7 @@ export async function registerHealthRoutes(app: FastifyInstance) {
     const ingressReadiness = getLiveKitIngressReadiness();
     const platformScaleReadiness = getPlatformScaleReadiness();
     const telemetryReadiness = getPlatformTelemetryReadiness();
+    const metricsReadiness = getPlatformMetricsReadiness();
     const voiceAgentRuntimeReadiness = getVoiceAgentRuntimeReadiness();
     const agentConsultReadiness = getAgentConsultReadiness();
     return {
@@ -86,6 +89,7 @@ export async function registerHealthRoutes(app: FastifyInstance) {
       ingressReadiness,
       platformScaleReadiness,
       telemetryReadiness,
+      metricsReadiness,
       diagnosticsReadiness,
       releaseMaterialsReadiness,
     };
