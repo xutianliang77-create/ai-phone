@@ -1,3 +1,8 @@
 <resources>
     <string name="app_name">无界AI</string>
+    <string name="enterprise_screen_share_channel">企业会议屏幕共享</string>
+    <string name="enterprise_screen_share_channel_description">显示正在进行的企业会议屏幕共享及停止操作</string>
+    <string name="enterprise_screen_share_title">正在共享手机屏幕</string>
+    <string name="enterprise_screen_share_body">无界AI企业版正在共享屏幕，不包含系统音频</string>
+    <string name="enterprise_screen_share_stop">停止共享</string>
 </resources>

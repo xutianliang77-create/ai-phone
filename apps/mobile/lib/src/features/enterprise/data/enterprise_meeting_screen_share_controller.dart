@@ -1,12 +1,16 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:math';
 
+import 'enterprise_android_screen_share_bridge.dart';
+import 'enterprise_android_screen_share_publisher.dart';
 import 'enterprise_ios_screen_share_publisher.dart';
 import 'enterprise_meeting_screen_share_api.dart';
 import 'enterprise_meeting_screen_share_models.dart';
 import 'enterprise_mobile_api_client.dart';
 import 'enterprise_mobile_models.dart';
 import 'enterprise_replaykit_bridge.dart';
+import 'enterprise_screen_share_platform.dart';
 
 part 'enterprise_meeting_screen_share_lifecycle.dart';
 
@@ -46,18 +50,20 @@ class EnterpriseMeetingScreenShareController {
     required this.meetingId,
     required this.participantId,
     required this.onSnapshot,
-    EnterpriseIosScreenSharePublisher? publisher,
-    EnterpriseReplayKitBridge? bridge,
-  })  : _publisher = publisher ?? EnterpriseIosScreenSharePublisher(),
-        _bridge = bridge ?? EnterpriseReplayKitBridge();
+    EnterpriseScreenSharePublisher? publisher,
+    EnterpriseScreenShareBridge? bridge,
+  })  : _publisher = publisher ?? _defaultScreenSharePublisher(),
+        _bridge = bridge ?? _defaultScreenShareBridge() {
+    _bridge.setOnSystemStopped(_broadcastEnded);
+  }
 
   final EnterpriseMobileApiClient api;
   final EnterpriseMobileWorkspace workspace;
   final String meetingId;
   final String participantId;
   final void Function(EnterpriseMeetingScreenShareSnapshot) onSnapshot;
-  final EnterpriseIosScreenSharePublisher _publisher;
-  final EnterpriseReplayKitBridge _bridge;
+  final EnterpriseScreenSharePublisher _publisher;
+  final EnterpriseScreenShareBridge _bridge;
   EnterpriseMeetingScreenShareSnapshot _snapshot =
       const EnterpriseMeetingScreenShareSnapshot.idle();
   Timer? _pollTimer;
@@ -91,7 +97,9 @@ class EnterpriseMeetingScreenShareController {
     if (!isSupported || !await _bridge.isConfigured()) {
       _emit(
           operation: EnterpriseMeetingScreenShareOperation.failed,
-          errorCode: 'replaykit_not_configured');
+          errorCode: Platform.isAndroid
+              ? 'media_projection_not_configured'
+              : 'replaykit_not_configured');
       return;
     }
     _epoch += 1;
@@ -100,6 +108,8 @@ class EnterpriseMeetingScreenShareController {
         operation: EnterpriseMeetingScreenShareOperation.waitingForBroadcast,
         errorCode: null);
     try {
+      await _bridge.requestAuthorization();
+      _ensureStarting();
       final version = await api.getMeetingVersion(workspace, meetingId);
       _ensureStarting();
       final response = await api.acquireScreenShare(
@@ -112,7 +122,9 @@ class EnterpriseMeetingScreenShareController {
       final share = response.share;
       final grant = response.grant;
       if (share.participantId != participantId || grant == null) {
-        throw const EnterpriseReplayKitException('screen_share_grant_mismatch');
+        throw const EnterpriseScreenSharePlatformException(
+          'screen_share_grant_mismatch',
+        );
       }
       final nonce = _uuid();
       _controlNonce = nonce;
@@ -129,10 +141,12 @@ class EnterpriseMeetingScreenShareController {
       );
       _ensureStarting();
       _startRenewing();
-      _activationTimer = Timer(
-        const Duration(seconds: 25),
-        () => unawaited(_activationExpired()),
-      );
+      if (_pendingTrackSid == null) {
+        _activationTimer = Timer(
+          const Duration(seconds: 25),
+          () => unawaited(_activationExpired()),
+        );
+      }
     } catch (error) {
       await _failClosed(error);
     } finally {
@@ -197,6 +211,7 @@ class EnterpriseMeetingScreenShareController {
     _disposed = true;
     _epoch += 1;
     _pollTimer?.cancel();
+    await _bridge.dispose();
     await _stopLocal();
     if (share?.participantId == participantId &&
         const <String>{'active', 'paused'}.contains(share?.status)) {
@@ -212,11 +227,34 @@ class EnterpriseMeetingScreenShareController {
     }
   }
 
-  void _published(String trackSid) {
+  void _published(String trackSid, String captureTrackId) {
     if (_disposed || _controlNonce == null) return;
-    _pendingTrackSid = trackSid;
-    _activationTimer?.cancel();
-    if (!_busy) unawaited(_renew());
+    unawaited(_activatePublished(trackSid, captureTrackId));
+  }
+
+  Future<void> _activatePublished(
+    String trackSid,
+    String captureTrackId,
+  ) async {
+    final share = _snapshot.share;
+    final nonce = _controlNonce;
+    if (_disposed || share == null || nonce == null) return;
+    try {
+      await _bridge.activate(
+        share: share,
+        controlNonce: nonce,
+        captureTrackId: captureTrackId,
+      );
+      if (_disposed || _controlNonce != nonce) return;
+      _pendingTrackSid = trackSid;
+      _activationTimer?.cancel();
+      if (!_busy) unawaited(_renew());
+    } catch (error) {
+      if (_controlNonce != nonce) return;
+      _emit(errorCode: _errorCode(error));
+      _stopRequested = true;
+      await _finishStopRequest();
+    }
   }
 
   void _broadcastEnded() {
@@ -226,7 +264,9 @@ class EnterpriseMeetingScreenShareController {
 
   void _ensureStarting() {
     if (_disposed || _stopRequested) {
-      throw const EnterpriseReplayKitException('screen_share_start_cancelled');
+      throw const EnterpriseScreenSharePlatformException(
+        'screen_share_start_cancelled',
+      );
     }
   }
 
@@ -245,7 +285,9 @@ class EnterpriseMeetingScreenShareController {
         trackSid: _pendingTrackSid ?? share.trackSid,
       );
       if (response.share.participantId != participantId) {
-        throw const EnterpriseReplayKitException('screen_share_owner_changed');
+        throw const EnterpriseScreenSharePlatformException(
+          'screen_share_owner_changed',
+        );
       }
       await _bridge.renew(
         share: response.share,
@@ -268,3 +310,12 @@ class EnterpriseMeetingScreenShareController {
     }
   }
 }
+
+EnterpriseScreenSharePublisher _defaultScreenSharePublisher() =>
+    Platform.isAndroid
+        ? EnterpriseAndroidScreenSharePublisher()
+        : EnterpriseIosScreenSharePublisher();
+
+EnterpriseScreenShareBridge _defaultScreenShareBridge() => Platform.isAndroid
+    ? EnterpriseAndroidScreenShareBridge()
+    : EnterpriseReplayKitBridge();

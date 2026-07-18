@@ -57,7 +57,7 @@ class _EnterpriseMeetingScreenShareCardState
               const SizedBox(width: 12),
               Expanded(
                 child: Text(
-                  '共享 iPhone 屏幕',
+                  '共享手机屏幕',
                   style: Theme.of(context).textTheme.titleMedium,
                 ),
               ),
@@ -146,30 +146,34 @@ String _statusLabel(
     };
 
 String _description(EnterpriseMeetingScreenShareCard widget, bool ownsShare) {
-  if (!widget.supported) return '当前版本仅在 iOS 上启用 ReplayKit 屏幕共享。';
+  if (!widget.supported) return '当前平台尚未配置系统级屏幕共享。';
   if (!widget.canShare) return '当前会议角色不允许发起屏幕共享。';
   if (widget.snapshot.revocation == 'pending') {
     return '旧发布身份正在服务端撤销；完成前不会发放新共享权限。';
   }
   if (widget.snapshot.operation ==
       EnterpriseMeetingScreenShareOperation.waitingForBroadcast) {
-    return '请在系统弹窗中选择“无界AI企业版”并开始广播；离开 App 后仍可持续共享。';
+    return '请在系统授权界面确认屏幕共享；离开 App 后仍可持续共享。';
   }
   if (widget.snapshot.share != null && !ownsShare) {
     return '另一位参会者正在共享，结束后你才能发起共享。';
   }
   if (ownsShare && widget.snapshot.share?.status == 'paused') {
-    return '该共享已暂停；iOS 当前可安全停止，不提供伪造的恢复入口。';
+    return '该共享已暂停；当前可安全停止，不提供伪造的恢复入口。';
   }
   if (ownsShare && widget.snapshot.share?.status == 'active') {
-    return 'ReplayKit 正在共享整个屏幕，不包含系统音频。';
+    return '系统屏幕共享正在运行，不包含系统音频。';
   }
-  return '共享整个 iPhone 屏幕；凭证只保留在主 App，不会写入扩展。';
+  return '共享整个手机屏幕；RTC 凭证只保留在主 App 内存中。';
 }
 
 String _errorLabel(String code) => switch (code) {
       'replaykit_not_configured' => 'ReplayKit 扩展或 App Group 尚未配置。',
-      'replaykit_activation_timeout' => '未在系统弹窗中开始广播，本次共享已安全结束。',
+      'media_projection_not_configured' => 'MediaProjection 前台服务尚未配置。',
+      'notification_permission_denied' => '必须允许前台通知，才能显示并停止屏幕共享。',
+      'media_projection_permission_denied' => '未授予系统屏幕捕获权限。',
+      'media_projection_monitor_unavailable' => '无法监控系统投屏状态，本次共享已安全结束。',
+      'screen_share_activation_timeout' => '未在系统界面开始共享，本次共享已安全结束。',
       'screen_share_conflict' => '当前已有参会者正在共享屏幕。',
       'screen_share_forbidden' => '当前会议角色无权共享屏幕。',
       'screen_share_revocation_pending' => '发布身份仍在撤销，服务端将继续处理。',

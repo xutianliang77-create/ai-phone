@@ -1,6 +1,6 @@
 # 无界AI企业版验收任务与计划
 
-版本：v1.32
+版本：v1.33
 日期：2026-07-19
 状态：可执行验收计划，已对齐统一通讯平台和 PostgreSQL Primary 收敛
 
@@ -336,13 +336,14 @@ forced-RLS、跨租户/ticket 攻击、事件重放、四人真实媒体、浏�
 | AC-SHARE-008 | 系统音频 | 与麦克风独立，不形成循环和错误发言段 |
 | AC-SHARE-009 | 横屏/大字体 | 控件、字幕和画面不遮挡关键操作 |
 | AC-SHARE-010 | 结束清理 | meeting ended 后无活跃租约和轨道 |
+| AC-SHARE-011 | Android MediaProjection | Android 13/14/15 授权、前台通知、系统/通知停止、后台与返回状态一致 |
 
 共享启动 P95 不高于3秒；主持人 stop P95 不高于500ms。默认数据库和对象目录中不得出现屏幕帧。
 
 `ENT-MTG-004` 当前已有 `0024`、tenant-scoped lease/command Repository、acquire/pause/resume/renew/stop API、
 expected-version CAS、代际最小权限 grant、cell pending-work 到期回收及 LiveKit 撤销 outbox 代码候选。按本轮
 “测试先略过”要求，尚未运行 migration up/down、forced-RLS/跨租户、双 acquire、幂等重放、暂停窗口、Worker 崩溃恢复、
-Provider 未配置/超时/404、真实 LiveKit track 撤销或浏览器/真机矩阵；AC-SHARE-001..010 和 A1 均未通过，任务保持
+Provider 未配置/超时/404、真实 LiveKit track 撤销或浏览器/真机矩阵；AC-SHARE-001..011 和 A1 均未通过，任务保持
 `in_progress`。特别是静态 typecheck 不能证明500ms停止、客户端消失后回收或旧 generation 无法恢复。
 
 `ENT-MTG-005` 当前已形成成员 Web `getDisplayMedia`、真实 display surface 映射、独立屏幕 publisher Room、首次
@@ -356,6 +357,14 @@ Chrome/Edge/Safari/Firefox 的 screen/window/tab 权限、用户拒绝、浏览�
 build setting 检查与扩展 Swift typecheck 不替代真机：必须在目标 iPhone 上验证系统广播选择器、离开 App/锁屏持续、
 返回状态一致、系统控制中心停止、来电/音频中断、Wi-Fi/蜂窝切换、后台续租、扩展被杀、清单过期、旧 generation/nonce、
 真实 LiveKit 首帧和服务端撤销。当前未构建或安装 App，也未运行上述矩阵，因此 AC-SHARE-002/006/009/010 和 A1 均未通过。
+
+`ENT-MTG-007` 当前已形成 Android 一次性 MediaProjection 授权、Android 13+ 通知权限、Android 14
+`mediaProjection` 前台服务、独立最小权限 publisher Room、token-free Service 控制、25秒激活超时、10秒续租，
+以及系统投屏/通知/租约停止汇合代码候选。恢复验收时必须在 Android 13/14/15 目标机验证：两类权限接受/拒绝/取消、
+通知持续可见和停止动作、系统状态栏/隐私控制停止、前后台/锁屏/Activity 重建/进程回收、Service 被杀、租约过期、
+旧 generation/nonce、Wi-Fi/蜂窝切换、真实 LiveKit 首帧与服务端撤销。还必须固定验证 `flutter_webrtc 1.4.0` 系统停止
+监听可建立；监听结构不匹配时应停止并显示失败，而不是继续显示共享中。本轮未运行测试、APK 构建或真机矩阵，因此
+AC-SHARE-006/009/010/011 和 A1 均未通过。
 
 ### 7.4 屏幕 OCR 翻译
 

@@ -38,7 +38,7 @@ extension _EnterpriseMeetingScreenShareLifecycle
 
   Future<void> _activationExpired() async {
     if (_disposed || _pendingTrackSid != null || _controlNonce == null) return;
-    _emit(errorCode: 'replaykit_activation_timeout');
+    _emit(errorCode: 'screen_share_activation_timeout');
     await stop();
   }
 
@@ -108,6 +108,9 @@ extension _EnterpriseMeetingScreenShareLifecycle
     final nonce = _controlNonce;
     _controlNonce = null;
     _pendingTrackSid = null;
+    try {
+      await _bridge.deactivate();
+    } catch (_) {}
     await _publisher.stop();
     if (share != null && nonce != null) {
       try {
@@ -161,8 +164,8 @@ extension _EnterpriseMeetingScreenShareLifecycle
 
 String _errorCode(Object error) {
   if (error is EnterpriseMobileApiException) return error.code;
-  if (error is EnterpriseReplayKitException) return error.code;
-  if (error is UnsupportedError) return 'replaykit_not_available';
+  if (error is EnterpriseScreenSharePlatformException) return error.code;
+  if (error is UnsupportedError) return 'screen_share_not_available';
   return 'screen_share_request_failed';
 }
 

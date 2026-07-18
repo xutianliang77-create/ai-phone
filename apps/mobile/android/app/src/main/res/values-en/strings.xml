@@ -1,3 +1,8 @@
 <resources>
     <string name="app_name">无界AI</string>
+    <string name="enterprise_screen_share_channel">Enterprise meeting screen sharing</string>
+    <string name="enterprise_screen_share_channel_description">Shows active enterprise screen sharing and its stop control</string>
+    <string name="enterprise_screen_share_title">Sharing your phone screen</string>
+    <string name="enterprise_screen_share_body">Wujie AI Enterprise is sharing without system audio</string>
+    <string name="enterprise_screen_share_stop">Stop sharing</string>
 </resources>

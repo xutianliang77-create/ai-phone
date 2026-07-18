@@ -16,6 +16,7 @@ class MainActivity : FlutterActivity() {
     private val systemAsrBridge = AndroidSystemAsrBridge(this, audioSessionCoordinator)
     private val pcmAudioOutputBridge = PcmAudioOutputBridge(this, audioSessionCoordinator)
     private val speechOutputBridge = AndroidSpeechOutputBridge(this, audioSessionCoordinator)
+    private val mediaProjectionBridge = EnterpriseMediaProjectionBridge(this)
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -23,6 +24,7 @@ class MainActivity : FlutterActivity() {
         systemAsrBridge.register(flutterEngine.dartExecutor.binaryMessenger)
         pcmAudioOutputBridge.register(flutterEngine.dartExecutor.binaryMessenger)
         speechOutputBridge.register(flutterEngine.dartExecutor.binaryMessenger)
+        mediaProjectionBridge.register(flutterEngine.dartExecutor.binaryMessenger)
         MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,
             "translation_mobile/ocr"
@@ -43,6 +45,7 @@ class MainActivity : FlutterActivity() {
         permissions: Array<out String>,
         grantResults: IntArray
     ) {
+        if (mediaProjectionBridge.onRequestPermissionsResult(requestCode, grantResults)) return
         if (systemAsrBridge.onRequestPermissionsResult(requestCode, grantResults)) return
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
     }
@@ -51,6 +54,7 @@ class MainActivity : FlutterActivity() {
         systemAsrBridge.destroy()
         pcmAudioOutputBridge.destroy()
         speechOutputBridge.destroy()
+        mediaProjectionBridge.destroy()
         audioSessionCoordinator.destroy()
         super.onDestroy()
     }

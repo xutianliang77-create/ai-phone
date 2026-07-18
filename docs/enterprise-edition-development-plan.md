@@ -1,6 +1,6 @@
 # 无界AI企业版开发方案与计划
 
-版本：v1.36
+版本：v1.37
 日期：2026-07-19
 状态：E0 执行计划，已对齐统一通讯平台和 PostgreSQL Primary 收敛
 
@@ -40,6 +40,7 @@
 - `ENT-MTG-004` 已形成 `0024`、单会议活动租约唯一约束、acquire/pause/resume/renew/stop 幂等 CAS、代际发布身份、最小权限 LiveKit grant、cell Worker 到期回收和撤销 outbox 代码候选。Web/iOS/Android 采集仍分别属于 MTG-005/006/007；本轮未运行 migration、并发、forced-RLS、Worker 或真实 LiveKit 测试，保持 `in_progress`。
 - `ENT-MTG-005` 已形成成员 Web 屏幕共享代码候选：浏览器用户手势选择内容后读取真实 `displaySurface`，再申请租约并用独立 Room 发布；首次续租绑定 track SID，后续按10秒续租；观看端只接受服务端当前 publisher identity，暂停/停止先断本地发布且撤销 pending 保持可见。系统音频、访客发布、iOS/Android、simulcast 和主持人强停不在本任务内；本轮未运行测试或真实 LiveKit/浏览器门禁，保持 `in_progress`。
 - `ENT-MTG-006` 已形成 iOS ReplayKit 代码候选：主 App 持有短期发布 grant 并维持独立屏幕 Room，Broadcast Upload Extension 只经 App Group Unix socket 发送视频样本；token-free 控制清单以 share/generation/nonce 和 lease expiry 失败闭合，系统停止、超时和离会均先清理本地再收敛服务端租约。当前未构建/安装 App，未执行真机后台、真实 LiveKit、网络切换和权限矩阵，保持 `in_progress`。
+- `ENT-MTG-007` 已形成 Android MediaProjection 代码候选：一次性系统授权发生在服务端 acquire 前，授权后先启动带停止操作的 `mediaProjection` 前台服务，再由独立最小权限 Room 发布屏幕轨；系统投屏停止、通知停止和租约到期均进入同一停止状态机。前台服务不持有 RTC token。当前未运行测试、APK 构建/安装、真机、真实 LiveKit、后台与网络切换矩阵，保持 `in_progress`。
 - PostgreSQL、SaaS 控制面、对象存储、正式域名、真实 Provider 和目标国家合规确认均未通过门禁。
 - 当前开发必须继续使用独立企业 worktree；个人版声纹和部署 WIP 不进入企业提交。
 - 公共 PostgreSQL Primary、统一通讯、Billing 和 Product Records 的稳定代码基线已导入；`ENT-DATA-008` 和 `ENT-CORE-013/014/015` 已完成代码与本地自动化。`ENT-DATA-009` 已产出全表切换/对账/逻辑恢复工具、签名证据和一次性本地 PostgreSQL 16 演练，进入 `ready_for_acceptance`；不能继承主产品环境验收，也未通过异地 PITR/H3。
@@ -140,7 +141,7 @@ CORE-001/002 验收
 3. 复用稳定 Speech Pipeline，但由 tenant-aware dispatch ticket、每 participant track 独立管线和服务端定向投递包裹，禁止复用个人会话身份或全局译音轨。
 4. Web 企业会议页和移动端会议入口。
 5. 屏幕共享租约和 Web `getDisplayMedia`。
-6. iOS ReplayKit 和 Android MediaProjection 接口；Android 真机仍按 iOS 产品化后的既定顺序验收。
+6. iOS ReplayKit 和 Android MediaProjection 客户端代码候选；两端分别进入系统授权、后台、网络切换和真实 LiveKit 真机验收。
 7. 自适应订阅、主持人停止、断线恢复和审计。
 8. 会后逐字稿、摘要、决策和待办。
 9. 屏幕 OCR 翻译作为 P1 灰度。
@@ -304,4 +305,4 @@ CORE-001/002 验收
 
 E0 基线完成后已形成 `ENT-MTG-001/002` 代码候选；未通过真实 PostgreSQL、tenant/RBAC/token 攻击、Provider、浏览器与真机门禁，仍不能计为 E1 完成。
 
-当前进展：`ENT-CORE-003/004/005` 已完成并等待验收；`ENT-DATA-001` 已完成二十四段 schema 代码，等待 staging PostgreSQL migrate/restore/PITR 证据；`ENT-DATA-002/003/004/007/008/009` 已完成 Repository、可靠事件、演示导入、统一 Primary Runtime、公共通讯 tenant scope，以及全库签名切换/恢复工具；`ENT-CORE-013/014/015`、`ENT-CORE-007/010/012` 已完成代码和自动化并进入验收；`ENT-UI-001/002/003/005/006/007` 已进入验收。`ENT-MTG-003` 已形成 tenant-aware 实时翻译代码候选；`ENT-MTG-004` 已形成租约 CAS、最小权限 grant、cell 到期回收和 LiveKit 撤销代码候选；`ENT-MTG-005` 已形成 Web 采集、独立发布、代际过滤和共享控制代码候选。因测试暂缓、migration/真实恢复、真实 Provider、四人媒体、浏览器或真机门禁未完成，`ENT-OBS-001`、`ENT-UI-004/008/009/010/011/012` 和 `ENT-MTG-001..005` 继续保持 `in_progress`。恢复测试时先补齐 MTG-001..005 的 API/RBAC/跨租户/ticket/forced-RLS/幂等/CAS/旧 generation/Worker/Flutter、screen/window/tab、多浏览器、原生停止、弱网、四人媒体和重启恢复矩阵。staging `ENT-DATA-009` 和 `ENT-REL-002/003` 的对象清理、跨故障域/PITR 仍未通过。
+当前进展：`ENT-CORE-003/004/005` 已完成并等待验收；`ENT-DATA-001` 已完成二十四段 schema 代码，等待 staging PostgreSQL migrate/restore/PITR 证据；`ENT-DATA-002/003/004/007/008/009` 已完成 Repository、可靠事件、演示导入、统一 Primary Runtime、公共通讯 tenant scope，以及全库签名切换/恢复工具；`ENT-CORE-013/014/015`、`ENT-CORE-007/010/012` 已完成代码和自动化并进入验收；`ENT-UI-001/002/003/005/006/007` 已进入验收。`ENT-MTG-003` 已形成 tenant-aware 实时翻译代码候选；`ENT-MTG-004` 已形成租约 CAS、最小权限 grant、cell 到期回收和 LiveKit 撤销代码候选；`ENT-MTG-005` 已形成 Web 采集、独立发布、代际过滤和共享控制代码候选；`ENT-MTG-006/007` 已分别形成 iOS ReplayKit 与 Android MediaProjection 代码候选。因测试暂缓、migration/真实恢复、真实 Provider、四人媒体、浏览器或真机门禁未完成，`ENT-OBS-001`、`ENT-UI-004/008/009/010/011/012` 和 `ENT-MTG-001..007` 继续保持 `in_progress`。恢复测试时先补齐 MTG-001..007 的 API/RBAC/跨租户/ticket/forced-RLS/幂等/CAS/旧 generation/Worker/Flutter、screen/window/tab、多浏览器、iOS/Android 原生停止、权限拒绝、后台、弱网、四人媒体和重启恢复矩阵。staging `ENT-DATA-009` 和 `ENT-REL-002/003` 的对象清理、跨故障域/PITR 仍未通过。

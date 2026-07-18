@@ -1,6 +1,6 @@
 # 无界AI企业版详细功能设计
 
-版本：v1.15
+版本：v1.16
 日期：2026-07-19
 状态：SaaS 详细设计基线，已对齐统一通讯平台
 
@@ -332,7 +332,7 @@ LLM 只能提出结构化工具请求；Policy Engine 校验租户、客户、�
 
 共享者可暂停、恢复和停止；暂停保留本地 capture 但断开旧发布身份，恢复使用新 generation grant 重新发布，停止或
 浏览器原生“停止共享”先结束本地 track，再提交幂等 stop。服务端返回撤销 pending 时界面保持“正在停止/暂停”，
-不显示已完成。访客发布、系统音频、Android MediaProjection、自适应 simulcast、主持人强停和 OCR
+不显示已完成。访客发布、系统音频、自适应 simulcast、主持人强停和 OCR
 仍分别属于后续任务；未执行真实浏览器/LiveKit 测试前不可宣称 screen/window/tab 可用或通过企业生产门禁。
 
 当前 `ENT-MTG-006` iOS 代码候选在成员已加入企业会议后按 `screenShareRole` 显示 ReplayKit 入口，提供自动、流畅、
@@ -344,6 +344,13 @@ Broadcast Extension 不接收 RTC token，只读取 App Group 中带到期时间
 过期、清单删除或代际不匹配即停止；视频样本只经 App Group Unix socket 交给主 App 的 LiveKit 采集路径，音频样本忽略。
 离开 App 后持续共享依赖正在进行的会议音频后台会话，不能作为任意后台执行能力。未完成真机、真实 LiveKit、后台/锁屏、
 网络切换和系统权限验证前，不能宣称 AC-SHARE-002 或企业生产门禁通过。
+
+当前 `ENT-MTG-007` Android 代码候选复用同一成员角色、三档画质、独立 publisher Room、25秒激活超时和10秒续租。
+Android 13+ 先请求可见前台通知权限，再由系统 MediaProjection 弹窗取得一次性捕获授权；用户拒绝时不申请服务端租约。
+Android 14 顺序固定为授权成功、acquire、启动 `mediaProjection` 前台服务、创建屏幕轨，避免在前台服务就绪前消费授权。
+通知停止、系统投屏停止、租约到期、离会和续租失败均先停止本地发布，再收敛服务端租约。Service 只接收
+share/generation/publisher/lease/nonce，不接收 RTC token；系统音频固定关闭。未完成 APK 构建、目标 Android 真机、权限拒绝、
+后台/锁屏、进程回收、网络切换和真实 LiveKit 验证前，不能宣称 Android 屏幕共享可用或通过生产门禁。
 
 共享布局提供：
 

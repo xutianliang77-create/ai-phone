@@ -1,6 +1,6 @@
 # 无界AI企业版详细技术设计
 
-版本：v1.34
+版本：v1.35
 日期：2026-07-19
 状态：统一通讯平台与 PostgreSQL Primary 收敛详细技术方案
 
@@ -1604,6 +1604,43 @@ publisher 公式不符、generation/nonce 改变或主 App 发出 `iOS_Broadcast
 本实现当前只有 Flutter analyze、plist/PBX 解析、Xcode build setting 和扩展 Swift typecheck 静态证据；未构建或安装
 生产 App，未执行真机系统选择器、后台/锁屏、内存压力、网络切换、真实 LiveKit 首帧/续租/撤销或多发布者竞争。
 因此 `ENT-MTG-006` 保持 `in_progress`，不代表 AC-SHARE-002、A1 或企业生产门禁通过。
+
+### 19.12 Android MediaProjection 屏幕共享
+
+Flutter 屏幕共享控制器现通过统一 publisher/bridge contract 在 iOS ReplayKit 与 Android MediaProjection 之间选择，
+服务端租约、独立 publisher Room、首次 track SID 绑定、10秒续租、25秒激活超时和离会停止逻辑保持一致。Android
+启动不复用会议主 Room；成员入会 grant 继续禁止 screen share，generation 专属 grant 只进入
+`Room(autoSubscribe:false)` 并发布 video screen source，系统音频固定为 false。
+
+Android 启动顺序固定为：
+
+1. Android 13+ 请求 `POST_NOTIFICATIONS`，拒绝时失败闭合，确保共享时存在用户可见停止入口。
+2. 调用固定依赖 `flutter_webrtc 1.4.0` 的 `Helper.requestCapturePermission()` 取得一次性 MediaProjection 授权；
+   该步骤发生在读取 meeting version 和 acquire 之前，用户拒绝不会留下服务端租约。
+3. acquire 成功后只把 `shareId/generation/publisherIdentity/leaseExpiresAt/controlNonce` 交给原生 bridge。
+4. 原生启动声明 `foregroundServiceType=mediaProjection` 的 `START_NOT_STICKY` Service，并在 MethodChannel 返回前完成
+   `startForeground`；之后 Flutter 才连接独立 Room 和创建屏幕轨，满足 Android 14 的授权与前台服务顺序。
+5. 屏幕轨发布后，bridge 以 WebRTC capture track ID 核对 screen capturer，再注册额外的 MediaProjection stop callback；
+   监听建立后才允许首次 renew 把 UI 置为 active。
+
+前台通知使用与 Flutter `mobile_screen_share_outlined/stop_screen_share_outlined` 相同语义的 Material vector，明确显示
+“正在共享手机屏幕”“不包含系统音频”和停止操作。Service 不接收或持久化 RTC URL、access token、tenant route、
+API key 或屏幕帧；进程终止后 `START_NOT_STICKY` 不恢复旧授权。renew 只接受相同 share/generation/publisher/nonce
+且未来不超过五分钟的到期时间，过期时 Service 主动停止 MediaProjection 并通知 Flutter。通知停止、系统投屏停止、
+Service 意外销毁、离会和续租失败都进入同一 Flutter stop 状态机；Flutter 已消失时本地 lease timer 和服务端 cell
+Worker 分别负责设备端与服务端最终回收。
+
+`flutter_webrtc 1.4.0` 没有公开系统停止事件，插件自带的 MediaProjection callback 也不转发 track ended。原生 bridge
+因此只在锁定版本边界内反射 `FlutterWebRTCPlugin.methodCallHandler -> getUserMediaImpl -> getCapturerInfo(trackId)`，
+核对 capturer 精确类型后读取其 MediaProjection 并追加 callback。插件 consumer ProGuard 规则已保留这些类与字段；
+任何字段、类型、track 或 projection 不匹配均返回 `media_projection_monitor_unavailable`，停止本地轨和租约，禁止在
+无法观测系统停止时继续显示共享成功。主动停止先注销额外 callback，再停止 WebRTC track，避免把本地清理误判为
+系统撤销。
+
+本实现当前只通过 Flutter analyze 和 manifest/XML/源代码静态门禁；按要求未运行测试，也未执行 APK 构建/安装、
+Android 13/14/15 真机权限、通知拒绝、系统状态栏停止、后台/锁屏、Activity/进程回收、网络切换、内存压力、真实
+LiveKit 首帧/续租/撤销或多发布者竞争。因此 `ENT-MTG-007` 保持 `in_progress`，不代表 Android 屏幕共享、A1 或
+企业生产门禁通过。
 
 ## 20. 错误、重试和客户端动作
 

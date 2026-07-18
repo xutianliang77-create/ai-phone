@@ -1,6 +1,6 @@
 # 无界AI企业版技术架构
 
-版本：v1.19
+版本：v1.20
 日期：2026-07-19
 状态：SaaS 详细架构基线，已对齐统一通讯平台和 PostgreSQL Primary
 
@@ -302,6 +302,16 @@ React video。暂停/停止先断发布传输，服务端 revoke/outbox 负责�
 使用原子替换；扩展每秒复核并在过期、删除或不匹配时失败闭合。系统 stop 使用 Darwin notification 汇合到同一停止路径。
 会议主音频 Room 仍使用禁止 screen-share 的成员 token；LiveKit 广播管理器关闭自动发布，避免主 Room 与独立 publisher
 Room 同时发布。后台持续依赖活跃会议音频会话，尚未经过真机/锁屏/网络切换验证，不提升架构状态为 production ready。
+
+`ENT-MTG-007` 的 Android 路径继续分离会议音频 Room 与屏幕 publisher Room。Flutter 先取得 Android 13+ 通知权限和
+MediaProjection 一次性授权，授权成功后才请求服务端租约；Android 14 上先确认 `foregroundServiceType=mediaProjection`
+的 Service 已调用 `startForeground`，再由固定 `flutter_webrtc 1.4.0` 创建屏幕轨。Service 只持有
+share ID、generation、publisher identity、lease expiry 和 nonce，RTC URL/token 只在 Flutter publisher 内存中。
+
+系统投屏 callback、前台通知停止和 Service 租约计时器均产生同一 token-free stop event，Flutter 先解除原生监听并
+停止独立 Room，再调用服务端幂等 stop；Flutter 不存活时 Service 仍在 lease expiry 停止 MediaProjection，服务端
+cell Worker 继续作为最终回收边界。系统停止监听依赖锁定插件版本的运行时结构，字段或 capturer 类型不匹配即拒绝把
+共享置为 active，不静默降级。该路径尚无 APK/真机/后台/进程回收/网络切换或真实 LiveKit 证据。
 
 ## 7. 外呼营销架构
 

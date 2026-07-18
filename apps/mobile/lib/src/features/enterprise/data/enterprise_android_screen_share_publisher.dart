@@ -2,28 +2,19 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:livekit_client/livekit_client.dart' as livekit;
-// livekit_client 2.8.1 does not export BroadcastManager publicly. This pinned
-// implementation API is required to keep the audio room from auto-publishing.
-// ignore: implementation_imports
-import 'package:livekit_client/src/managers/broadcast_manager.dart'
-    as livekit_broadcast;
 
 import 'enterprise_meeting_screen_share_models.dart';
 import 'enterprise_screen_share_platform.dart';
 
-class EnterpriseIosScreenSharePublisher
+class EnterpriseAndroidScreenSharePublisher
     implements EnterpriseScreenSharePublisher {
   livekit.Room? _room;
   livekit.EventsListener<livekit.RoomEvent>? _listener;
-  EnterpriseScreenSharePublished? _onPublished;
   void Function()? _onEnded;
-  String? _publishedSid;
-  bool _broadcastObserved = false;
-  bool _publishing = false;
   bool _closing = false;
 
   @override
-  bool get isSupported => Platform.isIOS;
+  bool get isSupported => Platform.isAndroid;
 
   @override
   Future<void> start({
@@ -33,11 +24,14 @@ class EnterpriseIosScreenSharePublisher
     required void Function() onEnded,
     required bool Function() isCancelled,
   }) async {
-    if (!isSupported) throw UnsupportedError('ios_replaykit_required');
+    if (!isSupported) {
+      throw const EnterpriseScreenSharePlatformException(
+        'media_projection_not_available',
+      );
+    }
     await stop(requestSystemStop: false);
     _ensureActive(isCancelled);
     _closing = false;
-    _onPublished = onPublished;
     _onEnded = onEnded;
     final captureOptions = _captureOptions(qualityMode);
     final room = livekit.Room(
@@ -51,23 +45,12 @@ class EnterpriseIosScreenSharePublisher
     _room = room;
     _listener = listener;
     listener
-      ..on<livekit.LocalTrackPublishedEvent>((event) {
-        if (event.publication.source != livekit.TrackSource.screenShareVideo ||
-            _closing ||
-            _publishedSid == event.publication.sid) {
-          return;
-        }
-        _notifyPublished(event.publication);
-      })
       ..on<livekit.LocalTrackUnpublishedEvent>((event) {
         if (event.publication.source == livekit.TrackSource.screenShareVideo) {
           _notifyEnded();
         }
       })
       ..on<livekit.RoomDisconnectedEvent>((_) => _notifyEnded());
-    final broadcast = livekit_broadcast.BroadcastManager();
-    broadcast.shouldPublishTrack = false;
-    broadcast.addListener(_broadcastChanged);
     try {
       await room.prepareConnection(grant.rtcUrl.toString(), grant.accessToken);
       _ensureActive(isCancelled, room);
@@ -77,11 +60,29 @@ class EnterpriseIosScreenSharePublisher
         connectOptions: const livekit.ConnectOptions(autoSubscribe: false),
       );
       _ensureActive(isCancelled, room);
-      if (broadcast.isBroadcasting) {
-        _broadcastChanged();
-      } else {
-        await broadcast.requestActivation();
+      final participant = room.localParticipant;
+      if (participant == null) {
+        throw const EnterpriseScreenSharePlatformException(
+          'media_projection_room_not_ready',
+        );
       }
+      final publication = await participant.setScreenShareEnabled(
+        true,
+        captureScreenAudio: false,
+        screenShareCaptureOptions: captureOptions,
+      );
+      _ensureActive(isCancelled, room);
+      final trackSid = publication?.sid;
+      final captureTrackId = publication?.track?.mediaStreamTrack.id;
+      if (trackSid == null ||
+          trackSid.isEmpty ||
+          captureTrackId == null ||
+          captureTrackId.isEmpty) {
+        throw const EnterpriseScreenSharePlatformException(
+          'media_projection_track_not_ready',
+        );
+      }
+      onPublished(trackSid, captureTrackId);
     } catch (_) {
       await stop(requestSystemStop: false);
       rethrow;
@@ -91,12 +92,6 @@ class EnterpriseIosScreenSharePublisher
   @override
   Future<void> stop({bool requestSystemStop = true}) async {
     _closing = true;
-    final broadcast = livekit_broadcast.BroadcastManager();
-    broadcast.removeListener(_broadcastChanged);
-    broadcast.shouldPublishTrack = false;
-    if (requestSystemStop && broadcast.isBroadcasting) {
-      await _ignore(broadcast.requestStop);
-    }
     final room = _room;
     final listener = _listener;
     _room = null;
@@ -112,55 +107,7 @@ class EnterpriseIosScreenSharePublisher
       await _ignore(room.disconnect);
       await _ignore(room.dispose);
     }
-    _publishedSid = null;
-    _broadcastObserved = false;
-    _publishing = false;
-    _onPublished = null;
     _onEnded = null;
-    broadcast.shouldPublishTrack = true;
-  }
-
-  void _broadcastChanged() {
-    final broadcasting = livekit_broadcast.BroadcastManager().isBroadcasting;
-    if (broadcasting) {
-      _broadcastObserved = true;
-      unawaited(_publish());
-    } else if (_broadcastObserved) {
-      _notifyEnded();
-    }
-  }
-
-  Future<void> _publish() async {
-    final participant = _room?.localParticipant;
-    if (_publishing || _closing || participant == null) return;
-    _publishing = true;
-    try {
-      final publication = await participant.setScreenShareEnabled(
-        true,
-        captureScreenAudio: false,
-        screenShareCaptureOptions:
-            _room!.roomOptions.defaultScreenShareCaptureOptions,
-      );
-      if (publication != null) _notifyPublished(publication);
-    } catch (_) {
-      _notifyEnded();
-    } finally {
-      _publishing = false;
-    }
-  }
-
-  void _notifyPublished(livekit.LocalTrackPublication publication) {
-    final trackSid = publication.sid;
-    final captureTrackId = publication.track?.mediaStreamTrack.id;
-    if (_closing ||
-        trackSid.isEmpty ||
-        captureTrackId == null ||
-        captureTrackId.isEmpty ||
-        _publishedSid == trackSid) {
-      return;
-    }
-    _publishedSid = trackSid;
-    _onPublished?.call(trackSid, captureTrackId);
   }
 
   void _notifyEnded() {
@@ -176,7 +123,9 @@ class EnterpriseIosScreenSharePublisher
     if (isCancelled() ||
         _closing ||
         expectedRoom != null && !identical(_room, expectedRoom)) {
-      throw StateError('screen_share_start_cancelled');
+      throw const EnterpriseScreenSharePlatformException(
+        'screen_share_start_cancelled',
+      );
     }
   }
 
@@ -187,7 +136,6 @@ class EnterpriseIosScreenSharePublisher
       _ => livekit.VideoParametersPresets.screenShareH1080FPS15,
     };
     return livekit.ScreenShareCaptureOptions(
-      useiOSBroadcastExtension: true,
       captureScreenAudio: false,
       maxFrameRate: (parameters.encoding?.maxFramerate ?? 15).toDouble(),
       params: parameters,
