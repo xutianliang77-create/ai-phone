@@ -2,6 +2,7 @@ import { vi } from "vitest";
 import type { EnterpriseApi } from "../api/enterprise-api.js";
 
 type ContentApi = Pick<EnterpriseApi,
+  | "listMembers" | "createMember" | "updateMember"
   | "listKnowledgeSources" | "createKnowledgeSource"
   | "listKnowledgeVersions" | "createKnowledgeVersion"
   | "stageKnowledgeVersion" | "publishKnowledgeVersion"
@@ -15,6 +16,9 @@ type ContentApi = Pick<EnterpriseApi,
 
 export function fakeEnterpriseContentApi(): ContentApi {
   return {
+    listMembers: vi.fn().mockResolvedValue({ members: [] }),
+    createMember: vi.fn(),
+    updateMember: vi.fn(),
     listKnowledgeSources: vi.fn().mockResolvedValue({ sources: [] }),
     createKnowledgeSource: vi.fn(),
     listKnowledgeVersions: vi.fn().mockResolvedValue({ knowledgeVersions: [] }),

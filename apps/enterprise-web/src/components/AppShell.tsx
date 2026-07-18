@@ -15,6 +15,7 @@ import { StatusPanel } from "./StatusPanel.js";
 import { ProviderReadinessPanel } from "./ProviderReadinessPanel.js";
 import { TenantJobPage } from "../pages/TenantJobPage.js";
 import { KnowledgePage } from "../pages/KnowledgePage.js";
+import { MemberSettingsPage } from "../pages/MemberSettingsPage.js";
 import { PageFrame } from "./PageFrame.js";
 
 export function AppShell() {
@@ -114,7 +115,22 @@ export function AppShell() {
                 </PageFrame>
               )}
           />
-          {enterpriseNavigation.slice(1).filter(({ path }) => path !== "/knowledge").map((item) => (
+          <Route
+            path="/settings/*"
+            element={routeAllowed(state.context.scopes, "/settings")
+              ? <MemberSettingsPage />
+              : (
+                <PageFrame title="成员与角色" description="企业成员关系与服务端 RBAC scope">
+                  <StatusPanel
+                    state="forbidden"
+                    description="当前账号缺少 member:read，未读取任何企业成员数据。"
+                  />
+                </PageFrame>
+              )}
+          />
+          {enterpriseNavigation.slice(1).filter(({ path }) =>
+            path !== "/knowledge" && path !== "/settings"
+          ).map((item) => (
             <Route
               key={item.path}
               path={`${item.path}/*`}

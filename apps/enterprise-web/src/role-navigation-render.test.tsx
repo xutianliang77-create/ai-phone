@@ -32,6 +32,22 @@ describe("enterprise role navigation render matrix", () => {
     expect(screen.getByRole("heading", { name: "无权访问" })).toBeVisible();
     expect(screen.queryByRole("link", { name: /AI 客服/ })).not.toBeInTheDocument();
   });
+
+  it("does not execute member reads from a direct settings URL without scope", async () => {
+    const api = renderRole("marketing_member", "/settings");
+
+    expect(await screen.findByRole("heading", { name: "成员与角色" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "无权访问" })).toBeVisible();
+    expect(api.listMembers).not.toHaveBeenCalled();
+  });
+
+  it("routes an authorized settings URL to the real member directory", async () => {
+    const api = renderRole("owner", "/settings");
+
+    expect(await screen.findByRole("heading", { name: "成员与角色" })).toBeVisible();
+    expect(await screen.findByRole("heading", { name: "暂无数据" })).toBeVisible();
+    expect(api.listMembers).toHaveBeenCalledOnce();
+  });
 });
 
 const expectedRoutes: Record<EnterpriseMemberRole, readonly string[]> = {
@@ -47,6 +63,7 @@ const expectedRoutes: Record<EnterpriseMemberRole, readonly string[]> = {
 };
 
 function renderRole(role: EnterpriseMemberRole, path: string) {
+  const api = fakeApi(role);
   const storage = new MemoryStorage();
   storage.setItem("wujie.enterprise.session.v1", JSON.stringify({
     token: "token-a",
@@ -54,13 +71,14 @@ function renderRole(role: EnterpriseMemberRole, path: string) {
     tenantId: "tenant-a",
     account: account(),
   }));
-  return render(
+  render(
     <MemoryRouter initialEntries={[path]}>
-      <AuthProvider api={fakeApi(role)} storage={storage}>
+      <AuthProvider api={api} storage={storage}>
         <AppRoutes />
       </AuthProvider>
     </MemoryRouter>,
   );
+  return api;
 }
 
 function fakeApi(role: EnterpriseMemberRole): EnterpriseApi {

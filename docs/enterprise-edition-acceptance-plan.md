@@ -1,6 +1,6 @@
 # 无界AI企业版验收任务与计划
 
-版本：v1.18
+版本：v1.19
 日期：2026-07-19
 状态：可执行验收计划，已对齐统一通讯平台和 PostgreSQL Primary 收敛
 
@@ -130,6 +130,16 @@ draft/review/published/expired、生效范围和只读快照；所有内容请�
 forbidden/conflict/not_ready 且 PostgreSQL 缺失时不回退到 SQLite/JSON。该自动化满足 AC-UI-004/005/007/011
 的代码候选条件，并复用 AC-ENT-0021/0022 服务端 guard；正式接受仍需桌面浏览器矩阵、键盘/无障碍、真实
 PostgreSQL staging 双租户并发发布及 ASR/翻译/LLM Worker 引用消费，当前不能进入 A1 或生产放行。
+
+`ENT-UI-005` 当前代码候选覆盖成员目录、现有账号加入、角色/状态编辑和九角色 scope 说明。页面直接读取
+共享 `enterpriseRoleScopes`，成员 API client 为读写请求携带 Bearer、`x-tenant-id` 和签名 route document，
+body 不发送 tenantId；只读角色不渲染新增/编辑入口，无 scope 的直接 URL 不发起成员读取，所有者与当前账号
+不提供自改入口，服务端 membership/RBAC/route guard 继续作为最终授权边界。403/409/503 分别进入
+forbidden/conflict/not_ready，安全 trace ID 可见。当前 API 只把已注册 userId 加入企业并返回 active membership，
+没有短信、邮件或 Provider 邀请，因此不能把“添加成员”表述为外部邀请成功。该自动化满足
+AC-UI-002/003/004/005/006/011 的代码候选条件；本地 Chromium 1440px 检查只证明单一桌面布局，不替代
+Chrome/Safari/Edge 全矩阵、320-1280px、深色/200% 缩放、axe/键盘或真实 PostgreSQL staging 验收，当前不能
+进入 A1 或生产放行。
 
 ### 4.2 浏览器和设备矩阵
 

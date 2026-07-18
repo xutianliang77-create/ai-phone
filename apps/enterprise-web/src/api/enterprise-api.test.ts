@@ -135,6 +135,50 @@ describe("enterprise API client", () => {
     });
     expect(JSON.parse(String(fetcher.mock.calls[1]?.[1]?.body))).not.toHaveProperty("tenantId");
   });
+
+  it("binds member reads and writes to the selected tenant route without a body tenant override", async () => {
+    const fetcher = vi.fn<typeof fetch>().mockImplementation(async () => new Response(
+      JSON.stringify({ members: [], member: { id: "member-b" } }),
+      { status: 200 },
+    ));
+    const api = createEnterpriseApi(fetcher, "/api");
+    const context = contentContext();
+
+    await api.listMembers(context);
+    await api.createMember(context, { userId: "user-b", role: "support_agent" });
+    await api.updateMember(context, "member/b", {
+      role: "support_manager",
+      status: "suspended",
+    });
+
+    expect(fetcher.mock.calls.map(([url]) => url)).toEqual([
+      "/api/enterprise/v1/members",
+      "/api/enterprise/v1/members",
+      "/api/enterprise/v1/members/member%2Fb",
+    ]);
+    expect(fetcher.mock.calls.map(([, init]) => init?.method)).toEqual([
+      undefined,
+      "POST",
+      "PATCH",
+    ]);
+    expect(JSON.parse(String(fetcher.mock.calls[1]?.[1]?.body))).toEqual({
+      userId: "user-b",
+      role: "support_agent",
+    });
+    expect(JSON.parse(String(fetcher.mock.calls[2]?.[1]?.body))).toEqual({
+      role: "support_manager",
+      status: "suspended",
+    });
+    for (const call of fetcher.mock.calls) {
+      const headers = call[1]?.headers as Record<string, string>;
+      expect(headers).toMatchObject({
+        authorization: "Bearer token-a",
+        "x-tenant-id": "tenant-a",
+      });
+      expect(decodeRouteDocument(headers["x-enterprise-route-document"]!))
+        .toEqual(context.routeDocument);
+    }
+  });
 });
 
 function contentContext() {

@@ -27,6 +27,11 @@ export const enterpriseIcons = {
     publish: "publish",
     review: "fact_check",
     version: "history",
+    edit: "edit",
+  },
+  member: {
+    person: "person",
+    role: "admin_panel_settings",
   },
   content: {
     source: "description",

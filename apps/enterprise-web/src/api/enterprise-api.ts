@@ -16,6 +16,7 @@ import type {
   PhoneCodeRequestResponse,
   PhoneLoginResponse,
 } from "@translation/contracts";
+import { createEnterpriseMemberApi, type EnterpriseMemberApi } from "./enterprise-member-api.js";
 
 export class EnterpriseApiError extends Error {
   constructor(
@@ -46,7 +47,7 @@ export interface EnterprisePublicationInput {
   expiresAt?: string;
 }
 
-export interface EnterpriseApi {
+export interface EnterpriseApi extends EnterpriseMemberApi {
   requestCode(phone: string): Promise<PhoneCodeRequestResponse>;
   login(phone: string, code: string): Promise<PhoneLoginResponse>;
   listTenants(token: string): Promise<EnterpriseTenantListResponse>;
@@ -154,6 +155,7 @@ export function createEnterpriseApi(
 ): EnterpriseApi {
   const request = createRequester(fetcher, baseUrl);
   return {
+    ...createEnterpriseMemberApi(request, contentHeaders),
     requestCode: (phone) => request("/auth/phone/request-code", {
       method: "POST",
       body: JSON.stringify({ phone }),
