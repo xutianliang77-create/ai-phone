@@ -1,4 +1,16 @@
-from app.hymt2_engine import build_prompt
+from app.hymt2_engine import as_model_inputs, build_prompt
+
+
+def test_hymt2_model_inputs_drop_unsupported_token_type_ids() -> None:
+    inputs = {
+        "input_ids": object(),
+        "attention_mask": object(),
+        "token_type_ids": object(),
+    }
+
+    model_inputs = as_model_inputs(inputs)
+
+    assert set(model_inputs) == {"input_ids", "attention_mask"}
 
 
 def test_hymt2_prompt_uses_requested_non_english_target_language() -> None:

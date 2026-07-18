@@ -185,7 +185,11 @@ def build_prompt(
 
 def as_model_inputs(inputs):
     if isinstance(inputs, Mapping):
-        return inputs
+        return {
+            key: value
+            for key, value in inputs.items()
+            if key != "token_type_ids"
+        }
     return {"input_ids": inputs}
 
 
