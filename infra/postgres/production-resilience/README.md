@@ -58,3 +58,49 @@ npm run postgres:resilience-drill -- \
 This repository supplies the orchestration and fail-closed evidence contract.
 It deliberately does not select a cloud provider, second host, bucket, KMS key,
 or Patroni DCS on behalf of the operator.
+
+## Concrete Patroni and WAL-G integration
+
+`patroni-walg.drill.example.json` binds the fixed drill to the repository's
+concrete adapters. Copy it and both provider examples to ignored private files,
+replace every executable path and SHA-256, then install `probe-table.sql` only in
+`ai_phone_staging`. The adapters never invoke a shell and pass only named
+environment variables to `patronictl`, `psql`, `pg_dump`, WAL-G and controllers.
+
+The Patroni adapter requires two database hosts across two failure domains and a
+healthy three-voter DCS across three failure domains. Its pinned controllers must
+attest DCS quorum, perform a bounded failure injection, and recover the old
+primary. The adapter independently checks Patroni leadership, the durable write
+probe, old-primary read-only/isolation, writer service discovery and timeline
+rejoin. An ambiguous failure request is not replayed automatically.
+
+The WAL-G adapter supports exactly one configured `WALG_S3_PREFIX`,
+`WALG_GS_PREFIX` or `WALG_AZ_PREFIX`. A pinned storage controller must inspect the
+real remote objects and attest TLS, at-rest encryption, retention, object lock and
+version IDs. A pinned recovery controller owns the isolated PostgreSQL lifecycle;
+the adapter itself runs `backup-push`, `wal-show`, `backup-fetch`, forces a WAL
+switch, and compares bounded streaming SHA-256 values from `pg_dump` on source and
+restore. The source must be drained for the restore checksum window; a live write
+during that window correctly fails the equality gate.
+
+Provider/controller stdout is a single JSON object. Secrets must be supplied only
+through the allowlisted environment variables; stdout/stderr evidence is mode
+`0600` and secret-looking values are redacted. The example SHA values are inert
+placeholders and must never be treated as deployment evidence.
+
+Before any real drill, run the read-only provider readiness gate. It does not
+connect to PostgreSQL, Patroni, DCS or object storage and never invokes a provider
+command. It validates private-file binding, executable hashes and permissions,
+the exact per-step environment allowlist, controller argument routing, the real
+`pg_service.conf` database/host/`verify-full` entries, required secret presence,
+an empty restore PGDATA and cross-file topology/database/retention consistency.
+
+```bash
+npm run check:postgres-resilience-providers -- \
+  --drill infra/postgres/production-resilience/drill.json \
+  --patroni infra/postgres/production-resilience/patroni-ha-provider.json \
+  --walg infra/postgres/production-resilience/walg-backup-provider.json
+```
+
+`ready` means only that the local provider contract is safe to start; it is not
+failover, backup, restore, RPO/RTO or production acceptance evidence.
