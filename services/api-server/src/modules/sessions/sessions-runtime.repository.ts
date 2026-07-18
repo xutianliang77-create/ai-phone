@@ -288,10 +288,10 @@ export async function mutateSessionRecord<T>(
   operation: string,
   payload: unknown,
   plan: (current: SessionRecord) => MutationPlan<T>,
-  legacyOperation: () => T,
+  legacyOperation: () => T | Promise<T>,
 ): Promise<T | null> {
   const runtime = getRepositoryRuntime();
-  if (runtime.driver !== "postgres") return legacyOperation();
+  if (runtime.driver !== "postgres") return await legacyOperation();
   return withPostgresRepositoryFence(
     { aggregateType: "communication_session", aggregateId: sessionId },
     async (fence) => {

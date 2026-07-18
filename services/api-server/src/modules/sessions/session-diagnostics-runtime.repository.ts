@@ -1,9 +1,12 @@
 import type { RealtimeNodeDiagnosticsDto } from "@translation/contracts";
-import * as legacy from "./sessions.repository.js";
 import type { SessionRecord } from "./session-record.js";
 import { mergeSessionNodeDiagnostics as mergeDiagnostics } from
   "./session-diagnostics-merge.js";
-import { mutateSessionRecord } from "./sessions-runtime.repository.js";
+import {
+  findSession,
+  mutateSessionRecord,
+  saveSessionDiagnostics,
+} from "./sessions-runtime.repository.js";
 
 export function mergeSessionNodeDiagnostics(
   sessionId: string,
@@ -17,10 +20,10 @@ export function mergeSessionNodeDiagnostics(
     const next = structuredClone(current);
     next.diagnostics = diagnostics;
     return { next, result: (saved: SessionRecord) => saved };
-  }, () => {
-    const current = legacy.findSession(sessionId);
+  }, async () => {
+    const current = await findSession(sessionId);
     if (!current) return null;
-    return legacy.saveSessionDiagnostics(
+    return saveSessionDiagnostics(
       sessionId,
       mergeDiagnostics(current.diagnostics, node),
     );
