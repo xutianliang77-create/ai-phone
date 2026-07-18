@@ -93,9 +93,91 @@ The system probe runs after ramp-up while sessions are still active and must emi
 `recovered=true`, and `observedRecoverySeconds`. Mock attestations are written as
 `mock_passed` and cannot be promoted into `latest.json`.
 
+The repository includes the real translation-room runner used by the example
+configuration. It authenticates with `PLATFORM_LOAD_ACCOUNT_TOKEN`, alternates
+the checked-in Chinese and English PCM fixtures across sessions, waits for the
+automatically dispatched Worker, and requires matched ASR, MT, TTS final events
+plus target-leg TTS audio. Optional fixture and pacing overrides are
+`PLATFORM_LOAD_ZH_AUDIO_FIXTURE`, `PLATFORM_LOAD_EN_AUDIO_FIXTURE`, and
+`PLATFORM_LOAD_UTTERANCE_INTERVAL_MS`. Keep credentials in the process
+environment; do not write them into the JSON config or evidence files.
+
+The SIP translation runner uses only a deterministic target from
+`MIXED_LOAD_PSTN_ALLOWLIST`, never prints the number, and refuses a staging
+health profile unless PSTN is ready on `livekit_sip`. It connects the host
+before dialing, repeats the identical outbound request to prove the one-dial
+idempotency fence, polls that same operation until webhook reconciliation marks
+it active, then requires ASR/MT/TTS finals and `playback.ended` for the SIP leg.
+The allowlisted destination must be an owned auto-answer test endpoint capable
+of the planned parallel call volume; personal or third-party numbers are not
+valid capacity targets.
+
+The Agent Egress runner creates an autonomous Agent draft with recording
+requested, waits for the bound SIP callee to grant the exact recording policy,
+then starts LiveKit Egress twice with the same request to prove the single-start
+idempotency fence. It keeps both the Agent call and recording active through the
+phase deadline, stops Egress, requires a completed recording plus verified audio
+and manifest SHA-256 values, and finally cancels the Agent call. Configure the
+private policy bindings only through the process environment:
+
+```bash
+export PLATFORM_LOAD_AGENT_CONSENT_PROMPT_VERSION=replace-with-staging-version
+export PLATFORM_LOAD_AGENT_DISCLOSURE_PROMPT_VERSION=replace-with-staging-version
+export PLATFORM_LOAD_AGENT_RECORDING_POLICY_VERSION=replace-with-staging-version
+```
+
+The owned auto-answer endpoint must acknowledge the AI disclosure, explicitly
+grant recording consent, and keep the call open until the phase ends. A refusal,
+withdrawal, stale generation, early Agent/Egress termination, unverified artifact,
+or policy mismatch fails the session; the runner never treats these as success.
+Keep `gracefulDrainSeconds` greater than two API request timeouts plus
+`PLATFORM_LOAD_EGRESS_ARTIFACT_TIMEOUT_MS`; the example uses 120 seconds so the
+artifact recovery worker can finish verification after the phase deadline.
+
+The three failure profiles use the repository failure runner and cannot be
+arbitrarily recombined: `translation_worker_sigkill` maps only to
+`translation-worker/sigkill`, `model_provider_timeout` to
+`model-provider/timeout`, and `livekit_node_drain` to `livekit/node-drain`.
+The runner talks only to an allowlisted HTTPS staging controller and submits the
+same idempotent request twice. Both requests must resolve to the same operation,
+and the second response must be marked as replayed.
+
+The private controller must implement `POST /v1/failure-operations` and
+`GET /v1/failure-operations/:operationId`. Every operation is bound to the run,
+phase, failure profile, automatic recovery policy, and recovery deadline. A
+successful terminal response must include `injectionObservedAt`, `recoveredAt`,
+non-empty `injectionEvidence`, and non-empty `recoveryEvidence`. Automatic
+recovery is a controller responsibility and must continue if the runner exits or
+loses its network connection.
+Requests are restricted to `scope=run` and `maxAffectedResources=1`; the
+controller must echo and enforce both fields together with target concurrency and
+the recovery timeout.
+
+```bash
+export PLATFORM_LOAD_FAILURE_CONTROL_ACK=WUJIE_STAGING_FAILURE_ONLY
+export PLATFORM_LOAD_FAILURE_CONTROL_URL=https://replace-with-chaos-controller.example.cn/
+export PLATFORM_LOAD_FAILURE_ALLOWED_HOSTS=replace-with-chaos-controller.example.cn
+export PLATFORM_LOAD_FAILURE_TOKEN=replace-with-private-controller-token
+```
+
+Do not point the controller at production or expose a general command-execution
+API. The controller implementation must allow only the three bounded profiles,
+enforce its own TTL/lease and target allowlists, and return opaque resource IDs
+rather than secrets or customer data.
+
+The example system probe queries a staging Prometheus endpoint over HTTPS.
+Configure `PLATFORM_LOAD_PROMETHEUS_URL`,
+`PLATFORM_LOAD_METRICS_ALLOWED_HOSTS`, and optional
+`PLATFORM_LOAD_PROMETHEUS_TOKEN`. The three expressions
+`PLATFORM_LOAD_PROMQL_UTILIZATION`, `PLATFORM_LOAD_PROMQL_OOM_COUNT`, and
+`PLATFORM_LOAD_PROMQL_UNBOUNDED_QUEUE` must each aggregate the complete staging
+pool to exactly one scalar. Ambiguous vectors, utilization outside 0-1,
+non-integer OOM counts, and negative queue values fail closed.
+
 ```bash
 export MIXED_LOAD_STAGING_ACK=WUJIE_STAGING_LOAD_ONLY
 export MIXED_LOAD_PSTN_ALLOWLIST=+8613800138000
+export PLATFORM_LOAD_ACCOUNT_TOKEN=replace-with-isolated-staging-account-token
 npm run platform:mixed-load -- \
   --config infra/platform-ha/mixed-load.json \
   --promote-latest

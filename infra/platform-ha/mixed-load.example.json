@@ -8,7 +8,7 @@
     "apiBaseUrl": "https://replace-with-isolated-staging-api.example.cn",
     "allowedApiHosts": ["replace-with-isolated-staging-api.example.cn"],
     "acknowledgement": "WUJIE_STAGING_LOAD_ONLY",
-    "gracefulDrainSeconds": 30,
+    "gracefulDrainSeconds": 120,
     "maxPendingStarts": 150,
     "systemSampleDelaySeconds": 30
   },
@@ -36,8 +36,8 @@
     "minimumFinalCoverageRatio": 0.99
   },
   "systemProbe": {
-    "file": "replace-with-system-metrics-probe",
-    "args": ["--json"]
+    "file": "node",
+    "args": ["scripts/run_platform_system_probe.mjs"]
   },
   "scenarios": [
     {
@@ -45,8 +45,8 @@
       "weight": 60,
       "trafficKinds": ["api", "livekit", "asr", "mt", "tts"],
       "command": {
-        "file": "replace-with-real-translation-session-runner",
-        "args": ["--json"]
+        "file": "node",
+        "args": ["scripts/run_translation_room_load_session.mjs"]
       }
     },
     {
@@ -54,8 +54,8 @@
       "weight": 20,
       "trafficKinds": ["api", "livekit", "sip", "asr", "mt", "tts"],
       "command": {
-        "file": "replace-with-real-sip-session-runner",
-        "args": ["--json"]
+        "file": "node",
+        "args": ["scripts/run_sip_translation_load_session.mjs"]
       }
     },
     {
@@ -63,8 +63,8 @@
       "weight": 20,
       "trafficKinds": ["api", "livekit", "sip", "agent", "egress"],
       "command": {
-        "file": "replace-with-real-agent-egress-runner",
-        "args": ["--json"]
+        "file": "node",
+        "args": ["scripts/run_agent_egress_load_session.mjs"]
       }
     }
   ],
