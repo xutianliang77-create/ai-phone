@@ -151,6 +151,7 @@ function routeDocument(tenantId: string) {
     tenantId,
     homeRegion: "cn",
     cellId: "cn-cell-01",
+    routeEpoch: 7,
     apiBaseUrl: "https://api-cn.enterprise.example",
     rtcUrl: "wss://rtc-cn.enterprise.example",
     issuedAt: "2026-07-16T00:00:00Z",

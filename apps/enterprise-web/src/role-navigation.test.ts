@@ -12,12 +12,12 @@ import {
 const expectedRoutes: Record<EnterpriseMemberRole, readonly string[]> = {
   owner: ["/", "/campaigns", "/support", "/meetings", "/contacts", "/knowledge", "/analytics", "/audit", "/settings"],
   admin: ["/", "/campaigns", "/support", "/meetings", "/contacts", "/knowledge", "/analytics", "/audit", "/settings"],
-  marketing_manager: ["/", "/campaigns", "/contacts", "/knowledge", "/analytics"],
-  marketing_member: ["/", "/campaigns", "/contacts", "/knowledge", "/analytics"],
-  support_manager: ["/", "/support", "/contacts", "/knowledge", "/analytics"],
-  support_agent: ["/", "/support", "/contacts", "/knowledge", "/analytics"],
-  meeting_host: ["/", "/meetings", "/analytics"],
-  member: ["/", "/meetings", "/analytics"],
+  marketing_manager: ["/", "/campaigns", "/contacts", "/knowledge", "/analytics", "/settings"],
+  marketing_member: ["/", "/campaigns", "/contacts", "/knowledge", "/analytics", "/settings"],
+  support_manager: ["/", "/support", "/contacts", "/knowledge", "/analytics", "/settings"],
+  support_agent: ["/", "/support", "/contacts", "/knowledge", "/analytics", "/settings"],
+  meeting_host: ["/", "/meetings", "/analytics", "/settings"],
+  member: ["/", "/meetings", "/analytics", "/settings"],
   auditor: ["/", "/campaigns", "/support", "/meetings", "/contacts", "/knowledge", "/analytics", "/audit", "/settings"],
 };
 

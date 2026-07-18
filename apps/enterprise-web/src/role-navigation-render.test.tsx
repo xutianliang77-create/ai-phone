@@ -33,12 +33,20 @@ describe("enterprise role navigation render matrix", () => {
     expect(screen.queryByRole("link", { name: /AI 客服/ })).not.toBeInTheDocument();
   });
 
-  it("does not execute member reads from a direct settings URL without scope", async () => {
+  it("opens the first tenant-readable settings page without executing member reads", async () => {
     const api = renderRole("marketing_member", "/settings");
 
-    expect(await screen.findByRole("heading", { name: "成员与角色" })).toBeVisible();
-    expect(screen.getByRole("heading", { name: "无权访问" })).toBeVisible();
+    expect(await screen.findByRole("heading", { name: "区域与数据" })).toBeVisible();
+    expect(screen.queryByRole("link", { name: /成员与角色/ })).not.toBeInTheDocument();
     expect(api.listMembers).not.toHaveBeenCalled();
+  });
+
+  it("guards a direct billing settings URL before calling billing APIs", async () => {
+    const api = renderRole("marketing_member", "/settings/billing");
+
+    expect(await screen.findByRole("heading", { name: "企业设置" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "无权访问" })).toBeVisible();
+    expect(api.getBillingEntitlements).not.toHaveBeenCalled();
   });
 
   it("routes an authorized settings URL to the real member directory", async () => {
@@ -53,12 +61,12 @@ describe("enterprise role navigation render matrix", () => {
 const expectedRoutes: Record<EnterpriseMemberRole, readonly string[]> = {
   owner: ["/", "/campaigns", "/support", "/meetings", "/contacts", "/knowledge", "/analytics", "/audit", "/settings"],
   admin: ["/", "/campaigns", "/support", "/meetings", "/contacts", "/knowledge", "/analytics", "/audit", "/settings"],
-  marketing_manager: ["/", "/campaigns", "/contacts", "/knowledge", "/analytics"],
-  marketing_member: ["/", "/campaigns", "/contacts", "/knowledge", "/analytics"],
-  support_manager: ["/", "/support", "/contacts", "/knowledge", "/analytics"],
-  support_agent: ["/", "/support", "/contacts", "/knowledge", "/analytics"],
-  meeting_host: ["/", "/meetings", "/analytics"],
-  member: ["/", "/meetings", "/analytics"],
+  marketing_manager: ["/", "/campaigns", "/contacts", "/knowledge", "/analytics", "/settings"],
+  marketing_member: ["/", "/campaigns", "/contacts", "/knowledge", "/analytics", "/settings"],
+  support_manager: ["/", "/support", "/contacts", "/knowledge", "/analytics", "/settings"],
+  support_agent: ["/", "/support", "/contacts", "/knowledge", "/analytics", "/settings"],
+  meeting_host: ["/", "/meetings", "/analytics", "/settings"],
+  member: ["/", "/meetings", "/analytics", "/settings"],
   auditor: ["/", "/campaigns", "/support", "/meetings", "/contacts", "/knowledge", "/analytics", "/audit", "/settings"],
 };
 
@@ -92,6 +100,7 @@ function fakeApi(role: EnterpriseMemberRole): EnterpriseApi {
       tenantId: "tenant-a",
       homeRegion: "cn",
       cellId: "cn-cell-01",
+      routeEpoch: 7,
       apiBaseUrl: "https://api-cn.enterprise.example",
       rtcUrl: "wss://rtc-cn.enterprise.example",
       issuedAt: "2026-07-16T00:00:00Z",

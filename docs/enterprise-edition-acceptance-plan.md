@@ -1,6 +1,6 @@
 # 无界AI企业版验收任务与计划
 
-版本：v1.19
+版本：v1.20
 日期：2026-07-19
 状态：可执行验收计划，已对齐统一通讯平台和 PostgreSQL Primary 收敛
 
@@ -140,6 +140,15 @@ forbidden/conflict/not_ready，安全 trace ID 可见。当前 API 只把已注�
 AC-UI-002/003/004/005/006/011 的代码候选条件；本地 Chromium 1440px 检查只证明单一桌面布局，不替代
 Chrome/Safari/Edge 全矩阵、320-1280px、深色/200% 缩放、axe/键盘或真实 PostgreSQL staging 验收，当前不能
 进入 A1 或生产放行。
+
+`ENT-UI-007` 当前代码候选覆盖区域/route、Provider capability、billing account/subscription/entitlement、预算和
+usage ledger 账期聚合。企业设置主入口以 tenant:read 发现，二级入口分别由 member/billing/usage scope 守卫；
+无权直接 URL 在页面请求前停止，服务端 RBAC/route guard 仍是最终授权边界。homeRegion/cell 只读且不显示 route
+signature；Provider 页面只展示 capability/status/reason/脱敏 fingerprint，不接收 Key、Secret、Webhook 或探测 URL；
+订阅变更只提交精确 plan code/version、seats、cycle 和稳定幂等键，预算更新提交 expectedVersion，409 不覆盖服务端
+版本；503 明确 not_ready 且不回退 SQLite/JSON。该自动化满足 AC-UI-002/003/004/005/006/007/011 的代码候选
+条件。本地隔离 Chromium 1440×1000 和 390×844 检查仅证明两个布局样本，未覆盖完整 AC-UI-008/009/010；正式
+接受仍需浏览器/键盘/axe 矩阵、真实 PostgreSQL staging、双租户攻击、真实 Provider/账务和 A1/H3 门禁。
 
 ### 4.2 浏览器和设备矩阵
 

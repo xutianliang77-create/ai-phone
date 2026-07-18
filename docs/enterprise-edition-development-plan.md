@@ -1,6 +1,6 @@
 # 无界AI企业版开发方案与计划
 
-版本：v1.22
+版本：v1.23
 日期：2026-07-19
 状态：E0 执行计划，已对齐统一通讯平台和 PostgreSQL Primary 收敛
 
@@ -29,6 +29,7 @@
 - `ENT-UI-001` 已完成生产令牌、Material Icons 注册表、Flutter 对照和浏览器验证，等待验收；`ENT-UI-002` 已完成共享 scope 真值、九角色导航矩阵、嵌套路由 guard 和 `ENT-CORE-011` 签名 route document；`ENT-UI-003` 已完成八态组件矩阵及 Provider/冲突/job 真值联调，均等待验收。
 - `ENT-UI-006` 已完成 Knowledge Source、Term Pack、Script Template 的服务端真值页面、签名 route document 客户端、scope 写入口控制、draft/review/published/expired 与 PostgreSQL not_ready/forbidden/conflict 状态，进入 `ready_for_acceptance`；浏览器矩阵、真实 PostgreSQL 并发发布和 Worker/Provider 消费仍待 A1/H3。
 - `ENT-UI-005` 已完成成员目录、现有账号加入、角色/状态编辑和九角色 scope 说明，所有成员请求绑定当前 tenant 与签名 route document；无 `member:write` 不渲染写入口，直接 URL 无 scope 时不发起成员读取，所有者和当前账号不提供自改入口。当前接口不是短信/邮件/Provider 邀请服务，真实邀请通道仍待后续设计；任务进入 `ready_for_acceptance`，浏览器矩阵和真实 PostgreSQL staging 仍待 A0/H3。
+- `ENT-UI-007` 已完成成员/权益/区域/Provider/预算与用量二级设置导航，按 `tenant:read`、`member:read`、`billing:read/write`、`usage:read` 分别发现和守卫入口。区域只读，Provider 不接收/回显敏感配置，套餐变更只接受精确服务端 plan/version 并稳定重试幂等键，预算更新带 expectedVersion，用量只展示服务端 ledger 聚合；任务进入 `ready_for_acceptance`。本地 Chromium 1440/390px 只验证隔离 fixture 布局，不替代 UI-009/010、真实 PostgreSQL staging、账务/Provider 或生产放行。
 - PostgreSQL、SaaS 控制面、对象存储、正式域名、真实 Provider 和目标国家合规确认均未通过门禁。
 - 当前开发必须继续使用独立企业 worktree；个人版声纹和部署 WIP 不进入企业提交。
 - 公共 PostgreSQL Primary、统一通讯、Billing 和 Product Records 的稳定代码基线已导入；`ENT-DATA-008` 和 `ENT-CORE-013/014/015` 已完成代码与本地自动化。`ENT-DATA-009` 已产出全表切换/对账/逻辑恢复工具、签名证据和一次性本地 PostgreSQL 16 演练，进入 `ready_for_acceptance`；不能继承主产品环境验收，也未通过异地 PITR/H3。
@@ -293,4 +294,4 @@ CORE-001/002 验收
 
 E0 完成后再启动 `ENT-MTG-001` 主链；允许提前做协议 spike，但不能把未接入真实 tenant/data/readiness 的会议页面计为 E1 完成。
 
-当前进展：`ENT-CORE-003/004/005` 已完成并等待验收；`ENT-DATA-001` 已完成十八段 schema 与本地自动化，等待 staging PostgreSQL migrate/restore/PITR 证据；`ENT-DATA-002/003/004/007/008/009` 已完成 Repository、可靠事件、演示导入、统一 Primary Runtime、公共通讯 tenant scope，以及全库签名切换/恢复证据代码与本地 PostgreSQL 16 演练；`ENT-CORE-004/005` 已完成 tenant knowledge 与 terminology/script 的 revision/review/publish、不可变 hash/citation 和有效期解析，其中术语 resolver 固化 ASR/翻译/LLM 的同一版本引用；`ENT-CORE-013/014/015` 已完成企业统一通讯绑定、签名 Worker dispatch fence 及设备/声音/录制运行策略并进入验收；`ENT-CORE-007/010/012` 已完成 tenant budget、billing account、版本化 plan/subscription/entitlement、不可变 usage event/ledger/adjustment、账期 count/hash 聚合与 dispatch 服务端限额自动化并进入验收；`ENT-UI-001/002/003/005/006` 已进入验收。下一优先级为 `ENT-UI-004/007` 服务端真值页面、staging `ENT-DATA-009` 验收和 `ENT-REL-003` 跨故障域/PITR。
+当前进展：`ENT-CORE-003/004/005` 已完成并等待验收；`ENT-DATA-001` 已完成十八段 schema 与本地自动化，等待 staging PostgreSQL migrate/restore/PITR 证据；`ENT-DATA-002/003/004/007/008/009` 已完成 Repository、可靠事件、演示导入、统一 Primary Runtime、公共通讯 tenant scope，以及全库签名切换/恢复证据代码与本地 PostgreSQL 16 演练；`ENT-CORE-004/005` 已完成 tenant knowledge 与 terminology/script 的 revision/review/publish、不可变 hash/citation 和有效期解析，其中术语 resolver 固化 ASR/翻译/LLM 的同一版本引用；`ENT-CORE-013/014/015` 已完成企业统一通讯绑定、签名 Worker dispatch fence 及设备/声音/录制运行策略并进入验收；`ENT-CORE-007/010/012` 已完成 tenant budget、billing account、版本化 plan/subscription/entitlement、不可变 usage event/ledger/adjustment、账期 count/hash 聚合与 dispatch 服务端限额自动化并进入验收；`ENT-UI-001/002/003/005/006/007` 已进入验收。下一优先级为 `ENT-UI-004/008` 服务端真值页面、staging `ENT-DATA-009` 验收和 `ENT-REL-003` 跨故障域/PITR。

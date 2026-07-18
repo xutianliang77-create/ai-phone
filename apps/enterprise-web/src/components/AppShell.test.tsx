@@ -6,6 +6,6 @@ describe("enterprise scope navigation", () => {
     expect(routeAllowed(["tenant:read", "meeting:read"], "/")).toBe(true);
     expect(routeAllowed(["tenant:read", "meeting:read"], "/meetings")).toBe(true);
     expect(routeAllowed(["tenant:read", "meeting:read"], "/campaigns")).toBe(false);
-    expect(routeAllowed(["tenant:read", "meeting:read"], "/settings")).toBe(false);
+    expect(routeAllowed(["tenant:read", "meeting:read"], "/settings")).toBe(true);
   });
 });

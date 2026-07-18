@@ -291,7 +291,7 @@
   .brand-lockup span,
   .tenant-switcher > span,
   .tenant-switcher select,
-  .nav-item span,
+  .nav-item > span:not(.material-icons):not(.material-icons-outlined),
   .sidebar__footer span {
     position: absolute;
     width: 1px;
@@ -356,10 +356,6 @@
   .nav-item {
     min-width: 44px;
     padding: 0 10px;
-  }
-
-  .nav-item:nth-child(n + 6) {
-    display: none;
   }
 
   .workspace {

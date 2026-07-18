@@ -179,6 +179,59 @@ describe("enterprise API client", () => {
         .toEqual(context.routeDocument);
     }
   });
+
+  it("uses exact billing, budget and usage routes with the signed tenant context", async () => {
+    const fetcher = vi.fn<typeof fetch>().mockImplementation(async () => new Response(
+      JSON.stringify({ account: {}, subscription: {}, entitlement: {}, budgets: [], budget: {}, aggregates: [] }),
+      { status: 200 },
+    ));
+    const api = createEnterpriseApi(fetcher, "/api");
+    const context = contentContext();
+
+    await api.getBillingEntitlements(context);
+    await api.changeSubscription(context, {
+      planCode: "enterprise_growth",
+      planVersion: "2026-07",
+      seats: 12,
+      billingCycle: "annual",
+      idempotencyKey: "change-a",
+    });
+    await api.listUsageBudgets(context);
+    await api.configureUsageBudget(context, "llm_input_tokens", {
+      unit: "tokens",
+      limitAmount: 1000,
+      alertThresholdPercent: 80,
+      periodStart: "2026-07-01T00:00:00Z",
+      periodEnd: "2026-08-01T00:00:00Z",
+      expectedVersion: 2,
+    });
+    await api.listUsageAggregates(context);
+
+    expect(fetcher.mock.calls.map(([url]) => url)).toEqual([
+      "/api/saas/v1/tenants/tenant-a/entitlements",
+      "/api/saas/v1/tenants/tenant-a/subscription/change",
+      "/api/enterprise/v1/usage/budgets",
+      "/api/enterprise/v1/usage/budgets/llm_input_tokens",
+      "/api/enterprise/v1/usage/aggregates",
+    ]);
+    expect(fetcher.mock.calls.map(([, init]) => init?.method)).toEqual([
+      undefined, "POST", undefined, "PUT", undefined,
+    ]);
+    expect(JSON.parse(String(fetcher.mock.calls[1]?.[1]?.body))).toEqual({
+      planCode: "enterprise_growth",
+      planVersion: "2026-07",
+      seats: 12,
+      billingCycle: "annual",
+      idempotencyKey: "change-a",
+    });
+    expect(JSON.parse(String(fetcher.mock.calls[3]?.[1]?.body))).not.toHaveProperty("tenantId");
+    for (const call of fetcher.mock.calls) {
+      const headers = call[1]?.headers as Record<string, string>;
+      expect(headers["x-tenant-id"]).toBe("tenant-a");
+      expect(decodeRouteDocument(headers["x-enterprise-route-document"]!))
+        .toEqual(context.routeDocument);
+    }
+  });
 });
 
 function contentContext() {

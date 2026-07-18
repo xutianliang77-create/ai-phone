@@ -3,6 +3,8 @@ import type { EnterpriseApi } from "../api/enterprise-api.js";
 
 type ContentApi = Pick<EnterpriseApi,
   | "listMembers" | "createMember" | "updateMember"
+  | "getBillingEntitlements" | "changeSubscription"
+  | "listUsageBudgets" | "configureUsageBudget" | "listUsageAggregates"
   | "listKnowledgeSources" | "createKnowledgeSource"
   | "listKnowledgeVersions" | "createKnowledgeVersion"
   | "stageKnowledgeVersion" | "publishKnowledgeVersion"
@@ -19,6 +21,11 @@ export function fakeEnterpriseContentApi(): ContentApi {
     listMembers: vi.fn().mockResolvedValue({ members: [] }),
     createMember: vi.fn(),
     updateMember: vi.fn(),
+    getBillingEntitlements: vi.fn(),
+    changeSubscription: vi.fn(),
+    listUsageBudgets: vi.fn().mockResolvedValue({ budgets: [] }),
+    configureUsageBudget: vi.fn(),
+    listUsageAggregates: vi.fn().mockResolvedValue({ aggregates: [] }),
     listKnowledgeSources: vi.fn().mockResolvedValue({ sources: [] }),
     createKnowledgeSource: vi.fn(),
     listKnowledgeVersions: vi.fn().mockResolvedValue({ knowledgeVersions: [] }),

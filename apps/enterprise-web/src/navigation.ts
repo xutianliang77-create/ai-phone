@@ -71,7 +71,7 @@ export const enterpriseNavigation: readonly EnterpriseNavigationItem[] = [
     label: "企业设置",
     description: "成员、权益、区域与 Provider",
     icon: "settings",
-    anyScope: ["member:read", "tenant:write"],
+    anyScope: ["tenant:read"],
   },
 ] as const;
 

@@ -38,6 +38,15 @@ export const enterpriseIcons = {
     terms: "translate",
     script: "record_voice_over",
   },
+  settings: {
+    members: "group",
+    billing: "workspace_premium",
+    region: "public",
+    provider: "hub",
+    usage: "data_usage",
+    budget: "speed",
+    entitlement: "verified",
+  },
   status: {
     loading: "autorenew",
     empty: "inbox",

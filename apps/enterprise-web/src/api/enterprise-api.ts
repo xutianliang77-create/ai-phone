@@ -3,7 +3,6 @@ import type {
   EnterpriseKnowledgeSourceDto,
   EnterpriseKnowledgeSourceType,
   EnterpriseKnowledgeVersionDto,
-  EnterpriseProviderCapabilitiesResponse,
   EnterpriseScriptTemplateDto,
   EnterpriseScriptTemplateVersionDto,
   EnterpriseTermEntryDto,
@@ -17,6 +16,7 @@ import type {
   PhoneLoginResponse,
 } from "@translation/contracts";
 import { createEnterpriseMemberApi, type EnterpriseMemberApi } from "./enterprise-member-api.js";
+import { createEnterpriseSettingsApi, type EnterpriseSettingsApi } from "./enterprise-settings-api.js";
 
 export class EnterpriseApiError extends Error {
   constructor(
@@ -47,15 +47,11 @@ export interface EnterprisePublicationInput {
   expiresAt?: string;
 }
 
-export interface EnterpriseApi extends EnterpriseMemberApi {
+export interface EnterpriseApi extends EnterpriseMemberApi, EnterpriseSettingsApi {
   requestCode(phone: string): Promise<PhoneCodeRequestResponse>;
   login(phone: string, code: string): Promise<PhoneLoginResponse>;
   listTenants(token: string): Promise<EnterpriseTenantListResponse>;
   getTenantRoute(token: string, tenantId: string): Promise<EnterpriseTenantRouteDocument>;
-  getProviderCapabilities(
-    token: string,
-    tenantId: string,
-  ): Promise<EnterpriseProviderCapabilitiesResponse>;
   getContext(token: string, tenantId: string): Promise<EnterpriseContextResponse>;
   getTenantJob(token: string, jobId: string): Promise<EnterpriseTenantJobResponse>;
   listKnowledgeSources(context: EnterpriseContentRequestContext): Promise<{
@@ -156,6 +152,7 @@ export function createEnterpriseApi(
   const request = createRequester(fetcher, baseUrl);
   return {
     ...createEnterpriseMemberApi(request, contentHeaders),
+    ...createEnterpriseSettingsApi(request, contentHeaders),
     requestCode: (phone) => request("/auth/phone/request-code", {
       method: "POST",
       body: JSON.stringify({ phone }),
@@ -170,10 +167,6 @@ export function createEnterpriseApi(
     getTenantRoute: (token, tenantId) => request(
       `/saas/v1/tenants/${encodeURIComponent(tenantId)}/route`,
       { headers: authorization(token) },
-    ),
-    getProviderCapabilities: (token, tenantId) => request(
-      "/enterprise/v1/provider-capabilities",
-      { headers: { ...authorization(token), "x-tenant-id": tenantId } },
     ),
     getContext: (token, tenantId) => request("/enterprise/v1/me", {
       headers: { ...authorization(token), "x-tenant-id": tenantId },
