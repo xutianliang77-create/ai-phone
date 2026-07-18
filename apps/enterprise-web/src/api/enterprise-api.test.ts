@@ -75,4 +75,88 @@ describe("enterprise API client", () => {
     });
     expect(fetcher.mock.calls[1]?.[0]).toBe("/api/saas/v1/tenant-jobs/job-a");
   });
+
+  it("binds enterprise content reads to the tenant and signed route document", async () => {
+    const fetcher = vi.fn<typeof fetch>().mockImplementation(async () => new Response(
+      JSON.stringify({ sources: [], termPacks: [], scriptTemplates: [] }),
+      { status: 200 },
+    ));
+    const api = createEnterpriseApi(fetcher, "/api");
+    const context = contentContext();
+
+    await api.listKnowledgeSources(context);
+    await api.listTermPacks(context);
+    await api.listScriptTemplates(context);
+
+    expect(fetcher.mock.calls.map(([url]) => url)).toEqual([
+      "/api/enterprise/v1/knowledge/sources",
+      "/api/enterprise/v1/terminology/packs",
+      "/api/enterprise/v1/script-templates",
+    ]);
+    for (const call of fetcher.mock.calls) {
+      const headers = call[1]?.headers as Record<string, string>;
+      expect(headers).toMatchObject({
+        authorization: "Bearer token-a",
+        "x-tenant-id": "tenant-a",
+      });
+      expect(decodeRouteDocument(headers["x-enterprise-route-document"]!))
+        .toEqual(context.routeDocument);
+    }
+  });
+
+  it("uses exact version, review and publish endpoints without a body tenant override", async () => {
+    const fetcher = vi.fn<typeof fetch>().mockImplementation(async () => new Response(
+      JSON.stringify({ knowledgeVersion: {}, termPackVersion: {}, scriptTemplateVersion: {} }),
+      { status: 200 },
+    ));
+    const api = createEnterpriseApi(fetcher, "/api");
+    const context = contentContext();
+
+    await api.stageKnowledgeVersion(context, "knowledge-version", {
+      expectedVersion: 2,
+      chunks: [{ blockId: "block-001", content: "verified content" }],
+    });
+    await api.publishTermPackVersion(context, "term-version", {
+      expectedVersion: 3,
+      effectiveFrom: "2026-07-19T00:00:00.000Z",
+    });
+    await api.createScriptTemplateVersion(context, "template-a", {
+      locale: "zh-CN", countryCode: "CN", productCode: "product-cn",
+    });
+
+    expect(fetcher.mock.calls.map(([url]) => url)).toEqual([
+      "/api/enterprise/v1/knowledge/versions/knowledge-version/chunks",
+      "/api/enterprise/v1/terminology/pack-versions/term-version/publish",
+      "/api/enterprise/v1/script-templates/template-a/versions",
+    ]);
+    expect(JSON.parse(String(fetcher.mock.calls[0]?.[1]?.body))).toEqual({
+      expectedVersion: 2,
+      chunks: [{ blockId: "block-001", content: "verified content" }],
+    });
+    expect(JSON.parse(String(fetcher.mock.calls[1]?.[1]?.body))).not.toHaveProperty("tenantId");
+  });
 });
+
+function contentContext() {
+  return {
+    token: "token-a",
+    tenantId: "tenant-a",
+    routeDocument: {
+      tenantId: "tenant-a",
+      homeRegion: "cn",
+      cellId: "cn-cell-01",
+      routeEpoch: 7,
+      apiBaseUrl: "https://api-cn.enterprise.example",
+      rtcUrl: "wss://rtc-cn.enterprise.example",
+      issuedAt: "2026-07-19T00:00:00.000Z",
+      expiresAt: "2099-07-19T00:05:00.000Z",
+      signature: "signed-route-document",
+    },
+  };
+}
+
+function decodeRouteDocument(value: string) {
+  const padded = value.replaceAll("-", "+").replaceAll("_", "/") +
+    "=".repeat((4 - value.length % 4) % 4);
+  return JSON.parse(Buffer.from(padded, "base64").toString("utf8")) as unknown;
+}

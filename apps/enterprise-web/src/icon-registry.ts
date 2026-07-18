@@ -24,6 +24,14 @@ export const enterpriseIcons = {
     takeover: "pan_tool_alt",
     shareScreen: "screen_share",
     stopShare: "stop_screen_share",
+    publish: "publish",
+    review: "fact_check",
+    version: "history",
+  },
+  content: {
+    source: "description",
+    terms: "translate",
+    script: "record_voice_over",
   },
   status: {
     loading: "autorenew",

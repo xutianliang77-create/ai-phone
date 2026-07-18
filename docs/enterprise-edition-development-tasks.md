@@ -1,7 +1,7 @@
 # 无界AI企业版开发任务
 
-版本：v1.23
-日期：2026-07-18
+版本：v1.24
+日期：2026-07-19
 状态：E0 开发中，已对齐统一通讯平台和 PostgreSQL Primary 收敛
 
 ## 1. 状态定义
@@ -39,6 +39,7 @@
 - `ENT-UI-001` 已完成生产颜色/字号/尺寸/圆角令牌、Material Icons 语义注册表、Flutter 对照和依赖扫描，等待验收。
 - `ENT-UI-002` 已完成 active membership 租户选择、共享 role/scope 真值、九角色 route discovery、scope 导航、直接/嵌套路由 guard 及签名 route document 联调，等待验收。
 - `ENT-UI-003` 已完成八态注册表、语义图标、ARIA live/alert、trace ID、可行动入口和组件矩阵，并接入服务端 Provider capability、租户生命周期 job 及 409/412 冲突映射，等待验收。
+- `ENT-UI-006` 已把 Knowledge Source、Term Pack 和 Script Template 的稳定资源、修订、评审与发布接入企业 Web。所有请求携带当前 tenant 与签名 route document；只读角色不显示写入口，服务端仍执行 scope guard；draft/review/published/expired、loading/empty/not_ready/forbidden/conflict/failed 均使用真实响应且不回退到 SQLite/JSON。代码与自动化完成，进入 `ready_for_acceptance`；浏览器矩阵、真实 PostgreSQL staging、并发发布和外部 Worker/Provider 消费仍待正式验收。
 - PostgreSQL runtime、cell Worker 和演示数据导入对账代码已接通，但尚未在真实 PostgreSQL 上执行 migrate/import/reconcile、并发租约、恢复或容量门禁，不能据此宣称企业试点或生产可用。生命周期执行器也尚未接入真实对象存储/Provider 清理服务。基础 append-only 审计和 usage accounting 已实现，但受控审计导出、retention/对象清单和 Provider 删除收敛仍属于 `ENT-UI-008/ENT-REL-002`，会议/客服/营销业务聚合和外部 Provider 仍未通过实现或真实环境门禁。
 - 主产品稳定提交 `fe1c3c2` 已作为 `ENT-DATA-007` 基线合入企业分支；后续个人工作区 WIP 仍不得直接进入企业提交。公共通讯 tenant scope 已完成本地代码门禁，切换/对账证据仍由 `ENT-DATA-009` 完成，主产品 staging 结果不能继承为企业验收证据。
 
@@ -77,7 +78,7 @@
 | ENT-UI-003 | 统一页面状态 | CORE-003/008 | loading/empty/not_ready/degraded/forbidden/conflict/processing/failed 组件 | 不出现空白页、假成功或覆盖冲突版本 | ready_for_acceptance |
 | ENT-UI-004 | 企业工作台 | UI-002/003、CORE-007/008/010/012、OBS-001 | readiness、待办、业务状态、用量和告警 | 所有状态来自服务端；无真实样本不绘制趋势 | todo |
 | ENT-UI-005 | 成员与角色设置 | UI-002/003、CORE-001/002 | 成员列表、邀请、角色/状态编辑、scope 说明 | 角色变更与服务端 scopes 一致；越权入口不可执行 | todo |
-| ENT-UI-006 | 知识与术语管理 | UI-003、CORE-004/005 | source/version/publish、term pack、script template 页面 | 未发布/过期内容明确标识且不能被错误发布 | todo |
+| ENT-UI-006 | 知识与术语管理 | UI-003、CORE-004/005 | source/version/publish、term pack、script template 页面 | 未发布/过期内容明确标识且不能被错误发布 | ready_for_acceptance |
 | ENT-UI-007 | 区域、Provider、套餐与用量 | UI-003、CORE-007/008/010/011/012 | region/route、capability、entitlement、budget、billing 页面 | homeRegion 只读；不回显密钥；未配置显示 not_ready | todo |
 | ENT-UI-008 | 审计与分析 | UI-003、CORE-006、OBS-001 | 审计筛选/详情/导出、质量和成本下钻 | 敏感字段脱敏；导出有目的、范围、到期和审计 | todo |
 | ENT-UI-009 | 响应式、深色和无障碍 | UI-001..008 | 320/600/960/1280 布局、dark mode、键盘和动态字体 | 无横向溢出；WCAG AA；200%缩放核心操作可达 | todo |
@@ -85,7 +86,7 @@
 | ENT-UI-011 | Flutter 企业入口 | UI-001/002、CORE-002 | 工作台、会议、接管、告警和我的入口 | 不复制批量管理；离线/越权不显示乐观成功 | todo |
 | ENT-UI-012 | Web 访客参会壳 | CORE-003、MTG-002 | guest token 入会、设备检查、字幕和共享入口 | token 仅访问指定 meeting；不暴露租户导航和成员数据 | todo |
 
-`ENT-CORE-003` 的生产脚手架、登录和构建已完成；`ENT-UI-001/002/003` 已进入验收。Provider capability 与租户生命周期 job 已使用服务端真值；尚未实现的业务领域页面继续明确显示未就绪。静态 HTML 原型不进入生产构建，也不能替代这些任务的验收。
+`ENT-CORE-003` 的生产脚手架、登录和构建已完成；`ENT-UI-001/002/003/006` 已进入验收。Provider capability、租户生命周期 job 与知识/术语/话术版本已使用服务端真值；尚未实现的业务领域页面继续明确显示未就绪。静态 HTML 原型不进入生产构建，也不能替代这些任务的验收。
 
 ## 4. P0 企业会议
 

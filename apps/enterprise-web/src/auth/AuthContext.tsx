@@ -42,6 +42,7 @@ type AuthState =
 
 interface AuthContextValue {
   state: AuthState;
+  api: EnterpriseApi;
   requestCode(phone: string): Promise<PhoneCodeRequestResponse>;
   login(phone: string, code: string): Promise<void>;
   selectTenant(tenantId: string): Promise<void>;
@@ -112,6 +113,7 @@ export function AuthProvider({
 
   const value = useMemo<AuthContextValue>(() => ({
     state,
+    api,
     requestCode: (phone) => api.requestCode(phone),
     login: async (phone, code) => {
       const result = await api.login(phone, code);

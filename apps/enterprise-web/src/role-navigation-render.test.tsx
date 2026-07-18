@@ -13,6 +13,7 @@ import { AppRoutes } from "./App.js";
 import type { EnterpriseApi } from "./api/enterprise-api.js";
 import { AuthProvider } from "./auth/AuthContext.js";
 import { MemoryStorage } from "./test/MemoryStorage.js";
+import { fakeEnterpriseContentApi } from "./test/fakeEnterpriseContentApi.js";
 
 describe("enterprise role navigation render matrix", () => {
   it.each(enterpriseMemberRoles)("renders only discovered links for %s", async (role) => {
@@ -65,6 +66,7 @@ function renderRole(role: EnterpriseMemberRole, path: string) {
 function fakeApi(role: EnterpriseMemberRole): EnterpriseApi {
   const value = membership(role);
   return {
+    ...fakeEnterpriseContentApi(),
     requestCode: vi.fn(),
     login: vi.fn(),
     listTenants: vi.fn().mockResolvedValue({ tenants: [value] }),

@@ -1,7 +1,7 @@
 # 无界AI企业版开发方案与计划
 
-版本：v1.20
-日期：2026-07-18
+版本：v1.21
+日期：2026-07-19
 状态：E0 执行计划，已对齐统一通讯平台和 PostgreSQL Primary 收敛
 
 ## 1. 开发原则
@@ -27,6 +27,7 @@
 - `ENT-DATA-003` 已完成 tenant-scoped Inbox/Outbox、事务内领域提交、100次重放去重、lease/retry/recovery 和 SQLite/迁移自动化，进入 `ready_for_acceptance`；真实 PostgreSQL 并发 claim 和 Provider sandbox 仍是验收门禁。
 - `ENT-DATA-007` 已合入上游稳定提交 `fe1c3c2`，用唯一 `API_STORAGE_DRIVER`、公共/enterprise 双 manifest 验证、同库 name/OID 校验和 tenant/directory/cell/migration/maintenance 分权连接收敛 API 与 cell Worker；代码和本地自动化进入 `ready_for_acceptance`，真实 PostgreSQL H3 未执行。
 - `ENT-UI-001` 已完成生产令牌、Material Icons 注册表、Flutter 对照和浏览器验证，等待验收；`ENT-UI-002` 已完成共享 scope 真值、九角色导航矩阵、嵌套路由 guard 和 `ENT-CORE-011` 签名 route document；`ENT-UI-003` 已完成八态组件矩阵及 Provider/冲突/job 真值联调，均等待验收。
+- `ENT-UI-006` 已完成 Knowledge Source、Term Pack、Script Template 的服务端真值页面、签名 route document 客户端、scope 写入口控制、draft/review/published/expired 与 PostgreSQL not_ready/forbidden/conflict 状态，进入 `ready_for_acceptance`；浏览器矩阵、真实 PostgreSQL 并发发布和 Worker/Provider 消费仍待 A1/H3。
 - PostgreSQL、SaaS 控制面、对象存储、正式域名、真实 Provider 和目标国家合规确认均未通过门禁。
 - 当前开发必须继续使用独立企业 worktree；个人版声纹和部署 WIP 不进入企业提交。
 - 公共 PostgreSQL Primary、统一通讯、Billing 和 Product Records 的稳定代码基线已导入；`ENT-DATA-008` 和 `ENT-CORE-013/014/015` 已完成代码与本地自动化。`ENT-DATA-009` 已产出全表切换/对账/逻辑恢复工具、签名证据和一次性本地 PostgreSQL 16 演练，进入 `ready_for_acceptance`；不能继承主产品环境验收，也未通过异地 PITR/H3。

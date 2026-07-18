@@ -144,8 +144,16 @@
 }
 
 .page-heading {
+  display: flex;
+  gap: 20px;
+  justify-content: space-between;
+  align-items: flex-start;
   max-width: 1440px;
   margin: 0 auto 24px;
+}
+
+.page-heading__action {
+  flex: 0 0 auto;
 }
 
 .page-heading h1 {

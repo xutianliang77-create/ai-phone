@@ -14,6 +14,8 @@ import { MaterialIcon } from "./MaterialIcon.js";
 import { StatusPanel } from "./StatusPanel.js";
 import { ProviderReadinessPanel } from "./ProviderReadinessPanel.js";
 import { TenantJobPage } from "../pages/TenantJobPage.js";
+import { KnowledgePage } from "../pages/KnowledgePage.js";
+import { PageFrame } from "./PageFrame.js";
 
 export function AppShell() {
   const { state, selectTenant, logout } = useAuth();
@@ -99,7 +101,20 @@ export function AppShell() {
                 </PageFrame>
               )}
           />
-          {enterpriseNavigation.slice(1).map((item) => (
+          <Route
+            path="/knowledge/*"
+            element={routeAllowed(state.context.scopes, "/knowledge")
+              ? <KnowledgePage />
+              : (
+                <PageFrame title="知识与术语" description="知识、术语包与企业话术版本">
+                  <StatusPanel
+                    state="forbidden"
+                    description="当前账号缺少 knowledge:read，未读取任何企业内容。"
+                  />
+                </PageFrame>
+              )}
+          />
+          {enterpriseNavigation.slice(1).filter(({ path }) => path !== "/knowledge").map((item) => (
             <Route
               key={item.path}
               path={`${item.path}/*`}
@@ -178,25 +193,6 @@ function GuardedPlaceholder({
         action={<Link className="button button--secondary" to="/">返回工作台</Link>}
       />
     </PageFrame>
-  );
-}
-
-function PageFrame({
-  title,
-  description,
-  children,
-}: {
-  title: string;
-  description: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <main className="page-frame">
-      <header className="page-heading">
-        <div><h1>{title}</h1><p>{description}</p></div>
-      </header>
-      <div className="page-content">{children}</div>
-    </main>
   );
 }
 

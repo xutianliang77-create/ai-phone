@@ -11,6 +11,7 @@ import { EnterpriseApiError, type EnterpriseApi } from "./api/enterprise-api.js"
 import { AuthProvider } from "./auth/AuthContext.js";
 import { MemoryStorage } from "./test/MemoryStorage.js";
 import { AppRoutes } from "./App.js";
+import { fakeEnterpriseContentApi } from "./test/fakeEnterpriseContentApi.js";
 
 describe("enterprise application entry", () => {
   it("keeps a failed login outside the enterprise shell", async () => {
@@ -100,6 +101,7 @@ function renderApp(api: EnterpriseApi, storage: MemoryStorage, entries: string[]
 
 function fakeApi(tenants = [membership("tenant-a", "Tenant A")]): EnterpriseApi {
   return {
+    ...fakeEnterpriseContentApi(),
     requestCode: vi.fn(),
     login: vi.fn(),
     listTenants: vi.fn().mockResolvedValue({ tenants }),

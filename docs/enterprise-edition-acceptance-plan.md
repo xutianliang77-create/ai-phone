@@ -1,7 +1,7 @@
 # 无界AI企业版验收任务与计划
 
-版本：v1.17
-日期：2026-07-18
+版本：v1.18
+日期：2026-07-19
 状态：可执行验收计划，已对齐统一通讯平台和 PostgreSQL Primary 收敛
 
 ## 1. 验收目标
@@ -123,6 +123,13 @@ Provider 链路成功。
 | AC-UI-012 | 前端可观测性 | 页面错误带安全 trace ID；前端错误和性能可按 tenant/route/version 追踪且不含敏感字段 | error event、日志脱敏检查 |
 
 页面验收至少覆盖：工作台、外呼活动、客服坐席台、企业会议、客户与线索、知识与术语、数据分析、合规与审计、企业设置，以及 Web 访客参会页和 Flutter 企业入口。
+
+`ENT-UI-006` 当前代码候选覆盖知识源、术语包、话术模板三类稳定资源和修订列表，显式显示
+draft/review/published/expired、生效范围和只读快照；所有内容请求携带当前 tenant 与签名 route document，
+写入使用服务端 `expectedVersion`，`knowledge:read` 角色不显示写入口，403/409/503 分别进入
+forbidden/conflict/not_ready 且 PostgreSQL 缺失时不回退到 SQLite/JSON。该自动化满足 AC-UI-004/005/007/011
+的代码候选条件，并复用 AC-ENT-0021/0022 服务端 guard；正式接受仍需桌面浏览器矩阵、键盘/无障碍、真实
+PostgreSQL staging 双租户并发发布及 ASR/翻译/LLM Worker 引用消费，当前不能进入 A1 或生产放行。
 
 ### 4.2 浏览器和设备矩阵
 
