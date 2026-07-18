@@ -20,6 +20,7 @@ export const enterpriseTenantTableNames = [
   "api_credentials", "entitlements", "subscriptions",
   "knowledge_sources", "knowledge_versions", "term_packs",
   "policy_decisions", "audit_events", "usage_ledger", "idempotency_keys",
+  "usage_budgets", "usage_holds", "usage_budget_alerts",
   "inbox_events", "outbox_events", "marketing_campaigns", "marketing_leads",
   "contact_consents", "suppression_entries", "marketing_call_tasks",
   "marketing_outcomes", "support_channels", "customer_profiles",

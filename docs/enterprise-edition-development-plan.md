@@ -1,6 +1,6 @@
 # 无界AI企业版开发方案与计划
 
-版本：v1.14
+版本：v1.15
 日期：2026-07-18
 状态：E0 执行计划，已对齐统一通讯平台和 PostgreSQL Primary 收敛
 
@@ -102,7 +102,7 @@ CORE-001/002 验收
 | E0-W0 | CORE-001/002 验收、CORE-003 技术选型、DATA-001 schema | UI-001 主题/图标、威胁模型、验收环境 | 决策记录、干净构建、PostgreSQL migration 测试 |
 | E0-W1 | DATA-002/003/004、CORE-009/011 | UI-002/003、CORE-006/008 | 两租户攻击、单一 runtime、cell Worker、导入对账、幂等重放、路由签名、统一错误页 |
 | E0-W1.5 | DATA-007/008、CORE-013/014/015 | DATA-009 演练准备、统一会话 contract test | 双 manifest、单 Primary Runtime、公共通讯表 forced RLS、企业业务唯一绑定、签名 dispatch ticket、旧 generation/route epoch fence |
-| E0-W2 | CORE-007/010/012、CORE-004/005 | UI-004/005/006/007、OBS-001 | tenant billing account、entitlement/ledger 对账、知识版本、工作台真值 |
+| E0-W2 | CORE-010/012、CORE-004/005；CORE-007 已进入验收 | UI-004/005/006/007、OBS-001 | tenant billing account、entitlement/ledger 对账、知识版本、工作台真值 |
 | E0-W3 | UI-008/009/010/011、REL-001 前置 | 对象存储恢复、控制面故障演练 | A0、AC-UI、A1 适用项和生产 Web 构建 |
 
 每个波次可以按完成情况滚动，不以日历周强制切换；未通过数据和权限门禁的页面不能用前端 mock 标记“已完成”。
@@ -290,4 +290,4 @@ CORE-001/002 验收
 
 E0 完成后再启动 `ENT-MTG-001` 主链；允许提前做协议 spike，但不能把未接入真实 tenant/data/readiness 的会议页面计为 E1 完成。
 
-当前进展：`ENT-CORE-003` 已完成并等待验收；`ENT-DATA-001` 已完成十三段 schema 与本地自动化，等待真实 PostgreSQL migrate/restore/PITR 证据；`ENT-DATA-002/003/004/007/008` 已完成 Repository、可靠事件、演示导入、统一 Primary Runtime 和公共通讯 tenant scope 的代码与自动化；`ENT-CORE-013/014/015` 已完成企业统一通讯绑定、签名 Worker dispatch fence 及设备/声音/录制运行策略并进入验收，`ENT-UI-001/002/003` 已进入验收。下一优先级为企业计量、套餐与账单链路 `ENT-CORE-007/010/012`；`ENT-DATA-009` 随后负责最终切换和全量对账证据。
+当前进展：`ENT-CORE-003` 已完成并等待验收；`ENT-DATA-001` 已完成十四段 schema 与本地自动化，等待真实 PostgreSQL migrate/restore/PITR 证据；`ENT-DATA-002/003/004/007/008` 已完成 Repository、可靠事件、演示导入、统一 Primary Runtime 和公共通讯 tenant scope 的代码与自动化；`ENT-CORE-013/014/015` 已完成企业统一通讯绑定、签名 Worker dispatch fence 及设备/声音/录制运行策略并进入验收；`ENT-CORE-007` 已完成 tenant usage budget、hold/settle、阈值告警和不可变 ledger 自动化并进入验收；`ENT-UI-001/002/003` 已进入验收。下一优先级为 `ENT-CORE-010/012` 的 tenant billing account、版本化 entitlement 和账期聚合；`ENT-DATA-009` 随后负责最终切换和全量对账证据。

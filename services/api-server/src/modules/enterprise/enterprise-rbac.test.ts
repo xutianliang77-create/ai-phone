@@ -55,6 +55,8 @@ const expectedScopes: Record<EnterpriseMemberRole, readonly EnterpriseScope[]> =
     "campaign:read",
     "support:read",
     "meeting:read",
+    "billing:read",
+    "usage:read",
     "audit:read",
     "audit:export",
   ],

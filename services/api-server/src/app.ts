@@ -28,6 +28,9 @@ import {
   registerEnterpriseCommunicationPolicyRoutes,
 } from "./modules/enterprise/enterprise-communication-policy.routes.js";
 import {
+  registerEnterpriseUsageBudgetRoutes,
+} from "./modules/enterprise/enterprise-usage-budget.routes.js";
+import {
   createEnvironmentTenantLifecycleExecutor,
   type TenantLifecycleExecutor,
 } from "./modules/enterprise/enterprise-tenant-lifecycle-executor.js";
@@ -101,6 +104,11 @@ export async function buildApp(dependencies: {
     enterpriseRepositoryRuntime,
   );
   await registerEnterpriseCommunicationPolicyRoutes(
+    app,
+    tenantRouteService,
+    enterpriseRepositoryRuntime,
+  );
+  await registerEnterpriseUsageBudgetRoutes(
     app,
     tenantRouteService,
     enterpriseRepositoryRuntime,

@@ -46,7 +46,7 @@ describe("enterprise PostgreSQL startup gate", () => {
     expect(result).toMatchObject({
       status: "verified",
       mode: "verify",
-      evidence: { migrations: 13, rls: "forced", subjectColumns: 12 },
+      evidence: { migrations: 14, rls: "forced", subjectColumns: 12 },
     });
     expect(fixture.config).toEqual({
       connectionString: "postgresql://enterprise.example/app",
@@ -118,7 +118,7 @@ function clientFixture(subjectType = "text") {
         };
       }
       if (sql.includes("schema_migrations")) {
-        return { rows: [{ count: "13" }] as Row[] };
+        return { rows: [{ count: "14" }] as Row[] };
       }
       if (sql.includes("FROM pg_constraint")) {
         return { rows: [{ count: "12" }] as Row[] };

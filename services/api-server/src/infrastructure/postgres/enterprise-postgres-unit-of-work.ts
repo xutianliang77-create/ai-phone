@@ -31,6 +31,9 @@ import {
 import {
   EnterpriseCommunicationPolicyPostgresRepository,
 } from "./enterprise-postgres-communication-policy.repository.js";
+import {
+  EnterpriseUsageBudgetPostgresRepository,
+} from "./enterprise-postgres-usage-budget.repository.js";
 
 export interface EnterprisePostgresUnitOfWork {
   tenant: EnterpriseTenantPostgresRepository;
@@ -39,6 +42,7 @@ export interface EnterprisePostgresUnitOfWork {
   communication: EnterpriseCommunicationPostgresRepository;
   communicationBindings: EnterpriseCommunicationBindingPostgresRepository;
   communicationPolicies: EnterpriseCommunicationPolicyPostgresRepository;
+  usageBudgets: EnterpriseUsageBudgetPostgresRepository;
   workerDispatches: EnterpriseWorkerDispatchPostgresRepository;
 }
 
@@ -59,6 +63,7 @@ export function withEnterprisePostgresUnitOfWork<T>(
         createEnterpriseCommunicationBindingPostgresRepository(session),
       communicationPolicies:
         new EnterpriseCommunicationPolicyPostgresRepository(session),
+      usageBudgets: new EnterpriseUsageBudgetPostgresRepository(session),
       workerDispatches: new EnterpriseWorkerDispatchPostgresRepository(session),
     }),
   );

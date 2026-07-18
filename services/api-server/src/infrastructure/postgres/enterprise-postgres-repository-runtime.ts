@@ -199,6 +199,41 @@ export function createPostgresEnterpriseRepositoryRuntime(
         },
       );
     },
+    configureUsageBudget(input) {
+      return withEnterprisePostgresUnitOfWork(
+        pool,
+        input.context,
+        async (unit) => {
+          const result = await unit.usageBudgets.configure(input.budget);
+          if (result.status !== "created" && result.status !== "updated") {
+            return result;
+          }
+          await unit.tenant.appendAuditEvent(createEnterpriseAuditEvent({
+            context: input.context,
+            action: "usage_budget.configure",
+            resourceType: "usage_budget",
+            resourceId: result.budget.id,
+            result: "completed",
+            details: {
+              category: result.budget.category,
+              unit: result.budget.unit,
+              limitAmount: result.budget.limitAmount,
+              version: result.budget.version,
+            },
+            createdAt: result.budget.updatedAt,
+          }));
+          return result;
+        },
+      );
+    },
+    async listUsageBudgets(input) {
+      const budgets = await withEnterprisePostgresUnitOfWork(
+        pool,
+        input.context,
+        (unit) => unit.usageBudgets.list(),
+      );
+      return { status: "ready", budgets };
+    },
     beginTenantCreation(input) {
       return beginPostgresTenantCreation(pool, input);
     },

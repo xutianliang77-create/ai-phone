@@ -1,6 +1,6 @@
 # 无界AI企业版技术架构
 
-版本：v1.7
+版本：v1.8
 日期：2026-07-18
 状态：SaaS 详细架构基线，已对齐统一通讯平台和 PostgreSQL Primary
 
@@ -312,6 +312,10 @@ flowchart LR
   不持有业务表写凭证。
 - 每个命令包含 `tenantId`、`aggregateId`、`idempotencyKey` 和预期 `version`。
 - session 结束、hold 释放、ledger 和 outbox 必须同事务提交。
+- 企业预算 Repository 在 tenant 行锁内读取周期预算、已结算 ledger 和未过期 hold，完成 reserve/settle；
+  API、Worker 重试共用数据库幂等键和请求 hash，不依赖进程内计数。
+- `usage_ledger` 与预算告警只追加；hold 只允许从 `held` 单向进入 `settled/released/expired`，
+  所有新表启用 forced RLS，SQLite/JSON 不提供伪企业账务回退。
 - Enterprise Repository 以 forced-RLS tenant transaction 原子写公共 dispatch/capacity 与企业 grant；
   通用媒体 Worker 只持有短期签名 ticket，不持有数据库凭证。每次 accept、heartbeat、结果提交都
   由 Repository 重读当前 binding、grant、capacity lease 和不可变 policy snapshot；旧

@@ -45,6 +45,11 @@ import {
 import type {
   EnterpriseCommunicationPolicyVersion,
 } from "./enterprise-communication-policy.js";
+import type {
+  ConfigureEnterpriseUsageBudgetInput,
+  ConfigureEnterpriseUsageBudgetResult,
+  EnterpriseUsageBudgetRecord,
+} from "./enterprise-usage-budget.js";
 
 export type EnterpriseContextResult =
   | { status: "resolved"; tenant: EnterpriseTenantRecord; member: EnterpriseMemberRecord }
@@ -121,6 +126,16 @@ export interface EnterpriseRepositoryRuntime {
     | { status: "version_conflict" }
     | { status: "storage_required" }
   >;
+  configureUsageBudget?(input: {
+    context: EnterpriseTenantContext;
+    budget: ConfigureEnterpriseUsageBudgetInput;
+  }): Promise<ConfigureEnterpriseUsageBudgetResult | { status: "storage_required" }>;
+  listUsageBudgets?(input: {
+    context: EnterpriseTenantContext;
+  }): Promise<
+    | { status: "ready"; budgets: EnterpriseUsageBudgetRecord[] }
+    | { status: "storage_required" }
+  >;
   beginTenantCreation(input: {
     ownerUserId: string;
     name: string;
@@ -195,6 +210,12 @@ export const legacyEnterpriseRepositoryRuntime: EnterpriseRepositoryRuntime = {
     return listEnterpriseAuditEvents(input);
   },
   async publishCommunicationPolicy() {
+    return { status: "storage_required" };
+  },
+  async configureUsageBudget() {
+    return { status: "storage_required" };
+  },
+  async listUsageBudgets() {
     return { status: "storage_required" };
   },
   async beginTenantCreation(input) {

@@ -1,6 +1,6 @@
 # 无界AI企业版详细技术设计
 
-版本：v1.16
+版本：v1.17
 日期：2026-07-18
 状态：统一通讯平台与 PostgreSQL Primary 收敛详细技术方案
 
@@ -1008,6 +1008,23 @@ llm_input/output_tokens
 营销和客服电话先 hold，再按终态真实时长 settle。失败重试使用新的 attempt id，但同一 provider call 只能结算一次。
 
 SaaS 计量形成三层记录：原始 usage event、不可变 ledger、账期聚合。套餐权益和账单聚合错误不能改写原始 ledger；使用调整流水进行纠正。
+
+### 13.1 第一批企业用量预算实现（ENT-CORE-007）
+
+enterprise migration `0014_enterprise_usage_budgets` 增加 `usage_budgets`、`usage_holds` 和
+`usage_budget_alerts`，并为既有 `usage_ledger` 增加 entry type、budget/hold 引用、稳定 source ref、
+request hash 和 recorded time。三张新表均 forced RLS；ledger/alert 由 trigger 拒绝 UPDATE/DELETE，
+hold 的身份字段不可变且只能从 `held` 单向进入终态。
+
+预算键为 `tenant + category + unit + UTC period`。reserve 在 tenant 行锁内依次过期旧 hold、汇总已
+settle ledger 和有效 hold，再决定是否创建新 hold；超过上限在任何 Worker/capacity 副作用前拒绝。
+settle 锁定同一 tenant 与 hold，校验实际量不超过预留量，并在同一事务追加唯一 ledger 后推进 hold。
+相同幂等键只有 request hash、hold 和 amount 全相同才重放；阈值告警以
+`tenant + budget + threshold` 唯一，只追加一次。外部预算 API 使用 `billing:read/write`、active
+membership 和签名 route document；演示存储返回 `enterprise_postgres_required`。
+
+本批只完成用量分类、预算、hold/settle 和告警，不提前宣称套餐 entitlement、账期聚合或支付结算完成；
+这些边界分别由 `ENT-CORE-010/012` 收敛。
 
 席位按账期快照计费，用量按租户时区之外的统一 UTC 账期切分，避免时区修改导致重复计费。
 

@@ -1,6 +1,6 @@
 # 无界AI企业版开发任务
 
-版本：v1.17
+版本：v1.18
 日期：2026-07-18
 状态：E0 开发中，已对齐统一通讯平台和 PostgreSQL Primary 收敛
 
@@ -17,7 +17,7 @@
 ### 1.1 当前状态快照
 
 - `ENT-CORE-001/002/003` 已完成代码和自动化，等待验收；生产 Web 应用位于 `apps/enterprise-web`。
-- `ENT-DATA-001` 已有十三段 PostgreSQL up/down migration、tenant-first 索引、复合 FK、强制 RLS、checksum/锁和备份归档 smoke；`0008` 增加 user directory，`0009` 增加 cell pending-work projection，`0010` 修正 opaque subject，`0011` 增加企业通讯会话绑定，`0012` 增加 scope-bound Worker dispatch grant，`0013` 增加企业通讯运行策略、授权证据和不可变快照。一次性本地 PostgreSQL 16 验证不替代真实 migrate/restore/PITR 证据，任务保持 `in_progress`。
+- `ENT-DATA-001` 已有十四段 PostgreSQL up/down migration、tenant-first 索引、复合 FK、强制 RLS、checksum/锁和备份归档 smoke；`0008` 增加 user directory，`0009` 增加 cell pending-work projection，`0010` 修正 opaque subject，`0011` 增加企业通讯会话绑定，`0012` 增加 scope-bound Worker dispatch grant，`0013` 增加企业通讯运行策略、授权证据和不可变快照，`0014` 增加 tenant usage budget、hold 和阈值告警。一次性本地 PostgreSQL 16 验证不替代真实 migrate/restore/PITR 证据，任务保持 `in_progress`。
 - `ENT-DATA-002` 已完成单一 `legacy|postgres` Enterprise Repository runtime adapter，Tenant/Member/Audit、Directory、lifecycle 和 HTTP 路由均通过同一 runtime；PostgreSQL 只有在启动 schema gate 已验证时才允许选中，不存在 fallback、双写或局部切换。独立 cell Worker 已实现 cell/worker/poll/batch/lease 配置、forced-RLS pending discovery、tenant transaction 二次复核、lifecycle/outbox claim/finalize、失败隔离和显式 publisher 降级。代码与本地自动化完成，进入 `ready_for_acceptance`；真实 PostgreSQL、并发 claim、容量和恢复证据仍属于 H3 门禁。
 - `ENT-DATA-004` 已实现 JSON/SQLite 六类企业记录源读取、SQLite 临时副本与 `quick_check`、维护窗口空目标导入、事务内读回，以及逐集合 count/SHA-256 和总 hash 对账；任何不一致整体回滚。该工具只迁移当前 Tenant/Member/Job/Audit/Inbox/Outbox 演示数据，不是客户生产迁移通道，进入 `ready_for_acceptance`。
 - `ENT-DATA-003` 已完成 tenant-scoped inbox 去重、稳定 JSON hash、领域写入/inbox/outbox 同事务、outbox 内容不可变、lease claim、指数退避和恢复处理；100 次相同事件重放只执行一次领域副作用，跨租户 provider ID/idempotency key 相互隔离。SQLite 证据仅用于自动化和封闭演示，真实 PostgreSQL 并发 claim 与 Provider sandbox 仍待正式验收。
@@ -28,6 +28,7 @@
 - `ENT-CORE-013` 已新增 enterprise `0011` 统一会话绑定表和事务型 Repository：Meeting/Support/Marketing 使用同一 tenant-scoped 公共 session，数据库复合 FK 固定唯一业务归属，route epoch、policy/entitlement 版本和区域快照不可变。状态机覆盖 dispatch/ready/active/degraded/draining/terminal，使用 version、generation 和 event sequence 拒绝旧路由、旧 Worker、重放与非法倒退；代码、定向矩阵和一次性本地 PostgreSQL 16 普通角色 RLS/down-up 验证完成，进入 `ready_for_acceptance`，不代表 A1/H3 或生产门禁通过。
 - `ENT-CORE-014` 已新增 enterprise `0012` Worker dispatch grant、短期 HMAC ticket 和运行时 Adapter。签发从当前 binding 派生 tenant/session/cell/route epoch/generation/capability，capacity reserve 与 dispatch/grant 原子提交；accept/heartbeat/副作用授权/finalize 都重读 binding/grant/lease，cancel 同事务释放容量，旧 route/generation 和迟到结果失败闭合。代码、负向矩阵和一次性本地 PostgreSQL 16 普通角色验证完成，进入 `ready_for_acceptance`，不代表真实多实例、H3 容量或生产门禁通过。
 - `ENT-CORE-015` 已新增 enterprise `0013` 通讯策略版本、purpose-specific 授权证据和不可变运行快照，发布 API 由 `tenant:write` 与签名 route document 双重保护；device/cloud ASR、翻译、TTS 依据有效 readiness/fingerprint 解析，声纹、录音和诊断音频无独立有效授权即禁用。Worker ticket v2 绑定 policy snapshot/version，签发与 lifecycle 都对失效快照、过期 readiness、未允许 capability 和撤回授权失败闭合。代码、负向矩阵和一次性本地 PostgreSQL 16 普通角色 RLS/down-forward 机制验证完成，进入 `ready_for_acceptance`；不代表真实设备/Provider、A1/H2/H3 或生产门禁通过。
+- `ENT-CORE-007` 已新增 enterprise `0014` tenant usage budget、usage hold 和 append-only threshold alert，并增强 `usage_ledger` 的 budget/hold/source/hash 归属。reserve 在 tenant 行锁内汇总已结算量和有效 hold，settle 只追加 ledger 并单向结束 hold；同幂等键不同 hash 拒绝，预算超限在副作用前失败闭合。代码和自动化完成，进入 `ready_for_acceptance`；真实 PostgreSQL 并发、长稳和账务抽样仍待验收。
 - `ENT-CORE-008` 已完成 PSTN/CRM/Calendar/Channel 统一 capability document、实时 probe contract、敏感配置过滤和明确降级，等待真实 Provider 验收。
 - `ENT-CORE-006` 已完成 append-only audit 契约、`audit:read` 查询 API、tenant/filter/sort/expiry 绑定的 HMAC cursor、成员与租户生命周期高风险结果埋点，以及 SQLite/PostgreSQL UPDATE/DELETE 拒绝约束，等待正式密钥、真实 PostgreSQL 与验收矩阵。
 - `ENT-UI-001` 已完成生产颜色/字号/尺寸/圆角令牌、Material Icons 语义注册表、Flutter 对照和依赖扫描，等待验收。
@@ -46,7 +47,7 @@
 | ENT-CORE-004 | 企业知识版本 | CORE-001 | source/version/chunk/publish | 未发布和过期知识不可检索 | todo |
 | ENT-CORE-005 | 企业术语和话术 | CORE-004 | term pack、script template | ASR/翻译/LLM 使用同一版本引用 | todo |
 | ENT-CORE-006 | 审计事件 | CORE-001 | append-only audit API | 高风险操作都有 actor/target/result | ready_for_acceptance |
-| ENT-CORE-007 | 企业用量与预算 | CORE-001 | ledger category、budget、alert | 重试不重复 hold/settle | todo |
+| ENT-CORE-007 | 企业用量与预算 | CORE-001 | ledger category、budget、alert | 重试不重复 hold/settle | ready_for_acceptance |
 | ENT-CORE-008 | Provider readiness | 无 | PSTN/CRM/Calendar/Channel capability | 缺配置明确 not_ready，不伪造成功 | ready_for_acceptance |
 | ENT-CORE-009 | SaaS 租户生命周期 | CORE-001 | signup/provision/suspend/export/delete saga | 重试不重复租户，失败不标 active | ready_for_acceptance |
 | ENT-CORE-010 | 套餐和 Entitlement | CORE-001/007 | tenant billing account、plan、subscription、seat、entitlement | 服务端按 tenant 和版本执行权益、限额和归属 | todo |

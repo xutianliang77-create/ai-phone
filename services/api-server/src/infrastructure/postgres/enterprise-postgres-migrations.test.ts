@@ -24,6 +24,7 @@ describe("enterprise PostgreSQL migrations", () => {
       "0011_enterprise_communication_bindings",
       "0012_enterprise_worker_dispatch_grants",
       "0013_enterprise_communication_runtime_policy",
+      "0014_enterprise_usage_budgets",
     ]);
     for (const migration of migrations) {
       expect(migration.up.trim()).not.toBe("");
@@ -96,6 +97,11 @@ describe("enterprise PostgreSQL migrations", () => {
     expect(sql).toContain("table_name || '_tenant_isolation'");
     expect(sql).toContain("communication_authorization_invalidate_snapshot");
     expect(sql).toContain("policy_snapshot_id uuid");
+    expect(sql).toContain("CREATE TABLE enterprise.usage_budgets");
+    expect(sql).toContain("CREATE TABLE enterprise.usage_holds");
+    expect(sql).toContain("CREATE TABLE enterprise.usage_budget_alerts");
+    expect(sql).toContain("enterprise_usage_ledger_append_only");
+    expect(sql).toContain("enterprise_usage_hold_identity_immutable");
     expect(sql).toMatch(
       /FOREIGN KEY \(scope_type, scope_id, dispatch_id\)[\s\S]*REFERENCES ai_phone\.worker_dispatches \(scope_type, scope_id, id\)/,
     );
@@ -115,6 +121,7 @@ describe("enterprise PostgreSQL migrations", () => {
     expect(rollbackSql).toContain(
       "DROP TABLE IF EXISTS enterprise.communication_policy_snapshots",
     );
+    expect(rollbackSql).toContain("DROP TABLE IF EXISTS enterprise.usage_budgets");
     expect(sql).not.toContain("BYPASSRLS");
   });
 
