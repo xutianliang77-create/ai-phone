@@ -15,9 +15,12 @@ export class BoundedJsonCommandRunner {
 
   execute(command, options) {
     return new Promise((resolve, reject) => {
+      const inheritedEnvironment = selectEnvironment(command.environmentKeys);
+      const environment = { ...inheritedEnvironment, ...options.env };
+      const secretValues = environmentSecrets(environment);
       const child = spawn(command.file, command.args, {
         cwd: this.root,
-        env: { ...process.env, ...options.env },
+        env: environment,
         shell: false,
         stdio: ["ignore", "pipe", "pipe"],
       });
@@ -31,7 +34,12 @@ export class BoundedJsonCommandRunner {
         clearTimeout(timer);
         options.signal?.removeEventListener("abort", aborted);
         this.children.delete(child);
-        persistEvidence(this.outputDirectory, options.label, stdout, stderr);
+        persistEvidence(
+          this.outputDirectory,
+          options.label,
+          redact(stdout, secretValues),
+          redact(stderr, secretValues),
+        );
         if (error) reject(error);
         else resolve(value);
       };
@@ -70,7 +78,7 @@ export class BoundedJsonCommandRunner {
           return;
         }
         try {
-          finish(null, JSON.parse(stdout.toString("utf8")));
+          finish(null, JSON.parse(redact(stdout, secretValues).toString("utf8")));
         } catch {
           finish(new Error(`${options.label} did not emit one JSON document on stdout`));
         }
@@ -101,8 +109,40 @@ function appendBounded(current, chunk, label) {
 function persistEvidence(directory, label, stdout, stderr) {
   const safe = label.replace(/[^A-Za-z0-9_-]/g, "_");
   const base = path.join(directory, "commands", safe);
-  writeFileSync(`${base}.json`, stdout);
-  if (stderr.length > 0) writeFileSync(`${base}.stderr.log`, stderr);
+  writeFileSync(`${base}.json`, stdout, { mode: 0o600 });
+  if (stderr.length > 0) {
+    writeFileSync(`${base}.stderr.log`, stderr, { mode: 0o600 });
+  }
+}
+
+function selectEnvironment(keys) {
+  if (!Array.isArray(keys)) return process.env;
+  const selected = {};
+  for (const key of keys) {
+    if (process.env[key] !== undefined) selected[key] = process.env[key];
+  }
+  return selected;
+}
+
+function environmentSecrets(environment) {
+  return Object.entries(environment)
+    .filter(([key, value]) =>
+      /(?:^|_)(?:PASSWORD|SECRET|TOKEN|CREDENTIALS?|PRIVATE_KEY|PASSFILE|LIBSODIUM_KEY|ENCRYPTION_KEY|API_KEY)(?:_|$)/i
+        .test(key) &&
+      typeof value === "string" && value.length >= 4)
+    .map(([, value]) => value)
+    .sort((left, right) => right.length - left.length);
+}
+
+function redact(value, secrets) {
+  let text = value.toString("utf8");
+  for (const secret of secrets) {
+    const escaped = JSON.stringify(secret).slice(1, -1);
+    for (const candidate of new Set([secret, escaped])) {
+      text = text.split(candidate).join("[REDACTED]");
+    }
+  }
+  return Buffer.from(text, "utf8");
 }
 
 function waitForExit(child) {

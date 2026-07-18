@@ -121,10 +121,17 @@ function validateCommands(commands, required, label, issues) {
       command.file.includes("\0") || forbiddenShell(command.file) ||
       !Array.isArray(command.args) ||
       command.args.some((value) => typeof value !== "string" || value.includes("\0")) ||
+      !validEnvironmentKeys(command.environmentKeys) ||
       !integer(command.timeoutSeconds, 5, 86_400)) {
       issues.push(`${label} command ${name} is invalid`);
     }
   }
+}
+
+function validEnvironmentKeys(keys) {
+  return Array.isArray(keys) && keys.length <= 64 &&
+    new Set(keys).size === keys.length &&
+    keys.every((key) => /^[A-Z][A-Z0-9_]{0,79}$/.test(key));
 }
 
 function forbiddenShell(file) {

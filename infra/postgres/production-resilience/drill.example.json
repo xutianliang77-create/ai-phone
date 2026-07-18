@@ -28,26 +28,31 @@
       "baseline": {
         "file": "replace-with-ha-provider-adapter",
         "args": ["baseline", "--json"],
+        "environmentKeys": [],
         "timeoutSeconds": 60
       },
       "triggerFailover": {
         "file": "replace-with-ha-provider-adapter",
         "args": ["trigger-failover", "--json"],
+        "environmentKeys": [],
         "timeoutSeconds": 300
       },
       "verifyFencing": {
         "file": "replace-with-ha-provider-adapter",
         "args": ["verify-fencing", "--json"],
+        "environmentKeys": [],
         "timeoutSeconds": 120
       },
       "verifyEndpoint": {
         "file": "replace-with-ha-provider-adapter",
         "args": ["verify-endpoint", "--json"],
+        "environmentKeys": [],
         "timeoutSeconds": 120
       },
       "rebuildOldPrimary": {
         "file": "replace-with-ha-provider-adapter",
         "args": ["rebuild-old-primary", "--json"],
+        "environmentKeys": [],
         "timeoutSeconds": 1800
       }
     }
@@ -63,21 +68,25 @@
       "createBaseBackup": {
         "file": "replace-with-backup-provider-adapter",
         "args": ["create-base-backup", "--json"],
+        "environmentKeys": [],
         "timeoutSeconds": 3600
       },
       "verifyArchive": {
         "file": "replace-with-backup-provider-adapter",
         "args": ["verify-archive", "--json"],
+        "environmentKeys": [],
         "timeoutSeconds": 300
       },
       "restoreOffHost": {
         "file": "replace-with-backup-provider-adapter",
         "args": ["restore-off-host", "--json"],
+        "environmentKeys": [],
         "timeoutSeconds": 7200
       },
       "verifyRestore": {
         "file": "replace-with-backup-provider-adapter",
         "args": ["verify-restore", "--json"],
+        "environmentKeys": [],
         "timeoutSeconds": 600
       }
     }

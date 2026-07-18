@@ -46,5 +46,10 @@ export function validPostgresResilienceDrillConfig() {
 }
 
 function command() {
-  return { file: "provider-cli", args: ["--json"], timeoutSeconds: 60 };
+  return {
+    file: "provider-cli",
+    args: ["--json"],
+    environmentKeys: ["PATH"],
+    timeoutSeconds: 60,
+  };
 }

@@ -34,4 +34,12 @@ describe("PostgreSQL resilience drill config", () => {
     expect(checked.issues).toContain("PostgreSQL TLS must be verify-full");
     expect(checked.issues).toContain("WAL encryption and immutability are mandatory");
   });
+
+  it("requires an explicit environment allowlist for every provider command", () => {
+    const value = config();
+    delete value.ha.commands.baseline.environmentKeys;
+    expect(validatePostgresResilienceDrillConfig(value).issues).toContain(
+      "HA command baseline is invalid",
+    );
+  });
 });
