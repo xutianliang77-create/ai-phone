@@ -1,7 +1,7 @@
 # 统一架构实施与测试计划
 
-版本：v1.1
-日期：2026-07-17
+版本：v1.2
+日期：2026-07-19
 
 ## 1. 迁移原则
 
@@ -46,13 +46,13 @@
 | ARC-DATA-005 | 双写校验 | 旧 snapshot 与新表聚合一致 |
 | ARC-DATA-006 | PostgreSQL adapter | 50 并发写和恢复通过 |
 
-迁移步骤：
+当前迁移状态与发布步骤：
 
-1. 新表只写 shadow。
-2. 对比旧聚合与新聚合。
-3. 新表作为读主，旧表回退。
-4. 稳定一个版本后停止旧写。
-5. 数据备份和回滚演练后删除兼容字段。
+1. 31 段 schema、primary UoW、全部生产 Repository adapter 和静态调用图 `0/0` 已完成。
+2. 隔离 staging 已完成 migration/import/audit/rollback，compile-time primary authorization 已开启。
+3. 每个目标环境仍须使用独立 database identity、verify-full TLS 和签名 cutover evidence。
+4. 选择 `API_STORAGE_DRIVER=postgres` 后 PostgreSQL 是唯一写主，不运行长期 dual write。
+5. 跨主机 Patroni/etcd、WAL-G off-host PITR、容量与回滚证据通过前保持多节点失败关闭。
 
 ## 4. Phase C：LiveKit Job Runtime
 
@@ -191,14 +191,11 @@ POSTGRES_PRIMARY_STORE
 4. ASR/MT/TTS/LLM 有可观测 fallback 和容量策略。
 5. 安全、并发、长稳、真机和账本门禁全部有证据包。
 
-## 12. 当前建议优先顺序
+## 12. 当前后续验收顺序
 
-1. 完成 Platform P0：兼容矩阵、Provider Adapter、最小权限 token、可信消息和
-   Communication Contract。
-2. 在隔离环境接入 LiveKit SIP 出站翻译电话，保持旧 PSTN provider 可回退且
-   同一 session 只执行一个拨号控制器。
-3. 引入显式 Dispatch，把 Translation Worker 包装为 job，并补 prewarm、load、
-   drain 和 crash recovery。
-4. 补 provider operations、Egress 录音/记录闭环和 PostgreSQL 增量模型。
-5. 先灰度 Agent Assist，再开发 Autonomous Agent。
-6. 最后进入 Ingress、分布式 HA、100 并发和多地域。
+1. 恢复本批 unit/typecheck/lint/build 与合同回归，先消除静态候选的不确定性。
+2. 在隔离 staging 复验 ASR/MT/TTS fallback、真流式 TTS、尾句有界 drain 和 Agent prewarm。
+3. 以 owned-device 完成 direct/TURN/reconnect、echo/barge-in 和 RTC 阈值校准。
+4. 接私有 trunk/白名单号码，依次验证 SIP、Agent、Egress、Ingress，保持所有高风险 flag 默认关闭。
+5. 补第二数据库节点、3 个 DCS voter 和 off-host 对象存储，执行真实 HA/PITR。
+6. 最后执行 25/50/100 并发、故障注入和 120 分钟 soak，再决定生产切流和灰度。

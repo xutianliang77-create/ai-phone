@@ -23,6 +23,10 @@ Worker-side `configuration_fingerprint` values describe the routing and
 pipeline parameters effective in the Worker. They are a separate domain from
 the model-service startup fingerprint and must not be compared for equality.
 
+The translation service also exports bounded admission and micro-batch gauges
+and counters. They contain no request or session labels; use them to distinguish
+GPU execution saturation, queued batch work, capacity rejection and queue timeout.
+
 ## Security and cardinality
 
 `/metrics` is disabled with HTTP 503 unless `METRICS_BEARER_TOKEN` is set. Use a

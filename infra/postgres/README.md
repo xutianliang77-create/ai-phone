@@ -1,16 +1,21 @@
-# PostgreSQL incremental projection
+# PostgreSQL primary runtime and migration projection
 
 This directory contains the normalized communication-platform schema and its
-idempotent shadow-projection functions. It is not yet the primary API
-Repository and does not authorize multi-node writes.
+idempotent migration/reconciliation projection. PostgreSQL is an authorized
+single-writer API Repository only when `API_STORAGE_DRIVER=postgres`; startup
+still fails closed on the full migration manifest, database identity, signed
+cutover evidence, TLS policy, and multi-node readiness.
 
 Current behavior:
 
-- JSON or SQLite remains the only write authority.
-- Each persisted aggregate change appends a unique local projection event.
-- One API projection worker applies events in order.
-- PostgreSQL records each event ID before applying it, so replay after a local
-  acknowledgement failure is safe.
+- JSON and SQLite remain explicit compatibility drivers; they are not dual
+  writers when PostgreSQL is selected.
+- The PostgreSQL runtime is the sole write authority for normalized aggregates,
+  command/reliable inboxes, outbox, usage, billing, provider operations, Agent,
+  recording, ingress, account, payment, voice, terms, and diagnostics data.
+- Legacy projection/import is retained for one-time migration and signed
+  reconciliation only. PostgreSQL records each projection event ID before
+  applying it, so replay after an acknowledgement failure is safe.
 - Agent target phone numbers are sealed before they enter projection events,
   import records, normalized tasks, or generic projection records. The opaque
   reference is bound to the owning user and draft and supports key rotation.
@@ -38,18 +43,17 @@ Current behavior:
   with normalized projection and reliable outbox writes; expired command and
   inbox records have a bounded `SKIP LOCKED` pruning helper.
 - Migration `019_usage_accounting` adds versioned usage accounts and holds plus
-  an append-only billing ledger. The dormant asynchronous Session and Usage
+  an append-only billing ledger. The asynchronous Session and Usage
   repositories require a session or billing-account fence, serialize balances
   by user row, and commit normalized records, command results, and outbox
-  events atomically. They are source-complete building blocks, not a runtime
-  driver switch.
+  events atomically and are connected through the shared Repository runtime.
 - Migrations `020_worker_capacity_fencing` and `021_domain_capacity_locks`
   provide explicit cross-session capacity serialization for Worker runtime and
-  Ingress. Dormant asynchronous Dispatch, Recording, Artifact, and Ingress
+  Ingress. Asynchronous Dispatch, Recording, Artifact, and Ingress
   repositories now use the same fenced command/record/outbox unit of work.
 - Migration `022_agent_primary_idempotency` adds request-hash audit columns,
   mode-scoped run attempts, one active run per task/mode, and handoff business
-  idempotency. Dormant asynchronous Agent repositories atomically coordinate
+  idempotency. Asynchronous Agent repositories atomically coordinate
   Run, Step, Tool, Handoff, and Consult records under their owning fence.
 - Migration `023_aggregate_lease_renewal` keeps the fencing token stable when
   the same live platform instance renews ownership. A token changes only after
@@ -71,6 +75,9 @@ Current behavior:
   constraints with the public non-negative revision contract.
 - Migration `030_tts_playback_session_identity` aligns PostgreSQL playback
   identity with SQLite and the session aggregate by using `(session_id, id)`.
+- Migration `031_voice_agent_recording_consent` stores authoritative
+  participant consent evidence and the Agent Task recording policy used by the
+  Agent/Egress runners.
 - Primary import now includes legacy usage maps, holds, ledger rows, and
   deterministic Agent request-hash/idempotency backfills. Audit compares every
   primary payload, normalized namespace counts, the exact migration manifest,
@@ -78,27 +85,29 @@ Current behavior:
   explicit cutover ID before startup can accept it.
 - Runtime adapters now cover every production Repository consumer and
   `npm run check:postgres-primary-cutover -- --summary` reports `0/0`.
-- `API_STORAGE_DRIVER=postgres` remains fail-closed because compile-time primary
-  authorization is intentionally false until the isolated Beelink staging
-  database completes migration, replay, fault, rollback, and least-privilege
-  acceptance. Multi-node operation remains separately disabled.
+- Compile-time PostgreSQL primary authorization is enabled after isolated
+  Beelink staging acceptance. This does not switch existing environments:
+  `API_STORAGE_DRIVER` remains explicit, production still requires its own
+  verify-full TLS and signed evidence, and multi-node operation remains a
+  separate fail-closed gate.
 
-Deferred Beelink/staging procedure:
+Production/HA acceptance procedure:
 
-1. provision an isolated PostgreSQL database and least-privilege roles;
-2. set TLS verification and run all 30 migrations with
+1. provision the target PostgreSQL database and least-privilege roles without
+   reusing the accepted isolated staging database;
+2. set `verify-full` TLS and run all 31 migrations with
    `npm run postgres:migrate` twice;
 3. run `npm run postgres:check`, then `npm run postgres:import`;
 4. run `npm run postgres:audit` with `POSTGRES_CUTOVER_EVIDENCE_FILE` pointing
    into the isolated evidence package and set a unique `POSTGRES_CUTOVER_ID`
    plus a separate 32+ character `POSTGRES_CUTOVER_EVIDENCE_HMAC_KEY`;
-5. enable the projection against copied staging data;
-6. verify backlog drain, event replay, count/hash, relationships, connection
-   loss, and failover;
-7. keep `PLATFORM_MULTI_NODE_ENABLED=false` until a real PostgreSQL primary
-   Repository, atomic claim paths, backup/restore, PITR, and cutover rollback
-   have passed acceptance.
+5. verify copied-data import/replay, count/hash, relationships and rollback
+   before selecting `API_STORAGE_DRIVER=postgres`;
+6. verify connection loss, Patroni/etcd failover, fencing, old-primary rebuild,
+   WAL-G off-host backup/restore and PITR;
+7. keep `PLATFORM_MULTI_NODE_ENABLED=false` until the real cross-host topology,
+   backup/restore, PITR, capacity and cutover rollback have passed acceptance.
 
-Never point this worker at production before the staging migration and shadow
-reconciliation evidence package exists. The local outbox is durable but is not
-a distributed queue and must not be consumed by multiple API instances.
+Never point the runtime at production before its signed migration and
+reconciliation evidence package exists. PostgreSQL reliable outbox claims use
+`SKIP LOCKED`; the legacy local outbox remains single-instance only.

@@ -1,8 +1,8 @@
 # LiveKit 平台化开发任务与实施计划
 
-版本：v1.0
-日期：2026-07-17
-状态：本地静态实现已推进至 Ingress/HA 门禁，服务器验证暂停
+版本：v1.1
+日期：2026-07-19
+状态：计划内代码已推进至 P2 可观测性与 Provider HA 集成，动态验收暂缓
 
 ## 1. 计划口径
 
@@ -17,26 +17,26 @@
 SIP 是电话能力的首要产品目标；但它必须先通过最小权限、统一合同和单一副作用
 控制三个短前置门禁。
 
-### 1.1 2026-07-17 批次状态
+### 1.1 2026-07-19 批次状态
 
 | 范围 | 静态实现 | 执行证据 | 当前判定 |
 | --- | --- | --- | --- |
-| Compatibility Profile | Server/SIP 候选版本和 digest；Egress/Ingress 延后实时探测 | 未跑 staging | 发布阻塞 |
-| Provider Adapter/Contract | Room、PSTN、SIP、Dispatch、Egress、Ingress 与统一 operation DTO | 当前批未跑测试 | 静态待验证 |
-| Guest ticket/nonce/上限 | 原子消费、防重放、资源门禁 | 当前批未跑测试 | 静态待验证 |
+| Compatibility Profile | Server/SIP/Egress/Ingress 版本与 digest 固定门禁、SDK 能力合同 | Server direct/TURN/reconnect 与 10 会话 admission 已有 staging 记录；本批未复跑 | Egress/Ingress 实际 digest、owned-device/SIP 验收待补 |
+| Provider Adapter/Contract | Room、PSTN、SIP、Dispatch、Egress、Ingress 与统一 operation DTO | 本批按要求未跑测试 | `ready_for_acceptance` |
+| Guest ticket/nonce/上限 | 原子消费、防重放、资源门禁 | 本批按要求未跑测试 | `ready_for_acceptance` |
 | SIP outbound/对账 | Worker-ready、单拨号、签名 webhook、乱序对账、零计费失败 | 未连接 trunk | H2-H4 待验收 |
 | Agent Dispatch | 显式 dispatch、ticket、预热、容量、drain、lease/recovery | 未连真实 Worker pool | H2-H3 待验收 |
 | Egress | room/participant/track、artifact hash/manifest/retention、webhook/recovery | 未连对象存储/Egress | H2-H3 待验收 |
-| PostgreSQL | 23 段 migration、command/reliable inbox、异步 Session/Provider/Usage/Dispatch/Recording/Ingress/Agent/Consult UoW | 未连接 PostgreSQL | 主写聚合静态待验证；统一调用面尚未切换 |
-| Agent Assist | 人在环建议、敏感降级、run/step/handoff 数据模型 | 未连 LLM/语音 | 静态待验证 |
-| Autonomous Agent | 独立 runtime、AgentSession、披露、AMD/IVR、结构化结果、接管/恢复/结束闭环 | 未连接模型、SIP 或真机 | 静态待验证；保持关闭 |
-| Operator warm transfer | 私密 consult room、独立 SIP leg、move 对账、App 接受/拒绝/恢复 | 未连接 LiveKit/SIP/真机 | 静态待验证；默认关闭 |
-| Ingress | RTMP/WHIP/HTTPS URL、DNS/IP/redirect SSRF、SRT bridge、容量、webhook/recovery | 未连 Ingress | 静态待验证；SRT 运行验收未完成 |
-| HA/100 并发 | 拓扑/容量合同、OTel、home-region 路由、fencing、启动拒绝 | 未做多节点/负载/故障注入 | 运行态未完成 |
-| 媒体隔离 | human→Worker、TTS→目标 leg、早期媒体 gate | 未做真媒体 smoke | 发布阻塞 |
+| PostgreSQL | 31 段 migration、primary UoW、command/reliable inbox、全部生产 Repository runtime adapter | 隔离 staging 已完成 migration/import/audit/rollback；本批未复跑 | 静态调用图 `0/0`；生产切流与跨主机 HA/PITR 待独立授权 |
+| Agent Assist | 人在环建议、敏感降级、run/step/handoff 数据模型 | 未连真实 LLM/语音 | `ready_for_acceptance` |
+| Autonomous Agent | 独立 runtime、AgentSession、披露、AMD/IVR、结构化结果、接管/恢复/结束闭环 | 未连接真实模型、SIP 或真机 | `ready_for_acceptance`；保持关闭 |
+| Operator warm transfer | 私密 consult room、独立 SIP leg、move 对账、App 接受/拒绝/恢复 | 未连接 LiveKit/SIP/真机 | `ready_for_acceptance`；默认关闭 |
+| Ingress | RTMP/WHIP/HTTPS URL、DNS/IP/redirect SSRF、SRT bridge、容量、webhook/recovery | 未连真实 Ingress | `ready_for_acceptance`；SRT 运行验收未完成 |
+| HA/100 并发 | Patroni/etcd、WAL-G、拓扑/容量合同、混合流量/故障编排、OTel、home-region 路由、fencing、启动拒绝 | 缺第二数据库节点、3 个 DCS voter、off-host 对象存储和私有故障控制器 | 代码完成，真实 HA/PITR/25–100 并发待验收 |
+| 媒体隔离 | human→Worker、TTS→目标 leg、早期媒体 gate、流式 TTS 直达 LiveKit sink | Server direct/TURN/reconnect 已有 staging 记录；owned-device 未校准 | `ready_for_acceptance` |
 
-暂停边界：Beelink 开机前只允许代码、配置、测试用例和文档开发；服务器端 build、
-typecheck、test、render、deploy、service start、真实 SIP 呼叫全部不得执行。
+当前执行边界：按用户要求先完成代码，测试、构建、部署、真实 SIP、staging 和真机阈值
+校准暂缓。既有 staging 记录只说明当时环境，不替代本批回归，也不得据此标记 accepted。
 
 ## 2. 工作流与依赖
 
@@ -330,52 +330,36 @@ Feature flag：`LIVEKIT_AGENT_DISPATCH`
 - 切换后只有单一写主。
 - 不使用长期 dual write。
 
-当前进度：规范化 schema、23 段 migration、逐事件本地 outbox、PostgreSQL inbox、
-shadow projection、离线 import、逐记录 count/hash 对账及原子 evidence 文件已实现；
-新增 `SKIP LOCKED` reliable outbox、provider CAS 和 aggregate fencing SQL/Repository。
-新增异步 `PostgresPrimaryStore` aggregate unit-of-work：按 aggregate advisory lock
-串行化、校验并锁定 fencing lease、projection record CAS、同一 event payload 防重放，
-并可在同一事务写 reliable outbox；重复 projection event 不再错误递增 record version，
-outbox 重用幂等键但内容不同时明确冲突。现有领域 Repository 仍是同步 snapshot API，
-新增 durable primary command inbox，按 command request hash 保存原始结果，解决状态
-继续推进后同一命令重试无法靠 projection payload hash 正确去重的问题。新增异步
-PostgreSQL Provider Operations Repository：同一 session fence、确定性 operation ID、
-唯一键竞争重读、版本/外部 ID/状态转换检查、同事务 normalized projection + command
-result + reliable outbox，并在提交前二次校验 fence。该 Repository 尚未接入现有 27 个
-非测试调用模块。新增 reliable inbox 采用“先占位、同事务处理、保存结果”语义，
-并发重复 webhook 在领域变更前去重，event ID 复用但 payload/session/type 改变时失败
-关闭；command/inbox retention 都使用有界 `SKIP LOCKED` 清理。其他领域仍是同步
-snapshot API。新增异步 Session Repository，把 CallLeg、segment、playback 与 Session
-版本作为同一 fenced aggregate 写入；新增 Usage Accounting Repository，以 Session 或
-billing-account fence 约束命令、用户账户行锁串行化跨会话余额，并在同一事务提交
-usage account、hold、request-hash ledger、command result 和 outbox。上述新 Repository
-尚未接入现有同步调用面。Agent Run/Step/Tool/Handoff/Consult 已新增异步主写 UoW，
-业务幂等 request hash、mode-scoped attempt、单活约束以及 Consult/Handoff/Run 原子
-状态更新已进入第 22 段 migration；统一 runtime 工厂、精确 schema manifest、完整
-primary import 和签名 audit 证据门禁已加入，但调用面迁移和单次 cutover 仍未完成，
-因此尚未切成异步 PostgreSQL 单一写主，
-因此多节点启动继续明确失败关闭，不能用 foundation 代码冒充 cutover 完成。
+当前进度（2026-07-19）：规范化 schema、31 段 migration、PostgreSQL primary UoW、
+command/reliable inbox、`SKIP LOCKED` outbox、aggregate fencing、Provider CAS、shadow
+projection、离线 import、逐记录 count/hash 对账及签名 evidence 已实现。Session、CallLeg、
+playback、Usage/Billing、Provider Operation、Dispatch、Recording/Egress、Ingress、Agent
+Run/Step/Tool/Handoff/Consult、账号、支付、Voice、Terms 与 Diagnostics 均已通过统一 runtime
+adapter 接入；内存/SQLite/JSON 兼容路径只保留在显式 adapter 边界。
 
 Import 会把 legacy Usage map/hold/ledger 转成版本化记录，并为旧 Agent
 Run/Step/Tool/Handoff 生成确定性 request hash/idempotency metadata；audit 同时核对所有
-primary payload、normalized namespace count、23 段 schema 与 database identity，证据以
-cutover ID + 独立 HMAC key 签名。静态调用图当前仍有 81 处旧 Repository 导入和 25 处
-直接 Snapshot 导入，因此 compile-time authorization 保持 false；这些计数归零并补齐
-尚未建模的账号、支付、Voice、Terms、Diagnostics 持久化之前不得切
-`API_STORAGE_DRIVER=postgres`。
+primary payload、normalized namespace count、31 段 schema 与 database identity，证据以
+cutover ID + 独立 HMAC key 签名。静态调用图现为旧 Repository 导入 `0`、直接 Snapshot
+导入 `0`，`postgresPrimaryCutoverAuthorization` 已在隔离 staging 验收后开启。运行时仍强制
+完整 migration、数据库 identity、签名 evidence、关闭 shadow dual-write 以及生产
+`verify-full` TLS；现有 SQLite staging 未自动切流，多节点和生产切换仍需独立发布授权。
 
 第 23 段 migration 修正 aggregate lease 续租语义：同一未过期 instance owner 续租保持
 fencing token，只有过期或跨 owner 接管才生成新 token；同 owner 并发写由 advisory
 transaction lock 串行，避免并发请求互相把对方误判为 stale writer。统一调用层只能使用
 稳定且至少 8 字符的 `PLATFORM_INSTANCE_ID`，不能按请求随机生成 owner。
 
-后续本地静态批次已新增 Worker Dispatch/Capacity、Recording Consent/Job/Artifact 和
-Ingress 异步主写 Repository。Dispatch 在同一 session-fenced transaction 内锁定全局
-resource pool，并原子写 reservation+dispatch；Ingress 使用独立容量锁串行化全局与
-单 Session 上限；Recording snapshot 只接受已持久化的权威 consent，Job/Artifact 使用
-规范化唯一键、primary CAS、command inbox 和 outbox。过期 Worker reservation 不在持有
-其他 Session fence 时被跨聚合改写，只从实时容量统计排除并由自身 fence 恢复清理。
-这些 Repository 同样尚未接入调用面；统一 driver cutover 仍未完成。
+Worker Dispatch/Capacity、Recording Consent/Job/Artifact 和 Ingress 已接入统一 runtime
+调用面。Dispatch 在同一 session-fenced transaction 内锁定全局 resource pool，并原子写
+reservation+dispatch；Ingress 使用独立容量锁串行化全局与单 Session 上限；Recording 只接受
+已持久化的权威 consent，Job/Artifact 使用规范化唯一键、primary CAS、command inbox 和
+outbox。过期 Worker reservation 不在持有其他 Session fence 时被跨聚合改写，只从实时容量
+统计排除并由自身 fence 恢复清理。
+
+第 31 段 migration 将 Agent 被叫录音同意合同、参与者 consent 证据和 Agent Task 录音策略
+纳入规范化主表与 projection 回填；Agent/Egress runner 只能使用已持久化的权威同意记录，
+不能以运行参数替代同意证据。
 
 ## 7. Platform P1-D：Egress 与通话记录
 
@@ -413,8 +397,9 @@ resource pool，并原子写 reservation+dispatch；Ingress 使用独立容量�
 - 对象和 manifest 对账一致。
 
 当前进度：consent snapshot、audio-only room recording、start/list/stop、provider
-operation、签名 webhook、artifact 和恢复轮询已完成静态实现；retention 删除任务、
-对象 hash/manifest 和真实 Egress/对象存储仍待实现或验收。
+operation、签名 webhook、artifact 和恢复轮询已完成静态实现；对象流式 SHA-256 校验、
+加密 manifest 写入、定时 retention 删除及失败退避也已接入统一 Artifact Worker。
+真实 Egress/对象存储的对象、manifest 与删除对账仍待 staging 验收。
 
 ## 8. Platform P1-E：Voice Agent
 
@@ -512,8 +497,32 @@ move/end、未知结果恢复、脱敏投影和 App 接受/拒绝/三方确认�
 | ARC-TTS-001 | 真流式 chunk/cancel | OPT-RT-005/CALL-005 |
 | ARC-TTS-002 | voice prewarm/cache/8k route | OPT-VOICE-001/002 |
 | ARC-MODEL-001 | 固定 Model Profile 和 fingerprint | OPT-OBS-001 |
+| ARC-FALLBACK-001 | ASR/MT/TTS/LLM session-sticky fallback | OPT-OBS-001 |
 
 所有模型任务先在隔离 harness A/B，再进入正式 integration flag。
+
+当前进度：`ARC-ASR-001` 已使用每条 leg 的有界 ingest ring buffer 与持久 WebSocket
+二进制 ASR session 解耦 RTC 收帧；`ARC-ASR-002` 已把首遍 ASR final、MT 和二遍 LLM
+纠错解耦，首遍字幕不再等待纠错，实际变化的二遍结果复用同一 `speechId/revision` 并提升
+`pipelineGeneration`，以既有 Abort/generation 门禁取消旧 MT/TTS。服务端在同 revision
+的新 generation 到达时清除旧译文，避免新原文与旧译文短暂拼接。相关代码和回归用例
+已补。`ARC-MT-001` 已增加模型服务共享的有界 execution admission；流式请求独占配额，
+非流式请求按 `max_tokens` 兼容性在短窗口内组成 Hy-MT2 batch，队列、并发、等待时间和
+batch size 均有硬上限，容量拒绝/超时/执行中/排队中/平均 batch size 已进入 Prometheus
+合同和 dashboard。`ARC-FALLBACK-001` 已增加 ASR/MT/TTS 跨 Provider 会话粘性路由、全局 cooldown、
+单 session half-open 恢复、非重试 4xx/外部取消保护、双 Provider 幂等 close，以及 MT/TTS 流式
+`restart` 清空门禁；LLM Provider 故障后同一 call 固定使用本地规则。切换使用结构化
+`worker.status`，并由 runtime diagnostics fingerprint 覆盖 fallback 参数。`ARC-VAD-002` 已把抢话限制为
+目标参与者存在真实 active playback 时才判定，播放期提高 VAD 持续时间/概率门槛，短应答归为
+backchannel，只有 sink clear 成功才取消旧 MT/TTS；端侧既有 TTS active/tail、输出路由、能量 gate 和
+pre-roll 丢弃继续承担原生 echo start gate。本批按用户要求未执行测试，因此以上只进入
+`ready_for_acceptance`，不是 accepted。
+
+`ARC-TTS-001` 已把 VoxCPM2 `generate_streaming()` 接到模型服务 NDJSON 合同，Worker 使用
+有界多订阅音频流把首个 PCM chunk 直接送入 LiveKit sink；不支持流式播放的 PSTN/HTTP sink
+才在自身边界缓冲整段。sequence/sample-rate/generation/cancel 均失败关闭，主 Provider 已输出
+音频后发生断流时不会从头播放 fallback，避免重复前缀。播放期间回声指纹按 lifecycle 保持，
+结束后只保留 8 秒 tail；真实音质、chunk 边界、首包和取消仍需 staging/真机验收。
 
 ## 10. Platform P2：Ingress、HA 和规模化
 
@@ -560,10 +569,14 @@ drain、独立镜像/profile、`external_bridge_id` projection 以及 bridge+Liv
 - 2 小时 soak。
 - 网络和依赖故障注入。
 
-当前进度：新增两地域/独立池/托管 PostgreSQL 与 Redis 的拓扑合同、多节点启动
-失效关闭、容量结果校验器、OTLP trace、provider operation trace 关联、home-region/
-cell 粘滞路由和 aggregate fencing token。它们不等于实现了 PostgreSQL 写主、
-TURN/SFU 多节点、100 并发或 2 小时长稳；现有会话禁止跨区漂移，故障转移只接新会话。
+当前进度：除两地域/独立池拓扑合同、多节点启动失效关闭、容量结果校验器、OTLP trace、
+provider operation trace、home-region/cell 粘滞路由和 aggregate fencing 外，已经实现
+PostgreSQL primary runtime、Patroni/etcd Provider、旧主 fencing/重建步骤、WAL-G off-host
+base backup/WAL/restore Provider，以及覆盖 API、LiveKit、SIP、ASR、MT、TTS、Agent、Egress
+的真实混合流量与故障注入编排器。上述是可部署的 Provider 集成，不等于真实跨主机 HA、
+PITR、TURN/SFU 多节点、25/50/100 并发或 2 小时长稳已经通过；现有会话禁止跨区漂移，
+故障转移只接新会话。真实验收仍缺第二数据库节点、3 个 DCS voter、off-host 对象存储、
+私有故障控制器、Prometheus 凭证和 owned auto-answer 白名单号码。
 
 P2-A1 已补充逐轮 MT 首 token 与 TTS 首音频实际到达 Worker 的时间点，并从持久化
 `speechId/turnId/pipelineTiming` 生成 ASR、处理队列、turn buffer、MT、TTS、字幕端到端、
@@ -589,10 +602,11 @@ URL、模型路径、请求内容与 voice identity，ASR context 只包含内�
 resource 和 batch processor 输出 OTLP/HTTP；Grafana dashboard 覆盖模型版本/签名、RTC 分位数、
 包损、ingest drop/backpressure 和样本可用性。metrics token 未配置时所有新增端点 fail closed。
 
-当前仍是本地代码级验收：API gauges 是各进程 bounded window 的重算值，不替代持久化质量报告；
-模型服务签名描述启动参数，不是模型权重 checksum；Collector 只完成静态合同校验，尚未实际启动。
-RTT/jitter/loss、重连/TURN、drop/backpressure 的生产阈值仍为空，必须在隔离 staging、真机与
-10/25/50/100 并发实测后校准，不得用单元测试或本地分位数替代真实负载验收。
+当前 staging 已启动 Collector/sink，并完成 direct、强制 TURN、full reconnect 及 10 会话 admission
+smoke；API gauges 仍是各进程 bounded window 的重算值，不替代持久化质量报告，模型服务签名描述
+启动参数而非模型权重 checksum。owned-device 样本、25/50/100 并发和长稳 soak 尚未完成，
+RTT/jitter/loss、drop/backpressure 的正式阈值继续为空；不得用混合聚合窗口、单元测试或本地分位数
+替代分场景真实负载验收。
 
 ## 11. 建议批次
 
@@ -655,17 +669,32 @@ RTT/jitter/loss、重连/TURN、drop/backpressure 的生产阈值仍为空，必
 
 ## 13. 当前开发状态
 
-2026-07-17 Platform P0 Batch 0A/0B：
+2026-07-19 静态开发收尾：
 
 | 任务 | 状态 | 剩余门禁 |
 | --- | --- | --- |
-| ARC-LK-001 | in_progress | Server digest、staging media smoke |
-| ARC-LK-002 | in_progress | LiveKit room + legacy PSTN adapter 已接入；SIP/Dispatch/Egress/Ingress 待实现 |
+| ARC-LK-001 | ready_for_acceptance | 版本/digest 固定门禁、compatibility gate 和 direct/TURN/reconnect staging 记录已具备；Egress/Ingress 实际 digest、owned-device、真实 SIP 与本批回归待执行 |
+| ARC-LK-002 | ready_for_acceptance | Room/PSTN/SIP/Dispatch/Egress/Ingress adapter 与统一 operation DTO 已实现；合同和 staging 未执行 |
 | ARC-SEC-001 | ready_for_acceptance | staging/真机 token 和媒体复验 |
 | ARC-SEC-002 | ready_for_acceptance | staging、多节点 SQLite/PostgreSQL 并发核销复验 |
 | ARC-SEC-003 | ready_for_acceptance | staging App/Web 伪造消息复验 |
-| ARC-SEC-004 | in_progress | Call Room 上限完成；CORS/Gateway/分布式公网限流待补 |
-| ARC-SEC-005 | in_progress | 私有部署配置迁移和镜像 digest |
-| ARC-CONTRACT-001 | in_progress | Flutter/Python golden fixtures |
+| ARC-SEC-004 | ready_for_acceptance | API/Gateway/队列上限与分布式限流代码完成；自动化和 staging 洪泛门禁未执行 |
+| ARC-SEC-005 | ready_for_acceptance | 权限、secret scan、SBOM、轮换合同完成；Egress/Ingress 实际 digest/SBOM 待 staging |
+| ARC-CONTRACT-001 | ready_for_acceptance | Node/Flutter/Python 共用 golden fixtures 已完成；三端测试未执行 |
+| ARC-SIP-001..003 | ready_for_acceptance | outbound/inbound、单次拨号门禁、状态桥、签名 webhook、退款和 reconciliation 完成；真实 trunk/白名单号码待执行 |
+| ARC-FALLBACK-001 | ready_for_acceptance | 跨 Provider、cooldown、恢复和流式 restart 代码完成；故障注入/staging 未执行 |
+| ARC-VAD-001/002 | ready_for_acceptance | translation endpoint profiles、Agent turn profile、Worker backchannel/active-playback gate 与既有端侧 echo gate 已闭合；真机回声/抢话门禁未执行 |
+| ARC-ASR-001/002 | ready_for_acceptance | 每 leg 有界 ingest、持久流、两遍纠错与 generation 取消完成；本批未回归，真实语料/漏句门禁待执行 |
+| ARC-MT-001 | ready_for_acceptance | 稳定前缀、上下文/术语、admission、batch/stream 和 fallback 完成；真实中英混合、数字与术语门禁待执行 |
+| ARC-TTS-001/002 | ready_for_acceptance | VoxCPM2 真流式生成、bounded broadcast、LiveKit 直出、prewarm/voice/8k route 完成；真实首包、音质、断流/取消待执行 |
+| ARC-MODEL-001 | ready_for_acceptance | Worker 与 ASR/MT/TTS 实际启动参数 fingerprint、Prometheus/OTel/dashboard 完成；权重 checksum 与真实部署对账待执行 |
+| ARC-DATA-001..006 | ready_for_acceptance | 31 段 migration、全部 runtime adapter、签名 audit 与静态 `0/0` 完成；生产切流和跨主机故障验收待执行 |
+| ARC-JOB-001..005 | ready_for_acceptance | dispatch/prewarm/load/drain/lease/fence/recovery 完成；真实 Worker pool 故障验收待执行 |
+| ARC-EGR-001..003 | ready_for_acceptance | 同意、operation、runner、artifact/manifest/retention/recovery 完成；真实 Egress 与对象存储待执行 |
+| ARC-AGENT-001..007 | ready_for_acceptance | Assist、受控 autonomous runtime/tool gateway/接管/consult/录音合同完成，默认关闭；真实模型/SIP/真机待执行 |
+| ARC-ING-001 | ready_for_acceptance | 原生 Ingress 与 SRT bridge、SSRF/capacity/recovery 完成；真实媒体、镜像和 UDP 网络待执行 |
+| ARC-HA-001/002 | ready_for_acceptance | Patroni/etcd、WAL-G、拓扑、fencing、服务发现/旧主重建合同完成；缺外部节点/DCS/对象存储，不可标 accepted |
+| ARC-OBS-001 | ready_for_acceptance | speech/turn/RTC/ingest/fingerprint、Prometheus/OTel/Collector/dashboard 完成；正式 RTC 阈值仍为 `calibration_required` |
+| ARC-LOAD-001 | ready_for_acceptance | 真实混合流量、admission 和故障编排器完成；25/50/100、120 分钟 soak 与真实 Provider 证据待执行 |
 
 `ready_for_acceptance` 不等于 accepted；没有部署和真实环境证据前不得结项。

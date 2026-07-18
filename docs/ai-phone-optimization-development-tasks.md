@@ -1,7 +1,7 @@
 # ai phone 优化开发任务清单
 
-版本：v4.6
-日期：2026-07-14
+版本：v4.7
+日期：2026-07-19
 关联：`docs/domestic-app-detailed-functional-design.md`、`docs/ai-phone-translation-technical-design.md`、`docs/domestic-design-review-action-plan.md`
 
 新增统一架构任务来源：
@@ -21,6 +21,11 @@
 Host 分享前轮换、Call Room 人数/时长/data 大小与频率上限，以及 LiveKit room 和
 HTTP/Fonoster/mock PSTN 生产 adapter。当前证据仍为 H1；公共 CORS/Gateway 上限、
 多节点共享存储竞争和真实 SIP 不在本批完成范围。
+
+2026-07-19 ARC 静态开发已推进至 31 段 PostgreSQL primary、SIP/Dispatch/Egress/Agent/
+Ingress/HA Provider、每 leg 有界 ASR、session-sticky fallback、echo-aware barge-in、
+VoxCPM2 真流式 TTS 和 P2-A3 可观测性；逐项状态见架构任务计划。按用户要求本批测试
+暂缓，因此以下需要动态证据的 `OPT-*` 不提升为 accepted，产品验收真值保持不变。
 
 ## 1. 目标和范围
 
@@ -71,7 +76,7 @@ HTTP/Fonoster/mock PSTN 生产 adapter。当前证据仍为 H1；公共 CORS/Gat
 - `OPT-RT-001`：代码和自动化门禁完成。
 - `OPT-RT-002`：`accepted`。App 结束前持久化按 `sessionId` 隔离的 finalization outbox，网络恢复、冷启动和回前台会重试保存与结束；API 校验路径 ID、请求体 ID、账号和幂等键，并对同一 session 串行、不同 session 并行结算。iPhone 断网复验 session `7a576a03-d139-4e42-a473-bb0ee13fb63a` 自动收敛 ended，2段字幕完整、hold=0、仅一条 `-21` 秒 ledger，未暴露原始超时。
 - `OPT-RT-003`：`accepted`。RT-003B 三轮 silence 断句及翻译延迟通过；RT-003A 已禁止 `max_duration` 硬切段使用上下文 LLM、拒绝超出 raw 支持范围的扩写，并按 raw continuation 合并。Qwen3 ASR 去重现仅作用于时间重叠结果，重复讲话不会再被误删；动态纠错 context 回显在 ASR Provider 入口拦截。iPhone session `c7c915b7-d5d2-4ab0-9e3d-58f52adb92ad` 三轮同句产生3段译文，无未来后缀扩写、重复后缀或领域词泄露，427帧零丢失、hold=0、单次结算。
-- `OPT-RT-004`：`todo（可靠性验收）`。代码和自动化门禁完成，RT-004A“说完立即结束”和 RT-004B“翻译处理中立即结束”冒烟通过；100 次尾句原文和译文保存率尚未执行，完成前不得标记 accepted。
+- `OPT-RT-004`：`todo（可靠性验收）`。代码和自动化门禁完成；call end 先给尾句 MT 默认 1500ms 有界落地窗口，再取消 TTS/播放和关闭 Provider，无响应任务超时后立即收敛。既有 RT-004A/B 冒烟不替代 100 次尾句原文和译文保存率，完成前不得标记 accepted。
 - `OPT-RT-005`：`accepted`。Gateway 按字幕顺序逐条合成，暂停、结束和断线取消在途及待处理 TTS，App 顺序播放并清空残留。VoxCPM2 已修复48k误标24k、正文控制提示泄露和自然声音音量过低；自然声音与当前个人克隆均达到约 `-18 dBFS`、ASR 回听只有正文。iPhone 两轮真机验收通过：长测 session `99812932-3d12-4675-bc00-b1ae87a65e3f` 连续19段、结束/取消 session `c9251e1b-8cca-45db-bdf5-12766ab2d016` 连续6段，用户确认顺序、取消和结束后残留均正常；两轮均零丢帧、hold=0、单次结算。
 - `OPT-TERM-001`：`in_progress（代码完成，统一验收待执行）`。App 同传设置已支持通用、商业、科技、医疗、旅游、餐饮、娱乐单选并持久化；API 校验后把选择和词库版本写入 realtime response/token；Gateway 按 session 选择统一生成 ASR hotwords/corrections、翻译 glossary 和 LLM 保护字段，旧客户端继续回退服务器默认包。自动化门禁通过，Beelink 与 iPhone 尚未部署验收。
 - `OPT-OBS-001`：`in_progress（代码完成，统一验收待执行）`。新增账号隔离的 `/sessions/:sessionId/quality-report`，按 session 汇总翻译覆盖率、延迟均值/P95/最大值、丢帧、VAD fallback、端点原因、说话人、overlap 和 Provider 指纹；报告不包含字幕正文、音频或逐帧概率。API 自动化通过，真实 session 报告和告警阈值尚待统一验收。
@@ -79,10 +84,10 @@ HTTP/Fonoster/mock PSTN 生产 adapter。当前证据仍为 H1；公共 CORS/Gat
 - `OPT-DATA-002`：`in_progress（代码完成，恢复演练待执行）`。新增 JSON→SQLite 一次性迁移、`quick_check`、SQLite online backup 和维护模式 restore；恢复前自动保留 pre-restore 文件，发布脚本仅在 `MIGRATE_SQLITE=true` 时切换现有服务器。
 - `OPT-DATA-004`：`in_progress（代码和自动化门禁完成，部署验收待执行）`。Call legs、segments、playbacks、inbox 和 outbox 已进入同一 SQLite 事务边界；写入按 `sessionId` 加锁并校验 `expectedVersion`，SQLite 使用实体 CAS、外键、事件幂等键和 `targetLegId + generation` 唯一约束。50 个并发 session、同 session 版本冲突、重复事件、重复 End、单次结算和 outbox 恢复测试通过。
 - `OPT-CALL-003`：`in_progress（代码完成，重启验收待执行）`。Call Link 已以 Session 为持久化聚合，callId 与 sessionId 强绑定，call legs、历史、终态和未发送事件可恢复；启动和周期恢复会收敛遗留会话。Beelink SQLite 迁移与 API/Worker 重启演练尚未执行。
-- `OPT-CALL-004`：`in_progress（代码和自动化门禁完成，真实媒体验收待执行）`。新增 Playback 聚合、`playbackId + generation + sourceLegId + targetLegId` 绑定和 `queued/streaming/interrupted/completed/failed` 状态机；`tts.ready` 仍只表示音频生成。Worker 按目标角色独立排队并发送 `playback.queued/started/ended/failed`，API 对重复事件幂等、终态回退返回冲突，End 将活动播放收敛为 `interrupted(session_end)`。真实 sink ACK、stop/clear 和迟到帧拒绝属于 `OPT-CALL-005`，本阶段未启用全双工。
-- `OPT-CALL-005`：`in_progress（代码和自动化门禁完成，真实双向媒体验收待执行）`。API 在 `playback.queued` 后返回数据库确认的 `playbackId/generation/sourceLegId/targetLegId`；Worker 以真实 `targetLegId` 独立排队并使用 AbortSignal 取消，生产 HTTP 客户端在绑定缺失、代次不符或 leg 为空时 fail closed，不生成临时路由。LiveKit sink 调用 `clearQueue()`、按 generation 拒绝迟到帧，App/Web 只订阅绑定当前 participant identity 的目标译音轨。PSTN Bridge 已强校验 `callId=sessionId` 及 playback/leg IDs，并提供能力和 interrupt 接口；当前 Mock/HTTP/Fonoster adapter 均明确报告 `clearPlayback=false`，interrupt 返回409，未接入支持 clear 的真实 Provider 前只能半双工或纯字幕，不能开启 `OPT-CALL-006`。
-- `OPT-CALL-006`：`in_progress（代码和自动化门禁完成，统一真机验收待执行）`。全双工默认关闭，由 `CALL_FULL_DUPLEX_ENABLED` 灰度；App/Web 显式启用 WebRTC AEC、降噪和自动增益，Worker 只接受 ASR Service 返回的 MarbleNet 帧级概率，连续语音达到240ms、概率不低于0.5且 pre-roll 不低于400ms时，才按当前说话人的 `targetLegId` 中断其译音。相反方向队列不受影响；旧 route epoch 和 playback generation 的排队音频及迟到帧均被拒绝。
-- `OPT-CALL-007`：`in_progress（代码和自动化门禁完成，故障注入与长稳验收待执行）`。VAD fallback、概率缺失、pre-roll 不足、sink 不支持 clear 或 clear 失败时通过 `pipeline.degraded` 收敛到半双工；健康 MarbleNet 和可清除 LiveKit sink 恢复后发布 `pipeline.restored`。`barge_in.detected/confirmed` 与精确 playback generation 绑定，质量报告汇总停止延迟；App/Web 收到降级事件后恢复 TTS 播放期间暂停采集的安全策略。真实 PSTN Provider 尚无 clear 能力，不进入全双工灰度。
+- `OPT-CALL-004`：`in_progress（代码完成，真实媒体验收待执行）`。Playback 聚合、`playbackId + generation + sourceLegId + targetLegId`、`queued/streaming/interrupted/completed/failed` 状态机和 lifecycle 事件已闭合；VoxCPM2 首 chunk 经有界流直接送 LiveKit sink，`tts.ready` 与真实播放仍保持分离。API 对重复事件幂等、终态回退冲突，End 收敛活动播放。
+- `OPT-CALL-005`：`in_progress（代码完成，真实双向媒体验收待执行）`。API 返回数据库确认的 playback/leg binding；Worker 按 target leg 独立队列、generation/AbortSignal/sequence 失败关闭，LiveKit sink 支持流式写入、`clearQueue()` 和迟到帧拒绝，App/Web 只订阅目标译音轨。HTTP/Fonoster PSTN adapter 仍明确 `clearPlayback=false`，真实 PSTN 在能力验收前强制半双工或字幕。
+- `OPT-CALL-006`：`in_progress（代码完成，统一真机验收待执行）`。全双工默认关闭；App/Web 使用 WebRTC AEC/NS/AGC，Worker 只在目标参与者存在 active playback 时判定抢话。普通门槛为 240ms/0.5，echo-aware 门槛提高到 480ms/0.72，`<=360ms` 短应答只记 backchannel；全部 sink clear 成功后才取消旧 MT/TTS，pre-roll 保持 400ms。
+- `OPT-CALL-007`：`in_progress（代码完成，故障注入与长稳验收待执行）`。VAD/clear 不可用时失败关闭到半双工；ASR/MT/TTS/LLM 已具备 per-call 粘性 fallback、cooldown 和单新会话 half-open，TTS 首音频后断流不从头重播。`worker.status`、barge-in/playback、RTC/ingest 和模型 fingerprint 已进入质量观测；真实故障与长稳仍未执行。
 - `OPT-SEC-001`：`in_progress（代码完成，统一验收待执行）`。realtime session 的个人声音配置只从当前账号 ready voice profile 解析，客户端提交的 `voiceProfileId/referenceAudioId` 不直接进入 token；上传完成后才置 ready，删除或跨账号 reference 不可复用。
 - `OPT-SEC-002`：`in_progress（代码完成，统一验收待执行）`。App 使用 WebSocket subprotocol 传 realtime token，URL 不再带 token；Gateway 只回显固定协议名。旧 query token 受 `REALTIME_ALLOW_QUERY_TOKEN` 控制，发布门禁要求为 false。
 - `OPT-REL-001`：`accepted（代码门禁）`。新增 `check:source-build`，发布前强制从源码构建全部 workspace、核对6个运行入口，并检查 Dockerfile 使用 `npm ci` 且逐项编译 contracts、LLM、API、Gateway、Worker 和 PSTN Bridge；Beelink deploy 在同步前强制执行。
@@ -166,15 +171,15 @@ HTTP/Fonoster/mock PSTN 生产 adapter。当前证据仍为 H1；公共 CORS/Gat
 | OPT-S2S-001 | 新增 `SpeechToSpeechProvider` 能力契约 | `in_progress（代码完成，Provider 评测待执行）`；级联与原生语音统一为 `CallSpeechPipeline`，支持 `cascade/native/shadow`，shadow 失败不影响正式输出，未配置 Provider 时禁止误开 |
 | OPT-S2S-002 | Gemini Live 国际路线 | 固定语料通过质量、成本、地区和隐私评审 |
 | OPT-S2S-003 | GPT-Live 候选接入 | API 正式可用后通过 Provider 评测再上线 |
-| OPT-PSTN-001 | 真实 PSTN 服务商媒体协议 | 普通电话接通、译音回灌、失败退款闭环 |
-| OPT-PSTN-002 | PSTN 播放能力与抢话适配 | Provider 声明 bidirectional/streaming/clear；支持者完成 stop/clear，不支持者强制半双工或字幕降级 |
-| OPT-AGENT-001 | AI Calling Agent 灰度 | `in_progress（任务管理完成，真实 PSTN 灰度待执行）`；灰度白名单、AI 告知、授权、禁拨/紧急号码拒绝、小时频控、人工接管、历史任务恢复、授权后取消、按 userId 隔离和开始/取消并发原子化已完成 |
+| OPT-PSTN-001 | 真实 PSTN 服务商媒体协议 | `in_progress（代码完成，真实 trunk/号码验收待执行）`；LiveKit SIP outbound/inbound、单次拨号门禁、Worker-ready、DTMF/transfer/hangup、签名 webhook、对账和失败退款已闭合 |
+| OPT-PSTN-002 | PSTN 播放能力与抢话适配 | `in_progress（代码完成，真实 PSTN clear 验收待执行）`；Provider capability、target leg/generation、stream/interrupt 合同已闭合，不支持 clear 的 adapter 自动强制半双工或字幕 |
+| OPT-AGENT-001 | AI Calling Agent 灰度 | `in_progress（代码完成，真实 PSTN 灰度待执行）`；任务/Run/Operation/Hold fence、独立 runtime/tool gateway、披露、AMD/IVR、录音同意、人工接管/consult、Egress 和崩溃恢复已完成，Autonomous 默认关闭 |
 | OPT-VOICE-001 | VoxCPM2 Hi-Fi 声音克隆 | `in_progress（相似度与20次稳定生成通过，自然度优化 TODO）`；个人声音相似本人，但自然度和语速弱于自然预置音色；参考音频质量门禁、标准/Hi-Fi 路由、试听、48k→24k 高质量重采样和响度规范化已完成 |
 | OPT-VOICE-002 | 朗读声音预设选择 | `todo（真机盲听验收）`；版本化 Provider 目录、固定参考音频、App 选择和会话透传已部署，待普通话、英语及四种方言连续10句 A/B 通过后结项 |
 | OPT-SPK-004 | 授权声纹身份识别 | `todo（非阻断）`；录入链路已通过，但本人匹配未达到0.72阈值；后续补匹配置信度诊断、本人/陌生人样本复测和阈值评估，不阻塞当前产品化主线 |
 | OPT-ANDROID-001 | Android 端侧 ASR 候选 | `todo（iOS 产品化后）`；与系统 ASR、在线 ASR 固定语料对比后决策 |
 | OPT-VAD-005 | 端侧 MarbleNet 候选评测 | CoreML/Android ONNX 与现有端点检测比较低音量召回、误触发、耗电、温升和实时系数，通过后再决定是否集成 |
-| OPT-DATA-003 | PostgreSQL/Redis 后续迁移 | Repository adapter 可迁移，数据校验和回滚通过 |
+| OPT-DATA-003 | PostgreSQL/Redis 后续迁移 | `in_progress（代码完成，生产 HA/PITR 验收待执行）`；31 段 migration、primary Repository runtime、签名 import/audit、静态调用图 `0/0`、Patroni/etcd 与 WAL-G Provider 已完成；真实跨主机切流、PITR 和容量证据通过后结项 |
 
 ### 4.1 全双工开发顺序
 

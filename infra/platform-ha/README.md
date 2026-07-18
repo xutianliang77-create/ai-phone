@@ -18,10 +18,12 @@ Copy `topology.example.json` to the private environment-specific
 - 25/50/100-session steps, a 120-minute soak, zero duplicated provider side
   effects, and zero lost final events.
 
-Do not enable multi-node writes while SQLite/JSON remains the primary store.
-The current PostgreSQL path is an incremental shadow projection and must pass
-migration, replay, count/hash, failover, and single-writer cutover acceptance
-before `API_STORAGE_DRIVER=postgres` can become a supported release setting.
+Do not enable multi-node writes while SQLite/JSON is the selected primary
+store. The PostgreSQL primary runtime and Repository adapters are implemented
+and compile-time authorized after isolated staging acceptance, but each target
+release must still pass migration, replay, count/hash, verify-full TLS,
+single-writer cutover, Patroni/etcd failover, fencing, old-primary rebuild and
+WAL-G off-host PITR before multi-node writes are supported.
 
 Static check (no service connection):
 

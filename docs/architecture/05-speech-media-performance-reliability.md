@@ -80,9 +80,11 @@ HTTP batch 适配器保留为 fallback；LiveKit/通话主链路目标使用 Web
 
 ### 3.4 Provider fallback
 
-- Provider 失败后在 session 内切到 fallback，并进入 cooldown。
-- 后台探测恢复，不在每帧来回切换。
-- 切换产生 `provider.degraded/restored` 和 model fingerprint。
+- Provider 失败后在 session 内切到 fallback，并进入 cooldown；既有会话不切回主路由。
+- cooldown 结束后只允许一个新 session 作为 half-open recovery probe，其余新 session 继续走
+  fallback，不在每帧来回切换。
+- 切换通过结构化 `worker.status` 上报 degraded/restored、stage、provider、model；实际参数
+  fingerprint 继续进入同一 call runtime diagnostics。
 - flush 和 close 对 primary/fallback 都必须幂等。
 
 ## 4. TTS 优化
@@ -101,6 +103,12 @@ tts.error
 
 Worker 收到第一个 chunk 即发布 LiveKit 音轨，不等待整句完成。
 
+当前实现已经使用 VoxCPM2 `generate_streaming()` 逐 chunk 生成 NDJSON 事件；Worker 通过
+默认上限 8 chunk 的有界多订阅流同时驱动目标 sink，LiveKit sink 直接消费，只有不支持
+`playStream` 的兼容 sink 才在自身边界缓冲整段。sequence、sample rate、AbortSignal 和
+generation 不一致会终止当前流；首段音频已经播放后若 Provider 断流，不从 fallback 重播
+整句，避免用户再次听到相同前缀。
+
 ### 4.2 播放策略
 
 - 每个 target leg 独立队列。
@@ -109,6 +117,8 @@ Worker 收到第一个 chunk 即发布 LiveKit 音轨，不等待整句完成。
 - barge-in 调用 clear，迟到 chunk 按 generation 丢弃。
 - 字幕先于音频发布。
 - sink 不支持 clear 时自动半双工。
+- 回声指纹在 playback active lifecycle 内保持，`ended` 后只保留 8 秒 tail；
+  `interrupted/failed` 立即撤销，避免固定超长窗口屏蔽用户主动复述。
 
 ### 4.3 性能
 

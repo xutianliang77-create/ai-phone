@@ -267,7 +267,8 @@ Gate 1 任一失败，禁止真实电话和 Agent 灰度。
 
 说明：
 
-- 未完成 streaming TTS 的旧完整 PCM 路径继续按现有 AC 门槛评价。
+- 真流式路径按 first chunk、连续播放、断流/取消和不重复前缀验收；兼容整块 PCM
+  fallback 仍按既有 AC 门槛单独评价，不能用 fallback 结果冒充流式门禁。
 - 电话 8kHz 必须独立做人耳、回录 ASR 和数字/地址可懂度验收。
 - App、Web、PSTN 各自记录首包，不用服务器日志代替用户侧时间。
 
@@ -421,7 +422,7 @@ test、配置渲染、服务启动、部署或真实电话。唯一执行的机�
 
 Beelink 开机后必须按第 0 节顺序执行，并额外增加：
 
-1. PostgreSQL 23 段 migration 重复执行、shadow backlog/replay、离线 import、逐记录
+1. PostgreSQL 31 段 migration 重复执行、migration/import/replay、逐记录
    count/hash/evidence、normalized count、database identity、签名 cutover ID、
    `SKIP LOCKED` claim、CAS/fencing、断连和故障恢复；
 2. Egress/Ingress 镜像 tag、digest、amd64 manifest 和独立 pool smoke；
@@ -431,11 +432,12 @@ Beelink 开机后必须按第 0 节顺序执行，并额外增加：
    70% 负载 120 分钟 soak、85% 有界拒绝和故障注入；
 6. 将真实证据写入忽略目录，并通过 `check:platform-capacity` 绑定 topology SHA-256。
 
-在 PostgreSQL 主 Repository 和真实 failover 未实现前，
-`PLATFORM_MULTI_NODE_ENABLED=true` 必须拒绝 API 启动。静态拓扑文件和校验脚本不能
-作为多节点 HA 已完成的证据。
+PostgreSQL 主 Repository 和 compile-time authorization 已实现；但真实跨主机 failover、
+fencing、服务发现和旧主重建证据齐备前，`PLATFORM_MULTI_NODE_ENABLED=true` 仍必须拒绝
+API 启动。静态拓扑文件和校验脚本不能作为多节点 HA 已完成的证据。
 
 单次 cutover 的源码前置门禁还要求
 `npm run check:postgres-primary-cutover -- --release` 返回 ready：旧 Repository import
 与直接 Snapshot import 必须同时为 0，不能通过仅设置环境变量绕过 compile-time
-authorization。当前静态审计仍为 81/25，故保持发布阻塞。
+authorization。当前静态审计为 `0/0 ready`；生产发布仍由 verify-full TLS、签名数据库
+evidence、真实 HA/PITR/容量和独立切流授权继续阻塞，不能只凭源码门禁放行。

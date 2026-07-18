@@ -77,6 +77,11 @@ Flutter 当前处理 `DataReceivedEvent` 时只解析 payload，没有验证：
 - 如果当前凭据曾被复制到工单、聊天或日志，发布前轮换。
 - CI 增加 secret scan 和镜像 SBOM。
 
+上述落盘、扫描、SBOM 和轮换合同已固化在
+`docs/operations/secret-image-lifecycle.md`；真实镜像验证状态仍以
+`infra/livekit-compatibility-profile.json` 为准，未探测的 Egress/Ingress 不得标记
+为 verified。
+
 ### SEC-LK-004 公共入口缺少明确资源上限
 
 当前 API CORS 为任意 origin；Gateway `WebSocketServer` 未设置 `maxPayload`；
