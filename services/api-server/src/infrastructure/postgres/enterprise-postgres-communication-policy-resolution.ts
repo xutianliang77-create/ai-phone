@@ -36,6 +36,15 @@ export interface ResolveEnterpriseCommunicationPolicyInput {
 export class EnterpriseCommunicationPolicyResolutionPostgresRepository {
   constructor(private readonly session: EnterpriseTenantPostgresSession) {}
 
+  async currentPublishedVersion() {
+    const result = await this.session.query<{ policy_version: string }>(`
+      SELECT policy_version FROM enterprise.communication_policy_versions
+      WHERE tenant_id = $1 AND status = 'published'
+      ORDER BY published_at DESC, id DESC LIMIT 1
+    `);
+    return result.rows[0]?.policy_version ?? null;
+  }
+
   async resolve(input: ResolveEnterpriseCommunicationPolicyInput) {
     const normalized = normalize(input);
     const bindingResult = await this.session.query<

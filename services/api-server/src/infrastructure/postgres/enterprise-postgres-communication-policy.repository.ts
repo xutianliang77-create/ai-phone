@@ -43,4 +43,8 @@ export class EnterpriseCommunicationPolicyPostgresRepository {
   >) {
     return this.resolver.resolve(...args);
   }
+
+  currentPublishedVersion() {
+    return this.resolver.currentPublishedVersion();
+  }
 }

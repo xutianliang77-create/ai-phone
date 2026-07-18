@@ -17,6 +17,7 @@ import { KnowledgePage } from "../pages/KnowledgePage.js";
 import { EnterpriseSettingsPage } from "../pages/EnterpriseSettingsPage.js";
 import { DashboardPage } from "../pages/DashboardPage.js";
 import { AuditPage } from "../pages/AuditPage.js";
+import { MeetingsPage } from "../pages/MeetingsPage.js";
 import { AnalyticsPage } from "../pages/AnalyticsPage.js";
 import { PageFrame } from "./PageFrame.js";
 import { EnterpriseTelemetry } from "./EnterpriseTelemetry.js";
@@ -128,6 +129,17 @@ export function AppShell() {
               )}
           />
           <Route
+            path="/meetings/*"
+            element={routeAllowed(state.context.scopes, "/meetings")
+              ? <MeetingsPage />
+              : (
+                <PageFrame title="企业会议" description="会议、字幕、共享与材料">
+                  <StatusPanel state="forbidden"
+                    description="当前账号缺少 meeting:read，未读取任何会议。" />
+                </PageFrame>
+              )}
+          />
+          <Route
             path="/knowledge/*"
             element={routeAllowed(state.context.scopes, "/knowledge")
               ? <KnowledgePage />
@@ -178,6 +190,7 @@ export function AppShell() {
           {enterpriseNavigation.slice(1).filter(({ path }) =>
             path !== "/knowledge" && path !== "/analytics" &&
             path !== "/audit" && path !== "/settings"
+            && path !== "/meetings"
           ).map((item) => (
             <Route
               key={item.path}

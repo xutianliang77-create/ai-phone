@@ -21,6 +21,10 @@ import { createEnterpriseMemberApi, type EnterpriseMemberApi } from "./enterpris
 import { createEnterpriseSettingsApi, type EnterpriseSettingsApi } from "./enterprise-settings-api.js";
 import { createEnterpriseAuditApi, type EnterpriseAuditApi } from "./enterprise-audit-api.js";
 import {
+  createEnterpriseMeetingApi,
+  type EnterpriseMeetingApi,
+} from "./enterprise-meeting-api.js";
+import {
   configuredEnterpriseBaseUrl,
   createEnterpriseBinaryRequester,
   createEnterpriseRequester,
@@ -46,7 +50,7 @@ export interface EnterprisePublicationInput {
 }
 
 export interface EnterpriseApi extends EnterpriseMemberApi, EnterpriseSettingsApi,
-  EnterpriseAuditApi {
+  EnterpriseAuditApi, EnterpriseMeetingApi {
   requestCode(phone: string): Promise<PhoneCodeRequestResponse>;
   login(phone: string, code: string): Promise<PhoneLoginResponse>;
   listTenants(token: string): Promise<EnterpriseTenantListResponse>;
@@ -158,6 +162,7 @@ export function createEnterpriseApi(
     ...createEnterpriseMemberApi(request, contentHeaders),
     ...createEnterpriseSettingsApi(request, contentHeaders),
     ...createEnterpriseAuditApi(request, binaryRequest, contentHeaders),
+    ...createEnterpriseMeetingApi(request, contentHeaders),
     requestCode: (phone) => request("/auth/phone/request-code", {
       method: "POST",
       body: JSON.stringify({ phone }),

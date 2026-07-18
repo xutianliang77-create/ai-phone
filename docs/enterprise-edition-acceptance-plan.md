@@ -1,6 +1,6 @@
 # 无界AI企业版验收任务与计划
 
-版本：v1.28
+版本：v1.29
 日期：2026-07-19
 状态：可执行验收计划，已对齐统一通讯平台和 PostgreSQL Primary 收敛
 
@@ -150,15 +150,15 @@ Playwright、axe 或视觉回归，也未生成/审批截图基线，因此 AC-U
 `ENT-UI-011` 当前 Flutter 代码候选把企业入口与个人主导航隔离，每次进入重新校验账号有效期、active membership、
 所选 tenant、短期签名 route document、region/cell/epoch、`/enterprise/v1/me` scopes 和 Provider capability；401 会清理
 会话与企业选择，离线或上下文不一致不显示缓存工作区。五入口使用 Material Icons；会议和接管分别按
-`meeting:read`、`support:takeover` 发现，tenant-scoped API 未实现时明确 `not_ready`，不复用个人同传、Call Link 或
-AI 代打。当前只通过 `flutter analyze`，未运行 Flutter test、构建、动态字体、横竖屏或真机矩阵，因此该候选不能
+`meeting:read`、`support:takeover` 发现。会议现读取 tenant-scoped API、换取短期 grant 并使用独立企业 LiveKit 音频
+客户端，不复用个人同传或 Call Link；接管未实现时仍明确 `not_ready`。当前只通过 `flutter analyze`，未运行 Flutter test、构建、动态字体、横竖屏或真机矩阵，因此该候选不能
 作为 AC-UI-001..006/008..011、A1 或移动端生产放行证据，任务保持 `in_progress`。
 
 `ENT-UI-012` 当前 Web 代码候选把 `/join/:meetingId` 放在成员 `AuthProvider/AppShell` 外，不读取账号、membership、
 tenant 导航或成员数据。guest token 只接受 URL fragment，query token、非法 meeting/token、地址栏清理失败均拒绝；
-有效凭据清除地址后只驻留页面内存，不进入 storage、日志或 UI。麦克风检查仅由用户点击触发并立即停止 track，
-共享只探测浏览器能力，不在无 session/lease 时调用 `getDisplayMedia`。`ENT-MTG-002` token/API 未实现，本批不发送 token、
-不连接 RTC，字幕和共享保持 `not_ready`。当前仅有 typecheck/build/bundle 静态证据，未运行 token 攻击测试、浏览器、
+有效凭据清除地址后只驻留页面内存，不进入 storage、日志或 UI。访客点击后才以加密邀请换取短期 RTC grant，
+客户端只开放麦克风发布和订阅，并明确禁止 data/camera/screenShare；字幕和共享保持 `not_ready`。当前仅有
+typecheck/build/bundle 静态证据，未运行 token 攻击测试、浏览器、
 权限、设备、axe 或视觉矩阵，不能满足 token 单会议约束、AC-UI-004/005/008..012、AC-MTG 或 A1。
 
 `ENT-UI-006` 当前代码候选覆盖知识源、术语包、话术模板三类稳定资源和修订列表，显式显示
@@ -291,10 +291,11 @@ schema 测试及 session/leg/dispatch/provider/playback/participant 六资源跨
 | AC-MTG-004 | 四人入会 | 成员、访客和主持人身份正确 |
 | AC-MTG-005 | 重启恢复 | API/Worker 重启后会议和参与者状态收敛 |
 
-`ENT-MTG-001` 当前代码候选新增 `0021`、Meeting/Participant/Artifact 领域状态机、tenant-scoped Repository、
-Primary runtime adapter 和 recoverable aggregate 读取。恢复记录同时包含唯一 communication binding；缺 binding 不会
-被补成 ready。当前未运行 up/down、forced RLS、跨租户、CAS 竞争、API/Worker 重启或 PostgreSQL 恢复测试，也未实现
-MTG-002 token/API，因此不能满足 AC-MTG-001..005 或 A1。
+`ENT-MTG-001/002` 当前代码候选新增 `0021/0022`、Meeting/Participant/Artifact 领域状态机、tenant-scoped Repository、
+Primary runtime adapter、recoverable aggregate、创建/邀请/成员与访客入会 API、加密邀请和短期 LiveKit grant。
+创建要求 tenant+key+hash 幂等并在单事务写 host/binding/audit/outbox；缺 route、policy、entitlement、密钥或 Provider
+均失败闭合。当前未运行 up/down、forced RLS、九角色/跨租户、token 篡改与过期、CAS 竞争、四人 RTC、API/Worker
+重启或 PostgreSQL 恢复测试，因此 AC-MTG-001..005 和 A1 均未通过。
 
 ### 7.2 字幕、翻译和说话人
 
@@ -463,7 +464,7 @@ MTG-002 token/API，因此不能满足 AC-MTG-001..005 或 A1。
 
 - PostgreSQL 作为所有真实 SaaS 租户的初始真源。
 - 内部 SQLite 演示数据可以迁移，但不能作为客户生产迁移路径的必要依赖。
-- 验收 commit 锁定的公共31段 manifest（基线从 `fe1c3c2` 演进）与 enterprise 21段 migration manifest 在隔离企业数据库从空库完整执行；两个 manifest 的顺序、checksum、schema verify 和 down/forward 策略均有证据，不能只跑其中一套。
+- 验收 commit 锁定的公共31段 manifest（基线从 `fe1c3c2` 演进）与 enterprise 22段 migration manifest 在隔离企业数据库从空库完整执行；两个 manifest 的顺序、checksum、schema verify 和 down/forward 策略均有证据，不能只跑其中一套。
 - 每个进程只有一个 Storage Driver 和 startup verdict；HTTP、企业 Repository、统一通讯会话和 cell Worker 使用同一 verified Primary Runtime，不存在 fallback、shadow read、dual write 或按路由混用。
 - 应用 tenant、user directory、cell discovery、migration、maintenance 分别使用最小权限角色；生产 TLS 使用 `verify-full`。应用角色没有 `BYPASSRLS`、表 owner、DDL 或关闭 RLS 权限。
 - 公共 communication session、participant、media leg、dispatch、Provider operation、playback 和相关账本全部具有 tenant scope、复合 FK 和 `FORCE ROW LEVEL SECURITY`；使用跨租户 ID、缺 scope、伪造 owner/user 过滤做负向验证。
@@ -472,7 +473,7 @@ MTG-002 token/API，因此不能满足 AC-MTG-001..005 或 A1。
 - 使用普通应用角色验证 billing account/plan/subscription/entitlement/change history forced RLS、活动 subscription 唯一、plan/snapshot/change 不可变，以及 entitlement projection/binding/grant 的 tenant 复合 FK；按跨租户、停用 account、过期账期、错 subscription/plan/version、席位超限、幂等漂移和客户端 limit 伪造执行负向矩阵。
 - accounts、tenant、communication session、segment、campaign、support、meeting、ledger 和 object hash 数量与规范化 SHA-256 一致。
 - 全量复制后记录增量水位，切换时获取 writer fence、清退旧 API/Worker、重放剩余 inbox/outbox，再做第二次 count/hash；切换或对账失败可按书面决策回滚，旧 writer 不能继续写入。
-- staging startup 必须拒绝 local evidence、签名篡改、错误 cutover/target ID、错误 commit/image/topology、错误 system identifier/OID、缺 baseline 引用、未清退 writer 或任一31+21 migration 漂移。维护工具只验证 fence，不自动执行 promote 或隔离旧主。
+- staging startup 必须拒绝 local evidence、签名篡改、错误 cutover/target ID、错误 commit/image/topology、错误 system identifier/OID、缺 baseline 引用、未清退 writer 或任一31+22 migration 漂移。维护工具只验证 fence，不自动执行 promote 或隔离旧主。
 - migration 后使用普通应用角色验证 `FORCE ROW LEVEL SECURITY`；确认 user directory self policy、tenant projection policy、成员投影同步和跨租户拒绝均生效。
 - 使用独立 cell Worker 角色验证 pending projection forced RLS、trigger 同步、空 cell 失败闭合、旧 cell 拒绝和 tenant transaction 原子 claim。
 - 使用 API 应用角色验证 PostgreSQL runtime 只在 startup gate `verified` 后创建；非法或 `dual_write` driver、连接/校验失败均不得监听端口，也不得回退到 legacy。

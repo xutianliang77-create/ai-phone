@@ -1,3 +1,4 @@
+import type { EnterpriseMeetingPolicyDto } from "@translation/contracts";
 import type { EnterpriseCommunicationBindingRecord } from
   "./enterprise-communication-session.js";
 
@@ -30,7 +31,7 @@ export interface EnterpriseMeetingRecord {
   hostUserId: string;
   scheduledAt?: string;
   status: EnterpriseMeetingStatus;
-  policy: Record<string, unknown>;
+  policy: EnterpriseMeetingPolicyDto;
   retentionUntil?: string;
   createdAt: string;
   updatedAt: string;
@@ -79,9 +80,11 @@ export interface CreateEnterpriseMeetingInput {
   hostUserId: string;
   scheduledAt?: string;
   status: "scheduled" | "provisioning";
-  policy: Record<string, unknown>;
+  policy: EnterpriseMeetingPolicyDto;
   retentionUntil?: string;
   createdAt: string;
+  idempotencyKey: string;
+  requestHash: string;
 }
 
 export interface AddEnterpriseMeetingParticipantInput {

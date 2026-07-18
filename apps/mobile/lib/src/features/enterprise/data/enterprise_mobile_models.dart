@@ -109,6 +109,7 @@ class EnterpriseMobileRoute {
     required this.routeEpoch,
     required this.apiBaseUrl,
     required this.rtcUrl,
+    required this.issuedAt,
     required this.expiresAt,
     required this.signature,
   });
@@ -119,6 +120,7 @@ class EnterpriseMobileRoute {
   final int routeEpoch;
   final Uri apiBaseUrl;
   final Uri rtcUrl;
+  final DateTime issuedAt;
   final DateTime expiresAt;
   final String signature;
 
@@ -130,10 +132,23 @@ class EnterpriseMobileRoute {
       routeEpoch: _integer(json, 'routeEpoch'),
       apiBaseUrl: Uri.parse(_text(json, 'apiBaseUrl')),
       rtcUrl: Uri.parse(_text(json, 'rtcUrl')),
+      issuedAt: DateTime.parse(_text(json, 'issuedAt')),
       expiresAt: DateTime.parse(_text(json, 'expiresAt')),
       signature: _text(json, 'signature'),
     );
   }
+
+  Map<String, Object?> toJson() => <String, Object?>{
+        'tenantId': tenantId,
+        'homeRegion': homeRegion,
+        'cellId': cellId,
+        'routeEpoch': routeEpoch,
+        'apiBaseUrl': apiBaseUrl.toString(),
+        'rtcUrl': rtcUrl.toString(),
+        'issuedAt': issuedAt.toUtc().toIso8601String(),
+        'expiresAt': expiresAt.toUtc().toIso8601String(),
+        'signature': signature,
+      };
 }
 
 class EnterpriseMobileProviderCapability {

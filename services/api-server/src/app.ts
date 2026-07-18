@@ -61,6 +61,12 @@ import {
 } from "./modules/enterprise/enterprise-observability.routes.js";
 import { registerEnterpriseAuditExportRoutes } from
   "./modules/enterprise/enterprise-audit-export.routes.js";
+import { registerEnterpriseMeetingRoutes } from
+  "./modules/enterprise/enterprise-meeting.routes.js";
+import {
+  createEnvironmentEnterpriseMeetingInviteTokenService,
+  type EnterpriseMeetingInviteTokenService,
+} from "./modules/enterprise/enterprise-meeting-invite-token.js";
 import {
   createEnvironmentAuditExportArtifactStore,
   type EnterpriseAuditExportArtifactStore,
@@ -89,6 +95,7 @@ export async function buildApp(dependencies: {
   auditCursorService?: EnterpriseAuditCursorService;
   auditExportArtifactStore?: EnterpriseAuditExportArtifactStore;
   enterpriseRepositoryRuntime?: EnterpriseRepositoryRuntime;
+  enterpriseMeetingInviteTokenService?: EnterpriseMeetingInviteTokenService;
 } = {}) {
   const app = Fastify({
     logger: {
@@ -184,6 +191,13 @@ export async function buildApp(dependencies: {
     tenantRouteService,
     enterpriseRepositoryRuntime,
     auditExportArtifactStore,
+  );
+  await registerEnterpriseMeetingRoutes(
+    app,
+    tenantRouteService,
+    enterpriseRepositoryRuntime,
+    dependencies.enterpriseMeetingInviteTokenService ??
+      createEnvironmentEnterpriseMeetingInviteTokenService(),
   );
   await registerPlansRoutes(app);
   await registerRealtimeRoutes(app);

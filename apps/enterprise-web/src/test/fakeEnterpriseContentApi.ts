@@ -17,6 +17,8 @@ type ContentApi = Pick<EnterpriseApi,
   | "listScriptTemplates" | "createScriptTemplate"
   | "listScriptTemplateVersions" | "createScriptTemplateVersion"
   | "stageScriptTemplateVersion" | "publishScriptTemplateVersion"
+  | "listMeetings" | "createMeeting" | "createMeetingGuestInvitation"
+  | "joinMeeting" | "joinMeetingAsGuest"
 >;
 
 export function fakeEnterpriseContentApi(): ContentApi {
@@ -53,5 +55,10 @@ export function fakeEnterpriseContentApi(): ContentApi {
     createScriptTemplateVersion: vi.fn(),
     stageScriptTemplateVersion: vi.fn(),
     publishScriptTemplateVersion: vi.fn(),
+    listMeetings: vi.fn().mockResolvedValue({ meetings: [] }),
+    createMeeting: vi.fn(),
+    createMeetingGuestInvitation: vi.fn(),
+    joinMeeting: vi.fn(),
+    joinMeetingAsGuest: vi.fn(),
   };
 }

@@ -56,6 +56,8 @@ import { EnterpriseAuditExportPostgresRepository } from
   "./enterprise-postgres-audit-export.repository.js";
 import { EnterpriseMeetingPostgresRepository } from
   "./enterprise-postgres-meeting.repository.js";
+import { EnterpriseMeetingInvitationPostgresRepository } from
+  "./enterprise-postgres-meeting-invitation.repository.js";
 
 export interface EnterprisePostgresUnitOfWork {
   tenant: EnterpriseTenantPostgresRepository;
@@ -74,6 +76,7 @@ export interface EnterprisePostgresUnitOfWork {
   auditExports: EnterpriseAuditExportPostgresRepository;
   workerDispatches: EnterpriseWorkerDispatchPostgresRepository;
   meetings: EnterpriseMeetingPostgresRepository;
+  meetingInvitations: EnterpriseMeetingInvitationPostgresRepository;
 }
 
 export function withEnterprisePostgresUnitOfWork<T>(
@@ -104,6 +107,7 @@ export function withEnterprisePostgresUnitOfWork<T>(
       auditExports: new EnterpriseAuditExportPostgresRepository(session),
       workerDispatches: new EnterpriseWorkerDispatchPostgresRepository(session),
       meetings: new EnterpriseMeetingPostgresRepository(session),
+      meetingInvitations: new EnterpriseMeetingInvitationPostgresRepository(session),
     }),
   );
 }

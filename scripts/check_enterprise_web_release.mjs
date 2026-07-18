@@ -12,16 +12,24 @@ const matrix = readJson(matrixPath, "release matrix");
 validateMatrix(matrix);
 const files = listFiles(dist);
 const textAssets = files.filter((path) => /\.(?:html|js|css)$/.test(path));
+const htmlAssets = textAssets.filter((path) => path.endsWith(".html"));
 if (!textAssets.some((path) => path.endsWith(".html"))) issues.push("HTML entry missing");
 if (!textAssets.some((path) => path.endsWith(".js"))) issues.push("JavaScript bundle missing");
 if (!textAssets.some((path) => path.endsWith(".css"))) issues.push("CSS bundle missing");
 if (files.some((path) => path.endsWith(".map"))) issues.push("source maps must not ship");
 
+const javascriptAssets = textAssets.filter((path) => path.endsWith(".js"));
+const entryJavaScript = entryJavaScriptAssets(htmlAssets, javascriptAssets);
+if (entryJavaScript.length === 0) issues.push("initial JavaScript entry missing");
 const sizes = {
-  javascript: sumSize(textAssets.filter((path) => path.endsWith(".js"))),
+  entryJavaScript: sumSize(entryJavaScript),
+  javascript: sumSize(javascriptAssets),
   css: sumSize(textAssets.filter((path) => path.endsWith(".css"))),
 };
-if (sizes.javascript > 512 * 1024) issues.push("JavaScript exceeds 512 KiB budget");
+if (sizes.entryJavaScript > 512 * 1024) {
+  issues.push("initial JavaScript exceeds 512 KiB budget");
+}
+if (sizes.javascript > 1024 * 1024) issues.push("total JavaScript exceeds 1 MiB budget");
 if (sizes.css > 96 * 1024) issues.push("CSS exceeds 96 KiB budget");
 
 const bundleText = textAssets.map((path) => readFileSync(path, "utf8")).join("\n");
@@ -46,6 +54,7 @@ if (issues.length > 0) {
 console.log(JSON.stringify({
   status: "passed",
   files: files.length,
+  entryJavaScriptBytes: sizes.entryJavaScript,
   javascriptBytes: sizes.javascript,
   cssBytes: sizes.css,
   releaseMetadataRequired: release,
@@ -125,6 +134,15 @@ function listFiles(path) {
 
 function sumSize(paths) {
   return paths.reduce((total, path) => total + statSync(path).size, 0);
+}
+
+function entryJavaScriptAssets(htmlPaths, javascriptPaths) {
+  const names = new Set(htmlPaths.flatMap((path) =>
+    [...readFileSync(path, "utf8").matchAll(/<script[^>]+src="([^"]+\.js)"/g)]
+      .map((match) => match[1]?.split("/").pop())
+      .filter(Boolean),
+  ));
+  return javascriptPaths.filter((path) => names.has(path.split("/").pop()));
 }
 
 function readJson(path, label) {

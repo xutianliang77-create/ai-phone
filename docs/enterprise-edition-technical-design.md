@@ -1,6 +1,6 @@
 # 无界AI企业版详细技术设计
 
-版本：v1.30
+版本：v1.31
 日期：2026-07-19
 状态：统一通讯平台与 PostgreSQL Primary 收敛详细技术方案
 
@@ -21,11 +21,11 @@
 | RBAC | `ready_for_acceptance` | 已有17个 scope、九角色矩阵、统一服务端 guard 和越权测试 |
 | SaaS tenant lifecycle | `ready_for_acceptance` | 已有幂等开通、暂停、导出/删除执行器、租约、有界恢复和 receipt 校验；真实对象存储/Provider 清理服务尚待验收 |
 | Append-only audit | `ready_for_acceptance` | 已有 tenant-scoped 查询、HMAC cursor、成员/RBAC/租户生命周期埋点和 SQLite/PostgreSQL 不可变约束；受控导出已进入 UI-008 开发，真实 PostgreSQL 验收仍待执行 |
-| PostgreSQL schema | `implemented` | 已有二十一段 up/down migration、tenant-first 索引、复合 FK、强制 RLS、user directory、cell pending projection、opaque subject identity、企业通讯/dispatch/策略、usage/billing、knowledge/terminology、observability trace、受控审计导出和 Meeting 聚合约束；尚无真实 migrate/restore/PITR 证据 |
+| PostgreSQL schema | `implemented` | 已有二十二段 up/down migration、tenant-first 索引、复合 FK、强制 RLS、user directory、cell pending projection、opaque subject identity、企业通讯/dispatch/策略、usage/billing、knowledge/terminology、observability trace、受控审计导出、Meeting 聚合和创建幂等/policy 约束；尚无真实 migrate/restore/PITR 证据 |
 | Tenant-scoped Repository | `ready_for_acceptance` | 已有 tenant/user/cell scoped transaction、subject guard、单一 `legacy|postgres` runtime、HTTP 全链路注入、独立 cell Worker，以及 Tenant/Member/Audit、Directory、lifecycle、Inbox/Outbox、budget、billing/entitlement、usage accounting、knowledge、terminology 和共享 unit-of-work；尚无真实 PostgreSQL H3 证据 |
 | Enterprise Inbox/Outbox | `ready_for_acceptance` | 已有 tenant-scoped 去重、稳定 payload hash、领域/inbox/outbox 原子提交、lease/retry/recovery 和100次重放门禁；真实 PostgreSQL 并发与 Provider sandbox 尚待验收 |
 | SQLite/JSON 演示数据导入 | `ready_for_acceptance` | 已有维护窗口、SQLite 临时副本与 quick_check、空目标事务导入、六集合 count/SHA-256 读回对账和不一致回滚；仅限内部演示数据 |
-| 公共 Primary Runtime 收敛 | `ready_for_acceptance` | 已合入上游稳定提交 `fe1c3c2`；公共31段与 enterprise 21段 manifest 由一个启动编排验证，driver、数据库身份和分权连接失败均在监听前闭合；尚无真实 PostgreSQL H3 证据 |
+| 公共 Primary Runtime 收敛 | `ready_for_acceptance` | 已合入上游稳定提交 `fe1c3c2`；公共31段与 enterprise 22段 manifest 由一个启动编排验证，driver、数据库身份和分权连接失败均在监听前闭合；尚无真实 PostgreSQL H3 证据 |
 | 企业链路追踪 | `in_progress` | 平台 trace 已进入 tenant context、PostgreSQL session、communication binding、usage event/ledger 与会话报告；本轮未执行测试和真实 PostgreSQL 门禁，货币成本因无价格表明确 not configured |
 | 企业工作台真值投影 | `in_progress` | Web 已读取 tenant/route、Provider、subscription、budget、usage aggregate 和显式 session trace report；业务聚合与价格表缺失时明确 not ready/not configured，本轮未执行自动化、浏览器或 PostgreSQL 门禁 |
 | 审计与分析 | `in_progress` | Web 已接入审计筛选/详情、显式 session 下钻和受控 JSONL 导出；`0020`、Repository/API/cell Worker/加密对象存储边界已实现，本轮未执行 migration、双租户、对象存储或浏览器测试；业务聚合/价格表与物理对象清理仍未完成 |
@@ -38,7 +38,7 @@
 | SaaS 计量聚合 | `ready_for_acceptance` | enterprise `0016` 已实现 tenant usage event、event/ledger 一致性、append-only adjustment、负数净额保护及 count/hash/watermark 账期聚合；真实关账、支付对账和 A1/H3 待验收 |
 | 企业知识版本 | `ready_for_acceptance` | enterprise `0017`、Knowledge Repository/runtime/API 已实现 source/revision/chunk/review/publish、发布后不可变、四维时间检索和稳定 citation；当前仅有确定性文本检索，本地普通角色验证不代表 embedding Provider、对象存储、恶意文档或 A1/H3 已通过 |
 | 企业术语与话术版本 | `ready_for_acceptance` | enterprise `0018`、共享契约、Term Pack/Script Template Repository/runtime/API 已实现稳定资源、递增 revision、review/publish、有效期解析、hash 校验和同一术语版本运行时引用；仅有自动化和本地 PostgreSQL 16 普通角色证据，真实 Worker/Provider、A1/H3 未通过 |
-| Primary 全量切换/恢复证据 | `ready_for_acceptance` | 工具按运行时动态校验 manifest/全业务表；`c9b5be2` 历史证据为31+16/81张表，当前31+21/86张表必须重新生成签名证据；异地 WAL/PITR/H3 未通过 |
+| Primary 全量切换/恢复证据 | `ready_for_acceptance` | 工具按运行时动态校验 manifest/全业务表；`c9b5be2` 历史证据为31+16/81张表，当前31+22/86张表必须重新生成签名证据；异地 WAL/PITR/H3 未通过 |
 | PostgreSQL 控制面/业务聚合 | `designed` | 后续 CORE/MTG/CS/MKT 领域任务范围，不能从公共 Repository runtime 推导为已实现 |
 | SQLite | `demo_only` | 仅本地开发、自动化和封闭演示，不承载真实企业试点数据 |
 | PSTN/CRM/Calendar/OCR | `not_ready` 或按环境探测 | 未配置必须明确降级，不生成虚假外部对象或成功状态 |
@@ -977,7 +977,7 @@ baseline 文件 hash，验证源库默认只读、写探针返回 SQLSTATE `2500
 整行 hash、主键、migration 或 server version 不一致都会生成签名 `mismatch` 并以非零退出。
 
 生产 startup gate 只接受 `environment=staging` 的 matched cutover evidence，且运行时
-commit/image/topology、cutover ID、target logical ID、当前 system identifier/OID 和31+21
+commit/image/topology、cutover ID、target logical ID、当前 system identifier/OID 和31+22
 manifest 必须逐项一致。本地 PostgreSQL 16 演练已验证81张表、8张含记录关键表、增量后17行
 全库 hash、writer fence、隔离 `pg_dump/pg_restore` 和单行篡改失败；证据见
 `docs/evidence/ent-data-009-local-drill-2026-07-18.md`。这只证明机制可执行，不是异地主机
@@ -1378,8 +1378,9 @@ SDK 默认链/工作负载身份，或同时提供 Access Key 与 Secret Key，�
 
 Enterprise Web release matrix 固定九角色、八页面状态、320/600/960/1280/1440、light/dark 和
 Chromium/Firefox/WebKit；Vitest 负责状态/契约，Playwright 负责 route discovery、直接 URL、页面溢出、主题持久化、
-动态字体、键盘、axe 和截图。视觉 snapshot 缺失或差异超过0.5%、任一浏览器失败、测试被 `only`、bundle 超过
-512KiB JavaScript/96KiB CSS、存在 source map/fixture/debug code/本地或内部地址/密钥时，release candidate 失败闭合。
+动态字体、键盘、axe 和截图。视觉 snapshot 缺失或差异超过0.5%、任一浏览器失败、测试被 `only`、初始 JavaScript
+超过512KiB、全部按需 JavaScript 超过1MiB、CSS超过96KiB，或存在 source map/fixture/debug code/本地或内部地址/密钥时，
+release candidate 失败闭合。LiveKit 只在用户入会时动态加载，不能回灌控制台首屏包。
 发布 version/commit 必须编译进入 bundle、匹配 clean Git HEAD；CI 使用 Node 24 并保留 trace、截图、视频和 JSON/HTML 结果。
 
 浏览器只上报 `kind/code/path/appVersion/releaseCommit/occurredAt` 及本地 SHA-256 截断 fingerprint，或有界 performance
@@ -1404,8 +1405,10 @@ cell、route epoch、expiry、非本地 HTTPS/WSS URL、非空签名和 capabili
 
 `EnterpriseShellPage` 由工作台、会议、接管、告警和我的组成，统一使用 Material `NavigationBar` 和 outlined/filled
 图标对。会议只在 `meeting:read` 时发现，接管只在 `support:takeover` 时发现；入口隐藏不替代服务端 guard。当前
-工作台只展示 tenant/route/scope/Provider document，告警只从 tenant 状态和非 ready capability 派生。tenant-scoped
-会议列表与接管队列 API 尚未实现，两页固定 `not_ready`，不读取个人数据或提交副作用。
+工作台只展示 tenant/route/scope/Provider document，告警只从 tenant 状态和非 ready capability 派生。会议页把完整
+route document 用 base64url JSON 放入 `x-enterprise-route-document`，从 route 的 `apiBaseUrl` 读取租户 Meeting 列表并
+换取短期 RTC grant；独立 `EnterpriseMeetingRoomClient` 只启用麦克风和远端音频订阅，不复用个人 Call Link 客户端。
+接管队列 API 尚未实现，继续固定 `not_ready`。
 
 本批仅通过 Flutter 静态分析；未运行 test、build、真机、动态字体或横竖屏，故 `ENT-UI-011` 保持 `in_progress`。
 
@@ -1417,15 +1420,42 @@ meeting ID 只接受8至128位 URL-safe 标识；guest token 只接受32至4096�
 query token 一律拒绝，避免被服务端 access log/referrer 捕获；fragment 读取后立即用 `history.replaceState` 清除地址栏，
 清除失败即失败闭合。凭据只驻留当前 JavaScript 内存，不写 local/session storage、不显示、不记录。
 
-设备检查不等于入会。麦克风只在访客点击后调用 `getUserMedia({audio:true,video:false})`，获得后立即停止全部 track；
-错误只映射为 permission denied/unavailable，不显示原始异常。屏幕共享只探测 `getDisplayMedia` 是否存在，不调用；
-真正共享必须等待 meeting participant、主持人策略与服务端 lease。字幕和共享按钮在 meeting session 建立前禁用。
+访客点击入会后才把内存中的邀请提交给 `/enterprise/v1/meetings/:meetingId/guest-join`。成功响应必须为 LiveKit、
+meeting ID 与路径一致、未过期，并声明 microphone/subscribe=true、camera/data/screenShare=false；随后独立
+`EnterpriseMeetingRoomClient` 才连接 RTC 并申请麦克风。原始异常、token 和 access token 均不显示或记录。
+字幕与共享保持禁用，直到 `ENT-MTG-003/004` 提供 tenant-aware 数据协议和共享租约。当前未执行 token 攻击、
+浏览器权限、弱网、axe 或设备矩阵，`ENT-UI-012` 保持 `in_progress`。
 
-`ENT-MTG-001` 已提供 Meeting Repository/runtime 和可恢复聚合；`ENT-MTG-002` guest token exchange、participant/RTC grant
-尚未实现，本批不会把
-个人 Call Link guest-ticket 当作企业会议凭据，也不会向不存在的接口发送 token。页面对有效邀请明确显示
-`not_ready`，没有任何入会成功状态。服务端主链完成后必须把 token 绑定单一 tenant/meeting/participant/role/expiry/
-track permission，并由客户端复核响应 meeting ID 后才能进入 RTC。当前 `ENT-UI-012` 保持 `in_progress`。
+### 19.7 Meeting 创建、邀请和短期入会授权
+
+成员端 API 为 `GET /enterprise/v1/meetings`、`GET /enterprise/v1/meetings/:id`、
+`POST /enterprise/v1/meetings`、`POST /enterprise/v1/meetings/:id/invitations` 和
+`POST /enterprise/v1/meetings/:id/join`。全部先解析 active membership，再校验 `meeting:read|write` 与签名 route；
+body 中可选 tenantId 只能与上下文相同。公开 guest-join 不接受 tenant header，而是先验证密文邀请，再从已认证 claims
+派生 tenant context，避免由访客提供租户归属。
+
+创建请求必须携带 `Idempotency-Key`。`0022` 给 Meeting 增加 tenant-scoped creation key/request hash 唯一约束并把
+policy 收紧为 `allowGuests + screenShareRole + optional defaultLanguage`；历史不合规 policy 在 migration 中降级为
+`allowGuests=false, screenShareRole=host_only`。同一事务锁定 tenant，要求 active tenant/cell、当前 published
+communication policy 和 active entitlement，然后写 Meeting、host participant、communication binding、audit 与
+`meeting.provision.requested` outbox。相同 key+hash 返回 replay，不同 hash 返回409；任何前置条件或 binding 失败都不
+留下部分 Meeting。
+
+访客邀请由 `ENTERPRISE_MEETING_INVITE_SECRET` 派生 AES-256-GCM key，使用独立 AAD，密文绑定 tenant、meeting、
+participant、guest role、issuedAt、expiresAt 和 tokenId，默认600秒、允许60至1800秒。服务端验证 AEAD、结构、时间窗和
+路径 meeting ID 后，才读取对应 guest participant。邀请写入也要求 Idempotency-Key，并以 tenant+meeting+key 唯一；
+相同 actor/body hash 重放复用 participant 并签发新短期密文，异 hash 返回409。邀请密钥未配置时返回
+`meeting_not_ready`，且不会先落 participant 或生成调试 token。
+
+RTC grant 只在 binding 与当前 tenant route/cell/epoch 一致且 communication session 非 terminal 时签发。
+`CALL_ROOM_PROVIDER=livekit`、WSS route、`LIVEKIT_API_KEY/SECRET` 缺一即失败闭合；默认 TTL 120秒、上限300秒。
+LiveKit identity/metadata/attributes 绑定 tenant、meeting、communication session、participant 和 role，VideoGrant 只允许
+加入指定 room、订阅和发布 microphone source，明确禁止 data、camera 与 screen share。owner/admin/meeting_host/member
+可作为成员入会，auditor 被拒绝；只有 host 可在预约时间前15分钟内把 scheduled CAS 到 provisioning；guest 必须使用
+预创建 participant 和精确邀请。token 签发成功/失败只审计 participant/role/reason，不审计 token 内容。
+
+以上是 `ENT-MTG-002` 代码候选，不代表动态授权矩阵、forced-RLS、真实 LiveKit、浏览器或真机已验证；任务保持
+`in_progress`。
 
 ## 20. 错误、重试和客户端动作
 

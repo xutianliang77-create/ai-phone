@@ -1,6 +1,6 @@
 # 无界AI企业版设计文档索引
 
-版本：v1.23
+版本：v1.24
 日期：2026-07-19
 状态：SaaS 详细设计基线，已纳入统一通讯平台和 PostgreSQL Primary 演进
 
@@ -46,11 +46,11 @@ cell Worker、JSON/SQLite 演示导入，以及全业务表 Primary 切换/恢�
 无界AI主产品公共 PostgreSQL migration、Primary Runtime、可靠 Inbox/Outbox、
 fencing、Billing/Product Records、verify-full 和韧性代码已形成稳定提交 `fe1c3c2`，并由
 `ENT-DATA-007` 合入企业分支。企业版已经完成单 driver、双 manifest、同库身份和分权
-连接的本地自动化，当前 manifest 为公共31段、enterprise 21段；`ENT-DATA-008` 和
+连接的本地自动化，当前 manifest 为公共31段、enterprise 22段；`ENT-DATA-008` 和
 `ENT-CORE-013/014/015` 已完成公共通讯 tenant scope、企业业务会话绑定、签名 Worker dispatch fence
 及设备/声音/录制策略快照的代码/本地自动化，但不能继承主产品 staging 验收。`ENT-DATA-009` 已增加
 31+16 migration manifest 的历史本地证据、全表主键分页 count/hash、WAL 水位、writer fence、签名
-cutover/restore 证据和 production startup 绑定门禁；当前 `0017..0021` 必须按31+21重新生成切换证据。
+cutover/restore 证据和 production startup 绑定门禁；当前 `0017..0022` 必须按31+22重新生成切换证据。
 `ENT-CORE-004` 已增加 tenant-scoped source/version/chunk、草稿审核发布状态机、发布后不可变约束、
 locale/country/product/effective-time 检索和知识引用 ID；
 `ENT-CORE-005` 已增加版本化 term pack/script template、审核发布和生效窗口、发布后不可变约束，
@@ -71,14 +71,16 @@ axe、视觉回归或真机验收，不能据此宣称 WCAG AA 或生产门禁�
 bundle 敏感信息与 clean commit 扫描，以及签名租户上下文中的脱敏客户端错误/性能事件。测试和视觉基线本轮
 未执行，任务保持 `in_progress`，不能据此宣称 AC-UI 或 Web release gate 已通过。
 `ENT-UI-011` 已增加与个人主导航隔离的 Flutter 企业入口，重新校验账号、active membership、签名 route、
-region/cell/scope 和 Provider document，并按 scope 发现工作台、会议、接管、告警、我的；会议/接管 API 未闭合时
-明确 not_ready，离线与上下文不一致失败闭合。当前只通过 Flutter 静态分析，测试、构建和真机门禁未执行。
+region/cell/scope 和 Provider document，并按 scope 发现工作台、会议、接管、告警、我的；会议页现读取 tenant-scoped
+Meeting API、换取短期 RTC grant 并使用独立企业 LiveKit 音频客户端，接管仍在 API 未闭合时明确 not_ready。
+当前只通过 Flutter 静态分析，测试、构建和真机门禁未执行。
 `ENT-UI-012` 已增加独立于成员 AuthProvider/AppShell 的 Web 访客参会壳，fragment guest token 清除后只驻留内存，
-query/非法凭据/清除失败均拒绝；用户可显式检查麦克风，字幕与共享在无企业 meeting session/lease 时保持 not_ready。
-`ENT-MTG-002` 尚未实现，当前不发送 token、不连接 RTC，测试与浏览器设备门禁未执行。
+query/非法凭据/清除失败均拒绝；访客可显式用加密邀请换取仅允许麦克风发布和订阅的短期 RTC grant，
+字幕与共享仍保持 not_ready。测试与浏览器设备门禁未执行。
 `ENT-MTG-001` 已增加 Meeting/Participant/Artifact 领域状态机、`0021` schema 约束、tenant-scoped PostgreSQL
-Repository/runtime 和包含 communication binding 的恢复聚合读取。当前 migration、RLS、并发与重启恢复测试未执行，
-且 MTG-002 API/token 未实现，任务保持 `in_progress`。
+Repository/runtime 和包含 communication binding 的恢复聚合读取。`ENT-MTG-002` 已形成创建/邀请/成员与访客入会、
+加密邀请、短期 LiveKit grant、Web/Flutter 入口代码候选；当前 migration、RLS、RBAC/token 攻击、并发、浏览器、真机与
+重启恢复测试未执行，因此两项任务均保持 `in_progress`。
 
 ## 3. 继承文档
 

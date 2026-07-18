@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../data/enterprise_mobile_api_client.dart';
 import '../../data/enterprise_mobile_models.dart';
 import 'enterprise_alerts_page.dart';
 import 'enterprise_dashboard_page.dart';
@@ -9,12 +10,14 @@ import 'enterprise_takeover_page.dart';
 
 class EnterpriseShellPage extends StatefulWidget {
   const EnterpriseShellPage({
+    required this.client,
     required this.workspace,
     required this.onSwitchTenant,
     required this.onManageAccount,
     super.key,
   });
 
+  final EnterpriseMobileApiClient client;
   final EnterpriseMobileWorkspace workspace;
   final VoidCallback onSwitchTenant;
   final VoidCallback onManageAccount;
@@ -86,7 +89,10 @@ class _EnterpriseShellPageState extends State<EnterpriseShellPage> {
           label: '会议',
           icon: Icons.groups_outlined,
           selectedIcon: Icons.groups,
-          page: EnterpriseMeetingsPage(workspace: workspace),
+          page: EnterpriseMeetingsPage(
+            client: widget.client,
+            workspace: workspace,
+          ),
         ),
       if (workspace.context.can('support:takeover'))
         _EnterpriseDestination(

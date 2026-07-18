@@ -4,6 +4,7 @@ import 'dart:io';
 
 import 'package:http/http.dart' as http;
 
+import 'enterprise_meeting_models.dart';
 import 'enterprise_mobile_models.dart';
 
 class EnterpriseMobileApiClient {
@@ -55,6 +56,47 @@ class EnterpriseMobileApiClient {
     );
   }
 
+  Future<List<EnterpriseMobileMeetingAggregate>> listMeetings(
+    EnterpriseMobileWorkspace workspace,
+  ) async {
+    final json = await _contentRequest(
+      workspace,
+      '/enterprise/v1/meetings',
+      method: 'GET',
+    );
+    final meetings = json['meetings'];
+    if (meetings is! List<Object?>) {
+      throw const FormatException('Invalid enterprise meetings response');
+    }
+    return meetings.map((value) {
+      if (value is! Map<String, Object?>) {
+        throw const FormatException('Invalid enterprise meeting aggregate');
+      }
+      return EnterpriseMobileMeetingAggregate.fromJson(value);
+    }).toList(growable: false);
+  }
+
+  Future<EnterpriseMobileMeetingJoinGrant> joinMeeting(
+    EnterpriseMobileWorkspace workspace,
+    String meetingId,
+  ) async {
+    final json = await _contentRequest(
+      workspace,
+      '/enterprise/v1/meetings/${Uri.encodeComponent(meetingId)}/join',
+      method: 'POST',
+      body: const <String, Object?>{},
+    );
+    final grant = EnterpriseMobileMeetingJoinGrant.fromJson(json);
+    if (grant.meetingId != meetingId ||
+        _canonicalUrl(grant.rtcUrl) != _canonicalUrl(workspace.route.rtcUrl)) {
+      throw const EnterpriseMobileApiException(
+        code: 'tenant_context_mismatch',
+        message: 'Enterprise meeting grant mismatch',
+      );
+    }
+    return grant;
+  }
+
   void close() => _client.close();
 
   Future<Map<String, Object?>> _get(
@@ -72,6 +114,42 @@ class EnterpriseMobileApiClient {
           if (tenantId != null) 'x-tenant-id': tenantId,
         },
       ).timeout(_timeout);
+    } on TimeoutException {
+      throw const EnterpriseMobileApiException(
+        code: 'network_timeout',
+        message: 'Enterprise request timed out',
+      );
+    } catch (_) {
+      throw const EnterpriseMobileApiException(
+        code: 'network_error',
+        message: 'Enterprise network unavailable',
+      );
+    }
+    return _decode(response);
+  }
+
+  Future<Map<String, Object?>> _contentRequest(
+    EnterpriseMobileWorkspace workspace,
+    String path, {
+    required String method,
+    Map<String, Object?>? body,
+  }) async {
+    http.Response response;
+    try {
+      final request =
+          http.Request(method, workspace.route.apiBaseUrl.resolve(path))
+            ..headers.addAll(<String, String>{
+              'accept': 'application/json',
+              'authorization': 'Bearer ${workspace.token}',
+              'x-tenant-id': workspace.context.tenant.id,
+              'x-enterprise-route-document': base64Url
+                  .encode(utf8.encode(jsonEncode(workspace.route.toJson())))
+                  .replaceAll('=', ''),
+              if (body != null) 'content-type': 'application/json',
+            });
+      if (body != null) request.body = jsonEncode(body);
+      response = await http.Response.fromStream(await _client.send(request))
+          .timeout(_timeout);
     } on TimeoutException {
       throw const EnterpriseMobileApiException(
         code: 'network_timeout',
@@ -150,6 +228,8 @@ class EnterpriseMobileApiClient {
         route.homeRegion == tenant.homeRegion &&
         route.cellId == tenant.cellId &&
         route.routeEpoch == tenant.version &&
+        !route.issuedAt
+            .isAfter(DateTime.now().add(const Duration(seconds: 30))) &&
         route.expiresAt.isAfter(DateTime.now()) &&
         _publicUrl(route.apiBaseUrl, 'https') &&
         _publicUrl(route.rtcUrl, 'wss') &&
@@ -182,6 +262,13 @@ class EnterpriseMobileApiClient {
         !host.endsWith('.local') &&
         !host.endsWith('.internal') &&
         InternetAddress.tryParse(host) == null;
+  }
+
+  String _canonicalUrl(Uri value) {
+    final path = value.path.endsWith('/')
+        ? value.path.substring(0, value.path.length - 1)
+        : value.path;
+    return '${value.scheme}://${value.authority}$path';
   }
 }
 

@@ -22,14 +22,14 @@ import type { EnterpriseTenantPostgresSession } from
 
 export class EnterpriseMeetingPostgresRepository {
   constructor(private readonly session: EnterpriseTenantPostgresSession) {}
-
   async create(input: CreateEnterpriseMeetingInput) {
     const value = normalizeMeeting(input);
     const result = await this.session.query<MeetingRow>(`
       INSERT INTO enterprise.meetings(
         tenant_id, id, title, host_user_id, scheduled_at, status,
-        policy, retention_until, created_at, updated_at, version
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9, $9, 1)
+        policy, retention_until, created_at, updated_at, version,
+        creation_key, creation_request_hash
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9, $9, 1, $10, $11)
       ON CONFLICT DO NOTHING
       RETURNING *
     `, [
@@ -37,10 +37,25 @@ export class EnterpriseMeetingPostgresRepository {
       enterprisePostgresAccountSubjectId(value.hostUserId),
       value.scheduledAt ?? null, value.status, JSON.stringify(value.policy),
       value.retentionUntil ?? null, value.createdAt,
+      value.idempotencyKey, value.requestHash,
     ]);
-    return result.rows[0]
-      ? { status: "created" as const, meeting: mapMeeting(result.rows[0]) }
-      : { status: "conflict" as const };
+    if (result.rows[0]) {
+      return { status: "created" as const, meeting: mapMeeting(result.rows[0]) };
+    }
+    const existing = await this.findByCreationKey(value.idempotencyKey);
+    if (!existing || existing.requestHash !== value.requestHash) {
+      return { status: "idempotency_conflict" as const };
+    }
+    return { status: "replayed" as const, meeting: existing.meeting };
+  }
+
+  async findByCreationKey(idempotencyKey: string) {
+    const result = await this.session.query<MeetingRow>(`
+      SELECT * FROM enterprise.meetings
+      WHERE tenant_id = $1 AND creation_key = $2
+    `, [eventKey(idempotencyKey)]);
+    const row = result.rows[0];
+    return row ? { meeting: mapMeeting(row), requestHash: row.creation_request_hash } : null;
   }
 
   async find(meetingId: string, lock = false) {
@@ -156,6 +171,22 @@ export class EnterpriseMeetingPostgresRepository {
     return result.rows.map(mapParticipant);
   }
 
+  async participantById(meetingId: string, participantId: string) {
+    const result = await this.session.query<ParticipantRow>(`
+      SELECT * FROM enterprise.meeting_participants
+      WHERE tenant_id = $1 AND meeting_id = $2 AND id = $3
+    `, [requiredUuid(meetingId), requiredUuid(participantId)]);
+    return result.rows[0] ? mapParticipant(result.rows[0]) : null;
+  }
+
+  async participantByUser(meetingId: string, userId: string) {
+    const result = await this.session.query<ParticipantRow>(`
+      SELECT * FROM enterprise.meeting_participants
+      WHERE tenant_id = $1 AND meeting_id = $2 AND user_id = $3
+    `, [requiredUuid(meetingId), enterprisePostgresAccountSubjectId(userId)]);
+    return result.rows[0] ? mapParticipant(result.rows[0]) : null;
+  }
+
   async artifacts(meetingId: string) {
     const result = await this.session.query<ArtifactRow>(`
       SELECT * FROM enterprise.meeting_artifacts
@@ -171,7 +202,7 @@ function normalizeMeeting(input: CreateEnterpriseMeetingInput) {
   const scheduledAt = optionalIso(input.scheduledAt);
   const retentionUntil = optionalIso(input.retentionUntil);
   if (!["scheduled", "provisioning"].includes(input.status) ||
-    !input.policy || Array.isArray(input.policy) || typeof input.policy !== "object" ||
+    !validPolicy(input.policy) ||
     (scheduledAt && scheduledAt < createdAt) ||
     (retentionUntil && retentionUntil <= createdAt)) {
     throw new Error("Invalid enterprise meeting");
@@ -180,6 +211,8 @@ function normalizeMeeting(input: CreateEnterpriseMeetingInput) {
     ...input, id: requiredUuid(input.id), title: bounded(input.title, 200),
     hostUserId: enterprisePostgresAccountSubjectId(input.hostUserId),
     createdAt, scheduledAt, retentionUntil,
+    idempotencyKey: eventKey(input.idempotencyKey),
+    requestHash: hash(input.requestHash),
   };
 }
 
@@ -230,6 +263,29 @@ function code(value: unknown, max: number) {
   if (!/^[A-Za-z0-9][A-Za-z0-9._:-]*$/.test(text)) throw new Error("Invalid meeting code");
   return text;
 }
+function eventKey(value: unknown) {
+  const text = bounded(value, 160);
+  if (!/^[A-Za-z0-9][A-Za-z0-9._:-]*$/.test(text)) {
+    throw new Error("Invalid meeting idempotency key");
+  }
+  return text;
+}
+function hash(value: unknown) {
+  const text = bounded(value, 64);
+  if (!/^[a-f0-9]{64}$/.test(text)) throw new Error("Invalid meeting request hash");
+  return text;
+}
+function validPolicy(value: unknown) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const policy = value as Record<string, unknown>;
+  const keys = Object.keys(policy);
+  return keys.every((key) => [
+    "allowGuests", "screenShareRole", "defaultLanguage",
+  ].includes(key)) && typeof policy.allowGuests === "boolean" &&
+    ["host_only", "members"].includes(String(policy.screenShareRole)) &&
+    (policy.defaultLanguage === undefined ||
+      /^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/.test(String(policy.defaultLanguage)));
+}
 function requiredIso(value: unknown) {
   const text = bounded(value, 64); const date = new Date(text);
   if (!Number.isFinite(date.getTime()) || date.toISOString() !== text) {
@@ -273,10 +329,10 @@ function mapArtifact(row: ArtifactRow): EnterpriseMeetingArtifactRecord {
 interface MeetingRow extends Record<string, unknown> {
   id: string; tenant_id: string; title: string; host_user_id: string;
   scheduled_at: string | Date | null; status: EnterpriseMeetingStatus;
-  policy: Record<string, unknown>; retention_until: string | Date | null;
+  policy: EnterpriseMeetingRecord["policy"]; retention_until: string | Date | null;
   created_at: string | Date; updated_at: string | Date;
   started_at: string | Date | null; ended_at: string | Date | null;
-  version: string | number;
+  version: string | number; creation_request_hash: string;
 }
 interface ParticipantRow extends Record<string, unknown> {
   id: string; tenant_id: string; meeting_id: string; user_id: string | null;

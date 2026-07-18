@@ -63,6 +63,7 @@ class _EnterpriseEntryPageState extends State<EnterpriseEntryPage> {
     final workspace = _workspace;
     if (workspace != null) {
       return EnterpriseShellPage(
+        client: _client,
         workspace: workspace,
         onSwitchTenant: _switchTenant,
         onManageAccount: _openAccount,
@@ -338,7 +339,6 @@ class _EntryList extends StatelessWidget {
   const _EntryList({required this.child});
 
   final Widget child;
-
   @override
   Widget build(BuildContext context) {
     return ListView(
