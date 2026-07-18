@@ -1,6 +1,8 @@
 import type { FastifyReply, FastifyRequest } from "fastify";
 import type { EnterpriseScope } from "@translation/contracts";
 import { sendError } from "../../infrastructure/http/errors.js";
+import { currentPlatformTraceId } from
+  "../../infrastructure/observability/platform-telemetry.js";
 import { requireAccount } from "../account/account-auth.js";
 import { hasEnterpriseScope } from "./enterprise-rbac.js";
 import {
@@ -21,7 +23,7 @@ export async function requireEnterpriseContext(
   const result = await runtime.resolveContext({
     userId: account.id,
     selectedTenantId,
-    traceId: String(request.id),
+    traceId: enterpriseRequestTraceId(request),
   });
   if (result.status === "access_denied") {
     sendError(reply, 403, "tenant_access_denied", "Tenant access denied");
@@ -54,7 +56,7 @@ export async function requireEnterpriseScope(
           tenantId: context.tenant.id,
           actorUserId: context.account.id,
           actorRole: context.member.role,
-          traceId: String(request.id),
+          traceId: enterpriseRequestTraceId(request),
         }),
         action: audit.action,
         resourceType: audit.resourceType,
@@ -70,6 +72,14 @@ export async function requireEnterpriseScope(
     return null;
   }
   return context;
+}
+
+export function enterpriseRequestTraceId(requestOrId: FastifyRequest | unknown) {
+  const fallback = requestOrId && typeof requestOrId === "object" &&
+      "id" in requestOrId
+    ? String((requestOrId as { id: unknown }).id)
+    : String(requestOrId);
+  return currentPlatformTraceId() ?? fallback;
 }
 
 function headerValue(value: string | string[] | undefined) {

@@ -59,6 +59,10 @@ export async function withEnterpriseTenantPostgresSession<T>(
       "SELECT set_config('app.scope_id', $1, true)",
       [context.tenantId],
     );
+    await client.query(
+      "SELECT set_config('app.trace_id', $1, true)",
+      [context.traceId],
+    );
     const session = Object.freeze({
       context,
       queryTenantRecord<Row extends Record<string, unknown>>(
@@ -121,6 +125,7 @@ const communicationTables = new Set([
   "provider_operations",
   "worker_dispatches",
   "participant_recording_consents",
+  "transcript_segments",
 ]);
 
 function assertCommunicationSql(sql: string) {

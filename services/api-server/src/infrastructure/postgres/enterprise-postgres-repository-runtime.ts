@@ -34,6 +34,7 @@ import { createEnterprisePostgresKnowledgeRuntime } from
   "./enterprise-postgres-knowledge-runtime.js";
 import { createEnterprisePostgresTerminologyRuntime } from
   "./enterprise-postgres-terminology-runtime.js";
+import { createEnterprisePostgresObservabilityRuntime } from "./enterprise-postgres-observability-runtime.js";
 
 export function createPostgresEnterpriseRepositoryRuntime(
   pools: EnterprisePostgresPool | {
@@ -54,6 +55,7 @@ export function createPostgresEnterpriseRepositoryRuntime(
     driver: "postgres",
     ...createEnterprisePostgresKnowledgeRuntime(pool),
     ...createEnterprisePostgresTerminologyRuntime(pool),
+    ...createEnterprisePostgresObservabilityRuntime(pool),
     resolveContext(input) {
       return resolveEnterprisePostgresContext({
         pool: split.directoryPool,

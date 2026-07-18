@@ -92,11 +92,11 @@ export class EnterpriseCommunicationBindingPostgresRepository {
         tenant_id, id, communication_session_id, kind,
         meeting_id, support_session_id, marketing_call_task_id,
         status, home_region, cell_id, route_epoch, policy_version,
-        entitlement_version, generation, last_event_sequence,
+        entitlement_version, trace_id, generation, last_event_sequence,
         started_at, updated_at, version
       ) VALUES (
         $1, $2, $3, $4, $5, $6, $7, $8, $9,
-        $10, $11, $12, $13, $14, $15, $16, $17, $18
+        $10, $11, $12, $13, $14, $15, $16, $17, $18, $19
       )
       ON CONFLICT DO NOTHING
       RETURNING *
@@ -113,6 +113,7 @@ export class EnterpriseCommunicationBindingPostgresRepository {
       normalized.routeEpoch,
       normalized.policyVersion,
       entitlementState.entitlement.entitlementVersion,
+      this.session.context.traceId,
       1,
       0,
       normalized.startedAt,

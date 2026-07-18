@@ -4,6 +4,8 @@ import type {
 import {
   createEnterpriseTenantContext,
 } from "../../modules/enterprise/enterprise-tenant-context.js";
+import { runWithPlatformTraceId } from
+  "../observability/platform-telemetry.js";
 import type {
   EnterpriseOutboxPublisher,
 } from "../../modules/enterprise/enterprise-outbox-processor.js";
@@ -135,11 +137,14 @@ async function processRef(
   const event = claimed.result.event;
   let result;
   try {
-    result = await options.outboxPublisher.publish(event);
+    result = await runWithPlatformTraceId(
+      event.traceId,
+      () => options.outboxPublisher.publish(event),
+    );
   } catch {
     result = { status: "retry" as const, reason: "publisher_unavailable" };
   }
-  await finalizeOutbox(options.tenantPool, event, result, now, traceId);
+  await finalizeOutbox(options.tenantPool, event, result, now);
   return result.status === "completed" ? "completed" : "retried";
 }
 
@@ -148,7 +153,6 @@ function finalizeOutbox(
   event: import("../../modules/enterprise/enterprise-event-record.js").EnterpriseOutboxEventRecord,
   result: { status: "completed" } | { status: "retry"; reason: string },
   now: Date,
-  traceId: string,
 ) {
   const availableAt = result.status === "completed"
     ? now.toISOString()
@@ -161,7 +165,7 @@ function finalizeOutbox(
     createEnterpriseTenantContext({
       tenantId: event.tenantId,
       actorUserId: "system:enterprise-outbox",
-      traceId,
+      traceId: event.traceId,
     }),
     async (unit) => {
       const updated = await unit.events.finalizeOutbox({

@@ -9,7 +9,10 @@ import {
 } from "@translation/contracts";
 import { sendError } from "../../infrastructure/http/errors.js";
 import { requireAccount } from "../account/account-auth.js";
-import { requireEnterpriseScope } from "./enterprise-auth.js";
+import {
+  enterpriseRequestTraceId,
+  requireEnterpriseScope,
+} from "./enterprise-auth.js";
 import { enterpriseScopesForRole } from "./enterprise-rbac.js";
 import { registerEnterpriseTenantLifecycleRoutes } from "./enterprise-tenant-lifecycle.routes.js";
 import type { TenantProvisioner } from "./enterprise-tenant-provisioner.js";
@@ -68,7 +71,7 @@ export async function registerEnterpriseTenantRoutes(
     return {
       tenants: (await runtime.listMemberships({
         userId: account.id,
-        traceId: String(request.id),
+        traceId: enterpriseRequestTraceId(request),
       })).map(({ tenant, member }) => ({
         tenant: toTenantDto(tenant),
         member: toMemberDto(member),
@@ -88,7 +91,7 @@ export async function registerEnterpriseTenantRoutes(
       tenantId: context.tenant.id,
       actorUserId: context.account.id,
       actorRole: context.member.role,
-      traceId: String(request.id),
+      traceId: enterpriseRequestTraceId(request),
     });
     return {
       members: (await runtime.listMembers(repositoryContext)).map(toMemberDto),
@@ -126,7 +129,7 @@ export async function registerEnterpriseTenantRoutes(
         tenantId: context.tenant.id,
         actorUserId: context.account.id,
         actorRole: context.member.role,
-        traceId: String(request.id),
+        traceId: enterpriseRequestTraceId(request),
       }),
       userId,
       role: body.role,
@@ -176,7 +179,7 @@ export async function registerEnterpriseTenantRoutes(
         tenantId: context.tenant.id,
         actorUserId: context.account.id,
         actorRole: context.member.role,
-        traceId: String(request.id),
+        traceId: enterpriseRequestTraceId(request),
       }),
       memberId: params.memberId,
       role,

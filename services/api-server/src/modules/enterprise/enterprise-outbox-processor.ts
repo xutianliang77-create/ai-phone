@@ -9,6 +9,8 @@ import {
 import {
   createEnterpriseTenantContext,
 } from "./enterprise-tenant-context.js";
+import { runWithPlatformTraceId } from
+  "../../infrastructure/observability/platform-telemetry.js";
 
 export interface EnterpriseOutboxPublisher {
   publish(event: Readonly<EnterpriseOutboxEventRecord>): Promise<
@@ -41,12 +43,19 @@ export async function processEnterpriseOutboxEvent(
   if (claimed.status !== "claimed") return claimed;
   let result: Awaited<ReturnType<EnterpriseOutboxPublisher["publish"]>>;
   try {
-    result = await publisher.publish(claimed.event);
+    result = await runWithPlatformTraceId(
+      claimed.event.traceId,
+      () => publisher.publish(claimed.event),
+    );
   } catch {
     result = { status: "retry", reason: "publisher_unavailable" };
   }
   return finalizeEnterpriseOutboxEvent({
-    context,
+    context: createEnterpriseTenantContext({
+      tenantId: claimed.event.tenantId,
+      actorUserId: "system:enterprise-outbox",
+      traceId: claimed.event.traceId,
+    }),
     eventId: ref.eventId,
     attempt: claimed.attempt,
     result,

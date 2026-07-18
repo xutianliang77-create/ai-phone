@@ -2,7 +2,10 @@ import { randomUUID } from "node:crypto";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { EnterpriseKnowledgeSourceType } from "@translation/contracts";
 import { sendError } from "../../infrastructure/http/errors.js";
-import { requireEnterpriseScope } from "./enterprise-auth.js";
+import {
+  enterpriseRequestTraceId,
+  requireEnterpriseScope,
+} from "./enterprise-auth.js";
 import {
   prepareEnterpriseKnowledgeChunks,
   validateEnterpriseKnowledgeDimensions,
@@ -200,7 +203,8 @@ function tenantContext(
 ) {
   return createEnterpriseTenantContext({
     tenantId: access.tenant.id, actorUserId: access.account.id,
-    actorRole: access.member.role, traceId: String(traceId),
+    actorRole: access.member.role,
+    traceId: enterpriseRequestTraceId(traceId),
   });
 }
 

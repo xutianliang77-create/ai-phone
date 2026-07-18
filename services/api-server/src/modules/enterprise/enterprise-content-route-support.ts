@@ -1,6 +1,9 @@
 import type { FastifyReply, FastifyRequest } from "fastify";
 import { sendError } from "../../infrastructure/http/errors.js";
-import { requireEnterpriseScope } from "./enterprise-auth.js";
+import {
+  enterpriseRequestTraceId,
+  requireEnterpriseScope,
+} from "./enterprise-auth.js";
 import type { EnterpriseRepositoryRuntime } from "./enterprise-repository-runtime.js";
 import { requireTenantRouteDocument } from "./enterprise-tenant-route.routes.js";
 import type { TenantRouteService } from "./enterprise-tenant-route.js";
@@ -30,7 +33,8 @@ export function enterpriseContentContext(
 ) {
   return createEnterpriseTenantContext({
     tenantId: access.tenant.id, actorUserId: access.account.id,
-    actorRole: access.member.role, traceId: String(traceId),
+    actorRole: access.member.role,
+    traceId: enterpriseRequestTraceId(traceId),
   });
 }
 

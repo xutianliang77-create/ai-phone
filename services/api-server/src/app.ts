@@ -57,6 +57,9 @@ import {
   registerEnterpriseAuditRoutes,
 } from "./modules/enterprise/enterprise-audit.routes.js";
 import {
+  registerEnterpriseObservabilityRoutes,
+} from "./modules/enterprise/enterprise-observability.routes.js";
+import {
   legacyEnterpriseRepositoryRuntime,
   type EnterpriseRepositoryRuntime,
 } from "./modules/enterprise/enterprise-repository-runtime.js";
@@ -159,6 +162,10 @@ export async function buildApp(dependencies: {
     app,
     dependencies.auditCursorService ??
       createEnvironmentEnterpriseAuditCursorService(),
+    enterpriseRepositoryRuntime,
+  );
+  await registerEnterpriseObservabilityRoutes(
+    app,
     enterpriseRepositoryRuntime,
   );
   await registerPlansRoutes(app);

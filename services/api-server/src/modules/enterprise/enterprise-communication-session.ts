@@ -36,6 +36,7 @@ export interface EnterpriseCommunicationBindingRecord {
   routeEpoch: number;
   policyVersion: string;
   entitlementVersion: string;
+  traceId: string;
   generation: number;
   lastEventSequence: number;
   lastEventAt?: string;

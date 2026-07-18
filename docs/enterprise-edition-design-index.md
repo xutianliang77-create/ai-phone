@@ -1,7 +1,7 @@
 # 无界AI企业版设计文档索引
 
-版本：v1.15
-日期：2026-07-18
+版本：v1.16
+日期：2026-07-19
 状态：SaaS 详细设计基线，已纳入统一通讯平台和 PostgreSQL Primary 演进
 
 ## 1. 产品边界
@@ -46,7 +46,7 @@ cell Worker、JSON/SQLite 演示导入，以及全业务表 Primary 切换/恢�
 无界AI主产品公共 PostgreSQL migration、Primary Runtime、可靠 Inbox/Outbox、
 fencing、Billing/Product Records、verify-full 和韧性代码已形成稳定提交 `fe1c3c2`，并由
 `ENT-DATA-007` 合入企业分支。企业版已经完成单 driver、双 manifest、同库身份和分权
-连接的本地自动化，当前 manifest 为公共31段、enterprise 18段；`ENT-DATA-008` 和
+连接的本地自动化，当前 manifest 为公共31段、enterprise 19段；`ENT-DATA-008` 和
 `ENT-CORE-013/014/015` 已完成公共通讯 tenant scope、企业业务会话绑定、签名 Worker dispatch fence
 及设备/声音/录制策略快照的代码/本地自动化，但不能继承主产品 staging 验收。`ENT-DATA-009` 已增加
 31+16 migration manifest 的历史本地证据、全表主键分页 count/hash、WAL 水位、writer fence、签名

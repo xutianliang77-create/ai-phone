@@ -17,6 +17,7 @@ export interface EnterpriseUsageEventRecord {
   sourceRef: string;
   idempotencyKey: string;
   requestHash: string;
+  traceId: string;
   occurredAt: string;
   receivedAt: string;
   metadata: Record<string, string | number | boolean | null>;

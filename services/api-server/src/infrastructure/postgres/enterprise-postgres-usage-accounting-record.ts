@@ -29,6 +29,7 @@ export function mapEnterpriseUsageEvent(
     sourceRef: text(row.source_ref, "source ref"),
     idempotencyKey: text(row.idempotency_key, "idempotency key"),
     requestHash: hash(row.request_hash, "request hash"),
+    traceId: text(row.trace_id, "trace id"),
     occurredAt: timestamp(row.occurred_at, "occurred at"),
     receivedAt: timestamp(row.received_at, "received at"),
     metadata: metadata(row.metadata),

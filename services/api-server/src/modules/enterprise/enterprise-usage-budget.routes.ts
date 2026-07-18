@@ -5,7 +5,10 @@ import {
   type EnterpriseUsageBudgetDto,
 } from "@translation/contracts";
 import { sendError } from "../../infrastructure/http/errors.js";
-import { requireEnterpriseScope } from "./enterprise-auth.js";
+import {
+  enterpriseRequestTraceId,
+  requireEnterpriseScope,
+} from "./enterprise-auth.js";
 import type {
   EnterpriseRepositoryRuntime,
 } from "./enterprise-repository-runtime.js";
@@ -97,7 +100,7 @@ function tenantContext(
     tenantId: access.tenant.id,
     actorUserId: access.account.id,
     actorRole: access.member.role,
-    traceId: String(traceId),
+    traceId: enterpriseRequestTraceId(traceId),
   });
 }
 

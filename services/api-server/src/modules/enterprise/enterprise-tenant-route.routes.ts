@@ -1,6 +1,7 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { sendError } from "../../infrastructure/http/errors.js";
 import { requireAccount } from "../account/account-auth.js";
+import { enterpriseRequestTraceId } from "./enterprise-auth.js";
 import type { EnterpriseTenantRecord } from "./enterprise-tenant-record.js";
 import {
   decodeTenantRouteDocument,
@@ -22,7 +23,7 @@ export async function registerEnterpriseTenantRouteRoutes(
     const context = await runtime.resolveContext({
       userId: account.id,
       selectedTenantId: tenantId,
-      traceId: String(request.id),
+      traceId: enterpriseRequestTraceId(request),
     });
     if (context.status !== "resolved") {
       return sendError(reply, 404, "tenant_route_not_found", "Tenant route not found");

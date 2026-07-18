@@ -2,6 +2,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { CreateEnterpriseTenantRequest } from "@translation/contracts";
 import { sendError } from "../../infrastructure/http/errors.js";
 import { requireAccount } from "../account/account-auth.js";
+import { enterpriseRequestTraceId } from "./enterprise-auth.js";
 import type {
   EnterpriseMemberRecord,
   EnterpriseTenantJobRecord,
@@ -41,7 +42,7 @@ export async function registerEnterpriseTenantLifecycleRoutes(
       name,
       homeRegion,
       idempotencyKey,
-      traceId: String(request.id),
+      traceId: enterpriseRequestTraceId(request),
     });
     if (begun.status === "conflict") return idempotencyConflict(reply);
     if (begun.status !== "created") {
@@ -67,7 +68,7 @@ export async function registerEnterpriseTenantLifecycleRoutes(
       tenantId,
       actorUserId: account.id,
       idempotencyKey,
-      traceId: String(request.id),
+      traceId: enterpriseRequestTraceId(request),
     });
     if (begun.status === "conflict") return idempotencyConflict(reply);
     if (begun.status === "not_found") return tenantNotFound(reply);
@@ -97,7 +98,7 @@ export async function registerEnterpriseTenantLifecycleRoutes(
         actorUserId: account.id,
         type: `tenant.${action}`,
         idempotencyKey,
-        traceId: String(request.id),
+        traceId: enterpriseRequestTraceId(request),
       });
       if (started.status === "conflict") return idempotencyConflict(reply);
       if (started.status === "not_found") return tenantNotFound(reply);
@@ -132,7 +133,7 @@ export async function registerEnterpriseTenantLifecycleRoutes(
     const job = await runtime.findTenantJob({
       jobId,
       userId: account.id,
-      traceId: String(request.id),
+      traceId: enterpriseRequestTraceId(request),
     });
     if (!job) return sendError(reply, 404, "tenant_job_not_found", "Tenant job not found");
     return { job: toJobDto(job) };

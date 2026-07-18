@@ -8,7 +8,10 @@ import {
   EnterpriseAuditCursorBinding,
   EnterpriseAuditCursorService,
 } from "./enterprise-audit-cursor.js";
-import { requireEnterpriseScope } from "./enterprise-auth.js";
+import {
+  enterpriseRequestTraceId,
+  requireEnterpriseScope,
+} from "./enterprise-auth.js";
 import {
   createEnterpriseTenantContext,
 } from "./enterprise-tenant-context.js";
@@ -63,7 +66,7 @@ export async function registerEnterpriseAuditRoutes(
       tenantId: context.tenant.id,
       actorUserId: context.account.id,
       actorRole: context.member.role,
-      traceId: String(request.id),
+      traceId: enterpriseRequestTraceId(request),
     });
     let before;
     if (parsed.cursor) {

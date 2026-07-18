@@ -3,6 +3,7 @@ import type {
   EnterpriseMemberRole,
   EnterpriseMemberStatus,
   EnterpriseTenantJobType,
+  EnterpriseSessionTraceReportResponse,
 } from "@translation/contracts";
 import type {
   EnterpriseAuditAppendInput,
@@ -187,6 +188,14 @@ export interface EnterpriseRepositoryRuntime
     | { status: "ready"; aggregates: EnterpriseUsagePeriodAggregateRecord[] }
     | { status: "storage_required" }
   >;
+  getSessionTraceReport?(input: {
+    context: EnterpriseTenantContext;
+    sessionId: string;
+  }): Promise<
+    | { status: "ready"; report: EnterpriseSessionTraceReportResponse }
+    | { status: "not_found" }
+    | { status: "storage_required" }
+  >;
   beginTenantCreation(input: {
     ownerUserId: string;
     name: string;
@@ -285,6 +294,9 @@ export const legacyEnterpriseRepositoryRuntime: EnterpriseRepositoryRuntime = {
     return { status: "storage_required" };
   },
   async listUsagePeriodAggregates() {
+    return { status: "storage_required" };
+  },
+  async getSessionTraceReport() {
     return { status: "storage_required" };
   },
   async beginTenantCreation(input) {

@@ -1,7 +1,10 @@
 import { randomUUID } from "node:crypto";
 import type { FastifyInstance } from "fastify";
 import { sendError } from "../../infrastructure/http/errors.js";
-import { requireEnterpriseScope } from "./enterprise-auth.js";
+import {
+  enterpriseRequestTraceId,
+  requireEnterpriseScope,
+} from "./enterprise-auth.js";
 import {
   enterpriseExecutionPreferences,
   enterpriseSensitiveFeatureModes,
@@ -67,7 +70,7 @@ export async function registerEnterpriseCommunicationPolicyRoutes(
         tenantId: access.tenant.id,
         actorUserId: access.account.id,
         actorRole: access.member.role,
-        traceId: String(request.id),
+        traceId: enterpriseRequestTraceId(request),
       }),
       policy: { id, ...parsed, publishedAt },
     });

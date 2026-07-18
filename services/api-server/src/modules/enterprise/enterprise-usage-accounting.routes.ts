@@ -1,7 +1,10 @@
 import type { FastifyInstance } from "fastify";
 import type { EnterpriseUsagePeriodAggregateDto } from "@translation/contracts";
 import { sendError } from "../../infrastructure/http/errors.js";
-import { requireEnterpriseScope } from "./enterprise-auth.js";
+import {
+  enterpriseRequestTraceId,
+  requireEnterpriseScope,
+} from "./enterprise-auth.js";
 import type {
   EnterpriseRepositoryRuntime,
 } from "./enterprise-repository-runtime.js";
@@ -39,7 +42,7 @@ export async function registerEnterpriseUsageAccountingRoutes(
         tenantId: access.tenant.id,
         actorUserId: access.account.id,
         actorRole: access.member.role,
-        traceId: String(request.id),
+        traceId: enterpriseRequestTraceId(request),
       }),
     });
     if (result.status === "storage_required") return postgresRequired(reply);

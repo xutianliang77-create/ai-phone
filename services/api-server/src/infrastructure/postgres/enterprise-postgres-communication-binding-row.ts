@@ -21,6 +21,7 @@ export interface EnterpriseCommunicationBindingPostgresRow
   route_epoch: unknown;
   policy_version: unknown;
   entitlement_version: unknown;
+  trace_id: unknown;
   generation: unknown;
   last_event_sequence: unknown;
   last_event_at: unknown;
@@ -60,6 +61,7 @@ export function mapEnterpriseCommunicationBindingRow(
     routeEpoch: safeInteger(row.route_epoch, 1),
     policyVersion: text(row.policy_version),
     entitlementVersion: text(row.entitlement_version),
+    traceId: text(row.trace_id),
     generation: safeInteger(row.generation, 1),
     lastEventSequence: safeInteger(row.last_event_sequence, 0),
     ...(lastEventAt ? { lastEventAt } : {}),

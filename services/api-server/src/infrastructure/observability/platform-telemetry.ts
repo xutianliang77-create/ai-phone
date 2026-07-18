@@ -134,6 +134,17 @@ export function currentPlatformTraceId() {
   return requestTrace.getStore()?.traceId;
 }
 
+export function runWithPlatformTraceId<T>(
+  traceId: string,
+  operation: () => T,
+) {
+  const normalized = traceId.trim();
+  if (!normalized || Buffer.byteLength(normalized) > 160) {
+    throw new Error("Invalid platform trace ID");
+  }
+  return requestTrace.run({ traceId: normalized }, operation);
+}
+
 export function platformPropagationHeaders(
   headers: Record<string, string | string[] | undefined>,
 ) {

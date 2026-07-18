@@ -29,6 +29,7 @@ describe("enterprise PostgreSQL migrations", () => {
       "0016_enterprise_usage_accounting",
       "0017_enterprise_knowledge_versions",
       "0018_enterprise_terminology_scripts",
+      "0019_enterprise_observability_trace",
     ]);
     for (const migration of migrations) {
       expect(migration.up.trim()).not.toBe("");
@@ -136,6 +137,9 @@ describe("enterprise PostgreSQL migrations", () => {
     expect(sql).toContain("enterprise_usage_event_append_only");
     expect(sql).toContain("enterprise_usage_adjustment_append_only");
     expect(sql).toContain("enterprise_usage_period_aggregate_guard");
+    expect(sql).toContain("communication_session_bindings_trace_idx");
+    expect(sql).toContain("tenant_usage_events_trace_idx");
+    expect(sql).toContain("usage_ledger_trace_idx");
     expect(sql).toContain("enterprise.validate_usage_event_ledger_link");
     expect(sql).toContain("enterprise.validate_usage_adjustment_insert");
     expect(sql).toContain("usage_event_id uuid");

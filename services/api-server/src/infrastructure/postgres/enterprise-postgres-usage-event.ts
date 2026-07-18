@@ -54,10 +54,10 @@ export class EnterpriseUsageEventPostgresRepository {
       INSERT INTO enterprise.tenant_usage_events(
         tenant_id, id, billing_account_id, budget_id, hold_id,
         ledger_entry_id, category, unit, amount, source_type, source_ref,
-        idempotency_key, request_hash, occurred_at, received_at, metadata
+        idempotency_key, request_hash, trace_id, occurred_at, received_at, metadata
       ) VALUES (
         $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11,
-        $12, $13, $14, $15, $16::jsonb
+        $12, $13, $14, $15, $16, $17::jsonb
       ) RETURNING *
     `, [
       eventId,
@@ -72,6 +72,7 @@ export class EnterpriseUsageEventPostgresRepository {
       input.sourceRef,
       input.idempotencyKey,
       input.requestHash,
+      this.session.context.traceId,
       input.occurredAt,
       input.receivedAt,
       JSON.stringify(input.metadata),
@@ -81,10 +82,10 @@ export class EnterpriseUsageEventPostgresRepository {
         id, tenant_id, category, amount, unit, source_type, source_id,
         idempotency_key, occurred_at, metadata, entry_type, budget_id,
         hold_id, source_ref, request_hash, recorded_at,
-        billing_account_id, usage_event_id
+        billing_account_id, usage_event_id, trace_id
       ) VALUES (
         $2, $1, $3, $4, $5, $6, NULL, $7, $8, $9::jsonb,
-        'settle', $10, $11, $12, $13, $14, $15, $16
+        'settle', $10, $11, $12, $13, $14, $15, $16, $17
       ) RETURNING id
     `, [
       ledgerId,
@@ -102,6 +103,7 @@ export class EnterpriseUsageEventPostgresRepository {
       input.receivedAt,
       input.billingAccountId,
       eventId,
+      this.session.context.traceId,
     ]);
     return {
       status: "recorded" as const,

@@ -1,7 +1,7 @@
 # 无界AI企业版详细技术设计
 
-版本：v1.22
-日期：2026-07-18
+版本：v1.23
+日期：2026-07-19
 状态：统一通讯平台与 PostgreSQL Primary 收敛详细技术方案
 
 ## 1. 设计原则
@@ -21,11 +21,12 @@
 | RBAC | `ready_for_acceptance` | 已有17个 scope、九角色矩阵、统一服务端 guard 和越权测试 |
 | SaaS tenant lifecycle | `ready_for_acceptance` | 已有幂等开通、暂停、导出/删除执行器、租约、有界恢复和 receipt 校验；真实对象存储/Provider 清理服务尚待验收 |
 | Append-only audit | `ready_for_acceptance` | 已有 tenant-scoped 查询、HMAC cursor、成员/RBAC/租户生命周期埋点和 SQLite/PostgreSQL 不可变约束；受控导出和真实 PostgreSQL 验收尚待后续任务 |
-| PostgreSQL schema | `implemented` | 已有十八段 up/down migration、tenant-first 索引、复合 FK、强制 RLS、user directory、cell pending projection、opaque subject identity、企业通讯/dispatch/策略、usage budget、版本化 billing/entitlement、usage accounting、knowledge 和 terminology 发布守卫；尚无真实 migrate/restore/PITR 证据 |
+| PostgreSQL schema | `implemented` | 已有十九段 up/down migration、tenant-first 索引、复合 FK、强制 RLS、user directory、cell pending projection、opaque subject identity、企业通讯/dispatch/策略、usage budget、版本化 billing/entitlement、usage accounting、knowledge、terminology 和 observability trace；尚无真实 migrate/restore/PITR 证据 |
 | Tenant-scoped Repository | `ready_for_acceptance` | 已有 tenant/user/cell scoped transaction、subject guard、单一 `legacy|postgres` runtime、HTTP 全链路注入、独立 cell Worker，以及 Tenant/Member/Audit、Directory、lifecycle、Inbox/Outbox、budget、billing/entitlement、usage accounting、knowledge、terminology 和共享 unit-of-work；尚无真实 PostgreSQL H3 证据 |
 | Enterprise Inbox/Outbox | `ready_for_acceptance` | 已有 tenant-scoped 去重、稳定 payload hash、领域/inbox/outbox 原子提交、lease/retry/recovery 和100次重放门禁；真实 PostgreSQL 并发与 Provider sandbox 尚待验收 |
 | SQLite/JSON 演示数据导入 | `ready_for_acceptance` | 已有维护窗口、SQLite 临时副本与 quick_check、空目标事务导入、六集合 count/SHA-256 读回对账和不一致回滚；仅限内部演示数据 |
-| 公共 Primary Runtime 收敛 | `ready_for_acceptance` | 已合入上游稳定提交 `fe1c3c2`；公共31段与 enterprise 18段 manifest 由一个启动编排验证，driver、数据库身份和分权连接失败均在监听前闭合；尚无真实 PostgreSQL H3 证据 |
+| 公共 Primary Runtime 收敛 | `ready_for_acceptance` | 已合入上游稳定提交 `fe1c3c2`；公共31段与 enterprise 19段 manifest 由一个启动编排验证，driver、数据库身份和分权连接失败均在监听前闭合；尚无真实 PostgreSQL H3 证据 |
+| 企业链路追踪 | `in_progress` | 平台 trace 已进入 tenant context、PostgreSQL session、communication binding、usage event/ledger 与会话报告；本轮未执行测试和真实 PostgreSQL 门禁，货币成本因无价格表明确 not configured |
 | 公共通讯 tenant scope | `ready_for_acceptance` | 公共 manifest 已增至31段；12张通讯资源表具有不可空 scope、复合 FK、写入 guard 和 forced RLS，企业 unit-of-work 只暴露 tenant-bound 白名单 Repository；尚无真实双租户 A1/H3 证据 |
 | 企业统一通讯会话绑定 | `ready_for_acceptance` | enterprise `0011` 和 tenant unit-of-work 已建立 Meeting/Support/Marketing 唯一绑定、route/policy/entitlement 快照及 generation/event-sequence 收敛状态机；尚无真实多实例、cell 迁移和 A1/H3 证据 |
 | Tenant-aware Worker Dispatch | `ready_for_acceptance` | enterprise `0012` 以 scope FK/RLS 绑定公共 dispatch/capacity；短期 HMAC ticket、租户容量、lease/heartbeat、cancel/finalize 和二次 binding fence 已实现；仅有自动化和一次性本地 PostgreSQL 16 证据，尚无真实多实例/H3 容量证据 |
@@ -1283,7 +1284,40 @@ document，SQLite/JSON 明确返回 `enterprise_postgres_required`。
 未列入白名单的响应字段永不返回客户端；features 只保留每类能力的布尔白名单，
 文档 60 秒过期，业务命令仍需重新校验。
 
-## 19. 错误、重试和客户端动作
+## 19. 企业链路追踪、质量与成本报告
+
+入口 API 在 `onRequest` 创建或继承 W3C trace，并以安全的 `x-trace-id` 返回。Enterprise route 不再把
+Fastify request id 当作业务 trace：`EnterpriseTenantContext.traceId` 统一读取当前平台 trace，tenant
+PostgreSQL transaction 同时设置 `app.trace_id`。外部 baggage 不能写入 tenant、role、scope、cell 或
+route epoch，trace 只用于关联，永不参与授权。
+
+enterprise migration `0019_enterprise_observability_trace` 为
+`communication_session_bindings`、`tenant_usage_events` 和 append-only `usage_ledger` 增加不可空
+`trace_id` 与 tenant-first index。新 usage event 与 settle ledger 在同一事务写入同一 trace，数据库
+deferred consistency trigger 逐字段连同 trace 一起核对；调整 ledger 也保存发起调整的 trace。历史记录
+只能标记为 `legacy`，不能编造不存在的父链路，报告不会用 `legacy` 关联审计事件。
+outbox publisher 在 API 线程外执行时，处理器从不可变 outbox event 恢复原 trace 到异步上下文；Provider
+operation 和 finalize 继续使用该业务 trace，Worker poll/claim trace 只描述 Worker 自身调度，不覆盖父链路。
+
+`GET /enterprise/v1/observability/sessions/:sessionId/report` 需要 `audit:read`，Repository 在 tenant
+transaction 和公共通讯 forced RLS 下读取：
+
+- 精确 communication binding、policy version、entitlement version 和创建 trace；
+- 每个 segment 最新 revision 的翻译覆盖率、实际 latency 样本、平均值与 p95；无 segment 时返回
+  `quality.status=no_samples`，所有比率/延迟为 null 或 0 样本，不绘制假趋势；
+- tenant usage event、对应 immutable ledger ID、category/unit/amount/source/trace；
+- Provider operation 的类型、状态、trace 和起止时间，以及同 trace 的脱敏审计事件。
+
+当前 billing plan 只有币种、套餐和 entitlement，没有按 category/provider/version 生效的单位价格表。
+因此报告的 `monetaryCost.amount` 固定为 null，状态为 `not_configured`，reason 为
+`pricing_not_configured`；usage amount 只能解释为秒、帧、字符或 token，不能显示为账单、余额或货币成本。
+后续若引入定价，必须版本化价格、有效期、币种、舍入规则和 Provider 归属，并以不可变 ledger 重算对账，
+不能在 UI 端估价。
+
+本批尚未运行 migration up/down、双租户攻击、API/Repository 自动化、真实 Provider 和 H1 长稳，任务保持
+`in_progress`，不能宣称企业生产门禁通过。
+
+## 20. 错误、重试和客户端动作
 
 | 错误类 | HTTP/协议语义 | 是否重试 | 客户端动作 |
 | --- | --- | --- | --- |
@@ -1297,7 +1331,7 @@ document，SQLite/JSON 明确返回 `enterprise_postgres_required`。
 
 所有自动重试都有次数、截止时间、抖动退避和 dead-letter/人工处理路径。高风险动作不得由客户端无限重试。
 
-## 20. 测试与验收映射
+## 21. 测试与验收映射
 
 | 设计不变量 | 自动化门禁 | 真实环境门禁 |
 | --- | --- | --- |
@@ -1313,6 +1347,7 @@ document，SQLite/JSON 明确返回 `enterprise_postgres_required`。
 | 统一通讯 tenant scope | session/leg/dispatch/provider/playback 复合约束、forced RLS、伪造 scope 和可选 owner 负向测试 | 两租户同时通话、取消、迟到事件和 cell 迁移攻击演练 |
 | 企业通讯运行策略 | policy version/snapshot 不可变、readiness/fingerprint 过期、capability deny、授权缺失/过期/撤回和 ticket policy mismatch 测试 | 真实端侧/云端 ASR/翻译/TTS 与声纹/录音/诊断 purpose 撤回演练 |
 | 企业账单归属 | tenant billing account、跨租户账单 ID、ledger/adjustment 幂等和对账测试 | 支付 sandbox、账期关闭和财务抽样对账 |
+| 企业链路报告 | `x-trace-id` 到 binding/provider/usage/ledger/audit 的关联、legacy/no-sample/no-price、跨租户 session/trace 负测 | 两租户真实会话、Provider、OTLP、账务抽样和 H1 长稳 |
 | 生产韧性 | writer fence、route epoch、旧 Worker generation、备份清单和恢复脚本测试 | 跨故障域自动切换、旧主隔离、异地主机不可变备份和 PITR |
 
 设计评审通过不等于功能验收。任务只有在代码、自动化、目标环境证据和 `enterprise-edition-acceptance-plan.md` 对应条目齐全后才能从 `ready_for_acceptance` 进入 `accepted`。

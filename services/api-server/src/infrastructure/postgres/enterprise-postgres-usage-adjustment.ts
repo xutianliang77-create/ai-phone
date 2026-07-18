@@ -65,10 +65,10 @@ export class EnterpriseUsageAdjustmentPostgresRepository {
         id, tenant_id, category, amount, unit, source_type, source_id,
         idempotency_key, occurred_at, metadata, entry_type, budget_id,
         hold_id, source_ref, request_hash, recorded_at,
-        billing_account_id, usage_event_id
+        billing_account_id, usage_event_id, trace_id
       ) VALUES (
         $2, $1, $3, $4, $5, 'billing_adjustment', NULL, $6, $7,
-        $8::jsonb, 'adjustment', $9, NULL, $10, $11, $12, $13, NULL
+        $8::jsonb, 'adjustment', $9, NULL, $10, $11, $12, $13, NULL, $14
       ) RETURNING id
     `, [
       ledgerId,
@@ -86,6 +86,7 @@ export class EnterpriseUsageAdjustmentPostgresRepository {
       normalized.requestHash,
       normalized.now,
       accountId,
+      this.session.context.traceId,
     ]);
     const inserted = await this.session.query<EnterpriseUsageAccountingRow>(`
       INSERT INTO enterprise.usage_adjustments(
