@@ -1,6 +1,6 @@
 # 无界AI企业版开发方案与计划
 
-版本：v1.18
+版本：v1.19
 日期：2026-07-18
 状态：E0 执行计划，已对齐统一通讯平台和 PostgreSQL Primary 收敛
 
@@ -20,7 +20,7 @@
 
 - `ENT-CORE-001/002/003` 已到 `ready_for_acceptance`；Tenant/Member、RBAC 和 `apps/enterprise-web` 生产应用基础可供后续任务复用。
 - Enterprise Web 已冻结 React 19、TypeScript 5.9、Vite 8、React Router 7 和 Vitest/Testing Library 技术基线，并实现真实登录、会话恢复和租户上下文。
-- `ENT-DATA-001` 已实现十六段 PostgreSQL up/down migration、复合 FK、强制 RLS、migration runner、schema verify 和归档 smoke；`0014` 增加 usage budget/hold/alert，`0015` 增加 tenant billing account 与版本化 plan/subscription/entitlement，`0016` 增加不可变 usage event/adjustment 与账期聚合，真实 PostgreSQL migrate/restore/PITR 尚无环境证据，任务保持 `in_progress`。
+- `ENT-DATA-001` 已实现十七段 PostgreSQL up/down migration、复合 FK、强制 RLS、migration runner、schema verify 和归档 smoke；`0014` 增加 usage budget/hold/alert，`0015` 增加 tenant billing account 与版本化 plan/subscription/entitlement，`0016` 增加不可变 usage event/adjustment 与账期聚合，`0017` 增加知识 chunk/发布守卫/检索维度，真实 PostgreSQL migrate/restore/PITR 尚无环境证据，任务保持 `in_progress`。
 - `ENT-DATA-002` 已完成单一 `legacy|postgres` Repository runtime、HTTP 全链路注入、fail-closed 启动选择和独立 cell Worker。PostgreSQL 模式不回退、不双写；API 不执行跨租户恢复扫描，Worker 通过 cell forced RLS 发现最小引用后进入 tenant transaction 复核并 claim/finalize。代码和本地自动化进入 `ready_for_acceptance`，真实 PostgreSQL 并发、容量和恢复仍待 H3。
 - `ENT-DATA-004` 已完成 JSON/SQLite 源读取、SQLite 副本 `quick_check`、空目标事务导入和六集合 count/SHA-256 读回对账；不一致回滚，且明确只用于内部演示数据迁移。真实 PostgreSQL import/reconcile 证据仍待 H3。
 - `ENT-DATA-003` 已完成 tenant-scoped Inbox/Outbox、事务内领域提交、100次重放去重、lease/retry/recovery 和 SQLite/迁移自动化，进入 `ready_for_acceptance`；真实 PostgreSQL 并发 claim 和 Provider sandbox 仍是验收门禁。
@@ -284,10 +284,10 @@ CORE-001/002 验收
 | 8 | `ENT-UI-001/002/003` | 把设计令牌、Material Icons、租户权限导航和统一状态变为生产组件 |
 | 9 | `ENT-CORE-006/008` | 完成审计和 Provider capability/readiness 真值 |
 | 10 | `ENT-CORE-007/010/012` | 完成 tenant billing account、套餐、entitlement、预算、ledger 和账期聚合 |
-| 11 | `ENT-CORE-004/005` | 完成知识、术语和话术版本闭环 |
+| 11 | `ENT-CORE-004/005` | `CORE-004` 知识版本代码已完成；继续 `CORE-005` 术语和话术版本闭环 |
 | 12 | `ENT-DATA-009` | 验收 staging 全量/增量 hash、writer fence、切换/回滚和旧写入者清退证据；本地机制代码已完成 |
 | 13 | `ENT-UI-004..010` | 完成公共页面、响应式、无障碍、E2E 和 Web 发布门禁 |
 
 E0 完成后再启动 `ENT-MTG-001` 主链；允许提前做协议 spike，但不能把未接入真实 tenant/data/readiness 的会议页面计为 E1 完成。
 
-当前进展：`ENT-CORE-003` 已完成并等待验收；`ENT-DATA-001` 已完成十六段 schema 与本地自动化，等待真实 PostgreSQL migrate/restore/PITR 证据；`ENT-DATA-002/003/004/007/008/009` 已完成 Repository、可靠事件、演示导入、统一 Primary Runtime、公共通讯 tenant scope，以及全库签名切换/恢复证据代码与本地 PostgreSQL 16 演练；`ENT-CORE-013/014/015` 已完成企业统一通讯绑定、签名 Worker dispatch fence 及设备/声音/录制运行策略并进入验收；`ENT-CORE-007/010/012` 已完成 tenant budget、billing account、版本化 plan/subscription/entitlement、不可变 usage event/ledger/adjustment、账期 count/hash 聚合与 dispatch 服务端限额自动化并进入验收；`ENT-UI-001/002/003` 已进入验收。下一优先级为 staging `ENT-DATA-009` 验收、`ENT-REL-003` 跨故障域/PITR，以及 `ENT-CORE-004/005` 企业知识与术语版本。
+当前进展：`ENT-CORE-003/004` 已完成并等待验收；`ENT-DATA-001` 已完成十七段 schema 与本地自动化，等待真实 PostgreSQL migrate/restore/PITR 证据；`ENT-DATA-002/003/004/007/008/009` 已完成 Repository、可靠事件、演示导入、统一 Primary Runtime、公共通讯 tenant scope，以及全库签名切换/恢复证据代码与本地 PostgreSQL 16 演练；`ENT-CORE-004` 已完成 tenant knowledge source/revision/chunk/review/publish、不可变 citation 与有效期检索；`ENT-CORE-013/014/015` 已完成企业统一通讯绑定、签名 Worker dispatch fence 及设备/声音/录制运行策略并进入验收；`ENT-CORE-007/010/012` 已完成 tenant budget、billing account、版本化 plan/subscription/entitlement、不可变 usage event/ledger/adjustment、账期 count/hash 聚合与 dispatch 服务端限额自动化并进入验收；`ENT-UI-001/002/003` 已进入验收。下一优先级为 `ENT-CORE-005` 企业术语/话术版本、staging `ENT-DATA-009` 验收和 `ENT-REL-003` 跨故障域/PITR。

@@ -1,6 +1,6 @@
 # 无界AI企业版技术架构
 
-版本：v1.11
+版本：v1.12
 日期：2026-07-18
 状态：SaaS 详细架构基线，已对齐统一通讯平台和 PostgreSQL Primary
 
@@ -177,7 +177,8 @@ object-storage
 | 账号、Tenant、RBAC、企业命令 | `services/api-server` | 先按 domain module 隔离；只有独立扩缩容或故障域需要时才拆服务 |
 | Enterprise Repository runtime/cell Worker | `services/api-server/src/modules/enterprise`、`services/api-server/src/infrastructure/postgres` | API 使用单一 `legacy|postgres` runtime；独立启动的 cell Worker 仅以 cell discovery 和 tenant transaction 角色 claim/finalize |
 | Communication Session、Provider Operation、Dispatch、Recording 和 Usage | 上游稳定提交 `fe1c3c2` 已导入企业分支，`ENT-DATA-008/CORE-013/014/015` 已补 tenant scope、企业业务绑定、签名 dispatch fence 和企业运行策略快照 | 公共 runtime 已成为代码基线；dispatch 必须先通过服务端 policy snapshot 与授权 fence，真实 Provider/设备仍待验收 |
-| PostgreSQL Primary 基础 | 公共31段 migration/Primary Runtime 与企业现有16段 migration | 已收敛为一个 Storage Driver/启动编排和两个有序 manifest；按 tenant/directory/cell/migration/maintenance 使用最小权限连接，等待真实 H3 验收 |
+| PostgreSQL Primary 基础 | 公共31段 migration/Primary Runtime 与企业现有17段 migration | 已收敛为一个 Storage Driver/启动编排和两个有序 manifest；按 tenant/directory/cell/migration/maintenance 使用最小权限连接，等待真实 H3 验收 |
+| Enterprise Knowledge | enterprise `0017`、Knowledge Repository/runtime/API | source/revision/chunk/review/publish、发布后不可变、四维有效期检索和 citation 已接入；embedding Provider 未配置时保持确定性文本检索，不声明向量 readiness |
 | Tenant Billing/Entitlement | `packages/contracts`、enterprise PostgreSQL migration `0014/0015` 与 tenant unit-of-work | billing account、版本化 plan/subscription/entitlement、预算和 dispatch fence 已接入；支付 Provider 尚未完成 |
 | Usage Accounting | enterprise migration `0016`、usage accounting Repository/runtime 和只读 API | 原始 event、append-only ledger/adjustment、可重建账期聚合、count/hash 对账及 forced RLS 已接入；真实账期关账和支付对账待验收 |
 | 实时信令、字幕和 playback 控制 | `services/realtime-gateway` | 保持无业务数据库直写，通过 API/事件提交业务结果 |
@@ -362,7 +363,7 @@ Worker 无权依据缓存继续执行敏感能力。
 
 生产 PostgreSQL 启动还必须验证企业签名 cutover evidence：证据绑定 staging 环境、
 commit、image digest、topology hash、目标 logical ID、system identifier/OID、公共31段与
-企业16段 manifest，并证明源库 writer fence、旧 API/Worker 角色会话为0、目标可写和
+企业17段 manifest，并证明源库 writer fence、旧 API/Worker 角色会话为0、目标可写和
 二次全量 hash 一致。本地逻辑恢复证据不提升为跨故障域 HA/PITR 结论。
 
 ## 10. 安全架构

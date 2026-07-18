@@ -18,7 +18,7 @@ import {
 export const enterpriseTenantTableNames = [
   "members", "user_tenant_directory", "platform_pending_work",
   "api_credentials", "entitlements", "subscriptions",
-  "knowledge_sources", "knowledge_versions", "term_packs",
+  "knowledge_sources", "knowledge_versions", "knowledge_chunks", "term_packs",
   "policy_decisions", "audit_events", "usage_ledger", "idempotency_keys",
   "usage_budgets", "usage_holds", "usage_budget_alerts",
   "billing_accounts", "billing_plan_versions", "entitlement_snapshots",
@@ -38,6 +38,8 @@ export const enterpriseSubjectColumns = [
   ["members", "user_id"],
   ["user_tenant_directory", "user_id"],
   ["knowledge_sources", "created_by"],
+  ["knowledge_versions", "reviewed_by"],
+  ["knowledge_versions", "published_by"],
   ["marketing_campaigns", "owner_user_id"],
   ["support_sessions", "assigned_user_id"],
   ["meetings", "host_user_id"],

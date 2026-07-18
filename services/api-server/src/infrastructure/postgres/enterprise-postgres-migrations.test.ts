@@ -27,6 +27,7 @@ describe("enterprise PostgreSQL migrations", () => {
       "0014_enterprise_usage_budgets",
       "0015_enterprise_billing_entitlements",
       "0016_enterprise_usage_accounting",
+      "0017_enterprise_knowledge_versions",
     ]);
     for (const migration of migrations) {
       expect(migration.up.trim()).not.toBe("");
@@ -116,6 +117,11 @@ describe("enterprise PostgreSQL migrations", () => {
     expect(sql).toContain("CREATE TABLE enterprise.tenant_usage_events");
     expect(sql).toContain("CREATE TABLE enterprise.usage_adjustments");
     expect(sql).toContain("CREATE TABLE enterprise.usage_period_aggregates");
+    expect(sql).toContain("CREATE TABLE enterprise.knowledge_chunks");
+    expect(sql).toContain("enterprise_knowledge_version_guard");
+    expect(sql).toContain("enterprise_knowledge_chunk_guard");
+    expect(sql).toContain("knowledge_chunks_tenant_isolation");
+    expect(sql).toContain("OR NOT EXISTS (");
     expect(sql).toContain("enterprise_usage_event_append_only");
     expect(sql).toContain("enterprise_usage_adjustment_append_only");
     expect(sql).toContain("enterprise_usage_period_aggregate_guard");
@@ -146,6 +152,7 @@ describe("enterprise PostgreSQL migrations", () => {
     expect(rollbackSql).toContain(
       "DROP TABLE IF EXISTS enterprise.tenant_usage_events",
     );
+    expect(rollbackSql).toContain("DROP TABLE IF EXISTS enterprise.knowledge_chunks");
     expect(sql).not.toContain("BYPASSRLS");
   });
 

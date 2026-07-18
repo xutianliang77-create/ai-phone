@@ -1,6 +1,6 @@
 # 无界AI企业版详细技术设计
 
-版本：v1.20
+版本：v1.21
 日期：2026-07-18
 状态：统一通讯平台与 PostgreSQL Primary 收敛详细技术方案
 
@@ -21,11 +21,11 @@
 | RBAC | `ready_for_acceptance` | 已有17个 scope、九角色矩阵、统一服务端 guard 和越权测试 |
 | SaaS tenant lifecycle | `ready_for_acceptance` | 已有幂等开通、暂停、导出/删除执行器、租约、有界恢复和 receipt 校验；真实对象存储/Provider 清理服务尚待验收 |
 | Append-only audit | `ready_for_acceptance` | 已有 tenant-scoped 查询、HMAC cursor、成员/RBAC/租户生命周期埋点和 SQLite/PostgreSQL 不可变约束；受控导出和真实 PostgreSQL 验收尚待后续任务 |
-| PostgreSQL schema | `implemented` | 已有十六段 up/down migration、tenant-first 索引、复合 FK、强制 RLS、user directory、cell pending projection、opaque subject identity、企业通讯/dispatch/策略、usage budget、版本化 billing/entitlement 和 usage accounting；尚无真实 migrate/restore/PITR 证据 |
-| Tenant-scoped Repository | `ready_for_acceptance` | 已有 tenant/user/cell scoped transaction、subject guard、单一 `legacy|postgres` runtime、HTTP 全链路注入、独立 cell Worker，以及 Tenant/Member/Audit、Directory、lifecycle、Inbox/Outbox、budget、billing/entitlement、usage accounting 和共享 unit-of-work；尚无真实 PostgreSQL H3 证据 |
+| PostgreSQL schema | `implemented` | 已有十七段 up/down migration、tenant-first 索引、复合 FK、强制 RLS、user directory、cell pending projection、opaque subject identity、企业通讯/dispatch/策略、usage budget、版本化 billing/entitlement、usage accounting 和 knowledge chunk/publish guard；尚无真实 migrate/restore/PITR 证据 |
+| Tenant-scoped Repository | `ready_for_acceptance` | 已有 tenant/user/cell scoped transaction、subject guard、单一 `legacy|postgres` runtime、HTTP 全链路注入、独立 cell Worker，以及 Tenant/Member/Audit、Directory、lifecycle、Inbox/Outbox、budget、billing/entitlement、usage accounting、knowledge 和共享 unit-of-work；尚无真实 PostgreSQL H3 证据 |
 | Enterprise Inbox/Outbox | `ready_for_acceptance` | 已有 tenant-scoped 去重、稳定 payload hash、领域/inbox/outbox 原子提交、lease/retry/recovery 和100次重放门禁；真实 PostgreSQL 并发与 Provider sandbox 尚待验收 |
 | SQLite/JSON 演示数据导入 | `ready_for_acceptance` | 已有维护窗口、SQLite 临时副本与 quick_check、空目标事务导入、六集合 count/SHA-256 读回对账和不一致回滚；仅限内部演示数据 |
-| 公共 Primary Runtime 收敛 | `ready_for_acceptance` | 已合入上游稳定提交 `fe1c3c2`；公共31段与 enterprise 16段 manifest 由一个启动编排验证，driver、数据库身份和分权连接失败均在监听前闭合；尚无真实 PostgreSQL H3 证据 |
+| 公共 Primary Runtime 收敛 | `ready_for_acceptance` | 已合入上游稳定提交 `fe1c3c2`；公共31段与 enterprise 17段 manifest 由一个启动编排验证，driver、数据库身份和分权连接失败均在监听前闭合；尚无真实 PostgreSQL H3 证据 |
 | 公共通讯 tenant scope | `ready_for_acceptance` | 公共 manifest 已增至31段；12张通讯资源表具有不可空 scope、复合 FK、写入 guard 和 forced RLS，企业 unit-of-work 只暴露 tenant-bound 白名单 Repository；尚无真实双租户 A1/H3 证据 |
 | 企业统一通讯会话绑定 | `ready_for_acceptance` | enterprise `0011` 和 tenant unit-of-work 已建立 Meeting/Support/Marketing 唯一绑定、route/policy/entitlement 快照及 generation/event-sequence 收敛状态机；尚无真实多实例、cell 迁移和 A1/H3 证据 |
 | Tenant-aware Worker Dispatch | `ready_for_acceptance` | enterprise `0012` 以 scope FK/RLS 绑定公共 dispatch/capacity；短期 HMAC ticket、租户容量、lease/heartbeat、cancel/finalize 和二次 binding fence 已实现；仅有自动化和一次性本地 PostgreSQL 16 证据，尚无真实多实例/H3 容量证据 |
@@ -33,7 +33,8 @@
 | 企业用量预算 | `ready_for_acceptance` | enterprise `0014` 已实现 tenant/category/unit/UTC period 预算、hold/settle、阈值告警和 ledger 不可变约束；真实并发与账务抽样待验收 |
 | 租户账务和 Entitlement | `ready_for_acceptance` | enterprise `0015` 已实现 tenant billing account、不可变 plan/subscription/entitlement version、服务端账期及 binding/dispatch entitlement fence；真实支付 Provider、关账对账和 A1/H3 待验收 |
 | SaaS 计量聚合 | `ready_for_acceptance` | enterprise `0016` 已实现 tenant usage event、event/ledger 一致性、append-only adjustment、负数净额保护及 count/hash/watermark 账期聚合；真实关账、支付对账和 A1/H3 待验收 |
-| Primary 全量切换/恢复证据 | `ready_for_acceptance` | 已实现31+16 manifest、81张业务表主键分页整行 hash、WAL 水位、writer fence、旧角色会话清退、HMAC cutover/restore evidence 与 production startup 绑定；仅完成本地 PostgreSQL 16 逻辑恢复机制证据，异地 WAL/PITR/H3 未通过 |
+| 企业知识版本 | `ready_for_acceptance` | enterprise `0017`、Knowledge Repository/runtime/API 已实现 source/revision/chunk/review/publish、发布后不可变、四维时间检索和稳定 citation；当前仅有确定性文本检索，本地普通角色验证不代表 embedding Provider、对象存储、恶意文档或 A1/H3 已通过 |
+| Primary 全量切换/恢复证据 | `ready_for_acceptance` | 工具按运行时动态校验 manifest/全业务表；`c9b5be2` 历史证据为31+16/81张表，新增 `0017` 后当前31+17/82张表必须重新生成签名证据；异地 WAL/PITR/H3 未通过 |
 | PostgreSQL 控制面/业务聚合 | `designed` | 后续 CORE/MTG/CS/MKT 领域任务范围，不能从公共 Repository runtime 推导为已实现 |
 | SQLite | `demo_only` | 仅本地开发、自动化和封闭演示，不承载真实企业试点数据 |
 | PSTN/CRM/Calendar/OCR | `not_ready` 或按环境探测 | 未配置必须明确降级，不生成虚假外部对象或成功状态 |
@@ -380,7 +381,11 @@ POST   /enterprise/v1/members
 PATCH  /enterprise/v1/members/:memberId
 GET    /enterprise/v1/knowledge/sources
 POST   /enterprise/v1/knowledge/sources
-POST   /enterprise/v1/knowledge/sources/:id/publish
+GET    /enterprise/v1/knowledge/sources/:sourceId/versions
+POST   /enterprise/v1/knowledge/sources/:sourceId/versions
+PUT    /enterprise/v1/knowledge/versions/:versionId/chunks
+POST   /enterprise/v1/knowledge/versions/:versionId/publish
+POST   /enterprise/v1/knowledge/search
 GET    /enterprise/v1/audit-events
 POST   /enterprise/v1/communication-policies
 ```
@@ -590,11 +595,49 @@ PSTN webhook 使用 provider event ID 去重。重复 answered/completed 不得�
 
 ## 8. RAG 和知识版本
 
-- 上传文档先进入 `draft`，解析、分块和审核后才能 `published`。
-- embedding 和 chunk 都携带 `tenantId + knowledgeVersionId`。
-- 检索必须同时过滤租户、语言、国家、产品和生效时间。
-- 每次回答保存引用 ID，不保存完整检索提示词中的敏感内容。
-- 新版本发布不修改历史会话引用。
+### 8.1 数据和状态机
+
+`knowledge_sources` 表示租户内稳定的逻辑来源，名称在未归档 source 中大小写不敏感唯一；
+`knowledge_versions` 的 revision 在 source 行锁内由服务端递增，客户端不能指定；`knowledge_chunks`
+以 `(tenantId, knowledgeVersionId, blockId)` 和 sequence 双唯一保存有序分块。三表均使用复合 tenant FK、
+forced RLS 和 tenant transaction。
+
+允许的首批路径为 `draft -> review -> published`。chunk 集只能在 draft 中一次性插入，提交成功后同时
+写入逐 chunk SHA-256、长度前缀聚合 content hash、review actor/time 并递增 optimistic version。
+publish 要求当前状态 review、expectedVersion 命中、至少一个 chunk、审核/发布 actor 与生效窗口齐全；
+数据库 trigger 再次执行相同不变量。published/expired version 和任何 chunk UPDATE 均失败，不能为修正
+内容改写历史版本。
+
+### 8.2 API 和权限
+
+- `POST/GET /enterprise/v1/knowledge/sources`
+- `POST/GET /enterprise/v1/knowledge/sources/:sourceId/versions`
+- `PUT /enterprise/v1/knowledge/versions/:versionId/chunks`
+- `POST /enterprise/v1/knowledge/versions/:versionId/publish`
+- `POST /enterprise/v1/knowledge/search`
+
+所有路由先解析 active membership，再校验 `knowledge:read|knowledge:publish` 和签名 tenant route
+document；请求体中的 tenantId 只允许与服务端上下文相同。legacy/SQLite runtime 不持久化企业知识，
+明确返回 `enterprise_postgres_required`。create/review/publish 写入 append-only audit。
+
+### 8.3 检索和引用
+
+检索固定叠加 `tenantId + locale + countryCode + productCode + serverNow`，country/product 允许显式
+`ALL/all` source 作为租户内通配版本。SQL 只选择 `status=published`、已生效且未过期的版本，并以
+`DISTINCT ON (sourceId)` 取每个 source 的最高 revision；draft、processing、review、failed、未来和
+过期版本不会进入候选集。返回 citation 固定为 `knowledgeVersionId:blockId`，业务会话只保存 citation
+和必要证据，不保存完整敏感提示词；后续发布新 revision 不改写历史引用。
+
+当前代码没有伪造 embedding readiness：未配置 embedding/向量 Provider 时仅执行大小受限的确定性
+文本匹配。向量生成、恶意文档扫描、对象存储内容提取和召回质量门禁必须作为后续 Provider/验收证据，
+不能从 `ENT-CORE-004` 本地结果推导为已完成。
+
+### 8.4 一致性和限制
+
+单次 chunk 提交限定1..200块、单块最多12000字节、总内容最多1MB，blockId 唯一；revision 创建、
+chunk 审核和发布分别使用 source/version 行锁及 expectedVersion，冲突不产生半成品。Repository SQL
+除 forced RLS 外仍显式包含 `tenant_id = $1`；批量 `INSERT ... SELECT` 也通过 tenant scope 子查询满足
+SQL fence。任何 Provider 未配置、检索无证据或结果为空时，上层必须明确降级并提供人工路径。
 
 ## 9. 工具调用安全
 
@@ -882,7 +925,7 @@ Worker dispatch ticket 升级为 v2，并将 `policySnapshotId + policyVersion` 
 `ENT-DATA-009` 的维护工具在 `REPEATABLE READ READ ONLY` 快照内枚举 `ai_phone` 与
 `enterprise` 全部业务表（排除 migration 元表），要求每张表存在主键，按复合主键
 keyset pagination 读取 `to_jsonb(row)` 规范文本。每行以字节长度前缀加入 SHA-256，
-形成 table count/hash/last-key hash，再汇总公共31段、企业16段 checksum、8张关键表、
+形成 table count/hash/last-key hash，再汇总公共31段、企业17段 checksum、8张关键表、
 总行数和全库 hash。维护账号必须是受审计的 superuser 或 `BYPASSRLS` 全读角色，不能复用
 tenant/directory/cell 应用凭证。
 
@@ -894,7 +937,7 @@ baseline 文件 hash，验证源库默认只读、写探针返回 SQLSTATE `2500
 整行 hash、主键、migration 或 server version 不一致都会生成签名 `mismatch` 并以非零退出。
 
 生产 startup gate 只接受 `environment=staging` 的 matched cutover evidence，且运行时
-commit/image/topology、cutover ID、target logical ID、当前 system identifier/OID 和31+16
+commit/image/topology、cutover ID、target logical ID、当前 system identifier/OID 和31+17
 manifest 必须逐项一致。本地 PostgreSQL 16 演练已验证81张表、8张含记录关键表、增量后17行
 全库 hash、writer fence、隔离 `pg_dump/pg_restore` 和单行篡改失败；证据见
 `docs/evidence/ent-data-009-local-drill-2026-07-18.md`。这只证明机制可执行，不是异地主机

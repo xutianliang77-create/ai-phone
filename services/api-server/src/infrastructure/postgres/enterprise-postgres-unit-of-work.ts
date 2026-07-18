@@ -40,6 +40,9 @@ import {
 import {
   EnterpriseUsageAccountingPostgresRepository,
 } from "./enterprise-postgres-usage-accounting.repository.js";
+import {
+  EnterpriseKnowledgePostgresRepository,
+} from "./enterprise-postgres-knowledge.repository.js";
 
 export interface EnterprisePostgresUnitOfWork {
   tenant: EnterpriseTenantPostgresRepository;
@@ -51,6 +54,7 @@ export interface EnterprisePostgresUnitOfWork {
   billingEntitlements: EnterpriseBillingEntitlementPostgresRepository;
   usageBudgets: EnterpriseUsageBudgetPostgresRepository;
   usageAccounting: EnterpriseUsageAccountingPostgresRepository;
+  knowledge: EnterpriseKnowledgePostgresRepository;
   workerDispatches: EnterpriseWorkerDispatchPostgresRepository;
 }
 
@@ -75,6 +79,7 @@ export function withEnterprisePostgresUnitOfWork<T>(
         new EnterpriseBillingEntitlementPostgresRepository(session),
       usageBudgets: new EnterpriseUsageBudgetPostgresRepository(session),
       usageAccounting: new EnterpriseUsageAccountingPostgresRepository(session),
+      knowledge: new EnterpriseKnowledgePostgresRepository(session),
       workerDispatches: new EnterpriseWorkerDispatchPostgresRepository(session),
     }),
   );

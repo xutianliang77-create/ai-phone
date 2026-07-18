@@ -1,6 +1,6 @@
 # 无界AI企业版详细功能设计
 
-版本：v1.9
+版本：v1.10
 日期：2026-07-18
 状态：SaaS 详细设计基线，已对齐统一通讯平台
 
@@ -230,6 +230,16 @@ Provider Adapter、可靠事件和会话历史能力，并新增：
 - 过期、未审核或无权限文档不能进入检索上下文。
 - 没有可信证据时回答“无法确认”，并提供转人工路径。
 - 企业术语和禁止替换词同时作用于 ASR、翻译和答案生成。
+
+知识发布闭环固定为：创建 source -> 创建不可复用的 draft revision -> 一次性提交 chunk 集合并进入
+review -> 发布生效窗口。发布者不能从客户端指定 tenant、revision、content hash 或 citation；服务端按
+chunk 顺序和内容生成 SHA-256，并把回答引用固定为 `knowledgeVersionId:blockId`。已发布版本及其 chunk
+不可改写，新版本发布不改变历史会话引用。
+
+检索请求必须显式提交 locale、country 和 product，服务端再叠加 tenant 与当前时间过滤；只选择每个
+source 当前满足条件的最高 published revision。draft、processing、review、failed、尚未生效和已过期
+版本均返回空。当前未配置 embedding Provider 时使用确定性的受限文本检索，不把 pending embedding
+伪装为向量检索成功。
 
 ### 6.4 工具调用
 

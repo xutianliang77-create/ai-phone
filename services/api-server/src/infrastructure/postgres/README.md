@@ -55,10 +55,10 @@ ENTERPRISE_MIGRATION_DATABASE_URL='postgresql://...' \
 
 两种启用模式都在恢复任务、Fastify 构建和端口监听前失败闭合，并在校验后关闭连接。
 `verify` 不写 migration；`migrate_verify` 始终在 migration 后执行相同 schema verify。
-统一启动编排先验证公共31段 manifest 和签名 cutover evidence，再验证 enterprise 16段
+统一启动编排先验证公共31段 manifest 和签名 cutover evidence，再验证 enterprise 17段
 manifest，并核对两个 verdict 的 database name/OID；任一失败都关闭已创建资源且不监听。
 
-当前十段 migration 中，`0004` 增加 tenant lifecycle 状态和 job，`0005` 增加
+基础 migration `0004` 至 `0010` 中，`0004` 增加 tenant lifecycle 状态和 job，`0005` 增加
 导出/删除执行所需的 scope snapshot、attempt、lease、retry、receipt 和终态约束，
 `0006` 为 audit events 增加 result/details 约束、tenant-first 查询索引和拒绝
 UPDATE/DELETE 的 append-only 触发器，`0007` 为 enterprise inbox/outbox 增加
@@ -115,6 +115,18 @@ Worker 使用独立 cell discovery 凭证和共享 tenant pool，不持有 direc
 `ENTERPRISE_CELL_DATABASE_URL`、`ENTERPRISE_MIGRATION_DATABASE_URL` 和维护凭证，
 不得使用 `BYPASSRLS` 应用角色扫描或修改全租户数据。
 
+## Knowledge versions
+
+`ENT-CORE-004` 由 migration `0017` 提供 `knowledge_chunks`、检索维度和数据库发布守卫。
+Knowledge Repository 只允许 `draft -> review -> published`：chunk 集在 tenant transaction 中一次性
+写入，服务端生成逐块和聚合 SHA-256；发布要求 review、expectedVersion、非空 chunk、actor 和有效
+时间窗。published version/chunk 不可更新删除。HTTP 路由还要求 `knowledge:read|knowledge:publish`
+和签名 tenant route document，legacy/SQLite runtime 明确返回 PostgreSQL required。
+
+检索强制 tenant、locale、country、product、server time，只返回每个 source 最新有效 published
+revision，并生成 `knowledgeVersionId:blockId` citation。当前没有 embedding Provider 集成，文本匹配
+只是确定性降级，不能声称向量召回已就绪。
+
 ## Backup smoke
 
 归档 smoke 要求目标机存在 `pg_dump` 和 `pg_restore`：
@@ -149,5 +161,6 @@ SQLSTATE `25006`、旧 writer 会话为0、target 可写和二次全量 hash 相
 
 生产启动只接受 `environment=staging` 的 `cutover/matched` 签名证据，并绑定当前
 commit、image digest、topology hash、目标 logical ID、数据库 system identifier/OID 和
-31+16 migration manifest。本地同机 `pg_dump/pg_restore` 只能证明逻辑恢复与对账机制；
+31+17 migration manifest。`c9b5be2` 的31+16本地证据在 `0017` 后会被门禁拒绝，必须重新生成；
+本地同机 `pg_dump/pg_restore` 只能证明逻辑恢复与对账机制；
 跨故障域自动切换、异地主机不可变 WAL/PITR 和 RPO/RTO 仍由 `ENT-REL-003`/H3 验收。

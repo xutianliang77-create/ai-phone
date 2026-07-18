@@ -35,6 +35,9 @@ import {
   finalizePostgresTenantLifecycleJob,
   finalizePostgresTenantProvision,
 } from "./enterprise-postgres-runtime-lifecycle-process.js";
+import {
+  createEnterprisePostgresKnowledgeRuntime,
+} from "./enterprise-postgres-knowledge-runtime.js";
 
 export function createPostgresEnterpriseRepositoryRuntime(
   pools: EnterprisePostgresPool | {
@@ -53,6 +56,7 @@ export function createPostgresEnterpriseRepositoryRuntime(
   const pool = split.tenantPool;
   return {
     driver: "postgres",
+    ...createEnterprisePostgresKnowledgeRuntime(pool),
     resolveContext(input) {
       return resolveEnterprisePostgresContext({
         pool: split.directoryPool,

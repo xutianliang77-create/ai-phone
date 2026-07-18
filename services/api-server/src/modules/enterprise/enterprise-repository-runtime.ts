@@ -64,6 +64,9 @@ import type {
   RecordEnterpriseUsageEventInput,
   RecordEnterpriseUsageEventResult,
 } from "./enterprise-usage-accounting.js";
+import type {
+  EnterpriseKnowledgeRepositoryRuntime,
+} from "./enterprise-knowledge-runtime.js";
 
 export type EnterpriseContextResult =
   | { status: "resolved"; tenant: EnterpriseTenantRecord; member: EnterpriseMemberRecord }
@@ -86,7 +89,8 @@ export type EnterpriseLifecycleResult = {
   };
 };
 
-export interface EnterpriseRepositoryRuntime {
+export interface EnterpriseRepositoryRuntime
+  extends EnterpriseKnowledgeRepositoryRuntime {
   readonly driver: "legacy" | "postgres";
   resolveContext(input: {
     userId: string;
