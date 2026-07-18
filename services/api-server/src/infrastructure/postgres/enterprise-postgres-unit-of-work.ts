@@ -2,6 +2,10 @@ import type {
   EnterpriseTenantContext,
 } from "../../modules/enterprise/enterprise-tenant-context.js";
 import {
+  createEnterpriseCommunicationPostgresRepository,
+  type EnterpriseCommunicationPostgresRepository,
+} from "./enterprise-postgres-communication.repository.js";
+import {
   createEnterpriseEventsPostgresRepository,
   type EnterpriseEventsPostgresRepository,
 } from "./enterprise-postgres-events.repository.js";
@@ -22,6 +26,7 @@ export interface EnterprisePostgresUnitOfWork {
   tenant: EnterpriseTenantPostgresRepository;
   lifecycle: EnterpriseLifecyclePostgresRepository;
   events: EnterpriseEventsPostgresRepository;
+  communication: EnterpriseCommunicationPostgresRepository;
 }
 
 export function withEnterprisePostgresUnitOfWork<T>(
@@ -36,6 +41,7 @@ export function withEnterprisePostgresUnitOfWork<T>(
       tenant: createEnterpriseTenantPostgresRepository(session),
       lifecycle: createEnterpriseLifecyclePostgresRepository(session),
       events: createEnterpriseEventsPostgresRepository(session),
+      communication: createEnterpriseCommunicationPostgresRepository(session),
     }),
   );
 }

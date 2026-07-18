@@ -24,6 +24,10 @@ export interface EnterpriseTenantPostgresSession {
     sql: string,
     values?: unknown[],
   ): Promise<{ rows: Row[] }>;
+  queryCommunication<Row extends Record<string, unknown>>(
+    sql: string,
+    values?: unknown[],
+  ): Promise<{ rows: Row[] }>;
 }
 
 export async function withEnterpriseTenantPostgresSession<T>(
@@ -38,6 +42,13 @@ export async function withEnterpriseTenantPostgresSession<T>(
     transactionStarted = true;
     await client.query(
       "SELECT set_config('app.tenant_id', $1, true)",
+      [context.tenantId],
+    );
+    await client.query(
+      "SELECT set_config('app.scope_type', 'tenant', true)",
+    );
+    await client.query(
+      "SELECT set_config('app.scope_id', $1, true)",
       [context.tenantId],
     );
     const session = Object.freeze({
@@ -56,6 +67,13 @@ export async function withEnterpriseTenantPostgresSession<T>(
         assertTenantScopedSql(sql);
         return client.query<Row>(sql, [context.tenantId, ...values]);
       },
+      queryCommunication<Row extends Record<string, unknown>>(
+        sql: string,
+        values: unknown[] = [],
+      ) {
+        assertCommunicationSql(sql);
+        return client.query<Row>(sql, ["tenant", context.tenantId, ...values]);
+      },
     });
     const result = await operation(session);
     await client.query("COMMIT");
@@ -71,6 +89,37 @@ export async function withEnterpriseTenantPostgresSession<T>(
     throw error;
   } finally {
     client.release();
+  }
+}
+
+const communicationTables = new Set([
+  "communication_sessions",
+  "session_media_legs",
+  "tts_playbacks",
+  "provider_operations",
+  "worker_dispatches",
+  "participant_recording_consents",
+]);
+
+function assertCommunicationSql(sql: string) {
+  const normalized = normalizedSql(sql);
+  const tables = [...normalized.matchAll(
+    /\bai_phone\.([a-z_][a-z0-9_]*)\b/gi,
+  )].map((match) => match[1]!.toLowerCase());
+  if (!/^select\b/i.test(normalized) || normalized.includes(";") ||
+    /\bjoin\b/i.test(normalized) ||
+    /\b(?:or|union)\b/i.test(normalized) ||
+    (normalized.match(/\bselect\b/gi)?.length ?? 0) !== 1 ||
+    tables.length !== 1 || !communicationTables.has(tables[0]!)) {
+    throw new Error("Enterprise communication SQL must be a single scoped SELECT");
+  }
+  const where = normalized.match(/\bwhere\b([\s\S]*)$/i)?.[1] ?? "";
+  const typePredicate = /\b(?:[a-z_][a-z0-9_]*\.)?scope_type\s*=\s*\$1\b/i;
+  const idPredicate = /\b(?:[a-z_][a-z0-9_]*\.)?scope_id\s*=\s*\$2\b/i;
+  if (!typePredicate.test(where) || !idPredicate.test(where)) {
+    throw new Error(
+      "Enterprise communication SQL must contain scope_type = $1 and scope_id = $2",
+    );
   }
 }
 

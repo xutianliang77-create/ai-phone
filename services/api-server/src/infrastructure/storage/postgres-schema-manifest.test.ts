@@ -7,9 +7,9 @@ import {
 
 describe("PostgreSQL schema manifest", () => {
   it("pins the complete ordered migration set", () => {
-    expect(expectedPostgresMigrations).toHaveLength(30);
+    expect(expectedPostgresMigrations).toHaveLength(31);
     expect(expectedPostgresMigrations.at(-1)).toBe(
-      "030_tts_playback_session_identity",
+      "031_communication_resource_scope",
     );
     expect(comparePostgresMigrations([...expectedPostgresMigrations])).toEqual({
       missing: [],
@@ -22,7 +22,7 @@ describe("PostgreSQL schema manifest", () => {
       ...expectedPostgresMigrations.slice(0, -1),
       "999_unknown",
     ])).toEqual({
-      missing: ["030_tts_playback_session_identity"],
+      missing: ["031_communication_resource_scope"],
       extra: ["999_unknown"],
     });
   });
@@ -44,5 +44,28 @@ describe("PostgreSQL schema manifest", () => {
       import.meta.url,
     ), "utf8");
     expect(sql).toContain("PRIMARY KEY (session_id, id)");
+  });
+
+  it("forces first-class scope across communication resources", () => {
+    const sql = readFileSync(new URL(
+      "../../../../../infra/postgres/migrations/031_communication_resource_scope.sql",
+      import.meta.url,
+    ), "utf8");
+    for (const table of [
+      "communication_sessions", "session_media_legs", "tts_playbacks",
+      "provider_operations", "worker_dispatches",
+      "participant_recording_consents",
+    ]) {
+      expect(sql).toContain(`ALTER TABLE ai_phone.${table}`);
+    }
+    expect(sql).toContain("ALTER COLUMN scope_type SET NOT NULL");
+    expect(sql).toContain("ALTER COLUMN scope_id SET NOT NULL");
+    expect(sql).toContain("FOREIGN KEY (scope_type, scope_id, session_id)");
+    expect(sql).toContain("communication_sessions_scope_key");
+    expect(sql).toContain("provider_operations_scope_session_idx");
+    expect(sql).toContain("ENABLE ROW LEVEL SECURITY");
+    expect(sql).toContain("FORCE ROW LEVEL SECURITY");
+    expect(sql).toContain("communication_scope_matches(scope_type, scope_id)");
+    expect(sql).not.toMatch(/scope_id\s*=\s*\$\d+\s+OR/i);
   });
 });

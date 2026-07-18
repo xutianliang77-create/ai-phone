@@ -30,6 +30,11 @@ describe("enterprise PostgreSQL tenant session", () => {
           "INSERT INTO enterprise.members(tenant_id, id) VALUES ($1, $2)",
           ["member-b"],
         );
+        await session.queryCommunication(
+          `SELECT id FROM ai_phone.communication_sessions
+           WHERE scope_type = $1 AND scope_id = $2 AND id = $3`,
+          ["session-a"],
+        );
         return "done";
       },
     );
@@ -39,6 +44,14 @@ describe("enterprise PostgreSQL tenant session", () => {
       { sql: "BEGIN", values: undefined },
       {
         sql: "SELECT set_config('app.tenant_id', $1, true)",
+        values: ["tenant-a"],
+      },
+      {
+        sql: "SELECT set_config('app.scope_type', 'tenant', true)",
+        values: undefined,
+      },
+      {
+        sql: "SELECT set_config('app.scope_id', $1, true)",
         values: ["tenant-a"],
       },
       {
@@ -56,6 +69,11 @@ describe("enterprise PostgreSQL tenant session", () => {
       {
         sql: "INSERT INTO enterprise.members(tenant_id, id) VALUES ($1, $2)",
         values: ["tenant-a", "member-b"],
+      },
+      {
+        sql: `SELECT id FROM ai_phone.communication_sessions
+           WHERE scope_type = $1 AND scope_id = $2 AND id = $3`,
+        values: ["tenant", "tenant-a", "session-a"],
       },
       { sql: "COMMIT", values: undefined },
     ]);
@@ -147,6 +165,28 @@ describe("enterprise PostgreSQL tenant session", () => {
     expect(fixture.released).toBe(true);
   });
 
+  it("rejects communication reads without an immutable tenant scope", async () => {
+    for (const sql of [
+      "SELECT id FROM ai_phone.communication_sessions WHERE id = $3",
+      `SELECT id FROM ai_phone.communication_sessions
+       WHERE scope_type = $1 AND scope_id = $2 OR true`,
+      `SELECT id FROM ai_phone.projection_records
+       WHERE scope_type = $1 AND scope_id = $2`,
+      `SELECT scope_type = $1, scope_id = $2
+       FROM ai_phone.communication_sessions`,
+      `SELECT resource.id FROM ai_phone.communication_sessions resource
+       JOIN pg_catalog.pg_class hidden ON true
+       WHERE resource.scope_type = $1 AND resource.scope_id = $2`,
+    ]) {
+      const fixture = poolFixture();
+      await expect(withEnterpriseTenantPostgresSession(
+        fixture.pool,
+        tenantContext(),
+        (session) => session.queryCommunication(sql, ["resource-a"]),
+      )).rejects.toThrow("communication SQL");
+    }
+  });
+
   it("rejects comment bypasses and incorrectly ordered tenant inserts", async () => {
     const commented = poolFixture();
     await expect(withEnterpriseTenantPostgresSession(
@@ -182,6 +222,8 @@ describe("enterprise PostgreSQL tenant session", () => {
     expect(fixture.calls.map(({ sql }) => sql)).toEqual([
       "BEGIN",
       "SELECT set_config('app.tenant_id', $1, true)",
+      "SELECT set_config('app.scope_type', 'tenant', true)",
+      "SELECT set_config('app.scope_id', $1, true)",
       "ROLLBACK",
     ]);
     expect(fixture.released).toBe(true);

@@ -1,6 +1,6 @@
 # 无界AI企业版验收任务与计划
 
-版本：v1.7
+版本：v1.8
 日期：2026-07-18
 状态：可执行验收计划，已对齐统一通讯平台和 PostgreSQL Primary 收敛
 
@@ -159,6 +159,13 @@ Mock 只能验证协议，不能替代 iPhone/Web、真实 LiveKit、真实模�
 - 从本人目录获得 tenant 引用后必须逐租户重新校验 active tenant/member；伪造 selected tenant 时不得先泄露 tenant 是否存在。
 - 公共 communication session、participant、media leg、Worker dispatch、Provider operation 和 TTS playback 使用两个真实 tenant 做 CRUD、分页、取消和迟到事件攻击；Repository predicate、复合 FK 和 forced RLS 三层都必须拒绝跨租户访问。
 - 对只传 session/provider/playback/dispatch ID、不传 scope，或把 `owner_id`/`user_id` 过滤省略的调用做负向测试；任何返回全局记录的通用 Repository 都阻断 A1。
+
+`ENT-DATA-008` 当前仅具备本地自动化候选证据：公共第31段 migration 的不可空 scope、
+复合 FK、写入 trigger、forced RLS 和 enterprise tenant session/Repository contract 已由
+schema 测试及 session/leg/dispatch/provider/playback/participant 六资源跨租户矩阵覆盖。
+正式 `AC-ENT-0014` 仍必须在无 `BYPASSRLS`、非表 owner 的真实 PostgreSQL 应用角色下，
+以两个 tenant 执行 CRUD、裸 ID、伪造 scope、取消和迟到事件攻击；该证据未完成前不得把
+`ready_for_acceptance` 改为 `accepted`，也不得通过 A1/H3。
 
 ### 6.2 RBAC
 

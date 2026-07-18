@@ -88,9 +88,8 @@ describe("enterprise PostgreSQL tenant repository", () => {
       events: [auditRecord()],
       nextPosition: { createdAt: now, id: auditId },
     });
-    expect(fixture.calls[2]).toMatchObject({
-      values: [tenantId],
-    });
+    expect(fixture.calls.find(({ sql }) => sql.includes("FROM enterprise.tenants")))
+      .toMatchObject({ values: [tenantId] });
     expect(fixture.calls.find(({ sql }) =>
       sql.includes("INSERT INTO enterprise.members")
     )?.values?.slice(0, 3)).toEqual([tenantId, memberId, userId]);

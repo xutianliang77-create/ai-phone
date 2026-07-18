@@ -1,6 +1,6 @@
 # 无界AI企业版详细技术设计
 
-版本：v1.12
+版本：v1.13
 日期：2026-07-18
 状态：统一通讯平台与 PostgreSQL Primary 收敛详细技术方案
 
@@ -26,6 +26,7 @@
 | Enterprise Inbox/Outbox | `ready_for_acceptance` | 已有 tenant-scoped 去重、稳定 payload hash、领域/inbox/outbox 原子提交、lease/retry/recovery 和100次重放门禁；真实 PostgreSQL 并发与 Provider sandbox 尚待验收 |
 | SQLite/JSON 演示数据导入 | `ready_for_acceptance` | 已有维护窗口、SQLite 临时副本与 quick_check、空目标事务导入、六集合 count/SHA-256 读回对账和不一致回滚；仅限内部演示数据 |
 | 公共 Primary Runtime 收敛 | `ready_for_acceptance` | 已合入上游稳定提交 `fe1c3c2`；公共30段与 enterprise 10段 manifest 由一个启动编排验证，driver、数据库身份和分权连接失败均在监听前闭合；尚无真实 PostgreSQL H3 证据 |
+| 公共通讯 tenant scope | `ready_for_acceptance` | 公共 manifest 已增至31段；12张通讯资源表具有不可空 scope、复合 FK、写入 guard 和 forced RLS，企业 unit-of-work 只暴露 tenant-bound 白名单 Repository；尚无真实双租户 A1/H3 证据 |
 | PostgreSQL 控制面/业务聚合 | `designed` | 后续 CORE/MTG/CS/MKT 领域任务范围，不能从公共 Repository runtime 推导为已实现 |
 | SQLite | `demo_only` | 仅本地开发、自动化和封闭演示，不承载真实企业试点数据 |
 | PSTN/CRM/Calendar/OCR | `not_ready` 或按环境探测 | 未配置必须明确降级，不生成虚假外部对象或成功状态 |
@@ -36,8 +37,8 @@
 
 截至 2026-07-18，公共 PostgreSQL migration、Primary Runtime、fence、可靠事件、
 Billing 和 Product Records 已形成稳定提交 `fe1c3c2`，并通过 `ENT-DATA-007` 合入
-企业分支。合入只建立代码基线，不继承主产品 staging、容量或灾备结论；公共通讯表仍须
-由 `ENT-DATA-008` 完成 tenant scope/RLS 改造，切换证据仍由 `ENT-DATA-009` 独立产出。
+企业分支。合入只建立代码基线，不继承主产品 staging、容量或灾备结论；公共通讯表已由
+`ENT-DATA-008` 完成本地 tenant scope/RLS 代码改造，切换证据仍由 `ENT-DATA-009` 独立产出。
 
 - 一个进程只能选择一个 Storage Driver，并在监听端口前通过同一套 startup readiness；不得按路由回退或双写。
 - 一个 Driver 可以使用多个最小权限连接池：migration、应用 tenant、user directory、cell discovery、maintenance 各自分权，不能共享超级角色。
@@ -763,8 +764,27 @@ API 的 enterprise tenant Repository 适配并复用公共 Primary pool，由公
 
 该实现已完成本地代码和自动化门禁，但没有运行真实企业 PostgreSQL 双 manifest、角色
 授权、并发 claim、PITR 或跨故障域恢复；因此状态仅为 `ready_for_acceptance`，不得宣称
-企业试点或生产门禁通过。公共通讯和账单表也必须等待 `ENT-DATA-008/009` 后才能承载
-真实企业租户流量。
+企业试点或生产门禁通过。公共通讯和账单表也必须等待各自 scope、业务写路径及
+`ENT-DATA-009` 切换证据完成后才能承载真实企业租户流量。
+
+第十批完成 `ENT-DATA-008` 公共通讯 tenant scope。公共 migration manifest 新增
+`031_communication_resource_scope`，将历史个人数据从 session 的 `user_id` 确定性回填为
+`scope_type=user`，所有 child scope 都从所属 session/job 派生；无法找到合法父记录时
+`SET NOT NULL` 或复合 FK 会使整段事务失败，不生成无归属记录。session、leg、transcript、
+playback、Provider operation、dispatch/capacity、participant consent、recording 和 ingress
+共12张表都启用并强制 RLS，policy 同时匹配 transaction-local scope type 和 scope ID。
+
+写入 trigger 要求事务已设置 scope，禁止更新资源归属，并使现有 projection function 在
+INSERT 时也只能写入当前 scope。企业 tenant session 在 `app.tenant_id` 之外固定设置
+`app.scope_type=tenant` 和 `app.scope_id=TenantContext.tenantId`。它只暴露
+`queryCommunication` 单 SELECT 白名单，SQL 必须同时包含 `scope_type=$1` 与
+`scope_id=$2`，拒绝 OR、UNION、子查询、多表和通用 `projection_records`；session、leg、
+dispatch、Provider operation、playback 和 participant consent 返回行还会再次核对 tenant。
+
+该状态只表示代码与本地负向矩阵已完成。尚未用无 `BYPASSRLS` 的真实应用角色执行 migration、
+双租户 CRUD、取消/迟到事件、最小权限授权和回滚演练，也未接通 `ENT-CORE-013/014` 的企业
+会话写命令和签名 dispatch ticket，因此只能标记 `ready_for_acceptance`，不能宣称 A1、H3、
+企业试点或生产门禁通过。
 
 ### 11.2 事务和一致性边界
 
