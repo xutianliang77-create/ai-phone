@@ -1,8 +1,8 @@
-# AI Phone 企业版验收任务与计划
+# 无界AI企业版验收任务与计划
 
-版本：v1.6
-日期：2026-07-17
-状态：可执行验收计划，已对齐 UI v1.0
+版本：v1.7
+日期：2026-07-18
+状态：可执行验收计划，已对齐统一通讯平台和 PostgreSQL Primary 收敛
 
 ## 1. 验收目标
 
@@ -54,6 +54,9 @@ Mock 只能验证协议，不能替代 iPhone/Web、真实 LiveKit、真实模�
 - 生产相同的 reverse proxy、HTTPS/WSS、短期 token 和内部鉴权。
 - ASR、翻译、TTS、LLM、Speaker、OCR health 返回实际 Provider fingerprint。
 - SQLite WAL 仅用于本地开发和封闭演示；A1-A4 均必须使用 PostgreSQL。
+- 公共与 enterprise migration manifest 在同一隔离企业数据库按固定顺序执行，并分别保留 checksum/schema verify 证据。
+- migration、tenant API、user directory、cell discovery、maintenance 使用独立最小权限角色/连接池；生产连接使用 `sslmode=verify-full`。
+- PostgreSQL 主备位于不同物理故障域，具备自动 leader election、旧主隔离和异地主机不可变备份；同机副本不满足 A4 环境要求。
 
 ### 3.3 数据集
 
@@ -78,6 +81,10 @@ Mock 只能验证协议，不能替代 iPhone/Web、真实 LiveKit、真实模�
 | AC-ENT-0009 | Repository runtime | `legacy|postgres` 单一 driver；PostgreSQL 未通过 startup verify 时拒绝；无 fallback、双写或路由级混用 |
 | AC-ENT-0010 | Cell Worker 启动 | 非 PostgreSQL driver、缺 cell/worker、越界 poll/batch/lease、缺 HTTPS publisher/token 均失败闭合 |
 | AC-ENT-0011 | 演示数据导入 | 仅维护窗口和空目标允许；JSON/SQLite 导入后六集合 count/hash 一致，不一致整体回滚 |
+| AC-ENT-0012 | 上游基线 | 只集成主产品稳定 commit；未提交 WIP、陈旧 README 或 staging 结果不能成为企业完成状态和验收证据 |
+| AC-ENT-0013 | 单一 Primary Runtime | 公共/企业双 manifest 共用一个 startup verdict 和 Storage Driver；允许分权连接池，不允许 fallback、shadow read、dual write 或路由级混用 |
+| AC-ENT-0014 | 统一通讯 scope | session/participant/leg/dispatch/provider/playback 具有不可省略的 `scope_type + scope_id`、复合约束和 forced RLS；可选 owner/user filter 不能通过验收 |
+| AC-ENT-0015 | Worker Dispatch | ticket 含签名 tenant/session/cell/route epoch/generation/capability/expiry；跨租户、跨 cell、过期和旧 generation 全部拒绝 |
 
 ### 4.1 企业 UI 与前端工程验收
 
@@ -136,6 +143,8 @@ Mock 只能验证协议，不能替代 iPhone/Web、真实 LiveKit、真实模�
 - 时区、套餐和席位在账期中途变化不重复计量。
 - 调整使用新 ledger entry，不修改历史流水。
 - 重试、webhook 重放和 Worker 恢复不重复计费。
+- 账单以 `billing_account_id + tenant_id` 归属；篡改 tenant、个人 `user_id` 或付款联系人不能读取、调整或结算另一租户账单。
+- 个人订阅/余额迁移到企业账单时生成期初快照和 adjustment，保留源 hash；禁止通过 ID 映射直接复用个人账单记录。
 
 ## 6. A1 租户、权限和数据验收
 
@@ -148,6 +157,8 @@ Mock 只能验证协议，不能替代 iPhone/Web、真实 LiveKit、真实模�
 - 租户 A 持续高负载时，租户 B 的登录、会议和客服仍满足限流后的服务目标。
 - 使用无 `BYPASSRLS`、非表 owner 的真实应用角色：仅设置 `app.user_id` 时只能读取本人 Tenant Directory；不能 JOIN/子查询 members，也不能读取其他 user 的目录。
 - 从本人目录获得 tenant 引用后必须逐租户重新校验 active tenant/member；伪造 selected tenant 时不得先泄露 tenant 是否存在。
+- 公共 communication session、participant、media leg、Worker dispatch、Provider operation 和 TTS playback 使用两个真实 tenant 做 CRUD、分页、取消和迟到事件攻击；Repository predicate、复合 FK 和 forced RLS 三层都必须拒绝跨租户访问。
+- 对只传 session/provider/playback/dispatch ID、不传 scope，或把 `owner_id`/`user_id` 过滤省略的调用做负向测试；任何返回全局记录的通用 Repository 都阻断 A1。
 
 ### 6.2 RBAC
 
@@ -330,6 +341,9 @@ Mock 只能验证协议，不能替代 iPhone/Web、真实 LiveKit、真实模�
 - 客服连续100个会话。
 - 外呼白名单连续100个任务。
 - 无内存持续增长、残留 hold、重复 ledger、残留 screen share lease 或无法结束 session。
+- 依次执行 25、50、100 并发通讯会话阶梯压测，并保留 API/DB/LiveKit/Worker/Provider/tenant 指标和拒绝原因。
+- 使用真实会议、客服、外呼、ASR、翻译、TTS 混合流量连续120分钟；不得用纯健康检查或单一 mock 请求替代。
+- 压测中让一个 tenant 持续超配额，验证其他 tenant 的登录、建会、接管和安全结束能力仍满足目标；过载 tenant 只收到有界拒绝/降级。
 
 ## 11. H2 安全和隐私
 
@@ -341,14 +355,19 @@ Mock 只能验证协议，不能替代 iPhone/Web、真实 LiveKit、真实模�
 - 导出、删除、撤回和保存期限有审计记录。
 - 删除任务在对象服务故障后最终收敛。
 - 安全扫描 P0/P1 问题清零。
+- 外部请求携带伪造 tenant/role/scope/cell/route epoch tracing baggage 时，网关必须删除并从已验证身份重建；trace/baggage 不能扩权。
+- 临时依赖漏洞例外必须列 owner、锁定版本、缓解措施和到期日；例外到期或适用版本变化会阻断发布，且任何报表不得将其表述为“零漏洞/已修复”。
 
 ## 12. H3 PostgreSQL、Cell 和灾备
 
 - PostgreSQL 作为所有真实 SaaS 租户的初始真源。
 - 内部 SQLite 演示数据可以迁移，但不能作为客户生产迁移路径的必要依赖。
-- accounts、tenant、session、segment、campaign、support、meeting、ledger 和 object hash 数量一致。
-- 迁移窗口发生错误时可回滚旧系统。
-- PostgreSQL PITR 和对象存储恢复演练。
+- 验收 commit 锁定的公共 manifest（当前主产品 WIP 候选为30段）与 enterprise 10段 migration manifest 在隔离企业数据库从空库完整执行；两个 manifest 的顺序、checksum、schema verify 和 down/forward 策略均有证据，不能只跑其中一套。
+- 每个进程只有一个 Storage Driver 和 startup verdict；HTTP、企业 Repository、统一通讯会话和 cell Worker 使用同一 verified Primary Runtime，不存在 fallback、shadow read、dual write 或按路由混用。
+- 应用 tenant、user directory、cell discovery、migration、maintenance 分别使用最小权限角色；生产 TLS 使用 `verify-full`。应用角色没有 `BYPASSRLS`、表 owner、DDL 或关闭 RLS 权限。
+- 公共 communication session、participant、media leg、dispatch、Provider operation、playback 和相关账本全部具有 tenant scope、复合 FK 和 `FORCE ROW LEVEL SECURITY`；使用跨租户 ID、缺 scope、伪造 owner/user 过滤做负向验证。
+- accounts、tenant、communication session、segment、campaign、support、meeting、ledger 和 object hash 数量与规范化 SHA-256 一致。
+- 全量复制后记录增量水位，切换时获取 writer fence、清退旧 API/Worker、重放剩余 inbox/outbox，再做第二次 count/hash；切换或对账失败可按书面决策回滚，旧 writer 不能继续写入。
 - migration 后使用普通应用角色验证 `FORCE ROW LEVEL SECURITY`；确认 user directory self policy、tenant projection policy、成员投影同步和跨租户拒绝均生效。
 - 使用独立 cell Worker 角色验证 pending projection forced RLS、trigger 同步、空 cell 失败闭合、旧 cell 拒绝和 tenant transaction 原子 claim。
 - 使用 API 应用角色验证 PostgreSQL runtime 只在 startup gate `verified` 后创建；非法或 `dual_write` driver、连接/校验失败均不得监听端口，也不得回退到 legacy。
@@ -359,6 +378,9 @@ Mock 只能验证协议，不能替代 iPhone/Web、真实 LiveKit、真实模�
 - 分别执行 disabled、verify、migrate_verify 和非法启动模式；确认 disabled 无连接、verify 无写 migration、migrate_verify 顺序正确，所有失败均无 HTTP 监听或后台恢复任务。
 - 恢复后余额、审计、禁拨和授权证据一致。
 - 租户迁移 cell 后旧 cell 拒绝新写入，route document 指向新 cell。
+- 在不同物理故障域部署主备，执行自动 leader election；网络分区/主机掉电后旧主必须被 fencing，旧 route epoch 和旧 Worker generation 的写入/副作用全部拒绝，原主重新加入前先校验 timeline/数据一致性。
+- base backup 与 WAL 加密保存到异地主机不可变存储，执行指定时间点恢复并核对 tenant、session、ledger、audit、suppression、consent 和 object manifest；同机副本、人工 promote 或只验证归档文件存在均不算通过。
+- 主产品 staging、同机复制、个人账单或可选 owner Product Records 的结果不能继承为本 H3 证据；每份证据必须绑定企业 commit、image digest、数据库 manifest checksum 和环境拓扑。
 
 具体 RPO/RTO 由企业 SLA 确定；未确定前不能在材料中承诺数值。
 
@@ -405,6 +427,7 @@ evidencePath
 - A0-A3 与 H1-H3 适用项通过。
 - 无串租户、误拨、重复结算、无法停止共享或高风险自动执行问题。
 - PostgreSQL 和备份恢复通过。
+- 公共/enterprise migration、统一 Primary Runtime、通讯 tenant scope、全量切换/hash 和跨故障域自动恢复全部通过。
 - 租户开通、套餐、计量、欠费、注销、区域路由和 noisy-neighbor 门禁通过。
 - 客户不需要安装或维护任何 AI Phone 服务端组件。
 - 真实 PSTN、域名、证书、Webhook、监控和值班配置 ready。
@@ -412,6 +435,7 @@ evidencePath
 - iOS/Web 正式构建通过；Android 能力按既定产品化阶段明确标注。
 - 管理员、坐席、主持人和审计员使用手册完成。
 - 已准备 kill switch，可按租户、活动、Provider 和功能立即停止。
+- 不存在已到期的临时安全例外；未到期例外必须在发布记录中明确风险、缓解和截止日，不得宣称零漏洞。
 
 ## 16. 开发任务与验收执行矩阵
 
@@ -422,7 +446,8 @@ evidencePath
 | UI-011/012、MTG-001..013 | AC-UI、AC-MTG、AC-SHARE、会后材料 | RTC、token、共享、字幕或布局变更后 | A1 |
 | CS-001..012 | AC-UI、A2 客服、H1 故障 | Agent、知识、工具、队列或 Provider 变更后 | A2 |
 | MKT-001..014 | AC-UI、A3 外呼、H1/H2 | 国家策略、Provider、调度、话术或接管变更后 | A3 |
-| DATA-001..006 | A1 隔离、H1、H3 | schema、Repository、迁移、备份或 cell 变更后 | A4 |
+| DATA-001..009 | A0 单 Primary、A1 隔离、H1、H3 | schema、Repository、Primary runtime、scope、迁移、备份或 cell 变更后 | A4 |
+| CORE-013..015 | AC-ENT-0014/0015、A1 隔离、业务会话、H1/H2 | 会话、dispatch、cell route、声音/录制策略或 Worker 变更后 | A1；对应 Provider 就绪后进入 A2/A3 |
 | REL-001..008、OBS-001 | H1/H2/H3 和最终发布门禁 | 每个正式候选版本 | A4 |
 
 ### 16.1 执行节奏

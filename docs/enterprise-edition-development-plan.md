@@ -1,8 +1,8 @@
-# AI Phone 企业版开发方案与计划
+# 无界AI企业版开发方案与计划
 
-版本：v1.9
-日期：2026-07-17
-状态：E0 执行计划，已对齐 UI v1.0
+版本：v1.10
+日期：2026-07-18
+状态：E0 执行计划，已对齐统一通讯平台和 PostgreSQL Primary 收敛
 
 ## 1. 开发原则
 
@@ -11,6 +11,7 @@
 - 服务器端和客户端层独立发布；Mac 不进入运行链路。
 - 企业版只以平台托管 SaaS 交付，不开发客户侧服务端安装器。
 - 不复制个人版 ASR、翻译、TTS、Speaker、LLM 和计费实现。
+- 主产品未提交 WIP 只作为设计输入；只有稳定提交经企业 tenant/RLS 改造和验收后才进入企业基线。
 - SQLite WAL 仅用于本地开发和封闭演示；真实企业 SaaS 试点前完成 PostgreSQL。
 - 真实 PSTN、CRM 或日历账号阻塞时，完成 Adapter、contract test、mock harness 和清晰降级，不伪造可用。
 - 每项任务只有代码、自动化、真实环境证据和文档同时完成才可结项。
@@ -26,6 +27,7 @@
 - `ENT-UI-001` 已完成生产令牌、Material Icons 注册表、Flutter 对照和浏览器验证，等待验收；`ENT-UI-002` 已完成共享 scope 真值、九角色导航矩阵及嵌套路由 guard，仍等待 `ENT-CORE-011` 签名 route document；`ENT-UI-003` 已完成八态组件矩阵，仍等待 `ENT-CORE-008` 和领域 API 的 Provider/冲突/job 真值联调。
 - PostgreSQL、SaaS 控制面、对象存储、正式域名、真实 Provider 和目标国家合规确认均未通过门禁。
 - 当前开发必须继续使用独立企业 worktree；个人版声纹和部署 WIP 不进入企业提交。
+- 主产品公共 PostgreSQL Primary、统一通讯、Billing 和 Product Records 更新尚未形成可直接继承的企业证据；企业版通过 `ENT-DATA-007/008/009` 和 `ENT-CORE-013/014/015` 完成契约、作用域和切换收敛。
 
 ## 2. 里程碑总览
 
@@ -45,12 +47,15 @@
 CORE-001/002 验收
   -> DATA-001 PostgreSQL
   -> DATA-002/003 Repository + Inbox/Outbox
+  -> DATA-007/008 公共 Primary Runtime + 通讯资源 tenant scope
   -> CORE-009/010/011 租户生命周期、权益和区域路由
+  -> CORE-013/014/015 统一通讯会话 + Worker Dispatch + 企业设备/声音策略
   -> CORE-006/007/008/012 审计、用量、readiness 和计量
   -> UI-002/003/004/005/007/010 企业壳和公共页面
   -> MTG-001/002/004/005 企业会议 MVP
   -> CS-001/003/004/009/010 AI 客服 MVP
   -> MKT-001..014 外呼受控试点
+  -> DATA-009 全量切换证据
   -> REL-* 正式发布
 ```
 
@@ -95,7 +100,8 @@ CORE-001/002 验收
 | --- | --- | --- | --- |
 | E0-W0 | CORE-001/002 验收、CORE-003 技术选型、DATA-001 schema | UI-001 主题/图标、威胁模型、验收环境 | 决策记录、干净构建、PostgreSQL migration 测试 |
 | E0-W1 | DATA-002/003/004、CORE-009/011 | UI-002/003、CORE-006/008 | 两租户攻击、单一 runtime、cell Worker、导入对账、幂等重放、路由签名、统一错误页 |
-| E0-W2 | CORE-007/010/012、CORE-004/005 | UI-004/005/006/007、OBS-001 | entitlement/ledger 对账、知识版本、工作台真值 |
+| E0-W1.5 | DATA-007/008、CORE-013/014/015 | DATA-009 演练准备、统一会话 contract test | 双 manifest、单 Primary Runtime、公共通讯表 forced RLS、签名 dispatch ticket、旧 generation/route epoch fence |
+| E0-W2 | CORE-007/010/012、CORE-004/005 | UI-004/005/006/007、OBS-001 | tenant billing account、entitlement/ledger 对账、知识版本、工作台真值 |
 | E0-W3 | UI-008/009/010/011、REL-001 前置 | 对象存储恢复、控制面故障演练 | A0、AC-UI、A1 适用项和生产 Web 构建 |
 
 每个波次可以按完成情况滚动，不以日历周强制切换；未通过数据和权限门禁的页面不能用前端 mock 标记“已完成”。
@@ -197,6 +203,8 @@ CORE-001/002 验收
 - SAST、依赖扫描、渗透测试和密钥轮换。
 - 监控、告警、值班手册、容量和成本报告。
 - 订阅续费、欠费暂停、超额策略、账单对账和客户状态页。
+- 跨故障域 PostgreSQL 自动切换、旧主 writer fencing、重新加入和异地主机不可变备份/PITR；同机副本或人工切换不能替代生产门禁。
+- 以 25/50/100 并发和 120 分钟真实混合流量验证 tenant 限流、Worker 容量和 noisy-neighbor 隔离。
 - iOS、Web 正式构建；Android 按既定后续计划进入产品化验收。
 
 ## 8. 团队分工建议
@@ -244,6 +252,10 @@ CORE-001/002 验收
 | 区域误路由 | 签名 route document，区域不匹配拒绝写入 |
 | Provider 锁定 | Capability Adapter 和 contract test |
 | 回声/抢话 | WebRTC AEC、exact reference、VAD 和半双工降级 |
+| 上游未提交实现漂移 | 只对齐稳定提交；记录公共/enterprise migration manifest 和接口版本，不从个人工作区复制 WIP |
+| 公共表仍为 user/optional owner scope | `scope_type + scope_id` 一等建模、复合 FK、forced RLS 和跨租户负向测试通过前禁止企业流量 |
+| 临时依赖漏洞例外过期 | 记录 owner/版本/缓解/到期日；到期前修复或重新评审，不能宣称零漏洞 |
+| 同故障域伪高可用 | 自动切换必须跨物理故障域并隔离旧主；异地主机备份/PITR 独立验收 |
 
 ## 11. 每阶段交付物
 
@@ -265,13 +277,16 @@ CORE-001/002 验收
 | 2 | `ENT-CORE-003` | 决定 Web 技术栈并建立生产脚手架、构建和登录壳 |
 | 3 | `ENT-DATA-001` | 建立 PostgreSQL schema、migration、复合 FK、RLS 和备份 smoke |
 | 4 | `ENT-DATA-002/003` | 强制 tenant Repository，建立 inbox/outbox 和幂等重放门禁 |
-| 5 | `ENT-CORE-009/011` | 完成开通 saga、homeRegion/cell 和签名 route document |
-| 6 | `ENT-UI-001/002/003` | 把设计令牌、Material Icons、租户权限导航和统一状态变为生产组件 |
-| 7 | `ENT-CORE-006/008` | 完成审计和 Provider capability/readiness 真值 |
-| 8 | `ENT-CORE-007/010/012` | 完成套餐、entitlement、预算、ledger 和账期聚合 |
-| 9 | `ENT-CORE-004/005` | 完成知识、术语和话术版本闭环 |
-| 10 | `ENT-UI-004..010` | 完成公共页面、响应式、无障碍、E2E 和 Web 发布门禁 |
+| 5 | `ENT-DATA-007/008` | 收敛公共/企业 migration 与 Primary Runtime，为通讯公共表增加不可省略的 tenant scope 和 forced RLS |
+| 6 | `ENT-CORE-009/011` | 完成开通 saga、homeRegion/cell 和签名 route document |
+| 7 | `ENT-CORE-013/014/015` | 建立统一通讯会话、tenant-aware Worker Dispatch 和企业设备/声音策略 |
+| 8 | `ENT-UI-001/002/003` | 把设计令牌、Material Icons、租户权限导航和统一状态变为生产组件 |
+| 9 | `ENT-CORE-006/008` | 完成审计和 Provider capability/readiness 真值 |
+| 10 | `ENT-CORE-007/010/012` | 完成 tenant billing account、套餐、entitlement、预算、ledger 和账期聚合 |
+| 11 | `ENT-CORE-004/005` | 完成知识、术语和话术版本闭环 |
+| 12 | `ENT-DATA-009` | 完成全量/增量 hash、writer fence、切换、回滚和旧写入者清退证据 |
+| 13 | `ENT-UI-004..010` | 完成公共页面、响应式、无障碍、E2E 和 Web 发布门禁 |
 
 E0 完成后再启动 `ENT-MTG-001` 主链；允许提前做协议 spike，但不能把未接入真实 tenant/data/readiness 的会议页面计为 E1 完成。
 
-当前进展：第2项 `ENT-CORE-003` 已完成并等待验收；第3项 `ENT-DATA-001` 已完成十段 schema 与本地自动化，等待真实 PostgreSQL migrate/restore/PITR 证据；第4项已完成单一 Repository runtime、HTTP 注入、cell Worker、subject identity、启动门禁和 JSON/SQLite count/hash 对账，`ENT-DATA-002/003/004` 进入验收，但尚无真实 PostgreSQL 环境证据；第6项 `ENT-UI-001/002/003` 已进入验收。
+当前进展：`ENT-CORE-003` 已完成并等待验收；`ENT-DATA-001` 已完成十段 schema 与本地自动化，等待真实 PostgreSQL migrate/restore/PITR 证据；`ENT-DATA-002/003/004` 已完成单一 Enterprise Repository runtime、HTTP 注入、cell Worker、subject identity、启动门禁和 JSON/SQLite count/hash 对账并进入验收，但尚无真实 PostgreSQL 环境证据；`ENT-UI-001/002/003` 已进入验收。`ENT-DATA-007/008/009` 与 `ENT-CORE-013/014/015` 为本次架构更新新增任务，状态仍为 `todo`。

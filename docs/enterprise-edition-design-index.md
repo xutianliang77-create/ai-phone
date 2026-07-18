@@ -1,12 +1,13 @@
-# AI Phone 企业版设计文档索引
+# 无界AI企业版设计文档索引
 
-版本：v1.4
-日期：2026-07-17
-状态：SaaS 详细设计基线
+版本：v1.5
+日期：2026-07-18
+状态：SaaS 详细设计基线，已纳入统一通讯平台和 PostgreSQL Primary 演进
 
 ## 1. 产品边界
 
-企业版建立在个人版实时同传、Call Link、图片翻译、声音和历史能力之上，只新增三条企业业务主线：
+企业版建立在无界AI统一通讯平台之上，复用 `communicationSession`、LiveKit、
+Speech/Translation/Voice Agent Runtime、Provider Adapter 和可靠事件能力，只新增三条企业业务主线：
 
 1. 出海 AI 外呼营销。
 2. AI 客服。
@@ -41,6 +42,12 @@
 cell Worker 和 JSON/SQLite 演示数据 count/hash 对账代码，状态为等待真实 PostgreSQL
 验收；这不等于 `ENT-DATA-001`、PITR、容量、安全或企业生产门禁已经通过。
 
+无界AI主产品当前已经形成30段公共 PostgreSQL migration、Primary Runtime、可靠
+Inbox/Outbox、fencing、Billing/Product Records、verify-full、PITR 和容量/韧性门禁候选；
+但这些更新仍位于主产品未提交工作树。企业版只把它们作为本轮设计输入，尚未导入代码，
+也不能继承主产品 staging 的验收结论。后续由 `ENT-DATA-007/008/009` 完成稳定基线接入、
+公共通讯聚合 tenant scope 和企业独立切换证据。
+
 ## 3. 继承文档
 
 本设计不替换现有个人版和实时媒体设计，以下文档继续作为底层约束：
@@ -58,12 +65,18 @@ cell Worker 和 JSON/SQLite 演示数据 count/hash 对账代码，状态为等�
 - Flutter App、Web 企业控制台和 Web 参会页均属于客户端层。
 - SaaS 控制面负责租户、套餐、区域、权益、账单和全局配置；区域数据面承载媒体、模型和租户业务数据。
 - 每个租户创建时固定 `homeRegion`；业务数据不能因请求路由或 Provider 切换跨区域漂移。
-- API 是账号、租户、任务、会话、用量和审计的唯一写入方。
-- Realtime Gateway、Worker、PSTN Bridge 和模型服务不得直接写业务数据库。
+- API 与受限的 Enterprise Repository cell Worker 是直接数据库写入方；普通 Realtime
+  Gateway、Translation/Agent/OCR Worker、PSTN Bridge 和模型服务不得持有业务表写凭证。
 - 所有企业数据必须绑定 `tenantId`；用户写操作同时校验 `tenantId + userId + resourceId`。
 - 所有可重试写操作必须携带 `idempotencyKey`；状态迁移使用版本条件更新。
 - AI 不得绕过确定性策略直接拨号、退款、付款、承诺合同或读取未授权数据。
 - SQLite WAL 只用于本地开发、自动化和封闭演示；任何真实企业 SaaS 试点和付费租户必须使用 PostgreSQL。
+- 全产品只允许一个 Storage Driver 和启动 readiness 真值；可以按 tenant、directory、cell、
+  migration/backup 职责使用多个最小权限连接池，但不能保留两套独立切换开关或双写真值。
+- 公共通讯聚合必须使用一等 `scopeType + scopeId`；企业路径固定为 tenant scope，不能把
+  可空 `ownerId/tenantId` 或可选过滤条件当作租户隔离。
+- 主产品 staging、同机复制或控制面压测证据不能自动提升企业任务状态；企业 forced RLS、
+  cell、租户账单、多租户容量、跨故障域 HA 和 off-host 恢复必须独立验收。
 
 ## 5. 任务编号
 
@@ -80,10 +93,12 @@ cell Worker 和 JSON/SQLite 演示数据 count/hash 对账代码，状态为等�
 
 ## 6. 推荐交付顺序
 
-1. SaaS 控制面和企业公共底座。
-2. 企业会议和屏幕共享。
-3. AI 呼入客服与人工接管。
-4. 出海 AI 外呼营销受控试点。
-5. 多区域准备、多实例和正式企业发布。
+1. SaaS 控制面和现有企业公共底座。
+2. 统一 Primary Runtime、公共通讯 tenant scope、communication session 和 Worker Dispatch。
+3. 租户账单、统一迁移/对账和企业 PostgreSQL 独立验收。
+4. 企业会议和屏幕共享。
+5. AI 呼入客服与人工接管。
+6. 出海 AI 外呼营销受控试点。
+7. 多区域、多实例、跨故障域韧性和正式企业发布。
 
 外呼营销最后开放，因为它同时依赖真实 PSTN、国家策略、授权证明、禁拨名单、人工接管和审计闭环。

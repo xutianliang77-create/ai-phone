@@ -1,12 +1,13 @@
-# AI Phone 企业版技术架构
+# 无界AI企业版技术架构
 
-版本：v1.2
-日期：2026-07-17
-状态：SaaS 详细架构基线待评审
+版本：v1.3
+日期：2026-07-18
+状态：SaaS 详细架构基线，已对齐统一通讯平台和 PostgreSQL Primary
 
 ## 1. 架构目标
 
-- 复用个人版实时翻译、Call Link、PSTN、LLM、TTS 和 Speaker 能力。
+- 复用无界AI统一 Communication Session、LiveKit、Speech/Translation/Voice Agent Runtime、
+  PSTN、LLM、TTS、Speaker 和可靠事件能力。
 - 三条企业业务线共享租户、知识、会话、审计、用量和 Provider 层。
 - 保持客户端层和服务器层两层部署，不引入 Mac 生产依赖。
 - 以多租户 SaaS 统一交付，不向客户部署服务器或模型。
@@ -39,7 +40,9 @@ flowchart TB
       API["API Server"]
       RepoWorker["Enterprise Repository Cell Worker"]
       Gateway["Realtime Gateway"]
-      Worker["Translation/Call Worker"]
+      Session["Communication Session Runtime"]
+      Dispatch["Worker Dispatch/Capacity"]
+      Worker["Speech/Translation/Voice Agent Runtime"]
       Campaign["Campaign Scheduler"]
       Support["Support Orchestrator"]
       Meeting["Meeting Orchestrator"]
@@ -75,9 +78,15 @@ flowchart TB
     Proxy --> API
     Proxy --> Gateway
     LiveKit --> Worker
+    API --> Session
+    Session --> Dispatch
+    Dispatch --> Worker
     API --> Campaign
     API --> Support
     API --> Meeting
+    Campaign --> Session
+    Support --> Session
+    Meeting --> Session
     Campaign --> Agent
     Support --> Agent
     Agent --> Policy
@@ -138,7 +147,10 @@ reverse-proxy
 api-server
 enterprise-repository-worker
 realtime-gateway
+communication-session-runtime
+worker-dispatch
 translation-worker
+voice-agent-runtime
 livekit
 campaign-scheduler
 support-orchestrator
@@ -163,12 +175,14 @@ object-storage
 | --- | --- | --- |
 | 账号、Tenant、RBAC、企业命令 | `services/api-server` | 先按 domain module 隔离；只有独立扩缩容或故障域需要时才拆服务 |
 | Enterprise Repository runtime/cell Worker | `services/api-server/src/modules/enterprise`、`services/api-server/src/infrastructure/postgres` | API 使用单一 `legacy|postgres` runtime；独立启动的 cell Worker 仅以 cell discovery 和 tenant transaction 角色 claim/finalize |
+| Communication Session、Provider Operation、Dispatch、Recording 和 Usage | 无界AI主产品公共 runtime 候选，企业分支尚未导入 | 只接入已提交且门禁稳定的公共基线；所有企业入口增加 tenant scope、route epoch、entitlement 和 RLS |
+| PostgreSQL Primary 基础 | 无界AI主产品30段 migration/Primary Runtime 候选与企业现有10段 migration | 收敛为一个 Storage Driver/启动真值和两个有序 manifest；按 tenant/directory/cell/maintenance 使用最小权限角色 |
 | 实时信令、字幕和 playback 控制 | `services/realtime-gateway` | 保持无业务数据库直写，通过 API/事件提交业务结果 |
-| ASR、翻译、TTS、Agent call worker | `services/translation-worker` | 按 track/任务横向扩展，Provider 继续通过 Adapter |
+| ASR、翻译、TTS、Agent call worker | `services/translation-worker`，后续接入统一 dispatch/runtime | 按 session/track/任务横向扩展，Provider 继续通过 Adapter；API 进程不运行媒体或 LLM 循环 |
 | PSTN 媒体桥 | `services/pstn-bridge` | 只处理 Provider 媒体/状态协议，不承载 Campaign 真值 |
 | 共享契约和事件 | `packages/contracts` | 客户端/服务端共同编译，版本变更保持向后兼容 |
 | Campaign/Support/Meeting Orchestrator | 尚未实现的逻辑模块 | 初期进入 API/Worker 内的独立 module，不预先制造微服务 |
-| SaaS 控制面、PostgreSQL、对象存储 | 尚未通过生产门禁 | 试点前按 `ENT-CORE-009/010/011`、`ENT-DATA-001` 实现和验收 |
+| SaaS 控制面、PostgreSQL、对象存储 | 尚未通过企业生产门禁 | 试点前按 `ENT-CORE-009/010/011`、`ENT-DATA-001/007/008/009` 实现和独立验收 |
 
 架构图中的逻辑组件不等于当前已经存在的可部署服务。文档和 readiness 必须区分 `designed`、`implemented`、`verified` 与 `production_ready`。
 
@@ -287,10 +301,14 @@ flowchart LR
 
 ## 9. 数据架构
 
-### 9.1 单一写入方
+### 9.1 单一写入真值
 
-- API Server 是业务数据库唯一写入方。
-- Worker 和 Orchestrator 通过内部命令 API 提交事件。
+- 全产品只有一个 Storage Driver 和启动 readiness 真值；不能让公共和 Enterprise runtime
+  分别决定是否写 PostgreSQL，也不能长期双写或按路由局部切换。
+- API Server 与受限的 Enterprise Repository cell Worker 是直接写入方。cell Worker 只做
+  cell-scoped discovery，再建立 tenant-scoped transaction 进行 claim/finalize。
+- Translation/Voice Agent/OCR Worker 和 Orchestrator 通过内部命令或可靠事件提交结果，
+  不持有业务表写凭证。
 - 每个命令包含 `tenantId`、`aggregateId`、`idempotencyKey` 和预期 `version`。
 - session 结束、hold 释放、ledger 和 outbox 必须同事务提交。
 
@@ -304,6 +322,31 @@ flowchart LR
 
 对象存储保存授权证据、知识文档、导出、参考声音和经授权的录音。数据库只保存归属、hash、版本和对象引用。
 
+### 9.3 公共和企业数据边界
+
+- 公共 `ai_phone` schema 提供 aggregate fence、command inbox、可靠 Inbox/Outbox、Provider
+  Operation、Session、Usage、Dispatch、Recording、Agent 和 Primary Runtime 原语。
+- `enterprise` schema 继续保存 Tenant/Member/Directory、RBAC、审计、租户生命周期、
+  Campaign/Support/Meeting 和企业账单等类型化表，并保持复合 FK、tenant-first index 和 forced RLS。
+- 公共聚合使用一等 `scope_type + scope_id`；企业路径只允许 `scope_type=tenant`，且 scope ID
+  必须等于 transaction-local `app.tenant_id`。可空 `owner_id/tenant_id` 或可选查询过滤不能充当权限边界。
+- 通用 Product Records 只能作为个人/兼容数据索引；企业 Repository 不得调用无 tenant context
+  的通用 query。需要企业化的账号、同意、诊断、术语和声纹必须使用 tenant-scoped adapter 或类型化表。
+- User Directory 和 `platform_pending_work` 是授权/路由安全投影，必须在原事务同步维护；
+  普通 UI/read model 才允许通过 outbox 最终一致更新。
+
+### 9.4 连接角色和迁移顺序
+
+一个 Storage Driver 不等于一个高权限连接池。目标运行时至少区分：
+
+1. tenant runtime：设置 `app.tenant_id`，访问 tenant-owned 公共和企业表；
+2. directory runtime：只设置 `app.user_id`，只读本人目录投影；
+3. cell discovery runtime：只设置 `app.cell_id/worker_id/trace_id`，只读最小 pending 引用；
+4. migrator/backup/restore：独立受审计 maintenance 凭证，不进入 API/Worker 常驻池。
+
+启动顺序固定为公共 manifest、企业 manifest、双 schema verify、RLS/identity/role verify，
+全部通过后才创建应用池和监听端口。任一失败都不回退 legacy，也不开放部分 PostgreSQL 路径。
+
 ## 10. 安全架构
 
 - 企业数据访问始终校验 tenant membership 和 RBAC。
@@ -316,13 +359,15 @@ flowchart LR
 - 高风险动作必须产生不可覆盖的审计事件。
 - 外部 webhook 使用签名、时间戳、防重放和 inbox 去重。
 - 客户端 token 短期有效，并限制房间、角色和可发布轨道类型。
+- trace context 只承载关联信息；边缘入口丢弃 `baggage`，tenant、role、route、entitlement 和
+  policy 只从认证、membership 和服务端状态解析，不能从 trace header 扩权。
 
 ## 11. 可观测性
 
 每个请求贯通：
 
 ```text
-tenantId -> campaign/support/meeting id -> sessionId -> callLegId
+tenantId -> campaign/support/meeting id -> communicationSessionId -> callLegId
 -> turnId -> segmentId -> playbackId/toolExecutionId -> ledgerId
 ```
 
@@ -336,12 +381,14 @@ tenantId -> campaign/support/meeting id -> sessionId -> callLegId
 | PSTN | Provider Adapter，不把 Twilio/Telnyx 逻辑写入业务层 |
 | Agent | LLM + 确定性状态机 + Policy Engine |
 | 数据 | SQLite 仅用于本地演示；真实 SaaS 试点起使用 PostgreSQL |
+| Primary Runtime | 复用公共 fenced transaction/可靠事件原语，企业 tenant/RLS 作为强制适配层，不直接复用可选 owner 查询 |
 | SaaS 交付 | 控制面 + 区域数据面；不提供客户自建服务端 |
 | 区域 | 租户固定 homeRegion/cell，迁移走受控任务 |
 | 消息 | 先使用数据库 inbox/outbox，规模化后再引入消息中间件 |
 | 屏幕共享 | LiveKit screen track + CAS 共享租约 |
 | OCR | 可选旁路，失败不影响共享 |
 | 多租户 | 所有企业聚合根强制 tenantId，不用客户端过滤代替服务端隔离 |
+| Billing | 复用原子事务模式，不复用个人 `user_id` 账单模型；企业使用 tenant billing account、seat、entitlement 和账期聚合 |
 
 ## 13. 信任区和服务身份
 
@@ -367,12 +414,15 @@ public internet
 | 单个 API/Gateway 实例退出 | 负载均衡摘除，无状态实例接管 | 短暂重连，已提交命令不丢失 |
 | Worker 退出 | lease 超时后重新 claim，generation 拒绝旧输出 | 字幕/译音短暂降级，不重复结算 |
 | Provider 故障 | capability 熔断、备用路由或明确降级 | 页面和会话显示具体不可用能力 |
-| PostgreSQL 主库故障 | 托管故障切换/PITR；写入在主库不确定时停止 | 保留安全结束能力，不接受高风险新命令 |
+| PostgreSQL 主库故障 | 跨故障域自动选主、旧主 fencing、endpoint 切换和 off-host PITR；写入在主库不确定时停止 | 保留安全结束能力，不接受高风险新命令 |
 | 对象存储故障 | 元数据事务保留 pending，outbox 重试 | 上传/导出显示 processing，不伪造完成 |
 | 控制面故障 | 有效 route/token 的区域会话短时自治 | 不能新开通/改套餐，进行中会话可安全结束 |
 | 单 cell 故障 | 按已演练的迁移/恢复计划切换 | 未完成一致性校验前不双写另一个 cell |
 
-正式环境的 stateless 入口至少跨两个故障单元部署；PostgreSQL 备份、PITR、RPO/RTO 和 cell 恢复只有在 `ENT-REL-003` 演练通过后才能对外承诺。
+正式环境的 stateless 入口至少跨两个故障单元部署；PostgreSQL 必须使用不同物理主机/
+故障域、自动选主和旧主拒写，WAL/base backup 必须加密并保存在 off-host 不可变存储。
+同机复制、同盘 WAL 和手工 promote 只能作为机制证据；RPO/RTO 和 cell 恢复只有在
+`ENT-REL-003` 演练通过后才能对外承诺。
 
 ## 15. 容量和服务目标
 
@@ -390,7 +440,10 @@ public internet
 | 数据 | DB pool、锁等待、事务冲突、outbox age、备份和恢复校验 |
 | 成本 | tenant/feature/provider 的分钟、token、字符、帧和单位业务结果成本 |
 
-每个租户都有并发、速率、预算和队列上限。容量测试按“小租户突发、大租户持续、单 Provider 故障、单 cell 降级”四类场景执行；未获得测试证据前不标注具体并发或 SLA 数字。
+每个租户都有并发、速率、预算和队列上限。容量测试按25/50/100 session、小租户突发、
+大租户持续、单 Provider 故障、单 cell 降级执行；发布前还要完成至少120分钟的真实
+API/LiveKit/SIP/ASR/MT/TTS/Agent/Egress 混合流量。数据库控制面 soak 不能替代真实媒体容量；
+未获得测试证据前不标注具体并发或 SLA 数字。
 
 ## 16. 不可破坏的架构不变量
 
@@ -400,3 +453,5 @@ public internet
 4. 外部副作用必须有幂等键、inbox/outbox 或 Provider event 去重。
 5. 余额、授权、禁拨、审批、主持人停止和人工接管优先于迟到的 AI/媒体输出。
 6. SQLite 只能报告 `demo_only`；PostgreSQL、备份和隔离未验收时不能宣称企业试点 ready。
+7. 主产品 staging、同机 HA、公共 Product Records 或个人 Billing 不能自动成为企业验收证据或租户数据模型。
+8. 任何通用 Repository 的可选 owner/scope 过滤在企业路径都必须被 tenant-scoped adapter 替代或拒绝。

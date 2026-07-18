@@ -1,13 +1,13 @@
-# AI Phone 企业版详细技术设计
+# 无界AI企业版详细技术设计
 
-版本：v1.10
-日期：2026-07-17
-状态：SaaS 详细技术方案基线待评审
+版本：v1.11
+日期：2026-07-18
+状态：统一通讯平台与 PostgreSQL Primary 收敛详细技术方案
 
 ## 1. 设计原则
 
-- 复用现有 `translation_sessions`、`call_legs`、segment、playback 和 usage ledger。
-- 企业业务保存自己的聚合状态，但媒体和翻译结果仍引用统一 session。
+- 复用无界AI统一通讯会话、媒体 leg、segment、playback、Provider operation 和 usage ledger。
+- 企业业务保存自己的聚合状态，但媒体、翻译、TTS 和 Worker 调度结果都引用统一 `communicationSessionId`。
 - 企业版由平台统一托管；客户配置业务策略，不配置服务器、数据库或模型地址。
 - 所有状态迁移由服务端执行；客户端只提交命令。
 - LLM 输出使用 JSON Schema，并在进入业务状态机前校验。
@@ -30,6 +30,19 @@
 | PSTN/CRM/Calendar/OCR | `not_ready` 或按环境探测 | 未配置必须明确降级，不生成虚假外部对象或成功状态 |
 
 状态含义统一为：`designed` 仅完成设计，`implemented` 表示代码存在，`verified` 表示自动化/环境证据通过，`production_ready` 还要求真实 Provider、容量、安全、备份和运维门禁。
+
+### 1.2 无界AI上游对齐边界
+
+截至 2026-07-18，主产品工作区存在公共 PostgreSQL migration、Primary runtime、
+fence、可靠事件、Billing 和 Product Records 等未提交更新。企业版只把这些变化作为
+接口和收敛方向输入；只有主产品形成稳定提交、企业分支完成 tenant/RLS 改造并通过
+本文件和验收计划的证据门禁后，才能进入企业实现基线。
+
+- 一个进程只能选择一个 Storage Driver，并在监听端口前通过同一套 startup readiness；不得按路由回退或双写。
+- 一个 Driver 可以使用多个最小权限连接池：migration、应用 tenant、user directory、cell discovery、maintenance 各自分权，不能共享超级角色。
+- 公共 schema 保存跨产品可复用的通讯运行原语；`enterprise` schema 保存租户、成员、策略、业务聚合和 forced-RLS 投影。
+- 公共表进入企业请求链路后必须具有一等 `scope_type + scope_id`，且企业 scope 的 `scope_id` 必须等于可信 tenant context；可选 `owner_id`/`user_id` 过滤不能充当授权边界。
+- 主产品 staging、单机副本或同故障域验证不自动成为企业生产证据；企业版仍需独立的迁移、隔离、切换、恢复和容量验收。
 
 ## 2. 核心数据模型
 
@@ -208,6 +221,53 @@ idempotency_keys
 ```
 
 `audit_events` 和 `usage_ledger` 只追加，不允许更新历史记录。
+
+### 2.6 统一通讯会话和资源作用域
+
+```text
+communication_sessions(
+  id, scope_type, scope_id, tenant_id, kind, status,
+  home_region, cell_id, route_epoch, policy_version,
+  entitlement_version, started_at, ended_at, version
+)
+
+session_participants(
+  session_id, participant_id, scope_type, scope_id,
+  subject_id, role, locale, joined_at, left_at
+)
+
+media_legs(
+  session_id, leg_id, scope_type, scope_id, provider,
+  provider_binding_id, direction, media_type, generation, status
+)
+
+worker_dispatches(
+  id, session_id, scope_type, scope_id, tenant_id, cell_id,
+  route_epoch, generation, capability, status, lease_expires_at,
+  worker_id, attempt, idempotency_key, created_at, updated_at
+)
+
+provider_operations(
+  id, session_id, scope_type, scope_id, operation_type,
+  provider, provider_reference, request_hash, status,
+  idempotency_key, created_at, completed_at
+)
+
+tts_playbacks(
+  session_id, playback_id, scope_type, scope_id,
+  generation, provider_operation_id, status, started_at, ended_at
+)
+```
+
+企业请求只允许 `scope_type='tenant'`，并要求 `scope_id = tenant_id =
+TenantContext.tenantId`。所有父子关系使用包含 scope 的复合唯一键/外键；按 session、
+provider reference、playback 或 dispatch ID 查询时也必须带 scope。Provider 返回的 ID
+只能作为 binding，不能成为平台资源主键或授权凭据。
+
+主产品的通用 Product Records 若只提供可选 `owner_id`，不能直接承载企业授权；必须先由
+`ENT-DATA-008` 增加不可省略的 scope 契约、forced RLS 和跨租户负向测试。主产品按
+`user_id` 聚合的个人账单同样不能直接作为企业账单，企业结算以 tenant billing account
+和不可变 usage ledger 为准。
 
 ## 3. API 设计
 
@@ -395,15 +455,29 @@ share: requested -> active <-> paused -> stopping -> ended
 {
   "eventId": "uuid",
   "tenantId": "tenant_uuid",
-  "aggregateType": "campaign|support_session|meeting|screen_share",
+  "scopeType": "tenant",
+  "scopeId": "tenant_uuid",
+  "homeRegion": "ap-southeast",
+  "cellId": "cell-01",
+  "routeEpoch": 12,
+  "aggregateType": "communication_session|campaign|support_session|meeting|screen_share",
   "aggregateId": "uuid",
   "aggregateVersion": 7,
   "eventType": "meeting.screen_share.started",
   "occurredAt": "ISO-8601",
   "idempotencyKey": "source:event-id",
+  "actorSubject": "user_<uuid>-or-system:subject",
+  "traceId": "trace-id",
+  "policyVersion": "policy-version",
+  "entitlementVersion": 9,
   "payload": {}
 }
 ```
+
+`tenantId/scopeId/homeRegion/cellId/routeEpoch` 均由可信服务端上下文写入，不能从
+客户端 header、baggage 或 Provider payload 复制。消费者在副作用前重新核对 scope、
+当前 route epoch、策略和权益版本；旧 generation/route epoch 的迟到事件只允许收敛或
+审计，不能恢复已取消的 Worker、媒体 leg 或播放。
 
 关键事件：
 
@@ -417,6 +491,8 @@ meeting.started / participant.joined / ended
 meeting.screen_share.started / paused / resumed / stopped
 meeting.artifact.generated / published
 policy.denied / pipeline.degraded / pipeline.restored
+communication_session.created / routed / degraded / ended
+worker_dispatch.requested / leased / cancelled / fenced / completed
 ```
 
 ## 6. 外呼执行设计
@@ -544,6 +620,7 @@ OCR Worker 每 1 至 2 秒获取低码率关键帧，先计算感知 hash；变�
 - 每个 access token 固化 `tenantId + homeRegion + cellId + roles + entitlementVersion`；区域不匹配时拒绝写入并要求重新发现路由。
 - entitlement 由服务端读取和缓存，缓存失效时采取保守策略；客户端不得自行开启未购买功能。
 - 租户级并发 semaphore、速率限制和预算在 claim/dispatch 前再次校验。
+- Worker dispatch ticket 必须携带服务端签名的 `tenantId + communicationSessionId + cellId + routeEpoch + generation + capability + expiresAt`；Worker 不接受缺 scope、过期或跨 cell 的裸任务。
 
 ### 11.1 PostgreSQL 租户隔离
 
@@ -554,6 +631,18 @@ OCR Worker 每 1 至 2 秒获取低码率关键帧，先计算感知 hash；变�
 - PostgreSQL RLS 作为纵深防御：事务开始后 `SET LOCAL app.tenant_id`，policy 校验当前 tenant；运行时角色不得拥有 `BYPASSRLS` 或表 owner 权限。
 - migration、备份、恢复和平台级运维使用独立受审计角色；应用凭证不能执行 DDL 或关闭 RLS。
 - RLS 不代替 Repository 条件、复合外键和自动化越权测试，三层门禁必须同时存在。
+
+#### 11.1.1 公共 Primary Runtime 收敛
+
+`ENT-DATA-007` 负责把企业 Repository runtime 收敛到主产品稳定版本的 Primary
+Runtime，而不是在两个 runtime 之间长期保留旁路。收敛时必须满足：
+
+1. 公共 migration manifest 与 enterprise migration manifest 按固定顺序执行、分别校验 checksum，并由一个启动门禁给出完整 schema 结论。
+2. 每个进程只选择一个 Storage Driver；旧 `ENTERPRISE_REPOSITORY_DRIVER` 可作为迁移期兼容输入，但最终解析为同一个进程级 driver，不能产生 route-level fallback、shadow read 或 dual write。
+3. API tenant pool、user directory pool、cell discovery pool、migration pool 和 maintenance pool 仍保持独立角色、连接上限与审计身份；“统一 runtime”不等于“统一数据库高权限凭证”。
+4. 公共通讯聚合只有在 `ENT-DATA-008` 完成 scope 列、复合约束、forced RLS、Repository context 和负向测试后，才允许企业流量读写。
+5. `user_tenant_directory` 和 `platform_pending_work` 继续在所属 tenant 事务内同步更新；异步最终一致投影不能承担授权或恢复发现。
+6. 数据切换由 `ENT-DATA-009` 输出全量 count/hash、增量水位、writer fence、旧写入者清退和回滚决策证据；仅连接成功或跑通一组本地测试不算完成。
 
 当前首批实现通过工厂创建带私有 brand 的 frozen `TenantContext`，绑定
 `tenantId + actorUserId + actorRole + traceId`；业务代码不能用普通对象替代。
@@ -658,6 +747,11 @@ transaction，获取 advisory lock，要求目标六集合为空，
 分别计算每集合 count/SHA-256 与总 hash；任一差异或约束失败即 rollback。
 该工具不是客户生产迁移通道，也不替代全域 `ENT-DATA-005`、PITR 或真实 H3 演练。
 
+上述独立 Enterprise Repository driver 是当前已实现基线，不是最终双栈目标。
+`ENT-DATA-007` 完成后，HTTP、统一通讯会话、企业业务 Repository 和 cell Worker 必须
+共享同一个已验证 Primary Runtime；在此之前禁止把公共通讯表或主产品账单表接入真实
+企业租户流量。
+
 ### 11.2 事务和一致性边界
 
 | 命令 | 单事务必须提交 | 事务外处理 |
@@ -670,6 +764,9 @@ transaction，获取 advisory lock，要求目标六集合为空，
 | screen share acquire/stop | share lease、generation、meeting version、审计 | token 签发/撤销、RTC track 收敛 |
 | 工具执行请求 | request hash、确认状态、idempotency、outbox | Adapter 调用；结果再以 inbox 事务落库 |
 | 租户删除 | tombstone、删除范围快照、审计/outbox | 对象删除、Provider 清理、最终校验 |
+| 创建/路由通讯会话 | tenant-scoped session、route epoch、policy/entitlement snapshot、dispatch outbox | LiveKit/ASR/翻译/TTS Worker 分配 |
+| 取消通讯会话 | session generation、dispatch fence、媒体/播放取消意图、审计/outbox | Worker/Provider 实际停止和迟到回执收敛 |
+| 企业用量结算 | tenant billing account、usage hold/settle、不可变 ledger、账单调整 outbox | 支付 Provider、发票和财务系统同步 |
 
 不能把数据库事务跨越 LLM、PSTN、CRM、对象存储或模型网络调用。外部调用前先提交 outbox；调用结果以带去重键的 inbox 进入新事务。
 
@@ -790,6 +887,11 @@ SaaS 计量形成三层记录：原始 usage event、不可变 ledger、账期�
 
 席位按账期快照计费，用量按租户时区之外的统一 UTC 账期切分，避免时区修改导致重复计费。
 
+企业账单的授权和归属主键是 `billing_account_id + tenant_id`，付款人 subject 只是该
+账单账户的受控联系人，不能替代 tenant。来自主产品的 `user_id` 个人订阅、余额或账单
+记录不得通过 ID 映射直接升级为企业账单；迁移必须生成 tenant billing account、期初
+余额/权益快照和可对账 adjustment，并保留源记录哈希和审计引用。
+
 ## 14. 降级策略
 
 | 故障 | 降级 |
@@ -825,6 +927,10 @@ SaaS 计量形成三层记录：原始 usage event、不可变 ledger、账期�
 - 屏幕共享必须满足 LiveKit、短期 token 和主持人策略 readiness。
 - 客服工具必须有 schema、权限和幂等策略。
 - SaaS 试点必须使用 PostgreSQL、正式域名、TLS、租户限流、备份和账单审计；SQLite 环境必须报告 `environment=demo_only`。
+- 公共与 enterprise migration manifest 必须同时通过 checksum/schema verify；任一缺失、漂移或执行顺序不确定都要在监听端口前失败。
+- 应用、目录、cell discovery、migration、maintenance 使用独立角色和连接池；生产连接必须 `sslmode=verify-full` 并验证服务端证书与主机名。
+- Primary 切换必须配置 writer generation/fence，旧 writer、旧 route epoch 和旧 Worker generation 不能继续提交副作用。
+- 依赖漏洞临时例外必须有 owner、适用版本、缓解措施和到期日；例外只表示限期风险接受，不得在界面、文档或验收结果中写成“零漏洞”或“已修复”。
 
 ## 17. 服务身份、密钥和数据分类
 
@@ -832,6 +938,7 @@ SaaS 计量形成三层记录：原始 usage event、不可变 ledger、账期�
 
 - API、Gateway、Worker、Scheduler、Agent 和 Adapter 使用短期 workload credential；不共享一个永久内部 token。
 - 服务凭证声明允许的 caller、audience、tenant 范围和操作；接收方仍执行 tenant、resource 和 purpose 校验。
+- 入口网关删除外部传入的 tenant、role、scope、cell、route epoch 等 tracing baggage，并从已验证身份和 route document 重新生成内部上下文；trace 传播不能授予权限。
 - 对象存储使用短期签名 URL，绑定 tenant、object、content type、大小、操作和过期时间。
 - PSTN/CRM/Calendar webhook 保存 provider event ID、签名验证结果和接收时间；失败签名不进入业务 inbox。
 
@@ -841,7 +948,7 @@ SaaS 计量形成三层记录：原始 usage event、不可变 ledger、账期�
 | --- | --- | --- |
 | L1 公开 | 产品帮助、公开状态页 | 可缓存，不包含 tenant 数据 |
 | L2 企业内部 | 活动名称、会议标题、聚合指标 | tenant 加密存储，按 RBAC 访问 |
-| L3 敏感 | 电话、客户资料、字幕、授权证据、工具参数 | 字段/对象加密，日志脱敏，导出审计 |
+| L3 敏感 | tenant/campaign 绑定的加密电话引用、客户资料、字幕、授权证据、工具参数 | 字段/对象加密，日志脱敏，导出审计；明文电话不得作为跨租户全局主键 |
 | L4 高敏/生物特征 | 原始音频、屏幕录制、声纹 embedding、付款/身份材料 | 单独授权、最短保留、严格 purpose 限制，不进入普通日志/分析 |
 
 模型输入遵循最小化原则；不需要的 L3/L4 字段在进入 Provider 前删除或标记化。Provider 是否允许训练、保存多久、处理区域和删除能力属于 capability/readiness 门禁。
@@ -904,5 +1011,9 @@ SaaS 计量形成三层记录：原始 usage event、不可变 ledger、账期�
 | 屏幕共享可停止 | lease、双 acquire、revoke 后旧 track 测试 | Web/iOS/Android 真机与弱网 |
 | AI 不越权 | JSON Schema、Policy deny、知识无答案、工具风险矩阵 | 坐席接管和高风险人工流程 |
 | 生产数据门禁 | migration、RLS、backup/restore、负载和数据对账 | PostgreSQL/PITR/cell 恢复演练 |
+| 公共 Primary 收敛 | 双 manifest checksum、单 driver、无 fallback/双写、角色池和启动 fail-closed | 隔离企业库全量 migrate/verify/cutover/rollback 演练 |
+| 统一通讯 tenant scope | session/leg/dispatch/provider/playback 复合约束、forced RLS、伪造 scope 和可选 owner 负向测试 | 两租户同时通话、取消、迟到事件和 cell 迁移攻击演练 |
+| 企业账单归属 | tenant billing account、跨租户账单 ID、ledger/adjustment 幂等和对账测试 | 支付 sandbox、账期关闭和财务抽样对账 |
+| 生产韧性 | writer fence、route epoch、旧 Worker generation、备份清单和恢复脚本测试 | 跨故障域自动切换、旧主隔离、异地主机不可变备份和 PITR |
 
 设计评审通过不等于功能验收。任务只有在代码、自动化、目标环境证据和 `enterprise-edition-acceptance-plan.md` 对应条目齐全后才能从 `ready_for_acceptance` 进入 `accepted`。
