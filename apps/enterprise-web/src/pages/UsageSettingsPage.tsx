@@ -151,7 +151,9 @@ function BudgetSection({ budgets, state, error, readable, writable, onRetry, onE
     {state === "loading" ? <StatusPanel state="loading" description="正在读取用量预算。" /> : null}
     {state === "failed" ? <UsageError error={error} operation="读取预算" action={<button className="button button--secondary" onClick={onRetry}>重试</button>} /> : null}
     {state === "ready" && budgets.length === 0 ? <StatusPanel state="empty" description="服务端没有当前租户的预算配置。" /> : null}
-    {state === "ready" && budgets.length > 0 ? <div className="settings-table-wrap"><table className="settings-table"><thead><tr><th>类别</th><th>上限</th><th>阈值</th><th>周期</th><th>状态 / 版本</th><th>操作</th></tr></thead><tbody>{budgets.map((budget) => <tr key={budget.id}>
+    {state === "ready" && budgets.length > 0 ? <div className="settings-table-wrap"
+      role="region" aria-label="用量预算表" tabIndex={0}><table className="settings-table">
+      <caption className="visually-hidden">当前租户的用量预算</caption><thead><tr><th>类别</th><th>上限</th><th>阈值</th><th>周期</th><th>状态 / 版本</th><th>操作</th></tr></thead><tbody>{budgets.map((budget) => <tr key={budget.id}>
       <td><strong>{usageCategoryPresentation[budget.category].label}</strong><small>{budget.category}</small></td>
       <td>{budget.limitAmount.toLocaleString("zh-CN")} {unitLabels[budget.unit]}</td><td>{budget.alertThresholdPercent}%</td>
       <td>{formatSettingsDate(budget.periodStart)}<small>至 {formatSettingsDate(budget.periodEnd)}</small></td>
@@ -169,7 +171,9 @@ function AggregateSection({ aggregates, state, error, readable, onRetry }: {
     {state === "loading" ? <StatusPanel state="loading" description="正在读取不可变 ledger 的账期聚合。" /> : null}
     {state === "failed" ? <UsageError error={error} operation="读取用量" action={<button className="button button--secondary" onClick={onRetry}>重试</button>} /> : null}
     {state === "ready" && aggregates.length === 0 ? <StatusPanel state="empty" description="服务端没有当前租户的账期聚合；页面不生成趋势或示例数据。" /> : null}
-    {state === "ready" && aggregates.length > 0 ? <div className="settings-table-wrap"><table className="settings-table"><thead><tr><th>类别</th><th>结算 / 调整 / 净额</th><th>记录计数</th><th>账期</th><th>Ledger</th></tr></thead><tbody>{aggregates.map((item) => <tr key={item.id}>
+    {state === "ready" && aggregates.length > 0 ? <div className="settings-table-wrap"
+      role="region" aria-label="账期用量表" tabIndex={0}><table className="settings-table">
+      <caption className="visually-hidden">当前租户的不可变账期聚合</caption><thead><tr><th>类别</th><th>结算 / 调整 / 净额</th><th>记录计数</th><th>账期</th><th>Ledger</th></tr></thead><tbody>{aggregates.map((item) => <tr key={item.id}>
       <td><strong>{usageCategoryPresentation[item.category].label}</strong><small>{item.category}</small></td>
       <td>{item.settledAmount} / {item.adjustmentAmount} / <strong>{item.netAmount}</strong><small>{unitLabels[item.unit]}</small></td>
       <td>{item.ledgerCount} ledger<small>{item.usageEventCount} event · {item.adjustmentCount} adjustment</small></td>

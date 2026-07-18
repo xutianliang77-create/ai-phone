@@ -1,6 +1,6 @@
 # 无界AI企业版设计文档索引
 
-版本：v1.18
+版本：v1.19
 日期：2026-07-19
 状态：SaaS 详细设计基线，已纳入统一通讯平台和 PostgreSQL Primary 演进
 
@@ -64,6 +64,9 @@ tenant/route、Provider、subscription、budget 和 usage aggregate 接入企业
 `ENT-UI-008` 已增加审计筛选/详情、显式 session 下钻和有目的/范围/保留期/hash 的受控导出；
 未配置加密对象存储时明确 not_ready，物理对象清理仍由 `ENT-REL-002` 验收。本轮同样只完成静态门禁，
 不能据此宣称 PostgreSQL、对象存储、H2/H3 或生产门禁通过。
+`ENT-UI-009` 已增加持久化 system/light/dark 主题、320/600/960/1280 响应式规则、动态字号、跳至主内容、
+路由焦点、可聚焦横向表格与明确 ARIA 语义；本轮只形成静态代码候选，未完成浏览器、200% 缩放、键盘、
+axe、视觉回归或真机验收，不能据此宣称 WCAG AA 或生产门禁通过。
 
 ## 3. 继承文档
 

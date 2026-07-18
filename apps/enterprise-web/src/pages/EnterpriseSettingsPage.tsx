@@ -33,7 +33,7 @@ export function EnterpriseSettingsPage() {
 
   return (
     <div className="settings-workspace">
-      <nav className="settings-navigation" aria-label="企业设置导航">
+      <nav className="settings-navigation" aria-label="企业设置导航" tabIndex={0}>
         {visible.map((item) => (
           <NavLink
             key={item.path}

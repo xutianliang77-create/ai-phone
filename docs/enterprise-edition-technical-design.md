@@ -1,6 +1,6 @@
 # 无界AI企业版详细技术设计
 
-版本：v1.25
+版本：v1.26
 日期：2026-07-19
 状态：统一通讯平台与 PostgreSQL Primary 收敛详细技术方案
 
@@ -1357,6 +1357,22 @@ SDK 默认链/工作负载身份，或同时提供 Access Key 与 Secret Key，�
 数据分析页当前只支持用户明确输入 session ID 的质量、Provider、usage/ledger 与 trace 下钻。
 会议/客服/营销聚合 API 和版本化单位价格表未实现，页面固定显示 not_ready/not_configured，
 不补零、不拼客户端估算、不绘制示例趋势。本批按指令未执行测试，任务保持 `in_progress`。
+
+### 19.3 响应式、主题与无障碍运行时
+
+`EnterpriseThemeProvider` 只管理客户端显示偏好 `system|light|dark`，使用固定版本的 localStorage key；
+解析结果写入根节点 `data-theme` 和 `color-scheme`。system 模式监听系统色彩变化，存储不可用时降级为 system，
+不把主题写入 tenant、member、API 或审计数据。浅深色语义继续复用 Flutter 品牌令牌，小字号风险前景使用单独
+`color-signal-text`，避免改变品牌 Signal 色本身。
+
+壳在960px以下用顶部 tenant selector 替代被折叠的侧栏 selector，600px以下使用可横向滚动且保留文字的底部主导航。
+页面内容容器始终 `min-width: 0`；高密度表格和设置导航在自身容器滚动并可键盘聚焦，禁止用页面级隐藏溢出掩盖
+布局错误。字号、行高、控件、顶部栏和侧栏基准改用 `rem`，默认视觉尺寸不变；路由切换后主区域获得程序化焦点，
+壳提供 skip link，普通交互使用 `:focus-visible` 两像素主色焦点环。原先不完整的 tab ARIA 改为普通
+`aria-pressed` 按钮组，数据表增加 caption，图标按钮保持可访问名称。
+
+以上只构成 AC-UI-008/009/010 的代码候选。本批未执行真实浏览器、320/600/960/1280/1440 截图、200% 缩放、
+动态字体、横屏、键盘流程、axe、forced-colors 或视觉回归，任务保持 `in_progress`。
 
 ## 20. 错误、重试和客户端动作
 

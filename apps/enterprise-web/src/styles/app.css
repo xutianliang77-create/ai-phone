@@ -35,12 +35,12 @@
 }
 
 .brand-lockup strong {
-  font-size: 16px;
+  font-size: 1rem;
 }
 
 .brand-lockup small {
   color: var(--color-outline);
-  font-size: 12px;
+  font-size: 0.75rem;
 }
 
 .tenant-switcher {
@@ -93,7 +93,7 @@
   padding: 12px 8px 0;
   border-top: 1px solid var(--color-outline-variant);
   color: var(--color-outline);
-  font-size: 12px;
+  font-size: 0.75rem;
 }
 
 .workspace {
@@ -119,7 +119,7 @@
 .topbar__context,
 .topbar__account {
   color: var(--color-outline);
-  font-size: 12px;
+  font-size: 0.75rem;
 }
 
 .environment-badge {
@@ -131,12 +131,12 @@
   border-radius: var(--radius);
   background: color-mix(in srgb, var(--color-primary) 10%, transparent);
   color: var(--color-primary);
-  font-size: 12px;
+  font-size: 0.75rem;
   font-weight: 700;
 }
 
 .environment-badge .material-icons-outlined {
-  font-size: 16px;
+  font-size: 1rem;
 }
 
 .page-frame {
@@ -194,7 +194,7 @@
 .truth-card span,
 .truth-card small {
   color: var(--color-outline);
-  font-size: 12px;
+  font-size: 0.75rem;
 }
 
 .truth-card strong {
@@ -227,7 +227,7 @@
 
 .status-panel h2 {
   margin-bottom: 6px;
-  font-size: 16px;
+  font-size: 1rem;
 }
 
 .status-panel p {

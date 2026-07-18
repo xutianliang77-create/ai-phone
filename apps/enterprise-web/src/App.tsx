@@ -5,13 +5,16 @@ import { StatusPanel } from "./components/StatusPanel.js";
 import { BlockedPage } from "./pages/BlockedPage.js";
 import { LoginPage } from "./pages/LoginPage.js";
 import { TenantPickerPage } from "./pages/TenantPickerPage.js";
+import { EnterpriseThemeProvider } from "./enterprise-theme.js";
 
 export function EnterpriseApp() {
   return (
     <BrowserRouter>
-      <AuthProvider>
-        <AppRoutes />
-      </AuthProvider>
+      <EnterpriseThemeProvider>
+        <AuthProvider>
+          <AppRoutes />
+        </AuthProvider>
+      </EnterpriseThemeProvider>
     </BrowserRouter>
   );
 }

@@ -211,7 +211,9 @@ function UsageSection({ resource, readable }: {
     {readable && resource.state === "failed" ? <DashboardError error={resource.error} operation="读取账期用量" /> : null}
     {resource.state === "ready" && resource.data.length === 0 ? <StatusPanel state="empty"
       description="服务端没有账期聚合；工作台不生成示例趋势。" /> : null}
-    {resource.state === "ready" && resource.data.length > 0 ? <div className="dashboard-table-wrap"><table className="dashboard-table">
+    {resource.state === "ready" && resource.data.length > 0 ? <div className="dashboard-table-wrap"
+      role="region" aria-label="账期用量聚合" tabIndex={0}><table className="dashboard-table">
+      <caption className="visually-hidden">当前租户的账期用量聚合</caption>
       <thead><tr><th>类别</th><th>净用量</th><th>账期</th><th>Ledger</th></tr></thead>
       <tbody>{resource.data.map((item) => <tr key={item.id}><td>{usageCategoryPresentation[item.category].label}<small>{item.category}</small></td>
         <td><strong>{item.netAmount.toLocaleString("zh-CN")}</strong> {unitLabels[item.unit]}<small>{item.usageEventCount} event · {item.adjustmentCount} adjustment</small></td>

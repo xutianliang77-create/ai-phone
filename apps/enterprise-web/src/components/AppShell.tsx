@@ -19,14 +19,32 @@ import { DashboardPage } from "../pages/DashboardPage.js";
 import { AuditPage } from "../pages/AuditPage.js";
 import { AnalyticsPage } from "../pages/AnalyticsPage.js";
 import { PageFrame } from "./PageFrame.js";
+import {
+  useEnterpriseTheme,
+  type EnterpriseThemePreference,
+} from "../enterprise-theme.js";
 
 export function AppShell() {
   const { state, selectTenant, logout } = useAuth();
+  const { preference, setPreference } = useEnterpriseTheme();
   if (state.status !== "ready") return null;
   const visibleNavigation = discoverEnterpriseNavigation(state.context.scopes);
+  const tenantSelect = (label: string) => (
+    <select
+      aria-label={label}
+      value={state.context.tenant.id}
+      onChange={(event) => void selectTenant(event.target.value)}
+      disabled={state.tenants.length < 2}
+    >
+      {state.tenants.map(({ tenant }) => (
+        <option key={tenant.id} value={tenant.id}>{tenant.name}</option>
+      ))}
+    </select>
+  );
 
   return (
     <div className="app-shell">
+      <a className="skip-link" href="#enterprise-main">跳至主要内容</a>
       <aside className="sidebar">
         <div className="brand-lockup">
           <img src={brandIconUrl} alt="" />
@@ -34,22 +52,14 @@ export function AppShell() {
         </div>
         <label className="tenant-switcher">
           <span>当前企业</span>
-          <select
-            aria-label="切换企业"
-            value={state.context.tenant.id}
-            onChange={(event) => void selectTenant(event.target.value)}
-            disabled={state.tenants.length < 2}
-          >
-            {state.tenants.map(({ tenant }) => (
-              <option key={tenant.id} value={tenant.id}>{tenant.name}</option>
-            ))}
-          </select>
+          {tenantSelect("切换企业")}
         </label>
         <nav aria-label="企业版主导航">
           {visibleNavigation.map((item) => (
             <NavLink
               key={item.path}
               to={item.path}
+              title={item.label}
               end={item.path === "/"}
               className={({ isActive }) => isActive ? "nav-item nav-item--active" : "nav-item"}
             >
@@ -72,6 +82,10 @@ export function AppShell() {
       </aside>
       <div className="workspace">
         <header className="topbar">
+          <label className="topbar__tenant">
+            <span className="visually-hidden">当前企业</span>
+            {tenantSelect("切换当前企业")}
+          </label>
           <span className="topbar__context">
             {state.routeDocument.homeRegion} · {state.routeDocument.cellId}
           </span>
@@ -79,6 +93,18 @@ export function AppShell() {
             <MaterialIcon name="verified_user" />
             {planLabel(state.context.tenant.planCode)}
           </span>
+          <label className="theme-selector">
+            <MaterialIcon name={enterpriseIcons.appearance[preference]} />
+            <span className="visually-hidden">界面主题</span>
+            <select aria-label="界面主题" value={preference}
+              onChange={(event) => setPreference(
+                event.target.value as EnterpriseThemePreference,
+              )}>
+              <option value="system">跟随系统</option>
+              <option value="light">浅色</option>
+              <option value="dark">深色</option>
+            </select>
+          </label>
           <span className="topbar__account">{state.session.account.phoneMasked}</span>
         </header>
         <Routes>

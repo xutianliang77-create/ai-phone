@@ -1,6 +1,6 @@
 # 无界AI企业版开发任务
 
-版本：v1.29
+版本：v1.30
 日期：2026-07-19
 状态：E0 开发中，已对齐统一通讯平台和 PostgreSQL Primary 收敛
 
@@ -45,6 +45,7 @@
 - `ENT-UI-006` 已把 Knowledge Source、Term Pack 和 Script Template 的稳定资源、修订、评审与发布接入企业 Web。所有请求携带当前 tenant 与签名 route document；只读角色不显示写入口，服务端仍执行 scope guard；draft/review/published/expired、loading/empty/not_ready/forbidden/conflict/failed 均使用真实响应且不回退到 SQLite/JSON。代码与自动化完成，进入 `ready_for_acceptance`；浏览器矩阵、真实 PostgreSQL staging、并发发布和外部 Worker/Provider 消费仍待正式验收。
 - `ENT-UI-007` 已把企业设置拆为成员、套餐与权益、区域与数据、Provider、预算与用量五个 scope-aware 二级入口。homeRegion/cell/route epoch/retention 只读且不显示签名；Provider 只读取 capability document，不接收密钥或伪造 ready；订阅变更复用幂等键，预算更新携带 expectedVersion，用量只展示不可变 ledger 账期聚合。只读角色和直接 URL 均在发请求前受 scope guard，503 不回退到 SQLite/JSON。代码、自动化、生产构建和隔离 Chromium 1440/390px 检查完成，进入 `ready_for_acceptance`；全浏览器/无障碍矩阵、真实 PostgreSQL staging、Provider 和账务生产门禁仍待正式验收。
 - `ENT-UI-008` 已接入 tenant-scoped 审计筛选、签名 cursor 翻页、脱敏列表、事件详情和显式 session 质量/用量下钻；新增真实受控导出契约、`0020` job、Repository/runtime/API、cell Worker 与加密 S3 或非生产本地 artifact store。创建必须提供目的、最长31天半开范围、1至30天保留期和幂等键；下载重新鉴权、校验 size/SHA-256 并追加审计。对象存储未配置时返回 not_ready，不生成假文件；业务聚合/货币计价仍明确未就绪。当前只完成 typecheck/构建/静态门禁，按本轮要求未执行自动化、浏览器或 PostgreSQL 测试，状态保持 `in_progress`。
+- `ENT-UI-009` 已增加持久化 system/light/dark 主题、与 Flutter 对齐的浅深色令牌、可见主题/租户控件、320/600/960/1280 收敛规则、移动端可滚动带文字导航、跳至主内容、路由焦点恢复、可聚焦横向表格、表格 caption、真实按钮语义和 `rem` 动态字号。浅色风险小字使用独立 AA 前景令牌，品牌 Signal 颜色不变。当前只完成 typecheck/构建/静态门禁，未执行浏览器尺寸、200% 缩放、键盘、axe、视觉回归或真机矩阵，状态保持 `in_progress`。
 - PostgreSQL runtime、cell Worker 和演示数据导入对账代码已接通，但尚未在真实 PostgreSQL 上执行 migrate/import/reconcile、并发租约、恢复或容量门禁，不能据此宣称企业试点或生产可用。受控审计导出已实现到期拒绝和对象过期元数据，但物理删除、对象清单对账、Provider 删除收敛仍属于 `ENT-REL-002`；会议/客服/营销业务聚合和外部 Provider 仍未通过实现或真实环境门禁。
 - 主产品稳定提交 `fe1c3c2` 已作为 `ENT-DATA-007` 基线合入企业分支；后续个人工作区 WIP 仍不得直接进入企业提交。公共通讯 tenant scope 已完成本地代码门禁，切换/对账证据仍由 `ENT-DATA-009` 完成，主产品 staging 结果不能继承为企业验收证据。
 
@@ -86,12 +87,12 @@
 | ENT-UI-006 | 知识与术语管理 | UI-003、CORE-004/005 | source/version/publish、term pack、script template 页面 | 未发布/过期内容明确标识且不能被错误发布 | ready_for_acceptance |
 | ENT-UI-007 | 区域、Provider、套餐与用量 | UI-003、CORE-007/008/010/011/012 | region/route、capability、entitlement、budget、billing 页面 | homeRegion 只读；不回显密钥；未配置显示 not_ready | ready_for_acceptance |
 | ENT-UI-008 | 审计与分析 | UI-003、CORE-006、OBS-001 | 审计筛选/详情/导出、质量和成本下钻 | 敏感字段脱敏；导出有目的、范围、到期和审计 | in_progress |
-| ENT-UI-009 | 响应式、深色和无障碍 | UI-001..008 | 320/600/960/1280 布局、dark mode、键盘和动态字体 | 无横向溢出；WCAG AA；200%缩放核心操作可达 | todo |
+| ENT-UI-009 | 响应式、深色和无障碍 | UI-001..008 | 320/600/960/1280 布局、dark mode、键盘和动态字体 | 无横向溢出；WCAG AA；200%缩放核心操作可达 | in_progress |
 | ENT-UI-010 | Web 自动化与发布门禁 | UI-002..009 | unit、contract、E2E、视觉回归、bundle 和错误监控 | 角色×页面×状态矩阵通过；生产构建无示例数据 | todo |
 | ENT-UI-011 | Flutter 企业入口 | UI-001/002、CORE-002 | 工作台、会议、接管、告警和我的入口 | 不复制批量管理；离线/越权不显示乐观成功 | todo |
 | ENT-UI-012 | Web 访客参会壳 | CORE-003、MTG-002 | guest token 入会、设备检查、字幕和共享入口 | token 仅访问指定 meeting；不暴露租户导航和成员数据 | todo |
 
-`ENT-CORE-003` 的生产脚手架、登录和构建已完成；`ENT-UI-001/002/003/005/006/007` 已进入验收。Provider capability、租户生命周期 job、成员关系、知识/术语/话术版本、区域、权益、预算和用量聚合已使用服务端真值；尚未实现的业务领域页面继续明确显示未就绪。静态 HTML 原型不进入生产构建，也不能替代这些任务的验收。
+`ENT-CORE-003` 的生产脚手架、登录和构建已完成；`ENT-UI-001/002/003/005/006/007` 已进入验收，`ENT-UI-004/008/009` 因暂缓测试保持开发中。Provider capability、租户生命周期 job、成员关系、知识/术语/话术版本、区域、权益、预算和用量聚合已使用服务端真值；尚未实现的业务领域页面继续明确显示未就绪。静态 HTML 原型和静态无障碍检查不进入生产验收，也不能替代浏览器、键盘、axe 和视觉回归矩阵。
 
 ## 4. P0 企业会议
 

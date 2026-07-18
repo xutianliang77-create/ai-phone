@@ -62,6 +62,11 @@ export const enterpriseIcons = {
     export: "download",
     analytics: "query_stats",
   },
+  appearance: {
+    system: "brightness_auto",
+    light: "light_mode",
+    dark: "dark_mode",
+  },
   status: {
     loading: "autorenew",
     empty: "inbox",

@@ -22,7 +22,9 @@ export function AuditEventTable({
     return <StatusPanel state="empty" title="没有匹配的审计事件"
       description="当前租户与筛选条件没有返回记录；页面不生成示例事件。" />;
   }
-  return <div className="audit-table-wrap"><table className="audit-table">
+  return <div className="audit-table-wrap" role="region" aria-label="审计事件表"
+    tabIndex={0}><table className="audit-table"><caption className="visually-hidden">
+      当前筛选条件下的审计事件</caption>
     <thead><tr><th>时间</th><th>Actor</th><th>操作</th><th>资源</th><th>结果</th><th>Trace</th></tr></thead>
     <tbody>{events.map((event) => <tr key={event.id}
       className={selectedId === event.id ? "audit-table__row--selected" : undefined}>

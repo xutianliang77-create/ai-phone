@@ -22,16 +22,16 @@
   border: 1px solid var(--color-primary);
   border-radius: var(--radius);
   color: var(--color-primary);
-  font-size: 44px;
+  font-size: 2.75rem;
   font-weight: 300;
-  line-height: 58px;
+  line-height: 3.625rem;
   text-align: center;
 }
 
 .auth-brand h1 {
   max-width: 700px;
   margin-bottom: 24px;
-  font-size: clamp(34px, 4.5vw, 60px);
+  font-size: clamp(2.125rem, 4.5vw, 3.75rem);
   line-height: 1.16;
   letter-spacing: -0.04em;
 }
@@ -39,7 +39,7 @@
 .auth-brand > p:last-child {
   max-width: 580px;
   color: var(--color-outline);
-  font-size: 16px;
+  font-size: 1rem;
 }
 
 .auth-card {
@@ -54,8 +54,8 @@
 
 .auth-card h2 {
   margin-bottom: 8px;
-  font-size: 24px;
-  line-height: 30px;
+  font-size: 1.5rem;
+  line-height: 1.875rem;
 }
 
 .auth-card__intro,
@@ -71,7 +71,7 @@
 
 .auth-card label,
 .tenant-switcher > span {
-  font-size: 12px;
+  font-size: 0.75rem;
   font-weight: 600;
 }
 
@@ -96,7 +96,7 @@
   margin: 0;
   padding: 10px 12px;
   border-radius: var(--radius);
-  font-size: 12px;
+  font-size: 0.75rem;
 }
 
 .form-notice {
@@ -154,7 +154,7 @@
   color: var(--color-outline);
 }
 
-@media (max-width: 599px) {
+@media (max-width: 839px) {
   .auth-layout {
     display: block;
   }
@@ -170,13 +170,13 @@
     width: 48px;
     height: 48px;
     margin-bottom: 20px;
-    font-size: 34px;
-    line-height: 42px;
+    font-size: 2.125rem;
+    line-height: 2.625rem;
   }
 
   .auth-brand h1 {
     margin-bottom: 12px;
-    font-size: 30px;
+    font-size: 1.875rem;
   }
 
   .auth-card {

@@ -22,7 +22,8 @@ body {
 
 button,
 input,
-select {
+select,
+textarea {
   color: inherit;
   font: inherit;
 }
@@ -38,12 +39,19 @@ select:disabled {
   opacity: 0.55;
 }
 
-button:focus-visible,
-input:focus-visible,
-select:focus-visible,
-a:focus-visible {
+:where(button, input, select, textarea, a, [tabindex]):focus-visible {
   outline: 2px solid var(--color-primary);
   outline-offset: 2px;
+}
+
+img,
+svg {
+  max-width: 100%;
+}
+
+code,
+pre {
+  overflow-wrap: anywhere;
 }
 
 h1,
@@ -73,6 +81,7 @@ p {
   line-height: var(--font-label-large-line);
   font-weight: var(--font-label-large-weight);
   text-decoration: none;
+  text-align: center;
 }
 
 .button--primary {

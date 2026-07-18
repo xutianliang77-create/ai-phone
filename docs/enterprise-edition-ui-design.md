@@ -1,8 +1,8 @@
 # 无界AI企业版 UI 详细设计
 
-版本：v1.4
+版本：v1.5
 日期：2026-07-19
-状态：设计基线；企业 Web 公共组件与首批设置/工作台已实现，完整业务页面与正式验收仍在开发
+状态：设计基线；企业 Web 公共组件、首批设置/工作台和响应式/主题/无障碍代码候选已实现，正式验收仍在开发
 
 ## 1. 设计范围
 
@@ -58,6 +58,7 @@
 | Primary | `#087A70` | `#62D7CA` | 主按钮、选中、链接、进度 |
 | On Primary | `#FFFFFF` | `#003731` | 主按钮文字与图标 |
 | Signal/Secondary | `#C4574E` | `#FFB0A6` | 风险、失败、接管和信号点 |
+| Signal Text | `#A8433C` | `#FFB0A6` | 小字号风险文字；浅色前景静态对比度 5.94:1 |
 | Tertiary | `#4F6498` | `#B9C5FF` | 次级信息、分析维度 |
 | Surface | `#F7F9F8` | `#0C1110` | 页面背景 |
 | Surface Container | `#FFFFFF` | `#151C1A` | 卡片、表格、输入框 |
@@ -73,6 +74,8 @@
 ### 4.2 字体
 
 Web 优先使用系统中文无衬线字体：`-apple-system`、`BlinkMacSystemFont`、`Segoe UI`、`PingFang SC`、`Microsoft YaHei`。与 Flutter 文字层级对齐：
+
+生产 Web 以 `rem` 表达字号、行高、控件和导航基准尺寸；默认根字号下仍与下表像素值一致，用户字体放大时允许内容重排而不是裁切文字。
 
 | 层级 | 字号/行高 | 字重 | 用途 |
 | --- | --- | --- | --- |
@@ -285,12 +288,16 @@ budget、usage aggregate 和显式 session trace report。卡片沿用同一 Mat
 
 ## 10. 响应式与无障碍
 
-- `>= 1280px`：完整侧栏和 12 列网格；客服使用三栏布局。
-- `960–1279px`：折叠侧栏；客服右栏变为抽屉。
-- `600–959px`：表格转卡片列表，筛选进入底部面板。
-- `< 600px`：仅保留移动高频入口；复杂配置提示前往 Web 控制台。
+- `>= 1280px`：完整侧栏和宽屏内容网格；已实现页面最多四列真值卡片，业务三栏在对应业务页交付后启用。
+- `960–1279px`：完整侧栏；内容网格按页面断点收敛，横向数据区保留自身滚动，不推动页面宽度。
+- `600–959px`：72px 折叠侧栏，租户切换移到顶部栏；页面卡片收敛为两列或一列，600px 登录页已切为单栏。
+- `< 600px`：主导航变为底部可横向滚动入口并保留图标和文字；顶部栏只保留租户与主题，页面动作、表单和卡片单列重排。
+- 主题选择提供“跟随系统/浅色/深色”，保存在浏览器本地偏好中；跟随系统时监听 `prefers-color-scheme`，不改变服务端 tenant 或账号配置。
+- 横向表格和设置导航使用带名称的可聚焦 region；键盘用户可进入后滚动查看，表格提供隐藏 caption。
+- 壳提供“跳至主要内容”，路由切换后把焦点移到页面主区域；焦点环不得被卡片 overflow 裁切。
 - 正文与背景对比度满足 WCAG AA；键盘焦点使用 2px Primary 外框。
-- 支持 200% 缩放、动态字体和 `prefers-reduced-motion`；状态动画不作为唯一反馈。
+- 支持 200% 缩放、动态字体、`prefers-reduced-motion`、`prefers-contrast: more` 和 forced colors；状态动画不作为唯一反馈。
+- 禁止用全局 `overflow-x: hidden` 掩盖溢出；真正需要横向空间的表格/导航必须在自身容器滚动。
 
 ## 11. 权限与页面状态验收矩阵
 
@@ -313,4 +320,4 @@ budget、usage aggregate 和显式 session trace report。卡片沿用同一 Mat
 
 设计评审原型应包含工作台、外呼活动、客服坐席台、企业会议、知识、审计和成员设置，并使用同一导航、颜色、圆角和 Material Icons。原型数据必须标注“设计示例”。
 
-`ENT-CORE-003` 负责真实 Web 壳、登录会话、路由和生产构建，`ENT-UI-001` 负责生产令牌与 Material Icons 注册表，两项现已进入 `ready_for_acceptance`。`ENT-UI-002` 已实现 active membership 切换、共享 scope 真值、九角色导航和直接/嵌套路由 guard，但签名 route document 仍依赖 `ENT-CORE-011`。`ENT-UI-003` 已实现 loading、empty、not_ready、degraded、forbidden、conflict、processing、failed 八态注册表、ARIA 语义、trace ID 与行动入口，但 Provider/冲突/job 的业务真值仍依赖 `ENT-CORE-008` 和后续领域 API。两项均保持 `in_progress`；完整 Web 自动化和发布门禁归 `ENT-UI-010`。本文和静态原型本身仍不能作为生产验收证据。
+`ENT-CORE-003` 负责真实 Web 壳、登录会话、路由和生产构建，`ENT-UI-001` 负责生产令牌与 Material Icons 注册表，两项现已进入 `ready_for_acceptance`。`ENT-UI-002` 已实现 active membership 切换、共享 scope 真值、九角色导航和直接/嵌套路由 guard；`ENT-UI-003` 已实现 loading、empty、not_ready、degraded、forbidden、conflict、processing、failed 八态注册表、ARIA 语义、trace ID 与行动入口。`ENT-UI-009` 已形成响应式、主题、动态字号和键盘语义代码候选，但未运行浏览器、200% 缩放、键盘、axe、视觉回归或真机矩阵，保持 `in_progress`；完整 Web 自动化和发布门禁归 `ENT-UI-010`。本文、静态原型和静态检查本身仍不能作为生产验收证据。

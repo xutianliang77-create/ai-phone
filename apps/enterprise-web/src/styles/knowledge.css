@@ -70,14 +70,14 @@
 .version-panel h2,
 .content-form h3 {
   margin: 0 0 4px;
-  font-size: 16px;
+  font-size: 1rem;
 }
 
 .resource-panel p,
 .version-panel__header p {
   margin: 0;
   color: var(--color-outline);
-  font-size: 12px;
+  font-size: 0.75rem;
 }
 
 .resource-list {
@@ -119,7 +119,7 @@
 
 .resource-item small {
   color: var(--color-outline);
-  font-size: 12px;
+  font-size: 0.75rem;
 }
 
 .resource-item--active {
@@ -183,7 +183,7 @@
   border-radius: var(--radius);
   background: var(--color-surface-high);
   color: var(--color-outline);
-  font-size: 12px;
+  font-size: 0.75rem;
 }
 
 .version-card .button,
@@ -204,7 +204,7 @@
   border-radius: 999px;
   background: var(--color-surface-high);
   color: var(--color-outline);
-  font-size: 12px;
+  font-size: 0.75rem;
   font-weight: 700;
 }
 
@@ -242,7 +242,7 @@
 
 .content-form label > span {
   color: var(--color-outline);
-  font-size: 12px;
+  font-size: 0.75rem;
   font-weight: 700;
 }
 
@@ -277,7 +277,7 @@
 .content-form__notice,
 .content-form__error {
   margin: 0;
-  font-size: 12px;
+  font-size: 0.75rem;
 }
 
 .content-form__notice {

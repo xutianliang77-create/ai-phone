@@ -232,7 +232,9 @@ function ExportTable({ exports, canExport, downloading, onDownload }: {
   exports: EnterpriseAuditExportDto[]; canExport: boolean; downloading?: string;
   onDownload: (item: EnterpriseAuditExportDto) => void;
 }) {
-  return <div className="audit-table-wrap"><table className="audit-table"><thead><tr>
+  return <div className="audit-table-wrap" role="region" aria-label="受控导出记录"
+    tabIndex={0}><table className="audit-table"><caption className="visually-hidden">
+      当前租户的受控审计导出任务</caption><thead><tr>
     <th>创建时间</th><th>目的与范围</th><th>状态</th><th>文件证据</th><th>操作</th>
   </tr></thead><tbody>{exports.map((item) => <tr key={item.id}>
     <td>{formatSettingsDate(item.createdAt)}<small>{visibleAuditIdentifier(item.requestedBy)}</small></td>

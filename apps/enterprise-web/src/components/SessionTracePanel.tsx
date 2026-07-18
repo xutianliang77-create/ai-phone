@@ -90,7 +90,9 @@ function SessionReport({ report }: { report: EnterpriseSessionTraceReportRespons
     </div>
     {report.usage.length === 0 ? <StatusPanel state="empty" title="暂无会话用量"
       description="没有关联 usage event/ledger；货币金额保持未配置。" />
-      : <div className="dashboard-table-wrap"><table className="dashboard-table">
+      : <div className="dashboard-table-wrap" role="region" aria-label="会话用量记录"
+        tabIndex={0}><table className="dashboard-table"><caption className="visually-hidden">
+          当前会话的用量与不可变账本引用</caption>
         <thead><tr><th>用量类别</th><th>数量</th><th>来源</th><th>Trace</th></tr></thead>
         <tbody>{report.usage.map((item) => <tr key={item.eventId}>
           <td>{usageCategoryPresentation[item.category].label}<small>{item.ledgerEntryId}</small></td>

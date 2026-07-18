@@ -1,8 +1,9 @@
 :root {
-  color-scheme: light dark;
+  color-scheme: light;
   --color-primary: #087a70;
   --color-on-primary: #ffffff;
   --color-signal: #c4574e;
+  --color-signal-text: #a8433c;
   --color-tertiary: #4f6498;
   --color-surface: #f7f9f8;
   --color-container: #ffffff;
@@ -13,41 +14,60 @@
   --color-outline-variant: #d2dcda;
   --color-error: #c34c43;
   --radius: 8px;
-  --font-headline-small-size: 24px;
-  --font-headline-small-line: 30px;
+  --font-headline-small-size: 1.5rem;
+  --font-headline-small-line: 1.875rem;
   --font-headline-small-weight: 700;
-  --font-title-large-size: 20px;
-  --font-title-large-line: 26px;
+  --font-title-large-size: 1.25rem;
+  --font-title-large-line: 1.625rem;
   --font-title-large-weight: 700;
-  --font-title-medium-size: 16px;
-  --font-title-medium-line: 22px;
+  --font-title-medium-size: 1rem;
+  --font-title-medium-line: 1.375rem;
   --font-title-medium-weight: 600;
-  --font-body-large-size: 16px;
-  --font-body-large-line: 25px;
-  --font-body-medium-size: 14px;
-  --font-body-medium-line: 21px;
-  --font-label-large-size: 16px;
-  --font-label-large-line: 20px;
+  --font-body-large-size: 1rem;
+  --font-body-large-line: 1.5625rem;
+  --font-body-medium-size: 0.875rem;
+  --font-body-medium-line: 1.3125rem;
+  --font-label-large-size: 1rem;
+  --font-label-large-line: 1.25rem;
   --font-label-large-weight: 700;
-  --font-label-medium-size: 12px;
-  --font-label-medium-line: 16px;
+  --font-label-medium-size: 0.75rem;
+  --font-label-medium-line: 1rem;
   --font-label-medium-weight: 600;
-  --control-height: 48px;
-  --touch-target: 44px;
-  --icon-size: 20px;
-  --icon-table-size: 18px;
-  --icon-empty-size: 32px;
-  --sidebar-width: 248px;
-  --topbar-height: 64px;
+  --control-height: 3rem;
+  --touch-target: 2.75rem;
+  --icon-size: 1.25rem;
+  --icon-table-size: 1.125rem;
+  --icon-empty-size: 2rem;
+  --sidebar-width: 15.5rem;
+  --topbar-height: 4rem;
   --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
     "Microsoft YaHei", sans-serif;
 }
 
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --color-primary: #62d7ca;
+  --color-on-primary: #003731;
+  --color-signal: #ffb0a6;
+  --color-signal-text: #ffb0a6;
+  --color-tertiary: #b9c5ff;
+  --color-surface: #0c1110;
+  --color-container: #151c1a;
+  --color-surface-high: #1c2522;
+  --color-surface-highest: #25302d;
+  --color-on-surface: #e3e8e6;
+  --color-outline: #87918e;
+  --color-outline-variant: #394542;
+  --color-error: #ffb4ab;
+}
+
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme]) {
+    color-scheme: dark;
     --color-primary: #62d7ca;
     --color-on-primary: #003731;
     --color-signal: #ffb0a6;
+    --color-signal-text: #ffb0a6;
     --color-tertiary: #b9c5ff;
     --color-surface: #0c1110;
     --color-container: #151c1a;

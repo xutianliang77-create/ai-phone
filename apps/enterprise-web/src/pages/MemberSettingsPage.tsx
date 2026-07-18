@@ -203,8 +203,10 @@ function MemberDirectory({
   return (
     <section className="member-section" aria-labelledby="member-directory-title">
       <header><div><h2 id="member-directory-title">成员目录</h2><p>{members.length} 个服务端成员关系</p></div></header>
-      <div className="member-table-wrap">
-        <table className="member-table">
+      <div className="member-table-wrap" role="region" aria-label="企业成员目录"
+        tabIndex={0}>
+        <table className="member-table"><caption className="visually-hidden">
+          当前租户的成员、角色、状态与操作</caption>
           <thead><tr><th>账号</th><th>角色</th><th>状态</th><th>加入时间</th><th>操作</th></tr></thead>
           <tbody>{members.map((member) => {
             const current = member.userId === currentUserId;

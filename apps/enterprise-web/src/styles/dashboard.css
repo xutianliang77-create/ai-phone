@@ -40,7 +40,7 @@
 .dashboard-report-grid small,
 .dashboard-report__meta {
   color: var(--color-outline);
-  font-size: 12px;
+  font-size: 0.75rem;
 }
 
 .dashboard-metric strong,
@@ -108,20 +108,20 @@
 .dashboard-table th {
   background: var(--color-surface-high);
   color: var(--color-outline);
-  font-size: 12px;
+  font-size: 0.75rem;
 }
 
 .dashboard-table td small {
   display: block;
   margin-top: 4px;
   color: var(--color-outline);
-  font-size: 12px;
+  font-size: 0.75rem;
 }
 
 .dashboard-table code,
 .dashboard-traces code {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 12px;
+  font-size: 0.75rem;
   overflow-wrap: anywhere;
 }
 

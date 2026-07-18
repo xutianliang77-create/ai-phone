@@ -249,10 +249,10 @@ function KnowledgeWorkspace({
 }
 
 function ContentTabs({ kind, catalog, disabled, onChange }: { kind: ContentKind; catalog?: ContentCatalog; disabled: boolean; onChange(kind: ContentKind): void }) {
-  return <div className="content-tabs" role="tablist" aria-label="企业内容类型">
+  return <div className="content-tabs" role="group" aria-label="企业内容类型">
     {contentKinds.map((item) => {
       const presentation = contentKindPresentation[item];
-      return <button key={item} role="tab" aria-selected={kind === item} disabled={disabled} className={kind === item ? "content-tab content-tab--active" : "content-tab"} onClick={() => onChange(item)}>
+      return <button key={item} aria-pressed={kind === item} disabled={disabled} className={kind === item ? "content-tab content-tab--active" : "content-tab"} onClick={() => onChange(item)}>
         <MaterialIcon name={enterpriseIcons.content[presentation.icon]} />
         <span>{presentation.label}<small>{catalog?.[item].length ?? "–"}</small></span>
       </button>;
