@@ -106,6 +106,66 @@ export class PostgresReliableOutboxRepository {
     }
   }
 
+  async claimMatching(input: {
+    owner: string;
+    limit: number;
+    leaseSeconds: number;
+    sessionId?: string;
+    eventType?: string;
+    now?: Date;
+  }) {
+    validateClaim(input);
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      const rows = await client.query<OutboxRow>(`
+        WITH candidates AS (
+          SELECT id FROM ai_phone.reliable_outbox_events
+          WHERE published_at IS NULL AND dead_lettered_at IS NULL
+            AND available_at <= $6::timestamptz
+            AND (lease_until IS NULL OR lease_until <= now())
+            AND ($4::text IS NULL OR session_id = $4)
+            AND ($5::text IS NULL OR event_type = $5)
+          ORDER BY available_at, created_at, id
+          FOR UPDATE SKIP LOCKED LIMIT $2
+        )
+        UPDATE ai_phone.reliable_outbox_events AS event
+        SET lease_owner = $1,
+          lease_until = now() + make_interval(secs => $3),
+          attempts = event.attempts + 1
+        FROM candidates WHERE event.id = candidates.id RETURNING event.*
+      `, [input.owner, input.limit, input.leaseSeconds,
+        input.sessionId, input.eventType, (input.now ?? new Date()).toISOString()]);
+      await client.query("COMMIT");
+      return rows.rows.map(fromRow);
+    } catch (error) {
+      await client.query("ROLLBACK").catch(() => undefined);
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  async listPendingSessionIds(eventType: string, now = new Date(), limit = 200) {
+    if (!eventType.trim() || !Number.isInteger(limit) || limit < 1 || limit > 500 ||
+      !Number.isFinite(now.getTime())) throw new Error("Invalid outbox session query");
+    const client = await this.pool.connect();
+    try {
+      const result = await client.query<{ session_id: string }>(`
+        SELECT session_id, min(available_at) AS first_available
+        FROM ai_phone.reliable_outbox_events
+        WHERE event_type = $1 AND session_id IS NOT NULL
+          AND published_at IS NULL AND dead_lettered_at IS NULL
+          AND available_at <= $2::timestamptz
+          AND (lease_until IS NULL OR lease_until <= now())
+        GROUP BY session_id ORDER BY first_available, session_id LIMIT $3
+      `, [eventType, now.toISOString(), limit]);
+      return result.rows.map((row) => row.session_id);
+    } finally {
+      client.release();
+    }
+  }
+
   async acknowledge(id: string, owner: string) {
     const result = await this.withLease(id, owner, `
       UPDATE ai_phone.reliable_outbox_events
@@ -131,6 +191,17 @@ export class PostgresReliableOutboxRepository {
     `, deadLetterAfter);
   }
 
+  async release(id: string, owner: string) {
+    return this.withLease(id, owner, `
+      UPDATE ai_phone.reliable_outbox_events
+      SET lease_owner = NULL, lease_until = NULL,
+          attempts = GREATEST(0, attempts - 1)
+      WHERE id = $1 AND lease_owner = $2 AND lease_until > now()
+        AND published_at IS NULL AND dead_lettered_at IS NULL
+      RETURNING id
+    `);
+  }
+
   private async withLease(
     id: string,
     owner: string,
@@ -147,6 +218,26 @@ export class PostgresReliableOutboxRepository {
     } finally {
       client.release();
     }
+  }
+}
+
+function validateClaim(input: {
+  owner: string;
+  limit: number;
+  leaseSeconds: number;
+  sessionId?: string;
+  eventType?: string;
+  now?: Date;
+}) {
+  if (input.owner.trim().length < 8 || Buffer.byteLength(input.owner) > 200 ||
+    !Number.isInteger(input.limit) || input.limit < 1 || input.limit > 200 ||
+    !Number.isInteger(input.leaseSeconds) || input.leaseSeconds < 5 ||
+    input.leaseSeconds > 300 || (input.sessionId !== undefined &&
+      (!input.sessionId.trim() || Buffer.byteLength(input.sessionId) > 160)) ||
+    (input.eventType !== undefined && (!input.eventType.trim() ||
+      Buffer.byteLength(input.eventType) > 120)) ||
+    (input.now !== undefined && !Number.isFinite(input.now.getTime()))) {
+    throw new Error("Invalid outbox claim parameters");
   }
 }
 

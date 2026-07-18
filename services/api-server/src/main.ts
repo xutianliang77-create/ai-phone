@@ -11,7 +11,7 @@ import {
 import {
   recoverPendingVoiceIdentityDeletions,
   startVoiceIdentityDeletionRecovery,
-} from "./modules/voice-identities/voice-identity-deletion-recovery.js";
+} from "./modules/voice-identities/voice-identity-deletion-recovery-runtime.js";
 import {
   recoverPendingLiveKitSipCompletions,
   startLiveKitSipReconciliationRecovery,
@@ -31,7 +31,8 @@ import {
 } from "./modules/ingress/ingress-recovery.js";
 import { assertPlatformScaleStartup } from "./infrastructure/platform/platform-scale-readiness.js";
 import { startRecordingArtifactRecovery } from "./modules/recordings/recording-artifact-recovery.js";
-import { startAgentCallLeaseRecovery } from "./modules/agent-calls/agent-call-lease.repository.js";
+import { startAgentCallLeaseRecovery } from
+  "./modules/agent-calls/agent-call-lease-recovery.js";
 import { startPlatformTelemetry } from "./infrastructure/observability/platform-telemetry.js";
 import {
   recoverAgentConsults,
@@ -158,6 +159,22 @@ app.addHook("onClose", async () => {
   await repositoryRuntime.close();
   await stopTelemetry();
 });
+
+let shutdownStarted = false;
+const shutdown = async (signal: "SIGINT" | "SIGTERM") => {
+  if (shutdownStarted) return;
+  shutdownStarted = true;
+  app.log.info({ signal }, "API shutdown started");
+  try {
+    await app.close();
+    app.log.info({ signal }, "API shutdown completed");
+  } catch (error) {
+    app.log.error({ error, signal }, "API shutdown failed");
+    process.exitCode = 1;
+  }
+};
+process.once("SIGINT", () => void shutdown("SIGINT"));
+process.once("SIGTERM", () => void shutdown("SIGTERM"));
 
 if (recovery.recoveredCount > 0) {
   app.log.warn({ recovery }, "Recovered stale realtime sessions");

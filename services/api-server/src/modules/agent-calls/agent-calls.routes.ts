@@ -19,7 +19,7 @@ import {
   findAgentCallDraft,
   listAgentCallDrafts,
   requestAgentCallTakeover,
-} from "./agent-calls.repository.js";
+} from "./agent-calls-runtime.repository.js";
 import { registerAgentAssistRoutes } from "./agent-assist.routes.js";
 import { registerAgentCallStartRoute } from "./agent-call-start.routes.js";
 import { registerVoiceAgentCallExecutionRoutes } from
@@ -30,7 +30,7 @@ import { registerVoiceAgentToolGatewayRoutes } from
   "./voice-agent-tool-gateway.routes.js";
 import { registerAgentCallTakeoverRoutes } from "./agent-call-takeover.routes.js";
 import { findSessionProviderOperation } from
-  "../provider-operations/provider-operations.repository.js";
+  "../provider-operations/provider-operations-runtime.repository.js";
 import { publishVoiceAgentControl } from "./voice-agent-control-publisher.js";
 import { registerAgentConsultRoutes } from "./agent-consult.routes.js";
 import { registerAgentConsultControlRoutes } from "./agent-consult-control.routes.js";
@@ -51,15 +51,15 @@ export async function registerAgentCallRoutes(app: FastifyInstance) {
   registerAgentCallStartRoute(app);
 
   app.get("/ai-calling-agent/drafts", async (request, reply) => {
-    const account = requireAccount(request, reply);
+    const account = await requireAccount(request, reply);
     if (!account) return;
-    return { drafts: listAgentCallDrafts(account.id).map(toDto) };
+    return { drafts: (await listAgentCallDrafts(account.id)).map(toDto) };
   });
 
   app.post("/ai-calling-agent/drafts", async (request, reply) => {
-    const account = requireAccount(request, reply);
+    const account = await requireAccount(request, reply);
     if (!account) return;
-    const draft = createAgentCallDraft(
+    const draft = await createAgentCallDraft(
       account.id,
       request.body as CreateAiCallingAgentDraftRequest,
     );
@@ -75,9 +75,9 @@ export async function registerAgentCallRoutes(app: FastifyInstance) {
   });
 
   app.get("/ai-calling-agent/drafts/:draftId", async (request, reply) => {
-    const account = requireAccount(request, reply);
+    const account = await requireAccount(request, reply);
     if (!account) return;
-    const draft = findAgentCallDraft(
+    const draft = await findAgentCallDraft(
       account.id,
       (request.params as { draftId: string }).draftId,
     );
@@ -94,9 +94,9 @@ export async function registerAgentCallRoutes(app: FastifyInstance) {
   app.post(
     "/ai-calling-agent/drafts/:draftId/authorize",
     async (request, reply) => {
-      const account = requireAccount(request, reply);
+      const account = await requireAccount(request, reply);
       if (!account) return;
-      const result = authorizeAgentCallDraft(
+      const result = await authorizeAgentCallDraft(
         account.id,
         (request.params as { draftId: string }).draftId,
         request.body as AuthorizeAiCallingAgentRequest,
@@ -151,15 +151,15 @@ export async function registerAgentCallRoutes(app: FastifyInstance) {
   app.post(
     "/ai-calling-agent/drafts/:draftId/takeover",
     async (request, reply) => {
-      const account = requireAccount(request, reply);
+      const account = await requireAccount(request, reply);
       if (!account) return;
       const draftId = (request.params as { draftId: string }).draftId;
-      const current = findAgentCallDraft(account.id, draftId);
+      const current = await findAgentCallDraft(account.id, draftId);
       if (!current) {
         return sendError(reply, 404, "agent_call_draft_not_found", "Draft not found");
       }
       const dial = current.callId
-        ? findSessionProviderOperation(current.callId, "sip_outbound")
+        ? await findSessionProviderOperation(current.callId, "sip_outbound")
         : null;
       if (current.status !== "requires_human_takeover" &&
         current.status !== "takeover_requested" &&
@@ -171,7 +171,7 @@ export async function registerAgentCallRoutes(app: FastifyInstance) {
           "Call is not ready for human takeover",
         );
       }
-      const draft = requestAgentCallTakeover(
+      const draft = await requestAgentCallTakeover(
         account.id,
         draftId,
         request.body as RequestAiCallingAgentTakeoverRequest,
@@ -198,9 +198,9 @@ export async function registerAgentCallRoutes(app: FastifyInstance) {
   app.post(
     "/ai-calling-agent/drafts/:draftId/cancel",
     async (request, reply) => {
-      const account = requireAccount(request, reply);
+      const account = await requireAccount(request, reply);
       if (!account) return;
-      const result = cancelAgentCallDraft(
+      const result = await cancelAgentCallDraft(
         account.id,
         (request.params as { draftId: string }).draftId,
         request.body as CancelAiCallingAgentDraftRequest,

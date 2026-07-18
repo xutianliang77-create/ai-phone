@@ -31,6 +31,56 @@ describe("PostgresReliableOutboxRepository.enqueue", () => {
     await expect(repository().enqueue({ query } as never, event))
       .rejects.toBeInstanceOf(PostgresOutboxConflictError);
   });
+
+  it("claims only the requested session and event type", async () => {
+    const query = vi.fn()
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({ rows: [{
+        id: "event_1",
+        idempotency_key: event.idempotencyKey,
+        session_id: event.sessionId,
+        event_type: event.eventType,
+        event_version: 1,
+        payload: event.payload,
+        attempts: 1,
+        lease_owner: "outbox-test-owner",
+        lease_until: new Date("2026-07-17T10:01:00.000Z"),
+      }] })
+      .mockResolvedValueOnce({});
+    const release = vi.fn();
+    const repo = new PostgresReliableOutboxRepository({
+      connect: vi.fn().mockResolvedValue({ query, release }),
+    } as never);
+    await expect(repo.claimMatching({
+      owner: "outbox-test-owner",
+      limit: 10,
+      leaseSeconds: 30,
+      sessionId: "session_1",
+      eventType: "session.completed",
+      now: new Date("2026-07-17T10:00:00.000Z"),
+    })).resolves.toMatchObject([{ id: "event_1", attempts: 1 }]);
+    expect(query).toHaveBeenNthCalledWith(2, expect.any(String), [
+      "outbox-test-owner",
+      10,
+      30,
+      "session_1",
+      "session.completed",
+      "2026-07-17T10:00:00.000Z",
+    ]);
+    expect(release).toHaveBeenCalledOnce();
+  });
+
+  it("releases an unattempted claim without consuming an attempt", async () => {
+    const query = vi.fn().mockResolvedValue({ rowCount: 1, rows: [{ id: "event_1" }] });
+    const repo = new PostgresReliableOutboxRepository({
+      connect: vi.fn().mockResolvedValue({ query, release: vi.fn() }),
+    } as never);
+    await expect(repo.release("event_1", "outbox-test-owner")).resolves.toBe(true);
+    expect(query).toHaveBeenCalledWith(
+      expect.stringContaining("attempts = GREATEST(0, attempts - 1)"),
+      ["event_1", "outbox-test-owner"],
+    );
+  });
 });
 
 function repository() {

@@ -1,4 +1,5 @@
 import { createHmac } from "node:crypto";
+import type { AgentConsultDto } from "@translation/contracts";
 import type { FastifyInstance } from "fastify";
 import { sendError } from "../../infrastructure/http/errors.js";
 import { requireAccount } from "../account/account-auth.js";
@@ -10,22 +11,22 @@ import { LiveKitSipProviderAdapter } from
 import {
   beginProviderOperation,
   updateProviderOperation,
-} from "../provider-operations/provider-operations.repository.js";
+} from "../provider-operations/provider-operations-runtime.repository.js";
 import { withSessionWriteLock } from "../sessions/session-write-coordinator.js";
 import { evaluateAgentCallTargetPolicy } from "./agent-call-gray-policy.js";
-import { findAgentCallDraft } from "./agent-calls.repository.js";
+import { findAgentCallDraft } from "./agent-calls-runtime.repository.js";
 import {
   beginAgentConsult,
   findAgentConsult,
   listAgentConsults,
   updateAgentConsult,
-} from "./agent-consult.repository.js";
+} from "./agent-consult-runtime.repository.js";
 import { getAgentConsultConfig } from "./agent-consult-readiness.js";
 import { LiveKitAgentConsultRoom } from "./livekit-agent-consult-room.js";
 import {
   findActiveAgentRun,
   findAgentRun,
-} from "./agent-orchestration.repository.js";
+} from "./agent-orchestration-runtime.repository.js";
 
 type SipFactory = (config: ConstructorParameters<typeof LiveKitSipProviderAdapter>[0]) =>
   Pick<LiveKitSipProviderAdapter, "createParticipant">;
@@ -44,7 +45,7 @@ export function setAgentConsultStartFactoriesForTests(input: {
 
 export function registerAgentConsultRoutes(app: FastifyInstance) {
   app.post("/ai-calling-agent/drafts/:draftId/consults", async (request, reply) => {
-    const account = requireAccount(request, reply);
+    const account = await requireAccount(request, reply);
     if (!account) return;
     const body = parseStart(request.body);
     if (!body) return invalid(reply);
@@ -77,6 +78,9 @@ export function registerAgentConsultRoutes(app: FastifyInstance) {
         requestHash,
         ttlSeconds: config.config.ttlSeconds,
       }));
+    if (!("consult" in begun)) {
+      return sendError(reply, 409, "agent_consult_run_missing", "Agent run unavailable");
+    }
     if (begun.status === "payload_conflict" || begun.status === "active_conflict") {
       return sendError(reply, 409, "agent_consult_conflict", "Another consult is active");
     }
@@ -84,42 +88,46 @@ export function registerAgentConsultRoutes(app: FastifyInstance) {
       return reply.status(202).send({ consult: consultResponse(begun.consult), replayed: true });
     }
     const consult = begun.consult;
-    const operation = beginProviderOperation({
+    const operation = (await beginProviderOperation({
       sessionId: consult.sessionId,
       provider: "livekit_sip",
       operationType: "sip_consult",
       operationKey: consult.id,
       idempotencyKey: `sip-consult:${consult.sessionId}:${consult.id}`,
       requestHash,
-    }).operation;
+    })).operation;
     if (["accepted", "active", "unknown"].includes(operation.status)) {
-      updateAgentConsult({
+      await updateAgentConsult({
         consultId: consult.id,
         status: "dialing",
         providerOperationId: operation.id,
       });
       return reply.status(202).send({
-        consult: consultResponse(findAgentConsult(consult.id)!),
+        consult: consultResponse((await findAgentConsult(consult.id))!),
         replayed: true,
       });
     }
     if (["failed", "cancelled"].includes(operation.status)) {
-      updateAgentConsult({ consultId: consult.id, status: "failed", failureCode: "dial_failed" });
+      await updateAgentConsult({
+        consultId: consult.id, status: "failed", failureCode: "dial_failed",
+      });
       return sendError(reply, 503, "agent_consult_dial_failed", "Consult call failed");
     }
     const room = (testRoomFactory ?? ((value) =>
       new LiveKitAgentConsultRoom(value)))(config.config.room);
     const ensured = await room.ensure(consult.consultRoomName);
     if (!ensured.ok) {
-      updateProviderOperation({
+      await updateProviderOperation({
         operationId: operation.id,
         status: "failed",
         errorClass: ensured.errorClass,
       });
-      updateAgentConsult({ consultId: consult.id, status: "failed", failureCode: "room_failed" });
+      await updateAgentConsult({
+        consultId: consult.id, status: "failed", failureCode: "room_failed",
+      });
       return unavailable(reply);
     }
-    updateAgentConsult({
+    await updateAgentConsult({
       consultId: consult.id,
       status: "dialing",
       expectedVersion: consult.version,
@@ -141,7 +149,7 @@ export function registerAgentConsultRoutes(app: FastifyInstance) {
         consultId: consult.id,
       },
     });
-    updateProviderOperation({
+    await updateProviderOperation({
       operationId: operation.id,
       status: result.ok ? "accepted"
         : result.reconciliationRequired ? "unknown" : "failed",
@@ -151,11 +159,13 @@ export function registerAgentConsultRoutes(app: FastifyInstance) {
       } : { errorClass: result.errorClass }),
     });
     if (!result.ok && !result.reconciliationRequired) {
-      updateAgentConsult({ consultId: consult.id, status: "failed", failureCode: result.errorClass });
+      await updateAgentConsult({
+        consultId: consult.id, status: "failed", failureCode: result.errorClass,
+      });
       return sendError(reply, 503, "agent_consult_dial_failed", "Consult call failed");
     }
     return reply.status(202).send({
-      consult: consultResponse(findAgentConsult(consult.id)!),
+      consult: consultResponse((await findAgentConsult(consult.id))!),
       replayed: begun.status === "replayed",
     });
   });
@@ -163,7 +173,7 @@ export function registerAgentConsultRoutes(app: FastifyInstance) {
   app.post(
     "/ai-calling-agent/drafts/:draftId/consults/:consultId/join",
     async (request, reply) => {
-      const account = requireAccount(request, reply);
+      const account = await requireAccount(request, reply);
       if (!account) return;
       const binding = await agentConsultBinding(account.id, request.params);
       if (!binding.ok) return sendError(reply, binding.code, binding.error, binding.message);
@@ -193,7 +203,7 @@ export function registerAgentConsultRoutes(app: FastifyInstance) {
   app.get(
     "/ai-calling-agent/drafts/:draftId/consults/:consultId",
     async (request, reply) => {
-      const account = requireAccount(request, reply);
+      const account = await requireAccount(request, reply);
       if (!account) return;
       const binding = await agentConsultBinding(account.id, request.params);
       return binding.ok
@@ -204,15 +214,15 @@ export function registerAgentConsultRoutes(app: FastifyInstance) {
 }
 
 async function validateStart(userId: string, draftId: string, maxAttempts: number) {
-  const draft = findAgentCallDraft(userId, draftId);
+  const draft = await findAgentCallDraft(userId, draftId);
   const call = draft?.callId ? await findCallLink(draft.callId) : null;
-  const run = draft ? findActiveAgentRun(draft.id, "autonomous") : null;
+  const run = draft ? await findActiveAgentRun(draft.id, "autonomous") : null;
   if (!draft || !call || !run) return denied(404, "agent_consult_not_found", "Call not found");
   if (call.purpose !== "voice_agent" || draft.status !== "takeover_requested" ||
     !draft.takeoverReadyAt || !draft.takeoverResolvedAt) {
     return denied(409, "agent_consult_takeover_required", "Human takeover is required");
   }
-  if (listAgentConsults(run.id).length >= maxAttempts) {
+  if ((await listAgentConsults(run.id)).length >= maxAttempts) {
     return denied(429, "agent_consult_attempt_limit", "Consult attempt limit reached");
   }
   const presence = await readCallRoomHumanPresence(call);
@@ -225,10 +235,10 @@ async function validateStart(userId: string, draftId: string, maxAttempts: numbe
 
 export async function agentConsultBinding(userId: string, params: unknown) {
   const value = params as { draftId?: string; consultId?: string };
-  const draft = value.draftId ? findAgentCallDraft(userId, value.draftId) : null;
+  const draft = value.draftId ? await findAgentCallDraft(userId, value.draftId) : null;
   const call = draft?.callId ? await findCallLink(draft.callId) : null;
-  const consult = value.consultId ? findAgentConsult(value.consultId) : null;
-  const run = consult ? findAgentRun(consult.runId) : null;
+  const consult = value.consultId ? await findAgentConsult(value.consultId) : null;
+  const run = consult ? await findAgentRun(consult.runId) : null;
   if (!draft || !call || !consult || !run || run.taskId !== draft.id ||
     run.mode !== "autonomous" || consult.sessionId !== call.sessionId) {
     return denied(404, "agent_consult_not_found", "Consult not found");
@@ -245,7 +255,7 @@ function parseStart(body: unknown) {
     : null;
 }
 
-export function consultResponse(consult: NonNullable<ReturnType<typeof findAgentConsult>>) {
+export function consultResponse(consult: AgentConsultDto) {
   const {
     operatorPhoneHash: _phoneHash,
     requestHash: _requestHash,

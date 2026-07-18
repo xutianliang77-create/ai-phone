@@ -1,13 +1,13 @@
 import {
   findProviderOperation,
   updateProviderOperation,
-} from "../provider-operations/provider-operations.repository.js";
+} from "../provider-operations/provider-operations-runtime.repository.js";
 import type { ProviderOperationRecord } from "../provider-operations/provider-operation-record.js";
 import { completeSessionWithUsage } from "../sessions/session-completion.js";
 import { endCallLegs } from "../sessions/sessions-runtime.repository.js";
 import { registerCallLeg } from "./call-links.service.js";
 import { updateAgentCallFromPstnWebhook } from
-  "../agent-calls/agent-calls.repository.js";
+  "../agent-calls/agent-call-webhook-runtime.js";
 
 export async function markLiveKitSipAnswered(input: {
   operationId: string;
@@ -16,7 +16,7 @@ export async function markLiveKitSipAnswered(input: {
   externalOperationId?: string;
   externalResourceId?: string;
 }) {
-  const updated = updateProviderOperation({
+  const updated = await updateProviderOperation({
     operationId: input.operationId,
     status: "active",
     externalOperationId: input.externalOperationId,
@@ -51,10 +51,10 @@ export async function observeLiveKitSipCompletion(input: {
   externalOperationId?: string;
   externalResourceId?: string;
 }) {
-  const operation = findProviderOperation(input.operationId);
+  const operation = await findProviderOperation(input.operationId);
   if (!operation) return { status: "ignored" as const, terminal: false };
   if (input.event === "participant_left" && !operation.answeredAt) {
-    const pending = updateProviderOperation({
+    const pending = await updateProviderOperation({
       operationId: operation.id,
       status: "unknown",
       externalOperationId: input.externalOperationId,
@@ -81,7 +81,7 @@ export async function observeLiveKitSipCompletion(input: {
 export async function expirePendingLiveKitSipCompletion(
   operationId: string,
 ) {
-  const operation = findProviderOperation(operationId);
+  const operation = await findProviderOperation(operationId);
   if (!operation || operation.status !== "unknown" || operation.answeredAt ||
     !operation.completionObservedAt) {
     return { status: "ignored" as const, terminal: false };
@@ -110,7 +110,7 @@ async function finishSipOperation(
   });
   if (!session) throw new Error("SIP completion session was not found");
   if (session?.endedAt) await endCallLegs(session.id, session.endedAt);
-  const updated = updateProviderOperation({
+  const updated = await updateProviderOperation({
     operationId: operation.id,
     status: terminalStatus,
     errorClass: terminalStatus === "failed" ? "call_not_answered" : undefined,
@@ -124,7 +124,7 @@ async function finishSipOperation(
   if (updated.status !== "updated") {
     throw new Error(`SIP terminal operation update failed: ${updated.status}`);
   }
-  updateAgentCallFromPstnWebhook({
+  await updateAgentCallFromPstnWebhook({
     eventId: "livekit-terminal:" + updated.operation.id + ":" +
       (updated.operation.completionObservedAt ?? endedAt.toISOString()),
     callId: updated.operation.sessionId,

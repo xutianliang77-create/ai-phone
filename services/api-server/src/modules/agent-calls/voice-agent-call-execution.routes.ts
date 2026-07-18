@@ -6,12 +6,12 @@ import { executeLiveKitSipOutbound } from
   "../call-links/livekit-sip-outbound-coordinator.js";
 import { getLiveKitSipConfig } from "../call-links/livekit-sip-readiness.js";
 import { findProviderOperation } from
-  "../provider-operations/provider-operations.repository.js";
-import { findAgentCallDraftById } from "./agent-calls.repository.js";
+  "../provider-operations/provider-operations-runtime.repository.js";
+import { findAgentCallDraftById } from "./agent-calls-runtime.repository.js";
 import {
   isInternalAuthorized,
 } from "./agent-call-route-helpers.js";
-import { verifyAgentCallLease } from "./agent-call-lease.repository.js";
+import { verifyAgentCallLease } from "./agent-call-lease-runtime.repository.js";
 import { getVoiceAgentRuntimeReadiness } from "./voice-agent-runtime-readiness.js";
 import { getVoiceAgentRuntimeSupervisor } from "./voice-agent-runtime-supervisor.js";
 
@@ -25,7 +25,7 @@ export function registerVoiceAgentCallExecutionRoutes(app: FastifyInstance) {
       const workerId = header(request.headers["x-agent-worker-id"]);
       const leaseToken = header(request.headers["x-agent-call-lease-token"]);
       const draftId = (request.params as { draftId: string }).draftId;
-      const draft = findAgentCallDraftById(draftId);
+      const draft = await findAgentCallDraftById(draftId);
       if (!draft || !workerId || !leaseToken ||
         !verifyAgentCallLease(draft, workerId, leaseToken)) {
         return sendError(reply, 409, "agent_call_lease_conflict", "Worker lease is invalid");
@@ -75,13 +75,13 @@ export function registerVoiceAgentCallExecutionRoutes(app: FastifyInstance) {
           "Voice Agent runtime did not become ready",
         );
       }
-      const currentDraft = findAgentCallDraftById(draftId);
+      const currentDraft = await findAgentCallDraftById(draftId);
       if (!currentDraft ||
         !verifyAgentCallLease(currentDraft, workerId, leaseToken)) {
         await runtime.stop(call.callId);
         return sendError(reply, 409, "agent_call_lease_conflict", "Worker lease expired");
       }
-      const operation = findProviderOperation(currentDraft.providerOperationId!);
+      const operation = await findProviderOperation(currentDraft.providerOperationId!);
       if (!operation || operation.sessionId !== call.sessionId ||
         operation.operationType !== "sip_outbound" ||
         operation.provider !== "livekit_sip") {

@@ -117,7 +117,7 @@ export async function deleteSession(sessionId: string) {
 }
 
 export function upsertCallLeg(sessionId: string, callLeg: CallLegRecord) {
-  return mutateSession(sessionId, "call-leg-upsert", callLeg, (current) => {
+  return mutateSessionRecord(sessionId, "call-leg-upsert", callLeg, (current) => {
     if (current.mode !== "call_link") return { next: null, result: null };
     const next = structuredClone(current);
     const callLegs = next.callLegs ?? [];
@@ -131,7 +131,7 @@ export function upsertCallLeg(sessionId: string, callLeg: CallLegRecord) {
 }
 
 export function endCallLegs(sessionId: string, endedAt: string) {
-  return mutateSession(sessionId, "call-legs-end", { endedAt }, (current) => {
+  return mutateSessionRecord(sessionId, "call-legs-end", { endedAt }, (current) => {
     if (!current.callLegs?.some((leg) => leg.status !== "ended")) {
       return { next: null, result: current };
     }
@@ -143,7 +143,7 @@ export function endCallLegs(sessionId: string, endedAt: string) {
 }
 
 export function endSession(sessionId: string, now = new Date()) {
-  return mutateSession(sessionId, "end", { endedAt: now.toISOString() }, (current) => {
+  return mutateSessionRecord(sessionId, "end", { endedAt: now.toISOString() }, (current) => {
     if (current.status === "ended") {
       return { next: null, result: { session: current, wasAlreadyEnded: true } };
     }
@@ -164,7 +164,7 @@ export function transitionSessionState(
   sessionId: string,
   status: PersistedRealtimeSessionState,
 ) {
-  return mutateSession(sessionId, "transition", { status }, (current) => {
+  return mutateSessionRecord(sessionId, "transition", { status }, (current) => {
     const transition = transitionRealtimeSessionState(current.status, status);
     if (!transition.accepted) return { next: null, result: { session: current, transition } };
     const next = structuredClone(current);
@@ -196,7 +196,7 @@ export function updateSessionReviewActionItem(
   actionIndex: number,
   completed: boolean,
 ) {
-  return mutateSession(sessionId, "review-action", { actionIndex, completed }, (current) => {
+  return mutateSessionRecord(sessionId, "review-action", { actionIndex, completed }, (current) => {
     const actionItem = current.review?.actionItems?.[actionIndex];
     if (!actionItem) return { next: null, result: null };
     const next = structuredClone(current);
@@ -229,7 +229,7 @@ export function renameSessionSpeaker(
   speakerId: string,
   displayName: string,
 ) {
-  return mutateSession(sessionId, "speaker-rename", { speakerId, displayName }, (current) => {
+  return mutateSessionRecord(sessionId, "speaker-rename", { speakerId, displayName }, (current) => {
     if (!current.segments.some((segment) => segment.speaker?.speakerId === speakerId)) {
       return { next: null, result: null };
     }
@@ -276,14 +276,14 @@ function updateSession(
   update: (next: SessionRecord) => void,
   legacyOperation: () => SessionRecord | null,
 ) {
-  return mutateSession(sessionId, operation, payload, (current) => {
+  return mutateSessionRecord(sessionId, operation, payload, (current) => {
     const next = structuredClone(current);
     update(next);
     return { next, result: (saved: SessionRecord) => saved };
   }, legacyOperation);
 }
 
-async function mutateSession<T>(
+export async function mutateSessionRecord<T>(
   sessionId: string,
   operation: string,
   payload: unknown,

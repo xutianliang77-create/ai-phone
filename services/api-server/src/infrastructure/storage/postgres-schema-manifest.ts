@@ -22,6 +22,13 @@ export const expectedPostgresMigrations = [
   "021_domain_capacity_locks",
   "022_agent_primary_idempotency",
   "023_aggregate_lease_renewal",
+  "024_reliable_inbox_leases",
+  "025_agent_phone_reference_security",
+  "026_agent_task_primary",
+  "027_billing_atomicity",
+  "028_product_records_primary",
+  "029_projection_runtime_compatibility",
+  "030_tts_playback_session_identity",
 ] as const;
 
 export function comparePostgresMigrations(applied: string[]) {

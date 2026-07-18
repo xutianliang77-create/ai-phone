@@ -1,28 +1,30 @@
 import type { WebhookEvent } from "livekit-server-sdk";
-import { processInboxEventOnly } from "../events/reliable-events.repository.js";
+import { processInboxEventOnlyAsync } from
+  "../events/reliable-events-runtime.repository.js";
 import {
   findSessionProviderOperation,
   updateProviderOperation,
-} from "../provider-operations/provider-operations.repository.js";
+} from "../provider-operations/provider-operations-runtime.repository.js";
 import {
   findRecordingJobByExternalId,
   updateRecordingJob,
-} from "./recordings.repository.js";
-import { upsertRecordingArtifact } from "./recording-artifacts.repository.js";
+} from "./recordings-runtime.repository.js";
+import { upsertRecordingArtifact } from
+  "./recording-artifacts-runtime.repository.js";
 import { toProviderJob } from "./livekit-egress-provider-adapter.js";
 
-export function reconcileLiveKitEgressWebhook(event: WebhookEvent) {
+export async function reconcileLiveKitEgressWebhook(event: WebhookEvent) {
   if (!event.id || !event.egressInfo ||
     !["egress_started", "egress_updated", "egress_ended"].includes(event.event)) {
     return null;
   }
   const providerJob = toProviderJob(event.egressInfo);
-  const job = findRecordingJobByExternalId(providerJob.recordingId);
+  const job = await findRecordingJobByExternalId(providerJob.recordingId);
   if (!job || job.roomName !== providerJob.roomName) return null;
   if (providerJob.artifacts.some((artifact) => artifact.objectKey !== job.objectKey)) {
     throw new Error("LiveKit Egress artifact binding conflict");
   }
-  const processed = processInboxEventOnly({
+  const processed = await processInboxEventOnlyAsync({
     eventId: `livekit:${event.id}`,
     sessionId: job.sessionId,
     eventType: `livekit.${event.event}`,
@@ -49,11 +51,11 @@ export function reconcileLiveKitEgressWebhook(event: WebhookEvent) {
   };
 }
 
-export function applyRecordingProviderJob(
+export async function applyRecordingProviderJob(
   jobId: string,
   providerJob: ReturnType<typeof toProviderJob>,
 ) {
-  const job = findRecordingJobByExternalId(providerJob.recordingId);
+  const job = await findRecordingJobByExternalId(providerJob.recordingId);
   if (!job || job.id !== jobId) return null;
   const status = providerJob.status === "complete"
     ? "completed" as const
@@ -64,13 +66,13 @@ export function applyRecordingProviderJob(
     : providerJob.status === "active"
     ? "active" as const
     : "starting" as const;
-  const result = updateRecordingJob({
+  const result = await updateRecordingJob({
     jobId: job.id,
     status,
     errorClass: providerJob.error,
   });
   if (job.providerOperationId) {
-    updateProviderOperation({
+    await updateProviderOperation({
       operationId: job.providerOperationId,
       status: status === "completed" ? "succeeded" : status === "failed"
         ? "failed"
@@ -78,20 +80,20 @@ export function applyRecordingProviderJob(
       errorClass: providerJob.error,
     });
   }
-  const stopOperation = findSessionProviderOperation(
+  const stopOperation = await findSessionProviderOperation(
     job.sessionId,
     "egress_stop",
     job.id,
   );
   if (stopOperation && ["completed", "failed"].includes(status)) {
-    updateProviderOperation({
+    await updateProviderOperation({
       operationId: stopOperation.id,
       status: status === "completed" ? "succeeded" : "failed",
       errorClass: providerJob.error,
     });
   }
   for (const artifact of providerJob.artifacts) {
-    upsertRecordingArtifact({
+    await upsertRecordingArtifact({
       recordingJobId: job.id,
       sessionId: job.sessionId,
       objectKey: artifact.objectKey,

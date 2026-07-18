@@ -1,4 +1,6 @@
 import type { PoolClient } from "pg";
+import { isAgentPhoneReference } from
+  "../../modules/agent-calls/agent-phone-reference.js";
 
 export interface PostgresProjectionApplyEvent {
   id: string;
@@ -22,6 +24,10 @@ export async function applyPostgresProjectionEvent(
     ? "ai_phone.apply_ingress_projection_event"
     : event.namespace === "agentConsults"
     ? "ai_phone.apply_agent_consult_projection_event"
+    : billingProjectionNamespaces.has(event.namespace)
+    ? "ai_phone.apply_billing_projection_event"
+    : productRecordNamespaces.has(event.namespace)
+    ? "ai_phone.apply_product_record_projection_event"
     : usageProjectionNamespaces.has(event.namespace)
     ? "ai_phone.apply_usage_projection_event"
     : agentProjectionNamespaces.has(event.namespace)
@@ -63,6 +69,7 @@ export async function applyPostgresProjectionEvent(
       session?.routingGeneration,
     ]);
   }
+  await applyAgentTaskPhoneReference(client, event);
   if (event.operation === "delete") {
     await client.query(
       "DELETE FROM ai_phone.projection_records WHERE namespace = $1 AND record_key = $2",
@@ -89,6 +96,36 @@ export async function applyPostgresProjectionEvent(
     applied: true as const,
     recordVersion,
   };
+}
+
+async function applyAgentTaskPhoneReference(
+  client: Pick<PoolClient, "query">,
+  event: PostgresProjectionApplyEvent,
+) {
+  if (event.namespace !== "agentCallDrafts" || event.operation !== "upsert") return;
+  const payload = event.payload as Record<string, unknown> | undefined;
+  if (!payload || Object.hasOwn(payload, "targetPhone")) {
+    throw new Error("Unsafe Agent task phone payload");
+  }
+  const reference = payload.targetPhoneReference;
+  if (reference !== undefined && !isAgentPhoneReference(reference)) {
+    throw new Error("Invalid Agent task phone reference");
+  }
+  const version = payload.version;
+  const requestHash = payload.requestHash;
+  const idempotencyKey = payload.idempotencyKey;
+  if (!Number.isSafeInteger(version) || Number(version) < 1 ||
+    typeof requestHash !== "string" || requestHash.length < 16 ||
+    requestHash.length > 128 || typeof idempotencyKey !== "string" ||
+    !idempotencyKey.trim() || Buffer.byteLength(idempotencyKey) > 200) {
+    throw new Error("Invalid Agent task primary metadata");
+  }
+  await client.query(`
+    UPDATE ai_phone.agent_tasks
+    SET target_phone_reference = $2, version = $3, request_hash = $4,
+      idempotency_key = $5
+    WHERE id = $1
+  `, [event.recordKey, reference ?? null, version, requestHash, idempotencyKey]);
 }
 
 async function applyAgentPrimaryAuditColumns(
@@ -128,4 +165,21 @@ const usageProjectionNamespaces = new Set([
   "usageAccounts",
   "usageHolds",
   "billingLedger",
+]);
+
+const billingProjectionNamespaces = new Set([
+  "billingEntitlements",
+  "paymentOrders",
+  "billingNotifications",
+]);
+
+const productRecordNamespaces = new Set([
+  "accounts",
+  "authSessions",
+  "smsOtpChallenges",
+  "accountConsents",
+  "appErrorReports",
+  "termbaseTerms",
+  "voiceIdentities",
+  "voiceProfiles",
 ]);

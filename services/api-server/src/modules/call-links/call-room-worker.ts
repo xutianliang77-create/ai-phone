@@ -10,6 +10,7 @@ import {
   completeCallRoomDataEvent,
   failCallRoomDataEvent,
   pendingCallRoomDataEvents,
+  releaseCallRoomDataEvent,
   stageCallRoomDataEvents,
 } from "./call-room-reliable-events.js";
 import { LiveKitRoomProviderAdapter } from "./livekit-room-provider-adapter.js";
@@ -173,12 +174,16 @@ export async function deliverPendingCallRoomDataEvents(
   } catch (error) {
     return { ok: false as const, issues: [errorMessage(error)] };
   }
-  for (const pending of pendingCallRoomDataEvents(record.sessionId, now)) {
+  const pendingEvents = await pendingCallRoomDataEvents(record.sessionId, now);
+  for (const [index, pending] of pendingEvents.entries()) {
     try {
       await publisher.publish(record.roomName, pending.event);
-      completeCallRoomDataEvent(pending.record.idempotencyKey);
+      await completeCallRoomDataEvent(pending.record);
     } catch (error) {
-      failCallRoomDataEvent(pending.record.idempotencyKey, error);
+      await failCallRoomDataEvent(pending.record, error).catch(() => undefined);
+      await Promise.all(pendingEvents.slice(index + 1).map((remaining) =>
+        releaseCallRoomDataEvent(remaining.record).catch(() => false)
+      ));
       return { ok: false as const, issues: [errorMessage(error)] };
     }
   }

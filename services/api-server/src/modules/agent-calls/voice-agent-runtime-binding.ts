@@ -1,11 +1,11 @@
 import { findCallLink } from "../call-links/call-links.service.js";
 import { findWorkerDispatch } from
-  "../worker-dispatches/worker-dispatch.repository.js";
+  "../worker-dispatches/worker-dispatch-runtime.repository.js";
 import {
   findAgentCallDraftByCallReference,
   findAgentCallDraftById,
-} from "./agent-calls.repository.js";
-import { findActiveAgentRun } from "./agent-orchestration.repository.js";
+} from "./agent-calls-runtime.repository.js";
+import { findActiveAgentRun } from "./agent-orchestration-runtime.repository.js";
 import { getVoiceAgentRuntimeReadiness } from "./voice-agent-runtime-readiness.js";
 import { getVoiceAgentRuntimeSupervisor } from "./voice-agent-runtime-supervisor.js";
 
@@ -15,9 +15,9 @@ export async function resolveVoiceAgentRuntimeBinding(
 ) {
   const runtime = getVoiceAgentRuntimeSupervisor();
   const claim = runtime.verifyTicket?.(ticket);
-  const draft = findAgentCallDraftById(draftId);
+  const draft = await findAgentCallDraftById(draftId);
   const call = draft?.callId ? await findCallLink(draft.callId) : null;
-  const run = draft ? findActiveAgentRun(draft.id, "autonomous") : null;
+  const run = draft ? await findActiveAgentRun(draft.id, "autonomous") : null;
   const readiness = getVoiceAgentRuntimeReadiness();
   if (!claim || !draft || !call || !run || !draft.disclosurePromptVersion ||
     !draft.providerOperationId ||
@@ -29,7 +29,7 @@ export async function resolveVoiceAgentRuntimeBinding(
     claim.agentName !== readiness.agentName) {
     return { ok: false as const, code: "binding_conflict" };
   }
-  const dispatch = findWorkerDispatch(call.sessionId);
+  const dispatch = await findWorkerDispatch(call.sessionId);
   if (!dispatch || dispatch.generation !== claim.generation ||
     dispatch.agentName !== readiness.agentName) {
     return { ok: false as const, code: "generation_conflict" };
@@ -41,7 +41,7 @@ export async function resolveVoiceAgentRuntimeCallBinding(
   callId: string,
   ticket: string,
 ) {
-  const draft = findAgentCallDraftByCallReference({ callId });
+  const draft = await findAgentCallDraftByCallReference({ callId });
   return draft
     ? await resolveVoiceAgentRuntimeBinding(draft.id, ticket)
     : { ok: false as const, code: "binding_missing" };

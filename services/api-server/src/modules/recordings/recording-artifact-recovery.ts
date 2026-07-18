@@ -7,10 +7,10 @@ import {
   markRecordingArtifactDeletionFailed,
   markRecordingArtifactVerificationFailed,
   markRecordingArtifactVerified,
-} from "./recording-artifacts.repository.js";
+} from "./recording-artifacts-runtime.repository.js";
 import { createRecordingArtifactManifest } from "./recording-artifact-manifest.js";
 import { RecordingObjectStore } from "./recording-object-store.js";
-import { findRecordingJob } from "./recordings.repository.js";
+import { findRecordingJob } from "./recordings-runtime.repository.js";
 
 export async function recoverRecordingArtifacts() {
   const configured = getRecordingArtifactConfig();
@@ -20,10 +20,10 @@ export async function recoverRecordingArtifacts() {
   let deletedCount = 0;
   let failedCount = 0;
   try {
-    for (const artifact of listArtifactsPendingVerification(
+    for (const artifact of await listArtifactsPendingVerification(
       configured.config.artifactBatchSize,
     )) {
-      const job = findRecordingJob(artifact.recordingJobId);
+      const job = await findRecordingJob(artifact.recordingJobId);
       if (!job) continue;
       try {
         const verification = await store.verifyAudio(artifact.objectKey);
@@ -33,7 +33,7 @@ export async function recoverRecordingArtifacts() {
           body: manifest.body,
           audioSha256: verification.sha256,
         });
-        markRecordingArtifactVerified({
+        await markRecordingArtifactVerified({
           artifactId: artifact.id,
           ...verification,
           manifestObjectKey: manifest.manifestObjectKey,
@@ -41,21 +41,21 @@ export async function recoverRecordingArtifacts() {
         });
         verifiedCount += 1;
       } catch (error) {
-        markRecordingArtifactVerificationFailed(artifact.id, error);
+        await markRecordingArtifactVerificationFailed(artifact.id, error);
         failedCount += 1;
       }
     }
-    for (const artifact of listArtifactsDueForRetention(
+    for (const artifact of await listArtifactsDueForRetention(
       configured.config.artifactBatchSize,
     )) {
       try {
-        markRecordingArtifactDeleting(artifact.id);
+        await markRecordingArtifactDeleting(artifact.id);
         if (artifact.manifestObjectKey) await store.delete(artifact.manifestObjectKey);
         await store.delete(artifact.objectKey);
-        markRecordingArtifactDeleted(artifact.id);
+        await markRecordingArtifactDeleted(artifact.id);
         deletedCount += 1;
       } catch (error) {
-        markRecordingArtifactDeletionFailed(artifact.id, error);
+        await markRecordingArtifactDeletionFailed(artifact.id, error);
         failedCount += 1;
       }
     }

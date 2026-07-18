@@ -2,12 +2,12 @@ import {
   findProviderOperation,
   findSessionProviderOperation,
   updateProviderOperation,
-} from "../provider-operations/provider-operations.repository.js";
+} from "../provider-operations/provider-operations-runtime.repository.js";
 import {
   findAgentConsult,
   listRecoverableAgentConsults,
   updateAgentConsult,
-} from "./agent-consult.repository.js";
+} from "./agent-consult-runtime.repository.js";
 import { getAgentConsultConfig } from "./agent-consult-readiness.js";
 import { LiveKitAgentConsultRoom } from "./livekit-agent-consult-room.js";
 
@@ -32,7 +32,7 @@ export async function recoverAgentConsults(input: { now?: Date } = {}) {
   const now = input.now ?? new Date();
   let recoveredCount = 0;
   let failedCount = 0;
-  const consults = listRecoverableAgentConsults();
+  const consults = await listRecoverableAgentConsults();
   for (const candidate of consults) {
     const result = await recoverOne(candidate.id, room, now);
     recoveredCount += result === "recovered" ? 1 : 0;
@@ -59,7 +59,7 @@ export function startAgentConsultRecovery(input: {
 }
 
 async function recoverOne(consultId: string, room: RecoveryRoom, now: Date) {
-  const consult = findAgentConsult(consultId);
+  const consult = await findAgentConsult(consultId);
   if (!consult) return "unchanged" as const;
   const identities = [consult.operatorParticipantIdentity];
   const [privatePresence, mainPresence] = await Promise.all([
@@ -70,9 +70,9 @@ async function recoverOne(consultId: string, room: RecoveryRoom, now: Date) {
   const inPrivate = privatePresence.present.length === 1;
   const inMain = mainPresence.present.length === 1;
   if (inMain) {
-    advanceToMerged(consultId, now);
-    finishMove(consult.sessionId, consult.id, now);
-    activateLeg(consult.providerOperationId, now);
+    await advanceToMerged(consultId, now);
+    await finishMove(consult.sessionId, consult.id, now);
+    await activateLeg(consult.providerOperationId, now);
     return "recovered" as const;
   }
   if (inPrivate && consult.status === "merging") {
@@ -81,18 +81,20 @@ async function recoverOne(consultId: string, room: RecoveryRoom, now: Date) {
       consult.operatorParticipantIdentity,
       consult.mainRoomName,
     );
-    const move = findSessionProviderOperation(
+    const move = await findSessionProviderOperation(
       consult.sessionId,
       "sip_consult_move",
       consult.id,
     );
     if (moved.ok) {
-      if (move) updateProviderOperation({ operationId: move.id, status: "succeeded", now });
-      updateAgentConsult({ consultId, status: "merged", now });
+      if (move) {
+        await updateProviderOperation({ operationId: move.id, status: "succeeded", now });
+      }
+      await updateAgentConsult({ consultId, status: "merged", now });
       return "recovered" as const;
     }
     if (move) {
-      updateProviderOperation({
+      await updateProviderOperation({
         operationId: move.id,
         status: moved.reconciliationRequired ? "unknown" : "failed",
         errorClass: moved.errorClass,
@@ -100,7 +102,7 @@ async function recoverOne(consultId: string, room: RecoveryRoom, now: Date) {
       });
     }
     if (!moved.reconciliationRequired) {
-      updateAgentConsult({
+      await updateAgentConsult({
         consultId,
         status: "failed",
         failureCode: moved.errorClass,
@@ -110,78 +112,82 @@ async function recoverOne(consultId: string, room: RecoveryRoom, now: Date) {
     return "failed" as const;
   }
   if (inPrivate) {
-    advanceToConnected(consultId, now);
-    activateLeg(consult.providerOperationId, now);
+    await advanceToConnected(consultId, now);
+    await activateLeg(consult.providerOperationId, now);
     return "recovered" as const;
   }
   if (now.getTime() < Date.parse(consult.expiresAt)) return "unchanged" as const;
-  finishExpired(consultId, now);
+  await finishExpired(consultId, now);
   await room.delete(consult.consultRoomName);
   return "recovered" as const;
 }
 
-function advanceToConnected(consultId: string, now: Date) {
-  let consult = findAgentConsult(consultId)!;
+async function advanceToConnected(consultId: string, now: Date) {
+  let consult = (await findAgentConsult(consultId))!;
   if (consult.status === "requested") {
-    updateAgentConsult({ consultId, status: "dialing", now });
-    consult = findAgentConsult(consultId)!;
+    await updateAgentConsult({ consultId, status: "dialing", now });
+    consult = (await findAgentConsult(consultId))!;
   }
   if (consult.status === "dialing") {
-    updateAgentConsult({ consultId, status: "connected", now });
+    await updateAgentConsult({ consultId, status: "connected", now });
   }
 }
 
-function advanceToMerged(consultId: string, now: Date) {
-  advanceToConnected(consultId, now);
-  let consult = findAgentConsult(consultId)!;
+async function advanceToMerged(consultId: string, now: Date) {
+  await advanceToConnected(consultId, now);
+  let consult = (await findAgentConsult(consultId))!;
   if (consult.status === "connected") {
-    updateAgentConsult({ consultId, status: "merging", now });
-    consult = findAgentConsult(consultId)!;
+    await updateAgentConsult({ consultId, status: "merging", now });
+    consult = (await findAgentConsult(consultId))!;
   }
   if (consult.status === "merging") {
-    updateAgentConsult({ consultId, status: "merged", now });
+    await updateAgentConsult({ consultId, status: "merged", now });
   }
 }
 
-function finishExpired(consultId: string, now: Date) {
-  let consult = findAgentConsult(consultId)!;
+async function finishExpired(consultId: string, now: Date) {
+  let consult = (await findAgentConsult(consultId))!;
   const connected = Boolean(consult.connectedAt);
   if (consult.status === "requested") {
-    updateAgentConsult({ consultId, status: "dialing", now });
-    consult = findAgentConsult(consultId)!;
+    await updateAgentConsult({ consultId, status: "dialing", now });
+    consult = (await findAgentConsult(consultId))!;
   }
-  updateAgentConsult({
+  await updateAgentConsult({
     consultId,
     status: connected ? "failed" : "no_answer",
     failureCode: connected ? "operator_presence_lost" : "operator_no_answer",
     now,
   });
-  finishLeg(consult.providerOperationId, connected ? "succeeded" : "failed", now);
+  await finishLeg(consult.providerOperationId, connected ? "succeeded" : "failed", now);
 }
 
-function activateLeg(operationId: string | undefined, now: Date) {
+async function activateLeg(operationId: string | undefined, now: Date) {
   if (!operationId) return;
-  const operation = findProviderOperation(operationId);
+  const operation = await findProviderOperation(operationId);
   if (operation && !["active", "succeeded", "failed", "cancelled"].includes(operation.status)) {
-    updateProviderOperation({ operationId, status: "active", now });
+    await updateProviderOperation({ operationId, status: "active", now });
   }
 }
 
-function finishMove(sessionId: string, consultId: string, now: Date) {
-  const operation = findSessionProviderOperation(sessionId, "sip_consult_move", consultId);
+async function finishMove(sessionId: string, consultId: string, now: Date) {
+  const operation = await findSessionProviderOperation(
+    sessionId,
+    "sip_consult_move",
+    consultId,
+  );
   if (operation && !["succeeded", "failed", "cancelled"].includes(operation.status)) {
-    updateProviderOperation({ operationId: operation.id, status: "succeeded", now });
+    await updateProviderOperation({ operationId: operation.id, status: "succeeded", now });
   }
 }
 
-function finishLeg(
+async function finishLeg(
   operationId: string | undefined,
   status: "succeeded" | "failed",
   now: Date,
 ) {
   if (!operationId) return;
-  const operation = findProviderOperation(operationId);
+  const operation = await findProviderOperation(operationId);
   if (operation && !["succeeded", "failed", "cancelled"].includes(operation.status)) {
-    updateProviderOperation({ operationId, status, now });
+    await updateProviderOperation({ operationId, status, now });
   }
 }

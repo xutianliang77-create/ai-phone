@@ -3,16 +3,16 @@ import { sendError } from "../../infrastructure/http/errors.js";
 import {
   listAccountConsents,
   recordAccountConsent,
-} from "./account-consent.service.js";
+} from "./account-consent-runtime.service.js";
 import {
   accountFromAuthorization,
-  exportAccountData,
   loginWithPhoneCode,
   logout,
   requestAccountDeletion,
   requestPhoneLoginCode,
   toAccountDto,
-} from "./account.service.js";
+} from "./account-runtime.service.js";
+import { exportAccountData } from "./account-export-runtime.service.js";
 
 export async function registerAccountRoutes(app: FastifyInstance) {
   app.post("/auth/phone/request-code", async (request, reply) => {
@@ -38,7 +38,7 @@ export async function registerAccountRoutes(app: FastifyInstance) {
     if (typeof body?.phone !== "string" || typeof body?.code !== "string") {
       return sendError(reply, 400, "invalid_login", "Invalid login request");
     }
-    const result = loginWithPhoneCode(body.phone, body.code, {
+    const result = await loginWithPhoneCode(body.phone, body.code, {
       clientKey: clientKeyFromRequest(request),
     });
     if (!result.ok) {
@@ -49,33 +49,33 @@ export async function registerAccountRoutes(app: FastifyInstance) {
   });
 
   app.post("/auth/logout", async (request) => {
-    logout(request.headers.authorization);
+    await logout(request.headers.authorization);
     return { status: "ok" };
   });
 
   app.get("/account/me", async (request, reply) => {
-    const account = requireAccount(request);
+    const account = await requireAccount(request);
     if (!account) return unauthorized(reply);
     return { account: toAccountDto(account) };
   });
 
   app.get("/account/export", async (request, reply) => {
-    const account = requireAccount(request);
+    const account = await requireAccount(request);
     if (!account) return unauthorized(reply);
-    return exportAccountData(account);
+    return await exportAccountData(account);
   });
 
   app.get("/account/consents", async (request, reply) => {
-    const account = requireAccount(request);
+    const account = await requireAccount(request);
     if (!account) return unauthorized(reply);
-    return { consents: listAccountConsents(account) };
+    return { consents: await listAccountConsents(account) };
   });
 
   app.post("/account/consents", async (request, reply) => {
-    const account = requireAccount(request);
+    const account = await requireAccount(request);
     if (!account) return unauthorized(reply);
     const body = request.body as Record<string, unknown> | undefined;
-    const result = recordAccountConsent(account, body ?? {});
+    const result = await recordAccountConsent(account, body ?? {});
     if (!result.ok) {
       return sendError(reply, 400, result.code, "Invalid consent record");
     }
@@ -83,13 +83,13 @@ export async function registerAccountRoutes(app: FastifyInstance) {
   });
 
   app.post("/account/delete", async (request, reply) => {
-    const account = requireAccount(request);
+    const account = await requireAccount(request);
     if (!account) return unauthorized(reply);
-    return { account: requestAccountDeletion(account) };
+    return { account: await requestAccountDeletion(account) };
   });
 }
 
-function requireAccount(request: FastifyRequest) {
+async function requireAccount(request: FastifyRequest) {
   return accountFromAuthorization(request.headers.authorization);
 }
 

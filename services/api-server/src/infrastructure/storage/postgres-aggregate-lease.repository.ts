@@ -24,7 +24,7 @@ export class PostgresAggregateLeaseRepository {
         [input.aggregateType, input.aggregateId, input.ownerId, input.leaseSeconds],
       );
       const row = result.rows[0];
-      return row ? fromRow(row) : null;
+      return row?.aggregate_type ? fromRow(row) : null;
     } finally {
       client.release();
     }
@@ -56,14 +56,18 @@ export class PostgresAggregateLeaseRepository {
 }
 
 interface LeaseRow {
-  aggregate_type: string;
-  aggregate_id: string;
-  owner_id: string;
-  fencing_token: string;
-  lease_until: Date;
+  aggregate_type: string | null;
+  aggregate_id: string | null;
+  owner_id: string | null;
+  fencing_token: string | null;
+  lease_until: Date | null;
 }
 
 function fromRow(row: LeaseRow): AggregateWriterLease {
+  if (!row.aggregate_type || !row.aggregate_id || !row.owner_id ||
+    !row.fencing_token || !row.lease_until) {
+    throw new Error("Invalid PostgreSQL aggregate lease");
+  }
   return {
     aggregateType: row.aggregate_type,
     aggregateId: row.aggregate_id,

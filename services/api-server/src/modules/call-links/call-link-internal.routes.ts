@@ -1,14 +1,16 @@
 import type { FastifyInstance } from "fastify";
 import { sendError } from "../../infrastructure/http/errors.js";
 import { StorageConflictError } from "../../infrastructure/storage/sqlite-snapshot-store.js";
-import { InboxPayloadConflictError } from "../events/reliable-events.repository.js";
+import { InboxPayloadConflictError } from
+  "../events/reliable-events-runtime.repository.js";
 import {
   findProviderOperation,
   updateProviderOperation,
-} from "../provider-operations/provider-operations.repository.js";
+} from "../provider-operations/provider-operations-runtime.repository.js";
 import { SessionVersionConflictError } from "../sessions/sessions-runtime.repository.js";
 import { withSessionWriteLock } from "../sessions/session-write-coordinator.js";
-import { getReadyVoiceProfileTtsConfig } from "../voice-profiles/voice-profiles.service.js";
+import { getReadyVoiceProfileTtsConfig } from
+  "../voice-profiles/voice-profiles-runtime.service.js";
 import { getCallLinkWorkerSupervisor } from "./call-link-worker-supervisor.js";
 import {
   type CallLinkRecord,
@@ -22,7 +24,8 @@ import {
   deliverPendingCallRoomDataEvents,
   publishCallRoomDataEvents,
 } from "./call-room-worker.js";
-import { CallPlaybackConflictError } from "./call-playbacks.repository.js";
+import { CallPlaybackConflictError } from
+  "./call-playbacks-runtime.repository.js";
 import { consumeCallRoomEventRequest } from "./call-room-event-rate-limit.js";
 import { getCallRoomResourceLimits } from "./call-room-resource-limits.js";
 import { liveKitSipParticipantIdentity } from "./livekit-sip-identity.js";
@@ -104,7 +107,7 @@ export function registerCallLinkInternalRoutes(app: FastifyInstance) {
             event.segmentId === "worker-started",
         )
       ) {
-        getCallLinkWorkerSupervisor().markReady(record.callId);
+        await getCallLinkWorkerSupervisor().markReady(record.callId);
       }
       return {
         callId: record.callId,
@@ -158,7 +161,7 @@ export function registerCallLinkInternalRoutes(app: FastifyInstance) {
           participantRole: "worker",
           joinType: "worker",
         });
-        const ttsVoice = getReadyVoiceProfileTtsConfig(record.userId);
+        const ttsVoice = await getReadyVoiceProfileTtsConfig(record.userId);
         return {
           ...token,
           sessionId: record.sessionId,
@@ -187,7 +190,7 @@ export function registerCallLinkInternalRoutes(app: FastifyInstance) {
       if (!record) {
         return sendError(reply, 404, "call_link_not_found", "Call link not found");
       }
-      const operation = findProviderOperation(status.operationId);
+      const operation = await findProviderOperation(status.operationId);
       const expectedIdentity = liveKitSipParticipantIdentity(
         record.sessionId,
         status.operationId,
@@ -238,14 +241,14 @@ export function registerCallLinkInternalRoutes(app: FastifyInstance) {
   });
 }
 
-function observeLiveKitSipDialing(
+async function observeLiveKitSipDialing(
   operationId: string,
   status: SipStatus,
   observedAt: Date,
 ) {
-  const operation = findProviderOperation(operationId);
+  const operation = await findProviderOperation(operationId);
   if (!operation) return { status: "not_found" as const, terminal: false };
-  const updated = updateProviderOperation({
+  const updated = await updateProviderOperation({
     operationId,
     status: operation.status,
     externalOperationId: status.sipCallId,

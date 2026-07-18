@@ -11,14 +11,14 @@ import {
   findProviderOperation,
   findSessionProviderOperation,
   updateProviderOperation,
-} from "../provider-operations/provider-operations.repository.js";
+} from "../provider-operations/provider-operations-runtime.repository.js";
 
 export async function executeVoiceAgentHangup(input: {
   call: CallLinkRecord;
   config: LiveKitSipConfig;
   idempotencyKey: string;
 }) {
-  const dial = findSessionProviderOperation(input.call.sessionId, "sip_outbound");
+  const dial = await findSessionProviderOperation(input.call.sessionId, "sip_outbound");
   if (!dial || !["accepted", "unknown", "active", "succeeded"]
     .includes(dial.status)) {
     return { ok: false as const, code: "sip_not_started" };
@@ -28,7 +28,7 @@ export async function executeVoiceAgentHangup(input: {
     roomName: input.call.roomName,
     dialOperationId: dial.id,
   })).digest("hex");
-  const started = beginProviderOperation({
+  const started = await beginProviderOperation({
     sessionId: input.call.sessionId,
     provider: "livekit_sip",
     operationType: "sip_hangup",
@@ -67,7 +67,7 @@ export async function executeVoiceAgentHangup(input: {
   const status = result.ok || notFound
     ? "succeeded"
     : result.reconciliationRequired ? "unknown" : "failed";
-  updateProviderOperation({
+  await updateProviderOperation({
     operationId: started.operation.id,
     status,
     errorClass: result.ok ? undefined : result.errorClass,
@@ -75,7 +75,7 @@ export async function executeVoiceAgentHangup(input: {
       ? { externalResourceId: result.externalResourceId }
       : {}),
   });
-  const operation = findProviderOperation(started.operation.id) ?? started.operation;
+  const operation = await findProviderOperation(started.operation.id) ?? started.operation;
   return {
     ok: status === "succeeded",
     code: status,

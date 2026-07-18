@@ -9,7 +9,7 @@ import { completeSessionWithUsage } from "../sessions/session-completion.js";
 import { endCallLegs } from "../sessions/sessions-runtime.repository.js";
 import { withSessionWriteLock } from "../sessions/session-write-coordinator.js";
 import { findSessionProviderOperation } from
-  "../provider-operations/provider-operations.repository.js";
+  "../provider-operations/provider-operations-runtime.repository.js";
 import type { ProviderOperationRecord } from "../provider-operations/provider-operation-record.js";
 import { getCallLinkWorkerSupervisor } from "./call-link-worker-supervisor.js";
 import {
@@ -36,7 +36,7 @@ export function setLiveKitSipProviderFactoryForTests(
 
 export function registerCallLinkSipRoutes(app: FastifyInstance) {
   app.post("/call-links/:callId/sip-outbound", async (request, reply) => {
-    const account = requireAccount(request, reply);
+    const account = await requireAccount(request, reply);
     if (!account) return;
     const params = request.params as { callId: string };
     const parsed = parseRequest(request.body);
@@ -86,7 +86,7 @@ export function registerCallLinkSipRoutes(app: FastifyInstance) {
       return {
         ok: true as const,
         record: validation.record,
-        operation: beginLiveKitSipOutbound({
+        operation: await beginLiveKitSipOutbound({
           record: validation.record,
           request: parsed,
         }),
@@ -170,7 +170,7 @@ async function validateDial(
   if (presence.activeHostCount !== 1) {
     return failure(409, "sip_host_not_connected", "Host must join before dialing");
   }
-  const existing = findSessionProviderOperation(record.sessionId, "sip_outbound");
+  const existing = await findSessionProviderOperation(record.sessionId, "sip_outbound");
   if (presence.activeGuestCount > 0 && !existing) {
     return failure(409, "sip_guest_already_connected", "A guest is already connected");
   }

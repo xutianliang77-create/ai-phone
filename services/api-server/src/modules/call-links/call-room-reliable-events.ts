@@ -1,10 +1,13 @@
 import {
-  listPendingOutboxEvents,
+  claimPendingOutboxEvents,
   markOutboxFailed,
   markOutboxPublished,
   processInboxEventAsync,
+  releaseOutboxClaim,
   hasInboxEvent,
-} from "../events/reliable-events.repository.js";
+  pendingOutboxSessionIds,
+  type ClaimedOutboxEvent,
+} from "../events/reliable-events-runtime.repository.js";
 import {
   assertSessionVersion,
   findSession,
@@ -20,9 +23,9 @@ export async function stageCallRoomDataEvents(options: {
   events: CallRoomDataEvent[];
   expectedVersion?: number;
 }) {
-  const duplicateOnly = options.events.every((event) =>
+  const duplicateOnly = (await Promise.all(options.events.map((event) =>
     hasInboxEvent(eventId(options.record, event))
-  );
+  ))).every(Boolean);
   if (!duplicateOnly) {
     await assertSessionVersion(options.record.sessionId, options.expectedVersion);
   }
@@ -51,30 +54,34 @@ export async function stageCallRoomDataEvents(options: {
   };
 }
 
-export function pendingCallRoomDataEvents(sessionId: string, now?: Date) {
-  return listPendingOutboxEvents({
+export async function pendingCallRoomDataEvents(sessionId: string, now?: Date) {
+  return (await claimPendingOutboxEvents({
     sessionId,
     eventType: callRoomOutboxEventType,
     now,
-  }).map((record) => ({
+  })).map((record) => ({
     record,
     event: record.payload as CallRoomDataEvent,
   }));
 }
 
 export function pendingCallRoomSessionIds(now?: Date) {
-  return [...new Set(listPendingOutboxEvents({
-    eventType: callRoomOutboxEventType,
-    now,
-  }).map((event) => event.sessionId))];
+  return pendingOutboxSessionIds(callRoomOutboxEventType, now);
 }
 
-export function completeCallRoomDataEvent(idempotencyKey: string) {
-  return markOutboxPublished(idempotencyKey);
+export function completeCallRoomDataEvent(event: ClaimedOutboxEvent) {
+  return markOutboxPublished(event);
 }
 
-export function failCallRoomDataEvent(idempotencyKey: string, error: unknown) {
-  return markOutboxFailed(idempotencyKey, error);
+export function failCallRoomDataEvent(
+  event: ClaimedOutboxEvent,
+  error: unknown,
+) {
+  return markOutboxFailed(event, error);
+}
+
+export function releaseCallRoomDataEvent(event: ClaimedOutboxEvent) {
+  return releaseOutboxClaim(event);
 }
 
 function eventId(record: CallLinkRecord, event: CallRoomDataEvent) {

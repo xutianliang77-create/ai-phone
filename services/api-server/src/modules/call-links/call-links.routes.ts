@@ -77,7 +77,7 @@ export async function registerCallLinkRoutes(app: FastifyInstance) {
   });
 
   app.post("/call-links", async (request, reply) => {
-    const account = requireAccount(request, reply);
+    const account = await requireAccount(request, reply);
     if (!account) return;
     const env = loadEnv();
     const limits = getCallRoomResourceLimits();
@@ -101,7 +101,7 @@ export async function registerCallLinkRoutes(app: FastifyInstance) {
   });
 
   app.post("/call-links/:callId/guest-ticket", async (request, reply) => {
-    const account = requireAccount(request, reply);
+    const account = await requireAccount(request, reply);
     if (!account) return;
     const params = request.params as { callId: string };
     return withSessionWriteLock(params.callId, async () => {
@@ -190,7 +190,7 @@ export async function registerCallLinkRoutes(app: FastifyInstance) {
   );
 
   app.post("/call-links/:callId/end", async (request, reply) => {
-    const account = requireAccount(request, reply);
+    const account = await requireAccount(request, reply);
     if (!account) return;
     const params = request.params as { callId: string };
     return withSessionWriteLock(params.callId, async () => {

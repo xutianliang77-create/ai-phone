@@ -19,7 +19,7 @@ export async function registerTextTranslationRoutes(
   fetchFn: typeof fetch = fetch,
 ) {
   app.post("/translation/text", async (request, reply) => {
-    const account = requireAccount(request, reply);
+    const account = await requireAccount(request, reply);
     if (!account) return;
 
     const body = request.body as TextTranslationRequest;

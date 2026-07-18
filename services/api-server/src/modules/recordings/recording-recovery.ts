@@ -4,25 +4,25 @@ import { getLiveKitEgressConfig } from "./livekit-egress-readiness.js";
 import {
   listRecoverableRecordingJobs,
   updateRecordingJob,
-} from "./recordings.repository.js";
+} from "./recordings-runtime.repository.js";
 
 export async function recoverRecordingJobs() {
   const config = getLiveKitEgressConfig();
   if (!config.ok) return { inspectedCount: 0, recoveredCount: 0, failedCount: 0 };
-  const jobs = listRecoverableRecordingJobs();
+  const jobs = await listRecoverableRecordingJobs();
   const provider = new LiveKitEgressProviderAdapter(config.config);
   const results = await Promise.allSettled(jobs.map(async (job) => {
     const result = await provider.get(job.externalRecordingId!);
     if (!result.ok) throw new Error(`Egress reconciliation failed: ${result.errorClass}`);
     if (!result.result) {
-      updateRecordingJob({
+      await updateRecordingJob({
         jobId: job.id,
         status: "failed",
         errorClass: "egress_not_found",
       });
       return;
     }
-    applyRecordingProviderJob(job.id, result.result);
+    await applyRecordingProviderJob(job.id, result.result);
   }));
   const recoveredCount = results.filter((result) => result.status === "fulfilled").length;
   return {

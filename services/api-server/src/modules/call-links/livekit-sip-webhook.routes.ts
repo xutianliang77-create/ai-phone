@@ -4,12 +4,12 @@ import { sendError } from "../../infrastructure/http/errors.js";
 import {
   InboxPayloadConflictError,
   processInboxEventOnlyAsync,
-} from "../events/reliable-events.repository.js";
+} from "../events/reliable-events-runtime.repository.js";
 import {
   findProviderOperation,
   findSessionProviderOperation,
   updateProviderOperation,
-} from "../provider-operations/provider-operations.repository.js";
+} from "../provider-operations/provider-operations-runtime.repository.js";
 import { getCallLinkWorkerSupervisor } from "./call-link-worker-supervisor.js";
 import {
   findCallLink,
@@ -27,7 +27,7 @@ import { closeLiveKitSipInbound } from "./call-link-sip-inbound.routes.js";
 import {
   findAgentToolExecutionByProviderOperation,
   updateAgentToolExecution,
-} from "../agent-calls/agent-orchestration.repository.js";
+} from "../agent-calls/agent-orchestration-runtime.repository.js";
 import { getVoiceAgentRuntimeSupervisor } from
   "../agent-calls/voice-agent-runtime-supervisor.js";
 import {
@@ -76,7 +76,7 @@ export function registerLiveKitSipWebhookRoutes(app: FastifyInstance) {
       );
     }
     try {
-      const egress = reconcileLiveKitEgressWebhook(event);
+      const egress = await reconcileLiveKitEgressWebhook(event);
       if (egress) {
         return reply.status(202).send({
           status: egress.duplicate ? "duplicate" : egress.status,
@@ -84,7 +84,7 @@ export function registerLiveKitSipWebhookRoutes(app: FastifyInstance) {
           recordingId: egress.recordingId,
         });
       }
-      const ingress = reconcileLiveKitIngressWebhook(event);
+      const ingress = await reconcileLiveKitIngressWebhook(event);
       if (ingress) {
         return reply.status(202).send({
           status: ingress.duplicate ? "duplicate" : ingress.status,
@@ -105,7 +105,7 @@ export function registerLiveKitSipWebhookRoutes(app: FastifyInstance) {
       return sendError(reply, 409, "livekit_egress_binding_conflict", "Egress event conflict");
     }
     try {
-      const consult = reconcileAgentConsultWebhook(event);
+      const consult = await reconcileAgentConsultWebhook(event);
       if (consult) {
         return reply.status(202).send({
           status: consult.status,
@@ -136,7 +136,7 @@ export function registerLiveKitSipWebhookRoutes(app: FastifyInstance) {
     }
     const binding = await sipEventBinding(event);
     if (!binding) return reply.status(202).send({ status: "ignored", eventId: event.id });
-    const operation = findProviderOperation(binding.operationId);
+    const operation = await findProviderOperation(binding.operationId);
     if (!operation || operation.provider !== "livekit_sip" ||
       operation.operationType !== binding.operationType ||
       operation.sessionId !== binding.sessionId) {
@@ -180,7 +180,7 @@ export function registerLiveKitSipWebhookRoutes(app: FastifyInstance) {
     if (result?.terminal) {
       if (operation.operationType === "sip_inbound") {
         await closeLiveKitSipInbound(
-          findProviderOperation(operation.id) ?? operation,
+          await findProviderOperation(operation.id) ?? operation,
           "call_terminal",
         );
       }
@@ -201,7 +201,7 @@ export function registerLiveKitSipWebhookRoutes(app: FastifyInstance) {
 }
 
 async function applySipEvent(event: WebhookEvent, operationId: string) {
-  const operation = findProviderOperation(operationId);
+  const operation = await findProviderOperation(operationId);
   if (!operation) return { status: "ignored" as const, terminal: false };
   const externalOperationId = event.participant?.attributes?.["sip.callID"];
   const externalResourceId = operation.operationType === "sip_outbound"
@@ -218,7 +218,7 @@ async function applySipEvent(event: WebhookEvent, operationId: string) {
         externalResourceId,
       });
     }
-    const observed = updateProviderOperation({
+    const observed = await updateProviderOperation({
       operationId,
       status: operation.status,
       externalOperationId,
@@ -242,7 +242,9 @@ async function applySipEvent(event: WebhookEvent, operationId: string) {
     externalOperationId,
     externalResourceId,
   });
-  if (result.terminal) reconcileHangupOperation(operation.sessionId, eventDate(event));
+  if (result.terminal) {
+    await reconcileHangupOperation(operation.sessionId, eventDate(event));
+  }
   return result;
 }
 
@@ -293,10 +295,10 @@ function safeParticipantAttributes(event: WebhookEvent) {
   ].flatMap((key) => attributes[key] ? [[key, attributes[key]]] : []));
 }
 
-function reconcileHangupOperation(sessionId: string, observedAt: Date) {
-  const hangup = findSessionProviderOperation(sessionId, "sip_hangup");
+async function reconcileHangupOperation(sessionId: string, observedAt: Date) {
+  const hangup = await findSessionProviderOperation(sessionId, "sip_hangup");
   if (!hangup || ["succeeded", "failed", "cancelled"].includes(hangup.status)) return;
-  const updated = updateProviderOperation({
+  const updated = await updateProviderOperation({
     operationId: hangup.id,
     status: "succeeded",
     completionObservedAt: observedAt.toISOString(),
@@ -306,9 +308,9 @@ function reconcileHangupOperation(sessionId: string, observedAt: Date) {
   const operation = "operation" in updated && updated.operation
     ? updated.operation
     : hangup;
-  const execution = findAgentToolExecutionByProviderOperation(operation.id);
+  const execution = await findAgentToolExecutionByProviderOperation(operation.id);
   if (execution) {
-    updateAgentToolExecution({
+    await updateAgentToolExecution({
       executionId: execution.id,
       status: "succeeded",
       resultSummary: "SIP hangup confirmed by participant_left",

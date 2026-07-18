@@ -33,7 +33,7 @@ export async function registerHealthRoutes(app: FastifyInstance) {
     const callRoomReadiness = getCallRoomReadiness();
     const pstnReadiness = getPstnReadiness();
     const smsReadiness = getSmsDeploymentReadiness();
-    const diagnosticsReadiness = getDiagnosticsDeploymentReadiness();
+    const diagnosticsReadiness = await getDiagnosticsDeploymentReadiness();
     const releaseMaterialsReadiness = getReleaseMaterialsReadiness();
     const sessionReview = sessionReviewProviderStatus();
     const workerDispatchReadiness = getLiveKitDispatchReadiness();
@@ -102,7 +102,7 @@ export async function registerHealthRoutes(app: FastifyInstance) {
   });
 
   app.get("/health/release-ready", async (_request, reply) => {
-    const releaseReadiness = getReleaseReadiness();
+    const releaseReadiness = await getReleaseReadiness();
     const statusCode = releaseReadiness.status === "ready" ? 200 : 503;
     return reply.status(statusCode).send(releaseReadiness);
   });

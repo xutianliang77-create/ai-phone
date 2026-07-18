@@ -243,10 +243,48 @@ export class PostgresIngressRepository {
         : null);
   }
 
+  async findByIngressId(externalIngressId: string) {
+    if (!bounded(externalIngressId, 500)) {
+      throw new Error("Invalid external ingress id");
+    }
+    const sources = await this.querySources(`
+      WHERE source.external_ingress_id = $1
+      ORDER BY source.updated_at DESC, source.id LIMIT 1
+    `, [externalIngressId]);
+    return sources[0] ?? null;
+  }
+
+  async findByIdempotency(sessionId: string, idempotencyKey: string) {
+    if (!bounded(sessionId, 160) || !bounded(idempotencyKey, 200)) {
+      throw new Error("Invalid ingress idempotency lookup");
+    }
+    const sources = await this.querySources(`
+      WHERE source.session_id = $1 AND source.idempotency_key = $2
+      LIMIT 1
+    `, [sessionId, idempotencyKey]);
+    return sources[0] ?? null;
+  }
+
+  async listSession(sessionId: string) {
+    if (!bounded(sessionId, 160)) throw new Error("Invalid ingress session id");
+    return this.querySources(`
+      WHERE source.session_id = $1
+      ORDER BY source.created_at, source.id
+    `, [sessionId]);
+  }
+
   async listRecoverable(limit = 200) {
     if (!Number.isInteger(limit) || limit < 1 || limit > 500) {
       throw new Error("Invalid ingress recovery limit");
     }
+    return this.querySources(`
+      WHERE source.status = ANY($1::text[])
+        AND source.external_ingress_id IS NOT NULL
+      ORDER BY source.updated_at, source.id LIMIT $2
+    `, [[...activeIngressStatuses], limit]);
+  }
+
+  private async querySources(where: string, values: unknown[]) {
     const client = await this.pool.connect();
     try {
       const rows = await client.query<SourceRow>(`
@@ -255,10 +293,8 @@ export class PostgresIngressRepository {
         JOIN ai_phone.projection_records AS primary_record
           ON primary_record.namespace = 'externalMediaSources'
           AND primary_record.record_key = source.id
-        WHERE source.status = ANY($1::text[])
-          AND source.external_ingress_id IS NOT NULL
-        ORDER BY source.updated_at, source.id LIMIT $2
-      `, [[...activeIngressStatuses], limit]);
+        ${where}
+      `, values);
       return rows.rows.map((row) => requireExternalMediaSource(row.payload, row.id));
     } finally {
       client.release();

@@ -56,7 +56,6 @@ type UpdateResult = {
 
 export class PostgresWorkerDispatchRepository {
   private readonly primary: PostgresPrimaryStore;
-
   constructor(private readonly pool: Pick<Pool, "connect">) {
     this.primary = new PostgresPrimaryStore(pool);
   }
@@ -105,6 +104,24 @@ export class PostgresWorkerDispatchRepository {
             reservation: currentReservation.reservation,
           });
         }
+        const dispatchId = workerDispatchId(input.sessionId);
+        const currentPrimary = await transaction.read<WorkerDispatchDto>(
+          "workerDispatches",
+          dispatchId,
+        );
+        const current = currentPrimary
+          ? requireWorkerDispatch(currentPrimary.payload, input.sessionId)
+          : null;
+        const leaseActive = Boolean(current && activeDispatchStatuses.has(current.status) &&
+          Date.parse(current.leaseExpiresAt) > now.getTime());
+        if (leaseActive && (current!.callId !== input.callId ||
+          current!.roomName !== input.roomName || current!.provider !== input.provider ||
+          current!.agentName !== input.agentName)) {
+          return recordDomainCommand(transaction, command, {
+            status: "dispatch_conflict",
+            dispatch: current!,
+          });
+        }
         const used = await heldCapacityUnits(transaction, input.resource, timestamp);
         if (!reservationLeaseActive && used + 1 > input.maxUnits) {
           return recordDomainCommand(transaction, command, {
@@ -133,24 +150,6 @@ export class PostgresWorkerDispatchRepository {
           commandId: input.commandId,
           suffix: "reserve",
         });
-        const dispatchId = workerDispatchId(input.sessionId);
-        const currentPrimary = await transaction.read<WorkerDispatchDto>(
-          "workerDispatches",
-          dispatchId,
-        );
-        const current = currentPrimary
-          ? requireWorkerDispatch(currentPrimary.payload, input.sessionId)
-          : null;
-        const leaseActive = Boolean(current && activeDispatchStatuses.has(current.status) &&
-          Date.parse(current.leaseExpiresAt) > now.getTime());
-        if (leaseActive && (current!.callId !== input.callId ||
-          current!.roomName !== input.roomName || current!.provider !== input.provider ||
-          current!.agentName !== input.agentName)) {
-          return recordDomainCommand(transaction, command, {
-            status: "dispatch_conflict",
-            dispatch: current!,
-          });
-        }
         const dispatch: WorkerDispatchDto = leaseActive ? {
           ...current!,
           version: current!.version + 1,
@@ -167,6 +166,7 @@ export class PostgresWorkerDispatchRepository {
           generation: (current?.generation ?? 0) + 1,
           version: (current?.version ?? 0) + 1,
           leaseExpiresAt: addSeconds(now, input.leaseSeconds),
+          generationStartedAt: timestamp,
           createdAt: current?.createdAt ?? timestamp,
           updatedAt: timestamp,
         };
@@ -204,6 +204,7 @@ export class PostgresWorkerDispatchRepository {
     metadataHash?: string;
     errorClass?: string;
     leaseSeconds?: number;
+    heartbeat?: boolean;
     commandId: string;
     requestHash: string;
     fence: PostgresAggregateFence;
@@ -282,8 +283,8 @@ export class PostgresWorkerDispatchRepository {
             ? { lastErrorClass: input.errorClass.slice(0, 80) }
             : {}),
         };
-        if (input.status === "ready") {
-          next.readyAt ??= timestamp;
+        if (input.status === "ready" || input.heartbeat) {
+          if (input.status === "ready") next.readyAt ??= timestamp;
           next.lastHeartbeatAt = timestamp;
         }
         if (terminal) next.endedAt ??= timestamp;
@@ -318,10 +319,9 @@ export class PostgresWorkerDispatchRepository {
       },
     );
   }
-  find(sessionId: string) {
-    return this.primary.read<WorkerDispatchDto>("workerDispatches", workerDispatchId(sessionId))
-      .then((record) => record ? requireWorkerDispatch(record.payload, sessionId) : null);
-  }
+  find(sessionId: string) { return this.primary
+    .read<WorkerDispatchDto>("workerDispatches", workerDispatchId(sessionId))
+    .then((record) => record ? requireWorkerDispatch(record.payload, sessionId) : null); }
 }
 function validateReserve(input: {
   callId: string;
@@ -337,7 +337,7 @@ function validateReserve(input: {
     !bounded(input.owner, 160) || !Number.isInteger(input.maxUnits) ||
     input.maxUnits < 1 || input.maxUnits > 10_000 ||
     !Number.isInteger(input.leaseSeconds) || input.leaseSeconds < 5 ||
-    input.leaseSeconds > 120) throw new Error("Invalid worker dispatch reservation");
+    input.leaseSeconds > 300) throw new Error("Invalid worker dispatch reservation");
 }
 function addSeconds(now: Date, seconds: number) {
   return new Date(now.getTime() + seconds * 1_000).toISOString();

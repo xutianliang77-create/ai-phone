@@ -63,6 +63,13 @@ function checkSoak(soak, issues) {
     soak.sloPassed !== true) {
     issues.push("70% utilization 120-minute soak did not pass");
   }
+  const requiredTraffic = [
+    "api", "livekit", "sip", "asr", "mt", "tts", "agent", "egress",
+  ];
+  if (soak?.realProviderTraffic !== true || !Array.isArray(soak?.trafficKinds) ||
+    requiredTraffic.some((kind) => !soak.trafficKinds.includes(kind))) {
+    issues.push("Soak must include real API/RTC/SIP/model/agent/egress traffic");
+  }
 }
 
 function checkAdmission(admission, issues) {

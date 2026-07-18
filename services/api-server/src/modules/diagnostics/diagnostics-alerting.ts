@@ -1,15 +1,15 @@
-import { summarizeAppErrorReports } from "./app-errors.repository.js";
+import { summarizeAppErrorReports } from "./app-errors-runtime.repository.js";
 import {
   diagnosticsAlertWebhookConfigIssues,
   diagnosticsAlertWebhookStatus,
 } from "./diagnostics-alert-webhook.js";
 import { diagnosticsAdminStatus } from "./diagnostics-auth.js";
 
-export function getDiagnosticsAlertState(now = new Date()) {
+export async function getDiagnosticsAlertState(now = new Date()) {
   const windowMinutes = positiveInt(process.env.DIAGNOSTICS_ALERT_WINDOW_MINUTES, 15);
   const fatalThreshold = positiveInt(process.env.DIAGNOSTICS_FATAL_ALERT_THRESHOLD, 1);
   const since = new Date(now.getTime() - windowMinutes * 60_000).toISOString();
-  const summary = summarizeAppErrorReports({ since });
+  const summary = await summarizeAppErrorReports({ since });
   const critical = summary.fatal >= fatalThreshold;
   return {
     status: critical ? "critical" : "ok",
@@ -24,8 +24,8 @@ export function getDiagnosticsAlertState(now = new Date()) {
   };
 }
 
-export function getDiagnosticsDeploymentReadiness() {
-  const alertState = getDiagnosticsAlertState();
+export async function getDiagnosticsDeploymentReadiness() {
+  const alertState = await getDiagnosticsAlertState();
   const issues = [
     ...configIssues(),
     ...(alertState.status === "critical"

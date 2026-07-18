@@ -24,12 +24,20 @@ import {
   recordingConsentPayloadHash,
   storeRecordingRecord,
 } from "./postgres-recording-uow.js";
+import { PostgresRecordingQueries } from "./postgres-recording-queries.js";
+
+type RecordingJobUpdateResult = { status: "not_found" } | {
+  status: "updated" | "version_conflict" | "invalid_transition" | "external_id_conflict";
+  job: RecordingJobDto;
+};
 
 export class PostgresRecordingsRepository {
   private readonly primary: PostgresPrimaryStore;
+  private readonly queries: PostgresRecordingQueries;
 
   constructor(private readonly pool: Pick<Pool, "connect">) {
     this.primary = new PostgresPrimaryStore(pool);
+    this.queries = new PostgresRecordingQueries(pool);
   }
 
   async recordConsent(input: {
@@ -270,8 +278,11 @@ export class PostgresRecordingsRepository {
       commandId: input.commandId, commandType: "recording.job.update",
       requestHash: input.requestHash,
     });
-    return this.primary.withAggregateTransaction(input.fence, async (transaction) => {
-      const replay = await transaction.readCommandResult<unknown>(command);
+    return this.primary.withAggregateTransaction<RecordingJobUpdateResult>(
+      input.fence,
+      async (transaction) => {
+      const replay = await transaction
+        .readCommandResult<RecordingJobUpdateResult>(command);
       if (replay) return replay;
       const primary = await transaction.read<RecordingJobDto>("recordingJobs", input.jobId);
       if (!primary) return recordDomainCommand(transaction, command, { status: "not_found" });
@@ -305,7 +316,24 @@ export class PostgresRecordingsRepository {
       return recordDomainCommand(transaction, command, {
         status: "updated", job: requireRecordingJob(stored.payload, next.id),
       });
-    });
+      },
+    );
+  }
+
+  findJob(jobId: string) { return this.queries.findJob(jobId); }
+
+  latestConsents(sessionId: string) { return this.queries.latestConsents(sessionId); }
+
+  findJobByExternalId(externalRecordingId: string) {
+    return this.queries.findJobByExternalId(externalRecordingId);
+  }
+
+  listSessionJobs(sessionId: string) {
+    return this.queries.listSessionJobs(sessionId);
+  }
+
+  listRecoverableJobs(limit?: number) {
+    return this.queries.listRecoverableJobs(limit);
   }
 
   private async readJob(transaction: Parameters<typeof storeRecordingRecord>[0], id: string) {

@@ -8,7 +8,7 @@ import type {
 import { isSupportedLanguage } from "@translation/contracts";
 import { sendError } from "../../infrastructure/http/errors.js";
 import { requireAccount } from "../account/account-auth.js";
-import { getUsageBalance } from "../usage/usage.service.js";
+import { getUsageBalance } from "../usage/usage-hold-runtime.service.js";
 import {
   createSession,
   deleteSession,
@@ -35,7 +35,7 @@ export async function registerSessionsRoutes(app: FastifyInstance) {
   registerSessionSpeakerRoutes(app);
   registerSessionReviewActionRoutes(app);
   app.get("/sessions", async (request, reply) => {
-    const account = requireAccount(request, reply);
+    const account = await requireAccount(request, reply);
     if (!account) return;
     const query = request.query as { q?: string };
     return {
@@ -44,7 +44,7 @@ export async function registerSessionsRoutes(app: FastifyInstance) {
   });
 
   app.post("/sessions/type-to-speak", async (request, reply) => {
-    const account = requireAccount(request, reply);
+    const account = await requireAccount(request, reply);
     if (!account) return;
     const body = request.body as Partial<SaveTypeToSpeakSessionRequest>;
     if (!isValidTextTranslationBody(body, true)) {
@@ -66,7 +66,7 @@ export async function registerSessionsRoutes(app: FastifyInstance) {
   });
 
   app.post("/sessions/text-translation", async (request, reply) => {
-    const account = requireAccount(request, reply);
+    const account = await requireAccount(request, reply);
     if (!account) return;
     const body = request.body as Partial<SaveTextTranslationSessionRequest>;
     if (!isValidTextTranslationBody(body, false)) {
@@ -92,7 +92,7 @@ export async function registerSessionsRoutes(app: FastifyInstance) {
   });
 
   app.get("/sessions/:sessionId", async (request, reply) => {
-    const account = requireAccount(request, reply);
+    const account = await requireAccount(request, reply);
     if (!account) return;
     const params = request.params as { sessionId: string };
     const session = await findSession(params.sessionId);
@@ -103,7 +103,7 @@ export async function registerSessionsRoutes(app: FastifyInstance) {
   });
 
   app.get("/sessions/:sessionId/quality-report", async (request, reply) => {
-    const account = requireAccount(request, reply);
+    const account = await requireAccount(request, reply);
     if (!account) return;
     const params = request.params as { sessionId: string };
     const session = await findSession(params.sessionId);
@@ -114,7 +114,7 @@ export async function registerSessionsRoutes(app: FastifyInstance) {
   });
 
   app.post("/sessions/:sessionId/segments", async (request, reply) => {
-    const account = requireAccount(request, reply);
+    const account = await requireAccount(request, reply);
     if (!account) return;
     const params = request.params as { sessionId: string };
     const body = request.body as Partial<SaveSessionSegmentsRequest>;
@@ -137,7 +137,7 @@ export async function registerSessionsRoutes(app: FastifyInstance) {
   });
 
   app.post("/sessions/:sessionId/review", async (request, reply) => {
-    const account = requireAccount(request, reply);
+    const account = await requireAccount(request, reply);
     if (!account) return;
     const params = request.params as { sessionId: string };
     const session = await findSession(params.sessionId);
@@ -165,7 +165,7 @@ export async function registerSessionsRoutes(app: FastifyInstance) {
   });
 
   app.delete("/sessions/:sessionId", async (request, reply) => {
-    const account = requireAccount(request, reply);
+    const account = await requireAccount(request, reply);
     if (!account) return;
     const params = request.params as { sessionId: string };
     return withSessionWriteLock(params.sessionId, async () => {
@@ -182,7 +182,7 @@ export async function registerSessionsRoutes(app: FastifyInstance) {
   });
 
   app.get("/sessions/:sessionId/export", async (request, reply) => {
-    const account = requireAccount(request, reply);
+    const account = await requireAccount(request, reply);
     if (!account) return;
     const params = request.params as { sessionId: string };
     const query = request.query as { format?: string };
@@ -195,9 +195,9 @@ export async function registerSessionsRoutes(app: FastifyInstance) {
   });
 
   app.get("/usage/balance", async (request, reply) => {
-    const account = requireAccount(request, reply);
+    const account = await requireAccount(request, reply);
     if (!account) return;
-    return { ...getUsageBalance(account.id) };
+    return { ...(await getUsageBalance(account.id)) };
   });
 
   app.get("/internal/usage/balance/:userId", async (request, reply) => {
@@ -210,7 +210,7 @@ export async function registerSessionsRoutes(app: FastifyInstance) {
       );
     }
     const params = request.params as { userId: string };
-    return { ...getUsageBalance(params.userId) };
+    return { ...(await getUsageBalance(params.userId)) };
   });
 
   app.post("/internal/sessions/:sessionId/refund", async (request, reply) => {
@@ -229,7 +229,7 @@ export async function registerSessionsRoutes(app: FastifyInstance) {
       const session = await findSession(params.sessionId);
       if (!session)
         return sendError(reply, 404, "session_not_found", "Session not found");
-      const refund = refundSessionUsage(session, { reason: body?.reason });
+      const refund = await refundSessionUsage(session, { reason: body?.reason });
       return {
         sessionId: session.id,
         refundedSeconds: refund.refundedSeconds,

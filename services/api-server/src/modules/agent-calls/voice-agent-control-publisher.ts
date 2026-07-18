@@ -6,7 +6,7 @@ import { LiveKitRoomProviderAdapter } from
 import { getLiveKitRoomConfig } from "../call-links/call-room-readiness.js";
 import { findSession } from "../sessions/sessions-runtime.repository.js";
 import { findWorkerDispatch } from
-  "../worker-dispatches/worker-dispatch.repository.js";
+  "../worker-dispatches/worker-dispatch-runtime.repository.js";
 
 export const voiceAgentControlTopic = "voice-agent.control.v1";
 
@@ -16,7 +16,7 @@ export async function publishVoiceAgentControl(input: {
 }) {
   const call = await findCallLink(input.callId);
   const config = getLiveKitRoomConfig();
-  const dispatch = findWorkerDispatch(input.callId);
+  const dispatch = await findWorkerDispatch(input.callId);
   const identities = (await findSession(input.callId))?.callLegs
     ?.filter((leg) => leg.status === "active" && leg.participantRole === "worker")
     .map((leg) => leg.participantIdentity) ?? [];

@@ -4,7 +4,7 @@ import type { CallRoomDataEvent } from "./call-room-events.js";
 import {
   applyCallBargeInEvent,
   applyCallPlaybackEvent,
-} from "./call-playbacks.repository.js";
+} from "./call-playbacks-runtime.repository.js";
 
 export async function persistCallRoomDataEvent(
   record: CallLinkRecord,

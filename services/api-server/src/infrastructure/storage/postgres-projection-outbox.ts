@@ -4,6 +4,8 @@ import type {
   PostgresProjectionEventRecord,
   PostgresProjectionNamespace,
 } from "./postgres-projection-record.js";
+import { protectAgentCallPrimaryPayload } from
+  "../../modules/agent-calls/agent-phone-reference.js";
 
 export const postgresProjectionSpecs: Array<{
   namespace: PostgresProjectionNamespace;
@@ -45,7 +47,9 @@ export function appendPostgresProjectionEvents(
         namespace: spec.namespace,
         recordKey: key,
         operation: right === undefined ? "delete" : "upsert",
-        ...(right === undefined ? {} : { payload: structuredClone(right) }),
+        ...(right === undefined ? {} : {
+          payload: primaryProjectionPayload(spec.namespace, right),
+        }),
         attempts: 0,
         createdAt: timestamp,
         updatedAt: timestamp,
@@ -61,9 +65,18 @@ export function postgresProjectionSnapshotRecords(snapshot: AppStoreSnapshot) {
     [...byKey(snapshot, spec.namespace, spec.key)].map(([recordKey, payload]) => ({
       namespace: spec.namespace,
       recordKey,
-      payload,
+      payload: primaryProjectionPayload(spec.namespace, payload),
     }))
   );
+}
+
+function primaryProjectionPayload(
+  namespace: PostgresProjectionNamespace,
+  value: unknown,
+) {
+  return namespace === "agentCallDrafts"
+    ? protectAgentCallPrimaryPayload(value)
+    : structuredClone(value);
 }
 
 function byKey(

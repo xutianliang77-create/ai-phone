@@ -28,6 +28,8 @@ export function requireWorkerDispatch(value: unknown, sessionId: string) {
     !bounded(record.callId ?? "", 160) || !bounded(record.roomName ?? "", 200) ||
     !activeOrTerminal(record.status) || !positive(record.generation) ||
     !positive(record.version) || !validTimestamp(record.leaseExpiresAt) ||
+    (record.generationStartedAt !== undefined &&
+      !validTimestamp(record.generationStartedAt)) ||
     !validTimestamp(record.createdAt) || !validTimestamp(record.updatedAt)) {
     throw new Error("Invalid PostgreSQL worker dispatch record");
   }

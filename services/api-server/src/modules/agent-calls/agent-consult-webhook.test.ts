@@ -24,9 +24,9 @@ describe("Agent operator consult webhook", () => {
     store.postgresProjectionEvents = [];
   });
 
-  it("connects in private and reconciles the move into the main room", () => {
+  it("connects in private and reconciles the move into the main room", async () => {
     const binding = createConsult();
-    const joinedPrivate = reconcileAgentConsultWebhook(event(
+    const joinedPrivate = await reconcileAgentConsultWebhook(event(
       binding,
       "operator-private",
       "participant_joined",
@@ -42,13 +42,13 @@ describe("Agent operator consult webhook", () => {
     }).operation;
     updateAgentConsult({ consultId: binding.id, status: "merging" });
     updateProviderOperation({ operationId: move.id, status: "unknown" });
-    const leftPrivate = reconcileAgentConsultWebhook(event(
+    const leftPrivate = await reconcileAgentConsultWebhook(event(
       binding,
       "operator-left-private",
       "participant_left",
       binding.consultRoomName,
     ));
-    const joinedMain = reconcileAgentConsultWebhook(event(
+    const joinedMain = await reconcileAgentConsultWebhook(event(
       binding,
       "operator-main",
       "participant_joined",
@@ -63,7 +63,7 @@ describe("Agent operator consult webhook", () => {
       .toBe("succeeded");
   });
 
-  it("deduplicates a signed event without replaying state changes", () => {
+  it("deduplicates a signed event without replaying state changes", async () => {
     const binding = createConsult();
     const joined = event(
       binding,
@@ -72,8 +72,8 @@ describe("Agent operator consult webhook", () => {
       binding.consultRoomName,
     );
 
-    const first = reconcileAgentConsultWebhook(joined);
-    const duplicate = reconcileAgentConsultWebhook(joined);
+    const first = await reconcileAgentConsultWebhook(joined);
+    const duplicate = await reconcileAgentConsultWebhook(joined);
 
     expect(first?.status).toBe("connected");
     expect(duplicate?.status).toBe("duplicate");

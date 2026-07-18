@@ -1,0 +1,49 @@
+{
+  "schemaVersion": 1,
+  "status": "accepted_temporary_exception",
+  "advisory": "GHSA-8988-4f7v-96qf",
+  "severity": "moderate",
+  "owner": "platform",
+  "expiresAt": "2026-08-31T23:59:59+08:00",
+  "upstreamPackage": "@livekit/agents",
+  "upstreamVersion": "1.5.0",
+  "allowedVulnerabilities": [
+    "@livekit/agents",
+    "@opentelemetry/core",
+    "@opentelemetry/exporter-logs-otlp-proto",
+    "@opentelemetry/exporter-trace-otlp-proto",
+    "@opentelemetry/instrumentation-pino",
+    "@opentelemetry/otlp-exporter-base",
+    "@opentelemetry/otlp-transformer",
+    "@opentelemetry/propagator-b3",
+    "@opentelemetry/propagator-jaeger",
+    "@opentelemetry/resources",
+    "@opentelemetry/sdk-logs",
+    "@opentelemetry/sdk-metrics",
+    "@opentelemetry/sdk-trace-base",
+    "@opentelemetry/sdk-trace-node"
+  ],
+  "requiredDirectVersions": {
+    "@opentelemetry/api": "1.9.1",
+    "@opentelemetry/core": "2.9.0",
+    "@opentelemetry/exporter-trace-otlp-proto": "0.220.0",
+    "@opentelemetry/resources": "2.9.0",
+    "@opentelemetry/sdk-trace-node": "2.9.0"
+  },
+  "requiredSourceMarkers": [
+    "W3CTraceContextPropagator",
+    "platformPropagationHeaders(request.headers)"
+  ],
+  "reachability": {
+    "publicInboundBaggageUsed": false,
+    "livekitAgentsPropagationExtractFound": false,
+    "agentProcessesHavePublicOtelHttpInstrumentation": false
+  },
+  "mitigations": [
+    "API tracing uses OpenTelemetry core 2.9.0 and OTLP 0.220.0",
+    "API propagation is trace-context-only and strips inbound baggage",
+    "LiveKit Agent workers do not call propagation.extract and do not install HTTP instrumentation",
+    "Worker network ingress remains private and separately authenticated"
+  ],
+  "removalTrigger": "Upgrade when LiveKit Agents publishes a release without OpenTelemetry core below 2.8.0, then remove this exception."
+}

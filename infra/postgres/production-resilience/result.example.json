@@ -1,0 +1,50 @@
+{
+  "schemaVersion": 1,
+  "status": "unexecuted",
+  "environment": "staging",
+  "runId": "replace-after-resilience-drill",
+  "topologySha256": "replace-with-topology-sha256",
+  "capacityResultSha256": "replace-with-capacity-result-sha256",
+  "objectives": {
+    "maxRpoSeconds": 300,
+    "maxRtoSeconds": 120
+  },
+  "ha": {
+    "mode": "managed_ha",
+    "nodes": [
+      { "hostId": "db-host-a", "failureDomain": "zone-a" },
+      { "hostId": "db-host-b", "failureDomain": "zone-b" }
+    ],
+    "dcsVoters": 0,
+    "dcsFailureDomains": [],
+    "automaticFailover": {
+      "status": "unexecuted",
+      "healthControllerInitiated": false,
+      "fencingPassed": false,
+      "oldPrimaryWriteRejected": false,
+      "endpointSwitched": false,
+      "oldPrimaryRejoined": false,
+      "observedRpoSeconds": null,
+      "observedRtoSeconds": null
+    }
+  },
+  "wal": {
+    "mode": "provider_managed_object_storage",
+    "targetClass": "off_host_object_storage",
+    "offHost": false,
+    "encryptedInTransit": false,
+    "encryptedAtRest": false,
+    "immutable": false,
+    "retentionDays": 30,
+    "unresolvedArchiveFailures": 0,
+    "maxObservedArchiveLagSeconds": null,
+    "restoreDrill": {
+      "status": "unexecuted",
+      "source": "off_host_object_storage",
+      "checksumVerified": false,
+      "recoveryTargetReached": false,
+      "observedDataLossSeconds": null
+    }
+  },
+  "evidence": []
+}

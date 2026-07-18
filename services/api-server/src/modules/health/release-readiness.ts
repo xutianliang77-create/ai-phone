@@ -18,13 +18,13 @@ import { getVoiceAgentRuntimeReadiness } from
 import { getAgentConsultReadiness } from
   "../agent-calls/agent-consult-readiness.js";
 
-export function getReleaseReadiness() {
+export async function getReleaseReadiness() {
   const accountReadiness = getAccountDeploymentReadiness();
   const paymentReadiness = getPaymentDeploymentReadiness();
   const callRoomReadiness = getCallRoomReadiness();
   const pstnReadiness = getPstnReadiness();
   const smsReadiness = getSmsDeploymentReadiness();
-  const diagnosticsReadiness = getDiagnosticsDeploymentReadiness();
+  const diagnosticsReadiness = await getDiagnosticsDeploymentReadiness();
   const releaseMaterialsReadiness = getReleaseMaterialsReadiness();
   const workerDispatchReadiness = getLiveKitDispatchReadiness();
   const egressReadiness = getLiveKitEgressReadiness();

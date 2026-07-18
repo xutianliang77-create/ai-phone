@@ -17,7 +17,7 @@ import {
 import { runStoreTransaction } from "../../infrastructure/storage/json-store.js";
 import { enqueueOutboxEvent } from "../events/reliable-events.repository.js";
 import { interruptActiveCallPlaybacks } from "../call-links/call-playbacks.repository.js";
-import { activePlanForUser } from "../plans/plans.service.js";
+import { activePlanForUser } from "../plans/plans-runtime.service.js";
 import { withPostgresRepositoryFence } from
   "../../infrastructure/storage/postgres-repository-fence.js";
 import {
@@ -124,7 +124,7 @@ function completePostgresSessionWithUsage(
           nextSession: next,
           expectedVersion: current.version,
           billableSeconds,
-          plan: activePlanForUser(current.userId),
+          plan: await activePlanForUser(current.userId),
           idempotencyKey: `settle:${sessionId}`,
           commandId,
           requestHash,

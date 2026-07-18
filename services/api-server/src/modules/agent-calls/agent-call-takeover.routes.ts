@@ -11,24 +11,24 @@ import {
   findAgentCallDraft,
   resolveAgentCallTakeover,
   resumeAgentCallAfterTakeover,
-} from "./agent-calls.repository.js";
+} from "./agent-calls-runtime.repository.js";
 import { toAgentCallDto } from "./agent-call-route-helpers.js";
 import {
   acceptAgentHandoff,
   findActiveAgentRun,
   rejectAgentHandoff,
-} from "./agent-orchestration.repository.js";
+} from "./agent-orchestration-runtime.repository.js";
 import { publishVoiceAgentControl } from "./voice-agent-control-publisher.js";
 
 export function registerAgentCallTakeoverRoutes(app: FastifyInstance) {
   app.post(
     "/ai-calling-agent/drafts/:draftId/takeover/accept",
     async (request, reply) => {
-      const account = requireAccount(request, reply);
+      const account = await requireAccount(request, reply);
       if (!account) return;
       const draftId = (request.params as { draftId: string }).draftId;
       const participantIdentity = parseParticipantIdentity(request.body);
-      const draft = findAgentCallDraft(account.id, draftId);
+      const draft = await findAgentCallDraft(account.id, draftId);
       if (!draft) return notFound(reply);
       if (!participantIdentity || !draft.callId ||
         draft.status !== "takeover_requested" ||
@@ -50,11 +50,11 @@ export function registerAgentCallTakeoverRoutes(app: FastifyInstance) {
           "Takeover host is not connected",
         );
       }
-      const run = findActiveAgentRun(draft.id, "autonomous");
-      if (!run || !acceptAgentHandoff(run.id)) {
+      const run = await findActiveAgentRun(draft.id, "autonomous");
+      if (!run || !await acceptAgentHandoff(run.id)) {
         return conflict(reply, "agent_handoff_conflict", "Handoff cannot be accepted");
       }
-      const resolved = resolveAgentCallTakeover(draft.id);
+      const resolved = await resolveAgentCallTakeover(draft.id);
       return { draft: toAgentCallDto(resolved ?? draft) };
     },
   );
@@ -62,10 +62,10 @@ export function registerAgentCallTakeoverRoutes(app: FastifyInstance) {
   app.post(
     "/ai-calling-agent/drafts/:draftId/takeover/reject",
     async (request, reply) => {
-      const account = requireAccount(request, reply);
+      const account = await requireAccount(request, reply);
       if (!account) return;
       const draftId = (request.params as { draftId: string }).draftId;
-      const draft = findAgentCallDraft(account.id, draftId);
+      const draft = await findAgentCallDraft(account.id, draftId);
       if (!draft) return notFound(reply);
       if (draft.status !== "takeover_requested") {
         return conflict(reply, "agent_takeover_not_active", "Takeover is not active");
@@ -87,11 +87,11 @@ export function registerAgentCallTakeoverRoutes(app: FastifyInstance) {
           "Connected host must leave or accept takeover",
         );
       }
-      const run = findActiveAgentRun(draft.id, "autonomous");
-      if (!run || !rejectAgentHandoff(run.id)) {
+      const run = await findActiveAgentRun(draft.id, "autonomous");
+      if (!run || !await rejectAgentHandoff(run.id)) {
         return conflict(reply, "agent_handoff_conflict", "Handoff cannot be rejected");
       }
-      const resumed = resumeAgentCallAfterTakeover(account.id, draft.id);
+      const resumed = await resumeAgentCallAfterTakeover(account.id, draft.id);
       const control = await publishVoiceAgentControl({
         callId: draft.callId!,
         command: "resume",

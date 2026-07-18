@@ -12,32 +12,32 @@ import {
   listActiveTerms,
   revokeTermbaseTerm,
   saveTermbaseTerm,
-} from "./terms.repository.js";
+} from "./terms-runtime.repository.js";
 import type { TermbaseTermRecord } from "./term-record.js";
 
 export async function registerTermsRoutes(app: FastifyInstance) {
   app.get("/termbase/terms", async (request, reply) => {
-    const account = requireAccount(request, reply);
+    const account = await requireAccount(request, reply);
     if (!account) return;
     const query = request.query as TermQuery;
     return {
-      terms: listActiveTerms({
+      terms: (await listActiveTerms({
         userId: account.id,
         termbaseId: stringValue(query.termbaseId) ?? defaultTermbaseId,
         sourceLanguage: languageValue(query.sourceLanguage),
         targetLanguage: languageValue(query.targetLanguage),
-      }).map(toDto),
+      })).map(toDto),
     };
   });
 
   app.post("/termbase/terms", async (request, reply) => {
-    const account = requireAccount(request, reply);
+    const account = await requireAccount(request, reply);
     if (!account) return;
     const body = request.body as Partial<SaveTermbaseTermRequest>;
     if (!isValidSaveTermRequest(body)) {
       return sendError(reply, 400, "invalid_termbase_term", "Invalid term");
     }
-    const term = saveTermbaseTerm(account.id, body);
+    const term = await saveTermbaseTerm(account.id, body);
     if (!term) {
       return sendError(reply, 400, "invalid_termbase_term", "Invalid term");
     }
@@ -45,10 +45,10 @@ export async function registerTermsRoutes(app: FastifyInstance) {
   });
 
   app.delete("/termbase/terms/:termId", async (request, reply) => {
-    const account = requireAccount(request, reply);
+    const account = await requireAccount(request, reply);
     if (!account) return;
     const params = request.params as { termId: string };
-    const term = revokeTermbaseTerm(account.id, params.termId);
+    const term = await revokeTermbaseTerm(account.id, params.termId);
     if (!term) return sendError(reply, 404, "term_not_found", "Term not found");
     return { term: toDto(term) };
   });
@@ -64,12 +64,12 @@ export async function registerTermsRoutes(app: FastifyInstance) {
     }
     const query = request.query as TermQuery;
     return {
-      terms: listActiveTerms({
+      terms: (await listActiveTerms({
         userId: stringValue(query.userId) ?? "",
         termbaseId: stringValue(query.termbaseId) ?? defaultTermbaseId,
         sourceLanguage: languageValue(query.sourceLanguage),
         targetLanguage: languageValue(query.targetLanguage),
-      })
+      }))
         .slice(0, 20)
         .map(toDto),
     };

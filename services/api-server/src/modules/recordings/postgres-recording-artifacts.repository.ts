@@ -176,6 +176,34 @@ export class PostgresRecordingArtifactsRepository {
     });
   }
 
+  find(artifactId: string) {
+    return this.primary.read<RecordingArtifactDto>("recordingArtifacts", artifactId)
+      .then((record) => record
+        ? requireRecordingArtifact(record.payload, artifactId)
+        : null);
+  }
+
+  async listJob(recordingJobId: string) {
+    if (!bounded(recordingJobId, 200)) {
+      throw new Error("Invalid recording artifact job id");
+    }
+    const client = await this.pool.connect();
+    try {
+      const rows = await client.query<ArtifactRow>(`
+        SELECT artifact.id, primary_record.payload
+        FROM ai_phone.recording_artifacts AS artifact
+        JOIN ai_phone.projection_records AS primary_record
+          ON primary_record.namespace = 'recordingArtifacts'
+          AND primary_record.record_key = artifact.id
+        WHERE artifact.recording_job_id = $1
+        ORDER BY artifact.created_at, artifact.id
+      `, [recordingJobId]);
+      return rows.rows.map((row) => requireRecordingArtifact(row.payload, row.id));
+    } finally {
+      client.release();
+    }
+  }
+
   async listPendingVerification(limit: number, now = new Date()) {
     return this.queryQueue(`
       artifact.status IN ('available', 'verification_failed')

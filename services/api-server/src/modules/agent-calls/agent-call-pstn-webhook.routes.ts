@@ -3,7 +3,7 @@ import type { PstnAgentCallWebhookRequest } from "@translation/contracts";
 import { sendError } from "../../infrastructure/http/errors.js";
 import { toAgentCallDto as toDto } from "./agent-call-route-helpers.js";
 import { verifyPstnAgentCallWebhook } from "./agent-call-pstn-webhook.js";
-import { updateAgentCallFromPstnWebhook } from "./agent-calls.repository.js";
+import { updateAgentCallFromPstnWebhook } from "./agent-call-webhook-runtime.js";
 
 export async function registerAgentCallPstnWebhookRoutes(app: FastifyInstance) {
   app.post("/webhooks/pstn/agent-calls", async (request, reply) => {
@@ -35,7 +35,7 @@ export async function registerAgentCallPstnWebhookRoutes(app: FastifyInstance) {
         "Invalid PSTN webhook signature",
       );
     }
-    const result = updateAgentCallFromPstnWebhook(verified.body);
+    const result = await updateAgentCallFromPstnWebhook(verified.body);
     if (result.status === "not_found") {
       return sendError(
         reply,

@@ -1,25 +1,26 @@
 import type { FastifyInstance } from "fastify";
+import type { RecordingJobDto } from "@translation/contracts";
 import { sendError } from "../../infrastructure/http/errors.js";
 import { requireAccount } from "../account/account-auth.js";
 import { findCallLink } from "../call-links/call-links.service.js";
 import {
   beginProviderOperation,
   updateProviderOperation,
-} from "../provider-operations/provider-operations.repository.js";
+} from "../provider-operations/provider-operations-runtime.repository.js";
 import { withSessionWriteLock } from "../sessions/session-write-coordinator.js";
 import { LiveKitEgressProviderAdapter } from "./livekit-egress-provider-adapter.js";
 import { getLiveKitEgressConfig } from "./livekit-egress-readiness.js";
 import {
   findRecordingJob,
   updateRecordingJob,
-} from "./recordings.repository.js";
+} from "./recordings-runtime.repository.js";
 import { applyRecordingProviderJob } from "./livekit-egress-reconciliation.js";
 
 export function registerRecordingStopRoutes(app: FastifyInstance) {
   app.post(
     "/call-links/:callId/recordings/:recordingId/stop",
     async (request, reply) => {
-      const account = requireAccount(request, reply);
+      const account = await requireAccount(request, reply);
       if (!account) return;
       const params = request.params as { callId: string; recordingId: string };
       const config = getLiveKitEgressConfig();
@@ -32,7 +33,7 @@ export function registerRecordingStopRoutes(app: FastifyInstance) {
         if (call.userId !== account.id) {
           return failure(403, "account_forbidden", "Account cannot access resource");
         }
-        const job = findRecordingJob(params.recordingId);
+        const job = await findRecordingJob(params.recordingId);
         if (!job || job.sessionId !== call.sessionId) {
           return failure(404, "recording_not_found", "Recording not found");
         }
@@ -43,7 +44,7 @@ export function registerRecordingStopRoutes(app: FastifyInstance) {
           return failure(409, "recording_not_started", "Recording has not started");
         }
         if (job.status !== "stopping") {
-          updateRecordingJob({
+          await updateRecordingJob({
             jobId: job.id,
             status: "stopping",
             expectedVersion: job.version,
@@ -55,15 +56,15 @@ export function registerRecordingStopRoutes(app: FastifyInstance) {
         return sendError(reply, prepared.status, prepared.code, prepared.message);
       }
       if (prepared.terminal) return reply.status(202).send(response(prepared.job));
-      const job = findRecordingJob(prepared.job.id)!;
-      const operation = beginProviderOperation({
+      const job = (await findRecordingJob(prepared.job.id))!;
+      const operation = (await beginProviderOperation({
         sessionId: job.sessionId,
         provider: "livekit_egress",
         operationType: "egress_stop",
         operationKey: job.id,
         idempotencyKey: `egress-stop:${job.id}`,
         requestHash: job.externalRecordingId!,
-      }).operation;
+      })).operation;
       const result = await new LiveKitEgressProviderAdapter(config.config).stop({
         operationId: operation.id,
         sessionId: job.sessionId,
@@ -75,35 +76,35 @@ export function registerRecordingStopRoutes(app: FastifyInstance) {
         payload: { recordingId: job.externalRecordingId! },
       });
       if (!result.ok) {
-        updateProviderOperation({
+        await updateProviderOperation({
           operationId: operation.id,
           status: result.reconciliationRequired ? "unknown" : "failed",
           errorClass: result.errorClass,
         });
         if (!result.reconciliationRequired) {
-          updateRecordingJob({
+          await updateRecordingJob({
             jobId: job.id,
             status: "failed",
             errorClass: result.errorClass,
           });
         }
         return result.reconciliationRequired
-          ? reply.status(202).send(response(findRecordingJob(job.id)!))
+          ? reply.status(202).send(response((await findRecordingJob(job.id))!))
           : sendError(reply, 503, "recording_stop_failed", "Recording could not stop");
       }
-      updateProviderOperation({
+      await updateProviderOperation({
         operationId: operation.id,
         status: "accepted",
         externalOperationId: result.result.recordingId,
         externalResourceId: result.result.recordingId,
       });
-      applyRecordingProviderJob(job.id, result.result);
-      return reply.status(202).send(response(findRecordingJob(job.id)!));
+      await applyRecordingProviderJob(job.id, result.result);
+      return reply.status(202).send(response((await findRecordingJob(job.id))!));
     },
   );
 }
 
-function response(job: NonNullable<ReturnType<typeof findRecordingJob>>) {
+function response(job: RecordingJobDto) {
   return {
     id: job.id,
     sessionId: job.sessionId,

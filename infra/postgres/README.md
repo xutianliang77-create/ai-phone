@@ -11,7 +11,9 @@ Current behavior:
 - One API projection worker applies events in order.
 - PostgreSQL records each event ID before applying it, so replay after a local
   acknowledgement failure is safe.
-- Target phone numbers are intentionally omitted from the projection.
+- Agent target phone numbers are sealed before they enter projection events,
+  import records, normalized tasks, or generic projection records. The opaque
+  reference is bound to the owning user and draft and supports key rotation.
 - Provider, Recording, Ingress, Agent Step, and Agent Tool idempotency is scoped
   to its owning aggregate rather than globally.
 - Recording projection preserves room, participant, and audio-track targets;
@@ -52,25 +54,39 @@ Current behavior:
 - Migration `023_aggregate_lease_renewal` keeps the fencing token stable when
   the same live platform instance renews ownership. A token changes only after
   expiry or owner takeover, while advisory transaction locks serialize writes.
+- Migration `024_reliable_inbox_leases` adds recoverable claim leases and
+  attempt tracking for asynchronous webhook inbox processing.
+- Migration `025_agent_phone_reference_security` rejects plaintext in
+  `agent_tasks.target_phone_reference`. Agent projection/import requires the
+  dedicated `AGENT_PHONE_REFERENCE_*` keyring and fails closed when absent.
+- Migration `026_agent_task_primary` adds Task version/request identity,
+  owner-scoped idempotency, unique call binding, and queue/reconciliation
+  indexes required by the Agent Task primary Repository.
+- Migration `027_billing_atomicity` adds fenced payment orders, entitlements,
+  notification dedupe, and normalized billing indexes.
+- Migration `028_product_records_primary` adds indexed primary records for
+  accounts, consents, diagnostics, terms, and voice metadata.
+- Migration `029_projection_runtime_compatibility` pins PL/pgSQL conflict
+  resolution for the legacy projection function and aligns transcript revision
+  constraints with the public non-negative revision contract.
+- Migration `030_tts_playback_session_identity` aligns PostgreSQL playback
+  identity with SQLite and the session aggregate by using `(session_id, id)`.
 - Primary import now includes legacy usage maps, holds, ledger rows, and
   deterministic Agent request-hash/idempotency backfills. Audit compares every
   primary payload, normalized namespace counts, the exact migration manifest,
   and database identity. Cutover evidence is HMAC-signed and bound to an
   explicit cutover ID before startup can accept it.
-- That Repository is not wired into the existing synchronous call sites yet;
-  command IDs, session fencing, and the remaining aggregates must migrate as
-  one driver cutover instead of creating a long-lived dual-write path.
-- The existing synchronous snapshot repositories do not consume this unit of
-  work yet. `API_STORAGE_DRIVER=postgres` and multi-node operation therefore
-  remain fail-closed; this foundation is not a primary-store cutover.
-- `npm run check:postgres-primary-cutover -- --summary` is the source import
-  gate. It currently reports remaining legacy Repository and direct Snapshot
-  consumers, so compile-time primary authorization stays false.
+- Runtime adapters now cover every production Repository consumer and
+  `npm run check:postgres-primary-cutover -- --summary` reports `0/0`.
+- `API_STORAGE_DRIVER=postgres` remains fail-closed because compile-time primary
+  authorization is intentionally false until the isolated Beelink staging
+  database completes migration, replay, fault, rollback, and least-privilege
+  acceptance. Multi-node operation remains separately disabled.
 
 Deferred Beelink/staging procedure:
 
 1. provision an isolated PostgreSQL database and least-privilege roles;
-2. set TLS verification and run all 23 migrations with
+2. set TLS verification and run all 30 migrations with
    `npm run postgres:migrate` twice;
 3. run `npm run postgres:check`, then `npm run postgres:import`;
 4. run `npm run postgres:audit` with `POSTGRES_CUTOVER_EVIDENCE_FILE` pointing

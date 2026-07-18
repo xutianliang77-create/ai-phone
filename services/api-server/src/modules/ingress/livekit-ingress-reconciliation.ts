@@ -1,24 +1,25 @@
 import type { WebhookEvent } from "livekit-server-sdk";
 import type { ExternalMediaProviderJob } from "@translation/contracts";
-import { processInboxEventOnly } from "../events/reliable-events.repository.js";
+import { processInboxEventOnlyAsync } from
+  "../events/reliable-events-runtime.repository.js";
 import {
   findSessionProviderOperation,
   updateProviderOperation,
-} from "../provider-operations/provider-operations.repository.js";
+} from "../provider-operations/provider-operations-runtime.repository.js";
 import { toIngressProviderJob } from "./livekit-ingress-provider-adapter.js";
 import {
   findExternalMediaSourceByIngressId,
   updateExternalMediaSource,
-} from "./ingress.repository.js";
+} from "./ingress-runtime.repository.js";
 
-export function reconcileLiveKitIngressWebhook(event: WebhookEvent) {
+export async function reconcileLiveKitIngressWebhook(event: WebhookEvent) {
   if (!event.id || !event.ingressInfo ||
     !["ingress_started", "ingress_ended"].includes(event.event)) return null;
   const providerJob = toIngressProviderJob(event.ingressInfo);
-  const source = findExternalMediaSourceByIngressId(providerJob.ingressId);
+  const source = await findExternalMediaSourceByIngressId(providerJob.ingressId);
   if (!source || source.roomName !== providerJob.roomName ||
     source.participantIdentity !== providerJob.participantIdentity) return null;
-  const processed = processInboxEventOnly({
+  const processed = await processInboxEventOnlyAsync({
     eventId: `livekit:${event.id}`,
     sessionId: source.sessionId,
     eventType: `livekit.${event.event}`,
@@ -41,11 +42,11 @@ export function reconcileLiveKitIngressWebhook(event: WebhookEvent) {
   };
 }
 
-export function applyIngressProviderJob(
+export async function applyIngressProviderJob(
   sourceId: string,
   providerJob: ExternalMediaProviderJob,
 ) {
-  const source = findExternalMediaSourceByIngressId(providerJob.ingressId);
+  const source = await findExternalMediaSourceByIngressId(providerJob.ingressId);
   if (!source || source.id !== sourceId) return null;
   const status = providerJob.status === "publishing"
     ? "publishing" as const
@@ -56,13 +57,13 @@ export function applyIngressProviderJob(
     : providerJob.status === "failed"
     ? "failed" as const
     : "ready" as const;
-  const result = updateExternalMediaSource({
+  const result = await updateExternalMediaSource({
     sourceId,
     status,
     errorClass: providerJob.error,
   });
   if (source.providerOperationId) {
-    updateProviderOperation({
+    await updateProviderOperation({
       operationId: source.providerOperationId,
       status: status === "failed" ? "failed"
         : status === "publishing" ? "active"
@@ -70,13 +71,13 @@ export function applyIngressProviderJob(
       errorClass: providerJob.error,
     });
   }
-  const deleteOperation = findSessionProviderOperation(
+  const deleteOperation = await findSessionProviderOperation(
     source.sessionId,
     "ingress_delete",
     source.id,
   );
   if (deleteOperation && ["completed", "failed"].includes(status)) {
-    updateProviderOperation({
+    await updateProviderOperation({
       operationId: deleteOperation.id,
       status: status === "completed" ? "succeeded" : "failed",
       errorClass: providerJob.error,

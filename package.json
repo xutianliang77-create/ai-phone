@@ -39,6 +39,10 @@
     "check:livekit-compatibility": "node scripts/check_livekit_compatibility_profile.mjs",
     "check:platform-topology": "node scripts/check_platform_topology.mjs",
     "check:platform-capacity": "node scripts/check_platform_capacity_result.mjs",
+    "platform:mixed-load": "node scripts/run_platform_mixed_load.mjs",
+    "check:postgres-production-resilience": "node scripts/check_postgres_production_resilience.mjs",
+    "postgres:resilience-drill": "node scripts/run_postgres_resilience_drill.mjs",
+    "check:dependency-security": "node scripts/check_dependency_security.mjs",
     "check:livekit-duplex-playback": "npm run build -w @translation/translation-worker && node scripts/check_livekit_duplex_playback.mjs",
     "render:livekit-selfhost": "node scripts/render_livekit_selfhost_config.mjs",
     "check:livekit-selfhost-config": "node scripts/check_livekit_selfhost_config.mjs",
@@ -100,7 +104,7 @@
   },
   "devDependencies": {
     "@types/node": "^24.10.1",
-    "tsx": "^4.20.6",
+    "tsx": "^4.23.1",
     "typescript": "^5.9.3",
     "vitest": "^4.0.15"
   }

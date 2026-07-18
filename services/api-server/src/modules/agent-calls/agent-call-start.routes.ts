@@ -11,8 +11,8 @@ import { getAgentCallUsageReadiness } from "./agent-call-usage-readiness.js";
 import {
   findAgentCallDraft,
   listAgentCallDrafts,
-  startAgentCallDraft,
-} from "./agent-calls.repository.js";
+} from "./agent-calls-runtime.repository.js";
+import { startAgentCallDraft } from "./agent-call-start-runtime.js";
 import {
   autonomousAgentPolicyRequired,
   evaluateAutonomousAgentPolicy,
@@ -22,10 +22,10 @@ export function registerAgentCallStartRoute(app: FastifyInstance) {
   app.post(
     "/ai-calling-agent/drafts/:draftId/start",
     async (request, reply) => {
-      const account = requireAccount(request, reply);
+      const account = await requireAccount(request, reply);
       if (!account) return;
       const draftId = (request.params as { draftId: string }).draftId;
-      const draft = findAgentCallDraft(account.id, draftId);
+      const draft = await findAgentCallDraft(account.id, draftId);
       if (!draft) {
         return sendError(
           reply,
@@ -56,7 +56,7 @@ export function registerAgentCallStartRoute(app: FastifyInstance) {
       const startPolicy = evaluateAgentCallStartPolicy({
         userId: account.id,
         targetPhone: draft.targetPhone,
-        drafts: listAgentCallDrafts(account.id),
+        drafts: await listAgentCallDrafts(account.id),
       });
       if (!startPolicy.allowed) {
         return reply.status(startPolicy.statusCode).send({
@@ -104,7 +104,7 @@ export function registerAgentCallStartRoute(app: FastifyInstance) {
           draft: toDto(draft),
         });
       }
-      const usageReadiness = getAgentCallUsageReadiness(account.id);
+      const usageReadiness = await getAgentCallUsageReadiness(account.id);
       if (usageReadiness.status !== "ready") {
         return reply.status(402).send({
           error: {

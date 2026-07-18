@@ -2,16 +2,16 @@ import { createHash } from "node:crypto";
 import type { FastifyInstance } from "fastify";
 import { sendError } from "../../infrastructure/http/errors.js";
 import { findSessionProviderOperation } from
-  "../provider-operations/provider-operations.repository.js";
+  "../provider-operations/provider-operations-runtime.repository.js";
 import { withSessionWriteLock } from "../sessions/session-write-coordinator.js";
 import { isInternalAuthorized } from "./agent-call-route-helpers.js";
-import { requestAgentCallTakeover } from "./agent-calls.repository.js";
+import { requestAgentCallTakeover } from "./agent-calls-runtime.repository.js";
 import {
   findAgentToolExecution,
   hasAgentRuntimeEvent,
   requestAgentToolExecution,
   updateAgentToolExecution,
-} from "./agent-orchestration.repository.js";
+} from "./agent-orchestration-runtime.repository.js";
 import { resolveVoiceAgentRuntimeBinding } from
   "./voice-agent-runtime-binding.js";
 import { getLiveKitSipConfig } from "../call-links/livekit-sip-readiness.js";
@@ -37,14 +37,14 @@ export function registerVoiceAgentToolGatewayRoutes(app: FastifyInstance) {
         return sendError(reply, 409, "voice_agent_takeover_active", "Human takeover is active");
       }
       if (body.reason === "task_finished" &&
-        !hasAgentRuntimeEvent(binding.run.id, "structured_result")) {
+        !await hasAgentRuntimeEvent(binding.run.id, "structured_result")) {
         return sendError(reply, 409, "voice_agent_result_required", "Result is required");
       }
       const sip = getLiveKitSipConfig();
       if (!sip.ok) {
         return sendError(reply, 503, "livekit_sip_not_configured", "SIP is not configured");
       }
-      const requested = requestAgentToolExecution({
+      const requested = await requestAgentToolExecution({
         runId: binding.run.id,
         toolName: "hangup_call",
         toolVersion: "v1",
@@ -53,7 +53,10 @@ export function registerVoiceAgentToolGatewayRoutes(app: FastifyInstance) {
         approved: true,
         idempotencyKey: `voice-agent-hangup:${binding.run.id}`,
       });
-      updateAgentToolExecution({
+      if (!("execution" in requested)) {
+        return sendError(reply, 409, "voice_agent_run_missing", "Agent run unavailable");
+      }
+      await updateAgentToolExecution({
         executionId: requested.execution.id,
         status: "running",
       });
@@ -63,7 +66,7 @@ export function registerVoiceAgentToolGatewayRoutes(app: FastifyInstance) {
           config: sip.config,
           idempotencyKey: `voice-agent-hangup:${binding.call.sessionId}`,
         }));
-      updateAgentToolExecution({
+      await updateAgentToolExecution({
         executionId: requested.execution.id,
         status: result.ok ? "succeeded" : result.code === "unknown"
           ? "running"
@@ -103,8 +106,8 @@ export function registerVoiceAgentToolGatewayRoutes(app: FastifyInstance) {
       if (!binding.ok) {
         return sendError(reply, 409, "voice_agent_tool_binding", "Tool binding failed");
       }
-      const decision = authorizeTool(params.toolName, body.arguments, binding);
-      const requested = requestAgentToolExecution({
+      const decision = await authorizeTool(params.toolName, body.arguments, binding);
+      const requested = await requestAgentToolExecution({
         runId: binding.run.id,
         toolName: params.toolName,
         toolVersion: "v1",
@@ -113,8 +116,11 @@ export function registerVoiceAgentToolGatewayRoutes(app: FastifyInstance) {
         approved: decision.authorized,
         idempotencyKey: body.idempotencyKey,
       });
+      if (!("execution" in requested)) {
+        return sendError(reply, 409, "voice_agent_run_missing", "Agent run unavailable");
+      }
       if (!decision.authorized) {
-        updateAgentToolExecution({
+        await updateAgentToolExecution({
           executionId: requested.execution.id,
           status: "cancelled",
           resultSummary: decision.reason,
@@ -126,11 +132,11 @@ export function registerVoiceAgentToolGatewayRoutes(app: FastifyInstance) {
         });
       }
       if (params.toolName === "request_takeover") {
-        requestAgentCallTakeover(binding.draft.userId, binding.draft.id, {
+        await requestAgentCallTakeover(binding.draft.userId, binding.draft.id, {
           reason: String(body.arguments.reason).slice(0, 200),
         });
       }
-      updateAgentToolExecution({
+      await updateAgentToolExecution({
         executionId: requested.execution.id,
         status: "running",
       });
@@ -157,11 +163,11 @@ export function registerVoiceAgentToolGatewayRoutes(app: FastifyInstance) {
         params.draftId,
         body.ticket,
       );
-      const execution = findAgentToolExecution(params.executionId);
+      const execution = await findAgentToolExecution(params.executionId);
       if (!binding.ok || !execution || execution.runId !== binding.run.id) {
         return sendError(reply, 409, "voice_agent_tool_binding", "Tool binding failed");
       }
-      const updated = updateAgentToolExecution({
+      const updated = await updateAgentToolExecution({
         executionId: execution.id,
         status: body.status,
         resultSummary: body.resultSummary,
@@ -171,7 +177,7 @@ export function registerVoiceAgentToolGatewayRoutes(app: FastifyInstance) {
   );
 }
 
-function authorizeTool(
+async function authorizeTool(
   toolName: string,
   args: Record<string, unknown>,
   binding: Extract<
@@ -187,10 +193,15 @@ function authorizeTool(
     if (typeof args.digit !== "string" || !/^[0-9*#A-D]$/.test(args.digit)) {
       return denied("invalid_dtmf_digit");
     }
-    const dial = findSessionProviderOperation(binding.call.sessionId, "sip_outbound");
+    const dial = await findSessionProviderOperation(
+      binding.call.sessionId,
+      "sip_outbound",
+    );
     if (!dial || dial.status !== "active") return denied("sip_not_active");
-    const ivr = hasAgentRuntimeEvent(binding.run.id, "ivr_detected");
-    const disclosed = hasAgentRuntimeEvent(binding.run.id, "disclosure_completed");
+    const [ivr, disclosed] = await Promise.all([
+      hasAgentRuntimeEvent(binding.run.id, "ivr_detected"),
+      hasAgentRuntimeEvent(binding.run.id, "disclosure_completed"),
+    ]);
     return ivr || disclosed ? allowed() : denied("disclosure_or_ivr_required");
   }
   if (toolName === "request_takeover") {

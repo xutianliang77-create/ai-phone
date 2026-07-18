@@ -7,7 +7,7 @@ import {
   beginProviderOperation,
   findProviderOperation,
   updateProviderOperation,
-} from "../provider-operations/provider-operations.repository.js";
+} from "../provider-operations/provider-operations-runtime.repository.js";
 import type { ProviderOperationRecord } from
   "../provider-operations/provider-operation-record.js";
 import type { CallLinkRecord } from "./call-links.service.js";
@@ -79,7 +79,7 @@ export async function executeLiveKitSipOutbound(input: {
     },
   });
   if (result.ok) {
-    const updated = updateProviderOperation({
+    const updated = await updateProviderOperation({
       operationId: input.operation.id,
       status: "accepted",
       expectedVersion: input.operation.version,
@@ -87,12 +87,12 @@ export async function executeLiveKitSipOutbound(input: {
       externalResourceId: result.externalResourceId,
     });
     return {
-      ...success(currentOperation(updated, input.operation), false),
+      ...success(await currentOperation(updated, input.operation), false),
       participantIdentity: result.result.participantIdentity,
     };
   }
   const reconciliationRequired = result.reconciliationRequired;
-  const updated = updateProviderOperation({
+  const updated = await updateProviderOperation({
     operationId: input.operation.id,
     status: reconciliationRequired ? "unknown" : "failed",
     expectedVersion: input.operation.version,
@@ -100,7 +100,7 @@ export async function executeLiveKitSipOutbound(input: {
     externalOperationId: result.externalOperationId,
   });
   return failure(
-    currentOperation(updated, input.operation),
+    await currentOperation(updated, input.operation),
     reconciliationRequired,
     result.errorClass,
   );
@@ -146,11 +146,11 @@ function failure(
   };
 }
 
-function currentOperation(
-  result: ReturnType<typeof updateProviderOperation>,
+async function currentOperation(
+  result: Awaited<ReturnType<typeof updateProviderOperation>>,
   fallback: ProviderOperationRecord,
 ) {
   return "operation" in result && result.operation
     ? result.operation
-    : findProviderOperation(fallback.id) ?? fallback;
+    : await findProviderOperation(fallback.id) ?? fallback;
 }

@@ -23,6 +23,7 @@ export interface WorkerDispatchDto {
   workerId?: string;
   metadataHash?: string;
   leaseExpiresAt: string;
+  generationStartedAt?: string;
   createdAt: string;
   updatedAt: string;
   readyAt?: string;

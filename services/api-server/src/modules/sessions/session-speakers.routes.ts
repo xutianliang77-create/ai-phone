@@ -11,7 +11,7 @@ import { withSessionWriteLock } from "./session-write-coordinator.js";
 
 export function registerSessionSpeakerRoutes(app: FastifyInstance) {
   app.get("/sessions/:sessionId/speakers", async (request, reply) => {
-    const account = requireAccount(request, reply);
+    const account = await requireAccount(request, reply);
     if (!account) return;
     const params = request.params as { sessionId: string };
     const session = await findSession(params.sessionId);
@@ -27,7 +27,7 @@ export function registerSessionSpeakerRoutes(app: FastifyInstance) {
   app.patch(
     "/sessions/:sessionId/speakers/:speakerId",
     async (request, reply) => {
-      const account = requireAccount(request, reply);
+      const account = await requireAccount(request, reply);
       if (!account) return;
       const params = request.params as { sessionId: string; speakerId: string };
       const body = request.body;

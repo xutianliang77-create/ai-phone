@@ -1,3 +1,4 @@
+import type { ExternalMediaSourceDto } from "@translation/contracts";
 import { LiveKitIngressProviderAdapter } from "./livekit-ingress-provider-adapter.js";
 import { SrtLiveKitIngressProviderAdapter } from
   "./srt-livekit-ingress-provider-adapter.js";
@@ -6,16 +7,16 @@ import { getLiveKitIngressConfig } from "./livekit-ingress-readiness.js";
 import {
   beginProviderOperation,
   updateProviderOperation,
-} from "../provider-operations/provider-operations.repository.js";
+} from "../provider-operations/provider-operations-runtime.repository.js";
 import {
   listRecoverableExternalMediaSources,
   updateExternalMediaSource,
-} from "./ingress.repository.js";
+} from "./ingress-runtime.repository.js";
 
 export async function recoverExternalMediaSources() {
   const config = getLiveKitIngressConfig();
   if (!config.ok) return { inspectedCount: 0, recoveredCount: 0, failedCount: 0 };
-  const sources = listRecoverableExternalMediaSources();
+  const sources = await listRecoverableExternalMediaSources();
   const results = await Promise.allSettled(sources.map(async (source) => {
     if (source.inputType === "srt" && !config.config.srtBridgeConfigured) {
       throw new Error("SRT bridge cleanup is unavailable");
@@ -61,28 +62,28 @@ export async function recoverExternalMediaSources() {
       const result = await provider.get(source.externalIngressId!);
       if (!result.ok) throw new Error(`Ingress reconciliation failed: ${result.errorClass}`);
       if (!result.result) {
-        updateExternalMediaSource({
+        await updateExternalMediaSource({
           sourceId: source.id,
           status: "failed",
           errorClass: "ingress_not_found",
         });
         return;
       }
-      applyIngressProviderJob(source.id, result.result);
+      await applyIngressProviderJob(source.id, result.result);
       return;
     }
     const provider = new LiveKitIngressProviderAdapter(config.config);
     const result = await provider.get(source.externalIngressId!);
     if (!result.ok) throw new Error(`Ingress reconciliation failed: ${result.errorClass}`);
     if (!result.result) {
-      updateExternalMediaSource({
+      await updateExternalMediaSource({
         sourceId: source.id,
         status: "failed",
         errorClass: "ingress_not_found",
       });
       return;
     }
-    applyIngressProviderJob(source.id, result.result);
+    await applyIngressProviderJob(source.id, result.result);
   }));
   const recoveredCount = results.filter((result) => result.status === "fulfilled").length;
   return {
@@ -120,7 +121,7 @@ async function cleanupOrphanedLiveKitIngress(
 }
 
 async function cleanupOperation(
-  source: ReturnType<typeof listRecoverableExternalMediaSources>[number],
+  source: ExternalMediaSourceDto,
   errorClass: string,
   execute: (operation: {
     operationId: string;
@@ -131,14 +132,14 @@ async function cleanupOperation(
   }) => ReturnType<LiveKitIngressProviderAdapter["delete"]>,
   timeoutSeconds: number,
 ) {
-  const operation = beginProviderOperation({
+  const operation = (await beginProviderOperation({
     sessionId: source.sessionId,
     provider: "livekit_ingress",
     operationType: "ingress_delete",
     operationKey: source.id,
     idempotencyKey: `ingress-recovery-delete:${source.id}`,
     requestHash: source.externalIngressId!,
-  }).operation;
+  })).operation;
   const result = await execute({
     operationId: operation.id,
     sessionId: source.sessionId,
@@ -147,16 +148,24 @@ async function cleanupOperation(
     deadlineAt: new Date(Date.now() + timeoutSeconds * 1_000).toISOString(),
   });
   if (result.ok) {
-    updateProviderOperation({ operationId: operation.id, status: "succeeded" });
-    updateExternalMediaSource({ sourceId: source.id, status: "failed", errorClass });
+    await updateProviderOperation({ operationId: operation.id, status: "succeeded" });
+    await updateExternalMediaSource({
+      sourceId: source.id,
+      status: "failed",
+      errorClass,
+    });
     return;
   }
   if (result.errorClass === "not_found") {
-    updateProviderOperation({ operationId: operation.id, status: "succeeded" });
-    updateExternalMediaSource({ sourceId: source.id, status: "failed", errorClass });
+    await updateProviderOperation({ operationId: operation.id, status: "succeeded" });
+    await updateExternalMediaSource({
+      sourceId: source.id,
+      status: "failed",
+      errorClass,
+    });
     return;
   }
-  updateProviderOperation({
+  await updateProviderOperation({
     operationId: operation.id,
     status: result.reconciliationRequired ? "unknown" : "failed",
     errorClass: result.errorClass,

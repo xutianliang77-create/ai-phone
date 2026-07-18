@@ -15,7 +15,7 @@ import { withSessionWriteLock } from "../sessions/session-write-coordinator.js";
 
 export function registerRealtimeFinalizationRoute(app: FastifyInstance) {
   app.post("/realtime/sessions/:sessionId/finalize", async (request, reply) => {
-    const account = requireAccount(request, reply);
+    const account = await requireAccount(request, reply);
     if (!account) return;
     const params = request.params as { sessionId: string };
     const body = request.body as Partial<FinalizeRealtimeSessionRequest>;

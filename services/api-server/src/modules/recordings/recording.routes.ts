@@ -1,12 +1,13 @@
 import { createHash, randomUUID } from "node:crypto";
 import type { FastifyInstance } from "fastify";
+import type { RecordingJobDto } from "@translation/contracts";
 import { TokenVerifier } from "livekit-server-sdk";
 import { sendError } from "../../infrastructure/http/errors.js";
 import { requireAccount } from "../account/account-auth.js";
 import {
   beginProviderOperation,
   updateProviderOperation,
-} from "../provider-operations/provider-operations.repository.js";
+} from "../provider-operations/provider-operations-runtime.repository.js";
 import { findSession } from "../sessions/sessions-runtime.repository.js";
 import { withSessionWriteLock } from "../sessions/session-write-coordinator.js";
 import { findCallLink } from "../call-links/call-links.service.js";
@@ -21,8 +22,9 @@ import {
   listSessionRecordingJobs,
   recordParticipantRecordingConsent,
   updateRecordingJob,
-} from "./recordings.repository.js";
-import { listRecordingArtifacts } from "./recording-artifacts.repository.js";
+} from "./recordings-runtime.repository.js";
+import { listRecordingArtifacts } from
+  "./recording-artifacts-runtime.repository.js";
 import { registerRecordingStopRoutes } from "./recording-stop.routes.js";
 import { applyRecordingProviderJob } from "./livekit-egress-reconciliation.js";
 import {
@@ -73,7 +75,7 @@ export function registerRecordingRoutes(app: FastifyInstance) {
   });
 
   app.post("/call-links/:callId/recordings", async (request, reply) => {
-    const account = requireAccount(request, reply);
+    const account = await requireAccount(request, reply);
     if (!account) return;
     const params = request.params as { callId: string };
     const body = parseStartRecordingRequest(request.body);
@@ -119,7 +121,7 @@ export function registerRecordingRoutes(app: FastifyInstance) {
           "SIP recording requires provider-verified callee consent",
         );
       }
-      const latest = latestParticipantRecordingConsents(call.sessionId);
+      const latest = await latestParticipantRecordingConsents(call.sessionId);
       const consents = humanLegs.map((leg) => latest.get(leg.participantIdentity));
       if (consents.some((consent) =>
         !consent || consent.status !== "granted" ||
@@ -127,7 +129,7 @@ export function registerRecordingRoutes(app: FastifyInstance) {
       )) {
         return failure(409, "recording_consent_incomplete", "All participants must consent");
       }
-      const snapshot = createRecordingConsentSnapshot({
+      const snapshot = await createRecordingConsentSnapshot({
         sessionId: call.sessionId,
         policyVersion: body.policyVersion,
         participantConsents: consents as NonNullable<(typeof consents)[number]>[],
@@ -143,7 +145,7 @@ export function registerRecordingRoutes(app: FastifyInstance) {
         participantIdentity: body.participantIdentity,
         trackId: body.trackId,
       });
-      const begun = beginRecordingJob({
+      const begun = await beginRecordingJob({
         sessionId: call.sessionId,
         roomName: call.roomName,
         recordingType: body.recordingType,
@@ -165,18 +167,20 @@ export function registerRecordingRoutes(app: FastifyInstance) {
       return sendError(reply, 409, "recording_operation_conflict", "Recording conflicts");
     }
     if (prepared.begun.status === "replayed") {
-      return reply.status(202).send(recordingResponse(prepared.begun.job, true));
+      return reply.status(202).send(
+        await recordingResponse(prepared.begun.job, true),
+      );
     }
     const job = prepared.begun.job;
-    const operation = beginProviderOperation({
+    const operation = (await beginProviderOperation({
       sessionId: job.sessionId,
       provider: "livekit_egress",
       operationType: "egress_start",
       operationKey: job.id,
       idempotencyKey: `egress-start:${job.id}`,
       requestHash: job.requestHash,
-    }).operation;
-    updateRecordingJob({
+    })).operation;
+    await updateRecordingJob({
       jobId: job.id,
       status: "starting",
       expectedVersion: job.version,
@@ -198,39 +202,43 @@ export function registerRecordingRoutes(app: FastifyInstance) {
       },
     });
     if (!result.ok) {
-      updateProviderOperation({
+      await updateProviderOperation({
         operationId: operation.id,
         status: result.reconciliationRequired ? "unknown" : "failed",
         errorClass: result.errorClass,
       });
       if (!result.reconciliationRequired) {
-        updateRecordingJob({
+        await updateRecordingJob({
           jobId: job.id,
           status: "failed",
           errorClass: result.errorClass,
         });
       }
       return result.reconciliationRequired
-        ? reply.status(202).send(recordingResponse(findRecordingJob(job.id)!, false))
+        ? reply.status(202).send(
+          await recordingResponse((await findRecordingJob(job.id))!, false),
+        )
         : sendError(reply, 503, "recording_start_failed", "Recording could not start");
     }
-    updateProviderOperation({
+    await updateProviderOperation({
       operationId: operation.id,
       status: "accepted",
       externalOperationId: result.result.recordingId,
       externalResourceId: result.result.recordingId,
     });
-    updateRecordingJob({
+    await updateRecordingJob({
       jobId: job.id,
       status: "starting",
       externalRecordingId: result.result.recordingId,
     });
-    applyRecordingProviderJob(job.id, result.result);
-    return reply.status(202).send(recordingResponse(findRecordingJob(job.id)!, false));
+    await applyRecordingProviderJob(job.id, result.result);
+    return reply.status(202).send(
+      await recordingResponse((await findRecordingJob(job.id))!, false),
+    );
   });
 
   app.get("/call-links/:callId/recordings", async (request, reply) => {
-    const account = requireAccount(request, reply);
+    const account = await requireAccount(request, reply);
     if (!account) return;
     const call = await findCallLink(
       (request.params as { callId: string }).callId,
@@ -239,15 +247,15 @@ export function registerRecordingRoutes(app: FastifyInstance) {
     if (call.userId !== account.id) {
       return sendError(reply, 403, "account_forbidden", "Account cannot access resource");
     }
-    return {
-      recordings: listSessionRecordingJobs(call.sessionId).map((job) =>
-        recordingResponse(job, false)
-      ),
-    };
+    const jobs = await listSessionRecordingJobs(call.sessionId);
+    return { recordings: await Promise.all(jobs.map((job) =>
+      recordingResponse(job, false)
+    )) };
   });
 }
 
-function recordingResponse(job: NonNullable<ReturnType<typeof findRecordingJob>>, replayed: boolean) {
+async function recordingResponse(job: RecordingJobDto, replayed: boolean) {
+  const artifacts = await listRecordingArtifacts(job.id);
   return {
     id: job.id,
     sessionId: job.sessionId,
@@ -258,7 +266,7 @@ function recordingResponse(job: NonNullable<ReturnType<typeof findRecordingJob>>
     contentType: job.contentType,
     retentionUntil: job.retentionUntil,
     replayed,
-    artifacts: listRecordingArtifacts(job.id).map((artifact) => ({
+    artifacts: artifacts.map((artifact) => ({
       id: artifact.id,
       status: artifact.status,
       contentType: artifact.contentType,

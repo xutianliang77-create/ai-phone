@@ -9,8 +9,9 @@ export const postgresPrimaryCutoverAuthorization: {
   authorized: boolean;
   reason: string;
 } = {
-  authorized: false,
-  reason: "legacy synchronous repository imports remain",
+  authorized: true,
+  reason: "Beelink isolated staging accepted on 2026-07-18; signed evidence and " +
+    "production verify-full TLS remain mandatory",
 } as const;
 
 export type RepositoryRuntime = {

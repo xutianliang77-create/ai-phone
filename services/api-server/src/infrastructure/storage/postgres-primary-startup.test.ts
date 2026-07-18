@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { postgresPrimaryConfigurationIssues } from "./postgres-primary-startup.js";
+import { postgresPrimaryCutoverAuthorization } from "./repository-runtime.js";
 
 const original = { ...process.env };
 
@@ -11,6 +12,13 @@ afterEach(() => {
 });
 
 describe("PostgreSQL primary startup", () => {
+  it("records the completed isolated staging authorization", () => {
+    expect(postgresPrimaryCutoverAuthorization).toMatchObject({
+      authorized: true,
+      reason: expect.stringContaining("Beelink isolated staging accepted"),
+    });
+  });
+
   it("fails closed without explicit primary and signed cutover evidence", () => {
     delete process.env.POSTGRES_PRIMARY_ENABLED;
     delete process.env.POSTGRES_URL;

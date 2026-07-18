@@ -68,10 +68,10 @@ describe("pstn readiness", () => {
     });
   });
 
-  it("surfaces pstn issues in release readiness", () => {
+  it("surfaces pstn issues in release readiness", async () => {
     process.env.CALL_PROVIDER_POLICY = "domestic_pstn_bridge";
 
-    const readiness = getReleaseReadiness();
+    const readiness = await getReleaseReadiness();
 
     expect(readiness.pstnReadiness.issues).toContain("pstn missing PSTN_PROVIDER");
     expect(readiness.issues).toContain("pstn missing PSTN_PROVIDER");

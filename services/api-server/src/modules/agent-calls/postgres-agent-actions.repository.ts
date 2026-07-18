@@ -29,7 +29,7 @@ import {
 export class PostgresAgentActionsRepository {
   private readonly primary: PostgresPrimaryStore;
 
-  constructor(pool: Pick<Pool, "connect">) {
+  constructor(private readonly pool: Pick<Pool, "connect">) {
     this.primary = new PostgresPrimaryStore(pool);
   }
 
@@ -269,7 +269,40 @@ export class PostgresAgentActionsRepository {
         handoff: requireAgentHandoff(stored.payload, handoff.id),
         run: updatedRun,
       });
-    });
+      });
+  }
+
+  async findTool(executionId: string) {
+    const primary = await this.primary.read<PostgresAgentToolRecord>(
+      "agentToolExecutions", executionId,
+    );
+    return primary ? requireAgentTool(primary.payload, executionId) : null;
+  }
+
+  async findToolForTask(taskId: string, idempotencyKey: string) {
+    return this.findToolByQuery(`
+      SELECT tool.id FROM ai_phone.tool_executions AS tool
+      JOIN ai_phone.agent_runs AS run ON run.id = tool.run_id
+      WHERE run.task_id = $1 AND tool.idempotency_key = $2
+      ORDER BY run.attempt DESC LIMIT 1
+    `, [taskId, idempotencyKey]);
+  }
+
+  async findToolByProviderOperation(providerOperationId: string) {
+    return this.findToolByQuery(`
+      SELECT id FROM ai_phone.tool_executions
+      WHERE provider_operation_id = $1 ORDER BY created_at DESC LIMIT 1
+    `, [providerOperationId]);
+  }
+
+  private async findToolByQuery(sql: string, values: unknown[]) {
+    const client = await this.pool.connect();
+    try {
+      const result = await client.query<IdRow>(sql, values);
+      return result.rows[0] ? this.findTool(result.rows[0].id) : null;
+    } finally {
+      client.release();
+    }
   }
 
   private async storeRunStatus(

@@ -112,6 +112,7 @@ export function beginWorkerDispatch(input: {
       generation,
       version: (existing?.version ?? 0) + 1,
       leaseExpiresAt: addSeconds(now, input.leaseSeconds),
+      generationStartedAt: now.toISOString(),
       createdAt: existing?.createdAt ?? now.toISOString(),
       updatedAt: now.toISOString(),
     };

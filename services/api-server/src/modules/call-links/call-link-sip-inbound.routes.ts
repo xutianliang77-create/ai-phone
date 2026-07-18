@@ -9,7 +9,7 @@ import {
   findProviderOperation,
   findSessionProviderOperation,
   updateProviderOperation,
-} from "../provider-operations/provider-operations.repository.js";
+} from "../provider-operations/provider-operations-runtime.repository.js";
 import type { ProviderOperationRecord } from "../provider-operations/provider-operation-record.js";
 import { withSessionWriteLock } from "../sessions/session-write-coordinator.js";
 import { getCallLinkWorkerSupervisor } from "./call-link-worker-supervisor.js";
@@ -33,7 +33,7 @@ export function setLiveKitSipInboundProviderFactoryForTests(factory: Factory | n
 
 export function registerCallLinkSipInboundRoutes(app: FastifyInstance) {
   app.post("/call-links/:callId/sip-inbound", async (request, reply) => {
-    const account = requireAccount(request, reply);
+    const account = await requireAccount(request, reply);
     if (!account) return;
     const params = request.params as { callId: string };
     const body = parseOpenRequest(request.body);
@@ -53,7 +53,7 @@ export function registerCallLinkSipInboundRoutes(app: FastifyInstance) {
     const started = await withSessionWriteLock(params.callId, async () => {
       const validation = await validateOpen(params.callId, account.id);
       if (!validation.ok) return validation;
-      const operation = beginProviderOperation({
+      const operation = await beginProviderOperation({
         sessionId: validation.record.sessionId,
         provider: "livekit_sip",
         operationType: "sip_inbound",
@@ -93,13 +93,13 @@ export function registerCallLinkSipInboundRoutes(app: FastifyInstance) {
         },
       },
     });
-    updateProviderOperation({
+    await updateProviderOperation({
       operationId: started.operation.id,
       status: result.ok ? "accepted" : result.reconciliationRequired ? "unknown" : "failed",
       errorClass: result.ok ? undefined : result.errorClass,
       ...(result.ok ? { externalResourceId: result.result.dispatchRuleId } : {}),
     });
-    const current = findProviderOperation(started.operation.id) ?? started.operation;
+    const current = await findProviderOperation(started.operation.id) ?? started.operation;
     if (!result.ok && !result.reconciliationRequired) {
       return sendError(reply, 503, "sip_inbound_failed", "Inbound binding failed");
     }
@@ -112,13 +112,13 @@ export function registerCallLinkSipInboundRoutes(app: FastifyInstance) {
   });
 
   app.post("/call-links/:callId/sip-inbound/close", async (request, reply) => {
-    const account = requireAccount(request, reply);
+    const account = await requireAccount(request, reply);
     if (!account) return;
     const params = request.params as { callId: string };
     const record = await findCallLink(params.callId);
     if (!record) return sendError(reply, 404, "call_link_not_found", "Call link not found");
     if (record.userId !== account.id) return sendError(reply, 403, "account_forbidden", "Forbidden");
-    const operation = findSessionProviderOperation(record.sessionId, "sip_inbound", "primary");
+    const operation = await findSessionProviderOperation(record.sessionId, "sip_inbound", "primary");
     if (!operation) return sendError(reply, 404, "sip_inbound_not_found", "Inbound binding not found");
     const result = await closeLiveKitSipInbound(operation, "host_close");
     return reply.status(result.status === "failed" ? 503 : 202).send(result);
@@ -136,7 +136,7 @@ export async function closeLiveKitSipInbound(
   if (!config.ok || !config.config.inbound) {
     return { status: "not_configured" as const, operationId: inbound.id };
   }
-  const begun = beginProviderOperation({
+  const begun = await beginProviderOperation({
     sessionId: inbound.sessionId,
     provider: "livekit_sip",
     operationType: "sip_inbound_close",
@@ -155,14 +155,14 @@ export async function closeLiveKitSipInbound(
     payload: { dispatchRuleId: inbound.externalResourceId },
   });
   const status = result.ok ? "succeeded" : result.reconciliationRequired ? "unknown" : "failed";
-  updateProviderOperation({
+  await updateProviderOperation({
     operationId: begun.operation.id,
     status,
     errorClass: result.ok ? undefined : result.errorClass,
     externalResourceId: inbound.externalResourceId,
   });
   if (result.ok && !["succeeded", "failed", "cancelled"].includes(inbound.status)) {
-    updateProviderOperation({ operationId: inbound.id, status: "succeeded" });
+    await updateProviderOperation({ operationId: inbound.id, status: "succeeded" });
   }
   return { status, operationId: begun.operation.id, reason };
 }
@@ -177,7 +177,7 @@ async function validateOpen(callId: string, accountId: string) {
   if ((await persistedCallRoomHumanPresence(callId)).activeHostCount !== 1) {
     return failure(409, "sip_host_not_connected", "Host must join first");
   }
-  const occupied = findActiveProviderOperations("sip_inbound").find(
+  const occupied = (await findActiveProviderOperations("sip_inbound")).find(
     (operation) => operation.sessionId !== record.sessionId,
   );
   if (occupied) return failure(409, "sip_inbound_trunk_busy", "Inbound trunk is reserved");

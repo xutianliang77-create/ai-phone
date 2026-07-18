@@ -1,4 +1,5 @@
-import { getStoreSnapshot } from "../../infrastructure/storage/json-store.js";
+import { findActiveProviderOperations } from
+  "../provider-operations/provider-operations-runtime.repository.js";
 import { withSessionWriteLock } from "../sessions/session-write-coordinator.js";
 import { getCallLinkWorkerSupervisor } from "./call-link-worker-supervisor.js";
 import { expirePendingLiveKitSipCompletion } from "./livekit-sip-reconciliation.js";
@@ -9,13 +10,13 @@ export async function recoverPendingLiveKitSipCompletions(options: {
 } = {}) {
   const now = options.now ?? new Date();
   const graceMs = Math.max(5, options.graceSeconds ?? 30) * 1000;
-  const candidates = getStoreSnapshot().providerOperations.filter((operation) =>
+  const candidates = (await findActiveProviderOperations("sip_outbound"))
+    .filter((operation) =>
     operation.provider === "livekit_sip" &&
-    operation.operationType === "sip_outbound" &&
     operation.status === "unknown" &&
     !operation.answeredAt &&
     completionIsStale(operation.completionObservedAt, now, graceMs)
-  );
+    );
   let recoveredCount = 0;
   await Promise.all(candidates.map((operation) =>
     withSessionWriteLock(operation.sessionId, async () => {

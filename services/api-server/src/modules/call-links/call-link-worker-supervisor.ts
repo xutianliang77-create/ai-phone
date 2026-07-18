@@ -23,9 +23,13 @@ export interface ManagedCallLinkWorkerProcess {
 
 export interface CallLinkWorkerRuntime {
   ensure(callId: string): Promise<void>;
-  markReady(callId: string, claim?: WorkerRuntimeClaim): void;
-  heartbeat?(callId: string, claim: WorkerRuntimeClaim): unknown;
-  reportFailure?(callId: string, claim: WorkerRuntimeClaim, errorClass?: string): void;
+  markReady(callId: string, claim?: WorkerRuntimeClaim): void | Promise<void>;
+  heartbeat?(callId: string, claim: WorkerRuntimeClaim): unknown | Promise<unknown>;
+  reportFailure?(
+    callId: string,
+    claim: WorkerRuntimeClaim,
+    errorClass?: string,
+  ): void | Promise<void>;
   verifyTicket?(ticket: string): WorkerDispatchTicketPayload | null;
   stop(callId: string): void | Promise<void>;
   shutdown(): void | Promise<void>;

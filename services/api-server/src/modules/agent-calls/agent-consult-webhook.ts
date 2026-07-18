@@ -1,24 +1,24 @@
 import type { WebhookEvent } from "livekit-server-sdk";
 import {
-  processInboxEventOnly,
-} from "../events/reliable-events.repository.js";
+  processInboxEventOnlyAsync,
+} from "../events/reliable-events-runtime.repository.js";
 import {
   findProviderOperation,
   findSessionProviderOperation,
   updateProviderOperation,
-} from "../provider-operations/provider-operations.repository.js";
+} from "../provider-operations/provider-operations-runtime.repository.js";
 import {
   findAgentConsult,
   updateAgentConsult,
-} from "./agent-consult.repository.js";
+} from "./agent-consult-runtime.repository.js";
 
 export class AgentConsultWebhookBindingError extends Error {}
 
-export function reconcileAgentConsultWebhook(event: WebhookEvent) {
+export async function reconcileAgentConsultWebhook(event: WebhookEvent) {
   const role = event.participant?.attributes?.["translation.role"];
   if (role !== "operator") return null;
-  const binding = bindingFor(event);
-  const processed = processInboxEventOnly({
+  const binding = await bindingFor(event);
+  const processed = await processInboxEventOnlyAsync({
     eventId: `livekit:${event.id}`,
     sessionId: binding.consult.sessionId,
     eventType: `livekit.${event.event}`,
@@ -34,7 +34,7 @@ export function reconcileAgentConsultWebhook(event: WebhookEvent) {
   };
 }
 
-function bindingFor(event: WebhookEvent) {
+async function bindingFor(event: WebhookEvent) {
   if (!event.id || !event.participant || !event.room?.name ||
     !["participant_joined", "participant_left", "participant_connection_aborted"]
       .includes(event.event)) {
@@ -44,8 +44,8 @@ function bindingFor(event: WebhookEvent) {
   const consultId = attributes["translation.consultId"];
   const operationId = attributes["translation.operationId"];
   const sessionId = attributes["translation.sessionId"];
-  const consult = consultId ? findAgentConsult(consultId) : null;
-  const operation = operationId ? findProviderOperation(operationId) : null;
+  const consult = consultId ? await findAgentConsult(consultId) : null;
+  const operation = operationId ? await findProviderOperation(operationId) : null;
   if (!consult || !operation || operation.provider !== "livekit_sip" ||
     operation.operationType !== "sip_consult" || operation.sessionId !== sessionId ||
     consult.providerOperationId !== operation.id || consult.sessionId !== sessionId ||
@@ -56,24 +56,30 @@ function bindingFor(event: WebhookEvent) {
   return { consult, operation };
 }
 
-function applyEvent(event: WebhookEvent, consultId: string) {
-  const consult = findAgentConsult(consultId)!;
-  const operation = findProviderOperation(consult.providerOperationId!)!;
+async function applyEvent(event: WebhookEvent, consultId: string) {
+  const consult = (await findAgentConsult(consultId))!;
+  const operation = (await findProviderOperation(consult.providerOperationId!))!;
   const observedAt = eventDate(event);
   const roomName = event.room!.name;
   const mainRoom = roomName === consult.mainRoomName;
   const externalOperationId = event.participant?.attributes?.["sip.callID"];
   const externalResourceId = event.participant?.sid || undefined;
   if (event.event === "participant_joined") {
-    updateOperationActive(operation.id, observedAt, externalOperationId, externalResourceId);
-    if (!mainRoom && answered(event)) advanceConnected(consultId, observedAt);
+    await updateOperationActive(
+      operation.id,
+      observedAt,
+      externalOperationId,
+      externalResourceId,
+    );
+    if (!mainRoom && answered(event)) await advanceConnected(consultId, observedAt);
     if (mainRoom) {
-      finishMoveOperation(consult.sessionId, consult.id, observedAt);
+      await finishMoveOperation(consult.sessionId, consult.id, observedAt);
       if (consult.status === "connected") {
-        updateAgentConsult({ consultId, status: "merging", now: observedAt });
+        await updateAgentConsult({ consultId, status: "merging", now: observedAt });
       }
-      if (["connected", "merging"].includes(findAgentConsult(consultId)!.status)) {
-        updateAgentConsult({ consultId, status: "merged", now: observedAt });
+      const current = await findAgentConsult(consultId);
+      if (current && ["connected", "merging"].includes(current.status)) {
+        await updateAgentConsult({ consultId, status: "merged", now: observedAt });
       }
     }
     return { status: mainRoom ? "merged" as const :
@@ -82,7 +88,7 @@ function applyEvent(event: WebhookEvent, consultId: string) {
   if (!mainRoom && ["merging", "merged"].includes(consult.status)) {
     return { status: "moving" as const };
   }
-  finishLegOperation(
+  await finishLegOperation(
     operation.id,
     consult.connectedAt ? "succeeded" : "failed",
     observedAt,
@@ -95,9 +101,9 @@ function applyEvent(event: WebhookEvent, consultId: string) {
   }
   if (!consult.connectedAt && !mainRoom) {
     if (consult.status === "requested") {
-      updateAgentConsult({ consultId, status: "dialing", now: observedAt });
+      await updateAgentConsult({ consultId, status: "dialing", now: observedAt });
     }
-    updateAgentConsult({
+    await updateAgentConsult({
       consultId,
       status: "no_answer",
       failureCode: "operator_no_answer",
@@ -105,7 +111,7 @@ function applyEvent(event: WebhookEvent, consultId: string) {
     });
     return { status: "no_answer" as const };
   }
-  updateAgentConsult({
+  await updateAgentConsult({
     consultId,
     status: "failed",
     failureCode: mainRoom ? "operator_left_after_merge" : "operator_left_consult",
@@ -114,27 +120,28 @@ function applyEvent(event: WebhookEvent, consultId: string) {
   return { status: "failed" as const };
 }
 
-function advanceConnected(consultId: string, now: Date) {
-  const consult = findAgentConsult(consultId)!;
+async function advanceConnected(consultId: string, now: Date) {
+  const consult = (await findAgentConsult(consultId))!;
   if (consult.status === "requested") {
-    updateAgentConsult({ consultId, status: "dialing", now });
+    await updateAgentConsult({ consultId, status: "dialing", now });
   }
-  if (["requested", "dialing"].includes(findAgentConsult(consultId)!.status)) {
-    updateAgentConsult({ consultId, status: "connected", now });
+  const current = await findAgentConsult(consultId);
+  if (current && ["requested", "dialing"].includes(current.status)) {
+    await updateAgentConsult({ consultId, status: "connected", now });
   }
 }
 
-function updateOperationActive(
+async function updateOperationActive(
   operationId: string,
   now: Date,
   externalOperationId?: string,
   externalResourceId?: string,
 ) {
-  const operation = findProviderOperation(operationId);
+  const operation = await findProviderOperation(operationId);
   if (!operation || ["active", "succeeded", "failed", "cancelled"].includes(operation.status)) {
     return;
   }
-  updateProviderOperation({
+  await updateProviderOperation({
     operationId,
     status: "active",
     externalOperationId,
@@ -143,14 +150,14 @@ function updateOperationActive(
   });
 }
 
-function finishMoveOperation(sessionId: string, consultId: string, now: Date) {
-  const move = findSessionProviderOperation(sessionId, "sip_consult_move", consultId);
+async function finishMoveOperation(sessionId: string, consultId: string, now: Date) {
+  const move = await findSessionProviderOperation(sessionId, "sip_consult_move", consultId);
   if (move && !["succeeded", "failed", "cancelled"].includes(move.status)) {
-    updateProviderOperation({ operationId: move.id, status: "succeeded", now });
+    await updateProviderOperation({ operationId: move.id, status: "succeeded", now });
   }
 }
 
-function finishLegOperation(
+async function finishLegOperation(
   operationId: string,
   status: "succeeded" | "failed",
   now: Date,
@@ -158,9 +165,9 @@ function finishLegOperation(
   externalOperationId?: string,
   externalResourceId?: string,
 ) {
-  const operation = findProviderOperation(operationId);
+  const operation = await findProviderOperation(operationId);
   if (!operation || ["succeeded", "failed", "cancelled"].includes(operation.status)) return;
-  updateProviderOperation({
+  await updateProviderOperation({
     operationId,
     status,
     externalOperationId,

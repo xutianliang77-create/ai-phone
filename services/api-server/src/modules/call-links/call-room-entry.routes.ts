@@ -48,7 +48,7 @@ export function registerCallRoomEntryRoute(app: FastifyInstance) {
       );
     }
     const account = participantRole === "host"
-      ? requireAccount(request, reply)
+      ? await requireAccount(request, reply)
       : null;
     if (participantRole === "host" && !account) return;
     const participantName = parseParticipantName(body.participantName);
@@ -136,7 +136,7 @@ export function registerCallRoomEntryRoute(app: FastifyInstance) {
       );
     }
     const account = participantRole === "host"
-      ? requireAccount(request, reply)
+      ? await requireAccount(request, reply)
       : null;
     if (participantRole === "host" && !account) return;
 

@@ -3,16 +3,16 @@ import type {
   WorkerCapacityReservationDto,
   WorkerDispatchDto,
 } from "@translation/contracts";
-import { updateProviderOperation } from "../provider-operations/provider-operations.repository.js";
+import { updateProviderOperation } from
+  "../provider-operations/provider-operations-runtime.repository.js";
 import { findCallLink } from "../call-links/call-links.service.js";
 import {
-  beginWorkerDispatch,
   findWorkerDispatch,
   heartbeatWorkerDispatch,
   releaseWorkerCapacity,
-  reserveWorkerCapacity,
+  reserveAndBeginWorkerDispatch,
   updateWorkerDispatch,
-} from "./worker-dispatch.repository.js";
+} from "./worker-dispatch-runtime.repository.js";
 import { LiveKitDispatchProviderAdapter } from "./livekit-dispatch-provider-adapter.js";
 import type { LiveKitDispatchConfig } from "./livekit-dispatch-readiness.js";
 import {
@@ -52,7 +52,11 @@ export class CallLinkWorkerDispatchRuntime {
     private readonly resourceLabel = "Translation Worker",
   ) {
     this.provider = provider ?? new LiveKitDispatchProviderAdapter(config);
-    this.coordinator = new WorkerDispatchProviderCoordinator(config, this.provider);
+    this.coordinator = new WorkerDispatchProviderCoordinator(
+      config,
+      this.provider,
+      this.resource,
+    );
   }
 
   ensure(callId: string) {
@@ -66,7 +70,7 @@ export class CallLinkWorkerDispatchRuntime {
     return task;
   }
 
-  markReady(
+  async markReady(
     callId: string,
     claim?: Pick<WorkerDispatchTicketPayload, "generation"> & {
       workerId?: string;
@@ -74,34 +78,35 @@ export class CallLinkWorkerDispatchRuntime {
     },
   ) {
     if (!claim) return;
-    const record = findWorkerDispatch(callId);
+    const record = await findWorkerDispatch(callId);
     if (!record || record.callId !== callId || record.generation !== claim.generation) return;
-    const updated = updateWorkerDispatch({
+    const updated = await updateWorkerDispatch({
       sessionId: record.sessionId,
       generation: record.generation,
       status: "ready",
       workerId: claim.workerId,
       jobId: claim.jobId,
       leaseSeconds: this.config.leaseSeconds,
+      resource: this.resource,
     });
     if (updated.status !== "updated") return;
     if (record.operationId) {
-      updateProviderOperation({ operationId: record.operationId, status: "active" });
+      await updateProviderOperation({ operationId: record.operationId, status: "active" });
     }
     this.resolveWaiter(callId, record.generation);
   }
 
-  heartbeat(
+  async heartbeat(
     callId: string,
     claim: Pick<WorkerDispatchTicketPayload, "generation"> & {
       workerId?: string;
       jobId?: string;
     },
   ) {
-    const current = findWorkerDispatch(callId);
+    const current = await findWorkerDispatch(callId);
     if (current?.status === "dispatched" &&
       current.generation === claim.generation) {
-      this.markReady(callId, claim);
+      await this.markReady(callId, claim);
       return findWorkerDispatch(callId);
     }
     return heartbeatWorkerDispatch({
@@ -110,66 +115,73 @@ export class CallLinkWorkerDispatchRuntime {
       workerId: claim.workerId,
       jobId: claim.jobId,
       leaseSeconds: this.config.leaseSeconds,
+      resource: this.resource,
     });
   }
 
-  reportFailure(
+  async reportFailure(
     callId: string,
     claim: Pick<WorkerDispatchTicketPayload, "generation">,
     errorClass = "worker_failed",
   ) {
-    const record = findWorkerDispatch(callId);
+    const record = await findWorkerDispatch(callId);
     if (!record || record.generation !== claim.generation) return;
-    updateWorkerDispatch({
+    await updateWorkerDispatch({
       sessionId: record.sessionId,
       generation: record.generation,
       status: "failed",
       errorClass,
+      resource: this.resource,
     });
     if (record.operationId) {
-      updateProviderOperation({
+      await updateProviderOperation({
         operationId: record.operationId,
         status: "failed",
         errorClass,
       });
     }
-    releaseWorkerCapacity(record.sessionId);
+    await releaseWorkerCapacity(record.sessionId, this.resource);
     this.rejectWaiter(callId, record.generation, new Error(errorClass));
   }
 
   async stop(callId: string) {
-    const record = findWorkerDispatch(callId);
+    const record = await findWorkerDispatch(callId);
     if (!record || ["completed", "failed"].includes(record.status)) {
-      releaseWorkerCapacity(callId);
+      await releaseWorkerCapacity(callId, this.resource);
       return;
     }
     this.rejectWaiter(callId, record.generation, new Error("Worker dispatch stopped"));
     if (!record.externalDispatchId ||
       !["dispatched", "ready", "draining"].includes(record.status)) {
-      this.failRecord(record, "dispatch_stopped");
+      await this.failRecord(record, "dispatch_stopped");
       return;
     }
     if (record.status !== "draining") {
-      updateWorkerDispatch({
+      await updateWorkerDispatch({
         sessionId: record.sessionId,
         generation: record.generation,
         status: "draining",
+        resource: this.resource,
       });
     }
     const result = await this.coordinator.delete(record);
     if (result === "deleted") {
-      updateWorkerDispatch({
+      await updateWorkerDispatch({
         sessionId: record.sessionId,
         generation: record.generation,
         status: "completed",
+        resource: this.resource,
       });
       if (record.operationId) {
-        updateProviderOperation({ operationId: record.operationId, status: "succeeded" });
+        await updateProviderOperation({
+          operationId: record.operationId,
+          status: "succeeded",
+        });
       }
     } else if (result === "failed") {
-      this.failRecord(record, "dispatch_delete_failed");
+      await this.failRecord(record, "dispatch_delete_failed");
     }
-    releaseWorkerCapacity(record.sessionId);
+    await releaseWorkerCapacity(record.sessionId, this.resource);
   }
 
   shutdown() {
@@ -188,41 +200,48 @@ export class CallLinkWorkerDispatchRuntime {
   private async ensureOnce(callId: string) {
     for (let recoveryAttempt = 0; recoveryAttempt < 2; recoveryAttempt += 1) {
       const record = await findCallLink(callId);
-      if (!record || record.status === "ended") throw new Error("Call link is unavailable");
-      const reservation = reserveWorkerCapacity({
-        sessionId: record.sessionId,
-        resource: this.resource,
-        owner: this.owner,
-        maxUnits: this.config.maxActiveJobs,
-        leaseSeconds: this.config.leaseSeconds,
-      });
-      if (reservation.status !== "held") {
-        throw new WorkerCapacityError(this.resourceLabel);
+      if (!record || record.status === "ended" ||
+        Date.parse(record.expiresAt) <= Date.now()) {
+        throw new Error("Call link is unavailable");
       }
-      const begun = beginWorkerDispatch({
+      const begun = await reserveAndBeginWorkerDispatch({
         callId: record.callId,
         sessionId: record.sessionId,
         roomName: record.roomName,
         provider: "livekit_dispatch",
         agentName: this.config.agentName,
+        resource: this.resource,
+        owner: this.owner,
+        maxUnits: this.config.maxActiveJobs,
         leaseSeconds: this.config.leaseSeconds,
       });
+      if (begun.status === "capacity_exhausted") {
+        throw new WorkerCapacityError(this.resourceLabel);
+      }
+      if (begun.status === "reservation_conflict") {
+        throw new Error("Worker capacity reservation is owned by another instance");
+      }
+      if (begun.status === "dispatch_conflict") {
+        throw new Error("Worker dispatch request conflicts with the active generation");
+      }
       if (begun.dispatch.status === "ready" && begun.leaseActive) return;
       try {
         await this.coordinator.ensure(begun.dispatch, record.expiresAt);
         await this.waitUntilReady(begun.dispatch);
         return;
       } catch (error) {
-        const current = findWorkerDispatch(record.sessionId);
+        const current = await findWorkerDispatch(record.sessionId);
         if (current && current.generation === begun.dispatch.generation &&
-          current.status !== "failed") this.failRecord(current, errorClass(error));
+          current.status !== "failed") {
+          await this.failRecord(current, errorClass(error));
+        }
         if (recoveryAttempt === 1) throw error;
       }
     }
   }
 
-  private waitUntilReady(record: WorkerDispatchDto) {
-    if (findWorkerDispatch(record.sessionId)?.status === "ready") {
+  private async waitUntilReady(record: WorkerDispatchDto) {
+    if ((await findWorkerDispatch(record.sessionId))?.status === "ready") {
       return Promise.resolve();
     }
     const existing = this.waiters.get(record.callId);
@@ -263,21 +282,22 @@ export class CallLinkWorkerDispatchRuntime {
     waiter.reject(error);
   }
 
-  private failRecord(record: WorkerDispatchDto, reason: string) {
-    updateWorkerDispatch({
+  private async failRecord(record: WorkerDispatchDto, reason: string) {
+    await updateWorkerDispatch({
       sessionId: record.sessionId,
       generation: record.generation,
       status: "failed",
       errorClass: reason,
+      resource: this.resource,
     });
     if (record.operationId) {
-      updateProviderOperation({
+      await updateProviderOperation({
         operationId: record.operationId,
         status: "failed",
         errorClass: reason,
       });
     }
-    releaseWorkerCapacity(record.sessionId);
+    await releaseWorkerCapacity(record.sessionId, this.resource);
   }
 }
 

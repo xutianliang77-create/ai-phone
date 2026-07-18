@@ -50,3 +50,68 @@ The checker binds the result to the verified topology SHA-256 and refuses
 missing evidence, skipped stages, duplicate provider effects, duplicate
 settlements, lost final events, an incomplete soak, or an overload run that did
 not demonstrate bounded rejection.
+
+## Real mixed-traffic runner
+
+Copy `mixed-load.example.json` to the private environment-specific
+`mixed-load.json`. Replace every command with an isolated staging runner that
+drives the real provider. The orchestrator does not invoke a shell and passes
+the run, phase, scenario, target concurrency, duration, API URL, and allowlisted
+PSTN targets through `PLATFORM_LOAD_*` / `MIXED_LOAD_PSTN_ALLOWLIST` environment
+variables.
+
+Each scenario command must remain alive for the requested phase duration and
+emit exactly one JSON document on stdout. A successful real attestation must
+contain:
+
+```json
+{
+  "schemaVersion": 1,
+  "status": "passed",
+  "environment": "staging",
+  "realProviderTraffic": true,
+  "observedDurationMs": 1800000,
+  "trafficKinds": ["api", "livekit", "asr", "mt", "tts"],
+  "providerEvidence": {
+    "api": ["trace-id"],
+    "livekit": ["room-name"],
+    "asr": ["speech-id"],
+    "mt": ["turn-id"],
+    "tts": ["playback-id"]
+  },
+  "finalEventObserved": true,
+  "providerSideEffectDuplicates": 0,
+  "lostFinalEvents": 0,
+  "duplicateSettlements": 0,
+  "metrics": { "sessionStartMs": 900, "finalLatencyMs": 1300 }
+}
+```
+
+The system probe runs after ramp-up while sessions are still active and must emit
+`observedUtilization`, `oomCount`, and
+`unboundedQueueObserved`. Failure commands must emit `status=passed`,
+`recovered=true`, and `observedRecoverySeconds`. Mock attestations are written as
+`mock_passed` and cannot be promoted into `latest.json`.
+
+```bash
+export MIXED_LOAD_STAGING_ACK=WUJIE_STAGING_LOAD_ONLY
+export MIXED_LOAD_PSTN_ALLOWLIST=+8613800138000
+npm run platform:mixed-load -- \
+  --config infra/platform-ha/mixed-load.json \
+  --promote-latest
+```
+
+Never run this against production endpoints or a non-allowlisted telephone
+number. Do not overlap it with database, GPU, or media soak runs whose resource
+measurements must remain uncontaminated.
+
+Production PostgreSQL resilience is a third independent gate. It binds the
+capacity result to cross-host automatic failover and off-host WAL restore evidence:
+
+```bash
+npm run check:postgres-production-resilience -- \
+  --topology infra/platform-ha/topology.json \
+  --capacity outputs/platform-capacity/latest.json \
+  --file outputs/postgres-resilience/latest.json \
+  --json
+```

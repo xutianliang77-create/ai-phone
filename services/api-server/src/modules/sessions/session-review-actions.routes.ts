@@ -12,7 +12,7 @@ export function registerSessionReviewActionRoutes(app: FastifyInstance) {
   app.patch(
     "/sessions/:sessionId/action-items/:actionIndex",
     async (request, reply) => {
-      const account = requireAccount(request, reply);
+      const account = await requireAccount(request, reply);
       if (!account) return;
       const params = request.params as {
         sessionId: string;

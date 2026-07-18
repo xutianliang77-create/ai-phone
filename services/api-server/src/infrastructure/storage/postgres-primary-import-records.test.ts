@@ -62,4 +62,39 @@ describe("PostgreSQL primary import records", () => {
         requestHash: expect.stringMatching(/^[a-f0-9]{64}$/),
       });
   });
+
+  it("replaces Agent phone plaintext with a deterministic sealed reference", () => {
+    const previousActive = process.env.AGENT_PHONE_REFERENCE_ACTIVE_KEY_ID;
+    const previousKeys = process.env.AGENT_PHONE_REFERENCE_KEYS_JSON;
+    process.env.AGENT_PHONE_REFERENCE_ACTIVE_KEY_ID = "import-v1";
+    process.env.AGENT_PHONE_REFERENCE_KEYS_JSON = JSON.stringify({
+      "import-v1": Buffer.alloc(32, 3).toString("base64url"),
+    });
+    try {
+      const snapshot = createEmptyStoreSnapshot();
+      snapshot.agentCallDrafts.push({
+        id: "draft-1", userId: "user-1", scenario: "booking", status: "draft",
+        objective: "book a table", suggestedScript: "book", language: "zh",
+        riskLevel: "low", riskReasons: [], targetPhone: "13800138000",
+        createdAt: "2026-07-18T00:00:00.000Z",
+        updatedAt: "2026-07-18T00:00:00.000Z",
+      });
+      const first = postgresPrimarySnapshotRecords(snapshot);
+      const second = postgresPrimarySnapshotRecords(snapshot);
+      const payload = first.find((record) => record.namespace === "agentCallDrafts")
+        ?.payload as Record<string, unknown>;
+      expect(payload.targetPhone).toBeUndefined();
+      expect(payload.targetPhoneReference).toMatch(/^aph1\.import-v1\./);
+      expect(JSON.stringify(payload)).not.toContain("13800138000");
+      expect(second).toEqual(first);
+    } finally {
+      restore("AGENT_PHONE_REFERENCE_ACTIVE_KEY_ID", previousActive);
+      restore("AGENT_PHONE_REFERENCE_KEYS_JSON", previousKeys);
+    }
+  });
 });
+
+function restore(key: string, value: string | undefined) {
+  if (value === undefined) delete process.env[key];
+  else process.env[key] = value;
+}

@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import type { AgentConsultDto } from "@translation/contracts";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { sendError } from "../../infrastructure/http/errors.js";
 import { requireAccount } from "../account/account-auth.js";
@@ -6,7 +7,7 @@ import {
   beginProviderOperation,
   findProviderOperation,
   updateProviderOperation,
-} from "../provider-operations/provider-operations.repository.js";
+} from "../provider-operations/provider-operations-runtime.repository.js";
 import {
   agentConsultBinding,
   consultResponse,
@@ -15,7 +16,7 @@ import {
   completeAgentConsultHandoff,
   findAgentConsult,
   updateAgentConsult,
-} from "./agent-consult.repository.js";
+} from "./agent-consult-runtime.repository.js";
 import { getAgentConsultConfig } from "./agent-consult-readiness.js";
 import { LiveKitAgentConsultRoom } from "./livekit-agent-consult-room.js";
 import { getVoiceAgentRuntimeSupervisor } from
@@ -64,21 +65,27 @@ export function registerAgentConsultControlRoutes(app: FastifyInstance) {
           "Both participants must be connected to the private consult room",
         );
       }
-      const operation = beginControlOperation(binding.consult, "sip_consult_move");
+      const operation = await beginControlOperation(
+        binding.consult,
+        "sip_consult_move",
+      );
       if (!operation.ok) return conflict(reply, operation.code, operation.message);
       if (operation.replayed) {
         return reply.status(operation.operation.status === "succeeded" ? 200 : 202).send({
-          consult: consultResponse(findAgentConsult(binding.consult.id)!),
+          consult: consultResponse((await findAgentConsult(binding.consult.id))!),
           replayed: true,
         });
       }
-      const merging = updateAgentConsult({
+      const merging = await updateAgentConsult({
         consultId: binding.consult.id,
         status: "merging",
         expectedVersion: binding.consult.version,
       });
       if (merging.status !== "updated") {
-        updateProviderOperation({ operationId: operation.operation.id, status: "failed" });
+        await updateProviderOperation({
+          operationId: operation.operation.id,
+          status: "failed",
+        });
         return conflict(reply, "agent_consult_version_conflict", "Consult state changed");
       }
       const moved = await room.move(
@@ -87,13 +94,13 @@ export function registerAgentConsultControlRoutes(app: FastifyInstance) {
         binding.consult.mainRoomName,
       );
       if (!moved.ok) {
-        updateProviderOperation({
+        await updateProviderOperation({
           operationId: operation.operation.id,
           status: moved.reconciliationRequired ? "unknown" : "failed",
           errorClass: moved.errorClass,
         });
         if (!moved.reconciliationRequired) {
-          updateAgentConsult({
+          await updateAgentConsult({
             consultId: binding.consult.id,
             status: "failed",
             failureCode: moved.errorClass,
@@ -101,17 +108,19 @@ export function registerAgentConsultControlRoutes(app: FastifyInstance) {
         }
         return moved.reconciliationRequired
           ? reply.status(202).send({
-            consult: consultResponse(findAgentConsult(binding.consult.id)!),
+            consult: consultResponse((await findAgentConsult(binding.consult.id))!),
             reconciliationRequired: true,
           })
           : unavailable(reply);
       }
-      updateProviderOperation({
+      await updateProviderOperation({
         operationId: operation.operation.id,
         status: "succeeded",
       });
-      updateAgentConsult({ consultId: binding.consult.id, status: "merged" });
-      return { consult: consultResponse(findAgentConsult(binding.consult.id)!) };
+      await updateAgentConsult({ consultId: binding.consult.id, status: "merged" });
+      return {
+        consult: consultResponse((await findAgentConsult(binding.consult.id))!),
+      };
     },
   );
 
@@ -128,10 +137,16 @@ export function registerAgentConsultControlRoutes(app: FastifyInstance) {
       }
       const room = configuredRoom(reply);
       if (!room) return;
-      const operation = beginControlOperation(binding.consult, "sip_consult_end");
+      const operation = await beginControlOperation(
+        binding.consult,
+        "sip_consult_end",
+      );
       if (!operation.ok) return conflict(reply, operation.code, operation.message);
       if (!operation.replayed) {
-        updateAgentConsult({ consultId: binding.consult.id, status: "rejected" });
+        await updateAgentConsult({
+          consultId: binding.consult.id,
+          status: "rejected",
+        });
         const removed = await room.remove(
           binding.consult.consultRoomName,
           binding.consult.operatorParticipantIdentity,
@@ -140,7 +155,7 @@ export function registerAgentConsultControlRoutes(app: FastifyInstance) {
         const uncertain = (!removed.ok && removed.reconciliationRequired) ||
           (!deleted.ok && deleted.reconciliationRequired);
         const failed = !removed.ok || !deleted.ok;
-        updateProviderOperation({
+        await updateProviderOperation({
           operationId: operation.operation.id,
           status: uncertain ? "unknown" : failed ? "failed" : "succeeded",
           ...(failed ? {
@@ -148,10 +163,12 @@ export function registerAgentConsultControlRoutes(app: FastifyInstance) {
               : !deleted.ok ? deleted.errorClass : "unavailable",
           } : {}),
         });
-        if (removed.ok) finishConsultLeg(binding.consult.providerOperationId);
+        if (removed.ok) {
+          await finishConsultLeg(binding.consult.providerOperationId);
+        }
       }
-      const current = findAgentConsult(binding.consult.id)!;
-      const endOperation = findProviderOperation(operation.operation.id);
+      const current = (await findAgentConsult(binding.consult.id))!;
+      const endOperation = await findProviderOperation(operation.operation.id);
       return reply.status(endOperation?.status === "unknown" ? 202 : 200).send({
         consult: consultResponse(current),
         replayed: operation.replayed,
@@ -187,13 +204,16 @@ export function registerAgentConsultControlRoutes(app: FastifyInstance) {
         );
       }
       await getVoiceAgentRuntimeSupervisor().stop(binding.call.callId);
-      const completed = completeAgentConsultHandoff({
+      const completed = await completeAgentConsultHandoff({
         consultId: binding.consult.id,
         expectedVersion: binding.consult.version,
         runId: binding.run.id,
       });
       if (completed.status !== "completed") {
         return conflict(reply, "agent_consult_version_conflict", "Consult state changed");
+      }
+      if (!("consult" in completed)) {
+        return conflict(reply, "agent_consult_not_found", "Consult is unavailable");
       }
       await room.delete(binding.consult.consultRoomName);
       return { consult: consultResponse(completed.consult) };
@@ -205,7 +225,7 @@ async function authenticatedBinding(
   request: FastifyRequest,
   reply: FastifyReply,
 ) {
-  const account = requireAccount(request, reply);
+  const account = await requireAccount(request, reply);
   if (!account) return null;
   const binding = await agentConsultBinding(account.id, request.params);
   if (!binding.ok) {
@@ -226,14 +246,14 @@ function configuredRoom(reply: Parameters<typeof sendError>[0]) {
   );
 }
 
-function beginControlOperation(
-  consult: NonNullable<ReturnType<typeof findAgentConsult>>,
+async function beginControlOperation(
+  consult: AgentConsultDto,
   operationType: "sip_consult_move" | "sip_consult_end",
 ) {
   const requestHash = createHash("sha256")
     .update(`${operationType}:${consult.id}`)
     .digest("hex");
-  const result = beginProviderOperation({
+  const result = await beginProviderOperation({
     sessionId: consult.sessionId,
     provider: "livekit_sip",
     operationType,
@@ -255,11 +275,11 @@ function beginControlOperation(
   };
 }
 
-function finishConsultLeg(operationId?: string) {
+async function finishConsultLeg(operationId?: string) {
   if (!operationId) return;
-  const operation = findProviderOperation(operationId);
+  const operation = await findProviderOperation(operationId);
   if (operation && !["succeeded", "failed", "cancelled"].includes(operation.status)) {
-    updateProviderOperation({ operationId, status: "succeeded" });
+    await updateProviderOperation({ operationId, status: "succeeded" });
   }
 }
 

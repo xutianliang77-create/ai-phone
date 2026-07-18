@@ -8,7 +8,7 @@ import {
 import {
   claimQueuedAgentCalls,
   updateClaimedAgentCall,
-} from "./agent-call-lease.repository.js";
+} from "./agent-call-lease-runtime.repository.js";
 
 export async function registerAgentCallInternalRoutes(app: FastifyInstance) {
   app.post(
@@ -27,7 +27,7 @@ export async function registerAgentCallInternalRoutes(app: FastifyInstance) {
       if (!validWorkerId(workerId) || !leaseToken) {
         return sendError(reply, 400, "agent_call_lease_required", "Worker lease is required");
       }
-      const result = updateClaimedAgentCall({
+      const result = await updateClaimedAgentCall({
         draftId: (request.params as { draftId: string }).draftId,
         workerId,
         leaseToken,
@@ -85,7 +85,7 @@ export async function registerAgentCallInternalRoutes(app: FastifyInstance) {
       if (!leaseSeconds) {
         return sendError(reply, 503, "agent_call_lease_not_configured", "Lease is unavailable");
       }
-      const result = claimQueuedAgentCalls({
+      const result = await claimQueuedAgentCalls({
         workerId,
         limit: Number(body?.limit ?? 5),
         leaseSeconds,

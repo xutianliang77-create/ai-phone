@@ -1,8 +1,10 @@
 import { timingSafeEqual } from "node:crypto";
 import type { FastifyInstance } from "fastify";
 import { sendError } from "../../infrastructure/http/errors.js";
-import { findWorkerDispatch } from "../worker-dispatches/worker-dispatch.repository.js";
-import { getReadyVoiceProfileTtsConfig } from "../voice-profiles/voice-profiles.service.js";
+import { findWorkerDispatch } from
+  "../worker-dispatches/worker-dispatch-runtime.repository.js";
+import { getReadyVoiceProfileTtsConfig } from
+  "../voice-profiles/voice-profiles-runtime.service.js";
 import { findCallLink, registerCallLeg } from "./call-links.service.js";
 import { getCallLinkWorkerSupervisor } from "./call-link-worker-supervisor.js";
 
@@ -31,7 +33,7 @@ export function registerWorkerDispatchRuntimeRoutes(app: FastifyInstance) {
       claim.sessionId !== call.sessionId || claim.roomName !== call.roomName) {
       return sendError(reply, 403, "worker_runtime_binding_conflict", "Worker binding failed");
     }
-    const dispatch = findWorkerDispatch(call.sessionId);
+    const dispatch = await findWorkerDispatch(call.sessionId);
     if (!dispatch || dispatch.generation !== claim.generation) {
       return sendError(reply, 409, "worker_dispatch_generation_conflict", "Dispatch is stale");
     }
@@ -41,12 +43,12 @@ export function registerWorkerDispatchRuntimeRoutes(app: FastifyInstance) {
       participantRole: "worker",
       joinType: "worker",
     });
-    runtime.heartbeat?.(call.callId, {
+    await runtime.heartbeat?.(call.callId, {
       generation: claim.generation,
       workerId: body.workerId,
       jobId: body.jobId,
     });
-    const ttsVoice = getReadyVoiceProfileTtsConfig(call.userId);
+    const ttsVoice = await getReadyVoiceProfileTtsConfig(call.userId);
     return {
       callId: call.callId,
       sessionId: call.sessionId,
@@ -78,17 +80,19 @@ export function registerWorkerDispatchRuntimeRoutes(app: FastifyInstance) {
       ...(body.workerId ? { workerId: body.workerId } : {}),
       ...(body.jobId ? { jobId: body.jobId } : {}),
     };
-    if (body.event === "ready") runtime.markReady(params.callId, runtimeClaim);
-    if (body.event === "heartbeat") runtime.heartbeat?.(params.callId, runtimeClaim);
+    if (body.event === "ready") await runtime.markReady(params.callId, runtimeClaim);
+    if (body.event === "heartbeat") {
+      await runtime.heartbeat?.(params.callId, runtimeClaim);
+    }
     if (body.event === "failed") {
-      runtime.reportFailure?.(
+      await runtime.reportFailure?.(
         params.callId,
         runtimeClaim,
         body.errorClass ?? "worker_failed",
       );
     }
     if (body.event === "ending") await runtime.stop(params.callId);
-    const dispatch = findWorkerDispatch(call.sessionId);
+    const dispatch = await findWorkerDispatch(call.sessionId);
     if (!dispatch || dispatch.generation !== claim.generation) {
       return sendError(reply, 409, "worker_dispatch_generation_conflict", "Dispatch is stale");
     }

@@ -1,13 +1,16 @@
 import { createHash } from "node:crypto";
 import type { FastifyInstance } from "fastify";
-import type { ExternalMediaInputType } from "@translation/contracts";
+import type {
+  ExternalMediaInputType,
+  ExternalMediaSourceDto,
+} from "@translation/contracts";
 import { sendError } from "../../infrastructure/http/errors.js";
 import { requireAccount } from "../account/account-auth.js";
 import { findCallLink } from "../call-links/call-links.service.js";
 import {
   beginProviderOperation,
   updateProviderOperation,
-} from "../provider-operations/provider-operations.repository.js";
+} from "../provider-operations/provider-operations-runtime.repository.js";
 import { registerIngressDeleteRoutes } from "./ingress-delete.routes.js";
 import { LiveKitIngressProviderAdapter } from "./livekit-ingress-provider-adapter.js";
 import { SrtLiveKitIngressProviderAdapter } from
@@ -23,12 +26,12 @@ import {
   findExternalMediaSourceByIdempotency,
   listSessionExternalMediaSources,
   updateExternalMediaSource,
-} from "./ingress.repository.js";
+} from "./ingress-runtime.repository.js";
 
 export function registerIngressRoutes(app: FastifyInstance) {
   registerIngressDeleteRoutes(app);
   app.post("/call-links/:callId/ingress", async (request, reply) => {
-    const account = requireAccount(request, reply);
+    const account = await requireAccount(request, reply);
     if (!account) return;
     const input = parseCreateRequest(request.body);
     if (!input) {
@@ -59,7 +62,7 @@ export function registerIngressRoutes(app: FastifyInstance) {
       sourceUrlHash: input.sourceUrl ? sha256(input.sourceUrl) : undefined,
       policyVersion: input.policyVersion,
     });
-    const existing = findExternalMediaSourceByIdempotency(
+    const existing = await findExternalMediaSourceByIdempotency(
       call.sessionId,
       input.idempotencyKey,
     );
@@ -85,7 +88,7 @@ export function registerIngressRoutes(app: FastifyInstance) {
     const participantIdentity = `external:${sha256(
       `${call.sessionId}:${input.idempotencyKey}`,
     ).slice(0, 32)}`;
-    const begun = beginExternalMediaSource({
+    const begun = await beginExternalMediaSource({
       sessionId: call.sessionId,
       roomName: call.roomName,
       inputType: input.inputType,
@@ -113,15 +116,15 @@ export function registerIngressRoutes(app: FastifyInstance) {
       });
     }
     const source = begun.source;
-    const operation = beginProviderOperation({
+    const operation = (await beginProviderOperation({
       sessionId: source.sessionId,
       provider: "livekit_ingress",
       operationType: "ingress_create",
       operationKey: source.id,
       idempotencyKey: `ingress-create:${source.id}`,
       requestHash,
-    }).operation;
-    updateExternalMediaSource({
+    })).operation;
+    await updateExternalMediaSource({
       sourceId: source.id,
       status: "requested",
       expectedVersion: source.version,
@@ -149,37 +152,39 @@ export function registerIngressRoutes(app: FastifyInstance) {
       },
     });
     if (!result.ok) {
-      updateProviderOperation({
+      await updateProviderOperation({
         operationId: operation.id,
         status: result.reconciliationRequired ? "unknown" : "failed",
         errorClass: result.errorClass,
       });
       if (!result.reconciliationRequired) {
-        updateExternalMediaSource({
+        await updateExternalMediaSource({
           sourceId: source.id,
           status: "failed",
           errorClass: result.errorClass,
         });
       }
       return result.reconciliationRequired
-        ? reply.status(202).send({ source: sourceResponse(findExternalMediaSource(source.id)!) })
+        ? reply.status(202).send({
+          source: sourceResponse((await findExternalMediaSource(source.id))!),
+        })
         : sendError(reply, 503, "external_media_create_failed", "Ingress create failed");
     }
-    updateProviderOperation({
+    await updateProviderOperation({
       operationId: operation.id,
       status: "accepted",
       externalOperationId: result.result.ingressId,
       externalResourceId: result.result.ingressId,
     });
-    updateExternalMediaSource({
+    await updateExternalMediaSource({
       sourceId: source.id,
       status: "ready",
       externalIngressId: result.result.ingressId,
       externalBridgeId: result.result.bridgeId,
     });
-    applyIngressProviderJob(source.id, result.result);
+    await applyIngressProviderJob(source.id, result.result);
     return reply.header("cache-control", "no-store").status(201).send({
-      source: sourceResponse(findExternalMediaSource(source.id)!),
+      source: sourceResponse((await findExternalMediaSource(source.id))!),
       replayed: false,
       ...(result.result.connectionUrl
         ? {
@@ -193,7 +198,7 @@ export function registerIngressRoutes(app: FastifyInstance) {
   });
 
   app.get("/call-links/:callId/ingress", async (request, reply) => {
-    const account = requireAccount(request, reply);
+    const account = await requireAccount(request, reply);
     if (!account) return;
     const call = await findCallLink(
       (request.params as { callId: string }).callId,
@@ -201,9 +206,8 @@ export function registerIngressRoutes(app: FastifyInstance) {
     if (!call || call.userId !== account.id) {
       return sendError(reply, 404, "call_link_not_found", "Call link not found");
     }
-    return {
-      sources: listSessionExternalMediaSources(call.sessionId).map(sourceResponse),
-    };
+    const sources = await listSessionExternalMediaSources(call.sessionId);
+    return { sources: sources.map(sourceResponse) };
   });
 }
 
@@ -222,7 +226,7 @@ function parseCreateRequest(body: unknown) {
   };
 }
 
-function sourceResponse(source: NonNullable<ReturnType<typeof findExternalMediaSource>>) {
+function sourceResponse(source: ExternalMediaSourceDto) {
   return {
     id: source.id,
     sessionId: source.sessionId,

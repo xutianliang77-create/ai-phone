@@ -25,6 +25,7 @@ export function issueWorkerDispatchTicket(input: {
   generation: number;
   secret: string;
   ttlSeconds: number;
+  nonce?: string;
   now?: Date;
 }) {
   const nowSeconds = Math.floor((input.now ?? new Date()).getTime() / 1000);
@@ -35,7 +36,7 @@ export function issueWorkerDispatchTicket(input: {
     roomName: input.roomName,
     agentName: input.agentName,
     generation: input.generation,
-    nonce: randomUUID(),
+    nonce: input.nonce ?? randomUUID(),
     iat: nowSeconds,
     exp: nowSeconds + input.ttlSeconds,
   };
@@ -65,6 +66,16 @@ export function verifyWorkerDispatchTicket(
 
 export function workerDispatchMetadataHash(ticket: string) {
   return createHash("sha256").update(ticket).digest("hex");
+}
+
+export function workerDispatchTicketNonce(input: {
+  sessionId: string;
+  generation: number;
+  secret: string;
+}) {
+  return createHmac("sha256", input.secret)
+    .update(`${input.sessionId}:${input.generation}`)
+    .digest("base64url");
 }
 
 function validPayload(value: unknown, nowSeconds: number): value is WorkerDispatchTicketPayload {

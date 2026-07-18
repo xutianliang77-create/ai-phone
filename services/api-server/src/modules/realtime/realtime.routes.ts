@@ -27,7 +27,7 @@ import { isValidSegmentPatch } from "./realtime-segment-validation.js";
 export async function registerRealtimeRoutes(app: FastifyInstance) {
   registerRealtimeFinalizationRoute(app);
   app.post("/realtime/sessions", async (request, reply) => {
-    const account = requireAccount(request, reply);
+    const account = await requireAccount(request, reply);
     if (!account) return;
     const parsed = validateCreateRealtimeSessionRequest(request.body);
     if (!parsed.ok) {
@@ -47,7 +47,7 @@ export async function registerRealtimeRoutes(app: FastifyInstance) {
   });
 
   app.get("/realtime/sessions/:sessionId/status", async (request, reply) => {
-    const account = requireAccount(request, reply);
+    const account = await requireAccount(request, reply);
     if (!account) return;
     const params = request.params as { sessionId: string };
     const session = await findSession(params.sessionId);
@@ -62,7 +62,7 @@ export async function registerRealtimeRoutes(app: FastifyInstance) {
   });
 
   app.post("/realtime/sessions/:sessionId/end", async (request, reply) => {
-    const account = requireAccount(request, reply);
+    const account = await requireAccount(request, reply);
     if (!account) return;
     const params = request.params as { sessionId: string };
     return withSessionWriteLock(params.sessionId, async () => {

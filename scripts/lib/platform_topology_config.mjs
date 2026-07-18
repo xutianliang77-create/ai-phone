@@ -106,7 +106,9 @@ function checkPools(pools, issues) {
 }
 
 function checkState(state, issues) {
-  if (state?.postgresMode !== "managed_ha") issues.push("PostgreSQL HA is required");
+  if (!["managed_ha", "patroni_etcd"].includes(state?.postgresMode)) {
+    issues.push("PostgreSQL managed HA or Patroni/etcd is required");
+  }
   if (state?.redisMode !== "managed_ha") issues.push("Redis HA is required");
   if (state?.objectStorageReplication !== "same_data_region") {
     issues.push("Object storage replication must remain in the same data region");

@@ -14,7 +14,7 @@ import {
   findProviderOperation,
   findSessionProviderOperation,
   updateProviderOperation,
-} from "../provider-operations/provider-operations.repository.js";
+} from "../provider-operations/provider-operations-runtime.repository.js";
 import type { ProviderOperationRecord } from "../provider-operations/provider-operation-record.js";
 import { withSessionWriteLock } from "../sessions/session-write-coordinator.js";
 import { isInternalAuthorized } from "./call-link-internal.routes.js";
@@ -58,9 +58,9 @@ export function registerCallLinkSipControlRoutes(app: FastifyInstance) {
       if (!body) {
         return sendError(reply, 400, "invalid_sip_control_status", "Invalid status");
       }
-      return withSessionWriteLock(params.callId, () => {
-        const operation = findProviderOperation(params.operationId);
-        const dial = findSessionProviderOperation(params.callId, "sip_outbound");
+      return withSessionWriteLock(params.callId, async () => {
+        const operation = await findProviderOperation(params.operationId);
+        const dial = await findSessionProviderOperation(params.callId, "sip_outbound");
         if (!operation || operation.sessionId !== params.callId ||
           operation.operationType !== "sip_dtmf" ||
           !dial || dial.id !== body.dialOperationId) {
@@ -70,7 +70,7 @@ export function registerCallLinkSipControlRoutes(app: FastifyInstance) {
         if (operation.status === "succeeded" || operation.status === "failed") {
           return sendError(reply, 409, "sip_control_terminal_conflict", "Status is terminal");
         }
-        const result = updateProviderOperation({
+        const result = await updateProviderOperation({
           operationId: operation.id,
           status: body.status,
           errorClass: body.errorClass,
@@ -86,7 +86,7 @@ export function registerCallLinkSipControlRoutes(app: FastifyInstance) {
 }
 
 async function handleDtmf(request: any, reply: any) {
-  const account = requireAccount(request, reply);
+  const account = await requireAccount(request, reply);
   if (!account) return;
   const params = request.params as { callId: string };
   const body = parseDtmf(request.body);
@@ -99,7 +99,7 @@ async function handleDtmf(request: any, reply: any) {
   if (started.replayed) return reply.status(202).send(
     controlResponse(params.callId, started.operation, true),
   );
-  const accepted = updateProviderOperation({
+  const accepted = await updateProviderOperation({
     operationId: started.operation.id,
     status: "accepted",
     expectedVersion: started.operation.version,
@@ -119,7 +119,7 @@ async function handleDtmf(request: any, reply: any) {
     });
   } catch (error) {
     const definite = error instanceof Error && error.name === "SipControlWorkerBindingError";
-    updateProviderOperation({
+    await updateProviderOperation({
       operationId: operation.id,
       status: definite ? "failed" : "unknown",
       errorClass: definite ? "worker_binding" : "delivery_unknown",
@@ -127,7 +127,7 @@ async function handleDtmf(request: any, reply: any) {
   }
   return reply.status(202).send(controlResponse(
     params.callId,
-    findProviderOperation(operation.id) ?? operation,
+    await findProviderOperation(operation.id) ?? operation,
     false,
   ));
 }
@@ -137,7 +137,7 @@ async function handleProviderControl(
   reply: any,
   type: "sip_transfer" | "sip_hangup",
 ) {
-  const account = requireAccount(request, reply);
+  const account = await requireAccount(request, reply);
   if (!account) return;
   const params = request.params as { callId: string };
   const body = type === "sip_transfer" ? parseTransfer(request.body) : null;
@@ -184,7 +184,7 @@ async function handleProviderControl(
   const status = result.ok || successfulHangup
     ? "succeeded"
     : result.reconciliationRequired ? "unknown" : "failed";
-  updateProviderOperation({
+  await updateProviderOperation({
     operationId: started.operation.id,
     status,
     errorClass: result.ok ? undefined : result.errorClass,
@@ -192,7 +192,7 @@ async function handleProviderControl(
       ? { externalResourceId: result.externalResourceId }
       : {}),
   });
-  const current = findProviderOperation(started.operation.id) ?? started.operation;
+  const current = await findProviderOperation(started.operation.id) ?? started.operation;
   if (status === "failed") {
     return sendError(reply, 503, "sip_control_failed", "SIP control was rejected");
   }
@@ -208,7 +208,7 @@ async function beginControl(
 ) {
   const binding = await validateBinding(callId, accountId, type);
   if (!binding.ok) return binding;
-  const result = beginProviderOperation({
+  const result = await beginProviderOperation({
     sessionId: binding.record.sessionId,
     provider: "livekit_sip",
     operationType: type,
@@ -239,7 +239,7 @@ async function validateBinding(
   if (record.status === "ended" || Date.now() >= Date.parse(record.expiresAt)) {
     return failure(410, "call_link_expired", "Call link expired");
   }
-  const dial = findSessionProviderOperation(record.sessionId, "sip_outbound");
+  const dial = await findSessionProviderOperation(record.sessionId, "sip_outbound");
   if (!dial) return failure(409, "sip_outbound_missing", "Outbound call is missing");
   const allowed = type === "sip_hangup"
     ? ["accepted", "unknown", "active"]

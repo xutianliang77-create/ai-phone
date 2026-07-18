@@ -9,8 +9,9 @@ import {
   trace,
   type Span,
 } from "@opentelemetry/api";
+import { W3CTraceContextPropagator } from "@opentelemetry/core";
 import { OTLPTraceExporter } from "@opentelemetry/exporter-trace-otlp-proto";
-import { Resource } from "@opentelemetry/resources";
+import { resourceFromAttributes } from "@opentelemetry/resources";
 import {
   BatchSpanProcessor,
   NodeTracerProvider,
@@ -21,6 +22,7 @@ import { ATTR_SERVICE_NAME, ATTR_SERVICE_VERSION } from "@opentelemetry/semantic
 
 const requestSpans = new WeakMap<object, Span>();
 const requestTrace = new AsyncLocalStorage<{ traceId: string }>();
+const traceContextPropagator = new W3CTraceContextPropagator();
 let provider: NodeTracerProvider | undefined;
 
 export function getPlatformTelemetryReadiness() {
@@ -57,7 +59,7 @@ export async function startPlatformTelemetry() {
     headers: parseHeaders(process.env.OTEL_EXPORTER_OTLP_HEADERS),
   });
   provider = new NodeTracerProvider({
-    resource: new Resource({
+    resource: resourceFromAttributes({
       [ATTR_SERVICE_NAME]: "ai-phone-api",
       [ATTR_SERVICE_VERSION]: "0.1.0",
       "service.namespace": "wujie-ai",
@@ -69,14 +71,14 @@ export async function startPlatformTelemetry() {
     sampler: new ParentBasedSampler({
       root: new TraceIdRatioBasedSampler(readiness.sampleRatio),
     }),
+    spanProcessors: [new BatchSpanProcessor(exporter, {
+      maxQueueSize: integerEnv("OTEL_BSP_MAX_QUEUE_SIZE", 2048, 128, 16_384),
+      maxExportBatchSize: integerEnv("OTEL_BSP_MAX_EXPORT_BATCH_SIZE", 512, 32, 2048),
+      scheduledDelayMillis: integerEnv("OTEL_BSP_SCHEDULE_DELAY_MS", 5000, 100, 60_000),
+      exportTimeoutMillis: integerEnv("OTEL_BSP_EXPORT_TIMEOUT_MS", 10_000, 1000, 60_000),
+    })],
   });
-  provider.addSpanProcessor(new BatchSpanProcessor(exporter, {
-    maxQueueSize: integerEnv("OTEL_BSP_MAX_QUEUE_SIZE", 2048, 128, 16_384),
-    maxExportBatchSize: integerEnv("OTEL_BSP_MAX_EXPORT_BATCH_SIZE", 512, 32, 2048),
-    scheduledDelayMillis: integerEnv("OTEL_BSP_SCHEDULE_DELAY_MS", 5000, 100, 60_000),
-    exportTimeoutMillis: integerEnv("OTEL_BSP_EXPORT_TIMEOUT_MS", 10_000, 1000, 60_000),
-  }));
-  provider.register();
+  provider.register({ propagator: traceContextPropagator });
   return async () => {
     await provider?.shutdown();
     provider = undefined;
@@ -85,7 +87,10 @@ export async function startPlatformTelemetry() {
 
 export function registerPlatformTelemetryHooks(app: FastifyInstance) {
   app.addHook("onRequest", (request, reply, done) => {
-    const parent = propagation.extract(context.active(), request.headers);
+    const parent = propagation.extract(
+      context.active(),
+      platformPropagationHeaders(request.headers),
+    );
     const span = trace.getTracer("ai-phone-api").startSpan(
       `${request.method} ${routeName(request.url)}`,
       {
@@ -127,6 +132,17 @@ export function registerPlatformTelemetryHooks(app: FastifyInstance) {
 
 export function currentPlatformTraceId() {
   return requestTrace.getStore()?.traceId;
+}
+
+export function platformPropagationHeaders(
+  headers: Record<string, string | string[] | undefined>,
+) {
+  if (!Object.keys(headers).some((name) => name.toLowerCase() === "baggage")) {
+    return headers;
+  }
+  return Object.fromEntries(
+    Object.entries(headers).filter(([name]) => name.toLowerCase() !== "baggage"),
+  );
 }
 
 function parseHeaders(value: string | undefined) {

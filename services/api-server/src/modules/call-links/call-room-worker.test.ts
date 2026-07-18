@@ -78,6 +78,36 @@ describe("call room worker publisher", () => {
     );
   });
 
+  it("does not consume later ordered events when the first publish fails", async () => {
+    const record = fakeCallLinkRecord("call_failure");
+    const events = buildCallRoomSmokeEvents({
+      callId: record.callId,
+      roomName: record.roomName,
+      nowMs: 1_000,
+    });
+    createSession({
+      id: record.sessionId,
+      userId: "user_1",
+      mode: "call_link",
+      status: "active",
+      consumedSeconds: 0,
+      createdAt: record.createdAt,
+      segments: [],
+    });
+    setCallRoomDataPublisherForTests({
+      async publish() {
+        throw new Error("publish failed");
+      },
+    });
+
+    await expect(publishCallRoomDataEvents(record, events)).resolves.toMatchObject({
+      ok: false,
+      issues: ["publish failed"],
+    });
+    expect(getStoreSnapshot().outboxEvents.map((event) => event.attempts))
+      .toEqual([1, 0, 0, 0]);
+  });
+
   it("persists raw, optimized, refinement, and model timing metadata", async () => {
     const record = fakeCallLinkRecord("call_metadata");
     createSession({

@@ -27,6 +27,17 @@
   "soak": {
     "targetUtilization": 0.7,
     "durationMinutes": 120,
+    "realProviderTraffic": false,
+    "trafficKinds": [
+      "api",
+      "livekit",
+      "sip",
+      "asr",
+      "mt",
+      "tts",
+      "agent",
+      "egress"
+    ],
     "status": "unexecuted",
     "sloPassed": false
   },

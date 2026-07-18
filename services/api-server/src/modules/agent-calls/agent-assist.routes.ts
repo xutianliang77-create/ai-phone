@@ -15,14 +15,14 @@ import {
   beginAgentRun,
   findAgentStepByIdempotency,
   updateAgentRun,
-} from "./agent-orchestration.repository.js";
-import { findAgentCallDraft } from "./agent-calls.repository.js";
+} from "./agent-orchestration-runtime.repository.js";
+import { findAgentCallDraft } from "./agent-calls-runtime.repository.js";
 
 export function registerAgentAssistRoutes(app: FastifyInstance) {
   app.post(
     "/ai-calling-agent/drafts/:draftId/assist/suggestions",
     async (request, reply) => {
-      const account = requireAccount(request, reply);
+      const account = await requireAccount(request, reply);
       if (!account) return;
       const input = parseSuggestionRequest(request.body);
       if (!input) {
@@ -43,7 +43,7 @@ export function registerAgentAssistRoutes(app: FastifyInstance) {
           readiness,
         });
       }
-      const draft = findAgentCallDraft(
+      const draft = await findAgentCallDraft(
         account.id,
         (request.params as { draftId: string }).draftId,
       );
@@ -58,14 +58,17 @@ export function registerAgentAssistRoutes(app: FastifyInstance) {
           "Draft must be authorized before Agent Assist",
         );
       }
-      const begun = beginAgentRun({
+      const begun = await beginAgentRun({
         taskId: draft.id,
         sessionId: draft.callId,
         mode: "assist",
         policyVersion: process.env.VOICE_AGENT_POLICY_VERSION ?? "agent-assist-v1",
         modelProfileId: process.env.VOICE_AGENT_LLM_MODEL,
       });
-      const replay = findAgentStepByIdempotency(begun.run.id, input.idempotencyKey);
+      if (!("run" in begun)) {
+        return sendError(reply, 409, "agent_assist_run_conflict", "Agent run unavailable");
+      }
+      const replay = await findAgentStepByIdempotency(begun.run.id, input.idempotencyKey);
       if (replay) {
         return {
           run: begun.run,
@@ -74,13 +77,13 @@ export function registerAgentAssistRoutes(app: FastifyInstance) {
           replayed: true,
         };
       }
-      updateAgentRun({ runId: begun.run.id, status: "running" });
+      await updateAgentRun({ runId: begun.run.id, status: "running" });
       const generated = await generateAgentAssistSuggestion({
         draft,
         latestUtterance: input.latestUtterance,
         recentTurns: input.recentTurns,
       });
-      const appended = appendAgentStep({
+      const appended = await appendAgentStep({
         runId: begun.run.id,
         decisionType: "suggest_response",
         inputTurnId: input.inputTurnId,
@@ -88,6 +91,9 @@ export function registerAgentAssistRoutes(app: FastifyInstance) {
         latencyMs: generated.latencyMs,
         idempotencyKey: input.idempotencyKey,
       });
+      if (!("step" in appended)) {
+        return sendError(reply, 409, "agent_assist_step_conflict", "Agent step unavailable");
+      }
       return {
         run: begun.run,
         step: publicStep(appended.step),

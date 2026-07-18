@@ -31,7 +31,7 @@ import {
 export class PostgresAgentRunsRepository {
   private readonly primary: PostgresPrimaryStore;
 
-  constructor(pool: Pick<Pool, "connect">) {
+  constructor(private readonly pool: Pick<Pool, "connect">) {
     this.primary = new PostgresPrimaryStore(pool);
   }
 
@@ -244,6 +244,59 @@ export class PostgresAgentRunsRepository {
         status: "created", step: requireAgentStep(stored.payload, step.id),
       });
     });
+  }
+
+  async find(runId: string) {
+    const primary = await this.primary.read<PostgresAgentRunRecord>("agentRuns", runId);
+    return primary ? requireAgentRun(primary.payload, runId) : null;
+  }
+
+  async findActive(taskId: string, mode: AgentExecutionMode) {
+    const client = await this.pool.connect();
+    try {
+      const result = await client.query<IdRow>(`
+        SELECT run.id FROM ai_phone.agent_runs AS run
+        WHERE run.task_id = $1 AND run.mode = $2
+          AND run.status = ANY($3::text[])
+        ORDER BY run.attempt DESC LIMIT 1
+      `, [taskId, mode, [...activeAgentRunStatuses]]);
+      return result.rows[0] ? this.find(result.rows[0].id) : null;
+    } finally {
+      client.release();
+    }
+  }
+
+  async findStepByIdempotency(runId: string, idempotencyKey: string) {
+    const client = await this.pool.connect();
+    try {
+      const result = await client.query<IdRow>(`
+        SELECT id FROM ai_phone.agent_steps
+        WHERE run_id = $1 AND idempotency_key = $2 LIMIT 1
+      `, [runId, idempotencyKey]);
+      const id = result.rows[0]?.id;
+      if (!id) return null;
+      const primary = await this.primary.read<PostgresAgentStepRecord>("agentSteps", id);
+      return primary ? requireAgentStep(primary.payload, id) : null;
+    } finally {
+      client.release();
+    }
+  }
+
+  async listExecutedSteps(runId: string) {
+    const client = await this.pool.connect();
+    try {
+      const result = await client.query<IdRow>(`
+        SELECT id FROM ai_phone.agent_steps
+        WHERE run_id = $1 AND status = 'executed' ORDER BY sequence ASC
+      `, [runId]);
+      const steps = await Promise.all(result.rows.map(async ({ id }) => {
+        const primary = await this.primary.read<PostgresAgentStepRecord>("agentSteps", id);
+        return primary ? requireAgentStep(primary.payload, id) : null;
+      }));
+      return steps.filter((step): step is PostgresAgentStepRecord => Boolean(step));
+    } finally {
+      client.release();
+    }
   }
 }
 

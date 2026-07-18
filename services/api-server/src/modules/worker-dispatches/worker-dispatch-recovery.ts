@@ -1,13 +1,14 @@
 import { findCallLink } from "../call-links/call-links.service.js";
 import { getCallLinkWorkerSupervisor } from "../call-links/call-link-worker-supervisor.js";
 import { workerRuntimeProvider } from "./livekit-dispatch-readiness.js";
-import { listRecoverableWorkerDispatches } from "./worker-dispatch.repository.js";
+import { listRecoverableWorkerDispatches } from
+  "./worker-dispatch-runtime.repository.js";
 
 export async function recoverStaleWorkerDispatches(now = new Date()) {
   if (workerRuntimeProvider() !== "livekit_dispatch") {
     return { inspectedCount: 0, recoveredCount: 0, failedCount: 0 };
   }
-  const stale = listRecoverableWorkerDispatches(now);
+  const stale = await listRecoverableWorkerDispatches(now);
   const runtime = getCallLinkWorkerSupervisor();
   const results = await Promise.allSettled(stale.map(async (dispatch) => {
     const call = await findCallLink(dispatch.callId);

@@ -1,4 +1,4 @@
-import type { Pool } from "pg";
+import type { Pool, QueryResultRow } from "pg";
 import {
   PostgresPrimaryStore,
   type PostgresAggregateFence,
@@ -20,7 +20,7 @@ import {
 export class PostgresAgentHandoffsRepository {
   private readonly primary: PostgresPrimaryStore;
 
-  constructor(pool: Pick<Pool, "connect">) {
+  constructor(private readonly pool: Pick<Pool, "connect">) {
     this.primary = new PostgresPrimaryStore(pool);
   }
 
@@ -92,7 +92,45 @@ export class PostgresAgentHandoffsRepository {
       });
     });
   }
+
+  findRequested(runId: string, target?: "user" | "operator") {
+    return this.findByQuery(`
+      SELECT id FROM ai_phone.handoff_records
+      WHERE run_id = $1 AND status = 'requested'
+        AND ($2::text IS NULL OR target = $2)
+      ORDER BY requested_at DESC LIMIT 1
+    `, [runId, target ?? null]);
+  }
+
+  findLatest(
+    runId: string,
+    target: "user" | "operator",
+    status: "accepted" | "failed",
+  ) {
+    return this.findByQuery(`
+      SELECT id FROM ai_phone.handoff_records
+      WHERE run_id = $1 AND target = $2 AND status = $3
+      ORDER BY requested_at DESC LIMIT 1
+    `, [runId, target, status]);
+  }
+
+  private async findByQuery(sql: string, values: unknown[]) {
+    const client = await this.pool.connect();
+    try {
+      const result = await client.query<IdRow>(sql, values);
+      const id = result.rows[0]?.id;
+      if (!id) return null;
+      const primary = await this.primary.read<PostgresAgentHandoffRecord>(
+        "agentHandoffs", id,
+      );
+      return primary ? requireAgentHandoff(primary.payload, id) : null;
+    } finally {
+      client.release();
+    }
+  }
 }
+
+interface IdRow extends QueryResultRow { id: string }
 
 async function storeRunStatus(
   transaction: Parameters<typeof readAgentRun>[0],

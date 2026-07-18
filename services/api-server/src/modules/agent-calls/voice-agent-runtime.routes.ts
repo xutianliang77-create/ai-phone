@@ -10,15 +10,15 @@ import { registerCallLeg } from "../call-links/call-links.service.js";
 import { liveKitSipParticipantIdentity } from
   "../call-links/livekit-sip-identity.js";
 import { findWorkerDispatch } from
-  "../worker-dispatches/worker-dispatch.repository.js";
+  "../worker-dispatches/worker-dispatch-runtime.repository.js";
 import { getLiveKitSipConfig } from "../call-links/livekit-sip-readiness.js";
 import { withSessionWriteLock } from "../sessions/session-write-coordinator.js";
 import {
-  failAgentCallRuntime,
   findAgentCallDraftById,
   markAgentCallTakeoverReady,
   recordAgentCallRuntimeResult,
-} from "./agent-calls.repository.js";
+} from "./agent-calls-runtime.repository.js";
+import { failAgentCallRuntime } from "./agent-call-webhook-runtime.js";
 import { isInternalAuthorized } from "./agent-call-route-helpers.js";
 import {
   appendAgentStep,
@@ -28,7 +28,7 @@ import {
   findAgentStepByIdempotency,
   findRequestedAgentHandoff,
   updateAgentRun,
-} from "./agent-orchestration.repository.js";
+} from "./agent-orchestration-runtime.repository.js";
 import {
   resolveVoiceAgentRuntimeBinding,
   resolveVoiceAgentRuntimeCallBinding,
@@ -108,10 +108,10 @@ export function registerVoiceAgentRuntimeRoutes(app: FastifyInstance) {
       };
       const existing = body.event === "heartbeat"
         ? null
-        : findAgentStepByIdempotency(binding.run.id, body.eventId);
+        : await findAgentStepByIdempotency(binding.run.id, body.eventId);
       if (body.event === "structured_result" &&
-        !hasAgentRuntimeEvent(binding.run.id, "disclosure_completed") &&
-        !hasAgentAmdCategory(binding.run.id, [
+        !await hasAgentRuntimeEvent(binding.run.id, "disclosure_completed") &&
+        !await hasAgentAmdCategory(binding.run.id, [
           "machine-ivr",
           "machine-vm",
           "machine-unavailable",
@@ -129,11 +129,14 @@ export function registerVoiceAgentRuntimeRoutes(app: FastifyInstance) {
       const handoffTimedOut = body.event === "heartbeat"
         ? await expireHandoffIfNeeded(binding)
         : false;
-      const dispatch = findWorkerDispatch(binding.call.sessionId);
+      const dispatch = await findWorkerDispatch(binding.call.sessionId);
       if (!dispatch || dispatch.generation !== binding.claim.generation) {
         return sendError(reply, 409, "voice_agent_generation_conflict", "Dispatch is stale");
       }
-      const currentDraft = findAgentCallDraftById(binding.draft.id)!;
+      const currentDraft = await findAgentCallDraftById(binding.draft.id);
+      if (!currentDraft) {
+        return sendError(reply, 409, "voice_agent_binding_missing", "Draft is unavailable");
+      }
       return {
         callId: binding.call.callId,
         generation: dispatch.generation,
@@ -157,7 +160,7 @@ async function expireHandoffIfNeeded(
   >,
 ) {
   if (binding.draft.status !== "takeover_requested") return false;
-  const handoff = findRequestedAgentHandoff(binding.run.id, "user");
+  const handoff = await findRequestedAgentHandoff(binding.run.id, "user");
   if (!handoff || Date.now() - Date.parse(handoff.requestedAt) <
       handoffTimeoutSeconds() * 1000) return false;
   const sip = getLiveKitSipConfig();
@@ -169,8 +172,8 @@ async function expireHandoffIfNeeded(
       idempotencyKey: `voice-agent-handoff-timeout:${binding.call.sessionId}`,
     }));
   if (!result.ok) return false;
-  expireAgentHandoff(binding.run.id);
-  recordAgentCallRuntimeResult(binding.draft.id, {
+  await expireAgentHandoff(binding.run.id);
+  await recordAgentCallRuntimeResult(binding.draft.id, {
     outcome: "unresolved",
     summary: "人工接管等待超时，系统已安全结束电话。",
     evidence: ["handoff_timeout"],
@@ -194,31 +197,34 @@ async function applyRuntimeEvent(
   runtimeClaim: { generation: number; workerId?: string; jobId?: string },
 ) {
   if (body.event === "ready") {
-    binding.runtime.markReady(binding.call.callId, runtimeClaim);
-    updateAgentRun({ runId: binding.run.id, status: "running" });
+    await binding.runtime.markReady(binding.call.callId, runtimeClaim);
+    await updateAgentRun({ runId: binding.run.id, status: "running" });
   } else if (body.event === "heartbeat") {
-    binding.runtime.heartbeat?.(binding.call.callId, runtimeClaim);
+    await binding.runtime.heartbeat?.(binding.call.callId, runtimeClaim);
     return;
   } else if (body.event === "failed") {
-    binding.runtime.reportFailure?.(
+    await binding.runtime.reportFailure?.(
       binding.call.callId,
       runtimeClaim,
       body.errorClass ?? "voice_agent_failed",
     );
-    updateAgentRun({
+    await updateAgentRun({
       runId: binding.run.id,
       status: "failed",
       failureCode: body.errorClass ?? "voice_agent_failed",
     });
-    failAgentCallRuntime(binding.draft.id, body.errorClass ?? "voice_agent_failed");
+    await failAgentCallRuntime(
+      binding.draft.id,
+      body.errorClass ?? "voice_agent_failed",
+    );
   } else if (body.event === "ending") {
     await binding.runtime.stop(binding.call.callId);
   } else if (body.event === "takeover_ready") {
-    markAgentCallTakeoverReady(binding.draft.id);
+    await markAgentCallTakeoverReady(binding.draft.id);
   } else if (body.event === "structured_result" && body.result) {
-    recordAgentCallRuntimeResult(binding.draft.id, body.result);
+    await recordAgentCallRuntimeResult(binding.draft.id, body.result);
   }
-  appendAgentStep({
+  await appendAgentStep({
     runId: binding.run.id,
     decisionType: decisionType(body.event),
     outputSummary: JSON.stringify(eventSummary(body)),
