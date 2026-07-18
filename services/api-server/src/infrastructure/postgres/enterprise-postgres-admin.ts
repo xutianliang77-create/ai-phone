@@ -33,7 +33,7 @@ export const enterpriseTenantTableNames = [
   "meeting_action_items", "communication_session_bindings",
   "worker_dispatch_grants", "communication_policy_versions",
   "communication_authorization_evidence", "communication_policy_snapshots",
-  "tenant_jobs",
+  "tenant_jobs", "audit_export_jobs",
 ] as const;
 export const enterpriseSubjectColumns = [
   ["members", "user_id"],
@@ -59,6 +59,7 @@ export const enterpriseSubjectColumns = [
   ["billing_accounts", "billing_contact_subject_id"],
   ["billing_subscription_changes", "actor_id"],
   ["usage_adjustments", "actor_id"],
+  ["audit_export_jobs", "actor_id"],
 ] as const;
 
 const [action] = process.argv.slice(2);

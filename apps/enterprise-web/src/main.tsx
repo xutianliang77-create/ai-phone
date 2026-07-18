@@ -11,6 +11,7 @@ import "./styles/dashboard.css";
 import "./styles/knowledge.css";
 import "./styles/members.css";
 import "./styles/settings.css";
+import "./styles/audit.css";
 
 const root = document.getElementById("root");
 if (!root) throw new Error("Enterprise Web root element is missing");

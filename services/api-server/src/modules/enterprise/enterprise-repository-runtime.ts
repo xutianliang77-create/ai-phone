@@ -71,6 +71,7 @@ import type {
 import type {
   EnterpriseTerminologyRepositoryRuntime,
 } from "./enterprise-terminology-runtime.js";
+import type { EnterpriseAuditExportRuntime } from "./enterprise-audit-export-runtime.js";
 
 export type EnterpriseContextResult =
   | { status: "resolved"; tenant: EnterpriseTenantRecord; member: EnterpriseMemberRecord }
@@ -95,7 +96,8 @@ export type EnterpriseLifecycleResult = {
 
 export interface EnterpriseRepositoryRuntime
   extends EnterpriseKnowledgeRepositoryRuntime,
-    EnterpriseTerminologyRepositoryRuntime {
+    EnterpriseTerminologyRepositoryRuntime,
+    EnterpriseAuditExportRuntime {
   readonly driver: "legacy" | "postgres";
   resolveContext(input: {
     userId: string;
@@ -297,6 +299,15 @@ export const legacyEnterpriseRepositoryRuntime: EnterpriseRepositoryRuntime = {
     return { status: "storage_required" };
   },
   async getSessionTraceReport() {
+    return { status: "storage_required" };
+  },
+  async createAuditExport() {
+    return { status: "storage_required" };
+  },
+  async listAuditExports() {
+    return { status: "storage_required" };
+  },
+  async findAuditExport() {
     return { status: "storage_required" };
   },
   async beginTenantCreation(input) {

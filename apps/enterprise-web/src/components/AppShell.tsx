@@ -16,6 +16,8 @@ import { TenantJobPage } from "../pages/TenantJobPage.js";
 import { KnowledgePage } from "../pages/KnowledgePage.js";
 import { EnterpriseSettingsPage } from "../pages/EnterpriseSettingsPage.js";
 import { DashboardPage } from "../pages/DashboardPage.js";
+import { AuditPage } from "../pages/AuditPage.js";
+import { AnalyticsPage } from "../pages/AnalyticsPage.js";
 import { PageFrame } from "./PageFrame.js";
 
 export function AppShell() {
@@ -111,6 +113,28 @@ export function AppShell() {
               )}
           />
           <Route
+            path="/analytics/*"
+            element={routeAllowed(state.context.scopes, "/analytics")
+              ? <AnalyticsPage />
+              : (
+                <PageFrame title="数据分析" description="质量、成本与业务分析">
+                  <StatusPanel state="forbidden"
+                    description="当前账号缺少业务读取 scope，未读取任何分析数据。" />
+                </PageFrame>
+              )}
+          />
+          <Route
+            path="/audit/*"
+            element={routeAllowed(state.context.scopes, "/audit")
+              ? <AuditPage />
+              : (
+                <PageFrame title="合规与审计" description="操作审计、详情与受控导出">
+                  <StatusPanel state="forbidden"
+                    description="当前账号缺少 audit:read，未读取任何审计事件。" />
+                </PageFrame>
+              )}
+          />
+          <Route
             path="/settings/*"
             element={routeAllowed(state.context.scopes, "/settings")
               ? <EnterpriseSettingsPage />
@@ -124,7 +148,8 @@ export function AppShell() {
               )}
           />
           {enterpriseNavigation.slice(1).filter(({ path }) =>
-            path !== "/knowledge" && path !== "/settings"
+            path !== "/knowledge" && path !== "/analytics" &&
+            path !== "/audit" && path !== "/settings"
           ).map((item) => (
             <Route
               key={item.path}

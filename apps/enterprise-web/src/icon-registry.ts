@@ -56,6 +56,12 @@ export const enterpriseIcons = {
     business: "account_tree",
     trace: "timeline",
   },
+  audit: {
+    events: "policy",
+    details: "manage_search",
+    export: "download",
+    analytics: "query_stats",
+  },
   status: {
     loading: "autorenew",
     empty: "inbox",

@@ -35,6 +35,13 @@ export type EnterprisePostgresPendingWorkRef =
       tenantId: string;
       workKind: "outbox";
       resourceId: string;
+    }
+  | {
+      cellId: string;
+      tenantId: string;
+      workKind: "audit_export";
+      resourceId: string;
+      actorUserId: string;
     };
 
 export function listEnterprisePostgresPendingWork(input: {
@@ -88,7 +95,7 @@ export async function claimEnterprisePostgresPendingWork(input: {
   if (input.ref.cellId !== input.cellId) {
     throw new Error("Enterprise pending work cell mismatch");
   }
-  const actorUserId = input.ref.workKind === "tenant_lifecycle"
+  const actorUserId = input.ref.workKind !== "outbox"
     ? enterprisePostgresAccountSubjectId(input.ref.actorUserId)
     : "system:enterprise-outbox";
   return withEnterprisePostgresUnitOfWork(
@@ -108,6 +115,16 @@ export async function claimEnterprisePostgresPendingWork(input: {
           workKind: input.ref.workKind,
           result: await unit.lifecycle.claimJob({
             jobId: input.ref.resourceId,
+            now: input.now,
+            leaseExpiresAt: input.leaseExpiresAt,
+          }),
+        };
+      }
+      if (input.ref.workKind === "audit_export") {
+        return {
+          workKind: input.ref.workKind,
+          result: await unit.auditExports.claim({
+            id: input.ref.resourceId,
             now: input.now,
             leaseExpiresAt: input.leaseExpiresAt,
           }),
@@ -135,7 +152,7 @@ function mapPendingWorkRow(
   }
   const tenantId = requiredText(row.tenant_id);
   const resourceId = requiredText(row.resource_id);
-  if (row.work_kind === "tenant_lifecycle") {
+  if (row.work_kind === "tenant_lifecycle" || row.work_kind === "audit_export") {
     return {
       cellId,
       tenantId,

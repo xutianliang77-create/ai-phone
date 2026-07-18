@@ -5,6 +5,7 @@ type ContentApi = Pick<EnterpriseApi,
   | "listMembers" | "createMember" | "updateMember"
   | "getBillingEntitlements" | "changeSubscription"
   | "getSessionTraceReport"
+  | "listAuditEvents" | "listAuditExports" | "createAuditExport" | "downloadAuditExport"
   | "listUsageBudgets" | "configureUsageBudget" | "listUsageAggregates"
   | "listKnowledgeSources" | "createKnowledgeSource"
   | "listKnowledgeVersions" | "createKnowledgeVersion"
@@ -24,6 +25,10 @@ export function fakeEnterpriseContentApi(): ContentApi {
     updateMember: vi.fn(),
     getBillingEntitlements: vi.fn(),
     getSessionTraceReport: vi.fn(),
+    listAuditEvents: vi.fn().mockResolvedValue({ events: [] }),
+    listAuditExports: vi.fn().mockResolvedValue({ exports: [] }),
+    createAuditExport: vi.fn(),
+    downloadAuditExport: vi.fn(),
     changeSubscription: vi.fn(),
     listUsageBudgets: vi.fn().mockResolvedValue({ budgets: [] }),
     configureUsageBudget: vi.fn(),

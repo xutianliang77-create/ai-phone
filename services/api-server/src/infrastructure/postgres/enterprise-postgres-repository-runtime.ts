@@ -35,7 +35,7 @@ import { createEnterprisePostgresKnowledgeRuntime } from
 import { createEnterprisePostgresTerminologyRuntime } from
   "./enterprise-postgres-terminology-runtime.js";
 import { createEnterprisePostgresObservabilityRuntime } from "./enterprise-postgres-observability-runtime.js";
-
+import { createEnterprisePostgresAuditExportRuntime } from "./enterprise-postgres-audit-export-runtime.js";
 export function createPostgresEnterpriseRepositoryRuntime(
   pools: EnterprisePostgresPool | {
     tenantPool: EnterprisePostgresPool;
@@ -56,6 +56,7 @@ export function createPostgresEnterpriseRepositoryRuntime(
     ...createEnterprisePostgresKnowledgeRuntime(pool),
     ...createEnterprisePostgresTerminologyRuntime(pool),
     ...createEnterprisePostgresObservabilityRuntime(pool),
+    ...createEnterprisePostgresAuditExportRuntime(pool),
     resolveContext(input) {
       return resolveEnterprisePostgresContext({
         pool: split.directoryPool,

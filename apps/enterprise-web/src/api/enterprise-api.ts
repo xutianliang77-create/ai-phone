@@ -17,18 +17,14 @@ import type {
 } from "@translation/contracts";
 import { createEnterpriseMemberApi, type EnterpriseMemberApi } from "./enterprise-member-api.js";
 import { createEnterpriseSettingsApi, type EnterpriseSettingsApi } from "./enterprise-settings-api.js";
-
-export class EnterpriseApiError extends Error {
-  constructor(
-    readonly status: number,
-    readonly code: string,
-    message: string,
-    readonly traceId?: string,
-  ) {
-    super(message);
-    this.name = "EnterpriseApiError";
-  }
-}
+import { createEnterpriseAuditApi, type EnterpriseAuditApi } from "./enterprise-audit-api.js";
+import {
+  configuredEnterpriseBaseUrl,
+  createEnterpriseBinaryRequester,
+  createEnterpriseRequester,
+  enterpriseContentHeaders as contentHeaders,
+} from "./enterprise-request.js";
+export { EnterpriseApiError } from "./enterprise-api-error.js";
 
 export interface EnterpriseContentRequestContext {
   token: string;
@@ -47,7 +43,8 @@ export interface EnterprisePublicationInput {
   expiresAt?: string;
 }
 
-export interface EnterpriseApi extends EnterpriseMemberApi, EnterpriseSettingsApi {
+export interface EnterpriseApi extends EnterpriseMemberApi, EnterpriseSettingsApi,
+  EnterpriseAuditApi {
   requestCode(phone: string): Promise<PhoneCodeRequestResponse>;
   login(phone: string, code: string): Promise<PhoneLoginResponse>;
   listTenants(token: string): Promise<EnterpriseTenantListResponse>;
@@ -147,12 +144,14 @@ export interface EnterpriseApi extends EnterpriseMemberApi, EnterpriseSettingsAp
 
 export function createEnterpriseApi(
   fetcher: typeof fetch = fetch,
-  baseUrl = configuredBaseUrl(),
+  baseUrl = configuredEnterpriseBaseUrl(),
 ): EnterpriseApi {
-  const request = createRequester(fetcher, baseUrl);
+  const request = createEnterpriseRequester(fetcher, baseUrl);
+  const binaryRequest = createEnterpriseBinaryRequester(fetcher, baseUrl);
   return {
     ...createEnterpriseMemberApi(request, contentHeaders),
     ...createEnterpriseSettingsApi(request, contentHeaders),
+    ...createEnterpriseAuditApi(request, binaryRequest, contentHeaders),
     requestCode: (phone) => request("/auth/phone/request-code", {
       method: "POST",
       body: JSON.stringify({ phone }),
@@ -256,87 +255,8 @@ export function createEnterpriseApi(
   };
 }
 
-function createRequester(fetcher: typeof fetch, baseUrl: string) {
-  return async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
-    const controller = new AbortController();
-    const timeout = window.setTimeout(() => controller.abort(), 8_000);
-    try {
-      const response = await fetcher(`${trimTrailingSlash(baseUrl)}${path}`, {
-        ...init,
-        signal: controller.signal,
-        headers: {
-          accept: "application/json",
-          ...(init.body ? { "content-type": "application/json" } : {}),
-          ...init.headers,
-        },
-      });
-      const payload = await readJson(response);
-      if (!response.ok) throw apiError(response.status, payload);
-      return payload as T;
-    } finally {
-      window.clearTimeout(timeout);
-    }
-  };
-}
-
 function authorization(token: string) {
   return { authorization: `Bearer ${token}` };
-}
-
-function contentHeaders(context: EnterpriseContentRequestContext) {
-  return {
-    ...authorization(context.token),
-    "x-tenant-id": context.tenantId,
-    "x-enterprise-route-document": encodeRouteDocument(context.routeDocument),
-  };
-}
-
-function encodeRouteDocument(document: EnterpriseTenantRouteDocument) {
-  const bytes = new TextEncoder().encode(JSON.stringify(document));
-  let binary = "";
-  for (const byte of bytes) binary += String.fromCharCode(byte);
-  return window.btoa(binary).replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/, "");
-}
-
-async function readJson(response: Response): Promise<unknown> {
-  const text = await response.text();
-  if (!text) return {};
-  try {
-    return JSON.parse(text) as unknown;
-  } catch {
-    throw new EnterpriseApiError(response.status, "invalid_response", "Invalid API response");
-  }
-}
-
-function apiError(status: number, payload: unknown) {
-  if (isErrorPayload(payload)) {
-    return new EnterpriseApiError(
-      status,
-      payload.error.code,
-      payload.error.message,
-      payload.error.traceId,
-    );
-  }
-  return new EnterpriseApiError(status, "request_failed", "Enterprise API request failed");
-}
-
-function isErrorPayload(payload: unknown): payload is {
-  error: { code: string; message: string; traceId?: string };
-} {
-  if (!payload || typeof payload !== "object" || !("error" in payload)) return false;
-  const error = payload.error;
-  return Boolean(error && typeof error === "object" && "code" in error &&
-    "message" in error && typeof error.code === "string" &&
-    typeof error.message === "string" &&
-    (!("traceId" in error) || typeof error.traceId === "string"));
-}
-
-function configuredBaseUrl() {
-  return import.meta.env.VITE_ENTERPRISE_API_BASE_URL?.trim() || "/api";
-}
-
-function trimTrailingSlash(value: string) {
-  return value.replace(/\/+$/, "");
 }
 
 export const enterpriseApi = createEnterpriseApi();

@@ -1,6 +1,6 @@
 # 无界AI企业版 UI 详细设计
 
-版本：v1.3
+版本：v1.4
 日期：2026-07-19
 状态：设计基线；企业 Web 公共组件与首批设置/工作台已实现，完整业务页面与正式验收仍在开发
 
@@ -252,6 +252,7 @@ budget、usage aggregate 和显式 session trace report。卡片沿用同一 Mat
 - 指标卡只展示 4 个核心指标，其余通过趋势和下钻表展示。
 - 营销、客服、会议和成本不混合分母；每个图表显示统计口径。
 - 无真实样本时显示“暂无数据”，不绘制虚假趋势。
+- 当前 `ENT-UI-008` 只开放明确 session ID 的质量、Provider、usage/ledger 与 trace 下钻；业务聚合和货币价格接口未交付时展示 not_ready/not_configured，不渲染占位趋势或客户端估价。
 
 ### 8.8 合规与审计
 
@@ -259,6 +260,8 @@ budget、usage aggregate 和显式 session trace report。卡片沿用同一 Mat
 - 审计表显示时间、actor、操作、资源、结果、策略/知识版本和 trace ID。
 - 导出需选择目的、范围和保留时间；任务完成后显示对象到期时间。
 - 审计员只有只读和受控导出，不显示修改策略入口。
+- 事件列表默认缩略 actor/resource 标识，详情才展示完整 trace；导出按钮仅向 `audit:export` 显示。
+- 创建导出使用二次确认对话框，强制选择目的、半开时间范围和保留期限；processing/failed/expired 使用服务端 job 状态，下载前显示完整性校验过程，不展示对象 key 或存储凭据。
 
 ### 8.9 企业设置
 

@@ -59,6 +59,12 @@ import {
 import {
   registerEnterpriseObservabilityRoutes,
 } from "./modules/enterprise/enterprise-observability.routes.js";
+import { registerEnterpriseAuditExportRoutes } from
+  "./modules/enterprise/enterprise-audit-export.routes.js";
+import {
+  createEnvironmentAuditExportArtifactStore,
+  type EnterpriseAuditExportArtifactStore,
+} from "./modules/enterprise/enterprise-audit-export-artifact-store.js";
 import {
   legacyEnterpriseRepositoryRuntime,
   type EnterpriseRepositoryRuntime,
@@ -81,6 +87,7 @@ export async function buildApp(dependencies: {
   tenantLifecycleExecutor?: TenantLifecycleExecutor;
   providerReadinessService?: EnterpriseProviderReadinessService;
   auditCursorService?: EnterpriseAuditCursorService;
+  auditExportArtifactStore?: EnterpriseAuditExportArtifactStore;
   enterpriseRepositoryRuntime?: EnterpriseRepositoryRuntime;
 } = {}) {
   const app = Fastify({
@@ -103,6 +110,9 @@ export async function buildApp(dependencies: {
     legacyEnterpriseRepositoryRuntime;
   const tenantRouteService = dependencies.tenantRouteService ??
     createEnvironmentTenantRouteService();
+  const auditExportArtifactStore = dependencies.auditExportArtifactStore ??
+    createEnvironmentAuditExportArtifactStore();
+  app.addHook("onClose", () => auditExportArtifactStore.close());
   registerPlatformTelemetryHooks(app);
   await app.register(cors, { origin: true });
   await registerAccountRoutes(app);
@@ -167,6 +177,12 @@ export async function buildApp(dependencies: {
   await registerEnterpriseObservabilityRoutes(
     app,
     enterpriseRepositoryRuntime,
+  );
+  await registerEnterpriseAuditExportRoutes(
+    app,
+    tenantRouteService,
+    enterpriseRepositoryRuntime,
+    auditExportArtifactStore,
   );
   await registerPlansRoutes(app);
   await registerRealtimeRoutes(app);

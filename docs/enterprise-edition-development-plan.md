@@ -1,6 +1,6 @@
 # 无界AI企业版开发方案与计划
 
-版本：v1.25
+版本：v1.26
 日期：2026-07-19
 状态：E0 执行计划，已对齐统一通讯平台和 PostgreSQL Primary 收敛
 
@@ -20,7 +20,7 @@
 
 - `ENT-CORE-001/002/003` 已到 `ready_for_acceptance`；Tenant/Member、RBAC 和 `apps/enterprise-web` 生产应用基础可供后续任务复用。
 - Enterprise Web 已冻结 React 19、TypeScript 5.9、Vite 8、React Router 7 和 Vitest/Testing Library 技术基线，并实现真实登录、会话恢复和租户上下文。
-- `ENT-DATA-001` 已实现十九段 PostgreSQL up/down migration、复合 FK、强制 RLS、migration runner、schema verify 和归档 smoke；`0017` 增加知识 chunk/发布守卫/检索维度，`0018` 增加版本化 term pack/script template、发布守卫和运行时解析维度，`0019` 增加企业会话、用量和 ledger trace。本地 PostgreSQL 16 验证不替代 staging migrate/restore/PITR，任务保持 `in_progress`。
+- `ENT-DATA-001` 已实现二十段 PostgreSQL up/down migration、复合 FK、强制 RLS、migration runner、schema verify 和归档 smoke；`0017/0018/0019/0020` 分别增加知识版本、术语/话术版本、企业 trace 和受控审计导出 job。本地 PostgreSQL 16 验证不替代 staging migrate/restore/PITR，任务保持 `in_progress`。
 - `ENT-CORE-005` 已完成版本化术语包、话术模板、审核发布、有效时间解析、统一运行时引用和租户隔离矩阵，进入 `ready_for_acceptance`；真实 ASR/翻译/LLM Worker 消费和 A1/H3 仍待验收。
 - `ENT-DATA-002` 已完成单一 `legacy|postgres` Repository runtime、HTTP 全链路注入、fail-closed 启动选择和独立 cell Worker。PostgreSQL 模式不回退、不双写；API 不执行跨租户恢复扫描，Worker 通过 cell forced RLS 发现最小引用后进入 tenant transaction 复核并 claim/finalize。代码和本地自动化进入 `ready_for_acceptance`，真实 PostgreSQL 并发、容量和恢复仍待 H3。
 - `ENT-DATA-004` 已完成 JSON/SQLite 源读取、SQLite 副本 `quick_check`、空目标事务导入和六集合 count/SHA-256 读回对账；不一致回滚，且明确只用于内部演示数据迁移。真实 PostgreSQL import/reconcile 证据仍待 H3。
@@ -31,6 +31,7 @@
 - `ENT-UI-005` 已完成成员目录、现有账号加入、角色/状态编辑和九角色 scope 说明，所有成员请求绑定当前 tenant 与签名 route document；无 `member:write` 不渲染写入口，直接 URL 无 scope 时不发起成员读取，所有者和当前账号不提供自改入口。当前接口不是短信/邮件/Provider 邀请服务，真实邀请通道仍待后续设计；任务进入 `ready_for_acceptance`，浏览器矩阵和真实 PostgreSQL staging 仍待 A0/H3。
 - `ENT-UI-007` 已完成成员/权益/区域/Provider/预算与用量二级设置导航，按 `tenant:read`、`member:read`、`billing:read/write`、`usage:read` 分别发现和守卫入口。区域只读，Provider 不接收/回显敏感配置，套餐变更只接受精确服务端 plan/version 并稳定重试幂等键，预算更新带 expectedVersion，用量只展示服务端 ledger 聚合；任务进入 `ready_for_acceptance`。本地 Chromium 1440/390px 只验证隔离 fixture 布局，不替代 UI-009/010、真实 PostgreSQL staging、账务/Provider 或生产放行。
 - `ENT-UI-004` 已接入租户/区域、Provider、subscription、预算、usage aggregate 和会话 trace report 的首批工作台。页面按 scope 决定是否发起 billing/usage/audit 请求，预算只和同类别、同单位、同 UTC 账期聚合比较；业务聚合与价格表缺失时明确 not_ready/not_configured。当前仅通过静态类型检查和生产 Web 构建，按本轮要求未执行自动化、浏览器和 PostgreSQL 验证，任务保持 `in_progress`。
+- `ENT-UI-008` 已实现审计筛选、签名 cursor、脱敏详情、显式 session 下钻和真实受控 JSONL 导出链路。导出由 PostgreSQL job/cell Worker 处理，强制目的、范围、保留期、幂等和 hash/size 回执；客户端只经重新鉴权的 API 下载，不获取对象存储凭据或 key。未配置对象存储、业务聚合或价格表时明确 not_ready/not_configured。按本轮要求未执行自动化、浏览器、migration 或双租户验证，任务保持 `in_progress`。
 - PostgreSQL、SaaS 控制面、对象存储、正式域名、真实 Provider 和目标国家合规确认均未通过门禁。
 - 当前开发必须继续使用独立企业 worktree；个人版声纹和部署 WIP 不进入企业提交。
 - 公共 PostgreSQL Primary、统一通讯、Billing 和 Product Records 的稳定代码基线已导入；`ENT-DATA-008` 和 `ENT-CORE-013/014/015` 已完成代码与本地自动化。`ENT-DATA-009` 已产出全表切换/对账/逻辑恢复工具、签名证据和一次性本地 PostgreSQL 16 演练，进入 `ready_for_acceptance`；不能继承主产品环境验收，也未通过异地 PITR/H3。
@@ -295,4 +296,4 @@ CORE-001/002 验收
 
 E0 完成后再启动 `ENT-MTG-001` 主链；允许提前做协议 spike，但不能把未接入真实 tenant/data/readiness 的会议页面计为 E1 完成。
 
-当前进展：`ENT-CORE-003/004/005` 已完成并等待验收；`ENT-DATA-001` 已完成十九段 schema 代码，等待 staging PostgreSQL migrate/restore/PITR 证据；`ENT-DATA-002/003/004/007/008/009` 已完成 Repository、可靠事件、演示导入、统一 Primary Runtime、公共通讯 tenant scope，以及全库签名切换/恢复证据代码与本地 PostgreSQL 16 演练；`ENT-CORE-004/005` 已完成 tenant knowledge 与 terminology/script 的 revision/review/publish、不可变 hash/citation 和有效期解析；`ENT-CORE-013/014/015`、`ENT-CORE-007/010/012` 已完成代码和自动化并进入验收；`ENT-UI-001/002/003/005/006/007` 已进入验收。`ENT-OBS-001` 已实现可信 trace 写入及 tenant-scoped 会话质量/用量/Provider/审计报告代码；`ENT-UI-004` 已把该报告与租户、Provider、subscription、预算和 usage 真值接入工作台。两项均因本轮暂缓测试保持 `in_progress`。下一优先级为补齐 `ENT-OBS-001/ENT-UI-004` 自动化与 PostgreSQL/浏览器负测，再实施 `ENT-UI-008`；staging `ENT-DATA-009` 和 `ENT-REL-003` 跨故障域/PITR 仍未通过。
+当前进展：`ENT-CORE-003/004/005` 已完成并等待验收；`ENT-DATA-001` 已完成二十段 schema 代码，等待 staging PostgreSQL migrate/restore/PITR 证据；`ENT-DATA-002/003/004/007/008/009` 已完成 Repository、可靠事件、演示导入、统一 Primary Runtime、公共通讯 tenant scope，以及全库签名切换/恢复工具；`ENT-CORE-013/014/015`、`ENT-CORE-007/010/012` 已完成代码和自动化并进入验收；`ENT-UI-001/002/003/005/006/007` 已进入验收。`ENT-OBS-001`、`ENT-UI-004/008` 已分别实现会话报告、工作台真值和审计/分析/受控导出，但因本轮暂缓测试保持 `in_progress`。下一优先级为实施 `ENT-UI-009` 响应式、深色和无障碍，再实施 `ENT-UI-010` 自动化/发布门禁；恢复测试时补齐三项的 API/component/RBAC/forced-RLS/浏览器矩阵。staging `ENT-DATA-009` 和 `ENT-REL-002/003` 的对象清理、跨故障域/PITR 仍未通过。

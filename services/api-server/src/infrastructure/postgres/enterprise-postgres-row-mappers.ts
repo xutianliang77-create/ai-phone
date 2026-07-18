@@ -289,6 +289,9 @@ function auditDetails(value: unknown) {
   return Object.fromEntries(Object.entries(
     parsed as Record<string, unknown>,
   ).map(([key, item]) => {
+    if (/token|secret|password|authorization|idempotency|phone|url/i.test(key)) {
+      return [key, "[REDACTED]"];
+    }
     if (
       item !== null &&
       typeof item !== "string" &&

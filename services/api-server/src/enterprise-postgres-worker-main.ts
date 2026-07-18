@@ -19,6 +19,8 @@ import {
 import {
   createEnvironmentTenantLifecycleExecutor,
 } from "./modules/enterprise/enterprise-tenant-lifecycle-executor.js";
+import { createEnvironmentAuditExportArtifactStore } from
+  "./modules/enterprise/enterprise-audit-export-artifact-store.js";
 
 if (process.argv[1] &&
   import.meta.url === pathToFileURL(process.argv[1]).href) {
@@ -50,6 +52,7 @@ export async function runEnterprisePostgresWorkerMain() {
     primaryRuntime.platform.postgres.pool,
   );
   const controller = new AbortController();
+  const auditExportArtifactStore = createEnvironmentAuditExportArtifactStore();
   process.once("SIGINT", () => controller.abort());
   process.once("SIGTERM", () => controller.abort());
   try {
@@ -60,6 +63,7 @@ export async function runEnterprisePostgresWorkerMain() {
       config,
       lifecycleExecutor: createEnvironmentTenantLifecycleExecutor(),
       outboxPublisher: createEnvironmentEnterpriseOutboxPublisher(),
+      auditExportArtifactStore,
       signal: controller.signal,
       onBatch: (result) => {
         if (result.inspected > 0) {
@@ -76,6 +80,7 @@ export async function runEnterprisePostgresWorkerMain() {
     try {
       await discoveryPool.end();
     } finally {
+      auditExportArtifactStore.close();
       await primaryRuntime.close();
     }
   }

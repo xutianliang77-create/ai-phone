@@ -30,6 +30,7 @@ describe("enterprise PostgreSQL migrations", () => {
       "0017_enterprise_knowledge_versions",
       "0018_enterprise_terminology_scripts",
       "0019_enterprise_observability_trace",
+      "0020_enterprise_audit_exports",
     ]);
     for (const migration of migrations) {
       expect(migration.up.trim()).not.toBe("");

@@ -1,6 +1,8 @@
 import type {
   TenantLifecycleExecutor,
 } from "../../modules/enterprise/enterprise-tenant-lifecycle-executor.js";
+import type { EnterpriseAuditExportArtifactStore } from
+  "../../modules/enterprise/enterprise-audit-export-artifact-store.js";
 import {
   createEnterpriseTenantContext,
 } from "../../modules/enterprise/enterprise-tenant-context.js";
@@ -26,6 +28,8 @@ import {
 import type {
   EnterprisePostgresWorkerConfig,
 } from "./enterprise-postgres-worker-config.js";
+import { processEnterpriseAuditExport } from
+  "./enterprise-postgres-audit-export-worker.js";
 
 export async function runEnterprisePostgresWorkerBatch(options: {
   discoveryPool: EnterprisePostgresPool;
@@ -34,6 +38,7 @@ export async function runEnterprisePostgresWorkerBatch(options: {
   config: EnterprisePostgresWorkerConfig;
   lifecycleExecutor: TenantLifecycleExecutor;
   outboxPublisher: EnterpriseOutboxPublisher;
+  auditExportArtifactStore?: EnterpriseAuditExportArtifactStore;
   now?: Date;
 }) {
   const now = options.now ?? new Date();
@@ -70,6 +75,7 @@ export async function runEnterprisePostgresWorkerLoop(options: {
   config: EnterprisePostgresWorkerConfig;
   lifecycleExecutor: TenantLifecycleExecutor;
   outboxPublisher: EnterpriseOutboxPublisher;
+  auditExportArtifactStore?: EnterpriseAuditExportArtifactStore;
   signal: AbortSignal;
   onBatch?: (
     result: Awaited<ReturnType<typeof runEnterprisePostgresWorkerBatch>>,
@@ -91,7 +97,7 @@ async function processRef(
   options: Parameters<typeof runEnterprisePostgresWorkerBatch>[0],
   ref: EnterprisePostgresPendingWorkRef,
   now: Date,
-): Promise<"completed" | "retried" | "busy"> {
+): Promise<"completed" | "retried" | "busy" | "failed"> {
   const traceId = `${workerTrace(options.config.workerId, now)}:${ref.resourceId}`;
   const claimed = await claimEnterprisePostgresPendingWork({
     pool: options.tenantPool,
@@ -133,6 +139,21 @@ async function processRef(
       now,
     });
     return finalized.job?.status === "completed" ? "completed" : "retried";
+  }
+  if (claimed.workKind === "audit_export") {
+    if (!options.auditExportArtifactStore) {
+      throw new Error("Enterprise audit export artifact store is missing");
+    }
+    const auditExport = await processEnterpriseAuditExport({
+      pool: options.tenantPool,
+      store: options.auditExportArtifactStore,
+      auditExport: claimed.result.auditExport,
+      now,
+      traceId,
+    });
+    return auditExport.status === "completed"
+      ? "completed"
+      : auditExport.status === "failed" ? "failed" : "retried";
   }
   const event = claimed.result.event;
   let result;
