@@ -22,9 +22,28 @@ export function recordParticipantRecordingConsent(input: {
   participantIdentity: string;
   policyVersion: string;
   granted: boolean;
+  source?: ParticipantRecordingConsentDto["source"];
+  participantRole?: ParticipantRecordingConsentDto["participantRole"];
+  joinType?: ParticipantRecordingConsentDto["joinType"];
+  generation?: number;
+  runtimeEventId?: string;
+  evidenceHash?: string;
+  observedAt?: string;
+  expiresAt?: string;
   now?: Date;
 }) {
   return runStoreTransaction(() => {
+    const existing = input.runtimeEventId
+      ? getStoreSnapshot().participantRecordingConsents.find((item) =>
+          item.sessionId === input.sessionId &&
+          item.runtimeEventId === input.runtimeEventId)
+      : undefined;
+    if (existing) {
+      if (consentSemanticHash(existing) !== consentSemanticHash(input)) {
+        throw new Error("Recording consent runtime event conflicts with its replay");
+      }
+      return existing;
+    }
     const now = (input.now ?? new Date()).toISOString();
     const record: ParticipantRecordingConsentDto = {
       id: randomUUID(),
@@ -32,6 +51,14 @@ export function recordParticipantRecordingConsent(input: {
       participantIdentity: input.participantIdentity,
       policyVersion: input.policyVersion,
       status: input.granted ? "granted" : "revoked",
+      ...(input.source ? { source: input.source } : {}),
+      ...(input.participantRole ? { participantRole: input.participantRole } : {}),
+      ...(input.joinType ? { joinType: input.joinType } : {}),
+      ...(input.generation ? { generation: input.generation } : {}),
+      ...(input.runtimeEventId ? { runtimeEventId: input.runtimeEventId } : {}),
+      ...(input.evidenceHash ? { evidenceHash: input.evidenceHash } : {}),
+      ...(input.observedAt ? { observedAt: input.observedAt } : {}),
+      ...(input.expiresAt ? { expiresAt: input.expiresAt } : {}),
       ...(input.granted ? { grantedAt: now } : { revokedAt: now }),
       createdAt: now,
     };
@@ -46,7 +73,7 @@ export function latestParticipantRecordingConsents(sessionId: string) {
   for (const record of getStoreSnapshot().participantRecordingConsents) {
     if (record.sessionId !== sessionId) continue;
     const current = latest.get(record.participantIdentity);
-    if (!current || current.createdAt < record.createdAt) {
+    if (!current || consentTimestamp(current) <= consentTimestamp(record)) {
       latest.set(record.participantIdentity, record);
     }
   }
@@ -69,6 +96,14 @@ export function createRecordingConsentSnapshot(input: {
       participantIdentity: record.participantIdentity,
       policyVersion: record.policyVersion,
       status: record.status,
+      source: record.source,
+      participantRole: record.participantRole,
+      joinType: record.joinType,
+      generation: record.generation,
+      runtimeEventId: record.runtimeEventId,
+      evidenceHash: record.evidenceHash,
+      observedAt: record.observedAt,
+      expiresAt: record.expiresAt,
     })));
     const existing = getStoreSnapshot().recordingConsentSnapshots.find(
       (item) => item.sessionId === input.sessionId && item.payloadHash === payloadHash,
@@ -211,4 +246,37 @@ function canTransition(current: RecordingJobStatus, next: RecordingJobStatus) {
 
 function hashJson(value: unknown) {
   return createHash("sha256").update(JSON.stringify(value)).digest("hex");
+}
+
+function consentTimestamp(value: ParticipantRecordingConsentDto) {
+  return Date.parse(value.observedAt ?? value.createdAt);
+}
+
+function consentSemanticHash(value: {
+  participantIdentity: string;
+  policyVersion: string;
+  status?: ParticipantRecordingConsentDto["status"];
+  granted?: boolean;
+  source?: ParticipantRecordingConsentDto["source"];
+  participantRole?: ParticipantRecordingConsentDto["participantRole"];
+  joinType?: ParticipantRecordingConsentDto["joinType"];
+  generation?: number;
+  runtimeEventId?: string;
+  evidenceHash?: string;
+  observedAt?: string;
+  expiresAt?: string;
+}) {
+  return hashJson({
+    participantIdentity: value.participantIdentity,
+    policyVersion: value.policyVersion,
+    status: value.status ?? (value.granted ? "granted" : "revoked"),
+    source: value.source,
+    participantRole: value.participantRole,
+    joinType: value.joinType,
+    generation: value.generation,
+    runtimeEventId: value.runtimeEventId,
+    evidenceHash: value.evidenceHash,
+    observedAt: value.observedAt,
+    expiresAt: value.expiresAt,
+  });
 }

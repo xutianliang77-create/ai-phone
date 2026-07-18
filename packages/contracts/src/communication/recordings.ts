@@ -1,4 +1,7 @@
 export type ParticipantRecordingConsentStatus = "granted" | "revoked";
+export type ParticipantRecordingConsentSource =
+  | "participant_token"
+  | "voice_agent_runtime";
 
 export interface ParticipantRecordingConsentDto {
   id: string;
@@ -6,6 +9,14 @@ export interface ParticipantRecordingConsentDto {
   participantIdentity: string;
   policyVersion: string;
   status: ParticipantRecordingConsentStatus;
+  source?: ParticipantRecordingConsentSource;
+  participantRole?: "host" | "guest";
+  joinType?: "app" | "web" | "sip";
+  generation?: number;
+  runtimeEventId?: string;
+  evidenceHash?: string;
+  observedAt?: string;
+  expiresAt?: string;
   grantedAt?: string;
   revokedAt?: string;
   createdAt: string;

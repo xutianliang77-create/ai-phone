@@ -29,6 +29,7 @@ export type AgentStepDecisionType =
   | "tool_request"
   | "handoff"
   | "disclosure"
+  | "recording_consent"
   | "amd_classification"
   | "ivr_navigation"
   | "runtime_event"

@@ -38,7 +38,8 @@ export class PostgresRecordingQueries {
           AND primary_record.record_key = consent.id
         WHERE consent.session_id = $1
         ORDER BY consent.participant_identity,
-          primary_record.updated_at DESC, consent.id DESC
+          consent.observed_at DESC NULLS LAST,
+          primary_record.updated_at DESC, consent.created_at DESC, consent.id DESC
       `, [sessionId]);
       return new Map(rows.rows.map((row) => {
         const consent = requireRecordingConsent(row.payload, row.id);

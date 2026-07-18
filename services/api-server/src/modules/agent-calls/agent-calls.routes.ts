@@ -34,6 +34,8 @@ import { findSessionProviderOperation } from
 import { publishVoiceAgentControl } from "./voice-agent-control-publisher.js";
 import { registerAgentConsultRoutes } from "./agent-consult.routes.js";
 import { registerAgentConsultControlRoutes } from "./agent-consult-control.routes.js";
+import { validateVoiceAgentRecordingAuthorization } from
+  "./voice-agent-recording-consent.js";
 
 export async function registerAgentCallRoutes(app: FastifyInstance) {
   app.addHook("onClose", async () => {
@@ -96,10 +98,29 @@ export async function registerAgentCallRoutes(app: FastifyInstance) {
     async (request, reply) => {
       const account = await requireAccount(request, reply);
       if (!account) return;
+      const authorization = request.body as AuthorizeAiCallingAgentRequest;
+      const recording = validateVoiceAgentRecordingAuthorization(authorization);
+      if (!recording.ok) {
+        if (recording.code === "recording_not_ready") {
+          return reply.status(503).send({
+            error: {
+              code: "voice_agent_recording_not_ready",
+              message: "Voice Agent recording consent is unavailable",
+            },
+            readiness: recording.configured,
+          });
+        }
+        return sendError(
+          reply,
+          400,
+          "voice_agent_recording_policy_invalid",
+          "Recording request and policy do not match",
+        );
+      }
       const result = await authorizeAgentCallDraft(
         account.id,
         (request.params as { draftId: string }).draftId,
-        request.body as AuthorizeAiCallingAgentRequest,
+        authorization,
       );
       if (result.status === "not_found") {
         return sendError(

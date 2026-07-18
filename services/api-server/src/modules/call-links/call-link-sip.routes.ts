@@ -27,6 +27,7 @@ import {
   getLiveKitSipConfig,
   type LiveKitSipConfig,
 } from "./livekit-sip-readiness.js";
+import { liveKitSipParticipantIdentity } from "./livekit-sip-identity.js";
 
 export function setLiveKitSipProviderFactoryForTests(
   factory: Parameters<typeof setLiveKitSipOutboundProviderFactoryForTests>[0],
@@ -122,7 +123,6 @@ export function registerCallLinkSipRoutes(app: FastifyInstance) {
         started.record,
         result.operation,
         result.replayed,
-        result.participantIdentity,
       ));
     }
     if (result.reconciliationRequired) {
@@ -214,7 +214,6 @@ function responseBody(
   record: CallLinkRecord,
   operation: ProviderOperationRecord,
   replayed: boolean,
-  participantIdentity?: string,
 ) {
   return {
     callId: record.callId,
@@ -224,7 +223,10 @@ function responseBody(
     provider: operation.provider,
     status: operation.status,
     replayed,
-    ...(participantIdentity ? { participantIdentity } : {}),
+    participantIdentity: liveKitSipParticipantIdentity(
+      record.sessionId,
+      operation.id,
+    ),
     ...(operation.externalOperationId
       ? { providerCallId: operation.externalOperationId }
       : {}),

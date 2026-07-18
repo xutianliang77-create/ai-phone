@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import type {
   VoiceAgentRuntimeEventRequest,
   VoiceAgentRuntimeEventResponse,
+  VoiceAgentRecordingConsentEvent,
   VoiceAgentRuntimeSnapshotDto,
   VoiceAgentStructuredResultDto,
   VoiceAgentToolAuthorization,
@@ -47,6 +48,7 @@ export class VoiceAgentRuntimeApiClient {
     errorClass?: string;
     amdCategory?: VoiceAgentRuntimeEventRequest["amdCategory"];
     transcriptSummary?: string;
+    recordingConsent?: VoiceAgentRecordingConsentEvent;
     result?: VoiceAgentStructuredResultDto;
   }) {
     return this.post<VoiceAgentRuntimeEventResponse>(
@@ -63,6 +65,9 @@ export class VoiceAgentRuntimeApiClient {
         ...(input.amdCategory ? { amdCategory: input.amdCategory } : {}),
         ...(input.transcriptSummary
           ? { transcriptSummary: input.transcriptSummary }
+          : {}),
+        ...(input.recordingConsent
+          ? { recordingConsent: input.recordingConsent }
           : {}),
         ...(input.result ? { result: input.result } : {}),
       },

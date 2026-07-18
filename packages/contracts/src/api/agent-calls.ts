@@ -31,6 +31,8 @@ export interface AuthorizeAiCallingAgentRequest {
   consentPromptVersion: string;
   recipientDisclosureConfirmed?: boolean;
   disclosurePromptVersion?: string;
+  recordingRequested?: boolean;
+  recordingPolicyVersion?: string;
 }
 
 export interface RequestAiCallingAgentTakeoverRequest {
@@ -76,6 +78,8 @@ export interface AiCallingAgentDraftDto {
   consentPromptVersion?: string;
   recipientDisclosureConfirmed?: boolean;
   disclosurePromptVersion?: string;
+  recordingRequested?: boolean;
+  recordingPolicyVersion?: string;
   authorizedAt?: string;
   takeoverRequestedAt?: string;
   takeoverReadyAt?: string;

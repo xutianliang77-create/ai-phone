@@ -267,6 +267,12 @@ function authorize(current: AgentCallRecord | null, request: AuthorizeAiCallingA
   if (!request.userConfirmed || !cleanText(request.consentPromptVersion, 80)) {
     return { status: "invalid" as const };
   }
+  if ((request.recordingRequested === true &&
+      !cleanText(request.recordingPolicyVersion, 80)) ||
+    (request.recordingRequested !== true &&
+      request.recordingPolicyVersion !== undefined)) {
+    return { status: "invalid" as const };
+  }
   if (current.status === "cancelled") return { status: "cancelled" as const, draft: current };
   if (current.status !== "draft" && current.status !== "requires_human_takeover") {
     return { status: "invalid_state" as const, draft: current };
@@ -281,6 +287,10 @@ function authorize(current: AgentCallRecord | null, request: AuthorizeAiCallingA
   next.consentPromptVersion = cleanText(request.consentPromptVersion, 80);
   next.recipientDisclosureConfirmed = request.recipientDisclosureConfirmed === true;
   next.disclosurePromptVersion = cleanText(request.disclosurePromptVersion, 80) || undefined;
+  next.recordingRequested = request.recordingRequested === true;
+  next.recordingPolicyVersion = next.recordingRequested
+    ? cleanText(request.recordingPolicyVersion, 80) || undefined
+    : undefined;
   next.authorizedAt = now;
   next.updatedAt = now;
   return { status: "ready" as const, draft: current, next };

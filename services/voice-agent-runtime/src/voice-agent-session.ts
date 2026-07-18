@@ -56,6 +56,7 @@ export class ManagedVoiceAgentSession {
       room: this.input.ctx.room,
       resultReported: false,
       takeoverRequested: false,
+      recordingConsentStatus: undefined,
     };
     const models = buildVoiceAgentModels(
       this.input.env,
@@ -206,7 +207,11 @@ export class ManagedVoiceAgentSession {
     await this.report("disclosure_completed");
     this.session!.resumeReplyAuthorization();
     this.session!.generateReply({
-      instructions: "Continue with the approved objective now. Stay within the approved script and tools.",
+      instructions: this.input.snapshot.recordingConsent
+        ? `Before discussing the objective, ask exactly: "${
+            this.input.snapshot.recordingConsent.promptText
+          }" Wait for an explicit yes or no. Call record_recording_consent with the exact transcribed answer. A refusal must be recorded as revoked and the call may continue without recording. If consent is later withdrawn, call the tool again immediately.`
+        : "Continue with the approved objective now. Stay within the approved script and tools.",
     });
   }
 

@@ -7,9 +7,9 @@ import {
 
 describe("PostgreSQL schema manifest", () => {
   it("pins the complete ordered migration set", () => {
-    expect(expectedPostgresMigrations).toHaveLength(30);
+    expect(expectedPostgresMigrations).toHaveLength(31);
     expect(expectedPostgresMigrations.at(-1)).toBe(
-      "030_tts_playback_session_identity",
+      "031_voice_agent_recording_consent",
     );
     expect(comparePostgresMigrations([...expectedPostgresMigrations])).toEqual({
       missing: [],
@@ -22,7 +22,7 @@ describe("PostgreSQL schema manifest", () => {
       ...expectedPostgresMigrations.slice(0, -1),
       "999_unknown",
     ])).toEqual({
-      missing: ["030_tts_playback_session_identity"],
+      missing: ["031_voice_agent_recording_consent"],
       extra: ["999_unknown"],
     });
   });
@@ -44,5 +44,15 @@ describe("PostgreSQL schema manifest", () => {
       import.meta.url,
     ), "utf8");
     expect(sql).toContain("PRIMARY KEY (session_id, id)");
+  });
+
+  it("pins Voice Agent callee consent trust and recording policy fields", () => {
+    const sql = readFileSync(new URL(
+      "../../../../../infra/postgres/migrations/031_voice_agent_recording_consent.sql",
+      import.meta.url,
+    ), "utf8");
+    expect(sql).toContain("recording_consents_runtime_event_idx");
+    expect(sql).toContain("participant_recording_consents_trust_check");
+    expect(sql).toContain("agent_tasks_recording_policy_check");
   });
 });

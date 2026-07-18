@@ -16,6 +16,7 @@ export type VoiceAgentRuntimeEventType =
   | "heartbeat"
   | "disclosure_started"
   | "disclosure_completed"
+  | "recording_consent"
   | "amd_classified"
   | "ivr_detected"
   | "takeover_ready"
@@ -46,6 +47,13 @@ export interface VoiceAgentStructuredResultDto {
   nextStep?: string;
 }
 
+export interface VoiceAgentRecordingConsentEvent {
+  status: "granted" | "revoked";
+  policyVersion: string;
+  evidenceHash: string;
+  observedAt: string;
+}
+
 export interface VoiceAgentRuntimeSnapshotDto {
   draftId: string;
   callId: string;
@@ -62,6 +70,11 @@ export interface VoiceAgentRuntimeSnapshotDto {
   approvedScript: string;
   disclosureText: string;
   disclosurePromptVersion: string;
+  recordingConsent?: {
+    policyVersion: string;
+    promptText: string;
+    expiresAt: string;
+  };
 }
 
 export interface VoiceAgentRuntimeEventRequest {
@@ -73,6 +86,7 @@ export interface VoiceAgentRuntimeEventRequest {
   errorClass?: string;
   amdCategory?: VoiceAgentAmdCategory;
   transcriptSummary?: string;
+  recordingConsent?: VoiceAgentRecordingConsentEvent;
   result?: VoiceAgentStructuredResultDto;
 }
 

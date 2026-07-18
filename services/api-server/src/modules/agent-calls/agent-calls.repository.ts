@@ -122,6 +122,12 @@ export function authorizeAgentCallDraft(
   if (!request.userConfirmed || !cleanText(request.consentPromptVersion, 80)) {
     return { status: "invalid" as const };
   }
+  if ((request.recordingRequested === true &&
+      !cleanText(request.recordingPolicyVersion, 80)) ||
+    (request.recordingRequested !== true &&
+      request.recordingPolicyVersion !== undefined)) {
+    return { status: "invalid" as const };
+  }
   if (draft.status === "cancelled") {
     return { status: "cancelled" as const, draft };
   }
@@ -137,6 +143,10 @@ export function authorizeAgentCallDraft(
   draft.recipientDisclosureConfirmed = request.recipientDisclosureConfirmed === true;
   draft.disclosurePromptVersion = cleanText(request.disclosurePromptVersion, 80) ||
     undefined;
+  draft.recordingRequested = request.recordingRequested === true;
+  draft.recordingPolicyVersion = draft.recordingRequested
+    ? cleanText(request.recordingPolicyVersion, 80) || undefined
+    : undefined;
   draft.authorizedAt = new Date().toISOString();
   draft.updatedAt = draft.authorizedAt;
   persistStoreSnapshot();

@@ -42,7 +42,7 @@ export function requireRecordingConsent(value: unknown, consentId: string) {
     !bounded(consent.participantIdentity ?? "", 200) ||
     !bounded(consent.policyVersion ?? "", 120) ||
     !["granted", "revoked"].includes(consent.status ?? "") ||
-    !validTimestamp(consent.createdAt)) {
+    !validTimestamp(consent.createdAt) || !validConsentTrust(consent)) {
     throw new Error("Invalid PostgreSQL recording consent");
   }
   return consent as ParticipantRecordingConsentDto;
@@ -128,6 +128,14 @@ export function recordingConsentPayloadHash(
     participantIdentity: record.participantIdentity,
     policyVersion: record.policyVersion,
     status: record.status,
+    source: record.source,
+    participantRole: record.participantRole,
+    joinType: record.joinType,
+    generation: record.generation,
+    runtimeEventId: record.runtimeEventId,
+    evidenceHash: record.evidenceHash,
+    observedAt: record.observedAt,
+    expiresAt: record.expiresAt,
   })))).digest("hex");
 }
 
@@ -141,5 +149,14 @@ function activeOrTerminal(value: unknown): value is RecordingJobStatus {
 
 function positive(value: unknown): value is number {
   return typeof value === "number" && Number.isSafeInteger(value) && value > 0;
+}
+
+function validConsentTrust(consent: Partial<ParticipantRecordingConsentDto>) {
+  if (!consent.source || consent.source === "participant_token") return true;
+  return consent.source === "voice_agent_runtime" &&
+    consent.participantRole === "guest" && consent.joinType === "sip" &&
+    positive(consent.generation) && bounded(consent.runtimeEventId ?? "", 128) &&
+    /^[a-f0-9]{64}$/.test(consent.evidenceHash ?? "") &&
+    validTimestamp(consent.observedAt) && validTimestamp(consent.expiresAt);
 }
 import { createHash } from "node:crypto";

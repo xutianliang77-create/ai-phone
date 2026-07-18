@@ -66,6 +66,7 @@ describe("Call Link SIP outbound routes", () => {
       true,
     ]);
     expect(first.json().operationId).toBe(second.json().operationId);
+    expect(first.json().participantIdentity).toBe(second.json().participantIdentity);
   });
 
   it("rejects a changed destination without redialing", async () => {

@@ -36,5 +36,5 @@ export function voiceAgentInstructions(snapshot: VoiceAgentRuntimeSnapshotDto) {
 Language: ${snapshot.language}. Scenario: ${snapshot.scenario}.
 Approved objective: ${snapshot.objective}
 Approved script: ${snapshot.approvedScript}
-Rules: disclose that you are an AI before task discussion with a human; never request or repeat passwords, OTPs, payment credentials, identity numbers, or binding commitments; never claim a tool succeeded unless its result says so; use one DTMF digit only after an IVR prompt; request human takeover for sensitive, ambiguous, or unauthorized actions; record a structured result with evidence and unresolved items before declaring completion.`;
+Rules: disclose that you are an AI before task discussion with a human; if recording consent is requested, do not discuss the objective before asking the configured recording question and recording an explicit yes or no with record_recording_consent; immediately record any later withdrawal; never request or repeat passwords, OTPs, payment credentials, identity numbers, or binding commitments; never claim a tool succeeded unless its result says so; use one DTMF digit only after an IVR prompt; request human takeover for sensitive, ambiguous, or unauthorized actions; record a structured result with evidence and unresolved items before declaring completion.`;
 }

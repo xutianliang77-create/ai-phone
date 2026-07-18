@@ -1,6 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
 import type { FastifyInstance } from "fastify";
-import type { RecordingJobDto } from "@translation/contracts";
 import { TokenVerifier } from "livekit-server-sdk";
 import { sendError } from "../../infrastructure/http/errors.js";
 import { requireAccount } from "../account/account-auth.js";
@@ -12,6 +11,10 @@ import { findSession } from "../sessions/sessions-runtime.repository.js";
 import { withSessionWriteLock } from "../sessions/session-write-coordinator.js";
 import { findCallLink } from "../call-links/call-links.service.js";
 import { getLiveKitRoomConfig } from "../call-links/call-room-readiness.js";
+import { findAgentCallDraftByCallReference } from
+  "../agent-calls/agent-calls-runtime.repository.js";
+import { findWorkerDispatch } from
+  "../worker-dispatches/worker-dispatch-runtime.repository.js";
 import { LiveKitEgressProviderAdapter } from "./livekit-egress-provider-adapter.js";
 import { getLiveKitEgressConfig } from "./livekit-egress-readiness.js";
 import {
@@ -23,14 +26,14 @@ import {
   recordParticipantRecordingConsent,
   updateRecordingJob,
 } from "./recordings-runtime.repository.js";
-import { listRecordingArtifacts } from
-  "./recording-artifacts-runtime.repository.js";
 import { registerRecordingStopRoutes } from "./recording-stop.routes.js";
 import { applyRecordingProviderJob } from "./livekit-egress-reconciliation.js";
+import { evaluateRecordingConsentGate } from "./recording-consent-gate.js";
 import {
   parseRecordingConsentRequest,
   parseStartRecordingRequest,
 } from "./recording-request.js";
+import { recordingResponse } from "./recording-response.js";
 
 export function registerRecordingRoutes(app: FastifyInstance) {
   registerRecordingStopRoutes(app);
@@ -58,12 +61,25 @@ export function registerRecordingRoutes(app: FastifyInstance) {
     if (!leg || !["host", "guest"].includes(leg.participantRole)) {
       return sendError(reply, 409, "recording_participant_not_active", "Participant is not active");
     }
+    if (leg.joinType === "sip") {
+      return sendError(
+        reply,
+        409,
+        "recording_runtime_consent_required",
+        "SIP consent must be reported by the bound runtime",
+      );
+    }
     const consent = await withSessionWriteLock(call.sessionId, () =>
       recordParticipantRecordingConsent({
         sessionId: call.sessionId,
         participantIdentity,
         policyVersion: body.policyVersion,
         granted: body.consent,
+        source: "participant_token",
+        participantRole: leg.participantRole as "host" | "guest",
+        joinType: leg.joinType as "app" | "web",
+        observedAt: new Date().toISOString(),
+        expiresAt: call.expiresAt,
       }));
     return reply.header("cache-control", "no-store").send({
       callId: call.callId,
@@ -71,6 +87,39 @@ export function registerRecordingRoutes(app: FastifyInstance) {
       policyVersion: consent.policyVersion,
       status: consent.status,
       createdAt: consent.createdAt,
+    });
+  });
+
+  app.get("/call-links/:callId/recording-consents", async (request, reply) => {
+    const account = await requireAccount(request, reply);
+    if (!account) return;
+    const call = await findCallLink(
+      (request.params as { callId: string }).callId,
+    );
+    if (!call) {
+      return sendError(reply, 404, "call_link_not_found", "Call link not found");
+    }
+    if (call.userId !== account.id) {
+      return sendError(reply, 403, "account_forbidden", "Account cannot access resource");
+    }
+    const latest = await latestParticipantRecordingConsents(call.sessionId);
+    return reply.header("cache-control", "no-store").send({
+      callId: call.callId,
+      consents: [...latest.values()].map((consent) => ({
+        id: consent.id,
+        participantIdentity: consent.participantIdentity,
+        policyVersion: consent.policyVersion,
+        status: consent.status,
+        source: consent.source,
+        participantRole: consent.participantRole,
+        joinType: consent.joinType,
+        generation: consent.generation,
+        runtimeEventId: consent.runtimeEventId,
+        evidenceHash: consent.evidenceHash,
+        observedAt: consent.observedAt,
+        expiresAt: consent.expiresAt,
+        createdAt: consent.createdAt,
+      })),
     });
   });
 
@@ -102,37 +151,33 @@ export function registerRecordingRoutes(app: FastifyInstance) {
       if (!session) {
         return failure(404, "session_not_found", "Session not found");
       }
-      const humanLegs = (session.callLegs ?? []).filter((leg) =>
-        leg.status === "active" && ["host", "guest"].includes(leg.participantRole)
-      );
-      if (humanLegs.length < 2) {
-        return failure(409, "recording_participants_incomplete", "Two participants are required");
-      }
+      const latest = await latestParticipantRecordingConsents(call.sessionId);
+      const [agentDraft, dispatch] = call.purpose === "voice_agent"
+        ? await Promise.all([
+            findAgentCallDraftByCallReference({ callId: call.callId }),
+            findWorkerDispatch(call.sessionId),
+          ])
+        : [null, null];
+      const gate = evaluateRecordingConsentGate({
+        purpose: call.purpose,
+        policyVersion: body.policyVersion,
+        callLegs: session.callLegs ?? [],
+        latestConsents: latest,
+        agentDraft,
+        dispatchGeneration: dispatch?.generation,
+      });
+      if (!gate.ok) return failure(409, gate.code, gate.message);
       const targetLeg = body.participantIdentity
-        ? humanLegs.find((leg) => leg.participantIdentity === body.participantIdentity)
+        ? gate.participantLegs.find((leg) =>
+            leg.participantIdentity === body.participantIdentity)
         : undefined;
       if (body.participantIdentity && !targetLeg) {
         return failure(409, "recording_target_not_active", "Recording target is not active");
       }
-      if (humanLegs.some((leg) => leg.joinType === "sip")) {
-        return failure(
-          409,
-          "sip_recording_consent_required",
-          "SIP recording requires provider-verified callee consent",
-        );
-      }
-      const latest = await latestParticipantRecordingConsents(call.sessionId);
-      const consents = humanLegs.map((leg) => latest.get(leg.participantIdentity));
-      if (consents.some((consent) =>
-        !consent || consent.status !== "granted" ||
-        consent.policyVersion !== body.policyVersion
-      )) {
-        return failure(409, "recording_consent_incomplete", "All participants must consent");
-      }
       const snapshot = await createRecordingConsentSnapshot({
         sessionId: call.sessionId,
         policyVersion: body.policyVersion,
-        participantConsents: consents as NonNullable<(typeof consents)[number]>[],
+        participantConsents: gate.consents,
       });
       const objectKey = `${config.config.objectPrefix}/${sessionKey(call.sessionId)}/${
         randomUUID()
@@ -252,36 +297,6 @@ export function registerRecordingRoutes(app: FastifyInstance) {
       recordingResponse(job, false)
     )) };
   });
-}
-
-async function recordingResponse(job: RecordingJobDto, replayed: boolean) {
-  const artifacts = await listRecordingArtifacts(job.id);
-  return {
-    id: job.id,
-    sessionId: job.sessionId,
-    status: job.status,
-    recordingType: job.recordingType,
-    participantIdentity: job.participantIdentity,
-    trackId: job.trackId,
-    contentType: job.contentType,
-    retentionUntil: job.retentionUntil,
-    replayed,
-    artifacts: artifacts.map((artifact) => ({
-      id: artifact.id,
-      status: artifact.status,
-      contentType: artifact.contentType,
-      sizeBytes: artifact.sizeBytes,
-      durationMs: artifact.durationMs,
-      sha256: artifact.sha256,
-      manifestSha256: artifact.manifestSha256,
-      verifiedAt: artifact.verifiedAt,
-      deletedAt: artifact.deletedAt,
-      lastErrorClass: artifact.lastErrorClass,
-    })),
-    createdAt: job.createdAt,
-    startedAt: job.startedAt,
-    endedAt: job.endedAt,
-  };
 }
 
 async function verifyParticipantToken(authorization: string | undefined, roomName: string) {

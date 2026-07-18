@@ -16,16 +16,20 @@ export async function recordParticipantRecordingConsent(
     return legacy.recordParticipantRecordingConsent(input);
   }
   const now = input.now ?? new Date();
-  const requestHash = repositoryRequestHash({
-    ...input,
-    now: now.toISOString(),
-  });
+  const requestHash = repositoryRequestHash(input.runtimeEventId
+    ? { ...input, now: undefined }
+    : { ...input, now: now.toISOString() });
   return withPostgresRepositoryFence(
     { aggregateType: "communication_session", aggregateId: input.sessionId },
     (fence) => runtime.postgres.recordings.recordConsent({
       ...input,
       now,
-      commandId: commandId(input.sessionId, "consent", 0, requestHash),
+      commandId: commandId(
+        input.sessionId,
+        input.runtimeEventId ? `consent:${input.runtimeEventId}` : "consent",
+        0,
+        requestHash,
+      ),
       requestHash,
       fence,
     }),

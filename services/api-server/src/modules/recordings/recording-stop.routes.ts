@@ -110,6 +110,8 @@ function response(job: RecordingJobDto) {
     sessionId: job.sessionId,
     status: job.status,
     recordingType: job.recordingType,
+    providerOperationId: job.providerOperationId,
+    externalRecordingId: job.externalRecordingId,
     retentionUntil: job.retentionUntil,
     startedAt: job.startedAt,
     endedAt: job.endedAt,

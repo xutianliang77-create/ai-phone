@@ -3,11 +3,9 @@ import type {
   ParticipantRecordingConsentDto,
   RecordingConsentSnapshotDto,
   RecordingJobDto,
-  RecordingJobStatus,
 } from "@translation/contracts";
 import {
   PostgresPrimaryStore,
-  type PostgresAggregateFence,
 } from "../../infrastructure/storage/postgres-primary-store.js";
 import {
   assertDomainFence,
@@ -25,6 +23,12 @@ import {
   storeRecordingRecord,
 } from "./postgres-recording-uow.js";
 import { PostgresRecordingQueries } from "./postgres-recording-queries.js";
+import type {
+  BeginRecordingJobInput,
+  CreateRecordingSnapshotInput,
+  RecordRecordingConsentInput,
+  UpdateRecordingJobInput,
+} from "./postgres-recording-types.js";
 
 type RecordingJobUpdateResult = { status: "not_found" } | {
   status: "updated" | "version_conflict" | "invalid_transition" | "external_id_conflict";
@@ -40,16 +44,7 @@ export class PostgresRecordingsRepository {
     this.queries = new PostgresRecordingQueries(pool);
   }
 
-  async recordConsent(input: {
-    sessionId: string;
-    participantIdentity: string;
-    policyVersion: string;
-    granted: boolean;
-    commandId: string;
-    requestHash: string;
-    fence: PostgresAggregateFence;
-    now?: Date;
-  }) {
+  async recordConsent(input: RecordRecordingConsentInput) {
     assertDomainFence(input.fence, "communication_session", input.sessionId);
     const command = domainCommand(input.fence, {
       commandId: input.commandId,
@@ -69,6 +64,14 @@ export class PostgresRecordingsRepository {
           participantIdentity: input.participantIdentity,
           policyVersion: input.policyVersion,
           status: input.granted ? "granted" : "revoked",
+          ...(input.source ? { source: input.source } : {}),
+          ...(input.participantRole ? { participantRole: input.participantRole } : {}),
+          ...(input.joinType ? { joinType: input.joinType } : {}),
+          ...(input.generation ? { generation: input.generation } : {}),
+          ...(input.runtimeEventId ? { runtimeEventId: input.runtimeEventId } : {}),
+          ...(input.evidenceHash ? { evidenceHash: input.evidenceHash } : {}),
+          ...(input.observedAt ? { observedAt: input.observedAt } : {}),
+          ...(input.expiresAt ? { expiresAt: input.expiresAt } : {}),
           ...(input.granted ? { grantedAt: now } : { revokedAt: now }),
           createdAt: now,
         };
@@ -90,15 +93,7 @@ export class PostgresRecordingsRepository {
     );
   }
 
-  async createSnapshot(input: {
-    sessionId: string;
-    policyVersion: string;
-    participantConsents: ParticipantRecordingConsentDto[];
-    commandId: string;
-    requestHash: string;
-    fence: PostgresAggregateFence;
-    now?: Date;
-  }) {
+  async createSnapshot(input: CreateRecordingSnapshotInput) {
     assertDomainFence(input.fence, "communication_session", input.sessionId);
     const command = domainCommand(input.fence, {
       commandId: input.commandId,
@@ -172,21 +167,7 @@ export class PostgresRecordingsRepository {
     );
   }
 
-  async beginJob(input: {
-    sessionId: string;
-    roomName: string;
-    recordingType: RecordingJobDto["recordingType"];
-    participantIdentity?: string;
-    trackId?: string;
-    consentSnapshotId: string;
-    retentionUntil: string;
-    objectKey: string;
-    idempotencyKey: string;
-    requestHash: string;
-    commandId: string;
-    fence: PostgresAggregateFence;
-    now?: Date;
-  }) {
+  async beginJob(input: BeginRecordingJobInput) {
     assertDomainFence(input.fence, "communication_session", input.sessionId);
     const command = domainCommand(input.fence, {
       commandId: input.commandId,
@@ -267,12 +248,7 @@ export class PostgresRecordingsRepository {
     );
   }
 
-  async updateJob(input: {
-    jobId: string; sessionId: string; status: RecordingJobStatus;
-    expectedVersion?: number; providerOperationId?: string;
-    externalRecordingId?: string; errorClass?: string;
-    commandId: string; requestHash: string; fence: PostgresAggregateFence; now?: Date;
-  }) {
+  async updateJob(input: UpdateRecordingJobInput) {
     assertDomainFence(input.fence, "communication_session", input.sessionId);
     const command = domainCommand(input.fence, {
       commandId: input.commandId, commandType: "recording.job.update",

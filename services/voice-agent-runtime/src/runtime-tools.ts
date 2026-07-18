@@ -1,4 +1,5 @@
-import { tool } from "@livekit/agents";
+import { createHash } from "node:crypto";
+import { llm, tool } from "@livekit/agents";
 import type { Room } from "@livekit/rtc-node";
 import {
   sipDtmfCode,
@@ -16,6 +17,7 @@ export interface VoiceAgentUserData {
   room: Room;
   resultReported: boolean;
   takeoverRequested: boolean;
+  recordingConsentStatus?: "granted" | "revoked";
 }
 
 const dtmfSchema = z.object({
@@ -35,8 +37,13 @@ const resultSchema = z.object({
   nextStep: z.string().min(1).max(300).optional(),
 }).strict();
 
+const recordingConsentSchema = z.object({
+  status: z.enum(["granted", "revoked"]),
+  calleeUtterance: z.string().min(1).max(300),
+}).strict();
+
 export function buildVoiceAgentTools(data: VoiceAgentUserData) {
-  return [
+  const tools: llm.FunctionTool<any, VoiceAgentUserData, any>[] = [
     tool<VoiceAgentUserData, typeof dtmfSchema>({
       name: "send_dtmf",
       description: "Press exactly one IVR keypad digit after the IVR asks for it.",
@@ -126,4 +133,33 @@ export function buildVoiceAgentTools(data: VoiceAgentUserData) {
       },
     }),
   ];
+  if (data.snapshot.recordingConsent) {
+    tools.splice(2, 0, tool<VoiceAgentUserData, typeof recordingConsentSchema>({
+      name: "record_recording_consent",
+      description: "Record the callee's explicit yes or no recording decision. Use the exact transcribed answer and call again immediately if consent is withdrawn.",
+      parameters: recordingConsentSchema,
+      onDuplicate: "allow",
+      execute: async (args) => {
+        const policy = data.snapshot.recordingConsent;
+        if (!policy) throw new Error("Recording consent was not requested");
+        const evidenceHash = createHash("sha256")
+          .update(args.calleeUtterance.trim())
+          .digest("hex");
+        await data.api.event({
+          snapshot: data.snapshot,
+          ticket: data.ticket,
+          event: "recording_consent",
+          recordingConsent: {
+            status: args.status,
+            policyVersion: policy.policyVersion,
+            evidenceHash,
+            observedAt: new Date().toISOString(),
+          },
+        });
+        data.recordingConsentStatus = args.status;
+        return { recorded: true, status: args.status };
+      },
+    }));
+  }
+  return tools;
 }

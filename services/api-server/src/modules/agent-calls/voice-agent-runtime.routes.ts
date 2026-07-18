@@ -1,9 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import type {
   AgentStepDecisionType,
-  VoiceAgentAmdCategory,
   VoiceAgentRuntimeEventRequest,
-  VoiceAgentStructuredResultDto,
 } from "@translation/contracts";
 import { sendError } from "../../infrastructure/http/errors.js";
 import { registerCallLeg } from "../call-links/call-links.service.js";
@@ -35,6 +33,15 @@ import {
 } from
   "./voice-agent-runtime-binding.js";
 import { executeVoiceAgentHangup } from "./voice-agent-sip-control.js";
+import { voiceAgentRecordingConsentSnapshot } from
+  "./voice-agent-recording-consent.js";
+import {
+  applyVoiceAgentRecordingConsent,
+} from "./voice-agent-recording-consent-event.js";
+import {
+  parseVoiceAgentRuntimeEvent,
+  parseVoiceAgentRuntimeSnapshotRequest,
+} from "./voice-agent-runtime-request.js";
 
 export function registerVoiceAgentRuntimeRoutes(app: FastifyInstance) {
   app.post(
@@ -43,7 +50,7 @@ export function registerVoiceAgentRuntimeRoutes(app: FastifyInstance) {
       if (!isInternalAuthorized(request.headers.authorization)) {
         return sendError(reply, 401, "internal_error", "Unauthorized internal request");
       }
-      const body = parseSnapshot(request.body);
+      const body = parseVoiceAgentRuntimeSnapshotRequest(request.body);
       if (!body) {
         return sendError(reply, 400, "invalid_voice_agent_snapshot", "Invalid snapshot");
       }
@@ -52,6 +59,22 @@ export function registerVoiceAgentRuntimeRoutes(app: FastifyInstance) {
         body.ticket,
       );
       if (!binding.ok) return bindingError(reply, binding.code);
+      const recordingConsent = binding.draft.recordingRequested
+        ? voiceAgentRecordingConsentSnapshot({
+            language: binding.draft.language,
+            callExpiresAt: binding.call.expiresAt,
+          })
+        : null;
+      if (binding.draft.recordingRequested &&
+        (!recordingConsent || recordingConsent.policyVersion !==
+          binding.draft.recordingPolicyVersion)) {
+        return sendError(
+          reply,
+          409,
+          "voice_agent_recording_policy_conflict",
+          "Voice Agent recording policy binding failed",
+        );
+      }
       await registerCallLeg({
         callId: binding.call.callId,
         participantIdentity: body.participantIdentity,
@@ -82,6 +105,7 @@ export function registerVoiceAgentRuntimeRoutes(app: FastifyInstance) {
         approvedScript: binding.draft.suggestedScript,
         disclosureText: disclosureText(binding.draft.language),
         disclosurePromptVersion: binding.draft.disclosurePromptVersion,
+        ...(recordingConsent ? { recordingConsent } : {}),
       };
     },
   );
@@ -92,7 +116,7 @@ export function registerVoiceAgentRuntimeRoutes(app: FastifyInstance) {
       if (!isInternalAuthorized(request.headers.authorization)) {
         return sendError(reply, 401, "internal_error", "Unauthorized internal request");
       }
-      const body = parseRuntimeEvent(request.body);
+      const body = parseVoiceAgentRuntimeEvent(request.body);
       if (!body) {
         return sendError(reply, 400, "invalid_voice_agent_event", "Invalid runtime event");
       }
@@ -122,6 +146,38 @@ export function registerVoiceAgentRuntimeRoutes(app: FastifyInstance) {
           "voice_agent_disclosure_incomplete",
           "Disclosure or machine classification is required",
         );
+      }
+      if (body.event === "recording_consent" &&
+        !await hasAgentRuntimeEvent(binding.run.id, "disclosure_completed")) {
+        return sendError(
+          reply,
+          409,
+          "voice_agent_disclosure_incomplete",
+          "Disclosure is required before recording consent",
+        );
+      }
+      if (!existing && body.event === "recording_consent" && body.recordingConsent) {
+        const consent = await applyVoiceAgentRecordingConsent({
+          call: binding.call,
+          draft: binding.draft,
+          generation: binding.claim.generation,
+          eventId: body.eventId,
+          consent: body.recordingConsent,
+        });
+        if (!consent.ok) {
+          return sendError(
+            reply,
+            409,
+            `voice_agent_recording_${consent.code}`,
+            "Recording consent binding failed",
+          );
+        }
+        if (consent.stop.failed > 0) {
+          request.log.error({
+            callId: binding.call.callId,
+            failedStops: consent.stop.failed,
+          }, "Recording consent revocation requires reconciliation");
+        }
       }
       if (!existing) {
         await applyRuntimeEvent(binding, body, runtimeClaim);
@@ -233,70 +289,9 @@ async function applyRuntimeEvent(
   });
 }
 
-function parseSnapshot(body: unknown) {
-  if (!body || typeof body !== "object") return null;
-  const value = body as Record<string, unknown>;
-  if (!bounded(value.ticket, 4096) || !bounded(value.participantIdentity, 256) ||
-    !bounded(value.workerId, 128) || !bounded(value.jobId, 128)) return null;
-  return {
-    ticket: value.ticket,
-    participantIdentity: value.participantIdentity,
-    workerId: value.workerId,
-    jobId: value.jobId,
-  };
-}
-
-function parseRuntimeEvent(body: unknown): VoiceAgentRuntimeEventRequest | null {
-  if (!body || typeof body !== "object") return null;
-  const value = body as Record<string, unknown>;
-  const events = [
-    "ready", "heartbeat", "disclosure_started", "disclosure_completed",
-    "amd_classified", "ivr_detected", "takeover_ready", "structured_result",
-    "failed", "ending",
-  ];
-  if (!bounded(value.ticket, 4096) || !bounded(value.eventId, 128) ||
-    !events.includes(String(value.event)) || !optional(value.workerId, 128) ||
-    !optional(value.jobId, 128) || !optional(value.errorClass, 80) ||
-    !optional(value.transcriptSummary, 500)) return null;
-  const amdCategory = parseAmd(value.amdCategory);
-  if (value.amdCategory !== undefined && !amdCategory) return null;
-  const result = parseResult(value.result);
-  if (value.event === "structured_result" && !result) return null;
-  return {
-    ticket: value.ticket,
-    eventId: value.eventId,
-    event: value.event as VoiceAgentRuntimeEventRequest["event"],
-    ...(value.workerId ? { workerId: value.workerId as string } : {}),
-    ...(value.jobId ? { jobId: value.jobId as string } : {}),
-    ...(value.errorClass ? { errorClass: value.errorClass as string } : {}),
-    ...(amdCategory ? { amdCategory } : {}),
-    ...(value.transcriptSummary
-      ? { transcriptSummary: value.transcriptSummary as string }
-      : {}),
-    ...(result ? { result } : {}),
-  };
-}
-
-function parseResult(value: unknown): VoiceAgentStructuredResultDto | null {
-  if (!value || typeof value !== "object") return null;
-  const item = value as Record<string, unknown>;
-  if (!["completed", "partial", "unresolved", "failed"].includes(
-    String(item.outcome),
-  ) || !bounded(item.summary, 800)) return null;
-  const evidence = strings(item.evidence, 8, 300);
-  const unresolvedItems = strings(item.unresolvedItems, 8, 300);
-  if (!evidence || !unresolvedItems || !optional(item.nextStep, 300)) return null;
-  return {
-    outcome: item.outcome as VoiceAgentStructuredResultDto["outcome"],
-    summary: item.summary,
-    evidence,
-    unresolvedItems,
-    ...(item.nextStep ? { nextStep: item.nextStep as string } : {}),
-  };
-}
-
 function decisionType(event: VoiceAgentRuntimeEventRequest["event"]): AgentStepDecisionType {
   if (event.startsWith("disclosure_")) return "disclosure";
+  if (event === "recording_consent") return "recording_consent";
   if (event === "amd_classified") return "amd_classification";
   if (event === "ivr_detected") return "ivr_navigation";
   if (event === "structured_result") return "structured_result";
@@ -308,6 +303,7 @@ function eventSummary(body: VoiceAgentRuntimeEventRequest) {
     event: body.event,
     ...(body.amdCategory ? { amdCategory: body.amdCategory } : {}),
     ...(body.transcriptSummary ? { transcriptSummary: body.transcriptSummary } : {}),
+    ...(body.recordingConsent ? { recordingConsent: body.recordingConsent } : {}),
     ...(body.result ? { result: body.result } : {}),
     ...(body.errorClass ? { errorClass: body.errorClass } : {}),
   };
@@ -317,29 +313,6 @@ function disclosureText(language: "zh" | "en") {
   return language === "en"
     ? process.env.VOICE_AGENT_DISCLOSURE_TEXT_EN!
     : process.env.VOICE_AGENT_DISCLOSURE_TEXT_ZH!;
-}
-
-function parseAmd(value: unknown): VoiceAgentAmdCategory | null {
-  return ["human", "machine-ivr", "machine-vm", "machine-unavailable", "uncertain"]
-      .includes(String(value))
-    ? value as VoiceAgentAmdCategory
-    : null;
-}
-
-function strings(value: unknown, maximumItems: number, maximumBytes: number) {
-  if (!Array.isArray(value) || value.length > maximumItems) return null;
-  return value.every((item) => bounded(item, maximumBytes))
-    ? value as string[]
-    : null;
-}
-
-function bounded(value: unknown, maximum: number): value is string {
-  return typeof value === "string" && value.length > 0 &&
-    Buffer.byteLength(value) <= maximum;
-}
-
-function optional(value: unknown, maximum: number) {
-  return value === undefined || bounded(value, maximum);
 }
 
 function bindingError(reply: Parameters<typeof sendError>[0], code: string) {
