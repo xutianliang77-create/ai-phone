@@ -1,92 +1,45 @@
-import { WebSocketServer, type WebSocket } from "ws";
-import { createServer } from "node:http";
-import type { SessionEndReason, ServerRealtimeEvent } from "@translation/contracts";
-import { verifyRealtimeToken } from "../auth/realtime-token-verifier.js";
-import { loadEnv } from "../config/env.js";
+import type { SessionEndReason } from "@translation/contracts";
 import { AudioFrameBatcher } from "./audio-frame-batcher.js";
 import { clearAudioFrameLog, logAudioFrameReceived } from "../metrics/audio-frame-logger.js";
-import { handleGatewayHttpRequest } from "./gateway-health.js";
 import { realtimeLogger } from "../metrics/realtime-metrics.js";
 import { clearTextSegmentLog } from "../metrics/text-segment-logger.js";
 import { parseIncomingEvent } from "../protocol/incoming-event-parser.js";
-import { buildError, serializeEvent } from "../protocol/outgoing-event-builder.js";
+import { buildError } from "../protocol/outgoing-event-builder.js";
 import { ProviderRouter } from "../providers/provider-router.js";
 import type { RealtimeProvider } from "../providers/realtime-provider.js";
 import { asrCorrectionTermsForPacks, asrHotwordsForTerminology } from "../domain/domain-lexicon.js";
-import { createSessionEventSink } from "../sessions/session-event-sink.js";
-import {
-  domainLexiconPacksForSession,
-  loadTerminologyForSession,
-} from "../sessions/session-domain-terminology.js";
-import { attachSession, confirmSessionConnection, deleteSession, getSession, sessionBillableSeconds, transitionStatus } from "../sessions/session-manager.js";
-import { createUsageBalanceClient } from "../usage/usage-balance-client.js";
+import { domainLexiconPacksForSession, loadTerminologyForSession } from "../sessions/session-domain-terminology.js";
+import { confirmSessionConnection, deleteSession, getSession, sessionBillableSeconds, transitionStatus } from "../sessions/session-manager.js";
 import { createUsageTickDecision } from "../usage/usage-ticker.js";
-import { extractRealtimeConnectionToken, realtimeProtocol } from "../auth/realtime-connection-token.js";
-import { HttpTtsSynthesizer } from "../tts/http-tts-synthesizer.js";
-import { RealtimeTtsOutputQueue } from "../tts/realtime-tts-output.js";
+import { createRealtimeTtsOutputQueue } from "../tts/realtime-tts-output-factory.js";
 import { handleControlEvent } from "./session-control-handler.js";
 import { RealtimeSessionFinalizer } from "./realtime-session-finalizer.js";
 import { RealtimeConnectionCleanup } from "./realtime-connection-cleanup.js";
-import { DisconnectFinalizerRegistry } from "../sessions/disconnect-finalizer-registry.js";
 import { RealtimeEventDispatcher } from "./realtime-event-dispatcher.js";
 import { RealtimeFlushTracker } from "./realtime-flush-tracker.js";
-import {
-  logSpeakerAttributionConfigured,
-  resolveSpeakerAttribution,
-} from "./speaker-attribution-config.js";
+import { logSpeakerAttributionConfigured, resolveSpeakerAttribution } from "./speaker-attribution-config.js";
 import { handleTextSegment } from "./client-text-segment-handler.js";
 import { endpointModeForRealtimeMode } from "./realtime-endpoint-mode.js";
+import { admitRealtimeConnection, sendRealtimeEvent } from "./realtime-connection-admission.js";
+import { createRealtimeServerRuntime } from "./realtime-server-runtime.js";
 
 const router = new ProviderRouter();
 export { normalizeClientTextLanguage } from "../protocol/client-text-language.js";
 
-function send(ws: WebSocket, event: ServerRealtimeEvent) {
-  if (ws.readyState === 1) ws.send(serializeEvent(event));
-}
-
 export function startWebSocketServer() {
-  const env = loadEnv();
-  const httpServer = createServer((request, response) => {
-    handleGatewayHttpRequest(request, response, env);
-  });
-  const server = new WebSocketServer({
-    server: httpServer,
-    path: "/realtime",
-    handleProtocols: (protocols) =>
-      protocols.has(realtimeProtocol) ? realtimeProtocol : false,
-  });
-  const sessionEventSink = createSessionEventSink(env);
-  const usageBalanceClient = createUsageBalanceClient(env);
-  const disconnectFinalizers = new DisconnectFinalizerRegistry(
-    env.disconnectGraceMs,
-    (error) => realtimeLogger.error({ error }, "Deferred session finalization failed"),
-  );
+  const {
+    env,
+    protection,
+    httpServer,
+    server,
+    sessionEventSink,
+    usageBalanceClient,
+    disconnectFinalizers,
+  } = createRealtimeServerRuntime();
 
   server.on("connection", async (ws, request) => {
-    const token = extractRealtimeConnectionToken(
-      request,
-      env.allowQueryToken === true,
-    );
-    const claims = token ? verifyRealtimeToken(token, env.realtimeTokenSecret) : null;
-    if (!claims) {
-      send(ws, buildError("invalid_token", "Invalid realtime token", {
-        stage: "connection",
-        retryable: false,
-      }));
-      ws.close();
-      return;
-    }
-
-    const attachment = attachSession(claims);
-    if (!attachment) {
-      send(ws, buildError("bad_event", "Realtime session cannot be resumed", {
-        sessionId: claims.sessionId,
-        stage: "session",
-        retryable: false,
-      }));
-      ws.close();
-      return;
-    }
+    const attachment = admitRealtimeConnection(ws, request, env);
+    if (!attachment) return;
     const { session, generation, resumed } = attachment;
     let provider: RealtimeProvider;
     try {
@@ -123,7 +76,7 @@ export function startWebSocketServer() {
         }).catch(() => undefined);
         deleteSession(session.id, session);
       }
-      send(ws, buildError("provider_unavailable", "Realtime provider is unavailable", {
+      sendRealtimeEvent(ws, buildError("provider_unavailable", "Realtime provider is unavailable", {
         sessionId: session.id,
         stage: "provider",
         provider: env.provider,
@@ -134,15 +87,9 @@ export function startWebSocketServer() {
     }
 
     const flushTracker = new RealtimeFlushTracker();
-    const ttsOutputQueue = new RealtimeTtsOutputQueue({
-      sessionId: session.id,
-      voiceOutput: session.claims.voiceOutput,
-      voice: session.claims.voice,
-      synthesizer: new HttpTtsSynthesizer(env),
-      isSessionActive: () => getSession(session.id)?.status === "active",
-    });
+    const ttsOutputQueue = createRealtimeTtsOutputQueue(env, session);
     const eventDispatcher = new RealtimeEventDispatcher({
-      sendClient: (event) => send(ws, event),
+      sendClient: (event) => sendRealtimeEvent(ws, event),
       eventSink: sessionEventSink,
       onSyncError: (event, error) => {
         realtimeLogger.warn({
@@ -160,7 +107,7 @@ export function startWebSocketServer() {
     const sendRealtime = eventDispatcher.send;
 
     const startedEvent = { type: "session.started", sessionId: session.id } as const;
-    if (resumed) send(ws, startedEvent);
+    if (resumed) sendRealtimeEvent(ws, startedEvent);
     else sendRealtime(startedEvent);
     let controlQueue = Promise.resolve();
     let usageTickInFlight = false;
@@ -177,6 +124,7 @@ export function startWebSocketServer() {
           retryable: true,
         }));
       },
+      maxPendingAudioMs: env.maxPendingAudioMs,
     });
     const finalizer = new RealtimeSessionFinalizer({
       sessionId: session.id,
@@ -228,7 +176,35 @@ export function startWebSocketServer() {
         });
     }, 30_000);
 
+    const messageRateGuard = protection.createMessageGuard();
+    let rateLimited = false;
+    let pendingControlEvents = 0;
+    const enqueueControl = (
+      run: () => Promise<void>,
+      onError: (error: unknown) => void,
+    ) => {
+      if (pendingControlEvents >= env.maxPendingControlEvents) return false;
+      pendingControlEvents += 1;
+      controlQueue = controlQueue
+        .then(run)
+        .catch(onError)
+        .finally(() => {
+          pendingControlEvents = Math.max(0, pendingControlEvents - 1);
+        });
+      return true;
+    };
     ws.on("message", (data) => {
+      if (rateLimited) return;
+      if (!messageRateGuard.consume("message")) {
+        rateLimited = true;
+        sendRealtime(buildError("bad_event", "Realtime message rate limit exceeded", {
+          sessionId: session.id,
+          stage: "connection",
+          retryable: true,
+        }));
+        ws.close(1008, "message_rate_limited");
+        return;
+      }
       const event = parseIncomingEvent(data.toString());
       if (!event) {
         sendRealtime(buildError("bad_event", "Malformed realtime event", {
@@ -245,6 +221,16 @@ export function startWebSocketServer() {
       }
 
       if (event.type === "audio.frame") {
+        if (!messageRateGuard.consume("audio")) {
+          rateLimited = true;
+          sendRealtime(buildError("bad_event", "Realtime audio frame rate limit exceeded", {
+            sessionId: session.id,
+            stage: "connection",
+            retryable: true,
+          }));
+          ws.close(1008, "audio_rate_limited");
+          return;
+        }
         const activeSession = getSession(session.id);
         if (activeSession?.status === "active") {
           logAudioFrameReceived(event);
@@ -254,9 +240,9 @@ export function startWebSocketServer() {
       }
 
       if (event.type === "client.text.segment") {
-        controlQueue = controlQueue
-          .then(() => handleTextSegment(event, session.id, provider, sendRealtime))
-          .catch((error) => {
+        if (!enqueueControl(
+          () => handleTextSegment(event, session.id, provider, sendRealtime),
+          (error) => {
             realtimeLogger.error({ error, sessionId: session.id }, "Realtime text processing failed");
             sendRealtime(buildError("provider_unavailable", "Realtime text processing failed", {
               sessionId: session.id,
@@ -264,12 +250,13 @@ export function startWebSocketServer() {
               provider: provider.name,
               retryable: true,
             }));
-          });
+          },
+        )) closeForControlBackpressure();
         return;
       }
 
-      controlQueue = controlQueue
-        .then(() =>
+      if (!enqueueControl(
+        () =>
           handleControlEvent(
             event,
             session.id,
@@ -278,8 +265,7 @@ export function startWebSocketServer() {
             sendRealtime,
             endRealtimeSession,
           ),
-        )
-        .catch((error) => {
+        (error) => {
           realtimeLogger.error({ error, sessionId: session.id }, "Realtime event processing failed");
           sendRealtime(buildError("provider_unavailable", "Realtime event processing failed", {
             sessionId: session.id,
@@ -287,7 +273,18 @@ export function startWebSocketServer() {
             provider: provider.name,
             retryable: true,
           }));
-        });
+        },
+      )) closeForControlBackpressure();
+
+      function closeForControlBackpressure() {
+        rateLimited = true;
+        sendRealtime(buildError("provider_unavailable", "Realtime control queue capacity reached", {
+          sessionId: session.id,
+          stage: "connection",
+          retryable: true,
+        }));
+        ws.close(1013, "control_queue_capacity_reached");
+      }
     });
 
     let connectionError = false;
@@ -342,6 +339,7 @@ export function startWebSocketServer() {
     realtimeLogger.info({ port: env.port }, "Realtime gateway started");
   });
   server.on("close", () => {
+    void protection.close();
     disconnectFinalizers.close();
     httpServer.close();
   });

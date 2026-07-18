@@ -26,6 +26,8 @@ import { getVoiceAgentRuntimeReadiness } from
   "../agent-calls/voice-agent-runtime-readiness.js";
 import { getAgentConsultReadiness } from
   "../agent-calls/agent-consult-readiness.js";
+import { getPublicEntryProtectionReadiness } from
+  "../../infrastructure/security/public-entry-protection.js";
 
 export async function registerHealthRoutes(app: FastifyInstance) {
   app.get("/health", async () => {
@@ -49,6 +51,7 @@ export async function registerHealthRoutes(app: FastifyInstance) {
     const metricsReadiness = getPlatformMetricsReadiness();
     const voiceAgentRuntimeReadiness = getVoiceAgentRuntimeReadiness();
     const agentConsultReadiness = getAgentConsultReadiness();
+    const publicEntryProtectionReadiness = getPublicEntryProtectionReadiness();
     return {
       status: "ok",
       service: "api-server",
@@ -90,6 +93,7 @@ export async function registerHealthRoutes(app: FastifyInstance) {
       platformScaleReadiness,
       telemetryReadiness,
       metricsReadiness,
+      publicEntryProtectionReadiness,
       diagnosticsReadiness,
       releaseMaterialsReadiness,
     };

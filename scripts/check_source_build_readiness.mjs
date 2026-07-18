@@ -33,6 +33,7 @@ export function checkSourceBuildReadiness(
   const entrypoints = [
     "packages/contracts/dist/index.js",
     "packages/llm/dist/index.js",
+    "packages/platform-security/dist/index.js",
     "services/api-server/dist/main.js",
     "services/realtime-gateway/dist/main.js",
     "services/translation-worker/dist/main.js",
@@ -49,6 +50,7 @@ export function checkSourceBuildReadiness(
   for (const workspace of [
     "@translation/contracts",
     "@translation/llm",
+    "@translation/platform-security",
     "@translation/api-server",
     "@translation/realtime-gateway",
     "@translation/translation-worker",

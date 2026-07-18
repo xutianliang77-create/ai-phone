@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import {
   SIP_DEFAULTS, SIP_REQUIRED_TEXT, renderLiveKitSipCompose,
@@ -49,6 +49,7 @@ export function checkLiveKitSelfHostConfig(options = {}) {
   const env = normalizeEnv(parseEnvFile(options.envText ?? readFileSync(envFile, "utf8")));
   const checks = [];
   const issues = [];
+  if (!options.envText) requirePrivateEnvMode(envFile, checks, issues);
   requireText(env, checks, issues);
   requireDomains(env, checks, issues);
   requireSecrets(env, checks, issues);
@@ -59,6 +60,17 @@ export function checkLiveKitSelfHostConfig(options = {}) {
   validateLiveKitEgressEnv(env, checks, issues);
   validateLiveKitIngressEnv(env, checks, issues);
   return selfHostResult(envFile, checks, issues, env);
+}
+
+function requirePrivateEnvMode(envFile, checks, issues) {
+  const mode = statSync(envFile).mode & 0o777;
+  const ok = (mode & 0o077) === 0 && (mode & 0o400) !== 0;
+  record(checks, "LIVEKIT_PRIVATE_ENV_MODE", ok, {
+    mode: mode.toString(8).padStart(3, "0"),
+  });
+  if (!ok) {
+    issues.push("LiveKit self-host private env must be owner-only (0600 or 0400)");
+  }
 }
 
 export function renderLiveKitSelfHostFiles(envInput) {

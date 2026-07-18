@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import process from "node:process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -35,9 +35,12 @@ if (check.status !== "ready") {
 
 const env = parseEnvFile(readFileSync(envFile, "utf8"));
 const files = renderLiveKitSelfHostFiles(env);
-mkdirSync(outputDir, { recursive: true });
+mkdirSync(outputDir, { recursive: true, mode: 0o700 });
+chmodSync(outputDir, 0o700);
 for (const [fileName, content] of Object.entries(files)) {
-  writeFileSync(path.join(outputDir, fileName), content);
+  const file = path.join(outputDir, fileName);
+  writeFileSync(file, content, { mode: 0o600 });
+  chmodSync(file, 0o600);
 }
 
 print({

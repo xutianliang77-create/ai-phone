@@ -60,6 +60,10 @@ export function getSession(sessionId: string) {
   return sessions.get(sessionId) ?? null;
 }
 
+export function activeSessionCount() {
+  return sessions.size;
+}
+
 export function transitionStatus(
   sessionId: string,
   status: RealtimeSession["status"],

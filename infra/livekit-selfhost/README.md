@@ -50,6 +50,7 @@ App / Web Guest
 ```bash
 cp infra/livekit-selfhost/.env.example infra/livekit-selfhost/.env
 $EDITOR infra/livekit-selfhost/.env
+chmod 600 infra/livekit-selfhost/.env
 ```
 
 5. Check and render:
@@ -70,6 +71,13 @@ Enabled container images must use both an explicit tag and an
 candidate LiveKit Server tag is recorded in
 `infra/livekit-compatibility-profile.json`; it remains release-blocked until
 the target-architecture digest and staging media smoke are recorded.
+
+The renderer rejects a private env file readable by group/other users and
+writes the generated directory as `0700` with every rendered file at `0600`.
+Rendered YAML and the release snippet contain secrets even though Compose mounts
+them read-only. Production must materialize the input from an audited external
+Secret Manager into a private runtime directory; see
+`docs/operations/secret-image-lifecycle.md`.
 
 6. Copy the rendered `generated/` directory to the VM, for example
    `/opt/livekit`, then start it:

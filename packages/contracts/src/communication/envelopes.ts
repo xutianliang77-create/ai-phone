@@ -7,6 +7,8 @@ export interface CommunicationActor {
 
 export interface CommunicationCommand<TPayload = unknown>
   extends CommunicationIds {
+  contractVersion: 1;
+  kind: "command";
   commandId: string;
   expectedVersion: number;
   idempotencyKey: string;
@@ -18,6 +20,8 @@ export interface CommunicationCommand<TPayload = unknown>
 
 export interface CommunicationEvent<TPayload = unknown>
   extends CommunicationIds {
+  contractVersion: 1;
+  kind: "event";
   eventId: string;
   eventType: string;
   eventVersion: number;

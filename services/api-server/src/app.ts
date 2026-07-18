@@ -23,9 +23,21 @@ import { registerIngressRoutes } from "./modules/ingress/ingress.routes.js";
 import { registerPlatformTelemetryHooks } from "./infrastructure/observability/platform-telemetry.js";
 import { registerPlatformMetricsRoutes } from
   "./infrastructure/observability/platform-metrics.routes.js";
+import { loadEnv } from "./config/env.js";
+import { registerPublicEntryProtection } from
+  "./infrastructure/security/public-entry-protection.js";
+import type { PublicEntryRateLimiter } from
+  "./infrastructure/security/public-entry-protection.js";
 
-export async function buildApp() {
+export interface BuildAppOptions {
+  publicEntryRateLimiter?: PublicEntryRateLimiter;
+}
+
+export async function buildApp(options: BuildAppOptions = {}) {
+  const env = loadEnv();
   const app = Fastify({
+    bodyLimit: env.apiBodyLimitBytes,
+    trustProxy: env.trustProxyAddresses,
     logger: {
       level: process.env.LOG_LEVEL ?? "info",
       redact: {
@@ -42,8 +54,20 @@ export async function buildApp() {
     },
   });
   registerPlatformTelemetryHooks(app);
+  await app.register(cors, {
+    origin: env.corsAllowedOrigins,
+    methods: ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allowedHeaders: [
+      "authorization",
+      "content-type",
+      "idempotency-key",
+      "x-device-id",
+    ],
+    strictPreflight: true,
+    maxAge: 600,
+  });
+  registerPublicEntryProtection(app, env, options.publicEntryRateLimiter);
   registerPlatformMetricsRoutes(app);
-  await app.register(cors, { origin: true });
   await registerAccountRoutes(app);
   await registerAgentCallRoutes(app);
   await registerHealthRoutes(app);

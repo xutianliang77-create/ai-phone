@@ -1,0 +1,27 @@
+{
+  "contractVersion": 1,
+  "kind": "event",
+  "eventId": "evt_playback_started_001",
+  "eventType": "speech.playback.started",
+  "eventVersion": 1,
+  "aggregateVersion": 8,
+  "sequence": 42,
+  "sessionId": "session_001",
+  "speechId": "speech_001",
+  "participantId": "participant_guest_001",
+  "roomId": "room_001",
+  "legId": "leg_guest_001",
+  "turnId": "turn_001",
+  "segmentId": "segment_001",
+  "playbackId": "playback_001",
+  "occurredAt": "2026-07-19T08:00:03.250Z",
+  "producer": "translation-worker",
+  "traceId": "trace_001",
+  "idempotencyKey": "playback-started:playback_001:1",
+  "payload": {
+    "sourceLanguage": "zh-CN",
+    "targetLanguage": "en-US",
+    "generation": 1,
+    "sampleRate": 24000
+  }
+}

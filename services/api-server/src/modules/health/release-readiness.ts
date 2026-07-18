@@ -17,6 +17,8 @@ import { getVoiceAgentRuntimeReadiness } from
   "../agent-calls/voice-agent-runtime-readiness.js";
 import { getAgentConsultReadiness } from
   "../agent-calls/agent-consult-readiness.js";
+import { getPublicEntryProtectionReadiness } from
+  "../../infrastructure/security/public-entry-protection.js";
 
 export async function getReleaseReadiness() {
   const accountReadiness = getAccountDeploymentReadiness();
@@ -36,6 +38,7 @@ export async function getReleaseReadiness() {
   const telemetryReadiness = getPlatformTelemetryReadiness();
   const voiceAgentRuntimeReadiness = getVoiceAgentRuntimeReadiness();
   const agentConsultReadiness = getAgentConsultReadiness();
+  const publicEntryProtectionReadiness = getPublicEntryProtectionReadiness();
   const issues = [
     ...accountReadiness.issues,
     ...paymentReadiness.issues,
@@ -55,6 +58,10 @@ export async function getReleaseReadiness() {
     ...(ingressReadiness.enabled ? ingressReadiness.issues : []),
     ...(platformScaleReadiness.enabled ? platformScaleReadiness.issues : []),
     ...(telemetryReadiness.required ? telemetryReadiness.issues : []),
+    ...(publicEntryProtectionReadiness.provider === "redis"
+      ? []
+      : ["Release requires distributed Redis public entry protection"]),
+    ...publicEntryProtectionReadiness.issues,
   ];
   return {
     status: issues.length === 0 ? "ready" : "not_ready",
@@ -76,6 +83,7 @@ export async function getReleaseReadiness() {
     ingressReadiness,
     platformScaleReadiness,
     telemetryReadiness,
+    publicEntryProtectionReadiness,
     issues,
   };
 }

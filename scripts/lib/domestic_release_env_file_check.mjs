@@ -4,6 +4,7 @@ import {
   checkModelRoutingConfig,
   renderModelRoutingEnv,
 } from "./model_routing_config.mjs";
+import { requireReleaseSecurity } from "./domestic_release_security_check.mjs";
 
 const requiredText = [
   "APPLE_IAP_BUNDLE_ID",
@@ -37,6 +38,7 @@ const requiredText = [
   "PSTN_BRIDGE_STATUS_WEBHOOK_SECRET",
   "PSTN_BRIDGE_AUDIO_FRAME_SINK_API_KEY",
   "INTERNAL_API_SECRET",
+  "PUBLIC_RATE_LIMIT_KEY_SECRET",
 ];
 
 const requiredHttps = [
@@ -75,6 +77,7 @@ const secretMinimumLengths = {
   PSTN_BRIDGE_FONOSTER_API_KEY: 16,
   PSTN_BRIDGE_FONOSTER_API_SECRET: 16,
   INTERNAL_API_SECRET: 16,
+  PUBLIC_RATE_LIMIT_KEY_SECRET: 32,
 };
 
 export function checkDomesticReleaseEnvFile(options = {}) {
@@ -104,6 +107,7 @@ export function checkDomesticReleaseEnvFile(options = {}) {
   requireReleaseArtifact(root, env, checks, issues, "MODEL_ROUTING_FILE");
   requireModelRouting(root, env, checks, issues);
   requirePstnProvider(env, checks, issues);
+  requireReleaseSecurity(filePath, env, checks, issues);
   return result(filePath, checks, issues);
 }
 
@@ -171,6 +175,7 @@ function requireLiveKit(env, checks, issues) {
 }
 
 function requireFixedValues(env, checks, issues) {
+  fixedValue(env, checks, issues, "NODE_ENV", "production");
   fixedValue(env, checks, issues, "REGION_EDITION", "domestic");
   fixedValue(env, checks, issues, "DATA_REGION", "cn");
   fixedValue(env, checks, issues, "COMPLIANCE_PROFILE", "pipl");
@@ -182,6 +187,9 @@ function requireFixedValues(env, checks, issues) {
   fixedValue(env, checks, issues, "TTS_MODEL", "VoxCPM2");
   fixedValue(env, checks, issues, "APPLE_IAP_ENVIRONMENT", "Production");
   fixedValue(env, checks, issues, "PSTN_RECORDING_DISCLOSURE_ENABLED", "true");
+  fixedValue(env, checks, issues, "API_TEST_AUTO_ACCOUNT", "false");
+  fixedValue(env, checks, issues, "AUTH_DEBUG_OTP", "false");
+  fixedValue(env, checks, issues, "REALTIME_ALLOW_QUERY_TOKEN", "false");
   oneOf(env, checks, issues, "DIAGNOSTICS_ALERT_WEBHOOK_FORMAT", [
     "generic",
     "wecom",

@@ -7,6 +7,7 @@ export * from "./api/realtime.js";
 export * from "./api/voice-presets.js";
 export * from "./call-room/events.js";
 export * from "./communication/envelopes.js";
+export * from "./communication/codec.js";
 export * from "./communication/identifiers.js";
 export * from "./communication/livekit-compatibility.js";
 export * from "./communication/provider-adapters.js";

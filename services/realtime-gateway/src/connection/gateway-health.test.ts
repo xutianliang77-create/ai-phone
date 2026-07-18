@@ -4,6 +4,23 @@ import { gatewayHealthPayload, gatewayReleaseReadinessPayload } from "./gateway-
 
 const env: RealtimeEnv = {
   port: 3001,
+  allowedOrigins: ["https://call.example.cn"],
+  trustProxyAddresses: ["127.0.0.1", "::1"],
+  maxPayloadBytes: 65_536,
+  maxConnections: 512,
+  maxConnectionsPerIp: 8,
+  maxSessions: 256,
+  maxMessagesPerSecond: 120,
+  maxAudioFramesPerSecond: 75,
+  maxPendingAudioMs: 6000,
+  maxPendingControlEvents: 32,
+  maxPendingTtsOutputs: 32,
+  handshakeRateLimitPerMinute: 30,
+  publicRateLimitProvider: "redis",
+  publicRateLimitRedisUrl: "redis://127.0.0.1:6379/1",
+  publicRateLimitKeyPrefix: "test:gateway",
+  publicRateLimitKeySecret: "test-only",
+  publicRateLimitConnectTimeoutMs: 250,
   realtimeTokenSecret: "secret",
   provider: "lmstudio",
   resolvedProvider: "lmstudio",
@@ -50,7 +67,11 @@ const env: RealtimeEnv = {
 
 describe("gateway health", () => {
   it("reports gateway runtime routing settings", () => {
-    expect(gatewayHealthPayload(env)).toEqual({
+    expect(gatewayHealthPayload(env, {
+      status: "ready",
+      provider: "redis",
+      issues: [],
+    })).toEqual({
       status: "ok",
       service: "realtime-gateway",
       version: "0.1.0",
@@ -70,6 +91,11 @@ describe("gateway health", () => {
       translationModel: "tencent/Hy-MT2-1.8B",
       sessionEventSink: "api",
       tokenTransport: "subprotocol",
+      publicEntryProtection: {
+        status: "ready",
+        provider: "redis",
+        issues: [],
+      },
       releaseReadiness: {
         status: "not_ready",
         profile: "domestic",

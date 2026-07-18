@@ -1,6 +1,9 @@
 const envKeys = [
   "PAYMENT_REQUIRED_PROVIDERS",
   "NODE_ENV",
+  "PUBLIC_RATE_LIMIT_PROVIDER",
+  "PUBLIC_RATE_LIMIT_REDIS_URL",
+  "PUBLIC_RATE_LIMIT_KEY_SECRET",
   "AUTH_OTP_SECRET",
   "AUTH_DEBUG_OTP",
   "API_TEST_AUTO_ACCOUNT",
@@ -92,6 +95,7 @@ export function configurePaymentEnv() {
 
 export function configureAccountEnv() {
   process.env.NODE_ENV = "production";
+  process.env.PUBLIC_RATE_LIMIT_PROVIDER = "memory";
   process.env.AUTH_OTP_SECRET = "otp_secret_012345678901234567890123";
   delete process.env.AUTH_DEBUG_OTP;
   process.env.API_TEST_AUTO_ACCOUNT = "false";

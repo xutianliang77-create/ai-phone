@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, test } from "vitest";
@@ -162,6 +162,31 @@ describe("checkDomesticReleaseEnvFile", () => {
     );
   });
 
+  test("fails development auth, local Redis, and broad file permissions", () => {
+    const root = createRoot(tempDirs);
+    const file = writeEnv(root, readyEnv({
+      API_TEST_AUTO_ACCOUNT: "true",
+      AUTH_TEST_PHONE: "13800000000",
+      AUTH_TEST_CODE: "123456",
+      PUBLIC_RATE_LIMIT_REDIS_URL: "redis://127.0.0.1:6379/1",
+    }));
+    chmodSync(file, 0o644);
+
+    const result = checkDomesticReleaseEnvFile({ root, file });
+
+    expect(result.issues).toContain(
+      "domestic release env must be owner-only (0600 or 0400)",
+    );
+    expect(result.issues).toContain(
+      "domestic release env API_TEST_AUTO_ACCOUNT must be false",
+    );
+    expect(result.issues).toContain("domestic release env forbids AUTH_TEST_PHONE");
+    expect(result.issues).toContain("domestic release env forbids AUTH_TEST_CODE");
+    expect(result.issues).toContain(
+      "domestic release env invalid PUBLIC_RATE_LIMIT_REDIS_URL",
+    );
+  });
+
   test("parses quoted values and export prefixes", () => {
     expect(parseEnvFile("export FOO='bar baz'\nBAR=\"qux\"\n")).toEqual({
       FOO: "bar baz",
@@ -222,15 +247,24 @@ function writeEnv(root, values) {
       .map(([key, value]) => `${key}=${value}`)
       .join("\n"),
   );
+  chmodSync(file, 0o600);
   return file;
 }
 
 function readyEnv(overrides = {}) {
   return {
+    NODE_ENV: "production",
     REGION_EDITION: "domestic",
     DATA_REGION: "cn",
     COMPLIANCE_PROFILE: "pipl",
     INTERNAL_API_SECRET: "internal_api_secret_123",
+    PUBLIC_RATE_LIMIT_PROVIDER: "redis",
+    PUBLIC_RATE_LIMIT_REDIS_URL: "rediss://redis.qkxy.cn:6380/1",
+    PUBLIC_RATE_LIMIT_KEY_SECRET:
+      "public_rate_limit_secret_1234567890",
+    API_TEST_AUTO_ACCOUNT: "false",
+    AUTH_DEBUG_OTP: "false",
+    REALTIME_ALLOW_QUERY_TOKEN: "false",
     PUBLIC_CALL_BASE_URL: "https://call.qkxy.cn",
     REALTIME_PROVIDER: "hymt2_self_hosted",
     MODEL_ROUTING_PROFILE: "domestic_server_qwen3_hymt2_voxcpm2",

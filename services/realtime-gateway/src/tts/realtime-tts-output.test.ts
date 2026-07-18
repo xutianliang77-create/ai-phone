@@ -81,6 +81,35 @@ describe("realtime tts output queue", () => {
     expect(synthesizer.canceled).toEqual(["sess_1"]);
     expect(sent.map((event) => event.segmentId)).toEqual(["seg_3"]);
   });
+
+  it("drops new outputs when the TTS queue reaches its bound", async () => {
+    const first = deferred<AudioOutput | null>();
+    const synthesizer = new FakeTtsSynthesizer((event) => (
+      event.segmentId === "seg_1" ? first.promise : Promise.resolve(audioFor(event, 2))
+    ));
+    const dropped: string[] = [];
+    const queue = new RealtimeTtsOutputQueue({
+      sessionId: "sess_1",
+      voiceOutput: true,
+      synthesizer,
+      isSessionActive: () => true,
+      maxPendingOutputs: 2,
+      onDrop: (event) => dropped.push(event.segmentId),
+    });
+
+    queue.enqueue(translation(1), () => undefined);
+    queue.enqueue(translation(2), () => undefined);
+    queue.enqueue(translation(3), () => undefined);
+    first.resolve(audioFor(translation(1), 1));
+    await queue.drain();
+
+    expect(synthesizer.started).toEqual(["seg_1", "seg_2"]);
+    expect(dropped).toEqual(["seg_3"]);
+    expect(queue.diagnostics()).toEqual({
+      pendingOutputs: 0,
+      droppedOutputs: 1,
+    });
+  });
 });
 
 class FakeTtsSynthesizer {

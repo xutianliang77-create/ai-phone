@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, test } from "vitest";
@@ -105,6 +105,7 @@ function writeEnv(tempDirs, values) {
       .map(([key, value]) => `${key}=${value}`)
       .join("\n"),
   );
+  chmodSync(file, 0o600);
   return file;
 }
 

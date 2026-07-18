@@ -27,6 +27,7 @@
     "@opentelemetry/semantic-conventions": "1.30.0",
     "@translation/contracts": "file:../../packages/contracts",
     "@translation/llm": "file:../../packages/llm",
+    "@translation/platform-security": "file:../../packages/platform-security",
     "fastify": "^5.6.2",
     "livekit-client": "^2.20.0",
     "livekit-server-sdk": "^2.16.0",
