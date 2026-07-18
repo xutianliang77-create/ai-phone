@@ -277,6 +277,44 @@ describe("HttpTtsProvider", () => {
     ]);
   });
 
+  it("keeps the timeout active while the streaming body is stalled", async () => {
+    let requestSignal: AbortSignal | null = null;
+    const provider = new HttpTtsProvider({
+      endpoint: "https://tts.example.com/synthesize",
+      streamEndpoint: "https://tts.example.com/stream",
+      timeoutMs: 20,
+      fetchFn: async (_url, init) => {
+        requestSignal = init?.signal as AbortSignal;
+        return new Response(new ReadableStream({
+          start(controller) {
+            controller.enqueue(new TextEncoder().encode(
+              `${JSON.stringify({
+                type: "metadata",
+                provider: "voxcpm2",
+                model: "VoxCPM2",
+              })}\n`,
+            ));
+          },
+        }));
+      },
+    });
+
+    const consume = async () => {
+      for await (const _event of provider.synthesizeStream!({
+        text: "你好",
+        language: "zh",
+        speakerRole: "guest",
+        segmentId: "seg_stalled",
+        signal: new AbortController().signal,
+      })) {
+        // Consume until the provider times out the stalled response body.
+      }
+    };
+
+    await expect(consume()).rejects.toMatchObject({ name: "TimeoutError" });
+    expect(requestSignal?.aborted).toBe(true);
+  });
+
   it("enforces the warmup latency gate", async () => {
     const provider = new HttpTtsProvider({
       endpoint: "https://tts.example.com/synthesize",

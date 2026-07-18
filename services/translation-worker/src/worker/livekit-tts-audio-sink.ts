@@ -1,4 +1,8 @@
-import type { CallTtsAudioSink, SynthesizedSpeech } from "./types.js";
+import type {
+  CallTtsAudioChunk,
+  CallTtsAudioSink,
+  SynthesizedSpeech,
+} from "./types.js";
 
 export interface LiveKitTtsRtcModule {
   AudioFrame: new (
@@ -77,6 +81,28 @@ export class LiveKitTtsAudioSink implements CallTtsAudioSink {
     return { status: "played" as const };
   }
 
+  async playStream(
+    input: Parameters<NonNullable<CallTtsAudioSink["playStream"]>>[0],
+  ) {
+    const iterator = input.audioStream[Symbol.asyncIterator]();
+    const first = await iterator.next();
+    if (first.done) throw new Error("LiveKit TTS stream returned no audio");
+    const sampleRate = first.value.audio.sampleRate;
+    const key = trackKey(input.targetLegId, sampleRate);
+    const previous = this.playQueues.get(key) ?? Promise.resolve();
+    const stream = prependChunk(first.value, iterator);
+    const next = previous
+      .catch(() => {})
+      .then(() => this.playStreamOnTrack(input, stream, sampleRate));
+    this.playQueues.set(key, next);
+    try {
+      await next;
+    } finally {
+      if (this.playQueues.get(key) === next) this.playQueues.delete(key);
+    }
+    return { status: "played" as const };
+  }
+
   async interrupt(input: Parameters<NonNullable<CallTtsAudioSink["interrupt"]>>[0]) {
     if (this.generations.get(input.targetLegId) !== input.generation) {
       return { cleared: false };
@@ -120,6 +146,50 @@ export class LiveKitTtsAudioSink implements CallTtsAudioSink {
       }
     }
     await track.source.waitForPlayout?.();
+  }
+
+  private async playStreamOnTrack(
+    input: Parameters<NonNullable<CallTtsAudioSink["playStream"]>>[0],
+    audioStream: AsyncIterable<CallTtsAudioChunk>,
+    sampleRate: 16000 | 24000,
+  ) {
+    const latest = this.generations.get(input.targetLegId) ?? 0;
+    if (input.generation < latest) throw new Error("Stale LiveKit playback generation");
+    this.generations.set(input.targetLegId, input.generation);
+    const track = await this.trackFor(
+      input.targetSpeakerRole,
+      input.targetLegId,
+      sampleRate,
+    );
+    let expectedSequence = 1;
+    try {
+      for await (const audioChunk of audioStream) {
+        if (audioChunk.sequence !== expectedSequence) {
+          throw new Error(`LiveKit TTS stream sequence gap: expected ${expectedSequence}`);
+        }
+        expectedSequence += 1;
+        if (audioChunk.audio.sampleRate !== sampleRate) {
+          throw new Error("LiveKit TTS stream sample rate changed");
+        }
+        for (const chunk of chunkSamples(
+          audioChunk.audio,
+          this.options.frameSizeMs ?? 100,
+        )) {
+          assertCurrentPlayback(this.generations, input);
+          await track.source.captureFrame(new this.options.rtc.AudioFrame(
+            chunk,
+            track.sampleRate,
+            1,
+            chunk.length,
+          ));
+        }
+      }
+      assertCurrentPlayback(this.generations, input);
+      await track.source.waitForPlayout?.();
+    } catch (error) {
+      track.source.clearQueue?.();
+      throw error;
+    }
   }
 
   private async trackFor(
@@ -219,6 +289,22 @@ function pcm16Base64ToSamples(data: string) {
     samples[index] = buffer.readInt16LE(index * 2);
   }
   return samples;
+}
+
+async function* prependChunk(
+  first: CallTtsAudioChunk,
+  iterator: AsyncIterator<CallTtsAudioChunk>,
+) {
+  try {
+    yield first;
+    while (true) {
+      const next = await iterator.next();
+      if (next.done) return;
+      yield next.value;
+    }
+  } finally {
+    await iterator.return?.();
+  }
 }
 
 function assertCurrentPlayback(

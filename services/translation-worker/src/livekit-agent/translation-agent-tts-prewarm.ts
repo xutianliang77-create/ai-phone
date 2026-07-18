@@ -42,6 +42,7 @@ export async function prewarmTranslationAgentTts(
     fetchFn: options.fetchFn,
   });
   const speech = await provider.synthesize({
+    callId: "agent-node-prewarm",
     text: "准备就绪",
     language: "zh",
     speakerRole: "host",

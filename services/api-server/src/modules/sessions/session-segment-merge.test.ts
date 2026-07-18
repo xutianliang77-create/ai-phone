@@ -132,6 +132,45 @@ describe("session segment revision merge", () => {
     });
   });
 
+  it("clears derived translation when refinement advances the generation", () => {
+    const segment = createSessionSegment({
+      segmentId: "seg_1",
+      speechId: "speech_1",
+      turnId: "turn_1",
+      revision: 0,
+      pipelineGeneration: 1,
+      sourceText: "call fifteen",
+      translatedText: "拨打十五",
+      targetLanguage: "zh",
+      stage: "translation",
+      provider: "old_provider",
+      pipelineTiming: { translationFinalAtMs: 80 },
+    });
+
+    applySessionSegmentPatch(segment, {
+      segmentId: "seg_1",
+      speechId: "speech_1",
+      turnId: "turn_1",
+      revision: 0,
+      pipelineGeneration: 2,
+      sourceText: "call fifty",
+      rawText: "call fifteen",
+      optimizedText: "call fifty",
+    });
+
+    expect(segment).toMatchObject({
+      revision: 0,
+      pipelineGeneration: 2,
+      sourceText: "call fifty",
+      rawText: "call fifteen",
+      optimizedText: "call fifty",
+      translatedText: "",
+    });
+    expect(segment.provider).toBeUndefined();
+    expect(segment.targetLanguage).toBeUndefined();
+    expect(segment.pipelineTiming).toBeUndefined();
+  });
+
   it("does not retain derived translation when a full newer revision is saved", () => {
     const [segment] = mergeSessionSegments([{
       id: "seg_1",

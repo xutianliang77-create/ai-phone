@@ -308,6 +308,37 @@ async def test_voxcpm2_engine_uses_retryable_complete_generation(tmp_path) -> No
     assert model.kwargs["retry_badcase_ratio_threshold"] == 6.0
 
 
+@pytest.mark.asyncio
+async def test_voxcpm2_engine_streams_model_chunks_without_complete_generation(
+    tmp_path,
+) -> None:
+    model = FakeStreamingCapableVoxCpmModel()
+    engine = VoxCpm2TtsEngine(
+        model_dir=str(tmp_path),
+        cfg_value=2.0,
+        inference_timesteps=10,
+        load_denoiser=False,
+    )
+    engine._model = model
+
+    events = [event async for event in engine.synthesize_stream(
+        TtsSynthesizeRequest(
+            text="Streaming.",
+            language="en",
+            speakerRole="guest",
+            segmentId="seg_streaming",
+        ),
+    )]
+
+    assert model.generate_calls == 0
+    assert model.streaming_calls == 1
+    assert [event["type"] for event in events] == [
+        "metadata", "audio_chunk", "final",
+    ]
+    assert events[1]["sequence"] == 1
+    assert events[2]["audioDurationMs"] >= 1
+
+
 class FakeTtsModel:
     def __init__(self, sample_rate: int) -> None:
         self.sample_rate = sample_rate

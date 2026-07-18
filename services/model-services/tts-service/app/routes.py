@@ -1,5 +1,4 @@
 from hmac import compare_digest
-import base64
 import json
 
 from fastapi import APIRouter, Header, HTTPException, Response, status
@@ -91,9 +90,10 @@ def create_router(
     ):
         require_api_key(config, authorization)
         try:
-            speech = await service.synthesize(request)
+            stream = service.synthesize_stream(request)
+            first = await anext(stream)
             return StreamingResponse(
-                tts_ndjson_stream(speech),
+                tts_ndjson_stream(first, stream),
                 media_type="application/x-ndjson",
                 headers={"cache-control": "no-cache", "x-accel-buffering": "no"},
             )
@@ -139,21 +139,13 @@ def create_router(
     return router
 
 
-async def tts_ndjson_stream(speech: TtsSynthesizeResponse):
-    body = speech.model_dump(exclude={"audio"}, exclude_none=True)
-    yield json.dumps({"type": "metadata", **body}) + "\n"
-    pcm = base64.b64decode(speech.audio.data)
-    bytes_per_chunk = max(2, int(speech.audio.sampleRate * 2 * 0.1))
-    for offset in range(0, len(pcm), bytes_per_chunk):
-        chunk = pcm[offset:offset + bytes_per_chunk]
-        yield json.dumps({
-            "type": "audio_chunk",
-            "format": "pcm16",
-            "sampleRate": speech.audio.sampleRate,
-            "sequence": offset // bytes_per_chunk + 1,
-            "data": base64.b64encode(chunk).decode("ascii"),
-        }) + "\n"
-    yield json.dumps({"type": "final"}) + "\n"
+async def tts_ndjson_stream(first: dict, stream):
+    try:
+        yield json.dumps(first) + "\n"
+        async for event in stream:
+            yield json.dumps(event) + "\n"
+    finally:
+        await stream.aclose()
 
 
 def require_api_key(config: TtsConfig, authorization: str | None) -> None:

@@ -6,7 +6,9 @@ import {
 } from "@translation/contracts";
 import { isAborted, runAbortable } from "./abortable-operation.js";
 import { callRecognitionMetadata } from "./call-recognition-metadata.js";
+import type { CaptionTranslationInput } from "./call-caption-pipeline-input.js";
 import { CallPipelineVersionState } from "./call-pipeline-version-state.js";
+import { translateIncrementally } from "./incremental-provider-stream.js";
 import type { CallTranscriptRefiner } from "./call-transcript-refiner.js";
 import type { CallTtsPlaybackQueue } from "./call-tts-playback-queue.js";
 import { CallTtsSynthesisQueue } from "./call-tts-synthesis-queue.js";
@@ -27,7 +29,6 @@ export class CallCaptionPipeline {
   private readonly ttsQueue: CallTtsSynthesisQueue;
   private readonly translationTasks = new Map<string, Set<Promise<void>>>();
   private readonly translationContext: CallTranslationContextStore;
-
   constructor(private readonly options: {
     translationProvider: CallTranslationProvider;
     eventSink: CallRoomEventSink;
@@ -49,16 +50,40 @@ export class CallCaptionPipeline {
   setTtsVoice(voice: TtsVoiceConfig) {
     this.ttsQueue.setVoice(voice);
   }
+  async startCall(callId: string) {
+    await Promise.all([
+      this.options.translationProvider.createCall?.(callId),
+      this.options.ttsProvider?.createCall?.(callId),
+    ]);
+  }
 
-  warmupTts(signal: AbortSignal) {
-    return this.ttsQueue.warmup(signal);
+  warmupTts(callId: string, signal: AbortSignal) {
+    return this.ttsQueue.warmup(callId, signal);
+  }
+
+  async closeCall(callId: string) {
+    const results = await Promise.allSettled([
+      this.options.translationProvider.closeCall?.(callId),
+      this.options.ttsProvider?.closeCall?.(callId),
+    ]);
+    const rejected = results.find(
+      (result): result is PromiseRejectedResult => result.status === "rejected",
+    );
+    if (rejected) throw rejected.reason;
   }
 
   async drain(callId: string) {
-    const tasks = this.translationTasks.get(callId);
-    if (tasks?.size) await Promise.allSettled([...tasks]);
-    await this.ttsQueue.drain(callId);
+    await this.drainTranslations(callId);
+    await this.drainTts(callId);
   }
+
+  async drainTranslations(callId: string) {
+    while (this.translationTasks.get(callId)?.size) {
+      await Promise.allSettled([...this.translationTasks.get(callId)!]);
+    }
+  }
+
+  drainTts(callId: string) { return this.ttsQueue.drain(callId); }
 
   cancel(callId: string) {
     this.state.cancel(callId);
@@ -80,18 +105,32 @@ export class CallCaptionPipeline {
     speakerRole: CallAudioSpeakerRole,
     transcript: BufferedCallTranscript["transcript"],
   ) {
-    const identity = this.state.identity(callId, speakerRole, transcript);
-    if (this.state.isPublished(identity)) return;
+    const published = await this.publishVersion(callId, speakerRole, transcript);
+    if (!published || !this.options.transcriptRefiner) return;
+    this.track(callId, this.refineInBackground({
+      callId,
+      speakerRole,
+      transcript,
+      identity: published.identity,
+      signal: published.signal,
+    }));
+  }
+
+  private async publishVersion(
+    callId: string,
+    speakerRole: CallAudioSpeakerRole,
+    transcript: BufferedCallTranscript["transcript"],
+    refined?: Awaited<ReturnType<CallTranscriptRefiner["refine"]>>,
+    forceNewGeneration = false,
+  ) {
+    const identity = this.state.identity(callId, speakerRole, transcript, {
+      forceNewGeneration,
+    });
+    if (this.state.isPublished(identity)) return null;
     const signal = this.state.activate(identity);
 
     const sourceLanguage = transcript.language;
     const targetLanguage = oppositeCallLanguage(sourceLanguage);
-    const refined = await this.options.transcriptRefiner?.refine(
-      callId,
-      speakerRole,
-      transcript,
-      targetLanguage,
-    );
     const text = refined?.text ?? transcript.text;
     const recognitionMetadata = callRecognitionMetadata(transcript, refined);
     const transcriptReadyAtMs = this.options.nowMs();
@@ -136,6 +175,39 @@ export class CallCaptionPipeline {
       refinedRawText: refined?.rawText,
       commonEvent,
     }));
+    return { identity, signal };
+  }
+
+  private async refineInBackground(input: {
+    callId: string;
+    speakerRole: CallAudioSpeakerRole;
+    transcript: BufferedCallTranscript["transcript"];
+    identity: ReturnType<CallPipelineVersionState["identity"]>;
+    signal: AbortSignal;
+  }) {
+    let refined: Awaited<ReturnType<CallTranscriptRefiner["refine"]>>;
+    try {
+      refined = await runAbortable(input.signal, () =>
+        this.options.transcriptRefiner!.refine(
+          input.callId,
+          input.speakerRole,
+          input.transcript,
+          oppositeCallLanguage(input.transcript.language),
+        )
+      );
+    } catch (error) {
+      if (isAborted(error, input.signal)) return;
+      throw error;
+    }
+    if (!this.state.isCurrent(input.identity) ||
+      !refined.text.trim() || refined.text === input.transcript.text) return;
+    await this.publishVersion(input.callId, input.speakerRole, {
+      ...input.transcript,
+      speechId: input.identity.speechId,
+      turnId: input.identity.turnId,
+      revision: input.identity.revision,
+      text: refined.text,
+    }, refined, true);
   }
 
   private async translate(input: CaptionTranslationInput) {
@@ -145,11 +217,13 @@ export class CallCaptionPipeline {
       const context = this.translationContext.prepare({
         callId: input.callId,
         speakerRole: input.speakerRole,
+        speechId: input.identity.speechId,
         text: input.text,
         sourceLanguage: input.sourceLanguage,
         targetLanguage: input.targetLanguage,
       });
       const translationInput = {
+          callId: input.callId,
           text: input.text,
           sourceLanguage: input.sourceLanguage,
           targetLanguage: input.targetLanguage,
@@ -165,9 +239,14 @@ export class CallCaptionPipeline {
           ? translateIncrementally(
             this.options.translationProvider,
             translationInput,
-            () => {
-              input.pipelineTiming.translationFirstTokenAtMs ??=
-                this.options.nowMs();
+            {
+              onFirstToken: () => {
+                input.pipelineTiming.translationFirstTokenAtMs ??=
+                  this.options.nowMs();
+              },
+              onRestart: () => {
+                delete input.pipelineTiming.translationFirstTokenAtMs;
+              },
             },
           )
           : this.options.translationProvider.translate(translationInput)
@@ -189,6 +268,8 @@ export class CallCaptionPipeline {
         input.transcript.text,
         input.text,
         input.refinedRawText,
+        undefined,
+        input.identity.speechId,
       );
       return;
     }
@@ -213,10 +294,12 @@ export class CallCaptionPipeline {
       input.text,
       input.refinedRawText,
       translatedText,
+      input.identity.speechId,
     );
     this.translationContext.remember({
       callId: input.callId,
       speakerRole: input.speakerRole,
+      speechId: input.identity.speechId,
       sourceText: input.text,
       translatedText,
       sourceLanguage: input.sourceLanguage,
@@ -256,42 +339,12 @@ export class CallCaptionPipeline {
     optimizedText: string,
     refinedRawText?: string,
     translatedText?: string,
+    speechId?: string,
   ) {
     this.options.transcriptRefiner?.remember(callId, speakerRole, {
       rawText: refinedRawText ?? rawText,
       optimizedText,
       ...(translatedText ? { translatedText } : {}),
-    });
+    }, speechId);
   }
-}
-
-async function translateIncrementally(
-  provider: CallTranslationProvider,
-  input: Parameters<CallTranslationProvider["translate"]>[0],
-  onFirstToken: () => void,
-) {
-  if (!provider.translateStream) throw new Error("Translation stream is unavailable");
-  let finalText = "";
-  for await (const event of provider.translateStream(input)) {
-    if (input.signal.aborted) throw input.signal.reason ?? new Error("Translation aborted");
-    if (event.text.trim()) onFirstToken();
-    if (event.type === "final") finalText = event.text;
-  }
-  if (!finalText.trim()) throw new Error("Translation stream returned no final text");
-  return finalText;
-}
-
-interface CaptionTranslationInput {
-  callId: string;
-  speakerRole: CallAudioSpeakerRole;
-  transcript: BufferedCallTranscript["transcript"];
-  identity: ReturnType<CallPipelineVersionState["identity"]>;
-  signal: AbortSignal;
-  sourceLanguage: CallRoomSubmittedEvent["sourceLanguage"];
-  targetLanguage: CallRoomSubmittedEvent["targetLanguage"];
-  text: string;
-  recognitionMetadata: ReturnType<typeof callRecognitionMetadata>;
-  pipelineTiming: SpeechPipelineTimingDto;
-  refinedRawText?: string;
-  commonEvent: Omit<CallRoomSubmittedEvent, "type" | "timestampMs" | "text">;
 }

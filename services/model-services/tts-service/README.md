@@ -29,6 +29,7 @@ TTS_SERVICE_PROVIDER=voxcpm2 \
 TTS_MODEL_VERSION=VoxCPM2 \
 TTS_SERVICE_API_KEY=replace-with-strong-tts-key \
 TTS_VOXCPM2_MODEL_DIR=/data/models/translation-model-eval/data/tts-product-fit/models/openbmb_voxcpm2 \
+TTS_VOXCPM2_REQUIRE_STREAMING=true \
 TTS_VOICE_REFERENCE_DIR=/data/ai-phone/voice-references \
 uvicorn app.main:app --host 0.0.0.0 --port 8002
 ```
@@ -55,8 +56,12 @@ npm run check:tts-provider -- \
 
 The P1 streaming and warmup endpoints are `POST /tts/stream` (NDJSON PCM
 chunks) and `POST /tts/warmup` (single-flight, cached after the first
-synthesis). The Worker keeps both opt-in so the whole-response path remains a
-one-variable rollback.
+synthesis). VoxCPM2 streaming calls the model's `generate_streaming()` iterator;
+it does not synthesize a complete payload before emitting chunks. Disconnects
+close the iterator after the in-flight model chunk returns. The Worker keeps the
+stream endpoint opt-in so the whole-response path remains a one-variable
+rollback. A VoxCPM2 runtime without `generate_streaming()` fails the stream
+request instead of silently returning pseudo-streamed audio.
 
 Run the staging latency gate after the service is warm and before promotion:
 

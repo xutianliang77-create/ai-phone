@@ -1,61 +1,32 @@
-import type { CallRoomTranslationLanguage } from "@translation/contracts";
 import { runAbortable } from "./abortable-operation.js";
 import { KeyedAsyncQueue } from "./keyed-async-queue.js";
+import type {
+  PlaybackInput,
+  PlaybackInterruptionResult,
+  PlaybackInterruptReason,
+  PlaybackLifecycle,
+  PlaybackLifecycleInput,
+  PlaybackStartedInput,
+} from "./call-tts-playback-types.js";
+import { playTtsAudioStream } from "./tts-playback-stream.js";
 import type {
   CallAudioSpeakerRole,
   CallPlaybackBinding,
   CallTtsAudioSink,
-  SynthesizedSpeech,
+  CallTtsAudioStream,
 } from "./types.js";
-
-export interface PlaybackInput {
-  callId: string;
-  segmentId: string;
-  speakerRole: CallAudioSpeakerRole;
-  targetLanguage: CallRoomTranslationLanguage;
-  translatedText: string;
-  speech: SynthesizedSpeech;
-}
-
-export interface PlaybackLifecycleInput extends PlaybackInput {
-  targetSpeakerRole: CallAudioSpeakerRole;
-  playbackId: string;
-  generation: number;
-  sourceLegId?: string;
-  targetLegId?: string;
-  playbackReason?: PlaybackInterruptReason;
-}
-
-export interface PlaybackStartedInput extends PlaybackLifecycleInput {
-  sourceLegId: string;
-  targetLegId: string;
-}
-
-export type PlaybackInterruptReason =
-  | "barge_in"
-  | "session_end"
-  | "superseded"
-  | "failure";
-
-export type PlaybackLifecycle =
-  | "queued"
-  | "started"
-  | "interrupted"
-  | "ended"
-  | "failed";
-
+export type {
+  PlaybackInput,
+  PlaybackInterruptionResult,
+  PlaybackInterruptReason,
+  PlaybackLifecycle,
+  PlaybackLifecycleInput,
+  PlaybackStartedInput,
+} from "./call-tts-playback-types.js";
 interface ActivePlayback {
   input: PlaybackStartedInput;
   controller: AbortController;
 }
-
-export interface PlaybackInterruptionResult {
-  supported: boolean;
-  interrupted: boolean;
-  cleared: boolean;
-  playback?: PlaybackStartedInput;
-}
-
 export class CallTtsPlaybackQueue {
   private readonly sinks: CallTtsAudioSink[] = [];
   private readonly routeQueue = new KeyedAsyncQueue();
@@ -79,12 +50,32 @@ export class CallTtsPlaybackQueue {
   }
 
   enqueue(input: PlaybackInput) {
-    if (this.sinks.length === 0 || !input.speech.audio) return;
+    void this.queuePlayback(input).catch(() => undefined);
+  }
+
+  enqueueStream(input: PlaybackInput & { audioStream: CallTtsAudioStream }) {
+    if (this.sinks.length === 0) return Promise.resolve(false);
+    return new Promise<boolean>((resolve, reject) => {
+      void this.queuePlayback(input, { resolve, reject }).catch(reject);
+    });
+  }
+
+  private async queuePlayback(
+    input: PlaybackInput,
+    consumersReady?: PlaybackConsumersReady,
+  ) {
+    if (this.sinks.length === 0 || (!input.speech.audio && !input.audioStream)) {
+      consumersReady?.resolve(false);
+      return;
+    }
     const targetSpeakerRole = oppositeSpeakerRole(input.speakerRole);
     const routeKey = targetRouteKey(input.callId, targetSpeakerRole);
     const routeEpoch = this.routeEpoch(routeKey);
-    void this.routeQueue.enqueue(routeKey, async () => {
-      if (this.routeEpoch(routeKey) !== routeEpoch) return;
+    await this.routeQueue.enqueue(routeKey, async () => {
+      if (this.routeEpoch(routeKey) !== routeEpoch) {
+        consumersReady?.resolve(false);
+        return;
+      }
       const generation = this.nextGeneration(routeKey);
       const pending: PlaybackLifecycleInput = {
         ...input,
@@ -98,15 +89,16 @@ export class CallTtsPlaybackQueue {
       this.rememberTargetKey(input.callId, targetKey);
       await this.targetQueue.enqueue(targetKey, async () => {
         if (this.routeEpoch(routeKey) !== routeEpoch) {
+          consumersReady?.resolve(false);
           await this.publishLifecycle("interrupted", {
             ...routed,
             playbackReason: "barge_in",
           });
           return;
         }
-        await this.play(routed);
+        await this.play(routed, consumersReady);
       });
-    }).catch(() => undefined);
+    });
   }
 
   supportsInterruption() {
@@ -115,6 +107,16 @@ export class CallTtsPlaybackQueue {
       sink.capabilities.clearPlayback === true &&
       Boolean(sink.interrupt)
     );
+  }
+
+  activePlaybackForSpeaker(
+    callId: string,
+    targetSpeakerRole: CallAudioSpeakerRole,
+  ) {
+    return [...this.active.values()].find((item) =>
+      item.input.callId === callId &&
+      item.input.targetSpeakerRole === targetSpeakerRole
+    )?.input;
   }
 
   interruptSpeaker(input: {
@@ -231,34 +233,46 @@ export class CallTtsPlaybackQueue {
     })));
   }
 
-  private async play(input: PlaybackStartedInput) {
+  private async play(
+    input: PlaybackStartedInput,
+    consumersReady?: PlaybackConsumersReady,
+  ) {
     const key = targetQueueKey(input.callId, input.targetLegId);
     const controller = new AbortController();
     this.active.set(key, { input, controller });
     this.onPlaybackStarted?.(input);
     await this.publishLifecycle("started", input);
-    let failed = false;
-    let queuedOnly = false;
-    for (const sink of this.sinks) {
+    const streams = input.audioStream
+      ? this.sinks.map(() => input.audioStream!.subscribe())
+      : [];
+    consumersReady?.resolve(streams.length > 0);
+    const results = await Promise.all(this.sinks.map(async (sink, index) => {
       try {
-        const result = await runAbortable(controller.signal, () => sink.play({
-            callId: input.callId,
-            segmentId: input.segmentId,
-            playbackId: input.playbackId,
-            generation: input.generation,
-            sourceLegId: input.sourceLegId,
-            targetLegId: input.targetLegId,
-            sourceSpeakerRole: input.speakerRole,
-            targetSpeakerRole: input.targetSpeakerRole,
-            language: input.targetLanguage,
-            speech: input.speech,
-            signal: controller.signal,
-          }));
-        queuedOnly ||= result?.status === "queued";
+        const common = {
+          callId: input.callId,
+          segmentId: input.segmentId,
+          playbackId: input.playbackId,
+          generation: input.generation,
+          sourceLegId: input.sourceLegId,
+          targetLegId: input.targetLegId,
+          sourceSpeakerRole: input.speakerRole,
+          targetSpeakerRole: input.targetSpeakerRole,
+          language: input.targetLanguage,
+          speech: input.speech,
+          signal: controller.signal,
+        };
+        const result = await runAbortable(controller.signal, () =>
+          input.audioStream
+            ? playTtsAudioStream(sink, common, streams[index]!)
+            : sink.play(common)
+        );
+        return { failed: false, queued: result?.status === "queued" };
       } catch {
-        if (!controller.signal.aborted) failed = true;
+        return { failed: !controller.signal.aborted, queued: false };
       }
-    }
+    }));
+    const failed = results.some((result) => result.failed);
+    const queuedOnly = results.some((result) => result.queued);
     if (this.active.get(key)?.input.playbackId === input.playbackId) {
       this.active.delete(key);
     }
@@ -305,6 +319,11 @@ export class CallTtsPlaybackQueue {
     keys.add(key);
     this.targetKeys.set(callId, keys);
   }
+}
+
+interface PlaybackConsumersReady {
+  resolve: (ready: boolean) => void;
+  reject: (error: unknown) => void;
 }
 
 function bindPlayback(

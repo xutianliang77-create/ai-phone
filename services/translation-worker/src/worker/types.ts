@@ -50,6 +50,10 @@ export interface CallDuplexConfig {
   minProbability: number;
   cooldownMs: number;
   preRollMs: number;
+  echoGateEnabled: boolean;
+  echoMinSpeechMs: number;
+  echoMinProbability: number;
+  backchannelMaxSpeechMs: number;
 }
 
 export interface CallAsrProvider {
@@ -62,7 +66,9 @@ export interface CallAsrProvider {
 }
 
 export interface CallTranslationProvider {
+  createCall?(callId: string): Promise<void>;
   translate(input: {
+    callId: string;
     text: string;
     sourceLanguage: CallRoomTranslationLanguage;
     targetLanguage: CallRoomTranslationLanguage;
@@ -77,9 +83,11 @@ export interface CallTranslationProvider {
   }): Promise<string>;
   translateStream?(input: Parameters<CallTranslationProvider["translate"]>[0]):
     AsyncIterable<TranslationStreamEvent>;
+  closeCall?(callId: string): Promise<void>;
 }
 
 export type TranslationStreamEvent =
+  | { type: "restart" }
   | { type: "delta"; text: string }
   | { type: "stable_prefix"; text: string }
   | { type: "final"; text: string };
@@ -124,7 +132,9 @@ export interface TtsVoiceConfig {
 }
 
 export interface CallTtsProvider {
+  createCall?(callId: string): Promise<void>;
   synthesize(input: {
+    callId: string;
     text: string;
     language: CallRoomTranslationLanguage;
     speakerRole: CallAudioSpeakerRole;
@@ -138,18 +148,20 @@ export interface CallTtsProvider {
   }): Promise<SynthesizedSpeech | null>;
   synthesizeStream?(input: Parameters<CallTtsProvider["synthesize"]>[0]):
     AsyncIterable<TtsStreamEvent>;
-  warmup?(input: { signal: AbortSignal; voice?: TtsVoiceConfig }):
+  warmup?(input: { callId: string; signal: AbortSignal; voice?: TtsVoiceConfig }):
     Promise<TtsWarmupResult>;
+  closeCall?(callId: string): Promise<void>;
 }
 
 export type TtsStreamEvent =
+  | { type: "restart" }
   | { type: "metadata"; speech: SynthesizedSpeech }
   | {
     type: "audio_chunk";
     sequence: number;
     audio: NonNullable<SynthesizedSpeech["audio"]>;
   }
-  | { type: "final" };
+  | { type: "final"; audioDurationMs?: number };
 
 export interface TtsWarmupResult {
   cached: boolean;
@@ -159,20 +171,34 @@ export interface TtsWarmupResult {
   model?: string;
 }
 
+export interface CallTtsAudioChunk {
+  sequence: number;
+  audio: NonNullable<SynthesizedSpeech["audio"]>;
+}
+
+export interface CallTtsAudioStream {
+  subscribe(): AsyncIterable<CallTtsAudioChunk>;
+}
+
+export interface CallTtsAudioSinkInput {
+  callId: string;
+  segmentId: string;
+  playbackId: string;
+  generation: number;
+  sourceLegId: string;
+  targetLegId: string;
+  sourceSpeakerRole: CallAudioSpeakerRole;
+  targetSpeakerRole: CallAudioSpeakerRole;
+  language: CallRoomTranslationLanguage;
+  speech: SynthesizedSpeech;
+  signal: AbortSignal;
+}
+
 export interface CallTtsAudioSink {
   readonly capabilities?: PlaybackSinkCapabilities;
-  play(input: {
-    callId: string;
-    segmentId: string;
-    playbackId: string;
-    generation: number;
-    sourceLegId: string;
-    targetLegId: string;
-    sourceSpeakerRole: CallAudioSpeakerRole;
-    targetSpeakerRole: CallAudioSpeakerRole;
-    language: CallRoomTranslationLanguage;
-    speech: SynthesizedSpeech;
-    signal: AbortSignal;
+  play(input: CallTtsAudioSinkInput): Promise<CallTtsPlaybackSinkResult | void>;
+  playStream?(input: CallTtsAudioSinkInput & {
+    audioStream: AsyncIterable<CallTtsAudioChunk>;
   }): Promise<CallTtsPlaybackSinkResult | void>;
   interrupt?(input: CallTtsPlaybackInterruptInput):
     Promise<CallTtsPlaybackInterruptResult>;

@@ -45,6 +45,29 @@ class TtsService:
     ) -> TtsSynthesizeResponse:
         return await self.engine.synthesize(self.voice_presets.resolve_request(request))
 
+    async def synthesize_stream(self, request: TtsSynthesizeRequest):
+        resolved = self.voice_presets.resolve_request(request)
+        stream = getattr(self.engine, "synthesize_stream", None)
+        if callable(stream):
+            async for event in stream(resolved):
+                yield event
+            return
+        speech = await self.engine.synthesize(resolved)
+        body = speech.model_dump(exclude={"audio"}, exclude_none=True)
+        yield {"type": "metadata", **body}
+        pcm = base64.b64decode(speech.audio.data)
+        bytes_per_chunk = max(2, int(speech.audio.sampleRate * 2 * 0.1))
+        for offset in range(0, len(pcm), bytes_per_chunk):
+            chunk = pcm[offset:offset + bytes_per_chunk]
+            yield {
+                "type": "audio_chunk",
+                "format": "pcm16",
+                "sampleRate": speech.audio.sampleRate,
+                "sequence": offset // bytes_per_chunk + 1,
+                "data": base64.b64encode(chunk).decode("ascii"),
+            }
+        yield {"type": "final", "audioDurationMs": speech.audioDurationMs}
+
     async def warmup(self, request: TtsSynthesizeRequest) -> dict[str, object]:
         if self._warmup_result is not None:
             return {**self._warmup_result, "cached": True}

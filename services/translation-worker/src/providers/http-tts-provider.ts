@@ -73,37 +73,54 @@ export class HttpTtsProvider implements CallTtsProvider {
       return;
     }
     const { signal, ...request } = input;
-    const response = await this.fetchWithTimeout(this.options.streamEndpoint, {
-      method: "POST",
-      headers: this.headers(),
-      body: JSON.stringify({
-        ...request,
-        voice: input.voice ?? this.options.voice,
-      }),
-    }, signal);
-    if (!response.ok || !response.body) {
-      throw new Error(`HTTP TTS stream returned HTTP ${response.status}`);
-    }
-    for await (const message of parseNdjson(response.body, signal)) {
-      if (message.type === "metadata") {
-        yield {
-          type: "metadata" as const,
-          speech: normalizeSpeechMetadata(message, {
-            provider: this.options.provider,
-            model: this.options.model,
-          }),
-        };
-      } else if (message.type === "audio_chunk") {
-        const audio = normalizeAudio(message);
-        if (!audio) throw new Error("HTTP TTS stream returned invalid PCM chunk");
-        yield {
-          type: "audio_chunk" as const,
-          sequence: positiveInteger(message.sequence),
-          audio,
-        };
-      } else if (message.type === "final") {
-        yield { type: "final" as const };
+    const controller = new AbortController();
+    const abort = () => controller.abort(signal.reason);
+    if (signal.aborted) abort();
+    signal.addEventListener("abort", abort, { once: true });
+    const timer = setTimeout(() => {
+      controller.abort(new DOMException("TTS stream timed out", "TimeoutError"));
+    }, this.options.timeoutMs);
+    try {
+      const response = await this.fetchFn(this.options.streamEndpoint, {
+        method: "POST",
+        headers: this.headers(),
+        body: JSON.stringify({
+          ...request,
+          voice: input.voice ?? this.options.voice,
+        }),
+        signal: controller.signal,
+      });
+      if (!response.ok || !response.body) {
+        throw new Error(`HTTP TTS stream returned HTTP ${response.status}`);
       }
+      for await (const message of parseNdjson(response.body, controller.signal)) {
+        if (message.type === "metadata") {
+          yield {
+            type: "metadata" as const,
+            speech: normalizeSpeechMetadata(message, {
+              provider: this.options.provider,
+              model: this.options.model,
+            }),
+          };
+        } else if (message.type === "audio_chunk") {
+          const audio = normalizeAudio(message);
+          if (!audio) throw new Error("HTTP TTS stream returned invalid PCM chunk");
+          yield {
+            type: "audio_chunk" as const,
+            sequence: positiveInteger(message.sequence),
+            audio,
+          };
+        } else if (message.type === "final") {
+          yield {
+            type: "final" as const,
+            audioDurationMs: finiteOrUndefined(message.audioDurationMs),
+          };
+        }
+      }
+    } finally {
+      clearTimeout(timer);
+      signal.removeEventListener("abort", abort);
+      controller.abort();
     }
   }
 
@@ -116,6 +133,7 @@ export class HttpTtsProvider implements CallTtsProvider {
       method: "POST",
       headers: this.headers(),
       body: JSON.stringify({
+        callId: input.callId,
         text: "准备就绪",
         language: "zh",
         speakerRole: "host",
@@ -263,10 +281,16 @@ async function* parseNdjson(
   const reader = body.getReader();
   const decoder = new TextDecoder();
   let buffered = "";
+  const cancel = () => {
+    void reader.cancel(signal.reason).catch(() => undefined);
+  };
+  if (signal.aborted) cancel();
+  signal.addEventListener("abort", cancel, { once: true });
   try {
     while (true) {
       if (signal.aborted) throw signal.reason ?? new Error("TTS stream aborted");
       const { done, value } = await reader.read();
+      if (signal.aborted) throw signal.reason ?? new Error("TTS stream aborted");
       buffered += decoder.decode(value, { stream: !done });
       const lines = buffered.split(/\r?\n/u);
       buffered = lines.pop() ?? "";
@@ -279,6 +303,7 @@ async function* parseNdjson(
       }
     }
   } finally {
+    signal.removeEventListener("abort", cancel);
     reader.releaseLock();
   }
 }

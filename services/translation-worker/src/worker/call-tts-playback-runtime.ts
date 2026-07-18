@@ -25,15 +25,29 @@ export function createCallTtsPlaybackQueue(options: {
       ]);
     },
     (input) => {
-      const playbackMs = input.speech.audioDurationMs ?? 0;
       options.recentTtsEchoes.remember(
         input.callId,
         input.targetSpeakerRole,
         input.translatedText,
-        options.nowMs() + playbackMs + 8_000,
+        Number.MAX_SAFE_INTEGER,
       );
     },
-  async (state, input) => {
+    async (state, input) => {
+      if (state === "ended" || state === "interrupted" || state === "failed") {
+        options.recentTtsEchoes.forget(
+          input.callId,
+          input.targetSpeakerRole,
+          input.translatedText,
+        );
+        if (state === "ended") {
+          options.recentTtsEchoes.remember(
+            input.callId,
+            input.targetSpeakerRole,
+            input.translatedText,
+            options.nowMs() + 8_000,
+          );
+        }
+      }
       const result = await options.eventSink.publish(input.callId, [
         playbackEvent(state, input, options.nowMs()),
       ]);

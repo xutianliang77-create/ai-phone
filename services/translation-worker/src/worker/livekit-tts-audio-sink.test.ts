@@ -172,6 +172,49 @@ describe("LiveKitTtsAudioSink", () => {
     expect(rtc.sources[0].captured).toHaveLength(framesAfterClear);
   });
 
+  it("captures streaming PCM before the source reaches final", async () => {
+    const rtc = createFakeRtc();
+    const sink = new LiveKitTtsAudioSink({
+      room: new FakeRoom(),
+      rtc,
+      frameSizeMs: 1,
+    });
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const playback = sink.playStream!({
+      callId: "call_stream",
+      segmentId: "seg_stream",
+      playbackId: "pb_stream",
+      generation: 1,
+      sourceLegId: "host-leg",
+      targetLegId: "guest-leg",
+      sourceSpeakerRole: "host",
+      targetSpeakerRole: "guest",
+      language: "en",
+      speech: { provider: "voxcpm2", model: "VoxCPM2" },
+      signal: new AbortController().signal,
+      audioStream: (async function* () {
+        yield {
+          sequence: 1,
+          audio: { format: "pcm16", sampleRate: 16000, data: pcm16([1, 2]) },
+        } as const;
+        await gate;
+        yield {
+          sequence: 2,
+          audio: { format: "pcm16", sampleRate: 16000, data: pcm16([3, 4]) },
+        } as const;
+      })(),
+    });
+
+    await waitUntil(() => rtc.sources[0]?.captured.length === 1);
+    expect(rtc.sources[0].captured[0].data[0]).toBe(1);
+    release();
+    await playback;
+    expect(rtc.sources[0].captured.map((frame) => frame.data[0])).toEqual([1, 3]);
+  });
+
   it("reports support only when room and rtc can publish audio", () => {
     expect(isLiveKitTtsAudioSupported(new FakeRoom(), createFakeRtc())).toBe(true);
     expect(isLiveKitTtsAudioSupported({}, createFakeRtc())).toBe(false);
@@ -280,4 +323,12 @@ function pcm16(samples: number[]) {
   const buffer = Buffer.alloc(samples.length * 2);
   samples.forEach((sample, index) => buffer.writeInt16LE(sample, index * 2));
   return buffer.toString("base64");
+}
+
+async function waitUntil(predicate: () => boolean, timeoutMs = 100) {
+  const deadline = Date.now() + timeoutMs;
+  while (!predicate()) {
+    if (Date.now() >= deadline) throw new Error("condition not reached");
+    await new Promise((resolve) => setTimeout(resolve, 1));
+  }
 }

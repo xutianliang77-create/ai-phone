@@ -20,6 +20,7 @@ export function newWorker(
   ttsAudioSink?: CallTtsAudioSink,
   translationProvider: CallTranslationProvider = new FakeTranslationProvider(),
   transcriptRefiner?: CallTranscriptRefiner,
+  endDrainGraceMs = 0,
 ) {
   return new CallTranslationWorker({
     asrProvider: asr,
@@ -28,6 +29,7 @@ export function newWorker(
     ttsAudioSink,
     eventSink: sink,
     transcriptRefiner,
+    endDrainGraceMs,
     nowMs: () => 1000,
   });
 }

@@ -42,6 +42,7 @@ export class CallTranslationWorker implements CallSpeechPipeline {
   private readonly interruptionController: CallInterruptionController;
   private readonly recentTtsEchoes = new RecentTtsEchoFilter();
   private readonly turnCoordinator = new TurnCoordinator();
+  private readonly endDrainGraceMs: number;
   private readonly ttsWarmups = new Map<string, {
     controller: AbortController;
     task: Promise<void>;
@@ -50,6 +51,7 @@ export class CallTranslationWorker implements CallSpeechPipeline {
     this.asrProvider = options.asrProvider;
     this.eventSink = options.eventSink;
     this.nowMs = options.nowMs ?? Date.now;
+    this.endDrainGraceMs = Math.max(0, options.endDrainGraceMs ?? 1_500);
     this.playbackQueue = createCallTtsPlaybackQueue({
       eventSink: this.eventSink,
       recentTtsEchoes: this.recentTtsEchoes,
@@ -91,11 +93,18 @@ export class CallTranslationWorker implements CallSpeechPipeline {
     this.captionPipeline.clear(callId);
     this.turnCoordinator.clear(callId);
     try {
-      await this.asrProvider.createCall(callId);
+      await Promise.all([
+        this.asrProvider.createCall(callId),
+        this.captionPipeline.startCall(callId),
+      ]);
     } catch (error) {
+      await Promise.allSettled([
+        this.asrProvider.closeCall(callId),
+        this.captionPipeline.closeCall(callId),
+      ]);
       await this.eventSink.publish(callId, [
-        statusEvent("asr-start-failed", "ASR 启动失败", this.nowMs(), {
-          stage: "asr",
+        statusEvent("provider-start-failed", "语音翻译链路启动失败", this.nowMs(), {
+          stage: "worker",
           retryable: true,
         }),
       ]);
@@ -193,11 +202,27 @@ export class CallTranslationWorker implements CallSpeechPipeline {
       await this.flushSpeaker(callId, "host");
       await this.flushSpeaker(callId, "guest");
       await this.processingQueue.drain(callId);
-      await this.asrProvider.closeCall(callId);
+      const translationDrain = this.captionPipeline.drainTranslations(callId);
+      await settlesWithin(translationDrain, this.endDrainGraceMs);
       this.captionPipeline.cancel(callId);
-      await this.captionPipeline.drain(callId);
+      await translationDrain;
       await this.playbackQueue.cancelCall(callId, "session_end");
+      await this.captionPipeline.drainTts(callId);
       await this.playbackQueue.drain(callId);
+      const closeResults = await Promise.allSettled([
+        this.asrProvider.closeCall(callId),
+        this.captionPipeline.closeCall(callId),
+      ]);
+      if (closeResults.some((result) => result.status === "rejected")) {
+        await this.eventSink.publish(callId, [
+          statusEvent(
+            "provider-close-degraded",
+            "Provider 关闭未完全确认，通话资源已停止接收新任务",
+            this.nowMs(),
+            { stage: "worker", retryable: true },
+          ),
+        ]);
+      }
       await this.eventSink.publish(callId, [
         statusEvent("worker-ended", "通话翻译 Worker 已结束", this.nowMs(), {
           stage: "worker",
@@ -220,7 +245,7 @@ export class CallTranslationWorker implements CallSpeechPipeline {
       task: Promise.resolve() as Promise<void>,
     };
     runtime.task = Promise.resolve()
-      .then(() => this.captionPipeline.warmupTts(controller.signal))
+      .then(() => this.captionPipeline.warmupTts(callId, controller.signal))
       .then(() => undefined)
       .catch(async () => {
         if (controller.signal.aborted) return;
@@ -292,5 +317,20 @@ export class CallTranslationWorker implements CallSpeechPipeline {
 
   private enqueueProcessing(callId: string, operation: () => Promise<void>) {
     return this.processingQueue.enqueue(callId, operation);
+  }
+}
+
+async function settlesWithin(promise: Promise<void>, timeoutMs: number) {
+  if (timeoutMs <= 0) return false;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      promise.then(() => true),
+      new Promise<false>((resolve) => {
+        timer = setTimeout(() => resolve(false), timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
   }
 }

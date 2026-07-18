@@ -17,6 +17,7 @@ export interface CallTranslationWorkerOptions {
   eventSink: CallRoomEventSink;
   transcriptRefiner?: CallTranscriptRefiner;
   duplexConfig?: CallDuplexConfig;
+  endDrainGraceMs?: number;
   nowMs?: () => number;
   terminology?: TermbaseTermDto[];
 }

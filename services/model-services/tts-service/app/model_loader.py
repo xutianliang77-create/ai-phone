@@ -30,6 +30,7 @@ def load_engine(config: TtsConfig) -> TtsEngine:
             inference_timesteps=config.voxcpm2_inference_timesteps,
             hifi_inference_timesteps=config.voxcpm2_hifi_inference_timesteps,
             load_denoiser=config.voxcpm2_load_denoiser,
+            require_streaming=config.voxcpm2_require_streaming,
             voice_reference_dir=config.voice_reference_dir,
         )
     raise ValueError(f"Unsupported TTS provider: {config.provider}")

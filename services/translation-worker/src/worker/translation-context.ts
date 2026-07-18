@@ -8,6 +8,7 @@ import type {
 } from "./types.js";
 
 interface StoredTranslation extends TranslationContextSegment {
+  speechId?: string;
   sourceLanguage: CallRoomTranslationLanguage;
   targetLanguage: CallRoomTranslationLanguage;
 }
@@ -20,12 +21,14 @@ export class CallTranslationContextStore {
   prepare(input: {
     callId: string;
     speakerRole: "host" | "guest";
+    speechId?: string;
     text: string;
     sourceLanguage: CallRoomTranslationLanguage;
     targetLanguage: CallRoomTranslationLanguage;
   }) {
     const previousSegments = (this.recent.get(contextKey(input.callId, input.speakerRole)) ?? [])
       .filter((segment) =>
+        (!input.speechId || segment.speechId !== input.speechId) &&
         segment.sourceLanguage === input.sourceLanguage &&
         segment.targetLanguage === input.targetLanguage
       )
@@ -46,6 +49,7 @@ export class CallTranslationContextStore {
   remember(input: {
     callId: string;
     speakerRole: "host" | "guest";
+    speechId?: string;
     sourceText: string;
     translatedText: string;
     sourceLanguage: CallRoomTranslationLanguage;
@@ -53,7 +57,11 @@ export class CallTranslationContextStore {
   }) {
     const key = contextKey(input.callId, input.speakerRole);
     const items = this.recent.get(key) ?? [];
-    items.push(input);
+    const existing = input.speechId
+      ? items.findIndex((item) => item.speechId === input.speechId)
+      : -1;
+    if (existing >= 0) items[existing] = input;
+    else items.push(input);
     this.recent.set(key, items.slice(-6));
   }
 

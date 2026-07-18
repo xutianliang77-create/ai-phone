@@ -13,7 +13,7 @@ export interface CallPipelineIdentity {
 
 export class CallPipelineVersionState {
   private readonly versions = new Map<string, PipelineVersion>();
-  private readonly publishedRevisions = new Map<string, number>();
+  private readonly publishedVersions = new Map<string, PipelineVersion>();
   private readonly controllers = new Map<string, PipelineController>();
 
   identity(
@@ -23,6 +23,7 @@ export class CallPipelineVersionState {
       TranscriptSegment,
       "segmentId" | "speechId" | "turnId" | "revision"
     >,
+    options: { forceNewGeneration?: boolean } = {},
   ): CallPipelineIdentity {
     const key = `${callId}:${speakerRole}:${transcript.segmentId}`;
     const revision = transcript.revision ?? 1;
@@ -31,6 +32,8 @@ export class CallPipelineVersionState {
       ? 1
       : revision > current.revision
         ? current.generation + 1
+        : revision === current.revision && options.forceNewGeneration
+          ? current.generation + 1
         : current.generation;
     if (!current || revision >= current.revision) {
       this.versions.set(key, { revision, generation });
@@ -47,8 +50,12 @@ export class CallPipelineVersionState {
   }
 
   isPublished(identity: CallPipelineIdentity) {
-    return (this.publishedRevisions.get(identity.key) ?? -1) >=
-      identity.revision;
+    const published = this.publishedVersions.get(identity.key);
+    return published !== undefined && (
+      published.revision > identity.revision ||
+      published.revision === identity.revision &&
+        published.generation >= identity.generation
+    );
   }
 
   activate(identity: CallPipelineIdentity) {
@@ -76,19 +83,21 @@ export class CallPipelineVersionState {
   }
 
   markPublished(identity: CallPipelineIdentity) {
-    this.publishedRevisions.set(
-      identity.key,
-      Math.max(
-        this.publishedRevisions.get(identity.key) ?? -1,
-        identity.revision,
-      ),
-    );
+    const published = this.publishedVersions.get(identity.key);
+    if (!published || identity.revision > published.revision ||
+      identity.revision === published.revision &&
+        identity.generation > published.generation) {
+      this.publishedVersions.set(identity.key, {
+        revision: identity.revision,
+        generation: identity.generation,
+      });
+    }
   }
 
   clear(callId: string) {
     this.cancel(callId);
     const prefix = `${callId}:`;
-    for (const map of [this.versions, this.publishedRevisions]) {
+    for (const map of [this.versions, this.publishedVersions]) {
       for (const key of map.keys()) {
         if (key.startsWith(prefix)) map.delete(key);
       }

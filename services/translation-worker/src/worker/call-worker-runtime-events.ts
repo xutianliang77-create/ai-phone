@@ -10,6 +10,10 @@ export const disabledCallDuplexConfig: CallDuplexConfig = {
   minProbability: 0.5,
   cooldownMs: 800,
   preRollMs: 400,
+  echoGateEnabled: true,
+  echoMinSpeechMs: 480,
+  echoMinProbability: 0.72,
+  backchannelMaxSpeechMs: 360,
 };
 
 export function callWorkerStatusEvent(

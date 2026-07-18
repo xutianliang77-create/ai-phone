@@ -25,7 +25,7 @@ describe("CallInterruptionController", () => {
       type: "barge_in.confirmed",
       targetLegId: "guest-leg",
       speakerRole: "guest",
-      speechDurationMs: 300,
+      speechDurationMs: 500,
       preRollMs: 400,
     }));
     harness.releaseAll();
@@ -45,6 +45,8 @@ describe("CallInterruptionController", () => {
     expect(harness.interruptedTargets).toEqual([]);
 
     harness.controller.observe(decision(5, "guest", true));
+    harness.controller.observe(decision(6, "guest", true));
+    harness.controller.observe(decision(7, "guest", true));
     await harness.confirmed.promise;
     expect(harness.interruptedTargets).toEqual(["guest-leg"]);
     harness.releaseAll();
@@ -95,6 +97,35 @@ describe("CallInterruptionController", () => {
     }));
     harness.releaseAll();
     await harness.queue.drain("call-1");
+  });
+
+  it("classifies a short playback-time response without interrupting", async () => {
+    const harness = createHarness();
+    harness.queue.enqueue(playback("to-guest", "host"));
+    await harness.firstStarted.promise;
+
+    harness.controller.observe(decision(1, "guest", true));
+    harness.controller.observe(decision(2, "guest", true));
+    harness.controller.observe(decision(3, "guest", false));
+    await Promise.resolve();
+
+    expect(harness.interruptedTargets).toEqual([]);
+    expect(harness.cancelledTargets).toEqual([]);
+    expect(harness.events).toContainEqual(expect.objectContaining({
+      type: "worker.status",
+      segmentId: "backchannel-guest-3",
+      speechDurationMs: 200,
+    }));
+    harness.releaseAll();
+    await harness.queue.drain("call-1");
+  });
+
+  it("does not cancel translation when there is no active playback", async () => {
+    const harness = createHarness();
+    harness.observeSpeech("guest");
+    await Promise.resolve();
+    expect(harness.cancelledTargets).toEqual([]);
+    expect(harness.interruptedTargets).toEqual([]);
   });
 });
 
@@ -175,9 +206,9 @@ function createHarness(options: { interruptible?: boolean } = {}) {
     confirmed,
     degraded,
     observeSpeech(role: "host" | "guest") {
-      controller.observe(decision(1, role, true));
-      controller.observe(decision(2, role, true));
-      controller.observe(decision(3, role, true));
+      for (let sequence = 1; sequence <= 5; sequence += 1) {
+        controller.observe(decision(sequence, role, true));
+      }
     },
     releaseAll() {
       for (const release of releases.values()) release.resolve();
@@ -228,6 +259,10 @@ function config() {
     minProbability: 0.5,
     cooldownMs: 800,
     preRollMs: 400,
+    echoGateEnabled: true,
+    echoMinSpeechMs: 480,
+    echoMinProbability: 0.72,
+    backchannelMaxSpeechMs: 360,
   };
 }
 

@@ -75,12 +75,17 @@ describe("translation worker env", () => {
 
   it("keeps full duplex disabled by default and validates its thresholds", () => {
     process.env = {};
+    expect(loadEnv().pipelineEndGraceMs).toBe(1500);
     expect(loadEnv().duplexConfig).toEqual({
       enabled: false,
       minSpeechMs: 240,
       minProbability: 0.5,
       cooldownMs: 800,
       preRollMs: 400,
+      echoGateEnabled: true,
+      echoMinSpeechMs: 480,
+      echoMinProbability: 0.72,
+      backchannelMaxSpeechMs: 360,
     });
 
     process.env = {
@@ -89,6 +94,10 @@ describe("translation worker env", () => {
       CALL_BARGE_IN_MIN_PROBABILITY: "0.7",
       CALL_BARGE_IN_COOLDOWN_MS: "900",
       CALL_BARGE_IN_PRE_ROLL_MS: "500",
+      CALL_ECHO_START_GATE_ENABLED: "false",
+      CALL_ECHO_BARGE_IN_MIN_SPEECH_MS: "520",
+      CALL_ECHO_BARGE_IN_MIN_PROBABILITY: "0.78",
+      CALL_BACKCHANNEL_MAX_SPEECH_MS: "400",
     };
     expect(loadEnv().duplexConfig).toEqual({
       enabled: true,
@@ -96,10 +105,18 @@ describe("translation worker env", () => {
       minProbability: 0.7,
       cooldownMs: 900,
       preRollMs: 500,
+      echoGateEnabled: false,
+      echoMinSpeechMs: 520,
+      echoMinProbability: 0.78,
+      backchannelMaxSpeechMs: 400,
     });
 
     process.env.CALL_BARGE_IN_MIN_PROBABILITY = "1.1";
     expect(loadEnv().duplexConfig.minProbability).toBe(0.5);
+    process.env.CALL_PIPELINE_END_GRACE_MS = "2500";
+    expect(loadEnv().pipelineEndGraceMs).toBe(2500);
+    process.env.CALL_PIPELINE_END_GRACE_MS = "10001";
+    expect(loadEnv().pipelineEndGraceMs).toBe(1500);
   });
 
   it("bounds the per-leg audio ingest queue capacity", () => {

@@ -66,11 +66,13 @@ export function applySessionSegmentPatch(
   const currentGeneration = segment.pipelineGeneration ?? 0;
   const incomingGeneration = patch.pipelineGeneration ?? 0;
   const isNewerRevision = incomingRevision > currentRevision;
+  const isNewerGeneration = incomingRevision === currentRevision &&
+    incomingGeneration > currentGeneration;
   const isCurrentPipeline = isNewerRevision ||
     incomingRevision === currentRevision && incomingGeneration >= currentGeneration;
 
   if (isCurrentPipeline) {
-    if (isNewerRevision) {
+    if (isNewerRevision || isNewerGeneration) {
       clearDerivedTranslation(segment);
       delete segment.pipelineTiming;
     }

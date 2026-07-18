@@ -43,6 +43,7 @@ class VoxCpm2TtsEngine:
         inference_timesteps: int,
         hifi_inference_timesteps: int = 15,
         load_denoiser: bool,
+        require_streaming: bool = False,
         voice_reference_dir: str = "",
     ) -> None:
         self.model_dir = Path(model_dir)
@@ -50,6 +51,7 @@ class VoxCpm2TtsEngine:
         self.inference_timesteps = inference_timesteps
         self.hifi_inference_timesteps = hifi_inference_timesteps
         self.load_denoiser = load_denoiser
+        self.require_streaming = require_streaming
         self.voice_reference_dir = Path(voice_reference_dir) if voice_reference_dir else None
         self._model = None
         self._load_error: str | None = None
@@ -118,6 +120,49 @@ class VoxCpm2TtsEngine:
             ),
         )
 
+    async def synthesize_stream(self, request: TtsSynthesizeRequest):
+        from app.voxcpm2_streaming import stream_voxcpm2
+
+        model = self._load()
+        model_sample_rate = parse_model_sample_rate(
+            getattr(getattr(model, "tts_model", None), "sample_rate", None)
+            or self._model_sample_rate
+            or OUTPUT_SAMPLE_RATE
+        )
+        self._model_sample_rate = model_sample_rate
+        generate_streaming = getattr(model, "generate_streaming", None)
+        if not callable(generate_streaming):
+            raise TtsUnavailableError(
+                "VoxCPM2 runtime does not support generate_streaming",
+            )
+        text = build_voxcpm2_text(request.text, request.language)
+        kwargs = voxcpm2_generate_kwargs(
+            generate_streaming,
+            text=text,
+            request=request,
+            reference_wav_path=self._reference_wav_path(request),
+            cfg_value=self.cfg_value,
+            inference_timesteps=(
+                self.hifi_inference_timesteps
+                if request.voice and request.voice.quality == "hifi"
+                else self.inference_timesteps
+            ),
+        )
+        async for event in stream_voxcpm2(
+            model=model,
+            kwargs=kwargs,
+            model_sample_rate=model_sample_rate,
+        ):
+            if event["type"] == "metadata":
+                event.update({
+                    "voiceMode": request.voice.mode if request.voice else "preset",
+                    "voiceProfileId": (
+                        request.voice.voiceProfileId if request.voice else None
+                    ),
+                    "presetId": request.voice.presetId if request.voice else None,
+                })
+            yield event
+
     def _generate(
         self,
         model,
@@ -126,8 +171,6 @@ class VoxCpm2TtsEngine:
         reference_wav_path: Path | None,
         started: float,
     ) -> tuple[list[float], int]:
-        # The HTTP contract returns a complete PCM payload, so model streaming
-        # adds no client latency benefit and disables VoxCPM2 bad-case retries.
         generate = model.generate
         kwargs = voxcpm2_generate_kwargs(
             generate,
@@ -161,9 +204,13 @@ class VoxCpm2TtsEngine:
         if not self.model_dir.exists():
             return False, f"VoxCPM2 model dir does not exist: {self.model_dir}"
         try:
-            import voxcpm  # noqa: F401
+            from voxcpm import VoxCPM
         except Exception as exc:
             return False, f"VoxCPM2 runtime is not installed: {exc}"
+        if self.require_streaming and not callable(
+            getattr(VoxCPM, "generate_streaming", None),
+        ):
+            return False, "VoxCPM2 runtime does not support generate_streaming"
         return True, None
 
     def _load(self):

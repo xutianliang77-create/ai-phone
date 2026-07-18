@@ -5,6 +5,7 @@ import {
   frame,
   newWorker,
 } from "./call-translation-worker.test-support.js";
+import type { CallTranscriptRefiner } from "./call-transcript-refiner.js";
 import type {
   CallAsrProvider,
   CallAudioFrame,
@@ -16,6 +17,73 @@ import type {
 } from "./types.js";
 
 describe("Call pipeline cancellation", () => {
+  it("publishes the first ASR final before background refinement completes", async () => {
+    const translation = new ControlledTranslationProvider();
+    const refiner = new ControlledTranscriptRefiner();
+    const sink = new RecordingSink();
+    const worker = newWorker(
+      revisionAsr().firstOnly(),
+      sink,
+      undefined,
+      undefined,
+      translation,
+      refiner as unknown as CallTranscriptRefiner,
+    );
+
+    await worker.processAudioFrame(frame("call_refine", "guest", 1));
+    expect(transcriptEvents(sink, "call_refine")).toMatchObject([{
+      revision: 0,
+      pipelineGeneration: 1,
+      text: "call fifteen",
+      rawText: "call fifteen",
+      optimizedText: "call fifteen",
+    }]);
+    expect(translation.requests).toHaveLength(1);
+
+    refiner.resolve("call fifty");
+    await waitUntil(() => translation.requests.length === 2);
+    expect(translation.requests[0].signal.aborted).toBe(true);
+    expect(transcriptEvents(sink, "call_refine")).toMatchObject([
+      { revision: 0, pipelineGeneration: 1, text: "call fifteen" },
+      {
+        revision: 0,
+        pipelineGeneration: 2,
+        text: "call fifty",
+        rawText: "call fifteen",
+        optimizedText: "call fifty",
+      },
+    ]);
+
+    translation.resolve(0, "旧译文");
+    translation.resolve(1, "新译文");
+    await waitUntil(() => translationEvents(sink, "call_refine").length === 1);
+    expect(translationEvents(sink, "call_refine")).toMatchObject([{
+      revision: 0,
+      pipelineGeneration: 2,
+      translatedText: "新译文",
+    }]);
+  });
+
+  it("does not wait for an unresponsive background refiner when ending", async () => {
+    const translation = new ControlledTranslationProvider();
+    const refiner = new ControlledTranscriptRefiner();
+    const sink = new RecordingSink();
+    const worker = newWorker(
+      revisionAsr().firstOnly(),
+      sink,
+      undefined,
+      undefined,
+      translation,
+      refiner as unknown as CallTranscriptRefiner,
+    );
+
+    await worker.processAudioFrame(frame("call_refine_end", "guest", 1));
+    const ending = worker.endCall("call_refine_end");
+
+    expect(await settlesWithin(ending)).toBe(true);
+    expect(translation.requests[0].signal.aborted).toBe(true);
+  });
+
   it("suppresses an old MT result when a newer revision supersedes it", async () => {
     const translation = new ControlledTranslationProvider();
     const sink = new RecordingSink();
@@ -90,6 +158,33 @@ describe("Call pipeline cancellation", () => {
     expect(translationEvents(sink, "call_end")).toEqual([]);
   });
 
+  it("gives an in-flight final translation a bounded chance to persist", async () => {
+    const translation = new ControlledTranslationProvider();
+    const sink = new RecordingSink();
+    const worker = newWorker(
+      revisionAsr().firstOnly(),
+      sink,
+      undefined,
+      undefined,
+      translation,
+      undefined,
+      100,
+    );
+
+    await worker.processAudioFrame(frame("call_grace", "guest", 1));
+    await waitUntil(() => translation.requests.length === 1);
+    const ending = worker.endCall("call_grace");
+    translation.resolve(0, "结束前译文");
+    await ending;
+
+    expect(translationEvents(sink, "call_grace")).toMatchObject([{
+      translatedText: "结束前译文",
+    }]);
+    expect(sink.eventsFor("call_grace").at(-1)).toMatchObject({
+      segmentId: "worker-ended",
+    });
+  });
+
   it("reports provider AbortError when the pipeline signal was not cancelled", async () => {
     const sink = new RecordingSink();
     const worker = newWorker(
@@ -158,6 +253,24 @@ class ControlledTtsProvider implements CallTtsProvider {
   }
 }
 
+class ControlledTranscriptRefiner {
+  private resolveRefinement!: (value: ReturnType<typeof refinement>) => void;
+  private readonly result = new Promise<ReturnType<typeof refinement>>((resolve) => {
+    this.resolveRefinement = resolve;
+  });
+
+  async refine() {
+    return await this.result;
+  }
+
+  remember() {}
+  clear() {}
+
+  resolve(text: string) {
+    this.resolveRefinement(refinement(text));
+  }
+}
+
 function revisionAsr() {
   return new SequenceAsrProvider([
     { segmentId: "seg_1", turnId: "turn_1", revision: 0, text: "call fifteen", language: "en" },
@@ -167,6 +280,27 @@ function revisionAsr() {
 
 function translationEvents(sink: RecordingSink, callId: string) {
   return sink.eventsFor(callId).filter((event) => event.type === "translation.final");
+}
+
+function transcriptEvents(sink: RecordingSink, callId: string) {
+  return sink.eventsFor(callId).filter((event) => event.type === "transcript.final");
+}
+
+function refinement(text: string) {
+  return {
+    rawText: "call fifteen",
+    text,
+    refinement: {
+      provider: "openai_compatible" as const,
+      model: "refiner-test",
+      promptVersion: "asr_refine_v2",
+      confidence: 0.95,
+      latencyMs: 25,
+      operations: ["number_correction"],
+      protectedTermsKept: [],
+      warnings: [],
+    },
+  };
 }
 
 function readyEvents(sink: RecordingSink, callId: string) {

@@ -14,6 +14,13 @@ import type {
   TtsVoiceConfig,
   TtsVoiceMode,
 } from "../worker/types.js";
+import {
+  parseProviderFallbackEnv,
+  type AsrFallbackRouteConfig,
+  type ProviderFallbackConfig,
+  type TranslationFallbackRouteConfig,
+  type TtsFallbackRouteConfig,
+} from "./provider-fallback-env.js";
 
 export interface TranslationWorkerEnv {
   apiBaseUrl: string;
@@ -27,6 +34,12 @@ export interface TranslationWorkerEnv {
   rtcStatsIntervalMs: number;
   diagnosticsNodeId: string;
   modelRoutingProfile?: string;
+  providerFallback: ProviderFallbackConfig;
+  asrFallback?: AsrFallbackRouteConfig;
+  translationFallback?: TranslationFallbackRouteConfig;
+  ttsFallback?: TtsFallbackRouteConfig;
+  llmFallbackCooldownMs: number;
+  pipelineEndGraceMs: number;
   asrProvider: string;
   asrModel?: string;
   asrHttpEndpoint: string;
@@ -100,6 +113,13 @@ export function loadEnv(): TranslationWorkerEnv {
       hostname(),
     ),
     modelRoutingProfile: modelProfile?.name,
+    ...parseProviderFallbackEnv(env),
+    pipelineEndGraceMs: boundedInteger(
+      env.CALL_PIPELINE_END_GRACE_MS,
+      1_500,
+      0,
+      10_000,
+    ),
     asrProvider: modelProfile?.asr?.provider ?? "http_asr",
     asrModel: modelProfile?.asr?.model,
     asrHttpEndpoint:
@@ -187,6 +207,26 @@ function parseDuplexConfig(
     ),
     cooldownMs: boundedNumber(env.CALL_BARGE_IN_COOLDOWN_MS, 800, 0, 5000),
     preRollMs: boundedNumber(env.CALL_BARGE_IN_PRE_ROLL_MS, 400, 0, 2000),
+    echoGateEnabled: env.CALL_ECHO_START_GATE_ENABLED?.trim().toLowerCase() !==
+      "false",
+    echoMinSpeechMs: boundedNumber(
+      env.CALL_ECHO_BARGE_IN_MIN_SPEECH_MS,
+      480,
+      160,
+      2000,
+    ),
+    echoMinProbability: boundedNumber(
+      env.CALL_ECHO_BARGE_IN_MIN_PROBABILITY,
+      0.72,
+      0,
+      1,
+    ),
+    backchannelMaxSpeechMs: boundedNumber(
+      env.CALL_BACKCHANNEL_MAX_SPEECH_MS,
+      360,
+      80,
+      1000,
+    ),
   };
 }
 

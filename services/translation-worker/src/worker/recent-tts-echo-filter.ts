@@ -21,6 +21,20 @@ export class RecentTtsEchoFilter {
     this.entries.set(key, [...active, { text: normalized, expiresAtMs }]);
   }
 
+  forget(
+    callId: string,
+    targetSpeakerRole: CallAudioSpeakerRole,
+    text: string,
+  ) {
+    const normalized = normalizeEchoText(text);
+    const key = participantKey(callId, targetSpeakerRole);
+    const remaining = (this.entries.get(key) ?? []).filter(
+      (entry) => entry.text !== normalized,
+    );
+    if (remaining.length === 0) this.entries.delete(key);
+    else this.entries.set(key, remaining);
+  }
+
   matches(
     callId: string,
     speakerRole: CallAudioSpeakerRole,

@@ -51,6 +51,9 @@ export function workerModelFingerprints(
         audioFrameSizeMs: env.audioFrameSizeMs,
         audioIngestMaxFrames: env.audioIngestMaxFrames,
         duplex: env.duplexConfig,
+        providerFallback: env.providerFallback,
+        llmFallbackCooldownMs: env.llmFallbackCooldownMs,
+        endDrainGraceMs: env.pipelineEndGraceMs,
       },
     },
     {
@@ -64,6 +67,14 @@ export function workerModelFingerprints(
         streamFallbackToHttp: env.asrStreamFallbackToHttp,
         timeoutMs: env.asrHttpTimeoutMs,
         domainLexiconPacks: env.domainLexiconPacks,
+        fallback: env.asrFallback
+          ? {
+            provider: env.asrFallback.provider,
+            model: env.asrFallback.model,
+            streaming: Boolean(env.asrFallback.streamEndpoint),
+            timeoutMs: env.asrFallback.timeoutMs,
+          }
+          : undefined,
       },
     },
     {
@@ -75,6 +86,15 @@ export function workerModelFingerprints(
         streaming: env.translationStreamingEnabled,
         timeoutMs: env.translationTimeoutMs,
         maxTokens: env.translationMaxTokens,
+        fallback: env.translationFallback
+          ? {
+            provider: env.translationFallback.provider,
+            model: env.translationFallback.model,
+            streaming: env.translationFallback.streaming,
+            timeoutMs: env.translationFallback.timeoutMs,
+            maxTokens: env.translationFallback.maxTokens,
+          }
+          : undefined,
       },
     },
   ];
@@ -90,6 +110,14 @@ export function workerModelFingerprints(
         warmupMaxMs: env.ttsWarmupMaxMs,
         voiceMode: env.ttsVoice?.mode,
         quality: env.ttsVoice?.quality,
+        fallback: env.ttsFallback
+          ? {
+            provider: env.ttsFallback.provider,
+            model: env.ttsFallback.model,
+            streaming: Boolean(env.ttsFallback.streamEndpoint),
+            timeoutMs: env.ttsFallback.timeoutMs,
+          }
+          : undefined,
       },
     });
   }

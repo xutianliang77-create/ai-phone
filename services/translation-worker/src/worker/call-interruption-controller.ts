@@ -57,7 +57,22 @@ export class CallInterruptionController {
     if (state.degradedReason && this.options.playbackQueue.supportsInterruption()) {
       this.publishModeChange(decision, state, "pipeline.restored");
     }
-    if (!decision.voiced || (decision.probability ?? 0) < this.options.config.minProbability) {
+    const playback = this.options.playbackQueue.activePlaybackForSpeaker(
+      decision.callId,
+      decision.speakerRole,
+    );
+    if (!playback) {
+      resetSpeech(state);
+      return;
+    }
+    const probabilityThreshold = this.options.config.echoGateEnabled
+      ? Math.max(
+        this.options.config.minProbability,
+        this.options.config.echoMinProbability,
+      )
+      : this.options.config.minProbability;
+    if (!decision.voiced || (decision.probability ?? 0) < probabilityThreshold) {
+      if (!decision.voiced) this.publishBackchannel(decision, state);
       resetSpeech(state);
       return;
     }
@@ -76,7 +91,6 @@ export class CallInterruptionController {
       now - state.lastBargeInMs < this.options.config.cooldownMs ||
       this.inFlight.has(key)) return;
 
-    this.options.onBargeIn?.(decision.callId, decision.speakerRole);
     this.inFlight.add(key);
     void this.interrupt(decision, state).finally(() => {
       this.inFlight.delete(key);
@@ -130,6 +144,7 @@ export class CallInterruptionController {
       return;
     }
 
+    this.options.onBargeIn?.(decision.callId, decision.speakerRole);
     state.lastBargeInMs = detectedAt;
     const speechDurationMs = state.consecutiveSpeechMs;
     const probability = state.minimumProbability;
@@ -198,6 +213,26 @@ export class CallInterruptionController {
     }]);
   }
 
+  private publishBackchannel(decision: CallVadDecision, state: SpeechState) {
+    if (state.consecutiveSpeechMs <= 0 ||
+      state.consecutiveSpeechMs > this.options.config.backchannelMaxSpeechMs) return;
+    void this.publish(decision.callId, [{
+      type: "worker.status",
+      segmentId: `backchannel-${decision.speakerRole}-${decision.sequence}`,
+      speakerRole: "worker",
+      speaker: participantTrackSpeaker("worker"),
+      sourceLanguage: "en",
+      targetLanguage: "zh",
+      text: "检测到播放期间短应答，未中断当前语音",
+      stage: "worker",
+      provider: decision.provider,
+      retryable: false,
+      speechDurationMs: state.consecutiveSpeechMs,
+      vadProbability: state.minimumProbability,
+      timestampMs: this.options.nowMs(),
+    }]);
+  }
+
   private async publish(callId: string, events: CallRoomSubmittedEvent[]) {
     try {
       await this.options.eventSink.publish(callId, events);
@@ -239,13 +274,17 @@ function requiredSpeechMs(
     decision.probability ?? config.minProbability,
     state.minimumProbability,
   );
-  if (probability >= 0.88) {
-    return Math.max(160, Math.round(config.minSpeechMs * 0.75));
-  }
-  if (probability < config.minProbability + 0.08) {
-    return Math.min(1000, Math.round(config.minSpeechMs * 1.5));
-  }
-  return config.minSpeechMs;
+  const adaptive = probability >= 0.88
+    ? Math.max(160, Math.round(config.minSpeechMs * 0.75))
+    : probability < config.minProbability + 0.08
+    ? Math.min(1000, Math.round(config.minSpeechMs * 1.5))
+    : config.minSpeechMs;
+  if (!config.echoGateEnabled) return adaptive;
+  return Math.max(
+    adaptive,
+    config.echoMinSpeechMs,
+    config.backchannelMaxSpeechMs + decision.durationMs,
+  );
 }
 
 function vadUnavailableReason(
