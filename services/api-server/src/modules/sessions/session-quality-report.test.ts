@@ -81,7 +81,81 @@ describe("session quality report", () => {
       "slow_barge_in_stop",
     ]));
   });
+
+  it("computes p50/p95 stage latency and local quality gates", () => {
+    const session = sampleSession();
+    session.segments = [
+      pipelineSegment("one", {
+        asrStartedAtMs: 0,
+        asrFinalAtMs: 100,
+        processingQueueEnteredAtMs: 100,
+        processingQueueReleasedAtMs: 110,
+        turnBufferReleasedAtMs: 130,
+        translationStartedAtMs: 140,
+        translationFirstTokenAtMs: 170,
+        translationFinalAtMs: 300,
+        ttsStartedAtMs: 310,
+        ttsFirstAudioAtMs: 360,
+        ttsReadyAtMs: 450,
+      }),
+      pipelineSegment("two", {
+        asrStartedAtMs: 1000,
+        asrFinalAtMs: 2500,
+        processingQueueEnteredAtMs: 2500,
+        processingQueueReleasedAtMs: 2700,
+        turnBufferReleasedAtMs: 3000,
+        translationStartedAtMs: 3000,
+        translationFirstTokenAtMs: 3400,
+        translationFinalAtMs: 3600,
+        ttsStartedAtMs: 3600,
+        ttsFirstAudioAtMs: 4300,
+        ttsReadyAtMs: 4500,
+      }),
+    ];
+    session.playbacks = [
+      pipelinePlayback("one", 1, 500),
+      pipelinePlayback("two", 2, 5000),
+    ];
+
+    const report = buildSessionQualityReport(session, new Date(0));
+
+    expect(report.pipeline).toMatchObject({
+      asrFinal: { sampleCount: 2, averageMs: 800, p50Ms: 100,
+        p95Ms: 1500, maxMs: 1500 },
+      translationFirstToken: { p50Ms: 30, p95Ms: 400 },
+      translationFinal: { averageMs: 380, p50Ms: 160, p95Ms: 600 },
+      ttsFirstAudio: { averageMs: 375, p50Ms: 50, p95Ms: 700 },
+      playbackStartEndToEnd: { averageMs: 2250, p50Ms: 500, p95Ms: 4000 },
+    });
+    expect(report.flags).toEqual(expect.arrayContaining([
+      "slow_asr_final",
+      "slow_translation_final",
+      "slow_tts_first_audio",
+    ]));
+  });
 });
+
+function pipelineSegment(
+  id: string,
+  pipelineTiming: NonNullable<SessionRecord["segments"][number]["pipelineTiming"]>,
+) {
+  return { id, sourceText: `source-${id}`, translatedText: `target-${id}`,
+    pipelineTiming };
+}
+
+function pipelinePlayback(id: string, generation: number, startedAtMs: number) {
+  return {
+    id: `playback-${id}`,
+    segmentId: id,
+    sourceLegId: "host-leg",
+    targetLegId: "guest-leg",
+    generation,
+    status: "completed" as const,
+    queuedAt: new Date(startedAtMs - 10).toISOString(),
+    startedAt: new Date(startedAtMs).toISOString(),
+    endedAt: new Date(startedAtMs + 100).toISOString(),
+  };
+}
 
 function playback(
   id: string,

@@ -17,6 +17,10 @@ import { HttpCallSipStatusClient } from "./worker/call-sip-status-client.js";
 import { HttpCallTtsTrackAccessClient } from "./worker/call-tts-track-access-client.js";
 import { CallTranslationWorker } from "./worker/call-translation-worker.js";
 import { CallTranscriptRefiner } from "./worker/call-transcript-refiner.js";
+import {
+  CallDiagnosticsReporter,
+  HttpCallDiagnosticsClient,
+} from "./worker/call-diagnostics-client.js";
 import { LiveKitCallAudioSource } from "./worker/livekit-call-audio-source.js";
 import type { AudioIngestMetrics } from "./worker/audio-ingest-ring-buffer.js";
 import { SpeechPipelineRouter } from "./worker/speech-pipeline-router.js";
@@ -107,12 +111,22 @@ async function main() {
     return;
   }
 
+  const diagnostics = new CallDiagnosticsReporter({
+    env,
+    client: new HttpCallDiagnosticsClient({
+      apiBaseUrl: env.apiBaseUrl,
+      internalApiSecret: env.internalApiSecret,
+      timeoutMs: env.apiTimeoutMs,
+    }),
+  });
+
   const source = new LiveKitCallAudioSource({
     callId: env.callId,
     worker: buildDefaultSpeechPipeline(),
     audioSampleRate: env.audioSampleRate,
     audioFrameSizeMs: env.audioFrameSizeMs,
     audioIngestMaxFrames: env.audioIngestMaxFrames,
+    rtcStatsIntervalMs: env.rtcStatsIntervalMs,
     tokenClient: new HttpCallRoomTokenClient({
       apiBaseUrl: env.apiBaseUrl,
       internalApiSecret: env.internalApiSecret,
@@ -137,12 +151,17 @@ async function main() {
     }, "Translation worker stopped after call ended"),
     onIngestMetrics: (metrics) =>
       logAudioIngestMetrics(metrics, env.audioFrameSizeMs),
+    onDiagnostics: (snapshot) => diagnostics.report(env.callId!, snapshot),
   });
   process.once("SIGINT", () => void source.stop());
   process.once("SIGTERM", () => void source.stop());
-  const token = await source.start();
-  logger.info({ callId: env.callId, roomName: token.roomName }, "Translation Worker joined call room.");
-  await source.waitUntilDisconnected();
+  try {
+    const token = await source.start();
+    logger.info({ callId: env.callId, roomName: token.roomName }, "Translation Worker joined call room.");
+    await source.waitUntilDisconnected();
+  } finally {
+    await source.stop();
+  }
 }
 
 export function isTranslationWorkerEntrypoint(argv = process.argv) {

@@ -15,6 +15,7 @@ import {
   shouldForwardAudioTrack,
 } from "./livekit-call-audio-utils.js";
 import { LiveKitCallAudioTrackRuntime } from "./livekit-call-audio-track-runtime.js";
+import { LiveKitCallDiagnostics } from "./livekit-call-diagnostics.js";
 import { LiveKitCallSipTrackGate } from "./livekit-call-sip-track-gate.js";
 import type {
   LiveKitCallAudioSourceOptions,
@@ -54,8 +55,10 @@ export class LiveKitCallAudioSource {
   private readonly disconnected = deferred<void>();
   private readonly pipelineReady = deferred<void>();
   private readonly sipTrackGate: LiveKitCallSipTrackGate;
+  private readonly diagnostics: LiveKitCallDiagnostics;
 
   constructor(private readonly options: LiveKitCallAudioSourceOptions) {
+    this.diagnostics = new LiveKitCallDiagnostics(options);
     this.sipTrackGate = new LiveKitCallSipTrackGate({
       callId: options.callId,
       statusClient: options.sipStatusClient,
@@ -80,13 +83,12 @@ export class LiveKitCallAudioSource {
       autoSubscribe: true,
       dynacast: false,
     });
+    this.diagnostics.startRtc(room);
     this.attachLiveKitTtsSink(room, rtc, token.callId, token.participantIdentity);
     try {
       await this.startPipeline();
     } catch (error) {
-      this.stopIngest(true);
-      await room.disconnect();
-      await rtc.dispose?.();
+      await this.stop().catch(() => undefined);
       throw error;
     }
     return token;
@@ -97,6 +99,7 @@ export class LiveKitCallAudioSource {
     this.rtc = input.rtc;
     if (input.ttsVoice) this.options.worker.setTtsVoice(input.ttsVoice);
     this.attachRoomListeners(input.room, input.rtc);
+    this.diagnostics.startRtc(input.room);
     this.attachLiveKitTtsSink(
       input.room,
       input.rtc,
@@ -132,6 +135,7 @@ export class LiveKitCallAudioSource {
     this.stopIngest(true);
     this.pipelineReady.resolve();
     await Promise.allSettled([...this.trackTasks]);
+    const diagnostics = await this.diagnostics.stop();
     let failure: unknown;
     try {
       if (this.ownsRoomConnection) await this.room?.disconnect();
@@ -152,6 +156,7 @@ export class LiveKitCallAudioSource {
     } catch (error) {
       failure ??= error;
     } finally {
+      await this.diagnostics.report(diagnostics);
       this.disconnected.resolve();
     }
     if (failure) throw failure;
@@ -206,7 +211,7 @@ export class LiveKitCallAudioSource {
       worker: this.options.worker,
       nextSequence: () => ++this.sequenceByRole[speakerRole],
       isStopped: () => this.ingestStopped,
-      onMetrics: this.options.onIngestMetrics,
+      onMetrics: (metrics) => this.diagnostics.observeIngest(metrics),
       nowMs: this.options.nowMs,
     });
     this.trackRuntimes.add(runtime);

@@ -1,9 +1,14 @@
 import type {
+  CallPlaybackDto,
+  SessionQualityLatencyDistributionDto,
+  SessionQualityPipelineDto,
   SessionQualityProviderDto,
   SessionQualityReportResponse,
   SessionSegmentDto,
+  SpeechPipelineTimingDto,
 } from "@translation/contracts";
 import type { SessionRecord } from "./session-record.js";
+import { runtimeQualitySummary } from "./session-quality-runtime.js";
 
 export function buildSessionQualityReport(
   session: SessionRecord,
@@ -19,6 +24,7 @@ export function buildSessionQualityReport(
     )
     .sort((left, right) => left - right);
   const diagnostics = session.diagnostics;
+  const runtimeQuality = runtimeQualitySummary(session);
   const endpointReasons = endpointReasonCounts(segments);
   const speakerIds = new Set(
     segments
@@ -39,6 +45,8 @@ export function buildSessionQualityReport(
       mixedLanguage: segments.filter((segment) => segment.mixedLanguage).length,
     },
     latency: latencySummary(latencies),
+    ...pipelineSummary(segments, session.playbacks ?? []),
+    ...runtimeQuality.summary,
     ...(diagnostics
       ? {
           audio: {
@@ -82,7 +90,7 @@ export function buildSessionQualityReport(
     ...playbackSummary(session),
     flags: [],
   };
-  report.flags = qualityFlags(report);
+  report.flags = [...qualityFlags(report), ...runtimeQuality.flags];
   return report;
 }
 
@@ -148,6 +156,97 @@ function latencySummary(values: number[]) {
   };
 }
 
+function pipelineSummary(
+  segments: SessionSegmentDto[],
+  playbacks: CallPlaybackDto[],
+) {
+  const durations = (
+    start: keyof SpeechPipelineTimingDto,
+    end: keyof SpeechPipelineTimingDto,
+  ) => segments.flatMap((segment) => {
+    const timing = segment.pipelineTiming;
+    return timing ? duration(timing[start], timing[end]) : [];
+  });
+  const pipeline: SessionQualityPipelineDto = {};
+  addDistribution(pipeline, "asrFinal", durations("asrStartedAtMs", "asrFinalAtMs"));
+  addDistribution(pipeline, "processingQueueWait", durations(
+    "processingQueueEnteredAtMs",
+    "processingQueueReleasedAtMs",
+  ));
+  addDistribution(pipeline, "turnBufferWait", durations(
+    "processingQueueReleasedAtMs",
+    "turnBufferReleasedAtMs",
+  ));
+  addDistribution(pipeline, "translationFirstToken", durations(
+    "translationStartedAtMs",
+    "translationFirstTokenAtMs",
+  ));
+  addDistribution(pipeline, "translationFinal", durations(
+    "translationStartedAtMs",
+    "translationFinalAtMs",
+  ));
+  addDistribution(pipeline, "ttsFirstAudio", durations(
+    "ttsStartedAtMs",
+    "ttsFirstAudioAtMs",
+  ));
+  addDistribution(pipeline, "ttsFinal", durations("ttsStartedAtMs", "ttsReadyAtMs"));
+  addDistribution(pipeline, "captionEndToEnd", durations(
+    "asrStartedAtMs",
+    "translationFinalAtMs",
+  ));
+  addDistribution(pipeline, "audioReadyEndToEnd", durations(
+    "asrStartedAtMs",
+    "ttsFirstAudioAtMs",
+  ));
+  addDistribution(pipeline, "playbackStartEndToEnd", playbackDurations(
+    segments,
+    playbacks,
+  ));
+  return Object.keys(pipeline).length > 0 ? { pipeline } : {};
+}
+
+function playbackDurations(
+  segments: SessionSegmentDto[],
+  playbacks: CallPlaybackDto[],
+) {
+  const starts = new Map(segments.flatMap((segment) => {
+    const value = segment.pipelineTiming?.asrStartedAtMs;
+    return value === undefined ? [] : [[segment.id, value] as const];
+  }));
+  return playbacks.flatMap((playback) => {
+    const start = starts.get(playback.segmentId);
+    const end = playback.startedAt ? Date.parse(playback.startedAt) : Number.NaN;
+    return duration(start, end);
+  });
+}
+
+function duration(start: number | undefined, end: number | undefined): number[] {
+  if (start === undefined || end === undefined || !Number.isFinite(start) ||
+    !Number.isFinite(end) || end < start) return [];
+  return [end - start];
+}
+
+function addDistribution(
+  target: SessionQualityPipelineDto,
+  key: keyof SessionQualityPipelineDto,
+  values: number[],
+) {
+  if (values.length > 0) target[key] = latencyDistribution(values);
+}
+
+function latencyDistribution(values: number[]): SessionQualityLatencyDistributionDto {
+  const ordered = [...values].sort((left, right) => left - right);
+  const summary = latencySummary(ordered);
+  return {
+    ...summary,
+    p50Ms: percentile(ordered, 0.5),
+  };
+}
+
+function percentile(values: number[], ratio: number) {
+  return values[Math.max(0, Math.ceil(values.length * ratio) - 1)] ?? 0;
+}
+
 function endpointReasonCounts(segments: SessionSegmentDto[]) {
   const counts: SessionQualityReportResponse["endpoints"] = {};
   for (const segment of segments) {
@@ -206,6 +305,15 @@ function qualityFlags(report: SessionQualityReportResponse) {
   if ((report.playback?.failed ?? 0) > 0) flags.push("playback_failed");
   if ((report.bargeIn?.p95StopLatencyMs ?? 0) > 300) {
     flags.push("slow_barge_in_stop");
+  }
+  if ((report.pipeline?.asrFinal?.p95Ms ?? 0) > 1400) {
+    flags.push("slow_asr_final");
+  }
+  if ((report.pipeline?.translationFinal?.p95Ms ?? 0) > 500) {
+    flags.push("slow_translation_final");
+  }
+  if ((report.pipeline?.ttsFirstAudio?.p95Ms ?? 0) > 600) {
+    flags.push("slow_tts_first_audio");
   }
   return flags;
 }

@@ -63,7 +63,8 @@ export function sourceForTest(
   worker: RecordingWorker,
   overrides: Pick<
     LiveKitCallAudioSourceOptions,
-    "audioIngestMaxFrames" | "onCallEnded" | "onIngestMetrics"
+    "audioIngestMaxFrames" | "onCallEnded" | "onDiagnostics" |
+      "onIngestMetrics" | "rtcStatsIntervalMs"
   > = {},
 ) {
   return new LiveKitCallAudioSource({

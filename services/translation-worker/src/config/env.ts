@@ -1,4 +1,8 @@
-import { mergeModelRoutingEnv } from "./model-routing-env.js";
+import { hostname } from "node:os";
+import {
+  loadModelRoutingProfileMetadata,
+  mergeModelRoutingEnv,
+} from "./model-routing-env.js";
 import { loadLlmConfig, type LlmConfig } from "@translation/llm";
 import {
   parseDomainLexiconPacks,
@@ -20,6 +24,11 @@ export interface TranslationWorkerEnv {
   audioSampleRate: 16000 | 24000;
   audioFrameSizeMs: number;
   audioIngestMaxFrames: number;
+  rtcStatsIntervalMs: number;
+  diagnosticsNodeId: string;
+  modelRoutingProfile?: string;
+  asrProvider: string;
+  asrModel?: string;
   asrHttpEndpoint: string;
   asrHttpFlushEndpoint?: string;
   asrStreamEndpoint?: string;
@@ -28,6 +37,7 @@ export interface TranslationWorkerEnv {
   asrHttpTimeoutMs: number;
   translationBaseUrl: string;
   translationModel: string;
+  translationProvider: string;
   translationApiKey?: string;
   translationTimeoutMs: number;
   translationMaxTokens: number;
@@ -63,6 +73,7 @@ export interface TranslationWorkerEnv {
 
 export function loadEnv(): TranslationWorkerEnv {
   const env = mergeModelRoutingEnv("translationWorker");
+  const modelProfile = loadModelRoutingProfileMetadata();
   return {
     apiBaseUrl: env.API_BASE_URL ?? "http://127.0.0.1:3100",
     internalApiSecret: env.INTERNAL_API_SECRET,
@@ -78,6 +89,19 @@ export function loadEnv(): TranslationWorkerEnv {
       4,
       200,
     ),
+    rtcStatsIntervalMs: boundedInteger(
+      env.TRANSLATION_WORKER_RTC_STATS_INTERVAL_MS,
+      5_000,
+      1_000,
+      60_000,
+    ),
+    diagnosticsNodeId: boundedIdentifier(
+      env.TRANSLATION_WORKER_NODE_ID,
+      hostname(),
+    ),
+    modelRoutingProfile: modelProfile?.name,
+    asrProvider: modelProfile?.asr?.provider ?? "http_asr",
+    asrModel: modelProfile?.asr?.model,
     asrHttpEndpoint:
       env.ASR_HTTP_ENDPOINT ?? "http://127.0.0.1:8001/asr/transcribe",
     asrHttpFlushEndpoint: env.ASR_HTTP_FLUSH_ENDPOINT,
@@ -94,6 +118,7 @@ export function loadEnv(): TranslationWorkerEnv {
       env.TRANSLATION_MODEL ??
       env.LMSTUDIO_MODEL ??
       "tencent/Hy-MT2-1.8B",
+    translationProvider: modelProfile?.translation?.provider ?? "openai_compatible",
     translationApiKey: env.TRANSLATION_API_KEY ?? env.LMSTUDIO_API_KEY,
     translationTimeoutMs: Number(
       env.TRANSLATION_TIMEOUT_MS ??
@@ -119,8 +144,8 @@ export function loadEnv(): TranslationWorkerEnv {
     ),
     ttsHttpApiKey: env.TTS_HTTP_API_KEY,
     ttsHttpTimeoutMs: Number(env.TTS_HTTP_TIMEOUT_MS ?? 10000),
-    ttsProvider: env.TTS_PROVIDER,
-    ttsModel: env.TTS_MODEL,
+    ttsProvider: env.TTS_PROVIDER ?? modelProfile?.tts?.provider,
+    ttsModel: env.TTS_MODEL ?? modelProfile?.tts?.model,
     ttsVoice: parseTtsVoiceConfig(env),
     ttsAudioSinkEndpoint: env.TTS_AUDIO_SINK_ENDPOINT,
     ttsAudioSinkInterruptEndpoint: env.TTS_AUDIO_SINK_INTERRUPT_ENDPOINT,
@@ -140,6 +165,12 @@ export function loadEnv(): TranslationWorkerEnv {
     llmConfig: loadLlmConfig(env),
     duplexConfig: parseDuplexConfig(env),
   };
+}
+
+function boundedIdentifier(value: string | undefined, fallback: string) {
+  const normalized = value?.trim() || fallback.trim() || "translation-worker";
+  return Buffer.byteLength(normalized) <= 128
+    ? normalized : normalized.slice(0, 32);
 }
 
 function parseDuplexConfig(

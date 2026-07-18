@@ -31,6 +31,10 @@ describe("translation worker env", () => {
     expect(env.ttsProvider).toBe("voxcpm2");
     expect(env.ttsModel).toBe("VoxCPM2");
     expect(env.ttsHttpEndpoint).toBe("http://models.local:8002/tts/synthesize");
+    expect(env.modelRoutingProfile).toBe("domestic");
+    expect(env.asrProvider).toBe("http_fireredasr2_aed");
+    expect(env.asrModel).toBe("FireRedASR2-AED");
+    expect(env.translationProvider).toBe("hymt2_self_hosted");
   });
 
   it("lets explicit environment variables override model routing defaults", () => {
@@ -110,6 +114,14 @@ describe("translation worker env", () => {
 
     process.env = { TRANSLATION_WORKER_AUDIO_INGEST_MAX_FRAMES: "4.5" };
     expect(loadEnv().audioIngestMaxFrames).toBe(20);
+  });
+
+  it("bounds the RTC sampling interval", () => {
+    process.env = { TRANSLATION_WORKER_RTC_STATS_INTERVAL_MS: "10000" };
+    expect(loadEnv().rtcStatsIntervalMs).toBe(10000);
+
+    process.env = { TRANSLATION_WORKER_RTC_STATS_INTERVAL_MS: "999" };
+    expect(loadEnv().rtcStatsIntervalMs).toBe(5000);
   });
 
   it("bounds the Agent node TTS prewarm timeout", () => {

@@ -13,6 +13,11 @@ import type {
   SpeechPipelineTimingDto,
 } from "../realtime/diagnostics.js";
 import type { SessionReviewResponse } from "./realtime-review.js";
+import type {
+  SessionQualityIngestDto,
+  SessionQualityModelFingerprintDto,
+  SessionQualityRtcDto,
+} from "./session-quality.js";
 
 export type {
   SaveTermbaseTermRequest,
@@ -25,6 +30,11 @@ export type {
   TermbaseTermResponse,
   TermbaseTermsResponse,
 } from "./realtime-review.js";
+export type {
+  SessionQualityIngestDto,
+  SessionQualityModelFingerprintDto,
+  SessionQualityRtcDto,
+} from "./session-quality.js";
 
 export interface SessionStatusResponse {
   sessionId: string;
@@ -218,6 +228,27 @@ export interface SessionQualityProviderDto {
   segmentCount: number;
 }
 
+export interface SessionQualityLatencyDistributionDto {
+  sampleCount: number;
+  averageMs: number;
+  p50Ms: number;
+  p95Ms: number;
+  maxMs: number;
+}
+
+export interface SessionQualityPipelineDto {
+  asrFinal?: SessionQualityLatencyDistributionDto;
+  processingQueueWait?: SessionQualityLatencyDistributionDto;
+  turnBufferWait?: SessionQualityLatencyDistributionDto;
+  translationFirstToken?: SessionQualityLatencyDistributionDto;
+  translationFinal?: SessionQualityLatencyDistributionDto;
+  ttsFirstAudio?: SessionQualityLatencyDistributionDto;
+  ttsFinal?: SessionQualityLatencyDistributionDto;
+  captionEndToEnd?: SessionQualityLatencyDistributionDto;
+  audioReadyEndToEnd?: SessionQualityLatencyDistributionDto;
+  playbackStartEndToEnd?: SessionQualityLatencyDistributionDto;
+}
+
 export interface SessionQualityReportResponse {
   version: 1;
   sessionId: string;
@@ -237,6 +268,10 @@ export interface SessionQualityReportResponse {
     p95Ms: number;
     maxMs: number;
   };
+  pipeline?: SessionQualityPipelineDto;
+  ingest?: SessionQualityIngestDto;
+  rtc?: SessionQualityRtcDto;
+  modelFingerprints?: SessionQualityModelFingerprintDto[];
   audio?: {
     receivedFrames: number;
     droppedFrames: number;

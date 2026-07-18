@@ -1,4 +1,5 @@
 import type { RealtimeSessionDiagnosticsDto } from "@translation/contracts";
+import { parseRealtimeNodeDiagnostics } from "./realtime-node-diagnostics.js";
 
 export function parseRealtimeDiagnostics(
   value: unknown,
@@ -15,6 +16,15 @@ export function parseRealtimeDiagnostics(
   if (diagnostics.vad !== undefined && !isVadDiagnostics(diagnostics.vad)) {
     return undefined;
   }
+  const nodes = Array.isArray(diagnostics.nodes)
+    ? diagnostics.nodes.map(parseRealtimeNodeDiagnostics)
+    : undefined;
+  if (diagnostics.nodes !== undefined &&
+    (!Array.isArray(diagnostics.nodes) || diagnostics.nodes.length > 16 ||
+      nodes?.some((node) => !node) ||
+      new Set(nodes?.map((node) => node!.runtimeId)).size !== nodes?.length)) {
+    return undefined;
+  }
   const audio = diagnostics.audio!;
   return {
     version: 1,
@@ -27,6 +37,7 @@ export function parseRealtimeDiagnostics(
       ? { speakerTurns: sanitizedSpeakerTurns(diagnostics.speakerTurns) }
       : {}),
     ...(diagnostics.vad ? { vad: sanitizedVad(diagnostics.vad) } : {}),
+    ...(nodes ? { nodes: nodes as NonNullable<RealtimeSessionDiagnosticsDto["nodes"]> } : {}),
   };
 }
 

@@ -8,6 +8,21 @@ interface ModelRoutingConfig {
 
 interface ModelRoutingProfile {
   env?: Record<string, Record<string, unknown>>;
+  asr?: ModelRoutingIdentity;
+  translation?: ModelRoutingIdentity;
+  tts?: ModelRoutingIdentity;
+}
+
+interface ModelRoutingIdentity {
+  provider?: string;
+  model?: string;
+}
+
+export interface ModelRoutingProfileMetadata {
+  name: string;
+  asr?: ModelRoutingIdentity;
+  translation?: ModelRoutingIdentity;
+  tts?: ModelRoutingIdentity;
 }
 
 const DEFAULT_MODEL_ROUTING_FILE = "release/domestic/model-routing.json";
@@ -37,6 +52,26 @@ export function loadModelRoutingEnvGroup(
   if (!profile) throw new Error(`Model routing profile not found: ${profileName ?? ""}`);
 
   return stringEnvRecord(profile.env?.[groupName] ?? {});
+}
+
+export function loadModelRoutingProfileMetadata(
+  env: NodeJS.ProcessEnv = process.env,
+): ModelRoutingProfileMetadata | undefined {
+  if (!env.MODEL_ROUTING_FILE && !env.MODEL_ROUTING_PROFILE) return undefined;
+  const filePath = resolveModelRoutingFile(
+    env.MODEL_ROUTING_FILE ?? DEFAULT_MODEL_ROUTING_FILE,
+  );
+  const config = JSON.parse(readFileSync(filePath, "utf8")) as ModelRoutingConfig;
+  const name = env.MODEL_ROUTING_PROFILE ?? config.activeProfile;
+  const profile = name ? config.profiles?.[name] : undefined;
+  if (!name || !profile) throw new Error(`Model routing profile not found: ${name ?? ""}`);
+  return {
+    name,
+    ...(profile.asr ? { asr: { ...profile.asr } } : {}),
+    ...(profile.translation
+      ? { translation: { ...profile.translation } } : {}),
+    ...(profile.tts ? { tts: { ...profile.tts } } : {}),
+  };
 }
 
 function resolveModelRoutingFile(filePath: string) {

@@ -128,9 +128,66 @@ export interface RealtimeVadDiagnosticsDto {
   endpointPolicy: RealtimeAsrEndpointPolicyDto;
 }
 
+export interface RealtimeAudioLegDiagnosticsDto {
+  legId: string;
+  speakerRole: "host" | "guest";
+  dropPolicy: "drop_oldest";
+  capacityFrames: number;
+  receivedFrames: number;
+  dequeuedFrames: number;
+  processedFrames: number;
+  failedFrames: number;
+  inFlightFrames: number;
+  droppedFrames: number;
+  overflowDroppedFrames: number;
+  shutdownDiscardedFrames: number;
+  sequenceGapFrames: number;
+  queueDepthFrames: number;
+  highWatermarkFrames: number;
+  backpressureEvents: number;
+  firstReceivedSequence?: number;
+  lastReceivedSequence?: number;
+  lastProcessedSequence?: number;
+}
+
+export interface RealtimeRtcSampleDto {
+  observedAtMs: number;
+  rttMs?: number;
+  jitterMs?: number;
+  packetsReceived?: number;
+  packetsLost?: number;
+}
+
+export interface RealtimeRtcDiagnosticsDto {
+  attemptedSampleCount: number;
+  unavailableSampleCount: number;
+  discardedSampleCount: number;
+  samples: RealtimeRtcSampleDto[];
+}
+
+export interface RealtimeModelFingerprintDto {
+  stage: "pipeline" | "asr" | "translation" | "tts";
+  provider: string;
+  model?: string;
+  profile?: string;
+  fingerprint: string;
+}
+
+export interface RealtimeNodeDiagnosticsDto {
+  nodeId: string;
+  runtimeId: string;
+  generation?: number;
+  startedAtMs: number;
+  endedAtMs: number;
+  audioLegs: RealtimeAudioLegDiagnosticsDto[];
+  rtc?: RealtimeRtcDiagnosticsDto;
+  modelFingerprints: RealtimeModelFingerprintDto[];
+}
+
 export interface RealtimeSessionDiagnosticsDto {
   version: 1;
   audio: RealtimeAudioDiagnosticsDto;
   speakerTurns?: RealtimeSpeakerTurnDiagnosticsDto;
   vad?: RealtimeVadDiagnosticsDto;
+  nodes?: RealtimeNodeDiagnosticsDto[];
 }

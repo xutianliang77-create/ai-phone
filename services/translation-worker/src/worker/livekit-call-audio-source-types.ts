@@ -1,4 +1,8 @@
 import type { AudioIngestMetrics } from "./audio-ingest-ring-buffer.js";
+import type {
+  RealtimeAudioLegDiagnosticsDto,
+  RealtimeRtcDiagnosticsDto,
+} from "@translation/contracts";
 import type { CallRoomEndedError } from "./call-room-event-client.js";
 import type { HttpCallRoomTokenClient } from "./call-room-token-client.js";
 import type { CallSipStatusReporter } from "./call-sip-status-client.js";
@@ -21,6 +25,8 @@ export interface LiveKitCallAudioSourceOptions {
   onError?: (error: unknown) => void;
   onCallEnded?: (error: CallRoomEndedError) => void;
   onIngestMetrics?: (metrics: AudioIngestMetrics) => void;
+  onDiagnostics?: (snapshot: LiveKitCallDiagnosticsSnapshot) => void | Promise<void>;
+  rtcStatsIntervalMs?: number;
   loadRtcNode?: () => Promise<RtcNodeModule>;
   nowMs?: () => number;
 }
@@ -47,9 +53,15 @@ export interface RtcRoom extends LiveKitTtsRoom {
     dynacast: boolean;
   }): Promise<void>;
   disconnect(): Promise<void>;
+  getRtcStats?(): Promise<unknown>;
   remoteParticipants?: Map<string, {
     trackPublications?: Map<string, { track?: unknown }>;
   }>;
+}
+
+export interface LiveKitCallDiagnosticsSnapshot {
+  audioLegs: RealtimeAudioLegDiagnosticsDto[];
+  rtc?: RealtimeRtcDiagnosticsDto;
 }
 
 export interface RtcAudioFrame {

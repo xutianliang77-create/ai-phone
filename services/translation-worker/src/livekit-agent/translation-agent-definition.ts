@@ -7,6 +7,10 @@ import { HttpCallSipStatusClient } from "../worker/call-sip-status-client.js";
 import { HttpCallSipControlClient } from "../worker/call-sip-control-client.js";
 import { HttpCallTtsTrackAccessClient } from "../worker/call-tts-track-access-client.js";
 import {
+  CallDiagnosticsReporter,
+  HttpCallDiagnosticsClient,
+} from "../worker/call-diagnostics-client.js";
+import {
   LiveKitCallAudioSource,
   type RtcNodeModule,
   type RtcRoom,
@@ -68,12 +72,22 @@ export default defineAgent<TranslationAgentProcessData>({
       }),
       onError: (error) => logger.warn({ err: error }, "SIP DTMF control failed"),
     });
+    const diagnostics = new CallDiagnosticsReporter({
+      env,
+      generation: snapshot.generation,
+      client: new HttpCallDiagnosticsClient({
+        apiBaseUrl: env.apiBaseUrl,
+        internalApiSecret: env.internalApiSecret,
+        timeoutMs: env.apiTimeoutMs,
+      }),
+    });
     const source = new LiveKitCallAudioSource({
       callId: snapshot.callId,
       worker: buildDefaultSpeechPipeline(),
       audioSampleRate: env.audioSampleRate,
       audioFrameSizeMs: env.audioFrameSizeMs,
       audioIngestMaxFrames: env.audioIngestMaxFrames,
+      rtcStatsIntervalMs: env.rtcStatsIntervalMs,
       sipStatusClient: new HttpCallSipStatusClient({
         apiBaseUrl: env.apiBaseUrl,
         internalApiSecret: env.internalApiSecret,
@@ -92,6 +106,7 @@ export default defineAgent<TranslationAgentProcessData>({
       }, "Translation worker stopped after call ended"),
       onIngestMetrics: (metrics) =>
         logAudioIngestMetrics(metrics, env.audioFrameSizeMs),
+      onDiagnostics: (report) => diagnostics.report(snapshot.callId, report),
     });
     let heartbeat: NodeJS.Timeout | undefined;
     let endingSent = false;

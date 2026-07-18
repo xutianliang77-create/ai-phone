@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { AudioIngestMetrics } from "./audio-ingest-ring-buffer.js";
+import type { LiveKitCallDiagnosticsSnapshot } from
+  "./livekit-call-audio-source-types.js";
 import { CallRoomEndedError } from "./call-room-event-client.js";
 import {
   CallEndedWorker,
@@ -20,9 +22,11 @@ describe("LiveKitCallAudioSource ingest", () => {
       if (frame.sequence === 1) await firstFrameGate;
     });
     const metrics: AudioIngestMetrics[] = [];
+    const diagnostics: LiveKitCallDiagnosticsSnapshot[] = [];
     const source = sourceForTest(rtc, worker, {
       audioIngestMaxFrames: 2,
       onIngestMetrics: (snapshot) => metrics.push(snapshot),
+      onDiagnostics: (snapshot) => diagnostics.push(snapshot),
     });
 
     await source.start();
@@ -67,6 +71,15 @@ describe("LiveKitCallAudioSource ingest", () => {
       droppedFrames: 2,
       queueDepthFrames: 0,
     }));
+    expect(diagnostics).toEqual([expect.objectContaining({
+      audioLegs: [expect.objectContaining({
+        legId: "guest:1",
+        receivedFrames: 5,
+        processedFrames: 3,
+        droppedFrames: 2,
+        sequenceGapFrames: 2,
+      })],
+    })]);
   });
 
   it("treats call-ended publication as a clean terminal signal", async () => {
