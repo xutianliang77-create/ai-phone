@@ -28,11 +28,11 @@ describe("enterprise theme and icon contract", () => {
 
   it("registers the shared type, radius, control and icon sizes", () => {
     expect(tokensCss).toContain("--radius: 8px");
-    expect(tokensCss).toContain("--font-headline-small-size: 24px");
-    expect(tokensCss).toContain("--font-body-medium-size: 14px");
-    expect(tokensCss).toContain("--control-height: 48px");
-    expect(tokensCss).toContain("--touch-target: 44px");
-    expect(tokensCss).toContain("--icon-size: 20px");
+    expect(tokensCss).toContain("--font-headline-small-size: 1.5rem");
+    expect(tokensCss).toContain("--font-body-medium-size: 0.875rem");
+    expect(tokensCss).toContain("--control-height: 3rem");
+    expect(tokensCss).toContain("--touch-target: 2.75rem");
+    expect(tokensCss).toContain("--icon-size: 1.25rem");
     expect(flutterTheme).toContain("BorderRadius.circular(8)");
     expect(flutterTheme).toContain("fontSize: 24");
     expect(flutterTheme).toContain("fontSize: 14");

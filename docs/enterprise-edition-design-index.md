@@ -1,6 +1,6 @@
 # 无界AI企业版设计文档索引
 
-版本：v1.19
+版本：v1.20
 日期：2026-07-19
 状态：SaaS 详细设计基线，已纳入统一通讯平台和 PostgreSQL Primary 演进
 
@@ -67,6 +67,9 @@ tenant/route、Provider、subscription、budget 和 usage aggregate 接入企业
 `ENT-UI-009` 已增加持久化 system/light/dark 主题、320/600/960/1280 响应式规则、动态字号、跳至主内容、
 路由焦点、可聚焦横向表格与明确 ARIA 语义；本轮只形成静态代码候选，未完成浏览器、200% 缩放、键盘、
 axe、视觉回归或真机验收，不能据此宣称 WCAG AA 或生产门禁通过。
+`ENT-UI-010` 已定义三引擎 Playwright 角色/路由/响应式/主题/键盘/axe/视觉门禁、固定 release matrix、
+bundle 敏感信息与 clean commit 扫描，以及签名租户上下文中的脱敏客户端错误/性能事件。测试和视觉基线本轮
+未执行，任务保持 `in_progress`，不能据此宣称 AC-UI 或 Web release gate 已通过。
 
 ## 3. 继承文档
 

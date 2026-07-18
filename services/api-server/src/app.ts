@@ -176,6 +176,7 @@ export async function buildApp(dependencies: {
   );
   await registerEnterpriseObservabilityRoutes(
     app,
+    tenantRouteService,
     enterpriseRepositoryRuntime,
   );
   await registerEnterpriseAuditExportRoutes(

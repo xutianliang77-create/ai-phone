@@ -17,7 +17,8 @@ export function LoginPage() {
     setNotice("");
     try {
       const result = await requestCode(phone);
-      const localCode = result.debugCode ? ` 开发环境验证码：${result.debugCode}` : "";
+      const localCode = import.meta.env.DEV && result.debugCode
+        ? ` 开发环境验证码：${result.debugCode}` : "";
       setNotice(`验证码已发送至 ${result.phoneMasked}。${localCode}`);
     } catch (caught) {
       setError(errorMessage(caught));

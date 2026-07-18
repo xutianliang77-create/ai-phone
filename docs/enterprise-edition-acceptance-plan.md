@@ -1,6 +1,6 @@
 # 无界AI企业版验收任务与计划
 
-版本：v1.24
+版本：v1.25
 日期：2026-07-19
 状态：可执行验收计划，已对齐统一通讯平台和 PostgreSQL Primary 收敛
 
@@ -139,6 +139,13 @@ Provider 链路成功。
 高对比和 forced-colors 基础规则。浅色风险小字使用对比度 5.94:1 的独立前景令牌；该数值只证明该令牌与白色
 背景的静态计算，不代表完整页面已通过 WCAG AA。按本轮指令未执行浏览器截图/布局断言、200% 缩放、动态字体、
 横屏、键盘路径、axe 或视觉回归，因此 AC-UI-008/009/010 尚未通过，任务保持 `in_progress`。
+
+`ENT-UI-010` 当前代码候选定义 Chromium/Firefox/WebKit、九角色导航、直接 URL、320/600/960/1280/1440、
+浅深主题、200% 动态字号、键盘 skip link、axe A/AA、截图回归和脱敏客户端事件用例。发布脚本强制固定 matrix、
+JavaScript/CSS 预算、无 source map、无本地/内部地址、私钥、cloud key、fixture/debug code，且 release version/commit
+必须嵌入 bundle、匹配 clean HEAD。错误上报 body 不接收 tenantId/message/stack/token，服务端以 membership、
+`tenant:read` 和签名 route document 重建 tenant/region/cell/epoch 后写结构化日志。按本轮指令未运行 Vitest、API、
+Playwright、axe 或视觉回归，也未生成/审批截图基线，因此 AC-UI-001..012 和正式 release gate 均未通过。
 
 `ENT-UI-006` 当前代码候选覆盖知识源、术语包、话术模板三类稳定资源和修订列表，显式显示
 draft/review/published/expired、生效范围和只读快照；所有内容请求携带当前 tenant 与签名 route document，

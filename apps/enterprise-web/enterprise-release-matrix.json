@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "roles": [
+    "owner",
+    "admin",
+    "marketing_manager",
+    "marketing_member",
+    "support_manager",
+    "support_agent",
+    "meeting_host",
+    "member",
+    "auditor"
+  ],
+  "pageStates": [
+    "loading",
+    "empty",
+    "not_ready",
+    "degraded",
+    "forbidden",
+    "conflict",
+    "processing",
+    "failed"
+  ],
+  "viewports": [320, 600, 960, 1280, 1440],
+  "themes": ["light", "dark"],
+  "browserEngines": ["chromium", "firefox", "webkit"],
+  "requiredSuites": ["unit", "contract", "role-route", "responsive", "visual", "keyboard", "axe", "bundle", "telemetry"]
+}

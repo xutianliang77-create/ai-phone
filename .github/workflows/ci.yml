@@ -14,9 +14,33 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 24
           cache: npm
       - run: npm ci
       - run: npm run typecheck
       - run: npm test
       - run: npm run check:lines
+
+  enterprise-web-release:
+    runs-on: ubuntu-latest
+    env:
+      VITE_ENTERPRISE_RELEASE_VERSION: 0.1.0
+      VITE_ENTERPRISE_RELEASE_COMMIT: ${{ github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run release:gate:static -w @translation/enterprise-web
+      - run: npm run test:unit -w @translation/enterprise-web
+      - run: npx playwright install --with-deps chromium firefox webkit
+      - run: npm run test:e2e -w @translation/enterprise-web
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: enterprise-web-release-evidence
+          path: apps/enterprise-web/test-results
+          if-no-files-found: error
+          retention-days: 14

@@ -1,6 +1,6 @@
 # 无界AI企业版详细技术设计
 
-版本：v1.26
+版本：v1.27
 日期：2026-07-19
 状态：统一通讯平台与 PostgreSQL Primary 收敛详细技术方案
 
@@ -1373,6 +1373,22 @@ SDK 默认链/工作负载身份，或同时提供 Access Key 与 Secret Key，�
 
 以上只构成 AC-UI-008/009/010 的代码候选。本批未执行真实浏览器、320/600/960/1280/1440 截图、200% 缩放、
 动态字体、横屏、键盘流程、axe、forced-colors 或视觉回归，任务保持 `in_progress`。
+
+### 19.4 Web release gate 与客户端遥测
+
+Enterprise Web release matrix 固定九角色、八页面状态、320/600/960/1280/1440、light/dark 和
+Chromium/Firefox/WebKit；Vitest 负责状态/契约，Playwright 负责 route discovery、直接 URL、页面溢出、主题持久化、
+动态字体、键盘、axe 和截图。视觉 snapshot 缺失或差异超过0.5%、任一浏览器失败、测试被 `only`、bundle 超过
+512KiB JavaScript/96KiB CSS、存在 source map/fixture/debug code/本地或内部地址/密钥时，release candidate 失败闭合。
+发布 version/commit 必须编译进入 bundle、匹配 clean Git HEAD；CI 使用 Node 24 并保留 trace、截图、视频和 JSON/HTML 结果。
+
+浏览器只上报 `kind/code/path/appVersion/releaseCommit/occurredAt` 及本地 SHA-256 截断 fingerprint，或有界 performance
+metric；message、stack、query、tenantId、token 和任意额外字段不发送。`POST /enterprise/v1/observability/client-events`
+要求 Bearer、active membership、`tenant:read` 和当前签名 route document，服务端补 tenant/homeRegion/cell/routeEpoch/
+actorRole/traceId 后写结构化 error/info 日志。遥测传输失败被吞掉，不能递归产生用户可见错误或伪造上报成功。
+
+当前只完成自动化与门禁实现、typecheck、生产构建和静态扫描；未运行测试、未生成视觉基线、未验证 CI artifact，
+因此 `ENT-UI-010` 保持 `in_progress`。
 
 ## 20. 错误、重试和客户端动作
 

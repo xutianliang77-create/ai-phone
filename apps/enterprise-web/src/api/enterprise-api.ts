@@ -1,5 +1,7 @@
 import type {
   EnterpriseContextResponse,
+  EnterpriseClientEventRequest,
+  EnterpriseClientEventResponse,
   EnterpriseKnowledgeSourceDto,
   EnterpriseKnowledgeSourceType,
   EnterpriseKnowledgeVersionDto,
@@ -51,6 +53,10 @@ export interface EnterpriseApi extends EnterpriseMemberApi, EnterpriseSettingsAp
   getTenantRoute(token: string, tenantId: string): Promise<EnterpriseTenantRouteDocument>;
   getContext(token: string, tenantId: string): Promise<EnterpriseContextResponse>;
   getTenantJob(token: string, jobId: string): Promise<EnterpriseTenantJobResponse>;
+  reportClientEvent(
+    context: EnterpriseContentRequestContext,
+    event: EnterpriseClientEventRequest,
+  ): Promise<EnterpriseClientEventResponse>;
   listKnowledgeSources(context: EnterpriseContentRequestContext): Promise<{
     sources: EnterpriseKnowledgeSourceDto[];
   }>;
@@ -173,6 +179,14 @@ export function createEnterpriseApi(
     getTenantJob: (token, jobId) => request(
       `/saas/v1/tenant-jobs/${encodeURIComponent(jobId)}`,
       { headers: authorization(token) },
+    ),
+    reportClientEvent: (context, event) => request(
+      "/enterprise/v1/observability/client-events",
+      {
+        method: "POST",
+        headers: contentHeaders(context),
+        body: JSON.stringify(event),
+      },
     ),
     listKnowledgeSources: (context) => request(
       "/enterprise/v1/knowledge/sources",

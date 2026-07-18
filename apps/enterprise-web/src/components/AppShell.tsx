@@ -19,6 +19,7 @@ import { DashboardPage } from "../pages/DashboardPage.js";
 import { AuditPage } from "../pages/AuditPage.js";
 import { AnalyticsPage } from "../pages/AnalyticsPage.js";
 import { PageFrame } from "./PageFrame.js";
+import { EnterpriseTelemetry } from "./EnterpriseTelemetry.js";
 import {
   useEnterpriseTheme,
   type EnterpriseThemePreference,
@@ -44,6 +45,7 @@ export function AppShell() {
 
   return (
     <div className="app-shell">
+      <EnterpriseTelemetry />
       <a className="skip-link" href="#enterprise-main">跳至主要内容</a>
       <aside className="sidebar">
         <div className="brand-lockup">

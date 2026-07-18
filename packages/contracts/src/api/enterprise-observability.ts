@@ -13,6 +13,31 @@ import type {
   ProviderOperationType,
 } from "../communication/provider-operations.js";
 
+export const enterpriseClientEventKinds = [
+  "error",
+  "unhandled_rejection",
+  "performance",
+] as const;
+
+export type EnterpriseClientEventKind = typeof enterpriseClientEventKinds[number];
+
+export interface EnterpriseClientEventRequest {
+  kind: EnterpriseClientEventKind;
+  code: string;
+  routePath: string;
+  appVersion: string;
+  releaseCommit: string;
+  occurredAt: string;
+  fingerprint?: string;
+  metricName?: string;
+  value?: number;
+}
+
+export interface EnterpriseClientEventResponse {
+  accepted: true;
+  traceId: string;
+}
+
 export interface EnterpriseSessionTraceReportResponse {
   generatedAt: string;
   session: {
