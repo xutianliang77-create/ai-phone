@@ -1,11 +1,12 @@
 import { isTerminalRealtimeSessionState } from "@translation/contracts";
-import { getStoreSnapshot } from "../../infrastructure/storage/json-store.js";
-import { releaseUsageHold } from "../usage/usage.service.js";
+import { releaseUsageHold } from "../usage/usage-hold-runtime.service.js";
 import {
   endCallLegs,
   endSession,
   findSession,
-} from "./sessions.repository.js";
+} from "./sessions-runtime.repository.js";
+import { listStaleSessionCandidates } from
+  "./sessions-recovery.repository.js";
 import { withSessionWriteLock } from "./session-write-coordinator.js";
 
 export interface StaleSessionRecoveryResult {
@@ -20,19 +21,18 @@ export async function recoverStaleRealtimeSessions(options: {
 } = {}): Promise<StaleSessionRecoveryResult> {
   const now = options.now ?? new Date();
   const graceMs = Math.max(0, options.graceSeconds ?? 300) * 1000;
-  const store = getStoreSnapshot();
   let inspectedCount = 0;
   let recoveredCount = 0;
   let releasedHoldCount = 0;
 
-  const candidateIds = store.sessions
-    .filter((session) => !isTerminalRealtimeSessionState(session.status))
+  const cutoff = new Date(now.getTime() - graceMs);
+  const candidateIds = (await listStaleSessionCandidates(cutoff))
     .map((session) => session.id);
   inspectedCount = candidateIds.length;
 
   await Promise.all(candidateIds.map((sessionId) =>
-    withSessionWriteLock(sessionId, () => {
-      const session = findSession(sessionId);
+    withSessionWriteLock(sessionId, async () => {
+      const session = await findSession(sessionId);
       if (!session || isTerminalRealtimeSessionState(session.status)) return;
       const lastActivityMs = Date.parse(
         session.lastActivityAt ?? session.createdAt,
@@ -40,13 +40,13 @@ export async function recoverStaleRealtimeSessions(options: {
       if (!Number.isFinite(lastActivityMs) ||
           now.getTime() - lastActivityMs <= graceMs) return;
 
-      const result = endSession(session.id, now);
+      const result = await endSession(session.id, now);
       if (!result || result.wasAlreadyEnded) return;
       if (result.session.endedAt) {
-        endCallLegs(result.session.id, result.session.endedAt);
+        await endCallLegs(result.session.id, result.session.endedAt);
       }
       recoveredCount += 1;
-      if (releaseUsageHold(session.userId, session.id)) {
+      if (await releaseUsageHold(session.userId, session.id)) {
         releasedHoldCount += 1;
       }
     }),

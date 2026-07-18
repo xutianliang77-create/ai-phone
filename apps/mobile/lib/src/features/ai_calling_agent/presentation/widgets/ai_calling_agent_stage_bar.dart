@@ -9,7 +9,13 @@ class AiCallingAgentStageBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final active = switch (status) {
       'authorized' => 1,
-      'queued' || 'in_progress' || 'completed' || 'failed' || 'cancelled' => 2,
+      'queued' ||
+      'dispatching' ||
+      'reconciliation_required' ||
+      'in_progress' ||
+      'completed' ||
+      'failed' ||
+      'cancelled' => 2,
       _ => 0,
     };
     return Row(

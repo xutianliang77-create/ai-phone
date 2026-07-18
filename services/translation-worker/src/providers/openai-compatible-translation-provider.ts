@@ -1,5 +1,6 @@
 import type { CallRoomTranslationLanguage } from "@translation/contracts";
 import type { CallTranslationProvider } from "../worker/types.js";
+import { stripRepeatedContextPrefix } from "../worker/translation-context.js";
 
 export interface OpenAiCompatibleTranslationProviderOptions {
   baseUrl: string;
@@ -7,6 +8,7 @@ export interface OpenAiCompatibleTranslationProviderOptions {
   apiKey?: string;
   timeoutMs: number;
   maxTokens: number;
+  streaming?: boolean;
   fetchFn?: typeof fetch;
 }
 
@@ -23,27 +25,74 @@ export class OpenAiCompatibleTranslationProvider implements CallTranslationProvi
     this.fetchFn = options.fetchFn ?? fetch;
   }
 
-  async translate(input: {
-    text: string;
-    sourceLanguage: CallRoomTranslationLanguage;
-    targetLanguage: CallRoomTranslationLanguage;
-  }) {
+  async translate(
+    input: Parameters<CallTranslationProvider["translate"]>[0],
+  ) {
     const first = await this.requestTranslation(input, false);
     const firstValidation = validateTranslation(first);
-    if (firstValidation.ok) return firstValidation.text;
+    if (firstValidation.ok) {
+      return stripRepeatedContextPrefix(firstValidation.text, input.previousSegments);
+    }
 
     const retry = await this.requestTranslation(input, true);
     const retryValidation = validateTranslation(retry);
-    if (retryValidation.ok) return retryValidation.text;
+    if (retryValidation.ok) {
+      return stripRepeatedContextPrefix(retryValidation.text, input.previousSegments);
+    }
 
     throw new Error(retryValidation.message);
   }
 
-  private async requestTranslation(input: {
-    text: string;
-    sourceLanguage: CallRoomTranslationLanguage;
-    targetLanguage: CallRoomTranslationLanguage;
-  }, repairAttempt: boolean) {
+  async *translateStream(
+    input: Parameters<CallTranslationProvider["translate"]>[0],
+  ) {
+    if (!this.options.streaming) {
+      yield { type: "final" as const, text: await this.translate(input) };
+      return;
+    }
+    const response = await this.fetchWithTimeout(this.chatUrl(), {
+      method: "POST",
+      headers: this.headers(),
+      body: JSON.stringify({
+        model: this.options.model,
+        temperature: 0,
+        max_tokens: this.options.maxTokens,
+        stream: true,
+        messages: [
+          {
+            role: "system",
+            content: systemPrompt(input.sourceLanguage, input.targetLanguage),
+          },
+          { role: "user", content: sourceTextPayload(input) },
+        ],
+      }),
+    }, input.signal);
+    if (!response.ok || !response.body) {
+      throw new Error(`Translation stream returned HTTP ${response.status}`);
+    }
+    let text = "";
+    let stablePrefix = "";
+    for await (const delta of parseOpenAiSse(response.body, input.signal)) {
+      text += delta;
+      yield { type: "delta" as const, text: delta };
+      const nextStable = sentenceStablePrefix(text);
+      if (nextStable.length > stablePrefix.length) {
+        stablePrefix = nextStable;
+        yield { type: "stable_prefix" as const, text: stablePrefix };
+      }
+    }
+    const validation = validateTranslation(stripThinking(text));
+    if (!validation.ok) throw new Error(validation.message);
+    yield {
+      type: "final" as const,
+      text: stripRepeatedContextPrefix(validation.text, input.previousSegments),
+    };
+  }
+
+  private async requestTranslation(
+    input: Parameters<CallTranslationProvider["translate"]>[0],
+    repairAttempt: boolean,
+  ) {
     const response = await this.fetchWithTimeout(this.chatUrl(), {
       method: "POST",
       headers: this.headers(),
@@ -56,10 +105,10 @@ export class OpenAiCompatibleTranslationProvider implements CallTranslationProvi
             role: "system",
             content: systemPrompt(input.sourceLanguage, input.targetLanguage, repairAttempt),
           },
-          { role: "user", content: sourceTextPayload(input.text) },
+          { role: "user", content: sourceTextPayload(input) },
         ],
       }),
-    });
+    }, input.signal);
     if (!response.ok) {
       throw new Error(`Translation provider returned HTTP ${response.status}`);
     }
@@ -68,13 +117,21 @@ export class OpenAiCompatibleTranslationProvider implements CallTranslationProvi
     return stripThinking(message?.content ?? "");
   }
 
-  private async fetchWithTimeout(url: string, init: RequestInit) {
+  private async fetchWithTimeout(
+    url: string,
+    init: RequestInit,
+    externalSignal: AbortSignal,
+  ) {
     const controller = new AbortController();
+    const abort = () => controller.abort(externalSignal.reason);
+    if (externalSignal.aborted) abort();
+    externalSignal.addEventListener("abort", abort, { once: true });
     const timer = setTimeout(() => controller.abort(), this.options.timeoutMs);
     try {
       return await this.fetchFn(url, { ...init, signal: controller.signal });
     } finally {
       clearTimeout(timer);
+      externalSignal.removeEventListener("abort", abort);
     }
   }
 
@@ -120,8 +177,26 @@ function stripThinking(content: string) {
   return content.replace(/<think>[\s\S]*?<\/think>/gi, "").trim();
 }
 
-function sourceTextPayload(text: string) {
-  return `SOURCE_TEXT\n${text}\nEND_SOURCE_TEXT`;
+function sourceTextPayload(
+  input: Parameters<CallTranslationProvider["translate"]>[0],
+) {
+  const sections = [
+    input.previousSegments?.length
+      ? `READ_ONLY_CONTEXT\n${input.previousSegments.map((item) =>
+        `${item.sourceText} => ${item.translatedText}`
+      ).join("\n")}\nEND_READ_ONLY_CONTEXT`
+      : "",
+    input.glossary?.length
+      ? `GLOSSARY\n${input.glossary.map((item) =>
+        `${item.sourceText} => ${item.translatedText}`
+      ).join("\n")}\nEND_GLOSSARY`
+      : "",
+    input.protectedEntities?.length
+      ? `PROTECTED_ENTITIES\n${input.protectedEntities.join("\n")}\nEND_PROTECTED_ENTITIES`
+      : "",
+    `SOURCE_TEXT\n${input.text}\nEND_SOURCE_TEXT`,
+  ];
+  return sections.filter(Boolean).join("\n");
 }
 
 function validateTranslation(content: string) {
@@ -155,4 +230,45 @@ function isAssistantStyleReply(content: string) {
     "text that needs to be translated",
     "as an ai",
   ].some((phrase) => normalized.includes(phrase));
+}
+
+async function* parseOpenAiSse(
+  body: ReadableStream<Uint8Array>,
+  signal: AbortSignal,
+) {
+  const reader = body.getReader();
+  const decoder = new TextDecoder();
+  let buffered = "";
+  try {
+    while (true) {
+      if (signal.aborted) throw signal.reason ?? new Error("Translation stream aborted");
+      const { done, value } = await reader.read();
+      buffered += decoder.decode(value, { stream: !done });
+      const events = buffered.split(/\r?\n\r?\n/u);
+      buffered = events.pop() ?? "";
+      for (const event of events) {
+        for (const line of event.split(/\r?\n/u)) {
+          if (!line.startsWith("data:")) continue;
+          const payload = line.slice(5).trim();
+          if (!payload || payload === "[DONE]") continue;
+          const parsed = JSON.parse(payload) as {
+            choices?: Array<{ delta?: { content?: string } }>;
+          };
+          const content = parsed.choices?.[0]?.delta?.content;
+          if (content) yield content;
+        }
+      }
+      if (done) break;
+    }
+  } finally {
+    reader.releaseLock();
+  }
+}
+
+function sentenceStablePrefix(text: string) {
+  let end = -1;
+  for (const match of text.matchAll(/[。！？.!?](?:[\s"'”’]|$)/gu)) {
+    end = (match.index ?? -1) + match[0].length;
+  }
+  return end > 0 ? text.slice(0, end).trim() : "";
 }

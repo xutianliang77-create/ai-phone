@@ -63,7 +63,7 @@ export async function registerEnterpriseTenantRoutes(
   });
 
   app.get("/enterprise/v1/tenants", async (request, reply) => {
-    const account = requireAccount(request, reply);
+    const account = await requireAccount(request, reply);
     if (!account) return;
     return {
       tenants: (await runtime.listMemberships({

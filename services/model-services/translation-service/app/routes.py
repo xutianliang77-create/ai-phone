@@ -4,6 +4,8 @@ from time import time
 from uuid import uuid4
 
 from fastapi import APIRouter, Header, HTTPException, status
+from fastapi.responses import StreamingResponse
+import json
 
 from app.config import TranslationConfig
 from app.schemas import (
@@ -48,6 +50,12 @@ def create_router(service: TranslationService, config: TranslationConfig) -> API
     ) -> ChatCompletionResponse:
         require_api_key(config, authorization)
         try:
+            if request.stream:
+                return StreamingResponse(
+                    openai_sse_stream(service, request, config.model_version),
+                    media_type="text/event-stream",
+                    headers={"cache-control": "no-cache", "x-accel-buffering": "no"},
+                )
             translated = await asyncio.to_thread(service.translate_chat, request)
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -68,6 +76,39 @@ def create_router(service: TranslationService, config: TranslationConfig) -> API
         )
 
     return router
+
+
+def openai_sse_stream(
+    service: TranslationService,
+    request: ChatCompletionRequest,
+    model: str,
+):
+    completion_id = f"chatcmpl-{uuid4().hex}"
+    created = int(time())
+    for chunk in service.translate_chat_stream(request):
+        yield "data: " + json.dumps({
+            "id": completion_id,
+            "object": "chat.completion.chunk",
+            "created": created,
+            "model": model,
+            "choices": [{
+                "index": 0,
+                "delta": {"content": chunk},
+                "finish_reason": None,
+            }],
+        }, ensure_ascii=False) + "\n\n"
+    yield "data: " + json.dumps({
+        "id": completion_id,
+        "object": "chat.completion.chunk",
+        "created": created,
+        "model": model,
+        "choices": [{
+            "index": 0,
+            "delta": {},
+            "finish_reason": "stop",
+        }],
+    }) + "\n\n"
+    yield "data: [DONE]\n\n"
 
 
 def require_api_key(config: TranslationConfig, authorization: str | None) -> None:

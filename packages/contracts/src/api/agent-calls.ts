@@ -8,6 +8,8 @@ export type AiCallingAgentStatus =
   | "draft"
   | "authorized"
   | "queued"
+  | "dispatching"
+  | "reconciliation_required"
   | "in_progress"
   | "completed"
   | "failed"
@@ -47,6 +49,7 @@ export interface StartAiCallingAgentCallRequest {
 
 export interface UpdateAiCallingAgentCallStatusRequest {
   status: "in_progress" | "completed" | "failed";
+  providerOperationStatus?: "accepted" | "unknown" | "succeeded" | "failed";
   providerCallId?: string;
   consumedSeconds?: number;
   resultSummary?: string;
@@ -75,6 +78,8 @@ export interface AiCallingAgentDraftDto {
   disclosurePromptVersion?: string;
   authorizedAt?: string;
   takeoverRequestedAt?: string;
+  takeoverReadyAt?: string;
+  takeoverResolvedAt?: string;
   takeoverReason?: string;
   cancelledAt?: string;
   cancellationReason?: string;
@@ -100,4 +105,17 @@ export interface AiCallingAgentDraftResponse {
 
 export interface AiCallingAgentDraftsResponse {
   drafts: AiCallingAgentDraftDto[];
+}
+
+export interface AgentCallWorkerClaimDto {
+  draft: AiCallingAgentDraftDto;
+  workerId: string;
+  leaseToken: string;
+  leaseExpiresAt: string;
+  attempt: number;
+  dialIdempotencyKey: string;
+}
+
+export interface AgentCallWorkerClaimsResponse {
+  claims: AgentCallWorkerClaimDto[];
 }

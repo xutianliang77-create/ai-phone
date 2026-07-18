@@ -35,6 +35,11 @@ describe("call web guest script", () => {
     expect(script).toContain("已进入房间，等待发起方加入");
     expect(script).toContain('link.status === "active"');
     expect(script).toContain("shouldAttachAudioTrack");
+    expect(script).toContain("setTrackSubscriptionPermissions(false");
+    expect(script).toContain("{ autoSubscribe: false }");
+    expect(script).toContain('participantRole(participant.identity) === "worker"');
+    expect(script).toContain("publication.setSubscribed(shouldAttachAudioTrack");
+    expect(script).toContain("syncRemoteAudioSubscriptions(room)");
     expect(script).toContain("if (!targetRole) return false;");
     expect(script).toContain("distanceFromTimelineBottom");
     expect(script).toContain('document.querySelector(".bottom")?.offsetHeight');
@@ -50,5 +55,14 @@ describe("call web guest script", () => {
     expect(script).toContain("state.fullDuplexEnabled && !state.duplexDegraded");
     expect(script).toContain('event.type === "pipeline.degraded"');
     expect(script).toContain("echoCancellation: true");
+    expect(script).toContain("topic !== callRoomCaptionTopic || participant");
+    expect(script).toContain("event.callId !== callId");
+    expect(script).toContain("event.roomName !== state.expectedRoomName");
+    expect(script).toContain('"translation.captions"');
+    expect(script).toContain('get("ticket")');
+    expect(script).toContain("guestTicket,");
+    expect(script).toContain("guest_ticket_already_used");
+    expect(script).toContain("clearGuestTicketFromAddress");
+    expect(script).toContain("window.history.replaceState");
   });
 });

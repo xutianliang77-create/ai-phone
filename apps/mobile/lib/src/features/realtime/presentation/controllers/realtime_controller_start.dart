@@ -38,9 +38,13 @@ extension RealtimeControllerStart on RealtimeController {
     _statusBeforeReconnect = null;
     _segments.clear();
     _drafts.clear();
+    _speechEchoSegmentIds.clear();
+    _asrTextChain = Future<void>.value();
     _deviceAsrRecovery.reset();
     if (_usesDeviceAsr) {
       await _prepareDeviceAsr();
+      if (!_isCurrentStart(generation)) return;
+      await _prepareOnDeviceTranslation();
       if (!_isCurrentStart(generation)) return;
     }
     await _eventSubscription?.cancel();

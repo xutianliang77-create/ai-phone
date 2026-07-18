@@ -103,6 +103,7 @@ describe("CallTranslationWorker quality pipeline", () => {
       .filter((event) => event.type === "translation.final")).toHaveLength(2);
     expect(audioSink.played).toHaveLength(1);
     audioSink.releasePlayback();
+    await waitUntil(() => audioSink.played.length === 2);
     await worker.endCall("call_tts");
     expect(audioSink.played.map((item) => item.segmentId)).toEqual(["tts_1", "tts_2"]);
   });
@@ -154,6 +155,14 @@ describe("CallTranslationWorker quality pipeline", () => {
     });
   });
 });
+
+async function waitUntil(predicate: () => boolean, timeoutMs = 100) {
+  const deadline = Date.now() + timeoutMs;
+  while (!predicate()) {
+    if (Date.now() >= deadline) throw new Error("condition not reached");
+    await new Promise((resolve) => setTimeout(resolve, 1));
+  }
+}
 
 function segment(
   segmentId: string,

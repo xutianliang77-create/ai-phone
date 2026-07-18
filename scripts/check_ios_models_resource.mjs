@@ -9,6 +9,7 @@ if (takeFlag("--help") || takeFlag("-h")) {
   process.exit(0);
 }
 const requireReadyModel = takeFlag("--require-ready-model");
+const requireVadModel = takeFlag("--require-vad-model");
 
 const pbxprojPath = path.resolve("apps/mobile/ios/Runner.xcodeproj/project.pbxproj");
 const builtAppPath = path.resolve(
@@ -30,6 +31,7 @@ const modelReports = existsSync(builtModelsPath)
   : [];
 const selectedModel = modelReports.find((report) => report.bundleDetected) ??
   modelReports[0];
+const vadModel = inspectVadModel(builtModelsPath);
 
 const result = {
   project: {
@@ -56,6 +58,10 @@ const result = {
     sizeMiB: selectedModel?.sizeMiB ?? null,
     reportCount: modelReports.length,
   },
+  vad: {
+    required: requireVadModel,
+    ...vadModel,
+  },
 };
 
 console.log(JSON.stringify(result, null, 2));
@@ -72,6 +78,10 @@ if (existsSync(builtAppPath) && !result.builtApp.hasModelsDirectory) {
 
 if (requireReadyModel && result.model.status !== "ready") {
   console.error("Built Runner.app does not contain a FluidAudio-ready Nemotron model candidate.");
+  process.exit(1);
+}
+if (requireVadModel && result.vad.status !== "ready") {
+  console.error("Built Runner.app does not contain the FluidAudio Silero VAD model.");
   process.exit(1);
 }
 
@@ -120,6 +130,35 @@ function inspectRoot(root) {
     missing,
     sizeBytes,
     sizeMiB: bytesToMiB(sizeBytes),
+  };
+}
+
+function inspectVadModel(modelsPath) {
+  const root = path.join(
+    modelsPath,
+    "vad",
+    "silero-vad-unified-256ms-v6.0.0.mlmodelc",
+  );
+  const required = [
+    "coremldata.bin",
+    "metadata.json",
+    "model.mil",
+    "weights/weight.bin",
+  ];
+  const missing = required.filter(
+    (relativePath) => !existsSync(path.join(root, relativePath)),
+  );
+  const exists = existsSync(root);
+  return {
+    root,
+    status: exists && missing.length === 0
+      ? "ready"
+      : exists
+        ? "model_incomplete"
+        : "model_not_found",
+    missing,
+    sizeBytes: directorySizeBytes(root),
+    sizeMiB: bytesToMiB(directorySizeBytes(root)),
   };
 }
 
@@ -184,10 +223,11 @@ function bytesToMiB(value) {
 
 function usage() {
   console.log(`Usage:
-  scripts/check_ios_models_resource.mjs [--require-ready-model] [BUILT_RUNNER_APP]
+  scripts/check_ios_models_resource.mjs [--require-ready-model] [--require-vad-model] [BUILT_RUNNER_APP]
 
 Checks that ios/Runner/Models is wired into the Runner target resources. If a
 built Runner.app path exists, also checks that Models/ was copied into it.
 With --require-ready-model, also checks Runner.app/Models for a FluidAudio-ready
-Nemotron model candidate.`);
+Nemotron model candidate. With --require-vad-model, checks the staged FluidAudio
+Silero VAD Core ML bundle.`);
 }

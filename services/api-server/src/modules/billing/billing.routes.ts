@@ -2,27 +2,29 @@ import type { FastifyInstance } from "fastify";
 import { sendError } from "../../infrastructure/http/errors.js";
 import { requireAccount } from "../account/account-auth.js";
 import type { PaymentProvider } from "./billing-records.js";
-import { handleAppleServerNotification } from "./apple-server-notifications.js";
+import { handleAppleServerNotification } from
+  "./apple-server-notifications-runtime.js";
 import {
   confirmPaymentOrder,
   createPaymentOrder,
   getBillingLedger,
   getBillingProducts,
   refundPaymentOrder,
-} from "./billing.service.js";
-import { handleDomesticPaymentNotification } from "./domestic-payment-notifications.js";
+} from "./billing-runtime.service.js";
+import { handleDomesticPaymentNotification } from
+  "./domestic-payment-notifications-runtime.js";
 
 export async function registerBillingRoutes(app: FastifyInstance) {
   app.get("/billing/products", async () => getBillingProducts());
 
   app.get("/billing/ledger", async (request, reply) => {
-    const account = requireAccount(request, reply);
+    const account = await requireAccount(request, reply);
     if (!account) return;
-    return getBillingLedger(account.id);
+    return await getBillingLedger(account.id);
   });
 
   app.post("/billing/orders", async (request, reply) => {
-    const account = requireAccount(request, reply);
+    const account = await requireAccount(request, reply);
     if (!account) return;
     const body = request.body as Partial<{
       productId: string;
@@ -32,17 +34,18 @@ export async function registerBillingRoutes(app: FastifyInstance) {
       return sendError(reply, 400, "invalid_payment_order", "Invalid payment order");
     }
 
-    const result = createPaymentOrder({
+    const result = await createPaymentOrder({
       userId: account.id,
       productId: body.productId,
       provider: body.provider,
+      idempotencyKey: headerValue(request.headers["idempotency-key"]),
     });
     if (!result.ok) return sendResultError(reply, result);
     return result;
   });
 
   app.post("/billing/orders/:orderId/confirm", async (request, reply) => {
-    const account = requireAccount(request, reply);
+    const account = await requireAccount(request, reply);
     if (!account) return;
     const params = request.params as { orderId: string };
     const body = request.body as Partial<{
@@ -53,7 +56,7 @@ export async function registerBillingRoutes(app: FastifyInstance) {
       return sendError(reply, 400, "invalid_payment_confirmation", "Invalid payment confirmation");
     }
 
-    const result = confirmPaymentOrder({
+    const result = await confirmPaymentOrder({
       userId: account.id,
       orderId: params.orderId,
       transactionId: body.transactionId,
@@ -64,11 +67,11 @@ export async function registerBillingRoutes(app: FastifyInstance) {
   });
 
   app.post("/billing/orders/:orderId/refund", async (request, reply) => {
-    const account = requireAccount(request, reply);
+    const account = await requireAccount(request, reply);
     if (!account) return;
     const params = request.params as { orderId: string };
     const body = (request.body ?? {}) as Partial<{ reason: string }>;
-    const result = refundPaymentOrder({
+    const result = await refundPaymentOrder({
       userId: account.id,
       orderId: params.orderId,
       reason: body.reason,
@@ -82,13 +85,13 @@ export async function registerBillingRoutes(app: FastifyInstance) {
     if (typeof body.signedPayload !== "string") {
       return sendError(reply, 400, "invalid_apple_notification", "Invalid Apple notification");
     }
-    const result = handleAppleServerNotification({ signedPayload: body.signedPayload });
+    const result = await handleAppleServerNotification({ signedPayload: body.signedPayload });
     if (!result.ok) return sendResultError(reply, result);
     return result;
   });
 
   app.post("/billing/wechat/notifications", async (request, reply) => {
-    const result = handleDomesticPaymentNotification({
+    const result = await handleDomesticPaymentNotification({
       provider: "wechat_pay",
       body: request.body,
     });
@@ -97,13 +100,17 @@ export async function registerBillingRoutes(app: FastifyInstance) {
   });
 
   app.post("/billing/alipay/notifications", async (request, reply) => {
-    const result = handleDomesticPaymentNotification({
+    const result = await handleDomesticPaymentNotification({
       provider: "alipay",
       body: request.body,
     });
     if (!result.ok) return sendResultError(reply, result);
     return result;
   });
+}
+
+function headerValue(value: string | string[] | undefined) {
+  return Array.isArray(value) ? value[0] : value;
 }
 
 function isPaymentProvider(value: unknown): value is PaymentProvider {

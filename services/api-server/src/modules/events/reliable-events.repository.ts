@@ -13,6 +13,85 @@ export class InboxPayloadConflictError extends Error {
   }
 }
 
+export function processInboxEventOnly<T>(options: {
+  eventId: string;
+  sessionId: string;
+  eventType: string;
+  payload: unknown;
+  process: () => T;
+}) {
+  return runStoreTransaction(() => {
+    const store = getStoreSnapshot();
+    const payloadHash = hashPayload(options.payload);
+    const existing = store.inboxEvents.find(
+      (event) => event.eventId === options.eventId,
+    );
+    if (existing) {
+      if (existing.payloadHash !== payloadHash) {
+        throw new InboxPayloadConflictError(options.eventId);
+      }
+      return { duplicate: true as const, result: undefined };
+    }
+    const result = options.process();
+    const now = new Date().toISOString();
+    store.inboxEvents.push({
+      eventId: options.eventId,
+      sessionId: options.sessionId,
+      eventType: options.eventType,
+      payloadHash,
+      receivedAt: now,
+      processedAt: now,
+    });
+    persistStoreSnapshot();
+    return { duplicate: false as const, result };
+  });
+}
+
+export function processInboxEventOnlyAsync<T>(options: {
+  eventId: string;
+  sessionId: string;
+  eventType: string;
+  payload: unknown;
+  process: () => Promise<T>;
+}) {
+  return withInboxEventLock(options.eventId, async () => {
+    const payloadHash = hashPayload(options.payload);
+    const existing = getStoreSnapshot().inboxEvents.find(
+      (event) => event.eventId === options.eventId,
+    );
+    if (existing) {
+      if (existing.payloadHash !== payloadHash) {
+        throw new InboxPayloadConflictError(options.eventId);
+      }
+      return { duplicate: true as const, result: undefined };
+    }
+    const result = await options.process();
+    runStoreTransaction(() => {
+      const store = getStoreSnapshot();
+      const raced = store.inboxEvents.find(
+        (event) => event.eventId === options.eventId,
+      );
+      if (raced) {
+        if (raced.payloadHash !== payloadHash) {
+          throw new InboxPayloadConflictError(options.eventId);
+        }
+        return;
+      }
+      const now = new Date().toISOString();
+      store.inboxEvents.push({
+        eventId: options.eventId,
+        sessionId: options.sessionId,
+        eventType: options.eventType,
+        payloadHash,
+        receivedAt: now,
+        processedAt: now,
+      });
+      persistStoreSnapshot();
+    });
+    return { duplicate: false as const, result };
+  });
+}
+
 export function processInboxEvent<T>(options: {
   eventId: string;
   sessionId: string;
@@ -58,6 +137,57 @@ export function processInboxEvent<T>(options: {
     persistStoreSnapshot();
     return { duplicate: false as const, result };
   });
+}
+
+export function processInboxEventAsync<T>(options: {
+  eventId: string;
+  sessionId: string;
+  eventType: string;
+  payload: unknown;
+  process: () => Promise<T>;
+  outbox: Omit<OutboxEventRecord, "attempts" | "availableAt" | "createdAt">;
+}) {
+  return withInboxEventLock(options.eventId, async () => {
+    const payloadHash = hashPayload(options.payload);
+    const existing = getStoreSnapshot().inboxEvents.find(
+      (event) => event.eventId === options.eventId,
+    );
+    if (existing) {
+      if (existing.payloadHash !== payloadHash) {
+        throw new InboxPayloadConflictError(options.eventId);
+      }
+      return { duplicate: true as const, result: undefined };
+    }
+    const result = await options.process();
+    runStoreTransaction(() => {
+      const store = getStoreSnapshot();
+      const now = new Date().toISOString();
+      store.inboxEvents.push({
+        eventId: options.eventId,
+        sessionId: options.sessionId,
+        eventType: options.eventType,
+        payloadHash,
+        receivedAt: now,
+        processedAt: now,
+      });
+      if (!store.outboxEvents.some(
+        (event) => event.idempotencyKey === options.outbox.idempotencyKey
+      )) {
+        store.outboxEvents.push({
+          ...options.outbox,
+          attempts: 0,
+          availableAt: now,
+          createdAt: now,
+        });
+      }
+      persistStoreSnapshot();
+    });
+    return { duplicate: false as const, result };
+  });
+}
+
+export function hasInboxEvent(eventId: string) {
+  return getStoreSnapshot().inboxEvents.some((event) => event.eventId === eventId);
 }
 
 export function enqueueOutboxEvent(
@@ -126,4 +256,21 @@ export function findOutboxEvent(idempotencyKey: string) {
 
 function hashPayload(payload: unknown) {
   return createHash("sha256").update(JSON.stringify(payload)).digest("hex");
+}
+
+const inboxEventLocks = new Map<string, Promise<void>>();
+
+async function withInboxEventLock<T>(eventId: string, operation: () => Promise<T>) {
+  const previous = inboxEventLocks.get(eventId) ?? Promise.resolve();
+  let release!: () => void;
+  const current = new Promise<void>((resolve) => { release = resolve; });
+  const tail = previous.then(() => current);
+  inboxEventLocks.set(eventId, tail);
+  await previous;
+  try {
+    return await operation();
+  } finally {
+    release();
+    if (inboxEventLocks.get(eventId) === tail) inboxEventLocks.delete(eventId);
+  }
 }

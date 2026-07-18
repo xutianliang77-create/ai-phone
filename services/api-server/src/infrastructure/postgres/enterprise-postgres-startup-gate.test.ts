@@ -29,7 +29,7 @@ describe("enterprise PostgreSQL startup gate", () => {
     await expect(runEnterprisePostgresStartupGate({
       env: { ENTERPRISE_POSTGRES_STARTUP_MODE: "verify" },
       createClient: vi.fn(),
-    })).rejects.toThrow("ENTERPRISE_DATABASE_URL is required");
+    })).rejects.toThrow("ENTERPRISE_MIGRATION_DATABASE_URL is required");
   });
 
   it("verifies the schema and closes the client before startup continues", async () => {
@@ -102,6 +102,9 @@ function clientFixture(subjectType = "text") {
     },
     async query<Row extends Record<string, unknown>>(sql: string) {
       calls.push(sql);
+      if (sql.includes("current_database()")) {
+        return { rows: [{ name: "ai_phone", oid: "42" }] as Row[] };
+      }
       if (sql.includes("SELECT id, checksum")) {
         return { rows: [] as Row[] };
       }

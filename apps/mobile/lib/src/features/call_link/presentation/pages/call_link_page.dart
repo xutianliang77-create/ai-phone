@@ -54,6 +54,7 @@ class _CallLinkPageState extends State<CallLinkPage> {
   bool _loading = false;
   bool _roomLoading = false;
   bool _linkRefreshInFlight = false;
+  bool _shareInFlight = false;
 
   @override
   void initState() {
@@ -164,7 +165,8 @@ class _CallLinkPageState extends State<CallLinkPage> {
     if (link == null || _endResult != null || _linkRefreshInFlight) return;
     _linkRefreshInFlight = true;
     try {
-      final refreshed = await _client.getCallLink(callId: link.callId);
+      final refreshed = (await _client.getCallLink(callId: link.callId))
+          .withJoinUrl(link.joinUrl);
       if (!mounted || _link?.callId != refreshed.callId) return;
       setState(() => _link = refreshed);
     } catch (_) {
@@ -223,12 +225,25 @@ class _CallLinkPageState extends State<CallLinkPage> {
   }
 
   Future<void> _share(String text) async {
-    final shareText = widget.shareText;
-    if (shareText != null) {
-      await shareText(text);
-      return;
+    final link = _link;
+    if (link == null || _shareInFlight) return;
+    _shareInFlight = true;
+    try {
+      final joinUrl = await _client.rotateGuestTicket(callId: link.callId);
+      if (!mounted || _link?.callId != link.callId) return;
+      setState(() => _link = link.withJoinUrl(joinUrl));
+      text = joinUrl;
+      final shareText = widget.shareText;
+      if (shareText != null) {
+        await shareText(text);
+      } else {
+        await SharePlus.instance.share(ShareParams(text: text));
+      }
+    } catch (error) {
+      if (mounted) setState(() => _error = error);
+    } finally {
+      _shareInFlight = false;
     }
-    await SharePlus.instance.share(ShareParams(text: text));
   }
 
   Future<bool> _ensureVoiceConsent() {

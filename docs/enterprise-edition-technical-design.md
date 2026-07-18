@@ -1,6 +1,6 @@
 # 无界AI企业版详细技术设计
 
-版本：v1.11
+版本：v1.12
 日期：2026-07-18
 状态：统一通讯平台与 PostgreSQL Primary 收敛详细技术方案
 
@@ -25,6 +25,7 @@
 | Tenant-scoped Repository | `ready_for_acceptance` | 已有 tenant/user/cell scoped transaction、subject guard、单一 `legacy|postgres` runtime、HTTP 全链路注入、独立 cell Worker，以及 Tenant/Member/Audit、Directory、lifecycle、Inbox/Outbox、pending discovery 和共享 unit-of-work；尚无真实 PostgreSQL H3 证据 |
 | Enterprise Inbox/Outbox | `ready_for_acceptance` | 已有 tenant-scoped 去重、稳定 payload hash、领域/inbox/outbox 原子提交、lease/retry/recovery 和100次重放门禁；真实 PostgreSQL 并发与 Provider sandbox 尚待验收 |
 | SQLite/JSON 演示数据导入 | `ready_for_acceptance` | 已有维护窗口、SQLite 临时副本与 quick_check、空目标事务导入、六集合 count/SHA-256 读回对账和不一致回滚；仅限内部演示数据 |
+| 公共 Primary Runtime 收敛 | `ready_for_acceptance` | 已合入上游稳定提交 `fe1c3c2`；公共30段与 enterprise 10段 manifest 由一个启动编排验证，driver、数据库身份和分权连接失败均在监听前闭合；尚无真实 PostgreSQL H3 证据 |
 | PostgreSQL 控制面/业务聚合 | `designed` | 后续 CORE/MTG/CS/MKT 领域任务范围，不能从公共 Repository runtime 推导为已实现 |
 | SQLite | `demo_only` | 仅本地开发、自动化和封闭演示，不承载真实企业试点数据 |
 | PSTN/CRM/Calendar/OCR | `not_ready` 或按环境探测 | 未配置必须明确降级，不生成虚假外部对象或成功状态 |
@@ -33,10 +34,10 @@
 
 ### 1.2 无界AI上游对齐边界
 
-截至 2026-07-18，主产品工作区存在公共 PostgreSQL migration、Primary runtime、
-fence、可靠事件、Billing 和 Product Records 等未提交更新。企业版只把这些变化作为
-接口和收敛方向输入；只有主产品形成稳定提交、企业分支完成 tenant/RLS 改造并通过
-本文件和验收计划的证据门禁后，才能进入企业实现基线。
+截至 2026-07-18，公共 PostgreSQL migration、Primary Runtime、fence、可靠事件、
+Billing 和 Product Records 已形成稳定提交 `fe1c3c2`，并通过 `ENT-DATA-007` 合入
+企业分支。合入只建立代码基线，不继承主产品 staging、容量或灾备结论；公共通讯表仍须
+由 `ENT-DATA-008` 完成 tenant scope/RLS 改造，切换证据仍由 `ENT-DATA-009` 独立产出。
 
 - 一个进程只能选择一个 Storage Driver，并在监听端口前通过同一套 startup readiness；不得按路由回退或双写。
 - 一个 Driver 可以使用多个最小权限连接池：migration、应用 tenant、user directory、cell discovery、maintenance 各自分权，不能共享超级角色。
@@ -722,7 +723,7 @@ migration checksum/schema/RLS/identity 列不满足均在任何恢复任务、Fa
 端口监听之前终止进程。校验结束后连接立即关闭，不把管理连接复用为应用连接池。
 
 第七批完成 Enterprise Repository runtime。`ENTERPRISE_REPOSITORY_DRIVER` 只接受
-`legacy|postgres`，默认 `legacy`；选择 `postgres` 时必须先得到启动 gate 的
+`legacy|postgres`，并作为兼容输入服从 `API_STORAGE_DRIVER`；选择 `postgres` 时必须先得到启动 gate 的
 `verified` 结果，再创建一个应用连接池并把同一 runtime 注入 tenant、member、
 RBAC、audit、route 和 lifecycle 路由。不存在按路由选择、失败回退、shadow read、
 双写或 `dual_write` 模式。PostgreSQL 创建租户使用
@@ -747,10 +748,23 @@ transaction，获取 advisory lock，要求目标六集合为空，
 分别计算每集合 count/SHA-256 与总 hash；任一差异或约束失败即 rollback。
 该工具不是客户生产迁移通道，也不替代全域 `ENT-DATA-005`、PITR 或真实 H3 演练。
 
-上述独立 Enterprise Repository driver 是当前已实现基线，不是最终双栈目标。
-`ENT-DATA-007` 完成后，HTTP、统一通讯会话、企业业务 Repository 和 cell Worker 必须
-共享同一个已验证 Primary Runtime；在此之前禁止把公共通讯表或主产品账单表接入真实
-企业租户流量。
+第九批完成 `ENT-DATA-007` Primary Runtime 收敛。企业分支合入上游稳定提交
+`fe1c3c2` 的公共30段 migration 和 Primary Runtime；`API_STORAGE_DRIVER` 成为唯一
+driver，旧企业变量只能与其一致。启动编排先校验公共签名 cutover evidence、manifest
+和数据库身份，再以独立 migration 连接校验 enterprise 10段 manifest、forced RLS、
+identity 和数据库身份；两个 verdict 的 database name/OID 不同即关闭已创建资源并拒绝启动。
+
+API 的 enterprise tenant Repository 适配并复用公共 Primary pool，由公共 runtime
+唯一负责关闭；user directory 使用独立最小权限 pool。cell Worker 也先通过同一 Primary
+启动编排，再以独立 cell discovery pool 读取最小引用、以共享 tenant pool claim/finalize，
+且不会创建或持有 directory 凭证。directory、cell、migration、maintenance 在生产环境
+必须提供各自显式 URL；TLS 模式统一使用 `POSTGRES_SSL_MODE`，生产门禁仍要求
+`verify-full`。不存在 fallback、shadow read、dual write 或路由级 driver。
+
+该实现已完成本地代码和自动化门禁，但没有运行真实企业 PostgreSQL 双 manifest、角色
+授权、并发 claim、PITR 或跨故障域恢复；因此状态仅为 `ready_for_acceptance`，不得宣称
+企业试点或生产门禁通过。公共通讯和账单表也必须等待 `ENT-DATA-008/009` 后才能承载
+真实企业租户流量。
 
 ### 11.2 事务和一致性边界
 

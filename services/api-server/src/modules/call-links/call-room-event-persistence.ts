@@ -1,12 +1,12 @@
-import { upsertSegment } from "../sessions/sessions.repository.js";
+import { upsertSegment } from "../sessions/sessions-runtime.repository.js";
 import type { CallLinkRecord } from "./call-links.service.js";
 import type { CallRoomDataEvent } from "./call-room-events.js";
 import {
   applyCallBargeInEvent,
   applyCallPlaybackEvent,
-} from "./call-playbacks.repository.js";
+} from "./call-playbacks-runtime.repository.js";
 
-export function persistCallRoomDataEvent(
+export async function persistCallRoomDataEvent(
   record: CallLinkRecord,
   event: CallRoomDataEvent,
 ) {
@@ -20,8 +20,13 @@ export function persistCallRoomDataEvent(
   if (event.type.startsWith("pipeline.")) {
     return null;
   }
-  return upsertSegment(record.sessionId, {
+  return await upsertSegment(record.sessionId, {
     segmentId: event.segmentId,
+    speechId: event.speechId,
+    turnId: event.turnId,
+    revision: event.revision,
+    pipelineGeneration: event.pipelineGeneration,
+    pipelineTiming: event.pipelineTiming,
     sourceText: event.sourceText ?? (
       event.type === "transcript.final" ? event.text : undefined
     ),

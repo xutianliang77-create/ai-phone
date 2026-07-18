@@ -1,11 +1,9 @@
 import {
   closeTracks,
   disconnectRooms,
-  publishDataPacket,
   publishGuestAudioTrack,
   publishTranslationTtsTrack,
   rtcMediaReady,
-  waitForDataPacket,
   waitForCallRoomCaption,
   waitForTranslationTtsAudio,
   waitForWorkerAudio,
@@ -43,7 +41,13 @@ export async function checkLiveKitRoomMediaReadiness(options) {
     });
 
     const hostToken = await createRoomToken(options, apiBaseUrl, created.callId, "host");
-    const guestToken = await createRoomToken(options, apiBaseUrl, created.callId, "guest");
+    const guestToken = await createRoomToken(
+      options,
+      apiBaseUrl,
+      created.callId,
+      "guest",
+      guestTicketFromJoinUrl(created.joinUrl),
+    );
     const sameRoom = [hostToken, guestToken].every(
       (token) => token?.roomName === roomName,
     );
@@ -115,12 +119,6 @@ export async function checkLiveKitRoomMediaReadiness(options) {
       guest: identityOf(participants.guest),
       worker: identityOf(participants.worker),
     });
-
-    const dataReceived = waitForDataPacket(participants.guest, rtc, options);
-    await publishDataPacket(participants.host, rtc);
-    const data = await dataReceived;
-    record(checks, "data_channel_received", data.ok, data.details);
-    if (!data.ok) issues.push("Guest participant did not receive host data packet.");
 
     const serverSegmentId = `server-caption-${Date.now()}`;
     const serverCaptionReceived = waitForCallRoomCaption(
@@ -200,11 +198,29 @@ export async function checkLiveKitRoomMediaReadiness(options) {
   };
 }
 
-async function createRoomToken(options, apiBaseUrl, callId, participantRole) {
+async function createRoomToken(
+  options,
+  apiBaseUrl,
+  callId,
+  participantRole,
+  guestTicket,
+) {
   return (await requestJson(options, `${apiBaseUrl}/call-links/${encodeURIComponent(callId)}/room-token`, {
     method: "POST",
-    body: { participantRole, participantName: `${participantRole}-media-readiness` },
+    body: {
+      participantRole,
+      participantName: `${participantRole}-media-readiness`,
+      ...(participantRole === "guest" ? { guestTicket } : {}),
+    },
   })).body;
+}
+
+function guestTicketFromJoinUrl(joinUrl) {
+  const ticket = typeof joinUrl === "string"
+    ? new URL(joinUrl).searchParams.get("ticket")
+    : null;
+  if (!ticket) throw new Error("Call link did not include a guest ticket");
+  return ticket;
 }
 
 function createParticipantRooms(rtc) {

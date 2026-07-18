@@ -1,0 +1,85 @@
+{
+  "schemaVersion": 1,
+  "environment": "staging",
+  "topologyFile": "infra/platform-ha/topology.json",
+  "capacityResultFile": "outputs/platform-capacity/latest.json",
+  "safety": {
+    "acknowledgement": "WUJIE_POSTGRES_RESILIENCE_STAGING_ONLY",
+    "sourceDatabase": "ai_phone_staging",
+    "restoreDatabase": "ai_phone_restore_drill_01",
+    "tlsMode": "verify-full",
+    "allowAutomaticFailover": true,
+    "allowRestoreTargetCreation": true,
+    "gracefulDrainSeconds": 30
+  },
+  "objectives": {
+    "maxRpoSeconds": 300,
+    "maxRtoSeconds": 120
+  },
+  "ha": {
+    "mode": "managed_ha",
+    "nodes": [
+      { "hostId": "replace-db-host-a", "failureDomain": "replace-zone-a" },
+      { "hostId": "replace-db-host-b", "failureDomain": "replace-zone-b" }
+    ],
+    "dcsVoters": 0,
+    "dcsFailureDomains": [],
+    "commands": {
+      "baseline": {
+        "file": "replace-with-ha-provider-adapter",
+        "args": ["baseline", "--json"],
+        "timeoutSeconds": 60
+      },
+      "triggerFailover": {
+        "file": "replace-with-ha-provider-adapter",
+        "args": ["trigger-failover", "--json"],
+        "timeoutSeconds": 300
+      },
+      "verifyFencing": {
+        "file": "replace-with-ha-provider-adapter",
+        "args": ["verify-fencing", "--json"],
+        "timeoutSeconds": 120
+      },
+      "verifyEndpoint": {
+        "file": "replace-with-ha-provider-adapter",
+        "args": ["verify-endpoint", "--json"],
+        "timeoutSeconds": 120
+      },
+      "rebuildOldPrimary": {
+        "file": "replace-with-ha-provider-adapter",
+        "args": ["rebuild-old-primary", "--json"],
+        "timeoutSeconds": 1800
+      }
+    }
+  },
+  "wal": {
+    "mode": "provider_managed_object_storage",
+    "targetClass": "off_host_object_storage",
+    "retentionDays": 30,
+    "requireEncryptionInTransit": true,
+    "requireEncryptionAtRest": true,
+    "requireImmutability": true,
+    "commands": {
+      "createBaseBackup": {
+        "file": "replace-with-backup-provider-adapter",
+        "args": ["create-base-backup", "--json"],
+        "timeoutSeconds": 3600
+      },
+      "verifyArchive": {
+        "file": "replace-with-backup-provider-adapter",
+        "args": ["verify-archive", "--json"],
+        "timeoutSeconds": 300
+      },
+      "restoreOffHost": {
+        "file": "replace-with-backup-provider-adapter",
+        "args": ["restore-off-host", "--json"],
+        "timeoutSeconds": 7200
+      },
+      "verifyRestore": {
+        "file": "replace-with-backup-provider-adapter",
+        "args": ["verify-restore", "--json"],
+        "timeoutSeconds": 600
+      }
+    }
+  }
+}

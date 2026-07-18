@@ -99,11 +99,11 @@ void main() {
     await controller.start();
     asr.emit(const AsrTextSegment(id: 'asr_1', text: 'first', language: 'en'));
     await pumpEventQueue();
-    asr.emit(
-        const AsrTextSegment(id: 'echo_1', text: 'second', language: 'en'));
-    await pumpEventQueue();
-    await Future<void>.delayed(const Duration(milliseconds: 750));
-    asr.emit(const AsrTextSegment(id: 'asr_2', text: 'second', language: 'en'));
+    asr.emit(const AsrTextSegment(
+      id: 'echo_1',
+      text: '第一句',
+      language: 'zh',
+    ));
     await pumpEventQueue();
 
     expect(controller.segments.map((segment) => segment.id), <String>['asr_1']);
@@ -113,10 +113,10 @@ void main() {
       language: 'zh',
     ));
     await Future<void>.delayed(const Duration(milliseconds: 400));
-    asr.emit(const AsrTextSegment(id: 'asr_3', text: 'second', language: 'en'));
+    asr.emit(const AsrTextSegment(id: 'asr_2', text: 'second', language: 'en'));
     await pumpEventQueue();
     expect(controller.segments.map((segment) => segment.id),
-        <String>['asr_1', 'asr_3']);
+        <String>['asr_1', 'asr_2']);
     expect(speaker.spoken, <(String, String)>[('第一句', 'zh'), ('第二句', 'zh')]);
   });
 

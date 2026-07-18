@@ -1,11 +1,19 @@
 import { describe, expect, it } from "vitest";
-import { LiveKitCallAudioSource } from "./livekit-call-audio-source.js";
-import type { CallAudioFrame, CallAudioSpeakerRole } from "./types.js";
+import {
+  LiveKitCallAudioSource,
+} from "./livekit-call-audio-source.js";
+import {
+  createFakeRtcNode,
+  eventually,
+  RecordingWorker,
+} from "./livekit-call-audio-source.test-support.js";
 
 describe("LiveKitCallAudioSource", () => {
   it("joins the room with a worker token and forwards remote audio frames", async () => {
-    const worker = new RecordingWorker();
     const rtc = createFakeRtcNode();
+    const worker = new RecordingWorker(() => {
+      expect(rtc.room.connected).not.toBeNull();
+    });
     const source = new LiveKitCallAudioSource({
       callId: "call_1",
       worker: worker as never,
@@ -198,124 +206,5 @@ describe("LiveKitCallAudioSource", () => {
       referenceAudioId: "voice-profile-1",
     });
   });
+
 });
-
-class RecordingWorker {
-  readonly started: string[] = [];
-  readonly ended: string[] = [];
-  readonly frames: CallAudioFrame[] = [];
-  readonly ttsSinks: unknown[] = [];
-  ttsVoice: unknown = null;
-
-  async startCall(callId: string) {
-    this.started.push(callId);
-  }
-
-  async processAudioFrame(frame: CallAudioFrame) {
-    this.frames.push(frame);
-  }
-
-  async flushSpeaker(_callId: string, _speakerRole: CallAudioSpeakerRole) {}
-
-  async endCall(callId: string) {
-    this.ended.push(callId);
-  }
-
-  addTtsAudioSink(sink: unknown) {
-    this.ttsSinks.push(sink);
-  }
-
-  setTtsVoice(voice: unknown) {
-    this.ttsVoice = voice;
-  }
-}
-
-function createFakeRtcNode(options: { localPublishing?: boolean } = {}) {
-  class RemoteAudioTrack {}
-  class FakeAudioStream extends ReadableStream<{ data: Int16Array; sampleRate: number }> {
-    constructor() {
-      super({
-        start(controller) {
-          controller.enqueue({ data: new Int16Array([1, -1]), sampleRate: 24000 });
-          controller.close();
-        },
-      });
-    }
-  }
-  const room = new FakeRoom(options.localPublishing);
-  const module: Record<string, unknown> = {
-    Room: class {
-      constructor() {
-        return room;
-      }
-    },
-    RoomEvent: {
-      TrackSubscribed: "trackSubscribed",
-      Disconnected: "disconnected",
-    },
-    AudioStream: FakeAudioStream,
-    RemoteAudioTrack,
-    async dispose() {},
-  };
-  if (options.localPublishing) {
-    module.AudioFrame = class {
-      constructor(
-        readonly data: Int16Array,
-        readonly sampleRate: number,
-        readonly channels: number,
-        readonly samplesPerChannel: number,
-      ) {}
-    };
-    module.AudioSource = class {
-      async captureFrame(_frame: unknown) {}
-    };
-    module.LocalAudioTrack = {
-      createAudioTrack: (name: string, source: unknown) => ({ name, source }),
-    };
-    module.TrackPublishOptions = class {
-      source?: unknown;
-    };
-    module.TrackSource = { SOURCE_MICROPHONE: "microphone" };
-  }
-  return {
-    room,
-    RemoteAudioTrack,
-    module,
-  };
-}
-
-class FakeRoom {
-  connected: unknown = null;
-  localParticipant?: { publishTrack(track: unknown, options: unknown): Promise<unknown> };
-  private readonly listeners = new Map<string, Array<(...args: unknown[]) => void>>();
-
-  constructor(private readonly localPublishing = false) {}
-
-  on(event: string, listener: (...args: unknown[]) => void) {
-    this.listeners.set(event, [...(this.listeners.get(event) ?? []), listener]);
-    return this;
-  }
-
-  async connect(url: string, token: string, opts: unknown) {
-    this.connected = { url, token, opts };
-    if (this.localPublishing) {
-      this.localParticipant = { publishTrack: async () => ({}) };
-    }
-  }
-
-  async disconnect() {
-    this.emit("disconnected");
-  }
-
-  emit(event: string, ...args: unknown[]) {
-    for (const listener of this.listeners.get(event) ?? []) listener(...args);
-  }
-}
-
-async function eventually(predicate: () => boolean) {
-  for (let attempt = 0; attempt < 10; attempt += 1) {
-    if (predicate()) return;
-    await new Promise((resolve) => setTimeout(resolve, 0));
-  }
-  expect(predicate()).toBe(true);
-}

@@ -1,94 +1,160 @@
-import type { CallAudioSpeakerRole, CallSpeechPipeline } from "./types.js";
-import type {
-  CallRoomWorkerToken,
-  HttpCallRoomTokenClient,
-} from "./call-room-token-client.js";
+import type { CallAudioSpeakerRole } from "./types.js";
+import {
+  isCallRoomEndedError,
+  type CallRoomEndedError,
+} from "./call-room-event-client.js";
 import {
   isLiveKitTtsAudioSupported,
   LiveKitTtsAudioSink,
   type LiveKitTtsRtcModule,
-  type LiveKitTtsRoom,
 } from "./livekit-tts-audio-sink.js";
+import { participantRole } from "./livekit-call-participant.js";
+import {
+  deferred,
+  isRemoteAudioTrack,
+  shouldForwardAudioTrack,
+} from "./livekit-call-audio-utils.js";
+import { LiveKitCallAudioTrackRuntime } from "./livekit-call-audio-track-runtime.js";
+import { LiveKitCallSipTrackGate } from "./livekit-call-sip-track-gate.js";
+import type {
+  LiveKitCallAudioSourceOptions,
+  RtcNodeModule,
+  RtcRoom,
+  StartInRoomInput,
+} from "./livekit-call-audio-source-types.js";
 
-export interface LiveKitCallAudioSourceOptions {
-  callId: string;
-  tokenClient: Pick<HttpCallRoomTokenClient, "createWorkerToken">;
-  worker: CallSpeechPipeline;
-  audioSampleRate: 16000 | 24000;
-  audioFrameSizeMs: number;
-  loadRtcNode?: () => Promise<RtcNodeModule>;
-  nowMs?: () => number;
-}
+export type {
+  LiveKitCallAudioSourceOptions,
+  RtcNodeModule,
+  RtcRoom,
+} from "./livekit-call-audio-source-types.js";
 
-interface RtcNodeModule extends Partial<LiveKitTtsRtcModule> {
-  Room: new () => RtcRoom;
-  RoomEvent: { TrackSubscribed: string; Disconnected: string };
-  AudioStream: new (
-    track: unknown,
-    options: { sampleRate: number; numChannels: number; frameSizeMs: number },
-  ) => ReadableStream<RtcAudioFrame>;
-  RemoteAudioTrack?: new (...args: unknown[]) => object;
-  dispose?: () => Promise<void>;
-}
-
-interface RtcRoom extends LiveKitTtsRoom {
-  on(event: string, listener: (...args: unknown[]) => void): RtcRoom;
-  connect(url: string, token: string, opts: {
-    autoSubscribe: boolean;
-    dynacast: boolean;
-  }): Promise<void>;
-  disconnect(): Promise<void>;
-}
-
-interface RtcAudioFrame {
-  data: Int16Array;
-  sampleRate: number;
-}
+const DEFAULT_AUDIO_INGEST_MAX_FRAMES = 20;
 
 export class LiveKitCallAudioSource {
   private room: RtcRoom | null = null;
   private rtc: RtcNodeModule | null = null;
-  private sequence = 0;
-  private stopped = false;
+  private readonly sequenceByRole: Record<CallAudioSpeakerRole, number> = {
+    host: 0,
+    guest: 0,
+  };
+  private readonly legCountByRole: Record<CallAudioSpeakerRole, number> = {
+    host: 0,
+    guest: 0,
+  };
+  private ingestStopped = false;
+  private stopPromise: Promise<void> | null = null;
+  private callEnded = false;
+  private fatalError: unknown;
+  private workerStarted = false;
+  private ownsRoomConnection = false;
+  private readonly startedTracks = new Set<unknown>();
+  private readonly trackRuntimes = new Set<LiveKitCallAudioTrackRuntime>();
+  private readonly trackTasks = new Set<Promise<void>>();
   private readonly disconnected = deferred<void>();
+  private readonly pipelineReady = deferred<void>();
+  private readonly sipTrackGate: LiveKitCallSipTrackGate;
 
-  constructor(private readonly options: LiveKitCallAudioSourceOptions) {}
+  constructor(private readonly options: LiveKitCallAudioSourceOptions) {
+    this.sipTrackGate = new LiveKitCallSipTrackGate({
+      callId: options.callId,
+      statusClient: options.sipStatusClient,
+      reportError: (error) => this.reportError(error),
+      startAudioTrack: (track, speakerRole, rtc) =>
+        this.startAudioTrack(track, speakerRole, rtc),
+    });
+  }
 
   async start() {
+    if (!this.options.tokenClient) throw new Error("Worker room token client is required");
     const token = await this.options.tokenClient.createWorkerToken(this.options.callId);
     const rtc = await this.loadRtcNode();
     const room = new rtc.Room();
     this.rtc = rtc;
     this.room = room;
+    this.ownsRoomConnection = true;
 
     if (token.ttsVoice) this.options.worker.setTtsVoice(token.ttsVoice);
-    await this.options.worker.startCall(this.options.callId);
-    room
-      .on(rtc.RoomEvent.TrackSubscribed, (track, publication, participant) => {
-        void this.handleTrackSubscribed(track, publication, participant, rtc);
-      })
-      .on(rtc.RoomEvent.Disconnected, () => {
-        this.disconnected.resolve();
-      });
+    this.attachRoomListeners(room, rtc);
     await room.connect(token.wsUrl, token.token, {
       autoSubscribe: true,
       dynacast: false,
     });
-    this.attachLiveKitTtsSink(room, rtc);
+    this.attachLiveKitTtsSink(room, rtc, token.callId, token.participantIdentity);
+    try {
+      await this.startPipeline();
+    } catch (error) {
+      this.stopIngest(true);
+      await room.disconnect();
+      await rtc.dispose?.();
+      throw error;
+    }
     return token;
+  }
+
+  async startInRoom(input: StartInRoomInput) {
+    this.room = input.room;
+    this.rtc = input.rtc;
+    if (input.ttsVoice) this.options.worker.setTtsVoice(input.ttsVoice);
+    this.attachRoomListeners(input.room, input.rtc);
+    this.attachLiveKitTtsSink(
+      input.room,
+      input.rtc,
+      this.options.callId,
+      input.participantIdentity,
+    );
+    await this.startPipeline();
+    for (const participant of input.room.remoteParticipants?.values() ?? []) {
+      for (const publication of participant.trackPublications?.values() ?? []) {
+        if (publication.track) {
+          void this.handleTrackSubscribed(
+            publication.track,
+            publication,
+            participant,
+            input.rtc,
+          ).catch((error) => this.handleAudioTrackError(error));
+        }
+      }
+    }
   }
 
   async waitUntilDisconnected() {
     await this.disconnected.promise;
+    if (this.fatalError) throw this.fatalError;
   }
 
-  async stop() {
-    if (this.stopped) return;
-    this.stopped = true;
-    await this.room?.disconnect();
-    await this.options.worker.endCall(this.options.callId);
-    await this.rtc?.dispose?.();
-    this.disconnected.resolve();
+  stop() {
+    this.stopPromise ??= this.performStop();
+    return this.stopPromise;
+  }
+
+  private async performStop() {
+    this.stopIngest(true);
+    this.pipelineReady.resolve();
+    await Promise.allSettled([...this.trackTasks]);
+    let failure: unknown;
+    try {
+      if (this.ownsRoomConnection) await this.room?.disconnect();
+    } catch (error) {
+      failure = error;
+    }
+    try {
+      if (this.workerStarted) await this.options.worker.endCall(this.options.callId);
+    } catch (error) {
+      if (isCallRoomEndedError(error)) {
+        this.markCallEnded(error);
+      } else {
+        failure ??= error;
+      }
+    }
+    try {
+      if (this.ownsRoomConnection) await this.rtc?.dispose?.();
+    } catch (error) {
+      failure ??= error;
+    } finally {
+      this.disconnected.resolve();
+    }
+    if (failure) throw failure;
   }
 
   private async handleTrackSubscribed(
@@ -99,39 +165,103 @@ export class LiveKitCallAudioSource {
   ) {
     if (!shouldForwardAudioTrack(track, publication)) return;
     const speakerRole = participantRole(participant);
-    if (!speakerRole || !isRemoteAudioTrack(track, rtc)) return;
+    if (!speakerRole || !isRemoteAudioTrack(track, rtc.RemoteAudioTrack)) return;
+
+    if (!await this.sipTrackGate.allowTrack({
+      track,
+      speakerRole,
+      participant,
+      rtc,
+    })) return;
+    await this.startAudioTrack(track, speakerRole, rtc);
+  }
+
+  private async handleParticipantAttributesChanged(
+    participant: unknown,
+  ) {
+    await this.sipTrackGate.handleParticipantAttributesChanged(participant);
+  }
+
+  private async startAudioTrack(
+    track: unknown,
+    speakerRole: CallAudioSpeakerRole,
+    rtc: RtcNodeModule,
+  ) {
+    if (this.startedTracks.has(track)) return;
+    this.startedTracks.add(track);
 
     const stream = new rtc.AudioStream(track, {
       sampleRate: this.options.audioSampleRate,
       numChannels: 1,
       frameSizeMs: this.options.audioFrameSizeMs,
     });
-    await this.pumpAudioStream(stream, speakerRole);
+    const legId = `${speakerRole}:${++this.legCountByRole[speakerRole]}`;
+    const runtime = new LiveKitCallAudioTrackRuntime({
+      callId: this.options.callId,
+      legId,
+      speakerRole,
+      stream,
+      capacityFrames: this.audioIngestMaxFrames(),
+      pipelineReady: this.pipelineReady.promise,
+      worker: this.options.worker,
+      nextSequence: () => ++this.sequenceByRole[speakerRole],
+      isStopped: () => this.ingestStopped,
+      onMetrics: this.options.onIngestMetrics,
+      nowMs: this.options.nowMs,
+    });
+    this.trackRuntimes.add(runtime);
+    let task!: Promise<void>;
+    task = runtime.run()
+      .catch((error) => this.handleAudioTrackError(error))
+      .finally(() => {
+        this.trackRuntimes.delete(runtime);
+        this.trackTasks.delete(task);
+      });
+    this.trackTasks.add(task);
   }
 
-  private async pumpAudioStream(
-    stream: ReadableStream<RtcAudioFrame>,
-    speakerRole: CallAudioSpeakerRole,
-  ) {
-    const reader = stream.getReader();
-    try {
-      while (!this.stopped) {
-        const result = await reader.read();
-        if (result.done) break;
-        await this.options.worker.processAudioFrame({
-          type: "audio.frame",
-          sessionId: this.options.callId,
-          speakerRole,
-          sequence: ++this.sequence,
-          timestampMs: this.options.nowMs?.() ?? Date.now(),
-          format: "pcm16",
-          sampleRate: normalizeSampleRate(result.value.sampleRate),
-          data: int16Base64(result.value.data),
-        });
-      }
-    } finally {
-      reader.releaseLock();
+  private handleAudioTrackError(error: unknown) {
+    if (isCallRoomEndedError(error)) {
+      this.markCallEnded(error);
+    } else {
+      this.fatalError ??= error;
+      this.reportError(error);
     }
+    this.stopIngest(true);
+    this.disconnected.resolve();
+  }
+
+  private markCallEnded(error: CallRoomEndedError) {
+    if (this.callEnded) return;
+    this.callEnded = true;
+    try {
+      this.options.onCallEnded?.(error);
+    } catch {
+      // Lifecycle observers must not turn a normal terminal state into failure.
+    }
+  }
+
+  private stopIngest(discardPending: boolean) {
+    this.ingestStopped = true;
+    for (const runtime of this.trackRuntimes) {
+      runtime.stop(discardPending);
+    }
+  }
+
+  private reportError(error: unknown) {
+    try {
+      this.options.onError?.(error);
+    } catch {
+      // Error observers must not replace the original media failure.
+    }
+  }
+
+  private audioIngestMaxFrames() {
+    const configured = this.options.audioIngestMaxFrames ??
+      DEFAULT_AUDIO_INGEST_MAX_FRAMES;
+    return Number.isInteger(configured) && configured > 0
+      ? configured
+      : DEFAULT_AUDIO_INGEST_MAX_FRAMES;
   }
 
   private async loadRtcNode() {
@@ -145,73 +275,55 @@ export class LiveKitCallAudioSource {
     }
   }
 
-  private attachLiveKitTtsSink(room: RtcRoom, rtc: RtcNodeModule) {
+  private attachRoomListeners(room: RtcRoom, rtc: RtcNodeModule) {
+    room
+      .on(rtc.RoomEvent.TrackSubscribed, (track, publication, participant) => {
+        void this.handleTrackSubscribed(track, publication, participant, rtc)
+          .catch((error) => this.handleAudioTrackError(error));
+      })
+      .on(rtc.RoomEvent.Disconnected, () => {
+        this.sipTrackGate.clear();
+        this.stopIngest(true);
+        this.disconnected.resolve();
+      });
+    if (rtc.RoomEvent.ParticipantAttributesChanged) {
+      room.on(rtc.RoomEvent.ParticipantAttributesChanged, (_changed, participant) => {
+        void this.handleParticipantAttributesChanged(participant)
+          .catch((error) => this.handleAudioTrackError(error));
+      });
+    }
+  }
+
+  private async startPipeline() {
+    try {
+      await this.options.worker.startCall(this.options.callId);
+      this.workerStarted = true;
+    } finally {
+      this.pipelineReady.resolve();
+    }
+  }
+
+  private attachLiveKitTtsSink(
+    room: RtcRoom,
+    rtc: RtcNodeModule,
+    callId: string,
+    participantIdentity: string,
+  ) {
     if (!isLiveKitTtsAudioSupported(room, rtc)) return;
     this.options.worker.addTtsAudioSink(new LiveKitTtsAudioSink({
       room,
       rtc: rtc as LiveKitTtsRtcModule,
+      ...(this.options.ttsTrackAccessClient ? {
+        trackAccess: {
+          authorizeTrack: (request) =>
+            this.options.ttsTrackAccessClient!.authorizeTrack(callId, {
+              workerIdentity: participantIdentity,
+              ...request,
+            }),
+        },
+      } : {}),
     }));
   }
-}
-
-function shouldForwardAudioTrack(track: unknown, publication: unknown) {
-  return !isTranslationTtsTrackName(audioTrackName(track, publication));
-}
-
-function audioTrackName(track: unknown, publication: unknown) {
-  const value = publication as { name?: unknown; trackName?: unknown };
-  if (typeof value.name === "string" && value.name) return value.name;
-  if (typeof value.trackName === "string" && value.trackName) return value.trackName;
-  const trackValue = track as { name?: unknown };
-  return typeof trackValue.name === "string" ? trackValue.name : "";
-}
-
-function isTranslationTtsTrackName(trackName: string) {
-  return /^translation-tts-(host|guest)-[1-9][0-9]*(?:\.[A-Za-z0-9_-]+)?$/.test(trackName);
-}
-
-function participantRole(participant: unknown): CallAudioSpeakerRole | null {
-  const value = participant as { metadata?: unknown; identity?: unknown };
-  const fromMetadata = parseMetadataRole(value.metadata);
-  if (fromMetadata) return fromMetadata;
-  const identity = typeof value.identity === "string" ? value.identity : "";
-  if (identity.includes(":host:")) return "host";
-  if (identity.includes(":guest:")) return "guest";
-  return null;
-}
-
-function parseMetadataRole(metadata: unknown): CallAudioSpeakerRole | null {
-  if (typeof metadata !== "string" || !metadata) return null;
-  try {
-    const parsed = JSON.parse(metadata) as { participantRole?: unknown };
-    if (parsed.participantRole === "host" || parsed.participantRole === "guest") {
-      return parsed.participantRole;
-    }
-  } catch {
-    return null;
-  }
-  return null;
-}
-
-function isRemoteAudioTrack(track: unknown, rtc: RtcNodeModule) {
-  if (!rtc.RemoteAudioTrack) return true;
-  return track instanceof rtc.RemoteAudioTrack;
-}
-
-function normalizeSampleRate(sampleRate: number): 16000 | 24000 {
-  return sampleRate === 16000 ? 16000 : 24000;
-}
-
-function int16Base64(data: Int16Array) {
-  return Buffer.from(data.buffer, data.byteOffset, data.byteLength).toString("base64");
-}
-
-function deferred<T>() {
-  let resolve!: (value: T | PromiseLike<T>) => void;
-  const promise = new Promise<T>((resolver) => {
-    resolve = resolver;
-  });
-  return { promise, resolve };
 }
 
 async function loadRtcNode(): Promise<RtcNodeModule> {

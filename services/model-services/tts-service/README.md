@@ -53,6 +53,19 @@ npm run check:tts-provider -- \
   --json
 ```
 
+The P1 streaming and warmup endpoints are `POST /tts/stream` (NDJSON PCM
+chunks) and `POST /tts/warmup` (single-flight, cached after the first
+synthesis). The Worker keeps both opt-in so the whole-response path remains a
+one-variable rollback.
+
+Run the staging latency gate after the service is warm and before promotion:
+
+```bash
+python scripts/tts_latency_gate.py \
+  --base-url http://127.0.0.1:8002 \
+  --api-key "$TTS_HTTP_API_KEY"
+```
+
 For release readiness, use the real VoxCPM2 endpoint and keep the default
 `provider=voxcpm2` and `model=VoxCPM2`. Set `TTS_SERVICE_API_KEY` on the
 service and use the same secret as `TTS_HTTP_API_KEY` in the Worker/release

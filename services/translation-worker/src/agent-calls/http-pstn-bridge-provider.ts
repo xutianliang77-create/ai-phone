@@ -1,4 +1,4 @@
-import type { AiCallingAgentDraftDto } from "@translation/contracts";
+import type { AgentCallWorkerClaimDto } from "@translation/contracts";
 import type { PstnBridge, PstnBridgeCallResult } from "./types.js";
 
 export interface HttpPstnBridgeProviderOptions {
@@ -17,11 +17,16 @@ export class HttpPstnBridgeProvider implements PstnBridge {
     this.fetchFn = options.fetchFn ?? fetch;
   }
 
-  async placeCall(draft: AiCallingAgentDraftDto): Promise<PstnBridgeCallResult> {
+  async placeCall(claim: AgentCallWorkerClaimDto): Promise<PstnBridgeCallResult> {
+    const draft = claim.draft;
     const response = await this.fetchWithTimeout(this.callUrl(), {
       method: "POST",
-      headers: this.headers(),
+      headers: {
+        ...this.headers(),
+        "idempotency-key": claim.dialIdempotencyKey,
+      },
       body: JSON.stringify({
+        idempotencyKey: claim.dialIdempotencyKey,
         draftId: draft.id,
         callId: draft.callId,
         targetName: draft.targetName,

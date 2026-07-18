@@ -10,6 +10,48 @@ export interface SegmentVadContextDto {
   endpointPolicyFingerprint: string;
 }
 
+export interface SpeechPipelineTimingDto {
+  asrStartedAtMs?: number;
+  asrFinalAtMs?: number;
+  processingQueueEnteredAtMs?: number;
+  processingQueueReleasedAtMs?: number;
+  turnBufferReleasedAtMs?: number;
+  transcriptReadyAtMs?: number;
+  translationStartedAtMs?: number;
+  translationFinalAtMs?: number;
+  ttsStartedAtMs?: number;
+  ttsReadyAtMs?: number;
+  eventPublishStartedAtMs?: number;
+}
+
+export function isSpeechPipelineTiming(
+  value: unknown,
+): value is SpeechPipelineTimingDto {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  if (!Object.keys(value).every((field) =>
+    pipelineTimingFields.includes(field as typeof pipelineTimingFields[number])
+  )) return false;
+  return pipelineTimingFields.every((field) => {
+    const timestamp = (value as Record<string, unknown>)[field];
+    return timestamp === undefined ||
+      typeof timestamp === "number" && Number.isFinite(timestamp) && timestamp >= 0;
+  });
+}
+
+const pipelineTimingFields = [
+  "asrStartedAtMs",
+  "asrFinalAtMs",
+  "processingQueueEnteredAtMs",
+  "processingQueueReleasedAtMs",
+  "turnBufferReleasedAtMs",
+  "transcriptReadyAtMs",
+  "translationStartedAtMs",
+  "translationFinalAtMs",
+  "ttsStartedAtMs",
+  "ttsReadyAtMs",
+  "eventPublishStartedAtMs",
+] as const;
+
 export function isSegmentVadContext(
   value: unknown,
 ): value is SegmentVadContextDto {

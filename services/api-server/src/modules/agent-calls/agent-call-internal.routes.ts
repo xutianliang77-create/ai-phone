@@ -6,9 +6,9 @@ import {
   toAgentCallDto as toDto,
 } from "./agent-call-route-helpers.js";
 import {
-  listQueuedAgentCallDraftsForWorker,
-  updateAgentCallExecutionStatusById,
-} from "./agent-calls.repository.js";
+  claimQueuedAgentCalls,
+  updateClaimedAgentCall,
+} from "./agent-call-lease-runtime.repository.js";
 
 export async function registerAgentCallInternalRoutes(app: FastifyInstance) {
   app.post(
@@ -22,10 +22,17 @@ export async function registerAgentCallInternalRoutes(app: FastifyInstance) {
           "Unauthorized internal request",
         );
       }
-      const result = updateAgentCallExecutionStatusById(
-        (request.params as { draftId: string }).draftId,
-        request.body as UpdateAiCallingAgentCallStatusRequest,
-      );
+      const workerId = headerValue(request.headers["x-agent-worker-id"]);
+      const leaseToken = headerValue(request.headers["x-agent-call-lease-token"]);
+      if (!validWorkerId(workerId) || !leaseToken) {
+        return sendError(reply, 400, "agent_call_lease_required", "Worker lease is required");
+      }
+      const result = await updateClaimedAgentCall({
+        draftId: (request.params as { draftId: string }).draftId,
+        workerId,
+        leaseToken,
+        request: request.body as UpdateAiCallingAgentCallStatusRequest,
+      });
       if (result.status === "not_found") {
         return sendError(
           reply,
@@ -51,12 +58,15 @@ export async function registerAgentCallInternalRoutes(app: FastifyInstance) {
           draft: toDto(result.draft),
         });
       }
+      if (result.status === "lease_conflict") {
+        return sendError(reply, 409, "agent_call_lease_conflict", "Worker lease is invalid");
+      }
       return { draft: toDto(result.draft) };
     },
   );
 
-  app.get(
-    "/internal/ai-calling-agent/drafts/queued",
+  app.post(
+    "/internal/ai-calling-agent/drafts/claims",
     async (request, reply) => {
       if (!isInternalAuthorized(request.headers.authorization)) {
         return sendError(
@@ -66,12 +76,50 @@ export async function registerAgentCallInternalRoutes(app: FastifyInstance) {
           "Unauthorized internal request",
         );
       }
-      const limit = Number((request.query as { limit?: string }).limit ?? 10);
+      const body = request.body as { workerId?: unknown; limit?: unknown } | undefined;
+      const workerId = body?.workerId;
+      const leaseSeconds = configuredLeaseSeconds();
+      if (!validWorkerId(workerId)) {
+        return sendError(reply, 400, "invalid_agent_worker_id", "Worker ID is invalid");
+      }
+      if (!leaseSeconds) {
+        return sendError(reply, 503, "agent_call_lease_not_configured", "Lease is unavailable");
+      }
+      const result = await claimQueuedAgentCalls({
+        workerId,
+        limit: Number(body?.limit ?? 5),
+        leaseSeconds,
+      });
+      if (result.status === "not_configured") {
+        return sendError(reply, 503, "agent_call_provider_not_configured", "Provider is unavailable");
+      }
       return {
-        drafts: listQueuedAgentCallDraftsForWorker(
-          Number.isFinite(limit) ? limit : 10,
-        ).map(toDto),
+        claims: result.claims.map((claim) => ({
+          ...claim,
+          draft: toDto(claim.draft),
+        })),
       };
     },
   );
+
+  app.get("/internal/ai-calling-agent/drafts/queued", async (request, reply) => {
+    if (!isInternalAuthorized(request.headers.authorization)) {
+      return sendError(reply, 401, "internal_error", "Unauthorized internal request");
+    }
+    return sendError(reply, 409, "agent_call_claim_required", "Use atomic worker claims");
+  });
+}
+
+function validWorkerId(value: unknown): value is string {
+  return typeof value === "string" && value.length <= 80 &&
+    /^[A-Za-z0-9._:-]+$/.test(value);
+}
+
+function headerValue(value: string | string[] | undefined) {
+  return Array.isArray(value) ? value[0] : value;
+}
+
+function configuredLeaseSeconds() {
+  const value = Number(process.env.AGENT_CALL_WORKER_LEASE_SECONDS ?? 45);
+  return Number.isInteger(value) && value >= 15 && value <= 300 ? value : null;
 }

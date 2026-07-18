@@ -10,11 +10,15 @@ import type {
 import { toTelephonyMulaw8k } from "./audio-codec.js";
 import { FonosterPstnProvider } from "./fonoster-provider.js";
 import { buildMediaWriter } from "./media-writer.js";
+import { PstnProviderAdapter } from "./pstn-provider-adapter.js";
 
 export function buildPstnProvider(config: PstnBridgeEnv, fetchFn: typeof fetch = fetch) {
-  if (config.provider === "http") return new HttpPstnProvider(config, fetchFn);
-  if (config.provider === "fonoster") return new FonosterPstnProvider(config, fetchFn);
-  return new MockPstnProvider();
+  const delegate = config.provider === "http"
+    ? new HttpPstnProvider(config, fetchFn)
+    : config.provider === "fonoster"
+    ? new FonosterPstnProvider(config, fetchFn)
+    : new MockPstnProvider();
+  return new PstnProviderAdapter(config.provider, delegate);
 }
 
 export class MockPstnProvider implements PstnProvider {
@@ -52,7 +56,7 @@ export class HttpPstnProvider implements PstnProvider {
   async placeCall(request: AgentCallBridgeRequest): Promise<AgentCallBridgeResult> {
     const response = await this.fetchWithTimeout(this.callUrl(), {
       method: "POST",
-      headers: this.headers(),
+      headers: this.headers(request.idempotencyKey),
       body: JSON.stringify({
         ...request,
         recordingDisclosureEnabled: this.config.recordingDisclosureEnabled,
@@ -121,9 +125,10 @@ export class HttpPstnProvider implements PstnProvider {
     return `${this.config.upstreamBaseUrl?.replace(/\/$/, "")}/translated-audio`;
   }
 
-  private headers() {
+  private headers(idempotencyKey?: string) {
     return {
       "content-type": "application/json",
+      ...(idempotencyKey ? { "idempotency-key": idempotencyKey } : {}),
       ...(this.config.upstreamApiKey ? { authorization: `Bearer ${this.config.upstreamApiKey}` } : {}),
     };
   }

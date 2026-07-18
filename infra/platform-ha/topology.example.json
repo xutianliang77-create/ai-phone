@@ -1,0 +1,52 @@
+{
+  "schemaVersion": 1,
+  "status": "candidate_unverified",
+  "targetConcurrentSessions": 100,
+  "steadyStateUtilization": 0.7,
+  "admissionRejectUtilization": 0.85,
+  "regions": [
+    {
+      "id": "cn-north-1",
+      "dataRegion": "cn",
+      "active": true,
+      "acceptNewSessions": true,
+      "livekitEndpoint": "wss://livekit-north.example.cn",
+      "apiEndpoint": "https://api-north.example.cn"
+    },
+    {
+      "id": "cn-east-1",
+      "dataRegion": "cn",
+      "active": true,
+      "acceptNewSessions": false,
+      "livekitEndpoint": "wss://livekit-east.example.cn",
+      "apiEndpoint": "https://api-east.example.cn"
+    }
+  ],
+  "pools": {
+    "api": { "minReplicas": 2, "maxReplicas": 8, "failureDomain": "zone" },
+    "livekit": { "minReplicas": 2, "maxReplicas": 8, "failureDomain": "zone" },
+    "sip": { "minReplicas": 2, "maxReplicas": 8, "failureDomain": "zone" },
+    "translation": { "minReplicas": 2, "maxReplicas": 16, "failureDomain": "node" },
+    "agent": { "minReplicas": 1, "maxReplicas": 8, "failureDomain": "node" },
+    "egress": { "minReplicas": 1, "maxReplicas": 8, "failureDomain": "node" },
+    "ingress": { "minReplicas": 1, "maxReplicas": 8, "failureDomain": "node" }
+  },
+  "state": {
+    "postgresMode": "managed_ha",
+    "redisMode": "managed_ha",
+    "objectStorageReplication": "same_data_region",
+    "singleWriterPerAggregate": true
+  },
+  "routing": {
+    "sessionPlacement": "home_region_sticky",
+    "crossRegionFailover": "new_sessions_only",
+    "maxFailoverRtoSeconds": 120,
+    "turnRouting": "region_local"
+  },
+  "acceptance": {
+    "steps": [25, 50, 100],
+    "soakMinutes": 120,
+    "providerSideEffectDuplicatesAllowed": 0,
+    "lostFinalEventsAllowed": 0
+  }
+}

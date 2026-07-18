@@ -28,6 +28,10 @@ export class CallInterruptionController {
     playbackQueue: CallTtsPlaybackQueue;
     eventSink: CallRoomEventSink;
     nowMs: () => number;
+    onBargeIn?: (
+      callId: string,
+      targetSpeakerRole: CallAudioSpeakerRole,
+    ) => void;
   }) {}
 
   observe(decision: CallVadDecision) {
@@ -64,10 +68,15 @@ export class CallInterruptionController {
       decision.probability ?? 0,
     );
     const now = this.options.nowMs();
-    if (state.consecutiveSpeechMs < this.options.config.minSpeechMs ||
+    if (state.consecutiveSpeechMs < requiredSpeechMs(
+        decision,
+        state,
+        this.options.config,
+      ) ||
       now - state.lastBargeInMs < this.options.config.cooldownMs ||
       this.inFlight.has(key)) return;
 
+    this.options.onBargeIn?.(decision.callId, decision.speakerRole);
     this.inFlight.add(key);
     void this.interrupt(decision, state).finally(() => {
       this.inFlight.delete(key);
@@ -219,6 +228,24 @@ function stateKey(callId: string, role: CallAudioSpeakerRole) {
 
 function maxFrameGapMs(decision: CallVadDecision) {
   return Math.max(400, decision.durationMs * 2);
+}
+
+function requiredSpeechMs(
+  decision: CallVadDecision,
+  state: SpeechState,
+  config: CallDuplexConfig,
+) {
+  const probability = Math.min(
+    decision.probability ?? config.minProbability,
+    state.minimumProbability,
+  );
+  if (probability >= 0.88) {
+    return Math.max(160, Math.round(config.minSpeechMs * 0.75));
+  }
+  if (probability < config.minProbability + 0.08) {
+    return Math.min(1000, Math.round(config.minSpeechMs * 1.5));
+  }
+  return config.minSpeechMs;
 }
 
 function vadUnavailableReason(

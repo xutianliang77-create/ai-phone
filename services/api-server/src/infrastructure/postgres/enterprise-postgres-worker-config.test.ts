@@ -9,12 +9,14 @@ describe("enterprise PostgreSQL worker config", () => {
       "requires PostgreSQL",
     );
     expect(() => loadEnterprisePostgresWorkerConfig({
+      API_STORAGE_DRIVER: "postgres",
       ENTERPRISE_REPOSITORY_DRIVER: "postgres",
     })).toThrow("cellId");
   });
 
   it("loads bounded worker defaults", () => {
     expect(loadEnterprisePostgresWorkerConfig({
+      API_STORAGE_DRIVER: "postgres",
       ENTERPRISE_REPOSITORY_DRIVER: "postgres",
       ENTERPRISE_WORKER_CELL_ID: "cn-cell-01",
       ENTERPRISE_WORKER_ID: "worker-01",
@@ -29,6 +31,7 @@ describe("enterprise PostgreSQL worker config", () => {
 
   it("rejects invalid limits instead of silently clamping them", () => {
     expect(() => loadEnterprisePostgresWorkerConfig({
+      API_STORAGE_DRIVER: "postgres",
       ENTERPRISE_REPOSITORY_DRIVER: "postgres",
       ENTERPRISE_WORKER_CELL_ID: "cn-cell-01",
       ENTERPRISE_WORKER_ID: "worker-01",

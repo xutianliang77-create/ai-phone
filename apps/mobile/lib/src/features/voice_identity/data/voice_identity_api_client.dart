@@ -45,17 +45,26 @@ class VoiceIdentity {
 }
 
 class VoiceIdentityApiClient implements VoiceIdentityClient {
+  static const _defaultRequestTimeout = Duration(seconds: 8);
+  static const _defaultEnrollmentTimeout = Duration(seconds: 35);
+
   VoiceIdentityApiClient({
     required Uri baseUrl,
     http.Client? client,
     AccountSessionStore accountSessionStore = const FileAccountSessionStore(),
+    Duration requestTimeout = _defaultRequestTimeout,
+    Duration enrollmentTimeout = _defaultEnrollmentTimeout,
   })  : _baseUrl = baseUrl,
         _client = client ?? http.Client(),
-        _accountSessionStore = accountSessionStore;
+        _accountSessionStore = accountSessionStore,
+        _requestTimeout = requestTimeout,
+        _enrollmentTimeout = enrollmentTimeout;
 
   final Uri _baseUrl;
   final http.Client _client;
   final AccountSessionStore _accountSessionStore;
+  final Duration _requestTimeout;
+  final Duration _enrollmentTimeout;
 
   @override
   Future<List<VoiceIdentity>> list() async {
@@ -90,6 +99,7 @@ class VoiceIdentityApiClient implements VoiceIdentityClient {
       'POST',
       '/voice-identities/$identityId/reference-audio',
       body: {'audioBase64': audioBase64},
+      timeout: _enrollmentTimeout,
     );
     return _identity(json);
   }
@@ -112,6 +122,7 @@ class VoiceIdentityApiClient implements VoiceIdentityClient {
     String method,
     String path, {
     Map<String, Object?>? body,
+    Duration? timeout,
   }) async {
     final request = http.Request(method, _baseUrl.resolve(path));
     request.headers.addAll(await accountAuthorizationHeaders(
@@ -120,8 +131,11 @@ class VoiceIdentityApiClient implements VoiceIdentityClient {
           body == null ? const {} : const {'content-type': 'application/json'},
     ));
     if (body != null) request.body = jsonEncode(body);
-    final streamed = await _client.send(request);
-    final response = await http.Response.fromStream(streamed);
+    final response = await (() async {
+      final streamed = await _client.send(request);
+      return http.Response.fromStream(streamed);
+    })()
+        .timeout(timeout ?? _requestTimeout);
     final json = jsonDecode(response.body) as Map<String, Object?>;
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw VoiceIdentityApiException(response.statusCode, json);

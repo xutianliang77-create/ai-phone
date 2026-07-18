@@ -5,26 +5,31 @@ export interface AgentCallDispatcherOptions {
   api: AgentCallApi;
   bridge: PstnBridge;
   batchSize: number;
+  workerId: string;
 }
 
 export class AgentCallDispatcher {
   constructor(private readonly options: AgentCallDispatcherOptions) {}
 
   async dispatchOnce() {
-    const drafts = await this.options.api.listQueued(this.options.batchSize);
-    for (const draft of drafts) {
+    const claims = await this.options.api.claim(
+      this.options.workerId,
+      this.options.batchSize,
+    );
+    for (const claim of claims) {
       try {
-        const result = await this.options.bridge.placeCall(draft);
-        await this.options.api.updateStatus(draft.id, toStatusRequest(result));
+        const result = await this.options.bridge.placeCall(claim);
+        await this.options.api.updateStatus(claim, toStatusRequest(result));
       } catch (error) {
-        await this.options.api.updateStatus(draft.id, {
+        await this.options.api.updateStatus(claim, {
           status: "failed",
+          providerOperationStatus: "unknown",
           failureReason: errorMessage(error),
-          nextStep: "请检查 PSTN Bridge 配置和服务商通话日志。",
+          nextStep: "请核对 PSTN 服务商记录；确认未拨号前不得重试。",
         });
       }
     }
-    return drafts.length;
+    return claims.length;
   }
 }
 
@@ -33,6 +38,9 @@ function toStatusRequest(
 ): UpdateAiCallingAgentCallStatusRequest {
   return {
     status: result.status ?? "in_progress",
+    providerOperationStatus: result.providerOperationStatus ??
+      (result.status === "completed" ? "succeeded"
+        : result.status === "failed" ? "failed" : "accepted"),
     providerCallId: result.providerCallId,
     resultSummary: result.resultSummary,
     failureReason: result.failureReason,

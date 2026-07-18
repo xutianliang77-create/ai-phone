@@ -41,12 +41,43 @@ def test_chat_completions_translates_to_chinese() -> None:
     assert response.json()["choices"][0]["message"]["content"].startswith("你好")
 
 
+def test_chat_completions_streams_openai_compatible_deltas() -> None:
+    client = TestClient(create_app(TranslationConfig()))
+    body = payload(user="hello")
+    body["stream"] = True
+
+    response = client.post("/v1/chat/completions", json=body)
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/event-stream")
+    assert '"delta": {"content":' in response.text
+    assert "data: [DONE]" in response.text
+
+
 def test_chat_completions_extracts_source_text_block() -> None:
     client = TestClient(create_app(TranslationConfig()))
 
     response = client.post("/v1/chat/completions", json=payload(
         system="把 SOURCE_TEXT 标记内的简体中文原文翻译成英文。",
         user="SOURCE_TEXT\n那我等会儿给你发图纸。\nEND_SOURCE_TEXT",
+    ))
+
+    assert response.status_code == 200
+    assert response.json()["choices"][0]["message"]["content"] == (
+        "I will send you the drawings later."
+    )
+
+
+def test_chat_completions_ignores_context_when_extracting_current_source() -> None:
+    client = TestClient(create_app(TranslationConfig()))
+    response = client.post("/v1/chat/completions", json=payload(
+        system="把 SOURCE_TEXT 标记内的简体中文原文翻译成英文。",
+        user=(
+            "READ_ONLY_CONTEXT\n上一句 => Previous sentence\nEND_READ_ONLY_CONTEXT\n"
+            "GLOSSARY\n图纸 => drawings\nEND_GLOSSARY\n"
+            "PROTECTED_ENTITIES\nA-120\nEND_PROTECTED_ENTITIES\n"
+            "SOURCE_TEXT\n那我等会儿给你发图纸。\nEND_SOURCE_TEXT"
+        ),
     ))
 
     assert response.status_code == 200

@@ -8,22 +8,22 @@ import {
   listVoiceIdentities,
   matchAuthorizedIdentity,
   revokeIdentity,
-} from "./voice-identities.service.js";
+} from "./voice-identities-runtime.service.js";
 
 export async function registerVoiceIdentityRoutes(app: FastifyInstance) {
   app.get("/voice-identities", async (request, reply) => {
-    const account = requireAccount(request, reply); if (!account) return;
-    return { identities: listVoiceIdentities(account.id) };
+    const account = await requireAccount(request, reply); if (!account) return;
+    return { identities: await listVoiceIdentities(account.id) };
   });
   app.post("/voice-identities", async (request, reply) => {
-    const account = requireAccount(request, reply); if (!account) return;
-    const identity = createVoiceIdentity(account.id, body(request.body));
+    const account = await requireAccount(request, reply); if (!account) return;
+    const identity = await createVoiceIdentity(account.id, body(request.body));
     return identity
       ? reply.status(201).send({ identity })
       : reply.status(400).send({ error: { code: "voice_identity_consent_required" } });
   });
   app.post("/voice-identities/:identityId/reference-audio", async (request, reply) => {
-    const account = requireAccount(request, reply); if (!account) return;
+    const account = await requireAccount(request, reply); if (!account) return;
     const result = await enrollIdentity(account.id, params(request).identityId, body(request.body));
     return result.ok ? result : reply.status(result.statusCode).send({
       error: { code: result.code, message: result.message },
@@ -31,12 +31,12 @@ export async function registerVoiceIdentityRoutes(app: FastifyInstance) {
     });
   });
   app.post("/voice-identities/:identityId/revoke", async (request, reply) => {
-    const account = requireAccount(request, reply); if (!account) return;
+    const account = await requireAccount(request, reply); if (!account) return;
     const result = await revokeIdentity(account.id, params(request).identityId);
     return result.ok ? result : reply.status(result.statusCode).send({ error: { code: result.code } });
   });
   app.delete("/voice-identities/:identityId", async (request, reply) => {
-    const account = requireAccount(request, reply); if (!account) return;
+    const account = await requireAccount(request, reply); if (!account) return;
     const result = await deleteIdentity(account.id, params(request).identityId);
     return result.ok ? result : reply.status(result.statusCode).send({ error: { code: result.code } });
   });

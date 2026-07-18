@@ -80,13 +80,23 @@ class RealtimeSettingsPanel extends StatelessWidget {
                 onPressed: () =>
                     _pickLanguage(context, LanguagePickerKind.target),
               ),
-              DomainLexiconButton(
-                settings: settings,
-                enabled: enabled,
-                onChanged: onChanged,
-              ),
+              if (settings.processingMode == RealtimeProcessingMode.online)
+                DomainLexiconButton(
+                  settings: settings,
+                  enabled: enabled,
+                  onChanged: onChanged,
+                ),
             ],
           ),
+          if (settings.processingMode == RealtimeProcessingMode.onDevice) ...[
+            const SizedBox(height: 8),
+            Text(
+              l10n.onDeviceLanguageCapabilityHint,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ],
           const SizedBox(height: 16),
           _SectionLabel(l10n.voiceSettingsGroupLabel),
           const SizedBox(height: 6),
@@ -97,6 +107,15 @@ class RealtimeSettingsPanel extends StatelessWidget {
             voicePresets: voicePresets,
             voicePresetsLoading: voicePresetsLoading,
           ),
+          if (settings.processingMode == RealtimeProcessingMode.onDevice) ...[
+            const SizedBox(height: 8),
+            Text(
+              l10n.onDeviceVoiceCapabilityHint,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ],
           if (!enabled) ...[
             const SizedBox(height: 8),
             Row(
@@ -125,7 +144,11 @@ class RealtimeSettingsPanel extends StatelessWidget {
 
   void _changeProcessingMode(Set<RealtimeProcessingMode> values) {
     if (values.isEmpty) return;
-    onChanged(settings.copyWith(processingMode: values.single));
+    onChanged(
+      settings
+          .copyWith(processingMode: values.single)
+          .normalizedForCapabilities(),
+    );
   }
 
   Future<void> _pickLanguage(
@@ -139,6 +162,9 @@ class RealtimeSettingsPanel extends StatelessWidget {
       selectedCode: kind == LanguagePickerKind.source
           ? settings.sourceLanguage
           : settings.targetLanguage,
+      supportedCodes: settings.processingMode == RealtimeProcessingMode.onDevice
+          ? onDeviceTranslationLanguageCodes
+          : null,
     );
     if (selected == null) return;
     onChanged(kind == LanguagePickerKind.source
@@ -176,8 +202,12 @@ class _VoiceOutputSelector extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
-    final selected =
-        enabled ? settings.voiceOutputMode : RealtimeVoiceOutputMode.off;
+    final selected = !enabled
+        ? RealtimeVoiceOutputMode.off
+        : settings.processingMode == RealtimeProcessingMode.onDevice &&
+                settings.voiceOutputMode == RealtimeVoiceOutputMode.myVoice
+            ? RealtimeVoiceOutputMode.natural
+            : settings.voiceOutputMode;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
@@ -200,11 +230,12 @@ class _VoiceOutputSelector extends StatelessWidget {
               icon: const Icon(Icons.record_voice_over_outlined),
               label: Text(l10n.voiceOutputNaturalLabel),
             ),
-            ButtonSegment<RealtimeVoiceOutputMode>(
-              value: RealtimeVoiceOutputMode.myVoice,
-              icon: const Icon(Icons.graphic_eq_outlined),
-              label: Text(l10n.voiceOutputMyVoiceLabel),
-            ),
+            if (settings.processingMode == RealtimeProcessingMode.online)
+              ButtonSegment<RealtimeVoiceOutputMode>(
+                value: RealtimeVoiceOutputMode.myVoice,
+                icon: const Icon(Icons.graphic_eq_outlined),
+                label: Text(l10n.voiceOutputMyVoiceLabel),
+              ),
           ],
           selected: <RealtimeVoiceOutputMode>{selected},
           onSelectionChanged: enabled

@@ -28,6 +28,7 @@ import 'realtime_runtime_factories.dart';
 import 'realtime_session_state.dart';
 import 'segment_draft.dart';
 import 'speech_capture_gate.dart';
+import 'translation_text_protection.dart';
 
 export 'realtime_session_state.dart';
 
@@ -35,6 +36,7 @@ part 'realtime_controller_gateway_events.dart';
 part 'realtime_controller_audio_session.dart';
 part 'realtime_controller_device_asr_recovery.dart';
 part 'realtime_controller_local_translation.dart';
+part 'realtime_controller_translation_preflight.dart';
 part 'realtime_controller_lifecycle.dart';
 part 'realtime_controller_segments.dart';
 part 'realtime_controller_speech.dart';
@@ -89,8 +91,10 @@ class RealtimeController extends ChangeNotifier {
   bool _autoSpeakTranslation;
   final Duration? _speechOutputTimeout;
   Future<void> _speechChain = Future<void>.value();
+  Future<void> _asrTextChain = Future<void>.value();
   int _speechGeneration = 0;
   final SpeechCaptureGate _speechCaptureGate;
+  final Set<String> _speechEchoSegmentIds = <String>{};
   RealtimeStatus _status = RealtimeStatus.idle;
   final List<SubtitleSegment> _segments = <SubtitleSegment>[];
   final Map<String, SegmentDraft> _drafts = <String, SegmentDraft>{};
@@ -135,6 +139,7 @@ class RealtimeController extends ChangeNotifier {
       if (_usesDeviceAsr) {
         await _mobileAsrProvider?.stop();
         await _drainDeviceAsrStopEvents();
+        await _drainAsrTextSegments();
       } else {
         await _audioCapture.stop();
       }

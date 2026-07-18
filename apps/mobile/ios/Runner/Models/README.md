@@ -35,6 +35,18 @@ Documents/Models/multilingual/2240ms/
 Documents/Models/latin/2240ms/
 ```
 
+FluidAudio Silero VAD is staged separately for offline device startup:
+
+```text
+Runner/Models/vad/silero-vad-unified-256ms-v6.0.0.mlmodelc/
+```
+
+From the repository root:
+
+```bash
+HF_ENDPOINT=https://hf-mirror.com npm run ios:vad:stage
+```
+
 For development builds, the app can also ask FluidAudio to download and cache
 the matching FluidInference variant at runtime:
 

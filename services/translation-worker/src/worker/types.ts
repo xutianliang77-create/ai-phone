@@ -6,6 +6,7 @@ import type {
   CallRoomTranslationLanguage,
   SegmentTimingDto,
   SegmentVadContextDto,
+  SpeechPipelineTimingDto,
 } from "@translation/contracts";
 
 export type CallAudioSpeakerRole = Exclude<CallRoomSpeakerRole, "worker">;
@@ -16,8 +17,10 @@ export interface CallAudioFrame extends AudioFrame {
 
 export interface TranscriptSegment {
   segmentId: string;
+  speechId?: string;
   turnId?: string;
   revision?: number;
+  pipelineTiming?: SpeechPipelineTimingDto;
   text: string;
   language?: CallRoomTranslationLanguage;
   confidence?: number;
@@ -63,7 +66,32 @@ export interface CallTranslationProvider {
     text: string;
     sourceLanguage: CallRoomTranslationLanguage;
     targetLanguage: CallRoomTranslationLanguage;
+    speechId: string;
+    turnId: string;
+    revision: number;
+    pipelineGeneration: number;
+    signal: AbortSignal;
+    previousSegments?: TranslationContextSegment[];
+    glossary?: TranslationGlossaryTerm[];
+    protectedEntities?: string[];
   }): Promise<string>;
+  translateStream?(input: Parameters<CallTranslationProvider["translate"]>[0]):
+    AsyncIterable<TranslationStreamEvent>;
+}
+
+export type TranslationStreamEvent =
+  | { type: "delta"; text: string }
+  | { type: "stable_prefix"; text: string }
+  | { type: "final"; text: string };
+
+export interface TranslationContextSegment {
+  sourceText: string;
+  translatedText: string;
+}
+
+export interface TranslationGlossaryTerm {
+  sourceText: string;
+  translatedText: string;
 }
 
 export interface SynthesizedSpeech {
@@ -101,8 +129,34 @@ export interface CallTtsProvider {
     language: CallRoomTranslationLanguage;
     speakerRole: CallAudioSpeakerRole;
     segmentId: string;
+    speechId: string;
+    turnId: string;
+    revision: number;
+    pipelineGeneration: number;
+    signal: AbortSignal;
     voice?: TtsVoiceConfig;
   }): Promise<SynthesizedSpeech | null>;
+  synthesizeStream?(input: Parameters<CallTtsProvider["synthesize"]>[0]):
+    AsyncIterable<TtsStreamEvent>;
+  warmup?(input: { signal: AbortSignal; voice?: TtsVoiceConfig }):
+    Promise<TtsWarmupResult>;
+}
+
+export type TtsStreamEvent =
+  | { type: "metadata"; speech: SynthesizedSpeech }
+  | {
+    type: "audio_chunk";
+    sequence: number;
+    audio: NonNullable<SynthesizedSpeech["audio"]>;
+  }
+  | { type: "final" };
+
+export interface TtsWarmupResult {
+  cached: boolean;
+  elapsedMs: number;
+  firstAudioMs?: number;
+  provider?: string;
+  model?: string;
 }
 
 export interface CallTtsAudioSink {

@@ -77,7 +77,7 @@ function configureCallRoomEnv() {
   process.env.LIVEKIT_URL = "wss://livekit.example.cn";
   process.env.LIVEKIT_API_KEY = "lk_key";
   process.env.LIVEKIT_API_SECRET = "lk_secret";
-  process.env.CALL_ROOM_TOKEN_TTL_SECONDS = "3600";
+  process.env.CALL_ROOM_TOKEN_TTL_SECONDS = "120";
   process.env.INTERNAL_API_SECRET = "internal-secret-123";
 }
 

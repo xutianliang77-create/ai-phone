@@ -38,6 +38,7 @@ ASR_MODEL_DIR="${ASR_MODEL_DIR:-$DEFAULT_ASR_MODEL_DIR}"
 TRANSLATION_MODEL_DIR="${TRANSLATION_MODEL_DIR:-$REMOTE_ROOT/data/translation-product-fit/models/hymt2_1_8b}"
 TTS_MODEL_DIR="${TTS_MODEL_DIR:-$REMOTE_ROOT/data/tts-product-fit/models/openbmb_voxcpm2}"
 TTS_VOICE_REFERENCE_DIR="${TTS_VOICE_REFERENCE_DIR:-/data/models/ai-phone-server/runtime/data/voice-references}"
+TTS_VOICE_PRESET_MANIFEST="${TTS_VOICE_PRESET_MANIFEST:-$TTS_SERVICE_DIR/voice-presets.json}"
 
 ASR_SERVICE_API_KEY="${ASR_SERVICE_API_KEY:-local-asr-service-api-key}"
 TRANSLATION_SERVICE_API_KEY="${TRANSLATION_SERVICE_API_KEY:-local-translation-service-api-key}"
@@ -45,7 +46,7 @@ TTS_SERVICE_API_KEY="${TTS_SERVICE_API_KEY:-local-tts-service-api-key}"
 SPEAKER_SERVICE_API_KEY="${SPEAKER_SERVICE_API_KEY:-local-speaker-service-api-key}"
 SPEAKER_MODEL_PROVIDER="${SPEAKER_MODEL_PROVIDER:-sortformer_shadow}"
 SPEAKER_MODEL_ID="${SPEAKER_MODEL_ID:-$REMOTE_ROOT/models/sortformer/diar_streaming_sortformer_4spk-v2.1.nemo}"
-VOICE_IDENTITY_MODEL_ID="${VOICE_IDENTITY_MODEL_ID:-nvidia/speakerverification_en_titanet_large}"
+VOICE_IDENTITY_MODEL_ID="${VOICE_IDENTITY_MODEL_ID:-$REMOTE_ROOT/models/titanet/speakerverification_en_titanet_large.nemo}"
 VOICE_IDENTITY_STORE_DIR="${VOICE_IDENTITY_STORE_DIR:-/data/ai-phone/speaker-identities}"
 
 ASR_QWEN3_CONTEXT="${ASR_QWEN3_CONTEXT:-}"
@@ -100,6 +101,7 @@ ssh "$BEELINK_HOST" \
    TRANSLATION_MODEL_DIR='$TRANSLATION_MODEL_DIR' \
    TTS_MODEL_DIR='$TTS_MODEL_DIR' \
    TTS_VOICE_REFERENCE_DIR='$TTS_VOICE_REFERENCE_DIR' \
+   TTS_VOICE_PRESET_MANIFEST='$TTS_VOICE_PRESET_MANIFEST' \
    ASR_SERVICE_API_KEY='$ASR_SERVICE_API_KEY' \
    TRANSLATION_SERVICE_API_KEY='$TRANSLATION_SERVICE_API_KEY' \
    TTS_SERVICE_API_KEY='$TTS_SERVICE_API_KEY' \
@@ -130,8 +132,12 @@ start_service() {
   local log="$REMOTE_ROOT/logs/$name.log"
   local pid_file="$dir/$name.pid"
   local python="${4:-$REMOTE_PYTHON}"
+  local unit="ai-phone-$name.service"
+  local unit_dir="$HOME/.config/systemd/user"
+  local unit_path="$unit_dir/$unit"
 
   cd "$dir"
+  systemctl --user stop "$unit" 2>/dev/null || true
   if [ -f "$pid_file" ] && kill -0 "$(cat "$pid_file")" 2>/dev/null; then
     kill "$(cat "$pid_file")"
     wait_for_stop "$(cat "$pid_file")"
@@ -148,22 +154,41 @@ start_service() {
     fi
   fi
 
-  set -a
-  . ./.env
-  set +a
-  nohup setsid "$python" -m uvicorn app.main:app \
-    --host 0.0.0.0 \
-    --port "$port" \
-    > "$log" 2>&1 < /dev/null &
-  echo $! > "$pid_file"
+  mkdir -p "$unit_dir"
+  cat > "$unit_path" <<EOF
+[Unit]
+Description=ai phone $name
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=$dir
+EnvironmentFile=$dir/.env
+Environment=PYTHONUNBUFFERED=1
+ExecStart=$python -m uvicorn app.main:app --host 0.0.0.0 --port $port
+Restart=always
+RestartSec=3
+TimeoutStopSec=20
+KillMode=mixed
+StandardOutput=append:$log
+StandardError=append:$log
+
+[Install]
+WantedBy=default.target
+EOF
+  systemctl --user daemon-reload
+  systemctl --user enable "$unit" >/dev/null
+  systemctl --user restart "$unit"
   for _ in $(seq 1 240); do
     if ss -ltnp 2>/dev/null | grep ":$port" >/dev/null; then
+      systemctl --user show "$unit" --property=MainPID --value > "$pid_file"
       return 0
     fi
     sleep 0.5
   done
   echo "$name did not start listening on $port. Last log lines:" >&2
-  tail -80 "$log" >&2 || true
+  journalctl --user -u "$unit" -n 80 --no-pager >&2 || true
   exit 1
 }
 
@@ -219,9 +244,18 @@ speaker_key="$(strong_secret "$SPEAKER_SERVICE_API_KEY" "$SPEAKER_SERVICE_DIR/.e
 voice_identity_key=""
 voice_identity_provider="off"
 if [ "$VOICE_IDENTITY_ENABLED" = "true" ]; then
+  if [ ! -f "$VOICE_IDENTITY_MODEL_ID" ]; then
+    echo "Voice identity checkpoint is missing: $VOICE_IDENTITY_MODEL_ID" >&2
+    exit 1
+  fi
   voice_identity_provider="nemo_titanet"
   voice_identity_key="$(awk -F= '/^VOICE_IDENTITY_ENCRYPTION_KEY=/{print $2}' \
     "$SPEAKER_SERVICE_DIR/.env" 2>/dev/null | tail -1)"
+  if [ -n "$voice_identity_key" ] && ! "$SPEAKER_REMOTE_PYTHON" -c \
+    "from cryptography.fernet import Fernet; Fernet('$voice_identity_key'.encode())" \
+    >/dev/null 2>&1; then
+    voice_identity_key=""
+  fi
   if [ -z "$voice_identity_key" ]; then
     voice_identity_key="$($SPEAKER_REMOTE_PYTHON -c \
       'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())')"
@@ -320,7 +354,8 @@ write_env "$TTS_SERVICE_DIR/.env" \
   "TTS_VOXCPM2_INFERENCE_TIMESTEPS=10" \
   "TTS_VOXCPM2_HIFI_INFERENCE_TIMESTEPS=15" \
   "TTS_VOXCPM2_LOAD_DENOISER=false" \
-  "TTS_VOICE_REFERENCE_DIR=$TTS_VOICE_REFERENCE_DIR"
+  "TTS_VOICE_REFERENCE_DIR=$TTS_VOICE_REFERENCE_DIR" \
+  "TTS_VOICE_PRESET_MANIFEST=$TTS_VOICE_PRESET_MANIFEST"
 
 if [ "$SPEAKER_SERVICE_ENABLED" = "true" ]; then
   if [ ! -x "$SPEAKER_REMOTE_PYTHON" ]; then
@@ -369,20 +404,24 @@ echo "Health checks:"
 check_health() {
   local url="$1"
   local require_available="$2"
+  local require_voice_identity="${3:-false}"
   local body
   body="$(curl -fsS "$url")"
   printf "%s\n" "$body"
-  HEALTH_BODY="$body" python3 - "$require_available" <<'PY'
+  HEALTH_BODY="$body" python3 - "$require_available" "$require_voice_identity" <<'PY'
 import json
 import os
 import sys
 
 require_available = sys.argv[1] == "true"
+require_voice_identity = sys.argv[2] == "true"
 payload = json.loads(os.environ["HEALTH_BODY"])
 if payload.get("status") not in {"ok", "ready"}:
     raise SystemExit(f"health status is not ok: {payload.get('status')}")
 if require_available and payload.get("available") is not True:
     raise SystemExit(f"model is not available: {payload.get('reason')}")
+if require_voice_identity and payload.get("voiceIdentityAvailable") is not True:
+    raise SystemExit("voice identity model is not loaded")
 PY
 }
 
@@ -390,5 +429,5 @@ check_health "http://$BEELINK_IP:$ASR_PORT/health" false
 check_health "http://$BEELINK_IP:$TRANSLATION_PORT/health" true
 check_health "http://$BEELINK_IP:$TTS_PORT/health" true
 if [ "$SPEAKER_SERVICE_ENABLED" = "true" ]; then
-  check_health "http://$BEELINK_IP:$SPEAKER_PORT/health" false
+  check_health "http://$BEELINK_IP:$SPEAKER_PORT/health" false "$VOICE_IDENTITY_ENABLED"
 fi

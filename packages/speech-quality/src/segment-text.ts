@@ -17,8 +17,10 @@ export function mergeTranscriptParts(parts: SpeechTranscript[]): SpeechTranscrip
       first.text.trim(),
     );
   const languageProfile = analyzeTurnLanguage(text, first.language);
+  const pipelineTiming = mergedPipelineTiming(parts);
   return {
     segmentId: first.segmentId,
+    ...(first.speechId ? { speechId: first.speechId } : {}),
     ...(first.turnId ? { turnId: first.turnId } : {}),
     ...(parts.some((part) => typeof part.revision === "number")
       ? { revision: Math.max(...parts.map((part) => part.revision ?? 0)) }
@@ -29,9 +31,45 @@ export function mergeTranscriptParts(parts: SpeechTranscript[]): SpeechTranscrip
     confidence: mergedConfidence(parts) ?? last.confidence,
     ...(last.endpointReason ? { endpointReason: last.endpointReason } : {}),
     ...(last.vadContext ? { vadContext: last.vadContext } : {}),
+    ...(pipelineTiming ? { pipelineTiming } : {}),
     ...(first.speaker ? { speaker: first.speaker } : {}),
     ...(mergedTiming(parts) ? { timing: mergedTiming(parts) } : {}),
   };
+}
+
+function mergedPipelineTiming(parts: SpeechTranscript[]) {
+  const timings = parts
+    .map((part) => part.pipelineTiming)
+    .filter((timing): timing is NonNullable<SpeechTranscript["pipelineTiming"]> =>
+      timing !== undefined
+    );
+  if (timings.length === 0) return undefined;
+  return {
+    ...minimumTiming(timings, "asrStartedAtMs"),
+    ...maximumTiming(timings, "asrFinalAtMs"),
+    ...minimumTiming(timings, "processingQueueEnteredAtMs"),
+    ...maximumTiming(timings, "processingQueueReleasedAtMs"),
+  };
+}
+
+function minimumTiming(
+  timings: Array<NonNullable<SpeechTranscript["pipelineTiming"]>>,
+  field: "asrStartedAtMs" | "processingQueueEnteredAtMs",
+) {
+  const values = timings
+    .map((timing) => timing[field])
+    .filter((value): value is number => value !== undefined);
+  return values.length > 0 ? { [field]: Math.min(...values) } : {};
+}
+
+function maximumTiming(
+  timings: Array<NonNullable<SpeechTranscript["pipelineTiming"]>>,
+  field: "asrFinalAtMs" | "processingQueueReleasedAtMs",
+) {
+  const values = timings
+    .map((timing) => timing[field])
+    .filter((value): value is number => value !== undefined);
+  return values.length > 0 ? { [field]: Math.max(...values) } : {};
 }
 
 function mergedTiming(parts: SpeechTranscript[]) {

@@ -10,6 +10,10 @@ final class CoreMlNemotronAudioInput {
   private var tapInstalled = false
   private var audioSessionActive = false
   private var audioSessionError: String?
+  private var voiceProcessingAttempted = false
+  private var lastVoiceProcessingEnabled = false
+  private var lastVoiceProcessingAgcEnabled = false
+  private var voiceProcessingError: String?
   private var lastChunkSamples = 0
   private var lastInputSampleRate = 0
   private var lastInputChannels = 0
@@ -22,6 +26,7 @@ final class CoreMlNemotronAudioInput {
   private var flushedTailSamples = 0
   private var lastChunkRms = 0.0
   private var lastConversionError: String?
+  private var runtimeErrorEmitted = false
   private let targetSampleRate = 16_000.0
 
   init(audioSessionCoordinator: AudioSessionCoordinator) {
@@ -30,10 +35,17 @@ final class CoreMlNemotronAudioInput {
 
   func start(
     chunkDurationMs: Int,
+    onRuntimeError: @escaping (String, String) -> Void,
     onChunk: @escaping ([Float]) -> Void
   ) throws {
     _ = stop()
     try configureAudioSession()
+    do {
+      try configureVoiceProcessing()
+    } catch {
+      deactivateAudioSession()
+      throw error
+    }
 
     let input = engine.inputNode
     let inputFormat = input.outputFormat(forBus: 0)
@@ -66,10 +78,20 @@ final class CoreMlNemotronAudioInput {
         if let error = result.error {
           self.conversionFailures += 1
           self.lastConversionError = error
+          self.emitRuntimeError(
+            code: "audio_conversion_failed",
+            message: error,
+            handler: onRuntimeError
+          )
         }
         if samples.isEmpty && converted.frameLength > 0 {
           self.floatExtractionFailures += 1
           self.lastConversionError = "float_channel_data_missing"
+          self.emitRuntimeError(
+            code: "audio_float_extraction_failed",
+            message: "Audio converter returned samples without Float32 channel data",
+            handler: onRuntimeError
+          )
         }
         self.totalConvertedSamples += samples.count
         self.pendingSamples.append(contentsOf: samples)
@@ -95,6 +117,7 @@ final class CoreMlNemotronAudioInput {
   }
 
   func stop(flushPending: Bool = false) -> [Float] {
+    deactivateVoiceProcessing()
     if tapInstalled {
       engine.inputNode.removeTap(onBus: 0)
       tapInstalled = false
@@ -127,8 +150,9 @@ final class CoreMlNemotronAudioInput {
         "conversionFailures": conversionFailures,
         "floatExtractionFailures": floatExtractionFailures,
         "emittedChunks": emittedChunks,
-        "flushedTailSamples": flushedTailSamples,
-        "lastChunkRms": lastChunkRms
+      "flushedTailSamples": flushedTailSamples,
+      "lastChunkRms": lastChunkRms,
+      "runtimeErrorEmitted": runtimeErrorEmitted
       ]
       if let lastConversionError {
         stats["lastConversionError"] = lastConversionError
@@ -139,6 +163,10 @@ final class CoreMlNemotronAudioInput {
       "running": running,
       "tapInstalled": tapInstalled,
       "sessionActive": audioSessionActive,
+      "voiceProcessingPolicy": "apple_voice_processing_aec_ns",
+      "voiceProcessingAttempted": voiceProcessingAttempted,
+      "lastVoiceProcessingEnabled": lastVoiceProcessingEnabled,
+      "lastVoiceProcessingAgcEnabled": lastVoiceProcessingAgcEnabled,
       "targetSampleRate": Int(targetSampleRate),
       "lastChunkSamples": lastChunkSamples,
       "inputSampleRate": lastInputSampleRate,
@@ -147,6 +175,9 @@ final class CoreMlNemotronAudioInput {
     payload.merge(stats) { _, value in value }
     if let audioSessionError {
       payload["sessionError"] = audioSessionError
+    }
+    if let voiceProcessingError {
+      payload["voiceProcessingError"] = voiceProcessingError
     }
     return payload
   }
@@ -163,7 +194,18 @@ final class CoreMlNemotronAudioInput {
       flushedTailSamples = 0
       lastChunkRms = 0
       lastConversionError = nil
+      runtimeErrorEmitted = false
     }
+  }
+
+  private func emitRuntimeError(
+    code: String,
+    message: String,
+    handler: (String, String) -> Void
+  ) {
+    guard !runtimeErrorEmitted else { return }
+    runtimeErrorEmitted = true
+    handler(code, message)
   }
 
   private func configureAudioSession() throws {
@@ -175,6 +217,48 @@ final class CoreMlNemotronAudioInput {
       audioSessionActive = false
       audioSessionError = error.localizedDescription
       throw error
+    }
+  }
+
+  private func configureVoiceProcessing() throws {
+    voiceProcessingAttempted = true
+    lastVoiceProcessingEnabled = false
+    lastVoiceProcessingAgcEnabled = false
+    do {
+      guard #available(iOS 13.0, *) else {
+        throw NSError(
+          domain: "CoreMlNemotronAudioInput",
+          code: 1,
+          userInfo: [
+            NSLocalizedDescriptionKey: "Apple voice processing requires iOS 13 or later"
+          ]
+        )
+      }
+      let input = engine.inputNode
+      try input.setVoiceProcessingEnabled(true)
+      input.isVoiceProcessingAGCEnabled = false
+      guard input.isVoiceProcessingEnabled else {
+        throw NSError(
+          domain: "CoreMlNemotronAudioInput",
+          code: 2,
+          userInfo: [
+            NSLocalizedDescriptionKey: "Apple voice processing did not become active"
+          ]
+        )
+      }
+      lastVoiceProcessingEnabled = true
+      lastVoiceProcessingAgcEnabled = input.isVoiceProcessingAGCEnabled
+      voiceProcessingError = nil
+    } catch {
+      voiceProcessingError = error.localizedDescription
+      throw error
+    }
+  }
+
+  private func deactivateVoiceProcessing() {
+    guard voiceProcessingAttempted else { return }
+    if #available(iOS 13.0, *) {
+      try? engine.inputNode.setVoiceProcessingEnabled(false)
     }
   }
 

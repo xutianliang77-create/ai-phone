@@ -10,7 +10,20 @@ import { diagnosticsAdminStatus } from "../diagnostics/diagnostics-auth.js";
 import { sessionReviewProviderStatus } from "../sessions/session-review.js";
 import { getReleaseMaterialsReadiness } from "./release-materials-readiness.js";
 import { getReleaseReadiness } from "./release-readiness.js";
-import { getStorageStatus } from "../../infrastructure/storage/json-store.js";
+import { getRepositoryStorageStatus } from
+  "../../infrastructure/storage/repository-runtime.js";
+import { getLiveKitDispatchReadiness } from "../worker-dispatches/livekit-dispatch-readiness.js";
+import { getLiveKitEgressReadiness } from "../recordings/livekit-egress-readiness.js";
+import { getPostgresProjectionReadiness } from "../../infrastructure/storage/postgres-projection-status.js";
+import { getAgentAssistReadiness } from "../agent-calls/agent-assist-provider.js";
+import { getAutonomousAgentReadiness } from "../agent-calls/autonomous-agent-policy.js";
+import { getLiveKitIngressReadiness } from "../ingress/livekit-ingress-readiness.js";
+import { getPlatformScaleReadiness } from "../../infrastructure/platform/platform-scale-readiness.js";
+import { getPlatformTelemetryReadiness } from "../../infrastructure/observability/platform-telemetry.js";
+import { getVoiceAgentRuntimeReadiness } from
+  "../agent-calls/voice-agent-runtime-readiness.js";
+import { getAgentConsultReadiness } from
+  "../agent-calls/agent-consult-readiness.js";
 
 export async function registerHealthRoutes(app: FastifyInstance) {
   app.get("/health", async () => {
@@ -20,9 +33,19 @@ export async function registerHealthRoutes(app: FastifyInstance) {
     const callRoomReadiness = getCallRoomReadiness();
     const pstnReadiness = getPstnReadiness();
     const smsReadiness = getSmsDeploymentReadiness();
-    const diagnosticsReadiness = getDiagnosticsDeploymentReadiness();
+    const diagnosticsReadiness = await getDiagnosticsDeploymentReadiness();
     const releaseMaterialsReadiness = getReleaseMaterialsReadiness();
     const sessionReview = sessionReviewProviderStatus();
+    const workerDispatchReadiness = getLiveKitDispatchReadiness();
+    const egressReadiness = getLiveKitEgressReadiness();
+    const postgresProjectionReadiness = getPostgresProjectionReadiness();
+    const agentAssistReadiness = getAgentAssistReadiness();
+    const autonomousAgentReadiness = getAutonomousAgentReadiness();
+    const ingressReadiness = getLiveKitIngressReadiness();
+    const platformScaleReadiness = getPlatformScaleReadiness();
+    const telemetryReadiness = getPlatformTelemetryReadiness();
+    const voiceAgentRuntimeReadiness = getVoiceAgentRuntimeReadiness();
+    const agentConsultReadiness = getAgentConsultReadiness();
     return {
       status: "ok",
       service: "api-server",
@@ -32,7 +55,7 @@ export async function registerHealthRoutes(app: FastifyInstance) {
       dataRegion: env.dataRegion,
       callProviderPolicy: env.callProviderPolicy,
       complianceProfile: env.complianceProfile,
-      storage: getStorageStatus(),
+      storage: getRepositoryStorageStatus(),
       diagnostics: {
         appErrorReporting: "enabled",
         appErrorEndpoint: "/diagnostics/app-errors",
@@ -53,6 +76,16 @@ export async function registerHealthRoutes(app: FastifyInstance) {
       pstnReadiness,
       smsReadiness,
       sessionReview,
+      workerDispatchReadiness,
+      egressReadiness,
+      postgresProjectionReadiness,
+      agentAssistReadiness,
+      autonomousAgentReadiness,
+      voiceAgentRuntimeReadiness,
+      agentConsultReadiness,
+      ingressReadiness,
+      platformScaleReadiness,
+      telemetryReadiness,
       diagnosticsReadiness,
       releaseMaterialsReadiness,
     };
@@ -69,7 +102,7 @@ export async function registerHealthRoutes(app: FastifyInstance) {
   });
 
   app.get("/health/release-ready", async (_request, reply) => {
-    const releaseReadiness = getReleaseReadiness();
+    const releaseReadiness = await getReleaseReadiness();
     const statusCode = releaseReadiness.status === "ready" ? 200 : 503;
     return reply.status(statusCode).send(releaseReadiness);
   });

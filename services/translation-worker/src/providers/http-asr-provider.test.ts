@@ -11,6 +11,9 @@ describe("HttpAsrProvider", () => {
         requests.push({ url, body: JSON.parse(init?.body as string) });
         return response(200, {
           segmentId: "seg_1",
+          speechId: "speech_1",
+          turnId: "turn_1",
+          revision: 2,
           text: "hello",
           language: "en",
         });
@@ -35,7 +38,13 @@ describe("HttpAsrProvider", () => {
       targetLanguage: "zh",
       mode: "call_link",
     });
-    expect(transcript).toMatchObject({ segmentId: "seg_1", text: "hello" });
+    expect(transcript).toMatchObject({
+      segmentId: "seg_1",
+      speechId: "speech_1",
+      turnId: "turn_1",
+      revision: 2,
+      text: "hello",
+    });
   });
 
   it("flushes the matching speaker ASR session", async () => {

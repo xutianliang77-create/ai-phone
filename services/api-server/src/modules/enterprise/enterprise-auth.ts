@@ -15,7 +15,7 @@ export async function requireEnterpriseContext(
   reply: FastifyReply,
   runtime: EnterpriseRepositoryRuntime,
 ) {
-  const account = requireAccount(request, reply);
+  const account = await requireAccount(request, reply);
   if (!account) return null;
   const selectedTenantId = headerValue(request.headers["x-tenant-id"]);
   const result = await runtime.resolveContext({

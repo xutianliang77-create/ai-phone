@@ -16,6 +16,14 @@ extension RealtimeSettingsL10n on AppLocalizations {
   String get targetLanguageLabel => isChinese ? '目标语言' : 'Target';
   String get autoDetectLanguageLabel => isChinese ? '自动识别' : 'Auto detect';
   String get autoReverseTargetLabel => isChinese ? '自动反向' : 'Auto reverse';
+  String get onDeviceLanguageCapabilityHint => isChinese
+      ? '端侧当前支持中英互译，开始前会检查系统语言包。'
+      : 'On-device mode currently supports Chinese-English translation and '
+          'checks system language packs before starting.';
+  String get onDeviceVoiceCapabilityHint => isChinese
+      ? '端侧使用系统自然声音；“我的声音”和行业词库仅在线模式可用。'
+      : 'On-device mode uses the system voice. My Voice and industry terms '
+          'are available online only.';
   String get autoSpeakTranslationLabel =>
       isChinese ? '自动朗读译文' : 'Speak translation';
   String get voiceOutputSettingLabel => isChinese ? '朗读声音' : 'Spoken voice';

@@ -17,8 +17,20 @@ export interface LiveKitTtsRtcModule {
 
 export interface LiveKitTtsRoom {
   localParticipant?: {
-    publishTrack(track: unknown, options: unknown): Promise<unknown>;
+    publishTrack(
+      track: unknown,
+      options: unknown,
+    ): Promise<{ sid?: unknown }>;
   };
+}
+
+export interface LiveKitTtsTrackAccess {
+  authorizeTrack(input: {
+    targetLegId: string;
+    targetSpeakerRole: "host" | "guest";
+    trackSid: string;
+    trackName: string;
+  }): Promise<void>;
 }
 
 interface LiveKitAudioSource {
@@ -46,6 +58,7 @@ export class LiveKitTtsAudioSink implements CallTtsAudioSink {
     room: LiveKitTtsRoom;
     rtc: LiveKitTtsRtcModule;
     frameSizeMs?: number;
+    trackAccess?: LiveKitTtsTrackAccess;
   }) {}
 
   async play(input: Parameters<CallTtsAudioSink["play"]>[0]) {
@@ -130,13 +143,29 @@ export class LiveKitTtsAudioSink implements CallTtsAudioSink {
     const participant = this.options.room.localParticipant;
     if (!participant) throw new Error("LiveKit room has no local participant");
     const source = new this.options.rtc.AudioSource(sampleRate, 1);
+    const trackName = liveKitTtsTrackName(
+      targetSpeakerRole,
+      sampleRate,
+      targetLegId,
+    );
     const track = this.options.rtc.LocalAudioTrack.createAudioTrack(
-      liveKitTtsTrackName(targetSpeakerRole, sampleRate, targetLegId),
+      trackName,
       source,
     );
     const publishOptions = new this.options.rtc.TrackPublishOptions();
     publishOptions.source = this.options.rtc.TrackSource.SOURCE_MICROPHONE;
-    await participant.publishTrack(track, publishOptions);
+    const publication = await participant.publishTrack(track, publishOptions);
+    if (this.options.trackAccess) {
+      if (typeof publication.sid !== "string" || !publication.sid) {
+        throw new Error("LiveKit TTS publication is missing a track SID");
+      }
+      await this.options.trackAccess.authorizeTrack({
+        targetLegId,
+        targetSpeakerRole,
+        trackSid: publication.sid,
+        trackName,
+      });
+    }
     return { source, sampleRate };
   }
 }

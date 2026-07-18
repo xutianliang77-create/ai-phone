@@ -62,6 +62,10 @@ mv "$tmp_env" .env
 chmod 600 .env
 
 pid_file="$REMOTE_SERVICE_DIR/tts-service.pid"
+unit="ai-phone-tts-service.service"
+unit_dir="$HOME/.config/systemd/user"
+unit_path="$unit_dir/$unit"
+systemctl --user stop "$unit" 2>/dev/null || true
 if [ -f "$pid_file" ] && kill -0 "$(cat "$pid_file")" 2>/dev/null; then
   kill "$(cat "$pid_file")"
   for _ in $(seq 1 20); do
@@ -96,17 +100,42 @@ if [ "$GENERATE_VOICE_PRESETS" = "1" ]; then
   "$REMOTE_PYTHON" scripts/generate_voice_presets.py "${generate_args[@]}"
 fi
 
-set -a
-. ./.env
-set +a
-nohup "$REMOTE_PYTHON" -m uvicorn app.main:app \
-  --host 0.0.0.0 \
-  --port "$TTS_SERVICE_PORT" \
-  > "$REMOTE_ROOT/logs/tts-service.log" 2>&1 &
-echo $! > "$pid_file"
-sleep 2
-ss -ltnp 2>/dev/null | grep ":$TTS_SERVICE_PORT" >/dev/null
-echo "started pid $(cat "$pid_file") on port $TTS_SERVICE_PORT"
+mkdir -p "$unit_dir"
+cat > "$unit_path" <<EOF
+[Unit]
+Description=ai phone tts-service
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=$REMOTE_SERVICE_DIR
+EnvironmentFile=$REMOTE_SERVICE_DIR/.env
+Environment=PYTHONUNBUFFERED=1
+ExecStart=$REMOTE_PYTHON -m uvicorn app.main:app --host 0.0.0.0 --port $TTS_SERVICE_PORT
+Restart=always
+RestartSec=3
+TimeoutStopSec=20
+KillMode=mixed
+StandardOutput=append:$REMOTE_ROOT/logs/tts-service.log
+StandardError=append:$REMOTE_ROOT/logs/tts-service.log
+
+[Install]
+WantedBy=default.target
+EOF
+systemctl --user daemon-reload
+systemctl --user enable "$unit" >/dev/null
+systemctl --user restart "$unit"
+for _ in $(seq 1 240); do
+  if ss -ltnp 2>/dev/null | grep ":$TTS_SERVICE_PORT" >/dev/null; then
+    systemctl --user show "$unit" --property=MainPID --value > "$pid_file"
+    echo "started pid $(cat "$pid_file") on port $TTS_SERVICE_PORT"
+    exit 0
+  fi
+  sleep 0.5
+done
+journalctl --user -u "$unit" -n 80 --no-pager >&2 || true
+exit 1
 REMOTE
 
 echo "Health:"

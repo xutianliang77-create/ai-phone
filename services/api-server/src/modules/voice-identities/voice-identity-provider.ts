@@ -47,7 +47,7 @@ function request(path: string, init: RequestInit) {
         ? { authorization: `Bearer ${process.env.SPEAKER_HTTP_API_KEY}` }
         : {}),
     },
-    signal: AbortSignal.timeout(Number(process.env.VOICE_IDENTITY_HTTP_TIMEOUT_MS ?? 15000)),
+    signal: AbortSignal.timeout(Number(process.env.VOICE_IDENTITY_HTTP_TIMEOUT_MS ?? 30000)),
   }).then((response) => {
     if (!response.ok) throw new Error(`Voice identity provider HTTP ${response.status}`);
     return response;

@@ -20,6 +20,8 @@ class AiCallingAgentDraft {
     this.consentPromptVersion,
     this.authorizedAt,
     this.takeoverRequestedAt,
+    this.takeoverReadyAt,
+    this.takeoverResolvedAt,
     this.takeoverReason,
     this.cancelledAt,
     this.cancellationReason,
@@ -48,6 +50,8 @@ class AiCallingAgentDraft {
   final String? consentPromptVersion;
   final String? authorizedAt;
   final String? takeoverRequestedAt;
+  final String? takeoverReadyAt;
+  final String? takeoverResolvedAt;
   final String? takeoverReason;
   final String? cancelledAt;
   final String? cancellationReason;
@@ -82,6 +86,8 @@ class AiCallingAgentDraft {
       consentPromptVersion: json['consentPromptVersion'] as String?,
       authorizedAt: json['authorizedAt'] as String?,
       takeoverRequestedAt: json['takeoverRequestedAt'] as String?,
+      takeoverReadyAt: json['takeoverReadyAt'] as String?,
+      takeoverResolvedAt: json['takeoverResolvedAt'] as String?,
       takeoverReason: json['takeoverReason'] as String?,
       cancelledAt: json['cancelledAt'] as String?,
       cancellationReason: json['cancellationReason'] as String?,
@@ -225,6 +231,44 @@ class AiCallingAgentApiClient {
     if (!_isSuccess(response)) {
       throw AiCallingAgentApiException(
           'Request takeover failed: ${response.body}');
+    }
+    return _draftFromBody(response.body);
+  }
+
+  Future<AiCallingAgentDraft> acceptTakeover({
+    required String draftId,
+    required String participantIdentity,
+  }) {
+    return _takeoverDecision(
+      draftId: draftId,
+      decision: 'accept',
+      participantIdentity: participantIdentity,
+    );
+  }
+
+  Future<AiCallingAgentDraft> rejectTakeover({required String draftId}) {
+    return _takeoverDecision(draftId: draftId, decision: 'reject');
+  }
+
+  Future<AiCallingAgentDraft> _takeoverDecision({
+    required String draftId,
+    required String decision,
+    String? participantIdentity,
+  }) async {
+    final response = await _client.post(
+      _baseUrl.resolve(
+        '/ai-calling-agent/drafts/$draftId/takeover/$decision',
+      ),
+      headers: await _authHeaders(json: true),
+      body: jsonEncode({
+        if (participantIdentity != null)
+          'participantIdentity': participantIdentity,
+      }),
+    );
+    if (!_isSuccess(response)) {
+      throw AiCallingAgentApiException(
+        'Takeover $decision failed: ${response.body}',
+      );
     }
     return _draftFromBody(response.body);
   }

@@ -1,3 +1,9 @@
+import {
+  callRoomResourceLimitIssues,
+  getCallRoomResourceLimits,
+  type CallRoomResourceLimits,
+} from "./call-room-resource-limits.js";
+
 export interface CallRoomReadiness {
   status: "ready" | "not_ready";
   provider: string;
@@ -10,6 +16,7 @@ export interface CallRoomReadiness {
   internalApi: {
     secret: "configured" | "configuration_required";
   };
+  resourceLimits: CallRoomResourceLimits;
   issues: string[];
 }
 
@@ -18,9 +25,11 @@ export interface LiveKitRoomConfig {
   apiKey: string;
   apiSecret: string;
   tokenTtlSeconds: number;
+  resourceLimits: CallRoomResourceLimits;
 }
 
-const defaultTokenTtlSeconds = 3600;
+const defaultTokenTtlSeconds = 120;
+const maxTokenTtlSeconds = 300;
 
 export function getCallRoomReadiness(): CallRoomReadiness {
   const provider = callRoomProvider();
@@ -31,6 +40,7 @@ export function getCallRoomReadiness(): CallRoomReadiness {
     ...liveKitIssues(livekitUrl),
     ...internalApiIssues(),
     ...tokenTtlIssues(),
+    ...callRoomResourceLimitIssues(),
   ];
   return {
     status: issues.length === 0 ? "ready" : "not_ready",
@@ -50,6 +60,7 @@ export function getCallRoomReadiness(): CallRoomReadiness {
         ? "configured"
         : "configuration_required",
     },
+    resourceLimits: getCallRoomResourceLimits(),
     issues,
   };
 }
@@ -67,6 +78,7 @@ export function getLiveKitRoomConfig():
       apiKey: process.env.LIVEKIT_API_KEY ?? "",
       apiSecret: process.env.LIVEKIT_API_SECRET ?? "",
       tokenTtlSeconds: readiness.livekit.tokenTtlSeconds,
+      resourceLimits: readiness.resourceLimits,
     },
   };
 }
@@ -107,15 +119,15 @@ function internalApiIssues() {
 }
 
 function tokenTtlIssues() {
-  return isPositiveInt(process.env.CALL_ROOM_TOKEN_TTL_SECONDS)
+  return isAllowedTokenTtl(process.env.CALL_ROOM_TOKEN_TTL_SECONDS)
     ? []
-    : ["call room invalid CALL_ROOM_TOKEN_TTL_SECONDS"];
+    : [`call room CALL_ROOM_TOKEN_TTL_SECONDS must be 1-${maxTokenTtlSeconds}`];
 }
 
 function parseTokenTtlSeconds() {
   const value = process.env.CALL_ROOM_TOKEN_TTL_SECONDS;
   if (!value) return defaultTokenTtlSeconds;
-  return isPositiveInt(value) ? Number(value) : defaultTokenTtlSeconds;
+  return isAllowedTokenTtl(value) ? Number(value) : defaultTokenTtlSeconds;
 }
 
 function hasStrongInternalSecret() {
@@ -131,8 +143,8 @@ function isAllowedLiveKitUrl(value: string) {
   }
 }
 
-function isPositiveInt(value: string | undefined) {
+function isAllowedTokenTtl(value: string | undefined) {
   if (value === undefined || value.length === 0) return true;
   const parsed = Number(value);
-  return Number.isInteger(parsed) && parsed > 0;
+  return Number.isInteger(parsed) && parsed > 0 && parsed <= maxTokenTtlSeconds;
 }

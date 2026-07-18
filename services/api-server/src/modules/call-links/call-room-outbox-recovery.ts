@@ -6,9 +6,9 @@ import { deliverPendingCallRoomDataEvents } from "./call-room-worker.js";
 export async function recoverPendingCallRoomOutbox(now = new Date()) {
   let publishedSessionCount = 0;
   const failedSessionIds: string[] = [];
-  for (const sessionId of pendingCallRoomSessionIds(now)) {
+  for (const sessionId of await pendingCallRoomSessionIds(now)) {
     await withSessionWriteLock(sessionId, async () => {
-      const record = findCallLink(sessionId);
+      const record = await findCallLink(sessionId);
       if (!record) return;
       const result = await deliverPendingCallRoomDataEvents(record, now);
       if (result.ok) {

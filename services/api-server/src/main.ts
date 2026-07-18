@@ -11,7 +11,7 @@ import {
 import {
   recoverPendingVoiceIdentityDeletions,
   startVoiceIdentityDeletionRecovery,
-} from "./modules/voice-identities/voice-identity-deletion-recovery.js";
+} from "./modules/voice-identities/voice-identity-deletion-recovery-runtime.js";
 import {
   createEnvironmentTenantLifecycleExecutor,
 } from "./modules/enterprise/enterprise-tenant-lifecycle-executor.js";
@@ -20,18 +20,40 @@ import {
   startEnterpriseTenantLifecycleRecovery,
 } from "./modules/enterprise/enterprise-tenant-lifecycle-processor.js";
 import {
-  runEnterprisePostgresStartupGate,
-} from "./infrastructure/postgres/enterprise-postgres-startup-gate.js";
+  initializeEnterprisePrimaryRuntime,
+} from "./infrastructure/postgres/enterprise-primary-runtime.js";
 import {
-  createEnvironmentEnterpriseRepositoryRuntime,
-} from "./modules/enterprise/enterprise-repository-runtime-factory.js";
-
-const enterprisePostgresStartup = await runEnterprisePostgresStartupGate();
-const enterpriseRepositoryRuntime =
-  createEnvironmentEnterpriseRepositoryRuntime({
-    postgresStartupVerified: enterprisePostgresStartup.status === "verified",
-  });
+  recoverPendingLiveKitSipCompletions,
+  startLiveKitSipReconciliationRecovery,
+} from "./modules/call-links/livekit-sip-reconciliation-recovery.js";
+import {
+  recoverStaleWorkerDispatches,
+  startWorkerDispatchRecovery,
+} from "./modules/worker-dispatches/worker-dispatch-recovery.js";
+import {
+  recoverRecordingJobs,
+  startRecordingRecovery,
+} from "./modules/recordings/recording-recovery.js";
+import { startPostgresProjectionWorker } from "./infrastructure/storage/postgres-projection-worker.js";
+import {
+  recoverExternalMediaSources,
+  startIngressRecovery,
+} from "./modules/ingress/ingress-recovery.js";
+import { assertPlatformScaleStartup } from "./infrastructure/platform/platform-scale-readiness.js";
+import { startRecordingArtifactRecovery } from "./modules/recordings/recording-artifact-recovery.js";
+import { startAgentCallLeaseRecovery } from
+  "./modules/agent-calls/agent-call-lease-recovery.js";
+import { startPlatformTelemetry } from "./infrastructure/observability/platform-telemetry.js";
+import {
+  recoverAgentConsults,
+  startAgentConsultRecovery,
+} from "./modules/agent-calls/agent-consult-recovery.js";
 const env = loadEnv();
+const primaryRuntime = await initializeEnterprisePrimaryRuntime();
+const repositoryRuntime = primaryRuntime.platform;
+const enterpriseRepositoryRuntime = primaryRuntime.enterprise;
+const stopTelemetry = await startPlatformTelemetry();
+assertPlatformScaleStartup();
 const recovery = await recoverStaleRealtimeSessions({
   graceSeconds: env.realtimeStaleSessionGraceSeconds,
 });
@@ -40,10 +62,15 @@ const app = await buildApp({
   tenantLifecycleExecutor,
   enterpriseRepositoryRuntime,
 });
-if (enterprisePostgresStartup.status === "verified") {
+if (primaryRuntime.startup.status === "verified") {
   app.log.info(
-    { enterprisePostgresStartup },
-    "Enterprise PostgreSQL startup gate verified",
+    {
+      platformPostgresStartup: repositoryRuntime.driver === "postgres"
+        ? repositoryRuntime.primaryStartup
+        : undefined,
+      enterprisePostgresStartup: primaryRuntime.startup,
+    },
+    "Unified PostgreSQL Primary Runtime verified",
   );
 }
 const outboxRecovery = await recoverPendingCallRoomOutbox();
@@ -62,6 +89,9 @@ const tenantLifecycleRecovery = legacyTenantLifecycleRecovery
       failedCount: 0,
       processingCount: 0,
     };
+const sipReconciliation = await recoverPendingLiveKitSipCompletions({
+  graceSeconds: env.livekitSipReconciliationGraceSeconds,
+});
 const stopRecovery = startStaleRealtimeSessionRecovery({
   intervalSeconds: env.realtimeStaleSessionSweepSeconds,
   graceSeconds: env.realtimeStaleSessionGraceSeconds,
@@ -106,13 +136,102 @@ const stopTenantLifecycleRecovery = legacyTenantLifecycleRecovery
       ),
     })
   : () => {};
+const stopSipReconciliation = startLiveKitSipReconciliationRecovery({
+  intervalSeconds: env.realtimeStaleSessionSweepSeconds,
+  graceSeconds: env.livekitSipReconciliationGraceSeconds,
+  onResult: (result) => {
+    if (result.recoveredCount > 0) {
+      app.log.warn({ sipReconciliation: result }, "Reconciled unanswered SIP calls");
+    }
+  },
+  onError: (error) => app.log.error({ error }, "SIP reconciliation failed"),
+});
+const stopWorkerDispatchRecovery = startWorkerDispatchRecovery({
+  intervalSeconds: env.realtimeStaleSessionSweepSeconds,
+  onResult: (result) => {
+    if (result.recoveredCount > 0 || result.failedCount > 0) {
+      app.log.info({ workerDispatchRecovery: result }, "Reconciled Worker dispatches");
+    }
+  },
+  onError: (error) => app.log.error({ error }, "Worker dispatch recovery failed"),
+});
+const stopRecordingRecovery = startRecordingRecovery({
+  intervalSeconds: env.realtimeStaleSessionSweepSeconds,
+  onResult: (result) => {
+    if (result.recoveredCount > 0 || result.failedCount > 0) {
+      app.log.info({ recordingRecovery: result }, "Reconciled recording jobs");
+    }
+  },
+  onError: (error) => app.log.error({ error }, "Recording recovery failed"),
+});
+const stopIngressRecovery = startIngressRecovery({
+  intervalSeconds: env.realtimeStaleSessionSweepSeconds,
+  onResult: (result) => {
+    if (result.recoveredCount > 0 || result.failedCount > 0) {
+      app.log.info({ ingressRecovery: result }, "Reconciled external media sources");
+    }
+  },
+  onError: (error) => app.log.error({ error }, "Ingress recovery failed"),
+});
+const stopRecordingArtifactRecovery = startRecordingArtifactRecovery({
+  onResult: (result) => {
+    if (result.verifiedCount > 0 || result.deletedCount > 0 || result.failedCount > 0) {
+      app.log.info({ recordingArtifacts: result }, "Reconciled recording artifacts");
+    }
+  },
+  onError: (error) => app.log.error({ error }, "Recording artifact recovery failed"),
+});
+const stopAgentCallLeaseRecovery = startAgentCallLeaseRecovery({
+  intervalSeconds: env.realtimeStaleSessionSweepSeconds,
+  onResult: (result) => {
+    if (result.recoveredCount > 0 || result.reconciliationExpiredCount > 0) {
+      app.log.warn({ agentCallLeases: result }, "Agent call leases reconciled fail closed");
+    }
+  },
+  onError: (error) => app.log.error({ error }, "Agent call lease recovery failed"),
+});
+const stopAgentConsultRecovery = startAgentConsultRecovery({
+  intervalSeconds: env.realtimeStaleSessionSweepSeconds,
+  onResult: (result) => {
+    if (result.recoveredCount > 0 || result.failedCount > 0) {
+      app.log.warn({ agentConsults: result }, "External operator consults reconciled");
+    }
+  },
+  onError: (error) => app.log.error({ error }, "Agent consult recovery failed"),
+});
+let stopPostgresProjection: () => Promise<void> = async () => {};
 app.addHook("onClose", async () => {
   stopRecovery();
   stopOutboxRecovery();
   stopVoiceIdentityRecovery();
   stopTenantLifecycleRecovery();
-  await enterpriseRepositoryRuntime.close();
+  stopSipReconciliation();
+  stopWorkerDispatchRecovery();
+  stopRecordingRecovery();
+  stopIngressRecovery();
+  stopRecordingArtifactRecovery();
+  stopAgentCallLeaseRecovery();
+  stopAgentConsultRecovery();
+  await stopPostgresProjection();
+  await primaryRuntime.close();
+  await stopTelemetry();
 });
+
+let shutdownStarted = false;
+const shutdown = async (signal: "SIGINT" | "SIGTERM") => {
+  if (shutdownStarted) return;
+  shutdownStarted = true;
+  app.log.info({ signal }, "API shutdown started");
+  try {
+    await app.close();
+    app.log.info({ signal }, "API shutdown completed");
+  } catch (error) {
+    app.log.error({ error, signal }, "API shutdown failed");
+    process.exitCode = 1;
+  }
+};
+process.once("SIGINT", () => void shutdown("SIGINT"));
+process.once("SIGTERM", () => void shutdown("SIGTERM"));
 
 if (recovery.recoveredCount > 0) {
   app.log.warn({ recovery }, "Recovered stale realtime sessions");
@@ -135,5 +254,29 @@ if (
     "Recovered tenant lifecycle jobs",
   );
 }
-
+if (sipReconciliation.recoveredCount > 0) {
+  app.log.warn({ sipReconciliation }, "Reconciled unanswered SIP calls");
+}
 await app.listen({ port: env.apiPort, host: "0.0.0.0" });
+stopPostgresProjection = await startPostgresProjectionWorker({
+  onError: (error, eventId) => app.log.error(
+    { error, eventId },
+    "PostgreSQL projection failed",
+  ),
+});
+const agentConsultRecovery = await recoverAgentConsults();
+if (agentConsultRecovery.recoveredCount > 0 || agentConsultRecovery.failedCount > 0) {
+  app.log.warn({ agentConsultRecovery }, "External operator consults reconciled");
+}
+const ingressRecovery = await recoverExternalMediaSources();
+if (ingressRecovery.recoveredCount > 0 || ingressRecovery.failedCount > 0) {
+  app.log.info({ ingressRecovery }, "Reconciled external media sources");
+}
+const recordingRecovery = await recoverRecordingJobs();
+if (recordingRecovery.recoveredCount > 0 || recordingRecovery.failedCount > 0) {
+  app.log.info({ recordingRecovery }, "Reconciled recording jobs");
+}
+const workerDispatchRecovery = await recoverStaleWorkerDispatches();
+if (workerDispatchRecovery.recoveredCount > 0 || workerDispatchRecovery.failedCount > 0) {
+  app.log.info({ workerDispatchRecovery }, "Reconciled Worker dispatches");
+}

@@ -5,23 +5,24 @@ import type {
 } from "@translation/contracts";
 import { domainLexiconVersion } from "@translation/contracts";
 import { loadEnv } from "../../config/env.js";
-import { activePlanForUser } from "../plans/plans.service.js";
-import { createSession } from "../sessions/sessions.repository.js";
-import { createUsageHold } from "../usage/usage.service.js";
-import { getReadyVoiceProfileTtsConfig } from "../voice-profiles/voice-profiles.service.js";
+import { activePlanForUser } from "../plans/plans-runtime.service.js";
+import { createSession } from "../sessions/sessions-runtime.repository.js";
+import { createUsageHold } from "../usage/usage-hold-runtime.service.js";
+import { getReadyVoiceProfileTtsConfig } from
+  "../voice-profiles/voice-profiles-runtime.service.js";
 import { createRealtimeToken } from "./realtime-token.js";
 
 const maxDurationSeconds = 1800;
 const realtimeStartHoldSeconds = 30;
 
-export function createRealtimeSession(
+export async function createRealtimeSession(
   userId: string,
   input: CreateRealtimeSessionRequest,
-): CreateRealtimeSessionResponse | null {
-  const plan = activePlanForUser(userId);
+): Promise<CreateRealtimeSessionResponse | null> {
+  const plan = await activePlanForUser(userId);
   const env = loadEnv();
   const sessionId = randomUUID();
-  const hold = createUsageHold(userId, realtimeStartHoldSeconds, plan, {
+  const hold = await createUsageHold(userId, realtimeStartHoldSeconds, {
     sessionId,
     idempotencyKey: `hold:${sessionId}`,
     note: "realtime_session_hold",
@@ -30,9 +31,9 @@ export function createRealtimeSession(
   if (hold.status !== "held") return null;
   const now = Math.floor(Date.now() / 1000);
   const expiresAt = now + 5 * 60;
-  const voice = resolveRealtimeVoice(userId, input);
+  const voice = await resolveRealtimeVoice(userId, input);
 
-  createSession({
+  await createSession({
     id: sessionId,
     userId,
     mode: input.mode,
@@ -94,7 +95,7 @@ function endpointModeForRealtimeMode(
     : "conversation" as const;
 }
 
-function resolveRealtimeVoice(
+async function resolveRealtimeVoice(
   userId: string,
   input: CreateRealtimeSessionRequest,
 ) {
@@ -103,7 +104,7 @@ function resolveRealtimeVoice(
   if (voice.mode !== "personal_clone" && voice.mode !== "ultimate_clone") {
     return voice;
   }
-  const readyVoice = getReadyVoiceProfileTtsConfig(userId);
+  const readyVoice = await getReadyVoiceProfileTtsConfig(userId);
   if (!readyVoice) return undefined;
   return readyVoice;
 }

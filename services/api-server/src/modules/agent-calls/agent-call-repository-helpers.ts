@@ -32,6 +32,10 @@ export function isAgentCallCancellable(status: string) {
   return (
     status === "draft" ||
     status === "authorized" ||
+    status === "queued" ||
+    status === "dispatching" ||
+    status === "reconciliation_required" ||
+    status === "in_progress" ||
     status === "requires_human_takeover" ||
     status === "takeover_requested"
   );
@@ -40,6 +44,8 @@ export function isAgentCallCancellable(status: string) {
 export function isStartedStatus(status: string) {
   return (
     status === "queued" ||
+    status === "dispatching" ||
+    status === "reconciliation_required" ||
     status === "in_progress" ||
     status === "completed" ||
     status === "failed"

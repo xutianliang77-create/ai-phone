@@ -11,13 +11,8 @@ export function evaluateAgentCallStartPolicy(input: {
   if (!isGrayUserAllowed(input.userId)) {
     return denied("gray_not_allowed", "Account is not in the AI calling gray allowlist");
   }
-  const phone = normalizeAgentCallPhone(input.targetPhone);
-  if (!isValidAgentCallPhone(phone)) {
-    return denied("invalid_target", "Target phone number is invalid");
-  }
-  if (blockedNumbers().has(phone) || emergencyNumbers.has(phone)) {
-    return denied("do_not_call", "Target number is blocked from AI calling");
-  }
+  const target = evaluateAgentCallTargetPolicy(input.targetPhone);
+  if (!target.allowed) return target;
   const limit = positiveInteger(process.env.AGENT_CALL_RATE_LIMIT_PER_HOUR, 3);
   const since = (input.now ?? new Date()).getTime() - 60 * 60 * 1000;
   const recentStarts = input.drafts.filter((draft) =>
@@ -29,6 +24,17 @@ export function evaluateAgentCallStartPolicy(input: {
     return denied("rate_limited", "AI calling hourly rate limit exceeded", 429);
   }
   return { allowed: true as const, rateLimitPerHour: limit };
+}
+
+export function evaluateAgentCallTargetPolicy(targetPhone: string) {
+  const phone = normalizeAgentCallPhone(targetPhone);
+  if (!isValidAgentCallPhone(phone)) {
+    return denied("invalid_target", "Target phone number is invalid");
+  }
+  if (blockedNumbers().has(phone) || emergencyNumbers.has(phone)) {
+    return denied("do_not_call", "Target number is blocked from AI calling");
+  }
+  return { allowed: true as const };
 }
 
 export function grayModeStatus(userId: string) {

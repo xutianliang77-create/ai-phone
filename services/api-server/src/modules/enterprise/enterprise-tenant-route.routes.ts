@@ -16,7 +16,7 @@ export async function registerEnterpriseTenantRouteRoutes(
   runtime: EnterpriseRepositoryRuntime,
 ) {
   app.get("/saas/v1/tenants/:tenantId/route", async (request, reply) => {
-    const account = requireAccount(request, reply);
+    const account = await requireAccount(request, reply);
     if (!account) return;
     const { tenantId } = request.params as { tenantId: string };
     const context = await runtime.resolveContext({

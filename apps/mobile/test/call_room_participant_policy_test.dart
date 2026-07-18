@@ -11,4 +11,28 @@ void main() {
     expect(isHumanCallRoomParticipant('call-1:worker:worker-1'), isFalse);
     expect(isHumanCallRoomParticipant('unknown'), isFalse);
   });
+
+  test('accepts only server-injected caption topic data', () {
+    expect(
+      isTrustedCallRoomDataPacket(
+        topic: callRoomCaptionTopic,
+        senderIdentity: null,
+      ),
+      isTrue,
+    );
+    expect(
+      isTrustedCallRoomDataPacket(
+        topic: callRoomCaptionTopic,
+        senderIdentity: 'call-1:guest:guest-1',
+      ),
+      isFalse,
+    );
+    expect(
+      isTrustedCallRoomDataPacket(
+        topic: 'untrusted.topic',
+        senderIdentity: null,
+      ),
+      isFalse,
+    );
+  });
 }

@@ -1,4 +1,4 @@
-import { getReadyVoiceProfileTtsConfig } from "./voice-profiles.service.js";
+import { getReadyVoiceProfileTtsConfig } from "./voice-profiles-runtime.service.js";
 
 type TestAudioLanguage = "zh" | "en";
 
@@ -32,7 +32,7 @@ export async function synthesizeMyVoiceTestAudio(
   userId: string,
   body: Record<string, unknown>,
 ): Promise<VoiceTestAudioResult> {
-  const voice = getReadyVoiceProfileTtsConfig(userId);
+  const voice = await getReadyVoiceProfileTtsConfig(userId);
   if (!voice) {
     return failure(409, "voice_profile_not_ready", "voice profile is not ready");
   }

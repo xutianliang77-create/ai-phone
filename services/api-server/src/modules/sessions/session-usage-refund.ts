@@ -1,29 +1,31 @@
-import { refundSeconds, releaseUsageHold } from "../usage/usage.service.js";
+import { refundUsage } from "../usage/usage-hold-runtime.service.js";
 import type { SessionRecord } from "./session-record.js";
 
 export interface SessionUsageRefundOptions {
   reason?: unknown;
 }
 
-export function refundSessionUsage(
+export async function refundSessionUsage(
   session: SessionRecord,
   options: SessionUsageRefundOptions = {},
 ) {
   const refundedSeconds = normalizeSeconds(session.consumedSeconds);
   const reason = cleanReason(options.reason);
   const idempotencyKey = `refund:${session.id}`;
-  const result = refundSeconds(session.userId, refundedSeconds, undefined, {
-    sessionId: session.id,
-    idempotencyKey,
-    note: `usage_refund:${reason}`,
-  });
-  releaseUsageHold(session.userId, session.id);
+  const result = await refundUsage(
+    session.userId,
+    session.id,
+    refundedSeconds,
+    `usage_refund:${reason}`,
+  );
+  const ledger = "ledger" in result ? result.ledger : undefined;
   return {
     idempotencyKey,
     reason,
-    refundedSeconds: result.refundedSeconds,
+    refundedSeconds: "refundedSeconds" in result
+      ? result.refundedSeconds : Math.max(0, result.ledger.deltaSeconds),
     balance: result.balance,
-    ledger: result.status === "refunded" ? result.ledger : undefined,
+    ledger,
   };
 }
 

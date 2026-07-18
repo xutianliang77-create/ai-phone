@@ -37,13 +37,25 @@ import {
 } from "./enterprise-postgres-runtime-lifecycle-process.js";
 
 export function createPostgresEnterpriseRepositoryRuntime(
-  pool: EnterprisePostgresPool,
+  pools: EnterprisePostgresPool | {
+    tenantPool: EnterprisePostgresPool;
+    directoryPool: EnterprisePostgresPool;
+    close: () => Promise<void>;
+  },
 ): EnterpriseRepositoryRuntime {
+  const split = "tenantPool" in pools
+    ? pools
+    : {
+        tenantPool: pools,
+        directoryPool: pools,
+        close: () => pools.end(),
+      };
+  const pool = split.tenantPool;
   return {
     driver: "postgres",
     resolveContext(input) {
       return resolveEnterprisePostgresContext({
-        pool,
+        pool: split.directoryPool,
         userId: input.userId,
         selectedTenantId: input.selectedTenantId,
         traceId: input.traceId,
@@ -51,7 +63,7 @@ export function createPostgresEnterpriseRepositoryRuntime(
     },
     listMemberships(input) {
       return listEnterprisePostgresMemberships({
-        pool,
+        pool: split.directoryPool,
         userId: input.userId,
         traceId: input.traceId,
       });
@@ -192,7 +204,7 @@ export function createPostgresEnterpriseRepositoryRuntime(
       return [];
     },
     async close() {
-      await pool.end();
+      await split.close();
     },
   };
 }

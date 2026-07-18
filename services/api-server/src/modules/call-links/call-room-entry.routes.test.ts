@@ -102,7 +102,11 @@ describe("call room entry routes", () => {
     const guestTokenResponse = await app.inject({
       method: "POST",
       url: `/call-links/${callId}/room-token`,
-      payload: { participantRole: "guest", participantName: "Guest" },
+      payload: {
+        participantRole: "guest",
+        participantName: "Guest",
+        guestTicket: guestTicketFrom(created),
+      },
     });
     const guestToken = guestTokenResponse.json();
     const guestConnected = await app.inject({
@@ -158,7 +162,11 @@ describe("call room entry routes", () => {
     const guestToken = (await app.inject({
       method: "POST",
       url: `/call-links/${callId}/room-token`,
-      payload: { participantRole: "guest", participantName: "Guest" },
+      payload: {
+        participantRole: "guest",
+        participantName: "Guest",
+        guestTicket: guestTicketFrom(created),
+      },
     })).json();
     await app.inject({
       method: "POST",
@@ -200,7 +208,10 @@ describe("call room entry routes", () => {
     const token = (await app.inject({
       method: "POST",
       url: `/call-links/${first.json().callId}/room-token`,
-      payload: { participantRole: "guest" },
+      payload: {
+        participantRole: "guest",
+        guestTicket: guestTicketFrom(first),
+      },
     })).json();
 
     const response = await app.inject({
@@ -221,7 +232,10 @@ describe("call room entry routes", () => {
     const response = await app.inject({
       method: "POST",
       url: `/call-links/${created.json().callId}/room-token`,
-      payload: { participantRole: "guest" },
+      payload: {
+        participantRole: "guest",
+        guestTicket: guestTicketFrom(created),
+      },
     });
     await app.close();
 
@@ -292,7 +306,7 @@ function configureCallRoomEnv() {
   process.env.LIVEKIT_URL = "wss://livekit.example.cn";
   process.env.LIVEKIT_API_KEY = "lk_key";
   process.env.LIVEKIT_API_SECRET = "lk_secret";
-  process.env.CALL_ROOM_TOKEN_TTL_SECONDS = "3600";
+  process.env.CALL_ROOM_TOKEN_TTL_SECONDS = "120";
   process.env.INTERNAL_API_SECRET = "internal-secret-123";
   process.env.CALL_FULL_DUPLEX_ENABLED = "true";
 }
@@ -316,4 +330,9 @@ function connectionConfirmation(token: Record<string, string>) {
     participantRole: token.participantRole,
     token: token.token,
   };
+}
+
+function guestTicketFrom(response: { json(): Record<string, unknown> }) {
+  const joinUrl = String(response.json().joinUrl ?? "");
+  return new URL(joinUrl).searchParams.get("ticket") ?? "";
 }

@@ -14,6 +14,10 @@ import type {
   CallVadDecisionSink,
   TranscriptSegment,
 } from "../worker/types.js";
+import {
+  PersistentAsrStream,
+  type AsrWebSocketFactory,
+} from "./persistent-asr-stream.js";
 
 export interface HttpAsrProviderOptions {
   endpoint: string;
@@ -23,11 +27,17 @@ export interface HttpAsrProviderOptions {
   endpointMode?: AsrEndpointMode;
   hotwords?: string[];
   corrections?: Array<{ fromText: string; toText: string }>;
+  streamEndpoint?: string;
+  streamFallbackToHttp?: boolean;
+  webSocketFactory?: AsrWebSocketFactory;
   fetchFn?: typeof fetch;
 }
 
 interface AsrResponse {
   segmentId?: string;
+  speechId?: string;
+  turnId?: string;
+  revision?: number;
   text?: string;
   language?: CallRoomTranslationLanguage;
   confidence?: number | null;
@@ -39,6 +49,7 @@ interface AsrResponse {
 export class HttpAsrProvider implements CallAsrProvider {
   private readonly fetchFn: typeof fetch;
   private vadDecisionSink: CallVadDecisionSink | null = null;
+  private readonly streams = new Map<string, PersistentAsrStream>();
 
   constructor(private readonly options: HttpAsrProviderOptions) {
     this.fetchFn = options.fetchFn ?? fetch;
@@ -51,6 +62,28 @@ export class HttpAsrProvider implements CallAsrProvider {
   }
 
   async transcribe(frame: CallAudioFrame): Promise<TranscriptSegment | null> {
+    if (this.options.streamEndpoint) {
+      try {
+        const response = await this.streamFor(frame.sessionId, frame.speakerRole)
+          .transcribe(frame);
+        if (response.vadDecision) {
+          this.vadDecisionSink?.({
+            ...response.vadDecision,
+            callId: frame.sessionId,
+            speakerRole: frame.speakerRole,
+          });
+        }
+        return response.transcript
+          ? parseAsrResponse(response.transcript, `asr_${frame.sequence}`)
+          : null;
+      } catch (error) {
+        if (this.options.streamFallbackToHttp === false) throw error;
+      }
+    }
+    return this.transcribeHttp(frame);
+  }
+
+  private async transcribeHttp(frame: CallAudioFrame): Promise<TranscriptSegment | null> {
     const response = await this.fetchWithTimeout(this.options.endpoint, {
       method: "POST",
       headers: this.headers(),
@@ -75,6 +108,21 @@ export class HttpAsrProvider implements CallAsrProvider {
   }
 
   async flush(callId: string, speakerRole: CallAudioSpeakerRole) {
+    const stream = this.streams.get(streamKey(callId, speakerRole));
+    if (stream) {
+      try {
+        const response = await stream.flush();
+        return response.transcript
+          ? parseAsrResponse(response.transcript, "asr_flush")
+          : null;
+      } catch (error) {
+        if (this.options.streamFallbackToHttp === false) throw error;
+      }
+    }
+    return this.flushHttp(callId, speakerRole);
+  }
+
+  private async flushHttp(callId: string, speakerRole: CallAudioSpeakerRole) {
     const response = await this.fetchWithTimeout(
       this.flushUrl(asrSessionId(callId, speakerRole)),
       {
@@ -94,7 +142,22 @@ export class HttpAsrProvider implements CallAsrProvider {
     return parseAsrResponse(await response.json() as AsrResponse, "asr_flush");
   }
 
-  async closeCall(_callId: string) {}
+  async closeCall(callId: string) {
+    await Promise.allSettled((["host", "guest"] as const).map(async (speakerRole) => {
+      const key = streamKey(callId, speakerRole);
+      const stream = this.streams.get(key);
+      this.streams.delete(key);
+      if (stream) {
+        try {
+          await stream.close();
+          return;
+        } catch {
+          // Complete cleanup through the idempotent HTTP endpoint.
+        }
+      }
+      await this.closeSessionHttp(asrSessionId(callId, speakerRole));
+    }));
+  }
 
   private emitVadDecision(response: Response, frame: CallAudioFrame) {
     const headers = response.headers as Headers | undefined;
@@ -150,9 +213,45 @@ export class HttpAsrProvider implements CallAsrProvider {
     const base = this.options.endpoint.replace(/\/asr\/transcribe$/, "");
     return `${base}/asr/sessions/${encodeURIComponent(sessionId)}/flush`;
   }
+
+  private closeUrl(sessionId: string) {
+    const base = this.options.endpoint.replace(/\/asr\/transcribe$/, "");
+    return `${base}/asr/sessions/${encodeURIComponent(sessionId)}`;
+  }
+
+  private async closeSessionHttp(sessionId: string) {
+    const response = await this.fetchWithTimeout(this.closeUrl(sessionId), {
+      method: "DELETE",
+      headers: this.headers(),
+    });
+    if (!response.ok && response.status !== 404 && response.status !== 410) {
+      throw new Error(`HTTP ASR close returned HTTP ${response.status}`);
+    }
+  }
+
+  private streamFor(callId: string, speakerRole: CallAudioSpeakerRole) {
+    const key = streamKey(callId, speakerRole);
+    const existing = this.streams.get(key);
+    if (existing) return existing;
+    const created = new PersistentAsrStream(callId, speakerRole, {
+      endpoint: this.options.streamEndpoint!,
+      apiKey: this.options.apiKey,
+      timeoutMs: this.options.timeoutMs,
+      endpointMode: this.options.endpointMode ?? "call_link",
+      hotwords: this.options.hotwords ?? [],
+      corrections: this.options.corrections ?? [],
+      webSocketFactory: this.options.webSocketFactory,
+    });
+    this.streams.set(key, created);
+    return created;
+  }
 }
 
 function asrSessionId(callId: string, speakerRole: CallAudioSpeakerRole) {
+  return `${callId}:${speakerRole}`;
+}
+
+function streamKey(callId: string, speakerRole: CallAudioSpeakerRole) {
   return `${callId}:${speakerRole}`;
 }
 
@@ -168,6 +267,9 @@ function parseAsrResponse(
   const confidence = normalizeConfidence(body.confidence);
   return {
     segmentId: body.segmentId ?? fallbackSegmentId,
+    ...(validIdentifier(body.speechId) ? { speechId: body.speechId.trim() } : {}),
+    ...(validIdentifier(body.turnId) ? { turnId: body.turnId.trim() } : {}),
+    ...(validRevision(body.revision) ? { revision: body.revision } : {}),
     text,
     language: body.language,
     ...(confidence === undefined ? {} : { confidence }),
@@ -179,6 +281,14 @@ function parseAsrResponse(
       ? { vadContext: body.vadContext }
       : {}),
   };
+}
+
+function validIdentifier(value: unknown): value is string {
+  return typeof value === "string" && value.trim().length > 0 && value.length <= 160;
+}
+
+function validRevision(value: unknown): value is number {
+  return typeof value === "number" && Number.isInteger(value) && value >= 0;
 }
 
 function normalizeConfidence(value: number | null | undefined) {

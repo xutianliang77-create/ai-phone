@@ -99,14 +99,14 @@ describe("api app", () => {
       await app.close();
 
       expect(created.statusCode).toBe(200);
-      expect(created.json()).toMatchObject({
-        callId,
-        mode: "call_link",
-        status: "created",
-        joinUrl: `https://call.example.cn/join/${callId}`,
-      });
+      const createdJoinUrl = new URL(created.json().joinUrl as string);
+      expect(created.json()).toMatchObject({ callId, mode: "call_link", status: "created" });
+      expect(createdJoinUrl.origin).toBe("https://call.example.cn");
+      expect(createdJoinUrl.pathname).toBe(`/join/${callId}`);
+      expect(createdJoinUrl.searchParams.get("ticket")).toMatch(/^g1\./);
       expect(fetched.statusCode).toBe(200);
-      expect(fetched.json().joinUrl).toBe(created.json().joinUrl);
+      expect(fetched.json().joinUrl).toBe(`https://call.example.cn/join/${callId}`);
+      expect(fetched.json().joinUrl).not.toContain("ticket");
     } finally {
       if (previousBaseUrl === undefined) {
         delete process.env.PUBLIC_CALL_BASE_URL;

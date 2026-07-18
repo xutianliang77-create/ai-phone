@@ -87,13 +87,13 @@ describe("call playback event routes", () => {
 async function createCallWithLegs(app: Awaited<ReturnType<typeof buildApp>>) {
   const created = await app.inject({ method: "POST", url: "/call-links" });
   const callId = created.json().callId as string;
-  registerCallLeg({
+  await registerCallLeg({
     callId,
     participantIdentity: `${callId}:host`,
     participantRole: "host",
     joinType: "app",
   });
-  registerCallLeg({
+  await registerCallLeg({
     callId,
     participantIdentity: `${callId}:guest`,
     participantRole: "guest",
@@ -157,7 +157,7 @@ function configureEnv() {
   process.env.LIVEKIT_URL = "wss://livekit.example.cn";
   process.env.LIVEKIT_API_KEY = "lk_key";
   process.env.LIVEKIT_API_SECRET = "lk_secret";
-  process.env.CALL_ROOM_TOKEN_TTL_SECONDS = "3600";
+  process.env.CALL_ROOM_TOKEN_TTL_SECONDS = "120";
   process.env.INTERNAL_API_SECRET = "internal-secret-123";
 }
 

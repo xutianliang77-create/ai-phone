@@ -30,10 +30,26 @@ CoreMlNemotronAudioDiagnostic? coreMlNemotronAudioDiagnostic(
       audio: audio,
     );
   }
+  if (_hasText(audio['voiceProcessingError']) ||
+      (audio['voiceProcessingAttempted'] == true &&
+          audio['lastVoiceProcessingEnabled'] != true)) {
+    return CoreMlNemotronAudioDiagnostic(
+      status: 'warning',
+      issue: 'voice_processing_error',
+      audio: audio,
+    );
+  }
   if (_hasText(audio['processingError'])) {
     return CoreMlNemotronAudioDiagnostic(
       status: 'warning',
       issue: 'asr_processing_error',
+      audio: audio,
+    );
+  }
+  if (audio['vadActiveProvider'] == 'rms_fallback') {
+    return CoreMlNemotronAudioDiagnostic(
+      status: 'warning',
+      issue: 'vad_fallback',
       audio: audio,
     );
   }
@@ -85,6 +101,15 @@ Map<String, Object?> coreMlNemotronAudioDetails(
     final processingError = fluidAudio['processingError'];
     if (_hasText(processingError)) {
       audio['processingError'] = processingError;
+    }
+    final vad = fluidAudio['vad'];
+    if (vad is Map) {
+      audio['vadConfiguredProvider'] = vad['configuredProvider'];
+      audio['vadActiveProvider'] = vad['activeProvider'];
+      audio['vadFallbackReason'] = vad['fallbackReason'];
+      audio['vadFallbackCount'] = vad['fallbackCount'];
+      audio['vadLastProbability'] = vad['lastProbability'];
+      audio['vadPreRollSamples'] = vad['preRollSamplesLimit'];
     }
     if (audio.isNotEmpty) return audio;
   }

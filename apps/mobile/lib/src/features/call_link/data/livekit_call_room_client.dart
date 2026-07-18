@@ -6,17 +6,15 @@ import 'call_room_capture_options.dart';
 import 'call_room_data_event.dart';
 import 'call_room_participant_policy.dart';
 import 'call_room_client.dart';
-import 'call_room_tts_capture_gate.dart';
+import 'call_room_tts_capture_controller.dart';
 
 class LiveKitCallRoomClient implements CallRoomClient {
   final StreamController<CallRoomSnapshot> _snapshots =
       StreamController<CallRoomSnapshot>.broadcast();
   livekit.Room? _room;
   livekit.EventsListener<livekit.RoomEvent>? _listener;
-  final CallRoomTtsCaptureGate _ttsCaptureGate = CallRoomTtsCaptureGate();
-  final Set<String> _gatedTtsSegments = <String>{};
-  Timer? _ttsCaptureTimer;
-  int _ttsCaptureGeneration = 0;
+  final CallRoomTtsCaptureController _ttsCapture =
+      CallRoomTtsCaptureController();
   CallRoomSnapshot _current = const CallRoomSnapshot.disconnected();
   bool _disposed = false;
   bool _fullDuplexEnabled = false;
@@ -49,6 +47,8 @@ class LiveKitCallRoomClient implements CallRoomClient {
     _listenToRoom(
       room,
       listener,
+      callId: token.callId,
+      roomName: token.roomName,
       localRole: token.participantRole,
       localParticipantIdentity: token.participantIdentity,
     );
@@ -60,6 +60,7 @@ class LiveKitCallRoomClient implements CallRoomClient {
         token.token,
         connectOptions: const livekit.ConnectOptions(autoSubscribe: false),
       );
+      _syncLocalTrackPermissions(room);
       await room.localParticipant?.setMicrophoneEnabled(
         true,
         audioCaptureOptions: callRoomAudioCaptureOptions,
@@ -98,6 +99,8 @@ class LiveKitCallRoomClient implements CallRoomClient {
   void _listenToRoom(
     livekit.Room room,
     livekit.EventsListener<livekit.RoomEvent> listener, {
+    required String callId,
+    required String roomName,
     required String localRole,
     required String localParticipantIdentity,
   }) {
@@ -115,15 +118,18 @@ class LiveKitCallRoomClient implements CallRoomClient {
         ));
       })
       ..on<livekit.RoomReconnectedEvent>((_) {
+        _syncLocalTrackPermissions(room);
         _emit(_snapshotFromRoom(
           room,
           status: CallRoomConnectionStatus.connected,
         ));
       })
       ..on<livekit.ParticipantConnectedEvent>((_) {
+        _syncLocalTrackPermissions(room);
         _emit(_snapshotFromRoom(room));
       })
       ..on<livekit.ParticipantDisconnectedEvent>((_) {
+        _syncLocalTrackPermissions(room);
         _emit(_snapshotFromRoom(room));
       })
       ..on<livekit.TrackPublishedEvent>((event) {
@@ -141,9 +147,23 @@ class LiveKitCallRoomClient implements CallRoomClient {
         ));
       })
       ..on<livekit.DataReceivedEvent>((event) {
-        _handleDataMessage(room, event.data, localRole: localRole);
+        if (!isTrustedCallRoomDataPacket(
+          topic: event.topic,
+          senderIdentity: event.participant?.identity,
+        )) {
+          return;
+        }
+        _handleDataMessage(
+          room,
+          event.data,
+          callId: callId,
+          roomName: roomName,
+          localRole: localRole,
+        );
       })
       ..on<livekit.RoomDisconnectedEvent>((event) {
+        _fullDuplexEnabled = false;
+        _duplexDegraded = false;
         _emit(CallRoomSnapshot.disconnected(
           message: event.reason == null ? null : 'LiveKit: ${event.reason}',
         ));
@@ -164,6 +184,22 @@ class LiveKitCallRoomClient implements CallRoomClient {
         );
       }
     }
+  }
+
+  void _syncLocalTrackPermissions(livekit.Room room) {
+    final workerPermissions = room.remoteParticipants.values
+        .where((participant) =>
+            callRoomParticipantRole(participant.identity) == 'worker')
+        .map((participant) => livekit.ParticipantTrackPermission(
+              participant.identity,
+              true,
+              null,
+            ))
+        .toList(growable: false);
+    room.localParticipant?.setTrackSubscriptionPermissions(
+      allParticipantsAllowed: false,
+      trackPermissions: workerPermissions,
+    );
   }
 
   Future<void> _subscribeRemoteAudioPublication(
@@ -222,9 +258,15 @@ class LiveKitCallRoomClient implements CallRoomClient {
   void _handleDataMessage(
     livekit.Room room,
     List<int> data, {
+    required String callId,
+    required String roomName,
     required String localRole,
   }) {
-    final payload = parseCallRoomData(data);
+    final payload = parseCallRoomData(
+      data,
+      expectedCallId: callId,
+      expectedRoomName: roomName,
+    );
     if (payload.duplexMode == 'half_duplex') {
       _duplexDegraded = true;
     } else if (payload.duplexMode == 'full_duplex') {
@@ -235,67 +277,21 @@ class LiveKitCallRoomClient implements CallRoomClient {
         caption.ttsReady &&
         caption.speakerRole != localRole &&
         caption.audioDurationMs != null) {
-      unawaited(_blockCaptureForTts(room, caption));
+      unawaited(_ttsCapture.blockFor(
+        room: room,
+        caption: caption,
+        fullDuplexEnabled: _fullDuplexEnabled,
+        duplexDegraded: _duplexDegraded,
+        onMicrophoneChanged: (enabled) {
+          _emit(_snapshotFromRoom(room, microphoneEnabled: enabled));
+        },
+      ));
     }
     _emit(_snapshotFromRoom(
       room,
       message: payload.message,
       captions: caption == null ? null : _mergeCaption(caption),
     ));
-  }
-
-  Future<void> _blockCaptureForTts(
-    livekit.Room room,
-    CallRoomCaption caption,
-  ) async {
-    if (_fullDuplexEnabled && !_duplexDegraded) return;
-    if (!_gatedTtsSegments.add(caption.segmentId)) return;
-    if (_gatedTtsSegments.length > 100) {
-      _gatedTtsSegments.remove(_gatedTtsSegments.first);
-    }
-    final playbackMs = caption.audioDurationMs!.clamp(200, 30000);
-    final remaining = _ttsCaptureGate.blockFor(
-      Duration(milliseconds: playbackMs),
-    );
-    final generation = ++_ttsCaptureGeneration;
-    _ttsCaptureTimer?.cancel();
-    try {
-      await room.localParticipant?.setMicrophoneEnabled(false);
-    } catch (_) {
-      return;
-    }
-    if (_room != room || generation != _ttsCaptureGeneration) return;
-    _emit(_snapshotFromRoom(room, microphoneEnabled: false));
-    _ttsCaptureTimer = Timer(
-      remaining,
-      () => unawaited(_restoreCaptureAfterTts(room, generation)),
-    );
-  }
-
-  Future<void> _restoreCaptureAfterTts(
-    livekit.Room room,
-    int generation,
-  ) async {
-    if (_room != room || generation != _ttsCaptureGeneration) return;
-    final remaining = _ttsCaptureGate.remaining;
-    if (remaining > Duration.zero) {
-      _ttsCaptureTimer = Timer(
-        remaining,
-        () => unawaited(_restoreCaptureAfterTts(room, generation)),
-      );
-      return;
-    }
-    try {
-      await room.localParticipant?.setMicrophoneEnabled(
-        true,
-        audioCaptureOptions: callRoomAudioCaptureOptions,
-      );
-    } catch (_) {
-      return;
-    }
-    if (_room == room && generation == _ttsCaptureGeneration) {
-      _emit(_snapshotFromRoom(room, microphoneEnabled: true));
-    }
   }
 
   List<CallRoomCaption> _mergeCaption(CallRoomCaption caption) {
@@ -312,11 +308,7 @@ class LiveKitCallRoomClient implements CallRoomClient {
   }
 
   Future<void> _disposeRoom({required bool disconnectFirst}) async {
-    _ttsCaptureGeneration += 1;
-    _ttsCaptureTimer?.cancel();
-    _ttsCaptureTimer = null;
-    _ttsCaptureGate.reset();
-    _gatedTtsSegments.clear();
+    _ttsCapture.reset();
     final listener = _listener;
     final room = _room;
     _listener = null;

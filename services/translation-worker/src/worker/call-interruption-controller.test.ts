@@ -19,6 +19,7 @@ describe("CallInterruptionController", () => {
     await harness.confirmed.promise;
 
     expect(harness.interruptedTargets).toEqual(["guest-leg"]);
+    expect(harness.cancelledTargets).toEqual(["guest"]);
     expect(harness.events.map((event) => event.type)).toContain("barge_in.detected");
     expect(harness.events).toContainEqual(expect.objectContaining({
       type: "barge_in.confirmed",
@@ -106,6 +107,7 @@ function createHarness(options: { interruptible?: boolean } = {}) {
   const releases = new Map<string, ReturnType<typeof deferred<void>>>();
   const events: CallRoomSubmittedEvent[] = [];
   const interruptedTargets: string[] = [];
+  const cancelledTargets: string[] = [];
   let startedCount = 0;
   const eventSink: CallRoomEventSink = {
     async publish(_callId, batch) {
@@ -159,12 +161,15 @@ function createHarness(options: { interruptible?: boolean } = {}) {
     playbackQueue: queue,
     eventSink,
     nowMs: () => 1000,
+    onBargeIn: (_callId, targetSpeakerRole) =>
+      cancelledTargets.push(targetSpeakerRole),
   });
   return {
     queue,
     controller,
     events,
     interruptedTargets,
+    cancelledTargets,
     firstStarted,
     bothStarted,
     confirmed,

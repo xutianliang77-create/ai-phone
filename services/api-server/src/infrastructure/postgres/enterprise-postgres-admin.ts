@@ -54,7 +54,7 @@ export async function runEnterprisePostgresAdmin(command: string | undefined) {
     throw new Error("Usage: enterprise-postgres-admin <migrate|rollback|verify|backup-smoke>");
   }
   const client = createEnterprisePostgresClient(
-    enterprisePostgresConnectionConfig(),
+    enterprisePostgresConnectionConfig(process.env, "migration"),
   );
   await client.connect();
   try {
@@ -73,6 +73,10 @@ export async function runEnterprisePostgresAdmin(command: string | undefined) {
 }
 
 export async function verifyEnterprisePostgresSchema(client: PostgresMigrationClient) {
+  const identity = await client.query<{ name: string; oid: string }>(`
+    SELECT current_database() AS name,
+      (SELECT oid::text FROM pg_database WHERE datname = current_database()) AS oid
+  `);
   const tables = await client.query<{ table_name: string; rls: boolean; force_rls: boolean }>(`
     SELECT c.relname AS table_name, c.relrowsecurity AS rls,
       c.relforcerowsecurity AS force_rls
@@ -131,17 +135,25 @@ export async function verifyEnterprisePostgresSchema(client: PostgresMigrationCl
       }`,
     );
   }
+  const database = identity.rows[0];
+  if (!database?.name || !database.oid) {
+    throw new Error("Enterprise PostgreSQL database identity is unavailable");
+  }
   return {
     migrations: Number(migrations.rows[0]?.count),
     tenantTables: enterpriseTenantTableNames.length,
     compositeForeignKeys: Number(foreignKeys.rows[0]?.count),
     subjectColumns: enterpriseSubjectColumns.length,
     rls: "forced",
+    database,
   };
 }
 
 function runBackupArchiveSmoke() {
-  const connectionString = requiredEnterprisePostgresDatabaseUrl();
+  const connectionString = requiredEnterprisePostgresDatabaseUrl(
+    process.env,
+    "maintenance",
+  );
   const directory = mkdtempSync(join(tmpdir(), "wujie-enterprise-pg-"));
   const archive = join(directory, "enterprise-schema.dump");
   try {

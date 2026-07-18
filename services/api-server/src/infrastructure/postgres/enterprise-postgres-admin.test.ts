@@ -20,6 +20,7 @@ describe("enterprise PostgreSQL schema verification", () => {
       compositeForeignKeys: 12,
       subjectColumns: enterpriseSubjectColumns.length,
       rls: "forced",
+      database: { name: "ai_phone", oid: "42" },
     });
   });
 
@@ -42,6 +43,9 @@ class VerifyClient implements PostgresMigrationClient {
   ) {}
 
   async query<Row extends Record<string, unknown>>(sql: string) {
+    if (sql.includes("current_database()")) {
+      return { rows: [{ name: "ai_phone", oid: "42" }] as Row[] };
+    }
     if (sql.includes("FROM pg_class")) {
       return {
         rows: enterpriseTenantTableNames.map((table_name) => ({

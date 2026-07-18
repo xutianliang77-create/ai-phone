@@ -4,6 +4,11 @@ export function toAgentCallDto(record: AgentCallRecord) {
   const {
     userId: _userId,
     providerWebhookEventIds: _eventIds,
+    workerLeaseOwner: _leaseOwner,
+    workerLeaseTokenHash: _leaseTokenHash,
+    workerLeaseExpiresAt: _leaseExpiresAt,
+    workerLeaseAttempt: _leaseAttempt,
+    providerOperationId: _providerOperationId,
     ...draft
   } = record;
   return draft;
@@ -12,6 +17,8 @@ export function toAgentCallDto(record: AgentCallRecord) {
 export function isStarted(status: string) {
   return (
     status === "queued" ||
+    status === "dispatching" ||
+    status === "reconciliation_required" ||
     status === "in_progress" ||
     status === "completed" ||
     status === "failed"

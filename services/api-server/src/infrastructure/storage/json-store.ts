@@ -10,108 +10,30 @@ import {
   SqliteSnapshotStore,
   StorageConflictError,
 } from "./sqlite-snapshot-store.js";
-import type { SessionRecord } from "../../modules/sessions/session-record.js";
-import type {
-  AppleServerNotificationRecord,
-  BillingLedgerEntry,
-  PaymentOrderRecord,
-} from "../../modules/billing/billing-records.js";
-import type { AppErrorReportRecord } from "../../modules/diagnostics/app-error-record.js";
-import type { TermbaseTermRecord } from "../../modules/terms/term-record.js";
-import type { AgentCallRecord } from "../../modules/agent-calls/agent-call-record.js";
-import type { UsageHoldRecord } from "../../modules/usage/usage-hold-record.js";
-import type {
-  AccountConsentRecord,
-  AccountRecord,
-  AuthSessionRecord,
-  SmsOtpChallengeRecord,
-} from "../../modules/account/account-record.js";
-import type { VoiceProfileRecord } from "../../modules/voice-profiles/voice-profile-record.js";
-import type { VoiceIdentityRecord } from "../../modules/voice-identities/voice-identity-record.js";
-import type {
-  InboxEventRecord,
-  OutboxEventRecord,
-} from "../../modules/events/event-record.js";
-import type {
-  EnterpriseAuditEventRecord,
-  EnterpriseMemberRecord,
-  EnterpriseTenantJobRecord,
-  EnterpriseTenantRecord,
-} from "../../modules/enterprise/enterprise-tenant-record.js";
-import type {
-  EnterpriseInboxEventRecord,
-  EnterpriseOutboxEventRecord,
-} from "../../modules/enterprise/enterprise-event-record.js";
+import { appendPostgresProjectionEvents } from "./postgres-projection-outbox.js";
+import {
+  createEmptyStoreSnapshot,
+  normalizeStoreSnapshot,
+  type AppStoreSnapshot,
+} from "./json-store-snapshot.js";
 
-export interface AppStoreSnapshot {
-  sessions: SessionRecord[];
-  usageBalances: Record<string, number>;
-  accounts: AccountRecord[];
-  authSessions: AuthSessionRecord[];
-  smsOtpChallenges: SmsOtpChallengeRecord[];
-  accountConsentRecords: AccountConsentRecord[];
-  usagePlanCodes: Record<string, string>;
-  usageHolds: UsageHoldRecord[];
-  entitlementPlanCodes: Record<string, string>;
-  entitlementOrderIds: Record<string, string>;
-  paymentOrders: PaymentOrderRecord[];
-  billingLedger: BillingLedgerEntry[];
-  appleServerNotifications: AppleServerNotificationRecord[];
-  appErrorReports: AppErrorReportRecord[];
-  termbaseTerms: TermbaseTermRecord[];
-  agentCallDrafts: AgentCallRecord[];
-  voiceProfiles: VoiceProfileRecord[];
-  voiceIdentities: VoiceIdentityRecord[];
-  enterpriseTenants: EnterpriseTenantRecord[];
-  enterpriseMembers: EnterpriseMemberRecord[];
-  enterpriseTenantJobs: EnterpriseTenantJobRecord[];
-  enterpriseAuditEvents: EnterpriseAuditEventRecord[];
-  enterpriseInboxEvents: EnterpriseInboxEventRecord[];
-  enterpriseOutboxEvents: EnterpriseOutboxEventRecord[];
-  inboxEvents: InboxEventRecord[];
-  outboxEvents: OutboxEventRecord[];
-}
-
-const defaultSnapshot: AppStoreSnapshot = {
-  sessions: [],
-  usageBalances: {},
-  accounts: [],
-  authSessions: [],
-  smsOtpChallenges: [],
-  accountConsentRecords: [],
-  usagePlanCodes: {},
-  usageHolds: [],
-  entitlementPlanCodes: {},
-  entitlementOrderIds: {},
-  paymentOrders: [],
-  billingLedger: [],
-  appleServerNotifications: [],
-  appErrorReports: [],
-  termbaseTerms: [],
-  agentCallDrafts: [],
-  voiceProfiles: [],
-  voiceIdentities: [],
-  enterpriseTenants: [],
-  enterpriseMembers: [],
-  enterpriseTenantJobs: [],
-  enterpriseAuditEvents: [],
-  enterpriseInboxEvents: [],
-  enterpriseOutboxEvents: [],
-  inboxEvents: [],
-  outboxEvents: [],
+export {
+  createEmptyStoreSnapshot,
+  normalizeStoreSnapshot,
 };
-
-export function createEmptyStoreSnapshot() {
-  return structuredClone(defaultSnapshot);
-}
+export type { AppStoreSnapshot } from "./json-store-snapshot.js";
 
 let snapshot: AppStoreSnapshot | null = null;
+let persistedSnapshot: AppStoreSnapshot | null = null;
 let sqliteStore: SqliteSnapshotStore | null = null;
 let transactionDepth = 0;
 let transactionDirty = false;
 
 export function getStoreSnapshot() {
-  if (!snapshot) snapshot = readSnapshot();
+  if (!snapshot) {
+    snapshot = readSnapshot();
+    persistedSnapshot = structuredClone(snapshot);
+  }
   return snapshot;
 }
 
@@ -148,22 +70,31 @@ export function runStoreTransaction<T>(operation: () => T): T {
 
 function persistStoreSnapshotNow() {
   if (!snapshot) return;
+  if (persistedSnapshot) {
+    appendPostgresProjectionEvents(persistedSnapshot, snapshot);
+  }
   if (storageDriver() === "sqlite") {
     const store = getSqliteStore();
     try {
       store.save(snapshot);
     } catch (error) {
       snapshot = store.read();
+      persistedSnapshot = structuredClone(snapshot);
       throw error;
     }
+    persistedSnapshot = structuredClone(snapshot);
     return;
   }
   const file = dataFile();
-  if (!file) return;
+  if (!file) {
+    persistedSnapshot = structuredClone(snapshot);
+    return;
+  }
   mkdirSync(dirname(file), { recursive: true });
   const tmp = `${file}.tmp`;
   writeFileSync(tmp, JSON.stringify(snapshot, null, 2));
   renameSync(tmp, file);
+  persistedSnapshot = structuredClone(snapshot);
 }
 
 function isPromiseLike(value: unknown): value is PromiseLike<unknown> {
@@ -198,73 +129,12 @@ function readSnapshot(): AppStoreSnapshot {
 
 function readJsonSnapshot(): AppStoreSnapshot {
   const file = dataFile();
-  if (!file || !existsSync(file)) return structuredClone(defaultSnapshot);
+  if (!file || !existsSync(file)) return createEmptyStoreSnapshot();
   try {
     return normalizeStoreSnapshot(JSON.parse(readFileSync(file, "utf8")));
   } catch {
-    return structuredClone(defaultSnapshot);
+    return createEmptyStoreSnapshot();
   }
-}
-
-export function normalizeStoreSnapshot(value: unknown): AppStoreSnapshot {
-  const raw = value && typeof value === "object"
-    ? value as Partial<AppStoreSnapshot>
-    : {};
-  return {
-      sessions: Array.isArray(raw.sessions) ? raw.sessions : [],
-      usageBalances: raw.usageBalances ?? {},
-      accounts: Array.isArray(raw.accounts) ? raw.accounts : [],
-      authSessions: Array.isArray(raw.authSessions) ? raw.authSessions : [],
-      smsOtpChallenges: Array.isArray(raw.smsOtpChallenges)
-        ? raw.smsOtpChallenges
-        : [],
-      accountConsentRecords: Array.isArray(raw.accountConsentRecords)
-        ? raw.accountConsentRecords
-        : [],
-      usagePlanCodes: raw.usagePlanCodes ?? {},
-      usageHolds: Array.isArray(raw.usageHolds) ? raw.usageHolds : [],
-      entitlementPlanCodes: raw.entitlementPlanCodes ?? {},
-      entitlementOrderIds: raw.entitlementOrderIds ?? {},
-      paymentOrders: Array.isArray(raw.paymentOrders) ? raw.paymentOrders : [],
-      billingLedger: Array.isArray(raw.billingLedger) ? raw.billingLedger : [],
-      appleServerNotifications: Array.isArray(raw.appleServerNotifications)
-        ? raw.appleServerNotifications
-        : [],
-      appErrorReports: Array.isArray(raw.appErrorReports)
-        ? raw.appErrorReports
-        : [],
-      termbaseTerms: Array.isArray(raw.termbaseTerms) ? raw.termbaseTerms : [],
-      agentCallDrafts: Array.isArray(raw.agentCallDrafts)
-        ? raw.agentCallDrafts
-        : [],
-      voiceProfiles: Array.isArray(raw.voiceProfiles) ? raw.voiceProfiles : [],
-      voiceIdentities: Array.isArray(raw.voiceIdentities) ? raw.voiceIdentities : [],
-      enterpriseTenants: Array.isArray(raw.enterpriseTenants)
-        ? raw.enterpriseTenants
-        : [],
-      enterpriseMembers: Array.isArray(raw.enterpriseMembers)
-        ? raw.enterpriseMembers
-        : [],
-      enterpriseTenantJobs: Array.isArray(raw.enterpriseTenantJobs)
-        ? raw.enterpriseTenantJobs.map((job) => ({
-            ...job,
-            attempts: Number.isInteger(job.attempts) && job.attempts >= 0
-              ? job.attempts
-              : 0,
-          }))
-        : [],
-      enterpriseAuditEvents: Array.isArray(raw.enterpriseAuditEvents)
-        ? raw.enterpriseAuditEvents
-        : [],
-      enterpriseInboxEvents: Array.isArray(raw.enterpriseInboxEvents)
-        ? raw.enterpriseInboxEvents
-        : [],
-      enterpriseOutboxEvents: Array.isArray(raw.enterpriseOutboxEvents)
-        ? raw.enterpriseOutboxEvents
-        : [],
-      inboxEvents: Array.isArray(raw.inboxEvents) ? raw.inboxEvents : [],
-      outboxEvents: Array.isArray(raw.outboxEvents) ? raw.outboxEvents : [],
-  };
 }
 
 function getSqliteStore() {

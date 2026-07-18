@@ -7,13 +7,17 @@ import type {
   SessionSegmentStage,
   SegmentTimingDto,
   SegmentVadContextDto,
+  SpeechPipelineTimingDto,
   SpeakerAttributionDto,
 } from "@translation/contracts";
 
 export interface SessionSegmentPatch {
   segmentId: string;
+  speechId?: string;
   turnId?: string;
   revision?: number;
+  pipelineGeneration?: number;
+  pipelineTiming?: SpeechPipelineTimingDto;
   sourceText?: string;
   rawText?: string;
   optimizedText?: string;
@@ -59,15 +63,36 @@ export function applySessionSegmentPatch(
 ) {
   const currentRevision = segment.revision ?? 0;
   const incomingRevision = patch.revision ?? 0;
-  const isCurrentRevision = incomingRevision >= currentRevision;
+  const currentGeneration = segment.pipelineGeneration ?? 0;
+  const incomingGeneration = patch.pipelineGeneration ?? 0;
+  const isNewerRevision = incomingRevision > currentRevision;
+  const isCurrentPipeline = isNewerRevision ||
+    incomingRevision === currentRevision && incomingGeneration >= currentGeneration;
 
-  if (isCurrentRevision) {
+  if (isCurrentPipeline) {
+    if (isNewerRevision) {
+      clearDerivedTranslation(segment);
+      delete segment.pipelineTiming;
+    }
     applyRecognitionFields(segment, patch);
+    applyTranslationFields(segment, patch);
+    if (patch.speechId) segment.speechId = patch.speechId;
+    if (patch.turnId) segment.turnId = patch.turnId;
+    if (patch.pipelineTiming) {
+      segment.pipelineTiming = isNewerRevision
+        ? { ...patch.pipelineTiming }
+        : mergePipelineTiming(segment.pipelineTiming, patch.pipelineTiming);
+    }
   }
-  applyTranslationFields(segment, patch);
-  segment.turnId ??= patch.turnId;
   if (segment.revision !== undefined || patch.revision !== undefined) {
     segment.revision = Math.max(currentRevision, incomingRevision);
+  }
+  if (patch.pipelineGeneration !== undefined) {
+    segment.pipelineGeneration = isNewerRevision
+      ? patch.pipelineGeneration
+      : Math.max(currentGeneration, patch.pipelineGeneration);
+  } else if (isNewerRevision) {
+    delete segment.pipelineGeneration;
   }
 }
 
@@ -79,8 +104,13 @@ export function createSessionSegment(patch: SessionSegmentPatch): SessionSegment
   };
   applyRecognitionFields(segment, patch);
   applyTranslationFields(segment, patch);
+  if (patch.speechId) segment.speechId = patch.speechId;
   if (patch.turnId) segment.turnId = patch.turnId;
   if (typeof patch.revision === "number") segment.revision = patch.revision;
+  if (typeof patch.pipelineGeneration === "number") {
+    segment.pipelineGeneration = patch.pipelineGeneration;
+  }
+  if (patch.pipelineTiming) segment.pipelineTiming = { ...patch.pipelineTiming };
   return segment;
 }
 
@@ -90,26 +120,65 @@ function mergeCompleteSegment(
 ): SessionSegmentDto {
   const existingRevision = existing.revision ?? 0;
   const incomingRevision = incoming.revision ?? 0;
-  const incomingIsNewer = incomingRevision > existingRevision;
+  const existingGeneration = existing.pipelineGeneration ?? 0;
+  const incomingGeneration = incoming.pipelineGeneration ?? 0;
+  const incomingIsNewer = incomingRevision > existingRevision ||
+    incomingRevision === existingRevision &&
+      incomingGeneration > existingGeneration;
   return {
     ...incoming,
     ...existing,
-    sourceText: preferText(existing.sourceText, incoming.sourceText) ?? "",
-    rawText: preferText(existing.rawText, incoming.rawText),
-    optimizedText: preferText(existing.optimizedText, incoming.optimizedText),
-    translatedText: preferText(existing.translatedText, incoming.translatedText) ?? "",
-    turnId: existing.turnId ?? incoming.turnId,
+    sourceText: incomingIsNewer
+      ? preferText(incoming.sourceText, existing.sourceText) ?? ""
+      : preferText(existing.sourceText, incoming.sourceText) ?? "",
+    rawText: incomingIsNewer
+      ? incoming.rawText
+      : preferText(existing.rawText, incoming.rawText),
+    optimizedText: incomingIsNewer
+      ? incoming.optimizedText
+      : preferText(existing.optimizedText, incoming.optimizedText),
+    translatedText: incomingIsNewer
+      ? incoming.translatedText
+      : preferText(existing.translatedText, incoming.translatedText) ?? "",
+    speechId: incomingIsNewer
+      ? incoming.speechId ?? existing.speechId
+      : existing.speechId ?? incoming.speechId,
+    turnId: incomingIsNewer
+      ? incoming.turnId ?? existing.turnId
+      : existing.turnId ?? incoming.turnId,
     revision: existing.revision === undefined && incoming.revision === undefined
       ? undefined
       : Math.max(existingRevision, incomingRevision),
+    pipelineGeneration:
+      existing.pipelineGeneration === undefined &&
+        incoming.pipelineGeneration === undefined
+        ? undefined
+        : incomingRevision > existingRevision
+          ? incoming.pipelineGeneration
+          : Math.max(existingGeneration, incomingGeneration),
+    pipelineTiming: incomingIsNewer
+      ? incoming.pipelineTiming
+      : mergePipelineTiming(existing.pipelineTiming, incoming.pipelineTiming),
     sourceLanguage: existing.sourceLanguage ?? incoming.sourceLanguage,
-    targetLanguage: existing.targetLanguage ?? incoming.targetLanguage,
+    targetLanguage: incomingIsNewer
+      ? incoming.targetLanguage
+      : existing.targetLanguage ?? incoming.targetLanguage,
     confidence: existing.confidence ?? incoming.confidence,
-    stage: existing.stage ?? incoming.stage,
-    provider: existing.provider ?? incoming.provider,
-    model: existing.model ?? incoming.model,
-    latencyMs: existing.latencyMs ?? incoming.latencyMs,
-    providerUsage: existing.providerUsage ?? incoming.providerUsage,
+    stage: incomingIsNewer
+      ? incoming.stage
+      : existing.stage ?? incoming.stage,
+    provider: incomingIsNewer
+      ? incoming.provider
+      : existing.provider ?? incoming.provider,
+    model: incomingIsNewer
+      ? incoming.model
+      : existing.model ?? incoming.model,
+    latencyMs: incomingIsNewer
+      ? incoming.latencyMs
+      : existing.latencyMs ?? incoming.latencyMs,
+    providerUsage: incomingIsNewer
+      ? incoming.providerUsage
+      : existing.providerUsage ?? incoming.providerUsage,
     refinement: existing.refinement ?? incoming.refinement,
     speaker: incomingIsNewer
       ? incoming.speaker ?? existing.speaker
@@ -130,6 +199,27 @@ function mergeCompleteSegment(
       ? incoming.mixedLanguage ?? existing.mixedLanguage
       : existing.mixedLanguage ?? incoming.mixedLanguage,
   };
+}
+
+function clearDerivedTranslation(segment: SessionSegmentDto) {
+  segment.translatedText = "";
+  delete segment.targetLanguage;
+  delete segment.provider;
+  delete segment.model;
+  delete segment.latencyMs;
+  delete segment.providerUsage;
+  if (segment.stage === "translation" || segment.stage === "tts") {
+    delete segment.stage;
+  }
+}
+
+function mergePipelineTiming(
+  existing: SpeechPipelineTimingDto | undefined,
+  incoming: SpeechPipelineTimingDto | undefined,
+) {
+  if (!existing) return incoming ? { ...incoming } : undefined;
+  if (!incoming) return { ...existing };
+  return { ...existing, ...incoming };
 }
 
 function applyRecognitionFields(

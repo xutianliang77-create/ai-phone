@@ -13,9 +13,12 @@ import { HttpTtsProvider } from "./providers/http-tts-provider.js";
 import { OpenAiCompatibleTranslationProvider } from "./providers/openai-compatible-translation-provider.js";
 import { HttpCallRoomEventClient } from "./worker/call-room-event-client.js";
 import { HttpCallRoomTokenClient } from "./worker/call-room-token-client.js";
+import { HttpCallSipStatusClient } from "./worker/call-sip-status-client.js";
+import { HttpCallTtsTrackAccessClient } from "./worker/call-tts-track-access-client.js";
 import { CallTranslationWorker } from "./worker/call-translation-worker.js";
 import { CallTranscriptRefiner } from "./worker/call-transcript-refiner.js";
 import { LiveKitCallAudioSource } from "./worker/livekit-call-audio-source.js";
+import type { AudioIngestMetrics } from "./worker/audio-ingest-ring-buffer.js";
 import { SpeechPipelineRouter } from "./worker/speech-pipeline-router.js";
 import type { CallSpeechPipeline, SpeechToSpeechProvider } from "./worker/types.js";
 
@@ -29,6 +32,8 @@ export function buildDefaultWorker(endpointMode: AsrEndpointMode = "call_link") 
     asrProvider: new HttpAsrProvider({
       endpoint: env.asrHttpEndpoint,
       flushEndpoint: env.asrHttpFlushEndpoint,
+      streamEndpoint: env.asrStreamEndpoint,
+      streamFallbackToHttp: env.asrStreamFallbackToHttp,
       apiKey: env.asrHttpApiKey,
       timeoutMs: env.asrHttpTimeoutMs,
       endpointMode,
@@ -41,10 +46,14 @@ export function buildDefaultWorker(endpointMode: AsrEndpointMode = "call_link") 
       apiKey: env.translationApiKey,
       timeoutMs: env.translationTimeoutMs,
       maxTokens: env.translationMaxTokens,
+      streaming: env.translationStreamingEnabled,
     }),
     ttsProvider: env.ttsHttpEndpoint
       ? new HttpTtsProvider({
         endpoint: env.ttsHttpEndpoint,
+        streamEndpoint: env.ttsStreamEndpoint,
+        warmupEndpoint: env.ttsWarmupEndpoint,
+        warmupMaxMs: env.ttsWarmupMaxMs,
         apiKey: env.ttsHttpApiKey,
         timeoutMs: env.ttsHttpTimeoutMs,
         provider: env.ttsProvider,
@@ -72,6 +81,7 @@ export function buildDefaultWorker(endpointMode: AsrEndpointMode = "call_link") 
       terminology,
     }),
     duplexConfig: env.duplexConfig,
+    terminology,
   });
 }
 
@@ -102,12 +112,31 @@ async function main() {
     worker: buildDefaultSpeechPipeline(),
     audioSampleRate: env.audioSampleRate,
     audioFrameSizeMs: env.audioFrameSizeMs,
+    audioIngestMaxFrames: env.audioIngestMaxFrames,
     tokenClient: new HttpCallRoomTokenClient({
       apiBaseUrl: env.apiBaseUrl,
       internalApiSecret: env.internalApiSecret,
       timeoutMs: env.apiTimeoutMs,
       participantName: env.participantName,
     }),
+    sipStatusClient: new HttpCallSipStatusClient({
+      apiBaseUrl: env.apiBaseUrl,
+      internalApiSecret: env.internalApiSecret,
+      timeoutMs: env.apiTimeoutMs,
+    }),
+    ttsTrackAccessClient: new HttpCallTtsTrackAccessClient({
+      apiBaseUrl: env.apiBaseUrl,
+      internalApiSecret: env.internalApiSecret,
+      timeoutMs: env.apiTimeoutMs,
+    }),
+    onError: (error) =>
+      logger.warn({ err: error }, "Translation audio source failed"),
+    onCallEnded: (error) => logger.info({
+      callId: error.callId,
+      code: error.code,
+    }, "Translation worker stopped after call ended"),
+    onIngestMetrics: (metrics) =>
+      logAudioIngestMetrics(metrics, env.audioFrameSizeMs),
   });
   process.once("SIGINT", () => void source.stop());
   process.once("SIGTERM", () => void source.stop());
@@ -130,4 +159,30 @@ if (isTranslationWorkerEntrypoint()) {
     logger.error({ err: error }, "Translation Worker failed");
     process.exitCode = 1;
   });
+}
+
+function logAudioIngestMetrics(
+  metrics: AudioIngestMetrics,
+  audioFrameSizeMs: number,
+) {
+  const data = {
+    ...metrics,
+    capacityAudioMs: metrics.capacityFrames * audioFrameSizeMs,
+  };
+  if (metrics.event === "backpressure") {
+    if (metrics.backpressureEvents !== 1 && metrics.backpressureEvents % 25 !== 0) {
+      return;
+    }
+    logger.warn(data, "Audio ingest backpressure dropped stale frames");
+    return;
+  }
+  if (metrics.event === "sequence_gap") {
+    logger.warn(data, "Audio ingest sequence gap observed");
+    return;
+  }
+  if (metrics.event === "drained" || metrics.event === "stopped") {
+    logger.info(data, "Audio ingest leg completed");
+    return;
+  }
+  logger.debug(data, "Audio ingest high watermark changed");
 }

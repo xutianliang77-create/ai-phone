@@ -97,6 +97,20 @@ describe("translation worker env", () => {
     process.env.CALL_BARGE_IN_MIN_PROBABILITY = "1.1";
     expect(loadEnv().duplexConfig.minProbability).toBe(0.5);
   });
+
+  it("bounds the per-leg audio ingest queue capacity", () => {
+    process.env = {};
+    expect(loadEnv().audioIngestMaxFrames).toBe(20);
+
+    process.env = { TRANSLATION_WORKER_AUDIO_INGEST_MAX_FRAMES: "48" };
+    expect(loadEnv().audioIngestMaxFrames).toBe(48);
+
+    process.env = { TRANSLATION_WORKER_AUDIO_INGEST_MAX_FRAMES: "201" };
+    expect(loadEnv().audioIngestMaxFrames).toBe(20);
+
+    process.env = { TRANSLATION_WORKER_AUDIO_INGEST_MAX_FRAMES: "4.5" };
+    expect(loadEnv().audioIngestMaxFrames).toBe(20);
+  });
 });
 
 function writeConfig(tempDirs: string[]) {

@@ -1,5 +1,6 @@
 const autoSourceLanguageCode = 'auto';
 const autoReverseTargetLanguageCode = 'auto_reverse';
+const onDeviceTranslationLanguageCodes = <String>{'zh', 'en'};
 
 class SupportedTranslationLanguage {
   const SupportedTranslationLanguage({

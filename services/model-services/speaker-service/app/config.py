@@ -20,7 +20,10 @@ class SpeakerConfig:
     onset: float
     offset: float
     voice_identity_provider: str = "off"
-    voice_identity_model_id: str = "nvidia/speakerverification_en_titanet_large"
+    voice_identity_model_id: str = (
+        "/data/models/translation-model-eval/models/titanet/"
+        "speakerverification_en_titanet_large.nemo"
+    )
     voice_identity_store_dir: str = "/data/ai-phone/speaker-identities"
     voice_identity_encryption_key: str = ""
 
@@ -47,7 +50,8 @@ def load_config() -> SpeakerConfig:
         voice_identity_provider=os.getenv("VOICE_IDENTITY_PROVIDER", "off"),
         voice_identity_model_id=os.getenv(
             "VOICE_IDENTITY_MODEL_ID",
-            "nvidia/speakerverification_en_titanet_large",
+            "/data/models/translation-model-eval/models/titanet/"
+            "speakerverification_en_titanet_large.nemo",
         ),
         voice_identity_store_dir=os.getenv(
             "VOICE_IDENTITY_STORE_DIR",

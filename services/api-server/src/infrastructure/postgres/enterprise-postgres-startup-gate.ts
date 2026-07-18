@@ -27,7 +27,7 @@ export async function runEnterprisePostgresStartupGate(options: {
   if (mode === "disabled") return { status: "disabled" as const, mode };
 
   const client = (options.createClient ?? createEnterprisePostgresClient)(
-    enterprisePostgresConnectionConfig(env),
+    enterprisePostgresConnectionConfig(env, "migration"),
   );
   await client.connect();
   try {

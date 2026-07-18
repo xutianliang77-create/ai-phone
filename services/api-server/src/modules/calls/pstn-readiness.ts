@@ -1,6 +1,6 @@
 import { loadEnv } from "../../config/env.js";
 
-type PstnProvider = "twilio" | "telnyx" | "domestic_bridge";
+type PstnProvider = "twilio" | "telnyx" | "domestic_bridge" | "livekit_sip";
 
 export interface PstnReadiness {
   status: "ready" | "not_ready";
@@ -27,10 +27,16 @@ export function getPstnReadiness(): PstnReadiness {
     policy,
     enabled,
     provider: provider || "not_configured",
-    account: configured("PSTN_ACCOUNT_ID"),
-    apiKey: configured("PSTN_API_KEY"),
-    webhookBaseUrl: configured("PSTN_WEBHOOK_BASE_URL"),
-    webhookSecret: configured("PSTN_WEBHOOK_SECRET"),
+    account: configured(provider === "livekit_sip"
+      ? "LIVEKIT_SIP_OUTBOUND_TRUNK_ID"
+      : "PSTN_ACCOUNT_ID"),
+    apiKey: configured(provider === "livekit_sip" ? "LIVEKIT_API_KEY" : "PSTN_API_KEY"),
+    webhookBaseUrl: configured(provider === "livekit_sip"
+      ? "LIVEKIT_WEBHOOK_URL"
+      : "PSTN_WEBHOOK_BASE_URL"),
+    webhookSecret: configured(provider === "livekit_sip"
+      ? "LIVEKIT_API_SECRET"
+      : "PSTN_WEBHOOK_SECRET"),
     consentPromptVersion: configured("PSTN_CONSENT_PROMPT_VERSION"),
     recordingDisclosure: process.env.PSTN_RECORDING_DISCLOSURE_ENABLED === "true"
       ? "enabled"
@@ -41,6 +47,7 @@ export function getPstnReadiness(): PstnReadiness {
 }
 
 function enabledIssues(policy: string, provider: string) {
+  if (provider === "livekit_sip") return liveKitSipIssues(policy);
   return [
     ...disabledIssues(policy),
     ...providerIssues(provider),
@@ -54,6 +61,30 @@ function enabledIssues(policy: string, provider: string) {
     ]),
     ...webhookBaseUrlIssues(),
     ...secretIssues(),
+    ...recordingDisclosureIssues(),
+    ...maxCallMinutesIssues(),
+  ];
+}
+
+function liveKitSipIssues(policy: string) {
+  return [
+    ...disabledIssues(policy),
+    ...missingIssues([
+      "LIVEKIT_URL",
+      "LIVEKIT_API_KEY",
+      "LIVEKIT_API_SECRET",
+      "LIVEKIT_SIP_OUTBOUND_TRUNK_ID",
+      "LIVEKIT_WEBHOOK_URL",
+      "INTERNAL_API_SECRET",
+      "PSTN_CONSENT_PROMPT_VERSION",
+      "PSTN_MAX_CALL_MINUTES",
+    ]),
+    ...publicHttpsUrlIssues("LIVEKIT_WEBHOOK_URL"),
+    ...strongSecretIssues("LIVEKIT_API_SECRET", 32),
+    ...strongSecretIssues("INTERNAL_API_SECRET", 16),
+    ...(process.env.LIVEKIT_SIP_MEDIA_ROUTING_MODE === "translated_tracks_only"
+      ? []
+      : ["pstn livekit sip media routing is not release-enabled"]),
     ...recordingDisclosureIssues(),
     ...maxCallMinutesIssues(),
   ];
@@ -77,7 +108,10 @@ function missingIssues(keys: string[]) {
 }
 
 function webhookBaseUrlIssues() {
-  const key = "PSTN_WEBHOOK_BASE_URL";
+  return publicHttpsUrlIssues("PSTN_WEBHOOK_BASE_URL");
+}
+
+function publicHttpsUrlIssues(key: string) {
   const value = process.env[key];
   if (!value) return [];
   try {
@@ -92,9 +126,12 @@ function webhookBaseUrlIssues() {
 }
 
 function secretIssues() {
-  const key = "PSTN_WEBHOOK_SECRET";
+  return strongSecretIssues("PSTN_WEBHOOK_SECRET", 32);
+}
+
+function strongSecretIssues(key: string, minimum: number) {
   const secret = process.env[key];
-  return secret && secret.length < 32 ? [`pstn invalid ${key}`] : [];
+  return secret && secret.length < minimum ? [`pstn invalid ${key}`] : [];
 }
 
 function recordingDisclosureIssues() {
@@ -107,14 +144,14 @@ function maxCallMinutesIssues() {
   const value = process.env.PSTN_MAX_CALL_MINUTES;
   if (!value) return [];
   const parsed = Number(value);
-  return Number.isInteger(parsed) && parsed > 0
+  return Number.isInteger(parsed) && parsed > 0 && parsed <= 120
     ? []
-    : ["pstn invalid PSTN_MAX_CALL_MINUTES"];
+    : ["pstn invalid PSTN_MAX_CALL_MINUTES:must_be_1_120"];
 }
 
 function maxCallMinutes() {
   const parsed = Number(process.env.PSTN_MAX_CALL_MINUTES);
-  return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+  return Number.isInteger(parsed) && parsed > 0 && parsed <= 120 ? parsed : null;
 }
 
 function configured(key: string) {
@@ -126,7 +163,8 @@ function isPstnEnabled(policy: string) {
 }
 
 function isPstnProvider(provider: string): provider is PstnProvider {
-  return provider === "twilio" || provider === "telnyx" || provider === "domestic_bridge";
+  return provider === "twilio" || provider === "telnyx" ||
+    provider === "domestic_bridge" || provider === "livekit_sip";
 }
 
 function isLocalHost(hostname: string) {

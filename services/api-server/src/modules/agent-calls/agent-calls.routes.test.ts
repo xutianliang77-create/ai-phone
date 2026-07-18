@@ -150,10 +150,25 @@ describe("agent call routes", () => {
       url: `/ai-calling-agent/drafts/${draftId}/start`,
       payload: { consentPromptVersion: "cn-agent-v1" },
     });
+    const claimed = await app.inject({
+      method: "POST",
+      url: "/internal/ai-calling-agent/drafts/claims",
+      headers: { authorization: "Bearer internal-secret-for-agent" },
+      payload: { workerId: "route-test-worker", limit: 1 },
+    });
+    const claim = claimed.json().claims[0] as {
+      workerId: string;
+      leaseToken: string;
+    };
+    const workerHeaders = {
+      authorization: "Bearer internal-secret-for-agent",
+      "x-agent-worker-id": claim.workerId,
+      "x-agent-call-lease-token": claim.leaseToken,
+    };
     const inProgress = await app.inject({
       method: "POST",
       url: `/internal/ai-calling-agent/drafts/${draftId}/status`,
-      headers: { authorization: "Bearer internal-secret-for-agent" },
+      headers: workerHeaders,
       payload: {
         status: "in_progress",
         providerCallId: "provider-call-1",
@@ -162,7 +177,7 @@ describe("agent call routes", () => {
     const completed = await app.inject({
       method: "POST",
       url: `/internal/ai-calling-agent/drafts/${draftId}/status`,
-      headers: { authorization: "Bearer internal-secret-for-agent" },
+      headers: workerHeaders,
       payload: {
         status: "completed",
         consumedSeconds: 17,

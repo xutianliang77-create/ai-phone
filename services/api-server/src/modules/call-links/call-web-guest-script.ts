@@ -3,15 +3,20 @@ import { renderCallWebRoomConfirmationFunctions } from "./call-web-room-confirma
 import { renderCallWebPageActionFunctions } from "./call-web-page-actions-script.js";
 import { renderCallWebActivationFunctions } from "./call-web-activation-script.js";
 import { renderCallWebEnvironmentFunctions } from "./call-web-environment-script.js";
+import { callRoomCaptionTopic } from "@translation/contracts";
+import { renderCallWebGuestTicketFunctions } from "./call-web-guest-ticket-script.js";
+import { renderCallWebMediaIsolationFunctions } from "./call-web-media-isolation-script.js";
 
 export function renderCallGuestScript() {
   return String.raw`(() => {
   const config = window.__CALL_LINK__ || {};
   const callId = config.callId || "";
+  const callRoomCaptionTopic = ${JSON.stringify(callRoomCaptionTopic)};
   const state = {
     room: null,
     localRole: "guest",
     localParticipantIdentity: "",
+    expectedRoomName: "",
     captions: new Map(),
     followLatest: true,
     captionsOnly: false,
@@ -38,6 +43,7 @@ export function renderCallGuestScript() {
 
 ${renderCallWebActivationFunctions()}
 ${renderCallWebEnvironmentFunctions()}
+${renderCallWebGuestTicketFunctions()}
 
   function speakerLabel(role) {
     if (role === state.localRole) return "我";
@@ -182,16 +188,23 @@ ${renderCallWebEnvironmentFunctions()}
     const targetLeg = ttsTrackTargetLegToken(trackName);
     return !targetLeg || targetLeg === legToken(state.localParticipantIdentity);
   }
+${renderCallWebMediaIsolationFunctions()}
 ${renderCallWebTtsCaptureFunctions()}
 ${renderCallWebRoomConfirmationFunctions()}
 ${renderCallWebPageActionFunctions()}
 
   function bindRoom(room) {
     const lk = window.LivekitClient;
+    room.on(lk.RoomEvent.ParticipantConnected, () => syncLocalTrackPermissions(room));
+    room.on(lk.RoomEvent.ParticipantDisconnected, () => syncLocalTrackPermissions(room));
+    room.on(lk.RoomEvent.TrackPublished, (publication) => {
+      publication.setSubscribed(shouldAttachAudioTrack(null, publication));
+    });
     room.on(lk.RoomEvent.Disconnected, () => {
       stopActivationPolling();
       resetTtsCaptureGate();
       state.room = null;
+      state.expectedRoomName = "";
       status("通话已断开", "error");
       $("leave").disabled = true;
       $("remote-audio").textContent = "";
@@ -208,9 +221,14 @@ ${renderCallWebPageActionFunctions()}
     room.on(lk.RoomEvent.TrackUnsubscribed, (track) => {
       track.detach().forEach((element) => element.remove());
     });
-    room.on(lk.RoomEvent.DataReceived, (payload) => {
+    room.on(lk.RoomEvent.DataReceived, (payload, participant, kind, topic) => {
+      if (topic !== callRoomCaptionTopic || participant) return;
       try {
         const event = JSON.parse(new TextDecoder().decode(payload));
+        if (
+          event.callId !== callId ||
+          event.roomName !== state.expectedRoomName
+        ) return;
         if (handlePipelineEvent(event)) return;
         if (isCaptionEvent(event)) updateCaption(event);
       } catch {
@@ -242,17 +260,9 @@ ${renderCallWebPageActionFunctions()}
       $("room-name").textContent = link.roomName || "未配置";
 
       status("正在申请入会凭证");
-      const tokenResponse = await fetch("/call-links/" + encodeURIComponent(callId) + "/room-token", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          participantRole: "guest",
-          participantName: $("name").value.trim() || "guest",
-        }),
-      });
-      if (!tokenResponse.ok) throw new Error("通话房间暂未配置");
-      const token = await tokenResponse.json();
+      const token = await redeemGuestRoomToken();
       state.localParticipantIdentity = token.participantIdentity || "";
+      state.expectedRoomName = token.roomName || "";
       state.fullDuplexEnabled = token.fullDuplexEnabled === true;
       state.duplexDegraded = false;
       if (!window.LivekitClient?.Room) throw new Error("通话 SDK 未加载");
@@ -272,7 +282,9 @@ ${renderCallWebPageActionFunctions()}
       status("正在连接房间");
       const room = new window.LivekitClient.Room({ adaptiveStream: true, dynacast: true });
       bindRoom(room);
-      await room.connect(token.wsUrl, token.token);
+      await room.connect(token.wsUrl, token.token, { autoSubscribe: false });
+      syncLocalTrackPermissions(room);
+      syncRemoteAudioSubscriptions(room);
       try {
         const activation = await confirmRoomConnection(token);
         if (!state.captionsOnly) {
@@ -312,6 +324,7 @@ ${renderCallWebPageActionFunctions()}
     resetTtsCaptureGate();
     state.room?.disconnect();
     state.room = null;
+    state.expectedRoomName = "";
     state.fullDuplexEnabled = false;
     state.duplexDegraded = false;
     $("remote-audio").textContent = "";

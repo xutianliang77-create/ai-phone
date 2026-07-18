@@ -151,7 +151,8 @@ describe("enterprise PostgreSQL cell worker", () => {
 
 function fixture(overrides: Record<string, unknown>) {
   return {
-    pool: {} as never,
+    discoveryPool: {} as never,
+    tenantPool: {} as never,
     runtime: {
       driver: "postgres",
       finalizeTenantLifecycleJob: overrides.finalizeTenantLifecycleJob,

@@ -17,12 +17,23 @@ class CallRoomDataPayload {
   final String? degradationReason;
 }
 
-CallRoomDataPayload parseCallRoomData(List<int> data) {
+CallRoomDataPayload parseCallRoomData(
+  List<int> data, {
+  String? expectedCallId,
+  String? expectedRoomName,
+}) {
   try {
     final decoded = utf8.decode(data);
     final payload = jsonDecode(decoded);
     if (payload is! Map<String, Object?>) {
-      return CallRoomDataPayload(message: decoded);
+      return const CallRoomDataPayload();
+    }
+    if (!_matchesCallRoom(
+      payload,
+      expectedCallId: expectedCallId,
+      expectedRoomName: expectedRoomName,
+    )) {
+      return const CallRoomDataPayload();
     }
     final type = payload['type'] as String?;
     final text = _string(payload['text']);
@@ -50,10 +61,22 @@ CallRoomDataPayload parseCallRoomData(List<int> data) {
       }
       return CallRoomDataPayload(caption: caption);
     }
-    return CallRoomDataPayload(message: _cleanText(text) ?? decoded);
+    return const CallRoomDataPayload();
   } catch (_) {
-    return const CallRoomDataPayload(message: 'LiveKit data message');
+    return const CallRoomDataPayload();
   }
+}
+
+bool _matchesCallRoom(
+  Map<String, Object?> payload, {
+  required String? expectedCallId,
+  required String? expectedRoomName,
+}) {
+  if (expectedCallId != null && payload['callId'] != expectedCallId) return false;
+  if (expectedRoomName != null && payload['roomName'] != expectedRoomName) {
+    return false;
+  }
+  return true;
 }
 
 CallRoomCaption _captionFromPayload(

@@ -5,14 +5,14 @@ import { toSessionDetail } from "./session-mappers.js";
 import {
   findSession,
   updateSessionReviewActionItem,
-} from "./sessions.repository.js";
+} from "./sessions-runtime.repository.js";
 import { withSessionWriteLock } from "./session-write-coordinator.js";
 
 export function registerSessionReviewActionRoutes(app: FastifyInstance) {
   app.patch(
     "/sessions/:sessionId/action-items/:actionIndex",
     async (request, reply) => {
-      const account = requireAccount(request, reply);
+      const account = await requireAccount(request, reply);
       if (!account) return;
       const params = request.params as {
         sessionId: string;
@@ -30,8 +30,8 @@ export function registerSessionReviewActionRoutes(app: FastifyInstance) {
         );
       }
       const completed = body.completed;
-      return withSessionWriteLock(params.sessionId, () => {
-        const session = findSession(params.sessionId);
+      return withSessionWriteLock(params.sessionId, async () => {
+        const session = await findSession(params.sessionId);
         if (!session) {
           return sendError(reply, 404, "session_not_found", "Session not found");
         }
@@ -51,7 +51,7 @@ export function registerSessionReviewActionRoutes(app: FastifyInstance) {
             "Action item not found",
           );
         }
-        const updated = updateSessionReviewActionItem(
+        const updated = await updateSessionReviewActionItem(
           params.sessionId,
           actionIndex,
           completed,

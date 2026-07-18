@@ -26,7 +26,7 @@ export async function registerEnterpriseTenantLifecycleRoutes(
   runtime: EnterpriseRepositoryRuntime,
 ) {
   app.post("/saas/v1/tenants", async (request, reply) => {
-    const account = requireAccount(request, reply);
+    const account = await requireAccount(request, reply);
     if (!account) return;
     const idempotencyKey = requireIdempotencyKey(request, reply);
     if (!idempotencyKey) return;
@@ -58,7 +58,7 @@ export async function registerEnterpriseTenantLifecycleRoutes(
   });
 
   app.post("/saas/v1/tenants/:tenantId/provision", async (request, reply) => {
-    const account = requireAccount(request, reply);
+    const account = await requireAccount(request, reply);
     if (!account) return;
     const idempotencyKey = requireIdempotencyKey(request, reply);
     if (!idempotencyKey) return;
@@ -87,7 +87,7 @@ export async function registerEnterpriseTenantLifecycleRoutes(
 
   for (const action of ["suspend", "export", "delete"] as const) {
     app.post(`/saas/v1/tenants/:tenantId/${action}`, async (request, reply) => {
-      const account = requireAccount(request, reply);
+      const account = await requireAccount(request, reply);
       if (!account) return;
       const idempotencyKey = requireIdempotencyKey(request, reply);
       if (!idempotencyKey) return;
@@ -126,7 +126,7 @@ export async function registerEnterpriseTenantLifecycleRoutes(
   }
 
   app.get("/saas/v1/tenant-jobs/:jobId", async (request, reply) => {
-    const account = requireAccount(request, reply);
+    const account = await requireAccount(request, reply);
     if (!account) return;
     const { jobId } = request.params as { jobId: string };
     const job = await runtime.findTenantJob({

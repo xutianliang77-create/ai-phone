@@ -36,7 +36,7 @@ export async function runEnterprisePostgresDataAdmin(
   }
   const source = readEnterpriseDataSource(type, file);
   const client = createEnterprisePostgresClient(
-    enterprisePostgresConnectionConfig(),
+    enterprisePostgresConnectionConfig(process.env, "maintenance"),
   );
   await client.connect();
   try {

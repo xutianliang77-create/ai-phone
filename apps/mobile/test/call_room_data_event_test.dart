@@ -7,6 +7,8 @@ void main() {
   test('parses worker status data messages', () {
     final payload = parseCallRoomData(utf8.encode(jsonEncode({
       'type': 'worker.status',
+      'callId': 'call_1',
+      'roomName': 'call_call_1',
       'text': '房间翻译 Worker 已连接',
     })));
 
@@ -37,6 +39,8 @@ void main() {
   test('parses translation final events as translated captions', () {
     final payload = parseCallRoomData(utf8.encode(jsonEncode({
       'type': 'translation.final',
+      'callId': 'call_1',
+      'roomName': 'call_call_1',
       'segmentId': 'segment-1',
       'speakerRole': 'guest',
       'sourceLanguage': 'en',
@@ -54,6 +58,8 @@ void main() {
   test('parses tts ready events as caption voice metadata', () {
     final payload = parseCallRoomData(utf8.encode(jsonEncode({
       'type': 'tts.ready',
+      'callId': 'call_1',
+      'roomName': 'call_call_1',
       'segmentId': 'segment-1',
       'speakerRole': 'guest',
       'sourceLanguage': 'en',
@@ -81,11 +87,15 @@ void main() {
   test('parses full duplex degradation and recovery controls', () {
     final degraded = parseCallRoomData(utf8.encode(jsonEncode({
       'type': 'pipeline.degraded',
+      'callId': 'call_1',
+      'roomName': 'call_call_1',
       'duplexMode': 'half_duplex',
       'degradationReason': 'vad_fallback',
     })));
     final restored = parseCallRoomData(utf8.encode(jsonEncode({
       'type': 'pipeline.restored',
+      'callId': 'call_1',
+      'roomName': 'call_call_1',
       'duplexMode': 'full_duplex',
     })));
 
@@ -94,5 +104,32 @@ void main() {
     expect(degraded.message, '全双工抢话已降级为半双工');
     expect(restored.duplexMode, 'full_duplex');
     expect(restored.message, '全双工抢话已恢复');
+  });
+
+  test('rejects events bound to another call or room', () {
+    final payload = parseCallRoomData(
+      utf8.encode(jsonEncode({
+        'type': 'worker.status',
+        'callId': 'call_2',
+        'roomName': 'call_call_2',
+        'text': '伪造状态',
+      })),
+      expectedCallId: 'call_1',
+      expectedRoomName: 'call_call_1',
+    );
+
+    expect(payload.message, isNull);
+    expect(payload.caption, isNull);
+  });
+
+  test('does not render unknown or malformed data payloads', () {
+    final unknown = parseCallRoomData(utf8.encode(jsonEncode({
+      'type': 'unknown.control',
+      'text': '不应显示',
+    })));
+    final malformed = parseCallRoomData(const [0xff]);
+
+    expect(unknown.message, isNull);
+    expect(malformed.message, isNull);
   });
 }

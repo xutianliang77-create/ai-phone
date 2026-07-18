@@ -12,10 +12,28 @@ export interface HttpCallRoomEventClientOptions {
   fetchFn?: typeof fetch;
 }
 
+export class CallRoomEndedError extends Error {
+  readonly code = "call_room_ended";
+
+  constructor(readonly callId: string) {
+    super(`Call room ${callId} has ended`);
+    this.name = "CallRoomEndedError";
+  }
+}
+
+export function isCallRoomEndedError(error: unknown): error is CallRoomEndedError {
+  return error instanceof CallRoomEndedError || (
+    error instanceof Error &&
+    "code" in error &&
+    error.code === "call_room_ended"
+  );
+}
+
 export class HttpCallRoomEventClient implements CallRoomEventSink {
   private readonly fetchFn: typeof fetch;
   private readonly sessionVersions = new Map<string, number>();
   private readonly publicationTails = new Map<string, Promise<void>>();
+  private readonly endedCalls = new Set<string>();
 
   constructor(private readonly options: HttpCallRoomEventClientOptions) {
     this.fetchFn = options.fetchFn ?? fetch;
@@ -23,6 +41,7 @@ export class HttpCallRoomEventClient implements CallRoomEventSink {
 
   async publish(callId: string, events: CallRoomSubmittedEvent[]) {
     if (events.length === 0) return {};
+    if (this.endedCalls.has(callId)) throw new CallRoomEndedError(callId);
     const previous = this.publicationTails.get(callId) ?? Promise.resolve();
     const publication = previous.catch(() => undefined).then(() =>
       this.publishBatch(callId, events)
@@ -39,6 +58,7 @@ export class HttpCallRoomEventClient implements CallRoomEventSink {
   }
 
   private async publishBatch(callId: string, events: CallRoomSubmittedEvent[]) {
+    if (this.endedCalls.has(callId)) throw new CallRoomEndedError(callId);
     let response = await this.postEvents(callId, events);
     if (response.status === 409) {
       const conflict = await readJson(response);
@@ -47,6 +67,11 @@ export class HttpCallRoomEventClient implements CallRoomEventSink {
         this.sessionVersions.set(callId, currentVersion);
         response = await this.postEvents(callId, events);
       }
+    }
+    if (response.status === 410) {
+      this.endedCalls.add(callId);
+      this.sessionVersions.delete(callId);
+      throw new CallRoomEndedError(callId);
     }
     if (!response.ok) {
       throw new Error(`Call room event API returned HTTP ${response.status}`);

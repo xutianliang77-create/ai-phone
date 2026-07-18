@@ -3,6 +3,9 @@ import '../../../platform/translation/supported_translation_language.dart';
 import 'voice_preset_catalog.dart';
 import 'domain_lexicon_pack.dart';
 
+export '../../../platform/translation/supported_translation_language.dart'
+    show onDeviceTranslationLanguageCodes;
+
 enum RealtimeProcessingMode { onDevice, online }
 
 enum RealtimeVoiceOutputMode { off, natural, myVoice }
@@ -40,7 +43,7 @@ class RealtimeRuntimeSettings {
       ),
       voicePresetId: config.realtimeVoicePresetId,
       domainLexiconPack: config.domainLexiconPack,
-    );
+    ).normalizedForCapabilities();
   }
 
   factory RealtimeRuntimeSettings.fromJson(Map<String, Object?> json) {
@@ -67,7 +70,7 @@ class RealtimeRuntimeSettings {
       domainLexiconPack: normalizeDomainLexiconPack(
         json['domainLexiconPack'] as String? ?? defaultDomainLexiconPack,
       ),
-    );
+    ).normalizedForCapabilities();
   }
 
   final RealtimeProcessingMode processingMode;
@@ -147,6 +150,33 @@ class RealtimeRuntimeSettings {
       'domainLexiconPack': domainLexiconPack,
       'autoSpeakTranslation': autoSpeakTranslation,
     };
+  }
+
+  RealtimeRuntimeSettings normalizedForCapabilities() {
+    if (processingMode != RealtimeProcessingMode.onDevice) return this;
+    final normalizedSource = sourceLanguage == autoSourceLanguageCode ||
+            onDeviceTranslationLanguageCodes.contains(sourceLanguage)
+        ? sourceLanguage
+        : autoSourceLanguageCode;
+    final normalizedTarget = targetLanguage == autoReverseTargetLanguageCode ||
+            onDeviceTranslationLanguageCodes.contains(targetLanguage)
+        ? targetLanguage
+        : autoReverseTargetLanguageCode;
+    final normalizedVoice = voiceOutputMode == RealtimeVoiceOutputMode.myVoice
+        ? RealtimeVoiceOutputMode.natural
+        : voiceOutputMode;
+    if (normalizedSource == sourceLanguage &&
+        normalizedTarget == targetLanguage &&
+        normalizedVoice == voiceOutputMode &&
+        domainLexiconPack == defaultDomainLexiconPack) {
+      return this;
+    }
+    return copyWith(
+      sourceLanguage: normalizedSource,
+      targetLanguage: normalizedTarget,
+      voiceOutputMode: normalizedVoice,
+      domainLexiconPack: defaultDomainLexiconPack,
+    );
   }
 
   RealtimeVoiceOutputMode _toggleVoiceOutputMode(bool enabled) {

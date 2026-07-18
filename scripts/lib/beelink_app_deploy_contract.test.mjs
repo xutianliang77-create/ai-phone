@@ -32,7 +32,7 @@ describe("Beelink app deployment contract", () => {
     expect(script).toContain(
       'set_env VOICE_IDENTITY_HTTP_BASE_URL "http://127.0.0.1:8022"',
     );
-    expect(script).toContain('set_env VOICE_IDENTITY_HTTP_TIMEOUT_MS "15000"');
+    expect(script).toContain('set_env VOICE_IDENTITY_HTTP_TIMEOUT_MS "30000"');
   });
 });
 

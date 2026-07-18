@@ -20,8 +20,18 @@ extension RealtimeControllerDeviceAsrRecovery on RealtimeController {
   Future<void> _startMobileAsrProvider() async {
     await _audioSessionCoordinator.beginCapture();
     try {
-      await _mobileAsrProvider?.start(createDeviceAsrConfig(_config));
+      await _mobileAsrProvider?.start(createDeviceAsrConfig(
+        _config,
+        diagnosticSessionId: _session?.sessionId,
+      ));
       _deviceAsrRecovery.markStarted();
+      await _recordDeviceAsrDiagnosticEvent(
+        'controller.asr_started',
+        payload: <String, Object?>{
+          'sessionId': _session?.sessionId,
+          'language': _config.deviceAsrLanguage,
+        },
+      );
     } catch (error) {
       await ignoreCleanupError(_audioSessionCoordinator.endCapture);
       if (!_shouldRetryDeviceAsrStartup()) rethrow;
@@ -33,22 +43,44 @@ extension RealtimeControllerDeviceAsrRecovery on RealtimeController {
     unawaited(_recoverOrFailDeviceAsr(error));
   }
 
-  void _handleAsrTextSegmentError(Object error) {
-    unawaited(_failWithRealtimeError(error));
-  }
-
   void _sendTextSegment(AsrTextSegment segment) {
     final session = _session;
     if (session == null ||
         (_status != RealtimeStatus.active && !_stopInFlight)) {
       return;
     }
-    if (_speechCaptureGate.blocksCapture) return;
-    unawaited(
-      _handleAsrTextSegment(session.sessionId, segment).catchError(
-        _handleAsrTextSegmentError,
-      ),
+    final isPlaybackEcho = _speechCaptureGate.shouldDropDeviceAsr(
+      text: segment.text,
+      language: segment.language,
     );
+    if (isPlaybackEcho) _speechEchoSegmentIds.add(segment.id);
+    final segmentWasMarkedAsEcho = _speechEchoSegmentIds.contains(segment.id);
+    if (segment.isFinal) _speechEchoSegmentIds.remove(segment.id);
+    unawaited(_recordDeviceAsrDiagnosticEvent(
+      'capture_gate.decision',
+      payload: <String, Object?>{
+        'segmentId': segment.id,
+        'isFinal': segment.isFinal,
+        'playbackActive': _speechCaptureGate.playbackActive,
+        'droppedAsEcho': segmentWasMarkedAsEcho,
+      },
+    ));
+    if (segmentWasMarkedAsEcho) return;
+    if (_speechCaptureGate.playbackActive) {
+      unawaited(_stopSpeaking());
+    }
+    final sessionId = session.sessionId;
+    final queued = _asrTextChain.then((_) async {
+      final currentSession = _session;
+      if (currentSession?.sessionId != sessionId ||
+          (_status != RealtimeStatus.active && !_stopInFlight)) {
+        return;
+      }
+      await _handleAsrTextSegment(sessionId, segment);
+    });
+    _asrTextChain = queued.catchError((Object error) async {
+      await _failWithRealtimeError(error);
+    });
   }
 
   Future<void> _recoverOrFailDeviceAsr(Object error) async {
@@ -82,6 +114,27 @@ extension RealtimeControllerDeviceAsrRecovery on RealtimeController {
     if (_usesDeviceAsr) {
       await Future<void>.delayed(RealtimeController._deviceAsrStopDrain);
     }
+  }
+
+  Future<void> _drainAsrTextSegments() async {
+    await _asrTextChain.catchError((Object _) {});
+  }
+
+  Future<void> _recordDeviceAsrDiagnosticEvent(
+    String type, {
+    Map<String, Object?> payload = const <String, Object?>{},
+  }) async {
+    final isNativePlaybackControl = type.startsWith('tts.');
+    if (!_config.deviceAsrDiagnosticCaptureEnabled &&
+        !isNativePlaybackControl) {
+      return;
+    }
+    final provider = _mobileAsrProvider;
+    if (provider is! MobileAsrDiagnosticTimeline) return;
+    final timeline = provider as MobileAsrDiagnosticTimeline;
+    await ignoreCleanupError(() {
+      return timeline.recordDiagnosticEvent(type, payload: payload);
+    });
   }
 
   bool _shouldRecoverDeviceAsr() {

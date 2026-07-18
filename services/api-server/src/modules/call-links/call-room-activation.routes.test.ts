@@ -42,11 +42,12 @@ describe("call room activation barrier", () => {
       });
       expect(response.statusCode).toBe(200);
     };
-    const callId = (await app.inject({ method: "POST", url: "/call-links" }))
-      .json().callId as string;
+    const created = await app.inject({ method: "POST", url: "/call-links" });
+    const callId = created.json().callId as string;
+    const guestTicket = guestTicketFrom(created.json().joinUrl as string);
     const [hostToken, guestToken] = await Promise.all([
       roomToken(app, callId, "host"),
-      roomToken(app, callId, "guest"),
+      roomToken(app, callId, "guest", guestTicket),
     ]);
 
     const responses = await Promise.all([
@@ -75,9 +76,10 @@ describe("call room activation barrier", () => {
       async publish() {},
     } satisfies CallRoomDataPublisher);
     const app = await buildApp();
-    const callId = (await app.inject({ method: "POST", url: "/call-links" }))
-      .json().callId as string;
-    const token = await roomToken(app, callId, "guest");
+    const created = await app.inject({ method: "POST", url: "/call-links" });
+    const callId = created.json().callId as string;
+    const guestTicket = guestTicketFrom(created.json().joinUrl as string);
+    const token = await roomToken(app, callId, "guest", guestTicket);
 
     const response = await confirmConnection(app, callId, token);
     await app.close();
@@ -113,12 +115,28 @@ function connectedPublisher(): CallRoomDataPublisher {
   };
 }
 
-async function roomToken(app: Awaited<ReturnType<typeof buildApp>>, callId: string, role: string) {
-  return (await app.inject({
+async function roomToken(
+  app: Awaited<ReturnType<typeof buildApp>>,
+  callId: string,
+  role: string,
+  guestTicket?: string,
+) {
+  const response = await app.inject({
     method: "POST",
     url: `/call-links/${callId}/room-token`,
-    payload: { participantRole: role },
-  })).json() as Record<string, string>;
+    payload: {
+      participantRole: role,
+      ...(guestTicket ? { guestTicket } : {}),
+    },
+  });
+  expect(response.statusCode).toBe(200);
+  return response.json() as Record<string, string>;
+}
+
+function guestTicketFrom(joinUrl: string) {
+  const ticket = new URL(joinUrl).searchParams.get("ticket");
+  expect(ticket).toMatch(/^g1\./);
+  return ticket!;
 }
 
 function confirmConnection(

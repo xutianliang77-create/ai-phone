@@ -92,6 +92,72 @@ describe("call room reliable event routes", () => {
     expect(published).toEqual(["saved"]);
     expect(getStoreSnapshot().outboxEvents[0]?.publishedAt).toBeTruthy();
   });
+
+  it("accepts a newer revision while deduplicating a replay of that revision", async () => {
+    const published: Array<{ revision?: number; text: string }> = [];
+    setCallRoomDataPublisherForTests({
+      async publish(_roomName, event) {
+        published.push({ revision: event.revision, text: event.text });
+      },
+    });
+    const app = await buildApp();
+    const created = await app.inject({ method: "POST", url: "/call-links" });
+    const callId = created.json().callId as string;
+    const first = {
+      events: [{
+        ...eventPayload("segment-1", "call fifteen"),
+        speechId: "speech-1",
+        turnId: "turn-1",
+        revision: 0,
+        pipelineGeneration: 1,
+      }],
+    };
+    const corrected = {
+      events: [{
+        ...eventPayload("segment-1", "call fifty"),
+        speechId: "speech-1",
+        turnId: "turn-1",
+        revision: 1,
+        pipelineGeneration: 2,
+        pipelineTiming: {
+          asrStartedAtMs: 100,
+          asrFinalAtMs: 220,
+          translationFinalAtMs: 300,
+          eventPublishStartedAtMs: 310,
+        },
+      }],
+    };
+
+    const firstResponse = await postEvents(app, callId, first);
+    const correctedResponse = await postEvents(app, callId, corrected);
+    const replayResponse = await postEvents(app, callId, corrected);
+    await app.close();
+
+    expect(firstResponse.statusCode).toBe(200);
+    expect(correctedResponse.statusCode).toBe(200);
+    expect(replayResponse.json().duplicateCount).toBe(1);
+    expect(published).toEqual([
+      { revision: 0, text: "call fifteen" },
+      { revision: 1, text: "call fifty" },
+    ]);
+    expect(getStoreSnapshot().sessions.find((item) => item.id === callId))
+      .toMatchObject({
+        segments: [{
+          id: "segment-1",
+          speechId: "speech-1",
+          turnId: "turn-1",
+          revision: 1,
+          pipelineGeneration: 2,
+          pipelineTiming: {
+            asrStartedAtMs: 100,
+            asrFinalAtMs: 220,
+            translationFinalAtMs: 300,
+            eventPublishStartedAtMs: 310,
+          },
+          sourceText: "call fifty",
+        }],
+      });
+  });
 });
 
 const envKeys = [
@@ -130,7 +196,7 @@ function configureEnv() {
   process.env.LIVEKIT_URL = "wss://livekit.example.cn";
   process.env.LIVEKIT_API_KEY = "lk_key";
   process.env.LIVEKIT_API_SECRET = "lk_secret";
-  process.env.CALL_ROOM_TOKEN_TTL_SECONDS = "3600";
+  process.env.CALL_ROOM_TOKEN_TTL_SECONDS = "120";
   process.env.INTERNAL_API_SECRET = "internal-secret-123";
 }
 

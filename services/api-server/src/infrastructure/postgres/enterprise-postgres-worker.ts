@@ -26,7 +26,8 @@ import type {
 } from "./enterprise-postgres-worker-config.js";
 
 export async function runEnterprisePostgresWorkerBatch(options: {
-  pool: EnterprisePostgresPool;
+  discoveryPool: EnterprisePostgresPool;
+  tenantPool: EnterprisePostgresPool;
   runtime: EnterpriseRepositoryRuntime;
   config: EnterprisePostgresWorkerConfig;
   lifecycleExecutor: TenantLifecycleExecutor;
@@ -35,7 +36,7 @@ export async function runEnterprisePostgresWorkerBatch(options: {
 }) {
   const now = options.now ?? new Date();
   const refs = await listEnterprisePostgresPendingWork({
-    pool: options.pool,
+    pool: options.discoveryPool,
     cellId: options.config.cellId,
     workerId: options.config.workerId,
     traceId: workerTrace(options.config.workerId, now),
@@ -61,7 +62,8 @@ export async function runEnterprisePostgresWorkerBatch(options: {
 }
 
 export async function runEnterprisePostgresWorkerLoop(options: {
-  pool: EnterprisePostgresPool;
+  discoveryPool: EnterprisePostgresPool;
+  tenantPool: EnterprisePostgresPool;
   runtime: EnterpriseRepositoryRuntime;
   config: EnterprisePostgresWorkerConfig;
   lifecycleExecutor: TenantLifecycleExecutor;
@@ -90,7 +92,7 @@ async function processRef(
 ): Promise<"completed" | "retried" | "busy"> {
   const traceId = `${workerTrace(options.config.workerId, now)}:${ref.resourceId}`;
   const claimed = await claimEnterprisePostgresPendingWork({
-    pool: options.pool,
+    pool: options.tenantPool,
     cellId: options.config.cellId,
     ref,
     now: now.toISOString(),
@@ -137,7 +139,7 @@ async function processRef(
   } catch {
     result = { status: "retry" as const, reason: "publisher_unavailable" };
   }
-  await finalizeOutbox(options.pool, event, result, now, traceId);
+  await finalizeOutbox(options.tenantPool, event, result, now, traceId);
   return result.status === "completed" ? "completed" : "retried";
 }
 

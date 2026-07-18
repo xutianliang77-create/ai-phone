@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { MediaWriteRequest } from "./types.js";
 import { FonosterPstnProvider } from "./fonoster-provider.js";
 import { buildPstnProvider, HttpPstnProvider, MockPstnProvider } from "./providers.js";
+import { PstnProviderAdapter } from "./pstn-provider-adapter.js";
 
 describe("PSTN providers", () => {
   it("returns a deterministic mock provider call id", async () => {
@@ -45,7 +46,8 @@ describe("PSTN providers", () => {
   it("selects the Fonoster-compatible provider", () => {
     const provider = buildPstnProvider(fonosterConfig());
 
-    expect(provider).toBeInstanceOf(FonosterPstnProvider);
+    expect(provider).toBeInstanceOf(PstnProviderAdapter);
+    expect(provider.providerName).toBe("pstn_fonoster");
   });
 
   it("forwards calls to a Fonoster-compatible facade", async () => {
@@ -249,6 +251,7 @@ function fonosterConfig() {
 
 function agentCall() {
   return {
+    idempotencyKey: "pstn:place:call-1",
     draftId: "draft-1",
     callId: "call-1",
     targetPhone: "13800138000",

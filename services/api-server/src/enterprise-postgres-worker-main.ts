@@ -1,5 +1,6 @@
 import { pathToFileURL } from "node:url";
 import {
+  adaptSharedPostgresPool,
   createEnterprisePostgresPool,
   enterprisePostgresConnectionConfig,
 } from "./infrastructure/postgres/enterprise-postgres-client.js";
@@ -7,11 +8,8 @@ import {
   createEnvironmentEnterpriseOutboxPublisher,
 } from "./infrastructure/postgres/enterprise-postgres-outbox-publisher.js";
 import {
-  createPostgresEnterpriseRepositoryRuntime,
-} from "./infrastructure/postgres/enterprise-postgres-repository-runtime.js";
-import {
-  runEnterprisePostgresStartupGate,
-} from "./infrastructure/postgres/enterprise-postgres-startup-gate.js";
+  initializeEnterprisePrimaryRuntime,
+} from "./infrastructure/postgres/enterprise-primary-runtime.js";
 import {
   loadEnterprisePostgresWorkerConfig,
 } from "./infrastructure/postgres/enterprise-postgres-worker-config.js";
@@ -28,22 +26,37 @@ if (process.argv[1] &&
 }
 
 export async function runEnterprisePostgresWorkerMain() {
-  const startup = await runEnterprisePostgresStartupGate();
-  if (startup.status !== "verified") {
-    throw new Error("Enterprise cell worker requires PostgreSQL startup verify");
-  }
   const config = loadEnterprisePostgresWorkerConfig();
-  const pool = createEnterprisePostgresPool(
-    enterprisePostgresConnectionConfig(),
+  const primaryRuntime = await initializeEnterprisePrimaryRuntime({
+    enterpriseDirectoryAccess: false,
+  });
+  if (
+    primaryRuntime.driver !== "postgres" ||
+    primaryRuntime.platform.driver !== "postgres"
+  ) {
+    await primaryRuntime.close();
+    throw new Error("Enterprise cell worker requires PostgreSQL Primary Runtime");
+  }
+  let discoveryPool;
+  try {
+    discoveryPool = createEnterprisePostgresPool(
+      enterprisePostgresConnectionConfig(process.env, "cell"),
+    );
+  } catch (error) {
+    await primaryRuntime.close();
+    throw error;
+  }
+  const tenantPool = adaptSharedPostgresPool(
+    primaryRuntime.platform.postgres.pool,
   );
-  const runtime = createPostgresEnterpriseRepositoryRuntime(pool);
   const controller = new AbortController();
   process.once("SIGINT", () => controller.abort());
   process.once("SIGTERM", () => controller.abort());
   try {
     await runEnterprisePostgresWorkerLoop({
-      pool,
-      runtime,
+      discoveryPool,
+      tenantPool,
+      runtime: primaryRuntime.enterprise,
       config,
       lifecycleExecutor: createEnvironmentTenantLifecycleExecutor(),
       outboxPublisher: createEnvironmentEnterpriseOutboxPublisher(),
@@ -60,6 +73,10 @@ export async function runEnterprisePostgresWorkerMain() {
       },
     });
   } finally {
-    await runtime.close();
+    try {
+      await discoveryPool.end();
+    } finally {
+      await primaryRuntime.close();
+    }
   }
 }

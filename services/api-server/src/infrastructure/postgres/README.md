@@ -1,8 +1,8 @@
 # Enterprise PostgreSQL schema
 
 `ENT-DATA-001` 在这里提供企业 schema、up/down migration、受保护回滚、复合外键、强制 RLS
-和备份归档 smoke。它不把当前 API 的 SQLite 存储切换为 PostgreSQL；Repository
-切换属于 `ENT-DATA-002`。
+和备份归档 smoke。`ENT-DATA-007` 已把企业 Repository 与公共 PostgreSQL Primary
+Runtime 收敛到同一个进程级 Storage Driver；SQLite 仍仅用于本地开发和封闭演示。
 
 `ENT-DATA-002` 已提供三类 transaction-local session：
 
@@ -23,8 +23,8 @@ PostgreSQL unit-of-work。它们提供 tenant 根记录安全查询、成员 CAS
 lifecycle job 锁/CAS、inbox/outbox 幂等返回、outbox lease claim/finalize 和
 snake_case 行映射；输入与返回行都会再次核对 tenant。平台 discovery 只返回
 cell/tenant/kind/resource 和必要 actor，随后进入 tenant unit-of-work 复核当前 cell
-并以 `FOR UPDATE` 锁定路由行后执行 lifecycle/outbox 原子 claim。该代码尚未接入
-API/Worker runtime。
+并以 `FOR UPDATE` 锁定路由行后执行 lifecycle/outbox 原子 claim。API 与独立 Worker
+均通过统一 Primary Runtime 注入该 Repository，不存在路由级 fallback 或双写。
 
 identity 使用 opaque subject，而不是资源 UUID：
 
@@ -41,7 +41,7 @@ PostgreSQL。需要只验证已部署 schema 时：
 
 ```bash
 ENTERPRISE_POSTGRES_STARTUP_MODE=verify \
-ENTERPRISE_DATABASE_URL='postgresql://...' \
+ENTERPRISE_MIGRATION_DATABASE_URL='postgresql://...' \
   npm run dev -w @translation/api-server
 ```
 
@@ -49,13 +49,14 @@ ENTERPRISE_DATABASE_URL='postgresql://...' \
 
 ```bash
 ENTERPRISE_POSTGRES_STARTUP_MODE=migrate_verify \
-ENTERPRISE_DATABASE_URL='postgresql://...' \
+ENTERPRISE_MIGRATION_DATABASE_URL='postgresql://...' \
   npm run dev -w @translation/api-server
 ```
 
 两种启用模式都在恢复任务、Fastify 构建和端口监听前失败闭合，并在校验后关闭连接。
 `verify` 不写 migration；`migrate_verify` 始终在 migration 后执行相同 schema verify。
-该门禁不代表 HTTP/Worker Repository driver 或单一真值切换已经完成。
+统一启动编排先验证公共30段 manifest 和签名 cutover evidence，再验证 enterprise 10段
+manifest，并核对两个 verdict 的 database name/OID；任一失败都关闭已创建资源且不监听。
 
 当前十段 migration 中，`0004` 增加 tenant lifecycle 状态和 job，`0005` 增加
 导出/删除执行所需的 scope snapshot、attempt、lease、retry、receipt 和终态约束，
@@ -74,10 +75,10 @@ rollback。这些结构支持控制面代码和自动化，不代表真实 Postg
 `enterprise` schema 和表，但不能作为 API 运行时账号长期使用。
 
 ```bash
-ENTERPRISE_DATABASE_URL='postgresql://...' \
+ENTERPRISE_MIGRATION_DATABASE_URL='postgresql://...' \
   npm run enterprise:postgres -- migrate
 
-ENTERPRISE_DATABASE_URL='postgresql://...' \
+ENTERPRISE_MIGRATION_DATABASE_URL='postgresql://...' \
   npm run enterprise:postgres -- verify
 ```
 
@@ -85,12 +86,13 @@ ENTERPRISE_DATABASE_URL='postgresql://...' \
 
 ```bash
 ENTERPRISE_POSTGRES_ALLOW_DOWN=true \
-ENTERPRISE_DATABASE_URL='postgresql://...' \
+ENTERPRISE_MIGRATION_DATABASE_URL='postgresql://...' \
   npm run enterprise:postgres -- rollback
 ```
 
-默认要求 TLS 证书校验。仅本机封闭环境可显式设置
-`ENTERPRISE_DATABASE_SSL=disable`；该设置不能进入企业试点环境。
+默认要求 TLS 证书校验。统一使用 `POSTGRES_SSL_MODE`；仅本机封闭环境可设为
+`disable`，生产环境必须通过公共 Primary 门禁使用 `verify-full`。旧
+`ENTERPRISE_DATABASE_SSL=disable` 只保留本地兼容，不能进入企业试点环境。
 
 ## Tenant isolation
 
@@ -106,16 +108,19 @@ ENTERPRISE_DATABASE_URL='postgresql://...' \
 - 平台恢复使用 `SET LOCAL app.cell_id = $1` 的 forced-RLS projection；projection
   不含 payload，发现引用在 claim 前必须重新进入 tenant session 核对当前 cell。
 
-HTTP/Worker Repository driver、Worker cell 配置和 SQLite/JSON 数据对账仍未完成。
-完成前禁止局部切换或双写；平台 Worker 不得使用 `BYPASSRLS` 应用角色扫描或修改
-全租户数据。
+`API_STORAGE_DRIVER` 是唯一进程级 driver；旧 `ENTERPRISE_REPOSITORY_DRIVER` 为空或
+必须与其一致。API tenant Repository 复用公共 Primary pool，directory 使用独立凭证；
+Worker 使用独立 cell discovery 凭证和共享 tenant pool，不持有 directory 凭证。
+生产环境必须显式配置 `ENTERPRISE_DIRECTORY_DATABASE_URL`、
+`ENTERPRISE_CELL_DATABASE_URL`、`ENTERPRISE_MIGRATION_DATABASE_URL` 和维护凭证，
+不得使用 `BYPASSRLS` 应用角色扫描或修改全租户数据。
 
 ## Backup smoke
 
 归档 smoke 要求目标机存在 `pg_dump` 和 `pg_restore`：
 
 ```bash
-ENTERPRISE_DATABASE_URL='postgresql://...' \
+ENTERPRISE_MAINTENANCE_DATABASE_URL='postgresql://...' \
   npm run enterprise:postgres -- backup-smoke
 ```
 
