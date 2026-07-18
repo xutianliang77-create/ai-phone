@@ -268,6 +268,52 @@ export function createPostgresEnterpriseRepositoryRuntime(
         },
       );
     },
+    recordUsageEvent(input) {
+      return withEnterprisePostgresUnitOfWork(
+        pool,
+        input.context,
+        (unit) => unit.usageAccounting.record(input.event),
+      );
+    },
+    adjustUsage(input) {
+      return withEnterprisePostgresUnitOfWork(
+        pool,
+        input.context,
+        async (unit) => {
+          const result = await unit.usageAccounting.adjust(input.adjustment);
+          if (result.status !== "adjusted") return result;
+          await unit.tenant.appendAuditEvent(createEnterpriseAuditEvent({
+            context: input.context,
+            action: "usage.adjustment",
+            resourceType: "usage_ledger",
+            resourceId: result.adjustment.adjustmentLedgerEntryId,
+            result: "completed",
+            details: {
+              targetLedgerEntryId: result.adjustment.targetLedgerEntryId,
+              deltaAmount: result.adjustment.deltaAmount,
+              reasonCode: result.adjustment.reasonCode,
+            },
+            createdAt: result.adjustment.createdAt,
+          }));
+          return result;
+        },
+      );
+    },
+    rebuildUsagePeriod(input) {
+      return withEnterprisePostgresUnitOfWork(
+        pool,
+        input.context,
+        (unit) => unit.usageAccounting.rebuild(input.period),
+      );
+    },
+    async listUsagePeriodAggregates(input) {
+      const aggregates = await withEnterprisePostgresUnitOfWork(
+        pool,
+        input.context,
+        (unit) => unit.usageAccounting.list(),
+      );
+      return { status: "ready", aggregates };
+    },
     beginTenantCreation(input) {
       return beginPostgresTenantCreation(pool, input);
     },

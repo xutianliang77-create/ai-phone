@@ -1,6 +1,6 @@
 # 无界AI企业版详细功能设计
 
-版本：v1.7
+版本：v1.8
 日期：2026-07-18
 状态：SaaS 详细设计基线，已对齐统一通讯平台
 
@@ -369,6 +369,19 @@ LLM 只能提出结构化工具请求；Policy Engine 校验租户、客户、�
   `maxUnits` 不参与授权。
 - 当前实现不连接支付渠道，也不生成付款、续费或开票成功；真实账务 Provider、回调、退款和
   对账仍须后续环境验收。SQLite/JSON 继续返回 PostgreSQL required。
+
+### 8.4 不可变计量和账期聚合
+
+- 每次真实消费先追加 tenant usage event，再在同一事务追加一条引用该 event 的 settle ledger；
+  event 和 ledger 的 tenant、billing account、类别、单位、金额、来源、请求 hash 和时间必须一致。
+- 原始 event 与 ledger 都不可更新或删除。错账只能由内部受控账务运行时追加 adjustment ledger，
+  adjustment 必须引用原 settle ledger、记录原因和 actor，且累计调整后不能产生负数净用量。
+- 账期聚合按 `tenant + billing account + category + unit + UTC period` 重建，保存 settle、adjustment、
+  net、记录数、SHA-256 ledger hash、source watermark 和版本；聚合可重建，不能反向改写原始流水。
+- 租户公开接口只提供 `usage:read` 的聚合只读列表，不提供 owner/admin 自助冲正入口；账务调整
+  必须来自受控内部流程并写审计，避免租户角色给自己减免用量。
+- SQLite/JSON 不承载企业计量真值，继续明确返回 PostgreSQL required。当前完成的是本地数据库
+  机制与自动化，不等于真实支付、开票、A1/H3 或企业生产账务门禁通过。
 
 ## 9. 核心流程契约
 

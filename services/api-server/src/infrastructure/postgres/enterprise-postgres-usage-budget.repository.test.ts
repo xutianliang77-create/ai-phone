@@ -105,6 +105,9 @@ describe("enterprise PostgreSQL usage budget", () => {
     expect(settled.calls.filter(({ sql }) =>
       sql.includes("INSERT INTO enterprise.usage_ledger")
     )).toHaveLength(1);
+    expect(settled.calls.filter(({ sql }) =>
+      sql.includes("INSERT INTO enterprise.tenant_usage_events")
+    )).toHaveLength(1);
 
     const replay = usageFixture("settle_replay");
     await expect(new EnterpriseUsageBudgetPostgresRepository(replay.session)
@@ -164,6 +167,8 @@ function usageFixture(mode: Mode) {
         settled_amount: "20",
         settled_at: now.toISOString(),
       } : {})];
+    } else if (sql.includes("INSERT INTO enterprise.tenant_usage_events")) {
+      rows = [usageEventRow(values)];
     } else if (sql.includes("UPDATE enterprise.usage_holds") &&
       sql.includes("settled_amount")) {
       rows = [holdRow({
@@ -185,6 +190,27 @@ function usageFixture(mode: Mode) {
     queryWorkerDispatch: query,
   } satisfies EnterpriseTenantPostgresSession;
   return { calls, session };
+}
+
+function usageEventRow(values: unknown[]) {
+  return {
+    id: values[0],
+    tenant_id: tenantId,
+    billing_account_id: values[1],
+    budget_id: values[2],
+    hold_id: values[3],
+    ledger_entry_id: values[4],
+    category: values[5],
+    unit: values[6],
+    amount: String(values[7]),
+    source_type: values[8],
+    source_ref: values[9],
+    idempotency_key: values[10],
+    request_hash: values[11],
+    occurred_at: values[12],
+    received_at: values[13],
+    metadata: {},
+  };
 }
 
 function budgetRow(overrides: Record<string, unknown> = {}) {

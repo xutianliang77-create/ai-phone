@@ -55,6 +55,15 @@ import type {
   ChangeEnterpriseSubscriptionResult,
   EnterpriseEntitlementState,
 } from "./enterprise-billing-entitlement.js";
+import type {
+  AdjustEnterpriseUsageInput,
+  AdjustEnterpriseUsageResult,
+  EnterpriseUsagePeriodAggregateRecord,
+  RebuildEnterpriseUsagePeriodInput,
+  RebuildEnterpriseUsagePeriodResult,
+  RecordEnterpriseUsageEventInput,
+  RecordEnterpriseUsageEventResult,
+} from "./enterprise-usage-accounting.js";
 
 export type EnterpriseContextResult =
   | { status: "resolved"; tenant: EnterpriseTenantRecord; member: EnterpriseMemberRecord }
@@ -152,6 +161,24 @@ export interface EnterpriseRepositoryRuntime {
     context: EnterpriseTenantContext;
     change: ChangeEnterpriseSubscriptionInput;
   }): Promise<ChangeEnterpriseSubscriptionResult | { status: "storage_required" }>;
+  recordUsageEvent?(input: {
+    context: EnterpriseTenantContext;
+    event: RecordEnterpriseUsageEventInput;
+  }): Promise<RecordEnterpriseUsageEventResult | { status: "storage_required" }>;
+  adjustUsage?(input: {
+    context: EnterpriseTenantContext;
+    adjustment: AdjustEnterpriseUsageInput;
+  }): Promise<AdjustEnterpriseUsageResult | { status: "storage_required" }>;
+  rebuildUsagePeriod?(input: {
+    context: EnterpriseTenantContext;
+    period: RebuildEnterpriseUsagePeriodInput;
+  }): Promise<RebuildEnterpriseUsagePeriodResult | { status: "storage_required" }>;
+  listUsagePeriodAggregates?(input: {
+    context: EnterpriseTenantContext;
+  }): Promise<
+    | { status: "ready"; aggregates: EnterpriseUsagePeriodAggregateRecord[] }
+    | { status: "storage_required" }
+  >;
   beginTenantCreation(input: {
     ownerUserId: string;
     name: string;
@@ -238,6 +265,18 @@ export const legacyEnterpriseRepositoryRuntime: EnterpriseRepositoryRuntime = {
     return { status: "storage_required" };
   },
   async changeSubscription() {
+    return { status: "storage_required" };
+  },
+  async recordUsageEvent() {
+    return { status: "storage_required" };
+  },
+  async adjustUsage() {
+    return { status: "storage_required" };
+  },
+  async rebuildUsagePeriod() {
+    return { status: "storage_required" };
+  },
+  async listUsagePeriodAggregates() {
     return { status: "storage_required" };
   },
   async beginTenantCreation(input) {

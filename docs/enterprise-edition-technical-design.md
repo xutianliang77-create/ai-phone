@@ -1,6 +1,6 @@
 # 无界AI企业版详细技术设计
 
-版本：v1.18
+版本：v1.19
 日期：2026-07-18
 状态：统一通讯平台与 PostgreSQL Primary 收敛详细技术方案
 
@@ -21,17 +21,18 @@
 | RBAC | `ready_for_acceptance` | 已有17个 scope、九角色矩阵、统一服务端 guard 和越权测试 |
 | SaaS tenant lifecycle | `ready_for_acceptance` | 已有幂等开通、暂停、导出/删除执行器、租约、有界恢复和 receipt 校验；真实对象存储/Provider 清理服务尚待验收 |
 | Append-only audit | `ready_for_acceptance` | 已有 tenant-scoped 查询、HMAC cursor、成员/RBAC/租户生命周期埋点和 SQLite/PostgreSQL 不可变约束；受控导出和真实 PostgreSQL 验收尚待后续任务 |
-| PostgreSQL schema | `implemented` | 已有十五段 up/down migration、tenant-first 索引、复合 FK、强制 RLS、user directory、cell pending projection、opaque subject identity、企业通讯/dispatch/策略、usage budget 和版本化 billing/entitlement；尚无真实 migrate/restore/PITR 证据 |
-| Tenant-scoped Repository | `ready_for_acceptance` | 已有 tenant/user/cell scoped transaction、subject guard、单一 `legacy|postgres` runtime、HTTP 全链路注入、独立 cell Worker，以及 Tenant/Member/Audit、Directory、lifecycle、Inbox/Outbox、budget、billing/entitlement 和共享 unit-of-work；尚无真实 PostgreSQL H3 证据 |
+| PostgreSQL schema | `implemented` | 已有十六段 up/down migration、tenant-first 索引、复合 FK、强制 RLS、user directory、cell pending projection、opaque subject identity、企业通讯/dispatch/策略、usage budget、版本化 billing/entitlement 和 usage accounting；尚无真实 migrate/restore/PITR 证据 |
+| Tenant-scoped Repository | `ready_for_acceptance` | 已有 tenant/user/cell scoped transaction、subject guard、单一 `legacy|postgres` runtime、HTTP 全链路注入、独立 cell Worker，以及 Tenant/Member/Audit、Directory、lifecycle、Inbox/Outbox、budget、billing/entitlement、usage accounting 和共享 unit-of-work；尚无真实 PostgreSQL H3 证据 |
 | Enterprise Inbox/Outbox | `ready_for_acceptance` | 已有 tenant-scoped 去重、稳定 payload hash、领域/inbox/outbox 原子提交、lease/retry/recovery 和100次重放门禁；真实 PostgreSQL 并发与 Provider sandbox 尚待验收 |
 | SQLite/JSON 演示数据导入 | `ready_for_acceptance` | 已有维护窗口、SQLite 临时副本与 quick_check、空目标事务导入、六集合 count/SHA-256 读回对账和不一致回滚；仅限内部演示数据 |
-| 公共 Primary Runtime 收敛 | `ready_for_acceptance` | 已合入上游稳定提交 `fe1c3c2`；公共31段与 enterprise 15段 manifest 由一个启动编排验证，driver、数据库身份和分权连接失败均在监听前闭合；尚无真实 PostgreSQL H3 证据 |
+| 公共 Primary Runtime 收敛 | `ready_for_acceptance` | 已合入上游稳定提交 `fe1c3c2`；公共31段与 enterprise 16段 manifest 由一个启动编排验证，driver、数据库身份和分权连接失败均在监听前闭合；尚无真实 PostgreSQL H3 证据 |
 | 公共通讯 tenant scope | `ready_for_acceptance` | 公共 manifest 已增至31段；12张通讯资源表具有不可空 scope、复合 FK、写入 guard 和 forced RLS，企业 unit-of-work 只暴露 tenant-bound 白名单 Repository；尚无真实双租户 A1/H3 证据 |
 | 企业统一通讯会话绑定 | `ready_for_acceptance` | enterprise `0011` 和 tenant unit-of-work 已建立 Meeting/Support/Marketing 唯一绑定、route/policy/entitlement 快照及 generation/event-sequence 收敛状态机；尚无真实多实例、cell 迁移和 A1/H3 证据 |
 | Tenant-aware Worker Dispatch | `ready_for_acceptance` | enterprise `0012` 以 scope FK/RLS 绑定公共 dispatch/capacity；短期 HMAC ticket、租户容量、lease/heartbeat、cancel/finalize 和二次 binding fence 已实现；仅有自动化和一次性本地 PostgreSQL 16 证据，尚无真实多实例/H3 容量证据 |
 | 企业设备、声音和录制策略 | `ready_for_acceptance` | enterprise `0013`、发布 API、策略解析、purpose-specific 授权和 Worker policy fence 已实现；仅有自动化和一次性本地 PostgreSQL 16 机制证据，尚无真实设备/Provider、A1/H2/H3 证据 |
 | 企业用量预算 | `ready_for_acceptance` | enterprise `0014` 已实现 tenant/category/unit/UTC period 预算、hold/settle、阈值告警和 ledger 不可变约束；真实并发与账务抽样待验收 |
-| 租户账务和 Entitlement | `ready_for_acceptance` | enterprise `0015` 已实现 tenant billing account、不可变 plan/subscription/entitlement version、服务端账期及 binding/dispatch entitlement fence；真实支付 Provider、账期聚合和 A1/H3 待验收 |
+| 租户账务和 Entitlement | `ready_for_acceptance` | enterprise `0015` 已实现 tenant billing account、不可变 plan/subscription/entitlement version、服务端账期及 binding/dispatch entitlement fence；真实支付 Provider、关账对账和 A1/H3 待验收 |
+| SaaS 计量聚合 | `ready_for_acceptance` | enterprise `0016` 已实现 tenant usage event、event/ledger 一致性、append-only adjustment、负数净额保护及 count/hash/watermark 账期聚合；真实关账、支付对账和 A1/H3 待验收 |
 | PostgreSQL 控制面/业务聚合 | `designed` | 后续 CORE/MTG/CS/MKT 领域任务范围，不能从公共 Repository runtime 推导为已实现 |
 | SQLite | `demo_only` | 仅本地开发、自动化和封闭演示，不承载真实企业试点数据 |
 | PSTN/CRM/Calendar/OCR | `not_ready` 或按环境探测 | 未配置必须明确降级，不生成虚假外部对象或成功状态 |
@@ -1046,8 +1047,8 @@ enterprise migration `0015_enterprise_billing_entitlements` 增加 forced-RLS `b
 新 communication binding 从当前活动 entitlement 读取并冻结 version。Worker dispatch ticket v3
 携带该 version，签发时再次核对 billing account、与 snapshot 对应的活动 subscription、服务端
 账期、plan identity、effective window 和 capability limit；请求不再接受客户端 `maxUnits`。
-legacy/SQLite 返回 `enterprise_postgres_required`。本批没有支付、开票、退款 Provider，也未完成
-原始 usage event、账期聚合和 adjustment；后者属于 `ENT-CORE-012`。
+legacy/SQLite 返回 `enterprise_postgres_required`。本批没有支付、开票、退款 Provider；原始
+usage event、账期聚合和 adjustment 由后续 `ENT-CORE-012` 实现，见 13.3。
 
 席位按账期快照计费，用量按租户时区之外的统一 UTC 账期切分，避免时区修改导致重复计费。
 
@@ -1055,6 +1056,35 @@ legacy/SQLite 返回 `enterprise_postgres_required`。本批没有支付、开�
 账单账户的受控联系人，不能替代 tenant。来自主产品的 `user_id` 个人订阅、余额或账单
 记录不得通过 ID 映射直接升级为企业账单；迁移必须生成 tenant billing account、期初
 余额/权益快照和可对账 adjustment，并保留源记录哈希和审计引用。
+
+### 13.3 不可变 Usage Accounting（ENT-CORE-012）
+
+enterprise migration `0016_enterprise_usage_accounting` 增加 forced-RLS
+`tenant_usage_events`、`usage_adjustments` 和 `usage_period_aggregates`，并为
+`usage_ledger` 增加唯一 `usage_event_id`。原始 event 和 adjustment 使用 append-only trigger；
+event 与 settle ledger 通过双向延迟复合外键和 deferred constraint trigger，在事务提交时逐字段核对
+tenant、billing account、budget/hold、category/unit/amount、source、hash、时间、metadata 和 event ID。
+
+通用 `recordUsageEvent` 先锁 tenant、读取活动 billing account，再同事务写 event/settle ledger；
+budget hold 的 settle 路径复用相同写入器，因此不会出现“hold 已结算但原始 event 缺失”的新记录。
+相同 tenant/idempotency key 只有请求 hash 和核心字段完全一致才重放；同键不同载荷拒绝。
+
+`adjustUsage` 只存在于内部 Repository runtime，不暴露租户自助写 API。它锁 tenant 和目标 settle
+ledger，服务端生成 request hash，追加 adjustment ledger 与 adjustment record，并写 actor 审计；
+数据库 trigger 再次核对目标/调整流水的 account、category、unit、amount、source、hash 和时间，
+按目标行锁串行汇总历史 delta，累计净额小于零时失败闭合。任何流程都不得 UPDATE/DELETE 原始 event、
+settle ledger 或 adjustment。
+
+`rebuildUsagePeriod` 以 `tenant + billing account + category + unit + [periodStart, periodEnd)` 查询
+ledger，按 `occurred_at,id` 稳定排序，计算 settle/adjustment/net、usage event/settlement/
+adjustment/ledger 四类 count、最新 recorded watermark
+和带长度分隔的 SHA-256 ledger hash。聚合表只允许 identity 不变、version 加一、computed time 与
+watermark 单调前进的更新；调用方可用 expected version 拒绝并发覆盖。公开
+`GET /enterprise/v1/usage/aggregates` 只允许 active membership、`usage:read` 和有效签名 route
+document，SQLite/JSON 明确返回 `enterprise_postgres_required`。
+
+本批本地 PostgreSQL 16 证据只覆盖 migration、forced RLS、不可变/一致性/负净额 guard、runtime
+和 count/hash 对账机制。它不连接支付、开票或退款 Provider，也不替代 A1、H3、真实关账或生产验收。
 
 ## 14. 降级策略
 

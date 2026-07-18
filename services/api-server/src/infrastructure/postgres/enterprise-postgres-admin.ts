@@ -23,6 +23,7 @@ export const enterpriseTenantTableNames = [
   "usage_budgets", "usage_holds", "usage_budget_alerts",
   "billing_accounts", "billing_plan_versions", "entitlement_snapshots",
   "billing_subscription_changes",
+  "tenant_usage_events", "usage_adjustments", "usage_period_aggregates",
   "inbox_events", "outbox_events", "marketing_campaigns", "marketing_leads",
   "contact_consents", "suppression_entries", "marketing_call_tasks",
   "marketing_outcomes", "support_channels", "customer_profiles",
@@ -48,6 +49,7 @@ export const enterpriseSubjectColumns = [
   ["idempotency_keys", "actor_id"],
   ["billing_accounts", "billing_contact_subject_id"],
   ["billing_subscription_changes", "actor_id"],
+  ["usage_adjustments", "actor_id"],
 ] as const;
 
 const [action] = process.argv.slice(2);

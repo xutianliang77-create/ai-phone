@@ -1,6 +1,6 @@
 # 无界AI企业版设计文档索引
 
-版本：v1.11
+版本：v1.12
 日期：2026-07-18
 状态：SaaS 详细设计基线，已纳入统一通讯平台和 PostgreSQL Primary 演进
 
@@ -45,12 +45,12 @@ cell Worker 和 JSON/SQLite 演示数据 count/hash 对账代码，状态为等�
 无界AI主产品公共 PostgreSQL migration、Primary Runtime、可靠 Inbox/Outbox、
 fencing、Billing/Product Records、verify-full 和韧性代码已形成稳定提交 `fe1c3c2`，并由
 `ENT-DATA-007` 合入企业分支。企业版已经完成单 driver、双 manifest、同库身份和分权
-连接的本地自动化，当前 manifest 为公共31段、enterprise 15段；`ENT-DATA-008` 和
+连接的本地自动化，当前 manifest 为公共31段、enterprise 16段；`ENT-DATA-008` 和
 `ENT-CORE-013/014/015` 已完成公共通讯 tenant scope、企业业务会话绑定、签名 Worker dispatch fence
 及设备/声音/录制策略快照的代码/本地自动化，但不能继承主产品 staging 验收。`ENT-DATA-009`、
-`ENT-CORE-007/010` 已增加 tenant usage budget、幂等 hold/settle、tenant billing account、
-不可变 plan/subscription/entitlement 版本和 dispatch 服务端限额；`ENT-CORE-012` 的原始 usage
-event、账期聚合与 adjustment 尚未完成。真实设备/Provider、支付账务环境、A1/H2/H3 仍待完成。
+`ENT-CORE-007/010/012` 已增加 tenant usage budget、幂等 hold/settle、tenant billing account、
+不可变 plan/subscription/entitlement 版本、原始 usage event、append-only adjustment、账期
+count/hash 聚合和 dispatch 服务端限额。真实设备/Provider、支付账务环境、关账、A1/H2/H3 仍待完成。
 
 ## 3. 继承文档
 

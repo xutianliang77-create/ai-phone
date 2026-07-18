@@ -1,6 +1,6 @@
 # 无界AI企业版验收任务与计划
 
-版本：v1.13
+版本：v1.14
 日期：2026-07-18
 状态：可执行验收计划，已对齐统一通讯平台和 PostgreSQL Primary 收敛
 
@@ -88,6 +88,7 @@ Mock 只能验证协议，不能替代 iPhone/Web、真实 LiveKit、真实模�
 | AC-ENT-0016 | 企业通讯运行策略 | 策略按精确 tenant/version 发布；dispatch ticket 绑定不可变 policy snapshot/version；device/cloud readiness 与 fingerprint 缺失或过期时明确降级；声纹、录音和诊断音频分别要求有效 purpose 授权，证据缺失、过期或撤回立即阻断新副作用且不改写历史快照 |
 | AC-ENT-0017 | 企业用量预算 | tenant/category/unit/UTC period 唯一预算；并发 reserve 不超卖；相同 hold/settle key 同 hash 精确重放、不同 hash 拒绝；超限不产生副作用；ledger/alert 不可更新删除，跨租户 ID 不可见不可写 |
 | AC-ENT-0018 | 租户账务和 Entitlement | tenant billing account 唯一；同时最多一个活动 subscription；plan/snapshot/version 不可改写删除；套餐变更只接受服务端 plan 并由服务端生成账期；跨租户、过期/错订阅、席位超限、旧 entitlement、客户端伪造 limit/maxUnits 全部拒绝且不产生 dispatch 副作用 |
+| AC-ENT-0019 | 不可变 Usage Accounting | raw event 与 settle ledger 同事务且逐字段一致；event/ledger/adjustment 不可更新删除；同键精确重放、异载荷拒绝；adjustment 只追加并引用原 settle、累计净额不得为负；UTC period 聚合的 settle/adjustment/net、usage event/settlement/adjustment/ledger count、SHA-256 hash 和 watermark 可重建，历史 ledger-only 缺口可见；跨租户读写与租户自助冲正均拒绝 |
 
 ### 4.1 企业 UI 与前端工程验收
 
@@ -374,7 +375,7 @@ schema 测试及 session/leg/dispatch/provider/playback/participant 六资源跨
 
 - PostgreSQL 作为所有真实 SaaS 租户的初始真源。
 - 内部 SQLite 演示数据可以迁移，但不能作为客户生产迁移路径的必要依赖。
-- 验收 commit 锁定的公共31段 manifest（基线从 `fe1c3c2` 演进）与 enterprise 15段 migration manifest 在隔离企业数据库从空库完整执行；两个 manifest 的顺序、checksum、schema verify 和 down/forward 策略均有证据，不能只跑其中一套。
+- 验收 commit 锁定的公共31段 manifest（基线从 `fe1c3c2` 演进）与 enterprise 16段 migration manifest 在隔离企业数据库从空库完整执行；两个 manifest 的顺序、checksum、schema verify 和 down/forward 策略均有证据，不能只跑其中一套。
 - 每个进程只有一个 Storage Driver 和 startup verdict；HTTP、企业 Repository、统一通讯会话和 cell Worker 使用同一 verified Primary Runtime，不存在 fallback、shadow read、dual write 或按路由混用。
 - 应用 tenant、user directory、cell discovery、migration、maintenance 分别使用最小权限角色；生产 TLS 使用 `verify-full`。应用角色没有 `BYPASSRLS`、表 owner、DDL 或关闭 RLS 权限。
 - 公共 communication session、participant、media leg、dispatch、Provider operation、playback 和相关账本全部具有 tenant scope、复合 FK 和 `FORCE ROW LEVEL SECURITY`；使用跨租户 ID、缺 scope、伪造 owner/user 过滤做负向验证。
@@ -462,7 +463,7 @@ evidencePath
 | CS-001..012 | AC-UI、A2 客服、H1 故障 | Agent、知识、工具、队列或 Provider 变更后 | A2 |
 | MKT-001..014 | AC-UI、A3 外呼、H1/H2 | 国家策略、Provider、调度、话术或接管变更后 | A3 |
 | DATA-001..009 | A0 单 Primary、A1 隔离、H1、H3 | schema、Repository、Primary runtime、scope、迁移、备份或 cell 变更后 | A4 |
-| CORE-007/010/012、CORE-013..015 | AC-ENT-0014..0017、A1 隔离、业务会话、计量、H1/H2 | 会话、dispatch、账务、cell route、声音/录制策略或 Worker 变更后 | A1；对应 Provider/账务环境就绪后进入 A2/A3 |
+| CORE-007/010/012、CORE-013..015 | AC-ENT-0014..0019、A1 隔离、业务会话、计量、H1/H2 | 会话、dispatch、账务、cell route、声音/录制策略或 Worker 变更后 | A1；对应 Provider/账务环境就绪后进入 A2/A3 |
 | REL-001..008、OBS-001 | H1/H2/H3 和最终发布门禁 | 每个正式候选版本 | A4 |
 
 ### 16.1 执行节奏

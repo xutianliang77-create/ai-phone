@@ -115,6 +115,31 @@ export interface EnterpriseEntitlementsResponse {
   entitlement: EnterpriseEntitlementSnapshotDto;
 }
 
+export interface EnterpriseUsagePeriodAggregateDto {
+  id: string;
+  tenantId: string;
+  billingAccountId: string;
+  category: EnterpriseUsageCategory;
+  unit: EnterpriseUsageUnit;
+  periodStart: string;
+  periodEnd: string;
+  settledAmount: number;
+  adjustmentAmount: number;
+  netAmount: number;
+  settlementCount: number;
+  usageEventCount: number;
+  adjustmentCount: number;
+  ledgerCount: number;
+  ledgerHash: string;
+  sourceWatermark?: string;
+  computedAt: string;
+  version: number;
+}
+
+export interface EnterpriseUsagePeriodAggregatesResponse {
+  aggregates: EnterpriseUsagePeriodAggregateDto[];
+}
+
 export function isEnterpriseUsageCategory(
   value: unknown,
 ): value is EnterpriseUsageCategory {

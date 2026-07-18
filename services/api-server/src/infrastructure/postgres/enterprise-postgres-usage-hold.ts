@@ -14,6 +14,9 @@ import {
   type EnterpriseUsageBudgetRow,
   type EnterpriseUsageHoldRow,
 } from "./enterprise-postgres-usage-budget-record.js";
+import {
+  EnterpriseUsageEventPostgresRepository,
+} from "./enterprise-postgres-usage-event.js";
 
 export class EnterpriseUsageHoldPostgresRepository {
   constructor(private readonly session: EnterpriseTenantPostgresSession) {}
@@ -129,31 +132,29 @@ export class EnterpriseUsageHoldPostgresRepository {
       return { status: "hold_not_active" };
     }
     if (normalized.amount > hold.amount) return { status: "amount_exceeds_hold" };
-    await this.session.query(`
-      INSERT INTO enterprise.usage_ledger(
-        id, tenant_id, category, amount, unit, source_type, source_id,
-        idempotency_key, occurred_at, metadata, entry_type, budget_id,
-        hold_id, source_ref, request_hash, recorded_at, billing_account_id
-      ) VALUES (
-        $2, $1, $3, $4, $5, $6, NULL, $7, $8, $9::jsonb,
-        'settle', $10, $11, $12, $13, $14, $15
-      ) RETURNING id
-    `, [
-      randomUUID(),
-      hold.category,
-      normalized.amount,
-      hold.unit,
-      hold.sourceType,
-      normalized.idempotencyKey,
-      normalized.occurredAt,
-      JSON.stringify(normalized.metadata),
-      hold.budgetId,
-      hold.id,
-      hold.sourceRef,
-      normalized.requestHash,
-      normalized.now,
-      hold.billingAccountId,
-    ]);
+    const event = await new EnterpriseUsageEventPostgresRepository(
+      this.session,
+    ).recordSettlement({
+      billingAccountId: hold.billingAccountId,
+      budgetId: hold.budgetId,
+      holdId: hold.id,
+      category: hold.category,
+      unit: hold.unit,
+      amount: normalized.amount,
+      sourceType: hold.sourceType,
+      sourceRef: hold.sourceRef,
+      idempotencyKey: normalized.idempotencyKey,
+      requestHash: normalized.requestHash,
+      occurredAt: normalized.occurredAt,
+      metadata: normalized.metadata,
+      now: new Date(normalized.now),
+    });
+    if (event.status === "idempotency_conflict") {
+      return { status: "idempotency_conflict" };
+    }
+    if (event.status === "billing_account_unavailable") {
+      throw new Error("Enterprise usage billing account unavailable");
+    }
     const updated = await this.session.query<EnterpriseUsageHoldRow>(`
       UPDATE enterprise.usage_holds
       SET status = 'settled', settled_amount = $3, settled_at = $4,
