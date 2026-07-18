@@ -1,6 +1,6 @@
 # 无界AI企业版验收任务与计划
 
-版本：v1.27
+版本：v1.28
 日期：2026-07-19
 状态：可执行验收计划，已对齐统一通讯平台和 PostgreSQL Primary 收敛
 
@@ -90,7 +90,7 @@ Mock 只能验证协议，不能替代 iPhone/Web、真实 LiveKit、真实模�
 | AC-ENT-0017 | 企业用量预算 | tenant/category/unit/UTC period 唯一预算；并发 reserve 不超卖；相同 hold/settle key 同 hash 精确重放、不同 hash 拒绝；超限不产生副作用；ledger/alert 不可更新删除，跨租户 ID 不可见不可写 |
 | AC-ENT-0018 | 租户账务和 Entitlement | tenant billing account 唯一；同时最多一个活动 subscription；plan/snapshot/version 不可改写删除；套餐变更只接受服务端 plan 并由服务端生成账期；跨租户、过期/错订阅、席位超限、旧 entitlement、客户端伪造 limit/maxUnits 全部拒绝且不产生 dispatch 副作用 |
 | AC-ENT-0019 | 不可变 Usage Accounting | raw event 与 settle ledger 同事务且逐字段一致；event/ledger/adjustment 不可更新删除；同键精确重放、异载荷拒绝；adjustment 只追加并引用原 settle、累计净额不得为负；UTC period 聚合的 settle/adjustment/net、usage event/settlement/adjustment/ledger count、SHA-256 hash 和 watermark 可重建，历史 ledger-only 缺口可见；跨租户读写与租户自助冲正均拒绝 |
-| AC-ENT-0020 | Primary 切换与恢复证据 | 公共31段/企业20段 manifest、全部业务表 count/整行 hash、关键 tenant/session/ledger/audit/consent/suppression/object 清单和增量 WAL 水位一致；源 writer fence 与 SQLSTATE 25006 写拒绝、旧 API/Worker 角色会话为0、目标写探针成功；baseline/cutover/restore evidence 验签并绑定 commit/image/topology/system identifier/OID；任意单行篡改失败闭合 |
+| AC-ENT-0020 | Primary 切换与恢复证据 | 公共31段/企业21段 manifest、全部业务表 count/整行 hash、关键 tenant/session/ledger/audit/consent/suppression/object 清单和增量 WAL 水位一致；源 writer fence 与 SQLSTATE 25006 写拒绝、旧 API/Worker 角色会话为0、目标写探针成功；baseline/cutover/restore evidence 验签并绑定 commit/image/topology/system identifier/OID；任意单行篡改失败闭合 |
 | AC-ENT-0021 | 企业知识版本 | source/revision/chunk 只能由 `knowledge:publish` 且持有效 tenant route 的角色写入；revision 服务端串行递增，chunk/block 唯一且 hash 由服务端生成；无 chunk、非 review、旧 expectedVersion、跨租户和 tenantId 伪造全部拒绝；published version/chunk 不可更新删除；检索强制 tenant/locale/country/product/effective-time，只返回每个 source 最新有效 published revision，并产生稳定 `knowledgeVersionId:blockId` citation；draft/review/failed/未来/过期均为0结果 |
 | AC-ENT-0022 | 企业术语与话术版本 | term pack/script template 稳定资源与 revision 只能由 `knowledge:publish` 且持有效 tenant route 的角色写入；revision 服务端串行递增，term ID/原词唯一，话术必说语与禁语不冲突，hash 由服务端生成；非 review、旧 expectedVersion、跨租户、tenantId 伪造、评审后改内容/hash 和 published 更新删除全部拒绝；resolver 强制 tenant/source-target locale/country/product/purpose/effective-time，只返回当前有效 published 版本，且顶层、ASR、翻译和 LLM 的 `termPackVersionId` 完全相同，话术版本只进入 LLM；draft/review/未来/过期/用途不符均明确 not ready |
 | AC-ENT-0023 | 企业会话链路报告 | API 响应 `x-trace-id` 与 TenantContext、communication binding、usage event/ledger 和 Provider operation 一致可关联；会话报告只允许 `audit:read` 且必须受 tenant forced RLS 隔离；质量指标只由真实 segment/latency 计算，无样本返回 `no_samples`；用量逐项引用 event/ledger/trace；无单位价格表时货币金额必须为 null 且 reason 为 `pricing_not_configured`；跨租户 session ID、伪造 trace 和 legacy trace 不得泄露其他租户审计 |
@@ -157,7 +157,7 @@ AI 代打。当前只通过 `flutter analyze`，未运行 Flutter test、构建�
 `ENT-UI-012` 当前 Web 代码候选把 `/join/:meetingId` 放在成员 `AuthProvider/AppShell` 外，不读取账号、membership、
 tenant 导航或成员数据。guest token 只接受 URL fragment，query token、非法 meeting/token、地址栏清理失败均拒绝；
 有效凭据清除地址后只驻留页面内存，不进入 storage、日志或 UI。麦克风检查仅由用户点击触发并立即停止 track，
-共享只探测浏览器能力，不在无 session/lease 时调用 `getDisplayMedia`。`ENT-MTG-001/002` 未实现，本批不发送 token、
+共享只探测浏览器能力，不在无 session/lease 时调用 `getDisplayMedia`。`ENT-MTG-002` token/API 未实现，本批不发送 token、
 不连接 RTC，字幕和共享保持 `not_ready`。当前仅有 typecheck/build/bundle 静态证据，未运行 token 攻击测试、浏览器、
 权限、设备、axe 或视觉矩阵，不能满足 token 单会议约束、AC-UI-004/005/008..012、AC-MTG 或 A1。
 
@@ -290,6 +290,11 @@ schema 测试及 session/leg/dispatch/provider/playback/participant 六资源跨
 | AC-MTG-003 | 未授权入会 | token/tenant/meeting 任一不符即拒绝 |
 | AC-MTG-004 | 四人入会 | 成员、访客和主持人身份正确 |
 | AC-MTG-005 | 重启恢复 | API/Worker 重启后会议和参与者状态收敛 |
+
+`ENT-MTG-001` 当前代码候选新增 `0021`、Meeting/Participant/Artifact 领域状态机、tenant-scoped Repository、
+Primary runtime adapter 和 recoverable aggregate 读取。恢复记录同时包含唯一 communication binding；缺 binding 不会
+被补成 ready。当前未运行 up/down、forced RLS、跨租户、CAS 竞争、API/Worker 重启或 PostgreSQL 恢复测试，也未实现
+MTG-002 token/API，因此不能满足 AC-MTG-001..005 或 A1。
 
 ### 7.2 字幕、翻译和说话人
 
@@ -458,7 +463,7 @@ schema 测试及 session/leg/dispatch/provider/playback/participant 六资源跨
 
 - PostgreSQL 作为所有真实 SaaS 租户的初始真源。
 - 内部 SQLite 演示数据可以迁移，但不能作为客户生产迁移路径的必要依赖。
-- 验收 commit 锁定的公共31段 manifest（基线从 `fe1c3c2` 演进）与 enterprise 20段 migration manifest 在隔离企业数据库从空库完整执行；两个 manifest 的顺序、checksum、schema verify 和 down/forward 策略均有证据，不能只跑其中一套。
+- 验收 commit 锁定的公共31段 manifest（基线从 `fe1c3c2` 演进）与 enterprise 21段 migration manifest 在隔离企业数据库从空库完整执行；两个 manifest 的顺序、checksum、schema verify 和 down/forward 策略均有证据，不能只跑其中一套。
 - 每个进程只有一个 Storage Driver 和 startup verdict；HTTP、企业 Repository、统一通讯会话和 cell Worker 使用同一 verified Primary Runtime，不存在 fallback、shadow read、dual write 或按路由混用。
 - 应用 tenant、user directory、cell discovery、migration、maintenance 分别使用最小权限角色；生产 TLS 使用 `verify-full`。应用角色没有 `BYPASSRLS`、表 owner、DDL 或关闭 RLS 权限。
 - 公共 communication session、participant、media leg、dispatch、Provider operation、playback 和相关账本全部具有 tenant scope、复合 FK 和 `FORCE ROW LEVEL SECURITY`；使用跨租户 ID、缺 scope、伪造 owner/user 过滤做负向验证。
@@ -467,7 +472,7 @@ schema 测试及 session/leg/dispatch/provider/playback/participant 六资源跨
 - 使用普通应用角色验证 billing account/plan/subscription/entitlement/change history forced RLS、活动 subscription 唯一、plan/snapshot/change 不可变，以及 entitlement projection/binding/grant 的 tenant 复合 FK；按跨租户、停用 account、过期账期、错 subscription/plan/version、席位超限、幂等漂移和客户端 limit 伪造执行负向矩阵。
 - accounts、tenant、communication session、segment、campaign、support、meeting、ledger 和 object hash 数量与规范化 SHA-256 一致。
 - 全量复制后记录增量水位，切换时获取 writer fence、清退旧 API/Worker、重放剩余 inbox/outbox，再做第二次 count/hash；切换或对账失败可按书面决策回滚，旧 writer 不能继续写入。
-- staging startup 必须拒绝 local evidence、签名篡改、错误 cutover/target ID、错误 commit/image/topology、错误 system identifier/OID、缺 baseline 引用、未清退 writer 或任一31+20 migration 漂移。维护工具只验证 fence，不自动执行 promote 或隔离旧主。
+- staging startup 必须拒绝 local evidence、签名篡改、错误 cutover/target ID、错误 commit/image/topology、错误 system identifier/OID、缺 baseline 引用、未清退 writer 或任一31+21 migration 漂移。维护工具只验证 fence，不自动执行 promote 或隔离旧主。
 - migration 后使用普通应用角色验证 `FORCE ROW LEVEL SECURITY`；确认 user directory self policy、tenant projection policy、成员投影同步和跨租户拒绝均生效。
 - 使用独立 cell Worker 角色验证 pending projection forced RLS、trigger 同步、空 cell 失败闭合、旧 cell 拒绝和 tenant transaction 原子 claim。
 - 使用 API 应用角色验证 PostgreSQL runtime 只在 startup gate `verified` 后创建；非法或 `dual_write` driver、连接/校验失败均不得监听端口，也不得回退到 legacy。

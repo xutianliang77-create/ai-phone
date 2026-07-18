@@ -36,6 +36,7 @@ import { createEnterprisePostgresTerminologyRuntime } from
   "./enterprise-postgres-terminology-runtime.js";
 import { createEnterprisePostgresObservabilityRuntime } from "./enterprise-postgres-observability-runtime.js";
 import { createEnterprisePostgresAuditExportRuntime } from "./enterprise-postgres-audit-export-runtime.js";
+import { createEnterprisePostgresMeetingRuntime } from "./enterprise-postgres-meeting-runtime.js";
 export function createPostgresEnterpriseRepositoryRuntime(
   pools: EnterprisePostgresPool | {
     tenantPool: EnterprisePostgresPool;
@@ -53,10 +54,9 @@ export function createPostgresEnterpriseRepositoryRuntime(
   const pool = split.tenantPool;
   return {
     driver: "postgres",
-    ...createEnterprisePostgresKnowledgeRuntime(pool),
-    ...createEnterprisePostgresTerminologyRuntime(pool),
+    ...createEnterprisePostgresKnowledgeRuntime(pool), ...createEnterprisePostgresTerminologyRuntime(pool),
     ...createEnterprisePostgresObservabilityRuntime(pool),
-    ...createEnterprisePostgresAuditExportRuntime(pool),
+    ...createEnterprisePostgresAuditExportRuntime(pool), ...createEnterprisePostgresMeetingRuntime(pool),
     resolveContext(input) {
       return resolveEnterprisePostgresContext({
         pool: split.directoryPool,

@@ -1,6 +1,6 @@
 # 无界AI企业版设计文档索引
 
-版本：v1.22
+版本：v1.23
 日期：2026-07-19
 状态：SaaS 详细设计基线，已纳入统一通讯平台和 PostgreSQL Primary 演进
 
@@ -46,11 +46,11 @@ cell Worker、JSON/SQLite 演示导入，以及全业务表 Primary 切换/恢�
 无界AI主产品公共 PostgreSQL migration、Primary Runtime、可靠 Inbox/Outbox、
 fencing、Billing/Product Records、verify-full 和韧性代码已形成稳定提交 `fe1c3c2`，并由
 `ENT-DATA-007` 合入企业分支。企业版已经完成单 driver、双 manifest、同库身份和分权
-连接的本地自动化，当前 manifest 为公共31段、enterprise 20段；`ENT-DATA-008` 和
+连接的本地自动化，当前 manifest 为公共31段、enterprise 21段；`ENT-DATA-008` 和
 `ENT-CORE-013/014/015` 已完成公共通讯 tenant scope、企业业务会话绑定、签名 Worker dispatch fence
 及设备/声音/录制策略快照的代码/本地自动化，但不能继承主产品 staging 验收。`ENT-DATA-009` 已增加
 31+16 migration manifest 的历史本地证据、全表主键分页 count/hash、WAL 水位、writer fence、签名
-cutover/restore 证据和 production startup 绑定门禁；当前 `0017..0020` 必须按31+20重新生成切换证据。
+cutover/restore 证据和 production startup 绑定门禁；当前 `0017..0021` 必须按31+21重新生成切换证据。
 `ENT-CORE-004` 已增加 tenant-scoped source/version/chunk、草稿审核发布状态机、发布后不可变约束、
 locale/country/product/effective-time 检索和知识引用 ID；
 `ENT-CORE-005` 已增加版本化 term pack/script template、审核发布和生效窗口、发布后不可变约束，
@@ -75,7 +75,10 @@ region/cell/scope 和 Provider document，并按 scope 发现工作台、会议�
 明确 not_ready，离线与上下文不一致失败闭合。当前只通过 Flutter 静态分析，测试、构建和真机门禁未执行。
 `ENT-UI-012` 已增加独立于成员 AuthProvider/AppShell 的 Web 访客参会壳，fragment guest token 清除后只驻留内存，
 query/非法凭据/清除失败均拒绝；用户可显式检查麦克风，字幕与共享在无企业 meeting session/lease 时保持 not_ready。
-`ENT-MTG-001/002` 尚未实现，当前不发送 token、不连接 RTC，测试与浏览器设备门禁未执行。
+`ENT-MTG-002` 尚未实现，当前不发送 token、不连接 RTC，测试与浏览器设备门禁未执行。
+`ENT-MTG-001` 已增加 Meeting/Participant/Artifact 领域状态机、`0021` schema 约束、tenant-scoped PostgreSQL
+Repository/runtime 和包含 communication binding 的恢复聚合读取。当前 migration、RLS、并发与重启恢复测试未执行，
+且 MTG-002 API/token 未实现，任务保持 `in_progress`。
 
 ## 3. 继承文档
 
