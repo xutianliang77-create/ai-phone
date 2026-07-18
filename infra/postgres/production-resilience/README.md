@@ -104,3 +104,22 @@ npm run check:postgres-resilience-providers -- \
 
 `ready` means only that the local provider contract is safe to start; it is not
 failover, backup, restore, RPO/RTO or production acceptance evidence.
+
+## Controller contract conformance
+
+Before private controllers and infrastructure are available, the seven JSON
+attestation contracts can be exercised in isolation. The default command uses a
+built-in synthetic fixture; `--fixture` accepts output assembled from an isolated
+controller harness such as `controller-conformance.example.json`.
+
+```bash
+npm run check:postgres-resilience-controller-contracts
+npm run check:postgres-resilience-controller-contracts -- \
+  --fixture infra/postgres/production-resilience/controller-conformance.example.json
+```
+
+Every simulated attestation must contain `simulationOnly: true`. The production
+Patroni and WAL-G Provider paths reject that marker before accepting any result.
+Consequently, a passing conformance report is always `promotable: false`: it
+validates field types, exact WAL/restore binding and the simulation fence, but it
+cannot satisfy a real DCS, failover, backup, restore or production resilience gate.

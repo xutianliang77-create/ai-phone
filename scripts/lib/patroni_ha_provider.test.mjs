@@ -97,4 +97,19 @@ describe("runPatroniHaProviderStep", () => {
     const stateFile = path.join(root, config().stateDirectory, "run-12345678.json");
     expect(JSON.parse(readFileSync(stateFile, "utf8")).failoverIntentAt).toBeTruthy();
   });
+
+  it("rejects simulated DCS evidence from the production Provider path", async () => {
+    const root = mkdtempSync(path.join(tmpdir(), "patroni-provider-"));
+    const providerRuntime = runtime();
+    providerRuntime.verifyDcs.mockResolvedValueOnce({
+      status: "passed",
+      simulationOnly: true,
+      quorumHealthy: true,
+      voterCount: 3,
+      failureDomainCount: 3,
+    });
+    await expect(step({ root, config: config(), runtime: providerRuntime,
+      runId: "run-12345678" }, "baseline"))
+      .rejects.toThrow("simulation is not production evidence");
+  });
 });

@@ -1,0 +1,62 @@
+{
+  "schemaVersion": 1,
+  "simulationOnly": true,
+  "expectations": {
+    "retentionDays": 30,
+    "targetWal": "000000010000000000000001",
+    "restoreDatabase": "ai_phone_restore_simulation_01"
+  },
+  "attestations": {
+    "dcs": {
+      "status": "passed",
+      "simulationOnly": true,
+      "quorumHealthy": true,
+      "voterCount": 3,
+      "failureDomainCount": 3
+    },
+    "failureInjection": {
+      "status": "passed",
+      "simulationOnly": true,
+      "injectionObserved": true,
+      "automaticRecoveryEnabled": true,
+      "operationId": "simulated-failure-1"
+    },
+    "haRecovery": {
+      "status": "passed",
+      "simulationOnly": true,
+      "recoveryRequested": true
+    },
+    "baseBackup": {
+      "status": "passed",
+      "simulationOnly": true,
+      "offHost": true,
+      "encryptedInTransit": true,
+      "encryptedAtRest": true,
+      "immutable": true,
+      "retentionDays": 30,
+      "checksumSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "objectVersionId": "simulated-backup-version-1"
+    },
+    "walArchive": {
+      "status": "passed",
+      "simulationOnly": true,
+      "lastArchivedWal": "000000010000000000000001",
+      "unresolvedArchiveFailures": 0,
+      "maxObservedArchiveLagSeconds": 0,
+      "objectVersionId": "simulated-wal-version-1"
+    },
+    "restoreRecovery": {
+      "status": "passed",
+      "simulationOnly": true,
+      "recoveryTargetReached": true,
+      "restoreDatabase": "ai_phone_restore_simulation_01",
+      "observedDataLossSeconds": 0
+    },
+    "restoreIsolation": {
+      "status": "passed",
+      "simulationOnly": true,
+      "isolatedTarget": true,
+      "writeIsolationVerified": true
+    }
+  }
+}

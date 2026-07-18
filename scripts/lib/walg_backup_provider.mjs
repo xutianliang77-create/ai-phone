@@ -1,5 +1,11 @@
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
+import {
+  assertBaseBackupStorageAttestation,
+  assertRestoreIsolationAttestation,
+  assertRestoreRecoveryAttestation,
+  assertWalArchiveStorageAttestation,
+} from "./postgres_resilience_controller_contracts.mjs";
 
 export async function runWalgBackupProviderStep(options) {
   const { config, runtime, root, runId, step } = options;
@@ -22,7 +28,9 @@ async function createBaseBackup(context) {
     runId: context.runId,
     backupId: state.backupId,
   });
-  assertBackupAttestation(context.config, attestation);
+  assertBaseBackupStorageAttestation(attestation, {
+    retentionDays: context.config.retentionDays,
+  });
   state.backupCompletedAt = new Date().toISOString();
   state.backupChecksumSha256 = attestation.checksumSha256;
   state.backupObjectVersionId = attestation.objectVersionId;
@@ -71,13 +79,9 @@ async function verifyArchive(context) {
     backupId: state.backupId,
     targetWal: switched.lastArchivedWal,
   });
-  if (attestation?.status !== "passed" ||
-    attestation.lastArchivedWal !== switched.lastArchivedWal ||
-    attestation.unresolvedArchiveFailures !== 0 ||
-    !nonNegative(attestation.maxObservedArchiveLagSeconds) ||
-    !bounded(attestation.objectVersionId)) {
-    throw new Error("Off-host WAL archive attestation failed");
-  }
+  assertWalArchiveStorageAttestation(attestation, {
+    targetWal: switched.lastArchivedWal,
+  });
   state.archiveVerifiedAt = new Date().toISOString();
   state.lastArchivedWal = attestation.lastArchivedWal;
   state.maxObservedArchiveLagSeconds = attestation.maxObservedArchiveLagSeconds;
@@ -113,11 +117,9 @@ async function restoreOffHost(context) {
     backupId: state.backupId,
     targetWal: state.lastArchivedWal,
   });
-  if (recovery?.status !== "passed" || recovery?.recoveryTargetReached !== true ||
-    recovery?.restoreDatabase !== context.config.restoreDatabase ||
-    !nonNegative(recovery?.observedDataLossSeconds)) {
-    throw new Error("WAL-G recovery controller did not prove the isolated PITR target");
-  }
+  assertRestoreRecoveryAttestation(recovery, {
+    restoreDatabase: context.config.restoreDatabase,
+  });
   state.restoreCompletedAt = new Date().toISOString();
   state.observedDataLossSeconds = recovery.observedDataLossSeconds;
   writeState(context.stateFile, state);
@@ -140,11 +142,11 @@ async function verifyRestore(context) {
   ]);
   const sourceEndpoint = `${source?.serverAddress}:${source?.serverPort}`;
   const restoreEndpoint = `${restored?.serverAddress}:${restored?.serverPort}`;
+  assertRestoreIsolationAttestation(isolation);
   if (source?.database !== context.config.sourceDatabase ||
     restored?.database !== context.config.restoreDatabase || restored?.inRecovery !== false ||
     sourceEndpoint === restoreEndpoint || sourceHash !== restoredHash ||
-    !sha256(sourceHash) || isolation?.status !== "passed" ||
-    isolation?.isolatedTarget !== true || isolation?.writeIsolationVerified !== true) {
+    !sha256(sourceHash)) {
     throw new Error("Restored database checksum or isolation verification failed");
   }
   state.restoreVerifiedAt = new Date().toISOString();
@@ -157,15 +159,6 @@ async function verifyRestore(context) {
     sourceDataSha256: sourceHash,
     restoredDataSha256: restoredHash,
   });
-}
-
-function assertBackupAttestation(config, value) {
-  if (value?.status !== "passed" || value?.offHost !== true ||
-    value?.encryptedInTransit !== true || value?.encryptedAtRest !== true ||
-    value?.immutable !== true || value?.retentionDays < config.retentionDays ||
-    !sha256(value?.checksumSha256) || !bounded(value?.objectVersionId)) {
-    throw new Error("Off-host base-backup encryption or immutability attestation failed");
-  }
 }
 
 function backupResult(state, replayed) {
@@ -246,12 +239,4 @@ function validId(value) {
 
 function sha256(value) {
   return typeof value === "string" && /^[a-f0-9]{64}$/.test(value);
-}
-
-function bounded(value) {
-  return typeof value === "string" && value.length >= 2 && value.length <= 512;
-}
-
-function nonNegative(value) {
-  return typeof value === "number" && Number.isFinite(value) && value >= 0;
 }

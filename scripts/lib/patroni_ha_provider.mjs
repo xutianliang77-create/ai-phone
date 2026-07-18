@@ -1,6 +1,11 @@
 import { randomUUID } from "node:crypto";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
+import {
+  assertDcsControllerAttestation,
+  assertFailureControllerAttestation,
+  assertHaRecoveryControllerAttestation,
+} from "./postgres_resilience_controller_contracts.mjs";
 
 export async function runPatroniHaProviderStep(options) {
   const { config, runtime, root, runId, step } = options;
@@ -18,10 +23,7 @@ export async function runPatroniHaProviderStep(options) {
 
 async function baseline(context) {
   const dcs = await context.runtime.verifyDcs({ runId: context.runId });
-  if (dcs?.status !== "passed" || dcs?.quorumHealthy !== true ||
-    dcs?.voterCount < 3 || dcs?.failureDomainCount < 3) {
-    throw new Error("Patroni DCS quorum attestation failed");
-  }
+  assertDcsControllerAttestation(dcs);
   const cluster = await context.runtime.cluster();
   const candidate = context.config.nodes.find(
     (node) => node.id === context.config.failoverCandidateId,
@@ -78,10 +80,7 @@ async function triggerFailover(context) {
     oldPrimaryId: state.oldPrimaryId,
     newPrimaryId: state.newPrimaryId,
   });
-  if (injection?.status !== "passed" || injection?.injectionObserved !== true ||
-    injection?.automaticRecoveryEnabled !== true) {
-    throw new Error("Failure controller did not attest bounded automatic recovery");
-  }
+  assertFailureControllerAttestation(injection);
   const cluster = await waitForCluster(context, (value) =>
     value.primary.id === state.newPrimaryId);
   const baseline = await context.runtime.probeExists(context.config.writerPgService, {
@@ -100,7 +99,7 @@ async function triggerFailover(context) {
   state.observedRpoSeconds = 0;
   state.observedRtoSeconds = Math.ceil((Date.now() - startedAt) / 1000);
   state.newPrimaryTimeline = cluster.primary.timeline;
-  state.failureOperationId = String(injection.operationId ?? context.runId);
+  state.failureOperationId = injection.operationId;
   state.postFailoverProbeId = postFailoverProbeId;
   writeState(context.stateFile, state);
   return passed(failoverResult(state, false));
@@ -154,9 +153,7 @@ async function rebuildOldPrimary(context) {
     oldPrimaryId: state.oldPrimaryId,
     newPrimaryId: state.newPrimaryId,
   });
-  if (recovery?.status !== "passed" || recovery?.recoveryRequested !== true) {
-    throw new Error("Recovery controller did not accept the old Patroni primary");
-  }
+  assertHaRecoveryControllerAttestation(recovery);
   let cluster = await waitForCluster(context, (value) =>
     value.members.some((member) => member.id === state.oldPrimaryId),
   context.config.rebuildTimeoutSeconds);

@@ -104,4 +104,17 @@ describe("runWalgBackupProviderStep", () => {
     expect(result.backupId).toBe("base_00000001");
     expect(providerRuntime.backupPush).toHaveBeenCalledTimes(1);
   });
+
+  it("rejects simulated storage evidence from the production Provider path", async () => {
+    const root = mkdtempSync(path.join(tmpdir(), "walg-provider-"));
+    const providerRuntime = runtime();
+    const originalAttestation = providerRuntime.storageAttestation.getMockImplementation();
+    providerRuntime.storageAttestation.mockImplementation(async (...args) => ({
+      ...(await originalAttestation(...args)),
+      simulationOnly: true,
+    }));
+    await expect(step({ root, config: config(root), runtime: providerRuntime,
+      runId: "run-12345678" }, "create-base-backup"))
+      .rejects.toThrow("simulation is not production evidence");
+  });
 });

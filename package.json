@@ -47,6 +47,7 @@
     "platform:system-probe": "node scripts/run_platform_system_probe.mjs",
     "check:postgres-production-resilience": "node scripts/check_postgres_production_resilience.mjs",
     "check:postgres-resilience-providers": "node scripts/check_postgres_resilience_provider_readiness.mjs",
+    "check:postgres-resilience-controller-contracts": "node scripts/check_postgres_resilience_controller_conformance.mjs",
     "postgres:resilience-drill": "node scripts/run_postgres_resilience_drill.mjs",
     "postgres:patroni-provider": "node scripts/run_patroni_ha_provider.mjs",
     "postgres:walg-provider": "node scripts/run_walg_backup_provider.mjs",
