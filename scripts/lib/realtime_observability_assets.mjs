@@ -99,6 +99,11 @@ export function validateRealtimeObservabilityAssets(input) {
   if (!input.collector.includes('credentials: "${env:METRICS_BEARER_TOKEN}"')) {
     issues.push("Prometheus scrape bearer token must come from the environment");
   }
+  if (!input.collector.includes('host: "127.0.0.1"') ||
+    !input.collector.includes("port: 18888") ||
+    input.collector.includes("port: 8888")) {
+    issues.push("OTel collector internal metrics must use isolated port 18888");
+  }
   return {
     status: issues.length === 0 ? "ready" : "not_ready",
     issueCount: issues.length,

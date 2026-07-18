@@ -75,6 +75,14 @@ exporters:
       max_elapsed_time: 300s
 
 service:
+  telemetry:
+    metrics:
+      readers:
+        - pull:
+            exporter:
+              prometheus:
+                host: "127.0.0.1"
+                port: 18888
   extensions: [health_check]
   pipelines:
     metrics/realtime:

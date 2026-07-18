@@ -57,6 +57,10 @@ Run a compatible OpenTelemetry Collector Contrib build with:
 otelcol-contrib --config infra/observability/otel-collector-realtime.yaml
 ```
 
+The collector binds its internal Prometheus telemetry to
+`127.0.0.1:18888`, avoiding the collector default `8888` and keeping the
+diagnostic endpoint private to the host.
+
 Import `grafana/realtime-quality-dashboard.json` into Grafana and select the
 Prometheus-compatible data source receiving the OTLP metrics.
 
