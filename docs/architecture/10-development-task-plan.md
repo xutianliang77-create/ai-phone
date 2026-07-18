@@ -1,6 +1,6 @@
 # LiveKit 平台化开发任务与实施计划
 
-版本：v1.1
+版本：v1.2
 日期：2026-07-19
 状态：计划内代码已推进至 P2 可观测性与 Provider HA 集成，动态验收暂缓
 
@@ -569,11 +569,11 @@ drain、独立镜像/profile、`external_bridge_id` projection 以及 bridge+Liv
 - 2 小时 soak。
 - 网络和依赖故障注入。
 
-当前进度：除两地域/独立池拓扑合同、多节点启动失效关闭、容量结果校验器、OTLP trace、
-provider operation trace、home-region/cell 粘滞路由和 aggregate fencing 外，已经实现
+当前进度：两地域/独立池拓扑合同、多节点启动失效关闭、容量结果校验器、OTLP trace、
+provider operation trace、home-region/cell 粘滞路由和 aggregate fencing 均已实现；同时已经实现
 PostgreSQL primary runtime、Patroni/etcd Provider、旧主 fencing/重建步骤、WAL-G off-host
 base backup/WAL/restore Provider，以及覆盖 API、LiveKit、SIP、ASR、MT、TTS、Agent、Egress
-的真实混合流量与故障注入编排器。上述是可部署的 Provider 集成，不等于真实跨主机 HA、
+的真实混合流量与故障注入编排器。上述是可部署的代码与 Provider 集成，不等于真实跨主机 HA、
 PITR、TURN/SFU 多节点、25/50/100 并发或 2 小时长稳已经通过；现有会话禁止跨区漂移，
 故障转移只接新会话。真实验收仍缺第二数据库节点、3 个 DCS voter、off-host 对象存储、
 私有故障控制器、Prometheus 凭证和 owned auto-answer 白名单号码。
@@ -599,7 +599,8 @@ JSON SHA-256 签名，并通过 health 和 bearer-protected Prometheus `/metrics
 URL、模型路径、请求内容与 voice identity，ASR context 只包含内容哈希。API 将 P2-A2 的 bounded
 诊断窗口转换为低基数 Prometheus gauges，重试上报按 `runtimeId` 替换而不重复累加，最多保留
 4096 个 runtime。OTel Collector 配置覆盖 API/ASR/MT/TTS 四个 scrape job，经 memory limiter、
-resource 和 batch processor 输出 OTLP/HTTP；Grafana dashboard 覆盖模型版本/签名、RTC 分位数、
+resource 和 batch processor 通过 Collector 0.153 的 canonical `otlp_http` exporter 输出 OTLP/HTTP；
+Grafana dashboard 覆盖模型版本/签名、RTC 分位数、
 包损、ingest drop/backpressure 和样本可用性。metrics token 未配置时所有新增端点 fail closed。
 
 当前 staging 已启动 Collector/sink，并完成 direct、强制 TURN、full reconnect 及 10 会话 admission

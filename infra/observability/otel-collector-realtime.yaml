@@ -61,7 +61,7 @@ processors:
     send_batch_max_size: 2048
 
 exporters:
-  otlphttp/metrics:
+  otlp_http/metrics:
     metrics_endpoint: "${env:OTEL_METRICS_EXPORT_ENDPOINT}"
     headers:
       Authorization: "${env:OTEL_METRICS_EXPORT_AUTHORIZATION}"
@@ -88,4 +88,4 @@ service:
     metrics/realtime:
       receivers: [prometheus/realtime]
       processors: [memory_limiter, resource/realtime, batch]
-      exporters: [otlphttp/metrics]
+      exporters: [otlp_http/metrics]

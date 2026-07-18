@@ -17,8 +17,10 @@
   ASR/MT/TTS/LLM session-sticky fallback、echo-aware barge-in、backchannel 和有界 call-end drain。
 - TTS：VoxCPM2 `generate_streaming()`、NDJSON chunk 合同、有界多订阅流、LiveKit 直出、
   generation/cancel/sequence/sample-rate 门禁，以及首音频后断流不重播前缀。
-- P2：Ingress/SRT bridge、Patroni/etcd、WAL-G off-host backup/restore、真实混合流量/故障
-  编排、RTC/ingest/pipeline timing、模型启动参数 fingerprint、Prometheus/OTel/Collector/dashboard。
+- P2：两地域/独立池拓扑合同、多节点启动 fail-closed、home-region/cell 粘滞路由、aggregate
+  fencing、Patroni/etcd、WAL-G off-host backup/restore、容量结果校验器与真实混合流量/故障编排；
+  RTC/ingest/pipeline timing、模型启动参数 fingerprint、OTLP trace、Provider Operation trace、
+  Prometheus/OTel/Collector/dashboard 也已闭合。
 
 ## 2. 关键代码入口
 
@@ -34,6 +36,11 @@
   `infra/postgres/migrations/001_*.sql` 至 `031_voice_agent_recording_consent.sql`。
 - HA/PITR/负载：`scripts/lib/patroni_ha_provider*.mjs`、
   `scripts/lib/walg_backup_provider*.mjs`、`scripts/lib/platform_mixed_load*.mjs`。
+- 多节点和追踪：`scripts/lib/platform_topology_config.mjs`、
+  `scripts/lib/platform_capacity_result.mjs`、
+  `services/api-server/src/infrastructure/platform/platform-scale-readiness.ts`、
+  `services/api-server/src/infrastructure/platform/platform-session-routing.ts`、
+  `services/api-server/src/infrastructure/observability/platform-telemetry.ts`。
 
 ## 3. 本轮静态检查
 

@@ -55,7 +55,7 @@ describe("realtime observability assets", () => {
           .map((target) => `\${env:${target}}`),
         'credentials: "${env:METRICS_BEARER_TOKEN}"',
         'metrics_endpoint: "${env:OTEL_METRICS_EXPORT_ENDPOINT}"',
-        "exporters: [otlphttp/metrics]",
+        "exporters: [otlp_http/metrics]",
         'host: "127.0.0.1"',
         "port: 8888",
       ].join("\n"),

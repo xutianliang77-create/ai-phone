@@ -97,7 +97,7 @@ export function validateRealtimeObservabilityAssets(input) {
       issues.push(`OTel collector target env missing: ${target}`);
     }
   }
-  if (!input.collector.includes("exporters: [otlphttp/metrics]") ||
+  if (!input.collector.includes("exporters: [otlp_http/metrics]") ||
     !input.collector.includes(
       'metrics_endpoint: "${env:OTEL_METRICS_EXPORT_ENDPOINT}"',
     )) {

@@ -61,6 +61,9 @@ Run a compatible OpenTelemetry Collector Contrib build with:
 otelcol-contrib --config infra/observability/otel-collector-realtime.yaml
 ```
 
+The configuration uses the Collector 0.153 canonical `otlp_http` exporter
+identifier. Do not restore the deprecated `otlphttp` alias.
+
 The collector binds its internal Prometheus telemetry to
 `127.0.0.1:18888`, avoiding the collector default `8888` and keeping the
 diagnostic endpoint private to the host.
@@ -84,6 +87,6 @@ and 10 then 25/50/100 concurrent-session runs. Until that evidence exists,
 `rtcThresholdPolicy.status` remains `calibration_required` and
 `rtcThresholdPolicy.thresholds` remains `null`.
 
-The collector configuration has only been statically validated in this batch;
-starting it and validating real scrape/export behavior belongs to the staging
-acceptance run.
+The collector has been started in isolated staging and all four scrape targets
+were observed healthy. That operational smoke does not replace owned-device,
+per-scenario threshold calibration or the deferred release acceptance run.
