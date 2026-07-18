@@ -36,6 +36,7 @@ export interface TranslationWorkerEnv {
   ttsStreamEndpoint?: string;
   ttsWarmupEndpoint?: string;
   ttsWarmupMaxMs: number;
+  ttsAgentPrewarmTimeoutMs: number;
   ttsHttpApiKey?: string;
   ttsHttpTimeoutMs: number;
   ttsProvider?: string;
@@ -110,6 +111,12 @@ export function loadEnv(): TranslationWorkerEnv {
     ttsStreamEndpoint: env.TTS_STREAM_ENDPOINT?.trim() || undefined,
     ttsWarmupEndpoint: env.TTS_WARMUP_ENDPOINT?.trim() || undefined,
     ttsWarmupMaxMs: boundedInteger(env.TTS_WARMUP_MAX_MS, 15000, 100, 120000),
+    ttsAgentPrewarmTimeoutMs: boundedInteger(
+      env.TTS_AGENT_PREWARM_TIMEOUT_MS,
+      60000,
+      1000,
+      120000,
+    ),
     ttsHttpApiKey: env.TTS_HTTP_API_KEY,
     ttsHttpTimeoutMs: Number(env.TTS_HTTP_TIMEOUT_MS ?? 10000),
     ttsProvider: env.TTS_PROVIDER,

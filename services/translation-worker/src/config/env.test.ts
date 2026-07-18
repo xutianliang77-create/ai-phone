@@ -111,6 +111,20 @@ describe("translation worker env", () => {
     process.env = { TRANSLATION_WORKER_AUDIO_INGEST_MAX_FRAMES: "4.5" };
     expect(loadEnv().audioIngestMaxFrames).toBe(20);
   });
+
+  it("bounds the Agent node TTS prewarm timeout", () => {
+    process.env = {};
+    expect(loadEnv().ttsAgentPrewarmTimeoutMs).toBe(60000);
+
+    process.env = { TTS_AGENT_PREWARM_TIMEOUT_MS: "90000" };
+    expect(loadEnv().ttsAgentPrewarmTimeoutMs).toBe(90000);
+
+    process.env = { TTS_AGENT_PREWARM_TIMEOUT_MS: "999" };
+    expect(loadEnv().ttsAgentPrewarmTimeoutMs).toBe(60000);
+
+    process.env = { TTS_AGENT_PREWARM_TIMEOUT_MS: "120001" };
+    expect(loadEnv().ttsAgentPrewarmTimeoutMs).toBe(60000);
+  });
 });
 
 function writeConfig(tempDirs: string[]) {
