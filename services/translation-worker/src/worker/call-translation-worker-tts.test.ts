@@ -41,6 +41,11 @@ describe("CallTranslationWorker TTS", () => {
       voiceProfileId: "my_voice",
       firstAudioMs: 120,
       audioDurationMs: 900,
+      pipelineTiming: {
+        ttsStartedAtMs: 1000,
+        ttsFirstAudioAtMs: 1000,
+        ttsReadyAtMs: 1000,
+      },
     });
   });
 

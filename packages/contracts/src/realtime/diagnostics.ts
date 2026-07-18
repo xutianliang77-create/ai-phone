@@ -18,8 +18,10 @@ export interface SpeechPipelineTimingDto {
   turnBufferReleasedAtMs?: number;
   transcriptReadyAtMs?: number;
   translationStartedAtMs?: number;
+  translationFirstTokenAtMs?: number;
   translationFinalAtMs?: number;
   ttsStartedAtMs?: number;
+  ttsFirstAudioAtMs?: number;
   ttsReadyAtMs?: number;
   eventPublishStartedAtMs?: number;
 }
@@ -31,11 +33,20 @@ export function isSpeechPipelineTiming(
   if (!Object.keys(value).every((field) =>
     pipelineTimingFields.includes(field as typeof pipelineTimingFields[number])
   )) return false;
-  return pipelineTimingFields.every((field) => {
+  if (!pipelineTimingFields.every((field) => {
     const timestamp = (value as Record<string, unknown>)[field];
     return timestamp === undefined ||
       typeof timestamp === "number" && Number.isFinite(timestamp) && timestamp >= 0;
-  });
+  })) return false;
+  const timing = value as SpeechPipelineTimingDto;
+  return ordered(timing.asrStartedAtMs, timing.asrFinalAtMs) &&
+    ordered(timing.processingQueueEnteredAtMs, timing.processingQueueReleasedAtMs) &&
+    ordered(timing.translationStartedAtMs, timing.translationFinalAtMs) &&
+    ordered(timing.translationStartedAtMs, timing.translationFirstTokenAtMs) &&
+    ordered(timing.translationFirstTokenAtMs, timing.translationFinalAtMs) &&
+    ordered(timing.ttsStartedAtMs, timing.ttsReadyAtMs) &&
+    ordered(timing.ttsStartedAtMs, timing.ttsFirstAudioAtMs) &&
+    ordered(timing.ttsFirstAudioAtMs, timing.ttsReadyAtMs);
 }
 
 const pipelineTimingFields = [
@@ -46,11 +57,17 @@ const pipelineTimingFields = [
   "turnBufferReleasedAtMs",
   "transcriptReadyAtMs",
   "translationStartedAtMs",
+  "translationFirstTokenAtMs",
   "translationFinalAtMs",
   "ttsStartedAtMs",
+  "ttsFirstAudioAtMs",
   "ttsReadyAtMs",
   "eventPublishStartedAtMs",
 ] as const;
+
+function ordered(first: number | undefined, second: number | undefined) {
+  return first === undefined || second === undefined || first <= second;
+}
 
 export function isSegmentVadContext(
   value: unknown,

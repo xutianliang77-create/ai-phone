@@ -92,6 +92,8 @@ export class CallTtsSynthesisQueue {
           pipelineGeneration: input.identity.generation,
           signal: input.signal,
           ...(input.voice ? { voice: input.voice } : {}),
+        }, () => {
+          pipelineTiming.ttsFirstAudioAtMs ??= this.options.nowMs();
         })
           : input.provider.synthesize({
             text: normalizeTtsText(input.translatedText, input.targetLanguage),
@@ -121,6 +123,7 @@ export class CallTtsSynthesisQueue {
     if (!speech || !input.isCurrent()) return;
 
     pipelineTiming.ttsReadyAtMs = this.options.nowMs();
+    pipelineTiming.ttsFirstAudioAtMs ??= pipelineTiming.ttsReadyAtMs;
     await this.options.eventSink.publish(input.callId, [{
       type: "tts.ready",
       segmentId: input.segmentId,
@@ -160,6 +163,7 @@ export class CallTtsSynthesisQueue {
 async function synthesizeIncrementally(
   provider: CallTtsProvider,
   input: Parameters<CallTtsProvider["synthesize"]>[0],
+  onFirstAudio: () => void,
 ) {
   if (!provider.synthesizeStream) throw new Error("TTS stream is unavailable");
   let metadata: SynthesizedSpeech | undefined;
@@ -174,6 +178,7 @@ async function synthesizeIncrementally(
       continue;
     }
     if (event.type === "audio_chunk") {
+      onFirstAudio();
       if (event.sequence !== expectedSequence) {
         throw new Error(`TTS stream sequence gap: expected ${expectedSequence}`);
       }

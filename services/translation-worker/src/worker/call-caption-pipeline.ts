@@ -162,7 +162,14 @@ export class CallCaptionPipeline {
       };
       translatedText = await runAbortable(input.signal, () =>
         this.options.translationProvider.translateStream
-          ? translateIncrementally(this.options.translationProvider, translationInput)
+          ? translateIncrementally(
+            this.options.translationProvider,
+            translationInput,
+            () => {
+              input.pipelineTiming.translationFirstTokenAtMs ??=
+                this.options.nowMs();
+            },
+          )
           : this.options.translationProvider.translate(translationInput)
       );
     } catch (error) {
@@ -188,6 +195,7 @@ export class CallCaptionPipeline {
     if (!this.state.isCurrent(input.identity)) return;
 
     const translationFinalAtMs = this.options.nowMs();
+    input.pipelineTiming.translationFirstTokenAtMs ??= translationFinalAtMs;
     input.pipelineTiming.translationFinalAtMs = translationFinalAtMs;
     await this.options.eventSink.publish(input.callId, [{
       ...input.commonEvent,
@@ -260,11 +268,13 @@ export class CallCaptionPipeline {
 async function translateIncrementally(
   provider: CallTranslationProvider,
   input: Parameters<CallTranslationProvider["translate"]>[0],
+  onFirstToken: () => void,
 ) {
   if (!provider.translateStream) throw new Error("Translation stream is unavailable");
   let finalText = "";
   for await (const event of provider.translateStream(input)) {
     if (input.signal.aborted) throw input.signal.reason ?? new Error("Translation aborted");
+    if (event.text.trim()) onFirstToken();
     if (event.type === "final") finalText = event.text;
   }
   if (!finalText.trim()) throw new Error("Translation stream returned no final text");
