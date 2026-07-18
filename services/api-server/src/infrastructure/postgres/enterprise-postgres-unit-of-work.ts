@@ -25,6 +25,9 @@ import {
   withEnterpriseTenantPostgresSession,
   type EnterpriseTenantPostgresPool,
 } from "./enterprise-postgres-tenant-session.js";
+import {
+  EnterpriseWorkerDispatchPostgresRepository,
+} from "./enterprise-postgres-worker-dispatch.repository.js";
 
 export interface EnterprisePostgresUnitOfWork {
   tenant: EnterpriseTenantPostgresRepository;
@@ -32,6 +35,7 @@ export interface EnterprisePostgresUnitOfWork {
   events: EnterpriseEventsPostgresRepository;
   communication: EnterpriseCommunicationPostgresRepository;
   communicationBindings: EnterpriseCommunicationBindingPostgresRepository;
+  workerDispatches: EnterpriseWorkerDispatchPostgresRepository;
 }
 
 export function withEnterprisePostgresUnitOfWork<T>(
@@ -49,6 +53,7 @@ export function withEnterprisePostgresUnitOfWork<T>(
       communication: createEnterpriseCommunicationPostgresRepository(session),
       communicationBindings:
         createEnterpriseCommunicationBindingPostgresRepository(session),
+      workerDispatches: new EnterpriseWorkerDispatchPostgresRepository(session),
     }),
   );
 }

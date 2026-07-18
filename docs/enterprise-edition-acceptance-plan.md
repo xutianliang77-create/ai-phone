@@ -1,6 +1,6 @@
 # 无界AI企业版验收任务与计划
 
-版本：v1.9
+版本：v1.10
 日期：2026-07-18
 状态：可执行验收计划，已对齐统一通讯平台和 PostgreSQL Primary 收敛
 
@@ -84,7 +84,7 @@ Mock 只能验证协议，不能替代 iPhone/Web、真实 LiveKit、真实模�
 | AC-ENT-0012 | 上游基线 | 只集成主产品稳定 commit；未提交 WIP、陈旧 README 或 staging 结果不能成为企业完成状态和验收证据 |
 | AC-ENT-0013 | 单一 Primary Runtime | 公共/企业双 manifest 共用一个 startup verdict 和 Storage Driver；允许分权连接池，不允许 fallback、shadow read、dual write 或路由级混用 |
 | AC-ENT-0014 | 统一通讯 scope 与业务绑定 | session/participant/leg/dispatch/provider/playback 具有不可省略的 `scope_type + scope_id`、复合约束和 forced RLS；Meeting/Support/Marketing 只能绑定同 tenant session；旧 route/generation、重复 event sequence、非法倒退和终态恢复全部拒绝 |
-| AC-ENT-0015 | Worker Dispatch | ticket 含签名 tenant/session/cell/route epoch/generation/capability/expiry；跨租户、跨 cell、过期和旧 generation 全部拒绝 |
+| AC-ENT-0015 | Worker Dispatch | ticket 含签名 tenant/session/cell/route epoch/generation/capability/expiry；签发、accept、heartbeat、结果提交重读当前 binding/grant/lease；跨租户、跨 cell、过期、取消、旧 route/generation 全部拒绝且不提交迟到副作用 |
 
 ### 4.1 企业 UI 与前端工程验收
 
@@ -369,7 +369,7 @@ schema 测试及 session/leg/dispatch/provider/playback/participant 六资源跨
 
 - PostgreSQL 作为所有真实 SaaS 租户的初始真源。
 - 内部 SQLite 演示数据可以迁移，但不能作为客户生产迁移路径的必要依赖。
-- 验收 commit 锁定的公共31段 manifest（基线从 `fe1c3c2` 演进）与 enterprise 11段 migration manifest 在隔离企业数据库从空库完整执行；两个 manifest 的顺序、checksum、schema verify 和 down/forward 策略均有证据，不能只跑其中一套。
+- 验收 commit 锁定的公共31段 manifest（基线从 `fe1c3c2` 演进）与 enterprise 12段 migration manifest 在隔离企业数据库从空库完整执行；两个 manifest 的顺序、checksum、schema verify 和 down/forward 策略均有证据，不能只跑其中一套。
 - 每个进程只有一个 Storage Driver 和 startup verdict；HTTP、企业 Repository、统一通讯会话和 cell Worker 使用同一 verified Primary Runtime，不存在 fallback、shadow read、dual write 或按路由混用。
 - 应用 tenant、user directory、cell discovery、migration、maintenance 分别使用最小权限角色；生产 TLS 使用 `verify-full`。应用角色没有 `BYPASSRLS`、表 owner、DDL 或关闭 RLS 权限。
 - 公共 communication session、participant、media leg、dispatch、Provider operation、playback 和相关账本全部具有 tenant scope、复合 FK 和 `FORCE ROW LEVEL SECURITY`；使用跨租户 ID、缺 scope、伪造 owner/user 过滤做负向验证。

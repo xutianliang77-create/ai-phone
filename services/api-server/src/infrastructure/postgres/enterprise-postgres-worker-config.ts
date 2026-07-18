@@ -8,6 +8,7 @@ export interface EnterprisePostgresWorkerConfig {
   pollIntervalMs: number;
   batchSize: number;
   leaseMs: number;
+  dispatchSigningSecret: string;
 }
 
 export function loadEnterprisePostgresWorkerConfig(
@@ -40,7 +41,20 @@ export function loadEnterprisePostgresWorkerConfig(
       300_000,
       30_000,
     ),
+    dispatchSigningSecret: signingSecret(
+      env.ENTERPRISE_WORKER_DISPATCH_SIGNING_SECRET,
+    ),
   };
+}
+
+function signingSecret(value: string | undefined) {
+  const secret = value?.trim() ?? "";
+  if (Buffer.byteLength(secret) < 32) {
+    throw new Error(
+      "ENTERPRISE_WORKER_DISPATCH_SIGNING_SECRET must be at least 32 bytes",
+    );
+  }
+  return secret;
 }
 
 function identifier(field: string, value: string | undefined) {

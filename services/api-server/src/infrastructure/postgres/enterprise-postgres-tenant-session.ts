@@ -32,6 +32,10 @@ export interface EnterpriseTenantPostgresSession {
     sql: string,
     values?: unknown[],
   ): Promise<{ rows: Row[] }>;
+  queryWorkerDispatch<Row extends Record<string, unknown>>(
+    sql: string,
+    values?: unknown[],
+  ): Promise<{ rows: Row[] }>;
 }
 
 export async function withEnterpriseTenantPostgresSession<T>(
@@ -83,6 +87,13 @@ export async function withEnterpriseTenantPostgresSession<T>(
         values: unknown[] = [],
       ) {
         assertCommunicationMutationSql(sql);
+        return client.query<Row>(sql, ["tenant", context.tenantId, ...values]);
+      },
+      queryWorkerDispatch<Row extends Record<string, unknown>>(
+        sql: string,
+        values: unknown[] = [],
+      ) {
+        assertWorkerDispatchSql(sql);
         return client.query<Row>(sql, ["tenant", context.tenantId, ...values]);
       },
     });
@@ -182,6 +193,49 @@ function assertCommunicationMutationSql(sql: string) {
     return;
   }
   throw new Error("Enterprise communication mutation must be INSERT or UPDATE");
+}
+
+const workerDispatchTables = new Set([
+  "worker_dispatches",
+  "worker_capacity_reservations",
+]);
+
+function assertWorkerDispatchSql(sql: string) {
+  const normalized = normalizedSql(sql);
+  const tables = [...normalized.matchAll(
+    /\bai_phone\.([a-z_][a-z0-9_]*)\b/gi,
+  )].map((match) => match[1]!.toLowerCase());
+  if (normalized.includes(";") || /\b(?:join|or|union|delete)\b/i.test(normalized) ||
+    tables.length !== 1 || !workerDispatchTables.has(tables[0]!) ||
+    (normalized.match(/\bselect\b/gi)?.length ?? 0) > 1) {
+    throw new Error("Enterprise worker dispatch SQL must target one scoped table");
+  }
+  if (/^insert\b/i.test(normalized)) {
+    const match = normalized.match(/\(([^)]*)\)\s*values\s*\(([^)]*)\)/i);
+    const columns = match?.[1]?.split(",").map((value) => value.trim()) ?? [];
+    const values = match?.[2]?.split(",").map((value) => value.trim()) ?? [];
+    const typeIndex = columns.indexOf("scope_type");
+    const idIndex = columns.indexOf("scope_id");
+    if (typeIndex < 0 || idIndex < 0 || values[typeIndex] !== "$1" ||
+      values[idIndex] !== "$2") {
+      throw new Error(
+        "Enterprise worker dispatch INSERT must use scope_type = $1 and scope_id = $2",
+      );
+    }
+    return;
+  }
+  if (!/^select\b/i.test(normalized) && !/^update\b/i.test(normalized)) {
+    throw new Error("Enterprise worker dispatch SQL must be SELECT, INSERT or UPDATE");
+  }
+  const where = normalized.match(
+    /\bwhere\b([\s\S]*?)(?:\breturning\b|\bfor\s+update\b|$)/i,
+  )?.[1] ?? "";
+  if (!/\b(?:[a-z_][a-z0-9_]*\.)?scope_type\s*=\s*\$1\b/i.test(where) ||
+    !/\b(?:[a-z_][a-z0-9_]*\.)?scope_id\s*=\s*\$2\b/i.test(where)) {
+    throw new Error(
+      "Enterprise worker dispatch SQL must contain scope_type = $1 and scope_id = $2",
+    );
+  }
 }
 
 function assertTenantScopedSql(sql: string) {

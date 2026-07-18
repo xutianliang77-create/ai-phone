@@ -1,6 +1,6 @@
 # 无界AI企业版设计文档索引
 
-版本：v1.7
+版本：v1.8
 日期：2026-07-18
 状态：SaaS 详细设计基线，已纳入统一通讯平台和 PostgreSQL Primary 演进
 
@@ -45,9 +45,10 @@ cell Worker 和 JSON/SQLite 演示数据 count/hash 对账代码，状态为等�
 无界AI主产品公共 PostgreSQL migration、Primary Runtime、可靠 Inbox/Outbox、
 fencing、Billing/Product Records、verify-full 和韧性代码已形成稳定提交 `fe1c3c2`，并由
 `ENT-DATA-007` 合入企业分支。企业版已经完成单 driver、双 manifest、同库身份和分权
-连接的本地自动化，当前 manifest 为公共31段、enterprise 11段；`ENT-DATA-008` 和
-`ENT-CORE-013` 已完成公共通讯 tenant scope 与企业业务会话绑定的代码/本地自动化，但不能
-继承主产品 staging 验收。`ENT-CORE-014/015`、`ENT-DATA-009` 及真实 PostgreSQL H3 仍待完成。
+连接的本地自动化，当前 manifest 为公共31段、enterprise 12段；`ENT-DATA-008` 和
+`ENT-CORE-013/014` 已完成公共通讯 tenant scope、企业业务会话绑定与签名 Worker dispatch fence
+的代码/本地自动化，但不能继承主产品 staging 验收。`ENT-CORE-015`、`ENT-DATA-009` 及真实
+PostgreSQL H3 仍待完成。
 
 ## 3. 继承文档
 

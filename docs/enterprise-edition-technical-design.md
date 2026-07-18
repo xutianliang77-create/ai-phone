@@ -1,6 +1,6 @@
 # 无界AI企业版详细技术设计
 
-版本：v1.14
+版本：v1.15
 日期：2026-07-18
 状态：统一通讯平台与 PostgreSQL Primary 收敛详细技术方案
 
@@ -21,13 +21,14 @@
 | RBAC | `ready_for_acceptance` | 已有17个 scope、九角色矩阵、统一服务端 guard 和越权测试 |
 | SaaS tenant lifecycle | `ready_for_acceptance` | 已有幂等开通、暂停、导出/删除执行器、租约、有界恢复和 receipt 校验；真实对象存储/Provider 清理服务尚待验收 |
 | Append-only audit | `ready_for_acceptance` | 已有 tenant-scoped 查询、HMAC cursor、成员/RBAC/租户生命周期埋点和 SQLite/PostgreSQL 不可变约束；受控导出和真实 PostgreSQL 验收尚待后续任务 |
-| PostgreSQL schema | `implemented` | 已有十一段 up/down migration、tenant-first 索引、复合 FK、强制 RLS、user directory、cell pending projection、opaque subject identity、企业通讯绑定、受保护回滚、checksum/锁和归档 smoke；尚无真实 migrate/restore/PITR 证据 |
+| PostgreSQL schema | `implemented` | 已有十二段 up/down migration、tenant-first 索引、复合 FK、强制 RLS、user directory、cell pending projection、opaque subject identity、企业通讯绑定和 Worker dispatch grant、受保护回滚、checksum/锁和归档 smoke；尚无真实 migrate/restore/PITR 证据 |
 | Tenant-scoped Repository | `ready_for_acceptance` | 已有 tenant/user/cell scoped transaction、subject guard、单一 `legacy|postgres` runtime、HTTP 全链路注入、独立 cell Worker，以及 Tenant/Member/Audit、Directory、lifecycle、Inbox/Outbox、pending discovery 和共享 unit-of-work；尚无真实 PostgreSQL H3 证据 |
 | Enterprise Inbox/Outbox | `ready_for_acceptance` | 已有 tenant-scoped 去重、稳定 payload hash、领域/inbox/outbox 原子提交、lease/retry/recovery 和100次重放门禁；真实 PostgreSQL 并发与 Provider sandbox 尚待验收 |
 | SQLite/JSON 演示数据导入 | `ready_for_acceptance` | 已有维护窗口、SQLite 临时副本与 quick_check、空目标事务导入、六集合 count/SHA-256 读回对账和不一致回滚；仅限内部演示数据 |
-| 公共 Primary Runtime 收敛 | `ready_for_acceptance` | 已合入上游稳定提交 `fe1c3c2`；公共31段与 enterprise 11段 manifest 由一个启动编排验证，driver、数据库身份和分权连接失败均在监听前闭合；尚无真实 PostgreSQL H3 证据 |
+| 公共 Primary Runtime 收敛 | `ready_for_acceptance` | 已合入上游稳定提交 `fe1c3c2`；公共31段与 enterprise 12段 manifest 由一个启动编排验证，driver、数据库身份和分权连接失败均在监听前闭合；尚无真实 PostgreSQL H3 证据 |
 | 公共通讯 tenant scope | `ready_for_acceptance` | 公共 manifest 已增至31段；12张通讯资源表具有不可空 scope、复合 FK、写入 guard 和 forced RLS，企业 unit-of-work 只暴露 tenant-bound 白名单 Repository；尚无真实双租户 A1/H3 证据 |
 | 企业统一通讯会话绑定 | `ready_for_acceptance` | enterprise `0011` 和 tenant unit-of-work 已建立 Meeting/Support/Marketing 唯一绑定、route/policy/entitlement 快照及 generation/event-sequence 收敛状态机；尚无真实多实例、cell 迁移和 A1/H3 证据 |
+| Tenant-aware Worker Dispatch | `ready_for_acceptance` | enterprise `0012` 以 scope FK/RLS 绑定公共 dispatch/capacity；短期 HMAC ticket、租户容量、lease/heartbeat、cancel/finalize 和二次 binding fence 已实现；仅有自动化和一次性本地 PostgreSQL 16 证据，尚无真实多实例/H3 容量证据 |
 | PostgreSQL 控制面/业务聚合 | `designed` | 后续 CORE/MTG/CS/MKT 领域任务范围，不能从公共 Repository runtime 推导为已实现 |
 | SQLite | `demo_only` | 仅本地开发、自动化和封闭演示，不承载真实企业试点数据 |
 | PSTN/CRM/Calendar/OCR | `not_ready` 或按环境探测 | 未配置必须明确降级，不生成虚假外部对象或成功状态 |
@@ -804,9 +805,25 @@ tenant unit-of-work 新增受限 communication mutation 和 binding Repository�
 企业状态同步投影为公共 session 的 created/active/ended/failed。
 
 当前代码、定向矩阵和一次性本地 PostgreSQL 16 普通应用角色 forced-RLS/down-up 验证已完成，
-但尚未在真实企业 PostgreSQL、两个真实租户、多实例 Worker 或 cell 迁移环境执行。也未接通
-`ENT-CORE-014` 签名 dispatch ticket，因此只能标记 `ready_for_acceptance`，不能宣称 A1、H3、
-企业试点或生产门禁通过。
+但尚未在真实企业 PostgreSQL、两个真实租户、多实例 Worker 或 cell 迁移环境执行。该会话绑定和
+下述 dispatch 实现均只能标记 `ready_for_acceptance`，不能宣称 A1、H3、企业试点或生产门禁通过。
+
+第十二批完成 `ENT-CORE-014` Tenant-aware Worker Dispatch。enterprise `0012` 新增
+`worker_dispatch_grants`，用 tenant/session 复合 FK 绑定当前 communication binding，并用 scope FK
+绑定公共 `worker_dispatches` 与 `worker_capacity_reservations`。grant 固化 capability、cell、route
+epoch、generation、idempotency/request hash 和最多五分钟有效期；身份字段不可变，表启用 forced RLS。
+
+签发入口不接收客户端 tenant/cell/route/generation baggage，而是在 tenant transaction 锁定租户与
+当前 binding 后派生 ticket，并以租户级容量统计、lease 和唯一 generation fence 原子创建公共记录与
+grant。ticket 使用至少32字节密钥的 HMAC，签名覆盖 ticket/tenant/session/cell/route epoch/
+generation/capability/issuedAt/expiresAt；篡改、弱密钥、未来票据、过期和五分钟以上 TTL 均失败闭合。
+
+Worker accept、heartbeat、每次副作用授权和 finalize 都先验签，再按签名 tenant 建立 Repository context，
+重读并锁定 grant、当前 binding、公共 dispatch 和 capacity lease。错误 tenant/cell/capability、旧 route/
+generation、过期 lease、取消或终态均不能更新公共状态。取消在同一事务把 grant 置为 cancelled、公共
+dispatch 置为 failed 并释放 capacity；迟到 finalize 只返回 fenced 状态。一次性本地 PostgreSQL 16
+普通角色验证了 `created -> accepted -> authorized -> cancelled`、错误 cell、取消后迟到结果、跨租户
+RLS 0行可见/0行可写及 `0012` down/forward；该证据不是目标 H3、多实例或生产容量验收。
 
 ### 11.2 事务和一致性边界
 

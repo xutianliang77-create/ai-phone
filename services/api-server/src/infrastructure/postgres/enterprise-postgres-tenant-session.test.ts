@@ -35,6 +35,11 @@ describe("enterprise PostgreSQL tenant session", () => {
            WHERE scope_type = $1 AND scope_id = $2 AND id = $3`,
           ["session-a"],
         );
+        await session.queryWorkerDispatch(
+          `SELECT id FROM ai_phone.worker_dispatches
+           WHERE scope_type = $1 AND scope_id = $2 AND session_id = $3`,
+          ["session-a"],
+        );
         return "done";
       },
     );
@@ -73,6 +78,11 @@ describe("enterprise PostgreSQL tenant session", () => {
       {
         sql: `SELECT id FROM ai_phone.communication_sessions
            WHERE scope_type = $1 AND scope_id = $2 AND id = $3`,
+        values: ["tenant", "tenant-a", "session-a"],
+      },
+      {
+        sql: `SELECT id FROM ai_phone.worker_dispatches
+           WHERE scope_type = $1 AND scope_id = $2 AND session_id = $3`,
         values: ["tenant", "tenant-a", "session-a"],
       },
       { sql: "COMMIT", values: undefined },

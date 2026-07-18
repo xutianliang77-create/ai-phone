@@ -20,12 +20,15 @@ describe("enterprise PostgreSQL worker config", () => {
       ENTERPRISE_REPOSITORY_DRIVER: "postgres",
       ENTERPRISE_WORKER_CELL_ID: "cn-cell-01",
       ENTERPRISE_WORKER_ID: "worker-01",
+      ENTERPRISE_WORKER_DISPATCH_SIGNING_SECRET:
+        "enterprise-worker-dispatch-secret-32-bytes",
     })).toEqual({
       cellId: "cn-cell-01",
       workerId: "worker-01",
       pollIntervalMs: 5_000,
       batchSize: 25,
       leaseMs: 30_000,
+      dispatchSigningSecret: "enterprise-worker-dispatch-secret-32-bytes",
     });
   });
 
@@ -35,7 +38,18 @@ describe("enterprise PostgreSQL worker config", () => {
       ENTERPRISE_REPOSITORY_DRIVER: "postgres",
       ENTERPRISE_WORKER_CELL_ID: "cn-cell-01",
       ENTERPRISE_WORKER_ID: "worker-01",
+      ENTERPRISE_WORKER_DISPATCH_SIGNING_SECRET:
+        "enterprise-worker-dispatch-secret-32-bytes",
       ENTERPRISE_WORKER_BATCH_SIZE: "101",
     })).toThrow("ENTERPRISE_WORKER_BATCH_SIZE");
+  });
+
+  it("fails closed without a strong dispatch signing secret", () => {
+    expect(() => loadEnterprisePostgresWorkerConfig({
+      API_STORAGE_DRIVER: "postgres",
+      ENTERPRISE_REPOSITORY_DRIVER: "postgres",
+      ENTERPRISE_WORKER_CELL_ID: "cn-cell-01",
+      ENTERPRISE_WORKER_ID: "worker-01",
+    })).toThrow("ENTERPRISE_WORKER_DISPATCH_SIGNING_SECRET");
   });
 });

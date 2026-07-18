@@ -22,6 +22,7 @@ describe("enterprise PostgreSQL migrations", () => {
       "0009_enterprise_platform_pending_work",
       "0010_enterprise_subject_ids",
       "0011_enterprise_communication_bindings",
+      "0012_enterprise_worker_dispatch_grants",
     ]);
     for (const migration of migrations) {
       expect(migration.up.trim()).not.toBe("");
@@ -85,12 +86,24 @@ describe("enterprise PostgreSQL migrations", () => {
     expect(sql).toContain("last_event_sequence bigint");
     expect(sql).toContain("route_epoch bigint");
     expect(sql).toContain("entitlement_version text NOT NULL");
+    expect(sql).toContain("CREATE TABLE enterprise.worker_dispatch_grants");
+    expect(sql).toContain("worker_dispatch_grants_tenant_isolation");
+    expect(sql).toContain("worker_dispatch_grant_identity_immutable");
+    expect(sql).toMatch(
+      /FOREIGN KEY \(scope_type, scope_id, dispatch_id\)[\s\S]*REFERENCES ai_phone\.worker_dispatches \(scope_type, scope_id, id\)/,
+    );
+    expect(sql).toMatch(
+      /FOREIGN KEY \(scope_type, scope_id, capacity_reservation_id\)[\s\S]*REFERENCES ai_phone\.worker_capacity_reservations \(scope_type, scope_id, id\)/,
+    );
     expect(sql).toMatch(
       /FUNCTION enterprise\.current_user_id\(\)[\s\S]*RETURNS text/,
     );
     expect(rollbackSql).toContain("cannot rollback enterprise subject IDs");
     expect(rollbackSql).toContain(
       "DROP TABLE IF EXISTS enterprise.communication_session_bindings",
+    );
+    expect(rollbackSql).toContain(
+      "DROP TABLE IF EXISTS enterprise.worker_dispatch_grants",
     );
     expect(sql).not.toContain("BYPASSRLS");
   });

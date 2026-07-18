@@ -138,8 +138,8 @@ function verifiedStartup(database: { name: string; oid: string }) {
     status: "verified" as const,
     mode: "verify" as const,
     evidence: {
-      migrations: 11,
-      tenantTables: 33,
+      migrations: 12,
+      tenantTables: 34,
       compositeForeignKeys: 12,
       subjectColumns: 12,
       rls: "forced",

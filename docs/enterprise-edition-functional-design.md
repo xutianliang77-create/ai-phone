@@ -1,6 +1,6 @@
 # 无界AI企业版详细功能设计
 
-版本：v1.3
+版本：v1.4
 日期：2026-07-18
 状态：SaaS 详细设计基线，已对齐统一通讯平台
 
@@ -327,6 +327,9 @@ LLM 只能提出结构化工具请求；Policy Engine 校验租户、客户、�
 - 会话创建时冻结签名 route document 的 `routeEpoch`、home region/cell、policy version 和
   entitlement version；任何迟到事件必须携带相同 route epoch，并以 generation + event sequence
   收敛，不能恢复已终止会话。
+- Worker 只接受服务端从当前会话绑定派生的短期签名 ticket；ticket 固化 tenant、session、cell、
+  route epoch、generation、capability 和到期时间。签发、accept、heartbeat、提交结果均二次读取
+  当前 binding/lease；取消会释放租户容量并使旧 ticket 立即失效。
 - 客户端必须展示 `dispatching`、`ready`、`draining`、`cancelled`、`degraded`、
   `captions_only` 和 `half_duplex` 等真实运行状态，不把已受理误显示为已执行。
 - 管理员可配置租户允许的端侧/云端 ASR、翻译、TTS、声纹、录音和诊断策略；
