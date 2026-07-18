@@ -27,6 +27,9 @@ import {
 import type {
   EnterpriseTenantPostgresSession,
 } from "./enterprise-postgres-tenant-session.js";
+import {
+  EnterpriseEntitlementResolutionPostgresRepository,
+} from "./enterprise-postgres-entitlement-resolution.js";
 
 export type {
   BindEnterpriseCommunicationSessionInput,
@@ -47,6 +50,14 @@ export class EnterpriseCommunicationBindingPostgresRepository {
     const normalized = normalizeBindingInput(input);
     const existing = await this.findBySession(normalized.communicationSessionId);
     if (existing) return this.replayResult(existing, normalized);
+
+    const entitlementState = await new EnterpriseEntitlementResolutionPostgresRepository(
+      this.session,
+    ).current();
+    if (!entitlementState || entitlementState.account.status !== "active" ||
+      entitlementState.entitlement.status !== "active") {
+      return { status: "entitlement_unavailable" as const };
+    }
 
     const publicSession = await this.session.queryCommunicationMutation<{ id: string }>(`
       INSERT INTO ai_phone.communication_sessions(
@@ -101,7 +112,7 @@ export class EnterpriseCommunicationBindingPostgresRepository {
       normalized.cellId,
       normalized.routeEpoch,
       normalized.policyVersion,
-      normalized.entitlementVersion,
+      entitlementState.entitlement.entitlementVersion,
       1,
       0,
       normalized.startedAt,

@@ -31,6 +31,9 @@ import {
   registerEnterpriseUsageBudgetRoutes,
 } from "./modules/enterprise/enterprise-usage-budget.routes.js";
 import {
+  registerEnterpriseBillingEntitlementRoutes,
+} from "./modules/enterprise/enterprise-billing-entitlement.routes.js";
+import {
   createEnvironmentTenantLifecycleExecutor,
   type TenantLifecycleExecutor,
 } from "./modules/enterprise/enterprise-tenant-lifecycle-executor.js";
@@ -109,6 +112,11 @@ export async function buildApp(dependencies: {
     enterpriseRepositoryRuntime,
   );
   await registerEnterpriseUsageBudgetRoutes(
+    app,
+    tenantRouteService,
+    enterpriseRepositoryRuntime,
+  );
+  await registerEnterpriseBillingEntitlementRoutes(
     app,
     tenantRouteService,
     enterpriseRepositoryRuntime,

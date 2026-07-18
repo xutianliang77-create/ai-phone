@@ -1,6 +1,6 @@
 # 无界AI企业版技术架构
 
-版本：v1.8
+版本：v1.9
 日期：2026-07-18
 状态：SaaS 详细架构基线，已对齐统一通讯平台和 PostgreSQL Primary
 
@@ -177,7 +177,8 @@ object-storage
 | 账号、Tenant、RBAC、企业命令 | `services/api-server` | 先按 domain module 隔离；只有独立扩缩容或故障域需要时才拆服务 |
 | Enterprise Repository runtime/cell Worker | `services/api-server/src/modules/enterprise`、`services/api-server/src/infrastructure/postgres` | API 使用单一 `legacy|postgres` runtime；独立启动的 cell Worker 仅以 cell discovery 和 tenant transaction 角色 claim/finalize |
 | Communication Session、Provider Operation、Dispatch、Recording 和 Usage | 上游稳定提交 `fe1c3c2` 已导入企业分支，`ENT-DATA-008/CORE-013/014/015` 已补 tenant scope、企业业务绑定、签名 dispatch fence 和企业运行策略快照 | 公共 runtime 已成为代码基线；dispatch 必须先通过服务端 policy snapshot 与授权 fence，真实 Provider/设备仍待验收 |
-| PostgreSQL Primary 基础 | 公共31段 migration/Primary Runtime 与企业现有13段 migration | 已收敛为一个 Storage Driver/启动编排和两个有序 manifest；按 tenant/directory/cell/migration/maintenance 使用最小权限连接，等待真实 H3 验收 |
+| PostgreSQL Primary 基础 | 公共31段 migration/Primary Runtime 与企业现有15段 migration | 已收敛为一个 Storage Driver/启动编排和两个有序 manifest；按 tenant/directory/cell/migration/maintenance 使用最小权限连接，等待真实 H3 验收 |
+| Tenant Billing/Entitlement | `packages/contracts`、enterprise PostgreSQL migration `0014/0015` 与 tenant unit-of-work | billing account、版本化 plan/subscription/entitlement、预算和 dispatch fence 已接入；支付 Provider 与账期聚合尚未完成 |
 | 实时信令、字幕和 playback 控制 | `services/realtime-gateway` | 保持无业务数据库直写，通过 API/事件提交业务结果 |
 | ASR、翻译、TTS、Agent call worker | `services/translation-worker`，后续接入统一 dispatch/runtime | 按 session/track/任务横向扩展，Provider 继续通过 Adapter；API 进程不运行媒体或 LLM 循环 |
 | PSTN 媒体桥 | `services/pstn-bridge` | 只处理 Provider 媒体/状态协议，不承载 Campaign 真值 |
@@ -400,6 +401,12 @@ tenantId -> campaign/support/meeting id -> communicationSessionId -> callLegId
 | OCR | 可选旁路，失败不影响共享 |
 | 多租户 | 所有企业聚合根强制 tenantId，不用客户端过滤代替服务端隔离 |
 | Billing | 复用原子事务模式，不复用个人 `user_id` 账单模型；企业使用 tenant billing account、seat、entitlement 和账期聚合 |
+
+Billing 控制面只接受对服务端已发布 plan version 的引用。账期由服务端生成，plan version、
+entitlement snapshot 和 subscription change history 由 PostgreSQL 不可变/append-only trigger
+保护；活动 entitlement 必须与同一活动 subscription、billing account 和有效账期一致。
+Communication binding 冻结 entitlement version，Worker dispatch 再从该版本读取 capability
+limit，客户端不能提交并发上限。真实支付、开票和退款 Provider 不属于当前已验证边界。
 
 ## 13. 信任区和服务身份
 

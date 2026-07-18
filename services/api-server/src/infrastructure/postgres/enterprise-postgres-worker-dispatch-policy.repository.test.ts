@@ -31,7 +31,6 @@ describe("enterprise PostgreSQL worker dispatch policy", () => {
       provider: "livekit_dispatch",
       agentName: "translation-runtime",
       idempotencyKey: "dispatch-request-1",
-      maxUnits: 2,
       leaseSeconds: 60,
       ticketTtlSeconds: 300,
       now: new Date("2026-07-18T05:00:00.000Z"),

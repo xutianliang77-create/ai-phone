@@ -206,7 +206,6 @@ function bindingInput(kind: "meeting" | "support" | "marketing") {
     cellId: "cn-cell-01",
     routeEpoch: 7,
     policyVersion: "policy-v1",
-    entitlementVersion: "entitlement-v1",
     startedAt: now,
   };
 }
@@ -264,6 +263,15 @@ function repositoryFixture(options: {
     queryCommunication: unsupported,
     async query<Row extends Record<string, unknown>>(sql: string, values = []) {
       queryCalls.push({ sql, values });
+      if (sql.includes("enterprise.billing_accounts")) {
+        return { rows: [billingAccountRow() as Row] };
+      }
+      if (sql.includes("enterprise.subscriptions")) {
+        return { rows: [subscriptionRow() as Row] };
+      }
+      if (sql.includes("enterprise.entitlement_snapshots")) {
+        return { rows: [entitlementRow() as Row] };
+      }
       return { rows: (options.queryRows?.(sql, values) ?? []) as Row[] };
     },
     async queryCommunicationMutation<Row extends Record<string, unknown>>(
@@ -278,6 +286,35 @@ function repositoryFixture(options: {
     queryCalls,
     mutationCalls,
     repository: createEnterpriseCommunicationBindingPostgresRepository(session),
+  };
+}
+
+function billingAccountRow() {
+  return {
+    id: tenantId, tenant_id: tenantId, status: "active", currency: "CNY",
+    billing_contact_subject_id: actorId, created_at: now, updated_at: now,
+    version: "1",
+  };
+}
+
+function subscriptionRow() {
+  return {
+    id: "00000000-0000-4000-8000-000000000051", tenant_id: tenantId,
+    billing_account_id: tenantId, plan_code: "enterprise-test",
+    plan_version: "plan-v1", status: "active", seats: "1",
+    billing_cycle: "monthly", current_period_start: now,
+    current_period_end: "2026-08-18T00:00:00.000Z", created_at: now,
+    updated_at: now, version: "1",
+  };
+}
+
+function entitlementRow() {
+  return {
+    id: "00000000-0000-4000-8000-000000000052", tenant_id: tenantId,
+    billing_account_id: tenantId, subscription_id: subscriptionRow().id,
+    entitlement_version: "entitlement-v1", status: "active",
+    plan_code: "enterprise-test", plan_version: "plan-v1", entitlements: {},
+    effective_from: now, effective_until: null, created_at: now,
   };
 }
 

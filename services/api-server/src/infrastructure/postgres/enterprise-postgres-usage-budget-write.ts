@@ -41,15 +41,21 @@ export class EnterpriseUsageBudgetWritePostgresRepository {
     ]);
     if (overlap.rows[0]) return { status: "period_overlap" };
     if (normalized.expectedVersion !== undefined) return { status: "conflict" };
+    const account = await this.session.query<{ id: string }>(`
+      SELECT id FROM enterprise.billing_accounts
+      WHERE tenant_id = $1 AND status = 'active' FOR UPDATE
+    `);
+    if (!account.rows[0]) throw new Error("Enterprise billing account unavailable");
     const inserted = await this.session.query<EnterpriseUsageBudgetRow>(`
       INSERT INTO enterprise.usage_budgets(
-        tenant_id, id, category, unit, limit_amount,
+        tenant_id, id, billing_account_id, category, unit, limit_amount,
         alert_threshold_percent, status, period_start, period_end,
         created_at, updated_at, version
-      ) VALUES ($1, $2, $3, $4, $5, $6, 'active', $7, $8, $9, $9, 1)
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, 'active', $8, $9, $10, $10, 1)
       RETURNING *
     `, [
       randomUUID(),
+      account.rows[0].id,
       normalized.category,
       normalized.unit,
       normalized.limitAmount,

@@ -107,6 +107,7 @@ function budgetRecord(selectedTenantId: string) {
   return {
     id: "00000000-0000-4000-8000-000000000041",
     tenantId: selectedTenantId,
+    billingAccountId: selectedTenantId,
     category: "marketing_call_seconds" as const,
     unit: "seconds" as const,
     limitAmount: 100,

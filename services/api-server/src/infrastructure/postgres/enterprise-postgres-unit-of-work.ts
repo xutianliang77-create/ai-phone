@@ -34,6 +34,9 @@ import {
 import {
   EnterpriseUsageBudgetPostgresRepository,
 } from "./enterprise-postgres-usage-budget.repository.js";
+import {
+  EnterpriseBillingEntitlementPostgresRepository,
+} from "./enterprise-postgres-billing-entitlement.repository.js";
 
 export interface EnterprisePostgresUnitOfWork {
   tenant: EnterpriseTenantPostgresRepository;
@@ -42,6 +45,7 @@ export interface EnterprisePostgresUnitOfWork {
   communication: EnterpriseCommunicationPostgresRepository;
   communicationBindings: EnterpriseCommunicationBindingPostgresRepository;
   communicationPolicies: EnterpriseCommunicationPolicyPostgresRepository;
+  billingEntitlements: EnterpriseBillingEntitlementPostgresRepository;
   usageBudgets: EnterpriseUsageBudgetPostgresRepository;
   workerDispatches: EnterpriseWorkerDispatchPostgresRepository;
 }
@@ -63,6 +67,8 @@ export function withEnterprisePostgresUnitOfWork<T>(
         createEnterpriseCommunicationBindingPostgresRepository(session),
       communicationPolicies:
         new EnterpriseCommunicationPolicyPostgresRepository(session),
+      billingEntitlements:
+        new EnterpriseBillingEntitlementPostgresRepository(session),
       usageBudgets: new EnterpriseUsageBudgetPostgresRepository(session),
       workerDispatches: new EnterpriseWorkerDispatchPostgresRepository(session),
     }),

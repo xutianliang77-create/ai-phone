@@ -19,6 +19,8 @@ export interface EnterpriseWorkerDispatchGrantRecord {
   communicationSessionId: string;
   policySnapshotId: string;
   policyVersion: string;
+  billingAccountId: string;
+  entitlementVersion: string;
   dispatchId: string;
   capacityReservationId: string;
   capability: EnterpriseWorkerCapability;
@@ -45,6 +47,8 @@ export interface EnterpriseWorkerDispatchGrantRow
   communication_session_id: unknown;
   policy_snapshot_id: unknown;
   policy_version: unknown;
+  billing_account_id: unknown;
+  entitlement_version: unknown;
   dispatch_id: unknown;
   capacity_reservation_id: unknown;
   capability: unknown;
@@ -87,6 +91,8 @@ export function mapEnterpriseWorkerDispatchGrantRow(
     communicationSessionId: required(row.communication_session_id, "session"),
     policySnapshotId: required(row.policy_snapshot_id, "policy snapshot"),
     policyVersion: required(row.policy_version, "policy version"),
+    billingAccountId: required(row.billing_account_id, "billing account"),
+    entitlementVersion: required(row.entitlement_version, "entitlement version"),
     dispatchId: required(row.dispatch_id, "dispatch"),
     capacityReservationId: required(row.capacity_reservation_id, "capacity"),
     capability: capability as EnterpriseWorkerCapability,
@@ -111,7 +117,7 @@ export type EnterpriseWorkerFenceResult =
   | { status: "authorized" }
   | { status: "tenant_mismatch" | "session_mismatch" | "cell_mismatch" }
   | { status: "capability_mismatch" | "stale_route" | "stale_generation" }
-  | { status: "policy_mismatch" }
+  | { status: "policy_mismatch" | "entitlement_mismatch" }
   | { status: "expired" | "cancelled" | "not_accepted" }
   | { status: "lease_conflict" | "lease_expired" };
 
@@ -136,6 +142,10 @@ export function evaluateEnterpriseWorkerDispatchFence(input: {
     payload.policyVersion !== grant.policyVersion ||
     grant.policyVersion !== binding.policyVersion) {
     return { status: "policy_mismatch" };
+  }
+  if (payload.entitlementVersion !== grant.entitlementVersion ||
+    grant.entitlementVersion !== binding.entitlementVersion) {
+    return { status: "entitlement_mismatch" };
   }
   if (payload.cellId !== input.workerCellId || payload.cellId !== grant.cellId ||
     payload.cellId !== binding.cellId) return { status: "cell_mismatch" };

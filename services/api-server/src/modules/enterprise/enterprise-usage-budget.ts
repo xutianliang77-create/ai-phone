@@ -6,6 +6,7 @@ import type {
 export interface EnterpriseUsageBudgetRecord {
   id: string;
   tenantId: string;
+  billingAccountId: string;
   category: EnterpriseUsageCategory;
   unit: EnterpriseUsageUnit;
   limitAmount: number;
@@ -21,6 +22,7 @@ export interface EnterpriseUsageBudgetRecord {
 export interface EnterpriseUsageHoldRecord {
   id: string;
   tenantId: string;
+  billingAccountId: string;
   budgetId: string;
   category: EnterpriseUsageCategory;
   unit: EnterpriseUsageUnit;

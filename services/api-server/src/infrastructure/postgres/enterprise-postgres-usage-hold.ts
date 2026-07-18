@@ -74,15 +74,16 @@ export class EnterpriseUsageHoldPostgresRepository {
     }
     const inserted = await this.session.query<EnterpriseUsageHoldRow>(`
       INSERT INTO enterprise.usage_holds(
-        tenant_id, id, budget_id, category, unit, amount, status,
+        tenant_id, id, billing_account_id, budget_id, category, unit, amount, status,
         source_type, source_ref, idempotency_key, request_hash,
         held_at, expires_at, updated_at, version
       ) VALUES (
-        $1, $2, $3, $4, $5, $6, 'held', $7, $8, $9, $10,
-        $11, $12, $11, 1
+        $1, $2, $3, $4, $5, $6, $7, 'held', $8, $9, $10, $11,
+        $12, $13, $12, 1
       ) RETURNING *
     `, [
       randomUUID(),
+      budget.billingAccountId,
       budget.id,
       normalized.category,
       normalized.unit,
@@ -132,10 +133,10 @@ export class EnterpriseUsageHoldPostgresRepository {
       INSERT INTO enterprise.usage_ledger(
         id, tenant_id, category, amount, unit, source_type, source_id,
         idempotency_key, occurred_at, metadata, entry_type, budget_id,
-        hold_id, source_ref, request_hash, recorded_at
+        hold_id, source_ref, request_hash, recorded_at, billing_account_id
       ) VALUES (
         $2, $1, $3, $4, $5, $6, NULL, $7, $8, $9::jsonb,
-        'settle', $10, $11, $12, $13, $14
+        'settle', $10, $11, $12, $13, $14, $15
       ) RETURNING id
     `, [
       randomUUID(),
@@ -151,6 +152,7 @@ export class EnterpriseUsageHoldPostgresRepository {
       hold.sourceRef,
       normalized.requestHash,
       normalized.now,
+      hold.billingAccountId,
     ]);
     const updated = await this.session.query<EnterpriseUsageHoldRow>(`
       UPDATE enterprise.usage_holds

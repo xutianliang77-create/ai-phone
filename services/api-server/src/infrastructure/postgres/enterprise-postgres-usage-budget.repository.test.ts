@@ -134,11 +134,14 @@ function usageFixture(mode: Mode) {
     calls.push({ sql, values });
     let rows: Array<Record<string, unknown>> = [];
     if (mode === "configure") {
-      if (sql.includes("INSERT INTO enterprise.usage_budgets")) {
+      if (sql.includes("SELECT id FROM enterprise.billing_accounts")) {
+        rows = [{ id: tenantId }];
+      } else if (sql.includes("INSERT INTO enterprise.usage_budgets")) {
         rows = [budgetRow({
           id: String(values[0]),
-          limit_amount: values[3],
-          alert_threshold_percent: values[4],
+          billing_account_id: values[1],
+          limit_amount: values[4],
+          alert_threshold_percent: values[5],
         })];
       }
     } else if (sql.includes("SELECT * FROM enterprise.usage_holds") &&
@@ -188,6 +191,7 @@ function budgetRow(overrides: Record<string, unknown> = {}) {
   return {
     id: budgetId,
     tenant_id: tenantId,
+    billing_account_id: tenantId,
     category: "marketing_call_seconds",
     unit: "seconds",
     limit_amount: "100",
@@ -206,6 +210,7 @@ function holdRow(overrides: Record<string, unknown> = {}) {
   return {
     id: holdId,
     tenant_id: tenantId,
+    billing_account_id: tenantId,
     budget_id: budgetId,
     category: "marketing_call_seconds",
     unit: "seconds",

@@ -27,3 +27,57 @@ export function policyRow(change: Record<string, unknown> = {}) {
     ...change,
   };
 }
+
+export function entitlementRow(change: Record<string, unknown> = {}) {
+  return {
+    id: "00000000-0000-4000-8000-000000000051",
+    tenant_id: tenantId,
+    billing_account_id: tenantId,
+    subscription_id: "00000000-0000-4000-8000-000000000052",
+    entitlement_version: "entitlement-1",
+    status: "active",
+    plan_code: "enterprise-test",
+    plan_version: "plan-1",
+    entitlements: {
+      "worker.translation_runtime.concurrent": { enabled: true, limit: 2 },
+      "worker.voice_agent_runtime.concurrent": { enabled: true, limit: 1 },
+    },
+    effective_from: "2026-07-18T04:00:00.000Z",
+    effective_until: null,
+    created_at: "2026-07-18T04:00:00.000Z",
+    ...change,
+  };
+}
+
+export function billingAccountRow(change: Record<string, unknown> = {}) {
+  return {
+    id: tenantId,
+    tenant_id: tenantId,
+    status: "active",
+    currency: "CNY",
+    billing_contact_subject_id: null,
+    created_at: "2026-07-18T04:00:00.000Z",
+    updated_at: "2026-07-18T04:00:00.000Z",
+    version: "1",
+    ...change,
+  };
+}
+
+export function subscriptionRow(change: Record<string, unknown> = {}) {
+  return {
+    id: "00000000-0000-4000-8000-000000000052",
+    tenant_id: tenantId,
+    billing_account_id: tenantId,
+    plan_code: "enterprise-test",
+    plan_version: "plan-1",
+    status: "active",
+    seats: "1",
+    billing_cycle: "monthly",
+    current_period_start: "2026-07-18T04:00:00.000Z",
+    current_period_end: "2026-08-18T04:00:00.000Z",
+    created_at: "2026-07-18T04:00:00.000Z",
+    updated_at: "2026-07-18T04:00:00.000Z",
+    version: "1",
+    ...change,
+  };
+}

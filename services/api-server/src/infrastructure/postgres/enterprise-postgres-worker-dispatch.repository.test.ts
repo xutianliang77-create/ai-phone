@@ -11,16 +11,15 @@ import type {
 import {
   EnterpriseWorkerDispatchPostgresRepository,
 } from "./enterprise-postgres-worker-dispatch.repository.js";
-import { policyRow } from "./enterprise-postgres-worker-dispatch-policy-fixture.test-helper.js";
+import { billingAccountRow, entitlementRow, policyRow, subscriptionRow } from
+  "./enterprise-postgres-worker-dispatch-policy-fixture.test-helper.js";
 
 const tenantId = "00000000-0000-4000-8000-000000000001";
 const now = new Date("2026-07-18T05:00:00.000Z");
-
 describe("enterprise PostgreSQL worker dispatch", () => {
   it("derives tenant, cell, route and generation from the locked binding", async () => {
     const fixture = issueFixture();
     const repository = new EnterpriseWorkerDispatchPostgresRepository(fixture.session);
-
     const result = await repository.issue(issueInput());
 
     expect(result.status).toBe("created");
@@ -46,7 +45,7 @@ describe("enterprise PostgreSQL worker dispatch", () => {
     const fixture = issueFixture({ used: 2 });
     const repository = new EnterpriseWorkerDispatchPostgresRepository(fixture.session);
 
-    await expect(repository.issue({ ...issueInput(), maxUnits: 2 }))
+    await expect(repository.issue(issueInput()))
       .resolves.toEqual({ status: "capacity_exhausted", used: 2, limit: 2 });
     expect(fixture.calls.some(({ sql }) => /^\s*INSERT\b/.test(sql))).toBe(false);
   });
@@ -119,7 +118,6 @@ function issueInput() {
     provider: "livekit_dispatch" as const,
     agentName: "translation-runtime",
     idempotencyKey: "dispatch-request-1",
-    maxUnits: 2,
     leaseSeconds: 60,
     ticketTtlSeconds: 300,
     now,
@@ -139,6 +137,9 @@ function issueFixture(input: {
         const policy = Object.hasOwn(input, "policy") ? input.policy : policyRow();
         return policy ? [policy] : [];
       }
+      if (sql.includes("entitlement_snapshots")) return [entitlementRow()];
+      if (sql.includes("billing_accounts")) return [billingAccountRow()];
+      if (sql.includes("enterprise.subscriptions")) return [subscriptionRow()];
       if (sql.includes("capability = $3") && sql.includes("generation = $4")) return [];
       if (sql.includes("INSERT INTO enterprise.worker_dispatch_grants")) {
         return [grantRow({
@@ -147,7 +148,9 @@ function issueFixture(input: {
           capacity_reservation_id: values?.[3],
           policy_snapshot_id: values?.[8],
           policy_version: values?.[9],
-          request_hash: values?.[11],
+          billing_account_id: values?.[10],
+          entitlement_version: values?.[11],
+          request_hash: values?.[13],
           status: "issued",
           lease_owner: null,
           lease_expires_at: null,
@@ -265,12 +268,13 @@ function baseSession(calls: Call[], handlers: {
 
 function payload(): EnterpriseWorkerDispatchTicketPayload {
   return {
-    v: 2,
+    v: 3,
     ticketId: "00000000-0000-4000-8000-000000000011",
     tenantId,
     communicationSessionId: "enterprise-session-1",
     policySnapshotId: "00000000-0000-4000-8000-000000000021",
     policyVersion: "policy-1",
+    entitlementVersion: "entitlement-1",
     cellId: "cn-cell-01",
     routeEpoch: 7,
     generation: 3,
@@ -287,6 +291,8 @@ function grantRow(change: Record<string, unknown> = {}) {
     communication_session_id: payload().communicationSessionId,
     policy_snapshot_id: payload().policySnapshotId,
     policy_version: payload().policyVersion,
+    billing_account_id: tenantId,
+    entitlement_version: payload().entitlementVersion,
     dispatch_id: "dispatch-1",
     capacity_reservation_id: "capacity-1",
     capability: payload().capability,

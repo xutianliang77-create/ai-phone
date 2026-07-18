@@ -10,6 +10,7 @@ import type {
 export interface EnterpriseUsageBudgetRow extends Record<string, unknown> {
   id: unknown;
   tenant_id: unknown;
+  billing_account_id: unknown;
   category: unknown;
   unit: unknown;
   limit_amount: unknown;
@@ -25,6 +26,7 @@ export interface EnterpriseUsageBudgetRow extends Record<string, unknown> {
 export interface EnterpriseUsageHoldRow extends Record<string, unknown> {
   id: unknown;
   tenant_id: unknown;
+  billing_account_id: unknown;
   budget_id: unknown;
   category: unknown;
   unit: unknown;
@@ -60,6 +62,7 @@ export function mapEnterpriseUsageBudgetRow(
   return {
     id: required(row.id, "id"),
     tenantId,
+    billingAccountId: required(row.billing_account_id, "billing account"),
     category,
     unit,
     limitAmount: nonNegative(row.limit_amount, "limit"),
@@ -91,6 +94,7 @@ export function mapEnterpriseUsageHoldRow(
   return {
     id: required(row.id, "id"),
     tenantId,
+    billingAccountId: required(row.billing_account_id, "billing account"),
     budgetId: required(row.budget_id, "budget"),
     category,
     unit,

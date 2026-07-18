@@ -27,6 +27,7 @@ export type EnterpriseUsageUnit = (typeof enterpriseUsageUnits)[number];
 export interface EnterpriseUsageBudgetDto {
   id: string;
   tenantId: string;
+  billingAccountId: string;
   category: EnterpriseUsageCategory;
   unit: EnterpriseUsageUnit;
   limitAmount: number;
@@ -50,6 +51,68 @@ export interface ConfigureEnterpriseUsageBudgetRequest {
 
 export interface EnterpriseUsageBudgetsResponse {
   budgets: EnterpriseUsageBudgetDto[];
+}
+
+export interface EnterpriseBillingAccountDto {
+  id: string;
+  tenantId: string;
+  status: "active" | "past_due" | "suspended" | "closed";
+  currency: string;
+  billingContactSubjectId?: string;
+  createdAt: string;
+  updatedAt: string;
+  version: number;
+}
+
+export interface EnterpriseEntitlementValueDto {
+  enabled: boolean;
+  limit: number | null;
+}
+
+export interface EnterpriseEntitlementSnapshotDto {
+  id: string;
+  tenantId: string;
+  billingAccountId: string;
+  subscriptionId: string;
+  entitlementVersion: string;
+  status: "active" | "retired";
+  planCode: string;
+  planVersion: string;
+  entitlements: Record<string, EnterpriseEntitlementValueDto>;
+  effectiveFrom: string;
+  effectiveUntil?: string;
+  createdAt: string;
+}
+
+export interface EnterpriseSubscriptionDto {
+  id: string;
+  tenantId: string;
+  billingAccountId: string;
+  planCode: string;
+  planVersion: string;
+  status: string;
+  seats: number;
+  billingCycle: string;
+  currentPeriodStart: string;
+  currentPeriodEnd: string;
+  createdAt: string;
+  updatedAt: string;
+  version: number;
+}
+
+export interface ChangeEnterpriseSubscriptionRequest {
+  tenantId?: string;
+  planCode: string;
+  planVersion: string;
+  seats: number;
+  billingCycle: "monthly" | "annual";
+  idempotencyKey: string;
+}
+
+export interface EnterpriseEntitlementsResponse {
+  account: EnterpriseBillingAccountDto;
+  subscription: EnterpriseSubscriptionDto;
+  entitlement: EnterpriseEntitlementSnapshotDto;
 }
 
 export function isEnterpriseUsageCategory(

@@ -25,6 +25,7 @@ describe("enterprise PostgreSQL migrations", () => {
       "0012_enterprise_worker_dispatch_grants",
       "0013_enterprise_communication_runtime_policy",
       "0014_enterprise_usage_budgets",
+      "0015_enterprise_billing_entitlements",
     ]);
     for (const migration of migrations) {
       expect(migration.up.trim()).not.toBe("");
@@ -102,6 +103,15 @@ describe("enterprise PostgreSQL migrations", () => {
     expect(sql).toContain("CREATE TABLE enterprise.usage_budget_alerts");
     expect(sql).toContain("enterprise_usage_ledger_append_only");
     expect(sql).toContain("enterprise_usage_hold_identity_immutable");
+    expect(sql).toContain("CREATE TABLE enterprise.billing_accounts");
+    expect(sql).toContain("CREATE TABLE enterprise.billing_plan_versions");
+    expect(sql).toContain("CREATE TABLE enterprise.entitlement_snapshots");
+    expect(sql).toContain("CREATE TABLE enterprise.billing_subscription_changes");
+    expect(sql).toContain("enterprise_entitlement_snapshot_immutable");
+    expect(sql).toContain("enterprise_subscription_immutable");
+    expect(sql).toContain("subscriptions_one_active_account_idx");
+    expect(sql).toContain("entitlements_snapshot_version_fk");
+    expect(sql).toContain("billing_account_id uuid");
     expect(sql).toMatch(
       /FOREIGN KEY \(scope_type, scope_id, dispatch_id\)[\s\S]*REFERENCES ai_phone\.worker_dispatches \(scope_type, scope_id, id\)/,
     );
@@ -122,6 +132,7 @@ describe("enterprise PostgreSQL migrations", () => {
       "DROP TABLE IF EXISTS enterprise.communication_policy_snapshots",
     );
     expect(rollbackSql).toContain("DROP TABLE IF EXISTS enterprise.usage_budgets");
+    expect(rollbackSql).toContain("DROP TABLE IF EXISTS enterprise.billing_accounts");
     expect(sql).not.toContain("BYPASSRLS");
   });
 

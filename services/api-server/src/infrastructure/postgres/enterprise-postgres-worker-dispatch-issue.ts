@@ -21,6 +21,9 @@ import {
   mapEnterpriseCommunicationPolicySnapshot,
   type EnterpriseCommunicationPolicySnapshotRow,
 } from "./enterprise-postgres-communication-policy-record.js";
+import {
+  EnterpriseEntitlementResolutionPostgresRepository,
+} from "./enterprise-postgres-entitlement-resolution.js";
 
 export interface IssueEnterpriseWorkerDispatchInput {
   communicationSessionId: string;
@@ -30,7 +33,6 @@ export interface IssueEnterpriseWorkerDispatchInput {
   provider: "local_process" | "livekit_dispatch";
   agentName: string;
   idempotencyKey: string;
-  maxUnits: number;
   leaseSeconds: number;
   ticketTtlSeconds: number;
   now?: Date;
@@ -40,6 +42,7 @@ export type IssueEnterpriseWorkerDispatchResult =
   | { status: "created" | "replayed"; grant: EnterpriseWorkerDispatchGrantRecord }
   | { status: "not_found" | "terminal" | "dispatch_conflict" }
   | { status: "policy_unresolved" | "policy_denied" }
+  | { status: "entitlement_unavailable" | "entitlement_denied" }
   | { status: "idempotency_conflict" }
   | { status: "capacity_exhausted"; used: number; limit: number };
 
@@ -101,9 +104,19 @@ export class EnterpriseWorkerDispatchIssuePostgresRepository {
     if (!policy.allowedCapabilities.includes(normalized.capability)) {
       return { status: "policy_denied" };
     }
+    const entitlement = await new EnterpriseEntitlementResolutionPostgresRepository(
+      this.session,
+    ).resolveDispatch({
+      entitlementVersion: binding.entitlementVersion,
+      capability: normalized.capability,
+      now: normalized.now,
+    });
+    if (entitlement.status !== "allowed") return entitlement;
     if (replayedGrant) {
       return replayedGrant.requestHash === normalized.requestHash &&
-          replayedGrant.policySnapshotId === policy.id
+          replayedGrant.policySnapshotId === policy.id &&
+          replayedGrant.billingAccountId === entitlement.billingAccountId &&
+          replayedGrant.entitlementVersion === entitlement.entitlementVersion
         ? { status: "replayed", grant: replayedGrant }
         : { status: "idempotency_conflict" };
     }
@@ -134,8 +147,8 @@ export class EnterpriseWorkerDispatchIssuePostgresRepository {
         AND status = 'held' AND lease_expires_at > $4
     `, [normalized.capability, issuedAt]);
     const used = safeCount(usedResult.rows[0]?.units);
-    if (!activeExisting && used + 1 > normalized.maxUnits) {
-      return { status: "capacity_exhausted", used, limit: normalized.maxUnits };
+    if (!activeExisting && used + 1 > entitlement.limit) {
+      return { status: "capacity_exhausted", used, limit: entitlement.limit };
     }
     const conflictingDispatch = await this.session.queryWorkerDispatch<{ id: string }>(`
       SELECT id FROM ai_phone.worker_dispatches
@@ -183,11 +196,12 @@ export class EnterpriseWorkerDispatchIssuePostgresRepository {
       INSERT INTO enterprise.worker_dispatch_grants(
         tenant_id, id, communication_session_id, dispatch_id,
         capacity_reservation_id, capability, cell_id, route_epoch,
-        generation, policy_snapshot_id, policy_version, status,
+        generation, policy_snapshot_id, policy_version,
+        billing_account_id, entitlement_version, status,
         idempotency_key, request_hash, issued_at, expires_at, updated_at, version
       ) VALUES (
-        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'issued',
-        $12, $13, $14, $15, $14, 1
+        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, 'issued',
+        $14, $15, $16, $17, $16, 1
       ) RETURNING *
     `, [
       grantId,
@@ -200,6 +214,8 @@ export class EnterpriseWorkerDispatchIssuePostgresRepository {
       binding.generation,
       policy.id,
       policy.policyVersion,
+      entitlement.billingAccountId,
+      entitlement.entitlementVersion,
       normalized.idempotencyKey,
       normalized.requestHash,
       issuedAt,
@@ -273,7 +289,6 @@ function normalize(input: IssueEnterpriseWorkerDispatchInput) {
     !bounded(input.callId, 160) || !bounded(input.roomName, 200) ||
     !["local_process", "livekit_dispatch"].includes(input.provider) ||
     !bounded(input.agentName, 160) || !bounded(input.idempotencyKey, 128) ||
-    !Number.isInteger(input.maxUnits) || input.maxUnits < 1 || input.maxUnits > 10_000 ||
     !Number.isInteger(input.leaseSeconds) || input.leaseSeconds < 5 ||
     input.leaseSeconds > 300 || !Number.isInteger(input.ticketTtlSeconds) ||
     input.ticketTtlSeconds < 30 || input.ticketTtlSeconds > 300 ||
@@ -287,7 +302,6 @@ function normalize(input: IssueEnterpriseWorkerDispatchInput) {
     roomName: input.roomName,
     provider: input.provider,
     agentName: input.agentName,
-    maxUnits: input.maxUnits,
     leaseSeconds: input.leaseSeconds,
     ticketTtlSeconds: input.ticketTtlSeconds,
   })).digest("hex");

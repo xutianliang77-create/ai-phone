@@ -234,6 +234,40 @@ export function createPostgresEnterpriseRepositoryRuntime(
       );
       return { status: "ready", budgets };
     },
+    async getBillingEntitlements(input) {
+      const state = await withEnterprisePostgresUnitOfWork(
+        pool,
+        input.context,
+        (unit) => unit.billingEntitlements.current(),
+      );
+      return state ? { status: "ready", state } : { status: "not_found" };
+    },
+    changeSubscription(input) {
+      return withEnterprisePostgresUnitOfWork(
+        pool,
+        input.context,
+        async (unit) => {
+          const result = await unit.billingEntitlements.change(input.change);
+          if (result.status !== "changed") return result;
+          await unit.tenant.appendAuditEvent(createEnterpriseAuditEvent({
+            context: input.context,
+            action: "subscription.change",
+            resourceType: "subscription",
+            resourceId: result.subscription.id,
+            result: "completed",
+            details: {
+              billingAccountId: result.account.id,
+              planCode: result.subscription.planCode,
+              planVersion: result.subscription.planVersion,
+              entitlementVersion: result.entitlement.entitlementVersion,
+              seats: result.subscription.seats,
+            },
+            createdAt: result.subscription.updatedAt,
+          }));
+          return result;
+        },
+      );
+    },
     beginTenantCreation(input) {
       return beginPostgresTenantCreation(pool, input);
     },

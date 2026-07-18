@@ -100,12 +100,13 @@ function session(
 
 function payload(): EnterpriseWorkerDispatchTicketPayload {
   return {
-    v: 2,
+    v: 3,
     ticketId: "00000000-0000-4000-8000-000000000011",
     tenantId,
     communicationSessionId: "enterprise-session-1",
     policySnapshotId: "00000000-0000-4000-8000-000000000021",
     policyVersion: "policy-1",
+    entitlementVersion: "entitlement-1",
     cellId: "cn-cell-01",
     routeEpoch: 7,
     generation: 3,
@@ -122,6 +123,8 @@ function grant(): EnterpriseWorkerDispatchGrantRecord {
     communicationSessionId: payload().communicationSessionId,
     policySnapshotId: payload().policySnapshotId,
     policyVersion: payload().policyVersion,
+    billingAccountId: tenantId,
+    entitlementVersion: payload().entitlementVersion,
     dispatchId: "dispatch-1",
     capacityReservationId: "capacity-1",
     capability: payload().capability,

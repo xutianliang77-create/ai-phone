@@ -23,7 +23,8 @@ describe("enterprise worker dispatch ticket", () => {
 
     for (const field of [
       "tenantId", "communicationSessionId", "policySnapshotId", "policyVersion",
-      "cellId", "routeEpoch", "generation", "capability", "expiresAt",
+      "entitlementVersion", "cellId", "routeEpoch", "generation", "capability",
+      "expiresAt",
     ] as const) {
       const [encoded, signature] = ticket.split(".");
       const changed = JSON.parse(
@@ -63,12 +64,13 @@ describe("enterprise worker dispatch ticket", () => {
 
 function payload(): EnterpriseWorkerDispatchTicketPayload {
   return {
-    v: 2,
+    v: 3,
     ticketId: "00000000-0000-4000-8000-000000000011",
     tenantId: "00000000-0000-4000-8000-000000000001",
     communicationSessionId: "enterprise-session-1",
     policySnapshotId: "00000000-0000-4000-8000-000000000021",
     policyVersion: "policy-1",
+    entitlementVersion: "entitlement-1",
     cellId: "cn-cell-01",
     routeEpoch: 7,
     generation: 3,

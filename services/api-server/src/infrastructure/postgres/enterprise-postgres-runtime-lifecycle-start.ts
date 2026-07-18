@@ -76,6 +76,10 @@ export async function beginPostgresTenantCreation(
           input.ownerUserId,
         );
       }
+      await unit.billingEntitlements.ensureAccount({
+        billingContactUserId: input.ownerUserId,
+        now: new Date(now),
+      });
       const member = await unit.tenant.insertMember(records.member);
       const job = await unit.lifecycle.insertJob(records.job);
       if (member.status !== "created" || job.status !== "created") {

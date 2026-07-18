@@ -50,6 +50,11 @@ import type {
   ConfigureEnterpriseUsageBudgetResult,
   EnterpriseUsageBudgetRecord,
 } from "./enterprise-usage-budget.js";
+import type {
+  ChangeEnterpriseSubscriptionInput,
+  ChangeEnterpriseSubscriptionResult,
+  EnterpriseEntitlementState,
+} from "./enterprise-billing-entitlement.js";
 
 export type EnterpriseContextResult =
   | { status: "resolved"; tenant: EnterpriseTenantRecord; member: EnterpriseMemberRecord }
@@ -136,6 +141,17 @@ export interface EnterpriseRepositoryRuntime {
     | { status: "ready"; budgets: EnterpriseUsageBudgetRecord[] }
     | { status: "storage_required" }
   >;
+  getBillingEntitlements?(input: {
+    context: EnterpriseTenantContext;
+  }): Promise<
+    | { status: "ready"; state: EnterpriseEntitlementState }
+    | { status: "not_found" }
+    | { status: "storage_required" }
+  >;
+  changeSubscription?(input: {
+    context: EnterpriseTenantContext;
+    change: ChangeEnterpriseSubscriptionInput;
+  }): Promise<ChangeEnterpriseSubscriptionResult | { status: "storage_required" }>;
   beginTenantCreation(input: {
     ownerUserId: string;
     name: string;
@@ -216,6 +232,12 @@ export const legacyEnterpriseRepositoryRuntime: EnterpriseRepositoryRuntime = {
     return { status: "storage_required" };
   },
   async listUsageBudgets() {
+    return { status: "storage_required" };
+  },
+  async getBillingEntitlements() {
+    return { status: "storage_required" };
+  },
+  async changeSubscription() {
     return { status: "storage_required" };
   },
   async beginTenantCreation(input) {

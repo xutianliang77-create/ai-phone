@@ -15,7 +15,6 @@ export interface BindEnterpriseCommunicationSessionInput {
   cellId: string;
   routeEpoch: number;
   policyVersion: string;
-  entitlementVersion: string;
   startedAt: string;
 }
 
@@ -54,11 +53,6 @@ export function normalizeBindingInput(
     cellId: requiredCode(input.cellId, "cell id"),
     routeEpoch: positiveInteger(input.routeEpoch, "route epoch"),
     policyVersion: requiredText(input.policyVersion, "policy version", 128),
-    entitlementVersion: requiredText(
-      input.entitlementVersion,
-      "entitlement version",
-      128,
-    ),
     startedAt: requiredIso(input.startedAt, "started at"),
   };
 }
@@ -94,7 +88,6 @@ export function sameBindingIdentity(
     record.homeRegion === input.homeRegion && record.cellId === input.cellId &&
     record.routeEpoch === input.routeEpoch &&
     record.policyVersion === input.policyVersion &&
-    record.entitlementVersion === input.entitlementVersion &&
     record.startedAt === input.startedAt;
 }
 

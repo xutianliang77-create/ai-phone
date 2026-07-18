@@ -1,6 +1,6 @@
 # 无界AI企业版详细功能设计
 
-版本：v1.6
+版本：v1.7
 日期：2026-07-18
 状态：SaaS 详细设计基线，已对齐统一通讯平台
 
@@ -355,6 +355,20 @@ LLM 只能提出结构化工具请求；Policy Engine 校验租户、客户、�
 - 服务端在租户事务内串行复核已结算量、有效 hold 和预算上限；客户端显示的余额不参与授权决定。
 - 达到阈值时只追加一条预算告警；历史 usage ledger 和告警不可更新或删除，纠正必须走后续调整流水。
 - SQLite/JSON 运行时明确报告 PostgreSQL required，不能用内存预算或演示余额伪造企业账务成功。
+
+### 8.3 租户账务和套餐权益
+
+- 每个 tenant 只有一个 tenant-owned billing account；付款联系人只是账号 subject，不能替代
+  `tenantId`、跨租户共享余额或继承个人订阅。
+- 套餐能力由服务端已发布的不可变 plan version 决定。租户变更只能引用 plan code/version、
+  席位数和账期类型，不能提交 entitlement 内容、并发上限或账期起止时间。
+- 变更套餐在一个 tenant transaction 内退役旧 subscription/entitlement，创建新订阅和不可变
+  entitlement snapshot，并追加幂等变更记录与审计；同一 billing account 同时最多一个活动订阅。
+- 新会话绑定和 Worker dispatch 必须同时复核活动 billing account、活动订阅、有效账期、精确
+  entitlement version 和 capability limit。任一缺失、过期或不一致都失败闭合，客户端缓存和
+  `maxUnits` 不参与授权。
+- 当前实现不连接支付渠道，也不生成付款、续费或开票成功；真实账务 Provider、回调、退款和
+  对账仍须后续环境验收。SQLite/JSON 继续返回 PostgreSQL required。
 
 ## 9. 核心流程契约
 
