@@ -1,6 +1,6 @@
 # 无界AI企业版设计文档索引
 
-版本：v1.16
+版本：v1.17
 日期：2026-07-19
 状态：SaaS 详细设计基线，已纳入统一通讯平台和 PostgreSQL Primary 演进
 
@@ -58,6 +58,9 @@ locale/country/product/effective-time 检索和知识引用 ID；
 `ENT-CORE-007/010/012` 已增加 tenant usage budget、幂等 hold/settle、tenant billing account、
 不可变 plan/subscription/entitlement 版本、原始 usage event、append-only adjustment、账期
 count/hash 聚合和 dispatch 服务端限额。真实设备/Provider、支付账务环境、关账、A1/H2/H3 仍待完成。
+`ENT-OBS-001` 已提供 tenant-scoped 单会话质量/Provider/usage/ledger/audit 报告；`ENT-UI-004` 已把该报告与
+tenant/route、Provider、subscription、budget 和 usage aggregate 接入企业工作台。两项本轮均未执行自动化、浏览器
+或 PostgreSQL 测试，保持 `in_progress`，业务聚合和货币价格缺失时仍明确 not_ready/not_configured。
 
 ## 3. 继承文档
 

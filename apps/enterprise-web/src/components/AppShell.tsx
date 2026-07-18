@@ -12,10 +12,10 @@ import {
 } from "../navigation.js";
 import { MaterialIcon } from "./MaterialIcon.js";
 import { StatusPanel } from "./StatusPanel.js";
-import { ProviderReadinessPanel } from "./ProviderReadinessPanel.js";
 import { TenantJobPage } from "../pages/TenantJobPage.js";
 import { KnowledgePage } from "../pages/KnowledgePage.js";
 import { EnterpriseSettingsPage } from "../pages/EnterpriseSettingsPage.js";
+import { DashboardPage } from "../pages/DashboardPage.js";
 import { PageFrame } from "./PageFrame.js";
 
 export function AppShell() {
@@ -82,12 +82,7 @@ export function AppShell() {
         <Routes>
           <Route
             path="/"
-            element={
-              <Dashboard
-                context={state.context}
-                providerCapabilities={state.providerCapabilities}
-              />
-            }
+            element={<DashboardPage />}
           />
           <Route
             path="/settings/jobs/:jobId"
@@ -152,42 +147,6 @@ export function AppShell() {
         </Routes>
       </div>
     </div>
-  );
-}
-
-function Dashboard({
-  context,
-  providerCapabilities,
-}: {
-  context: EnterpriseContextResponse;
-  providerCapabilities: Parameters<typeof ProviderReadinessPanel>[0]["capabilities"];
-}) {
-  return (
-    <PageFrame title="工作台" description="企业上下文与基础接入状态">
-      <section className="truth-grid" aria-label="企业上下文">
-        <article className="truth-card">
-          <span>企业状态</span>
-          <strong>{context.tenant.status}</strong>
-          <small>服务端租户记录</small>
-        </article>
-        <article className="truth-card">
-          <span>当前角色</span>
-          <strong>{context.member.role}</strong>
-          <small>{context.scopes.length} 个服务端 scope</small>
-        </article>
-        <article className="truth-card">
-          <span>数据区域</span>
-          <strong>{context.tenant.homeRegion}</strong>
-          <small>签名 route document 已校验</small>
-        </article>
-      </section>
-      <ProviderReadinessPanel capabilities={providerCapabilities} />
-      <StatusPanel
-        state="not_ready"
-        title="业务数据尚未接入"
-        description="本迭代只交付企业 Web 基础、真实登录和租户上下文；未创建示例指标或伪造 Provider 状态。"
-      />
-    </PageFrame>
   );
 }
 

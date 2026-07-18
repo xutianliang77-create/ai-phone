@@ -47,6 +47,15 @@ export const enterpriseIcons = {
     budget: "speed",
     entitlement: "verified",
   },
+  dashboard: {
+    tenant: "domain",
+    provider: "hub",
+    plan: "workspace_premium",
+    alert: "notifications_active",
+    tasks: "checklist",
+    business: "account_tree",
+    trace: "timeline",
+  },
   status: {
     loading: "autorenew",
     empty: "inbox",

@@ -1,6 +1,6 @@
 # 无界AI企业版开发方案与计划
 
-版本：v1.24
+版本：v1.25
 日期：2026-07-19
 状态：E0 执行计划，已对齐统一通讯平台和 PostgreSQL Primary 收敛
 
@@ -30,6 +30,7 @@
 - `ENT-UI-006` 已完成 Knowledge Source、Term Pack、Script Template 的服务端真值页面、签名 route document 客户端、scope 写入口控制、draft/review/published/expired 与 PostgreSQL not_ready/forbidden/conflict 状态，进入 `ready_for_acceptance`；浏览器矩阵、真实 PostgreSQL 并发发布和 Worker/Provider 消费仍待 A1/H3。
 - `ENT-UI-005` 已完成成员目录、现有账号加入、角色/状态编辑和九角色 scope 说明，所有成员请求绑定当前 tenant 与签名 route document；无 `member:write` 不渲染写入口，直接 URL 无 scope 时不发起成员读取，所有者和当前账号不提供自改入口。当前接口不是短信/邮件/Provider 邀请服务，真实邀请通道仍待后续设计；任务进入 `ready_for_acceptance`，浏览器矩阵和真实 PostgreSQL staging 仍待 A0/H3。
 - `ENT-UI-007` 已完成成员/权益/区域/Provider/预算与用量二级设置导航，按 `tenant:read`、`member:read`、`billing:read/write`、`usage:read` 分别发现和守卫入口。区域只读，Provider 不接收/回显敏感配置，套餐变更只接受精确服务端 plan/version 并稳定重试幂等键，预算更新带 expectedVersion，用量只展示服务端 ledger 聚合；任务进入 `ready_for_acceptance`。本地 Chromium 1440/390px 只验证隔离 fixture 布局，不替代 UI-009/010、真实 PostgreSQL staging、账务/Provider 或生产放行。
+- `ENT-UI-004` 已接入租户/区域、Provider、subscription、预算、usage aggregate 和会话 trace report 的首批工作台。页面按 scope 决定是否发起 billing/usage/audit 请求，预算只和同类别、同单位、同 UTC 账期聚合比较；业务聚合与价格表缺失时明确 not_ready/not_configured。当前仅通过静态类型检查和生产 Web 构建，按本轮要求未执行自动化、浏览器和 PostgreSQL 验证，任务保持 `in_progress`。
 - PostgreSQL、SaaS 控制面、对象存储、正式域名、真实 Provider 和目标国家合规确认均未通过门禁。
 - 当前开发必须继续使用独立企业 worktree；个人版声纹和部署 WIP 不进入企业提交。
 - 公共 PostgreSQL Primary、统一通讯、Billing 和 Product Records 的稳定代码基线已导入；`ENT-DATA-008` 和 `ENT-CORE-013/014/015` 已完成代码与本地自动化。`ENT-DATA-009` 已产出全表切换/对账/逻辑恢复工具、签名证据和一次性本地 PostgreSQL 16 演练，进入 `ready_for_acceptance`；不能继承主产品环境验收，也未通过异地 PITR/H3。
@@ -294,4 +295,4 @@ CORE-001/002 验收
 
 E0 完成后再启动 `ENT-MTG-001` 主链；允许提前做协议 spike，但不能把未接入真实 tenant/data/readiness 的会议页面计为 E1 完成。
 
-当前进展：`ENT-CORE-003/004/005` 已完成并等待验收；`ENT-DATA-001` 已完成十九段 schema 代码，等待 staging PostgreSQL migrate/restore/PITR 证据；`ENT-DATA-002/003/004/007/008/009` 已完成 Repository、可靠事件、演示导入、统一 Primary Runtime、公共通讯 tenant scope，以及全库签名切换/恢复证据代码与本地 PostgreSQL 16 演练；`ENT-CORE-004/005` 已完成 tenant knowledge 与 terminology/script 的 revision/review/publish、不可变 hash/citation 和有效期解析；`ENT-CORE-013/014/015`、`ENT-CORE-007/010/012` 已完成代码和自动化并进入验收；`ENT-UI-001/002/003/005/006/007` 已进入验收。`ENT-OBS-001` 已实现可信 trace 写入及 tenant-scoped 会话质量/用量/Provider/审计报告代码，因本轮暂缓测试仍为 `in_progress`。下一优先级为补齐 `ENT-OBS-001` 自动化与 PostgreSQL 负测，再接 `ENT-UI-004/008` 服务端真值页面；staging `ENT-DATA-009` 和 `ENT-REL-003` 跨故障域/PITR 仍未通过。
+当前进展：`ENT-CORE-003/004/005` 已完成并等待验收；`ENT-DATA-001` 已完成十九段 schema 代码，等待 staging PostgreSQL migrate/restore/PITR 证据；`ENT-DATA-002/003/004/007/008/009` 已完成 Repository、可靠事件、演示导入、统一 Primary Runtime、公共通讯 tenant scope，以及全库签名切换/恢复证据代码与本地 PostgreSQL 16 演练；`ENT-CORE-004/005` 已完成 tenant knowledge 与 terminology/script 的 revision/review/publish、不可变 hash/citation 和有效期解析；`ENT-CORE-013/014/015`、`ENT-CORE-007/010/012` 已完成代码和自动化并进入验收；`ENT-UI-001/002/003/005/006/007` 已进入验收。`ENT-OBS-001` 已实现可信 trace 写入及 tenant-scoped 会话质量/用量/Provider/审计报告代码；`ENT-UI-004` 已把该报告与租户、Provider、subscription、预算和 usage 真值接入工作台。两项均因本轮暂缓测试保持 `in_progress`。下一优先级为补齐 `ENT-OBS-001/ENT-UI-004` 自动化与 PostgreSQL/浏览器负测，再实施 `ENT-UI-008`；staging `ENT-DATA-009` 和 `ENT-REL-003` 跨故障域/PITR 仍未通过。

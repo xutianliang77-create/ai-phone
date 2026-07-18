@@ -1,8 +1,8 @@
 # 无界AI企业版 UI 详细设计
 
-版本：v1.2
-日期：2026-07-16
-状态：设计基线；`ENT-CORE-003/ENT-UI-001` 已实现，权限路由和业务状态联调仍在开发
+版本：v1.3
+日期：2026-07-19
+状态：设计基线；企业 Web 公共组件与首批设置/工作台已实现，完整业务页面与正式验收仍在开发
 
 ## 1. 设计范围
 
@@ -198,6 +198,11 @@ Web 优先使用系统中文无衬线字体：`-apple-system`、`BlinkMacSystemF
 5. 最近审计事件和服务告警。
 
 readiness 卡必须把 PostgreSQL、PSTN、CRM、Calendar、LiveKit 和策略版本分别展示，不能合并成一个绿色“系统正常”。
+
+当前 `ENT-UI-004` 首批实现只展示已有服务端契约可证明的 tenant/region、Provider capability、subscription、
+budget、usage aggregate 和显式 session trace report。卡片沿用同一 Material Icons 注册表、1px outline、8px 圆角
+和 Primary/Signal 语义；窄屏从四列收敛为两列和一列。PostgreSQL、LiveKit、策略版本以及会议/客服/营销汇总在服务端
+接口交付前必须显示 not_ready 或不渲染，不能并入“系统正常”。无 usage/quality 样本不绘制趋势，无价格表不显示金额。
 
 ### 8.2 外呼营销
 

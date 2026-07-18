@@ -1,6 +1,6 @@
 # 无界AI企业版详细技术设计
 
-版本：v1.23
+版本：v1.24
 日期：2026-07-19
 状态：统一通讯平台与 PostgreSQL Primary 收敛详细技术方案
 
@@ -27,6 +27,7 @@
 | SQLite/JSON 演示数据导入 | `ready_for_acceptance` | 已有维护窗口、SQLite 临时副本与 quick_check、空目标事务导入、六集合 count/SHA-256 读回对账和不一致回滚；仅限内部演示数据 |
 | 公共 Primary Runtime 收敛 | `ready_for_acceptance` | 已合入上游稳定提交 `fe1c3c2`；公共31段与 enterprise 19段 manifest 由一个启动编排验证，driver、数据库身份和分权连接失败均在监听前闭合；尚无真实 PostgreSQL H3 证据 |
 | 企业链路追踪 | `in_progress` | 平台 trace 已进入 tenant context、PostgreSQL session、communication binding、usage event/ledger 与会话报告；本轮未执行测试和真实 PostgreSQL 门禁，货币成本因无价格表明确 not configured |
+| 企业工作台真值投影 | `in_progress` | Web 已读取 tenant/route、Provider、subscription、budget、usage aggregate 和显式 session trace report；业务聚合与价格表缺失时明确 not ready/not configured，本轮未执行自动化、浏览器或 PostgreSQL 门禁 |
 | 公共通讯 tenant scope | `ready_for_acceptance` | 公共 manifest 已增至31段；12张通讯资源表具有不可空 scope、复合 FK、写入 guard 和 forced RLS，企业 unit-of-work 只暴露 tenant-bound 白名单 Repository；尚无真实双租户 A1/H3 证据 |
 | 企业统一通讯会话绑定 | `ready_for_acceptance` | enterprise `0011` 和 tenant unit-of-work 已建立 Meeting/Support/Marketing 唯一绑定、route/policy/entitlement 快照及 generation/event-sequence 收敛状态机；尚无真实多实例、cell 迁移和 A1/H3 证据 |
 | Tenant-aware Worker Dispatch | `ready_for_acceptance` | enterprise `0012` 以 scope FK/RLS 绑定公共 dispatch/capacity；短期 HMAC ticket、租户容量、lease/heartbeat、cancel/finalize 和二次 binding fence 已实现；仅有自动化和一次性本地 PostgreSQL 16 证据，尚无真实多实例/H3 容量证据 |
@@ -1313,6 +1314,20 @@ transaction 和公共通讯 forced RLS 下读取：
 `pricing_not_configured`；usage amount 只能解释为秒、帧、字符或 token，不能显示为账单、余额或货币成本。
 后续若引入定价，必须版本化价格、有效期、币种、舍入规则和 Provider 归属，并以不可变 ledger 重算对账，
 不能在 UI 端估价。
+
+### 19.1 企业工作台真值投影
+
+`ENT-UI-004` 不建立第二套 Dashboard 聚合存储。当前 Web 分别读取 tenant context/route document、Provider
+capability、billing entitlement、usage budget、UTC period aggregate，以及需要 `audit:read` 的单会话报告；
+每类资源独立保留 loading/ready/failed 状态，缺少 `billing:read`、`usage:read` 或 `audit:read` 时不发起对应请求。
+
+预算告警只在 budget 与 aggregate 的 `category + unit + periodStart + periodEnd` 全部一致时计算百分比，禁止把秒、
+字符、token 或帧相加。用量表逐行显示不可变 ledger 聚合；无记录时显示 empty，不补零或绘制趋势。会话质量只按
+用户明确输入的 session ID 查询，当前没有“最近会话”列表 API，因此前端不得猜测最新会话。营销、客服和会议的
+服务端聚合尚未交付，业务状态区固定显示 not_ready；货币成本继续使用报告的 `pricing_not_configured`，前端不估价。
+
+本批只完成静态 typecheck 和 Enterprise Web 生产构建，尚未执行 component/API/browser/PostgreSQL 验证，任务保持
+`in_progress`。
 
 本批尚未运行 migration up/down、双租户攻击、API/Repository 自动化、真实 Provider 和 H1 长稳，任务保持
 `in_progress`，不能宣称企业生产门禁通过。

@@ -3,6 +3,7 @@ import type {
   ConfigureEnterpriseUsageBudgetRequest,
   EnterpriseEntitlementsResponse,
   EnterpriseProviderCapabilitiesResponse,
+  EnterpriseSessionTraceReportResponse,
   EnterpriseUsageBudgetsResponse,
   EnterpriseUsageCategory,
   EnterpriseUsagePeriodAggregatesResponse,
@@ -20,6 +21,11 @@ export interface EnterpriseSettingsApi {
   getBillingEntitlements(
     context: EnterpriseContentRequestContext,
   ): Promise<EnterpriseEntitlementsResponse>;
+  getSessionTraceReport(
+    token: string,
+    tenantId: string,
+    sessionId: string,
+  ): Promise<EnterpriseSessionTraceReportResponse>;
   changeSubscription(
     context: EnterpriseContentRequestContext,
     input: Omit<ChangeEnterpriseSubscriptionRequest, "tenantId">,
@@ -49,6 +55,10 @@ export function createEnterpriseSettingsApi(
     getBillingEntitlements: (context) => request(
       `/saas/v1/tenants/${encodeURIComponent(context.tenantId)}/entitlements`,
       { headers: headers(context) },
+    ),
+    getSessionTraceReport: (token, tenantId, sessionId) => request(
+      `/enterprise/v1/observability/sessions/${encodeURIComponent(sessionId)}/report`,
+      { headers: { authorization: `Bearer ${token}`, "x-tenant-id": tenantId } },
     ),
     changeSubscription: (context, input) => request(
       `/saas/v1/tenants/${encodeURIComponent(context.tenantId)}/subscription/change`,

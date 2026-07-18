@@ -1,6 +1,6 @@
 # 无界AI企业版验收任务与计划
 
-版本：v1.21
+版本：v1.22
 日期：2026-07-19
 状态：可执行验收计划，已对齐统一通讯平台和 PostgreSQL Primary 收敛
 
@@ -153,6 +153,13 @@ signature；Provider 页面只展示 capability/status/reason/脱敏 fingerprint
 版本；503 明确 not_ready 且不回退 SQLite/JSON。该自动化满足 AC-UI-002/003/004/005/006/007/011 的代码候选
 条件。本地隔离 Chromium 1440×1000 和 390×844 检查仅证明两个布局样本，未覆盖完整 AC-UI-008/009/010；正式
 接受仍需浏览器/键盘/axe 矩阵、真实 PostgreSQL staging、双租户攻击、真实 Provider/账务和 A1/H3 门禁。
+
+`ENT-UI-004` 当前实现把 tenant/region、Provider capability、subscription、budget、usage aggregate 和按明确
+session ID 查询的 trace report 投影到工作台。billing/usage/audit 数据只有具备对应 scope 才请求；预算告警只允许
+category、unit、period 全部相同的预算和聚合比较，不跨单位合计；业务汇总接口、单位价格或质量样本缺失时分别显示
+not_ready、not_configured 或 no_samples，不把不可用数据算作健康，也不生成示例趋势。本轮只执行 typecheck、生产
+Web build、文件规模和 diff 静态门禁，按要求未执行 component/API/browser/PostgreSQL 测试，因此尚不能声称满足
+AC-UI-003/004/005/006/008/009/010/011/012 或 AC-ENT-0017/0018/0019/0023，任务保持 `in_progress`。
 
 ### 4.2 浏览器和设备矩阵
 
