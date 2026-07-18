@@ -3,7 +3,11 @@ import type {
   CreateEnterpriseMeetingRequest,
   EnterpriseMeetingGuestInvitationResponse,
   EnterpriseMeetingJoinTokenResponse,
+  EnterpriseMeetingCurrentScreenShareResponse,
   EnterpriseMeetingResponse,
+  EnterpriseMeetingScreenShareQuality,
+  EnterpriseMeetingScreenShareResponse,
+  EnterpriseMeetingScreenShareSource,
   EnterpriseMeetingsResponse,
   JoinEnterpriseMeetingGuestRequest,
   JoinEnterpriseMeetingMemberRequest,
@@ -16,6 +20,8 @@ type ContentHeaders = (context: EnterpriseContentRequestContext) => Record<strin
 export interface EnterpriseMeetingApi {
   listMeetings(context: EnterpriseContentRequestContext):
     Promise<EnterpriseMeetingsResponse>;
+  getMeeting(context: EnterpriseContentRequestContext, meetingId: string):
+    Promise<EnterpriseMeetingResponse>;
   createMeeting(
     context: EnterpriseContentRequestContext,
     input: CreateEnterpriseMeetingRequest,
@@ -36,6 +42,29 @@ export interface EnterpriseMeetingApi {
     meetingId: string,
     input: JoinEnterpriseMeetingGuestRequest,
   ): Promise<EnterpriseMeetingJoinTokenResponse>;
+  currentMeetingScreenShare(
+    context: EnterpriseContentRequestContext,
+    meetingId: string,
+  ): Promise<EnterpriseMeetingCurrentScreenShareResponse>;
+  acquireMeetingScreenShare(
+    context: EnterpriseContentRequestContext,
+    meetingId: string,
+    input: {
+      sourceType: EnterpriseMeetingScreenShareSource;
+      includesSystemAudio: boolean;
+      qualityMode: EnterpriseMeetingScreenShareQuality;
+      expectedMeetingVersion: number;
+    },
+    idempotencyKey: string,
+  ): Promise<EnterpriseMeetingScreenShareResponse>;
+  commandMeetingScreenShare(
+    context: EnterpriseContentRequestContext,
+    meetingId: string,
+    shareId: string,
+    command: "pause" | "resume" | "renew" | "stop",
+    input: { expectedVersion: number; trackSid?: string },
+    idempotencyKey: string,
+  ): Promise<EnterpriseMeetingScreenShareResponse>;
 }
 
 export function createEnterpriseMeetingApi(
@@ -45,6 +74,10 @@ export function createEnterpriseMeetingApi(
   return {
     listMeetings: (context) => request(
       "/enterprise/v1/meetings",
+      { headers: contentHeaders(context) },
+    ),
+    getMeeting: (context, meetingId) => request(
+      `/enterprise/v1/meetings/${encodeURIComponent(meetingId)}`,
       { headers: contentHeaders(context) },
     ),
     createMeeting: (context, input, idempotencyKey) => request(
@@ -76,7 +109,129 @@ export function createEnterpriseMeetingApi(
       ),
       meetingId,
     ),
+    currentMeetingScreenShare: async (context, meetingId) =>
+      validateCurrentScreenShare(await request<unknown>(
+        `/enterprise/v1/meetings/${encodeURIComponent(meetingId)}` +
+          "/screen-shares/current",
+        { headers: contentHeaders(context) },
+      ), meetingId),
+    acquireMeetingScreenShare: async (context, meetingId, input, key) =>
+      validateScreenShareResponse(await request<unknown>(
+        `/enterprise/v1/meetings/${encodeURIComponent(meetingId)}` +
+          "/screen-shares/acquire",
+        { method: "POST", headers: {
+          ...contentHeaders(context), "idempotency-key": key,
+        }, body: JSON.stringify(input) },
+      ), meetingId, context.routeDocument.rtcUrl, true),
+    commandMeetingScreenShare: async (
+      context, meetingId, shareId, command, input, key,
+    ) => validateScreenShareResponse(await request<unknown>(
+      `/enterprise/v1/meetings/${encodeURIComponent(meetingId)}` +
+        `/screen-shares/${encodeURIComponent(shareId)}/${command}`,
+      { method: "POST", headers: {
+        ...contentHeaders(context), "idempotency-key": key,
+      }, body: JSON.stringify(input) },
+    ), meetingId, context.routeDocument.rtcUrl,
+    command === "resume" || command === "renew"),
   };
+}
+
+function validateCurrentScreenShare(
+  value: unknown,
+  meetingId: string,
+): EnterpriseMeetingCurrentScreenShareResponse {
+  const result = object(value);
+  if (!result || !revocation(result.revocation) ||
+    result.share !== null && !screenShare(result.share, meetingId)) {
+    throw new Error("Invalid current screen share");
+  }
+  return result as unknown as EnterpriseMeetingCurrentScreenShareResponse;
+}
+
+function validateScreenShareResponse(
+  value: unknown,
+  meetingId: string,
+  expectedRtcUrl: string,
+  grantAllowed: boolean,
+): EnterpriseMeetingScreenShareResponse {
+  const result = object(value);
+  const share = object(result?.share);
+  if (!result || !share || !screenShare(share, meetingId) ||
+    !revocation(result.revocation) ||
+    result.replayed !== undefined && result.replayed !== true ||
+    result.grant !== undefined && (!grantAllowed ||
+      !screenShareGrant(result.grant, share, expectedRtcUrl)) ||
+    grantAllowed && share.status === "active" && result.grant === undefined) {
+    throw new Error("Invalid screen share response");
+  }
+  return result as unknown as EnterpriseMeetingScreenShareResponse;
+}
+
+function screenShare(value: unknown, meetingId: string) {
+  const share = object(value);
+  if (!share || !uuid(share.id) || share.meetingId !== meetingId ||
+    !uuid(share.participantId) || !uuid(share.communicationSessionId) ||
+    !["screen", "window", "tab"].includes(String(share.sourceType)) ||
+    typeof share.includesSystemAudio !== "boolean" ||
+    !["auto", "smooth", "high"].includes(String(share.qualityMode)) ||
+    !["active", "paused", "ended", "expired"].includes(String(share.status)) ||
+    !positive(share.generation) || !positive(share.version) ||
+    share.publisherIdentity !== `ent-share:${share.id}:g${share.generation}` ||
+    share.trackSid !== undefined && !bounded(share.trackSid, 128) ||
+    !timestamp(share.startedAt) || !timestamp(share.createdAt) ||
+    !timestamp(share.updatedAt) ||
+    share.leaseExpiresAt !== undefined && !timestamp(share.leaseExpiresAt) ||
+    share.pausedAt !== undefined && !timestamp(share.pausedAt) ||
+    share.endedAt !== undefined && !timestamp(share.endedAt)) return false;
+  return true;
+}
+
+function screenShareGrant(
+  value: unknown,
+  share: Record<string, unknown>,
+  expectedRtcUrl: string,
+) {
+  const grant = object(value);
+  const capabilities = object(grant?.capabilities);
+  const expiresAt = Date.parse(String(grant?.expiresAt));
+  const leaseExpiresAt = Date.parse(String(share.leaseExpiresAt));
+  return Boolean(grant && grant.provider === "livekit" &&
+    grant.publisherIdentity === share.publisherIdentity &&
+    grant.generation === share.generation &&
+    typeof grant.rtcUrl === "string" && validRtcUrl(grant.rtcUrl) &&
+    canonicalUrl(grant.rtcUrl) === canonicalUrl(expectedRtcUrl) &&
+    grant.roomName === `ent_${String(share.communicationSessionId).replaceAll("-", "")}` &&
+    bounded(grant.accessToken, 8_192) && grant.accessToken.length >= 64 &&
+    grant.accessToken.split(".").length === 3 && timestamp(grant.expiresAt) &&
+    timestamp(share.leaseExpiresAt) && expiresAt > Date.now() &&
+    expiresAt <= leaseExpiresAt && expiresAt <= Date.now() + 125_000 && capabilities &&
+    capabilities.screenShare === true &&
+    capabilities.screenShareAudio === share.includesSystemAudio &&
+    capabilities.microphone === false && capabilities.camera === false &&
+    capabilities.data === false && capabilities.subscribe === false);
+}
+
+function object(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown> : null;
+}
+function revocation(value: unknown) {
+  return ["not_required", "completed", "pending"].includes(String(value));
+}
+function uuid(value: unknown): value is string {
+  return typeof value === "string" &&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+      .test(value);
+}
+function positive(value: unknown) {
+  return Number.isSafeInteger(value) && Number(value) >= 1;
+}
+function bounded(value: unknown, maximum: number): value is string {
+  return typeof value === "string" && value.length > 0 &&
+    new TextEncoder().encode(value).byteLength <= maximum;
+}
+function timestamp(value: unknown) {
+  return typeof value === "string" && Number.isFinite(Date.parse(value));
 }
 
 function validateJoinGrant(

@@ -1,6 +1,6 @@
 # 无界AI企业版技术架构
 
-版本：v1.17
+版本：v1.18
 日期：2026-07-19
 状态：SaaS 详细架构基线，已对齐统一通讯平台和 PostgreSQL Primary
 
@@ -289,6 +289,12 @@ transaction 内完成 participant/policy/entitlement/route fence 与 CAS，再�
 pause/stop/route fence/到期均写撤销 outbox。cell Worker 到期扫描负责在客户端消失后把租约收敛为 expired，
 Worker 内置的撤销 publisher 幂等移除旧发布 identity；Provider 未配置时保持 retry/pending。该服务端闭环不代表
 Web `getDisplayMedia`、ReplayKit、MediaProjection、系统音频或真实 LiveKit 已验收。
+
+`ENT-MTG-005` 的 Web 客户端把麦克风订阅 Room 与屏幕发布 Room 分离：前者继续使用不含 screen-share 发布权限的
+成员 token，后者只使用 `ENT-MTG-004` 当前 generation 的短期 publisher token。用户手势产生的 capture track 不经
+业务服务器或对象存储，只直接发布到 LiveKit；API 只保存 source/quality/track SID/租约元数据。主 Room 的订阅层
+同时比对 `Track.Source.ScreenShare` 与服务端当前 `publisherIdentity`，旧 generation participant 即使仍在房间也不进入
+React video。暂停/停止先断发布传输，服务端 revoke/outbox 负责最终 fencing；当前仅有代码和静态构建证据。
 
 ## 7. 外呼营销架构
 

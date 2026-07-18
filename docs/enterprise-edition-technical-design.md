@@ -1,6 +1,6 @@
 # 无界AI企业版详细技术设计
 
-版本：v1.32
+版本：v1.33
 日期：2026-07-19
 状态：统一通讯平台与 PostgreSQL Primary 收敛详细技术方案
 
@@ -33,6 +33,7 @@
 | 企业统一通讯会话绑定 | `ready_for_acceptance` | enterprise `0011` 和 tenant unit-of-work 已建立 Meeting/Support/Marketing 唯一绑定、route/policy/entitlement 快照及 generation/event-sequence 收敛状态机；尚无真实多实例、cell 迁移和 A1/H3 证据 |
 | Tenant-aware Worker Dispatch | `ready_for_acceptance` | enterprise `0012` 以 scope FK/RLS 绑定公共 dispatch/capacity；短期 HMAC ticket、租户容量、lease/heartbeat、cancel/finalize 和二次 binding fence 已实现；仅有自动化和一次性本地 PostgreSQL 16 证据，尚无真实多实例/H3 容量证据 |
 | 企业设备、声音和录制策略 | `ready_for_acceptance` | enterprise `0013`、发布 API、策略解析、purpose-specific 授权和 Worker policy fence 已实现；仅有自动化和一次性本地 PostgreSQL 16 机制证据，尚无真实设备/Provider、A1/H2/H3 证据 |
+| Web 屏幕共享 | `in_progress` | 成员 Web 已实现真实 display surface 识别、独立最小权限发布 Room、track SID 续租、当前 generation 订阅过滤和开始/暂停/恢复/停止 UI；未执行自动化、多浏览器、弱网或真实 LiveKit 门禁 |
 | 企业用量预算 | `ready_for_acceptance` | enterprise `0014` 已实现 tenant/category/unit/UTC period 预算、hold/settle、阈值告警和 ledger 不可变约束；真实并发与账务抽样待验收 |
 | 租户账务和 Entitlement | `ready_for_acceptance` | enterprise `0015` 已实现 tenant billing account、不可变 plan/subscription/entitlement version、服务端账期及 binding/dispatch entitlement fence；真实支付 Provider、关账对账和 A1/H3 待验收 |
 | SaaS 计量聚合 | `ready_for_acceptance` | enterprise `0016` 已实现 tenant usage event、event/ledger 一致性、append-only adjustment、负数净额保护及 count/hash/watermark 账期聚合；真实关账、支付对账和 A1/H3 待验收 |
@@ -1445,8 +1446,8 @@ query token 一律拒绝，避免被服务端 access log/referrer 捕获；fragm
 meeting ID 与路径一致、未过期，并声明 microphone/subscribe=true、camera/data/screenShare=false；随后独立
 `EnterpriseMeetingRoomClient` 才连接 RTC 并申请麦克风。原始异常、token 和 access token 均不显示或记录。
 字幕现由 `ENT-MTG-003` 的 tenant-aware topic、target participant 和 generation 绑定消费；运行时未就绪时明确
-`not_ready`，不生成示例字幕。服务端租约由 `ENT-MTG-004` 提供，但共享采集仍禁用直到 `ENT-MTG-005/006`
-接入 Web/ReplayKit。当前未执行 token/ticket 攻击、四人媒体、
+`not_ready`，不生成示例字幕。`ENT-MTG-005` 只向已认证成员 Web 接入共享采集；访客 grant 继续固定
+`screenShare=false`，ReplayKit 仍等待 `ENT-MTG-006`。当前未执行 token/ticket 攻击、四人媒体、
 浏览器权限、弱网、axe 或设备矩阵，`ENT-UI-012` 保持 `in_progress`。
 
 ### 19.7 Meeting 创建、邀请和短期入会授权
@@ -1547,6 +1548,34 @@ API 的 pause/stop/fence 也写同一幂等撤销事件并立即尝试 LiveKit `
 主持人 force-stop UI 或 OCR；这些仍属于 `ENT-MTG-005..010/012`。本轮按要求只完成静态门禁，未执行 `0024`
 up/down、forced-RLS、双 acquire/CAS、Worker 到期、outbox 重放、真实 LiveKit 撤销、浏览器或真机测试，
 因此 `ENT-MTG-004` 保持 `in_progress`，不代表 A1 或企业生产门禁通过。
+
+### 19.10 Web 屏幕共享采集、发布与观看
+
+成员 Web 在显式按钮事件内调用 `navigator.mediaDevices.getDisplayMedia({ video, audio: false })`。`auto` 使用浏览器
+默认约束，`smooth` 以1080p/30fps为目标，`high` 以1440p/15fps为目标且允许最高4K/30fps；这些是采集偏好，不是
+服务端保证。客户端读取 `MediaStreamTrack.getSettings().displaySurface`，只接受 monitor/window/browser 并分别映射
+为 screen/window/tab。缺失视频轨道、用户拒绝或来源未知均停止全部临时轨道，不发送 acquire，避免来源伪造。
+
+取得真实来源后，客户端读取最新 meeting version，再调用 acquire。麦克风会议 Room 的 grant 固定
+`screenShare=false`；屏幕使用第二个 `Room({ autoSubscribe:false })` 和 generation 专属 grant，只发布原始 video track，
+source 固定 `Track.Source.ScreenShare`，不发布系统音频、麦克风、摄像头或 data。发布返回 track SID 后立即执行一次
+renew 绑定 SID，之后每10秒 renew。capture、MediaStream 和像素帧只留在浏览器与 RTC 媒体路径，不进入业务 API、
+PostgreSQL、日志或对象存储。
+
+主会议 Room 继续自动订阅媒体，但渲染层同时要求 remote participant identity 等于 current API 返回的
+`publisherIdentity` 且 publication source 为 `screen_share`。current share 改变、暂停、结束或 generation 前移时，
+客户端立即清除旧 video；迟到的旧 participant/track 不能重新进入画面。单独的屏幕 publisher identity 不计入页面的
+远端参会者人数。
+
+pause 先禁用并取消发布本地 track、断开屏幕 Room，再以原 expected version 调服务端；capture 保留以便 resume。
+resume 取得新 generation grant 后复用仍存活的 capture track 重新发布并重新绑定 SID。stop、页面离开或浏览器原生
+track ended 先停止本地所有 track，然后提交 stop；撤销 pending 使用同一 idempotency key 有界重试，耗尽后仍保留
+pending 文案，由服务端 outbox 最终收敛。发布或续租建立阶段失败时客户端 fail closed，停止本地 capture 并尝试结束
+已取得的活动租约，不显示共享成功。
+
+本实现只覆盖已认证成员 Web。访客发布、系统音频、ReplayKit、MediaProjection、simulcast/自适应布局、主持人强停和
+OCR 分别由 `ENT-MTG-006..010/012` 交付。按本轮要求未执行 unit/API/Playwright、screen/window/tab、多浏览器权限、
+弱网/重连、多发布者竞争或真实 LiveKit 测试，因此 `ENT-MTG-005` 保持 `in_progress`。
 
 ## 20. 错误、重试和客户端动作
 

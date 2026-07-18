@@ -1,4 +1,9 @@
-import type { ConnectionState, Room } from "livekit-client";
+import type {
+  ConnectionState,
+  RemoteParticipant,
+  RemoteTrackPublication,
+  Room,
+} from "livekit-client";
 import type {
   EnterpriseMeetingCaptionEvent,
   EnterpriseMeetingJoinTokenResponse,
@@ -14,6 +19,8 @@ export interface EnterpriseMeetingRoomSnapshot {
   translatedAudioEnabled: boolean;
   translatedAudioAvailable: boolean;
   captions: EnterpriseMeetingCaptionEvent[];
+  screenShareTrack: MediaStreamTrack | null;
+  screenSharePublisherIdentity: string | null;
 }
 
 export class EnterpriseMeetingRoomClient {
@@ -28,8 +35,11 @@ export class EnterpriseMeetingRoomClient {
     translatedAudioEnabled: false,
     translatedAudioAvailable: false,
     captions: [],
+    screenShareTrack: null,
+    screenSharePublisherIdentity: null,
   };
   private grant: EnterpriseMeetingJoinTokenResponse | null = null;
+  private expectedScreenSharePublisherIdentity: string | null = null;
   private readonly seenEventIds = new Set<string>();
 
   constructor(
@@ -56,8 +66,16 @@ export class EnterpriseMeetingRoomClient {
       .on(RoomEvent.ConnectionStateChanged, (state) => {
         this.emit({ status: connectionStatus(state) });
       })
-      .on(RoomEvent.ParticipantConnected, () => this.syncParticipants())
-      .on(RoomEvent.ParticipantDisconnected, () => this.syncParticipants())
+      .on(RoomEvent.ParticipantConnected, () => {
+        this.syncParticipants(); this.syncScreenShare();
+      })
+      .on(RoomEvent.ParticipantDisconnected, () => {
+        this.syncParticipants(); this.syncScreenShare();
+      })
+      .on(RoomEvent.TrackSubscribed, (_track, publication, participant) => {
+        this.acceptScreenShare(publication, participant);
+      })
+      .on(RoomEvent.TrackUnsubscribed, () => this.syncScreenShare())
       .on(RoomEvent.DataReceived, (payload, participant, _kind, topic) => {
         this.acceptCaption(payload, participant, topic);
       })
@@ -66,6 +84,7 @@ export class EnterpriseMeetingRoomClient {
           status: "disconnected",
           microphoneEnabled: false,
           remoteParticipantCount: 0,
+          screenShareTrack: null,
         });
       });
     try {
@@ -89,6 +108,13 @@ export class EnterpriseMeetingRoomClient {
     this.emit({ microphoneEnabled: room.localParticipant.isMicrophoneEnabled });
   }
 
+  setExpectedScreenSharePublisherIdentity(identity: string | null) {
+    this.expectedScreenSharePublisherIdentity = identity;
+    this.emit({ screenSharePublisherIdentity: identity });
+    this.syncParticipants();
+    this.syncScreenShare();
+  }
+
   async disconnect() {
     const room = this.room;
     this.room = null;
@@ -107,13 +133,40 @@ export class EnterpriseMeetingRoomClient {
       translatedAudioEnabled: false,
       translatedAudioAvailable: false,
       captions: [],
+      screenShareTrack: null,
+      screenSharePublisherIdentity: this.expectedScreenSharePublisherIdentity,
     });
   }
 
   private syncParticipants() {
     if (this.room) {
-      this.emit({ remoteParticipantCount: this.room.remoteParticipants.size });
+      this.emit({ remoteParticipantCount: [...this.room.remoteParticipants.values()]
+        .filter((participant) => !participant.identity.startsWith("ent-share:"))
+        .length });
     }
+  }
+
+  private acceptScreenShare(
+    publication: RemoteTrackPublication,
+    participant: RemoteParticipant,
+  ) {
+    const expected = this.expectedScreenSharePublisherIdentity;
+    if (!expected || participant.identity !== expected ||
+      String(publication.source) !== "screen_share") return;
+    this.emit({ screenShareTrack: publication.track?.mediaStreamTrack ?? null });
+  }
+
+  private syncScreenShare() {
+    const room = this.room;
+    const expected = this.expectedScreenSharePublisherIdentity;
+    if (!room || !expected) {
+      this.emit({ screenShareTrack: null });
+      return;
+    }
+    const participant = room.remoteParticipants.get(expected);
+    const publication = participant ? [...participant.trackPublications.values()]
+      .find((candidate) => String(candidate.source) === "screen_share") : undefined;
+    this.emit({ screenShareTrack: publication?.track?.mediaStreamTrack ?? null });
   }
 
   private acceptCaption(

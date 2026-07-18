@@ -1,6 +1,6 @@
 # 无界AI企业版验收任务与计划
 
-版本：v1.30
+版本：v1.31
 日期：2026-07-19
 状态：可执行验收计划，已对齐统一通讯平台和 PostgreSQL Primary 收敛
 
@@ -344,6 +344,12 @@ expected-version CAS、代际最小权限 grant、cell pending-work 到期回收
 “测试先略过”要求，尚未运行 migration up/down、forced-RLS/跨租户、双 acquire、幂等重放、暂停窗口、Worker 崩溃恢复、
 Provider 未配置/超时/404、真实 LiveKit track 撤销或浏览器/真机矩阵；AC-SHARE-001..010 和 A1 均未通过，任务保持
 `in_progress`。特别是静态 typecheck 不能证明500ms停止、客户端消失后回收或旧 generation 无法恢复。
+
+`ENT-MTG-005` 当前已形成成员 Web `getDisplayMedia`、真实 display surface 映射、独立屏幕 publisher Room、首次
+track SID 绑定与周期续租、当前 generation identity 过滤、视频布局和开始/暂停/恢复/停止代码候选。静态 typecheck、
+生产 Web build 和非 release bundle 检查只能证明可编译和体积边界；按要求未运行 unit/API/Playwright，也未验证
+Chrome/Edge/Safari/Firefox 的 screen/window/tab 权限、用户拒绝、浏览器原生停止、暂停恢复、网络重连、旧 identity
+迟到、两人竞争或真实 LiveKit 首帧/撤销。因此 AC-SHARE-001/003/005/006/007/009/010 仍未通过，不能进入 A1 放行。
 
 ### 7.4 屏幕 OCR 翻译
 

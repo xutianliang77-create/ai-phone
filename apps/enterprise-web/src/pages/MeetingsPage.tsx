@@ -18,6 +18,8 @@ import {
 } from "../meeting/enterprise-meeting-room.js";
 import { MeetingTranslationPanel } from
   "../meeting/MeetingTranslationPanel.js";
+import { MeetingScreenSharePanel } from
+  "../meeting/MeetingScreenSharePanel.js";
 
 type LoadState =
   | { status: "loading" }
@@ -34,6 +36,8 @@ const disconnected: EnterpriseMeetingRoomSnapshot = {
   translatedAudioEnabled: false,
   translatedAudioAvailable: false,
   captions: [],
+  screenShareTrack: null,
+  screenSharePublisherIdentity: null,
 };
 
 export function MeetingsPage() {
@@ -43,7 +47,11 @@ export function MeetingsPage() {
   const [busy, setBusy] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [room, setRoom] = useState(disconnected);
-  const [activeMeetingId, setActiveMeetingId] = useState<string | null>(null);
+  const [joined, setJoined] = useState<{
+    meetingId: string;
+    participantId: string;
+    canShare: boolean;
+  } | null>(null);
   const [captionLanguage, setCaptionLanguage] = useState<"zh" | "en">("zh");
   const [translatedAudioEnabled, setTranslatedAudioEnabled] = useState(false);
   const roomClient = useRef<EnterpriseMeetingRoomClient | null>(null);
@@ -110,7 +118,12 @@ export function MeetingsPage() {
         translatedAudioEnabled,
       });
       await roomClient.current.connect(grant);
-      setActiveMeetingId(meeting.meeting.id);
+      setJoined({
+        meetingId: meeting.meeting.id,
+        participantId: grant.participantId,
+        canShare: grant.participantRole === "host" ||
+          meeting.meeting.policy.screenShareRole === "members",
+      });
       setNotice(grant.translation.status === "not_ready"
         ? `已进入音频会议；字幕未就绪（${grant.translation.reasonCode}）。`
         : "已进入音频会议；字幕按个人语言偏好定向投递。");
@@ -144,12 +157,13 @@ export function MeetingsPage() {
 
   async function leaveMeeting() {
     await roomClient.current?.disconnect();
-    setActiveMeetingId(null);
-    setNotice("已离开会议，麦克风轨道已停止。");
+    setJoined(null);
+    setNotice("已离开会议，麦克风和本地屏幕采集轨道已停止。");
   }
 
   return (
-    <PageFrame title="企业会议" description="租户隔离的创建、邀请和短期音频入会">
+    <PageFrame title="企业会议"
+      description="租户隔离的音频会议、定向字幕与代际受控屏幕共享">
       {canWrite ? (
         <form className="meeting-create" onSubmit={(event) => {
           event.preventDefault(); void createMeeting();
@@ -177,13 +191,17 @@ export function MeetingsPage() {
             onClick={() => void leaveMeeting()}>离开会议</button>
         </section>
       ) : null}
+      {requestContext && joined && roomClient.current && room.status !== "disconnected" ?
+        <MeetingScreenSharePanel api={api} context={requestContext}
+          meetingId={joined.meetingId} participantId={joined.participantId}
+          canShare={joined.canShare} room={room} roomClient={roomClient.current} /> : null}
       <MeetingTranslationPanel room={room} captionLanguage={captionLanguage}
         translatedAudioEnabled={translatedAudioEnabled}
         editable={room.status === "disconnected"}
         onCaptionLanguage={setCaptionLanguage}
         onTranslatedAudioEnabled={setTranslatedAudioEnabled} />
       <MeetingList load={load} busy={busy} canJoin={canJoin} canWrite={canWrite}
-        activeMeetingId={activeMeetingId} refresh={refresh}
+        activeMeetingId={joined?.meetingId ?? null} refresh={refresh}
         joinMeeting={joinMeeting} inviteGuest={inviteGuest} />
     </PageFrame>
   );

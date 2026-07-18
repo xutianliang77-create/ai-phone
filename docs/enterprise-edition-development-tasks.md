@@ -1,6 +1,6 @@
 # 无界AI企业版开发任务
 
-版本：v1.37
+版本：v1.38
 日期：2026-07-19
 状态：E0 开发中，已对齐统一通讯平台和 PostgreSQL Primary 收敛
 
@@ -51,6 +51,7 @@
 - `ENT-UI-012` 已增加完全位于成员 `AuthProvider/AppShell` 之外的 `/join/:meetingId` Web 访客壳，不发起账号、membership 或 tenant 请求，也不渲染租户导航和成员数据。邀请只接受 `#token=` fragment，拒绝 query token、非法 meeting ID/token，并立即从地址栏清除后只存页面内存；清除失败即拒绝。访客点击入会后以加密邀请换取短期 RTC grant，客户端只开放麦克风和订阅；字幕、数据、摄像头与共享继续关闭且不回退个人 Call Link。仅完成 typecheck、生产构建、bundle 与文件规模静态门禁，token 攻击、浏览器权限和设备矩阵按要求未执行，任务保持 `in_progress`。
 - `ENT-MTG-001` 已增加 `0021` Meeting 聚合约束、Meeting/Participant/Artifact 领域记录与状态机、tenant-scoped PostgreSQL Repository、统一 runtime adapter 和可恢复聚合读取。meeting CAS 只允许 scheduled→provisioning→active→ending→ended 及受控取消/失败；参与者身份强制 user/external XOR、host 与 meeting host 一致，artifact 类型/发布状态受约束；聚合同时返回唯一 communication binding，重启恢复读取 provisioning/active/ending。当前未运行 migration、RLS/并发/恢复测试，任务保持 `in_progress`。
 - `ENT-MTG-004` 已增加 `0024`、单会议活动租约唯一约束、append-only 命令账本、acquire/pause/resume/renew/stop 幂等 CAS、route/entitlement/participant fence、代际发布 identity 和仅屏幕源 LiveKit grant。cell Worker 依据 forced-RLS pending-work 到期回收并通过 outbox 幂等移除旧发布者；Provider 未配置或撤销失败返回 pending，不伪造完成。当前按要求未运行 migration、Repository/API/Worker、并发、forced-RLS 或真实 LiveKit 测试，任务保持 `in_progress`。
+- `ENT-MTG-005` 已在成员 Web 会议页实现 `getDisplayMedia` 用户授权、真实 screen/window/tab 识别、独立最小权限发布房间、首次 track SID 绑定和10秒租约续期；主会议房间只渲染服务端当前 generation 指定 identity 的 screen track。暂停、恢复、停止和浏览器原生停止均先收敛本地媒体，撤销 pending 不伪装为已停止。当前按要求未运行 unit/API/Playwright、多浏览器、弱网或真实 LiveKit 测试，任务保持 `in_progress`。
 - `ENT-MTG-002` 已形成创建/列表/详情、访客邀请、成员/访客入会 API，创建在同一 PostgreSQL 事务内写 Meeting、host、communication binding、audit 和 outbox，并用 tenant+creation key 拒绝不同请求重放；邀请也以 tenant+meeting+key/hash 幂等，重放不重复创建 participant。邀请采用 AES-256-GCM 短期密文并绑定 tenant/meeting/participant/role/expiry；RTC grant 绑定 tenant/meeting/session/participant/role，只允许麦克风发布和订阅。Web 成员/访客与 Flutter 成员入口使用独立企业 LiveKit 客户端；密钥、route、policy、entitlement 或 Provider 缺失均明确 not_ready。当前未运行 API、RBAC/跨租户、token 攻击、PostgreSQL、浏览器或真机测试，任务保持 `in_progress`。
 - PostgreSQL runtime、cell Worker 和演示数据导入对账代码已接通，但尚未在真实 PostgreSQL 上执行 migrate/import/reconcile、并发租约、恢复或容量门禁，不能据此宣称企业试点或生产可用。受控审计导出已实现到期拒绝和对象过期元数据，但物理删除、对象清单对账、Provider 删除收敛仍属于 `ENT-REL-002`；会议/客服/营销业务聚合和外部 Provider 仍未通过实现或真实环境门禁。
 - 主产品稳定提交 `fe1c3c2` 已作为 `ENT-DATA-007` 基线合入企业分支；后续个人工作区 WIP 仍不得直接进入企业提交。公共通讯 tenant scope 已完成本地代码门禁，切换/对账证据仍由 `ENT-DATA-009` 完成，主产品 staging 结果不能继承为企业验收证据。
@@ -108,7 +109,7 @@
 | ENT-MTG-002 | 创建和入会 | MTG-001 | API、短期 token、Web/Flutter 入口 | host/guest/member 权限正确 | in_progress |
 | ENT-MTG-003 | 企业实时翻译 | MTG-002、CORE-014 | tenant-aware Worker 路由、个人字幕语言 | 四人字幕和译音不串轨，旧 Worker 不恢复播放 | in_progress |
 | ENT-MTG-004 | 屏幕共享租约 | MTG-002 | acquire/pause/resume/renew/stop、CAS、短期发布 grant、cell lease reaper、LiveKit 撤销 | 同时共享只成功一个；停止续租后服务端自行回收 | in_progress |
-| ENT-MTG-005 | Web 屏幕共享 | MTG-004 | getDisplayMedia、布局、控制 | screen/window/tab 可用 | todo |
+| ENT-MTG-005 | Web 屏幕共享 | MTG-004 | getDisplayMedia、独立发布房间、代际订阅过滤、布局与控制 | screen/window/tab 真实来源、暂停恢复和原生停止在浏览器/LiveKit 门禁通过 | in_progress |
 | ENT-MTG-006 | iOS ReplayKit | MTG-004 | Broadcast Extension、Flutter bridge | 离开 App 后持续共享且可停止 | todo |
 | ENT-MTG-007 | Android MediaProjection | MTG-004 | 平台桥接、前台服务 | iOS 产品化后进入真机门禁 | todo |
 | ENT-MTG-008 | 共享系统音频 | MTG-005/006 | 独立 audio track 和策略 | 不进入错误 ASR，不形成回声环 | todo |

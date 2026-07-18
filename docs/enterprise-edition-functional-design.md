@@ -1,6 +1,6 @@
 # 无界AI企业版详细功能设计
 
-版本：v1.13
+版本：v1.14
 日期：2026-07-19
 状态：SaaS 详细设计基线，已对齐统一通讯平台
 
@@ -322,7 +322,18 @@ LLM 只能提出结构化工具请求；Policy Engine 校验租户、客户、�
 每个命令要求签名 tenant route、当前会议 participant、策略/entitlement、幂等键和 expected version；同一会议只保留
 一个 active/paused 租约。每代共享使用独立发布 identity 和仅允许 screen-share source 的短期 grant；暂停、停止、
 租约到期或 route fence 会撤销旧 identity。Provider 未配置或撤销暂时失败时返回 `pending` 并由 outbox 重试，
-不显示假成功。Web、iOS、Android 的实际采集入口仍分别等待 `ENT-MTG-005/006/007`，因此当前客户端不可宣称可用。
+不显示假成功。
+
+当前 `ENT-MTG-005` 成员 Web 代码候选只在用户点击后调用 `getDisplayMedia`，禁用系统音频，并从浏览器实际
+`displaySurface` 映射 screen/window/tab；浏览器不报告来源时立即停止采集，不以用户预选值冒充。取得真实来源后
+才申请服务端租约，并用独立于麦克风会议连接的最小权限 Room 发布 screen track；发布成功立即绑定 track SID，
+随后按10秒续租。观看端从当前租约取得 publisher identity，只接受该 identity 的 `screen_share` 轨道，旧 generation
+即使迟到也不渲染。
+
+共享者可暂停、恢复和停止；暂停保留本地 capture 但断开旧发布身份，恢复使用新 generation grant 重新发布，停止或
+浏览器原生“停止共享”先结束本地 track，再提交幂等 stop。服务端返回撤销 pending 时界面保持“正在停止/暂停”，
+不显示已完成。访客发布、系统音频、iOS ReplayKit、Android MediaProjection、自适应 simulcast、主持人强停和 OCR
+仍分别属于后续任务；未执行真实浏览器/LiveKit 测试前不可宣称 screen/window/tab 可用或通过企业生产门禁。
 
 共享布局提供：
 
