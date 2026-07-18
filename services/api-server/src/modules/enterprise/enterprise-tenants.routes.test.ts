@@ -296,6 +296,9 @@ function routeHeader(tenantId: string) {
     tenantId,
     homeRegion: "cn",
     cellId: "cn-cell-01",
+    routeEpoch: getStoreSnapshot().enterpriseTenants.find(
+      ({ id }) => id === tenantId,
+    )?.version ?? 1,
   });
   if (result.status !== "ready") throw new Error("Test tenant route is not ready");
   return {

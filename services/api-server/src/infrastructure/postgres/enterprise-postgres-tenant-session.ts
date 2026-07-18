@@ -28,6 +28,10 @@ export interface EnterpriseTenantPostgresSession {
     sql: string,
     values?: unknown[],
   ): Promise<{ rows: Row[] }>;
+  queryCommunicationMutation<Row extends Record<string, unknown>>(
+    sql: string,
+    values?: unknown[],
+  ): Promise<{ rows: Row[] }>;
 }
 
 export async function withEnterpriseTenantPostgresSession<T>(
@@ -72,6 +76,13 @@ export async function withEnterpriseTenantPostgresSession<T>(
         values: unknown[] = [],
       ) {
         assertCommunicationSql(sql);
+        return client.query<Row>(sql, ["tenant", context.tenantId, ...values]);
+      },
+      queryCommunicationMutation<Row extends Record<string, unknown>>(
+        sql: string,
+        values: unknown[] = [],
+      ) {
+        assertCommunicationMutationSql(sql);
         return client.query<Row>(sql, ["tenant", context.tenantId, ...values]);
       },
     });
@@ -121,6 +132,56 @@ function assertCommunicationSql(sql: string) {
       "Enterprise communication SQL must contain scope_type = $1 and scope_id = $2",
     );
   }
+}
+
+function assertCommunicationMutationSql(sql: string) {
+  const normalized = normalizedSql(sql);
+  const tables = [...normalized.matchAll(
+    /\bai_phone\.([a-z_][a-z0-9_]*)\b/gi,
+  )].map((match) => match[1]!.toLowerCase());
+  if (normalized.includes(";") || /\b(?:join|or|union|from)\b/i.test(normalized) ||
+    tables.length !== 1 || tables[0] !== "communication_sessions") {
+    throw new Error(
+      "Enterprise communication mutation must target one communication session",
+    );
+  }
+  if (/^insert\b/i.test(normalized)) {
+    if (!/^insert\s+into\s+ai_phone\.communication_sessions\b/i.test(
+      normalized,
+    )) {
+      throw new Error(
+        "Enterprise communication INSERT must target communication_sessions",
+      );
+    }
+    const match = normalized.match(/\(([^)]*)\)\s*values\s*\(([^)]*)\)/i);
+    const columns = match?.[1]?.split(",").map((value) => value.trim()) ?? [];
+    const values = match?.[2]?.split(",").map((value) => value.trim()) ?? [];
+    const typeIndex = columns.indexOf("scope_type");
+    const idIndex = columns.indexOf("scope_id");
+    if (typeIndex < 0 || idIndex < 0 || values[typeIndex] !== "$1" ||
+      values[idIndex] !== "$2") {
+      throw new Error(
+        "Enterprise communication INSERT must use scope_type = $1 and scope_id = $2",
+      );
+    }
+    return;
+  }
+  if (/^update\b/i.test(normalized)) {
+    if (!/^update\s+ai_phone\.communication_sessions\b/i.test(normalized)) {
+      throw new Error(
+        "Enterprise communication UPDATE must target communication_sessions",
+      );
+    }
+    const where = normalized.match(/\bwhere\b([\s\S]*?)(?:\breturning\b|$)/i)?.[1] ?? "";
+    if (!/\bscope_type\s*=\s*\$1\b/i.test(where) ||
+      !/\bscope_id\s*=\s*\$2\b/i.test(where)) {
+      throw new Error(
+        "Enterprise communication UPDATE must use scope_type = $1 and scope_id = $2",
+      );
+    }
+    return;
+  }
+  throw new Error("Enterprise communication mutation must be INSERT or UPDATE");
 }
 
 function assertTenantScopedSql(sql: string) {

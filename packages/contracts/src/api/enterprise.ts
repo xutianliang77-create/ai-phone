@@ -192,6 +192,7 @@ export interface EnterpriseTenantRouteDocument {
   tenantId: string;
   homeRegion: string;
   cellId: string;
+  routeEpoch: number;
   apiBaseUrl: string;
   rtcUrl: string;
   issuedAt: string;

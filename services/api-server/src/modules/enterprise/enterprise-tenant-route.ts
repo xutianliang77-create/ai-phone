@@ -5,6 +5,7 @@ export interface TenantRouteInput {
   tenantId: string;
   homeRegion: string;
   cellId: string;
+  routeEpoch: number;
 }
 
 export interface TenantPublicRoute {
@@ -38,6 +39,9 @@ export function createTenantRouteService(options: {
   return {
     issue(input) {
       if (!secret) return { status: "not_ready", reason: "route_signing_not_configured" };
+      if (!Number.isSafeInteger(input.routeEpoch) || input.routeEpoch < 1) {
+        return { status: "not_ready", reason: "route_epoch_invalid" };
+      }
       const route = options.publicRoutes[input.cellId];
       if (!validPublicRoute(route) || route.homeRegion !== input.homeRegion) {
         return { status: "not_ready", reason: "public_route_not_configured" };
@@ -64,7 +68,8 @@ export function createTenantRouteService(options: {
       }
       if (document.tenantId !== expected.tenantId ||
         document.homeRegion !== expected.homeRegion ||
-        document.cellId !== expected.cellId) {
+        document.cellId !== expected.cellId ||
+        document.routeEpoch !== expected.routeEpoch) {
         return { status: "mismatch" };
       }
       const issuedAt = Date.parse(document.issuedAt);
@@ -109,6 +114,7 @@ function sign(
       document.tenantId,
       document.homeRegion,
       document.cellId,
+      document.routeEpoch,
       document.apiBaseUrl,
       document.rtcUrl,
       document.issuedAt,
@@ -142,6 +148,7 @@ function isRouteDocument(value: unknown): value is EnterpriseTenantRouteDocument
     document.expiresAt,
     document.signature,
   ].every((item) => typeof item === "string" && item.length > 0) &&
+    Number.isSafeInteger(document.routeEpoch) && document.routeEpoch! > 0 &&
     validEndpoint(document.apiBaseUrl!, "https:") &&
     validEndpoint(document.rtcUrl!, "wss:");
 }

@@ -25,7 +25,7 @@ export const enterpriseTenantTableNames = [
   "marketing_outcomes", "support_channels", "customer_profiles",
   "support_sessions", "support_cases", "tool_executions", "meetings",
   "meeting_participants", "meeting_screen_shares", "meeting_artifacts",
-  "meeting_action_items",
+  "meeting_action_items", "communication_session_bindings",
   "tenant_jobs",
 ] as const;
 export const enterpriseSubjectColumns = [

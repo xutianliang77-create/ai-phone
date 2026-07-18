@@ -35,6 +35,7 @@ describe("enterprise tenant route document", () => {
       tenantId: "tenant-a",
       homeRegion: "cn",
       cellId: "cn-cell-01",
+      routeEpoch: 1,
       apiBaseUrl: "https://api-cn.enterprise.example",
       rtcUrl: "wss://rtc-cn.enterprise.example",
       issuedAt: "2026-07-16T00:00:00.000Z",
@@ -45,6 +46,10 @@ describe("enterprise tenant route document", () => {
     expect(routeService.verify(response.json(), tenantRoute())).toEqual({
       status: "verified",
     });
+    expect(routeService.verify(response.json(), {
+      ...tenantRoute(),
+      routeEpoch: 2,
+    })).toEqual({ status: "mismatch" });
   });
 
   it("rejects missing, tampered, expired, and wrong-tenant documents on writes", async () => {
@@ -59,10 +64,15 @@ describe("enterprise tenant route document", () => {
       ...issued.document,
       cellId: "cn-cell-02",
     }), "candidate-user");
+    const staleEpoch = await addMember(app, encodeTenantRouteDocument({
+      ...issued.document,
+      routeEpoch: issued.document.routeEpoch - 1,
+    }), "candidate-user");
     const otherIssued = routeService.issue({
       tenantId: "tenant-b",
       homeRegion: "cn",
       cellId: "cn-cell-01",
+      routeEpoch: 1,
     });
     if (otherIssued.status !== "ready") throw new Error("Other route fixture is not ready");
     const wrongTenant = await addMember(
@@ -82,6 +92,8 @@ describe("enterprise tenant route document", () => {
     expect(missing.json().error.code).toBe("route_document_required");
     expect(tampered.statusCode).toBe(409);
     expect(tampered.json().error.code).toBe("route_document_invalid");
+    expect(staleEpoch.statusCode).toBe(409);
+    expect(staleEpoch.json().error.code).toBe("route_document_invalid");
     expect(wrongTenant.statusCode).toBe(409);
     expect(wrongTenant.json().error.code).toBe("route_mismatch");
     expect(expired.statusCode).toBe(409);
@@ -124,7 +136,12 @@ function testRouteService(now: () => number) {
 }
 
 function tenantRoute() {
-  return { tenantId: "tenant-a", homeRegion: "cn", cellId: "cn-cell-01" };
+  return {
+    tenantId: "tenant-a",
+    homeRegion: "cn",
+    cellId: "cn-cell-01",
+    routeEpoch: 1,
+  };
 }
 
 function addMember(

@@ -187,6 +187,47 @@ describe("enterprise PostgreSQL tenant session", () => {
     }
   });
 
+  it("allows only scoped communication session mutations", async () => {
+    const fixture = poolFixture();
+    await withEnterpriseTenantPostgresSession(
+      fixture.pool,
+      tenantContext(),
+      (session) => session.queryCommunicationMutation(
+        `INSERT INTO ai_phone.communication_sessions(
+          scope_type, scope_id, id, user_id, mode, status,
+          consumed_seconds, version, created_at, updated_at
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+        ON CONFLICT (id) DO NOTHING RETURNING id`,
+        ["session-a", "user-a", "meeting", "created", 0, 1, "now", "now"],
+      ),
+    );
+    expect(fixture.calls.at(-2)?.values?.slice(0, 3)).toEqual([
+      "tenant",
+      "tenant-a",
+      "session-a",
+    ]);
+
+    for (const sql of [
+      `INSERT INTO ai_phone.communication_sessions(
+        id, scope_type, scope_id
+      ) VALUES ($3, $2, $1) RETURNING id`,
+      `UPDATE ai_phone.communication_sessions SET status = $3
+       WHERE id = $4 RETURNING id`,
+      `DELETE FROM ai_phone.communication_sessions
+       WHERE scope_type = $1 AND scope_id = $2`,
+      `INSERT INTO ai_phone.session_media_legs(
+        scope_type, scope_id, id
+      ) VALUES ($1, $2, $3) RETURNING id`,
+    ]) {
+      const rejected = poolFixture();
+      await expect(withEnterpriseTenantPostgresSession(
+        rejected.pool,
+        tenantContext(),
+        (session) => session.queryCommunicationMutation(sql, []),
+      )).rejects.toThrow("communication");
+    }
+  });
+
   it("rejects comment bypasses and incorrectly ordered tenant inserts", async () => {
     const commented = poolFixture();
     await expect(withEnterpriseTenantPostgresSession(

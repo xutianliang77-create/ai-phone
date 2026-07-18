@@ -21,6 +21,7 @@ describe("enterprise PostgreSQL migrations", () => {
       "0008_enterprise_user_tenant_directory",
       "0009_enterprise_platform_pending_work",
       "0010_enterprise_subject_ids",
+      "0011_enterprise_communication_bindings",
     ]);
     for (const migration of migrations) {
       expect(migration.up.trim()).not.toBe("");
@@ -75,10 +76,22 @@ describe("enterprise PostgreSQL migrations", () => {
     expect(sql).toContain("ALTER COLUMN user_id TYPE text");
     expect(sql).toContain("ALTER COLUMN owner_user_id TYPE text");
     expect(sql).toContain("ALTER COLUMN actor_id TYPE text");
+    expect(sql).toContain("CREATE TABLE enterprise.communication_session_bindings");
+    expect(sql).toMatch(
+      /FOREIGN KEY \(scope_type, scope_id, communication_session_id\)[\s\S]*REFERENCES ai_phone\.communication_sessions \(scope_type, scope_id, id\)/,
+    );
+    expect(sql).toContain("communication_binding_identity_immutable");
+    expect(sql).toContain("communication_session_bindings_tenant_isolation");
+    expect(sql).toContain("last_event_sequence bigint");
+    expect(sql).toContain("route_epoch bigint");
+    expect(sql).toContain("entitlement_version text NOT NULL");
     expect(sql).toMatch(
       /FUNCTION enterprise\.current_user_id\(\)[\s\S]*RETURNS text/,
     );
     expect(rollbackSql).toContain("cannot rollback enterprise subject IDs");
+    expect(rollbackSql).toContain(
+      "DROP TABLE IF EXISTS enterprise.communication_session_bindings",
+    );
     expect(sql).not.toContain("BYPASSRLS");
   });
 

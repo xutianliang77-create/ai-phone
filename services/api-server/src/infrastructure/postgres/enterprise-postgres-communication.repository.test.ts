@@ -74,6 +74,7 @@ function repositoryFixture(rowTenantId: string) {
     context,
     query: unsupported,
     queryTenantRecord: unsupported,
+    queryCommunicationMutation: unsupported,
     async queryCommunication<Row extends Record<string, unknown>>(
       sql: string,
       values: unknown[] = [],

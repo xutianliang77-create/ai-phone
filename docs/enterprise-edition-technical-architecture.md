@@ -1,6 +1,6 @@
 # 无界AI企业版技术架构
 
-版本：v1.4
+版本：v1.5
 日期：2026-07-18
 状态：SaaS 详细架构基线，已对齐统一通讯平台和 PostgreSQL Primary
 
@@ -175,8 +175,8 @@ object-storage
 | --- | --- | --- |
 | 账号、Tenant、RBAC、企业命令 | `services/api-server` | 先按 domain module 隔离；只有独立扩缩容或故障域需要时才拆服务 |
 | Enterprise Repository runtime/cell Worker | `services/api-server/src/modules/enterprise`、`services/api-server/src/infrastructure/postgres` | API 使用单一 `legacy|postgres` runtime；独立启动的 cell Worker 仅以 cell discovery 和 tenant transaction 角色 claim/finalize |
-| Communication Session、Provider Operation、Dispatch、Recording 和 Usage | 上游稳定提交 `fe1c3c2` 已导入企业分支 | 公共 runtime 已成为代码基线；所有企业入口仍须由 `ENT-DATA-008/CORE-013/014` 增加 tenant scope、route epoch、entitlement 和 RLS |
-| PostgreSQL Primary 基础 | 公共30段 migration/Primary Runtime 与企业现有10段 migration | 已收敛为一个 Storage Driver/启动编排和两个有序 manifest；按 tenant/directory/cell/migration/maintenance 使用最小权限连接，等待真实 H3 验收 |
+| Communication Session、Provider Operation、Dispatch、Recording 和 Usage | 上游稳定提交 `fe1c3c2` 已导入企业分支，`ENT-DATA-008/CORE-013` 已补 tenant scope 和企业业务绑定 | 公共 runtime 已成为代码基线；签名 dispatch ticket 和设备/声音策略仍由 `ENT-CORE-014/015` 完成 |
+| PostgreSQL Primary 基础 | 公共31段 migration/Primary Runtime 与企业现有11段 migration | 已收敛为一个 Storage Driver/启动编排和两个有序 manifest；按 tenant/directory/cell/migration/maintenance 使用最小权限连接，等待真实 H3 验收 |
 | 实时信令、字幕和 playback 控制 | `services/realtime-gateway` | 保持无业务数据库直写，通过 API/事件提交业务结果 |
 | ASR、翻译、TTS、Agent call worker | `services/translation-worker`，后续接入统一 dispatch/runtime | 按 session/track/任务横向扩展，Provider 继续通过 Adapter；API 进程不运行媒体或 LLM 循环 |
 | PSTN 媒体桥 | `services/pstn-bridge` | 只处理 Provider 媒体/状态协议，不承载 Campaign 真值 |

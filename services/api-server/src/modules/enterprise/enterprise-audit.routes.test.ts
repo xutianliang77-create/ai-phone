@@ -277,6 +277,7 @@ function tenantHeaders(token: string, tenantId: string) {
     tenantId,
     homeRegion: "cn",
     cellId: "cn-cell-01",
+    routeEpoch: routeEpochFor(tenantId),
   });
   if (route.status !== "ready") throw new Error("Tenant route is not ready");
   return {
@@ -284,6 +285,11 @@ function tenantHeaders(token: string, tenantId: string) {
     "x-tenant-id": tenantId,
     "x-enterprise-route-document": encodeTenantRouteDocument(route.document),
   };
+}
+
+function routeEpochFor(tenantId: string) {
+  return getStoreSnapshot().enterpriseTenants.find(({ id }) => id === tenantId)
+    ?.version ?? 1;
 }
 
 function testApp(

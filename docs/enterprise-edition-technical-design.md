@@ -1,6 +1,6 @@
 # 无界AI企业版详细技术设计
 
-版本：v1.13
+版本：v1.14
 日期：2026-07-18
 状态：统一通讯平台与 PostgreSQL Primary 收敛详细技术方案
 
@@ -21,12 +21,13 @@
 | RBAC | `ready_for_acceptance` | 已有17个 scope、九角色矩阵、统一服务端 guard 和越权测试 |
 | SaaS tenant lifecycle | `ready_for_acceptance` | 已有幂等开通、暂停、导出/删除执行器、租约、有界恢复和 receipt 校验；真实对象存储/Provider 清理服务尚待验收 |
 | Append-only audit | `ready_for_acceptance` | 已有 tenant-scoped 查询、HMAC cursor、成员/RBAC/租户生命周期埋点和 SQLite/PostgreSQL 不可变约束；受控导出和真实 PostgreSQL 验收尚待后续任务 |
-| PostgreSQL schema | `implemented` | 已有十段 up/down migration、tenant-first 索引、复合 FK、强制 RLS、user directory、cell pending projection、opaque subject identity、受保护回滚、checksum/锁和归档 smoke；尚无真实 migrate/restore/PITR 证据 |
+| PostgreSQL schema | `implemented` | 已有十一段 up/down migration、tenant-first 索引、复合 FK、强制 RLS、user directory、cell pending projection、opaque subject identity、企业通讯绑定、受保护回滚、checksum/锁和归档 smoke；尚无真实 migrate/restore/PITR 证据 |
 | Tenant-scoped Repository | `ready_for_acceptance` | 已有 tenant/user/cell scoped transaction、subject guard、单一 `legacy|postgres` runtime、HTTP 全链路注入、独立 cell Worker，以及 Tenant/Member/Audit、Directory、lifecycle、Inbox/Outbox、pending discovery 和共享 unit-of-work；尚无真实 PostgreSQL H3 证据 |
 | Enterprise Inbox/Outbox | `ready_for_acceptance` | 已有 tenant-scoped 去重、稳定 payload hash、领域/inbox/outbox 原子提交、lease/retry/recovery 和100次重放门禁；真实 PostgreSQL 并发与 Provider sandbox 尚待验收 |
 | SQLite/JSON 演示数据导入 | `ready_for_acceptance` | 已有维护窗口、SQLite 临时副本与 quick_check、空目标事务导入、六集合 count/SHA-256 读回对账和不一致回滚；仅限内部演示数据 |
-| 公共 Primary Runtime 收敛 | `ready_for_acceptance` | 已合入上游稳定提交 `fe1c3c2`；公共30段与 enterprise 10段 manifest 由一个启动编排验证，driver、数据库身份和分权连接失败均在监听前闭合；尚无真实 PostgreSQL H3 证据 |
+| 公共 Primary Runtime 收敛 | `ready_for_acceptance` | 已合入上游稳定提交 `fe1c3c2`；公共31段与 enterprise 11段 manifest 由一个启动编排验证，driver、数据库身份和分权连接失败均在监听前闭合；尚无真实 PostgreSQL H3 证据 |
 | 公共通讯 tenant scope | `ready_for_acceptance` | 公共 manifest 已增至31段；12张通讯资源表具有不可空 scope、复合 FK、写入 guard 和 forced RLS，企业 unit-of-work 只暴露 tenant-bound 白名单 Repository；尚无真实双租户 A1/H3 证据 |
+| 企业统一通讯会话绑定 | `ready_for_acceptance` | enterprise `0011` 和 tenant unit-of-work 已建立 Meeting/Support/Marketing 唯一绑定、route/policy/entitlement 快照及 generation/event-sequence 收敛状态机；尚无真实多实例、cell 迁移和 A1/H3 证据 |
 | PostgreSQL 控制面/业务聚合 | `designed` | 后续 CORE/MTG/CS/MKT 领域任务范围，不能从公共 Repository runtime 推导为已实现 |
 | SQLite | `demo_only` | 仅本地开发、自动化和封闭演示，不承载真实企业试点数据 |
 | PSTN/CRM/Calendar/OCR | `not_ready` 或按环境探测 | 未配置必须明确降级，不生成虚假外部对象或成功状态 |
@@ -227,10 +228,18 @@ idempotency_keys
 ### 2.6 统一通讯会话和资源作用域
 
 ```text
-communication_sessions(
-  id, scope_type, scope_id, tenant_id, kind, status,
-  home_region, cell_id, route_epoch, policy_version,
-  entitlement_version, started_at, ended_at, version
+ai_phone.communication_sessions(
+  id, scope_type, scope_id, user_id, mode, status,
+  home_region, home_cell_id, routing_generation,
+  created_at, ended_at, version
+)
+
+enterprise.communication_session_bindings(
+  id, tenant_id, communication_session_id, kind,
+  meeting_id|support_session_id|marketing_call_task_id,
+  status, home_region, cell_id, route_epoch,
+  policy_version, entitlement_version, generation,
+  last_event_sequence, started_at, ended_at, version
 )
 
 session_participants(
@@ -297,7 +306,7 @@ GET    /enterprise/v1/provider-capabilities
 | --- | --- |
 | `Authorization` | 用户访问令牌或租户 API credential；两者必须在服务端解析 actor 和有效 scope |
 | `X-Tenant-Id` | 多 membership 账号选择租户；只能选择已有 active membership，不能授予访问权 |
-| route document | 数据面校验 tenant、homeRegion、cell、过期时间和签名；错误区域的写入返回 route mismatch |
+| route document | 数据面校验 tenant、homeRegion、cell、route epoch、过期时间和签名；错误区域或旧 epoch 的写入返回 route mismatch |
 | `Idempotency-Key` | 所有可重试写命令必填；同 tenant、actor、route 和 request hash 返回同一结果 |
 | `If-Match`/`expectedVersion` | 更新和状态迁移携带期望版本；冲突返回当前 version，不做 last-write-wins |
 | `traceparent`/`X-Request-Id` | 贯通 API、outbox、Worker、Provider 和 ledger；响应回传可安全展示的 trace ID |
@@ -750,9 +759,9 @@ transaction，获取 advisory lock，要求目标六集合为空，
 该工具不是客户生产迁移通道，也不替代全域 `ENT-DATA-005`、PITR 或真实 H3 演练。
 
 第九批完成 `ENT-DATA-007` Primary Runtime 收敛。企业分支合入上游稳定提交
-`fe1c3c2` 的公共30段 migration 和 Primary Runtime；`API_STORAGE_DRIVER` 成为唯一
+`fe1c3c2` 的公共 migration 和 Primary Runtime；`API_STORAGE_DRIVER` 成为唯一
 driver，旧企业变量只能与其一致。启动编排先校验公共签名 cutover evidence、manifest
-和数据库身份，再以独立 migration 连接校验 enterprise 10段 manifest、forced RLS、
+和数据库身份，再以独立 migration 连接校验 enterprise manifest、forced RLS、
 identity 和数据库身份；两个 verdict 的 database name/OID 不同即关闭已创建资源并拒绝启动。
 
 API 的 enterprise tenant Repository 适配并复用公共 Primary pool，由公共 runtime
@@ -781,9 +790,22 @@ INSERT 时也只能写入当前 scope。企业 tenant session 在 `app.tenant_id
 `scope_id=$2`，拒绝 OR、UNION、子查询、多表和通用 `projection_records`；session、leg、
 dispatch、Provider operation、playback 和 participant consent 返回行还会再次核对 tenant。
 
-该状态只表示代码与本地负向矩阵已完成。尚未用无 `BYPASSRLS` 的真实应用角色执行 migration、
-双租户 CRUD、取消/迟到事件、最小权限授权和回滚演练，也未接通 `ENT-CORE-013/014` 的企业
-会话写命令和签名 dispatch ticket，因此只能标记 `ready_for_acceptance`，不能宣称 A1、H3、
+第十一批完成 `ENT-CORE-013` 企业统一通讯会话绑定。enterprise `0011` 建立
+`communication_session_bindings`，用生成的 `scope_type=tenant/scope_id=tenant_id` 与公共
+session 复合外键绑定，并以三个互斥业务外键保证 Meeting、Support、Marketing 只能选择一个归属；
+同一业务对象和同一 communication session 均只能绑定一次。route epoch、home region/cell、
+policy/entitlement 版本及业务身份由数据库 trigger 固定，旧 `translation_session_id uuid` 仅保留为
+明确标注的 legacy 字段，新写路径不得使用。
+
+tenant unit-of-work 新增受限 communication mutation 和 binding Repository。创建命令在同一事务内
+先写 tenant-scoped 公共 session，再写企业绑定；全局 session ID 冲突、业务 FK 不存在、跨租户引用或
+重放参数漂移都会回滚。状态机以 `route_epoch + generation + last_event_sequence + version CAS`
+判定事件：新 generation 可从低序号恢复，旧 route/generation、重复序号、非法倒退和终态恢复均拒绝；
+企业状态同步投影为公共 session 的 created/active/ended/failed。
+
+当前代码、定向矩阵和一次性本地 PostgreSQL 16 普通应用角色 forced-RLS/down-up 验证已完成，
+但尚未在真实企业 PostgreSQL、两个真实租户、多实例 Worker 或 cell 迁移环境执行。也未接通
+`ENT-CORE-014` 签名 dispatch ticket，因此只能标记 `ready_for_acceptance`，不能宣称 A1、H3、
 企业试点或生产门禁通过。
 
 ### 11.2 事务和一致性边界
@@ -880,7 +902,8 @@ retention 窗口、业务表/对象清单、受控审计导出和 Provider 删�
 `ENTERPRISE_ROUTE_TTL_SECONDS` 控制。原始 IP、localhost、`.local`、`.internal`
 及非 HTTPS/WSS 端点不得进入 route document。企业数据面写入通过
 `X-Enterprise-Route-Document` 携带 base64url 文档；缺失、篡改、过期或
-tenant/homeRegion/cell 不匹配均在副作用前拒绝。
+tenant/homeRegion/cell/route epoch 不匹配均在副作用前拒绝。当前 route epoch 取 tenant
+路由记录 version；路由或生命周期版本推进后，旧文档不能继续发起写入。
 
 客户端登录后先从控制面获取短期 route document：
 
@@ -889,8 +912,10 @@ tenant/homeRegion/cell 不匹配均在副作用前拒绝。
   "tenantId": "uuid",
   "homeRegion": "ap-southeast",
   "cellId": "cell-01",
+  "routeEpoch": 12,
   "apiBaseUrl": "https://api-ap.example.com",
   "rtcUrl": "wss://rtc-ap.example.com",
+  "issuedAt": "ISO-8601",
   "expiresAt": "ISO-8601",
   "signature": "..."
 }

@@ -34,6 +34,7 @@ export async function registerEnterpriseTenantRouteRoutes(
       tenantId: context.tenant.id,
       homeRegion: context.tenant.homeRegion,
       cellId: context.tenant.cellId,
+      routeEpoch: context.tenant.version,
     });
     if (result.status === "not_ready") {
       return sendError(reply, 503, "route_not_ready", "Tenant route not ready");
@@ -59,6 +60,7 @@ export function requireTenantRouteDocument(
     tenantId: tenant.id,
     homeRegion: tenant.homeRegion,
     cellId: tenant.cellId ?? "",
+    routeEpoch: tenant.version,
   });
   if (result.status === "verified") return true;
   if (result.status === "not_ready") {

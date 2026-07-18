@@ -1,6 +1,6 @@
 # 无界AI企业版开发任务
 
-版本：v1.14
+版本：v1.15
 日期：2026-07-18
 状态：E0 开发中，已对齐统一通讯平台和 PostgreSQL Primary 收敛
 
@@ -17,14 +17,15 @@
 ### 1.1 当前状态快照
 
 - `ENT-CORE-001/002/003` 已完成代码和自动化，等待验收；生产 Web 应用位于 `apps/enterprise-web`。
-- `ENT-DATA-001` 已有十段 PostgreSQL up/down migration、tenant-first 索引、复合 FK、强制 RLS、checksum/锁和备份归档 smoke；`0008` 增加 user directory，`0009` 增加 cell pending-work projection，`0010` 把 user/actor identity 从 UUID 修正为受约束的 opaque subject text，并为不兼容 actor 提供显式 rollback 阻断。更广泛的主产品 staging 或本地 PostgreSQL 结果不替代企业 schema 的真实 migrate/restore/PITR 证据，任务保持 `in_progress`。
+- `ENT-DATA-001` 已有十一段 PostgreSQL up/down migration、tenant-first 索引、复合 FK、强制 RLS、checksum/锁和备份归档 smoke；`0008` 增加 user directory，`0009` 增加 cell pending-work projection，`0010` 把 user/actor identity 从 UUID 修正为受约束的 opaque subject text，`0011` 增加企业通讯会话绑定。一次性本地 PostgreSQL 16 验证不替代真实 migrate/restore/PITR 证据，任务保持 `in_progress`。
 - `ENT-DATA-002` 已完成单一 `legacy|postgres` Enterprise Repository runtime adapter，Tenant/Member/Audit、Directory、lifecycle 和 HTTP 路由均通过同一 runtime；PostgreSQL 只有在启动 schema gate 已验证时才允许选中，不存在 fallback、双写或局部切换。独立 cell Worker 已实现 cell/worker/poll/batch/lease 配置、forced-RLS pending discovery、tenant transaction 二次复核、lifecycle/outbox claim/finalize、失败隔离和显式 publisher 降级。代码与本地自动化完成，进入 `ready_for_acceptance`；真实 PostgreSQL、并发 claim、容量和恢复证据仍属于 H3 门禁。
 - `ENT-DATA-004` 已实现 JSON/SQLite 六类企业记录源读取、SQLite 临时副本与 `quick_check`、维护窗口空目标导入、事务内读回，以及逐集合 count/SHA-256 和总 hash 对账；任何不一致整体回滚。该工具只迁移当前 Tenant/Member/Job/Audit/Inbox/Outbox 演示数据，不是客户生产迁移通道，进入 `ready_for_acceptance`。
 - `ENT-DATA-003` 已完成 tenant-scoped inbox 去重、稳定 JSON hash、领域写入/inbox/outbox 同事务、outbox 内容不可变、lease claim、指数退避和恢复处理；100 次相同事件重放只执行一次领域副作用，跨租户 provider ID/idempotency key 相互隔离。SQLite 证据仅用于自动化和封闭演示，真实 PostgreSQL 并发 claim 与 Provider sandbox 仍待正式验收。
-- `ENT-DATA-007` 已把上游稳定提交 `fe1c3c2` 的公共 30 段 migration 与 PostgreSQL Primary Runtime 纳入企业分支，并以 `API_STORAGE_DRIVER` 作为唯一进程级 driver。统一启动编排依次验证公共 cutover 证据和 enterprise 10 段 manifest，核对数据库 name/OID 后才创建企业 runtime；API tenant pool 复用公共 Primary pool，directory、cell、migration 和 maintenance 使用分权连接配置，Worker 不获取 directory 凭证。代码和本地自动化完成，进入 `ready_for_acceptance`；真实 PostgreSQL 双 manifest、最小权限角色、并发和恢复证据仍属于 H3。
+- `ENT-DATA-007` 已把上游稳定提交 `fe1c3c2` 的公共 Primary Runtime 纳入企业分支，并以 `API_STORAGE_DRIVER` 作为唯一进程级 driver。统一启动编排现验证公共31段和 enterprise 11段 manifest，核对数据库 name/OID 后才创建企业 runtime；API tenant pool 复用公共 Primary pool，directory、cell、migration 和 maintenance 使用分权连接配置，Worker 不获取 directory 凭证。代码和本地自动化完成，进入 `ready_for_acceptance`；真实 PostgreSQL 双 manifest、最小权限角色、并发和恢复证据仍属于 H3。
 - `ENT-DATA-008` 已新增公共 migration `031_communication_resource_scope`：session、leg、transcript、playback、Provider operation、dispatch/capacity、participant consent、recording 和 ingress 共12张表具有不可空 `scope_type + scope_id`、复合 scope FK、写入 scope trigger 和 forced RLS。企业 tenant transaction 同时设置 `app.tenant_id/app.scope_type/app.scope_id`，只向企业 unit-of-work 暴露六类白名单、单 SELECT、显式 scope predicate 的通讯 Repository；跨租户返回行会被二次拒绝。代码和本地自动化完成，进入 `ready_for_acceptance`；真实双租户 PostgreSQL CRUD/迟到事件攻击仍属于 A1/H3。
 - `ENT-CORE-009` 已完成租户创建/区域开通幂等、失败重试、暂停、导出和删除执行器；导出固化 tenant/member/job 与 actor scope 快照，执行使用租约、有界重试和 receipt hash，删除只在 receipt 校验后进入 `deleted`，等待真实生命周期服务与对象存储验收。
-- `ENT-CORE-011` 已完成按 active membership 签发短期 HMAC route document、公开端点校验和企业写入区域 guard，等待正式域名/密钥验收。
+- `ENT-CORE-011` 已完成按 active membership 签发短期 HMAC route document、route epoch 签名、公开端点校验和企业写入区域 guard，等待正式域名/密钥验收。
+- `ENT-CORE-013` 已新增 enterprise `0011` 统一会话绑定表和事务型 Repository：Meeting/Support/Marketing 使用同一 tenant-scoped 公共 session，数据库复合 FK 固定唯一业务归属，route epoch、policy/entitlement 版本和区域快照不可变。状态机覆盖 dispatch/ready/active/degraded/draining/terminal，使用 version、generation 和 event sequence 拒绝旧路由、旧 Worker、重放与非法倒退；代码、定向矩阵和一次性本地 PostgreSQL 16 普通角色 RLS/down-up 验证完成，进入 `ready_for_acceptance`，不代表 A1/H3 或生产门禁通过。
 - `ENT-CORE-008` 已完成 PSTN/CRM/Calendar/Channel 统一 capability document、实时 probe contract、敏感配置过滤和明确降级，等待真实 Provider 验收。
 - `ENT-CORE-006` 已完成 append-only audit 契约、`audit:read` 查询 API、tenant/filter/sort/expiry 绑定的 HMAC cursor、成员与租户生命周期高风险结果埋点，以及 SQLite/PostgreSQL UPDATE/DELETE 拒绝约束，等待正式密钥、真实 PostgreSQL 与验收矩阵。
 - `ENT-UI-001` 已完成生产颜色/字号/尺寸/圆角令牌、Material Icons 语义注册表、Flutter 对照和依赖扫描，等待验收。
@@ -49,7 +50,7 @@
 | ENT-CORE-010 | 套餐和 Entitlement | CORE-001/007 | tenant billing account、plan、subscription、seat、entitlement | 服务端按 tenant 和版本执行权益、限额和归属 | todo |
 | ENT-CORE-011 | Tenant Directory | CORE-009 | homeRegion/cell、签名 route document | 区域错误时拒绝业务写入 | ready_for_acceptance |
 | ENT-CORE-012 | SaaS 计量聚合 | CORE-007/010 | tenant usage event、账期聚合、调整流水 | 不修改原始 ledger，企业账单按 tenant account 可对账 | todo |
-| ENT-CORE-013 | 企业统一通讯会话绑定 | DATA-007/008、CORE-001/011 | communication session、participant/media leg 绑定、route epoch、状态机 | 所有企业会议/客服/外呼共享 tenant-scoped session；重启和迟到事件可收敛 | todo |
+| ENT-CORE-013 | 企业统一通讯会话绑定 | DATA-007/008、CORE-001/011 | communication session、participant/media leg 绑定、route epoch、状态机 | 所有企业会议/客服/外呼共享 tenant-scoped session；重启和迟到事件可收敛 | ready_for_acceptance |
 | ENT-CORE-014 | Tenant-aware Worker Dispatch | CORE-013、DATA-003/008 | 签名 dispatch ticket、capacity/lease、cancel/fence、cell route | 缺 tenant/cell/generation 失败闭合；旧 route/generation 不能提交副作用 | todo |
 | ENT-CORE-015 | 企业设备、声音和录制策略 | CORE-013/014、CORE-002 | device/cloud ASR、翻译、TTS、voice identity、录制和降级策略 | 策略按 tenant/version 执行；声纹和录音无授权不启用 | todo |
 | ENT-DATA-001 | 企业 PostgreSQL schema | CORE-001 | schema、migration、FK、backup | 真实企业试点数据库门禁通过 | in_progress |

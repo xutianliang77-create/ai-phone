@@ -1,6 +1,6 @@
 # 无界AI企业版验收任务与计划
 
-版本：v1.8
+版本：v1.9
 日期：2026-07-18
 状态：可执行验收计划，已对齐统一通讯平台和 PostgreSQL Primary 收敛
 
@@ -83,7 +83,7 @@ Mock 只能验证协议，不能替代 iPhone/Web、真实 LiveKit、真实模�
 | AC-ENT-0011 | 演示数据导入 | 仅维护窗口和空目标允许；JSON/SQLite 导入后六集合 count/hash 一致，不一致整体回滚 |
 | AC-ENT-0012 | 上游基线 | 只集成主产品稳定 commit；未提交 WIP、陈旧 README 或 staging 结果不能成为企业完成状态和验收证据 |
 | AC-ENT-0013 | 单一 Primary Runtime | 公共/企业双 manifest 共用一个 startup verdict 和 Storage Driver；允许分权连接池，不允许 fallback、shadow read、dual write 或路由级混用 |
-| AC-ENT-0014 | 统一通讯 scope | session/participant/leg/dispatch/provider/playback 具有不可省略的 `scope_type + scope_id`、复合约束和 forced RLS；可选 owner/user filter 不能通过验收 |
+| AC-ENT-0014 | 统一通讯 scope 与业务绑定 | session/participant/leg/dispatch/provider/playback 具有不可省略的 `scope_type + scope_id`、复合约束和 forced RLS；Meeting/Support/Marketing 只能绑定同 tenant session；旧 route/generation、重复 event sequence、非法倒退和终态恢复全部拒绝 |
 | AC-ENT-0015 | Worker Dispatch | ticket 含签名 tenant/session/cell/route epoch/generation/capability/expiry；跨租户、跨 cell、过期和旧 generation 全部拒绝 |
 
 ### 4.1 企业 UI 与前端工程验收
@@ -125,7 +125,7 @@ Mock 只能验证协议，不能替代 iPhone/Web、真实 LiveKit、真实模�
 
 - 同一开通 idempotency key 重放100次只产生一个 tenant、subscription 和 regional tenant。
 - 区域 provisioning 失败时 tenant 保持非 active；恢复后可继续，不生成第二个租户。
-- `homeRegion/cellId` route document 有签名、短期有效且不能篡改。
+- `homeRegion/cellId/routeEpoch` route document 有签名、短期有效且不能篡改；旧 epoch 被拒绝。
 - 把 AP 区域 token 发送到 EU 数据面时写请求被拒绝，并提示重新发现路由。
 - 控制面短时不可用时，已登录区域会话可继续安全运行；禁止新开通和套餐变更。
 
@@ -369,10 +369,11 @@ schema 测试及 session/leg/dispatch/provider/playback/participant 六资源跨
 
 - PostgreSQL 作为所有真实 SaaS 租户的初始真源。
 - 内部 SQLite 演示数据可以迁移，但不能作为客户生产迁移路径的必要依赖。
-- 验收 commit 锁定的公共30段 manifest（基线 `fe1c3c2`）与 enterprise 10段 migration manifest 在隔离企业数据库从空库完整执行；两个 manifest 的顺序、checksum、schema verify 和 down/forward 策略均有证据，不能只跑其中一套。
+- 验收 commit 锁定的公共31段 manifest（基线从 `fe1c3c2` 演进）与 enterprise 11段 migration manifest 在隔离企业数据库从空库完整执行；两个 manifest 的顺序、checksum、schema verify 和 down/forward 策略均有证据，不能只跑其中一套。
 - 每个进程只有一个 Storage Driver 和 startup verdict；HTTP、企业 Repository、统一通讯会话和 cell Worker 使用同一 verified Primary Runtime，不存在 fallback、shadow read、dual write 或按路由混用。
 - 应用 tenant、user directory、cell discovery、migration、maintenance 分别使用最小权限角色；生产 TLS 使用 `verify-full`。应用角色没有 `BYPASSRLS`、表 owner、DDL 或关闭 RLS 权限。
 - 公共 communication session、participant、media leg、dispatch、Provider operation、playback 和相关账本全部具有 tenant scope、复合 FK 和 `FORCE ROW LEVEL SECURITY`；使用跨租户 ID、缺 scope、伪造 owner/user 过滤做负向验证。
+- 使用普通应用角色验证 `communication_session_bindings` 的三类互斥业务 FK、同 tenant 公共 session 复合 FK、route/policy/entitlement 快照不可变、唯一绑定和跨租户不可见；按 Meeting/Support/Marketing 分别执行精确重放、参数漂移、旧 route/generation、重复序号、非法倒退和终态恢复矩阵。
 - accounts、tenant、communication session、segment、campaign、support、meeting、ledger 和 object hash 数量与规范化 SHA-256 一致。
 - 全量复制后记录增量水位，切换时获取 writer fence、清退旧 API/Worker、重放剩余 inbox/outbox，再做第二次 count/hash；切换或对账失败可按书面决策回滚，旧 writer 不能继续写入。
 - migration 后使用普通应用角色验证 `FORCE ROW LEVEL SECURITY`；确认 user directory self policy、tenant projection policy、成员投影同步和跨租户拒绝均生效。

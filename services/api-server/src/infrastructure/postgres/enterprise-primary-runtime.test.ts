@@ -138,7 +138,7 @@ function verifiedStartup(database: { name: string; oid: string }) {
     status: "verified" as const,
     mode: "verify" as const,
     evidence: {
-      migrations: 10,
+      migrations: 11,
       tenantTables: 33,
       compositeForeignKeys: 12,
       subjectColumns: 12,
