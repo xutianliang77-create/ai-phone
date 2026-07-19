@@ -11,7 +11,11 @@ import type {
   LiveKitTtsRtcModule,
   LiveKitTtsRoom,
 } from "./livekit-tts-audio-sink.js";
-import type { CallSpeechPipeline, TtsVoiceConfig } from "./types.js";
+import type {
+  CallAudioSpeakerRole,
+  CallSpeechPipeline,
+  TtsVoiceConfig,
+} from "./types.js";
 
 export interface LiveKitCallAudioSourceOptions {
   callId: string;
@@ -25,6 +29,7 @@ export interface LiveKitCallAudioSourceOptions {
   onError?: (error: unknown) => void;
   onCallEnded?: (error: CallRoomEndedError) => void;
   onIngestMetrics?: (metrics: AudioIngestMetrics) => void;
+  onTrackLifecycle?: (event: LiveKitCallAudioTrackLifecycleEvent) => void;
   onDiagnostics?: (snapshot: LiveKitCallDiagnosticsSnapshot) => void | Promise<void>;
   rtcStatsIntervalMs?: number;
   loadRtcNode?: () => Promise<RtcNodeModule>;
@@ -35,6 +40,7 @@ export interface RtcNodeModule extends Partial<LiveKitTtsRtcModule> {
   Room: new () => RtcRoom;
   RoomEvent: {
     TrackSubscribed: string;
+    TrackPublished?: string;
     Disconnected: string;
     ParticipantAttributesChanged?: string;
   };
@@ -43,6 +49,7 @@ export interface RtcNodeModule extends Partial<LiveKitTtsRtcModule> {
     options: { sampleRate: number; numChannels: number; frameSizeMs: number },
   ) => ReadableStream<RtcAudioFrame>;
   RemoteAudioTrack?: new (...args: unknown[]) => object;
+  TrackKind?: { KIND_AUDIO?: unknown };
   dispose?: () => Promise<void>;
 }
 
@@ -54,9 +61,28 @@ export interface RtcRoom extends LiveKitTtsRoom {
   }): Promise<void>;
   disconnect(): Promise<void>;
   getRtcStats?(): Promise<unknown>;
-  remoteParticipants?: Map<string, {
-    trackPublications?: Map<string, { track?: unknown }>;
-  }>;
+  remoteParticipants?: Map<string, RtcRemoteParticipant>;
+}
+
+export interface RtcRemoteParticipant {
+  metadata?: unknown;
+  identity?: unknown;
+  trackPublications?: Map<string, RtcRemoteTrackPublication>;
+}
+
+export interface RtcRemoteTrackPublication {
+  track?: unknown;
+  kind?: unknown;
+  setSubscribed?: (subscribed: boolean) => void;
+}
+
+export interface LiveKitCallAudioTrackLifecycleEvent {
+  event: "publication_observed" | "track_subscribed" | "audio_leg_started";
+  speakerRole: CallAudioSpeakerRole | null;
+  outcome: "subscription_requested" | "subscription_unsupported" |
+    "ignored_unknown_role" | "ignored_translation_tts" |
+    "ignored_non_audio" | "accepted";
+  publicationKind?: string | number | null;
 }
 
 export interface LiveKitCallDiagnosticsSnapshot {

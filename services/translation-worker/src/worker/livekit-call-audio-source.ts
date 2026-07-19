@@ -8,22 +8,17 @@ import {
   LiveKitTtsAudioSink,
   type LiveKitTtsRtcModule,
 } from "./livekit-tts-audio-sink.js";
-import { participantRole } from "./livekit-call-participant.js";
-import {
-  deferred,
-  isRemoteAudioTrack,
-  shouldForwardAudioTrack,
-} from "./livekit-call-audio-utils.js";
+import { deferred } from "./livekit-call-audio-utils.js";
 import { LiveKitCallAudioTrackRuntime } from "./livekit-call-audio-track-runtime.js";
 import { LiveKitCallDiagnostics } from "./livekit-call-diagnostics.js";
 import { LiveKitCallSipTrackGate } from "./livekit-call-sip-track-gate.js";
+import { LiveKitCallTrackLifecycle } from "./livekit-call-track-lifecycle.js";
 import type {
   LiveKitCallAudioSourceOptions,
   RtcNodeModule,
   RtcRoom,
   StartInRoomInput,
 } from "./livekit-call-audio-source-types.js";
-
 export type {
   LiveKitCallAudioSourceOptions,
   RtcNodeModule,
@@ -56,9 +51,10 @@ export class LiveKitCallAudioSource {
   private readonly pipelineReady = deferred<void>();
   private readonly sipTrackGate: LiveKitCallSipTrackGate;
   private readonly diagnostics: LiveKitCallDiagnostics;
-
+  private readonly trackLifecycle: LiveKitCallTrackLifecycle;
   constructor(private readonly options: LiveKitCallAudioSourceOptions) {
     this.diagnostics = new LiveKitCallDiagnostics(options);
+    this.trackLifecycle = new LiveKitCallTrackLifecycle(options.onTrackLifecycle);
     this.sipTrackGate = new LiveKitCallSipTrackGate({
       callId: options.callId,
       statusClient: options.sipStatusClient,
@@ -107,15 +103,21 @@ export class LiveKitCallAudioSource {
       input.participantIdentity,
     );
     await this.startPipeline();
-    for (const participant of input.room.remoteParticipants?.values() ?? []) {
+    this.reconcileExistingPublications(input.room, input.rtc);
+  }
+
+  private reconcileExistingPublications(room: RtcRoom, rtc: RtcNodeModule) {
+    for (const participant of room.remoteParticipants?.values() ?? []) {
       for (const publication of participant.trackPublications?.values() ?? []) {
         if (publication.track) {
           void this.handleTrackSubscribed(
             publication.track,
             publication,
             participant,
-            input.rtc,
+            rtc,
           ).catch((error) => this.handleAudioTrackError(error));
+        } else {
+          this.trackLifecycle.subscribePublication(publication, participant, rtc);
         }
       }
     }
@@ -168,10 +170,13 @@ export class LiveKitCallAudioSource {
     participant: unknown,
     rtc: RtcNodeModule,
   ) {
-    if (!shouldForwardAudioTrack(track, publication)) return;
-    const speakerRole = participantRole(participant);
-    if (!speakerRole || !isRemoteAudioTrack(track, rtc.RemoteAudioTrack)) return;
-
+    const speakerRole = this.trackLifecycle.acceptSubscribedTrack(
+      track,
+      publication,
+      participant,
+      rtc,
+    );
+    if (!speakerRole) return;
     if (!await this.sipTrackGate.allowTrack({
       track,
       speakerRole,
@@ -194,6 +199,7 @@ export class LiveKitCallAudioSource {
   ) {
     if (this.startedTracks.has(track)) return;
     this.startedTracks.add(track);
+    this.trackLifecycle.legStarted(speakerRole);
 
     const stream = new rtc.AudioStream(track, {
       sampleRate: this.options.audioSampleRate,
@@ -298,8 +304,12 @@ export class LiveKitCallAudioSource {
           .catch((error) => this.handleAudioTrackError(error));
       });
     }
+    if (rtc.RoomEvent.TrackPublished) {
+      room.on(rtc.RoomEvent.TrackPublished, (publication, participant) => {
+        this.trackLifecycle.subscribePublication(publication, participant, rtc);
+      });
+    }
   }
-
   private async startPipeline() {
     try {
       await this.options.worker.startCall(this.options.callId);

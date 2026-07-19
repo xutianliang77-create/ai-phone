@@ -280,7 +280,7 @@ ${renderCallWebPageActionFunctions()}
       }
 
       status("正在连接房间");
-      const room = new window.LivekitClient.Room({ adaptiveStream: true, dynacast: true });
+      const room = new window.LivekitClient.Room({ adaptiveStream: true, dynacast: true, publishDefaults: { red: false }, singlePeerConnection: false });
       bindRoom(room);
       await room.connect(token.wsUrl, token.token, { autoSubscribe: false });
       syncLocalTrackPermissions(room);

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   LiveKitCallAudioSource,
 } from "./livekit-call-audio-source.js";
@@ -64,6 +64,97 @@ describe("LiveKitCallAudioSource", () => {
     expect(worker.frames[0].data).toBe(Buffer.from(new Int16Array([1, -1]).buffer).toString("base64"));
     expect(worker.ended).toEqual(["call_1"]);
     expect(worker.lifecycle).toEqual(["marked:call_1", "ended:call_1"]);
+  });
+
+  it("subscribes a microphone publication that existed before startInRoom attached", async () => {
+    const rtc = createFakeRtcNode();
+    const worker = new RecordingWorker();
+    const participant = {
+      metadata: JSON.stringify({ participantRole: "guest" }),
+      trackPublications: new Map<string, unknown>(),
+    };
+    const publication: {
+      track?: unknown;
+      setSubscribed: ReturnType<typeof vi.fn>;
+    } = {
+      setSubscribed: vi.fn(() => {
+        const track = new rtc.RemoteAudioTrack();
+        publication.track = track;
+        rtc.room.emit("trackSubscribed", track, publication, participant);
+      }),
+    };
+    participant.trackPublications.set("TR_PREEXISTING", publication);
+    Object.assign(rtc.room, {
+      remoteParticipants: new Map([["guest-participant", participant]]),
+    });
+    const source = new LiveKitCallAudioSource({
+      callId: "call_1",
+      worker: worker as never,
+      audioSampleRate: 24000,
+      audioFrameSizeMs: 100,
+    });
+
+    await source.startInRoom({
+      room: rtc.room as never,
+      rtc: rtc.module,
+      participantIdentity: "call_1:worker:one",
+    });
+    await eventually(() => worker.frames.length === 1);
+    await source.stop();
+
+    expect(publication.setSubscribed).toHaveBeenCalledWith(true);
+    expect(worker.frames[0]).toMatchObject({
+      sessionId: "call_1",
+      speakerRole: "guest",
+      sequence: 1,
+    });
+  });
+
+  it("subscribes a microphone publication published after startInRoom attached", async () => {
+    const rtc = createFakeRtcNode();
+    const worker = new RecordingWorker();
+    const lifecycle: Array<{ event: string; outcome: string }> = [];
+    const participant = {
+      metadata: JSON.stringify({ participantRole: "guest" }),
+    };
+    const publication: {
+      track?: unknown;
+      setSubscribed: ReturnType<typeof vi.fn>;
+    } = {
+      setSubscribed: vi.fn(() => {
+        const track = new rtc.RemoteAudioTrack();
+        publication.track = track;
+        rtc.room.emit("trackSubscribed", track, publication, participant);
+      }),
+    };
+    const source = new LiveKitCallAudioSource({
+      callId: "call_1",
+      worker: worker as never,
+      audioSampleRate: 24000,
+      audioFrameSizeMs: 100,
+      onTrackLifecycle: (event) => lifecycle.push(event),
+    });
+
+    await source.startInRoom({
+      room: rtc.room as never,
+      rtc: rtc.module,
+      participantIdentity: "call_1:worker:one",
+    });
+    rtc.room.emit("trackPublished", publication, participant);
+    await eventually(() => worker.frames.length === 1);
+    await source.stop();
+
+    expect(publication.setSubscribed).toHaveBeenCalledWith(true);
+    expect(worker.frames[0]).toMatchObject({
+      sessionId: "call_1",
+      speakerRole: "guest",
+      sequence: 1,
+    });
+    expect(lifecycle.map(({ event, outcome }) => `${event}:${outcome}`)).toEqual([
+      "publication_observed:subscription_requested",
+      "track_subscribed:accepted",
+      "audio_leg_started:accepted",
+    ]);
   });
 
   it("ignores non host or guest participants", async () => {

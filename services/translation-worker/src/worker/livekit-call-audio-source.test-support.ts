@@ -130,6 +130,7 @@ export function createFakeRtcNode(options: {
     },
     RoomEvent: {
       TrackSubscribed: "trackSubscribed",
+      TrackPublished: "trackPublished",
       Disconnected: "disconnected",
     },
     AudioStream: FakeAudioStream,

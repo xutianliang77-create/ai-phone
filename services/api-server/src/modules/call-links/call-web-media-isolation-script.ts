@@ -4,9 +4,18 @@ export function renderCallWebMediaIsolationFunctions() {
     const parts = String(identity || "").split(":");
     return parts.length >= 3 ? parts[1] : "";
   }
+  function isTranslationWorkerParticipant(participant) {
+    if (participantRole(participant.identity) === "worker") return true;
+    const identity = String(participant.identity || "");
+    const prefix = "translation-" + callId.slice(0, 12) + "-g";
+    const generation = identity.slice(prefix.length);
+    return participant.isAgent === true &&
+      identity.startsWith(prefix) &&
+      /^[1-9][0-9]*$/.test(generation);
+  }
   function syncLocalTrackPermissions(room) {
     const workerPermissions = Array.from(room.remoteParticipants.values())
-      .filter((participant) => participantRole(participant.identity) === "worker")
+      .filter(isTranslationWorkerParticipant)
       .map((participant) => ({
         participantIdentity: participant.identity,
         allowAll: true,

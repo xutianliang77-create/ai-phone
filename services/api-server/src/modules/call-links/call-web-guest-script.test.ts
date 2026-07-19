@@ -38,6 +38,8 @@ describe("call web guest script", () => {
     expect(script).toContain("setTrackSubscriptionPermissions(false");
     expect(script).toContain("{ autoSubscribe: false }");
     expect(script).toContain('participantRole(participant.identity) === "worker"');
+    expect(script).toContain("participant.isAgent === true");
+    expect(script).toContain('"translation-" + callId.slice(0, 12) + "-g"');
     expect(script).toContain("publication.setSubscribed(shouldAttachAudioTrack");
     expect(script).toContain("syncRemoteAudioSubscriptions(room)");
     expect(script).toContain("if (!targetRole) return false;");
@@ -55,6 +57,8 @@ describe("call web guest script", () => {
     expect(script).toContain("state.fullDuplexEnabled && !state.duplexDegraded");
     expect(script).toContain('event.type === "pipeline.degraded"');
     expect(script).toContain("echoCancellation: true");
+    expect(script).toContain("publishDefaults: { red: false }");
+    expect(script).toContain("singlePeerConnection: false");
     expect(script).toContain("topic !== callRoomCaptionTopic || participant");
     expect(script).toContain("event.callId !== callId");
     expect(script).toContain("event.roomName !== state.expectedRoomName");

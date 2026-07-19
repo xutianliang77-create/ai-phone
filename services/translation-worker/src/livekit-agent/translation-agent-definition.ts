@@ -1,4 +1,4 @@
-import { AutoSubscribe, defineAgent } from "@livekit/agents";
+import { defineAgent } from "@livekit/agents";
 import * as rtc from "@livekit/rtc-node";
 import pino from "pino";
 import { loadEnv, type TranslationWorkerEnv } from "../config/env.js";
@@ -48,7 +48,7 @@ export default defineAgent<TranslationAgentProcessData>({
       internalApiSecret: env.internalApiSecret,
       timeoutMs: env.apiTimeoutMs,
     });
-    await ctx.connect(undefined, AutoSubscribe.AUDIO_ONLY);
+    await ctx.connect();
     const participantIdentity = ctx.agent?.identity;
     if (!participantIdentity) throw new Error("LiveKit Agent has no participant identity");
     const snapshot = await runtimeClient.snapshot({
@@ -106,6 +106,10 @@ export default defineAgent<TranslationAgentProcessData>({
       }, "Translation worker stopped after call ended"),
       onIngestMetrics: (metrics) =>
         logAudioIngestMetrics(metrics, env.audioFrameSizeMs),
+      onTrackLifecycle: (event) => logger.info({
+        callId: snapshot.callId,
+        ...event,
+      }, "LiveKit audio track lifecycle"),
       onDiagnostics: (report) => diagnostics.report(snapshot.callId, report),
     });
     let heartbeat: NodeJS.Timeout | undefined;
