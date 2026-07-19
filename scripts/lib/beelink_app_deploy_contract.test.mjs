@@ -5,6 +5,10 @@ const script = readFileSync(
   new URL("../deploy_beelink_app_services.sh", import.meta.url),
   "utf8",
 );
+const llmScript = readFileSync(
+  new URL("../deploy_beelink_llm_service.sh", import.meta.url),
+  "utf8",
+);
 
 describe("Beelink app deployment contract", () => {
   it("builds before freezing writes and migrates before enabling SQLite", () => {
@@ -27,12 +31,27 @@ describe("Beelink app deployment contract", () => {
 
   it("routes authorized voice identity calls to the speaker service", () => {
     expect(script).toContain(
-      "VOICE_IDENTITY_HTTP_BASE_URL=http://127.0.0.1:8022",
+      'SPEAKER_HTTP_BASE_URL="${SPEAKER_HTTP_BASE_URL:-http://$SPEAKER_SERVICE_HOST:8022}"',
     );
     expect(script).toContain(
-      'set_env VOICE_IDENTITY_HTTP_BASE_URL "http://127.0.0.1:8022"',
+      'VOICE_IDENTITY_HTTP_BASE_URL="${VOICE_IDENTITY_HTTP_BASE_URL:-$SPEAKER_HTTP_BASE_URL}"',
+    );
+    expect(script).toContain(
+      'set_env VOICE_IDENTITY_HTTP_BASE_URL "$VOICE_IDENTITY_HTTP_BASE_URL"',
     );
     expect(script).toContain('set_env VOICE_IDENTITY_HTTP_TIMEOUT_MS "30000"');
+  });
+
+  it("keeps server endpoints configurable and LLM off loopback", () => {
+    expect(script).toContain('LLM_SERVICE_HOST="${LLM_SERVICE_HOST:-$PUBLIC_HOST}"');
+    expect(script).toContain('LLM_BASE_URL="${LLM_BASE_URL:-http://$LLM_SERVICE_HOST:1234/v1}"');
+    expect(script).toContain('set_env LLM_BASE_URL "$LLM_BASE_URL"');
+    expect(llmScript).toContain(
+      'LLM_BIND_ADDRESS="${LLM_BIND_ADDRESS:-${BEELINK_TAILSCALE_IP:-100.110.127.117}}"',
+    );
+    expect(llmScript).toContain(
+      "LLM_BIND_ADDRESS must be a server-reachable non-loopback address",
+    );
   });
 });
 

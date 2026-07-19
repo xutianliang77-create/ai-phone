@@ -19,7 +19,7 @@ services:
     healthcheck:
       test:
         - CMD-SHELL
-        - node -e "fetch('http://127.0.0.1:3110/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"
+        - node -e "fetch(process.env.API_HEALTH_URL||'http://127.0.0.1:3110/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"
       interval: 5s
       timeout: 3s
       retries: 20
@@ -34,7 +34,7 @@ services:
     healthcheck:
       test:
         - CMD-SHELL
-        - node -e "fetch('http://127.0.0.1:3111/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"
+        - node -e "fetch(process.env.GATEWAY_HEALTH_URL||'http://127.0.0.1:3111/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"
       interval: 5s
       timeout: 3s
       retries: 20
@@ -53,7 +53,7 @@ services:
     healthcheck:
       test:
         - CMD-SHELL
-        - node -e "fetch('http://127.0.0.1:8081/').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"
+        - node -e "fetch(process.env.TRANSLATION_AGENT_HEALTH_URL||'http://127.0.0.1:8081/worker').then(async r=>{const b=await r.json();if(!r.ok||!b.agent_name)process.exit(1)}).catch(()=>process.exit(1))"
       interval: 5s
       timeout: 3s
       retries: 30
@@ -73,7 +73,7 @@ services:
     healthcheck:
       test:
         - CMD-SHELL
-        - node -e "fetch('http://127.0.0.1:8082/').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"
+        - node -e "fetch(process.env.VOICE_AGENT_HEALTH_URL||'http://127.0.0.1:8082/').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"
       interval: 5s
       timeout: 3s
       retries: 36
@@ -94,7 +94,7 @@ services:
     healthcheck:
       test:
         - CMD-SHELL
-        - node -e "fetch('http://127.0.0.1:'+(process.env.SRT_INGRESS_PORT||'3310')+'/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"
+        - node -e "fetch(process.env.SRT_INGRESS_HEALTH_URL||'http://127.0.0.1:'+(process.env.SRT_INGRESS_PORT||'3310')+'/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"
       interval: 5s
       timeout: 3s
       retries: 20
