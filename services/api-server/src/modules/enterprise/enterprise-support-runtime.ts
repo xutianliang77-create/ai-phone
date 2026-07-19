@@ -1,13 +1,43 @@
 import type { EnterpriseTenantContext } from "./enterprise-tenant-context.js";
 import type {
+  CreateEnterpriseSupportChannelInput,
   CreateEnterpriseSupportSessionInput,
+  EnterpriseSupportChannelRecord,
   EnterpriseSupportSessionAggregate,
   EnterpriseSupportSessionStatus,
 } from "./enterprise-support.js";
+import type {
+  EnterpriseSupportInboundAuthorization,
+  EnterpriseSupportInboundEvent,
+  EnterpriseSupportInboundResult,
+  EnterpriseSupportInboundRoute,
+} from "./enterprise-support-inbound.js";
 
 type StorageRequired = { status: "storage_required" };
 
 export interface EnterpriseSupportRepositoryRuntime {
+  createSupportChannel?(input: {
+    context: EnterpriseTenantContext;
+    channel: CreateEnterpriseSupportChannelInput;
+  }): Promise<
+    | { status: "created"; channel: EnterpriseSupportChannelRecord }
+    | { status: "conflict" }
+    | StorageRequired
+  >;
+  authorizeSupportInboundChannel?(input: {
+    context: EnterpriseTenantContext;
+    channelId: string;
+    channelType: EnterpriseSupportInboundRoute["channelType"];
+  }): Promise<
+    | { status: "ready"; authorization: EnterpriseSupportInboundAuthorization }
+    | { status: "channel_not_found" | "channel_unavailable" | "route_not_ready" }
+    | StorageRequired
+  >;
+  ingestSupportInbound?(input: {
+    context: EnterpriseTenantContext;
+    route: EnterpriseSupportInboundRoute;
+    event: EnterpriseSupportInboundEvent;
+  }): Promise<EnterpriseSupportInboundResult | StorageRequired>;
   createSupportSession?(input: {
     context: EnterpriseTenantContext;
     session: CreateEnterpriseSupportSessionInput;

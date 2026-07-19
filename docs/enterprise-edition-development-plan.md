@@ -1,6 +1,6 @@
 # 无界AI企业版开发方案与计划
 
-版本：v1.43
+版本：v1.44
 日期：2026-07-19
 状态：E0 执行计划，已对齐统一通讯平台和 PostgreSQL Primary 收敛
 
@@ -38,6 +38,7 @@
 - `ENT-UI-012` 已实现公开 `/join/:meetingId` 访客壳并放在成员 AuthProvider 之外；邀请凭据只接受 fragment、清除地址后只驻留内存，query/格式错误/历史清理失败均拒绝。访客点击入会后以加密邀请换取短期 RTC grant，并由独立企业 LiveKit 客户端只发布麦克风和订阅音频；不读取 tenant/member，不调用个人 Call Link，字幕、数据、摄像头和共享明确未开放。当前仅通过 typecheck、生产构建、bundle 和文件规模静态门禁，任务保持 `in_progress`。
 - `ENT-MTG-001` 已实现 Meeting/Participant/Artifact 领域模型、CAS 状态机、`0021` 数据库状态/身份/时间/恢复约束、tenant-scoped Repository 和 Primary runtime adapter。聚合读取把 meeting、participant、artifact 与唯一 communication binding 合并，恢复入口只返回 provisioning/active/ending；缺 binding 可见而不伪造。当前只通过 API typecheck、文件规模和 diff 门禁，未运行 migration、forced-RLS、并发 CAS、重启恢复或自动化，保持 `in_progress`。
 - `ENT-CS-001` 已形成 `0028`、Support Channel/Customer/Queue/Session/Case/Tool 领域模型、数据库状态与身份 guard、幂等会话创建、support communication binding 原子绑定、tenant-scoped Repository/runtime 和非终态恢复代码候选。当前只执行静态门禁，未运行 migration、forced-RLS、CAS、重启恢复或自动化，保持 `in_progress`。
+- `ENT-CS-002` 已形成共享 PSTN/Web/App 入站契约、短期 tenant/channel/route dispatch ticket、内部授权/入站 API、实时 Provider readiness、Inbox hash 去重、客户 hash 归并和统一 session/binding/audit/Outbox 事务代码候选。Provider webhook 签名仍由 edge Adapter 负责；当前未运行自动化、真实 Provider、并发或重启恢复，保持 `in_progress`。
 - `ENT-MTG-004` 已形成 `0024`、单会议活动租约唯一约束、acquire/pause/resume/renew/stop 幂等 CAS、代际发布身份、最小权限 LiveKit grant、cell Worker 到期回收和撤销 outbox 代码候选。Web/iOS/Android 采集仍分别属于 MTG-005/006/007；本轮未运行 migration、并发、forced-RLS、Worker 或真实 LiveKit 测试，保持 `in_progress`。
 - `ENT-MTG-005` 已形成成员 Web 屏幕共享代码候选：浏览器用户手势选择内容后读取真实 `displaySurface`，再申请租约并用独立 Room 发布；首次续租绑定 track SID，后续按10秒续租；观看端只接受服务端当前 publisher identity，暂停/停止先断本地发布且撤销 pending 保持可见。系统音频、访客发布、iOS/Android、simulcast 和主持人强停不在本任务内；本轮未运行测试或真实 LiveKit/浏览器门禁，保持 `in_progress`。
 - `ENT-MTG-006` 已形成 iOS ReplayKit 代码候选：主 App 持有短期发布 grant 并维持独立屏幕 Room，Broadcast Upload Extension 只经 App Group Unix socket 发送视频样本；token-free 控制清单以 share/generation/nonce 和 lease expiry 失败闭合，系统停止、超时和离会均先清理本地再收敛服务端租约。当前未构建/安装 App，未执行真机后台、真实 LiveKit、网络切换和权限矩阵，保持 `in_progress`。
@@ -168,7 +169,7 @@ CORE-001/002 验收
 ### 5.1 交付顺序
 
 1. support channel、queue、session、case 和 tool execution：`ENT-CS-001` 已形成代码候选，恢复测试后验收。
-2. PSTN/Web/App 呼入 Adapter 和统一会话创建。
+2. PSTN/Web/App 呼入 Adapter 和统一会话创建：`ENT-CS-002` 已形成内部 Adapter contract/runtime 代码候选，真实 edge Provider 待验收。
 3. tenant-scoped RAG 和引用。
 4. Support Agent 状态机和 JSON Schema 输出。
 5. 只读工具、可逆写工具和高风险工具三级 Policy。

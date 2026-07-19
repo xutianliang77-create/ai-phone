@@ -1,6 +1,6 @@
 # 无界AI企业版技术架构
 
-版本：v1.25
+版本：v1.26
 日期：2026-07-19
 状态：SaaS 详细架构基线，已对齐统一通讯平台和 PostgreSQL Primary
 
@@ -392,6 +392,16 @@ flowchart LR
   非法迁移。普通 Agent/Provider 不持有这些业务表写凭证。
 - 重启恢复入口只扫描当前 tenant 的非终态 session，再按复合 tenant FK 聚合关联资源；缺关联或缺 binding
   不回退到 SQLite/JSON，也不把恢复失败报告成 ready。
+
+### 8.2 Channel Adapter 与 tenant dispatch
+
+外部 Provider webhook 不直接进入 tenant Repository。PSTN/消息 edge Adapter 先校验 Provider 签名、时间窗和
+重放，再以内部服务凭据请求短期 support ingress ticket；Web/App Gateway 使用同一内部协议。ticket 的 HMAC
+覆盖 tenant/channel/type/region/cell/routeEpoch/expiry，业务入站端点只从已验证 ticket 创建 TenantContext。
+
+入站 tenant transaction 依次锁定 tenant 路由、复核 active channel、policy 和 entitlement，以
+`source + sourceEventId + canonical payload hash` 写 Inbox；客户只按 hash 化外部键归并。support session、公共
+communication session、唯一 binding、审计和 `support.session.created` Outbox 同事务提交。任何冲突或未就绪均回滚。
 
 ## 9. 数据架构
 

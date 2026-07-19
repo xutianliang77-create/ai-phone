@@ -71,6 +71,8 @@ import { registerEnterpriseMeetingScreenOcrRoutes } from
   "./modules/enterprise/enterprise-meeting-screen-ocr.routes.js";
 import { registerEnterpriseMeetingCalendarRoutes } from
   "./modules/enterprise/enterprise-meeting-calendar.routes.js";
+import { registerEnterpriseSupportChannelRoutes } from
+  "./modules/enterprise/enterprise-support-channel.routes.js";
 import {
   createEnvironmentEnterpriseMeetingMaterialProvider,
   type EnterpriseMeetingMaterialProvider,
@@ -99,6 +101,10 @@ import {
   legacyEnterpriseRepositoryRuntime,
   type EnterpriseRepositoryRuntime,
 } from "./modules/enterprise/enterprise-repository-runtime.js";
+import {
+  createEnvironmentEnterpriseSupportInboundTicketService,
+  type EnterpriseSupportInboundTicketService,
+} from "./modules/enterprise/enterprise-support-inbound-ticket.js";
 import { registerHealthRoutes } from "./modules/health/health.routes.js";
 import { registerModelRoutes } from "./modules/models/models.routes.js";
 import { registerPlansRoutes } from "./modules/plans/plans.routes.js";
@@ -125,6 +131,7 @@ export async function buildApp(dependencies: {
   enterpriseMeetingScreenShareProvider?: EnterpriseMeetingScreenShareProvider;
   enterpriseMeetingMaterialProvider?: EnterpriseMeetingMaterialProvider;
   enterpriseMeetingScreenOcrDispatch?: EnterpriseMeetingScreenOcrDispatchService;
+  enterpriseSupportInboundTicketService?: EnterpriseSupportInboundTicketService;
 } = {}) {
   const app = Fastify({
     logger: {
@@ -150,6 +157,8 @@ export async function buildApp(dependencies: {
     createEnvironmentAuditExportArtifactStore();
   const providerReadinessService = dependencies.providerReadinessService ??
     createEnterpriseProviderReadinessService();
+  const supportInboundTickets = dependencies.enterpriseSupportInboundTicketService ??
+    createEnvironmentEnterpriseSupportInboundTicketService();
   app.addHook("onClose", () => auditExportArtifactStore.close());
   registerPlatformTelemetryHooks(app);
   await app.register(cors, { origin: true });
@@ -233,6 +242,10 @@ export async function buildApp(dependencies: {
   );
   registerEnterpriseMeetingCalendarRoutes(
     app, tenantRouteService, enterpriseRepositoryRuntime, providerReadinessService,
+  );
+  registerEnterpriseSupportChannelRoutes(
+    app, tenantRouteService, enterpriseRepositoryRuntime,
+    providerReadinessService, supportInboundTickets,
   );
   registerEnterpriseMeetingScreenShareRoutes(
     app,

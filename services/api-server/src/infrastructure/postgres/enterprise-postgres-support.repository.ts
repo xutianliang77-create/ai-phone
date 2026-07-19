@@ -92,6 +92,13 @@ export class EnterpriseSupportPostgresRepository {
     `, [uuid(customerId)]);
     return result.rows[0] ? mapCustomerProfile(result.rows[0]) : null;
   }
+  async findCustomerByExternalId(externalId: string) {
+    const result = await this.session.query<CustomerProfileRow>(`
+      SELECT * FROM enterprise.customer_profiles
+      WHERE tenant_id = $1 AND external_id = $2
+    `, [text(externalId, 200)]);
+    return result.rows[0] ? mapCustomerProfile(result.rows[0]) : null;
+  }
   async createSession(input: CreateEnterpriseSupportSessionInput) {
     const value = normalizeSession(input);
     const result = await this.session.query<SupportSessionRow>(`

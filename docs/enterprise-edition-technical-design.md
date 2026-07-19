@@ -1,6 +1,6 @@
 # 无界AI企业版详细技术设计
 
-版本：v1.41
+版本：v1.42
 日期：2026-07-19
 状态：统一通讯平台与 PostgreSQL Primary 收敛详细技术方案
 
@@ -205,6 +205,13 @@ tool_executions(
 communication policy、活动 entitlement、客户与 active channel，再创建 `kind=support` 的唯一
 communication binding。Repository 不调用外部 Channel Provider；真实 PSTN/Web/App 入站属于
 `ENT-CS-002`。
+
+`ENT-CS-002` 使用 Provider-neutral 共享契约 `EnterpriseSupportInboundEvent`。事件只包含 provider/source、稳定
+event ID、SHA-256 客户键/可选电话 hash、显示名、locale、intent、priority 和 canonical UTC 时间；禁止原始电话和
+客户端 tenant 覆盖。内部授权先通过 active channel 与实时 readiness，再签发最长15分钟的 HMAC dispatch ticket，
+ticket 固定 tenant/channel/type/homeRegion/cell/routeEpoch。入站以 `support.<source> + sourceEventId` 去重，
+同 ID 不同 canonical hash 返回冲突；Inbox、客户归并、support/communication session、binding、audit 和 Outbox
+在同一 tenant transaction 内提交。
 
 ### 2.4 企业会议和屏幕共享
 
@@ -528,6 +535,8 @@ POST   /enterprise/v1/suppression
 
 ```text
 POST   /enterprise/v1/support/channels
+POST   /internal/enterprise/support/channels/authorize
+POST   /internal/enterprise/support/inbound
 GET    /enterprise/v1/support/queues
 GET    /enterprise/v1/support/sessions
 GET    /enterprise/v1/support/sessions/:sessionId
@@ -1217,6 +1226,10 @@ retention 窗口和受控审计导出的创建/下载已由 `ENT-UI-008` 实现�
 `X-Enterprise-Route-Document` 携带 base64url 文档；缺失、篡改、过期或
 tenant/homeRegion/cell/route epoch 不匹配均在副作用前拒绝。当前 route epoch 取 tenant
 路由记录 version；路由或生命周期版本推进后，旧文档不能继续发起写入。
+
+客服 ingress 使用独立至少32字节 `ENTERPRISE_SUPPORT_INGRESS_SIGNING_SECRET`，不能复用客户端 route 或
+Provider webhook secret；`ENTERPRISE_SUPPORT_INGRESS_TICKET_TTL_SECONDS` 仅允许60至900秒。内部 channel
+授权和入站端点还要求至少16字符 `INTERNAL_API_SECRET`。任一密钥缺失或过短时 ticket 签发/内部请求失败闭合。
 
 客户端登录后先从控制面获取短期 route document：
 

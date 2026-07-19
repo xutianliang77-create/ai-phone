@@ -10,6 +10,7 @@ export * from "./api/enterprise-billing.js";
 export * from "./api/enterprise-observability.js";
 export * from "./api/enterprise-knowledge.js";
 export * from "./api/enterprise-terminology.js";
+export * from "./api/enterprise-support.js";
 export * from "./api/call-links.js";
 export * from "./api/model-routing.js";
 export * from "./api/plans.js";

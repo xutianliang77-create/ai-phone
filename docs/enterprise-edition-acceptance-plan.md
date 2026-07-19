@@ -1,6 +1,6 @@
 # 无界AI企业版验收任务与计划
 
-版本：v1.39
+版本：v1.40
 日期：2026-07-19
 状态：可执行验收计划，已对齐统一通讯平台和 PostgreSQL Primary 收敛
 
@@ -445,10 +445,17 @@ contract test 已定义但按要求未运行。真实 PostgreSQL forced-RLS/崩�
 | AC-CS-003 | 状态 CAS | session/case/tool 非法迁移、版本竞争、身份改写、删除和终态回退均失败 |
 | AC-CS-004 | 原子绑定 | support session 与公共 communication session/binding 同事务成功或回滚 |
 | AC-CS-005 | 重启恢复 | API/Worker 重启后仅恢复非终态会话，关联资源一致，缺 binding 明确未就绪 |
+| AC-CS-006 | tenant dispatch | ticket 篡改、过期、旧 route epoch、跨 tenant/channel/type 均被拒绝 |
+| AC-CS-007 | 入站重放 | 同 source/event/hash 只创建一个 session，不同 hash 冲突且原记录不变 |
+| AC-CS-008 | Provider 降级 | PSTN inbound 未配置/未 ready、签名未通过或内部 ticket 未配置时创建数为零 |
+| AC-CS-009 | 三渠道一致性 | PSTN/Web/App 均进入 tenant-scoped communication session 与唯一 support binding |
 
 `ENT-CS-001` 当前只有 migration、领域模型、Repository/runtime 和未执行的状态矩阵代码候选。按本轮要求
 未运行自动化、真实 PostgreSQL migration/forced-RLS、并发 CAS 或重启恢复，因此 AC-CS-001..005
 均未通过，任务保持 `in_progress`。
+
+`ENT-CS-002` 的共享契约、ticket、内部路由和事务代码已形成，但未运行 ticket/route/inbox/并发测试，也未接
+真实 PSTN edge、Web Gateway 或 App Gateway，因此 AC-CS-006..009 同样未通过。
 
 ### 8.1 渠道和语言
 

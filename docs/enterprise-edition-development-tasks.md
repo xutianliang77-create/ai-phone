@@ -1,6 +1,6 @@
 # 无界AI企业版开发任务
 
-版本：v1.46
+版本：v1.47
 日期：2026-07-19
 状态：E0 开发中，已对齐统一通讯平台和 PostgreSQL Primary 收敛
 
@@ -147,12 +147,17 @@ migration/forced-RLS、真实 Google Workspace 管理授权、Worker 重启、�
 CAS 迁移会话并聚合恢复非终态资源。状态矩阵已定义但按要求未运行，真实 migration/forced-RLS/并发/
 重启恢复均未验收，任务保持 `in_progress`。
 
+`ENT-CS-002` 已形成 Provider-neutral 共享契约、内部 channel 授权/入站 API、短期 HMAC tenant dispatch ticket、
+PSTN inbound readiness、Web/App first-party 路径，以及 Inbox hash 去重、客户 hash 归并、统一 support/communication
+session、audit/Outbox 原子事务。ticket/路由负向测试已定义但按要求未运行，真实 Provider webhook 签名、PSTN/Web/App、
+并发重放和重启恢复均未验收，任务保持 `in_progress`。
+
 ## 5. P1 AI 客服
 
 | 编号 | 任务 | 依赖 | 交付物 | 完成定义 | 状态 |
 | --- | --- | --- | --- | --- | --- |
 | ENT-CS-001 | 客服领域模型 | CORE-013、DATA-003/008 | channel/queue/session/case/tool schema、communication session binding | 状态机和重启恢复通过 | in_progress |
-| ENT-CS-002 | 呼入 Channel Adapter | CS-001、CORE-008/014 | PSTN/Web/App contract、tenant dispatch | 三渠道创建同一 tenant-scoped communication session | todo |
+| ENT-CS-002 | 呼入 Channel Adapter | CS-001、CORE-008/014 | PSTN/Web/App contract、tenant dispatch | 三渠道创建同一 tenant-scoped communication session | in_progress |
 | ENT-CS-003 | Tenant RAG | CORE-004、CS-001 | 检索过滤、引用、无答案路径 | 不跨租户、不无依据回答 | todo |
 | ENT-CS-004 | Support Agent | CS-003、CORE-014/015 | 状态机、JSON schema、上下文压缩、声音/降级策略 | thinking 不泄露，超时可降级，取消后旧 TTS 不恢复 | todo |
 | ENT-CS-005 | Tool Registry | CS-001 | 工具 schema、风险和权限 | 未注册工具不可执行 | todo |

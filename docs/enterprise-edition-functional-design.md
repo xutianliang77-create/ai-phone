@@ -1,6 +1,6 @@
 # 无界AI企业版详细功能设计
 
-版本：v1.22
+版本：v1.23
 日期：2026-07-19
 状态：SaaS 详细设计基线，已对齐统一通讯平台
 
@@ -239,6 +239,17 @@ Provider、usage/ledger 和 trace；跨会话业务聚合与货币成本尚未�
   handoff 无坐席时可回到 AI，进行中会话可结束或失败，终态不可改写。
 - API/Worker 重启只从 PostgreSQL 读取非终态会话，并一起恢复渠道、客户、队列、工单、工具执行和
   communication binding。binding 缺失必须显式暴露为未就绪，不得临时生成进程内真值。
+
+#### 6.2.2 三渠道统一入站
+
+- PSTN、Web 和 App Adapter 共用一个入站事件契约：稳定 `sourceEventId`、渠道、发生时间、优先级和
+  hash 化客户键；禁止提交原始电话号码或用请求 body 的 `tenantId` 作为授权真值。
+- 可信 ingress 先以内部凭据换取短期 dispatch ticket。ticket 固定 tenant、channel、channel type、region、
+  cell 和 route epoch；过期、篡改、跨渠道或旧路由请求均拒绝。
+- PSTN 每次授权都读取实时 capability 且必须具有 inbound 能力；Web/App first-party 路径不冒充外部 Provider。
+  Provider 未配置、探测失败或签名服务未配置时返回 not ready，不创建半条会话。
+- 相同 provider event ID 与相同 payload hash 只返回原会话；相同 ID 不同内容返回冲突。Provider 签名验证
+  必须在 edge Adapter 完成，只有验证成功的事件才能进入内部 tenant dispatch。
 
 ### 6.3 知识问答
 
