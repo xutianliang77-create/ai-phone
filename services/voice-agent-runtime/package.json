@@ -6,7 +6,9 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "dev": "tsx src/agent-server.ts dev",
+    "dev:support": "tsx src/support-agent-server.ts dev",
     "start": "node dist/agent-server.js start",
+    "start:support": "node dist/support-agent-server.js start",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run src"
   },

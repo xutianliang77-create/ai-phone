@@ -1,6 +1,6 @@
 # 无界AI企业版详细功能设计
 
-版本：v1.24
+版本：v1.25
 日期：2026-07-19
 状态：SaaS 详细设计基线，已对齐统一通讯平台
 
@@ -274,7 +274,21 @@ source 当前满足条件的最高 published revision。draft、processing、rev
 稳定 citation，由后续 Support Agent 按引用生成答案；无命中时返回本地化“无法确认”与转人工指令，不调用
 LLM 生成企业事实。每次检索只审计维度、结果数和逐条知识版本/citation/hash，不保存问题或知识正文。
 
-### 6.3.1 企业术语与话术版本
+### 6.3.1 Support Agent
+
+- AI 接待只在已有 support session、queue、communication binding、活动 entitlement 和当前通讯策略快照均有效时启动；
+  客户端不能提交 tenant、cell、route epoch、generation 或模型地址。
+- 每轮只消费服务端返回的当前 published RAG evidence。没有证据时不调用 LLM，而是使用本地化固定话术说明无法确认并转人工；
+  Provider 未配置、超时、不可用或返回非法 JSON 时采用同一显式降级路径，不显示或播报“成功回答”。
+- 模型输出必须严格等于 `spokenText/intent/toolRequest/riskSignals/knowledgeCitations/conversationState` 六字段；
+  `thinking/reasoning/analysis` 或任何额外字段均拒绝。`ENT-CS-005` 前 `toolRequest` 固定为 `null`。
+- `answer/qualify` 必须至少引用一条本轮 evidence，引用只能是服务端给出的 citation 子集；任何风险信号必须转人工。
+- 最近上下文最多12轮、单轮1500字节、整体8000字节，并以 hash、幂等键和递增 sequence 保存；客户输入单独只保存 SHA-256，
+  恢复所需的受限上下文按租户数据生命周期处理。
+- 每个 Worker ticket 固定 tenant/session/cell/route epoch/policy/entitlement/generation。回复完成后、TTS 播放前必须再次向 API 授权；
+  取消、接管、过期 lease、旧 generation 或策略失效都会拒绝播放，Worker 立即中断 speech、清空缓冲且不自动恢复旧音频。
+
+### 6.3.2 企业术语与话术版本
 
 - 术语包是租户内稳定资源，每次修改创建独立 revision；版本维度包含源/目标语言、国家、产品和
   `marketing|support|meeting|all` 使用范围。

@@ -1,6 +1,6 @@
 # 无界AI企业版技术架构
 
-版本：v1.27
+版本：v1.28
 日期：2026-07-19
 状态：SaaS 详细架构基线，已对齐统一通讯平台和 PostgreSQL Primary
 
@@ -177,7 +177,7 @@ object-storage
 | 账号、Tenant、RBAC、企业命令 | `services/api-server` | 先按 domain module 隔离；只有独立扩缩容或故障域需要时才拆服务 |
 | Enterprise Repository runtime/cell Worker | `services/api-server/src/modules/enterprise`、`services/api-server/src/infrastructure/postgres` | API 使用单一 `legacy|postgres` runtime；独立启动的 cell Worker 仅以 cell discovery 和 tenant transaction 角色 claim/finalize |
 | Communication Session、Provider Operation、Dispatch、Recording 和 Usage | 上游稳定提交 `fe1c3c2` 已导入企业分支，`ENT-DATA-008/CORE-013/014/015` 已补 tenant scope、企业业务绑定、签名 dispatch fence 和企业运行策略快照 | 公共 runtime 已成为代码基线；dispatch 必须先通过服务端 policy snapshot 与授权 fence，真实 Provider/设备仍待验收 |
-| PostgreSQL Primary 基础 | 公共31段 migration/Primary Runtime 与企业现有28段 migration | 已收敛为一个 Storage Driver/启动编排和两个有序 manifest；按 tenant/directory/cell/migration/maintenance 使用最小权限连接，等待真实 H3 验收 |
+| PostgreSQL Primary 基础 | 公共31段 migration/Primary Runtime 与企业现有29段 migration | 已收敛为一个 Storage Driver/启动编排和两个有序 manifest；按 tenant/directory/cell/migration/maintenance 使用最小权限连接，等待真实 H3 验收 |
 | 受控审计导出 | enterprise `0020`、Audit Export API/Repository、cell Worker、加密对象存储 Adapter | API 只创建/查询/鉴权下载；cell Worker 在 tenant transaction 取数并保存 hash/size/expiry，客户端不获得对象存储 key/凭据；物理 purge 与对象清单仍待 REL-002 |
 | Enterprise Knowledge | enterprise `0017`、Knowledge Repository/runtime/API | source/revision/chunk/review/publish、发布后不可变、四维有效期检索和 citation 已接入；embedding Provider 未配置时保持确定性文本检索，不声明向量 readiness |
 | Enterprise Terminology | enterprise `0018`、Term Pack/Script Template Repository/runtime/API | 稳定资源与不可变 revision、审核发布、生效时间解析已接入；resolver 向 ASR/翻译/LLM 返回同一术语版本引用，话术只供 LLM 使用 |
@@ -409,7 +409,25 @@ communication session、唯一 binding、审计和 `support.session.created` Out
 Knowledge Repository。会话必须处于非终态服务阶段，知识查询必须同时满足 tenant、locale、country、product、
 published revision 和服务端有效时间。RAG 只返回 evidence/citation 或确定性的 no-evidence/handoff directive，
 不在 Repository/API 层调用 LLM，也不把空检索包装成答案。命中的逐条知识版本、block、citation 和 content hash
-写入不可变审计，但 query、chunk content 和完整提示词不进入审计。后续 `ENT-CS-004` 才负责引用约束下的答案生成。
+写入不可变审计，但 query、chunk content 和完整提示词不进入审计。`ENT-CS-004` 在此证据边界之上完成引用约束生成。
+
+### 8.4 Support Agent 服务端生成与媒体 fence
+
+Support Agent 采用 API-owned generation：独立 LiveKit Worker cell 只负责音频 I/O、ASR、TTS 和中断控制，
+不持有 PostgreSQL 凭据，也不直接把通用 LLM 接到语音输出。Worker 的自定义 LLM adapter 把客户 final turn、
+受限最近上下文和签名 Worker ticket 提交 API；API 在 tenant Unit of Work 内复核 support session、communication
+binding、policy snapshot、entitlement、lease 和 generation，取得当前 RAG evidence 后才在事务外调用配置的
+OpenAI-compatible Provider，并在回写前再次执行相同 fence。
+
+`enterprise.support_agent_runs/turns` 是可恢复状态真值，均使用 tenant-first FK、forced RLS、幂等/hash、递增 sequence
+和单向状态 trigger。turn 不保存独立原始客户文本，只保存 SHA-256；run 保存最多12轮的有界恢复上下文。模型输出使用
+strict JSON Schema，禁用 thinking，拒绝额外字段、引用越界、无引用回答和风险未转人工。无证据、Provider 未配置、超时、
+不可用或非法输出均生成确定性 handoff/degraded 结果。
+
+TTS 不把“生成成功”当作播放许可。Worker 在把 `spokenText` 交给 TTS 前调用独立 authorize endpoint，API 再次读取当前
+dispatch/policy/generation；只有匹配的 run/turn/text 获得许可。短期 ticket 在到期前轮换并复核 tenant/session/cell/route/
+generation 不变；心跳或控制 fence 失败时 Worker 强制 interrupt、清空音频 buffer、关闭输入输出并以不 drain 方式结束，
+被打断的 speech 不写 delivered，因此取消后的旧 TTS 不会由恢复逻辑重新播放。
 
 ## 9. 数据架构
 

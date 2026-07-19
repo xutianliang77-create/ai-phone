@@ -62,3 +62,73 @@ export type EnterpriseSupportRagResponse =
       handoffRecommended: true;
       evidence: [];
     };
+
+export type EnterpriseSupportAgentIntent =
+  | "qualify"
+  | "answer"
+  | "handoff"
+  | "end";
+
+export type EnterpriseSupportAgentConversationState =
+  | "qualifying"
+  | "answering"
+  | "handoff"
+  | "ending";
+
+export interface EnterpriseSupportAgentTurnOutput {
+  spokenText: string;
+  intent: EnterpriseSupportAgentIntent;
+  toolRequest: null;
+  riskSignals: string[];
+  knowledgeCitations: string[];
+  conversationState: EnterpriseSupportAgentConversationState;
+}
+
+export interface EnterpriseSupportAgentDispatchResponse {
+  status: "ready";
+  ticket: string;
+  runId: string;
+  sessionId: string;
+  communicationSessionId: string;
+  roomName: string;
+  agentName: string;
+  generation: number;
+  expiresAt: string;
+}
+
+export interface EnterpriseSupportAgentWorkerSnapshot {
+  runId: string;
+  sessionId: string;
+  communicationSessionId: string;
+  roomName: string;
+  generation: number;
+  locale: string;
+  countryCode: string;
+  productCode: string;
+  conversationState: EnterpriseSupportAgentConversationState;
+}
+
+export interface EnterpriseSupportAgentRecentTurn {
+  role: "customer" | "assistant";
+  text: string;
+}
+
+export interface EnterpriseSupportAgentTurnRequest {
+  ticket: string;
+  workerCellId: string;
+  workerId: string;
+  inputTurnId: string;
+  idempotencyKey: string;
+  customerText: string;
+  recentTurns: EnterpriseSupportAgentRecentTurn[];
+}
+
+export interface EnterpriseSupportAgentTurnResponse {
+  status: "generated" | "degraded" | "handoff";
+  turnId: string;
+  sequence: number;
+  generation: number;
+  output: EnterpriseSupportAgentTurnOutput;
+  providerFingerprint?: string;
+  reasonCode?: string;
+}

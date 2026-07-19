@@ -75,6 +75,16 @@ import { registerEnterpriseSupportChannelRoutes } from
   "./modules/enterprise/enterprise-support-channel.routes.js";
 import { registerEnterpriseSupportRagRoutes } from
   "./modules/enterprise/enterprise-support-rag.routes.js";
+import { registerEnterpriseSupportAgentRoutes } from
+  "./modules/enterprise/enterprise-support-agent.routes.js";
+import {
+  createEnvironmentEnterpriseSupportAgentProvider,
+  type EnterpriseSupportAgentProvider,
+} from "./modules/enterprise/enterprise-support-agent-provider.js";
+import {
+  createEnvironmentEnterpriseSupportAgentDispatchService,
+  type EnterpriseSupportAgentDispatchService,
+} from "./modules/enterprise/enterprise-support-agent-dispatch.js";
 import {
   createEnvironmentEnterpriseMeetingMaterialProvider,
   type EnterpriseMeetingMaterialProvider,
@@ -134,6 +144,8 @@ export async function buildApp(dependencies: {
   enterpriseMeetingMaterialProvider?: EnterpriseMeetingMaterialProvider;
   enterpriseMeetingScreenOcrDispatch?: EnterpriseMeetingScreenOcrDispatchService;
   enterpriseSupportInboundTicketService?: EnterpriseSupportInboundTicketService;
+  enterpriseSupportAgentProvider?: EnterpriseSupportAgentProvider;
+  enterpriseSupportAgentDispatchService?: EnterpriseSupportAgentDispatchService;
 } = {}) {
   const app = Fastify({
     logger: {
@@ -251,6 +263,13 @@ export async function buildApp(dependencies: {
   );
   registerEnterpriseSupportRagRoutes(
     app, tenantRouteService, enterpriseRepositoryRuntime,
+  );
+  registerEnterpriseSupportAgentRoutes(
+    app, tenantRouteService, enterpriseRepositoryRuntime,
+    dependencies.enterpriseSupportAgentProvider ??
+      createEnvironmentEnterpriseSupportAgentProvider(),
+    dependencies.enterpriseSupportAgentDispatchService ??
+      createEnvironmentEnterpriseSupportAgentDispatchService(),
   );
   registerEnterpriseMeetingScreenShareRoutes(
     app,

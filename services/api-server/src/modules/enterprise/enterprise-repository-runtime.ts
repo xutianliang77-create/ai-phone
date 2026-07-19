@@ -74,6 +74,8 @@ import type {
 import type { EnterpriseAuditExportRuntime } from "./enterprise-audit-export-runtime.js";
 import type { EnterpriseMeetingRepositoryRuntime } from "./enterprise-meeting-runtime.js";
 import type { EnterpriseSupportRepositoryRuntime } from "./enterprise-support-runtime.js";
+import type { EnterpriseSupportAgentRepositoryRuntime } from
+  "./enterprise-support-agent-runtime.js";
 
 export type EnterpriseContextResult =
   | { status: "resolved"; tenant: EnterpriseTenantRecord; member: EnterpriseMemberRecord }
@@ -101,7 +103,8 @@ export interface EnterpriseRepositoryRuntime
     EnterpriseTerminologyRepositoryRuntime,
     EnterpriseAuditExportRuntime,
     EnterpriseMeetingRepositoryRuntime,
-    EnterpriseSupportRepositoryRuntime {
+    EnterpriseSupportRepositoryRuntime,
+    EnterpriseSupportAgentRepositoryRuntime {
   readonly driver: "legacy" | "postgres";
   resolveContext(input: {
     userId: string;

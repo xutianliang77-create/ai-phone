@@ -39,6 +39,7 @@ describe("enterprise PostgreSQL migrations", () => {
       "0026_enterprise_meeting_screen_ocr",
       "0027_enterprise_meeting_calendar_sync",
       "0028_enterprise_support_domain",
+      "0029_enterprise_support_agent",
     ]);
     for (const migration of migrations) {
       expect(migration.up.trim()).not.toBe("");
@@ -141,6 +142,10 @@ describe("enterprise PostgreSQL migrations", () => {
     expect(sql).toContain("support_queues_tenant_isolation");
     expect(sql).toContain("support_sessions_state_shape_check");
     expect(sql).toContain("support_sessions_guard");
+    expect(sql).toContain("CREATE TABLE enterprise.support_agent_runs");
+    expect(sql).toContain("CREATE TABLE enterprise.support_agent_turns");
+    expect(sql).toContain("support_agent_runs_guard");
+    expect(sql).toContain("support_agent_turns_guard");
     expect(sql).toContain("CREATE TABLE enterprise.meeting_material_segments");
     expect(sql).toContain("CREATE TABLE enterprise.meeting_material_conclusion_evidence");
     expect(sql).toContain("CREATE TABLE enterprise.meeting_action_item_evidence");
@@ -189,6 +194,7 @@ describe("enterprise PostgreSQL migrations", () => {
     expect(rollbackSql).toContain("DROP TABLE IF EXISTS enterprise.term_pack_versions");
     expect(rollbackSql).toContain("DROP TABLE IF EXISTS enterprise.script_template_versions");
     expect(rollbackSql).toContain("DROP TABLE IF EXISTS enterprise.meeting_material_runs");
+    expect(rollbackSql).toContain("DROP TABLE IF EXISTS enterprise.support_agent_runs");
     expect(sql).not.toContain("BYPASSRLS");
   });
 

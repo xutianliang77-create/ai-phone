@@ -1,6 +1,6 @@
 # 无界AI企业版详细技术设计
 
-版本：v1.43
+版本：v1.44
 日期：2026-07-19
 状态：统一通讯平台与 PostgreSQL Primary 收敛详细技术方案
 
@@ -21,11 +21,11 @@
 | RBAC | `ready_for_acceptance` | 已有17个 scope、九角色矩阵、统一服务端 guard 和越权测试 |
 | SaaS tenant lifecycle | `ready_for_acceptance` | 已有幂等开通、暂停、导出/删除执行器、租约、有界恢复和 receipt 校验；真实对象存储/Provider 清理服务尚待验收 |
 | Append-only audit | `ready_for_acceptance` | 已有 tenant-scoped 查询、HMAC cursor、成员/RBAC/租户生命周期埋点和 SQLite/PostgreSQL 不可变约束；受控导出已进入 UI-008 开发，真实 PostgreSQL 验收仍待执行 |
-| PostgreSQL schema | `implemented` | 已有二十八段 up/down migration、tenant-first 索引、复合 FK、强制 RLS、user directory、cell pending projection、opaque subject identity、企业通讯/dispatch/策略、usage/billing、knowledge/terminology、observability trace、受控审计导出、Meeting 聚合/创建/翻译、屏幕共享租约、会后材料、屏幕 OCR、日历同步和客服领域；尚无真实 migrate/restore/PITR 证据 |
+| PostgreSQL schema | `implemented` | 已有二十九段 up/down migration、tenant-first 索引、复合 FK、强制 RLS、user directory、cell pending projection、opaque subject identity、企业通讯/dispatch/策略、usage/billing、knowledge/terminology、observability trace、受控审计导出、Meeting 聚合/创建/翻译、屏幕共享租约、会后材料、屏幕 OCR、日历同步、客服领域和 Support Agent run/turn；尚无真实 migrate/restore/PITR 证据 |
 | Tenant-scoped Repository | `ready_for_acceptance` | 已有 tenant/user/cell scoped transaction、subject guard、单一 `legacy|postgres` runtime、HTTP 全链路注入、独立 cell Worker，以及 Tenant/Member/Audit、Directory、lifecycle、Inbox/Outbox、budget、billing/entitlement、usage accounting、knowledge、terminology 和共享 unit-of-work；尚无真实 PostgreSQL H3 证据 |
 | Enterprise Inbox/Outbox | `ready_for_acceptance` | 已有 tenant-scoped 去重、稳定 payload hash、领域/inbox/outbox 原子提交、lease/retry/recovery 和100次重放门禁；真实 PostgreSQL 并发与 Provider sandbox 尚待验收 |
 | SQLite/JSON 演示数据导入 | `ready_for_acceptance` | 已有维护窗口、SQLite 临时副本与 quick_check、空目标事务导入、六集合 count/SHA-256 读回对账和不一致回滚；仅限内部演示数据 |
-| 公共 Primary Runtime 收敛 | `ready_for_acceptance` | 已合入上游稳定提交 `fe1c3c2`；公共31段与 enterprise 28段 manifest 由一个启动编排验证，driver、数据库身份和分权连接失败均在监听前闭合；尚无真实 PostgreSQL H3 证据 |
+| 公共 Primary Runtime 收敛 | `ready_for_acceptance` | 已合入上游稳定提交 `fe1c3c2`；公共31段与 enterprise 29段 manifest 由一个启动编排验证，driver、数据库身份和分权连接失败均在监听前闭合；尚无真实 PostgreSQL H3 证据 |
 | 企业链路追踪 | `in_progress` | 平台 trace 已进入 tenant context、PostgreSQL session、communication binding、usage event/ledger 与会话报告；本轮未执行测试和真实 PostgreSQL 门禁，货币成本因无价格表明确 not configured |
 | 企业工作台真值投影 | `in_progress` | Web 已读取 tenant/route、Provider、subscription、budget、usage aggregate 和显式 session trace report；业务聚合与价格表缺失时明确 not ready/not configured，本轮未执行自动化、浏览器或 PostgreSQL 门禁 |
 | 审计与分析 | `in_progress` | Web 已接入审计筛选/详情、显式 session 下钻和受控 JSONL 导出；`0020`、Repository/API/cell Worker/加密对象存储边界已实现，本轮未执行 migration、双租户、对象存储或浏览器测试；业务聚合/价格表与物理对象清理仍未完成 |
@@ -40,8 +40,9 @@
 | SaaS 计量聚合 | `ready_for_acceptance` | enterprise `0016` 已实现 tenant usage event、event/ledger 一致性、append-only adjustment、负数净额保护及 count/hash/watermark 账期聚合；真实关账、支付对账和 A1/H3 待验收 |
 | 企业知识版本 | `ready_for_acceptance` | enterprise `0017`、Knowledge Repository/runtime/API 已实现 source/revision/chunk/review/publish、发布后不可变、四维时间检索和稳定 citation；当前仅有确定性文本检索，本地普通角色验证不代表 embedding Provider、对象存储、恶意文档或 A1/H3 已通过 |
 | 客服 Tenant RAG | `in_progress` | 已将客服活动会话绑定到 tenant-scoped Knowledge Repository，返回逐条 evidence/citation 或确定性无答案转人工指令，并固化不含 query/content 的引用审计；未执行测试、真实 PostgreSQL、召回质量或 Support Agent 生成门禁 |
+| Support Agent | `in_progress` | `0029`、strict JSON schema Provider、API-owned turn runtime、独立 LiveKit Worker cell、上下文压缩、无证据/超时降级和 generation-bound TTS authorize fence 已形成代码候选；未执行自动化、migration/RLS、真实 LLM/ASR/TTS/LiveKit、取消竞态或接管验收 |
 | 企业术语与话术版本 | `ready_for_acceptance` | enterprise `0018`、共享契约、Term Pack/Script Template Repository/runtime/API 已实现稳定资源、递增 revision、review/publish、有效期解析、hash 校验和同一术语版本运行时引用；仅有自动化和本地 PostgreSQL 16 普通角色证据，真实 Worker/Provider、A1/H3 未通过 |
-| Primary 全量切换/恢复证据 | `ready_for_acceptance` | 工具按运行时动态校验 manifest/全业务表；`c9b5be2` 历史证据为31+16/81张表，当前31+28/102张表必须重新生成签名证据；异地 WAL/PITR/H3 未通过 |
+| Primary 全量切换/恢复证据 | `ready_for_acceptance` | 工具按运行时动态校验 manifest/全业务表；`c9b5be2` 历史证据为31+16/81张表，当前31+29/104张表必须重新生成签名证据；异地 WAL/PITR/H3 未通过 |
 | PostgreSQL 控制面/业务聚合 | `designed` | 后续 CORE/MTG/CS/MKT 领域任务范围，不能从公共 Repository runtime 推导为已实现 |
 | SQLite | `demo_only` | 仅本地开发、自动化和封闭演示，不承载真实企业试点数据 |
 | PSTN/CRM/OCR | `not_ready` 或按环境探测 | 未配置必须明确降级，不生成虚假外部对象或成功状态 |
@@ -198,6 +199,21 @@ tool_executions(
   id, tenant_id, session_id, customer_id, tool_name, risk_level, request_hash,
   confirmation_status, status, external_result_ref,
   idempotency_key, created_at, started_at, completed_at, updated_at, version
+)
+
+support_agent_runs(
+  id, tenant_id, support_session_id, communication_session_id,
+  dispatch_grant_id, generation, status, locale, country_code, product_code,
+  conversation_state, context_document, context_hash, last_turn_sequence,
+  created_at, updated_at, version
+)
+
+support_agent_turns(
+  id, tenant_id, run_id, support_session_id, input_turn_id, idempotency_key,
+  request_hash, sequence, status, customer_text_hash, context_hash, evidence_hash,
+  spoken_text, intent, conversation_state, risk_signals, knowledge_citations,
+  provider_fingerprint, failure_code, tts_authorized_at, delivered_at,
+  created_at, updated_at, version
 )
 ```
 
@@ -717,6 +733,23 @@ PSTN webhook 使用 provider event ID 去重。重复 answered/completed 不得�
 
 禁止输出思考过程。`spokenText` 在发送 TTS 前经过品牌、禁语、事实引用和国家告知检查。
 
+`ENT-CS-004` 将该契约实现为 strict `json_schema` 请求，并显式发送 `enable_thinking=false`。解析器要求六字段精确匹配；
+额外 `thinking/reasoning/analysis`、非 `null` 工具请求、无证据的 `answer/qualify`、不属于本轮 evidence 的 citation，
+以及带风险但未 handoff 的输出全部拒绝。Prompt、客户 query、evidence content 和 thinking 不写日志/审计；审计只写
+run/turn、generation、result count、knowledge version/block/citation/content hash。
+
+生成分为 prepare/Provider/complete 三段。prepare 在 tenant transaction 中校验 ticket、lease、binding、policy、
+generation、support session 和当前 published evidence，按 `(run_id,idempotency_key)` 创建 `prepared` turn；Provider 在事务外
+受8秒默认超时约束；complete 重新检索并比较 evidence hash，再次 authorize dispatch，最后原子保存 output/context 和
+handoff 状态。知识在两段之间变化时返回 `knowledge_changed`，不把旧证据结果提交。
+
+Worker 只从独立 `support-agent-server` 启动，启动时要求显式 enabled、LiveKit dispatch、cell ID、内部 API 凭据和
+ASR/TTS 模型。API-backed LLM 在返回文本前调用 `/tts/authorize`；该入口再次执行 dispatch/policy/generation fence，
+且 `(run,turn)` 重试只返回同一授权。Worker 在短期 dispatch ticket 到期前调用 refresh，并拒绝 ticket/tenant/session/
+cell/route/generation 绑定变化。LLM stream 被中断时向未完成 HTTP 请求传播 AbortSignal并清空待交付队列；心跳失败
+强制 `interrupt + clearBuffer + audio disable + shutdown(drain=false)`。`turns/delivered` 仅在未中断的 playout 完成后推进状态；
+`handoff/end` 话术交付后 Worker 主动退出，前者保留人工接管状态，后者原子收敛 support session 终态。
+
 ## 8. RAG 和知识版本
 
 ### 8.1 数据和状态机
@@ -1120,7 +1153,7 @@ Worker dispatch ticket 升级为 v2，并将 `policySnapshotId + policyVersion` 
 `ENT-DATA-009` 的维护工具在 `REPEATABLE READ READ ONLY` 快照内枚举 `ai_phone` 与
 `enterprise` 全部业务表（排除 migration 元表），要求每张表存在主键，按复合主键
 keyset pagination 读取 `to_jsonb(row)` 规范文本。每行以字节长度前缀加入 SHA-256，
-形成 table count/hash/last-key hash，再汇总公共31段、企业28段 checksum、8张关键表、
+形成 table count/hash/last-key hash，再汇总公共31段、企业29段 checksum、8张关键表、
 总行数和全库 hash。维护账号必须是受审计的 superuser 或 `BYPASSRLS` 全读角色，不能复用
 tenant/directory/cell 应用凭证。
 
@@ -1132,7 +1165,7 @@ baseline 文件 hash，验证源库默认只读、写探针返回 SQLSTATE `2500
 整行 hash、主键、migration 或 server version 不一致都会生成签名 `mismatch` 并以非零退出。
 
 生产 startup gate 只接受 `environment=staging` 的 matched cutover evidence，且运行时
-commit/image/topology、cutover ID、target logical ID、当前 system identifier/OID 和31+28
+commit/image/topology、cutover ID、target logical ID、当前 system identifier/OID 和31+29
 manifest 必须逐项一致。本地 PostgreSQL 16 演练已验证81张表、8张含记录关键表、增量后17行
 全库 hash、writer fence、隔离 `pg_dump/pg_restore` 和单行篡改失败；证据见
 `docs/evidence/ent-data-009-local-drill-2026-07-18.md`。这只证明机制可执行，不是异地主机
