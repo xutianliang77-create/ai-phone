@@ -122,7 +122,7 @@ export class PostgresReliableOutboxRepository {
         WITH candidates AS (
           SELECT id FROM ai_phone.reliable_outbox_events
           WHERE published_at IS NULL AND dead_lettered_at IS NULL
-            AND available_at <= $6::timestamptz
+            AND available_at <= COALESCE($6::timestamptz, now())
             AND (lease_until IS NULL OR lease_until <= now())
             AND ($4::text IS NULL OR session_id = $4)
             AND ($5::text IS NULL OR event_type = $5)
@@ -135,7 +135,7 @@ export class PostgresReliableOutboxRepository {
           attempts = event.attempts + 1
         FROM candidates WHERE event.id = candidates.id RETURNING event.*
       `, [input.owner, input.limit, input.leaseSeconds,
-        input.sessionId, input.eventType, (input.now ?? new Date()).toISOString()]);
+        input.sessionId, input.eventType, input.now?.toISOString() ?? null]);
       await client.query("COMMIT");
       return rows.rows.map(fromRow);
     } catch (error) {
@@ -146,9 +146,11 @@ export class PostgresReliableOutboxRepository {
     }
   }
 
-  async listPendingSessionIds(eventType: string, now = new Date(), limit = 200) {
+  async listPendingSessionIds(eventType: string, now?: Date, limit = 200) {
     if (!eventType.trim() || !Number.isInteger(limit) || limit < 1 || limit > 500 ||
-      !Number.isFinite(now.getTime())) throw new Error("Invalid outbox session query");
+      (now !== undefined && !Number.isFinite(now.getTime()))) {
+      throw new Error("Invalid outbox session query");
+    }
     const client = await this.pool.connect();
     try {
       const result = await client.query<{ session_id: string }>(`
@@ -156,10 +158,10 @@ export class PostgresReliableOutboxRepository {
         FROM ai_phone.reliable_outbox_events
         WHERE event_type = $1 AND session_id IS NOT NULL
           AND published_at IS NULL AND dead_lettered_at IS NULL
-          AND available_at <= $2::timestamptz
+          AND available_at <= COALESCE($2::timestamptz, now())
           AND (lease_until IS NULL OR lease_until <= now())
         GROUP BY session_id ORDER BY first_available, session_id LIMIT $3
-      `, [eventType, now.toISOString(), limit]);
+      `, [eventType, now?.toISOString() ?? null, limit]);
       return result.rows.map((row) => row.session_id);
     } finally {
       client.release();

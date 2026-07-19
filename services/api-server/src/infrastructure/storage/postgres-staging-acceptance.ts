@@ -249,7 +249,8 @@ async function verifyOutboxClaim() {
     sessionId: outboxSessionId,
     eventType: event.eventType,
   })));
-  assert(claimed[0].length + claimed[1].length === 1, "outbox was double claimed");
+  const claimCount = claimed[0].length + claimed[1].length;
+  assert(claimCount === 1, `outbox claim count mismatch: ${claimCount}`);
   const winner = claimed[0].length === 1 ? 0 : 1;
   assert(await repository.acknowledge(outboxEventId, owners[winner]!),
     "outbox winner could not acknowledge");

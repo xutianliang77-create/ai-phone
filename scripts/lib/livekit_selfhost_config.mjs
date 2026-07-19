@@ -22,7 +22,8 @@ const DEFAULTS = {
   ...SIP_DEFAULTS,
   ...EGRESS_DEFAULTS,
   ...INGRESS_DEFAULTS,
-  LIVEKIT_IMAGE: "livekit/livekit-server:v1.13.1",
+  LIVEKIT_IMAGE:
+    "livekit/livekit-server:v1.13.3@sha256:8ef3ee244ded8477d5b40d9dff4b084e1809a9fa0e4d9ed8d29943b3c6322998",
   LIVEKIT_REDIS_IMAGE: "redis:7.4.7-alpine",
   LIVEKIT_CADDY_IMAGE: "caddy:2.10.2-alpine",
   LIVEKIT_HTTP_PORT: "7880",

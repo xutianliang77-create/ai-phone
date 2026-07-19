@@ -70,6 +70,41 @@ describe("PostgresReliableOutboxRepository.enqueue", () => {
     expect(release).toHaveBeenCalledOnce();
   });
 
+  it("uses database time when a claim cutoff is not supplied", async () => {
+    const query = vi.fn()
+      .mockResolvedValueOnce({})
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({});
+    const repo = new PostgresReliableOutboxRepository({
+      connect: vi.fn().mockResolvedValue({ query, release: vi.fn() }),
+    } as never);
+
+    await repo.claimMatching({
+      owner: "outbox-test-owner",
+      limit: 10,
+      leaseSeconds: 30,
+      sessionId: "session_1",
+      eventType: "session.completed",
+    });
+
+    expect(query).toHaveBeenNthCalledWith(2, expect.stringContaining(
+      "available_at <= COALESCE($6::timestamptz, now())",
+    ), ["outbox-test-owner", 10, 30, "session_1", "session.completed", null]);
+  });
+
+  it("uses database time when listing pending sessions without a cutoff", async () => {
+    const query = vi.fn().mockResolvedValue({ rows: [{ session_id: "session_1" }] });
+    const repo = new PostgresReliableOutboxRepository({
+      connect: vi.fn().mockResolvedValue({ query, release: vi.fn() }),
+    } as never);
+
+    await expect(repo.listPendingSessionIds("session.completed", undefined, 10))
+      .resolves.toEqual(["session_1"]);
+    expect(query).toHaveBeenCalledWith(expect.stringContaining(
+      "available_at <= COALESCE($2::timestamptz, now())",
+    ), ["session.completed", null, 10]);
+  });
+
   it("releases an unattempted claim without consuming an attempt", async () => {
     const query = vi.fn().mockResolvedValue({ rowCount: 1, rows: [{ id: "event_1" }] });
     const repo = new PostgresReliableOutboxRepository({
