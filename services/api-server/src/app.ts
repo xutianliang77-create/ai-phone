@@ -77,6 +77,8 @@ import { registerEnterpriseSupportRagRoutes } from
   "./modules/enterprise/enterprise-support-rag.routes.js";
 import { registerEnterpriseSupportAgentRoutes } from
   "./modules/enterprise/enterprise-support-agent.routes.js";
+import { registerEnterpriseSupportToolRoutes } from
+  "./modules/enterprise/enterprise-support-tool.routes.js";
 import {
   createEnvironmentEnterpriseSupportAgentProvider,
   type EnterpriseSupportAgentProvider,
@@ -270,6 +272,9 @@ export async function buildApp(dependencies: {
       createEnvironmentEnterpriseSupportAgentProvider(),
     dependencies.enterpriseSupportAgentDispatchService ??
       createEnvironmentEnterpriseSupportAgentDispatchService(),
+  );
+  registerEnterpriseSupportToolRoutes(
+    app, tenantRouteService, enterpriseRepositoryRuntime,
   );
   registerEnterpriseMeetingScreenShareRoutes(
     app,

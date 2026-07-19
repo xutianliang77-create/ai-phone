@@ -1,6 +1,6 @@
 # 无界AI企业版设计文档索引
 
-版本：v1.37
+版本：v1.38
 日期：2026-07-19
 状态：SaaS 详细设计基线，已纳入统一通讯平台和 PostgreSQL Primary 演进
 
@@ -46,11 +46,11 @@ cell Worker、JSON/SQLite 演示导入，以及全业务表 Primary 切换/恢�
 无界AI主产品公共 PostgreSQL migration、Primary Runtime、可靠 Inbox/Outbox、
 fencing、Billing/Product Records、verify-full 和韧性代码已形成稳定提交 `fe1c3c2`，并由
 `ENT-DATA-007` 合入企业分支。企业版已经完成单 driver、双 manifest、同库身份和分权
-连接的本地自动化，当前 manifest 为公共31段、enterprise 29段；`ENT-DATA-008` 和
+连接的本地自动化，当前 manifest 为公共31段、enterprise 30段；`ENT-DATA-008` 和
 `ENT-CORE-013/014/015` 已完成公共通讯 tenant scope、企业业务会话绑定、签名 Worker dispatch fence
 及设备/声音/录制策略快照的代码/本地自动化，但不能继承主产品 staging 验收。`ENT-DATA-009` 已增加
 31+16 migration manifest 的历史本地证据、全表主键分页 count/hash、WAL 水位、writer fence、签名
-cutover/restore 证据和 production startup 绑定门禁；当前 `0017..0029` 必须按31+29重新生成切换证据。
+cutover/restore 证据和 production startup 绑定门禁；当前 `0017..0030` 必须按31+30重新生成切换证据。
 `ENT-CORE-004` 已增加 tenant-scoped source/version/chunk、草稿审核发布状态机、发布后不可变约束、
 locale/country/product/effective-time 检索和知识引用 ID；
 `ENT-CORE-005` 已增加版本化 term pack/script template、审核发布和生效窗口、发布后不可变约束，
@@ -113,6 +113,11 @@ Inbox hash 去重与统一 session/binding/audit/Outbox 事务；真实 Provider
 API-owned prepare/complete、最多12轮上下文、无证据/Provider 超时显式 handoff/degraded，以及独立 LiveKit Worker cell
 的短期 ticket 轮换、TTS 前 ticket/policy/generation 重验和中断后禁止 delivered fence。当前只通过静态门禁；migration/RLS、自动化、真实 Provider、
 LiveKit/ASR/TTS、取消/接管竞态和重启恢复未执行，保持 `in_progress`。
+`ENT-CS-005` 已增加 `0030` forced-RLS Tool Registry、不可变 revision、固定
+risk/scope/confirmation 映射、封闭 primitive schema、签名 Worker fence、参数 hash、幂等授权记录和
+DB insert guard。只读只创建 `requested`，可逆写只创建 `awaiting_confirmation`，高风险只返回人工接管且不创建
+execution；Agent 工具输出和真实 Adapter 仍分别待 `ENT-CS-006/007/008`。当前只进入静态门禁，
+migration/RLS、自动化、并发发布、双租户和真实 Provider/Adapter 未执行，保持 `in_progress`。
 当前按要求未执行
 测试、migration、RLS、RBAC/ticket/evidence 攻击、并发共享、Worker/Provider、四人媒体、浏览器、真机与重启恢复，
 因此上述任务均保持 `in_progress`。

@@ -41,7 +41,7 @@ type Runtime = Pick<EnterpriseRepositoryRuntime,
   "authorizeSupportAgentTts" | "deliverSupportAgentTurn" |
   "finalizeSupportAgentWorker">;
 type Unit = Parameters<Parameters<typeof withEnterprisePostgresUnitOfWork>[2]>[0];
-type WorkerInput = { ticket: string; workerCellId: string; workerId: string;
+export type SupportAgentWorkerInput = { ticket: string; workerCellId: string; workerId: string;
   traceId: string; now?: Date };
 
 export function createEnterprisePostgresSupportAgentRuntime(
@@ -117,26 +117,26 @@ export function createEnterprisePostgresSupportAgentRuntime(
     },
 
     acceptSupportAgentWorker(input) {
-      return withWorker(pool, input, async (unit, payload) => {
+      return withSupportAgentWorker(pool, input, async (unit, payload) => {
         const accepted = await unit.workerDispatches.accept({ payload,
           workerCellId: input.workerCellId, workerId: input.workerId,
           leaseSeconds: input.leaseSeconds, now: input.now });
         if (accepted.status !== "accepted") return accepted;
-        const authorized = await authorizeAndResolve(unit, payload, input);
+        const authorized = await authorizeSupportAgentWorker(unit, payload, input);
         if (authorized.status !== "ready") return authorized;
         return { status: "accepted" as const, snapshot: snapshot(authorized.run) };
       });
     },
 
     heartbeatSupportAgentWorker(input) {
-      return withWorker(pool, input, (unit, payload) =>
+      return withSupportAgentWorker(pool, input, (unit, payload) =>
         unit.workerDispatches.heartbeat({ payload,
           workerCellId: input.workerCellId, workerId: input.workerId,
           leaseSeconds: input.leaseSeconds, now: input.now }));
     },
 
     refreshSupportAgentWorker(input) {
-      return withWorker(pool, input, async (unit, payload) => {
+      return withSupportAgentWorker(pool, input, async (unit, payload) => {
         const refreshed = await unit.workerDispatches.refresh({ payload,
           workerCellId: input.workerCellId, workerId: input.workerId,
           leaseSeconds: input.leaseSeconds,
@@ -151,8 +151,8 @@ export function createEnterprisePostgresSupportAgentRuntime(
     },
 
     prepareSupportAgentTurn(input) {
-      return withWorker(pool, input, async (unit, payload) => {
-        const authorized = await authorizeAndResolve(unit, payload, input);
+      return withSupportAgentWorker(pool, input, async (unit, payload) => {
+        const authorized = await authorizeSupportAgentWorker(unit, payload, input);
         if (authorized.status !== "ready") return authorized;
         const run = authorized.run;
         const context = compactEnterpriseSupportAgentContext(input.recentTurns);
@@ -184,8 +184,8 @@ export function createEnterprisePostgresSupportAgentRuntime(
     },
 
     completeSupportAgentTurn(input) {
-      return withWorker(pool, input, async (unit, payload) => {
-        const authorized = await authorizeAndResolve(unit, payload, input);
+      return withSupportAgentWorker(pool, input, async (unit, payload) => {
+        const authorized = await authorizeSupportAgentWorker(unit, payload, input);
         if (authorized.status !== "ready") return authorized;
         if (authorized.run.id !== input.runId) return { status: "run_mismatch" };
         const now = input.now ?? new Date();
@@ -239,8 +239,8 @@ export function createEnterprisePostgresSupportAgentRuntime(
     },
 
     authorizeSupportAgentTts(input) {
-      return withWorker(pool, input, async (unit, payload) => {
-        const authorized = await authorizeAndResolve(unit, payload, input);
+      return withSupportAgentWorker(pool, input, async (unit, payload) => {
+        const authorized = await authorizeSupportAgentWorker(unit, payload, input);
         if (authorized.status !== "ready") return authorized;
         if (authorized.run.id !== input.runId) return { status: "run_mismatch" };
         const result = await unit.supportAgents.authorizeTts({ runId: input.runId,
@@ -254,8 +254,8 @@ export function createEnterprisePostgresSupportAgentRuntime(
     },
 
     deliverSupportAgentTurn(input) {
-      return withWorker(pool, input, async (unit, payload) => {
-        const authorized = await authorizeAndResolve(unit, payload, input);
+      return withSupportAgentWorker(pool, input, async (unit, payload) => {
+        const authorized = await authorizeSupportAgentWorker(unit, payload, input);
         if (authorized.status !== "ready") return authorized;
         if (authorized.run.id !== input.runId) return { status: "run_mismatch" };
         return unit.supportAgents.deliverTurn({ runId: input.runId,
@@ -265,8 +265,8 @@ export function createEnterprisePostgresSupportAgentRuntime(
     },
 
     finalizeSupportAgentWorker(input) {
-      return withWorker(pool, input, async (unit, payload) => {
-        const authorized = await authorizeAndResolve(unit, payload, input);
+      return withSupportAgentWorker(pool, input, async (unit, payload) => {
+        const authorized = await authorizeSupportAgentWorker(unit, payload, input);
         if (authorized.status !== "ready") return authorized;
         const finalized = await unit.workerDispatches.finalize({ payload,
           workerCellId: input.workerCellId, workerId: input.workerId,
@@ -297,7 +297,8 @@ export function createEnterprisePostgresSupportAgentRuntime(
   };
 }
 
-function withWorker<T>(pool: EnterpriseTenantPostgresPool, input: WorkerInput,
+export function withSupportAgentWorker<T>(pool: EnterpriseTenantPostgresPool,
+  input: SupportAgentWorkerInput,
   operation: (unit: Unit, payload: EnterpriseWorkerDispatchTicketPayload) => Promise<T>) {
   const secret = supportAgentWorkerSigningSecret();
   const payload = secret ? verifyEnterpriseWorkerDispatchTicket({
@@ -312,8 +313,8 @@ function withWorker<T>(pool: EnterpriseTenantPostgresPool, input: WorkerInput,
   }), (unit) => operation(unit, payload));
 }
 
-async function authorizeAndResolve(unit: Unit,
-  payload: EnterpriseWorkerDispatchTicketPayload, input: WorkerInput) {
+export async function authorizeSupportAgentWorker(unit: Unit,
+  payload: EnterpriseWorkerDispatchTicketPayload, input: SupportAgentWorkerInput) {
   const effect = await unit.workerDispatches.authorize({ payload,
     workerCellId: input.workerCellId, workerId: input.workerId, now: input.now });
   if (effect.status !== "authorized") return effect;

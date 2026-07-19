@@ -79,6 +79,12 @@ export function mapToolExecution(row: ToolExecutionRow): EnterpriseToolExecution
     customerId: row.customer_id, toolName: row.tool_name,
     riskLevel: row.risk_level, requestHash: row.request_hash,
     confirmationStatus: row.confirmation_status, status: row.status,
+    ...(row.registry_definition_id ? {
+      toolDefinitionId: row.registry_definition_id,
+      toolRevision: Number(row.tool_revision),
+      argumentsHash: row.arguments_hash!,
+      authorizationScope: row.authorization_scope!,
+    } : {}),
     ...(row.external_result_ref ? { externalResultRef: row.external_result_ref } : {}),
     idempotencyKey: row.idempotency_key, createdAt: iso(row.created_at),
     ...optionalTime("startedAt", row.started_at),
@@ -133,5 +139,8 @@ export interface ToolExecutionRow extends Record<string, unknown> {
   status: EnterpriseToolExecutionStatus; external_result_ref: string | null;
   idempotency_key: string; created_at: string | Date;
   started_at: string | Date | null; completed_at: string | Date | null;
+  registry_definition_id: string | null; tool_revision: string | number | null;
+  arguments_hash: string | null;
+  authorization_scope: EnterpriseToolExecutionRecord["authorizationScope"] | null;
   updated_at: string | Date; version: string | number;
 }

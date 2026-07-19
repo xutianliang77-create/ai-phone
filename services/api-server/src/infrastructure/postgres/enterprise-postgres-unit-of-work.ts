@@ -72,6 +72,10 @@ import { EnterpriseSupportPostgresRepository } from
   "./enterprise-postgres-support.repository.js";
 import { EnterpriseSupportAgentPostgresRepository } from
   "./enterprise-postgres-support-agent.repository.js";
+import { EnterpriseSupportToolPostgresRepository } from
+  "./enterprise-postgres-support-tool.repository.js";
+import { EnterpriseSupportToolExecutionPostgresRepository } from
+  "./enterprise-postgres-support-tool-execution.repository.js";
 
 export interface EnterprisePostgresUnitOfWork {
   tenant: EnterpriseTenantPostgresRepository;
@@ -98,6 +102,8 @@ export interface EnterprisePostgresUnitOfWork {
   meetingCalendar: EnterpriseMeetingCalendarPostgresRepository;
   support: EnterpriseSupportPostgresRepository;
   supportAgents: EnterpriseSupportAgentPostgresRepository;
+  supportTools: EnterpriseSupportToolPostgresRepository;
+  supportToolExecutions: EnterpriseSupportToolExecutionPostgresRepository;
 }
 
 export function withEnterprisePostgresUnitOfWork<T>(
@@ -136,6 +142,9 @@ export function withEnterprisePostgresUnitOfWork<T>(
       meetingCalendar: new EnterpriseMeetingCalendarPostgresRepository(session),
       support: new EnterpriseSupportPostgresRepository(session),
       supportAgents: new EnterpriseSupportAgentPostgresRepository(session),
+      supportTools: new EnterpriseSupportToolPostgresRepository(session),
+      supportToolExecutions:
+        new EnterpriseSupportToolExecutionPostgresRepository(session),
     }),
   );
 }

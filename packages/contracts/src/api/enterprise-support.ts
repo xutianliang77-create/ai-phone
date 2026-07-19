@@ -1,3 +1,5 @@
+import type { EnterpriseScope } from "./enterprise.js";
+
 export type EnterpriseSupportInboundChannelType = "pstn" | "web" | "app";
 
 export interface EnterpriseSupportInboundAuthorizationRequest {
@@ -131,4 +133,56 @@ export interface EnterpriseSupportAgentTurnResponse {
   output: EnterpriseSupportAgentTurnOutput;
   providerFingerprint?: string;
   reasonCode?: string;
+}
+
+export type EnterpriseSupportToolRiskLevel =
+  | "read"
+  | "reversible_write"
+  | "high_risk";
+
+export type EnterpriseSupportToolConfirmationMode =
+  | "none"
+  | "customer_confirmation"
+  | "human_handoff";
+
+export type EnterpriseSupportToolDefinitionStatus =
+  | "draft"
+  | "active"
+  | "retired";
+
+export type EnterpriseSupportToolPropertySchema =
+  | { type: "string"; minLength?: number; maxLength?: number; enum?: string[] }
+  | { type: "number" | "integer"; minimum?: number; maximum?: number }
+  | { type: "boolean" };
+
+export interface EnterpriseSupportToolInputSchema {
+  type: "object";
+  additionalProperties: false;
+  properties: Record<string, EnterpriseSupportToolPropertySchema>;
+  required: string[];
+}
+
+export interface EnterpriseSupportToolDefinitionDto {
+  id: string;
+  toolName: string;
+  revision: number;
+  status: EnterpriseSupportToolDefinitionStatus;
+  description: string;
+  riskLevel: EnterpriseSupportToolRiskLevel;
+  requiredScope: EnterpriseScope;
+  confirmationMode: EnterpriseSupportToolConfirmationMode;
+  inputSchema: EnterpriseSupportToolInputSchema;
+  schemaHash: string;
+  createdAt: string;
+  publishedAt?: string;
+  retiredAt?: string;
+  version: number;
+}
+
+export interface EnterpriseSupportToolAuthorizationResponse {
+  status: "authorized" | "confirmation_required" | "handoff_required";
+  definition: EnterpriseSupportToolDefinitionDto;
+  argumentsHash: string;
+  executionId?: string;
+  replayed?: boolean;
 }

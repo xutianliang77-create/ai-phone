@@ -108,7 +108,7 @@ export async function loadEnterprisePostgresSupportAggregate(
       unit.support.findCustomer(session.customerId),
       session.queueId ? unit.support.findQueue(session.queueId) : null,
       unit.support.cases(session.id),
-      unit.support.toolExecutions(session.id),
+      unit.supportToolExecutions.list(session.id),
       unit.communicationBindings.findByBusiness("support", session.id),
     ]);
   if (!channel || !customer || (session.queueId && !queue)) {

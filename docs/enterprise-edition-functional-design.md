@@ -1,6 +1,6 @@
 # 无界AI企业版详细功能设计
 
-版本：v1.25
+版本：v1.26
 日期：2026-07-19
 状态：SaaS 详细设计基线，已对齐统一通讯平台
 
@@ -281,7 +281,8 @@ LLM 生成企业事实。每次检索只审计维度、结果数和逐条知识�
 - 每轮只消费服务端返回的当前 published RAG evidence。没有证据时不调用 LLM，而是使用本地化固定话术说明无法确认并转人工；
   Provider 未配置、超时、不可用或返回非法 JSON 时采用同一显式降级路径，不显示或播报“成功回答”。
 - 模型输出必须严格等于 `spokenText/intent/toolRequest/riskSignals/knowledgeCitations/conversationState` 六字段；
-  `thinking/reasoning/analysis` 或任何额外字段均拒绝。`ENT-CS-005` 前 `toolRequest` 固定为 `null`。
+  `thinking/reasoning/analysis` 或任何额外字段均拒绝。`ENT-CS-005` 只建立注册和授权边界；
+  在 `ENT-CS-006/007/008` 接入真实 Adapter 前，Agent 输出中的 `toolRequest` 仍固定为 `null`。
 - `answer/qualify` 必须至少引用一条本轮 evidence，引用只能是服务端给出的 citation 子集；任何风险信号必须转人工。
 - 最近上下文最多12轮、单轮1500字节、整体8000字节，并以 hash、幂等键和递增 sequence 保存；客户输入单独只保存 SHA-256，
   恢复所需的受限上下文按租户数据生命周期处理。
@@ -314,6 +315,24 @@ LLM 生成企业事实。每次检索只审计维度、结果数和逐条知识�
 | 高风险 | 退款、付款、身份验证、合同变更 | 必须人工接管或企业审批 |
 
 LLM 只能提出结构化工具请求；Policy Engine 校验租户、客户、权限、参数和确认状态后才能真正执行。
+
+`ENT-CS-005` 将工具登记为租户内不可变 revision，状态只允许
+`draft -> active -> retired`。同名工具同时最多一个 active revision；发布新版会在同一事务中
+退役旧版，已发布定义不允许改写。注册信息包含：
+
+- 小型、封闭的输入 schema：根对象、`additionalProperties=false`、最多32个字段，字段只支持
+  `string/number/integer/boolean`，整体最多8192字节。
+- 固定风险策略：只读=`support:read + none`，可逆写=`support:manage + customer_confirmation`，
+  高风险=`support:takeover + human_handoff`；客户端不能自由组合这三组值。
+- 授权前重验 Worker ticket、lease、binding、policy、route epoch、generation、run 和客服会话；
+  `tenantId/customerId/sessionId` 全部由服务端上下文解析，不接受模型或请求体覆盖。
+- 参数必须精确符合 active revision 的 schema，并仅保存规范化 SHA-256；原始参数不进入
+  tool execution 或审计明细。同一幂等键异参数直接冲突。
+- 只读授权只能创建 `requested`；可逆写只能创建 `awaiting_confirmation`，不代表已执行；
+  高风险只返回人工接管，不创建可执行记录。未注册、草稿或已退役工具均失败闭合。
+
+本阶段不包含订单、物流、库存、工单、回拨、退款或支付 Adapter，也不把“授权记录已创建”
+表述为外部业务操作已成功。
 
 ### 6.5 人工坐席工作台
 

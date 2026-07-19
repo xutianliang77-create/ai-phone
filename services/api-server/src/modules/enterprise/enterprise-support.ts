@@ -1,5 +1,6 @@
 import type { EnterpriseCommunicationBindingRecord } from
   "./enterprise-communication-session.js";
+import type { EnterpriseScope } from "@translation/contracts";
 
 export const enterpriseSupportChannelTypes = ["pstn", "web", "app"] as const;
 export type EnterpriseSupportChannelType =
@@ -75,6 +76,8 @@ export interface EnterpriseToolExecutionRecord {
   toolName: string; riskLevel: EnterpriseToolRiskLevel; requestHash: string;
   confirmationStatus: EnterpriseToolConfirmationStatus;
   status: EnterpriseToolExecutionStatus; externalResultRef?: string;
+  toolDefinitionId?: string; toolRevision?: number;
+  argumentsHash?: string; authorizationScope?: EnterpriseScope;
   idempotencyKey: string; createdAt: string; startedAt?: string;
   completedAt?: string; updatedAt: string; version: number;
 }
@@ -112,6 +115,8 @@ export interface CreateEnterpriseSupportCaseInput {
 export interface CreateEnterpriseToolExecutionInput {
   id: string; sessionId: string; customerId: string; toolName: string;
   riskLevel: EnterpriseToolRiskLevel; requestHash: string;
+  toolDefinitionId: string; toolRevision: number;
+  argumentsHash: string; authorizationScope: EnterpriseScope;
   confirmationStatus: EnterpriseToolConfirmationStatus;
   status: "requested" | "awaiting_confirmation";
   idempotencyKey: string; createdAt: string;

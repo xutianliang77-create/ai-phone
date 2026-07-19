@@ -6,6 +6,8 @@ import { createEnterprisePostgresSupportRuntime } from
   "./enterprise-postgres-support-runtime.js";
 import { createEnterprisePostgresSupportAgentRuntime } from
   "./enterprise-postgres-support-agent-runtime.js";
+import { createEnterprisePostgresSupportToolRuntime } from
+  "./enterprise-postgres-support-tool-runtime.js";
 
 export function createEnterprisePostgresBusinessRuntimes(
   pool: EnterpriseTenantPostgresPool,
@@ -15,5 +17,6 @@ export function createEnterprisePostgresBusinessRuntimes(
     ...createEnterprisePostgresMeetingFeatureRuntimes(pool, dispatchSigningSecret),
     ...createEnterprisePostgresSupportRuntime(pool),
     ...createEnterprisePostgresSupportAgentRuntime(pool),
+    ...createEnterprisePostgresSupportToolRuntime(pool),
   };
 }

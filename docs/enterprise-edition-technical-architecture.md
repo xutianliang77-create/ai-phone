@@ -1,6 +1,6 @@
 # 无界AI企业版技术架构
 
-版本：v1.28
+版本：v1.29
 日期：2026-07-19
 状态：SaaS 详细架构基线，已对齐统一通讯平台和 PostgreSQL Primary
 
@@ -429,6 +429,32 @@ dispatch/policy/generation；只有匹配的 run/turn/text 获得许可。短期
 generation 不变；心跳或控制 fence 失败时 Worker 强制 interrupt、清空音频 buffer、关闭输入输出并以不 drain 方式结束，
 被打断的 speech 不写 delivered，因此取消后的旧 TTS 不会由恢复逻辑重新播放。
 
+### 8.5 Tool Registry 与授权网关
+
+`ENT-CS-005` 在 Support Agent 和未来业务 Adapter 之间增加服务端 Tool Registry/Policy Gateway。
+Registry 保存 tenant-scoped 不可变 revision、封闭输入 schema、风险等级、必需 scope、确认模式和
+schema hash；定义表 forced RLS，并且同名工具只有一个 active revision。新 revision 发布与旧
+revision 退役在同一 tenant transaction 中完成。
+
+```mermaid
+flowchart LR
+    Worker["Support Agent Worker"] --> Ticket["Ticket / Lease / Generation Fence"]
+    Ticket --> Registry["Active Tool Revision"]
+    Registry --> Schema["Schema + Argument Hash"]
+    Schema --> Risk{"Risk Policy"}
+    Risk -->|read| Requested["requested execution"]
+    Risk -->|reversible_write| Confirm["awaiting_confirmation"]
+    Risk -->|high_risk| Handoff["human handoff; no execution"]
+    Requested --> FutureRead["ENT-CS-006 Adapter"]
+    Confirm --> FutureWrite["ENT-CS-007 Confirmation + Adapter"]
+```
+
+内部授权入口只接受有效内部凭据和签名 `voice_agent_runtime` Worker ticket，并复用已有
+dispatch、binding、policy、route epoch、generation 和 run fence。客户与会话身份由当前 support session
+服务端解析；原始工具参数不落库、不入审计。PostgreSQL insert trigger 同样拒绝未注册/非 active
+定义、风险与确认策略错配及高风险自动执行，因此跳过 HTTP runtime 也不能将非法工具记录推进为
+可执行状态。实际 Adapter 和客户确认状态机分别属于 `ENT-CS-006/007/008`，本任务不伪造外部执行成功。
+
 ## 9. 数据架构
 
 ### 9.1 单一写入真值
@@ -489,7 +515,7 @@ Worker 无权依据缓存继续执行敏感能力。
 
 生产 PostgreSQL 启动还必须验证企业签名 cutover evidence：证据绑定 staging 环境、
 commit、image digest、topology hash、目标 logical ID、system identifier/OID、公共31段与
-企业21段 manifest，并证明源库 writer fence、旧 API/Worker 角色会话为0、目标可写和
+企业30段 manifest，并证明源库 writer fence、旧 API/Worker 角色会话为0、目标可写和
 二次全量 hash 一致。本地逻辑恢复证据不提升为跨故障域 HA/PITR 结论。
 
 ## 10. 安全架构

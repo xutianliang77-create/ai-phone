@@ -3,15 +3,12 @@ import {
   enterpriseSupportChannelStatuses,
   enterpriseSupportChannelTypes,
   enterpriseSupportQueueStatuses,
-  enterpriseToolConfirmationStatuses,
-  enterpriseToolRiskLevels,
   isEnterpriseSupportSessionStatus,
   type CreateEnterpriseCustomerProfileInput,
   type CreateEnterpriseSupportCaseInput,
   type CreateEnterpriseSupportChannelInput,
   type CreateEnterpriseSupportQueueInput,
   type CreateEnterpriseSupportSessionInput,
-  type CreateEnterpriseToolExecutionInput,
   type EnterpriseSupportSessionStatus,
 } from "../../modules/enterprise/enterprise-support.js";
 import { enterprisePostgresAccountSubjectId } from
@@ -20,9 +17,9 @@ import type { EnterpriseTenantPostgresSession } from
   "./enterprise-postgres-tenant-session.js";
 import {
   mapCustomerProfile, mapSupportCase, mapSupportChannel, mapSupportQueue,
-  mapSupportSession, mapToolExecution, type CustomerProfileRow,
+  mapSupportSession, type CustomerProfileRow,
   type SupportCaseRow, type SupportChannelRow, type SupportQueueRow,
-  type SupportSessionRow, type ToolExecutionRow,
+  type SupportSessionRow,
 } from "./enterprise-postgres-support-records.js";
 
 export class EnterpriseSupportPostgresRepository {
@@ -219,29 +216,6 @@ export class EnterpriseSupportPostgresRepository {
     `, [uuid(sessionId)]);
     return result.rows.map(mapSupportCase);
   }
-  async createToolExecution(input: CreateEnterpriseToolExecutionInput) {
-    const value = normalizeTool(input);
-    const result = await this.session.query<ToolExecutionRow>(`
-      INSERT INTO enterprise.tool_executions(
-        tenant_id, id, session_id, customer_id, tool_name, risk_level,
-        request_hash, confirmation_status, status, idempotency_key,
-        created_at, updated_at, version
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $11, 1)
-      ON CONFLICT DO NOTHING RETURNING *
-    `, [value.id, value.sessionId, value.customerId, value.toolName,
-      value.riskLevel, value.requestHash, value.confirmationStatus,
-      value.status, value.idempotencyKey, value.createdAt]);
-    return result.rows[0]
-      ? { status: "created" as const, execution: mapToolExecution(result.rows[0]) }
-      : { status: "conflict" as const };
-  }
-  async toolExecutions(sessionId: string) {
-    const result = await this.session.query<ToolExecutionRow>(`
-      SELECT * FROM enterprise.tool_executions
-      WHERE tenant_id = $1 AND session_id = $2 ORDER BY created_at, id
-    `, [uuid(sessionId)]);
-    return result.rows.map(mapToolExecution);
-  }
 }
 
 function normalizeChannel(input: CreateEnterpriseSupportChannelInput) {
@@ -287,18 +261,6 @@ function normalizeCase(input: CreateEnterpriseSupportCaseInput) {
     externalTicketId: optionalText(input.externalTicketId, 200),
     createdAt: timestamp(input.createdAt) };
 }
-function normalizeTool(input: CreateEnterpriseToolExecutionInput) {
-  if (!enterpriseToolRiskLevels.includes(input.riskLevel) ||
-    !enterpriseToolConfirmationStatuses.includes(input.confirmationStatus) ||
-    !["requested", "awaiting_confirmation"].includes(input.status) ||
-    (input.status === "awaiting_confirmation" && input.confirmationStatus !== "required")) {
-    throw new Error("Invalid tool execution");
-  }
-  return { ...input, id: uuid(input.id), sessionId: uuid(input.sessionId),
-    customerId: uuid(input.customerId), toolName: toolCode(input.toolName),
-    requestHash: hash(input.requestHash), idempotencyKey: key(input.idempotencyKey),
-    createdAt: timestamp(input.createdAt) };
-}
 function uuid(value: unknown) {
   const result = text(value, 36);
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(result)) throw new Error("Invalid support ID");
@@ -313,11 +275,6 @@ function optionalText(value: unknown, max: number) { return value == null ? unde
 function providerCode(value: unknown) {
   const result = text(value, 64);
   if (!/^[a-z][a-z0-9_-]{1,63}$/.test(result)) throw new Error("Invalid provider code");
-  return result;
-}
-function toolCode(value: unknown) {
-  const result = text(value, 128);
-  if (!/^[a-z][a-z0-9_.-]{1,127}$/.test(result)) throw new Error("Invalid tool code");
   return result;
 }
 function failureCodeValue(value: unknown) {

@@ -1,6 +1,6 @@
 # 无界AI企业版开发方案与计划
 
-版本：v1.46
+版本：v1.47
 日期：2026-07-19
 状态：E0 执行计划，已对齐统一通讯平台和 PostgreSQL Primary 收敛
 
@@ -20,7 +20,7 @@
 
 - `ENT-CORE-001/002/003` 已到 `ready_for_acceptance`；Tenant/Member、RBAC 和 `apps/enterprise-web` 生产应用基础可供后续任务复用。
 - Enterprise Web 已冻结 React 19、TypeScript 5.9、Vite 8、React Router 7 和 Vitest/Testing Library 技术基线，并实现真实登录、会话恢复和租户上下文。
-- `ENT-DATA-001` 已实现二十九段 PostgreSQL up/down migration、复合 FK、强制 RLS、migration runner、schema verify 和归档 smoke；`0017..0029` 分别增加知识、术语/话术、企业 trace、审计导出、Meeting 聚合/入会/翻译、屏幕共享租约、会后材料、屏幕 OCR、日历同步、客服领域和 Support Agent run/turn。历史本地 PostgreSQL 16 验证不替代当前31+29 staging migrate/restore/PITR，任务保持 `in_progress`。
+- `ENT-DATA-001` 已实现三十段 PostgreSQL up/down migration、复合 FK、强制 RLS、migration runner、schema verify 和归档 smoke；`0017..0030` 分别增加知识、术语/话术、企业 trace、审计导出、Meeting 聚合/入会/翻译、屏幕共享租约、会后材料、屏幕 OCR、日历同步、客服领域、Support Agent run/turn 和 Tool Registry。历史本地 PostgreSQL 16 验证不替代当前31+30 staging migrate/restore/PITR，任务保持 `in_progress`。
 - `ENT-CORE-005` 已完成版本化术语包、话术模板、审核发布、有效时间解析、统一运行时引用和租户隔离矩阵，进入 `ready_for_acceptance`；真实 ASR/翻译/LLM Worker 消费和 A1/H3 仍待验收。
 - `ENT-DATA-002` 已完成单一 `legacy|postgres` Repository runtime、HTTP 全链路注入、fail-closed 启动选择和独立 cell Worker。PostgreSQL 模式不回退、不双写；API 不执行跨租户恢复扫描，Worker 通过 cell forced RLS 发现最小引用后进入 tenant transaction 复核并 claim/finalize。代码和本地自动化进入 `ready_for_acceptance`，真实 PostgreSQL 并发、容量和恢复仍待 H3。
 - `ENT-DATA-004` 已完成 JSON/SQLite 源读取、SQLite 副本 `quick_check`、空目标事务导入和六集合 count/SHA-256 读回对账；不一致回滚，且明确只用于内部演示数据迁移。真实 PostgreSQL import/reconcile 证据仍待 H3。
@@ -173,7 +173,9 @@ CORE-001/002 验收
 2. PSTN/Web/App 呼入 Adapter 和统一会话创建：`ENT-CS-002` 已形成内部 Adapter contract/runtime 代码候选，真实 edge Provider 待验收。
 3. tenant-scoped RAG、引用和无答案转人工：`ENT-CS-003` 已形成代码候选，召回/隔离/审计矩阵待验收。
 4. Support Agent 状态机和 JSON Schema 输出：`ENT-CS-004` 已形成 forced-RLS run/turn、API-owned generation、独立 Worker cell、RAG citation guard、上下文压缩、Provider 超时降级和 generation-bound TTS authorize 代码候选；恢复测试后验收。
-5. 只读工具、可逆写工具和高风险工具三级 Policy。
+5. 只读工具、可逆写工具和高风险工具三级 Policy：`ENT-CS-005` 已形成
+   forced-RLS 不可变 Registry、固定 risk/scope/confirmation 映射、封闭 schema、Worker fence、
+   参数 hash、幂等授权记录和 DB insert guard 代码候选；恢复测试后验收，真实 Adapter 待 CS-006/007/008。
 6. 客服坐席工作台、队列、字幕和接管。
 7. 工单、回拨、结果、质检和分析。
 8. CRM/Ticket Adapter outbox。
@@ -314,4 +316,4 @@ CORE-001/002 验收
 
 E0 基线完成后已形成 `ENT-MTG-001/002` 代码候选；未通过真实 PostgreSQL、tenant/RBAC/token 攻击、Provider、浏览器与真机门禁，仍不能计为 E1 完成。
 
-当前进展：`ENT-CORE-003/004/005` 已完成并等待验收；`ENT-DATA-001` 已完成二十九段 schema 代码，等待 staging PostgreSQL migrate/restore/PITR 证据；`ENT-DATA-002/003/004/007/008/009` 已完成 Repository、可靠事件、演示导入、统一 Primary Runtime、公共通讯 tenant scope，以及全库签名切换/恢复工具；`ENT-CORE-013/014/015`、`ENT-CORE-007/010/012` 已完成代码和自动化并进入验收；`ENT-UI-001/002/003/005/006/007` 已进入验收。`ENT-MTG-003` 已形成 tenant-aware 实时翻译代码候选；`ENT-MTG-004` 已形成租约 CAS、最小权限 grant、cell 到期回收和 LiveKit 撤销代码候选；`ENT-MTG-005..013` 已分别形成 Web/iOS/Android 采集、系统音频、自适应布局、主持人强停、会后材料、屏幕 OCR 和日历 Adapter 代码候选；`ENT-CS-001..004` 已分别形成客服领域/恢复 runtime、统一入站 Adapter、tenant RAG 和 Support Agent 代码候选。因测试暂缓、migration/真实恢复、真实 Provider、四人媒体、浏览器或真机门禁未完成，`ENT-OBS-001`、`ENT-UI-004/008/009/010/011/012`、`ENT-MTG-001..013` 和 `ENT-CS-001..004` 继续保持 `in_progress`。恢复测试时还需补齐 CS-001/002 的 migration/forced-RLS、跨租户、幂等/hash、状态 CAS、终态不可变、ticket/重放和重启恢复矩阵，CS-003 的会话状态、知识版本、引用审计和无答案路径矩阵，以及 CS-004 的 strict schema/thinking、Provider timeout、上下文边界、generation 取消与真实 TTS playout 矩阵。staging `ENT-DATA-009` 和 `ENT-REL-002/003` 的对象清理、跨故障域/PITR 仍未通过。
+当前进展：`ENT-CORE-003/004/005` 已完成并等待验收；`ENT-DATA-001` 已完成三十段 schema 代码，等待 staging PostgreSQL migrate/restore/PITR 证据；`ENT-DATA-002/003/004/007/008/009` 已完成 Repository、可靠事件、演示导入、统一 Primary Runtime、公共通讯 tenant scope，以及全库签名切换/恢复工具；`ENT-CORE-013/014/015`、`ENT-CORE-007/010/012` 已完成代码和自动化并进入验收；`ENT-UI-001/002/003/005/006/007` 已进入验收。`ENT-MTG-003` 已形成 tenant-aware 实时翻译代码候选；`ENT-MTG-004` 已形成租约 CAS、最小权限 grant、cell 到期回收和 LiveKit 撤销代码候选；`ENT-MTG-005..013` 已分别形成 Web/iOS/Android 采集、系统音频、自适应布局、主持人强停、会后材料、屏幕 OCR 和日历 Adapter 代码候选；`ENT-CS-001..005` 已分别形成客服领域/恢复 runtime、统一入站 Adapter、tenant RAG、Support Agent 和 Tool Registry 授权边界代码候选。因测试暂缓、migration/真实恢复、真实 Provider、四人媒体、浏览器或真机门禁未完成，`ENT-OBS-001`、`ENT-UI-004/008/009/010/011/012`、`ENT-MTG-001..013` 和 `ENT-CS-001..005` 继续保持 `in_progress`。恢复测试时还需补齐 CS-001/002 的 migration/forced-RLS、跨租户、幂等/hash、状态 CAS、终态不可变、ticket/重放和重启恢复矩阵，CS-003 的会话状态、知识版本、引用审计和无答案路径矩阵，CS-004 的 strict schema/thinking、Provider timeout、上下文边界、generation 取消与真实 TTS playout 矩阵，以及 CS-005 的 migration/forced-RLS、发布并发、schema 恶意输入、未注册/已退役、ticket/generation、幂等冲突和高风险不落执行记录矩阵。staging `ENT-DATA-009` 和 `ENT-REL-002/003` 的对象清理、跨故障域/PITR 仍未通过。
