@@ -12,7 +12,7 @@ services:
     build:
       context: ../..
       dockerfile: infra/ai-phone-server/Dockerfile
-    container_name: ai-phone-api
+    container_name: ${AI_PHONE_CONTAINER_PREFIX:-ai-phone}-api
     command: ["node", "services/api-server/dist/main.js"]
     volumes:
       - ${AI_PHONE_DATA_DIR}:/data/ai-phone
@@ -26,7 +26,7 @@ services:
 
   gateway:
     <<: *runtime
-    container_name: ai-phone-gateway
+    container_name: ${AI_PHONE_CONTAINER_PREFIX:-ai-phone}-gateway
     command: ["node", "services/realtime-gateway/dist/main.js"]
     depends_on:
       api:
@@ -41,7 +41,7 @@ services:
 
   translation-agent:
     <<: *runtime
-    container_name: ai-phone-translation-agent
+    container_name: ${AI_PHONE_CONTAINER_PREFIX:-ai-phone}-translation-agent
     command:
       - node
       - services/translation-worker/dist/livekit-agent/translation-agent-server.js
@@ -61,7 +61,7 @@ services:
   voice-agent:
     <<: *runtime
     profiles: ["voice-agent"]
-    container_name: ai-phone-voice-agent
+    container_name: ${AI_PHONE_CONTAINER_PREFIX:-ai-phone}-voice-agent
     command:
       - node
       - services/voice-agent-runtime/dist/agent-server.js
@@ -85,7 +85,7 @@ services:
     build:
       context: ../..
       dockerfile: infra/srt-ingress-bridge/Dockerfile
-    container_name: ai-phone-srt-ingress-bridge
+    container_name: ${AI_PHONE_CONTAINER_PREFIX:-ai-phone}-srt-ingress-bridge
     env_file:
       - ${AI_PHONE_ENV_FILE}
     network_mode: host

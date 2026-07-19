@@ -41,3 +41,28 @@ The generated test environment intentionally keeps the test account enabled.
 Before production release, use `NODE_ENV=production`, disable
 `API_TEST_AUTO_ACCOUNT`, remove the fixed test code, configure SMS/payment and
 rotate all secrets.
+
+## Isolated core production candidate
+
+The production-candidate path is separate from the stable `ai-phone` Compose
+project. It accepts only a regular `0600` private env that passes the domestic
+release gate with `DOMESTIC_RELEASE_CAPABILITY_PROFILE=core_translation`.
+Preflight also rejects stable container names, the stable remote root, reserved
+ports, test accounts, debug OTP, and enabled SIP/Agent/Egress switches.
+
+```bash
+CANDIDATE_ENV_FILE=release/domestic/release.env \
+  npm run check:core-candidate-deploy -- --json
+
+CANDIDATE_ENV_FILE=release/domestic/release.env \
+  npm run deploy:beelink-core-candidate
+
+npm run status:beelink-core-candidate
+```
+
+Defaults use Compose project/container prefix `ai-phone-core-candidate`, remote
+root `/data/models/ai-phone-server-candidates/core-translation`, and ports
+`3320/3321/8381`. The deployment never configures Tailscale routing and keeps
+its env, SQLite data, image tag, and containers independent from stable. Use
+`scripts/deploy_beelink_core_candidate.sh down` to stop the candidate while
+retaining its rollback image, previous private env, and isolated data.

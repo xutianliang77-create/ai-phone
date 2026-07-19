@@ -17,6 +17,14 @@ const ttsScript = readFileSync(
   new URL("../deploy_beelink_voxcpm2_tts_service.sh", import.meta.url),
   "utf8",
 );
+const candidateScript = readFileSync(
+  new URL("../deploy_beelink_core_candidate.sh", import.meta.url),
+  "utf8",
+);
+const compose = readFileSync(
+  new URL("../../infra/ai-phone-server/docker-compose.yaml", import.meta.url),
+  "utf8",
+);
 
 describe("Beelink app deployment contract", () => {
   it("builds before freezing writes and migrates before enabling SQLite", () => {
@@ -87,6 +95,25 @@ describe("Beelink app deployment contract", () => {
       "--host $TTS_BIND_ADDRESS --port $TTS_SERVICE_PORT",
     );
     expect(ttsScript).toContain('curl -sS "$TTS_HEALTH_URL"');
+  });
+
+  it("keeps the production candidate isolated and fail-closed", () => {
+    expect(candidateScript).toContain(
+      "check_core_translation_candidate_deploy.mjs",
+    );
+    expect(candidateScript).toContain("test \"$(stat -c '%a' \"$incoming\")\" = \"600\"");
+    expect(candidateScript).toContain("install -m 600");
+    expect(candidateScript).toContain("server.env.rollback");
+    expect(candidateScript).toContain("--exclude='PROGRESS_LOG.md'");
+    expect(candidateScript).toContain("--exclude='release/domestic/release.env'");
+    expect(candidateScript).toContain("docker compose -p '$COMPOSE_PROJECT_NAME'");
+    expect(candidateScript).not.toContain("tailscale serve");
+    expect(compose).toContain(
+      "container_name: ${AI_PHONE_CONTAINER_PREFIX:-ai-phone}-api",
+    );
+    expect(compose).toContain(
+      "container_name: ${AI_PHONE_CONTAINER_PREFIX:-ai-phone}-translation-agent",
+    );
   });
 });
 
