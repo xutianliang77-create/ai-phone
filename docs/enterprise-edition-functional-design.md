@@ -1,6 +1,6 @@
 # 无界AI企业版详细功能设计
 
-版本：v1.23
+版本：v1.24
 日期：2026-07-19
 状态：SaaS 详细设计基线，已对齐统一通讯平台
 
@@ -268,6 +268,11 @@ chunk 顺序和内容生成 SHA-256，并把回答引用固定为 `knowledgeVers
 source 当前满足条件的最高 published revision。draft、processing、review、failed、尚未生效和已过期
 版本均返回空。当前未配置 embedding Provider 时使用确定性的受限文本检索，不把 pending embedding
 伪装为向量检索成功。
+
+`ENT-CS-003` 把上述检索接入客服会话专用 RAG 入口。只有 `waiting`、`ai_active`、
+`handoff_requested` 或 `human_active` 会话可以检索；请求不能提交 tenant 覆盖。命中时只返回已审核证据和
+稳定 citation，由后续 Support Agent 按引用生成答案；无命中时返回本地化“无法确认”与转人工指令，不调用
+LLM 生成企业事实。每次检索只审计维度、结果数和逐条知识版本/citation/hash，不保存问题或知识正文。
 
 ### 6.3.1 企业术语与话术版本
 

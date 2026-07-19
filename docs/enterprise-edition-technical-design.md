@@ -1,6 +1,6 @@
 # 无界AI企业版详细技术设计
 
-版本：v1.42
+版本：v1.43
 日期：2026-07-19
 状态：统一通讯平台与 PostgreSQL Primary 收敛详细技术方案
 
@@ -39,6 +39,7 @@
 | 租户账务和 Entitlement | `ready_for_acceptance` | enterprise `0015` 已实现 tenant billing account、不可变 plan/subscription/entitlement version、服务端账期及 binding/dispatch entitlement fence；真实支付 Provider、关账对账和 A1/H3 待验收 |
 | SaaS 计量聚合 | `ready_for_acceptance` | enterprise `0016` 已实现 tenant usage event、event/ledger 一致性、append-only adjustment、负数净额保护及 count/hash/watermark 账期聚合；真实关账、支付对账和 A1/H3 待验收 |
 | 企业知识版本 | `ready_for_acceptance` | enterprise `0017`、Knowledge Repository/runtime/API 已实现 source/revision/chunk/review/publish、发布后不可变、四维时间检索和稳定 citation；当前仅有确定性文本检索，本地普通角色验证不代表 embedding Provider、对象存储、恶意文档或 A1/H3 已通过 |
+| 客服 Tenant RAG | `in_progress` | 已将客服活动会话绑定到 tenant-scoped Knowledge Repository，返回逐条 evidence/citation 或确定性无答案转人工指令，并固化不含 query/content 的引用审计；未执行测试、真实 PostgreSQL、召回质量或 Support Agent 生成门禁 |
 | 企业术语与话术版本 | `ready_for_acceptance` | enterprise `0018`、共享契约、Term Pack/Script Template Repository/runtime/API 已实现稳定资源、递增 revision、review/publish、有效期解析、hash 校验和同一术语版本运行时引用；仅有自动化和本地 PostgreSQL 16 普通角色证据，真实 Worker/Provider、A1/H3 未通过 |
 | Primary 全量切换/恢复证据 | `ready_for_acceptance` | 工具按运行时动态校验 manifest/全业务表；`c9b5be2` 历史证据为31+16/81张表，当前31+28/102张表必须重新生成签名证据；异地 WAL/PITR/H3 未通过 |
 | PostgreSQL 控制面/业务聚合 | `designed` | 后续 CORE/MTG/CS/MKT 领域任务范围，不能从公共 Repository runtime 推导为已实现 |
@@ -754,6 +755,14 @@ document；请求体中的 tenantId 只允许与服务端上下文相同。legac
 当前代码没有伪造 embedding readiness：未配置 embedding/向量 Provider 时仅执行大小受限的确定性
 文本匹配。向量生成、恶意文档扫描、对象存储内容提取和召回质量门禁必须作为后续 Provider/验收证据，
 不能从 `ENT-CORE-004` 本地结果推导为已完成。
+
+`POST /enterprise/v1/support/sessions/:sessionId/rag` 是 `ENT-CS-003` 的会话级受控入口。它要求 active
+membership、`support:read` 和有效签名 tenant route，body 只接受 query/locale/country/product/limit，
+不接受 tenantId。runtime 先在 tenant transaction 中确认会话存在且状态属于 `waiting|ai_active|handoff_requested|
+human_active`，再调用同一 Knowledge Repository。命中返回 `answer_with_citations` 与逐条 evidence；零结果返回
+`state_uncertain_and_offer_handoff`、本地化无法确认文案和 `handoffRecommended=true`。该层不调用 LLM，不能生成
+无引用企业事实。检索审计只记录维度、结果数，并为每条证据记录 knowledge version/source/revision/block/content hash；
+query、content 和提示词均不写入审计。
 
 ### 8.4 一致性和限制
 

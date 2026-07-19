@@ -1,3 +1,5 @@
+import type { EnterpriseSupportRagResponse } from "@translation/contracts";
+import type { SearchEnterpriseKnowledgeInput } from "./enterprise-knowledge.js";
 import type { EnterpriseTenantContext } from "./enterprise-tenant-context.js";
 import type {
   CreateEnterpriseSupportChannelInput,
@@ -56,6 +58,15 @@ export interface EnterpriseSupportRepositoryRuntime {
   }): Promise<
     | { status: "ready"; aggregate: EnterpriseSupportSessionAggregate }
     | { status: "not_found" }
+    | StorageRequired
+  >;
+  resolveSupportKnowledge?(input: {
+    context: EnterpriseTenantContext;
+    sessionId: string;
+    search: SearchEnterpriseKnowledgeInput;
+  }): Promise<
+    | { status: "ready"; resolution: EnterpriseSupportRagResponse }
+    | { status: "not_found" | "not_active" }
     | StorageRequired
   >;
   listRecoverableSupportSessions?(input: {

@@ -1,6 +1,6 @@
 # 无界AI企业版验收任务与计划
 
-版本：v1.40
+版本：v1.41
 日期：2026-07-19
 状态：可执行验收计划，已对齐统一通讯平台和 PostgreSQL Primary 收敛
 
@@ -473,6 +473,10 @@ contract test 已定义但按要求未运行。真实 PostgreSQL forced-RLS/崩�
 | AC-CS-RAG-003 | 过期知识 | 不进入回答上下文 |
 | AC-CS-RAG-004 | 跨租户诱导 | 不返回另一租户内容 |
 | AC-CS-RAG-005 | 冲突知识 | 按生效版本并提示需要确认 |
+
+`ENT-CS-003` 已形成会话状态 guard、tenant-scoped 检索、逐条 citation evidence、无证据转人工指令和脱敏引用
+审计代码候选。按本轮要求未运行自动化、真实 PostgreSQL forced-RLS、双租户诱导、未来/过期/冲突版本、审计完整性、
+召回质量或 Agent 答案测试，因此 AC-CS-RAG-001..005 均未通过，任务保持 `in_progress`。
 
 ### 8.3 工具调用
 

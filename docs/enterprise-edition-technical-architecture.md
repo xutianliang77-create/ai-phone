@@ -1,6 +1,6 @@
 # 无界AI企业版技术架构
 
-版本：v1.26
+版本：v1.27
 日期：2026-07-19
 状态：SaaS 详细架构基线，已对齐统一通讯平台和 PostgreSQL Primary
 
@@ -187,7 +187,7 @@ object-storage
 | ASR、翻译、TTS、Agent call worker | `services/translation-worker`，后续接入统一 dispatch/runtime | 按 session/track/任务横向扩展，Provider 继续通过 Adapter；API 进程不运行媒体或 LLM 循环 |
 | PSTN 媒体桥 | `services/pstn-bridge` | 只处理 Provider 媒体/状态协议，不承载 Campaign 真值 |
 | 共享契约和事件 | `packages/contracts` | 客户端/服务端共同编译，版本变更保持向后兼容 |
-| Campaign/Support/Meeting Orchestrator | 尚未实现的逻辑模块 | 初期进入 API/Worker 内的独立 module，不预先制造微服务 |
+| Campaign/Support/Meeting Orchestrator | Meeting 与 Support 已按任务逐步进入 API/Worker 独立 module；Campaign 尚未实现 | 保持领域边界，只有独立扩缩容或故障域需要时才拆服务 |
 | SaaS 控制面、PostgreSQL、对象存储 | 尚未通过企业生产门禁 | 试点前按 `ENT-CORE-009/010/011`、`ENT-DATA-001/007/008/009` 实现和独立验收 |
 
 架构图中的逻辑组件不等于当前已经存在的可部署服务。文档和 readiness 必须区分 `designed`、`implemented`、`verified` 与 `production_ready`。
@@ -402,6 +402,14 @@ flowchart LR
 入站 tenant transaction 依次锁定 tenant 路由、复核 active channel、policy 和 entitlement，以
 `source + sourceEventId + canonical payload hash` 写 Inbox；客户只按 hash 化外部键归并。support session、公共
 communication session、唯一 binding、审计和 `support.session.created` Outbox 同事务提交。任何冲突或未就绪均回滚。
+
+### 8.3 Tenant RAG 与保守回答边界
+
+客服专用 RAG 由 API 内的 Support runtime 在同一 tenant Unit of Work 中读取 support session 与 Enterprise
+Knowledge Repository。会话必须处于非终态服务阶段，知识查询必须同时满足 tenant、locale、country、product、
+published revision 和服务端有效时间。RAG 只返回 evidence/citation 或确定性的 no-evidence/handoff directive，
+不在 Repository/API 层调用 LLM，也不把空检索包装成答案。命中的逐条知识版本、block、citation 和 content hash
+写入不可变审计，但 query、chunk content 和完整提示词不进入审计。后续 `ENT-CS-004` 才负责引用约束下的答案生成。
 
 ## 9. 数据架构
 

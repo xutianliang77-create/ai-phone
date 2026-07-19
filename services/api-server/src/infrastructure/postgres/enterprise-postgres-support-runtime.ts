@@ -10,6 +10,8 @@ import { createEnterprisePostgresSupportSession } from
   "./enterprise-postgres-support-create.js";
 import { ingestEnterprisePostgresSupportInbound } from
   "./enterprise-postgres-support-inbound.js";
+import { resolveEnterprisePostgresSupportKnowledge } from
+  "./enterprise-postgres-support-rag.js";
 import {
   withEnterprisePostgresUnitOfWork,
   type EnterprisePostgresUnitOfWork,
@@ -69,6 +71,9 @@ export function createEnterprisePostgresSupportRuntime(
               aggregate: await loadEnterprisePostgresSupportAggregate(unit, session) }
           : { status: "not_found" };
       });
+    },
+    resolveSupportKnowledge(input) {
+      return resolveEnterprisePostgresSupportKnowledge(pool, input);
     },
     listRecoverableSupportSessions(input) {
       return withEnterprisePostgresUnitOfWork(pool, input.context, async (unit) => ({

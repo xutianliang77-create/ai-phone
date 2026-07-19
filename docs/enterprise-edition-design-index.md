@@ -1,6 +1,6 @@
 # 无界AI企业版设计文档索引
 
-版本：v1.35
+版本：v1.36
 日期：2026-07-19
 状态：SaaS 详细设计基线，已纳入统一通讯平台和 PostgreSQL Primary 演进
 
@@ -106,9 +106,12 @@ migration/forced-RLS、并发 CAS 或重启恢复，任务保持 `in_progress`�
 `ENT-CS-002` 已增加共享 Channel Adapter 契约、短期 tenant dispatch ticket、内部授权/入站路由、Provider readiness、
 Inbox hash 去重与统一 session/binding/audit/Outbox 事务；真实 Provider edge、自动化和恢复门禁未执行，保持
 `in_progress`。
+`ENT-CS-003` 已增加客服会话级 tenant RAG 契约/runtime/API，只检索当前有效 published 知识，命中返回并审计
+逐条 evidence/citation，无证据明确无法确认并提供转人工指令；自动化、真实 PostgreSQL、召回质量和 Agent 生成门禁
+未执行，保持 `in_progress`。
 当前按要求未执行
 测试、migration、RLS、RBAC/ticket/evidence 攻击、并发共享、Worker/Provider、四人媒体、浏览器、真机与重启恢复，
-因此十三项任务均保持 `in_progress`。
+因此上述任务均保持 `in_progress`。
 
 ## 3. 继承文档
 
@@ -128,6 +131,7 @@ Inbox hash 去重与统一 session/binding/audit/Outbox 事务；真实 Provider
 - [ENT-MTG-013 日历 Adapter 实现与静态门禁证据](./evidence/ent-mtg-013-calendar-adapter-2026-07-19.md)
 - [ENT-CS-001 客服领域实现与静态门禁证据](./evidence/ent-cs-001-support-domain-2026-07-19.md)
 - [ENT-CS-002 呼入 Channel Adapter 实现与静态门禁证据](./evidence/ent-cs-002-channel-adapter-2026-07-19.md)
+- [ENT-CS-003 Tenant RAG 实现与静态门禁证据](./evidence/ent-cs-003-tenant-rag-2026-07-19.md)
 - [ENT-MTG-006 iOS ReplayKit 实现与静态门禁证据](./evidence/ent-mtg-006-ios-replaykit-2026-07-19.md)
 - [ENT-MTG-007 Android MediaProjection 实现与静态门禁证据](./evidence/ent-mtg-007-android-media-projection-2026-07-19.md)
 - [ENT-MTG-008 Web 系统音频实现与静态门禁证据](./evidence/ent-mtg-008-web-system-audio-2026-07-19.md)

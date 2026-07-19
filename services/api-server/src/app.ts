@@ -73,6 +73,8 @@ import { registerEnterpriseMeetingCalendarRoutes } from
   "./modules/enterprise/enterprise-meeting-calendar.routes.js";
 import { registerEnterpriseSupportChannelRoutes } from
   "./modules/enterprise/enterprise-support-channel.routes.js";
+import { registerEnterpriseSupportRagRoutes } from
+  "./modules/enterprise/enterprise-support-rag.routes.js";
 import {
   createEnvironmentEnterpriseMeetingMaterialProvider,
   type EnterpriseMeetingMaterialProvider,
@@ -246,6 +248,9 @@ export async function buildApp(dependencies: {
   registerEnterpriseSupportChannelRoutes(
     app, tenantRouteService, enterpriseRepositoryRuntime,
     providerReadinessService, supportInboundTickets,
+  );
+  registerEnterpriseSupportRagRoutes(
+    app, tenantRouteService, enterpriseRepositoryRuntime,
   );
   registerEnterpriseMeetingScreenShareRoutes(
     app,
