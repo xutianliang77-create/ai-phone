@@ -6,6 +6,11 @@ import { createEnterpriseAuditEvent } from
 import { enterpriseSupportAgentRequestHash } from
   "../../modules/enterprise/enterprise-support-agent.js";
 import {
+  enterpriseSupportHighRiskCategory,
+  enterpriseSupportHighRiskEvidenceHash,
+  enterpriseSupportHighRiskHandoffPolicyVersion,
+} from "../../modules/enterprise/enterprise-support-high-risk-handoff.js";
+import {
   supportToolDefinitionDto,
   validateEnterpriseSupportToolArguments,
 } from "../../modules/enterprise/enterprise-support-tool-registry.js";
@@ -104,7 +109,7 @@ export function createEnterprisePostgresSupportToolRuntime(
       return withSupportAgentWorker(pool, input, async (unit, payload) => {
         const authorized = await authorizeSupportAgentWorker(unit, payload, input);
         if (authorized.status !== "ready") return authorized;
-        if (authorized.run.id !== input.runId || authorized.run.status !== "active") {
+        if (authorized.run.id !== input.runId || authorized.run.status === "ending") {
           return { status: "run_mismatch" as const };
         }
         const definition = await unit.supportTools.findActive(input.toolName, true);
@@ -128,10 +133,59 @@ export function createEnterprisePostgresSupportToolRuntime(
         }
         const dto = supportToolDefinitionDto(definition);
         if (definition.riskLevel === "high_risk") {
-          await auditDecision(unit, context, authorized.run.supportSessionId,
-            definition.toolName, "handoff_required", now, definition.id);
+          const session = await unit.support.findSession(
+            authorized.run.supportSessionId, true,
+          );
+          if (!session) return { status: "run_mismatch" as const };
+          const riskCategory = enterpriseSupportHighRiskCategory(definition.toolName);
+          const riskEvidenceHash = enterpriseSupportHighRiskEvidenceHash({
+            toolDefinitionId: definition.id, toolName: definition.toolName,
+            toolRevision: definition.revision,
+            argumentsHash: prepared.argumentsHash,
+          });
+          const requestHash = enterpriseSupportAgentRequestHash({
+            policyVersion: enterpriseSupportHighRiskHandoffPolicyVersion,
+            runId: authorized.run.id,
+            sessionId: session.id, customerId: session.customerId,
+            riskEvidenceHash,
+          });
+          const handoff = await unit.supportHighRiskHandoffs.create({
+            id: randomUUID(), supportSessionId: session.id,
+            customerId: session.customerId, supportAgentRunId: authorized.run.id,
+            toolDefinitionId: definition.id, toolName: definition.toolName,
+            toolRevision: definition.revision, riskCategory,
+            argumentsHash: prepared.argumentsHash, riskEvidenceHash, requestHash,
+            idempotencyKey: input.idempotencyKey, createdAt: now.toISOString(),
+            allowCreate: authorized.run.status === "active" &&
+              session.status === "ai_active",
+          });
+          if (handoff.status === "idempotency_conflict" ||
+            handoff.status === "run_mismatch") return handoff;
+          if (handoff.status === "created") {
+            const runTransition = await unit.supportAgents.requestHandoff({
+              runId: authorized.run.id, requestedAt: now.toISOString(),
+            });
+            if (runTransition.status !== "requested") {
+              throw new Error("High risk handoff lost Support Agent run fence");
+            }
+            const sessionTransition = await unit.support.transition({
+              sessionId: session.id, status: "handoff_requested",
+              expectedVersion: session.version, occurredAt: now.toISOString(),
+            });
+            if (sessionTransition.status !== "updated") {
+              throw new Error("High risk handoff lost support session fence");
+            }
+          }
+          await auditHandoff(unit, context, session.id, definition.toolName,
+            definition.id, handoff.request.id, riskEvidenceHash,
+            handoff.status === "replayed", now);
           return { status: "handoff_required" as const, definition: dto,
-            argumentsHash: prepared.argumentsHash };
+            argumentsHash: prepared.argumentsHash,
+            handoffRequestId: handoff.request.id, riskCategory, riskEvidenceHash,
+            replayed: handoff.status === "replayed" };
+        }
+        if (authorized.run.status !== "active") {
+          return { status: "run_mismatch" as const };
         }
         const session = await unit.support.findSession(
           authorized.run.supportSessionId, true,
@@ -168,6 +222,25 @@ export function createEnterprisePostgresSupportToolRuntime(
       });
     },
   };
+}
+
+async function auditHandoff(
+  unit: Parameters<Parameters<typeof withEnterprisePostgresUnitOfWork>[2]>[0],
+  context: ReturnType<typeof createEnterpriseTenantContext>,
+  sessionId: string,
+  toolName: string,
+  definitionId: string,
+  handoffRequestId: string,
+  riskEvidenceHash: string,
+  replayed: boolean,
+  now: Date,
+) {
+  await unit.tenant.appendAuditEvent(createEnterpriseAuditEvent({ context,
+    action: "support.tool.handoff", resourceType: "support_session",
+    resourceId: sessionId, result: "accepted",
+    details: { toolName, definitionId, handoffRequestId, riskEvidenceHash, replayed },
+    createdAt: now.toISOString(),
+  }));
 }
 
 async function auditDecision(

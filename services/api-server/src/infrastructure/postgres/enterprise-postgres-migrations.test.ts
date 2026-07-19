@@ -152,6 +152,11 @@ describe("enterprise PostgreSQL migrations", () => {
     expect(sql).toContain("CREATE TABLE enterprise.support_tool_definitions");
     expect(sql).toContain("tool_executions_registry_insert_guard");
     expect(sql).toContain("enterprise high risk support tool requires human handoff");
+    expect(sql).toContain(
+      "CREATE TABLE enterprise.support_high_risk_handoff_requests",
+    );
+    expect(sql).toContain("support_high_risk_handoffs_insert_guard");
+    expect(sql).toContain("enterprise high risk handoff request is immutable");
     expect(sql).toContain("tool_executions_read_recovery_idx");
     expect(sql).toContain("provider_simulated boolean");
     expect(sql).toContain("tool_executions_read_shape_check");
@@ -210,6 +215,12 @@ describe("enterprise PostgreSQL migrations", () => {
     expect(rollbackSql).toContain("DROP TABLE IF EXISTS enterprise.support_agent_runs");
     expect(rollbackSql).toContain(
       "DROP TABLE IF EXISTS enterprise.support_tool_definitions",
+    );
+    expect(rollbackSql).toContain(
+      "DROP TABLE IF EXISTS enterprise.support_high_risk_handoff_requests",
+    );
+    expect(rollbackSql).toContain(
+      "cannot roll back enterprise high risk handoff evidence",
     );
     expect(rollbackSql).toContain("DROP COLUMN IF EXISTS execution_attempt");
     expect(sql).not.toContain("BYPASSRLS");

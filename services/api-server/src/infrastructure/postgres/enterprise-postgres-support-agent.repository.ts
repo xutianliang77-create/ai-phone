@@ -137,9 +137,13 @@ export class EnterpriseSupportAgentPostgresRepository {
     const turn = await this.findTurn(input.turnId, true);
     if (!run || !turn || turn.runId !== run.id) return { status: "not_found" as const };
     if (turn.status === "tts_authorized" && turn.output && turn.ttsAuthorizedAt) {
+      if (run.status === "handoff_requested" && turn.output.intent !== "handoff") {
+        return { status: "conflict" as const };
+      }
       return { status: "authorized" as const, run, turn };
     }
     if (!["active", "handoff_requested", "ending"].includes(run.status) ||
+      (run.status === "handoff_requested" && turn.status !== "handoff") ||
       !["generated", "degraded", "handoff"].includes(turn.status)) {
       return { status: "conflict" as const };
     }
@@ -153,11 +157,33 @@ export class EnterpriseSupportAgentPostgresRepository {
       : { status: "conflict" as const };
   }
 
+  async requestHandoff(input: { runId: string; requestedAt: string }) {
+    const run = await this.findRun(input.runId, true);
+    if (!run) return { status: "not_found" as const };
+    if (run.status === "handoff_requested") {
+      return { status: "requested" as const, run };
+    }
+    if (run.status !== "active") return { status: "conflict" as const };
+    const updated = await this.session.query<RunRow>(`
+      UPDATE enterprise.support_agent_runs SET status = 'handoff_requested',
+        conversation_state = 'handoff', updated_at = $3, version = version + 1
+      WHERE tenant_id = $1 AND id = $2 AND version = $4 AND status = 'active'
+      RETURNING *
+    `, [run.id, timestamp(input.requestedAt), run.version]);
+    return updated.rows[0]
+      ? { status: "requested" as const, run: mapRun(updated.rows[0]) }
+      : { status: "conflict" as const };
+  }
+
   async deliverTurn(input: { runId: string; turnId: string; deliveredAt: string }) {
+    const run = await this.findRun(input.runId, true);
     const turn = await this.findTurn(input.turnId, true);
-    if (!turn || turn.runId !== uuid(input.runId)) return { status: "not_found" as const };
+    if (!run || !turn || turn.runId !== run.id) return { status: "not_found" as const };
     if (turn.status === "delivered") return { status: "delivered" as const, turn };
-    if (turn.status !== "tts_authorized") return { status: "conflict" as const };
+    if (turn.status !== "tts_authorized" ||
+      (run.status === "handoff_requested" && turn.output?.intent !== "handoff")) {
+      return { status: "conflict" as const };
+    }
     const updated = await this.session.query<TurnRow>(`
       UPDATE enterprise.support_agent_turns SET status = 'delivered',
         delivered_at = $3, updated_at = $3, version = version + 1

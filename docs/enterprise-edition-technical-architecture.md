@@ -1,6 +1,6 @@
 # 无界AI企业版技术架构
 
-版本：v1.31
+版本：v1.32
 日期：2026-07-19
 状态：SaaS 详细架构基线，已对齐统一通讯平台和 PostgreSQL Primary
 
@@ -467,7 +467,7 @@ tenant-bound Adapter，再在新的 tenant transaction 中复核 ticket、run、
 definition、lease 和 version 后 finalize。`0031` 保存 attempt、lease、Provider fingerprint、
 `simulated`、有界结果与 hash，并由 trigger 拒绝过期完成、租约篡改、终态改写和迟到结果。生产
 runtime 默认未配置；可注入 mock 只用于协议和客户归属验证，不伪造真实外部系统成功。高风险接管
-仍属于 `ENT-CS-008`。
+由 `ENT-CS-008` 的独立不可执行请求收敛。
 
 ### 8.7 可逆写 Tool Adapter 执行单元
 
@@ -482,6 +482,22 @@ Cell Worker 复用现有 cell discovery、tenant forced-RLS claim 和恢复循�
 reference 的确定失败才在同一 tenant transaction 中递增 attempt、写 execution 终态、发布 Outbox
 并追加审计。默认 API/Worker Adapter 均 unavailable；没有真实 Provider 配置时不会进入确认或产生
 伪业务对象。
+
+### 8.8 高风险人工接管单元
+
+`ENT-CS-008` 不复用 `tool_executions` 或写工具 Outbox，而是增加 forced-RLS、append-only 的
+`support_high_risk_handoff_requests`。记录通过 tenant-first FK 绑定 support session/customer、Support
+Agent run 和 active Tool Registry revision，只保存参数 hash、固定策略版本和风险证据 hash。
+
+首次 high-risk 授权在一个 tenant Unit of Work 中锁定 Worker dispatch、binding、policy、route epoch、
+generation、run、session 和 active definition，写入接管请求后把 run/session 同时推进为
+`handoff_requested`。任一 CAS 或绑定失败使整个事务回滚；相同幂等键只允许精确重放。PostgreSQL insert
+trigger 再次要求 session/run/definition 均 active 且 run 属于该 session，mutation trigger 拒绝更新和删除。
+Tool Registry 的既有 execution insert guard 继续无条件拒绝 high-risk，因此绕过 API 也不能产生可执行动作。
+
+run 进入接管后，TTS authorize 只允许状态为 `handoff` 的 turn；普通 generated/degraded 回答不能取得新
+播放许可。当前输出是“等待人工处理”的持久证据，不含坐席队列、claim、Provider 副作用或人工已经接通的承诺；
+这些分别留给 `ENT-CS-009` 和真实业务系统人工流程。
 
 ## 9. 数据架构
 
@@ -543,7 +559,7 @@ Worker 无权依据缓存继续执行敏感能力。
 
 生产 PostgreSQL 启动还必须验证企业签名 cutover evidence：证据绑定 staging 环境、
 commit、image digest、topology hash、目标 logical ID、system identifier/OID、公共31段与
-企业32段 manifest，并证明源库 writer fence、旧 API/Worker 角色会话为0、目标可写和
+企业33段 manifest，并证明源库 writer fence、旧 API/Worker 角色会话为0、目标可写和
 二次全量 hash 一致。本地逻辑恢复证据不提升为跨故障域 HA/PITR 结论。
 
 ## 10. 安全架构

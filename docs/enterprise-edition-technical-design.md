@@ -1,6 +1,6 @@
 # 无界AI企业版详细技术设计
 
-版本：v1.47
+版本：v1.48
 日期：2026-07-19
 状态：统一通讯平台与 PostgreSQL Primary 收敛详细技术方案
 
@@ -21,11 +21,11 @@
 | RBAC | `ready_for_acceptance` | 已有17个 scope、九角色矩阵、统一服务端 guard 和越权测试 |
 | SaaS tenant lifecycle | `ready_for_acceptance` | 已有幂等开通、暂停、导出/删除执行器、租约、有界恢复和 receipt 校验；真实对象存储/Provider 清理服务尚待验收 |
 | Append-only audit | `ready_for_acceptance` | 已有 tenant-scoped 查询、HMAC cursor、成员/RBAC/租户生命周期埋点和 SQLite/PostgreSQL 不可变约束；受控导出已进入 UI-008 开发，真实 PostgreSQL 验收仍待执行 |
-| PostgreSQL schema | `implemented` | 已有三十二段 up/down migration、tenant-first 索引、复合 FK、强制 RLS、user directory、cell pending projection、opaque subject identity、企业通讯/dispatch/策略、usage/billing、knowledge/terminology、observability trace、受控审计导出、Meeting 聚合/创建/翻译、屏幕共享租约、会后材料、屏幕 OCR、日历同步、客服领域、Support Agent run/turn、Tool Registry、只读租约执行和可逆写确认/Outbox 状态；尚无真实 migrate/restore/PITR 证据 |
+| PostgreSQL schema | `implemented` | 已有三十三段 up/down migration、tenant-first 索引、复合 FK、强制 RLS、user directory、cell pending projection、opaque subject identity、企业通讯/dispatch/策略、usage/billing、knowledge/terminology、observability trace、受控审计导出、Meeting 聚合/创建/翻译、屏幕共享租约、会后材料、屏幕 OCR、日历同步、客服领域、Support Agent run/turn、Tool Registry、只读租约执行、可逆写确认/Outbox 和不可执行高风险接管请求；尚无真实 migrate/restore/PITR 证据 |
 | Tenant-scoped Repository | `ready_for_acceptance` | 已有 tenant/user/cell scoped transaction、subject guard、单一 `legacy|postgres` runtime、HTTP 全链路注入、独立 cell Worker，以及 Tenant/Member/Audit、Directory、lifecycle、Inbox/Outbox、budget、billing/entitlement、usage accounting、knowledge、terminology 和共享 unit-of-work；尚无真实 PostgreSQL H3 证据 |
 | Enterprise Inbox/Outbox | `ready_for_acceptance` | 已有 tenant-scoped 去重、稳定 payload hash、领域/inbox/outbox 原子提交、lease/retry/recovery 和100次重放门禁；真实 PostgreSQL 并发与 Provider sandbox 尚待验收 |
 | SQLite/JSON 演示数据导入 | `ready_for_acceptance` | 已有维护窗口、SQLite 临时副本与 quick_check、空目标事务导入、六集合 count/SHA-256 读回对账和不一致回滚；仅限内部演示数据 |
-| 公共 Primary Runtime 收敛 | `ready_for_acceptance` | 已合入上游稳定提交 `fe1c3c2`；公共31段与 enterprise 32段 manifest 由一个启动编排验证，driver、数据库身份和分权连接失败均在监听前闭合；尚无真实 PostgreSQL H3 证据 |
+| 公共 Primary Runtime 收敛 | `ready_for_acceptance` | 已合入上游稳定提交 `fe1c3c2`；公共31段与 enterprise 33段 manifest 由一个启动编排验证，driver、数据库身份和分权连接失败均在监听前闭合；尚无真实 PostgreSQL H3 证据 |
 | 企业链路追踪 | `in_progress` | 平台 trace 已进入 tenant context、PostgreSQL session、communication binding、usage event/ledger 与会话报告；本轮未执行测试和真实 PostgreSQL 门禁，货币成本因无价格表明确 not configured |
 | 企业工作台真值投影 | `in_progress` | Web 已读取 tenant/route、Provider、subscription、budget、usage aggregate 和显式 session trace report；业务聚合与价格表缺失时明确 not ready/not configured，本轮未执行自动化、浏览器或 PostgreSQL 门禁 |
 | 审计与分析 | `in_progress` | Web 已接入审计筛选/详情、显式 session 下钻和受控 JSONL 导出；`0020`、Repository/API/cell Worker/加密对象存储边界已实现，本轮未执行 migration、双租户、对象存储或浏览器测试；业务聚合/价格表与物理对象清理仍未完成 |
@@ -44,8 +44,9 @@
 | Tool Registry | `in_progress` | `0030`、不可变工具 revision、固定风险/scope/确认映射、封闭输入 schema、签名 Worker fence、幂等授权记录和 DB insert guard 已形成代码候选；Agent 仍不输出工具请求，只读执行见 CS-006，客户确认/高风险流程属于 CS-007/008，未执行自动化、migration/RLS 或真实 Provider 验收 |
 | 只读 Tool Adapter | `in_progress` | `0031`、order/logistics/inventory 严格 Adapter contract、默认 not_configured runtime、可注入 simulated mock、claim/事务外调用/fenced finalize、结果 hash/稳定回放和客户归属 guard 已形成代码候选；Agent 仍不输出工具请求，未执行自动化、migration/RLS、并发租约或真实 Provider 验收 |
 | 可逆写 Tool Adapter | `in_progress` | `0032`、ticket/callback/note 严格 Adapter contract、120秒客户 turn 确认、AES-GCM Outbox、Cell Worker 重试、Provider 幂等/fingerprint fence 和 execution/outbox 原子终结已形成代码候选；默认 not_configured、mock simulated=true，Agent 仍不输出工具请求，未执行自动化、migration/RLS、崩溃恢复或真实 Provider 验收 |
+| 高风险人工接管 | `in_progress` | `0033`、forced-RLS/不可变 handoff request、run/session/customer/revision/arguments/risk evidence 绑定、幂等冲突和 run/session 原子 handoff 已形成代码候选；不创建 execution/Outbox/Provider 调用，坐席队列属于 CS-009，未执行自动化、migration/RLS、并发或真实接管验收 |
 | 企业术语与话术版本 | `ready_for_acceptance` | enterprise `0018`、共享契约、Term Pack/Script Template Repository/runtime/API 已实现稳定资源、递增 revision、review/publish、有效期解析、hash 校验和同一术语版本运行时引用；仅有自动化和本地 PostgreSQL 16 普通角色证据，真实 Worker/Provider、A1/H3 未通过 |
-| Primary 全量切换/恢复证据 | `ready_for_acceptance` | 工具按运行时动态校验 manifest/全业务表；`c9b5be2` 历史证据为31+16/81张表，当前31+32/105张表必须重新生成签名证据；异地 WAL/PITR/H3 未通过 |
+| Primary 全量切换/恢复证据 | `ready_for_acceptance` | 工具按运行时动态校验 manifest/全业务表；`c9b5be2` 历史证据为31+16/81张表，当前31+33/106张表必须重新生成签名证据；异地 WAL/PITR/H3 未通过 |
 | PostgreSQL 控制面/业务聚合 | `designed` | 后续 CORE/MTG/CS/MKT 领域任务范围，不能从公共 Repository runtime 推导为已实现 |
 | SQLite | `demo_only` | 仅本地开发、自动化和封闭演示，不承载真实企业试点数据 |
 | PSTN/CRM/OCR | `not_ready` 或按环境探测 | 未配置必须明确降级，不生成虚假外部对象或成功状态 |
@@ -210,6 +211,13 @@ support_tool_definitions(
   required_scope, confirmation_mode, input_schema, schema_hash,
   created_by, published_by, retired_by, created_at, published_at,
   retired_at, updated_at, version
+)
+
+support_high_risk_handoff_requests(
+  id, tenant_id, support_session_id, customer_id, support_agent_run_id,
+  tool_definition_id, tool_name, tool_revision, risk_level,
+  authorization_scope, confirmation_mode, risk_category, policy_version,
+  arguments_hash, risk_evidence_hash, request_hash, idempotency_key, created_at
 )
 
 support_agent_runs(
@@ -848,6 +856,37 @@ migration 在已经确认或产生外部写证据时失败闭合。
 只记录一次有效效果并固定 `simulated=true`。这不是工单/CRM/回拨 Provider 的真实成功证据。Support
 Agent 输出仍固定 `toolRequest=null`，自动从模型请求推进确认不属于本批。
 
+### 7.4 高风险接管请求与不可执行边界
+
+`ENT-CS-008` 沿用 `/internal/enterprise/support-tools/authorize`，但 high-risk 分支不再只返回瞬时
+`handoff_required`。运行时验证 active definition 的封闭 schema 后，按工具名前缀把风险归为
+`refund/payment/identity/other_high_risk`，并生成：
+
+```text
+riskEvidenceHash = SHA256(policyVersion, riskLevel, scope, confirmationMode,
+                          riskCategory, definitionId, toolName, revision, argumentsHash)
+requestHash = SHA256(runId, sessionId, customerId, riskEvidenceHash, policyVersion)
+```
+
+`0033_enterprise_support_high_risk_handoffs` 新增
+`support_high_risk_handoff_requests`。每行固定 `high_risk + support:takeover + human_handoff +
+ent-cs-008.v1`，以复合 FK 绑定 session/customer、run 和精确工具 revision；唯一
+`(tenant_id,idempotency_key)` 只允许同 request hash 重放。表不保存原始参数、客户话语、支付或身份材料，
+也没有可执行 payload、Provider reference 或成功状态。
+
+insert trigger 在数据库内再次读取 session、run 和 definition，要求三者均 active、run 归属 session 且
+definition 仍为 human_handoff；mutation trigger 无条件拒绝 UPDATE/DELETE。Repository 先锁定并检查既有
+幂等键，首次创建只允许 `active + ai_active`，随后同事务执行
+`support_agent_runs.active -> handoff_requested` 和
+`support_sessions.ai_active -> handoff_requested`。任一 fence 丢失抛错并整体回滚；重放只返回同一 request ID，
+不重复状态迁移。
+
+既有 `tool_executions_registry_insert_guard` 仍拒绝所有 high-risk execution，因此该路径永远不创建 execution、
+确认挑战、Outbox 或 Adapter 调用。run 已进入 handoff 时，TTS authorize 只接受 turn status=`handoff`，
+拒绝新的普通 generated/degraded 回答。审计只保存工具、definition、handoff request ID、risk evidence hash
+和 replay 标志。本批没有 queue/claim/assignment 字段，不会声称已经有坐席接管；该状态由 `ENT-CS-009`
+继续推进。`0033` down migration 仅允许空请求表回退；已有接管证据时失败闭合，不静默删除审计依据。
+
 ## 8. RAG 和知识版本
 
 ### 8.1 数据和状态机
@@ -1263,7 +1302,7 @@ baseline 文件 hash，验证源库默认只读、写探针返回 SQLSTATE `2500
 整行 hash、主键、migration 或 server version 不一致都会生成签名 `mismatch` 并以非零退出。
 
 生产 startup gate 只接受 `environment=staging` 的 matched cutover evidence，且运行时
-commit/image/topology、cutover ID、target logical ID、当前 system identifier/OID 和31+32
+commit/image/topology、cutover ID、target logical ID、当前 system identifier/OID 和31+33
 manifest 必须逐项一致。本地 PostgreSQL 16 演练已验证81张表、8张含记录关键表、增量后17行
 全库 hash、writer fence、隔离 `pg_dump/pg_restore` 和单行篡改失败；证据见
 `docs/evidence/ent-data-009-local-drill-2026-07-18.md`。这只证明机制可执行，不是异地主机

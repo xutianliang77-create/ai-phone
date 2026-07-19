@@ -184,6 +184,9 @@ export interface EnterpriseSupportToolAuthorizationResponse {
   definition: EnterpriseSupportToolDefinitionDto;
   argumentsHash: string;
   executionId?: string;
+  handoffRequestId?: string;
+  riskCategory?: "refund" | "payment" | "identity" | "other_high_risk";
+  riskEvidenceHash?: string;
   replayed?: boolean;
 }
 

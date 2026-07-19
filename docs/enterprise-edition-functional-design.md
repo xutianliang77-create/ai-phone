@@ -1,6 +1,6 @@
 # 无界AI企业版详细功能设计
 
-版本：v1.28
+版本：v1.29
 日期：2026-07-19
 状态：SaaS 详细设计基线，已对齐统一通讯平台
 
@@ -364,6 +364,22 @@ LLM 只能提出结构化工具请求；Policy Engine 校验租户、客户、�
 本阶段仍不包含退款、支付或身份验证 Adapter，也不把“授权/确认记录已创建”、Outbox 已入队、mock
 结果或静态检查表述为外部业务操作已成功。Support Agent 的 `toolRequest` 仍固定为 `null`，模型到
 确认入口的自动编排不在本批开放。
+
+`ENT-CS-008` 把退款、付款、身份验证以及其他登记为 `high_risk` 的请求收敛为不可执行的人工接管请求：
+
+- 高风险仍必须精确登记为 `support:takeover + human_handoff`；任何参数 schema、工具 revision 或
+  Worker/run/session 绑定不一致都失败闭合，绝不降级为只读或可逆写工具。
+- 授权入口只保存 tenant、当前 Support Agent run、support session、customer、active tool revision、
+  规范化参数 SHA-256、风险类别和风险证据 SHA-256，不保存退款原因、支付资料、身份材料等原文。
+- 首次请求在同一数据库事务内写入不可变 `handoff request`，把 Agent run 和 support session 原子推进为
+  `handoff_requested`；数据库继续拒绝为该请求创建 `tool_execution`、Outbox 或 Provider 调用。
+- 同一幂等键且证据完全一致只返回原接管请求；参数、revision、run、session、customer 或证据任一变化即冲突。
+  接管后只能授权 `handoff` 话术 TTS，普通回答不得继续播报。
+- `refund.*`、`payment.*`、`identity.*` 分别归类为退款、付款、身份验证；其他 high-risk 工具统一归入
+  `other_high_risk`，安全行为完全相同。当前只生成待人工处理的证据记录，不表示退款、付款或身份验证已完成。
+
+坐席排队、claim/release、SLA 和双坐席互斥属于 `ENT-CS-009`；本批没有自动分配坐席，也不会把
+`handoff_requested` 表述为已经接通人工。
 
 ### 6.5 人工坐席工作台
 

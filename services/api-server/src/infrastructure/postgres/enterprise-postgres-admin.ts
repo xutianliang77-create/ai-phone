@@ -30,6 +30,7 @@ export const enterpriseTenantTableNames = [
   "marketing_outcomes", "support_channels", "customer_profiles",
   "support_queues", "support_sessions", "support_cases", "tool_executions", "meetings",
   "support_agent_runs", "support_agent_turns", "support_tool_definitions",
+  "support_high_risk_handoff_requests",
   "meeting_participants", "meeting_screen_shares", "meeting_artifacts",
   "meeting_action_items", "meeting_translation_events",
   "meeting_screen_share_commands",
