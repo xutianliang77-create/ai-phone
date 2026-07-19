@@ -95,6 +95,16 @@ export const enterpriseIcons = {
     answer: "record_voice_over",
     tools: "construction",
   },
+  campaign: {
+    aggregate: "campaign",
+    objective: "track_changes",
+    countries: "public",
+    languages: "translate",
+    schedule: "event",
+    concurrency: "speed",
+    approval: "verified_user",
+    edit: "edit",
+  },
   appearance: {
     system: "brightness_auto",
     light: "light_mode",

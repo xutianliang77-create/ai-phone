@@ -16,6 +16,7 @@ import "./styles/analytics.css";
 import "./styles/guest.css";
 import "./styles/meeting.css";
 import "./styles/support.css";
+import "./styles/campaign.css";
 import "./styles/accessibility.css";
 
 const root = document.getElementById("root");

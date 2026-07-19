@@ -47,6 +47,7 @@ describe("enterprise PostgreSQL migrations", () => {
       "0034_enterprise_support_agent_queue",
       "0035_enterprise_support_followups",
       "0036_enterprise_support_quality",
+      "0037_enterprise_marketing_campaigns",
     ]);
     for (const migration of migrations) {
       expect(migration.up.trim()).not.toBe("");
@@ -183,6 +184,11 @@ describe("enterprise PostgreSQL migrations", () => {
     expect(sql).toContain("guard_support_quality_review_insert");
     expect(sql).toContain("guard_support_quality_evidence_counts");
     expect(sql).toContain("enterprise support quality evidence is immutable");
+    expect(sql).toContain("marketing_campaigns_tenant_creation_key_unique_idx");
+    expect(sql).toContain("marketing_campaigns_owner_member_fk");
+    expect(sql).toContain("guard_marketing_campaign_mutation");
+    expect(sql).toContain("enterprise marketing campaign approval required");
+    expect(sql).toContain("enterprise marketing campaign cannot be deleted");
     expect(sql).toContain("tool_executions_read_recovery_idx");
     expect(sql).toContain("provider_simulated boolean");
     expect(sql).toContain("tool_executions_read_shape_check");
@@ -252,6 +258,7 @@ describe("enterprise PostgreSQL migrations", () => {
       "cannot roll back enterprise support agent claim evidence",
     );
     expect(rollbackSql).toContain("DROP COLUMN IF EXISTS execution_attempt");
+    expect(rollbackSql).toContain("DROP FUNCTION IF EXISTS enterprise.guard_marketing_campaign_mutation");
     expect(sql).not.toContain("BYPASSRLS");
   });
 

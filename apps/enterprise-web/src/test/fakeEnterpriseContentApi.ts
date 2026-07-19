@@ -34,6 +34,8 @@ type ContentApi = Pick<EnterpriseApi,
   | "listSupportQualityRuleVersions" | "publishSupportQualityRuleVersion"
   | "getSupportQualityDashboard" | "analyzeSupportQualitySession"
   | "getSupportQualitySession"
+  | "listCampaigns" | "getCampaign" | "createCampaign" | "updateCampaign"
+  | "scheduleCampaign"
 >;
 
 export function fakeEnterpriseContentApi(): ContentApi {
@@ -116,5 +118,10 @@ export function fakeEnterpriseContentApi(): ContentApi {
     }, sessions: [] }),
     analyzeSupportQualitySession: vi.fn(),
     getSupportQualitySession: vi.fn(),
+    listCampaigns: vi.fn().mockResolvedValue({ campaigns: [] }),
+    getCampaign: vi.fn(),
+    createCampaign: vi.fn(),
+    updateCampaign: vi.fn(),
+    scheduleCampaign: vi.fn(),
   };
 }

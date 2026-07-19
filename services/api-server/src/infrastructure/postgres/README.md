@@ -6,7 +6,8 @@ Runtime 收敛到同一个进程级 Storage Driver；SQLite 仍仅用于本地�
 
 `ENT-DATA-002` 已提供三类 transaction-local session：
 
-- tenant session 设置 `app.tenant_id`，把 tenant 注入 `$1`，拒绝缺少 tenant
+- tenant session 设置 `app.tenant_id + app.user_id`，把 tenant 注入 `$1`，并为 tenant 内 actor guard
+  提供事务级身份；拒绝缺少 tenant
   predicate、注释绕过、错位 INSERT，以及 tenant 根表的 JOIN/子查询/UNION/OR。
 - directory session 设置 `app.user_id`，只允许从
   `enterprise.user_tenant_directory` 单表读取显式 `user_id = $1` 的本人记录。
@@ -31,8 +32,8 @@ identity 使用 opaque subject，而不是资源 UUID：
 - account subject 必须是规范的 `user_<uuid>`。
 - audit/policy/idempotency actor 可以是 account subject，或
   `system:enterprise-outbox` 形式的受约束 namespace subject。
-- Repository 在 SQL 前和行映射时校验；schema verify 当前覆盖23个 account/audit subject 列，
-  包括术语和话术的创建、审核与发布 actor。raw UUID、`user-a` 和 system actor 写入 user 列
+- Repository 在 SQL 前和行映射时校验；schema verify 当前覆盖38个 account/audit subject 列，
+  包括活动 owner、术语和话术的创建、审核与发布 actor。raw UUID、`user-a` 和 system actor 写入 user 列
   都会失败闭合。
 
 ## API startup gate
@@ -56,7 +57,7 @@ ENTERPRISE_MIGRATION_DATABASE_URL='postgresql://...' \
 
 两种启用模式都在恢复任务、Fastify 构建和端口监听前失败闭合，并在校验后关闭连接。
 `verify` 不写 migration；`migrate_verify` 始终在 migration 后执行相同 schema verify。
-统一启动编排先验证公共31段 manifest 和签名 cutover evidence，再验证 enterprise 27段
+统一启动编排先验证公共31段 manifest 和签名 cutover evidence，再验证 enterprise 37段
 manifest，并核对两个 verdict 的 database name/OID；任一失败都关闭已创建资源且不监听。
 
 基础 migration `0004` 至 `0010` 中，`0004` 增加 tenant lifecycle 状态和 job，`0005` 增加

@@ -53,6 +53,10 @@ export async function withEnterpriseTenantPostgresSession<T>(
       [context.tenantId],
     );
     await client.query(
+      "SELECT set_config('app.user_id', $1, true)",
+      [context.actorUserId],
+    );
+    await client.query(
       "SELECT set_config('app.scope_type', 'tenant', true)",
     );
     await client.query(

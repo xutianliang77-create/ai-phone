@@ -1,6 +1,6 @@
 # 无界AI企业版开发任务
 
-版本：v1.57
+版本：v1.58
 日期：2026-07-19
 状态：E0 开发中，已对齐统一通讯平台和 PostgreSQL Primary 收敛
 
@@ -17,14 +17,14 @@
 ### 1.1 当前状态快照
 
 - `ENT-CORE-001/002/003` 已完成代码和自动化，等待验收；生产 Web 应用位于 `apps/enterprise-web`。
-- `ENT-DATA-001` 已有三十六段 PostgreSQL up/down migration、tenant-first 索引、复合 FK、强制 RLS、checksum/锁和备份归档 smoke；`0017..0034` 延续既有知识、会议、客服 Agent/Tools、高风险接管和坐席 claim，`0035` 增加 callback/followup forced-RLS 与可靠后续动作，`0036` 增加不可变客服质检规则/复核/发现。历史本地 PostgreSQL 16 验证不替代当前31+36 staging migrate/restore/PITR 证据，任务保持 `in_progress`。
+- `ENT-DATA-001` 已有三十七段 PostgreSQL up/down migration、tenant-first 索引、复合 FK、强制 RLS、checksum/锁和备份归档 smoke；`0017..0034` 延续既有知识、会议、客服 Agent/Tools、高风险接管和坐席 claim，`0035` 增加 callback/followup forced-RLS 与可靠后续动作，`0036` 增加不可变客服质检规则/复核/发现，`0037` 增加 Campaign 幂等键、owner/member 复合 FK 和状态守卫。历史本地 PostgreSQL 16 验证不替代当前31+37 staging migrate/restore/PITR 证据，任务保持 `in_progress`。
 - `ENT-DATA-002` 已完成单一 `legacy|postgres` Enterprise Repository runtime adapter，Tenant/Member/Audit、Directory、lifecycle 和 HTTP 路由均通过同一 runtime；PostgreSQL 只有在启动 schema gate 已验证时才允许选中，不存在 fallback、双写或局部切换。独立 cell Worker 已实现 cell/worker/poll/batch/lease 配置、forced-RLS pending discovery、tenant transaction 二次复核、lifecycle/outbox claim/finalize、失败隔离和显式 publisher 降级。代码与本地自动化完成，进入 `ready_for_acceptance`；真实 PostgreSQL、并发 claim、容量和恢复证据仍属于 H3 门禁。
 - `ENT-DATA-004` 已实现 JSON/SQLite 六类企业记录源读取、SQLite 临时副本与 `quick_check`、维护窗口空目标导入、事务内读回，以及逐集合 count/SHA-256 和总 hash 对账；任何不一致整体回滚。该工具只迁移当前 Tenant/Member/Job/Audit/Inbox/Outbox 演示数据，不是客户生产迁移通道，进入 `ready_for_acceptance`。
 - `ENT-DATA-003` 已完成 tenant-scoped inbox 去重、稳定 JSON hash、领域写入/inbox/outbox 同事务、outbox 内容不可变、lease claim、指数退避和恢复处理；100 次相同事件重放只执行一次领域副作用，跨租户 provider ID/idempotency key 相互隔离。SQLite 证据仅用于自动化和封闭演示，真实 PostgreSQL 并发 claim 与 Provider sandbox 仍待正式验收。
-- `ENT-DATA-007` 已把上游稳定提交 `fe1c3c2` 的公共 Primary Runtime 纳入企业分支，并以 `API_STORAGE_DRIVER` 作为唯一进程级 driver。统一启动编排现验证公共31段和 enterprise 36段 manifest，核对数据库 name/OID 后才创建企业 runtime；API tenant pool 复用公共 Primary pool，directory、cell、migration 和 maintenance 使用分权连接配置，Worker 不获取 directory 凭证。代码和本地自动化完成，进入 `ready_for_acceptance`；真实 PostgreSQL 双 manifest、最小权限角色、并发和恢复证据仍属于 H3。
+- `ENT-DATA-007` 已把上游稳定提交 `fe1c3c2` 的公共 Primary Runtime 纳入企业分支，并以 `API_STORAGE_DRIVER` 作为唯一进程级 driver。统一启动编排现验证公共31段和 enterprise 37段 manifest，核对数据库 name/OID 后才创建企业 runtime；API tenant pool 复用公共 Primary pool，directory、cell、migration 和 maintenance 使用分权连接配置，Worker 不获取 directory 凭证。代码和本地自动化完成，进入 `ready_for_acceptance`；真实 PostgreSQL 双 manifest、最小权限角色、并发和恢复证据仍属于 H3。
 - `ENT-OBS-001` 已进入开发：平台 `x-trace-id` 现注入 Enterprise TenantContext 和 PostgreSQL `app.trace_id`，`0019` 把会话绑定、usage event 与不可变 ledger 的 trace 固化并建立 tenant-first 索引；新增按 tenant scope 的会话报告契约/API，返回真实 segment 覆盖率/延迟、Provider operation、usage/ledger 和关联审计。当前无单位价格表，货币成本固定返回 `pricing_not_configured`，不把用量冒充金额。按本轮要求尚未执行测试矩阵、migration 和双租户负测，状态保持 `in_progress`。
 - `ENT-DATA-008` 已新增公共 migration `031_communication_resource_scope`：session、leg、transcript、playback、Provider operation、dispatch/capacity、participant consent、recording 和 ingress 共12张表具有不可空 `scope_type + scope_id`、复合 scope FK、写入 scope trigger 和 forced RLS。企业 tenant transaction 同时设置 `app.tenant_id/app.scope_type/app.scope_id`，只向企业 unit-of-work 暴露六类白名单、单 SELECT、显式 scope predicate 的通讯 Repository；跨租户返回行会被二次拒绝。代码和本地自动化完成，进入 `ready_for_acceptance`；真实双租户 PostgreSQL CRUD/迟到事件攻击仍属于 A1/H3。
-- `ENT-DATA-009` 已实现动态双 manifest、全业务表主键分页整行 count/SHA-256、关键 tenant/session/ledger/audit/consent/suppression/object 清单、WAL 水位、HMAC baseline/cutover/restore evidence、源库 SQLSTATE `25006` writer fence、旧 writer 会话清退和 production startup 身份绑定。提交 `c9b5be2` 的历史本地证据覆盖公共31段/企业16段与81张表；当前代码为31+36和112张表，旧签名证据会被 startup gate 拒绝，必须在 staging 重新生成。任务保持 `ready_for_acceptance`；跨故障域自动选主、异地主机不可变 WAL/PITR 和 RPO/RTO 仍待 `ENT-REL-003`/H3。
+- `ENT-DATA-009` 已实现动态双 manifest、全业务表主键分页整行 count/SHA-256、关键 tenant/session/ledger/audit/consent/suppression/object 清单、WAL 水位、HMAC baseline/cutover/restore evidence、源库 SQLSTATE `25006` writer fence、旧 writer 会话清退和 production startup 身份绑定。提交 `c9b5be2` 的历史本地证据覆盖公共31段/企业16段与81张表；当前代码为31+37和112张表，旧签名证据会被 startup gate 拒绝，必须在 staging 重新生成。任务保持 `ready_for_acceptance`；跨故障域自动选主、异地主机不可变 WAL/PITR 和 RPO/RTO 仍待 `ENT-REL-003`/H3。
 - `ENT-CORE-004` 已新增 enterprise `0017`、共享契约、tenant Knowledge Repository/runtime 和七个服务端路由：source、递增 revision、一次性 chunk 集、review、publish、列表和检索均绑定 membership/RBAC/route document。服务端生成 chunk/content SHA-256 与 citation；数据库要求 review+非空 chunk 才能发布，并冻结 published version/chunk。检索强制 tenant/locale/country/product/effective-time，只取每个 source 最新有效 published revision；review、过期和跨租户数据返回空。代码、定向矩阵及一次性 PostgreSQL 16 普通角色 forced-RLS/down-up 验证完成，进入 `ready_for_acceptance`；embedding Provider、真实对象存储、恶意文档扫描和生产 A1/H3 尚未验收。
 - `ENT-CORE-005` 已新增 enterprise `0018`、共享契约、Term Pack/Script Template Repository/runtime 和十三个服务端路由。稳定资源下的 revision 由服务端行锁递增，内容规范化后生成 SHA-256，review 后内容/hash 与 published 版本不可修改；resolver 强制 tenant/source-target locale/country/product/purpose/effective-time，只返回有效 published 版本，并给 ASR、翻译、LLM 同一 `termPackVersionId`，可选话术只给 LLM。代码、定向矩阵和一次性 PostgreSQL 16 非 owner/非 BYPASSRLS 普通角色 down-forward 验证完成，进入 `ready_for_acceptance`；真实 Worker/Provider、A1/H3 尚未验收。
 - `ENT-CORE-009` 已完成租户创建/区域开通幂等、失败重试、暂停、导出和删除执行器；导出固化 tenant/member/job 与 actor scope 快照，执行使用租约、有界重试和 receipt hash，删除只在 receipt 校验后进入 `deleted`，等待真实生命周期服务与对象存储验收。
@@ -55,6 +55,7 @@
 - `ENT-UI-012` 已增加完全位于成员 `AuthProvider/AppShell` 之外的 `/join/:meetingId` Web 访客壳，不发起账号、membership 或 tenant 请求，也不渲染租户导航和成员数据。邀请只接受 `#token=` fragment，拒绝 query token、非法 meeting ID/token，并立即从地址栏清除后只存页面内存；清除失败即拒绝。访客点击入会后以加密邀请换取短期 RTC grant，客户端只开放麦克风和订阅；字幕、数据、摄像头与共享继续关闭且不回退个人 Call Link。仅完成 typecheck、生产构建、bundle 与文件规模静态门禁，token 攻击、浏览器权限和设备矩阵按要求未执行，任务保持 `in_progress`。
 - `ENT-CS-010` 已形成 tenant-scoped workbench activate/read API、claim 与 Agent run cancel 原子栅栏、旧 claim 恢复栅栏、最终字幕 revision 投影、客户/知识/风险/历史聚合和同风格三栏 Web 坐席台。字幕以2.5秒只读轮询，claim 按当前时间续一个 queue lease；乱序快照不覆盖较新 lease。静音、转组、结束、工单和回呼没有安全 Provider/API 时 disabled + reasonCode，不伪造成功。当前只完成 typecheck/构建/静态门禁，按要求未运行自动化、真实 PostgreSQL/RLS、Worker/TTS、LiveKit、浏览器或真实坐席媒体，任务保持 `in_progress`。
 - `ENT-CS-012` 已形成 `0036` forced-RLS 质检规则/复核/发现、`quality:read/manage`、终态会话与 Agent run 双 guard、规则/source hash 精确重放、五类确定性结构发现、最新复核 Dashboard 和同风格证据详情。语义模型未配置时 review 固定 partial/not_configured、错误回答率为 null，不以无引用率替代。当前只完成静态门禁，按要求未运行自动化、真实 PostgreSQL/RLS、浏览器、自动批处理或人工金标质量验收，任务保持 `in_progress`。
+- `ENT-MKT-001` 已形成共享 Campaign 契约、`0037` 创建幂等/owner FK/状态 trigger、forced-RLS 命令幂等账本、tenant-scoped Repository/runtime、list/read/create/draft patch/aggregate schedule API 和同风格 Web 页面。三类写命令同键同 hash 精确重放；schedule 需要 `campaign:approve`，且未审批、非 approved、无 policyVersion 或无未来 startAt 均失败闭合；成功也不创建 task 或调用 PSTN。当前只完成静态门禁，自动化、真实 PostgreSQL/RLS、浏览器、线索/策略/审批/Scheduler/Provider 均未验收，任务保持 `in_progress`。
 - `ENT-MTG-001` 已增加 `0021` Meeting 聚合约束、Meeting/Participant/Artifact 领域记录与状态机、tenant-scoped PostgreSQL Repository、统一 runtime adapter 和可恢复聚合读取。meeting CAS 只允许 scheduled→provisioning→active→ending→ended 及受控取消/失败；参与者身份强制 user/external XOR、host 与 meeting host 一致，artifact 类型/发布状态受约束；聚合同时返回唯一 communication binding，重启恢复读取 provisioning/active/ending。当前未运行 migration、RLS/并发/恢复测试，任务保持 `in_progress`。
 - `ENT-MTG-004` 已增加 `0024`、单会议活动租约唯一约束、append-only 命令账本、acquire/pause/resume/renew/stop 幂等 CAS、route/entitlement/participant fence、代际发布 identity 和仅屏幕源 LiveKit grant。cell Worker 依据 forced-RLS pending-work 到期回收并通过 outbox 幂等移除旧发布者；Provider 未配置或撤销失败返回 pending，不伪造完成。当前按要求未运行 migration、Repository/API/Worker、并发、forced-RLS 或真实 LiveKit 测试，任务保持 `in_progress`。
 - `ENT-MTG-005` 已在成员 Web 会议页实现 `getDisplayMedia` 用户授权、真实 screen/window/tab 识别、独立最小权限发布房间、首次 track SID 绑定和10秒租约续期；主会议房间只渲染服务端当前 generation 指定 identity 的 screen track。暂停、恢复、停止和浏览器原生停止均先收敛本地媒体，撤销 pending 不伪装为已停止。当前按要求未运行 unit/API/Playwright、多浏览器、弱网或真实 LiveKit 测试，任务保持 `in_progress`。
@@ -236,7 +237,7 @@ claim、断线回收和人工接通均未验收，任务保持 `in_progress`。
 
 | 编号 | 任务 | 依赖 | 交付物 | 完成定义 | 状态 |
 | --- | --- | --- | --- | --- | --- |
-| ENT-MKT-001 | Campaign 聚合 | CORE-001、DATA-003 | campaign/status/approval | 未审批活动不能调度 | todo |
+| ENT-MKT-001 | Campaign 聚合 | CORE-001、DATA-003 | `0037`、共享契约、三类写命令幂等、CAS、Repository/API、同风格 Web 页面 | 未审批活动不能调度；重试不重复变更；不提前生成 task 或 PSTN 副作用 | in_progress |
 | ENT-MKT-002 | 线索导入 | MKT-001 | CSV/API、E.164、去重、错误报告 | 批次可回滚且不重复线索 | todo |
 | ENT-MKT-003 | 授权证据 | MKT-002 | consent schema/object/hash | 无有效授权任务数为零 | todo |
 | ENT-MKT-004 | 禁拨名单 | MKT-002 | tenant/global scope、撤回 | 拒绝后立即阻断全部待任务 | todo |

@@ -1,6 +1,6 @@
 # 无界AI企业版详细功能设计
 
-版本：v1.33
+版本：v1.34
 日期：2026-07-19
 状态：SaaS 详细设计基线，已对齐统一通讯平台
 
@@ -158,6 +158,18 @@ Provider、usage/ledger 和 trace；跨会话业务聚合与货币成本尚未�
 6. 合规预检和主管审批。
 
 未完成授权证明、国家策略或审批的活动不能开始。
+
+#### 5.1.1 Campaign 聚合首批实现边界
+
+- 新活动只能由服务端以当前登录成员作为负责人创建为 `draft/not_submitted`；客户端提交的 tenant、owner、
+  status、approval 或 policy version 不成为真值。同一幂等键同内容返回原活动，异内容返回冲突。
+- `campaign:read` 只读取当前 tenant 的活动列表和详情；`campaign:write` 只允许以 expectedVersion 修改尚未
+  提交的草稿字段，不允许强制覆盖或修改聚合身份。创建、草稿更新和待调度命令均要求幂等键；同一 actor、
+  route 和键只精确重放同一 request hash，响应丢失时客户端必须复用原键。
+- “进入待调度”只改变 Campaign 聚合状态，不生成 call task、usage hold、Outbox 或 PSTN 请求。该命令要求
+  `campaign:approve`，并同时复核活动为 `approved`、审批为 `approved`、策略版本存在、开始时间为未来。
+- 当前 Web 页面只提供上述真实聚合能力，并明确标出线索、授权、国家策略、审批流、Scheduler 和 PSTN 尚未
+  接入；不得把不可用按钮或静态活动卡片解释为活动已经启动。
 
 ### 5.2 线索管理
 

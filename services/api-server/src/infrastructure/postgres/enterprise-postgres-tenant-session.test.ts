@@ -52,12 +52,20 @@ describe("enterprise PostgreSQL tenant session", () => {
         values: ["tenant-a"],
       },
       {
+        sql: "SELECT set_config('app.user_id', $1, true)",
+        values: ["user-a"],
+      },
+      {
         sql: "SELECT set_config('app.scope_type', 'tenant', true)",
         values: undefined,
       },
       {
         sql: "SELECT set_config('app.scope_id', $1, true)",
         values: ["tenant-a"],
+      },
+      {
+        sql: "SELECT set_config('app.trace_id', $1, true)",
+        values: ["trace-a"],
       },
       {
         sql: "SELECT id FROM enterprise.tenants WHERE id = $1",
@@ -273,8 +281,10 @@ describe("enterprise PostgreSQL tenant session", () => {
     expect(fixture.calls.map(({ sql }) => sql)).toEqual([
       "BEGIN",
       "SELECT set_config('app.tenant_id', $1, true)",
+      "SELECT set_config('app.user_id', $1, true)",
       "SELECT set_config('app.scope_type', 'tenant', true)",
       "SELECT set_config('app.scope_id', $1, true)",
+      "SELECT set_config('app.trace_id', $1, true)",
       "ROLLBACK",
     ]);
     expect(fixture.released).toBe(true);

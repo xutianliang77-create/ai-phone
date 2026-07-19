@@ -1,6 +1,6 @@
 # 无界AI企业版技术架构
 
-版本：v1.36
+版本：v1.37
 日期：2026-07-19
 状态：SaaS 详细架构基线，已对齐统一通讯平台和 PostgreSQL Primary
 
@@ -364,6 +364,19 @@ flowchart LR
 ```
 
 每次调度都重新检查授权、禁拨、当地时间、活动状态和租户预算。导入时通过不代表执行时继续有效。
+
+### 7.1 Campaign 聚合写入边界
+
+`ENT-MKT-001` 只把 `marketing_campaigns` 接入 Enterprise Repository Unit of Work。HTTP 层解析 membership、
+`campaign:read/write/approve` 和签名 route document，Runtime 在单一 tenant transaction 中执行幂等创建、
+幂等且版本化的草稿更新、状态守卫和脱敏审计；草稿更新与待调度命令先按 tenant/actor/route/key 取得事务级
+幂等锁，再使用 forced-RLS `idempotency_keys` 保存 request hash 和结果版本。SQL 始终显式包含
+`tenant_id = $1`，forced RLS 和 owner/member 复合外键作为纵深防御。
+
+`0037` 的 trigger 固化身份、创建条件、版本递增、草稿可变窗口和允许的状态边；任何未审批、无策略版本或
+无开始时间的记录都不能进入 `scheduled`。这里的 `scheduled` 只是业务聚合真值，不创建拨号任务，也不调用
+Provider。Lead/Consent/Suppression、Country Policy、Approval snapshot、Scheduler claim 和 PSTN dispatch 仍按
+`ENT-MKT-002..008` 分层接入，不能绕过后续执行时复核。
 
 ## 8. AI 客服架构
 

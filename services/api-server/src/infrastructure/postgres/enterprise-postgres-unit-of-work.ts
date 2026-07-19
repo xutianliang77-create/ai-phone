@@ -86,6 +86,8 @@ import { EnterpriseSupportFollowupPostgresRepository } from
   "./enterprise-postgres-support-followup.repository.js";
 import { EnterpriseSupportQualityPostgresRepository } from
   "./enterprise-postgres-support-quality.repository.js";
+import { EnterpriseCampaignPostgresRepository } from
+  "./enterprise-postgres-campaign.repository.js";
 
 export interface EnterprisePostgresUnitOfWork {
   tenant: EnterpriseTenantPostgresRepository;
@@ -119,6 +121,7 @@ export interface EnterprisePostgresUnitOfWork {
   supportWorkbench: EnterpriseSupportWorkbenchPostgresRepository;
   supportFollowups: EnterpriseSupportFollowupPostgresRepository;
   supportQuality: EnterpriseSupportQualityPostgresRepository;
+  campaigns: EnterpriseCampaignPostgresRepository;
 }
 
 export function withEnterprisePostgresUnitOfWork<T>(
@@ -166,6 +169,7 @@ export function withEnterprisePostgresUnitOfWork<T>(
       supportWorkbench: new EnterpriseSupportWorkbenchPostgresRepository(session),
       supportFollowups: new EnterpriseSupportFollowupPostgresRepository(session),
       supportQuality: new EnterpriseSupportQualityPostgresRepository(session),
+      campaigns: new EnterpriseCampaignPostgresRepository(session),
     }),
   );
 }

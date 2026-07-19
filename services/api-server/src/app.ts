@@ -24,9 +24,7 @@ import {
   type EnterpriseProviderReadinessService,
 } from "./modules/enterprise/enterprise-provider-readiness.js";
 import { registerEnterpriseProviderReadinessRoutes } from "./modules/enterprise/enterprise-provider-readiness.routes.js";
-import {
-  registerEnterpriseCommunicationPolicyRoutes,
-} from "./modules/enterprise/enterprise-communication-policy.routes.js";
+import { registerEnterpriseCommunicationPolicyRoutes } from "./modules/enterprise/enterprise-communication-policy.routes.js";
 import {
   registerEnterpriseUsageBudgetRoutes,
 } from "./modules/enterprise/enterprise-usage-budget.routes.js";
@@ -36,9 +34,7 @@ import {
 import {
   registerEnterpriseBillingEntitlementRoutes,
 } from "./modules/enterprise/enterprise-billing-entitlement.routes.js";
-import {
-  registerEnterpriseKnowledgeRoutes,
-} from "./modules/enterprise/enterprise-knowledge.routes.js";
+import { registerEnterpriseKnowledgeRoutes } from "./modules/enterprise/enterprise-knowledge.routes.js";
 import {
   registerEnterpriseTerminologyRoutes,
 } from "./modules/enterprise/enterprise-terminology.routes.js";
@@ -82,6 +78,8 @@ import { registerEnterpriseSupportAgentQueueRoutes } from
 import { registerEnterpriseSupportWorkbenchRoutes } from "./modules/enterprise/enterprise-support-workbench.routes.js";
 import { registerEnterpriseSupportToolRoutes } from
   "./modules/enterprise/enterprise-support-tool.routes.js";
+import { registerEnterpriseCampaignRoutes } from
+  "./modules/enterprise/enterprise-campaign.routes.js";
 import {
   createEnvironmentEnterpriseSupportAgentProvider,
   type EnterpriseSupportAgentProvider,
@@ -283,6 +281,7 @@ export async function buildApp(dependencies: {
   registerEnterpriseSupportToolRoutes(
     app, tenantRouteService, enterpriseRepositoryRuntime,
   );
+  registerEnterpriseCampaignRoutes(app, tenantRouteService, enterpriseRepositoryRuntime);
   registerEnterpriseMeetingScreenShareRoutes(
     app,
     tenantRouteService,

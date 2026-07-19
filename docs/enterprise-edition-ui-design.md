@@ -1,6 +1,6 @@
 # 无界AI企业版 UI 详细设计
 
-版本：v1.20
+版本：v1.21
 日期：2026-07-19
 状态：设计基线；企业 Web 公共组件、首批设置/工作台、响应式/主题/无障碍和 Web/iOS/Android 成员屏幕共享代码候选已实现，正式验收仍在开发
 
@@ -216,6 +216,16 @@ budget、usage aggregate 和显式 session trace report。卡片沿用同一 Mat
 - 主表：活动、国家/语言、授权覆盖、策略版本、预算、任务状态、负责人。
 - 详情页 Tab：概览、线索、话术与知识、合规校验、实时任务、结果分析、审计。
 - 启动按钮只有 `campaign:approve` 且 readiness 全部通过时可用；否则显示缺失项，不显示假成功。
+- `ENT-MKT-001` 首批页面复用企业壳、浅/深色 token、1px outline、8px 圆角、`StatusPanel` 和 Material Icons
+  注册表；活动、国家、语言、计划、并发、审批分别使用 `campaign/public/translate/event/speed/verified_user`，
+  不引入第二套图标库。
+- `campaign:write` 用户看到草稿创建/编辑表单，字段为名称、目标、国家、语言、时区、可选起止时间和并发；
+  owner、tenant、status、approval 和 policy version 不显示为可编辑字段。创建、保存和待调度在响应成功前保留
+  同一幂等键，网络失败重试不换键；版本或幂等冲突回到统一 conflict 状态。
+- 列表使用响应式双列活动卡，展示服务端状态、审批状态、版本和实际字段；760px 以下单列，420px 以下事实
+  网格单列。无数据、403、409 和 PostgreSQL 未就绪均使用统一页面状态，不生成 fixture。
+- “待调度”只向 `campaign:approve` 显示，审批未通过时禁用并说明依赖 `ENT-MKT-006`；即使聚合迁移成功也只
+  提示尚未创建拨号任务或调用 PSTN，Scheduler/Provider 未接入时不得出现启动成功文案。
 
 ### 8.3 AI 客服坐席台
 
