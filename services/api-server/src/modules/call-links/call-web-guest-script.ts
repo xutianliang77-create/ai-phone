@@ -6,6 +6,8 @@ import { renderCallWebEnvironmentFunctions } from "./call-web-environment-script
 import { callRoomCaptionTopic } from "@translation/contracts";
 import { renderCallWebGuestTicketFunctions } from "./call-web-guest-ticket-script.js";
 import { renderCallWebMediaIsolationFunctions } from "./call-web-media-isolation-script.js";
+import { renderCallWebConnectionLifecycleFunctions } from
+  "./call-web-connection-lifecycle-script.js";
 
 export function renderCallGuestScript() {
   return String.raw`(() => {
@@ -192,6 +194,7 @@ ${renderCallWebMediaIsolationFunctions()}
 ${renderCallWebTtsCaptureFunctions()}
 ${renderCallWebRoomConfirmationFunctions()}
 ${renderCallWebPageActionFunctions()}
+${renderCallWebConnectionLifecycleFunctions()}
 
   function bindRoom(room) {
     const lk = window.LivekitClient;
@@ -200,16 +203,7 @@ ${renderCallWebPageActionFunctions()}
     room.on(lk.RoomEvent.TrackPublished, (publication) => {
       publication.setSubscribed(shouldAttachAudioTrack(null, publication));
     });
-    room.on(lk.RoomEvent.Disconnected, () => {
-      stopActivationPolling();
-      resetTtsCaptureGate();
-      state.room = null;
-      state.expectedRoomName = "";
-      status("通话已断开", "error");
-      $("leave").disabled = true;
-      $("remote-audio").textContent = "";
-      updateJoinButton();
-    });
+    bindRoomConnectionLifecycle(room);
     room.on(lk.RoomEvent.TrackSubscribed, (track, publication) => {
       if (track.kind !== "audio") return;
       if (!shouldAttachAudioTrack(track, publication)) return;

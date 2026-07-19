@@ -68,5 +68,11 @@ describe("call web guest script", () => {
     expect(script).toContain("guest_ticket_already_used");
     expect(script).toContain("clearGuestTicketFromAddress");
     expect(script).toContain("window.history.replaceState");
+    expect(script).toContain("RoomEvent.SignalReconnecting");
+    expect(script).toContain("RoomEvent.Reconnecting");
+    expect(script).toContain("RoomEvent.Reconnected");
+    expect(script).toContain("网络中断，正在重连");
+    expect(script).toContain("已恢复加入，麦克风已开启");
+    expect(script).toContain("已恢复加入，麦克风未开启");
   });
 });
