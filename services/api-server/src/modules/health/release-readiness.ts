@@ -19,8 +19,14 @@ import { getAgentConsultReadiness } from
   "../agent-calls/agent-consult-readiness.js";
 import { getPublicEntryProtectionReadiness } from
   "../../infrastructure/security/public-entry-protection.js";
+import { getAgentCallExecutionReadiness } from
+  "../agent-calls/agent-call-execution-readiness.js";
+import { getReleaseCapabilityProfileReadiness } from
+  "./release-capability-profile.js";
 
 export async function getReleaseReadiness() {
+  const capabilityProfileReadiness = getReleaseCapabilityProfileReadiness();
+  const fullRelease = capabilityProfileReadiness.profile === "commercial_full";
   const accountReadiness = getAccountDeploymentReadiness();
   const paymentReadiness = getPaymentDeploymentReadiness();
   const callRoomReadiness = getCallRoomReadiness();
@@ -39,7 +45,9 @@ export async function getReleaseReadiness() {
   const voiceAgentRuntimeReadiness = getVoiceAgentRuntimeReadiness();
   const agentConsultReadiness = getAgentConsultReadiness();
   const publicEntryProtectionReadiness = getPublicEntryProtectionReadiness();
+  const agentCallExecutionReadiness = getAgentCallExecutionReadiness();
   const issues = [
+    ...capabilityProfileReadiness.issues,
     ...accountReadiness.issues,
     ...paymentReadiness.issues,
     ...callRoomReadiness.issues,
@@ -48,7 +56,7 @@ export async function getReleaseReadiness() {
     ...diagnosticsReadiness.issues,
     ...releaseMaterialsReadiness.issues,
     ...workerDispatchReadiness.issues,
-    ...egressReadiness.issues,
+    ...(fullRelease ? egressReadiness.issues : []),
     ...postgresProjectionReadiness.issues,
     ...(agentAssistReadiness.status === "disabled" ? [] : agentAssistReadiness.issues),
     ...(process.env.VOICE_AGENT_AUTONOMOUS_ENABLED === "true"
@@ -62,10 +70,12 @@ export async function getReleaseReadiness() {
       ? []
       : ["Release requires distributed Redis public entry protection"]),
     ...publicEntryProtectionReadiness.issues,
+    ...(fullRelease ? agentCallExecutionReadiness.issues : []),
   ];
   return {
     status: issues.length === 0 ? "ready" : "not_ready",
     service: "api-server",
+    capabilityProfileReadiness,
     accountReadiness,
     paymentReadiness,
     callRoomReadiness,
@@ -84,6 +94,7 @@ export async function getReleaseReadiness() {
     platformScaleReadiness,
     telemetryReadiness,
     publicEntryProtectionReadiness,
+    agentCallExecutionReadiness,
     issues,
   };
 }

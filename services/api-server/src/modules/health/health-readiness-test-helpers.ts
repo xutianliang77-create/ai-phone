@@ -1,4 +1,5 @@
 const envKeys = [
+  "DOMESTIC_RELEASE_CAPABILITY_PROFILE",
   "PAYMENT_REQUIRED_PROVIDERS",
   "NODE_ENV",
   "PUBLIC_RATE_LIMIT_PROVIDER",
@@ -42,6 +43,13 @@ const envKeys = [
   "LIVEKIT_EGRESS_S3_ACCESS_KEY",
   "LIVEKIT_EGRESS_S3_SECRET_KEY",
   "LIVEKIT_EGRESS_OBJECT_PREFIX",
+  "AGENT_CALL_WORKER_ENABLED",
+  "AGENT_CALL_PROVIDER_ADAPTER",
+  "PSTN_PROVIDER_IDEMPOTENCY_GUARANTEED",
+  "VOICE_AGENT_ENABLED",
+  "VOICE_AGENT_ASSIST_ENABLED",
+  "VOICE_AGENT_AUTONOMOUS_ENABLED",
+  "VOICE_AGENT_OPERATOR_CONSULT_ENABLED",
   "CALL_PROVIDER_POLICY",
   "PSTN_PROVIDER",
   "PSTN_ACCOUNT_ID",
@@ -113,6 +121,7 @@ export function configureDiagnosticsEnv() {
 }
 
 export function configureCallRoomEnv() {
+  process.env.DOMESTIC_RELEASE_CAPABILITY_PROFILE = "core_translation";
   process.env.CALL_ROOM_PROVIDER = "livekit";
   process.env.LIVEKIT_URL = "wss://livekit.example.cn";
   process.env.LIVEKIT_API_KEY = "lk_key";
@@ -122,8 +131,8 @@ export function configureCallRoomEnv() {
   process.env.TRANSLATION_WORKER_RUNTIME_PROVIDER = "livekit_dispatch";
   process.env.LIVEKIT_DISPATCH_TICKET_SECRET = "dispatch-secret-012345678901234567890";
   process.env.LIVEKIT_TRANSLATION_AGENT_NAME = "translation-runtime";
-  process.env.LIVEKIT_EGRESS_ENABLED = "true";
-  process.env.LIVEKIT_EGRESS_ARTIFACT_WORKER_ENABLED = "true";
+  process.env.LIVEKIT_EGRESS_ENABLED = "false";
+  process.env.LIVEKIT_EGRESS_ARTIFACT_WORKER_ENABLED = "false";
   process.env.LIVEKIT_EGRESS_S3_BUCKET = "recordings-test";
   process.env.LIVEKIT_EGRESS_S3_REGION = "cn-test-1";
   process.env.LIVEKIT_EGRESS_S3_ACCESS_KEY = "recording-access";

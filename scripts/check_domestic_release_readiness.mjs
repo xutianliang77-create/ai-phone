@@ -39,6 +39,10 @@ const skipDiagnosticsAlertingLocalSmoke = takeFlag(
 const envFile =
   valueFlag("--env-file") ?? process.env.DOMESTIC_RELEASE_ENV_FILE;
 if (!help && envFile) applyEnvFile(envFile);
+const capabilityProfile =
+  valueFlag("--profile") ??
+  process.env.DOMESTIC_RELEASE_CAPABILITY_PROFILE ??
+  "commercial_full";
 const output = path.resolve(
   root,
   valueFlag("--output") ?? ".cache/domestic-release-readiness.json",
@@ -146,6 +150,7 @@ const result = {
     internalApiSecret: process.env.INTERNAL_API_SECRET,
     diagnosticsAdminToken: process.env.DIAGNOSTICS_ADMIN_TOKEN,
     timeoutMs,
+    capabilityProfile,
     checkCallLinkWorker: !skipCallLinkWorker,
     checkLiveKitRoomMedia: !skipLiveKitRoomMedia,
     checkLiveKitSelfHost: !skipLiveKitSelfHost,
@@ -180,7 +185,7 @@ if (json) {
   );
   for (const check of result.checks) {
     console.error(
-      `${check.status === "pass" ? "pass" : "fail"}: ${check.name}`,
+      `${check.status}: ${check.name}`,
     );
   }
   for (const action of result.actions) console.error(`action: ${action}`);
@@ -218,6 +223,7 @@ function usage() {
   scripts/check_domestic_release_readiness.mjs --release-env-file release/domestic/release.env
   scripts/check_domestic_release_readiness.mjs --livekit-selfhost-env infra/livekit-selfhost/.env
   scripts/check_domestic_release_readiness.mjs --env-file release/domestic/release.env
+  scripts/check_domestic_release_readiness.mjs --profile core_translation
   scripts/check_domestic_release_readiness.mjs --skip-call-link-worker
   scripts/check_domestic_release_readiness.mjs --skip-livekit-room-media
   scripts/check_domestic_release_readiness.mjs --skip-livekit-selfhost
@@ -235,6 +241,8 @@ function usage() {
   scripts/check_domestic_release_readiness.mjs --skip-diagnostics-alerting-local-smoke
 
 Verifies domestic release gates:
+- Explicit capability profile: core_translation defers real SIP/Agent/Egress;
+  commercial_full keeps all Provider gates mandatory
 - Mobile app release metadata
 - Domestic release secret file .gitignore hygiene
 - Model selection readiness from MODEL_SELECTION_FILE

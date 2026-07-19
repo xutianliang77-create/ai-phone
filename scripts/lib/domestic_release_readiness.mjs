@@ -30,6 +30,12 @@ export async function checkDomesticReleaseReadiness(options) {
   const checks = [];
   const issues = [];
   const actions = [];
+  const capabilityProfile = options.capabilityProfile ?? null;
+  const providerAcceptanceDeferred = capabilityProfile === "core_translation";
+  const supportedProfiles = ["core_translation", "commercial_full"];
+  if (capabilityProfile && !supportedProfiles.includes(capabilityProfile)) {
+    issues.push(`invalid domestic release capability profile ${capabilityProfile}`);
+  }
   const apiBaseUrl = normalizeBaseUrl(options.apiBaseUrl);
   const gatewayBaseUrl = normalizeBaseUrl(options.gatewayBaseUrl);
   const pstnBridgeBaseUrl = normalizeBaseUrl(options.pstnBridgeBaseUrl);
@@ -191,7 +197,7 @@ export async function checkDomesticReleaseReadiness(options) {
     normalizeIssues,
   });
   await appendPstnBridgeReadiness({
-    enabled: options.checkPstnBridge !== false,
+    enabled: options.checkPstnBridge !== false && !providerAcceptanceDeferred,
     baseUrl: pstnBridgeBaseUrl,
     fetchFn: options.fetchFn,
     timeoutMs: options.timeoutMs,
@@ -203,9 +209,15 @@ export async function checkDomesticReleaseReadiness(options) {
     checkReleaseEndpoint,
   });
   await appendPstnProviderEventReadiness({
-    mediaEnabled: options.checkPstnProviderMediaEvent !== false,
-    statusEnabled: options.checkPstnProviderStatusEvent !== false,
-    internalLoopEnabled: options.checkPstnInternalMediaLoop !== false,
+    mediaEnabled:
+      options.checkPstnProviderMediaEvent !== false &&
+      !providerAcceptanceDeferred,
+    statusEnabled:
+      options.checkPstnProviderStatusEvent !== false &&
+      !providerAcceptanceDeferred,
+    internalLoopEnabled:
+      options.checkPstnInternalMediaLoop !== false &&
+      !providerAcceptanceDeferred,
     root: options.root,
     timeoutMs: options.timeoutMs,
     mediaCheckFn: options.checkPstnProviderMediaEventFn,
@@ -229,7 +241,8 @@ export async function checkDomesticReleaseReadiness(options) {
     normalizeIssues,
   });
   await appendAgentCallWorkerReadiness({
-    enabled: options.checkAgentCallWorker !== false,
+    enabled:
+      options.checkAgentCallWorker !== false && !providerAcceptanceDeferred,
     root: options.root,
     timeoutMs: options.timeoutMs,
     checkFn: options.checkAgentCallWorkerFn,
@@ -269,8 +282,13 @@ export async function checkDomesticReleaseReadiness(options) {
     normalizeIssues,
   });
 
+  if (providerAcceptanceDeferred) markProviderChecksDeferred(checks);
+
   return {
     status: issues.length === 0 ? "ready" : "not_ready",
+    capabilityProfile,
+    deferredCapabilities:
+      providerAcceptanceDeferred ? ["livekit_sip", "agent", "egress"] : [],
     apiBaseUrl,
     gatewayBaseUrl,
     pstnBridgeBaseUrl,
@@ -286,6 +304,24 @@ export async function checkDomesticReleaseReadiness(options) {
     issues,
     actions: [...new Set(actions)],
   };
+}
+
+function markProviderChecksDeferred(checks) {
+  const names = new Set([
+    "pstn_bridge_release_ready",
+    "pstn_provider_media_event_readiness",
+    "pstn_provider_status_event_readiness",
+    "pstn_internal_media_loop_readiness",
+    "agent_call_worker_readiness",
+  ]);
+  for (const check of checks) {
+    if (!names.has(check.name) || check.details?.skipped !== true) continue;
+    check.status = "deferred";
+    check.details = {
+      ...check.details,
+      disposition: "deferred_by_core_translation_profile",
+    };
+  }
 }
 
 export async function checkDomesticReleaseReadinessOnLocalStack(options) {
