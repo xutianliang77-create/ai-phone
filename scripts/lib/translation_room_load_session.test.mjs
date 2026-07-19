@@ -57,6 +57,32 @@ describe("translation room load session", () => {
     expect(requests.at(-1).url).toContain("/call-links/call-load-1/end");
     expect(runtime.disposed).toBe(true);
   });
+
+  it("fails when translated audio starts but playback terminates as failed", async () => {
+    const clock = new FakeClock();
+    const requests = [];
+    const runtime = new FakeRtcRuntime(clock, "playback.failed");
+
+    await expect(runTranslationRoomLoadSession({
+      root: process.cwd(),
+      apiBaseUrl: "https://staging.example.cn",
+      sessionId: "capacity-failed-playback",
+      durationMs: 1000,
+      accountToken: "account-secret",
+      requestTimeoutMs: 1000,
+      eventTimeoutMs: 1000,
+      utteranceIntervalMs: 1000,
+      endpointSilenceMs: 20,
+      nowMs: () => clock.now,
+      sleep: (ms) => clock.sleep(ms),
+      readWav: () => ({ sampleRate: 1000, pcm: pcm([100, 200]) }),
+      loadRtcNode: async () => runtime.module,
+      fetchFn: fakeApi(requests),
+    })).rejects.toThrow("Translated target playback failed");
+
+    expect(requests.at(-1).url).toContain("/call-links/call-load-1/end");
+    expect(runtime.disposed).toBe(true);
+  });
 });
 
 class FakeClock {
@@ -70,8 +96,9 @@ class FakeRtcRuntime {
   rooms = [];
   disposed = false;
 
-  constructor(clock) {
+  constructor(clock, playbackType = "playback.ended") {
     const runtime = this;
+    this.playbackType = playbackType;
     class Room extends EventEmitter {
       remoteParticipants = new Map([
         ["worker", { identity: "call-load-1:worker:translation" }],
@@ -140,6 +167,7 @@ class FakeRtcRuntime {
         { ...base, type: "transcript.final" },
         { ...base, type: "translation.final" },
         { ...base, type: "tts.ready", provider: "real-tts", model: "tts-model" },
+        { ...base, type: this.playbackType },
       ]) {
         room.emit(
           "data",

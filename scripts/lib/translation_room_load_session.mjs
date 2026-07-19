@@ -108,8 +108,19 @@ export async function runTranslationRoomLoadSession(options) {
         timeoutMs: options.eventTimeoutMs,
       });
       await audioObserver.waitForFrameAfter(audioFramesBefore, options.eventTimeoutMs);
+      const playback = await collector.waitForEvent({
+        afterIndex,
+        timeoutMs: options.eventTimeoutMs,
+        message: "Timed out waiting for translated target playback completion",
+        predicate: (item) => item.event.segmentId === cycle.tts.event.segmentId &&
+          ["playback.ended", "playback.failed"].includes(item.event.type),
+      });
+      if (playback.event.type !== "playback.ended") {
+        throw new Error("Translated target playback failed");
+      }
       completed.push({
         ...cycle,
+        playback,
         audioEndedAtMs: timing.endedAtMs,
         finalLatencyMs: Math.max(
           0,
