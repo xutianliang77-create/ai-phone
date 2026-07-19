@@ -1,6 +1,6 @@
 # 无界AI企业版详细功能设计
 
-版本：v1.20
+版本：v1.21
 日期：2026-07-19
 状态：SaaS 详细设计基线，已对齐统一通讯平台
 
@@ -422,6 +422,21 @@ OCR Provider、LiveKit、浏览器和真机验收尚未执行，因此任务保�
 `ENT-MTG-011` 当前已形成 PostgreSQL schema、Repository/runtime/API、OpenAI-compatible review adapter 的明确降级、
 Web/Flutter 材料入口和审计/outbox 代码候选。导出 Adapter、自动化、真实 migration/forced-RLS、Provider、浏览器和真机
 证据尚未执行，因此任务保持 `in_progress`，不代表企业生产门禁通过。
+
+### 7.6 企业日历同步
+
+- 只有未来的预约会议可同步；即时、已开始、已结束或已取消会议不创建外部事件。
+- 只有会议主持人且具有 `meeting:write` scope 时可提交，同一会议最多绑定一个 Provider 事件。
+- 首个 Adapter 为 Google Calendar。事件只包含会议标题、起止时间和已认证成员入口，不创建 Google Meet，
+  也不把访客 token 或 Provider 凭据发送给客户端；外部访客仍走独立短期邀请。
+- Provider 未配置、实时 readiness 非 ready、租户未绑定、加密 keyring 缺失或 Worker 不可用时明确失败或 pending，
+  不生成本地假事件。同步成功后才显示经服务端验证的 Provider reference。
+- 重试沿用由 tenant 与 meeting 派生的稳定 event ID；Provider 返回重复 ID 时读取并核对无界 meeting/sync 标记，
+  相同事件收敛为成功，不同事件作为 collision 失败。
+
+`ENT-MTG-013` 当前代码候选已形成 `0027` forced-RLS 同步记录、主持人 API、加密 outbox、Google Workspace
+service-account Adapter、可注入 mock 以及 Web/Flutter 状态入口。自动化、真实 PostgreSQL、Google Workspace 管理授权、
+浏览器和真机验收未执行，因此保持 `in_progress`，不代表企业生产门禁通过。
 
 ## 8. 企业公共能力
 

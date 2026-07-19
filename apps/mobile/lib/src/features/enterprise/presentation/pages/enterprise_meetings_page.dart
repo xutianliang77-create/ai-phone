@@ -9,6 +9,7 @@ import '../../data/enterprise_meeting_screen_share_controller.dart';
 import '../../data/enterprise_mobile_api_client.dart';
 import '../../data/enterprise_mobile_models.dart';
 import '../widgets/enterprise_meeting_room_card.dart';
+import '../widgets/enterprise_meeting_calendar_card.dart';
 import '../widgets/enterprise_meeting_media_workspace.dart';
 import '../widgets/enterprise_meeting_material_card.dart';
 import '../widgets/enterprise_meeting_screen_share_card.dart';

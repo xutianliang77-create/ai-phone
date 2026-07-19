@@ -28,6 +28,8 @@ import { MeetingScreenSharePanel } from
   "../meeting/MeetingScreenSharePanel.js";
 import { MeetingMaterialsPanel } from
   "../meeting/MeetingMaterialsPanel.js";
+import { MeetingCalendarSyncCard } from
+  "../meeting/MeetingCalendarSyncCard.js";
 
 type LoadState =
   | { status: "loading" }
@@ -54,6 +56,7 @@ export function MeetingsPage() {
   const { state, api } = useAuth();
   const [load, setLoad] = useState<LoadState>({ status: "loading" });
   const [title, setTitle] = useState("");
+  const [scheduledAt, setScheduledAt] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [room, setRoom] = useState(disconnected);
@@ -102,6 +105,7 @@ export function MeetingsPage() {
     try {
       await api.createMeeting(requestContext, {
         title: cleanTitle,
+        ...(scheduledAt ? { scheduledAt: new Date(scheduledAt).toISOString() } : {}),
         policy: {
           allowGuests: true,
           screenShareRole: "host_only",
@@ -109,7 +113,10 @@ export function MeetingsPage() {
         },
       }, crypto.randomUUID());
       setTitle("");
-      setNotice("会议已创建；统一通讯仍会按服务端状态显示 provisioning 或 ready。");
+      setScheduledAt("");
+      setNotice(scheduledAt
+        ? "会议已预约；主持人可在会议卡片中同步企业日历。"
+        : "会议已创建；统一通讯仍会按服务端状态显示 provisioning 或 ready。");
       await refresh();
     } catch (error) {
       setLoad({ status: "failed", error });
@@ -191,8 +198,13 @@ export function MeetingsPage() {
             <input value={title} maxLength={200} onChange={(event) => setTitle(event.target.value)}
               placeholder="例如：中英项目周会" />
           </label>
+          <label>预约时间（可选）
+            <input type="datetime-local" value={scheduledAt}
+              onChange={(event) => setScheduledAt(event.target.value)} />
+          </label>
           <button className="button button--primary" disabled={!title.trim() || busy !== null}>
-            <MaterialIcon name={enterpriseIcons.action.create} />创建即时会议
+            <MaterialIcon name={scheduledAt ? enterpriseIcons.meeting.calendar
+              : enterpriseIcons.action.create} />{scheduledAt ? "预约会议" : "创建即时会议"}
           </button>
         </form>
       ) : null}
@@ -281,6 +293,11 @@ function MeetingList(props: {
             props.actorUserId === meeting.hostUserId)}
         connected={props.activeMeetingId === meeting.id}
         onMeetingChanged={props.refresh} />
+      {meeting.status === "scheduled" && meeting.scheduledAt &&
+        props.actorUserId === meeting.hostUserId ?
+        <MeetingCalendarSyncCard api={props.api} context={props.context}
+          meetingId={meeting.id} meetingVersion={meeting.version}
+          canSync={props.canWrite && Date.parse(meeting.scheduledAt) > Date.now()} /> : null}
     </article>;
   })}</div>;
 }

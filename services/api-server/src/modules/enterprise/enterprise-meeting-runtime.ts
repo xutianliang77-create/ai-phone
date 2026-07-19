@@ -19,6 +19,8 @@ import type { EnterpriseMeetingMaterialRuntime } from
   "./enterprise-meeting-material-runtime.js";
 import type { EnterpriseMeetingScreenOcrRuntime } from
   "./enterprise-meeting-screen-ocr-runtime.js";
+import type { EnterpriseMeetingCalendarRuntime } from
+  "./enterprise-meeting-calendar-runtime.js";
 
 export interface EnterpriseMeetingTranslationDispatch {
   ticket: string;
@@ -52,7 +54,7 @@ export interface EnterpriseMeetingJoinAuthorization {
 
 export interface EnterpriseMeetingRepositoryRuntime
   extends EnterpriseMeetingScreenShareRuntime, EnterpriseMeetingMaterialRuntime,
-    EnterpriseMeetingScreenOcrRuntime {
+    EnterpriseMeetingScreenOcrRuntime, EnterpriseMeetingCalendarRuntime {
   createMeeting?(input: {
     context: EnterpriseTenantContext;
     meeting: CreateEnterpriseMeetingInput;

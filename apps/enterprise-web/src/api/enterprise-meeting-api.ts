@@ -14,6 +14,10 @@ import type {
 } from "@translation/contracts";
 import type { EnterpriseContentRequestContext } from "./enterprise-api.js";
 import {
+  createEnterpriseMeetingCalendarApi,
+  type EnterpriseMeetingCalendarApi,
+} from "./enterprise-meeting-calendar-api.js";
+import {
   createEnterpriseMeetingMaterialApi,
   type EnterpriseMeetingMaterialApi,
 } from "./enterprise-meeting-material-api.js";
@@ -25,7 +29,8 @@ import {
 type Requester = <T>(path: string, init?: RequestInit) => Promise<T>;
 type ContentHeaders = (context: EnterpriseContentRequestContext) => Record<string, string>;
 
-export interface EnterpriseMeetingApi extends EnterpriseMeetingMaterialApi,
+export interface EnterpriseMeetingApi extends EnterpriseMeetingCalendarApi,
+  EnterpriseMeetingMaterialApi,
   EnterpriseMeetingScreenOcrApi {
   listMeetings(context: EnterpriseContentRequestContext):
     Promise<EnterpriseMeetingsResponse>;
@@ -88,6 +93,7 @@ export function createEnterpriseMeetingApi(
   contentHeaders: ContentHeaders,
 ): EnterpriseMeetingApi {
   return {
+    ...createEnterpriseMeetingCalendarApi(request, contentHeaders),
     ...createEnterpriseMeetingMaterialApi(request, contentHeaders),
     ...createEnterpriseMeetingScreenOcrApi(request, contentHeaders),
     listMeetings: (context) => request(

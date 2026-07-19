@@ -26,6 +26,7 @@ type ContentApi = Pick<EnterpriseApi,
   | "updateMeetingMaterialAction"
   | "currentMeetingScreenOcr" | "enableMeetingScreenOcr"
   | "disableMeetingScreenOcr"
+  | "currentMeetingCalendarSync" | "requestMeetingCalendarSync"
 >;
 
 export function fakeEnterpriseContentApi(): ContentApi {
@@ -83,5 +84,7 @@ export function fakeEnterpriseContentApi(): ContentApi {
     }),
     enableMeetingScreenOcr: vi.fn(),
     disableMeetingScreenOcr: vi.fn(),
+    currentMeetingCalendarSync: vi.fn().mockResolvedValue({ sync: null }),
+    requestMeetingCalendarSync: vi.fn(),
   };
 }

@@ -25,6 +25,10 @@ import { createEnvironmentEnterpriseMeetingScreenShareProvider } from
   "./modules/enterprise/enterprise-meeting-screen-share-provider.js";
 import { createEnterpriseMeetingScreenShareOutboxPublisher } from
   "./modules/enterprise/enterprise-meeting-screen-share-outbox.js";
+import { createEnterpriseMeetingCalendarOutboxPublisher } from
+  "./modules/enterprise/enterprise-meeting-calendar-outbox.js";
+import { createEnvironmentGoogleCalendarProvider } from
+  "./modules/enterprise/enterprise-google-calendar-provider.js";
 
 if (process.argv[1] &&
   import.meta.url === pathToFileURL(process.argv[1]).href) {
@@ -66,10 +70,13 @@ export async function runEnterprisePostgresWorkerMain() {
       runtime: primaryRuntime.enterprise,
       config,
       lifecycleExecutor: createEnvironmentTenantLifecycleExecutor(),
-      outboxPublisher: createEnterpriseMeetingScreenShareOutboxPublisher({
-        provider: createEnvironmentEnterpriseMeetingScreenShareProvider(),
-        fallback: createEnvironmentEnterpriseOutboxPublisher(),
-        rtcUrl: (process.env.LIVEKIT_URL ?? process.env.LIVEKIT_WS_URL ?? "").trim(),
+      outboxPublisher: createEnterpriseMeetingCalendarOutboxPublisher({
+        provider: createEnvironmentGoogleCalendarProvider(),
+        fallback: createEnterpriseMeetingScreenShareOutboxPublisher({
+          provider: createEnvironmentEnterpriseMeetingScreenShareProvider(),
+          fallback: createEnvironmentEnterpriseOutboxPublisher(),
+          rtcUrl: (process.env.LIVEKIT_URL ?? process.env.LIVEKIT_WS_URL ?? "").trim(),
+        }),
       }),
       auditExportArtifactStore,
       signal: controller.signal,

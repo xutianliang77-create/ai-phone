@@ -45,6 +45,9 @@ export const enterpriseIcons = {
     evidence: "link",
     action: "task_alt",
     end: "stop_circle",
+    calendar: "event",
+    calendarSync: "sync",
+    openExternal: "open_in_new",
   },
   settings: {
     members: "group",

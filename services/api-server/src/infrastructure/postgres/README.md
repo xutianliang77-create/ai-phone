@@ -56,7 +56,7 @@ ENTERPRISE_MIGRATION_DATABASE_URL='postgresql://...' \
 
 两种启用模式都在恢复任务、Fastify 构建和端口监听前失败闭合，并在校验后关闭连接。
 `verify` 不写 migration；`migrate_verify` 始终在 migration 后执行相同 schema verify。
-统一启动编排先验证公共31段 manifest 和签名 cutover evidence，再验证 enterprise 26段
+统一启动编排先验证公共31段 manifest 和签名 cutover evidence，再验证 enterprise 27段
 manifest，并核对两个 verdict 的 database name/OID；任一失败都关闭已创建资源且不监听。
 
 基础 migration `0004` 至 `0010` 中，`0004` 增加 tenant lifecycle 状态和 job，`0005` 增加
@@ -175,7 +175,7 @@ SQLSTATE `25006`、旧 writer 会话为0、target 可写和二次全量 hash 相
 
 生产启动只接受 `environment=staging` 的 `cutover/matched` 签名证据，并绑定当前
 commit、image digest、topology hash、目标 logical ID、数据库 system identifier/OID 和
-31+26 migration manifest。`c9b5be2` 的31+16本地证据会被门禁拒绝，必须重新生成；
+31+27 migration manifest。`c9b5be2` 的31+16本地证据会被门禁拒绝，必须重新生成；
 本地同机 `pg_dump/pg_restore` 只能证明逻辑恢复与对账机制；
 跨故障域自动切换、异地主机不可变 WAL/PITR 和 RPO/RTO 仍由 `ENT-REL-003`/H3 验收。
 
@@ -204,3 +204,12 @@ frame 只允许一次 `processing -> ready|failed`，原始图像不进入 schem
 复核当前 tenant/cell/route/share lease/track/run/subscriber 后显式订阅 LiveKit screen track；Provider 默认关闭且只接受
 HTTPS endpoint。布局定向发送给订阅 participant，并保留 API polling fallback。当前未执行 migration/down、forced-RLS、
 真实 Provider/LiveKit、并发或客户端验收。
+
+## Meeting calendar adapter
+
+`ENT-MTG-013` 由 migration `0027` 增加单会议/Provider 唯一的 forced-RLS 同步记录。API 只接受主持人对未来预约
+会议提交的版本/时长/幂等键，在同一 tenant transaction 写 sync、AES-256-GCM 密文 outbox 和 audit。cell Worker 使用
+tenant-bound Google Workspace service account 创建稳定 event ID；409 时读取并核对 private meeting/sync 标记，避免响应
+丢失后的重复创建。Provider receipt、outbox finalize 和 audit 再以一个 transaction 收敛。事件只保存无界AI成员入口，
+不创建 Google Meet、不传播访客 token。readiness、direct credential、public URL 或 keyring 缺失均明确失败闭合。
+当前未执行 migration/RLS、contract、真实 Google Workspace、Worker 恢复或客户端验收。

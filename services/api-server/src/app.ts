@@ -69,6 +69,8 @@ import { registerEnterpriseMeetingMaterialRoutes } from
   "./modules/enterprise/enterprise-meeting-material.routes.js";
 import { registerEnterpriseMeetingScreenOcrRoutes } from
   "./modules/enterprise/enterprise-meeting-screen-ocr.routes.js";
+import { registerEnterpriseMeetingCalendarRoutes } from
+  "./modules/enterprise/enterprise-meeting-calendar.routes.js";
 import {
   createEnvironmentEnterpriseMeetingMaterialProvider,
   type EnterpriseMeetingMaterialProvider,
@@ -146,6 +148,8 @@ export async function buildApp(dependencies: {
     createEnvironmentTenantRouteService();
   const auditExportArtifactStore = dependencies.auditExportArtifactStore ??
     createEnvironmentAuditExportArtifactStore();
+  const providerReadinessService = dependencies.providerReadinessService ??
+    createEnterpriseProviderReadinessService();
   app.addHook("onClose", () => auditExportArtifactStore.close());
   registerPlatformTelemetryHooks(app);
   await app.register(cors, { origin: true });
@@ -198,8 +202,7 @@ export async function buildApp(dependencies: {
   );
   await registerEnterpriseProviderReadinessRoutes(
     app,
-    dependencies.providerReadinessService ??
-      createEnterpriseProviderReadinessService(),
+    providerReadinessService,
     enterpriseRepositoryRuntime,
   );
   await registerEnterpriseAuditRoutes(
@@ -227,6 +230,9 @@ export async function buildApp(dependencies: {
       createEnvironmentEnterpriseMeetingInviteTokenService(),
     dependencies.enterpriseMeetingTranslationDispatchService ??
       createEnvironmentEnterpriseMeetingTranslationDispatchService(),
+  );
+  registerEnterpriseMeetingCalendarRoutes(
+    app, tenantRouteService, enterpriseRepositoryRuntime, providerReadinessService,
   );
   registerEnterpriseMeetingScreenShareRoutes(
     app,

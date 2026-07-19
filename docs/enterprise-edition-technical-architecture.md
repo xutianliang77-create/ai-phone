@@ -1,6 +1,6 @@
 # 无界AI企业版技术架构
 
-版本：v1.23
+版本：v1.24
 日期：2026-07-19
 状态：SaaS 详细架构基线，已对齐统一通讯平台和 PostgreSQL Primary
 
@@ -177,7 +177,7 @@ object-storage
 | 账号、Tenant、RBAC、企业命令 | `services/api-server` | 先按 domain module 隔离；只有独立扩缩容或故障域需要时才拆服务 |
 | Enterprise Repository runtime/cell Worker | `services/api-server/src/modules/enterprise`、`services/api-server/src/infrastructure/postgres` | API 使用单一 `legacy|postgres` runtime；独立启动的 cell Worker 仅以 cell discovery 和 tenant transaction 角色 claim/finalize |
 | Communication Session、Provider Operation、Dispatch、Recording 和 Usage | 上游稳定提交 `fe1c3c2` 已导入企业分支，`ENT-DATA-008/CORE-013/014/015` 已补 tenant scope、企业业务绑定、签名 dispatch fence 和企业运行策略快照 | 公共 runtime 已成为代码基线；dispatch 必须先通过服务端 policy snapshot 与授权 fence，真实 Provider/设备仍待验收 |
-| PostgreSQL Primary 基础 | 公共31段 migration/Primary Runtime 与企业现有26段 migration | 已收敛为一个 Storage Driver/启动编排和两个有序 manifest；按 tenant/directory/cell/migration/maintenance 使用最小权限连接，等待真实 H3 验收 |
+| PostgreSQL Primary 基础 | 公共31段 migration/Primary Runtime 与企业现有27段 migration | 已收敛为一个 Storage Driver/启动编排和两个有序 manifest；按 tenant/directory/cell/migration/maintenance 使用最小权限连接，等待真实 H3 验收 |
 | 受控审计导出 | enterprise `0020`、Audit Export API/Repository、cell Worker、加密对象存储 Adapter | API 只创建/查询/鉴权下载；cell Worker 在 tenant transaction 取数并保存 hash/size/expiry，客户端不获得对象存储 key/凭据；物理 purge 与对象清单仍待 REL-002 |
 | Enterprise Knowledge | enterprise `0017`、Knowledge Repository/runtime/API | source/revision/chunk/review/publish、发布后不可变、四维有效期检索和 citation 已接入；embedding Provider 未配置时保持确定性文本检索，不声明向量 readiness |
 | Enterprise Terminology | enterprise `0018`、Term Pack/Script Template Repository/runtime/API | 稳定资源与不可变 revision、审核发布、生效时间解析已接入；resolver 向 ASR/翻译/LLM 返回同一术语版本引用，话术只供 LLM 使用 |
@@ -340,6 +340,12 @@ Worker 不持有数据库凭证；每次 claim 先经 API 重读 tenant/cell/rou
 尺寸、Provider fingerprint 和布局块。服务端把布局定向发送给启用该 run 的 participant；Web/Flutter 对 data event 再做
 meeting/target/share/generation/run/revision 校验，并保留 API polling fallback。OCR Provider、调度、轨道或投递故障与共享租约、
 麦克风和字幕状态机隔离，不能停止或伪造原共享成功状态。
+
+`ENT-MTG-013` 把预约会议同步作为独立 outbox 副作用：API 在同一 tenant transaction 写同步记录、加密 payload、
+outbox 和审计；cell Worker 解密后调用 Google Calendar Adapter，并在同一 transaction 收敛 Provider receipt 与 outbox。
+首个试点配置把一个 Google Workspace service account、domain-wide delegation subject 和 calendar 绑定到一个 tenant；
+跨租户请求在 Provider 前失败。稳定 Provider event ID 支持 POST 响应丢失后的 409/GET 对账，不创建 Google Meet，
+不向事件或日志写 guest token、service-account 私钥和明文 outbox payload。readiness 或配置缺失时不创建外部对象。
 
 ## 7. 外呼营销架构
 

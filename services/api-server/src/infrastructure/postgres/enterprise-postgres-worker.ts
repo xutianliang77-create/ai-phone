@@ -166,6 +166,24 @@ async function processRef(
   } catch {
     result = { status: "retry" as const, reason: "publisher_unavailable" };
   }
+  if (event.eventType === "meeting.calendar.create.requested") {
+    if (!options.runtime.finalizeMeetingCalendarOutbox) {
+      throw new Error("Meeting calendar runtime is missing");
+    }
+    const finalized = await options.runtime.finalizeMeetingCalendarOutbox({
+      context: createEnterpriseTenantContext({
+        tenantId: event.tenantId,
+        actorUserId: "system:enterprise-calendar",
+        traceId: event.traceId,
+      }),
+      eventId: event.id,
+      attempt: event.attempts,
+      result,
+      now,
+    });
+    return finalized.status === "completed" ? "completed" :
+      finalized.status === "retried" ? "retried" : "failed";
+  }
   await finalizeOutbox(options.tenantPool, event, result, now);
   return result.status === "completed" ? "completed" : "retried";
 }

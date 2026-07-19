@@ -10,6 +10,10 @@
   background: var(--color-container);
 }
 
+.meeting-create {
+  grid-template-columns: minmax(0, 1fr) minmax(190px, 0.6fr) auto;
+}
+
 .meeting-create label,
 .meeting-room-status > div {
   display: grid;
@@ -57,6 +61,43 @@
   border: 1px solid var(--color-outline-variant);
   border-radius: var(--radius);
   background: var(--color-container);
+}
+
+.meeting-calendar {
+  display: grid;
+  gap: 12px;
+  padding-top: 14px;
+  border-top: 1px solid var(--color-outline-variant);
+}
+
+.meeting-calendar header,
+.meeting-calendar__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.meeting-calendar header > div,
+.meeting-calendar__actions label {
+  display: grid;
+  gap: 4px;
+}
+
+.meeting-calendar header span,
+.meeting-calendar p,
+.meeting-calendar small {
+  margin: 0;
+  color: var(--color-outline);
+}
+
+.meeting-calendar .button {
+  width: fit-content;
+  gap: 8px;
+}
+
+.meeting-calendar__actions select {
+  min-height: var(--control-height);
 }
 
 .meeting-materials {

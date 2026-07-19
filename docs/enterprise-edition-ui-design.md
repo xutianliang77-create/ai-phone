@@ -1,6 +1,6 @@
 # 无界AI企业版 UI 详细设计
 
-版本：v1.16
+版本：v1.17
 日期：2026-07-19
 状态：设计基线；企业 Web 公共组件、首批设置/工作台、响应式/主题/无障碍和 Web/iOS/Android 成员屏幕共享代码候选已实现，正式验收仍在开发
 
@@ -235,6 +235,12 @@ budget、usage aggregate 和显式 session trace report。卡片沿用同一 Mat
 
 - 列表页区分即时会议、预约会议和已结束材料。
 - 会议详情显示参会者、语言、录音/翻译授权、共享策略和材料状态。
+- 创建区使用同一 Material 3 表单提供可选预约时间；即时会议使用 `add`，预约与日历卡使用 `event_outlined`，
+  同步动作使用 `sync`，外部查看使用 `open_in_new` 或移动端 `content_copy`，不混用品牌外图标。
+- 只有未来预约会议的主持人显示“企业日历”卡；卡片展示尚未同步、等待 Worker、已同步、失败四态和会议时长。
+  Provider 未就绪时显示真实原因，不用本地日历事件或成功 toast 兜底；外部访客邀请与日历同步明确分开。
+- Web 成功后可打开经服务端验证的 HTTPS Provider 链接；Flutter 在未引入受控外部跳转依赖前只复制该链接。
+  客户端不接收 service-account 凭据、guest token、明文 outbox payload 或可覆盖的 Provider event ID。
 - 会中布局支持画面优先、字幕优先、并排和移动端浮动字幕。
 - 共享控制使用 `screen_share_outlined`；主持人强制停止显示共享者、generation 和影响说明。
 - OCR 未启用或失败时保留原共享画面，不显示空白翻译层。

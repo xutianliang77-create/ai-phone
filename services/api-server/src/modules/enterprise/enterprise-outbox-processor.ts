@@ -11,10 +11,12 @@ import {
 } from "./enterprise-tenant-context.js";
 import { runWithPlatformTraceId } from
   "../../infrastructure/observability/platform-telemetry.js";
+import type { EnterpriseMeetingCalendarPublishReceipt } from
+  "./enterprise-meeting-calendar.js";
 
 export interface EnterpriseOutboxPublisher {
   publish(event: Readonly<EnterpriseOutboxEventRecord>): Promise<
-    | { status: "completed" }
+    | { status: "completed"; receipt?: EnterpriseMeetingCalendarPublishReceipt }
     | { status: "retry"; reason: string }
   >;
 }

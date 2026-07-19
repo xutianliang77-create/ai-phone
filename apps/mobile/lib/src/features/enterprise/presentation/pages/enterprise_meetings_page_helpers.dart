@@ -57,6 +57,17 @@ extension on _EnterpriseMeetingsPageState {
               connected: _activeMeetingId == meeting.id,
               onMeetingChanged: _load,
             ),
+            if (meeting.status == 'scheduled' &&
+                meeting.scheduledAt != null &&
+                widget.workspace.context.member.userId == meeting.hostUserId)
+              EnterpriseMeetingCalendarCard(
+                client: widget.client,
+                workspace: widget.workspace,
+                meetingId: meeting.id,
+                meetingVersion: meeting.version,
+                canSync: widget.workspace.context.can('meeting:write') &&
+                    meeting.scheduledAt!.isAfter(DateTime.now()),
+              ),
           ],
         ),
       ),

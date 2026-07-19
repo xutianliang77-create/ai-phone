@@ -39,6 +39,7 @@ export const enterpriseTenantTableNames = [
   "meeting_screen_ocr_runs", "meeting_screen_ocr_subscriptions",
   "meeting_screen_ocr_commands", "meeting_screen_ocr_frames",
   "meeting_screen_ocr_blocks",
+  "meeting_calendar_syncs",
   "communication_session_bindings",
   "worker_dispatch_grants", "communication_policy_versions",
   "communication_authorization_evidence", "communication_policy_snapshots",
@@ -72,6 +73,7 @@ export const enterpriseSubjectColumns = [
   ["meeting_material_runs", "created_by"],
   ["meeting_screen_ocr_runs", "created_by"],
   ["meeting_screen_ocr_commands", "actor_id"],
+  ["meeting_calendar_syncs", "created_by"],
 ] as const;
 
 const [action] = process.argv.slice(2);
