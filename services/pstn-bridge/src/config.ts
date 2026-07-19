@@ -23,6 +23,10 @@ export function loadEnv(env: NodeJS.ProcessEnv = process.env): PstnBridgeEnv {
     statusWebhookTimeoutMs: Number(env.PSTN_BRIDGE_STATUS_WEBHOOK_TIMEOUT_MS ?? 5000),
     statusWebhookRetryCount: Number(env.PSTN_BRIDGE_STATUS_WEBHOOK_RETRY_COUNT ?? 2),
     statusWebhookRetryDelayMs: Number(env.PSTN_BRIDGE_STATUS_WEBHOOK_RETRY_DELAY_MS ?? 250),
+    enterpriseStatusWebhookEndpoint:
+      clean(env.PSTN_BRIDGE_ENTERPRISE_STATUS_WEBHOOK_ENDPOINT),
+    enterpriseStatusWebhookSecret:
+      clean(env.PSTN_BRIDGE_ENTERPRISE_STATUS_WEBHOOK_SECRET),
     audioFrameSinkEndpoint: clean(env.PSTN_BRIDGE_AUDIO_FRAME_SINK_ENDPOINT),
     audioFrameSinkApiKey: clean(env.PSTN_BRIDGE_AUDIO_FRAME_SINK_API_KEY),
     audioFrameSinkTimeoutMs: Number(env.PSTN_BRIDGE_AUDIO_FRAME_SINK_TIMEOUT_MS ?? 5000),

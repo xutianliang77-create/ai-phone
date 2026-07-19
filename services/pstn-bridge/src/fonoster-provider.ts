@@ -100,6 +100,15 @@ export class FonosterPstnProvider implements PstnProvider {
         language: limit(request.language, 40),
         consentPromptVersion: limit(request.consentPromptVersion, 80),
         recordingDisclosureEnabled: String(this.config.recordingDisclosureEnabled),
+        ...(request.enterpriseContext ? {
+          enterpriseTenantId: request.enterpriseContext.tenantId,
+          enterpriseHomeRegion: request.enterpriseContext.homeRegion,
+          enterpriseCellId: request.enterpriseContext.cellId,
+          enterpriseRouteEpoch: String(request.enterpriseContext.routeEpoch),
+          enterpriseTaskId: request.enterpriseContext.taskId,
+          enterpriseDispatchGeneration:
+            String(request.enterpriseContext.dispatchGeneration),
+        } : {}),
       },
     };
   }

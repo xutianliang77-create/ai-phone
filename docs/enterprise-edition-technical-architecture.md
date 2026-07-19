@@ -470,6 +470,24 @@ Scheduler 通过内部命令访问业务库，不获得跨 tenant 扫描入口�
 本层无 communication session、Outbox、PSTN 或媒体资源；下一层 `ENT-MKT-008` 必须使用 claim generation/token 建立
 scoped dispatch 和 Provider 幂等副作用，不能把 task 的 dispatching 状态直接解释为“已拨号”。
 
+### 7.8 Scoped PSTN dispatch 与两阶段副作用
+
+`ENT-MKT-008` 使用 `prepare transaction -> Provider HTTPS call -> finalize transaction`，不在持锁事务内等待外部网络。
+prepare 锁定 task，校验 Scheduler claim token/generation 与当前 route，再重读 approval、Lead/link、Consent、
+Suppression、Country Policy/当地窗口和有效 billing/subscription/entitlement；成功后原子创建公共 tenant-scoped
+communication session、企业 binding、无明文号码 Outbox 与 `marketing_pstn_dispatches`。dispatch 固化 tenant/task/
+generation、route/cell、hold、Provider fingerprint、稳定幂等键和请求 hash。
+
+Provider 明确接受后，finalize 在同一 tenant transaction 内先以 dispatch ID 幂等结算固定60秒 hold，再将 task 从
+dispatching 推到 dispatched、binding 推到 active 并发布 Outbox。连接中断、超时或可重试 HTTP 错误进入 `unknown`；
+Scheduler reaper 看到同 generation 的 prepared/unknown/accepted/answered 证据时不得释放并生成新一代拨号，必须先
+通过 Provider 幂等查询或 webhook 对账。明确拒绝才释放 hold，task 由既有 lease 机制恢复。
+
+PSTN Bridge 把 tenant、home region、cell、route epoch、task 和 dispatch generation 放入 Provider metadata，并把状态
+投递到独立 enterprise webhook。API 对完整 body 做 HMAC 校验，以 Provider event ID 写 Inbox 去重，再锁当前 route 和
+dispatch fence 后推进 answered/completed/failed；迟到旧 route/generation/provider call 被拒绝。Provider/keyring/
+webhook/idempotency 未配置时 runtime 失败闭合，不回退 legacy 或 simulated Provider。
+
 ## 8. AI 客服架构
 
 ```mermaid
@@ -728,7 +746,7 @@ Worker 无权依据缓存继续执行敏感能力。
 
 生产 PostgreSQL 启动还必须验证企业签名 cutover evidence：证据绑定 staging 环境、
 commit、image digest、topology hash、目标 logical ID、system identifier/OID、公共31段与
-企业44段 manifest，并证明源库 writer fence、旧 API/Worker 角色会话为0、目标可写和
+企业45段 manifest，并证明源库 writer fence、旧 API/Worker 角色会话为0、目标可写和
 二次全量 hash 一致。本地逻辑恢复证据不提升为跨故障域 HA/PITR 结论。
 
 ## 10. 安全架构

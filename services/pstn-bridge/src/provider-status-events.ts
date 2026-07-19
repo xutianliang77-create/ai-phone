@@ -58,6 +58,8 @@ export function parseProviderStatusEvent(input: unknown): StatusWebhookRequest |
   const providerCallId = text(body.providerCallId, 160);
   const status = normalizedStatus(body.status);
   if (!eventId || (!callId && !providerCallId) || !status) return null;
+  const scoped = enterpriseContext(body);
+  if (scoped === null) return null;
   return {
     eventId,
     status,
@@ -67,7 +69,32 @@ export function parseProviderStatusEvent(input: unknown): StatusWebhookRequest |
     ...optionalText("resultSummary", body.resultSummary, 800),
     ...optionalText("failureReason", body.failureReason, 300),
     ...optionalText("nextStep", body.nextStep, 300),
+    ...scoped,
   };
+}
+
+function enterpriseContext(body: Record<string, unknown>) {
+  const direct = plainObject(body.enterpriseContext) ? body.enterpriseContext : null;
+  const metadata = plainObject(body.metadata) ? body.metadata : null;
+  if ("enterpriseContext" in body && !direct) return null;
+  const metadataKeys = ["enterpriseTenantId", "enterpriseHomeRegion",
+    "enterpriseCellId", "enterpriseTaskId", "enterpriseRouteEpoch",
+    "enterpriseDispatchGeneration"];
+  if (!direct && (!metadata || !metadataKeys.some((key) => key in metadata))) return {};
+  const source = direct ?? metadata;
+  if (!source) return null;
+  const tenantId = text(direct ? source.tenantId : source.enterpriseTenantId, 36);
+  const homeRegion = text(direct ? source.homeRegion : source.enterpriseHomeRegion, 64);
+  const cellId = text(direct ? source.cellId : source.enterpriseCellId, 64);
+  const taskId = text(direct ? source.taskId : source.enterpriseTaskId, 36);
+  const routeEpoch = integer(direct ? source.routeEpoch : source.enterpriseRouteEpoch);
+  const generation = integer(direct
+    ? source.dispatchGeneration : source.enterpriseDispatchGeneration);
+  return uuid(tenantId) && uuid(taskId) &&
+    /^[A-Za-z0-9][A-Za-z0-9._:-]*$/.test(homeRegion) &&
+    /^[A-Za-z0-9][A-Za-z0-9._:-]*$/.test(cellId) && routeEpoch && generation
+    ? { enterpriseContext: { tenantId, homeRegion, cellId, taskId,
+      routeEpoch, dispatchGeneration: generation } } : null;
 }
 
 function normalizedStatus(value: unknown): StatusWebhookRequest["status"] | null {
@@ -113,3 +140,11 @@ function optionalNumber(name: string, value: unknown) {
 function text(value: unknown, maxLength: number) {
   return typeof value === "string" && value.trim() ? value.trim().slice(0, maxLength) : "";
 }
+
+function integer(value: unknown) { const number = typeof value === "string"
+  ? Number(value) : value; return typeof number === "number" &&
+  Number.isSafeInteger(number) && number > 0 ? number : null; }
+function uuid(value: string) { return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(value); }
+function plainObject(value: unknown): value is Record<string, unknown> { return Boolean(value) &&
+  typeof value === "object" && !Array.isArray(value) &&
+  Object.getPrototypeOf(value) === Object.prototype; }

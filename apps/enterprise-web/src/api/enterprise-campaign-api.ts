@@ -16,6 +16,7 @@ import type {
   EnterpriseMarketingSuppressionResponse,
   EnterpriseMarketingSuppressionsResponse,
   EnterpriseMarketingSchedulerStatusResponse,
+  EnterpriseMarketingPstnStatusResponse,
   EnterpriseCountryPoliciesResponse,
   EnterpriseCountryPolicyResponse,
   EnterpriseCampaignCountryPolicyReadinessResponse,
@@ -49,6 +50,8 @@ export interface EnterpriseCampaignApi {
     Promise<EnterpriseCampaignResponse>;
   getCampaignSchedulerStatus(context: EnterpriseContentRequestContext, campaignId: string):
     Promise<EnterpriseMarketingSchedulerStatusResponse>;
+  getCampaignPstnStatus(context: EnterpriseContentRequestContext, campaignId: string):
+    Promise<EnterpriseMarketingPstnStatusResponse>;
   listCampaignLeads(context: EnterpriseContentRequestContext, campaignId: string):
     Promise<EnterpriseCampaignLeadsResponse>;
   listLeadImportBatches(context: EnterpriseContentRequestContext, campaignId: string):
@@ -128,6 +131,10 @@ export function createEnterpriseCampaignApi(
     ),
     getCampaignSchedulerStatus: (context, campaignId) => request(
       `${campaigns}/${encodeURIComponent(campaignId)}/scheduler`,
+      { headers: headers(context) },
+    ),
+    getCampaignPstnStatus: (context, campaignId) => request(
+      `${campaigns}/${encodeURIComponent(campaignId)}/pstn-dispatch`,
       { headers: headers(context) },
     ),
     listCampaignLeads: (context, campaignId) => request(

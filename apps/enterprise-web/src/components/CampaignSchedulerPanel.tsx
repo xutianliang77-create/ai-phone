@@ -31,7 +31,8 @@ export function CampaignSchedulerPanel({ api, context, campaign }: {
       ? stateLabel(state.scheduler.state) : "只读状态"}</small></summary>
     <div className="campaign-scheduler-panel__body">
       <p className="campaign-scheduler-boundary"><MaterialIcon
-        name={enterpriseIcons.campaign.claim} /><span>claim 仅保留任务与预算；不会创建通信会话、Outbox 或 PSTN 外呼。</span></p>
+        name={enterpriseIcons.campaign.claim} /><span>claim 只保留任务与预算；后续 PSTN
+          派发必须提交同一 claim token、route 与 generation。</span></p>
       {state.status === "loading" || state.status === "idle" ? <StatusPanel
         state="loading" description="正在读取服务端调度状态。" /> : null}
       {state.status === "failed" ? <StatusPanel state={apiErrorState(state.error)}

@@ -52,7 +52,8 @@ export function buildPstnBridgeServer(options: PstnBridgeServerOptions = {}) {
         providerEventDeduper,
         dialGate,
         hasAudioFrameSink: Boolean(options.audioFrameSink || config.audioFrameSinkEndpoint),
-        hasStatusWebhookSink: Boolean(options.statusWebhookSink || config.statusWebhookEndpoint),
+        hasStatusWebhookSink: Boolean(options.statusWebhookSink ||
+          config.statusWebhookEndpoint || config.enterpriseStatusWebhookEndpoint),
       });
     } catch (error) {
       sendJson(response, 500, {
@@ -205,7 +206,7 @@ async function handleMediaFrame(context: {
   sendJson(context.response, 200, { status: result.status ?? "accepted", ...result });
 }
 
-function parseAgentCallRequest(input: unknown): AgentCallBridgeRequest | null {
+export function parseAgentCallRequest(input: unknown): AgentCallBridgeRequest | null {
   if (!input || typeof input !== "object") return null;
   const body = input as Record<string, unknown>;
   const idempotencyKey = text(body.idempotencyKey, 160);
@@ -215,8 +216,10 @@ function parseAgentCallRequest(input: unknown): AgentCallBridgeRequest | null {
   const objective = text(body.objective, 800);
   const suggestedScript = text(body.suggestedScript, 1200);
   const language = text(body.language, 20);
+  const enterpriseContext = parseEnterpriseContext(body.enterpriseContext);
   if (!idempotencyKey || !draftId || !callId || !targetPhone || !objective ||
-    !suggestedScript || !language) {
+    !suggestedScript || !language ||
+    (body.enterpriseContext !== undefined && !enterpriseContext)) {
     return null;
   }
   return {
@@ -229,8 +232,31 @@ function parseAgentCallRequest(input: unknown): AgentCallBridgeRequest | null {
     language,
     ...optionalText("targetName", body.targetName, 120),
     ...optionalText("consentPromptVersion", body.consentPromptVersion, 120),
+    ...(enterpriseContext ? { enterpriseContext } : {}),
   };
 }
+
+function parseEnterpriseContext(input: unknown) {
+  if (!input || typeof input !== "object" || Array.isArray(input) ||
+    Object.getPrototypeOf(input) !== Object.prototype) return null;
+  const value = input as Record<string, unknown>;
+  const keys = ["tenantId", "homeRegion", "cellId", "routeEpoch", "taskId",
+    "dispatchGeneration"];
+  if (Object.keys(value).sort().join(",") !== keys.sort().join(",")) return null;
+  const tenantId = text(value.tenantId, 36); const taskId = text(value.taskId, 36);
+  const homeRegion = text(value.homeRegion, 64); const cellId = text(value.cellId, 64);
+  const routeEpoch = Number(value.routeEpoch); const generation =
+    Number(value.dispatchGeneration);
+  return uuidText(tenantId) && uuidText(taskId) &&
+    /^[A-Za-z0-9][A-Za-z0-9._:-]*$/.test(homeRegion) &&
+    /^[A-Za-z0-9][A-Za-z0-9._:-]*$/.test(cellId) &&
+    Number.isSafeInteger(routeEpoch) && routeEpoch > 0 &&
+    Number.isSafeInteger(generation) && generation > 0
+    ? { tenantId, taskId, homeRegion, cellId, routeEpoch,
+      dispatchGeneration: generation } : null;
+}
+
+function uuidText(value: string) { return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(value); }
 
 function parseMediaFrameRequest(input: unknown): PstnMediaFrameRequest | null {
   if (!input || typeof input !== "object") return null;

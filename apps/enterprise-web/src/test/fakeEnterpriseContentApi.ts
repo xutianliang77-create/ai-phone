@@ -36,7 +36,7 @@ type ContentApi = Pick<EnterpriseApi,
   | "getSupportQualitySession"
   | "listCampaigns" | "getCampaign" | "createCampaign" | "updateCampaign"
   | "scheduleCampaign" | "listCampaignLeads" | "listLeadImportBatches"
-  | "getCampaignSchedulerStatus"
+  | "getCampaignSchedulerStatus" | "getCampaignPstnStatus"
   | "importCampaignLeads" | "rollbackLeadImport"
   | "listMarketingConsents" | "getMarketingConsentEligibility"
   | "registerMarketingConsent" | "revokeMarketingConsent"
@@ -173,5 +173,12 @@ export function fakeEnterpriseContentApi(): ContentApi {
     updateCampaign: vi.fn(),
     scheduleCampaign: vi.fn(),
     getCampaignSchedulerStatus: vi.fn().mockRejectedValue(new Error("not configured")),
+    getCampaignPstnStatus: vi.fn().mockResolvedValue({ campaignId:
+      "00000000-0000-4000-8000-000000000001", dispatches: { total: 0,
+        prepared: 0, unknown: 0, accepted: 0, answered: 0, completed: 0, failed: 0 },
+      provider: { status: "not_configured", provider: "unavailable",
+        reasonCode: "provider_not_configured" },
+      billing: { category: "marketing_call_seconds", reservedSecondsPerDispatch: 60,
+        settlement: "on_provider_acceptance" } }),
   };
 }

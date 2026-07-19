@@ -30,7 +30,7 @@ export const enterpriseTenantTableNames = [
   "marketing_lead_import_rows",
   "contact_consents", "suppression_entries", "marketing_country_policy_versions",
   "marketing_campaign_validation_snapshots", "marketing_campaign_approval_decisions",
-  "marketing_call_tasks",
+  "marketing_call_tasks", "marketing_pstn_dispatches",
   "marketing_outcomes", "support_channels", "customer_profiles",
   "support_queues", "support_sessions", "support_cases", "tool_executions", "meetings",
   "support_agent_runs", "support_agent_turns", "support_tool_definitions",

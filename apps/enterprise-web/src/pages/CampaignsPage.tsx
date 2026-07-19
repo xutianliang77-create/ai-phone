@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { EnterpriseCampaignDto } from "@translation/contracts";
 import { useAuth } from "../auth/AuthContext.js";
 import { apiErrorState } from "../business-state.js";
@@ -14,6 +14,9 @@ import { CampaignSchedulerPanel } from
 import { PageFrame } from "../components/PageFrame.js";
 import { StatusPanel } from "../components/StatusPanel.js";
 import { enterpriseIcons } from "../icon-registry.js";
+
+const CampaignPstnDispatchPanel = lazy(() =>
+  import("../components/CampaignPstnDispatchPanel.js"));
 
 type LoadState =
   | { status: "loading" }
@@ -144,7 +147,7 @@ export function CampaignsPage() {
     <section className="campaign-boundary" aria-label="当前实现边界">
       <MaterialIcon name={enterpriseIcons.campaign.approval} />
       <div><strong>活动未审批时服务端禁止调度</strong>
-        <span>线索、授权、禁拨、国家策略、审批快照和 Scheduler 已接入；通信会话与 PSTN 尚未接入，本页不显示模拟外呼成功。</span>
+        <span>线索、授权、禁拨、国家策略、审批快照、Scheduler 与 scoped PSTN 状态已接入；本页不提供手工拨号，也不显示模拟外呼成功。</span>
       </div>
     </section>
     {notice ? <p className="campaign-notice" role="status">{notice}</p> : null}
@@ -208,6 +211,11 @@ export function CampaignsPage() {
             onChanged={refresh} /> : null}
           {context ? <CampaignSchedulerPanel api={api} context={context}
             campaign={campaign} /> : null}
+          {context ? <Suspense fallback={<StatusPanel state="loading"
+            description="正在加载 PSTN 派发状态面板。" />}>
+            <CampaignPstnDispatchPanel api={api} context={context}
+              campaign={campaign} />
+          </Suspense> : null}
           <dl className="campaign-facts">
             <div><dt><MaterialIcon name={enterpriseIcons.campaign.countries} />国家</dt>
               <dd>{campaign.countryCodes.join(" · ")}</dd></div>

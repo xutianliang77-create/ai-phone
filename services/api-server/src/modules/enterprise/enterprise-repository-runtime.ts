@@ -78,7 +78,7 @@ import type { EnterpriseMarketingConsentRepositoryRuntime } from "./enterprise-m
 import type { EnterpriseMarketingSuppressionRepositoryRuntime } from "./enterprise-marketing-suppression-runtime.js";
 import type { EnterpriseMarketingCountryPolicyRepositoryRuntime } from "./enterprise-marketing-country-policy-runtime.js";
 import type { EnterpriseCampaignApprovalRepositoryRuntime } from "./enterprise-campaign-approval-runtime.js";
-import type { EnterpriseMarketingSchedulerRepositoryRuntime } from "./enterprise-marketing-scheduler-runtime.js";
+import type { EnterpriseMarketingSchedulerRepositoryRuntime } from "./enterprise-marketing-scheduler-runtime.js"; import type { EnterpriseMarketingPstnRepositoryRuntime } from "./enterprise-marketing-pstn-runtime.js";
 export type EnterpriseContextResult =
   { status: "resolved"; tenant: EnterpriseTenantRecord; member: EnterpriseMemberRecord } |
   { status: "access_denied" } | { status: "selection_required" };
@@ -108,7 +108,8 @@ export interface EnterpriseRepositoryRuntime
     EnterpriseCampaignRepositoryRuntime, EnterpriseLeadImportRepositoryRuntime,
     EnterpriseMarketingConsentRepositoryRuntime,
     EnterpriseMarketingSuppressionRepositoryRuntime, EnterpriseMarketingCountryPolicyRepositoryRuntime,
-    EnterpriseCampaignApprovalRepositoryRuntime, EnterpriseMarketingSchedulerRepositoryRuntime {
+    EnterpriseCampaignApprovalRepositoryRuntime, EnterpriseMarketingSchedulerRepositoryRuntime,
+    EnterpriseMarketingPstnRepositoryRuntime {
   readonly driver: "legacy" | "postgres";
   resolveContext(input: {
     userId: string;

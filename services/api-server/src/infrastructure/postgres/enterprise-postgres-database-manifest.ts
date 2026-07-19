@@ -47,6 +47,7 @@ export const enterpriseCutoverCriticalTables = [
   "enterprise.marketing_country_policy_versions",
   "enterprise.marketing_campaign_validation_snapshots",
   "enterprise.marketing_campaign_approval_decisions",
+  "enterprise.marketing_pstn_dispatches",
   "ai_phone.recording_artifacts",
   "enterprise.meeting_artifacts",
 ] as const;

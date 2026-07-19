@@ -11,6 +11,16 @@ export interface AgentCallBridgeRequest {
   suggestedScript: string;
   language: string;
   consentPromptVersion?: string;
+  enterpriseContext?: EnterprisePstnContext;
+}
+
+export interface EnterprisePstnContext {
+  tenantId: string;
+  homeRegion: string;
+  cellId: string;
+  routeEpoch: number;
+  taskId: string;
+  dispatchGeneration: number;
 }
 
 export interface AgentCallBridgeResult {
@@ -150,6 +160,8 @@ export interface PstnBridgeEnv {
   statusWebhookTimeoutMs: number;
   statusWebhookRetryCount: number;
   statusWebhookRetryDelayMs: number;
+  enterpriseStatusWebhookEndpoint?: string;
+  enterpriseStatusWebhookSecret?: string;
   audioFrameSinkEndpoint?: string;
   audioFrameSinkApiKey?: string;
   audioFrameSinkTimeoutMs: number;
@@ -176,6 +188,7 @@ export interface StatusWebhookRequest {
   resultSummary?: string;
   failureReason?: string;
   nextStep?: string;
+  enterpriseContext?: EnterprisePstnContext;
 }
 
 export interface PstnStatusWebhookSink {

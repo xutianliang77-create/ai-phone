@@ -120,6 +120,7 @@ export const enterpriseIcons = {
     reject: "cancel",
     scheduler: "pending_actions",
     claim: "lock_clock",
+    pstn: "phone_in_talk",
   },
   appearance: {
     system: "brightness_auto",

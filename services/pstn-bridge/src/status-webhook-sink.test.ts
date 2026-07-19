@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { HttpStatusWebhookSink, signStatusWebhookBody } from "./status-webhook-sink.js";
+import { HttpStatusWebhookSink, signEnterpriseStatusWebhookBody,
+  signStatusWebhookBody } from "./status-webhook-sink.js";
 import type { PstnBridgeEnv, StatusWebhookRequest } from "./types.js";
 
 describe("status webhook sink", () => {
@@ -62,6 +63,29 @@ describe("status webhook sink", () => {
     await expect(sink.send({ eventId: "event-4", callId: "call-1", status: "failed" }))
       .rejects.toThrow("invalid signature");
     expect(calls).toBe(1);
+  });
+
+  it("routes enterprise calls to the isolated signed webhook", async () => {
+    let call: { url: string; headers: HeadersInit; body: unknown } | undefined;
+    const sink = new HttpStatusWebhookSink(env({
+      enterpriseStatusWebhookEndpoint: "https://api.qkxy.cn/webhooks/enterprise/pstn",
+      enterpriseStatusWebhookSecret: "e".repeat(32),
+    }), async (url, init) => {
+      call = { url: String(url), headers: init?.headers ?? {},
+        body: JSON.parse(String(init?.body)) };
+      return jsonResponse(200, { status: "accepted" });
+    });
+    await sink.send({ eventId: "event-enterprise", callId: "session-1",
+      status: "in_progress", enterpriseContext: {
+        tenantId: "00000000-0000-4000-8000-000000000001",
+        homeRegion: "cn-north", cellId: "cell-a", routeEpoch: 3,
+        taskId: "00000000-0000-4000-8000-000000000002",
+        dispatchGeneration: 4,
+      } });
+    expect(call?.url).toBe("https://api.qkxy.cn/webhooks/enterprise/pstn");
+    expect((call?.headers as Record<string, string>)[
+      "x-translation-enterprise-pstn-signature"])
+      .toBe(signEnterpriseStatusWebhookBody("e".repeat(32), call?.body));
   });
 });
 

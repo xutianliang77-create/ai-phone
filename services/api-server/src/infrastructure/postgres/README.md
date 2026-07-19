@@ -32,7 +32,7 @@ identity 使用 opaque subject，而不是资源 UUID：
 - account subject 必须是规范的 `user_<uuid>`。
 - audit/policy/idempotency actor 可以是 account subject，或
   `system:enterprise-outbox` 形式的受约束 namespace subject。
-- Repository 在 SQL 前和行映射时校验；schema verify 当前覆盖47个 account/audit subject 列，
+- Repository 在 SQL 前和行映射时校验；schema verify 当前覆盖48个 account/audit subject 列，
   包括活动 owner、术语和话术的创建、审核与发布 actor。raw UUID、`user-a` 和 system actor 写入 user 列
   都会失败闭合。
 
@@ -57,7 +57,7 @@ ENTERPRISE_MIGRATION_DATABASE_URL='postgresql://...' \
 
 两种启用模式都在恢复任务、Fastify 构建和端口监听前失败闭合，并在校验后关闭连接。
 `verify` 不写 migration；`migrate_verify` 始终在 migration 后执行相同 schema verify。
-统一启动编排先验证公共31段 manifest 和签名 cutover evidence，再验证 enterprise 43段
+统一启动编排先验证公共31段 manifest 和签名 cutover evidence，再验证 enterprise 45段
 manifest，并核对两个 verdict 的 database name/OID；任一失败都关闭已创建资源且不监听。
 
 基础 migration `0004` 至 `0010` 中，`0004` 增加 tenant lifecycle 状态和 job，`0005` 增加
@@ -176,7 +176,7 @@ SQLSTATE `25006`、旧 writer 会话为0、target 可写和二次全量 hash 相
 
 生产启动只接受 `environment=staging` 的 `cutover/matched` 签名证据，并绑定当前
 commit、image digest、topology hash、目标 logical ID、数据库 system identifier/OID 和
-31+43 migration manifest。`c9b5be2` 的31+16本地证据会被门禁拒绝，必须重新生成；
+31+45 migration manifest。`c9b5be2` 的31+16本地证据会被门禁拒绝，必须重新生成；
 本地同机 `pg_dump/pg_restore` 只能证明逻辑恢复与对账机制；
 跨故障域自动切换、异地主机不可变 WAL/PITR 和 RPO/RTO 仍由 `ENT-REL-003`/H3 验收。
 
@@ -253,3 +253,27 @@ ready 还要求未来开始时间、至少一条 Lead、全部国家策略、合
 重建 snapshot；任一集合/hash 漂移返回 stale。Campaign 只在数据库确认 validation/decision actor、时间、版本和内容后
 进入 pending/approved/rejected；批准后固定 decision ID 和 snapshot hash。scheduled transition 及未来 call task 必须再次
 通过当前 snapshot 比对。该层不创建 call task、usage hold、Outbox 或 PSTN 请求，真实 migration/RLS/并发仍待验收。
+
+## Marketing PSTN dispatch
+
+`ENT-MKT-008` 由 migration `0045` 新增 forced-RLS `marketing_pstn_dispatches`，以 tenant-first 复合 FK 固定 task、
+Campaign、communication binding、usage hold 与 Outbox。prepare transaction 重验 Scheduler claim token/generation、
+当前 route、审批/Lead/link/Consent/Suppression/Policy/当地窗口和有效 entitlement，再原子创建 scoped session/binding、
+无明文号码 Outbox 与稳定 Provider idempotency key。Provider 调用在事务外执行；明确 accepted 后第二个 transaction
+只结算一次固定60秒并由数据库 dispatch evidence 推进 task/binding。`unknown` 保留对账且阻止 lease reaper 盲目重拨。
+
+默认 Adapter 不可用。启用时必须同时配置：
+
+```text
+ENTERPRISE_MARKETING_PSTN_PROVIDER=pstn_http|pstn_fonoster
+ENTERPRISE_MARKETING_PSTN_BRIDGE_URL=https://...
+ENTERPRISE_MARKETING_PSTN_BRIDGE_TOKEN=...
+ENTERPRISE_MARKETING_PSTN_WEBHOOK_SECRET=...
+ENTERPRISE_MARKETING_PSTN_IDEMPOTENCY_GUARANTEED=true
+PSTN_BRIDGE_ENTERPRISE_STATUS_WEBHOOK_ENDPOINT=https://.../webhooks/enterprise/marketing/pstn
+PSTN_BRIDGE_ENTERPRISE_STATUS_WEBHOOK_SECRET=...
+```
+
+PSTN Bridge token 至少16字节，并需配置独立 enterprise status webhook endpoint/至少32字节 secret。Bridge URL 必须为 HTTPS，dispatch 超时最多10秒；
+Provider、凭据、webhook、号码 keyring 或持久幂等保证任一缺失均返回 `not_ready`。当前未执行 `0045` migration/down、
+forced-RLS、真实 Provider/PSTN、响应丢失对账和并发门禁，不能据此宣称企业外呼生产就绪。

@@ -274,6 +274,24 @@ Provider、usage/ledger 和 trace；跨会话业务聚合与货币成本尚未�
 - Web 调度器面板只读展示真实 task 数量、下个计划时间、活动/租户并发和预算状态。它不提供“开始拨号”，也不把 claim
   显示为已接通或已完成。
 
+#### 5.2.7 PSTN dispatch 首批实现边界
+
+- 内部 dispatch 入口只接受 Scheduler 的 tenant、task、claim token、dispatch generation 和签名 route document。
+  服务端在拨号前重新验证当前 region/cell/route epoch、审批、Lead/link、Consent、Suppression、Country Policy、
+  被叫当地时间窗、活动 entitlement 和尚有至少15秒的 claim lease；客户端不能提交号码或 Provider。
+- prepare transaction 创建 tenant-scoped communication session/binding、无明文号码的 Outbox 和不可变 dispatch。
+  Provider 请求使用 tenant+task+generation 稳定幂等键；号码只在事务提交后由 keyring 解密到 Provider 请求内存，
+  不写 Outbox、审计或 Web 响应。
+- Provider 调用位于数据库事务外，最多等待10秒。首次明确接受后 finalize transaction 才把 task 标为 dispatched、
+  结算固定60秒 `marketing_call_seconds` hold 并推进 binding；同 dispatch 重放只返回既有结果，不再次拨号或扣费。
+- 超时、连接中断或可重试 HTTP 错误按 `unknown/reconciliation_required` 保留，lease reaper 不产生下一代盲目重拨。
+  明确拒绝释放 hold，task 在原 lease 到期后由 Scheduler 恢复。后续 Provider 状态以签名 webhook event ID 去重，并
+  重读 route/generation/call fence 后推进 answered/completed/failed，不重复结算。
+- Provider、HTTPS Bridge、Bridge token、webhook secret、号码 keyring 或 Provider 持久幂等保证任一缺失时只显示
+  `not_ready`。Web 面板只读展示 dispatch 数量、Provider readiness 和60秒结算规则，不提供模拟拨号按钮或成功文案。
+- 当前仅形成代码和静态门禁候选；真实 PSTN sandbox、PostgreSQL forced-RLS、丢响应对账、并发和浏览器未验收，
+  不能宣称企业外呼已可生产使用。
+
 ### 5.3 AI 营销专员
 
 - 配置品牌、身份、产品、价值主张和目标市场。

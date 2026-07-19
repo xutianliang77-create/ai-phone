@@ -100,6 +100,8 @@ import { EnterpriseCampaignApprovalPostgresRepository } from
   "./enterprise-postgres-campaign-approval.repository.js";
 import { EnterpriseMarketingSchedulerPostgresRepository } from
   "./enterprise-postgres-marketing-scheduler.repository.js";
+import { EnterpriseMarketingPstnPostgresRepository } from
+  "./enterprise-postgres-marketing-pstn.repository.js";
 
 export interface EnterprisePostgresUnitOfWork {
   tenant: EnterpriseTenantPostgresRepository;
@@ -140,6 +142,7 @@ export interface EnterprisePostgresUnitOfWork {
   marketingCountryPolicies: EnterpriseMarketingCountryPolicyPostgresRepository;
   campaignApprovals: EnterpriseCampaignApprovalPostgresRepository;
   marketingScheduler: EnterpriseMarketingSchedulerPostgresRepository;
+  marketingPstn: EnterpriseMarketingPstnPostgresRepository;
 }
 
 export function withEnterprisePostgresUnitOfWork<T>(
@@ -196,6 +199,7 @@ export function withEnterprisePostgresUnitOfWork<T>(
         new EnterpriseMarketingCountryPolicyPostgresRepository(session),
       campaignApprovals: new EnterpriseCampaignApprovalPostgresRepository(session),
       marketingScheduler: new EnterpriseMarketingSchedulerPostgresRepository(session),
+      marketingPstn: new EnterpriseMarketingPstnPostgresRepository(session),
     }),
   );
 }

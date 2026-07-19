@@ -16,9 +16,6 @@ export class HttpStatusWebhookSink implements PstnStatusWebhookSink {
   ) {}
 
   async send(request: StatusWebhookRequest) {
-    if (!this.config.statusWebhookEndpoint || !this.config.statusWebhookSecret) {
-      throw new Error("PSTN Bridge status webhook sink is not configured");
-    }
     let lastError: unknown = null;
     const attempts = this.config.statusWebhookRetryCount + 1;
     for (let attempt = 1; attempt <= attempts; attempt += 1) {
@@ -34,21 +31,34 @@ export class HttpStatusWebhookSink implements PstnStatusWebhookSink {
   }
 
   private async sendOnce(request: StatusWebhookRequest, attempt: number) {
-    const response = await this.fetchWithTimeout(this.config.statusWebhookEndpoint as string, {
+    const enterprise = request.enterpriseContext;
+    const endpoint = enterprise
+      ? this.config.enterpriseStatusWebhookEndpoint
+      : this.config.statusWebhookEndpoint;
+    const secret = enterprise
+      ? this.config.enterpriseStatusWebhookSecret
+      : this.config.statusWebhookSecret;
+    if (!endpoint || !secret || (enterprise && Buffer.byteLength(secret) < 32)) {
+      throw new Error(enterprise
+        ? "Enterprise PSTN status webhook sink is not configured"
+        : "PSTN Bridge status webhook sink is not configured");
+    }
+    const body = enterprise ? enterpriseWebhookBody(request) : request;
+    const response = await this.fetchWithTimeout(endpoint, {
       method: "POST",
       headers: {
         "content-type": "application/json",
-        "x-translation-pstn-signature": signStatusWebhookBody(
-          this.config.statusWebhookSecret as string,
-          request,
-        ),
+        ...(enterprise ? {
+          "x-translation-enterprise-pstn-signature":
+            signEnterpriseStatusWebhookBody(secret, body),
+        } : { "x-translation-pstn-signature": signStatusWebhookBody(secret, request) }),
         "x-translation-pstn-attempt": String(attempt),
       },
-      body: JSON.stringify(request),
+      body: JSON.stringify(body),
     });
-    const body = await readJson(response);
-    if (!response.ok) throw statusWebhookError(response.status, body);
-    return { status: parseSinkStatus(body?.status) };
+    const responseBody = await readJson(response);
+    if (!response.ok) throw statusWebhookError(response.status, responseBody);
+    return { status: parseSinkStatus(responseBody?.status) };
   }
 
   private async fetchWithTimeout(url: string, init: RequestInit) {
@@ -60,6 +70,20 @@ export class HttpStatusWebhookSink implements PstnStatusWebhookSink {
       clearTimeout(timer);
     }
   }
+}
+
+function enterpriseWebhookBody(request: StatusWebhookRequest) {
+  const context = request.enterpriseContext!;
+  return { ...context, eventId: request.eventId, status: request.status,
+    ...(request.callId ? { callId: request.callId } : {}),
+    ...(request.providerCallId ? { providerCallId: request.providerCallId } : {}),
+    ...(request.consumedSeconds !== undefined
+      ? { consumedSeconds: request.consumedSeconds } : {}),
+    ...(request.failureReason ? { failureReason: request.failureReason } : {}) };
+}
+
+export function signEnterpriseStatusWebhookBody(secret: string, body: unknown) {
+  return createHmac("sha256", secret).update(stable(body)).digest("hex");
 }
 
 function statusWebhookError(status: number, body: unknown) {
@@ -121,4 +145,13 @@ function numberText(value: unknown) {
   return typeof value === "number" && Number.isFinite(value) && value >= 0
     ? String(Math.ceil(value))
     : undefined;
+}
+
+function stable(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(stable).join(",")}]`;
+  if (value && typeof value === "object") return `{${Object.entries(
+    value as Record<string, unknown>).filter(([, item]) => item !== undefined)
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([key, item]) => `${JSON.stringify(key)}:${stable(item)}`).join(",")}}`;
+  return JSON.stringify(value);
 }

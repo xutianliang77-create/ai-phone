@@ -1,6 +1,7 @@
 import { createServer } from "node:http";
 import { afterEach, describe, expect, it } from "vitest";
 import { signProviderWebhookBody } from "./provider-webhook-auth.js";
+import { parseProviderStatusEvent } from "./provider-status-events.js";
 import { buildPstnBridgeServer } from "./server.js";
 import type { PstnStatusWebhookSink, StatusWebhookRequest } from "./types.js";
 
@@ -50,6 +51,19 @@ describe("provider status events", () => {
     expect(duplicate.status).toBe(200);
     expect(duplicate.body).toEqual({ status: "duplicate", eventId: "provider-status-1" });
     expect(updates).toHaveLength(1);
+  });
+
+  it("requires a complete enterprise routing fence when metadata is present", () => {
+    expect(parseProviderStatusEvent({ ...statusEvent(), metadata: {
+      enterpriseTenantId: "00000000-0000-4000-8000-000000000001",
+      enterpriseHomeRegion: "cn-north", enterpriseCellId: "cell-a",
+      enterpriseTaskId: "00000000-0000-4000-8000-000000000002",
+      enterpriseRouteEpoch: "3", enterpriseDispatchGeneration: "4",
+    } })).toMatchObject({ enterpriseContext: { routeEpoch: 3,
+      dispatchGeneration: 4 } });
+    expect(parseProviderStatusEvent({ ...statusEvent(), metadata: {
+      enterpriseTenantId: "00000000-0000-4000-8000-000000000001",
+    } })).toBeNull();
   });
 
   async function startBridge(updates: StatusWebhookRequest[]) {

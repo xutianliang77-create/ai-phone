@@ -54,14 +54,28 @@ export class EnterpriseMarketingSchedulerPostgresRepository {
       WHERE hold_record.tenant_id = $1 AND task.tenant_id = hold_record.tenant_id
         AND task.usage_hold_id = hold_record.id AND task.status = 'dispatching'
         AND task.lease_expires_at <= $2 AND hold_record.status = 'held'
+        AND NOT EXISTS (
+          SELECT 1 FROM enterprise.marketing_pstn_dispatches dispatch
+          WHERE dispatch.tenant_id = task.tenant_id AND dispatch.task_id = task.id
+            AND dispatch.dispatch_generation = task.dispatch_generation
+            AND dispatch.status IN ('prepared', 'unknown', 'accepted', 'answered')
+        )
     `, [iso(now)]);
     await this.session.query(`
-      UPDATE enterprise.marketing_call_tasks
+      UPDATE enterprise.marketing_call_tasks task
       SET status = 'retry', outcome_code = 'scheduler_lease_expired',
         claimed_at = NULL, claim_owner = NULL, claim_token_hash = NULL,
         lease_expires_at = NULL, usage_hold_id = NULL, updated_at = $2,
         version = version + 1
-      WHERE tenant_id = $1 AND status = 'dispatching' AND lease_expires_at <= $2
+      WHERE task.tenant_id = $1 AND task.status = 'dispatching'
+        AND task.lease_expires_at <= $2
+        AND NOT EXISTS (
+          SELECT 1 FROM enterprise.marketing_pstn_dispatches dispatch
+          WHERE dispatch.tenant_id = task.tenant_id
+            AND dispatch.task_id = task.id
+            AND dispatch.dispatch_generation = task.dispatch_generation
+            AND dispatch.status IN ('prepared', 'unknown', 'accepted', 'answered')
+        )
     `, [iso(now)]);
   }
 
