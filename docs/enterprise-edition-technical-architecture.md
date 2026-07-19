@@ -1,6 +1,6 @@
 # 无界AI企业版技术架构
 
-版本：v1.32
+版本：v1.33
 日期：2026-07-19
 状态：SaaS 详细架构基线，已对齐统一通讯平台和 PostgreSQL Primary
 
@@ -177,7 +177,7 @@ object-storage
 | 账号、Tenant、RBAC、企业命令 | `services/api-server` | 先按 domain module 隔离；只有独立扩缩容或故障域需要时才拆服务 |
 | Enterprise Repository runtime/cell Worker | `services/api-server/src/modules/enterprise`、`services/api-server/src/infrastructure/postgres` | API 使用单一 `legacy|postgres` runtime；独立启动的 cell Worker 仅以 cell discovery 和 tenant transaction 角色 claim/finalize |
 | Communication Session、Provider Operation、Dispatch、Recording 和 Usage | 上游稳定提交 `fe1c3c2` 已导入企业分支，`ENT-DATA-008/CORE-013/014/015` 已补 tenant scope、企业业务绑定、签名 dispatch fence 和企业运行策略快照 | 公共 runtime 已成为代码基线；dispatch 必须先通过服务端 policy snapshot 与授权 fence，真实 Provider/设备仍待验收 |
-| PostgreSQL Primary 基础 | 公共31段 migration/Primary Runtime 与企业现有32段 migration | 已收敛为一个 Storage Driver/启动编排和两个有序 manifest；按 tenant/directory/cell/migration/maintenance 使用最小权限连接，等待真实 H3 验收 |
+| PostgreSQL Primary 基础 | 公共31段 migration/Primary Runtime 与企业现有34段 migration | 已收敛为一个 Storage Driver/启动编排和两个有序 manifest；按 tenant/directory/cell/migration/maintenance 使用最小权限连接，等待真实 H3 验收 |
 | 受控审计导出 | enterprise `0020`、Audit Export API/Repository、cell Worker、加密对象存储 Adapter | API 只创建/查询/鉴权下载；cell Worker 在 tenant transaction 取数并保存 hash/size/expiry，客户端不获得对象存储 key/凭据；物理 purge 与对象清单仍待 REL-002 |
 | Enterprise Knowledge | enterprise `0017`、Knowledge Repository/runtime/API | source/revision/chunk/review/publish、发布后不可变、四维有效期检索和 citation 已接入；embedding Provider 未配置时保持确定性文本检索，不声明向量 readiness |
 | Enterprise Terminology | enterprise `0018`、Term Pack/Script Template Repository/runtime/API | 稳定资源与不可变 revision、审核发布、生效时间解析已接入；resolver 向 ASR/翻译/LLM 返回同一术语版本引用，话术只供 LLM 使用 |
@@ -499,6 +499,22 @@ run 进入接管后，TTS authorize 只允许状态为 `handoff` 的 turn；普�
 播放许可。当前输出是“等待人工处理”的持久证据，不含坐席队列、claim、Provider 副作用或人工已经接通的承诺；
 这些分别留给 `ENT-CS-009` 和真实业务系统人工流程。
 
+### 8.9 坐席队列与 claim 单元
+
+`ENT-CS-009` 在既有 `support_queues` 上增加 `handoff_sla_seconds` 和 `claim_lease_seconds`，并新增
+forced-RLS 的 `support_agent_claims`。claim 通过 tenant-first 复合外键绑定 session、queue、active member；
+部分唯一索引保证每个 tenant/session 只有一个 active claim。`support_sessions.active_agent_claim_id` 使用
+deferred 复合外键同时绑定 claim、session 和 assigned user，使 `human_active` 不能只改一个字段伪造接管。
+
+API、PostgreSQL Repository 和 trigger 形成三层守卫：坐席只能 self-claim；member 必须 active 且属于
+owner/admin/support_manager/support_agent；queue 必须 active；session 必须为 `handoff_requested`。释放和
+改派先终结旧 claim，再把 session 从 `human_active` 收敛回 `handoff_requested`；改派随后在同一事务创建
+新 claim 并再次激活。所有路径使用 session/claim version fence、请求 hash 和幂等键，事务中间失败整体回滚。
+
+work-item 投影只返回待接管或 lease 已过期的会话，按 SLA breach、priority、handoff time、ID 排序。lease
+过期不会在只读列表中暗改状态；下一次 claim 才原子写入 `expired` 证据并取得控制权。该单元不包含
+`ENT-CS-010` 的实时字幕、客户资料、知识建议或媒体控制，也不调用 CRM/Provider。
+
 ## 9. 数据架构
 
 ### 9.1 单一写入真值
@@ -559,7 +575,7 @@ Worker 无权依据缓存继续执行敏感能力。
 
 生产 PostgreSQL 启动还必须验证企业签名 cutover evidence：证据绑定 staging 环境、
 commit、image digest、topology hash、目标 logical ID、system identifier/OID、公共31段与
-企业33段 manifest，并证明源库 writer fence、旧 API/Worker 角色会话为0、目标可写和
+企业34段 manifest，并证明源库 writer fence、旧 API/Worker 角色会话为0、目标可写和
 二次全量 hash 一致。本地逻辑恢复证据不提升为跨故障域 HA/PITR 结论。
 
 ## 10. 安全架构

@@ -50,11 +50,12 @@ export class EnterpriseSupportPostgresRepository {
     const value = normalizeQueue(input);
     const result = await this.session.query<SupportQueueRow>(`
       INSERT INTO enterprise.support_queues(
-        tenant_id, id, name, status, default_priority, created_by,
-        created_at, updated_at, version
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $7, 1)
+        tenant_id, id, name, status, default_priority, handoff_sla_seconds,
+        claim_lease_seconds, created_by, created_at, updated_at, version
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $9, 1)
       ON CONFLICT DO NOTHING RETURNING *
     `, [value.id, value.name, value.status, value.defaultPriority,
+      value.handoffSlaSeconds, value.claimLeaseSeconds,
       value.createdBy, value.createdAt]);
     return result.rows[0]
       ? { status: "created" as const, queue: mapSupportQueue(result.rows[0]) }
@@ -66,6 +67,13 @@ export class EnterpriseSupportPostgresRepository {
       WHERE tenant_id = $1 AND id = $2
     `, [uuid(queueId)]);
     return result.rows[0] ? mapSupportQueue(result.rows[0]) : null;
+  }
+  async listQueues() {
+    const result = await this.session.query<SupportQueueRow>(`
+      SELECT * FROM enterprise.support_queues
+      WHERE tenant_id = $1 ORDER BY status, name, id
+    `);
+    return result.rows.map(mapSupportQueue);
   }
   async createCustomer(input: CreateEnterpriseCustomerProfileInput) {
     const value = normalizeCustomer(input);
@@ -145,7 +153,7 @@ export class EnterpriseSupportPostgresRepository {
   async transition(input: {
     sessionId: string; status: EnterpriseSupportSessionStatus;
     expectedVersion: number; occurredAt: string; queueId?: string;
-    assignedUserId?: string; failureCode?: string;
+    assignedUserId?: string; activeAgentClaimId?: string; failureCode?: string;
   }) {
     if (!isEnterpriseSupportSessionStatus(input.status) ||
       !Number.isSafeInteger(input.expectedVersion) || input.expectedVersion < 1) {
@@ -165,13 +173,15 @@ export class EnterpriseSupportPostgresRepository {
       if (!queue) return { status: "resource_not_found" as const };
       if (queue.status !== "active") return { status: "resource_unavailable" as const };
     }
-    if (input.status === "human_active" && !input.assignedUserId) {
+    if (input.status === "human_active" &&
+      (!input.assignedUserId || !input.activeAgentClaimId)) {
       return { status: "invalid_transition" as const };
     }
     const assignedUserId = input.status === "human_active"
       ? enterprisePostgresAccountSubjectId(input.assignedUserId)
-      : ["ai_active", "handoff_requested"].includes(input.status)
-        ? undefined : current.assignedUserId;
+      : undefined;
+    const activeAgentClaimId = input.status === "human_active"
+      ? uuid(input.activeAgentClaimId) : undefined;
     const failureCode = input.status === "failed"
       ? failureCodeValue(input.failureCode) : undefined;
     const terminal = ["ended", "failed"].includes(input.status);
@@ -179,16 +189,18 @@ export class EnterpriseSupportPostgresRepository {
     const handoff = ["handoff_requested", "human_active"].includes(input.status);
     const result = await this.session.query<SupportSessionRow>(`
       UPDATE enterprise.support_sessions SET status = $3, queue_id = $4,
-        assigned_user_id = $5, queued_at = $6, started_at = $7,
-        handoff_requested_at = $8, assigned_at = $9, ended_at = $10,
-        failure_code = $11, updated_at = $12, version = version + 1
-      WHERE tenant_id = $1 AND id = $2 AND version = $13 AND status = $14
+        assigned_user_id = $5, active_agent_claim_id = $6, queued_at = $7,
+        started_at = $8, handoff_requested_at = $9, assigned_at = $10,
+        ended_at = $11, failure_code = $12, updated_at = $13,
+        version = version + 1
+      WHERE tenant_id = $1 AND id = $2 AND version = $14 AND status = $15
       RETURNING *
     `, [uuid(input.sessionId), input.status, queueId ?? null,
-      assignedUserId ?? null, current.queuedAt ?? (queueId ? occurredAt : null),
+      assignedUserId ?? null, activeAgentClaimId ?? null,
+      current.queuedAt ?? (queueId ? occurredAt : null),
       current.startedAt ?? (started ? occurredAt : null),
       current.handoffRequestedAt ?? (handoff ? occurredAt : null),
-      input.status === "human_active" ? occurredAt : assignedUserId ? current.assignedAt : null,
+      input.status === "human_active" ? occurredAt : null,
       terminal ? occurredAt : null, failureCode ?? null, occurredAt,
       input.expectedVersion, current.status]);
     return result.rows[0]
@@ -225,10 +237,15 @@ function normalizeChannel(input: CreateEnterpriseSupportChannelInput) {
     configRef: text(input.configRef, 200), createdAt: timestamp(input.createdAt) };
 }
 function normalizeQueue(input: CreateEnterpriseSupportQueueInput) {
-  if (!enterpriseSupportQueueStatuses.includes(input.status) || !integer(input.defaultPriority)) {
+  const handoffSlaSeconds = input.handoffSlaSeconds ?? 60;
+  const claimLeaseSeconds = input.claimLeaseSeconds ?? 300;
+  if (!enterpriseSupportQueueStatuses.includes(input.status) ||
+    !integer(input.defaultPriority) || !range(handoffSlaSeconds, 10, 86_400) ||
+    !range(claimLeaseSeconds, 30, 3_600)) {
     throw new Error("Invalid support queue");
   }
   return { ...input, id: uuid(input.id), name: text(input.name, 120),
+    handoffSlaSeconds, claimLeaseSeconds,
     createdBy: enterprisePostgresAccountSubjectId(input.createdBy),
     createdAt: timestamp(input.createdAt) };
 }
@@ -283,6 +300,9 @@ function failureCodeValue(value: unknown) {
   return result;
 }
 function integer(value: unknown) { return Number.isSafeInteger(value) && Number(value) >= 0 && Number(value) <= 100; }
+function range(value: unknown, min: number, max: number) {
+  return Number.isSafeInteger(value) && Number(value) >= min && Number(value) <= max;
+}
 function key(value: unknown) {
   const result = text(value, 160);
   if (!/^[A-Za-z0-9][A-Za-z0-9._:-]*$/.test(result)) throw new Error("Invalid support key");

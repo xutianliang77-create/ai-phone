@@ -1,6 +1,6 @@
 # 无界AI企业版设计文档索引
 
-版本：v1.41
+版本：v1.42
 日期：2026-07-19
 状态：SaaS 详细设计基线，已纳入统一通讯平台和 PostgreSQL Primary 演进
 
@@ -46,11 +46,11 @@ cell Worker、JSON/SQLite 演示导入，以及全业务表 Primary 切换/恢�
 无界AI主产品公共 PostgreSQL migration、Primary Runtime、可靠 Inbox/Outbox、
 fencing、Billing/Product Records、verify-full 和韧性代码已形成稳定提交 `fe1c3c2`，并由
 `ENT-DATA-007` 合入企业分支。企业版已经完成单 driver、双 manifest、同库身份和分权
-连接的本地自动化，当前 manifest 为公共31段、enterprise 33段；`ENT-DATA-008` 和
+连接的本地自动化，当前 manifest 为公共31段、enterprise 34段；`ENT-DATA-008` 和
 `ENT-CORE-013/014/015` 已完成公共通讯 tenant scope、企业业务会话绑定、签名 Worker dispatch fence
 及设备/声音/录制策略快照的代码/本地自动化，但不能继承主产品 staging 验收。`ENT-DATA-009` 已增加
 31+16 migration manifest 的历史本地证据、全表主键分页 count/hash、WAL 水位、writer fence、签名
-cutover/restore 证据和 production startup 绑定门禁；当前 `0017..0033` 必须按31+33重新生成切换证据。
+cutover/restore 证据和 production startup 绑定门禁；当前 `0017..0034` 必须按31+34重新生成切换证据。
 `ENT-CORE-004` 已增加 tenant-scoped source/version/chunk、草稿审核发布状态机、发布后不可变约束、
 locale/country/product/effective-time 检索和知识引用 ID；
 `ENT-CORE-005` 已增加版本化 term pack/script template、审核发布和生效窗口、发布后不可变约束，
@@ -133,8 +133,13 @@ mock 固定 simulated=true，Agent `toolRequest` 仍为 `null`。测试、真实
 `ENT-CS-008` 已增加 `0033` forced-RLS/append-only high-risk handoff request，将退款、付款、身份验证及
 其他 high-risk 请求绑定到 run/session/customer/active revision/arguments hash/risk evidence hash；首次
 请求与 run/session 的 handoff_requested 原子提交，同键异证据冲突，接管后只允许 handoff TTS。该路径
-不创建 execution、Outbox 或 Provider 调用，坐席 queue/claim 属于 `ENT-CS-009`。测试和真实 PostgreSQL/
+不创建 execution、Outbox 或 Provider 调用，坐席 queue/claim 由 `ENT-CS-009` 独立实现。测试和真实 PostgreSQL/
 RLS/并发/TTS/人工接通验收未执行，保持 `in_progress`。
+`ENT-CS-009` 已增加 `0034` queue SLA/claim lease、forced-RLS exclusive claim、session/claim/assigned member
+deferred binding、确定性 work-item 排序、self-claim、renew/release 和 manager reassign API。坐席身份只取
+当前 membership，改派同时受 HTTP/runtime/DB 守卫；lease 过期在下一次 claim 时原子释放重领。测试已定义
+但未运行，真实 migration/RLS、双租户、并发/崩溃/重启和人工媒体未验收，保持 `in_progress`；这也不表示
+`ENT-CS-010` 工作台已经实现。
 当前按要求未执行
 测试、migration、RLS、RBAC/ticket/evidence 攻击、并发共享、Worker/Provider、四人媒体、浏览器、真机与重启恢复，
 因此上述任务均保持 `in_progress`。
@@ -153,6 +158,7 @@ RLS/并发/TTS/人工接通验收未执行，保持 `in_progress`。
 - [ENT-MTG-004 屏幕共享租约实现与静态门禁证据](./evidence/ent-mtg-004-screen-share-lease-2026-07-19.md)
 - [ENT-MTG-005 Web 屏幕共享实现与静态门禁证据](./evidence/ent-mtg-005-web-screen-share-2026-07-19.md)
 - [ENT-MTG-011 会后材料实现与静态门禁证据](./evidence/ent-mtg-011-meeting-materials-2026-07-19.md)
+- [ENT-CS-009 坐席队列实现与静态门禁证据](./evidence/ent-cs-009-support-agent-queue-2026-07-19.md)
 - [ENT-MTG-012 屏幕 OCR 翻译实现与静态门禁证据](./evidence/ent-mtg-012-screen-ocr-translation-2026-07-19.md)
 - [ENT-MTG-013 日历 Adapter 实现与静态门禁证据](./evidence/ent-mtg-013-calendar-adapter-2026-07-19.md)
 - [ENT-CS-001 客服领域实现与静态门禁证据](./evidence/ent-cs-001-support-domain-2026-07-19.md)

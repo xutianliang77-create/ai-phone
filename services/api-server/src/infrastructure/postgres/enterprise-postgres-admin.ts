@@ -31,6 +31,7 @@ export const enterpriseTenantTableNames = [
   "support_queues", "support_sessions", "support_cases", "tool_executions", "meetings",
   "support_agent_runs", "support_agent_turns", "support_tool_definitions",
   "support_high_risk_handoff_requests",
+  "support_agent_claims",
   "meeting_participants", "meeting_screen_shares", "meeting_artifacts",
   "meeting_action_items", "meeting_translation_events",
   "meeting_screen_share_commands",
@@ -80,6 +81,8 @@ export const enterpriseSubjectColumns = [
   ["support_tool_definitions", "created_by"],
   ["support_tool_definitions", "published_by"],
   ["support_tool_definitions", "retired_by"],
+  ["support_agent_claims", "agent_user_id"],
+  ["support_agent_claims", "released_by"],
 ] as const;
 
 const [action] = process.argv.slice(2);

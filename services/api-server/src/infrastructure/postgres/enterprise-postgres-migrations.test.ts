@@ -43,6 +43,8 @@ describe("enterprise PostgreSQL migrations", () => {
       "0030_enterprise_support_tool_registry",
       "0031_enterprise_support_read_tools",
       "0032_enterprise_support_write_tools",
+      "0033_enterprise_support_high_risk_handoffs",
+      "0034_enterprise_support_agent_queue",
     ]);
     for (const migration of migrations) {
       expect(migration.up.trim()).not.toBe("");
@@ -157,6 +159,11 @@ describe("enterprise PostgreSQL migrations", () => {
     );
     expect(sql).toContain("support_high_risk_handoffs_insert_guard");
     expect(sql).toContain("enterprise high risk handoff request is immutable");
+    expect(sql).toContain("CREATE TABLE enterprise.support_agent_claims");
+    expect(sql).toContain("support_agent_claims_active_session_idx");
+    expect(sql).toContain("guard_support_agent_claim_insert");
+    expect(sql).toContain("guard_support_agent_claim_mutation");
+    expect(sql).toContain("ADD COLUMN active_agent_claim_id uuid");
     expect(sql).toContain("tool_executions_read_recovery_idx");
     expect(sql).toContain("provider_simulated boolean");
     expect(sql).toContain("tool_executions_read_shape_check");
@@ -221,6 +228,9 @@ describe("enterprise PostgreSQL migrations", () => {
     );
     expect(rollbackSql).toContain(
       "cannot roll back enterprise high risk handoff evidence",
+    );
+    expect(rollbackSql).toContain(
+      "cannot roll back enterprise support agent claim evidence",
     );
     expect(rollbackSql).toContain("DROP COLUMN IF EXISTS execution_attempt");
     expect(sql).not.toContain("BYPASSRLS");

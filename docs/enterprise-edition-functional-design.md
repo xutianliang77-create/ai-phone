@@ -1,6 +1,6 @@
 # 无界AI企业版详细功能设计
 
-版本：v1.29
+版本：v1.30
 日期：2026-07-19
 状态：SaaS 详细设计基线，已对齐统一通讯平台
 
@@ -378,8 +378,18 @@ LLM 只能提出结构化工具请求；Policy Engine 校验租户、客户、�
 - `refund.*`、`payment.*`、`identity.*` 分别归类为退款、付款、身份验证；其他 high-risk 工具统一归入
   `other_high_risk`，安全行为完全相同。当前只生成待人工处理的证据记录，不表示退款、付款或身份验证已完成。
 
-坐席排队、claim/release、SLA 和双坐席互斥属于 `ENT-CS-009`；本批没有自动分配坐席，也不会把
-`handoff_requested` 表述为已经接通人工。
+`ENT-CS-009` 已形成坐席排队与接管代码候选：
+
+- 主管以队列配置默认优先级、handoff SLA 和 claim lease；等待项按 SLA 是否超时、优先级、请求人工时间、
+  会话 ID 确定性排序，不依赖进程内队列或不透明模型评分。
+- 坐席只能以当前登录成员身份自领，不能在请求体伪造 `agentUserId`。同一会话由数据库部分唯一索引保证
+  同时最多一个 active claim，并把 `human_active` 会话绑定到同一个 claim 和 assigned member。
+- 坐席可续租或自释；owner/admin/support_manager 可释放和改派给 active 的客服角色。改派按
+  old claim 终结、会话回到 handoff、new claim 建立、会话重新激活的单事务完成。
+- lease 到期后工作项重新可见；新坐席 claim 时先在同一事务终结旧 claim 并释放会话，避免双控制者。
+  claim/release/reassign 均使用 optimistic version、幂等 hash、脱敏审计和 tenant route document。
+- 当前只证明服务端队列和互斥接管候选，不代表坐席工作台、字幕/通话控制、真实人工已接通或 PostgreSQL
+  生产门禁通过；这些仍分别属于 `ENT-CS-010` 和真实环境验收。
 
 ### 6.5 人工坐席工作台
 

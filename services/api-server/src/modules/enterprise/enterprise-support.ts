@@ -51,7 +51,8 @@ export interface EnterpriseSupportChannelRecord {
 }
 export interface EnterpriseSupportQueueRecord {
   id: string; tenantId: string; name: string; status: EnterpriseSupportQueueStatus;
-  defaultPriority: number; createdBy: string; createdAt: string;
+  defaultPriority: number; handoffSlaSeconds: number; claimLeaseSeconds: number;
+  createdBy: string; createdAt: string;
   updatedAt: string; version: number;
 }
 export interface EnterpriseCustomerProfileRecord {
@@ -65,6 +66,7 @@ export interface EnterpriseSupportSessionRecord {
   assignedUserId?: string; intent?: string; priority: number;
   createdAt: string; queuedAt?: string; startedAt?: string;
   handoffRequestedAt?: string; assignedAt?: string; endedAt?: string;
+  activeAgentClaimId?: string;
   failureCode?: string; updatedAt: string; version: number;
 }
 export interface EnterpriseSupportCaseRecord {
@@ -110,7 +112,8 @@ export interface CreateEnterpriseSupportChannelInput {
 }
 export interface CreateEnterpriseSupportQueueInput {
   id: string; name: string; status: EnterpriseSupportQueueStatus;
-  defaultPriority: number; createdBy: string; createdAt: string;
+  defaultPriority: number; handoffSlaSeconds?: number;
+  claimLeaseSeconds?: number; createdBy: string; createdAt: string;
 }
 export interface CreateEnterpriseCustomerProfileInput {
   id: string; externalId?: string; phoneHash?: string; displayName?: string;

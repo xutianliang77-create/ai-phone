@@ -26,7 +26,9 @@ export function mapSupportChannel(row: SupportChannelRow): EnterpriseSupportChan
 export function mapSupportQueue(row: SupportQueueRow): EnterpriseSupportQueueRecord {
   return {
     id: row.id, tenantId: row.tenant_id, name: row.name, status: row.status,
-    defaultPriority: Number(row.default_priority), createdBy: row.created_by,
+    defaultPriority: Number(row.default_priority),
+    handoffSlaSeconds: Number(row.handoff_sla_seconds),
+    claimLeaseSeconds: Number(row.claim_lease_seconds), createdBy: row.created_by,
     createdAt: iso(row.created_at), updatedAt: iso(row.updated_at),
     version: Number(row.version),
   };
@@ -49,6 +51,8 @@ export function mapSupportSession(row: SupportSessionRow): EnterpriseSupportSess
     channelId: row.channel_id, status: row.status, priority: Number(row.priority),
     ...(row.queue_id ? { queueId: row.queue_id } : {}),
     ...(row.assigned_user_id ? { assignedUserId: row.assigned_user_id } : {}),
+    ...(row.active_agent_claim_id
+      ? { activeAgentClaimId: row.active_agent_claim_id } : {}),
     ...(row.intent ? { intent: row.intent } : {}),
     createdAt: iso(row.created_at), updatedAt: iso(row.updated_at),
     ...optionalTime("queuedAt", row.queued_at),
@@ -132,7 +136,8 @@ export interface SupportChannelRow extends Record<string, unknown> {
 }
 export interface SupportQueueRow extends Record<string, unknown> {
   id: string; tenant_id: string; name: string; status: EnterpriseSupportQueueStatus;
-  default_priority: string | number; created_by: string;
+  default_priority: string | number; handoff_sla_seconds: string | number;
+  claim_lease_seconds: string | number; created_by: string;
   created_at: string | Date; updated_at: string | Date; version: string | number;
 }
 export interface CustomerProfileRow extends Record<string, unknown> {
@@ -144,7 +149,8 @@ export interface CustomerProfileRow extends Record<string, unknown> {
 export interface SupportSessionRow extends Record<string, unknown> {
   id: string; tenant_id: string; customer_id: string; channel_id: string;
   status: EnterpriseSupportSessionStatus; queue_id: string | null;
-  assigned_user_id: string | null; intent: string | null; priority: string | number;
+  assigned_user_id: string | null; active_agent_claim_id: string | null;
+  intent: string | null; priority: string | number;
   created_at: string | Date; queued_at: string | Date | null;
   started_at: string | Date | null; handoff_requested_at: string | Date | null;
   assigned_at: string | Date | null; ended_at: string | Date | null;

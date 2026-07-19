@@ -2,12 +2,18 @@ import type { EnterpriseSupportRagResponse } from "@translation/contracts";
 import type { SearchEnterpriseKnowledgeInput } from "./enterprise-knowledge.js";
 import type { EnterpriseTenantContext } from "./enterprise-tenant-context.js";
 import type {
+  CreateEnterpriseSupportQueueInput,
   CreateEnterpriseSupportChannelInput,
   CreateEnterpriseSupportSessionInput,
   EnterpriseSupportChannelRecord,
+  EnterpriseSupportQueueRecord,
   EnterpriseSupportSessionAggregate,
   EnterpriseSupportSessionStatus,
 } from "./enterprise-support.js";
+import type {
+  EnterpriseSupportAgentClaimRecord,
+  EnterpriseSupportQueueWorkItem,
+} from "./enterprise-support-agent-queue.js";
 import type {
   EnterpriseSupportInboundAuthorization,
   EnterpriseSupportInboundEvent,
@@ -18,6 +24,72 @@ import type {
 type StorageRequired = { status: "storage_required" };
 
 export interface EnterpriseSupportRepositoryRuntime {
+  createSupportQueue?(input: {
+    context: EnterpriseTenantContext;
+    queue: CreateEnterpriseSupportQueueInput;
+  }): Promise<
+    | { status: "created"; queue: EnterpriseSupportQueueRecord }
+    | { status: "conflict" }
+    | StorageRequired
+  >;
+  listSupportQueues?(input: {
+    context: EnterpriseTenantContext;
+  }): Promise<
+    | { status: "ready"; queues: EnterpriseSupportQueueRecord[] }
+    | StorageRequired
+  >;
+  listSupportQueueWorkItems?(input: {
+    context: EnterpriseTenantContext; queueId: string; limit: number; now: string;
+  }): Promise<
+    | { status: "ready"; workItems: EnterpriseSupportQueueWorkItem[] }
+    | { status: "queue_not_found" | "queue_unavailable" }
+    | StorageRequired
+  >;
+  claimSupportSession?(input: {
+    context: EnterpriseTenantContext; sessionId: string;
+    expectedSessionVersion: number; idempotencyKey: string; now: string;
+  }): Promise<
+    | { status: "claimed" | "replayed"; claim: EnterpriseSupportAgentClaimRecord;
+        session: EnterpriseSupportSessionAggregate["session"] }
+    | { status: "not_found" | "queue_not_found" | "queue_unavailable" |
+        "not_handoff_requested" | "already_claimed" | "conflict" |
+        "idempotency_conflict" }
+    | StorageRequired
+  >;
+  renewSupportAgentClaim?(input: {
+    context: EnterpriseTenantContext; claimId: string;
+    expectedClaimVersion: number; now: string;
+  }): Promise<
+    | { status: "renewed"; claim: EnterpriseSupportAgentClaimRecord }
+    | { status: "not_found" | "forbidden" | "claim_not_active" |
+        "claim_expired" | "queue_not_found" | "conflict" }
+    | StorageRequired
+  >;
+  releaseSupportAgentClaim?(input: {
+    context: EnterpriseTenantContext; claimId: string;
+    expectedClaimVersion: number; expectedSessionVersion: number;
+    idempotencyKey: string; reason: "agent_release" | "agent_disconnect";
+    now: string;
+  }): Promise<
+    | { status: "released" | "replayed"; claim: EnterpriseSupportAgentClaimRecord;
+        session: EnterpriseSupportSessionAggregate["session"] }
+    | { status: "not_found" | "forbidden" | "claim_not_active" |
+        "conflict" | "idempotency_conflict" }
+    | StorageRequired
+  >;
+  reassignSupportAgentClaim?(input: {
+    context: EnterpriseTenantContext; claimId: string; targetUserId: string;
+    expectedClaimVersion: number; expectedSessionVersion: number;
+    idempotencyKey: string; now: string;
+  }): Promise<
+    | { status: "reassigned" | "replayed";
+        previousClaim: EnterpriseSupportAgentClaimRecord;
+        claim: EnterpriseSupportAgentClaimRecord;
+        session: EnterpriseSupportSessionAggregate["session"] }
+    | { status: "not_found" | "forbidden" | "claim_not_active" |
+        "target_not_eligible" | "conflict" | "idempotency_conflict" }
+    | StorageRequired
+  >;
   createSupportChannel?(input: {
     context: EnterpriseTenantContext;
     channel: CreateEnterpriseSupportChannelInput;
@@ -83,6 +155,7 @@ export interface EnterpriseSupportRepositoryRuntime {
     occurredAt: string;
     queueId?: string;
     assignedUserId?: string;
+    activeAgentClaimId?: string;
     failureCode?: string;
   }): Promise<
     | { status: "updated"; aggregate: EnterpriseSupportSessionAggregate }
