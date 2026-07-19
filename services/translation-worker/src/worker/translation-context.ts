@@ -86,6 +86,21 @@ export function extractProtectedEntities(text: string) {
   return unique(patterns.flatMap((pattern) => text.match(pattern) ?? [])).slice(0, 32);
 }
 
+export function normalizeTranslationSourceText(
+  text: string,
+  sourceLanguage: CallRoomTranslationLanguage,
+) {
+  if (sourceLanguage !== "zh") return text;
+  return text.replace(
+    /((?:联系电话|手机号码|手机号|电话号码|电话|号码)\s*(?:是|为|[:：])?\s*)([0-9零〇○一二两三四五六七八九幺](?:[0-9零〇○一二两三四五六七八九幺\s,，、-]{4,})[0-9零〇○一二两三四五六七八九幺])/gu,
+    (match, label: string, digits: string) => {
+      const compact = digits.replace(/[\s,，、-]/gu, "");
+      if (Array.from(compact).length < 6) return match;
+      return `${label}${Array.from(compact, chinesePhoneDigit).join("")}`;
+    },
+  );
+}
+
 export function stripRepeatedContextPrefix(
   translation: string,
   previousSegments: TranslationContextSegment[] = [],
@@ -134,3 +149,24 @@ function unique(values: string[]) {
     return true;
   });
 }
+
+function chinesePhoneDigit(value: string) {
+  return chinesePhoneDigits[value] ?? value;
+}
+
+const chinesePhoneDigits: Record<string, string> = {
+  零: "0",
+  〇: "0",
+  "○": "0",
+  一: "1",
+  幺: "1",
+  二: "2",
+  两: "2",
+  三: "3",
+  四: "4",
+  五: "5",
+  六: "6",
+  七: "7",
+  八: "8",
+  九: "9",
+};

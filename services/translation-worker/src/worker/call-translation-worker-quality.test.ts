@@ -10,6 +10,7 @@ import type {
   CallAsrProvider,
   CallAudioFrame,
   CallAudioSpeakerRole,
+  CallTranslationProvider,
   TranscriptSegment,
 } from "./types.js";
 
@@ -46,6 +47,53 @@ describe("CallTranslationWorker quality pipeline", () => {
     expect(sink.eventsFor("call_mixed")[0]).toMatchObject({
       sourceLanguage: "zh",
       sourceText: "请检查 LiveKit API，然后部署到服务器。",
+    });
+  });
+
+  it("corrects a clearly Chinese turn after an English turn despite stale ASR metadata", async () => {
+    const asr = new SequenceAsrProvider([
+      {
+        segmentId: "english",
+        text: "What's your name?",
+        language: "en",
+        endpointReason: "silence",
+      },
+      {
+        segmentId: "chinese",
+        text: "你叫什么名字？",
+        language: "en",
+        endpointReason: "silence",
+      },
+    ]);
+    const translation = new RecordingTranslationProvider();
+    const sink = new RecordingSink();
+    const worker = newWorker(asr, sink, undefined, undefined, translation);
+
+    await worker.processAudioFrame(frame("call_language", "guest", 1));
+    await worker.processAudioFrame(frame("call_language", "guest", 2));
+
+    expect(sink.eventsFor("call_language")
+      .filter((event) => event.type === "transcript.final")
+      .map((event) => [event.sourceLanguage, event.targetLanguage]))
+      .toEqual([["en", "zh"], ["zh", "en"]]);
+  });
+
+  it("normalizes spoken phone digits for MT without changing the source caption", async () => {
+    const asr = new SequenceAsrProvider([
+      segment("phone", "联系电话是幺三八零零一三八零零。"),
+    ]);
+    const translation = new RecordingTranslationProvider();
+    const sink = new RecordingSink();
+    const worker = newWorker(asr, sink, undefined, undefined, translation);
+
+    await worker.processAudioFrame(frame("call_phone", "host", 1));
+
+    expect(translation.requests[0]).toMatchObject({
+      text: "联系电话是1380013800。",
+      protectedEntities: ["1380013800"],
+    });
+    expect(sink.eventsFor("call_phone")[0]).toMatchObject({
+      sourceText: "联系电话是幺三八零零一三八零零。",
     });
   });
 
@@ -198,4 +246,12 @@ class RoleAsrProvider implements CallAsrProvider {
     return null;
   }
   async closeCall(_callId: string) {}
+}
+
+class RecordingTranslationProvider implements CallTranslationProvider {
+  readonly requests: Parameters<CallTranslationProvider["translate"]>[0][] = [];
+  async translate(input: Parameters<CallTranslationProvider["translate"]>[0]) {
+    this.requests.push(input);
+    return "translated";
+  }
 }

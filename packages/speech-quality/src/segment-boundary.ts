@@ -22,6 +22,7 @@ const englishContinuationSuffixes = [
 export function shouldHoldForNextSegment(text: string, language: string) {
   const trimmed = text.trim();
   if (!trimmed || /[！？!?]$/u.test(trimmed)) return false;
+  if (isStructuredFieldPrefix(trimmed, language)) return true;
   if (/[,，、;；:：]$/u.test(trimmed)) return true;
 
   const normalized = trimmed.replace(/[.。]+$/u, "");
@@ -33,6 +34,13 @@ export function shouldHoldForNextSegment(text: string, language: string) {
   return language === "zh"
     ? hasChineseContinuationSuffix(trimmed)
     : hasEnglishContinuationSuffix(trimmed);
+}
+
+export function isStructuredFieldPrefix(text: string, language: string) {
+  if (language !== "zh") return false;
+  const normalized = text.trim().replace(/[.。]+$/u, "");
+  return /^(?:联系电话|手机号码|手机号|电话号码|电话|号码|订单金额|金额|订单号|收货地址|地址)(?:是|为|[:：])$/u
+    .test(normalized);
 }
 
 function hasChineseContinuationSuffix(text: string) {

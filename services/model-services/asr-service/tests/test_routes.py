@@ -40,6 +40,18 @@ def test_runtime_fingerprint_changes_with_effective_parameters() -> None:
     )
 
 
+def test_runtime_fingerprint_tracks_mixed_language_retry() -> None:
+    disabled = AsrConfig(provider="qwen3_asr")
+    enabled = AsrConfig(
+        provider="qwen3_asr",
+        qwen3_mixed_language_retry_enabled=True,
+    )
+
+    assert disabled.runtime_parameters() != enabled.runtime_parameters()
+    assert disabled.runtime_parameters()["mixedLanguageRetryEnabled"] is False
+    assert enabled.runtime_parameters()["mixedLanguageRetryEnabled"] is True
+
+
 def test_metrics_exposes_runtime_identity_without_secrets() -> None:
     client = TestClient(create_app(AsrConfig(
         api_key="asr-secret",

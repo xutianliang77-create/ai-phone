@@ -23,7 +23,6 @@ export class CallPipelineVersionState {
       TranscriptSegment,
       "segmentId" | "speechId" | "turnId" | "revision"
     >,
-    options: { forceNewGeneration?: boolean } = {},
   ): CallPipelineIdentity {
     const key = `${callId}:${speakerRole}:${transcript.segmentId}`;
     const revision = transcript.revision ?? 1;
@@ -32,8 +31,6 @@ export class CallPipelineVersionState {
       ? 1
       : revision > current.revision
         ? current.generation + 1
-        : revision === current.revision && options.forceNewGeneration
-          ? current.generation + 1
         : current.generation;
     if (!current || revision >= current.revision) {
       this.versions.set(key, { revision, generation });

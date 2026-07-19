@@ -55,6 +55,13 @@ when processed concurrently. The deployment defaults use 900, 1400, 900, and
 1100 ms endpoint silence respectively; tune them only through the corresponding
 `ASR_QWEN3_*_ENDPOINT_SILENCE_MS` variables.
 
+`ASR_QWEN3_MIXED_LANGUAGE_RETRY_ENABLED=false` remains off by default. In an
+isolated A/B run it can retry an `auto` segment with the English route when the
+first result contains only Chinese. The retry is accepted only when it restores
+an English prefix while preserving the complete Chinese suffix. Do not enable
+it in production until mixed-language accuracy and ASR latency both pass their
+staging gates, because eligible segments require a second inference.
+
 ## FireRedASR2-AED
 
 ```bash

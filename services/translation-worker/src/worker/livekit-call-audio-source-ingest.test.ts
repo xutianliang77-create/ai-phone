@@ -112,10 +112,74 @@ describe("LiveKitCallAudioSource ingest", () => {
       event: "stopped",
       receivedFrames: 1,
       dequeuedFrames: 1,
-      processedFrames: 0,
-      failedFrames: 1,
+      processedFrames: 1,
+      failedFrames: 0,
       inFlightFrames: 0,
       droppedFrames: 0,
     }));
   });
+
+  it("replaces the previous participant track after RTC reconnect", async () => {
+    const first = controlledAudioStream();
+    const second = controlledAudioStream();
+    const streams = new Map<unknown, ReadableStream<{
+      data: Int16Array;
+      sampleRate: number;
+    }>>();
+    const rtc = createFakeRtcNode({
+      audioStreamForTrack: (track) => streams.get(track)!,
+    });
+    const worker = new RecordingWorker();
+    const lifecycle: string[] = [];
+    const source = sourceForTest(rtc, worker, {
+      onTrackLifecycle: (event) => lifecycle.push(event.event),
+    });
+    const participant = {
+      identity: "guest-one",
+      metadata: JSON.stringify({ participantRole: "guest" }),
+    };
+    const firstTrack = new rtc.RemoteAudioTrack();
+    const secondTrack = new rtc.RemoteAudioTrack();
+    streams.set(firstTrack, first.stream);
+    streams.set(secondTrack, second.stream);
+
+    await source.start();
+    rtc.room.emit("trackSubscribed", firstTrack, {}, participant);
+    first.push();
+    await eventually(() => worker.frames.length === 1);
+    rtc.room.emit("trackSubscribed", secondTrack, {}, participant);
+    await eventually(() => lifecycle.filter((event) =>
+      event === "audio_leg_started").length === 2);
+    for (let index = 0; index < 3; index += 1) {
+      first.push();
+      second.push();
+    }
+    await eventually(() => worker.frames.length >= 4);
+    await source.stop();
+
+    expect(worker.frames.map((frame) => frame.sequence)).toEqual([1, 2, 3, 4]);
+  });
 });
+
+function controlledAudioStream() {
+  let controller: ReadableStreamDefaultController<{
+    data: Int16Array;
+    sampleRate: number;
+  }>;
+  const stream = new ReadableStream({
+    start(value) {
+      controller = value;
+    },
+  });
+  return {
+    stream,
+    push() {
+      try {
+        controller.enqueue({ data: new Int16Array([1, -1]), sampleRate: 24000 });
+        return true;
+      } catch {
+        return false;
+      }
+    },
+  };
+}

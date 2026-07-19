@@ -13,6 +13,7 @@ import type { CallAudioSpeakerRole } from "./types.js";
 interface PendingSipTrack {
   track: unknown;
   speakerRole: CallAudioSpeakerRole;
+  sourceKey: string;
   identity: string;
   rtc: RtcNodeModule;
 }
@@ -25,6 +26,7 @@ interface LiveKitCallSipTrackGateOptions {
     track: unknown,
     speakerRole: CallAudioSpeakerRole,
     rtc: RtcNodeModule,
+    sourceKey: string,
   ) => Promise<void>;
 }
 
@@ -37,6 +39,7 @@ export class LiveKitCallSipTrackGate {
   async allowTrack(input: {
     track: unknown;
     speakerRole: CallAudioSpeakerRole;
+    sourceKey: string;
     participant: unknown;
     rtc: RtcNodeModule;
   }) {
@@ -50,6 +53,7 @@ export class LiveKitCallSipTrackGate {
     this.pendingTracks.set(input.track, {
       track: input.track,
       speakerRole: input.speakerRole,
+      sourceKey: input.sourceKey,
       identity: sipParticipant.identity,
       rtc: input.rtc,
     });
@@ -69,6 +73,7 @@ export class LiveKitCallSipTrackGate {
         pending.track,
         pending.speakerRole,
         pending.rtc,
+        pending.sourceKey,
       );
     }
   }

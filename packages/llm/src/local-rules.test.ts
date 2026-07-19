@@ -4,11 +4,11 @@ import { applyAsrLocalRules } from "./local-rules.js";
 describe("ASR local rules", () => {
   it("repairs known model and product terms", () => {
     const result = applyAsrLocalRules(
-      "我们测试同船，Twin3ASR、HiMT2、BoxCPM2、HiM T Two、Vox CPM Two 和 R120。",
+      "我们测试同船，Twin3ASR、HiMT2、BoxCPM2、HiM T Two、Vox CPM Two、R120、A杠120 和 A杠幺二零。",
     );
 
     expect(result.text).toBe(
-      "我们测试同传，Qwen3 ASR、Hy-MT2、VoxCPM2、Hy-MT2、VoxCPM2 和 A-120。",
+      "我们测试同传，Qwen3 ASR、Hy-MT2、VoxCPM2、Hy-MT2、VoxCPM2、A-120、A-120 和 A-120。",
     );
     expect(result.operations).toContain("term_correction");
     expect(result.operations).toContain("identifier_correction");

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   CallTranslationContextStore,
   extractProtectedEntities,
+  normalizeTranslationSourceText,
   stripRepeatedContextPrefix,
 } from "./translation-context.js";
 
@@ -108,4 +109,17 @@ it("removes an accidental previous-context echo", () => {
     "Previous sentence. Current translation.",
     [{ sourceText: "上一句", translatedText: "Previous sentence." }],
   )).toBe("Current translation.");
+});
+
+it("normalizes spoken Chinese phone digits only for the MT source", () => {
+  expect(normalizeTranslationSourceText(
+    "联系电话是幺三八零零一三八零零。",
+    "zh",
+  )).toBe("联系电话是1380013800。");
+  expect(normalizeTranslationSourceText(
+    "联系电话是幺三八零零，一三八零零。",
+    "zh",
+  )).toBe("联系电话是1380013800。");
+  expect(normalizeTranslationSourceText("订单金额是一千二百三十四元。", "zh"))
+    .toBe("订单金额是一千二百三十四元。");
 });

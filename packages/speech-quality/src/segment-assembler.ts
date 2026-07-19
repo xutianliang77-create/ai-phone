@@ -1,5 +1,8 @@
 import type { SpeechTranscript } from "./speech-transcript.js";
-import { shouldHoldForNextSegment } from "./segment-boundary.js";
+import {
+  isStructuredFieldPrefix,
+  shouldHoldForNextSegment,
+} from "./segment-boundary.js";
 import { canonicalSegmentText, mergeTranscriptParts } from "./segment-text.js";
 
 interface PendingSegment {
@@ -23,6 +26,7 @@ export interface SegmentAssemblerOptions {
   maxBufferedCharacters?: number;
   maxBufferMs?: number;
   maxContinuationBufferMs?: number;
+  maxStructuredBufferMs?: number;
   maxRememberedFinals?: number;
   duplicateTextWindowMs?: number;
 }
@@ -36,6 +40,7 @@ const DEFAULT_MAX_BUFFERED_SEGMENTS = 3;
 const DEFAULT_MAX_BUFFERED_CHARACTERS = 180;
 const DEFAULT_MAX_BUFFER_MS = 1800;
 const DEFAULT_MAX_CONTINUATION_BUFFER_MS = 5000;
+const DEFAULT_MAX_STRUCTURED_BUFFER_MS = 7000;
 const DEFAULT_MAX_REMEMBERED_FINALS = 64;
 const DEFAULT_DUPLICATE_TEXT_WINDOW_MS = 1200;
 
@@ -44,6 +49,7 @@ export class SegmentAssembler {
   private readonly maxBufferedCharacters: number;
   private readonly maxBufferMs: number;
   private readonly maxContinuationBufferMs: number;
+  private readonly maxStructuredBufferMs: number;
   private readonly maxRememberedFinals: number;
   private readonly duplicateTextWindowMs: number;
   private readonly sessions = new Map<string, SessionAssemblyState>();
@@ -54,6 +60,8 @@ export class SegmentAssembler {
     this.maxBufferMs = options.maxBufferMs ?? DEFAULT_MAX_BUFFER_MS;
     this.maxContinuationBufferMs = options.maxContinuationBufferMs ??
       DEFAULT_MAX_CONTINUATION_BUFFER_MS;
+    this.maxStructuredBufferMs = options.maxStructuredBufferMs ??
+      DEFAULT_MAX_STRUCTURED_BUFFER_MS;
     this.maxRememberedFinals = options.maxRememberedFinals ?? DEFAULT_MAX_REMEMBERED_FINALS;
     this.duplicateTextWindowMs = options.duplicateTextWindowMs ?? DEFAULT_DUPLICATE_TEXT_WINDOW_MS;
   }
@@ -165,6 +173,9 @@ export class SegmentAssembler {
   }
 
   private bufferMs(pending: PendingSegment) {
+    if (pending.parts.some((part) =>
+      isStructuredFieldPrefix(part.text, part.language)
+    )) return this.maxStructuredBufferMs;
     return pending.parts.some(isMaxDuration)
       ? this.maxContinuationBufferMs
       : this.maxBufferMs;

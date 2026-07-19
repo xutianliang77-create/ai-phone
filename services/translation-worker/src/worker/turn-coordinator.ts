@@ -29,6 +29,20 @@ export class TurnCoordinator {
       });
       return dominantLanguage;
     }
+    if (!profile.mixedLanguage && dominantLanguage !== state.language &&
+      isUnambiguousTurn(input.text, dominantLanguage)) {
+      state.language = dominantLanguage;
+      state.candidate = undefined;
+      state.candidateTurns = 0;
+      return dominantLanguage;
+    }
+    if (!profile.mixedLanguage &&
+      dominantLanguage !== input.fallbackLanguage) {
+      state.language = dominantLanguage;
+      state.candidate = undefined;
+      state.candidateTurns = 0;
+      return dominantLanguage;
+    }
     if (profile.mixedLanguage &&
       dominantLanguage !== input.fallbackLanguage) {
       state.candidate = undefined;
@@ -70,4 +84,15 @@ export class TurnCoordinator {
 
 function stateKey(callId: string, speakerRole: CallAudioSpeakerRole) {
   return `${callId}:${speakerRole}`;
+}
+
+function isUnambiguousTurn(
+  text: string,
+  language: CallRoomTranslationLanguage,
+) {
+  const chineseChars = text.match(/[\u4e00-\u9fff]/gu)?.length ?? 0;
+  const englishWords = text.match(/[A-Za-z]+/gu)?.length ?? 0;
+  return language === "zh"
+    ? chineseChars >= 2 && englishWords === 0
+    : englishWords >= 2 && chineseChars === 0;
 }

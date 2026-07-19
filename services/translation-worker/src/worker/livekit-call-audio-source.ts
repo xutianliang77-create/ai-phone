@@ -10,6 +10,11 @@ import {
 } from "./livekit-tts-audio-sink.js";
 import { deferred } from "./livekit-call-audio-utils.js";
 import { LiveKitCallAudioTrackRuntime } from "./livekit-call-audio-track-runtime.js";
+import {
+  audioSourceKey,
+  LiveKitCallAudioTrackRegistry,
+  loadRtcNodeModule,
+} from "./livekit-call-audio-source-runtime.js";
 import { LiveKitCallDiagnostics } from "./livekit-call-diagnostics.js";
 import { LiveKitCallSipTrackGate } from "./livekit-call-sip-track-gate.js";
 import { LiveKitCallTrackLifecycle } from "./livekit-call-track-lifecycle.js";
@@ -47,6 +52,7 @@ export class LiveKitCallAudioSource {
   private readonly startedTracks = new Set<unknown>();
   private readonly trackRuntimes = new Set<LiveKitCallAudioTrackRuntime>();
   private readonly trackTasks = new Set<Promise<void>>();
+  private readonly activeAudioTracks = new LiveKitCallAudioTrackRegistry();
   private readonly disconnected = deferred<void>();
   private readonly pipelineReady = deferred<void>();
   private readonly sipTrackGate: LiveKitCallSipTrackGate;
@@ -59,15 +65,15 @@ export class LiveKitCallAudioSource {
       callId: options.callId,
       statusClient: options.sipStatusClient,
       reportError: (error) => this.reportError(error),
-      startAudioTrack: (track, speakerRole, rtc) =>
-        this.startAudioTrack(track, speakerRole, rtc),
+      startAudioTrack: (track, speakerRole, rtc, sourceKey) =>
+        this.startAudioTrack(track, speakerRole, rtc, sourceKey),
     });
   }
 
   async start() {
     if (!this.options.tokenClient) throw new Error("Worker room token client is required");
     const token = await this.options.tokenClient.createWorkerToken(this.options.callId);
-    const rtc = await this.loadRtcNode();
+    const rtc = await loadRtcNodeModule(this.options.loadRtcNode);
     const room = new rtc.Room();
     this.rtc = rtc;
     this.room = room;
@@ -177,13 +183,15 @@ export class LiveKitCallAudioSource {
       rtc,
     );
     if (!speakerRole) return;
+    const sourceKey = audioSourceKey(speakerRole, participant);
     if (!await this.sipTrackGate.allowTrack({
       track,
       speakerRole,
+      sourceKey,
       participant,
       rtc,
     })) return;
-    await this.startAudioTrack(track, speakerRole, rtc);
+    await this.startAudioTrack(track, speakerRole, rtc, sourceKey);
   }
 
   private async handleParticipantAttributesChanged(
@@ -196,9 +204,12 @@ export class LiveKitCallAudioSource {
     track: unknown,
     speakerRole: CallAudioSpeakerRole,
     rtc: RtcNodeModule,
+    sourceKey: string,
   ) {
     if (this.startedTracks.has(track)) return;
     this.startedTracks.add(track);
+    await this.activeAudioTracks.stopPrevious(sourceKey);
+    if (this.ingestStopped) return;
     this.trackLifecycle.legStarted(speakerRole);
 
     const stream = new rtc.AudioStream(track, {
@@ -225,10 +236,12 @@ export class LiveKitCallAudioSource {
     task = runtime.run()
       .catch((error) => this.handleAudioTrackError(error))
       .finally(() => {
+        this.activeAudioTracks.deleteIfCurrent(sourceKey, runtime);
         this.trackRuntimes.delete(runtime);
         this.trackTasks.delete(task);
       });
     this.trackTasks.add(task);
+    this.activeAudioTracks.set(sourceKey, runtime, task);
   }
 
   private handleAudioTrackError(error: unknown) {
@@ -273,17 +286,6 @@ export class LiveKitCallAudioSource {
     return Number.isInteger(configured) && configured > 0
       ? configured
       : DEFAULT_AUDIO_INGEST_MAX_FRAMES;
-  }
-
-  private async loadRtcNode() {
-    try {
-      return await (this.options.loadRtcNode ?? loadRtcNode)();
-    } catch (error) {
-      throw new Error(
-        "LiveKit Node RTC runtime is unavailable. Install @livekit/rtc-node before running the Translation Worker.",
-        { cause: error },
-      );
-    }
   }
 
   private attachRoomListeners(room: RtcRoom, rtc: RtcNodeModule) {
@@ -340,10 +342,4 @@ export class LiveKitCallAudioSource {
       } : {}),
     }));
   }
-}
-
-async function loadRtcNode(): Promise<RtcNodeModule> {
-  const dynamicImport = new Function("name", "return import(name)") as
-    (name: string) => Promise<RtcNodeModule>;
-  return dynamicImport("@livekit/rtc-node");
 }

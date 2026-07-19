@@ -46,7 +46,7 @@ describe("Call pipeline cancellation", () => {
     expect(transcriptEvents(sink, "call_refine")).toMatchObject([
       { revision: 0, pipelineGeneration: 1, text: "call fifteen" },
       {
-        revision: 0,
+        revision: 1,
         pipelineGeneration: 2,
         text: "call fifty",
         rawText: "call fifteen",
@@ -58,7 +58,7 @@ describe("Call pipeline cancellation", () => {
     translation.resolve(1, "新译文");
     await waitUntil(() => translationEvents(sink, "call_refine").length === 1);
     expect(translationEvents(sink, "call_refine")).toMatchObject([{
-      revision: 0,
+      revision: 1,
       pipelineGeneration: 2,
       translatedText: "新译文",
     }]);

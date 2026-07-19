@@ -2,11 +2,11 @@ import { describe, expect, it } from "vitest";
 import { TurnCoordinator } from "./turn-coordinator.js";
 
 describe("TurnCoordinator", () => {
-  it("requires two consecutive turns before switching a leg language", () => {
+  it("requires two consecutive ambiguous tokens before switching a leg language", () => {
     const coordinator = new TurnCoordinator();
     expect(language(coordinator, "我们先检查服务。", "zh")).toBe("zh");
-    expect(language(coordinator, "the service is ready", "en")).toBe("zh");
-    expect(language(coordinator, "the trunk is connected", "en")).toBe("en");
+    expect(language(coordinator, "API", "en")).toBe("zh");
+    expect(language(coordinator, "RTC", "en")).toBe("en");
   });
 
   it("keeps the stable language for mixed Chinese and English turns", () => {
@@ -24,6 +24,13 @@ describe("TurnCoordinator", () => {
       "en",
     )).toBe("zh");
     expect(language(coordinator, "the trunk is connected", "en")).toBe("en");
+  });
+
+  it("trusts an unambiguous monolingual turn when ASR metadata conflicts", () => {
+    const coordinator = new TurnCoordinator();
+    expect(language(coordinator, "What's your name?", "en")).toBe("en");
+    expect(language(coordinator, "你叫什么名字？", "zh")).toBe("zh");
+    expect(language(coordinator, "the service is ready", "zh")).toBe("en");
   });
 
   it("classifies explicit boundaries but keeps max-duration continuations", () => {

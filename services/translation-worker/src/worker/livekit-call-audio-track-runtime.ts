@@ -6,6 +6,7 @@ import {
   int16Base64,
   normalizeSampleRate,
 } from "./livekit-call-audio-utils.js";
+import { isCallRoomEndedError } from "./call-room-event-client.js";
 import type { RtcAudioFrame } from "./livekit-call-audio-source-types.js";
 import type {
   CallAudioFrame,
@@ -30,6 +31,7 @@ interface LiveKitCallAudioTrackRuntimeOptions {
 export class LiveKitCallAudioTrackRuntime {
   private readonly reader: ReadableStreamDefaultReader<RtcAudioFrame>;
   private readonly queue: AudioIngestRingBuffer<CallAudioFrame>;
+  private stopped = false;
 
   constructor(private readonly options: LiveKitCallAudioTrackRuntimeOptions) {
     this.reader = options.stream.getReader();
@@ -45,17 +47,18 @@ export class LiveKitCallAudioTrackRuntime {
   async run() {
     await this.options.pipelineReady;
     await Promise.all([this.readAudioStream(), this.consumeAudio()]);
-    if (!this.options.isStopped()) this.queue.report("drained");
+    if (!this.isStopped()) this.queue.report("drained");
   }
 
   stop(discardPending: boolean) {
+    this.stopped = true;
     this.queue.close({ discardPending });
     void this.reader.cancel().catch(() => undefined);
   }
 
   private async readAudioStream() {
     try {
-      while (!this.options.isStopped()) {
+      while (!this.isStopped()) {
         const result = await this.reader.read();
         if (result.done) break;
         this.queue.enqueue({
@@ -70,24 +73,32 @@ export class LiveKitCallAudioTrackRuntime {
         });
       }
     } catch (error) {
-      if (!this.options.isStopped()) throw error;
+      if (!this.isStopped()) throw error;
     } finally {
-      this.queue.close({ discardPending: this.options.isStopped() });
+      this.queue.close({ discardPending: this.isStopped() });
       this.reader.releaseLock();
     }
   }
 
   private async consumeAudio() {
-    while (!this.options.isStopped()) {
+    while (!this.isStopped()) {
       const frame = await this.queue.dequeue();
       if (!frame) return;
       try {
         await this.options.worker.processAudioFrame(frame);
         this.queue.markProcessed(frame);
       } catch (error) {
+        if (isCallRoomEndedError(error)) {
+          this.queue.markProcessed(frame);
+          throw error;
+        }
         this.queue.markFailed();
         throw error;
       }
     }
+  }
+
+  private isStopped() {
+    return this.stopped || this.options.isStopped();
   }
 }

@@ -22,7 +22,8 @@ import type {
   CallTtsProvider,
   TtsVoiceConfig,
 } from "./types.js";
-import { CallTranslationContextStore } from "./translation-context.js";
+import { CallTranslationContextStore, normalizeTranslationSourceText } from
+  "./translation-context.js";
 
 export class CallCaptionPipeline {
   private readonly state = new CallPipelineVersionState();
@@ -58,7 +59,6 @@ export class CallCaptionPipeline {
   warmupTts(callId: string, signal: AbortSignal) {
     return this.ttsQueue.warmup(callId, signal);
   }
-
   async closeCall(callId: string) {
     const results = await Promise.allSettled([
       this.options.translationProvider.closeCall?.(callId),
@@ -121,11 +121,8 @@ export class CallCaptionPipeline {
     speakerRole: CallAudioSpeakerRole,
     transcript: BufferedCallTranscript["transcript"],
     refined?: Awaited<ReturnType<CallTranscriptRefiner["refine"]>>,
-    forceNewGeneration = false,
   ) {
-    const identity = this.state.identity(callId, speakerRole, transcript, {
-      forceNewGeneration,
-    });
+    const identity = this.state.identity(callId, speakerRole, transcript);
     if (this.state.isPublished(identity)) return null;
     const signal = this.state.activate(identity);
 
@@ -206,26 +203,29 @@ export class CallCaptionPipeline {
       ...input.transcript,
       speechId: input.identity.speechId,
       turnId: input.identity.turnId,
-      revision: input.identity.revision,
+      revision: input.identity.revision + 1,
       text: refined.text,
-    }, refined, true);
+    }, refined);
   }
 
   private async translate(input: CaptionTranslationInput) {
     input.pipelineTiming.translationStartedAtMs = this.options.nowMs();
     let translatedText: string;
     try {
+      const providerText = normalizeTranslationSourceText(
+        input.text, input.sourceLanguage,
+      );
       const context = this.translationContext.prepare({
         callId: input.callId,
         speakerRole: input.speakerRole,
         speechId: input.identity.speechId,
-        text: input.text,
+        text: providerText,
         sourceLanguage: input.sourceLanguage,
         targetLanguage: input.targetLanguage,
       });
       const translationInput = {
           callId: input.callId,
-          text: input.text,
+          text: providerText,
           sourceLanguage: input.sourceLanguage,
           targetLanguage: input.targetLanguage,
           speechId: input.identity.speechId,

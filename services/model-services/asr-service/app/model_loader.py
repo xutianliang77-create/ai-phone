@@ -83,6 +83,7 @@ def load_engine(config: AsrConfig) -> AsrEngine:
             vad_energy_threshold=config.qwen3_vad_energy_threshold,
             context=config.qwen3_context,
             english_context=config.qwen3_english_context,
+            mixed_language_retry_enabled=config.qwen3_mixed_language_retry_enabled,
             vad_provider=vad_provider,
             endpoint_policies=qwen3_endpoint_policies(config),
         )
@@ -101,6 +102,7 @@ def load_engine(config: AsrConfig) -> AsrEngine:
             vad_energy_threshold=config.qwen3_vad_energy_threshold,
             context=config.qwen3_context,
             english_context=config.qwen3_english_context,
+            mixed_language_retry_enabled=config.qwen3_mixed_language_retry_enabled,
             vad_provider=vad_provider,
             endpoint_policies=qwen3_endpoint_policies(config),
             runner=LocalQwen3HfAsrRunner(

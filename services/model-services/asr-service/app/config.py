@@ -47,6 +47,7 @@ class AsrConfig:
     qwen3_vad_energy_threshold: int = 350
     qwen3_context: str = ""
     qwen3_english_context: str = ""
+    qwen3_mixed_language_retry_enabled: bool = False
 
     def runtime_parameters(self) -> dict[str, object]:
         common: dict[str, object] = {
@@ -98,6 +99,7 @@ class AsrConfig:
             "vadEnergyThreshold": self.qwen3_vad_energy_threshold,
             "contextSha256": _text_fingerprint(self.qwen3_context),
             "englishContextSha256": _text_fingerprint(self.qwen3_english_context),
+            "mixedLanguageRetryEnabled": self.qwen3_mixed_language_retry_enabled,
         }
 
 
@@ -173,6 +175,10 @@ def load_config() -> AsrConfig:
         ),
         qwen3_context=os.getenv("ASR_QWEN3_CONTEXT", ""),
         qwen3_english_context=os.getenv("ASR_QWEN3_ENGLISH_CONTEXT", ""),
+        qwen3_mixed_language_retry_enabled=(
+            os.getenv("ASR_QWEN3_MIXED_LANGUAGE_RETRY_ENABLED", "false").lower()
+            == "true"
+        ),
     )
 
 

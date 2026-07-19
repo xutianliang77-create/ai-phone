@@ -174,7 +174,11 @@ function languageName(language: CallRoomTranslationLanguage) {
 }
 
 function stripThinking(content: string) {
-  return content.replace(/<think>[\s\S]*?<\/think>/gi, "").trim();
+  return content
+    .replace(/<think>[\s\S]*?<\/think>/gi, "")
+    .trim()
+    .replace(/^(?:\[\s*(?:to be translated text|text to be translated)\s*\]|【\s*(?:to be translated text|text to be translated)\s*】)\s*/iu, "")
+    .trim();
 }
 
 function sourceTextPayload(

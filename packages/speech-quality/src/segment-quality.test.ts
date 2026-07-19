@@ -38,4 +38,23 @@ describe("shared speech quality", () => {
       processingQueueReleasedAtMs: 125,
     });
   });
+
+  it("holds an incomplete structured field long enough for its value", () => {
+    const assembler = new SegmentAssembler();
+    expect(assembler.push("session", {
+      segmentId: "amount-label",
+      text: "订单金额是。",
+      language: "zh",
+      endpointReason: "silence",
+    }, 0).ready).toEqual([]);
+
+    const result = assembler.push("session", {
+      segmentId: "amount-value",
+      text: "一千两百三十四点五六元。",
+      language: "zh",
+      endpointReason: "silence",
+    }, 5200);
+
+    expect(result.ready[0].text).toBe("订单金额是一千两百三十四点五六元。");
+  });
 });

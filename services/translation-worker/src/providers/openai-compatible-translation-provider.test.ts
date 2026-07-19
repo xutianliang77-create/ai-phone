@@ -131,6 +131,33 @@ describe("OpenAiCompatibleTranslationProvider", () => {
     })).rejects.toThrow("assistant-style non-translation");
   });
 
+  it("removes model translation-label scaffolding from otherwise valid text", async () => {
+    const outputs = [
+      "[To be translated text] What is that?",
+      "[Text to be translated] Look closely.",
+      "【To be translated text】 Save the subtitles.",
+    ];
+    const provider = new OpenAiCompatibleTranslationProvider({
+      baseUrl: "http://127.0.0.1:1234/v1",
+      model: "chatty-model",
+      timeoutMs: 1000,
+      maxTokens: 80,
+      fetchFn: async () => response(200, {
+        choices: [{ message: { content: outputs.shift() } }],
+      }),
+    });
+
+    const input = {
+      text: "那是啥？",
+      sourceLanguage: "zh" as const,
+      targetLanguage: "en" as const,
+      signal: new AbortController().signal,
+    };
+    await expect(provider.translate(input)).resolves.toBe("What is that?");
+    await expect(provider.translate(input)).resolves.toBe("Look closely.");
+    await expect(provider.translate(input)).resolves.toBe("Save the subtitles.");
+  });
+
   it("propagates pipeline cancellation to the active HTTP request", async () => {
     const controller = new AbortController();
     let requestSignal: AbortSignal | null = null;

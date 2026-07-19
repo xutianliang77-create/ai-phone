@@ -23,6 +23,27 @@ class FakeQwen3Runner:
         return self.text
 
 
+class LanguageAwareQwen3Runner(FakeQwen3Runner):
+    def __init__(self, auto_text: str, english_text: str) -> None:
+        super().__init__(auto_text)
+        self.auto_text = auto_text
+        self.english_text = english_text
+        self.languages: list[str | None] = []
+
+    def transcribe(self, audio_path: str, language: str | None, context: str) -> str:
+        super().transcribe(audio_path, language, context)
+        self.languages.append(language)
+        return self.english_text if language == "English" else self.auto_text
+
+
+class FailingEnglishQwen3Runner(LanguageAwareQwen3Runner):
+    def transcribe(self, audio_path: str, language: str | None, context: str) -> str:
+        if language == "English":
+            self.languages.append(language)
+            raise RuntimeError("isolated retry failure")
+        return super().transcribe(audio_path, language, context)
+
+
 async def test_qwen3_engine_flushes_buffered_transcript() -> None:
     runner = FakeQwen3Runner("今天下午三点我们讨论产品计划")
     engine = qwen_engine(runner)
@@ -100,6 +121,66 @@ def test_qwen3_language_maps_app_language_codes() -> None:
     assert qwen3_language("en") == "English"
     assert qwen3_language("en-US") == "English"
     assert qwen3_language("auto") is None
+
+
+async def test_qwen3_engine_can_restore_strict_mixed_language_prefix() -> None:
+    runner = LanguageAwareQwen3Runner(
+        auto_text="你叫什么名字？",
+        english_text="What's your name?你叫什么名字？",
+    )
+    engine = qwen_engine(runner, mixed_language_retry_enabled=True)
+
+    await engine.transcribe(frame(sequence=1, source_language="auto"))
+    result = await engine.flush("sess_1", "auto", "en")
+
+    assert result is not None
+    assert result.text == "What's your name?你叫什么名字？"
+    assert runner.languages == [None, "English"]
+
+
+async def test_qwen3_engine_does_not_retry_mixed_language_by_default() -> None:
+    runner = LanguageAwareQwen3Runner(
+        auto_text="你叫什么名字？",
+        english_text="What's your name?你叫什么名字？",
+    )
+    engine = qwen_engine(runner)
+
+    await engine.transcribe(frame(sequence=1, source_language="auto"))
+    result = await engine.flush("sess_1", "auto", "en")
+
+    assert result is not None
+    assert result.text == "你叫什么名字？"
+    assert runner.languages == [None]
+
+
+async def test_qwen3_engine_does_not_retry_explicit_chinese() -> None:
+    runner = LanguageAwareQwen3Runner(
+        auto_text="你叫什么名字？",
+        english_text="What's your name?你叫什么名字？",
+    )
+    engine = qwen_engine(runner, mixed_language_retry_enabled=True)
+
+    await engine.transcribe(frame(sequence=1, source_language="zh"))
+    result = await engine.flush("sess_1", "zh", "en")
+
+    assert result is not None
+    assert result.text == "你叫什么名字？"
+    assert runner.languages == ["Chinese"]
+
+
+async def test_qwen3_engine_preserves_primary_when_retry_fails() -> None:
+    runner = FailingEnglishQwen3Runner(
+        auto_text="你叫什么名字？",
+        english_text="",
+    )
+    engine = qwen_engine(runner, mixed_language_retry_enabled=True)
+
+    await engine.transcribe(frame(sequence=1, source_language="auto"))
+    result = await engine.flush("sess_1", "auto", "en")
+
+    assert result is not None
+    assert result.text == "你叫什么名字？"
+    assert runner.languages == [None, "English"]
 
 
 async def test_qwen3_engine_uses_empty_context_for_english() -> None:
@@ -191,6 +272,7 @@ async def test_qwen3_engine_keeps_real_speech_with_domain_terms() -> None:
 def qwen_engine(
     runner: FakeQwen3Runner,
     min_audio_ms: int = 500,
+    mixed_language_retry_enabled: bool = False,
 ) -> Qwen3AsrEngine:
     return Qwen3AsrEngine(
         model_dir="/unused",
@@ -205,6 +287,7 @@ def qwen_engine(
         vad_energy_threshold=350,
         context="",
         english_context="",
+        mixed_language_retry_enabled=mixed_language_retry_enabled,
         runner=runner,
     )
 

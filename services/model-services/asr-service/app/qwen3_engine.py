@@ -5,6 +5,7 @@ from typing import Protocol
 from app.audio_buffer import RealtimePcmSegmenter
 from app.endpoint_policy import EndpointPolicy
 from app.qwen3_context_guard import is_context_echo
+from app.qwen3_mixed_language import retry_mixed_language_prefix
 from app.schemas import LanguageCode, TranslationLanguageCode
 from app.schemas import AsrTranscribeRequest, AsrTranscribeResponse
 from app.sensevoice_engine import normalize_transcript, transcript_language, write_temp_wav
@@ -63,6 +64,7 @@ class Qwen3AsrEngine:
         vad_energy_threshold: int,
         context: str = "",
         english_context: str = "",
+        mixed_language_retry_enabled: bool = False,
         runner: Qwen3Runner | None = None,
         vad_provider: VadProvider | None = None,
         endpoint_policies: dict[str, EndpointPolicy] | None = None,
@@ -87,6 +89,7 @@ class Qwen3AsrEngine:
         self._session_prompt_by_session: dict[str, tuple[list[str], list[tuple[str, str]]]] = {}
         self.context = context
         self.english_context = english_context
+        self.mixed_language_retry_enabled = mixed_language_retry_enabled
 
     async def transcribe(
         self,
@@ -197,6 +200,21 @@ class Qwen3AsrEngine:
                 language,
                 context,
             )
+            if self.mixed_language_retry_enabled:
+                retry_context = qwen3_context(
+                    source_language="en",
+                    context=self.context,
+                    english_context=self.english_context,
+                    hotwords=hotwords,
+                    corrections=corrections,
+                )
+                text = await retry_mixed_language_prefix(
+                    transcribe=self.runner.transcribe,
+                    audio_path=audio_path,
+                    source_language=source_language,
+                    primary_text=text,
+                    retry_context=retry_context,
+                )
         finally:
             os.unlink(audio_path)
 

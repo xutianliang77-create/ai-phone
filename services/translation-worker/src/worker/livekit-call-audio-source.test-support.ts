@@ -70,7 +70,7 @@ export function sourceForTest(
   overrides: Pick<
     LiveKitCallAudioSourceOptions,
     "audioIngestMaxFrames" | "onCallEnded" | "onDiagnostics" |
-      "onIngestMetrics" | "rtcStatsIntervalMs"
+      "onIngestMetrics" | "onTrackLifecycle" | "rtcStatsIntervalMs"
   > = {},
 ) {
   return new LiveKitCallAudioSource({
@@ -101,6 +101,10 @@ export function sourceForTest(
 export function createFakeRtcNode(options: {
   localPublishing?: boolean;
   frameCount?: number;
+  audioStreamForTrack?: (track: unknown) => ReadableStream<{
+    data: Int16Array;
+    sampleRate: number;
+  }>;
 } = {}) {
   class RemoteAudioTrack {}
   class FakeAudioStream extends ReadableStream<{
@@ -121,6 +125,11 @@ export function createFakeRtcNode(options: {
       });
     }
   }
+  const AudioStream = options.audioStreamForTrack
+    ? function AudioStream(track: unknown) {
+      return options.audioStreamForTrack!(track);
+    }
+    : FakeAudioStream;
   const room = new FakeRoom(options.localPublishing);
   const module: Record<string, unknown> = {
     Room: class {
@@ -133,7 +142,7 @@ export function createFakeRtcNode(options: {
       TrackPublished: "trackPublished",
       Disconnected: "disconnected",
     },
-    AudioStream: FakeAudioStream,
+    AudioStream,
     RemoteAudioTrack,
     async dispose() {},
   };
