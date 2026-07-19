@@ -61,7 +61,16 @@ export function registerCallLinkInternalRoutes(app: FastifyInstance) {
       if (!record) {
         return sendError(reply, 404, "call_link_not_found", "Call link not found");
       }
-      if (record.status === "ended" || Date.now() > Date.parse(record.expiresAt)) {
+      if (record.status === "ended") {
+        return {
+          callId: record.callId,
+          sessionId: record.sessionId,
+          status: "ended",
+          callEnded: true,
+          publishedEvents: [],
+        };
+      }
+      if (Date.now() > Date.parse(record.expiresAt)) {
         return sendError(reply, 410, "call_link_expired", "Call link expired");
       }
       const parsed = await parseCallRoomEventRequest(request.body, record);

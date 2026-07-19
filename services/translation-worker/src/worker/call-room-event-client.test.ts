@@ -101,6 +101,33 @@ describe("HttpCallRoomEventClient", () => {
     expect(requestCount).toBe(1);
   });
 
+  it("turns a terminal HTTP 200 acknowledgement into a terminal call signal", async () => {
+    let requestCount = 0;
+    const client = new HttpCallRoomEventClient({
+      apiBaseUrl: "http://127.0.0.1:3100",
+      timeoutMs: 100,
+      fetchFn: (async () => {
+        requestCount += 1;
+        return jsonResponse(200, { callEnded: true });
+      }) as typeof fetch,
+    });
+    const event = {
+      type: "worker.status" as const,
+      segmentId: "worker",
+      speakerRole: "worker" as const,
+      sourceLanguage: "en" as const,
+      targetLanguage: "zh" as const,
+      text: "ending",
+      timestampMs: 1,
+    };
+
+    await expect(client.publish("call_ended", [event]))
+      .rejects.toBeInstanceOf(CallRoomEndedError);
+    await expect(client.publish("call_ended", [event]))
+      .rejects.toMatchObject({ code: "call_room_ended" });
+    expect(requestCount).toBe(1);
+  });
+
   it("suppresses event requests after the control plane marks a call ended", async () => {
     let requestCount = 0;
     const client = new HttpCallRoomEventClient({

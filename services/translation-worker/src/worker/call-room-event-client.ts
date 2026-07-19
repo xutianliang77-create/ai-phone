@@ -81,6 +81,10 @@ export class HttpCallRoomEventClient implements CallRoomEventSink {
       throw new Error(`Call room event API returned HTTP ${response.status}`);
     }
     const result = await readJson(response);
+    if (result?.callEnded === true) {
+      this.markEnded(callId);
+      throw new CallRoomEndedError(callId);
+    }
     const sessionVersion = integerValue(result?.sessionVersion);
     if (sessionVersion !== undefined) {
       this.sessionVersions.set(callId, sessionVersion);
