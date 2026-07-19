@@ -19,6 +19,7 @@ export type RegionEdition = "domestic" | "international";
 export type LlmProviderName = "off" | "mock" | "openai_compatible";
 
 export interface RealtimeEnv {
+  host: string;
   port: number;
   allowedOrigins: string[];
   trustProxyAddresses: string[];
@@ -104,6 +105,7 @@ export function loadEnv(): RealtimeEnv {
     env.PUBLIC_RATE_LIMIT_PROVIDER,
   );
   return {
+    host: env.REALTIME_BIND_HOST?.trim() || "0.0.0.0",
     port: Number(env.REALTIME_PORT ?? 3001),
     allowedOrigins: commaSeparated(env.REALTIME_ALLOWED_ORIGINS),
     trustProxyAddresses: commaSeparated(

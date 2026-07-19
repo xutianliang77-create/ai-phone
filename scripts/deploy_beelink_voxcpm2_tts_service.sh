@@ -9,7 +9,14 @@ REMOTE_MODEL_DIR="${REMOTE_MODEL_DIR:-$REMOTE_ROOT/data/tts-product-fit/models/o
 REMOTE_VOICE_REFERENCE_DIR="${REMOTE_VOICE_REFERENCE_DIR:-/data/models/ai-phone-server/runtime/data/voice-references}"
 REMOTE_PYTHON="${REMOTE_PYTHON:-$REMOTE_ROOT/.venv/bin/python}"
 TTS_SERVICE_PORT="${TTS_SERVICE_PORT:-8002}"
+TTS_BIND_ADDRESS="${TTS_BIND_ADDRESS:-0.0.0.0}"
+TTS_HEALTH_URL="${TTS_HEALTH_URL:-http://${BEELINK_TAILSCALE_IP:-100.110.127.117}:$TTS_SERVICE_PORT/health}"
 LOCAL_SERVICE_DIR="$ROOT_DIR/services/model-services/tts-service"
+
+[[ "$TTS_BIND_ADDRESS" =~ ^[A-Za-z0-9._:-]+$ ]] || {
+  echo "TTS_BIND_ADDRESS is invalid" >&2
+  exit 1
+}
 
 echo "Deploying TTS service to $BEELINK_HOST:$REMOTE_SERVICE_DIR"
 ssh "$BEELINK_HOST" "mkdir -p '$REMOTE_SERVICE_DIR' '$REMOTE_ROOT/logs' '$REMOTE_VOICE_REFERENCE_DIR'"
@@ -29,6 +36,7 @@ ssh "$BEELINK_HOST" \
    REMOTE_VOICE_REFERENCE_DIR='$REMOTE_VOICE_REFERENCE_DIR' \
    REMOTE_PYTHON='$REMOTE_PYTHON' \
    TTS_SERVICE_PORT='$TTS_SERVICE_PORT' \
+   TTS_BIND_ADDRESS='$TTS_BIND_ADDRESS' \
    GENERATE_VOICE_PRESETS='${GENERATE_VOICE_PRESETS:-0}' \
    FORCE_VOICE_PRESETS='${FORCE_VOICE_PRESETS:-0}' \
    TTS_SERVICE_API_KEY='${TTS_SERVICE_API_KEY:-}' \
@@ -112,7 +120,7 @@ Type=simple
 WorkingDirectory=$REMOTE_SERVICE_DIR
 EnvironmentFile=$REMOTE_SERVICE_DIR/.env
 Environment=PYTHONUNBUFFERED=1
-ExecStart=$REMOTE_PYTHON -m uvicorn app.main:app --host 0.0.0.0 --port $TTS_SERVICE_PORT
+ExecStart=$REMOTE_PYTHON -m uvicorn app.main:app --host $TTS_BIND_ADDRESS --port $TTS_SERVICE_PORT
 Restart=always
 RestartSec=3
 TimeoutStopSec=20
@@ -139,5 +147,5 @@ exit 1
 REMOTE
 
 echo "Health:"
-curl -sS "http://${BEELINK_TAILSCALE_IP:-100.110.127.117}:$TTS_SERVICE_PORT/health"
+curl -sS "$TTS_HEALTH_URL"
 echo

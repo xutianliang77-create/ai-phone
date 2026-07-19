@@ -3,6 +3,7 @@ export interface VoiceAgentRuntimeEnv {
   internalApiSecret: string;
   apiTimeoutMs: number;
   agentName: string;
+  host: string;
   port: number;
   maxJobs: number;
   idleProcesses: number;
@@ -36,6 +37,7 @@ export function loadVoiceAgentRuntimeEnv(): VoiceAgentRuntimeEnv {
     internalApiSecret: required("INTERNAL_API_SECRET", 16),
     apiTimeoutMs: integer("VOICE_AGENT_API_TIMEOUT_MS", 10_000, 1_000, 60_000),
     agentName: process.env.LIVEKIT_VOICE_AGENT_NAME?.trim() || "voice-agent-runtime",
+    host: process.env.VOICE_AGENT_BIND_HOST?.trim() || "0.0.0.0",
     port: integer("VOICE_AGENT_PORT", 8082, 1024, 65_535),
     maxJobs: integer("VOICE_AGENT_MAX_JOBS_PER_NODE", 2, 1, 32),
     idleProcesses: integer("VOICE_AGENT_IDLE_PROCESSES", 1, 1, 32),

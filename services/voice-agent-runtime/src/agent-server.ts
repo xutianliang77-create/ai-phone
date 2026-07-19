@@ -16,7 +16,7 @@ const env = loadVoiceAgentRuntimeEnv();
 cli.runApp(new ServerOptions({
   agent: fileURLToPath(new URL("./agent-definition.js", import.meta.url)),
   agentName: env.agentName,
-  host: "0.0.0.0",
+  host: env.host,
   port: env.port,
   loadFunc: async (server) => Math.min(1, server.activeJobs.length / env.maxJobs),
   loadThreshold: 0.99,

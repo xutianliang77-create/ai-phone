@@ -4,8 +4,10 @@ import { createSrtIngressBridgeServer } from "./server.js";
 const config = loadSrtIngressBridgeConfig();
 const { manager, server } = createSrtIngressBridgeServer(config);
 
-server.listen(config.healthPort, "127.0.0.1", () => {
-  process.stdout.write(`srt-ingress-bridge listening on 127.0.0.1:${config.healthPort}\n`);
+server.listen(config.healthPort, config.bindHost, () => {
+  process.stdout.write(
+    `srt-ingress-bridge listening on ${config.bindHost}:${config.healthPort}\n`,
+  );
 });
 
 let stopping = false;

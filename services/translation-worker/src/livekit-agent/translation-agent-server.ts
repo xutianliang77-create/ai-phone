@@ -33,7 +33,7 @@ try {
 cli.runApp(new ServerOptions({
   agent: fileURLToPath(new URL("./translation-agent-definition.js", import.meta.url)),
   agentName,
-  host: "0.0.0.0",
+  host: process.env.LIVEKIT_AGENT_BIND_HOST?.trim() || "0.0.0.0",
   port: integerEnv("LIVEKIT_AGENT_PORT", 8081, 1024, 65_535),
   loadFunc: async (server) => Math.min(1, server.activeJobs.length / maxJobs),
   loadThreshold: 0.99,

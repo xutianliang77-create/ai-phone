@@ -335,8 +335,8 @@ export function startWebSocketServer() {
     ws.on("close", () => { void cleanupConnection(); });
   });
 
-  httpServer.listen(env.port, () => {
-    realtimeLogger.info({ port: env.port }, "Realtime gateway started");
+  httpServer.listen(env.port, env.host, () => {
+    realtimeLogger.info({ host: env.host, port: env.port }, "Realtime gateway started");
   });
   httpServer.on("close", () => {
     void protection.close();

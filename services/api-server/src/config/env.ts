@@ -1,4 +1,5 @@
 export interface ApiEnv {
+  apiHost: string;
   apiPort: number;
   apiBodyLimitBytes: number;
   corsAllowedOrigins: string[];
@@ -29,6 +30,7 @@ export function loadEnv(): ApiEnv {
     process.env.PUBLIC_RATE_LIMIT_PROVIDER,
   );
   return {
+    apiHost: process.env.API_BIND_HOST?.trim() || "0.0.0.0",
     apiPort: Number(process.env.API_PORT ?? 3000),
     apiBodyLimitBytes: boundedInteger(
       process.env.API_BODY_LIMIT_BYTES,

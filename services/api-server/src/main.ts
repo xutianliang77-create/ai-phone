@@ -191,7 +191,7 @@ if (voiceIdentityRecovery.deletedCount > 0) {
 if (sipReconciliation.recoveredCount > 0) {
   app.log.warn({ sipReconciliation }, "Reconciled unanswered SIP calls");
 }
-await app.listen({ port: env.apiPort, host: "0.0.0.0" });
+await app.listen({ port: env.apiPort, host: env.apiHost });
 stopPostgresProjection = await startPostgresProjectionWorker({
   onError: (error, eventId) => app.log.error(
     { error, eventId },

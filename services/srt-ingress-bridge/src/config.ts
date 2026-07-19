@@ -1,5 +1,6 @@
 export interface SrtIngressBridgeConfig {
   apiKey: string;
+  bindHost: string;
   ffmpegPath: string;
   healthPort: number;
   latencyMs: number;
@@ -17,6 +18,7 @@ export function loadSrtIngressBridgeConfig(
 ): SrtIngressBridgeConfig {
   const config = {
     apiKey: required(env, "SRT_INGRESS_BRIDGE_API_KEY"),
+    bindHost: env.SRT_INGRESS_BIND_HOST?.trim() || "127.0.0.1",
     ffmpegPath: env.SRT_INGRESS_FFMPEG_PATH?.trim() || "/usr/bin/ffmpeg",
     healthPort: integer(env, "SRT_INGRESS_PORT", 3310, 1, 65_535),
     latencyMs: integer(env, "SRT_INGRESS_LATENCY_MS", 200, 20, 8_000),
@@ -49,6 +51,9 @@ export function configIssues(config: SrtIngressBridgeConfig) {
   const issues: string[] = [];
   if (Buffer.byteLength(config.apiKey) < 16) {
     issues.push("SRT_INGRESS_BRIDGE_API_KEY must be at least 16 bytes");
+  }
+  if (!validHost(config.bindHost)) {
+    issues.push("SRT_INGRESS_BIND_HOST must be a hostname or IPv4 address");
   }
   if (!validHost(config.publicHost)) {
     issues.push("SRT_INGRESS_PUBLIC_HOST must be a hostname or IPv4 address");

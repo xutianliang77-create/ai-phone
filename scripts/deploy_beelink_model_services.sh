@@ -4,11 +4,17 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BEELINK_HOST="${BEELINK_HOST:-beelink@100.110.127.117}"
 BEELINK_IP="${BEELINK_TAILSCALE_IP:-100.110.127.117}"
+MODEL_SERVICE_BIND_ADDRESS="${MODEL_SERVICE_BIND_ADDRESS:-0.0.0.0}"
 REMOTE_ROOT="${REMOTE_ROOT:-/data/models/translation-model-eval}"
 REMOTE_PYTHON="${REMOTE_PYTHON:-$REMOTE_ROOT/.venv/bin/python}"
 SPEAKER_REMOTE_PYTHON="${SPEAKER_REMOTE_PYTHON:-$REMOTE_ROOT/.venv-speaker/bin/python}"
 SPEAKER_SERVICE_ENABLED="${SPEAKER_SERVICE_ENABLED:-false}"
 VOICE_IDENTITY_ENABLED="${VOICE_IDENTITY_ENABLED:-false}"
+
+[[ "$MODEL_SERVICE_BIND_ADDRESS" =~ ^[A-Za-z0-9._:-]+$ ]] || {
+  echo "MODEL_SERVICE_BIND_ADDRESS is invalid" >&2
+  exit 1
+}
 
 ASR_SERVICE_PROVIDER="${ASR_SERVICE_PROVIDER:-qwen3_asr}"
 if [ "$ASR_SERVICE_PROVIDER" = "qwen3_asr" ]; then
@@ -97,6 +103,7 @@ ssh "$BEELINK_HOST" \
    SPEAKER_SERVICE_DIR='$SPEAKER_SERVICE_DIR' \
    SPEAKER_SERVICE_ENABLED='$SPEAKER_SERVICE_ENABLED' \
    VOICE_IDENTITY_ENABLED='$VOICE_IDENTITY_ENABLED' \
+   MODEL_SERVICE_BIND_ADDRESS='$MODEL_SERVICE_BIND_ADDRESS' \
    ASR_SERVICE_PROVIDER='$ASR_SERVICE_PROVIDER' \
    ASR_MODEL_VERSION='$ASR_MODEL_VERSION' \
    ASR_PORT='$ASR_PORT' \
@@ -173,7 +180,7 @@ Type=simple
 WorkingDirectory=$dir
 EnvironmentFile=$dir/.env
 Environment=PYTHONUNBUFFERED=1
-ExecStart=$python -m uvicorn app.main:app --host 0.0.0.0 --port $port
+ExecStart=$python -m uvicorn app.main:app --host $MODEL_SERVICE_BIND_ADDRESS --port $port
 Restart=always
 RestartSec=3
 TimeoutStopSec=20

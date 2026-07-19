@@ -69,6 +69,7 @@ export interface TranslationWorkerEnv {
   ttsAudioSinkInterruptEndpoint?: string;
   ttsAudioSinkApiKey?: string;
   ttsAudioSinkTimeoutMs: number;
+  audioFrameSinkHost: string;
   audioFrameSinkPort: number;
   audioFrameSinkApiKey?: string;
   agentCallWorkerBatchSize: number;
@@ -171,6 +172,8 @@ export function loadEnv(): TranslationWorkerEnv {
     ttsAudioSinkInterruptEndpoint: env.TTS_AUDIO_SINK_INTERRUPT_ENDPOINT,
     ttsAudioSinkApiKey: env.TTS_AUDIO_SINK_API_KEY,
     ttsAudioSinkTimeoutMs: Number(env.TTS_AUDIO_SINK_TIMEOUT_MS ?? 5000),
+    audioFrameSinkHost:
+      env.TRANSLATION_WORKER_AUDIO_FRAME_SINK_HOST?.trim() || "0.0.0.0",
     audioFrameSinkPort: Number(env.TRANSLATION_WORKER_AUDIO_FRAME_SINK_PORT ?? 3312),
     audioFrameSinkApiKey: env.TRANSLATION_WORKER_AUDIO_FRAME_SINK_API_KEY,
     agentCallWorkerBatchSize: Number(env.AGENT_CALL_WORKER_BATCH_SIZE ?? 5),

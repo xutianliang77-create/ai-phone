@@ -129,6 +129,7 @@ export interface MediaWriteResult {
 }
 
 export interface PstnBridgeEnv {
+  host: string;
   port: number;
   apiKey?: string;
   provider: PstnBridgeProviderName;

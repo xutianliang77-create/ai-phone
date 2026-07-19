@@ -9,6 +9,14 @@ const llmScript = readFileSync(
   new URL("../deploy_beelink_llm_service.sh", import.meta.url),
   "utf8",
 );
+const modelScript = readFileSync(
+  new URL("../deploy_beelink_model_services.sh", import.meta.url),
+  "utf8",
+);
+const ttsScript = readFileSync(
+  new URL("../deploy_beelink_voxcpm2_tts_service.sh", import.meta.url),
+  "utf8",
+);
 
 describe("Beelink app deployment contract", () => {
   it("builds before freezing writes and migrates before enabling SQLite", () => {
@@ -43,6 +51,26 @@ describe("Beelink app deployment contract", () => {
   });
 
   it("keeps server endpoints configurable and LLM off loopback", () => {
+    for (const name of [
+      "API_BIND_HOST",
+      "REALTIME_BIND_HOST",
+      "LIVEKIT_AGENT_BIND_HOST",
+      "VOICE_AGENT_BIND_HOST",
+      "SRT_INGRESS_BIND_HOST",
+      "TRANSLATION_WORKER_AUDIO_FRAME_SINK_HOST",
+    ]) {
+      expect(script).toMatch(
+        new RegExp(`set_env\\s+${name}\\s+"\\$${name}"`),
+      );
+    }
+    for (const name of [
+      "ASR_SERVICE_HOST",
+      "SPEAKER_SERVICE_HOST",
+      "TRANSLATION_SERVICE_HOST",
+      "TTS_SERVICE_HOST",
+    ]) {
+      expect(script).toContain(`${name}=\"\${${name}:-$PUBLIC_HOST}\"`);
+    }
     expect(script).toContain('LLM_SERVICE_HOST="${LLM_SERVICE_HOST:-$PUBLIC_HOST}"');
     expect(script).toContain('LLM_BASE_URL="${LLM_BASE_URL:-http://$LLM_SERVICE_HOST:1234/v1}"');
     expect(script).toContain('set_env LLM_BASE_URL "$LLM_BASE_URL"');
@@ -52,6 +80,13 @@ describe("Beelink app deployment contract", () => {
     expect(llmScript).toContain(
       "LLM_BIND_ADDRESS must be a server-reachable non-loopback address",
     );
+    expect(modelScript).toContain(
+      "--host $MODEL_SERVICE_BIND_ADDRESS --port $port",
+    );
+    expect(ttsScript).toContain(
+      "--host $TTS_BIND_ADDRESS --port $TTS_SERVICE_PORT",
+    );
+    expect(ttsScript).toContain('curl -sS "$TTS_HEALTH_URL"');
   });
 });
 

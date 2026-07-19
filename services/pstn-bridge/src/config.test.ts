@@ -6,9 +6,14 @@ describe("pstn bridge config", () => {
     const config = loadEnv({});
     const readiness = checkReleaseReadiness(config);
 
-    expect(config).toMatchObject({ port: 3302, provider: "mock" });
+    expect(config).toMatchObject({ host: "0.0.0.0", port: 3302, provider: "mock" });
     expect(readiness.status).toBe("not_ready");
     expect(readiness.issues).toContain("pstn_bridge provider must not be mock for release");
+  });
+
+  it("configures the server bind address", () => {
+    expect(loadEnv({ PSTN_BRIDGE_BIND_HOST: "10.20.30.43" }).host)
+      .toBe("10.20.30.43");
   });
 
   it("accepts a real HTTP upstream release configuration", () => {

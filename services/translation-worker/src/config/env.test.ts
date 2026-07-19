@@ -154,6 +154,14 @@ describe("translation worker env", () => {
     process.env = { TTS_AGENT_PREWARM_TIMEOUT_MS: "120001" };
     expect(loadEnv().ttsAgentPrewarmTimeoutMs).toBe(60000);
   });
+
+  it("configures the PSTN audio sink bind address", () => {
+    process.env = {
+      TRANSLATION_WORKER_AUDIO_FRAME_SINK_HOST: "10.20.30.42",
+    };
+
+    expect(loadEnv().audioFrameSinkHost).toBe("10.20.30.42");
+  });
 });
 
 function writeConfig(tempDirs: string[]) {
