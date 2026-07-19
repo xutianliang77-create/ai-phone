@@ -20,6 +20,7 @@ const emptySnapshot: EnterpriseMeetingScreenShareSnapshot = {
   operation: "idle",
   share: null,
   localTrack: null,
+  localSystemAudioAvailable: false,
   revocation: "not_required",
 };
 
@@ -33,6 +34,7 @@ export function MeetingScreenSharePanel(props: {
   roomClient: EnterpriseMeetingRoomClient;
 }) {
   const [quality, setQuality] = useState<EnterpriseMeetingScreenShareQuality>("auto");
+  const [includesSystemAudio, setIncludesSystemAudio] = useState(false);
   const [state, setState] = useState(emptySnapshot);
   const controller = useRef<EnterpriseMeetingScreenShareController | null>(null);
 
@@ -80,10 +82,16 @@ export function MeetingScreenSharePanel(props: {
           occupied ? "正在等待当前代际的视频轨道" : "当前没有人共享屏幕"}</span>
       </div>}
 
+    {share?.status === "active" && share.includesSystemAudio ?
+      <ScreenShareAudio track={props.room.screenShareAudioTrack} own={ownShare}
+        available={ownShare ? state.localSystemAudioAvailable :
+          props.room.screenShareAudioTrack !== null} /> : null}
+
     <div className="meeting-screen-share__controls">
       {!occupied ? <>
         <label>画面质量
-          <select value={quality} disabled={!props.canShare || state.operation !== "idle"}
+          <select value={quality} disabled={!props.canShare ||
+            !["idle", "failed"].includes(state.operation)}
             onChange={(event) => setQuality(
               event.target.value as EnterpriseMeetingScreenShareQuality,
             )}>
@@ -92,9 +100,16 @@ export function MeetingScreenSharePanel(props: {
             <option value="high">清晰优先</option>
           </select>
         </label>
+        <label className="meeting-screen-share__audio-option">
+          <span><input type="checkbox" checked={includesSystemAudio}
+            disabled={!props.canShare || !["idle", "failed"].includes(state.operation)}
+            onChange={(event) => setIncludesSystemAudio(event.target.checked)} />
+            共享系统音频</span>
+          <small>仅浏览器实际返回独立音轨时发布；不会作为麦克风送入会议 ASR。</small>
+        </label>
         <button className="button button--primary" type="button"
           disabled={!props.canShare || !["idle", "failed"].includes(state.operation)}
-          onClick={() => void controller.current?.start(quality)}>
+          onClick={() => void controller.current?.start(quality, includesSystemAudio)}>
           <MaterialIcon name={enterpriseIcons.action.shareScreen} />共享屏幕
         </button>
       </> : null}
@@ -125,6 +140,29 @@ export function MeetingScreenSharePanel(props: {
   </section>;
 }
 
+function ScreenShareAudio(props: {
+  track: MediaStreamTrack | null;
+  own: boolean;
+  available: boolean;
+}) {
+  const element = useRef<HTMLAudioElement | null>(null);
+  useEffect(() => {
+    const audio = element.current;
+    if (!audio || !props.track || props.own) return;
+    audio.srcObject = new MediaStream([props.track]);
+    void audio.play().catch(() => undefined);
+    return () => { audio.srcObject = null; };
+  }, [props.track, props.own]);
+  return <div className="meeting-screen-share__audio">
+    <MaterialIcon name={props.available ? "volume_up" : "volume_off"} outlined />
+    <span>{props.own ? props.available ?
+      "系统音频已独立发布；本机不回放，避免形成回声。" :
+      "系统音频已停止，共享画面继续。" : props.track ?
+        "正在播放演示者共享的系统音频。" : "系统音频暂不可用，共享画面继续。"}</span>
+    {!props.own && props.track ? <audio ref={element} autoPlay controls /> : null}
+  </div>;
+}
+
 function ScreenShareVideo(props: { track: MediaStreamTrack; own: boolean }) {
   const element = useRef<HTMLVideoElement | null>(null);
   useEffect(() => {
@@ -150,7 +188,8 @@ function screenShareSummary(
     return "浏览器选择内容后，系统按实际的屏幕、窗口或标签页建立独立发布租约。";
   }
   return `${ownShare ? "你" : "另一位参会者"}正在共享${sourceLabel(share.sourceType)}` +
-    ` · ${qualityLabel(share.qualityMode)} · 第 ${share.generation} 代`;
+    ` · ${qualityLabel(share.qualityMode)} · ${share.includesSystemAudio ?
+      "已请求系统音频" : "不含系统音频"} · 第 ${share.generation} 代`;
 }
 
 function operationLabel(state: EnterpriseMeetingScreenShareSnapshot) {
@@ -173,6 +212,7 @@ function errorLabel(code: string) {
   return ({
     screen_capture_unsupported: "当前浏览器不支持安全的屏幕采集。",
     screen_capture_missing_video: "浏览器没有返回可共享的视频轨道。",
+    screen_capture_audio_unavailable: "浏览器未返回系统音频；请选择支持音频的标签页或关闭系统音频选项。",
     screen_capture_source_unknown: "浏览器未报告实际共享类型，未建立租约。",
     screen_capture_not_allowed: "你取消了屏幕选择，未建立共享租约。",
     screen_share_capture_ended: "浏览器已结束屏幕采集，服务端租约正在收敛。",
@@ -184,6 +224,8 @@ function errorLabel(code: string) {
     enterprise_postgres_required: "企业 PostgreSQL 运行时未就绪，屏幕共享保持关闭。",
     screen_share_revocation_pending: "旧发布身份仍在撤销中；服务端会继续重试。",
     screen_share_grant_missing: "屏幕发布凭证未就绪，未伪造共享成功。",
+    screen_share_grant_mismatch: "系统音频权限与采集结果不一致，已停止本次共享。",
+    screen_share_audio_ended: "系统音频已结束，共享画面继续。",
     screen_share_request_failed: "屏幕共享请求失败，请刷新会议状态后重试。",
   } as Record<string, string>)[code] ?? "屏幕共享状态发生变化，请刷新后重试。";
 }

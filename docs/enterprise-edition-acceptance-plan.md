@@ -1,6 +1,6 @@
 # 无界AI企业版验收任务与计划
 
-版本：v1.33
+版本：v1.34
 日期：2026-07-19
 状态：可执行验收计划，已对齐统一通讯平台和 PostgreSQL Primary 收敛
 
@@ -365,6 +365,14 @@ build setting 检查与扩展 Swift typecheck 不替代真机：必须在目标 
 旧 generation/nonce、Wi-Fi/蜂窝切换、真实 LiveKit 首帧与服务端撤销。还必须固定验证 `flutter_webrtc 1.4.0` 系统停止
 监听可建立；监听结构不匹配时应停止并显示失败，而不是继续显示共享中。本轮未运行测试、APK 构建或真机矩阵，因此
 AC-SHARE-006/009/010/011 和 A1 均未通过。
+
+`ENT-MTG-008` 当前只形成 Web 独立系统音频发布/观看和 Enterprise Meeting Agent 双重输入守卫代码候选。恢复验收时
+至少覆盖 Chrome/Edge/Safari/Firefox 的标签页/窗口/整屏音频能力差异、用户未勾选音频、请求后浏览器无音轨、系统音频
+entitlement 拒绝、grant capability 不一致、video/audio 部分发布失败、音频单独结束、暂停恢复、自动播放拒绝和旧
+generation 音轨。真实 LiveKit 房间中必须证明共享者本机没有捕获音轨回放，远端可以手动/自动播放，扬声器和耳机下均
+不形成回声环；Worker 证据必须证明 `ent-share:*`/`SCREEN_SHARE_AUDIO` 没有 ASR segment、caption 或 speaker 记录，
+成员 microphone 仍正常处理。iOS/Android 应保持无入口和 `includesSystemAudio=false`，直到各自真实采集链路另行验收。
+本轮按要求未运行上述测试，因此 AC-SHARE-008 和 A1 均未通过。
 
 ### 7.4 屏幕 OCR 翻译
 

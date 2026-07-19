@@ -5,10 +5,12 @@ import type {
 import type { EnterpriseMeetingApi } from "../api/enterprise-meeting-api.js";
 import type { EnterpriseContentRequestContext } from "../api/enterprise-api.js";
 import {
+  enterpriseScreenCaptureReady,
   EnterpriseMeetingScreenSharePublisher,
+  enterpriseScreenShareDelay,
+  enterpriseScreenShareErrorCode,
   type EnterpriseScreenCapture,
 } from "./enterprise-meeting-screen-share-publisher.js";
-
 type Revocation = "not_required" | "completed" | "pending";
 type Operation = "idle" | "capturing" | "starting" | "active" | "pausing" |
   "paused" | "resuming" | "stopping" | "failed";
@@ -16,13 +18,15 @@ export interface EnterpriseMeetingScreenShareSnapshot {
   operation: Operation;
   share: EnterpriseMeetingScreenShareDto | null;
   localTrack: MediaStreamTrack | null;
+  localSystemAudioAvailable: boolean;
   revocation: Revocation;
   errorCode?: string;
 }
 export class EnterpriseMeetingScreenShareController {
   private readonly publisher = new EnterpriseMeetingScreenSharePublisher();
   private snapshot: EnterpriseMeetingScreenShareSnapshot = {
-    operation: "idle", share: null, localTrack: null, revocation: "not_required",
+    operation: "idle", share: null, localTrack: null,
+    localSystemAudioAvailable: false, revocation: "not_required",
   };
   private capture: EnterpriseScreenCapture | null = null;
   private pollTimer: ReturnType<typeof setInterval> | null = null;
@@ -31,7 +35,6 @@ export class EnterpriseMeetingScreenShareController {
   private disposed = false;
   private stopRequested = false;
   private stateEpoch = 0;
-
   constructor(
     private readonly api: EnterpriseMeetingApi,
     private readonly context: EnterpriseContentRequestContext,
@@ -45,23 +48,25 @@ export class EnterpriseMeetingScreenShareController {
     void this.refresh();
     this.pollTimer ??= setInterval(() => void this.refresh(), 2_000);
   }
-  async start(quality: EnterpriseMeetingScreenShareQuality) {
+  async start(quality: EnterpriseMeetingScreenShareQuality, includesSystemAudio: boolean) {
     if (this.busy || this.capture || this.disposed) return;
     this.stateEpoch += 1;
     this.busy = true;
     this.emit({ operation: "capturing", errorCode: undefined });
     try {
-      const capture = await this.publisher.capture(quality);
+      const capture = await this.publisher.capture(quality, includesSystemAudio);
       this.capture = capture;
-      capture.track.addEventListener("ended", this.browserEnded, { once: true });
-      this.emit({ operation: "starting", localTrack: capture.track });
+      capture.videoTrack.addEventListener("ended", this.browserEnded, { once: true });
+      capture.audioTrack?.addEventListener("ended", this.systemAudioEnded, { once: true });
+      this.emit({ operation: "starting", localTrack: capture.videoTrack,
+        localSystemAudioAvailable: capture.audioTrack !== null });
       const meeting = await this.api.getMeeting(this.context, this.meetingId);
       const response = await this.api.acquireMeetingScreenShare(
         this.context,
         this.meetingId,
         {
           sourceType: capture.sourceType,
-          includesSystemAudio: false,
+          includesSystemAudio: capture.includesSystemAudio,
           qualityMode: quality,
           expectedMeetingVersion: meeting.meeting.meeting.version,
         },
@@ -69,8 +74,8 @@ export class EnterpriseMeetingScreenShareController {
       );
       if (!response.grant) throw new Error("screen_share_grant_missing");
       this.emit({ share: response.share, revocation: response.revocation });
-      const trackSid = await this.publisher.publish(response.grant, capture.track);
-      if (this.stopRequested || capture.track.readyState === "ended") {
+      const trackSid = await this.publisher.publish(response.grant, capture);
+      if (this.stopRequested || !enterpriseScreenCaptureReady(capture)) {
         throw new Error("screen_share_capture_ended");
       }
       const renewed = await this.api.commandMeetingScreenShare(
@@ -96,7 +101,7 @@ export class EnterpriseMeetingScreenShareController {
     this.busy = true;
     this.stopRenewing();
     this.emit({ operation: "pausing", errorCode: undefined });
-    this.capture.track.enabled = false;
+    this.capture.stream.getTracks().forEach((track) => { track.enabled = false; });
     await this.publisher.disconnect();
     try {
       const key = crypto.randomUUID();
@@ -131,9 +136,9 @@ export class EnterpriseMeetingScreenShareController {
       );
       if (!response.grant) throw new Error("screen_share_grant_missing");
       this.emit({ share: response.share, revocation: response.revocation });
-      this.capture.track.enabled = true;
-      const trackSid = await this.publisher.publish(response.grant, this.capture.track);
-      if (this.stopRequested || this.capture.track.readyState === "ended") {
+      this.capture.stream.getTracks().forEach((track) => { track.enabled = true; });
+      const trackSid = await this.publisher.publish(response.grant, this.capture);
+      if (this.stopRequested || !enterpriseScreenCaptureReady(this.capture)) {
         throw new Error("screen_share_capture_ended");
       }
       const renewed = await this.api.commandMeetingScreenShare(
@@ -174,7 +179,8 @@ export class EnterpriseMeetingScreenShareController {
         void this.retryRevocation("stop", share, key);
       }
     } catch (error) {
-      this.emit({ operation: "failed", errorCode: errorCode(error) });
+      this.emit({ operation: "failed",
+        errorCode: enterpriseScreenShareErrorCode(error) });
     } finally {
       this.busy = false;
     }
@@ -204,6 +210,13 @@ export class EnterpriseMeetingScreenShareController {
       return undefined;
     });
   };
+  private readonly systemAudioEnded = () => {
+    const capture = this.capture;
+    if (!capture?.audioTrack) return;
+    if (this.snapshot.operation !== "active") return this.browserEnded();
+    if (!this.publisher.degradeSystemAudio(capture)) return;
+    this.emit({ localSystemAudioAvailable: false, errorCode: "screen_share_audio_ended" });
+  };
   private async refresh() {
     if (this.disposed || this.busy) return;
     const epoch = this.stateEpoch;
@@ -225,7 +238,9 @@ export class EnterpriseMeetingScreenShareController {
           current.revocation === "pending" ? "stopping" : "idle";
       this.emit({ share: current.share, revocation: current.revocation, operation });
     } catch (error) {
-      if (epoch === this.stateEpoch) this.emit({ errorCode: errorCode(error) });
+      if (epoch === this.stateEpoch) {
+        this.emit({ errorCode: enterpriseScreenShareErrorCode(error) });
+      }
     }
   }
   private startRenewing() {
@@ -245,7 +260,7 @@ export class EnterpriseMeetingScreenShareController {
       );
       this.emit({ share: response.share, revocation: response.revocation, errorCode: undefined });
     } catch (error) {
-      this.emit({ errorCode: errorCode(error) });
+      this.emit({ errorCode: enterpriseScreenShareErrorCode(error) });
       await this.refresh();
     } finally {
       this.busy = false;
@@ -263,7 +278,7 @@ export class EnterpriseMeetingScreenShareController {
     key: string,
   ) {
     for (let attempt = 0; attempt < 3 && !this.disposed; attempt += 1) {
-      await delay(1_500);
+      await enterpriseScreenShareDelay(1_500);
       try {
         const response = await this.api.commandMeetingScreenShare(
           this.context, this.meetingId, original.id, command,
@@ -289,7 +304,7 @@ export class EnterpriseMeetingScreenShareController {
   private async failClosed(error: unknown) {
     const share = this.snapshot.share;
     await this.stopLocalCapture();
-    this.emit({ operation: "failed", errorCode: errorCode(error) });
+    this.emit({ operation: "failed", errorCode: enterpriseScreenShareErrorCode(error) });
     if (share?.participantId === this.participantId && share.status === "active") {
       const key = crypto.randomUUID();
       try {
@@ -315,17 +330,16 @@ export class EnterpriseMeetingScreenShareController {
     this.capture = null;
     await this.publisher.disconnect();
     if (capture) {
-      capture.track.removeEventListener("ended", this.browserEnded);
+      capture.videoTrack.removeEventListener("ended", this.browserEnded);
+      capture.audioTrack?.removeEventListener("ended", this.systemAudioEnded);
       capture.stream.getTracks().forEach((track) => track.stop());
     }
-    this.emit({ localTrack: null });
+    this.emit({ localTrack: null, localSystemAudioAvailable: false });
   }
-
   private stopRenewing() {
     if (this.renewTimer) clearInterval(this.renewTimer);
     this.renewTimer = null;
   }
-
   private emit(value: Partial<EnterpriseMeetingScreenShareSnapshot>) {
     if (value.share && this.snapshot.share?.id === value.share.id &&
       value.share.version < this.snapshot.share.version) return;
@@ -333,16 +347,3 @@ export class EnterpriseMeetingScreenShareController {
     if (!this.disposed) this.onSnapshot(this.snapshot);
   }
 }
-
-function errorCode(error: unknown) {
-  const code = error && typeof error === "object" && "code" in error
-    ? error.code : null;
-  if (typeof code === "string" && /^[a-z0-9_]{1,120}$/.test(code)) return code;
-  if (error instanceof DOMException && error.name === "NotAllowedError") {
-    return "screen_capture_not_allowed";
-  }
-  return error instanceof Error && /^[a-z0-9_]{1,120}$/.test(error.message)
-    ? error.message : "screen_share_request_failed";
-}
-const delay = (milliseconds: number) =>
-  new Promise<void>((resolve) => setTimeout(resolve, milliseconds));

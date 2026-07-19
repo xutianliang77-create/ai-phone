@@ -1,6 +1,6 @@
 # 无界AI企业版详细功能设计
 
-版本：v1.16
+版本：v1.17
 日期：2026-07-19
 状态：SaaS 详细设计基线，已对齐统一通讯平台
 
@@ -324,7 +324,7 @@ LLM 只能提出结构化工具请求；Policy Engine 校验租户、客户、�
 租约到期或 route fence 会撤销旧 identity。Provider 未配置或撤销暂时失败时返回 `pending` 并由 outbox 重试，
 不显示假成功。
 
-当前 `ENT-MTG-005` 成员 Web 代码候选只在用户点击后调用 `getDisplayMedia`，禁用系统音频，并从浏览器实际
+当前 `ENT-MTG-005` 成员 Web 代码候选只在用户点击后调用 `getDisplayMedia`，并从浏览器实际
 `displaySurface` 映射 screen/window/tab；浏览器不报告来源时立即停止采集，不以用户预选值冒充。取得真实来源后
 才申请服务端租约，并用独立于麦克风会议连接的最小权限 Room 发布 screen track；发布成功立即绑定 track SID，
 随后按10秒续租。观看端从当前租约取得 publisher identity，只接受该 identity 的 `screen_share` 轨道，旧 generation
@@ -332,8 +332,21 @@ LLM 只能提出结构化工具请求；Policy Engine 校验租户、客户、�
 
 共享者可暂停、恢复和停止；暂停保留本地 capture 但断开旧发布身份，恢复使用新 generation grant 重新发布，停止或
 浏览器原生“停止共享”先结束本地 track，再提交幂等 stop。服务端返回撤销 pending 时界面保持“正在停止/暂停”，
-不显示已完成。访客发布、系统音频、自适应 simulcast、主持人强停和 OCR
+不显示已完成。访客发布、自适应 simulcast、主持人强停和 OCR
 仍分别属于后续任务；未执行真实浏览器/LiveKit 测试前不可宣称 screen/window/tab 可用或通过企业生产门禁。
+
+当前 `ENT-MTG-008` Web 入口提供“共享系统音频”选择，但以浏览器实际返回的 audio track 为唯一事实：请求音频后
+没有得到音轨时，在 acquire 前停止全部采集并提示选择支持音频的标签页或关闭选项，不把无音频共享登记为成功。
+得到音轨后，服务端分别校验系统音频 entitlement 和 generation grant，客户端核对 grant capability，再把视频发布为
+`screen_share`、音频发布为独立 `screen_share_audio`。视频结束时停止整次共享；活动中的音频单独结束时只移除音频发布，
+明确显示“系统音频已结束，共享画面继续”，不会因可选音频故障终止画面。
+观看者通过独立 audio 元素播放；共享者本机不附加该轨，避免捕获音频再次本地回放形成循环。
+
+会议翻译 Worker 只接受 `ent:<participantId>:<role>` 发布者的 microphone source，`ent-share:*` 和
+`screen_share_audio` 不进入参会者 ASR/字幕。iOS ReplayKit 当前仍忽略 `.audioApp/.audioMic`，Android MediaProjection
+当前没有 AudioPlaybackCapture/自定义 WebRTC audio source；两端继续固定 `includesSystemAudio=false`，不得用开关或
+通知文案冒充实现。当前未执行浏览器、真实 LiveKit、耳机/扬声器回声、ASR 错误发言段或移动端真机验证，任务保持
+`in_progress`。
 
 当前 `ENT-MTG-006` iOS 代码候选在成员已加入企业会议后按 `screenShareRole` 显示 ReplayKit 入口，提供自动、流畅、
 高清三档和开始/停止；不开放系统音频，也不把暂停冒充完成。主 App 在申请服务端租约前先确认 Broadcast Extension 与

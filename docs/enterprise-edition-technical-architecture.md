@@ -1,6 +1,6 @@
 # 无界AI企业版技术架构
 
-版本：v1.20
+版本：v1.21
 日期：2026-07-19
 状态：SaaS 详细架构基线，已对齐统一通讯平台和 PostgreSQL Primary
 
@@ -312,6 +312,16 @@ share ID、generation、publisher identity、lease expiry 和 nonce，RTC URL/to
 停止独立 Room，再调用服务端幂等 stop；Flutter 不存活时 Service 仍在 lease expiry 停止 MediaProjection，服务端
 cell Worker 继续作为最终回收边界。系统停止监听依赖锁定插件版本的运行时结构，字段或 capturer 类型不匹配即拒绝把
 共享置为 active，不静默降级。该路径尚无 APK/真机/后台/进程回收/网络切换或真实 LiveKit 证据。
+
+`ENT-MTG-008` 复用既有屏幕共享租约中的 `includesSystemAudio`，不新增媒体数据库字段或把音频写入业务服务器。
+Web capture 在 acquire 前验证 `getDisplayMedia` 同时返回 video/audio；独立 publisher Room 以同一
+publisher identity/stream、不同 `screen_share` 与 `screen_share_audio` source 发布。服务端 entitlement 解析与 token
+能力分别限制并发屏幕共享和系统音频，客户端再核对 grant 与实际音轨一致，部分发布失败会断开整个 publisher Room。
+
+主会议 Room 只接受服务端当前 generation identity 的两类共享轨：视频进入 React video，音频进入独立 audio playback；
+共享者本机不播放捕获音轨。Enterprise Meeting Agent 的订阅侧既要求成员 identity 形状，也要求 publication source 为
+microphone，因此系统音频不会成为说话人、ASR 或字幕输入。iOS/Android 仍没有连接 ReplayKit app audio 或 Android
+AudioPlaybackCapture 到独立 WebRTC audio source，保持 `includesSystemAudio=false`；该边界不以自动降级掩盖。
 
 ## 7. 外呼营销架构
 

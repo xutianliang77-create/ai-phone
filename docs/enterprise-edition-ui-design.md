@@ -1,6 +1,6 @@
 # 无界AI企业版 UI 详细设计
 
-版本：v1.12
+版本：v1.13
 日期：2026-07-19
 状态：设计基线；企业 Web 公共组件、首批设置/工作台、响应式/主题/无障碍和 Web/iOS/Android 成员屏幕共享代码候选已实现，正式验收仍在开发
 
@@ -303,6 +303,14 @@ budget、usage aggregate 和显式 session trace report。卡片沿用同一 Mat
 - iOS 当前通过系统广播选择器确认；Android 先显示通知权限和 MediaProjection 系统授权，授权后常驻低优先级前台通知。
   通知沿用 `screen_share` / `stop_screen_share` Material 图标，标题说明正在共享手机屏幕，正文明确“不包含系统音频”，
   停止操作始终可见。两端当前只交付开始/停止；暂停/恢复、系统音频和主持人强停在对应后续任务完成前不显示入口。
+- Web 未占用共享时，在画质选择旁显示“共享系统音频”复选框和能力说明；用户勾选不等于成功，只有浏览器真实返回
+  独立音轨且服务端 entitlement/grant 一致后，状态摘要才显示“含系统音频”。浏览器不支持时显示可行动错误，不回退为
+  静默无声的成功状态。
+- 远端系统音频使用 `volume_up_outlined` 语义、状态文字和原生 audio controls，自动播放被浏览器阻止时仍可手动播放；
+  共享者只显示“已独立发布，本机不回放”，不创建本地 audio 播放节点。等待远端音轨时使用 `volume_off_outlined`，
+  与视频等待态和当前 generation identity 一致。
+- iOS/Android 不显示系统音频开关，通知继续明确“不包含系统音频”；真实 ReplayKit app-audio 或 Android
+  AudioPlaybackCapture 管线和真机门禁完成前，不因 Web 已实现而扩大移动端能力声明。
 
 ## 10. 响应式与无障碍
 

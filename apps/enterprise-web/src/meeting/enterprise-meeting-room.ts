@@ -20,6 +20,7 @@ export interface EnterpriseMeetingRoomSnapshot {
   translatedAudioAvailable: boolean;
   captions: EnterpriseMeetingCaptionEvent[];
   screenShareTrack: MediaStreamTrack | null;
+  screenShareAudioTrack: MediaStreamTrack | null;
   screenSharePublisherIdentity: string | null;
 }
 
@@ -36,6 +37,7 @@ export class EnterpriseMeetingRoomClient {
     translatedAudioAvailable: false,
     captions: [],
     screenShareTrack: null,
+    screenShareAudioTrack: null,
     screenSharePublisherIdentity: null,
   };
   private grant: EnterpriseMeetingJoinTokenResponse | null = null;
@@ -85,6 +87,7 @@ export class EnterpriseMeetingRoomClient {
           microphoneEnabled: false,
           remoteParticipantCount: 0,
           screenShareTrack: null,
+          screenShareAudioTrack: null,
         });
       });
     try {
@@ -134,6 +137,7 @@ export class EnterpriseMeetingRoomClient {
       translatedAudioAvailable: false,
       captions: [],
       screenShareTrack: null,
+      screenShareAudioTrack: null,
       screenSharePublisherIdentity: this.expectedScreenSharePublisherIdentity,
     });
   }
@@ -151,22 +155,32 @@ export class EnterpriseMeetingRoomClient {
     participant: RemoteParticipant,
   ) {
     const expected = this.expectedScreenSharePublisherIdentity;
-    if (!expected || participant.identity !== expected ||
-      String(publication.source) !== "screen_share") return;
-    this.emit({ screenShareTrack: publication.track?.mediaStreamTrack ?? null });
+    if (!expected || participant.identity !== expected) return;
+    const track = publication.track?.mediaStreamTrack ?? null;
+    if (String(publication.source) === "screen_share") {
+      this.emit({ screenShareTrack: track });
+    } else if (String(publication.source) === "screen_share_audio") {
+      this.emit({ screenShareAudioTrack: track });
+    }
   }
 
   private syncScreenShare() {
     const room = this.room;
     const expected = this.expectedScreenSharePublisherIdentity;
     if (!room || !expected) {
-      this.emit({ screenShareTrack: null });
+      this.emit({ screenShareTrack: null, screenShareAudioTrack: null });
       return;
     }
     const participant = room.remoteParticipants.get(expected);
-    const publication = participant ? [...participant.trackPublications.values()]
-      .find((candidate) => String(candidate.source) === "screen_share") : undefined;
-    this.emit({ screenShareTrack: publication?.track?.mediaStreamTrack ?? null });
+    const publications = participant ? [...participant.trackPublications.values()] : [];
+    const publication = publications
+      .find((candidate) => String(candidate.source) === "screen_share");
+    const audioPublication = publications
+      .find((candidate) => String(candidate.source) === "screen_share_audio");
+    this.emit({
+      screenShareTrack: publication?.track?.mediaStreamTrack ?? null,
+      screenShareAudioTrack: audioPublication?.track?.mediaStreamTrack ?? null,
+    });
   }
 
   private acceptCaption(

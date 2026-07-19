@@ -37,6 +37,7 @@ const disconnected: EnterpriseMeetingRoomSnapshot = {
   translatedAudioAvailable: false,
   captions: [],
   screenShareTrack: null,
+  screenShareAudioTrack: null,
   screenSharePublisherIdentity: null,
 };
 

@@ -1,6 +1,6 @@
 # 无界AI企业版详细技术设计
 
-版本：v1.35
+版本：v1.36
 日期：2026-07-19
 状态：统一通讯平台与 PostgreSQL Primary 收敛详细技术方案
 
@@ -33,7 +33,7 @@
 | 企业统一通讯会话绑定 | `ready_for_acceptance` | enterprise `0011` 和 tenant unit-of-work 已建立 Meeting/Support/Marketing 唯一绑定、route/policy/entitlement 快照及 generation/event-sequence 收敛状态机；尚无真实多实例、cell 迁移和 A1/H3 证据 |
 | Tenant-aware Worker Dispatch | `ready_for_acceptance` | enterprise `0012` 以 scope FK/RLS 绑定公共 dispatch/capacity；短期 HMAC ticket、租户容量、lease/heartbeat、cancel/finalize 和二次 binding fence 已实现；仅有自动化和一次性本地 PostgreSQL 16 证据，尚无真实多实例/H3 容量证据 |
 | 企业设备、声音和录制策略 | `ready_for_acceptance` | enterprise `0013`、发布 API、策略解析、purpose-specific 授权和 Worker policy fence 已实现；仅有自动化和一次性本地 PostgreSQL 16 机制证据，尚无真实设备/Provider、A1/H2/H3 证据 |
-| Web 屏幕共享 | `in_progress` | 成员 Web 已实现真实 display surface 识别、独立最小权限发布 Room、track SID 续租、当前 generation 订阅过滤和开始/暂停/恢复/停止 UI；未执行自动化、多浏览器、弱网或真实 LiveKit 门禁 |
+| Web 屏幕共享 | `in_progress` | 成员 Web 已实现真实 display surface 识别、独立最小权限发布 Room、可选独立系统音轨、track SID 续租、当前 generation 订阅过滤和开始/暂停/恢复/停止 UI；移动端系统音频仍关闭，未执行自动化、多浏览器、回声、弱网或真实 LiveKit 门禁 |
 | 企业用量预算 | `ready_for_acceptance` | enterprise `0014` 已实现 tenant/category/unit/UTC period 预算、hold/settle、阈值告警和 ledger 不可变约束；真实并发与账务抽样待验收 |
 | 租户账务和 Entitlement | `ready_for_acceptance` | enterprise `0015` 已实现 tenant billing account、不可变 plan/subscription/entitlement version、服务端账期及 binding/dispatch entitlement fence；真实支付 Provider、关账对账和 A1/H3 待验收 |
 | SaaS 计量聚合 | `ready_for_acceptance` | enterprise `0016` 已实现 tenant usage event、event/ledger 一致性、append-only adjustment、负数净额保护及 count/hash/watermark 账期聚合；真实关账、支付对账和 A1/H3 待验收 |
@@ -1641,6 +1641,35 @@ Worker 分别负责设备端与服务端最终回收。
 Android 13/14/15 真机权限、通知拒绝、系统状态栏停止、后台/锁屏、Activity/进程回收、网络切换、内存压力、真实
 LiveKit 首帧/续租/撤销或多发布者竞争。因此 `ENT-MTG-007` 保持 `in_progress`，不代表 Android 屏幕共享、A1 或
 企业生产门禁通过。
+
+### 19.13 Web 系统音频独立发布与 ASR 隔离
+
+Web 控制器在用户手势中把“共享系统音频”映射为 `getDisplayMedia({audio:true})`。结果必须同时具有 video track 和
+audio track，且 video 的 `displaySurface` 可识别；任一条件不满足都先停止 stream，再返回结构化
+`screen_capture_audio_unavailable` 或来源错误，不创建服务端租约。实际音轨存在后，acquire 才发送
+`includesSystemAudio=true`。服务端既有 runtime 会额外检查 `meeting.screen_share.system_audio` entitlement，并只在
+该字段为真时把 `TrackSource.SCREEN_SHARE_AUDIO` 加入短期 token；Web 再要求 grant `screenShareAudio` 与 capture 一致。
+
+独立 publisher Room 先发布 video `Track.Source.ScreenShare`，再发布 audio `Track.Source.ScreenShareAudio`，两者使用
+相同 generation publisher identity 和 stream 标识，但不同 track name。首次 renew 仍绑定 video track SID 作为租约
+活动证明；audio 由同一 identity、generation token 和 Room transport 约束。初始任一发布失败会 unpublish 已发布轨并断开
+Room；video `ended` 会停止整次共享。进入 active 后 audio 单独 `ended` 只从 stream 和 publisher Room 移除音轨，并把
+本地状态降级为 `screen_share_audio_ended`，视频和租约继续；pause/resume 不伪造恢复已结束的音轨。
+
+主会议 Room 继续排除 `ent-share:*` 对 remote participant count 的影响，只从服务端当前 publisher identity 接受
+`screen_share` 和 `screen_share_audio`。视频与音频分别进入 video/audio DOM；音频只对远端观看者附加，共享者本机
+不附加捕获轨，避免二次播放被再次捕获。audio controls 始终保留，以处理浏览器自动播放策略。
+
+Enterprise Meeting translation Agent 对每个输入同时执行两道守卫：participant identity 必须匹配
+`ent:<UUID>:host|member|guest`，publication source 必须等于 rtc-node `SOURCE_MICROPHONE`。因此
+`ent-share:<shareId>:g<generation>` 即使被 `AUDIO_ONLY` 自动订阅，其 `SCREEN_SHARE_AUDIO` 也不会建立 Speech Pipeline，
+不会生成错误 sourceParticipantId、ASR segment 或字幕。Agent permissions 仍只声明 microphone source。
+
+iOS 当前 ReplayKit Extension 只传 video sample，Android 当前 MediaProjection 只建立 screen video，均没有可验证的
+app-audio/AudioPlaybackCapture 到独立 WebRTC audio source 管线；移动 grant validator 继续要求
+`screenShareAudio=false`，请求体继续发送 `includesSystemAudio=false`。本轮仅形成 Web/Worker 静态代码候选，未执行
+浏览器/真实 LiveKit、entitlement 负测、音轨中断、扬声器/耳机回声、错误 ASR 段或移动真机矩阵，因此
+`ENT-MTG-008` 保持 `in_progress`，不代表 AC-SHARE-008、A1 或企业生产门禁通过。
 
 ## 20. 错误、重试和客户端动作
 

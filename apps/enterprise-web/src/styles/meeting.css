@@ -172,7 +172,43 @@
   display: grid;
   min-width: 180px;
   gap: 6px;
+}
+
+.meeting-screen-share__controls label:first-child {
   margin-right: auto;
+}
+
+.meeting-screen-share__audio-option span,
+.meeting-screen-share__audio {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.meeting-screen-share__audio-option small,
+.meeting-screen-share__audio {
+  color: var(--color-outline);
+}
+
+.meeting-screen-share__audio-option small {
+  max-width: 360px;
+}
+
+.meeting-screen-share__audio {
+  flex-wrap: wrap;
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  background: var(--color-surface-high);
+}
+
+.meeting-screen-share__audio span {
+  flex: 1;
+  min-width: 220px;
+}
+
+.meeting-screen-share__audio audio {
+  max-width: 100%;
+  height: 32px;
 }
 
 .meeting-screen-share__error {

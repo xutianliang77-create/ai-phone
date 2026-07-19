@@ -1,6 +1,6 @@
 # 无界AI企业版开发方案与计划
 
-版本：v1.37
+版本：v1.38
 日期：2026-07-19
 状态：E0 执行计划，已对齐统一通讯平台和 PostgreSQL Primary 收敛
 
@@ -41,6 +41,7 @@
 - `ENT-MTG-005` 已形成成员 Web 屏幕共享代码候选：浏览器用户手势选择内容后读取真实 `displaySurface`，再申请租约并用独立 Room 发布；首次续租绑定 track SID，后续按10秒续租；观看端只接受服务端当前 publisher identity，暂停/停止先断本地发布且撤销 pending 保持可见。系统音频、访客发布、iOS/Android、simulcast 和主持人强停不在本任务内；本轮未运行测试或真实 LiveKit/浏览器门禁，保持 `in_progress`。
 - `ENT-MTG-006` 已形成 iOS ReplayKit 代码候选：主 App 持有短期发布 grant 并维持独立屏幕 Room，Broadcast Upload Extension 只经 App Group Unix socket 发送视频样本；token-free 控制清单以 share/generation/nonce 和 lease expiry 失败闭合，系统停止、超时和离会均先清理本地再收敛服务端租约。当前未构建/安装 App，未执行真机后台、真实 LiveKit、网络切换和权限矩阵，保持 `in_progress`。
 - `ENT-MTG-007` 已形成 Android MediaProjection 代码候选：一次性系统授权发生在服务端 acquire 前，授权后先启动带停止操作的 `mediaProjection` 前台服务，再由独立最小权限 Room 发布屏幕轨；系统投屏停止、通知停止和租约到期均进入同一停止状态机。前台服务不持有 RTC token。当前未运行测试、APK 构建/安装、真机、真实 LiveKit、后台与网络切换矩阵，保持 `in_progress`。
+- `ENT-MTG-008` 已形成 Web 系统音频代码候选：只有 `getDisplayMedia` 实际返回独立 audio track 才申请系统音频 entitlement/grant，并以同 generation 的 `screen_share_audio` source 发布；观看端显式播放远端轨，共享者本机不回放。Enterprise Meeting Agent 只接收成员 microphone publication，双重排除共享 publisher/audio。iOS ReplayKit 与 Android MediaProjection 尚无真实系统音频采集管线，继续显式关闭。当前未运行浏览器/真实 LiveKit/ASR/回声矩阵，保持 `in_progress`。
 - PostgreSQL、SaaS 控制面、对象存储、正式域名、真实 Provider 和目标国家合规确认均未通过门禁。
 - 当前开发必须继续使用独立企业 worktree；个人版声纹和部署 WIP 不进入企业提交。
 - 公共 PostgreSQL Primary、统一通讯、Billing 和 Product Records 的稳定代码基线已导入；`ENT-DATA-008` 和 `ENT-CORE-013/014/015` 已完成代码与本地自动化。`ENT-DATA-009` 已产出全表切换/对账/逻辑恢复工具、签名证据和一次性本地 PostgreSQL 16 演练，进入 `ready_for_acceptance`；不能继承主产品环境验收，也未通过异地 PITR/H3。

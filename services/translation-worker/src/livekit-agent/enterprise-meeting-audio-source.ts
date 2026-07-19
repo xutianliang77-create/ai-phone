@@ -76,6 +76,8 @@ export class EnterpriseMeetingAudioSource {
   ) {
     if (this.stopped || this.tracks.has(track) ||
       this.tracks.size >= this.options.maxTracks ||
+      !enterpriseMicrophonePublication(publication,
+        this.options.rtc.TrackSource?.SOURCE_MICROPHONE) ||
       !shouldForwardAudioTrack(track, publication) ||
       !isRemoteAudioTrack(track, this.options.rtc.RemoteAudioTrack)) return;
     const identity = enterpriseParticipant(participant);
@@ -186,6 +188,10 @@ function publicationSid(value: unknown) {
   const sid = typeof item.sid === "string" ? item.sid : item.trackSid;
   return typeof sid === "string" && /^[A-Za-z0-9_-]{1,128}$/.test(sid)
     ? sid : null;
+}
+function enterpriseMicrophonePublication(value: unknown, microphone: unknown) {
+  return microphone !== undefined &&
+    (value as { source?: unknown }).source === microphone;
 }
 function participants(room: RtcRoom) {
   return (room as unknown as { remoteParticipants?: Map<string, unknown> })
