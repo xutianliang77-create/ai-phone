@@ -18,6 +18,8 @@ import {
 } from "../meeting/enterprise-meeting-room.js";
 import { MeetingTranslationPanel } from
   "../meeting/MeetingTranslationPanel.js";
+import { MeetingMediaWorkspace } from
+  "../meeting/MeetingMediaWorkspace.js";
 import { MeetingScreenSharePanel } from
   "../meeting/MeetingScreenSharePanel.js";
 
@@ -162,6 +164,11 @@ export function MeetingsPage() {
     setNotice("已离开会议，麦克风和本地屏幕采集轨道已停止。");
   }
 
+  const translationPanel = <MeetingTranslationPanel room={room}
+    captionLanguage={captionLanguage} translatedAudioEnabled={translatedAudioEnabled}
+    editable={room.status === "disconnected"} onCaptionLanguage={setCaptionLanguage}
+    onTranslatedAudioEnabled={setTranslatedAudioEnabled} />;
+
   return (
     <PageFrame title="企业会议"
       description="租户隔离的音频会议、定向字幕与代际受控屏幕共享">
@@ -193,14 +200,11 @@ export function MeetingsPage() {
         </section>
       ) : null}
       {requestContext && joined && roomClient.current && room.status !== "disconnected" ?
-        <MeetingScreenSharePanel api={api} context={requestContext}
-          meetingId={joined.meetingId} participantId={joined.participantId}
-          canShare={joined.canShare} room={room} roomClient={roomClient.current} /> : null}
-      <MeetingTranslationPanel room={room} captionLanguage={captionLanguage}
-        translatedAudioEnabled={translatedAudioEnabled}
-        editable={room.status === "disconnected"}
-        onCaptionLanguage={setCaptionLanguage}
-        onTranslatedAudioEnabled={setTranslatedAudioEnabled} />
+        <MeetingMediaWorkspace captions={translationPanel} screen={
+          <MeetingScreenSharePanel api={api} context={requestContext}
+            meetingId={joined.meetingId} participantId={joined.participantId}
+            canShare={joined.canShare} room={room} roomClient={roomClient.current} />
+        } /> : translationPanel}
       <MeetingList load={load} busy={busy} canJoin={canJoin} canWrite={canWrite}
         activeMeetingId={joined?.meetingId ?? null} refresh={refresh}
         joinMeeting={joinMeeting} inviteGuest={inviteGuest} />

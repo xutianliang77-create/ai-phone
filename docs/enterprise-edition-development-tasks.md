@@ -1,6 +1,6 @@
 # 无界AI企业版开发任务
 
-版本：v1.41
+版本：v1.42
 日期：2026-07-19
 状态：E0 开发中，已对齐统一通讯平台和 PostgreSQL Primary 收敛
 
@@ -35,6 +35,7 @@
 - `ENT-MTG-006` 已形成 iOS ReplayKit 代码候选：Broadcast Upload Extension 通过 App Group Unix socket 向主 App 传递视频样本，App Group 控制清单只保存 share/generation/publisher/lease/nonce，不保存 RTC token；Flutter 使用独立最小权限 publisher Room、25秒激活超时、10秒租约续期和系统停止回收，并按会议策略守卫入口。当前只通过 Flutter/Swift/Xcode 工程静态检查，未构建或安装 App，也未执行真机、真实 LiveKit、后台、网络切换或租约攻击测试，保持 `in_progress`。
 - `ENT-MTG-007` 已形成 Android MediaProjection 代码候选：Android 13+ 先取得可见通知权限，再取得一次性屏幕捕获授权；Android 14 顺序固定为授权、启动 `mediaProjection` 前台服务、发布屏幕轨。前台服务只持有 share/generation/publisher/lease/nonce，并通过通知停止、租约到期和系统投屏停止汇合到 Flutter/服务端停止状态机。当前只通过 Flutter analyze 和静态配置检查，按要求未运行测试、APK 构建、安装、真机权限/后台/网络切换或真实 LiveKit，保持 `in_progress`。
 - `ENT-MTG-008` 已形成 Web 系统音频代码候选：浏览器实际返回音频轨后才申请 `includesSystemAudio=true` 租约，独立发布/订阅 `screen_share_audio`；本机不回放，活动中音频单独结束时只移除音轨并保持共享画面。企业翻译 Agent 同时要求 `ent:<participantId>:<role>` identity 和 microphone source，拒绝 `ent-share:*` 及共享音轨。iOS/Android 仍固定关闭系统音频；当前只通过静态门禁，未运行浏览器、真实 LiveKit、回声或 ASR 验证，保持 `in_progress`。
+- `ENT-MTG-009` 已形成 Web/Flutter 自适应共享布局代码候选：三档画质显式配置 screen-share simulcast layers 与 dynacast；Web 保留 `RemoteVideoTrack.attach`，Flutter 使用 `VideoTrackRenderer`，把真实可见尺寸反馈给 adaptive subscription。两端提供画面优先/并排/字幕优先，窄屏/大字体自动纵向且不以 overlay 遮挡控制。当前只通过静态门禁，未运行浏览器、真机、弱网或真实 LiveKit layer 验证，保持 `in_progress`。
 - `ENT-CORE-007` 已新增 enterprise `0014` tenant usage budget、usage hold 和 append-only threshold alert，并增强 `usage_ledger` 的 budget/hold/source/hash 归属。reserve 在 tenant 行锁内汇总已结算量和有效 hold，settle 只追加 ledger 并单向结束 hold；同幂等键不同 hash 拒绝，预算超限在副作用前失败闭合。代码和自动化完成，进入 `ready_for_acceptance`；真实 PostgreSQL 并发、长稳和账务抽样仍待验收。
 - `ENT-CORE-010` 已新增 enterprise `0015` tenant billing account、不可变 plan version、活动 subscription 唯一约束、不可变 entitlement snapshot 和 append-only change history。套餐变更只引用服务端 plan，账期由服务端生成；communication binding/Worker ticket v3 固化 entitlement version，dispatch 从活动 account/subscription/snapshot 读取 limit，不接受客户端 `maxUnits`。代码、定向矩阵和一次性本地 PostgreSQL 16 forced-RLS/down-forward 机制验证完成，进入 `ready_for_acceptance`；未接支付 Provider，也不代表 A1/H3 或生产账务门禁通过。
 - `ENT-CORE-012` 已新增 enterprise `0016` tenant usage event、event/ledger 双向一致性、append-only adjustment、目标净额非负保护和按 UTC period 重建的 count/SHA-256 hash/watermark 聚合。budget settle 已接入原始 event；租户只开放 `usage:read` 聚合列表，冲正仅限内部 runtime 并追加审计。代码、定向测试和一次性本地 PostgreSQL 16 普通角色 forced-RLS/一致性/负数 guard 验证完成，进入 `ready_for_acceptance`；未执行真实关账、支付 Provider、A1/H3 或生产账务门禁。
@@ -116,7 +117,7 @@
 | ENT-MTG-006 | iOS ReplayKit | MTG-004 | Broadcast Extension、App Group 无令牌交接、独立 publisher Room、Flutter bridge | 离开 App 后持续共享且可停止 | in_progress |
 | ENT-MTG-007 | Android MediaProjection | MTG-004 | 一次性授权、mediaProjection 前台服务、可见停止通知、独立 publisher Room、原生停止监听 | 系统/通知/租约停止均收敛，token 不进入 Service；真机门禁通过前不宣称可用 | in_progress |
 | ENT-MTG-008 | 共享系统音频 | MTG-005/006 | Web 独立 audio track、entitlement/grant 守卫、独立播放与 ASR source fence；移动端明确降级 | 不进入错误 ASR，不形成回声环；移动端无真实采集时不显示成功 | in_progress |
-| ENT-MTG-009 | 共享自适应布局 | MTG-005 | simulcast、画面/字幕布局 | 小屏横屏大字体无重叠 | todo |
+| ENT-MTG-009 | 共享自适应布局 | MTG-005 | Web/Flutter 显式 simulcast/dynacast、尺寸驱动订阅、三种画面/字幕布局 | 小屏横屏大字体无重叠；弱网层切换不阻断音频和字幕 | in_progress |
 | ENT-MTG-010 | 主持人共享控制 | MTG-004 | grant/revoke/force stop | 撤销后旧 track 不恢复 | todo |
 | ENT-MTG-011 | 会后材料 | MTG-003、CORE-004 | transcript/review/action items | 结论可回溯 segment | todo |
 | ENT-MTG-012 | 屏幕 OCR 翻译 | MTG-005、CORE-004 | keyframe/hash/OCR/layout events | 默认关闭，失败不影响共享 | todo |

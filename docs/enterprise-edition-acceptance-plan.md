@@ -1,6 +1,6 @@
 # 无界AI企业版验收任务与计划
 
-版本：v1.34
+版本：v1.35
 日期：2026-07-19
 状态：可执行验收计划，已对齐统一通讯平台和 PostgreSQL Primary 收敛
 
@@ -373,6 +373,13 @@ generation 音轨。真实 LiveKit 房间中必须证明共享者本机没有捕
 不形成回声环；Worker 证据必须证明 `ent-share:*`/`SCREEN_SHARE_AUDIO` 没有 ASR segment、caption 或 speaker 记录，
 成员 microphone 仍正常处理。iOS/Android 应保持无入口和 `includesSystemAudio=false`，直到各自真实采集链路另行验收。
 本轮按要求未运行上述测试，因此 AC-SHARE-008 和 A1 均未通过。
+
+`ENT-MTG-009` 当前只形成 Web/Flutter 显式 simulcast/dynacast、renderer 尺寸驱动订阅和三种布局代码候选。恢复验收
+必须从 LiveKit server/client stats 证明 smooth/auto/high 的主层和附加层真实发布、无订阅层被 dynacast 关闭、远端
+元素/Widget 缩放或不可见会改变订阅需求，弱网下降层时麦克风、系统音频和字幕不断流；Firefox/不支持环境应明确单层
+而不是报告多层。布局矩阵至少覆盖320/390/600/760/840/960/1280px、手机横屏低高度、Web 200%缩放和Flutter
+1.0/1.5/2.0动态字体，三种模式均不得遮挡共享停止、麦克风、离会或字幕。当前未运行上述浏览器/真机/真实媒体测试，
+因此 AC-SHARE-006/007/009 和 A1 均未通过。
 
 ### 7.4 屏幕 OCR 翻译
 

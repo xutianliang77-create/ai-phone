@@ -45,6 +45,8 @@ class EnterpriseIosScreenSharePublisher
         adaptiveStream: true,
         dynacast: true,
         defaultScreenShareCaptureOptions: captureOptions,
+        defaultVideoPublishOptions:
+            enterpriseScreenShareVideoPublishOptions(qualityMode),
       ),
     );
     final listener = room.createListener();
@@ -181,11 +183,7 @@ class EnterpriseIosScreenSharePublisher
   }
 
   livekit.ScreenShareCaptureOptions _captureOptions(String qualityMode) {
-    final parameters = switch (qualityMode) {
-      'smooth' => livekit.VideoParametersPresets.screenShareH720FPS15,
-      'high' => livekit.VideoParametersPresets.screenShareH1440FPS30,
-      _ => livekit.VideoParametersPresets.screenShareH1080FPS15,
-    };
+    final parameters = enterpriseScreenShareVideoParameters(qualityMode);
     return livekit.ScreenShareCaptureOptions(
       useiOSBroadcastExtension: true,
       captureScreenAudio: false,

@@ -1,6 +1,6 @@
 # 无界AI企业版详细功能设计
 
-版本：v1.17
+版本：v1.18
 日期：2026-07-19
 状态：SaaS 详细设计基线，已对齐统一通讯平台
 
@@ -371,6 +371,16 @@ share/generation/publisher/lease/nonce，不接收 RTC token；系统音频固�
 - 字幕优先。
 - 画面与字幕并排。
 - 手机横屏全屏和浮动字幕。
+
+当前 `ENT-MTG-009` 把前三种布局落为 Web/Flutter 可见选择：画面优先保持共享画面在前并限制字幕区高度，字幕优先
+把字幕置前并缩短共享画面，并排在空间和字号允许时使用两列。为避免关键控制被遮挡，当前代码候选没有启用浮动字幕
+overlay；Web 低于960px自动单列，Flutter 宽度低于840或文字缩放超过1.5倍时自动单列，窄屏按钮使用 wrap/grid。
+
+发布端按画质显式配置 screen-share simulcast：smooth 为720p主层+360p低层，auto 为1080p主层+360p/720p，
+high 为1440p主层+360p/720p；两端开启 dynacast。Web 观看端用 LiveKit `RemoteVideoTrack.attach/detach`，Flutter
+用 `VideoTrackRenderer`，使 adaptive subscription 依据真实可见性、CSS/Widget 尺寸和像素密度选择层，而不是仅把原始
+MediaStreamTrack 交给 video。SDK/浏览器不支持 screen simulcast 时保持单层明确降级；媒体层降级不影响会议麦克风、
+系统音频或服务端定向字幕。真实弱网、层选择、CPU、横屏和200%/动态字体尚未验收，任务保持 `in_progress`。
 
 ### 7.4 共享内容翻译
 

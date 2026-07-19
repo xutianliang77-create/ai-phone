@@ -8,6 +8,7 @@ import '../../data/enterprise_meeting_screen_share_controller.dart';
 import '../../data/enterprise_mobile_api_client.dart';
 import '../../data/enterprise_mobile_models.dart';
 import '../widgets/enterprise_meeting_room_card.dart';
+import '../widgets/enterprise_meeting_media_workspace.dart';
 import '../widgets/enterprise_meeting_screen_share_card.dart';
 import '../widgets/enterprise_mobile_status_panel.dart';
 import '../widgets/enterprise_meeting_translation_card.dart';
@@ -85,16 +86,23 @@ class _EnterpriseMeetingsPageState extends State<EnterpriseMeetingsPage> {
         ),
       ]);
     }
+    final translationCard = EnterpriseMeetingTranslationCard(
+      snapshot: _room,
+      captionLanguage: _captionLanguage,
+      translatedAudioEnabled: _translatedAudioEnabled,
+      editable: _room.status == EnterpriseMeetingRoomStatus.disconnected,
+      onCaptionLanguage: (value) => setState(() => _captionLanguage = value),
+      onTranslatedAudio: (value) =>
+          setState(() => _translatedAudioEnabled = value),
+    );
     return _PageBody(children: <Widget>[
-      EnterpriseMeetingTranslationCard(
-        snapshot: _room,
-        captionLanguage: _captionLanguage,
-        translatedAudioEnabled: _translatedAudioEnabled,
-        editable: _room.status == EnterpriseMeetingRoomStatus.disconnected,
-        onCaptionLanguage: (value) => setState(() => _captionLanguage = value),
-        onTranslatedAudio: (value) =>
-            setState(() => _translatedAudioEnabled = value),
-      ),
+      if (_room.status == EnterpriseMeetingRoomStatus.disconnected)
+        translationCard
+      else
+        EnterpriseMeetingMediaWorkspace(
+          screenTrack: _room.screenShareTrack,
+          captions: translationCard,
+        ),
       if (_room.status != EnterpriseMeetingRoomStatus.disconnected)
         EnterpriseMeetingRoomCard(
           snapshot: _room,
@@ -236,6 +244,10 @@ class _EnterpriseMeetingsPageState extends State<EnterpriseMeetingsPage> {
         meetingId: meetingId,
         participantId: grant.participantId,
         onSnapshot: (snapshot) {
+          final share = snapshot.share;
+          _roomClient.setExpectedScreenSharePublisherIdentity(
+            share?.status == 'active' ? share!.publisherIdentity : null,
+          );
           if (mounted) setState(() => _screenShare = snapshot);
         },
       );
@@ -259,6 +271,7 @@ class _EnterpriseMeetingsPageState extends State<EnterpriseMeetingsPage> {
   Future<void> _leave() async {
     final screenShare = _screenShareController;
     _screenShareController = null;
+    _roomClient.setExpectedScreenSharePublisherIdentity(null);
     if (screenShare != null) {
       await screenShare.stop();
       await screenShare.dispose();

@@ -75,6 +75,102 @@
   background: var(--color-container);
 }
 
+.meeting-media-workspace {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+
+.meeting-media-workspace__toolbar,
+.meeting-media-workspace__toolbar > div,
+.meeting-media-workspace__choices {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.meeting-media-workspace__toolbar {
+  justify-content: space-between;
+  padding: 12px 16px;
+  border: 1px solid var(--color-outline-variant);
+  border-radius: var(--radius);
+  background: var(--color-container);
+}
+
+.meeting-media-workspace__toolbar > div:first-child > .material-icons-outlined {
+  color: var(--color-primary);
+}
+
+.meeting-media-workspace__toolbar span {
+  display: grid;
+  gap: 2px;
+}
+
+.meeting-media-workspace__toolbar small {
+  color: var(--color-outline);
+}
+
+.meeting-media-workspace__choices {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.meeting-media-workspace__choices button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: var(--control-height);
+  padding: 8px 12px;
+  border: 1px solid var(--color-outline-variant);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--color-on-surface);
+  cursor: pointer;
+}
+
+.meeting-media-workspace__choices button.is-selected {
+  border-color: var(--color-primary);
+  background: color-mix(in srgb, var(--color-primary) 12%, transparent);
+  color: var(--color-primary);
+}
+
+.meeting-media-workspace__content {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+}
+
+.meeting-media-workspace__screen,
+.meeting-media-workspace__captions {
+  min-width: 0;
+}
+
+.meeting-media-workspace.layout--balanced .meeting-media-workspace__content {
+  grid-template-columns: minmax(0, 1.6fr) minmax(320px, 0.8fr);
+  align-items: start;
+}
+
+.meeting-media-workspace.layout--captions .meeting-media-workspace__captions {
+  order: -1;
+}
+
+.meeting-media-workspace.layout--screen .meeting-caption-feed {
+  max-height: 180px;
+  overflow: auto;
+}
+
+.meeting-media-workspace.layout--balanced .meeting-caption-feed,
+.meeting-media-workspace.layout--captions .meeting-caption-feed {
+  max-height: 66vh;
+  overflow: auto;
+}
+
+.meeting-media-workspace.layout--captions .meeting-screen-share__video,
+.meeting-media-workspace.layout--captions .meeting-screen-share__empty {
+  min-height: 180px;
+  max-height: 42vh;
+}
+
 .meeting-screen-share {
   display: grid;
   gap: 16px;
@@ -331,6 +427,12 @@
   margin-top: auto;
 }
 
+@media (max-width: 959px) {
+  .meeting-media-workspace.layout--balanced .meeting-media-workspace__content {
+    grid-template-columns: 1fr;
+  }
+}
+
 @media (max-width: 760px) {
   .meeting-list,
   .meeting-create,
@@ -359,5 +461,42 @@
   .meeting-screen-share__controls label {
     width: 100%;
     margin-right: 0;
+  }
+
+  .meeting-media-workspace__toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .meeting-media-workspace__choices {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .meeting-media-workspace__choices button {
+    justify-content: center;
+    padding-inline: 8px;
+  }
+}
+
+@media (max-height: 560px) and (orientation: landscape) and (min-width: 760px) {
+  .meeting-media-workspace.layout--balanced .meeting-media-workspace__content {
+    grid-template-columns: minmax(0, 1.5fr) minmax(300px, 0.9fr);
+  }
+
+  .meeting-media-workspace .meeting-screen-share__video,
+  .meeting-media-workspace .meeting-screen-share__empty {
+    min-height: 180px;
+    max-height: 62vh;
+  }
+
+  .meeting-media-workspace .meeting-caption-feed {
+    max-height: 42vh;
+  }
+}
+
+@media (max-width: 420px) {
+  .meeting-media-workspace__choices {
+    grid-template-columns: 1fr;
   }
 }

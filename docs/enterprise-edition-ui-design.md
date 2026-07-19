@@ -1,6 +1,6 @@
 # 无界AI企业版 UI 详细设计
 
-版本：v1.13
+版本：v1.14
 日期：2026-07-19
 状态：设计基线；企业 Web 公共组件、首批设置/工作台、响应式/主题/无障碍和 Web/iOS/Android 成员屏幕共享代码候选已实现，正式验收仍在开发
 
@@ -311,6 +311,14 @@ budget、usage aggregate 和显式 session trace report。卡片沿用同一 Mat
   与视频等待态和当前 generation identity 一致。
 - iOS/Android 不显示系统音频开关，通知继续明确“不包含系统音频”；真实 ReplayKit app-audio 或 Android
   AudioPlaybackCapture 管线和真机门禁完成前，不因 Web 已实现而扩大移动端能力声明。
+- Web/Flutter 入会后显示“会议视图”布局组，统一使用 Material `dashboard_customize_outlined`、`slideshow_outlined`、
+  `view_sidebar_outlined`、`subtitles_outlined`。画面优先、并排、字幕优先是同一组单选状态，Web 用 `aria-pressed`，
+  Flutter 用 `ChoiceChip`；图标和文字都可见，不以颜色作为唯一选中提示。
+- 并排只在 Web `>=960px`、Flutter 可用宽度 `>=840` 且文字缩放 `<=1.5` 时启用；其余自动纵向。Web 手机按钮在
+  760px 以下三列、极窄宽度再单列；Flutter 使用 Wrap。横屏低高度限制画面与字幕区高度并允许字幕内部滚动，停止、
+  麦克风和离会操作仍在正常文档流，不用 overlay 遮挡。
+- 远端画面空缺、暂停或尚未订阅时显示深色“正在等待共享画面”占位；Web/Flutter renderer 必须保留 SDK adaptive
+  registration，不能为了复用普通 video/Image 组件丢失可见性和尺寸反馈。
 
 ## 10. 响应式与无障碍
 

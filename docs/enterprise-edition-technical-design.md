@@ -1,6 +1,6 @@
 # 无界AI企业版详细技术设计
 
-版本：v1.36
+版本：v1.37
 日期：2026-07-19
 状态：统一通讯平台与 PostgreSQL Primary 收敛详细技术方案
 
@@ -33,7 +33,7 @@
 | 企业统一通讯会话绑定 | `ready_for_acceptance` | enterprise `0011` 和 tenant unit-of-work 已建立 Meeting/Support/Marketing 唯一绑定、route/policy/entitlement 快照及 generation/event-sequence 收敛状态机；尚无真实多实例、cell 迁移和 A1/H3 证据 |
 | Tenant-aware Worker Dispatch | `ready_for_acceptance` | enterprise `0012` 以 scope FK/RLS 绑定公共 dispatch/capacity；短期 HMAC ticket、租户容量、lease/heartbeat、cancel/finalize 和二次 binding fence 已实现；仅有自动化和一次性本地 PostgreSQL 16 证据，尚无真实多实例/H3 容量证据 |
 | 企业设备、声音和录制策略 | `ready_for_acceptance` | enterprise `0013`、发布 API、策略解析、purpose-specific 授权和 Worker policy fence 已实现；仅有自动化和一次性本地 PostgreSQL 16 机制证据，尚无真实设备/Provider、A1/H2/H3 证据 |
-| Web 屏幕共享 | `in_progress` | 成员 Web 已实现真实 display surface 识别、独立最小权限发布 Room、可选独立系统音轨、track SID 续租、当前 generation 订阅过滤和开始/暂停/恢复/停止 UI；移动端系统音频仍关闭，未执行自动化、多浏览器、回声、弱网或真实 LiveKit 门禁 |
+| Web/Flutter 屏幕共享 | `in_progress` | 已实现真实来源/系统授权、独立最小权限发布 Room、Web 可选独立系统音轨、显式 screen simulcast/dynacast、renderer 尺寸驱动订阅、当前 generation 过滤和三种画面/字幕布局；移动端系统音频仍关闭，未执行自动化、多浏览器/真机、回声、弱网或真实 LiveKit 门禁 |
 | 企业用量预算 | `ready_for_acceptance` | enterprise `0014` 已实现 tenant/category/unit/UTC period 预算、hold/settle、阈值告警和 ledger 不可变约束；真实并发与账务抽样待验收 |
 | 租户账务和 Entitlement | `ready_for_acceptance` | enterprise `0015` 已实现 tenant billing account、不可变 plan/subscription/entitlement version、服务端账期及 binding/dispatch entitlement fence；真实支付 Provider、关账对账和 A1/H3 待验收 |
 | SaaS 计量聚合 | `ready_for_acceptance` | enterprise `0016` 已实现 tenant usage event、event/ledger 一致性、append-only adjustment、负数净额保护及 count/hash/watermark 账期聚合；真实关账、支付对账和 A1/H3 待验收 |
@@ -1670,6 +1670,34 @@ app-audio/AudioPlaybackCapture 到独立 WebRTC audio source 管线；移动 gra
 `screenShareAudio=false`，请求体继续发送 `includesSystemAudio=false`。本轮仅形成 Web/Worker 静态代码候选，未执行
 浏览器/真实 LiveKit、entitlement 负测、音轨中断、扬声器/耳机回声、错误 ASR 段或移动真机矩阵，因此
 `ENT-MTG-008` 保持 `in_progress`，不代表 AC-SHARE-008、A1 或企业生产门禁通过。
+
+### 19.14 自适应发布、订阅和画面/字幕布局
+
+Web capture 对 smooth/auto/high 分别使用最大1280×720@15、1920×1080@15、2560×1440@15约束。发布时显式设置
+`simulcast=true`、`degradationPreference=maintain-resolution` 和 `dynacast=true`：smooth 的主编码为720p15并附加
+360p3，auto 主编码为1080p15并附加360p3/720p5，high 主编码上限4.5Mbps@15并附加相同低/中层。LiveKit SDK 在
+Firefox 等自身不支持 screen simulcast 的环境可关闭多层；客户端不把该 SDK 降级伪装为多层成功。
+
+Flutter 锁定 `livekit_client 2.8.1`，共享 publisher Room 现显式设置 `VideoPublishOptions`。smooth/auto/high 主参数
+分别为 screenShareH720FPS15、H1080FPS15、H1440FPS30，附加层为360p3以及非 smooth 时的720p5，simulcast/dynacast
+均打开，degradation preference 为 maintainResolution。iOS ReplayKit 和 Android MediaProjection 继续使用各自同一
+quality 的 capture options；没有添加系统音频或新的原生权限。
+
+Web 观看端原先只把 `publication.track.mediaStreamTrack` 放进新 MediaStream，这会丢失 LiveKit adaptiveStream 对元素
+可见性和尺寸的观察。当前 snapshot 保留 `RemoteVideoTrack`；仅服务端 current share 的 publisher identity 和
+`screen_share` source 可进入状态，React 组件在 mount/update/unmount 时调用 `attach/detach(video)`。本地发布者预览
+继续使用原始 capture track，避免把自己的远端订阅当作发布状态真值。
+
+Flutter main Room 同样保存 expected publisher identity，只从该 participant 的 `screenShareVideo` publication 取得
+`RemoteVideoTrack`，并在订阅/取消订阅/participant 事件后重建 snapshot。`VideoTrackRenderer` 根据 Widget 大小、可见性
+和 device pixel ratio 向 SDK 注册订阅需求；`ent-share:*` participant 被排除于参会者计数。未知 identity、旧 generation
+或非 screen source 不渲染。
+
+Web `MeetingMediaWorkspace` 和 Flutter `EnterpriseMeetingMediaWorkspace` 均提供 screen/balanced/captions 三态且保持
+两部分挂载。Web 并排断点为960px，Flutter 为可用宽度840且文字缩放不超过1.5；否则按优先级纵向排序。低高度横屏
+限制媒体/字幕可视高度，字幕区域内部滚动，所有控制保持正常文档流。当前未运行真实 LiveKit layer 统计、弱网切层、
+Firefox单层降级、CPU/带宽、320/600/960/横屏/200%或Flutter动态字体真机矩阵，因此 `ENT-MTG-009` 保持
+`in_progress`，不代表 AC-SHARE-006/007/009、A1 或企业生产门禁通过。
 
 ## 20. 错误、重试和客户端动作
 

@@ -2,6 +2,7 @@ import type {
   ConnectionState,
   RemoteParticipant,
   RemoteTrackPublication,
+  RemoteVideoTrack,
   Room,
 } from "livekit-client";
 import type {
@@ -19,7 +20,7 @@ export interface EnterpriseMeetingRoomSnapshot {
   translatedAudioEnabled: boolean;
   translatedAudioAvailable: boolean;
   captions: EnterpriseMeetingCaptionEvent[];
-  screenShareTrack: MediaStreamTrack | null;
+  screenShareTrack: RemoteVideoTrack | null;
   screenShareAudioTrack: MediaStreamTrack | null;
   screenSharePublisherIdentity: string | null;
 }
@@ -156,11 +157,11 @@ export class EnterpriseMeetingRoomClient {
   ) {
     const expected = this.expectedScreenSharePublisherIdentity;
     if (!expected || participant.identity !== expected) return;
-    const track = publication.track?.mediaStreamTrack ?? null;
     if (String(publication.source) === "screen_share") {
-      this.emit({ screenShareTrack: track });
+      this.emit({ screenShareTrack: remoteScreenTrack(publication) });
     } else if (String(publication.source) === "screen_share_audio") {
-      this.emit({ screenShareAudioTrack: track });
+      this.emit({ screenShareAudioTrack:
+        publication.track?.mediaStreamTrack ?? null });
     }
   }
 
@@ -178,7 +179,7 @@ export class EnterpriseMeetingRoomClient {
     const audioPublication = publications
       .find((candidate) => String(candidate.source) === "screen_share_audio");
     this.emit({
-      screenShareTrack: publication?.track?.mediaStreamTrack ?? null,
+      screenShareTrack: publication ? remoteScreenTrack(publication) : null,
       screenShareAudioTrack: audioPublication?.track?.mediaStreamTrack ?? null,
     });
   }
@@ -211,6 +212,12 @@ export class EnterpriseMeetingRoomClient {
     this.snapshot = { ...this.snapshot, ...value };
     this.onSnapshot(this.snapshot);
   }
+}
+
+function remoteScreenTrack(publication: RemoteTrackPublication) {
+  const track = publication.track;
+  return track?.mediaStreamTrack.kind === "video" && "attach" in track
+    ? track as RemoteVideoTrack : null;
 }
 
 function validateCaption(

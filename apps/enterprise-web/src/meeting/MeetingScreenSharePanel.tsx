@@ -3,6 +3,7 @@ import type {
   EnterpriseMeetingScreenShareQuality,
   EnterpriseMeetingScreenShareSource,
 } from "@translation/contracts";
+import type { RemoteVideoTrack } from "livekit-client";
 import type { EnterpriseApi, EnterpriseContentRequestContext } from
   "../api/enterprise-api.js";
 import { MaterialIcon } from "../components/MaterialIcon.js";
@@ -58,9 +59,10 @@ export function MeetingScreenSharePanel(props: {
     return () => props.roomClient.setExpectedScreenSharePublisherIdentity(null);
   }, [expectedIdentity, props.roomClient]);
 
-  const visibleTrack = share?.status === "active"
-    ? props.room.screenShareTrack ?? (ownShare ? state.localTrack : null)
-    : null;
+  const localTrack = share?.status === "active" && ownShare ? state.localTrack : null;
+  const remoteTrack = share?.status === "active" && !ownShare
+    ? props.room.screenShareTrack : null;
+  const visibleTrack = localTrack !== null || remoteTrack !== null;
   const occupied = share?.status === "active" || share?.status === "paused";
 
   return <section className="meeting-screen-share" aria-label="会议屏幕共享">
@@ -73,7 +75,8 @@ export function MeetingScreenSharePanel(props: {
       </span>
     </header>
 
-    {visibleTrack ? <ScreenShareVideo track={visibleTrack} own={ownShare} /> :
+    {visibleTrack ? <ScreenShareVideo localTrack={localTrack}
+      remoteTrack={remoteTrack} own={ownShare} /> :
       <div className="meeting-screen-share__empty">
         <MaterialIcon name={share?.status === "paused" ? "pause_circle" :
           enterpriseIcons.action.shareScreen}
@@ -163,16 +166,26 @@ function ScreenShareAudio(props: {
   </div>;
 }
 
-function ScreenShareVideo(props: { track: MediaStreamTrack; own: boolean }) {
+function ScreenShareVideo(props: {
+  localTrack: MediaStreamTrack | null;
+  remoteTrack: RemoteVideoTrack | null;
+  own: boolean;
+}) {
   const element = useRef<HTMLVideoElement | null>(null);
   useEffect(() => {
     const video = element.current;
     if (!video) return;
-    const stream = new MediaStream([props.track]);
-    video.srcObject = stream;
+    if (props.remoteTrack) {
+      props.remoteTrack.attach(video);
+    } else if (props.localTrack) {
+      video.srcObject = new MediaStream([props.localTrack]);
+    }
     void video.play().catch(() => undefined);
-    return () => { video.srcObject = null; };
-  }, [props.track]);
+    return () => {
+      if (props.remoteTrack) props.remoteTrack.detach(video);
+      video.srcObject = null;
+    };
+  }, [props.localTrack, props.remoteTrack]);
   return <div className="meeting-screen-share__video">
     <video ref={element} autoPlay playsInline muted={props.own} />
     <span>{props.own ? "你的共享画面" : "当前共享画面"}</span>

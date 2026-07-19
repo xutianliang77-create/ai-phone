@@ -11,6 +11,7 @@ export interface EnterpriseScreenCapture {
   audioTrack: MediaStreamTrack | null;
   sourceType: EnterpriseMeetingScreenShareSource;
   includesSystemAudio: boolean;
+  quality: EnterpriseMeetingScreenShareQuality;
 }
 
 export class EnterpriseMeetingScreenSharePublisher {
@@ -49,7 +50,7 @@ export class EnterpriseMeetingScreenSharePublisher {
       throw new Error("screen_capture_source_unknown");
     }
     return {
-      stream, videoTrack, audioTrack, sourceType,
+      stream, videoTrack, audioTrack, sourceType, quality,
       includesSystemAudio: audioTrack !== null,
     };
   }
@@ -59,7 +60,7 @@ export class EnterpriseMeetingScreenSharePublisher {
     if (grant.capabilities.screenShareAudio !== capture.includesSystemAudio) {
       throw new Error("screen_share_grant_mismatch");
     }
-    const { Room, Track } = await import("livekit-client");
+    const { Room, ScreenSharePresets, Track } = await import("livekit-client");
     const room = new Room({ adaptiveStream: true, dynacast: true });
     this.room = room;
     try {
@@ -69,6 +70,9 @@ export class EnterpriseMeetingScreenSharePublisher {
         source: Track.Source.ScreenShare,
         name: `enterprise-screen-g${grant.generation}`,
         stream: grant.publisherIdentity,
+        simulcast: true,
+        degradationPreference: "maintain-resolution",
+        ...screenShareEncoding(capture.quality, ScreenSharePresets),
       });
       if (capture.audioTrack) {
         this.publishedTracks.push(capture.audioTrack);
@@ -138,18 +142,38 @@ export function enterpriseScreenShareErrorCode(error: unknown) {
 function videoConstraints(
   quality: EnterpriseMeetingScreenShareQuality,
 ): boolean | MediaTrackConstraints {
-  if (quality === "auto") return true;
   if (quality === "smooth") {
+    return {
+      width: { ideal: 1_280, max: 1_280 },
+      height: { ideal: 720, max: 720 },
+      frameRate: { ideal: 15, max: 15 },
+    };
+  }
+  if (quality === "auto") {
     return {
       width: { ideal: 1_920, max: 1_920 },
       height: { ideal: 1_080, max: 1_080 },
-      frameRate: { ideal: 30, max: 30 },
+      frameRate: { ideal: 15, max: 15 },
     };
   }
   return {
-    width: { ideal: 2_560, max: 3_840 },
-    height: { ideal: 1_440, max: 2_160 },
-    frameRate: { ideal: 15, max: 30 },
+    width: { ideal: 2_560, max: 2_560 },
+    height: { ideal: 1_440, max: 1_440 },
+    frameRate: { ideal: 15, max: 15 },
+  };
+}
+
+function screenShareEncoding(
+  quality: EnterpriseMeetingScreenShareQuality,
+  presets: typeof import("livekit-client")["ScreenSharePresets"],
+) {
+  const screenShareEncoding = quality === "smooth" ? presets.h720fps15.encoding :
+    quality === "high" ? { ...presets.original.encoding,
+      maxBitrate: 4_500_000, maxFramerate: 15 } : presets.h1080fps15.encoding;
+  return {
+    screenShareEncoding,
+    screenShareSimulcastLayers: quality === "smooth" ? [presets.h360fps3] :
+      [presets.h360fps3, presets.h720fps5],
   };
 }
 

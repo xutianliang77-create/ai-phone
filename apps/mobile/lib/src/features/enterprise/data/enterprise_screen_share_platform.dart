@@ -1,3 +1,5 @@
+import 'package:livekit_client/livekit_client.dart' as livekit;
+
 import 'enterprise_meeting_screen_share_models.dart';
 
 typedef EnterpriseScreenSharePublished = void Function(
@@ -59,4 +61,29 @@ class EnterpriseScreenSharePlatformException implements Exception {
 
   @override
   String toString() => code;
+}
+
+livekit.VideoParameters enterpriseScreenShareVideoParameters(
+  String qualityMode,
+) =>
+    switch (qualityMode) {
+      'smooth' => livekit.VideoParametersPresets.screenShareH720FPS15,
+      'high' => livekit.VideoParametersPresets.screenShareH1440FPS30,
+      _ => livekit.VideoParametersPresets.screenShareH1080FPS15,
+    };
+
+livekit.VideoPublishOptions enterpriseScreenShareVideoPublishOptions(
+  String qualityMode,
+) {
+  final parameters = enterpriseScreenShareVideoParameters(qualityMode);
+  return livekit.VideoPublishOptions(
+    screenShareEncoding: parameters.encoding,
+    simulcast: true,
+    degradationPreference: livekit.DegradationPreference.maintainResolution,
+    screenShareSimulcastLayers: <livekit.VideoParameters>[
+      livekit.VideoParametersPresets.screenShareH360FPS3,
+      if (qualityMode != 'smooth')
+        livekit.VideoParametersPresets.screenShareH720FPS5,
+    ],
+  );
 }

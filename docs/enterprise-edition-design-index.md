@@ -1,6 +1,6 @@
 # 无界AI企业版设计文档索引
 
-版本：v1.29
+版本：v1.30
 日期：2026-07-19
 状态：SaaS 详细设计基线，已纳入统一通讯平台和 PostgreSQL Primary 演进
 
@@ -89,9 +89,11 @@ display surface 识别、独立发布房间、track SID 续租、代际订阅过
 已增加 Android MediaProjection 显式授权、可见前台通知、独立 Flutter publisher Room、租约到期回收，以及系统投屏/
 通知停止汇合；前台服务只持有 token-free 控制元数据。`ENT-MTG-008` 已增加 Web 真实系统音频请求、独立
 `screen_share_audio` 发布与观看、本机不回放，以及翻译 Agent 的 participant identity + microphone source 双重守卫；
-iOS/Android 没有真实音频采集管线时继续关闭入口。当前按要求未执行
+iOS/Android 没有真实音频采集管线时继续关闭入口。`ENT-MTG-009` 已增加 Web/Flutter 显式 simulcast/dynacast、
+基于真实渲染元素尺寸的 adaptive subscription，以及画面优先/并排/字幕优先布局；窄屏与大字体不使用遮挡式 overlay。
+当前按要求未执行
 测试、migration、RLS、RBAC/ticket 攻击、并发共享、Worker/Provider、四人媒体、浏览器、真机与重启恢复，
-因此八项任务均保持 `in_progress`。
+因此九项任务均保持 `in_progress`。
 
 ## 3. 继承文档
 
@@ -109,6 +111,7 @@ iOS/Android 没有真实音频采集管线时继续关闭入口。当前按要�
 - [ENT-MTG-006 iOS ReplayKit 实现与静态门禁证据](./evidence/ent-mtg-006-ios-replaykit-2026-07-19.md)
 - [ENT-MTG-007 Android MediaProjection 实现与静态门禁证据](./evidence/ent-mtg-007-android-media-projection-2026-07-19.md)
 - [ENT-MTG-008 Web 系统音频实现与静态门禁证据](./evidence/ent-mtg-008-web-system-audio-2026-07-19.md)
+- [ENT-MTG-009 自适应共享布局实现与静态门禁证据](./evidence/ent-mtg-009-adaptive-screen-layout-2026-07-19.md)
 
 ## 4. 统一约束
 

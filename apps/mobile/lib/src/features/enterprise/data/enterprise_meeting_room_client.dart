@@ -23,6 +23,7 @@ class EnterpriseMeetingRoomSnapshot {
     required this.translatedAudioEnabled,
     required this.translatedAudioAvailable,
     required this.captions,
+    required this.screenShareTrack,
   });
 
   const EnterpriseMeetingRoomSnapshot.disconnected()
@@ -34,7 +35,8 @@ class EnterpriseMeetingRoomSnapshot {
         captionLanguage = 'zh',
         translatedAudioEnabled = false,
         translatedAudioAvailable = false,
-        captions = const <EnterpriseMobileMeetingCaption>[];
+        captions = const <EnterpriseMobileMeetingCaption>[],
+        screenShareTrack = null;
 
   final EnterpriseMeetingRoomStatus status;
   final bool microphoneEnabled;
@@ -45,6 +47,7 @@ class EnterpriseMeetingRoomSnapshot {
   final bool translatedAudioEnabled;
   final bool translatedAudioAvailable;
   final List<EnterpriseMobileMeetingCaption> captions;
+  final livekit.RemoteVideoTrack? screenShareTrack;
 }
 
 class EnterpriseMeetingRoomClient {
@@ -55,6 +58,7 @@ class EnterpriseMeetingRoomClient {
   EnterpriseMobileMeetingJoinGrant? _grant;
   List<EnterpriseMobileMeetingCaption> _captions = const [];
   final Set<String> _seenEventIds = <String>{};
+  String? _expectedScreenSharePublisherIdentity;
   bool _disposed = false;
 
   Stream<EnterpriseMeetingRoomSnapshot> get snapshots => _snapshots.stream;
@@ -75,6 +79,7 @@ class EnterpriseMeetingRoomClient {
       translatedAudioEnabled: grant.translation.translatedAudioEnabled,
       translatedAudioAvailable: grant.translation.translatedAudioAvailable,
       captions: const [],
+      screenShareTrack: null,
     ));
     final room = livekit.Room(
       roomOptions: const livekit.RoomOptions(
@@ -109,6 +114,12 @@ class EnterpriseMeetingRoomClient {
     _emit(_snapshot(room));
   }
 
+  void setExpectedScreenSharePublisherIdentity(String? identity) {
+    _expectedScreenSharePublisherIdentity = identity;
+    final room = _room;
+    if (room != null) _emit(_snapshot(room));
+  }
+
   Future<void> disconnect() async {
     await _disposeRoom();
     _emit(const EnterpriseMeetingRoomSnapshot.disconnected());
@@ -137,6 +148,8 @@ class EnterpriseMeetingRoomClient {
       })
       ..on<livekit.ParticipantConnectedEvent>((_) => _emit(_snapshot(room)))
       ..on<livekit.ParticipantDisconnectedEvent>((_) => _emit(_snapshot(room)))
+      ..on<livekit.TrackSubscribedEvent>((_) => _emit(_snapshot(room)))
+      ..on<livekit.TrackUnsubscribedEvent>((_) => _emit(_snapshot(room)))
       ..on<livekit.DataReceivedEvent>((event) {
         if (event.participant != null) return;
         _handleCaption(room, event.data, event.topic);
@@ -153,7 +166,10 @@ class EnterpriseMeetingRoomClient {
     return EnterpriseMeetingRoomSnapshot(
       status: status,
       microphoneEnabled: room.localParticipant?.isMicrophoneEnabled() ?? false,
-      remoteParticipantCount: room.remoteParticipants.length,
+      remoteParticipantCount: room.remoteParticipants.values
+          .where(
+              (participant) => !participant.identity.startsWith('ent-share:'))
+          .length,
       translationStatus: _grant?.translation.status ?? 'not_ready',
       translationReasonCode: _grant?.translation.reasonCode ?? 'not_joined',
       captionLanguage: _grant?.translation.captionLanguage ?? 'zh',
@@ -162,6 +178,7 @@ class EnterpriseMeetingRoomClient {
       translatedAudioAvailable:
           _grant?.translation.translatedAudioAvailable ?? false,
       captions: List<EnterpriseMobileMeetingCaption>.unmodifiable(_captions),
+      screenShareTrack: _screenShareTrack(room),
     );
   }
 
@@ -204,6 +221,7 @@ class EnterpriseMeetingRoomClient {
       await _ignore(room.dispose);
     }
     _grant = null;
+    _expectedScreenSharePublisherIdentity = null;
     _captions = const [];
     _seenEventIds.clear();
   }
@@ -216,5 +234,19 @@ class EnterpriseMeetingRoomClient {
 
   void _emit(EnterpriseMeetingRoomSnapshot snapshot) {
     if (!_disposed && !_snapshots.isClosed) _snapshots.add(snapshot);
+  }
+
+  livekit.RemoteVideoTrack? _screenShareTrack(livekit.Room room) {
+    final expected = _expectedScreenSharePublisherIdentity;
+    final participant =
+        expected == null ? null : room.remoteParticipants[expected];
+    if (participant == null) return null;
+    for (final publication in participant.videoTrackPublications) {
+      if (publication.source == livekit.TrackSource.screenShareVideo &&
+          publication.track != null) {
+        return publication.track;
+      }
+    }
+    return null;
   }
 }

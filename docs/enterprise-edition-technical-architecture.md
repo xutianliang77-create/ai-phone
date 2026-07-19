@@ -1,6 +1,6 @@
 # 无界AI企业版技术架构
 
-版本：v1.21
+版本：v1.22
 日期：2026-07-19
 状态：SaaS 详细架构基线，已对齐统一通讯平台和 PostgreSQL Primary
 
@@ -322,6 +322,16 @@ publisher identity/stream、不同 `screen_share` 与 `screen_share_audio` sourc
 共享者本机不播放捕获音轨。Enterprise Meeting Agent 的订阅侧既要求成员 identity 形状，也要求 publication source 为
 microphone，因此系统音频不会成为说话人、ASR 或字幕输入。iOS/Android 仍没有连接 ReplayKit app audio 或 Android
 AudioPlaybackCapture 到独立 WebRTC audio source，保持 `includesSystemAudio=false`；该边界不以自动降级掩盖。
+
+`ENT-MTG-009` 在 publisher Room 明确开启 screen simulcast 与 dynacast。Web smooth/auto/high 把 capture 上限约束为
+720p15、1080p15、1440p15，并分别发布低层或低/中层；Flutter 复用锁定 SDK 的720p15、1080p15、1440p30参数及
+360p3/720p5附加层。没有订阅者需要某层时 dynacast 停止该层，弱网时 LiveKit 可选择更低层；媒体质量变化不修改
+会议租约或字幕 generation。
+
+订阅端的自适应边界落在真实 renderer：Web snapshot 保存 `RemoteVideoTrack`，React video 用 `attach/detach` 注册 DOM
+尺寸/可见性；Flutter 只接受服务端当前 generation 的 `ent-share` identity 与 screen source，再交给
+`VideoTrackRenderer` 注册 Widget 尺寸和像素密度。共享 publisher 不计入远端参会者人数。布局完全在客户端显示层完成，
+画面/字幕都保持挂载；窄屏、大字体和低高度横屏使用重排/内部滚动，不创建遮挡关键控制的媒体 overlay。
 
 ## 7. 外呼营销架构
 
