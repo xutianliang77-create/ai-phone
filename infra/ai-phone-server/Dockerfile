@@ -28,7 +28,8 @@ RUN npm ci && \
     npm run build -w @translation/translation-worker && \
     npm run build -w @translation/pstn-bridge && \
     npm run build -w @translation/srt-ingress-bridge && \
-    npm run build -w @translation/voice-agent-runtime
+    npm run build -w @translation/voice-agent-runtime && \
+    npm cache clean --force
 
 ENV NODE_ENV=production \
     SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt
