@@ -86,6 +86,16 @@ export function mapToolExecution(row: ToolExecutionRow): EnterpriseToolExecution
       authorizationScope: row.authorization_scope!,
     } : {}),
     ...(row.external_result_ref ? { externalResultRef: row.external_result_ref } : {}),
+    executionAttempt: Number(row.execution_attempt),
+    ...(row.execution_lease_id ? { executionLeaseId: row.execution_lease_id } : {}),
+    ...optionalTime("executionLeaseExpiresAt", row.execution_lease_expires_at),
+    ...(row.provider_fingerprint
+      ? { providerFingerprint: row.provider_fingerprint } : {}),
+    ...(row.provider_simulated === null
+      ? {} : { providerSimulated: row.provider_simulated }),
+    ...(row.result_document ? { resultDocument: row.result_document } : {}),
+    ...(row.result_hash ? { resultHash: row.result_hash } : {}),
+    ...(row.failure_code ? { failureCode: row.failure_code } : {}),
     idempotencyKey: row.idempotency_key, createdAt: iso(row.created_at),
     ...optionalTime("startedAt", row.started_at),
     ...optionalTime("completedAt", row.completed_at),
@@ -142,5 +152,12 @@ export interface ToolExecutionRow extends Record<string, unknown> {
   registry_definition_id: string | null; tool_revision: string | number | null;
   arguments_hash: string | null;
   authorization_scope: EnterpriseToolExecutionRecord["authorizationScope"] | null;
+  execution_attempt: string | number;
+  execution_lease_id: string | null;
+  execution_lease_expires_at: string | Date | null;
+  provider_fingerprint: string | null;
+  provider_simulated: boolean | null;
+  result_document: EnterpriseToolExecutionRecord["resultDocument"] | null;
+  result_hash: string | null; failure_code: string | null;
   updated_at: string | Date; version: string | number;
 }

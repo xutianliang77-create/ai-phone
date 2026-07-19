@@ -105,6 +105,35 @@ export function registerEnterpriseSupportToolRoutes(
       return sendError(reply, 409, result.status,
         "Support tool authorization rejected");
     });
+
+  app.post("/internal/enterprise/support-tools/execute-read",
+    async (request, reply) => {
+      if (!internalAuthorized(request)) return unauthorized(reply);
+      if (!runtime.executeSupportReadTool) return postgresRequired(reply);
+      const body = readExecutionRequest(request.body);
+      if (!body) return invalid(reply, "invalid_support_read_tool_execution");
+      const result = await runtime.executeSupportReadTool({ ...body,
+        traceId: enterpriseRequestTraceId(request) });
+      if (result.status === "completed") return reply.send(result);
+      if (result.status === "in_progress") return reply.status(202).send(result);
+      if (result.status === "invalid_arguments") {
+        return invalid(reply, "invalid_support_read_tool_arguments");
+      }
+      if (["invalid_ticket", "ticket_expired"].includes(result.status)) {
+        return sendError(reply, 403, "support_read_tool_ticket_rejected",
+          "Support read tool Worker ticket rejected");
+      }
+      if (result.status === "not_found") return sendError(reply, 404,
+        "support_read_tool_execution_not_found", "Support read execution not found");
+      if (result.status === "not_configured") return sendError(reply, 503,
+        "support_read_tool_not_configured",
+        `Support read tool not configured: ${reason(result, "not_configured")}`);
+      if (result.status === "failed") return sendError(reply, 503,
+        "support_read_tool_failed",
+        `Support read tool failed: ${reason(result, "adapter_failed")}`);
+      return sendError(reply, 409, result.status,
+        "Support read tool execution rejected");
+    });
 }
 
 async function accessFor(
@@ -163,6 +192,19 @@ function authorizationRequest(value: unknown) {
     idempotencyKey: body.idempotencyKey, arguments: args };
 }
 
+function readExecutionRequest(value: unknown) {
+  const body = record(value);
+  if (!body || !exact(body, ["ticket", "workerCellId", "workerId", "runId",
+    "executionId", "arguments"]) || !bounded(body.ticket, 4_096, 64) ||
+    !code(body.workerCellId, 128) || !code(body.workerId, 128) ||
+    !uuid(body.runId) || !uuid(body.executionId)) return null;
+  const args = record(body.arguments);
+  if (!args || Buffer.byteLength(JSON.stringify(args)) > 8_192) return null;
+  return { ticket: body.ticket, workerCellId: body.workerCellId,
+    workerId: body.workerId, runId: body.runId, executionId: body.executionId,
+    arguments: args };
+}
+
 function definitionResult(reply: FastifyReply, result: { status: string;
   definition?: unknown }) {
   if (result.status === "storage_required") return postgresRequired(reply);
@@ -217,4 +259,8 @@ function unauthorized(reply: FastifyReply) {
 function postgresRequired(reply: FastifyReply) {
   return sendError(reply, 503, "enterprise_postgres_required",
     "Enterprise PostgreSQL runtime required");
+}
+function reason(value: object, fallback: string) {
+  return "reasonCode" in value && typeof value.reasonCode === "string"
+    ? value.reasonCode : fallback;
 }

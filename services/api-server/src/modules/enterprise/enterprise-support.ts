@@ -1,6 +1,7 @@
 import type { EnterpriseCommunicationBindingRecord } from
   "./enterprise-communication-session.js";
-import type { EnterpriseScope } from "@translation/contracts";
+import type { EnterpriseScope, EnterpriseSupportReadToolResult } from
+  "@translation/contracts";
 
 export const enterpriseSupportChannelTypes = ["pstn", "web", "app"] as const;
 export type EnterpriseSupportChannelType =
@@ -78,6 +79,11 @@ export interface EnterpriseToolExecutionRecord {
   status: EnterpriseToolExecutionStatus; externalResultRef?: string;
   toolDefinitionId?: string; toolRevision?: number;
   argumentsHash?: string; authorizationScope?: EnterpriseScope;
+  executionAttempt: number; executionLeaseId?: string;
+  executionLeaseExpiresAt?: string; providerFingerprint?: string;
+  providerSimulated?: boolean;
+  resultDocument?: EnterpriseSupportReadToolResult; resultHash?: string;
+  failureCode?: string;
   idempotencyKey: string; createdAt: string; startedAt?: string;
   completedAt?: string; updatedAt: string; version: number;
 }

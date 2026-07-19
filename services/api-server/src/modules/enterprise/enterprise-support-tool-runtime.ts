@@ -1,4 +1,5 @@
 import type {
+  EnterpriseSupportReadToolExecutionResponse,
   EnterpriseSupportToolAuthorizationResponse,
   EnterpriseSupportToolDefinitionDto,
 } from "@translation/contracts";
@@ -60,6 +61,19 @@ export interface EnterpriseSupportToolRepositoryRuntime {
     | EnterpriseSupportToolAuthorizationResponse
     | { status: "not_registered" | "invalid_arguments" |
         "idempotency_conflict" | "run_mismatch" }
+    | { status: string }
+  >;
+  executeSupportReadTool?(input: WorkerInput & {
+    runId: string;
+    executionId: string;
+    arguments: Record<string, unknown>;
+  }): Promise<
+    | EnterpriseSupportReadToolExecutionResponse
+    | { status: "in_progress" | "not_configured" | "failed" |
+        "not_found" | "invalid_arguments" | "unsupported_tool" |
+        "definition_not_active" | "execution_mismatch" |
+        "run_mismatch" | "lease_expired" | "conflict";
+        reasonCode?: string }
     | { status: string }
   >;
 }

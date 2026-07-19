@@ -186,3 +186,26 @@ export interface EnterpriseSupportToolAuthorizationResponse {
   executionId?: string;
   replayed?: boolean;
 }
+
+export type EnterpriseSupportReadToolResult =
+  | { kind: "order"; found: false; orderId: string }
+  | { kind: "order"; found: true; orderId: string; status: string;
+      updatedAt: string }
+  | { kind: "logistics"; found: false; trackingNumber: string }
+  | { kind: "logistics"; found: true; trackingNumber: string;
+      status: string; lastEvent: string; updatedAt: string }
+  | { kind: "inventory"; found: false; sku: string }
+  | { kind: "inventory"; found: true; sku: string; availability: string;
+      quantity: number; updatedAt: string };
+
+export interface EnterpriseSupportReadToolExecutionResponse {
+  status: "completed";
+  executionId: string;
+  toolName: string;
+  result: EnterpriseSupportReadToolResult;
+  resultHash: string;
+  providerFingerprint: string;
+  simulated: boolean;
+  providerReference: string;
+  replayed?: boolean;
+}

@@ -41,6 +41,7 @@ describe("enterprise PostgreSQL migrations", () => {
       "0028_enterprise_support_domain",
       "0029_enterprise_support_agent",
       "0030_enterprise_support_tool_registry",
+      "0031_enterprise_support_read_tools",
     ]);
     for (const migration of migrations) {
       expect(migration.up.trim()).not.toBe("");
@@ -150,6 +151,11 @@ describe("enterprise PostgreSQL migrations", () => {
     expect(sql).toContain("CREATE TABLE enterprise.support_tool_definitions");
     expect(sql).toContain("tool_executions_registry_insert_guard");
     expect(sql).toContain("enterprise high risk support tool requires human handoff");
+    expect(sql).toContain("tool_executions_read_recovery_idx");
+    expect(sql).toContain("provider_simulated boolean");
+    expect(sql).toContain("tool_executions_read_shape_check");
+    expect(sql).toContain("external_result_ref IS NOT NULL");
+    expect(sql).toContain("NEW.execution_attempt > OLD.execution_attempt + 1");
     expect(sql).toContain("CREATE TABLE enterprise.meeting_material_segments");
     expect(sql).toContain("CREATE TABLE enterprise.meeting_material_conclusion_evidence");
     expect(sql).toContain("CREATE TABLE enterprise.meeting_action_item_evidence");
@@ -202,6 +208,7 @@ describe("enterprise PostgreSQL migrations", () => {
     expect(rollbackSql).toContain(
       "DROP TABLE IF EXISTS enterprise.support_tool_definitions",
     );
+    expect(rollbackSql).toContain("DROP COLUMN IF EXISTS execution_attempt");
     expect(sql).not.toContain("BYPASSRLS");
   });
 

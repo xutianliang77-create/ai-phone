@@ -1,6 +1,6 @@
 # 无界AI企业版详细功能设计
 
-版本：v1.26
+版本：v1.27
 日期：2026-07-19
 状态：SaaS 详细设计基线，已对齐统一通讯平台
 
@@ -281,8 +281,8 @@ LLM 生成企业事实。每次检索只审计维度、结果数和逐条知识�
 - 每轮只消费服务端返回的当前 published RAG evidence。没有证据时不调用 LLM，而是使用本地化固定话术说明无法确认并转人工；
   Provider 未配置、超时、不可用或返回非法 JSON 时采用同一显式降级路径，不显示或播报“成功回答”。
 - 模型输出必须严格等于 `spokenText/intent/toolRequest/riskSignals/knowledgeCitations/conversationState` 六字段；
-  `thinking/reasoning/analysis` 或任何额外字段均拒绝。`ENT-CS-005` 只建立注册和授权边界；
-  在 `ENT-CS-006/007/008` 接入真实 Adapter 前，Agent 输出中的 `toolRequest` 仍固定为 `null`。
+  `thinking/reasoning/analysis` 或任何额外字段均拒绝。`ENT-CS-005` 建立注册和授权边界，
+  `ENT-CS-006` 增加独立只读执行入口；Agent 生成尚未接入该入口，`toolRequest` 仍固定为 `null`。
 - `answer/qualify` 必须至少引用一条本轮 evidence，引用只能是服务端给出的 citation 子集；任何风险信号必须转人工。
 - 最近上下文最多12轮、单轮1500字节、整体8000字节，并以 hash、幂等键和递增 sequence 保存；客户输入单独只保存 SHA-256，
   恢复所需的受限上下文按租户数据生命周期处理。
@@ -331,8 +331,21 @@ LLM 只能提出结构化工具请求；Policy Engine 校验租户、客户、�
 - 只读授权只能创建 `requested`；可逆写只能创建 `awaiting_confirmation`，不代表已执行；
   高风险只返回人工接管，不创建可执行记录。未注册、草稿或已退役工具均失败闭合。
 
-本阶段不包含订单、物流、库存、工单、回拨、退款或支付 Adapter，也不把“授权记录已创建”
-表述为外部业务操作已成功。
+`ENT-CS-006` 只开放 `order.lookup`、`logistics.lookup`、`inventory.lookup` 三个只读工具：
+
+- 必须先取得 `ENT-CS-005` 创建的精确 `requested` execution，再由签名 Worker ticket 调用内部
+  `execute-read`；请求不能另传 tenant、customer 或 session。
+- 订单和物流按当前 support session 的 customer 过滤，其他客户的同标识与“不存在”返回一致；
+  库存只在当前 tenant 的 Adapter 绑定内查询。
+- 数据库先以15秒租约和递增 attempt 原子 claim，Adapter 在事务外最多执行5秒，随后以相同
+  lease/version/definition/session fence 完成；过期或旧租约结果一律丢弃。
+- 结果按工具精确字段校验，成功必须带 Adapter receipt/reference，并保存 SHA-256；完成记录只允许同参数稳定回放。审计只保存工具名、
+  decision、Provider fingerprint、`simulated` 和结果 hash，不保存原始参数或结果正文。
+- 生产 runtime 默认 `not_configured`。确定性 mock 只能显式注入并返回 `simulated=true`，不代表
+  ERP、物流或库存 Provider 已接通。
+
+本阶段不包含工单、回拨、备注、退款、支付或身份验证 Adapter，也不把“授权记录已创建”、mock
+结果或静态检查表述为外部业务操作已成功。
 
 ### 6.5 人工坐席工作台
 
