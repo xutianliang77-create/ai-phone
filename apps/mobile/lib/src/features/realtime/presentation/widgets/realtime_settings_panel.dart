@@ -2,8 +2,11 @@ import 'package:flutter/material.dart';
 
 import '../../../../app/localization/app_localizations.dart';
 import '../../data/realtime_runtime_settings.dart';
+import '../../data/voice_preset_catalog.dart';
 import '../realtime_settings_l10n.dart';
 import 'translation_language_picker.dart';
+import 'voice_preset_picker.dart';
+import 'domain_lexicon_picker.dart';
 
 class RealtimeSettingsPanel extends StatelessWidget {
   const RealtimeSettingsPanel({
@@ -11,6 +14,9 @@ class RealtimeSettingsPanel extends StatelessWidget {
     required this.enabled,
     required this.onChanged,
     this.autoSpeakSupported = true,
+    this.voicePresets = const <VoicePreset>[],
+    this.voicePresetsLoading = false,
+    this.onEndRequested,
     this.padding = const EdgeInsets.fromLTRB(16, 4, 16, 8),
     super.key,
   });
@@ -19,6 +25,9 @@ class RealtimeSettingsPanel extends StatelessWidget {
   final bool enabled;
   final ValueChanged<RealtimeRuntimeSettings> onChanged;
   final bool autoSpeakSupported;
+  final List<VoicePreset> voicePresets;
+  final bool voicePresetsLoading;
+  final VoidCallback? onEndRequested;
   final EdgeInsetsGeometry padding;
 
   @override
@@ -30,6 +39,8 @@ class RealtimeSettingsPanel extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
+          _SectionLabel(l10n.processingModeLabel),
+          const SizedBox(height: 6),
           SegmentedButton<RealtimeProcessingMode>(
             showSelectedIcon: false,
             segments: <ButtonSegment<RealtimeProcessingMode>>[
@@ -47,7 +58,9 @@ class RealtimeSettingsPanel extends StatelessWidget {
             selected: <RealtimeProcessingMode>{settings.processingMode},
             onSelectionChanged: enabled ? _changeProcessingMode : null,
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 16),
+          _SectionLabel(l10n.languageSettingsGroupLabel),
+          const SizedBox(height: 6),
           Wrap(
             spacing: 8,
             runSpacing: 8,
@@ -67,20 +80,63 @@ class RealtimeSettingsPanel extends StatelessWidget {
                 onPressed: () =>
                     _pickLanguage(context, LanguagePickerKind.target),
               ),
-              _VoiceOutputSelector(
-                settings: settings,
-                enabled: enabled && autoSpeakSupported,
-                onChanged: onChanged,
-              ),
-              if (!enabled)
-                Text(
-                  l10n.settingsLockedHint,
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.outline,
-                  ),
+              if (settings.processingMode == RealtimeProcessingMode.online)
+                DomainLexiconButton(
+                  settings: settings,
+                  enabled: enabled,
+                  onChanged: onChanged,
                 ),
             ],
           ),
+          if (settings.processingMode == RealtimeProcessingMode.onDevice) ...[
+            const SizedBox(height: 8),
+            Text(
+              l10n.onDeviceLanguageCapabilityHint,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ],
+          const SizedBox(height: 16),
+          _SectionLabel(l10n.voiceSettingsGroupLabel),
+          const SizedBox(height: 6),
+          _VoiceOutputSelector(
+            settings: settings,
+            enabled: enabled && autoSpeakSupported,
+            onChanged: onChanged,
+            voicePresets: voicePresets,
+            voicePresetsLoading: voicePresetsLoading,
+          ),
+          if (settings.processingMode == RealtimeProcessingMode.onDevice) ...[
+            const SizedBox(height: 8),
+            Text(
+              l10n.onDeviceVoiceCapabilityHint,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ],
+          if (!enabled) ...[
+            const SizedBox(height: 8),
+            Row(
+              children: <Widget>[
+                Expanded(
+                  child: Text(
+                    l10n.settingsLockedHint,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.outline,
+                    ),
+                  ),
+                ),
+                if (onEndRequested != null)
+                  TextButton.icon(
+                    onPressed: onEndRequested,
+                    icon: const Icon(Icons.stop),
+                    label: Text(l10n.endToChangeSettingsLabel),
+                  ),
+              ],
+            ),
+          ],
         ],
       ),
     );
@@ -88,7 +144,11 @@ class RealtimeSettingsPanel extends StatelessWidget {
 
   void _changeProcessingMode(Set<RealtimeProcessingMode> values) {
     if (values.isEmpty) return;
-    onChanged(settings.copyWith(processingMode: values.single));
+    onChanged(
+      settings
+          .copyWith(processingMode: values.single)
+          .normalizedForCapabilities(),
+    );
   }
 
   Future<void> _pickLanguage(
@@ -102,6 +162,9 @@ class RealtimeSettingsPanel extends StatelessWidget {
       selectedCode: kind == LanguagePickerKind.source
           ? settings.sourceLanguage
           : settings.targetLanguage,
+      supportedCodes: settings.processingMode == RealtimeProcessingMode.onDevice
+          ? onDeviceTranslationLanguageCodes
+          : null,
     );
     if (selected == null) return;
     onChanged(kind == LanguagePickerKind.source
@@ -110,23 +173,41 @@ class RealtimeSettingsPanel extends StatelessWidget {
   }
 }
 
+class _SectionLabel extends StatelessWidget {
+  const _SectionLabel(this.text);
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(text, style: Theme.of(context).textTheme.titleSmall);
+  }
+}
+
 class _VoiceOutputSelector extends StatelessWidget {
   const _VoiceOutputSelector({
     required this.settings,
     required this.enabled,
     required this.onChanged,
+    required this.voicePresets,
+    required this.voicePresetsLoading,
   });
 
   final RealtimeRuntimeSettings settings;
   final bool enabled;
   final ValueChanged<RealtimeRuntimeSettings> onChanged;
+  final List<VoicePreset> voicePresets;
+  final bool voicePresetsLoading;
 
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
-    final selected = enabled
-        ? settings.voiceOutputMode
-        : RealtimeVoiceOutputMode.off;
+    final selected = !enabled
+        ? RealtimeVoiceOutputMode.off
+        : settings.processingMode == RealtimeProcessingMode.onDevice &&
+                settings.voiceOutputMode == RealtimeVoiceOutputMode.myVoice
+            ? RealtimeVoiceOutputMode.natural
+            : settings.voiceOutputMode;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
@@ -149,11 +230,12 @@ class _VoiceOutputSelector extends StatelessWidget {
               icon: const Icon(Icons.record_voice_over_outlined),
               label: Text(l10n.voiceOutputNaturalLabel),
             ),
-            ButtonSegment<RealtimeVoiceOutputMode>(
-              value: RealtimeVoiceOutputMode.myVoice,
-              icon: const Icon(Icons.graphic_eq_outlined),
-              label: Text(l10n.voiceOutputMyVoiceLabel),
-            ),
+            if (settings.processingMode == RealtimeProcessingMode.online)
+              ButtonSegment<RealtimeVoiceOutputMode>(
+                value: RealtimeVoiceOutputMode.myVoice,
+                icon: const Icon(Icons.graphic_eq_outlined),
+                label: Text(l10n.voiceOutputMyVoiceLabel),
+              ),
           ],
           selected: <RealtimeVoiceOutputMode>{selected},
           onSelectionChanged: enabled
@@ -162,8 +244,77 @@ class _VoiceOutputSelector extends StatelessWidget {
                   )
               : null,
         ),
+        if (settings.processingMode == RealtimeProcessingMode.online &&
+            settings.voiceOutputMode == RealtimeVoiceOutputMode.natural) ...[
+          const SizedBox(height: 8),
+          _VoicePresetButton(
+            settings: settings,
+            presets: voicePresets,
+            loading: voicePresetsLoading,
+            enabled: enabled,
+            onChanged: onChanged,
+          ),
+        ],
       ],
     );
+  }
+}
+
+class _VoicePresetButton extends StatelessWidget {
+  const _VoicePresetButton({
+    required this.settings,
+    required this.presets,
+    required this.loading,
+    required this.enabled,
+    required this.onChanged,
+  });
+
+  final RealtimeRuntimeSettings settings;
+  final List<VoicePreset> presets;
+  final bool loading;
+  final bool enabled;
+  final ValueChanged<RealtimeRuntimeSettings> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final selected = _findPreset(settings.voicePresetId);
+    final label = loading
+        ? context.l10n.voicePresetLoadingLabel
+        : selected?.label(chinese: context.l10n.isChinese) ??
+            context.l10n.voicePresetUnavailableLabel;
+    return OutlinedButton.icon(
+      onPressed: enabled && !loading && presets.isNotEmpty
+          ? () => _pick(context)
+          : null,
+      icon: const Icon(Icons.voice_chat_outlined),
+      label: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          Text(context.l10n.voicePresetSettingLabel,
+              style: Theme.of(context).textTheme.labelSmall),
+          Text(label),
+        ],
+      ),
+    );
+  }
+
+  VoicePreset? _findPreset(String id) {
+    for (final preset in presets) {
+      if (preset.id == id) return preset;
+    }
+    return null;
+  }
+
+  Future<void> _pick(BuildContext context) async {
+    final selected = await showVoicePresetPicker(
+      context: context,
+      presets: presets,
+      selectedId: settings.voicePresetId,
+    );
+    if (selected != null) {
+      onChanged(settings.copyWith(voicePresetId: selected));
+    }
   }
 }
 

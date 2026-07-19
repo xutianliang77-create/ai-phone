@@ -1,0 +1,100 @@
+x-runtime: &runtime
+  image: ai-phone-server:${AI_PHONE_IMAGE_TAG:-local}
+  pull_policy: never
+  env_file:
+    - ${AI_PHONE_ENV_FILE}
+  network_mode: host
+  restart: unless-stopped
+
+services:
+  api:
+    <<: *runtime
+    build:
+      context: ../..
+      dockerfile: infra/ai-phone-server/Dockerfile
+    container_name: ${AI_PHONE_CONTAINER_PREFIX:-ai-phone}-api
+    command: ["node", "services/api-server/dist/main.js"]
+    volumes:
+      - ${AI_PHONE_DATA_DIR}:/data/ai-phone
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - node -e "fetch(process.env.API_HEALTH_URL||'http://127.0.0.1:3110/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  gateway:
+    <<: *runtime
+    container_name: ${AI_PHONE_CONTAINER_PREFIX:-ai-phone}-gateway
+    command: ["node", "services/realtime-gateway/dist/main.js"]
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - node -e "fetch(process.env.GATEWAY_HEALTH_URL||'http://127.0.0.1:3111/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  translation-agent:
+    <<: *runtime
+    container_name: ${AI_PHONE_CONTAINER_PREFIX:-ai-phone}-translation-agent
+    command:
+      - node
+      - services/translation-worker/dist/livekit-agent/translation-agent-server.js
+      - start
+    depends_on:
+      api:
+        condition: service_healthy
+    stop_grace_period: 75s
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - node -e "fetch(process.env.TRANSLATION_AGENT_HEALTH_URL||'http://127.0.0.1:8081/worker').then(async r=>{const b=await r.json();if(!r.ok||!b.agent_name)process.exit(1)}).catch(()=>process.exit(1))"
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+  voice-agent:
+    <<: *runtime
+    profiles: ["voice-agent"]
+    container_name: ${AI_PHONE_CONTAINER_PREFIX:-ai-phone}-voice-agent
+    command:
+      - node
+      - services/voice-agent-runtime/dist/agent-server.js
+      - start
+    depends_on:
+      api:
+        condition: service_healthy
+    stop_grace_period: 105s
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - node -e "fetch(process.env.VOICE_AGENT_HEALTH_URL||'http://127.0.0.1:8082/').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"
+      interval: 5s
+      timeout: 3s
+      retries: 36
+
+  srt-ingress-bridge:
+    image: ai-phone-srt-ingress-bridge:${AI_PHONE_IMAGE_TAG:-local}
+    pull_policy: never
+    profiles: ["srt-ingress"]
+    build:
+      context: ../..
+      dockerfile: infra/srt-ingress-bridge/Dockerfile
+    container_name: ${AI_PHONE_CONTAINER_PREFIX:-ai-phone}-srt-ingress-bridge
+    env_file:
+      - ${AI_PHONE_ENV_FILE}
+    network_mode: host
+    restart: unless-stopped
+    stop_grace_period: 20s
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - node -e "fetch(process.env.SRT_INGRESS_HEALTH_URL||'http://127.0.0.1:'+(process.env.SRT_INGRESS_PORT||'3310')+'/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"
+      interval: 5s
+      timeout: 3s
+      retries: 20

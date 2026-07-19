@@ -1,4 +1,4 @@
-import { getReadyVoiceProfileTtsConfig } from "./voice-profiles.service.js";
+import { getReadyVoiceProfileTtsConfig } from "./voice-profiles-runtime.service.js";
 
 type TestAudioLanguage = "zh" | "en";
 
@@ -15,6 +15,7 @@ interface VoiceTestAudioResponse {
   model: string;
   voiceMode: string;
   voiceProfileId?: string;
+  variant: "natural" | "clone";
   audio: TtsAudioPayload;
 }
 
@@ -31,7 +32,7 @@ export async function synthesizeMyVoiceTestAudio(
   userId: string,
   body: Record<string, unknown>,
 ): Promise<VoiceTestAudioResult> {
-  const voice = getReadyVoiceProfileTtsConfig(userId);
+  const voice = await getReadyVoiceProfileTtsConfig(userId);
   if (!voice) {
     return failure(409, "voice_profile_not_ready", "voice profile is not ready");
   }
@@ -41,6 +42,7 @@ export async function synthesizeMyVoiceTestAudio(
   }
 
   const language = body.language === "en" ? "en" : "zh";
+  const variant = body.variant === "natural" ? "natural" : "clone";
   const text = cleanText(body.text, 120) || defaultTextByLanguage[language];
   try {
     const response = await fetch(endpoint, {
@@ -51,7 +53,7 @@ export async function synthesizeMyVoiceTestAudio(
         language,
         speakerRole: "guest",
         segmentId: `voice-test-${voice.voiceProfileId}`,
-        voice,
+        voice: variant === "clone" ? { ...voice, quality: "hifi" } : { mode: "preset" },
       }),
     });
     if (!response.ok) {
@@ -66,6 +68,7 @@ export async function synthesizeMyVoiceTestAudio(
       response: {
         text,
         language,
+        variant,
         ...payload,
       },
     };
@@ -76,7 +79,7 @@ export async function synthesizeMyVoiceTestAudio(
 
 function parseTtsResponse(
   value: unknown,
-): Omit<VoiceTestAudioResponse, "text" | "language"> | null {
+): Omit<VoiceTestAudioResponse, "text" | "language" | "variant"> | null {
   const object = asObject(value);
   const audio = asObject(object?.audio);
   const format = audio?.format;

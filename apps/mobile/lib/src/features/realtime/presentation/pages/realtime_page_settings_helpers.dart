@@ -6,11 +6,17 @@ void _openRealtimeSettingsForPage(_RealtimePageState state) {
     listenable: state.controller,
     realtimeMode: () => state._config.realtimeMode,
     settings: () => state._settings,
-    enabled: () => true,
-    modeEnabled: () => true,
-    autoSpeakSupported: state._realtimeAutoSpeakSupported,
+    enabled: () => state._canChangeSettings,
+    modeEnabled: () => state._canChangeMode,
+    autoSpeakSupported: () => state._realtimeAutoSpeakSupported,
     onRealtimeModeChanged: state._changeRealtimeMode,
     onSettingsChanged: state._changeSettings,
+    onEndRequested: () {
+      Navigator.of(state.context).maybePop();
+      unawaited(state.controller.stop());
+    },
+    voicePresets: state._voicePresetCatalog.presets,
+    voicePresetsLoading: state._voicePresetsLoading,
   );
 }
 
@@ -50,6 +56,7 @@ extension _RealtimePageSettingsActions on _RealtimePageState {
     return settings.processingMode == _settings.processingMode &&
         settings.sourceLanguage == _settings.sourceLanguage &&
         settings.targetLanguage == _settings.targetLanguage &&
+        settings.voicePresetId == _settings.voicePresetId &&
         settings.autoSpeakTranslation != _settings.autoSpeakTranslation;
   }
 

@@ -1,12 +1,11 @@
 import type { FastifyReply, FastifyRequest } from "fastify";
-import { getStoreSnapshot } from "../../infrastructure/storage/json-store.js";
 import { sendError } from "../../infrastructure/http/errors.js";
 import type { AccountRecord } from "./account-record.js";
-import { accountFromAuthorization } from "./account.service.js";
+import { accountFromAuthorization, ensureTestAccount } from "./account-runtime.service.js";
 
-export function requireAccount(request: FastifyRequest, reply: FastifyReply) {
+export async function requireAccount(request: FastifyRequest, reply: FastifyReply) {
   const account =
-    accountFromAuthorization(request.headers.authorization) ?? testAccount();
+    await accountFromAuthorization(request.headers.authorization) ?? await testAccount();
   if (!account) {
     sendError(reply, 401, "auth_required", "Account login required");
     return null;
@@ -14,7 +13,7 @@ export function requireAccount(request: FastifyRequest, reply: FastifyReply) {
   return account;
 }
 
-function testAccount() {
+async function testAccount() {
   const explicitlyEnabled = process.env.API_TEST_AUTO_ACCOUNT === "true";
   const vitestFallbackEnabled =
     Boolean(process.env.VITEST) &&
@@ -22,20 +21,12 @@ function testAccount() {
   if (!explicitlyEnabled && !vitestFallbackEnabled) {
     return null;
   }
-  const store = getStoreSnapshot();
-  const userId = "guest-user";
-  const existing = store.accounts.find((account) => account.id === userId);
-  if (existing && existing.status === "active") return existing;
+  const stored = await ensureTestAccount();
+  if (stored) return stored;
   const now = new Date().toISOString();
-  const account: AccountRecord = {
-    id: userId,
-    phoneHash: "test-phone-guest-user",
-    phoneMasked: "138****0000",
-    status: "active",
-    createdAt: now,
-    updatedAt: now,
-    lastLoginAt: now,
-  };
-  store.accounts.push(account);
-  return account;
+  return {
+    id: "guest-user", phoneHash: "test-phone-guest-user",
+    phoneMasked: "138****0000", status: "active",
+    createdAt: now, updatedAt: now, lastLoginAt: now,
+  } satisfies AccountRecord;
 }

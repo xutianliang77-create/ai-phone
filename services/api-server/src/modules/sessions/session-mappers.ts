@@ -4,13 +4,15 @@ import type {
   SessionListItem,
   SessionSegmentDto,
 } from "@translation/contracts";
-import type { SessionRecord } from "./sessions.repository.js";
+import type { SessionRecord } from "./session-record.js";
+import { sessionListSummary } from "./session-list-summary.js";
 
 export function toSessionListItem(session: SessionRecord): SessionListItem {
   return {
     sessionId: session.id,
     mode: session.mode,
     status: session.status,
+    ...sessionListSummary(session),
     consumedSeconds: session.consumedSeconds,
     createdAt: session.createdAt,
     ...(session.endedAt ? { endedAt: session.endedAt } : {}),
@@ -22,7 +24,9 @@ export function toSessionDetail(session: SessionRecord): SessionDetailResponse {
   return {
     ...toSessionListItem(session),
     segments: session.segments,
+    ...(session.playbacks?.length ? { playbacks: session.playbacks } : {}),
     review: session.review ?? null,
+    ...(session.diagnostics ? { diagnostics: session.diagnostics } : {}),
   };
 }
 
@@ -58,6 +62,7 @@ export function toSessionExport(
 function toPlainText(session: SessionRecord) {
   return session.segments
     .map((segment) => [
+      ...(segment.speaker ? [`Speaker: ${speakerLabel(segment)}`] : []),
       `Original: ${segment.rawText ?? segment.sourceText}`,
       ...(segment.optimizedText ? [`Optimized: ${segment.optimizedText}`] : []),
       `Translation: ${segment.translatedText}`,
@@ -77,6 +82,7 @@ function toMarkdown(session: SessionRecord) {
   appendReview(lines, session);
   for (const segment of session.segments) {
     lines.push(`## ${segment.id}`, "");
+    if (segment.speaker) lines.push(`Speaker: ${speakerLabel(segment)}`, "");
     if (segment.rawText && segment.rawText !== segment.sourceText) {
       lines.push("Raw", "", segment.rawText, "");
       lines.push("Optimized", "", segment.sourceText, "");
@@ -105,6 +111,20 @@ function toCsv(session: SessionRecord) {
       "model",
       "latencyMs",
       "estimatedTotalTokens",
+      "speakerId",
+      "speakerRole",
+      "speakerName",
+      "speakerSource",
+      "startMs",
+      "endMs",
+      "endpointReason",
+      "vadModelFingerprint",
+      "endpointPolicyFingerprint",
+      "dominantLanguage",
+      "detectedLanguages",
+      "mixedLanguage",
+      "overlap",
+      "activeSpeakerIds",
     ],
     ...session.segments.map((segment) => [
       segment.id,
@@ -120,28 +140,62 @@ function toCsv(session: SessionRecord) {
       segment.model ?? segment.providerUsage?.model ?? "",
       String(segment.latencyMs ?? segment.providerUsage?.latencyMs ?? ""),
       String(segment.providerUsage?.estimatedTotalTokens ?? ""),
+      segment.speaker?.speakerId ?? "",
+      segment.speaker?.role ?? "",
+      segment.speaker?.displayName ?? "",
+      segment.speaker?.source ?? "",
+      String(segment.timing?.startMs ?? ""),
+      String(segment.timing?.endMs ?? ""),
+      segment.vadContext?.endpointReason ?? "",
+      segment.vadContext?.vadModelFingerprint ?? "",
+      segment.vadContext?.endpointPolicyFingerprint ?? "",
+      segment.dominantLanguage ?? "",
+      segment.detectedLanguages?.join("|") ?? "",
+      String(segment.mixedLanguage ?? ""),
+      String(segment.timing?.overlap ?? ""),
+      segment.timing?.activeSpeakerIds?.join("|") ?? "",
     ]),
   ];
   return rows.map((row) => row.map(csvCell).join(",")).join("\n");
+}
+
+function speakerLabel(segment: SessionSegmentDto) {
+  const speaker = segment.speaker;
+  if (!speaker) return "Unknown";
+  return speaker.displayName ?? speaker.speakerId;
 }
 
 function appendSegmentDiagnostics(
   lines: string[],
   segment: SessionSegmentDto,
 ) {
-  const diagnostics = [
+  const diagnostics: Array<[
+    string,
+    string | number | boolean | undefined,
+  ]> = [
     ["Source language", segment.sourceLanguage],
     ["Target language", segment.targetLanguage],
+    ["Dominant language", segment.dominantLanguage],
+    ["Detected languages", segment.detectedLanguages?.join(", ")],
+    ["Mixed language", segment.mixedLanguage],
+    ["Overlapping speech", segment.timing?.overlap],
+    ["Speech start", segment.timing?.startMs],
+    ["Speech end", segment.timing?.endMs],
+    ["Endpoint reason", segment.vadContext?.endpointReason],
+    ["VAD model fingerprint", segment.vadContext?.vadModelFingerprint],
+    ["Endpoint policy fingerprint", segment.vadContext?.endpointPolicyFingerprint],
     ["Confidence", segment.confidence],
     ["Stage", segment.stage],
     ["Provider", segment.provider ?? segment.providerUsage?.provider],
     ["Model", segment.model ?? segment.providerUsage?.model],
     ["Latency", formatLatency(segment)],
     ["Refinement", formatRefinement(segment)],
-  ].filter((item): item is [string, string | number] => item[1] !== undefined && item[1] !== "");
-  if (diagnostics.length === 0) return;
+  ];
+  const available = diagnostics.filter(([, value]) =>
+    value !== undefined && value !== "");
+  if (available.length === 0) return;
   lines.push("Diagnostics", "");
-  for (const [label, value] of diagnostics) {
+  for (const [label, value] of available) {
     lines.push(`- ${label}: ${value}`);
   }
   lines.push("");

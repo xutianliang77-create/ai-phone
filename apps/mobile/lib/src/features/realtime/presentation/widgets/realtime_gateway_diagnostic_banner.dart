@@ -54,7 +54,7 @@ class RealtimeGatewayDiagnosticBanner extends StatelessWidget {
                   mainAxisSize: MainAxisSize.min,
                   children: <Widget>[
                     Text(
-                      l10n.isChinese ? '在线模型链路' : 'Online model pipeline',
+                      l10n.isChinese ? '无界AI 在线服务' : 'Wujie AI Online',
                       style: theme.textTheme.titleSmall,
                     ),
                     const SizedBox(height: 2),
@@ -91,10 +91,31 @@ class RealtimeGatewayDiagnosticBanner extends StatelessWidget {
     AppLocalizations l10n,
     RealtimeGatewayDiagnostic? diagnostic,
   ) {
-    if (diagnostic != null) return l10n.errorMessage(diagnostic.displayMessage);
+    if (diagnostic != null) {
+      return switch (diagnostic.stage) {
+        'connection' => l10n.isChinese
+            ? '实时连接异常，请检查网络后重试'
+            : 'Connection issue. Check your network and retry',
+        'session' => l10n.isChinese
+            ? '会话暂时不可用，请稍后重试'
+            : 'Session is temporarily unavailable',
+        'asr' => l10n.isChinese
+            ? '语音识别暂时不可用，请稍后重试'
+            : 'Speech recognition is temporarily unavailable',
+        'translation' => l10n.isChinese
+            ? '翻译暂时不可用，请稍后重试'
+            : 'Translation is temporarily unavailable',
+        'tts' => l10n.isChinese
+            ? '语音朗读暂时不可用，请稍后重试'
+            : 'Speech playback is temporarily unavailable',
+        _ => l10n.isChinese
+            ? '在线服务暂时不可用，请稍后重试'
+            : 'Online service is temporarily unavailable',
+      };
+    }
     return l10n.isChinese
-        ? 'ASR、翻译、TTS 由服务器 Provider 处理'
-        : 'ASR, translation, and TTS are handled by server providers';
+        ? '语音识别、翻译和朗读已准备'
+        : 'Recognition, translation, and speech are ready';
   }
 
   List<String> _diagnosticLabels(
@@ -104,10 +125,7 @@ class RealtimeGatewayDiagnosticBanner extends StatelessWidget {
     if (diagnostic == null) return const <String>[];
     return <String>[
       if (_stageLabel(l10n, diagnostic.stage) case final stage?) stage,
-      if (diagnostic.provider case final provider? when provider.isNotEmpty)
-        provider,
       if (diagnostic.isRetryable) l10n.isChinese ? '可重试' : 'Retryable',
-      if (diagnostic.code case final code? when code.isNotEmpty) code,
     ];
   }
 
@@ -115,7 +133,7 @@ class RealtimeGatewayDiagnosticBanner extends StatelessWidget {
     return switch (stage) {
       'connection' => l10n.isChinese ? '实时连接' : 'Connection',
       'session' => l10n.isChinese ? '会话' : 'Session',
-      'provider' => l10n.isChinese ? '在线模型' : 'Provider',
+      'provider' => l10n.isChinese ? '在线服务' : 'Online service',
       'asr' => l10n.isChinese ? 'ASR 识别' : 'ASR',
       'translation' => l10n.isChinese ? '翻译' : 'Translation',
       'tts' => l10n.isChinese ? 'TTS 朗读' : 'TTS',

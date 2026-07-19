@@ -22,6 +22,8 @@ async def test_mock_engine_returns_playable_pcm16() -> None:
     payload = base64.b64decode(response.audio.data)
     assert response.provider == "mock"
     assert response.model == "mock-tts-v0.1.0"
+    assert response.modelSampleRate == 16000
+    assert response.outputSampleRate == 16000
     assert response.audio.sampleRate == 16000
     assert response.audio.format == "pcm16"
     assert len(payload) >= 2

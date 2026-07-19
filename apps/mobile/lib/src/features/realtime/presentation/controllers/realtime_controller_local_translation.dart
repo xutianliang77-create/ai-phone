@@ -1,7 +1,5 @@
 part of 'realtime_controller.dart';
 
-const _localPartialFlushDelay = Duration(milliseconds: 1600);
-
 extension RealtimeControllerLocalTranslation on RealtimeController {
   Future<void> _handleAsrTextSegment(
     String sessionId,
@@ -64,7 +62,7 @@ extension RealtimeControllerLocalTranslation on RealtimeController {
         confidence: segment.confidence,
         stage: 'asr',
       );
-      _scheduleLocalPartialTranslation(segment);
+      _localPartialFlush.remember(segment);
       return;
     }
     _localPartialFlush.clearIfSameId(segment.id);
@@ -74,7 +72,7 @@ extension RealtimeControllerLocalTranslation on RealtimeController {
   Future<void> _flushPendingLocalPartialTranslation() async {
     final segment = _localPartialFlush.take();
     if (segment == null || !_config.useLocalSessions) return;
-    if (_status != RealtimeStatus.listening && !_stopInFlight) return;
+    if (_status != RealtimeStatus.active && !_stopInFlight) return;
     await _translateLocalSegment(AsrTextSegment(
       id: segment.id,
       text: segment.text,
@@ -90,6 +88,9 @@ extension RealtimeControllerLocalTranslation on RealtimeController {
         : null;
     if (translated != null) {
       final targetLanguage = _targetLanguageForAsr(segment);
+      if (_message == 'On-device translation unavailable') {
+        _message = null;
+      }
       _upsertSegment(
         segment.id,
         sourceText: segment.text,
@@ -110,24 +111,13 @@ extension RealtimeControllerLocalTranslation on RealtimeController {
       confidence: segment.confidence,
       stage: 'asr',
     );
+    if (_config.useLocalSessions) {
+      _message = 'On-device translation unavailable';
+      _notify();
+    }
     if (_config.onDeviceTranslationRequired) {
       _fail('On-device translation unavailable');
     }
-  }
-
-  void _scheduleLocalPartialTranslation(AsrTextSegment segment) {
-    if (!_canTranslateLocalPartial(segment)) return;
-    _localPartialFlush.schedule(
-      segment,
-      _localPartialFlushDelay,
-      _flushPendingLocalPartialTranslation,
-    );
-  }
-
-  bool _canTranslateLocalPartial(AsrTextSegment segment) {
-    return _config.useOnDeviceTranslation &&
-        !_isIgnorableRealtimeText(segment.text) &&
-        _mobileTranslationProvider != null;
   }
 
   bool _canTranslateOnDevice(AsrTextSegment segment) {
@@ -140,36 +130,24 @@ extension RealtimeControllerLocalTranslation on RealtimeController {
   Future<MobileTranslationResult?> _translateOnDevice(
     AsrTextSegment segment,
   ) async {
-    final chunks = _translationChunks(segment.text);
-    if (chunks.length < 2) {
-      final config = _translationConfigForAsr(segment);
-      if (config == null) return null;
-      return _mobileTranslationProvider!.translate(
-        segment.text,
-        config,
-      );
-    }
-    final translatedChunks = <String>[];
-    String? provider;
-    for (final chunk in chunks) {
-      final config = _translationConfigForLanguage(chunk.language);
-      if (config == null) {
-        translatedChunks.add(chunk.text);
-        continue;
-      }
-      final translated = await _mobileTranslationProvider!.translate(
-        chunk.text,
-        config,
-      );
-      if (translated == null) continue;
-      provider ??= translated.provider;
-      translatedChunks.add(translated.text);
-    }
-    if (translatedChunks.isEmpty) return null;
-    return MobileTranslationResult(
-      text: translatedChunks.join(' / '),
-      provider: provider ?? 'ios_system',
+    final config = _translationConfigForAsr(segment);
+    if (config == null) return null;
+    final protected = protectTranslationText(segment.text, config);
+    final translated = await _mobileTranslationProvider!.translate(
+      protected.text,
+      config,
     );
+    if (translated == null || !protected.hasProtectedText) return translated;
+    final restoredText = protected.restore(translated.text);
+    if (restoredText != null) {
+      return MobileTranslationResult(
+        text: restoredText,
+        provider: translated.provider,
+      );
+    }
+    // Some translators may rewrite an unfamiliar placeholder. Retry the
+    // original sentence so an internal marker can never reach the UI.
+    return _mobileTranslationProvider.translate(segment.text, config);
   }
 
   MobileTranslationConfig? _translationConfigForAsr(AsrTextSegment segment) {
@@ -248,32 +226,6 @@ extension RealtimeControllerLocalTranslation on RealtimeController {
     return 'en';
   }
 
-  List<_TranslationChunk> _translationChunks(String text) {
-    final chunks = <_TranslationChunk>[];
-    final buffer = StringBuffer();
-    String? currentLanguage;
-    for (final rune in text.runes) {
-      final char = String.fromCharCode(rune);
-      final language = _scriptLanguage(char);
-      if (language != null &&
-          currentLanguage != null &&
-          language != currentLanguage &&
-          buffer.toString().trim().isNotEmpty) {
-        chunks
-            .add(_TranslationChunk(buffer.toString().trim(), currentLanguage));
-        buffer.clear();
-        currentLanguage = language;
-      }
-      currentLanguage ??= language;
-      buffer.write(char);
-    }
-    final tail = buffer.toString().trim();
-    if (tail.isNotEmpty && currentLanguage != null) {
-      chunks.add(_TranslationChunk(tail, currentLanguage));
-    }
-    return chunks.length > 1 ? chunks : const <_TranslationChunk>[];
-  }
-
   String? _scriptLanguage(String char) {
     if (RegExp(r'[\u4e00-\u9fff]').hasMatch(char)) return 'zh';
     if (RegExp(r'[A-Za-z]').hasMatch(char)) return 'en';
@@ -281,28 +233,11 @@ extension RealtimeControllerLocalTranslation on RealtimeController {
   }
 }
 
-class _TranslationChunk {
-  const _TranslationChunk(this.text, this.language);
-
-  final String text;
-  final String language;
-}
-
 class _LocalPartialTranslationFlush {
-  Timer? _timer;
   AsrTextSegment? _segment;
 
-  void schedule(
-    AsrTextSegment segment,
-    Duration delay,
-    Future<void> Function() flush,
-  ) {
+  void remember(AsrTextSegment segment) {
     _segment = segment;
-    _timer?.cancel();
-    _timer = Timer(delay, () {
-      _timer = null;
-      unawaited(flush());
-    });
   }
 
   AsrTextSegment? take() {
@@ -316,8 +251,6 @@ class _LocalPartialTranslationFlush {
   }
 
   void cancel() {
-    _timer?.cancel();
-    _timer = null;
     _segment = null;
   }
 }

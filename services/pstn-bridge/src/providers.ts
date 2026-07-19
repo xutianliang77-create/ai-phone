@@ -10,14 +10,19 @@ import type {
 import { toTelephonyMulaw8k } from "./audio-codec.js";
 import { FonosterPstnProvider } from "./fonoster-provider.js";
 import { buildMediaWriter } from "./media-writer.js";
+import { PstnProviderAdapter } from "./pstn-provider-adapter.js";
 
 export function buildPstnProvider(config: PstnBridgeEnv, fetchFn: typeof fetch = fetch) {
-  if (config.provider === "http") return new HttpPstnProvider(config, fetchFn);
-  if (config.provider === "fonoster") return new FonosterPstnProvider(config, fetchFn);
-  return new MockPstnProvider();
+  const delegate = config.provider === "http"
+    ? new HttpPstnProvider(config, fetchFn)
+    : config.provider === "fonoster"
+    ? new FonosterPstnProvider(config, fetchFn)
+    : new MockPstnProvider();
+  return new PstnProviderAdapter(config.provider, delegate);
 }
 
 export class MockPstnProvider implements PstnProvider {
+  readonly playbackCapabilities = noClearPlaybackCapabilities();
   async placeCall(request: AgentCallBridgeRequest): Promise<AgentCallBridgeResult> {
     return {
       status: "in_progress",
@@ -36,6 +41,7 @@ export class MockPstnProvider implements PstnProvider {
 }
 
 export class HttpPstnProvider implements PstnProvider {
+  readonly playbackCapabilities = noClearPlaybackCapabilities();
   private readonly callRoutes = new Map<string, {
     providerCallId?: string;
     mediaStreamId?: string;
@@ -50,7 +56,7 @@ export class HttpPstnProvider implements PstnProvider {
   async placeCall(request: AgentCallBridgeRequest): Promise<AgentCallBridgeResult> {
     const response = await this.fetchWithTimeout(this.callUrl(), {
       method: "POST",
-      headers: this.headers(),
+      headers: this.headers(request.idempotencyKey),
       body: JSON.stringify({
         ...request,
         recordingDisclosureEnabled: this.config.recordingDisclosureEnabled,
@@ -87,9 +93,13 @@ export class HttpPstnProvider implements PstnProvider {
     const result = normalizeAudioResult(body);
     const mediaWrite = await this.mediaWriter.write({
       callId: request.callId,
+      sessionId: request.sessionId,
       providerCallId,
       mediaStreamId,
       segmentId: request.segmentId,
+      playbackId: request.playbackId,
+      generation: request.generation,
+      targetLegId: request.targetLegId,
       targetSpeakerRole: request.targetSpeakerRole,
       language: request.language,
       telephonyAudio,
@@ -115,9 +125,10 @@ export class HttpPstnProvider implements PstnProvider {
     return `${this.config.upstreamBaseUrl?.replace(/\/$/, "")}/translated-audio`;
   }
 
-  private headers() {
+  private headers(idempotencyKey?: string) {
     return {
       "content-type": "application/json",
+      ...(idempotencyKey ? { "idempotency-key": idempotencyKey } : {}),
       ...(this.config.upstreamApiKey ? { authorization: `Bearer ${this.config.upstreamApiKey}` } : {}),
     };
   }
@@ -129,6 +140,14 @@ export class HttpPstnProvider implements PstnProvider {
       mediaStreamId: result.mediaStreamId,
     });
   }
+}
+
+function noClearPlaybackCapabilities() {
+  return {
+    bidirectionalMedia: false,
+    streamingWrite: false,
+    clearPlayback: false,
+  } as const;
 }
 
 async function readJson(response: Response) {

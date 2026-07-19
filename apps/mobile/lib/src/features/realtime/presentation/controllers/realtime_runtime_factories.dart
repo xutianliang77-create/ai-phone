@@ -9,6 +9,7 @@ import '../../../../platform/asr/unavailable_system_asr_provider.dart';
 import '../../../../platform/translation/ios_system_translation_provider.dart';
 import '../../../../platform/translation/mobile_translation_provider.dart';
 import '../../../../platform/translation/phrasebook_translation_provider.dart';
+import '../../../../platform/translation/supported_translation_language.dart';
 import '../../../../platform/translation/unavailable_translation_provider.dart';
 import '../../../history/data/local_session_store.dart';
 import '../../data/local_realtime_repository.dart';
@@ -47,7 +48,9 @@ MobileTranslationProvider? createDefaultMobileTranslationProvider(
   }
   if (config.onDeviceTranslationProvider == 'ios_system') {
     return IosSystemTranslationProvider(
-      fallback: PhrasebookTranslationProvider(),
+      fallback: config.useLocalSessions || config.onDeviceTranslationRequired
+          ? null
+          : PhrasebookTranslationProvider(),
     );
   }
   return UnavailableTranslationProvider();
@@ -60,7 +63,33 @@ MobileTranslationConfig createMobileTranslationConfig(AppConfig config) {
   );
 }
 
-MobileAsrConfig createDeviceAsrConfig(AppConfig config) {
+List<MobileTranslationConfig> createOnDeviceTranslationPreflightConfigs(
+  AppConfig config,
+) {
+  if (config.autoReverseTargetLanguage &&
+      config.sourceLanguage == autoSourceLanguageCode) {
+    return const <MobileTranslationConfig>[
+      MobileTranslationConfig(sourceLanguage: 'en', targetLanguage: 'zh'),
+      MobileTranslationConfig(sourceLanguage: 'zh', targetLanguage: 'en'),
+    ];
+  }
+  if (config.sourceLanguage == autoSourceLanguageCode) {
+    final sourceLanguage =
+        isChineseFamilyLanguage(config.targetLanguage) ? 'en' : 'zh';
+    return <MobileTranslationConfig>[
+      MobileTranslationConfig(
+        sourceLanguage: sourceLanguage,
+        targetLanguage: config.targetLanguage,
+      ),
+    ];
+  }
+  return <MobileTranslationConfig>[createMobileTranslationConfig(config)];
+}
+
+MobileAsrConfig createDeviceAsrConfig(
+  AppConfig config, {
+  String? diagnosticSessionId,
+}) {
   return MobileAsrConfig(
     language: config.deviceAsrLanguage,
     chunkDurationMs: config.deviceAsrChunkDurationMs,
@@ -69,5 +98,13 @@ MobileAsrConfig createDeviceAsrConfig(AppConfig config) {
     endpointMinSpeechMs: config.deviceAsrEndpointMinSpeechMs,
     endpointSilenceMs: config.deviceAsrEndpointSilenceMs,
     endpointSpeechThresholdRms: config.deviceAsrEndpointSpeechThresholdRms,
+    vadProvider: config.deviceAsrVadProvider,
+    vadThreshold: config.deviceAsrVadThreshold,
+    vadNegativeThreshold: config.deviceAsrVadNegativeThreshold,
+    vadPreRollMs: config.deviceAsrVadPreRollMs,
+    turnRoutingPolicy:
+        config.realtimeMode == 'conversation' ? 'alternate' : 'sticky',
+    diagnosticCaptureEnabled: config.deviceAsrDiagnosticCaptureEnabled,
+    diagnosticSessionId: diagnosticSessionId,
   );
 }

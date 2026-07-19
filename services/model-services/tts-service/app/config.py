@@ -5,6 +5,7 @@ import os
 DEFAULT_VOXCPM2_MODEL_DIR = (
     "/data/models/translation-model-eval/data/tts-product-fit/models/openbmb_voxcpm2"
 )
+DEFAULT_VOXCPM2_INFERENCE_WAIT_MS = 15000
 
 
 @dataclass(frozen=True)
@@ -12,12 +13,29 @@ class TtsConfig:
     provider: str = "mock"
     model_version: str = "mock-tts-v0.1.0"
     api_key: str = ""
+    metrics_bearer_token: str = ""
     mock_sample_rate: int = 16000
     voxcpm2_model_dir: str = DEFAULT_VOXCPM2_MODEL_DIR
     voxcpm2_cfg_value: float = 2.0
     voxcpm2_inference_timesteps: int = 10
+    voxcpm2_hifi_inference_timesteps: int = 15
+    voxcpm2_inference_wait_ms: int = DEFAULT_VOXCPM2_INFERENCE_WAIT_MS
     voxcpm2_load_denoiser: bool = False
+    voxcpm2_require_streaming: bool = False
     voice_reference_dir: str = ""
+    voice_preset_manifest_path: str = ""
+
+    def runtime_parameters(self) -> dict[str, object]:
+        if self.provider == "mock":
+            return {"sampleRate": self.mock_sample_rate}
+        return {
+            "cfgValue": self.voxcpm2_cfg_value,
+            "inferenceTimesteps": self.voxcpm2_inference_timesteps,
+            "hifiInferenceTimesteps": self.voxcpm2_hifi_inference_timesteps,
+            "inferenceWaitMs": self.voxcpm2_inference_wait_ms,
+            "loadDenoiser": self.voxcpm2_load_denoiser,
+            "requireStreaming": self.voxcpm2_require_streaming,
+        }
 
 
 def load_config() -> TtsConfig:
@@ -25,12 +43,25 @@ def load_config() -> TtsConfig:
         provider=os.getenv("TTS_SERVICE_PROVIDER", "mock"),
         model_version=os.getenv("TTS_MODEL_VERSION", "mock-tts-v0.1.0"),
         api_key=os.getenv("TTS_SERVICE_API_KEY", "").strip(),
+        metrics_bearer_token=os.getenv("METRICS_BEARER_TOKEN", "").strip(),
         mock_sample_rate=int(os.getenv("TTS_MOCK_SAMPLE_RATE", "16000")),
         voxcpm2_model_dir=os.getenv("TTS_VOXCPM2_MODEL_DIR", DEFAULT_VOXCPM2_MODEL_DIR),
         voxcpm2_cfg_value=float(os.getenv("TTS_VOXCPM2_CFG_VALUE", "2.0")),
         voxcpm2_inference_timesteps=int(os.getenv("TTS_VOXCPM2_INFERENCE_TIMESTEPS", "10")),
+        voxcpm2_hifi_inference_timesteps=int(
+            os.getenv("TTS_VOXCPM2_HIFI_INFERENCE_TIMESTEPS", "15")
+        ),
+        voxcpm2_inference_wait_ms=int(os.getenv(
+            "TTS_VOXCPM2_INFERENCE_WAIT_MS",
+            str(DEFAULT_VOXCPM2_INFERENCE_WAIT_MS),
+        )),
         voxcpm2_load_denoiser=env_bool("TTS_VOXCPM2_LOAD_DENOISER", False),
+        voxcpm2_require_streaming=env_bool(
+            "TTS_VOXCPM2_REQUIRE_STREAMING",
+            False,
+        ),
         voice_reference_dir=os.getenv("TTS_VOICE_REFERENCE_DIR", "").strip(),
+        voice_preset_manifest_path=os.getenv("TTS_VOICE_PRESET_MANIFEST", "").strip(),
     )
 
 

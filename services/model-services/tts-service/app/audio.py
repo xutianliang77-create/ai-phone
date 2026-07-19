@@ -41,3 +41,56 @@ def flatten_numeric_audio(audio) -> list[float]:
                 values.append(float(item))
         return values
     return [float(audio)]
+
+
+def resample_audio(
+    samples: Iterable[float],
+    *,
+    source_rate: int,
+    target_rate: int,
+) -> list[float]:
+    values = [float(value) for value in samples]
+    if source_rate <= 0 or target_rate <= 0:
+        raise ValueError("sample rates must be positive")
+    if not values or source_rate == target_rate:
+        return values
+
+    try:
+        import numpy as np
+        from scipy.signal import resample_poly
+    except ImportError as exc:
+        raise RuntimeError("VoxCPM2 resampling requires numpy and scipy") from exc
+
+    divisor = math.gcd(source_rate, target_rate)
+    result = resample_poly(
+        np.asarray(values, dtype=np.float32),
+        target_rate // divisor,
+        source_rate // divisor,
+        window=("kaiser", 5.0),
+    )
+    expected_count = round(len(values) * target_rate / source_rate)
+    if len(result) > expected_count:
+        result = result[:expected_count]
+    elif len(result) < expected_count:
+        result = np.pad(result, (0, expected_count - len(result)))
+    return [float(value) for value in result]
+
+
+def normalize_audio_loudness(
+    samples: Iterable[float],
+    *,
+    target_rms: float = 0.126,
+    max_gain: float = 8.0,
+    peak_ceiling: float = 0.95,
+) -> list[float]:
+    values = [float(value) for value in samples]
+    if not values:
+        return values
+    rms = math.sqrt(sum(value * value for value in values) / len(values))
+    peak = max(abs(value) for value in values)
+    if rms <= 1e-8 or peak <= 1e-8 or rms >= target_rms:
+        return values
+    gain = min(max_gain, target_rms / rms, peak_ceiling / peak)
+    if gain <= 1.0:
+        return values
+    return [value * gain for value in values]

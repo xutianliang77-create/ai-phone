@@ -281,6 +281,7 @@ describe("account routes", () => {
 
 const smsEnvKeys = [
   "NODE_ENV",
+  "PUBLIC_RATE_LIMIT_PROVIDER",
   "AUTH_DEBUG_OTP",
   "AUTH_TEST_PHONE",
   "AUTH_TEST_CODE",
@@ -312,6 +313,7 @@ function restoreSmsEnv(values: Record<string, string | undefined>) {
 }
 
 function configureHttpSmsEnv() {
+  process.env.PUBLIC_RATE_LIMIT_PROVIDER = "memory";
   process.env.SMS_PROVIDER = "http";
   process.env.SMS_HTTP_ENDPOINT = "https://sms.example.cn/send";
   process.env.SMS_HTTP_API_KEY = "sms_api_key_012345678901234";

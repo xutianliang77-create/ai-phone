@@ -46,6 +46,31 @@ void main() {
     expect(find.textContaining('未收到麦克风输入'), findsOneWidget);
   });
 
+  testWidgets('shows required voice processing state and failure hint',
+      (WidgetTester tester) async {
+    await tester.pumpWidget(const _AudioStatsTestApp(
+      details: <String, Object?>{
+        'fluidAudio': <String, Object?>{
+          'audio': <String, Object?>{
+            'voiceProcessingPolicy': 'apple_voice_processing_aec_ns',
+            'voiceProcessingAttempted': true,
+            'lastVoiceProcessingEnabled': false,
+            'lastVoiceProcessingAgcEnabled': false,
+            'voiceProcessingError': 'Voice processing did not become active',
+            'inputBuffers': 0,
+          },
+        },
+      },
+    ));
+
+    expect(find.text('语音处理策略'), findsOneWidget);
+    expect(find.text('回声消除与系统降噪'), findsOneWidget);
+    expect(find.text('自动增益 AGC'), findsOneWidget);
+    expect(find.text('语音处理错误'), findsOneWidget);
+    expect(find.textContaining('Apple 语音处理未启用'), findsOneWidget);
+    expect(find.textContaining('未收到麦克风输入'), findsNothing);
+  });
+
   testWidgets('shows audio session error before microphone hint',
       (WidgetTester tester) async {
     await tester.pumpWidget(const _AudioStatsTestApp(

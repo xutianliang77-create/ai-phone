@@ -1,32 +1,55 @@
 import type {
+  AsrEndpointReason,
   AudioFormat,
+  AsrEndpointMode,
   CallRoomTranslationLanguage,
   LanguageCode,
+  SegmentTimingDto,
 } from "@translation/contracts";
+import { isSegmentTiming, isSegmentVadContext } from "@translation/contracts";
 import type {
   CallAsrProvider,
   CallAudioFrame,
   CallAudioSpeakerRole,
+  CallVadDecisionSink,
   TranscriptSegment,
 } from "../worker/types.js";
+import {
+  PersistentAsrStream,
+  type AsrWebSocketFactory,
+} from "./persistent-asr-stream.js";
 
 export interface HttpAsrProviderOptions {
   endpoint: string;
   flushEndpoint?: string;
   apiKey?: string;
   timeoutMs: number;
+  endpointMode?: AsrEndpointMode;
+  hotwords?: string[];
+  corrections?: Array<{ fromText: string; toText: string }>;
+  streamEndpoint?: string;
+  streamFallbackToHttp?: boolean;
+  webSocketFactory?: AsrWebSocketFactory;
   fetchFn?: typeof fetch;
 }
 
 interface AsrResponse {
   segmentId?: string;
+  speechId?: string;
+  turnId?: string;
+  revision?: number;
   text?: string;
   language?: CallRoomTranslationLanguage;
-  confidence?: number;
+  confidence?: number | null;
+  timing?: SegmentTimingDto;
+  endpointReason?: string;
+  vadContext?: unknown;
 }
 
 export class HttpAsrProvider implements CallAsrProvider {
   private readonly fetchFn: typeof fetch;
+  private vadDecisionSink: CallVadDecisionSink | null = null;
+  private readonly streams = new Map<string, PersistentAsrStream>();
 
   constructor(private readonly options: HttpAsrProviderOptions) {
     this.fetchFn = options.fetchFn ?? fetch;
@@ -34,7 +57,33 @@ export class HttpAsrProvider implements CallAsrProvider {
 
   async createCall(_callId: string) {}
 
+  setVadDecisionSink(sink: CallVadDecisionSink | null) {
+    this.vadDecisionSink = sink;
+  }
+
   async transcribe(frame: CallAudioFrame): Promise<TranscriptSegment | null> {
+    if (this.options.streamEndpoint) {
+      try {
+        const response = await this.streamFor(frame.sessionId, frame.speakerRole)
+          .transcribe(frame);
+        if (response.vadDecision) {
+          this.vadDecisionSink?.({
+            ...response.vadDecision,
+            callId: frame.sessionId,
+            speakerRole: frame.speakerRole,
+          });
+        }
+        return response.transcript
+          ? parseAsrResponse(response.transcript, `asr_${frame.sequence}`)
+          : null;
+      } catch (error) {
+        if (this.options.streamFallbackToHttp === false) throw error;
+      }
+    }
+    return this.transcribeHttp(frame);
+  }
+
+  private async transcribeHttp(frame: CallAudioFrame): Promise<TranscriptSegment | null> {
     const response = await this.fetchWithTimeout(this.options.endpoint, {
       method: "POST",
       headers: this.headers(),
@@ -47,14 +96,33 @@ export class HttpAsrProvider implements CallAsrProvider {
         data: frame.data,
         sourceLanguage: "auto" satisfies LanguageCode,
         targetLanguage: "zh" satisfies CallRoomTranslationLanguage,
+        mode: this.options.endpointMode ?? "call_link",
+        hotwords: this.options.hotwords ?? [],
+        corrections: this.options.corrections ?? [],
       }),
     });
+    this.emitVadDecision(response, frame);
     if (response.status === 204) return null;
     if (!response.ok) throw new Error(`HTTP ASR returned HTTP ${response.status}`);
     return parseAsrResponse(await response.json() as AsrResponse, `asr_${frame.sequence}`);
   }
 
   async flush(callId: string, speakerRole: CallAudioSpeakerRole) {
+    const stream = this.streams.get(streamKey(callId, speakerRole));
+    if (stream) {
+      try {
+        const response = await stream.flush();
+        return response.transcript
+          ? parseAsrResponse(response.transcript, "asr_flush")
+          : null;
+      } catch (error) {
+        if (this.options.streamFallbackToHttp === false) throw error;
+      }
+    }
+    return this.flushHttp(callId, speakerRole);
+  }
+
+  private async flushHttp(callId: string, speakerRole: CallAudioSpeakerRole) {
     const response = await this.fetchWithTimeout(
       this.flushUrl(asrSessionId(callId, speakerRole)),
       {
@@ -63,6 +131,9 @@ export class HttpAsrProvider implements CallAsrProvider {
         body: JSON.stringify({
           sourceLanguage: "auto" satisfies LanguageCode,
           targetLanguage: "zh" satisfies CallRoomTranslationLanguage,
+          mode: this.options.endpointMode ?? "call_link",
+          hotwords: this.options.hotwords ?? [],
+          corrections: this.options.corrections ?? [],
         }),
       },
     );
@@ -71,7 +142,52 @@ export class HttpAsrProvider implements CallAsrProvider {
     return parseAsrResponse(await response.json() as AsrResponse, "asr_flush");
   }
 
-  async closeCall(_callId: string) {}
+  async closeCall(callId: string) {
+    await Promise.allSettled((["host", "guest"] as const).map(async (speakerRole) => {
+      const key = streamKey(callId, speakerRole);
+      const stream = this.streams.get(key);
+      this.streams.delete(key);
+      if (stream) {
+        try {
+          await stream.close();
+          return;
+        } catch {
+          // Complete cleanup through the idempotent HTTP endpoint.
+        }
+      }
+      await this.closeSessionHttp(asrSessionId(callId, speakerRole));
+    }));
+  }
+
+  private emitVadDecision(response: Response, frame: CallAudioFrame) {
+    const headers = response.headers as Headers | undefined;
+    const voiced = parseBooleanHeader(headers?.get("x-asr-vad-voiced"));
+    const provider = headers?.get("x-asr-vad-provider")?.trim();
+    const sequence = parseIntegerHeader(headers?.get("x-asr-vad-sequence"));
+    if (voiced === undefined || !provider || sequence !== frame.sequence) return;
+    const probability = parseRatioHeader(headers?.get("x-asr-vad-probability"));
+    const timestampMs = parseIntegerHeader(
+      headers?.get("x-asr-vad-timestamp-ms"),
+    ) ?? frame.timestampMs;
+    const durationMs = parseIntegerHeader(
+      headers?.get("x-asr-vad-duration-ms"),
+    ) ?? frameDurationMs(frame);
+    const preRollMs = parseIntegerHeader(
+      headers?.get("x-asr-vad-preroll-ms"),
+    ) ?? 0;
+    this.vadDecisionSink?.({
+      callId: frame.sessionId,
+      speakerRole: frame.speakerRole,
+      sequence,
+      timestampMs,
+      durationMs,
+      voiced,
+      ...(probability === undefined ? {} : { probability }),
+      provider,
+      fallback: parseBooleanHeader(headers?.get("x-asr-vad-fallback")) === true,
+      preRollMs,
+    });
+  }
 
   private async fetchWithTimeout(url: string, init: RequestInit) {
     const controller = new AbortController();
@@ -97,9 +213,45 @@ export class HttpAsrProvider implements CallAsrProvider {
     const base = this.options.endpoint.replace(/\/asr\/transcribe$/, "");
     return `${base}/asr/sessions/${encodeURIComponent(sessionId)}/flush`;
   }
+
+  private closeUrl(sessionId: string) {
+    const base = this.options.endpoint.replace(/\/asr\/transcribe$/, "");
+    return `${base}/asr/sessions/${encodeURIComponent(sessionId)}`;
+  }
+
+  private async closeSessionHttp(sessionId: string) {
+    const response = await this.fetchWithTimeout(this.closeUrl(sessionId), {
+      method: "DELETE",
+      headers: this.headers(),
+    });
+    if (!response.ok && response.status !== 404 && response.status !== 410) {
+      throw new Error(`HTTP ASR close returned HTTP ${response.status}`);
+    }
+  }
+
+  private streamFor(callId: string, speakerRole: CallAudioSpeakerRole) {
+    const key = streamKey(callId, speakerRole);
+    const existing = this.streams.get(key);
+    if (existing) return existing;
+    const created = new PersistentAsrStream(callId, speakerRole, {
+      endpoint: this.options.streamEndpoint!,
+      apiKey: this.options.apiKey,
+      timeoutMs: this.options.timeoutMs,
+      endpointMode: this.options.endpointMode ?? "call_link",
+      hotwords: this.options.hotwords ?? [],
+      corrections: this.options.corrections ?? [],
+      webSocketFactory: this.options.webSocketFactory,
+    });
+    this.streams.set(key, created);
+    return created;
+  }
 }
 
 function asrSessionId(callId: string, speakerRole: CallAudioSpeakerRole) {
+  return `${callId}:${speakerRole}`;
+}
+
+function streamKey(callId: string, speakerRole: CallAudioSpeakerRole) {
   return `${callId}:${speakerRole}`;
 }
 
@@ -112,10 +264,65 @@ function parseAsrResponse(
   if (body.language !== "zh" && body.language !== "en") {
     throw new Error("HTTP ASR returned invalid language");
   }
+  const confidence = normalizeConfidence(body.confidence);
   return {
     segmentId: body.segmentId ?? fallbackSegmentId,
+    ...(validIdentifier(body.speechId) ? { speechId: body.speechId.trim() } : {}),
+    ...(validIdentifier(body.turnId) ? { turnId: body.turnId.trim() } : {}),
+    ...(validRevision(body.revision) ? { revision: body.revision } : {}),
     text,
     language: body.language,
-    confidence: body.confidence,
+    ...(confidence === undefined ? {} : { confidence }),
+    ...(isSegmentTiming(body.timing) ? { timing: body.timing } : {}),
+    ...(isAsrEndpointReason(body.endpointReason)
+      ? { endpointReason: body.endpointReason }
+      : {}),
+    ...(isSegmentVadContext(body.vadContext)
+      ? { vadContext: body.vadContext }
+      : {}),
   };
+}
+
+function validIdentifier(value: unknown): value is string {
+  return typeof value === "string" && value.trim().length > 0 && value.length <= 160;
+}
+
+function validRevision(value: unknown): value is number {
+  return typeof value === "number" && Number.isInteger(value) && value >= 0;
+}
+
+function normalizeConfidence(value: number | null | undefined) {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0 && value <= 1
+    ? value
+    : undefined;
+}
+
+function isAsrEndpointReason(value: unknown): value is AsrEndpointReason {
+  return value === "silence" || value === "max_duration" || value === "flush" ||
+    value === "speaker_boundary";
+}
+
+function parseBooleanHeader(value: string | null | undefined) {
+  if (value === "true") return true;
+  if (value === "false") return false;
+  return undefined;
+}
+
+function parseIntegerHeader(value: string | null | undefined) {
+  if (!value) return undefined;
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed >= 0 ? parsed : undefined;
+}
+
+function parseRatioHeader(value: string | null | undefined) {
+  if (!value) return undefined;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed >= 0 && parsed <= 1
+    ? parsed
+    : undefined;
+}
+
+function frameDurationMs(frame: CallAudioFrame) {
+  const byteLength = Buffer.from(frame.data, "base64").byteLength;
+  return Math.max(0, Math.round(byteLength * 1000 / (frame.sampleRate * 2)));
 }

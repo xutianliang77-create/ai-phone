@@ -39,9 +39,8 @@ describe("http tts synthesizer", () => {
         language: "en",
       },
       {
-        mode: "personal_clone",
-        voiceProfileId: "voice_1",
-        referenceAudioId: "voice_1",
+        mode: "preset",
+        presetId: "zh_female_cantonese",
       },
     );
 
@@ -65,14 +64,70 @@ describe("http tts synthesizer", () => {
         speakerRole: "guest",
         segmentId: "seg_1",
         voice: {
-          mode: "personal_clone",
-          voiceProfileId: "voice_1",
-          referenceAudioId: "voice_1",
+          mode: "preset",
+          presetId: "zh_female_cantonese",
         },
       },
     });
   });
+
+  it("aborts an in-flight request when its session closes", async () => {
+    const synthesizer = new HttpTtsSynthesizer({
+      ...baseEnv(),
+      ttsHttpEndpoint: "http://models.local:8002/tts/synthesize",
+    });
+    let requestSignal: AbortSignal | null = null;
+    vi.stubGlobal("fetch", async (_url: string | URL | Request, init?: RequestInit) => {
+      requestSignal = init?.signal ?? null;
+      return await new Promise<Response>((_resolve, reject) => {
+        requestSignal?.addEventListener("abort", () => {
+          const error = new Error("aborted");
+          error.name = "AbortError";
+          reject(error);
+        });
+      });
+    });
+
+    const pending = synthesizer.synthesize({
+      type: "translation.final",
+      sessionId: "sess_abort",
+      segmentId: "seg_1",
+      text: "hello",
+      language: "en",
+    });
+    await vi.waitFor(() => expect(requestSignal).not.toBeNull());
+    synthesizer.closeSession("sess_abort");
+
+    await expect(pending).rejects.toMatchObject({ name: "AbortError" });
+    expect(requestSignal?.aborted).toBe(true);
+  });
+
+  it("keeps output sequence across pause cancellation and resets on close", async () => {
+    const synthesizer = new HttpTtsSynthesizer({
+      ...baseEnv(),
+      ttsHttpEndpoint: "http://models.local:8002/tts/synthesize",
+    });
+    vi.stubGlobal("fetch", async () => new Response(JSON.stringify({
+      audio: { format: "pcm16", sampleRate: 24000, data: "AA==" },
+    })));
+
+    expect((await synthesizer.synthesize(translation("seg_1")))?.sequence).toBe(1);
+    synthesizer.cancelSession("sess_sequence");
+    expect((await synthesizer.synthesize(translation("seg_2")))?.sequence).toBe(2);
+    synthesizer.closeSession("sess_sequence");
+    expect((await synthesizer.synthesize(translation("seg_3")))?.sequence).toBe(1);
+  });
 });
+
+function translation(segmentId: string) {
+  return {
+    type: "translation.final" as const,
+    sessionId: "sess_sequence",
+    segmentId,
+    text: "hello",
+    language: "en",
+  };
+}
 
 function baseEnv(): RealtimeEnv {
   return {

@@ -49,7 +49,84 @@ void main() {
     });
 
     expect(settings.voiceOutputMode, RealtimeVoiceOutputMode.natural);
+    expect(settings.voicePresetId, 'zh_female_natural');
     expect(settings.toJson()['voiceOutputMode'], 'natural');
+  });
+
+  test('persists the selected natural voice preset', () {
+    final settings = RealtimeRuntimeSettings.fromJson(const {
+      'processingMode': 'online',
+      'sourceLanguage': 'zh',
+      'targetLanguage': 'en',
+      'voiceOutputMode': 'natural',
+      'voicePresetId': 'zh_female_sichuanese',
+    });
+
+    final config = settings.applyTo(_baseConfig());
+
+    expect(settings.voicePresetId, 'zh_female_sichuanese');
+    expect(settings.toJson()['voicePresetId'], 'zh_female_sichuanese');
+    expect(config.realtimeVoicePresetId, 'zh_female_sichuanese');
+  });
+
+  test('persists and applies the selected domain lexicon pack', () {
+    final settings = RealtimeRuntimeSettings.fromJson(const {
+      'processingMode': 'online',
+      'sourceLanguage': 'zh',
+      'targetLanguage': 'en',
+      'voiceOutputMode': 'off',
+      'domainLexiconPack': 'medical',
+    });
+
+    final config = settings.applyTo(_baseConfig());
+
+    expect(settings.domainLexiconPack, 'medical');
+    expect(settings.toJson()['domainLexiconPack'], 'medical');
+    expect(config.domainLexiconPack, 'medical');
+  });
+
+  test('falls back to the general lexicon for unknown saved values', () {
+    final settings = RealtimeRuntimeSettings.fromJson(const {
+      'processingMode': 'online',
+      'sourceLanguage': 'zh',
+      'targetLanguage': 'en',
+      'voiceOutputMode': 'off',
+      'domainLexiconPack': 'unknown',
+    });
+
+    expect(settings.domainLexiconPack, 'product');
+  });
+
+  test('normalizes unsupported saved features for on-device mode', () {
+    final settings = RealtimeRuntimeSettings.fromJson(const {
+      'processingMode': 'onDevice',
+      'sourceLanguage': 'fr',
+      'targetLanguage': 'ja',
+      'voiceOutputMode': 'my_voice',
+      'domainLexiconPack': 'medical',
+    });
+
+    expect(settings.sourceLanguage, autoSourceLanguageCode);
+    expect(settings.targetLanguage, autoReverseTargetLanguageCode);
+    expect(settings.voiceOutputMode, RealtimeVoiceOutputMode.natural);
+    expect(settings.domainLexiconPack, 'product');
+  });
+
+  test('forces Listening sessions silent without losing the Talk preference',
+      () {
+    final listening = _baseConfig().copyWith(
+      realtimeMode: 'meeting',
+      realtimeVoiceOutputMode: 'my_voice',
+    );
+
+    final effectiveListening = applyRealtimeModeVoicePolicy(listening);
+    final effectiveTalk = applyRealtimeModeVoicePolicy(
+      listening.copyWith(realtimeMode: 'conversation'),
+    );
+
+    expect(effectiveListening.realtimeVoiceOutputMode, 'off');
+    expect(listening.realtimeVoiceOutputMode, 'my_voice');
+    expect(effectiveTalk.realtimeVoiceOutputMode, 'my_voice');
   });
 }
 

@@ -6,20 +6,20 @@ import {
   createMyVoiceProfile,
   deleteMyVoiceProfile,
   getMyVoiceProfile,
-} from "./voice-profiles.service.js";
+} from "./voice-profiles-runtime.service.js";
 import { synthesizeMyVoiceTestAudio } from "./voice-profile-test-audio.js";
 
 export async function registerVoiceProfileRoutes(app: FastifyInstance) {
   app.get("/voice-profiles/me", async (request, reply) => {
-    const account = requireAccount(request, reply);
+    const account = await requireAccount(request, reply);
     if (!account) return;
-    return { profile: getMyVoiceProfile(account.id) };
+    return { profile: await getMyVoiceProfile(account.id) };
   });
 
   app.post("/voice-profiles/me", async (request, reply) => {
-    const account = requireAccount(request, reply);
+    const account = await requireAccount(request, reply);
     if (!account) return;
-    const result = createMyVoiceProfile(
+    const result = await createMyVoiceProfile(
       account.id,
       (request.body ?? {}) as Record<string, unknown>,
     );
@@ -28,7 +28,7 @@ export async function registerVoiceProfileRoutes(app: FastifyInstance) {
   });
 
   app.post("/voice-profiles/me/reference-audio", async (request, reply) => {
-    const account = requireAccount(request, reply);
+    const account = await requireAccount(request, reply);
     if (!account) return;
     const result = await attachVoiceProfileReferenceAudio(
       account.id,
@@ -39,18 +39,16 @@ export async function registerVoiceProfileRoutes(app: FastifyInstance) {
         result.code === "voice_reference_sync_failed" ? 503 : 400;
       const message =
         "message" in result ? result.message ?? result.code : result.code;
-      return sendError(
-        reply,
-        statusCode,
-        result.code,
-        message,
-      );
+      return reply.status(statusCode).send({
+        error: { code: result.code, message },
+        ...("quality" in result ? { quality: result.quality } : {}),
+      });
     }
     return { profile: result.profile };
   });
 
   app.post("/voice-profiles/me/test-audio", async (request, reply) => {
-    const account = requireAccount(request, reply);
+    const account = await requireAccount(request, reply);
     if (!account) return;
     const result = await synthesizeMyVoiceTestAudio(
       account.id,
@@ -68,9 +66,9 @@ export async function registerVoiceProfileRoutes(app: FastifyInstance) {
   });
 
   app.delete("/voice-profiles/me", async (request, reply) => {
-    const account = requireAccount(request, reply);
+    const account = await requireAccount(request, reply);
     if (!account) return;
-    const result = deleteMyVoiceProfile(account.id);
+    const result = await deleteMyVoiceProfile(account.id);
     if (!result.ok) return sendError(reply, 404, result.code, result.code);
     return { profile: result.profile };
   });

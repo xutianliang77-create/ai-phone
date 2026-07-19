@@ -1,0 +1,58 @@
+{
+  "schemaVersion": 1,
+  "namespace": "wujie",
+  "export": {
+    "prometheusPath": "/metrics",
+    "authentication": "bearer",
+    "otelCollectorConfig": "infra/observability/otel-collector-realtime.yaml",
+    "dashboard": "infra/observability/grafana/realtime-quality-dashboard.json"
+  },
+  "cardinalityPolicy": {
+    "forbiddenLabels": ["call_id", "session_id", "runtime_id", "user_id", "speech_id"],
+    "allowedIdentityLabels": [
+      "service",
+      "provider",
+      "model_version",
+      "runtime_fingerprint",
+      "signature_version",
+      "worker_node",
+      "stage",
+      "model",
+      "profile",
+      "configuration_fingerprint"
+    ],
+    "maxRetainedWorkerRuntimesPerApiProcess": 4096
+  },
+  "metrics": [
+    "wujie_model_service_info",
+    "wujie_model_service_up",
+    "wujie_translation_active",
+    "wujie_translation_waiting",
+    "wujie_translation_pending",
+    "wujie_translation_batches_total",
+    "wujie_translation_completed_total",
+    "wujie_translation_rejected_total",
+    "wujie_translation_timed_out_total",
+    "wujie_realtime_runtime_count",
+    "wujie_realtime_audio_leg_count",
+    "wujie_realtime_audio_frames",
+    "wujie_realtime_backpressure_events",
+    "wujie_realtime_audio_high_watermark_ratio",
+    "wujie_realtime_rtc_samples",
+    "wujie_realtime_rtc_rtt_ms",
+    "wujie_realtime_rtc_jitter_ms",
+    "wujie_realtime_rtc_packet_loss_ratio",
+    "wujie_realtime_model_config_info"
+  ],
+  "rtcThresholdPolicy": {
+    "status": "calibration_required",
+    "thresholds": null,
+    "requiredEvidence": [
+      "isolated staging LiveKit session",
+      "owned real-device session",
+      "direct and TURN paths",
+      "reconnect sample",
+      "10 then 25/50/100 concurrent sessions"
+    ]
+  }
+}

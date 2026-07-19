@@ -2,8 +2,15 @@ import type {
   LanguageCode,
   TranslationLanguageCode,
 } from "../shared/languages.js";
+import type { SpeakerAttributionOptionsDto } from "../shared/speaker.js";
+import type { DomainLexiconPack } from "../shared/domain-lexicon.js";
 
 export type RealtimeMode = "conversation" | "meeting" | "classroom" | "business";
+export type AsrEndpointMode =
+  | "conversation"
+  | "listening"
+  | "call_link"
+  | "pstn";
 export type RealtimeVoiceMode =
   | "preset"
   | "voice_design"
@@ -12,10 +19,12 @@ export type RealtimeVoiceMode =
 
 export interface RealtimeVoiceConfig {
   mode: RealtimeVoiceMode;
+  presetId?: string;
   voiceProfileId?: string;
   referenceAudioId?: string;
   referenceTranscript?: string;
   controlPrompt?: string;
+  quality?: "standard" | "hifi";
 }
 
 export interface CreateRealtimeSessionRequest {
@@ -26,6 +35,8 @@ export interface CreateRealtimeSessionRequest {
   voiceOutput: boolean;
   voice?: RealtimeVoiceConfig;
   termbaseId?: string;
+  domainLexiconPacks?: DomainLexiconPack[];
+  speakerAttribution?: SpeakerAttributionOptionsDto;
 }
 
 export interface CreateRealtimeSessionResponse {
@@ -34,11 +45,15 @@ export interface CreateRealtimeSessionResponse {
   endpoint: string;
   expiresAt: string;
   maxDurationSeconds: number;
+  domainLexiconPacks?: DomainLexiconPack[];
+  domainLexiconVersion?: string;
 }
 
 export interface RealtimeTokenClaims {
   userId: string;
   sessionId: string;
+  mode?: RealtimeMode;
+  asrEndpointMode?: AsrEndpointMode;
   sourceLanguage: LanguageCode;
   targetLanguage: TranslationLanguageCode;
   autoReverseTargetLanguage?: boolean;
@@ -46,6 +61,8 @@ export interface RealtimeTokenClaims {
   voice?: RealtimeVoiceConfig;
   planCode: string;
   termbaseId?: string;
+  domainLexiconPacks?: DomainLexiconPack[];
+  speakerAttribution?: SpeakerAttributionOptionsDto;
   maxDurationSeconds: number;
   holdSeconds?: number;
   issuedAt: number;

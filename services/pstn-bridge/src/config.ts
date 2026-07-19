@@ -2,6 +2,7 @@ import type { PstnBridgeEnv, PstnBridgeProviderName } from "./types.js";
 
 export function loadEnv(env: NodeJS.ProcessEnv = process.env): PstnBridgeEnv {
   return {
+    host: env.PSTN_BRIDGE_BIND_HOST?.trim() || "0.0.0.0",
     port: Number(env.PSTN_BRIDGE_PORT ?? 3302),
     apiKey: clean(env.PSTN_BRIDGE_API_KEY),
     provider: parseProvider(env.PSTN_BRIDGE_PROVIDER),
@@ -29,6 +30,8 @@ export function loadEnv(env: NodeJS.ProcessEnv = process.env): PstnBridgeEnv {
     providerWebhookSecret: clean(env.PSTN_BRIDGE_PROVIDER_WEBHOOK_SECRET),
     providerWebhookMaxSkewMs: Number(env.PSTN_BRIDGE_PROVIDER_WEBHOOK_MAX_SKEW_MS ?? 300000),
     recordingDisclosureEnabled: env.PSTN_RECORDING_DISCLOSURE_ENABLED === "true",
+    providerIdempotencyGuaranteed:
+      env.PSTN_PROVIDER_IDEMPOTENCY_GUARANTEED === "true",
   };
 }
 
@@ -44,6 +47,9 @@ export function checkReleaseReadiness(config: PstnBridgeEnv) {
     ...requiredAudioFrameSink(config),
     ...requiredProviderWebhook(config),
     ...recordingDisclosure(config.recordingDisclosureEnabled),
+    ...(config.providerIdempotencyGuaranteed
+      ? []
+      : ["pstn_bridge provider must guarantee dial idempotency"]),
   ];
   return { status: issues.length === 0 ? "ready" : "not_ready", issues };
 }

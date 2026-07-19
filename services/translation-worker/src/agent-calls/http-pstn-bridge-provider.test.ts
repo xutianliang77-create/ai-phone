@@ -19,18 +19,25 @@ describe("HttpPstnBridgeProvider", () => {
     });
 
     const result = await provider.placeCall({
-      id: "draft_1",
-      callId: "call_1",
-      scenario: "booking",
-      status: "queued",
-      objective: "预约洗牙",
-      suggestedScript: "您好，我想预约洗牙",
-      targetPhone: "13800138000",
-      language: "zh",
-      riskLevel: "low",
-      riskReasons: [],
-      createdAt: "2026-07-03T00:00:00.000Z",
-      updatedAt: "2026-07-03T00:00:00.000Z",
+      workerId: "worker-1",
+      leaseToken: "lease-1",
+      leaseExpiresAt: "2026-07-03T00:01:00.000Z",
+      attempt: 1,
+      dialIdempotencyKey: "agent-dial:call_1",
+      draft: {
+        id: "draft_1",
+        callId: "call_1",
+        scenario: "booking",
+        status: "dispatching",
+        objective: "预约洗牙",
+        suggestedScript: "您好，我想预约洗牙",
+        targetPhone: "13800138000",
+        language: "zh",
+        riskLevel: "low",
+        riskReasons: [],
+        createdAt: "2026-07-03T00:00:00.000Z",
+        updatedAt: "2026-07-03T00:00:00.000Z",
+      },
     });
 
     expect(result).toEqual({ status: "in_progress", providerCallId: "pstn_1" });
@@ -38,6 +45,7 @@ describe("HttpPstnBridgeProvider", () => {
       url: "https://pstn-bridge.qkxy.cn/agent-calls",
       authorization: "Bearer bridge-secret",
       body: {
+        idempotencyKey: "agent-dial:call_1",
         draftId: "draft_1",
         callId: "call_1",
         targetPhone: "13800138000",

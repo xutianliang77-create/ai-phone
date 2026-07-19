@@ -1,9 +1,18 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import {
+  participantTrackSpeaker,
+  type CallRoomDataEvent,
+} from "@translation/contracts";
 import { getStoreSnapshot } from "../../infrastructure/storage/json-store.js";
+import {
+  createSession,
+  findSession,
+} from "../sessions/sessions.repository.js";
 import type { CallLinkRecord } from "./call-links.service.js";
 import { buildCallRoomSmokeEvents } from "./call-room-events.js";
 import {
   isLiveKitAlreadyExistsError,
+  persistCallRoomDataEvent,
   publishCallRoomDataEvents,
   setCallRoomDataPublisherForTests,
   type CallRoomDataPublisher,
@@ -29,6 +38,15 @@ describe("call room worker publisher", () => {
     const [event] = buildCallRoomSmokeEvents({
       callId: record.callId,
       roomName: record.roomName,
+    });
+    createSession({
+      id: record.sessionId,
+      userId: "user_1",
+      mode: "call_link",
+      status: "active",
+      consumedSeconds: 0,
+      createdAt: record.createdAt,
+      segments: [],
     });
 
     setCallRoomDataPublisherForTests({
@@ -59,6 +77,87 @@ describe("call room worker publisher", () => {
       false,
     );
   });
+
+  it("does not consume later ordered events when the first publish fails", async () => {
+    const record = fakeCallLinkRecord("call_failure");
+    const events = buildCallRoomSmokeEvents({
+      callId: record.callId,
+      roomName: record.roomName,
+      nowMs: 1_000,
+    });
+    createSession({
+      id: record.sessionId,
+      userId: "user_1",
+      mode: "call_link",
+      status: "active",
+      consumedSeconds: 0,
+      createdAt: record.createdAt,
+      segments: [],
+    });
+    setCallRoomDataPublisherForTests({
+      async publish() {
+        throw new Error("publish failed");
+      },
+    });
+
+    await expect(publishCallRoomDataEvents(record, events)).resolves.toMatchObject({
+      ok: false,
+      issues: ["publish failed"],
+    });
+    expect(getStoreSnapshot().outboxEvents.map((event) => event.attempts))
+      .toEqual([1, 0, 0, 0]);
+  });
+
+  it("persists raw, optimized, refinement, and model timing metadata", async () => {
+    const record = fakeCallLinkRecord("call_metadata");
+    createSession({
+      id: record.sessionId,
+      userId: "user_1",
+      mode: "call_link",
+      status: "active",
+      consumedSeconds: 0,
+      createdAt: record.createdAt,
+      segments: [],
+    });
+    await persistCallRoomDataEvent(record, {
+      type: "transcript.final",
+      callId: record.callId,
+      roomName: record.roomName,
+      segmentId: "segment_1",
+      speakerRole: "host",
+      speaker: participantTrackSpeaker("host"),
+      sourceLanguage: "zh",
+      targetLanguage: "en",
+      text: "会议纪要。",
+      sourceText: "会议纪要。",
+      rawText: "会议既要。",
+      optimizedText: "会议纪要。",
+      confidence: 0.82,
+      refinement: {
+        provider: "openai_compatible",
+        model: "qwen/qwen3.5-9b",
+        promptVersion: "asr_refine_v2",
+        confidence: 0.94,
+        latencyMs: 320,
+        operations: ["term_correction"],
+        protectedTermsKept: ["会议纪要"],
+        warnings: [],
+      },
+      timing: { startMs: 100, endMs: 900, source: "model" },
+      timestampMs: 1000,
+    } satisfies CallRoomDataEvent);
+
+    expect(findSession(record.sessionId)?.segments[0]).toMatchObject({
+      rawText: "会议既要。",
+      optimizedText: "会议纪要。",
+      confidence: 0.82,
+      refinement: {
+        provider: "openai_compatible",
+        model: "qwen/qwen3.5-9b",
+      },
+      timing: { startMs: 100, endMs: 900, source: "model" },
+    });
+  });
 });
 
 const envKeys = [
@@ -75,7 +174,7 @@ function configureCallRoomEnv() {
   process.env.LIVEKIT_URL = "wss://livekit.example.cn";
   process.env.LIVEKIT_API_KEY = "lk_key";
   process.env.LIVEKIT_API_SECRET = "lk_secret";
-  process.env.CALL_ROOM_TOKEN_TTL_SECONDS = "3600";
+  process.env.CALL_ROOM_TOKEN_TTL_SECONDS = "120";
   process.env.INTERNAL_API_SECRET = "internal-secret-123";
 }
 
@@ -106,6 +205,8 @@ function resetStore() {
   store.billingLedger = [];
   store.appleServerNotifications = [];
   store.appErrorReports = [];
+  store.inboxEvents = [];
+  store.outboxEvents = [];
 }
 
 function fakeCallLinkRecord(callId: string): CallLinkRecord {
@@ -118,6 +219,7 @@ function fakeCallLinkRecord(callId: string): CallLinkRecord {
     joinUrl: `https://call.example.cn/join/${callId}`,
     hostUrl: `https://call.example.cn/host/${callId}`,
     status: "created",
+    version: 1,
     mode: "call_link",
     createdAt: now,
     expiresAt: now,

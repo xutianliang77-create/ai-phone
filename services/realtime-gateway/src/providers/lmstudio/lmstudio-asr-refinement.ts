@@ -25,6 +25,41 @@ export interface RefinedTranscript {
   refinement: SessionSegmentRefinementDto;
 }
 
+export class RealtimeTranscriptRefiner {
+  private readonly recentSegments = new Map<string, RecentAsrSegment[]>();
+
+  constructor(private readonly options: {
+    provider: LlmProvider;
+    enabled: boolean;
+    minConfidence: number;
+  }) {}
+
+  refine(
+    session: RealtimeProviderSession,
+    transcript: TranscriptResult,
+    targetLanguage: TranslationLanguageCode,
+  ) {
+    return refineRealtimeTranscript({
+      ...this.options,
+      session,
+      transcript,
+      targetLanguage,
+      previousSegments: this.recentSegments.get(session.sessionId) ?? [],
+    });
+  }
+
+  remember(sessionId: string, segment: RecentAsrSegment) {
+    this.recentSegments.set(
+      sessionId,
+      appendRecentAsrSegment(this.recentSegments.get(sessionId), segment),
+    );
+  }
+
+  clear(sessionId: string) {
+    this.recentSegments.delete(sessionId);
+  }
+}
+
 export async function refineRealtimeTranscript(input: {
   provider: LlmProvider;
   enabled: boolean;
@@ -36,7 +71,9 @@ export async function refineRealtimeTranscript(input: {
 }): Promise<RefinedTranscript> {
   const rawText = input.transcript.text;
   const protectedTerms = protectedTermsFor(input.session);
-  const shouldUseLlm = input.enabled && shouldUseContextualAsrRefinement({
+  const shouldUseLlm = input.enabled &&
+    input.transcript.endpointReason !== "max_duration" &&
+    shouldUseContextualAsrRefinement({
     rawText,
     sourceLanguage: input.transcript.language,
     confidence: input.transcript.confidence,

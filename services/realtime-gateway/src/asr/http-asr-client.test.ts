@@ -19,6 +19,11 @@ describe("http asr client", () => {
           text: "hello",
           language: "en",
           confidence: 0.88,
+          vadContext: {
+            endpointReason: "silence",
+            vadModelFingerprint: "a".repeat(64),
+            endpointPolicyFingerprint: "b".repeat(64),
+          },
         });
       }) as typeof fetch,
     });
@@ -37,11 +42,17 @@ describe("http asr client", () => {
     expect(requests[0].url).toBe("http://127.0.0.1:8001/asr/transcribe");
     expect(requests[0].authorization).toBe("Bearer test-key");
     expect(requests[0].body.sampleRate).toBe(24000);
+    expect(requests[0].body.mode).toBeUndefined();
     expect(transcript).toEqual({
       segmentId: "seg_1",
       text: "hello",
       language: "en",
       confidence: 0.88,
+      vadContext: {
+        endpointReason: "silence",
+        vadModelFingerprint: "a".repeat(64),
+        endpointPolicyFingerprint: "b".repeat(64),
+      },
     });
   });
 
@@ -198,6 +209,9 @@ describe("http asr client", () => {
       sessionId: "sess_1",
       sourceLanguage: "en",
       targetLanguage: "zh",
+      hotwords: ["Hy-MT2"],
+      corrections: [{ fromText: "海歪MT", toText: "Hy-MT2" }],
+      mode: "conversation",
     });
 
     expect(requests[0].url).toBe(
@@ -206,8 +220,48 @@ describe("http asr client", () => {
     expect(requests[0].body).toEqual({
       sourceLanguage: "en",
       targetLanguage: "zh",
+      hotwords: ["Hy-MT2"],
+      corrections: [{ fromText: "海歪MT", toText: "Hy-MT2" }],
+      mode: "conversation",
     });
     expect(transcript?.segmentId).toBe("flush_7");
+  });
+
+  it("posts confirmed speaker boundaries to the ASR session", async () => {
+    const requests = [];
+    const client = new HttpAsrClient({
+      endpoint: "http://127.0.0.1:8001/asr/transcribe",
+      timeoutMs: 100,
+      fetchFn: (async (url: string, init?: RequestInit) => {
+        requests.push({ url, body: JSON.parse(init?.body as string) });
+        return response(200, {
+          segmentId: "boundary_4",
+          text: "first speaker turn",
+          language: "en",
+          endpointReason: "speaker_boundary",
+        });
+      }) as typeof fetch,
+    });
+
+    const transcript = await client.commitBoundary({
+      sessionId: "sess_1",
+      boundaryMs: 1480,
+      sourceLanguage: "en",
+      targetLanguage: "zh",
+    });
+
+    expect(requests[0]).toEqual({
+      url: "http://127.0.0.1:8001/asr/sessions/sess_1/boundary",
+      body: {
+        boundaryMs: 1480,
+        sourceLanguage: "en",
+        targetLanguage: "zh",
+        hotwords: [],
+        corrections: [],
+        mode: "conversation",
+      },
+    });
+    expect(transcript?.endpointReason).toBe("speaker_boundary");
   });
 
   it("closes remote ASR sessions", async () => {
@@ -233,6 +287,36 @@ describe("http asr client", () => {
       method: "DELETE",
       authorization: "Bearer test-key",
     });
+  });
+
+  it("reads session-scoped VAD diagnostics", async () => {
+    const client = new HttpAsrClient({
+      endpoint: "http://127.0.0.1:8001/asr/transcribe",
+      timeoutMs: 100,
+      fetchFn: (async (url: string) => response(200, {
+        configuredProvider: "marblenet",
+        activeProvider: "marblenet",
+        threshold: 0.5,
+        analyzedFrameCount: 2,
+        speechFrameCount: 1,
+        speechFrameRatio: 0.5,
+        fallbackCount: 0,
+        endpointPolicy: {
+          mode: "conversation",
+          minAudioMs: 1800,
+          endpointSilenceMs: 900,
+          maxAudioMs: 10000,
+          prerollMs: 400,
+          fingerprint: "a".repeat(64),
+        },
+        requestedUrl: url,
+      })) as typeof fetch,
+    });
+
+    const diagnostics = await client.diagnostics("sess 1");
+
+    expect(diagnostics.activeProvider).toBe("marblenet");
+    expect(diagnostics.endpointPolicy.mode).toBe("conversation");
   });
 });
 

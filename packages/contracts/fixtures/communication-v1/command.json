@@ -1,0 +1,24 @@
+{
+  "contractVersion": 1,
+  "kind": "command",
+  "commandId": "cmd_agent_start_001",
+  "sessionId": "session_001",
+  "participantId": "participant_user_001",
+  "legId": "leg_host_001",
+  "agentRunId": "agent_run_001",
+  "providerOperationId": "provider_operation_001",
+  "expectedVersion": 7,
+  "idempotencyKey": "agent-start:session_001:7",
+  "issuedAt": "2026-07-19T08:00:00.000Z",
+  "deadlineAt": "2026-07-19T08:00:30.000Z",
+  "actor": {
+    "type": "user",
+    "id": "account_001"
+  },
+  "payload": {
+    "scenario": "booking",
+    "locale": "zh-CN",
+    "instructions": "请预订明天下午三点的会议室",
+    "attempt": 1
+  }
+}

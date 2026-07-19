@@ -261,7 +261,11 @@ function findUsageHoldByIdempotencyKey(
 }
 
 function findActiveUsageHoldBySessionId(userId: string, sessionId: string) {
-  return activeUsageHolds(userId).find((hold) => hold.sessionId === sessionId) ?? null;
+  return getStoreSnapshot().usageHolds.find((hold) =>
+    hold.userId === userId &&
+    hold.sessionId === sessionId &&
+    hold.status === "active"
+  ) ?? null;
 }
 
 function normalizeSeconds(value: number) {

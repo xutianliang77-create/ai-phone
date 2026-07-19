@@ -14,6 +14,11 @@ export {
   MockLlmProvider,
 } from "./providers.js";
 export { OpenAiCompatibleLlmProvider } from "./openai-compatible-provider.js";
+export {
+  shouldUseContextualAsrRefinement,
+  type AsrRefinementPolicyInput,
+  type RecentAsrSegment,
+} from "./asr-refinement-policy.js";
 export type {
   AsrRefinementInput,
   AsrRefinementResult,

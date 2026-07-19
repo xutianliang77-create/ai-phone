@@ -1,4 +1,4 @@
-import { createHmac, randomUUID, timingSafeEqual } from "node:crypto";
+import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 import type { BillingProduct } from "./billing-products.js";
 import type { PaymentOrderRecord, PaymentProvider } from "./billing-records.js";
 
@@ -40,8 +40,10 @@ export function createDomesticPaymentIntent(input: {
     input.order.provider as DomesticPaymentProvider,
   );
   if (!notifyUrl) return domesticPaymentCallbackRequired();
-  const providerOrderId = providerOrderIdFor(input.order.provider, input.order.id);
-  const expiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString();
+  const providerOrderId = input.order.providerOrderId ??
+    providerOrderIdFor(input.order.provider, input.order.id);
+  const expiresAt = input.order.expiresAt ??
+    new Date(Date.now() + 15 * 60 * 1000).toISOString();
   const signature = signDomesticPaymentFields(config.webhookSecret, {
     amountCny: String(input.order.amountCny),
     expiresAt,
@@ -171,7 +173,7 @@ function getPaymentCallbackBaseUrl() {
 
 function providerOrderIdFor(provider: PaymentProvider, orderId: string) {
   const prefix = provider === "wechat_pay" ? "wx" : "ali";
-  return `${prefix}_${randomUUID()}_${orderId.slice(0, 8)}`;
+  return `${prefix}_${createHash("sha256").update(orderId).digest("hex").slice(0, 24)}`;
 }
 
 function safeEqual(expected: string, actual: string) {

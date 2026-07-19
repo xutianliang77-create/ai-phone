@@ -9,7 +9,7 @@ export function buildDefaultPstnAudioFrameSinkServer() {
   const env = loadEnv();
   return buildPstnAudioFrameServer({
     apiKey: env.audioFrameSinkApiKey,
-    worker: buildDefaultWorker(),
+    worker: buildDefaultWorker("pstn"),
   });
 }
 
@@ -20,9 +20,10 @@ async function main() {
   process.once("SIGTERM", () => server.close());
   await new Promise<void>((resolve, reject) => {
     server.once("error", reject);
-    server.listen(env.audioFrameSinkPort, "0.0.0.0", resolve);
+    server.listen(env.audioFrameSinkPort, env.audioFrameSinkHost, resolve);
   });
   logger.info({
+    host: env.audioFrameSinkHost,
     port: env.audioFrameSinkPort,
     configured: Boolean(env.audioFrameSinkApiKey),
   }, "Translation Worker PSTN audio frame sink started.");

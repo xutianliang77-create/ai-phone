@@ -1,58 +1,23 @@
 import base64
-from dataclasses import dataclass, field
-import struct
+from typing import TYPE_CHECKING
 
+from app.pcm_audio import PcmSessionBuffer, audio_duration_ms, pcm16_rms
 from app.schemas import AsrTranscribeRequest
+from app.endpoint_policy import EndpointPolicy, segment_vad_context, uniform_endpoint_policies
+from app.audio_segment_state import (
+    FrameVadDecision,
+    PcmAudioSegment,
+    PcmChunk,
+    RealtimeSessionState,
+    reset_active_segment,
+    retain_chunks_after_boundary,
+    segment_from_chunks,
+    split_chunks_at,
+    trim_preroll,
+)
 
-
-class PcmSessionBuffer:
-    def __init__(self, min_audio_ms: int) -> None:
-        self.min_audio_ms = min_audio_ms
-        self._chunks_by_session: dict[str, list[bytes]] = {}
-        self._seen_sequences: dict[str, set[int]] = {}
-
-    def append(self, request: AsrTranscribeRequest) -> bytes | None:
-        seen = self._seen_sequences.setdefault(request.sessionId, set())
-        if request.sequence in seen:
-            return None
-        seen.add(request.sequence)
-
-        chunk = base64.b64decode(request.data, validate=True)
-        chunks = self._chunks_by_session.setdefault(request.sessionId, [])
-        chunks.append(chunk)
-        if audio_duration_ms(b"".join(chunks), request.sampleRate) < self.min_audio_ms:
-            return None
-
-        audio = b"".join(chunks)
-        self._chunks_by_session[request.sessionId] = []
-        return audio
-
-
-@dataclass(frozen=True)
-class PcmAudioSegment:
-    pcm: bytes
-    sample_rate: int
-    end_sequence: int
-    duration_ms: int
-
-
-@dataclass(frozen=True)
-class _PcmChunk:
-    pcm: bytes
-    duration_ms: int
-    voiced: bool
-
-
-@dataclass
-class _RealtimeSessionState:
-    chunks: list[_PcmChunk] = field(default_factory=list)
-    preroll: list[_PcmChunk] = field(default_factory=list)
-    seen_sequences: set[int] = field(default_factory=set)
-    buffered_ms: int = 0
-    trailing_silence_ms: int = 0
-    sample_rate: int | None = None
-    last_sequence: int = 0
-    has_voice: bool = False
+if TYPE_CHECKING:
+    from app.vad import VadProvider
 
 
 class RealtimePcmSegmenter:
@@ -63,16 +28,37 @@ class RealtimePcmSegmenter:
         max_audio_ms: int,
         preroll_ms: int,
         vad_energy_threshold: int,
+        vad_provider: "VadProvider | None" = None,
+        endpoint_policies: dict[str, EndpointPolicy] | None = None,
     ) -> None:
         self.min_audio_ms = min_audio_ms
         self.endpoint_silence_ms = endpoint_silence_ms
         self.max_audio_ms = max_audio_ms
         self.preroll_ms = preroll_ms
         self.vad_energy_threshold = vad_energy_threshold
-        self._states: dict[str, _RealtimeSessionState] = {}
+        if vad_provider is None:
+            from app.vad import RmsVadProvider
+
+            vad_provider = RmsVadProvider(vad_energy_threshold)
+        self.vad_provider = vad_provider
+        self.endpoint_policies = endpoint_policies or uniform_endpoint_policies(
+            min_audio_ms,
+            endpoint_silence_ms,
+            max_audio_ms,
+            preroll_ms,
+        )
+        self._states: dict[str, RealtimeSessionState] = {}
 
     def append(self, request: AsrTranscribeRequest) -> PcmAudioSegment | None:
-        state = self._states.setdefault(request.sessionId, _RealtimeSessionState())
+        state = self._states.setdefault(request.sessionId, RealtimeSessionState())
+        policy = self.endpoint_policies.get(
+            request.mode,
+            self.endpoint_policies["conversation"],
+        )
+        if state.endpoint_policy is None:
+            state.endpoint_policy = policy
+        elif state.endpoint_policy.mode != policy.mode:
+            raise ValueError("ASR endpoint mode cannot change during a session")
         if request.sequence in state.seen_sequences:
             return None
         state.seen_sequences.add(request.sequence)
@@ -84,10 +70,27 @@ class RealtimePcmSegmenter:
         if duration_ms <= 0:
             return None
 
-        chunk = _PcmChunk(
+        decision = self.vad_provider.analyze(
+            request.sessionId,
+            pcm,
+            request.sampleRate,
+        )
+        state.latest_vad = FrameVadDecision(
+            sequence=request.sequence,
+            timestamp_ms=request.timestampMs,
+            duration_ms=duration_ms,
+            voiced=decision.voiced,
+            speech_probability=decision.probability,
+            provider=decision.provider,
+            preroll_ms=policy.preroll_ms,
+        )
+        chunk = PcmChunk(
             pcm=pcm,
             duration_ms=duration_ms,
-            voiced=pcm16_rms(pcm) > self.vad_energy_threshold,
+            voiced=decision.voiced,
+            speech_probability=decision.probability,
+            timestamp_ms=request.timestampMs,
+            sequence=request.sequence,
         )
         if not state.has_voice:
             return self._append_waiting_for_voice(state, chunk, request)
@@ -105,22 +108,74 @@ class RealtimePcmSegmenter:
             sample_rate=state.sample_rate,
             end_sequence=state.last_sequence,
             duration_ms=state.buffered_ms,
+            start_timestamp_ms=state.chunks[0].timestamp_ms,
+            end_timestamp_ms=(
+                state.chunks[-1].timestamp_ms + state.chunks[-1].duration_ms
+            ),
+            endpoint_reason="flush",
         )
         reset_active_segment(state)
+        self.vad_provider.reset_session(session_id)
         return segment
+
+    def commit_boundary(self, session_id: str, boundary_ms: int) -> PcmAudioSegment | None:
+        state = self._states.get(session_id)
+        if not state or not state.has_voice or not state.chunks or not state.sample_rate:
+            return None
+
+        previous_chunks, next_chunks = split_chunks_at(
+            state.chunks,
+            boundary_ms,
+            state.sample_rate,
+        )
+        if not previous_chunks or not any(chunk.voiced for chunk in previous_chunks):
+            return None
+
+        segment = segment_from_chunks(
+            previous_chunks,
+            state.sample_rate,
+            endpoint_reason="speaker_boundary",
+        )
+        retain_chunks_after_boundary(
+            state,
+            next_chunks,
+            self._policy(state).preroll_ms,
+        )
+        return segment
+
+    def diagnostics(self, session_id: str) -> dict[str, object]:
+        return {
+            **self.vad_provider.diagnostics(session_id),
+            "endpointPolicy": self._policy(self._states.get(session_id)).diagnostics(),
+        }
+
+    def segment_vad_context(self, session_id: str, endpoint_reason: str):
+        return segment_vad_context(self.diagnostics(session_id), endpoint_reason)
+
+    def frame_vad_decision(self, session_id: str) -> FrameVadDecision | None:
+        state = self._states.get(session_id)
+        return state.latest_vad if state else None
 
     def close(self, session_id: str) -> None:
         self._states.pop(session_id, None)
+        self.vad_provider.close_session(session_id)
+
+    def _policy(self, state: RealtimeSessionState | None) -> EndpointPolicy:
+        return (
+            state.endpoint_policy
+            if state and state.endpoint_policy
+            else self.endpoint_policies["conversation"]
+        )
 
     def _append_waiting_for_voice(
         self,
-        state: _RealtimeSessionState,
-        chunk: _PcmChunk,
+        state: RealtimeSessionState,
+        chunk: PcmChunk,
         request: AsrTranscribeRequest,
     ) -> PcmAudioSegment | None:
         if not chunk.voiced:
             state.preroll.append(chunk)
-            trim_preroll(state, self.preroll_ms)
+            trim_preroll(state, self._policy(state).preroll_ms)
             return None
 
         state.has_voice = True
@@ -132,8 +187,8 @@ class RealtimePcmSegmenter:
 
     def _append_active_segment(
         self,
-        state: _RealtimeSessionState,
-        chunk: _PcmChunk,
+        state: RealtimeSessionState,
+        chunk: PcmChunk,
         request: AsrTranscribeRequest,
     ) -> PcmAudioSegment | None:
         state.chunks.append(chunk)
@@ -146,12 +201,13 @@ class RealtimePcmSegmenter:
 
     def _emit_if_ready(
         self,
-        state: _RealtimeSessionState,
+        state: RealtimeSessionState,
         request: AsrTranscribeRequest,
     ) -> PcmAudioSegment | None:
-        has_endpoint = state.trailing_silence_ms >= self.endpoint_silence_ms
-        reached_min = state.buffered_ms >= self.min_audio_ms
-        reached_max = state.buffered_ms >= self.max_audio_ms
+        policy = self._policy(state)
+        has_endpoint = state.trailing_silence_ms >= policy.endpoint_silence_ms
+        reached_min = state.buffered_ms >= policy.min_audio_ms
+        reached_max = state.buffered_ms >= policy.max_audio_ms
         if not ((reached_min and has_endpoint) or reached_max):
             return None
 
@@ -161,42 +217,12 @@ class RealtimePcmSegmenter:
             sample_rate=request.sampleRate,
             end_sequence=request.sequence,
             duration_ms=state.buffered_ms,
+            start_timestamp_ms=state.chunks[0].timestamp_ms,
+            end_timestamp_ms=(
+                state.chunks[-1].timestamp_ms + state.chunks[-1].duration_ms
+            ),
+            endpoint_reason="silence" if has_endpoint else "max_duration",
         )
         reset_active_segment(state)
+        self.vad_provider.reset_session(request.sessionId)
         return segment
-
-
-def audio_duration_ms(pcm: bytes, sample_rate: int) -> int:
-    if sample_rate <= 0:
-        return 0
-    return len(pcm) * 1000 // (sample_rate * 2)
-
-
-def pcm16_rms(pcm: bytes) -> int:
-    even_length = len(pcm) - (len(pcm) % 2)
-    if even_length == 0:
-        return 0
-
-    total = 0
-    count = 0
-    for (sample,) in struct.iter_unpack("<h", pcm[:even_length]):
-        total += sample * sample
-        count += 1
-    if count == 0:
-        return 0
-    return int((total / count) ** 0.5)
-
-
-def trim_preroll(state: _RealtimeSessionState, max_ms: int) -> None:
-    while sum(chunk.duration_ms for chunk in state.preroll) > max_ms:
-        state.preroll.pop(0)
-
-
-def reset_active_segment(state: _RealtimeSessionState) -> None:
-    state.chunks = []
-    state.preroll = []
-    state.buffered_ms = 0
-    state.trailing_silence_ms = 0
-    state.sample_rate = None
-    state.last_sequence = 0
-    state.has_voice = False

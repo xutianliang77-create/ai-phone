@@ -1,5 +1,6 @@
 import type { CallRoomSubmittedEvent, CallRoomTranslationLanguage } from "@translation/contracts";
 import { CallTranslationWorker } from "./call-translation-worker.js";
+import type { CallTranscriptRefiner } from "./call-transcript-refiner.js";
 import type {
   CallAsrProvider,
   CallAudioFrame,
@@ -18,6 +19,8 @@ export function newWorker(
   ttsProvider?: CallTtsProvider,
   ttsAudioSink?: CallTtsAudioSink,
   translationProvider: CallTranslationProvider = new FakeTranslationProvider(),
+  transcriptRefiner?: CallTranscriptRefiner,
+  endDrainGraceMs = 0,
 ) {
   return new CallTranslationWorker({
     asrProvider: asr,
@@ -25,6 +28,8 @@ export function newWorker(
     ttsProvider,
     ttsAudioSink,
     eventSink: sink,
+    transcriptRefiner,
+    endDrainGraceMs,
     nowMs: () => 1000,
   });
 }
@@ -138,6 +143,7 @@ export class BlockingTtsAudioSink implements CallTtsAudioSink {
 
 export class RecordingSink implements CallRoomEventSink {
   private readonly events = new Map<string, CallRoomSubmittedEvent[]>();
+  readonly endedCalls: string[] = [];
 
   async publish(callId: string, events: CallRoomSubmittedEvent[]) {
     this.events.set(callId, [...this.eventsFor(callId), ...events]);
@@ -145,5 +151,9 @@ export class RecordingSink implements CallRoomEventSink {
 
   eventsFor(callId: string) {
     return this.events.get(callId) ?? [];
+  }
+
+  markEnded(callId: string) {
+    this.endedCalls.push(callId);
   }
 }

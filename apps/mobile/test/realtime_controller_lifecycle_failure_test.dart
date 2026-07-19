@@ -16,6 +16,28 @@ import 'package:translation_mobile/src/platform/audio/audio_capture.dart';
 import 'package:translation_mobile/src/platform/audio/audio_frame.dart';
 
 void main() {
+  test('reconnects the same session after a lifecycle pause', () async {
+    final repository = _FakeRealtimeRepository();
+    final provider = _LifecycleAsrProvider();
+    final controller = RealtimeController(
+      repository: repository,
+      audioCapture: _NoopAudioCapture(),
+      mobileAsrProvider: provider,
+      config: _deviceAsrConfig(),
+    );
+    addTearDown(controller.dispose);
+
+    await controller.start();
+    await controller.handleLifecycleState(AppLifecycleState.inactive);
+    await controller.handleLifecycleState(AppLifecycleState.resumed);
+
+    expect(controller.status, RealtimeStatus.active);
+    expect(repository.lifecycleSuspendedSessionIds, <String>['sess_1']);
+    expect(repository.lifecycleResumedSessionIds, <String>['sess_1']);
+    expect(repository.endedSessionIds, isEmpty);
+    expect(provider.startCalls, 2);
+  });
+
   test('does not resume an old session after lifecycle pause fails', () async {
     final repository = _FakeRealtimeRepository();
     final provider = _LifecycleAsrProvider(failStop: true);
@@ -32,7 +54,7 @@ void main() {
     await pumpEventQueue();
     await controller.handleLifecycleState(AppLifecycleState.resumed);
 
-    expect(controller.status, RealtimeStatus.ended);
+    expect(controller.status, RealtimeStatus.failed);
     expect(repository.endedSessionIds, <String>['sess_1']);
     expect(repository.resumedSessionIds, isEmpty);
     expect(provider.startCalls, 1);
@@ -59,6 +81,41 @@ void main() {
     expect(repository.resumedSessionIds, isEmpty);
     expect(provider.startCalls, 1);
   });
+
+  test('finalizes an active session when the app is detached', () async {
+    final repository = _FakeRealtimeRepository();
+    final provider = _LifecycleAsrProvider();
+    final controller = RealtimeController(
+      repository: repository,
+      audioCapture: _NoopAudioCapture(),
+      mobileAsrProvider: provider,
+      config: _deviceAsrConfig(),
+    );
+
+    await controller.start();
+    await controller.handleLifecycleState(AppLifecycleState.detached);
+
+    expect(controller.status, RealtimeStatus.ended);
+    expect(repository.endedSessionIds, <String>['sess_1']);
+    controller.dispose();
+  });
+
+  test('finalizes an active session before controller disposal completes',
+      () async {
+    final repository = _FakeRealtimeRepository();
+    final controller = RealtimeController(
+      repository: repository,
+      audioCapture: _NoopAudioCapture(),
+      mobileAsrProvider: _LifecycleAsrProvider(),
+      config: _deviceAsrConfig(),
+    );
+
+    await controller.start();
+    controller.dispose();
+    await Future<void>.delayed(const Duration(milliseconds: 180));
+
+    expect(repository.endedSessionIds, <String>['sess_1']);
+  });
 }
 
 AppConfig _deviceAsrConfig() {
@@ -84,6 +141,8 @@ class _FakeRealtimeRepository extends RealtimeRepository {
   final _events = StreamController<GatewayRealtimeEvent>.broadcast();
   final endedSessionIds = <String>[];
   final resumedSessionIds = <String>[];
+  final lifecycleSuspendedSessionIds = <String>[];
+  final lifecycleResumedSessionIds = <String>[];
   int closeRealtimeCalls = 0;
 
   @override
@@ -109,6 +168,20 @@ class _FakeRealtimeRepository extends RealtimeRepository {
   @override
   bool resume(String sessionId) {
     resumedSessionIds.add(sessionId);
+    return true;
+  }
+
+  @override
+  Future<bool> resumeAndWait(String sessionId) async => resume(sessionId);
+
+  @override
+  Future<void> suspendForLifecycle() async {
+    lifecycleSuspendedSessionIds.add('sess_1');
+  }
+
+  @override
+  Future<bool> resumeAfterLifecycle(String sessionId) async {
+    lifecycleResumedSessionIds.add(sessionId);
     return true;
   }
 

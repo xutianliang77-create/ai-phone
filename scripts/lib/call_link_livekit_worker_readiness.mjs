@@ -28,7 +28,13 @@ export async function checkCallLinkLiveKitWorkerReadiness(options) {
     });
 
     hostToken = await createRoomToken(options, apiBaseUrl, created.callId, "host");
-    guestToken = await createRoomToken(options, apiBaseUrl, created.callId, "guest");
+    guestToken = await createRoomToken(
+      options,
+      apiBaseUrl,
+      created.callId,
+      "guest",
+      guestTicketFromJoinUrl(created.joinUrl),
+    );
     record(checks, "host_guest_room_tokens", tokensJoinSameRoom(hostToken, guestToken, created), {
       hostRole: hostToken?.participantRole,
       guestRole: guestToken?.participantRole,
@@ -127,11 +133,29 @@ function record(checks, name, ok, details = {}) {
   checks.push({ name, status: ok ? "pass" : "fail", details });
 }
 
-async function createRoomToken(options, apiBaseUrl, callId, participantRole) {
+async function createRoomToken(
+  options,
+  apiBaseUrl,
+  callId,
+  participantRole,
+  guestTicket,
+) {
   return (await requestJson(options, `${apiBaseUrl}/call-links/${encodeURIComponent(callId)}/room-token`, {
     method: "POST",
-    body: { participantRole, participantName: `${participantRole}-readiness` },
+    body: {
+      participantRole,
+      participantName: `${participantRole}-readiness`,
+      ...(participantRole === "guest" ? { guestTicket } : {}),
+    },
   })).body;
+}
+
+function guestTicketFromJoinUrl(joinUrl) {
+  const ticket = typeof joinUrl === "string"
+    ? new URL(joinUrl).searchParams.get("ticket")
+    : null;
+  if (!ticket) throw new Error("Call link did not include a guest ticket");
+  return ticket;
 }
 
 function tokensJoinSameRoom(hostToken, guestToken, created) {

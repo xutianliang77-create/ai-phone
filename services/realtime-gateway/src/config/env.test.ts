@@ -22,12 +22,14 @@ describe("realtime gateway env", () => {
 
     const env = loadEnv();
 
+    expect(env.host).toBe("0.0.0.0");
     expect(env.provider).toBe("hymt2_self_hosted");
     expect(env.resolvedProvider).toBe("lmstudio");
     expect(env.lmStudioBaseUrl).toBe("http://models.local:8003/v1");
     expect(env.lmStudioModel).toBe("tencent/Hy-MT2-1.8B");
     expect(env.asrProvider).toBe("http");
     expect(env.asrHttpEndpoint).toBe("http://models.local:8001/asr/transcribe");
+    expect(env.speakerHttpTimeoutMs).toBe(2000);
   });
 
   it("lets explicit environment variables override model routing defaults", () => {
@@ -37,6 +39,12 @@ describe("realtime gateway env", () => {
     };
 
     expect(loadEnv().lmStudioModel).toBe("override-model");
+  });
+
+  it("configures the gateway bind address", () => {
+    process.env = { REALTIME_BIND_HOST: "10.20.30.41" };
+
+    expect(loadEnv().host).toBe("10.20.30.41");
   });
 });
 

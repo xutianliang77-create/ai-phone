@@ -1,21 +1,51 @@
 import type {
-  LanguageCode,
-  SessionSegmentProviderUsageDto,
   SessionReviewResponse,
   SessionSegmentDto,
-  SessionSegmentStage,
-  SessionSegmentRefinementDto,
+  SpeakerAttributionDto,
+  RealtimeSessionDiagnosticsDto,
+} from "@translation/contracts";
+import {
+  transitionRealtimeSessionState,
+  type PersistedRealtimeSessionState,
 } from "@translation/contracts";
 import {
   getStoreSnapshot,
   persistStoreSnapshot,
 } from "../../infrastructure/storage/json-store.js";
 import type { SessionRecord } from "./session-record.js";
+import type { CallLegRecord } from "../call-links/call-link-record.js";
+import {
+  applySessionSegmentPatch,
+  createSessionSegment,
+  mergeSessionSegments,
+  type SessionSegmentPatch,
+} from "./session-segment-merge.js";
+import { assertNewSessionPlacementAllowed } from "../../infrastructure/platform/platform-session-routing.js";
+import { sessionMatchesQuery } from "./sessions-runtime-views.js";
 
 export type { SessionRecord } from "./session-record.js";
 
+export class SessionVersionConflictError extends Error {
+  constructor(
+    readonly sessionId: string,
+    readonly expectedVersion: number,
+    readonly currentVersion: number,
+  ) {
+    super(
+      `Session ${sessionId} version ${currentVersion} does not match ${expectedVersion}`,
+    );
+    this.name = "SessionVersionConflictError";
+  }
+}
+
 export function createSession(record: SessionRecord) {
   const store = getStoreSnapshot();
+  const routing = assertNewSessionPlacementAllowed();
+  record.version ??= 1;
+  record.lastActivityAt ??= record.createdAt;
+  record.homeRegion ??= routing.homeRegion;
+  record.homeCellId ??= routing.homeCellId;
+  record.routingGeneration ??= routing.routingGeneration;
   store.sessions = [
     ...store.sessions.filter((session) => session.id !== record.id),
     record,
@@ -24,26 +54,90 @@ export function createSession(record: SessionRecord) {
   return record;
 }
 
+export function upsertCallLeg(sessionId: string, callLeg: CallLegRecord) {
+  const session = findSession(sessionId);
+  if (!session || session.mode !== "call_link") return null;
+  const callLegs = session.callLegs ?? [];
+  const position = callLegs.findIndex((leg) => leg.id === callLeg.id);
+  if (position >= 0) {
+    callLegs[position] = { ...callLegs[position], ...callLeg };
+  } else {
+    callLegs.push(callLeg);
+  }
+  session.callLegs = callLegs;
+  session.lastActivityAt = new Date().toISOString();
+  persistSessionMutation(session);
+  return session;
+}
+
+export function endCallLegs(sessionId: string, endedAt: string) {
+  const session = findSession(sessionId);
+  if (!session || !session.callLegs?.length) return session;
+  let changed = false;
+  session.callLegs = session.callLegs.map((leg) => {
+    if (leg.status === "ended") return leg;
+    changed = true;
+    return { ...leg, status: "ended", endedAt };
+  });
+  if (changed) persistSessionMutation(session);
+  return session;
+}
+
 export function findSession(sessionId: string) {
   return getStoreSnapshot().sessions.find((session) => session.id === sessionId) ?? null;
 }
 
-export function endSession(sessionId: string) {
+export function assertSessionVersion(
+  sessionId: string,
+  expectedVersion: number | undefined,
+) {
+  const session = findSession(sessionId);
+  if (!session || expectedVersion === undefined) return session;
+  const currentVersion = session.version ?? 1;
+  if (currentVersion !== expectedVersion) {
+    throw new SessionVersionConflictError(
+      sessionId,
+      expectedVersion,
+      currentVersion,
+    );
+  }
+  return session;
+}
+
+export function endSession(sessionId: string, now = new Date()) {
   const session = findSession(sessionId);
   if (!session) return null;
   const wasAlreadyEnded = session.status === "ended";
   if (wasAlreadyEnded) return { session, wasAlreadyEnded };
+  const transition = transitionRealtimeSessionState(session.status, "ended");
+  if (!transition.accepted) return null;
   session.status = "ended";
-  session.endedAt = new Date().toISOString();
-  persistStoreSnapshot();
+  session.endedAt = now.toISOString();
+  session.lastActivityAt = session.endedAt;
+  persistSessionMutation(session);
   return { session, wasAlreadyEnded };
+}
+
+export function transitionSessionState(
+  sessionId: string,
+  status: PersistedRealtimeSessionState,
+) {
+  const session = findSession(sessionId);
+  if (!session) return null;
+  const transition = transitionRealtimeSessionState(session.status, status);
+  if (transition.changed) session.status = status;
+  if (transition.accepted) {
+    session.lastActivityAt = new Date().toISOString();
+    persistSessionMutation(session);
+  }
+  return { session, transition };
 }
 
 export function listSessions(userId: string, query?: string) {
   const normalizedQuery = (query ?? "").trim().toLowerCase();
   return getStoreSnapshot().sessions
     .filter((session) => session.userId === userId)
-    .filter((session) => matchesQuery(session, normalizedQuery))
+    .filter((session) => sessionMatchesQuery(session, normalizedQuery))
     .sort((left, right) => right.createdAt.localeCompare(left.createdAt));
 }
 
@@ -59,55 +153,11 @@ export function deleteSession(sessionId: string) {
 export function saveSegments(sessionId: string, segments: SessionSegmentDto[]) {
   const session = findSession(sessionId);
   if (!session) return null;
-  session.segments = mergeSegments(session.segments, segments);
+  session.segments = mergeSessionSegments(session.segments, segments);
   session.review = null;
-  persistStoreSnapshot();
+  session.lastActivityAt = new Date().toISOString();
+  persistSessionMutation(session);
   return session;
-}
-
-function mergeSegments(
-  existingSegments: SessionSegmentDto[],
-  incomingSegments: SessionSegmentDto[],
-) {
-  const merged = [...existingSegments];
-  const indexById = new Map(merged.map((segment, index) => [segment.id, index]));
-  for (const incoming of incomingSegments) {
-    const index = indexById.get(incoming.id);
-    if (index === undefined) {
-      indexById.set(incoming.id, merged.length);
-      merged.push(incoming);
-      continue;
-    }
-    merged[index] = mergeSegment(merged[index], incoming);
-  }
-  return merged;
-}
-
-function mergeSegment(
-  existing: SessionSegmentDto,
-  incoming: SessionSegmentDto,
-): SessionSegmentDto {
-  return {
-    ...incoming,
-    ...existing,
-    sourceText: preferText(existing.sourceText, incoming.sourceText) ?? "",
-    rawText: preferText(existing.rawText, incoming.rawText),
-    optimizedText: preferText(existing.optimizedText, incoming.optimizedText),
-    translatedText: preferText(existing.translatedText, incoming.translatedText) ?? "",
-    sourceLanguage: existing.sourceLanguage ?? incoming.sourceLanguage,
-    targetLanguage: existing.targetLanguage ?? incoming.targetLanguage,
-    confidence: existing.confidence ?? incoming.confidence,
-    stage: existing.stage ?? incoming.stage,
-    provider: existing.provider ?? incoming.provider,
-    model: existing.model ?? incoming.model,
-    latencyMs: existing.latencyMs ?? incoming.latencyMs,
-    providerUsage: existing.providerUsage ?? incoming.providerUsage,
-    refinement: existing.refinement ?? incoming.refinement,
-  };
-}
-
-function preferText(left: string | undefined, right: string | undefined) {
-  return left && left.trim().length > 0 ? left : right;
 }
 
 export function saveSessionReview(
@@ -117,138 +167,122 @@ export function saveSessionReview(
   const session = findSession(sessionId);
   if (!session) return null;
   session.review = review;
-  persistStoreSnapshot();
+  persistSessionMutation(session);
+  return session;
+}
+
+export function updateSessionReviewActionItem(
+  sessionId: string,
+  actionIndex: number,
+  completed: boolean,
+) {
+  const session = findSession(sessionId);
+  const actionItems = session?.review?.actionItems;
+  if (!session || !actionItems?.[actionIndex]) return null;
+  actionItems[actionIndex] = {
+    ...actionItems[actionIndex],
+    completed,
+  };
+  persistSessionMutation(session);
+  return session;
+}
+
+export function saveSessionDiagnostics(
+  sessionId: string,
+  diagnostics: RealtimeSessionDiagnosticsDto,
+) {
+  const session = findSession(sessionId);
+  if (!session) return null;
+  session.diagnostics = diagnostics;
+  persistSessionMutation(session);
+  return session;
+}
+
+export function listSessionSpeakers(sessionId: string) {
+  const session = findSession(sessionId);
+  if (!session) return null;
+  const speakers = new Map<string, {
+    speaker: SpeakerAttributionDto;
+    segmentCount: number;
+    totalDurationMs: number;
+  }>();
+  for (const segment of session.segments) {
+    if (!segment.speaker) continue;
+    const current = speakers.get(segment.speaker.speakerId) ?? {
+      speaker: segment.speaker,
+      segmentCount: 0,
+      totalDurationMs: 0,
+    };
+    current.segmentCount += 1;
+    current.totalDurationMs += segment.timing
+      ? Math.max(0, segment.timing.endMs - segment.timing.startMs)
+      : 0;
+    if (segment.speaker.displayName) current.speaker = segment.speaker;
+    speakers.set(segment.speaker.speakerId, current);
+  }
+  return [...speakers.values()];
+}
+
+export function renameSessionSpeaker(
+  sessionId: string,
+  speakerId: string,
+  displayName: string,
+) {
+  const session = findSession(sessionId);
+  if (!session) return null;
+  let changed = false;
+  for (const segment of session.segments) {
+    if (segment.speaker?.speakerId !== speakerId) continue;
+    segment.speaker = { ...segment.speaker, displayName };
+    changed = true;
+  }
+  if (!changed) return null;
+  session.review = null;
+  persistSessionMutation(session);
   return session;
 }
 
 export function upsertSegment(
   sessionId: string,
-  patch: {
-    segmentId: string;
-    sourceText?: string;
-    rawText?: string;
-    optimizedText?: string;
-    translatedText?: string;
-    sourceLanguage?: LanguageCode;
-    targetLanguage?: LanguageCode;
-    confidence?: number;
-    stage?: SessionSegmentStage;
-    provider?: string;
-    model?: string;
-    latencyMs?: number;
-    providerUsage?: SessionSegmentProviderUsageDto;
-    refinement?: SessionSegmentRefinementDto;
-  },
+  patch: SessionSegmentPatch,
 ) {
   const session = findSession(sessionId);
   if (!session) return null;
   const existing = session.segments.find((segment) => segment.id === patch.segmentId);
   if (existing) {
-    if (typeof patch.sourceText === "string") existing.sourceText = patch.sourceText;
-    if (typeof patch.rawText === "string") existing.rawText = patch.rawText;
-    if (typeof patch.optimizedText === "string") {
-      existing.optimizedText = patch.optimizedText;
-    }
-    if (typeof patch.translatedText === "string") {
-      existing.translatedText = patch.translatedText;
-    }
-    applySegmentDiagnostics(existing, patch);
+    applySessionSegmentPatch(existing, patch);
   } else {
-    session.segments.push({
-      id: patch.segmentId,
-      sourceText: patch.sourceText ?? patch.optimizedText ?? patch.rawText ?? "",
-      ...(patch.rawText ? { rawText: patch.rawText } : {}),
-      ...(patch.optimizedText ? { optimizedText: patch.optimizedText } : {}),
-      translatedText: patch.translatedText ?? "",
-      ...buildSegmentDiagnostics(patch),
-    });
+    session.segments.push(createSessionSegment(patch));
   }
   session.review = null;
-  persistStoreSnapshot();
+  session.lastActivityAt = new Date().toISOString();
+  persistSessionMutation(session);
   return session;
-}
-
-function applySegmentDiagnostics(
-  segment: SessionSegmentDto,
-  patch: {
-    sourceLanguage?: LanguageCode;
-    targetLanguage?: LanguageCode;
-    confidence?: number;
-    stage?: SessionSegmentStage;
-    provider?: string;
-    model?: string;
-    latencyMs?: number;
-    providerUsage?: SessionSegmentProviderUsageDto;
-    refinement?: SessionSegmentRefinementDto;
-  },
-) {
-  const diagnostics = buildSegmentDiagnostics(patch);
-  if (diagnostics.sourceLanguage) segment.sourceLanguage = diagnostics.sourceLanguage;
-  if (diagnostics.targetLanguage) segment.targetLanguage = diagnostics.targetLanguage;
-  if (typeof diagnostics.confidence === "number") {
-    segment.confidence = diagnostics.confidence;
-  }
-  if (diagnostics.stage) segment.stage = diagnostics.stage;
-  if (diagnostics.provider) segment.provider = diagnostics.provider;
-  if (diagnostics.model) segment.model = diagnostics.model;
-  if (typeof diagnostics.latencyMs === "number") {
-    segment.latencyMs = diagnostics.latencyMs;
-  }
-  if (diagnostics.providerUsage) segment.providerUsage = diagnostics.providerUsage;
-  if (diagnostics.refinement) segment.refinement = diagnostics.refinement;
-}
-
-function buildSegmentDiagnostics(patch: {
-  sourceLanguage?: LanguageCode;
-  targetLanguage?: LanguageCode;
-  confidence?: number;
-  stage?: SessionSegmentStage;
-  provider?: string;
-  model?: string;
-  latencyMs?: number;
-  providerUsage?: SessionSegmentProviderUsageDto;
-  refinement?: SessionSegmentRefinementDto;
-}) {
-  return {
-    ...(patch.sourceLanguage ? { sourceLanguage: patch.sourceLanguage } : {}),
-    ...(patch.targetLanguage ? { targetLanguage: patch.targetLanguage } : {}),
-    ...(typeof patch.confidence === "number" ? { confidence: patch.confidence } : {}),
-    ...(patch.stage ? { stage: patch.stage } : {}),
-    ...(patch.provider ?? patch.providerUsage?.provider
-      ? { provider: patch.provider ?? patch.providerUsage?.provider }
-      : {}),
-    ...(patch.model ?? patch.providerUsage?.model
-      ? { model: patch.model ?? patch.providerUsage?.model }
-      : {}),
-    ...(typeof (patch.latencyMs ?? patch.providerUsage?.latencyMs) === "number"
-      ? { latencyMs: patch.latencyMs ?? patch.providerUsage?.latencyMs }
-      : {}),
-    ...(patch.providerUsage ? { providerUsage: patch.providerUsage } : {}),
-    ...(patch.refinement ? { refinement: patch.refinement } : {}),
-  };
 }
 
 export function updateConsumedSeconds(sessionId: string, consumedSeconds: number) {
   const session = findSession(sessionId);
   if (!session) return null;
   session.consumedSeconds = consumedSeconds;
-  persistStoreSnapshot();
+  session.lastActivityAt = new Date().toISOString();
+  persistSessionMutation(session);
   return session;
 }
 
-function matchesQuery(session: SessionRecord, query: string) {
-  if (!query) return true;
-  return [
-    session.id,
-    session.mode,
-    session.status,
-    session.createdAt,
-    session.endedAt ?? "",
-    ...session.segments.flatMap((segment) => [
-      segment.sourceText,
-      segment.rawText ?? "",
-      segment.optimizedText ?? "",
-      segment.translatedText,
-    ]),
-  ].some((value) => value.toLowerCase().includes(query));
+export function markSessionFinalized(
+  sessionId: string,
+  idempotencyKey: string,
+) {
+  const session = findSession(sessionId);
+  if (!session) return null;
+  session.finalizationIdempotencyKey = idempotencyKey;
+  session.finalizedAt = new Date().toISOString();
+  session.lastActivityAt = session.finalizedAt;
+  persistSessionMutation(session);
+  return session;
+}
+
+function persistSessionMutation(session: SessionRecord) {
+  session.version = (session.version ?? 0) + 1;
+  persistStoreSnapshot();
 }

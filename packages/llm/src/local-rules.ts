@@ -191,6 +191,8 @@ function termReplacements(protectedTerms: string[]) {
   replacements.push([/不金丹/g, "不，金丹", "domain_phrase_correction"]);
   if (has("A-120")) {
     replacements.push([/\bR[-\s]?120\b/g, "A-120", "identifier_correction"]);
+    replacements.push([/\bA\s*杠\s*120\b/g, "A-120", "identifier_correction"]);
+    replacements.push([/\bA\s*杠\s*(?:幺|一)二零/g, "A-120", "identifier_correction"]);
   }
   return replacements;
 }

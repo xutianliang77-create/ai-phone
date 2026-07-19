@@ -8,11 +8,21 @@ class FakeCallLinkApiClient extends CallLinkApiClient {
   FakeCallLinkApiClient({
     this.tokenFails = false,
     this.authRequired = false,
+    this.activeGuestCountAfterFetch = 0,
   }) : super(baseUrl: Uri.parse('http://localhost'));
 
   final bool tokenFails;
   final bool authRequired;
+  final int activeGuestCountAfterFetch;
   int createCount = 0;
+  int tokenCreateCount = 0;
+  int connectionConfirmCount = 0;
+  int ticketRotateCount = 0;
+  int sipOutboundCount = 0;
+  int sipHangupCount = 0;
+  final List<String> sipDtmfDigits = <String>[];
+  final List<String> sipTransferTargets = <String>[];
+  String? lastGuestTicket;
   final List<String> fetchedCallIds = <String>[];
   final List<String> endedCallIds = <String>[];
 
@@ -25,7 +35,7 @@ class FakeCallLinkApiClient extends CallLinkApiClient {
       sessionId: 'call_1',
       roomName: 'call_call_1',
       roomProvider: 'livekit',
-      joinUrl: 'https://call.example.cn/join/call_1',
+      joinUrl: 'https://call.example.cn/join/call_1?ticket=guest-ticket',
       hostUrl: 'https://call.example.cn/host/call_1',
       status: 'created',
       expiresAt: DateTime.utc(2026, 7, 2, 12),
@@ -44,6 +54,7 @@ class FakeCallLinkApiClient extends CallLinkApiClient {
       hostUrl: 'https://call.example.cn/host/$callId',
       status: 'created',
       expiresAt: DateTime.utc(2026, 7, 2, 12),
+      activeGuestCount: activeGuestCountAfterFetch,
     );
   }
 
@@ -52,7 +63,10 @@ class FakeCallLinkApiClient extends CallLinkApiClient {
     required String callId,
     String participantRole = 'host',
     String? participantName,
+    String? guestTicket,
   }) async {
+    tokenCreateCount += 1;
+    lastGuestTicket = guestTicket;
     if (tokenFails) {
       throw const CallLinkApiException('Create room token failed: 503');
     }
@@ -61,9 +75,43 @@ class FakeCallLinkApiClient extends CallLinkApiClient {
       provider: 'livekit',
       roomName: 'call_$callId',
       wsUrl: 'wss://livekit.example.cn',
+      participantIdentity: '$callId:$participantRole:test',
       participantRole: participantRole,
       token: 'secret-room-token',
       expiresAt: DateTime.utc(2026, 7, 2, 13),
+    );
+  }
+
+  @override
+  Future<String> rotateGuestTicket({required String callId}) async {
+    ticketRotateCount += 1;
+    return 'https://call.example.cn/join/$callId?ticket=rotated-ticket';
+  }
+
+  @override
+  Future<void> confirmRoomConnected(CallRoomToken token) async {
+    connectionConfirmCount += 1;
+  }
+
+  @override
+  Future<SipOutboundCall> startSipOutbound({
+    required String callId,
+    required String targetPhone,
+    required String sourceLanguage,
+    required String targetLanguage,
+    required bool disclosureConfirmed,
+  }) async {
+    sipOutboundCount += 1;
+    return SipOutboundCall(
+      callId: callId,
+      sessionId: callId,
+      roomName: 'call_$callId',
+      operationId: 'op_1',
+      provider: 'livekit_sip',
+      status: 'accepted',
+      replayed: false,
+      participantIdentity: '$callId:guest:sip:op_1',
+      providerCallId: 'sip-call-1',
     );
   }
 
@@ -78,6 +126,39 @@ class FakeCallLinkApiClient extends CallLinkApiClient {
       endedAt: DateTime.utc(2026, 7, 2, 13),
     );
   }
+
+  @override
+  Future<SipControlResult> hangupSip({required String callId}) async {
+    sipHangupCount += 1;
+    return _control('sip_hangup');
+  }
+
+  @override
+  Future<SipControlResult> sendSipDtmf({
+    required String callId,
+    required String digit,
+    required String idempotencyKey,
+  }) async {
+    sipDtmfDigits.add(digit);
+    return _control('sip_dtmf');
+  }
+
+  @override
+  Future<SipControlResult> transferSip({
+    required String callId,
+    required String targetPhone,
+    required String idempotencyKey,
+  }) async {
+    sipTransferTargets.add(targetPhone);
+    return _control('sip_transfer');
+  }
+
+  SipControlResult _control(String type) => SipControlResult(
+        operationId: 'control_${type}_${sipDtmfDigits.length}',
+        operationType: type,
+        status: 'succeeded',
+        replayed: false,
+      );
 
   @override
   void close() {}

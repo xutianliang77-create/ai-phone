@@ -77,7 +77,11 @@ class _JoinCallLinkPageState extends State<JoinCallLinkPage> {
           jumpToLatestLabel: l10n.isChinese ? '回到底部' : 'Back to latest',
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
           children: <Widget>[
-            Text(l10n.joinCallDomesticBody),
+            Text(
+              l10n.isChinese
+                  ? '粘贴邀请链接或通话编号，进入对方创建的翻译通话。'
+                  : 'Paste an invitation or call ID to join the translated call.',
+            ),
             const SizedBox(height: 16),
             TextField(
               controller: _controller,
@@ -102,14 +106,18 @@ class _JoinCallLinkPageState extends State<JoinCallLinkPage> {
             const SizedBox(height: 16),
             if (_loading) const LinearProgressIndicator(),
             if (_link != null) ...[
-              Text('${l10n.callRoomName}：${_link!.roomName}'),
-              const SizedBox(height: 4),
-              Text('${l10n.callRoomProvider}：${_link!.roomProvider}'),
+              Text(
+                l10n.isChinese ? '无界AI 通话服务' : 'Call service',
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
               const SizedBox(height: 8),
               _GuestTokenStatus(ready: _guestToken != null),
               const SizedBox(height: 12),
               _CallRoomStatus(snapshot: _roomSnapshot),
-              CallRoomCaptions(captions: _roomSnapshot.captions),
+              CallRoomCaptions(
+                captions: _roomSnapshot.captions,
+                localRole: 'guest',
+              ),
             ],
             if (_error != null)
               Padding(
@@ -127,8 +135,8 @@ class _JoinCallLinkPageState extends State<JoinCallLinkPage> {
 
   Future<void> _join() async {
     if (_loading) return;
-    final callId = _callIdFromInput(_controller.text);
-    if (callId == null) {
+    final invitation = _invitationFromInput(_controller.text);
+    if (invitation == null) {
       setState(() => _error = context.l10n.joinCallLinkInvalid);
       return;
     }
@@ -143,18 +151,25 @@ class _JoinCallLinkPageState extends State<JoinCallLinkPage> {
     });
     try {
       await _roomClient.disconnect();
-      final link = await _client.getCallLink(callId: callId);
+      final link = await _client.getCallLink(callId: invitation.callId);
       final token = await _client.createRoomToken(
         callId: link.callId,
         participantRole: 'guest',
         participantName: 'guest',
+        guestTicket: invitation.guestTicket,
       );
       if (!mounted) return;
       setState(() {
         _link = link;
         _guestToken = token;
       });
-      await _roomClient.connect(token);
+      try {
+        await _roomClient.connect(token);
+        await _client.confirmRoomConnected(token);
+      } catch (_) {
+        await _roomClient.disconnect();
+        rethrow;
+      }
     } catch (error) {
       if (mounted) setState(() => _error = error);
     } finally {
@@ -247,23 +262,31 @@ class _CallRoomStatus extends StatelessWidget {
   }
 }
 
-String? _callIdFromInput(String input) {
+_CallLinkInvitation? _invitationFromInput(String input) {
   final trimmed = input.trim();
   if (trimmed.isEmpty) return null;
   final uri = Uri.tryParse(trimmed);
   final segments = uri?.pathSegments ?? const <String>[];
   final joinIndex = segments.indexOf('join');
   if (joinIndex >= 0 && joinIndex + 1 < segments.length) {
-    return _validCallId(segments[joinIndex + 1]);
+    final callId = _validCallId(segments[joinIndex + 1]);
+    final guestTicket = uri?.queryParameters['ticket'];
+    if (callId != null && guestTicket != null && guestTicket.isNotEmpty) {
+      return _CallLinkInvitation(callId, guestTicket);
+    }
   }
-  if (segments.isNotEmpty && uri?.hasScheme == true) {
-    return _validCallId(segments.last);
-  }
-  return _validCallId(trimmed);
+  return null;
 }
 
 String? _validCallId(String value) {
   final cleaned = value.trim();
   if (RegExp(r'^[A-Za-z0-9_-]{3,120}$').hasMatch(cleaned)) return cleaned;
   return null;
+}
+
+class _CallLinkInvitation {
+  const _CallLinkInvitation(this.callId, this.guestTicket);
+
+  final String callId;
+  final String guestTicket;
 }

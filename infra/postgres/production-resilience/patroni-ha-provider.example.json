@@ -1,0 +1,66 @@
+{
+  "schemaVersion": 1,
+  "environment": "staging",
+  "clusterName": "ai-phone-staging",
+  "sourceDatabase": "ai_phone_staging",
+  "patronictl": {
+    "file": "/replace/bin/patronictl",
+    "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+  },
+  "psql": {
+    "file": "/replace/bin/psql",
+    "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+  },
+  "patroniEnvironmentKeys": [
+    "PATRONI_ETCD3_USERNAME",
+    "PATRONI_ETCD3_PASSWORD"
+  ],
+  "databaseEnvironmentKeys": [
+    "PGSERVICEFILE",
+    "PGPASSFILE",
+    "PGSSLROOTCERT"
+  ],
+  "patroniConfigFile": "/replace/etc/patroni/staging.yml",
+  "stateDirectory": "outputs/postgres-resilience/patroni-state",
+  "probeTable": "public.ai_phone_ha_probe",
+  "nodes": [
+    { "id": "db-a", "failureDomain": "zone-a", "pgService": "db-a-direct" },
+    { "id": "db-b", "failureDomain": "zone-b", "pgService": "db-b-direct" }
+  ],
+  "dcsVoters": [
+    { "id": "etcd-a", "failureDomain": "zone-a" },
+    { "id": "etcd-b", "failureDomain": "zone-b" },
+    { "id": "etcd-c", "failureDomain": "zone-c" }
+  ],
+  "requiredEnvironmentKeys": [
+    "PATRONI_ETCD3_USERNAME",
+    "PATRONI_ETCD3_PASSWORD",
+    "PGSERVICEFILE",
+    "PGPASSFILE",
+    "PGSSLROOTCERT",
+    "HA_CONTROLLER_TOKEN"
+  ],
+  "writerPgService": "ai-phone-writer",
+  "failoverCandidateId": "db-b",
+  "dcsController": {
+    "file": "/replace/bin/ha-dcs-controller",
+    "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+    "args": ["verify-quorum", "--json"],
+    "environmentKeys": ["HA_CONTROLLER_TOKEN"]
+  },
+  "failureController": {
+    "file": "/replace/bin/ha-failure-controller",
+    "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+    "args": ["inject", "--old-primary", "{oldPrimaryId}", "--json"],
+    "environmentKeys": ["HA_CONTROLLER_TOKEN"]
+  },
+  "recoveryController": {
+    "file": "/replace/bin/ha-recovery-controller",
+    "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+    "args": ["recover", "--node", "{oldPrimaryId}", "--json"],
+    "environmentKeys": ["HA_CONTROLLER_TOKEN"]
+  },
+  "pollIntervalMs": 1000,
+  "failoverTimeoutSeconds": 120,
+  "rebuildTimeoutSeconds": 1800
+}

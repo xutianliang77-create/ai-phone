@@ -59,6 +59,28 @@ describe("lmstudio ASR refinement", () => {
     expect(result.text).toBe("今天下午三点开会。");
     expect(result.refinement.provider).toBe("off");
   });
+
+  it("uses conservative local refinement for max-duration fragments", async () => {
+    const provider = new SpyLlmProvider();
+    const result = await refineRealtimeTranscript({
+      provider,
+      enabled: true,
+      minConfidence: 0.72,
+      session: session(),
+      transcript: {
+        segmentId: "qwen3_seg_800",
+        text: "今天下午三点我们讨论产品计划，确认负责。",
+        language: "zh",
+        confidence: 0.6,
+        endpointReason: "max_duration",
+      },
+      targetLanguage: "en",
+      previousSegments: [{ rawText: "请继续说。" }],
+    });
+
+    expect(provider.calls).toBe(0);
+    expect(result.text).toBe("今天下午三点我们讨论产品计划，确认负责。");
+  });
 });
 
 class SpyLlmProvider implements LlmProvider {

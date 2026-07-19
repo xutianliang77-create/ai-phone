@@ -13,7 +13,7 @@ void main() {
     expect(callRoomTtsTrackTargetRole('microphone'), isNull);
   });
 
-  test('allows only target-role TTS tracks while keeping normal audio', () {
+  test('allows only target-role TTS tracks', () {
     expect(
       shouldSubscribeCallRoomAudioTrack(
         trackName: 'translation-tts-host-16000',
@@ -33,7 +33,28 @@ void main() {
         trackName: 'participant-microphone',
         localRole: 'host',
       ),
+      isFalse,
+    );
+  });
+
+  test('allows a leg-bound TTS track only for its exact participant', () {
+    const identity = 'call-1:guest:participant-1';
+    final token = callRoomLegToken(identity);
+    expect(
+      shouldSubscribeCallRoomAudioTrack(
+        trackName: 'translation-tts-guest-24000.$token',
+        localRole: 'guest',
+        localParticipantIdentity: identity,
+      ),
       isTrue,
+    );
+    expect(
+      shouldSubscribeCallRoomAudioTrack(
+        trackName: 'translation-tts-guest-24000.$token',
+        localRole: 'guest',
+        localParticipantIdentity: 'call-1:guest:participant-2',
+      ),
+      isFalse,
     );
   });
 }

@@ -23,6 +23,27 @@ class FakeQwen3Runner:
         return self.text
 
 
+class LanguageAwareQwen3Runner(FakeQwen3Runner):
+    def __init__(self, auto_text: str, english_text: str) -> None:
+        super().__init__(auto_text)
+        self.auto_text = auto_text
+        self.english_text = english_text
+        self.languages: list[str | None] = []
+
+    def transcribe(self, audio_path: str, language: str | None, context: str) -> str:
+        super().transcribe(audio_path, language, context)
+        self.languages.append(language)
+        return self.english_text if language == "English" else self.auto_text
+
+
+class FailingEnglishQwen3Runner(LanguageAwareQwen3Runner):
+    def transcribe(self, audio_path: str, language: str | None, context: str) -> str:
+        if language == "English":
+            self.languages.append(language)
+            raise RuntimeError("isolated retry failure")
+        return super().transcribe(audio_path, language, context)
+
+
 async def test_qwen3_engine_flushes_buffered_transcript() -> None:
     runner = FakeQwen3Runner("今天下午三点我们讨论产品计划")
     engine = qwen_engine(runner)
@@ -39,18 +60,59 @@ async def test_qwen3_engine_flushes_buffered_transcript() -> None:
     assert runner.last_sample_rate == 16000
 
 
+async def test_qwen3_engine_transcribes_confirmed_speaker_boundary() -> None:
+    runner = FakeQwen3Runner("第一位说话人的完整句子")
+    engine = qwen_engine(runner, min_audio_ms=2000)
+
+    assert await engine.transcribe(frame(sequence=1)) is None
+    assert await engine.transcribe(frame(sequence=2)) is None
+    result = await engine.commit_boundary("sess_1", 1000, "zh", "en")
+
+    assert result is not None
+    assert result.segmentId == "qwen3_boundary_1"
+    assert result.timing == {
+        "startMs": 500,
+        "endMs": 1000,
+        "source": "client",
+    }
+
+
 async def test_qwen3_engine_dedupes_adjacent_transcripts() -> None:
     runner = FakeQwen3Runner("What is your name?")
     engine = qwen_engine(runner, min_audio_ms=200)
 
     await engine.transcribe(frame(sequence=1, duration_ms=200, source_language="en"))
     first = await engine.flush("sess_1", "en", "zh")
-    await engine.transcribe(frame(sequence=2, duration_ms=200, source_language="en"))
+    await engine.transcribe(frame(
+        sequence=2,
+        duration_ms=200,
+        source_language="en",
+        timestamp_ms=300,
+    ))
     second = await engine.flush("sess_1", "en", "zh")
 
     assert first is not None
     assert first.language == "en"
     assert second is None
+
+
+async def test_qwen3_engine_keeps_repeated_non_overlapping_utterances() -> None:
+    runner = FakeQwen3Runner("What is your name?")
+    engine = qwen_engine(runner, min_audio_ms=200)
+
+    await engine.transcribe(frame(sequence=1, duration_ms=200, source_language="en"))
+    first = await engine.flush("sess_1", "en", "zh")
+    await engine.transcribe(frame(
+        sequence=2,
+        duration_ms=200,
+        source_language="en",
+        timestamp_ms=1000,
+    ))
+    second = await engine.flush("sess_1", "en", "zh")
+
+    assert first is not None
+    assert second is not None
+    assert second.text == "What is your name?"
 
 
 def test_qwen3_language_maps_app_language_codes() -> None:
@@ -59,6 +121,66 @@ def test_qwen3_language_maps_app_language_codes() -> None:
     assert qwen3_language("en") == "English"
     assert qwen3_language("en-US") == "English"
     assert qwen3_language("auto") is None
+
+
+async def test_qwen3_engine_can_restore_strict_mixed_language_prefix() -> None:
+    runner = LanguageAwareQwen3Runner(
+        auto_text="你叫什么名字？",
+        english_text="What's your name?你叫什么名字？",
+    )
+    engine = qwen_engine(runner, mixed_language_retry_enabled=True)
+
+    await engine.transcribe(frame(sequence=1, source_language="auto"))
+    result = await engine.flush("sess_1", "auto", "en")
+
+    assert result is not None
+    assert result.text == "What's your name?你叫什么名字？"
+    assert runner.languages == [None, "English"]
+
+
+async def test_qwen3_engine_does_not_retry_mixed_language_by_default() -> None:
+    runner = LanguageAwareQwen3Runner(
+        auto_text="你叫什么名字？",
+        english_text="What's your name?你叫什么名字？",
+    )
+    engine = qwen_engine(runner)
+
+    await engine.transcribe(frame(sequence=1, source_language="auto"))
+    result = await engine.flush("sess_1", "auto", "en")
+
+    assert result is not None
+    assert result.text == "你叫什么名字？"
+    assert runner.languages == [None]
+
+
+async def test_qwen3_engine_does_not_retry_explicit_chinese() -> None:
+    runner = LanguageAwareQwen3Runner(
+        auto_text="你叫什么名字？",
+        english_text="What's your name?你叫什么名字？",
+    )
+    engine = qwen_engine(runner, mixed_language_retry_enabled=True)
+
+    await engine.transcribe(frame(sequence=1, source_language="zh"))
+    result = await engine.flush("sess_1", "zh", "en")
+
+    assert result is not None
+    assert result.text == "你叫什么名字？"
+    assert runner.languages == ["Chinese"]
+
+
+async def test_qwen3_engine_preserves_primary_when_retry_fails() -> None:
+    runner = FailingEnglishQwen3Runner(
+        auto_text="你叫什么名字？",
+        english_text="",
+    )
+    engine = qwen_engine(runner, mixed_language_retry_enabled=True)
+
+    await engine.transcribe(frame(sequence=1, source_language="auto"))
+    result = await engine.flush("sess_1", "auto", "en")
+
+    assert result is not None
+    assert result.text == "你叫什么名字？"
+    assert runner.languages == [None, "English"]
 
 
 async def test_qwen3_engine_uses_empty_context_for_english() -> None:
@@ -83,15 +205,74 @@ async def test_qwen3_engine_adds_hotwords_to_context() -> None:
         hotwords=["筑基丹", "灵脉之心", "Hy-MT2"],
         corrections=[{"fromText": "助机单", "toText": "筑基丹"}],
     ))
+    await engine.flush("sess_1", "zh", "en")
 
     assert "优先识别并保留以下热词" in runner.last_context
     assert "筑基丹" in runner.last_context
     assert "助机单=>筑基丹" in runner.last_context
 
 
+async def test_qwen3_engine_rejects_correction_prompt_echo() -> None:
+    runner = FakeQwen3Runner(
+        "常见误识别纠正：报价合同=>报价、合同；客户单价=>客单价；"
+        "检票号=>检票口。"
+    )
+    engine = qwen_engine(runner, min_audio_ms=200)
+
+    await engine.transcribe(frame(
+        sequence=1,
+        duration_ms=200,
+        corrections=[
+            {"fromText": "报价合同", "toText": "报价、合同"},
+            {"fromText": "客户单价", "toText": "客单价"},
+            {"fromText": "检票号", "toText": "检票口"},
+        ],
+    ))
+    result = await engine.flush("sess_1", "zh", "en")
+
+    assert result is None
+
+
+async def test_qwen3_engine_rejects_partial_context_echo_without_prefix() -> None:
+    runner = FakeQwen3Runner(
+        "报价合同报价合同客户单价客单价检票号检票口"
+    )
+    engine = qwen_engine(runner, min_audio_ms=200)
+
+    await engine.transcribe(frame(
+        sequence=1,
+        duration_ms=200,
+        corrections=[
+            {"fromText": "报价合同", "toText": "报价合同"},
+            {"fromText": "客户单价", "toText": "客单价"},
+            {"fromText": "检票号", "toText": "检票口"},
+        ],
+    ))
+    result = await engine.flush("sess_1", "zh", "en")
+
+    assert result is None
+
+
+async def test_qwen3_engine_keeps_real_speech_with_domain_terms() -> None:
+    runner = FakeQwen3Runner("请检查数据库网关和客单价是否正确")
+    engine = qwen_engine(runner, min_audio_ms=200)
+
+    await engine.transcribe(frame(
+        sequence=1,
+        duration_ms=200,
+        hotwords=["数据库", "网关", "客单价"],
+        corrections=[{"fromText": "客户单价", "toText": "客单价"}],
+    ))
+    result = await engine.flush("sess_1", "zh", "en")
+
+    assert result is not None
+    assert result.text == "请检查数据库网关和客单价是否正确"
+
+
 def qwen_engine(
     runner: FakeQwen3Runner,
     min_audio_ms: int = 500,
+    mixed_language_retry_enabled: bool = False,
 ) -> Qwen3AsrEngine:
     return Qwen3AsrEngine(
         model_dir="/unused",
@@ -106,6 +287,7 @@ def qwen_engine(
         vad_energy_threshold=350,
         context="",
         english_context="",
+        mixed_language_retry_enabled=mixed_language_retry_enabled,
         runner=runner,
     )
 
@@ -116,6 +298,7 @@ def frame(
     source_language: str = "zh",
     hotwords: list[str] | None = None,
     corrections: list[dict[str, str]] | None = None,
+    timestamp_ms: int | None = None,
 ) -> AsrTranscribeRequest:
     sample_rate = 16000
     sample_count = sample_rate * duration_ms // 1000
@@ -123,7 +306,7 @@ def frame(
     return AsrTranscribeRequest(
         sessionId="sess_1",
         sequence=sequence,
-        timestampMs=sequence * duration_ms,
+        timestampMs=timestamp_ms if timestamp_ms is not None else sequence * duration_ms,
         format="pcm16",
         sampleRate=sample_rate,
         data=base64.b64encode(pcm).decode("ascii"),

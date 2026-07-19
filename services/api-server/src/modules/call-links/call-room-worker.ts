@@ -1,5 +1,3 @@
-import { DataPacket_Kind, RoomServiceClient } from "livekit-server-sdk";
-import { upsertSegment } from "../sessions/sessions.repository.js";
 import type { CallLinkRecord } from "./call-links.service.js";
 import {
   buildCallRoomSmokeEvents,
@@ -8,10 +6,31 @@ import {
   type CallRoomDataEvent,
 } from "./call-room-events.js";
 import { getLiveKitRoomConfig, type LiveKitRoomConfig } from "./call-room-readiness.js";
+import {
+  completeCallRoomDataEvent,
+  failCallRoomDataEvent,
+  pendingCallRoomDataEvents,
+  releaseCallRoomDataEvent,
+  stageCallRoomDataEvents,
+} from "./call-room-reliable-events.js";
+import { LiveKitRoomProviderAdapter } from "./livekit-room-provider-adapter.js";
+export {
+  isLiveKitAlreadyExistsError,
+  liveKitApiUrl,
+} from "./livekit-room-provider-adapter.js";
+export { persistCallRoomDataEvent } from "./call-room-event-persistence.js";
 
 export interface CallRoomDataPublisher {
   ensureRoom?(roomName: string): Promise<void>;
+  hasParticipant?(roomName: string, participantIdentity: string): Promise<boolean>;
+  listParticipantIdentities?(roomName: string): Promise<string[]>;
   publish(roomName: string, event: CallRoomDataEvent): Promise<void>;
+}
+
+export interface CallRoomHumanPresence {
+  activeHostCount: number;
+  activeGuestCount: number;
+  activeHumanParticipantCount: number;
 }
 
 let testPublisher: CallRoomDataPublisher | null = null;
@@ -36,100 +55,192 @@ export async function publishCallRoomSmokeCaptions(record: CallLinkRecord):
   );
 }
 
+export async function ensureCallRoom(
+  record: CallLinkRecord,
+): Promise<{ ok: true; roomName: string } | { ok: false; issues: string[] }> {
+  const config = getLiveKitRoomConfig();
+  if (!config.ok) return { ok: false, issues: config.issues };
+  const publisher =
+    testPublisher ?? new LiveKitRoomDataPublisher(config.config);
+  try {
+    await publisher.ensureRoom?.(record.roomName);
+    return { ok: true, roomName: record.roomName };
+  } catch (error) {
+    return {
+      ok: false,
+      issues: [error instanceof Error ? error.message : String(error)],
+    };
+  }
+}
+
+export async function confirmCallRoomParticipant(
+  record: CallLinkRecord,
+  participantIdentity: string,
+): Promise<{ ok: true; connected: boolean } | { ok: false; issues: string[] }> {
+  const config = getLiveKitRoomConfig();
+  if (!config.ok) return { ok: false, issues: config.issues };
+  const publisher = testPublisher ?? new LiveKitRoomDataPublisher(config.config);
+  if (!publisher.hasParticipant) return { ok: true, connected: true };
+  try {
+    for (let attempt = 0; attempt < 4; attempt += 1) {
+      if (await publisher.hasParticipant(record.roomName, participantIdentity)) {
+        return { ok: true, connected: true };
+      }
+      if (attempt < 3) await delay(75);
+    }
+    return { ok: true, connected: false };
+  } catch (error) {
+    return { ok: false, issues: [errorMessage(error)] };
+  }
+}
+
+export async function readCallRoomHumanPresence(
+  record: CallLinkRecord,
+): Promise<
+  | { ok: true; presence: CallRoomHumanPresence }
+  | { ok: false; issues: string[] }
+> {
+  const config = getLiveKitRoomConfig();
+  if (!config.ok) return { ok: false, issues: config.issues };
+  const publisher = testPublisher ?? new LiveKitRoomDataPublisher(config.config);
+  if (!publisher.listParticipantIdentities) {
+    return { ok: false, issues: ["Call room presence is unavailable"] };
+  }
+  try {
+    const identities = await publisher.listParticipantIdentities(record.roomName);
+    const roles = identities
+      .map((identity) => callRoomParticipantRole(record.callId, identity))
+      .filter((role): role is "host" | "guest" => role !== null);
+    const activeHostCount = roles.filter((role) => role === "host").length;
+    const activeGuestCount = roles.filter((role) => role === "guest").length;
+    return {
+      ok: true,
+      presence: {
+        activeHostCount,
+        activeGuestCount,
+        activeHumanParticipantCount: activeHostCount + activeGuestCount,
+      },
+    };
+  } catch (error) {
+    return { ok: false, issues: [errorMessage(error)] };
+  }
+}
+
 export async function publishCallRoomDataEvents(
   record: CallLinkRecord,
   events: CallRoomDataEvent[],
+  options: { expectedVersion?: number } = {},
 ):
   Promise<
-    | { ok: true; roomName: string; topic: string; events: CallRoomDataEvent[] }
-    | { ok: false; issues: string[] }
+    | {
+      ok: true;
+      roomName: string;
+      topic: string;
+      events: CallRoomDataEvent[];
+      duplicateCount: number;
+      sessionVersion: number;
+    }
+    | { ok: false; issues: string[]; sessionVersion: number }
   > {
-  const config = getLiveKitRoomConfig();
-  if (!config.ok) return { ok: false, issues: config.issues };
-
-  const publisher = testPublisher ?? new LiveKitRoomDataPublisher(config.config);
-  await publisher.ensureRoom?.(record.roomName);
-  for (const event of events) {
-    await publisher.publish(record.roomName, event);
-    persistCallRoomDataEvent(record, event);
+  const staged = await stageCallRoomDataEvents({
+    record,
+    events,
+    expectedVersion: options.expectedVersion,
+  });
+  const delivered = await deliverPendingCallRoomDataEvents(record);
+  if (!delivered.ok) {
+    return { ...delivered, sessionVersion: staged.sessionVersion };
   }
   return {
     ok: true,
     roomName: record.roomName,
     topic: callRoomCaptionTopic,
     events,
+    duplicateCount: staged.duplicateCount,
+    sessionVersion: staged.sessionVersion,
   };
 }
 
-export function persistCallRoomDataEvent(
+export async function deliverPendingCallRoomDataEvents(
   record: CallLinkRecord,
-  event: CallRoomDataEvent,
+  now?: Date,
 ) {
-  if (event.type === "worker.status") return null;
-  return upsertSegment(record.sessionId, {
-    segmentId: event.segmentId,
-    sourceText: event.sourceText ?? (
-      event.type === "transcript.final" ? event.text : undefined
-    ),
-    translatedText: event.translatedText ?? (
-      event.type === "translation.final" ? event.text : undefined
-    ),
-  });
+  const config = getLiveKitRoomConfig();
+  if (!config.ok) return { ok: false as const, issues: config.issues };
+
+  const publisher = testPublisher ?? new LiveKitRoomDataPublisher(config.config);
+  try {
+    await publisher.ensureRoom?.(record.roomName);
+  } catch (error) {
+    return { ok: false as const, issues: [errorMessage(error)] };
+  }
+  const pendingEvents = await pendingCallRoomDataEvents(record.sessionId, now);
+  for (const [index, pending] of pendingEvents.entries()) {
+    try {
+      await publisher.publish(record.roomName, pending.event);
+      await completeCallRoomDataEvent(pending.record);
+    } catch (error) {
+      await failCallRoomDataEvent(pending.record, error).catch(() => undefined);
+      await Promise.all(pendingEvents.slice(index + 1).map((remaining) =>
+        releaseCallRoomDataEvent(remaining.record).catch(() => false)
+      ));
+      return { ok: false as const, issues: [errorMessage(error)] };
+    }
+  }
+  return {
+    ok: true as const,
+    roomName: record.roomName,
+    topic: callRoomCaptionTopic,
+  };
 }
 
 class LiveKitRoomDataPublisher implements CallRoomDataPublisher {
-  private readonly client: RoomServiceClient;
-  private readonly ensuredRooms = new Set<string>();
+  private readonly adapter: LiveKitRoomProviderAdapter;
 
   constructor(config: LiveKitRoomConfig) {
-    this.client = new RoomServiceClient(
-      liveKitApiUrl(config.livekitUrl),
-      config.apiKey,
-      config.apiSecret,
-    );
+    this.adapter = new LiveKitRoomProviderAdapter(config);
   }
 
   async ensureRoom(roomName: string) {
-    if (this.ensuredRooms.has(roomName)) return;
-    try {
-      await this.client.createRoom({
-        name: roomName,
-        emptyTimeout: 300,
-        maxParticipants: 16,
-      });
-    } catch (error) {
-      if (!isLiveKitAlreadyExistsError(error)) throw error;
-    }
-    this.ensuredRooms.add(roomName);
+    const result = await this.adapter.ensureRoom({
+      operationId: `room:ensure:${roomName}`,
+      sessionId: roomName.replace(/^call_/, ""),
+      expectedVersion: 1,
+      idempotencyKey: `room:ensure:${roomName}`,
+      deadlineAt: new Date(Date.now() + 10_000).toISOString(),
+      payload: { roomName },
+    });
+    if (!result.ok) throw new Error(`LiveKit room ensure failed: ${result.errorClass}`);
+  }
+
+  async hasParticipant(roomName: string, participantIdentity: string) {
+    return this.adapter.hasParticipant(roomName, participantIdentity);
+  }
+
+  async listParticipantIdentities(roomName: string) {
+    return this.adapter.listParticipantIdentities(roomName);
   }
 
   async publish(roomName: string, event: CallRoomDataEvent) {
-    await this.client.sendData(
-      roomName,
-      encodeCallRoomEvent(event),
-      DataPacket_Kind.RELIABLE,
-      { topic: callRoomCaptionTopic },
-    );
+    const data = encodeCallRoomEvent(event);
+    const config = getLiveKitRoomConfig();
+    if (!config.ok || data.byteLength > config.config.resourceLimits.maxDataPacketBytes) {
+      throw new Error("Call room data packet exceeds the configured limit");
+    }
+    await this.adapter.publish(roomName, data, callRoomCaptionTopic);
   }
 }
 
-export function liveKitApiUrl(livekitUrl: string) {
-  const url = new URL(livekitUrl);
-  if (url.protocol === "wss:") url.protocol = "https:";
-  if (url.protocol === "ws:") url.protocol = "http:";
-  return url.toString().replace(/\/$/, "");
+function callRoomParticipantRole(callId: string, identity: string) {
+  const [identityCallId, role] = identity.split(":", 3);
+  if (identityCallId !== callId) return null;
+  return role === "host" || role === "guest" ? role : null;
 }
 
-export function isLiveKitAlreadyExistsError(error: unknown) {
-  const candidate = error as {
-    code?: unknown;
-    status?: unknown;
-    message?: unknown;
-  };
-  return candidate.code === "already_exists" ||
-    candidate.status === 409 ||
-    (
-      typeof candidate.message === "string" &&
-      candidate.message.toLowerCase().includes("already exists")
-    );
+function errorMessage(error: unknown) {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function delay(milliseconds: number) {
+  return new Promise<void>((resolve) => setTimeout(resolve, milliseconds));
 }

@@ -12,12 +12,24 @@ export interface GatewayHealthPayload {
   callProviderPolicy: string;
   complianceProfile: string;
   asrProvider: RealtimeEnv["asrProvider"];
+  speakerProvider: RealtimeEnv["speakerProvider"];
+  speakerEndpoint?: string;
+  speakerTimeoutMs: number;
   asrEndpoint?: string;
   asrHealthUrl?: string;
   translationEndpoint?: string;
   translationModel?: string;
   sessionEventSink: RealtimeEnv["sessionEventSink"];
+  tokenTransport: "subprotocol" | "subprotocol_with_legacy_query";
+  publicEntryProtection: GatewayProtectionReadiness;
   releaseReadiness: GatewayReleaseReadinessPayload;
+}
+
+export interface GatewayProtectionReadiness {
+  status: "ready" | "not_ready";
+  provider: string;
+  issues: string[];
+  [key: string]: unknown;
 }
 
 export interface GatewayReleaseReadinessPayload {
@@ -26,7 +38,10 @@ export interface GatewayReleaseReadinessPayload {
   issues: string[];
 }
 
-export function gatewayHealthPayload(env: RealtimeEnv): GatewayHealthPayload {
+export function gatewayHealthPayload(
+  env: RealtimeEnv,
+  protection: GatewayProtectionReadiness = unconfiguredProtection(env),
+): GatewayHealthPayload {
   return {
     status: "ok",
     service: "realtime-gateway",
@@ -38,12 +53,19 @@ export function gatewayHealthPayload(env: RealtimeEnv): GatewayHealthPayload {
     callProviderPolicy: env.callProviderPolicy,
     complianceProfile: env.complianceProfile,
     asrProvider: env.asrProvider,
+    speakerProvider: env.speakerProvider,
+    speakerEndpoint: env.speakerHttpBaseUrl,
+    speakerTimeoutMs: env.speakerHttpTimeoutMs,
     asrEndpoint: env.asrHttpEndpoint,
     asrHealthUrl: env.asrHttpHealthUrl,
     translationEndpoint: translationEndpoint(env),
     translationModel: translationModel(env),
     sessionEventSink: env.sessionEventSink,
-    releaseReadiness: gatewayReleaseReadinessPayload(env),
+    tokenTransport: env.allowQueryToken
+      ? "subprotocol_with_legacy_query"
+      : "subprotocol",
+    publicEntryProtection: protection,
+    releaseReadiness: gatewayReleaseReadinessPayload(env, protection),
   };
 }
 
@@ -63,8 +85,9 @@ function translationModel(env: RealtimeEnv) {
 
 export function gatewayReleaseReadinessPayload(
   env: RealtimeEnv,
+  protection?: GatewayProtectionReadiness,
 ): GatewayReleaseReadinessPayload {
-  const issues = gatewayReleaseReadinessIssues(env);
+  const issues = gatewayReleaseReadinessIssues(env, protection);
   return {
     status: issues.length === 0 ? "ready" : "not_ready",
     profile: env.regionEdition,
@@ -72,7 +95,10 @@ export function gatewayReleaseReadinessPayload(
   };
 }
 
-function gatewayReleaseReadinessIssues(env: RealtimeEnv) {
+function gatewayReleaseReadinessIssues(
+  env: RealtimeEnv,
+  protection?: GatewayProtectionReadiness,
+) {
   const issues: string[] = [];
   if (env.regionEdition === "domestic") appendDomesticProviderIssues(env, issues);
   if (env.provider === "tencent_trtc" || env.resolvedProvider === "unsupported") {
@@ -80,6 +106,19 @@ function gatewayReleaseReadinessIssues(env: RealtimeEnv) {
   }
   appendAsrIssues(env, issues);
   appendSessionSinkIssues(env, issues);
+  if (env.allowQueryToken) {
+    issues.push("Release requires REALTIME_ALLOW_QUERY_TOKEN=false");
+  }
+  if (env.publicRateLimitProvider !== "redis") {
+    issues.push("Release requires PUBLIC_RATE_LIMIT_PROVIDER=redis");
+  }
+  if (!env.publicRateLimitRedisUrl) {
+    issues.push("Release requires PUBLIC_RATE_LIMIT_REDIS_URL");
+  }
+  if (!env.publicRateLimitKeySecret) {
+    issues.push("Release requires PUBLIC_RATE_LIMIT_KEY_SECRET");
+  }
+  if (protection?.status === "not_ready") issues.push(...protection.issues);
   return issues;
 }
 
@@ -124,23 +163,47 @@ export function handleGatewayHttpRequest(
   request: IncomingMessage,
   response: ServerResponse,
   env: RealtimeEnv,
+  protection: GatewayProtectionReadiness = unconfiguredProtection(env),
 ) {
   const url = new URL(request.url ?? "/", "http://127.0.0.1");
   if ((request.method === "GET" || request.method === "HEAD") && url.pathname === "/health") {
-    writeJson(response, 200, gatewayHealthPayload(env), request.method === "HEAD");
+    writeJson(
+      response,
+      200,
+      gatewayHealthPayload(env, protection),
+      request.method === "HEAD",
+    );
     return;
   }
   if (
     (request.method === "GET" || request.method === "HEAD") &&
     url.pathname === "/health/release-ready"
   ) {
-    const payload = gatewayReleaseReadinessPayload(env);
+    const payload = gatewayReleaseReadinessPayload(env, protection);
     writeJson(response, payload.status === "ready" ? 200 : 503, payload, request.method === "HEAD");
     return;
   }
   writeJson(response, 404, {
     error: { code: "not_found", message: "Not found" },
   }, request.method === "HEAD");
+}
+
+function unconfiguredProtection(env: RealtimeEnv): GatewayProtectionReadiness {
+  const issues = [
+    ...(env.publicRateLimitProvider === "redis" && !env.publicRateLimitRedisUrl
+      ? ["PUBLIC_RATE_LIMIT_REDIS_URL is required"]
+      : []),
+    ...(env.publicRateLimitProvider === "redis" && !env.publicRateLimitKeySecret
+      ? ["PUBLIC_RATE_LIMIT_KEY_SECRET is required"]
+      : []),
+  ];
+  return {
+    status: issues.length === 0 && env.publicRateLimitProvider === "memory"
+      ? "ready"
+      : "not_ready",
+    provider: env.publicRateLimitProvider,
+    issues,
+  };
 }
 
 function writeJson(

@@ -1,0 +1,109 @@
+{
+  "schemaVersion": 1,
+  "status": "candidate_unverified",
+  "environment": "staging",
+  "mode": "real",
+  "topologyFile": "infra/platform-ha/topology.json",
+  "safety": {
+    "apiBaseUrl": "https://replace-with-isolated-staging-api.example.cn",
+    "allowedApiHosts": ["replace-with-isolated-staging-api.example.cn"],
+    "acknowledgement": "WUJIE_STAGING_LOAD_ONLY",
+    "gracefulDrainSeconds": 120,
+    "maxPendingStarts": 150,
+    "systemSampleDelaySeconds": 30
+  },
+  "stages": [
+    { "concurrentSessions": 25, "durationMinutes": 30, "rampUpSeconds": 60 },
+    { "concurrentSessions": 50, "durationMinutes": 10, "rampUpSeconds": 120 },
+    { "concurrentSessions": 100, "durationMinutes": 30, "rampUpSeconds": 300 }
+  ],
+  "soak": {
+    "concurrentSessions": 70,
+    "durationMinutes": 120,
+    "targetUtilization": 0.7,
+    "rampUpSeconds": 300
+  },
+  "admission": {
+    "concurrentSessions": 120,
+    "durationMinutes": 10,
+    "minimumObservedUtilization": 0.85,
+    "rampUpSeconds": 120
+  },
+  "slo": {
+    "maxErrorRate": 0.01,
+    "p95SessionStartMs": 5000,
+    "p95FinalLatencyMs": 2000,
+    "minimumFinalCoverageRatio": 0.99
+  },
+  "systemProbe": {
+    "file": "node",
+    "args": ["scripts/run_platform_system_probe.mjs"]
+  },
+  "scenarios": [
+    {
+      "name": "translation_room",
+      "weight": 60,
+      "trafficKinds": ["api", "livekit", "asr", "mt", "tts"],
+      "command": {
+        "file": "node",
+        "args": ["scripts/run_translation_room_load_session.mjs"]
+      }
+    },
+    {
+      "name": "sip_translation",
+      "weight": 20,
+      "trafficKinds": ["api", "livekit", "sip", "asr", "mt", "tts"],
+      "command": {
+        "file": "node",
+        "args": ["scripts/run_sip_translation_load_session.mjs"]
+      }
+    },
+    {
+      "name": "agent_egress",
+      "weight": 20,
+      "trafficKinds": ["api", "livekit", "sip", "agent", "egress"],
+      "command": {
+        "file": "node",
+        "args": ["scripts/run_agent_egress_load_session.mjs"]
+      }
+    }
+  ],
+  "failureInjections": [
+    {
+      "name": "translation_worker_sigkill",
+      "target": "translation-worker",
+      "fault": "sigkill",
+      "phase": "capacity-100",
+      "atSeconds": 600,
+      "recoveryTimeoutSeconds": 120,
+      "command": {
+        "file": "node",
+        "args": ["scripts/run_platform_failure_injection.mjs"]
+      }
+    },
+    {
+      "name": "model_provider_timeout",
+      "target": "model-provider",
+      "fault": "timeout",
+      "phase": "soak",
+      "atSeconds": 1800,
+      "recoveryTimeoutSeconds": 120,
+      "command": {
+        "file": "node",
+        "args": ["scripts/run_platform_failure_injection.mjs"]
+      }
+    },
+    {
+      "name": "livekit_node_drain",
+      "target": "livekit",
+      "fault": "node-drain",
+      "phase": "soak",
+      "atSeconds": 3600,
+      "recoveryTimeoutSeconds": 300,
+      "command": {
+        "file": "node",
+        "args": ["scripts/run_platform_failure_injection.mjs"]
+      }
+    }
+  ]
+}

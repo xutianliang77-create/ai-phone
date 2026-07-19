@@ -3,6 +3,46 @@ import { createSessionEventSink } from "./session-event-sink.js";
 import type { RealtimeEnv } from "../config/env.js";
 
 describe("session event sink", () => {
+  it("syncs started, paused, and resumed states to the api", async () => {
+    const calls: Array<{ url: string; body: unknown }> = [];
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async (input, init) => {
+      calls.push({
+        url: String(input),
+        body: init?.body ? JSON.parse(String(init.body)) : null,
+      });
+      return new Response("{}", { status: 200 });
+    };
+
+    try {
+      const sink = createSessionEventSink({
+        ...baseEnv(),
+        sessionEventSink: "api",
+        apiBaseUrl: "http://127.0.0.1:3100",
+      });
+      await sink.record({ type: "session.started", sessionId: "sess_1" });
+      await sink.record({ type: "session.paused", sessionId: "sess_1" });
+      await sink.record({ type: "session.resumed", sessionId: "sess_1" });
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+
+    expect(calls).toEqual([
+      {
+        url: "http://127.0.0.1:3100/internal/realtime/sessions/sess_1/state",
+        body: { status: "active" },
+      },
+      {
+        url: "http://127.0.0.1:3100/internal/realtime/sessions/sess_1/state",
+        body: { status: "paused" },
+      },
+      {
+        url: "http://127.0.0.1:3100/internal/realtime/sessions/sess_1/state",
+        body: { status: "active" },
+      },
+    ]);
+  });
+
   it("posts final transcript, translation, and ended events to the api", async () => {
     const calls: Array<{ url: string; body: unknown }> = [];
     const originalFetch = globalThis.fetch;
@@ -25,16 +65,31 @@ describe("session event sink", () => {
         type: "transcript.final",
         sessionId: "sess_1",
         segmentId: "seg_1",
+        turnId: "turn_1",
+        revision: 0,
         text: "hello",
         language: "en",
+        dominantLanguage: "en",
+        detectedLanguages: ["en"],
+        mixedLanguage: false,
         confidence: 0.91,
+        vadContext: {
+          endpointReason: "silence",
+          vadModelFingerprint: "a".repeat(64),
+          endpointPolicyFingerprint: "b".repeat(64),
+        },
       });
       await sink.record({
         type: "translation.final",
         sessionId: "sess_1",
         segmentId: "seg_1",
+        turnId: "turn_1",
+        revision: 0,
         text: "你好",
         language: "zh",
+        dominantLanguage: "en",
+        detectedLanguages: ["en"],
+        mixedLanguage: false,
         providerUsage: {
           provider: "qwen_live",
           model: "qwen-plus",
@@ -59,11 +114,21 @@ describe("session event sink", () => {
         body: {
           sessionId: "sess_1",
           segmentId: "seg_1",
+          turnId: "turn_1",
+          revision: 0,
           sourceText: "hello",
           rawText: "hello",
+          dominantLanguage: "en",
+          detectedLanguages: ["en"],
+          mixedLanguage: false,
           sourceLanguage: "en",
           confidence: 0.91,
           stage: "asr",
+          vadContext: {
+            endpointReason: "silence",
+            vadModelFingerprint: "a".repeat(64),
+            endpointPolicyFingerprint: "b".repeat(64),
+          },
         },
       },
       {
@@ -71,7 +136,12 @@ describe("session event sink", () => {
         body: {
           sessionId: "sess_1",
           segmentId: "seg_1",
+          turnId: "turn_1",
+          revision: 0,
           translatedText: "你好",
+          dominantLanguage: "en",
+          detectedLanguages: ["en"],
+          mixedLanguage: false,
           targetLanguage: "zh",
           stage: "translation",
           provider: "qwen_live",
@@ -148,6 +218,75 @@ describe("session event sink", () => {
         },
       },
     ]);
+  });
+
+  it("retries final session settlement after transient API failures", async () => {
+    var attempts = 0;
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async () => {
+      attempts += 1;
+      return new Response("{}", { status: attempts < 3 ? 503 : 200 });
+    };
+
+    try {
+      const sink = createSessionEventSink({
+        ...baseEnv(),
+        sessionEventSink: "api",
+        apiBaseUrl: "http://127.0.0.1:3100",
+      });
+      await sink.record({
+        type: "session.ended",
+        sessionId: "sess_retry",
+        reason: "connection_closed",
+        billableSeconds: 12,
+      });
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+
+    expect(attempts).toBe(3);
+  });
+
+  it("syncs realtime session diagnostics with final settlement", async () => {
+    let body: unknown;
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async (_input, init) => {
+      body = JSON.parse(String(init?.body));
+      return new Response("{}", { status: 200 });
+    };
+
+    try {
+      const sink = createSessionEventSink({
+        ...baseEnv(),
+        sessionEventSink: "api",
+        apiBaseUrl: "http://127.0.0.1:3100",
+      });
+      await sink.record({
+        type: "session.ended",
+        sessionId: "sess_diagnostics",
+        diagnostics: {
+          version: 1,
+          audio: {
+            receivedFrameCount: 8,
+            processedBatchCount: 2,
+            droppedFrameCount: 0,
+          },
+        },
+      });
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+
+    expect(body).toEqual({
+      diagnostics: {
+        version: 1,
+        audio: {
+          receivedFrameCount: 8,
+          processedBatchCount: 2,
+          droppedFrameCount: 0,
+        },
+      },
+    });
   });
 });
 

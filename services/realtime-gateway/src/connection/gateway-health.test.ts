@@ -4,6 +4,23 @@ import { gatewayHealthPayload, gatewayReleaseReadinessPayload } from "./gateway-
 
 const env: RealtimeEnv = {
   port: 3001,
+  allowedOrigins: ["https://call.example.cn"],
+  trustProxyAddresses: ["127.0.0.1", "::1"],
+  maxPayloadBytes: 65_536,
+  maxConnections: 512,
+  maxConnectionsPerIp: 8,
+  maxSessions: 256,
+  maxMessagesPerSecond: 120,
+  maxAudioFramesPerSecond: 75,
+  maxPendingAudioMs: 6000,
+  maxPendingControlEvents: 32,
+  maxPendingTtsOutputs: 32,
+  handshakeRateLimitPerMinute: 30,
+  publicRateLimitProvider: "redis",
+  publicRateLimitRedisUrl: "redis://127.0.0.1:6379/1",
+  publicRateLimitKeyPrefix: "test:gateway",
+  publicRateLimitKeySecret: "test-only",
+  publicRateLimitConnectTimeoutMs: 250,
   realtimeTokenSecret: "secret",
   provider: "lmstudio",
   resolvedProvider: "lmstudio",
@@ -12,6 +29,7 @@ const env: RealtimeEnv = {
   callProviderPolicy: "call_link_only",
   complianceProfile: "pipl",
   asrProvider: "http",
+  speakerProvider: "http",
   openAiRealtimeEndpoint: "wss://api.openai.com/v1/realtime/translations",
   openAiRealtimeModel: "gpt-realtime-translate",
   openAiInputTranscriptionModel: "gpt-4o-mini-transcribe",
@@ -28,6 +46,8 @@ const env: RealtimeEnv = {
   asrHttpEndpoint: "http://127.0.0.1:8001/asr/transcribe",
   asrHttpApiKey: "1234567890abcdef",
   asrHttpTimeoutMs: 100,
+  speakerHttpBaseUrl: "http://127.0.0.1:8022",
+  speakerHttpTimeoutMs: 2000,
   ttsHttpTimeoutMs: 100,
   sessionEventSink: "api",
   apiBaseUrl: "http://127.0.0.1:3100",
@@ -47,7 +67,11 @@ const env: RealtimeEnv = {
 
 describe("gateway health", () => {
   it("reports gateway runtime routing settings", () => {
-    expect(gatewayHealthPayload(env)).toEqual({
+    expect(gatewayHealthPayload(env, {
+      status: "ready",
+      provider: "redis",
+      issues: [],
+    })).toEqual({
       status: "ok",
       service: "realtime-gateway",
       version: "0.1.0",
@@ -58,11 +82,20 @@ describe("gateway health", () => {
       callProviderPolicy: "call_link_only",
       complianceProfile: "pipl",
       asrProvider: "http",
+      speakerProvider: "http",
+      speakerEndpoint: "http://127.0.0.1:8022",
+      speakerTimeoutMs: 2000,
       asrEndpoint: "http://127.0.0.1:8001/asr/transcribe",
       asrHealthUrl: undefined,
       translationEndpoint: "http://127.0.0.1:1234/v1",
       translationModel: "tencent/Hy-MT2-1.8B",
       sessionEventSink: "api",
+      tokenTransport: "subprotocol",
+      publicEntryProtection: {
+        status: "ready",
+        provider: "redis",
+        issues: [],
+      },
       releaseReadiness: {
         status: "not_ready",
         profile: "domestic",
@@ -128,6 +161,19 @@ describe("gateway health", () => {
 
     expect(payload.issues).toContain(
       "Release requires ASR_HTTP_API_KEY with at least 16 characters",
+    );
+  });
+
+  it("blocks release while legacy query token transport is enabled", () => {
+    const payload = gatewayReleaseReadinessPayload({
+      ...env,
+      provider: "hymt2_self_hosted",
+      resolvedProvider: "lmstudio",
+      allowQueryToken: true,
+    });
+
+    expect(payload.issues).toContain(
+      "Release requires REALTIME_ALLOW_QUERY_TOKEN=false",
     );
   });
 

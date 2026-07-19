@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { MediaWriteRequest } from "./types.js";
 import { FonosterPstnProvider } from "./fonoster-provider.js";
 import { buildPstnProvider, HttpPstnProvider, MockPstnProvider } from "./providers.js";
+import { PstnProviderAdapter } from "./pstn-provider-adapter.js";
 
 describe("PSTN providers", () => {
   it("returns a deterministic mock provider call id", async () => {
@@ -45,7 +46,8 @@ describe("PSTN providers", () => {
   it("selects the Fonoster-compatible provider", () => {
     const provider = buildPstnProvider(fonosterConfig());
 
-    expect(provider).toBeInstanceOf(FonosterPstnProvider);
+    expect(provider).toBeInstanceOf(PstnProviderAdapter);
+    expect(provider.providerName).toBe("pstn_fonoster");
   });
 
   it("forwards calls to a Fonoster-compatible facade", async () => {
@@ -111,7 +113,12 @@ describe("PSTN providers", () => {
       authorization: "Bearer upstream-secret",
       body: {
         callId: "call-1",
+        sessionId: "call-1",
         segmentId: "seg-1",
+        playbackId: "playback-1",
+        generation: 1,
+        sourceLegId: "host-leg",
+        targetLegId: "guest-leg",
         providerCallId: "provider-call-1",
         mediaStreamId: "stream-1",
         targetSpeakerRole: "guest",
@@ -148,9 +155,13 @@ describe("PSTN providers", () => {
     });
     expect(writes[0]).toMatchObject({
       callId: "call-1",
+      sessionId: "call-1",
       providerCallId: "provider-call-1",
       mediaStreamId: "stream-1",
       segmentId: "seg-1",
+      playbackId: "playback-1",
+      generation: 1,
+      targetLegId: "guest-leg",
       targetSpeakerRole: "guest",
       telephonyAudio: { encoding: "mulaw8k", sampleRate: 8000, data: expect.any(String) },
     });
@@ -194,8 +205,12 @@ describe("PSTN providers", () => {
     });
     expect(writes[0]).toMatchObject({
       callId: "call-1",
+      sessionId: "call-1",
       providerCallId: "fonoster-call-1",
       mediaStreamId: "stream-1",
+      playbackId: "playback-1",
+      generation: 1,
+      targetLegId: "guest-leg",
       telephonyAudio: { encoding: "mulaw8k", sampleRate: 8000, data: expect.any(String) },
     });
   });
@@ -236,6 +251,7 @@ function fonosterConfig() {
 
 function agentCall() {
   return {
+    idempotencyKey: "pstn:place:call-1",
     draftId: "draft-1",
     callId: "call-1",
     targetPhone: "13800138000",
@@ -248,7 +264,12 @@ function agentCall() {
 function translatedAudio() {
   return {
     callId: "call-1",
+    sessionId: "call-1",
     segmentId: "seg-1",
+    playbackId: "playback-1",
+    generation: 1,
+    sourceLegId: "host-leg",
+    targetLegId: "guest-leg",
     sourceSpeakerRole: "host" as const,
     targetSpeakerRole: "guest" as const,
     language: "en" as const,

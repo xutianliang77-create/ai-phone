@@ -4,6 +4,12 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { buildApp } from "../../app.js";
 import { getStoreSnapshot } from "../../infrastructure/storage/json-store.js";
+import {
+  account,
+  restoreEnv,
+  session,
+  wavFixture,
+} from "./voice-profiles.test-support.js";
 
 describe("voice profile routes", () => {
   let previousReferenceDir: string | undefined;
@@ -201,6 +207,29 @@ describe("voice profile routes", () => {
     expect(response.json().error.code).toBe("unsupported_reference_audio_type");
   });
 
+  it("rejects quiet reference audio before syncing it", async () => {
+    const app = await buildApp();
+    await app.inject({
+      method: "POST",
+      url: "/voice-profiles/me",
+      payload: { consentAccepted: true, consentVersion: "domestic-voice-profile-v1" },
+    });
+    const response = await app.inject({
+      method: "POST",
+      url: "/voice-profiles/me/reference-audio",
+      payload: {
+        mimeType: "audio/wav",
+        durationMs: 5000,
+        audioBase64: wavFixture(0).toString("base64"),
+      },
+    });
+    await app.close();
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error.code).toBe("voice_reference_too_quiet");
+    expect(response.json().quality.accepted).toBe(false);
+  });
+
   it("keeps voice profiles isolated by account", async () => {
     const now = "2026-07-07T00:00:00.000Z";
     const store = getStoreSnapshot();
@@ -219,7 +248,6 @@ describe("voice profile routes", () => {
         displayName: "用户 A 的声音",
         consentAccepted: true,
         consentVersion: "domestic-voice-profile-v1",
-        referenceAudioId: "voice_a",
       },
     });
     const other = await app.inject({
@@ -231,118 +259,9 @@ describe("voice profile routes", () => {
 
     expect(created.json().profile).toMatchObject({
       displayName: "用户 A 的声音",
-      status: "ready",
-      referenceAudioId: "voice_a",
+      status: "pending_reference_audio",
     });
     expect(other.json().profile).toBeNull();
   });
 
-  it("synthesizes a playable test audio sample for a ready voice", async () => {
-    process.env.TTS_HTTP_ENDPOINT = "http://tts.local/tts/synthesize";
-    process.env.TTS_HTTP_API_KEY = "tts-secret";
-    const fetchMock = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
-      const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
-      expect(body).toMatchObject({
-        text: "你好，这是我的声音试听。",
-        language: "zh",
-        speakerRole: "guest",
-        voice: {
-          mode: "ultimate_clone",
-          voiceProfileId: expect.any(String),
-          referenceAudioId: expect.any(String),
-          referenceTranscript: "你好，我正在创建我的声音。",
-        },
-      });
-      expect(init?.headers).toMatchObject({
-        authorization: "Bearer tts-secret",
-      });
-      return new Response(JSON.stringify({
-        provider: "voxcpm2",
-        model: "VoxCPM2",
-        voiceMode: "ultimate_clone",
-        voiceProfileId: "voice-profile-1",
-        audio: { format: "pcm16", sampleRate: 24000, data: "AA==" },
-      }), { status: 200 });
-    });
-    globalThis.fetch = fetchMock as typeof fetch;
-
-    const app = await buildApp();
-    await app.inject({
-      method: "POST",
-      url: "/voice-profiles/me",
-      payload: {
-        consentAccepted: true,
-        consentVersion: "domestic-voice-profile-v1",
-        referenceAudioId: "voice-profile-1",
-        referenceTranscript: "请用自然语速朗读：你好，我正在创建我的声音。",
-      },
-    });
-    const response = await app.inject({
-      method: "POST",
-      url: "/voice-profiles/me/test-audio",
-      payload: {},
-    });
-    await app.close();
-
-    expect(response.statusCode).toBe(200);
-    expect(response.json()).toMatchObject({
-      text: "你好，这是我的声音试听。",
-      language: "zh",
-      provider: "voxcpm2",
-      model: "VoxCPM2",
-      audio: { format: "pcm16", sampleRate: 24000, data: "AA==" },
-    });
-    expect(fetchMock).toHaveBeenCalledOnce();
-  });
-
-  it("rejects test audio before the voice profile is ready", async () => {
-    const app = await buildApp();
-    await app.inject({
-      method: "POST",
-      url: "/voice-profiles/me",
-      payload: {
-        consentAccepted: true,
-        consentVersion: "domestic-voice-profile-v1",
-      },
-    });
-    const response = await app.inject({
-      method: "POST",
-      url: "/voice-profiles/me/test-audio",
-      payload: {},
-    });
-    await app.close();
-
-    expect(response.statusCode).toBe(409);
-    expect(response.json().error.code).toBe("voice_profile_not_ready");
-  });
 });
-
-function account(id: string, now: string) {
-  return {
-    id,
-    phoneHash: `phone-${id}`,
-    phoneMasked: "138****0000",
-    status: "active" as const,
-    createdAt: now,
-    updatedAt: now,
-    lastLoginAt: now,
-  };
-}
-
-function session(token: string, userId: string, now: string) {
-  return {
-    token,
-    userId,
-    createdAt: now,
-    expiresAt: "2099-01-01T00:00:00.000Z",
-  };
-}
-
-function wavFixture() {
-  return Buffer.from("524946462400000057415645666d7420", "hex");
-}
-
-function restoreEnv(key: string, value: string | undefined) {
-  if (value === undefined) delete process.env[key];
-  else process.env[key] = value;
-}

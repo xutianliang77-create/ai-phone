@@ -14,6 +14,7 @@ describe("domain lexicon", () => {
     const hotwords = asrHotwordsForTerminology(terms, corrections);
 
     expect(terms.some((term) => term.sourceText === "Qwen3 ASR")).toBe(true);
+    expect(terms.some((term) => term.sourceText === "同传")).toBe(true);
     expect(terms.some((term) => term.sourceText === "行动项")).toBe(true);
     expect(terms.some((term) => term.sourceText === "数据库")).toBe(true);
     expect(terms.some((term) => term.sourceText === "甲状腺")).toBe(true);
@@ -22,6 +23,7 @@ describe("domain lexicon", () => {
     expect(hotwords).toContain("客单价");
     expect(hotwords).toContain("网关");
     expect(hotwords).toContain("甲状腺");
+    expect(corrections).toContainEqual({ fromText: "同船", toText: "同传" });
   });
 
   it("keeps user terms and exposes ASR correction pairs", () => {

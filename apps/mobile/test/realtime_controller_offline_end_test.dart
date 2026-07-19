@@ -1,0 +1,101 @@
+import 'dart:async';
+
+import 'package:flutter_test/flutter_test.dart';
+import 'package:translation_mobile/src/features/realtime/data/gateway/gateway_realtime_event.dart';
+import 'package:translation_mobile/src/features/realtime/domain/entities/subtitle_segment.dart';
+import 'package:translation_mobile/src/features/realtime/presentation/controllers/realtime_controller.dart';
+
+import 'helpers/realtime_controller_test_helpers.dart';
+
+void main() {
+  test('enters local ended state while network finalization is pending', () async {
+    final repository = _DelayedEndRepository();
+    final controller = realtimeControllerForTest(
+      repository,
+      FakeAudioCapture(),
+    );
+    addTearDown(controller.dispose);
+
+    await controller.start();
+    final stopping = controller.stop();
+    await repository.endStarted;
+
+    expect(controller.status, RealtimeStatus.ended);
+
+    await controller.start();
+    expect(repository.startedSessionIds, <String>['sess_1']);
+
+    repository.releaseEnd();
+    await stopping;
+  });
+
+  test('shows a sync warning instead of a raw timeout after local end',
+      () async {
+    final repository = _TimeoutEndRepository();
+    final controller = realtimeControllerForTest(
+      repository,
+      FakeAudioCapture(),
+    );
+    addTearDown(controller.dispose);
+
+    await controller.start();
+    await controller.stop();
+
+    expect(controller.status, RealtimeStatus.ended);
+    expect(
+      controller.message,
+      'Session ended locally; history sync was not confirmed',
+    );
+    expect(controller.message, isNot(contains('TimeoutException')));
+  });
+
+  test('normalizes a serialized timeout emitted by the gateway', () async {
+    final repository = FakeRealtimeRepository();
+    final controller = realtimeControllerForTest(
+      repository,
+      FakeAudioCapture(),
+    );
+    addTearDown(controller.dispose);
+
+    await controller.start();
+    repository.emit(const GatewayRealtimeEvent.connection(
+      type: 'connection.closed',
+      message:
+          'TimeoutException after 0:00:08.000000: Future not completed',
+    ));
+    await pumpEventQueue();
+
+    expect(controller.status, RealtimeStatus.failed);
+    expect(controller.message, 'Realtime request timed out');
+    expect(controller.message, isNot(contains('TimeoutException')));
+  });
+}
+
+class _DelayedEndRepository extends FakeRealtimeRepository {
+  final _endStarted = Completer<void>();
+  final _endGate = Completer<void>();
+
+  Future<void> get endStarted => _endStarted.future;
+
+  @override
+  Future<void> end(
+    String sessionId,
+    List<SubtitleSegment> segments,
+  ) async {
+    endedSessionIds.add(sessionId);
+    _endStarted.complete();
+    await _endGate.future;
+  }
+
+  void releaseEnd() => _endGate.complete();
+}
+
+class _TimeoutEndRepository extends FakeRealtimeRepository {
+  @override
+  Future<void> end(
+    String sessionId,
+    List<SubtitleSegment> segments,
+  ) async {
+    throw TimeoutException('Future not completed');
+  }
+}

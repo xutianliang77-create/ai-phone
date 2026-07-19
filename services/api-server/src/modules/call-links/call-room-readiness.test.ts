@@ -31,6 +31,19 @@ describe("call room readiness", () => {
     expect(readiness.issues).toEqual([]);
     expect(readiness.internalApi.secret).toBe("configured");
   });
+
+  it("rejects room tokens longer than five minutes", () => {
+    configureLiveKit();
+    process.env.INTERNAL_API_SECRET = "internal-secret-123";
+    process.env.CALL_ROOM_TOKEN_TTL_SECONDS = "301";
+
+    const readiness = getCallRoomReadiness();
+
+    expect(readiness.status).toBe("not_ready");
+    expect(readiness.issues).toContain(
+      "call room CALL_ROOM_TOKEN_TTL_SECONDS must be 1-300",
+    );
+  });
 });
 
 const envKeys = [
@@ -47,7 +60,7 @@ function configureLiveKit() {
   process.env.LIVEKIT_URL = "wss://livekit.example.cn";
   process.env.LIVEKIT_API_KEY = "lk_key";
   process.env.LIVEKIT_API_SECRET = "lk_secret";
-  process.env.CALL_ROOM_TOKEN_TTL_SECONDS = "3600";
+  process.env.CALL_ROOM_TOKEN_TTL_SECONDS = "120";
 }
 
 function captureEnv() {

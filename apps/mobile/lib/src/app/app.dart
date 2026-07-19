@@ -39,7 +39,7 @@ class _TranslationAppState extends State<TranslationApp> {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'ai phone',
+      title: '无界AI',
       onGenerateTitle: (context) => context.l10n.appTitle,
       locale: _locale,
       localizationsDelegates: const <LocalizationsDelegate<dynamic>>[
@@ -52,6 +52,8 @@ class _TranslationAppState extends State<TranslationApp> {
       localeListResolutionCallback: _resolveLocaleList,
       localeResolutionCallback: _resolveLocale,
       theme: buildAppTheme(),
+      darkTheme: buildAppTheme(brightness: Brightness.dark),
+      themeMode: ThemeMode.system,
       onGenerateRoute: AppRouter.onGenerateRoute,
       builder: (context, child) => AppLanguageScope(
         locale: _locale ?? Localizations.localeOf(context),

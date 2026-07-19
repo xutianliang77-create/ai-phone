@@ -6,7 +6,13 @@ import { InMemoryProviderEventDeduper, type ProviderEventDeduper } from "./provi
 import { handleProviderMediaEvent } from "./provider-media-events.js";
 import { handleProviderStatusEvent } from "./provider-status-events.js";
 import { buildPstnProvider } from "./providers.js";
+import { handlePstnPlaybackControl } from "./pstn-playback-control.js";
+import {
+  InMemoryPstnDialGate,
+  type PstnDialGate,
+} from "./pstn-dial-gate.js";
 import { buildStatusWebhookSink } from "./status-webhook-sink.js";
+import { parseTranslatedAudioRequest } from "./translated-audio-request.js";
 import type {
   AgentCallBridgeRequest,
   PstnAudioFrameSink,
@@ -23,6 +29,7 @@ export interface PstnBridgeServerOptions {
   audioFrameSink?: PstnAudioFrameSink;
   statusWebhookSink?: PstnStatusWebhookSink;
   providerEventDeduper?: ProviderEventDeduper;
+  dialGate?: PstnDialGate;
   fetchFn?: typeof fetch;
 }
 
@@ -32,6 +39,7 @@ export function buildPstnBridgeServer(options: PstnBridgeServerOptions = {}) {
   const audioFrameSink = options.audioFrameSink ?? buildAudioFrameSink(config, options.fetchFn);
   const statusWebhookSink = options.statusWebhookSink ?? buildStatusWebhookSink(config, options.fetchFn);
   const providerEventDeduper = options.providerEventDeduper ?? new InMemoryProviderEventDeduper();
+  const dialGate = options.dialGate ?? new InMemoryPstnDialGate();
   return createServer(async (request, response) => {
     try {
       await handleRequest({
@@ -42,6 +50,7 @@ export function buildPstnBridgeServer(options: PstnBridgeServerOptions = {}) {
         audioFrameSink,
         statusWebhookSink,
         providerEventDeduper,
+        dialGate,
         hasAudioFrameSink: Boolean(options.audioFrameSink || config.audioFrameSinkEndpoint),
         hasStatusWebhookSink: Boolean(options.statusWebhookSink || config.statusWebhookEndpoint),
       });
@@ -61,6 +70,7 @@ async function handleRequest(context: {
   audioFrameSink: PstnAudioFrameSink;
   statusWebhookSink: PstnStatusWebhookSink;
   providerEventDeduper: ProviderEventDeduper;
+  dialGate: PstnDialGate;
   hasAudioFrameSink: boolean;
   hasStatusWebhookSink: boolean;
 }) {
@@ -81,13 +91,14 @@ async function handleRequest(context: {
     return;
   }
   if (request.method === "POST" && request.url === "/agent-calls") {
-    await handleAgentCall({ request, response, config, provider });
+    await handleAgentCall({ request, response, config, provider, dialGate: context.dialGate });
     return;
   }
   if (request.method === "POST" && request.url === "/translated-audio") {
     await handleTranslatedAudio({ request, response, config, provider });
     return;
   }
+  if (await handlePstnPlaybackControl({ request, response, config, provider })) return;
   if (request.method === "POST" && request.url === "/media-frames") {
     await handleMediaFrame(context);
     return;
@@ -108,6 +119,7 @@ async function handleAgentCall(context: {
   response: ServerResponse;
   config: PstnBridgeEnv;
   provider: PstnProvider;
+  dialGate: PstnDialGate;
 }) {
   if (!context.config.apiKey) {
     sendError(context.response, 503, "pstn_bridge_not_configured", "PSTN_BRIDGE_API_KEY is required");
@@ -122,7 +134,14 @@ async function handleAgentCall(context: {
     sendError(context.response, 400, "invalid_agent_call", "invalid agent call payload");
     return;
   }
-  const result = await context.provider.placeCall(body);
+  if (context.request.headers["idempotency-key"] !== body.idempotencyKey) {
+    sendError(context.response, 400, "invalid_idempotency_key", "idempotency key mismatch");
+    return;
+  }
+  const result = await context.dialGate.execute(
+    body,
+    () => context.provider.placeCall(body),
+  );
   sendJson(context.response, 200, { status: result.status ?? "in_progress", ...result });
 }
 
@@ -189,16 +208,19 @@ async function handleMediaFrame(context: {
 function parseAgentCallRequest(input: unknown): AgentCallBridgeRequest | null {
   if (!input || typeof input !== "object") return null;
   const body = input as Record<string, unknown>;
+  const idempotencyKey = text(body.idempotencyKey, 160);
   const draftId = text(body.draftId, 120);
   const callId = text(body.callId, 120);
   const targetPhone = text(body.targetPhone, 80);
   const objective = text(body.objective, 800);
   const suggestedScript = text(body.suggestedScript, 1200);
   const language = text(body.language, 20);
-  if (!draftId || !callId || !targetPhone || !objective || !suggestedScript || !language) {
+  if (!idempotencyKey || !draftId || !callId || !targetPhone || !objective ||
+    !suggestedScript || !language) {
     return null;
   }
   return {
+    idempotencyKey,
     draftId,
     callId,
     targetPhone,
@@ -208,47 +230,6 @@ function parseAgentCallRequest(input: unknown): AgentCallBridgeRequest | null {
     ...optionalText("targetName", body.targetName, 120),
     ...optionalText("consentPromptVersion", body.consentPromptVersion, 120),
   };
-}
-
-function parseTranslatedAudioRequest(input: unknown): TtsAudioSinkRequest | null {
-  if (!input || typeof input !== "object") return null;
-  const body = input as Record<string, unknown>;
-  const callId = text(body.callId, 120);
-  const segmentId = text(body.segmentId, 120);
-  const sourceSpeakerRole = speakerRole(body.sourceSpeakerRole);
-  const targetSpeakerRole = speakerRole(body.targetSpeakerRole);
-  const language = languageCode(body.language);
-  const audio = parseAudio(body.audio);
-  if (!callId || !segmentId || !sourceSpeakerRole || !targetSpeakerRole || !language || !audio) {
-    return null;
-  }
-  if (sourceSpeakerRole === targetSpeakerRole) return null;
-  return {
-    callId,
-    segmentId,
-    sourceSpeakerRole,
-    targetSpeakerRole,
-    language,
-    audio,
-    ...optionalText("providerCallId", body.providerCallId, 160),
-    ...optionalText("mediaStreamId", body.mediaStreamId, 160),
-    ...optionalText("provider", body.provider, 80),
-    ...optionalText("model", body.model, 120),
-    ...optionalNumber("firstAudioMs", body.firstAudioMs),
-    ...optionalNumber("audioDurationMs", body.audioDurationMs),
-  };
-}
-
-function parseAudio(input: unknown): TtsAudioSinkRequest["audio"] | null {
-  if (!input || typeof input !== "object") return null;
-  const audio = input as Record<string, unknown>;
-  const data = text(audio.data, 2_000_000);
-  const sampleRate = audio.sampleRate === 16000 || audio.sampleRate === 24000
-    ? audio.sampleRate
-    : null;
-  return audio.format === "pcm16" && sampleRate && data
-    ? { format: "pcm16", sampleRate, data }
-    : null;
 }
 
 function parseMediaFrameRequest(input: unknown): PstnMediaFrameRequest | null {
@@ -326,10 +307,6 @@ function text(value: unknown, maxLength: number) {
 
 function speakerRole(value: unknown): TtsAudioSinkRequest["sourceSpeakerRole"] | null {
   return value === "host" || value === "guest" ? value : null;
-}
-
-function languageCode(value: unknown): TtsAudioSinkRequest["language"] | null {
-  return value === "zh" || value === "en" ? value : null;
 }
 
 function errorMessage(error: unknown) {

@@ -41,7 +41,9 @@ describe("call room worker event routes", () => {
           stage: event.stage,
           retryable: event.retryable,
           ...(event.voiceMode ? { voiceMode: event.voiceMode } : {}),
-          ...(event.voiceProfileId ? { voiceProfileId: event.voiceProfileId } : {}),
+          ...(event.voiceProfileId
+            ? { voiceProfileId: event.voiceProfileId }
+            : {}),
         });
       },
     } satisfies CallRoomDataPublisher);
@@ -84,7 +86,12 @@ describe("call room worker event routes", () => {
       sessionId: callId,
       roomName: `call_${callId}`,
       topic: "translation.captions",
-      publishedEvents: ["worker.status", "transcript.final", "translation.final", "tts.ready"],
+      publishedEvents: [
+        "worker.status",
+        "transcript.final",
+        "translation.final",
+        "tts.ready",
+      ],
     });
     expect(published).toEqual([
       {
@@ -123,6 +130,17 @@ describe("call room worker event routes", () => {
         id: "segment-1",
         sourceText: "hello from guest",
         translatedText: "你好，来自访客。",
+        speaker: {
+          speakerId: "guest",
+          role: "guest",
+          source: "participant_track",
+          confidence: 1,
+        },
+        timing: {
+          startMs: 1,
+          endMs: 1,
+          source: "participant_track",
+        },
       },
     ]);
   });
@@ -212,6 +230,30 @@ describe("call room worker event routes", () => {
     expect(response.statusCode).toBe(400);
     expect(response.json().error.code).toBe("invalid_call_room_event");
   });
+
+  it("rejects worker events bound to another session", async () => {
+    configureCallRoomEnv();
+    process.env.INTERNAL_API_SECRET = "internal-secret-123";
+    const app = await buildApp();
+    const created = await app.inject({ method: "POST", url: "/call-links" });
+    const callId = created.json().callId as string;
+    const response = await app.inject({
+      method: "POST",
+      url: `/internal/call-links/${callId}/events`,
+      headers: { authorization: "Bearer internal-secret-123" },
+      payload: {
+        sessionId: "another-session",
+        events: [eventPayload("transcript.final", "segment-1", "hello")],
+      },
+    });
+    const session = getStoreSnapshot().sessions.find((item) => item.id === callId);
+    await app.close();
+
+    expect(response.statusCode).toBe(409);
+    expect(response.json().error.code).toBe("call_link_binding_conflict");
+    expect(session?.segments).toEqual([]);
+  });
+
 });
 
 const envKeys = [
@@ -261,7 +303,7 @@ function configureCallRoomEnv() {
   process.env.LIVEKIT_URL = "wss://livekit.example.cn";
   process.env.LIVEKIT_API_KEY = "lk_key";
   process.env.LIVEKIT_API_SECRET = "lk_secret";
-  process.env.CALL_ROOM_TOKEN_TTL_SECONDS = "3600";
+  process.env.CALL_ROOM_TOKEN_TTL_SECONDS = "120";
 }
 
 function captureEnv() {
@@ -295,6 +337,8 @@ function resetStore() {
   store.billingLedger = [];
   store.appleServerNotifications = [];
   store.appErrorReports = [];
+  store.inboxEvents = [];
+  store.outboxEvents = [];
 }
 
 function decodeJwtPayload(token: string) {

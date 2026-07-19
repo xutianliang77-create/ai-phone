@@ -1,0 +1,61 @@
+{
+  "schemaVersion": 1,
+  "status": "unexecuted",
+  "environment": "staging",
+  "runId": "replace-after-staging-run",
+  "topologySha256": "replace-with-topology-sha256",
+  "stages": [
+    {
+      "concurrentSessions": 25,
+      "durationMinutes": 30,
+      "status": "unexecuted",
+      "sloPassed": false
+    },
+    {
+      "concurrentSessions": 50,
+      "durationMinutes": 10,
+      "status": "unexecuted",
+      "sloPassed": false
+    },
+    {
+      "concurrentSessions": 100,
+      "durationMinutes": 30,
+      "status": "unexecuted",
+      "sloPassed": false
+    }
+  ],
+  "soak": {
+    "targetUtilization": 0.7,
+    "durationMinutes": 120,
+    "realProviderTraffic": false,
+    "trafficKinds": [
+      "api",
+      "livekit",
+      "sip",
+      "asr",
+      "mt",
+      "tts",
+      "agent",
+      "egress"
+    ],
+    "status": "unexecuted",
+    "sloPassed": false
+  },
+  "admission": {
+    "observedUtilization": 0.85,
+    "rejectionObserved": false,
+    "oomCount": 0,
+    "unboundedQueueObserved": false,
+    "status": "unexecuted"
+  },
+  "failureInjection": {
+    "status": "unexecuted"
+  },
+  "totals": {
+    "providerSideEffectDuplicates": 0,
+    "lostFinalEvents": 0,
+    "duplicateSettlements": 0,
+    "finalCoverageRatio": 0
+  },
+  "evidence": []
+}

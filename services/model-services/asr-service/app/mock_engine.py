@@ -29,11 +29,25 @@ class MockAsrEngine:
             text=text,
             language=language,
             confidence=0.9,
+            timing={
+                "startMs": request.timestampMs,
+                "endMs": request.timestampMs,
+                "source": "client",
+            },
         )
 
     async def flush(
         self,
         session_id: str,
+        source_language: LanguageCode,
+        target_language: TranslationLanguageCode,
+    ) -> AsrTranscribeResponse | None:
+        return None
+
+    async def commit_boundary(
+        self,
+        session_id: str,
+        boundary_ms: int,
         source_language: LanguageCode,
         target_language: TranslationLanguageCode,
     ) -> AsrTranscribeResponse | None:

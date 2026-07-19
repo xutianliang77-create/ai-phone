@@ -10,14 +10,64 @@ def test_health_route_mock() -> None:
     response = client.get("/health")
 
     assert response.status_code == 200
-    assert response.json() == {
+    body = response.json()
+    fingerprint = body.pop("runtimeFingerprint")
+    assert len(fingerprint) == 64
+    assert body == {
         "status": "ok",
         "service": "translation-service",
         "provider": "mock",
         "modelVersion": "tencent/Hy-MT2-1.8B",
         "available": True,
         "reason": None,
+        "runtimeSignatureVersion": 1,
     }
+
+
+def test_metrics_exposes_runtime_identity_without_secrets() -> None:
+    client = TestClient(create_app(TranslationConfig(
+        api_key="translation-secret",
+        metrics_bearer_token="metrics-secret",
+        hymt2_model_dir="/secret/model/path",
+    )))
+
+    assert client.get("/metrics").status_code == 401
+    response = client.get(
+        "/metrics",
+        headers={"authorization": "Bearer metrics-secret"},
+    )
+
+    assert response.status_code == 200
+    assert "wujie_model_service_info" in response.text
+    assert "wujie_translation_active 0" in response.text
+    assert "wujie_translation_pending 0" in response.text
+    assert client.get("/health").json()["runtimeFingerprint"] in response.text
+    assert "translation-secret" not in response.text
+    assert "metrics-secret" not in response.text
+    assert "/secret/model/path" not in response.text
+
+
+def test_runtime_fingerprint_changes_with_effective_parameters() -> None:
+    first = TestClient(create_app(TranslationConfig(
+        provider="hymt2",
+        hymt2_model_dir="/missing/model",
+        max_new_tokens=64,
+    )))
+    second = TestClient(create_app(TranslationConfig(
+        provider="hymt2",
+        hymt2_model_dir="/missing/model",
+        max_new_tokens=128,
+    )))
+
+    assert first.get("/health").json()["runtimeFingerprint"] != (
+        second.get("/health").json()["runtimeFingerprint"]
+    )
+
+
+def test_metrics_fails_closed_without_a_bearer_token() -> None:
+    client = TestClient(create_app(TranslationConfig()))
+
+    assert client.get("/metrics").status_code == 503
 
 
 def test_models_route_is_openai_compatible() -> None:
@@ -41,12 +91,43 @@ def test_chat_completions_translates_to_chinese() -> None:
     assert response.json()["choices"][0]["message"]["content"].startswith("你好")
 
 
+def test_chat_completions_streams_openai_compatible_deltas() -> None:
+    client = TestClient(create_app(TranslationConfig()))
+    body = payload(user="hello")
+    body["stream"] = True
+
+    response = client.post("/v1/chat/completions", json=body)
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/event-stream")
+    assert '"delta": {"content":' in response.text
+    assert "data: [DONE]" in response.text
+
+
 def test_chat_completions_extracts_source_text_block() -> None:
     client = TestClient(create_app(TranslationConfig()))
 
     response = client.post("/v1/chat/completions", json=payload(
         system="把 SOURCE_TEXT 标记内的简体中文原文翻译成英文。",
         user="SOURCE_TEXT\n那我等会儿给你发图纸。\nEND_SOURCE_TEXT",
+    ))
+
+    assert response.status_code == 200
+    assert response.json()["choices"][0]["message"]["content"] == (
+        "I will send you the drawings later."
+    )
+
+
+def test_chat_completions_ignores_context_when_extracting_current_source() -> None:
+    client = TestClient(create_app(TranslationConfig()))
+    response = client.post("/v1/chat/completions", json=payload(
+        system="把 SOURCE_TEXT 标记内的简体中文原文翻译成英文。",
+        user=(
+            "READ_ONLY_CONTEXT\n上一句 => Previous sentence\nEND_READ_ONLY_CONTEXT\n"
+            "GLOSSARY\n图纸 => drawings\nEND_GLOSSARY\n"
+            "PROTECTED_ENTITIES\nA-120\nEND_PROTECTED_ENTITIES\n"
+            "SOURCE_TEXT\n那我等会儿给你发图纸。\nEND_SOURCE_TEXT"
+        ),
     ))
 
     assert response.status_code == 200

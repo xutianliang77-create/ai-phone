@@ -1,6 +1,10 @@
 const envKeys = [
+  "DOMESTIC_RELEASE_CAPABILITY_PROFILE",
   "PAYMENT_REQUIRED_PROVIDERS",
   "NODE_ENV",
+  "PUBLIC_RATE_LIMIT_PROVIDER",
+  "PUBLIC_RATE_LIMIT_REDIS_URL",
+  "PUBLIC_RATE_LIMIT_KEY_SECRET",
   "AUTH_OTP_SECRET",
   "AUTH_DEBUG_OTP",
   "API_TEST_AUTO_ACCOUNT",
@@ -29,6 +33,23 @@ const envKeys = [
   "LIVEKIT_API_SECRET",
   "CALL_ROOM_TOKEN_TTL_SECONDS",
   "INTERNAL_API_SECRET",
+  "TRANSLATION_WORKER_RUNTIME_PROVIDER",
+  "LIVEKIT_DISPATCH_TICKET_SECRET",
+  "LIVEKIT_TRANSLATION_AGENT_NAME",
+  "LIVEKIT_EGRESS_ENABLED",
+  "LIVEKIT_EGRESS_ARTIFACT_WORKER_ENABLED",
+  "LIVEKIT_EGRESS_S3_BUCKET",
+  "LIVEKIT_EGRESS_S3_REGION",
+  "LIVEKIT_EGRESS_S3_ACCESS_KEY",
+  "LIVEKIT_EGRESS_S3_SECRET_KEY",
+  "LIVEKIT_EGRESS_OBJECT_PREFIX",
+  "AGENT_CALL_WORKER_ENABLED",
+  "AGENT_CALL_PROVIDER_ADAPTER",
+  "PSTN_PROVIDER_IDEMPOTENCY_GUARANTEED",
+  "VOICE_AGENT_ENABLED",
+  "VOICE_AGENT_ASSIST_ENABLED",
+  "VOICE_AGENT_AUTONOMOUS_ENABLED",
+  "VOICE_AGENT_OPERATOR_CONSULT_ENABLED",
   "CALL_PROVIDER_POLICY",
   "PSTN_PROVIDER",
   "PSTN_ACCOUNT_ID",
@@ -82,6 +103,7 @@ export function configurePaymentEnv() {
 
 export function configureAccountEnv() {
   process.env.NODE_ENV = "production";
+  process.env.PUBLIC_RATE_LIMIT_PROVIDER = "memory";
   process.env.AUTH_OTP_SECRET = "otp_secret_012345678901234567890123";
   delete process.env.AUTH_DEBUG_OTP;
   process.env.API_TEST_AUTO_ACCOUNT = "false";
@@ -99,12 +121,23 @@ export function configureDiagnosticsEnv() {
 }
 
 export function configureCallRoomEnv() {
+  process.env.DOMESTIC_RELEASE_CAPABILITY_PROFILE = "core_translation";
   process.env.CALL_ROOM_PROVIDER = "livekit";
   process.env.LIVEKIT_URL = "wss://livekit.example.cn";
   process.env.LIVEKIT_API_KEY = "lk_key";
   process.env.LIVEKIT_API_SECRET = "lk_secret";
-  process.env.CALL_ROOM_TOKEN_TTL_SECONDS = "3600";
+  process.env.CALL_ROOM_TOKEN_TTL_SECONDS = "120";
   process.env.INTERNAL_API_SECRET = "internal-secret-123";
+  process.env.TRANSLATION_WORKER_RUNTIME_PROVIDER = "livekit_dispatch";
+  process.env.LIVEKIT_DISPATCH_TICKET_SECRET = "dispatch-secret-012345678901234567890";
+  process.env.LIVEKIT_TRANSLATION_AGENT_NAME = "translation-runtime";
+  process.env.LIVEKIT_EGRESS_ENABLED = "false";
+  process.env.LIVEKIT_EGRESS_ARTIFACT_WORKER_ENABLED = "false";
+  process.env.LIVEKIT_EGRESS_S3_BUCKET = "recordings-test";
+  process.env.LIVEKIT_EGRESS_S3_REGION = "cn-test-1";
+  process.env.LIVEKIT_EGRESS_S3_ACCESS_KEY = "recording-access";
+  process.env.LIVEKIT_EGRESS_S3_SECRET_KEY = "recording-secret-0123456789";
+  process.env.LIVEKIT_EGRESS_OBJECT_PREFIX = "recordings";
 }
 
 export function configureSmsEnv() {

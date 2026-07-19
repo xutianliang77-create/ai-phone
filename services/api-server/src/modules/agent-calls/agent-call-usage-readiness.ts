@@ -1,9 +1,9 @@
-import { getUsageBalance } from "../usage/usage.service.js";
+import { getUsageBalance } from "../usage/usage-hold-runtime.service.js";
 
 export const AGENT_CALL_MINIMUM_START_SECONDS = 60;
 
-export function getAgentCallUsageReadiness(userId: string) {
-  const balance = getUsageBalance(userId);
+export async function getAgentCallUsageReadiness(userId: string) {
+  const balance = await getUsageBalance(userId);
   const ready = balance.availableSeconds >= AGENT_CALL_MINIMUM_START_SECONDS;
   return {
     status: ready ? "ready" as const : "not_ready" as const,

@@ -31,6 +31,10 @@ describe("translation worker env", () => {
     expect(env.ttsProvider).toBe("voxcpm2");
     expect(env.ttsModel).toBe("VoxCPM2");
     expect(env.ttsHttpEndpoint).toBe("http://models.local:8002/tts/synthesize");
+    expect(env.modelRoutingProfile).toBe("domestic");
+    expect(env.asrProvider).toBe("http_fireredasr2_aed");
+    expect(env.asrModel).toBe("FireRedASR2-AED");
+    expect(env.translationProvider).toBe("hymt2_self_hosted");
   });
 
   it("lets explicit environment variables override model routing defaults", () => {
@@ -56,6 +60,107 @@ describe("translation worker env", () => {
       referenceAudioId: "my_voice",
       controlPrompt: "clear and calm",
     });
+  });
+
+  it("defaults to cascade and validates native speech pipeline modes", () => {
+    process.env = {};
+    expect(loadEnv().speechPipelineMode).toBe("cascade");
+
+    process.env = { SPEECH_PIPELINE_MODE: "shadow" };
+    expect(loadEnv().speechPipelineMode).toBe("shadow");
+
+    process.env = { SPEECH_PIPELINE_MODE: "invalid" };
+    expect(() => loadEnv()).toThrow("Unsupported SPEECH_PIPELINE_MODE");
+  });
+
+  it("keeps full duplex disabled by default and validates its thresholds", () => {
+    process.env = {};
+    expect(loadEnv().pipelineEndGraceMs).toBe(1500);
+    expect(loadEnv().duplexConfig).toEqual({
+      enabled: false,
+      minSpeechMs: 240,
+      minProbability: 0.5,
+      cooldownMs: 800,
+      preRollMs: 400,
+      echoGateEnabled: true,
+      echoMinSpeechMs: 480,
+      echoMinProbability: 0.72,
+      backchannelMaxSpeechMs: 360,
+    });
+
+    process.env = {
+      CALL_FULL_DUPLEX_ENABLED: "true",
+      CALL_BARGE_IN_MIN_SPEECH_MS: "300",
+      CALL_BARGE_IN_MIN_PROBABILITY: "0.7",
+      CALL_BARGE_IN_COOLDOWN_MS: "900",
+      CALL_BARGE_IN_PRE_ROLL_MS: "500",
+      CALL_ECHO_START_GATE_ENABLED: "false",
+      CALL_ECHO_BARGE_IN_MIN_SPEECH_MS: "520",
+      CALL_ECHO_BARGE_IN_MIN_PROBABILITY: "0.78",
+      CALL_BACKCHANNEL_MAX_SPEECH_MS: "400",
+    };
+    expect(loadEnv().duplexConfig).toEqual({
+      enabled: true,
+      minSpeechMs: 300,
+      minProbability: 0.7,
+      cooldownMs: 900,
+      preRollMs: 500,
+      echoGateEnabled: false,
+      echoMinSpeechMs: 520,
+      echoMinProbability: 0.78,
+      backchannelMaxSpeechMs: 400,
+    });
+
+    process.env.CALL_BARGE_IN_MIN_PROBABILITY = "1.1";
+    expect(loadEnv().duplexConfig.minProbability).toBe(0.5);
+    process.env.CALL_PIPELINE_END_GRACE_MS = "2500";
+    expect(loadEnv().pipelineEndGraceMs).toBe(2500);
+    process.env.CALL_PIPELINE_END_GRACE_MS = "10001";
+    expect(loadEnv().pipelineEndGraceMs).toBe(1500);
+  });
+
+  it("bounds the per-leg audio ingest queue capacity", () => {
+    process.env = {};
+    expect(loadEnv().audioIngestMaxFrames).toBe(20);
+
+    process.env = { TRANSLATION_WORKER_AUDIO_INGEST_MAX_FRAMES: "48" };
+    expect(loadEnv().audioIngestMaxFrames).toBe(48);
+
+    process.env = { TRANSLATION_WORKER_AUDIO_INGEST_MAX_FRAMES: "201" };
+    expect(loadEnv().audioIngestMaxFrames).toBe(20);
+
+    process.env = { TRANSLATION_WORKER_AUDIO_INGEST_MAX_FRAMES: "4.5" };
+    expect(loadEnv().audioIngestMaxFrames).toBe(20);
+  });
+
+  it("bounds the RTC sampling interval", () => {
+    process.env = { TRANSLATION_WORKER_RTC_STATS_INTERVAL_MS: "10000" };
+    expect(loadEnv().rtcStatsIntervalMs).toBe(10000);
+
+    process.env = { TRANSLATION_WORKER_RTC_STATS_INTERVAL_MS: "999" };
+    expect(loadEnv().rtcStatsIntervalMs).toBe(5000);
+  });
+
+  it("bounds the Agent node TTS prewarm timeout", () => {
+    process.env = {};
+    expect(loadEnv().ttsAgentPrewarmTimeoutMs).toBe(60000);
+
+    process.env = { TTS_AGENT_PREWARM_TIMEOUT_MS: "90000" };
+    expect(loadEnv().ttsAgentPrewarmTimeoutMs).toBe(90000);
+
+    process.env = { TTS_AGENT_PREWARM_TIMEOUT_MS: "999" };
+    expect(loadEnv().ttsAgentPrewarmTimeoutMs).toBe(60000);
+
+    process.env = { TTS_AGENT_PREWARM_TIMEOUT_MS: "120001" };
+    expect(loadEnv().ttsAgentPrewarmTimeoutMs).toBe(60000);
+  });
+
+  it("configures the PSTN audio sink bind address", () => {
+    process.env = {
+      TRANSLATION_WORKER_AUDIO_FRAME_SINK_HOST: "10.20.30.42",
+    };
+
+    expect(loadEnv().audioFrameSinkHost).toBe("10.20.30.42");
   });
 });
 

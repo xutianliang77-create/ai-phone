@@ -90,7 +90,12 @@ describe("pstn bridge server", () => {
     expect(accepted.body).toEqual({ status: "queued", providerPlaybackId: "playback-1" });
     expect(playbackRequests[0]).toMatchObject({
       callId: "call-1",
+      sessionId: "call-1",
       segmentId: "seg-1",
+      playbackId: "playback-1",
+      generation: 1,
+      sourceLegId: "host-leg",
+      targetLegId: "guest-leg",
       sourceSpeakerRole: "host",
       targetSpeakerRole: "guest",
       language: "en",
@@ -120,6 +125,71 @@ describe("pstn bridge server", () => {
     expect(rejected.status).toBe(400);
     expect(rejected.body.error.code).toBe("invalid_translated_audio");
     expect(playbackCount).toBe(0);
+  });
+
+  it("rejects translated audio bound to another session", async () => {
+    let playbackCount = 0;
+    const provider: PstnProvider = {
+      async placeCall() {
+        return { status: "in_progress" };
+      },
+      async playTranslatedAudio() {
+        playbackCount += 1;
+        return { status: "queued" };
+      },
+    };
+    const baseUrl = await startBridge({ PSTN_BRIDGE_API_KEY: "bridge-secret" }, { provider });
+
+    const rejected = await requestJson(`${baseUrl}/translated-audio`, {
+      method: "POST",
+      bearerToken: "bridge-secret",
+      body: { ...translatedAudio(), sessionId: "call-2" },
+    });
+
+    expect(rejected.status).toBe(400);
+    expect(rejected.body.error.code).toBe("invalid_translated_audio");
+    expect(playbackCount).toBe(0);
+  });
+
+  it("reports playback capabilities and refuses unsupported clear requests", async () => {
+    const provider: PstnProvider = {
+      playbackCapabilities: {
+        bidirectionalMedia: false,
+        streamingWrite: false,
+        clearPlayback: false,
+      },
+      async placeCall() {
+        return { status: "in_progress" };
+      },
+      async playTranslatedAudio() {
+        return { status: "queued" };
+      },
+    };
+    const baseUrl = await startBridge({ PSTN_BRIDGE_API_KEY: "bridge-secret" }, { provider });
+
+    const capabilities = await requestJson(
+      `${baseUrl}/internal/playback-sinks/pstn/capabilities`,
+      { bearerToken: "bridge-secret" },
+    );
+    const rejected = await requestJson(
+      `${baseUrl}/internal/calls/call-1/playbacks/playback-1/interrupt`,
+      {
+        method: "POST",
+        bearerToken: "bridge-secret",
+        body: {
+          sessionId: "call-1",
+          targetLegId: "guest-leg",
+          generation: 1,
+          reason: "barge_in",
+          idempotencyKey: "interrupt:call-1:playback-1:1",
+        },
+      },
+    );
+
+    expect(capabilities.status).toBe(200);
+    expect(capabilities.body).toEqual(provider.playbackCapabilities);
+    expect(rejected.status).toBe(409);
+    expect(rejected.body.error.code).toBe("playback_clear_unsupported");
   });
 
   it("accepts PSTN media frames and forwards normalized PCM16 audio", async () => {
@@ -202,6 +272,7 @@ describe("pstn bridge server", () => {
 
 function agentCall() {
   return {
+    idempotencyKey: "pstn:place:call-1",
     draftId: "draft-1",
     callId: "call-1",
     targetPhone: "13800138000",
@@ -214,7 +285,12 @@ function agentCall() {
 function translatedAudio() {
   return {
     callId: "call-1",
+    sessionId: "call-1",
     segmentId: "seg-1",
+    playbackId: "playback-1",
+    generation: 1,
+    sourceLegId: "host-leg",
+    targetLegId: "guest-leg",
     sourceSpeakerRole: "host",
     targetSpeakerRole: "guest",
     language: "en",
@@ -258,6 +334,10 @@ async function requestJson(url: string, options: {
     headers: {
       ...(options.body ? { "content-type": "application/json" } : {}),
       ...(options.bearerToken ? { authorization: `Bearer ${options.bearerToken}` } : {}),
+      ...(options.body && typeof options.body === "object" &&
+          "idempotencyKey" in options.body
+        ? { "idempotency-key": String(options.body.idempotencyKey) }
+        : {}),
     },
     body: options.body ? JSON.stringify(options.body) : undefined,
   });

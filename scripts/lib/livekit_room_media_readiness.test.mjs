@@ -2,19 +2,23 @@ import { describe, expect, it } from "vitest";
 import { checkLiveKitRoomMediaReadiness } from "./livekit_room_media_readiness.mjs";
 
 describe("checkLiveKitRoomMediaReadiness", () => {
-  it("connects host, guest, and worker through data and audio media", async () => {
+  it("connects host, guest, and worker through trusted caption and audio media", async () => {
+    const rtc = createFakeRtcNode();
     const result = await checkLiveKitRoomMediaReadiness({
       apiBaseUrl: "http://127.0.0.1:3410",
       internalApiSecret: "internal-secret-123",
       timeoutMs: 100,
       fetchFn: fakeFetch,
-      loadRtcNode: async () => createFakeRtcNode(),
+      loadRtcNode: async () => rtc,
+      submitServerCaption: async (event) => rtc.broadcastData(event),
     });
 
     expect(result.status).toBe("ready");
     expect(result.callId).toBe("call_1");
+    expect(check(result, "single_participant_waits").status).toBe("pass");
+    expect(check(result, "human_pair_activates_worker").status).toBe("pass");
     expect(check(result, "participants_joined_room").status).toBe("pass");
-    expect(check(result, "data_channel_received").status).toBe("pass");
+    expect(check(result, "server_caption_data_received").status).toBe("pass");
     expect(check(result, "worker_audio_subscribed")).toMatchObject({
       status: "pass",
       details: {
@@ -69,6 +73,7 @@ async function fakeFetch(url, init = {}) {
       callId: "call_1",
       sessionId: "call_1",
       roomName: "call_call_1",
+      joinUrl: "https://example.test/call/call_1?ticket=guest-ticket-1",
     });
   }
   if (path.endsWith("/room-token") && init.method === "POST") {
@@ -77,6 +82,13 @@ async function fakeFetch(url, init = {}) {
   }
   if (path.endsWith("/worker-room-token") && init.method === "POST") {
     return jsonResponse(roomToken("worker"));
+  }
+  if (path.endsWith("/room-connected") && init.method === "POST") {
+    const body = JSON.parse(init.body);
+    return jsonResponse({
+      status: body.participantRole === "host" ? "active" : "waiting",
+      workerReady: body.participantRole === "host",
+    });
   }
   return jsonResponse({ error: { message: "not found" } }, 404);
 }
@@ -89,6 +101,7 @@ function roomToken(role) {
     roomName: "call_call_1",
     wsUrl: "ws://livekit.example.cn",
     participantRole: role,
+    participantIdentity: `call_1:${role}:fake`,
     token: role,
     expiresAt: "2026-07-05T01:00:00.000Z",
   };
@@ -136,13 +149,6 @@ function createFakeRtcNode() {
       this.room = room;
       this.rooms = rooms;
       this.identity = `call_1:${role}:fake`;
-    }
-
-    async publishData(data) {
-      for (const room of this.rooms) {
-        if (room === this.room) continue;
-        room.emit("dataReceived", data, this);
-      }
     }
 
     async publishTrack(track) {
@@ -205,6 +211,10 @@ function createFakeRtcNode() {
     },
     TrackPublishOptions: class {},
     TrackSource: { SOURCE_MICROPHONE: "microphone" },
+    broadcastData(event) {
+      const data = new TextEncoder().encode(JSON.stringify(event));
+      for (const room of connectedRooms) room.emit("dataReceived", data, null);
+    },
     async dispose() {},
   };
 }

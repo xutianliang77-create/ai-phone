@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:translation_mobile/src/features/realtime/data/realtime_runtime_settings.dart';
 
 import 'widget_test.dart';
 
@@ -66,5 +67,34 @@ void main() {
 
     expect(find.text('Talk'), findsOneWidget);
     expect(find.text('Listening'), findsOneWidget);
+  });
+
+  testWidgets('keeps Listening silent without losing the Talk voice setting',
+      (tester) async {
+    await pumpAcceptedApp(tester);
+    await tester.tap(find.byTooltip('自动朗读译文'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('语言'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('同传设置'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('聆听'));
+    await tester.pumpAndSettle();
+    var selector = tester.widget<SegmentedButton<RealtimeVoiceOutputMode>>(
+      find.byType(SegmentedButton<RealtimeVoiceOutputMode>),
+    );
+    expect(selector.onSelectionChanged, isNull);
+    expect(selector.selected,
+        <RealtimeVoiceOutputMode>{RealtimeVoiceOutputMode.off});
+
+    await tester.tap(find.text('对话'));
+    await tester.pumpAndSettle();
+    selector = tester.widget<SegmentedButton<RealtimeVoiceOutputMode>>(
+      find.byType(SegmentedButton<RealtimeVoiceOutputMode>),
+    );
+    expect(selector.onSelectionChanged, isNotNull);
+    expect(selector.selected,
+        <RealtimeVoiceOutputMode>{RealtimeVoiceOutputMode.natural});
   });
 }

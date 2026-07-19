@@ -14,16 +14,28 @@ class TranslationService:
         return self.engine.health()
 
     def translate_chat(self, request: ChatCompletionRequest) -> str:
+        return self.engine.translate(self.translation_input(request))
+
+    def translate_batch(self, requests: list[TranslationInput]) -> list[str]:
+        return self.engine.translate_batch(requests)
+
+    def translate_chat_stream(self, request: ChatCompletionRequest):
+        return self.engine.translate_stream(self.translation_input(request))
+
+    def translation_input(self, request: ChatCompletionRequest) -> TranslationInput:
         target_language = target_language_from_messages(request)
         source_text = source_text_from_messages(request)
         max_tokens = request.max_tokens or self.config.max_new_tokens
         if not source_text:
             raise ValueError("empty source text")
-        return self.engine.translate(TranslationInput(
+        return TranslationInput(
             text=source_text,
             target_language=target_language,
             max_tokens=max_tokens,
-        ))
+            previous_segments=tagged_pairs(request, "READ_ONLY_CONTEXT"),
+            glossary=tagged_pairs(request, "GLOSSARY"),
+            protected_entities=tagged_lines(request, "PROTECTED_ENTITIES"),
+        )
 
 
 def source_text_from_messages(request: ChatCompletionRequest) -> str:
@@ -31,6 +43,35 @@ def source_text_from_messages(request: ChatCompletionRequest) -> str:
     text = users[-1].strip() if users else ""
     match = re.search(r"SOURCE_TEXT\s*(.*?)\s*END_SOURCE_TEXT", text, re.S)
     return (match.group(1) if match else text).strip()
+
+
+def tagged_pairs(
+    request: ChatCompletionRequest,
+    tag: str,
+) -> tuple[tuple[str, str], ...]:
+    pairs: list[tuple[str, str]] = []
+    for line in tagged_lines(request, tag):
+        source, separator, target = line.partition("=>")
+        if separator and source.strip() and target.strip():
+            pairs.append((source.strip()[:200], target.strip()[:200]))
+    return tuple(pairs[:24])
+
+
+def tagged_lines(request: ChatCompletionRequest, tag: str) -> tuple[str, ...]:
+    users = [message.content for message in request.messages if message.role == "user"]
+    text = users[-1] if users else ""
+    match = re.search(
+        rf"{re.escape(tag)}\s*(.*?)\s*END_{re.escape(tag)}",
+        text,
+        re.S,
+    )
+    if not match:
+        return ()
+    return tuple(
+        line.strip()[:200]
+        for line in match.group(1).splitlines()
+        if line.strip()
+    )[:32]
 
 
 def target_language_from_messages(request: ChatCompletionRequest) -> str:

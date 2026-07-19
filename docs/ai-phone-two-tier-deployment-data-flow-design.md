@@ -1,7 +1,7 @@
 # ai phone 两层部署与数据流设计
 
-版本：v1.0  
-日期：2026-07-11  
+版本：v1.5
+日期：2026-07-13
 状态：已确认约束，进入实施
 
 ## 1. 架构约束
@@ -23,7 +23,8 @@ flowchart LR
 
     Proxy --> API["API Server"]
     Proxy --> Gateway["Realtime Gateway"]
-    Gateway --> ASR["Qwen3-ASR"]
+    Gateway --> ASR["ASR Service<br/>MarbleNet VAD + Qwen3-ASR"]
+    Gateway --> Speaker["Streaming Speaker Provider"]
     Gateway --> MT["Hy-MT2"]
     Gateway --> TTS["VoxCPM2 / TTS"]
     Gateway --> LLM["Qwen3.5 LLM"]
@@ -53,8 +54,11 @@ livekit
 asr-service
 translation-service
 tts-service
+speaker-service
 llm-runtime
 ```
+
+`MarbleNet VAD` 是 `asr-service` 内部 Speech Frontend，不增加第三个部署节点或公开端口。ONNX、Mel 预处理资产和 Qwen3-ASR 随同一个服务器发布单元管理。
 
 部署规则：
 
@@ -64,6 +68,10 @@ llm-runtime
 - 内部调用使用服务名或 `127.0.0.1`，不得使用 Mac IP。
 - 手机配置不得包含 `localhost`、Mac 局域网 IP、模型端口或内部密钥。
 - Tailscale 只用于开发运维和内测访问，不作为正式产品拓扑的一层。
+- Speaker Provider 与 ASR 并行，是可降级旁路；故障不得中断字幕和翻译。
+- App 只提交 speaker 策略，不持有说话人模型地址、密钥或内部端口。
+- 在线 VAD 由 ASR Service 权威执行；App 静音门控必须偏保守，不能因本地 RMS 较低丢弃待上传语音。
+- `/health` 必须返回实际 `vadProvider` 和 `vadThreshold`；发生 `rms_fallback` 时进入诊断告警但不终止会话。
 
 ## 4. 暂时数据存储方案
 
@@ -97,16 +105,21 @@ accounts
 auth_sessions
 consents
 translation_sessions
+call_legs
 session_segments
 session_reviews
+tts_playbacks
 terms
 voice_profiles
 usage_ledger
 idempotency_keys
+inbox_events
 outbox_events
 ```
 
-`usage_ledger` 和 `outbox_events` 使用只追加设计。session 结束、用量结算和 outbox 事件必须在同一事务提交。
+`translation_sessions` 是普通同传、Call Link、PSTN 和 Agent 的唯一会话聚合；Call Link 的 `callId` 等于 `sessionId`。`call_legs` 保存 host/guest/callee/agent 的媒体身份和 provider 映射，禁止另建只存在内存的 Call Link 真值。
+
+`usage_ledger`、`inbox_events` 和 `outbox_events` 使用只追加设计。session 结束、用量结算和 outbox 事件必须在同一事务提交。`tts_playbacks` 按 `target_leg_id + generation` 保证同一目标腿只有一个 active playback，取消后旧 generation 的迟到帧不得恢复播放。
 
 ### 4.4 备份和损坏处理
 
@@ -136,12 +149,20 @@ API -> SQLite: 创建 session、usage hold、幂等键
 API -> App: sessionId、一次性 realtime token、WSS endpoint
 App -> Gateway: WSS 连接和 audio.frame
 Gateway -> ASR: 音频窗口/flush
+ASR Speech Frontend: 16kHz normalize -> MarbleNet VAD -> endpoint/最大分段
 ASR -> Gateway: partial/final、language、confidence
-Gateway -> Translation/TTS: final 文本
-Gateway -> App: transcript、translation、audio.output
+Gateway -> Speaker Provider: 同时间轴音频帧
+Speaker Provider -> Gateway: anonymous speaker spans
+Gateway SpeechTurnCoordinator: participant/VAD/speaker span -> confirmed boundaryMs
+Gateway -> ASR Turn Buffer: commitBoundary(boundaryMs, fromSpeaker, toSpeaker)
+ASR Turn Buffer: 切分 PCM，speaker turn 内运行 Qwen3-ASR
+Gateway -> Translation/TTS: 带 speaker 的 final 文本
+Gateway -> App: transcript、translation、speaker.updated、audio.output
 Gateway -> API internal: segment.final 事件
 API -> SQLite: segment 幂等落库
 ```
+
+当前内部协议为 `POST /asr/sessions/:sessionId/boundary`。请求只包含 `boundaryMs`、语言方向和会话热词；speaker 身份由 Gateway 写入返回 transcript，不进入 ASR 模型提示词。
 
 ### 5.2 结束和异常断开
 
@@ -169,6 +190,31 @@ API -> SQLite: 保存 review 和 provider fingerprint
 App -> API: 查询历史详情
 ```
 
+### 5.4 Call Link/PSTN 全双工与抢话
+
+```text
+App/Web/PSTN source leg -> LiveKit/Bridge -> Worker source-leg queue
+Worker -> AEC(exact playback reference sent to this capture leg) -> MarbleNet VAD -> ASR
+Worker -> conservative correction -> ordered translation
+Worker transaction command -> API: playback.queued(playbackId, targetLegId, generation)
+Worker -> TTS stream -> target-leg playback sink
+target leg 新语音 -> InterruptionController
+InterruptionController -> cancel TTS + clear sink + playback.interrupted
+pre-roll -> 原 source-leg ASR，继续产生新 turn
+```
+
+约束：
+
+- source leg 的 ASR/翻译队列与 target leg 的播放队列分离；不同方向可以并行。
+- LiveKit participant track 是 Call Link 的身份真值；不对独立轨道叠加 diarization。
+- PCM、AEC reference、pre-roll 和逐帧 VAD 仅驻留 Worker 环形缓冲，不写 SQLite 或日志。
+- playback 状态、取消原因、generation、segment 关联和延迟指标写 SQLite；重复事件由 inbox 幂等键拒绝。
+- API/Worker 重启后，未确认完成的 playback 收敛为 interrupted，禁止自动重播；session、segment、usage 和历史从 SQLite 恢复。
+- PSTN Provider 未声明 `clearPlayback` 时，服务器不得开启全双工抢话，只能使用半双工或纯字幕降级。
+- 全双工开关由服务器发布环境统一控制并进入 Call Room token；手机和 Web 不持有模型地址或独立开关真值。
+- MarbleNet 帧级结论通过 ASR 内部 HTTP 响应头送回 Worker，不新增公开 VAD 服务或第三层部署。
+- App/Web 的 WebRTC AEC 是采集侧第一道回声控制；Worker 的 MarbleNet 连续语音门禁、target-leg generation fence 和近期播放取消是服务器侧第二道控制。
+
 ## 6. 手机端边界
 
 - 端侧模式可在无服务器时完成 ASR/翻译基础流程。
@@ -186,3 +232,6 @@ App -> API: 查询历史详情
 - 停止 Mac 上全部服务后，手机在线同传仍应正常。
 - 停止服务器后，手机必须明确显示在线不可用，端侧模式仍可进入。
 - 单服务器重启后，已结束历史和 ledger 不丢失；进行中的 session 可安全 finalize 或标记 interrupted。
+- API 重启后既有 Call Link 仍可查询和加入；不得因进程内 Map 丢失。
+- Worker 重启后旧 playback 不重播，迟到音频帧不跨 generation 播放。
+- 50 个并发 session 的 segment、settle、inbox/outbox 写入按 session 隔离；同一 session 使用事务和版本检查，不同 session 可并行。

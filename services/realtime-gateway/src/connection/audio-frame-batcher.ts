@@ -28,6 +28,9 @@ export class AudioFrameBatcher {
   private processQueued = false;
   private forceNextProcess = false;
   private droppedSinceLastWarning = 0;
+  private receivedFrameCount = 0;
+  private processedBatchCount = 0;
+  private droppedFrameCount = 0;
   private lastDropWarningAt = 0;
   private accepting = true;
   private closed = false;
@@ -42,6 +45,7 @@ export class AudioFrameBatcher {
     if (!this.accepting || this.closed) return;
     if (!this.canAppend(frame)) return;
 
+    this.receivedFrameCount += 1;
     this.pending.push(frame);
     this.trimPendingAudio();
     this.scheduleProcessing();
@@ -70,6 +74,14 @@ export class AudioFrameBatcher {
     this.closed = true;
     this.stopAccepting();
     await this.flush();
+  }
+
+  diagnostics() {
+    return {
+      receivedFrameCount: this.receivedFrameCount,
+      processedBatchCount: this.processedBatchCount,
+      droppedFrameCount: this.droppedFrameCount,
+    };
   }
 
   private canAppend(frame: AudioFrame) {
@@ -103,6 +115,7 @@ export class AudioFrameBatcher {
   }
 
   private warnDroppedFrames(dropped: number, pendingMs: number) {
+    this.droppedFrameCount += dropped;
     this.droppedSinceLastWarning += dropped;
     const now = Date.now();
     const shouldWarn =
@@ -160,6 +173,7 @@ export class AudioFrameBatcher {
   private async sendNextBatch(force: boolean) {
     const batch = this.takeBatch(force);
     if (!batch) return;
+    this.processedBatchCount += 1;
     for await (const outgoing of this.options.provider.sendAudio(batch)) {
       this.options.send(outgoing);
     }
@@ -196,7 +210,7 @@ function mergeFrames(frames: AudioFrame[]) {
   return {
     ...first,
     sequence: last.sequence,
-    timestampMs: last.timestampMs,
+    timestampMs: first.timestampMs,
     data: Buffer.concat(buffers).toString("base64"),
   };
 }

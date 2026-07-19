@@ -51,11 +51,6 @@ export function checkMobileChineseInterface(root) {
   );
   requireContains(checks, root, "apps/mobile/test/widget_test.dart", [
     ["falls back to Chinese for unsupported system locale", "Chinese fallback widget test exists"],
-    ["源语言", "Chinese source language setting widget assertion exists"],
-    ["自动识别", "Chinese auto language widget assertion exists"],
-    ["目标语言", "Chinese target language setting widget assertion exists"],
-    ["自动反向", "Chinese auto reverse target widget assertion exists"],
-    ["自动朗读译文", "Chinese translation speech toggle widget assertion exists"],
     ["switches interface language from home toolbar", "language switch widget test exists"],
     ["localizes realtime status bar API errors", "status bar API error widget test exists"],
     ["localizes diagnostic values and user-facing errors", "Chinese diagnostics widget test exists"],
@@ -63,6 +58,18 @@ export function checkMobileChineseInterface(root) {
     ["Device ASR processing failed: FluidAudio process failed", "Device-ASR processing failure widget assertion exists"],
     ["Device ASR diagnostic: no_microphone_input", "Device-ASR diagnostic widget assertion exists"],
   ]);
+  requireContains(
+    checks,
+    root,
+    "apps/mobile/test/realtime_settings_menu_test.dart",
+    [
+      ["源语言", "Chinese source language setting widget assertion exists"],
+      ["自动识别", "Chinese auto language widget assertion exists"],
+      ["目标语言", "Chinese target language setting widget assertion exists"],
+      ["自动反向", "Chinese auto reverse target widget assertion exists"],
+      ["自动朗读译文", "Chinese translation speech toggle widget assertion exists"],
+    ],
+  );
   requireContains(
     checks,
     root,

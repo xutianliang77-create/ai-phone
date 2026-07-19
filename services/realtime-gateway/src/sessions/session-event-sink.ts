@@ -7,6 +7,7 @@ import { cleanRealtimeText } from "../protocol/realtime-text.js";
 
 export interface SessionEventSink {
   record(event: ServerRealtimeEvent): Promise<void>;
+  touch(sessionId: string, status: "active" | "paused"): Promise<void>;
 }
 
 export function createSessionEventSink(env: RealtimeEnv): SessionEventSink {
@@ -20,6 +21,7 @@ export function createSessionEventSink(env: RealtimeEnv): SessionEventSink {
 
 class NoopSessionEventSink implements SessionEventSink {
   async record() {}
+  async touch() {}
 }
 
 class ApiSessionEventSink implements SessionEventSink {
@@ -30,23 +32,41 @@ class ApiSessionEventSink implements SessionEventSink {
   }) {}
 
   async record(event: ServerRealtimeEvent) {
+    if (
+      event.type === "session.started" ||
+      event.type === "session.paused" ||
+      event.type === "session.resumed"
+    ) {
+      await this.post(`/internal/realtime/sessions/${event.sessionId}/state`, {
+        status: event.type === "session.paused" ? "paused" : "active",
+      });
+      return;
+    }
     if (event.type === "transcript.final") {
       const sourceText = cleanRealtimeText(event.text);
       if (!sourceText) return;
       await this.upsertSegment({
         sessionId: event.sessionId,
         segmentId: event.segmentId,
+        turnId: event.turnId,
+        revision: event.revision,
         sourceText,
         rawText: cleanRealtimeText(event.rawText ?? event.text) ?? undefined,
         optimizedText: event.optimizedText
           ? cleanRealtimeText(event.optimizedText) ?? undefined
           : undefined,
+        dominantLanguage: event.dominantLanguage,
+        detectedLanguages: event.detectedLanguages,
+        mixedLanguage: event.mixedLanguage,
         sourceLanguage: event.language,
         ...(typeof event.confidence === "number"
           ? { confidence: event.confidence }
           : {}),
         stage: "asr",
         refinement: event.refinement,
+        speaker: event.speaker,
+        timing: event.timing,
+        vadContext: event.vadContext,
       });
       return;
     }
@@ -61,7 +81,12 @@ class ApiSessionEventSink implements SessionEventSink {
       await this.upsertSegment({
         sessionId: event.sessionId,
         segmentId: event.segmentId,
+        turnId: event.turnId,
+        revision: event.revision,
         translatedText,
+        dominantLanguage: event.dominantLanguage,
+        detectedLanguages: event.detectedLanguages,
+        mixedLanguage: event.mixedLanguage,
         targetLanguage: event.language,
         stage: event.type === "translation.failed"
           ? event.stage ?? "translation"
@@ -77,6 +102,26 @@ class ApiSessionEventSink implements SessionEventSink {
               providerUsage: event.providerUsage,
             }
           : {}),
+        ...(event.type === "translation.final" && event.speaker
+          ? { speaker: event.speaker }
+          : {}),
+        ...(event.type === "translation.final" && event.timing
+          ? { timing: event.timing }
+          : {}),
+        ...(event.type === "translation.final" && event.vadContext
+          ? { vadContext: event.vadContext }
+          : {}),
+      });
+      return;
+    }
+    if (event.type === "speaker.updated") {
+      await this.upsertSegment({
+        sessionId: event.sessionId,
+        segmentId: event.segmentId,
+        turnId: event.turnId,
+        revision: event.revision,
+        speaker: event.speaker,
+        timing: event.timing,
       });
       return;
     }
@@ -85,15 +130,31 @@ class ApiSessionEventSink implements SessionEventSink {
         ...(typeof event.billableSeconds === "number"
           ? { billableSeconds: event.billableSeconds }
           : {}),
-      });
+        ...(event.diagnostics ? { diagnostics: event.diagnostics } : {}),
+      }, 3);
     }
+  }
+
+  async touch(sessionId: string, status: "active" | "paused") {
+    await this.post(`/internal/realtime/sessions/${sessionId}/state`, { status });
   }
 
   private async upsertSegment(body: UpsertSessionSegmentRequest) {
     await this.post("/internal/realtime/segments", body);
   }
 
-  private async post(path: string, body: unknown) {
+  private async post(path: string, body: unknown, attempts = 1) {
+    for (let attempt = 1; attempt <= attempts; attempt += 1) {
+      try {
+        await this.postOnce(path, body);
+        return;
+      } catch (error) {
+        if (attempt === attempts) throw error;
+      }
+    }
+  }
+
+  private async postOnce(path: string, body: unknown) {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), this.options.timeoutMs);
     try {

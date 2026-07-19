@@ -47,6 +47,7 @@ export interface AsrRefinementResult {
     | "invalid_json"
     | "provider_error"
     | "language_mismatch"
+    | "content_expansion"
     | "disabled";
 }
 

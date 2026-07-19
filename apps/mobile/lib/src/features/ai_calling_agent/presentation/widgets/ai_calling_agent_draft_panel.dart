@@ -28,10 +28,18 @@ class AiCallingAgentDraftPanel extends StatelessWidget {
         draft.status == 'draft' && !draft.requiresHumanTakeover;
     final canStart = draft.status == 'authorized';
     final canRefresh = _startedStatus(draft.status);
-    final canTakeover =
-        draft.requiresHumanTakeover && draft.status != 'takeover_requested';
-    final canCancel =
-        draft.status == 'draft' || draft.status == 'requires_human_takeover';
+    final canTakeover = draft.status == 'requires_human_takeover' ||
+        (draft.callId != null &&
+            (draft.status == 'in_progress' ||
+                draft.status == 'takeover_requested'));
+    final canCancel = draft.status == 'draft' ||
+        draft.status == 'authorized' ||
+        draft.status == 'queued' ||
+        draft.status == 'dispatching' ||
+        draft.status == 'reconciliation_required' ||
+        draft.status == 'in_progress' ||
+        draft.status == 'requires_human_takeover' ||
+        draft.status == 'takeover_requested';
     return DecoratedBox(
       decoration: BoxDecoration(
         border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
@@ -88,7 +96,8 @@ class AiCallingAgentDraftPanel extends StatelessWidget {
                 OutlinedButton.icon(
                   onPressed: busy || !canTakeover ? null : onTakeover,
                   icon: const Icon(Icons.pan_tool_alt_outlined),
-                  label: const Text('人工接管'),
+                  label: Text(
+                      draft.status == 'takeover_requested' ? '进入人工通话' : '人工接管'),
                 ),
                 OutlinedButton.icon(
                   onPressed: busy || !canCancel ? null : onCancel,
@@ -105,6 +114,8 @@ class AiCallingAgentDraftPanel extends StatelessWidget {
 
   bool _startedStatus(String status) {
     return status == 'queued' ||
+        status == 'dispatching' ||
+        status == 'reconciliation_required' ||
         status == 'in_progress' ||
         status == 'completed' ||
         status == 'failed';
@@ -121,6 +132,8 @@ class AiCallingAgentDraftPanel extends StatelessWidget {
       'draft' => '待确认',
       'authorized' => '已授权',
       'queued' => '排队中',
+      'dispatching' => '正在拨号',
+      'reconciliation_required' => '等待服务商对账',
       'in_progress' => '通话中',
       'completed' => '已完成',
       'failed' => '失败',

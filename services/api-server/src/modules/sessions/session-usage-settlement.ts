@@ -1,4 +1,5 @@
 import { consumeSeconds, settleUsageHold } from "../usage/usage.service.js";
+import { findBillingLedgerEntryByIdempotencyKey } from "../billing/billing-ledger.service.js";
 import type { SessionRecord } from "./session-record.js";
 
 export const MIN_BILLABLE_SESSION_SECONDS = 6;
@@ -25,11 +26,26 @@ export function settleSessionUsage(
     session.endedAt,
     nowMs,
   );
-  const billableSeconds = toBillableSeconds(
-    options.billableSeconds ?? rawDurationSeconds,
-  );
+  const billableSeconds = options.billableSeconds === undefined
+    ? toBillableSeconds(rawDurationSeconds)
+    : normalizeMeasuredBillableSeconds(options.billableSeconds);
   const note = usageNoteForMode(session.mode);
   const idempotencyKey = `settle:${session.id}`;
+  const existing = findBillingLedgerEntryByIdempotencyKey(
+    session.userId,
+    idempotencyKey,
+  );
+  if (existing) {
+    const settledSeconds = Math.max(0, -existing.deltaSeconds);
+    settleUsageHold(session.userId, session.id, settledSeconds);
+    return {
+      rawDurationSeconds,
+      billableSeconds: settledSeconds,
+      charged: false,
+      note,
+      idempotencyKey,
+    };
+  }
 
   if (billableSeconds > 0) {
     consumeSeconds(session.userId, billableSeconds, undefined, {
@@ -64,6 +80,10 @@ export function toBillableSeconds(rawDurationSeconds: number) {
   if (!Number.isFinite(rawDurationSeconds)) return 0;
   if (rawDurationSeconds < MIN_BILLABLE_SESSION_SECONDS) return 0;
   return Math.max(0, Math.ceil(rawDurationSeconds));
+}
+
+export function normalizeMeasuredBillableSeconds(value: number) {
+  return Number.isFinite(value) ? Math.max(0, Math.ceil(value)) : 0;
 }
 
 function usageNoteForMode(mode: SessionRecord["mode"]) {

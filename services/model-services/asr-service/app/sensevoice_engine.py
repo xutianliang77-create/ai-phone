@@ -5,6 +5,7 @@ import tempfile
 from typing import Protocol
 
 from app.audio_buffer import RealtimePcmSegmenter
+from app.vad import VadProvider
 from app.schemas import LanguageCode, TranslationLanguageCode
 from app.schemas import AsrTranscribeRequest, AsrTranscribeResponse
 from app.wav_writer import write_pcm16_wav
@@ -48,6 +49,7 @@ class SenseVoiceEngine:
         max_audio_ms: int = 8_000,
         preroll_ms: int = 200,
         vad_energy_threshold: int = 350,
+        vad_provider: VadProvider | None = None,
         runner: SenseVoiceRunner | None = None,
     ) -> None:
         self.runner = runner or FunAsrSenseVoiceRunner(model_dir, device)
@@ -57,6 +59,7 @@ class SenseVoiceEngine:
             max_audio_ms=max_audio_ms,
             preroll_ms=preroll_ms,
             vad_energy_threshold=vad_energy_threshold,
+            vad_provider=vad_provider,
         )
         self._last_text_by_session: dict[str, str] = {}
 
@@ -75,6 +78,9 @@ class SenseVoiceEngine:
             sample_rate=segment.sample_rate,
             source_language=request.sourceLanguage,
             target_language=request.targetLanguage,
+            start_ms=segment.start_timestamp_ms,
+            end_ms=segment.end_timestamp_ms,
+            endpoint_reason=segment.endpoint_reason,
         )
 
     async def flush(
@@ -94,6 +100,31 @@ class SenseVoiceEngine:
             sample_rate=segment.sample_rate,
             source_language=source_language,
             target_language=target_language,
+            start_ms=segment.start_timestamp_ms,
+            end_ms=segment.end_timestamp_ms,
+            endpoint_reason=segment.endpoint_reason,
+        )
+
+    async def commit_boundary(
+        self,
+        session_id: str,
+        boundary_ms: int,
+        source_language: LanguageCode,
+        target_language: TranslationLanguageCode,
+    ) -> AsrTranscribeResponse | None:
+        segment = self.segmenter.commit_boundary(session_id, boundary_ms)
+        if segment is None:
+            return None
+        return await self._transcribe_segment(
+            session_id=session_id,
+            segment_id=f"sensevoice_boundary_{segment.end_sequence}",
+            pcm=segment.pcm,
+            sample_rate=segment.sample_rate,
+            source_language=source_language,
+            target_language=target_language,
+            start_ms=segment.start_timestamp_ms,
+            end_ms=segment.end_timestamp_ms,
+            endpoint_reason=segment.endpoint_reason,
         )
 
     async def close_session(self, session_id: str) -> None:
@@ -108,6 +139,9 @@ class SenseVoiceEngine:
         sample_rate: int,
         source_language: LanguageCode,
         target_language: TranslationLanguageCode,
+        start_ms: int,
+        end_ms: int,
+        endpoint_reason: str,
     ) -> AsrTranscribeResponse | None:
         audio_path = write_temp_wav(pcm, sample_rate)
         try:
@@ -127,6 +161,16 @@ class SenseVoiceEngine:
             text=text,
             language=transcript_language(text, source_language, target_language),
             confidence=None,
+            timing={
+                "startMs": start_ms,
+                "endMs": end_ms,
+                "source": "client",
+            },
+            endpointReason=endpoint_reason,
+            vadContext=self.segmenter.segment_vad_context(
+                session_id,
+                endpoint_reason,
+            ),
         )
 
     def _is_duplicate(self, session_id: str, text: str) -> bool:

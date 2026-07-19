@@ -1,13 +1,19 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { buildApp } from "../../app.js";
 import { getStoreSnapshot } from "../../infrastructure/storage/json-store.js";
-
+import {
+  captureAgentCallEnv,
+  clearAgentCallEnv,
+  configureAgentExecutionEnv,
+  createAuthorizedDraft,
+  restoreAgentCallEnv,
+} from "./agent-calls.test-support.js";
 describe("agent call routes", () => {
   let previousEnv: Record<string, string | undefined>;
 
   beforeEach(() => {
-    previousEnv = captureEnv();
-    clearEnv();
+    previousEnv = captureAgentCallEnv();
+    clearAgentCallEnv();
     const store = getStoreSnapshot();
     store.agentCallDrafts = [];
     store.usageBalances = {};
@@ -17,7 +23,7 @@ describe("agent call routes", () => {
   });
 
   afterEach(() => {
-    restoreEnv(previousEnv);
+    restoreAgentCallEnv(previousEnv);
   });
 
   it("creates a low risk draft and authorizes it only after user confirmation", async () => {
@@ -57,33 +63,22 @@ describe("agent call routes", () => {
     });
   });
 
-  it("cancels drafts before authorization and blocks later authorization", async () => {
+  it("rejects malformed target phones before creating a draft", async () => {
     const app = await buildApp();
-    const created = await app.inject({
+    const response = await app.inject({
       method: "POST",
       url: "/ai-calling-agent/drafts",
-      payload: { scenario: "booking", objective: "预约牙医复诊" },
-    });
-    const draftId = created.json().draft.id as string;
-    const cancelled = await app.inject({
-      method: "POST",
-      url: `/ai-calling-agent/drafts/${draftId}/cancel`,
-      payload: { reason: "用户确认前取消" },
-    });
-    const authorized = await app.inject({
-      method: "POST",
-      url: `/ai-calling-agent/drafts/${draftId}/authorize`,
-      payload: { userConfirmed: true, consentPromptVersion: "cn-agent-v1" },
+      payload: {
+        scenario: "booking",
+        objective: "预约会议室",
+        targetPhone: "1380000000",
+      },
     });
     await app.close();
 
-    expect(cancelled.json().draft).toMatchObject({
-      status: "cancelled",
-      cancellationReason: "用户确认前取消",
-    });
-    expect(cancelled.json().draft.cancelledAt).toEqual(expect.any(String));
-    expect(authorized.statusCode).toBe(409);
-    expect(authorized.json().error.code).toBe("agent_call_cancelled");
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error.code).toBe("invalid_agent_call_draft");
+    expect(getStoreSnapshot().agentCallDrafts).toHaveLength(0);
   });
 
   it("requires human takeover for high risk agent call drafts", async () => {
@@ -123,31 +118,6 @@ describe("agent call routes", () => {
     });
   });
 
-  it("does not cancel authorized drafts with the pre-authorization endpoint", async () => {
-    const app = await buildApp();
-    const created = await app.inject({
-      method: "POST",
-      url: "/ai-calling-agent/drafts",
-      payload: { scenario: "custom", objective: "咨询营业时间" },
-    });
-    const draftId = created.json().draft.id as string;
-    await app.inject({
-      method: "POST",
-      url: `/ai-calling-agent/drafts/${draftId}/authorize`,
-      payload: { userConfirmed: true, consentPromptVersion: "cn-agent-v1" },
-    });
-    const cancelled = await app.inject({
-      method: "POST",
-      url: `/ai-calling-agent/drafts/${draftId}/cancel`,
-      payload: { reason: "too_late" },
-    });
-    await app.close();
-
-    expect(cancelled.statusCode).toBe(409);
-    expect(cancelled.json().error.code).toBe("agent_call_cannot_cancel");
-    expect(cancelled.json().draft.status).toBe("authorized");
-  });
-
   it("does not start authorized drafts when execution is not configured", async () => {
     const app = await buildApp();
     const draftId = await createAuthorizedDraft(app);
@@ -180,10 +150,25 @@ describe("agent call routes", () => {
       url: `/ai-calling-agent/drafts/${draftId}/start`,
       payload: { consentPromptVersion: "cn-agent-v1" },
     });
+    const claimed = await app.inject({
+      method: "POST",
+      url: "/internal/ai-calling-agent/drafts/claims",
+      headers: { authorization: "Bearer internal-secret-for-agent" },
+      payload: { workerId: "route-test-worker", limit: 1 },
+    });
+    const claim = claimed.json().claims[0] as {
+      workerId: string;
+      leaseToken: string;
+    };
+    const workerHeaders = {
+      authorization: "Bearer internal-secret-for-agent",
+      "x-agent-worker-id": claim.workerId,
+      "x-agent-call-lease-token": claim.leaseToken,
+    };
     const inProgress = await app.inject({
       method: "POST",
       url: `/internal/ai-calling-agent/drafts/${draftId}/status`,
-      headers: { authorization: "Bearer internal-secret-for-agent" },
+      headers: workerHeaders,
       payload: {
         status: "in_progress",
         providerCallId: "provider-call-1",
@@ -192,7 +177,7 @@ describe("agent call routes", () => {
     const completed = await app.inject({
       method: "POST",
       url: `/internal/ai-calling-agent/drafts/${draftId}/status`,
-      headers: { authorization: "Bearer internal-secret-for-agent" },
+      headers: workerHeaders,
       payload: {
         status: "completed",
         consumedSeconds: 17,
@@ -226,14 +211,16 @@ describe("agent call routes", () => {
     expect(balance.json().remainingSeconds).toBe(283);
     expect(balance.json().heldSeconds).toBe(0);
     expect(balance.json().availableSeconds).toBe(283);
-    expect(ledger.json().ledger).toContainEqual(expect.objectContaining({
-      type: "usage",
-      deltaSeconds: -17,
-      balanceAfter: 283,
-      sessionId: queued.json().draft.callId,
-      note: "agent_call_usage",
-      idempotencyKey: `settle:${queued.json().draft.callId}`,
-    }));
+    expect(ledger.json().ledger).toContainEqual(
+      expect.objectContaining({
+        type: "usage",
+        deltaSeconds: -17,
+        balanceAfter: 283,
+        sessionId: queued.json().draft.callId,
+        note: "agent_call_usage",
+        idempotencyKey: `settle:${queued.json().draft.callId}`,
+      }),
+    );
   });
 
   it("protects worker execution updates with the internal secret", async () => {
@@ -264,7 +251,10 @@ describe("agent call routes", () => {
       payload: { scenario: "custom", objective: "咨询营业时间" },
     });
     const draftId = created.json().draft.id as string;
-    const list = await app.inject({ method: "GET", url: "/ai-calling-agent/drafts" });
+    const list = await app.inject({
+      method: "GET",
+      url: "/ai-calling-agent/drafts",
+    });
     const detail = await app.inject({
       method: "GET",
       url: `/ai-calling-agent/drafts/${draftId}`,
@@ -275,70 +265,72 @@ describe("agent call routes", () => {
     expect(detail.json().draft.id).toBe(draftId);
     expect(detail.json().draft.userId).toBeUndefined();
   });
+
+  it("enforces gray allowlist, disclosure and do-not-call before queueing", async () => {
+    configureAgentExecutionEnv();
+    process.env.AGENT_CALL_GRAY_ENABLED = "true";
+    process.env.AGENT_CALL_GRAY_USER_IDS = "guest-user";
+    process.env.AGENT_CALL_DO_NOT_CALL_NUMBERS = "13800138000";
+    const app = await buildApp();
+    const draftId = await createAuthorizedDraft(app, true);
+    const blocked = await app.inject({
+      method: "POST",
+      url: `/ai-calling-agent/drafts/${draftId}/start`,
+      payload: { consentPromptVersion: "cn-agent-v1" },
+    });
+    await app.close();
+
+    expect(blocked.statusCode).toBe(403);
+    expect(blocked.json().error.code).toBe("agent_call_do_not_call");
+    expect(getStoreSnapshot().usageHolds).toHaveLength(0);
+  });
+
+  it("requires recipient disclosure in gray mode", async () => {
+    configureAgentExecutionEnv();
+    process.env.AGENT_CALL_GRAY_ENABLED = "true";
+    process.env.AGENT_CALL_GRAY_USER_IDS = "guest-user";
+    const app = await buildApp();
+    const draftId = await createAuthorizedDraft(app);
+    const rejected = await app.inject({
+      method: "POST",
+      url: `/ai-calling-agent/drafts/${draftId}/start`,
+      payload: { consentPromptVersion: "cn-agent-v1" },
+    });
+    await app.close();
+
+    expect(rejected.statusCode).toBe(409);
+    expect(rejected.json().error.code).toBe("agent_call_disclosure_required");
+    expect(getStoreSnapshot().usageHolds).toHaveLength(0);
+  });
+
+  it("applies the gray rate limit atomically to concurrent starts", async () => {
+    configureAgentExecutionEnv();
+    process.env.AGENT_CALL_GRAY_ENABLED = "true";
+    process.env.AGENT_CALL_GRAY_USER_IDS = "guest-user";
+    process.env.AGENT_CALL_RATE_LIMIT_PER_HOUR = "1";
+    const app = await buildApp();
+    const firstId = await createAuthorizedDraft(app, true);
+    const secondId = await createAuthorizedDraft(app, true);
+
+    const responses = await Promise.all(
+      [firstId, secondId].map((draftId) =>
+        app.inject({
+          method: "POST",
+          url: `/ai-calling-agent/drafts/${draftId}/start`,
+          payload: { consentPromptVersion: "cn-agent-v1" },
+        }),
+      ),
+    );
+    await app.close();
+
+    expect(responses.map((response) => response.statusCode).sort()).toEqual([
+      200, 429,
+    ]);
+    expect(getStoreSnapshot().usageHolds).toHaveLength(1);
+    expect(
+      getStoreSnapshot().agentCallDrafts.filter(
+        (draft) => draft.status === "queued",
+      ),
+    ).toHaveLength(1);
+  });
 });
-
-const envKeys = [
-  "AGENT_CALL_WORKER_ENABLED",
-  "CALL_PROVIDER_POLICY",
-  "INTERNAL_API_SECRET",
-  "PSTN_PROVIDER",
-  "PSTN_ACCOUNT_ID",
-  "PSTN_API_KEY",
-  "PSTN_WEBHOOK_BASE_URL",
-  "PSTN_WEBHOOK_SECRET",
-  "PSTN_CONSENT_PROMPT_VERSION",
-  "PSTN_RECORDING_DISCLOSURE_ENABLED",
-  "PSTN_MAX_CALL_MINUTES",
-];
-
-async function createAuthorizedDraft(app: Awaited<ReturnType<typeof buildApp>>) {
-  const created = await app.inject({
-    method: "POST",
-    url: "/ai-calling-agent/drafts",
-    payload: {
-      scenario: "booking",
-      objective: "预约明天下午三点的会议室",
-      targetPhone: "13800138000",
-    },
-  });
-  const draftId = created.json().draft.id as string;
-  await app.inject({
-    method: "POST",
-    url: `/ai-calling-agent/drafts/${draftId}/authorize`,
-    payload: { userConfirmed: true, consentPromptVersion: "cn-agent-v1" },
-  });
-  return draftId;
-}
-
-function configureAgentExecutionEnv() {
-  process.env.AGENT_CALL_WORKER_ENABLED = "true";
-  process.env.CALL_PROVIDER_POLICY = "domestic_pstn_bridge";
-  process.env.INTERNAL_API_SECRET = "internal-secret-for-agent";
-  process.env.PSTN_PROVIDER = "domestic_bridge";
-  process.env.PSTN_ACCOUNT_ID = "pstn-account";
-  process.env.PSTN_API_KEY = "pstn-api-key";
-  process.env.PSTN_WEBHOOK_BASE_URL = "https://calls.qkxy.cn";
-  process.env.PSTN_WEBHOOK_SECRET = "12345678901234567890123456789012";
-  process.env.PSTN_CONSENT_PROMPT_VERSION = "cn-agent-v1";
-  process.env.PSTN_RECORDING_DISCLOSURE_ENABLED = "true";
-  process.env.PSTN_MAX_CALL_MINUTES = "30";
-}
-
-function captureEnv() {
-  return Object.fromEntries(envKeys.map((key) => [key, process.env[key]]));
-}
-
-function clearEnv() {
-  for (const key of envKeys) delete process.env[key];
-}
-
-function restoreEnv(values: Record<string, string | undefined>) {
-  for (const key of envKeys) {
-    const value = values[key];
-    if (value === undefined) {
-      delete process.env[key];
-    } else {
-      process.env[key] = value;
-    }
-  }
-}

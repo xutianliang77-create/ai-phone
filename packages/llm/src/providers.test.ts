@@ -49,6 +49,24 @@ describe("LLM providers", () => {
     expect(result.fallbackReason).toBe("language_mismatch");
     expect(result.warnings).toContain("llm_refinement_changed_language");
   });
+
+  it("rejects fluent content added beyond the current raw window", async () => {
+    const result = await refineAsrWithFallback(new ExpandingLlmProvider(), {
+      sessionId: "s1",
+      segmentId: "qwen3_seg_800",
+      sourceLanguage: "zh",
+      targetLanguage: "en",
+      rawText: "今天下午三点我们讨论产品计划，确认负责。",
+    });
+
+    expect(result.optimizedText).toBe(
+      "今天下午三点我们讨论产品计划，确认负责。",
+    );
+    expect(result.fallbackReason).toBe("content_expansion");
+    expect(result.warnings).toContain(
+      "llm_refinement_added_unsupported_content",
+    );
+  });
 });
 
 class TranslatingLlmProvider implements LlmProvider {
@@ -80,5 +98,16 @@ class TranslatingLlmProvider implements LlmProvider {
 
   async generateReview(_input: SessionReviewInput): Promise<SessionReviewResult> {
     throw new Error("not implemented");
+  }
+}
+
+class ExpandingLlmProvider extends TranslatingLlmProvider {
+  override async refineAsr(input: AsrRefinementInput) {
+    const base = await super.refineAsr(input);
+    return {
+      ...base,
+      optimizedText:
+        "今天下午三点我们讨论产品计划，确认负责人和截止日期，然后发送给所有参会人员。",
+    };
   }
 }

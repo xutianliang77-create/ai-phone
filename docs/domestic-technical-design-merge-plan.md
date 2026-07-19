@@ -5,6 +5,9 @@
 状态：合并计划  
 输入：外部技术设计评审稿 `00-architecture-overview.md` 至 `08-platform-services-design.md`
 
+统一架构基线：`docs/architecture/README.md`。后续 LiveKit、SIP、Agent、
+统一数据模型、并发和安全改造以该目录为准；本文保留为国内版评审稿的历史合并记录。
+
 ## 1. 结论
 
 外部技术设计评审稿覆盖面完整，可以作为国内版生产级目标架构的重要参考，但不能直接覆盖当前仓库已有设计和实现。

@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:translation_mobile/src/app/localization/app_localizations.dart';
 import 'package:translation_mobile/src/features/compliance/data/voice_processing_consent_store.dart';
 import 'package:translation_mobile/src/features/call_link/data/call_room_client.dart';
+import 'package:translation_mobile/src/shared/domain/speaker_attribution.dart';
 import 'package:translation_mobile/src/features/call_link/presentation/pages/call_link_page.dart';
 import 'package:translation_mobile/src/features/call_link/presentation/pages/join_call_link_page.dart';
 
@@ -13,9 +14,10 @@ void main() {
   testWidgets('creates and shares a call link', (WidgetTester tester) async {
     var sharedText = '';
     final roomClient = FakeCallRoomClient();
+    final apiClient = FakeCallLinkApiClient();
     await tester.pumpWidget(_TestApp(
       child: CallLinkPage(
-        client: FakeCallLinkApiClient(),
+        client: apiClient,
         roomClient: roomClient,
         voiceConsentStore: MemoryVoiceProcessingConsentStore.accepted(),
         shareText: (text) async => sharedText = text,
@@ -25,16 +27,24 @@ void main() {
     await tester.tap(find.text('生成链接'));
     await tester.pumpAndSettle();
 
-    expect(find.text('https://call.example.cn/join/call_1'), findsOneWidget);
-    expect(find.text('房间：call_call_1'), findsOneWidget);
-    expect(find.text('主持人入会凭证已准备'), findsOneWidget);
+    expect(
+      find.text('https://call.example.cn/join/call_1?ticket=guest-ticket'),
+      findsOneWidget,
+    );
+    expect(find.text('无界AI 通话服务已准备'), findsOneWidget);
+    expect(find.textContaining('livekit'), findsNothing);
     expect(find.textContaining('未入房'), findsOneWidget);
     expect(find.text('secret-room-token'), findsNothing);
+    expect(find.text('进入房间'), findsOneWidget);
 
     await tester.tap(find.text('分享链接'));
     await tester.pumpAndSettle();
 
-    expect(sharedText, 'https://call.example.cn/join/call_1');
+    expect(
+      sharedText,
+      'https://call.example.cn/join/call_1?ticket=rotated-ticket',
+    );
+    expect(apiClient.ticketRotateCount, 1);
   });
 
   testWidgets('requires voice consent before creating a call link',
@@ -59,7 +69,10 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(apiClient.createCount, 0);
-    expect(find.text('https://call.example.cn/join/call_1'), findsNothing);
+    expect(
+      find.text('https://call.example.cn/join/call_1?ticket=guest-ticket'),
+      findsNothing,
+    );
 
     await tester.tap(find.text('生成链接'));
     await tester.pumpAndSettle();
@@ -70,7 +83,10 @@ void main() {
 
     expect(store.record?.version, voiceProcessingConsentVersion);
     expect(apiClient.createCount, 1);
-    expect(find.text('https://call.example.cn/join/call_1'), findsOneWidget);
+    expect(
+      find.text('https://call.example.cn/join/call_1?ticket=guest-ticket'),
+      findsOneWidget,
+    );
   });
 
   testWidgets('shows login guidance before creating account-owned call links',
@@ -106,9 +122,12 @@ void main() {
 
     await tester.tap(find.text('生成链接'));
     await tester.pumpAndSettle();
+    expect(apiClient.tokenCreateCount, 0);
     await tester.tap(find.text('进入房间'));
     await tester.pumpAndSettle();
 
+    expect(apiClient.tokenCreateCount, 1);
+    expect(apiClient.connectionConfirmCount, 1);
     expect(roomClient.connectedToken?.token, 'secret-room-token');
     expect(find.textContaining('已入房，麦克风已发布'), findsOneWidget);
     expect(find.text('对方人数：1'), findsOneWidget);
@@ -121,6 +140,28 @@ void main() {
     expect(find.textContaining('未入房'), findsOneWidget);
     expect(find.text('通话记录已保存：8 秒'), findsOneWidget);
     expect(find.text('进入房间'), findsNothing);
+  });
+
+  testWidgets('shows waiting Web guests before the host enters',
+      (WidgetTester tester) async {
+    final apiClient = FakeCallLinkApiClient(activeGuestCountAfterFetch: 1);
+    await tester.pumpWidget(_TestApp(
+      child: CallLinkPage(
+        client: apiClient,
+        roomClient: FakeCallRoomClient(),
+        voiceConsentStore: MemoryVoiceProcessingConsentStore.accepted(),
+      ),
+    ));
+
+    await tester.tap(find.text('生成链接'));
+    await tester.pumpAndSettle();
+    expect(find.text('对方人数：0'), findsOneWidget);
+
+    await tester.pump(const Duration(seconds: 2));
+    await tester.pump();
+
+    expect(find.text('对方人数：1'), findsOneWidget);
+    expect(apiClient.fetchedCallIds, contains('call_1'));
   });
 
   testWidgets('shows LiveKit room data messages', (WidgetTester tester) async {
@@ -148,7 +189,11 @@ void main() {
       captions: const <CallRoomCaption>[
         CallRoomCaption(
           segmentId: 'segment-1',
-          speakerRole: 'guest',
+          speaker: SpeakerAttribution(
+            speakerId: 'guest',
+            role: 'guest',
+            source: 'participant_track',
+          ),
           sourceLanguage: 'en',
           targetLanguage: 'zh',
           timestampMs: 1,
@@ -179,7 +224,8 @@ void main() {
       findsOneWidget,
     );
     expect(find.text('你好，这是一次通话房间翻译测试。'), findsOneWidget);
-    expect(find.text('翻译语音已准备：qwen-tts'), findsOneWidget);
+    expect(find.text('翻译语音已准备'), findsOneWidget);
+    expect(find.textContaining('qwen-tts'), findsNothing);
   });
 
   testWidgets('auto-scrolls call room captions to the latest entry',
@@ -192,7 +238,11 @@ void main() {
     final captions = List<CallRoomCaption>.generate(18, (index) {
       return CallRoomCaption(
         segmentId: 'segment-$index',
-        speakerRole: 'guest',
+        speaker: const SpeakerAttribution(
+          speakerId: 'guest',
+          role: 'guest',
+          source: 'participant_track',
+        ),
         sourceLanguage: 'zh',
         targetLanguage: 'en',
         timestampMs: index,
@@ -219,7 +269,7 @@ void main() {
     expect(tester.getBottomLeft(latest).dy, lessThan(600));
   });
 
-  testWidgets('keeps the link when host room token is unavailable',
+  testWidgets('keeps the link when room startup fails on entry',
       (WidgetTester tester) async {
     await tester.pumpWidget(_TestApp(
       child: CallLinkPage(
@@ -232,10 +282,15 @@ void main() {
     await tester.tap(find.text('生成链接'));
     await tester.pumpAndSettle();
 
-    expect(find.text('https://call.example.cn/join/call_1'), findsOneWidget);
-    expect(find.text('主持人入会凭证未准备'), findsOneWidget);
-    expect(find.text('进入房间'), findsNothing);
-    expect(find.text('准备通话房间失败，请检查 LiveKit 配置'), findsOneWidget);
+    expect(
+      find.text('https://call.example.cn/join/call_1?ticket=guest-ticket'),
+      findsOneWidget,
+    );
+    expect(find.text('进入房间'), findsOneWidget);
+    await tester.tap(find.text('进入房间'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('准备通话失败，请稍后重试'), findsOneWidget);
   });
 
   testWidgets('joins a pasted call link as guest', (WidgetTester tester) async {
@@ -251,12 +306,14 @@ void main() {
 
     await tester.enterText(
       find.byType(TextField),
-      'https://call.example.cn/join/call_1',
+      'https://call.example.cn/join/call_1?ticket=guest-ticket',
     );
     await tester.tap(find.text('加入房间'));
     await tester.pumpAndSettle();
 
     expect(apiClient.fetchedCallIds, <String>['call_1']);
+    expect(apiClient.lastGuestTicket, 'guest-ticket');
+    expect(apiClient.connectionConfirmCount, 1);
     expect(roomClient.connectedToken?.participantRole, 'guest');
     expect(roomClient.connectedToken?.token, 'secret-room-token');
     expect(find.text('访客入会凭证已准备'), findsOneWidget);

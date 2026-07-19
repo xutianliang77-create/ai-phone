@@ -111,7 +111,7 @@ class _AutoFollowScrollViewState extends State<AutoFollowScrollView> {
     _scheduleScrollToLatest();
   }
 
-  void _scheduleScrollToLatest({bool retry = true}) {
+  void _scheduleScrollToLatest({int retries = 8}) {
     if (_scrollScheduled) return;
     _scrollScheduled = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -119,7 +119,7 @@ class _AutoFollowScrollViewState extends State<AutoFollowScrollView> {
       if (!mounted || !_scrollController.hasClients) return;
       final position = _scrollController.position;
       if (!position.hasContentDimensions) {
-        if (retry) _scheduleScrollToLatest(retry: false);
+        if (retries > 0) _scheduleScrollToLatest(retries: retries - 1);
         return;
       }
       final targetOffset = position.maxScrollExtent;
@@ -133,6 +133,10 @@ class _AutoFollowScrollViewState extends State<AutoFollowScrollView> {
         )
             .then((_) {
           if (!mounted) return;
+          if (!_isNearBottom && retries > 0) {
+            _scheduleScrollToLatest(retries: retries - 1);
+            return;
+          }
           setState(() {
             _followLatest = true;
             _showJumpToLatest = false;

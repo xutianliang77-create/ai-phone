@@ -15,7 +15,7 @@ void main() {
       onOpenDiagnostics: () {},
     ));
 
-    expect(find.text('在线模型链路'), findsNothing);
+    expect(find.text('无界AI 在线服务'), findsNothing);
   });
 
   testWidgets('shows online pipeline status and opens diagnostics',
@@ -27,15 +27,14 @@ void main() {
       onOpenDiagnostics: () => openCount += 1,
     ));
 
-    expect(find.text('在线模型链路'), findsOneWidget);
-    expect(find.text('ASR、翻译、TTS 由服务器 Provider 处理'), findsOneWidget);
+    expect(find.text('无界AI 在线服务'), findsOneWidget);
+    expect(find.text('语音识别、翻译和朗读已准备'), findsOneWidget);
 
     await tester.tap(find.byTooltip('模型链路诊断'));
     expect(openCount, 1);
   });
 
-  testWidgets('shows provider diagnostic labels for gateway errors',
-      (tester) async {
+  testWidgets('hides provider details from gateway errors', (tester) async {
     await tester.pumpWidget(_TestApp(
       processingMode: RealtimeProcessingMode.online,
       diagnostic: const RealtimeGatewayDiagnostic(
@@ -49,11 +48,11 @@ void main() {
       onOpenDiagnostics: () {},
     ));
 
-    expect(find.textContaining('网络连接失败'), findsOneWidget);
+    expect(find.textContaining('语音识别暂时不可用'), findsOneWidget);
     expect(find.text('ASR 识别'), findsOneWidget);
-    expect(find.text('firered_asr'), findsOneWidget);
+    expect(find.textContaining('firered_asr'), findsNothing);
     expect(find.text('可重试'), findsOneWidget);
-    expect(find.text('provider_unavailable'), findsOneWidget);
+    expect(find.text('provider_unavailable'), findsNothing);
   });
 }
 

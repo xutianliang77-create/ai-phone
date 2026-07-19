@@ -8,7 +8,7 @@ import {
   listAppErrorReports,
   maxStoredReports,
   summarizeAppErrorReports,
-} from "./app-errors.repository.js";
+} from "./app-errors-runtime.repository.js";
 import { sanitizeAppErrorReport } from "./app-error-sanitizer.js";
 import { dispatchDiagnosticsAlert } from "./diagnostics-alert-webhook.js";
 import { getDiagnosticsAlertState } from "./diagnostics-alerting.js";
@@ -19,7 +19,7 @@ export async function registerDiagnosticsRoutes(app: FastifyInstance) {
     const auth = verifyDiagnosticsAdmin(request.headers.authorization);
     if (!auth.ok) return sendError(reply, auth.statusCode, auth.code, auth.message);
 
-    const reports = listAppErrorReports(parseFilter(request.query));
+    const reports = await listAppErrorReports(parseFilter(request.query));
     return {
       reports: reports.map(toListItem),
       retentionLimit: maxStoredReports,
@@ -30,14 +30,14 @@ export async function registerDiagnosticsRoutes(app: FastifyInstance) {
     const auth = verifyDiagnosticsAdmin(request.headers.authorization);
     if (!auth.ok) return sendError(reply, auth.statusCode, auth.code, auth.message);
 
-    return summarizeAppErrorReports(parseFilter(request.query));
+    return await summarizeAppErrorReports(parseFilter(request.query));
   });
 
   app.get("/diagnostics/app-errors/alert-state", async (request, reply) => {
     const auth = verifyDiagnosticsAdmin(request.headers.authorization);
     if (!auth.ok) return sendError(reply, auth.statusCode, auth.code, auth.message);
 
-    return getDiagnosticsAlertState();
+    return await getDiagnosticsAlertState();
   });
 
   app.post("/diagnostics/app-errors/alert-test", async (request, reply) => {
@@ -46,7 +46,7 @@ export async function registerDiagnosticsRoutes(app: FastifyInstance) {
 
     const result = await dispatchDiagnosticsAlert(
       buildTestAlertRecord(),
-      getDiagnosticsAlertState(),
+      await getDiagnosticsAlertState(),
       undefined,
       { type: "app_error_test" },
     );
@@ -65,7 +65,7 @@ export async function registerDiagnosticsRoutes(app: FastifyInstance) {
     if (!auth.ok) return sendError(reply, auth.statusCode, auth.code, auth.message);
 
     const { eventId } = request.params as { eventId: string };
-    const report = findAppErrorReport(eventId);
+    const report = await findAppErrorReport(eventId);
     if (!report) return sendError(reply, 404, "app_error_not_found", "App error not found");
     return report;
   });
@@ -75,7 +75,7 @@ export async function registerDiagnosticsRoutes(app: FastifyInstance) {
     if (!sanitized.ok) {
       return sendError(reply, 400, sanitized.code, sanitized.code);
     }
-    const record = createAppErrorReport(sanitized.report);
+    const record = await createAppErrorReport(sanitized.report);
     request.log.warn(
       {
         eventId: record.id,
@@ -86,7 +86,7 @@ export async function registerDiagnosticsRoutes(app: FastifyInstance) {
       "App error report received",
     );
     if (record.fatal) {
-      const alertState = getDiagnosticsAlertState();
+      const alertState = await getDiagnosticsAlertState();
       void dispatchDiagnosticsAlert(record, alertState).then((result) => {
         request.log.warn(
           { eventId: record.id, alertDispatch: result.status },

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -15,6 +16,8 @@ void main() {
       sourceLanguage: 'auto',
       targetLanguage: 'en',
       voiceOutputMode: 'natural',
+      voicePresetId: 'zh_male_steady',
+      domainLexiconPack: 'technology',
       accountSessionStore: _sessionStore(),
       client: MockClient((request) async {
         expect(request.headers['authorization'], 'Bearer test-token');
@@ -39,8 +42,17 @@ void main() {
     expect(requestBody?['targetLanguage'], 'en');
     expect(requestBody?['mode'], 'meeting');
     expect(requestBody?['voiceOutput'], isTrue);
-    expect(requestBody?['voice'], {'mode': 'preset'});
+    expect(requestBody?['voice'], {
+      'mode': 'preset',
+      'presetId': 'zh_male_steady',
+    });
     expect(requestBody?['termbaseId'], 'default');
+    expect(requestBody?['domainLexiconPacks'], ['technology']);
+    expect(requestBody?['speakerAttribution'], {
+      'mode': 'auto',
+      'maxSpeakers': 4,
+      'allowVoiceIdentity': true,
+    });
   });
 
   test('creates sessions with ready My Voice config', () async {
@@ -87,6 +99,47 @@ void main() {
       'voiceProfileId': 'voice_1',
       'referenceAudioId': 'voice_1',
       'referenceTranscript': '你好，我正在创建我的声音。',
+    });
+  });
+
+  test('times out session creation when the network never responds', () async {
+    final api = RealtimeApiClient(
+      baseUrl: Uri.parse('http://127.0.0.1:3100'),
+      requestTimeout: const Duration(milliseconds: 20),
+      accountSessionStore: _sessionStore(),
+      client: MockClient((_) => Completer<http.Response>().future),
+    );
+
+    await expectLater(api.createSession(), throwsA(isA<TimeoutException>()));
+  });
+
+  test('binds finalization payload and idempotency key to the URL session',
+      () async {
+    late Uri requestUrl;
+    late Map<String, Object?> requestBody;
+    final api = RealtimeApiClient(
+      baseUrl: Uri.parse('http://127.0.0.1:3100'),
+      accountSessionStore: _sessionStore(),
+      client: MockClient((request) async {
+        requestUrl = request.url;
+        requestBody = jsonDecode(request.body) as Map<String, Object?>;
+        return http.Response('{}', 200);
+      }),
+    );
+
+    await api.finalizeSession(
+      sessionId: 'session-a',
+      segments: const [],
+      billableSeconds: 11,
+      idempotencyKey: 'finalize:session-a',
+    );
+
+    expect(requestUrl.path, '/realtime/sessions/session-a/finalize');
+    expect(requestBody, {
+      'sessionId': 'session-a',
+      'segments': <Object?>[],
+      'billableSeconds': 11,
+      'idempotencyKey': 'finalize:session-a',
     });
   });
 }

@@ -181,7 +181,7 @@ Usage Event 是计费解释层，当前实现以 `usage.tick` 和 session end �
 | --- | --- |
 | `session.pause` | 停止接收新音频，flush pending audio 和 provider |
 | `session.resume` | 恢复接收音频 |
-| `session.end` | 停止接收、flush、发送 `session.ended`、关闭连接 |
+| `session.end` | 停止接收，依次 flush audio batch、ASR/provider、segment sink，发送带完整性摘要的 `session.ended` 后关闭连接 |
 
 ### 4.4 Server Events
 
@@ -196,7 +196,7 @@ Usage Event 是计费解释层，当前实现以 `usage.tick` 和 session end �
 | `audio.output` | 服务端返回 TTS 音频 | 默认不保存原始音频 |
 | `usage.tick` | 在线用量提示，可带 `lowBalance` | UI 展示，P1 后写 usage event |
 | `session.paused` | 已暂停 | 更新 UI |
-| `session.ended` | 已结束，可带 `reason/billableSeconds/remainingSeconds` | 调 API 结算并保存历史 |
+| `session.ended` | 已结束，带 `reason/billableSeconds/remainingSeconds` 和 `flush` 完整性摘要 | App 确认结束；Gateway sink 调 API 结算并保存历史 |
 | `error` | 错误 | UI 展示 stage/provider/retryable |
 
 ### 4.5 事件顺序
@@ -225,6 +225,21 @@ Usage Event 是计费解释层，当前实现以 `usage.tick` 和 session end �
 - UI 只把 final 作为稳定历史。
 - partial/delta 可以覆盖当前草稿，不进入最终导出。
 - 同一 `segmentId` 的 final 到达后，后续同 ID final 只能覆盖同一段，不新增段。
+- `session.ended` 必须排在尾段 `transcript.final` 与 `translation.final/failed` 之后。
+- `flush.status` 为 `completed` 或 `empty` 且 audio/provider 成功、无未解决段时，App 才把结束 flush 视为确认成功。
+- `flush.status=degraded` 时仍结束和保存已有原文，但 App 必须提示最后一句未完整确认。
+
+`session.ended.flush` 字段：
+
+| 字段 | 含义 |
+| --- | --- |
+| `status` | `completed`、`empty` 或 `degraded` |
+| `transcriptFinalCount` | 结束窗口内补齐的最终原文数 |
+| `translationFinalCount` | 结束窗口内补齐的最终译文数 |
+| `translationFailedCount` | 已保留原文但翻译失败的段数 |
+| `unresolvedSegmentCount` | 仍只有 final 原文、没有译文或失败结果的段数 |
+| `pipelineErrorCount` | 结束窗口内 ASR/provider 等管线错误数 |
+| `audioFlushed/providerFlushed` | 两级 flush 是否执行成功 |
 
 ## 5. VAD、缓冲、端点和 flush
 
@@ -234,11 +249,13 @@ Usage Event 是计费解释层，当前实现以 `usage.tick` 和 session end �
 | --- | --- |
 | 采集 | App 20ms 至 100ms 一帧，弱网可合并但不超过 200ms |
 | 缓冲 | Gateway 批处理上限 800ms，积压超过 2400ms 丢弃旧帧并记录诊断 |
-| VAD | 服务端 ASR provider 优先返回端点，App 端仅做静音门控和 TTS 播放门控 |
+| VAD | 服务端 ASR 使用 MarbleNet v2 主判断，阈值默认 0.5；RMS 仅自动降级，App 端仅做保守静音门控和 TTS 播放门控 |
 | 强制切段 | 连续语音超过 6 至 8 秒必须强制 final，防止长句不翻译 |
 | silence flush | 静音 600 至 900ms 后 flush 当前段 |
 | stop flush | pause/end 前必须 flush pending audio 和 provider |
 | 去重 | `segmentId + normalizedText` 去重，短时间重复 final 不重复展示 |
+
+ASR flush 必须继续携带当前 session 的 `sourceLanguage`、`targetLanguage`、`hotwords` 和 `corrections`，保证尾句与实时段使用同一领域词策略。
 
 面对面自动朗读时：
 

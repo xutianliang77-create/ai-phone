@@ -26,6 +26,7 @@ class PlatformOcrProvider implements MobileOcrProvider {
       text: (result?['text'] as String? ?? '').trim(),
       provider: result?['provider'] as String? ?? 'platform_ocr',
       scripts: _stringList(result?['scripts']) ?? scripts,
+      blocks: _blocks(result?['blocks']),
     );
   }
 
@@ -35,5 +36,25 @@ class PlatformOcrProvider implements MobileOcrProvider {
   List<String>? _stringList(Object? value) {
     if (value is! List) return null;
     return value.whereType<String>().toList(growable: false);
+  }
+
+  List<MobileOcrBlock> _blocks(Object? value) {
+    if (value is! List) return const <MobileOcrBlock>[];
+    return value.whereType<Map>().map((item) {
+      return MobileOcrBlock(
+        text: (item['text'] as String? ?? '').trim(),
+        left: _coordinate(item['left']),
+        top: _coordinate(item['top']),
+        width: _coordinate(item['width']),
+        height: _coordinate(item['height']),
+      );
+    }).where((block) {
+      return block.text.isNotEmpty && block.width > 0 && block.height > 0;
+    }).toList(growable: false);
+  }
+
+  double _coordinate(Object? value) {
+    if (value is! num) return 0;
+    return value.toDouble().clamp(0, 1);
   }
 }

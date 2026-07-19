@@ -5,6 +5,8 @@ extension RealtimeControllerSegments on RealtimeController {
     String id, {
     String? sourceText,
     String? translatedText,
+    String? turnId,
+    int? revision,
     String? rawText,
     String? optimizedText,
     String? appendSourceText,
@@ -17,6 +19,10 @@ extension RealtimeControllerSegments on RealtimeController {
     String? model,
     int? latencyMs,
     Map<String, Object?>? refinement,
+    SpeakerAttribution? speaker,
+    SegmentTiming? timing,
+    Map<String, Object?>? vadContext,
+    TurnLanguageProfile? languageProfile,
   }) {
     final nextSourceText = _cleanRealtimeText(sourceText);
     final nextTranslatedText = _cleanRealtimeText(translatedText);
@@ -33,21 +39,36 @@ extension RealtimeControllerSegments on RealtimeController {
     }
 
     final current = _drafts[id] ?? SegmentDraft(id);
+    final canReviseRecognition = revision == null ||
+        current.revision == null ||
+        revision >= current.revision!;
+    final nextRevision = revision == null
+        ? current.revision
+        : current.revision == null || revision > current.revision!
+            ? revision
+            : current.revision;
     _drafts[id] = current.copyWith(
-      sourceText:
-          nextSourceText ?? current.sourceText + (nextAppendSourceText ?? ''),
+      turnId: current.turnId ?? turnId,
+      revision: nextRevision,
+      sourceText: canReviseRecognition
+          ? nextSourceText ?? current.sourceText + (nextAppendSourceText ?? '')
+          : current.sourceText,
       translatedText: nextTranslatedText ??
           current.translatedText + (nextAppendTranslatedText ?? ''),
-      rawText: rawText,
-      optimizedText: optimizedText,
-      sourceLanguage: sourceLanguage,
+      rawText: canReviseRecognition ? rawText : null,
+      optimizedText: canReviseRecognition ? optimizedText : null,
+      sourceLanguage: canReviseRecognition ? sourceLanguage : null,
       targetLanguage: targetLanguage,
-      confidence: confidence,
+      confidence: canReviseRecognition ? confidence : null,
       stage: stage,
       provider: provider,
       model: model,
       latencyMs: latencyMs,
-      refinement: refinement,
+      refinement: canReviseRecognition ? refinement : null,
+      speaker: canReviseRecognition ? speaker : null,
+      timing: canReviseRecognition ? timing : null,
+      vadContext: canReviseRecognition ? vadContext : null,
+      languageProfile: canReviseRecognition ? languageProfile : null,
     );
     _replaceSegmentsFromDrafts();
   }

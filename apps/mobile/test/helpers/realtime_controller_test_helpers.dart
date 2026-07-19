@@ -8,16 +8,27 @@ import 'package:translation_mobile/src/features/realtime/data/gateway/realtime_g
 import 'package:translation_mobile/src/features/realtime/data/realtime_repository.dart';
 import 'package:translation_mobile/src/features/realtime/domain/entities/subtitle_segment.dart';
 import 'package:translation_mobile/src/features/realtime/presentation/controllers/realtime_controller.dart';
+import 'package:translation_mobile/src/features/realtime/presentation/controllers/speech_capture_gate.dart';
 import 'package:translation_mobile/src/platform/audio/audio_capture.dart';
 import 'package:translation_mobile/src/platform/audio/audio_frame.dart';
+import 'package:translation_mobile/src/platform/audio/audio_session_coordinator.dart';
+import 'package:translation_mobile/src/platform/speech/pcm_audio_output_player.dart';
 
 RealtimeController realtimeControllerForTest(
   FakeRealtimeRepository repository,
-  FakeAudioCapture audio,
-) {
+  FakeAudioCapture audio, {
+  PcmAudioOutputPlayer? pcmAudioOutputPlayer,
+  bool autoSpeakTranslation = false,
+  AudioSessionCoordinator? audioSessionCoordinator,
+  SpeechCaptureGate? speechCaptureGate,
+}) {
   return RealtimeController(
     repository: repository,
     audioCapture: audio,
+    pcmAudioOutputPlayer: pcmAudioOutputPlayer,
+    autoSpeakTranslation: autoSpeakTranslation,
+    audioSessionCoordinator: audioSessionCoordinator,
+    speechCaptureGate: speechCaptureGate,
     config: AppConfig(
       apiBaseUrl: Uri.parse('http://127.0.0.1:3100'),
       useMockAudio: false,
@@ -32,13 +43,18 @@ RealtimeController realtimeControllerForTest(
 }
 
 class FakeRealtimeRepository extends RealtimeRepository {
-  FakeRealtimeRepository({this.emitTailOnEnd = false})
-      : super(
+  FakeRealtimeRepository({
+    this.emitTailOnEnd = false,
+    this.failEndConfirmation = false,
+    this.startCompleter,
+  }) : super(
           apiClient: NoopRealtimeApiClient(),
           gatewayClient: NoopRealtimeGatewayClient(),
         );
 
   final bool emitTailOnEnd;
+  final bool failEndConfirmation;
+  final Completer<RealtimeSession>? startCompleter;
   final _events = StreamController<GatewayRealtimeEvent>.broadcast();
   final startedSessionIds = <String>[];
   final endedSessionIds = <String>[];
@@ -50,6 +66,12 @@ class FakeRealtimeRepository extends RealtimeRepository {
 
   @override
   Future<RealtimeSession> startSession() async {
+    final pending = startCompleter;
+    if (pending != null) {
+      final session = await pending.future;
+      startedSessionIds.add(session.sessionId);
+      return session;
+    }
     final sessionId = 'sess_${startedSessionIds.length + 1}';
     startedSessionIds.add(sessionId);
     return RealtimeSession(
@@ -85,12 +107,20 @@ class FakeRealtimeRepository extends RealtimeRepository {
       language: 'zh',
     ));
     await Future<void>.delayed(Duration.zero);
+    if (failEndConfirmation) {
+      throw const RealtimeFinalizationException(
+        '最后一句处理未完整确认，现有原文和译文已保留',
+      );
+    }
   }
 
   @override
   Future<void> closeRealtime() async {
     closeRealtimeCalls += 1;
   }
+
+  @override
+  Future<bool> pauseAndWait(String sessionId) async => true;
 
   void emit(GatewayRealtimeEvent event) {
     _events.add(event);
@@ -109,6 +139,7 @@ class FakeAudioCapture implements AudioCapture {
   final bool failStart;
   final bool failStop;
   int stopCalls = 0;
+  int startCalls = 0;
 
   @override
   Stream<AudioFrame> get frames => _frames.stream;
@@ -118,6 +149,7 @@ class FakeAudioCapture implements AudioCapture {
 
   @override
   Future<void> start(AudioCaptureConfig config) async {
+    startCalls += 1;
     if (failStart) throw StateError('microphone start failed');
   }
 

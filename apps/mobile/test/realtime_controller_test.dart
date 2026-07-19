@@ -107,6 +107,54 @@ void main() {
     expect(controller.segments.single.translatedText, '你好');
   });
 
+  test('late translation cannot roll back a revised speaker label', () async {
+    final repository = FakeRealtimeRepository();
+    final controller =
+        realtimeControllerForTest(repository, FakeAudioCapture());
+    addTearDown(controller.dispose);
+    await controller.start();
+
+    repository.emit(GatewayRealtimeEvent.fromJson(<String, Object?>{
+      'type': 'transcript.final',
+      'sessionId': 'sess_1',
+      'segmentId': 'seg_1',
+      'turnId': 'turn_1',
+      'revision': 0,
+      'text': 'hello',
+      'dominantLanguage': 'en',
+      'detectedLanguages': <String>['en'],
+      'mixedLanguage': false,
+      'speaker': speakerJson('speaker_1'),
+    }));
+    repository.emit(GatewayRealtimeEvent.fromJson(<String, Object?>{
+      'type': 'speaker.updated',
+      'sessionId': 'sess_1',
+      'segmentId': 'seg_1',
+      'turnId': 'turn_1',
+      'revision': 1,
+      'speaker': speakerJson('speaker_2'),
+    }));
+    repository.emit(GatewayRealtimeEvent.fromJson(<String, Object?>{
+      'type': 'translation.final',
+      'sessionId': 'sess_1',
+      'segmentId': 'seg_1',
+      'turnId': 'turn_1',
+      'revision': 0,
+      'text': '你好',
+      'dominantLanguage': 'zh',
+      'detectedLanguages': <String>['zh', 'en'],
+      'mixedLanguage': true,
+      'speaker': speakerJson('speaker_1'),
+    }));
+    await pumpEventQueue();
+
+    expect(controller.segments.single.translatedText, '你好');
+    expect(controller.segments.single.speaker?.speakerId, 'speaker_2');
+    expect(controller.segments.single.revision, 1);
+    expect(controller.segments.single.languageProfile?.dominantLanguage, 'en');
+    expect(controller.segments.single.languageProfile?.mixedLanguage, isFalse);
+  });
+
   test('shows gateway provider error stage in the status message', () async {
     final repository = FakeRealtimeRepository();
     final audio = FakeAudioCapture();
@@ -125,9 +173,9 @@ void main() {
     ));
     await pumpEventQueue();
 
-    expect(controller.status, RealtimeStatus.ended);
+    expect(controller.status, RealtimeStatus.failed);
     expect(controller.message, contains('ASR 识别'));
-    expect(controller.message, contains('hymt2_self_hosted'));
+    expect(controller.message, isNot(contains('hymt2_self_hosted')));
     expect(controller.message, contains('可重试'));
   });
 
@@ -176,6 +224,23 @@ void main() {
     expect(audio.stopCalls, 1);
   });
 
+  test('ends with a warning when final flush is not confirmed', () async {
+    final repository = FakeRealtimeRepository(
+      emitTailOnEnd: true,
+      failEndConfirmation: true,
+    );
+    final controller =
+        realtimeControllerForTest(repository, FakeAudioCapture());
+    addTearDown(controller.dispose);
+
+    await controller.start();
+    await controller.stop();
+
+    expect(controller.status, RealtimeStatus.ended);
+    expect(controller.message, '最后一句处理未完整确认，现有原文和译文已保留');
+    expect(controller.segments.single.sourceText, 'tail audio');
+  });
+
   test('stops locally when gateway ends because usage is exhausted', () async {
     final repository = FakeRealtimeRepository();
     final audio = FakeAudioCapture();
@@ -221,7 +286,7 @@ void main() {
     ));
     await pumpEventQueue();
 
-    expect(controller.status, RealtimeStatus.listening);
+    expect(controller.status, RealtimeStatus.active);
     expect(controller.lowBalance, isTrue);
     expect(controller.remainingSeconds, 15);
 
@@ -247,7 +312,7 @@ void main() {
     await controller.start();
     await pumpEventQueue();
 
-    expect(controller.status, RealtimeStatus.ended);
+    expect(controller.status, RealtimeStatus.failed);
     expect(controller.message, contains('microphone start failed'));
     expect(repository.startedSessionIds, <String>['sess_1']);
     expect(repository.endedSessionIds, <String>['sess_1']);
@@ -255,3 +320,9 @@ void main() {
     expect(audio.stopCalls, 1);
   });
 }
+
+Map<String, Object?> speakerJson(String speakerId) => <String, Object?>{
+      'speakerId': speakerId,
+      'role': 'speaker',
+      'source': 'diarization',
+    };

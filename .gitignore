@@ -30,11 +30,16 @@ apps/mobile/ios/Runner/Models/**
 **/__pycache__/
 **/.pytest_cache/
 **/.data/
-tmp/
+/tmp/
 
 # Runtime/evaluation data may contain transcripts, accounts, or model weights
-data/
-test-audio/
+/data/
+/test-audio/*
+!/test-audio/iphone14-small-models/
+/test-audio/iphone14-small-models/*
+!/test-audio/iphone14-small-models/diar_001-24k.wav
+!/test-audio/iphone14-small-models/diar_002-24k.wav
+/test-apps/iphone14_model_tester/data/
 
 # Local operational history can contain device and private network details
 PROGRESS_LOG.md

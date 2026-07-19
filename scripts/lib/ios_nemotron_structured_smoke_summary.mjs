@@ -122,6 +122,11 @@ function audioSummary(audio) {
   return {
     audioSessionActive: audio?.sessionActive,
     audioSessionError: audio?.sessionError,
+    audioVoiceProcessingPolicy: audio?.voiceProcessingPolicy,
+    audioVoiceProcessingAttempted: audio?.voiceProcessingAttempted,
+    audioLastVoiceProcessingEnabled: audio?.lastVoiceProcessingEnabled,
+    audioLastVoiceProcessingAgcEnabled: audio?.lastVoiceProcessingAgcEnabled,
+    audioVoiceProcessingError: audio?.voiceProcessingError,
     audioProcessingError: audio?.processingError,
     audioInputBuffers: audio?.inputBuffers,
     audioEmittedChunks: audio?.emittedChunks,

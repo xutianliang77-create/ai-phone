@@ -9,7 +9,7 @@ bool shouldShowOnlineRecovery({
 }) {
   if (processingMode != RealtimeProcessingMode.online) return false;
   if (diagnostic == null) return false;
-  return status == RealtimeStatus.listening ||
+  return status == RealtimeStatus.active ||
       status == RealtimeStatus.paused ||
-      status == RealtimeStatus.ended;
+      status == RealtimeStatus.failed;
 }

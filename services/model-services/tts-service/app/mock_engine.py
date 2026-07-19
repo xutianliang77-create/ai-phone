@@ -9,6 +9,9 @@ class MockTtsEngine:
     def health(self) -> tuple[bool, str | None]:
         return True, None
 
+    def sample_rates(self) -> tuple[int, int]:
+        return self.sample_rate, self.sample_rate
+
     async def synthesize(
         self,
         request: TtsSynthesizeRequest,
@@ -19,8 +22,11 @@ class MockTtsEngine:
             model="mock-tts-v0.1.0",
             voiceMode=request.voice.mode if request.voice else "preset",
             voiceProfileId=request.voice.voiceProfileId if request.voice else None,
+            presetId=request.voice.presetId if request.voice else None,
             firstAudioMs=1,
             audioDurationMs=duration_ms,
+            modelSampleRate=self.sample_rate,
+            outputSampleRate=self.sample_rate,
             audio=TtsAudioPayload(
                 sampleRate=self.sample_rate,
                 data=sine_pcm16_base64(

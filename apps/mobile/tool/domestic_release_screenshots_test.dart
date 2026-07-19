@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:translation_mobile/src/features/call_link/data/call_room_client.dart';
+import 'package:translation_mobile/src/shared/domain/speaker_attribution.dart';
 import 'package:translation_mobile/src/features/call_link/presentation/pages/call_link_page.dart';
 import 'package:translation_mobile/src/features/history/presentation/pages/session_detail_page.dart';
 
@@ -59,7 +60,11 @@ Future<void> _captureCall(WidgetTester tester, String filename) async {
     captions: const <CallRoomCaption>[
       CallRoomCaption(
         segmentId: 'segment-release',
-        speakerRole: 'guest',
+        speaker: SpeakerAttribution(
+          speakerId: 'guest',
+          role: 'guest',
+          source: 'participant_track',
+        ),
         sourceLanguage: 'en',
         targetLanguage: 'zh',
         timestampMs: 1,

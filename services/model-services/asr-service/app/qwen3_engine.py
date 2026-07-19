@@ -3,9 +3,13 @@ import os
 from typing import Protocol
 
 from app.audio_buffer import RealtimePcmSegmenter
+from app.endpoint_policy import EndpointPolicy
+from app.qwen3_context_guard import is_context_echo
+from app.qwen3_mixed_language import retry_mixed_language_prefix
 from app.schemas import LanguageCode, TranslationLanguageCode
 from app.schemas import AsrTranscribeRequest, AsrTranscribeResponse
 from app.sensevoice_engine import normalize_transcript, transcript_language, write_temp_wav
+from app.vad import VadProvider
 
 
 class Qwen3Runner(Protocol):
@@ -60,7 +64,10 @@ class Qwen3AsrEngine:
         vad_energy_threshold: int,
         context: str = "",
         english_context: str = "",
+        mixed_language_retry_enabled: bool = False,
         runner: Qwen3Runner | None = None,
+        vad_provider: VadProvider | None = None,
+        endpoint_policies: dict[str, EndpointPolicy] | None = None,
     ) -> None:
         self.runner = runner or LocalQwen3AsrRunner(
             model_dir=model_dir,
@@ -75,23 +82,26 @@ class Qwen3AsrEngine:
             max_audio_ms=max_audio_ms,
             preroll_ms=preroll_ms,
             vad_energy_threshold=vad_energy_threshold,
+            vad_provider=vad_provider,
+            endpoint_policies=endpoint_policies,
         )
-        self._last_text_by_session: dict[str, str] = {}
+        self._recent_text_by_session: dict[str, list[tuple[str, int, int]]] = {}
         self._session_prompt_by_session: dict[str, tuple[list[str], list[tuple[str, str]]]] = {}
         self.context = context
         self.english_context = english_context
+        self.mixed_language_retry_enabled = mixed_language_retry_enabled
 
     async def transcribe(
         self,
         request: AsrTranscribeRequest,
     ) -> AsrTranscribeResponse | None:
-        segment = self.segmenter.append(request)
-        if segment is None:
-            return None
         self._session_prompt_by_session[request.sessionId] = (
             clean_prompt_words(request.hotwords),
             clean_correction_pairs(request.corrections),
         )
+        segment = self.segmenter.append(request)
+        if segment is None:
+            return None
         return await self._transcribe_segment(
             session_id=request.sessionId,
             segment_id=f"qwen3_seg_{segment.end_sequence}",
@@ -101,6 +111,9 @@ class Qwen3AsrEngine:
             target_language=request.targetLanguage,
             hotwords=request.hotwords,
             corrections=request.corrections,
+            start_ms=segment.start_timestamp_ms,
+            end_ms=segment.end_timestamp_ms,
+            endpoint_reason=segment.endpoint_reason,
         )
 
     async def flush(
@@ -122,11 +135,39 @@ class Qwen3AsrEngine:
             target_language=target_language,
             hotwords=hotwords,
             corrections=corrections,
+            start_ms=segment.start_timestamp_ms,
+            end_ms=segment.end_timestamp_ms,
+            endpoint_reason=segment.endpoint_reason,
+        )
+
+    async def commit_boundary(
+        self,
+        session_id: str,
+        boundary_ms: int,
+        source_language: LanguageCode,
+        target_language: TranslationLanguageCode,
+    ) -> AsrTranscribeResponse | None:
+        segment = self.segmenter.commit_boundary(session_id, boundary_ms)
+        if segment is None:
+            return None
+        hotwords, corrections = self._session_prompt_by_session.get(session_id, ([], []))
+        return await self._transcribe_segment(
+            session_id=session_id,
+            segment_id=f"qwen3_boundary_{segment.end_sequence}",
+            pcm=segment.pcm,
+            sample_rate=segment.sample_rate,
+            source_language=source_language,
+            target_language=target_language,
+            hotwords=hotwords,
+            corrections=corrections,
+            start_ms=segment.start_timestamp_ms,
+            end_ms=segment.end_timestamp_ms,
+            endpoint_reason=segment.endpoint_reason,
         )
 
     async def close_session(self, session_id: str) -> None:
         self.segmenter.close(session_id)
-        self._last_text_by_session.pop(session_id, None)
+        self._recent_text_by_session.pop(session_id, None)
         self._session_prompt_by_session.pop(session_id, None)
 
     async def _transcribe_segment(
@@ -139,6 +180,9 @@ class Qwen3AsrEngine:
         target_language: TranslationLanguageCode,
         hotwords: list[str],
         corrections: list[object],
+        start_ms: int,
+        end_ms: int,
+        endpoint_reason: str,
     ) -> AsrTranscribeResponse | None:
         audio_path = write_temp_wav(pcm, sample_rate)
         try:
@@ -156,26 +200,63 @@ class Qwen3AsrEngine:
                 language,
                 context,
             )
+            if self.mixed_language_retry_enabled:
+                retry_context = qwen3_context(
+                    source_language="en",
+                    context=self.context,
+                    english_context=self.english_context,
+                    hotwords=hotwords,
+                    corrections=corrections,
+                )
+                text = await retry_mixed_language_prefix(
+                    transcribe=self.runner.transcribe,
+                    audio_path=audio_path,
+                    source_language=source_language,
+                    primary_text=text,
+                    retry_context=retry_context,
+                )
         finally:
             os.unlink(audio_path)
 
         text = text.strip()
-        if not text or self._is_duplicate(session_id, text):
+        if not text or is_context_echo(text, context):
+            return None
+        if self._is_duplicate(session_id, text, start_ms, end_ms):
             return None
         return AsrTranscribeResponse(
             segmentId=segment_id,
             text=text,
             language=transcript_language(text, source_language, target_language),
             confidence=None,
+            timing={
+                "startMs": start_ms,
+                "endMs": end_ms,
+                "source": "client",
+            },
+            endpointReason=endpoint_reason,
+            vadContext=self.segmenter.segment_vad_context(
+                session_id,
+                endpoint_reason,
+            ),
         )
 
-    def _is_duplicate(self, session_id: str, text: str) -> bool:
+    def _is_duplicate(
+        self,
+        session_id: str,
+        text: str,
+        start_ms: int,
+        end_ms: int,
+    ) -> bool:
         normalized = normalize_transcript(text)
         if not normalized:
             return True
-        if self._last_text_by_session.get(session_id) == normalized:
-            return True
-        self._last_text_by_session[session_id] = normalized
+        recent = self._recent_text_by_session.setdefault(session_id, [])
+        for previous_text, previous_start, previous_end in recent:
+            overlaps = start_ms < previous_end and end_ms > previous_start
+            if overlaps and previous_text == normalized:
+                return True
+        recent.append((normalized, start_ms, end_ms))
+        self._recent_text_by_session[session_id] = recent[-8:]
         return False
 
 

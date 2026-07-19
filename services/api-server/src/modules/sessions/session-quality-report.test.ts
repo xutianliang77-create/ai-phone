@@ -1,0 +1,255 @@
+import { describe, expect, it } from "vitest";
+import type { SessionRecord } from "./session-record.js";
+import { buildSessionQualityReport } from "./session-quality-report.js";
+
+describe("session quality report", () => {
+  it("summarizes quality evidence without transcript text", () => {
+    const report = buildSessionQualityReport(sampleSession(), new Date(0));
+
+    expect(report).toMatchObject({
+      version: 1,
+      sessionId: "quality-session",
+      generatedAt: "1970-01-01T00:00:00.000Z",
+      segments: {
+        total: 2,
+        translated: 1,
+        sourceOnly: 1,
+        translationCoverage: 0.5,
+      },
+      latency: {
+        sampleCount: 2,
+        averageMs: 1750,
+        p95Ms: 3000,
+        maxMs: 3000,
+      },
+      audio: { receivedFrames: 100, droppedFrames: 2, dropRate: 0.02 },
+      speakers: { identified: 1, unknownSegments: 1, overlapSegments: 1 },
+      endpoints: { silence: 1, max_duration: 1 },
+    });
+    expect(report.flags).toEqual([
+      "source_without_translation",
+      "audio_frames_dropped",
+      "vad_fallback",
+      "unknown_speaker",
+      "high_translation_latency",
+      "max_duration_endpoint",
+    ]);
+    expect(JSON.stringify(report)).not.toContain("sensitive transcript");
+  });
+
+  it("reports an empty session deterministically", () => {
+    const session = sampleSession();
+    session.segments = [];
+    delete session.diagnostics;
+    const report = buildSessionQualityReport(session, new Date(0));
+
+    expect(report.segments.translationCoverage).toBe(0);
+    expect(report.latency).toEqual({
+      sampleCount: 0,
+      averageMs: 0,
+      p95Ms: 0,
+      maxMs: 0,
+    });
+    expect(report.flags).toEqual(["no_segments", "missing_audio_diagnostics"]);
+  });
+
+  it("summarizes playback and barge-in stop latency", () => {
+    const session = sampleSession();
+    session.playbacks = [
+      playback("one", "interrupted", 120),
+      playback("two", "interrupted", 350),
+      playback("three", "failed"),
+    ];
+
+    const report = buildSessionQualityReport(session, new Date(0));
+
+    expect(report.playback).toEqual({
+      total: 3,
+      completed: 0,
+      interrupted: 2,
+      failed: 1,
+      bargeInInterruptions: 2,
+    });
+    expect(report.bargeIn).toEqual({
+      sampleCount: 2,
+      averageStopLatencyMs: 235,
+      p95StopLatencyMs: 350,
+      maxStopLatencyMs: 350,
+    });
+    expect(report.flags).toEqual(expect.arrayContaining([
+      "playback_failed",
+      "slow_barge_in_stop",
+    ]));
+  });
+
+  it("computes p50/p95 stage latency and local quality gates", () => {
+    const session = sampleSession();
+    session.segments = [
+      pipelineSegment("one", {
+        asrStartedAtMs: 0,
+        asrFinalAtMs: 100,
+        processingQueueEnteredAtMs: 100,
+        processingQueueReleasedAtMs: 110,
+        turnBufferReleasedAtMs: 130,
+        translationStartedAtMs: 140,
+        translationFirstTokenAtMs: 170,
+        translationFinalAtMs: 300,
+        ttsStartedAtMs: 310,
+        ttsFirstAudioAtMs: 360,
+        ttsReadyAtMs: 450,
+      }),
+      pipelineSegment("two", {
+        asrStartedAtMs: 1000,
+        asrFinalAtMs: 2500,
+        processingQueueEnteredAtMs: 2500,
+        processingQueueReleasedAtMs: 2700,
+        turnBufferReleasedAtMs: 3000,
+        translationStartedAtMs: 3000,
+        translationFirstTokenAtMs: 3400,
+        translationFinalAtMs: 3600,
+        ttsStartedAtMs: 3600,
+        ttsFirstAudioAtMs: 4300,
+        ttsReadyAtMs: 4500,
+      }),
+    ];
+    session.playbacks = [
+      pipelinePlayback("one", 1, 500),
+      pipelinePlayback("two", 2, 5000),
+    ];
+
+    const report = buildSessionQualityReport(session, new Date(0));
+
+    expect(report.pipeline).toMatchObject({
+      asrFinal: { sampleCount: 2, averageMs: 800, p50Ms: 100,
+        p95Ms: 1500, maxMs: 1500 },
+      translationFirstToken: { p50Ms: 30, p95Ms: 400 },
+      translationFinal: { averageMs: 380, p50Ms: 160, p95Ms: 600 },
+      ttsFirstAudio: { averageMs: 375, p50Ms: 50, p95Ms: 700 },
+      playbackStartEndToEnd: { averageMs: 2250, p50Ms: 500, p95Ms: 4000 },
+    });
+    expect(report.flags).toEqual(expect.arrayContaining([
+      "slow_asr_final",
+      "slow_translation_final",
+      "slow_tts_first_audio",
+    ]));
+  });
+});
+
+function pipelineSegment(
+  id: string,
+  pipelineTiming: NonNullable<SessionRecord["segments"][number]["pipelineTiming"]>,
+) {
+  return { id, sourceText: `source-${id}`, translatedText: `target-${id}`,
+    pipelineTiming };
+}
+
+function pipelinePlayback(id: string, generation: number, startedAtMs: number) {
+  return {
+    id: `playback-${id}`,
+    segmentId: id,
+    sourceLegId: "host-leg",
+    targetLegId: "guest-leg",
+    generation,
+    status: "completed" as const,
+    queuedAt: new Date(startedAtMs - 10).toISOString(),
+    startedAt: new Date(startedAtMs).toISOString(),
+    endedAt: new Date(startedAtMs + 100).toISOString(),
+  };
+}
+
+function playback(
+  id: string,
+  status: "interrupted" | "failed",
+  stopLatencyMs?: number,
+) {
+  return {
+    id,
+    segmentId: `segment-${id}`,
+    sourceLegId: "host-leg",
+    targetLegId: "guest-leg",
+    generation: id === "one" ? 1 : id === "two" ? 2 : 3,
+    status,
+    interruptReason: status === "interrupted" ? "barge_in" as const : "failure" as const,
+    queuedAt: new Date(0).toISOString(),
+    ...(stopLatencyMs === undefined ? {} : { bargeIn: { stopLatencyMs } }),
+  };
+}
+
+function sampleSession(): SessionRecord {
+  return {
+    id: "quality-session",
+    userId: "guest-user",
+    mode: "conversation",
+    status: "ended",
+    consumedSeconds: 12,
+    createdAt: "2026-07-13T00:00:00.000Z",
+    endedAt: "2026-07-13T00:00:12.000Z",
+    segments: [
+      {
+        id: "one",
+        sourceText: "sensitive transcript one",
+        translatedText: "translated",
+        latencyMs: 500,
+        stage: "translation",
+        provider: "translation-provider",
+        model: "model-a",
+        speaker: {
+          speakerId: "speaker_1",
+          role: "speaker",
+          source: "diarization",
+        },
+        timing: { startMs: 0, endMs: 1000, source: "model" },
+        vadContext: {
+          endpointReason: "silence",
+          endpointPolicyFingerprint: "a".repeat(64),
+        },
+      },
+      {
+        id: "two",
+        sourceText: "sensitive transcript two",
+        translatedText: "",
+        latencyMs: 3000,
+        stage: "translation",
+        provider: "translation-provider",
+        model: "model-a",
+        timing: {
+          startMs: 1000,
+          endMs: 2000,
+          source: "model",
+          overlap: true,
+        },
+        vadContext: {
+          endpointReason: "max_duration",
+          endpointPolicyFingerprint: "a".repeat(64),
+        },
+      },
+    ],
+    diagnostics: {
+      version: 1,
+      audio: {
+        receivedFrameCount: 100,
+        processedBatchCount: 10,
+        droppedFrameCount: 2,
+      },
+      vad: {
+        configuredProvider: "marblenet",
+        activeProvider: "rms_fallback",
+        threshold: 0.5,
+        analyzedFrameCount: 100,
+        speechFrameCount: 50,
+        speechFrameRatio: 0.5,
+        fallbackCount: 1,
+        fallbackReason: "runtime_failed",
+        modelFingerprint: "b".repeat(64),
+        endpointPolicy: {
+          mode: "conversation",
+          minAudioMs: 300,
+          endpointSilenceMs: 900,
+          maxAudioMs: 10000,
+          prerollMs: 200,
+          fingerprint: "c".repeat(64),
+        },
+      },
+    },
+  };
+}

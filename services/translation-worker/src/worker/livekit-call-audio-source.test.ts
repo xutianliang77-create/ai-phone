@@ -1,11 +1,19 @@
-import { describe, expect, it } from "vitest";
-import { LiveKitCallAudioSource } from "./livekit-call-audio-source.js";
-import type { CallAudioFrame, CallAudioSpeakerRole } from "./types.js";
+import { describe, expect, it, vi } from "vitest";
+import {
+  LiveKitCallAudioSource,
+} from "./livekit-call-audio-source.js";
+import {
+  createFakeRtcNode,
+  eventually,
+  RecordingWorker,
+} from "./livekit-call-audio-source.test-support.js";
 
 describe("LiveKitCallAudioSource", () => {
   it("joins the room with a worker token and forwards remote audio frames", async () => {
-    const worker = new RecordingWorker();
     const rtc = createFakeRtcNode();
+    const worker = new RecordingWorker(() => {
+      expect(rtc.room.connected).not.toBeNull();
+    });
     const source = new LiveKitCallAudioSource({
       callId: "call_1",
       worker: worker as never,
@@ -55,6 +63,98 @@ describe("LiveKitCallAudioSource", () => {
     });
     expect(worker.frames[0].data).toBe(Buffer.from(new Int16Array([1, -1]).buffer).toString("base64"));
     expect(worker.ended).toEqual(["call_1"]);
+    expect(worker.lifecycle).toEqual(["marked:call_1", "ended:call_1"]);
+  });
+
+  it("subscribes a microphone publication that existed before startInRoom attached", async () => {
+    const rtc = createFakeRtcNode();
+    const worker = new RecordingWorker();
+    const participant = {
+      metadata: JSON.stringify({ participantRole: "guest" }),
+      trackPublications: new Map<string, unknown>(),
+    };
+    const publication: {
+      track?: unknown;
+      setSubscribed: ReturnType<typeof vi.fn>;
+    } = {
+      setSubscribed: vi.fn(() => {
+        const track = new rtc.RemoteAudioTrack();
+        publication.track = track;
+        rtc.room.emit("trackSubscribed", track, publication, participant);
+      }),
+    };
+    participant.trackPublications.set("TR_PREEXISTING", publication);
+    Object.assign(rtc.room, {
+      remoteParticipants: new Map([["guest-participant", participant]]),
+    });
+    const source = new LiveKitCallAudioSource({
+      callId: "call_1",
+      worker: worker as never,
+      audioSampleRate: 24000,
+      audioFrameSizeMs: 100,
+    });
+
+    await source.startInRoom({
+      room: rtc.room as never,
+      rtc: rtc.module,
+      participantIdentity: "call_1:worker:one",
+    });
+    await eventually(() => worker.frames.length === 1);
+    await source.stop();
+
+    expect(publication.setSubscribed).toHaveBeenCalledWith(true);
+    expect(worker.frames[0]).toMatchObject({
+      sessionId: "call_1",
+      speakerRole: "guest",
+      sequence: 1,
+    });
+  });
+
+  it("subscribes a microphone publication published after startInRoom attached", async () => {
+    const rtc = createFakeRtcNode();
+    const worker = new RecordingWorker();
+    const lifecycle: Array<{ event: string; outcome: string }> = [];
+    const participant = {
+      metadata: JSON.stringify({ participantRole: "guest" }),
+    };
+    const publication: {
+      track?: unknown;
+      setSubscribed: ReturnType<typeof vi.fn>;
+    } = {
+      setSubscribed: vi.fn(() => {
+        const track = new rtc.RemoteAudioTrack();
+        publication.track = track;
+        rtc.room.emit("trackSubscribed", track, publication, participant);
+      }),
+    };
+    const source = new LiveKitCallAudioSource({
+      callId: "call_1",
+      worker: worker as never,
+      audioSampleRate: 24000,
+      audioFrameSizeMs: 100,
+      onTrackLifecycle: (event) => lifecycle.push(event),
+    });
+
+    await source.startInRoom({
+      room: rtc.room as never,
+      rtc: rtc.module,
+      participantIdentity: "call_1:worker:one",
+    });
+    rtc.room.emit("trackPublished", publication, participant);
+    await eventually(() => worker.frames.length === 1);
+    await source.stop();
+
+    expect(publication.setSubscribed).toHaveBeenCalledWith(true);
+    expect(worker.frames[0]).toMatchObject({
+      sessionId: "call_1",
+      speakerRole: "guest",
+      sequence: 1,
+    });
+    expect(lifecycle.map(({ event, outcome }) => `${event}:${outcome}`)).toEqual([
+      "publication_observed:subscription_requested",
+      "track_subscribed:accepted",
+      "audio_leg_started:accepted",
+    ]);
   });
 
   it("ignores non host or guest participants", async () => {
@@ -128,7 +228,7 @@ describe("LiveKitCallAudioSource", () => {
     expect(worker.frames).toEqual([]);
   });
 
-  it("attaches a LiveKit TTS audio sink when local track publishing is available", async () => {
+  it("attaches a LiveKit TTS audio sink after local track publishing becomes available", async () => {
     const worker = new RecordingWorker();
     const rtc = createFakeRtcNode({ localPublishing: true });
     const source = new LiveKitCallAudioSource({
@@ -198,125 +298,5 @@ describe("LiveKitCallAudioSource", () => {
       referenceAudioId: "voice-profile-1",
     });
   });
+
 });
-
-class RecordingWorker {
-  readonly started: string[] = [];
-  readonly ended: string[] = [];
-  readonly frames: CallAudioFrame[] = [];
-  readonly ttsSinks: unknown[] = [];
-  ttsVoice: unknown = null;
-
-  async startCall(callId: string) {
-    this.started.push(callId);
-  }
-
-  async processAudioFrame(frame: CallAudioFrame) {
-    this.frames.push(frame);
-  }
-
-  async flushSpeaker(_callId: string, _speakerRole: CallAudioSpeakerRole) {}
-
-  async endCall(callId: string) {
-    this.ended.push(callId);
-  }
-
-  addTtsAudioSink(sink: unknown) {
-    this.ttsSinks.push(sink);
-  }
-
-  setTtsVoice(voice: unknown) {
-    this.ttsVoice = voice;
-  }
-}
-
-function createFakeRtcNode(options: { localPublishing?: boolean } = {}) {
-  class RemoteAudioTrack {}
-  class FakeAudioStream extends ReadableStream<{ data: Int16Array; sampleRate: number }> {
-    constructor() {
-      super({
-        start(controller) {
-          controller.enqueue({ data: new Int16Array([1, -1]), sampleRate: 24000 });
-          controller.close();
-        },
-      });
-    }
-  }
-  const room = new FakeRoom(options.localPublishing);
-  const module: Record<string, unknown> = {
-    Room: class {
-      constructor() {
-        return room;
-      }
-    },
-    RoomEvent: {
-      TrackSubscribed: "trackSubscribed",
-      Disconnected: "disconnected",
-    },
-    AudioStream: FakeAudioStream,
-    RemoteAudioTrack,
-    async dispose() {},
-  };
-  if (options.localPublishing) {
-    module.AudioFrame = class {
-      constructor(
-        readonly data: Int16Array,
-        readonly sampleRate: number,
-        readonly channels: number,
-        readonly samplesPerChannel: number,
-      ) {}
-    };
-    module.AudioSource = class {
-      async captureFrame(_frame: unknown) {}
-    };
-    module.LocalAudioTrack = {
-      createAudioTrack: (name: string, source: unknown) => ({ name, source }),
-    };
-    module.TrackPublishOptions = class {
-      source?: unknown;
-    };
-    module.TrackSource = { SOURCE_MICROPHONE: "microphone" };
-  }
-  return {
-    room,
-    RemoteAudioTrack,
-    module,
-  };
-}
-
-class FakeRoom {
-  connected: unknown = null;
-  readonly localParticipant?: { publishTrack(track: unknown, options: unknown): Promise<unknown> };
-  private readonly listeners = new Map<string, Array<(...args: unknown[]) => void>>();
-
-  constructor(localPublishing = false) {
-    if (localPublishing) {
-      this.localParticipant = { publishTrack: async () => ({}) };
-    }
-  }
-
-  on(event: string, listener: (...args: unknown[]) => void) {
-    this.listeners.set(event, [...(this.listeners.get(event) ?? []), listener]);
-    return this;
-  }
-
-  async connect(url: string, token: string, opts: unknown) {
-    this.connected = { url, token, opts };
-  }
-
-  async disconnect() {
-    this.emit("disconnected");
-  }
-
-  emit(event: string, ...args: unknown[]) {
-    for (const listener of this.listeners.get(event) ?? []) listener(...args);
-  }
-}
-
-async function eventually(predicate: () => boolean) {
-  for (let attempt = 0; attempt < 10; attempt += 1) {
-    if (predicate()) return;
-    await new Promise((resolve) => setTimeout(resolve, 0));
-  }
-  expect(predicate()).toBe(true);
-}

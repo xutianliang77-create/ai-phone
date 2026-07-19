@@ -17,11 +17,50 @@ uvicorn app.main:app --host 0.0.0.0 --port 8001
 - `GET /health`
 - `POST /asr/transcribe`
 - `POST /asr/sessions/{sessionId}/flush`
+- `GET /asr/sessions/{sessionId}/diagnostics`
 
 `POST /asr/transcribe` returns `204 No Content` when no final transcript is ready yet.
 `POST /asr/sessions/{sessionId}/flush` forces the active speech buffer to be
 recognized, which is useful before pause or end.
 The default provider is `mock`; SenseVoice can be added behind the same engine interface.
+
+## Server VAD
+
+Production online ASR uses `nvidia/Frame_VAD_Multilingual_MarbleNet_v2.0`
+through an in-process ONNX CPU runtime. NeMo is required only to export the
+ONNX network and its pinned Mel preprocessing assets. RMS remains an automatic
+fallback when assets cannot load or inference fails.
+
+Session diagnostics report the configured and active VAD provider, fallback
+reason/count, speech-frame ratio, probability summary, model fingerprint, and
+the frozen endpoint policy. They never include PCM or frame-level probability
+arrays.
+
+```bash
+ASR_VAD_PROVIDER=marblenet \
+ASR_VAD_MODEL_PATH=/data/models/translation-model-eval/models/frame_vad_multilingual_marblenet_v2/frame_vad_multilingual_marblenet_v2.0.onnx \
+ASR_VAD_ASSETS_PATH=/data/models/translation-model-eval/models/frame_vad_multilingual_marblenet_v2/frame_vad_multilingual_marblenet_v2.0.preprocessor.npz \
+ASR_VAD_THRESHOLD=0.5 \
+ASR_VAD_WINDOW_MS=1000 \
+ASR_VAD_SMOOTHING_FRAMES=3
+```
+
+Use `0.5` as the default threshold. `0.7` remains the stricter deployment
+preset for later noisy-environment comparison. The App must still gate TTS
+playback because VAD alone cannot distinguish device playback from live speech.
+
+Qwen3 ASR freezes one endpoint policy per session. Realtime `conversation`,
+`listening`, `call_link`, and `pstn` sessions therefore remain isolated even
+when processed concurrently. The deployment defaults use 900, 1400, 900, and
+1100 ms endpoint silence respectively; tune them only through the corresponding
+`ASR_QWEN3_*_ENDPOINT_SILENCE_MS` variables.
+
+`ASR_QWEN3_MIXED_LANGUAGE_RETRY_ENABLED=false` remains off by default. In an
+isolated A/B run it can retry an `auto` segment with the English route when the
+first result contains only Chinese. The retry is accepted only when it restores
+an English prefix while preserving the complete Chinese suffix. Do not enable
+it in production until mixed-language accuracy and ASR latency both pass their
+staging gates, because eligible segments require a second inference.
 
 ## FireRedASR2-AED
 
@@ -62,7 +101,7 @@ uvicorn app.main:app --host 0.0.0.0 --port 8001
 ```
 
 The SenseVoice provider buffers incoming 24 kHz PCM16 frames, ignores leading
-silence with a simple RMS VAD, emits a segment after endpoint silence, flushes
+silence with the configured VAD provider, emits a segment after endpoint silence, flushes
 long speech at `ASR_SENSEVOICE_MAX_AUDIO_MS`, and suppresses adjacent duplicate
 transcripts.
 

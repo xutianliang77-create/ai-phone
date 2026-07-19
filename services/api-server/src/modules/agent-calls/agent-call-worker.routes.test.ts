@@ -13,11 +13,12 @@ describe("agent call worker routes", () => {
 
   afterEach(() => restoreEnv(previousEnv));
 
-  it("protects queued draft polling with the internal secret", async () => {
+  it("protects atomic claims with the internal secret", async () => {
     const app = await buildApp();
     const rejected = await app.inject({
-      method: "GET",
-      url: "/internal/ai-calling-agent/drafts/queued",
+      method: "POST",
+      url: "/internal/ai-calling-agent/drafts/claims",
+      payload: { workerId: "worker-1", limit: 5 },
     });
     await app.close();
 
@@ -25,30 +26,41 @@ describe("agent call worker routes", () => {
     expect(rejected.json().error.code).toBe("internal_error");
   });
 
-  it("returns only queued drafts for the agent call worker", async () => {
+  it("atomically claims only queued drafts for one worker", async () => {
     const app = await buildApp();
     const firstId = await createQueuedDraft(app, "预约下午三点洗牙");
     await createAuthorizedDraft(app, "咨询营业时间");
     const list = await app.inject({
-      method: "GET",
-      url: "/internal/ai-calling-agent/drafts/queued?limit=5",
+      method: "POST",
+      url: "/internal/ai-calling-agent/drafts/claims",
       headers: { authorization: "Bearer internal-secret-for-agent" },
+      payload: { workerId: "worker-1", limit: 5 },
     });
     await app.close();
 
     expect(list.statusCode).toBe(200);
-    expect(list.json().drafts).toHaveLength(1);
-    expect(list.json().drafts[0]).toMatchObject({
-      id: firstId,
-      status: "queued",
-      targetPhone: "13800138000",
+    expect(list.json().claims).toHaveLength(1);
+    expect(list.json().claims[0]).toMatchObject({
+      workerId: "worker-1",
+      attempt: 1,
+      dialIdempotencyKey: expect.any(String),
+      draft: {
+        id: firstId,
+        status: "dispatching",
+        targetPhone: "13800138000",
+      },
     });
-    expect(list.json().drafts[0].userId).toBeUndefined();
+    expect(list.json().claims[0].draft.userId).toBeUndefined();
+    expect(list.json().claims[0].draft.workerLeaseTokenHash).toBeUndefined();
   });
 });
 
 const envKeys = [
   "AGENT_CALL_WORKER_ENABLED",
+  "AGENT_CALL_PROVIDER_ADAPTER",
+  "AGENT_CALL_WORKER_LEASE_SECONDS",
+  "AGENT_CALL_RECONCILIATION_TIMEOUT_SECONDS",
+  "PSTN_PROVIDER_IDEMPOTENCY_GUARANTEED",
   "CALL_PROVIDER_POLICY",
   "INTERNAL_API_SECRET",
   "PSTN_PROVIDER",
@@ -98,6 +110,10 @@ async function createAuthorizedDraft(
 
 function configureAgentExecutionEnv() {
   process.env.AGENT_CALL_WORKER_ENABLED = "true";
+  process.env.AGENT_CALL_PROVIDER_ADAPTER = "pstn_http";
+  process.env.AGENT_CALL_WORKER_LEASE_SECONDS = "45";
+  process.env.AGENT_CALL_RECONCILIATION_TIMEOUT_SECONDS = "7200";
+  process.env.PSTN_PROVIDER_IDEMPOTENCY_GUARANTEED = "true";
   process.env.CALL_PROVIDER_POLICY = "domestic_pstn_bridge";
   process.env.INTERNAL_API_SECRET = "internal-secret-for-agent";
   process.env.PSTN_PROVIDER = "domestic_bridge";

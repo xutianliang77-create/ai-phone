@@ -83,6 +83,9 @@ function createTestSession(options: {
     },
     status: "active",
     startedAt: Date.now(),
+    activeStartedAt: Date.now(),
+    accumulatedActiveMs: 0,
+    connectionGeneration: 1,
     billableSeconds: options.billableSeconds ?? 0,
   };
 }

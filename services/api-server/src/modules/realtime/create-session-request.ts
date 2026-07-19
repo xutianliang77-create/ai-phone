@@ -1,12 +1,16 @@
 import {
+  isDomainLexiconPack,
   isSupportedLanguage,
   isTranslationLanguage,
 } from "@translation/contracts";
 import type {
   CreateRealtimeSessionRequest,
+  DomainLexiconPack,
   RealtimeMode,
   RealtimeVoiceConfig,
   RealtimeVoiceMode,
+  SpeakerAttributionMode,
+  SpeakerAttributionOptionsDto,
 } from "@translation/contracts";
 
 const modes = new Set<RealtimeMode>([
@@ -22,6 +26,13 @@ const voiceModes = new Set<RealtimeVoiceMode>([
   "ultimate_clone",
 ]);
 const voiceIdPattern = /^[A-Za-z0-9_-]{1,80}$/;
+const speakerModes = new Set<SpeakerAttributionMode>([
+  "off",
+  "auto",
+  "participant_track",
+  "diarization",
+  "manual",
+]);
 
 interface ValidationError {
   code: string;
@@ -50,6 +61,8 @@ export function validateCreateRealtimeSessionRequest(
   const voiceOutput = input.voiceOutput;
   const voice = input.voice;
   const termbaseId = input.termbaseId;
+  const domainLexiconPacks = input.domainLexiconPacks;
+  const speakerAttribution = input.speakerAttribution;
 
   if (typeof mode !== "string" || !modes.has(mode as RealtimeMode)) {
     return invalid("mode must be conversation, meeting, classroom, or business");
@@ -85,6 +98,17 @@ export function validateCreateRealtimeSessionRequest(
   if (termbaseId !== undefined && typeof termbaseId !== "string") {
     return invalid("termbaseId must be string when provided");
   }
+  const parsedDomainLexiconPacks = parseDomainLexiconPacks(domainLexiconPacks);
+  if (parsedDomainLexiconPacks === false) {
+    return invalid("domainLexiconPacks must contain supported unique pack codes");
+  }
+  const parsedSpeakerAttribution = parseSpeakerAttribution(speakerAttribution);
+  if (parsedSpeakerAttribution === false) {
+    return invalid("speakerAttribution must be a valid speaker configuration");
+  }
+  const resolvedSpeakerAttribution = normalizeSpeakerAttribution(
+    parsedSpeakerAttribution ?? defaultSpeakerAttribution(),
+  );
 
   return {
     ok: true,
@@ -96,8 +120,71 @@ export function validateCreateRealtimeSessionRequest(
       voiceOutput,
       ...(parsedVoice ? { voice: parsedVoice } : {}),
       ...(termbaseId ? { termbaseId } : {}),
+      ...(parsedDomainLexiconPacks
+        ? { domainLexiconPacks: parsedDomainLexiconPacks }
+        : {}),
+      speakerAttribution: resolvedSpeakerAttribution,
     },
   };
+}
+
+function parseDomainLexiconPacks(
+  value: unknown,
+): DomainLexiconPack[] | null | false {
+  if (value === undefined) return null;
+  if (!Array.isArray(value) || value.length === 0 || value.length > 8) return false;
+  if (!value.every(isDomainLexiconPack)) return false;
+  return [...new Set(value)];
+}
+
+function parseSpeakerAttribution(
+  value: unknown,
+): SpeakerAttributionOptionsDto | null | false {
+  if (value === undefined) return null;
+  if (!isRecord(value) || !speakerModes.has(value.mode as SpeakerAttributionMode)) {
+    return false;
+  }
+  const maxSpeakers = value.maxSpeakers;
+  if (maxSpeakers !== undefined &&
+      maxSpeakers !== 2 && maxSpeakers !== 3 && maxSpeakers !== 4) {
+    return false;
+  }
+  if (value.allowVoiceIdentity !== undefined &&
+      typeof value.allowVoiceIdentity !== "boolean") {
+    return false;
+  }
+  return {
+    mode: value.mode as SpeakerAttributionMode,
+    ...(maxSpeakers ? { maxSpeakers } : {}),
+    ...(typeof value.allowVoiceIdentity === "boolean"
+      ? { allowVoiceIdentity: value.allowVoiceIdentity }
+      : {}),
+  };
+}
+
+function defaultSpeakerAttribution(): SpeakerAttributionOptionsDto {
+  return {
+    mode: "auto",
+    maxSpeakers: 4,
+    allowVoiceIdentity: false,
+  };
+}
+
+function normalizeSpeakerAttribution(
+  options: SpeakerAttributionOptionsDto,
+): SpeakerAttributionOptionsDto {
+  if (options.mode === "participant_track") {
+    return {
+      mode: "participant_track",
+      ...(typeof options.allowVoiceIdentity === "boolean"
+        ? { allowVoiceIdentity: options.allowVoiceIdentity }
+        : {}),
+    };
+  }
+  if (options.mode === "auto" || options.mode === "diarization") {
+    return { ...options, maxSpeakers: 4 };
+  }
+  return options;
 }
 
 function parseVoiceConfig(value: unknown): RealtimeVoiceConfig | null | false {
@@ -107,11 +194,14 @@ function parseVoiceConfig(value: unknown): RealtimeVoiceConfig | null | false {
   if (typeof mode !== "string" || !voiceModes.has(mode as RealtimeVoiceMode)) {
     return false;
   }
+  const presetId = optionalVoiceId(value.presetId);
   const voiceProfileId = optionalVoiceId(value.voiceProfileId);
   const referenceAudioId = optionalVoiceId(value.referenceAudioId);
   const referenceTranscript = optionalText(value.referenceTranscript, 1000);
   const controlPrompt = optionalText(value.controlPrompt, 240);
+  const quality = value.quality === "hifi" ? "hifi" as const : "standard" as const;
   if (
+    (value.presetId !== undefined && !presetId) ||
     (value.voiceProfileId !== undefined && !voiceProfileId) ||
     (value.referenceAudioId !== undefined && !referenceAudioId) ||
     (value.referenceTranscript !== undefined && !referenceTranscript) ||
@@ -121,10 +211,12 @@ function parseVoiceConfig(value: unknown): RealtimeVoiceConfig | null | false {
   }
   return {
     mode: mode as RealtimeVoiceMode,
+    ...(presetId ? { presetId } : {}),
     ...(voiceProfileId ? { voiceProfileId } : {}),
     ...(referenceAudioId ? { referenceAudioId } : {}),
     ...(referenceTranscript ? { referenceTranscript } : {}),
     ...(controlPrompt ? { controlPrompt } : {}),
+    quality,
   };
 }
 

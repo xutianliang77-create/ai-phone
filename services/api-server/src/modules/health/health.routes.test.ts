@@ -1,6 +1,8 @@
 import { rmSync } from "node:fs";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { buildApp } from "../../app.js";
+import type { PublicEntryRateLimiter } from
+  "../../infrastructure/security/public-entry-protection.js";
 import { getStoreSnapshot } from "../../infrastructure/storage/json-store.js";
 import {
   captureEnv,
@@ -248,7 +250,10 @@ describe("health routes", () => {
     configureSmsEnv();
     configureDiagnosticsEnv();
     configureReleaseMaterialsEnv(tempDirs);
-    const app = await buildApp();
+    process.env.PUBLIC_RATE_LIMIT_PROVIDER = "redis";
+    process.env.PUBLIC_RATE_LIMIT_REDIS_URL = "redis://redis.test:6379/1";
+    process.env.PUBLIC_RATE_LIMIT_KEY_SECRET = "test-rate-limit-secret";
+    const app = await buildApp({ publicEntryRateLimiter: readyRateLimiter() });
     const response = await app.inject({
       method: "GET",
       url: "/health/release-ready",
@@ -302,4 +307,24 @@ describe("health routes", () => {
 
 function configureReleaseMaterialsEnv(tempDirs: string[]) {
   process.env.RELEASE_MATERIALS_FILE = writeManifest(tempDirs, readyManifest());
+}
+
+function readyRateLimiter(): PublicEntryRateLimiter {
+  return {
+    start: async () => true,
+    close: async () => undefined,
+    readiness: () => ({
+      status: "ready",
+      provider: "redis",
+      configured: true,
+      connected: true,
+    }),
+    consume: async ({ limit }) => ({
+      status: "allowed",
+      provider: "redis",
+      limit,
+      remaining: limit - 1,
+      retryAfterMs: 60_000,
+    }),
+  };
 }

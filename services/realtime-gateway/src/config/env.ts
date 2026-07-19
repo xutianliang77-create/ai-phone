@@ -13,13 +13,33 @@ export type RealtimeProviderName =
   | "qwen_live"
   | "tencent_trtc";
 export type AsrProviderName = "mock" | "http";
+export type SpeakerProviderName = "off" | "http";
 export type SessionEventSinkName = "noop" | "api";
 export type RegionEdition = "domestic" | "international";
 export type LlmProviderName = "off" | "mock" | "openai_compatible";
 
 export interface RealtimeEnv {
+  host: string;
   port: number;
+  allowedOrigins: string[];
+  trustProxyAddresses: string[];
+  maxPayloadBytes: number;
+  maxConnections: number;
+  maxConnectionsPerIp: number;
+  maxSessions: number;
+  maxMessagesPerSecond: number;
+  maxAudioFramesPerSecond: number;
+  maxPendingAudioMs: number;
+  maxPendingControlEvents: number;
+  maxPendingTtsOutputs: number;
+  handshakeRateLimitPerMinute: number;
+  publicRateLimitProvider: "memory" | "redis";
+  publicRateLimitRedisUrl?: string;
+  publicRateLimitKeyPrefix: string;
+  publicRateLimitKeySecret: string;
+  publicRateLimitConnectTimeoutMs: number;
   realtimeTokenSecret: string;
+  allowQueryToken?: boolean;
   provider: RealtimeProviderName;
   resolvedProvider: "mock" | "openai" | "lmstudio" | "qwen_live" | "unsupported";
   regionEdition: RegionEdition;
@@ -27,6 +47,7 @@ export interface RealtimeEnv {
   callProviderPolicy: string;
   complianceProfile: string;
   asrProvider: AsrProviderName;
+  speakerProvider: SpeakerProviderName;
   openAiApiKey?: string;
   openAiRealtimeEndpoint: string;
   openAiRealtimeModel: string;
@@ -47,6 +68,9 @@ export interface RealtimeEnv {
   asrHttpHealthUrl?: string;
   asrHttpApiKey?: string;
   asrHttpTimeoutMs: number;
+  speakerHttpBaseUrl?: string;
+  speakerHttpApiKey?: string;
+  speakerHttpTimeoutMs: number;
   ttsHttpEndpoint?: string;
   ttsHttpApiKey?: string;
   ttsHttpTimeoutMs: number;
@@ -54,6 +78,8 @@ export interface RealtimeEnv {
   apiBaseUrl: string;
   internalApiSecret?: string;
   sessionSyncTimeoutMs: number;
+  disconnectGraceMs: number;
+  heartbeatIntervalMs: number;
   llmProvider: LlmProviderName;
   llmBaseUrl?: string;
   llmApiKey?: string;
@@ -75,9 +101,89 @@ export function loadEnv(): RealtimeEnv {
   const env = mergeModelRoutingEnv("gateway");
   const provider = parseProviderName(env.REALTIME_PROVIDER);
   const regionEdition = parseRegionEdition(env.REGION_EDITION);
+  const publicRateLimitProvider = parseRateLimitProvider(
+    env.PUBLIC_RATE_LIMIT_PROVIDER,
+  );
   return {
+    host: env.REALTIME_BIND_HOST?.trim() || "0.0.0.0",
     port: Number(env.REALTIME_PORT ?? 3001),
+    allowedOrigins: commaSeparated(env.REALTIME_ALLOWED_ORIGINS),
+    trustProxyAddresses: commaSeparated(
+      env.REALTIME_TRUST_PROXY_ADDRESSES ?? "127.0.0.1,::1",
+    ),
+    maxPayloadBytes: boundedInteger(
+      env.REALTIME_MAX_PAYLOAD_BYTES,
+      64 * 1024,
+      8 * 1024,
+      1024 * 1024,
+    ),
+    maxConnections: boundedInteger(
+      env.REALTIME_MAX_CONNECTIONS,
+      512,
+      1,
+      10_000,
+    ),
+    maxConnectionsPerIp: boundedInteger(
+      env.REALTIME_MAX_CONNECTIONS_PER_IP,
+      8,
+      1,
+      100,
+    ),
+    maxSessions: boundedInteger(env.REALTIME_MAX_SESSIONS, 256, 1, 5000),
+    maxMessagesPerSecond: boundedInteger(
+      env.REALTIME_MAX_MESSAGES_PER_SECOND,
+      120,
+      10,
+      1000,
+    ),
+    maxAudioFramesPerSecond: boundedInteger(
+      env.REALTIME_MAX_AUDIO_FRAMES_PER_SECOND,
+      75,
+      10,
+      250,
+    ),
+    maxPendingAudioMs: boundedInteger(
+      env.REALTIME_MAX_PENDING_AUDIO_MS,
+      6000,
+      500,
+      30_000,
+    ),
+    maxPendingControlEvents: boundedInteger(
+      env.REALTIME_MAX_PENDING_CONTROL_EVENTS,
+      32,
+      1,
+      256,
+    ),
+    maxPendingTtsOutputs: boundedInteger(
+      env.REALTIME_MAX_PENDING_TTS_OUTPUTS,
+      32,
+      1,
+      256,
+    ),
+    handshakeRateLimitPerMinute: boundedInteger(
+      env.REALTIME_HANDSHAKE_RATE_LIMIT_PER_MINUTE,
+      30,
+      1,
+      600,
+    ),
+    publicRateLimitProvider,
+    publicRateLimitRedisUrl: env.PUBLIC_RATE_LIMIT_REDIS_URL,
+    publicRateLimitKeyPrefix:
+      env.PUBLIC_RATE_LIMIT_KEY_PREFIX ?? "wujie:gateway:public",
+    publicRateLimitKeySecret:
+      env.PUBLIC_RATE_LIMIT_KEY_SECRET ??
+      (publicRateLimitProvider === "memory" ? "local-development-only" : ""),
+    publicRateLimitConnectTimeoutMs: boundedInteger(
+      env.PUBLIC_RATE_LIMIT_CONNECT_TIMEOUT_MS,
+      1500,
+      250,
+      10_000,
+    ),
     realtimeTokenSecret: env.REALTIME_TOKEN_SECRET ?? "dev-secret",
+    allowQueryToken: parseBoolean(
+      env.REALTIME_ALLOW_QUERY_TOKEN,
+      process.env.NODE_ENV !== "production",
+    ),
     provider,
     resolvedProvider: resolveProviderName(provider),
     regionEdition,
@@ -89,6 +195,7 @@ export function loadEnv(): RealtimeEnv {
       env.COMPLIANCE_PROFILE ??
       (regionEdition === "domestic" ? "pipl" : "us_ca"),
     asrProvider: parseAsrProviderName(env.ASR_PROVIDER),
+    speakerProvider: env.SPEAKER_PROVIDER === "http" ? "http" : "off",
     openAiApiKey: env.OPENAI_API_KEY,
     openAiRealtimeEndpoint:
       env.OPENAI_REALTIME_ENDPOINT ??
@@ -128,6 +235,9 @@ export function loadEnv(): RealtimeEnv {
     asrHttpHealthUrl: env.ASR_HTTP_HEALTH_URL,
     asrHttpApiKey: env.ASR_HTTP_API_KEY,
     asrHttpTimeoutMs: Number(env.ASR_HTTP_TIMEOUT_MS ?? 10_000),
+    speakerHttpBaseUrl: env.SPEAKER_HTTP_BASE_URL,
+    speakerHttpApiKey: env.SPEAKER_HTTP_API_KEY,
+    speakerHttpTimeoutMs: Number(env.SPEAKER_HTTP_TIMEOUT_MS ?? 2000),
     ttsHttpEndpoint: env.TTS_HTTP_ENDPOINT,
     ttsHttpApiKey: env.TTS_HTTP_API_KEY,
     ttsHttpTimeoutMs: Number(env.TTS_HTTP_TIMEOUT_MS ?? 30_000),
@@ -135,6 +245,8 @@ export function loadEnv(): RealtimeEnv {
     apiBaseUrl: env.API_BASE_URL ?? "http://127.0.0.1:3100",
     internalApiSecret: env.INTERNAL_API_SECRET,
     sessionSyncTimeoutMs: Number(env.SESSION_SYNC_TIMEOUT_MS ?? 5_000),
+    disconnectGraceMs: Number(env.REALTIME_DISCONNECT_GRACE_MS ?? 45_000),
+    heartbeatIntervalMs: Number(env.REALTIME_HEARTBEAT_INTERVAL_MS ?? 15_000),
     llmProvider: parseLlmProviderName(env.LLM_PROVIDER),
     llmBaseUrl: env.LLM_BASE_URL ?? env.SUMMARY_BASE_URL,
     llmApiKey: env.LLM_API_KEY ?? env.SUMMARY_API_KEY,
@@ -154,6 +266,28 @@ export function loadEnv(): RealtimeEnv {
     llmMinConfidence: Number(env.LLM_MIN_CONFIDENCE ?? 0.72),
     domainLexiconPacks: parseDomainLexiconPacks(env.DOMAIN_LEXICON_PACKS),
   };
+}
+
+function parseRateLimitProvider(value: string | undefined): "memory" | "redis" {
+  if (value === "redis") return "redis";
+  if (value === "memory") return "memory";
+  return process.env.NODE_ENV === "production" ? "redis" : "memory";
+}
+
+function commaSeparated(value: string | undefined) {
+  return (value ?? "").split(",").map((item) => item.trim()).filter(Boolean);
+}
+
+function boundedInteger(
+  value: string | undefined,
+  fallback: number,
+  minimum: number,
+  maximum: number,
+) {
+  const parsed = Number(value);
+  return Number.isSafeInteger(parsed) && parsed >= minimum && parsed <= maximum
+    ? parsed
+    : fallback;
 }
 
 function parseProviderName(value: string | undefined): RealtimeProviderName {

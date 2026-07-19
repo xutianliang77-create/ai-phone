@@ -1,10 +1,31 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
+import {
+  SIP_DEFAULTS, SIP_REQUIRED_TEXT, renderLiveKitSipCompose,
+  renderLiveKitSipReleaseEnv, renderLiveKitSipYaml, toLiveKitSipConfig,
+  validateLiveKitSipEnv,
+} from "./livekit_selfhost_sip_config.mjs";
+import {
+  hasRealValue, isImmutableImage, isPort, isPublicDomain, record,
+  selfHostResult, unquote, yamlQuote,
+} from "./livekit_selfhost_utils.mjs";
+import {
+  EGRESS_DEFAULTS, renderLiveKitEgressCompose, renderLiveKitEgressReleaseEnv,
+  renderLiveKitEgressYaml, toLiveKitEgressConfig, validateLiveKitEgressEnv,
+} from "./livekit_selfhost_egress_config.mjs";
+import {
+  INGRESS_DEFAULTS, renderLiveKitIngressCompose, renderLiveKitIngressReleaseEnv,
+  renderLiveKitIngressYaml, toLiveKitIngressConfig, validateLiveKitIngressEnv,
+} from "./livekit_selfhost_ingress_config.mjs";
 
 const DEFAULTS = {
-  LIVEKIT_IMAGE: "livekit/livekit-server:latest",
-  LIVEKIT_REDIS_IMAGE: "redis:7-alpine",
-  LIVEKIT_CADDY_IMAGE: "caddy:2-alpine",
+  ...SIP_DEFAULTS,
+  ...EGRESS_DEFAULTS,
+  ...INGRESS_DEFAULTS,
+  LIVEKIT_IMAGE:
+    "livekit/livekit-server:v1.13.3@sha256:8ef3ee244ded8477d5b40d9dff4b084e1809a9fa0e4d9ed8d29943b3c6322998",
+  LIVEKIT_REDIS_IMAGE: "redis:7.4.7-alpine",
+  LIVEKIT_CADDY_IMAGE: "caddy:2.10.2-alpine",
   LIVEKIT_HTTP_PORT: "7880",
   LIVEKIT_RTC_TCP_PORT: "7881",
   LIVEKIT_RTC_PORT_START: "50000",
@@ -14,12 +35,8 @@ const DEFAULTS = {
   LIVEKIT_TURN_TLS_PORT: "5349",
 };
 
-const REQUIRED_TEXT = [
-  "LIVEKIT_DOMAIN",
-  "LIVEKIT_TURN_DOMAIN",
-  "LIVEKIT_API_KEY",
-  "LIVEKIT_API_SECRET",
-];
+const REQUIRED_TEXT = ["LIVEKIT_DOMAIN", "LIVEKIT_TURN_DOMAIN", "LIVEKIT_API_KEY",
+  "LIVEKIT_API_SECRET", ...SIP_REQUIRED_TEXT];
 
 export function checkLiveKitSelfHostConfig(options = {}) {
   const root = options.root ?? process.cwd();
@@ -28,19 +45,33 @@ export function checkLiveKitSelfHostConfig(options = {}) {
     options.envFile ?? "infra/livekit-selfhost/.env",
   );
   if (!options.envText && !existsSync(envFile)) {
-    return result(envFile, [], [`LiveKit self-host env file missing: ${envFile}`]);
+    return selfHostResult(envFile, [], [`LiveKit self-host env file missing: ${envFile}`]);
   }
-  const env = normalizeEnv(
-    parseEnvFile(options.envText ?? readFileSync(envFile, "utf8")),
-  );
+  const env = normalizeEnv(parseEnvFile(options.envText ?? readFileSync(envFile, "utf8")));
   const checks = [];
   const issues = [];
+  if (!options.envText) requirePrivateEnvMode(envFile, checks, issues);
   requireText(env, checks, issues);
   requireDomains(env, checks, issues);
   requireSecrets(env, checks, issues);
+  requireImages(env, checks, issues);
   requirePorts(env, checks, issues);
   requireTurnTls(env, checks, issues);
-  return result(envFile, checks, issues, env);
+  validateLiveKitSipEnv(env, checks, issues);
+  validateLiveKitEgressEnv(env, checks, issues);
+  validateLiveKitIngressEnv(env, checks, issues);
+  return selfHostResult(envFile, checks, issues, env);
+}
+
+function requirePrivateEnvMode(envFile, checks, issues) {
+  const mode = statSync(envFile).mode & 0o777;
+  const ok = (mode & 0o077) === 0 && (mode & 0o400) !== 0;
+  record(checks, "LIVEKIT_PRIVATE_ENV_MODE", ok, {
+    mode: mode.toString(8).padStart(3, "0"),
+  });
+  if (!ok) {
+    issues.push("LiveKit self-host private env must be owner-only (0600 or 0400)");
+  }
 }
 
 export function renderLiveKitSelfHostFiles(envInput) {
@@ -48,6 +79,13 @@ export function renderLiveKitSelfHostFiles(envInput) {
   const config = toConfig(env);
   return {
     "livekit.yaml": renderLiveKitYaml(config),
+    "sip.yaml": renderLiveKitSipYaml(config),
+    ...(config.egressEnabled
+      ? { "egress.yaml": renderLiveKitEgressYaml(config) }
+      : {}),
+    ...(config.ingressEnabled
+      ? { "ingress.yaml": renderLiveKitIngressYaml(config) }
+      : {}),
     "docker-compose.yaml": renderDockerCompose(config),
     Caddyfile: renderCaddyfile(config),
     "redis.conf": renderRedisConf(),
@@ -122,6 +160,18 @@ function requireSecrets(env, checks, issues) {
   if (!secretOk) issues.push("LiveKit self-host weak LIVEKIT_API_SECRET");
 }
 
+function requireImages(env, checks, issues) {
+  for (const name of [
+    "LIVEKIT_IMAGE",
+    "LIVEKIT_REDIS_IMAGE",
+    "LIVEKIT_CADDY_IMAGE",
+  ]) {
+    const ok = isImmutableImage(env[name]);
+    record(checks, name, ok, { digestPinned: ok });
+    if (!ok) issues.push(`LiveKit self-host ${name} must use tag and sha256 digest`);
+  }
+}
+
 function requirePorts(env, checks, issues) {
   const names = [
     "LIVEKIT_HTTP_PORT",
@@ -160,9 +210,11 @@ function requireTurnTls(env, checks, issues) {
 function normalizeEnv(env) {
   return { ...DEFAULTS, ...env };
 }
-
 function toConfig(env) {
   return {
+    ...toLiveKitSipConfig(env),
+    ...toLiveKitEgressConfig(env),
+    ...toLiveKitIngressConfig(env),
     domain: env.LIVEKIT_DOMAIN,
     turnDomain: env.LIVEKIT_TURN_DOMAIN,
     apiKey: env.LIVEKIT_API_KEY,
@@ -198,6 +250,11 @@ function renderLiveKitYaml(config) {
     "",
     "keys:",
     `  ${yamlQuote(config.apiKey)}: ${yamlQuote(config.apiSecret)}`,
+    "",
+    "webhook:",
+    `  api_key: ${yamlQuote(config.apiKey)}`,
+    "  urls:",
+    `    - ${yamlQuote(config.webhookUrl)}`,
     "",
     "turn:",
     "  enabled: true",
@@ -244,6 +301,9 @@ function renderDockerCompose(config) {
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - ./caddy_data:/data
       - ./caddy_config:/config
+${renderLiveKitSipCompose(config)}
+${renderLiveKitEgressCompose(config)}
+${renderLiveKitIngressCompose(config)}
 `;
 }
 
@@ -268,56 +328,9 @@ function renderReleaseEnvSnippet(config) {
 LIVEKIT_URL=wss://${config.domain}
 LIVEKIT_API_KEY=${config.apiKey}
 LIVEKIT_API_SECRET=${config.apiSecret}
-CALL_ROOM_TOKEN_TTL_SECONDS=3600
+CALL_ROOM_TOKEN_TTL_SECONDS=120
+${renderLiveKitSipReleaseEnv(config)}
+${renderLiveKitEgressReleaseEnv(config)}
+${renderLiveKitIngressReleaseEnv(config)}
 `;
-}
-
-function hasRealValue(value) {
-  return typeof value === "string" && value.trim() !== "" && !isPlaceholder(value);
-}
-
-function isPlaceholder(value) {
-  return /required|replace|example|your-|todo|待填|localhost|127\.0\.0\.1|0\.0\.0\.0/i.test(
-    String(value ?? ""),
-  );
-}
-
-function isPublicDomain(value) {
-  if (!hasRealValue(value)) return false;
-  if (/^https?:|^wss?:/i.test(value)) return false;
-  if (/[/:]/.test(value)) return false;
-  return /^[a-z0-9][a-z0-9.-]*\.[a-z]{2,}$/i.test(value);
-}
-
-function isPort(value) {
-  const number = Number(value);
-  return Number.isInteger(number) && number > 0 && number <= 65535;
-}
-
-function unquote(value) {
-  return value.replace(/^["']|["']$/g, "");
-}
-
-function yamlQuote(value) {
-  return JSON.stringify(String(value));
-}
-
-function record(checks, name, ok, details = {}) {
-  checks.push({ name, status: ok ? "pass" : "fail", details });
-}
-
-function result(envFile, checks, issues, env = {}) {
-  return {
-    status: issues.length === 0 ? "ready" : "not_ready",
-    envFile,
-    releaseSnippet: issues.length === 0 ? `LIVEKIT_URL=wss://${env.LIVEKIT_DOMAIN}` : null,
-    checks,
-    issues,
-    actions:
-      issues.length === 0
-        ? []
-        : [
-            "Fill infra/livekit-selfhost/.env with production domains and secrets, then rerun this check.",
-          ],
-  };
 }

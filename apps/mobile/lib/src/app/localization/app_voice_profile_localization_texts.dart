@@ -60,6 +60,9 @@ const appVoiceProfileLocalizationTexts = <String, Map<String, String>>{
   'myVoiceRecording': {'zh': '录音中', 'en': 'Recording'},
   'myVoiceUploadSuccess': {'zh': '参考音频已上传', 'en': 'Reference audio uploaded'},
   'myVoiceTest': {'zh': '试听我的声音', 'en': 'Preview My Voice'},
+  'myVoiceTestNatural': {'zh': '试听自然声音', 'en': 'Preview Natural Voice'},
+  'myVoiceQuality': {'zh': '录音质量', 'en': 'Recording quality'},
+  'myVoiceQualityPassed': {'zh': '已通过服务端质量检查', 'en': 'Server quality check passed'},
   'myVoiceTesting': {'zh': '正在生成试听音频', 'en': 'Generating voice preview'},
   'myVoiceTestSuccess': {
     'zh': '试听完成。如果不像你的声音，请重新录制。',
@@ -76,9 +79,9 @@ const appVoiceProfileLocalizationTexts = <String, Map<String, String>>{
   },
   'myVoiceRecordingFailed': {'zh': '录音失败，请重试', 'en': 'Recording failed'},
   'myVoiceMicrophonePermissionDenied': {
-    'zh': '麦克风权限被拒绝，请到系统设置中允许 ai phone 使用麦克风。',
+    'zh': '麦克风权限被拒绝，请到系统设置中允许无界AI使用麦克风。',
     'en':
-        'Microphone permission is denied. Allow ai phone to use the microphone in system Settings.',
+        'Microphone permission is denied. Allow Wujie AI to use the microphone in system Settings.',
   },
   'myVoiceWavUnsupported': {
     'zh': '当前设备不支持 WAV 录音',

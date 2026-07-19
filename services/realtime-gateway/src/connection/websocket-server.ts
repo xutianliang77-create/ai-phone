@@ -1,81 +1,82 @@
-import { WebSocketServer, type WebSocket } from "ws";
-import { createServer } from "node:http";
-import type { ClientRealtimeEvent, ClientTextSegmentEvent, SessionEndReason, ServerRealtimeEvent } from "@translation/contracts";
-import { verifyRealtimeToken } from "../auth/realtime-token-verifier.js";
-import { loadEnv } from "../config/env.js";
+import type { SessionEndReason } from "@translation/contracts";
 import { AudioFrameBatcher } from "./audio-frame-batcher.js";
 import { clearAudioFrameLog, logAudioFrameReceived } from "../metrics/audio-frame-logger.js";
-import { handleGatewayHttpRequest } from "./gateway-health.js";
 import { realtimeLogger } from "../metrics/realtime-metrics.js";
-import { clearTextSegmentLog, logClientTextSegmentReceived } from "../metrics/text-segment-logger.js";
+import { clearTextSegmentLog } from "../metrics/text-segment-logger.js";
 import { parseIncomingEvent } from "../protocol/incoming-event-parser.js";
-import { buildError, serializeEvent } from "../protocol/outgoing-event-builder.js";
-import { normalizeClientTextLanguage } from "../protocol/client-text-language.js";
+import { buildError } from "../protocol/outgoing-event-builder.js";
 import { ProviderRouter } from "../providers/provider-router.js";
 import type { RealtimeProvider } from "../providers/realtime-provider.js";
-import {
-  asrCorrectionTermsForPacks,
-  asrHotwordsForTerminology,
-  mergeTerminologyWithDomainPacks,
-} from "../domain/domain-lexicon.js";
-import { createSessionEventSink } from "../sessions/session-event-sink.js";
-import { fetchSessionTerminology } from "../sessions/session-terminology.js";
-import { createSession, deleteSession, getSession, updateStatus } from "../sessions/session-manager.js";
-import { createUsageBalanceClient } from "../usage/usage-balance-client.js";
+import { asrCorrectionTermsForPacks, asrHotwordsForTerminology } from "../domain/domain-lexicon.js";
+import { domainLexiconPacksForSession, loadTerminologyForSession } from "../sessions/session-domain-terminology.js";
+import { confirmSessionConnection, deleteSession, getSession, sessionBillableSeconds, transitionStatus } from "../sessions/session-manager.js";
 import { createUsageTickDecision } from "../usage/usage-ticker.js";
-import { HttpTtsSynthesizer } from "../tts/http-tts-synthesizer.js";
-import { emitRealtimeTtsOutputForSession } from "../tts/realtime-tts-output.js";
+import { createRealtimeTtsOutputQueue } from "../tts/realtime-tts-output-factory.js";
+import { handleControlEvent } from "./session-control-handler.js";
+import { RealtimeSessionFinalizer } from "./realtime-session-finalizer.js";
+import { RealtimeConnectionCleanup } from "./realtime-connection-cleanup.js";
+import { RealtimeEventDispatcher } from "./realtime-event-dispatcher.js";
+import { RealtimeFlushTracker } from "./realtime-flush-tracker.js";
+import { logSpeakerAttributionConfigured, resolveSpeakerAttribution } from "./speaker-attribution-config.js";
+import { handleTextSegment } from "./client-text-segment-handler.js";
+import { endpointModeForRealtimeMode } from "./realtime-endpoint-mode.js";
+import { admitRealtimeConnection, sendRealtimeEvent } from "./realtime-connection-admission.js";
+import { createRealtimeServerRuntime } from "./realtime-server-runtime.js";
 
 const router = new ProviderRouter();
-
 export { normalizeClientTextLanguage } from "../protocol/client-text-language.js";
 
-function send(ws: WebSocket, event: ServerRealtimeEvent) {
-  if (ws.readyState === 1) ws.send(serializeEvent(event));
-}
-
 export function startWebSocketServer() {
-  const env = loadEnv();
-  const httpServer = createServer((request, response) => {
-    handleGatewayHttpRequest(request, response, env);
-  });
-  const server = new WebSocketServer({ server: httpServer, path: "/realtime" });
-  const sessionEventSink = createSessionEventSink(env);
-  const usageBalanceClient = createUsageBalanceClient(env);
-  const ttsSynthesizer = new HttpTtsSynthesizer(env);
+  const {
+    env,
+    protection,
+    httpServer,
+    server,
+    sessionEventSink,
+    usageBalanceClient,
+    disconnectFinalizers,
+  } = createRealtimeServerRuntime();
 
   server.on("connection", async (ws, request) => {
-    const url = new URL(request.url ?? "", `http://${request.headers.host}`);
-    const token = url.searchParams.get("token");
-    const claims = token ? verifyRealtimeToken(token, env.realtimeTokenSecret) : null;
-    if (!claims) {
-      send(ws, buildError("invalid_token", "Invalid realtime token", {
-        stage: "connection",
-        retryable: false,
-      }));
-      ws.close();
-      return;
-    }
-
-    const session = createSession(claims);
+    const attachment = admitRealtimeConnection(ws, request, env);
+    if (!attachment) return;
+    const { session, generation, resumed } = attachment;
     let provider: RealtimeProvider;
     try {
       provider = router.selectProvider(env);
+      const domainLexiconPacks = domainLexiconPacksForSession(session, env);
       const terminology = await loadTerminologyForSession(session, env);
-      const asrCorrections = asrCorrectionTermsForPacks(env.domainLexiconPacks);
+      const asrCorrections = asrCorrectionTermsForPacks(domainLexiconPacks);
       const asrHotwords = asrHotwordsForTerminology(terminology, asrCorrections);
+      const speakerAttribution = resolveSpeakerAttribution(session.claims);
       await provider.createSession({
         sessionId: session.id,
+        userId: session.userId,
+        asrEndpointMode: session.claims.asrEndpointMode ??
+          endpointModeForRealtimeMode(session.claims.mode),
         sourceLanguage: session.claims.sourceLanguage,
         targetLanguage: session.claims.targetLanguage,
         autoReverseTargetLanguage: session.claims.autoReverseTargetLanguage,
         voiceOutput: session.claims.voiceOutput,
+        speakerAttribution,
         terminology,
         asrHotwords,
         asrCorrections,
       });
+      logSpeakerAttributionConfigured(env, session, speakerAttribution);
     } catch {
-      send(ws, buildError("provider_unavailable", "Realtime provider is unavailable", {
+      const current = getSession(session.id);
+      if (current === session && current.connectionGeneration === generation) {
+        transitionStatus(session.id, "failed");
+        await sessionEventSink.record({
+          type: "session.ended",
+          sessionId: session.id,
+          reason: "connection_error",
+          billableSeconds: sessionBillableSeconds(session),
+        }).catch(() => undefined);
+        deleteSession(session.id, session);
+      }
+      sendRealtimeEvent(ws, buildError("provider_unavailable", "Realtime provider is unavailable", {
         sessionId: session.id,
         stage: "provider",
         provider: env.provider,
@@ -85,26 +86,29 @@ export function startWebSocketServer() {
       return;
     }
 
-    const sendRealtime = (event: ServerRealtimeEvent) => {
-      send(ws, event);
-      void sessionEventSink.record(event).catch((error) => {
+    const flushTracker = new RealtimeFlushTracker();
+    const ttsOutputQueue = createRealtimeTtsOutputQueue(env, session);
+    const eventDispatcher = new RealtimeEventDispatcher({
+      sendClient: (event) => sendRealtimeEvent(ws, event),
+      eventSink: sessionEventSink,
+      onSyncError: (event, error) => {
         realtimeLogger.warn({
           error,
           sessionId: "sessionId" in event ? event.sessionId : session.id,
           eventType: event.type,
         }, "Realtime session event sync failed");
-      });
-      emitRealtimeTtsOutputForSession({
-        event,
-        sessionId: session.id,
-        voiceOutput: session.claims.voiceOutput,
-        voice: session.claims.voice,
-        synthesizer: ttsSynthesizer,
-        send: sendRealtime,
-      });
-    };
+      },
+      afterSend: (event) => {
+        flushTracker.record(event);
+        if (event.type === "session.paused") ttsOutputQueue.cancelPending();
+        else ttsOutputQueue.enqueue(event, eventDispatcher.send);
+      },
+    });
+    const sendRealtime = eventDispatcher.send;
 
-    sendRealtime({ type: "session.started", sessionId: session.id });
+    const startedEvent = { type: "session.started", sessionId: session.id } as const;
+    if (resumed) sendRealtimeEvent(ws, startedEvent);
+    else sendRealtime(startedEvent);
     let controlQueue = Promise.resolve();
     let usageTickInFlight = false;
     const audioBatcher = new AudioFrameBatcher({
@@ -120,29 +124,36 @@ export function startWebSocketServer() {
           retryable: true,
         }));
       },
+      maxPendingAudioMs: env.maxPendingAudioMs,
+    });
+    const finalizer = new RealtimeSessionFinalizer({
+      sessionId: session.id,
+      provider,
+      audioBatcher,
+      send: sendRealtime,
+      drainSessionSync: () => eventDispatcher.drain(),
+      flushTracker,
+      onError: (stage, error) => {
+        realtimeLogger.warn({ error, stage, sessionId: session.id },
+          "Realtime pipeline flush failed during finalization");
+      },
     });
 
     const endRealtimeSession = async (
       reason: SessionEndReason,
       remainingSeconds?: number,
     ) => {
-      const activeSession = getSession(session.id);
-      if (!activeSession || activeSession.status === "ended") return;
-      audioBatcher.stopAccepting();
-      await audioBatcher.flush();
-      await flushProviderSession(provider, session.id, sendRealtime);
-      updateStatus(session.id, "ended");
-      sendRealtime({
-        type: "session.ended",
-        sessionId: session.id,
-        reason,
-        billableSeconds: session.billableSeconds,
-        ...(typeof remainingSeconds === "number" ? { remainingSeconds } : {}),
-      });
-      ws.close();
+      await finalizer.finalize(reason, remainingSeconds);
+      if (ws.readyState === 1) ws.close();
     };
 
     const usageInterval = setInterval(() => {
+      if (session.status === "active" || session.status === "paused") {
+        void sessionEventSink.touch(session.id, session.status).catch((error) => {
+          realtimeLogger.warn({ error, sessionId: session.id },
+            "Realtime session heartbeat sync failed");
+        });
+      }
       if (session.status !== "active" || usageTickInFlight) return;
       usageTickInFlight = true;
       controlQueue = controlQueue
@@ -165,7 +176,35 @@ export function startWebSocketServer() {
         });
     }, 30_000);
 
+    const messageRateGuard = protection.createMessageGuard();
+    let rateLimited = false;
+    let pendingControlEvents = 0;
+    const enqueueControl = (
+      run: () => Promise<void>,
+      onError: (error: unknown) => void,
+    ) => {
+      if (pendingControlEvents >= env.maxPendingControlEvents) return false;
+      pendingControlEvents += 1;
+      controlQueue = controlQueue
+        .then(run)
+        .catch(onError)
+        .finally(() => {
+          pendingControlEvents = Math.max(0, pendingControlEvents - 1);
+        });
+      return true;
+    };
     ws.on("message", (data) => {
+      if (rateLimited) return;
+      if (!messageRateGuard.consume("message")) {
+        rateLimited = true;
+        sendRealtime(buildError("bad_event", "Realtime message rate limit exceeded", {
+          sessionId: session.id,
+          stage: "connection",
+          retryable: true,
+        }));
+        ws.close(1008, "message_rate_limited");
+        return;
+      }
       const event = parseIncomingEvent(data.toString());
       if (!event) {
         sendRealtime(buildError("bad_event", "Malformed realtime event", {
@@ -176,7 +215,22 @@ export function startWebSocketServer() {
         return;
       }
 
+      if (event.sessionId === session.id &&
+          confirmSessionConnection(session.id, generation)) {
+        disconnectFinalizers.cancel(session.id);
+      }
+
       if (event.type === "audio.frame") {
+        if (!messageRateGuard.consume("audio")) {
+          rateLimited = true;
+          sendRealtime(buildError("bad_event", "Realtime audio frame rate limit exceeded", {
+            sessionId: session.id,
+            stage: "connection",
+            retryable: true,
+          }));
+          ws.close(1008, "audio_rate_limited");
+          return;
+        }
         const activeSession = getSession(session.id);
         if (activeSession?.status === "active") {
           logAudioFrameReceived(event);
@@ -186,9 +240,9 @@ export function startWebSocketServer() {
       }
 
       if (event.type === "client.text.segment") {
-        controlQueue = controlQueue
-          .then(() => handleTextSegment(event, session.id, provider, sendRealtime))
-          .catch((error) => {
+        if (!enqueueControl(
+          () => handleTextSegment(event, session.id, provider, sendRealtime),
+          (error) => {
             realtimeLogger.error({ error, sessionId: session.id }, "Realtime text processing failed");
             sendRealtime(buildError("provider_unavailable", "Realtime text processing failed", {
               sessionId: session.id,
@@ -196,12 +250,13 @@ export function startWebSocketServer() {
               provider: provider.name,
               retryable: true,
             }));
-          });
+          },
+        )) closeForControlBackpressure();
         return;
       }
 
-      controlQueue = controlQueue
-        .then(() =>
+      if (!enqueueControl(
+        () =>
           handleControlEvent(
             event,
             session.id,
@@ -210,8 +265,7 @@ export function startWebSocketServer() {
             sendRealtime,
             endRealtimeSession,
           ),
-        )
-        .catch((error) => {
+        (error) => {
           realtimeLogger.error({ error, sessionId: session.id }, "Realtime event processing failed");
           sendRealtime(buildError("provider_unavailable", "Realtime event processing failed", {
             sessionId: session.id,
@@ -219,131 +273,75 @@ export function startWebSocketServer() {
             provider: provider.name,
             retryable: true,
           }));
-        });
+        },
+      )) closeForControlBackpressure();
+
+      function closeForControlBackpressure() {
+        rateLimited = true;
+        sendRealtime(buildError("provider_unavailable", "Realtime control queue capacity reached", {
+          sessionId: session.id,
+          stage: "connection",
+          retryable: true,
+        }));
+        ws.close(1013, "control_queue_capacity_reached");
+      }
     });
 
-    ws.on("close", async () => {
+    let connectionError = false;
+    let heartbeatAlive = true;
+    ws.on("pong", () => { heartbeatAlive = true; });
+    const heartbeatInterval = setInterval(() => {
+      if (!heartbeatAlive) {
+        ws.terminate();
+        return;
+      }
+      heartbeatAlive = false;
+      ws.ping();
+    }, env.heartbeatIntervalMs);
+    const connectionCleanup = new RealtimeConnectionCleanup({
+      session,
+      generation,
+      finalizer,
+      provider,
+      sessionSync: eventDispatcher,
+      disconnectFinalizers,
+      closeClient: () => { if (ws.readyState === 1) ws.close(); },
+      onError: (stage, error) => realtimeLogger.warn(
+        { error, stage, sessionId: session.id },
+        "Realtime connection cleanup failed",
+      ),
+    });
+    if (resumed && session.disconnectDeadlineAt !== undefined) {
+      connectionCleanup.scheduleDeferredFinalization("connection_closed");
+    }
+    const cleanupConnection = async () => {
       clearInterval(usageInterval);
+      clearInterval(heartbeatInterval);
       clearAudioFrameLog(session.id);
       clearTextSegmentLog(session.id);
-      ttsSynthesizer.closeSession(session.id);
+      ttsOutputQueue.close();
       await controlQueue.catch(() => undefined);
-      await audioBatcher.close();
-      await provider.closeSession(session.id);
-      deleteSession(session.id, session);
+      const reason: SessionEndReason = connectionError
+        ? "connection_error"
+        : "connection_closed";
+      await connectionCleanup.run(reason);
+    };
+    ws.on("error", (error) => {
+      connectionError = true;
+      realtimeLogger.warn({ error, sessionId: session.id },
+        "Realtime client connection failed");
+      void cleanupConnection();
     });
+    ws.on("close", () => { void cleanupConnection(); });
   });
 
-  httpServer.listen(env.port, () => {
-    realtimeLogger.info({ port: env.port }, "Realtime gateway started");
+  httpServer.listen(env.port, env.host, () => {
+    realtimeLogger.info({ host: env.host, port: env.port }, "Realtime gateway started");
   });
-  server.on("close", () => httpServer.close());
-  return server;
-}
-
-async function loadTerminologyForSession(
-  session: ReturnType<typeof createSession>,
-  env: ReturnType<typeof loadEnv>,
-) {
-  try {
-    return mergeTerminologyWithDomainPacks(
-      await fetchSessionTerminology(session.claims, env),
-      env.domainLexiconPacks,
-    );
-  } catch (error) {
-    realtimeLogger.warn({
-      error,
-      sessionId: session.id,
-      termbaseId: session.claims.termbaseId,
-    }, "Realtime terminology fetch failed");
-    return mergeTerminologyWithDomainPacks([], env.domainLexiconPacks);
-  }
-}
-
-async function handleControlEvent(
-  event: Exclude<ClientRealtimeEvent, { type: "audio.frame" } | ClientTextSegmentEvent>,
-  sessionId: string,
-  provider: RealtimeProvider,
-  audioBatcher: AudioFrameBatcher,
-  sendEvent: (event: ServerRealtimeEvent) => void,
-  endRealtimeSession: (reason: SessionEndReason) => Promise<void>,
-) {
-  const session = getSession(sessionId);
-  if (!session) {
-    sendEvent(buildError("bad_event", "Realtime session was not found", {
-      sessionId,
-      stage: "session",
-      retryable: false,
-    }));
-    return;
-  }
-
-  if (event.type === "session.pause") {
-    audioBatcher.pauseAccepting();
-    await audioBatcher.flush();
-    await flushProviderSession(provider, session.id, sendEvent);
-    updateStatus(session.id, "paused");
-    sendEvent({ type: "session.paused", sessionId: session.id });
-    return;
-  }
-
-  if (event.type === "session.resume") {
-    updateStatus(session.id, "active");
-    audioBatcher.resumeAccepting();
-    return;
-  }
-
-  if (event.type === "session.end") {
-    await endRealtimeSession("client_request");
-  }
-}
-
-async function handleTextSegment(
-  event: ClientTextSegmentEvent,
-  expectedSessionId: string,
-  provider: RealtimeProvider,
-  sendEvent: (event: ServerRealtimeEvent) => void,
-) {
-  const session = getSession(expectedSessionId);
-  if (!session || event.sessionId !== expectedSessionId) {
-    sendEvent(buildError("bad_event", "Realtime session was not found", {
-      sessionId: expectedSessionId,
-      stage: "session",
-      retryable: false,
-    }));
-    return;
-  }
-  if (session.status !== "active") return;
-  if (!provider.sendText) {
-    sendEvent(buildError("bad_event", "Realtime provider does not accept text segments", {
-      sessionId: expectedSessionId,
-      stage: "provider",
-      provider: provider.name,
-      retryable: false,
-    }));
-    return;
-  }
-  const language = normalizeClientTextLanguage(event.language, session.claims.targetLanguage);
-  const normalizedEvent: ClientTextSegmentEvent = { ...event, language };
-  logClientTextSegmentReceived(normalizedEvent);
-
-  for await (const outgoing of provider.sendText({
-    sessionId: normalizedEvent.sessionId,
-    segmentId: normalizedEvent.segmentId,
-    text: normalizedEvent.text,
-    language: normalizedEvent.language,
-    isFinal: normalizedEvent.isFinal !== false,
-    confidence: normalizedEvent.confidence,
-  })) {
-    sendEvent(outgoing);
-  }
-}
-
-async function flushProviderSession(
-  provider: RealtimeProvider,
-  sessionId: string,
-  sendEvent: (event: ServerRealtimeEvent) => void,
-) {
-  if (!provider.flushSession) return;
-  for await (const outgoing of provider.flushSession(sessionId)) sendEvent(outgoing);
+  httpServer.on("close", () => {
+    void protection.close();
+    disconnectFinalizers.close();
+    server.close();
+  });
+  return httpServer;
 }

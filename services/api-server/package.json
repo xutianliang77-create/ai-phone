@@ -6,16 +6,35 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "dev": "tsx src/main.ts",
+    "postgres:migrate": "tsx src/infrastructure/storage/postgres-admin.ts migrate",
+    "postgres:check": "tsx src/infrastructure/storage/postgres-admin.ts check",
+    "postgres:import": "tsx src/infrastructure/storage/postgres-admin.ts import",
+    "postgres:audit": "tsx src/infrastructure/storage/postgres-admin.ts audit",
+    "postgres:staging-acceptance": "tsx src/infrastructure/storage/postgres-staging-acceptance.ts",
+    "postgres:load-acceptance": "tsx src/infrastructure/storage/postgres-load-acceptance.ts",
+    "postgres:soak-acceptance": "tsx src/infrastructure/storage/postgres-soak-acceptance.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "vitest run src"
+    "test": "vitest run src --maxWorkers=2"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "3.1089.0",
     "@fastify/cors": "^11.1.0",
+    "@opentelemetry/api": "1.9.1",
+    "@opentelemetry/core": "2.9.0",
+    "@opentelemetry/exporter-trace-otlp-proto": "0.220.0",
+    "@opentelemetry/resources": "2.9.0",
+    "@opentelemetry/sdk-trace-node": "2.9.0",
+    "@opentelemetry/semantic-conventions": "1.30.0",
     "@translation/contracts": "file:../../packages/contracts",
     "@translation/llm": "file:../../packages/llm",
+    "@translation/platform-security": "file:../../packages/platform-security",
     "fastify": "^5.6.2",
     "livekit-client": "^2.20.0",
     "livekit-server-sdk": "^2.16.0",
+    "pg": "8.22.0",
     "pino": "^10.1.0"
+  },
+  "devDependencies": {
+    "@types/pg": "8.20.0"
   }
 }

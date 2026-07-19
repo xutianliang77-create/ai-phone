@@ -7,7 +7,7 @@ import type { AppleIapTransactionPayload } from "./apple-iap-verifier.js";
 import type { AppleServerNotificationRecord } from "./billing-records.js";
 import { refundPaymentOrder } from "./billing.service.js";
 
-interface AppleNotificationPayload {
+export interface AppleNotificationPayload {
   notificationType?: string;
   subtype?: string;
   notificationUUID?: string;
@@ -46,7 +46,7 @@ export function handleAppleServerNotification(input: { signedPayload: string }) 
   return { ok: true as const, action: action.action, record: action };
 }
 
-function verifyNotificationPayload(signedPayload: string) {
+export function verifyNotificationPayload(signedPayload: string) {
   const result = verifyAppleJwsPayload<AppleNotificationPayload>({
     jws: signedPayload,
     rootCertSha256: process.env.APPLE_IAP_ROOT_CERT_SHA256,
@@ -62,7 +62,7 @@ function verifyNotificationPayload(signedPayload: string) {
   return result;
 }
 
-function verifyNotificationTransaction(payload: AppleNotificationPayload) {
+export function verifyNotificationTransaction(payload: AppleNotificationPayload) {
   const signedTransactionInfo = payload.data?.signedTransactionInfo;
   if (!signedTransactionInfo || payload.notificationType === "TEST") {
     return { ok: true as const, payload: {} as AppleIapTransactionPayload };

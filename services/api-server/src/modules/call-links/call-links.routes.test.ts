@@ -5,18 +5,26 @@ import {
   setCallRoomDataPublisherForTests,
   type CallRoomDataPublisher,
 } from "./call-room-worker.js";
+import {
+  setCallLinkWorkerSupervisorForTests,
+  type CallLinkWorkerRuntime,
+} from "./call-link-worker-supervisor.js";
 
 describe("call link routes", () => {
   let previousEnv: Record<string, string | undefined>;
+  let workerRuntime: FakeCallLinkWorkerRuntime;
 
   beforeEach(() => {
     previousEnv = captureEnv();
     clearEnv();
     resetStore();
+    workerRuntime = new FakeCallLinkWorkerRuntime();
+    setCallLinkWorkerSupervisorForTests(workerRuntime);
   });
 
   afterEach(() => {
     setCallRoomDataPublisherForTests(null);
+    setCallLinkWorkerSupervisorForTests(null);
     restoreEnv(previousEnv);
   });
 
@@ -34,7 +42,9 @@ describe("call link routes", () => {
       roomProvider: "livekit",
       sessionId: body.callId,
       roomName: `call_${body.callId}`,
-      joinUrl: `https://call.example.cn/join/${body.callId}`,
+      joinUrl: expect.stringMatching(
+        `^https://call\\.example\\.cn/join/${body.callId}\\?ticket=g1\\.`,
+      ),
       hostUrl: `https://call.example.cn/host/${body.callId}`,
     });
   });
@@ -57,78 +67,19 @@ describe("call link routes", () => {
     });
   });
 
-  it("issues LiveKit room tokens when the room provider is configured", async () => {
-    configureCallRoomEnv();
-    const app = await buildApp();
-    const created = await app.inject({ method: "POST", url: "/call-links" });
-    const callId = created.json().callId as string;
-    const response = await app.inject({
-      method: "POST",
-      url: `/call-links/${callId}/room-token`,
-      payload: { participantRole: "host", participantName: "Host" },
-    });
-    await app.close();
-
-    const body = response.json();
-    const payload = decodeJwtPayload(body.token);
-    expect(response.statusCode).toBe(200);
-    expect(body).toMatchObject({
-      callId,
-      provider: "livekit",
-      participantRole: "host",
-      roomName: `call_${callId}`,
-      wsUrl: "wss://livekit.example.cn",
-    });
-    expect(payload.iss).toBe("lk_key");
-    expect(payload.video).toMatchObject({
-      room: `call_${callId}`,
-      roomJoin: true,
-      canPublish: true,
-      canSubscribe: true,
-    });
-  });
-
-  it("rejects room tokens when LiveKit is not configured", async () => {
-    const app = await buildApp();
-    const created = await app.inject({ method: "POST", url: "/call-links" });
-    const response = await app.inject({
-      method: "POST",
-      url: `/call-links/${created.json().callId}/room-token`,
-      payload: { participantRole: "guest" },
-    });
-    await app.close();
-
-    expect(response.statusCode).toBe(503);
-    expect(response.json().error.code).toBe(
-      "call_room_provider_not_configured",
-    );
-  });
-
-  it("rejects invalid room participant roles", async () => {
-    configureCallRoomEnv();
-    const app = await buildApp();
-    const created = await app.inject({ method: "POST", url: "/call-links" });
-    const response = await app.inject({
-      method: "POST",
-      url: `/call-links/${created.json().callId}/room-token`,
-      payload: { participantRole: "speaker" },
-    });
-    await app.close();
-
-    expect(response.statusCode).toBe(400);
-    expect(response.json().error.code).toBe("invalid_call_room_participant");
-  });
-
   it("serves the Web Guest join page", async () => {
     const app = await buildApp();
+    const created = await app.inject({ method: "POST", url: "/call-links" });
     const response = await app.inject({
       method: "GET",
-      url: "/join/call_1",
+      url: `/join/${created.json().callId}`,
     });
     await app.close();
 
     expect(response.statusCode).toBe(200);
     expect(response.headers["content-type"]).toContain("text/html");
+    expect(response.headers["cache-control"]).toBe("no-store");
+    expect(response.headers["referrer-policy"]).toBe("no-referrer");
     expect(response.body).toContain("翻译通话");
     expect(response.body).toContain("/call-web/livekit-client.umd.js");
     expect(response.body).toContain("/call-web/guest.js");
@@ -216,7 +167,7 @@ describe("call link routes", () => {
       { roomName: `call_${callId}`, type: "tts.ready" },
     ]);
     expect(session.statusCode).toBe(200);
-    expect(session.json().segments).toEqual([
+    expect(session.json().segments).toMatchObject([
       {
         id: expect.stringMatching(/^smoke-/),
         sourceText: "hello, this is a call room translation test",
@@ -231,14 +182,16 @@ describe("call link routes", () => {
     const callId = created.json().callId as string;
     ageSession(callId, 8_000);
     const before = await app.inject({ method: "GET", url: "/usage/balance" });
-    const ended = await app.inject({
-      method: "POST",
-      url: `/call-links/${callId}/end`,
-    });
-    const repeated = await app.inject({
-      method: "POST",
-      url: `/call-links/${callId}/end`,
-    });
+    const [ended, repeated] = await Promise.all([
+      app.inject({
+        method: "POST",
+        url: `/call-links/${callId}/end`,
+      }),
+      app.inject({
+        method: "POST",
+        url: `/call-links/${callId}/end`,
+      }),
+    ]);
     const after = await app.inject({ method: "GET", url: "/usage/balance" });
     const ledger = await app.inject({ method: "GET", url: "/billing/ledger" });
     const fetched = await app.inject({
@@ -273,8 +226,49 @@ describe("call link routes", () => {
       idempotencyKey: `settle:${callId}`,
       note: "call_link_usage",
     });
+    expect(workerRuntime.stoppedCallIds).toEqual([callId]);
+    expect(getStoreSnapshot().outboxEvents.filter(
+      (event) => event.sessionId === callId && event.eventType === "call_room.data"
+    )).toHaveLength(1);
+  });
+
+  it("rejects an end request bound to a different call id", async () => {
+    const app = await buildApp();
+    const created = await app.inject({ method: "POST", url: "/call-links" });
+    const callId = created.json().callId as string;
+    const response = await app.inject({
+      method: "POST",
+      url: `/call-links/${callId}/end`,
+      payload: { callId: "another-call" },
+    });
+    const fetched = await app.inject({
+      method: "GET",
+      url: `/call-links/${callId}`,
+    });
+    await app.close();
+
+    expect(response.statusCode).toBe(409);
+    expect(response.json().error.code).toBe("call_link_binding_conflict");
+    expect(fetched.json().status).toBe("created");
   });
 });
+
+class FakeCallLinkWorkerRuntime implements CallLinkWorkerRuntime {
+  readonly ensuredCallIds: string[] = [];
+  readonly readyCallIds: string[] = [];
+  readonly stoppedCallIds: string[] = [];
+
+  async ensure(callId: string) {
+    this.ensuredCallIds.push(callId);
+  }
+  markReady(callId: string) {
+    this.readyCallIds.push(callId);
+  }
+  stop(callId: string) {
+    this.stoppedCallIds.push(callId);
+  }
+  shutdown() {}
+}
 
 const envKeys = [
   "PUBLIC_CALL_BASE_URL",
@@ -312,7 +306,7 @@ function configureCallRoomEnv() {
   process.env.LIVEKIT_URL = "wss://livekit.example.cn";
   process.env.LIVEKIT_API_KEY = "lk_key";
   process.env.LIVEKIT_API_SECRET = "lk_secret";
-  process.env.CALL_ROOM_TOKEN_TTL_SECONDS = "3600";
+  process.env.CALL_ROOM_TOKEN_TTL_SECONDS = "120";
   process.env.INTERNAL_API_SECRET = "internal-secret-123";
 }
 
@@ -329,6 +323,8 @@ function resetStore() {
   store.appleServerNotifications = [];
   store.appErrorReports = [];
   store.voiceProfiles = [];
+  store.inboxEvents = [];
+  store.outboxEvents = [];
 }
 
 function ageSession(sessionId: string, ageMs: number) {
@@ -337,9 +333,4 @@ function ageSession(sessionId: string, ageMs: number) {
   );
   if (!session) throw new Error(`Missing test session ${sessionId}`);
   session.createdAt = new Date(Date.now() - ageMs).toISOString();
-}
-
-function decodeJwtPayload(token: string) {
-  const payload = token.split(".")[1] ?? "";
-  return JSON.parse(Buffer.from(payload, "base64url").toString("utf8"));
 }

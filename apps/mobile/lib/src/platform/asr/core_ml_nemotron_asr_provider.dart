@@ -11,7 +11,8 @@ class CoreMlNemotronAsrProvider
         MobileAsrDiagnostics,
         MobileAsrPreparation,
         MobileAsrModelInspector,
-        MobileAsrRuntimeInspector {
+        MobileAsrRuntimeInspector,
+        MobileAsrDiagnosticTimeline {
   CoreMlNemotronAsrProvider({
     MethodChannel? methodChannel,
     EventChannel? eventChannel,
@@ -30,9 +31,18 @@ class CoreMlNemotronAsrProvider
     return _segments ??= _eventChannel
         .receiveBroadcastStream()
         .where((event) => event is Map)
-        .map((event) => AsrTextSegment.tryFromJson(
-              Map<String, Object?>.from(event as Map),
-            ))
+        .map((event) {
+          final payload = Map<String, Object?>.from(event as Map);
+          if (payload['type'] == 'runtime.error') {
+            throw PlatformException(
+              code: payload['code'] as String? ?? 'device_asr_runtime_error',
+              message:
+                  payload['message'] as String? ?? 'Device ASR runtime failed',
+              details: payload,
+            );
+          }
+          return AsrTextSegment.tryFromJson(payload);
+        })
         .where((segment) => segment != null)
         .cast<AsrTextSegment>();
   }
@@ -124,12 +134,30 @@ class CoreMlNemotronAsrProvider
       'endpointMinSpeechMs': config.endpointMinSpeechMs,
       'endpointSilenceMs': config.endpointSilenceMs,
       'endpointSpeechThresholdRms': config.endpointSpeechThresholdRms,
+      'vadProvider': config.vadProvider,
+      'vadThreshold': config.vadThreshold,
+      'vadNegativeThreshold': config.vadNegativeThreshold,
+      'vadPreRollMs': config.vadPreRollMs,
+      'turnRoutingPolicy': config.turnRoutingPolicy,
+      'diagnosticCaptureEnabled': config.diagnosticCaptureEnabled,
+      'diagnosticSessionId': config.diagnosticSessionId,
     };
   }
 
   @override
   Future<void> stop() async {
     await _methodChannel.invokeMethod<void>('stop');
+  }
+
+  @override
+  Future<void> recordDiagnosticEvent(
+    String type, {
+    Map<String, Object?> payload = const <String, Object?>{},
+  }) async {
+    await _methodChannel.invokeMethod<void>(
+      'recordDiagnosticEvent',
+      <String, Object?>{'type': type, 'payload': payload},
+    );
   }
 
   @override

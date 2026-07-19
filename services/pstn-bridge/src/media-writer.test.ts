@@ -38,9 +38,13 @@ describe("PSTN media writer", () => {
       authorization: "Bearer media-secret",
       body: {
         callId: "call-1",
+        sessionId: "call-1",
         providerCallId: "provider-call-1",
         mediaStreamId: "stream-1",
         segmentId: "seg-1",
+        playbackId: "playback-1",
+        generation: 1,
+        targetLegId: "guest-leg",
         telephonyAudio: { encoding: "mulaw8k", sampleRate: 8000, data: "/w==" },
       },
     });
@@ -65,9 +69,13 @@ describe("PSTN media writer", () => {
 function mediaWrite(): MediaWriteRequest {
   return {
     callId: "call-1",
+    sessionId: "call-1",
     providerCallId: "provider-call-1",
     mediaStreamId: "stream-1",
     segmentId: "seg-1",
+    playbackId: "playback-1",
+    generation: 1,
+    targetLegId: "guest-leg",
     targetSpeakerRole: "guest",
     language: "en",
     telephonyAudio: {

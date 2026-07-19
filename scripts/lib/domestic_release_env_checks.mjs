@@ -13,6 +13,8 @@ export function appendDomesticReleaseEnvFileReadiness(context) {
   context.record(context.checks, "domestic_release_env_file", ready, {
     status: result.status,
     filePath: result.filePath,
+    profile: result.profile,
+    deferredCapabilities: result.deferredCapabilities ?? [],
   });
   if (!ready) {
     context.issues.push("domestic_release_env_file is not ready.");

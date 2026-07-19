@@ -1,0 +1,39 @@
+FROM node:24-bookworm-slim
+
+WORKDIR /app
+
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends ca-certificates && \
+    rm -rf /var/lib/apt/lists/*
+
+COPY package.json package-lock.json tsconfig.base.json ./
+COPY packages ./packages
+COPY services/api-server ./services/api-server
+COPY services/realtime-gateway ./services/realtime-gateway
+COPY services/translation-worker ./services/translation-worker
+COPY services/pstn-bridge ./services/pstn-bridge
+COPY services/srt-ingress-bridge ./services/srt-ingress-bridge
+COPY services/voice-agent-runtime ./services/voice-agent-runtime
+COPY infra/postgres ./infra/postgres
+
+RUN npm ci && \
+    npm install --no-save --package-lock=false @ffmpeg-installer/linux-x64@4.1.0 && \
+    test -x node_modules/@ffmpeg-installer/linux-x64/ffmpeg && \
+    npm run build -w @translation/contracts && \
+    npm run build -w @translation/llm && \
+    npm run build -w @translation/platform-security && \
+    npm run build -w @translation/speech-quality && \
+    npm run build -w @translation/api-server && \
+    npm run build -w @translation/realtime-gateway && \
+    npm run build -w @translation/translation-worker && \
+    npm run build -w @translation/pstn-bridge && \
+    npm run build -w @translation/srt-ingress-bridge && \
+    npm run build -w @translation/voice-agent-runtime && \
+    npm cache clean --force
+
+ENV NODE_ENV=production \
+    SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt
+
+USER node
+
+CMD ["node", "services/api-server/dist/main.js"]

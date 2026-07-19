@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from hashlib import sha256
 import os
 
 
@@ -6,8 +7,15 @@ import os
 class AsrConfig:
     provider: str = "mock"
     api_key: str = ""
+    metrics_bearer_token: str = ""
     mock_emit_every_frames: int = 8
     model_version: str = "mock-asr-v0.1.0"
+    vad_provider: str = "rms"
+    vad_model_path: str = ""
+    vad_assets_path: str = ""
+    vad_threshold: float = 0.5
+    vad_window_ms: int = 1000
+    vad_smoothing_frames: int = 3
     sensevoice_model: str = "iic/SenseVoiceSmall"
     sensevoice_device: str = "cpu"
     sensevoice_min_audio_ms: int = 1200
@@ -30,19 +38,84 @@ class AsrConfig:
     qwen3_max_new_tokens: int = 256
     qwen3_min_audio_ms: int = 1800
     qwen3_endpoint_silence_ms: int = 1100
+    qwen3_conversation_endpoint_silence_ms: int = 900
+    qwen3_listening_endpoint_silence_ms: int = 1400
+    qwen3_call_link_endpoint_silence_ms: int = 900
+    qwen3_pstn_endpoint_silence_ms: int = 1100
     qwen3_max_audio_ms: int = 10000
     qwen3_preroll_ms: int = 400
     qwen3_vad_energy_threshold: int = 350
     qwen3_context: str = ""
     qwen3_english_context: str = ""
+    qwen3_mixed_language_retry_enabled: bool = False
+
+    def runtime_parameters(self) -> dict[str, object]:
+        common: dict[str, object] = {
+            "vadProvider": self.vad_provider,
+            "vadThreshold": self.vad_threshold,
+            "vadWindowMs": self.vad_window_ms,
+            "vadSmoothingFrames": self.vad_smoothing_frames,
+        }
+        if self.provider == "mock":
+            return {**common, "emitEveryFrames": self.mock_emit_every_frames}
+        if self.provider == "sensevoice":
+            return {
+                **common,
+                "model": self.sensevoice_model,
+                "device": self.sensevoice_device,
+                "minAudioMs": self.sensevoice_min_audio_ms,
+                "endpointSilenceMs": self.sensevoice_endpoint_silence_ms,
+                "maxAudioMs": self.sensevoice_max_audio_ms,
+                "prerollMs": self.sensevoice_preroll_ms,
+                "vadEnergyThreshold": self.sensevoice_vad_energy_threshold,
+            }
+        if self.provider == "fireredasr2_aed":
+            return {
+                **common,
+                "useGpu": self.firered_use_gpu,
+                "beamSize": self.firered_beam_size,
+                "minAudioMs": self.firered_min_audio_ms,
+                "endpointSilenceMs": self.firered_endpoint_silence_ms,
+                "maxAudioMs": self.firered_max_audio_ms,
+                "prerollMs": self.firered_preroll_ms,
+                "vadEnergyThreshold": self.firered_vad_energy_threshold,
+            }
+        return {
+            **common,
+            "dtype": self.qwen3_dtype,
+            "deviceMap": self.qwen3_device_map,
+            "maxInferenceBatchSize": self.qwen3_max_inference_batch_size,
+            "maxNewTokens": self.qwen3_max_new_tokens,
+            "minAudioMs": self.qwen3_min_audio_ms,
+            "endpointSilenceMs": self.qwen3_endpoint_silence_ms,
+            "endpointSilenceByMode": {
+                "conversation": self.qwen3_conversation_endpoint_silence_ms,
+                "listening": self.qwen3_listening_endpoint_silence_ms,
+                "call_link": self.qwen3_call_link_endpoint_silence_ms,
+                "pstn": self.qwen3_pstn_endpoint_silence_ms,
+            },
+            "maxAudioMs": self.qwen3_max_audio_ms,
+            "prerollMs": self.qwen3_preroll_ms,
+            "vadEnergyThreshold": self.qwen3_vad_energy_threshold,
+            "contextSha256": _text_fingerprint(self.qwen3_context),
+            "englishContextSha256": _text_fingerprint(self.qwen3_english_context),
+            "mixedLanguageRetryEnabled": self.qwen3_mixed_language_retry_enabled,
+        }
 
 
 def load_config() -> AsrConfig:
     return AsrConfig(
         provider=os.getenv("ASR_SERVICE_PROVIDER", "mock"),
         api_key=os.getenv("ASR_SERVICE_API_KEY", "").strip(),
+        metrics_bearer_token=os.getenv("METRICS_BEARER_TOKEN", "").strip(),
         mock_emit_every_frames=int(os.getenv("ASR_MOCK_EMIT_EVERY_FRAMES", "8")),
         model_version=os.getenv("ASR_MODEL_VERSION", "mock-asr-v0.1.0"),
+        vad_provider=os.getenv("ASR_VAD_PROVIDER", "rms"),
+        vad_model_path=os.getenv("ASR_VAD_MODEL_PATH", ""),
+        vad_assets_path=os.getenv("ASR_VAD_ASSETS_PATH", ""),
+        vad_threshold=float(os.getenv("ASR_VAD_THRESHOLD", "0.5")),
+        vad_window_ms=int(os.getenv("ASR_VAD_WINDOW_MS", "1000")),
+        vad_smoothing_frames=int(os.getenv("ASR_VAD_SMOOTHING_FRAMES", "3")),
         sensevoice_model=os.getenv("ASR_SENSEVOICE_MODEL", "iic/SenseVoiceSmall"),
         sensevoice_device=os.getenv("ASR_SENSEVOICE_DEVICE", "cpu"),
         sensevoice_min_audio_ms=int(os.getenv("ASR_SENSEVOICE_MIN_AUDIO_MS", "1200")),
@@ -83,6 +156,18 @@ def load_config() -> AsrConfig:
         qwen3_endpoint_silence_ms=int(
             os.getenv("ASR_QWEN3_ENDPOINT_SILENCE_MS", "1100")
         ),
+        qwen3_conversation_endpoint_silence_ms=int(
+            os.getenv("ASR_QWEN3_CONVERSATION_ENDPOINT_SILENCE_MS", "900")
+        ),
+        qwen3_listening_endpoint_silence_ms=int(
+            os.getenv("ASR_QWEN3_LISTENING_ENDPOINT_SILENCE_MS", "1400")
+        ),
+        qwen3_call_link_endpoint_silence_ms=int(
+            os.getenv("ASR_QWEN3_CALL_LINK_ENDPOINT_SILENCE_MS", "900")
+        ),
+        qwen3_pstn_endpoint_silence_ms=int(
+            os.getenv("ASR_QWEN3_PSTN_ENDPOINT_SILENCE_MS", "1100")
+        ),
         qwen3_max_audio_ms=int(os.getenv("ASR_QWEN3_MAX_AUDIO_MS", "10000")),
         qwen3_preroll_ms=int(os.getenv("ASR_QWEN3_PREROLL_MS", "400")),
         qwen3_vad_energy_threshold=int(
@@ -90,4 +175,12 @@ def load_config() -> AsrConfig:
         ),
         qwen3_context=os.getenv("ASR_QWEN3_CONTEXT", ""),
         qwen3_english_context=os.getenv("ASR_QWEN3_ENGLISH_CONTEXT", ""),
+        qwen3_mixed_language_retry_enabled=(
+            os.getenv("ASR_QWEN3_MIXED_LANGUAGE_RETRY_ENABLED", "false").lower()
+            == "true"
+        ),
     )
+
+
+def _text_fingerprint(value: str) -> str:
+    return sha256(value.encode("utf-8")).hexdigest()

@@ -1,8 +1,13 @@
+import '../../../../shared/domain/speaker_attribution.dart';
+import '../../../../shared/domain/turn_language_profile.dart';
+
 class SubtitleSegment {
   const SubtitleSegment({
     required this.id,
     required this.sourceText,
     required this.translatedText,
+    this.turnId,
+    this.revision,
     this.rawText,
     this.optimizedText,
     this.sourceLanguage,
@@ -13,9 +18,15 @@ class SubtitleSegment {
     this.model,
     this.latencyMs,
     this.refinement,
+    this.speaker,
+    this.timing,
+    this.vadContext,
+    this.languageProfile,
   });
 
   final String id;
+  final String? turnId;
+  final int? revision;
   final String sourceText;
   final String translatedText;
   final String? rawText;
@@ -28,4 +39,8 @@ class SubtitleSegment {
   final String? model;
   final int? latencyMs;
   final Map<String, Object?>? refinement;
+  final SpeakerAttribution? speaker;
+  final SegmentTiming? timing;
+  final Map<String, Object?>? vadContext;
+  final TurnLanguageProfile? languageProfile;
 }

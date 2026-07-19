@@ -81,7 +81,7 @@ function usage() {
 
 Verifies real LiveKit media behavior against a running API:
 - host, guest, and worker participants join one room
-- host data packet reaches guest over the data channel
+- API server caption reaches guest over the trusted data channel
 - guest publishes an audio track
 - worker subscribes and reads the first user audio frame
 - worker publishes a translation TTS audio track and guest reads the first translated audio frame`);

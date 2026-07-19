@@ -1,0 +1,70 @@
+{
+  "schemaVersion": 1,
+  "environment": "staging",
+  "sourceDatabase": "ai_phone_staging",
+  "restoreDatabase": "ai_phone_restore_drill_01",
+  "walG": {
+    "file": "/replace/bin/wal-g",
+    "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+  },
+  "psql": {
+    "file": "/replace/bin/psql",
+    "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+  },
+  "pgDump": {
+    "file": "/replace/bin/pg_dump",
+    "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+  },
+  "walGEnvironmentKeys": [
+    "WALG_S3_PREFIX",
+    "AWS_REGION",
+    "AWS_ACCESS_KEY_ID",
+    "AWS_SECRET_ACCESS_KEY",
+    "AWS_SESSION_TOKEN",
+    "AWS_ENDPOINT",
+    "AWS_S3_FORCE_PATH_STYLE",
+    "AWS_S3_CA_CERT_FILE",
+    "WALG_LIBSODIUM_KEY"
+  ],
+  "databaseEnvironmentKeys": [
+    "PGSERVICEFILE",
+    "PGPASSFILE",
+    "PGSSLROOTCERT"
+  ],
+  "pgDataDirectory": "/replace/postgresql/ai_phone_staging",
+  "restoreDataDirectory": "/replace/postgresql/ai_phone_restore_drill_01",
+  "stateDirectory": "outputs/postgres-resilience/walg-state",
+  "writerPgService": "ai-phone-writer",
+  "restorePgService": "ai-phone-restore",
+  "storageController": {
+    "file": "/replace/bin/object-storage-controller",
+    "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+    "args": ["{action}", "--json"],
+    "environmentKeys": ["OBJECT_STORAGE_CONTROL_TOKEN"]
+  },
+  "recoveryController": {
+    "file": "/replace/bin/postgres-recovery-controller",
+    "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+    "args": ["{action}", "--json"],
+    "environmentKeys": ["POSTGRES_RECOVERY_CONTROL_TOKEN"]
+  },
+  "requiredEnvironmentKeys": [
+    "WALG_S3_PREFIX",
+    "AWS_REGION",
+    "AWS_ACCESS_KEY_ID",
+    "AWS_SECRET_ACCESS_KEY",
+    "WALG_LIBSODIUM_KEY",
+    "PGSERVICEFILE",
+    "PGPASSFILE",
+    "PGSSLROOTCERT",
+    "OBJECT_STORAGE_CONTROL_TOKEN",
+    "POSTGRES_RECOVERY_CONTROL_TOKEN"
+  ],
+  "retentionDays": 30,
+  "requireEncryptionInTransit": true,
+  "requireEncryptionAtRest": true,
+  "requireImmutability": true,
+  "backupTimeoutSeconds": 3600,
+  "restoreTimeoutSeconds": 7200,
+  "verifyTimeoutSeconds": 600
+}

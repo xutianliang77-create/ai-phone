@@ -1,9 +1,19 @@
 import type {
+  AsrEndpointReason,
+  AsrEndpointMode,
   AudioFormat,
   LanguageCode,
   TranslationLanguageCode,
+  SegmentTimingDto,
+  SpeakerAttributionDto,
+  RealtimeVadDiagnosticsDto,
 } from "@translation/contracts";
-import { isTranslationLanguage } from "@translation/contracts";
+import {
+  isSegmentTiming,
+  isSegmentVadContext,
+  isSpeakerAttribution,
+  isTranslationLanguage,
+} from "@translation/contracts";
 import { cleanRealtimeText } from "../protocol/realtime-text.js";
 import type { TranscriptResult } from "./asr-provider.js";
 
@@ -25,6 +35,7 @@ export interface HttpAsrRequest {
   data: string;
   sourceLanguage: LanguageCode;
   targetLanguage: TranslationLanguageCode;
+  mode?: AsrEndpointMode;
   hotwords?: string[];
   corrections?: Array<{ fromText: string; toText: string }>;
 }
@@ -33,8 +44,13 @@ export interface HttpAsrFlushRequest {
   sessionId: string;
   sourceLanguage: LanguageCode;
   targetLanguage: TranslationLanguageCode;
+  mode?: AsrEndpointMode;
   hotwords?: string[];
   corrections?: Array<{ fromText: string; toText: string }>;
+}
+
+export interface HttpAsrBoundaryRequest extends HttpAsrFlushRequest {
+  boundaryMs: number;
 }
 
 interface HttpAsrResponse {
@@ -42,6 +58,10 @@ interface HttpAsrResponse {
   text?: string;
   language?: string;
   confidence?: number;
+  speaker?: SpeakerAttributionDto;
+  timing?: SegmentTimingDto;
+  endpointReason?: string;
+  vadContext?: unknown;
 }
 
 export class HttpAsrClient {
@@ -76,6 +96,9 @@ export class HttpAsrClient {
         body: JSON.stringify({
           sourceLanguage: request.sourceLanguage,
           targetLanguage: request.targetLanguage,
+          mode: request.mode ?? "conversation",
+          hotwords: request.hotwords ?? [],
+          corrections: request.corrections ?? [],
         }),
       },
     );
@@ -89,6 +112,34 @@ export class HttpAsrClient {
     );
   }
 
+  async commitBoundary(
+    request: HttpAsrBoundaryRequest,
+  ): Promise<TranscriptResult | null> {
+    const response = await this.fetchWithTimeout(
+      this.sessionUrl(request.sessionId) + "/boundary",
+      {
+        method: "POST",
+        headers: this.headers(),
+        body: JSON.stringify({
+          boundaryMs: request.boundaryMs,
+          sourceLanguage: request.sourceLanguage,
+          targetLanguage: request.targetLanguage,
+          mode: request.mode ?? "conversation",
+          hotwords: request.hotwords ?? [],
+          corrections: request.corrections ?? [],
+        }),
+      },
+    );
+    if (response.status === 204) return null;
+    if (!response.ok) {
+      throw new Error(`HTTP ASR boundary returned HTTP ${response.status}`);
+    }
+    return this.parseTranscript(
+      (await response.json()) as HttpAsrResponse,
+      "asr_boundary",
+    );
+  }
+
   async closeSession(sessionId: string): Promise<void> {
     const response = await this.fetchWithTimeout(this.sessionUrl(sessionId), {
       method: "DELETE",
@@ -96,6 +147,17 @@ export class HttpAsrClient {
     });
     if (!response.ok)
       throw new Error(`HTTP ASR close returned HTTP ${response.status}`);
+  }
+
+  async diagnostics(sessionId: string): Promise<RealtimeVadDiagnosticsDto> {
+    const response = await this.fetchWithTimeout(
+      this.sessionUrl(sessionId) + "/diagnostics",
+      { method: "GET", headers: this.headers() },
+    );
+    if (!response.ok) {
+      throw new Error(`HTTP ASR diagnostics returned HTTP ${response.status}`);
+    }
+    return (await response.json()) as RealtimeVadDiagnosticsDto;
   }
 
   async healthCheck() {
@@ -160,8 +222,21 @@ export class HttpAsrClient {
       text,
       language: body.language,
       confidence: body.confidence,
+      ...(isSpeakerAttribution(body.speaker) ? { speaker: body.speaker } : {}),
+      ...(isSegmentTiming(body.timing) ? { timing: body.timing } : {}),
+      ...(isAsrEndpointReason(body.endpointReason)
+        ? { endpointReason: body.endpointReason }
+        : {}),
+      ...(isSegmentVadContext(body.vadContext)
+        ? { vadContext: body.vadContext }
+        : {}),
     };
   }
+}
+
+function isAsrEndpointReason(value: unknown): value is AsrEndpointReason {
+  return value === "silence" || value === "max_duration" || value === "flush" ||
+    value === "speaker_boundary";
 }
 
 export function cleanRealtimeTranscript(text: string | undefined) {

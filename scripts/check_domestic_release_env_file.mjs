@@ -23,7 +23,9 @@ const result = {
 if (json) {
   console.log(JSON.stringify(result, null, 2));
 } else if (result.status === "ready") {
-  console.log("Domestic release env file readiness passed.");
+  console.log(
+    `Domestic release env file readiness passed (${result.profile}).`,
+  );
 } else {
   console.error(
     `Domestic release env file readiness failed: ${result.issues.join("; ")}`,
@@ -62,6 +64,8 @@ function usage() {
 
 Verifies that a domestic production env file contains real external service
 configuration before running the full release-ready gate:
+- DOMESTIC_RELEASE_CAPABILITY_PROFILE explicitly selects core_translation or
+  commercial_full; deferred Provider switches must be off in core_translation
 - Apple IAP, WeChat Pay, Alipay, payment callback URL
 - LiveKit room provider and public call link URL
 - Diagnostics on-call webhook and admin token

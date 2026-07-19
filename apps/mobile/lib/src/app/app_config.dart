@@ -1,5 +1,7 @@
 import 'region_edition_config.dart';
 import '../platform/translation/supported_translation_language.dart';
+import '../features/realtime/data/voice_preset_catalog.dart';
+import '../features/realtime/data/domain_lexicon_pack.dart';
 
 class AppConfig {
   AppConfig({
@@ -18,12 +20,19 @@ class AppConfig {
     this.deviceAsrEndpointMinSpeechMs = 600,
     this.deviceAsrEndpointSilenceMs = 900,
     this.deviceAsrEndpointSpeechThresholdRms = 0.006,
+    this.deviceAsrVadProvider = 'fluidaudio_silero',
+    this.deviceAsrVadThreshold = 0.6,
+    this.deviceAsrVadNegativeThreshold = 0.35,
+    this.deviceAsrVadPreRollMs = 800,
+    this.deviceAsrDiagnosticCaptureEnabled = false,
     this.useLocalSessions = false,
     this.useOnDeviceTranslation = false,
     this.onDeviceTranslationProvider = 'ios_system',
     this.onDeviceTranslationRequired = false,
     this.autoReverseTargetLanguage = true,
     String realtimeVoiceOutputMode = 'off',
+    String realtimeVoicePresetId = defaultRealtimeVoicePresetId,
+    String domainLexiconPack = defaultDomainLexiconPack,
     RegionEditionConfig? region,
     String realtimeMode = 'conversation',
     String sourceLanguage = 'auto',
@@ -31,6 +40,8 @@ class AppConfig {
   })  : realtimeVoiceOutputMode =
             _normalizeRealtimeVoiceOutputMode(realtimeVoiceOutputMode),
         sourceLanguage = _normalizeSourceLanguage(sourceLanguage),
+        realtimeVoicePresetId = _normalizeVoicePresetId(realtimeVoicePresetId),
+        domainLexiconPack = normalizeDomainLexiconPack(domainLexiconPack),
         targetLanguage = _normalizeTargetLanguage(targetLanguage),
         realtimeMode = _normalizeRealtimeMode(realtimeMode),
         region = region ?? const RegionEditionConfig.domestic();
@@ -49,12 +60,19 @@ class AppConfig {
   final int deviceAsrEndpointMinSpeechMs;
   final int deviceAsrEndpointSilenceMs;
   final double deviceAsrEndpointSpeechThresholdRms;
+  final String deviceAsrVadProvider;
+  final double deviceAsrVadThreshold;
+  final double deviceAsrVadNegativeThreshold;
+  final int deviceAsrVadPreRollMs;
+  final bool deviceAsrDiagnosticCaptureEnabled;
   final bool useLocalSessions;
   final bool useOnDeviceTranslation;
   final String onDeviceTranslationProvider;
   final bool onDeviceTranslationRequired;
   final bool autoReverseTargetLanguage;
   final String realtimeVoiceOutputMode;
+  final String realtimeVoicePresetId;
+  final String domainLexiconPack;
   final bool serverOwnedHistory;
   final bool appErrorReportingEnabled;
   final String appVersion;
@@ -118,6 +136,29 @@ class AppConfig {
     );
     final deviceAsrEndpointSpeechThresholdRms =
         double.tryParse(deviceAsrEndpointSpeechThresholdRmsRaw) ?? 0.006;
+    const deviceAsrVadProvider = String.fromEnvironment(
+      'DEVICE_ASR_VAD_PROVIDER',
+      defaultValue: 'fluidaudio_silero',
+    );
+    const deviceAsrVadThresholdRaw = String.fromEnvironment(
+      'DEVICE_ASR_VAD_THRESHOLD',
+      defaultValue: '0.6',
+    );
+    final deviceAsrVadThreshold =
+        double.tryParse(deviceAsrVadThresholdRaw) ?? 0.6;
+    const deviceAsrVadNegativeThresholdRaw = String.fromEnvironment(
+      'DEVICE_ASR_VAD_NEGATIVE_THRESHOLD',
+      defaultValue: '0.35',
+    );
+    final deviceAsrVadNegativeThreshold =
+        double.tryParse(deviceAsrVadNegativeThresholdRaw) ?? 0.35;
+    const deviceAsrVadPreRollMs = int.fromEnvironment(
+      'DEVICE_ASR_VAD_PRE_ROLL_MS',
+      defaultValue: 800,
+    );
+    const deviceAsrDiagnosticCaptureEnabled = bool.fromEnvironment(
+      'DEVICE_ASR_DIAGNOSTIC_CAPTURE',
+    );
     const useOnDeviceTranslation =
         bool.fromEnvironment('USE_ON_DEVICE_TRANSLATION');
     const useLocalSessions = bool.fromEnvironment('USE_LOCAL_SESSIONS');
@@ -135,6 +176,14 @@ class AppConfig {
     const realtimeVoiceOutputMode = String.fromEnvironment(
       'REALTIME_VOICE_OUTPUT_MODE',
       defaultValue: 'off',
+    );
+    const realtimeVoicePresetId = String.fromEnvironment(
+      'REALTIME_VOICE_PRESET_ID',
+      defaultValue: defaultRealtimeVoicePresetId,
+    );
+    const domainLexiconPack = String.fromEnvironment(
+      'DOMAIN_LEXICON_PACK',
+      defaultValue: defaultDomainLexiconPack,
     );
     const appVersion = String.fromEnvironment(
       'APP_VERSION',
@@ -159,6 +208,12 @@ class AppConfig {
       deviceAsrEndpointMinSpeechMs: deviceAsrEndpointMinSpeechMs,
       deviceAsrEndpointSilenceMs: deviceAsrEndpointSilenceMs,
       deviceAsrEndpointSpeechThresholdRms: deviceAsrEndpointSpeechThresholdRms,
+      deviceAsrVadProvider: deviceAsrVadProvider,
+      deviceAsrVadThreshold: deviceAsrVadThreshold,
+      deviceAsrVadNegativeThreshold: deviceAsrVadNegativeThreshold,
+      deviceAsrVadPreRollMs: deviceAsrVadPreRollMs,
+      deviceAsrDiagnosticCaptureEnabled:
+          deviceAsrDiagnosticCaptureEnabled,
       useLocalSessions: useLocalSessions,
       useOnDeviceTranslation: useOnDeviceTranslation,
       onDeviceTranslationProvider: onDeviceTranslationProvider,
@@ -166,6 +221,8 @@ class AppConfig {
       autoReverseTargetLanguage: autoReverseTargetLanguage ||
           targetLanguage == autoReverseTargetLanguageCode,
       realtimeVoiceOutputMode: realtimeVoiceOutputMode,
+      realtimeVoicePresetId: realtimeVoicePresetId,
+      domainLexiconPack: domainLexiconPack,
       serverOwnedHistory: serverOwnedHistory,
       appErrorReportingEnabled: appErrorReportingEnabled,
       appVersion: appVersion,
@@ -183,6 +240,8 @@ class AppConfig {
     bool? useOnDeviceTranslation,
     bool? autoReverseTargetLanguage,
     String? realtimeVoiceOutputMode,
+    String? realtimeVoicePresetId,
+    String? domainLexiconPack,
   }) {
     return AppConfig(
       apiBaseUrl: apiBaseUrl,
@@ -199,6 +258,12 @@ class AppConfig {
       deviceAsrEndpointMinSpeechMs: deviceAsrEndpointMinSpeechMs,
       deviceAsrEndpointSilenceMs: deviceAsrEndpointSilenceMs,
       deviceAsrEndpointSpeechThresholdRms: deviceAsrEndpointSpeechThresholdRms,
+      deviceAsrVadProvider: deviceAsrVadProvider,
+      deviceAsrVadThreshold: deviceAsrVadThreshold,
+      deviceAsrVadNegativeThreshold: deviceAsrVadNegativeThreshold,
+      deviceAsrVadPreRollMs: deviceAsrVadPreRollMs,
+      deviceAsrDiagnosticCaptureEnabled:
+          deviceAsrDiagnosticCaptureEnabled,
       useLocalSessions: useLocalSessions ?? this.useLocalSessions,
       useOnDeviceTranslation:
           useOnDeviceTranslation ?? this.useOnDeviceTranslation,
@@ -208,6 +273,9 @@ class AppConfig {
           autoReverseTargetLanguage ?? this.autoReverseTargetLanguage,
       realtimeVoiceOutputMode:
           realtimeVoiceOutputMode ?? this.realtimeVoiceOutputMode,
+      realtimeVoicePresetId:
+          realtimeVoicePresetId ?? this.realtimeVoicePresetId,
+      domainLexiconPack: domainLexiconPack ?? this.domainLexiconPack,
       serverOwnedHistory: serverOwnedHistory,
       appErrorReportingEnabled: appErrorReportingEnabled,
       appVersion: appVersion,
@@ -215,6 +283,13 @@ class AppConfig {
       region: region,
     );
   }
+}
+
+String _normalizeVoicePresetId(String value) {
+  final cleaned = value.trim();
+  return RegExp(r'^[A-Za-z0-9_-]{1,80}$').hasMatch(cleaned)
+      ? cleaned
+      : defaultRealtimeVoicePresetId;
 }
 
 String _normalizeRealtimeVoiceOutputMode(String value) {

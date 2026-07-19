@@ -6,14 +6,21 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "dev": "tsx src/main.ts",
+    "dev:livekit-agent": "tsx src/livekit-agent/translation-agent-server.ts dev",
+    "start:livekit-agent": "node dist/livekit-agent/translation-agent-server.js start",
     "dev:agent-calls": "tsx src/agent-calls/main.ts",
     "dev:pstn-audio-sink": "tsx src/pstn-audio-sink/main.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run src"
   },
   "dependencies": {
+    "@livekit/agents": "1.5.0",
+    "@livekit/protocol": "1.46.6",
     "@livekit/rtc-node": "^0.13.30",
     "@translation/contracts": "file:../../packages/contracts",
-    "pino": "^10.1.0"
+    "@translation/llm": "file:../../packages/llm",
+    "@translation/speech-quality": "file:../../packages/speech-quality",
+    "pino": "^10.1.0",
+    "zod": "4.1.8"
   }
 }

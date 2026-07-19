@@ -7,14 +7,14 @@ import '../../../../app/app_language.dart';
 import '../../../../app/localization/app_localizations.dart';
 import '../../../../platform/speech/pcm_audio_output_player.dart';
 import '../../../../platform/speech/speech_output_provider.dart';
+import '../../../../platform/audio/audio_session_coordinator.dart';
 import '../../../account/data/account_session_store.dart';
 import '../../../account/presentation/widgets/account_required_panel.dart';
 import '../../../compliance/data/voice_processing_consent_store.dart';
 import '../../../compliance/presentation/widgets/voice_processing_consent_dialog.dart';
-import '../../../device_asr/presentation/pages/core_ml_nemotron_diagnostics_page.dart';
-import '../../../history/presentation/pages/session_history_page.dart';
 import '../../data/realtime_runtime_settings.dart';
 import '../../data/realtime_settings_store.dart';
+import '../../data/voice_preset_catalog.dart';
 import '../controllers/realtime_controller.dart';
 import '../realtime_online_recovery_policy.dart';
 import '../realtime_settings_l10n.dart';
@@ -36,6 +36,7 @@ class RealtimePage extends StatefulWidget {
     this.speechOutputProvider,
     this.voiceConsentStore,
     this.accountSessionStore,
+    this.voicePresetClient,
   });
 
   final AppConfig? config;
@@ -43,6 +44,7 @@ class RealtimePage extends StatefulWidget {
   final SpeechOutputProvider? speechOutputProvider;
   final VoiceProcessingConsentStore? voiceConsentStore;
   final AccountSessionStore? accountSessionStore;
+  final VoicePresetClient? voicePresetClient;
 
   @override
   State<RealtimePage> createState() => _RealtimePageState();
@@ -53,10 +55,15 @@ class _RealtimePageState extends State<RealtimePage>
   late final RealtimeSettingsStore _settingsStore;
   late final VoiceProcessingConsentStore _voiceConsentStore;
   late final AccountSessionStore _accountSessionStore;
+  late final VoicePresetClient _voicePresetClient;
+  late final bool _ownsVoicePresetClient;
   late AppConfig _config;
   late RealtimeRuntimeSettings _settings;
   late RealtimeController controller;
   bool _onlineRecoveryInFlight = false;
+  bool _voicePresetsLoading = true;
+  VoicePresetCatalog _voicePresetCatalog = const VoicePresetCatalog.empty();
+  Timer? _finalizationReplayTimer;
 
   @override
   void initState() {
@@ -67,23 +74,42 @@ class _RealtimePageState extends State<RealtimePage>
     _accountSessionStore =
         widget.accountSessionStore ?? const FileAccountSessionStore();
     final baseConfig = widget.config ?? AppConfig.fromEnvironment();
+    _ownsVoicePresetClient = widget.voicePresetClient == null;
+    _voicePresetClient = widget.voicePresetClient ??
+        VoicePresetClient(baseUrl: baseConfig.apiBaseUrl);
     _settings = RealtimeRuntimeSettings.fromConfig(baseConfig);
     _config = _settings.applyTo(baseConfig);
     controller = _createRealtimePageController(this, _config);
     WidgetsBinding.instance.addObserver(this);
+    unawaited(controller.recoverPendingFinalizations());
+    _finalizationReplayTimer = Timer.periodic(
+      const Duration(seconds: 15),
+      (_) => unawaited(controller.recoverPendingFinalizations()),
+    );
     unawaited(_loadSettings());
+    unawaited(_loadVoicePresets());
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _finalizationReplayTimer?.cancel();
     controller.dispose();
+    if (_ownsVoicePresetClient) _voicePresetClient.close();
     super.dispose();
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    unawaited(controller.handleLifecycleState(state));
+    unawaited(_handleLifecycleState(state));
+  }
+
+  Future<void> _handleLifecycleState(AppLifecycleState state) async {
+    final current = controller;
+    if (state == AppLifecycleState.resumed) {
+      await current.recoverPendingFinalizations();
+    }
+    await current.handleLifecycleState(state);
   }
 
   @override
@@ -92,22 +118,27 @@ class _RealtimePageState extends State<RealtimePage>
     final languageScope = AppLanguageScope.of(context);
     return Scaffold(
       appBar: AppBar(
-        title: Text(l10n.appTitle),
+        toolbarHeight: 76,
+        titleSpacing: 0,
+        title: AnimatedBuilder(
+          animation: controller,
+          builder: (context, _) => RealtimeStatusBar(
+            status: controller.status,
+            routeLabel: _routeLabel(l10n),
+            message: controller.message,
+            remainingSeconds: controller.remainingSeconds,
+            lowBalance: controller.lowBalance,
+            autoSpeakTranslation:
+                _realtimeAutoSpeakSupported && _settings.autoSpeakTranslation,
+            autoSpeakEnabled: _realtimeAutoSpeakSupported,
+            onAutoSpeakChanged: _toggleAutoSpeakTranslation,
+          ),
+        ),
         actions: <Widget>[
           RealtimeLanguageMenu(
             locale: languageScope.locale,
             onLocaleChanged: languageScope.onChanged,
             onOpenRealtimeSettings: _openRealtimeSettings,
-          ),
-          IconButton(
-            onPressed: _openDeviceAsrDiagnostics,
-            icon: const Icon(Icons.health_and_safety_outlined),
-            tooltip: l10n.deviceAsrDiagnostics,
-          ),
-          IconButton(
-            onPressed: _openHistory,
-            icon: const Icon(Icons.history),
-            tooltip: l10n.history,
           ),
         ],
       ),
@@ -117,15 +148,6 @@ class _RealtimePageState extends State<RealtimePage>
           builder: (context, _) {
             return Column(
               children: <Widget>[
-                RealtimeStatusBar(
-                  status: controller.status,
-                  message: controller.message,
-                  remainingSeconds: controller.remainingSeconds,
-                  lowBalance: controller.lowBalance,
-                  autoSpeakTranslation: _settings.autoSpeakTranslation,
-                  autoSpeakEnabled: _realtimeAutoSpeakSupported,
-                  onAutoSpeakChanged: _toggleAutoSpeakTranslation,
-                ),
                 RealtimeOnlineRecoveryActions(
                   visible:
                       _shouldShowOnlineRecovery && !_onlineRecoveryInFlight,
@@ -141,13 +163,23 @@ class _RealtimePageState extends State<RealtimePage>
                     ),
                   ),
                 Expanded(
-                  child: ListView(
-                    padding: EdgeInsets.zero,
-                    children: _realtimeContent(),
+                  child: Padding(
+                    padding: const EdgeInsets.only(top: 12),
+                    child: SubtitleTimeline(
+                      key: const ValueKey('realtime-subtitle-workspace'),
+                      segments: controller.segments,
+                      visualizerActive:
+                          controller.status == RealtimeStatus.active,
+                      visualizerPaused:
+                          controller.status == RealtimeStatus.paused,
+                    ),
                   ),
                 ),
                 RealtimeControls(
-                  controller: controller,
+                  status: controller.status,
+                  onStart: controller.start,
+                  onPause: controller.pause,
+                  onStop: controller.stop,
                   onBeforeStart: () => _ensureRealtimeStartAllowed(this),
                 ),
               ],
@@ -158,38 +190,21 @@ class _RealtimePageState extends State<RealtimePage>
     );
   }
 
-  void _openHistory() {
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(builder: (_) => const SessionHistoryPage()),
-    );
-  }
-
-  void _openDeviceAsrDiagnostics() {
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) => const CoreMlNemotronDiagnosticsPage(),
-      ),
-    );
+  String _routeLabel(AppLocalizations l10n) {
+    final source = l10n.languageDisplayName(_settings.sourceLanguage);
+    final target = l10n.languageDisplayName(_settings.targetLanguage);
+    return '$source  →  $target';
   }
 
   bool get _canChangeSettings {
     return controller.status == RealtimeStatus.idle ||
-        controller.status == RealtimeStatus.ended;
+        isTerminalRealtimeStatus(controller.status);
   }
 
   bool get _canChangeMode => _canChangeSettings;
 
-  bool get _realtimeAutoSpeakSupported => true;
-
-  List<Widget> _realtimeContent() {
-    return <Widget>[
-      const SizedBox(height: 12),
-      SizedBox(
-        height: 420,
-        child: SubtitleTimeline(segments: controller.segments),
-      ),
-    ];
-  }
+  bool get _realtimeAutoSpeakSupported =>
+      realtimeModeSupportsVoiceOutput(_config.realtimeMode);
 
   bool get _shouldShowOnlineRecovery {
     return shouldShowOnlineRecovery(
@@ -234,14 +249,44 @@ class _RealtimePageState extends State<RealtimePage>
   }
 
   bool get _isRunningForRecovery =>
-      controller.status == RealtimeStatus.listening ||
+      controller.status == RealtimeStatus.active ||
       controller.status == RealtimeStatus.paused;
 
   Future<void> _loadSettings() async {
     final savedSettings = await _settingsStore.load();
     if (!mounted || savedSettings == null) return;
     if (!_canChangeSettings) return;
-    _replaceSettings(savedSettings);
+    _replaceSettings(_normalizeVoicePreset(savedSettings));
+  }
+
+  Future<void> _loadVoicePresets() async {
+    try {
+      final catalog = await _voicePresetClient.load();
+      if (!mounted) return;
+      setState(() {
+        _voicePresetCatalog = catalog;
+        _voicePresetsLoading = false;
+      });
+      final normalized = _normalizeVoicePreset(_settings);
+      if (normalized.voicePresetId != _settings.voicePresetId) {
+        _replaceSettings(normalized);
+        unawaited(_settingsStore.save(normalized));
+      }
+    } catch (_) {
+      if (mounted) setState(() => _voicePresetsLoading = false);
+    }
+  }
+
+  RealtimeRuntimeSettings _normalizeVoicePreset(
+    RealtimeRuntimeSettings settings,
+  ) {
+    if (_voicePresetCatalog.presets.isEmpty ||
+        _voicePresetCatalog.find(settings.voicePresetId) != null) {
+      return settings;
+    }
+    return settings.copyWith(
+      voicePresetId: _voicePresetCatalog.defaultPresetId,
+    );
   }
 
   void _replaceSettings(RealtimeRuntimeSettings settings) {

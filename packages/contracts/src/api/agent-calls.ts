@@ -8,6 +8,8 @@ export type AiCallingAgentStatus =
   | "draft"
   | "authorized"
   | "queued"
+  | "dispatching"
+  | "reconciliation_required"
   | "in_progress"
   | "completed"
   | "failed"
@@ -27,6 +29,10 @@ export interface CreateAiCallingAgentDraftRequest {
 export interface AuthorizeAiCallingAgentRequest {
   userConfirmed: boolean;
   consentPromptVersion: string;
+  recipientDisclosureConfirmed?: boolean;
+  disclosurePromptVersion?: string;
+  recordingRequested?: boolean;
+  recordingPolicyVersion?: string;
 }
 
 export interface RequestAiCallingAgentTakeoverRequest {
@@ -39,10 +45,13 @@ export interface CancelAiCallingAgentDraftRequest {
 
 export interface StartAiCallingAgentCallRequest {
   consentPromptVersion?: string;
+  disclosurePromptVersion?: string;
+  recipientDisclosureConfirmed?: boolean;
 }
 
 export interface UpdateAiCallingAgentCallStatusRequest {
   status: "in_progress" | "completed" | "failed";
+  providerOperationStatus?: "accepted" | "unknown" | "succeeded" | "failed";
   providerCallId?: string;
   consumedSeconds?: number;
   resultSummary?: string;
@@ -67,8 +76,14 @@ export interface AiCallingAgentDraftDto {
   riskLevel: "low" | "requires_human_takeover";
   riskReasons: string[];
   consentPromptVersion?: string;
+  recipientDisclosureConfirmed?: boolean;
+  disclosurePromptVersion?: string;
+  recordingRequested?: boolean;
+  recordingPolicyVersion?: string;
   authorizedAt?: string;
   takeoverRequestedAt?: string;
+  takeoverReadyAt?: string;
+  takeoverResolvedAt?: string;
   takeoverReason?: string;
   cancelledAt?: string;
   cancellationReason?: string;
@@ -94,4 +109,17 @@ export interface AiCallingAgentDraftResponse {
 
 export interface AiCallingAgentDraftsResponse {
   drafts: AiCallingAgentDraftDto[];
+}
+
+export interface AgentCallWorkerClaimDto {
+  draft: AiCallingAgentDraftDto;
+  workerId: string;
+  leaseToken: string;
+  leaseExpiresAt: string;
+  attempt: number;
+  dialIdempotencyKey: string;
+}
+
+export interface AgentCallWorkerClaimsResponse {
+  claims: AgentCallWorkerClaimDto[];
 }

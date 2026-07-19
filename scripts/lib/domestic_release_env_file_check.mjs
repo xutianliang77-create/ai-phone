@@ -4,78 +4,12 @@ import {
   checkModelRoutingConfig,
   renderModelRoutingEnv,
 } from "./model_routing_config.mjs";
+import { requireReleaseSecurity } from "./domestic_release_security_check.mjs";
+import { requireDomesticReleaseServiceConfig } from
+  "./domestic_release_env_service_requirements.mjs";
 
-const requiredText = [
-  "APPLE_IAP_BUNDLE_ID",
-  "APPLE_IAP_ROOT_CERT_SHA256",
-  "WECHAT_PAY_APP_ID",
-  "WECHAT_PAY_MCH_ID",
-  "WECHAT_PAY_WEBHOOK_SECRET",
-  "ALIPAY_APP_ID",
-  "ALIPAY_MERCHANT_ID",
-  "ALIPAY_WEBHOOK_SECRET",
-  "LIVEKIT_API_KEY",
-  "LIVEKIT_API_SECRET",
-  "DIAGNOSTICS_ADMIN_TOKEN",
-  "DIAGNOSTICS_ONCALL_CONTACT",
-  "DIAGNOSTICS_ALERT_WEBHOOK_SECRET",
-  "REALTIME_PROVIDER",
-  "MODEL_ROUTING_PROFILE",
-  "TRANSLATION_PROVIDER",
-  "TRANSLATION_MODEL",
-  "TRANSLATION_API_KEY",
-  "TRANSLATION_SERVICE_API_KEY",
-  "ASR_HTTP_API_KEY",
-  "ASR_SERVICE_API_KEY",
-  "TTS_PROVIDER",
-  "TTS_MODEL",
-  "TTS_HTTP_API_KEY",
-  "TTS_SERVICE_API_KEY",
-  "PSTN_BRIDGE_API_KEY",
-  "PSTN_BRIDGE_PROVIDER_WEBHOOK_SECRET",
-  "PSTN_BRIDGE_MEDIA_WRITER_API_KEY",
-  "PSTN_BRIDGE_STATUS_WEBHOOK_SECRET",
-  "PSTN_BRIDGE_AUDIO_FRAME_SINK_API_KEY",
-  "INTERNAL_API_SECRET",
-];
-
-const requiredHttps = [
-  "PUBLIC_CALL_BASE_URL",
-  "PAYMENT_CALLBACK_BASE_URL",
-  "DIAGNOSTICS_ALERT_WEBHOOK_URL",
-  "TRANSLATION_BASE_URL",
-  "ASR_HTTP_ENDPOINT",
-  "ASR_HTTP_FLUSH_ENDPOINT",
-  "TTS_HTTP_ENDPOINT",
-  "PSTN_BRIDGE_BASE_URL",
-  "PSTN_BRIDGE_MEDIA_WRITER_ENDPOINT",
-  "PSTN_BRIDGE_STATUS_WEBHOOK_ENDPOINT",
-  "PSTN_BRIDGE_AUDIO_FRAME_SINK_ENDPOINT",
-];
-
-const secretMinimumLengths = {
-  TRANSLATION_API_KEY: 16,
-  TRANSLATION_SERVICE_API_KEY: 16,
-  ASR_HTTP_API_KEY: 16,
-  ASR_SERVICE_API_KEY: 16,
-  QWEN_API_KEY: 16,
-  TTS_HTTP_API_KEY: 16,
-  TTS_SERVICE_API_KEY: 16,
-  LIVEKIT_API_SECRET: 16,
-  WECHAT_PAY_WEBHOOK_SECRET: 24,
-  ALIPAY_WEBHOOK_SECRET: 24,
-  DIAGNOSTICS_ADMIN_TOKEN: 16,
-  DIAGNOSTICS_ALERT_WEBHOOK_SECRET: 16,
-  PSTN_BRIDGE_API_KEY: 16,
-  PSTN_BRIDGE_PROVIDER_WEBHOOK_SECRET: 16,
-  PSTN_BRIDGE_MEDIA_WRITER_API_KEY: 16,
-  PSTN_BRIDGE_STATUS_WEBHOOK_SECRET: 16,
-  PSTN_BRIDGE_AUDIO_FRAME_SINK_API_KEY: 16,
-  PSTN_BRIDGE_UPSTREAM_API_KEY: 16,
-  PSTN_BRIDGE_FONOSTER_API_KEY: 16,
-  PSTN_BRIDGE_FONOSTER_API_SECRET: 16,
-  INTERNAL_API_SECRET: 16,
-};
+const releaseProfiles = ["core_translation", "commercial_full"];
+const deferredCapabilities = ["livekit_sip", "agent", "egress"];
 
 export function checkDomesticReleaseEnvFile(options = {}) {
   const root = options.root ?? process.cwd();
@@ -88,23 +22,23 @@ export function checkDomesticReleaseEnvFile(options = {}) {
       filePath,
       [],
       [`domestic release env file missing: ${filePath}`],
+      null,
     );
   }
   const env = parseEnvFile(readFileSync(filePath, "utf8"));
   const checks = [];
   const issues = [];
-  requireText(env, checks, issues);
-  requireHttps(env, checks, issues);
-  requireSecretStrength(env, checks, issues);
-  requireAppleRootFingerprint(env, checks, issues);
-  requireLiveKit(env, checks, issues);
-  requireFixedValues(env, checks, issues);
+  const profile = requireReleaseProfile(env, checks, issues);
+  const fullRelease = profile === "commercial_full";
+  requireDomesticReleaseServiceConfig({ env, checks, issues, fullRelease });
+  requireFixedValues(env, checks, issues, profile);
   requireReleaseArtifact(root, env, checks, issues, "RELEASE_MATERIALS_FILE");
   requireReleaseArtifact(root, env, checks, issues, "MODEL_SELECTION_FILE");
   requireReleaseArtifact(root, env, checks, issues, "MODEL_ROUTING_FILE");
   requireModelRouting(root, env, checks, issues);
-  requirePstnProvider(env, checks, issues);
-  return result(filePath, checks, issues);
+  if (fullRelease) requirePstnProvider(env, checks, issues);
+  requireReleaseSecurity(filePath, env, checks, issues);
+  return result(filePath, checks, issues, profile);
 }
 
 export function parseEnvFile(text) {
@@ -123,54 +57,21 @@ export function parseEnvFile(text) {
   return env;
 }
 
-function requireText(env, checks, issues) {
-  for (const key of requiredText) {
-    const ok = hasRealValue(env[key]);
-    record(checks, key, ok, { configured: ok });
-    if (!ok) issues.push(`domestic release env missing ${key}`);
-  }
+function requireReleaseProfile(env, checks, issues) {
+  oneOf(
+    env,
+    checks,
+    issues,
+    "DOMESTIC_RELEASE_CAPABILITY_PROFILE",
+    releaseProfiles,
+  );
+  return releaseProfiles.includes(env.DOMESTIC_RELEASE_CAPABILITY_PROFILE)
+    ? env.DOMESTIC_RELEASE_CAPABILITY_PROFILE
+    : null;
 }
 
-function requireSecretStrength(env, checks, issues) {
-  for (const [key, minLength] of Object.entries(secretMinimumLengths)) {
-    const value = env[key];
-    if (!hasRealValue(value)) continue;
-    const ok = value.trim().length >= minLength;
-    record(checks, `${key}_strength`, ok, {
-      minLength,
-      actualLength: value.trim().length,
-    });
-    if (!ok) issues.push(`domestic release env weak ${key}`);
-  }
-}
-
-function requireAppleRootFingerprint(env, checks, issues) {
-  const value = env.APPLE_IAP_ROOT_CERT_SHA256;
-  if (!hasRealValue(value)) return;
-  const ok = /^[a-f0-9]{64}$/i.test(value.trim());
-  record(checks, "APPLE_IAP_ROOT_CERT_SHA256_format", ok, {
-    expected: "64 hex characters",
-  });
-  if (!ok) {
-    issues.push("domestic release env invalid APPLE_IAP_ROOT_CERT_SHA256");
-  }
-}
-
-function requireHttps(env, checks, issues) {
-  for (const key of requiredHttps) {
-    const ok = isPublicUrl(env[key], ["https:"]);
-    record(checks, key, ok, { value: mask(env[key]) });
-    if (!ok) issues.push(`domestic release env invalid ${key}`);
-  }
-}
-
-function requireLiveKit(env, checks, issues) {
-  const ok = isPublicUrl(env.LIVEKIT_URL, ["wss:", "https:"]);
-  record(checks, "LIVEKIT_URL", ok, { value: mask(env.LIVEKIT_URL) });
-  if (!ok) issues.push("domestic release env invalid LIVEKIT_URL");
-}
-
-function requireFixedValues(env, checks, issues) {
+function requireFixedValues(env, checks, issues, profile) {
+  fixedValue(env, checks, issues, "NODE_ENV", "production");
   fixedValue(env, checks, issues, "REGION_EDITION", "domestic");
   fixedValue(env, checks, issues, "DATA_REGION", "cn");
   fixedValue(env, checks, issues, "COMPLIANCE_PROFILE", "pipl");
@@ -181,13 +82,57 @@ function requireFixedValues(env, checks, issues) {
   fixedValue(env, checks, issues, "TTS_PROVIDER", "voxcpm2");
   fixedValue(env, checks, issues, "TTS_MODEL", "VoxCPM2");
   fixedValue(env, checks, issues, "APPLE_IAP_ENVIRONMENT", "Production");
-  fixedValue(env, checks, issues, "PSTN_RECORDING_DISCLOSURE_ENABLED", "true");
+  fixedValue(env, checks, issues, "API_TEST_AUTO_ACCOUNT", "false");
+  fixedValue(env, checks, issues, "AUTH_DEBUG_OTP", "false");
+  fixedValue(env, checks, issues, "REALTIME_ALLOW_QUERY_TOKEN", "false");
+  fixedValue(env, checks, issues, "SMS_PROVIDER", "http");
+  boundedInteger(env, checks, issues, "SMS_HTTP_TIMEOUT_MS", 1000, 30000);
   oneOf(env, checks, issues, "DIAGNOSTICS_ALERT_WEBHOOK_FORMAT", [
     "generic",
     "wecom",
     "feishu",
     "dingtalk",
   ]);
+  if (profile === "core_translation") {
+    fixedValue(env, checks, issues, "CALL_PROVIDER_POLICY", "call_link_only");
+    fixedValue(env, checks, issues, "AGENT_CALL_WORKER_ENABLED", "false");
+    fixedValue(env, checks, issues, "VOICE_AGENT_ENABLED", "false");
+    fixedValue(env, checks, issues, "VOICE_AGENT_ASSIST_ENABLED", "false");
+    fixedValue(env, checks, issues, "VOICE_AGENT_AUTONOMOUS_ENABLED", "false");
+    fixedValue(
+      env,
+      checks,
+      issues,
+      "VOICE_AGENT_OPERATOR_CONSULT_ENABLED",
+      "false",
+    );
+    fixedValue(env, checks, issues, "LIVEKIT_EGRESS_ENABLED", "false");
+    fixedValue(
+      env,
+      checks,
+      issues,
+      "LIVEKIT_EGRESS_ARTIFACT_WORKER_ENABLED",
+      "false",
+    );
+  }
+  if (profile === "commercial_full") {
+    fixedValue(env, checks, issues, "PSTN_RECORDING_DISCLOSURE_ENABLED", "true");
+    oneOf(env, checks, issues, "CALL_PROVIDER_POLICY", [
+      "domestic_pstn_bridge",
+      "pstn_enabled",
+    ]);
+    fixedValue(env, checks, issues, "AGENT_CALL_WORKER_ENABLED", "true");
+    fixedValue(env, checks, issues, "VOICE_AGENT_ENABLED", "true");
+    fixedValue(env, checks, issues, "VOICE_AGENT_ASSIST_ENABLED", "true");
+    fixedValue(env, checks, issues, "LIVEKIT_EGRESS_ENABLED", "true");
+    fixedValue(
+      env,
+      checks,
+      issues,
+      "LIVEKIT_EGRESS_ARTIFACT_WORKER_ENABLED",
+      "true",
+    );
+  }
 }
 
 function requireReleaseArtifact(root, env, checks, issues, key) {
@@ -271,6 +216,17 @@ function oneOf(env, checks, issues, key, allowed) {
   if (!ok) issues.push(`domestic release env invalid ${key}`);
 }
 
+function boundedInteger(env, checks, issues, key, minimum, maximum) {
+  const value = Number(env[key]);
+  const ok = Number.isInteger(value) && value >= minimum && value <= maximum;
+  record(checks, key, ok, {
+    minimum,
+    maximum,
+    actual: env[key] ?? "",
+  });
+  if (!ok) issues.push(`domestic release env invalid ${key}`);
+}
+
 function isPublicUrl(value, protocols) {
   if (!hasRealValue(value)) return false;
   try {
@@ -315,10 +271,13 @@ function record(checks, name, ok, details = {}) {
   checks.push({ name, status: ok ? "pass" : "fail", details });
 }
 
-function result(filePath, checks, issues) {
+function result(filePath, checks, issues, profile) {
   return {
     status: issues.length === 0 ? "ready" : "not_ready",
     filePath,
+    profile,
+    deferredCapabilities:
+      profile === "core_translation" ? deferredCapabilities : [],
     checks,
     issues,
     actions:

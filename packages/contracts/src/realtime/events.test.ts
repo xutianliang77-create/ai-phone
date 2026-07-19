@@ -69,4 +69,42 @@ describe("realtime events", () => {
     expect(tick.lowBalance).toBe(true);
     expect(ended.reason).toBe("quota_exhausted");
   });
+
+  it("supports final flush integrity metadata", () => {
+    const ended: ServerRealtimeEvent = {
+      type: "session.ended",
+      sessionId: "sess_1",
+      reason: "client_request",
+      flush: {
+        status: "completed",
+        transcriptFinalCount: 1,
+        translationFinalCount: 1,
+        translationFailedCount: 0,
+        unresolvedSegmentCount: 0,
+        pipelineErrorCount: 0,
+        audioFlushed: true,
+        providerFlushed: true,
+      },
+    };
+
+    expect(ended.flush?.status).toBe("completed");
+    expect(ended.flush?.unresolvedSegmentCount).toBe(0);
+  });
+
+  it("supports authoritative and late speaker attribution", () => {
+    const event: ServerRealtimeEvent = {
+      type: "speaker.updated",
+      sessionId: "sess_1",
+      segmentId: "seg_1",
+      speaker: {
+        speakerId: "speaker_2",
+        role: "speaker",
+        source: "diarization",
+        confidence: 0.91,
+      },
+      timing: { startMs: 1000, endMs: 1800, source: "client" },
+    };
+
+    expect(event.speaker.speakerId).toBe("speaker_2");
+  });
 });

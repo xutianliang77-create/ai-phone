@@ -9,7 +9,6 @@ import 'call_room_captions.dart';
 class CallLinkResultPanel extends StatelessWidget {
   const CallLinkResultPanel({
     required this.link,
-    required this.hostToken,
     required this.roomSnapshot,
     required this.roomBusy,
     required this.endResult,
@@ -20,7 +19,6 @@ class CallLinkResultPanel extends StatelessWidget {
   });
 
   final CallLink link;
-  final CallRoomToken? hostToken;
   final CallRoomSnapshot roomSnapshot;
   final bool roomBusy;
   final CallLinkEndResult? endResult;
@@ -34,19 +32,33 @@ class CallLinkResultPanel extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
-        Text('${l10n.callRoomName}：${link.roomName}'),
-        const SizedBox(height: 4),
-        Text('${l10n.callRoomProvider}：${link.roomProvider}'),
-        const SizedBox(height: 8),
-        _HostTokenStatus(ready: hostToken != null),
+        Row(
+          children: <Widget>[
+            Icon(Icons.verified_outlined,
+                size: 20, color: Theme.of(context).colorScheme.primary),
+            const SizedBox(width: 8),
+            Flexible(
+              child: Text(
+                l10n.isChinese ? '无界AI 通话服务已准备' : 'Call service ready',
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+            ),
+          ],
+        ),
         const SizedBox(height: 12),
-        _CallRoomStatus(snapshot: roomSnapshot),
+        _CallRoomStatus(
+          snapshot: roomSnapshot,
+          waitingGuestCount: link.activeGuestCount,
+        ),
         if (endResult != null) ...[
           const SizedBox(height: 8),
           Text('${l10n.callRoomSaved}：${endResult!.consumedSeconds} 秒'),
         ],
-        CallRoomCaptions(captions: roomSnapshot.captions),
-        if (hostToken != null && endResult == null) ...[
+        CallRoomCaptions(
+          captions: roomSnapshot.captions,
+          localRole: 'host',
+        ),
+        if (endResult == null) ...[
           const SizedBox(height: 12),
           _CallRoomButton(
             snapshot: roomSnapshot,
@@ -56,7 +68,12 @@ class CallLinkResultPanel extends StatelessWidget {
           ),
         ],
         const SizedBox(height: 12),
-        SelectableText(link.joinUrl),
+        SelectableText(
+          link.joinUrl,
+          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+        ),
         const SizedBox(height: 12),
         OutlinedButton.icon(
           onPressed: () => onShare(link.joinUrl),
@@ -68,38 +85,14 @@ class CallLinkResultPanel extends StatelessWidget {
   }
 }
 
-class _HostTokenStatus extends StatelessWidget {
-  const _HostTokenStatus({required this.ready});
-
-  final bool ready;
-
-  @override
-  Widget build(BuildContext context) {
-    final l10n = context.l10n;
-    final color = ready
-        ? Theme.of(context).colorScheme.primary
-        : Theme.of(context).colorScheme.error;
-    return Row(
-      children: <Widget>[
-        Icon(
-          ready ? Icons.check_circle : Icons.error_outline,
-          size: 18,
-          color: color,
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          child:
-              Text(ready ? l10n.hostRoomTokenReady : l10n.hostRoomTokenMissing),
-        ),
-      ],
-    );
-  }
-}
-
 class _CallRoomStatus extends StatelessWidget {
-  const _CallRoomStatus({required this.snapshot});
+  const _CallRoomStatus({
+    required this.snapshot,
+    required this.waitingGuestCount,
+  });
 
   final CallRoomSnapshot snapshot;
+  final int waitingGuestCount;
 
   @override
   Widget build(BuildContext context) {
@@ -111,7 +104,7 @@ class _CallRoomStatus extends StatelessWidget {
         const SizedBox(height: 4),
         Text(
           '${l10n.callRoomRemoteParticipants}：'
-          '${snapshot.remoteParticipantCount}',
+          '${_remoteParticipantCount()}',
         ),
         if (snapshot.message != null) ...[
           const SizedBox(height: 4),
@@ -119,6 +112,17 @@ class _CallRoomStatus extends StatelessWidget {
         ],
       ],
     );
+  }
+
+  int _remoteParticipantCount() {
+    return switch (snapshot.status) {
+      CallRoomConnectionStatus.disconnected ||
+      CallRoomConnectionStatus.connecting =>
+        waitingGuestCount,
+      CallRoomConnectionStatus.connected ||
+      CallRoomConnectionStatus.reconnecting =>
+        snapshot.remoteParticipantCount,
+    };
   }
 
   String _statusText(AppLocalizations l10n) {

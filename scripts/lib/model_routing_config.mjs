@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 
-const DOMAINS = ["asr", "translation", "tts"];
+const DOMAINS = ["asr", "translation", "tts", "speaker"];
 const ALLOW_EMPTY_ENV_KEYS = new Set([
   "ASR_QWEN3_CONTEXT",
   "ASR_QWEN3_ENGLISH_CONTEXT",
@@ -95,9 +95,12 @@ function checkProfile(name, profile, checks, issues) {
     asr: summarizeChoice(profile?.asr),
     translation: summarizeChoice(profile?.translation),
     tts: summarizeChoice(profile?.tts),
+    speaker: summarizeChoice(profile?.speaker),
   });
   if (!domainReady) {
-    issues.push(`Model routing profile ${name} must include ASR, translation, and TTS choices.`);
+    issues.push(
+      `Model routing profile ${name} must include ASR, translation, TTS, and speaker choices.`,
+    );
   }
   checkEnvGroups(name, profile?.env ?? {}, checks, issues);
 }

@@ -141,7 +141,7 @@ class FakeCallLinkApiClient extends CallLinkApiClient {
       sessionId: 'call_release',
       roomName: 'call_release',
       roomProvider: 'livekit',
-      joinUrl: 'https://call.example.cn/join/call_release',
+      joinUrl: 'https://call.example.cn/join/call_release?ticket=release-ticket',
       hostUrl: 'https://call.example.cn/host/call_release',
       status: 'created',
       expiresAt: DateTime.utc(2026, 7, 4, 12),
@@ -153,16 +153,23 @@ class FakeCallLinkApiClient extends CallLinkApiClient {
     required String callId,
     String participantRole = 'host',
     String? participantName,
+    String? guestTicket,
   }) async {
     return CallRoomToken(
       callId: callId,
       provider: 'livekit',
       roomName: 'call_release',
       wsUrl: 'wss://livekit.example.cn',
+      participantIdentity: '$callId:$participantRole:screenshot',
       participantRole: participantRole,
       token: 'release-room-token',
       expiresAt: DateTime.utc(2026, 7, 4, 13),
     );
+  }
+
+  @override
+  Future<String> rotateGuestTicket({required String callId}) async {
+    return 'https://call.example.cn/join/$callId?ticket=release-rotated-ticket';
   }
 
   @override

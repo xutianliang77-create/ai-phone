@@ -98,6 +98,7 @@ void main() {
       '你好，我正在创建我的声音，用于翻译后的语音播报。',
     );
 
+    expect(find.text('试听自然声音'), findsOneWidget);
     await tester.tap(find.text('试听我的声音'));
     await tester.pumpAndSettle();
 
@@ -135,7 +136,7 @@ void main() {
     await tester.tap(find.text('开始录音'));
     await tester.pumpAndSettle();
 
-    expect(find.text('麦克风权限被拒绝，请到系统设置中允许 ai phone 使用麦克风。'), findsOneWidget);
+    expect(find.text('麦克风权限被拒绝，请到系统设置中允许无界AI使用麦克风。'), findsOneWidget);
   });
 }
 
@@ -183,6 +184,7 @@ class _FakeVoiceProfileClient implements VoiceProfileClient {
   Future<VoiceProfileTestAudio> testMyVoice({
     String language = 'zh',
     String? text,
+    String variant = 'clone',
   }) async {
     testVoiceCalled = true;
     return const VoiceProfileTestAudio(

@@ -53,13 +53,12 @@ void main() {
     expect(api.endedSessionId, 'sess_1');
   });
 
-  test('can leave history writes to the gateway session event sink', () async {
+  test('persists a durable finalization for server-owned history', () async {
     final api = _FakeRealtimeApiClient();
     final gateway = _FakeRealtimeGatewayClient();
     final repository = RealtimeRepository(
       apiClient: api,
       gatewayClient: gateway,
-      appPersistsSessionOnEnd: false,
     );
 
     await repository.end('sess_1', const [
@@ -71,8 +70,8 @@ void main() {
     ]);
 
     expect(gateway.endedSessionId, 'sess_1');
-    expect(api.savedSegments, isNull);
-    expect(api.endedSessionId, isNull);
+    expect(api.savedSegments?.single['id'], 'seg_1');
+    expect(api.endedSessionId, 'sess_1');
   });
 
   test('waits for gateway session end before saving app-owned history',
@@ -123,6 +122,34 @@ void main() {
 
     gateway.pauseCompleter!.complete(true);
     expect(await pauseFuture, isTrue);
+  });
+
+  test('waits for gateway session resume confirmation', () async {
+    final gateway = _FakeRealtimeGatewayClient()
+      ..resumeCompleter = Completer<bool>();
+    final repository = RealtimeRepository(
+      apiClient: _FakeRealtimeApiClient(),
+      gatewayClient: gateway,
+    );
+
+    var completed = false;
+    final resumeFuture = repository.resumeAndWait('sess_1').then((value) {
+      completed = true;
+      return value;
+    });
+    await Future<void>.delayed(Duration.zero);
+
+    expect(gateway.resumedSessionId, 'sess_1');
+    expect(completed, isFalse);
+
+    gateway.resumeCompleter!.complete(true);
+    expect(await resumeFuture, isTrue);
+
+    await repository.suspendForLifecycle();
+    final resumed = await repository.resumeAfterLifecycle('sess_1');
+    expect(gateway.lifecycleSuspendCalls, 1);
+    expect(gateway.lifecycleResumedSessionId, 'sess_1');
+    expect(resumed, isTrue);
   });
 
   test('uses target language when sending auto ASR text segments', () {
@@ -193,15 +220,13 @@ class _FakeRealtimeApiClient extends RealtimeApiClient {
   }
 
   @override
-  Future<void> saveSegments(
-    String sessionId,
-    List<Map<String, Object?>> segments,
-  ) async {
+  Future<void> finalizeSession({
+    required String sessionId,
+    required List<Map<String, Object?>> segments,
+    required int billableSeconds,
+    required String idempotencyKey,
+  }) async {
     savedSegments = segments;
-  }
-
-  @override
-  Future<void> endSession(String sessionId) async {
     endedSessionId = sessionId;
   }
 
@@ -234,9 +259,13 @@ class _FakeRealtimeGatewayClient extends RealtimeGatewayClient {
   final _events = StreamController<GatewayRealtimeEvent>.broadcast();
   String? endedSessionId;
   String? pausedSessionId;
+  String? resumedSessionId;
   String? sentTextLanguage;
   Completer<bool>? pauseCompleter;
+  Completer<bool>? resumeCompleter;
   Completer<bool>? endCompleter;
+  int lifecycleSuspendCalls = 0;
+  String? lifecycleResumedSessionId;
 
   @override
   Stream<GatewayRealtimeEvent> get events => _events.stream;
@@ -260,6 +289,29 @@ class _FakeRealtimeGatewayClient extends RealtimeGatewayClient {
   }) {
     pausedSessionId = sessionId;
     return pauseCompleter?.future ?? Future<bool>.value(true);
+  }
+
+  @override
+  Future<bool> resumeAndWait(
+    String sessionId, {
+    Duration timeout = const Duration(seconds: 2),
+  }) {
+    resumedSessionId = sessionId;
+    return resumeCompleter?.future ?? Future<bool>.value(true);
+  }
+
+  @override
+  Future<void> suspendForLifecycle() async {
+    lifecycleSuspendCalls += 1;
+  }
+
+  @override
+  Future<bool> reconnectAndResume(
+    String sessionId, {
+    Duration timeout = const Duration(seconds: 2),
+  }) async {
+    lifecycleResumedSessionId = sessionId;
+    return true;
   }
 
   @override

@@ -30,7 +30,8 @@ final class OcrBridge: NSObject {
       ))
       return
     }
-    guard let cgImage = UIImage(contentsOfFile: imagePath)?.cgImage else {
+    guard let image = UIImage(contentsOfFile: imagePath),
+          let cgImage = image.cgImage else {
       result(FlutterError(
         code: "ocr_invalid_image",
         message: "Unable to read image.",
@@ -40,13 +41,20 @@ final class OcrBridge: NSObject {
     }
 
     let scripts = normalizedScripts(args["scripts"])
+    let orientation = cgImageOrientation(image.imageOrientation)
     DispatchQueue.global(qos: .userInitiated).async {
-      self.performRecognition(cgImage: cgImage, scripts: scripts, result: result)
+      self.performRecognition(
+        cgImage: cgImage,
+        orientation: orientation,
+        scripts: scripts,
+        result: result
+      )
     }
   }
 
   private func performRecognition(
     cgImage: CGImage,
+    orientation: CGImagePropertyOrientation,
     scripts: [String],
     result: @escaping FlutterResult
   ) {
@@ -62,15 +70,15 @@ final class OcrBridge: NSObject {
         return
       }
       let observations = (request.results as? [VNRecognizedTextObservation]) ?? []
-      let lines = observations
+      let blocks = observations
         .sorted(by: self.readingOrder)
-        .compactMap { $0.topCandidates(1).first?.string.trimmingCharacters(in: .whitespacesAndNewlines) }
-        .filter { !$0.isEmpty }
+        .compactMap(self.resultBlock)
       DispatchQueue.main.async {
         result([
-          "text": lines.joined(separator: "\n"),
+          "text": blocks.compactMap { $0["text"] as? String }.joined(separator: "\n"),
           "provider": "ios_vision",
           "scripts": scripts,
+          "blocks": blocks,
         ])
       }
     }
@@ -79,7 +87,11 @@ final class OcrBridge: NSObject {
     request.recognitionLanguages = recognitionLanguages(for: scripts)
 
     do {
-      try VNImageRequestHandler(cgImage: cgImage, options: [:]).perform([request])
+      try VNImageRequestHandler(
+        cgImage: cgImage,
+        orientation: orientation,
+        options: [:]
+      ).perform([request])
     } catch {
       DispatchQueue.main.async {
         result(FlutterError(
@@ -89,6 +101,38 @@ final class OcrBridge: NSObject {
         ))
       }
     }
+  }
+
+  private func cgImageOrientation(
+    _ orientation: UIImage.Orientation
+  ) -> CGImagePropertyOrientation {
+    switch orientation {
+    case .up: return .up
+    case .upMirrored: return .upMirrored
+    case .down: return .down
+    case .downMirrored: return .downMirrored
+    case .left: return .left
+    case .leftMirrored: return .leftMirrored
+    case .right: return .right
+    case .rightMirrored: return .rightMirrored
+    @unknown default: return .up
+    }
+  }
+
+  private func resultBlock(_ observation: VNRecognizedTextObservation) -> [String: Any]? {
+    guard let text = observation.topCandidates(1).first?.string
+      .trimmingCharacters(in: .whitespacesAndNewlines),
+      !text.isEmpty else {
+      return nil
+    }
+    let bounds = observation.boundingBox
+    return [
+      "text": text,
+      "left": bounds.minX,
+      "top": 1 - bounds.maxY,
+      "width": bounds.width,
+      "height": bounds.height,
+    ]
   }
 
   private func normalizedScripts(_ rawScripts: Any?) -> [String] {

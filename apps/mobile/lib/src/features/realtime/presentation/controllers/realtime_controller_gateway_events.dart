@@ -2,7 +2,7 @@ part of 'realtime_controller.dart';
 
 extension RealtimeControllerGatewayEvents on RealtimeController {
   void handleGatewayEvent(GatewayRealtimeEvent event) {
-    if (_status == RealtimeStatus.ended && !_stopInFlight) return;
+    if (isTerminalRealtimeStatus(_status) && !_stopInFlight) return;
     final activeSessionId = _session?.sessionId;
     if (activeSessionId != null &&
         event.sessionId != null &&
@@ -25,32 +25,47 @@ extension RealtimeControllerGatewayEvents on RealtimeController {
       );
       _upsertSegment(
         event.segmentId!,
+        turnId: event.turnId,
+        revision: event.revision,
         translatedText: event.message ?? 'Translation unavailable',
         targetLanguage: event.language,
         stage: event.stage ?? 'translation',
         provider: event.provider,
         model: event.model,
         latencyMs: event.latencyMs,
+        languageProfile: event.languageProfile,
       );
       _message = event.message;
       _notify();
       return;
     }
     if (event.type == 'connection.reconnecting') {
+      if (_status == RealtimeStatus.active ||
+          _status == RealtimeStatus.paused) {
+        _statusBeforeReconnect = _status;
+      }
+      _setStatus(RealtimeStatus.connecting);
       _message = event.message;
-      _status = RealtimeStatus.connecting;
       _notify();
       return;
     }
     if (event.type == 'connection.reconnected') {
       _gatewayDiagnostic = null;
+      final previous = _statusBeforeReconnect;
+      _statusBeforeReconnect = null;
+      if (previous == RealtimeStatus.paused) {
+        unawaited(_restorePauseAfterReconnect());
+      } else {
+        _setStatus(RealtimeStatus.active);
+      }
       _message = event.message;
-      _status = RealtimeStatus.listening;
       _notify();
       return;
     }
     if (event.type == 'connection.closed') {
-      _fail(event.message ?? 'Realtime connection lost');
+      _fail(displayRealtimeErrorMessage(
+        event.message ?? 'Realtime connection lost',
+      ));
       return;
     }
     if (event.type == 'usage.tick') {
@@ -64,6 +79,14 @@ extension RealtimeControllerGatewayEvents on RealtimeController {
       _handleRemoteSessionEnded(event);
       return;
     }
+    if (event.type == 'session.paused') {
+      _setStatus(RealtimeStatus.paused);
+      return;
+    }
+    if (event.type == 'session.resumed') {
+      _setStatus(RealtimeStatus.active);
+      return;
+    }
     if (event.type == 'transcript.partial' && event.segmentId != null) {
       final text = _cleanRealtimeText(event.text);
       if (text != null) {
@@ -73,6 +96,10 @@ extension RealtimeControllerGatewayEvents on RealtimeController {
           sourceLanguage: event.language,
           confidence: event.confidence,
           stage: 'asr',
+          speaker: event.speaker,
+          timing: event.timing,
+          vadContext: event.vadContext,
+          languageProfile: event.languageProfile,
         );
       }
     }
@@ -83,6 +110,8 @@ extension RealtimeControllerGatewayEvents on RealtimeController {
       } else {
         _upsertSegment(
           event.segmentId!,
+          turnId: event.turnId,
+          revision: event.revision,
           sourceText: text,
           rawText: event.rawText,
           optimizedText: event.optimizedText,
@@ -90,6 +119,10 @@ extension RealtimeControllerGatewayEvents on RealtimeController {
           confidence: event.confidence,
           stage: 'asr',
           refinement: event.refinement,
+          speaker: event.speaker,
+          timing: event.timing,
+          vadContext: event.vadContext,
+          languageProfile: event.languageProfile,
         );
       }
     }
@@ -105,18 +138,33 @@ extension RealtimeControllerGatewayEvents on RealtimeController {
         _gatewayDiagnostic = null;
         _upsertSegment(
           event.segmentId!,
+          turnId: event.turnId,
+          revision: event.revision,
           translatedText: text,
           targetLanguage: event.language,
           stage: 'translation',
           provider: event.provider,
           model: event.model,
           latencyMs: event.latencyMs,
+          speaker: event.speaker,
+          timing: event.timing,
+          vadContext: event.vadContext,
+          languageProfile: event.languageProfile,
         );
         if (_usesDeviceAsr) {
           _speakTranslationIfNeeded(
               text, event.language ?? _config.targetLanguage);
         }
       }
+    }
+    if (event.type == 'speaker.updated' && event.segmentId != null) {
+      _upsertSegment(
+        event.segmentId!,
+        turnId: event.turnId,
+        revision: event.revision,
+        speaker: event.speaker,
+        timing: event.timing,
+      );
     }
     if (event.type == 'audio.output') {
       _playAudioOutputIfNeeded(event);
@@ -130,11 +178,8 @@ extension RealtimeControllerGatewayEvents on RealtimeController {
     );
     final stage = _gatewayErrorStageLabel(event.stage);
     if (stage == null) return message;
-    final provider = event.provider;
-    final source =
-        provider == null || provider.isEmpty ? stage : '$stage（$provider）';
     final retry = event.retryable == true ? '，可重试' : '';
-    return '$source：$message$retry';
+    return '$stage：$message$retry';
   }
 
   String? _gatewayErrorStageLabel(String? stage) {
@@ -160,9 +205,10 @@ extension RealtimeControllerGatewayEvents on RealtimeController {
     _message = _remoteEndMessage(event);
     _remainingSeconds = event.remainingSeconds;
     _lowBalance = false;
-    _status = RealtimeStatus.ended;
+    _setStatus(RealtimeStatus.ended);
     _session = null;
     _resumeAfterLifecyclePause = false;
+    _statusBeforeReconnect = null;
     _localPartialFlush.cancel();
     _deviceAsrRecovery.reset();
     unawaited(_stopSpeaking());
@@ -170,9 +216,18 @@ extension RealtimeControllerGatewayEvents on RealtimeController {
     _notify();
   }
 
+  Future<void> _restorePauseAfterReconnect() async {
+    final session = _session;
+    if (session == null) return;
+    if (!await _repository.pauseAndWait(session.sessionId)) {
+      _fail('Realtime connection lost');
+    }
+  }
+
   Future<void> _cleanupAfterRemoteEnd() async {
     _sessionTimeoutTimer?.cancel();
     await ignoreCleanupError(_audioCapture.stop);
+    await ignoreCleanupError(_audioSessionCoordinator.endCapture);
     await ignoreCleanupError(() async => _audioSubscription?.cancel());
     await ignoreCleanupError(() async => _mobileAsrProvider?.stop());
     await ignoreCleanupError(_stopSpeaking);

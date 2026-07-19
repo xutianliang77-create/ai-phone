@@ -1,10 +1,14 @@
 import '../../domain/entities/subtitle_segment.dart';
+import '../../../../shared/domain/speaker_attribution.dart';
+import '../../../../shared/domain/turn_language_profile.dart';
 
 class SegmentDraft {
   const SegmentDraft(
     this.id, {
     this.sourceText = '',
     this.translatedText = '',
+    this.turnId,
+    this.revision,
     this.rawText,
     this.optimizedText,
     this.sourceLanguage,
@@ -15,9 +19,15 @@ class SegmentDraft {
     this.model,
     this.latencyMs,
     this.refinement,
+    this.speaker,
+    this.timing,
+    this.vadContext,
+    this.languageProfile,
   });
 
   final String id;
+  final String? turnId;
+  final int? revision;
   final String sourceText;
   final String translatedText;
   final String? rawText;
@@ -30,10 +40,16 @@ class SegmentDraft {
   final String? model;
   final int? latencyMs;
   final Map<String, Object?>? refinement;
+  final SpeakerAttribution? speaker;
+  final SegmentTiming? timing;
+  final Map<String, Object?>? vadContext;
+  final TurnLanguageProfile? languageProfile;
 
   SegmentDraft copyWith({
     String? sourceText,
     String? translatedText,
+    String? turnId,
+    int? revision,
     String? rawText,
     String? optimizedText,
     String? sourceLanguage,
@@ -44,11 +60,17 @@ class SegmentDraft {
     String? model,
     int? latencyMs,
     Map<String, Object?>? refinement,
+    SpeakerAttribution? speaker,
+    SegmentTiming? timing,
+    Map<String, Object?>? vadContext,
+    TurnLanguageProfile? languageProfile,
   }) {
     return SegmentDraft(
       id,
       sourceText: sourceText ?? this.sourceText,
       translatedText: translatedText ?? this.translatedText,
+      turnId: turnId ?? this.turnId,
+      revision: revision ?? this.revision,
       rawText: rawText ?? this.rawText,
       optimizedText: optimizedText ?? this.optimizedText,
       sourceLanguage: sourceLanguage ?? this.sourceLanguage,
@@ -59,12 +81,18 @@ class SegmentDraft {
       model: model ?? this.model,
       latencyMs: latencyMs ?? this.latencyMs,
       refinement: refinement ?? this.refinement,
+      speaker: speaker ?? this.speaker,
+      timing: timing ?? this.timing,
+      vadContext: vadContext ?? this.vadContext,
+      languageProfile: languageProfile ?? this.languageProfile,
     );
   }
 
   SubtitleSegment toSegment() {
     return SubtitleSegment(
       id: id,
+      turnId: turnId,
+      revision: revision,
       sourceText: sourceText,
       translatedText: translatedText,
       rawText: rawText,
@@ -77,6 +105,10 @@ class SegmentDraft {
       model: model,
       latencyMs: latencyMs,
       refinement: refinement,
+      speaker: speaker,
+      timing: timing,
+      vadContext: vadContext,
+      languageProfile: languageProfile,
     );
   }
 }

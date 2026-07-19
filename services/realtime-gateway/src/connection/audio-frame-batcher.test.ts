@@ -25,7 +25,13 @@ describe("audio frame batcher", () => {
 
     expect(sentFrames).toHaveLength(1);
     expect(sentFrames[0].sequence).toBe(3);
+    expect(sentFrames[0].timestampMs).toBe(1);
     expect(Buffer.byteLength(sentFrames[0].data, "base64")).toBe(1920 * 3);
+    expect(batcher.diagnostics()).toEqual({
+      receivedFrameCount: 3,
+      processedBatchCount: 1,
+      droppedFrameCount: 0,
+    });
     vi.useRealTimers();
   });
 
@@ -61,6 +67,7 @@ describe("audio frame batcher", () => {
     expect(sentFrames).toHaveLength(2);
     expect(sentFrames[1].sequence).toBeGreaterThanOrEqual(19);
     expect(Buffer.byteLength(sentFrames[1].data, "base64")).toBeLessThanOrEqual(1920 * 2);
+    expect(batcher.diagnostics().droppedFrameCount).toBeGreaterThan(0);
     vi.useRealTimers();
   });
 });

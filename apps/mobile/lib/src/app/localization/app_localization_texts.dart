@@ -1,5 +1,6 @@
 import 'app_billing_localization_texts.dart';
 import 'app_call_link_localization_texts.dart';
+import 'app_device_asr_diagnostics_localization.dart';
 import 'app_history_localization_texts.dart';
 import 'app_scan_localization_texts.dart';
 import 'app_voice_profile_localization_texts.dart';
@@ -10,7 +11,7 @@ const appLocalizationTexts = <String, Map<String, String>>{
   ...appHistoryLocalizationTexts,
   ...appScanLocalizationTexts,
   ...appVoiceProfileLocalizationTexts,
-  'appTitle': {'zh': 'ai phone', 'en': 'ai phone'},
+  'appTitle': {'zh': '无界AI', 'en': '无界AI'},
   'realtimeSubtitle': {
     'zh': '中英实时同声传译',
     'en': 'Chinese-English realtime interpretation',
@@ -27,7 +28,14 @@ const appLocalizationTexts = <String, Map<String, String>>{
   'translateToEnglish': {'zh': '中译英', 'en': 'Chinese to English'},
   'start': {'zh': '开始', 'en': 'Start'},
   'pause': {'zh': '暂停', 'en': 'Pause'},
+  'resume': {'zh': '继续', 'en': 'Resume'},
+  'startAgain': {'zh': '再次开始', 'en': 'Start again'},
   'end': {'zh': '结束', 'en': 'End'},
+  'currentSubtitle': {'zh': '当前句', 'en': 'Current'},
+  'translationPending': {'zh': '翻译中', 'en': 'Translating'},
+  'backToLatest': {'zh': '回到底部', 'en': 'Back to latest'},
+  'overlappingSpeech': {'zh': '多人同时说话', 'en': 'Overlapping speech'},
+  'mixedLanguage': {'zh': '中英混合', 'en': 'Mixed language'},
   'tapStartToBegin': {'zh': '点击开始进行同传', 'en': 'Tap start to begin'},
   'export': {'zh': '导出', 'en': 'Export'},
   'exportDiagnostics': {'zh': '导出诊断', 'en': 'Export diagnostics'},
@@ -52,7 +60,8 @@ const appLocalizationTexts = <String, Map<String, String>>{
   'warning': {'zh': '提示', 'en': 'Warning'},
   'localAddressWarning': {
     'zh': '真机请连接统一服务器地址，不能使用手机本机地址',
-    'en': 'Use the unified server URL on a physical device, not a local-only address',
+    'en':
+        'Use the unified server URL on a physical device, not a local-only address',
   },
   'apiService': {'zh': '服务名称', 'en': 'Service'},
   'serviceVersion': {'zh': '服务版本', 'en': 'Version'},
@@ -115,7 +124,9 @@ const appLocalizationTexts = <String, Map<String, String>>{
   'statusConnecting': {'zh': '连接中', 'en': 'Connecting'},
   'statusListening': {'zh': '同传中', 'en': 'Listening'},
   'statusPaused': {'zh': '已暂停', 'en': 'Paused'},
+  'statusEnding': {'zh': '正在结束', 'en': 'Ending'},
   'statusEnded': {'zh': '已结束', 'en': 'Ended'},
+  'statusFailed': {'zh': '已中断', 'en': 'Failed'},
   'tabLive': {'zh': '同传', 'en': 'Live'},
   'tabCall': {'zh': '通话', 'en': 'Calls'},
   'tabLens': {'zh': '扫描', 'en': 'Lens'},
@@ -183,6 +194,7 @@ const zhDiagnosticsLabels = <String, String>{
   'audio.running': '录音运行中',
   'audio.sessionActive': '音频会话',
   'audio.sessionError': '音频会话错误',
+  ...zhDeviceAsrDiagnosticsLabels,
   'audio.processingError': 'ASR 处理错误',
   'audio.pendingSamples': '待处理采样',
   'audio.inputBuffers': '输入缓冲数',
@@ -271,6 +283,7 @@ const zhDiagnosticsValues = <String, String>{
   'no_converted_samples': '未输出转换采样',
   'no_asr_chunks': '尚未形成 ASR 音频块',
   'audio_session_error': '音频会话错误',
+  ...zhDeviceAsrDiagnosticsValues,
   'asr_processing_error': 'ASR 处理错误',
   'ios_system': 'iOS 系统翻译',
   'phrasebook': '短语兜底',
@@ -300,6 +313,7 @@ const zhRuntimeMessages = <String, String>{
   'Device ASR model ready. Connecting realtime session':
       '端侧 ASR 模型已就绪，正在连接实时会话',
   'Device ASR model ready. Starting local session': '端侧 ASR 模型已就绪，正在启动本地会话',
+  ...zhDeviceAsrRuntimeMessages,
   'Restarting device ASR': '正在重启端侧 ASR',
   'Starting device ASR self-test': '正在启动端侧 ASR 自测',
   'Listening for ASR segments': '正在监听端侧 ASR 识别结果',
@@ -310,6 +324,9 @@ const zhRuntimeMessages = <String, String>{
   'Realtime provider error': '实时翻译服务出错',
   'Realtime connection lost': '实时连接已断开',
   'Realtime connection restored': '实时连接已恢复',
+  'Realtime request timed out': '网络连接超时，请恢复网络后重试',
+  'Session ended locally; history sync was not confirmed':
+      '会话已在本机结束，网络不可用，历史记录同步尚未确认',
   'Translation unavailable': '翻译暂不可用',
   'On-device translation unavailable': '端侧翻译暂不可用',
   'Nemotron Core ML model was not found': '未找到 Nemotron Core ML 模型',

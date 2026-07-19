@@ -13,5 +13,6 @@ export interface VoiceProfileRecord {
   updatedAt: string;
   referenceAudioId?: string;
   referenceTranscript?: string;
+  referenceQuality?: import("./wav-reference-quality.js").VoiceReferenceQuality;
   deletedAt?: string;
 }

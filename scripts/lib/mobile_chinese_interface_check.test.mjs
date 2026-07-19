@@ -106,17 +106,19 @@ const diagnosticFailed = '端侧 ASR 诊断';
 `);
   write(root, "apps/mobile/test/widget_test.dart", `
 testWidgets('falls back to Chinese for unsupported system locale', (_) {});
-expect('源语言', isNotEmpty);
-expect('自动识别', isNotEmpty);
-expect('目标语言', isNotEmpty);
-expect('自动反向', isNotEmpty);
-expect('自动朗读译文', isNotEmpty);
 testWidgets('switches interface language from home toolbar', (_) {});
 testWidgets('localizes realtime status bar API errors', (_) {});
 test('localizes diagnostic values and user-facing errors', () {});
 test('keeps runtime and diagnostics messages Chinese by default', () {});
 expect('Device ASR processing failed: FluidAudio process failed', isNotEmpty);
 expect('Device ASR diagnostic: no_microphone_input', isNotEmpty);
+`);
+  write(root, "apps/mobile/test/realtime_settings_menu_test.dart", `
+expect('源语言', isNotEmpty);
+expect('自动识别', isNotEmpty);
+expect('目标语言', isNotEmpty);
+expect('自动反向', isNotEmpty);
+expect('自动朗读译文', isNotEmpty);
 `);
   write(root, "apps/mobile/lib/src/features/realtime/presentation/widgets/realtime_status_bar.dart", overrides.realtimeStatusBarDart ?? `
 Text(l10n.errorMessage(message!));
