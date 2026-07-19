@@ -12,6 +12,7 @@ from app.voxcpm2_engine import (
     parse_model_sample_rate,
     voxcpm2_generate_kwargs,
 )
+from voxcpm2_test_fakes import FakeStreamingCapableVoxCpmModel, FakeVoxCpmModel
 
 
 def test_voxcpm2_text_never_inserts_a_spoken_control_prompt() -> None:
@@ -337,39 +338,3 @@ async def test_voxcpm2_engine_streams_model_chunks_without_complete_generation(
     ]
     assert events[1]["sequence"] == 1
     assert events[2]["audioDurationMs"] >= 1
-
-
-class FakeTtsModel:
-    def __init__(self, sample_rate: int) -> None:
-        self.sample_rate = sample_rate
-
-
-class FakeVoxCpmModel:
-    def __init__(self, sample_rate: int = 24000, duration_seconds: int = 0) -> None:
-        self.tts_model = FakeTtsModel(sample_rate)
-        self.duration_seconds = duration_seconds
-        self.kwargs = {}
-
-    def generate(self, **kwargs):
-        self.kwargs = kwargs
-        if self.duration_seconds:
-            return [
-                0.5 * math.sin(2 * math.pi * 440 * index / self.tts_model.sample_rate)
-                for index in range(self.tts_model.sample_rate * self.duration_seconds)
-            ]
-        return [0.0, 0.1, -0.1]
-
-
-class FakeStreamingCapableVoxCpmModel(FakeVoxCpmModel):
-    def __init__(self) -> None:
-        super().__init__()
-        self.generate_calls = 0
-        self.streaming_calls = 0
-
-    def generate(self, **kwargs):
-        self.generate_calls += 1
-        return super().generate(**kwargs)
-
-    def generate_streaming(self, **kwargs):
-        self.streaming_calls += 1
-        yield super().generate(**kwargs)

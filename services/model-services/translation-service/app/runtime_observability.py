@@ -5,6 +5,18 @@ import json
 
 from fastapi import HTTPException
 
+TRANSLATION_GAUGES = (
+    ("active", "wujie_translation_active"),
+    ("waiting", "wujie_translation_waiting"),
+    ("pending", "wujie_translation_pending"),
+)
+TRANSLATION_COUNTERS = (
+    ("batches", "wujie_translation_batches_total"),
+    ("completed", "wujie_translation_completed_total"),
+    ("rejected", "wujie_translation_rejected_total"),
+    ("timed_out", "wujie_translation_timed_out_total"),
+)
+
 
 @dataclass(frozen=True)
 class RuntimeIdentity:
@@ -76,15 +88,15 @@ def prometheus_model_metrics(
         f"wujie_model_service_up{{{labels}}} {1 if available else 0}",
     ]
     if capacity is not None:
-        for name in ("active", "waiting", "pending"):
+        for capacity_key, metric_name in TRANSLATION_GAUGES:
             lines.extend([
-                f"# TYPE wujie_translation_{name} gauge",
-                f"wujie_translation_{name} {capacity[name]}",
+                f"# TYPE {metric_name} gauge",
+                f"{metric_name} {capacity[capacity_key]}",
             ])
-        for name in ("batches", "completed", "rejected", "timed_out"):
+        for capacity_key, metric_name in TRANSLATION_COUNTERS:
             lines.extend([
-                f"# TYPE wujie_translation_{name}_total counter",
-                f"wujie_translation_{name}_total {capacity[name]}",
+                f"# TYPE {metric_name} counter",
+                f"{metric_name} {capacity[capacity_key]}",
             ])
     return "\n".join([*lines, ""])
 

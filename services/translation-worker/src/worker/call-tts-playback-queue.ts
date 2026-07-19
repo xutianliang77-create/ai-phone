@@ -345,6 +345,5 @@ function targetRouteKey(callId: string, role: CallAudioSpeakerRole) {
   return `${callId}:route:${role}`;
 }
 
-function targetQueueKey(callId: string, targetLegId: string) {
-  return `${callId}:target:${targetLegId}`;
-}
+const targetQueueKey = (callId: string, targetLegId: string) =>
+  `${callId}:target:${targetLegId}`;

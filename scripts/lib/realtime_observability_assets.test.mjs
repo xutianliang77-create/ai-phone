@@ -12,7 +12,7 @@ describe("realtime observability assets", () => {
   it("keeps model, realtime, collector and dashboard contracts aligned", () => {
     expect(checkRealtimeObservabilityAssets(root)).toMatchObject({
       status: "ready",
-      metricCount: 12,
+      metricCount: 19,
       scrapeJobCount: 4,
       thresholdsCalibrated: false,
     });

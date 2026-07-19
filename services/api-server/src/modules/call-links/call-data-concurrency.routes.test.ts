@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { buildApp } from "../../app.js";
+import type { PublicEntryRateLimiter } from
+  "../../infrastructure/security/public-entry-protection.js";
 import { getStoreSnapshot } from "../../infrastructure/storage/json-store.js";
 import { setCallRoomDataPublisherForTests } from "./call-room-worker.js";
 
@@ -24,7 +26,7 @@ describe("call data concurrency", () => {
         published.add(event.eventId ?? `${event.callId}:${event.segmentId}`);
       },
     });
-    const app = await buildApp();
+    const app = await buildApp({ publicEntryRateLimiter: allowPublicEntries() });
     const created = await Promise.all(Array.from({ length: 50 }, () =>
       app.inject({ method: "POST", url: "/call-links" })
     ));
@@ -140,4 +142,24 @@ function resetStore() {
   store.billingLedger = [];
   store.inboxEvents = [];
   store.outboxEvents = [];
+}
+
+function allowPublicEntries(): PublicEntryRateLimiter {
+  return {
+    start: async () => true,
+    close: async () => undefined,
+    readiness: () => ({
+      status: "ready",
+      provider: "test",
+      configured: true,
+      connected: true,
+    }),
+    consume: async ({ limit }) => ({
+      status: "allowed",
+      provider: "memory",
+      limit,
+      remaining: limit - 1,
+      retryAfterMs: 0,
+    }),
+  };
 }

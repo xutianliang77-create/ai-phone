@@ -203,11 +203,17 @@ export class CallTranslationWorker implements CallSpeechPipeline {
       await this.flushSpeaker(callId, "guest");
       await this.processingQueue.drain(callId);
       const translationDrain = this.captionPipeline.drainTranslations(callId);
-      await settlesWithin(translationDrain, this.endDrainGraceMs);
-      this.captionPipeline.cancel(callId);
+      const translationsSettled = await settlesWithin(
+        translationDrain,
+        this.endDrainGraceMs,
+      );
+      if (!translationsSettled) this.captionPipeline.cancel(callId);
       await translationDrain;
+      const ttsDrain = this.captionPipeline.drainTts(callId);
+      const ttsSettled = await settlesWithin(ttsDrain, this.endDrainGraceMs);
+      if (!ttsSettled) this.captionPipeline.cancel(callId);
+      await ttsDrain;
       await this.playbackQueue.cancelCall(callId, "session_end");
-      await this.captionPipeline.drainTts(callId);
       await this.playbackQueue.drain(callId);
       const closeResults = await Promise.allSettled([
         this.asrProvider.closeCall(callId),
@@ -321,7 +327,9 @@ export class CallTranslationWorker implements CallSpeechPipeline {
 }
 
 async function settlesWithin(promise: Promise<void>, timeoutMs: number) {
-  if (timeoutMs <= 0) return false;
+  if (timeoutMs <= 0) {
+    return Promise.race([promise.then(() => true), Promise.resolve(false)]);
+  }
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
     return await Promise.race([

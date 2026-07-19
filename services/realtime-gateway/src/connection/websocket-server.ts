@@ -338,10 +338,10 @@ export function startWebSocketServer() {
   httpServer.listen(env.port, () => {
     realtimeLogger.info({ port: env.port }, "Realtime gateway started");
   });
-  server.on("close", () => {
+  httpServer.on("close", () => {
     void protection.close();
     disconnectFinalizers.close();
-    httpServer.close();
+    server.close();
   });
-  return server;
+  return httpServer;
 }

@@ -48,7 +48,7 @@ describe("CallTranslationWorker pipeline timing", () => {
     expect(tts.pipelineTiming?.ttsFirstAudioAtMs)
       .toBeGreaterThan(tts.pipelineTiming?.ttsStartedAtMs ?? 0);
     expect(tts.pipelineTiming?.ttsFirstAudioAtMs)
-      .toBeLessThan(tts.pipelineTiming?.ttsReadyAtMs ?? 0);
+      .toBe(tts.pipelineTiming?.ttsReadyAtMs);
   });
 });
 

@@ -21,7 +21,7 @@ describe("API public entry protection", () => {
     await app.close();
 
     expect(response.statusCode).toBe(429);
-    expect(response.headers["x-ratelimit-limit"]).toBe("1");
+    expect(response.headers["x-ratelimit-limit"]).toBe("5");
     expect(response.headers["retry-after"]).toBe("1");
   });
 

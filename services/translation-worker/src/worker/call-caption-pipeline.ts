@@ -320,7 +320,6 @@ export class CallCaptionPipeline {
       pipelineTiming: { ...input.pipelineTiming },
     });
   }
-
   private track(callId: string, task: Promise<void>) {
     const tasks = this.translationTasks.get(callId) ?? new Set<Promise<void>>();
     const tracked = task.finally(() => {
@@ -331,7 +330,6 @@ export class CallCaptionPipeline {
     this.translationTasks.set(callId, tasks);
     void tracked.catch(() => undefined);
   }
-
   private remember(
     callId: string,
     speakerRole: CallAudioSpeakerRole,

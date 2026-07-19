@@ -139,7 +139,7 @@ export class RealtimeGatewayProtection {
 }
 
 export class RealtimeMessageRateGuard {
-  private windowStartedAtMs = Date.now();
+  private windowStartedAtMs?: number;
   private messages = 0;
   private audioFrames = 0;
 
@@ -149,7 +149,9 @@ export class RealtimeMessageRateGuard {
   ) {}
 
   consume(kind: "message" | "audio", nowMs = Date.now()) {
-    if (nowMs - this.windowStartedAtMs >= 1000) {
+    if (this.windowStartedAtMs === undefined ||
+        nowMs < this.windowStartedAtMs ||
+        nowMs - this.windowStartedAtMs >= 1000) {
       this.windowStartedAtMs = nowMs;
       this.messages = 0;
       this.audioFrames = 0;

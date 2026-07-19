@@ -110,7 +110,7 @@ def test_stream_route_returns_metadata_pcm_chunks_and_final() -> None:
     assert messages[0]["type"] == "metadata"
     assert messages[1]["type"] == "audio_chunk"
     assert messages[1]["format"] == "pcm16"
-    assert messages[-1] == {"type": "final"}
+    assert messages[-1] == {"type": "final", "audioDurationMs": 240}
 
 
 def test_warmup_route_is_cached_after_first_synthesis() -> None:

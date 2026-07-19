@@ -57,7 +57,10 @@ describe("streaming provider fallback", () => {
       fallback,
       controller: controller("tts"),
     });
-    const events = [event async for event in provider.synthesizeStream!(ttsInput())];
+    const events = [];
+    for await (const event of provider.synthesizeStream!(ttsInput())) {
+      events.push(event);
+    }
     expect(events.map((event) => event.type)).toEqual([
       "metadata", "restart", "metadata", "audio_chunk", "final",
     ]);
