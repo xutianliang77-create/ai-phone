@@ -288,6 +288,7 @@ export class LiveKitCallAudioSource {
       })
       .on(rtc.RoomEvent.Disconnected, () => {
         this.sipTrackGate.clear();
+        this.options.worker.markCallEnded?.(this.options.callId);
         this.stopIngest(true);
         this.disconnected.resolve();
       });

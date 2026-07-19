@@ -39,6 +39,11 @@ export class HttpCallRoomEventClient implements CallRoomEventSink {
     this.fetchFn = options.fetchFn ?? fetch;
   }
 
+  markEnded(callId: string) {
+    this.endedCalls.add(callId);
+    this.sessionVersions.delete(callId);
+  }
+
   async publish(callId: string, events: CallRoomSubmittedEvent[]) {
     if (events.length === 0) return {};
     if (this.endedCalls.has(callId)) throw new CallRoomEndedError(callId);
@@ -69,8 +74,7 @@ export class HttpCallRoomEventClient implements CallRoomEventSink {
       }
     }
     if (response.status === 410) {
-      this.endedCalls.add(callId);
-      this.sessionVersions.delete(callId);
+      this.markEnded(callId);
       throw new CallRoomEndedError(callId);
     }
     if (!response.ok) {

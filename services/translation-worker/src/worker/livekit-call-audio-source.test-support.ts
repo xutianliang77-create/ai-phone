@@ -12,6 +12,7 @@ export class RecordingWorker {
   readonly ended: string[] = [];
   readonly frames: CallAudioFrame[] = [];
   readonly ttsSinks: unknown[] = [];
+  readonly lifecycle: string[] = [];
   ttsVoice: unknown = null;
 
   constructor(
@@ -33,6 +34,11 @@ export class RecordingWorker {
 
   async endCall(callId: string) {
     this.ended.push(callId);
+    this.lifecycle.push(`ended:${callId}`);
+  }
+
+  markCallEnded(callId: string) {
+    this.lifecycle.push(`marked:${callId}`);
   }
 
   addTtsAudioSink(sink: unknown) {

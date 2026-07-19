@@ -14,10 +14,12 @@ describe("speech pipeline router", () => {
 
     await router.startCall("call-one");
     await router.processAudioFrame(frame());
+    router.markCallEnded("call-one");
     await router.endCall("call-one");
 
     expect(cascade.startCall).toHaveBeenCalledOnce();
     expect(cascade.processAudioFrame).toHaveBeenCalledOnce();
+    expect(cascade.markCallEnded).toHaveBeenCalledWith("call-one");
     expect(native.startCall).not.toHaveBeenCalled();
   });
 
@@ -73,6 +75,7 @@ function pipeline(): CallSpeechPipeline {
     processAudioFrame: vi.fn(async () => undefined),
     flushSpeaker: vi.fn(async () => undefined),
     endCall: vi.fn(async () => undefined),
+    markCallEnded: vi.fn(),
     addTtsAudioSink: vi.fn(),
     setTtsVoice: vi.fn(),
   };

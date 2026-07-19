@@ -143,6 +143,7 @@ export class BlockingTtsAudioSink implements CallTtsAudioSink {
 
 export class RecordingSink implements CallRoomEventSink {
   private readonly events = new Map<string, CallRoomSubmittedEvent[]>();
+  readonly endedCalls: string[] = [];
 
   async publish(callId: string, events: CallRoomSubmittedEvent[]) {
     this.events.set(callId, [...this.eventsFor(callId), ...events]);
@@ -150,5 +151,9 @@ export class RecordingSink implements CallRoomEventSink {
 
   eventsFor(callId: string) {
     return this.events.get(callId) ?? [];
+  }
+
+  markEnded(callId: string) {
+    this.endedCalls.push(callId);
   }
 }

@@ -243,6 +243,7 @@ export interface CallRoomPublishResult {
 export interface CallRoomEventSink {
   publish(callId: string, events: CallRoomSubmittedEvent[]):
     Promise<CallRoomPublishResult | void>;
+  markEnded?(callId: string): void;
 }
 
 export interface CallTtsVoiceSink {
@@ -254,6 +255,7 @@ export interface CallSpeechPipeline extends CallTtsVoiceSink {
   processAudioFrame(frame: CallAudioFrame): Promise<void>;
   flushSpeaker(callId: string, speakerRole: CallAudioSpeakerRole): Promise<void>;
   endCall(callId: string): Promise<void>;
+  markCallEnded?(callId: string): void;
   addTtsAudioSink(sink: CallTtsAudioSink): void;
 }
 

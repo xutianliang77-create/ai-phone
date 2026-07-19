@@ -101,6 +101,31 @@ describe("HttpCallRoomEventClient", () => {
     expect(requestCount).toBe(1);
   });
 
+  it("suppresses event requests after the control plane marks a call ended", async () => {
+    let requestCount = 0;
+    const client = new HttpCallRoomEventClient({
+      apiBaseUrl: "http://127.0.0.1:3100",
+      timeoutMs: 100,
+      fetchFn: (async () => {
+        requestCount += 1;
+        return response(200);
+      }) as typeof fetch,
+    });
+
+    client.markEnded("call_ended");
+
+    await expect(client.publish("call_ended", [{
+      type: "worker.status",
+      segmentId: "worker",
+      speakerRole: "worker",
+      sourceLanguage: "en",
+      targetLanguage: "zh",
+      text: "ending",
+      timestampMs: 1,
+    }])).rejects.toBeInstanceOf(CallRoomEndedError);
+    expect(requestCount).toBe(0);
+  });
+
   it("returns the server-persisted playback leg binding", async () => {
     const client = new HttpCallRoomEventClient({
       apiBaseUrl: "http://127.0.0.1:3100",

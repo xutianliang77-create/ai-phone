@@ -70,6 +70,15 @@ export class SpeechPipelineRouter implements CallSpeechPipeline {
     }
   }
 
+  markCallEnded(callId: string) {
+    if (this.options.mode !== "native") {
+      this.options.cascade.markCallEnded?.(callId);
+    }
+    if (this.options.mode !== "cascade") {
+      this.options.native?.markCallEnded?.(callId);
+    }
+  }
+
   addTtsAudioSink(sink: CallTtsAudioSink) {
     this.options.cascade.addTtsAudioSink(sink);
     this.options.native?.addTtsAudioSink(sink);

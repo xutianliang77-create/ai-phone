@@ -238,6 +238,11 @@ export class CallTranslationWorker implements CallSpeechPipeline {
     }
   }
 
+  markCallEnded(callId: string) {
+    this.eventSink.markEnded?.(callId);
+    this.captionPipeline.cancel(callId);
+  }
+
   private startTtsWarmup(callId: string) {
     const controller = new AbortController();
     const runtime = {

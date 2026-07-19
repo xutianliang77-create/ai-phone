@@ -63,6 +63,7 @@ describe("LiveKitCallAudioSource", () => {
     });
     expect(worker.frames[0].data).toBe(Buffer.from(new Int16Array([1, -1]).buffer).toString("base64"));
     expect(worker.ended).toEqual(["call_1"]);
+    expect(worker.lifecycle).toEqual(["marked:call_1", "ended:call_1"]);
   });
 
   it("ignores non host or guest participants", async () => {

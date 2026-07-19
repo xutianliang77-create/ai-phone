@@ -84,6 +84,33 @@ describe("Call pipeline cancellation", () => {
     expect(translation.requests[0].signal.aborted).toBe(true);
   });
 
+  it("cancels background revisions after the control plane ends the call", async () => {
+    const translation = new ControlledTranslationProvider();
+    const refiner = new ControlledTranscriptRefiner();
+    const sink = new RecordingSink();
+    const worker = newWorker(
+      revisionAsr().firstOnly(),
+      sink,
+      undefined,
+      undefined,
+      translation,
+      refiner as unknown as CallTranscriptRefiner,
+    );
+
+    await worker.processAudioFrame(frame("call_control_end", "guest", 1));
+    worker.markCallEnded("call_control_end");
+    refiner.resolve("call fifty");
+    translation.resolve(0, "晚到译文");
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(sink.endedCalls).toEqual(["call_control_end"]);
+    expect(transcriptEvents(sink, "call_control_end")).toMatchObject([{
+      pipelineGeneration: 1,
+      text: "call fifteen",
+    }]);
+    expect(translationEvents(sink, "call_control_end")).toEqual([]);
+  });
+
   it("suppresses an old MT result when a newer revision supersedes it", async () => {
     const translation = new ControlledTranslationProvider();
     const sink = new RecordingSink();
