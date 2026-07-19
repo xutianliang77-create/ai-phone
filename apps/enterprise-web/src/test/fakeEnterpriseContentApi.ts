@@ -37,6 +37,8 @@ type ContentApi = Pick<EnterpriseApi,
   | "listCampaigns" | "getCampaign" | "createCampaign" | "updateCampaign"
   | "scheduleCampaign" | "listCampaignLeads" | "listLeadImportBatches"
   | "importCampaignLeads" | "rollbackLeadImport"
+  | "listMarketingConsents" | "getMarketingConsentEligibility"
+  | "registerMarketingConsent" | "revokeMarketingConsent"
 >;
 
 export function fakeEnterpriseContentApi(): ContentApi {
@@ -125,6 +127,15 @@ export function fakeEnterpriseContentApi(): ContentApi {
     importCampaignLeads: vi.fn().mockResolvedValue({ status: "rejected", totalRows: 0,
       errors: [] }),
     rollbackLeadImport: vi.fn().mockRejectedValue(new Error("not configured")),
+    listMarketingConsents: vi.fn().mockResolvedValue({
+      evaluatedAt: "2026-07-19T00:00:00.000Z", consents: [],
+    }),
+    getMarketingConsentEligibility: vi.fn().mockResolvedValue({
+      status: "blocked", evaluatedAt: "2026-07-19T00:00:00.000Z",
+      reasonCode: "consent_required",
+    }),
+    registerMarketingConsent: vi.fn().mockRejectedValue(new Error("not configured")),
+    revokeMarketingConsent: vi.fn().mockRejectedValue(new Error("not configured")),
     getCampaign: vi.fn(),
     createCampaign: vi.fn(),
     updateCampaign: vi.fn(),

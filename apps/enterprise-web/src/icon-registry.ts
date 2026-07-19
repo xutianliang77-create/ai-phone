@@ -107,6 +107,9 @@ export const enterpriseIcons = {
     leads: "contacts",
     import: "upload_file",
     rollback: "undo",
+    consent: "verified_user",
+    evidence: "attach_file",
+    revoke: "block",
   },
   appearance: {
     system: "brightness_auto",

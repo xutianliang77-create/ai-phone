@@ -1,6 +1,6 @@
 # 无界AI企业版技术架构
 
-版本：v1.38
+版本：v1.39
 日期：2026-07-19
 状态：SaaS 详细架构基线，已对齐统一通讯平台和 PostgreSQL Primary
 
@@ -388,7 +388,26 @@ tenant 行锁和 Campaign 行锁，确保 tenant 全局号码去重与 Campaign 
 导入数据流为 `CSV/API -> E.164 normalize -> tenant HMAC identity -> AES-GCM envelope ->
 Lead upsert decision -> Campaign link -> append-only row report -> committed batch`。号码明文不进入事件、审计、
 错误报告或 Web；keyring 缺失时 API 返回 not ready。批次回滚只执行 `active link -> rolled_back` 和有条件的
-`Lead active -> inactive`，不做物理删除；Consent、Suppression、Scheduler、call task 和 PSTN 继续位于后续层。
+`Lead active -> inactive`，不做物理删除；Consent 由下一层独立登记，Suppression、Scheduler、call task 和 PSTN
+继续位于后续层。
+
+### 7.3 Consent Evidence 写入与执行栅栏
+
+`ENT-MKT-003` 把授权拆成“对象证据验证”和“租户事务登记”两段。HTTP 层完成 membership、
+`campaign:read/write` 与签名 route 校验后，Evidence Store 才可按
+`prefix/tenants/{tenantId}/{objectId}` 读取对象；生产使用加密 S3/KMS，非生产可显式使用隔离本地目录。
+Adapter 校验 metadata tenant/object、SHA-256、字节数、内容类型和 server-side encryption，拒绝公开 URL、跨租户
+对象、缺配置和部分匹配。
+
+验证通过后，PostgreSQL Unit of Work 在 Campaign/Lead 行锁和 forced RLS 下登记固定
+`automated_marketing_call` purpose 的不可变 Consent，并追加不含电话明文或对象内容的审计。登记/撤回分别按
+tenant/actor/key/request hash 精确重放；撤回只追加 actor/reason/time/version，不覆盖原证据。读取有效性由服务端
+时间解析，不把 Web 状态当真值。
+
+`0039` 另外在 `marketing_call_tasks` insert/reschedule 层放置数据库 guard：同 tenant/Campaign/Lead 必须存在
+覆盖 `scheduled_at` 的 active Consent，否则 SQL 失败。因此即使后续 Scheduler 漏检，数据库也不能产生无授权
+任务。撤回 trigger 取消没有替代授权的 pending/scheduled/retry 任务；Scheduler、禁拨、Country Policy、审批快照、
+Outbox、PSTN dispatch 和已发媒体物理中止仍由 `ENT-MKT-004..009` 分层实现和重验。
 
 ## 8. AI 客服架构
 

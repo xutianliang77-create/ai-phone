@@ -1,6 +1,6 @@
 # 无界AI企业版详细功能设计
 
-版本：v1.35
+版本：v1.36
 日期：2026-07-19
 状态：SaaS 详细设计基线，已对齐统一通讯平台
 
@@ -168,8 +168,8 @@ Provider、usage/ledger 和 trace；跨会话业务聚合与货币成本尚未�
   route 和键只精确重放同一 request hash，响应丢失时客户端必须复用原键。
 - “进入待调度”只改变 Campaign 聚合状态，不生成 call task、usage hold、Outbox 或 PSTN 请求。该命令要求
   `campaign:approve`，并同时复核活动为 `approved`、审批为 `approved`、策略版本存在、开始时间为未来。
-- 当前 Web 页面只提供上述真实聚合能力，并明确标出线索、授权、国家策略、审批流、Scheduler 和 PSTN 尚未
-  接入；不得把不可用按钮或静态活动卡片解释为活动已经启动。
+- 当前 Web 页面提供上述真实聚合、线索导入和授权证据能力，并明确标出禁拨、国家策略、审批流、Scheduler 和
+  PSTN 尚未接入；不得把不可用按钮或静态活动卡片解释为活动已经启动。
 
 ### 5.2 线索管理
 
@@ -196,6 +196,23 @@ Provider、usage/ledger 和 trace；跨会话业务聚合与货币成本尚未�
   不删除 Lead 或逐行证据。没有其他活动关联、授权或通话任务的 Lead 才转为 inactive。
 - 导入不生成授权证据、禁拨记录、Country Policy、审批快照、call task、Outbox、usage hold 或 PSTN 请求。
   CRM Adapter 导入仍属于后续集成，不得把 `sourceReference` 当作 CRM 同步成功。
+
+#### 5.2.2 授权证据首批实现边界
+
+- 授权必须精确绑定当前 tenant、Campaign、active Lead 和 `automated_marketing_call` 用途；取得渠道仅允许 Web
+  表单、签署文件、录音通话或 CRM 证明。邮件、人工电话或其他用途不能推导为自动营销电话授权。
+- 数据库只保存证据对象 UUID、SHA-256、字节数、内容类型、来源、声明版本、取得/失效时间和 actor。登记前由
+  受信对象存储 Adapter 读取实体并核对 tenant/object metadata、内容 hash、大小、类型和服务端加密；不接受公开 URL。
+  生产环境禁止本地目录，未配置或任一字段不一致时失败闭合。
+- 只允许在 `draft/not_submitted` 活动为 active Campaign Lead 新增证据；登记和撤回均要求幂等键。证据身份、用途、
+  内容摘要、时间和创建信息不可改写或删除，只允许按 expectedVersion 一次性写入撤回 actor、原因和时间。
+- 列表保留 pending/active/expired/revoked 全历史；“当前有效”只由服务端时间计算，要求已经取得、未过期、未撤回且
+  Lead/活动关联仍 active。客户端时间、状态徽标或对象 UUID 不参与授权决定。
+- `marketing_call_tasks` 在 insert 或变更 Campaign/Lead/计划时间时由数据库再次要求覆盖计划时间的有效授权；缺失、
+  尚未生效、过期、撤回或跨活动证据都不能形成可执行任务。撤回保留证据历史，并取消没有其他有效授权覆盖的
+  pending/scheduled/retry 任务；已交给 PSTN 的物理中止仍属于后续 Scheduler/Provider 验收。
+- 当前 Web 线索表可进入授权详情，显示脱敏号码、服务端有效性、对象引用、缩略 hash、不可变历史和撤回影响；
+  不上传任意 URL、不显示电话号码明文，也不把授权登记解释为禁拨/国家策略/审批/PSTN 已通过。
 
 ### 5.3 AI 营销专员
 

@@ -28,6 +28,8 @@ import { createEnterprisePostgresCampaignRuntime } from
   "./enterprise-postgres-campaign-runtime.js";
 import { createEnterprisePostgresLeadImportRuntime } from
   "./enterprise-postgres-lead-import-runtime.js";
+import { createEnterprisePostgresMarketingConsentRuntime } from
+  "./enterprise-postgres-marketing-consent-runtime.js";
 
 export function createEnterprisePostgresBusinessRuntimes(
   pool: EnterpriseTenantPostgresPool,
@@ -49,5 +51,6 @@ export function createEnterprisePostgresBusinessRuntimes(
     ...createEnterprisePostgresSupportWriteToolRuntime(pool, supportWriteCommand),
     ...createEnterprisePostgresCampaignRuntime(pool),
     ...createEnterprisePostgresLeadImportRuntime(pool),
+    ...createEnterprisePostgresMarketingConsentRuntime(pool),
   };
 }

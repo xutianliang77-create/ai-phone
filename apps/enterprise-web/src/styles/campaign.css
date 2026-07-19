@@ -141,12 +141,69 @@
 .lead-batch-status--rolled_back { color: var(--color-outline);
   background: var(--color-surface-high); }
 
+.consent-panel { display: grid; gap: 18px; padding: 20px; border: 1px solid
+  var(--color-outline-variant); border-radius: var(--radius); background: var(--color-container); }
+.consent-panel__header { display: flex; gap: 16px; align-items: flex-start;
+  justify-content: space-between; }
+.consent-panel__header h2 { margin: 2px 0 0; font-size: 1.125rem; }
+.consent-panel__header p { margin: 6px 0 0; color: var(--color-outline); }
+.consent-boundary,
+.consent-eligibility { display: flex; gap: 10px; align-items: flex-start; padding: 12px;
+  border-radius: var(--radius); }
+.consent-boundary { background: color-mix(in srgb, var(--color-tertiary) 8%, transparent); }
+.consent-boundary > span,
+.consent-eligibility > span { display: grid; gap: 3px; }
+.consent-boundary .material-icons { color: var(--color-tertiary); }
+.consent-boundary small,
+.consent-eligibility small { color: var(--color-outline); }
+.consent-eligibility--eligible { border: 1px solid color-mix(in srgb,
+  var(--color-primary) 32%, var(--color-outline-variant));
+  background: color-mix(in srgb, var(--color-primary) 8%, transparent); }
+.consent-eligibility--eligible .material-icons { color: var(--color-primary); }
+.consent-eligibility--blocked { border: 1px solid color-mix(in srgb,
+  var(--color-error) 32%, var(--color-outline-variant));
+  background: color-mix(in srgb, var(--color-error) 7%, transparent); }
+.consent-eligibility--blocked .material-icons { color: var(--color-error); }
+.consent-form { display: grid; gap: 16px; padding: 16px; border-radius: var(--radius);
+  background: var(--color-surface); }
+.consent-form header h3,
+.consent-history h3 { margin: 0; font-size: .9375rem; }
+.consent-form header p { margin: 4px 0 0; color: var(--color-outline); font-size: .75rem; }
+.consent-form__grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px; }
+.consent-form label { display: grid; gap: 6px; color: var(--color-outline);
+  font-size: .75rem; font-weight: 700; }
+.consent-form__wide { grid-column: 1 / -1; }
+.consent-form > .button { justify-self: start; gap: 8px; }
+.consent-history { display: grid; gap: 12px; }
+.consent-history h3 { display: flex; gap: 8px; align-items: center; }
+.consent-history h3 span { color: var(--color-outline); font-size: .75rem; }
+.consent-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.consent-card { display: grid; min-width: 0; gap: 12px; padding: 14px;
+  border: 1px solid var(--color-outline-variant); border-radius: var(--radius); }
+.consent-card--revoked,
+.consent-card--expired { background: var(--color-surface); }
+.consent-card header { display: flex; gap: 8px; align-items: center; }
+.consent-card header small { margin-left: auto; color: var(--color-outline); }
+.consent-card dl { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px; margin: 0; }
+.consent-card dl div { min-width: 0; }
+.consent-card dt { color: var(--color-outline); font-size: .6875rem; }
+.consent-card dd { margin: 3px 0 0; overflow-wrap: anywhere; font-size: .8125rem; }
+.consent-card footer { display: flex; gap: 8px; align-items: center; }
+.consent-card footer input { min-width: 0; flex: 1; }
+.consent-card footer .button { flex: none; gap: 5px; }
+.consent-reason { margin: 0; color: var(--color-error); font-size: .8125rem; }
+
 @media (max-width: 760px) {
   .campaign-list,
   .campaign-form__grid,
   .lead-import-data,
   .lead-import-form { grid-template-columns: 1fr; }
-  .campaign-form__wide { grid-column: auto; }
+  .consent-form__grid,
+  .consent-list { grid-template-columns: 1fr; }
+  .campaign-form__wide,
+  .consent-form__wide { grid-column: auto; }
   .campaign-card footer { align-items: flex-start; flex-direction: column; }
   .campaign-card footer > div { width: 100%; justify-content: stretch; }
   .campaign-card footer .button { flex: 1; }
@@ -160,5 +217,7 @@
   .campaign-card,
   .lead-import-panel { padding: 16px; }
   .lead-import-panel__header,
+  .consent-panel__header,
   .lead-import-batches footer { align-items: flex-start; flex-direction: column; }
+  .consent-card footer { align-items: stretch; flex-direction: column; }
 }

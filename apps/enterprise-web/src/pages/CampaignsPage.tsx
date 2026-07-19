@@ -138,7 +138,7 @@ export function CampaignsPage() {
     <section className="campaign-boundary" aria-label="当前实现边界">
       <MaterialIcon name={enterpriseIcons.campaign.approval} />
       <div><strong>活动未审批时服务端禁止调度</strong>
-        <span>线索导入已接入脱敏批次；授权、禁拨、国家策略、审批流、Scheduler 和 PSTN 仍未接入，本页不显示模拟成功。</span>
+        <span>线索导入和不可变授权证据已接入；禁拨、国家策略、审批流、Scheduler 和 PSTN 仍未接入，本页不显示模拟成功。</span>
       </div>
     </section>
     {notice ? <p className="campaign-notice" role="status">{notice}</p> : null}

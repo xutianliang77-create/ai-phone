@@ -79,9 +79,8 @@ import { registerEnterpriseSupportWorkbenchRoutes } from
   "./modules/enterprise/enterprise-support-workbench.routes.js";
 import { registerEnterpriseSupportToolRoutes } from
   "./modules/enterprise/enterprise-support-tool.routes.js";
-import { registerEnterpriseCampaignRoutes } from
-  "./modules/enterprise/enterprise-campaign.routes.js";
-import { registerEnterpriseLeadImportRoutes } from "./modules/enterprise/enterprise-lead-import.routes.js";
+import { registerEnterpriseMarketingRoutes } from
+  "./modules/enterprise/enterprise-marketing.routes.js";
 import {
   createEnvironmentEnterpriseSupportAgentProvider,
   type EnterpriseSupportAgentProvider,
@@ -282,8 +281,7 @@ export async function buildApp(dependencies: {
   registerEnterpriseSupportToolRoutes(
     app, tenantRouteService, enterpriseRepositoryRuntime,
   );
-  registerEnterpriseCampaignRoutes(app, tenantRouteService, enterpriseRepositoryRuntime);
-  registerEnterpriseLeadImportRoutes(app, tenantRouteService, enterpriseRepositoryRuntime);
+  registerEnterpriseMarketingRoutes(app, tenantRouteService, enterpriseRepositoryRuntime);
   registerEnterpriseMeetingScreenShareRoutes(
     app,
     tenantRouteService,

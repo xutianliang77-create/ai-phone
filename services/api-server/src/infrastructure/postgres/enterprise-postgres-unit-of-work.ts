@@ -90,6 +90,8 @@ import { EnterpriseCampaignPostgresRepository } from
   "./enterprise-postgres-campaign.repository.js";
 import { EnterpriseLeadImportPostgresRepository } from
   "./enterprise-postgres-lead-import.repository.js";
+import { EnterpriseMarketingConsentPostgresRepository } from
+  "./enterprise-postgres-marketing-consent.repository.js";
 
 export interface EnterprisePostgresUnitOfWork {
   tenant: EnterpriseTenantPostgresRepository;
@@ -125,6 +127,7 @@ export interface EnterprisePostgresUnitOfWork {
   supportQuality: EnterpriseSupportQualityPostgresRepository;
   campaigns: EnterpriseCampaignPostgresRepository;
   leadImports: EnterpriseLeadImportPostgresRepository;
+  marketingConsents: EnterpriseMarketingConsentPostgresRepository;
 }
 
 export function withEnterprisePostgresUnitOfWork<T>(
@@ -174,6 +177,7 @@ export function withEnterprisePostgresUnitOfWork<T>(
       supportQuality: new EnterpriseSupportQualityPostgresRepository(session),
       campaigns: new EnterpriseCampaignPostgresRepository(session),
       leadImports: new EnterpriseLeadImportPostgresRepository(session),
+      marketingConsents: new EnterpriseMarketingConsentPostgresRepository(session),
     }),
   );
 }

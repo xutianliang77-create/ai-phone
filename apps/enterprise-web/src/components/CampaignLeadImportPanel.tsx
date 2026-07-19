@@ -13,6 +13,7 @@ import type {
 import { apiErrorState } from "../business-state.js";
 import { enterpriseIcons } from "../icon-registry.js";
 import { MaterialIcon } from "./MaterialIcon.js";
+import { CampaignConsentEvidencePanel } from "./CampaignConsentEvidencePanel.js";
 import { StatusPanel } from "./StatusPanel.js";
 
 type DataState =
@@ -35,6 +36,7 @@ export function CampaignLeadImportPanel({ api, context, campaign, canWrite, onCl
   const [result, setResult] = useState<EnterpriseLeadImportResponse | null>(null);
   const [clientError, setClientError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  const [consentLead, setConsentLead] = useState<EnterpriseCampaignLeadDto | null>(null);
   const importKey = useRef(commandKey("import"));
   const rollbackKeys = useRef(new Map<string, string>());
   const editable = canWrite && campaign.status === "draft" &&
@@ -111,6 +113,10 @@ export function CampaignLeadImportPanel({ api, context, campaign, canWrite, onCl
     }
   }
 
+  if (consentLead) return <CampaignConsentEvidencePanel api={api} context={context}
+    campaign={campaign} lead={consentLead} canWrite={canWrite}
+    onClose={() => setConsentLead(null)} />;
+
   return <section className="lead-import-panel" aria-labelledby="lead-import-title">
     <header className="lead-import-panel__header">
       <div><span className="lead-import-panel__eyebrow">{campaign.name}</span>
@@ -120,7 +126,7 @@ export function CampaignLeadImportPanel({ api, context, campaign, canWrite, onCl
     </header>
     <div className="lead-import-boundary"><MaterialIcon name={enterpriseIcons.campaign.approval} />
       <span><strong>导入不代表已取得营销授权</strong>
-        <small>本任务不会创建授权、禁拨、调度、拨号或 Provider 成功记录。</small></span>
+        <small>每条线索须另行登记并验证自动营销电话授权；禁拨、调度、拨号和 Provider 仍未接入。</small></span>
     </div>
     {editable ? <div className="lead-import-form">
       <div className="lead-import-tabs" role="tablist" aria-label="导入方式">
@@ -161,11 +167,13 @@ export function CampaignLeadImportPanel({ api, context, campaign, canWrite, onCl
         {data.leads.length === 0 ? <p className="lead-import-empty">暂无活动线索。</p>
           : <div className="lead-table" tabIndex={0} role="region"
             aria-label="活动线索表" aria-describedby="lead-mask-note"><table>
-              <thead><tr><th>号码</th><th>外部 ID</th><th>国家</th><th>语言</th><th>属性</th></tr></thead>
+              <thead><tr><th>号码</th><th>外部 ID</th><th>国家</th><th>语言</th><th>属性</th><th>授权</th></tr></thead>
               <tbody>{data.leads.map((lead) => <tr key={lead.linkId}>
                 <td>{lead.phoneHint}</td><td>{lead.externalId ?? "—"}</td>
                 <td>{lead.countryCode}</td><td>{lead.language ?? "—"}</td>
-                <td>{lead.attributeKeys.join(" · ") || "—"}</td></tr>)}</tbody>
+                <td>{lead.attributeKeys.join(" · ") || "—"}</td><td><button
+                  className="text-button" type="button" onClick={() => setConsentLead(lead)}>
+                  <MaterialIcon name={enterpriseIcons.campaign.consent} />查看</button></td></tr>)}</tbody>
             </table></div>}
         <small id="lead-mask-note">页面、API 和审计均不返回号码明文。</small></section>
       <section><h3>导入批次 <span>{data.batches.length}</span></h3>

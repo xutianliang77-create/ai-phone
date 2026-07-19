@@ -74,11 +74,11 @@ import type {
 import type { EnterpriseAuditExportRuntime } from "./enterprise-audit-export-runtime.js";
 import type { EnterpriseMeetingRepositoryRuntime } from "./enterprise-meeting-runtime.js";
 import type { EnterpriseSupportRepositoryRuntime } from "./enterprise-support-runtime.js";
-import type { EnterpriseSupportAgentRepositoryRuntime } from
-  "./enterprise-support-agent-runtime.js";
+import type { EnterpriseSupportAgentRepositoryRuntime } from "./enterprise-support-agent-runtime.js";
 import type { EnterpriseSupportToolRepositoryRuntime } from "./enterprise-support-tool-runtime.js";
 import type { EnterpriseCampaignRepositoryRuntime } from "./enterprise-campaign-runtime.js";
 import type { EnterpriseLeadImportRepositoryRuntime } from "./enterprise-lead-import-runtime.js";
+import type { EnterpriseMarketingConsentRepositoryRuntime } from "./enterprise-marketing-consent-runtime.js";
 export type EnterpriseContextResult =
   | { status: "resolved"; tenant: EnterpriseTenantRecord; member: EnterpriseMemberRecord }
   | { status: "access_denied" }
@@ -108,7 +108,7 @@ export interface EnterpriseRepositoryRuntime
     EnterpriseSupportRepositoryRuntime,
     EnterpriseSupportAgentRepositoryRuntime,
     EnterpriseSupportToolRepositoryRuntime,
-    EnterpriseCampaignRepositoryRuntime, EnterpriseLeadImportRepositoryRuntime {
+    EnterpriseCampaignRepositoryRuntime, EnterpriseLeadImportRepositoryRuntime, EnterpriseMarketingConsentRepositoryRuntime {
   readonly driver: "legacy" | "postgres";
   resolveContext(input: {
     userId: string;

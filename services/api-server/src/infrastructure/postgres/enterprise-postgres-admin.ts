@@ -69,6 +69,8 @@ export const enterpriseSubjectColumns = [
   ["marketing_lead_import_batches", "created_by"],
   ["marketing_lead_import_batches", "rollback_by"],
   ["marketing_campaign_leads", "linked_by"],
+  ["contact_consents", "created_by"],
+  ["contact_consents", "revoked_by"],
   ["support_queues", "created_by"],
   ["support_sessions", "assigned_user_id"],
   ["meetings", "host_user_id"],

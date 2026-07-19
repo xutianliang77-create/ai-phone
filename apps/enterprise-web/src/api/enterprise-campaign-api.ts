@@ -7,6 +7,12 @@ import type {
   EnterpriseLeadImportRequest,
   EnterpriseLeadImportResponse,
   EnterpriseLeadImportRollbackResponse,
+  EnterpriseMarketingConsentEligibilityResponse,
+  EnterpriseMarketingConsentRevocationResponse,
+  EnterpriseMarketingConsentResponse,
+  EnterpriseMarketingConsentsResponse,
+  RegisterEnterpriseMarketingConsentRequest,
+  RevokeEnterpriseMarketingConsentRequest,
   RollbackEnterpriseLeadImportRequest,
   UpdateEnterpriseCampaignRequest,
 } from "@translation/contracts";
@@ -39,6 +45,19 @@ export interface EnterpriseCampaignApi {
   rollbackLeadImport(context: EnterpriseContentRequestContext, campaignId: string,
     batchId: string, input: RollbackEnterpriseLeadImportRequest,
     idempotencyKey: string): Promise<EnterpriseLeadImportRollbackResponse>;
+  listMarketingConsents(context: EnterpriseContentRequestContext, campaignId: string,
+    leadId: string): Promise<EnterpriseMarketingConsentsResponse>;
+  getMarketingConsentEligibility(context: EnterpriseContentRequestContext,
+    campaignId: string, leadId: string):
+    Promise<EnterpriseMarketingConsentEligibilityResponse>;
+  registerMarketingConsent(context: EnterpriseContentRequestContext,
+    campaignId: string, leadId: string,
+    input: RegisterEnterpriseMarketingConsentRequest, idempotencyKey: string):
+    Promise<EnterpriseMarketingConsentResponse>;
+  revokeMarketingConsent(context: EnterpriseContentRequestContext,
+    campaignId: string, leadId: string, consentId: string,
+    input: RevokeEnterpriseMarketingConsentRequest, idempotencyKey: string):
+    Promise<EnterpriseMarketingConsentRevocationResponse>;
 }
 
 export function createEnterpriseCampaignApi(
@@ -85,5 +104,26 @@ export function createEnterpriseCampaignApi(
       { method: "POST", headers: { ...headers(context), "idempotency-key": key },
         body: JSON.stringify(input) },
     ),
+    listMarketingConsents: (context, campaignId, leadId) => request(
+      `${campaigns}/${encodeURIComponent(campaignId)}/leads/${
+        encodeURIComponent(leadId)}/consents`,
+      { headers: headers(context) },
+    ),
+    getMarketingConsentEligibility: (context, campaignId, leadId) => request(
+      `${campaigns}/${encodeURIComponent(campaignId)}/leads/${
+        encodeURIComponent(leadId)}/consent-eligibility`,
+      { headers: headers(context) },
+    ),
+    registerMarketingConsent: (context, campaignId, leadId, input, key) => request(
+      `${campaigns}/${encodeURIComponent(campaignId)}/leads/${
+        encodeURIComponent(leadId)}/consents`,
+      { method: "POST", headers: { ...headers(context), "idempotency-key": key },
+        body: JSON.stringify(input) },
+    ),
+    revokeMarketingConsent: (context, campaignId, leadId, consentId, input, key) =>
+      request(`${campaigns}/${encodeURIComponent(campaignId)}/leads/${
+        encodeURIComponent(leadId)}/consents/${encodeURIComponent(consentId)}/revoke`,
+      { method: "POST", headers: { ...headers(context), "idempotency-key": key },
+        body: JSON.stringify(input) }),
   };
 }
