@@ -1,6 +1,6 @@
 # 无界AI企业版设计文档索引
 
-版本：v1.49
+版本：v1.50
 日期：2026-07-19
 状态：SaaS 详细设计基线，已纳入统一通讯平台和 PostgreSQL Primary 演进
 
@@ -46,11 +46,11 @@ cell Worker、JSON/SQLite 演示导入，以及全业务表 Primary 切换/恢�
 无界AI主产品公共 PostgreSQL migration、Primary Runtime、可靠 Inbox/Outbox、
 fencing、Billing/Product Records、verify-full 和韧性代码已形成稳定提交 `fe1c3c2`，并由
 `ENT-DATA-007` 合入企业分支。企业版已经完成单 driver、双 manifest、同库身份和分权
-连接的本地自动化，当前 manifest 为公共31段、enterprise 40段；`ENT-DATA-008` 和
+连接的本地自动化，当前 manifest 为公共31段、enterprise 41段；`ENT-DATA-008` 和
 `ENT-CORE-013/014/015` 已完成公共通讯 tenant scope、企业业务会话绑定、签名 Worker dispatch fence
 及设备/声音/录制策略快照的代码/本地自动化，但不能继承主产品 staging 验收。`ENT-DATA-009` 已增加
 31+16 migration manifest 的历史本地证据、全表主键分页 count/hash、WAL 水位、writer fence、签名
-cutover/restore 证据和 production startup 绑定门禁；当前 `0017..0040` 必须按31+40重新生成切换证据。
+cutover/restore 证据和 production startup 绑定门禁；当前 `0017..0041` 必须按31+41重新生成切换证据。
 `ENT-CORE-004` 已增加 tenant-scoped source/version/chunk、草稿审核发布状态机、发布后不可变约束、
 locale/country/product/effective-time 检索和知识引用 ID；
 `ENT-CORE-005` 已增加版本化 term pack/script template、审核发布和生效窗口、发布后不可变约束，
@@ -159,7 +159,7 @@ tenant-scoped PostgreSQL Repository/runtime，以及 list/read/create/draft upda
 均携带请求 SHA-256，草稿更新和待调度命令复用 forced-RLS `idempotency_keys` 精确重放。
 未审批、非 approved 状态、无策略版本、无未来开始时间或缺 `campaign:approve` 均不能进入 `scheduled`。
 Enterprise Web 复用既有 Material Icons、浅深色 token、8px 圆角和统一状态页，提供真实草稿创建/编辑和
-活动卡片；授权、国家策略、审批、Scheduler、call task 与 PSTN 均未提前实现或伪造成功。当前只通过
+活动卡片；授权、审批、Scheduler、call task 与 PSTN 均未提前实现或伪造成功。当前只通过
 静态门禁，自动化、真实 PostgreSQL/RLS、浏览器和 Provider 均未验收，保持 `in_progress`。
 `ENT-MKT-002` 已增加 `0038` forced-RLS 导入批次/Campaign Lead/逐行证据、tenant Lead 唯一身份、CSV/API
 规范化、libphonenumber E.164、AES-GCM 原始/规范号码密文、tenant HMAC 去重、可重放导入/回滚 Repository/API
@@ -174,6 +174,12 @@ Enterprise Web 复用现有 Material Icons 与品牌 token 展示授权状态和
 拒绝联系/撤回/投诉来源、同号码 advisory lock、跨活动待任务取消和 call-task SQL 硬栅栏；Web 在授权详情中复用
 现有 `block/public` Material Icons 与品牌 token 展示真实禁拨历史和全局 readiness。全局注册表 Adapter 当前明确
 not_configured，自动化、真实 PostgreSQL/RLS、并发、浏览器与名单同步未验收，保持 `in_progress`。
+`ENT-MKT-005` 已增加 `0041` forced-RLS 不可变国家策略版本、发布幂等与国家/有效期不重叠约束、当地时间窗口、
+跨活动频控、品牌/AI 身份/营销目的告知、语音信箱策略、Campaign 目标时间 readiness 和 call-task SQL 硬栅栏。
+任务必须引用与 Lead 国家一致且覆盖计划时间的具体版本；Lead 时区缺失/非法、窗口外、重试过密或超频均拒绝。
+Enterprise Web 继续复用 `policy/schedule/speed/record_voice_over/voicemail` Material Icons 与既有 token；配置只表示
+企业合规输入，不冒充具体法域法律结论。自动化、真实 PostgreSQL/RLS、时区/并发、浏览器和法务签核抽样未验收，
+保持 `in_progress`；审批快照、Scheduler 与 PSTN 仍属于后续任务。
 当前按要求未执行
 测试、migration、RLS、RBAC/ticket/evidence 攻击、并发共享、Worker/Provider、四人媒体、浏览器、真机与重启恢复，
 因此上述任务均保持 `in_progress`。

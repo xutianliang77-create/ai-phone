@@ -112,6 +112,9 @@ export const enterpriseIcons = {
     revoke: "block",
     suppression: "block",
     globalSuppression: "public",
+    countryPolicy: "policy",
+    localTime: "schedule",
+    voicemail: "voicemail",
   },
   appearance: {
     system: "brightness_auto",

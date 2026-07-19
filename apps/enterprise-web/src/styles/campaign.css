@@ -241,6 +241,50 @@
 .suppression-list dt { color: var(--color-outline); font-size: .6875rem; }
 .suppression-list dd { margin: 3px 0 0; overflow-wrap: anywhere; font-size: .8125rem; }
 
+.country-policy-panel { display: grid; gap: 16px; padding: 20px;
+  border: 1px solid var(--color-outline-variant); border-radius: var(--radius);
+  background: var(--color-surface); }
+.country-policy-panel > header,
+.country-policy-card > header { display: flex; align-items: flex-start;
+  justify-content: space-between; gap: 12px; }
+.country-policy-panel h2,
+.country-policy-panel p { margin: 0; }
+.country-policy-boundary,
+.campaign-policy-readiness { display: flex; align-items: center; gap: 10px;
+  padding: 12px; border-radius: var(--radius);
+  background: var(--color-surface-high); }
+.country-policy-boundary span,
+.campaign-policy-readiness span { display: grid; gap: 3px; }
+.country-policy-boundary small,
+.campaign-policy-readiness small { color: var(--color-outline); }
+.country-policy-editor { border: 1px solid var(--color-outline-variant);
+  border-radius: var(--radius); overflow: hidden; }
+.country-policy-editor summary { display: flex; align-items: center; gap: 8px;
+  padding: 12px 16px; font-weight: 700; cursor: pointer; }
+.country-policy-editor form { display: grid; gap: 16px; padding: 16px;
+  border-top: 1px solid var(--color-outline-variant); }
+.country-policy-form__grid { display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.country-policy-form__grid label { display: grid; gap: 6px;
+  color: var(--color-outline); font-size: .75rem; font-weight: 700; }
+.country-policy-form__wide { grid-column: 1 / -1; }
+.country-policy-list { display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; }
+.country-policy-card { display: grid; gap: 12px; padding: 16px;
+  border: 1px solid var(--color-outline-variant); border-radius: var(--radius);
+  background: var(--color-surface-high); }
+.country-policy-card > header > div { display: flex; gap: 8px; }
+.country-policy-card dl { display: grid; gap: 8px; margin: 0; }
+.country-policy-card dl div { display: flex; justify-content: space-between; gap: 12px; }
+.country-policy-card dt { color: var(--color-outline); }
+.country-policy-card dd { margin: 0; text-align: right; overflow-wrap: anywhere; }
+.country-policy-card--expired { opacity: .72; }
+.campaign-policy-readiness { margin-block: 12px; }
+.campaign-policy-readiness--ready { border: 1px solid color-mix(in srgb,
+  var(--color-primary) 32%, var(--color-outline-variant)); }
+.campaign-policy-readiness--blocked { border: 1px solid color-mix(in srgb,
+  var(--color-error) 34%, var(--color-outline-variant)); }
+
 @media (max-width: 760px) {
   .campaign-list,
   .campaign-form__grid,
@@ -249,16 +293,20 @@
   .consent-form__grid,
   .consent-list,
   .suppression-form,
-  .suppression-list { grid-template-columns: 1fr; }
+  .suppression-list,
+  .country-policy-form__grid { grid-template-columns: 1fr; }
   .campaign-form__wide,
   .consent-form__wide,
   .suppression-form__wide,
-  .suppression-form > .button { grid-column: auto; }
+  .suppression-form > .button,
+  .country-policy-form__wide { grid-column: auto; }
   .campaign-card footer { align-items: flex-start; flex-direction: column; }
   .campaign-card footer > div { width: 100%; justify-content: stretch; }
   .campaign-card footer .button { flex: 1; }
   .lead-import-tabs { align-self: stretch; }
   .lead-import-tabs button { flex: 1; }
+  .country-policy-card dl div { display: grid; gap: 3px; }
+  .country-policy-card dd { text-align: left; }
 }
 
 @media (max-width: 420px) {

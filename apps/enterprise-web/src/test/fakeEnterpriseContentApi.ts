@@ -41,6 +41,8 @@ type ContentApi = Pick<EnterpriseApi,
   | "registerMarketingConsent" | "revokeMarketingConsent"
   | "listMarketingSuppressions" | "getMarketingSuppressionEligibility"
   | "createMarketingSuppression"
+  | "listCountryPolicies" | "publishCountryPolicy"
+  | "getCampaignCountryPolicyReadiness"
 >;
 
 export function fakeEnterpriseContentApi(): ContentApi {
@@ -150,6 +152,15 @@ export function fakeEnterpriseContentApi(): ContentApi {
         reasonCode: "global_suppression_registry_not_configured" },
     }),
     createMarketingSuppression: vi.fn().mockRejectedValue(new Error("not configured")),
+    listCountryPolicies: vi.fn().mockResolvedValue({
+      evaluatedAt: "2026-07-19T00:00:00.000Z", policies: [],
+    }),
+    publishCountryPolicy: vi.fn().mockRejectedValue(new Error("not configured")),
+    getCampaignCountryPolicyReadiness: vi.fn().mockResolvedValue({
+      status: "blocked", evaluatedAt: "2026-07-19T00:00:00.000Z",
+      targetAt: "2026-07-19T00:00:00.000Z", policies: [],
+      issues: [{ countryCode: "US", reasonCode: "country_policy_missing" }],
+    }),
     getCampaign: vi.fn(),
     createCampaign: vi.fn(),
     updateCampaign: vi.fn(),

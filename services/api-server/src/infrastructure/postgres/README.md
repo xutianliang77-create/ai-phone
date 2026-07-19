@@ -57,7 +57,7 @@ ENTERPRISE_MIGRATION_DATABASE_URL='postgresql://...' \
 
 两种启用模式都在恢复任务、Fastify 构建和端口监听前失败闭合，并在校验后关闭连接。
 `verify` 不写 migration；`migrate_verify` 始终在 migration 后执行相同 schema verify。
-统一启动编排先验证公共31段 manifest 和签名 cutover evidence，再验证 enterprise 40段
+统一启动编排先验证公共31段 manifest 和签名 cutover evidence，再验证 enterprise 41段
 manifest，并核对两个 verdict 的 database name/OID；任一失败都关闭已创建资源且不监听。
 
 基础 migration `0004` 至 `0010` 中，`0004` 增加 tenant lifecycle 状态和 job，`0005` 增加
@@ -176,7 +176,7 @@ SQLSTATE `25006`、旧 writer 会话为0、target 可写和二次全量 hash 相
 
 生产启动只接受 `environment=staging` 的 `cutover/matched` 签名证据，并绑定当前
 commit、image digest、topology hash、目标 logical ID、数据库 system identifier/OID 和
-31+40 migration manifest。`c9b5be2` 的31+16本地证据会被门禁拒绝，必须重新生成；
+31+41 migration manifest。`c9b5be2` 的31+16本地证据会被门禁拒绝，必须重新生成；
 本地同机 `pg_dump/pg_restore` 只能证明逻辑恢复与对账机制；
 跨故障域自动切换、异地主机不可变 WAL/PITR 和 RPO/RTO 仍由 `ENT-REL-003`/H3 验收。
 
@@ -233,3 +233,11 @@ Suppression insert 与 call-task insert/reschedule 使用相同的 `tenant + pho
 在同一事务取消该号码跨活动的 pending/scheduled/retry task；后续 task guard 命中 tenant/global 记录时拒绝 SQL。
 默认全局注册表 Adapter 为 not_configured，未命中本地记录也不返回 eligible。当前未执行 migration/down、
 forced-RLS、同号码并发、真实全局注册表或浏览器验收。
+
+## Marketing country policy
+
+`ENT-MKT-005` 由 migration `0041` 新增 forced-RLS `marketing_country_policy_versions`，以不可变版本固定国家、
+当地星期/分钟窗口、滚动频控、最小重试间隔、三段告知、语音信箱模式、合规确认依据和生效/失效时间。同国家
+版本与生效区间唯一，发布后不可更新删除。Campaign 进入 scheduled 时按 startAt 验证所有目标国家；call task
+必须显式引用与 Lead country 匹配且覆盖 scheduledAt 的版本，并由数据库按 Lead IANA timezone、当地窗口、重试
+间隔和跨活动频控失败闭合。该 migration 不实现审批快照、Scheduler claim、Outbox、usage hold 或 PSTN dispatch。

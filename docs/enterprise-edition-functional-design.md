@@ -1,6 +1,6 @@
 # 无界AI企业版详细功能设计
 
-版本：v1.37
+版本：v1.38
 日期：2026-07-19
 状态：SaaS 详细设计基线，已对齐统一通讯平台
 
@@ -229,6 +229,23 @@ Provider、usage/ledger 和 trace；跨会话业务聚合与货币成本尚未�
 - 当前全局禁拨注册表 Provider 未配置，企业名单未命中时只返回 `not_ready`，不能显示“可拨”。Web 在授权详情中
   展示真实 tenant/global 历史、全局 readiness 和服务端取消数量；Country Policy、Scheduler、PSTN dispatch 与已在
   Provider 侧执行的物理挂断仍属于后续任务。
+
+#### 5.2.4 国家策略首批实现边界
+
+- 国家策略是 tenant-owned 的不可变发布版本。每个版本固定一个 ISO 国家、当地星期/分钟窗口、滚动频控、最小
+  重试间隔、品牌/AI 身份/营销目的三段告知、语音信箱模式、合规确认依据和明确生效/失效时间；同国家生效区间
+  不得重叠。
+- 发布要求 `campaign:approve`、active membership、签名 route 和幂等键。普通营销成员和审计员只能读取；body
+  tenant、跨租户 ID、同键异内容、重复版本、重叠有效期、跨午夜或重叠时间窗口全部拒绝。
+- `disabled` 和 `human_only` 语音信箱模式不能夹带留言内容；只有 `compliant_message` 固化版本与短消息。这里仅保存
+  企业合规负责人确认的配置，不根据法规链接自动生成法律结论，也不代表目标国家/州/号码类型已通过法务放行。
+- Campaign readiness 按计划开始时间逐个解析目标国家。缺失、尚未生效或已过期均为 blocked；进入 scheduled 时
+  数据库再次要求全部国家有覆盖目标时间的版本。具体审批时冻结 policy set/data snapshot 属于 `ENT-MKT-006`。
+- 新建或重排 `marketing_call_tasks` 必须显式引用具体国家策略版本。数据库按 Lead 的国家和 IANA 时区换算当地时间，
+  在与禁拨相同的 tenant+phone 事务锁内复核有效期、窗口、跨活动滚动频控和最小重试间隔；缺时区、非法时区、
+  窗口外、过密或超频都不能留下可执行任务。
+- 当前 Web 只显示真实策略版本、hash、有效期、合规依据和逐活动 readiness；不显示审批、Scheduler、PSTN 或法务
+  验收成功。SQLite/JSON 不承载国家策略并固定失败闭合。
 
 ### 5.3 AI 营销专员
 

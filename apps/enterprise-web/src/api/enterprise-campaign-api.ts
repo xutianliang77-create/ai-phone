@@ -15,6 +15,10 @@ import type {
   EnterpriseMarketingSuppressionEligibilityResponse,
   EnterpriseMarketingSuppressionResponse,
   EnterpriseMarketingSuppressionsResponse,
+  EnterpriseCountryPoliciesResponse,
+  EnterpriseCountryPolicyResponse,
+  EnterpriseCampaignCountryPolicyReadinessResponse,
+  PublishEnterpriseCountryPolicyRequest,
   RegisterEnterpriseMarketingConsentRequest,
   RevokeEnterpriseMarketingConsentRequest,
   RollbackEnterpriseLeadImportRequest,
@@ -71,6 +75,13 @@ export interface EnterpriseCampaignApi {
   createMarketingSuppression(context: EnterpriseContentRequestContext,
     input: CreateEnterpriseMarketingSuppressionRequest, idempotencyKey: string):
     Promise<EnterpriseMarketingSuppressionResponse>;
+  listCountryPolicies(context: EnterpriseContentRequestContext):
+    Promise<EnterpriseCountryPoliciesResponse>;
+  publishCountryPolicy(context: EnterpriseContentRequestContext,
+    input: PublishEnterpriseCountryPolicyRequest, idempotencyKey: string):
+    Promise<EnterpriseCountryPolicyResponse>;
+  getCampaignCountryPolicyReadiness(context: EnterpriseContentRequestContext,
+    campaignId: string): Promise<EnterpriseCampaignCountryPolicyReadinessResponse>;
 }
 
 export function createEnterpriseCampaignApi(
@@ -152,6 +163,19 @@ export function createEnterpriseCampaignApi(
       "/enterprise/v1/suppression",
       { method: "POST", headers: { ...headers(context), "idempotency-key": key },
         body: JSON.stringify(input) },
+    ),
+    listCountryPolicies: (context) => request(
+      "/enterprise/v1/marketing/country-policies",
+      { headers: headers(context) },
+    ),
+    publishCountryPolicy: (context, input, key) => request(
+      "/enterprise/v1/marketing/country-policies",
+      { method: "POST", headers: { ...headers(context), "idempotency-key": key },
+        body: JSON.stringify(input) },
+    ),
+    getCampaignCountryPolicyReadiness: (context, campaignId) => request(
+      `${campaigns}/${encodeURIComponent(campaignId)}/country-policy-readiness`,
+      { headers: headers(context) },
     ),
   };
 }

@@ -1,6 +1,6 @@
 # 无界AI企业版技术架构
 
-版本：v1.40
+版本：v1.41
 日期：2026-07-19
 状态：SaaS 详细架构基线，已对齐统一通讯平台和 PostgreSQL Primary
 
@@ -407,7 +407,8 @@ tenant/actor/key/request hash 精确重放；撤回只追加 actor/reason/time/v
 `0039` 另外在 `marketing_call_tasks` insert/reschedule 层放置数据库 guard：同 tenant/Campaign/Lead 必须存在
 覆盖 `scheduled_at` 的 active Consent，否则 SQL 失败。因此即使后续 Scheduler 漏检，数据库也不能产生无授权
 任务。撤回 trigger 取消没有替代授权的 pending/scheduled/retry 任务；禁拨由 `ENT-MKT-004` 独立叠加，Country
-Policy、审批快照、Scheduler、Outbox、PSTN dispatch 和已发媒体物理中止仍由 `ENT-MKT-005..009` 分层实现和重验。
+Policy 已由 `ENT-MKT-005` 叠加；审批快照、Scheduler、Outbox、PSTN dispatch 和已发媒体物理中止仍由
+`ENT-MKT-006..009` 分层实现和重验。
 
 ### 7.4 Suppression 写入、全局投影与并发栅栏
 
@@ -421,8 +422,24 @@ HMAC 投影到同一 forced-RLS 表，要求 namespaced system actor 和固定 `
 删除，审计只保存 Lead/Campaign/scope/source/取消数，不保存明文号码。
 
 读取先返回本地 tenant/global 投影命中，再叠加全局注册表 readiness。当前外部注册表 Adapter 未配置，未命中本地
-投影也只能返回 not_ready；不能把未配置当作未命中。Country Policy、Scheduler claim、dispatch generation、PSTN
-Provider 取消和已开始媒体的物理停止继续由 `ENT-MKT-005..009` 实现。
+投影也只能返回 not_ready；不能把未配置当作未命中。Country Policy 已由 `ENT-MKT-005` 在下一层叠加；Scheduler
+claim、dispatch generation、PSTN Provider 取消和已开始媒体的物理停止继续由 `ENT-MKT-006..009` 实现。
+
+### 7.5 Country Policy 解析与执行边界
+
+`ENT-MKT-005` 把国家规则作为 tenant-owned、不可变、带明确有效期的发布版本接入。控制面路径为
+`Web/API -> campaign:approve guard -> Country Policy Repository -> forced-RLS PostgreSQL`；同 actor/key/request hash
+精确重放，同国家版本和有效期区间不能冲突。规则内容固定当地星期/分钟窗口、滚动频控、最小重试间隔、三段告知、
+语音信箱模式和合规确认依据，不调用 LLM 或外部法规 Provider 生成“合规”结论。
+
+读取路径分为 tenant 版本目录和 Campaign 目标时间 readiness。后者以 Campaign startAt（缺失时仅作当前时刻预览）
+逐国家解析有效版本，缺失、未来或过期都显式 blocked。Campaign 从 approved 进入 scheduled 时由独立数据库 trigger
+按 startAt 重验全部国家；`ENT-MKT-006` 再负责把解析结果冻结为审批快照，当前实现不提前替代审批。
+
+执行路径要求 call task 显式引用 `country_policy_version_id`。数据库 guard 在同一 `tenant + phone_hash` advisory lock
+中顺序复核 Suppression、Consent、Lead country/timezone、版本有效期、`scheduled_at AT TIME ZONE lead.timezone` 当地
+窗口、最小重试间隔和跨活动滚动频控。该栅栏只阻止形成或重排不合规任务，不生成 Scheduler claim、Outbox、usage
+hold 或 PSTN 副作用；真实法务、DST/时区库、并发和 Provider 仍需独立验收。
 
 ## 8. AI 客服架构
 
@@ -682,7 +699,7 @@ Worker 无权依据缓存继续执行敏感能力。
 
 生产 PostgreSQL 启动还必须验证企业签名 cutover evidence：证据绑定 staging 环境、
 commit、image digest、topology hash、目标 logical ID、system identifier/OID、公共31段与
-企业36段 manifest，并证明源库 writer fence、旧 API/Worker 角色会话为0、目标可写和
+企业41段 manifest，并证明源库 writer fence、旧 API/Worker 角色会话为0、目标可写和
 二次全量 hash 一致。本地逻辑恢复证据不提升为跨故障域 HA/PITR 结论。
 
 ## 10. 安全架构

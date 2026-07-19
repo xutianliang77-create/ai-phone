@@ -1,6 +1,6 @@
 # 无界AI企业版 UI 详细设计
 
-版本：v1.24
+版本：v1.25
 日期：2026-07-19
 状态：设计基线；企业 Web 公共组件、首批设置/工作台、响应式/主题/无障碍和 Web/iOS/Android 成员屏幕共享代码候选已实现，正式验收仍在开发
 
@@ -226,6 +226,13 @@ budget、usage aggregate 和显式 session trace report。卡片沿用同一 Mat
   网格单列。无数据、403、409 和 PostgreSQL 未就绪均使用统一页面状态，不生成 fixture。
 - “待调度”只向 `campaign:approve` 显示，审批未通过时禁用并说明依赖 `ENT-MKT-006`；即使聚合迁移成功也只
   提示尚未创建拨号任务或调用 PSTN，Scheduler/Provider 未接入时不得出现启动成功文案。
+- `ENT-MKT-005` 在活动列表上方增加国家策略面板，继续复用 `policy/schedule/speed/record_voice_over/voicemail`
+  Material Icons、浅深色 token、1px outline、8px 圆角和 `StatusPanel`。发布入口只向 `campaign:approve` 显示，
+  其他角色只读；配置区使用原生 details/form，不引入第二套图标、色板或模拟数据。
+- 表单固定显示当地星期/时间、滚动频控、最小重试间隔、品牌/AI 身份/营销目的告知、语音信箱、有效期和合规依据。
+  `compliant_message` 才显示留言版本与正文。顶部始终提示“策略配置不是法律结论”，发布成功也不显示法务通过。
+- 每个活动卡显示服务端目标时间 readiness；缺失、未生效、过期或 API 不可用均使用阻断语义，不以绿色或客户端
+  时区推算掩盖。策略卡显示国家、版本、有效期、频控、留言模式和缩略 hash；320/600px 单列，键盘与主题沿用现有门禁。
 
 ### 8.3 AI 客服坐席台
 

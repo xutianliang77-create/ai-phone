@@ -117,6 +117,12 @@ export class EnterpriseCampaignPostgresRepository {
         `campaign-blocked:${reasonCode}`, 409, occurredAt);
       return { status: "blocked" as const, reasonCode };
     }
+    const countryPolicyReason = await this.countryPolicyBlock(current);
+    if (countryPolicyReason) {
+      await this.recordCommand({ ...input, route: "campaign.schedule" },
+        `campaign-blocked:${countryPolicyReason}`, 409, occurredAt);
+      return { status: "blocked" as const, reasonCode: countryPolicyReason };
+    }
     const result = await this.session.query<CampaignRow>(`
       UPDATE enterprise.marketing_campaigns
       SET status = 'scheduled', updated_at = $3, version = version + 1
@@ -163,6 +169,28 @@ export class EnterpriseCampaignPostgresRepository {
       : { status: "conflict" as const };
   }
 
+  private async countryPolicyBlock(campaign: EnterpriseCampaignRecord) {
+    const targetAt = iso(campaign.schedule.startAt);
+    const target = Date.parse(targetAt);
+    const result = await this.session.query<CampaignCountryPolicyRow>(`
+      SELECT country_code, effective_from, expires_at
+      FROM enterprise.marketing_country_policy_versions
+      WHERE tenant_id = $1 AND country_code = ANY($2::text[])
+      ORDER BY country_code, effective_from DESC, id
+    `, [campaign.countryCodes]);
+    for (const countryCode of campaign.countryCodes) {
+      const versions = result.rows.filter((row) => row.country_code === countryCode);
+      if (versions.some((row) => Date.parse(iso(row.effective_from)) <= target &&
+        Date.parse(iso(row.expires_at)) > target)) continue;
+      if (versions.some((row) => Date.parse(iso(row.effective_from)) > target)) {
+        return "country_policy_not_yet_effective" as const;
+      }
+      return versions.length > 0 ? "country_policy_expired" as const
+        : "country_policy_missing" as const;
+    }
+    return null;
+  }
+
   private async recordMutation(input: MutationCommandInput & {
     campaign: EnterpriseCampaignRecord;
   }) {
@@ -204,6 +232,9 @@ interface CampaignRow extends Record<string, unknown> {
   policy_version: string | null; schedule: EnterpriseCampaignScheduleDto;
   concurrency_limit: number; created_at: string | Date; updated_at: string | Date;
   version: string | number; creation_key: string; creation_request_hash: string;
+}
+interface CampaignCountryPolicyRow extends Record<string, unknown> {
+  country_code: string; effective_from: string | Date; expires_at: string | Date;
 }
 
 function mapCampaign(row: CampaignRow): EnterpriseCampaignRecord {
@@ -262,7 +293,8 @@ function blockedResult(value: unknown) {
   const reason = value.startsWith("campaign-blocked:")
     ? value.slice("campaign-blocked:".length) : "";
   return ["approval_required", "policy_version_required", "schedule_start_required",
-    "schedule_start_elapsed", "status_not_schedulable"].includes(reason)
+    "schedule_start_elapsed", "status_not_schedulable", "country_policy_missing",
+    "country_policy_not_yet_effective", "country_policy_expired"].includes(reason)
     ? reason as ReturnType<typeof campaignScheduleBlock> : null;
 }
 function iso(value: unknown) {

@@ -48,7 +48,10 @@ export type EnterpriseCampaignScheduleBlock =
   | "policy_version_required"
   | "schedule_start_required"
   | "schedule_start_elapsed"
-  | "status_not_schedulable";
+  | "status_not_schedulable"
+  | "country_policy_missing"
+  | "country_policy_not_yet_effective"
+  | "country_policy_expired";
 
 export function campaignRequestHash(input: {
   ownerUserId: string;

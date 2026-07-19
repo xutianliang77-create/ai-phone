@@ -5,6 +5,8 @@ import { apiErrorState } from "../business-state.js";
 import { MaterialIcon } from "../components/MaterialIcon.js";
 import { CampaignLeadImportPanel } from
   "../components/CampaignLeadImportPanel.js";
+import { CampaignCountryPolicyPanel, CampaignCountryPolicyReadiness } from
+  "../components/CampaignCountryPolicyPanel.js";
 import { PageFrame } from "../components/PageFrame.js";
 import { StatusPanel } from "../components/StatusPanel.js";
 import { enterpriseIcons } from "../icon-registry.js";
@@ -138,10 +140,12 @@ export function CampaignsPage() {
     <section className="campaign-boundary" aria-label="当前实现边界">
       <MaterialIcon name={enterpriseIcons.campaign.approval} />
       <div><strong>活动未审批时服务端禁止调度</strong>
-        <span>线索导入和不可变授权证据已接入；禁拨、国家策略、审批流、Scheduler 和 PSTN 仍未接入，本页不显示模拟成功。</span>
+        <span>线索、授权、禁拨和国家策略已接入；审批快照、Scheduler 和 PSTN 仍未接入，本页不显示模拟成功。</span>
       </div>
     </section>
     {notice ? <p className="campaign-notice" role="status">{notice}</p> : null}
+    {context ? <CampaignCountryPolicyPanel api={api} context={context}
+      canPublish={canApprove} /> : null}
     {canWrite ? <form className="campaign-form" onSubmit={(event) => {
       event.preventDefault(); void saveCampaign();
     }}>
@@ -193,6 +197,8 @@ export function CampaignsPage() {
             {statusLabel(campaign.status)}</span><h2>{campaign.name}</h2></div>
             <span className="campaign-card__version">v{campaign.version}</span></header>
           <p>{campaign.objective}</p>
+          {context ? <CampaignCountryPolicyReadiness api={api} context={context}
+            campaign={campaign} /> : null}
           <dl className="campaign-facts">
             <div><dt><MaterialIcon name={enterpriseIcons.campaign.countries} />国家</dt>
               <dd>{campaign.countryCodes.join(" · ")}</dd></div>
