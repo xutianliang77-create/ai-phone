@@ -20,10 +20,12 @@ RUN npm ci && \
     npm run build -w @translation/contracts && \
     npm run build -w @translation/llm && \
     npm run build -w @translation/platform-security && \
+    npm run build -w @translation/speech-quality && \
     npm run build -w @translation/api-server && \
     npm run build -w @translation/realtime-gateway && \
     npm run build -w @translation/translation-worker && \
     npm run build -w @translation/pstn-bridge && \
+    npm run build -w @translation/srt-ingress-bridge && \
     npm run build -w @translation/voice-agent-runtime
 
 ENV NODE_ENV=production \

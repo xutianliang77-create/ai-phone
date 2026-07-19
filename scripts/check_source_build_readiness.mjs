@@ -34,10 +34,13 @@ export function checkSourceBuildReadiness(
     "packages/contracts/dist/index.js",
     "packages/llm/dist/index.js",
     "packages/platform-security/dist/index.js",
+    "packages/speech-quality/dist/index.js",
     "services/api-server/dist/main.js",
     "services/realtime-gateway/dist/main.js",
     "services/translation-worker/dist/main.js",
     "services/pstn-bridge/dist/main.js",
+    "services/srt-ingress-bridge/dist/main.js",
+    "services/voice-agent-runtime/dist/agent-server.js",
   ];
   const missing = entrypoints.filter(
     (file) => !existsSync(path.join(repositoryRoot, file)),
@@ -51,10 +54,13 @@ export function checkSourceBuildReadiness(
     "@translation/contracts",
     "@translation/llm",
     "@translation/platform-security",
+    "@translation/speech-quality",
     "@translation/api-server",
     "@translation/realtime-gateway",
     "@translation/translation-worker",
     "@translation/pstn-bridge",
+    "@translation/srt-ingress-bridge",
+    "@translation/voice-agent-runtime",
   ]) {
     if (!dockerfile.includes(`npm run build -w ${workspace}`)) {
       issues.push(`Dockerfile does not build ${workspace}`);
