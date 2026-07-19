@@ -1,6 +1,9 @@
+import re
+
 from app.model_loader import AsrEngine
 from app.schemas import (
     AsrBoundaryRequest,
+    AsrCorrectionTerm,
     AsrFlushRequest,
     AsrTranscribeRequest,
     AsrTranscribeResponse,
@@ -42,30 +45,71 @@ class AsrService:
         self,
         request: AsrTranscribeRequest,
     ) -> AsrTranscribeResponse | None:
-        return await self.engine.transcribe(request)
+        response = await self.engine.transcribe(request)
+        return corrected_response(response, request.corrections)
 
     async def flush(
         self,
         session_id: str,
         request: AsrFlushRequest,
     ) -> AsrTranscribeResponse | None:
-        return await self.engine.flush(
+        response = await self.engine.flush(
             session_id=session_id,
             source_language=request.sourceLanguage,
             target_language=request.targetLanguage,
         )
+        return corrected_response(response, request.corrections)
 
     async def commit_boundary(
         self,
         session_id: str,
         request: AsrBoundaryRequest,
     ) -> AsrTranscribeResponse | None:
-        return await self.engine.commit_boundary(
+        response = await self.engine.commit_boundary(
             session_id=session_id,
             boundary_ms=request.boundaryMs,
             source_language=request.sourceLanguage,
             target_language=request.targetLanguage,
         )
+        return corrected_response(response, request.corrections)
 
     async def close_session(self, session_id: str) -> None:
         await self.engine.close_session(session_id)
+
+
+def corrected_response(
+    response: AsrTranscribeResponse | None,
+    corrections: list[AsrCorrectionTerm],
+) -> AsrTranscribeResponse | None:
+    if response is None or not corrections:
+        return response
+    replacements: dict[str, str] = {}
+    sources: dict[str, str] = {}
+    for correction in corrections:
+        source = correction.fromText.strip()
+        target = correction.toText.strip()
+        key = source.casefold()
+        if not source or not target or key in replacements:
+            continue
+        replacements[key] = target
+        sources[key] = source
+    if not replacements:
+        return response
+    pattern = re.compile(
+        "|".join(
+            re.escape(sources[key])
+            for key in sorted(
+                sources,
+                key=lambda item: len(sources[item]),
+                reverse=True,
+            )
+        ),
+        re.IGNORECASE,
+    )
+    text = pattern.sub(
+        lambda match: replacements[match.group(0).casefold()],
+        response.text,
+    )
+    if text == response.text:
+        return response
+    return response.model_copy(update={"text": text})
