@@ -324,6 +324,33 @@
 .campaign-approval-actions label { display: grid; gap: 4px;
   min-width: min(100%, 260px); color: var(--color-outline);
   font-size: .75rem; font-weight: 700; }
+.campaign-scheduler-panel { border: 1px solid var(--color-outline-variant);
+  border-radius: var(--radius); background: var(--color-surface); }
+.campaign-scheduler-panel > summary { display: flex; align-items: center;
+  justify-content: space-between; gap: 12px; padding: 10px 12px; cursor: pointer; }
+.campaign-scheduler-panel > summary span,
+.campaign-scheduler-boundary { display: flex; align-items: center; gap: 8px; }
+.campaign-scheduler-panel > summary small { color: var(--color-outline); }
+.campaign-scheduler-panel__body { display: grid; gap: 12px; padding: 0 12px 12px; }
+.campaign-scheduler-boundary { margin: 0; padding: 10px; border-radius: var(--radius);
+  color: var(--color-tertiary); background: color-mix(in srgb,
+    var(--color-tertiary) 8%, transparent); font-size: .8125rem; }
+.campaign-scheduler-status { display: grid; gap: 12px; }
+.campaign-scheduler-status > header { display: flex; align-items: flex-start;
+  justify-content: space-between; gap: 12px; }
+.campaign-scheduler-status > header div { display: grid; gap: 3px; }
+.campaign-scheduler-status > header small { color: var(--color-outline); }
+.campaign-scheduler-counts { display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin: 0; }
+.campaign-scheduler-counts div { padding: 8px; border-radius: var(--radius);
+  background: var(--color-surface-high); text-align: center; }
+.campaign-scheduler-counts dt,
+.campaign-scheduler-fences dt { color: var(--color-outline); font-size: .75rem; }
+.campaign-scheduler-counts dd { margin: 3px 0 0; font-weight: 700; }
+.campaign-scheduler-fences { display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin: 0; }
+.campaign-scheduler-fences div { min-width: 0; }
+.campaign-scheduler-fences dd { margin: 3px 0 0; overflow-wrap: anywhere; }
 
 @media (max-width: 760px) {
   .campaign-list,
@@ -348,6 +375,7 @@
   .country-policy-card dl div { display: grid; gap: 3px; }
   .country-policy-card dd { text-align: left; }
   .campaign-validation-card dl { grid-template-columns: 1fr 1fr; }
+  .campaign-scheduler-counts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .campaign-approval-actions > * { width: 100%; }
 }
 
@@ -361,4 +389,5 @@
   .lead-import-batches footer { align-items: flex-start; flex-direction: column; }
   .consent-card footer { align-items: stretch; flex-direction: column; }
   .campaign-validation-card dl { grid-template-columns: 1fr; }
+  .campaign-scheduler-fences { grid-template-columns: 1fr; }
 }

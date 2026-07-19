@@ -64,6 +64,7 @@ export interface UpdateEnterpriseCampaignRequest {
 
 export interface EnterpriseCampaignResponse {
   campaign: EnterpriseCampaignDto;
+  generatedTaskCount?: number;
   replayed?: boolean;
 }
 

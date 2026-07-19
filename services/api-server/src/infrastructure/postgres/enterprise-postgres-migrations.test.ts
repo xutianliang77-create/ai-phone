@@ -54,6 +54,7 @@ describe("enterprise PostgreSQL migrations", () => {
       "0041_enterprise_marketing_country_policies",
       "0042_enterprise_marketing_campaign_approvals",
       "0043_enterprise_marketing_approval_guards",
+      "0044_enterprise_marketing_scheduler",
     ]);
     for (const migration of migrations) {
       expect(migration.up.trim()).not.toBe("");

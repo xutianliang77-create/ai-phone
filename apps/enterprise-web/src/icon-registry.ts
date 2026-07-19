@@ -118,6 +118,8 @@ export const enterpriseIcons = {
     validate: "fact_check",
     approve: "verified",
     reject: "cancel",
+    scheduler: "pending_actions",
+    claim: "lock_clock",
   },
   appearance: {
     system: "brightness_auto",

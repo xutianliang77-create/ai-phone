@@ -15,6 +15,7 @@ import type {
   EnterpriseMarketingSuppressionEligibilityResponse,
   EnterpriseMarketingSuppressionResponse,
   EnterpriseMarketingSuppressionsResponse,
+  EnterpriseMarketingSchedulerStatusResponse,
   EnterpriseCountryPoliciesResponse,
   EnterpriseCountryPolicyResponse,
   EnterpriseCampaignCountryPolicyReadinessResponse,
@@ -46,6 +47,8 @@ export interface EnterpriseCampaignApi {
   scheduleCampaign(context: EnterpriseContentRequestContext, campaignId: string,
     input: { expectedVersion: number }, idempotencyKey: string):
     Promise<EnterpriseCampaignResponse>;
+  getCampaignSchedulerStatus(context: EnterpriseContentRequestContext, campaignId: string):
+    Promise<EnterpriseMarketingSchedulerStatusResponse>;
   listCampaignLeads(context: EnterpriseContentRequestContext, campaignId: string):
     Promise<EnterpriseCampaignLeadsResponse>;
   listLeadImportBatches(context: EnterpriseContentRequestContext, campaignId: string):
@@ -122,6 +125,10 @@ export function createEnterpriseCampaignApi(
       `${campaigns}/${encodeURIComponent(campaignId)}/schedule`,
       { method: "POST", headers: { ...headers(context), "idempotency-key": key },
         body: JSON.stringify(input) },
+    ),
+    getCampaignSchedulerStatus: (context, campaignId) => request(
+      `${campaigns}/${encodeURIComponent(campaignId)}/scheduler`,
+      { headers: headers(context) },
     ),
     listCampaignLeads: (context, campaignId) => request(
       `${campaigns}/${encodeURIComponent(campaignId)}/leads`,

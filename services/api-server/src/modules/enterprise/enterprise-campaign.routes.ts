@@ -146,6 +146,8 @@ export function registerEnterpriseCampaignRoutes(
         `campaign_${result.reasonCode}`, `Campaign scheduling blocked: ${result.reasonCode}`);
       if (!("campaign" in result)) return postgresRequired(reply);
       return reply.send({ campaign: campaignDto(result.campaign),
+        ...(result.generatedTaskCount !== undefined
+          ? { generatedTaskCount: result.generatedTaskCount } : {}),
         ...(result.status === "replayed" ? { replayed: true } : {}) });
     },
   );

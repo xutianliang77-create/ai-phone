@@ -36,6 +36,7 @@ type ContentApi = Pick<EnterpriseApi,
   | "getSupportQualitySession"
   | "listCampaigns" | "getCampaign" | "createCampaign" | "updateCampaign"
   | "scheduleCampaign" | "listCampaignLeads" | "listLeadImportBatches"
+  | "getCampaignSchedulerStatus"
   | "importCampaignLeads" | "rollbackLeadImport"
   | "listMarketingConsents" | "getMarketingConsentEligibility"
   | "registerMarketingConsent" | "revokeMarketingConsent"
@@ -171,5 +172,6 @@ export function fakeEnterpriseContentApi(): ContentApi {
     createCampaign: vi.fn(),
     updateCampaign: vi.fn(),
     scheduleCampaign: vi.fn(),
+    getCampaignSchedulerStatus: vi.fn().mockRejectedValue(new Error("not configured")),
   };
 }

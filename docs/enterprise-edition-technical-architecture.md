@@ -1,6 +1,6 @@
 # 无界AI企业版技术架构
 
-版本：v1.42
+版本：v1.43
 日期：2026-07-19
 状态：SaaS 详细架构基线，已对齐统一通讯平台和 PostgreSQL Primary
 
@@ -454,6 +454,22 @@ approve 在同一事务重建 snapshot，逐项比较 Campaign、Policy set、Le
 scheduled transition 和未来 call task 都调用当前快照复核；task 还必须显式携带同一 approval decision，并出现在冻结的
 Lead/Consent/Policy set 中。任何证据漂移都失败闭合，但本层不生成任务、claim、hold、Outbox 或 Provider 请求。
 
+### 7.7 Scheduler task、claim 与故障隔离
+
+`ENT-MKT-007` 把调度拆为两个 tenant transaction。schedule transaction 锁 Campaign 并复核 approval snapshot，
+按 Lead timezone 与冻结 Country Policy 解析当地窗口，完整生成确定性 task 后才迁移 Campaign；目标数量不完整时整批
+回滚。claim transaction 先锁 tenant route，再以 `FOR UPDATE SKIP LOCKED` 选择 due task，逐 task 锁 Campaign、取得
+租户/活动容量和60秒 usage hold，最后以 version CAS 写入 owner/token hash/lease/generation。
+
+数据库 `0044` trigger 是第二道执行面：只允许 Scheduler namespaced actor 建立 dispatching claim，并重验当前
+billing/subscription/entitlement、approval、Lead/link、Consent、Suppression、Policy、当地窗口、容量和精确 hold。
+租约回收、授权撤回与禁拨写入在 tenant transaction 内先释放 hold，再把未派发 task 收敛为 retry/cancelled。
+Scheduler 通过内部命令访问业务库，不获得跨 tenant 扫描入口；每次 claim 由签名 route 与当前 route epoch 绑定，
+一个 tenant 的容量耗尽只产生 capacity skip，不占据其他 tenant 的 claim transaction。
+
+本层无 communication session、Outbox、PSTN 或媒体资源；下一层 `ENT-MKT-008` 必须使用 claim generation/token 建立
+scoped dispatch 和 Provider 幂等副作用，不能把 task 的 dispatching 状态直接解释为“已拨号”。
+
 ## 8. AI 客服架构
 
 ```mermaid
@@ -712,7 +728,7 @@ Worker 无权依据缓存继续执行敏感能力。
 
 生产 PostgreSQL 启动还必须验证企业签名 cutover evidence：证据绑定 staging 环境、
 commit、image digest、topology hash、目标 logical ID、system identifier/OID、公共31段与
-企业43段 manifest，并证明源库 writer fence、旧 API/Worker 角色会话为0、目标可写和
+企业44段 manifest，并证明源库 writer fence、旧 API/Worker 角色会话为0、目标可写和
 二次全量 hash 一致。本地逻辑恢复证据不提升为跨故障域 HA/PITR 结论。
 
 ## 10. 安全架构

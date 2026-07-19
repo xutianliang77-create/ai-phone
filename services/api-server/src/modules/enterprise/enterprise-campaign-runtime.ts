@@ -52,7 +52,8 @@ export interface EnterpriseCampaignRepositoryRuntime {
     requestHash: string;
     occurredAt: string;
   }): Promise<
-    | { status: "scheduled" | "replayed"; campaign: EnterpriseCampaignRecord }
+    | { status: "scheduled" | "replayed"; campaign: EnterpriseCampaignRecord;
+        generatedTaskCount?: number }
     | { status: "not_found" | "conflict" | "idempotency_conflict" }
     | { status: "blocked"; reasonCode: EnterpriseCampaignScheduleBlock;
         replayed?: boolean }

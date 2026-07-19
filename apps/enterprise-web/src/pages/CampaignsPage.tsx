@@ -9,6 +9,8 @@ import { CampaignCountryPolicyPanel, CampaignCountryPolicyReadiness } from
   "../components/CampaignCountryPolicyPanel.js";
 import { CampaignApprovalPanel } from
   "../components/CampaignApprovalPanel.js";
+import { CampaignSchedulerPanel } from
+  "../components/CampaignSchedulerPanel.js";
 import { PageFrame } from "../components/PageFrame.js";
 import { StatusPanel } from "../components/StatusPanel.js";
 import { enterpriseIcons } from "../icon-registry.js";
@@ -125,10 +127,10 @@ export function CampaignsPage() {
     try {
       const requestKey = `schedule:${campaign.id}:v${campaign.version}`;
       const idempotencyKey = commandKey(commandKeys.current, requestKey);
-      await api.scheduleCampaign(context, campaign.id,
+      const result = await api.scheduleCampaign(context, campaign.id,
         { expectedVersion: campaign.version }, idempotencyKey);
       commandKeys.current.delete(requestKey);
-      setNotice("活动聚合已进入待调度；尚未创建拨号任务或调用 PSTN。");
+      setNotice(`已按审批快照生成 ${result.generatedTaskCount ?? 0} 个调度任务；尚未创建通信会话或调用 PSTN。`);
       await refresh();
     } catch (error) {
       setLoad({ status: "failed", error });
@@ -142,7 +144,7 @@ export function CampaignsPage() {
     <section className="campaign-boundary" aria-label="当前实现边界">
       <MaterialIcon name={enterpriseIcons.campaign.approval} />
       <div><strong>活动未审批时服务端禁止调度</strong>
-        <span>线索、授权、禁拨、国家策略和不可变审批快照已接入；Scheduler 和 PSTN 仍未接入，本页不显示模拟成功。</span>
+        <span>线索、授权、禁拨、国家策略、审批快照和 Scheduler 已接入；通信会话与 PSTN 尚未接入，本页不显示模拟外呼成功。</span>
       </div>
     </section>
     {notice ? <p className="campaign-notice" role="status">{notice}</p> : null}
@@ -204,6 +206,8 @@ export function CampaignsPage() {
           {context ? <CampaignApprovalPanel api={api} context={context}
             campaign={campaign} canWrite={canWrite} canApprove={canApprove}
             onChanged={refresh} /> : null}
+          {context ? <CampaignSchedulerPanel api={api} context={context}
+            campaign={campaign} /> : null}
           <dl className="campaign-facts">
             <div><dt><MaterialIcon name={enterpriseIcons.campaign.countries} />国家</dt>
               <dd>{campaign.countryCodes.join(" · ")}</dd></div>

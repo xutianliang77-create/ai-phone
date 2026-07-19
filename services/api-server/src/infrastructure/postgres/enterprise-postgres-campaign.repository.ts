@@ -1,10 +1,6 @@
 import type { EnterpriseCampaignScheduleDto } from "@translation/contracts";
-import {
-  campaignScheduleBlock,
-  mergeCampaignDraft,
-  type CreateEnterpriseCampaignInput,
-  type EnterpriseCampaignRecord,
-} from "../../modules/enterprise/enterprise-campaign.js";
+import { campaignScheduleBlock, mergeCampaignDraft, type CreateEnterpriseCampaignInput,
+  type EnterpriseCampaignRecord } from "../../modules/enterprise/enterprise-campaign.js";
 import { enterprisePostgresAccountSubjectId, enterprisePostgresActorSubjectId } from
   "./enterprise-postgres-subject-id.js";
 import type { EnterpriseTenantPostgresSession } from
@@ -12,10 +8,10 @@ import type { EnterpriseTenantPostgresSession } from
 import { enterpriseCampaignApprovalSnapshotBlock,
   enterpriseCampaignCountryPolicyBlock } from
   "./enterprise-postgres-campaign-approval-snapshot.js";
-
+import { insertEnterpriseMarketingTasks, prepareEnterpriseMarketingTasks } from
+  "./enterprise-postgres-marketing-task-materializer.js";
 export class EnterpriseCampaignPostgresRepository {
   constructor(private readonly session: EnterpriseTenantPostgresSession) {}
-
   async create(input: CreateEnterpriseCampaignInput) {
     const value = campaignContent(input);
     const result = await this.session.query<CampaignRow>(`
@@ -41,7 +37,6 @@ export class EnterpriseCampaignPostgresRepository {
     }
     return { status: "replayed" as const, campaign: replay.campaign };
   }
-
   async findByCreationKey(key: string) {
     const result = await this.session.query<CampaignRow>(`
       SELECT * FROM enterprise.marketing_campaigns
@@ -51,7 +46,6 @@ export class EnterpriseCampaignPostgresRepository {
     return row ? { campaign: mapCampaign(row), requestHash: row.creation_request_hash }
       : null;
   }
-
   async find(campaignId: string, lock = false) {
     const result = await this.session.query<CampaignRow>(`
       SELECT * FROM enterprise.marketing_campaigns
@@ -59,7 +53,6 @@ export class EnterpriseCampaignPostgresRepository {
     `, [uuid(campaignId)]);
     return result.rows[0] ? mapCampaign(result.rows[0]) : null;
   }
-
   async list() {
     const result = await this.session.query<CampaignRow>(`
       SELECT * FROM enterprise.marketing_campaigns
@@ -69,7 +62,6 @@ export class EnterpriseCampaignPostgresRepository {
     `);
     return result.rows.map(mapCampaign);
   }
-
   async updateDraft(input: {
     campaignId: string; expectedVersion: number;
     patch: Parameters<typeof mergeCampaignDraft>[1]; updatedAt: string;
@@ -105,7 +97,6 @@ export class EnterpriseCampaignPostgresRepository {
     await this.recordMutation({ ...input, route: "campaign.draft_update", campaign });
     return { status: "updated" as const, campaign };
   }
-
   async schedule(input: {
     campaignId: string; expectedVersion: number; occurredAt: string;
     idempotencyKey: string; requestHash: string;
@@ -138,6 +129,15 @@ export class EnterpriseCampaignPostgresRepository {
         `campaign-blocked:${countryPolicyReason}`, 409, occurredAt);
       return { status: "blocked" as const, reasonCode: countryPolicyReason };
     }
+    const prepared = await prepareEnterpriseMarketingTasks(this.session, current);
+    if (prepared.status !== "ready") {
+      const schedulerReason = prepared.status === "snapshot_invalid"
+        ? "scheduler_snapshot_invalid" as const
+        : "scheduler_calling_window_unavailable" as const;
+      await this.recordCommand({ ...input, route: "campaign.schedule" },
+        `campaign-blocked:${schedulerReason}`, 409, occurredAt);
+      return { status: "blocked" as const, reasonCode: schedulerReason };
+    }
     const result = await this.session.query<CampaignRow>(`
       UPDATE enterprise.marketing_campaigns
       SET status = 'scheduled', updated_at = $3, version = version + 1
@@ -147,10 +147,13 @@ export class EnterpriseCampaignPostgresRepository {
     `, [uuid(input.campaignId), occurredAt, input.expectedVersion]);
     if (!result.rows[0]) return { status: "conflict" as const };
     const campaign = mapCampaign(result.rows[0]);
-    await this.recordMutation({ ...input, route: "campaign.schedule", campaign });
-    return { status: "scheduled" as const, campaign };
+    const generatedTaskCount = await insertEnterpriseMarketingTasks(
+      this.session, campaign, prepared.tasks, occurredAt,
+    );
+    await this.recordMutation({ ...input, route: "campaign.schedule", campaign,
+      generatedTaskCount });
+    return { status: "scheduled" as const, campaign, generatedTaskCount };
   }
-
   private async replayMutation(input: MutationCommandInput) {
     const actorId = enterprisePostgresActorSubjectId(this.session.context.actorUserId);
     await this.session.query(`
@@ -180,17 +183,18 @@ export class EnterpriseCampaignPostgresRepository {
     if (!campaign) return { status: "not_found" as const };
     return expected && campaign.version === expected.version &&
       campaign.status === expected.status
-      ? { status: "replayed" as const, campaign }
+      ? { status: "replayed" as const, campaign,
+          ...(expected.generatedTaskCount !== undefined
+            ? { generatedTaskCount: expected.generatedTaskCount } : {}) }
       : { status: "conflict" as const };
   }
-
   private async recordMutation(input: MutationCommandInput & {
-    campaign: EnterpriseCampaignRecord;
+    campaign: EnterpriseCampaignRecord; generatedTaskCount?: number;
   }) {
     const createdAt = iso(input.campaign.updatedAt);
-    await this.recordCommand(input, commandResultRef(input.campaign), 200, createdAt);
+    await this.recordCommand(input, commandResultRef(input.campaign,
+      input.generatedTaskCount), 200, createdAt);
   }
-
   private async recordCommand(input: MutationCommandInput, resultRef: string,
     responseCode: number, createdAt: string) {
     const expiresAt = new Date(Date.parse(createdAt) + 24 * 60 * 60 * 1_000)
@@ -205,18 +209,15 @@ export class EnterpriseCampaignPostgresRepository {
       responseCode, resultRef, uuid(input.campaignId), iso(createdAt), expiresAt]);
   }
 }
-
 interface MutationCommandInput {
   campaignId: string; expectedVersion: number;
   idempotencyKey: string; requestHash: string;
   route: "campaign.draft_update" | "campaign.schedule";
 }
-
 interface CampaignCommandRow extends Record<string, unknown> {
   actor_id: string; route: string; idempotency_key: string; request_hash: string;
   resource_id: string | null; response_body_ref: string | null;
 }
-
 interface CampaignRow extends Record<string, unknown> {
   id: string; tenant_id: string; name: string; objective: string;
   owner_user_id: string; country_codes: string[]; language_codes: string[];
@@ -267,18 +268,22 @@ function hash(value: unknown) {
     throw new Error("Invalid campaign request hash");
   return value;
 }
-function commandResultRef(campaign: EnterpriseCampaignRecord) {
-  return `campaign:v${campaign.version}:${campaign.status}`;
+function commandResultRef(campaign: EnterpriseCampaignRecord, generatedTaskCount?: number) {
+  return `campaign:v${campaign.version}:${campaign.status}${generatedTaskCount === undefined
+    ? "" : `:tasks${generatedTaskCount}`}`;
 }
 function commandResult(value: unknown) {
   if (typeof value !== "string") return null;
-  const match = /^campaign:v([1-9][0-9]*):([a-z_]+)$/.exec(value);
+  const match = /^campaign:v([1-9][0-9]*):([a-z_]+)(?::tasks([0-9]+))?$/.exec(value);
   const version = Number(match?.[1]);
   const status = match?.[2] as EnterpriseCampaignRecord["status"] | undefined;
+  const generatedTaskCount = match?.[3] === undefined ? undefined : Number(match[3]);
   return match && Number.isSafeInteger(version) && version > 0 && status &&
+    (generatedTaskCount === undefined || Number.isSafeInteger(generatedTaskCount)) &&
     ["draft", "validating", "pending_approval", "approved", "scheduled", "running",
       "paused", "completed", "cancelled", "failed"].includes(status)
-    ? { version, status } : null;
+    ? { version, status, ...(generatedTaskCount !== undefined
+      ? { generatedTaskCount } : {}) } : null;
 }
 function blockedResult(value: unknown) {
   if (typeof value !== "string") return null;
@@ -287,7 +292,8 @@ function blockedResult(value: unknown) {
   return ["approval_required", "policy_version_required", "schedule_start_required",
     "schedule_start_elapsed", "status_not_schedulable", "country_policy_missing",
     "country_policy_not_yet_effective", "country_policy_expired",
-    "approval_snapshot_required", "approval_snapshot_stale"].includes(reason)
+    "approval_snapshot_required", "approval_snapshot_stale",
+    "scheduler_snapshot_invalid", "scheduler_calling_window_unavailable"].includes(reason)
     ? reason as ReturnType<typeof campaignScheduleBlock> : null;
 }
 function iso(value: unknown) {

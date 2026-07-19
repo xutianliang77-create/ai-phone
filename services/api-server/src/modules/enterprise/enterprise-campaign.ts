@@ -54,7 +54,9 @@ export type EnterpriseCampaignScheduleBlock =
   | "country_policy_not_yet_effective"
   | "country_policy_expired"
   | "approval_snapshot_required"
-  | "approval_snapshot_stale";
+  | "approval_snapshot_stale"
+  | "scheduler_snapshot_invalid"
+  | "scheduler_calling_window_unavailable";
 
 export function campaignRequestHash(input: {
   ownerUserId: string;

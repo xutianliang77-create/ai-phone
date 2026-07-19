@@ -1,6 +1,6 @@
 # 无界AI企业版详细功能设计
 
-版本：v1.39
+版本：v1.40
 日期：2026-07-19
 状态：SaaS 详细设计基线，已对齐统一通讯平台
 
@@ -260,6 +260,19 @@ Provider、usage/ledger 和 trace；跨会话业务聚合与货币成本尚未�
   SQL 比对当前策略、Lead、Consent、Suppression；撤回、禁拨、新旧集合替换或伪造 ID 时任务数为零。
 - Web 只展示目标时间、数量、缩略 hash、服务端 issue 和决策历史；“批准”不等于具体法域法律意见，也不表示
   Scheduler、usage hold、Outbox 或 PSTN 已执行。legacy/SQLite/JSON 固定返回 PostgreSQL required。
+
+#### 5.2.6 Scheduler 首批实现边界
+
+- 活动 schedule 成功不再只改变聚合：服务端在同一 PostgreSQL 事务内按批准快照为每条冻结 Lead 生成一个确定性
+  attempt-1 task。每条 task 固定审批、国家策略、当地执行时间、生成 hash 与 actor；任一目标无法解析当地窗口时活动和
+  task 全部不变。
+- 内部 Scheduler 只领取已经到期且当前仍满足审批、active Lead/link、Consent、Suppression、Country Policy 和被叫
+  当地窗口的 task。每次领取必须同时获得活动/租户并发配额和60秒营销用量 hold，并绑定当前租户 route epoch、claim
+  owner、token hash、lease 和 generation。
+- Scheduler 崩溃只会让未派发 claim 在 lease 到期后释放 hold 并回到 retry。授权撤回或新增禁拨会同步取消未派发
+  claim；已经交给 Provider 的物理停止由 `ENT-MKT-008` 负责。
+- Web 调度器面板只读展示真实 task 数量、下个计划时间、活动/租户并发和预算状态。它不提供“开始拨号”，也不把 claim
+  显示为已接通或已完成。
 
 ### 5.3 AI 营销专员
 

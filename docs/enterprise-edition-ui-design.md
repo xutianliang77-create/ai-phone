@@ -1,6 +1,6 @@
 # 无界AI企业版 UI 详细设计
 
-版本：v1.26
+版本：v1.27
 日期：2026-07-19
 状态：设计基线；企业 Web 公共组件、首批设置/工作台、响应式/主题/无障碍和 Web/iOS/Android 成员屏幕共享代码候选已实现，正式验收仍在开发
 
@@ -239,6 +239,11 @@ budget、usage aggregate 和显式 session trace report。卡片沿用同一 Mat
 - 营销成员只看到“校验并提交审批”，主管/owner/admin 在 pending 且 ready 时看到“批准并固化快照”和必填拒绝理由。
   面板展示目标时间、Policy/Lead/Consent/Suppression 数量、snapshot/data hash、服务端 issue 和不可变 decision 历史；
   600px 下数量两列、420px 下单列。API 失败或 snapshot stale 一律保持阻断，不显示 Scheduler/PSTN 成功。
+- `ENT-MKT-007` 在每张活动卡增加默认折叠的只读“调度器”面板，沿用 `pending_actions/lock_clock` Material Icons、现有
+  token、1px outline、8px 圆角和 `StatusPanel`。展开时才请求服务端，失败不回退 fixture。
+- 面板展示 Scheduler 状态、九类任务计数、下个计划时间、活动并发、租户 entitlement 并发与营销预算状态；
+  760px 下计数两列、420px 下栅栏单列。始终说明 claim 只保留 task/hold，不创建 communication session、Outbox 或
+  PSTN。schedule 成功文案只显示服务端返回的物化任务数，不显示拨号成功。
 
 ### 8.3 AI 客服坐席台
 

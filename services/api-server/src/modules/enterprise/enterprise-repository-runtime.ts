@@ -78,6 +78,7 @@ import type { EnterpriseMarketingConsentRepositoryRuntime } from "./enterprise-m
 import type { EnterpriseMarketingSuppressionRepositoryRuntime } from "./enterprise-marketing-suppression-runtime.js";
 import type { EnterpriseMarketingCountryPolicyRepositoryRuntime } from "./enterprise-marketing-country-policy-runtime.js";
 import type { EnterpriseCampaignApprovalRepositoryRuntime } from "./enterprise-campaign-approval-runtime.js";
+import type { EnterpriseMarketingSchedulerRepositoryRuntime } from "./enterprise-marketing-scheduler-runtime.js";
 export type EnterpriseContextResult =
   { status: "resolved"; tenant: EnterpriseTenantRecord; member: EnterpriseMemberRecord } |
   { status: "access_denied" } | { status: "selection_required" };
@@ -96,7 +97,6 @@ export type EnterpriseLifecycleResult = {
     snapshot: NonNullable<EnterpriseTenantJobRecord["scopeSnapshot"]>;
   };
 };
-
 export interface EnterpriseRepositoryRuntime
   extends EnterpriseKnowledgeRepositoryRuntime,
     EnterpriseTerminologyRepositoryRuntime,
@@ -108,7 +108,7 @@ export interface EnterpriseRepositoryRuntime
     EnterpriseCampaignRepositoryRuntime, EnterpriseLeadImportRepositoryRuntime,
     EnterpriseMarketingConsentRepositoryRuntime,
     EnterpriseMarketingSuppressionRepositoryRuntime, EnterpriseMarketingCountryPolicyRepositoryRuntime,
-    EnterpriseCampaignApprovalRepositoryRuntime {
+    EnterpriseCampaignApprovalRepositoryRuntime, EnterpriseMarketingSchedulerRepositoryRuntime {
   readonly driver: "legacy" | "postgres";
   resolveContext(input: {
     userId: string;
@@ -258,7 +258,6 @@ export interface EnterpriseRepositoryRuntime
   ): Promise<Array<{ jobId: string; tenantId: string; actorUserId: string }>>;
   close(): Promise<void>;
 }
-
 export const legacyEnterpriseRepositoryRuntime: EnterpriseRepositoryRuntime = {
   driver: "legacy",
   async resolveContext(input) {

@@ -22,5 +22,9 @@ describe("enterprise marketing policy migrations", () => {
     expect(sql).toContain("approval_snapshot_id");
     expect(sql).toContain("current enterprise marketing campaign approval required");
     expect(sql).toContain("valid enterprise marketing task approval snapshot required");
+    expect(sql).toContain("CREATE TRIGGER marketing_call_tasks_scheduler_guard");
+    expect(sql).toContain("system:enterprise-marketing-scheduler");
+    expect(sql).toContain("worker.voice_agent_runtime.concurrent");
+    expect(sql).toContain("hold_record.amount = 60");
   });
 });

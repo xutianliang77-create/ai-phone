@@ -1,6 +1,6 @@
 # 无界AI企业版设计文档索引
 
-版本：v1.51
+版本：v1.52
 日期：2026-07-19
 状态：SaaS 详细设计基线，已纳入统一通讯平台和 PostgreSQL Primary 演进
 
@@ -46,11 +46,11 @@ cell Worker、JSON/SQLite 演示导入，以及全业务表 Primary 切换/恢�
 无界AI主产品公共 PostgreSQL migration、Primary Runtime、可靠 Inbox/Outbox、
 fencing、Billing/Product Records、verify-full 和韧性代码已形成稳定提交 `fe1c3c2`，并由
 `ENT-DATA-007` 合入企业分支。企业版已经完成单 driver、双 manifest、同库身份和分权
-连接的本地自动化，当前 manifest 为公共31段、enterprise 43段；`ENT-DATA-008` 和
+连接的本地自动化，当前 manifest 为公共31段、enterprise 44段；`ENT-DATA-008` 和
 `ENT-CORE-013/014/015` 已完成公共通讯 tenant scope、企业业务会话绑定、签名 Worker dispatch fence
 及设备/声音/录制策略快照的代码/本地自动化，但不能继承主产品 staging 验收。`ENT-DATA-009` 已增加
 31+16 migration manifest 的历史本地证据、全表主键分页 count/hash、WAL 水位、writer fence、签名
-cutover/restore 证据和 production startup 绑定门禁；当前 `0017..0043` 必须按31+43重新生成切换证据。
+cutover/restore 证据和 production startup 绑定门禁；当前 `0017..0044` 必须按31+44重新生成切换证据。
 `ENT-CORE-004` 已增加 tenant-scoped source/version/chunk、草稿审核发布状态机、发布后不可变约束、
 locale/country/product/effective-time 检索和知识引用 ID；
 `ENT-CORE-005` 已增加版本化 term pack/script template、审核发布和生效窗口、发布后不可变约束，
@@ -184,6 +184,11 @@ Enterprise Web 继续复用 `policy/schedule/speed/record_voice_over/voicemail` 
 Suppression 规范快照与 hash、validate/approve/reject API、同号码锁、状态转换和 schedule/task 数据库复核；Web 使用
 相同 Material Icons/token 按需读取并展示服务端证据。当前仅形成静态代码候选，自动化、真实 PostgreSQL/RLS、
 审批/撤回/禁拨竞态、浏览器和法务抽样未验收，保持 `in_progress`；Scheduler、Outbox、PSTN 属于 MKT-007..009。
+`ENT-MKT-007` 已增加 `0044` task generation/claim/lease/hold 栅栏、approval snapshot 到确定性 task 的同事务物化、
+IANA 当地窗口 due query、签名 route/current epoch、entitlement 租户并发、Campaign 并发、固定60秒 usage hold、
+`SKIP LOCKED`/CAS claim、过期重试和撤回/禁拨释放，以及同风格只读 Web 调度面板。当前只形成静态候选；自动化、
+真实 PostgreSQL/RLS、50并发、cell 隔离和浏览器未验收，保持 `in_progress`。communication session、Outbox、PSTN
+Provider side effect 明确留给 `ENT-MKT-008`。
 当前按要求未执行
 测试、migration、RLS、RBAC/ticket/evidence 攻击、并发共享、Worker/Provider、四人媒体、浏览器、真机与重启恢复，
 因此上述任务均保持 `in_progress`。

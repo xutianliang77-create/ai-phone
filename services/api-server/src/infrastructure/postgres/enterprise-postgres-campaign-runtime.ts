@@ -54,7 +54,8 @@ export function createEnterprisePostgresCampaignRuntime(
         if (result.status === "scheduled") await audit(unit, input.context,
           "campaign.schedule", result.campaign.id, result.campaign.updatedAt,
           { version: result.campaign.version, status: result.campaign.status,
-            policyVersion: result.campaign.policyVersion });
+            policyVersion: result.campaign.policyVersion,
+            generatedTaskCount: result.generatedTaskCount });
         if (result.status === "blocked" &&
           !("replayed" in result && result.replayed)) await audit(unit, input.context,
           "campaign.schedule", input.campaignId, input.occurredAt,

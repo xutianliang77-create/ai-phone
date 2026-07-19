@@ -77,6 +77,7 @@ export const enterpriseSubjectColumns = [
   ["marketing_country_policy_versions", "published_by"],
   ["marketing_campaign_validation_snapshots", "validated_by"],
   ["marketing_campaign_approval_decisions", "decided_by"],
+  ["marketing_call_tasks", "generated_by"],
   ["support_queues", "created_by"],
   ["support_sessions", "assigned_user_id"],
   ["meetings", "host_user_id"],
