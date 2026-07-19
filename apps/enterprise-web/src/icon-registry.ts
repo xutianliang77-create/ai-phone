@@ -121,6 +121,8 @@ export const enterpriseIcons = {
     scheduler: "pending_actions",
     claim: "lock_clock",
     pstn: "phone_in_talk",
+    agent: "smart_toy",
+    disclosure: "campaign",
   },
   appearance: {
     system: "brightness_auto",

@@ -17,6 +17,8 @@ import { enterpriseIcons } from "../icon-registry.js";
 
 const CampaignPstnDispatchPanel = lazy(() =>
   import("../components/CampaignPstnDispatchPanel.js"));
+const CampaignMarketingAgentPanel = lazy(() =>
+  import("../components/CampaignMarketingAgentPanel.js"));
 
 type LoadState =
   | { status: "loading" }
@@ -211,6 +213,11 @@ export function CampaignsPage() {
             onChanged={refresh} /> : null}
           {context ? <CampaignSchedulerPanel api={api} context={context}
             campaign={campaign} /> : null}
+          {context ? <Suspense fallback={<StatusPanel state="loading"
+            description="正在加载 Marketing Agent 配置。" />}>
+            <CampaignMarketingAgentPanel api={api} context={context}
+              campaign={campaign} canWrite={canWrite} />
+          </Suspense> : null}
           {context ? <Suspense fallback={<StatusPanel state="loading"
             description="正在加载 PSTN 派发状态面板。" />}>
             <CampaignPstnDispatchPanel api={api} context={context}

@@ -46,7 +46,10 @@ describe("enterprise marketing PSTN dispatch", () => {
     const result = await provider.dispatch({ idempotencyKey, draftId: taskId,
       callId: "00000000-0000-4000-8000-000000000003", targetPhone: "+14155552671",
       objective: "预约演示", suggestedScript: "预约演示", language: "zh-CN",
-      consentPromptVersion: "policy-1", enterpriseContext: { tenantId,
+      consentPromptVersion: "policy-1", enterpriseAgent: {
+        runtimeUrl: "https://agent.example.test/enterprise", ticket: "signed.ticket",
+        runId: "00000000-0000-4000-8000-000000000004", disclosureRequired: true,
+      }, enterpriseContext: { tenantId,
         taskId, homeRegion: "cn-north", cellId: "cell-a", routeEpoch: 1,
         dispatchGeneration: 1 } });
     expect(result).toEqual({ status: "accepted", providerCallId: "provider-call-1" });

@@ -43,6 +43,12 @@ export interface EnterpriseMarketingPstnCallRequest {
   suggestedScript: string;
   language: string;
   consentPromptVersion: string;
+  enterpriseAgent: {
+    runtimeUrl: string;
+    ticket: string;
+    runId: string;
+    disclosureRequired: true;
+  };
   enterpriseContext: {
     tenantId: string;
     homeRegion: string;
@@ -54,7 +60,7 @@ export interface EnterpriseMarketingPstnCallRequest {
 }
 
 export function marketingPstnIdentity(input: {
-  kind: "dispatch" | "binding" | "session";
+  kind: "dispatch" | "binding" | "session" | "agent_run" | "agent_ticket";
   tenantId: string;
   taskId: string;
   generation: number;

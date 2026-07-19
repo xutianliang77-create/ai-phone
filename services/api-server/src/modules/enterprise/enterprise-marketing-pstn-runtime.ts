@@ -20,12 +20,15 @@ export interface EnterpriseMarketingPstnRepositoryRuntime {
   prepareMarketingPstnDispatch?(input: { tenantId: string; homeRegion: string;
     cellId: string; routeEpoch: number; taskId: string; dispatchGeneration: number;
     claimToken: string; provider: "pstn_http" | "pstn_fonoster";
-    providerFingerprint: string; traceId: string; now: Date }): Promise<
+    providerFingerprint: string; agentProviderFingerprint: string;
+    enterpriseAgent: EnterpriseMarketingPstnCallRequest["enterpriseAgent"];
+    traceId: string; now: Date }): Promise<
       { status: "prepared"; dispatch: EnterpriseMarketingPstnDispatchRecord;
         request: EnterpriseMarketingPstnCallRequest } |
       { status: "already_accepted"; dispatch: EnterpriseMarketingPstnDispatchRecord } |
       { status: "route_mismatch" | "not_found" | "claim_rejected" |
-        "policy_rejected" | "protection_not_ready" | "conflict" } | StorageRequired>;
+        "policy_rejected" | "protection_not_ready" | "agent_profile_not_ready" |
+        "agent_content_not_ready" | "agent_run_conflict" | "conflict" } | StorageRequired>;
   finalizeMarketingPstnDispatch?(input: { tenantId: string; dispatchId: string;
     result: EnterpriseMarketingPstnProviderResult; traceId: string;
     now: Date }): Promise<{ status: "accepted" | "already_accepted" |

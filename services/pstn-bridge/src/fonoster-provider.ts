@@ -90,6 +90,7 @@ export class FonosterPstnProvider implements PstnProvider {
       to: request.targetPhone,
       appRef: requiredConfig("PSTN_BRIDGE_FONOSTER_APP_REF", this.config.fonosterAppRef),
       timeout: this.config.fonosterCallTimeoutSeconds ?? 60,
+      ...(request.enterpriseAgent ? { enterpriseAgent: request.enterpriseAgent } : {}),
       metadata: {
         provider: "fonoster",
         draftId: limit(request.draftId, 160),

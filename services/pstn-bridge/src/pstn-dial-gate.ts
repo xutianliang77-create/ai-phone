@@ -63,5 +63,11 @@ function hashRequest(request: AgentCallBridgeRequest) {
     suggestedScript: request.suggestedScript,
     language: request.language,
     consentPromptVersion: request.consentPromptVersion,
+    enterpriseContext: request.enterpriseContext,
+    enterpriseAgent: request.enterpriseAgent ? {
+      runtimeUrl: request.enterpriseAgent.runtimeUrl,
+      runId: request.enterpriseAgent.runId,
+      disclosureRequired: request.enterpriseAgent.disclosureRequired,
+    } : undefined,
   })).digest("hex");
 }

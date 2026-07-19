@@ -1,7 +1,7 @@
 # 无界AI企业版详细功能设计
 
-版本：v1.40
-日期：2026-07-19
+版本：v1.41
+日期：2026-07-20
 状态：SaaS 详细设计基线，已对齐统一通讯平台
 
 ## 1. 产品定位
@@ -301,6 +301,26 @@ Provider、usage/ledger 和 trace；跨会话业务聚合与货币成本尚未�
 - 可执行目标限于记录意向、预约、发送资料、创建回访和转人工。
 - 不得自主承诺价格、付款、退款、合同、医疗、法律或金融结论。
 - 知识不足时必须说明无法确认，不得使用 LLM 自由补写事实。
+
+#### 5.3.1 Marketing Agent 首批实现边界
+
+- 每个 Campaign 按国家和 locale 配置独立 profile，固化品牌、AI 身份、营销目的、产品、价值主张、声音、资格问题、
+  退订词、转人工词和结束语。profile 只允许在 `draft/not_submitted` 修改；活动批准后不能换话术或声音。
+- 开场告知必须同时逐字包含品牌、AI 身份和营销目的。PSTN prepare 只有在目标 profile、当前有效 published Term Pack、
+  published Script Template、LLM Provider 和签名 Agent runtime 全部 ready 时才创建 dispatch；缺任一项固定 `not_ready`。
+- PSTN prepare 在同一事务创建不可变 Agent run，并把短期签名 ticket、HTTPS runtime URL 和 run ID 交给 Bridge。
+  ticket 固定 tenant、dispatch、task、communication session、dispatch generation 和 route epoch；每次 disclosure、turn、
+  TTS 授权、交付和 finalize 都重读这些 fence。
+- disclosure 必须先授权、确认已播放，之后才能进入资格问题。每个 qualification turn 只能使用配置中的下一条原问题；
+  answer/objection 必须引用本轮 tenant-scoped published knowledge，缺证据或 Provider 失败时明确无法确认并结束。
+- 服务端只接受严格结构输出，拒绝额外 thinking/tool 字段、越界 citation、跳过资格问题、未交付 disclosure、以及价格、
+  付款、退款、合同、医疗、法律或金融保证。文本只有在再次通过 TTS authorize 后才可播放，播放完成才推进状态。
+- 退订意图由服务端确定性识别，在同一 tenant transaction 写入不可变 suppression 并返回结束话术；不依赖 LLM 是否遵循。
+  转人工只写 `handoff_requested` 并停止 AI，真实坐席接管仍属于 `ENT-MKT-011`，当前未配置时如实说明不可转接。
+- 同一通话只允许切换到 Campaign 已配置且能解析同一 product/country/purpose 的 published 内容版本；不允许临时翻译或
+  自由生成另一语言事实。Web 复用既有 Material Icons 与 Campaign 卡片，只展示真实 profile/readiness，不模拟通话成功。
+- 当前为代码和静态门禁候选；未运行 migration、forced-RLS、真实 PostgreSQL/LLM/PSTN、浏览器或通话验收，不能宣称
+  Marketing Agent 已通过企业生产门禁。
 
 ### 5.4 拨号策略
 

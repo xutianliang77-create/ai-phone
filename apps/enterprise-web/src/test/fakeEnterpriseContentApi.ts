@@ -37,6 +37,7 @@ type ContentApi = Pick<EnterpriseApi,
   | "listCampaigns" | "getCampaign" | "createCampaign" | "updateCampaign"
   | "scheduleCampaign" | "listCampaignLeads" | "listLeadImportBatches"
   | "getCampaignSchedulerStatus" | "getCampaignPstnStatus"
+  | "getCampaignMarketingAgentStatus" | "upsertCampaignMarketingAgentProfile"
   | "importCampaignLeads" | "rollbackLeadImport"
   | "listMarketingConsents" | "getMarketingConsentEligibility"
   | "registerMarketingConsent" | "revokeMarketingConsent"
@@ -180,5 +181,12 @@ export function fakeEnterpriseContentApi(): ContentApi {
         reasonCode: "provider_not_configured" },
       billing: { category: "marketing_call_seconds", reservedSecondsPerDispatch: 60,
         settlement: "on_provider_acceptance" } }),
+    getCampaignMarketingAgentStatus: vi.fn().mockResolvedValue({ campaignId:
+      "00000000-0000-4000-8000-000000000001", profiles: [],
+      provider: { status: "not_configured",
+        reasonCode: "marketing_agent_provider_not_configured" },
+      runtime: { status: "not_configured", reasonCode: "agent_runtime_url_missing" } }),
+    upsertCampaignMarketingAgentProfile: vi.fn().mockRejectedValue(
+      new Error("not configured")),
   };
 }

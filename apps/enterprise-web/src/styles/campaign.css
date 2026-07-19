@@ -36,6 +36,28 @@
 .campaign-form label small { font-weight: 400; }
 .campaign-form__wide { grid-column: 1 / -1; }
 .campaign-form > .button { justify-self: start; gap: 8px; }
+.campaign-agent-panel { gap: 14px; }
+.campaign-agent-form { display: grid; gap: 14px; padding: 14px;
+  border-radius: var(--radius); background: var(--color-surface); }
+.campaign-agent-form label { display: grid; gap: 6px; color: var(--color-outline);
+  font-size: .75rem; font-weight: 600; }
+.campaign-agent-form input,
+.campaign-agent-form textarea { color: var(--color-on-surface); }
+.campaign-agent-form > .button { justify-self: start; gap: 8px; }
+.campaign-agent-profiles,
+.campaign-agent-form__actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.campaign-agent-profiles button { padding: 8px 12px; border: 1px solid
+  var(--color-outline-variant); border-radius: 999px; color: var(--color-outline);
+  background: var(--color-surface); cursor: pointer; }
+.campaign-agent-profiles button.is-current { border-color: var(--color-primary);
+  color: var(--color-primary); }
+.campaign-agent-readiness { display: flex; gap: 10px; align-items: flex-start;
+  padding: 12px; border: 1px solid color-mix(in srgb, var(--color-primary) 32%,
+  var(--color-outline-variant)); border-radius: var(--radius);
+  background: color-mix(in srgb, var(--color-primary) 7%, transparent); }
+.campaign-agent-readiness > span { display: grid; gap: 3px; }
+.campaign-agent-readiness .material-icons { color: var(--color-primary); }
+.campaign-agent-readiness small { color: var(--color-outline); }
 
 .campaign-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
 .campaign-card { display: grid; min-width: 0; gap: 16px; padding: 20px; }

@@ -19,6 +19,8 @@ import { withEnterprisePostgresUnitOfWork } from
   "./enterprise-postgres-unit-of-work.js";
 import type { EnterpriseTenantPostgresPool } from
   "./enterprise-postgres-tenant-session.js";
+import { resolveMarketingAgentContent } from
+  "./enterprise-postgres-marketing-agent-runtime.js";
 
 type Runtime = Required<EnterpriseMarketingPstnRepositoryRuntime>;
 
@@ -36,23 +38,39 @@ export function createEnterprisePostgresMarketingPstnRuntime(
           protectionReady: phoneProtectionReady() };
       });
     },
-    prepareMarketingPstnDispatch(input) {
+    async prepareMarketingPstnDispatch(input) {
       let keyring;
       try { keyring = loadEnterpriseLeadPhoneKeyring(); }
       catch { keyring = null; }
-      if (!keyring) return Promise.resolve({ status: "protection_not_ready" as const });
+      if (!keyring) return { status: "protection_not_ready" as const };
       const context = systemContext(input.tenantId, input.traceId);
-      return withEnterprisePostgresUnitOfWork(pool, context, async (unit) => {
+      try { return await withEnterprisePostgresUnitOfWork(pool, context, async (unit) => {
         if (!await unit.marketingScheduler.lockRoute(input)) {
           return { status: "route_mismatch" as const };
         }
+        const target = await unit.marketingAgentProfiles.targetForTask(
+          input.taskId, input.dispatchGeneration);
+        if (!target) return { status: "agent_profile_not_ready" as const };
+        const content = await resolveMarketingAgentContent(unit, { ...target,
+          now: input.now.toISOString() });
+        if (!content) return { status: "agent_content_not_ready" as const };
         const result = await unit.marketingPstn.prepare({ taskId: input.taskId,
           generation: input.dispatchGeneration, claimToken: input.claimToken,
           homeRegion: input.homeRegion, cellId: input.cellId,
           routeEpoch: input.routeEpoch, provider: input.provider,
-          providerFingerprint: input.providerFingerprint, keyring,
+          providerFingerprint: input.providerFingerprint,
+          enterpriseAgent: input.enterpriseAgent, keyring,
           now: input.now.toISOString() });
         if (result.status !== "prepared") return result;
+        const agentRun = await unit.marketingAgents.createRun({
+          id: input.enterpriseAgent.runId, dispatch: result.dispatch,
+          leadId: target.leadId, content,
+          providerFingerprint: input.agentProviderFingerprint,
+          createdAt: input.now.toISOString(),
+        });
+        if (agentRun.status === "conflict") {
+          throw new MarketingAgentRunConflict();
+        }
         await unit.tenant.appendAuditEvent(createEnterpriseAuditEvent({ context,
           action: "marketing_pstn.prepare", resourceType: "marketing_pstn_dispatch",
           resourceId: result.dispatch.id, result: "completed",
@@ -62,7 +80,12 @@ export function createEnterprisePostgresMarketingPstnRuntime(
             routeEpoch: result.dispatch.routeEpoch, provider: result.dispatch.provider },
           createdAt: input.now.toISOString() }));
         return result;
-      });
+      }); } catch (error) {
+        if (error instanceof MarketingAgentRunConflict) {
+          return { status: "agent_run_conflict" as const };
+        }
+        throw error;
+      }
     },
     async finalizeMarketingPstnDispatch(input) {
       const context = systemContext(input.tenantId, input.traceId);
@@ -164,6 +187,7 @@ export function createEnterprisePostgresMarketingPstnRuntime(
 }
 
 class BillingRejected extends Error {}
+class MarketingAgentRunConflict extends Error {}
 
 async function settle(unit: EnterprisePostgresUnitOfWork,
   dispatch: EnterpriseMarketingPstnDispatchRecord, now: Date) {

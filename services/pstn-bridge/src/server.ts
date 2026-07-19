@@ -2,6 +2,8 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 import { fromTelephonyMulaw8k } from "./audio-codec.js";
 import { buildAudioFrameSink } from "./audio-frame-sink.js";
 import { checkReleaseReadiness, loadEnv } from "./config.js";
+import { enterpriseMarketingAgentBindingMatches,
+  parseEnterpriseMarketingAgentContext } from "./enterprise-agent-call.js";
 import { InMemoryProviderEventDeduper, type ProviderEventDeduper } from "./provider-event-deduper.js";
 import { handleProviderMediaEvent } from "./provider-media-events.js";
 import { handleProviderStatusEvent } from "./provider-status-events.js";
@@ -217,9 +219,14 @@ export function parseAgentCallRequest(input: unknown): AgentCallBridgeRequest | 
   const suggestedScript = text(body.suggestedScript, 1200);
   const language = text(body.language, 20);
   const enterpriseContext = parseEnterpriseContext(body.enterpriseContext);
+  const enterpriseAgent = parseEnterpriseMarketingAgentContext(body.enterpriseAgent);
   if (!idempotencyKey || !draftId || !callId || !targetPhone || !objective ||
     !suggestedScript || !language ||
-    (body.enterpriseContext !== undefined && !enterpriseContext)) {
+    (body.enterpriseContext !== undefined && !enterpriseContext) ||
+    (body.enterpriseAgent !== undefined && !enterpriseAgent) ||
+    Boolean(enterpriseContext) !== Boolean(enterpriseAgent) ||
+    (enterpriseContext && enterpriseAgent &&
+      !enterpriseMarketingAgentBindingMatches(enterpriseAgent, enterpriseContext, callId))) {
     return null;
   }
   return {
@@ -233,6 +240,7 @@ export function parseAgentCallRequest(input: unknown): AgentCallBridgeRequest | 
     ...optionalText("targetName", body.targetName, 120),
     ...optionalText("consentPromptVersion", body.consentPromptVersion, 120),
     ...(enterpriseContext ? { enterpriseContext } : {}),
+    ...(enterpriseAgent ? { enterpriseAgent } : {}),
   };
 }
 

@@ -1,7 +1,7 @@
 # 无界AI企业版 UI 详细设计
 
-版本：v1.27
-日期：2026-07-19
+版本：v1.28
+日期：2026-07-20
 状态：设计基线；企业 Web 公共组件、首批设置/工作台、响应式/主题/无障碍和 Web/iOS/Android 成员屏幕共享代码候选已实现，正式验收仍在开发
 
 ## 1. 设计范围
@@ -244,6 +244,15 @@ budget、usage aggregate 和显式 session trace report。卡片沿用同一 Mat
 - 面板展示 Scheduler 状态、九类任务计数、下个计划时间、活动并发、租户 entitlement 并发与营销预算状态；
   760px 下计数两列、420px 下栅栏单列。始终说明 claim 只保留 task/hold，不创建 communication session、Outbox 或
   PSTN。schedule 成功文案只显示服务端返回的物化任务数，不显示拨号成功。
+- `ENT-MKT-008` 在 Scheduler 后增加默认折叠的只读 PSTN 面板，仅展示真实 Provider readiness、dispatch 状态计数、
+  最后更新时间和固定60秒结算规则；没有拨号按钮，Provider 未配置/响应未知分别显示 not_ready/reconciliation required。
+- `ENT-MKT-009` 在 PSTN 前增加默认折叠的“AI 营销专员”面板，复用 `smart_toy/campaign/publish/add` Material Icons、
+  Campaign 卡片、现有 token、1px outline、8px 圆角和 `StatusPanel`，不增加第二套图标或颜色。
+- Profile 以国家/locale 版本胶囊切换；表单固定显示品牌、AI 身份、通话目的、产品、价值主张、目标市场、声音、
+  Term Pack、Script Template、开场告知、资格问题、退订词、转人工词和结束语。只在未提交草稿且有
+  `campaign:write` 时显示保存；活动提交后改为统一 forbidden 状态。
+- 开场告知未逐字包含品牌、AI 身份和通话目的时保存禁用；Provider/runtime 未就绪时显示服务端 reason code。ready
+  只表示生成与回调配置存在，并固定附带“仍需真实 PSTN 与 PostgreSQL 验收”，不显示已接通、已转人工或已成交。
 
 ### 8.3 AI 客服坐席台
 

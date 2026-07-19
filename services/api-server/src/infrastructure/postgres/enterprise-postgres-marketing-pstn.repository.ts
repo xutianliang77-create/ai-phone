@@ -52,6 +52,7 @@ export class EnterpriseMarketingPstnPostgresRepository {
     routeEpoch: number;
     provider: "pstn_http" | "pstn_fonoster";
     providerFingerprint: string;
+    enterpriseAgent: EnterpriseMarketingPstnCallRequest["enterpriseAgent"];
     keyring: EnterpriseLeadPhoneKeyring;
     now: string;
   }) {
@@ -65,7 +66,7 @@ export class EnterpriseMarketingPstnPostgresRepository {
       }
       if (replay.status === "failed") return { status: "claim_rejected" as const };
       return { status: "prepared" as const, dispatch: replay,
-        request: this.callRequest(task, replay, input.keyring) };
+        request: this.callRequest(task, replay, input.keyring, input.enterpriseAgent) };
     }
     if (!validClaim(task, input)) return { status: "claim_rejected" as const };
     if (!await marketingPstnSafetyFenceIsCurrent(this.session, task, input.now)) {
@@ -123,7 +124,7 @@ export class EnterpriseMarketingPstnPostgresRepository {
       hash(requestHash), iso(input.now)]);
     const dispatch = mapDispatch(inserted.rows[0]!);
     return { status: "prepared" as const, dispatch,
-      request: this.callRequest(task, dispatch, input.keyring) };
+      request: this.callRequest(task, dispatch, input.keyring, input.enterpriseAgent) };
   }
 
   async providerResult(input: { dispatchId: string;
@@ -259,13 +260,16 @@ export class EnterpriseMarketingPstnPostgresRepository {
   }
 
   private callRequest(task: TaskRow, dispatch: EnterpriseMarketingPstnDispatchRecord,
-    keyring: EnterpriseLeadPhoneKeyring): EnterpriseMarketingPstnCallRequest {
+    keyring: EnterpriseLeadPhoneKeyring,
+    enterpriseAgent: EnterpriseMarketingPstnCallRequest["enterpriseAgent"]):
+    EnterpriseMarketingPstnCallRequest {
     return { idempotencyKey: dispatch.providerIdempotencyKey, draftId: task.id,
       callId: dispatch.communicationSessionId,
       targetPhone: openEnterpriseLeadPhone({ tenantId: task.tenant_id, id: task.lead_id,
         field: "e164", encrypted: task.phone_e164_encrypted, keyring }),
       objective: task.objective, suggestedScript: task.objective,
       language: language(task), consentPromptVersion: task.country_policy_version_id,
+      enterpriseAgent,
       enterpriseContext: { tenantId: dispatch.tenantId,
         homeRegion: dispatch.homeRegion, cellId: dispatch.cellId,
         routeEpoch: dispatch.routeEpoch, taskId: dispatch.taskId,

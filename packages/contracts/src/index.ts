@@ -5,6 +5,7 @@ export * from "./api/enterprise-campaign.js";
 export * from "./api/enterprise-campaign-approval.js";
 export * from "./api/enterprise-marketing-scheduler.js";
 export * from "./api/enterprise-marketing-pstn.js";
+export * from "./api/enterprise-marketing-agent.js";
 export * from "./api/enterprise-lead-import.js";
 export * from "./api/enterprise-marketing-consent.js";
 export * from "./api/enterprise-marketing-suppression.js";

@@ -1,7 +1,7 @@
 # 无界AI企业版设计文档索引
 
-版本：v1.53
-日期：2026-07-19
+版本：v1.54
+日期：2026-07-20
 状态：SaaS 详细设计基线，已纳入统一通讯平台和 PostgreSQL Primary 演进
 
 ## 1. 产品边界
@@ -46,11 +46,11 @@ cell Worker、JSON/SQLite 演示导入，以及全业务表 Primary 切换/恢�
 无界AI主产品公共 PostgreSQL migration、Primary Runtime、可靠 Inbox/Outbox、
 fencing、Billing/Product Records、verify-full 和韧性代码已形成稳定提交 `fe1c3c2`，并由
 `ENT-DATA-007` 合入企业分支。企业版已经完成单 driver、双 manifest、同库身份和分权
-连接的本地自动化，当前 manifest 为公共31段、enterprise 45段；`ENT-DATA-008` 和
+连接的本地自动化，当前 manifest 为公共31段、enterprise 46段；`ENT-DATA-008` 和
 `ENT-CORE-013/014/015` 已完成公共通讯 tenant scope、企业业务会话绑定、签名 Worker dispatch fence
 及设备/声音/录制策略快照的代码/本地自动化，但不能继承主产品 staging 验收。`ENT-DATA-009` 已增加
 31+16 migration manifest 的历史本地证据、全表主键分页 count/hash、WAL 水位、writer fence、签名
-cutover/restore 证据和 production startup 绑定门禁；当前 `0017..0045` 必须按31+45重新生成切换证据。
+cutover/restore 证据和 production startup 绑定门禁；当前 `0017..0046` 必须按31+46重新生成切换证据。
 `ENT-CORE-004` 已增加 tenant-scoped source/version/chunk、草稿审核发布状态机、发布后不可变约束、
 locale/country/product/effective-time 检索和知识引用 ID；
 `ENT-CORE-005` 已增加版本化 term pack/script template、审核发布和生效窗口、发布后不可变约束，
@@ -193,6 +193,11 @@ idempotency key、HTTPS PSTN Bridge Adapter、HMAC webhook、Provider accept 后
 provider call 栅栏；Web 只读显示真实计数/readiness。响应未知保持 reconciliation required 且不会盲目重拨；Provider、
 Bridge、webhook、keyring 或持久幂等保证未配置时固定 `not_ready`。当前只形成静态候选，未运行自动化、真实
 PostgreSQL/RLS、PSTN Provider、响应丢失对账、并发或浏览器，`AC-ENT-0041` 未通过，任务保持 `blocked`。
+`ENT-MKT-009` 已增加 `0046` forced-RLS Marketing Agent profile/run/turn、PSTN 同事务 run、短期签名 runtime ticket、
+严格 LLM JSON Adapter、published knowledge/Term Pack/Script Template 冻结、disclosure/TTS 交付栅栏、退订
+suppression 和同风格 Campaign profile 页面。无证据、承诺性内容、越界引用、未配置 LLM/runtime/人工接管均失败
+闭合。当前只形成静态候选，未运行自动化、真实 PostgreSQL/RLS、LLM/PSTN 通话或浏览器，`AC-ENT-0042` 未通过，
+任务保持 `in_progress`；下一项为 `ENT-MKT-010` 实时监控。
 当前按要求未执行
 测试、migration、RLS、RBAC/ticket/evidence 攻击、并发共享、Worker/Provider、四人媒体、浏览器、真机与重启恢复，
 因此上述任务均保持 `in_progress`。
@@ -220,6 +225,7 @@ PostgreSQL/RLS、PSTN Provider、响应丢失对账、并发或浏览器，`AC-E
 - [ENT-MKT-003 授权证据实现和静态门禁证据](./evidence/ent-mkt-003-marketing-consent-2026-07-19.md)
 - [ENT-MKT-004 禁拨名单实现和静态门禁证据](./evidence/ent-mkt-004-marketing-suppression-2026-07-19.md)
 - [ENT-MKT-008 PSTN dispatch 实现和静态门禁证据](./evidence/ent-mkt-008-pstn-dispatch-2026-07-19.md)
+- [ENT-MKT-009 Marketing Agent 实现和静态门禁证据](./evidence/ent-mkt-009-marketing-agent-2026-07-20.md)
 - [ENT-MTG-012 屏幕 OCR 翻译实现与静态门禁证据](./evidence/ent-mtg-012-screen-ocr-translation-2026-07-19.md)
 - [ENT-MTG-013 日历 Adapter 实现与静态门禁证据](./evidence/ent-mtg-013-calendar-adapter-2026-07-19.md)
 - [ENT-CS-001 客服领域实现与静态门禁证据](./evidence/ent-cs-001-support-domain-2026-07-19.md)

@@ -12,6 +12,7 @@ export interface AgentCallBridgeRequest {
   language: string;
   consentPromptVersion?: string;
   enterpriseContext?: EnterprisePstnContext;
+  enterpriseAgent?: EnterpriseMarketingAgentContext;
 }
 
 export interface EnterprisePstnContext {
@@ -21,6 +22,13 @@ export interface EnterprisePstnContext {
   routeEpoch: number;
   taskId: string;
   dispatchGeneration: number;
+}
+
+export interface EnterpriseMarketingAgentContext {
+  runtimeUrl: string;
+  ticket: string;
+  runId: string;
+  disclosureRequired: true;
 }
 
 export interface AgentCallBridgeResult {

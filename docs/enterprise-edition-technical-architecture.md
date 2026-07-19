@@ -1,7 +1,7 @@
 # 无界AI企业版技术架构
 
-版本：v1.43
-日期：2026-07-19
+版本：v1.44
+日期：2026-07-20
 状态：SaaS 详细架构基线，已对齐统一通讯平台和 PostgreSQL Primary
 
 ## 1. 架构目标
@@ -487,6 +487,23 @@ PSTN Bridge 把 tenant、home region、cell、route epoch、task 和 dispatch ge
 投递到独立 enterprise webhook。API 对完整 body 做 HMAC 校验，以 Provider event ID 写 Inbox 去重，再锁当前 route 和
 dispatch fence 后推进 answered/completed/failed；迟到旧 route/generation/provider call 被拒绝。Provider/keyring/
 webhook/idempotency 未配置时 runtime 失败闭合，不回退 legacy 或 simulated Provider。
+
+### 7.9 Marketing Agent 服务端状态机
+
+`ENT-MKT-009` 不把 LLM 直接接到 PSTN。`0046` 在 tenant transaction 内固定 profile、published Term Pack/Script
+Template、knowledge context hash、dispatch generation 和 route epoch，并与 `marketing_pstn_dispatches` 同事务创建
+Agent run。PSTN Bridge 只得到短期 HMAC ticket 和 HTTPS runtime URL；ticket 不携带号码、知识正文、Provider token，且
+每次调用都必须重新匹配 tenant、dispatch、task、communication session、generation 和 route epoch。
+
+运行链路为 `disclosure authorize -> disclosure delivered -> turn prepare -> Provider -> turn complete -> TTS authorize ->
+turn delivered`。只有 disclosure delivered 才能生成后续话术；只有服务端验证过的结构输出才可取得 TTS 授权；只有
+真实 playout 回执才推进对话。Provider 调用在事务外，complete 时重验 profile/content/evidence hash，避免知识、术语或
+话术在生成期间漂移。最近上下文受 turn 数和字节数上限约束，原始客户文本只保存 hash，不进入审计。
+
+资格问题、退订和转人工先由服务端确定性规则处理。退订在同一 tenant transaction 追加 suppression 并结束；转人工只
+进入 `handoff_requested`，由 `ENT-MKT-011` 建立真实坐席接管，未配置时 Agent 明确说明无法转接后停止。一般回答必须
+引用当前 tenant-scoped published knowledge；无证据、禁语、承诺性内容、越界 citation、Provider 不可用或签名 runtime
+未配置都失败闭合。`ENT-MKT-010` 才提供实时监控，本层不伪造 dashboard、人工接管或 Outcome。
 
 ## 8. AI 客服架构
 

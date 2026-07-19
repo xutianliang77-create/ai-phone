@@ -57,7 +57,7 @@ ENTERPRISE_MIGRATION_DATABASE_URL='postgresql://...' \
 
 两种启用模式都在恢复任务、Fastify 构建和端口监听前失败闭合，并在校验后关闭连接。
 `verify` 不写 migration；`migrate_verify` 始终在 migration 后执行相同 schema verify。
-统一启动编排先验证公共31段 manifest 和签名 cutover evidence，再验证 enterprise 45段
+统一启动编排先验证公共31段 manifest 和签名 cutover evidence，再验证 enterprise 46段
 manifest，并核对两个 verdict 的 database name/OID；任一失败都关闭已创建资源且不监听。
 
 基础 migration `0004` 至 `0010` 中，`0004` 增加 tenant lifecycle 状态和 job，`0005` 增加
@@ -176,7 +176,7 @@ SQLSTATE `25006`、旧 writer 会话为0、target 可写和二次全量 hash 相
 
 生产启动只接受 `environment=staging` 的 `cutover/matched` 签名证据，并绑定当前
 commit、image digest、topology hash、目标 logical ID、数据库 system identifier/OID 和
-31+45 migration manifest。`c9b5be2` 的31+16本地证据会被门禁拒绝，必须重新生成；
+31+46 migration manifest。`c9b5be2` 的31+16本地证据会被门禁拒绝，必须重新生成；
 本地同机 `pg_dump/pg_restore` 只能证明逻辑恢复与对账机制；
 跨故障域自动切换、异地主机不可变 WAL/PITR 和 RPO/RTO 仍由 `ENT-REL-003`/H3 验收。
 
@@ -277,3 +277,25 @@ PSTN_BRIDGE_ENTERPRISE_STATUS_WEBHOOK_SECRET=...
 PSTN Bridge token 至少16字节，并需配置独立 enterprise status webhook endpoint/至少32字节 secret。Bridge URL 必须为 HTTPS，dispatch 超时最多10秒；
 Provider、凭据、webhook、号码 keyring 或持久幂等保证任一缺失均返回 `not_ready`。当前未执行 `0045` migration/down、
 forced-RLS、真实 Provider/PSTN、响应丢失对账和并发门禁，不能据此宣称企业外呼生产就绪。
+
+## Marketing Agent
+
+`ENT-MKT-009` 由 migration `0046` 新增 forced-RLS `marketing_agent_profiles/runs/turns`。profile 只在 Campaign
+`draft/not_submitted` 可改；PSTN prepare 同事务固定 profile、published Term Pack/Script Template 和 Agent run。
+Bridge 只接收短期 ticket/runtime URL/run ID，并要求 enterprise routing context 与 Agent binding 同时完整；disclosure、
+turn、TTS 和 finalize 每次都重验 tenant/dispatch/task/session/generation/route epoch。
+
+默认 LLM 与 runtime binding 都不可用。启用时必须配置：
+
+```text
+ENTERPRISE_MARKETING_AGENT_PROVIDER=openai_compatible
+ENTERPRISE_MARKETING_AGENT_BASE_URL=https://...
+ENTERPRISE_MARKETING_AGENT_MODEL=...
+ENTERPRISE_MARKETING_AGENT_API_KEY=...
+ENTERPRISE_MARKETING_AGENT_TICKET_SECRET=至少32字节
+ENTERPRISE_MARKETING_AGENT_RUNTIME_URL=https://...
+ENTERPRISE_MARKETING_AGENT_TICKET_TTL_SECONDS=300..3600
+```
+
+缺任一必需配置、profile 或 published 内容时 PSTN 失败闭合。SQLite/JSON 不承载该 runtime；当前未执行 `0046`、真实
+PostgreSQL/RLS、LLM/PSTN/媒体或浏览器门禁，不能据此宣称 Marketing Agent 已生产就绪。

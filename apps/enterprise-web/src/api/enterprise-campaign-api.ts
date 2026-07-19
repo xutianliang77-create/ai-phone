@@ -17,6 +17,9 @@ import type {
   EnterpriseMarketingSuppressionsResponse,
   EnterpriseMarketingSchedulerStatusResponse,
   EnterpriseMarketingPstnStatusResponse,
+  EnterpriseMarketingAgentStatusResponse,
+  EnterpriseMarketingAgentProfileResponse,
+  UpsertEnterpriseMarketingAgentProfileRequest,
   EnterpriseCountryPoliciesResponse,
   EnterpriseCountryPolicyResponse,
   EnterpriseCampaignCountryPolicyReadinessResponse,
@@ -52,6 +55,11 @@ export interface EnterpriseCampaignApi {
     Promise<EnterpriseMarketingSchedulerStatusResponse>;
   getCampaignPstnStatus(context: EnterpriseContentRequestContext, campaignId: string):
     Promise<EnterpriseMarketingPstnStatusResponse>;
+  getCampaignMarketingAgentStatus(context: EnterpriseContentRequestContext,
+    campaignId: string): Promise<EnterpriseMarketingAgentStatusResponse>;
+  upsertCampaignMarketingAgentProfile(context: EnterpriseContentRequestContext,
+    campaignId: string, input: UpsertEnterpriseMarketingAgentProfileRequest,
+    idempotencyKey: string): Promise<EnterpriseMarketingAgentProfileResponse>;
   listCampaignLeads(context: EnterpriseContentRequestContext, campaignId: string):
     Promise<EnterpriseCampaignLeadsResponse>;
   listLeadImportBatches(context: EnterpriseContentRequestContext, campaignId: string):
@@ -136,6 +144,15 @@ export function createEnterpriseCampaignApi(
     getCampaignPstnStatus: (context, campaignId) => request(
       `${campaigns}/${encodeURIComponent(campaignId)}/pstn-dispatch`,
       { headers: headers(context) },
+    ),
+    getCampaignMarketingAgentStatus: (context, campaignId) => request(
+      `${campaigns}/${encodeURIComponent(campaignId)}/marketing-agent`,
+      { headers: headers(context) },
+    ),
+    upsertCampaignMarketingAgentProfile: (context, campaignId, input, key) => request(
+      `${campaigns}/${encodeURIComponent(campaignId)}/marketing-agent/profiles`,
+      { method: "PUT", headers: { ...headers(context), "idempotency-key": key },
+        body: JSON.stringify(input) },
     ),
     listCampaignLeads: (context, campaignId) => request(
       `${campaigns}/${encodeURIComponent(campaignId)}/leads`,

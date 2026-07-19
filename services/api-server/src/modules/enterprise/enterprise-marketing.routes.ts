@@ -21,6 +21,12 @@ import { createEnvironmentEnterpriseMarketingPstnProvider } from
   "./enterprise-marketing-pstn-provider.js";
 import { registerEnterpriseMarketingPstnRoutes } from
   "./enterprise-marketing-pstn.routes.js";
+import { createEnvironmentEnterpriseMarketingAgentProvider } from
+  "./enterprise-marketing-agent-provider.js";
+import { createEnvironmentEnterpriseMarketingAgentRuntimeBinding } from
+  "./enterprise-marketing-agent-ticket.js";
+import { registerEnterpriseMarketingAgentRoutes } from
+  "./enterprise-marketing-agent.routes.js";
 
 export function registerEnterpriseMarketingRoutes(app: FastifyInstance,
   routeService: TenantRouteService, runtime: EnterpriseRepositoryRuntime) {
@@ -34,6 +40,10 @@ export function registerEnterpriseMarketingRoutes(app: FastifyInstance,
   registerEnterpriseMarketingCountryPolicyRoutes(app, routeService, runtime);
   registerEnterpriseCampaignApprovalRoutes(app, routeService, runtime);
   registerEnterpriseMarketingSchedulerRoutes(app, routeService, runtime);
+  const agentProvider = createEnvironmentEnterpriseMarketingAgentProvider();
+  const agentBinding = createEnvironmentEnterpriseMarketingAgentRuntimeBinding();
+  registerEnterpriseMarketingAgentRoutes(app, routeService, runtime,
+    agentProvider, agentBinding);
   registerEnterpriseMarketingPstnRoutes(app, routeService, runtime,
-    createEnvironmentEnterpriseMarketingPstnProvider());
+    createEnvironmentEnterpriseMarketingPstnProvider(), agentProvider, agentBinding);
 }

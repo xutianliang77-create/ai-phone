@@ -1,7 +1,7 @@
 # 无界AI企业版验收任务与计划
 
-版本：v1.57
-日期：2026-07-19
+版本：v1.58
+日期：2026-07-20
 状态：可执行验收计划，已对齐统一通讯平台和 PostgreSQL Primary 收敛
 
 ## 1. 验收目标
@@ -112,6 +112,7 @@ Mock 只能验证协议，不能替代 iPhone/Web、真实 LiveKit、真实模�
 | AC-ENT-0039 | 活动校验与审批快照 | `campaign:read/write/approve` 角色、active membership 与签名 route 生效；validate 只接受当前 tenant 的 draft/rejected expectedVersion 和幂等键，固化 Campaign、startAt Policy set、active Lead/link/committed batch、逐 Lead 目标时间有效 Consent 与 Suppression set；缺未来时间、无 Lead、国家/策略/IANA timezone/Consent 不符或任一禁拨时 blocked 且 Campaign 不变；ready 才经 validating 进入 pending；approve/reject 必须引用同 Campaign ready validation，批准前重建 snapshot，漂移返回 stale，拒绝理由必填并回 rejected draft；`0042/0043` 两表 forced RLS、复合 FK、insert-only、actor/time/source-version/状态 trigger 阻断跨租户和 SQL 跳步；批准固定 decision ID/hash，scheduled 与 task 再复核当前 snapshot 且 task 必须出现在冻结 Lead/Consent/Policy set；Web 只展示真实计数/hash/issues/decision，不显示 Scheduler/PSTN 成功 |
 | AC-ENT-0040 | Scheduler 任务物化与 claim | schedule 在 Campaign 状态变更同一事务按 approved snapshot 为每条冻结 Lead 生成唯一 attempt-1 task；任一 IANA/当地窗口解析失败时零 task/零状态变化，同命令重放不增加 task；内部 claim 必须同时通过内部密钥、签名 route、当前 tenant/cell/route epoch、approval/Lead/Consent/Suppression/Policy/当地窗口、活动与租户 entitlement 并发和精确60秒营销 usage hold；`FOR UPDATE SKIP LOCKED` + version CAS + DB trigger 下50 Scheduler 并发每 task 仅一 claim，单租户满载不阻塞其他 tenant；崩溃后 lease 到期释放 hold 并回 retry，撤回/禁拨取消未派发 claim；Web 只读显示真实计数/预算/并发且不显示通信会话、Outbox 或 PSTN 成功 |
 | AC-ENT-0041 | Scoped PSTN dispatch | 内部 dispatch 同时校验密钥、签名 route、当前 tenant/cell/epoch、claim token/generation、approval/Lead/link/Consent/Suppression/Policy/当地窗口、有效 entitlement 和剩余 lease；prepare 原子创建 scoped communication session/binding、无明文号码 Outbox 与不可变 dispatch，Provider 使用稳定 generation 幂等键；明确 accepted 只结算一次固定60秒并由 DB evidence 推进 task/binding，响应未知保持 reconciliation required 且不盲目重拨；HMAC webhook 以 event ID 去重并重验 route/generation/provider call，迟到/篡改/跨租户拒绝；Provider/Bridge/webhook/keyring/idempotency 未配置均 not_ready；Web 只读展示真实计数与 readiness，不伪造拨号成功 |
+| AC-ENT-0042 | Marketing Agent | profile 只在未提交草稿可写且开场逐字包含品牌、AI 身份和营销目的；PSTN 前必须解析目标国家/locale profile、当前有效 published Term Pack/Script Template、LLM 与签名 runtime；`0046` 三表 tenant-first FK/forced RLS，run 与 dispatch 同事务并由 task transition 复核；ticket 固定 tenant/dispatch/task/session/generation/route epoch；disclosure authorize+delivered 后才可 turn；qualification 使用配置原问题，answer/objection 只引用本轮 tenant knowledge，禁承诺和额外字段拒绝；TTS authorize+delivered 后才推进；退订原子写 suppression 并结束；人工接管未实现时如实停止；Provider/证据/语言版本缺失失败闭合；Web 只展示真实配置/readiness |
 
 `ENT-CS-005` 当前只形成 `AC-ENT-0026` 的代码候选；自动化、migration up/down/forward、
 forced-RLS 双租户、并发发布、Worker 竞态和真实 Provider/Adapter 均未执行。Agent `toolRequest`
@@ -705,7 +706,22 @@ Material Icons、320/600/960/1280、主题、键盘和无模拟成功。
 
 本轮只形成代码、测试定义和静态门禁候选；未运行自动化、`0045` migration/forced-RLS、双租户、真实 PSTN Provider、
 响应丢失对账、50并发或浏览器。因此 `AC-ENT-0041` 未通过，`ENT-MKT-008` 仍由外部 PSTN sandbox/凭据与正式验证
-阻塞，保持 `blocked`；`ENT-MKT-009` 才开始营销 Agent 话术执行。
+阻塞，保持 `blocked`；这些证据不替代下述 `ENT-MKT-009` Marketing Agent 独立验收。
+
+`ENT-MKT-009` 按 `AC-ENT-0042` 增加十二组矩阵：profile 矩阵覆盖 draft/not_submitted、批准后冻结、同国家/locale
+版本和幂等冲突；告知矩阵覆盖品牌/AI 身份/营销目的逐项缺失、authorize 未交付和重复回执；内容矩阵覆盖 Term Pack/
+Script Template draft/review/expired/locale/country/product/purpose/effective-time；PSTN 原子性覆盖 dispatch/run 任一点失败全
+回滚；ticket 矩阵覆盖签名、过期、tenant/dispatch/task/session/generation/route epoch 篡改；状态机矩阵覆盖 disclosure、
+qualifying、answering、closing、终态倒退和 sequence；知识矩阵覆盖跨租户、空 evidence、citation 越界和生成期间 hash 漂移；
+输出矩阵覆盖额外 thinking/tool 字段、资格问题改写、价格/付款/退款/合同/医疗/法律/金融保证；退订矩阵覆盖确定性词表、
+同号码锁、不可变 suppression、任务停止和重复请求；语言矩阵覆盖只切换已配置 profile/published 内容，缺目标语言失败闭合；
+TTS 矩阵覆盖 authorize/delivered、旧 generation 和中断后迟到 playout；Web/Provider 矩阵覆盖真实 readiness、Material Icons、
+主题/响应式/键盘以及未配置 LLM/runtime/人工接管不显示成功。
+
+当前只形成代码、测试定义和静态门禁候选；未运行 Vitest/API/Repository、`0046` migration/down/forward、普通角色
+forced-RLS、双租户、真实 PostgreSQL/LLM/PSTN/ASR/TTS、通话、浏览器或恶意提示矩阵。因此 `AC-ENT-0042` 未通过，
+`ENT-MKT-009` 保持 `in_progress`；`ENT-MKT-010` 才实现实时监控，`ENT-MKT-011` 才实现真实人工接管，`ENT-MKT-012`
+才固化 Outcome 和后续动作。
 
 ### 9.1 合规预检
 
@@ -798,7 +814,7 @@ Material Icons、320/600/960/1280、主题、键盘和无模拟成功。
 
 - PostgreSQL 作为所有真实 SaaS 租户的初始真源。
 - 内部 SQLite 演示数据可以迁移，但不能作为客户生产迁移路径的必要依赖。
-- 验收 commit 锁定的公共31段 manifest（基线从 `fe1c3c2` 演进）与 enterprise 45段 migration manifest 在隔离企业数据库从空库完整执行；两个 manifest 的顺序、checksum、schema verify 和 down/forward 策略均有证据，不能只跑其中一套。
+- 验收 commit 锁定的公共31段 manifest（基线从 `fe1c3c2` 演进）与 enterprise 46段 migration manifest 在隔离企业数据库从空库完整执行；两个 manifest 的顺序、checksum、schema verify 和 down/forward 策略均有证据，不能只跑其中一套。
 - 每个进程只有一个 Storage Driver 和 startup verdict；HTTP、企业 Repository、统一通讯会话和 cell Worker 使用同一 verified Primary Runtime，不存在 fallback、shadow read、dual write 或按路由混用。
 - 应用 tenant、user directory、cell discovery、migration、maintenance 分别使用最小权限角色；生产 TLS 使用 `verify-full`。应用角色没有 `BYPASSRLS`、表 owner、DDL 或关闭 RLS 权限。
 - 公共 communication session、participant、media leg、dispatch、Provider operation、playback 和相关账本全部具有 tenant scope、复合 FK 和 `FORCE ROW LEVEL SECURITY`；使用跨租户 ID、缺 scope、伪造 owner/user 过滤做负向验证。
@@ -807,7 +823,7 @@ Material Icons、320/600/960/1280、主题、键盘和无模拟成功。
 - 使用普通应用角色验证 billing account/plan/subscription/entitlement/change history forced RLS、活动 subscription 唯一、plan/snapshot/change 不可变，以及 entitlement projection/binding/grant 的 tenant 复合 FK；按跨租户、停用 account、过期账期、错 subscription/plan/version、席位超限、幂等漂移和客户端 limit 伪造执行负向矩阵。
 - accounts、tenant、communication session、segment、campaign、support、meeting、ledger 和 object hash 数量与规范化 SHA-256 一致。
 - 全量复制后记录增量水位，切换时获取 writer fence、清退旧 API/Worker、重放剩余 inbox/outbox，再做第二次 count/hash；切换或对账失败可按书面决策回滚，旧 writer 不能继续写入。
-- staging startup 必须拒绝 local evidence、签名篡改、错误 cutover/target ID、错误 commit/image/topology、错误 system identifier/OID、缺 baseline 引用、未清退 writer 或任一31+45 migration 漂移。维护工具只验证 fence，不自动执行 promote 或隔离旧主。
+- staging startup 必须拒绝 local evidence、签名篡改、错误 cutover/target ID、错误 commit/image/topology、错误 system identifier/OID、缺 baseline 引用、未清退 writer 或任一31+46 migration 漂移。维护工具只验证 fence，不自动执行 promote 或隔离旧主。
 - migration 后使用普通应用角色验证 `FORCE ROW LEVEL SECURITY`；确认 user directory self policy、tenant projection policy、成员投影同步和跨租户拒绝均生效。
 - 使用独立 cell Worker 角色验证 pending projection forced RLS、trigger 同步、空 cell 失败闭合、旧 cell 拒绝和 tenant transaction 原子 claim。
 - 使用 API 应用角色验证 PostgreSQL runtime 只在 startup gate `verified` 后创建；非法或 `dual_write` driver、连接/校验失败均不得监听端口，也不得回退到 legacy。

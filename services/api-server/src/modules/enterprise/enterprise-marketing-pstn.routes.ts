@@ -4,6 +4,12 @@ import { sendError } from "../../infrastructure/http/errors.js";
 import { enterpriseRequestTraceId, requireEnterpriseScope } from "./enterprise-auth.js";
 import type { EnterpriseMarketingPstnProvider } from
   "./enterprise-marketing-pstn-provider.js";
+import type { EnterpriseMarketingAgentProvider } from
+  "./enterprise-marketing-agent.js";
+import { marketingAgentTicketExpiry,
+  type EnterpriseMarketingAgentRuntimeBinding } from
+  "./enterprise-marketing-agent-ticket.js";
+import { marketingPstnIdentity } from "./enterprise-marketing-pstn.js";
 import { verifyEnterpriseMarketingPstnWebhook } from
   "./enterprise-marketing-pstn-webhook.js";
 import type { EnterpriseRepositoryRuntime } from "./enterprise-repository-runtime.js";
@@ -14,7 +20,9 @@ import { decodeTenantRouteDocument, type TenantRouteService } from
 
 export function registerEnterpriseMarketingPstnRoutes(app: FastifyInstance,
   routeService: TenantRouteService, runtime: EnterpriseRepositoryRuntime,
-  provider: EnterpriseMarketingPstnProvider) {
+  provider: EnterpriseMarketingPstnProvider,
+  agentProvider: EnterpriseMarketingAgentProvider,
+  agentBinding: EnterpriseMarketingAgentRuntimeBinding) {
   app.get<{ Params: { campaignId: string } }>(
     "/enterprise/v1/campaigns/:campaignId/pstn-dispatch", async (request, reply) => {
       const campaignId = uuid(request.params.campaignId);
@@ -53,17 +61,44 @@ export function registerEnterpriseMarketingPstnRoutes(app: FastifyInstance,
       const readiness = provider.readiness();
       if (readiness.status !== "ready" || readiness.provider === "unavailable" ||
         !readiness.fingerprint) return providerNotReady(reply, readiness.reasonCode);
+      const agentReadiness = agentProvider.readiness();
+      const runtimeReadiness = agentBinding.readiness();
+      if (agentReadiness.status !== "ready") {
+        return agentNotReady(reply, agentReadiness.reasonCode);
+      }
+      if (runtimeReadiness.status !== "ready") {
+        return agentNotReady(reply, runtimeReadiness.reasonCode);
+      }
       if (!runtime.prepareMarketingPstnDispatch ||
         !runtime.finalizeMarketingPstnDispatch) return postgresRequired(reply);
       const traceId = enterpriseRequestTraceId(request);
+      const identity = { tenantId: body.tenantId, taskId: body.taskId,
+        generation: body.dispatchGeneration };
+      const runId = marketingPstnIdentity({ kind: "agent_run", ...identity });
+      const ticket = agentBinding.issue({
+        ticketId: marketingPstnIdentity({ kind: "agent_ticket", ...identity }),
+        tenantId: body.tenantId, runId,
+        dispatchId: marketingPstnIdentity({ kind: "dispatch", ...identity }),
+        taskId: body.taskId,
+        communicationSessionId: marketingPstnIdentity({ kind: "session",
+          tenantId: body.tenantId, taskId: body.taskId, generation: 1 }),
+        dispatchGeneration: body.dispatchGeneration, routeEpoch: body.routeEpoch,
+        expiresAt: marketingAgentTicketExpiry(),
+      });
       const prepared = await runtime.prepareMarketingPstnDispatch({ ...body,
         provider: readiness.provider, providerFingerprint: readiness.fingerprint,
-        traceId, now: new Date() });
+        agentProviderFingerprint: agentReadiness.fingerprint,
+        enterpriseAgent: { runtimeUrl: runtimeReadiness.runtimeUrl, ticket,
+          runId, disclosureRequired: true }, traceId, now: new Date() });
       if (prepared.status === "storage_required") return postgresRequired(reply);
       if (prepared.status === "route_mismatch") return routeRejected(reply);
       if (prepared.status === "protection_not_ready") {
         return sendError(reply, 503, prepared.status,
           "Enterprise marketing phone protection is not ready");
+      }
+      if (["agent_profile_not_ready", "agent_content_not_ready",
+        "agent_run_conflict"].includes(prepared.status)) {
+        return agentNotReady(reply, prepared.status);
       }
       if (prepared.status === "already_accepted") {
         return reply.send(response("already_accepted", prepared.dispatch));
@@ -164,5 +199,7 @@ function postgresRequired(reply: FastifyReply) { return sendError(reply, 503,
   "enterprise_postgres_required", "Enterprise PostgreSQL runtime required"); }
 function providerNotReady(reply: FastifyReply, reason?: string) { return sendError(reply,
   503, "marketing_pstn_provider_not_ready", reason ?? "PSTN provider is not ready"); }
+function agentNotReady(reply: FastifyReply, reason?: string) { return sendError(reply,
+  503, "marketing_agent_not_ready", reason ?? "Marketing Agent is not ready"); }
 function dispatchRejected(reply: FastifyReply, reason: string) { return sendError(reply,
   409, `marketing_pstn_${reason}`, "Marketing PSTN dispatch rejected"); }

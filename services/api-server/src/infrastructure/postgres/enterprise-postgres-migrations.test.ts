@@ -56,6 +56,7 @@ describe("enterprise PostgreSQL migrations", () => {
       "0043_enterprise_marketing_approval_guards",
       "0044_enterprise_marketing_scheduler",
       "0045_enterprise_marketing_pstn_dispatch",
+      "0046_enterprise_marketing_agent",
     ]);
     for (const migration of migrations) {
       expect(migration.up.trim()).not.toBe("");
@@ -80,12 +81,12 @@ describe("enterprise PostgreSQL migrations", () => {
     expect(sql).toMatch(
       /FOREIGN KEY \(tenant_id, meeting_id\)[\s\S]*REFERENCES enterprise\.meetings \(tenant_id, id\)/,
     );
-    expect(sql).toContain("ENABLE ROW LEVEL SECURITY");
-    expect(sql).toContain("FORCE ROW LEVEL SECURITY");
-    expect(sql).toContain("enterprise.current_tenant_id()");
-    expect(sql).toContain("CREATE TABLE enterprise.tenant_jobs");
-    expect(sql).toContain("CREATE TABLE enterprise.marketing_pstn_dispatches");
-    expect(sql).toContain("marketing_pstn_dispatches_tenant_isolation");
+    expect(sql).toContain("ENABLE ROW LEVEL SECURITY"); expect(sql).toContain("FORCE ROW LEVEL SECURITY");
+    expect(sql).toContain("enterprise.current_tenant_id()"); expect(sql).toContain("CREATE TABLE enterprise.tenant_jobs");
+    expect(sql).toContain("CREATE TABLE enterprise.marketing_pstn_dispatches"); expect(sql).toContain("marketing_pstn_dispatches_tenant_isolation");
+    for (const table of ["profiles", "runs", "turns"])
+      expect(sql).toContain(`CREATE TABLE enterprise.marketing_agent_${table}`);
+    expect(sql).toContain("'marketing_agent_profiles', 'marketing_agent_runs', 'marketing_agent_turns'");
     expect(sql).toContain("'provisioning_failed'");
     expect(sql).toContain("scope_snapshot jsonb");
     expect(sql).toContain("receipt_hash text");
