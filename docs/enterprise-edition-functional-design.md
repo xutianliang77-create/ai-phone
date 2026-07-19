@@ -1,6 +1,6 @@
 # 无界AI企业版详细功能设计
 
-版本：v1.27
+版本：v1.28
 日期：2026-07-19
 状态：SaaS 详细设计基线，已对齐统一通讯平台
 
@@ -344,8 +344,26 @@ LLM 只能提出结构化工具请求；Policy Engine 校验租户、客户、�
 - 生产 runtime 默认 `not_configured`。确定性 mock 只能显式注入并返回 `simulated=true`，不代表
   ERP、物流或库存 Provider 已接通。
 
-本阶段不包含工单、回拨、备注、退款、支付或身份验证 Adapter，也不把“授权记录已创建”、mock
-结果或静态检查表述为外部业务操作已成功。
+`ENT-CS-007` 固定开放 `ticket.create`、`callback.schedule`、`note.add` 三个可逆写工具：
+
+- Worker 必须先请求确认挑战；系统用客户语言精确复述主题/内容、回拨时间/原因或备注，并只接受
+  确定性的“确认/取消”同义短语。挑战绑定当前 run、确认后的新客户 turn、sequence、客户文本
+  SHA-256 和120秒有效期，不能拿确认前或其他会话的回复复用。
+- 未确认、回复含糊、挑战过期、工具 revision 退役、session 非 `ai_active`、参数 hash 改变或
+  Adapter/keyring 未配置时均不创建 Outbox，也不调用外部系统。回拨时间在发起确认和实际入队时
+  都必须仍处于未来。
+- 确认后原始参数使用 AES-256-GCM 密封，tenant/execution/customer/tool/idempotency 作为附加认证
+  上下文；数据库与审计只保存确认/响应/结果 hash、Provider fingerprint、simulated 标志和 receipt，
+  不保存明文 Outbox 参数。
+- Cell Worker 使用同一 Provider 幂等键重试未知网络结果；超时、抛错和无 receipt 不得当作确定失败
+  或再次创建业务对象。只有 Provider 明确完成或携带 reference 的确定失败才进入终态并原子发布
+  Outbox。同一次 execution 的重复确认返回原 event，不产生第二个有效工单、回拨或备注。
+- 生产组合默认 `not_configured`；tenant-bound mock 明确 `simulated=true`，只验证协议候选，不能对客户
+  表述为工单系统、CRM 或回拨系统已成功。
+
+本阶段仍不包含退款、支付或身份验证 Adapter，也不把“授权/确认记录已创建”、Outbox 已入队、mock
+结果或静态检查表述为外部业务操作已成功。Support Agent 的 `toolRequest` 仍固定为 `null`，模型到
+确认入口的自动编排不在本批开放。
 
 ### 6.5 人工坐席工作台
 

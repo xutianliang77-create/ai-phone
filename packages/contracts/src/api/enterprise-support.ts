@@ -209,3 +209,38 @@ export interface EnterpriseSupportReadToolExecutionResponse {
   providerReference: string;
   replayed?: boolean;
 }
+
+export type EnterpriseSupportWriteToolSummary =
+  | { kind: "ticket"; subject: string; description: string }
+  | { kind: "callback"; scheduledAt: string; reason: string }
+  | { kind: "note"; note: string };
+
+export type EnterpriseSupportWriteToolResult =
+  | { kind: "ticket"; ticketId: string; status: "created" }
+  | { kind: "callback"; callbackId: string; status: "scheduled";
+      scheduledAt: string }
+  | { kind: "note"; noteId: string; status: "created" };
+
+export interface EnterpriseSupportWriteConfirmationResponse {
+  status: "confirmation_required";
+  executionId: string;
+  confirmationId: string;
+  prompt: string;
+  promptHash: string;
+  summary: EnterpriseSupportWriteToolSummary;
+  expiresAt: string;
+  replayed?: boolean;
+}
+
+export type EnterpriseSupportWriteDecisionResponse =
+  | { status: "processing"; executionId: string; outboxEventId: string;
+      replayed?: boolean }
+  | { status: "rejected"; executionId: string; replayed?: boolean }
+  | { status: "completed"; executionId: string;
+      toolName: "ticket.create" | "callback.schedule" | "note.add";
+      result: EnterpriseSupportWriteToolResult; resultHash: string;
+      providerFingerprint: string; simulated: boolean;
+      providerReference: string; replayed?: boolean }
+  | { status: "failed"; executionId: string; reasonCode: string;
+      providerFingerprint: string; simulated: boolean;
+      providerReference: string; replayed?: boolean };

@@ -10,6 +10,8 @@ import { createEnterprisePostgresSupportToolRuntime } from
   "./enterprise-postgres-support-tool-runtime.js";
 import { createEnterprisePostgresSupportReadToolRuntime } from
   "./enterprise-postgres-support-read-tool-runtime.js";
+import { createEnterprisePostgresSupportWriteToolRuntime } from
+  "./enterprise-postgres-support-write-tool-runtime.js";
 
 export function createEnterprisePostgresBusinessRuntimes(
   pool: EnterpriseTenantPostgresPool,
@@ -21,5 +23,6 @@ export function createEnterprisePostgresBusinessRuntimes(
     ...createEnterprisePostgresSupportAgentRuntime(pool),
     ...createEnterprisePostgresSupportToolRuntime(pool),
     ...createEnterprisePostgresSupportReadToolRuntime(pool),
+    ...createEnterprisePostgresSupportWriteToolRuntime(pool),
   };
 }

@@ -96,6 +96,23 @@ export function mapToolExecution(row: ToolExecutionRow): EnterpriseToolExecution
     ...(row.result_document ? { resultDocument: row.result_document } : {}),
     ...(row.result_hash ? { resultHash: row.result_hash } : {}),
     ...(row.failure_code ? { failureCode: row.failure_code } : {}),
+    ...(row.confirmation_challenge_id
+      ? { confirmationChallengeId: row.confirmation_challenge_id } : {}),
+    ...(row.confirmation_prompt_hash
+      ? { confirmationPromptHash: row.confirmation_prompt_hash } : {}),
+    ...(row.confirmation_response_hash
+      ? { confirmationResponseHash: row.confirmation_response_hash } : {}),
+    ...(row.confirmation_run_id
+      ? { confirmationRunId: row.confirmation_run_id } : {}),
+    ...(row.confirmation_turn_id
+      ? { confirmationTurnId: row.confirmation_turn_id } : {}),
+    ...(row.confirmation_after_sequence === null ? {}
+      : { confirmationAfterSequence: Number(row.confirmation_after_sequence) }),
+    ...optionalTime("confirmationRequestedAt", row.confirmation_requested_at),
+    ...optionalTime("confirmationExpiresAt", row.confirmation_expires_at),
+    ...optionalTime("confirmationDecidedAt", row.confirmation_decided_at),
+    ...(row.write_outbox_event_id
+      ? { writeOutboxEventId: row.write_outbox_event_id } : {}),
     idempotencyKey: row.idempotency_key, createdAt: iso(row.created_at),
     ...optionalTime("startedAt", row.started_at),
     ...optionalTime("completedAt", row.completed_at),
@@ -159,5 +176,15 @@ export interface ToolExecutionRow extends Record<string, unknown> {
   provider_simulated: boolean | null;
   result_document: EnterpriseToolExecutionRecord["resultDocument"] | null;
   result_hash: string | null; failure_code: string | null;
+  confirmation_challenge_id: string | null;
+  confirmation_prompt_hash: string | null;
+  confirmation_response_hash: string | null;
+  confirmation_run_id: string | null;
+  confirmation_turn_id: string | null;
+  confirmation_after_sequence: string | number | null;
+  confirmation_requested_at: string | Date | null;
+  confirmation_expires_at: string | Date | null;
+  confirmation_decided_at: string | Date | null;
+  write_outbox_event_id: string | null;
   updated_at: string | Date; version: string | number;
 }

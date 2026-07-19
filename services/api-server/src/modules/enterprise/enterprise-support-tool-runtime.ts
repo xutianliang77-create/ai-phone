@@ -1,11 +1,15 @@
 import type {
   EnterpriseSupportReadToolExecutionResponse,
+  EnterpriseSupportWriteConfirmationResponse,
+  EnterpriseSupportWriteDecisionResponse,
   EnterpriseSupportToolAuthorizationResponse,
   EnterpriseSupportToolDefinitionDto,
 } from "@translation/contracts";
 import type { PreparedEnterpriseSupportToolDefinition } from
   "./enterprise-support-tool-registry.js";
 import type { EnterpriseTenantContext } from "./enterprise-tenant-context.js";
+import type { EnterpriseSupportWritePublishReceipt } from
+  "./enterprise-support-write-tool.js";
 
 type StorageRequired = { status: "storage_required" };
 type WorkerInput = {
@@ -76,4 +80,41 @@ export interface EnterpriseSupportToolRepositoryRuntime {
         reasonCode?: string }
     | { status: string }
   >;
+  prepareSupportWriteConfirmation?(input: WorkerInput & {
+    runId: string;
+    executionId: string;
+    locale: string;
+    arguments: Record<string, unknown>;
+  }): Promise<
+    | EnterpriseSupportWriteConfirmationResponse
+    | { status: "not_configured" | "not_found" | "invalid_arguments" |
+        "unsupported_tool" | "definition_not_active" |
+        "execution_mismatch" | "run_mismatch" | "conflict";
+        reasonCode?: string }
+    | { status: string }
+  >;
+  confirmSupportWriteTool?(input: WorkerInput & {
+    runId: string;
+    executionId: string;
+    confirmationId: string;
+    turnId: string;
+    customerText: string;
+    arguments: Record<string, unknown>;
+  }): Promise<
+    | EnterpriseSupportWriteDecisionResponse
+    | { status: "confirmation_unrecognized" | "confirmation_expired" |
+        "not_configured" | "not_found" | "invalid_arguments" |
+        "unsupported_tool" | "definition_not_active" |
+        "execution_mismatch" | "run_mismatch" | "conflict";
+        reasonCode?: string }
+    | { status: string }
+  >;
+  finalizeSupportWriteToolOutbox?(input: {
+    context: EnterpriseTenantContext;
+    eventId: string;
+    attempt: number;
+    result: { status: "retry"; reason: string } |
+      { status: "completed"; receipt?: EnterpriseSupportWritePublishReceipt };
+    now: Date;
+  }): Promise<{ status: "completed" | "retried" | "failed" }>;
 }

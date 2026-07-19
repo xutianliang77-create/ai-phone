@@ -1,6 +1,6 @@
 # 无界AI企业版技术架构
 
-版本：v1.30
+版本：v1.31
 日期：2026-07-19
 状态：SaaS 详细架构基线，已对齐统一通讯平台和 PostgreSQL Primary
 
@@ -177,7 +177,7 @@ object-storage
 | 账号、Tenant、RBAC、企业命令 | `services/api-server` | 先按 domain module 隔离；只有独立扩缩容或故障域需要时才拆服务 |
 | Enterprise Repository runtime/cell Worker | `services/api-server/src/modules/enterprise`、`services/api-server/src/infrastructure/postgres` | API 使用单一 `legacy|postgres` runtime；独立启动的 cell Worker 仅以 cell discovery 和 tenant transaction 角色 claim/finalize |
 | Communication Session、Provider Operation、Dispatch、Recording 和 Usage | 上游稳定提交 `fe1c3c2` 已导入企业分支，`ENT-DATA-008/CORE-013/014/015` 已补 tenant scope、企业业务绑定、签名 dispatch fence 和企业运行策略快照 | 公共 runtime 已成为代码基线；dispatch 必须先通过服务端 policy snapshot 与授权 fence，真实 Provider/设备仍待验收 |
-| PostgreSQL Primary 基础 | 公共31段 migration/Primary Runtime 与企业现有31段 migration | 已收敛为一个 Storage Driver/启动编排和两个有序 manifest；按 tenant/directory/cell/migration/maintenance 使用最小权限连接，等待真实 H3 验收 |
+| PostgreSQL Primary 基础 | 公共31段 migration/Primary Runtime 与企业现有32段 migration | 已收敛为一个 Storage Driver/启动编排和两个有序 manifest；按 tenant/directory/cell/migration/maintenance 使用最小权限连接，等待真实 H3 验收 |
 | 受控审计导出 | enterprise `0020`、Audit Export API/Repository、cell Worker、加密对象存储 Adapter | API 只创建/查询/鉴权下载；cell Worker 在 tenant transaction 取数并保存 hash/size/expiry，客户端不获得对象存储 key/凭据；物理 purge 与对象清单仍待 REL-002 |
 | Enterprise Knowledge | enterprise `0017`、Knowledge Repository/runtime/API | source/revision/chunk/review/publish、发布后不可变、四维有效期检索和 citation 已接入；embedding Provider 未配置时保持确定性文本检索，不声明向量 readiness |
 | Enterprise Terminology | enterprise `0018`、Term Pack/Script Template Repository/runtime/API | 稳定资源与不可变 revision、审核发布、生效时间解析已接入；resolver 向 ASR/翻译/LLM 返回同一术语版本引用，话术只供 LLM 使用 |
@@ -448,7 +448,10 @@ flowchart LR
     Requested --> Claim["Read Lease Claim"]
     Claim --> ReadAdapter["Order / Logistics / Inventory Adapter"]
     ReadAdapter --> Finalize["Fenced Result Finalize"]
-    Confirm --> FutureWrite["ENT-CS-007 Confirmation + Adapter"]
+    Confirm --> Challenge["Confirmation Challenge / Turn Evidence"]
+    Challenge --> EncryptedOutbox["AES-GCM Write Outbox"]
+    EncryptedOutbox --> WriteAdapter["Ticket / Callback / Note Adapter"]
+    WriteAdapter --> WriteFinalize["Receipt + Execution Atomic Finalize"]
 ```
 
 内部授权入口只接受有效内部凭据和签名 `voice_agent_runtime` Worker ticket，并复用已有
@@ -463,8 +466,22 @@ dispatch、binding、policy、route epoch、generation 和 run fence。客户与
 tenant-bound Adapter，再在新的 tenant transaction 中复核 ticket、run、session/customer、active
 definition、lease 和 version 后 finalize。`0031` 保存 attempt、lease、Provider fingerprint、
 `simulated`、有界结果与 hash，并由 trigger 拒绝过期完成、租约篡改、终态改写和迟到结果。生产
-runtime 默认未配置；可注入 mock 只用于协议和客户归属验证，不伪造真实外部系统成功。可逆写确认和
-高风险接管仍分别属于 `ENT-CS-007/008`。
+runtime 默认未配置；可注入 mock 只用于协议和客户归属验证，不伪造真实外部系统成功。高风险接管
+仍属于 `ENT-CS-008`。
+
+### 8.7 可逆写 Tool Adapter 执行单元
+
+`ENT-CS-007` 在 API 侧把确认挑战绑定到 active Support Agent run 与挑战后新产生的客户 turn；数据库
+只保存 prompt/response hash、run/turn/sequence 和有效期。未取得精确确认前不生成 Outbox。确认事务
+同时把 execution 推进为 `confirmed` 并插入 `support.tool.write.requested`，Outbox 载荷由 AES-256-GCM
+密封，AAD 绑定 tenant、execution、customer、tool 和 Provider 幂等键。
+
+Cell Worker 复用现有 cell discovery、tenant forced-RLS claim 和恢复循环，但写工具由专用 Publisher
+调用 tenant-bound Adapter。Provider readiness 必须声明 `idempotencyGuaranteed=true`，且 fingerprint/
+`simulated` 必须与确认时完全一致。网络超时、异常或缺失 receipt 只用相同幂等键回退重试；完成或带
+reference 的确定失败才在同一 tenant transaction 中递增 attempt、写 execution 终态、发布 Outbox
+并追加审计。默认 API/Worker Adapter 均 unavailable；没有真实 Provider 配置时不会进入确认或产生
+伪业务对象。
 
 ## 9. 数据架构
 
@@ -526,7 +543,7 @@ Worker 无权依据缓存继续执行敏感能力。
 
 生产 PostgreSQL 启动还必须验证企业签名 cutover evidence：证据绑定 staging 环境、
 commit、image digest、topology hash、目标 logical ID、system identifier/OID、公共31段与
-企业31段 manifest，并证明源库 writer fence、旧 API/Worker 角色会话为0、目标可写和
+企业32段 manifest，并证明源库 writer fence、旧 API/Worker 角色会话为0、目标可写和
 二次全量 hash 一致。本地逻辑恢复证据不提升为跨故障域 HA/PITR 结论。
 
 ## 10. 安全架构

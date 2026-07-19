@@ -42,6 +42,7 @@ describe("enterprise PostgreSQL migrations", () => {
       "0029_enterprise_support_agent",
       "0030_enterprise_support_tool_registry",
       "0031_enterprise_support_read_tools",
+      "0032_enterprise_support_write_tools",
     ]);
     for (const migration of migrations) {
       expect(migration.up.trim()).not.toBe("");
@@ -154,6 +155,8 @@ describe("enterprise PostgreSQL migrations", () => {
     expect(sql).toContain("tool_executions_read_recovery_idx");
     expect(sql).toContain("provider_simulated boolean");
     expect(sql).toContain("tool_executions_read_shape_check");
+    expect(sql).toContain("tool_executions_runtime_shape_check");
+    expect(sql).toContain("DEFERRABLE INITIALLY DEFERRED");
     expect(sql).toContain("external_result_ref IS NOT NULL");
     expect(sql).toContain("NEW.execution_attempt > OLD.execution_attempt + 1");
     expect(sql).toContain("CREATE TABLE enterprise.meeting_material_segments");

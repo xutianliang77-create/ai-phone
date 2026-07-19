@@ -178,11 +178,28 @@ async function processRef(
       }),
       eventId: event.id,
       attempt: event.attempts,
-      result,
+      result: meetingCalendarResult(result),
       now,
     });
     return finalized.status === "completed" ? "completed" :
       finalized.status === "retried" ? "retried" : "failed";
+  }
+  if (event.eventType === "support.tool.write.requested") {
+    if (!options.runtime.finalizeSupportWriteToolOutbox) {
+      throw new Error("Support write tool runtime is missing");
+    }
+    const finalized = await options.runtime.finalizeSupportWriteToolOutbox({
+      context: createEnterpriseTenantContext({
+        tenantId: event.tenantId,
+        actorUserId: "system:enterprise-support-write",
+        traceId: event.traceId,
+      }),
+      eventId: event.id,
+      attempt: event.attempts,
+      result: supportWriteResult(result),
+      now,
+    });
+    return finalized.status;
   }
   await finalizeOutbox(options.tenantPool, event, result, now);
   return result.status === "completed" ? "completed" : "retried";
@@ -230,6 +247,22 @@ function workerTrace(workerId: string, now: Date) {
 
 function safeErrorCode(value: string) {
   return /^[a-z][a-z0-9_]{1,63}$/.test(value) ? value : "publisher_failed";
+}
+
+function meetingCalendarResult(result: Awaited<ReturnType<
+  EnterpriseOutboxPublisher["publish"]>>) {
+  if (result.status === "retry") return result;
+  return result.receipt?.kind === "meeting_calendar"
+    ? { status: "completed" as const, receipt: result.receipt }
+    : { status: "retry" as const, reason: "calendar_provider_receipt_invalid" };
+}
+
+function supportWriteResult(result: Awaited<ReturnType<
+  EnterpriseOutboxPublisher["publish"]>>) {
+  if (result.status === "retry") return result;
+  return result.receipt?.kind === "support_write_tool"
+    ? { status: "completed" as const, receipt: result.receipt }
+    : { status: "retry" as const, reason: "support_write_tool_receipt_invalid" };
 }
 
 function waitForNextPoll(milliseconds: number, signal: AbortSignal) {

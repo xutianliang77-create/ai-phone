@@ -1,6 +1,6 @@
 # 无界AI企业版设计文档索引
 
-版本：v1.39
+版本：v1.40
 日期：2026-07-19
 状态：SaaS 详细设计基线，已纳入统一通讯平台和 PostgreSQL Primary 演进
 
@@ -46,11 +46,11 @@ cell Worker、JSON/SQLite 演示导入，以及全业务表 Primary 切换/恢�
 无界AI主产品公共 PostgreSQL migration、Primary Runtime、可靠 Inbox/Outbox、
 fencing、Billing/Product Records、verify-full 和韧性代码已形成稳定提交 `fe1c3c2`，并由
 `ENT-DATA-007` 合入企业分支。企业版已经完成单 driver、双 manifest、同库身份和分权
-连接的本地自动化，当前 manifest 为公共31段、enterprise 31段；`ENT-DATA-008` 和
+连接的本地自动化，当前 manifest 为公共31段、enterprise 32段；`ENT-DATA-008` 和
 `ENT-CORE-013/014/015` 已完成公共通讯 tenant scope、企业业务会话绑定、签名 Worker dispatch fence
 及设备/声音/录制策略快照的代码/本地自动化，但不能继承主产品 staging 验收。`ENT-DATA-009` 已增加
 31+16 migration manifest 的历史本地证据、全表主键分页 count/hash、WAL 水位、writer fence、签名
-cutover/restore 证据和 production startup 绑定门禁；当前 `0017..0031` 必须按31+31重新生成切换证据。
+cutover/restore 证据和 production startup 绑定门禁；当前 `0017..0032` 必须按31+32重新生成切换证据。
 `ENT-CORE-004` 已增加 tenant-scoped source/version/chunk、草稿审核发布状态机、发布后不可变约束、
 locale/country/product/effective-time 检索和知识引用 ID；
 `ENT-CORE-005` 已增加版本化 term pack/script template、审核发布和生效窗口、发布后不可变约束，
@@ -116,13 +116,20 @@ LiveKit/ASR/TTS、取消/接管竞态和重启恢复未执行，保持 `in_progr
 `ENT-CS-005` 已增加 `0030` forced-RLS Tool Registry、不可变 revision、固定
 risk/scope/confirmation 映射、封闭 primitive schema、签名 Worker fence、参数 hash、幂等授权记录和
 DB insert guard。只读只创建 `requested`，可逆写只创建 `awaiting_confirmation`，高风险只返回人工接管且不创建
-execution；Agent 工具输出仍未开放，只读执行见 `ENT-CS-006`，确认/高风险流程待 `ENT-CS-007/008`。当前只进入静态门禁，
+execution；Agent 工具输出仍未开放，只读执行见 `ENT-CS-006`，可逆写确认/密文 Outbox/Worker 收敛见
+`ENT-CS-007`，高风险流程待 `ENT-CS-008`。`ENT-CS-007` 固定 ticket/callback/note，确认绑定挑战后客户
+turn，未知 Provider 结果使用相同幂等键重试，默认 unavailable、mock simulated=true。当前只进入静态门禁，
 migration/RLS、自动化、并发发布、双租户和真实 Provider/Adapter 未执行，保持 `in_progress`。
 `ENT-CS-006` 已增加 `0031` read execution attempt/lease/result 状态、order/logistics/inventory 严格
 Adapter contract、默认 not_configured runtime、tenant-bound simulated mock，以及 transaction claim、
 事务外限时调用和 lease/version/definition/session/customer fenced finalize。完成回放重新校验结果并重算
 hash；Agent `toolRequest` 仍为 `null`，真实 Provider 未配置。当前只通过静态门禁，测试、真实 migration/
 forced-RLS、双租户、并发重领、崩溃恢复和 Provider 验收未执行，保持 `in_progress`。
+`ENT-CS-007` 已增加 `0032`、120秒确认挑战、挑战后客户 turn hash/sequence 绑定、ticket/callback/note
+严格 Adapter、AES-GCM Outbox、Cell Worker 同幂等键恢复和 execution/outbox 原子 finalize。未确认、含糊/
+过期确认、参数/工具版本变化或配置缺失均不入队；未知网络结果不写确定失败。生产默认 unavailable，
+mock 固定 simulated=true，Agent `toolRequest` 仍为 `null`。测试、真实 migration/forced-RLS、并发确认、
+崩溃恢复和真实 Provider 均未执行，保持 `in_progress`。
 当前按要求未执行
 测试、migration、RLS、RBAC/ticket/evidence 攻击、并发共享、Worker/Provider、四人媒体、浏览器、真机与重启恢复，
 因此上述任务均保持 `in_progress`。

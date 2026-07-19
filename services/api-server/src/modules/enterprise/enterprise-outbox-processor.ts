@@ -13,10 +13,13 @@ import { runWithPlatformTraceId } from
   "../../infrastructure/observability/platform-telemetry.js";
 import type { EnterpriseMeetingCalendarPublishReceipt } from
   "./enterprise-meeting-calendar.js";
+import type { EnterpriseSupportWritePublishReceipt } from
+  "./enterprise-support-write-tool.js";
 
 export interface EnterpriseOutboxPublisher {
   publish(event: Readonly<EnterpriseOutboxEventRecord>): Promise<
-    | { status: "completed"; receipt?: EnterpriseMeetingCalendarPublishReceipt }
+    | { status: "completed"; receipt?: EnterpriseMeetingCalendarPublishReceipt |
+        EnterpriseSupportWritePublishReceipt }
     | { status: "retry"; reason: string }
   >;
 }

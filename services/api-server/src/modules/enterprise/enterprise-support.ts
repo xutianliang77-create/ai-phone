@@ -1,6 +1,7 @@
 import type { EnterpriseCommunicationBindingRecord } from
   "./enterprise-communication-session.js";
-import type { EnterpriseScope, EnterpriseSupportReadToolResult } from
+import type { EnterpriseScope, EnterpriseSupportReadToolResult,
+  EnterpriseSupportWriteToolResult } from
   "@translation/contracts";
 
 export const enterpriseSupportChannelTypes = ["pstn", "web", "app"] as const;
@@ -82,7 +83,13 @@ export interface EnterpriseToolExecutionRecord {
   executionAttempt: number; executionLeaseId?: string;
   executionLeaseExpiresAt?: string; providerFingerprint?: string;
   providerSimulated?: boolean;
-  resultDocument?: EnterpriseSupportReadToolResult; resultHash?: string;
+  resultDocument?: EnterpriseSupportReadToolResult |
+    EnterpriseSupportWriteToolResult; resultHash?: string;
+  confirmationChallengeId?: string; confirmationPromptHash?: string;
+  confirmationResponseHash?: string; confirmationRunId?: string;
+  confirmationTurnId?: string; confirmationAfterSequence?: number;
+  confirmationRequestedAt?: string; confirmationExpiresAt?: string;
+  confirmationDecidedAt?: string; writeOutboxEventId?: string;
   failureCode?: string;
   idempotencyKey: string; createdAt: string; startedAt?: string;
   completedAt?: string; updatedAt: string; version: number;
@@ -153,7 +160,7 @@ const toolTransitions: Record<
 > = {
   requested: new Set(["awaiting_confirmation", "running", "rejected", "failed", "cancelled"]),
   awaiting_confirmation: new Set(["confirmed", "rejected", "failed", "cancelled"]),
-  confirmed: new Set(["running", "failed", "cancelled"]),
+  confirmed: new Set(["running", "completed", "failed"]),
   running: new Set(["completed", "failed", "cancelled"]),
   completed: new Set(), rejected: new Set(), failed: new Set(), cancelled: new Set(),
 };

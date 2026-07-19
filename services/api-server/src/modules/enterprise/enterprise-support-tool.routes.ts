@@ -10,12 +10,15 @@ import { prepareEnterpriseSupportToolDefinition } from
 import { createEnterpriseTenantContext } from "./enterprise-tenant-context.js";
 import { requireTenantRouteDocument } from "./enterprise-tenant-route.routes.js";
 import type { TenantRouteService } from "./enterprise-tenant-route.js";
+import { registerEnterpriseSupportWriteToolRoutes } from
+  "./enterprise-support-write-tool.routes.js";
 
 export function registerEnterpriseSupportToolRoutes(
   app: FastifyInstance,
   routeService: TenantRouteService,
   runtime: EnterpriseRepositoryRuntime,
 ) {
+  registerEnterpriseSupportWriteToolRoutes(app, runtime);
   app.post("/enterprise/v1/support/tools", async (request, reply) => {
     const access = await accessFor(request, reply, runtime, routeService,
       "support:manage", "support.tool_definition.create");

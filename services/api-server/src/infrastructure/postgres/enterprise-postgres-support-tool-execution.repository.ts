@@ -3,7 +3,8 @@ import {
   enterpriseToolRiskLevels,
   type CreateEnterpriseToolExecutionInput,
 } from "../../modules/enterprise/enterprise-support.js";
-import type { EnterpriseSupportReadToolResult } from "@translation/contracts";
+import type { EnterpriseSupportReadToolResult,
+  EnterpriseSupportWriteToolResult } from "@translation/contracts";
 import { mapToolExecution, type ToolExecutionRow } from
   "./enterprise-postgres-support-records.js";
 import type { EnterpriseTenantPostgresSession } from
@@ -51,6 +52,105 @@ export class EnterpriseSupportToolExecutionPostgresRepository {
       WHERE tenant_id = $1 AND id = $2 ${lock ? "FOR UPDATE" : ""}
     `, [uuid(executionId)]);
     return result.rows[0] ? mapToolExecution(result.rows[0]) : null;
+  }
+
+  async findByWriteOutbox(eventId: string, lock = false) {
+    const result = await this.session.query<ToolExecutionRow>(`
+      SELECT * FROM enterprise.tool_executions
+      WHERE tenant_id = $1 AND write_outbox_event_id = $2
+      ${lock ? "FOR UPDATE" : ""}
+    `, [uuid(eventId)]);
+    return result.rows[0] ? mapToolExecution(result.rows[0]) : null;
+  }
+
+  async prepareWriteConfirmation(input: { executionId: string;
+    expectedVersion: number; challengeId: string; promptHash: string;
+    runId: string; afterSequence: number; requestedAt: string; expiresAt: string }) {
+    const result = await this.session.query<ToolExecutionRow>(`
+      UPDATE enterprise.tool_executions SET confirmation_challenge_id = $3,
+        confirmation_prompt_hash = $4, confirmation_run_id = $5,
+        confirmation_after_sequence = $6, confirmation_requested_at = $7,
+        confirmation_expires_at = $8, updated_at = $7, version = version + 1
+      WHERE tenant_id = $1 AND id = $2 AND version = $9
+        AND risk_level = 'reversible_write' AND status = 'awaiting_confirmation'
+        AND (confirmation_challenge_id IS NULL OR confirmation_expires_at <= $7)
+      RETURNING *
+    `, [uuid(input.executionId), uuid(input.challengeId), hash(input.promptHash),
+      uuid(input.runId), nonNegative(input.afterSequence), timestamp(input.requestedAt),
+      timestamp(input.expiresAt), positive(input.expectedVersion)]);
+    return result.rows[0]
+      ? { status: "prepared" as const, execution: mapToolExecution(result.rows[0]) }
+      : { status: "conflict" as const };
+  }
+
+  async confirmWrite(input: { executionId: string; expectedVersion: number;
+    challengeId: string; turnId: string; responseHash: string; decidedAt: string;
+    outboxEventId: string; providerFingerprint: string; providerSimulated: boolean }) {
+    const result = await this.session.query<ToolExecutionRow>(`
+      UPDATE enterprise.tool_executions SET status = 'confirmed',
+        confirmation_status = 'confirmed', confirmation_turn_id = $4,
+        confirmation_response_hash = $5, confirmation_decided_at = $6,
+        write_outbox_event_id = $7, provider_fingerprint = $8,
+        provider_simulated = $9, updated_at = $6, version = version + 1
+      WHERE tenant_id = $1 AND id = $2 AND confirmation_challenge_id = $3
+        AND version = $10 AND status = 'awaiting_confirmation'
+        AND confirmation_expires_at >= $6 RETURNING *
+    `, [uuid(input.executionId), uuid(input.challengeId), uuid(input.turnId),
+      hash(input.responseHash), timestamp(input.decidedAt), uuid(input.outboxEventId),
+      fingerprint(input.providerFingerprint), input.providerSimulated,
+      positive(input.expectedVersion)]);
+    return result.rows[0]
+      ? { status: "confirmed" as const, execution: mapToolExecution(result.rows[0]) }
+      : { status: "conflict" as const };
+  }
+
+  async rejectWrite(input: { executionId: string; expectedVersion: number;
+    challengeId: string; turnId: string; responseHash: string; decidedAt: string }) {
+    const result = await this.session.query<ToolExecutionRow>(`
+      UPDATE enterprise.tool_executions SET status = 'rejected',
+        confirmation_status = 'rejected', confirmation_turn_id = $4,
+        confirmation_response_hash = $5, confirmation_decided_at = $6,
+        completed_at = $6, updated_at = $6, version = version + 1
+      WHERE tenant_id = $1 AND id = $2 AND confirmation_challenge_id = $3
+        AND version = $7 AND status = 'awaiting_confirmation'
+        AND confirmation_expires_at >= $6 RETURNING *
+    `, [uuid(input.executionId), uuid(input.challengeId), uuid(input.turnId),
+      hash(input.responseHash), timestamp(input.decidedAt),
+      positive(input.expectedVersion)]);
+    return result.rows[0]
+      ? { status: "rejected" as const, execution: mapToolExecution(result.rows[0]) }
+      : { status: "conflict" as const };
+  }
+
+  async finalizeWrite(input: { executionId: string; expectedVersion: number;
+    eventId: string; result: { status: "retry"; reasonCode: string } |
+      { status: "completed"; document: EnterpriseSupportWriteToolResult;
+        resultHash: string; providerReference: string } |
+      { status: "failed"; reasonCode: string; providerReference: string };
+    completedAt: string }) {
+    const terminal = input.result.status !== "retry";
+    const status = input.result.status === "retry" ? "confirmed" : input.result.status;
+    const result = await this.session.query<ToolExecutionRow>(`
+      UPDATE enterprise.tool_executions SET status = $4,
+        execution_attempt = execution_attempt + 1,
+        result_document = $5::jsonb, result_hash = $6, failure_code = $7,
+        external_result_ref = $8, completed_at = $9, updated_at = $3,
+        version = version + 1
+      WHERE tenant_id = $1 AND id = $2 AND write_outbox_event_id = $10
+        AND version = $11 AND status = 'confirmed' RETURNING *
+    `, [uuid(input.executionId), timestamp(input.completedAt), status,
+      input.result.status === "completed" ? JSON.stringify(input.result.document) : null,
+      input.result.status === "completed" ? hash(input.result.resultHash) : null,
+      input.result.status === "retry" || input.result.status === "failed"
+        ? failure(input.result.reasonCode) : null,
+      input.result.status === "completed" || input.result.status === "failed"
+        ? reference(input.result.providerReference) : null,
+      terminal ? timestamp(input.completedAt) : null, uuid(input.eventId),
+      positive(input.expectedVersion)]);
+    return result.rows[0]
+      ? { status: status as "confirmed" | "completed" | "failed",
+          execution: mapToolExecution(result.rows[0]) }
+      : { status: "conflict" as const };
   }
 
   async claimRead(input: { executionId: string; expectedVersion: number;
@@ -180,6 +280,12 @@ function hash(value: unknown) {
 function positive(value: unknown) {
   if (!Number.isSafeInteger(value) || Number(value) < 1) {
     throw new Error("Invalid support tool revision");
+  }
+  return Number(value);
+}
+function nonNegative(value: unknown) {
+  if (!Number.isSafeInteger(value) || Number(value) < 0) {
+    throw new Error("Invalid support tool sequence");
   }
   return Number(value);
 }
