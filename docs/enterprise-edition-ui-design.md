@@ -1,6 +1,6 @@
 # 无界AI企业版 UI 详细设计
 
-版本：v1.17
+版本：v1.18
 日期：2026-07-19
 状态：设计基线；企业 Web 公共组件、首批设置/工作台、响应式/主题/无障碍和 Web/iOS/Android 成员屏幕共享代码候选已实现，正式验收仍在开发
 
@@ -230,6 +230,16 @@ budget、usage aggregate 和显式 session trace report。卡片沿用同一 Mat
 - 接管是珊瑚色高关注操作；接管成功后 AI 发言控件立即禁用。
 - 知识建议必须显示来源、版本和有效范围；无可信知识时明确“无法确认”。
 - 客户敏感字段默认遮罩，按权限临时显示并写入审计。
+- `ENT-CS-010` Web 代码候选复用企业壳、8px 圆角、Primary/Signal 颜色与 Material Icons：队列使用
+  `inbox`，字幕使用 `closed_caption`，客户使用 `person`，知识使用 `menu_book`，AI 停止使用
+  `voice_over_off`，静音/转组/结束使用 `mic_off/swap_horiz/call_end`，工单/回呼使用
+  `confirmation_number/phone_callback`，不引入第二套图标。
+- 桌面为 queue / conversation / context 三栏；1250px 以下客户上下文换到下一行，850px 以下单列，
+  600px 以下控制按钮两列。等待项、SLA、租约、字幕修订、客户、知识引用、风险和历史均来自 API。
+- 字幕标注为2.5秒服务端快照；没有字幕时可展示接管上下文，但必须写明“非实时字幕”。静音、转组、
+  结束、工单和回呼在 Provider/API 未就绪时为 disabled 并带原因，不显示可点击的假入口。
+- 接管后的绿色/Primary 状态只表示数据库已确认 AI run fence；物理媒体停止尚无 Worker 回执时，验收页
+  必须继续区分“服务端停止栅栏”和“300ms内音频停止”。
 
 ### 8.4 企业会议
 

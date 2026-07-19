@@ -14,6 +14,7 @@ import "./styles/settings.css";
 import "./styles/audit.css";
 import "./styles/guest.css";
 import "./styles/meeting.css";
+import "./styles/support.css";
 import "./styles/accessibility.css";
 
 const root = document.getElementById("root");

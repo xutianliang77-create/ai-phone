@@ -1,6 +1,6 @@
 # 无界AI企业版技术架构
 
-版本：v1.33
+版本：v1.34
 日期：2026-07-19
 状态：SaaS 详细架构基线，已对齐统一通讯平台和 PostgreSQL Primary
 
@@ -514,6 +514,25 @@ owner/admin/support_manager/support_agent；queue 必须 active；session 必须
 work-item 投影只返回待接管或 lease 已过期的会话，按 SLA breach、priority、handoff time、ID 排序。lease
 过期不会在只读列表中暗改状态；下一次 claim 才原子写入 `expired` 证据并取得控制权。该单元不包含
 `ENT-CS-010` 的实时字幕、客户资料、知识建议或媒体控制，也不调用 CRM/Provider。
+
+### 8.10 坐席工作台投影与 AI 停止栅栏
+
+`ENT-CS-010` 不新增业务表，而在既有 PostgreSQL Primary 上组合四类 tenant 真值：Support aggregate
+提供 session/customer/channel/queue/case/tool execution，Support Agent run/turn 提供有界对话和风险引用，
+high-risk handoff 提供不可执行风险证据，公共 `ai_phone.transcript_segments` 提供最终修订字幕。字幕读取只能
+通过 `queryCommunication` 的单表、显式 `scope_type=$1 AND scope_id=$2` 白名单 SELECT，并由 forced RLS
+二次隔离；Web 不直连数据库或 LiveKit 管理接口。
+
+claim 的状态转换、Agent run 取消和审计处于同一 tenant Unit of Work。run 为 active、handoff_requested
+或 ending 时统一进入 cancelled；未启动、completed、failed、既有 cancelled 形成三种可显示的安全 fence。
+Worker 每次 turn、TTS authorize、deliver 均重读 run/ticket/binding/generation，cancelled run 不再取得效果
+授权。旧版本有效 claim 可经 workbench activate 在行锁下补建 fence；assigned member、active claim、session
+绑定或 lease 任一不符均拒绝工作台。
+
+工作台 GET 是只读快照，2.5秒轮询不会续租；claim heartbeat 单独使用 expected version，并把 lease 设置为
+`now + queue.claimLeaseSeconds`，不会从旧到期时间反复累加。字幕或知识读取故障不能延长控制权，租约到期后
+客户端停止操作并回到队列。当前未实现 Worker 主动 interrupt/ack 和 LiveKit mute/end/transfer Provider，故
+架构状态只达到“数据库取消 + 后续授权失败闭合”，300ms内物理停播仍属于真实媒体验收。
 
 ## 9. 数据架构
 

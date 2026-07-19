@@ -19,6 +19,7 @@ import { DashboardPage } from "../pages/DashboardPage.js";
 import { AuditPage } from "../pages/AuditPage.js";
 import { MeetingsPage } from "../pages/MeetingsPage.js";
 import { AnalyticsPage } from "../pages/AnalyticsPage.js";
+import { SupportPage } from "../pages/SupportPage.js";
 import { PageFrame } from "./PageFrame.js";
 import { EnterpriseTelemetry } from "./EnterpriseTelemetry.js";
 import {
@@ -153,6 +154,17 @@ export function AppShell() {
               )}
           />
           <Route
+            path="/support/*"
+            element={routeAllowed(state.context.scopes, "/support")
+              ? <SupportPage />
+              : (
+                <PageFrame title="坐席工作台" description="客服队列、接管与服务上下文">
+                  <StatusPanel state="forbidden"
+                    description="当前账号缺少 support:read，未读取任何客服数据。" />
+                </PageFrame>
+              )}
+          />
+          <Route
             path="/analytics/*"
             element={routeAllowed(state.context.scopes, "/analytics")
               ? <AnalyticsPage />
@@ -190,7 +202,7 @@ export function AppShell() {
           {enterpriseNavigation.slice(1).filter(({ path }) =>
             path !== "/knowledge" && path !== "/analytics" &&
             path !== "/audit" && path !== "/settings"
-            && path !== "/meetings"
+            && path !== "/meetings" && path !== "/support"
           ).map((item) => (
             <Route
               key={item.path}

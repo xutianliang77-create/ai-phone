@@ -1,6 +1,6 @@
 # 无界AI企业版详细功能设计
 
-版本：v1.30
+版本：v1.31
 日期：2026-07-19
 状态：SaaS 详细设计基线，已对齐统一通讯平台
 
@@ -391,6 +391,22 @@ LLM 只能提出结构化工具请求；Policy Engine 校验租户、客户、�
 - 当前只证明服务端队列和互斥接管候选，不代表坐席工作台、字幕/通话控制、真实人工已接通或 PostgreSQL
   生产门禁通过；这些仍分别属于 `ENT-CS-010` 和真实环境验收。
 
+`ENT-CS-010` 已形成坐席工作台代码候选：
+
+- Web 左侧只读取当前 tenant 的 queue/work-item；接管后才读取对应 session 的客户、字幕、Agent 上下文、
+  风险、case 和工具执行，不提供跨坐席的活动会话目录。
+- claim 成功在同一 tenant 事务内把当前 Support Agent run 收敛为 `cancelled`；旧 Worker 的 prepare、TTS
+  authorize 和 deliver 继续受 run/ticket/generation fence 拒绝。刷新既有 claim 时，工作台 activate API
+  重新校验 assigned user、active claim 和未过期 lease 后补建相同停止栅栏。
+- 中间字幕区只轮询 tenant-scoped `transcript_segments` 的最终 revision；没有 segment 时只显示已有 Agent
+  上下文并标记“非实时字幕”，不生成示例对话或翻译。
+- 右侧客户资料、历史 case、工具结果、高风险接管和知识检索均来自现有服务端聚合；知识检索沿用当前
+  Agent 的 locale/country/product，缺少维度时禁用而不猜测默认值。
+- claim 心跳从当前时间续一个 queue lease，续租冲突或到期后停止控制。释放接管回到等待队列；静音、
+  转组、结束通话、创建工单和回呼没有安全 Provider/API 时固定显示 `not_ready`。
+- 当前没有 LiveKit worker interrupt 回执、真实坐席媒体、CRM/Ticket Provider 或浏览器测试，因此只证明
+  新生成/授权/交付的 AI 发言被服务端栅栏阻断，不证明已经播放的音频在300ms内物理停止，也不表示生产可用。
+
 ### 6.5 人工坐席工作台
 
 - 左侧为等待队列和 SLA。
@@ -398,6 +414,12 @@ LLM 只能提出结构化工具请求；Policy Engine 校验租户、客户、�
 - 右侧为客户资料、知识建议、订单和历史摘要。
 - 提供接管、静音、转组、结束、创建工单和预约回拨。
 - 接管时向坐席发送问题、已执行动作、风险和建议，不要求重新询问全部信息。
+- 当前 Web 代码候选采用三栏布局、Material Icons 和同一浅/深色令牌；2.5秒字幕快照与 claim 心跳分别
+  处理，字幕读取失败不能延长控制权，续租失败也不能用本地状态继续控制。
+- “AI 已停止”只在服务端确认 run 为 `cancelled`、不存在或已终态时显示。active、handoff_requested、
+  ending 或租约失效均不能进入 ready 工作台。
+- 尚未接通的媒体和 `ENT-CS-011` 工单/回呼按钮保持 disabled + reason code，不使用 toast 或本地 mock
+  冒充外部操作成功。
 
 ### 6.6 质检和分析
 

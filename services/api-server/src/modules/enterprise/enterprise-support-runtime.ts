@@ -14,6 +14,8 @@ import type {
   EnterpriseSupportAgentClaimRecord,
   EnterpriseSupportQueueWorkItem,
 } from "./enterprise-support-agent-queue.js";
+import type { EnterpriseSupportWorkbenchSnapshot } from
+  "./enterprise-support-workbench.js";
 import type {
   EnterpriseSupportInboundAuthorization,
   EnterpriseSupportInboundEvent,
@@ -24,6 +26,22 @@ import type {
 type StorageRequired = { status: "storage_required" };
 
 export interface EnterpriseSupportRepositoryRuntime {
+  activateSupportWorkbench?(input: {
+    context: EnterpriseTenantContext; sessionId: string; now: string;
+  }): Promise<
+    | { status: "ready"; workbench: EnterpriseSupportWorkbenchSnapshot }
+    | { status: "not_found" | "not_active" | "forbidden" |
+        "claim_not_active" | "claim_expired" }
+    | StorageRequired
+  >;
+  getSupportWorkbench?(input: {
+    context: EnterpriseTenantContext; sessionId: string; now: string;
+  }): Promise<
+    | { status: "ready"; workbench: EnterpriseSupportWorkbenchSnapshot }
+    | { status: "not_found" | "not_active" | "forbidden" |
+        "claim_not_active" | "claim_expired" | "ai_stop_not_verified" }
+    | StorageRequired
+  >;
   createSupportQueue?(input: {
     context: EnterpriseTenantContext;
     queue: CreateEnterpriseSupportQueueInput;
@@ -50,7 +68,8 @@ export interface EnterpriseSupportRepositoryRuntime {
     expectedSessionVersion: number; idempotencyKey: string; now: string;
   }): Promise<
     | { status: "claimed" | "replayed"; claim: EnterpriseSupportAgentClaimRecord;
-        session: EnterpriseSupportSessionAggregate["session"] }
+        session: EnterpriseSupportSessionAggregate["session"];
+        aiSpeechFence?: EnterpriseSupportWorkbenchSnapshot["aiSpeechFence"] }
     | { status: "not_found" | "queue_not_found" | "queue_unavailable" |
         "not_handoff_requested" | "already_claimed" | "conflict" |
         "idempotency_conflict" }

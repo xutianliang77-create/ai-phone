@@ -46,6 +46,15 @@ export class EnterpriseSupportHighRiskHandoffPostgresRepository {
       : { status: "idempotency_conflict" as const };
   }
 
+  async listForSession(sessionId: string) {
+    const result = await this.session.query<HandoffRow>(`
+      SELECT * FROM enterprise.support_high_risk_handoff_requests
+      WHERE tenant_id = $1 AND support_session_id = $2
+      ORDER BY created_at, id
+    `, [uuid(sessionId)]);
+    return result.rows.map(mapHandoff);
+  }
+
   private async findByKey(idempotencyKey: string, lock = false) {
     const result = await this.session.query<HandoffRow>(`
       SELECT * FROM enterprise.support_high_risk_handoff_requests

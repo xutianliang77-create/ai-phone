@@ -80,6 +80,8 @@ import { EnterpriseSupportHighRiskHandoffPostgresRepository } from
   "./enterprise-postgres-support-high-risk-handoff.repository.js";
 import { EnterpriseSupportAgentQueuePostgresRepository } from
   "./enterprise-postgres-support-agent-queue.repository.js";
+import { EnterpriseSupportWorkbenchPostgresRepository } from
+  "./enterprise-postgres-support-workbench.repository.js";
 
 export interface EnterprisePostgresUnitOfWork {
   tenant: EnterpriseTenantPostgresRepository;
@@ -110,6 +112,7 @@ export interface EnterprisePostgresUnitOfWork {
   supportToolExecutions: EnterpriseSupportToolExecutionPostgresRepository;
   supportHighRiskHandoffs: EnterpriseSupportHighRiskHandoffPostgresRepository;
   supportAgentQueue: EnterpriseSupportAgentQueuePostgresRepository;
+  supportWorkbench: EnterpriseSupportWorkbenchPostgresRepository;
 }
 
 export function withEnterprisePostgresUnitOfWork<T>(
@@ -154,6 +157,7 @@ export function withEnterprisePostgresUnitOfWork<T>(
       supportHighRiskHandoffs:
         new EnterpriseSupportHighRiskHandoffPostgresRepository(session),
       supportAgentQueue: new EnterpriseSupportAgentQueuePostgresRepository(session),
+      supportWorkbench: new EnterpriseSupportWorkbenchPostgresRepository(session),
     }),
   );
 }

@@ -1,6 +1,6 @@
 # 无界AI企业版开发任务
 
-版本：v1.54
+版本：v1.55
 日期：2026-07-19
 状态：E0 开发中，已对齐统一通讯平台和 PostgreSQL Primary 收敛
 
@@ -53,6 +53,7 @@
 - `ENT-UI-010` 已增加独立 Playwright 三引擎配置、九角色 route 矩阵、320/600/960/1280/1440 双主题截图、动态字体/键盘/axe/客户端遥测用例、固定 release matrix、生产 bundle 体积/源码映射/敏感信息/fixture/发布元数据扫描和 Node 24 CI release-candidate job。浏览器异常只在本地生成 SHA-256 截断 fingerprint，携带 path/app version/commit，经 Bearer、tenant 与签名 route document 上报；服务端拒绝额外字段并只写结构化日志。当前只完成 typecheck、生产构建和静态 bundle 门禁，按要求未运行 unit/API/Playwright/axe/视觉回归，且视觉基线未生成，任务保持 `in_progress`。
 - `ENT-UI-011` 已在个人版“我的”中增加独立企业工作区入口，并实现账号过期清理、active membership 发现、显式多租户选择、短期签名 route/region/cell/scope/Provider document 重新校验，以及工作台、会议、接管、告警、我的五入口。会议只向 `meeting:read` 显示，现读取 tenant-scoped Meeting 列表、换取短期 RTC grant 并通过独立企业 LiveKit 客户端加入音频；接管仍在 API 未完成时固定 `not_ready`，会议不回退个人同传或 Call Link。离线、401、跨成员/租户/区域和无效路由均不进入工作区。当前只完成 `flutter analyze` 静态门禁，按要求未运行 Flutter test、构建、真机、动态字体或横竖屏验证，任务保持 `in_progress`。
 - `ENT-UI-012` 已增加完全位于成员 `AuthProvider/AppShell` 之外的 `/join/:meetingId` Web 访客壳，不发起账号、membership 或 tenant 请求，也不渲染租户导航和成员数据。邀请只接受 `#token=` fragment，拒绝 query token、非法 meeting ID/token，并立即从地址栏清除后只存页面内存；清除失败即拒绝。访客点击入会后以加密邀请换取短期 RTC grant，客户端只开放麦克风和订阅；字幕、数据、摄像头与共享继续关闭且不回退个人 Call Link。仅完成 typecheck、生产构建、bundle 与文件规模静态门禁，token 攻击、浏览器权限和设备矩阵按要求未执行，任务保持 `in_progress`。
+- `ENT-CS-010` 已形成 tenant-scoped workbench activate/read API、claim 与 Agent run cancel 原子栅栏、旧 claim 恢复栅栏、最终字幕 revision 投影、客户/知识/风险/历史聚合和同风格三栏 Web 坐席台。字幕以2.5秒只读轮询，claim 按当前时间续一个 queue lease；乱序快照不覆盖较新 lease。静音、转组、结束、工单和回呼没有安全 Provider/API 时 disabled + reasonCode，不伪造成功。当前只完成 typecheck/构建/静态门禁，按要求未运行自动化、真实 PostgreSQL/RLS、Worker/TTS、LiveKit、浏览器或真实坐席媒体，任务保持 `in_progress`。
 - `ENT-MTG-001` 已增加 `0021` Meeting 聚合约束、Meeting/Participant/Artifact 领域记录与状态机、tenant-scoped PostgreSQL Repository、统一 runtime adapter 和可恢复聚合读取。meeting CAS 只允许 scheduled→provisioning→active→ending→ended 及受控取消/失败；参与者身份强制 user/external XOR、host 与 meeting host 一致，artifact 类型/发布状态受约束；聚合同时返回唯一 communication binding，重启恢复读取 provisioning/active/ending。当前未运行 migration、RLS/并发/恢复测试，任务保持 `in_progress`。
 - `ENT-MTG-004` 已增加 `0024`、单会议活动租约唯一约束、append-only 命令账本、acquire/pause/resume/renew/stop 幂等 CAS、route/entitlement/participant fence、代际发布 identity 和仅屏幕源 LiveKit grant。cell Worker 依据 forced-RLS pending-work 到期回收并通过 outbox 幂等移除旧发布者；Provider 未配置或撤销失败返回 pending，不伪造完成。当前按要求未运行 migration、Repository/API/Worker、并发、forced-RLS 或真实 LiveKit 测试，任务保持 `in_progress`。
 - `ENT-MTG-005` 已在成员 Web 会议页实现 `getDisplayMedia` 用户授权、真实 screen/window/tab 识别、独立最小权限发布房间、首次 track SID 绑定和10秒租约续期；主会议房间只渲染服务端当前 generation 指定 identity 的 screen track。暂停、恢复、停止和浏览器原生停止均先收敛本地媒体，撤销 pending 不伪装为已停止。当前按要求未运行 unit/API/Playwright、多浏览器、弱网或真实 LiveKit 测试，任务保持 `in_progress`。
@@ -207,6 +208,12 @@ lease 到期只在下一次 claim 时原子写 expired 证据并释放/重领，
 变体和旧写入。测试已定义但按要求未运行，真实 migration/forced-RLS、双租户、角色矩阵、同会话并发
 claim、断线回收和人工接通均未验收，任务保持 `in_progress`。
 
+`ENT-CS-010` 已形成 workbench activate/read runtime/API 与 Web 三栏工作台。claim 成功在同一 tenant
+事务内把最新 Agent run 取消；刷新旧 claim 时重新校验 assigned user、active claim 与未过期 lease 后补建
+相同 fence。工作台只公开客户、case、工具结果、风险类别、有界 Agent 上下文和 tenant-scoped 最终字幕，
+知识检索沿用 Agent locale/country/product；媒体/工单/回呼能力缺失时固定 not_ready。测试与真实环境证据
+未执行，任务保持 `in_progress`。
+
 ## 5. P1 AI 客服
 
 | 编号 | 任务 | 依赖 | 交付物 | 完成定义 | 状态 |
@@ -220,7 +227,7 @@ claim、断线回收和人工接通均未验收，任务保持 `in_progress`。
 | ENT-CS-007 | 可逆写工具 | CS-005 | ticket/callback/note adapter、确认挑战、密文 outbox、Worker finalize | 未确认不执行，重复只执行一次 | in_progress |
 | ENT-CS-008 | 高风险接管 | CS-005 | 不可执行 handoff request、refund/payment/identity 分类、证据 hash、run/session 原子接管 | AI 永不自动完成高风险动作；幂等重放且无 execution/Outbox | in_progress |
 | ENT-CS-009 | 坐席队列 | CS-001 | `0034`、确定性 routing、SLA/lease、claim/release/renew/reassign API | 两坐席不能同时接管同一会话；断线可回收；改派受主管守卫 | in_progress |
-| ENT-CS-010 | 坐席工作台 | CS-009、CS-004 | 字幕、客户、知识和通话控制 | 接管上下文完整且 AI 停止发言 | todo |
+| ENT-CS-010 | 坐席工作台 | CS-009、CS-004 | workbench activate/read、Agent cancel fence、字幕/客户/知识/风险/历史、lease heartbeat、显式媒体降级 | 接管上下文完整；后续 AI 授权失败闭合；物理停播与媒体控制待真实验收 | in_progress |
 | ENT-CS-011 | 工单和回拨 | CS-007 | case、callback、outbox | 外部失败可重试且不阻塞结束 | todo |
 | ENT-CS-012 | 质检分析 | CS-004、OBS-001 | quality rules、dashboard | 能定位错误回答和未告知 | todo |
 

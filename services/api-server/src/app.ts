@@ -79,6 +79,7 @@ import { registerEnterpriseSupportAgentRoutes } from
   "./modules/enterprise/enterprise-support-agent.routes.js";
 import { registerEnterpriseSupportAgentQueueRoutes } from
   "./modules/enterprise/enterprise-support-agent-queue.routes.js";
+import { registerEnterpriseSupportWorkbenchRoutes } from "./modules/enterprise/enterprise-support-workbench.routes.js";
 import { registerEnterpriseSupportToolRoutes } from
   "./modules/enterprise/enterprise-support-tool.routes.js";
 import {
@@ -278,6 +279,7 @@ export async function buildApp(dependencies: {
   registerEnterpriseSupportAgentQueueRoutes(
     app, tenantRouteService, enterpriseRepositoryRuntime,
   );
+  registerEnterpriseSupportWorkbenchRoutes(app, tenantRouteService, enterpriseRepositoryRuntime);
   registerEnterpriseSupportToolRoutes(
     app, tenantRouteService, enterpriseRepositoryRuntime,
   );

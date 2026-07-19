@@ -77,6 +77,8 @@ export function registerEnterpriseSupportAgentQueueRoutes(
         return reply.status(result.status === "claimed" ? 201 : 200).send({
           status: result.status, claim: publicClaim(result.claim),
           session: publicSession(result.session),
+          ...(result.aiSpeechFence
+            ? { aiSpeechFence: result.aiSpeechFence } : {}),
         });
       }
       return failure(reply, result.status);

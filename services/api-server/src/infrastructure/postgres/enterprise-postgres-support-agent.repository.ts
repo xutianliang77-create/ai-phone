@@ -58,6 +58,25 @@ export class EnterpriseSupportAgentPostgresRepository {
     return result.rows[0] ? mapRun(result.rows[0]) : null;
   }
 
+  async findLatestRunForSession(sessionId: string, lock = false) {
+    const result = await this.session.query<RunRow>(`
+      SELECT * FROM enterprise.support_agent_runs
+      WHERE tenant_id = $1 AND support_session_id = $2
+      ORDER BY generation DESC, created_at DESC, id DESC
+      LIMIT 1 ${lock ? "FOR UPDATE" : ""}
+    `, [uuid(sessionId)]);
+    return result.rows[0] ? mapRun(result.rows[0]) : null;
+  }
+
+  async listTurnsForRun(runId: string) {
+    const result = await this.session.query<TurnRow>(`
+      SELECT * FROM enterprise.support_agent_turns
+      WHERE tenant_id = $1 AND run_id = $2
+      ORDER BY sequence, id
+    `, [uuid(runId)]);
+    return result.rows.map(mapTurn);
+  }
+
   async beginTurn(input: {
     runId: string; supportSessionId: string; inputTurnId: string;
     idempotencyKey: string; requestHash: string; customerTextHash: string;

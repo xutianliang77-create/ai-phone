@@ -1,6 +1,6 @@
 # 无界AI企业版详细技术设计
 
-版本：v1.49
+版本：v1.50
 日期：2026-07-19
 状态：统一通讯平台与 PostgreSQL Primary 收敛详细技术方案
 
@@ -912,6 +912,37 @@ runtime 两层都限制 owner/admin/support_manager，目标必须是同 tenant 
 `human_active` 映射为 `claim_expired`。只读不隐式改写；竞争者实际 claim 时用 claim/session version fence
 终结旧 lease 后再接管。当前未执行 PostgreSQL up/down、forced-RLS 双租户、两个坐席竞争、断线回收或真实
 人工媒体验收，因此 `ENT-CS-009` 仍为 `in_progress`，也不代表 `ENT-CS-010` 工作台已实现。
+
+### 7.6 坐席工作台聚合、租约心跳和停止栅栏
+
+`POST /enterprise/v1/support/sessions/:sessionId/workbench` 用于打开或恢复工作台，`GET` 返回后续只读快照。
+二者都要求 `support:takeover`、签名 tenant route 和服务端 membership；runtime 锁定 session 与 active claim，
+要求 session=`human_active`、`active_agent_claim_id` 与 claim/session/agent 一致、claim 未过期，且当前 actor
+为 assigned agent 或 owner/admin/support_manager。跨 tenant ID 先由 tenant query/forced RLS 隔离，不能用
+manager 身份越过 tenant。
+
+新 claim 在 `support_sessions.human_active` 提交前后同一 Unit of Work 内读取该 session 最新 Agent run：
+`active/handoff_requested/ending -> cancelled`，已 `cancelled` 返回 stopped，`completed/failed` 返回 terminal，
+无 run 返回 not_started。上述状态是 ready 工作台唯一允许的 `aiSpeechFence`。worker authorization 不接受
+cancelled run，因此旧 ticket 即使仍未到期也不能 prepare、authorize TTS 或 deliver；该栅栏不替代 LiveKit
+已经开始播放音频的 interrupt/ack。
+
+涉及 run 与 session 的 claim/activate 先锁最新 Agent run，再锁 support session/claim，与 Worker 完成 turn、
+handoff 和 finalize 的 run→session 顺序一致；纯 queue/claim 操作仍维持既有 session-first 顺序。这样不会为
+停止栅栏引入新的反向锁序；任一事务被外部锁或 CAS 拒绝时整体回滚并由客户端使用原幂等键重试。
+
+快照只公开客服所需字段：客户 display/external/locale/attributes/consent、queue/session/claim、case、工具
+结果、高风险类别、Agent 有界上下文/已生成输出，以及最多200个最终 revision 字幕。phone hash、request hash、
+idempotency key、密文 outbox、dispatch ticket、Provider secret 和原始高风险参数不返回。字幕以 start time、
+created time、segment ID 稳定排序；无字幕不补造文本。
+
+claim renew 使用 expected claim version，并更新为 `now + claimLeaseSeconds`；Web 在剩余租期一半时续租，最长
+60秒检查一次。字幕 GET 与续租独立，乱序快照不得覆盖更高 claim version。release 仍使用 claim/session 双
+version 和新幂等键。知识检索复用 `POST .../rag`，维度只取当前 Agent run；无 run 时入口禁用。媒体 mute、
+transfer queue、end call 与 `ENT-CS-011` ticket/callback 由服务端返回 `not_ready + reasonCode`，客户端禁用。
+
+本批定义 `AC-ENT-0031`，但未运行 API/RBAC、Repository、forced-RLS、双坐席、lease、Worker/TTS、浏览器、
+真实 PostgreSQL 或 LiveKit 矩阵，因此 `ENT-CS-010` 保持 `in_progress`。
 
 ## 8. RAG 和知识版本
 

@@ -9,6 +9,8 @@ import type { EnterpriseTenantPostgresPool } from
   "./enterprise-postgres-tenant-session.js";
 import { withEnterprisePostgresUnitOfWork } from
   "./enterprise-postgres-unit-of-work.js";
+import { stopEnterpriseSupportAgent } from
+  "./enterprise-postgres-support-workbench-runtime.js";
 
 type Runtime = Pick<EnterpriseSupportRepositoryRuntime,
   "createSupportQueue" | "listSupportQueues" | "listSupportQueueWorkItems" |
@@ -62,10 +64,18 @@ export function createEnterprisePostgresSupportAgentQueueRuntime(
             prior.agentUserId !== input.context.actorUserId) {
             return { status: "idempotency_conflict" };
           }
+          await unit.supportAgents.findLatestRunForSession(input.sessionId, true);
           const replaySession = await unit.support.findSession(input.sessionId, true);
           if (!replaySession) return { status: "not_found" };
-          return { status: "replayed", claim: prior, session: replaySession };
+          const stopped = replaySession.status === "human_active" &&
+            replaySession.activeAgentClaimId === prior.id && prior.status === "active" &&
+            prior.leaseExpiresAt > input.now
+            ? await stopEnterpriseSupportAgent(unit, input.sessionId, input.now)
+            : null;
+          return { status: "replayed", claim: prior, session: replaySession,
+            ...(stopped ? { aiSpeechFence: stopped.fence } : {}) };
         }
+        await unit.supportAgents.findLatestRunForSession(input.sessionId, true);
         let session = await unit.support.findSession(input.sessionId, true);
         if (!session) return { status: "not_found" };
         if (session.version !== input.expectedSessionVersion) {
@@ -123,13 +133,17 @@ export function createEnterprisePostgresSupportAgentQueueRuntime(
         if (activated.status !== "updated") {
           throw new Error("Support claim session activation failed");
         }
+        const stopped = await stopEnterpriseSupportAgent(unit, session.id, input.now);
         await audit(unit, input.context, { action: "support.claim.create",
           resourceType: "support_agent_claim", resourceId: created.claim.id,
           createdAt: input.now, details: { sessionId: session.id,
             queueId: queue.id, agentUserId: created.claim.agentUserId,
-            leaseExpiresAt: created.claim.leaseExpiresAt } });
+            leaseExpiresAt: created.claim.leaseExpiresAt,
+            aiSpeechFence: stopped.fence.status,
+            ...(stopped.fence.runId ? { runId: stopped.fence.runId } : {}) } });
         return { status: created.status === "replayed" ? "replayed" : "claimed",
-          claim: created.claim, session: activated.session };
+          claim: created.claim, session: activated.session,
+          aiSpeechFence: stopped.fence };
       });
     },
     renewSupportAgentClaim(input) {
@@ -142,10 +156,9 @@ export function createEnterprisePostgresSupportAgentQueueRuntime(
         if (claim.leaseExpiresAt <= input.now) return { status: "claim_expired" };
         const queue = await unit.support.findQueue(claim.queueId);
         if (!queue) return { status: "queue_not_found" };
-        const base = Math.max(Date.parse(input.now), Date.parse(claim.leaseExpiresAt));
         const result = await unit.supportAgentQueue.renewClaim({ claimId: claim.id,
           expectedVersion: input.expectedClaimVersion, updatedAt: input.now,
-          leaseExpiresAt: new Date(base + queue.claimLeaseSeconds * 1_000).toISOString() });
+          leaseExpiresAt: plusSeconds(input.now, queue.claimLeaseSeconds) });
         if (result.status !== "updated") return { status: "conflict" };
         await audit(unit, input.context, { action: "support.claim.renew",
           resourceType: "support_agent_claim", resourceId: claim.id,

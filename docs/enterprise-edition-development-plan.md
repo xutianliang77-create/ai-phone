@@ -1,6 +1,6 @@
 # 无界AI企业版开发方案与计划
 
-版本：v1.51
+版本：v1.52
 日期：2026-07-19
 状态：E0 执行计划，已对齐统一通讯平台和 PostgreSQL Primary 收敛
 
@@ -41,6 +41,7 @@
 - `ENT-CS-002` 已形成共享 PSTN/Web/App 入站契约、短期 tenant/channel/route dispatch ticket、内部授权/入站 API、实时 Provider readiness、Inbox hash 去重、客户 hash 归并和统一 session/binding/audit/Outbox 事务代码候选。Provider webhook 签名仍由 edge Adapter 负责；当前未运行自动化、真实 Provider、并发或重启恢复，保持 `in_progress`。
 - `ENT-CS-003` 已形成客服会话级 tenant RAG 契约/runtime/API：只允许服务中会话检索当前有效 published 知识，命中返回逐条 evidence/citation，无证据返回确定性无法确认与转人工指令，引用写入不含 query/content 的不可变审计。当前仅通过静态门禁，未运行自动化、真实 PostgreSQL、召回质量或 Agent 生成验收，保持 `in_progress`。
 - `ENT-CS-009` 已形成 `0034`、queue SLA/lease、forced-RLS exclusive claim、session/claim/agent deferred binding、确定性 work-item 排序、self-claim、release/renew 和 manager reassign 的 Repository/runtime/API 代码候选。测试已定义但按要求未运行；真实 migration/RLS、双租户、两个坐席竞争、断线回收和真实接管未验收，保持 `in_progress`。
+- `ENT-CS-010` 已形成 workbench activate/read API、claim 时 Agent run cancel、旧 claim 恢复栅栏、tenant-scoped 最终字幕、客户/知识/风险/历史聚合、expected-version lease heartbeat 和三栏 Web 坐席台。没有安全 Provider/API 的静音、转组、结束、工单和回呼固定 not_ready。当前只完成静态门禁；自动化、真实 PostgreSQL/RLS、Worker/TTS、LiveKit 300ms停播、浏览器和真实坐席媒体未验收，保持 `in_progress`。
 - `ENT-MTG-004` 已形成 `0024`、单会议活动租约唯一约束、acquire/pause/resume/renew/stop 幂等 CAS、代际发布身份、最小权限 LiveKit grant、cell Worker 到期回收和撤销 outbox 代码候选。Web/iOS/Android 采集仍分别属于 MTG-005/006/007；本轮未运行 migration、并发、forced-RLS、Worker 或真实 LiveKit 测试，保持 `in_progress`。
 - `ENT-MTG-005` 已形成成员 Web 屏幕共享代码候选：浏览器用户手势选择内容后读取真实 `displaySurface`，再申请租约并用独立 Room 发布；首次续租绑定 track SID，后续按10秒续租；观看端只接受服务端当前 publisher identity，暂停/停止先断本地发布且撤销 pending 保持可见。系统音频、访客发布、iOS/Android、simulcast 和主持人强停不在本任务内；本轮未运行测试或真实 LiveKit/浏览器门禁，保持 `in_progress`。
 - `ENT-MTG-006` 已形成 iOS ReplayKit 代码候选：主 App 持有短期发布 grant 并维持独立屏幕 Room，Broadcast Upload Extension 只经 App Group Unix socket 发送视频样本；token-free 控制清单以 share/generation/nonce 和 lease expiry 失败闭合，系统停止、超时和离会均先清理本地再收敛服务端租约。当前未构建/安装 App，未执行真机后台、真实 LiveKit、网络切换和权限矩阵，保持 `in_progress`。
@@ -185,7 +186,8 @@ CORE-001/002 验收
    四项均待恢复自动化、真实 PostgreSQL/RLS/并发与崩溃恢复验收；真实 Provider 仍待 CS-006/007
    配置。`ENT-CS-009` 已形成 queue SLA/lease、exclusive claim、self-release/renew 和 manager reassign
    代码候选，待恢复真实 PostgreSQL/RLS/并发与断线回收验收。
-6. 客服坐席工作台、字幕、客户上下文和通话控制留给 `ENT-CS-010`。
+6. `ENT-CS-010` 已形成客服坐席工作台、字幕快照、客户/知识/风险上下文、Agent cancel fence 和 lease
+   heartbeat 代码候选；下一阶段补 Worker interrupt/ack、真实 LiveKit 媒体控制、浏览器与 AC-ENT-0031 验收。
 7. 工单、回拨、结果、质检和分析。
 8. CRM/Ticket Adapter outbox。
 

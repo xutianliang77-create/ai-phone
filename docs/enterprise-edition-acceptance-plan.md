@@ -1,6 +1,6 @@
 # 无界AI企业版验收任务与计划
 
-版本：v1.47
+版本：v1.48
 日期：2026-07-19
 状态：可执行验收计划，已对齐统一通讯平台和 PostgreSQL Primary 收敛
 
@@ -101,6 +101,7 @@ Mock 只能验证协议，不能替代 iPhone/Web、真实 LiveKit、真实模�
 | AC-ENT-0028 | 可逆写 Tool Adapter | 只允许 active `ticket.create/callback.schedule/note.add` 的 reversible_write execution；确认挑战绑定当前 run、挑战后新 turn、sequence、客户文本 hash 和120秒有效期，未确认、含糊、过期、旧 turn、跨 run/session/tenant、参数或 revision 变化时 Outbox 数为0；回拨时间在挑战和确认时均为未来；确认与密文 Outbox 同事务，明文参数不入库/审计；Adapter 必须 tenant-bound、声明 Provider 幂等保证且 fingerprint/simulated 与确认时一致；超时/未知结果使用同一幂等键重试且不写确定失败，完成或确定失败必须带 receipt/reference 并与 execution/outbox/audit 原子 finalize；并发/重复确认只存在一个 Outbox 和一次有效外部效果；默认 not_configured，mock 固定 `simulated=true` |
 | AC-ENT-0029 | 高风险人工接管 | active high-risk definition 必须精确为 `support:takeover/human_handoff`；退款、付款、身份验证及其他 high-risk 请求只生成不可执行且不可变的 handoff request，绑定 tenant/run/session/customer/definition revision/arguments hash/policy/risk evidence hash；原始参数和敏感材料不入库/审计；首次请求与 run/session 的 handoff_requested 原子提交，同幂等键同证据返回同 request、异证据冲突；DB insert/mutation guard、forced RLS 和 execution guard 阻断跨租户、失活绑定、改写删除、execution/Outbox/Provider 调用；接管后普通回答不能获得新 TTS 授权；当前不得声称坐席已接通 |
 | AC-ENT-0030 | 坐席队列与互斥接管 | queue SLA 为10..86400秒、claim lease 为30..3600秒；work-item 按 SLA breach、priority、handoff time、ID 稳定排序；claim 只能绑定当前登录 active 客服成员，请求体不能指定 agent；同 tenant/session 同时最多一个 active claim，human_active 的 session/claim/assigned user 必须一致；坐席只能自释/续租，owner/admin/support_manager 才能覆盖释放或改派，目标必须是同 tenant active 客服角色；claim/release/reassign 同键同 hash 精确重放、异 hash/旧 version 冲突；lease 到期可原子释放重领且旧坐席不能继续控制；跨租户、paused/disabled queue、非 handoff session、非客服角色、直接 SQL 绕过、事务中途失败均不得形成双控制者 |
+| AC-ENT-0031 | 坐席工作台与 AI 停止发言 | workbench activate/read 只允许 assigned agent 或同 tenant owner/admin/support_manager 且 active claim 未过期；claim、session human_active、最新 Agent run cancel 和审计原子提交，旧 claim 恢复也必须先补建 fence；cancelled/terminal/not_started 才能返回 ready，旧 Worker ticket/generation 的 prepare/TTS authorize/deliver 均为0；字幕只返回 tenant-scoped 每段最终 revision并稳定排序，跨租户 session/segment/customer/case/tool/risk 不可见；客户、Agent 上下文、知识维度、case、工具结果和风险证据完整但不暴露 phone/request/idempotency/dispatch secret；续租为 now+queue lease，字幕轮询不续租且旧响应不回退 claim version；release/过期/断网后控制停止；Provider/API 缺失的静音、转组、结束、工单、回呼固定 not_ready；真实 LiveKit 中已开始音频须在300ms内 interrupt 且旧音频不恢复 |
 
 `ENT-CS-005` 当前只形成 `AC-ENT-0026` 的代码候选；自动化、migration up/down/forward、
 forced-RLS 双租户、并发发布、Worker 竞态和真实 Provider/Adapter 均未执行。Agent `toolRequest`
@@ -126,6 +127,11 @@ mock 代码候选；测试已定义但按要求未运行，真实 PostgreSQL up/
 release/renew/reassign、角色守卫和脱敏审计代码候选；测试已定义但按要求未运行，真实 PostgreSQL
 up/down/forward、forced-RLS 双租户、并发 claim、锁顺序、断线/lease 到期、崩溃窗口、重启恢复和真实
 坐席媒体均未执行。任务保持 `in_progress`，不能作为 A0/A2/H2/H3、工作台可用或生产成功证据。
+
+`ENT-CS-010` 当前只形成 `AC-ENT-0031` 的 workbench runtime/API、Agent run cancel fence、字幕/客户/知识/
+风险/历史投影、lease heartbeat 和 Web 三栏代码候选；测试已定义但按要求未运行，真实 PostgreSQL/forced-RLS、
+跨租户、双坐席、旧 Worker/TTS、300ms物理停播、真实 LiveKit、浏览器/axe/视觉和 CRM/Ticket Provider 均未
+执行。任务保持 `in_progress`，不能作为坐席已接通、物理音频已停止或生产成功证据。
 
 `ENT-OBS-001` 当前仅完成实现和 typecheck；按开发阶段指令尚未执行 migration up/down、Repository/API、
 跨租户、legacy trace、Provider 失败和无样本矩阵，不能标记 `ready_for_acceptance`，也不能作为 H1/A4 证据。
@@ -537,6 +543,14 @@ ID 与 body tenant/agent 伪造；并发矩阵覆盖两个坐席同 session、�
 终态 claim 改写/删除；SLA 矩阵覆盖临界秒、priority 平手、稳定 ID 排序、paused/disabled queue 和时钟边界。
 每项同时核对 active claim 数、session assigned/claim/status、审计、跨租户不可见性和旧坐席副作用为零。
 
+`ENT-CS-010` 按 `AC-ENT-0031` 执行六组矩阵：访问矩阵覆盖 assigned agent、三类 manager、其他角色、
+跨 tenant 和过期/终态 claim；事务矩阵覆盖 claim/session/run cancel/audit 任一步失败回滚、旧 claim activate、
+active/handoff_requested/ending/terminal/no-run；Worker矩阵覆盖旧 ticket/generation 在 prepare/authorize/deliver
+与迟到 turn 的副作用为0；投影矩阵覆盖 transcript 多 revision、200段边界、客户/case/tool/risk 字段最小化和
+跨租户 ID；lease矩阵覆盖 now+lease、乱序 GET/renew、409、断网和释放；UI/媒体矩阵覆盖1440/1250/850/600/
+320、浅深色、键盘/axe、无字幕/无知识/Provider未配置，以及真实 LiveKit 已播音频300ms interrupt且不恢复。
+每项同时核对 fence/run/claim/session version、审计、Provider副作用、浏览器可操作性和禁用原因。
+
 ### 8.4 人工接管
 
 - 客户主动说“转人工”后立即进入 handoff_requested。
@@ -544,8 +558,9 @@ ID 与 body tenant/agent 伪造；并发矩阵覆盖两个坐席同 session、�
 - 两个坐席同时 claim 只能一个成功。
 - 坐席看到客户问题、知识引用、工具结果和风险。
 - 坐席退出或断网后会话可重新分配，不形成双控制者。
-- high-risk 请求只证明 `handoff_requested` 已持久化；`ENT-CS-009` 目前也只有未运行的 queue/claim 代码候选。
-  在 AC-ENT-0030 与真实坐席媒体证据完成前，界面和话术不得显示“坐席已接通”或“退款/付款/身份验证已处理”。
+- high-risk 请求只证明 `handoff_requested` 已持久化；`ENT-CS-009/010` 目前也只有未运行的 queue/claim/
+  workbench 代码候选。在 AC-ENT-0030/0031 与真实坐席媒体证据完成前，界面和话术不得显示“坐席已接通”、
+  “300ms内已停播”或“退款/付款/身份验证已处理”。
 
 ### 8.5 客服结果
 

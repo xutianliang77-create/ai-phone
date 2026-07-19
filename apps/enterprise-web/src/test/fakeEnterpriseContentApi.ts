@@ -27,6 +27,9 @@ type ContentApi = Pick<EnterpriseApi,
   | "currentMeetingScreenOcr" | "enableMeetingScreenOcr"
   | "disableMeetingScreenOcr"
   | "currentMeetingCalendarSync" | "requestMeetingCalendarSync"
+  | "listSupportQueues" | "listSupportWorkItems" | "claimSupportSession"
+  | "activateSupportWorkbench" | "getSupportWorkbench"
+  | "renewSupportClaim" | "releaseSupportClaim" | "resolveSupportKnowledge"
 >;
 
 export function fakeEnterpriseContentApi(): ContentApi {
@@ -86,5 +89,15 @@ export function fakeEnterpriseContentApi(): ContentApi {
     disableMeetingScreenOcr: vi.fn(),
     currentMeetingCalendarSync: vi.fn().mockResolvedValue({ sync: null }),
     requestMeetingCalendarSync: vi.fn(),
+    listSupportQueues: vi.fn().mockResolvedValue({ queues: [] }),
+    listSupportWorkItems: vi.fn().mockResolvedValue({
+      status: "ready", workItems: [],
+    }),
+    claimSupportSession: vi.fn(),
+    activateSupportWorkbench: vi.fn(),
+    getSupportWorkbench: vi.fn(),
+    renewSupportClaim: vi.fn(),
+    releaseSupportClaim: vi.fn(),
+    resolveSupportKnowledge: vi.fn(),
   };
 }

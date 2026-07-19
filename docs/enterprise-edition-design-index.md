@@ -1,6 +1,6 @@
 # 无界AI企业版设计文档索引
 
-版本：v1.42
+版本：v1.43
 日期：2026-07-19
 状态：SaaS 详细设计基线，已纳入统一通讯平台和 PostgreSQL Primary 演进
 
@@ -140,6 +140,10 @@ deferred binding、确定性 work-item 排序、self-claim、renew/release 和 m
 当前 membership，改派同时受 HTTP/runtime/DB 守卫；lease 过期在下一次 claim 时原子释放重领。测试已定义
 但未运行，真实 migration/RLS、双租户、并发/崩溃/重启和人工媒体未验收，保持 `in_progress`；这也不表示
 `ENT-CS-010` 工作台已经实现。
+`ENT-CS-010` 已增加 tenant-scoped workbench activate/read 聚合、claim 时 Agent run 原子取消、旧 claim
+补建停止栅栏、最终 revision 字幕快照、客户/知识/风险/历史三栏 Web 页面，以及独立 expected-version lease
+心跳。静音、转组、结束、工单和回呼未接 Provider/API 时固定 not_ready。当前只通过静态门禁，测试、真实
+PostgreSQL/forced-RLS、Worker/LiveKit 300ms停播、浏览器和真实坐席媒体未验收，保持 `in_progress`。
 当前按要求未执行
 测试、migration、RLS、RBAC/ticket/evidence 攻击、并发共享、Worker/Provider、四人媒体、浏览器、真机与重启恢复，
 因此上述任务均保持 `in_progress`。
@@ -159,6 +163,7 @@ deferred binding、确定性 work-item 排序、self-claim、renew/release 和 m
 - [ENT-MTG-005 Web 屏幕共享实现与静态门禁证据](./evidence/ent-mtg-005-web-screen-share-2026-07-19.md)
 - [ENT-MTG-011 会后材料实现与静态门禁证据](./evidence/ent-mtg-011-meeting-materials-2026-07-19.md)
 - [ENT-CS-009 坐席队列实现与静态门禁证据](./evidence/ent-cs-009-support-agent-queue-2026-07-19.md)
+- [ENT-CS-010 坐席工作台实现与静态门禁证据](./evidence/ent-cs-010-support-workbench-2026-07-19.md)
 - [ENT-MTG-012 屏幕 OCR 翻译实现与静态门禁证据](./evidence/ent-mtg-012-screen-ocr-translation-2026-07-19.md)
 - [ENT-MTG-013 日历 Adapter 实现与静态门禁证据](./evidence/ent-mtg-013-calendar-adapter-2026-07-19.md)
 - [ENT-CS-001 客服领域实现与静态门禁证据](./evidence/ent-cs-001-support-domain-2026-07-19.md)
