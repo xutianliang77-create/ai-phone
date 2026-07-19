@@ -1,6 +1,6 @@
 # 无界AI企业版详细功能设计
 
-版本：v1.36
+版本：v1.37
 日期：2026-07-19
 状态：SaaS 详细设计基线，已对齐统一通讯平台
 
@@ -213,6 +213,22 @@ Provider、usage/ledger 和 trace；跨会话业务聚合与货币成本尚未�
   pending/scheduled/retry 任务；已交给 PSTN 的物理中止仍属于后续 Scheduler/Provider 验收。
 - 当前 Web 线索表可进入授权详情，显示脱敏号码、服务端有效性、对象引用、缩略 hash、不可变历史和撤回影响；
   不上传任意 URL、不显示电话号码明文，也不把授权登记解释为禁拨/国家策略/审批/PSTN 已通过。
+
+#### 5.2.3 禁拨名单首批实现边界
+
+- 联系人拒绝再次联系、撤回自动营销电话授权、投诉处理或合规人员人工录入，都会形成 tenant scope 的不可变禁拨
+  记录；号码不从请求体接收，只从当前 tenant 的 active Campaign Lead 读取 HMAC 身份和脱敏提示。
+- tenant scope 对当前企业全部 Campaign 生效。global scope 是受信平台禁拨注册表按 tenant HMAC 生成的隐私投影，
+  只允许 namespaced system actor 写入；普通成员、客户端 scope 或直接跨租户 ID 不能伪造全局命中。
+- 首次写入在同一事务取消相同号码跨活动的 pending/scheduled/retry task，保留终态任务和禁拨原因、来源、actor、
+  时间、取消数量。禁拨记录不可更新或删除；已有同 scope 号码不会重复创建。
+- task 新建或改变 Campaign/Lead/计划时间时，数据库先按 tenant + phone HMAC 取得同一事务锁，再复核 tenant/global
+  禁拨；并发中无论 task 还是禁拨先提交，最终都不能留下可执行待任务。
+- 公开 API 要求 `campaign:write`、active membership、签名 route 和幂等键；读取要求 `campaign:read`。请求 tenant
+  只做一致性核对，legacy/SQLite/JSON 明确失败闭合。
+- 当前全局禁拨注册表 Provider 未配置，企业名单未命中时只返回 `not_ready`，不能显示“可拨”。Web 在授权详情中
+  展示真实 tenant/global 历史、全局 readiness 和服务端取消数量；Country Policy、Scheduler、PSTN dispatch 与已在
+  Provider 侧执行的物理挂断仍属于后续任务。
 
 ### 5.3 AI 营销专员
 

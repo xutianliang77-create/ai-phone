@@ -65,12 +65,8 @@ import type {
   RecordEnterpriseUsageEventInput,
   RecordEnterpriseUsageEventResult,
 } from "./enterprise-usage-accounting.js";
-import type {
-  EnterpriseKnowledgeRepositoryRuntime,
-} from "./enterprise-knowledge-runtime.js";
-import type {
-  EnterpriseTerminologyRepositoryRuntime,
-} from "./enterprise-terminology-runtime.js";
+import type { EnterpriseKnowledgeRepositoryRuntime } from "./enterprise-knowledge-runtime.js";
+import type { EnterpriseTerminologyRepositoryRuntime } from "./enterprise-terminology-runtime.js";
 import type { EnterpriseAuditExportRuntime } from "./enterprise-audit-export-runtime.js";
 import type { EnterpriseMeetingRepositoryRuntime } from "./enterprise-meeting-runtime.js";
 import type { EnterpriseSupportRepositoryRuntime } from "./enterprise-support-runtime.js";
@@ -79,6 +75,7 @@ import type { EnterpriseSupportToolRepositoryRuntime } from "./enterprise-suppor
 import type { EnterpriseCampaignRepositoryRuntime } from "./enterprise-campaign-runtime.js";
 import type { EnterpriseLeadImportRepositoryRuntime } from "./enterprise-lead-import-runtime.js";
 import type { EnterpriseMarketingConsentRepositoryRuntime } from "./enterprise-marketing-consent-runtime.js";
+import type { EnterpriseMarketingSuppressionRepositoryRuntime } from "./enterprise-marketing-suppression-runtime.js";
 export type EnterpriseContextResult =
   | { status: "resolved"; tenant: EnterpriseTenantRecord; member: EnterpriseMemberRecord }
   | { status: "access_denied" }
@@ -108,7 +105,9 @@ export interface EnterpriseRepositoryRuntime
     EnterpriseSupportRepositoryRuntime,
     EnterpriseSupportAgentRepositoryRuntime,
     EnterpriseSupportToolRepositoryRuntime,
-    EnterpriseCampaignRepositoryRuntime, EnterpriseLeadImportRepositoryRuntime, EnterpriseMarketingConsentRepositoryRuntime {
+    EnterpriseCampaignRepositoryRuntime, EnterpriseLeadImportRepositoryRuntime,
+    EnterpriseMarketingConsentRepositoryRuntime,
+    EnterpriseMarketingSuppressionRepositoryRuntime {
   readonly driver: "legacy" | "postgres";
   resolveContext(input: {
     userId: string;

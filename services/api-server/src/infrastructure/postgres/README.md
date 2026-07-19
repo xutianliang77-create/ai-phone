@@ -57,7 +57,7 @@ ENTERPRISE_MIGRATION_DATABASE_URL='postgresql://...' \
 
 两种启用模式都在恢复任务、Fastify 构建和端口监听前失败闭合，并在校验后关闭连接。
 `verify` 不写 migration；`migrate_verify` 始终在 migration 后执行相同 schema verify。
-统一启动编排先验证公共31段 manifest 和签名 cutover evidence，再验证 enterprise 39段
+统一启动编排先验证公共31段 manifest 和签名 cutover evidence，再验证 enterprise 40段
 manifest，并核对两个 verdict 的 database name/OID；任一失败都关闭已创建资源且不监听。
 
 基础 migration `0004` 至 `0010` 中，`0004` 增加 tenant lifecycle 状态和 job，`0005` 增加
@@ -176,7 +176,7 @@ SQLSTATE `25006`、旧 writer 会话为0、target 可写和二次全量 hash 相
 
 生产启动只接受 `environment=staging` 的 `cutover/matched` 签名证据，并绑定当前
 commit、image digest、topology hash、目标 logical ID、数据库 system identifier/OID 和
-31+39 migration manifest。`c9b5be2` 的31+16本地证据会被门禁拒绝，必须重新生成；
+31+40 migration manifest。`c9b5be2` 的31+16本地证据会被门禁拒绝，必须重新生成；
 本地同机 `pg_dump/pg_restore` 只能证明逻辑恢复与对账机制；
 跨故障域自动切换、异地主机不可变 WAL/PITR 和 RPO/RTO 仍由 `ENT-REL-003`/H3 验收。
 
@@ -222,3 +222,14 @@ tenant-bound Google Workspace service account 创建稳定 event ID；409 时读
 证据实体由独立 S3/KMS 或非生产本地 Adapter 校验；生产禁止本地目录。Consent 不可删除或改写，task insert/
 reschedule 必须在数据库内找到覆盖计划时间的有效授权，撤回会取消没有替代授权的 pending/scheduled/retry task。
 当前未执行 migration/down、forced-RLS、真实对象存储、并发撤回或浏览器验收。
+
+## Marketing suppression
+
+`ENT-MKT-004` 由 migration `0040` 扩展 `suppression_entries`，把 tenant/global scope、Campaign/Lead 来源、
+原因、来源标识、actor、幂等 hash、取消数量和 version 固化为不可变记录。公开 API 只允许 account actor 写 tenant
+scope；global scope 要求 namespaced system actor 与 `global_registry` 来源，作为权威注册表的 tenant HMAC 隐私投影。
+
+Suppression insert 与 call-task insert/reschedule 使用相同的 `tenant + phone_hash` advisory transaction lock。首次写入
+在同一事务取消该号码跨活动的 pending/scheduled/retry task；后续 task guard 命中 tenant/global 记录时拒绝 SQL。
+默认全局注册表 Adapter 为 not_configured，未命中本地记录也不返回 eligible。当前未执行 migration/down、
+forced-RLS、同号码并发、真实全局注册表或浏览器验收。

@@ -1,6 +1,6 @@
 # 无界AI企业版技术架构
 
-版本：v1.39
+版本：v1.40
 日期：2026-07-19
 状态：SaaS 详细架构基线，已对齐统一通讯平台和 PostgreSQL Primary
 
@@ -406,8 +406,23 @@ tenant/actor/key/request hash 精确重放；撤回只追加 actor/reason/time/v
 
 `0039` 另外在 `marketing_call_tasks` insert/reschedule 层放置数据库 guard：同 tenant/Campaign/Lead 必须存在
 覆盖 `scheduled_at` 的 active Consent，否则 SQL 失败。因此即使后续 Scheduler 漏检，数据库也不能产生无授权
-任务。撤回 trigger 取消没有替代授权的 pending/scheduled/retry 任务；Scheduler、禁拨、Country Policy、审批快照、
-Outbox、PSTN dispatch 和已发媒体物理中止仍由 `ENT-MKT-004..009` 分层实现和重验。
+任务。撤回 trigger 取消没有替代授权的 pending/scheduled/retry 任务；禁拨由 `ENT-MKT-004` 独立叠加，Country
+Policy、审批快照、Scheduler、Outbox、PSTN dispatch 和已发媒体物理中止仍由 `ENT-MKT-005..009` 分层实现和重验。
+
+### 7.4 Suppression 写入、全局投影与并发栅栏
+
+`ENT-MKT-004` 复用 Lead 的 tenant HMAC 电话身份，不把明文或新的跨租户稳定号码标识引入 Policy 域。公开 API
+只能以 active Campaign Lead 创建 tenant scope 的不可变禁拨；global scope 由受信控制面把权威注册表命中按 tenant
+HMAC 投影到同一 forced-RLS 表，要求 namespaced system actor 和固定 `global_registry` 来源，租户成员无写入口。
+
+`0040` 在 suppression INSERT 与 call-task INSERT/reschedule 之间使用相同的
+`tenant + phone_hash` advisory transaction lock。禁拨先提交时新任务在数据库 guard 被拒绝；任务先提交时禁拨事务
+在写入证据前取消同号码跨活动的 pending/scheduled/retry。记录与取消在同一 tenant transaction 内，历史不可更新/
+删除，审计只保存 Lead/Campaign/scope/source/取消数，不保存明文号码。
+
+读取先返回本地 tenant/global 投影命中，再叠加全局注册表 readiness。当前外部注册表 Adapter 未配置，未命中本地
+投影也只能返回 not_ready；不能把未配置当作未命中。Country Policy、Scheduler claim、dispatch generation、PSTN
+Provider 取消和已开始媒体的物理停止继续由 `ENT-MKT-005..009` 实现。
 
 ## 8. AI 客服架构
 

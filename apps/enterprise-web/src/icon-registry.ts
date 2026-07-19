@@ -110,6 +110,8 @@ export const enterpriseIcons = {
     consent: "verified_user",
     evidence: "attach_file",
     revoke: "block",
+    suppression: "block",
+    globalSuppression: "public",
   },
   appearance: {
     system: "brightness_auto",

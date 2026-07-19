@@ -11,6 +11,7 @@ import type { EnterpriseApi, EnterpriseContentRequestContext } from
 import { apiErrorState } from "../business-state.js";
 import { enterpriseIcons } from "../icon-registry.js";
 import { MaterialIcon } from "./MaterialIcon.js";
+import { CampaignSuppressionPanel } from "./CampaignSuppressionPanel.js";
 import { StatusPanel } from "./StatusPanel.js";
 
 type ConsentState =
@@ -103,6 +104,8 @@ export function CampaignConsentEvidencePanel({ api, context, campaign, lead,
     <div className="consent-boundary"><MaterialIcon name={enterpriseIcons.campaign.consent} />
       <span><strong>用途固定：自动营销电话</strong><small>邮件、人工电话或其他用途不能推导为本授权；公开 URL 和未验证对象均被拒绝。</small></span>
     </div>
+    <CampaignSuppressionPanel api={api} context={context} campaign={campaign}
+      lead={lead} canWrite={canWrite} />
     {notice ? <p className="campaign-notice" role="status">{notice}</p> : null}
     {state.status === "loading" ? <StatusPanel state="loading"
       description="正在读取授权历史并由服务端计算当前有效性。" /> : null}

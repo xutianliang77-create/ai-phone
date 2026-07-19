@@ -7,6 +7,10 @@ import { createEnvironmentMarketingConsentEvidenceStore } from
   "./enterprise-marketing-consent-evidence-store.js";
 import { registerEnterpriseMarketingConsentRoutes } from
   "./enterprise-marketing-consent.routes.js";
+import { unavailableEnterpriseGlobalSuppressionRegistry } from
+  "./enterprise-global-suppression-registry.js";
+import { registerEnterpriseMarketingSuppressionRoutes } from
+  "./enterprise-marketing-suppression.routes.js";
 
 export function registerEnterpriseMarketingRoutes(app: FastifyInstance,
   routeService: TenantRouteService, runtime: EnterpriseRepositoryRuntime) {
@@ -15,4 +19,6 @@ export function registerEnterpriseMarketingRoutes(app: FastifyInstance,
   registerEnterpriseCampaignRoutes(app, routeService, runtime);
   registerEnterpriseLeadImportRoutes(app, routeService, runtime);
   registerEnterpriseMarketingConsentRoutes(app, routeService, runtime, evidenceStore);
+  registerEnterpriseMarketingSuppressionRoutes(app, routeService, runtime,
+    unavailableEnterpriseGlobalSuppressionRegistry());
 }

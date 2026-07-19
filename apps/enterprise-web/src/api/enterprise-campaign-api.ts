@@ -1,5 +1,6 @@
 import type {
   CreateEnterpriseCampaignRequest,
+  CreateEnterpriseMarketingSuppressionRequest,
   EnterpriseCampaignResponse,
   EnterpriseCampaignsResponse,
   EnterpriseCampaignLeadsResponse,
@@ -11,6 +12,9 @@ import type {
   EnterpriseMarketingConsentRevocationResponse,
   EnterpriseMarketingConsentResponse,
   EnterpriseMarketingConsentsResponse,
+  EnterpriseMarketingSuppressionEligibilityResponse,
+  EnterpriseMarketingSuppressionResponse,
+  EnterpriseMarketingSuppressionsResponse,
   RegisterEnterpriseMarketingConsentRequest,
   RevokeEnterpriseMarketingConsentRequest,
   RollbackEnterpriseLeadImportRequest,
@@ -58,6 +62,15 @@ export interface EnterpriseCampaignApi {
     campaignId: string, leadId: string, consentId: string,
     input: RevokeEnterpriseMarketingConsentRequest, idempotencyKey: string):
     Promise<EnterpriseMarketingConsentRevocationResponse>;
+  listMarketingSuppressions(context: EnterpriseContentRequestContext,
+    campaignId: string, leadId: string):
+    Promise<EnterpriseMarketingSuppressionsResponse>;
+  getMarketingSuppressionEligibility(context: EnterpriseContentRequestContext,
+    campaignId: string, leadId: string):
+    Promise<EnterpriseMarketingSuppressionEligibilityResponse>;
+  createMarketingSuppression(context: EnterpriseContentRequestContext,
+    input: CreateEnterpriseMarketingSuppressionRequest, idempotencyKey: string):
+    Promise<EnterpriseMarketingSuppressionResponse>;
 }
 
 export function createEnterpriseCampaignApi(
@@ -125,5 +138,20 @@ export function createEnterpriseCampaignApi(
         encodeURIComponent(leadId)}/consents/${encodeURIComponent(consentId)}/revoke`,
       { method: "POST", headers: { ...headers(context), "idempotency-key": key },
         body: JSON.stringify(input) }),
+    listMarketingSuppressions: (context, campaignId, leadId) => request(
+      `${campaigns}/${encodeURIComponent(campaignId)}/leads/${
+        encodeURIComponent(leadId)}/suppressions`,
+      { headers: headers(context) },
+    ),
+    getMarketingSuppressionEligibility: (context, campaignId, leadId) => request(
+      `${campaigns}/${encodeURIComponent(campaignId)}/leads/${
+        encodeURIComponent(leadId)}/suppression-eligibility`,
+      { headers: headers(context) },
+    ),
+    createMarketingSuppression: (context, input, key) => request(
+      "/enterprise/v1/suppression",
+      { method: "POST", headers: { ...headers(context), "idempotency-key": key },
+        body: JSON.stringify(input) },
+    ),
   };
 }

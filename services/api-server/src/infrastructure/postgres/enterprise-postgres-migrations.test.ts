@@ -50,6 +50,7 @@ describe("enterprise PostgreSQL migrations", () => {
       "0037_enterprise_marketing_campaigns",
       "0038_enterprise_marketing_lead_imports",
       "0039_enterprise_marketing_consents",
+      "0040_enterprise_marketing_suppressions",
     ]);
     for (const migration of migrations) {
       expect(migration.up.trim()).not.toBe("");
@@ -200,6 +201,11 @@ describe("enterprise PostgreSQL migrations", () => {
     expect(sql).toContain("enterprise.guard_marketing_task_consent");
     expect(sql).toContain("valid automated marketing call consent required");
     expect(sql).toContain("contact_consents_cancel_tasks_after_revocation");
+    expect(sql).toContain("suppression_entries_v2_shape_check");
+    expect(sql).toContain("enterprise.guard_marketing_suppression_mutation");
+    expect(sql).toContain("enterprise marketing target is suppressed");
+    expect(sql).toContain(":marketing-suppression:");
+    expect(sql).toContain("outcome_code = 'suppressed'");
     expect(sql).toContain("purpose = 'automated_marketing_call'");
     expect(sql).toContain("guard_marketing_campaign_mutation");
     expect(sql).toContain("enterprise marketing campaign approval required");
@@ -276,6 +282,7 @@ describe("enterprise PostgreSQL migrations", () => {
     expect(rollbackSql).toContain("DROP FUNCTION IF EXISTS enterprise.guard_marketing_campaign_mutation");
     expect(rollbackSql).toContain("DROP FUNCTION IF EXISTS enterprise.guard_marketing_consent_mutation");
     expect(rollbackSql).toContain("cannot roll back enterprise marketing consent evidence");
+    expect(rollbackSql).toContain("cannot roll back enterprise marketing suppression evidence");
     expect(sql).not.toContain("BYPASSRLS");
   });
 

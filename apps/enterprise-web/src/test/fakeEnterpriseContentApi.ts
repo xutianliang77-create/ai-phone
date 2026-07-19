@@ -39,6 +39,8 @@ type ContentApi = Pick<EnterpriseApi,
   | "importCampaignLeads" | "rollbackLeadImport"
   | "listMarketingConsents" | "getMarketingConsentEligibility"
   | "registerMarketingConsent" | "revokeMarketingConsent"
+  | "listMarketingSuppressions" | "getMarketingSuppressionEligibility"
+  | "createMarketingSuppression"
 >;
 
 export function fakeEnterpriseContentApi(): ContentApi {
@@ -136,6 +138,18 @@ export function fakeEnterpriseContentApi(): ContentApi {
     }),
     registerMarketingConsent: vi.fn().mockRejectedValue(new Error("not configured")),
     revokeMarketingConsent: vi.fn().mockRejectedValue(new Error("not configured")),
+    listMarketingSuppressions: vi.fn().mockResolvedValue({
+      evaluatedAt: "2026-07-19T00:00:00.000Z", suppressions: [],
+      globalRegistry: { status: "not_configured",
+        reasonCode: "global_suppression_registry_not_configured" },
+    }),
+    getMarketingSuppressionEligibility: vi.fn().mockResolvedValue({
+      status: "not_ready", evaluatedAt: "2026-07-19T00:00:00.000Z",
+      reasonCode: "global_suppression_registry_not_configured",
+      globalRegistry: { status: "not_configured",
+        reasonCode: "global_suppression_registry_not_configured" },
+    }),
+    createMarketingSuppression: vi.fn().mockRejectedValue(new Error("not configured")),
     getCampaign: vi.fn(),
     createCampaign: vi.fn(),
     updateCampaign: vi.fn(),

@@ -71,6 +71,7 @@ export const enterpriseSubjectColumns = [
   ["marketing_campaign_leads", "linked_by"],
   ["contact_consents", "created_by"],
   ["contact_consents", "revoked_by"],
+  ["suppression_entries", "created_by"],
   ["support_queues", "created_by"],
   ["support_sessions", "assigned_user_id"],
   ["meetings", "host_user_id"],
