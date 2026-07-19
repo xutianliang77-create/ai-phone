@@ -1,8 +1,26 @@
 # LiveKit 平台化验收计划
 
-版本：v1.0
-日期：2026-07-17
+版本：v1.1
+日期：2026-07-19
 状态：验收基线
+
+## 0A. 2026-07-19 执行顺序覆盖
+
+按用户明确决策，真实 SIP 外呼、Voice/Autonomous Agent 和真实 Egress 延期到平台
+验收后段。本调整只改变执行顺序，不改变证据等级、合同、安全标准或最终商业发布
+要求；延期项继续标记 `未执行`，不能用 H0/H1/mock 代替真实 Provider 证据。
+
+当前顺序为：Gate 0-2 非 Provider 基础 -> Translation/Dispatch 核心功能 ->
+PostgreSQL/HA/PITR -> Translation 容量、故障和长稳 -> 客户端/RTC 阈值 ->
+模型质量与速度 -> 最后执行 SIP/Agent/Egress 的 Gate 3、Gate 7 和真实故障恢复 ->
+Gate 8 最终发布。
+
+在最后一组真实门禁通过前：
+
+- PSTN、Autonomous Agent 和 Egress 入口保持 disabled、隐藏或明确实验状态；
+- 当前核心同传里程碑可继续验收，但不得扩大为电话/Agent/录音能力已通过；
+- 商业版若包含这些能力，仍必须补齐真实 trunk/号码、Agent policy/披露/接管和
+  off-host artifact 存储证据。
 
 ## 0. 当前暂停状态与 Beelink 恢复门禁
 

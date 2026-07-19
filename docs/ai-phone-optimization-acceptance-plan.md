@@ -1,12 +1,28 @@
 # ai phone 优化验收方案
 
-版本：v1.19
-日期：2026-07-14
+版本：v1.20
+日期：2026-07-19
 任务来源：`docs/ai-phone-optimization-development-tasks.md`
 
 LiveKit SIP、Dispatch、Egress/Ingress、PostgreSQL 和规模化验收补充见
 `docs/architecture/11-platform-acceptance-plan.md`。该补充计划不改变本文已
 验收或待执行的 AC 状态。
+
+### 2026-07-19 剩余验收顺序调整
+
+按用户明确决策，真实 SIP 外呼、Voice/Autonomous Agent 和真实 Egress 统一延期到
+剩余验收后段。它们不再阻断当前核心同传、数据、客户端和生产基础门禁，但仍保持
+`未执行`，不得计为通过，也不得在真实验收前开放入口或对外宣称可用。
+
+剩余执行顺序冻结为：
+
+1. 收口不依赖私有 Provider 的核心功能、持久化、账号、安全、支付、诊断和发布材料；
+2. 完成 PostgreSQL primary、迁移/回滚、HA/PITR、25/50/100 容量和长稳；
+3. 完成剩余客户端、Android 隔离能力和正式 RTC 阈值；
+4. 在上述功能门禁完成后执行准确率、速度和候选 ASR/MT/TTS 模型比较；
+5. 最后在私有 trunk、owned auto-answer 白名单、Agent policy 和 off-host Egress
+   存储齐备后，验收真实 SIP 外呼、Agent 和 Egress；
+6. 汇总全部条件后再做商业版最终发布判定。
 
 2026-07-17 Platform P0 Batch 0A/0B 仅形成本地 H0/H1 自动化证据；Guest ticket
 重放/过期/跨 call/并发核销和 Call Room 上限已有自动化，staging、真机、外部
@@ -157,6 +173,9 @@ TTS 回灌指标由 App playback gate/AEC 验收，不能把 VAD 对合成语音
 当前自动化证据（2026-07-14）：`AC-CALL-004` 已覆盖同一 target 串行且 generation 递增、相反 target 并行、合法生命周期、终态不可逆、重复批次幂等、跨绑定冲突和 End 中断收敛；`AC-CALL-005` 已覆盖数据库确认的 leg 绑定、两个 target leg 并行、精确取消单侧、LiveKit `clearQueue()`、旧 generation 迟到帧0输出、App/Web 精确 participant 订阅，以及 PSTN 无 clear 能力时409降级；`AC-CALL-006` 已覆盖 MarbleNet 连续240ms和0.5概率门禁、400ms pre-roll、乱序/间断帧拒绝、只中断当前 target leg、相反方向持续播放、排队旧 route epoch 取消和 clear 后帧数不再增长；`AC-CALL-007` 已覆盖 VAD fallback、clear 不支持/失败时降级、恢复事件、精确 barge-in generation 持久化和质量报告停止延迟。Node 全仓、ASR 54项、Flutter analyze 和281项移动端测试均通过。上述 Call 任务仍需 Beelink feature flag 灰度、iPhone+Web 真实双端、100次抢话和30分钟回声长稳后才能标记 accepted；PSTN 还必须接入支持 clear 的真实 Provider 才能验收全双工。
 
 ## 6. P2/P3 专项验收
+
+本节中的 `AC-PSTN-001/002`、`AC-AGENT-001` 及真实 Egress 关联门禁按上方
+2026-07-19 顺序调整后移；编号和通过标准保持不变，不因延期降级为 mock 或自动通过。
 
 | 验收编号 | 对应任务 | 通过标准 |
 | --- | --- | --- |
