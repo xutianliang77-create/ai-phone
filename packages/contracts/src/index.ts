@@ -2,6 +2,7 @@ export * from "./api/auth.js";
 export * from "./api/agent-calls.js";
 export * from "./api/enterprise.js";
 export * from "./api/enterprise-campaign.js";
+export * from "./api/enterprise-lead-import.js";
 export * from "./api/enterprise-meeting.js";
 export * from "./api/enterprise-meeting-material.js";
 export * from "./api/enterprise-meeting-screen-ocr.js";

@@ -2,6 +2,12 @@ import type {
   CreateEnterpriseCampaignRequest,
   EnterpriseCampaignResponse,
   EnterpriseCampaignsResponse,
+  EnterpriseCampaignLeadsResponse,
+  EnterpriseLeadImportBatchesResponse,
+  EnterpriseLeadImportRequest,
+  EnterpriseLeadImportResponse,
+  EnterpriseLeadImportRollbackResponse,
+  RollbackEnterpriseLeadImportRequest,
   UpdateEnterpriseCampaignRequest,
 } from "@translation/contracts";
 import type { EnterpriseContentRequestContext } from "./enterprise-api.js";
@@ -23,6 +29,16 @@ export interface EnterpriseCampaignApi {
   scheduleCampaign(context: EnterpriseContentRequestContext, campaignId: string,
     input: { expectedVersion: number }, idempotencyKey: string):
     Promise<EnterpriseCampaignResponse>;
+  listCampaignLeads(context: EnterpriseContentRequestContext, campaignId: string):
+    Promise<EnterpriseCampaignLeadsResponse>;
+  listLeadImportBatches(context: EnterpriseContentRequestContext, campaignId: string):
+    Promise<EnterpriseLeadImportBatchesResponse>;
+  importCampaignLeads(context: EnterpriseContentRequestContext, campaignId: string,
+    input: EnterpriseLeadImportRequest, idempotencyKey: string):
+    Promise<EnterpriseLeadImportResponse>;
+  rollbackLeadImport(context: EnterpriseContentRequestContext, campaignId: string,
+    batchId: string, input: RollbackEnterpriseLeadImportRequest,
+    idempotencyKey: string): Promise<EnterpriseLeadImportRollbackResponse>;
 }
 
 export function createEnterpriseCampaignApi(
@@ -47,6 +63,25 @@ export function createEnterpriseCampaignApi(
     ),
     scheduleCampaign: (context, campaignId, input, key) => request(
       `${campaigns}/${encodeURIComponent(campaignId)}/schedule`,
+      { method: "POST", headers: { ...headers(context), "idempotency-key": key },
+        body: JSON.stringify(input) },
+    ),
+    listCampaignLeads: (context, campaignId) => request(
+      `${campaigns}/${encodeURIComponent(campaignId)}/leads`,
+      { headers: headers(context) },
+    ),
+    listLeadImportBatches: (context, campaignId) => request(
+      `${campaigns}/${encodeURIComponent(campaignId)}/lead-imports`,
+      { headers: headers(context) },
+    ),
+    importCampaignLeads: (context, campaignId, input, key) => request(
+      `${campaigns}/${encodeURIComponent(campaignId)}/lead-imports`,
+      { method: "POST", headers: { ...headers(context), "idempotency-key": key },
+        body: JSON.stringify(input) },
+    ),
+    rollbackLeadImport: (context, campaignId, batchId, input, key) => request(
+      `${campaigns}/${encodeURIComponent(campaignId)}/lead-imports/${
+        encodeURIComponent(batchId)}/rollback`,
       { method: "POST", headers: { ...headers(context), "idempotency-key": key },
         body: JSON.stringify(input) },
     ),

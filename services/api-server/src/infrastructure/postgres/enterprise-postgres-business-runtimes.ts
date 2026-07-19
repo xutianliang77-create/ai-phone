@@ -26,6 +26,8 @@ import { unavailableEnterpriseSupportWriteAdapter } from
   "../../modules/enterprise/enterprise-support-write-tool.js";
 import { createEnterprisePostgresCampaignRuntime } from
   "./enterprise-postgres-campaign-runtime.js";
+import { createEnterprisePostgresLeadImportRuntime } from
+  "./enterprise-postgres-lead-import-runtime.js";
 
 export function createEnterprisePostgresBusinessRuntimes(
   pool: EnterpriseTenantPostgresPool,
@@ -46,5 +48,6 @@ export function createEnterprisePostgresBusinessRuntimes(
     ...createEnterprisePostgresSupportReadToolRuntime(pool),
     ...createEnterprisePostgresSupportWriteToolRuntime(pool, supportWriteCommand),
     ...createEnterprisePostgresCampaignRuntime(pool),
+    ...createEnterprisePostgresLeadImportRuntime(pool),
   };
 }

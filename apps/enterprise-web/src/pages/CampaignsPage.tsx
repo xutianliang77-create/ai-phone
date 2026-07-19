@@ -3,6 +3,8 @@ import type { EnterpriseCampaignDto } from "@translation/contracts";
 import { useAuth } from "../auth/AuthContext.js";
 import { apiErrorState } from "../business-state.js";
 import { MaterialIcon } from "../components/MaterialIcon.js";
+import { CampaignLeadImportPanel } from
+  "../components/CampaignLeadImportPanel.js";
 import { PageFrame } from "../components/PageFrame.js";
 import { StatusPanel } from "../components/StatusPanel.js";
 import { enterpriseIcons } from "../icon-registry.js";
@@ -34,6 +36,7 @@ export function CampaignsPage() {
   const [editing, setEditing] = useState<EnterpriseCampaignDto | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [leadCampaign, setLeadCampaign] = useState<EnterpriseCampaignDto | null>(null);
   const [createKey, setCreateKey] = useState(() => campaignKey("create"));
   const commandKeys = useRef(new Map<string, string>());
   const ready = state.status === "ready" ? state : null;
@@ -135,7 +138,7 @@ export function CampaignsPage() {
     <section className="campaign-boundary" aria-label="当前实现边界">
       <MaterialIcon name={enterpriseIcons.campaign.approval} />
       <div><strong>活动未审批时服务端禁止调度</strong>
-        <span>线索、授权、国家策略、审批流、Scheduler 和 PSTN 将由后续 ENT-MKT 任务接入；本页不显示模拟成功。</span>
+        <span>线索导入已接入脱敏批次；授权、禁拨、国家策略、审批流、Scheduler 和 PSTN 仍未接入，本页不显示模拟成功。</span>
       </div>
     </section>
     {notice ? <p className="campaign-notice" role="status">{notice}</p> : null}
@@ -202,7 +205,10 @@ export function CampaignsPage() {
           </dl>
           <footer><span className="campaign-approval">审批：{
             approvalLabel(campaign.approvalStatus)}</span>
-            <div>{canWrite && campaign.status === "draft" &&
+            <div><button className="button button--secondary" type="button"
+              onClick={() => setLeadCampaign(campaign)} disabled={busy !== null}>
+              <MaterialIcon name={enterpriseIcons.campaign.leads} />线索</button>
+              {canWrite && campaign.status === "draft" &&
               campaign.approvalStatus === "not_submitted" ? <button
                 className="button button--secondary" type="button"
                 onClick={() => beginEdit(campaign)} disabled={busy !== null}>
@@ -217,6 +223,9 @@ export function CampaignsPage() {
           </footer>
         </article>)}
       </section> : null}
+    {leadCampaign && context ? <CampaignLeadImportPanel api={api} context={context}
+      campaign={leadCampaign} canWrite={canWrite}
+      onClose={() => setLeadCampaign(null)} /> : null}
   </PageFrame>;
 }
 

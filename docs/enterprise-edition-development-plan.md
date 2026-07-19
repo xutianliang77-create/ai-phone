@@ -1,6 +1,6 @@
 # 无界AI企业版开发方案与计划
 
-版本：v1.55
+版本：v1.56
 日期：2026-07-19
 状态：E0 执行计划，已对齐统一通讯平台和 PostgreSQL Primary 收敛
 
@@ -20,7 +20,7 @@
 
 - `ENT-CORE-001/002/003` 已到 `ready_for_acceptance`；Tenant/Member、RBAC 和 `apps/enterprise-web` 生产应用基础可供后续任务复用。
 - Enterprise Web 已冻结 React 19、TypeScript 5.9、Vite 8、React Router 7 和 Vitest/Testing Library 技术基线，并实现真实登录、会话恢复和租户上下文。
-- `ENT-DATA-001` 已实现三十七段 PostgreSQL up/down migration、复合 FK、强制 RLS、migration runner、schema verify 和归档 smoke；`0017..0037` 分别增加知识、术语/话术、企业 trace、审计导出、Meeting 聚合/入会/翻译、屏幕共享租约、会后材料、屏幕 OCR、日历同步、客服领域、Support Agent run/turn、Tool Registry、只读工具租约执行、可逆写确认/Outbox、高风险请求、坐席 claim、工单/回拨后续动作、客服质检证据和 Campaign 聚合守卫。历史本地 PostgreSQL 16 验证不替代当前31+37 staging migrate/restore/PITR，任务保持 `in_progress`。
+- `ENT-DATA-001` 已实现三十八段 PostgreSQL up/down migration、复合 FK、强制 RLS、migration runner、schema verify 和归档 smoke；`0017..0038` 分别增加知识、术语/话术、企业 trace、审计导出、Meeting 聚合/入会/翻译、屏幕共享租约、会后材料、屏幕 OCR、日历同步、客服领域、Support Agent run/turn、Tool Registry、只读工具租约执行、可逆写确认/Outbox、高风险请求、坐席 claim、工单/回拨后续动作、客服质检证据、Campaign 聚合和线索导入守卫。历史本地 PostgreSQL 16 验证不替代当前31+38 staging migrate/restore/PITR，任务保持 `in_progress`。
 - `ENT-CORE-005` 已完成版本化术语包、话术模板、审核发布、有效时间解析、统一运行时引用和租户隔离矩阵，进入 `ready_for_acceptance`；真实 ASR/翻译/LLM Worker 消费和 A1/H3 仍待验收。
 - `ENT-DATA-002` 已完成单一 `legacy|postgres` Repository runtime、HTTP 全链路注入、fail-closed 启动选择和独立 cell Worker。PostgreSQL 模式不回退、不双写；API 不执行跨租户恢复扫描，Worker 通过 cell forced RLS 发现最小引用后进入 tenant transaction 复核并 claim/finalize。代码和本地自动化进入 `ready_for_acceptance`，真实 PostgreSQL 并发、容量和恢复仍待 H3。
 - `ENT-DATA-004` 已完成 JSON/SQLite 源读取、SQLite 副本 `quick_check`、空目标事务导入和六集合 count/SHA-256 读回对账；不一致回滚，且明确只用于内部演示数据迁移。真实 PostgreSQL import/reconcile 证据仍待 H3。
@@ -45,6 +45,10 @@
 - `ENT-CS-011` 已形成 `0035` callback/followup forced-RLS schema、claim/session 双版本命令、确定性幂等业务 ID、密文 Outbox、Cell Worker 同键重试与 case/callback 最终投影，并在三栏坐席台增加 readiness 驱动的工单/回拨表单。默认 Adapter/keyring 未配置时不落数据且控件 not_ready；simulated 明示非真实效果。当前只完成静态门禁，自动化、真实 PostgreSQL/RLS、并发/崩溃恢复、浏览器和真实 Ticket/Callback Provider 未验收，保持 `in_progress`。
 - `ENT-CS-012` 已形成 `0036` forced-RLS 规则/复核/发现、独立 `quality:read/manage`、终态会话 source hash、五类确定性结构规则、最新复核 Dashboard 和证据详情代码候选。语义模型未配置时 review 固定 partial/not_configured、错误回答率为空。当前只完成静态门禁，自动化、真实 PostgreSQL/RLS、浏览器和语义质量金标未验收，保持 `in_progress`。
 - `ENT-MKT-001` 已形成 `0037`、共享契约、创建与变更命令幂等、tenant Repository/runtime/API 和 Web Campaign 草稿/列表代码候选。聚合 schedule 要求 approve scope、幂等键、CAS、approved 状态/审批、policyVersion 和未来 startAt；不生成 call task、usage hold、Outbox 或 PSTN 请求。当前只完成静态门禁，真实 PostgreSQL/RLS、浏览器和 MKT-002..008 依赖均未验收，保持 `in_progress`。
+- `ENT-MKT-002` 已形成 `0038`、CSV/API 规范化、libphonenumber E.164、AES-GCM 号码密文、tenant HMAC 去重、
+  可回滚批次、逐行报告、PostgreSQL Repository/runtime/API 和同风格 Campaign 线索面板代码候选。整批身份冲突零
+  Lead/link/batch 写入；导入与回滚只在未提交草稿开放，不生成 Consent/Suppression/task/Outbox/PSTN。当前只完成
+  静态门禁，自动化、真实 PostgreSQL/forced-RLS、浏览器和密钥轮换/恢复未验收，保持 `in_progress`。
 - `ENT-MTG-004` 已形成 `0024`、单会议活动租约唯一约束、acquire/pause/resume/renew/stop 幂等 CAS、代际发布身份、最小权限 LiveKit grant、cell Worker 到期回收和撤销 outbox 代码候选。Web/iOS/Android 采集仍分别属于 MTG-005/006/007；本轮未运行 migration、并发、forced-RLS、Worker 或真实 LiveKit 测试，保持 `in_progress`。
 - `ENT-MTG-005` 已形成成员 Web 屏幕共享代码候选：浏览器用户手势选择内容后读取真实 `displaySurface`，再申请租约并用独立 Room 发布；首次续租绑定 track SID，后续按10秒续租；观看端只接受服务端当前 publisher identity，暂停/停止先断本地发布且撤销 pending 保持可见。系统音频、访客发布、iOS/Android、simulcast 和主持人强停不在本任务内；本轮未运行测试或真实 LiveKit/浏览器门禁，保持 `in_progress`。
 - `ENT-MTG-006` 已形成 iOS ReplayKit 代码候选：主 App 持有短期发布 grant 并维持独立屏幕 Room，Broadcast Upload Extension 只经 App Group Unix socket 发送视频样本；token-free 控制清单以 share/generation/nonce 和 lease expiry 失败闭合，系统停止、超时和离会均先清理本地再收敛服务端租约。当前未构建/安装 App，未执行真机后台、真实 LiveKit、网络切换和权限矩阵，保持 `in_progress`。
@@ -196,8 +200,9 @@ CORE-001/002 验收
 8. `ENT-CS-012` 已形成租户规则版本、终态会话确定性分析、Dashboard 与证据下钻代码候选；下一阶段执行
    `AC-ENT-0033` 的 RBAC、forced-RLS、幂等/source hash、浏览器与人工金标矩阵。真实语义质检 Adapter、
    自动批处理、CRM/Ticket Adapter 配置与运营告警继续按独立任务和环境门禁推进。
-9. `ENT-MKT-001` 已形成 Campaign 聚合代码候选；下一阶段先执行 `AC-ENT-0034` 的 RBAC、幂等、CAS、
-   forced-RLS、状态 trigger 和浏览器矩阵，再按 MKT-002..006 补线索、授权、禁拨、国家策略与审批快照。
+9. `ENT-MKT-001/002` 已形成 Campaign 聚合与线索导入代码候选；下一阶段执行 `AC-ENT-0034/0035` 的 RBAC、
+   E.164/身份去重、幂等、CAS/回滚、forced-RLS、密文和浏览器矩阵，再从 `ENT-MKT-003` 补授权证据，随后接
+   禁拨、国家策略与审批快照。
    在这些前置条件和 MKT-007/008 未完成前，不创建可执行拨号任务，不接真实 PSTN。
 
 ### 5.2 退出门禁
@@ -336,7 +341,7 @@ CORE-001/002 验收
 
 E0 基线完成后已形成 `ENT-MTG-001/002` 代码候选；未通过真实 PostgreSQL、tenant/RBAC/token 攻击、Provider、浏览器与真机门禁，仍不能计为 E1 完成。
 
-当前进展：`ENT-DATA-001` 已完成三十七段 schema 代码，等待 staging PostgreSQL migrate/restore/PITR
+当前进展：`ENT-DATA-001` 已完成三十八段 schema 代码，等待 staging PostgreSQL migrate/restore/PITR
 证据；`ENT-CS-001..012` 已分别形成客服领域/恢复 runtime、统一入站 Adapter、tenant RAG、Support Agent、
 Tool Registry 授权边界、只读 Adapter 租约执行、可逆写确认/密文 Outbox、不可执行高风险接管和坐席
 queue/SLA/exclusive claim、坐席工作台、工单/回拨可靠后续动作和质检分析代码候选；`ENT-MKT-001` 已形成

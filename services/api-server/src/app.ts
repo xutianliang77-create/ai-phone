@@ -75,11 +75,13 @@ import { registerEnterpriseSupportAgentRoutes } from
   "./modules/enterprise/enterprise-support-agent.routes.js";
 import { registerEnterpriseSupportAgentQueueRoutes } from
   "./modules/enterprise/enterprise-support-agent-queue.routes.js";
-import { registerEnterpriseSupportWorkbenchRoutes } from "./modules/enterprise/enterprise-support-workbench.routes.js";
+import { registerEnterpriseSupportWorkbenchRoutes } from
+  "./modules/enterprise/enterprise-support-workbench.routes.js";
 import { registerEnterpriseSupportToolRoutes } from
   "./modules/enterprise/enterprise-support-tool.routes.js";
 import { registerEnterpriseCampaignRoutes } from
   "./modules/enterprise/enterprise-campaign.routes.js";
+import { registerEnterpriseLeadImportRoutes } from "./modules/enterprise/enterprise-lead-import.routes.js";
 import {
   createEnvironmentEnterpriseSupportAgentProvider,
   type EnterpriseSupportAgentProvider,
@@ -131,7 +133,6 @@ import { registerVoiceProfileRoutes } from "./modules/voice-profiles/voice-profi
 import { registerVoiceIdentityRoutes } from "./modules/voice-identities/voice-identities.routes.js";
 import { registerIngressRoutes } from "./modules/ingress/ingress.routes.js";
 import { registerPlatformTelemetryHooks } from "./infrastructure/observability/platform-telemetry.js";
-
 export async function buildApp(dependencies: {
   tenantProvisioner?: TenantProvisioner;
   tenantRouteService?: TenantRouteService;
@@ -282,6 +283,7 @@ export async function buildApp(dependencies: {
     app, tenantRouteService, enterpriseRepositoryRuntime,
   );
   registerEnterpriseCampaignRoutes(app, tenantRouteService, enterpriseRepositoryRuntime);
+  registerEnterpriseLeadImportRoutes(app, tenantRouteService, enterpriseRepositoryRuntime);
   registerEnterpriseMeetingScreenShareRoutes(
     app,
     tenantRouteService,
@@ -337,7 +339,6 @@ function serializeRequest(request: {
       request.remoteAddress ?? request.ip ?? request.raw?.socket?.remoteAddress,
   };
 }
-
 function serializeResponse(response: {
   statusCode?: number;
   raw?: { statusCode?: number };

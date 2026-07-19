@@ -1,6 +1,6 @@
 # 无界AI企业版设计文档索引
 
-版本：v1.46
+版本：v1.47
 日期：2026-07-19
 状态：SaaS 详细设计基线，已纳入统一通讯平台和 PostgreSQL Primary 演进
 
@@ -46,11 +46,11 @@ cell Worker、JSON/SQLite 演示导入，以及全业务表 Primary 切换/恢�
 无界AI主产品公共 PostgreSQL migration、Primary Runtime、可靠 Inbox/Outbox、
 fencing、Billing/Product Records、verify-full 和韧性代码已形成稳定提交 `fe1c3c2`，并由
 `ENT-DATA-007` 合入企业分支。企业版已经完成单 driver、双 manifest、同库身份和分权
-连接的本地自动化，当前 manifest 为公共31段、enterprise 37段；`ENT-DATA-008` 和
+连接的本地自动化，当前 manifest 为公共31段、enterprise 38段；`ENT-DATA-008` 和
 `ENT-CORE-013/014/015` 已完成公共通讯 tenant scope、企业业务会话绑定、签名 Worker dispatch fence
 及设备/声音/录制策略快照的代码/本地自动化，但不能继承主产品 staging 验收。`ENT-DATA-009` 已增加
 31+16 migration manifest 的历史本地证据、全表主键分页 count/hash、WAL 水位、writer fence、签名
-cutover/restore 证据和 production startup 绑定门禁；当前 `0017..0037` 必须按31+37重新生成切换证据。
+cutover/restore 证据和 production startup 绑定门禁；当前 `0017..0038` 必须按31+38重新生成切换证据。
 `ENT-CORE-004` 已增加 tenant-scoped source/version/chunk、草稿审核发布状态机、发布后不可变约束、
 locale/country/product/effective-time 检索和知识引用 ID；
 `ENT-CORE-005` 已增加版本化 term pack/script template、审核发布和生效窗口、发布后不可变约束，
@@ -159,8 +159,13 @@ tenant-scoped PostgreSQL Repository/runtime，以及 list/read/create/draft upda
 均携带请求 SHA-256，草稿更新和待调度命令复用 forced-RLS `idempotency_keys` 精确重放。
 未审批、非 approved 状态、无策略版本、无未来开始时间或缺 `campaign:approve` 均不能进入 `scheduled`。
 Enterprise Web 复用既有 Material Icons、浅深色 token、8px 圆角和统一状态页，提供真实草稿创建/编辑和
-活动卡片；线索、授权、国家策略、审批、Scheduler、call task 与 PSTN 均未提前实现或伪造成功。当前只通过
+活动卡片；授权、国家策略、审批、Scheduler、call task 与 PSTN 均未提前实现或伪造成功。当前只通过
 静态门禁，自动化、真实 PostgreSQL/RLS、浏览器和 Provider 均未验收，保持 `in_progress`。
+`ENT-MKT-002` 已增加 `0038` forced-RLS 导入批次/Campaign Lead/逐行证据、tenant Lead 唯一身份、CSV/API
+规范化、libphonenumber E.164、AES-GCM 原始/规范号码密文、tenant HMAC 去重、可重放导入/回滚 Repository/API
+和同风格 Web 面板。整批错误零业务写入；导入与回滚只在未提交草稿开放，号码只返回 hint，不生成授权、禁拨、
+任务、Outbox、usage 或 PSTN 副作用。当前只通过静态门禁，自动化、真实 PostgreSQL/RLS、密钥恢复和浏览器均未
+验收，保持 `in_progress`。
 当前按要求未执行
 测试、migration、RLS、RBAC/ticket/evidence 攻击、并发共享、Worker/Provider、四人媒体、浏览器、真机与重启恢复，
 因此上述任务均保持 `in_progress`。
@@ -184,6 +189,7 @@ Enterprise Web 复用既有 Material Icons、浅深色 token、8px 圆角和统�
 - [ENT-CS-011 工单与回拨实现和静态门禁证据](./evidence/ent-cs-011-support-followups-2026-07-19.md)
 - [ENT-CS-012 客服质检分析实现和静态门禁证据](./evidence/ent-cs-012-support-quality-2026-07-19.md)
 - [ENT-MKT-001 Campaign 聚合实现和静态门禁证据](./evidence/ent-mkt-001-campaign-aggregate-2026-07-19.md)
+- [ENT-MKT-002 线索导入实现和静态门禁证据](./evidence/ent-mkt-002-lead-import-2026-07-19.md)
 - [ENT-MTG-012 屏幕 OCR 翻译实现与静态门禁证据](./evidence/ent-mtg-012-screen-ocr-translation-2026-07-19.md)
 - [ENT-MTG-013 日历 Adapter 实现与静态门禁证据](./evidence/ent-mtg-013-calendar-adapter-2026-07-19.md)
 - [ENT-CS-001 客服领域实现与静态门禁证据](./evidence/ent-cs-001-support-domain-2026-07-19.md)

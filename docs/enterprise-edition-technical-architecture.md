@@ -1,6 +1,6 @@
 # 无界AI企业版技术架构
 
-版本：v1.37
+版本：v1.38
 日期：2026-07-19
 状态：SaaS 详细架构基线，已对齐统一通讯平台和 PostgreSQL Primary
 
@@ -377,6 +377,18 @@ flowchart LR
 无开始时间的记录都不能进入 `scheduled`。这里的 `scheduled` 只是业务聚合真值，不创建拨号任务，也不调用
 Provider。Lead/Consent/Suppression、Country Policy、Approval snapshot、Scheduler claim 和 PSTN dispatch 仍按
 `ENT-MKT-002..008` 分层接入，不能绕过后续执行时复核。
+
+### 7.2 Lead Import 写入边界
+
+`ENT-MKT-002` 把 Lead Import 作为 Campaign 下的独立 tenant transaction 接入。HTTP 层只接受
+`campaign:read/write`、有效 membership 与签名 route；格式规范化在进入 Repository 前完成，Repository 再取得
+tenant 行锁和 Campaign 行锁，确保 tenant 全局号码去重与 Campaign 可编辑窗口一致。任一格式或号码/externalId
+身份冲突发生在业务写入前，返回逐行报告而不形成部分批次。
+
+导入数据流为 `CSV/API -> E.164 normalize -> tenant HMAC identity -> AES-GCM envelope ->
+Lead upsert decision -> Campaign link -> append-only row report -> committed batch`。号码明文不进入事件、审计、
+错误报告或 Web；keyring 缺失时 API 返回 not ready。批次回滚只执行 `active link -> rolled_back` 和有条件的
+`Lead active -> inactive`，不做物理删除；Consent、Suppression、Scheduler、call task 和 PSTN 继续位于后续层。
 
 ## 8. AI 客服架构
 

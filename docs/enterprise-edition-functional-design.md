@@ -1,6 +1,6 @@
 # 无界AI企业版详细功能设计
 
-版本：v1.34
+版本：v1.35
 日期：2026-07-19
 状态：SaaS 详细设计基线，已对齐统一通讯平台
 
@@ -180,6 +180,22 @@ Provider、usage/ledger 和 trace；跨会话业务聚合与货币成本尚未�
 - 授权用途必须覆盖自动营销电话；普通邮件或人工电话授权不能自动推导。
 - 合并企业禁拨名单、国家禁拨结果和活动排除名单。
 - 联系人撤回后立即停止所有待执行任务，并生成审计事件。
+
+#### 5.2.1 线索导入首批实现边界
+
+- 当前实现支持单次最多500行的 CSV 或 API JSON；CSV 要求 `phone,countryCode`，可带
+  `externalId,timezone,language` 和 `attr.*`。服务端按国家解析有效号码并生成规范 E.164，任一行格式、国家、
+  时区、语言、属性或身份冲突都会返回逐行错误，整批不创建 Lead、Campaign 关联或导入批次。
+- 号码原始输入和规范 E.164 分别用 AES-256-GCM 密文保存，tenant + E.164 仅生成 HMAC-SHA-256 去重值；
+  Web、公开 API 和审计只返回末四位提示。号码保护密钥未配置、Repository 非 PostgreSQL 或 tenant route
+  失效时失败闭合，不回退 SQLite/JSON。
+- Lead 在 tenant 内按号码 hash 唯一，`externalId` 与号码必须保持一一一致；同一号码重复导入到同一活动记为
+  `duplicate`，已有 tenant Lead 首次关联活动记为 `linked`，新 Lead 记为 `created`。幂等键同一规范内容精确
+  重放，异内容冲突。
+- 已提交批次可在活动仍为 `draft/not_submitted` 时按 expectedVersion 回滚；回滚只停用该批次创建的活动关联，
+  不删除 Lead 或逐行证据。没有其他活动关联、授权或通话任务的 Lead 才转为 inactive。
+- 导入不生成授权证据、禁拨记录、Country Policy、审批快照、call task、Outbox、usage hold 或 PSTN 请求。
+  CRM Adapter 导入仍属于后续集成，不得把 `sourceReference` 当作 CRM 同步成功。
 
 ### 5.3 AI 营销专员
 

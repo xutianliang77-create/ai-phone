@@ -35,7 +35,8 @@ type ContentApi = Pick<EnterpriseApi,
   | "getSupportQualityDashboard" | "analyzeSupportQualitySession"
   | "getSupportQualitySession"
   | "listCampaigns" | "getCampaign" | "createCampaign" | "updateCampaign"
-  | "scheduleCampaign"
+  | "scheduleCampaign" | "listCampaignLeads" | "listLeadImportBatches"
+  | "importCampaignLeads" | "rollbackLeadImport"
 >;
 
 export function fakeEnterpriseContentApi(): ContentApi {
@@ -119,6 +120,11 @@ export function fakeEnterpriseContentApi(): ContentApi {
     analyzeSupportQualitySession: vi.fn(),
     getSupportQualitySession: vi.fn(),
     listCampaigns: vi.fn().mockResolvedValue({ campaigns: [] }),
+    listCampaignLeads: vi.fn().mockResolvedValue({ leads: [] }),
+    listLeadImportBatches: vi.fn().mockResolvedValue({ batches: [] }),
+    importCampaignLeads: vi.fn().mockResolvedValue({ status: "rejected", totalRows: 0,
+      errors: [] }),
+    rollbackLeadImport: vi.fn().mockRejectedValue(new Error("not configured")),
     getCampaign: vi.fn(),
     createCampaign: vi.fn(),
     updateCampaign: vi.fn(),

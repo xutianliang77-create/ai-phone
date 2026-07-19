@@ -104,6 +104,9 @@ export const enterpriseIcons = {
     concurrency: "speed",
     approval: "verified_user",
     edit: "edit",
+    leads: "contacts",
+    import: "upload_file",
+    rollback: "undo",
   },
   appearance: {
     system: "brightness_auto",

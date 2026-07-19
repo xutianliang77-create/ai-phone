@@ -78,7 +78,7 @@ import type { EnterpriseSupportAgentRepositoryRuntime } from
   "./enterprise-support-agent-runtime.js";
 import type { EnterpriseSupportToolRepositoryRuntime } from "./enterprise-support-tool-runtime.js";
 import type { EnterpriseCampaignRepositoryRuntime } from "./enterprise-campaign-runtime.js";
-
+import type { EnterpriseLeadImportRepositoryRuntime } from "./enterprise-lead-import-runtime.js";
 export type EnterpriseContextResult =
   | { status: "resolved"; tenant: EnterpriseTenantRecord; member: EnterpriseMemberRecord }
   | { status: "access_denied" }
@@ -108,7 +108,7 @@ export interface EnterpriseRepositoryRuntime
     EnterpriseSupportRepositoryRuntime,
     EnterpriseSupportAgentRepositoryRuntime,
     EnterpriseSupportToolRepositoryRuntime,
-    EnterpriseCampaignRepositoryRuntime {
+    EnterpriseCampaignRepositoryRuntime, EnterpriseLeadImportRepositoryRuntime {
   readonly driver: "legacy" | "postgres";
   resolveContext(input: {
     userId: string;

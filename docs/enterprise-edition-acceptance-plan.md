@@ -1,6 +1,6 @@
 # 无界AI企业版验收任务与计划
 
-版本：v1.51
+版本：v1.52
 日期：2026-07-19
 状态：可执行验收计划，已对齐统一通讯平台和 PostgreSQL Primary 收敛
 
@@ -105,6 +105,7 @@ Mock 只能验证协议，不能替代 iPhone/Web、真实 LiveKit、真实模�
 | AC-ENT-0032 | 工单、回拨与可靠后续动作 | 仅 assigned agent 或同 tenant owner/admin/support_manager 且 active claim/route 有效时可提交，session/claim expected version 失配、跨租户或 body 伪造 tenant/customer/agent 均拒绝；`0035` 两表 tenant-first FK、forced RLS、状态 trigger 和同 session 幂等键/hash 阻断跨租户、改写删除、同键异请求和孤儿业务行；Provider/keyring 未配置时业务行/Outbox/审计均为0，simulated 必须显式；ready 时 pending case 或 dispatch_pending callback、followup、密文 Outbox、脱敏审计原子提交且只返回 processing；超时/未知结果/fingerprint变化/非法 receipt 使用同一 Provider 幂等键重试，不写 external ID；确定 receipt 才原子收敛 case/callback、command、Outbox 和审计；会话释放/结束不取消已接受 Outbox，也不等待外部完成 |
 | AC-ENT-0033 | 客服质检分析 | `quality:read` 仅主管/owner/admin/auditor可读，`quality:manage` 仅主管/owner/admin可发布与分析；`0036` 三表 tenant-first FK、forced RLS、insert guard 和不可变 trigger 阻断跨租户与改写；规则按 locale/通配符解析、同键同 hash 重放、异 hash 冲突；仅 ended/failed session 与终态 Agent run 可分析，source hash 绑定 run/turn/output；五类结构发现与 evidence hash 可复现；Dashboard 每会话只计最新复核；未配置语义模型时 review 固定 partial/not_configured、错误回答率为 null，禁止以无引用规则冒充语义错误率 |
 | AC-ENT-0034 | Campaign 聚合 | `campaign:read/write/approve` 角色矩阵与签名 route 生效；创建只能形成当前 tenant/actor 的 `draft/not_submitted`；创建、PATCH、schedule 均要求幂等键，同键同 hash 精确重放、异 hash 冲突且不重复审计；PATCH 只改未提交草稿且 expectedVersion 冲突不覆盖；`0037` 唯一键、owner/member 复合 FK、forced RLS、身份/版本/状态 trigger 阻断跨租户、改写和非法迁移；schedule 仅 `campaign:approve` 且 approved 状态/审批、policyVersion、未来 startAt 全部满足时进入 scheduled，任一缺失 task/Outbox/Provider 副作用均为0；Web 不显示 fixture 或真实 PSTN 成功 |
+| AC-ENT-0035 | 线索导入与回滚 | `campaign:read/write` 与签名 route 生效；CSV/API 最大500行、E.164 国家解析、时区/语言/扁平属性边界和逐行错误可复现，任一错误 Lead/link/batch 为0；号码原始值/E.164 仅 AES-GCM 密文落库，tenant HMAC hash 唯一且 API/Web/审计/日志只显示 hint；同 tenant 号码与 external ID 一致绑定，同活动重复为 duplicate、已有 Lead 新关联为 linked、新 Lead 为 created，三计数之和等于总行数；同键同规范 hash 精确重放、异 hash 冲突；`0038` 三表 tenant-first FK/forced RLS、batch/link/row 不可删除、row append-only、状态/version trigger 阻断跨租户与改写；回滚只允许未提交草稿和正确 expectedVersion，同键重放，保留 batch/row/Lead，且有其他活动关联、consent 或 task 的 Lead 不停用；保护密钥/非 PostgreSQL 未配置时503且不回退；Consent/Suppression/task/Outbox/usage/PSTN 副作用均为0 |
 
 `ENT-CS-005` 当前只形成 `AC-ENT-0026` 的代码候选；自动化、migration up/down/forward、
 forced-RLS 双租户、并发发布、Worker 竞态和真实 Provider/Adapter 均未执行。Agent `toolRequest`
@@ -608,9 +609,20 @@ publisher/analyzer insert guard、UPDATE/DELETE、非法 code/severity/count/sem
 不可删除与非法状态边；调度矩阵逐项移除 approval/status/policy/startAt 并验证业务 task、Outbox、usage hold、
 Provider 调用均为0；UI 矩阵覆盖读写/审批入口、空/403/409/503、320/600/960/1280、浅深色和键盘。
 
-本轮未运行上述自动化、真实 PostgreSQL/RLS 或浏览器矩阵，也未接 Lead/Consent/Suppression、Country Policy、
-Approval snapshot、Scheduler 或 PSTN。因此 `AC-ENT-0034` 未通过，`ENT-MKT-001` 保持 `in_progress`，不能进入
+本轮未运行上述自动化、真实 PostgreSQL/RLS 或浏览器矩阵；`ENT-MKT-001` 本身也不以 `ENT-MKT-002` 的 Lead
+实现替代 Consent/Suppression、Country Policy、Approval snapshot、Scheduler 或 PSTN。因此 `AC-ENT-0034` 未通过，`ENT-MKT-001` 保持 `in_progress`，不能进入
 A3 白名单外呼或企业生产门禁。
+
+`ENT-MKT-002` 按 `AC-ENT-0035` 增加七组矩阵：格式矩阵覆盖 CSV 引号/换行/BOM/宽度/大小、API 行数与未知字段；
+号码矩阵覆盖国家有效性、E.164、国家不匹配、同号码不同排版和租户隔离；身份矩阵覆盖批内/跨批 phone/externalId
+组合及同活动 duplicate；幂等/原子矩阵覆盖同键同/异 hash、响应丢失、任一行错误、两个并发首次导入；schema
+矩阵覆盖 `0038` up/down/forward、三表 forced RLS、复合 FK、唯一索引、append-only 和非法状态/version；回滚矩阵
+覆盖 expectedVersion、同键重放、跨租户/跨活动、其他 active link、consent/task 保留；保护矩阵核对 AES-GCM AAD、
+HMAC tenant boundary、API/审计/日志/错误无明文、缺 keyring/legacy driver 503；Web 矩阵覆盖角色、空/错误/冲突/
+not-ready、320/600/960/1280、浅深色、键盘、表格聚焦和不显示授权/PSTN 成功。
+
+本轮只形成代码与静态门禁候选，未运行上述自动化、真实 PostgreSQL/forced-RLS、浏览器、并发或密钥恢复演练；
+因此 `AC-ENT-0035` 未通过，`ENT-MKT-002` 保持 `in_progress`。`ENT-MKT-003` 授权证据仍是下一任务。
 
 ### 9.1 合规预检
 
@@ -703,7 +715,7 @@ A3 白名单外呼或企业生产门禁。
 
 - PostgreSQL 作为所有真实 SaaS 租户的初始真源。
 - 内部 SQLite 演示数据可以迁移，但不能作为客户生产迁移路径的必要依赖。
-- 验收 commit 锁定的公共31段 manifest（基线从 `fe1c3c2` 演进）与 enterprise 37段 migration manifest 在隔离企业数据库从空库完整执行；两个 manifest 的顺序、checksum、schema verify 和 down/forward 策略均有证据，不能只跑其中一套。
+- 验收 commit 锁定的公共31段 manifest（基线从 `fe1c3c2` 演进）与 enterprise 38段 migration manifest 在隔离企业数据库从空库完整执行；两个 manifest 的顺序、checksum、schema verify 和 down/forward 策略均有证据，不能只跑其中一套。
 - 每个进程只有一个 Storage Driver 和 startup verdict；HTTP、企业 Repository、统一通讯会话和 cell Worker 使用同一 verified Primary Runtime，不存在 fallback、shadow read、dual write 或按路由混用。
 - 应用 tenant、user directory、cell discovery、migration、maintenance 分别使用最小权限角色；生产 TLS 使用 `verify-full`。应用角色没有 `BYPASSRLS`、表 owner、DDL 或关闭 RLS 权限。
 - 公共 communication session、participant、media leg、dispatch、Provider operation、playback 和相关账本全部具有 tenant scope、复合 FK 和 `FORCE ROW LEVEL SECURITY`；使用跨租户 ID、缺 scope、伪造 owner/user 过滤做负向验证。
@@ -712,7 +724,7 @@ A3 白名单外呼或企业生产门禁。
 - 使用普通应用角色验证 billing account/plan/subscription/entitlement/change history forced RLS、活动 subscription 唯一、plan/snapshot/change 不可变，以及 entitlement projection/binding/grant 的 tenant 复合 FK；按跨租户、停用 account、过期账期、错 subscription/plan/version、席位超限、幂等漂移和客户端 limit 伪造执行负向矩阵。
 - accounts、tenant、communication session、segment、campaign、support、meeting、ledger 和 object hash 数量与规范化 SHA-256 一致。
 - 全量复制后记录增量水位，切换时获取 writer fence、清退旧 API/Worker、重放剩余 inbox/outbox，再做第二次 count/hash；切换或对账失败可按书面决策回滚，旧 writer 不能继续写入。
-- staging startup 必须拒绝 local evidence、签名篡改、错误 cutover/target ID、错误 commit/image/topology、错误 system identifier/OID、缺 baseline 引用、未清退 writer 或任一31+37 migration 漂移。维护工具只验证 fence，不自动执行 promote 或隔离旧主。
+- staging startup 必须拒绝 local evidence、签名篡改、错误 cutover/target ID、错误 commit/image/topology、错误 system identifier/OID、缺 baseline 引用、未清退 writer 或任一31+38 migration 漂移。维护工具只验证 fence，不自动执行 promote 或隔离旧主。
 - migration 后使用普通应用角色验证 `FORCE ROW LEVEL SECURITY`；确认 user directory self policy、tenant projection policy、成员投影同步和跨租户拒绝均生效。
 - 使用独立 cell Worker 角色验证 pending projection forced RLS、trigger 同步、空 cell 失败闭合、旧 cell 拒绝和 tenant transaction 原子 claim。
 - 使用 API 应用角色验证 PostgreSQL runtime 只在 startup gate `verified` 后创建；非法或 `dual_write` driver、连接/校验失败均不得监听端口，也不得回退到 legacy。
