@@ -38,6 +38,14 @@ export const enterpriseIcons = {
     terms: "translate",
     script: "record_voice_over",
   },
+  meeting: {
+    materials: "article",
+    transcript: "subject",
+    summary: "summarize",
+    evidence: "link",
+    action: "task_alt",
+    end: "stop_circle",
+  },
   settings: {
     members: "group",
     billing: "workspace_premium",

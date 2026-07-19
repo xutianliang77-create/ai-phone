@@ -7,9 +7,19 @@ export interface EnterpriseBinaryResponse {
   sha256?: string;
 }
 
+export interface EnterpriseRequestInit extends RequestInit {
+  timeoutMs?: number;
+}
+
 export function createEnterpriseRequester(fetcher: typeof fetch, baseUrl: string) {
-  return async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
-    const response = await fetchWithTimeout(fetcher, baseUrl, path, init);
+  return async function request<T>(
+    path: string,
+    init: EnterpriseRequestInit = {},
+  ): Promise<T> {
+    const { timeoutMs, ...requestInit } = init;
+    const response = await fetchWithTimeout(
+      fetcher, baseUrl, path, requestInit, timeoutMs,
+    );
     const payload = await readJson(response);
     if (!response.ok) throw apiError(response.status, payload);
     return payload as T;

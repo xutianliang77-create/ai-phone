@@ -1,6 +1,6 @@
 # 无界AI企业版开发任务
 
-版本：v1.42
+版本：v1.43
 日期：2026-07-19
 状态：E0 开发中，已对齐统一通讯平台和 PostgreSQL Primary 收敛
 
@@ -17,14 +17,14 @@
 ### 1.1 当前状态快照
 
 - `ENT-CORE-001/002/003` 已完成代码和自动化，等待验收；生产 Web 应用位于 `apps/enterprise-web`。
-- `ENT-DATA-001` 已有二十四段 PostgreSQL up/down migration、tenant-first 索引、复合 FK、强制 RLS、checksum/锁和备份归档 smoke；`0017..0023` 分别增加知识、术语/话术、可信 trace、审计导出和 Meeting 聚合/入会/翻译，`0024` 增加屏幕共享租约、命令账本和 cell pending-work 回收。历史本地 PostgreSQL 16 验证不替代当前31+24 staging migrate/restore/PITR 证据，任务保持 `in_progress`。
+- `ENT-DATA-001` 已有二十五段 PostgreSQL up/down migration、tenant-first 索引、复合 FK、强制 RLS、checksum/锁和备份归档 smoke；`0017..0024` 分别增加知识、术语/话术、可信 trace、审计导出、Meeting 聚合/入会/翻译和屏幕共享租约，`0025` 增加会后材料修订、规范化 segment 和 evidence 关系。历史本地 PostgreSQL 16 验证不替代当前31+25 staging migrate/restore/PITR 证据，任务保持 `in_progress`。
 - `ENT-DATA-002` 已完成单一 `legacy|postgres` Enterprise Repository runtime adapter，Tenant/Member/Audit、Directory、lifecycle 和 HTTP 路由均通过同一 runtime；PostgreSQL 只有在启动 schema gate 已验证时才允许选中，不存在 fallback、双写或局部切换。独立 cell Worker 已实现 cell/worker/poll/batch/lease 配置、forced-RLS pending discovery、tenant transaction 二次复核、lifecycle/outbox claim/finalize、失败隔离和显式 publisher 降级。代码与本地自动化完成，进入 `ready_for_acceptance`；真实 PostgreSQL、并发 claim、容量和恢复证据仍属于 H3 门禁。
 - `ENT-DATA-004` 已实现 JSON/SQLite 六类企业记录源读取、SQLite 临时副本与 `quick_check`、维护窗口空目标导入、事务内读回，以及逐集合 count/SHA-256 和总 hash 对账；任何不一致整体回滚。该工具只迁移当前 Tenant/Member/Job/Audit/Inbox/Outbox 演示数据，不是客户生产迁移通道，进入 `ready_for_acceptance`。
 - `ENT-DATA-003` 已完成 tenant-scoped inbox 去重、稳定 JSON hash、领域写入/inbox/outbox 同事务、outbox 内容不可变、lease claim、指数退避和恢复处理；100 次相同事件重放只执行一次领域副作用，跨租户 provider ID/idempotency key 相互隔离。SQLite 证据仅用于自动化和封闭演示，真实 PostgreSQL 并发 claim 与 Provider sandbox 仍待正式验收。
-- `ENT-DATA-007` 已把上游稳定提交 `fe1c3c2` 的公共 Primary Runtime 纳入企业分支，并以 `API_STORAGE_DRIVER` 作为唯一进程级 driver。统一启动编排现验证公共31段和 enterprise 24段 manifest，核对数据库 name/OID 后才创建企业 runtime；API tenant pool 复用公共 Primary pool，directory、cell、migration 和 maintenance 使用分权连接配置，Worker 不获取 directory 凭证。代码和本地自动化完成，进入 `ready_for_acceptance`；真实 PostgreSQL 双 manifest、最小权限角色、并发和恢复证据仍属于 H3。
+- `ENT-DATA-007` 已把上游稳定提交 `fe1c3c2` 的公共 Primary Runtime 纳入企业分支，并以 `API_STORAGE_DRIVER` 作为唯一进程级 driver。统一启动编排现验证公共31段和 enterprise 25段 manifest，核对数据库 name/OID 后才创建企业 runtime；API tenant pool 复用公共 Primary pool，directory、cell、migration 和 maintenance 使用分权连接配置，Worker 不获取 directory 凭证。代码和本地自动化完成，进入 `ready_for_acceptance`；真实 PostgreSQL 双 manifest、最小权限角色、并发和恢复证据仍属于 H3。
 - `ENT-OBS-001` 已进入开发：平台 `x-trace-id` 现注入 Enterprise TenantContext 和 PostgreSQL `app.trace_id`，`0019` 把会话绑定、usage event 与不可变 ledger 的 trace 固化并建立 tenant-first 索引；新增按 tenant scope 的会话报告契约/API，返回真实 segment 覆盖率/延迟、Provider operation、usage/ledger 和关联审计。当前无单位价格表，货币成本固定返回 `pricing_not_configured`，不把用量冒充金额。按本轮要求尚未执行测试矩阵、migration 和双租户负测，状态保持 `in_progress`。
 - `ENT-DATA-008` 已新增公共 migration `031_communication_resource_scope`：session、leg、transcript、playback、Provider operation、dispatch/capacity、participant consent、recording 和 ingress 共12张表具有不可空 `scope_type + scope_id`、复合 scope FK、写入 scope trigger 和 forced RLS。企业 tenant transaction 同时设置 `app.tenant_id/app.scope_type/app.scope_id`，只向企业 unit-of-work 暴露六类白名单、单 SELECT、显式 scope predicate 的通讯 Repository；跨租户返回行会被二次拒绝。代码和本地自动化完成，进入 `ready_for_acceptance`；真实双租户 PostgreSQL CRUD/迟到事件攻击仍属于 A1/H3。
-- `ENT-DATA-009` 已实现动态双 manifest、全业务表主键分页整行 count/SHA-256、关键 tenant/session/ledger/audit/consent/suppression/object 清单、WAL 水位、HMAC baseline/cutover/restore evidence、源库 SQLSTATE `25006` writer fence、旧 writer 会话清退和 production startup 身份绑定。提交 `c9b5be2` 的历史本地证据覆盖公共31段/企业16段与81张表；当前代码为31+24和88张表，旧签名证据会被 startup gate 拒绝，必须在 staging 重新生成。任务保持 `ready_for_acceptance`；跨故障域自动选主、异地主机不可变 WAL/PITR 和 RPO/RTO 仍待 `ENT-REL-003`/H3。
+- `ENT-DATA-009` 已实现动态双 manifest、全业务表主键分页整行 count/SHA-256、关键 tenant/session/ledger/audit/consent/suppression/object 清单、WAL 水位、HMAC baseline/cutover/restore evidence、源库 SQLSTATE `25006` writer fence、旧 writer 会话清退和 production startup 身份绑定。提交 `c9b5be2` 的历史本地证据覆盖公共31段/企业16段与81张表；当前代码为31+25和95张表，旧签名证据会被 startup gate 拒绝，必须在 staging 重新生成。任务保持 `ready_for_acceptance`；跨故障域自动选主、异地主机不可变 WAL/PITR 和 RPO/RTO 仍待 `ENT-REL-003`/H3。
 - `ENT-CORE-004` 已新增 enterprise `0017`、共享契约、tenant Knowledge Repository/runtime 和七个服务端路由：source、递增 revision、一次性 chunk 集、review、publish、列表和检索均绑定 membership/RBAC/route document。服务端生成 chunk/content SHA-256 与 citation；数据库要求 review+非空 chunk 才能发布，并冻结 published version/chunk。检索强制 tenant/locale/country/product/effective-time，只取每个 source 最新有效 published revision；review、过期和跨租户数据返回空。代码、定向矩阵及一次性 PostgreSQL 16 普通角色 forced-RLS/down-up 验证完成，进入 `ready_for_acceptance`；embedding Provider、真实对象存储、恶意文档扫描和生产 A1/H3 尚未验收。
 - `ENT-CORE-005` 已新增 enterprise `0018`、共享契约、Term Pack/Script Template Repository/runtime 和十三个服务端路由。稳定资源下的 revision 由服务端行锁递增，内容规范化后生成 SHA-256，review 后内容/hash 与 published 版本不可修改；resolver 强制 tenant/source-target locale/country/product/purpose/effective-time，只返回有效 published 版本，并给 ASR、翻译、LLM 同一 `termPackVersionId`，可选话术只给 LLM。代码、定向矩阵和一次性 PostgreSQL 16 非 owner/非 BYPASSRLS 普通角色 down-forward 验证完成，进入 `ready_for_acceptance`；真实 Worker/Provider、A1/H3 尚未验收。
 - `ENT-CORE-009` 已完成租户创建/区域开通幂等、失败重试、暂停、导出和删除执行器；导出固化 tenant/member/job 与 actor scope 快照，执行使用租约、有界重试和 receipt hash，删除只在 receipt 校验后进入 `deleted`，等待真实生命周期服务与对象存储验收。
@@ -120,9 +120,14 @@
 | ENT-MTG-008 | 共享系统音频 | MTG-005/006 | Web 独立 audio track、entitlement/grant 守卫、独立播放与 ASR source fence；移动端明确降级 | 不进入错误 ASR，不形成回声环；移动端无真实采集时不显示成功 | in_progress |
 | ENT-MTG-009 | 共享自适应布局 | MTG-005 | Web/Flutter 显式 simulcast/dynacast、尺寸驱动订阅、三种画面/字幕布局 | 小屏横屏大字体无重叠；弱网层切换不阻断音频和字幕 | in_progress |
 | ENT-MTG-010 | 主持人共享控制 | MTG-004 | grant/revoke/force stop | 撤销后旧 track 不恢复 | in_progress |
-| ENT-MTG-011 | 会后材料 | MTG-003、CORE-004 | transcript/review/action items | 结论可回溯 segment | todo |
+| ENT-MTG-011 | 会后材料 | MTG-003、CORE-004 | transcript/review/action items | 结论可回溯 segment | in_progress |
 | ENT-MTG-012 | 屏幕 OCR 翻译 | MTG-005、CORE-004 | keyframe/hash/OCR/layout events | 默认关闭，失败不影响共享 | todo |
 | ENT-MTG-013 | 日历 Adapter | MTG-001、CORE-008 | contract、mock、首个 Provider | 重试不重复创建会议 | todo |
+
+`ENT-MTG-011` 已形成 `0025`、final event target fan-out 去重与 latest revision 冻结、source count/hash、幂等材料
+修订、逐项 segment evidence、当前会议 speaker label、action CAS、artifact/audit/outbox、LLM review 明确降级及
+Web/Flutter 服务端材料入口。Provider 未配置时只生成逐字稿，不生成假摘要；owner/due/priority 仅在引用证据可确认时绑定。
+自动化、migration/forced-RLS、真实 Provider、浏览器/真机和导出 Adapter 未完成，保持 `in_progress`。
 
 ## 5. P1 AI 客服
 

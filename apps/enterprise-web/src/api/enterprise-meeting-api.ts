@@ -13,11 +13,15 @@ import type {
   JoinEnterpriseMeetingMemberRequest,
 } from "@translation/contracts";
 import type { EnterpriseContentRequestContext } from "./enterprise-api.js";
+import {
+  createEnterpriseMeetingMaterialApi,
+  type EnterpriseMeetingMaterialApi,
+} from "./enterprise-meeting-material-api.js";
 
 type Requester = <T>(path: string, init?: RequestInit) => Promise<T>;
 type ContentHeaders = (context: EnterpriseContentRequestContext) => Record<string, string>;
 
-export interface EnterpriseMeetingApi {
+export interface EnterpriseMeetingApi extends EnterpriseMeetingMaterialApi {
   listMeetings(context: EnterpriseContentRequestContext):
     Promise<EnterpriseMeetingsResponse>;
   getMeeting(context: EnterpriseContentRequestContext, meetingId: string):
@@ -79,6 +83,7 @@ export function createEnterpriseMeetingApi(
   contentHeaders: ContentHeaders,
 ): EnterpriseMeetingApi {
   return {
+    ...createEnterpriseMeetingMaterialApi(request, contentHeaders),
     listMeetings: (context) => request(
       "/enterprise/v1/meetings",
       { headers: contentHeaders(context) },

@@ -2,6 +2,7 @@ class EnterpriseMobileMeeting {
   const EnterpriseMobileMeeting({
     required this.id,
     required this.title,
+    required this.hostUserId,
     required this.status,
     required this.allowGuests,
     required this.screenShareRole,
@@ -10,8 +11,7 @@ class EnterpriseMobileMeeting {
     this.scheduledAt,
   });
 
-  final String id;
-  final String title;
+  final String id, title, hostUserId;
   final String status;
   final bool allowGuests;
   final String screenShareRole;
@@ -33,6 +33,7 @@ class EnterpriseMobileMeeting {
     return EnterpriseMobileMeeting(
       id: _text(json, 'id'),
       title: _text(json, 'title'),
+      hostUserId: _text(json, 'hostUserId'),
       status: _text(json, 'status'),
       allowGuests: allowGuests,
       screenShareRole: screenShareRole as String,

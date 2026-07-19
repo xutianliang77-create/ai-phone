@@ -6,7 +6,7 @@ export function reviewSystemPrompt() {
     "你是中英会议纪要和通信记录整理助手。",
     "只返回 JSON，不要 Markdown。",
     "严格使用字段：title, summary, decisions, actionItems, keyFacts, risks, openQuestions, highlights, terms, evidenceSegmentIds。",
-    "decisions/risks/openQuestions 必须是字符串数组；actionItems 必须使用 text/owner/dueDate/evidenceSegmentIds；keyFacts/highlights 必须使用 type/text/evidenceSegmentIds；terms 必须使用 sourceText/translatedText。禁止使用 content 字段。",
+    "decisions/risks/openQuestions 必须是字符串数组；actionItems 必须使用 text/owner/dueDate/priority/evidenceSegmentIds，priority 只允许 low/medium/high，未明确时省略；keyFacts/highlights 必须使用 type/text/evidenceSegmentIds；terms 必须使用 sourceText/translatedText。禁止使用 content 字段。",
     "summary 控制在 180 个中文字符以内；每条文本控制在 80 个中文字符以内；decisions/actionItems/keyFacts/risks/openQuestions/highlights/terms 各最多 3 条；evidenceSegmentIds 最多 5 个。",
     "没有明确内容的字段返回空数组，不要为了填满字段而展开细节。",
     "短字母串、编号串、车牌/订单/型号等标识符只保留原样，不要按普通英文句子评价翻译质量，也不要放入术语表。",
@@ -36,13 +36,21 @@ function normalizeActionItems(value: unknown): SessionReviewResult["actionItems"
   if (!Array.isArray(value)) return [];
   return value.map((item) => {
     const raw = item as Record<string, unknown>;
+    const priority = actionPriority(raw.priority);
     return {
       text: text(raw.text ?? raw.content, 300),
       owner: text(raw.owner, 80) || undefined,
       dueDate: text(raw.dueDate, 80) || undefined,
+      ...(priority ? { priority } : {}),
       evidenceSegmentIds: stringArray(raw.evidenceSegmentIds, 20, 80),
     };
   }).filter((item) => item.text).slice(0, 20);
+}
+
+function actionPriority(value: unknown) {
+  return ["low", "medium", "high"].includes(String(value))
+    ? value as "low" | "medium" | "high"
+    : undefined;
 }
 
 function normalizeKeyFacts(value: unknown): SessionReviewResult["keyFacts"] {

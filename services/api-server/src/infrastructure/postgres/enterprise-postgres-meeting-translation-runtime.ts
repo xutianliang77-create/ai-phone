@@ -122,6 +122,9 @@ export function createEnterprisePostgresMeetingTranslationRuntime(
         }
         const meeting = await meetingForTicket(unit, payload);
         if (!meeting) return { status: "meeting_binding_mismatch" as const };
+        if (!["provisioning", "active", "ending"].includes(meeting.status)) {
+          return { status: "meeting_not_active" as const };
+        }
         return {
           status: "accepted" as const,
           snapshot: snapshotFor(meeting.id, payload, authorized.policy),
@@ -167,6 +170,9 @@ export function createEnterprisePostgresMeetingTranslationRuntime(
         if (authorized.status !== "authorized") return authorized;
         const meeting = await meetingForTicket(unit, payload);
         if (!meeting) return { status: "meeting_binding_mismatch" as const };
+        if (!["provisioning", "active", "ending"].includes(meeting.status)) {
+          return { status: "meeting_not_active" as const };
+        }
         return {
           status: "authorized" as const,
           deliveries: await unit.meetingTranslations.appendTargetEvents({

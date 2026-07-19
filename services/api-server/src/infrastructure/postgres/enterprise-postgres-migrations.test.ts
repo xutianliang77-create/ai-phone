@@ -35,6 +35,7 @@ describe("enterprise PostgreSQL migrations", () => {
       "0022_enterprise_meeting_entry",
       "0023_enterprise_meeting_translation",
       "0024_enterprise_meeting_screen_share_leases",
+      "0025_enterprise_meeting_materials",
     ]);
     for (const migration of migrations) {
       expect(migration.up.trim()).not.toBe("");
@@ -132,6 +133,11 @@ describe("enterprise PostgreSQL migrations", () => {
     expect(sql).toContain("CREATE TABLE enterprise.term_pack_versions");
     expect(sql).toContain("CREATE TABLE enterprise.script_templates");
     expect(sql).toContain("CREATE TABLE enterprise.script_template_versions");
+    expect(sql).toContain("CREATE TABLE enterprise.meeting_material_runs");
+    expect(sql).toContain("CREATE TABLE enterprise.meeting_material_segments");
+    expect(sql).toContain("CREATE TABLE enterprise.meeting_material_conclusion_evidence");
+    expect(sql).toContain("CREATE TABLE enterprise.meeting_action_item_evidence");
+    expect(sql).toContain("enterprise meeting material evidence is immutable");
     expect(sql).toContain("enterprise_term_pack_version_guard");
     expect(sql).toContain("enterprise_script_template_version_guard");
     expect(sql).toContain("ALTER TABLE enterprise.term_packs DISABLE ROW LEVEL SECURITY");
@@ -175,6 +181,7 @@ describe("enterprise PostgreSQL migrations", () => {
     expect(rollbackSql).toContain("DROP TABLE IF EXISTS enterprise.knowledge_chunks");
     expect(rollbackSql).toContain("DROP TABLE IF EXISTS enterprise.term_pack_versions");
     expect(rollbackSql).toContain("DROP TABLE IF EXISTS enterprise.script_template_versions");
+    expect(rollbackSql).toContain("DROP TABLE IF EXISTS enterprise.meeting_material_runs");
     expect(sql).not.toContain("BYPASSRLS");
   });
 

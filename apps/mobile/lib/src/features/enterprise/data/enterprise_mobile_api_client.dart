@@ -139,6 +139,7 @@ class EnterpriseMobileApiClient {
     required String method,
     Map<String, Object?>? body,
     String? idempotencyKey,
+    Duration? timeout,
   }) async {
     http.Response response;
     try {
@@ -156,7 +157,7 @@ class EnterpriseMobileApiClient {
             });
       if (body != null) request.body = jsonEncode(body);
       response = await http.Response.fromStream(await _client.send(request))
-          .timeout(_timeout);
+          .timeout(timeout ?? _timeout);
     } on TimeoutException {
       throw const EnterpriseMobileApiException(
         code: 'network_timeout',

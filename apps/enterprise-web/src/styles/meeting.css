@@ -59,6 +59,152 @@
   background: var(--color-container);
 }
 
+.meeting-materials {
+  display: grid;
+  gap: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--color-outline-variant);
+}
+
+.meeting-materials__entry,
+.meeting-materials__actions,
+.meeting-material-evidence,
+.meeting-material-actions article > div,
+.meeting-transcript article > header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.meeting-materials__notice,
+.meeting-materials__header > p {
+  margin: 0;
+  color: var(--color-outline);
+}
+
+.meeting-materials__body,
+.meeting-materials__header,
+.meeting-material-conclusions,
+.meeting-material-actions,
+.meeting-transcript,
+.meeting-speakers {
+  display: grid;
+  gap: 14px;
+}
+
+.meeting-materials__header {
+  padding: 16px;
+  border-radius: var(--radius);
+  background: var(--color-surface-high);
+}
+
+.meeting-materials__header > div:first-child,
+.meeting-material-conclusions h3,
+.meeting-material-actions h3,
+.meeting-transcript h3,
+.meeting-speakers h3 {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin: 0;
+}
+
+.meeting-materials__header > div:first-child span {
+  display: grid;
+  gap: 2px;
+}
+
+.meeting-materials__review {
+  width: fit-content;
+  padding: 5px 9px;
+  border-radius: 999px;
+  background: var(--color-container);
+  color: var(--color-outline);
+  font-size: .78rem;
+}
+
+.meeting-materials__review.state--ready {
+  background: color-mix(in srgb, var(--color-primary) 12%, transparent);
+  color: var(--color-primary);
+}
+
+.meeting-material-conclusions > div,
+.meeting-material-actions,
+.meeting-transcript {
+  display: grid;
+  gap: 10px;
+}
+
+.meeting-material-conclusions article,
+.meeting-material-actions article,
+.meeting-transcript article {
+  display: grid;
+  gap: 8px;
+  padding: 14px;
+  border: 1px solid var(--color-outline-variant);
+  border-radius: var(--radius);
+  background: var(--color-container);
+}
+
+.meeting-material-conclusions article > span,
+.meeting-material-actions article span {
+  color: var(--color-primary);
+  font-size: .78rem;
+}
+
+.meeting-material-conclusions p,
+.meeting-material-actions p,
+.meeting-transcript p {
+  margin: 0;
+  white-space: pre-wrap;
+}
+
+.meeting-material-evidence {
+  color: var(--color-outline);
+  font-size: .78rem;
+}
+
+.meeting-material-evidence a {
+  color: var(--color-primary);
+}
+
+.meeting-transcript article {
+  scroll-margin-top: 24px;
+}
+
+.meeting-transcript article > header {
+  justify-content: space-between;
+}
+
+.meeting-transcript article > header span,
+.meeting-transcript__translation {
+  color: var(--color-outline);
+}
+
+.meeting-speakers__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.meeting-speakers label,
+.meeting-speakers label > span {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.meeting-speakers label {
+  align-items: stretch;
+  flex-direction: column;
+}
+
+.meeting-speakers input {
+  min-width: 0;
+  flex: 1;
+}
+
 .meeting-card header,
 .meeting-card footer {
   display: flex;
@@ -445,6 +591,10 @@
   }
 
   .meeting-translation__preferences {
+    grid-template-columns: 1fr;
+  }
+
+  .meeting-speakers__grid {
     grid-template-columns: 1fr;
   }
 

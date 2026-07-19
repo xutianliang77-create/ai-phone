@@ -165,13 +165,21 @@ export function createEnterprisePostgresMeetingRuntime(
           joinedAt: input.now,
         });
         if (preference.status !== "updated") return { status: "not_ready" };
+        if (meeting.status === "provisioning") {
+          const active = await unit.meetings.transition({
+            meetingId: meeting.id, status: "active",
+            expectedVersion: meeting.version, occurredAt: input.now,
+          });
+          if (active.status !== "updated") return { status: "not_ready" };
+          meeting = active.meeting;
+        }
         return authorize(unit, meeting, preference.participant);
       });
     },
     authorizeGuestMeetingJoin(input) {
       return withEnterprisePostgresUnitOfWork(pool, input.context, async (unit) => {
         requiredTime(input.now);
-        const meeting = await unit.meetings.find(input.meetingId, true);
+        let meeting = await unit.meetings.find(input.meetingId, true);
         if (!meeting) return { status: "not_found" };
         if (meeting.status === "scheduled") return { status: "not_started" };
         if (!meeting.policy.allowGuests || !canIssueMeetingAccess(meeting.status)) {
@@ -193,6 +201,14 @@ export function createEnterprisePostgresMeetingRuntime(
           joinedAt: input.now,
         });
         if (preference.status !== "updated") return { status: "not_ready" };
+        if (meeting.status === "provisioning") {
+          const active = await unit.meetings.transition({
+            meetingId: meeting.id, status: "active",
+            expectedVersion: meeting.version, occurredAt: input.now,
+          });
+          if (active.status !== "updated") return { status: "not_ready" };
+          meeting = active.meeting;
+        }
         return authorize(unit, meeting, preference.participant);
       });
     },

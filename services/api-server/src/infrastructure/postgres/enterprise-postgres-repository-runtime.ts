@@ -11,12 +11,8 @@ import {
   resolveEnterprisePostgresContext,
 } from "./enterprise-postgres-directory.repository.js";
 import type { EnterprisePostgresPool } from "./enterprise-postgres-client.js";
-import {
-  withEnterpriseTenantPostgresRepository,
-} from "./enterprise-postgres-tenant.repository.js";
-import {
-  withEnterprisePostgresUnitOfWork,
-} from "./enterprise-postgres-unit-of-work.js";
+import { withEnterpriseTenantPostgresRepository } from "./enterprise-postgres-tenant.repository.js";
+import { withEnterprisePostgresUnitOfWork } from "./enterprise-postgres-unit-of-work.js";
 import {
   beginPostgresTenantCreation,
   beginPostgresTenantRetry,
@@ -33,10 +29,11 @@ import { createEnterprisePostgresTerminologyRuntime } from "./enterprise-postgre
 import { createEnterprisePostgresObservabilityRuntime } from "./enterprise-postgres-observability-runtime.js";
 import { createEnterprisePostgresAuditExportRuntime } from "./enterprise-postgres-audit-export-runtime.js";
 import { createEnterprisePostgresMeetingRuntime } from "./enterprise-postgres-meeting-runtime.js";
-import { createEnterprisePostgresMeetingTranslationRuntime } from
-  "./enterprise-postgres-meeting-translation-runtime.js";
+import { createEnterprisePostgresMeetingTranslationRuntime } from "./enterprise-postgres-meeting-translation-runtime.js";
 import { createEnterprisePostgresMeetingScreenShareRuntime } from
   "./enterprise-postgres-meeting-screen-share-runtime.js";
+import { createEnterprisePostgresMeetingMaterialRuntime } from "./enterprise-postgres-meeting-material-runtime.js";
+
 export function createPostgresEnterpriseRepositoryRuntime(
   pools: EnterprisePostgresPool | {
     tenantPool: EnterprisePostgresPool;
@@ -61,6 +58,7 @@ export function createPostgresEnterpriseRepositoryRuntime(
     ...createEnterprisePostgresMeetingRuntime(pool),
     ...createEnterprisePostgresMeetingTranslationRuntime(pool),
     ...createEnterprisePostgresMeetingScreenShareRuntime(pool),
+    ...createEnterprisePostgresMeetingMaterialRuntime(pool),
     resolveContext(input) {
       return resolveEnterprisePostgresContext({
         pool: split.directoryPool,

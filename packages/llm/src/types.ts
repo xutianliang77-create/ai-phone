@@ -80,6 +80,7 @@ export interface SessionReviewResult {
     text: string;
     owner?: string;
     dueDate?: string;
+    priority?: "low" | "medium" | "high";
     evidenceSegmentIds: string[];
   }>;
   keyFacts: Array<{

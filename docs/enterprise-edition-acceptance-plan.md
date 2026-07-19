@@ -1,6 +1,6 @@
 # 无界AI企业版验收任务与计划
 
-版本：v1.35
+版本：v1.36
 日期：2026-07-19
 状态：可执行验收计划，已对齐统一通讯平台和 PostgreSQL Primary 收敛
 
@@ -406,6 +406,11 @@ fence、force-stop 审计/状态 outbox、LiveKit 即时撤销与持久撤销 ou
 - 当前会议姓名修改不自动污染企业全局身份。
 - 导出权限、审计和删除期限正确。
 
+`ENT-MTG-011` 当前实现新增 `0025` 材料 run、规范化 segment、逐项 evidence、当前会议 speaker label、action item
+CAS、artifact/audit/outbox，以及 Web/Flutter 服务端材料消费。验收还必须覆盖 target fan-out 去重、最新 revision、同键重放、
+不同 hash、跨租户/跨会议 ID、空/伪造 evidence、未配置/超时/畸形 Provider、owner/due hallucination、发布竞争、保存到期和
+meeting ended 后迟到 Worker 事件拒绝。本轮按要求未运行这些门禁，因此 `ENT-MTG-011` 保持 `in_progress`，A1/H3 未通过。
+
 ## 8. A2 AI 客服验收
 
 ### 8.1 渠道和语言
@@ -531,7 +536,7 @@ fence、force-stop 审计/状态 outbox、LiveKit 即时撤销与持久撤销 ou
 
 - PostgreSQL 作为所有真实 SaaS 租户的初始真源。
 - 内部 SQLite 演示数据可以迁移，但不能作为客户生产迁移路径的必要依赖。
-- 验收 commit 锁定的公共31段 manifest（基线从 `fe1c3c2` 演进）与 enterprise 24段 migration manifest 在隔离企业数据库从空库完整执行；两个 manifest 的顺序、checksum、schema verify 和 down/forward 策略均有证据，不能只跑其中一套。
+- 验收 commit 锁定的公共31段 manifest（基线从 `fe1c3c2` 演进）与 enterprise 25段 migration manifest 在隔离企业数据库从空库完整执行；两个 manifest 的顺序、checksum、schema verify 和 down/forward 策略均有证据，不能只跑其中一套。
 - 每个进程只有一个 Storage Driver 和 startup verdict；HTTP、企业 Repository、统一通讯会话和 cell Worker 使用同一 verified Primary Runtime，不存在 fallback、shadow read、dual write 或按路由混用。
 - 应用 tenant、user directory、cell discovery、migration、maintenance 分别使用最小权限角色；生产 TLS 使用 `verify-full`。应用角色没有 `BYPASSRLS`、表 owner、DDL 或关闭 RLS 权限。
 - 公共 communication session、participant、media leg、dispatch、Provider operation、playback 和相关账本全部具有 tenant scope、复合 FK 和 `FORCE ROW LEVEL SECURITY`；使用跨租户 ID、缺 scope、伪造 owner/user 过滤做负向验证。
@@ -540,7 +545,7 @@ fence、force-stop 审计/状态 outbox、LiveKit 即时撤销与持久撤销 ou
 - 使用普通应用角色验证 billing account/plan/subscription/entitlement/change history forced RLS、活动 subscription 唯一、plan/snapshot/change 不可变，以及 entitlement projection/binding/grant 的 tenant 复合 FK；按跨租户、停用 account、过期账期、错 subscription/plan/version、席位超限、幂等漂移和客户端 limit 伪造执行负向矩阵。
 - accounts、tenant、communication session、segment、campaign、support、meeting、ledger 和 object hash 数量与规范化 SHA-256 一致。
 - 全量复制后记录增量水位，切换时获取 writer fence、清退旧 API/Worker、重放剩余 inbox/outbox，再做第二次 count/hash；切换或对账失败可按书面决策回滚，旧 writer 不能继续写入。
-- staging startup 必须拒绝 local evidence、签名篡改、错误 cutover/target ID、错误 commit/image/topology、错误 system identifier/OID、缺 baseline 引用、未清退 writer 或任一31+24 migration 漂移。维护工具只验证 fence，不自动执行 promote 或隔离旧主。
+- staging startup 必须拒绝 local evidence、签名篡改、错误 cutover/target ID、错误 commit/image/topology、错误 system identifier/OID、缺 baseline 引用、未清退 writer 或任一31+25 migration 漂移。维护工具只验证 fence，不自动执行 promote 或隔离旧主。
 - migration 后使用普通应用角色验证 `FORCE ROW LEVEL SECURITY`；确认 user directory self policy、tenant projection policy、成员投影同步和跨租户拒绝均生效。
 - 使用独立 cell Worker 角色验证 pending projection forced RLS、trigger 同步、空 cell 失败闭合、旧 cell 拒绝和 tenant transaction 原子 claim。
 - 使用 API 应用角色验证 PostgreSQL runtime 只在 startup gate `verified` 后创建；非法或 `dual_write` driver、连接/校验失败均不得监听端口，也不得回退到 legacy。

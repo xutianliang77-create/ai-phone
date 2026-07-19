@@ -1,6 +1,6 @@
 # 无界AI企业版详细技术设计
 
-版本：v1.37
+版本：v1.38
 日期：2026-07-19
 状态：统一通讯平台与 PostgreSQL Primary 收敛详细技术方案
 
@@ -21,11 +21,11 @@
 | RBAC | `ready_for_acceptance` | 已有17个 scope、九角色矩阵、统一服务端 guard 和越权测试 |
 | SaaS tenant lifecycle | `ready_for_acceptance` | 已有幂等开通、暂停、导出/删除执行器、租约、有界恢复和 receipt 校验；真实对象存储/Provider 清理服务尚待验收 |
 | Append-only audit | `ready_for_acceptance` | 已有 tenant-scoped 查询、HMAC cursor、成员/RBAC/租户生命周期埋点和 SQLite/PostgreSQL 不可变约束；受控导出已进入 UI-008 开发，真实 PostgreSQL 验收仍待执行 |
-| PostgreSQL schema | `implemented` | 已有二十四段 up/down migration、tenant-first 索引、复合 FK、强制 RLS、user directory、cell pending projection、opaque subject identity、企业通讯/dispatch/策略、usage/billing、knowledge/terminology、observability trace、受控审计导出、Meeting 聚合/创建/翻译和屏幕共享租约；尚无真实 migrate/restore/PITR 证据 |
+| PostgreSQL schema | `implemented` | 已有二十五段 up/down migration、tenant-first 索引、复合 FK、强制 RLS、user directory、cell pending projection、opaque subject identity、企业通讯/dispatch/策略、usage/billing、knowledge/terminology、observability trace、受控审计导出、Meeting 聚合/创建/翻译、屏幕共享租约和会后材料；尚无真实 migrate/restore/PITR 证据 |
 | Tenant-scoped Repository | `ready_for_acceptance` | 已有 tenant/user/cell scoped transaction、subject guard、单一 `legacy|postgres` runtime、HTTP 全链路注入、独立 cell Worker，以及 Tenant/Member/Audit、Directory、lifecycle、Inbox/Outbox、budget、billing/entitlement、usage accounting、knowledge、terminology 和共享 unit-of-work；尚无真实 PostgreSQL H3 证据 |
 | Enterprise Inbox/Outbox | `ready_for_acceptance` | 已有 tenant-scoped 去重、稳定 payload hash、领域/inbox/outbox 原子提交、lease/retry/recovery 和100次重放门禁；真实 PostgreSQL 并发与 Provider sandbox 尚待验收 |
 | SQLite/JSON 演示数据导入 | `ready_for_acceptance` | 已有维护窗口、SQLite 临时副本与 quick_check、空目标事务导入、六集合 count/SHA-256 读回对账和不一致回滚；仅限内部演示数据 |
-| 公共 Primary Runtime 收敛 | `ready_for_acceptance` | 已合入上游稳定提交 `fe1c3c2`；公共31段与 enterprise 24段 manifest 由一个启动编排验证，driver、数据库身份和分权连接失败均在监听前闭合；尚无真实 PostgreSQL H3 证据 |
+| 公共 Primary Runtime 收敛 | `ready_for_acceptance` | 已合入上游稳定提交 `fe1c3c2`；公共31段与 enterprise 25段 manifest 由一个启动编排验证，driver、数据库身份和分权连接失败均在监听前闭合；尚无真实 PostgreSQL H3 证据 |
 | 企业链路追踪 | `in_progress` | 平台 trace 已进入 tenant context、PostgreSQL session、communication binding、usage event/ledger 与会话报告；本轮未执行测试和真实 PostgreSQL 门禁，货币成本因无价格表明确 not configured |
 | 企业工作台真值投影 | `in_progress` | Web 已读取 tenant/route、Provider、subscription、budget、usage aggregate 和显式 session trace report；业务聚合与价格表缺失时明确 not ready/not configured，本轮未执行自动化、浏览器或 PostgreSQL 门禁 |
 | 审计与分析 | `in_progress` | Web 已接入审计筛选/详情、显式 session 下钻和受控 JSONL 导出；`0020`、Repository/API/cell Worker/加密对象存储边界已实现，本轮未执行 migration、双租户、对象存储或浏览器测试；业务聚合/价格表与物理对象清理仍未完成 |
@@ -34,12 +34,13 @@
 | Tenant-aware Worker Dispatch | `ready_for_acceptance` | enterprise `0012` 以 scope FK/RLS 绑定公共 dispatch/capacity；短期 HMAC ticket、租户容量、lease/heartbeat、cancel/finalize 和二次 binding fence 已实现；仅有自动化和一次性本地 PostgreSQL 16 证据，尚无真实多实例/H3 容量证据 |
 | 企业设备、声音和录制策略 | `ready_for_acceptance` | enterprise `0013`、发布 API、策略解析、purpose-specific 授权和 Worker policy fence 已实现；仅有自动化和一次性本地 PostgreSQL 16 机制证据，尚无真实设备/Provider、A1/H2/H3 证据 |
 | Web/Flutter 屏幕共享 | `in_progress` | 已实现真实来源/系统授权、独立最小权限发布 Room、Web 可选独立系统音轨、显式 screen simulcast/dynacast、renderer 尺寸驱动订阅、当前 generation 过滤、三种画面/字幕布局和 scope 受控主持人强停；移动端系统音频仍关闭，未执行自动化、多浏览器/真机、回声、弱网或真实 LiveKit 门禁 |
+| 企业会议会后材料 | `in_progress` | `0025`、Repository/runtime/API 和 Web/Flutter 已实现服务端冻结逐字稿、材料修订、逐项 evidence、当前会议 speaker label、action CAS 和人工发布；未执行 migration/RLS、自动化、真实复核 Provider、浏览器/真机或导出 Adapter 门禁 |
 | 企业用量预算 | `ready_for_acceptance` | enterprise `0014` 已实现 tenant/category/unit/UTC period 预算、hold/settle、阈值告警和 ledger 不可变约束；真实并发与账务抽样待验收 |
 | 租户账务和 Entitlement | `ready_for_acceptance` | enterprise `0015` 已实现 tenant billing account、不可变 plan/subscription/entitlement version、服务端账期及 binding/dispatch entitlement fence；真实支付 Provider、关账对账和 A1/H3 待验收 |
 | SaaS 计量聚合 | `ready_for_acceptance` | enterprise `0016` 已实现 tenant usage event、event/ledger 一致性、append-only adjustment、负数净额保护及 count/hash/watermark 账期聚合；真实关账、支付对账和 A1/H3 待验收 |
 | 企业知识版本 | `ready_for_acceptance` | enterprise `0017`、Knowledge Repository/runtime/API 已实现 source/revision/chunk/review/publish、发布后不可变、四维时间检索和稳定 citation；当前仅有确定性文本检索，本地普通角色验证不代表 embedding Provider、对象存储、恶意文档或 A1/H3 已通过 |
 | 企业术语与话术版本 | `ready_for_acceptance` | enterprise `0018`、共享契约、Term Pack/Script Template Repository/runtime/API 已实现稳定资源、递增 revision、review/publish、有效期解析、hash 校验和同一术语版本运行时引用；仅有自动化和本地 PostgreSQL 16 普通角色证据，真实 Worker/Provider、A1/H3 未通过 |
-| Primary 全量切换/恢复证据 | `ready_for_acceptance` | 工具按运行时动态校验 manifest/全业务表；`c9b5be2` 历史证据为31+16/81张表，当前31+24/88张表必须重新生成签名证据；异地 WAL/PITR/H3 未通过 |
+| Primary 全量切换/恢复证据 | `ready_for_acceptance` | 工具按运行时动态校验 manifest/全业务表；`c9b5be2` 历史证据为31+16/81张表，当前31+25/95张表必须重新生成签名证据；异地 WAL/PITR/H3 未通过 |
 | PostgreSQL 控制面/业务聚合 | `designed` | 后续 CORE/MTG/CS/MKT 领域任务范围，不能从公共 Repository runtime 推导为已实现 |
 | SQLite | `demo_only` | 仅本地开发、自动化和封闭演示，不承载真实企业试点数据 |
 | PSTN/CRM/Calendar/OCR | `not_ready` 或按环境探测 | 未配置必须明确降级，不生成虚假外部对象或成功状态 |
@@ -234,8 +235,49 @@ meeting_artifacts(
 )
 
 meeting_action_items(
-  id, tenant_id, meeting_id, owner_participant_id, text,
-  due_at, status, evidence_segment_ids, version
+  id, tenant_id, meeting_id, material_run_id, ordinal,
+  owner_participant_id, item_text, priority, due_at, status,
+  created_at, updated_at, version
+)
+
+meeting_material_runs(
+  id, tenant_id, meeting_id, revision, status,
+  source_event_count, source_hash, review_status, review_reason_code,
+  provider_fingerprint, retention_until, created_by,
+  idempotency_key, request_hash, created_at, updated_at,
+  published_at, version
+)
+
+meeting_material_segments(
+  id, tenant_id, meeting_id, material_run_id, ordinal,
+  source_participant_id, source_display_name, source_track_sid,
+  source_segment_id, revision, source_language, source_text,
+  occurred_at, created_at
+)
+
+meeting_material_segment_translations(
+  id, tenant_id, meeting_id, material_run_id,
+  material_segment_id, language, translated_text, created_at
+)
+
+meeting_material_speaker_labels(
+  id, tenant_id, meeting_id, material_run_id, participant_id,
+  display_name, created_at, updated_at, version
+)
+
+meeting_material_conclusions(
+  id, tenant_id, meeting_id, material_run_id,
+  kind, ordinal, conclusion_text, created_at
+)
+
+meeting_material_conclusion_evidence(
+  id, tenant_id, meeting_id, material_run_id,
+  conclusion_id, material_segment_id, created_at
+)
+
+meeting_action_item_evidence(
+  id, tenant_id, meeting_id, material_run_id,
+  action_item_id, material_segment_id, created_at
 )
 ```
 
@@ -491,6 +533,11 @@ POST   /enterprise/v1/meetings/:meetingId/join-token
 PUT    /enterprise/v1/meetings/:meetingId/translation-preference
 POST   /enterprise/v1/meetings/:meetingId/start
 POST   /enterprise/v1/meetings/:meetingId/end
+GET    /enterprise/v1/meetings/:meetingId/materials/current
+POST   /enterprise/v1/meetings/:meetingId/materials/generate
+POST   /enterprise/v1/meetings/:meetingId/materials/:runId/publish
+PUT    /enterprise/v1/meetings/:meetingId/materials/:runId/speakers/:participantId
+PUT    /enterprise/v1/meetings/:meetingId/materials/:runId/actions/:actionItemId
 POST   /enterprise/v1/meetings/:meetingId/screen-shares/acquire
 POST   /enterprise/v1/meetings/:meetingId/screen-shares/:shareId/pause
 POST   /enterprise/v1/meetings/:meetingId/screen-shares/:shareId/resume
@@ -987,7 +1034,7 @@ Worker dispatch ticket 升级为 v2，并将 `policySnapshotId + policyVersion` 
 `ENT-DATA-009` 的维护工具在 `REPEATABLE READ READ ONLY` 快照内枚举 `ai_phone` 与
 `enterprise` 全部业务表（排除 migration 元表），要求每张表存在主键，按复合主键
 keyset pagination 读取 `to_jsonb(row)` 规范文本。每行以字节长度前缀加入 SHA-256，
-形成 table count/hash/last-key hash，再汇总公共31段、企业21段 checksum、8张关键表、
+形成 table count/hash/last-key hash，再汇总公共31段、企业25段 checksum、8张关键表、
 总行数和全库 hash。维护账号必须是受审计的 superuser 或 `BYPASSRLS` 全读角色，不能复用
 tenant/directory/cell 应用凭证。
 
@@ -999,7 +1046,7 @@ baseline 文件 hash，验证源库默认只读、写探针返回 SQLSTATE `2500
 整行 hash、主键、migration 或 server version 不一致都会生成签名 `mismatch` 并以非零退出。
 
 生产 startup gate 只接受 `environment=staging` 的 matched cutover evidence，且运行时
-commit/image/topology、cutover ID、target logical ID、当前 system identifier/OID 和31+24
+commit/image/topology、cutover ID、target logical ID、当前 system identifier/OID 和31+25
 manifest 必须逐项一致。本地 PostgreSQL 16 演练已验证81张表、8张含记录关键表、增量后17行
 全库 hash、writer fence、隔离 `pg_dump/pg_restore` 和单行篡改失败；证据见
 `docs/evidence/ent-data-009-local-drill-2026-07-18.md`。这只证明机制可执行，不是异地主机
@@ -1015,6 +1062,7 @@ manifest 必须逐项一致。本地 PostgreSQL 16 演练已验证81张表、8�
 | marketing task 终态 | task/outcome、hold settle/release、ledger、outbox | CRM 同步、分析聚合 |
 | 坐席 claim | session version、assigned user、lease、审计 | 实时通知、外部工单同步 |
 | screen share acquire/stop | share lease、generation、meeting version、审计 | token 签发/撤销、RTC track 收敛 |
+| 生成/发布会后材料 | run、source count/hash、冻结 segment/translation、evidence、artifact、审计/outbox | 结构化 Provider 复核；外部导出 Adapter |
 | 工具执行请求 | request hash、确认状态、idempotency、outbox | Adapter 调用；结果再以 inbox 事务落库 |
 | 租户删除 | tombstone、删除范围快照、审计/outbox | 对象删除、Provider 清理、最终校验 |
 | 创建/路由通讯会话 | tenant-scoped session、route epoch、policy/entitlement snapshot、dispatch outbox | LiveKit/ASR/翻译/TTS Worker 分配 |
@@ -1732,6 +1780,37 @@ Web/Flutter 从已认证 workspace scope 决定是否发现入口，同时只对
 真实 LiveKit 500ms 撤销、Provider pending/outbox 或浏览器/真机矩阵，因此 `ENT-MTG-010` 保持 `in_progress`，
 不代表 AC-SHARE-004、A1 或企业生产门禁通过。
 
+### 19.16 会后材料修订、证据和 Provider 复核
+
+`ENT-MTG-011` 以 `0025_enterprise_meeting_materials` 建立材料 run、规范化 segment/translation、当前会议
+speaker label、结论/action item 和逐项 evidence。所有新表使用 tenant-first 复合 FK、forced RLS；冻结 segment、
+translation、结论和 evidence 由 trigger 禁止更新/删除。speaker label 和 action status 是显式可变投影，分别通过材料
+run version 与 action version CAS 更新；姓名修正只属于该材料 revision，不修改 participant 或 member。
+
+`meeting_translation_events` 是按目标参会者 fan-out 的 append-only final 事件，不能直接逐行变成逐字稿。Repository
+先按 `source_participant_id + source_track_sid + source_segment_id` 选择最大 revision，再合并不同目标副本；源文只允许
+一致值，每种翻译语言只保留一个一致值。规范排序后计算 `source_event_count` 和 SHA-256 `source_hash`。生成事务先持久化
+`review_status=processing` 的 run 和 request hash，同一个 tenant/meeting/idempotency key 只恢复原 run；同键不同请求
+返回冲突。Provider 在事务外执行，最终事务重新锁定 meeting/run，复核 version、source count/hash 和每个 evidence ID，
+避免长事务、重复副作用和复核期间源漂移。
+
+只有 ended meeting 可以生成材料；首次成员入会以 CAS 把 provisioning 推进为 active，主持人/owner/admin 结束会议时
+要求没有活动共享，并收敛 `active -> ending -> ended`。translation Worker 在 accept 和 publish 两处复核 meeting active，
+结束后的迟到事件返回 `meeting_not_active`，不能写入本次冻结材料。材料读取、生成、修名、待办更新和发布都通过可信
+tenant context、签名 route document 和 meeting scope guard，route/body 不接收 tenant 或 actor 覆盖字段。
+
+AI 复核复用 `@translation/llm` 的 OpenAI-compatible Adapter，默认关闭。未配置时 run 明确为 `not_configured`；health、
+超时、协议或 Schema 失败时为 `failed`，两者都只返回服务端冻结逐字稿，不补造摘要或待办。Provider 输出中的每条结论
+和 action 必须引用当前 run 的至少一个 material segment；未知、空或跨 run evidence 全部拒绝。负责人只在名称与当前
+会议唯一 participant 精确匹配且证据文本包含该名称时绑定；截止时间只在证据包含 Provider 原值且可严格解析时绑定，
+否则保持空值。`ready` 仍表示待人工发布，不代表内容自动成为企业真值。
+
+发布以 expected version 把 draft 改为 published，并在同一事务写 material artifact、审计和 outbox；只允许当前 draft、
+复核 ready 的 revision。Web/Flutter 只读取上述服务端材料，展示复核降级、证据片段、材料内修名、action 状态和人工发布，
+不以客户端字幕缓存回填。当前未运行 migration/down、forced-RLS/跨租户、fan-out/revision/hash、幂等/CAS、Provider
+hallucination、发布竞争、浏览器/Flutter/真机或外部导出 Adapter 门禁，因此任务保持 `in_progress`，不代表 A1/H3 或
+企业生产门禁通过。
+
 ## 20. 错误、重试和客户端动作
 
 | 错误类 | HTTP/协议语义 | 是否重试 | 客户端动作 |
@@ -1762,6 +1841,7 @@ Web/Flutter 从已认证 workspace scope 决定是否发现入口，同时只对
 | 统一通讯 tenant scope | session/leg/dispatch/provider/playback 复合约束、forced RLS、伪造 scope 和可选 owner 负向测试 | 两租户同时通话、取消、迟到事件和 cell 迁移攻击演练 |
 | 企业通讯运行策略 | policy version/snapshot 不可变、readiness/fingerprint 过期、capability deny、授权缺失/过期/撤回和 ticket policy mismatch 测试 | 真实端侧/云端 ASR/翻译/TTS 与声纹/录音/诊断 purpose 撤回演练 |
 | 企业会议定向翻译 | source participant/track、target language/identity、event idempotency、ticket/route/generation/playback fence、客户端 server-sender 校验 | 四人中英真实媒体、Worker/API 重启、弱网、Web/Flutter 和定向 TTS 演练 |
+| 企业会议会后材料 | target fan-out 去重、latest revision、source count/hash、同键重放、evidence/owner/due 负测、发布 CAS、结束后迟到事件拒绝 | 真实复核 Provider、双租户 PostgreSQL、浏览器/Flutter、导出与保留期演练 |
 | 企业账单归属 | tenant billing account、跨租户账单 ID、ledger/adjustment 幂等和对账测试 | 支付 sandbox、账期关闭和财务抽样对账 |
 | 企业链路报告 | `x-trace-id` 到 binding/provider/usage/ledger/audit 的关联、legacy/no-sample/no-price、跨租户 session/trace 负测 | 两租户真实会话、Provider、OTLP、账务抽样和 H1 长稳 |
 | 生产韧性 | writer fence、route epoch、旧 Worker generation、备份清单和恢复脚本测试 | 跨故障域自动切换、旧主隔离、异地主机不可变备份和 PITR |

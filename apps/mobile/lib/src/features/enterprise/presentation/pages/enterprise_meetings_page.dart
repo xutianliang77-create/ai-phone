@@ -9,6 +9,7 @@ import '../../data/enterprise_mobile_api_client.dart';
 import '../../data/enterprise_mobile_models.dart';
 import '../widgets/enterprise_meeting_room_card.dart';
 import '../widgets/enterprise_meeting_media_workspace.dart';
+import '../widgets/enterprise_meeting_material_card.dart';
 import '../widgets/enterprise_meeting_screen_share_card.dart';
 import '../widgets/enterprise_mobile_status_panel.dart';
 import '../widgets/enterprise_meeting_translation_card.dart';
@@ -193,6 +194,18 @@ class _EnterpriseMeetingsPageState extends State<EnterpriseMeetingsPage> {
                 _activeMeetingId == meeting.id ? '已加入' : '加入会议',
               ),
             ),
+            EnterpriseMeetingMaterialCard(
+              client: widget.client,
+              workspace: widget.workspace,
+              aggregate: aggregate,
+              canWrite: widget.workspace.context.can('meeting:write') &&
+                  (widget.workspace.context.member.role == 'owner' ||
+                      widget.workspace.context.member.role == 'admin' ||
+                      widget.workspace.context.member.userId ==
+                          meeting.hostUserId),
+              connected: _activeMeetingId == meeting.id,
+              onMeetingChanged: _load,
+            ),
           ],
         ),
       ),
@@ -264,6 +277,7 @@ class _EnterpriseMeetingsPageState extends State<EnterpriseMeetingsPage> {
           _canForceStopScreen = workspace.context.can('screen_share:stop');
           _screenShare = const EnterpriseMeetingScreenShareSnapshot.idle();
         });
+        await _load();
       }
     } catch (error) {
       if (mounted) setState(() => _error = _errorLabel(error));

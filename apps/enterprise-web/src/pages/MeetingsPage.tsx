@@ -6,6 +6,10 @@ import {
   useState,
 } from "react";
 import type { EnterpriseMeetingAggregateDto } from "@translation/contracts";
+import type {
+  EnterpriseApi,
+  EnterpriseContentRequestContext,
+} from "../api/enterprise-api.js";
 import { useAuth } from "../auth/AuthContext.js";
 import { apiErrorState } from "../business-state.js";
 import { MaterialIcon } from "../components/MaterialIcon.js";
@@ -22,6 +26,8 @@ import { MeetingMediaWorkspace } from
   "../meeting/MeetingMediaWorkspace.js";
 import { MeetingScreenSharePanel } from
   "../meeting/MeetingScreenSharePanel.js";
+import { MeetingMaterialsPanel } from
+  "../meeting/MeetingMaterialsPanel.js";
 
 type LoadState =
   | { status: "loading" }
@@ -132,6 +138,7 @@ export function MeetingsPage() {
       setNotice(grant.translation.status === "not_ready"
         ? `已进入音频会议；字幕未就绪（${grant.translation.reasonCode}）。`
         : "已进入音频会议；字幕按个人语言偏好定向投递。");
+      await refresh();
     } catch (error) {
       setNotice(`入会失败：${errorStateLabel(error)}`);
     } finally {
@@ -164,6 +171,7 @@ export function MeetingsPage() {
     await roomClient.current?.disconnect();
     setJoined(null);
     setNotice("已离开会议，麦克风和本地屏幕采集轨道已停止。");
+    await refresh();
   }
 
   const translationPanel = <MeetingTranslationPanel room={room}
@@ -208,9 +216,11 @@ export function MeetingsPage() {
             canShare={joined.canShare} canForceStop={joined.canForceStop}
             room={room} roomClient={roomClient.current} />
         } /> : translationPanel}
-      <MeetingList load={load} busy={busy} canJoin={canJoin} canWrite={canWrite}
+      {requestContext && ready ? <MeetingList load={load} busy={busy} canJoin={canJoin} canWrite={canWrite}
+        api={api} context={requestContext}
+        actorUserId={ready.context.member.userId} actorRole={ready.context.member.role}
         activeMeetingId={joined?.meetingId ?? null} refresh={refresh}
-        joinMeeting={joinMeeting} inviteGuest={inviteGuest} />
+        joinMeeting={joinMeeting} inviteGuest={inviteGuest} /> : null}
     </PageFrame>
   );
 }
@@ -220,6 +230,10 @@ function MeetingList(props: {
   busy: string | null;
   canJoin: boolean;
   canWrite: boolean;
+  api: EnterpriseApi;
+  context: EnterpriseContentRequestContext;
+  actorUserId: string;
+  actorRole: string;
   activeMeetingId: string | null;
   refresh(): Promise<void>;
   joinMeeting(value: EnterpriseMeetingAggregateDto): Promise<void>;
@@ -260,6 +274,12 @@ function MeetingList(props: {
             <MaterialIcon name="person_add" />复制访客邀请
           </button> : null}
       </footer>
+      <MeetingMaterialsPanel api={props.api} context={props.context}
+        aggregate={item} canWrite={props.canWrite &&
+          (props.actorRole === "owner" || props.actorRole === "admin" ||
+            props.actorUserId === meeting.hostUserId)}
+        connected={props.activeMeetingId === meeting.id}
+        onMeetingChanged={props.refresh} />
     </article>;
   })}</div>;
 }

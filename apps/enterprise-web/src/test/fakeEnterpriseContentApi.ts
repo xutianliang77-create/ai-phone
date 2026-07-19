@@ -21,6 +21,9 @@ type ContentApi = Pick<EnterpriseApi,
   | "joinMeeting" | "joinMeetingAsGuest" | "getMeeting"
   | "currentMeetingScreenShare" | "acquireMeetingScreenShare"
   | "commandMeetingScreenShare" | "forceStopMeetingScreenShare"
+  | "currentMeetingMaterial" | "endMeeting" | "generateMeetingMaterial"
+  | "publishMeetingMaterial" | "updateMeetingMaterialSpeaker"
+  | "updateMeetingMaterialAction"
 >;
 
 export function fakeEnterpriseContentApi(): ContentApi {
@@ -67,5 +70,11 @@ export function fakeEnterpriseContentApi(): ContentApi {
     acquireMeetingScreenShare: vi.fn(),
     commandMeetingScreenShare: vi.fn(),
     forceStopMeetingScreenShare: vi.fn(),
+    currentMeetingMaterial: vi.fn().mockResolvedValue({ material: null }),
+    endMeeting: vi.fn(),
+    generateMeetingMaterial: vi.fn(),
+    publishMeetingMaterial: vi.fn(),
+    updateMeetingMaterialSpeaker: vi.fn(),
+    updateMeetingMaterialAction: vi.fn(),
   };
 }

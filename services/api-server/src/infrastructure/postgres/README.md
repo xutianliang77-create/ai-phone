@@ -175,7 +175,7 @@ SQLSTATE `25006`、旧 writer 会话为0、target 可写和二次全量 hash 相
 
 生产启动只接受 `environment=staging` 的 `cutover/matched` 签名证据，并绑定当前
 commit、image digest、topology hash、目标 logical ID、数据库 system identifier/OID 和
-31+24 migration manifest。`c9b5be2` 的31+16本地证据会被门禁拒绝，必须重新生成；
+31+25 migration manifest。`c9b5be2` 的31+16本地证据会被门禁拒绝，必须重新生成；
 本地同机 `pg_dump/pg_restore` 只能证明逻辑恢复与对账机制；
 跨故障域自动切换、异地主机不可变 WAL/PITR 和 RPO/RTO 仍由 `ENT-REL-003`/H3 验收。
 
@@ -186,3 +186,11 @@ generation、acquire 幂等/hash、严格状态时间约束、append-only 命令
 API 使用 expected-version CAS 和短期最小权限 LiveKit grant；pause/stop/route fence/到期通过同一幂等 outbox
 撤销旧发布 identity。cell Worker 即使在客户端消失后也会把到期租约收敛为 expired。Provider 未配置或移除失败
 保持 retry/pending，不生成假成功。当前未执行 migration、forced-RLS、并发或真实 LiveKit 验收。
+
+## Meeting materials
+
+`ENT-MTG-011` 由 migration `0025` 增加 tenant-scoped material run、规范化 segment/translation、当前会议
+speaker label、结论/action item 和逐项 evidence。Repository 从按 target fan-out 的 final translation events 中选择每个
+source segment 的 latest revision，去重一致副本后计算 source count/hash；同一幂等键只恢复原 run，不同 request hash
+冲突。Provider 复核在事务外执行，最终事务重新验证 run version、源 hash 和 evidence。未配置或失败时只保存冻结逐字稿，
+不伪造摘要、负责人或截止时间。当前未执行 migration/down、forced-RLS、真实 Provider 或 PostgreSQL 并发门禁。

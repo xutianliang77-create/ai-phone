@@ -1,6 +1,6 @@
 # 无界AI企业版详细功能设计
 
-版本：v1.18
+版本：v1.19
 日期：2026-07-19
 状态：SaaS 详细设计基线，已对齐统一通讯平台
 
@@ -398,11 +398,22 @@ MediaStreamTrack 交给 video。SDK/浏览器不支持 screen simulcast 时保�
 
 ### 7.5 会后材料
 
-- 按说话人生成原文、译文和双语逐字稿。
-- 生成摘要、议题、决策、异议、风险和未解决问题。
-- 提取待办、负责人、截止时间和优先级，并关联证据 segment。
+- 结束会议后冻结 `meeting_translation_events` 的最新 revision；服务端按 source participant、track、segment 去除
+  target fan-out 重复记录，再按说话人生成原文、译文和双语逐字稿。客户端不得从本地字幕缓存重新拼接材料。
+- 每次生成形成独立材料修订，固化 source count、SHA-256、保存期限、Provider fingerprint 和 review 状态；同一
+  idempotency key 只返回同一修订，不同请求 hash 冲突。
+- 生成摘要、议题、决策、异议、风险和未解决问题；每一项必须引用当前修订内真实 segment，引用不存在时整项拒绝。
+- 提取待办、负责人、截止时间和优先级，并关联证据 segment。负责人只有在 Provider 文本与唯一参会者姓名精确匹配且
+  引用片段明确出现姓名时才绑定；截止时间只有在引用片段出现同一可解析值时才保存，未说出的字段保持空值。
+- Provider 未配置、不可用或失败时只保留冻结逐字稿，并分别显示 `not_configured` 或 `failed`；不得用本地模板摘要
+  冒充 AI 复核成功。摘要与待办必须经主持人/管理员 CAS 发布后才成为 published artifact。
+- draft 修订只对当前会议主持人、owner 和 admin 可见；普通成员与审计只读取最新 published 修订，不能提前消费未复核结论。
 - 导出 Markdown、PDF、Word，或通过 Adapter 同步协作工具。
-- 用户修正姓名和术语只作用于当前会议，除非管理员明确提升为企业词条。
+- 用户修正姓名只更新本次材料的 speaker label 和材料版本，不修改 participant/member；术语提升仍需管理员走企业词条发布。
+
+`ENT-MTG-011` 当前已形成 PostgreSQL schema、Repository/runtime/API、OpenAI-compatible review adapter 的明确降级、
+Web/Flutter 材料入口和审计/outbox 代码候选。导出 Adapter、自动化、真实 migration/forced-RLS、Provider、浏览器和真机
+证据尚未执行，因此任务保持 `in_progress`，不代表企业生产门禁通过。
 
 ## 8. 企业公共能力
 
