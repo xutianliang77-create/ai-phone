@@ -1,6 +1,6 @@
 # 无界AI企业版技术架构
 
-版本：v1.24
+版本：v1.25
 日期：2026-07-19
 状态：SaaS 详细架构基线，已对齐统一通讯平台和 PostgreSQL Primary
 
@@ -177,7 +177,7 @@ object-storage
 | 账号、Tenant、RBAC、企业命令 | `services/api-server` | 先按 domain module 隔离；只有独立扩缩容或故障域需要时才拆服务 |
 | Enterprise Repository runtime/cell Worker | `services/api-server/src/modules/enterprise`、`services/api-server/src/infrastructure/postgres` | API 使用单一 `legacy|postgres` runtime；独立启动的 cell Worker 仅以 cell discovery 和 tenant transaction 角色 claim/finalize |
 | Communication Session、Provider Operation、Dispatch、Recording 和 Usage | 上游稳定提交 `fe1c3c2` 已导入企业分支，`ENT-DATA-008/CORE-013/014/015` 已补 tenant scope、企业业务绑定、签名 dispatch fence 和企业运行策略快照 | 公共 runtime 已成为代码基线；dispatch 必须先通过服务端 policy snapshot 与授权 fence，真实 Provider/设备仍待验收 |
-| PostgreSQL Primary 基础 | 公共31段 migration/Primary Runtime 与企业现有27段 migration | 已收敛为一个 Storage Driver/启动编排和两个有序 manifest；按 tenant/directory/cell/migration/maintenance 使用最小权限连接，等待真实 H3 验收 |
+| PostgreSQL Primary 基础 | 公共31段 migration/Primary Runtime 与企业现有28段 migration | 已收敛为一个 Storage Driver/启动编排和两个有序 manifest；按 tenant/directory/cell/migration/maintenance 使用最小权限连接，等待真实 H3 验收 |
 | 受控审计导出 | enterprise `0020`、Audit Export API/Repository、cell Worker、加密对象存储 Adapter | API 只创建/查询/鉴权下载；cell Worker 在 tenant transaction 取数并保存 hash/size/expiry，客户端不获得对象存储 key/凭据；物理 purge 与对象清单仍待 REL-002 |
 | Enterprise Knowledge | enterprise `0017`、Knowledge Repository/runtime/API | source/revision/chunk/review/publish、发布后不可变、四维有效期检索和 citation 已接入；embedding Provider 未配置时保持确定性文本检索，不声明向量 readiness |
 | Enterprise Terminology | enterprise `0018`、Term Pack/Script Template Repository/runtime/API | 稳定资源与不可变 revision、审核发布、生效时间解析已接入；resolver 向 ASR/翻译/LLM 返回同一术语版本引用，话术只供 LLM 使用 |
@@ -381,6 +381,17 @@ flowchart LR
 ```
 
 工具调用使用 allowlist schema。模型输出不是执行结果；只有 Adapter 返回成功并落库后，才能向客户确认操作已完成。
+
+### 8.1 客服领域运行边界
+
+- PostgreSQL `0028_enterprise_support_domain` 固化 channel/customer/queue/session/case/tool 六类
+  tenant-first 记录；`support_queues` 与既有表一样启用并强制 RLS。
+- API 通过 Enterprise Repository Unit of Work 创建客服会话；tenant 路由、已发布通讯策略、活动权益、
+  客户和渠道必须全部就绪，随后原子创建 support 会话及公共 communication binding。
+- session/case/tool 的数据库 trigger 与 Repository CAS 共同拒绝删除、身份改写、版本跳跃、终态回退和
+  非法迁移。普通 Agent/Provider 不持有这些业务表写凭证。
+- 重启恢复入口只扫描当前 tenant 的非终态 session，再按复合 tenant FK 聚合关联资源；缺关联或缺 binding
+  不回退到 SQLite/JSON，也不把恢复失败报告成 ready。
 
 ## 9. 数据架构
 

@@ -38,6 +38,7 @@ describe("enterprise PostgreSQL migrations", () => {
       "0025_enterprise_meeting_materials",
       "0026_enterprise_meeting_screen_ocr",
       "0027_enterprise_meeting_calendar_sync",
+      "0028_enterprise_support_domain",
     ]);
     for (const migration of migrations) {
       expect(migration.up.trim()).not.toBe("");
@@ -136,6 +137,10 @@ describe("enterprise PostgreSQL migrations", () => {
     expect(sql).toContain("CREATE TABLE enterprise.script_templates");
     expect(sql).toContain("CREATE TABLE enterprise.script_template_versions");
     expect(sql).toContain("CREATE TABLE enterprise.meeting_material_runs");
+    expect(sql).toContain("CREATE TABLE enterprise.support_queues");
+    expect(sql).toContain("support_queues_tenant_isolation");
+    expect(sql).toContain("support_sessions_state_shape_check");
+    expect(sql).toContain("support_sessions_guard");
     expect(sql).toContain("CREATE TABLE enterprise.meeting_material_segments");
     expect(sql).toContain("CREATE TABLE enterprise.meeting_material_conclusion_evidence");
     expect(sql).toContain("CREATE TABLE enterprise.meeting_action_item_evidence");

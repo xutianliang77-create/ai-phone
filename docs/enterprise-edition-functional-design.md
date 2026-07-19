@@ -1,6 +1,6 @@
 # 无界AI企业版详细功能设计
 
-版本：v1.21
+版本：v1.22
 日期：2026-07-19
 状态：SaaS 详细设计基线，已对齐统一通讯平台
 
@@ -227,6 +227,18 @@ Provider、usage/ledger 和 trace；跨会话业务聚合与货币成本尚未�
 4. 查询知识库或调用受控业务工具。
 5. 回答、执行低风险操作或请求人工接管。
 6. 结束后生成摘要、工单和待办。
+
+#### 6.2.1 会话领域真值与恢复
+
+- 渠道、客户、队列、客服会话、工单和工具执行均为 tenant-scoped 资源；业务 ID 不能脱离
+  `tenantId` 被读取或关联。
+- 同一会话创建命令由 `idempotencyKey + requestHash` 判定重放或冲突，并在一个数据库事务内
+  创建 `support_session`、公共 `communication_session` 和唯一 support binding。任何一步失败均不保留
+  半条会话或伪造 Provider 成功。
+- 会话以 `created -> waiting -> ai_active -> handoff_requested -> human_active` 为主路径；
+  handoff 无坐席时可回到 AI，进行中会话可结束或失败，终态不可改写。
+- API/Worker 重启只从 PostgreSQL 读取非终态会话，并一起恢复渠道、客户、队列、工单、工具执行和
+  communication binding。binding 缺失必须显式暴露为未就绪，不得临时生成进程内真值。
 
 ### 6.3 知识问答
 
