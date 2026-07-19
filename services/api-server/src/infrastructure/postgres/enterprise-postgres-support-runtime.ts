@@ -102,12 +102,14 @@ export async function loadEnterprisePostgresSupportAggregate(
   unit: EnterprisePostgresUnitOfWork,
   session: EnterpriseSupportSessionAggregate["session"],
 ): Promise<EnterpriseSupportSessionAggregate> {
-  const [channel, customer, queue, cases, toolExecutions, communicationBinding] =
+  const [channel, customer, queue, cases, followupState, toolExecutions,
+    communicationBinding] =
     await Promise.all([
       unit.support.findChannel(session.channelId),
       unit.support.findCustomer(session.customerId),
       session.queueId ? unit.support.findQueue(session.queueId) : null,
       unit.support.cases(session.id),
+      unit.supportFollowups.listForSession(session.id),
       unit.supportToolExecutions.list(session.id),
       unit.communicationBindings.findByBusiness("support", session.id),
     ]);
@@ -117,7 +119,8 @@ export async function loadEnterprisePostgresSupportAggregate(
   return {
     session, channel, customer,
     ...(queue ? { queue } : {}),
-    cases, toolExecutions,
+    cases, callbacks: followupState.callbacks,
+    followups: followupState.followups, toolExecutions,
     ...(communicationBinding ? { communicationBinding } : {}),
   };
 }

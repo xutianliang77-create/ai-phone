@@ -30,6 +30,7 @@ type ContentApi = Pick<EnterpriseApi,
   | "listSupportQueues" | "listSupportWorkItems" | "claimSupportSession"
   | "activateSupportWorkbench" | "getSupportWorkbench"
   | "renewSupportClaim" | "releaseSupportClaim" | "resolveSupportKnowledge"
+  | "createSupportTicket" | "scheduleSupportCallback"
 >;
 
 export function fakeEnterpriseContentApi(): ContentApi {
@@ -98,6 +99,8 @@ export function fakeEnterpriseContentApi(): ContentApi {
     getSupportWorkbench: vi.fn(),
     renewSupportClaim: vi.fn(),
     releaseSupportClaim: vi.fn(),
+    createSupportTicket: vi.fn(),
+    scheduleSupportCallback: vi.fn(),
     resolveSupportKnowledge: vi.fn(),
   };
 }

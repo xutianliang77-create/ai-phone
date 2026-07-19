@@ -1,6 +1,6 @@
 # 无界AI企业版详细技术设计
 
-版本：v1.50
+版本：v1.51
 日期：2026-07-19
 状态：统一通讯平台与 PostgreSQL Primary 收敛详细技术方案
 
@@ -21,11 +21,11 @@
 | RBAC | `ready_for_acceptance` | 已有17个 scope、九角色矩阵、统一服务端 guard 和越权测试 |
 | SaaS tenant lifecycle | `ready_for_acceptance` | 已有幂等开通、暂停、导出/删除执行器、租约、有界恢复和 receipt 校验；真实对象存储/Provider 清理服务尚待验收 |
 | Append-only audit | `ready_for_acceptance` | 已有 tenant-scoped 查询、HMAC cursor、成员/RBAC/租户生命周期埋点和 SQLite/PostgreSQL 不可变约束；受控导出已进入 UI-008 开发，真实 PostgreSQL 验收仍待执行 |
-| PostgreSQL schema | `implemented` | 已有三十四段 up/down migration、tenant-first 索引、复合 FK、强制 RLS、user directory、cell pending projection、opaque subject identity、企业通讯/dispatch/策略、usage/billing、knowledge/terminology、observability trace、受控审计导出、Meeting 聚合/创建/翻译、屏幕共享租约、会后材料、屏幕 OCR、日历同步、客服领域、Support Agent run/turn、Tool Registry、只读租约执行、可逆写确认/Outbox、不可执行高风险请求和坐席 claim；尚无真实 migrate/restore/PITR 证据 |
+| PostgreSQL schema | `implemented` | 已有三十五段 up/down migration、tenant-first 索引、复合 FK、强制 RLS、user directory、cell pending projection、opaque subject identity、企业通讯/dispatch/策略、usage/billing、knowledge/terminology、observability trace、受控审计导出、Meeting 聚合/创建/翻译、屏幕共享租约、会后材料、屏幕 OCR、日历同步、客服领域、Support Agent run/turn、Tool Registry、只读租约执行、可逆写确认/Outbox、不可执行高风险请求、坐席 claim 和工单/回拨后续动作；尚无真实 migrate/restore/PITR 证据 |
 | Tenant-scoped Repository | `ready_for_acceptance` | 已有 tenant/user/cell scoped transaction、subject guard、单一 `legacy|postgres` runtime、HTTP 全链路注入、独立 cell Worker，以及 Tenant/Member/Audit、Directory、lifecycle、Inbox/Outbox、budget、billing/entitlement、usage accounting、knowledge、terminology 和共享 unit-of-work；尚无真实 PostgreSQL H3 证据 |
 | Enterprise Inbox/Outbox | `ready_for_acceptance` | 已有 tenant-scoped 去重、稳定 payload hash、领域/inbox/outbox 原子提交、lease/retry/recovery 和100次重放门禁；真实 PostgreSQL 并发与 Provider sandbox 尚待验收 |
 | SQLite/JSON 演示数据导入 | `ready_for_acceptance` | 已有维护窗口、SQLite 临时副本与 quick_check、空目标事务导入、六集合 count/SHA-256 读回对账和不一致回滚；仅限内部演示数据 |
-| 公共 Primary Runtime 收敛 | `ready_for_acceptance` | 已合入上游稳定提交 `fe1c3c2`；公共31段与 enterprise 34段 manifest 由一个启动编排验证，driver、数据库身份和分权连接失败均在监听前闭合；尚无真实 PostgreSQL H3 证据 |
+| 公共 Primary Runtime 收敛 | `ready_for_acceptance` | 已合入上游稳定提交 `fe1c3c2`；公共31段与 enterprise 35段 manifest 由一个启动编排验证，driver、数据库身份和分权连接失败均在监听前闭合；尚无真实 PostgreSQL H3 证据 |
 | 企业链路追踪 | `in_progress` | 平台 trace 已进入 tenant context、PostgreSQL session、communication binding、usage event/ledger 与会话报告；本轮未执行测试和真实 PostgreSQL 门禁，货币成本因无价格表明确 not configured |
 | 企业工作台真值投影 | `in_progress` | Web 已读取 tenant/route、Provider、subscription、budget、usage aggregate 和显式 session trace report；业务聚合与价格表缺失时明确 not ready/not configured，本轮未执行自动化、浏览器或 PostgreSQL 门禁 |
 | 审计与分析 | `in_progress` | Web 已接入审计筛选/详情、显式 session 下钻和受控 JSONL 导出；`0020`、Repository/API/cell Worker/加密对象存储边界已实现，本轮未执行 migration、双租户、对象存储或浏览器测试；业务聚合/价格表与物理对象清理仍未完成 |
@@ -46,8 +46,9 @@
 | 可逆写 Tool Adapter | `in_progress` | `0032`、ticket/callback/note 严格 Adapter contract、120秒客户 turn 确认、AES-GCM Outbox、Cell Worker 重试、Provider 幂等/fingerprint fence 和 execution/outbox 原子终结已形成代码候选；默认 not_configured、mock simulated=true，Agent 仍不输出工具请求，未执行自动化、migration/RLS、崩溃恢复或真实 Provider 验收 |
 | 高风险人工接管 | `in_progress` | `0033`、forced-RLS/不可变 handoff request、run/session/customer/revision/arguments/risk evidence 绑定、幂等冲突和 run/session 原子 handoff 已形成代码候选；不创建 execution/Outbox/Provider 调用，坐席队列属于 CS-009，未执行自动化、migration/RLS、并发或真实接管验收 |
 | 坐席队列 | `in_progress` | `0034`、queue SLA/lease、forced-RLS exclusive claim、session deferred binding、self-claim/release/renew 和 manager reassign API 已形成代码候选；测试已定义但未运行，真实 migration/RLS/并发/坐席未验收 |
+| 工单与回拨 | `in_progress` | `0035`、forced-RLS callback/followup、claim/session 双 version、确定性幂等业务 ID、AES-GCM Outbox、Worker 同键重试、case/callback 原子收敛和 Web 表单已形成代码候选；默认 Provider not_configured，未执行自动化、migration/RLS、崩溃恢复或真实 Ticket/Callback 验收 |
 | 企业术语与话术版本 | `ready_for_acceptance` | enterprise `0018`、共享契约、Term Pack/Script Template Repository/runtime/API 已实现稳定资源、递增 revision、review/publish、有效期解析、hash 校验和同一术语版本运行时引用；仅有自动化和本地 PostgreSQL 16 普通角色证据，真实 Worker/Provider、A1/H3 未通过 |
-| Primary 全量切换/恢复证据 | `ready_for_acceptance` | 工具按运行时动态校验 manifest/全业务表；`c9b5be2` 历史证据为31+16/81张表，当前31+34/107张表必须重新生成签名证据；异地 WAL/PITR/H3 未通过 |
+| Primary 全量切换/恢复证据 | `ready_for_acceptance` | 工具按运行时动态校验 manifest/全业务表；`c9b5be2` 历史证据为31+16/81张表，当前31+35/109张表必须重新生成签名证据；异地 WAL/PITR/H3 未通过 |
 | PostgreSQL 控制面/业务聚合 | `designed` | 后续 CORE/MTG/CS/MKT 领域任务范围，不能从公共 Repository runtime 推导为已实现 |
 | SQLite | `demo_only` | 仅本地开发、自动化和封闭演示，不承载真实企业试点数据 |
 | PSTN/CRM/OCR | `not_ready` 或按环境探测 | 未配置必须明确降级，不生成虚假外部对象或成功状态 |
@@ -939,10 +940,40 @@ created time、segment ID 稳定排序；无字幕不补造文本。
 claim renew 使用 expected claim version，并更新为 `now + claimLeaseSeconds`；Web 在剩余租期一半时续租，最长
 60秒检查一次。字幕 GET 与续租独立，乱序快照不得覆盖更高 claim version。release 仍使用 claim/session 双
 version 和新幂等键。知识检索复用 `POST .../rag`，维度只取当前 Agent run；无 run 时入口禁用。媒体 mute、
-transfer queue、end call 与 `ENT-CS-011` ticket/callback 由服务端返回 `not_ready + reasonCode`，客户端禁用。
+transfer queue、end call 继续返回 `not_ready + reasonCode`。`ENT-CS-011` ticket/callback 则读取服务端
+Adapter/keyring readiness：未配置时禁用，ready 时才开放异步提交。
 
 本批定义 `AC-ENT-0031`，但未运行 API/RBAC、Repository、forced-RLS、双坐席、lease、Worker/TTS、浏览器、
 真实 PostgreSQL 或 LiveKit 矩阵，因此 `ENT-CS-010` 保持 `in_progress`。
+
+### 7.7 工单、回拨与可靠后续动作
+
+人工坐席命令使用 `POST /enterprise/v1/support/sessions/:sessionId/followups/tickets|callbacks`。HTTP guard
+要求 `support:takeover` 和签名 route document；runtime 再锁定 session/active claim，要求 actor 是 assigned
+agent 或同租户 owner/admin/support_manager，并复核 body 的 session/claim expected version。tenant、customer、
+agent、claim 和业务 ID 均由服务端导出，请求体不能覆盖。工单主题/说明分别限制160/2000字节，回拨原因限制
+500字节且 scheduledAt 在提交时必须严格晚于服务端 now。
+
+`0035` 新增 `support_callbacks` 与 `support_followup_commands`。两表都有 tenant-first FK、forced RLS、
+复合唯一键和 mutation trigger；command 以 `(tenant, session, idempotency_key)` 唯一并保存 request hash，
+同键同请求返回原 processing/终态记录，同键异请求冲突。command/case/callback/outbox ID 由 tenant、session、
+kind 和幂等键确定性生成，使两个并发事务不会在唯一键竞争后留下随机孤儿 case。工单创建为 pending case；
+回拨创建为 dispatch_pending callback。
+
+创建事务先确认 AES-GCM keyring 和 Adapter readiness；任一 not_configured 不落业务行、审计或 Outbox。ready
+时把 case/callback、followup command、`support.followup.requested` 密文 Outbox 和不含主题/说明/原因的审计
+原子提交。sealed payload 复用 CS-007 的 tenant/customer/tool/arguments hash/fingerprint/simulated fence，
+Provider 幂等键固定绑定 command ID。Web 只显示 processing，不把本地 ID 当外部成功；simulated 始终显式标记。
+
+Cell Worker 在事务外调用 Adapter。网络超时、异常、fingerprint 变化、密文/AAD/receipt 校验失败都只递增
+command attempt、记录安全 reason code、按指数退避重排同一 Outbox；不会写 external ID 或确定失败。确定完成
+必须有匹配 command/tool/provider 的 receipt/result hash/reference，随后在同一 tenant transaction 中把 case
+推进 open 并写 external ticket ID，或把 callback 推进 scheduled 并写 external callback ID，同时终结 command、
+发布 Outbox 和追加审计。带 reference 的确定失败进入 failed；case 保留 pending，callback 进入 failed。finalize
+不复核会话仍活动，故坐席释放或结束会话不阻塞已接受的后续动作。
+
+本批定义 `AC-ENT-0032`。按持续边界未运行 migration、API/Repository/Worker 自动化、forced-RLS、并发、
+崩溃恢复、浏览器或真实 Provider，因此 `ENT-CS-011` 保持 `in_progress`，不能宣称企业生产门禁通过。
 
 ## 8. RAG 和知识版本
 
@@ -1347,7 +1378,7 @@ Worker dispatch ticket 升级为 v2，并将 `policySnapshotId + policyVersion` 
 `ENT-DATA-009` 的维护工具在 `REPEATABLE READ READ ONLY` 快照内枚举 `ai_phone` 与
 `enterprise` 全部业务表（排除 migration 元表），要求每张表存在主键，按复合主键
 keyset pagination 读取 `to_jsonb(row)` 规范文本。每行以字节长度前缀加入 SHA-256，
-形成 table count/hash/last-key hash，再汇总公共31段、企业34段 checksum、8张关键表、
+形成 table count/hash/last-key hash，再汇总公共31段、企业35段 checksum、8张关键表、
 总行数和全库 hash。维护账号必须是受审计的 superuser 或 `BYPASSRLS` 全读角色，不能复用
 tenant/directory/cell 应用凭证。
 
@@ -1359,7 +1390,7 @@ baseline 文件 hash，验证源库默认只读、写探针返回 SQLSTATE `2500
 整行 hash、主键、migration 或 server version 不一致都会生成签名 `mismatch` 并以非零退出。
 
 生产 startup gate 只接受 `environment=staging` 的 matched cutover evidence，且运行时
-commit/image/topology、cutover ID、target logical ID、当前 system identifier/OID 和31+34
+commit/image/topology、cutover ID、target logical ID、当前 system identifier/OID 和31+35
 manifest 必须逐项一致。本地 PostgreSQL 16 演练已验证81张表、8张含记录关键表、增量后17行
 全库 hash、writer fence、隔离 `pg_dump/pg_restore` 和单行篡改失败；证据见
 `docs/evidence/ent-data-009-local-drill-2026-07-18.md`。这只证明机制可执行，不是异地主机

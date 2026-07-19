@@ -9,12 +9,15 @@ import type { EnterpriseSupportWorkbenchSnapshot } from
 import { createEnterpriseTenantContext } from "./enterprise-tenant-context.js";
 import { requireTenantRouteDocument } from "./enterprise-tenant-route.routes.js";
 import type { TenantRouteService } from "./enterprise-tenant-route.js";
+import { registerEnterpriseSupportFollowupRoutes } from
+  "./enterprise-support-followup.routes.js";
 
 export function registerEnterpriseSupportWorkbenchRoutes(
   app: FastifyInstance,
   routeService: TenantRouteService,
   runtime: EnterpriseRepositoryRuntime,
 ) {
+  registerEnterpriseSupportFollowupRoutes(app, routeService, runtime);
   app.post<{ Params: { sessionId: string } }>(
     "/enterprise/v1/support/sessions/:sessionId/workbench",
     async (request, reply) => {
@@ -148,6 +151,19 @@ function publicWorkbench(
       externalTicketId: item.externalTicketId,
       createdAt: item.createdAt, updatedAt: item.updatedAt,
     })),
+    callbacks: aggregate.callbacks.map((item) => ({
+      id: item.id, scheduledAt: item.scheduledAt, reason: item.reason,
+      status: item.status, externalCallbackId: item.externalCallbackId,
+      failureCode: item.failureCode, createdAt: item.createdAt,
+      updatedAt: item.updatedAt, completedAt: item.completedAt,
+    })),
+    followups: aggregate.followups.map((item) => ({
+      id: item.id, kind: item.kind, status: item.status,
+      caseId: item.caseId, callbackId: item.callbackId,
+      providerSimulated: item.providerSimulated, attempts: item.attempts,
+      failureCode: item.failureCode, createdAt: item.createdAt,
+      updatedAt: item.updatedAt, completedAt: item.completedAt,
+    })),
     toolExecutions: aggregate.toolExecutions.map((item) => ({
       id: item.id, toolName: item.toolName, riskLevel: item.riskLevel,
       confirmationStatus: item.confirmationStatus, status: item.status,
@@ -186,8 +202,8 @@ function publicWorkbench(
       mute: notReady("livekit_agent_control_not_integrated"),
       transferQueue: notReady("support_queue_transfer_not_implemented"),
       endCall: notReady("livekit_agent_control_not_integrated"),
-      createTicket: notReady("ent_cs_011_not_implemented"),
-      callback: notReady("ent_cs_011_not_implemented"),
+      createTicket: followupControl(workbench.followupReadiness),
+      callback: followupControl(workbench.followupReadiness),
     },
   };
 }
@@ -213,6 +229,13 @@ function manager(role: string) {
 }
 function notReady(reasonCode: string) {
   return { status: "not_ready", reasonCode } as const;
+}
+function followupControl(
+  readiness: EnterpriseSupportWorkbenchSnapshot["followupReadiness"],
+) {
+  return readiness.status === "ready"
+    ? { status: "ready", simulated: readiness.simulated } as const
+    : notReady(readiness.reasonCode);
 }
 function maskedCustomerAttributes(value: Record<string, unknown>) {
   return Object.fromEntries(Object.entries(value).map(([name, item]) => [

@@ -8,6 +8,8 @@ import type { EnterpriseSupportAgentClaimRecord } from
 import type { EnterpriseSupportHighRiskHandoffRecord } from
   "./enterprise-support-high-risk-handoff.js";
 import type { EnterpriseSupportSessionAggregate } from "./enterprise-support.js";
+import type { EnterpriseSupportWriteAdapter } from
+  "./enterprise-support-write-tool.js";
 
 export interface EnterpriseSupportTranscriptSegment {
   segmentId: string;
@@ -41,4 +43,5 @@ export interface EnterpriseSupportWorkbenchSnapshot {
   agentTurns: EnterpriseSupportAgentTurnRecord[];
   highRiskHandoffs: EnterpriseSupportHighRiskHandoffRecord[];
   transcriptSegments: EnterpriseSupportTranscriptSegment[];
+  followupReadiness: ReturnType<EnterpriseSupportWriteAdapter["readiness"]>;
 }

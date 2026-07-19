@@ -40,6 +40,7 @@ export function SupportPage() {
   const workbenchRef = useRef<EnterpriseSupportWorkbenchDto | null>(null);
   const claimKeys = useRef(new Map<string, string>());
   const releaseKeys = useRef(new Map<string, string>());
+  const followupKeys = useRef(new Map<string, string>());
   const knowledgeRequest = useRef(0);
   if (state.status !== "ready") return null;
   const context = useMemo<EnterpriseContentRequestContext>(() => ({
@@ -247,6 +248,45 @@ export function SupportPage() {
     }
   }
 
+  async function submitFollowup(input: { kind: "ticket"; subject: string;
+    description: string } | { kind: "callback"; scheduledAt: string; reason: string }) {
+    const current = workbenchRef.current;
+    if (!current || busy) return false;
+    const requestKey = `${input.kind}:${JSON.stringify(input)}`;
+    const idempotencyKey = followupKeys.current.get(requestKey) ??
+      `web-${input.kind}:${crypto.randomUUID()}`;
+    followupKeys.current.set(requestKey, idempotencyKey);
+    setBusy(input.kind);
+    try {
+      const versions = { idempotencyKey,
+        expectedSessionVersion: current.session.version,
+        expectedClaimVersion: current.claim.version };
+      const result = input.kind === "ticket"
+        ? await api.createSupportTicket(context, current.session.id,
+            { subject: input.subject, description: input.description, ...versions })
+        : await api.scheduleSupportCallback(context, current.session.id,
+            { scheduledAt: input.scheduledAt, reason: input.reason, ...versions });
+      followupKeys.current.delete(requestKey);
+      setNotice(result.followup.providerSimulated
+        ? `模拟${input.kind === "ticket" ? "工单" : "回拨"}任务已入队；不代表真实外部效果。`
+        : `${input.kind === "ticket" ? "工单" : "回拨"}任务已入队；外部系统异步处理，不阻塞当前会话。`);
+      void refreshWorkbench(current.session.id).catch(() => undefined);
+      return true;
+    } catch (error) {
+      setNotice(`${input.kind === "ticket" ? "工单" : "回拨"}任务提交失败：${
+        errorLabel(error)}`);
+      return false;
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function refreshWorkbench(targetSessionId: string) {
+    const data = await api.getSupportWorkbench(context, targetSessionId);
+    setWorkbench((current) => current.status === "ready"
+      ? { status: "ready", data: mergeWorkbench(current.data, data) } : current);
+  }
+
   return <PageFrame title="坐席工作台"
     description="等待队列、接管租约、字幕、客户、知识与服务历史的租户服务端真值">
     {notice ? <p className="support-notice" role="status">{notice}</p> : null}
@@ -279,7 +319,10 @@ export function SupportPage() {
           onRenew={() => void renewClaim(false)} onRelease={() => void releaseClaim()} />
         <SupportContextPanel workbench={workbench.data} query={knowledgeQuery}
           knowledge={knowledge} searching={knowledgeSearching}
-          onQuery={setKnowledgeQuery} onSearch={() => void searchKnowledge()} />
+          busy={busy} onQuery={setKnowledgeQuery}
+          onSearch={() => void searchKnowledge()}
+          onTicket={(input) => submitFollowup({ kind: "ticket", ...input })}
+          onCallback={(input) => submitFollowup({ kind: "callback", ...input })} />
       </> : null}
     </div>
   </PageFrame>;

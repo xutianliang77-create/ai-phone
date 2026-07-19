@@ -213,10 +213,11 @@ export class EnterpriseSupportPostgresRepository {
       INSERT INTO enterprise.support_cases(
         tenant_id, id, customer_id, session_id, subject, status, summary,
         external_ticket_id, version, created_at, updated_at
-      ) VALUES ($1, $2, $3, $4, $5, 'open', $6, $7, 1, $8, $8)
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 1, $9, $9)
       ON CONFLICT DO NOTHING RETURNING *
     `, [value.id, value.customerId, value.sessionId ?? null, value.subject,
-      value.summary ?? null, value.externalTicketId ?? null, value.createdAt]);
+      value.status, value.summary ?? null, value.externalTicketId ?? null,
+      value.createdAt]);
     return result.rows[0]
       ? { status: "created" as const, case: mapSupportCase(result.rows[0]) }
       : { status: "conflict" as const };
@@ -272,11 +273,14 @@ function normalizeSession(input: CreateEnterpriseSupportSessionInput) {
     requestHash: hash(input.requestHash) };
 }
 function normalizeCase(input: CreateEnterpriseSupportCaseInput) {
+  if (input.status && !["open", "pending"].includes(input.status)) {
+    throw new Error("Invalid support case status");
+  }
   return { ...input, id: uuid(input.id), customerId: uuid(input.customerId),
     sessionId: input.sessionId ? uuid(input.sessionId) : undefined,
     subject: text(input.subject, 240), summary: optionalText(input.summary, 4000),
     externalTicketId: optionalText(input.externalTicketId, 200),
-    createdAt: timestamp(input.createdAt) };
+    status: input.status ?? "open", createdAt: timestamp(input.createdAt) };
 }
 function uuid(value: unknown) {
   const result = text(value, 36);

@@ -16,19 +16,29 @@ import { createEnterprisePostgresSupportAgentQueueRuntime } from
   "./enterprise-postgres-support-agent-queue-runtime.js";
 import { createEnterprisePostgresSupportWorkbenchRuntime } from
   "./enterprise-postgres-support-workbench-runtime.js";
+import { createEnterprisePostgresSupportFollowupRuntime } from
+  "./enterprise-postgres-support-followup-runtime.js";
+import { createEnterpriseSupportWriteCommandService } from
+  "../../modules/enterprise/enterprise-support-write-command.js";
+import { unavailableEnterpriseSupportWriteAdapter } from
+  "../../modules/enterprise/enterprise-support-write-tool.js";
 
 export function createEnterprisePostgresBusinessRuntimes(
   pool: EnterpriseTenantPostgresPool,
   dispatchSigningSecret: string,
 ) {
+  const supportWriteCommand = createEnterpriseSupportWriteCommandService({
+    adapter: unavailableEnterpriseSupportWriteAdapter(),
+  });
   return {
     ...createEnterprisePostgresMeetingFeatureRuntimes(pool, dispatchSigningSecret),
     ...createEnterprisePostgresSupportRuntime(pool),
     ...createEnterprisePostgresSupportAgentQueueRuntime(pool),
-    ...createEnterprisePostgresSupportWorkbenchRuntime(pool),
+    ...createEnterprisePostgresSupportWorkbenchRuntime(pool, supportWriteCommand),
+    ...createEnterprisePostgresSupportFollowupRuntime(pool, supportWriteCommand),
     ...createEnterprisePostgresSupportAgentRuntime(pool),
     ...createEnterprisePostgresSupportToolRuntime(pool),
     ...createEnterprisePostgresSupportReadToolRuntime(pool),
-    ...createEnterprisePostgresSupportWriteToolRuntime(pool),
+    ...createEnterprisePostgresSupportWriteToolRuntime(pool, supportWriteCommand),
   };
 }

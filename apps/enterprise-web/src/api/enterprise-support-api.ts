@@ -53,6 +53,14 @@ export interface EnterpriseSupportSessionDto {
   version: number;
 }
 
+export interface EnterpriseSupportFollowupDto {
+  id: string; kind: "ticket" | "callback";
+  status: "processing" | "completed" | "failed";
+  caseId?: string; callbackId?: string; providerSimulated: boolean;
+  attempts: number; failureCode?: string; createdAt: string;
+  updatedAt: string; completedAt?: string; version?: number;
+}
+
 export interface EnterpriseSupportWorkbenchDto {
   generatedAt: string;
   session: EnterpriseSupportSessionDto;
@@ -80,6 +88,13 @@ export interface EnterpriseSupportWorkbenchDto {
     resolution?: string; externalTicketId?: string; createdAt: string;
     updatedAt: string;
   }>;
+  callbacks: Array<{
+    id: string; scheduledAt: string; reason: string;
+    status: "dispatch_pending" | "scheduled" | "failed" | "cancelled" | "completed";
+    externalCallbackId?: string; failureCode?: string; createdAt: string;
+    updatedAt: string; completedAt?: string;
+  }>;
+  followups: EnterpriseSupportFollowupDto[];
   toolExecutions: Array<{
     id: string; toolName: string; riskLevel: string;
     confirmationStatus: string; status: string; resultDocument?: unknown;
@@ -107,7 +122,7 @@ export interface EnterpriseSupportWorkbenchDto {
     createdAt: string; updatedAt: string;
   }>;
   controls: Record<string, { status: "ready" | "forbidden" | "not_ready";
-    reasonCode?: string }>;
+    reasonCode?: string; simulated?: boolean }>;
 }
 
 export interface EnterpriseSupportApi {
@@ -144,6 +159,18 @@ export interface EnterpriseSupportApi {
       idempotencyKey: string; reason: "agent_release" | "agent_disconnect" },
   ): Promise<{ status: "released" | "replayed"; claim: EnterpriseSupportClaimDto;
     session: EnterpriseSupportSessionDto }>;
+  createSupportTicket(
+    context: EnterpriseContentRequestContext, sessionId: string,
+    input: { subject: string; description: string; idempotencyKey: string;
+      expectedSessionVersion: number; expectedClaimVersion: number },
+  ): Promise<{ status: "processing" | "replayed";
+    followup: EnterpriseSupportFollowupDto }>;
+  scheduleSupportCallback(
+    context: EnterpriseContentRequestContext, sessionId: string,
+    input: { scheduledAt: string; reason: string; idempotencyKey: string;
+      expectedSessionVersion: number; expectedClaimVersion: number },
+  ): Promise<{ status: "processing" | "replayed";
+    followup: EnterpriseSupportFollowupDto }>;
   resolveSupportKnowledge(
     context: EnterpriseContentRequestContext,
     sessionId: string,
@@ -184,6 +211,14 @@ export function createEnterpriseSupportApi(
     ),
     releaseSupportClaim: (context, claimId, input) => request(
       `/enterprise/v1/support/claims/${encodeURIComponent(claimId)}/release`,
+      { method: "POST", headers: headers(context), body: JSON.stringify(input) },
+    ),
+    createSupportTicket: (context, sessionId, input) => request(
+      `${sessionPath(sessionId)}/followups/tickets`,
+      { method: "POST", headers: headers(context), body: JSON.stringify(input) },
+    ),
+    scheduleSupportCallback: (context, sessionId, input) => request(
+      `${sessionPath(sessionId)}/followups/callbacks`,
       { method: "POST", headers: headers(context), body: JSON.stringify(input) },
     ),
     resolveSupportKnowledge: (context, sessionId, input) => request(

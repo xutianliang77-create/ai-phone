@@ -1,6 +1,6 @@
 # 无界AI企业版详细功能设计
 
-版本：v1.31
+版本：v1.32
 日期：2026-07-19
 状态：SaaS 详细设计基线，已对齐统一通讯平台
 
@@ -418,8 +418,14 @@ LLM 只能提出结构化工具请求；Policy Engine 校验租户、客户、�
   处理，字幕读取失败不能延长控制权，续租失败也不能用本地状态继续控制。
 - “AI 已停止”只在服务端确认 run 为 `cancelled`、不存在或已终态时显示。active、handoff_requested、
   ending 或租约失效均不能进入 ready 工作台。
-- 尚未接通的媒体和 `ENT-CS-011` 工单/回呼按钮保持 disabled + reason code，不使用 toast 或本地 mock
-  冒充外部操作成功。
+- 尚未接通的媒体按钮保持 disabled + reason code。工单/回拨只在服务端声明 Adapter、加密 keyring 和
+  Provider 幂等保证均 ready 时开放；提交后显示“异步处理中”，只有确定性 Provider receipt 才显示完成。
+- 坐席提交工单/回拨必须仍持有当前 session 的 active claim，并携带 session/claim expected version；API
+  请求体不能指定 tenant、customer 或 agent。Provider 未配置时不落本地业务记录或 Outbox，不使用 toast、
+  本地 mock 或临时 ID 冒充成功；显式 simulated Adapter 的页面和结果持续标记“仅协议验证”。
+- 工单先建立 tenant-scoped pending case，回拨先建立 `dispatch_pending` 记录，再和后续动作账本、密文
+  Outbox、脱敏审计同事务提交。网络超时或未知结果用原 Provider 幂等键后台重试，坐席可继续或结束会话；
+  receipt 完成后才写 external ticket/callback ID，确定失败保留失败原因供坐席处理。
 
 ### 6.6 质检和分析
 

@@ -45,6 +45,7 @@ describe("enterprise PostgreSQL migrations", () => {
       "0032_enterprise_support_write_tools",
       "0033_enterprise_support_high_risk_handoffs",
       "0034_enterprise_support_agent_queue",
+      "0035_enterprise_support_followups",
     ]);
     for (const migration of migrations) {
       expect(migration.up.trim()).not.toBe("");
@@ -164,6 +165,15 @@ describe("enterprise PostgreSQL migrations", () => {
     expect(sql).toContain("guard_support_agent_claim_insert");
     expect(sql).toContain("guard_support_agent_claim_mutation");
     expect(sql).toContain("ADD COLUMN active_agent_claim_id uuid");
+    expect(sql).toContain("CREATE TABLE enterprise.support_callbacks");
+    expect(sql).toContain("CREATE TABLE enterprise.support_followup_commands");
+    expect(sql).toContain("support_followup_commands_pending_idx");
+    expect(sql).toContain("support_cases_followup_binding_key");
+    expect(sql).toContain("support_agent_claims_followup_binding_key");
+    expect(sql).toContain(
+      "FOREIGN KEY (tenant_id, agent_claim_id, session_id)",
+    );
+    expect(sql).toContain("guard_support_followup_command_insert");
     expect(sql).toContain("tool_executions_read_recovery_idx");
     expect(sql).toContain("provider_simulated boolean");
     expect(sql).toContain("tool_executions_read_shape_check");

@@ -1,6 +1,6 @@
 # 无界AI企业版设计文档索引
 
-版本：v1.43
+版本：v1.44
 日期：2026-07-19
 状态：SaaS 详细设计基线，已纳入统一通讯平台和 PostgreSQL Primary 演进
 
@@ -46,11 +46,11 @@ cell Worker、JSON/SQLite 演示导入，以及全业务表 Primary 切换/恢�
 无界AI主产品公共 PostgreSQL migration、Primary Runtime、可靠 Inbox/Outbox、
 fencing、Billing/Product Records、verify-full 和韧性代码已形成稳定提交 `fe1c3c2`，并由
 `ENT-DATA-007` 合入企业分支。企业版已经完成单 driver、双 manifest、同库身份和分权
-连接的本地自动化，当前 manifest 为公共31段、enterprise 34段；`ENT-DATA-008` 和
+连接的本地自动化，当前 manifest 为公共31段、enterprise 35段；`ENT-DATA-008` 和
 `ENT-CORE-013/014/015` 已完成公共通讯 tenant scope、企业业务会话绑定、签名 Worker dispatch fence
 及设备/声音/录制策略快照的代码/本地自动化，但不能继承主产品 staging 验收。`ENT-DATA-009` 已增加
 31+16 migration manifest 的历史本地证据、全表主键分页 count/hash、WAL 水位、writer fence、签名
-cutover/restore 证据和 production startup 绑定门禁；当前 `0017..0034` 必须按31+34重新生成切换证据。
+cutover/restore 证据和 production startup 绑定门禁；当前 `0017..0035` 必须按31+35重新生成切换证据。
 `ENT-CORE-004` 已增加 tenant-scoped source/version/chunk、草稿审核发布状态机、发布后不可变约束、
 locale/country/product/effective-time 检索和知识引用 ID；
 `ENT-CORE-005` 已增加版本化 term pack/script template、审核发布和生效窗口、发布后不可变约束，
@@ -144,6 +144,11 @@ deferred binding、确定性 work-item 排序、self-claim、renew/release 和 m
 补建停止栅栏、最终 revision 字幕快照、客户/知识/风险/历史三栏 Web 页面，以及独立 expected-version lease
 心跳。静音、转组、结束、工单和回呼未接 Provider/API 时固定 not_ready。当前只通过静态门禁，测试、真实
 PostgreSQL/forced-RLS、Worker/LiveKit 300ms停播、浏览器和真实坐席媒体未验收，保持 `in_progress`。
+`ENT-CS-011` 已增加 `0035` forced-RLS `support_callbacks/support_followup_commands`、坐席 claim/session
+双版本栅栏、确定性幂等业务 ID、密文 `support.followup.requested` Outbox、Cell Worker 同键重试和
+case/callback 最终投影。Web 只在服务端 Adapter readiness 为 ready 时开放工单/回拨表单，入队只显示
+processing；未配置返回 not_ready，simulated 明示非真实外部效果。当前只通过静态门禁，自动化、真实
+PostgreSQL/RLS、崩溃恢复和真实 Ticket/Callback Provider 未验收，保持 `in_progress`。
 当前按要求未执行
 测试、migration、RLS、RBAC/ticket/evidence 攻击、并发共享、Worker/Provider、四人媒体、浏览器、真机与重启恢复，
 因此上述任务均保持 `in_progress`。
@@ -164,6 +169,7 @@ PostgreSQL/forced-RLS、Worker/LiveKit 300ms停播、浏览器和真实坐席媒
 - [ENT-MTG-011 会后材料实现与静态门禁证据](./evidence/ent-mtg-011-meeting-materials-2026-07-19.md)
 - [ENT-CS-009 坐席队列实现与静态门禁证据](./evidence/ent-cs-009-support-agent-queue-2026-07-19.md)
 - [ENT-CS-010 坐席工作台实现与静态门禁证据](./evidence/ent-cs-010-support-workbench-2026-07-19.md)
+- [ENT-CS-011 工单与回拨实现和静态门禁证据](./evidence/ent-cs-011-support-followups-2026-07-19.md)
 - [ENT-MTG-012 屏幕 OCR 翻译实现与静态门禁证据](./evidence/ent-mtg-012-screen-ocr-translation-2026-07-19.md)
 - [ENT-MTG-013 日历 Adapter 实现与静态门禁证据](./evidence/ent-mtg-013-calendar-adapter-2026-07-19.md)
 - [ENT-CS-001 客服领域实现与静态门禁证据](./evidence/ent-cs-001-support-domain-2026-07-19.md)

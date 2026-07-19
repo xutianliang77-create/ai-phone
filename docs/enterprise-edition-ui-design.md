@@ -1,6 +1,6 @@
 # 无界AI企业版 UI 详细设计
 
-版本：v1.18
+版本：v1.19
 日期：2026-07-19
 状态：设计基线；企业 Web 公共组件、首批设置/工作台、响应式/主题/无障碍和 Web/iOS/Android 成员屏幕共享代码候选已实现，正式验收仍在开发
 
@@ -234,6 +234,11 @@ budget、usage aggregate 和显式 session trace report。卡片沿用同一 Mat
   `inbox`，字幕使用 `closed_caption`，客户使用 `person`，知识使用 `menu_book`，AI 停止使用
   `voice_over_off`，静音/转组/结束使用 `mic_off/swap_horiz/call_end`，工单/回呼使用
   `confirmation_number/phone_callback`，不引入第二套图标。
+- `ENT-CS-011` 继续复用相同 `support-control`、按钮、输入框、圆角、浅/深色 token 和上述两个图标。
+  服务端 control 为 `not_ready` 时按钮禁用并通过 title 显示 reason code；ready 后在右栏展开紧凑表单。
+  工单字段为主题/说明，回拨字段为本地时间/原因；无效过去时间在客户端提示，服务端仍独立复核 UTC 时间。
+  提交成功文案只能为“任务已入队”，历史区分别显示本地 case/callback 与 processing/completed/failed
+  后续动作；simulated Adapter 始终显示珊瑚色警示，不能使用与真实完成相同的表达。
 - 桌面为 queue / conversation / context 三栏；1250px 以下客户上下文换到下一行，850px 以下单列，
   600px 以下控制按钮两列。等待项、SLA、租约、字幕修订、客户、知识引用、风险和历史均来自 API。
 - 字幕标注为2.5秒服务端快照；没有字幕时可展示接管上下文，但必须写明“非实时字幕”。静音、转组、

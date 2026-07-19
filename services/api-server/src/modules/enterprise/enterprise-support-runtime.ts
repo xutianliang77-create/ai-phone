@@ -9,7 +9,10 @@ import type {
   EnterpriseSupportQueueRecord,
   EnterpriseSupportSessionAggregate,
   EnterpriseSupportSessionStatus,
+  EnterpriseSupportFollowupRecord,
 } from "./enterprise-support.js";
+import type { EnterpriseSupportWritePublishReceipt } from
+  "./enterprise-support-write-tool.js";
 import type {
   EnterpriseSupportAgentClaimRecord,
   EnterpriseSupportQueueWorkItem,
@@ -26,6 +29,26 @@ import type {
 type StorageRequired = { status: "storage_required" };
 
 export interface EnterpriseSupportRepositoryRuntime {
+  createSupportFollowup?(input: {
+    context: EnterpriseTenantContext; sessionId: string;
+    expectedSessionVersion: number; expectedClaimVersion: number;
+    idempotencyKey: string; now: string;
+    action: { kind: "ticket"; subject: string; description: string } |
+      { kind: "callback"; scheduledAt: string; reason: string };
+  }): Promise<
+    | { status: "processing" | "replayed"; followup: EnterpriseSupportFollowupRecord }
+    | { status: "not_configured"; reasonCode: string }
+    | { status: "not_found" | "not_active" | "forbidden" |
+        "claim_not_active" | "claim_expired" | "conflict" |
+        "idempotency_conflict" | "invalid_arguments" }
+    | StorageRequired
+  >;
+  finalizeSupportFollowupOutbox?(input: {
+    context: EnterpriseTenantContext; eventId: string; attempt: number;
+    result: { status: "completed"; receipt: EnterpriseSupportWritePublishReceipt } |
+      { status: "retry"; reason: string };
+    now: Date;
+  }): Promise<{ status: "completed" | "retried" | "failed" }>;
   activateSupportWorkbench?(input: {
     context: EnterpriseTenantContext; sessionId: string; now: string;
   }): Promise<

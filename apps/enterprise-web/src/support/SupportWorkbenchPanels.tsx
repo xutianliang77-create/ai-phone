@@ -4,6 +4,7 @@ import type { EnterpriseSupportWorkbenchDto } from
 import { MaterialIcon } from "../components/MaterialIcon.js";
 import { StatusPanel } from "../components/StatusPanel.js";
 import { enterpriseIcons } from "../icon-registry.js";
+import { SupportFollowupControls } from "./SupportFollowupControls.js";
 
 export function SupportConversationPanel({
   workbench,
@@ -79,6 +80,9 @@ export function SupportContextPanel({
   searching,
   onQuery,
   onSearch,
+  busy,
+  onTicket,
+  onCallback,
 }: {
   workbench: EnterpriseSupportWorkbenchDto;
   query: string;
@@ -86,6 +90,9 @@ export function SupportContextPanel({
   searching: boolean;
   onQuery(value: string): void;
   onSearch(): void;
+  busy: string | null;
+  onTicket(input: { subject: string; description: string }): Promise<boolean>;
+  onCallback(input: { scheduledAt: string; reason: string }): Promise<boolean>;
 }) {
   return <aside className="support-context" aria-label="客户与知识上下文">
     <ContextSection icon={enterpriseIcons.support.customer} title="客户信息">
@@ -137,6 +144,7 @@ export function SupportContextPanel({
     </ContextSection>
     <ContextSection icon={enterpriseIcons.support.risk} title="风险与历史">
       {workbench.highRiskHandoffs.length === 0 && workbench.cases.length === 0 &&
+        workbench.callbacks.length === 0 && workbench.followups.length === 0 &&
         workbench.toolExecutions.length === 0 ? <p className="support-context__note">
           当前没有高风险请求、历史工单或工具执行记录。</p> : null}
       <div className="support-history">
@@ -150,6 +158,18 @@ export function SupportContextPanel({
           <MaterialIcon name={enterpriseIcons.support.ticket} /><span>
             <strong>{item.subject}</strong><small>{item.status} · {item.summary || "无摘要"}</small>
           </span></article>)}
+        {workbench.callbacks.map((item) => <article key={item.id}>
+          <MaterialIcon name={enterpriseIcons.support.callback} /><span>
+            <strong>{dateTime(item.scheduledAt)} 回拨</strong>
+            <small>{item.status} · {item.reason}</small>
+          </span></article>)}
+        {workbench.followups.map((item) => <article key={item.id}>
+          <MaterialIcon name={item.kind === "ticket" ? enterpriseIcons.support.ticket :
+            enterpriseIcons.support.callback} /><span>
+            <strong>{item.kind === "ticket" ? "工单同步" : "回拨调度"}</strong>
+            <small>{followupLabel(item.status)} · 尝试 {item.attempts} 次
+              {item.failureCode ? ` · ${item.failureCode}` : ""}</small>
+          </span></article>)}
         {workbench.toolExecutions.map((item) => <article key={item.id}>
           <MaterialIcon name="construction" /><span><strong>{item.toolName}</strong>
             <small>{item.riskLevel} · {item.status}{toolSummary(item.resultDocument)}</small>
@@ -157,12 +177,8 @@ export function SupportContextPanel({
       </div>
     </ContextSection>
     <ContextSection icon={enterpriseIcons.support.actions} title="后续动作">
-      <div className="support-followups">
-        <UnavailableControl icon={enterpriseIcons.support.ticket} label="创建工单"
-          reason="ENT-CS-011 尚未实施" />
-        <UnavailableControl icon={enterpriseIcons.support.callback} label="安排回呼"
-          reason="ENT-CS-011 尚未实施" />
-      </div>
+      <SupportFollowupControls workbench={workbench} busy={busy}
+        onTicket={onTicket} onCallback={onCallback} />
     </ContextSection>
   </aside>;
 }
@@ -218,4 +234,7 @@ function toolSummary(value: unknown) {
   const parts = [result.kind, result.status, result.availability,
     result.lastEvent].filter((item): item is string => typeof item === "string");
   return parts.length > 0 ? ` · ${parts.join(" · ")}` : "";
+}
+function followupLabel(value: string) {
+  return value === "processing" ? "处理中" : value === "completed" ? "已完成" : "失败";
 }

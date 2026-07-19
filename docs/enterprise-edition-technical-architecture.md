@@ -1,6 +1,6 @@
 # 无界AI企业版技术架构
 
-版本：v1.34
+版本：v1.35
 日期：2026-07-19
 状态：SaaS 详细架构基线，已对齐统一通讯平台和 PostgreSQL Primary
 
@@ -177,7 +177,7 @@ object-storage
 | 账号、Tenant、RBAC、企业命令 | `services/api-server` | 先按 domain module 隔离；只有独立扩缩容或故障域需要时才拆服务 |
 | Enterprise Repository runtime/cell Worker | `services/api-server/src/modules/enterprise`、`services/api-server/src/infrastructure/postgres` | API 使用单一 `legacy|postgres` runtime；独立启动的 cell Worker 仅以 cell discovery 和 tenant transaction 角色 claim/finalize |
 | Communication Session、Provider Operation、Dispatch、Recording 和 Usage | 上游稳定提交 `fe1c3c2` 已导入企业分支，`ENT-DATA-008/CORE-013/014/015` 已补 tenant scope、企业业务绑定、签名 dispatch fence 和企业运行策略快照 | 公共 runtime 已成为代码基线；dispatch 必须先通过服务端 policy snapshot 与授权 fence，真实 Provider/设备仍待验收 |
-| PostgreSQL Primary 基础 | 公共31段 migration/Primary Runtime 与企业现有34段 migration | 已收敛为一个 Storage Driver/启动编排和两个有序 manifest；按 tenant/directory/cell/migration/maintenance 使用最小权限连接，等待真实 H3 验收 |
+| PostgreSQL Primary 基础 | 公共31段 migration/Primary Runtime 与企业现有35段 migration | 已收敛为一个 Storage Driver/启动编排和两个有序 manifest；按 tenant/directory/cell/migration/maintenance 使用最小权限连接，等待真实 H3 验收 |
 | 受控审计导出 | enterprise `0020`、Audit Export API/Repository、cell Worker、加密对象存储 Adapter | API 只创建/查询/鉴权下载；cell Worker 在 tenant transaction 取数并保存 hash/size/expiry，客户端不获得对象存储 key/凭据；物理 purge 与对象清单仍待 REL-002 |
 | Enterprise Knowledge | enterprise `0017`、Knowledge Repository/runtime/API | source/revision/chunk/review/publish、发布后不可变、四维有效期检索和 citation 已接入；embedding Provider 未配置时保持确定性文本检索，不声明向量 readiness |
 | Enterprise Terminology | enterprise `0018`、Term Pack/Script Template Repository/runtime/API | 稳定资源与不可变 revision、审核发布、生效时间解析已接入；resolver 向 ASR/翻译/LLM 返回同一术语版本引用，话术只供 LLM 使用 |
@@ -534,6 +534,20 @@ Worker 每次 turn、TTS authorize、deliver 均重读 run/ticket/binding/genera
 客户端停止操作并回到队列。当前未实现 Worker 主动 interrupt/ack 和 LiveKit mute/end/transfer Provider，故
 架构状态只达到“数据库取消 + 后续授权失败闭合”，300ms内物理停播仍属于真实媒体验收。
 
+### 8.11 人工工单与回拨异步单元
+
+`ENT-CS-011` 与 AI 的客户确认写工具分开建模：人工坐席使用 `support:takeover` 和当前 active claim，不能
+伪造 tenant/customer/agent；API 在同一事务中复核 session/claim expected version，然后创建 pending case
+或 `dispatch_pending` callback、`support_followup_commands` 和 AES-GCM Outbox。两个新增表均使用
+tenant-first 复合外键、forced RLS、不可删除/受控状态迁移 trigger；确定性业务 ID 使并发同幂等键不会留下
+孤儿记录。
+
+Cell Worker 复用 CS-007 的严格 Ticket/Callback Adapter 与密封载荷，但事件类型固定为
+`support.followup.requested`，aggregate 为 followup command。超时、连接未知、fingerprint/simulated 变化或
+receipt 不完整只推进 attempt 并用同一 Provider 幂等键重试；完成或确定失败才在一个 tenant transaction 中
+收敛 command、case/callback、Outbox 和审计。finalize 不要求 session 仍为 human_active，因此会话结束不
+等待外部系统。默认 Adapter unavailable，未配置 keyring/Provider 时 API 不创建任何业务对象。
+
 ## 9. 数据架构
 
 ### 9.1 单一写入真值
@@ -594,7 +608,7 @@ Worker 无权依据缓存继续执行敏感能力。
 
 生产 PostgreSQL 启动还必须验证企业签名 cutover evidence：证据绑定 staging 环境、
 commit、image digest、topology hash、目标 logical ID、system identifier/OID、公共31段与
-企业34段 manifest，并证明源库 writer fence、旧 API/Worker 角色会话为0、目标可写和
+企业35段 manifest，并证明源库 writer fence、旧 API/Worker 角色会话为0、目标可写和
 二次全量 hash 一致。本地逻辑恢复证据不提升为跨故障域 HA/PITR 结论。
 
 ## 10. 安全架构

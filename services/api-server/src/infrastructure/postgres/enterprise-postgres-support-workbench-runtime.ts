@@ -6,6 +6,10 @@ import type { EnterpriseSupportAiSpeechFence } from
   "../../modules/enterprise/enterprise-support-workbench.js";
 import type { EnterpriseTenantPostgresPool } from
   "./enterprise-postgres-tenant-session.js";
+import { createEnterpriseSupportWriteCommandService, type EnterpriseSupportWriteCommandService } from
+  "../../modules/enterprise/enterprise-support-write-command.js";
+import { unavailableEnterpriseSupportWriteAdapter } from
+  "../../modules/enterprise/enterprise-support-write-tool.js";
 import { loadEnterprisePostgresSupportAggregate } from
   "./enterprise-postgres-support-runtime.js";
 import { withEnterprisePostgresUnitOfWork, type EnterprisePostgresUnitOfWork } from
@@ -16,6 +20,10 @@ type Runtime = Pick<EnterpriseRepositoryRuntime,
 
 export function createEnterprisePostgresSupportWorkbenchRuntime(
   pool: EnterpriseTenantPostgresPool,
+  command: EnterpriseSupportWriteCommandService =
+    createEnterpriseSupportWriteCommandService({
+      adapter: unavailableEnterpriseSupportWriteAdapter(),
+    }),
 ): Runtime {
   return {
     activateSupportWorkbench(input) {
@@ -42,6 +50,7 @@ export function createEnterprisePostgresSupportWorkbenchRuntime(
         return { status: "ready" as const,
           workbench: await loadWorkbench(
             unit, access.session, access.claim, stopped.fence, input.now,
+            command.readiness(input.context.tenantId),
           ) };
       });
     },
@@ -55,6 +64,7 @@ export function createEnterprisePostgresSupportWorkbenchRuntime(
         return { status: "ready" as const,
           workbench: await loadWorkbench(
             unit, access.session, access.claim, fence, input.now,
+            command.readiness(input.context.tenantId),
           ) };
       });
     },
@@ -83,7 +93,7 @@ export async function stopEnterpriseSupportAgent(
   return { fence, changed: true };
 }
 
-async function workbenchAccess(
+export async function workbenchAccess(
   unit: EnterprisePostgresUnitOfWork,
   sessionId: string,
   now: string,
@@ -114,6 +124,7 @@ async function loadWorkbench(
   claim: NonNullable<Awaited<ReturnType<EnterprisePostgresUnitOfWork["supportAgentQueue"]["findClaim"]>>>,
   aiSpeechFence: EnterpriseSupportAiSpeechFence,
   generatedAt: string,
+  followupReadiness: ReturnType<EnterpriseSupportWriteCommandService["readiness"]>,
 ) {
   const aggregate = await loadEnterprisePostgresSupportAggregate(unit, session);
   const agentRun = await unit.supportAgents.findLatestRunForSession(session.id);
@@ -126,7 +137,7 @@ async function loadWorkbench(
         )
       : [],
   ]);
-  return { generatedAt, aggregate, claim, aiSpeechFence,
+  return { generatedAt, aggregate, claim, aiSpeechFence, followupReadiness,
     ...(agentRun ? { agentRun } : {}),
     conversationContext: agentRun ? [...agentRun.contextDocument] : [],
     agentTurns, highRiskHandoffs, transcriptSegments };

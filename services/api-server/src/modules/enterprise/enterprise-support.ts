@@ -75,6 +75,26 @@ export interface EnterpriseSupportCaseRecord {
   resolution?: string; externalTicketId?: string; createdAt: string;
   updatedAt: string; resolvedAt?: string; closedAt?: string; version: number;
 }
+export type EnterpriseSupportCallbackStatus =
+  "dispatch_pending" | "scheduled" | "failed" | "cancelled" | "completed";
+export interface EnterpriseSupportCallbackRecord {
+  id: string; tenantId: string; sessionId: string; customerId: string;
+  scheduledAt: string; reason: string; status: EnterpriseSupportCallbackStatus;
+  externalCallbackId?: string; failureCode?: string; createdBy: string;
+  createdAt: string; updatedAt: string; completedAt?: string; version: number;
+}
+export type EnterpriseSupportFollowupStatus =
+  "processing" | "completed" | "failed";
+export interface EnterpriseSupportFollowupRecord {
+  id: string; tenantId: string; sessionId: string; customerId: string;
+  agentClaimId: string; kind: "ticket" | "callback";
+  caseId?: string; callbackId?: string; status: EnterpriseSupportFollowupStatus;
+  idempotencyKey: string; requestHash: string; outboxEventId: string;
+  providerFingerprint: string; providerSimulated: boolean;
+  providerReference?: string; resultHash?: string; failureCode?: string; attempts: number;
+  createdBy: string; createdAt: string; updatedAt: string;
+  completedAt?: string; version: number;
+}
 export interface EnterpriseToolExecutionRecord {
   id: string; tenantId: string; sessionId: string; customerId: string;
   toolName: string; riskLevel: EnterpriseToolRiskLevel; requestHash: string;
@@ -102,6 +122,8 @@ export interface EnterpriseSupportSessionAggregate {
   customer: EnterpriseCustomerProfileRecord;
   queue?: EnterpriseSupportQueueRecord;
   cases: EnterpriseSupportCaseRecord[];
+  callbacks: EnterpriseSupportCallbackRecord[];
+  followups: EnterpriseSupportFollowupRecord[];
   toolExecutions: EnterpriseToolExecutionRecord[];
   communicationBinding?: EnterpriseCommunicationBindingRecord;
 }
@@ -126,7 +148,8 @@ export interface CreateEnterpriseSupportSessionInput {
 }
 export interface CreateEnterpriseSupportCaseInput {
   id: string; customerId: string; sessionId?: string; subject: string;
-  summary?: string; externalTicketId?: string; createdAt: string;
+  status?: "open" | "pending"; summary?: string; externalTicketId?: string;
+  createdAt: string;
 }
 export interface CreateEnterpriseToolExecutionInput {
   id: string; sessionId: string; customerId: string; toolName: string;

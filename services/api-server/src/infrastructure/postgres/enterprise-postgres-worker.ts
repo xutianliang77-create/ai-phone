@@ -201,6 +201,23 @@ async function processRef(
     });
     return finalized.status;
   }
+  if (event.eventType === "support.followup.requested") {
+    if (!options.runtime.finalizeSupportFollowupOutbox) {
+      throw new Error("Support followup runtime is missing");
+    }
+    const finalized = await options.runtime.finalizeSupportFollowupOutbox({
+      context: createEnterpriseTenantContext({
+        tenantId: event.tenantId,
+        actorUserId: "system:enterprise-support-followup",
+        traceId: event.traceId,
+      }),
+      eventId: event.id,
+      attempt: event.attempts,
+      result: supportWriteResult(result),
+      now,
+    });
+    return finalized.status;
+  }
   await finalizeOutbox(options.tenantPool, event, result, now);
   return result.status === "completed" ? "completed" : "retried";
 }

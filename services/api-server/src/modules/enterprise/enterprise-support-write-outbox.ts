@@ -26,7 +26,8 @@ export function createEnterpriseSupportWriteOutboxPublisher(input: {
 }): EnterpriseOutboxPublisher {
   const keyring = input.keyring === undefined ? environmentKeyring() : input.keyring;
   return { publish(event) {
-    if (event.eventType !== "support.tool.write.requested") {
+    if (event.eventType !== "support.tool.write.requested" &&
+      event.eventType !== "support.followup.requested") {
       return input.fallback.publish(event);
     }
     return publishWrite(input.adapter, keyring, event);
@@ -110,12 +111,16 @@ function writePayload(value: unknown, event: Readonly<EnterpriseOutboxEventRecor
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const item = value as Record<string, unknown>;
   const toolName = supportWriteToolName(item.toolName);
+  const eventShape = event.eventType === "support.tool.write.requested"
+    ? event.aggregateType === "support_tool_execution"
+    : event.eventType === "support.followup.requested" &&
+      event.aggregateType === "support_followup_command";
   return Object.keys(item).sort().join(",") === ["argumentsHash", "customerId",
     "executionId", "idempotencyKey", "payloadHash", "providerFingerprint",
     "providerSimulated", "sealedPayload", "tenantId", "toolName", "v"]
     .sort().join(",") && item.v === 1 && item.tenantId === event.tenantId &&
     item.executionId === event.aggregateId &&
-    event.aggregateType === "support_tool_execution" && toolName &&
+    eventShape && toolName &&
     uuid(item.tenantId) && uuid(item.executionId) && uuid(item.customerId) &&
     key(item.idempotencyKey) && hash(item.argumentsHash) && hash(item.payloadHash) &&
     fingerprint(item.providerFingerprint) && typeof item.providerSimulated === "boolean" &&
