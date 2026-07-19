@@ -115,6 +115,9 @@ export const enterpriseIcons = {
     countryPolicy: "policy",
     localTime: "schedule",
     voicemail: "voicemail",
+    validate: "fact_check",
+    approve: "verified",
+    reject: "cancel",
   },
   appearance: {
     system: "brightness_auto",

@@ -43,6 +43,8 @@ type ContentApi = Pick<EnterpriseApi,
   | "createMarketingSuppression"
   | "listCountryPolicies" | "publishCountryPolicy"
   | "getCampaignCountryPolicyReadiness"
+  | "getCampaignApproval" | "validateCampaign" | "approveCampaign"
+  | "rejectCampaign"
 >;
 
 export function fakeEnterpriseContentApi(): ContentApi {
@@ -161,6 +163,10 @@ export function fakeEnterpriseContentApi(): ContentApi {
       targetAt: "2026-07-19T00:00:00.000Z", policies: [],
       issues: [{ countryCode: "US", reasonCode: "country_policy_missing" }],
     }),
+    getCampaignApproval: vi.fn().mockResolvedValue({ decisions: [] }),
+    validateCampaign: vi.fn().mockRejectedValue(new Error("not configured")),
+    approveCampaign: vi.fn().mockRejectedValue(new Error("not configured")),
+    rejectCampaign: vi.fn().mockRejectedValue(new Error("not configured")),
     getCampaign: vi.fn(),
     createCampaign: vi.fn(),
     updateCampaign: vi.fn(),

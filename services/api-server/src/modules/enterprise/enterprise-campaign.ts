@@ -26,6 +26,7 @@ export interface EnterpriseCampaignRecord {
   languageCodes: string[];
   status: EnterpriseCampaignStatus;
   approvalStatus: EnterpriseCampaignApprovalStatus;
+  approvalSnapshotId?: string;
   policyVersion?: string;
   schedule: EnterpriseCampaignScheduleDto;
   concurrencyLimit: number;
@@ -51,7 +52,9 @@ export type EnterpriseCampaignScheduleBlock =
   | "status_not_schedulable"
   | "country_policy_missing"
   | "country_policy_not_yet_effective"
-  | "country_policy_expired";
+  | "country_policy_expired"
+  | "approval_snapshot_required"
+  | "approval_snapshot_stale";
 
 export function campaignRequestHash(input: {
   ownerUserId: string;

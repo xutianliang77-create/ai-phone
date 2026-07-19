@@ -1,6 +1,6 @@
 # 无界AI企业版技术架构
 
-版本：v1.41
+版本：v1.42
 日期：2026-07-19
 状态：SaaS 详细架构基线，已对齐统一通讯平台和 PostgreSQL Primary
 
@@ -407,8 +407,8 @@ tenant/actor/key/request hash 精确重放；撤回只追加 actor/reason/time/v
 `0039` 另外在 `marketing_call_tasks` insert/reschedule 层放置数据库 guard：同 tenant/Campaign/Lead 必须存在
 覆盖 `scheduled_at` 的 active Consent，否则 SQL 失败。因此即使后续 Scheduler 漏检，数据库也不能产生无授权
 任务。撤回 trigger 取消没有替代授权的 pending/scheduled/retry 任务；禁拨由 `ENT-MKT-004` 独立叠加，Country
-Policy 已由 `ENT-MKT-005` 叠加；审批快照、Scheduler、Outbox、PSTN dispatch 和已发媒体物理中止仍由
-`ENT-MKT-006..009` 分层实现和重验。
+Policy 已由 `ENT-MKT-005` 叠加，审批快照已由 `ENT-MKT-006` 叠加；Scheduler、Outbox、PSTN dispatch 和已发媒体
+物理中止仍由 `ENT-MKT-007..009` 分层实现和重验。
 
 ### 7.4 Suppression 写入、全局投影与并发栅栏
 
@@ -423,7 +423,7 @@ HMAC 投影到同一 forced-RLS 表，要求 namespaced system actor 和固定 `
 
 读取先返回本地 tenant/global 投影命中，再叠加全局注册表 readiness。当前外部注册表 Adapter 未配置，未命中本地
 投影也只能返回 not_ready；不能把未配置当作未命中。Country Policy 已由 `ENT-MKT-005` 在下一层叠加；Scheduler
-claim、dispatch generation、PSTN Provider 取消和已开始媒体的物理停止继续由 `ENT-MKT-006..009` 实现。
+claim、dispatch generation、PSTN Provider 取消和已开始媒体的物理停止继续由 `ENT-MKT-007..009` 实现。
 
 ### 7.5 Country Policy 解析与执行边界
 
@@ -434,12 +434,25 @@ claim、dispatch generation、PSTN Provider 取消和已开始媒体的物理停
 
 读取路径分为 tenant 版本目录和 Campaign 目标时间 readiness。后者以 Campaign startAt（缺失时仅作当前时刻预览）
 逐国家解析有效版本，缺失、未来或过期都显式 blocked。Campaign 从 approved 进入 scheduled 时由独立数据库 trigger
-按 startAt 重验全部国家；`ENT-MKT-006` 再负责把解析结果冻结为审批快照，当前实现不提前替代审批。
+按 startAt 重验全部国家；`ENT-MKT-006` 再把解析结果冻结为审批快照。
 
 执行路径要求 call task 显式引用 `country_policy_version_id`。数据库 guard 在同一 `tenant + phone_hash` advisory lock
 中顺序复核 Suppression、Consent、Lead country/timezone、版本有效期、`scheduled_at AT TIME ZONE lead.timezone` 当地
 窗口、最小重试间隔和跨活动滚动频控。该栅栏只阻止形成或重排不合规任务，不生成 Scheduler claim、Outbox、usage
 hold 或 PSTN 副作用；真实法务、DST/时区库、并发和 Provider 仍需独立验收。
+
+### 7.6 活动审批快照与过期边界
+
+`ENT-MKT-006` 把审批拆成 validation snapshot 与 approval decision 两个不可变 tenant 记录。validate 数据流为
+`Campaign row lock -> Lead/link/batch share locks -> tenant+phone advisory locks -> Policy/Consent/Suppression resolution ->
+canonical JSON/hash -> validation insert -> validating/pending transition`。只有 snapshot ready 才改变 Campaign 状态。
+
+approve 在同一事务重建 snapshot，逐项比较 Campaign、Policy set、Lead set、选定 Consent set 和 Suppression set，
+然后写 decision 并把其 ID 与 validation hash 固定到 Campaign；reject 写带理由 decision 后回到 rejected draft。
+数据库 trigger 独立绑定 validation/decision actor、时间、源版本和合法状态迁移，防止直接 SQL 跳过 API。
+
+scheduled transition 和未来 call task 都调用当前快照复核；task 还必须显式携带同一 approval decision，并出现在冻结的
+Lead/Consent/Policy set 中。任何证据漂移都失败闭合，但本层不生成任务、claim、hold、Outbox 或 Provider 请求。
 
 ## 8. AI 客服架构
 
@@ -699,7 +712,7 @@ Worker 无权依据缓存继续执行敏感能力。
 
 生产 PostgreSQL 启动还必须验证企业签名 cutover evidence：证据绑定 staging 环境、
 commit、image digest、topology hash、目标 logical ID、system identifier/OID、公共31段与
-企业41段 manifest，并证明源库 writer fence、旧 API/Worker 角色会话为0、目标可写和
+企业43段 manifest，并证明源库 writer fence、旧 API/Worker 角色会话为0、目标可写和
 二次全量 hash 一致。本地逻辑恢复证据不提升为跨故障域 HA/PITR 结论。
 
 ## 10. 安全架构

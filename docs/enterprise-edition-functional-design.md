@@ -1,6 +1,6 @@
 # 无界AI企业版详细功能设计
 
-版本：v1.38
+版本：v1.39
 日期：2026-07-19
 状态：SaaS 详细设计基线，已对齐统一通讯平台
 
@@ -246,6 +246,20 @@ Provider、usage/ledger 和 trace；跨会话业务聚合与货币成本尚未�
   窗口外、过密或超频都不能留下可执行任务。
 - 当前 Web 只显示真实策略版本、hash、有效期、合规依据和逐活动 readiness；不显示审批、Scheduler、PSTN 或法务
   验收成功。SQLite/JSON 不承载国家策略并固定失败闭合。
+
+#### 5.2.5 活动审批首批实现边界
+
+- `campaign:write` 可对 `draft/not_submitted|rejected` 活动执行 validate。服务端以 startAt 固化 Campaign 内容、目标
+  Country Policy set、active Lead/link/committed batch、每条 Lead 的有效 Consent 和当前 Suppression set；没有未来
+  开始时间、没有有效 Lead、任一国家缺策略、Lead 国家不匹配、IANA 时区无效、缺授权或命中禁拨均保持 blocked。
+- ready validation 是不可变记录，只把活动经 `validating` 提交到 `pending_approval/pending`；blocked validation 不改
+  Campaign。校验与禁拨写入使用同一 tenant+phone 事务锁，Lead/link/batch/Consent 使用数据库共享锁，避免并发空窗。
+- `campaign:approve` 才能 approve/reject。批准前重建完整快照并要求 snapshot hash 与所引用 ready validation 完全一致；
+  拒绝必须给出理由并回到 `draft/rejected`，后续编辑会重置为 `not_submitted`。两类 decision 均不可更新删除。
+- 批准后 Campaign 固定 approval decision ID 和 validation snapshot hash。scheduled transition 及未来 call task 再由
+  SQL 比对当前策略、Lead、Consent、Suppression；撤回、禁拨、新旧集合替换或伪造 ID 时任务数为零。
+- Web 只展示目标时间、数量、缩略 hash、服务端 issue 和决策历史；“批准”不等于具体法域法律意见，也不表示
+  Scheduler、usage hold、Outbox 或 PSTN 已执行。legacy/SQLite/JSON 固定返回 PostgreSQL required。
 
 ### 5.3 AI 营销专员
 

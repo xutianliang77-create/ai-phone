@@ -77,10 +77,10 @@ import type { EnterpriseLeadImportRepositoryRuntime } from "./enterprise-lead-im
 import type { EnterpriseMarketingConsentRepositoryRuntime } from "./enterprise-marketing-consent-runtime.js";
 import type { EnterpriseMarketingSuppressionRepositoryRuntime } from "./enterprise-marketing-suppression-runtime.js";
 import type { EnterpriseMarketingCountryPolicyRepositoryRuntime } from "./enterprise-marketing-country-policy-runtime.js";
+import type { EnterpriseCampaignApprovalRepositoryRuntime } from "./enterprise-campaign-approval-runtime.js";
 export type EnterpriseContextResult =
   { status: "resolved"; tenant: EnterpriseTenantRecord; member: EnterpriseMemberRecord } |
   { status: "access_denied" } | { status: "selection_required" };
-
 export type EnterpriseLifecycleResult = {
   status: string;
   tenant?: EnterpriseTenantRecord;
@@ -107,8 +107,8 @@ export interface EnterpriseRepositoryRuntime
     EnterpriseSupportToolRepositoryRuntime,
     EnterpriseCampaignRepositoryRuntime, EnterpriseLeadImportRepositoryRuntime,
     EnterpriseMarketingConsentRepositoryRuntime,
-    EnterpriseMarketingSuppressionRepositoryRuntime,
-    EnterpriseMarketingCountryPolicyRepositoryRuntime {
+    EnterpriseMarketingSuppressionRepositoryRuntime, EnterpriseMarketingCountryPolicyRepositoryRuntime,
+    EnterpriseCampaignApprovalRepositoryRuntime {
   readonly driver: "legacy" | "postgres";
   resolveContext(input: {
     userId: string;

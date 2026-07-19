@@ -7,6 +7,8 @@ import { CampaignLeadImportPanel } from
   "../components/CampaignLeadImportPanel.js";
 import { CampaignCountryPolicyPanel, CampaignCountryPolicyReadiness } from
   "../components/CampaignCountryPolicyPanel.js";
+import { CampaignApprovalPanel } from
+  "../components/CampaignApprovalPanel.js";
 import { PageFrame } from "../components/PageFrame.js";
 import { StatusPanel } from "../components/StatusPanel.js";
 import { enterpriseIcons } from "../icon-registry.js";
@@ -140,7 +142,7 @@ export function CampaignsPage() {
     <section className="campaign-boundary" aria-label="当前实现边界">
       <MaterialIcon name={enterpriseIcons.campaign.approval} />
       <div><strong>活动未审批时服务端禁止调度</strong>
-        <span>线索、授权、禁拨和国家策略已接入；审批快照、Scheduler 和 PSTN 仍未接入，本页不显示模拟成功。</span>
+        <span>线索、授权、禁拨、国家策略和不可变审批快照已接入；Scheduler 和 PSTN 仍未接入，本页不显示模拟成功。</span>
       </div>
     </section>
     {notice ? <p className="campaign-notice" role="status">{notice}</p> : null}
@@ -199,6 +201,9 @@ export function CampaignsPage() {
           <p>{campaign.objective}</p>
           {context ? <CampaignCountryPolicyReadiness api={api} context={context}
             campaign={campaign} /> : null}
+          {context ? <CampaignApprovalPanel api={api} context={context}
+            campaign={campaign} canWrite={canWrite} canApprove={canApprove}
+            onChanged={refresh} /> : null}
           <dl className="campaign-facts">
             <div><dt><MaterialIcon name={enterpriseIcons.campaign.countries} />国家</dt>
               <dd>{campaign.countryCodes.join(" · ")}</dd></div>
@@ -215,7 +220,7 @@ export function CampaignsPage() {
               onClick={() => setLeadCampaign(campaign)} disabled={busy !== null}>
               <MaterialIcon name={enterpriseIcons.campaign.leads} />线索</button>
               {canWrite && campaign.status === "draft" &&
-              campaign.approvalStatus === "not_submitted" ? <button
+              ["not_submitted", "rejected"].includes(campaign.approvalStatus) ? <button
                 className="button button--secondary" type="button"
                 onClick={() => beginEdit(campaign)} disabled={busy !== null}>
                 <MaterialIcon name={enterpriseIcons.campaign.edit} />编辑</button> : null}
@@ -223,7 +228,7 @@ export function CampaignsPage() {
                 disabled={busy !== null || campaign.status !== "approved" ||
                   campaign.approvalStatus !== "approved"}
                 title={campaign.approvalStatus !== "approved"
-                  ? "等待 ENT-MKT-006 固化审批和策略快照" : "进入聚合待调度状态"}
+                  ? "等待服务端批准并固化快照" : "进入聚合待调度状态"}
                 onClick={() => void schedule(campaign)}>
                 <MaterialIcon name={enterpriseIcons.campaign.schedule} />待调度</button> : null}</div>
           </footer>

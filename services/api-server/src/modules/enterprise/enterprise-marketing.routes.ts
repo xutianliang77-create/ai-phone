@@ -13,6 +13,8 @@ import { registerEnterpriseMarketingSuppressionRoutes } from
   "./enterprise-marketing-suppression.routes.js";
 import { registerEnterpriseMarketingCountryPolicyRoutes } from
   "./enterprise-marketing-country-policy.routes.js";
+import { registerEnterpriseCampaignApprovalRoutes } from
+  "./enterprise-campaign-approval.routes.js";
 
 export function registerEnterpriseMarketingRoutes(app: FastifyInstance,
   routeService: TenantRouteService, runtime: EnterpriseRepositoryRuntime) {
@@ -24,4 +26,5 @@ export function registerEnterpriseMarketingRoutes(app: FastifyInstance,
   registerEnterpriseMarketingSuppressionRoutes(app, routeService, runtime,
     unavailableEnterpriseGlobalSuppressionRegistry());
   registerEnterpriseMarketingCountryPolicyRoutes(app, routeService, runtime);
+  registerEnterpriseCampaignApprovalRoutes(app, routeService, runtime);
 }

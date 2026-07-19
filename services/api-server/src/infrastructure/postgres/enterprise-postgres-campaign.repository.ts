@@ -9,6 +9,9 @@ import { enterprisePostgresAccountSubjectId, enterprisePostgresActorSubjectId } 
   "./enterprise-postgres-subject-id.js";
 import type { EnterpriseTenantPostgresSession } from
   "./enterprise-postgres-tenant-session.js";
+import { enterpriseCampaignApprovalSnapshotBlock,
+  enterpriseCampaignCountryPolicyBlock } from
+  "./enterprise-postgres-campaign-approval-snapshot.js";
 
 export class EnterpriseCampaignPostgresRepository {
   constructor(private readonly session: EnterpriseTenantPostgresSession) {}
@@ -78,7 +81,8 @@ export class EnterpriseCampaignPostgresRepository {
     const current = await this.find(input.campaignId, true);
     if (!current) return { status: "not_found" as const };
     if (current.version !== input.expectedVersion) return { status: "conflict" as const };
-    if (current.status !== "draft" || current.approvalStatus !== "not_submitted") {
+    if (current.status !== "draft" || !["not_submitted", "rejected"]
+      .includes(current.approvalStatus)) {
       return { status: "not_editable" as const };
     }
     const value = campaignContent(mergeCampaignDraft(current, input.patch));
@@ -87,9 +91,10 @@ export class EnterpriseCampaignPostgresRepository {
       UPDATE enterprise.marketing_campaigns
       SET name = $3, objective = $4, country_codes = $5, language_codes = $6,
         schedule = $7::jsonb, concurrency_limit = $8, updated_at = $9,
-        version = version + 1
+        approval_status = 'not_submitted', approval_snapshot_id = NULL,
+        policy_version = NULL, version = version + 1
       WHERE tenant_id = $1 AND id = $2 AND version = $10
-        AND status = 'draft' AND approval_status = 'not_submitted'
+        AND status = 'draft' AND approval_status IN ('not_submitted', 'rejected')
       RETURNING *
     `, [uuid(input.campaignId), bounded(value.name, 200),
       bounded(value.objective, 2_000), value.countryCodes, value.languageCodes,
@@ -117,7 +122,17 @@ export class EnterpriseCampaignPostgresRepository {
         `campaign-blocked:${reasonCode}`, 409, occurredAt);
       return { status: "blocked" as const, reasonCode };
     }
-    const countryPolicyReason = await this.countryPolicyBlock(current);
+    const approvalReason = await enterpriseCampaignApprovalSnapshotBlock(
+      this.session, current, occurredAt,
+    );
+    if (approvalReason) {
+      await this.recordCommand({ ...input, route: "campaign.schedule" },
+        `campaign-blocked:${approvalReason}`, 409, occurredAt);
+      return { status: "blocked" as const, reasonCode: approvalReason };
+    }
+    const countryPolicyReason = await enterpriseCampaignCountryPolicyBlock(
+      this.session, current,
+    );
     if (countryPolicyReason) {
       await this.recordCommand({ ...input, route: "campaign.schedule" },
         `campaign-blocked:${countryPolicyReason}`, 409, occurredAt);
@@ -169,28 +184,6 @@ export class EnterpriseCampaignPostgresRepository {
       : { status: "conflict" as const };
   }
 
-  private async countryPolicyBlock(campaign: EnterpriseCampaignRecord) {
-    const targetAt = iso(campaign.schedule.startAt);
-    const target = Date.parse(targetAt);
-    const result = await this.session.query<CampaignCountryPolicyRow>(`
-      SELECT country_code, effective_from, expires_at
-      FROM enterprise.marketing_country_policy_versions
-      WHERE tenant_id = $1 AND country_code = ANY($2::text[])
-      ORDER BY country_code, effective_from DESC, id
-    `, [campaign.countryCodes]);
-    for (const countryCode of campaign.countryCodes) {
-      const versions = result.rows.filter((row) => row.country_code === countryCode);
-      if (versions.some((row) => Date.parse(iso(row.effective_from)) <= target &&
-        Date.parse(iso(row.expires_at)) > target)) continue;
-      if (versions.some((row) => Date.parse(iso(row.effective_from)) > target)) {
-        return "country_policy_not_yet_effective" as const;
-      }
-      return versions.length > 0 ? "country_policy_expired" as const
-        : "country_policy_missing" as const;
-    }
-    return null;
-  }
-
   private async recordMutation(input: MutationCommandInput & {
     campaign: EnterpriseCampaignRecord;
   }) {
@@ -229,14 +222,11 @@ interface CampaignRow extends Record<string, unknown> {
   owner_user_id: string; country_codes: string[]; language_codes: string[];
   status: EnterpriseCampaignRecord["status"];
   approval_status: EnterpriseCampaignRecord["approvalStatus"];
-  policy_version: string | null; schedule: EnterpriseCampaignScheduleDto;
+  approval_snapshot_id: string | null; policy_version: string | null;
+  schedule: EnterpriseCampaignScheduleDto;
   concurrency_limit: number; created_at: string | Date; updated_at: string | Date;
   version: string | number; creation_key: string; creation_request_hash: string;
 }
-interface CampaignCountryPolicyRow extends Record<string, unknown> {
-  country_code: string; effective_from: string | Date; expires_at: string | Date;
-}
-
 function mapCampaign(row: CampaignRow): EnterpriseCampaignRecord {
   if (!["draft", "validating", "pending_approval", "approved", "scheduled",
     "running", "paused", "completed", "cancelled", "failed"].includes(row.status) ||
@@ -250,6 +240,8 @@ function mapCampaign(row: CampaignRow): EnterpriseCampaignRecord {
     ownerUserId: enterprisePostgresAccountSubjectId(row.owner_user_id),
     countryCodes: content.countryCodes, languageCodes: content.languageCodes,
     status: row.status, approvalStatus: row.approval_status,
+    ...(row.approval_snapshot_id
+      ? { approvalSnapshotId: uuid(row.approval_snapshot_id) } : {}),
     ...(row.policy_version ? { policyVersion: row.policy_version } : {}),
     schedule: content.schedule, concurrencyLimit: content.concurrencyLimit,
     createdAt: iso(row.created_at), updatedAt: iso(row.updated_at),
@@ -294,7 +286,8 @@ function blockedResult(value: unknown) {
     ? value.slice("campaign-blocked:".length) : "";
   return ["approval_required", "policy_version_required", "schedule_start_required",
     "schedule_start_elapsed", "status_not_schedulable", "country_policy_missing",
-    "country_policy_not_yet_effective", "country_policy_expired"].includes(reason)
+    "country_policy_not_yet_effective", "country_policy_expired",
+    "approval_snapshot_required", "approval_snapshot_stale"].includes(reason)
     ? reason as ReturnType<typeof campaignScheduleBlock> : null;
 }
 function iso(value: unknown) {

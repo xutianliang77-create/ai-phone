@@ -18,6 +18,9 @@ import type {
   EnterpriseCountryPoliciesResponse,
   EnterpriseCountryPolicyResponse,
   EnterpriseCampaignCountryPolicyReadinessResponse,
+  EnterpriseCampaignApprovalDetailResponse,
+  EnterpriseCampaignApprovalDecisionResponse,
+  EnterpriseCampaignValidationResponse,
   PublishEnterpriseCountryPolicyRequest,
   RegisterEnterpriseMarketingConsentRequest,
   RevokeEnterpriseMarketingConsentRequest,
@@ -82,6 +85,17 @@ export interface EnterpriseCampaignApi {
     Promise<EnterpriseCountryPolicyResponse>;
   getCampaignCountryPolicyReadiness(context: EnterpriseContentRequestContext,
     campaignId: string): Promise<EnterpriseCampaignCountryPolicyReadinessResponse>;
+  getCampaignApproval(context: EnterpriseContentRequestContext, campaignId: string):
+    Promise<EnterpriseCampaignApprovalDetailResponse>;
+  validateCampaign(context: EnterpriseContentRequestContext, campaignId: string,
+    input: { expectedVersion: number }, idempotencyKey: string):
+    Promise<EnterpriseCampaignValidationResponse>;
+  approveCampaign(context: EnterpriseContentRequestContext, campaignId: string,
+    input: { expectedVersion: number; validationSnapshotId: string },
+    idempotencyKey: string): Promise<EnterpriseCampaignApprovalDecisionResponse>;
+  rejectCampaign(context: EnterpriseContentRequestContext, campaignId: string,
+    input: { expectedVersion: number; validationSnapshotId: string; reason: string },
+    idempotencyKey: string): Promise<EnterpriseCampaignApprovalDecisionResponse>;
 }
 
 export function createEnterpriseCampaignApi(
@@ -176,6 +190,25 @@ export function createEnterpriseCampaignApi(
     getCampaignCountryPolicyReadiness: (context, campaignId) => request(
       `${campaigns}/${encodeURIComponent(campaignId)}/country-policy-readiness`,
       { headers: headers(context) },
+    ),
+    getCampaignApproval: (context, campaignId) => request(
+      `${campaigns}/${encodeURIComponent(campaignId)}/approval`,
+      { headers: headers(context) },
+    ),
+    validateCampaign: (context, campaignId, input, key) => request(
+      `${campaigns}/${encodeURIComponent(campaignId)}/approval/validate`,
+      { method: "POST", headers: { ...headers(context), "idempotency-key": key },
+        body: JSON.stringify(input) },
+    ),
+    approveCampaign: (context, campaignId, input, key) => request(
+      `${campaigns}/${encodeURIComponent(campaignId)}/approval/approve`,
+      { method: "POST", headers: { ...headers(context), "idempotency-key": key },
+        body: JSON.stringify(input) },
+    ),
+    rejectCampaign: (context, campaignId, input, key) => request(
+      `${campaigns}/${encodeURIComponent(campaignId)}/approval/reject`,
+      { method: "POST", headers: { ...headers(context), "idempotency-key": key },
+        body: JSON.stringify(input) },
     ),
   };
 }

@@ -32,6 +32,7 @@ export interface EnterpriseCampaignDto {
   languageCodes: string[];
   status: EnterpriseCampaignStatus;
   approvalStatus: EnterpriseCampaignApprovalStatus;
+  approvalSnapshotId?: string;
   policyVersion?: string;
   schedule: EnterpriseCampaignScheduleDto;
   concurrencyLimit: number;

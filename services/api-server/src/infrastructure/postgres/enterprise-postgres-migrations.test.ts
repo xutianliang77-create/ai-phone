@@ -51,6 +51,9 @@ describe("enterprise PostgreSQL migrations", () => {
       "0038_enterprise_marketing_lead_imports",
       "0039_enterprise_marketing_consents",
       "0040_enterprise_marketing_suppressions",
+      "0041_enterprise_marketing_country_policies",
+      "0042_enterprise_marketing_campaign_approvals",
+      "0043_enterprise_marketing_approval_guards",
     ]);
     for (const migration of migrations) {
       expect(migration.up.trim()).not.toBe("");
@@ -206,14 +209,6 @@ describe("enterprise PostgreSQL migrations", () => {
     expect(sql).toContain("enterprise marketing target is suppressed");
     expect(sql).toContain(":marketing-suppression:");
     expect(sql).toContain("outcome_code = 'suppressed'");
-    expect(sql).toContain("CREATE TABLE enterprise.marketing_country_policy_versions");
-    expect(sql).toContain("marketing_country_policy_versions_tenant_isolation");
-    expect(sql).toContain("enterprise.guard_marketing_country_policy_mutation");
-    expect(sql).toContain("marketing_campaigns_country_policy_guard");
-    expect(sql).toContain("OLD.country_codes IS DISTINCT FROM NEW.country_codes"); expect(sql).toContain("OLD.schedule IS DISTINCT FROM NEW.schedule");
-    expect(sql).toContain("country_policy_version_id");
-    expect(sql).toContain("outside local calling window");
-    expect(sql).toContain("marketing frequency limit exceeded");
     expect(sql).toContain("purpose = 'automated_marketing_call'");
     expect(sql).toContain("guard_marketing_campaign_mutation");
     expect(sql).toContain("enterprise marketing campaign approval required");

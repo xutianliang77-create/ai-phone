@@ -1,6 +1,6 @@
 # 无界AI企业版 UI 详细设计
 
-版本：v1.25
+版本：v1.26
 日期：2026-07-19
 状态：设计基线；企业 Web 公共组件、首批设置/工作台、响应式/主题/无障碍和 Web/iOS/Android 成员屏幕共享代码候选已实现，正式验收仍在开发
 
@@ -224,7 +224,7 @@ budget、usage aggregate 和显式 session trace report。卡片沿用同一 Mat
   同一幂等键，网络失败重试不换键；版本或幂等冲突回到统一 conflict 状态。
 - 列表使用响应式双列活动卡，展示服务端状态、审批状态、版本和实际字段；760px 以下单列，420px 以下事实
   网格单列。无数据、403、409 和 PostgreSQL 未就绪均使用统一页面状态，不生成 fixture。
-- “待调度”只向 `campaign:approve` 显示，审批未通过时禁用并说明依赖 `ENT-MKT-006`；即使聚合迁移成功也只
+- “待调度”只向 `campaign:approve` 显示，审批未通过或 snapshot 已漂移时禁用并展示服务端原因；即使聚合迁移成功也只
   提示尚未创建拨号任务或调用 PSTN，Scheduler/Provider 未接入时不得出现启动成功文案。
 - `ENT-MKT-005` 在活动列表上方增加国家策略面板，继续复用 `policy/schedule/speed/record_voice_over/voicemail`
   Material Icons、浅深色 token、1px outline、8px 圆角和 `StatusPanel`。发布入口只向 `campaign:approve` 显示，
@@ -233,6 +233,12 @@ budget、usage aggregate 和显式 session trace report。卡片沿用同一 Mat
   `compliant_message` 才显示留言版本与正文。顶部始终提示“策略配置不是法律结论”，发布成功也不显示法务通过。
 - 每个活动卡显示服务端目标时间 readiness；缺失、未生效、过期或 API 不可用均使用阻断语义，不以绿色或客户端
   时区推算掩盖。策略卡显示国家、版本、有效期、频控、留言模式和缩略 hash；320/600px 单列，键盘与主题沿用现有门禁。
+- `ENT-MKT-006` 在活动卡内增加默认折叠的“审批与快照”，按展开动作读取，避免列表为每个活动额外请求。沿用
+  `verified_user/fact_check/verified/cancel` Material Icons、现有 Primary/Signal 语义、1px outline、8px 圆角和
+  StatusPanel；不增加第二套图标或颜色。
+- 营销成员只看到“校验并提交审批”，主管/owner/admin 在 pending 且 ready 时看到“批准并固化快照”和必填拒绝理由。
+  面板展示目标时间、Policy/Lead/Consent/Suppression 数量、snapshot/data hash、服务端 issue 和不可变 decision 历史；
+  600px 下数量两列、420px 下单列。API 失败或 snapshot stale 一律保持阻断，不显示 Scheduler/PSTN 成功。
 
 ### 8.3 AI 客服坐席台
 

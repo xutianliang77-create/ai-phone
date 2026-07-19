@@ -34,6 +34,8 @@ import { createEnterprisePostgresMarketingSuppressionRuntime } from
   "./enterprise-postgres-marketing-suppression-runtime.js";
 import { createEnterprisePostgresMarketingCountryPolicyRuntime } from
   "./enterprise-postgres-marketing-country-policy-runtime.js";
+import { createEnterprisePostgresCampaignApprovalRuntime } from
+  "./enterprise-postgres-campaign-approval-runtime.js";
 
 export function createEnterprisePostgresBusinessRuntimes(
   pool: EnterpriseTenantPostgresPool,
@@ -58,5 +60,6 @@ export function createEnterprisePostgresBusinessRuntimes(
     ...createEnterprisePostgresMarketingConsentRuntime(pool),
     ...createEnterprisePostgresMarketingSuppressionRuntime(pool),
     ...createEnterprisePostgresMarketingCountryPolicyRuntime(pool),
+    ...createEnterprisePostgresCampaignApprovalRuntime(pool),
   };
 }
