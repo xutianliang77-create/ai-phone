@@ -7,10 +7,11 @@ import type { EnterpriseContentRequestContext } from "../api/enterprise-api.js";
 import {
   enterpriseScreenCaptureReady,
   EnterpriseMeetingScreenSharePublisher,
-  enterpriseScreenShareDelay,
   enterpriseScreenShareErrorCode,
   type EnterpriseScreenCapture,
 } from "./enterprise-meeting-screen-share-publisher.js";
+import { EnterpriseMeetingScreenShareRevocationController } from
+  "./enterprise-meeting-screen-share-revocation.js";
 type Revocation = "not_required" | "completed" | "pending";
 type Operation = "idle" | "capturing" | "starting" | "active" | "pausing" |
   "paused" | "resuming" | "stopping" | "failed";
@@ -35,6 +36,7 @@ export class EnterpriseMeetingScreenShareController {
   private disposed = false;
   private stopRequested = false;
   private stateEpoch = 0;
+  private readonly revocations: EnterpriseMeetingScreenShareRevocationController;
   constructor(
     private readonly api: EnterpriseMeetingApi,
     private readonly context: EnterpriseContentRequestContext,
@@ -43,7 +45,11 @@ export class EnterpriseMeetingScreenShareController {
     private readonly onSnapshot: (
       value: EnterpriseMeetingScreenShareSnapshot,
     ) => void,
-  ) {}
+  ) {
+    this.revocations = new EnterpriseMeetingScreenShareRevocationController(
+      api, context, meetingId, () => this.disposed, (value) => this.emit(value),
+    );
+  }
   startPolling() {
     void this.refresh();
     this.pollTimer ??= setInterval(() => void this.refresh(), 2_000);
@@ -114,7 +120,7 @@ export class EnterpriseMeetingScreenShareController {
         share: response.share, revocation: response.revocation,
       });
       if (response.revocation === "pending") {
-        void this.retryRevocation("pause", share, key);
+        this.revocations.retry("pause", share, key);
       }
     } catch (error) {
       await this.failClosed(error);
@@ -176,7 +182,7 @@ export class EnterpriseMeetingScreenShareController {
         share: response.share, revocation: response.revocation,
       });
       if (response.revocation === "pending") {
-        void this.retryRevocation("stop", share, key);
+        this.revocations.retry("stop", share, key);
       }
     } catch (error) {
       this.emit({ operation: "failed",
@@ -184,6 +190,17 @@ export class EnterpriseMeetingScreenShareController {
     } finally {
       this.busy = false;
     }
+  }
+  async forceStop() {
+    await this.revocations.forceStop({
+      share: this.snapshot.share, participantId: this.participantId,
+      busy: this.busy,
+      onStart: () => {
+        this.stateEpoch += 1; this.busy = true;
+        this.emit({ operation: "stopping", errorCode: undefined });
+      },
+      onFinish: () => { this.busy = false; },
+    });
   }
   dispose() {
     const share = this.snapshot.share;
@@ -218,7 +235,8 @@ export class EnterpriseMeetingScreenShareController {
     this.emit({ localSystemAudioAvailable: false, errorCode: "screen_share_audio_ended" });
   };
   private async refresh() {
-    if (this.disposed || this.busy) return;
+    if (this.disposed || this.busy || this.snapshot.revocation === "pending" &&
+      ["pausing", "stopping"].includes(this.snapshot.operation)) return;
     const epoch = this.stateEpoch;
     try {
       const current = await this.api.currentMeetingScreenShare(this.context, this.meetingId);
@@ -272,31 +290,6 @@ export class EnterpriseMeetingScreenShareController {
     this.stopRequested = false;
     await this.stop();
   }
-  private async retryRevocation(
-    command: "pause" | "stop",
-    original: EnterpriseMeetingScreenShareDto,
-    key: string,
-  ) {
-    for (let attempt = 0; attempt < 3 && !this.disposed; attempt += 1) {
-      await enterpriseScreenShareDelay(1_500);
-      try {
-        const response = await this.api.commandMeetingScreenShare(
-          this.context, this.meetingId, original.id, command,
-          { expectedVersion: original.version }, key,
-        );
-        this.emit({
-          share: response.share, revocation: response.revocation,
-          operation: response.revocation === "pending" ?
-            (command === "stop" ? "stopping" : "pausing") :
-            (command === "stop" ? "idle" : "paused"),
-        });
-        if (response.revocation !== "pending") return;
-      } catch {
-        // The durable server outbox remains authoritative after bounded client retries.
-      }
-    }
-    this.emit({ errorCode: "screen_share_revocation_pending" });
-  }
   private ownedShare(status: "active" | "paused") {
     const share = this.snapshot.share;
     return share?.participantId === this.participantId && share.status === status ? share : null;
@@ -317,7 +310,7 @@ export class EnterpriseMeetingScreenShareController {
           operation: response.revocation === "pending" ? "stopping" : "idle",
         });
         if (response.revocation === "pending") {
-          void this.retryRevocation("stop", share, key);
+          this.revocations.retry("stop", share, key);
         }
       } catch {
         this.emit({ operation: "stopping" });

@@ -33,7 +33,7 @@
 | 企业统一通讯会话绑定 | `ready_for_acceptance` | enterprise `0011` 和 tenant unit-of-work 已建立 Meeting/Support/Marketing 唯一绑定、route/policy/entitlement 快照及 generation/event-sequence 收敛状态机；尚无真实多实例、cell 迁移和 A1/H3 证据 |
 | Tenant-aware Worker Dispatch | `ready_for_acceptance` | enterprise `0012` 以 scope FK/RLS 绑定公共 dispatch/capacity；短期 HMAC ticket、租户容量、lease/heartbeat、cancel/finalize 和二次 binding fence 已实现；仅有自动化和一次性本地 PostgreSQL 16 证据，尚无真实多实例/H3 容量证据 |
 | 企业设备、声音和录制策略 | `ready_for_acceptance` | enterprise `0013`、发布 API、策略解析、purpose-specific 授权和 Worker policy fence 已实现；仅有自动化和一次性本地 PostgreSQL 16 机制证据，尚无真实设备/Provider、A1/H2/H3 证据 |
-| Web/Flutter 屏幕共享 | `in_progress` | 已实现真实来源/系统授权、独立最小权限发布 Room、Web 可选独立系统音轨、显式 screen simulcast/dynacast、renderer 尺寸驱动订阅、当前 generation 过滤和三种画面/字幕布局；移动端系统音频仍关闭，未执行自动化、多浏览器/真机、回声、弱网或真实 LiveKit 门禁 |
+| Web/Flutter 屏幕共享 | `in_progress` | 已实现真实来源/系统授权、独立最小权限发布 Room、Web 可选独立系统音轨、显式 screen simulcast/dynacast、renderer 尺寸驱动订阅、当前 generation 过滤、三种画面/字幕布局和 scope 受控主持人强停；移动端系统音频仍关闭，未执行自动化、多浏览器/真机、回声、弱网或真实 LiveKit 门禁 |
 | 企业用量预算 | `ready_for_acceptance` | enterprise `0014` 已实现 tenant/category/unit/UTC period 预算、hold/settle、阈值告警和 ledger 不可变约束；真实并发与账务抽样待验收 |
 | 租户账务和 Entitlement | `ready_for_acceptance` | enterprise `0015` 已实现 tenant billing account、不可变 plan/subscription/entitlement version、服务端账期及 binding/dispatch entitlement fence；真实支付 Provider、关账对账和 A1/H3 待验收 |
 | SaaS 计量聚合 | `ready_for_acceptance` | enterprise `0016` 已实现 tenant usage event、event/ledger 一致性、append-only adjustment、负数净额保护及 count/hash/watermark 账期聚合；真实关账、支付对账和 A1/H3 待验收 |
@@ -1698,6 +1698,39 @@ Web `MeetingMediaWorkspace` 和 Flutter `EnterpriseMeetingMediaWorkspace` 均提
 限制媒体/字幕可视高度，字幕区域内部滚动，所有控制保持正常文档流。当前未运行真实 LiveKit layer 统计、弱网切层、
 Firefox单层降级、CPU/带宽、320/600/960/横屏/200%或Flutter动态字体真机矩阵，因此 `ENT-MTG-009` 保持
 `in_progress`，不代表 AC-SHARE-006/007/009、A1 或企业生产门禁通过。
+
+### 19.15 主持人强制停止共享
+
+服务端新增：
+
+- `POST /enterprise/v1/meetings/:meetingId/screen-shares/:shareId/force-stop`
+- Header：Bearer、`x-tenant-id`、签名 tenant route、`Idempotency-Key`
+- Body：`{ "expectedVersion": positive_integer }`
+- Scope：`screen_share:stop`
+
+路由不接收 tenant、actor、role、participant 或 generation 等可伪造授权字段。认证层从 active membership 解析
+owner/admin/meeting_host 的 scope；PostgreSQL runtime 在同一 tenant unit of work 内锁 tenant/meeting 与目标 share，
+再通过 actor user ID 重读当前 meeting participant，并要求其已 joined 且未 left。没有 scope 在进入 runtime 前记录
+denied audit 并返回403；没有活动参会关系返回 `screen_share_forbidden`。目标 share 仍使用复合 tenant/meeting/id
+查询，跨租户或跨会议 ID 不能被命令命中。
+
+强停复用 `0024` append-only command ledger 的 stop 状态迁移，而不扩展数据库枚举：ledger 记录真实的状态命令、actor、
+expected version、请求 hash 和结果 generation；请求 hash 的 command 固定为 `force_stop`，因此与共享者自己的 stop
+不能共享幂等语义。成功在同一事务把 active/paused share 改为 ended，清空 lease/track SID，递增 version 与 generation，
+写 `meeting.screen_share.force_stop` append-only audit、`meeting.screen_share.force_stopped` 状态 outbox 和旧 generation
+的 `meeting.screen_share.revoke.requested` outbox。旧客户端随后 renew/resume 会因状态/version/generation 不匹配被拒绝，
+不能把 ended 恢复为 active。
+
+API 在事务提交后立即按被撤销 generation 的 `ent-share:<shareId>:g<generation>` 调用 LiveKit removeParticipant。
+404 视为已完成；未配置、超时或 Provider 错误返回 `revocation=pending`，但数据库 ended/generation fence 不回滚，
+持久 outbox 继续重试。Web/Flutter 使用原 `Idempotency-Key` 最多有界重试三次；每次 repository replay 只返回原结果并
+再次尝试 Provider 撤销，不追加重复 command/audit/outbox。客户端在 pending 时保持停止中，禁止新 acquire 假成功。
+
+Web/Flutter 从已认证 workspace scope 决定是否发现入口，同时只对他人的 active/paused share 展示操作；这只是 UX
+守卫，服务端 scope 和 active participant 才是权限真值。两端确认框显示目标 participant ID、generation 和撤销影响，
+沿用 `stop_screen_share` Material 图标和高关注色。当前未运行角色×API×资源、跨租户、同键重放、CAS 竞争、旧 renew、
+真实 LiveKit 500ms 撤销、Provider pending/outbox 或浏览器/真机矩阵，因此 `ENT-MTG-010` 保持 `in_progress`，
+不代表 AC-SHARE-004、A1 或企业生产门禁通过。
 
 ## 20. 错误、重试和客户端动作
 

@@ -302,7 +302,11 @@ budget、usage aggregate 和显式 session trace report。卡片沿用同一 Mat
   他人占用或撤销 pending 时禁用开始并显示原因。等待态统一提示在系统授权界面确认，不在共享前显示成功。
 - iOS 当前通过系统广播选择器确认；Android 先显示通知权限和 MediaProjection 系统授权，授权后常驻低优先级前台通知。
   通知沿用 `screen_share` / `stop_screen_share` Material 图标，标题说明正在共享手机屏幕，正文明确“不包含系统音频”，
-  停止操作始终可见。两端当前只交付开始/停止；暂停/恢复、系统音频和主持人强停在对应后续任务完成前不显示入口。
+  停止操作始终可见。两端当前交付开始/停止和有权主持人的远端强停；暂停/恢复和系统音频在对应后续任务完成前
+  不显示移动端入口。
+- Web/Flutter 仅在服务端 context 含 `screen_share:stop`、用户已加入当前会议且当前 active/paused share 属于他人时
+  显示珊瑚色“强制停止共享”。确认框必须展示目标 participant、generation 和“撤销旧发布权限”的影响；确认后
+  disabled 防重复提交。服务端返回 revocation pending 时继续显示“停止中”，不恢复按钮、不显示成功 toast。
 - Web 未占用共享时，在画质选择旁显示“共享系统音频”复选框和能力说明；用户勾选不等于成功，只有浏览器真实返回
   独立音轨且服务端 entitlement/grant 一致后，状态摘要才显示“含系统音频”。浏览器不支持时显示可行动错误，不回退为
   静默无声的成功状态。
@@ -354,4 +358,4 @@ budget、usage aggregate 和显式 session trace report。卡片沿用同一 Mat
 
 设计评审原型应包含工作台、外呼活动、客服坐席台、企业会议、知识、审计和成员设置，并使用同一导航、颜色、圆角和 Material Icons。原型数据必须标注“设计示例”。
 
-`ENT-CORE-003` 负责真实 Web 壳、登录会话、路由和生产构建，`ENT-UI-001` 负责生产令牌与 Material Icons 注册表，两项现已进入 `ready_for_acceptance`。`ENT-UI-002` 已实现 active membership 切换、共享 scope 真值、九角色导航和直接/嵌套路由 guard；`ENT-UI-003` 已实现 loading、empty、not_ready、degraded、forbidden、conflict、processing、failed 八态注册表、ARIA 语义、trace ID 与行动入口。`ENT-UI-009` 已形成响应式、主题、动态字号和键盘语义代码候选；`ENT-UI-010` 已定义三浏览器引擎、角色×路由、五档宽度、双主题、键盘、axe、视觉和 bundle/遥测门禁；`ENT-UI-011` 已形成重新校验企业上下文、scope-aware 五入口和失败闭合的 Flutter 代码候选；`ENT-UI-012` 已形成 AuthProvider 隔离、fragment 凭据清理、设备检查和明确 not_ready 的 Web 访客壳。后四项及 MTG-001..004 因未运行完整 migration、浏览器/Flutter test、token/CAS 攻击、设备权限、动态字体、键盘、axe、视觉回归、真实 Provider 或真机矩阵，仍保持 `in_progress`。本文、未执行的自动化定义、静态原型和静态检查本身仍不能作为生产验收证据。
+`ENT-CORE-003` 负责真实 Web 壳、登录会话、路由和生产构建，`ENT-UI-001` 负责生产令牌与 Material Icons 注册表，两项现已进入 `ready_for_acceptance`。`ENT-UI-002` 已实现 active membership 切换、共享 scope 真值、九角色导航和直接/嵌套路由 guard；`ENT-UI-003` 已实现 loading、empty、not_ready、degraded、forbidden、conflict、processing、failed 八态注册表、ARIA 语义、trace ID 与行动入口。`ENT-UI-009` 已形成响应式、主题、动态字号和键盘语义代码候选；`ENT-UI-010` 已定义三浏览器引擎、角色×路由、五档宽度、双主题、键盘、axe、视觉和 bundle/遥测门禁；`ENT-UI-011` 已形成重新校验企业上下文、scope-aware 五入口和失败闭合的 Flutter 代码候选；`ENT-UI-012` 已形成 AuthProvider 隔离、fragment 凭据清理、设备检查和明确 not_ready 的 Web 访客壳。后四项及 MTG-001..010 因未运行完整 migration、浏览器/Flutter test、token/CAS 攻击、设备权限、动态字体、键盘、axe、视觉回归、真实 Provider 或真机矩阵，仍保持 `in_progress`。本文、未执行的自动化定义、静态原型和静态检查本身仍不能作为生产验收证据。

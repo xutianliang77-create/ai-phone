@@ -54,6 +54,7 @@ export function MeetingsPage() {
     meetingId: string;
     participantId: string;
     canShare: boolean;
+    canForceStop: boolean;
   } | null>(null);
   const [captionLanguage, setCaptionLanguage] = useState<"zh" | "en">("zh");
   const [translatedAudioEnabled, setTranslatedAudioEnabled] = useState(false);
@@ -126,6 +127,7 @@ export function MeetingsPage() {
         participantId: grant.participantId,
         canShare: grant.participantRole === "host" ||
           meeting.meeting.policy.screenShareRole === "members",
+        canForceStop: ready?.context.scopes.includes("screen_share:stop") ?? false,
       });
       setNotice(grant.translation.status === "not_ready"
         ? `已进入音频会议；字幕未就绪（${grant.translation.reasonCode}）。`
@@ -203,7 +205,8 @@ export function MeetingsPage() {
         <MeetingMediaWorkspace captions={translationPanel} screen={
           <MeetingScreenSharePanel api={api} context={requestContext}
             meetingId={joined.meetingId} participantId={joined.participantId}
-            canShare={joined.canShare} room={room} roomClient={roomClient.current} />
+            canShare={joined.canShare} canForceStop={joined.canForceStop}
+            room={room} roomClient={roomClient.current} />
         } /> : translationPanel}
       <MeetingList load={load} busy={busy} canJoin={canJoin} canWrite={canWrite}
         activeMeetingId={joined?.meetingId ?? null} refresh={refresh}

@@ -44,6 +44,7 @@ class _EnterpriseMeetingsPageState extends State<EnterpriseMeetingsPage> {
       const EnterpriseMeetingScreenShareSnapshot.idle();
   String? _activeParticipantId;
   bool _canShareScreen = false;
+  bool _canForceStopScreen = false;
 
   @override
   void initState() {
@@ -116,9 +117,11 @@ class _EnterpriseMeetingsPageState extends State<EnterpriseMeetingsPage> {
           snapshot: _screenShare,
           participantId: _activeParticipantId!,
           canShare: _canShareScreen,
+          canForceStop: _canForceStopScreen,
           supported: _screenShareController!.isSupported,
           onStart: _screenShareController!.start,
           onStop: _screenShareController!.stop,
+          onForceStop: _screenShareController!.forceStop,
         ),
       if (_loading)
         const EnterpriseMobileStatusPanel(
@@ -258,6 +261,7 @@ class _EnterpriseMeetingsPageState extends State<EnterpriseMeetingsPage> {
           _activeMeetingId = meetingId;
           _activeParticipantId = grant.participantId;
           _canShareScreen = canShare;
+          _canForceStopScreen = workspace.context.can('screen_share:stop');
           _screenShare = const EnterpriseMeetingScreenShareSnapshot.idle();
         });
       }
@@ -282,6 +286,7 @@ class _EnterpriseMeetingsPageState extends State<EnterpriseMeetingsPage> {
         _activeMeetingId = null;
         _activeParticipantId = null;
         _canShareScreen = false;
+        _canForceStopScreen = false;
         _screenShare = const EnterpriseMeetingScreenShareSnapshot.idle();
       });
     }

@@ -5,6 +5,7 @@ class EnterpriseMobileScreenShare {
     required this.participantId,
     required this.communicationSessionId,
     required this.sourceType,
+    required this.includesSystemAudio,
     required this.qualityMode,
     required this.status,
     required this.generation,
@@ -24,6 +25,7 @@ class EnterpriseMobileScreenShare {
   final String participantId;
   final String communicationSessionId;
   final String sourceType;
+  final bool includesSystemAudio;
   final String qualityMode;
   final String status;
   final int generation;
@@ -46,6 +48,7 @@ class EnterpriseMobileScreenShare {
     final participantId = _text(json, 'participantId');
     final communicationSessionId = _text(json, 'communicationSessionId');
     final sourceType = _text(json, 'sourceType');
+    final includesSystemAudio = json['includesSystemAudio'];
     final qualityMode = _text(json, 'qualityMode');
     final status = _text(json, 'status');
     final generation = json['generation'];
@@ -60,7 +63,7 @@ class EnterpriseMobileScreenShare {
         !_uuid(participantId) ||
         !_uuid(communicationSessionId) ||
         !const <String>{'screen', 'window', 'tab'}.contains(sourceType) ||
-        json['includesSystemAudio'] != false ||
+        includesSystemAudio is! bool ||
         !const <String>{'auto', 'smooth', 'high'}.contains(qualityMode) ||
         !const <String>{'active', 'paused', 'ended', 'expired'}
             .contains(status) ||
@@ -80,6 +83,7 @@ class EnterpriseMobileScreenShare {
       participantId: participantId,
       communicationSessionId: communicationSessionId,
       sourceType: sourceType,
+      includesSystemAudio: includesSystemAudio,
       qualityMode: qualityMode,
       status: status,
       generation: generation,

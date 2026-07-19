@@ -104,4 +104,26 @@ extension EnterpriseMeetingScreenShareApi on EnterpriseMobileApiClient {
       grantRequired: command == 'renew',
     );
   }
+
+  Future<EnterpriseMobileScreenShareResponse> forceStopScreenShare(
+    EnterpriseMobileWorkspace workspace,
+    String meetingId,
+    EnterpriseMobileScreenShare share, {
+    required String idempotencyKey,
+  }) async {
+    final json = await contentRequest(
+      workspace,
+      '/enterprise/v1/meetings/${Uri.encodeComponent(meetingId)}'
+          '/screen-shares/${Uri.encodeComponent(share.id)}/force-stop',
+      method: 'POST',
+      idempotencyKey: idempotencyKey,
+      body: <String, Object?>{'expectedVersion': share.version},
+    );
+    return EnterpriseMobileScreenShareResponse.fromJson(
+      json,
+      meetingId: meetingId,
+      expectedRtcUrl: workspace.route.rtcUrl,
+      grantRequired: false,
+    );
+  }
 }

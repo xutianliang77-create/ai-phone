@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
+import type { EnterpriseScope } from "@translation/contracts";
 import { sendError } from "../../infrastructure/http/errors.js";
 import {
   enterpriseRequestTraceId,
@@ -115,6 +116,7 @@ export function registerEnterpriseMeetingScreenShareRoutes(
   for (const command of ["pause", "resume", "renew", "stop"] as const) {
     registerCommand(app, routeService, runtime, provider, command);
   }
+  registerForceStop(app, routeService, runtime, provider);
 }
 
 function registerCommand(
@@ -175,15 +177,62 @@ function registerCommand(
   );
 }
 
+function registerForceStop(
+  app: FastifyInstance,
+  routeService: TenantRouteService,
+  runtime: EnterpriseRepositoryRuntime,
+  provider: EnterpriseMeetingScreenShareProvider,
+) {
+  app.post<{ Params: { meetingId: string; shareId: string } }>(
+    "/enterprise/v1/meetings/:meetingId/screen-shares/:shareId/force-stop",
+    async (request, reply) => {
+      const access = await screenShareAccess(
+        request, reply, routeService, runtime,
+        "meeting.screen_share.force_stop", "screen_share:stop", "screen_share",
+      );
+      if (!access) return;
+      const meetingId = routeUuid(request.params.meetingId);
+      const shareId = routeUuid(request.params.shareId);
+      const body = parseScreenShareCommand(request.body, "force_stop");
+      const idempotencyKey = requestIdempotencyKey(request);
+      if (!meetingId || !shareId || !body) return invalid(reply);
+      if (!idempotencyKey) return idempotencyRequired(reply);
+      if (!runtime.forceStopMeetingScreenShare) return postgresRequired(reply);
+      const result = await runtime.forceStopMeetingScreenShare({
+        context: tenantContext(access, request), meetingId, shareId,
+        expectedVersion: body.expectedVersion, idempotencyKey,
+        requestHash: screenShareRequestHash({
+          actorUserId: access.account.id, meetingId, shareId,
+          command: "force_stop", body,
+        }),
+        now: new Date(),
+      });
+      const revocation = await revoke(
+        provider, access.route.rtcUrl, result.revoked ?? [],
+      );
+      if (result.status !== "updated" && result.status !== "replayed") {
+        return rejected(reply, result.status);
+      }
+      return reply.send({
+        share: dto(result.share),
+        ...(result.status === "replayed" ? { replayed: true } : {}),
+        revocation,
+      });
+    },
+  );
+}
+
 async function screenShareAccess(
   request: FastifyRequest,
   reply: FastifyReply,
   routeService: TenantRouteService,
   runtime: EnterpriseRepositoryRuntime,
   action: string,
+  scope: EnterpriseScope = "meeting:read",
+  resourceType = "meeting",
 ) {
   const access = await requireEnterpriseScope(
-    request, reply, runtime, "meeting:read", { action, resourceType: "meeting" },
+    request, reply, runtime, scope, { action, resourceType },
   );
   if (!access || !requireTenantRouteDocument(
     request, reply, routeService, access.tenant,

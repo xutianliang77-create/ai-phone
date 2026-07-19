@@ -20,7 +20,7 @@ type ContentApi = Pick<EnterpriseApi,
   | "listMeetings" | "createMeeting" | "createMeetingGuestInvitation"
   | "joinMeeting" | "joinMeetingAsGuest" | "getMeeting"
   | "currentMeetingScreenShare" | "acquireMeetingScreenShare"
-  | "commandMeetingScreenShare"
+  | "commandMeetingScreenShare" | "forceStopMeetingScreenShare"
 >;
 
 export function fakeEnterpriseContentApi(): ContentApi {
@@ -66,5 +66,6 @@ export function fakeEnterpriseContentApi(): ContentApi {
     currentMeetingScreenShare: vi.fn().mockResolvedValue({ share: null, revocation: "not_required" }),
     acquireMeetingScreenShare: vi.fn(),
     commandMeetingScreenShare: vi.fn(),
+    forceStopMeetingScreenShare: vi.fn(),
   };
 }

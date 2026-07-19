@@ -332,8 +332,14 @@ LLM 只能提出结构化工具请求；Policy Engine 校验租户、客户、�
 
 共享者可暂停、恢复和停止；暂停保留本地 capture 但断开旧发布身份，恢复使用新 generation grant 重新发布，停止或
 浏览器原生“停止共享”先结束本地 track，再提交幂等 stop。服务端返回撤销 pending 时界面保持“正在停止/暂停”，
-不显示已完成。访客发布、自适应 simulcast、主持人强停和 OCR
-仍分别属于后续任务；未执行真实浏览器/LiveKit 测试前不可宣称 screen/window/tab 可用或通过企业生产门禁。
+不显示已完成。访客发布和 OCR 仍分别属于后续任务；未执行真实浏览器/LiveKit 测试前不可宣称
+screen/window/tab 可用或通过企业生产门禁。
+
+当前 `ENT-MTG-010` 代码候选增加独立主持人强停入口。只有持有 `screen_share:stop` scope 且仍是该 meeting
+活动参会者的 owner/admin/会议主持人可以请求；服务端不信任隐藏按钮或客户端传入角色。强停复用既有 CAS stop
+状态迁移，把 share 置为 ended、递增 version/generation、清空 track SID 与租约，并以独立 `force_stop` 请求 hash、
+审计动作和 `force_stopped` outbox 区分普通共享者停止。LiveKit 即时撤销失败时返回 pending 并由原撤销 outbox
+最终收敛；客户端保持“停止中”，使用同一幂等键有界重试，不把 Provider 未完成显示为成功。
 
 当前 `ENT-MTG-008` Web 入口提供“共享系统音频”选择，但以浏览器实际返回的 audio track 为唯一事实：请求音频后
 没有得到音轨时，在 acquire 前停止全部采集并提示选择支持音频的标签页或关闭选项，不把无音频共享登记为成功。

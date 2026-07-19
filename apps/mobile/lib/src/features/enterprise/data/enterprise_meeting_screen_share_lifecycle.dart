@@ -1,9 +1,56 @@
 part of 'enterprise_meeting_screen_share_controller.dart';
 
-extension _EnterpriseMeetingScreenShareLifecycle
+extension EnterpriseMeetingScreenShareLifecycle
     on EnterpriseMeetingScreenShareController {
+  Future<void> forceStop() async {
+    if (_disposed || _busy) return;
+    final share = _snapshot.share;
+    if (share == null ||
+        share.participantId == participantId ||
+        !const <String>{'active', 'paused'}.contains(share.status)) {
+      return;
+    }
+    _epoch += 1;
+    _busy = true;
+    _emit(
+      operation: EnterpriseMeetingScreenShareOperation.stopping,
+      errorCode: null,
+    );
+    final key = _uuid();
+    try {
+      final response = await api.forceStopScreenShare(
+        workspace,
+        meetingId,
+        share,
+        idempotencyKey: key,
+      );
+      _emit(
+        operation: response.revocation == 'pending'
+            ? EnterpriseMeetingScreenShareOperation.stopping
+            : EnterpriseMeetingScreenShareOperation.idle,
+        share: response.share,
+        revocation: response.revocation,
+      );
+      if (response.revocation == 'pending') {
+        unawaited(_retryForceStop(share, key));
+      }
+    } catch (error) {
+      _emit(
+        operation: EnterpriseMeetingScreenShareOperation.failed,
+        errorCode: _errorCode(error),
+      );
+    } finally {
+      _busy = false;
+    }
+  }
+
   Future<void> _refresh() async {
-    if (_busy || _disposed) return;
+    if (_busy ||
+        _disposed ||
+        _snapshot.revocation == 'pending' &&
+            _snapshot.operation == EnterpriseMeetingScreenShareOperation.stopping) {
+      return;
+    }
     final epoch = _epoch;
     try {
       final current = await api.currentScreenShare(workspace, meetingId);
@@ -84,6 +131,32 @@ extension _EnterpriseMeetingScreenShareLifecycle
           meetingId,
           share,
           'stop',
+          idempotencyKey: key,
+        );
+        _emit(
+          operation: response.revocation == 'pending'
+              ? EnterpriseMeetingScreenShareOperation.stopping
+              : EnterpriseMeetingScreenShareOperation.idle,
+          share: response.share,
+          revocation: response.revocation,
+        );
+        if (response.revocation != 'pending') return;
+      } catch (_) {}
+    }
+    _emit(errorCode: 'screen_share_revocation_pending');
+  }
+
+  Future<void> _retryForceStop(
+    EnterpriseMobileScreenShare share,
+    String key,
+  ) async {
+    for (var attempt = 0; attempt < 3 && !_disposed; attempt += 1) {
+      await Future<void>.delayed(const Duration(milliseconds: 1500));
+      try {
+        final response = await api.forceStopScreenShare(
+          workspace,
+          meetingId,
+          share,
           idempotencyKey: key,
         );
         _emit(

@@ -18,7 +18,7 @@ export function parseScreenShareAcquire(value: unknown) {
 
 export function parseScreenShareCommand(
   value: unknown,
-  command: "pause" | "resume" | "renew" | "stop",
+  command: "pause" | "resume" | "renew" | "stop" | "force_stop",
 ) {
   const body = object(value);
   const allowed = command === "renew" ? ["expectedVersion", "trackSid"]
@@ -39,7 +39,7 @@ export function screenShareRequestHash(input: {
   actorUserId: string;
   meetingId: string;
   shareId?: string;
-  command: "acquire" | "pause" | "resume" | "renew" | "stop";
+  command: "acquire" | "pause" | "resume" | "renew" | "stop" | "force_stop";
   body: unknown;
 }) {
   return createHash("sha256").update(JSON.stringify(input)).digest("hex");

@@ -62,4 +62,20 @@ export interface EnterpriseMeetingScreenShareRuntime {
         revoked: EnterpriseMeetingScreenShareRevocation[] }
     | EnterpriseMeetingScreenShareFailure
   >;
+  forceStopMeetingScreenShare?(input: {
+    context: EnterpriseTenantContext;
+    meetingId: string;
+    shareId: string;
+    expectedVersion: number;
+    idempotencyKey: string;
+    requestHash: string;
+    now: Date;
+  }): Promise<
+    | { status: "updated" | "replayed"; share: EnterpriseMeetingScreenShareRecord;
+        revoked: EnterpriseMeetingScreenShareRevocation[] }
+    | { status: "expired" | "conflict" | "invalid_transition";
+        share: EnterpriseMeetingScreenShareRecord;
+        revoked: EnterpriseMeetingScreenShareRevocation[] }
+    | EnterpriseMeetingScreenShareFailure
+  >;
 }

@@ -65,6 +65,13 @@ export interface EnterpriseMeetingApi {
     input: { expectedVersion: number; trackSid?: string },
     idempotencyKey: string,
   ): Promise<EnterpriseMeetingScreenShareResponse>;
+  forceStopMeetingScreenShare(
+    context: EnterpriseContentRequestContext,
+    meetingId: string,
+    shareId: string,
+    input: { expectedVersion: number },
+    idempotencyKey: string,
+  ): Promise<EnterpriseMeetingScreenShareResponse>;
 }
 
 export function createEnterpriseMeetingApi(
@@ -133,6 +140,15 @@ export function createEnterpriseMeetingApi(
       }, body: JSON.stringify(input) },
     ), meetingId, context.routeDocument.rtcUrl,
     command === "resume" || command === "renew"),
+    forceStopMeetingScreenShare: async (
+      context, meetingId, shareId, input, key,
+    ) => validateScreenShareResponse(await request<unknown>(
+      `/enterprise/v1/meetings/${encodeURIComponent(meetingId)}` +
+        `/screen-shares/${encodeURIComponent(shareId)}/force-stop`,
+      { method: "POST", headers: {
+        ...contentHeaders(context), "idempotency-key": key,
+      }, body: JSON.stringify(input) },
+    ), meetingId, context.routeDocument.rtcUrl, false),
   };
 }
 

@@ -31,6 +31,7 @@ export function MeetingScreenSharePanel(props: {
   meetingId: string;
   participantId: string;
   canShare: boolean;
+  canForceStop: boolean;
   room: EnterpriseMeetingRoomSnapshot;
   roomClient: EnterpriseMeetingRoomClient;
 }) {
@@ -133,6 +134,17 @@ export function MeetingScreenSharePanel(props: {
         onClick={() => void controller.current?.stop()}>
         <MaterialIcon name={enterpriseIcons.action.stopShare} />停止共享
       </button> : null}
+      {!ownShare && occupied && props.canForceStop ? <button
+        className="button button--danger" type="button"
+        disabled={!["active", "paused"].includes(state.operation)}
+        onClick={() => {
+          if (window.confirm(`强制停止参会者 ${share.participantId} 的第 ` +
+            `${share.generation} 代共享？旧发布权限将立即撤销。`)) {
+            void controller.current?.forceStop();
+          }
+        }}>
+        <MaterialIcon name={enterpriseIcons.action.stopShare} />强制停止共享
+      </button> : null}
     </div>
     {!props.canShare && !occupied ? <p className="meeting-screen-share__hint">
       当前会议策略仅允许主持人共享屏幕。
@@ -231,7 +243,7 @@ function errorLabel(code: string) {
     screen_share_capture_ended: "浏览器已结束屏幕采集，服务端租约正在收敛。",
     screen_share_busy: "已有参会者正在共享；正在读取当前共享状态。",
     screen_share_conflict: "共享状态已变化；正在重新读取服务端状态。",
-    screen_share_forbidden: "当前参会身份或会议策略不允许共享屏幕。",
+    screen_share_forbidden: "当前参会身份无权执行该共享操作。",
     screen_share_not_ready: "屏幕共享服务尚未就绪，未发布本地画面。",
     screen_share_provider_not_ready: "LiveKit 屏幕发布能力未就绪，未伪造共享成功。",
     enterprise_postgres_required: "企业 PostgreSQL 运行时未就绪，屏幕共享保持关闭。",

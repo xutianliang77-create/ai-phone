@@ -381,6 +381,15 @@ generation 音轨。真实 LiveKit 房间中必须证明共享者本机没有捕
 1.0/1.5/2.0动态字体，三种模式均不得遮挡共享停止、麦克风、离会或字幕。当前未运行上述浏览器/真机/真实媒体测试，
 因此 AC-SHARE-006/007/009 和 A1 均未通过。
 
+`ENT-MTG-010` 当前形成独立 force-stop API、`screen_share:stop` 服务端 guard、活动参会者复核、stop CAS/generation
+fence、force-stop 审计/状态 outbox、LiveKit 即时撤销与持久撤销 outbox，以及 Web/Flutter scope 受控确认操作代码候选。
+恢复验收时必须执行 owner/admin/meeting_host/member/auditor/guest × 自己/他人 share × 同租户/跨租户/跨 meeting
+矩阵；验证缺 scope、已离会、伪造 participant/tenant、错误 expected version、相同 key/hash 重放、同 key 不同 hash、
+普通 stop 与 force-stop 竞争、旧 renew/resume 迟到均失败闭合。真实 LiveKit 中需记录 API commit 到旧 publisher 消失
+的 P95，证明目标500ms、Provider 404/超时/失败的 completed/pending 语义、outbox 恢复，以及旧 generation track 永不
+重新渲染。还需覆盖 Web/Flutter 确认、重复点击、pending、离线和动态权限回收。本轮按要求未运行这些测试，
+因此 AC-SHARE-004 和 A1 均未通过，`ENT-MTG-010` 保持 `in_progress`。
+
 ### 7.4 屏幕 OCR 翻译
 
 - PPT、网页、表格和深色页面识别。

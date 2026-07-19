@@ -1,15 +1,13 @@
-import { randomUUID } from "node:crypto";
-import { createEnterpriseAuditEvent } from
-  "../../modules/enterprise/enterprise-audit.repository.js";
-import type { EnterpriseOutboxEventRecord } from
-  "../../modules/enterprise/enterprise-event-record.js";
 import type { EnterpriseMeetingScreenShareRuntime } from
   "../../modules/enterprise/enterprise-meeting-screen-share-runtime.js";
 import {
   canEnterpriseParticipantShare,
-  type EnterpriseMeetingScreenShareRecord,
-  type EnterpriseMeetingScreenShareRevocation,
 } from "../../modules/enterprise/enterprise-meeting-screen-share.js";
+import {
+  recordScreenShareMeetingStarted as recordMeetingStarted,
+  recordScreenShareRevocations as recordRevocations,
+  recordScreenShareState as recordState,
+} from "./enterprise-postgres-meeting-screen-share-events.js";
 import type { EnterpriseTenantPostgresPool } from
   "./enterprise-postgres-tenant-session.js";
 import {
@@ -19,7 +17,7 @@ import {
 
 type Runtime = Pick<EnterpriseMeetingScreenShareRuntime,
   "currentMeetingScreenShare" | "acquireMeetingScreenShare" |
-  "commandMeetingScreenShare">;
+  "commandMeetingScreenShare" | "forceStopMeetingScreenShare">;
 
 export function createEnterprisePostgresMeetingScreenShareRuntime(
   pool: EnterpriseTenantPostgresPool,
@@ -188,6 +186,40 @@ export function createEnterprisePostgresMeetingScreenShareRuntime(
         return result;
       });
     },
+
+    forceStopMeetingScreenShare(input) {
+      return withEnterprisePostgresUnitOfWork(pool, input.context, async (unit) => {
+        const scope = await meetingScope(unit, input.meetingId, true);
+        if (!scope) return { status: "not_found" as const };
+        const share = await unit.meetingScreenShares.find(
+          input.meetingId, input.shareId, true,
+        );
+        if (!share) return { status: "not_found" as const };
+        const participant = await activeParticipant(
+          unit, input.meetingId, input.context.actorUserId,
+        );
+        if (!participant) return { status: "forbidden" as const };
+        const result = await unit.meetingScreenShares.mutate({
+          meetingId: input.meetingId,
+          shareId: input.shareId,
+          command: "stop",
+          expectedVersion: input.expectedVersion,
+          actorId: input.context.actorUserId,
+          idempotencyKey: input.idempotencyKey,
+          requestHash: input.requestHash,
+          now: input.now,
+          leaseSeconds: leaseSeconds(),
+          maxPauseSeconds: enterpriseMeetingScreenShareMaxPauseSeconds(),
+        });
+        await recordRevocations(unit, input.context, result.revoked, input.now);
+        if (result.status === "updated") {
+          await recordState(
+            unit, input.context, result.share, "force_stop", input.now,
+          );
+        }
+        return result;
+      });
+    },
   };
 }
 
@@ -241,91 +273,6 @@ async function screenShareEntitlement(
   }
   return { status: "allowed" as const,
     limit: feature.limit ?? Number.MAX_SAFE_INTEGER };
-}
-
-async function recordState(
-  unit: EnterprisePostgresUnitOfWork,
-  context: Parameters<typeof createEnterpriseAuditEvent>[0]["context"],
-  share: EnterpriseMeetingScreenShareRecord,
-  command: "acquire" | "pause" | "resume" | "renew" | "stop",
-  now: Date,
-) {
-  await unit.tenant.appendAuditEvent(createEnterpriseAuditEvent({
-    context,
-    action: `meeting.screen_share.${command}`,
-    resourceType: "screen_share",
-    resourceId: share.id,
-    result: "completed",
-    details: {
-      meetingId: share.meetingId,
-      participantId: share.participantId,
-      status: share.status,
-      generation: share.generation,
-      version: share.version,
-    },
-    createdAt: now.toISOString(),
-  }));
-  if (command === "renew") return;
-  await unit.events.insertOutbox(outbox({
-    context, shareId: share.id,
-    eventType: `meeting.screen_share.${command === "acquire" ? "started" :
-      command === "stop" ? "stopped" : `${command}d`}`,
-    idempotencyKey: `screen-share-state:${share.id}:v${share.version}`,
-    payload: { meetingId: share.meetingId, shareId: share.id,
-      participantId: share.participantId, generation: share.generation,
-      status: share.status },
-    now,
-  }));
-}
-
-async function recordRevocations(
-  unit: EnterprisePostgresUnitOfWork,
-  context: Parameters<typeof createEnterpriseAuditEvent>[0]["context"],
-  revocations: EnterpriseMeetingScreenShareRevocation[],
-  now: Date,
-) {
-  for (const item of revocations) {
-    await unit.events.insertOutbox(outbox({
-      context, shareId: item.shareId,
-      eventType: "meeting.screen_share.revoke.requested",
-      idempotencyKey: `screen-share-revoke:${item.shareId}:g${item.generation}`,
-      payload: item,
-      now,
-    }));
-  }
-}
-
-async function recordMeetingStarted(
-  unit: EnterprisePostgresUnitOfWork,
-  context: Parameters<typeof createEnterpriseAuditEvent>[0]["context"],
-  meetingId: string,
-  now: Date,
-) {
-  await unit.tenant.appendAuditEvent(createEnterpriseAuditEvent({
-    context, action: "meeting.start", resourceType: "meeting",
-    resourceId: meetingId, result: "completed", createdAt: now.toISOString(),
-  }));
-  await unit.events.insertOutbox(outbox({
-    context, shareId: meetingId, eventType: "meeting.started",
-    aggregateType: "meeting",
-    idempotencyKey: `meeting-started:${meetingId}`,
-    payload: { meetingId }, now,
-  }));
-}
-
-function outbox(input: {
-  context: Parameters<typeof createEnterpriseAuditEvent>[0]["context"];
-  shareId: string; eventType: string; idempotencyKey: string;
-  aggregateType?: "meeting" | "screen_share"; payload: unknown; now: Date;
-}): EnterpriseOutboxEventRecord {
-  const timestamp = input.now.toISOString();
-  return {
-    id: randomUUID(), tenantId: input.context.tenantId,
-    aggregateType: input.aggregateType ?? "screen_share", aggregateId: input.shareId,
-    eventType: input.eventType, idempotencyKey: input.idempotencyKey,
-    payload: input.payload, traceId: input.context.traceId,
-    attempts: 0, availableAt: timestamp, createdAt: timestamp,
-  };
 }
 
 function leaseSeconds() {
