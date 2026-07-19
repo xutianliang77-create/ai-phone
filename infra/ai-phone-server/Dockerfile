@@ -17,6 +17,8 @@ COPY services/voice-agent-runtime ./services/voice-agent-runtime
 COPY infra/postgres ./infra/postgres
 
 RUN npm ci && \
+    npm install --no-save --package-lock=false @ffmpeg-installer/linux-x64@4.1.0 && \
+    test -x node_modules/@ffmpeg-installer/linux-x64/ffmpeg && \
     npm run build -w @translation/contracts && \
     npm run build -w @translation/llm && \
     npm run build -w @translation/platform-security && \

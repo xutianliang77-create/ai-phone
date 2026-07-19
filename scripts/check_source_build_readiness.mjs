@@ -69,6 +69,14 @@ export function checkSourceBuildReadiness(
   if (!dockerfile.includes("npm ci")) {
     issues.push("Dockerfile must install the locked dependency graph with npm ci");
   }
+  if (
+    !dockerfile.includes("@ffmpeg-installer/linux-x64@4.1.0") ||
+    !dockerfile.includes(
+      "test -x node_modules/@ffmpeg-installer/linux-x64/ffmpeg",
+    )
+  ) {
+    issues.push("Dockerfile must install and verify the LiveKit Linux ffmpeg runtime");
+  }
 
   return {
     schemaVersion: 1,
