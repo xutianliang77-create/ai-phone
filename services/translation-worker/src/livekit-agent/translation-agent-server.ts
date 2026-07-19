@@ -7,6 +7,7 @@ import pino from "pino";
 import { loadEnv } from "../config/env.js";
 import { parseWorkerDispatchMetadata } from "./worker-dispatch-runtime-client.js";
 import { createTranslationAgentPermissions } from "./translation-agent-permissions.js";
+import { prewarmTranslationAgentLlm } from "./translation-agent-llm-prewarm.js";
 import { prewarmTranslationAgentTts } from "./translation-agent-tts-prewarm.js";
 
 const logger = pino({ name: "translation-livekit-agent-server" });
@@ -19,10 +20,13 @@ const agentName = process.env.LIVEKIT_TRANSLATION_AGENT_NAME?.trim() ||
   "translation-runtime";
 
 try {
-  const ttsPrewarm = await prewarmTranslationAgentTts(loadEnv());
+  const env = loadEnv();
+  const ttsPrewarm = await prewarmTranslationAgentTts(env);
   logger.info({ ttsPrewarm }, "Translation Agent TTS readiness established");
+  const llmPrewarm = await prewarmTranslationAgentLlm(env);
+  logger.info({ llmPrewarm }, "Translation Agent LLM readiness established");
 } catch (error) {
-  logger.error({ err: error }, "Translation Agent TTS prewarm failed");
+  logger.error({ err: error }, "Translation Agent dependency prewarm failed");
   throw error;
 }
 

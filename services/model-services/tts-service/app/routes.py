@@ -32,28 +32,21 @@ def create_router(
     @router.get("/health", response_model=HealthResponse)
     async def health() -> HealthResponse:
         available, reason = service.health()
-        model_sample_rate, output_sample_rate = service.sample_rates()
-        return HealthResponse(
-            status="ok" if available else "degraded",
-            service="tts-service",
-            provider=config.provider,
-            modelVersion=config.model_version,
-            available=available,
-            reason=reason,
-            modelSampleRate=model_sample_rate,
-            outputSampleRate=output_sample_rate,
-            voicePresetCatalogVersion=service.preset_catalog().version,
-            availableVoicePresetCount=len(service.preset_catalog().presets),
-            runtimeSignatureVersion=runtime_identity.signature_version,
-            runtimeFingerprint=runtime_identity.fingerprint,
-        )
+        return health_response(service, config, runtime_identity, available, reason)
+
+    @router.get("/ready", response_model=HealthResponse)
+    async def ready(response: Response) -> HealthResponse:
+        available, reason = service.readiness()
+        if not available:
+            response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+        return health_response(service, config, runtime_identity, available, reason)
 
     @router.get("/metrics")
     async def metrics(
         authorization: str | None = Header(default=None),
     ) -> Response:
         require_metrics_token(config.metrics_bearer_token, authorization)
-        available, _reason = service.health()
+        available, _reason = service.readiness()
         return Response(
             content=prometheus_model_metrics(runtime_identity, available),
             media_type="text/plain; version=0.0.4",
@@ -137,6 +130,30 @@ def create_router(
             raise HTTPException(status_code=503, detail=str(exc)) from exc
 
     return router
+
+
+def health_response(
+    service: TtsService,
+    config: TtsConfig,
+    runtime_identity: RuntimeIdentity,
+    available: bool,
+    reason: str | None,
+) -> HealthResponse:
+    model_sample_rate, output_sample_rate = service.sample_rates()
+    return HealthResponse(
+        status="ok" if available else "degraded",
+        service="tts-service",
+        provider=config.provider,
+        modelVersion=config.model_version,
+        available=available,
+        reason=reason,
+        modelSampleRate=model_sample_rate,
+        outputSampleRate=output_sample_rate,
+        voicePresetCatalogVersion=service.preset_catalog().version,
+        availableVoicePresetCount=len(service.preset_catalog().presets),
+        runtimeSignatureVersion=runtime_identity.signature_version,
+        runtimeFingerprint=runtime_identity.fingerprint,
+    )
 
 
 async def tts_ndjson_stream(first: dict, stream):

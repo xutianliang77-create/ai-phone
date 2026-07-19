@@ -149,10 +149,9 @@ describe("Call pipeline cancellation", () => {
     expect(await settlesWithin(ending)).toBe(true);
     expect(translation.requests[0].signal.aborted).toBe(true);
     expect(translationEvents(sink, "call_end")).toEqual([]);
-    expect(sink.eventsFor("call_end").at(-1)).toMatchObject({
-      type: "worker.status",
-      segmentId: "worker-ended",
-    });
+    expect(sink.eventsFor("call_end").some(
+      (event) => event.segmentId === "worker-ended",
+    )).toBe(false);
     translation.resolve(0, "晚到译文");
     await Promise.resolve();
     expect(translationEvents(sink, "call_end")).toEqual([]);
@@ -180,9 +179,9 @@ describe("Call pipeline cancellation", () => {
     expect(translationEvents(sink, "call_grace")).toMatchObject([{
       translatedText: "结束前译文",
     }]);
-    expect(sink.eventsFor("call_grace").at(-1)).toMatchObject({
-      segmentId: "worker-ended",
-    });
+    expect(sink.eventsFor("call_grace").some(
+      (event) => event.segmentId === "worker-ended",
+    )).toBe(false);
   });
 
   it("reports provider AbortError when the pipeline signal was not cancelled", async () => {

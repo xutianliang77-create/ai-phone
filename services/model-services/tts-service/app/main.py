@@ -1,3 +1,6 @@
+import asyncio
+import os
+
 from fastapi import FastAPI
 
 from app.config import TtsConfig, load_config
@@ -19,6 +22,11 @@ def create_app(config: TtsConfig | None = None) -> FastAPI:
         engine,
         voice_reference_dir=resolved_config.voice_reference_dir,
         voice_presets=voice_presets,
+        fatal_runtime_handler=(
+            schedule_failed_process_exit
+            if resolved_config.provider != "mock"
+            else None
+        ),
     )
     model_sample_rate, output_sample_rate = service.sample_rates()
     runtime_identity = build_runtime_identity(
@@ -35,6 +43,10 @@ def create_app(config: TtsConfig | None = None) -> FastAPI:
     app = FastAPI(title="Translation TTS Service", version="0.1.0")
     app.include_router(create_router(service, resolved_config, runtime_identity))
     return app
+
+
+def schedule_failed_process_exit() -> None:
+    asyncio.get_running_loop().call_later(0.25, os._exit, 70)
 
 
 app = create_app()

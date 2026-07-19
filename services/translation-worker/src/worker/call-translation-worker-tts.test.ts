@@ -75,12 +75,10 @@ describe("CallTranslationWorker TTS", () => {
     expect(eventsAfterEnd.map((event) => event.type)).toEqual([
       "transcript.final",
       "translation.final",
-      "worker.status",
     ]);
     expect(sink.eventsFor("call_1").map((event) => event.type)).toEqual([
       "transcript.final",
       "translation.final",
-      "worker.status",
     ]);
   });
 
@@ -197,7 +195,6 @@ describe("CallTranslationWorker TTS", () => {
       "playback.queued",
       "playback.started",
       "playback.ended",
-      "worker.status",
     ]);
   });
 
@@ -226,7 +223,6 @@ describe("CallTranslationWorker TTS", () => {
       "playback.queued",
       "playback.started",
       "playback.failed",
-      "worker.status",
       "worker.status",
     ]);
     expect(sink.eventsFor("call_1").find(

@@ -229,12 +229,6 @@ export class CallTranslationWorker implements CallSpeechPipeline {
           ),
         ]);
       }
-      await this.eventSink.publish(callId, [
-        statusEvent("worker-ended", "通话翻译 Worker 已结束", this.nowMs(), {
-          stage: "worker",
-          retryable: false,
-        }),
-      ]);
     } finally {
       this.turnBuffer.clear(callId);
       this.recentTtsEchoes.clear(callId);

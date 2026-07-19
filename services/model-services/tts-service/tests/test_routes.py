@@ -29,6 +29,21 @@ def test_health_route_mock() -> None:
     }
 
 
+def test_ready_requires_one_successful_inference() -> None:
+    client = TestClient(create_app(TtsConfig()))
+
+    before = client.get("/ready")
+    warmed = client.post("/tts/warmup", json=payload())
+    after = client.get("/ready")
+
+    assert before.status_code == 503
+    assert before.json()["available"] is False
+    assert "inference readiness" in before.json()["reason"]
+    assert warmed.status_code == 200
+    assert after.status_code == 200
+    assert after.json()["available"] is True
+
+
 def test_metrics_exposes_runtime_identity_without_secrets() -> None:
     client = TestClient(create_app(TtsConfig(
         api_key="tts-secret",

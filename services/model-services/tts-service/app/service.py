@@ -1,6 +1,7 @@
 import base64
 import binascii
 import asyncio
+from collections.abc import Callable
 import time
 from pathlib import Path
 import re
@@ -26,15 +27,30 @@ class TtsService:
         engine: TtsEngine,
         voice_reference_dir: str = "",
         voice_presets: VoicePresetCatalog | None = None,
+        fatal_runtime_handler: Callable[[], None] | None = None,
     ) -> None:
         self.engine = engine
         self.voice_reference_dir = Path(voice_reference_dir) if voice_reference_dir else None
         self.voice_presets = voice_presets or VoicePresetCatalog()
         self._warmup_lock = asyncio.Lock()
         self._warmup_result: dict[str, object] | None = None
+        self._fatal_runtime_handler = fatal_runtime_handler or (lambda: None)
+        self._fatal_runtime_handler_called = False
+        self._runtime_failure_reason: str | None = None
+        self._inference_ready = False
 
     def health(self) -> tuple[bool, str | None]:
+        if self._runtime_failure_reason:
+            return False, self._runtime_failure_reason
         return self.engine.health()
+
+    def readiness(self) -> tuple[bool, str | None]:
+        available, reason = self.health()
+        if not available:
+            return False, reason
+        if not self._inference_ready:
+            return False, "tts inference readiness has not been established"
+        return True, None
 
     def sample_rates(self) -> tuple[int | None, int]:
         return self.engine.sample_rates()
@@ -43,30 +59,44 @@ class TtsService:
         self,
         request: TtsSynthesizeRequest,
     ) -> TtsSynthesizeResponse:
-        return await self.engine.synthesize(self.voice_presets.resolve_request(request))
+        self._require_available()
+        try:
+            speech = await self.engine.synthesize(self.voice_presets.resolve_request(request))
+        except Exception as exc:
+            self._handle_runtime_error(exc)
+            raise
+        self._inference_ready = True
+        return speech
 
     async def synthesize_stream(self, request: TtsSynthesizeRequest):
+        self._require_available()
         resolved = self.voice_presets.resolve_request(request)
         stream = getattr(self.engine, "synthesize_stream", None)
-        if callable(stream):
-            async for event in stream(resolved):
-                yield event
-            return
-        speech = await self.engine.synthesize(resolved)
-        body = speech.model_dump(exclude={"audio"}, exclude_none=True)
-        yield {"type": "metadata", **body}
-        pcm = base64.b64decode(speech.audio.data)
-        bytes_per_chunk = max(2, int(speech.audio.sampleRate * 2 * 0.1))
-        for offset in range(0, len(pcm), bytes_per_chunk):
-            chunk = pcm[offset:offset + bytes_per_chunk]
-            yield {
-                "type": "audio_chunk",
-                "format": "pcm16",
-                "sampleRate": speech.audio.sampleRate,
-                "sequence": offset // bytes_per_chunk + 1,
-                "data": base64.b64encode(chunk).decode("ascii"),
-            }
-        yield {"type": "final", "audioDurationMs": speech.audioDurationMs}
+        try:
+            if callable(stream):
+                async for event in stream(resolved):
+                    if event.get("type") == "audio_chunk" and event.get("data"):
+                        self._inference_ready = True
+                    yield event
+                return
+            speech = await self.synthesize(request)
+            body = speech.model_dump(exclude={"audio"}, exclude_none=True)
+            yield {"type": "metadata", **body}
+            pcm = base64.b64decode(speech.audio.data)
+            bytes_per_chunk = max(2, int(speech.audio.sampleRate * 2 * 0.1))
+            for offset in range(0, len(pcm), bytes_per_chunk):
+                chunk = pcm[offset:offset + bytes_per_chunk]
+                yield {
+                    "type": "audio_chunk",
+                    "format": "pcm16",
+                    "sampleRate": speech.audio.sampleRate,
+                    "sequence": offset // bytes_per_chunk + 1,
+                    "data": base64.b64encode(chunk).decode("ascii"),
+                }
+            yield {"type": "final", "audioDurationMs": speech.audioDurationMs}
+        except Exception as exc:
+            self._handle_runtime_error(exc)
+            raise
 
     async def warmup(self, request: TtsSynthesizeRequest) -> dict[str, object]:
         if self._warmup_result is not None:
@@ -85,6 +115,22 @@ class TtsService:
                 "model": speech.model,
             }
             return self._warmup_result
+
+    def _require_available(self) -> None:
+        available, reason = self.health()
+        if not available:
+            raise TtsUnavailableError(reason or "TTS runtime is unavailable")
+
+    def _handle_runtime_error(self, error: Exception) -> None:
+        if isinstance(error, TtsUnavailableError) or not is_fatal_runtime_error(error):
+            return
+        self._runtime_failure_reason = fatal_runtime_reason(error)
+        self._inference_ready = False
+        self._warmup_result = None
+        if self._fatal_runtime_handler_called:
+            return
+        self._fatal_runtime_handler_called = True
+        self._fatal_runtime_handler()
 
     def preset_catalog(self) -> VoicePresetCatalogResponse:
         return self.voice_presets.response()
@@ -118,3 +164,31 @@ class TtsService:
 
 def is_wav(audio: bytes) -> bool:
     return len(audio) > 12 and audio[:4] == b"RIFF" and audio[8:12] == b"WAVE"
+
+
+def is_fatal_runtime_error(error: BaseException) -> bool:
+    current: BaseException | None = error
+    messages: list[str] = []
+    for _ in range(4):
+        if current is None:
+            break
+        messages.append(f"{type(current).__name__}: {current}".lower())
+        current = current.__cause__ or current.__context__
+    combined = " ".join(messages)
+    return any(marker in combined for marker in (
+        "device-side assert",
+        "acceleratorerror",
+        "cuda error",
+        "cuda out of memory",
+        "cublas",
+        "cudnn",
+    ))
+
+
+def fatal_runtime_reason(error: BaseException) -> str:
+    message = f"{type(error).__name__}: {error}".lower()
+    if "device-side assert" in message:
+        return "tts CUDA device-side assert; process restart required"
+    if "out of memory" in message:
+        return "tts CUDA out of memory; process restart required"
+    return "tts CUDA runtime failed; process restart required"

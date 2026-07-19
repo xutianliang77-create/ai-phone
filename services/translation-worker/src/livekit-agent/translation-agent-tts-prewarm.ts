@@ -6,6 +6,8 @@ type TtsPrewarmEnv = Pick<
   | "ttsHttpEndpoint"
   | "ttsHttpApiKey"
   | "ttsAgentPrewarmTimeoutMs"
+  | "ttsWarmupEndpoint"
+  | "ttsWarmupMaxMs"
   | "ttsProvider"
   | "ttsModel"
   | "ttsVoice"
@@ -15,12 +17,13 @@ export type TranslationAgentTtsPrewarmResult =
   | { status: "skipped"; reason: "tts_unconfigured" }
   | {
     status: "ready";
+    cached: boolean;
     elapsedMs: number;
     firstAudioMs?: number;
     provider?: string;
     model?: string;
-    audioBytes: number;
-    sampleRate: 16000 | 24000;
+    audioBytes?: number;
+    sampleRate?: 16000 | 24000;
   };
 
 export async function prewarmTranslationAgentTts(
@@ -39,8 +42,25 @@ export async function prewarmTranslationAgentTts(
     provider: env.ttsProvider,
     model: env.ttsModel,
     voice: env.ttsVoice,
+    warmupEndpoint: env.ttsWarmupEndpoint,
+    warmupMaxMs: env.ttsWarmupMaxMs,
     fetchFn: options.fetchFn,
   });
+  if (env.ttsWarmupEndpoint) {
+    const warmup = await provider.warmup({
+      callId: "agent-node-prewarm",
+      signal: new AbortController().signal,
+      voice: env.ttsVoice,
+    });
+    return {
+      status: "ready",
+      cached: warmup.cached,
+      elapsedMs: Date.now() - startedAt,
+      firstAudioMs: warmup.firstAudioMs,
+      provider: warmup.provider,
+      model: warmup.model,
+    };
+  }
   const speech = await provider.synthesize({
     callId: "agent-node-prewarm",
     text: "准备就绪",
@@ -59,6 +79,7 @@ export async function prewarmTranslationAgentTts(
 
   return {
     status: "ready",
+    cached: false,
     elapsedMs: Date.now() - startedAt,
     firstAudioMs: speech.firstAudioMs,
     provider: speech.provider,

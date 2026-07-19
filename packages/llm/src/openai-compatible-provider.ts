@@ -36,10 +36,13 @@ export class OpenAiCompatibleLlmProvider implements LlmProvider {
     if (issues.length > 0) {
       return { provider: this.name, status: "configuration_required", issues };
     }
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), this.config.correctionTimeoutMs);
     try {
       const response = await this.fetchFn(`${this.baseUrl()}/models`, {
         method: "GET",
         headers: this.headers(),
+        signal: controller.signal,
       });
       return {
         provider: this.name,
@@ -54,6 +57,8 @@ export class OpenAiCompatibleLlmProvider implements LlmProvider {
         issues: [error instanceof Error ? error.message : "llm health failed"],
         model: this.config.correctionModel,
       };
+    } finally {
+      clearTimeout(timer);
     }
   }
 
