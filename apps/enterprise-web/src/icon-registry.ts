@@ -87,6 +87,14 @@ export const enterpriseIcons = {
     export: "download",
     analytics: "query_stats",
   },
+  quality: {
+    dashboard: "fact_check",
+    rules: "rule",
+    analyze: "manage_search",
+    evidence: "find_in_page",
+    answer: "record_voice_over",
+    tools: "construction",
+  },
   appearance: {
     system: "brightness_auto",
     light: "light_mode",

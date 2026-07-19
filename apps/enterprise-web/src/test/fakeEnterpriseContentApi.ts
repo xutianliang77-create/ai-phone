@@ -31,6 +31,9 @@ type ContentApi = Pick<EnterpriseApi,
   | "activateSupportWorkbench" | "getSupportWorkbench"
   | "renewSupportClaim" | "releaseSupportClaim" | "resolveSupportKnowledge"
   | "createSupportTicket" | "scheduleSupportCallback"
+  | "listSupportQualityRuleVersions" | "publishSupportQualityRuleVersion"
+  | "getSupportQualityDashboard" | "analyzeSupportQualitySession"
+  | "getSupportQualitySession"
 >;
 
 export function fakeEnterpriseContentApi(): ContentApi {
@@ -102,5 +105,16 @@ export function fakeEnterpriseContentApi(): ContentApi {
     createSupportTicket: vi.fn(),
     scheduleSupportCallback: vi.fn(),
     resolveSupportKnowledge: vi.fn(),
+    listSupportQualityRuleVersions: vi.fn().mockResolvedValue({ ruleVersions: [] }),
+    publishSupportQualityRuleVersion: vi.fn(),
+    getSupportQualityDashboard: vi.fn().mockResolvedValue({ dashboard: {
+      reviewCount: 0, findingCount: 0, criticalCount: 0, highCount: 0,
+      mediumCount: 0, disclosureMissingSessionCount: 0,
+      unsupportedAnswerCount: 0, semanticIncorrectAnswerRate: null,
+      semanticStatus: "not_configured",
+      semanticReasonCode: "support_quality_semantic_model_not_configured",
+    }, sessions: [] }),
+    analyzeSupportQualitySession: vi.fn(),
+    getSupportQualitySession: vi.fn(),
   };
 }

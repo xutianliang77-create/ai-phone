@@ -17,11 +17,11 @@ export const memberRolePresentation: Record<
   admin: { label: "企业管理员", description: "管理企业配置、成员、业务与审计。" },
   marketing_manager: { label: "营销主管", description: "管理外呼活动、内容发布与审批。" },
   marketing_member: { label: "营销成员", description: "执行外呼活动，不能审批或发布知识。" },
-  support_manager: { label: "客服主管", description: "管理客服队列、接管会话与发布知识。" },
+  support_manager: { label: "客服主管", description: "管理客服队列、接管会话、质检与发布知识。" },
   support_agent: { label: "客服坐席", description: "读取并接管授权的客服会话。" },
   meeting_host: { label: "会议主持人", description: "创建会议并停止屏幕共享。" },
   member: { label: "企业成员", description: "读取企业上下文并参与会议。" },
-  auditor: { label: "审计员", description: "只读查看业务、账务、用量与审计记录。" },
+  auditor: { label: "审计员", description: "只读查看业务、质检、账务、用量与审计记录。" },
 };
 
 export const memberStatusPresentation: Record<
@@ -46,6 +46,8 @@ export const scopeLabels: Record<EnterpriseScope, string> = {
   "support:read": "读取客服",
   "support:manage": "管理客服",
   "support:takeover": "接管会话",
+  "quality:read": "读取质检",
+  "quality:manage": "管理质检",
   "meeting:read": "读取会议",
   "meeting:write": "管理会议",
   "screen_share:stop": "停止共享",

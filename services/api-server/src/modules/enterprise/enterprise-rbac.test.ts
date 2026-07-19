@@ -34,6 +34,8 @@ const expectedScopes: Record<EnterpriseMemberRole, readonly EnterpriseScope[]> =
     "support:read",
     "support:manage",
     "support:takeover",
+    "quality:read",
+    "quality:manage",
   ],
   support_agent: [
     "tenant:read",
@@ -54,6 +56,7 @@ const expectedScopes: Record<EnterpriseMemberRole, readonly EnterpriseScope[]> =
     "knowledge:read",
     "campaign:read",
     "support:read",
+    "quality:read",
     "meeting:read",
     "billing:read",
     "usage:read",

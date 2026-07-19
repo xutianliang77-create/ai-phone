@@ -18,6 +18,8 @@ import { createEnterprisePostgresSupportWorkbenchRuntime } from
   "./enterprise-postgres-support-workbench-runtime.js";
 import { createEnterprisePostgresSupportFollowupRuntime } from
   "./enterprise-postgres-support-followup-runtime.js";
+import { createEnterprisePostgresSupportQualityRuntime } from
+  "./enterprise-postgres-support-quality-runtime.js";
 import { createEnterpriseSupportWriteCommandService } from
   "../../modules/enterprise/enterprise-support-write-command.js";
 import { unavailableEnterpriseSupportWriteAdapter } from
@@ -36,6 +38,7 @@ export function createEnterprisePostgresBusinessRuntimes(
     ...createEnterprisePostgresSupportAgentQueueRuntime(pool),
     ...createEnterprisePostgresSupportWorkbenchRuntime(pool, supportWriteCommand),
     ...createEnterprisePostgresSupportFollowupRuntime(pool, supportWriteCommand),
+    ...createEnterprisePostgresSupportQualityRuntime(pool),
     ...createEnterprisePostgresSupportAgentRuntime(pool),
     ...createEnterprisePostgresSupportToolRuntime(pool),
     ...createEnterprisePostgresSupportReadToolRuntime(pool),

@@ -84,6 +84,8 @@ import { EnterpriseSupportWorkbenchPostgresRepository } from
   "./enterprise-postgres-support-workbench.repository.js";
 import { EnterpriseSupportFollowupPostgresRepository } from
   "./enterprise-postgres-support-followup.repository.js";
+import { EnterpriseSupportQualityPostgresRepository } from
+  "./enterprise-postgres-support-quality.repository.js";
 
 export interface EnterprisePostgresUnitOfWork {
   tenant: EnterpriseTenantPostgresRepository;
@@ -116,6 +118,7 @@ export interface EnterprisePostgresUnitOfWork {
   supportAgentQueue: EnterpriseSupportAgentQueuePostgresRepository;
   supportWorkbench: EnterpriseSupportWorkbenchPostgresRepository;
   supportFollowups: EnterpriseSupportFollowupPostgresRepository;
+  supportQuality: EnterpriseSupportQualityPostgresRepository;
 }
 
 export function withEnterprisePostgresUnitOfWork<T>(
@@ -162,6 +165,7 @@ export function withEnterprisePostgresUnitOfWork<T>(
       supportAgentQueue: new EnterpriseSupportAgentQueuePostgresRepository(session),
       supportWorkbench: new EnterpriseSupportWorkbenchPostgresRepository(session),
       supportFollowups: new EnterpriseSupportFollowupPostgresRepository(session),
+      supportQuality: new EnterpriseSupportQualityPostgresRepository(session),
     }),
   );
 }

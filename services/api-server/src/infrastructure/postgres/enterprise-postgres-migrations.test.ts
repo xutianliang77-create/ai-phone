@@ -46,6 +46,7 @@ describe("enterprise PostgreSQL migrations", () => {
       "0033_enterprise_support_high_risk_handoffs",
       "0034_enterprise_support_agent_queue",
       "0035_enterprise_support_followups",
+      "0036_enterprise_support_quality",
     ]);
     for (const migration of migrations) {
       expect(migration.up.trim()).not.toBe("");
@@ -174,6 +175,14 @@ describe("enterprise PostgreSQL migrations", () => {
       "FOREIGN KEY (tenant_id, agent_claim_id, session_id)",
     );
     expect(sql).toContain("guard_support_followup_command_insert");
+    expect(sql).toContain("CREATE TABLE enterprise.support_quality_rule_versions");
+    expect(sql).toContain("CREATE TABLE enterprise.support_quality_reviews");
+    expect(sql).toContain("CREATE TABLE enterprise.support_quality_findings");
+    expect(sql).toContain("support_agent_turns_quality_binding_key");
+    expect(sql).toContain("guard_support_quality_rule_insert");
+    expect(sql).toContain("guard_support_quality_review_insert");
+    expect(sql).toContain("guard_support_quality_evidence_counts");
+    expect(sql).toContain("enterprise support quality evidence is immutable");
     expect(sql).toContain("tool_executions_read_recovery_idx");
     expect(sql).toContain("provider_simulated boolean");
     expect(sql).toContain("tool_executions_read_shape_check");

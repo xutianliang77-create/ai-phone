@@ -11,6 +11,8 @@ import { requireTenantRouteDocument } from "./enterprise-tenant-route.routes.js"
 import type { TenantRouteService } from "./enterprise-tenant-route.js";
 import { registerEnterpriseSupportFollowupRoutes } from
   "./enterprise-support-followup.routes.js";
+import { registerEnterpriseSupportQualityRoutes } from
+  "./enterprise-support-quality.routes.js";
 
 export function registerEnterpriseSupportWorkbenchRoutes(
   app: FastifyInstance,
@@ -18,6 +20,7 @@ export function registerEnterpriseSupportWorkbenchRoutes(
   runtime: EnterpriseRepositoryRuntime,
 ) {
   registerEnterpriseSupportFollowupRoutes(app, routeService, runtime);
+  registerEnterpriseSupportQualityRoutes(app, routeService, runtime);
   app.post<{ Params: { sessionId: string } }>(
     "/enterprise/v1/support/sessions/:sessionId/workbench",
     async (request, reply) => {

@@ -13,6 +13,8 @@ import type {
 } from "./enterprise-support.js";
 import type { EnterpriseSupportWritePublishReceipt } from
   "./enterprise-support-write-tool.js";
+import type { EnterpriseSupportQualityRepositoryRuntime } from
+  "./enterprise-support-quality-runtime.js";
 import type {
   EnterpriseSupportAgentClaimRecord,
   EnterpriseSupportQueueWorkItem,
@@ -28,7 +30,8 @@ import type {
 
 type StorageRequired = { status: "storage_required" };
 
-export interface EnterpriseSupportRepositoryRuntime {
+export interface EnterpriseSupportRepositoryRuntime
+  extends EnterpriseSupportQualityRepositoryRuntime {
   createSupportFollowup?(input: {
     context: EnterpriseTenantContext; sessionId: string;
     expectedSessionVersion: number; expectedClaimVersion: number;

@@ -57,7 +57,7 @@ export const enterpriseNavigation: readonly EnterpriseNavigationItem[] = [
     label: "数据分析",
     description: "质量、成本与业务分析",
     icon: "analytics",
-    anyScope: ["campaign:read", "support:read", "meeting:read"],
+    anyScope: ["quality:read", "campaign:read", "meeting:read"],
   },
   {
     path: "/audit",

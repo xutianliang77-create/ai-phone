@@ -64,7 +64,7 @@ const expectedRoutes: Record<EnterpriseMemberRole, readonly string[]> = {
   marketing_manager: ["/", "/campaigns", "/contacts", "/knowledge", "/analytics", "/settings"],
   marketing_member: ["/", "/campaigns", "/contacts", "/knowledge", "/analytics", "/settings"],
   support_manager: ["/", "/support", "/contacts", "/knowledge", "/analytics", "/settings"],
-  support_agent: ["/", "/support", "/contacts", "/knowledge", "/analytics", "/settings"],
+  support_agent: ["/", "/support", "/contacts", "/knowledge", "/settings"],
   meeting_host: ["/", "/meetings", "/analytics", "/settings"],
   member: ["/", "/meetings", "/analytics", "/settings"],
   auditor: ["/", "/campaigns", "/support", "/meetings", "/contacts", "/knowledge", "/analytics", "/audit", "/settings"],
