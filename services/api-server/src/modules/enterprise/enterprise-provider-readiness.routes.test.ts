@@ -27,12 +27,13 @@ describe("enterprise provider readiness", () => {
     await app.close();
 
     expect(response.statusCode).toBe(200);
-    expect(response.json().capabilities).toHaveLength(4);
+    expect(response.json().capabilities).toHaveLength(5);
     expect(response.json().capabilities).toEqual(expect.arrayContaining([
       expect.objectContaining({ capability: "pstn.outbound", status: "not_configured" }),
       expect.objectContaining({ capability: "crm.sync", status: "not_configured" }),
       expect.objectContaining({ capability: "calendar.meetings", status: "not_configured" }),
       expect.objectContaining({ capability: "channel.messaging", status: "not_configured" }),
+      expect.objectContaining({ capability: "screen.ocr", status: "not_configured" }),
     ]));
     expect(fetcher).not.toHaveBeenCalled();
   });

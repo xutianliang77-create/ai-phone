@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../../data/enterprise_meeting_models.dart';
 import '../../data/enterprise_meeting_room_client.dart';
+import '../../data/enterprise_meeting_screen_ocr_models.dart';
 import '../../data/enterprise_meeting_screen_share_controller.dart';
 import '../../data/enterprise_mobile_api_client.dart';
 import '../../data/enterprise_mobile_models.dart';
@@ -11,8 +12,11 @@ import '../widgets/enterprise_meeting_room_card.dart';
 import '../widgets/enterprise_meeting_media_workspace.dart';
 import '../widgets/enterprise_meeting_material_card.dart';
 import '../widgets/enterprise_meeting_screen_share_card.dart';
+import '../widgets/enterprise_meeting_screen_ocr_card.dart';
 import '../widgets/enterprise_mobile_status_panel.dart';
 import '../widgets/enterprise_meeting_translation_card.dart';
+
+part 'enterprise_meetings_page_helpers.dart';
 
 class EnterpriseMeetingsPage extends StatefulWidget {
   const EnterpriseMeetingsPage({
@@ -46,6 +50,7 @@ class _EnterpriseMeetingsPageState extends State<EnterpriseMeetingsPage> {
   String? _activeParticipantId;
   bool _canShareScreen = false;
   bool _canForceStopScreen = false;
+  EnterpriseMobileScreenOcrView? _screenOcr;
 
   @override
   void initState() {
@@ -66,6 +71,7 @@ class _EnterpriseMeetingsPageState extends State<EnterpriseMeetingsPage> {
       unawaited(_roomClient.disconnect());
       _activeMeetingId = null;
       _activeParticipantId = null;
+      _screenOcr = null;
       unawaited(_load());
     }
   }
@@ -97,6 +103,14 @@ class _EnterpriseMeetingsPageState extends State<EnterpriseMeetingsPage> {
       onTranslatedAudio: (value) =>
           setState(() => _translatedAudioEnabled = value),
     );
+    final ocrRun = _screenOcr?.run;
+    final eventLayout = _room.screenOcrLayout;
+    final ocrEnabled = _screenOcr?.subscription?.enabled == true;
+    final ocrLayout = ocrEnabled
+        ? eventLayout?.runId == ocrRun?.id
+            ? eventLayout
+            : _screenOcr?.layout
+        : null;
     return _PageBody(children: <Widget>[
       if (_room.status == EnterpriseMeetingRoomStatus.disconnected)
         translationCard
@@ -104,6 +118,9 @@ class _EnterpriseMeetingsPageState extends State<EnterpriseMeetingsPage> {
         EnterpriseMeetingMediaWorkspace(
           screenTrack: _room.screenShareTrack,
           captions: translationCard,
+          screenOcrLayout: ocrLayout,
+          screenOcrDisplayMode:
+              _screenOcr?.subscription?.displayMode ?? 'original',
         ),
       if (_room.status != EnterpriseMeetingRoomStatus.disconnected)
         EnterpriseMeetingRoomCard(
@@ -123,6 +140,19 @@ class _EnterpriseMeetingsPageState extends State<EnterpriseMeetingsPage> {
           onStart: _screenShareController!.start,
           onStop: _screenShareController!.stop,
           onForceStop: _screenShareController!.forceStop,
+        ),
+      if (_activeMeetingId != null && _activeParticipantId != null)
+        EnterpriseMeetingScreenOcrCard(
+          client: widget.client,
+          workspace: widget.workspace,
+          meetingId: _activeMeetingId!,
+          share: _screenShare.share?.status == 'active'
+              ? _screenShare.share
+              : null,
+          defaultLanguage: _captionLanguage,
+          onView: (view) {
+            if (mounted) setState(() => _screenOcr = view);
+          },
         ),
       if (_loading)
         const EnterpriseMobileStatusPanel(
@@ -148,68 +178,6 @@ class _EnterpriseMeetingsPageState extends State<EnterpriseMeetingsPage> {
       else
         ..._meetings.map(_meetingCard),
     ]);
-  }
-
-  Widget _meetingCard(EnterpriseMobileMeetingAggregate aggregate) {
-    final meeting = aggregate.meeting;
-    final joinable = const <String>{'scheduled', 'provisioning', 'active'}
-        .contains(meeting.status);
-    final role = widget.workspace.context.member.role;
-    final canJoin = role != 'auditor' && joinable;
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(18),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            Row(children: <Widget>[
-              Icon(
-                Icons.groups_outlined,
-                color: Theme.of(context).colorScheme.primary,
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  meeting.title,
-                  style: Theme.of(context).textTheme.titleMedium,
-                ),
-              ),
-              Text(_statusLabel(meeting.status)),
-            ]),
-            const SizedBox(height: 12),
-            Text('${aggregate.participantCount} 位参会者 · '
-                '${aggregate.communicationStatus ?? 'not_ready'}'),
-            const SizedBox(height: 4),
-            Text(
-              _meetingTime(meeting),
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-            const SizedBox(height: 14),
-            FilledButton.icon(
-              onPressed: canJoin && !_joining && _activeMeetingId == null
-                  ? () => _join(meeting.id)
-                  : null,
-              icon: const Icon(Icons.login),
-              label: Text(
-                _activeMeetingId == meeting.id ? '已加入' : '加入会议',
-              ),
-            ),
-            EnterpriseMeetingMaterialCard(
-              client: widget.client,
-              workspace: widget.workspace,
-              aggregate: aggregate,
-              canWrite: widget.workspace.context.can('meeting:write') &&
-                  (widget.workspace.context.member.role == 'owner' ||
-                      widget.workspace.context.member.role == 'admin' ||
-                      widget.workspace.context.member.userId ==
-                          meeting.hostUserId),
-              connected: _activeMeetingId == meeting.id,
-              onMeetingChanged: _load,
-            ),
-          ],
-        ),
-      ),
-    );
   }
 
   Future<void> _load() async {
@@ -261,10 +229,22 @@ class _EnterpriseMeetingsPageState extends State<EnterpriseMeetingsPage> {
         participantId: grant.participantId,
         onSnapshot: (snapshot) {
           final share = snapshot.share;
-          _roomClient.setExpectedScreenSharePublisherIdentity(
-            share?.status == 'active' ? share!.publisherIdentity : null,
+          final previousShare = _screenShare.share;
+          final activeShare = share?.status == 'active' ? share : null;
+          _roomClient.setExpectedScreenShare(
+            publisherIdentity: activeShare?.publisherIdentity,
+            shareId: activeShare?.id,
+            shareGeneration: activeShare?.generation,
           );
-          if (mounted) setState(() => _screenShare = snapshot);
+          if (mounted) {
+            setState(() {
+              if (previousShare?.id != share?.id ||
+                  previousShare?.generation != share?.generation) {
+                _screenOcr = null;
+              }
+              _screenShare = snapshot;
+            });
+          }
         },
       );
       _screenShareController = controller;
@@ -289,7 +269,11 @@ class _EnterpriseMeetingsPageState extends State<EnterpriseMeetingsPage> {
   Future<void> _leave() async {
     final screenShare = _screenShareController;
     _screenShareController = null;
-    _roomClient.setExpectedScreenSharePublisherIdentity(null);
+    _roomClient.setExpectedScreenShare(
+      publisherIdentity: null,
+      shareId: null,
+      shareGeneration: null,
+    );
     if (screenShare != null) {
       await screenShare.stop();
       await screenShare.dispose();
@@ -302,48 +286,8 @@ class _EnterpriseMeetingsPageState extends State<EnterpriseMeetingsPage> {
         _canShareScreen = false;
         _canForceStopScreen = false;
         _screenShare = const EnterpriseMeetingScreenShareSnapshot.idle();
+        _screenOcr = null;
       });
     }
   }
-}
-
-class _PageBody extends StatelessWidget {
-  const _PageBody({required this.children});
-
-  final List<Widget> children;
-
-  @override
-  Widget build(BuildContext context) => ListView(
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
-        children: children,
-      );
-}
-
-String _errorLabel(Object error) {
-  if (error is EnterpriseMobileApiException) {
-    if (error.code == 'meeting_not_started') return '会议尚未开始。';
-    if (error.statusCode == 401 || error.statusCode == 403) {
-      return '当前身份无权入会。';
-    }
-    if (error.statusCode == 503) return '企业会议或 RTC Provider 尚未就绪。';
-  }
-  return '会议请求失败；未回退到个人 Call Link 或示例数据。';
-}
-
-String _statusLabel(String status) => switch (status) {
-      'scheduled' => '已预约',
-      'provisioning' => '准备中',
-      'active' => '进行中',
-      'ending' => '结束中',
-      'ended' => '已结束',
-      'cancelled' => '已取消',
-      'failed' => '失败',
-      _ => status,
-    };
-
-String _meetingTime(EnterpriseMobileMeeting meeting) {
-  final time = (meeting.scheduledAt ?? meeting.createdAt).toLocal();
-  String two(int value) => value.toString().padLeft(2, '0');
-  return '${time.year}-${two(time.month)}-${two(time.day)} '
-      '${two(time.hour)}:${two(time.minute)}';
 }

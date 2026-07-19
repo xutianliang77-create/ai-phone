@@ -32,6 +32,7 @@ export const providerCapabilityLabels = {
   "crm.sync": "CRM 同步",
   "calendar.meetings": "日历会议",
   "channel.messaging": "渠道消息",
+  "screen.ocr": "共享内容 OCR",
 } as const;
 
 export const providerStatusLabels = {

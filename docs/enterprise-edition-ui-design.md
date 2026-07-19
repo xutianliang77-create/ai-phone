@@ -1,6 +1,6 @@
 # 无界AI企业版 UI 详细设计
 
-版本：v1.15
+版本：v1.16
 日期：2026-07-19
 状态：设计基线；企业 Web 公共组件、首批设置/工作台、响应式/主题/无障碍和 Web/iOS/Android 成员屏幕共享代码候选已实现，正式验收仍在开发
 
@@ -126,6 +126,7 @@ Web 优先使用系统中文无衬线字体：`-apple-system`、`BlinkMacSystemF
 | 审批 | `verified_user_outlined` | 不与普通保存共用图标 |
 | 人工接管 | `pan_tool_alt_outlined` | 珊瑚色提示 |
 | 屏幕共享 | `screen_share_outlined` | 停止使用 `stop_screen_share_outlined` |
+| 共享内容翻译 | `translate` | 关闭使用 `visibility_off_outlined`，不另造 OCR 图标 |
 | 会议 | `groups_outlined` | 不使用通话 `call_outlined` 替代 |
 | 会后材料 | `article_outlined` | 逐字稿使用 `subject_outlined`，复核使用 `fact_check_outlined` |
 | 结论与待办 | `summarize_outlined` / `task_alt_outlined` | 发布使用 `publish_outlined`，证据必须保留文字锚点 |
@@ -237,6 +238,12 @@ budget、usage aggregate 和显式 session trace report。卡片沿用同一 Mat
 - 会中布局支持画面优先、字幕优先、并排和移动端浮动字幕。
 - 共享控制使用 `screen_share_outlined`；主持人强制停止显示共享者、generation 和影响说明。
 - OCR 未启用或失败时保留原共享画面，不显示空白翻译层。
+- “共享内容翻译”使用与现有会议卡片一致的 Material 3 卡片、`translate` 图标、状态 Chip、译文语言和
+  原图/译图/双语选择。默认未开启；启用、应用设置和关闭均显示明确 busy 状态，不使用 toast 冒充服务端结果。
+- `pending` 时说明只显示原共享；`not_configured/failed` 必须显示原因并明确“原共享画面和会议字幕继续可用”。
+  Web 与 Flutter 均按视频 contain 后的真实内容矩形叠加块，letterbox、横屏和缩放不把坐标直接映射到整个容器。
+- 双语块先原文后译文，译图只显示译文；原图模式不渲染 overlay。布局仅消费当前 participant/share generation/run 的
+  服务端响应，旧 revision、跨目标或 participant 发送的数据包静默拒绝。访客与无活动共享时不显示入口。
 - Web 访客页只显示品牌、邀请状态、设备检查、字幕和共享能力，不显示企业侧栏、tenant selector 或成员资料。
 - 访客邀请只接受 fragment，地址清除失败显示无效；没有 guest session 时字幕和共享入口禁用并显示“尚未就绪”。
 - 麦克风检查必须由用户点击，检查完成立即停止 track；Web 共享也必须由用户点击，浏览器返回实际共享来源后才申请

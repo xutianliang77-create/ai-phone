@@ -17,11 +17,16 @@ import {
   createEnterpriseMeetingMaterialApi,
   type EnterpriseMeetingMaterialApi,
 } from "./enterprise-meeting-material-api.js";
+import {
+  createEnterpriseMeetingScreenOcrApi,
+  type EnterpriseMeetingScreenOcrApi,
+} from "./enterprise-meeting-screen-ocr-api.js";
 
 type Requester = <T>(path: string, init?: RequestInit) => Promise<T>;
 type ContentHeaders = (context: EnterpriseContentRequestContext) => Record<string, string>;
 
-export interface EnterpriseMeetingApi extends EnterpriseMeetingMaterialApi {
+export interface EnterpriseMeetingApi extends EnterpriseMeetingMaterialApi,
+  EnterpriseMeetingScreenOcrApi {
   listMeetings(context: EnterpriseContentRequestContext):
     Promise<EnterpriseMeetingsResponse>;
   getMeeting(context: EnterpriseContentRequestContext, meetingId: string):
@@ -84,6 +89,7 @@ export function createEnterpriseMeetingApi(
 ): EnterpriseMeetingApi {
   return {
     ...createEnterpriseMeetingMaterialApi(request, contentHeaders),
+    ...createEnterpriseMeetingScreenOcrApi(request, contentHeaders),
     listMeetings: (context) => request(
       "/enterprise/v1/meetings",
       { headers: contentHeaders(context) },

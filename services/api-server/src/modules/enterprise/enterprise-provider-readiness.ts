@@ -49,6 +49,13 @@ const specs: ProviderSpec[] = [
     apiKey: "ENTERPRISE_CHANNEL_API_KEY",
     features: ["inbound", "outbound", "attachments"],
   },
+  {
+    capability: "screen.ocr",
+    providerKey: "ENTERPRISE_SCREEN_OCR_PROVIDER",
+    healthUrlKey: "ENTERPRISE_SCREEN_OCR_HEALTH_URL",
+    apiKey: "ENTERPRISE_SCREEN_OCR_API_KEY",
+    features: ["ocr", "translation", "layout"],
+  },
 ];
 
 export function createEnterpriseProviderReadinessService(options: {

@@ -24,6 +24,8 @@ type ContentApi = Pick<EnterpriseApi,
   | "currentMeetingMaterial" | "endMeeting" | "generateMeetingMaterial"
   | "publishMeetingMaterial" | "updateMeetingMaterialSpeaker"
   | "updateMeetingMaterialAction"
+  | "currentMeetingScreenOcr" | "enableMeetingScreenOcr"
+  | "disableMeetingScreenOcr"
 >;
 
 export function fakeEnterpriseContentApi(): ContentApi {
@@ -76,5 +78,10 @@ export function fakeEnterpriseContentApi(): ContentApi {
     publishMeetingMaterial: vi.fn(),
     updateMeetingMaterialSpeaker: vi.fn(),
     updateMeetingMaterialAction: vi.fn(),
+    currentMeetingScreenOcr: vi.fn().mockResolvedValue({
+      run: null, subscription: null, layout: null,
+    }),
+    enableMeetingScreenOcr: vi.fn(),
+    disableMeetingScreenOcr: vi.fn(),
   };
 }

@@ -56,7 +56,7 @@ ENTERPRISE_MIGRATION_DATABASE_URL='postgresql://...' \
 
 两种启用模式都在恢复任务、Fastify 构建和端口监听前失败闭合，并在校验后关闭连接。
 `verify` 不写 migration；`migrate_verify` 始终在 migration 后执行相同 schema verify。
-统一启动编排先验证公共31段 manifest 和签名 cutover evidence，再验证 enterprise 18段
+统一启动编排先验证公共31段 manifest 和签名 cutover evidence，再验证 enterprise 26段
 manifest，并核对两个 verdict 的 database name/OID；任一失败都关闭已创建资源且不监听。
 
 基础 migration `0004` 至 `0010` 中，`0004` 增加 tenant lifecycle 状态和 job，`0005` 增加
@@ -175,7 +175,7 @@ SQLSTATE `25006`、旧 writer 会话为0、target 可写和二次全量 hash 相
 
 生产启动只接受 `environment=staging` 的 `cutover/matched` 签名证据，并绑定当前
 commit、image digest、topology hash、目标 logical ID、数据库 system identifier/OID 和
-31+25 migration manifest。`c9b5be2` 的31+16本地证据会被门禁拒绝，必须重新生成；
+31+26 migration manifest。`c9b5be2` 的31+16本地证据会被门禁拒绝，必须重新生成；
 本地同机 `pg_dump/pg_restore` 只能证明逻辑恢复与对账机制；
 跨故障域自动切换、异地主机不可变 WAL/PITR 和 RPO/RTO 仍由 `ENT-REL-003`/H3 验收。
 
@@ -194,3 +194,13 @@ speaker label、结论/action item 和逐项 evidence。Repository 从按 target
 source segment 的 latest revision，去重一致副本后计算 source count/hash；同一幂等键只恢复原 run，不同 request hash
 冲突。Provider 复核在事务外执行，最终事务重新验证 run version、源 hash 和 evidence。未配置或失败时只保存冻结逐字稿，
 不伪造摘要、负责人或截止时间。当前未执行 migration/down、forced-RLS、真实 Provider 或 PostgreSQL 并发门禁。
+
+## Meeting screen OCR
+
+`ENT-MTG-012` 由 migration `0026` 增加 run、participant subscription、append-only command、frame claim 和
+append-only layout block。五张表均使用 tenant-first FK 和 forced RLS；订阅 FK 绑定 share generation/target language，
+frame 只允许一次 `processing -> ready|failed`，原始图像不进入 schema。Repository 在外部 Provider 前以 run 行锁完成
+感知 hash/Hamming distance 去重，并把每个实际 claim 记入 usage event/ledger。Worker 仅持短期 HMAC ticket，经内部 API
+复核当前 tenant/cell/route/share lease/track/run/subscriber 后显式订阅 LiveKit screen track；Provider 默认关闭且只接受
+HTTPS endpoint。布局定向发送给订阅 participant，并保留 API polling fallback。当前未执行 migration/down、forced-RLS、
+真实 Provider/LiveKit、并发或客户端验收。

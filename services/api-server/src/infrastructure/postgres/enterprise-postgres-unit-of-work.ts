@@ -64,6 +64,8 @@ import { EnterpriseMeetingScreenSharePostgresRepository } from
   "./enterprise-postgres-meeting-screen-share.repository.js";
 import { EnterpriseMeetingMaterialPostgresRepository } from
   "./enterprise-postgres-meeting-material.repository.js";
+import { EnterpriseMeetingScreenOcrPostgresRepository } from
+  "./enterprise-postgres-meeting-screen-ocr.repository.js";
 
 export interface EnterprisePostgresUnitOfWork {
   tenant: EnterpriseTenantPostgresRepository;
@@ -86,6 +88,7 @@ export interface EnterprisePostgresUnitOfWork {
   meetingTranslations: EnterpriseMeetingTranslationPostgresRepository;
   meetingScreenShares: EnterpriseMeetingScreenSharePostgresRepository;
   meetingMaterials: EnterpriseMeetingMaterialPostgresRepository;
+  meetingScreenOcr: EnterpriseMeetingScreenOcrPostgresRepository;
 }
 
 export function withEnterprisePostgresUnitOfWork<T>(
@@ -120,6 +123,7 @@ export function withEnterprisePostgresUnitOfWork<T>(
       meetingTranslations: new EnterpriseMeetingTranslationPostgresRepository(session),
       meetingScreenShares: new EnterpriseMeetingScreenSharePostgresRepository(session),
       meetingMaterials: new EnterpriseMeetingMaterialPostgresRepository(session),
+      meetingScreenOcr: new EnterpriseMeetingScreenOcrPostgresRepository(session),
     }),
   );
 }

@@ -67,6 +67,8 @@ import { registerEnterpriseMeetingScreenShareRoutes } from
   "./modules/enterprise/enterprise-meeting-screen-share.routes.js";
 import { registerEnterpriseMeetingMaterialRoutes } from
   "./modules/enterprise/enterprise-meeting-material.routes.js";
+import { registerEnterpriseMeetingScreenOcrRoutes } from
+  "./modules/enterprise/enterprise-meeting-screen-ocr.routes.js";
 import {
   createEnvironmentEnterpriseMeetingMaterialProvider,
   type EnterpriseMeetingMaterialProvider,
@@ -75,6 +77,10 @@ import {
   createEnvironmentEnterpriseMeetingScreenShareProvider,
   type EnterpriseMeetingScreenShareProvider,
 } from "./modules/enterprise/enterprise-meeting-screen-share-provider.js";
+import {
+  createEnvironmentEnterpriseMeetingScreenOcrDispatchService,
+  type EnterpriseMeetingScreenOcrDispatchService,
+} from "./modules/enterprise/enterprise-meeting-screen-ocr-dispatch.js";
 import {
   createEnvironmentEnterpriseMeetingInviteTokenService,
   type EnterpriseMeetingInviteTokenService,
@@ -116,6 +122,7 @@ export async function buildApp(dependencies: {
     EnterpriseMeetingTranslationDispatchService;
   enterpriseMeetingScreenShareProvider?: EnterpriseMeetingScreenShareProvider;
   enterpriseMeetingMaterialProvider?: EnterpriseMeetingMaterialProvider;
+  enterpriseMeetingScreenOcrDispatch?: EnterpriseMeetingScreenOcrDispatchService;
 } = {}) {
   const app = Fastify({
     logger: {
@@ -234,6 +241,13 @@ export async function buildApp(dependencies: {
     enterpriseRepositoryRuntime,
     dependencies.enterpriseMeetingMaterialProvider ??
       createEnvironmentEnterpriseMeetingMaterialProvider(),
+  );
+  registerEnterpriseMeetingScreenOcrRoutes(
+    app,
+    tenantRouteService,
+    enterpriseRepositoryRuntime,
+    dependencies.enterpriseMeetingScreenOcrDispatch ??
+      createEnvironmentEnterpriseMeetingScreenOcrDispatchService(),
   );
   await registerPlansRoutes(app);
   await registerRealtimeRoutes(app);

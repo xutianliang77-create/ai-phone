@@ -65,6 +65,7 @@ String _capabilityLabel(String capability) => switch (capability) {
       'crm.sync' => 'CRM 同步',
       'calendar.meetings' => '企业日历',
       'channel.messaging' => '消息渠道',
+      'screen.ocr' => '共享内容 OCR',
       _ => capability,
     };
 

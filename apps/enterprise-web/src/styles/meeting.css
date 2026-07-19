@@ -385,7 +385,7 @@
   object-fit: contain;
 }
 
-.meeting-screen-share__video span {
+.meeting-screen-share__video > span {
   position: absolute;
   left: 12px;
   bottom: 12px;
@@ -455,6 +455,81 @@
 
 .meeting-screen-share__error {
   color: var(--color-error, #ba1a1a);
+}
+
+.meeting-screen-ocr {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--color-outline-variant);
+  border-radius: var(--radius);
+  background: var(--color-surface-high);
+}
+
+.meeting-screen-ocr > header,
+.meeting-screen-ocr__controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.meeting-screen-ocr > header > .material-icons-outlined {
+  color: var(--color-primary);
+}
+
+.meeting-screen-ocr > header > div {
+  display: grid;
+  flex: 1;
+  min-width: 220px;
+}
+
+.meeting-screen-ocr > header small,
+.meeting-screen-ocr__notice {
+  color: var(--color-outline);
+}
+
+.meeting-screen-ocr__status {
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: var(--color-surface);
+  font-size: 0.75rem;
+}
+
+.meeting-screen-ocr__status.status--active {
+  color: var(--color-primary);
+  background: color-mix(in srgb, var(--color-primary) 12%, transparent);
+}
+
+.meeting-screen-ocr__controls label {
+  display: grid;
+  gap: 5px;
+  min-width: 150px;
+}
+
+.meeting-screen-ocr__overlay {
+  position: absolute;
+  pointer-events: none;
+}
+
+.meeting-screen-ocr__overlay span {
+  position: absolute;
+  display: grid;
+  align-content: center;
+  overflow: hidden;
+  padding: 3px 5px;
+  border-radius: 4px;
+  background: rgb(12 17 27 / 86%);
+  color: #fff;
+  font-size: clamp(0.64rem, 1.2vw, 0.9rem);
+  line-height: 1.25;
+}
+
+.meeting-screen-ocr__overlay small {
+  overflow: hidden;
+  color: rgb(255 255 255 / 72%);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .meeting-translation > header,

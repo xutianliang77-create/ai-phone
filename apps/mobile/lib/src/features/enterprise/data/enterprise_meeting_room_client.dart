@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:livekit_client/livekit_client.dart' as livekit;
 
 import 'enterprise_meeting_models.dart';
+import 'enterprise_meeting_screen_ocr_models.dart';
 
 enum EnterpriseMeetingRoomStatus {
   disconnected,
@@ -24,6 +25,7 @@ class EnterpriseMeetingRoomSnapshot {
     required this.translatedAudioAvailable,
     required this.captions,
     required this.screenShareTrack,
+    required this.screenOcrLayout,
   });
 
   const EnterpriseMeetingRoomSnapshot.disconnected()
@@ -36,7 +38,8 @@ class EnterpriseMeetingRoomSnapshot {
         translatedAudioEnabled = false,
         translatedAudioAvailable = false,
         captions = const <EnterpriseMobileMeetingCaption>[],
-        screenShareTrack = null;
+        screenShareTrack = null,
+        screenOcrLayout = null;
 
   final EnterpriseMeetingRoomStatus status;
   final bool microphoneEnabled;
@@ -48,6 +51,7 @@ class EnterpriseMeetingRoomSnapshot {
   final bool translatedAudioAvailable;
   final List<EnterpriseMobileMeetingCaption> captions;
   final livekit.RemoteVideoTrack? screenShareTrack;
+  final EnterpriseMobileScreenOcrLayout? screenOcrLayout;
 }
 
 class EnterpriseMeetingRoomClient {
@@ -59,6 +63,9 @@ class EnterpriseMeetingRoomClient {
   List<EnterpriseMobileMeetingCaption> _captions = const [];
   final Set<String> _seenEventIds = <String>{};
   String? _expectedScreenSharePublisherIdentity;
+  String? _expectedScreenShareId;
+  int? _expectedScreenShareGeneration;
+  EnterpriseMobileScreenOcrLayout? _screenOcrLayout;
   bool _disposed = false;
 
   Stream<EnterpriseMeetingRoomSnapshot> get snapshots => _snapshots.stream;
@@ -80,6 +87,7 @@ class EnterpriseMeetingRoomClient {
       translatedAudioAvailable: grant.translation.translatedAudioAvailable,
       captions: const [],
       screenShareTrack: null,
+      screenOcrLayout: null,
     ));
     final room = livekit.Room(
       roomOptions: const livekit.RoomOptions(
@@ -114,8 +122,17 @@ class EnterpriseMeetingRoomClient {
     _emit(_snapshot(room));
   }
 
-  void setExpectedScreenSharePublisherIdentity(String? identity) {
-    _expectedScreenSharePublisherIdentity = identity;
+  void setExpectedScreenShare({
+    required String? publisherIdentity,
+    required String? shareId,
+    required int? shareGeneration,
+  }) {
+    final changed = _expectedScreenShareId != shareId ||
+        _expectedScreenShareGeneration != shareGeneration;
+    _expectedScreenSharePublisherIdentity = publisherIdentity;
+    _expectedScreenShareId = shareId;
+    _expectedScreenShareGeneration = shareGeneration;
+    if (changed) _screenOcrLayout = null;
     final room = _room;
     if (room != null) _emit(_snapshot(room));
   }
@@ -152,7 +169,7 @@ class EnterpriseMeetingRoomClient {
       ..on<livekit.TrackUnsubscribedEvent>((_) => _emit(_snapshot(room)))
       ..on<livekit.DataReceivedEvent>((event) {
         if (event.participant != null) return;
-        _handleCaption(room, event.data, event.topic);
+        _handleData(room, event.data, event.topic);
       })
       ..on<livekit.RoomDisconnectedEvent>((_) {
         _emit(const EnterpriseMeetingRoomSnapshot.disconnected());
@@ -179,7 +196,16 @@ class EnterpriseMeetingRoomClient {
           _grant?.translation.translatedAudioAvailable ?? false,
       captions: List<EnterpriseMobileMeetingCaption>.unmodifiable(_captions),
       screenShareTrack: _screenShareTrack(room),
+      screenOcrLayout: _screenOcrLayout,
     );
+  }
+
+  void _handleData(livekit.Room room, List<int> data, String? topic) {
+    if (topic == 'wujie.enterprise.meeting.screen_ocr.v1') {
+      _handleScreenOcr(room, data);
+      return;
+    }
+    _handleCaption(room, data, topic);
   }
 
   void _handleCaption(livekit.Room room, List<int> data, String? topic) {
@@ -210,6 +236,50 @@ class EnterpriseMeetingRoomClient {
     }
   }
 
+  void _handleScreenOcr(livekit.Room room, List<int> data) {
+    final grant = _grant;
+    final shareId = _expectedScreenShareId;
+    final generation = _expectedScreenShareGeneration;
+    if (grant == null ||
+        shareId == null ||
+        generation == null ||
+        data.length > 12000) {
+      return;
+    }
+    try {
+      final decoded = jsonDecode(utf8.decode(data));
+      if (decoded is! Map<String, Object?> ||
+          decoded['v'] != 1 ||
+          decoded['type'] != 'screen_ocr.layout' ||
+          decoded['meetingId'] != grant.meetingId ||
+          decoded['targetParticipantId'] != grant.participantId ||
+          DateTime.tryParse(decoded['occurredAt'] as String? ?? '') == null ||
+          !_validRoomEventUuid(decoded['eventId']) ||
+          _seenEventIds.contains(decoded['eventId']) ||
+          decoded['layout'] is! Map<String, Object?>) {
+        return;
+      }
+      final layout = EnterpriseMobileScreenOcrLayout.fromJson(
+        decoded['layout']! as Map<String, Object?>,
+      );
+      if (layout.shareId != shareId || layout.shareGeneration != generation) {
+        return;
+      }
+      final current = _screenOcrLayout;
+      if (current != null &&
+          current.runId == layout.runId &&
+          current.frameRevision >= layout.frameRevision) {
+        return;
+      }
+      _seenEventIds.add(decoded['eventId']! as String);
+      if (_seenEventIds.length > 200) _seenEventIds.remove(_seenEventIds.first);
+      _screenOcrLayout = layout;
+      _emit(_snapshot(room));
+    } catch (_) {
+      // Malformed, stale, cross-target, or participant-sent packets are ignored.
+    }
+  }
+
   Future<void> _disposeRoom() async {
     final listener = _listener;
     final room = _room;
@@ -222,6 +292,9 @@ class EnterpriseMeetingRoomClient {
     }
     _grant = null;
     _expectedScreenSharePublisherIdentity = null;
+    _expectedScreenShareId = null;
+    _expectedScreenShareGeneration = null;
+    _screenOcrLayout = null;
     _captions = const [];
     _seenEventIds.clear();
   }
@@ -250,3 +323,10 @@ class EnterpriseMeetingRoomClient {
     return null;
   }
 }
+
+bool _validRoomEventUuid(Object? value) =>
+    value is String &&
+    RegExp(
+      r'^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$',
+      caseSensitive: false,
+    ).hasMatch(value);

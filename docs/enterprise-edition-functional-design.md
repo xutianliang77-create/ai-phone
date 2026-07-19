@@ -1,6 +1,6 @@
 # 无界AI企业版详细功能设计
 
-版本：v1.19
+版本：v1.20
 日期：2026-07-19
 状态：SaaS 详细设计基线，已对齐统一通讯平台
 
@@ -395,6 +395,14 @@ MediaStreamTrack 交给 video。SDK/浏览器不支持 screen simulcast 时保�
 - 无变化区域不重复 OCR 和翻译。
 - 默认不保存关键帧；保存或录制必须单独授权。
 - OCR 失败不得中断屏幕共享和会议字幕。
+
+`ENT-MTG-012` 当前代码候选把共享内容翻译做成每个参会者独立、默认关闭的订阅。开启时服务端复核 active
+participant、当前 share/generation/track、tenant route、entitlement 和短期 Worker ticket；Worker 只订阅该发布者的
+`screen_share` 视频轨，按1至2秒采样并在调用外部 Provider 前提交64位感知 hash。相同或近似帧不消耗 Provider，业务库
+只保存 run、订阅、frame hash/尺寸、归一化布局块和实际 Provider fingerprint，不保存图像字节。Web/Flutter 仅接受服务端
+定向、与当前 meeting/participant/share/generation/run 匹配的布局；data channel 不可用时以四秒 API 轮询读取已落库布局。
+Provider、调度或 RTC 未配置时显示 `not_configured/failed`，原共享画面和会议字幕继续。自动化、真实 PostgreSQL、
+OCR Provider、LiveKit、浏览器和真机验收尚未执行，因此任务保持 `in_progress`。
 
 ### 7.5 会后材料
 

@@ -1,6 +1,6 @@
 # 无界AI企业版设计文档索引
 
-版本：v1.31
+版本：v1.32
 日期：2026-07-19
 状态：SaaS 详细设计基线，已纳入统一通讯平台和 PostgreSQL Primary 演进
 
@@ -46,11 +46,11 @@ cell Worker、JSON/SQLite 演示导入，以及全业务表 Primary 切换/恢�
 无界AI主产品公共 PostgreSQL migration、Primary Runtime、可靠 Inbox/Outbox、
 fencing、Billing/Product Records、verify-full 和韧性代码已形成稳定提交 `fe1c3c2`，并由
 `ENT-DATA-007` 合入企业分支。企业版已经完成单 driver、双 manifest、同库身份和分权
-连接的本地自动化，当前 manifest 为公共31段、enterprise 25段；`ENT-DATA-008` 和
+连接的本地自动化，当前 manifest 为公共31段、enterprise 26段；`ENT-DATA-008` 和
 `ENT-CORE-013/014/015` 已完成公共通讯 tenant scope、企业业务会话绑定、签名 Worker dispatch fence
 及设备/声音/录制策略快照的代码/本地自动化，但不能继承主产品 staging 验收。`ENT-DATA-009` 已增加
 31+16 migration manifest 的历史本地证据、全表主键分页 count/hash、WAL 水位、writer fence、签名
-cutover/restore 证据和 production startup 绑定门禁；当前 `0017..0025` 必须按31+25重新生成切换证据。
+cutover/restore 证据和 production startup 绑定门禁；当前 `0017..0026` 必须按31+26重新生成切换证据。
 `ENT-CORE-004` 已增加 tenant-scoped source/version/chunk、草稿审核发布状态机、发布后不可变约束、
 locale/country/product/effective-time 检索和知识引用 ID；
 `ENT-CORE-005` 已增加版本化 term pack/script template、审核发布和生效窗口、发布后不可变约束，
@@ -94,9 +94,12 @@ iOS/Android 没有真实音频采集管线时继续关闭入口。`ENT-MTG-009` 
 `ENT-MTG-010` 已增加 scope 与活动参会关系双重守卫的主持人强停、generation fence、审计/outbox 和有界 LiveKit 撤销；
 `ENT-MTG-011` 已增加 `0025`、服务端逐字稿 fan-out 去重/latest revision 冻结、source count/hash、逐项 evidence、
 OpenAI-compatible 显式降级复核、当前会议 speaker label、action CAS，以及 Web/Flutter 服务端材料消费和人工发布。
+`ENT-MTG-012` 已增加 `0026`、per-participant 默认关闭订阅、短期 share/track/route ticket、`SUBSCRIBE_NONE` 精确订阅、
+服务端 pHash claim/usage ledger、HTTPS OCR Provider/readiness、定向布局事件与 Web/Flutter contain 坐标叠加；原始帧不落库，
+Provider/data channel 失败不影响共享和字幕。
 当前按要求未执行
 测试、migration、RLS、RBAC/ticket/evidence 攻击、并发共享、Worker/Provider、四人媒体、浏览器、真机与重启恢复，
-因此十一项任务均保持 `in_progress`。
+因此十二项任务均保持 `in_progress`。
 
 ## 3. 继承文档
 
@@ -112,6 +115,7 @@ OpenAI-compatible 显式降级复核、当前会议 speaker label、action CAS�
 - [ENT-MTG-004 屏幕共享租约实现与静态门禁证据](./evidence/ent-mtg-004-screen-share-lease-2026-07-19.md)
 - [ENT-MTG-005 Web 屏幕共享实现与静态门禁证据](./evidence/ent-mtg-005-web-screen-share-2026-07-19.md)
 - [ENT-MTG-011 会后材料实现与静态门禁证据](./evidence/ent-mtg-011-meeting-materials-2026-07-19.md)
+- [ENT-MTG-012 屏幕 OCR 翻译实现与静态门禁证据](./evidence/ent-mtg-012-screen-ocr-translation-2026-07-19.md)
 - [ENT-MTG-006 iOS ReplayKit 实现与静态门禁证据](./evidence/ent-mtg-006-ios-replaykit-2026-07-19.md)
 - [ENT-MTG-007 Android MediaProjection 实现与静态门禁证据](./evidence/ent-mtg-007-android-media-projection-2026-07-19.md)
 - [ENT-MTG-008 Web 系统音频实现与静态门禁证据](./evidence/ent-mtg-008-web-system-audio-2026-07-19.md)

@@ -242,7 +242,8 @@ export type EnterpriseProviderCapability =
   | "pstn.outbound"
   | "crm.sync"
   | "calendar.meetings"
-  | "channel.messaging";
+  | "channel.messaging"
+  | "screen.ocr";
 
 export type EnterpriseProviderCapabilityStatus =
   | "not_configured"

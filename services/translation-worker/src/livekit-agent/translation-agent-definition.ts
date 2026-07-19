@@ -22,13 +22,15 @@ import {
   parseEnterpriseMeetingDispatchMetadata,
   type EnterpriseMeetingDispatchTicket,
 } from "./enterprise-meeting-runtime-client.js";
-import { EnterpriseMeetingAudioSource } from
-  "./enterprise-meeting-audio-source.js";
+import { EnterpriseMeetingAudioSource } from "./enterprise-meeting-audio-source.js";
+import { parseEnterpriseScreenOcrMetadata } from
+  "./enterprise-screen-ocr-runtime-client.js";
+import { runEnterpriseScreenOcrAgent } from "./enterprise-screen-ocr-agent.js";
 import { attachSipControlHandler } from "./sip-control-handler.js";
 
 const logger = pino({ name: "translation-livekit-agent" });
 
-interface TranslationAgentProcessData {
+export interface TranslationAgentProcessData {
   env: TranslationWorkerEnv;
   prewarmedAt: string;
 }
@@ -41,6 +43,11 @@ export default defineAgent<TranslationAgentProcessData>({
     };
   },
   async entry(ctx) {
+    const screenOcrTicket = parseEnterpriseScreenOcrMetadata(ctx.job.metadata);
+    if (screenOcrTicket) {
+      await runEnterpriseScreenOcrAgent(ctx, screenOcrTicket);
+      return;
+    }
     const enterpriseTicket = parseEnterpriseMeetingDispatchMetadata(
       ctx.job.metadata,
     );

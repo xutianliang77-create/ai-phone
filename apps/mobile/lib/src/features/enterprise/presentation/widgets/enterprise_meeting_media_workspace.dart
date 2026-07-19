@@ -1,5 +1,9 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:livekit_client/livekit_client.dart' as livekit;
+
+import '../../data/enterprise_meeting_screen_ocr_models.dart';
 
 enum _MeetingMediaLayout { screen, balanced, captions }
 
@@ -7,11 +11,15 @@ class EnterpriseMeetingMediaWorkspace extends StatefulWidget {
   const EnterpriseMeetingMediaWorkspace({
     required this.screenTrack,
     required this.captions,
+    required this.screenOcrLayout,
+    required this.screenOcrDisplayMode,
     super.key,
   });
 
   final livekit.RemoteVideoTrack? screenTrack;
   final Widget captions;
+  final EnterpriseMobileScreenOcrLayout? screenOcrLayout;
+  final String screenOcrDisplayMode;
 
   @override
   State<EnterpriseMeetingMediaWorkspace> createState() =>
@@ -29,7 +37,11 @@ class _EnterpriseMeetingMediaWorkspaceState
           final sideBySide = _layout == _MeetingMediaLayout.balanced &&
               constraints.maxWidth >= 840 &&
               textScale <= 1.5;
-          final video = _ScreenShareViewer(track: widget.screenTrack);
+          final video = _ScreenShareViewer(
+            track: widget.screenTrack,
+            layout: widget.screenOcrLayout,
+            displayMode: widget.screenOcrDisplayMode,
+          );
           final ordered = _layout == _MeetingMediaLayout.captions
               ? <Widget>[widget.captions, video]
               : <Widget>[video, widget.captions];
@@ -84,9 +96,15 @@ class _EnterpriseMeetingMediaWorkspaceState
 }
 
 class _ScreenShareViewer extends StatelessWidget {
-  const _ScreenShareViewer({required this.track});
+  const _ScreenShareViewer({
+    required this.track,
+    required this.layout,
+    required this.displayMode,
+  });
 
   final livekit.RemoteVideoTrack? track;
+  final EnterpriseMobileScreenOcrLayout? layout;
+  final String displayMode;
 
   @override
   Widget build(BuildContext context) => Card(
@@ -110,14 +128,78 @@ class _ScreenShareViewer extends StatelessWidget {
                           style: TextStyle(color: Colors.white70),
                         ),
                       )
-                    : livekit.VideoTrackRenderer(
-                        track!,
-                        fit: livekit.VideoViewFit.contain,
+                    : Stack(
+                        fit: StackFit.expand,
+                        children: <Widget>[
+                          livekit.VideoTrackRenderer(
+                            track!,
+                            fit: livekit.VideoViewFit.contain,
+                          ),
+                          if (layout != null && displayMode != 'original')
+                            _ScreenOcrOverlay(
+                              layout: layout!,
+                              displayMode: displayMode,
+                            ),
+                        ],
                       ),
               ),
             ),
           ],
         ),
+      );
+}
+
+class _ScreenOcrOverlay extends StatelessWidget {
+  const _ScreenOcrOverlay({required this.layout, required this.displayMode});
+
+  final EnterpriseMobileScreenOcrLayout layout;
+  final String displayMode;
+
+  @override
+  Widget build(BuildContext context) => IgnorePointer(
+        child: LayoutBuilder(builder: (context, constraints) {
+          final scale = math.min(
+            constraints.maxWidth / layout.sourceWidth,
+            constraints.maxHeight / layout.sourceHeight,
+          );
+          final contentWidth = layout.sourceWidth * scale;
+          final contentHeight = layout.sourceHeight * scale;
+          final offsetX = (constraints.maxWidth - contentWidth) / 2;
+          final offsetY = (constraints.maxHeight - contentHeight) / 2;
+          return Stack(children: <Widget>[
+            for (final block in layout.blocks)
+              Positioned(
+                left: offsetX + block.left * contentWidth,
+                top: offsetY + block.top * contentHeight,
+                width: block.width * contentWidth,
+                height: block.height * contentHeight,
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: const Color(0xe61b1d22),
+                    border: Border.all(color: const Color(0xff80cbc4)),
+                    borderRadius: BorderRadius.circular(3),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 2),
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        displayMode == 'bilingual'
+                            ? '${block.sourceText}\n${block.translatedText}'
+                            : block.translatedText,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 12,
+                          height: 1.15,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+          ]);
+        }),
       );
 }
 

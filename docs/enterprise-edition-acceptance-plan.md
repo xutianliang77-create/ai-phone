@@ -1,6 +1,6 @@
 # 无界AI企业版验收任务与计划
 
-版本：v1.36
+版本：v1.37
 日期：2026-07-19
 状态：可执行验收计划，已对齐统一通讯平台和 PostgreSQL Primary 收敛
 
@@ -398,6 +398,15 @@ fence、force-stop 审计/状态 outbox、LiveKit 即时撤销与持久撤销 ou
 - OCR 服务关闭时共享继续，只提示内容翻译不可用。
 - 未授权时 OCR Worker 不订阅屏幕轨道。
 
+`ENT-MTG-012` 当前代码候选新增 `0026` 五张 forced-RLS 表、短期绑定 ticket、`SUBSCRIBE_NONE` 精确轨道订阅、服务端
+pHash claim/usage ledger、显式 HTTPS Provider 和 Web/Flutter 定向布局消费。正式验收必须覆盖：默认关闭；相同/近似帧
+100次只产生一次 Provider/usage；两名订阅者同语言共享 run、切换语言结束无订阅旧 run；关闭/离会/租约过期/route epoch
+变化后 Worker 下一帧失败；伪造 tenant/meeting/share/generation/publisher/track/participant/ticket/event/revision 全部拒绝；
+PPT/网页/表格/深色主题及320/390/600/960/1280、横屏、200%和动态字体坐标对齐；Provider off/超时/429/畸形布局、
+LiveKit data publish 失败和 Worker 崩溃时原共享与字幕不断流且 API polling 可恢复。还需证明数据库、对象存储、日志和错误
+响应均无原始帧，readiness fingerprint 来自真实 health probe。当前按要求只运行静态门禁，未运行上述自动化、migration、
+Provider、LiveKit、浏览器或真机矩阵，因此本节和 A1/H3 未通过，任务保持 `in_progress`。
+
 ### 7.5 会后材料
 
 - 逐字稿、译文、说话人和时间轴一致。
@@ -536,7 +545,7 @@ meeting ended 后迟到 Worker 事件拒绝。本轮按要求未运行这些门�
 
 - PostgreSQL 作为所有真实 SaaS 租户的初始真源。
 - 内部 SQLite 演示数据可以迁移，但不能作为客户生产迁移路径的必要依赖。
-- 验收 commit 锁定的公共31段 manifest（基线从 `fe1c3c2` 演进）与 enterprise 25段 migration manifest 在隔离企业数据库从空库完整执行；两个 manifest 的顺序、checksum、schema verify 和 down/forward 策略均有证据，不能只跑其中一套。
+- 验收 commit 锁定的公共31段 manifest（基线从 `fe1c3c2` 演进）与 enterprise 26段 migration manifest 在隔离企业数据库从空库完整执行；两个 manifest 的顺序、checksum、schema verify 和 down/forward 策略均有证据，不能只跑其中一套。
 - 每个进程只有一个 Storage Driver 和 startup verdict；HTTP、企业 Repository、统一通讯会话和 cell Worker 使用同一 verified Primary Runtime，不存在 fallback、shadow read、dual write 或按路由混用。
 - 应用 tenant、user directory、cell discovery、migration、maintenance 分别使用最小权限角色；生产 TLS 使用 `verify-full`。应用角色没有 `BYPASSRLS`、表 owner、DDL 或关闭 RLS 权限。
 - 公共 communication session、participant、media leg、dispatch、Provider operation、playback 和相关账本全部具有 tenant scope、复合 FK 和 `FORCE ROW LEVEL SECURITY`；使用跨租户 ID、缺 scope、伪造 owner/user 过滤做负向验证。
@@ -545,7 +554,7 @@ meeting ended 后迟到 Worker 事件拒绝。本轮按要求未运行这些门�
 - 使用普通应用角色验证 billing account/plan/subscription/entitlement/change history forced RLS、活动 subscription 唯一、plan/snapshot/change 不可变，以及 entitlement projection/binding/grant 的 tenant 复合 FK；按跨租户、停用 account、过期账期、错 subscription/plan/version、席位超限、幂等漂移和客户端 limit 伪造执行负向矩阵。
 - accounts、tenant、communication session、segment、campaign、support、meeting、ledger 和 object hash 数量与规范化 SHA-256 一致。
 - 全量复制后记录增量水位，切换时获取 writer fence、清退旧 API/Worker、重放剩余 inbox/outbox，再做第二次 count/hash；切换或对账失败可按书面决策回滚，旧 writer 不能继续写入。
-- staging startup 必须拒绝 local evidence、签名篡改、错误 cutover/target ID、错误 commit/image/topology、错误 system identifier/OID、缺 baseline 引用、未清退 writer 或任一31+25 migration 漂移。维护工具只验证 fence，不自动执行 promote 或隔离旧主。
+- staging startup 必须拒绝 local evidence、签名篡改、错误 cutover/target ID、错误 commit/image/topology、错误 system identifier/OID、缺 baseline 引用、未清退 writer 或任一31+26 migration 漂移。维护工具只验证 fence，不自动执行 promote 或隔离旧主。
 - migration 后使用普通应用角色验证 `FORCE ROW LEVEL SECURITY`；确认 user directory self policy、tenant projection policy、成员投影同步和跨租户拒绝均生效。
 - 使用独立 cell Worker 角色验证 pending projection forced RLS、trigger 同步、空 cell 失败闭合、旧 cell 拒绝和 tenant transaction 原子 claim。
 - 使用 API 应用角色验证 PostgreSQL runtime 只在 startup gate `verified` 后创建；非法或 `dual_write` driver、连接/校验失败均不得监听端口，也不得回退到 legacy。

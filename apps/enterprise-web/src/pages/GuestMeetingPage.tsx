@@ -25,6 +25,7 @@ const disconnected: EnterpriseMeetingRoomSnapshot = {
   screenShareTrack: null,
   screenShareAudioTrack: null,
   screenSharePublisherIdentity: null,
+  screenOcrLayout: null,
 };
 
 export function GuestMeetingPage() {

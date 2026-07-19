@@ -3,6 +3,7 @@ export * from "./api/agent-calls.js";
 export * from "./api/enterprise.js";
 export * from "./api/enterprise-meeting.js";
 export * from "./api/enterprise-meeting-material.js";
+export * from "./api/enterprise-meeting-screen-ocr.js";
 export * from "./api/enterprise-audit.js";
 export * from "./api/enterprise-billing.js";
 export * from "./api/enterprise-observability.js";

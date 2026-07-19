@@ -1,6 +1,6 @@
 # 无界AI企业版技术架构
 
-版本：v1.22
+版本：v1.23
 日期：2026-07-19
 状态：SaaS 详细架构基线，已对齐统一通讯平台和 PostgreSQL Primary
 
@@ -177,7 +177,7 @@ object-storage
 | 账号、Tenant、RBAC、企业命令 | `services/api-server` | 先按 domain module 隔离；只有独立扩缩容或故障域需要时才拆服务 |
 | Enterprise Repository runtime/cell Worker | `services/api-server/src/modules/enterprise`、`services/api-server/src/infrastructure/postgres` | API 使用单一 `legacy|postgres` runtime；独立启动的 cell Worker 仅以 cell discovery 和 tenant transaction 角色 claim/finalize |
 | Communication Session、Provider Operation、Dispatch、Recording 和 Usage | 上游稳定提交 `fe1c3c2` 已导入企业分支，`ENT-DATA-008/CORE-013/014/015` 已补 tenant scope、企业业务绑定、签名 dispatch fence 和企业运行策略快照 | 公共 runtime 已成为代码基线；dispatch 必须先通过服务端 policy snapshot 与授权 fence，真实 Provider/设备仍待验收 |
-| PostgreSQL Primary 基础 | 公共31段 migration/Primary Runtime 与企业现有20段 migration | 已收敛为一个 Storage Driver/启动编排和两个有序 manifest；按 tenant/directory/cell/migration/maintenance 使用最小权限连接，等待真实 H3 验收 |
+| PostgreSQL Primary 基础 | 公共31段 migration/Primary Runtime 与企业现有26段 migration | 已收敛为一个 Storage Driver/启动编排和两个有序 manifest；按 tenant/directory/cell/migration/maintenance 使用最小权限连接，等待真实 H3 验收 |
 | 受控审计导出 | enterprise `0020`、Audit Export API/Repository、cell Worker、加密对象存储 Adapter | API 只创建/查询/鉴权下载；cell Worker 在 tenant transaction 取数并保存 hash/size/expiry，客户端不获得对象存储 key/凭据；物理 purge 与对象清单仍待 REL-002 |
 | Enterprise Knowledge | enterprise `0017`、Knowledge Repository/runtime/API | source/revision/chunk/review/publish、发布后不可变、四维有效期检索和 citation 已接入；embedding Provider 未配置时保持确定性文本检索，不声明向量 readiness |
 | Enterprise Terminology | enterprise `0018`、Term Pack/Script Template Repository/runtime/API | 稳定资源与不可变 revision、审核发布、生效时间解析已接入；resolver 向 ASR/翻译/LLM 返回同一术语版本引用，话术只供 LLM 使用 |
@@ -332,6 +332,14 @@ AudioPlaybackCapture 到独立 WebRTC audio source，保持 `includesSystemAudio
 尺寸/可见性；Flutter 只接受服务端当前 generation 的 `ent-share` identity 与 screen source，再交给
 `VideoTrackRenderer` 注册 Widget 尺寸和像素密度。共享 publisher 不计入远端参会者人数。布局完全在客户端显示层完成，
 画面/字幕都保持挂载；窄屏、大字体和低高度横屏使用重排/内部滚动，不创建遮挡关键控制的媒体 overlay。
+
+`ENT-MTG-012` 复用同一 LiveKit Agent 部署但使用独立 screen OCR ticket/job：Agent 以 `SUBSCRIBE_NONE` 进入当前共享房间，
+只订阅 ticket 中的 publisher identity、track SID 和 screen-share video source。API/Repository 是唯一业务数据库写入方，
+Worker 不持有数据库凭证；每次 claim 先经 API 重读 tenant/cell/route/share lease/run/subscription fence，再由 Repository
+完成 pHash 去重和 usage ledger。原始帧只在 Worker 内存中发送给显式启用的 HTTPS OCR Provider，数据库只保留 hash、
+尺寸、Provider fingerprint 和布局块。服务端把布局定向发送给启用该 run 的 participant；Web/Flutter 对 data event 再做
+meeting/target/share/generation/run/revision 校验，并保留 API polling fallback。OCR Provider、调度、轨道或投递故障与共享租约、
+麦克风和字幕状态机隔离，不能停止或伪造原共享成功状态。
 
 ## 7. 外呼营销架构
 

@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import type {
+  EnterpriseMeetingScreenOcrResponse,
   EnterpriseMeetingScreenShareQuality,
   EnterpriseMeetingScreenShareSource,
 } from "@translation/contracts";
@@ -16,6 +17,7 @@ import type {
   EnterpriseMeetingRoomClient,
   EnterpriseMeetingRoomSnapshot,
 } from "./enterprise-meeting-room.js";
+import { MeetingScreenOcrControls } from "./MeetingScreenOcrControls.js";
 
 const emptySnapshot: EnterpriseMeetingScreenShareSnapshot = {
   operation: "idle",
@@ -38,6 +40,8 @@ export function MeetingScreenSharePanel(props: {
   const [quality, setQuality] = useState<EnterpriseMeetingScreenShareQuality>("auto");
   const [includesSystemAudio, setIncludesSystemAudio] = useState(false);
   const [state, setState] = useState(emptySnapshot);
+  const [ocrView, setOcrView] =
+    useState<EnterpriseMeetingScreenOcrResponse | null>(null);
   const controller = useRef<EnterpriseMeetingScreenShareController | null>(null);
 
   useEffect(() => {
@@ -65,6 +69,13 @@ export function MeetingScreenSharePanel(props: {
     ? props.room.screenShareTrack : null;
   const visibleTrack = localTrack !== null || remoteTrack !== null;
   const occupied = share?.status === "active" || share?.status === "paused";
+  const eventLayout = props.room.screenOcrLayout;
+  const ocrLayout = eventLayout && ocrView?.run &&
+    eventLayout.runId === ocrView.run.id && eventLayout.shareId === share?.id &&
+    eventLayout.shareGeneration === share?.generation
+    ? eventLayout : ocrView?.layout ?? null;
+  const ocrMode = ocrView?.subscription?.enabled
+    ? ocrView.subscription.displayMode : "original";
 
   return <section className="meeting-screen-share" aria-label="会议屏幕共享">
     <header>
@@ -77,7 +88,8 @@ export function MeetingScreenSharePanel(props: {
     </header>
 
     {visibleTrack ? <ScreenShareVideo localTrack={localTrack}
-      remoteTrack={remoteTrack} own={ownShare} /> :
+      remoteTrack={remoteTrack} own={ownShare} ocrLayout={ocrLayout}
+      ocrMode={ocrMode} /> :
       <div className="meeting-screen-share__empty">
         <MaterialIcon name={share?.status === "paused" ? "pause_circle" :
           enterpriseIcons.action.shareScreen}
@@ -90,6 +102,10 @@ export function MeetingScreenSharePanel(props: {
       <ScreenShareAudio track={props.room.screenShareAudioTrack} own={ownShare}
         available={ownShare ? state.localSystemAudioAvailable :
           props.room.screenShareAudioTrack !== null} /> : null}
+
+    <MeetingScreenOcrControls api={props.api} context={props.context}
+      meetingId={props.meetingId} share={share ?? null}
+      defaultLanguage={props.room.captionLanguage} onView={setOcrView} />
 
     <div className="meeting-screen-share__controls">
       {!occupied ? <>
@@ -182,8 +198,13 @@ function ScreenShareVideo(props: {
   localTrack: MediaStreamTrack | null;
   remoteTrack: RemoteVideoTrack | null;
   own: boolean;
+  ocrLayout: import("@translation/contracts").EnterpriseMeetingScreenOcrLayoutDto | null;
+  ocrMode: import("@translation/contracts").EnterpriseMeetingScreenOcrDisplayMode;
 }) {
   const element = useRef<HTMLVideoElement | null>(null);
+  const [contentRect, setContentRect] = useState<CSSProperties>({
+    inset: 0,
+  });
   useEffect(() => {
     const video = element.current;
     if (!video) return;
@@ -192,16 +213,58 @@ function ScreenShareVideo(props: {
     } else if (props.localTrack) {
       video.srcObject = new MediaStream([props.localTrack]);
     }
+    const sync = () => setContentRect(videoContentRect(
+      video, props.ocrLayout?.sourceSize,
+    ));
+    video.addEventListener("loadedmetadata", sync);
+    video.addEventListener("resize", sync);
+    const observer = new ResizeObserver(sync);
+    observer.observe(video);
+    sync();
     void video.play().catch(() => undefined);
     return () => {
+      observer.disconnect();
+      video.removeEventListener("loadedmetadata", sync);
+      video.removeEventListener("resize", sync);
       if (props.remoteTrack) props.remoteTrack.detach(video);
       video.srcObject = null;
     };
-  }, [props.localTrack, props.remoteTrack]);
+  }, [props.localTrack, props.remoteTrack,
+    props.ocrLayout?.sourceSize.width, props.ocrLayout?.sourceSize.height]);
   return <div className="meeting-screen-share__video">
     <video ref={element} autoPlay playsInline muted={props.own} />
+    {props.ocrLayout && props.ocrMode !== "original" ?
+      <div className="meeting-screen-ocr__overlay" style={contentRect}
+        aria-hidden="true">
+        {props.ocrLayout.blocks.map((block) => <span key={block.id}
+          style={{ left: `${block.rect.left * 100}%`, top: `${block.rect.top * 100}%`,
+            width: `${block.rect.width * 100}%`,
+            height: `${block.rect.height * 100}%` }}>
+          {props.ocrMode === "bilingual" ? <small>{block.sourceText}</small> : null}
+          <strong>{block.translatedText}</strong>
+        </span>)}
+      </div> : null}
     <span>{props.own ? "你的共享画面" : "当前共享画面"}</span>
   </div>;
+}
+
+function videoContentRect(
+  video: HTMLVideoElement,
+  source?: { width: number; height: number },
+): CSSProperties {
+  const width = video.clientWidth;
+  const height = video.clientHeight;
+  const sourceWidth = source?.width ?? video.videoWidth;
+  const sourceHeight = source?.height ?? video.videoHeight;
+  if (!width || !height || !sourceWidth || !sourceHeight) {
+    return { inset: 0 };
+  }
+  const scale = Math.min(width / sourceWidth, height / sourceHeight);
+  const renderedWidth = sourceWidth * scale;
+  const renderedHeight = sourceHeight * scale;
+  return { left: (width - renderedWidth) / 2,
+    top: (height - renderedHeight) / 2,
+    width: renderedWidth, height: renderedHeight };
 }
 
 function screenShareSummary(

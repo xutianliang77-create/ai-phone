@@ -9,6 +9,8 @@ import {
   parseEnterpriseMeetingDispatchMetadata,
 } from "./enterprise-meeting-runtime-client.js";
 import { createTranslationAgentPermissions } from "./translation-agent-permissions.js";
+import { parseEnterpriseScreenOcrMetadata } from
+  "./enterprise-screen-ocr-runtime-client.js";
 
 const workerLiveKitUrl = process.env.LIVEKIT_WORKER_URL?.trim();
 if (workerLiveKitUrl) process.env.LIVEKIT_URL = workerLiveKitUrl;
@@ -34,6 +36,24 @@ cli.runApp(new ServerOptions({
   jobMemoryLimitMB: integerEnv("LIVEKIT_AGENT_JOB_MEMORY_LIMIT_MB", 1024, 256, 16384),
   permissions: createTranslationAgentPermissions(),
   requestFunc: async (request) => {
+    const screenOcrTicket = parseEnterpriseScreenOcrMetadata(request.job.metadata);
+    if (screenOcrTicket) {
+      if (request.agentName !== agentName || request.room?.name !==
+        enterpriseMeetingRoomName(screenOcrTicket.communicationSessionId)) {
+        await request.reject();
+        return;
+      }
+      await request.accept(
+        "Enterprise Screen OCR Runtime",
+        `enterprise-ocr-${screenOcrTicket.runId.slice(0, 12)}`,
+        JSON.stringify({ participantRole: "worker",
+          screenOcrRunId: screenOcrTicket.runId,
+          shareGeneration: screenOcrTicket.shareGeneration }),
+        { "translation.role": "worker", "translation.scope": "screen_ocr",
+          "translation.generation": String(screenOcrTicket.shareGeneration) },
+      );
+      return;
+    }
     const enterpriseTicket = parseEnterpriseMeetingDispatchMetadata(
       request.job.metadata,
     );

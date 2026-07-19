@@ -8,7 +8,11 @@ import type {
 import type {
   EnterpriseMeetingCaptionEvent,
   EnterpriseMeetingJoinTokenResponse,
+  EnterpriseMeetingScreenOcrLayoutDto,
 } from "@translation/contracts";
+import { enterpriseMeetingScreenOcrTopic } from "@translation/contracts";
+import { validateScreenOcrLayoutEvent } from
+  "../api/enterprise-meeting-screen-ocr-api.js";
 
 export interface EnterpriseMeetingRoomSnapshot {
   status: "disconnected" | "connecting" | "connected" | "reconnecting";
@@ -23,6 +27,7 @@ export interface EnterpriseMeetingRoomSnapshot {
   screenShareTrack: RemoteVideoTrack | null;
   screenShareAudioTrack: MediaStreamTrack | null;
   screenSharePublisherIdentity: string | null;
+  screenOcrLayout: EnterpriseMeetingScreenOcrLayoutDto | null;
 }
 
 export class EnterpriseMeetingRoomClient {
@@ -40,6 +45,7 @@ export class EnterpriseMeetingRoomClient {
     screenShareTrack: null,
     screenShareAudioTrack: null,
     screenSharePublisherIdentity: null,
+    screenOcrLayout: null,
   };
   private grant: EnterpriseMeetingJoinTokenResponse | null = null;
   private expectedScreenSharePublisherIdentity: string | null = null;
@@ -80,7 +86,11 @@ export class EnterpriseMeetingRoomClient {
       })
       .on(RoomEvent.TrackUnsubscribed, () => this.syncScreenShare())
       .on(RoomEvent.DataReceived, (payload, participant, _kind, topic) => {
-        this.acceptCaption(payload, participant, topic);
+        if (topic === enterpriseMeetingScreenOcrTopic) {
+          this.acceptScreenOcr(payload, participant);
+        } else {
+          this.acceptCaption(payload, participant, topic);
+        }
       })
       .on(RoomEvent.Disconnected, () => {
         this.emit({
@@ -89,6 +99,7 @@ export class EnterpriseMeetingRoomClient {
           remoteParticipantCount: 0,
           screenShareTrack: null,
           screenShareAudioTrack: null,
+          screenOcrLayout: null,
         });
       });
     try {
@@ -113,8 +124,10 @@ export class EnterpriseMeetingRoomClient {
   }
 
   setExpectedScreenSharePublisherIdentity(identity: string | null) {
+    const changed = identity !== this.expectedScreenSharePublisherIdentity;
     this.expectedScreenSharePublisherIdentity = identity;
-    this.emit({ screenSharePublisherIdentity: identity });
+    this.emit({ screenSharePublisherIdentity: identity,
+      ...(changed ? { screenOcrLayout: null } : {}) });
     this.syncParticipants();
     this.syncScreenShare();
   }
@@ -140,6 +153,7 @@ export class EnterpriseMeetingRoomClient {
       screenShareTrack: null,
       screenShareAudioTrack: null,
       screenSharePublisherIdentity: this.expectedScreenSharePublisherIdentity,
+      screenOcrLayout: null,
     });
   }
 
@@ -206,6 +220,24 @@ export class EnterpriseMeetingRoomClient {
       if (oldest) this.seenEventIds.delete(oldest);
     }
     this.emit({ captions: [...this.snapshot.captions, event].slice(-50) });
+  }
+
+  private acceptScreenOcr(payload: Uint8Array, participant: unknown) {
+    const grant = this.grant;
+    if (!grant || participant || payload.byteLength > 12_000) return;
+    let value: unknown;
+    try { value = JSON.parse(new TextDecoder().decode(payload)); }
+    catch { return; }
+    const event = validateScreenOcrLayoutEvent(
+      value, grant.meetingId, grant.participantId,
+    );
+    if (!event || this.seenEventIds.has(event.eventId)) return;
+    this.seenEventIds.add(event.eventId);
+    if (this.seenEventIds.size > 200) {
+      const oldest = this.seenEventIds.values().next().value;
+      if (oldest) this.seenEventIds.delete(oldest);
+    }
+    this.emit({ screenOcrLayout: event.layout });
   }
 
   private emit(value: Partial<EnterpriseMeetingRoomSnapshot>) {
