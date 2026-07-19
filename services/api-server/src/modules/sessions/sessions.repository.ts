@@ -21,6 +21,7 @@ import {
   type SessionSegmentPatch,
 } from "./session-segment-merge.js";
 import { assertNewSessionPlacementAllowed } from "../../infrastructure/platform/platform-session-routing.js";
+import { sessionMatchesQuery } from "./sessions-runtime-views.js";
 
 export type { SessionRecord } from "./session-record.js";
 
@@ -136,7 +137,7 @@ export function listSessions(userId: string, query?: string) {
   const normalizedQuery = (query ?? "").trim().toLowerCase();
   return getStoreSnapshot().sessions
     .filter((session) => session.userId === userId)
-    .filter((session) => matchesQuery(session, normalizedQuery))
+    .filter((session) => sessionMatchesQuery(session, normalizedQuery))
     .sort((left, right) => right.createdAt.localeCompare(left.createdAt));
 }
 
@@ -284,21 +285,4 @@ export function markSessionFinalized(
 function persistSessionMutation(session: SessionRecord) {
   session.version = (session.version ?? 0) + 1;
   persistStoreSnapshot();
-}
-
-function matchesQuery(session: SessionRecord, query: string) {
-  if (!query) return true;
-  return [
-    session.id,
-    session.mode,
-    session.status,
-    session.createdAt,
-    session.endedAt ?? "",
-    ...session.segments.flatMap((segment) => [
-      segment.sourceText,
-      segment.rawText ?? "",
-      segment.optimizedText ?? "",
-      segment.translatedText,
-    ]),
-  ].some((value) => value.toLowerCase().includes(query));
 }

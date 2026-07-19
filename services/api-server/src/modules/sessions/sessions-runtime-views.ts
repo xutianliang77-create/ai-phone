@@ -7,7 +7,23 @@ export function sessionMatchesQuery(session: SessionRecord, query: string) {
     session.endedAt ?? "", ...session.segments.flatMap((segment) => [
       segment.sourceText, segment.rawText ?? "", segment.optimizedText ?? "",
       segment.translatedText,
-    ])].some((value) => value.toLowerCase().includes(query));
+    ]), ...reviewSearchValues(session)].some((value) =>
+      value.toLowerCase().includes(query));
+}
+
+function reviewSearchValues(session: SessionRecord) {
+  const review = session.review;
+  if (!review) return [];
+  return [
+    review.title ?? "", review.summary, ...(review.decisions ?? []),
+    ...(review.actionItems ?? []).flatMap((item) => [
+      item.text, item.owner ?? "", item.dueDate ?? "",
+    ]),
+    ...(review.keyFacts ?? []).map((item) => item.text),
+    ...(review.risks ?? []), ...(review.openQuestions ?? []),
+    ...review.highlights.map((item) => item.text),
+    ...review.terms.flatMap((term) => [term.sourceText, term.translatedText]),
+  ];
 }
 
 export function sessionSpeakerSummary(session: SessionRecord) {

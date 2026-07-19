@@ -156,4 +156,50 @@ describe("sessions routes", () => {
       speakerCount: 1,
     });
   });
+
+  it("searches generated review titles and action items", async () => {
+    const app = await buildApp();
+    const created = await app.inject({
+      method: "POST",
+      url: "/realtime/sessions",
+      payload: {
+        mode: "meeting",
+        sourceLanguage: "zh",
+        targetLanguage: "en",
+        voiceOutput: false,
+      },
+    });
+    const sessionId = created.json().sessionId as string;
+    const session = getStoreSnapshot().sessions.find((item) => item.id === sessionId);
+    if (!session) throw new Error("Expected created session");
+    session.review = {
+      provider: "local",
+      generatedAt: new Date().toISOString(),
+      title: "会议记录整理任务",
+      summary: "准备客户确认材料",
+      actionItems: [{
+        text: "整理会议记录并发送给客户确认",
+        completed: false,
+        evidenceSegmentIds: [],
+      }],
+      highlights: [],
+      terms: [],
+    };
+
+    const title = await app.inject({
+      method: "GET",
+      url: `/sessions?q=${encodeURIComponent("会议记录整理任务")}`,
+    });
+    const action = await app.inject({
+      method: "GET",
+      url: `/sessions?q=${encodeURIComponent("发送给客户确认")}`,
+    });
+    await app.close();
+
+    expect(title.statusCode).toBe(200);
+    expect(title.json().sessions).toHaveLength(1);
+    expect(title.json().sessions[0].sessionId).toBe(sessionId);
+    expect(action.statusCode).toBe(200);
+    expect(action.json().sessions[0].sessionId).toBe(sessionId);
+  });
 });
