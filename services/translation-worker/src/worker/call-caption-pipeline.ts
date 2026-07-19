@@ -46,7 +46,6 @@ export class CallCaptionPipeline {
       nowMs: options.nowMs,
     });
   }
-
   setTtsVoice(voice: TtsVoiceConfig) {
     this.ttsQueue.setVoice(voice);
   }
@@ -56,7 +55,6 @@ export class CallCaptionPipeline {
       this.options.ttsProvider?.createCall?.(callId),
     ]);
   }
-
   warmupTts(callId: string, signal: AbortSignal) {
     return this.ttsQueue.warmup(callId, signal);
   }
@@ -71,7 +69,6 @@ export class CallCaptionPipeline {
     );
     if (rejected) throw rejected.reason;
   }
-
   async drain(callId: string) {
     await this.drainTranslations(callId);
     await this.drainTts(callId);
@@ -105,12 +102,15 @@ export class CallCaptionPipeline {
     speakerRole: CallAudioSpeakerRole,
     transcript: BufferedCallTranscript["transcript"],
   ) {
-    const published = await this.publishVersion(callId, speakerRole, transcript);
+    const local = this.options.transcriptRefiner?.refineLocally?.(transcript);
+    const initial = local ? { ...transcript, text: local.text } : transcript;
+    const published = await this.publishVersion(callId, speakerRole, initial, local);
     if (!published || !this.options.transcriptRefiner) return;
     this.track(callId, this.refineInBackground({
       callId,
       speakerRole,
       transcript,
+      publishedText: initial.text,
       identity: published.identity,
       signal: published.signal,
     }));
@@ -182,6 +182,7 @@ export class CallCaptionPipeline {
     callId: string;
     speakerRole: CallAudioSpeakerRole;
     transcript: BufferedCallTranscript["transcript"];
+    publishedText: string;
     identity: ReturnType<CallPipelineVersionState["identity"]>;
     signal: AbortSignal;
   }) {
@@ -200,7 +201,7 @@ export class CallCaptionPipeline {
       throw error;
     }
     if (!this.state.isCurrent(input.identity) ||
-      !refined.text.trim() || refined.text === input.transcript.text) return;
+      !refined.text.trim() || refined.text === input.publishedText) return;
     await this.publishVersion(input.callId, input.speakerRole, {
       ...input.transcript,
       speechId: input.identity.speechId,

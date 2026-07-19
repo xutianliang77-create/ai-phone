@@ -17,6 +17,7 @@ const productTerms: TermRow[] = [
   ["VoxCPM2", "VoxCPM2"],
   ["端侧 ASR", "on-device ASR"],
   ["在线模型链路", "online model pipeline"],
+  ["同传", "simultaneous interpretation"],
   ["同声传译", "simultaneous interpretation"],
   ["会议纪要", "meeting minutes"],
   ["自动识别语言", "automatic language detection"],
@@ -189,6 +190,7 @@ export const domainTermPacks: Record<DomainLexiconPack, TermRow[]> = {
 
 export const domainCorrectionPacks: Record<DomainLexiconPack, AsrCorrectionTerm[]> = {
   product: [
+    { fromText: "同船", toText: "同传" },
     { fromText: "Quinn 3 ASR", toText: "Qwen3 ASR" },
     { fromText: "Quin 3 ASR", toText: "Qwen3 ASR" },
     { fromText: "HiM T Two", toText: "Hy-MT2" },

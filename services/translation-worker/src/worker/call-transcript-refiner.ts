@@ -4,6 +4,7 @@ import type {
   TermbaseTermDto,
 } from "@translation/contracts";
 import {
+  applyAsrLocalRules,
   defaultAsrProtectedTerms,
   type LlmProvider,
   OffLlmProvider,
@@ -42,12 +43,32 @@ export class CallTranscriptRefiner {
     ]);
   }
 
+  refineLocally(transcript: SpeechTranscript) {
+    const result = applyAsrLocalRules(transcript.text, this.protectedTerms);
+    if (!result.text || result.text === transcript.text) return undefined;
+    return {
+      rawText: transcript.text,
+      text: result.text,
+      refinement: {
+        provider: "local_rules",
+        promptVersion: "asr_refine_v2",
+        confidence: 0.86,
+        latencyMs: 0,
+        operations: result.operations,
+        protectedTermsKept: result.protectedTermsKept,
+        warnings: result.warnings,
+      } satisfies SessionSegmentRefinementDto,
+    };
+  }
+
   async refine(
     callId: string,
     speakerRole: CallAudioSpeakerRole,
     transcript: SpeechTranscript,
     targetLanguage: CallRoomTranslationLanguage,
   ) {
+    const local = this.refineLocally(transcript);
+    if (local) return local;
     const key = participantKey(callId, speakerRole);
     const previousSegments = this.recentSegments.get(key) ?? [];
     const shouldUseLlm = this.options.enabled &&
