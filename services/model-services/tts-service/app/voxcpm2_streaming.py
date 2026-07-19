@@ -130,7 +130,11 @@ async def next_in_thread(iterator):
     try:
         return await asyncio.shield(pending)
     except asyncio.CancelledError:
-        pending.add_done_callback(lambda _future: close_iterator(iterator))
+        try:
+            await asyncio.shield(pending)
+        except Exception:
+            pass
+        close_iterator(iterator)
         raise
 
 

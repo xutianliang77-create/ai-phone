@@ -12,7 +12,10 @@ from app.voxcpm2_engine import (
     parse_model_sample_rate,
     voxcpm2_generate_kwargs,
 )
-from voxcpm2_test_fakes import FakeStreamingCapableVoxCpmModel, FakeVoxCpmModel
+from voxcpm2_test_fakes import (
+    FakeStreamingCapableVoxCpmModel,
+    FakeVoxCpmModel,
+)
 
 
 def test_voxcpm2_text_never_inserts_a_spoken_control_prompt() -> None:

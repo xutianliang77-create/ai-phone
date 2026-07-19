@@ -167,14 +167,7 @@ def is_wav(audio: bytes) -> bool:
 
 
 def is_fatal_runtime_error(error: BaseException) -> bool:
-    current: BaseException | None = error
-    messages: list[str] = []
-    for _ in range(4):
-        if current is None:
-            break
-        messages.append(f"{type(current).__name__}: {current}".lower())
-        current = current.__cause__ or current.__context__
-    combined = " ".join(messages)
+    combined = runtime_error_text(error)
     return any(marker in combined for marker in (
         "device-side assert",
         "acceleratorerror",
@@ -182,13 +175,28 @@ def is_fatal_runtime_error(error: BaseException) -> bool:
         "cuda out of memory",
         "cublas",
         "cudnn",
+        "expanded size of the tensor",
+        "must match the existing size",
     ))
 
 
 def fatal_runtime_reason(error: BaseException) -> str:
-    message = f"{type(error).__name__}: {error}".lower()
+    message = runtime_error_text(error)
     if "device-side assert" in message:
         return "tts CUDA device-side assert; process restart required"
     if "out of memory" in message:
         return "tts CUDA out of memory; process restart required"
+    if "expanded size of the tensor" in message or "must match the existing size" in message:
+        return "tts model cache state is inconsistent; process restart required"
     return "tts CUDA runtime failed; process restart required"
+
+
+def runtime_error_text(error: BaseException) -> str:
+    current: BaseException | None = error
+    messages: list[str] = []
+    for _ in range(4):
+        if current is None:
+            break
+        messages.append(f"{type(current).__name__}: {current}".lower())
+        current = current.__cause__ or current.__context__
+    return " ".join(messages)

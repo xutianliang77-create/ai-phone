@@ -5,6 +5,7 @@ import os
 DEFAULT_VOXCPM2_MODEL_DIR = (
     "/data/models/translation-model-eval/data/tts-product-fit/models/openbmb_voxcpm2"
 )
+DEFAULT_VOXCPM2_INFERENCE_WAIT_MS = 15000
 
 
 @dataclass(frozen=True)
@@ -18,6 +19,7 @@ class TtsConfig:
     voxcpm2_cfg_value: float = 2.0
     voxcpm2_inference_timesteps: int = 10
     voxcpm2_hifi_inference_timesteps: int = 15
+    voxcpm2_inference_wait_ms: int = DEFAULT_VOXCPM2_INFERENCE_WAIT_MS
     voxcpm2_load_denoiser: bool = False
     voxcpm2_require_streaming: bool = False
     voice_reference_dir: str = ""
@@ -30,6 +32,7 @@ class TtsConfig:
             "cfgValue": self.voxcpm2_cfg_value,
             "inferenceTimesteps": self.voxcpm2_inference_timesteps,
             "hifiInferenceTimesteps": self.voxcpm2_hifi_inference_timesteps,
+            "inferenceWaitMs": self.voxcpm2_inference_wait_ms,
             "loadDenoiser": self.voxcpm2_load_denoiser,
             "requireStreaming": self.voxcpm2_require_streaming,
         }
@@ -48,6 +51,10 @@ def load_config() -> TtsConfig:
         voxcpm2_hifi_inference_timesteps=int(
             os.getenv("TTS_VOXCPM2_HIFI_INFERENCE_TIMESTEPS", "15")
         ),
+        voxcpm2_inference_wait_ms=int(os.getenv(
+            "TTS_VOXCPM2_INFERENCE_WAIT_MS",
+            str(DEFAULT_VOXCPM2_INFERENCE_WAIT_MS),
+        )),
         voxcpm2_load_denoiser=env_bool("TTS_VOXCPM2_LOAD_DENOISER", False),
         voxcpm2_require_streaming=env_bool(
             "TTS_VOXCPM2_REQUIRE_STREAMING",

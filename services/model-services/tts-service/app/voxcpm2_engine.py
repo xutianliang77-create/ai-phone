@@ -1,3 +1,5 @@
+import asyncio
+from contextlib import asynccontextmanager
 from pathlib import Path
 from inspect import signature
 import json
@@ -42,6 +44,7 @@ class VoxCpm2TtsEngine:
         cfg_value: float,
         inference_timesteps: int,
         hifi_inference_timesteps: int = 15,
+        inference_wait_ms: int = 15000,
         load_denoiser: bool,
         require_streaming: bool = False,
         voice_reference_dir: str = "",
@@ -50,6 +53,10 @@ class VoxCpm2TtsEngine:
         self.cfg_value = cfg_value
         self.inference_timesteps = inference_timesteps
         self.hifi_inference_timesteps = hifi_inference_timesteps
+        if inference_wait_ms < 1:
+            raise ValueError("VoxCPM2 inference wait must be positive")
+        self.inference_wait_ms = inference_wait_ms
+        self._inference_lock = asyncio.Lock()
         self.load_denoiser = load_denoiser
         self.require_streaming = require_streaming
         self.voice_reference_dir = Path(voice_reference_dir) if voice_reference_dir else None
@@ -69,99 +76,124 @@ class VoxCpm2TtsEngine:
         self,
         request: TtsSynthesizeRequest,
     ) -> TtsSynthesizeResponse:
-        model = self._load()
-        model_sample_rate = parse_model_sample_rate(
-            getattr(getattr(model, "tts_model", None), "sample_rate", None)
-            or self._model_sample_rate
-            or OUTPUT_SAMPLE_RATE
-        )
-        self._model_sample_rate = model_sample_rate
-        text = build_voxcpm2_text(request.text, request.language)
-        reference_wav_path = self._reference_wav_path(request)
-        started = time.perf_counter()
-        audio, first_audio_ms = self._generate(model, text, request, reference_wav_path, started)
-        if not audio:
-            raise TtsUnavailableError("VoxCPM2 returned empty audio")
-        try:
-            output_audio = resample_audio(
-                audio,
-                source_rate=model_sample_rate,
-                target_rate=OUTPUT_SAMPLE_RATE,
+        async with self._inference_slot():
+            model = self._load()
+            model_sample_rate = parse_model_sample_rate(
+                getattr(getattr(model, "tts_model", None), "sample_rate", None)
+                or self._model_sample_rate
+                or OUTPUT_SAMPLE_RATE
             )
-            output_audio = normalize_audio_loudness(output_audio)
-        except (RuntimeError, ValueError) as exc:
-            raise TtsUnavailableError(f"VoxCPM2 resampling failed: {exc}") from exc
-        audio_duration_ms = max(1, round(len(output_audio) / OUTPUT_SAMPLE_RATE * 1000))
-        logger.info(
-            "VoxCPM2 synthesis completed segmentId=%s voiceMode=%s "
-            "textCharacters=%d generationMs=%d audioDurationMs=%d "
-            "modelSampleRate=%d outputSampleRate=%d",
-            request.segmentId,
-            request.voice.mode if request.voice else "preset",
-            len(text),
-            elapsed_ms(started),
-            audio_duration_ms,
-            model_sample_rate,
-            OUTPUT_SAMPLE_RATE,
-        )
-        return TtsSynthesizeResponse(
-            provider="voxcpm2",
-            model="VoxCPM2",
-            voiceMode=request.voice.mode if request.voice else "preset",
-            voiceProfileId=request.voice.voiceProfileId if request.voice else None,
-            presetId=request.voice.presetId if request.voice else None,
-            firstAudioMs=first_audio_ms,
-            audioDurationMs=audio_duration_ms,
-            modelSampleRate=model_sample_rate,
-            outputSampleRate=OUTPUT_SAMPLE_RATE,
-            audio=TtsAudioPayload(
-                sampleRate=OUTPUT_SAMPLE_RATE,
-                data=pcm16_base64_from_floats(output_audio),
-            ),
-        )
+            self._model_sample_rate = model_sample_rate
+            text = build_voxcpm2_text(request.text, request.language)
+            reference_wav_path = self._reference_wav_path(request)
+            started = time.perf_counter()
+            audio, first_audio_ms = self._generate(
+                model,
+                text,
+                request,
+                reference_wav_path,
+                started,
+            )
+            if not audio:
+                raise TtsUnavailableError("VoxCPM2 returned empty audio")
+            try:
+                output_audio = resample_audio(
+                    audio,
+                    source_rate=model_sample_rate,
+                    target_rate=OUTPUT_SAMPLE_RATE,
+                )
+                output_audio = normalize_audio_loudness(output_audio)
+            except (RuntimeError, ValueError) as exc:
+                raise TtsUnavailableError(f"VoxCPM2 resampling failed: {exc}") from exc
+            audio_duration_ms = max(
+                1,
+                round(len(output_audio) / OUTPUT_SAMPLE_RATE * 1000),
+            )
+            logger.info(
+                "VoxCPM2 synthesis completed segmentId=%s voiceMode=%s "
+                "textCharacters=%d generationMs=%d audioDurationMs=%d "
+                "modelSampleRate=%d outputSampleRate=%d",
+                request.segmentId,
+                request.voice.mode if request.voice else "preset",
+                len(text),
+                elapsed_ms(started),
+                audio_duration_ms,
+                model_sample_rate,
+                OUTPUT_SAMPLE_RATE,
+            )
+            return TtsSynthesizeResponse(
+                provider="voxcpm2",
+                model="VoxCPM2",
+                voiceMode=request.voice.mode if request.voice else "preset",
+                voiceProfileId=request.voice.voiceProfileId if request.voice else None,
+                presetId=request.voice.presetId if request.voice else None,
+                firstAudioMs=first_audio_ms,
+                audioDurationMs=audio_duration_ms,
+                modelSampleRate=model_sample_rate,
+                outputSampleRate=OUTPUT_SAMPLE_RATE,
+                audio=TtsAudioPayload(
+                    sampleRate=OUTPUT_SAMPLE_RATE,
+                    data=pcm16_base64_from_floats(output_audio),
+                ),
+            )
 
     async def synthesize_stream(self, request: TtsSynthesizeRequest):
         from app.voxcpm2_streaming import stream_voxcpm2
 
-        model = self._load()
-        model_sample_rate = parse_model_sample_rate(
-            getattr(getattr(model, "tts_model", None), "sample_rate", None)
-            or self._model_sample_rate
-            or OUTPUT_SAMPLE_RATE
-        )
-        self._model_sample_rate = model_sample_rate
-        generate_streaming = getattr(model, "generate_streaming", None)
-        if not callable(generate_streaming):
-            raise TtsUnavailableError(
-                "VoxCPM2 runtime does not support generate_streaming",
+        async with self._inference_slot():
+            model = self._load()
+            model_sample_rate = parse_model_sample_rate(
+                getattr(getattr(model, "tts_model", None), "sample_rate", None)
+                or self._model_sample_rate
+                or OUTPUT_SAMPLE_RATE
             )
-        text = build_voxcpm2_text(request.text, request.language)
-        kwargs = voxcpm2_generate_kwargs(
-            generate_streaming,
-            text=text,
-            request=request,
-            reference_wav_path=self._reference_wav_path(request),
-            cfg_value=self.cfg_value,
-            inference_timesteps=(
-                self.hifi_inference_timesteps
-                if request.voice and request.voice.quality == "hifi"
-                else self.inference_timesteps
-            ),
-        )
-        async for event in stream_voxcpm2(
-            model=model,
-            kwargs=kwargs,
-            model_sample_rate=model_sample_rate,
-        ):
-            if event["type"] == "metadata":
-                event.update({
-                    "voiceMode": request.voice.mode if request.voice else "preset",
-                    "voiceProfileId": (
-                        request.voice.voiceProfileId if request.voice else None
-                    ),
-                    "presetId": request.voice.presetId if request.voice else None,
-                })
-            yield event
+            self._model_sample_rate = model_sample_rate
+            generate_streaming = getattr(model, "generate_streaming", None)
+            if not callable(generate_streaming):
+                raise TtsUnavailableError(
+                    "VoxCPM2 runtime does not support generate_streaming",
+                )
+            text = build_voxcpm2_text(request.text, request.language)
+            kwargs = voxcpm2_generate_kwargs(
+                generate_streaming,
+                text=text,
+                request=request,
+                reference_wav_path=self._reference_wav_path(request),
+                cfg_value=self.cfg_value,
+                inference_timesteps=(
+                    self.hifi_inference_timesteps
+                    if request.voice and request.voice.quality == "hifi"
+                    else self.inference_timesteps
+                ),
+            )
+            async for event in stream_voxcpm2(
+                model=model,
+                kwargs=kwargs,
+                model_sample_rate=model_sample_rate,
+            ):
+                if event["type"] == "metadata":
+                    event.update({
+                        "voiceMode": request.voice.mode if request.voice else "preset",
+                        "voiceProfileId": (
+                            request.voice.voiceProfileId if request.voice else None
+                        ),
+                        "presetId": request.voice.presetId if request.voice else None,
+                    })
+                yield event
+
+    @asynccontextmanager
+    async def _inference_slot(self):
+        try:
+            async with asyncio.timeout(self.inference_wait_ms / 1000):
+                await self._inference_lock.acquire()
+        except TimeoutError as exc:
+            raise TtsUnavailableError(
+                f"VoxCPM2 inference remained busy for {self.inference_wait_ms}ms",
+            ) from exc
+        try:
+            yield
+        finally:
+            self._inference_lock.release()
 
     def _generate(
         self,

@@ -30,6 +30,7 @@ TTS_MODEL_VERSION=VoxCPM2 \
 TTS_SERVICE_API_KEY=replace-with-strong-tts-key \
 TTS_VOXCPM2_MODEL_DIR=/data/models/translation-model-eval/data/tts-product-fit/models/openbmb_voxcpm2 \
 TTS_VOXCPM2_REQUIRE_STREAMING=true \
+TTS_VOXCPM2_INFERENCE_WAIT_MS=15000 \
 TTS_VOICE_REFERENCE_DIR=/data/ai-phone/voice-references \
 uvicorn app.main:app --host 0.0.0.0 --port 8002
 ```
@@ -42,6 +43,11 @@ VoxCPM2 currently emits 48 kHz PCM. The service uses polyphase resampling to
 produce the 24 kHz realtime protocol payload; it never relabels 48 kHz samples
 as 24 kHz. Health and synthesis responses expose `modelSampleRate` and
 `outputSampleRate` so this invariant can be monitored.
+
+The VoxCPM2 model instance is single-flight because its KV cache is mutable.
+Whole-response and streaming inference share the same gate. Concurrent callers
+wait up to `TTS_VOXCPM2_INFERENCE_WAIT_MS` before receiving `503`; cancellation
+releases the gate without allowing another request to overlap the active model.
 
 ## Local Contract Smoke
 
