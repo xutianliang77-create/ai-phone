@@ -1,6 +1,6 @@
 # 无界AI企业版设计文档索引
 
-版本：v1.61
+版本：v1.62
 日期：2026-07-20
 状态：SaaS 详细设计基线，已纳入统一通讯平台和 PostgreSQL Primary 演进
 
@@ -62,6 +62,13 @@ forced-RLS 与数据库 trigger 下更新 owner/generation/lease 三类协调列
 job/outbox 的 attempt/CAS 和稳定 Provider event/job ID 仍是最终副作用栅栏。Redis 只能作为可选唤醒优化，
 不得成为队列或租户状态真值。当前只通过静态门禁，未执行 `0050`、真实 PostgreSQL/RLS、多进程崩溃恢复或
 Provider 去重验收，任务保持 `in_progress`。
+`ENT-REL-001` 已增加企业候选版本安全门禁：CI 对 tracked/untracked 文本执行21条高置信 SAST 与密钥扫描，
+生产依赖继续使用精确版本、缓解措施和到期日绑定的临时例外；隔离 test/staging 渗透执行器只从环境变量
+读取凭据，结果不保存请求/响应正文，并以 HMAC 绑定 commit、目标、计划 hash、时间窗和必测攻击类别。
+API 浏览器 CORS 已从任意 Origin 反射收敛为生产默认同源、显式精确 allowlist，固定 LiveKit 模块也不再
+通过动态代码构造加载；iOS release 已移除 ATS 任意网络加载。当前静态扫描 P0/P1 为0、依赖高危/严重为0，但仍有14个 moderate 项属于同一
+OpenTelemetry 临时例外；真实隔离环境渗透、独立 reviewer、密钥轮换/恢复和外部 SAST 报告均未执行，
+`AC-ENT-0050` 未通过，任务保持 `in_progress`，不得宣称“零漏洞”或企业生产安全门禁已通过。
 `ENT-CORE-004` 已增加 tenant-scoped source/version/chunk、草稿审核发布状态机、发布后不可变约束、
 locale/country/product/effective-time 检索和知识引用 ID；
 `ENT-CORE-005` 已增加版本化 term pack/script template、审核发布和生效窗口、发布后不可变约束，

@@ -1,0 +1,40 @@
+{
+  "schemaVersion": 1,
+  "blockedSeverities": ["P0", "P1"],
+  "requiredStaticRuleIds": [
+    "ENT-SAST-001",
+    "ENT-SAST-002",
+    "ENT-SAST-003",
+    "ENT-SAST-004",
+    "ENT-SAST-005",
+    "ENT-SAST-006",
+    "ENT-SAST-007",
+    "ENT-SAST-008",
+    "ENT-SAST-009",
+    "ENT-SAST-010",
+    "ENT-SAST-011",
+    "ENT-SAST-012",
+    "ENT-SAST-013",
+    "ENT-SAST-014",
+    "ENT-SAST-015",
+    "ENT-SECRET-001",
+    "ENT-SECRET-002",
+    "ENT-SECRET-003",
+    "ENT-SECRET-004",
+    "ENT-SECRET-005",
+    "ENT-SECRET-006"
+  ],
+  "penetration": {
+    "allowedEnvironments": ["test", "staging"],
+    "maxEvidenceAgeHours": 168,
+    "minimumCases": 6,
+    "requiredCategories": [
+      "unauthenticated_access",
+      "tenant_context_spoofing",
+      "cross_tenant_access",
+      "role_escalation",
+      "webhook_signature_replay",
+      "payload_limit"
+    ]
+  }
+}

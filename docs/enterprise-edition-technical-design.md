@@ -1,6 +1,6 @@
 # 无界AI企业版详细技术设计
 
-版本：v1.67
+版本：v1.68
 日期：2026-07-20
 状态：统一通讯平台与 PostgreSQL Primary 收敛详细技术方案
 
@@ -24,6 +24,7 @@
 | PostgreSQL schema | `implemented` | 已有五十段 up/down migration、tenant-first 索引、复合 FK、强制 RLS、user directory、cell pending projection/coordination、opaque subject identity、企业通讯/dispatch/策略、usage/billing、knowledge/terminology、observability trace、受控审计导出、Meeting、客服、Campaign/Lead/Consent/Suppression/Country Policy、活动审批快照、Scheduler、PSTN dispatch、Marketing Agent、人工接管、Outcome 和 CRM sync 栅栏；尚无真实 migrate/restore/PITR 证据 |
 | Tenant-scoped Repository | `ready_for_acceptance` | 已有 tenant/user/cell scoped transaction、subject guard、单一 `legacy|postgres` runtime、HTTP 全链路注入、独立 cell Worker，以及 Tenant/Member/Audit、Directory、lifecycle、Inbox/Outbox、budget、billing/entitlement、usage accounting、knowledge、terminology 和共享 unit-of-work；尚无真实 PostgreSQL H3 证据 |
 | Enterprise Inbox/Outbox | `ready_for_acceptance` | 已有 tenant-scoped 去重、稳定 payload hash、领域/inbox/outbox 原子提交、lease/retry/recovery 和100次重放门禁；真实 PostgreSQL 并发与 Provider sandbox 尚待验收 |
+| 企业安全门禁 | `in_progress` | 已有21条高置信 SAST/密钥规则、精确依赖例外、隔离 test/staging 渗透 runner、commit/计划/时间窗 HMAC evidence verifier 和 CI 静态 job；本轮静态 P0/P1 为0且依赖无 high/critical，但14个 moderate 仍为限期 OpenTelemetry 例外，真实渗透/独立复核/密钥轮换未执行 |
 | SQLite/JSON 演示数据导入 | `ready_for_acceptance` | 已有维护窗口、SQLite 临时副本与 quick_check、空目标事务导入、六集合 count/SHA-256 读回对账和不一致回滚；仅限内部演示数据 |
 | 公共 Primary Runtime 收敛 | `ready_for_acceptance` | 已合入上游稳定提交 `fe1c3c2`；公共31段与 enterprise 50段 manifest 由一个启动编排验证，driver、数据库身份和分权连接失败均在监听前闭合；尚无真实 PostgreSQL H3 证据 |
 | 企业链路追踪 | `in_progress` | 平台 trace 已进入 tenant context、PostgreSQL session、communication binding、usage event/ledger 与会话报告；本轮未执行测试和真实 PostgreSQL 门禁，货币成本因无价格表明确 not configured |
@@ -2307,6 +2308,38 @@ document，SQLite/JSON 明确返回 `enterprise_postgres_required`。
 | L4 高敏/生物特征 | 原始音频、屏幕录制、声纹 embedding、付款/身份材料 | 单独授权、最短保留、严格 purpose 限制，不进入普通日志/分析 |
 
 模型输入遵循最小化原则；不需要的 L3/L4 字段在进入 Provider 前删除或标记化。Provider 是否允许训练、保存多久、处理区域和删除能力属于 capability/readiness 门禁。
+
+### 17.3 企业候选版本安全门禁（ENT-REL-001）
+
+门禁分为三份互不替代的证据：
+
+1. `check:enterprise-security-static` 从 Git 索引和未忽略的新文件生成扫描集合，跳过二进制后对
+   `apps/packages/services/*/src` 执行高置信 SAST，并对所有文本执行私钥与 GitHub、Slack、OpenAI、AWS、
+   Google 高置信 credential 规则。当前规则覆盖动态执行、全局关闭 TLS、反射式 CORS、原始 HTML注入、
+   child-process shell、Python shell/不校验证书/pickle，以及 Dart 证书/shell、Android release cleartext/
+   mixed content、iOS ATS/任意证书。policy 固定规则 ID，删除规则或放宽 P0/P1 都失败闭合。
+2. `check:dependency-security` 直接消费 `npm audit --omit=dev --json`，除精确匹配的临时例外外，新增 low/high/
+   critical、依赖名、severity、direct version、advisory、缓解 source marker 或到期日漂移均拒绝。本批结果仍是
+   同一 OpenTelemetry advisory 的14个 moderate package；这只表示限期接受，不是零漏洞或已修复。
+3. `enterprise:security-penetration` 读取未跟踪 JSON plan，凭据只引用环境变量；runner 仅允许 localhost 或
+   `ENTERPRISE_SECURITY_ALLOWED_HOSTS` 中的 test/staging，远端强制 HTTPS，拒绝 production、URL credential、
+   literal authorization/cookie/API key、重定向跟随和不完整类别。证据不保存 request/response body，只保存
+   status、bytes、SHA-256、duration 和 P1 finding。
+
+渗透 policy 至少要求未认证访问、tenant context 伪造、跨租户读取、角色提权、webhook 签名/重放和 payload
+上限六类。证据使用不少于32字符的独立 HMAC key 签名，覆盖 commit、test/staging origin、runner version、
+plan hash、开始/结束时间、每次尝试和 finding；release verifier 要求 candidate commit 精确相同、证据不超过
+168小时、所有类别/attempt 通过且 P0/P1 为0。签名 key、token、route document 不得进入 plan、artifact 或日志。
+
+共享 API 的 CORS 现由 `API_CORS_ALLOWED_ORIGINS` 精确配置：生产缺配置时关闭跨域，仅保留同源反向代理；
+非生产缺配置时只允许 localhost/loopback，wildcard、子域推导、路径、用户信息和重复 Origin 拒绝。
+`@livekit/rtc-node` 使用固定 `import()`，不再以 `new Function` 构造代码。PostgreSQL `require` 模式只保留给
+封闭非生产环境；iOS release 已移除 `NSAllowsArbitraryLoads`，Android cleartext 只允许 debug/profile manifest。
+既有 Primary startup 在 production 仍硬性要求 `verify-full`，不能用本静态规则降低该门禁。
+
+CI 只执行静态和依赖门禁；真实渗透必须在冻结候选环境另行执行，再由
+`check:enterprise-security-release -- --evidence=...` 重新运行两项扫描并验签。当前未执行真实 HTTP 攻击、外部
+SAST/DAST、独立 reviewer 或密钥轮换/恢复，所以 `ENT-REL-001` 保持 `in_progress`，`AC-ENT-0050` 未通过。
 
 ## 18. Provider readiness
 

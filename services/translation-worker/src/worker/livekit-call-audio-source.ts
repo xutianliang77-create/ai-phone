@@ -327,7 +327,5 @@ export class LiveKitCallAudioSource {
 }
 
 async function loadRtcNode(): Promise<RtcNodeModule> {
-  const dynamicImport = new Function("name", "return import(name)") as
-    (name: string) => Promise<RtcNodeModule>;
-  return dynamicImport("@livekit/rtc-node");
+  return import("@livekit/rtc-node") as Promise<RtcNodeModule>;
 }

@@ -5,6 +5,7 @@ import {
   redactLogObject,
   redactLogString,
 } from "@translation/contracts";
+import { apiCorsOrigin } from "./config/api-cors.js";
 import { registerAccountRoutes } from "./modules/account/account.routes.js";
 import { registerAgentCallRoutes } from "./modules/agent-calls/agent-calls.routes.js";
 import { registerBillingRoutes } from "./modules/billing/billing.routes.js";
@@ -178,7 +179,7 @@ export async function buildApp(dependencies: {
     createEnvironmentEnterpriseSupportInboundTicketService();
   app.addHook("onClose", () => auditExportArtifactStore.close());
   registerPlatformTelemetryHooks(app);
-  await app.register(cors, { origin: true });
+  await app.register(cors, { origin: apiCorsOrigin() });
   await registerAccountRoutes(app);
   await registerAgentCallRoutes(app);
   await registerHealthRoutes(app);

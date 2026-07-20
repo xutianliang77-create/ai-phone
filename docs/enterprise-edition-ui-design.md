@@ -1,6 +1,6 @@
 # 无界AI企业版 UI 详细设计
 
-版本：v1.35
+版本：v1.36
 日期：2026-07-20
 状态：设计基线；企业 Web 公共组件、首批设置/工作台、响应式/主题/无障碍和 Web/iOS/Android 成员屏幕共享代码候选已实现，正式验收仍在开发
 
@@ -432,6 +432,9 @@ budget、usage aggregate 和显式 session trace report。卡片沿用同一 Mat
   `cutover` 必须同时显示数据库逐表 hash、对象 receipt、旧 writer 为零和新 route epoch，任一缺失使用统一
   `warning/failed` 状态与 `sync_problem`/`undo` Material Icons，不用客户端计时器推断完成。
 - Provider 配置页只显示 capability 和脱敏 fingerprint，不回显密钥。
+- `ENT-REL-001` 不新增租户可操作的“安全扫描通过”开关。SAST、依赖、密钥和渗透 verdict 只属于平台
+  发布流水线与审计证据；若以后在状态页展示，只能显示候选版本、`ready/not_ready`、时间和脱敏 finding
+  计数，不能显示源代码行、目标 URL、token、请求/响应正文或把临时依赖例外表述为零漏洞。
 
 ## 9. Flutter 企业入口
 

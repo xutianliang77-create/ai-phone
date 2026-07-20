@@ -1,0 +1,77 @@
+{
+  "schemaVersion": 1,
+  "commitSha": "replace-with-40-character-candidate-commit",
+  "target": {
+    "environment": "staging",
+    "baseUrl": "https://staging-api.example.com"
+  },
+  "cases": [
+    {
+      "id": "unauthenticated-me",
+      "category": "unauthenticated_access",
+      "method": "GET",
+      "path": "/enterprise/v1/me",
+      "allowedStatuses": [401, 403]
+    },
+    {
+      "id": "spoofed-tenant-header",
+      "category": "tenant_context_spoofing",
+      "method": "GET",
+      "path": "/enterprise/v1/me",
+      "authEnv": "ENT_SECURITY_TENANT_A_TOKEN",
+      "headers": {
+        "x-tenant-id": "00000000-0000-4000-8000-000000000002",
+        "baggage": "tenant_id=00000000-0000-4000-8000-000000000002"
+      },
+      "allowedStatuses": [200],
+      "forbiddenResponseSubstrings": ["00000000-0000-4000-8000-000000000002"]
+    },
+    {
+      "id": "cross-tenant-meeting",
+      "category": "cross_tenant_access",
+      "method": "GET",
+      "path": "/enterprise/v1/meetings/00000000-0000-4000-8000-000000000001",
+      "authEnv": "ENT_SECURITY_TENANT_B_TOKEN",
+      "headerEnvs": {
+        "x-tenant-route": "ENT_SECURITY_TENANT_B_ROUTE"
+      },
+      "allowedStatuses": [403, 404]
+    },
+    {
+      "id": "viewer-member-write",
+      "category": "role_escalation",
+      "method": "POST",
+      "path": "/enterprise/v1/members",
+      "authEnv": "ENT_SECURITY_VIEWER_TOKEN",
+      "headerEnvs": {
+        "x-tenant-route": "ENT_SECURITY_VIEWER_ROUTE"
+      },
+      "headers": { "content-type": "application/json" },
+      "body": { "userId": "00000000-0000-4000-8000-000000000003", "role": "admin" },
+      "allowedStatuses": [403, 404]
+    },
+    {
+      "id": "invalid-webhook-signature-replay",
+      "category": "webhook_signature_replay",
+      "method": "POST",
+      "path": "/webhooks/enterprise/marketing/pstn",
+      "headers": { "content-type": "application/json", "x-signature": "invalid" },
+      "body": { "eventId": "security-replay-fixture" },
+      "repeat": 2,
+      "allowedStatuses": [400, 401, 403]
+    },
+    {
+      "id": "oversized-enterprise-request",
+      "category": "payload_limit",
+      "method": "POST",
+      "path": "/enterprise/v1/knowledge/search",
+      "authEnv": "ENT_SECURITY_TENANT_A_TOKEN",
+      "headerEnvs": {
+        "x-tenant-route": "ENT_SECURITY_TENANT_A_ROUTE"
+      },
+      "headers": { "content-type": "application/json" },
+      "bodyRepeat": { "field": "query", "character": "A", "count": 1048577 },
+      "allowedStatuses": [400, 413, 422]
+    }
+  ]
+}

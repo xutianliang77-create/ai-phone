@@ -1,6 +1,6 @@
 # 无界AI企业版开发方案与计划
 
-版本：v1.69
+版本：v1.70
 日期：2026-07-20
 状态：E0 执行计划，已对齐统一通讯平台和 PostgreSQL Primary 收敛
 
@@ -31,6 +31,11 @@
 - `ENT-DATA-006` 已形成 PostgreSQL-only 多实例协调候选：持久 queue owner/generation/lease、Cell-scoped
   `SKIP LOCKED` claim、并发处理、heartbeat/fence 和稳定 Provider 幂等键均已接入；Redis 不承担真值。
   测试、`0050` 真实 migrate/forced-RLS、双进程故障恢复和 Provider sandbox 未执行，保持 `in_progress`。
+- `ENT-REL-001` 已形成候选版本安全门禁：21条高置信 SAST/密钥规则扫描 Git tracked/untracked 文本，既有
+  dependency audit 精确约束 OpenTelemetry 临时例外，隔离 test/staging runner 与 HMAC verifier 绑定 commit、
+  计划 hash、时间窗和六类攻击；CI 新增独立静态安全 job。API CORS 已收敛到生产同源/精确 allowlist，固定
+  LiveKit 模块不再动态构造代码。当前 P0/P1 静态 finding 为0且依赖无 high/critical，但14个 moderate 仍是
+  限期例外；真实渗透、独立复核、外部 SAST/DAST 和密钥轮换/恢复未执行，任务保持 `in_progress`。
 - `ENT-DATA-003` 已完成 tenant-scoped Inbox/Outbox、事务内领域提交、100次重放去重、lease/retry/recovery 和 SQLite/迁移自动化，进入 `ready_for_acceptance`；真实 PostgreSQL 并发 claim 和 Provider sandbox 仍是验收门禁。
 - `ENT-DATA-007` 已合入上游稳定提交 `fe1c3c2`，用唯一 `API_STORAGE_DRIVER`、公共/enterprise 双 manifest 验证、同库 name/OID 校验和 tenant/directory/cell/migration/maintenance 分权连接收敛 API 与 cell Worker；代码和本地自动化进入 `ready_for_acceptance`，真实 PostgreSQL H3 未执行。
 - `ENT-UI-001` 已完成生产令牌、Material Icons 注册表、Flutter 对照和浏览器验证，等待验收；`ENT-UI-002` 已完成共享 scope 真值、九角色导航矩阵、嵌套路由 guard 和 `ENT-CORE-011` 签名 route document；`ENT-UI-003` 已完成八态组件矩阵及 Provider/冲突/job 真值联调，均等待验收。
@@ -311,6 +316,9 @@ CORE-001/002 验收
 - 租户级限流、配额、预算和异常熔断。
 - 数据保留、导出、删除、备份和恢复演练。
 - SAST、依赖扫描、渗透测试和密钥轮换。
+- 每个 candidate commit 在 CI 跑高置信 SAST/密钥和生产依赖 audit；P0/P1 不允许例外。真实 test/staging
+  渗透 evidence 必须与相同 commit 绑定、七天内、覆盖六类攻击并通过独立 reviewer，release verifier 验签后
+  才能进入候选发布；临时依赖例外必须在发布记录中显式披露。
 - 监控、告警、值班手册、容量和成本报告。
 - 订阅续费、欠费暂停、超额策略、账单对账和客户状态页。
 - 跨故障域 PostgreSQL 自动切换、旧主 writer fencing、重新加入和异地主机不可变备份/PITR；同机副本或人工切换不能替代生产门禁。
@@ -429,3 +437,6 @@ Adapter 静态候选；`AC-ENT-0046`、`0049` migration/RLS、真实 sandbox、W
 Worker 以 `FOR UPDATE SKIP LOCKED` 原子 claim、并发处理、续租和条件释放，具体 job/outbox attempt/CAS 与稳定
 event/job ID 继续承担最终副作用 fence。`AC-ENT-0049`、`0050` migrate/down/forward、forced-RLS 最小权限、
 真实双实例竞争、kill -9/网络故障、租约到期重领和 Provider 去重均未执行，任务保持 `in_progress`。
+`ENT-REL-001` 已进入企业安全门禁静态候选：高置信 SAST/密钥扫描与依赖 audit 已执行，CI、隔离渗透 runner、
+HMAC evidence/release verifier 和 CORS/固定模块加载修复已形成代码；真实 test/staging 攻击、外部 scanner、
+独立 reviewer、密钥轮换/恢复及 `AC-ENT-0050` 未执行，不能宣称零漏洞或企业安全门禁通过。

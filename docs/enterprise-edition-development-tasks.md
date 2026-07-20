@@ -1,6 +1,6 @@
 # 无界AI企业版开发任务
 
-版本：v1.72
+版本：v1.73
 日期：2026-07-20
 状态：E0 开发中，已对齐统一通讯平台和 PostgreSQL Primary 收敛
 
@@ -35,6 +35,11 @@
   `SKIP LOCKED` 原子 claim、owner/generation/lease、heartbeat 和条件 release；业务 job/outbox attempt/CAS 与
   稳定 event/job ID 继续阻断旧实例和重复副作用。测试已定义但未运行，真实 migration/RLS、双进程崩溃重领和
   Provider sandbox 去重未验收，`AC-ENT-0049` 未通过，状态保持 `in_progress`。
+- `ENT-REL-001` 已形成企业候选版本安全门禁：21条高置信 SAST/密钥规则覆盖 Git tracked/untracked 文本，
+  依赖 audit 继续精确限制未到期的 OpenTelemetry moderate 临时例外；隔离 test/staging HTTP runner、六类攻击
+  policy、脱敏 HMAC evidence/release verifier 和 CI 静态 job 已接通。API CORS 已改为生产同源/精确 allowlist，
+  固定 LiveKit 模块改用 `import()`。本轮静态 finding P0/P1 为0、依赖 high/critical 为0，但14个 moderate 仍是
+  临时例外；真实渗透/外部扫描、独立 reviewer 与密钥轮换未验收，`AC-ENT-0050` 未通过，保持 `in_progress`。
 - `ENT-CORE-004` 已新增 enterprise `0017`、共享契约、tenant Knowledge Repository/runtime 和七个服务端路由：source、递增 revision、一次性 chunk 集、review、publish、列表和检索均绑定 membership/RBAC/route document。服务端生成 chunk/content SHA-256 与 citation；数据库要求 review+非空 chunk 才能发布，并冻结 published version/chunk。检索强制 tenant/locale/country/product/effective-time，只取每个 source 最新有效 published revision；review、过期和跨租户数据返回空。代码、定向矩阵及一次性 PostgreSQL 16 普通角色 forced-RLS/down-up 验证完成，进入 `ready_for_acceptance`；embedding Provider、真实对象存储、恶意文档扫描和生产 A1/H3 尚未验收。
 - `ENT-CORE-005` 已新增 enterprise `0018`、共享契约、Term Pack/Script Template Repository/runtime 和十三个服务端路由。稳定资源下的 revision 由服务端行锁递增，内容规范化后生成 SHA-256，review 后内容/hash 与 published 版本不可修改；resolver 强制 tenant/source-target locale/country/product/purpose/effective-time，只返回有效 published 版本，并给 ASR、翻译、LLM 同一 `termPackVersionId`，可选话术只给 LLM。代码、定向矩阵和一次性 PostgreSQL 16 非 owner/非 BYPASSRLS 普通角色 down-forward 验证完成，进入 `ready_for_acceptance`；真实 Worker/Provider、A1/H3 尚未验收。
 - `ENT-CORE-009` 已完成租户创建/区域开通幂等、失败重试、暂停、导出和删除执行器；导出固化 tenant/member/job 与 actor scope 快照，执行使用租约、有界重试和 receipt hash，删除只在 receipt 校验后进入 `deleted`，等待真实生命周期服务与对象存储验收。
@@ -382,7 +387,7 @@ snapshot 测试已定义但未运行；未运行 Vitest/API/Repository、真实 
 | ENT-DATA-005 | Cell 数据迁移和回滚 | CORE-011、DATA-001/009 | 签名 export/cutover/rollback、动态 tenant/scope 表计划、对象 receipt、writer fence、流式 import/reconcile | 记录、ledger、audit、对象引用逐表一致；route epoch +1；旧 Cell 只读；反向回滚携带最新数据 | in_progress |
 | ENT-DATA-006 | 多实例协调 | DATA-003/007/008 | `0050` 持久 queue owner/generation/lease、`SKIP LOCKED` claim、heartbeat/fence、稳定 Provider 幂等键 | 同 Cell 单一有效 claim；崩溃到期重领；旧 generation 不能 finalize；不产生重复业务副作用 | in_progress |
 | ENT-DATA-009 | Primary 数据切换和全量对账 | DATA-007/008、CORE-013/014 | 全量/增量 count/hash、水位、writer fence、cutover/rollback/restore 签名证据 | 旧 writer 清退；切换前后 tenant/session/ledger/object 引用一致 | ready_for_acceptance |
-| ENT-REL-001 | 企业安全门禁 | CORE-002/006 | SAST、依赖、密钥和渗透测试 | P0/P1 问题清零 | todo |
+| ENT-REL-001 | 企业安全门禁 | CORE-002/006 | 高置信 SAST/密钥、依赖例外、隔离渗透 runner、签名 release evidence | P0/P1 为0；同 commit 七天内六类渗透证据验签；临时例外未过期且显式披露 | in_progress |
 | ENT-REL-002 | 数据生命周期 | DATA-001/003 | retention/export/delete jobs | 删除可审计且对象最终收敛 | todo |
 | ENT-REL-003 | 备份和灾备 | DATA-005/009 | 跨故障域自动切换、旧主 fencing、异地主机不可变备份、PITR | 达到约定 RPO/RTO，旧主不能恢复写入 | todo |
 | ENT-REL-004 | 灰度和熔断 | OBS-001 | tenant flag、kill switch、runbook | 单租户异常可隔离停止 | todo |

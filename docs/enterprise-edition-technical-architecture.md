@@ -1,6 +1,6 @@
 # 无界AI企业版技术架构
 
-版本：v1.51
+版本：v1.52
 日期：2026-07-20
 状态：SaaS 详细架构基线，已对齐统一通讯平台和 PostgreSQL Primary
 
@@ -930,6 +930,16 @@ Redis 若引入只能发送“可能有工作”的短暂唤醒，不参与 owne
 - 客户端 token 短期有效，并限制房间、角色和可发布轨道类型。
 - trace context 只承载关联信息；边缘入口丢弃 `baggage`，tenant、role、route、entitlement 和
   policy 只从认证、membership 和服务端状态解析，不能从 trace header 扩权。
+- 候选版本在 CI 执行独立企业安全 job：高置信 SAST/密钥扫描覆盖 tracked 与尚未提交的新文件，生产依赖
+  audit 只允许精确命中、未到期且有缓解措施的低等级例外。任何 P0/P1 或规则 manifest 漂移立即阻断。
+- 渗透执行器位于发布流水线外的隔离 test/staging 区，只允许 localhost 或显式 host allowlist；远端必须
+  HTTPS，拒绝 production、URL 凭据、重定向跟随和字面量认证 header。凭据只从环境变量注入。
+- 渗透 evidence 只保存 HTTP status、响应大小/hash、耗时和 finding 等级，以独立 HMAC 绑定 candidate commit、
+  目标 origin、计划 hash 和时间窗。发布门禁重新执行静态/依赖扫描并验签七天内 evidence；这不能替代
+  独立安全 reviewer、外部扫描器或密钥轮换/恢复演练。
+- 浏览器 API CORS 在生产无配置时关闭跨域，仅同源反向代理可用；分离部署必须配置精确 Origin allowlist，
+  wildcard、子域推导和请求 Origin 反射均拒绝。固定运行时模块使用静态 `import()`，不构造动态代码；iOS
+  release 不允许 ATS arbitrary loads，Android cleartext 仅可存在于 debug/profile manifest。
 
 ## 11. 可观测性
 
