@@ -123,6 +123,11 @@ export const enterpriseIcons = {
     pstn: "phone_in_talk",
     agent: "smart_toy",
     disclosure: "campaign",
+    monitoring: "monitor_heart",
+    captions: "closed_caption",
+    risk: "warning",
+    latency: "timer",
+    failure: "error_outline",
   },
   appearance: {
     system: "brightness_auto",

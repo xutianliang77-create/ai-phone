@@ -42,6 +42,8 @@ import { createEnterprisePostgresMarketingPstnRuntime } from
   "./enterprise-postgres-marketing-pstn-runtime.js";
 import { createEnterprisePostgresMarketingAgentRuntime } from
   "./enterprise-postgres-marketing-agent-runtime.js";
+import { createEnterprisePostgresMarketingMonitoringRuntime } from
+  "./enterprise-postgres-marketing-monitoring-runtime.js";
 
 export function createEnterprisePostgresBusinessRuntimes(
   pool: EnterpriseTenantPostgresPool,
@@ -70,5 +72,6 @@ export function createEnterprisePostgresBusinessRuntimes(
     ...createEnterprisePostgresMarketingSchedulerRuntime(pool),
     ...createEnterprisePostgresMarketingPstnRuntime(pool),
     ...createEnterprisePostgresMarketingAgentRuntime(pool),
+    ...createEnterprisePostgresMarketingMonitoringRuntime(pool),
   };
 }

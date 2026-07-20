@@ -1,6 +1,6 @@
 # 无界AI企业版详细技术设计
 
-版本：v1.60
+版本：v1.61
 日期：2026-07-20
 状态：统一通讯平台与 PostgreSQL Primary 收敛详细技术方案
 
@@ -50,6 +50,7 @@
 | 客服质检分析 | `in_progress` | `0036`、`quality:read/manage`、不可变规则/复核/发现、终态会话 source hash、五类确定性结构规则和 Web Dashboard 已形成代码候选；语义模型未配置且错误回答率为空，未执行自动化、migration/RLS、浏览器或语义质量验收 |
 | Campaign 聚合 | `in_progress` | `0037..0045`、共享契约、Lead/Consent/Suppression/Policy/Approval、确定性 task 物化、Scheduler claim/lease/hold、scoped PSTN dispatch、tenant Repository/runtime/API 和同风格 Web 页面已形成代码候选；未执行自动化、migration/RLS、真实 PSTN、并发或浏览器验收 |
 | Marketing Agent | `in_progress` | `0046`、版本化国家/locale profile、PSTN 同事务 run、服务端 disclosure/turn/TTS 状态机、短期签名 runtime ticket、严格 LLM Adapter、knowledge citation/禁语校验、退订 suppression 和 Campaign Web 配置已形成代码候选；未执行自动化、migration/RLS、真实 LLM/PSTN 通话或浏览器验收 |
+| Marketing 实时监控 | `in_progress` | 已有 `campaign:read` 的 tenant-scoped 汇总/单通话只读投影、最终字幕/Agent/Provider 证据、延迟/新鲜度/失败分类和同风格 Web 快照面板；当前明确为5秒非流式快照，未执行自动化、真实 PostgreSQL/RLS、通话、浏览器或 Realtime Gateway 验收 |
 | 营销授权证据 | `in_progress` | `0039`、对象实体验证、Campaign/Lead/purpose 绑定、不可变登记/撤回、服务端有效性解析、task insert/reschedule 数据库 guard 和同风格 Web 面板已形成代码候选；真实 S3/KMS、PostgreSQL/RLS、并发、浏览器和法务抽样未验收 |
 | 营销禁拨名单 | `in_progress` | `0040`、tenant/global 不可变记录、拒绝/撤回来源、Repository/runtime/API、同号码事务锁、task insert/reschedule guard、跨活动待任务取消和同风格 Web 面板已形成代码候选；全局注册表明确 not_configured，真实 PostgreSQL/RLS、并发、浏览器和名单同步未验收 |
 | 企业术语与话术版本 | `ready_for_acceptance` | enterprise `0018`、共享契约、Term Pack/Script Template Repository/runtime/API 已实现稳定资源、递增 revision、review/publish、有效期解析、hash 校验和同一术语版本运行时引用；仅有自动化和本地 PostgreSQL 16 普通角色证据，真实 Worker/Provider、A1/H3 未通过 |
@@ -812,6 +813,8 @@ GET    /enterprise/v1/campaigns/:campaignId/leads/:leadId/suppression-eligibilit
 POST   /enterprise/v1/suppression
 GET    /enterprise/v1/campaigns/:campaignId/marketing-agent
 PUT    /enterprise/v1/campaigns/:campaignId/marketing-agent/profiles
+GET    /enterprise/v1/campaigns/:campaignId/monitoring
+GET    /enterprise/v1/campaigns/:campaignId/monitoring/calls/:dispatchId
 ```
 
 Marketing Agent profile 的 GET/PUT 分别要求 `campaign:read/write`、active membership 和签名 route document；PUT 还要求
@@ -1065,6 +1068,16 @@ qualification 必须逐条使用 profile 原问题；服务端同时阻断价格
 不等于坐席已接通，真实 handoff 属于 `ENT-MKT-011`。TTS 前必须 authorize，playout 后必须 delivered；终态文本交付后 run
 收敛，PSTN 先终态时 finalize 仍通过同一 ticket fence 收口。Provider 或知识失败使用明确降级话术并停止，不生成外部
 成功、Outcome、资料发送、预约或回访记录。
+
+`ENT-MKT-010` 的两个读取 API 都要求 active membership、`campaign:read` 和签名 route document，route/body 不接受
+tenant 或 actor 覆盖。Campaign 级 snapshot 返回最多100条最近 dispatch、全量聚合计数、transport/freshness 和
+`truncated`；单通话 API 先重验 dispatch 属于同 tenant/Campaign，再返回最多200条公共最终修订字幕、100条 Agent turn
+和200条 scoped Provider operation。legacy/SQLite 固定 `enterprise_postgres_required`，跨租户或跨 Campaign ID 返回404。
+
+投影不新建 monitoring 表：dispatch/task/run/turn 的既有 server truth 与公共 scoped communication tables 仍是唯一真值。
+状态 age 以服务端 `generatedAt` 计算；accepted/answered 超15秒未变化标记 stale，accepted/answered 且10秒未交付
+disclosure 标记 warning，unknown/failed/Agent failed 标记 critical。当前 `transport.mode=snapshot`、
+`refreshAfterMs=5000`、`streamStatus=not_configured`，因此 UI 必须写明“非流式”，不能用轮询冒充 WSS/SSE 成功。
 
 ## 7. Agent Runtime
 

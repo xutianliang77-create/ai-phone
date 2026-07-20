@@ -1,6 +1,6 @@
 # 无界AI企业版开发任务
 
-版本：v1.65
+版本：v1.66
 日期：2026-07-20
 状态：E0 开发中，已对齐统一通讯平台和 PostgreSQL Primary 收敛
 
@@ -246,7 +246,7 @@ claim、断线回收和人工接通均未验收，任务保持 `in_progress`。
 | ENT-MKT-007 | Scheduler | MKT-006、CORE-007/014 | `0044`、审批快照任务物化、当地窗口 due query、SKIP LOCKED/CAS claim、route fence、usage hold、租户/活动并发、只读 Web 状态 | 50并发不重复 claim，过期租约可恢复，单租户超载不拖垮 cell | in_progress |
 | ENT-MKT-008 | PSTN dispatch | MKT-007、CORE-008/014、DATA-008 | `0045`、Provider adapter、签名 webhook、communication binding、Outbox、60秒 settle、scoped dispatch、只读 Web 状态 | 重放不重复拨号/扣费，旧 route/generation 不能拨号，Provider 未配置失败闭合 | blocked |
 | ENT-MKT-009 | Marketing Agent | MKT-008、CORE-004/005 | `0046`、版本化 profile、服务端状态机、签名 runtime ticket、严格 LLM Adapter、knowledge citation、disclosure/TTS fence、Campaign Web 配置 | 无依据不承诺；告知未播放不能继续；退订原子写 suppression 并结束；Provider 未配置失败闭合 | in_progress |
-| ENT-MKT-010 | 实时监控 | MKT-008、OBS-001 | dashboard、字幕、风险 | 状态延迟和失败可观测 | todo |
+| ENT-MKT-010 | 实时监控 | MKT-008、OBS-001 | campaign/call 只读投影、最终字幕、Agent 意图/风险、Provider 延迟/失败、5秒非流式 Web 快照 | 真实状态延迟和失败可观测；无样本/未接实时流不伪造成功 | in_progress |
 | ENT-MKT-011 | 人工接管 | MKT-009、CS-009 | handoff、超时和回拨 | 接管后 AI 音频立即停止 | todo |
 | ENT-MKT-012 | Outcome | MKT-009 | disposition、intent、next action | 有证据且不重复生成任务 | todo |
 | ENT-MKT-013 | CRM Adapter | MKT-012、CORE-008 | contract、outbox、首个 Provider | 外部失败恢复后只同步一次 | blocked |
@@ -317,6 +317,15 @@ published Term Pack/Script Template 与 context hash。退订由服务端确定�
 记录请求并停止 AI，真实接管仍属于 `ENT-MKT-011`。Provider、HTTPS runtime、签名 secret、profile 或 published 内容
 任一缺失都使 PSTN readiness 失败闭合。当前只形成代码、测试定义和静态候选；`0046` migrate/down、forced-RLS、
 双租户、真实 LLM/PSTN/通话、浏览器和承诺/引用攻击矩阵均未执行，`AC-ENT-0042` 未通过，任务保持 `in_progress`。
+
+`ENT-MKT-010` 已形成 PostgreSQL-only Campaign 汇总和单通话监控 Repository/runtime/API，使用 `campaign:read`、签名
+route、forced-RLS business tables 与公共 `scope_type/scope_id` 白名单读取。快照显示脱敏 Lead、dispatch/task/run/turn、
+告知交付、最终 revision 字幕、意图/风险/引用、Provider operation、接受/接听延迟、状态 age 和确定性关注原因；Web
+复用既有 token/Material Icons，并只在面板展开时按5秒刷新。Realtime Gateway 尚未接入，响应和页面均明确
+`streamStatus=not_configured/非流式`，也没有接管或 Outcome 写入口。当前通过 typecheck、build、E2E TypeScript、文件规模和
+开发态 bundle 静态门禁；自动化、真实
+PostgreSQL/RLS、双租户、真实通话、浏览器、100路刷新负载和流式订阅未验收，`AC-ENT-0043` 未通过，保持
+`in_progress`。
 
 ## 7. P2 企业发布
 

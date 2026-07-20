@@ -1,6 +1,6 @@
 # 无界AI企业版技术架构
 
-版本：v1.44
+版本：v1.45
 日期：2026-07-20
 状态：SaaS 详细架构基线，已对齐统一通讯平台和 PostgreSQL Primary
 
@@ -504,6 +504,22 @@ turn delivered`。只有 disclosure delivered 才能生成后续话术；只有�
 进入 `handoff_requested`，由 `ENT-MKT-011` 建立真实坐席接管，未配置时 Agent 明确说明无法转接后停止。一般回答必须
 引用当前 tenant-scoped published knowledge；无证据、禁语、承诺性内容、越界 citation、Provider 不可用或签名 runtime
 未配置都失败闭合。`ENT-MKT-010` 才提供实时监控，本层不伪造 dashboard、人工接管或 Outcome。
+
+### 7.10 Marketing Monitor 只读证据投影
+
+`ENT-MKT-010` 首批不增加第二套通话状态表。读取路径为
+`Enterprise Web -> campaign:read + signed route -> tenant Unit of Work -> dispatch/task/run/turn + scoped communication`。
+汇总查询以 forced-RLS `marketing_pstn_dispatches` 为根，只沿 tenant-first FK 关联 call task、Lead 和 Agent；单通话详情
+再以同一 `communicationSessionId` 通过公共 Repository 白名单读取 `transcript_segments/provider_operations`，每条公共
+查询必须同时包含 `scope_type='tenant'` 和可信 `scope_id=tenantId`。
+
+字幕只选择每个 `segmentId` 最大 revision 并稳定排序；Agent 侧只返回已存输出、意图、风险、引用、TTS 授权和实际
+delivered 时间，客户原始输入仍只有 hash。脱敏号码 hint 可以展示，明文号码、Provider call ID、幂等键、request hash、
+ticket、prompt、知识正文和审计敏感字段不进入响应。
+
+快照计算 Provider 接受、接听和状态 age，并把 unknown/failed、Agent failed、handoff requested、风险信号、15秒活跃状态
+陈旧和10秒未交付告知映射为明确关注原因。当前 HTTP 传输是5秒快照且 `streamStatus=not_configured`；客户端只在面板
+展开时刷新，不得把它标为 Realtime Gateway 已连接。可靠 WSS/SSE 订阅、接管命令和 Outcome 分别留给后续独立任务。
 
 ## 8. AI 客服架构
 

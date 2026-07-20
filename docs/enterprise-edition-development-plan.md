@@ -1,6 +1,6 @@
 # 无界AI企业版开发方案与计划
 
-版本：v1.62
+版本：v1.63
 日期：2026-07-20
 状态：E0 执行计划，已对齐统一通讯平台和 PostgreSQL Primary 收敛
 
@@ -78,7 +78,12 @@
   runtime ticket、严格 LLM JSON Adapter、published knowledge/Term Pack/Script Template 冻结、citation/禁语校验、
   TTS authorize/delivered fence、退订 suppression 原子写入和同风格 Web 配置。真实人工接管仍属于 `ENT-MKT-011`；
   未配置时如实结束。当前未运行自动化、`0046`/forced-RLS、真实 PostgreSQL/LLM/PSTN、浏览器或通话矩阵，任务保持
-  `in_progress`；下一开发项为 `ENT-MKT-010` 实时监控。
+  `in_progress`。
+- `ENT-MKT-010` 已形成 campaign/call tenant-scoped 只读监控投影、最终修订字幕、Agent 意图/风险、Provider 延迟/
+  失败和同风格 Web 5秒证据快照。当前明确非流式且 Realtime Gateway not_configured；已通过 typecheck、build、E2E
+  TypeScript、文件规模和开发态 bundle 静态门禁，
+  自动化、真实 PostgreSQL/RLS、真实通话、浏览器和负载未验收，保持 `in_progress`。下一开发项为 `ENT-MKT-011`
+  真实人工接管。
 - `ENT-MTG-004` 已形成 `0024`、单会议活动租约唯一约束、acquire/pause/resume/renew/stop 幂等 CAS、代际发布身份、最小权限 LiveKit grant、cell Worker 到期回收和撤销 outbox 代码候选。Web/iOS/Android 采集仍分别属于 MTG-005/006/007；本轮未运行 migration、并发、forced-RLS、Worker 或真实 LiveKit 测试，保持 `in_progress`。
 - `ENT-MTG-005` 已形成成员 Web 屏幕共享代码候选：浏览器用户手势选择内容后读取真实 `displaySurface`，再申请租约并用独立 Room 发布；首次续租绑定 track SID，后续按10秒续租；观看端只接受服务端当前 publisher identity，暂停/停止先断本地发布且撤销 pending 保持可见。系统音频、访客发布、iOS/Android、simulcast 和主持人强停不在本任务内；本轮未运行测试或真实 LiveKit/浏览器门禁，保持 `in_progress`。
 - `ENT-MTG-006` 已形成 iOS ReplayKit 代码候选：主 App 持有短期发布 grant 并维持独立屏幕 Room，Broadcast Upload Extension 只经 App Group Unix socket 发送视频样本；token-free 控制清单以 share/generation/nonce 和 lease expiry 失败闭合，系统停止、超时和离会均先清理本地再收敛服务端租约。当前未构建/安装 App，未执行真机后台、真实 LiveKit、网络切换和权限矩阵，保持 `in_progress`。
@@ -384,6 +389,7 @@ Campaign 聚合、线索导入、授权证据、禁拨与国家策略和同风�
 
 `ENT-MKT-008` 已形成 scoped PSTN dispatch 静态代码候选，但 `AC-ENT-0041`、真实 PSTN sandbox/凭据、PostgreSQL
 forced-RLS、响应丢失对账和浏览器均未完成，状态保持 `blocked`。`ENT-MKT-009` 已形成 Marketing Agent 静态代码
-候选，但 `AC-ENT-0042`、`0046`/forced-RLS、真实 LLM/PSTN 通话和浏览器均未完成，状态保持 `in_progress`；下一开发项
-为 `ENT-MKT-010` 实时监控。
+候选，但 `AC-ENT-0042`、`0046`/forced-RLS、真实 LLM/PSTN 通话和浏览器均未完成，状态保持 `in_progress`。
+`ENT-MKT-010` 已进入只读快照代码候选；`AC-ENT-0043`、真实 PostgreSQL/RLS、通话、浏览器、负载和可靠流式订阅
+均未完成，状态保持 `in_progress`。下一项为 `ENT-MKT-011` 真实人工接管；当前5秒快照不得宣称流式完成。
 staging `ENT-DATA-009` 和 `ENT-REL-002/003` 的对象清理、跨故障域/PITR 仍未通过。

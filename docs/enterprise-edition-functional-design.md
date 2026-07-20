@@ -1,6 +1,6 @@
 # 无界AI企业版详细功能设计
 
-版本：v1.41
+版本：v1.42
 日期：2026-07-20
 状态：SaaS 详细设计基线，已对齐统一通讯平台
 
@@ -342,6 +342,21 @@ Provider、usage/ledger 和 trace；跨会话业务聚合与货币成本尚未�
 - 客户要求人工、连续两次无法回答、投诉或敏感行为时请求接管。
 - 接管成功后 AI 停止发言，保留字幕、翻译和答案建议。
 - 接管超时按策略结束或预约人工回拨，不能让 AI 越权继续。
+
+#### 5.5.1 实时监控首批实现边界
+
+- 活动监控只读取服务端 tenant-scoped PSTN dispatch、call task、Marketing Agent run/turn、公共最终修订字幕和
+  Provider operation，不从浏览器本地缓存、fixture 或推测状态补齐数据。
+- Campaign 汇总固定显示全部、活跃、需要关注和失败数量；单通话显示脱敏号码 hint、dispatch/task/Agent 状态、
+  disclosure 是否交付、当前意图、风险信号、失败码、Provider 接受/接听延迟和状态新鲜度。
+- 客户文本只从公共 `transcript_segments` 的当前最大 revision 读取；Agent turn 继续只保存客户文本 hash，监控页不会
+  反向恢复原始输入。字幕无样本时显示“无样本”，不生成示例对话。
+- 当前传输明确为5秒服务端快照，只有面板展开时刷新；API 返回 `streamStatus=not_configured`，页面固定显示“非流式”。
+  Realtime Gateway/可靠订阅尚未接入，不能把轮询快照宣称为实时流成功。
+- 本任务没有拨号、静音、挂断或接管命令。`handoff_requested` 仅作为需要关注的真实状态显示，实际坐席 claim、媒体切换
+  和 AI 停播仍属于 `ENT-MKT-011`；Outcome/后续动作仍属于 `ENT-MKT-012`。
+- 当前只形成 PostgreSQL 读投影、API 和 Web 静态代码候选；未运行 PostgreSQL/RLS、双租户、真实通话、浏览器、负载或
+  Realtime Gateway 验收，不能宣称实时监控通过企业生产门禁。
 
 ### 5.6 结果和分析
 

@@ -19,6 +19,8 @@ const CampaignPstnDispatchPanel = lazy(() =>
   import("../components/CampaignPstnDispatchPanel.js"));
 const CampaignMarketingAgentPanel = lazy(() =>
   import("../components/CampaignMarketingAgentPanel.js"));
+const CampaignMarketingMonitoringPanel = lazy(() =>
+  import("../components/CampaignMarketingMonitoringPanel.js"));
 
 type LoadState =
   | { status: "loading" }
@@ -221,6 +223,11 @@ export function CampaignsPage() {
           {context ? <Suspense fallback={<StatusPanel state="loading"
             description="正在加载 PSTN 派发状态面板。" />}>
             <CampaignPstnDispatchPanel api={api} context={context}
+              campaign={campaign} />
+          </Suspense> : null}
+          {context ? <Suspense fallback={<StatusPanel state="loading"
+            description="正在加载通话监控面板。" />}>
+            <CampaignMarketingMonitoringPanel api={api} context={context}
               campaign={campaign} />
           </Suspense> : null}
           <dl className="campaign-facts">

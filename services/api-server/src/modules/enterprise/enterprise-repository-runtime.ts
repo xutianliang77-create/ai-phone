@@ -78,7 +78,7 @@ import type { EnterpriseMarketingConsentRepositoryRuntime } from "./enterprise-m
 import type { EnterpriseMarketingSuppressionRepositoryRuntime } from "./enterprise-marketing-suppression-runtime.js";
 import type { EnterpriseMarketingCountryPolicyRepositoryRuntime } from "./enterprise-marketing-country-policy-runtime.js";
 import type { EnterpriseCampaignApprovalRepositoryRuntime } from "./enterprise-campaign-approval-runtime.js";
-import type { EnterpriseMarketingSchedulerRepositoryRuntime } from "./enterprise-marketing-scheduler-runtime.js"; import type { EnterpriseMarketingPstnRepositoryRuntime } from "./enterprise-marketing-pstn-runtime.js"; import type { EnterpriseMarketingAgentRepositoryRuntime } from "./enterprise-marketing-agent-runtime.js";
+import type { EnterpriseMarketingSchedulerRepositoryRuntime } from "./enterprise-marketing-scheduler-runtime.js"; import type { EnterpriseMarketingPstnRepositoryRuntime } from "./enterprise-marketing-pstn-runtime.js"; import type { EnterpriseMarketingAgentRepositoryRuntime } from "./enterprise-marketing-agent-runtime.js"; import type { EnterpriseMarketingMonitoringRepositoryRuntime } from "./enterprise-marketing-monitoring-runtime.js";
 export type EnterpriseContextResult =
   { status: "resolved"; tenant: EnterpriseTenantRecord; member: EnterpriseMemberRecord } |
   { status: "access_denied" } | { status: "selection_required" };
@@ -109,7 +109,7 @@ export interface EnterpriseRepositoryRuntime
     EnterpriseMarketingSuppressionRepositoryRuntime, EnterpriseMarketingCountryPolicyRepositoryRuntime,
     EnterpriseCampaignApprovalRepositoryRuntime, EnterpriseMarketingSchedulerRepositoryRuntime,
     EnterpriseMarketingPstnRepositoryRuntime,
-    EnterpriseMarketingAgentRepositoryRuntime {
+    EnterpriseMarketingAgentRepositoryRuntime, EnterpriseMarketingMonitoringRepositoryRuntime {
   readonly driver: "legacy" | "postgres";
   resolveContext(input: {
     userId: string;

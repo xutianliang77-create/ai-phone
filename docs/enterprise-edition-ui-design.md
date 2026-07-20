@@ -1,6 +1,6 @@
 # 无界AI企业版 UI 详细设计
 
-版本：v1.28
+版本：v1.29
 日期：2026-07-20
 状态：设计基线；企业 Web 公共组件、首批设置/工作台、响应式/主题/无障碍和 Web/iOS/Android 成员屏幕共享代码候选已实现，正式验收仍在开发
 
@@ -253,6 +253,12 @@ budget、usage aggregate 和显式 session trace report。卡片沿用同一 Mat
   `campaign:write` 时显示保存；活动提交后改为统一 forbidden 状态。
 - 开场告知未逐字包含品牌、AI 身份和通话目的时保存禁用；Provider/runtime 未就绪时显示服务端 reason code。ready
   只表示生成与回调配置存在，并固定附带“仍需真实 PSTN 与 PostgreSQL 验收”，不显示已接通、已转人工或已成交。
+- `ENT-MKT-010` 在 PSTN 后增加默认折叠的只读“通话监控”面板，复用 `monitor_heart/closed_caption/warning/timer/
+  error_outline` Material Icons、Primary/Signal 语义、1px outline、8px 圆角和统一 `StatusPanel`，不引入第二套图标或色板。
+- 面板展开后按服务端 `refreshAfterMs=5000` 读取真实快照，收起立即停止；顶部始终标注“5秒服务端证据快照、非流式”。
+  汇总显示全部/活跃/需关注/失败，列表显示脱敏号码 hint、dispatch/Agent 状态、证据新鲜度和接听延迟。
+- 单通话详情按延迟、失败/风险、最终修订字幕、Agent turn 与 Provider operation 分组；无字幕、无 turn 或无 operation 均用
+  empty 状态，不补零或示例文本。760px 以下四列收敛两列，420px 以下单列；本面板没有接管、挂断或 Outcome 按钮。
 
 ### 8.3 AI 客服坐席台
 

@@ -1,6 +1,6 @@
 # 无界AI企业版验收任务与计划
 
-版本：v1.58
+版本：v1.59
 日期：2026-07-20
 状态：可执行验收计划，已对齐统一通讯平台和 PostgreSQL Primary 收敛
 
@@ -722,6 +722,19 @@ TTS 矩阵覆盖 authorize/delivered、旧 generation 和中断后迟到 playout
 forced-RLS、双租户、真实 PostgreSQL/LLM/PSTN/ASR/TTS、通话、浏览器或恶意提示矩阵。因此 `AC-ENT-0042` 未通过，
 `ENT-MKT-009` 保持 `in_progress`；`ENT-MKT-010` 才实现实时监控，`ENT-MKT-011` 才实现真实人工接管，`ENT-MKT-012`
 才固化 Outcome 和后续动作。
+
+`ENT-MKT-010` 按 `AC-ENT-0043` 增加九组矩阵：角色矩阵覆盖 owner/admin/marketing manager/member/auditor 允许读取及
+其他角色拒绝；租户矩阵覆盖伪造 tenant、跨 Campaign/dispatch/session、旧 route 和公共 scope 篡改；投影矩阵覆盖
+dispatch/task/run/turn 每种状态与没有 Agent run；字幕矩阵覆盖 segment 最大 revision、稳定排序、200条窗口、无样本、
+跨租户和客户文本只来自公共 scoped transcript；风险矩阵覆盖 unknown/failed、Agent failed、handoff requested、风险
+信号、15秒 stale 和10秒 disclosure 未交付；延迟矩阵覆盖无时间、接受/接听毫秒、未来/乱序时间失败闭合；Provider
+矩阵覆盖无 operation、unknown/failed、结束 duration 与非法枚举；Web 矩阵覆盖展开才刷新、收起停止、5秒非流式标签、
+空/403/404/503、320/600/960/1280、浅深色和键盘；负载/恢复矩阵覆盖100路列表、并发主管读取、API/数据库重启和陈旧
+响应不覆盖新快照。另需独立验证 Realtime Gateway 真实事件源后才能把 `streamStatus` 从 not_configured 提升。
+
+当前只形成代码和静态门禁候选；未运行 Vitest/API/Repository、真实 PostgreSQL/forced-RLS、双租户、真实 PSTN/Agent/
+字幕、浏览器、100路负载或 WSS/SSE 验收。因此 `AC-ENT-0043` 未通过，`ENT-MKT-010` 保持 `in_progress`；本证据不包含
+`ENT-MKT-011` 接管或 `ENT-MKT-012` Outcome。
 
 ### 9.1 合规预检
 

@@ -38,6 +38,7 @@ type ContentApi = Pick<EnterpriseApi,
   | "scheduleCampaign" | "listCampaignLeads" | "listLeadImportBatches"
   | "getCampaignSchedulerStatus" | "getCampaignPstnStatus"
   | "getCampaignMarketingAgentStatus" | "upsertCampaignMarketingAgentProfile"
+  | "getCampaignMarketingMonitoring" | "getCampaignMarketingMonitoringCall"
   | "importCampaignLeads" | "rollbackLeadImport"
   | "listMarketingConsents" | "getMarketingConsentEligibility"
   | "registerMarketingConsent" | "revokeMarketingConsent"
@@ -187,6 +188,17 @@ export function fakeEnterpriseContentApi(): ContentApi {
         reasonCode: "marketing_agent_provider_not_configured" },
       runtime: { status: "not_configured", reasonCode: "agent_runtime_url_missing" } }),
     upsertCampaignMarketingAgentProfile: vi.fn().mockRejectedValue(
+      new Error("not configured")),
+    getCampaignMarketingMonitoring: vi.fn().mockResolvedValue({
+      campaignId: "00000000-0000-4000-8000-000000000001",
+      generatedAt: "2026-07-20T00:00:00.000Z",
+      transport: { mode: "snapshot", refreshAfterMs: 5000,
+        streamStatus: "not_configured",
+        reasonCode: "marketing_monitor_realtime_stream_not_configured" },
+      counts: { total: 0, active: 0, attentionRequired: 0, failed: 0 },
+      calls: [], truncated: false,
+    }),
+    getCampaignMarketingMonitoringCall: vi.fn().mockRejectedValue(
       new Error("not configured")),
   };
 }

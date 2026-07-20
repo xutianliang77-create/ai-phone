@@ -27,6 +27,8 @@ import { createEnvironmentEnterpriseMarketingAgentRuntimeBinding } from
   "./enterprise-marketing-agent-ticket.js";
 import { registerEnterpriseMarketingAgentRoutes } from
   "./enterprise-marketing-agent.routes.js";
+import { registerEnterpriseMarketingMonitoringRoutes } from
+  "./enterprise-marketing-monitoring.routes.js";
 
 export function registerEnterpriseMarketingRoutes(app: FastifyInstance,
   routeService: TenantRouteService, runtime: EnterpriseRepositoryRuntime) {
@@ -44,6 +46,7 @@ export function registerEnterpriseMarketingRoutes(app: FastifyInstance,
   const agentBinding = createEnvironmentEnterpriseMarketingAgentRuntimeBinding();
   registerEnterpriseMarketingAgentRoutes(app, routeService, runtime,
     agentProvider, agentBinding);
+  registerEnterpriseMarketingMonitoringRoutes(app, routeService, runtime);
   registerEnterpriseMarketingPstnRoutes(app, routeService, runtime,
     createEnvironmentEnterpriseMarketingPstnProvider(), agentProvider, agentBinding);
 }

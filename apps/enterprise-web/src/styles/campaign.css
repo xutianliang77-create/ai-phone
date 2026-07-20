@@ -7,6 +7,212 @@
   background: var(--color-container);
 }
 
+.campaign-monitor {
+  border: 1px solid var(--color-outline);
+  border-radius: var(--radius);
+  background: var(--color-container);
+}
+
+.campaign-monitor > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 16px;
+  cursor: pointer;
+}
+
+.campaign-monitor > summary span,
+.campaign-monitor-detail > header > div,
+.campaign-monitor-detail h4 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.campaign-monitor > summary small,
+.campaign-monitor__timestamp,
+.campaign-monitor-call small,
+.campaign-monitor-detail small {
+  color: var(--color-outline);
+}
+
+.campaign-monitor__body {
+  display: grid;
+  gap: 16px;
+  padding: 0 16px 16px;
+}
+
+.campaign-monitor-counts,
+.campaign-monitor-facts {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.campaign-monitor-counts article,
+.campaign-monitor-facts div {
+  display: grid;
+  gap: 4px;
+  padding: 12px;
+  border-radius: var(--radius);
+  background: var(--color-surface);
+}
+
+.campaign-monitor-counts strong {
+  font-size: 1.5rem;
+}
+
+.campaign-monitor-list {
+  display: grid;
+  gap: 8px;
+}
+
+.campaign-monitor-call {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 12px;
+  border: 1px solid var(--color-outline);
+  border-radius: var(--radius);
+  color: inherit;
+  text-align: left;
+  background: var(--color-surface);
+  cursor: pointer;
+}
+
+.campaign-monitor-call.is-active {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 1px var(--color-primary);
+}
+
+.campaign-monitor-call > span:not(.campaign-monitor-call__signal) {
+  display: grid;
+  gap: 2px;
+}
+
+.campaign-monitor-call__signal {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--color-primary);
+}
+
+.campaign-monitor-call__signal.is-warning,
+.campaign-monitor-call__signal.is-critical {
+  background: var(--color-signal);
+}
+
+.campaign-monitor-call__signal.is-critical {
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--color-signal) 20%, transparent);
+}
+
+.campaign-monitor-detail {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid var(--color-outline);
+  border-radius: var(--radius);
+  background: var(--color-surface);
+}
+
+.campaign-monitor-detail > header,
+.campaign-monitor-turns header,
+.campaign-monitor-operations li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.campaign-monitor-detail__content,
+.campaign-monitor-detail__content > section {
+  display: grid;
+  gap: 12px;
+}
+
+.campaign-monitor-detail h4 {
+  margin: 0;
+}
+
+.campaign-monitor-facts {
+  margin: 0;
+}
+
+.campaign-monitor-facts dt {
+  color: var(--color-outline);
+  font-size: 0.75rem;
+}
+
+.campaign-monitor-facts dd {
+  margin: 0;
+  font-weight: 600;
+}
+
+.campaign-monitor-alert {
+  display: flex;
+  gap: 12px;
+  padding: 12px;
+  border-radius: var(--radius);
+  color: var(--color-signal-text);
+  background: color-mix(in srgb, var(--color-signal) 12%, var(--color-surface));
+}
+
+.campaign-monitor-alert p,
+.campaign-monitor-captions p,
+.campaign-monitor-turns p {
+  margin: 4px 0 0;
+}
+
+.campaign-monitor-captions,
+.campaign-monitor-turns,
+.campaign-monitor-operations {
+  display: grid;
+  gap: 8px;
+  max-height: 320px;
+  margin: 0;
+  padding: 0;
+  overflow: auto;
+  list-style: none;
+}
+
+.campaign-monitor-captions li,
+.campaign-monitor-turns li,
+.campaign-monitor-operations li {
+  padding: 12px;
+  border-radius: var(--radius);
+  background: var(--color-surface-high);
+}
+
+.campaign-monitor-captions .is-translation {
+  color: var(--color-primary);
+}
+
+.campaign-monitor-turns .is-risk {
+  color: var(--color-signal-text);
+}
+
+@media (max-width: 760px) {
+  .campaign-monitor-counts,
+  .campaign-monitor-facts {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 420px) {
+  .campaign-monitor-counts,
+  .campaign-monitor-facts,
+  .campaign-monitor-call {
+    grid-template-columns: 1fr;
+  }
+
+  .campaign-monitor-call__signal {
+    position: absolute;
+  }
+}
+
 .campaign-boundary {
   display: flex;
   gap: 12px;

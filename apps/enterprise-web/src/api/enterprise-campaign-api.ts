@@ -19,6 +19,8 @@ import type {
   EnterpriseMarketingPstnStatusResponse,
   EnterpriseMarketingAgentStatusResponse,
   EnterpriseMarketingAgentProfileResponse,
+  EnterpriseMarketingMonitoringCallResponse,
+  EnterpriseMarketingMonitoringSnapshotResponse,
   UpsertEnterpriseMarketingAgentProfileRequest,
   EnterpriseCountryPoliciesResponse,
   EnterpriseCountryPolicyResponse,
@@ -60,6 +62,11 @@ export interface EnterpriseCampaignApi {
   upsertCampaignMarketingAgentProfile(context: EnterpriseContentRequestContext,
     campaignId: string, input: UpsertEnterpriseMarketingAgentProfileRequest,
     idempotencyKey: string): Promise<EnterpriseMarketingAgentProfileResponse>;
+  getCampaignMarketingMonitoring(context: EnterpriseContentRequestContext,
+    campaignId: string): Promise<EnterpriseMarketingMonitoringSnapshotResponse>;
+  getCampaignMarketingMonitoringCall(context: EnterpriseContentRequestContext,
+    campaignId: string, dispatchId: string):
+    Promise<EnterpriseMarketingMonitoringCallResponse>;
   listCampaignLeads(context: EnterpriseContentRequestContext, campaignId: string):
     Promise<EnterpriseCampaignLeadsResponse>;
   listLeadImportBatches(context: EnterpriseContentRequestContext, campaignId: string):
@@ -153,6 +160,15 @@ export function createEnterpriseCampaignApi(
       `${campaigns}/${encodeURIComponent(campaignId)}/marketing-agent/profiles`,
       { method: "PUT", headers: { ...headers(context), "idempotency-key": key },
         body: JSON.stringify(input) },
+    ),
+    getCampaignMarketingMonitoring: (context, campaignId) => request(
+      `${campaigns}/${encodeURIComponent(campaignId)}/monitoring`,
+      { headers: headers(context) },
+    ),
+    getCampaignMarketingMonitoringCall: (context, campaignId, dispatchId) => request(
+      `${campaigns}/${encodeURIComponent(campaignId)}/monitoring/calls/${
+        encodeURIComponent(dispatchId)}`,
+      { headers: headers(context) },
     ),
     listCampaignLeads: (context, campaignId) => request(
       `${campaigns}/${encodeURIComponent(campaignId)}/leads`,

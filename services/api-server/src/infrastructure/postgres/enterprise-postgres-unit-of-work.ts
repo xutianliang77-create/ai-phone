@@ -106,6 +106,8 @@ import { EnterpriseMarketingAgentProfilePostgresRepository } from
   "./enterprise-postgres-marketing-agent-profile.repository.js";
 import { EnterpriseMarketingAgentPostgresRepository } from
   "./enterprise-postgres-marketing-agent.repository.js";
+import { EnterpriseMarketingMonitoringPostgresRepository } from
+  "./enterprise-postgres-marketing-monitoring.repository.js";
 
 export interface EnterprisePostgresUnitOfWork {
   tenant: EnterpriseTenantPostgresRepository;
@@ -149,6 +151,7 @@ export interface EnterprisePostgresUnitOfWork {
   marketingPstn: EnterpriseMarketingPstnPostgresRepository;
   marketingAgentProfiles: EnterpriseMarketingAgentProfilePostgresRepository;
   marketingAgents: EnterpriseMarketingAgentPostgresRepository;
+  marketingMonitoring: EnterpriseMarketingMonitoringPostgresRepository;
 }
 
 export function withEnterprisePostgresUnitOfWork<T>(
@@ -209,6 +212,8 @@ export function withEnterprisePostgresUnitOfWork<T>(
       marketingAgentProfiles:
         new EnterpriseMarketingAgentProfilePostgresRepository(session),
       marketingAgents: new EnterpriseMarketingAgentPostgresRepository(session),
+      marketingMonitoring:
+        new EnterpriseMarketingMonitoringPostgresRepository(session),
     }),
   );
 }
