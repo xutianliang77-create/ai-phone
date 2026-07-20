@@ -1,6 +1,6 @@
 # 无界AI企业版验收任务与计划
 
-版本：v1.63
+版本：v1.64
 日期：2026-07-20
 状态：可执行验收计划，已对齐统一通讯平台和 PostgreSQL Primary 收敛
 
@@ -118,6 +118,7 @@ Mock 只能验证协议，不能替代 iPhone/Web、真实 LiveKit、真实模�
 | AC-ENT-0045 | Marketing Outcome | `0048` Outcome/action tenant-first FK、forced RLS、append-only/终态/组合/deferred action 栅栏有效；只允许 active membership、签名 route、`campaign:read/write` 访问同租户 Campaign；同 task 并发和幂等重放只能得到一个 Outcome，legacy 行也阻断重复；证据只能引用当前最终字幕 revision、已交付 Agent turn 和匹配终态 task/dispatch/run/handoff/suppression/Provider 失败事实，hash 可复现且不复制客户原文；分类、意向和 next action 不矛盾，退订/无效号码/失败有专属服务端依据；后续动作最多一条且只为 `requested`，没有 CRM/日历/消息 receipt 时不得显示已回拨、已预约、已发送或已同步 |
 | AC-ENT-0046 | Marketing CRM Adapter | `0049` CRM sync tenant-first FK、forced RLS、单 Outcome/单 External ID、状态/attempt/receipt trigger 和 cutover critical manifest 有效；只允许 active membership、签名 route、`campaign:read/write` 访问同租户 Campaign/Outcome；同键重放、多键并发、Worker 崩溃、401、429/5xx、PATCH 响应丢失和 GET 暂不可用均复用同一 Outbox event/External ID，恢复后 Salesforce 只存在一个记录且本地只生成一个 synced receipt；AES-GCM AAD、tenant binding、sObject/config fingerprint、key rotation 和旧 Worker 漂移阻断跨租户/跨配置投递；HTTP 202、MKT-012 requested、PATCH 201/204 或不完整 Provider 响应不得显示成功，只有 GET 对账匹配 External ID/载荷/Record ID 后才 synced；CRM 故障不回滚通话终态、结算或 Outcome；缺 OAuth/租户/对象/字段/keyring 明确 not_ready，浏览器/DTO/日志/审计不泄露 secret 或明文摘要 |
 | AC-ENT-0047 | Marketing 活动分析 | 只允许 active membership、签名 route 和 `campaign:read` 读取同租户 Campaign；单响应全部指标来自一个 repeatable-read/read-only 快照，legacy/SQLite、跨租户、旧 route 和伪造 ID 失败闭合；漏斗只按 active Lead、task、Provider acceptedAt、answeredAt、verified Outcome，相邻分母为0返回 null；正向兴趣不冒充成交，requested/pending/PATCH accepted 不冒充 CRM 成功；投诉只计明确 complaint + origin Campaign，版本投诉还须精确 session 归属；用量逐项可追溯 usage event/settle/adjustment，净量不等于货币成本，无价格表时金额/currency 为 null 且 pricing_not_configured；国家与冻结 profile/术语/话术/Agent/PSTN fingerprint 拆分合计可复算，缺 run 不伪造版本；无样本明确 no_call_samples，Web 不回退缓存/fixture |
+| AC-ENT-0048 | 单租户 Cell 迁移与回滚 | 只有 maintenance 模式和受审计全读角色可 export/cutover，rollback replace 还必须是 superuser；源 tenant 无非终态 session/dispatch、活动 lease/hold，源库只读且旧 API/Worker writer 为0，目标可写且 tenant 为空；动态计划覆盖全部 enterprise tenant 表和12类公共 tenant communication scope，任何无 selector/无主键/schema 或31+49 migration 漂移均失败；签名 export 绑定 tenant、Cell、数据库身份、commit/image/topology，cutover 精确引用前序文件 hash；对象引用非0时必须有同 migration/tenant/方向/count/hash 的签名复制 receipt；目标 serializable 导入后记录、session、ledger、audit、consent、suppression、对象引用逐表 count/SHA-256 全等，homeRegion/status 不变且 route epoch 精确+1，失败目标零部分数据且不发布 route；回滚必须从当前 Cell 导出最新快照、反向全量覆盖旧 Cell、再次 epoch+1 和全表对账，不能直接启用陈旧副本；旧 route/旧 Cell 写入和 Worker claim 均拒绝 |
 
 `ENT-CS-005` 当前只形成 `AC-ENT-0026` 的代码候选；自动化、migration up/down/forward、
 forced-RLS 双租户、并发发布、Worker 竞态和真实 Provider/Adapter 均未执行。Agent `toolRequest`
@@ -891,6 +892,14 @@ contact_request、origin Campaign、跨 Campaign Lead 和有/无精确 session r
 - 使用普通应用角色验证 communication policy/version/snapshot forced RLS、不可变 trigger、授权撤回即 invalidated、dispatch grant 的 policy FK；按有效、缺失、过期、错 fingerprint、错 purpose、跨租户和撤回后迟到副作用执行负向矩阵。
 - 使用普通应用角色验证 billing account/plan/subscription/entitlement/change history forced RLS、活动 subscription 唯一、plan/snapshot/change 不可变，以及 entitlement projection/binding/grant 的 tenant 复合 FK；按跨租户、停用 account、过期账期、错 subscription/plan/version、席位超限、幂等漂移和客户端 limit 伪造执行负向矩阵。
 - accounts、tenant、communication session、segment、campaign、support、meeting、ledger 和 object hash 数量与规范化 SHA-256 一致。
+- 单租户 Cell 迁移只允许停机一致性窗口：源 tenant 的 communication binding、dispatch grant、公共 dispatch、
+  capacity hold 和 pending lease 均无活动项，源数据库只读、旧 writer 为0；目标 tenant 为空且数据库可写。
+- 以真实31+49 staging 双库执行 `export -> object receipt -> cutover -> reconcile`，确认全部 enterprise tenant 表、
+  公共 tenant communication scope、ledger/audit/consent/suppression 与对象引用逐表 count/hash 一致，目标 route
+  epoch 精确+1；篡改 export/evidence/object receipt、遗漏一表、目标预置 tenant 或保留旧 writer 必须非零失败且不发布路由。
+- cutover 后在新 Cell 写入一组可追溯增量，再停止新 Cell 并执行 rollback；旧 Cell 必须被最新快照反向全量替换、
+  epoch 再+1、不可变历史不丢失，不能只恢复 cutover 前旧副本。注入清除、导入、trigger 重新启用和最终对账故障，
+  验证目标事务整体回滚且原可恢复副本仍完整。
 - 全量复制后记录增量水位，切换时获取 writer fence、清退旧 API/Worker、重放剩余 inbox/outbox，再做第二次 count/hash；切换或对账失败可按书面决策回滚，旧 writer 不能继续写入。
 - staging startup 必须拒绝 local evidence、签名篡改、错误 cutover/target ID、错误 commit/image/topology、错误 system identifier/OID、缺 baseline 引用、未清退 writer 或任一31+49 migration 漂移。维护工具只验证 fence，不自动执行 promote 或隔离旧主。
 - migration 后使用普通应用角色验证 `FORCE ROW LEVEL SECURITY`；确认 user directory self policy、tenant projection policy、成员投影同步和跨租户拒绝均生效。
@@ -910,6 +919,9 @@ contact_request、origin Campaign、跨 Campaign Lead 和有/无精确 session r
 `ENT-DATA-009` 的本地 PostgreSQL 16 同机双库、`pg_dump/pg_restore`、writer fence 和
 篡改负测只满足 `AC-ENT-0020` 的机制/自动化前置条件，不满足上述不同物理故障域、
 异地主机不可变 WAL/PITR、自动选主、RPO/RTO 或完整 H3 放行条件。
+
+`ENT-DATA-005` 当前只形成 `AC-ENT-0048` 的维护命令、签名证据、流式导入、回滚和静态测试定义；本轮未运行
+测试、真实 PostgreSQL、对象复制、路由发布或故障注入，因此不能升级为 `ready_for_acceptance`，也不构成 H3 证据。
 
 具体 RPO/RTO 由企业 SLA 确定；未确定前不能在材料中承诺数值。
 

@@ -1,6 +1,6 @@
 # 无界AI企业版详细技术设计
 
-版本：v1.65
+版本：v1.66
 日期：2026-07-20
 状态：统一通讯平台与 PostgreSQL Primary 收敛详细技术方案
 
@@ -1942,6 +1942,54 @@ manifest 必须逐项一致。本地 PostgreSQL 16 演练已验证81张表、8�
 全库 hash、writer fence、隔离 `pg_dump/pg_restore` 和单行篡改失败；证据见
 `docs/evidence/ent-data-009-local-drill-2026-07-18.md`。这只证明机制可执行，不是异地主机
 不可变 WAL/PITR、跨故障域自动选主或 RPO/RTO 证据，后者仍属于 `ENT-REL-003`/H3。
+
+#### 11.1.3 单租户 Cell 迁移、对账与回滚
+
+`ENT-DATA-005` 复用 `ENT-DATA-009` 的双 manifest、数据库身份和规范 SHA-256 语义，但选择范围是单个
+tenant，不是整库。维护命令为 `enterprise:postgres-cell export|cutover|reconcile|rollback`，只在
+`ENTERPRISE_CELL_MIGRATION_MAINTENANCE=true` 且独立 maintenance URL 下运行。签名 metadata 固定
+run/migration/tenant ID、源/目标 Cell 与 logical database ID、commit、image digest 和 topology hash；证据文件
+使用独立至少32字符 HMAC key、0600临时文件和原子 rename，cutover/rollback 必须引用已验签前序文件 hash，
+输出路径不得覆盖前序证据；
+对象复制 receipt 使用另一把至少32字符 HMAC key，迁移证据签名权不交给对象 Adapter。
+
+表计划通过数据库 catalog 动态生成：`enterprise.tenants` 使用 `id`，其余 enterprise 业务表必须有
+`tenant_id`；发现任何没有 selector 的 enterprise 表立即失败。公共 `ai_phone` 只选择同时具有
+`scope_type + scope_id` 的表，并固定 `scope_type=tenant/scope_id=tenantId`。每表必须有主键；非延迟外键生成
+导入拓扑，延迟外键由目标事务 `SET CONSTRAINTS ALL DEFERRED` 处理。复合主键 keyset pagination 每页最多5000行，
+`to_jsonb(row)` 经稳定 JSON、字节长度前缀形成逐表 count/hash；总 hash同时绑定31段公共 migration、49段
+enterprise migration、对象引用 count/hash 和总行数。tenant 的 cell/version/updatedAt 及 pending projection cell
+在内容 hash 中规范为 route 占位符，另以 route 断言要求 homeRegion/status 不变且跨 Cell epoch 精确 +1。
+
+迁移前置门禁如下：
+
+1. 源 tenant 不存在非终态 communication binding、issued/accepted dispatch grant、未过期 pending lease、
+   活跃公共 dispatch 或 capacity hold。
+2. 源数据库 `default_transaction_read_only=on`、写探针返回 SQLSTATE `25006`，配置的 API/Worker writer role
+   会话数为0；目标默认可写、写探针成功且相同 writer role 会话数为0。
+3. 两端 server version、公共/enterprise migration 列表和动态表计划完全一致，源/目标数据库身份不同。
+4. cutover 前的当前源 manifest 必须与签名 export 证据完全一致；目标 tenant 必须为空。
+5. 只要对象引用数非0，就必须提供相同 migration/tenant/源目标 Cell/count/hash 的签名对象复制 receipt；
+   本工具不伪造或隐式跳过对象字节复制。
+
+目标导入在单一 `SERIALIZABLE` transaction 和 tenant advisory lock 内执行，以
+`jsonb_populate_recordset(NULL::schema.table, page)` 恢复 PostgreSQL 原类型。tenant route 写入目标 Cell，version
+只增加一次；普通 cutover 跳过 `platform_pending_work` 原始行，由 tenant job/outbox trigger 以新 Cell 重建。
+事务内重新收集完整 manifest；任一记录、ledger、audit、consent、suppression、对象引用、迁移或 route 不一致均
+rollback，控制面不得发布新 route。
+若数据库已提交但最终 evidence 文件落盘失败，`reconcile` 在相同 writer fence 下重新读取两端：以前序 export
+补发 cutover evidence，或以前序 cutover 补发 rollback evidence，并再次校验数据库身份、route 与对象 receipt；
+它不重复导入，也不把未对账目标标记成功。
+
+回滚把当前目标数据库作为只读源，并要求旧源数据库重新成为可写目标。因 append-only/immutable 用户触发器
+会正确阻止应用删除或改写历史，反向全量替换只允许受审计 superuser：在同一事务逐表 `DISABLE TRIGGER USER`、
+按反向拓扑清除旧 tenant、按正向拓扑导入包含最新 ledger/audit 的当前快照、把 pending projection cell 改为旧 Cell、
+`ENABLE TRIGGER USER` 后重新收集 manifest。DDL、删除、导入、重新启用或对账任一步失败均随事务回滚；普通
+`BYPASSRLS` maintenance 账号不足以执行 replace rollback。回滚后 route epoch 仍从当前源 +1，不能恢复旧 epoch。
+
+当前实现包含维护命令、动态计划、流式传输、writer/quiescence/object/evidence 门禁及测试定义，只通过 typecheck、
+构建候选与文件规模静态检查；未运行测试、真实 PostgreSQL 31+49 双库、对象存储复制、控制面 route 发布、
+故障注入或跨 Cell 演练，因此 `ENT-DATA-005` 保持 `in_progress`，不能作为 H3 或生产门禁证据。
 
 ### 11.2 事务和一致性边界
 

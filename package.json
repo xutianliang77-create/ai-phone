@@ -93,6 +93,7 @@
     "enterprise:postgres": "tsx services/api-server/src/infrastructure/postgres/enterprise-postgres-admin.ts",
     "enterprise:postgres-data": "tsx services/api-server/src/infrastructure/postgres/enterprise-postgres-data-admin.ts",
     "enterprise:postgres-cutover": "tsx services/api-server/src/infrastructure/postgres/enterprise-postgres-cutover-admin.ts",
+    "enterprise:postgres-cell": "tsx services/api-server/src/infrastructure/postgres/enterprise-postgres-cell-admin.ts",
     "postgres:migrate": "npm run postgres:migrate -w @translation/api-server",
     "postgres:check": "npm run postgres:check -w @translation/api-server",
     "postgres:import": "npm run postgres:import -w @translation/api-server",

@@ -1,6 +1,6 @@
 # 无界AI企业版开发方案与计划
 
-版本：v1.67
+版本：v1.68
 日期：2026-07-20
 状态：E0 执行计划，已对齐统一通讯平台和 PostgreSQL Primary 收敛
 
@@ -24,6 +24,10 @@
 - `ENT-CORE-005` 已完成版本化术语包、话术模板、审核发布、有效时间解析、统一运行时引用和租户隔离矩阵，进入 `ready_for_acceptance`；真实 ASR/翻译/LLM Worker 消费和 A1/H3 仍待验收。
 - `ENT-DATA-002` 已完成单一 `legacy|postgres` Repository runtime、HTTP 全链路注入、fail-closed 启动选择和独立 cell Worker。PostgreSQL 模式不回退、不双写；API 不执行跨租户恢复扫描，Worker 通过 cell forced RLS 发现最小引用后进入 tenant transaction 复核并 claim/finalize。代码和本地自动化进入 `ready_for_acceptance`，真实 PostgreSQL 并发、容量和恢复仍待 H3。
 - `ENT-DATA-004` 已完成 JSON/SQLite 源读取、SQLite 副本 `quick_check`、空目标事务导入和六集合 count/SHA-256 读回对账；不一致回滚，且明确只用于内部演示数据迁移。真实 PostgreSQL import/reconcile 证据仍待 H3。
+- `ENT-DATA-005` 已形成 PostgreSQL-only 单租户跨 Cell 维护命令：签名 export/cutover/rollback evidence、
+  活动会话/租约清退、源只读/旧 writer 为零、动态 tenant/scope 表计划、外键顺序流式导入、对象 receipt、
+  route epoch +1 和逐表 count/SHA-256 对账。回滚反向覆盖最新数据而非启用陈旧副本。当前只通过静态门禁，
+  测试、真实31+49双库、对象复制、路由发布和跨 Cell 故障演练未执行，保持 `in_progress`。
 - `ENT-DATA-003` 已完成 tenant-scoped Inbox/Outbox、事务内领域提交、100次重放去重、lease/retry/recovery 和 SQLite/迁移自动化，进入 `ready_for_acceptance`；真实 PostgreSQL 并发 claim 和 Provider sandbox 仍是验收门禁。
 - `ENT-DATA-007` 已合入上游稳定提交 `fe1c3c2`，用唯一 `API_STORAGE_DRIVER`、公共/enterprise 双 manifest 验证、同库 name/OID 校验和 tenant/directory/cell/migration/maintenance 分权连接收敛 API 与 cell Worker；代码和本地自动化进入 `ready_for_acceptance`，真实 PostgreSQL H3 未执行。
 - `ENT-UI-001` 已完成生产令牌、Material Icons 注册表、Flutter 对照和浏览器验证，等待验收；`ENT-UI-002` 已完成共享 scope 真值、九角色导航矩阵、嵌套路由 guard 和 `ENT-CORE-011` 签名 route document；`ENT-UI-003` 已完成八态组件矩阵及 Provider/冲突/job 真值联调，均等待验收。
@@ -387,8 +391,9 @@ CORE-001/002 验收
 | 9 | `ENT-CORE-006/008` | 完成审计和 Provider capability/readiness 真值 |
 | 10 | `ENT-CORE-007/010/012` | 完成 tenant billing account、套餐、entitlement、预算、ledger 和账期聚合 |
 | 11 | `ENT-CORE-004/005` | 知识、术语和话术版本闭环均已完成代码与本地机制验证，进入验收 |
-| 12 | `ENT-DATA-009` | 验收 staging 全量/增量 hash、writer fence、切换/回滚和旧写入者清退证据；本地机制代码已完成 |
-| 13 | `ENT-UI-004..012` | 完成公共页面、响应式、无障碍、Web 发布门禁、Flutter 企业入口和访客参会壳代码候选 |
+| 12 | `ENT-DATA-005` | 验收单租户 Cell 停写、对象复制、全表导入/对账、route 发布和反向回滚证据；静态代码候选已完成 |
+| 13 | `ENT-DATA-009` | 验收 staging 全量/增量 hash、writer fence、切换/回滚和旧写入者清退证据；本地机制代码已完成 |
+| 14 | `ENT-UI-004..012` | 完成公共页面、响应式、无障碍、Web 发布门禁、Flutter 企业入口和访客参会壳代码候选 |
 
 E0 基线完成后已形成 `ENT-MTG-001/002` 代码候选；未通过真实 PostgreSQL、tenant/RBAC/token 攻击、Provider、浏览器与真机门禁，仍不能计为 E1 完成。
 
@@ -415,4 +420,5 @@ Adapter 静态候选；`AC-ENT-0046`、`0049` migration/RLS、真实 sandbox、W
 真实账号缺失使其保持 `blocked`。`ENT-MKT-014` 已进入活动分析静态候选；`AC-ENT-0047`、真实 PostgreSQL/RLS、
 并发写入一致性、价格表、浏览器和容量验收均未完成，保持 `in_progress`；
 当前5秒快照不得宣称流式完成，requested action 不得宣称外部已执行。
-staging `ENT-DATA-009` 和 `ENT-REL-002/003` 的对象清理、跨故障域/PITR 仍未通过。
+`ENT-DATA-005` 当前仅完成静态代码候选；真实 Cell 停写、对象 receipt、双库导入/回滚、控制面 route 发布和
+`AC-ENT-0048` 未执行。staging `ENT-DATA-009` 和 `ENT-REL-002/003` 的对象清理、跨故障域/PITR 仍未通过。

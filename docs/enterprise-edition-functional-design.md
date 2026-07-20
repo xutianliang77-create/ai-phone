@@ -1,6 +1,6 @@
 # 无界AI企业版详细功能设计
 
-版本：v1.46
+版本：v1.47
 日期：2026-07-20
 状态：SaaS 详细设计基线，已对齐统一通讯平台
 
@@ -121,7 +121,18 @@ Provider、usage/ledger 和 trace；跨会话业务聚合与货币成本尚未�
 5. 配置知识、电话渠道、会议策略和预算。
 6. readiness 检查通过后开放对应功能。
 
-租户的 `homeRegion` 创建后不能由普通管理员直接修改；跨区域迁移必须通过受控迁移任务完成。
+租户的 `homeRegion` 创建后不能由普通管理员直接修改；同区域跨 Cell 或跨区域迁移必须通过受控迁移任务完成。
+
+首批 `ENT-DATA-005` 只开放给平台运维的维护命令，不新增租户管理员自助迁移 API。迁移固定经历
+`export -> object receipt -> cutover -> reconcile`：先停止源 Cell API/Worker 和活动会话/租约，证明源库只读、
+旧 writer 会话为零及目标可写，再复制当前 tenant 的全部 enterprise 记录和公共 tenant communication scope。
+数据库中出现任何无 tenant selector 的 enterprise 业务表、目标已有该 tenant、对象引用无匹配复制回执、
+逐表 count/hash 不一致或 route epoch 未精确递增一次时均不得切换路由。
+
+回滚不是简单把旧路由指回陈旧副本。当前目标 Cell 必须先进入相同停写窗口，再把最新 tenant 数据反向全量
+覆盖旧 Cell、递增 route epoch 并重新对账；不可变 ledger、audit、consent 和业务证据不得在应用路径被改写。
+签名 evidence 绑定 tenant、源/目标 Cell、数据库身份、commit、image 和 topology。控制面路由发布、真实对象
+复制和跨 Cell 演练未完成前，企业设置仍只显示只读 region/cell，不显示“迁移成功”。
 
 ### 4.2 套餐和权益
 

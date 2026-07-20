@@ -1,6 +1,6 @@
 # 无界AI企业版设计文档索引
 
-版本：v1.59
+版本：v1.60
 日期：2026-07-20
 状态：SaaS 详细设计基线，已纳入统一通讯平台和 PostgreSQL Primary 演进
 
@@ -51,6 +51,11 @@ fencing、Billing/Product Records、verify-full 和韧性代码已形成稳定�
 及设备/声音/录制策略快照的代码/本地自动化，但不能继承主产品 staging 验收。`ENT-DATA-009` 已增加
 31+16 migration manifest 的历史本地证据、全表主键分页 count/hash、WAL 水位、writer fence、签名
 cutover/restore 证据和 production startup 绑定门禁；当前 `0017..0049` 必须按31+49重新生成切换证据。
+`ENT-DATA-005` 已增加单租户跨 Cell 的签名 export/cutover/rollback 维护链路：动态覆盖全部
+enterprise tenant 表和公共 tenant communication scope，检查活动会话/租约、源只读与旧 writer 清退，
+以目标空租户、外键顺序流式导入、对象引用 receipt、逐表 count/SHA-256 和 route epoch +1 对账失败闭合；
+回滚从当前 Cell 反向全量覆盖旧 Cell。当前只通过静态门禁，未执行真实31+49 PostgreSQL、对象复制、
+控制面路由发布或跨 Cell 演练，任务保持 `in_progress`。
 `ENT-CORE-004` 已增加 tenant-scoped source/version/chunk、草稿审核发布状态机、发布后不可变约束、
 locale/country/product/effective-time 检索和知识引用 ID；
 `ENT-CORE-005` 已增加版本化 term pack/script template、审核发布和生效窗口、发布后不可变约束，

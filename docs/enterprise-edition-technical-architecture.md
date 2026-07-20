@@ -1,6 +1,6 @@
 # 无界AI企业版技术架构
 
-版本：v1.49
+版本：v1.50
 日期：2026-07-20
 状态：SaaS 详细架构基线，已对齐统一通讯平台和 PostgreSQL Primary
 
@@ -195,6 +195,16 @@ object-storage
 ### 3.4 SaaS cell
 
 一个区域可以包含多个 cell。每个租户在同一时刻只属于一个 cell，控制面目录记录 `tenantId -> homeRegion -> cellId`。cell 故障切换或迁移必须校验数据库、对象、ledger 和审计 hash，不能依靠 DNS 随机把同一租户写入两个数据面。
+
+`ENT-DATA-005` 首批采用停机一致性窗口，不引入双写：源 Cell 先停止 tenant 活动会话/租约及全部 API/Worker
+writer，数据库进入只读；维护进程在 `REPEATABLE READ` 中按 tenant selector 导出，在目标 `SERIALIZABLE`
+事务按非延迟外键拓扑导入。目标 tenant 必须为空；`user_tenant_directory` 原样迁移，
+`platform_pending_work` 在普通 cutover 由 tenant job/outbox trigger 按新 Cell 重建。数据库行只保存对象引用，
+存在对象引用时必须先取得绑定相同 tenant/源目标 Cell/count/hash 的签名对象复制 receipt。
+
+路由只在目标逐表 count/hash、对象 receipt 和目标 route epoch = 源 epoch + 1 后发布。旧 Cell 保持只读，
+因此旧 route document 即使尚未过期也不能产生写入。回滚使用当前 Cell 作为新源，把最新 tenant 全量反向替换
+旧 Cell 后再发布更高 epoch；不能直接启用旧副本。真实控制面路由发布与跨故障域对象复制仍是验收项。
 
 ### 3.5 扩缩容单元
 

@@ -1,6 +1,6 @@
 # 无界AI企业版 UI 详细设计
 
-版本：v1.33
+版本：v1.34
 日期：2026-07-20
 状态：设计基线；企业 Web 公共组件、首批设置/工作台、响应式/主题/无障碍和 Web/iOS/Android 成员屏幕共享代码候选已实现，正式验收仍在开发
 
@@ -426,7 +426,11 @@ budget、usage aggregate 和显式 session trace report。卡片沿用同一 Mat
 
 - 二级导航：成员与角色、套餐与权益、区域与数据、Provider、保存期限、API 凭证。
 - 成员列表显示姓名、邮箱、角色、状态、最后活跃和操作；角色编辑说明实际 scopes。
-- `homeRegion` 只读；“申请迁移”进入受控任务，不能直接下拉修改。
+- `homeRegion`、`cellId` 和 route epoch 只读；“申请迁移”只能进入受控任务，不能直接下拉修改。当前
+  `ENT-DATA-005` 仅有平台维护命令，没有租户自助 API，因此页面保持 `not_ready` 说明，不伪造进度、回滚或成功。
+- 后续接入控制面任务时，页面只消费签名状态 `requested/quiescing/exported/copying/reconciling/cutover/rolled_back/failed`；
+  `cutover` 必须同时显示数据库逐表 hash、对象 receipt、旧 writer 为零和新 route epoch，任一缺失使用统一
+  `warning/failed` 状态与 `sync_problem`/`undo` Material Icons，不用客户端计时器推断完成。
 - Provider 配置页只显示 capability 和脱敏 fingerprint，不回显密钥。
 
 ## 9. Flutter 企业入口
