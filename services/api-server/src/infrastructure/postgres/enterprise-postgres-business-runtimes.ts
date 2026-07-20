@@ -48,6 +48,8 @@ import { createEnvironmentEnterpriseMarketingHandoffProvider } from
   "../../modules/enterprise/enterprise-marketing-handoff-provider.js";
 import { createEnterprisePostgresMarketingHandoffRuntime } from
   "./enterprise-postgres-marketing-handoff-runtime.js";
+import { createEnterprisePostgresMarketingOutcomeRuntime } from
+  "./enterprise-postgres-marketing-outcome-runtime.js";
 
 export function createEnterprisePostgresBusinessRuntimes(
   pool: EnterpriseTenantPostgresPool,
@@ -82,5 +84,6 @@ export function createEnterprisePostgresBusinessRuntimes(
     ...createEnterprisePostgresMarketingMonitoringRuntime(pool),
     ...createEnterprisePostgresMarketingHandoffRuntime(
       pool, marketingHandoffProvider),
+    ...createEnterprisePostgresMarketingOutcomeRuntime(pool),
   };
 }

@@ -23,6 +23,8 @@ const CampaignMarketingMonitoringPanel = lazy(() =>
   import("../components/CampaignMarketingMonitoringPanel.js"));
 const CampaignMarketingHandoffPanel = lazy(() =>
   import("../components/CampaignMarketingHandoffPanel.js"));
+const CampaignMarketingOutcomePanel = lazy(() =>
+  import("../components/CampaignMarketingOutcomePanel.js"));
 
 type LoadState =
   | { status: "loading" }
@@ -236,6 +238,11 @@ export function CampaignsPage() {
             description="正在加载通话监控面板。" />}>
             <CampaignMarketingMonitoringPanel api={api} context={context}
               campaign={campaign} />
+          </Suspense> : null}
+          {context ? <Suspense fallback={<StatusPanel state="loading"
+            description="正在加载通话结果面板。" />}>
+            <CampaignMarketingOutcomePanel api={api} context={context}
+              campaign={campaign} canWrite={canWrite} />
           </Suspense> : null}
           <dl className="campaign-facts">
             <div><dt><MaterialIcon name={enterpriseIcons.campaign.countries} />国家</dt>

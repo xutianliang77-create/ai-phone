@@ -1,6 +1,6 @@
 # 无界AI企业版技术架构
 
-版本：v1.46
+版本：v1.47
 日期：2026-07-20
 状态：SaaS 详细架构基线，已对齐统一通讯平台和 PostgreSQL Primary
 
@@ -555,6 +555,29 @@ AI 停止时间、坐席加入时间和 receipt ID，才持久化为 media activ
 `timed_out` 或 `callback_required`。审计固定 `physicalProviderAction=not_verified`；物理挂断和真实回拨
 仍需独立 Provider/Outbox receipt，不由状态变更推断。当前未执行 `0047`、真实 PostgreSQL/RLS、
 PSTN/坐席媒体或300ms门禁，仍为 `in_progress`。
+
+### 7.12 Marketing Outcome 证据架构
+
+`ENT-MKT-012` 把 Outcome 定义为通话终态证据的不可变业务解释，不新增通话状态真值。`0048` 升级既有
+`marketing_outcomes` 并新增 forced-RLS `marketing_next_actions`；两者以 tenant/task/campaign/lead/dispatch/run/session
+复合绑定，单 task 只能有一个 Outcome 和至多一个内部 requested action。
+
+```mermaid
+flowchart LR
+    Terminal["terminal task + dispatch + run"] --> Evidence["final transcript / delivered turn / handoff / suppression"]
+    Evidence --> Hash["revision-bound evidence + source hash"]
+    Hash --> Outcome["immutable marketing outcome"]
+    Outcome --> Action["optional internal action: requested"]
+    Action -. "ENT-MKT-013" .-> External["CRM / calendar / messaging outbox + receipt"]
+```
+
+Repository 只接受当前最终字幕 revision 和已交付 Agent turn，服务端补充终态、handoff、suppression 和 Provider
+失败证据，并在 tenant transaction 内重算 hash。数据库 trigger 再验证 actor、terminal fence、分类/意向/后续动作组合、
+退订和无效号码依据；Outcome/action 均禁止更新和删除，deferred constraint 保证声明 next action 时同事务恰有一条匹配记录。
+
+本层不调用 CRM、日历、消息或 PSTN Provider，也不建立外部 Outbox；`requested` 只表示内部待办已固化。
+外部 Adapter、重试和 receipt 归 `ENT-MKT-013`。当前未执行 `0048`、真实 PostgreSQL/RLS、双租户、真实通话或浏览器门禁，
+仍为 `in_progress`。
 
 ## 8. AI 客服架构
 

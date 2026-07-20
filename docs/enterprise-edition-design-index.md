@@ -1,6 +1,6 @@
 # 无界AI企业版设计文档索引
 
-版本：v1.56
+版本：v1.57
 日期：2026-07-20
 状态：SaaS 详细设计基线，已纳入统一通讯平台和 PostgreSQL Primary 演进
 
@@ -46,11 +46,11 @@ cell Worker、JSON/SQLite 演示导入，以及全业务表 Primary 切换/恢�
 无界AI主产品公共 PostgreSQL migration、Primary Runtime、可靠 Inbox/Outbox、
 fencing、Billing/Product Records、verify-full 和韧性代码已形成稳定提交 `fe1c3c2`，并由
 `ENT-DATA-007` 合入企业分支。企业版已经完成单 driver、双 manifest、同库身份和分权
-连接的本地自动化，当前 manifest 为公共31段、enterprise 47段；`ENT-DATA-008` 和
+连接的本地自动化，当前 manifest 为公共31段、enterprise 48段；`ENT-DATA-008` 和
 `ENT-CORE-013/014/015` 已完成公共通讯 tenant scope、企业业务会话绑定、签名 Worker dispatch fence
 及设备/声音/录制策略快照的代码/本地自动化，但不能继承主产品 staging 验收。`ENT-DATA-009` 已增加
 31+16 migration manifest 的历史本地证据、全表主键分页 count/hash、WAL 水位、writer fence、签名
-cutover/restore 证据和 production startup 绑定门禁；当前 `0017..0047` 必须按31+47重新生成切换证据。
+cutover/restore 证据和 production startup 绑定门禁；当前 `0017..0048` 必须按31+48重新生成切换证据。
 `ENT-CORE-004` 已增加 tenant-scoped source/version/chunk、草稿审核发布状态机、发布后不可变约束、
 locale/country/product/effective-time 检索和知识引用 ID；
 `ENT-CORE-005` 已增加版本化 term pack/script template、审核发布和生效窗口、发布后不可变约束，
@@ -207,7 +207,12 @@ Session 原子物化，并复用 `support_agent_claims` 作为唯一坐席领取
 停播栅栏与 Provider 媒体回执；HTTPS/idempotency/坐席加入/300ms 保证缺任一项即 `not_ready`。
 超时 Worker 只记录 `timed_out/callback_required` 和 `physicalProviderAction=not_verified`，不伪造挂断或回拨成功。
 当前只形成静态代码候选；未运行自动化、真实 PostgreSQL/RLS、PSTN Provider、坐席媒体或 300ms
-验收，`AC-ENT-0044` 未通过，任务保持 `in_progress`。下一项为 `ENT-MKT-012` Outcome。
+验收，`AC-ENT-0044` 未通过，任务保持 `in_progress`。
+`ENT-MKT-012` 已增加 `0048` Outcome/内部 next action 不可变栅栏、终态 task/dispatch/run 绑定、最终字幕/
+已交付 Agent turn 与 handoff/suppression/Provider 失败证据、稳定 evidence/source hash、单 task 唯一和同风格 Web 面板。
+后续动作只保存 `requested`，页面明确外部已执行为0；CRM/日历/消息 Adapter 和 receipt 属于 `ENT-MKT-013`。
+当前只形成静态代码候选；未运行自动化、真实 PostgreSQL/RLS、双租户、真实通话或浏览器验收，
+`AC-ENT-0045` 未通过，任务保持 `in_progress`。下一项为 `ENT-MKT-013` CRM Adapter。
 当前按要求未执行
 测试、migration、RLS、RBAC/ticket/evidence 攻击、并发共享、Worker/Provider、四人媒体、浏览器、真机与重启恢复，
 因此上述任务均保持 `in_progress`。
@@ -238,6 +243,7 @@ Session 原子物化，并复用 `support_agent_claims` 作为唯一坐席领取
 - [ENT-MKT-009 Marketing Agent 实现和静态门禁证据](./evidence/ent-mkt-009-marketing-agent-2026-07-20.md)
 - [ENT-MKT-010 实时监控实现和静态门禁证据](./evidence/ent-mkt-010-marketing-monitoring-2026-07-20.md)
 - [ENT-MKT-011 真实人工接管实现和静态门禁证据](./evidence/ent-mkt-011-marketing-handoff-2026-07-20.md)
+- [ENT-MKT-012 Outcome 实现和静态门禁证据](./evidence/ent-mkt-012-marketing-outcome-2026-07-20.md)
 - [ENT-MTG-012 屏幕 OCR 翻译实现与静态门禁证据](./evidence/ent-mtg-012-screen-ocr-translation-2026-07-19.md)
 - [ENT-MTG-013 日历 Adapter 实现与静态门禁证据](./evidence/ent-mtg-013-calendar-adapter-2026-07-19.md)
 - [ENT-CS-001 客服领域实现与静态门禁证据](./evidence/ent-cs-001-support-domain-2026-07-19.md)

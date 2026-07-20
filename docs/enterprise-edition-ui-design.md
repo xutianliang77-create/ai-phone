@@ -1,6 +1,6 @@
 # 无界AI企业版 UI 详细设计
 
-版本：v1.30
+版本：v1.31
 日期：2026-07-20
 状态：设计基线；企业 Web 公共组件、首批设置/工作台、响应式/主题/无障碍和 Web/iOS/Android 成员屏幕共享代码候选已实现，正式验收仍在开发
 
@@ -266,6 +266,13 @@ budget、usage aggregate 和显式 session trace report。卡片沿用同一 Mat
   显示 delay。只在未提交草稿且有 `campaign:write` 时显示保存按钮，其他状态显示审批冻结说明。
 - readiness 分开显示策略资源和媒体 Provider。Provider 卡明示 HTTPS/幂等/坐席加入/300ms 停播要求；
   `ready` 也只表示配置声明就绪，固定附带“仍需真实 PostgreSQL/PSTN/坐席验收”，不显示已接通。
+- `ENT-MKT-012` 在监控面板后增加默认折叠的“通话结果”面板，复用 `assignment_turned_in/task_alt`
+  Material Icons、Campaign 卡片、既有 token、1px outline、8px 圆角和 `StatusPanel`，不增加第二套图标或色板。
+- 面板只列出尚无 Outcome 的终态通话；写权限用户先读取单通话最终 revision 字幕和已交付 Agent turn，再选择分类、
+  意向、摘要和一个内部后续动作。需要客户表态的分类在未选字幕证据时禁用提交，服务端仍负责最终证据校验。
+- 顶部四项固定区分“已固化/后续动作/可处理终态/外部已执行”；最后一项当前恒为0。列表把 action 显示为
+  `requested/外部未执行`，不得将预约请求、回拨请求或资料发送请求渲染成已预约、已回拨或已发送。
+- 760px 以下四列收敛两列，420px 以下单列；证据和长摘要允许换行，手机号只显示服务端脱敏 hint，hash 只显示短前缀。
 
 ### 8.3 AI 客服坐席台
 

@@ -23,6 +23,9 @@ import type {
   EnterpriseMarketingMonitoringSnapshotResponse,
   EnterpriseMarketingHandoffPolicyResponse,
   EnterpriseMarketingHandoffStatusResponse,
+  EnterpriseMarketingOutcomeListResponse,
+  EnterpriseMarketingOutcomeResponse,
+  CreateEnterpriseMarketingOutcomeRequest,
   UpsertEnterpriseMarketingAgentProfileRequest,
   UpsertEnterpriseMarketingHandoffPolicyRequest,
   EnterpriseCountryPoliciesResponse,
@@ -75,6 +78,11 @@ export interface EnterpriseCampaignApi {
   upsertCampaignMarketingHandoff(context: EnterpriseContentRequestContext,
     campaignId: string, input: UpsertEnterpriseMarketingHandoffPolicyRequest,
     idempotencyKey: string): Promise<EnterpriseMarketingHandoffPolicyResponse>;
+  listCampaignMarketingOutcomes(context: EnterpriseContentRequestContext,
+    campaignId: string): Promise<EnterpriseMarketingOutcomeListResponse>;
+  createCampaignMarketingOutcome(context: EnterpriseContentRequestContext,
+    campaignId: string, input: CreateEnterpriseMarketingOutcomeRequest,
+    idempotencyKey: string): Promise<EnterpriseMarketingOutcomeResponse>;
   listCampaignLeads(context: EnterpriseContentRequestContext, campaignId: string):
     Promise<EnterpriseCampaignLeadsResponse>;
   listLeadImportBatches(context: EnterpriseContentRequestContext, campaignId: string):
@@ -132,10 +140,12 @@ export function createEnterpriseCampaignApi(
   headers: Headers,
 ): EnterpriseCampaignApi {
   const campaigns = "/enterprise/v1/campaigns";
+  const campaignPath = (id: string, suffix = "") =>
+    `${campaigns}/${encodeURIComponent(id)}${suffix}`;
   return {
     listCampaigns: (context) => request(campaigns, { headers: headers(context) }),
     getCampaign: (context, campaignId) => request(
-      `${campaigns}/${encodeURIComponent(campaignId)}`,
+      campaignPath(campaignId),
       { headers: headers(context) },
     ),
     createCampaign: (context, input, key) => request(campaigns, {
@@ -143,98 +153,103 @@ export function createEnterpriseCampaignApi(
       body: JSON.stringify(input),
     }),
     updateCampaign: (context, campaignId, input, key) => request(
-      `${campaigns}/${encodeURIComponent(campaignId)}`,
+      campaignPath(campaignId),
       { method: "PATCH", headers: { ...headers(context), "idempotency-key": key },
         body: JSON.stringify(input) },
     ),
     scheduleCampaign: (context, campaignId, input, key) => request(
-      `${campaigns}/${encodeURIComponent(campaignId)}/schedule`,
+      campaignPath(campaignId, "/schedule"),
       { method: "POST", headers: { ...headers(context), "idempotency-key": key },
         body: JSON.stringify(input) },
     ),
     getCampaignSchedulerStatus: (context, campaignId) => request(
-      `${campaigns}/${encodeURIComponent(campaignId)}/scheduler`,
+      campaignPath(campaignId, "/scheduler"),
       { headers: headers(context) },
     ),
     getCampaignPstnStatus: (context, campaignId) => request(
-      `${campaigns}/${encodeURIComponent(campaignId)}/pstn-dispatch`,
+      campaignPath(campaignId, "/pstn-dispatch"),
       { headers: headers(context) },
     ),
     getCampaignMarketingAgentStatus: (context, campaignId) => request(
-      `${campaigns}/${encodeURIComponent(campaignId)}/marketing-agent`,
+      campaignPath(campaignId, "/marketing-agent"),
       { headers: headers(context) },
     ),
     upsertCampaignMarketingAgentProfile: (context, campaignId, input, key) => request(
-      `${campaigns}/${encodeURIComponent(campaignId)}/marketing-agent/profiles`,
+      campaignPath(campaignId, "/marketing-agent/profiles"),
       { method: "PUT", headers: { ...headers(context), "idempotency-key": key },
         body: JSON.stringify(input) },
     ),
     getCampaignMarketingMonitoring: (context, campaignId) => request(
-      `${campaigns}/${encodeURIComponent(campaignId)}/monitoring`,
+      campaignPath(campaignId, "/monitoring"),
       { headers: headers(context) },
     ),
     getCampaignMarketingMonitoringCall: (context, campaignId, dispatchId) => request(
-      `${campaigns}/${encodeURIComponent(campaignId)}/monitoring/calls/${
-        encodeURIComponent(dispatchId)}`,
+      campaignPath(campaignId, `/monitoring/calls/${encodeURIComponent(dispatchId)}`),
       { headers: headers(context) },
     ),
     getCampaignMarketingHandoff: (context, campaignId) => request(
-      `${campaigns}/${encodeURIComponent(campaignId)}/handoff`,
+      campaignPath(campaignId, "/handoff"),
       { headers: headers(context) },
     ),
     upsertCampaignMarketingHandoff: (context, campaignId, input, key) => request(
-      `${campaigns}/${encodeURIComponent(campaignId)}/handoff`,
+      campaignPath(campaignId, "/handoff"),
       { method: "PUT", headers: { ...headers(context), "idempotency-key": key },
         body: JSON.stringify(input) },
     ),
+    listCampaignMarketingOutcomes: (context, campaignId) => request(
+      campaignPath(campaignId, "/outcomes"),
+      { headers: headers(context) },
+    ),
+    createCampaignMarketingOutcome: (context, campaignId, input, key) => request(
+      campaignPath(campaignId, "/outcomes"),
+      { method: "POST", headers: { ...headers(context), "idempotency-key": key },
+        body: JSON.stringify(input) },
+    ),
     listCampaignLeads: (context, campaignId) => request(
-      `${campaigns}/${encodeURIComponent(campaignId)}/leads`,
+      campaignPath(campaignId, "/leads"),
       { headers: headers(context) },
     ),
     listLeadImportBatches: (context, campaignId) => request(
-      `${campaigns}/${encodeURIComponent(campaignId)}/lead-imports`,
+      campaignPath(campaignId, "/lead-imports"),
       { headers: headers(context) },
     ),
     importCampaignLeads: (context, campaignId, input, key) => request(
-      `${campaigns}/${encodeURIComponent(campaignId)}/lead-imports`,
+      campaignPath(campaignId, "/lead-imports"),
       { method: "POST", headers: { ...headers(context), "idempotency-key": key },
         body: JSON.stringify(input) },
     ),
     rollbackLeadImport: (context, campaignId, batchId, input, key) => request(
-      `${campaigns}/${encodeURIComponent(campaignId)}/lead-imports/${
-        encodeURIComponent(batchId)}/rollback`,
+      campaignPath(campaignId,
+        `/lead-imports/${encodeURIComponent(batchId)}/rollback`),
       { method: "POST", headers: { ...headers(context), "idempotency-key": key },
         body: JSON.stringify(input) },
     ),
     listMarketingConsents: (context, campaignId, leadId) => request(
-      `${campaigns}/${encodeURIComponent(campaignId)}/leads/${
-        encodeURIComponent(leadId)}/consents`,
+      campaignPath(campaignId, `/leads/${encodeURIComponent(leadId)}/consents`),
       { headers: headers(context) },
     ),
     getMarketingConsentEligibility: (context, campaignId, leadId) => request(
-      `${campaigns}/${encodeURIComponent(campaignId)}/leads/${
-        encodeURIComponent(leadId)}/consent-eligibility`,
+      campaignPath(campaignId,
+        `/leads/${encodeURIComponent(leadId)}/consent-eligibility`),
       { headers: headers(context) },
     ),
     registerMarketingConsent: (context, campaignId, leadId, input, key) => request(
-      `${campaigns}/${encodeURIComponent(campaignId)}/leads/${
-        encodeURIComponent(leadId)}/consents`,
+      campaignPath(campaignId, `/leads/${encodeURIComponent(leadId)}/consents`),
       { method: "POST", headers: { ...headers(context), "idempotency-key": key },
         body: JSON.stringify(input) },
     ),
     revokeMarketingConsent: (context, campaignId, leadId, consentId, input, key) =>
-      request(`${campaigns}/${encodeURIComponent(campaignId)}/leads/${
-        encodeURIComponent(leadId)}/consents/${encodeURIComponent(consentId)}/revoke`,
+      request(campaignPath(campaignId, `/leads/${encodeURIComponent(leadId)}/consents/${
+        encodeURIComponent(consentId)}/revoke`),
       { method: "POST", headers: { ...headers(context), "idempotency-key": key },
         body: JSON.stringify(input) }),
     listMarketingSuppressions: (context, campaignId, leadId) => request(
-      `${campaigns}/${encodeURIComponent(campaignId)}/leads/${
-        encodeURIComponent(leadId)}/suppressions`,
+      campaignPath(campaignId, `/leads/${encodeURIComponent(leadId)}/suppressions`),
       { headers: headers(context) },
     ),
     getMarketingSuppressionEligibility: (context, campaignId, leadId) => request(
-      `${campaigns}/${encodeURIComponent(campaignId)}/leads/${
-        encodeURIComponent(leadId)}/suppression-eligibility`,
+      campaignPath(campaignId,
+        `/leads/${encodeURIComponent(leadId)}/suppression-eligibility`),
       { headers: headers(context) },
     ),
     createMarketingSuppression: (context, input, key) => request(
@@ -252,25 +267,25 @@ export function createEnterpriseCampaignApi(
         body: JSON.stringify(input) },
     ),
     getCampaignCountryPolicyReadiness: (context, campaignId) => request(
-      `${campaigns}/${encodeURIComponent(campaignId)}/country-policy-readiness`,
+      campaignPath(campaignId, "/country-policy-readiness"),
       { headers: headers(context) },
     ),
     getCampaignApproval: (context, campaignId) => request(
-      `${campaigns}/${encodeURIComponent(campaignId)}/approval`,
+      campaignPath(campaignId, "/approval"),
       { headers: headers(context) },
     ),
     validateCampaign: (context, campaignId, input, key) => request(
-      `${campaigns}/${encodeURIComponent(campaignId)}/approval/validate`,
+      campaignPath(campaignId, "/approval/validate"),
       { method: "POST", headers: { ...headers(context), "idempotency-key": key },
         body: JSON.stringify(input) },
     ),
     approveCampaign: (context, campaignId, input, key) => request(
-      `${campaigns}/${encodeURIComponent(campaignId)}/approval/approve`,
+      campaignPath(campaignId, "/approval/approve"),
       { method: "POST", headers: { ...headers(context), "idempotency-key": key },
         body: JSON.stringify(input) },
     ),
     rejectCampaign: (context, campaignId, input, key) => request(
-      `${campaigns}/${encodeURIComponent(campaignId)}/approval/reject`,
+      campaignPath(campaignId, "/approval/reject"),
       { method: "POST", headers: { ...headers(context), "idempotency-key": key },
         body: JSON.stringify(input) },
     ),

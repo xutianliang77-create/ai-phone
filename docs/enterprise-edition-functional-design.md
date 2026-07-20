@@ -1,6 +1,6 @@
 # 无界AI企业版详细功能设计
 
-版本：v1.43
+版本：v1.44
 日期：2026-07-20
 状态：SaaS 详细设计基线，已对齐统一通讯平台
 
@@ -383,6 +383,23 @@ Provider、usage/ledger 和 trace；跨会话业务聚合与货币成本尚未�
 - 预约、回访和资料发送必须形成可追踪任务。
 - 支持结果推送 CRM Adapter，并保存外部对象 ID。
 - 指标包括接通率、有效对话率、预约率、接管率、退订率、投诉率和单有效线索成本。
+
+#### 5.6.1 Outcome 首批实现边界
+
+- Outcome 只能绑定同租户、同 Campaign、已终态的 call task/PSTN dispatch，以及已结束的 Agent run；
+  `accepted`、`answered`、claim 成功、handoff 请求或 callback_required 均不能单独当作业务成功。
+- 同一 task 只允许固化一个 Outcome，创建后不可修改或删除。重复幂等键返回原结果，不同请求或并发重复创建均拒绝，
+  避免同一通话反复生成结果和后续任务。
+- 运营人员只选择当前最终 revision 字幕或已交付 Agent turn；Repository 再补充终态 dispatch/run、handoff、suppression
+  等服务端证据，并固化 evidence/source hash。Outcome 和普通审计不复制客户原文。
+- `no_interest/potential_lead/appointment_requested` 必须有客户字幕证据；拒绝联系必须已有 suppression；无效号码必须有
+  allowlist Provider 失败码；通话失败必须有真实 dispatch/run 失败证据。服务端同时校验意向等级和结果分类不矛盾。
+- 预约仅固化为 `appointment_requested` 和内部 `appointment_request/requested`，不表示日历已预约；回拨、资料发送和
+  人工复核同样只创建一个内部 requested action，不表示外部动作已执行。
+- CRM/日历/消息 Provider 同步、可靠 Outbox 和外部对象 receipt 属于 `ENT-MKT-013`；未配置时当前页面固定显示
+  “外部已执行 0”，不得生成模拟成功。
+- 当前只形成 `0048`、PostgreSQL Repository/runtime/API 和同风格 Web 静态代码候选；未运行 migration/RLS、双租户、
+  真实通话、浏览器或 Provider 验收，不能宣称 Outcome 通过企业生产门禁。
 
 ## 6. AI 客服
 

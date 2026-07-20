@@ -40,6 +40,7 @@ type ContentApi = Pick<EnterpriseApi,
   | "getCampaignMarketingAgentStatus" | "upsertCampaignMarketingAgentProfile"
   | "getCampaignMarketingMonitoring" | "getCampaignMarketingMonitoringCall"
   | "getCampaignMarketingHandoff" | "upsertCampaignMarketingHandoff"
+  | "listCampaignMarketingOutcomes" | "createCampaignMarketingOutcome"
   | "importCampaignLeads" | "rollbackLeadImport"
   | "listMarketingConsents" | "getMarketingConsentEligibility"
   | "registerMarketingConsent" | "revokeMarketingConsent"
@@ -209,6 +210,14 @@ export function fakeEnterpriseContentApi(): ContentApi {
         reasonCode: "marketing_handoff_provider_not_configured" },
     }),
     upsertCampaignMarketingHandoff: vi.fn().mockRejectedValue(
+      new Error("not configured")),
+    listCampaignMarketingOutcomes: vi.fn().mockResolvedValue({
+      campaignId: "00000000-0000-4000-8000-000000000001",
+      generatedAt: "2026-07-20T00:00:00.000Z",
+      counts: { finalized: 0, nextActionRequested: 0 },
+      outcomes: [], truncated: false,
+    }),
+    createCampaignMarketingOutcome: vi.fn().mockRejectedValue(
       new Error("not configured")),
   };
 }

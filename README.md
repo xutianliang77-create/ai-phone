@@ -74,6 +74,18 @@ rolls back unless every collection count/SHA-256 and the total hash match.
 SQLite is still `demo_only`; these commands do not prove the real PostgreSQL,
 PITR, capacity, security, or enterprise production gates.
 
+## Enterprise marketing outcomes
+
+Migration `0048` upgrades the tenant-scoped `marketing_outcomes` truth and adds
+append-only `marketing_next_actions`. Outcomes can only be created for terminal
+calls from revision-bound server evidence; each task has one immutable outcome
+and at most one internal action whose status is `requested`.
+
+The outcome API does not call CRM, calendar, messaging, or PSTN providers.
+`requested` never means an external action completed. External adapter outbox,
+retry, and receipt handling remain part of `ENT-MKT-013`. PostgreSQL/RLS, real
+calls, providers, and browser acceptance have not yet been executed.
+
 ## iOS device build
 
 Standalone device testing must use Profile or Release. Debug builds should only

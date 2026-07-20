@@ -128,6 +128,8 @@ export const enterpriseIcons = {
     risk: "warning",
     latency: "timer",
     failure: "error_outline",
+    outcome: "assignment_turned_in",
+    nextAction: "task_alt",
   },
   appearance: {
     system: "brightness_auto",
