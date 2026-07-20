@@ -11,11 +11,11 @@ import type {
 describe("enterprise PostgreSQL schema verification", () => {
   it("accepts the current migration count", async () => {
     const evidence = await verifyEnterprisePostgresSchema(
-      new VerifyClient("48"),
+      new VerifyClient("51"),
     );
 
     expect(evidence).toEqual({
-      migrations: 48,
+      migrations: 51,
       tenantTables: enterpriseTenantTableNames.length,
       compositeForeignKeys: 12,
       subjectColumns: enterpriseSubjectColumns.length,
@@ -25,13 +25,13 @@ describe("enterprise PostgreSQL schema verification", () => {
   });
 
   it("rejects a stale migration count", async () => {
-    await expect(verifyEnterprisePostgresSchema(new VerifyClient("47")))
-      .rejects.toThrow("Migration count is not 48");
+    await expect(verifyEnterprisePostgresSchema(new VerifyClient("50")))
+      .rejects.toThrow("Migration count is not 51");
   });
 
   it("rejects stale UUID subject columns", async () => {
     await expect(verifyEnterprisePostgresSchema(
-      new VerifyClient("48", "uuid"),
+      new VerifyClient("51", "uuid"),
     )).rejects.toThrow("subject columns are not text");
   });
 });

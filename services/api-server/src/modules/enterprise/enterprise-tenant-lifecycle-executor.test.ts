@@ -4,6 +4,7 @@ import {
   readFileSync,
   rmSync,
 } from "node:fs";
+import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
@@ -102,6 +103,43 @@ describe("enterprise tenant lifecycle executor", () => {
       .resolves.toEqual({ status: "processing" });
     await expect(executor.execute(executionInput("tenant.export", "job-a")))
       .resolves.toEqual({ status: "retry", reason: "executor_unavailable" });
+  });
+
+  it("requires database, object and provider convergence for tenant deletion", async () => {
+    const convergence = {
+      schemaVersion: 1, tenantId: "tenant-a", jobId: "job-delete",
+      database: { status: "tombstoned", manifestHash: "a".repeat(64) },
+      objects: { status: "converged", discoveredCount: 2, deletedCount: 1,
+        alreadyAbsentCount: 1, remainingCount: 0, manifestHash: "b".repeat(64) },
+      providers: { status: "converged", discoveredCount: 1, deletedCount: 1,
+        alreadyAbsentCount: 0, remainingCount: 0, manifestHash: "c".repeat(64) },
+      verifiedAt: "2026-07-20T10:00:00.000Z",
+    };
+    const receiptHash = createHash("sha256")
+      .update(JSON.stringify(convergence)).digest("hex");
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(
+      JSON.stringify({ status: "completed", tenantId: "tenant-a",
+        jobId: "job-delete", receiptRef: "deletion:job-delete",
+        receiptHash, convergence }), { status: 200 },
+    ));
+    const executor = createEnvironmentTenantLifecycleExecutor({
+      env: { ENTERPRISE_TENANT_LIFECYCLE_EXECUTOR_URL:
+        "https://lifecycle.enterprise.example/jobs",
+        ENTERPRISE_TENANT_LIFECYCLE_EXECUTOR_TOKEN: "executor-token" },
+      fetcher,
+    });
+    await expect(executor.execute(executionInput("tenant.delete", "job-delete")))
+      .resolves.toMatchObject({ status: "completed", receiptHash });
+
+    fetcher.mockResolvedValueOnce(new Response(JSON.stringify({
+      status: "completed", tenantId: "tenant-a", jobId: "job-delete",
+      receiptRef: "deletion:job-delete", receiptHash,
+      convergence: { ...convergence, objects: {
+        ...convergence.objects, remainingCount: 1,
+      } },
+    }), { status: 200 }));
+    await expect(executor.execute(executionInput("tenant.delete", "job-delete")))
+      .resolves.toEqual({ status: "failed", reason: "deletion_not_converged" });
   });
 
   it("writes and deletes real demo artifacts only outside production", async () => {

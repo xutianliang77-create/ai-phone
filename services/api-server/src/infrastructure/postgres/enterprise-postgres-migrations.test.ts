@@ -5,7 +5,6 @@ import {
   rollbackEnterprisePostgres,
   type PostgresMigrationClient,
 } from "./enterprise-postgres-migrations.js";
-
 describe("enterprise PostgreSQL migrations", () => {
   it("loads ordered reversible migrations with stable checksums", () => {
     const migrations = loadEnterprisePostgresMigrations();
@@ -58,7 +57,8 @@ describe("enterprise PostgreSQL migrations", () => {
       "0045_enterprise_marketing_pstn_dispatch",
       "0046_enterprise_marketing_agent",
       "0047_enterprise_marketing_handoff", "0048_enterprise_marketing_outcomes",
-      "0049_enterprise_marketing_crm_sync", "0050_enterprise_worker_coordination"]);
+      "0049_enterprise_marketing_crm_sync", "0050_enterprise_worker_coordination",
+      "0051_enterprise_data_lifecycle"]);
     for (const migration of migrations) { expect(migration.up.trim()).not.toBe("");
       expect(migration.down.trim()).not.toBe("");
       expect(migration.checksum).toMatch(/^[a-f0-9]{64}$/); }

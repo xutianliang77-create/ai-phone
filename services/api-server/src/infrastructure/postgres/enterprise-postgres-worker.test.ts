@@ -4,6 +4,9 @@ const mocks = vi.hoisted(() => ({
   claimBatch: vi.fn(),
   claim: vi.fn(),
   finalizeOutbox: vi.fn(),
+  finalizeDataLifecycle: vi.fn(),
+  appendAudit: vi.fn(),
+  outstandingDataLifecycle: vi.fn(),
 }));
 
 vi.mock("./enterprise-postgres-pending-work.repository.js", () => ({
@@ -22,7 +25,14 @@ vi.mock("./enterprise-postgres-unit-of-work.js", () => ({
     _pool: unknown,
     _context: unknown,
     operation: (unit: unknown) => unknown,
-  ) => operation({ events: { finalizeOutbox: mocks.finalizeOutbox } }),
+  ) => operation({
+    events: { finalizeOutbox: mocks.finalizeOutbox },
+    dataLifecycle: {
+      finalize: mocks.finalizeDataLifecycle,
+      outstandingCount: mocks.outstandingDataLifecycle,
+    },
+    tenant: { appendAuditEvent: mocks.appendAudit },
+  }),
 }));
 
 import {
@@ -38,6 +48,8 @@ const now = new Date("2026-07-17T00:00:00.000Z");
 describe("enterprise PostgreSQL cell worker", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.outstandingDataLifecycle.mockResolvedValue(0);
+    mocks.appendAudit.mockResolvedValue(undefined);
   });
 
   it("executes and finalizes claimed lifecycle work", async () => {
@@ -124,6 +136,60 @@ describe("enterprise PostgreSQL cell worker", () => {
     }));
   });
 
+  it("deletes an expired artifact and commits only a verified receipt", async () => {
+    const job = dataLifecycleJob();
+    mocks.claimBatch.mockResolvedValue([{
+      cellId: "cn-cell-01", tenantId, workKind: "data_lifecycle",
+      resourceId: job.id,
+    }]);
+    mocks.claim.mockResolvedValue({
+      workKind: "data_lifecycle", result: { status: "claimed", job },
+    });
+    mocks.finalizeDataLifecycle.mockResolvedValue({
+      status: "updated", job: { ...job, status: "completed" },
+    });
+    const remove = vi.fn(async () => ({
+      status: "converged" as const, outcome: "deleted" as const,
+      receiptHash: "b".repeat(64),
+    }));
+    const result = await runEnterprisePostgresWorkerBatch(fixture({
+      delete: remove,
+    }));
+    expect(result.completed).toBe(1);
+    expect(remove).toHaveBeenCalledWith(job.objectKey);
+    expect(mocks.finalizeDataLifecycle).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: job.id, attempt: 1,
+        result: { status: "completed", outcome: "deleted",
+          receiptHash: "b".repeat(64) },
+      }),
+    );
+  });
+
+  it("does not invoke tenant deletion while object work is outstanding", async () => {
+    const job = lifecycleJob("tenant.delete");
+    mocks.claimBatch.mockResolvedValue([{
+      cellId: "cn-cell-01", tenantId, workKind: "tenant_lifecycle",
+      resourceId: job.id, actorUserId,
+    }]);
+    mocks.claim.mockResolvedValue({
+      workKind: "tenant_lifecycle", result: { status: "claimed", job },
+    });
+    mocks.outstandingDataLifecycle.mockResolvedValue(1);
+    const execute = vi.fn();
+    const finalize = vi.fn(async () => ({
+      status: "updated", job: { ...job, status: "processing" },
+    }));
+    const result = await runEnterprisePostgresWorkerBatch(fixture({
+      execute, finalizeTenantLifecycleJob: finalize,
+    }));
+    expect(result.retried).toBe(1);
+    expect(execute).not.toHaveBeenCalled();
+    expect(finalize).toHaveBeenCalledWith(expect.objectContaining({
+      result: { status: "processing" },
+    }));
+  });
+
   it("isolates a failed item and keeps batch accounting explicit", async () => {
     mocks.claimBatch.mockResolvedValue([{
       cellId: "cn-cell-01",
@@ -177,16 +243,20 @@ function fixture(overrides: Record<string, unknown>) {
     outboxPublisher: {
       publish: overrides.publish ?? vi.fn(),
     } as never,
+    ...(overrides.delete ? { auditExportArtifactStore: {
+      ready: true, put: vi.fn(), get: vi.fn(), delete: overrides.delete,
+      close: vi.fn(),
+    } as never } : {}),
     now,
   };
 }
 
-function lifecycleJob() {
+function lifecycleJob(type: "tenant.export" | "tenant.delete" = "tenant.export") {
   return {
     id: jobId,
     tenantId,
     actorUserId,
-    type: "tenant.export" as const,
+    type,
     idempotencyKey: "job-1",
     requestHash: "a".repeat(64),
     status: "processing" as const,
@@ -210,5 +280,16 @@ function lifecycleJob() {
     },
     createdAt: now.toISOString(),
     updatedAt: now.toISOString(),
+  };
+}
+
+function dataLifecycleJob() {
+  return {
+    id: jobId, tenantId, jobType: "object.delete" as const,
+    dataClass: "audit_export" as const, sourceId: jobId,
+    objectKey: `audit-exports/tenants/${tenantId}/${jobId}.jsonl`,
+    objectSha256: "a".repeat(64), sizeBytes: 10, retentionDays: 7,
+    retentionUntil: now.toISOString(), status: "processing" as const,
+    attempts: 1, createdAt: now.toISOString(), updatedAt: now.toISOString(),
   };
 }

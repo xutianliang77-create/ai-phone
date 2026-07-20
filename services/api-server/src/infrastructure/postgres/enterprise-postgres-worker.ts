@@ -34,6 +34,11 @@ import type {
 } from "./enterprise-postgres-worker-config.js";
 import { processEnterpriseAuditExport } from
   "./enterprise-postgres-audit-export-worker.js";
+import {
+  executeTenantLifecycleAfterDeletionFence,
+  runEnterpriseDataLifecycleClaim,
+} from
+  "./enterprise-postgres-worker-data-lifecycle.js";
 
 export async function runEnterprisePostgresWorkerBatch(options: {
   discoveryPool: EnterprisePostgresPool;
@@ -142,12 +147,10 @@ async function processClaimedRef(
       },
       snapshot: structuredClone(job.scopeSnapshot!),
     };
-    let result;
-    try {
-      result = await options.lifecycleExecutor.execute(execution);
-    } catch {
-      result = { status: "retry" as const, reason: "executor_unavailable" };
-    }
+    const result = await executeTenantLifecycleAfterDeletionFence({
+      pool: options.tenantPool, job, traceId,
+      execute: () => options.lifecycleExecutor.execute(execution),
+    });
     await lease.assertOwned();
     const finalized = await options.runtime.finalizeTenantLifecycleJob({
       context: createEnterpriseTenantContext({
@@ -177,6 +180,12 @@ async function processClaimedRef(
     return auditExport.status === "completed"
       ? "completed"
       : auditExport.status === "failed" ? "failed" : "retried";
+  }
+  if (claimed.workKind === "data_lifecycle") {
+    return runEnterpriseDataLifecycleClaim({
+      pool: options.tenantPool, store: options.auditExportArtifactStore,
+      job: claimed.result.job, now, traceId, assertOwned: lease.assertOwned,
+    });
   }
   const event = claimed.result.event;
   let result;

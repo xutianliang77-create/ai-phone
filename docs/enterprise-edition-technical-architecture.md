@@ -1,6 +1,6 @@
 # 无界AI企业版技术架构
 
-版本：v1.52
+版本：v1.53
 日期：2026-07-20
 状态：SaaS 详细架构基线，已对齐统一通讯平台和 PostgreSQL Primary
 
@@ -177,8 +177,9 @@ object-storage
 | 账号、Tenant、RBAC、企业命令 | `services/api-server` | 先按 domain module 隔离；只有独立扩缩容或故障域需要时才拆服务 |
 | Enterprise Repository runtime/cell Worker | `services/api-server/src/modules/enterprise`、`services/api-server/src/infrastructure/postgres` | API 使用单一 `legacy|postgres` runtime；独立启动的 cell Worker 仅以 cell discovery 和 tenant transaction 角色 claim/finalize |
 | Communication Session、Provider Operation、Dispatch、Recording 和 Usage | 上游稳定提交 `fe1c3c2` 已导入企业分支，`ENT-DATA-008/CORE-013/014/015` 已补 tenant scope、企业业务绑定、签名 dispatch fence 和企业运行策略快照 | 公共 runtime 已成为代码基线；dispatch 必须先通过服务端 policy snapshot 与授权 fence，真实 Provider/设备仍待验收 |
-| PostgreSQL Primary 基础 | 公共31段 migration/Primary Runtime 与企业现有36段 migration | 已收敛为一个 Storage Driver/启动编排和两个有序 manifest；按 tenant/directory/cell/migration/maintenance 使用最小权限连接，等待真实 H3 验收 |
-| 受控审计导出 | enterprise `0020`、Audit Export API/Repository、cell Worker、加密对象存储 Adapter | API 只创建/查询/鉴权下载；cell Worker 在 tenant transaction 取数并保存 hash/size/expiry，客户端不获得对象存储 key/凭据；物理 purge 与对象清单仍待 REL-002 |
+| PostgreSQL Primary 基础 | 公共31段 migration/Primary Runtime 与企业现有51段 migration | 已收敛为一个 Storage Driver/启动编排和两个有序 manifest；按 tenant/directory/cell/migration/maintenance 使用最小权限连接，等待真实 H3 验收 |
+| 受控审计导出 | enterprise `0020`、Audit Export API/Repository、cell Worker、加密对象存储 Adapter | API 只创建/查询/鉴权下载；cell Worker 在 tenant transaction 取数并保存 hash/size/expiry，客户端不获得对象存储 key/凭据 |
+| 数据生命周期 | enterprise `0051`、Data Lifecycle Repository、cell Worker、对象删除/复核 Adapter、tenant deletion convergence receipt | 导出完成原子登记删除 job；到期/租户删除复用 pending-work 协调；对象复核不存在及数据库/对象/Provider remaining=0 后才完成，不建立第二套 tenant/export 真值 |
 | Enterprise Knowledge | enterprise `0017`、Knowledge Repository/runtime/API | source/revision/chunk/review/publish、发布后不可变、四维有效期检索和 citation 已接入；embedding Provider 未配置时保持确定性文本检索，不声明向量 readiness |
 | Enterprise Terminology | enterprise `0018`、Term Pack/Script Template Repository/runtime/API | 稳定资源与不可变 revision、审核发布、生效时间解析已接入；resolver 向 ASR/翻译/LLM 返回同一术语版本引用，话术只供 LLM 使用 |
 | Tenant Billing/Entitlement | `packages/contracts`、enterprise PostgreSQL migration `0014/0015` 与 tenant unit-of-work | billing account、版本化 plan/subscription/entitlement、预算和 dispatch fence 已接入；支付 Provider 尚未完成 |
@@ -900,7 +901,7 @@ Worker 无权依据缓存继续执行敏感能力。
 
 生产 PostgreSQL 启动还必须验证企业签名 cutover evidence：证据绑定 staging 环境、
 commit、image digest、topology hash、目标 logical ID、system identifier/OID、公共31段与
-企业50段 manifest，并证明源库 writer fence、旧 API/Worker 角色会话为0、目标可写和
+企业51段 manifest，并证明源库 writer fence、旧 API/Worker 角色会话为0、目标可写和
 二次全量 hash 一致。本地逻辑恢复证据不提升为跨故障域 HA/PITR 结论。
 
 ### 9.5 多实例 Worker 协调
@@ -915,6 +916,13 @@ Worker 并发处理已占用记录，并以 owner+generation 续租；续租失�
 真正的业务完成仍由 tenant transaction 中的 attempt/CAS/终态约束确认；生命周期 executor、对象写入和 Outbox
 Provider 始终复用稳定 job/event ID。这里保证的是单一有效 claim 与副作用幂等收敛，不承诺网络请求只发送一次。
 Redis 若引入只能发送“可能有工作”的短暂唤醒，不参与 owner、generation、完成状态或恢复决策。
+
+`ENT-REL-002` 在相同模型上增加 `data_lifecycle` work kind。`audit_export_jobs` 仍是导出状态真值，
+`tenant_jobs` 仍是租户删除真值；`data_lifecycle_jobs` 只保存不可变删除范围、保存截止时间、attempt/lease 和
+物理删除回执。S3-compatible Adapter 在 Delete 后执行 Head 复核，本地 Adapter 仅用于非生产封闭演示；
+Adapter 缺失、网络未知或对象仍存在时 pending row 保留并退避重试。租户删除先等待本租户所有对象 job completed，
+同时把 processing audit export 作为 blocker；导出 INSERT 与 tenant 状态更新通过数据库行锁串行，删除期迟到导出
+被拒绝。随后再校验外部执行器的数据库/对象/Provider 三段清单，因此任一层失败都不会提前 tombstone 为 deleted。
 
 ## 10. 安全架构
 

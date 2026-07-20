@@ -56,7 +56,7 @@ export const enterpriseTenantTableNames = [
   "communication_session_bindings",
   "worker_dispatch_grants", "communication_policy_versions",
   "communication_authorization_evidence", "communication_policy_snapshots",
-  "tenant_jobs", "audit_export_jobs",
+  "tenant_jobs", "audit_export_jobs", "data_lifecycle_jobs",
 ] as const;
 export const enterpriseSubjectColumns = [
   ["members", "user_id"],

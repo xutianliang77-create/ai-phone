@@ -1,6 +1,6 @@
 # 无界AI企业版 UI 详细设计
 
-版本：v1.36
+版本：v1.37
 日期：2026-07-20
 状态：设计基线；企业 Web 公共组件、首批设置/工作台、响应式/主题/无障碍和 Web/iOS/Android 成员屏幕共享代码候选已实现，正式验收仍在开发
 
@@ -421,6 +421,9 @@ budget、usage aggregate 和显式 session trace report。卡片沿用同一 Mat
 - 审计员只有只读和受控导出，不显示修改策略入口。
 - 事件列表默认缩略 actor/resource 标识，详情才展示完整 trace；导出按钮仅向 `audit:export` 显示。
 - 创建导出使用二次确认对话框，强制选择目的、半开时间范围和保留期限；processing/failed/expired 使用服务端 job 状态，下载前显示完整性校验过程，不展示对象 key 或存储凭据。
+- `ENT-REL-002` 不新增“手工物理删除”按钮，也不把 Worker 内部对象 job 暴露为客户可改写状态。导出到期后
+  继续使用既有 `expired` 状态和 `delete_outline` Material Icon；物理删除完成/失败只通过有权限的审计事件
+  展示文字结果、时间、source ID 和 receipt hash 缩略值，不展示对象 key、bucket、endpoint 或 Provider reference。
 
 ### 8.9 企业设置
 
@@ -519,3 +522,7 @@ budget、usage aggregate 和显式 session trace report。卡片沿用同一 Mat
 `ENT-DATA-006` 是服务端运行协调任务，不增加客户可操作页面、图标或“手工抢占”按钮。未来运维视图若展示
 queue age、claim owner、generation 或 lease，只能读取脱敏聚合，并继续复用现有状态组件和 Material Icons；
 不得把内存中的 Worker 列表显示为数据库真值，也不得向租户管理员开放跨租户/跨 Cell 协调控制。
+
+`ENT-REL-002` 同样是服务端生命周期收敛任务。当前 UI 只消费已有导出 `expired` 与 append-only audit 真值；
+在未提供 tenant-scoped 只读生命周期投影前，不新增进度条、成功徽标或重试按钮。对象/Provider 未配置或故障
+必须保持 `not_ready/failed`，不能用倒计时结束推断物理删除完成。

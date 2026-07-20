@@ -188,6 +188,10 @@ function parseExecutorReceipt(
   ) {
     return { status: "failed", reason: "invalid_executor_receipt" };
   }
+  if (input.job.type === "tenant.delete" &&
+    !validDeletionConvergence(record.convergence, record.receiptHash, input)) {
+    return { status: "failed", reason: "deletion_not_converged" };
+  }
   return {
     status: "completed",
     receiptRef: record.receiptRef,
@@ -246,6 +250,52 @@ function validReceiptRef(value: unknown): value is string {
 
 function validReceiptHash(value: unknown): value is string {
   return typeof value === "string" && /^[a-f0-9]{64}$/.test(value);
+}
+
+function validDeletionConvergence(
+  value: unknown,
+  receiptHash: unknown,
+  input: TenantLifecycleExecutionInput,
+) {
+  if (!value || typeof value !== "object") return false;
+  const item = value as Record<string, unknown>;
+  const database = object(item.database);
+  const objects = object(item.objects);
+  const providers = object(item.providers);
+  if (item.schemaVersion !== 1 || item.tenantId !== input.job.tenantId ||
+    item.jobId !== input.job.id || database?.status !== "tombstoned" ||
+    objects?.status !== "converged" || providers?.status !== "converged" ||
+    !validReceiptHash(database.manifestHash) ||
+    !validConvergedGroup(objects) || !validConvergedGroup(providers) ||
+    typeof item.verifiedAt !== "string" ||
+    !Number.isFinite(Date.parse(item.verifiedAt))) return false;
+  const normalized = {
+    schemaVersion: 1, tenantId: input.job.tenantId, jobId: input.job.id,
+    database: { status: "tombstoned", manifestHash: database.manifestHash },
+    objects: convergedGroup(objects), providers: convergedGroup(providers),
+    verifiedAt: new Date(item.verifiedAt).toISOString(),
+  };
+  return receiptHash === sha256(JSON.stringify(normalized));
+}
+
+function validConvergedGroup(value: Record<string, unknown>) {
+  return validReceiptHash(value.manifestHash) && count(value.discoveredCount) &&
+    count(value.deletedCount) && count(value.alreadyAbsentCount) &&
+    value.remainingCount === 0 &&
+    value.discoveredCount === Number(value.deletedCount) +
+      Number(value.alreadyAbsentCount);
+}
+function convergedGroup(value: Record<string, unknown>) {
+  return { status: "converged", discoveredCount: value.discoveredCount,
+    deletedCount: value.deletedCount, alreadyAbsentCount: value.alreadyAbsentCount,
+    remainingCount: 0, manifestHash: value.manifestHash };
+}
+function object(value: unknown) {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown> : null;
+}
+function count(value: unknown) {
+  return Number.isSafeInteger(value) && Number(value) >= 0;
 }
 
 function safeReason(value: unknown, fallback: string) {

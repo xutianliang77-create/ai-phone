@@ -28,6 +28,11 @@ describe("enterprise PostgreSQL pending work", () => {
               resource_id: outboxId,
               actor_id: null,
             }),
+            pendingRow({
+              work_kind: "data_lifecycle",
+              resource_id: outboxId,
+              actor_id: null,
+            }),
           ]
         : []
     );
@@ -47,6 +52,12 @@ describe("enterprise PostgreSQL pending work", () => {
         cellId,
         tenantId,
         workKind: "outbox",
+        resourceId: outboxId,
+      },
+      {
+        cellId,
+        tenantId,
+        workKind: "data_lifecycle",
         resourceId: outboxId,
       },
     ]);
@@ -137,6 +148,31 @@ describe("enterprise PostgreSQL pending work", () => {
       workKind: "outbox",
       result: { status: "claimed", event: { id: outboxId, attempts: 1 } },
     });
+
+    const lifecycleData = poolFixture((sql) => {
+      if (sql.includes("FROM enterprise.tenants")) {
+        return [tenantRow({ status: "deletion_requested" })];
+      }
+      if (sql.includes("UPDATE enterprise.data_lifecycle_jobs")) {
+        return [dataLifecycleRow({ attempts: 1, lease_expires_at: leaseExpiresAt })];
+      }
+      return [];
+    });
+    const dataClaim = await claimEnterprisePostgresPendingWork({
+      pool: lifecycleData.pool,
+      cellId,
+      ref: { cellId, tenantId, workKind: "data_lifecycle", resourceId: outboxId },
+      now,
+      leaseExpiresAt,
+      traceId: "trace-data-lifecycle",
+    });
+    expect(dataClaim).toMatchObject({
+      workKind: "data_lifecycle",
+      result: { status: "claimed", job: { id: outboxId, attempts: 1 } },
+    });
+    expect(lifecycleData.calls.some(({ sql, values }) =>
+      sql.includes("UPDATE enterprise.data_lifecycle_jobs") && values?.at(-1) === true
+    )).toBe(true);
   });
 
   it("fails closed before claim when the tenant route changed", async () => {
@@ -271,6 +307,19 @@ function outboxRow(overrides: Record<string, unknown> = {}) {
     created_at: now,
     published_at: null,
     ...overrides,
+  };
+}
+
+function dataLifecycleRow(overrides: Record<string, unknown> = {}) {
+  return {
+    id: outboxId, tenant_id: tenantId, job_type: "object.delete",
+    data_class: "audit_export", source_id: outboxId,
+    object_key: `audit-exports/tenants/${tenantId}/${outboxId}.jsonl`,
+    object_sha256: "a".repeat(64), size_bytes: "10", retention_days: 7,
+    retention_until: now, status: "processing", attempts: 0,
+    next_attempt_at: null, lease_expires_at: null, completion_outcome: null,
+    receipt_hash: null, error_code: null, completed_at: null,
+    created_at: now, updated_at: now, ...overrides,
   };
 }
 

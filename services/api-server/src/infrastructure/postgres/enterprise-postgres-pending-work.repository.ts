@@ -50,6 +50,12 @@ export type EnterprisePostgresPendingWorkRef =
       tenantId: string;
       workKind: "screen_share";
       resourceId: string;
+    }
+  | {
+      cellId: string;
+      tenantId: string;
+      workKind: "data_lifecycle";
+      resourceId: string;
     };
 
 export function listEnterprisePostgresPendingWork(input: {
@@ -109,7 +115,10 @@ export async function claimEnterprisePostgresPendingWork(input: {
     input.ref.workKind === "audit_export"
     ? enterprisePostgresAccountSubjectId(input.ref.actorUserId)
     : input.ref.workKind === "outbox"
-    ? "system:enterprise-outbox" : "system:enterprise-screen-share";
+    ? "system:enterprise-outbox"
+    : input.ref.workKind === "data_lifecycle"
+    ? "system:enterprise-data-lifecycle"
+    : "system:enterprise-screen-share";
   return withEnterprisePostgresUnitOfWork(
     input.pool,
     createEnterpriseTenantContext({
@@ -165,6 +174,18 @@ export async function claimEnterprisePostgresPendingWork(input: {
             : { status: "busy" as const },
         };
       }
+      if (input.ref.workKind === "data_lifecycle") {
+        return {
+          workKind: input.ref.workKind,
+          result: await unit.dataLifecycle.claim({
+            id: input.ref.resourceId,
+            now: input.now,
+            leaseExpiresAt: input.leaseExpiresAt,
+            expedite: tenant.status === "deletion_requested" ||
+              tenant.status === "deleted",
+          }),
+        };
+      }
       return {
         workKind: input.ref.workKind,
         result: await unit.events.claimOutbox({
@@ -196,7 +217,8 @@ export function mapEnterprisePostgresPendingWorkRow(
       actorUserId: enterprisePostgresAccountSubjectId(row.actor_id),
     };
   }
-  if ((row.work_kind === "outbox" || row.work_kind === "screen_share") &&
+  if ((row.work_kind === "outbox" || row.work_kind === "screen_share" ||
+    row.work_kind === "data_lifecycle") &&
     row.actor_id == null) {
     return { cellId, tenantId, workKind: row.work_kind, resourceId };
   }

@@ -1,6 +1,6 @@
 # 无界AI企业版详细功能设计
 
-版本：v1.49
+版本：v1.50
 日期：2026-07-20
 状态：SaaS 详细设计基线，已对齐统一通讯平台
 
@@ -96,6 +96,9 @@ Provider Adapter、可靠事件和会话历史能力，并新增：
 并以异步 job 显示 processing/completed/failed/expired。数据分析页当前只允许按明确 session ID 下钻真实质量、
 Provider、usage/ledger 和 trace；跨会话业务聚合与货币成本尚未实现时保持 not_ready/not_configured，
 不能用示例指标或客户端估价替代。
+`ENT-REL-002` 已在服务端为 completed 导出登记独立的物理删除 job；页面到期后继续只显示 expired，
+不展示对象 key、存储凭据或内部删除目标。物理删除完成/失败写入 append-only audit，未完成时不能被租户删除
+流程掩盖为成功；tenant 进入删除流程后，新的审计导出也必须由服务端和数据库双重拒绝。
 
 ### 3.3 通用页面状态
 
@@ -148,6 +151,20 @@ Provider、usage/ledger 和 trace；跨会话业务聚合与货币成本尚未�
 - 会议和历史数据按套餐进入只读或保留期状态。
 - 注销前提供导出、删除范围和预计完成时间。
 - 注销使用 tombstone 和对象删除 outbox，完成后生成可审计结果。
+
+保存与删除规则：
+
+- `tenant.dataRetentionDays` 继续作为租户业务数据的服务端保存策略真值；受控审计导出另以请求时固化的
+  1 至 30 天保存期为准，后续套餐或租户字段变化不能改写既有 job。
+- 审计导出完成后，数据库自动登记对象 key、SHA-256、大小、保存截止时间和来源 ID；这些字段只在服务端
+  生命周期账本中可见，终态证据不可更新或删除。
+- 到期 job 和租户删除触发的提前 job 均由所属 Cell Worker 执行。对象存储 `DELETE` 返回后必须再次确认对象
+  不存在；网络结果未知、对象仍存在、Adapter 未配置或 key 非法时保持 retry/failed，不生成完成回执。
+- 租户进入 `deletion_requested` 后会立即调度其未完成对象 job；只要存在 processing 或 failed job，最终租户
+  删除执行器就不能被调用。外部执行器完成时还必须提交数据库 tombstone、对象和 Provider 三组清单，三组
+  `remainingCount` 都为零且规范化回执 SHA-256 匹配后，租户才能进入 `deleted`。
+- `already_absent` 不是虚构删除：它只表示删除前的实体复核已确认对象不存在，并与 `deleted` 使用不同结果写入
+  回执。当前代码候选首先覆盖 audit export 对象；其他业务对象和 Provider 清理仍须由真实生命周期服务清单逐项证明。
 
 ### 4.4 SaaS 服务管理
 

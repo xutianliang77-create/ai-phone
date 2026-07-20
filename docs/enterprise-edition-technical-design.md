@@ -1,6 +1,6 @@
 # 无界AI企业版详细技术设计
 
-版本：v1.68
+版本：v1.69
 日期：2026-07-20
 状态：统一通讯平台与 PostgreSQL Primary 收敛详细技术方案
 
@@ -21,15 +21,16 @@
 | RBAC | `ready_for_acceptance` | 已有23个 scope、九角色矩阵、统一服务端 guard 和越权测试；新增质检 scope 的自动化尚未恢复执行 |
 | SaaS tenant lifecycle | `ready_for_acceptance` | 已有幂等开通、暂停、导出/删除执行器、租约、有界恢复和 receipt 校验；真实对象存储/Provider 清理服务尚待验收 |
 | Append-only audit | `ready_for_acceptance` | 已有 tenant-scoped 查询、HMAC cursor、成员/RBAC/租户生命周期埋点和 SQLite/PostgreSQL 不可变约束；受控导出已进入 UI-008 开发，真实 PostgreSQL 验收仍待执行 |
-| PostgreSQL schema | `implemented` | 已有五十段 up/down migration、tenant-first 索引、复合 FK、强制 RLS、user directory、cell pending projection/coordination、opaque subject identity、企业通讯/dispatch/策略、usage/billing、knowledge/terminology、observability trace、受控审计导出、Meeting、客服、Campaign/Lead/Consent/Suppression/Country Policy、活动审批快照、Scheduler、PSTN dispatch、Marketing Agent、人工接管、Outcome 和 CRM sync 栅栏；尚无真实 migrate/restore/PITR 证据 |
+| PostgreSQL schema | `implemented` | 已有五十一段 up/down migration、tenant-first 索引、复合 FK、强制 RLS、user directory、cell pending projection/coordination、opaque subject identity、企业通讯/dispatch/策略、usage/billing、knowledge/terminology、observability trace、受控审计导出、数据生命周期、Meeting、客服、Campaign/Lead/Consent/Suppression/Country Policy、活动审批快照、Scheduler、PSTN dispatch、Marketing Agent、人工接管、Outcome 和 CRM sync 栅栏；尚无真实 migrate/restore/PITR 证据 |
 | Tenant-scoped Repository | `ready_for_acceptance` | 已有 tenant/user/cell scoped transaction、subject guard、单一 `legacy|postgres` runtime、HTTP 全链路注入、独立 cell Worker，以及 Tenant/Member/Audit、Directory、lifecycle、Inbox/Outbox、budget、billing/entitlement、usage accounting、knowledge、terminology 和共享 unit-of-work；尚无真实 PostgreSQL H3 证据 |
 | Enterprise Inbox/Outbox | `ready_for_acceptance` | 已有 tenant-scoped 去重、稳定 payload hash、领域/inbox/outbox 原子提交、lease/retry/recovery 和100次重放门禁；真实 PostgreSQL 并发与 Provider sandbox 尚待验收 |
 | 企业安全门禁 | `in_progress` | 已有21条高置信 SAST/密钥规则、精确依赖例外、隔离 test/staging 渗透 runner、commit/计划/时间窗 HMAC evidence verifier 和 CI 静态 job；本轮静态 P0/P1 为0且依赖无 high/critical，但14个 moderate 仍为限期 OpenTelemetry 例外，真实渗透/独立复核/密钥轮换未执行 |
+| 数据生命周期 | `in_progress` | `0051` 已登记 audit export retention/object 删除 job，复用 Cell queue 协调，Delete 后实体复核、attempt CAS、append-only receipt/audit 和 tenant delete 三段收敛回执已形成候选；未执行真实 migration/S3/Provider/故障注入 |
 | SQLite/JSON 演示数据导入 | `ready_for_acceptance` | 已有维护窗口、SQLite 临时副本与 quick_check、空目标事务导入、六集合 count/SHA-256 读回对账和不一致回滚；仅限内部演示数据 |
-| 公共 Primary Runtime 收敛 | `ready_for_acceptance` | 已合入上游稳定提交 `fe1c3c2`；公共31段与 enterprise 50段 manifest 由一个启动编排验证，driver、数据库身份和分权连接失败均在监听前闭合；尚无真实 PostgreSQL H3 证据 |
+| 公共 Primary Runtime 收敛 | `ready_for_acceptance` | 已合入上游稳定提交 `fe1c3c2`；公共31段与 enterprise 51段 manifest 由一个启动编排验证，driver、数据库身份和分权连接失败均在监听前闭合；尚无真实 PostgreSQL H3 证据 |
 | 企业链路追踪 | `in_progress` | 平台 trace 已进入 tenant context、PostgreSQL session、communication binding、usage event/ledger 与会话报告；本轮未执行测试和真实 PostgreSQL 门禁，货币成本因无价格表明确 not configured |
 | 企业工作台真值投影 | `in_progress` | Web 已读取 tenant/route、Provider、subscription、budget、usage aggregate 和显式 session trace report；业务聚合与价格表缺失时明确 not ready/not configured，本轮未执行自动化、浏览器或 PostgreSQL 门禁 |
-| 审计与分析 | `in_progress` | Web 已接入审计筛选/详情、显式 session 下钻和受控 JSONL 导出；`0020`、Repository/API/cell Worker/加密对象存储边界已实现，本轮未执行 migration、双租户、对象存储或浏览器测试；业务聚合/价格表与物理对象清理仍未完成 |
+| 审计与分析 | `in_progress` | Web 已接入审计筛选/详情、显式 session 下钻和受控 JSONL 导出；`0020/0051`、Repository/API/cell Worker/加密对象存储与到期物理清理边界已实现，本轮未执行 migration、双租户、对象存储或浏览器测试；业务聚合/价格表与真实对象清理验收仍未完成 |
 | 公共通讯 tenant scope | `ready_for_acceptance` | 公共 manifest 已增至31段；12张通讯资源表具有不可空 scope、复合 FK、写入 guard 和 forced RLS，企业 unit-of-work 只暴露 tenant-bound 白名单 Repository；尚无真实双租户 A1/H3 证据 |
 | 企业统一通讯会话绑定 | `ready_for_acceptance` | enterprise `0011` 和 tenant unit-of-work 已建立 Meeting/Support/Marketing 唯一绑定、route/policy/entitlement 快照及 generation/event-sequence 收敛状态机；尚无真实多实例、cell 迁移和 A1/H3 证据 |
 | Tenant-aware Worker Dispatch | `ready_for_acceptance` | enterprise `0012` 以 scope FK/RLS 绑定公共 dispatch/capacity；短期 HMAC ticket、租户容量、lease/heartbeat、cancel/finalize 和二次 binding fence 已实现；仅有自动化和一次性本地 PostgreSQL 16 证据，尚无真实多实例/H3 容量证据 |
@@ -59,7 +60,7 @@
 | 营销授权证据 | `in_progress` | `0039`、对象实体验证、Campaign/Lead/purpose 绑定、不可变登记/撤回、服务端有效性解析、task insert/reschedule 数据库 guard 和同风格 Web 面板已形成代码候选；真实 S3/KMS、PostgreSQL/RLS、并发、浏览器和法务抽样未验收 |
 | 营销禁拨名单 | `in_progress` | `0040`、tenant/global 不可变记录、拒绝/撤回来源、Repository/runtime/API、同号码事务锁、task insert/reschedule guard、跨活动待任务取消和同风格 Web 面板已形成代码候选；全局注册表明确 not_configured，真实 PostgreSQL/RLS、并发、浏览器和名单同步未验收 |
 | 企业术语与话术版本 | `ready_for_acceptance` | enterprise `0018`、共享契约、Term Pack/Script Template Repository/runtime/API 已实现稳定资源、递增 revision、review/publish、有效期解析、hash 校验和同一术语版本运行时引用；仅有自动化和本地 PostgreSQL 16 普通角色证据，真实 Worker/Provider、A1/H3 未通过 |
-| Primary 全量切换/恢复证据 | `ready_for_acceptance` | 工具按运行时动态校验 manifest/全业务表；`c9b5be2` 历史证据为31+16/81张表，当前31+50/126张表必须重新生成签名证据；异地 WAL/PITR/H3 未通过 |
+| Primary 全量切换/恢复证据 | `ready_for_acceptance` | 工具按运行时动态校验 manifest/全业务表；`c9b5be2` 历史证据为31+16/81张表，当前31+51/127张表必须重新生成签名证据；异地 WAL/PITR/H3 未通过 |
 | PostgreSQL 控制面/业务聚合 | `designed` | 后续 CORE/MTG/CS/MKT 领域任务范围，不能从公共 Repository runtime 推导为已实现 |
 | SQLite | `demo_only` | 仅本地开发、自动化和封闭演示，不承载真实企业试点数据 |
 | PSTN/CRM/OCR | `not_ready` 或按环境探测 | 未配置必须明确降级，不生成虚假外部对象或成功状态 |
@@ -1938,7 +1939,7 @@ baseline 文件 hash，验证源库默认只读、写探针返回 SQLSTATE `2500
 整行 hash、主键、migration 或 server version 不一致都会生成签名 `mismatch` 并以非零退出。
 
 生产 startup gate 只接受 `environment=staging` 的 matched cutover evidence，且运行时
-commit/image/topology、cutover ID、target logical ID、当前 system identifier/OID 和31+50
+commit/image/topology、cutover ID、target logical ID、当前 system identifier/OID 和31+51
 manifest 必须逐项一致。本地 PostgreSQL 16 演练已验证81张表、8张含记录关键表、增量后17行
 全库 hash、writer fence、隔离 `pg_dump/pg_restore` 和单行篡改失败；证据见
 `docs/evidence/ent-data-009-local-drill-2026-07-18.md`。这只证明机制可执行，不是异地主机
@@ -1958,7 +1959,7 @@ run/migration/tenant ID、源/目标 Cell 与 logical database ID、commit、ima
 `tenant_id`；发现任何没有 selector 的 enterprise 表立即失败。公共 `ai_phone` 只选择同时具有
 `scope_type + scope_id` 的表，并固定 `scope_type=tenant/scope_id=tenantId`。每表必须有主键；非延迟外键生成
 导入拓扑，延迟外键由目标事务 `SET CONSTRAINTS ALL DEFERRED` 处理。复合主键 keyset pagination 每页最多5000行，
-`to_jsonb(row)` 经稳定 JSON、字节长度前缀形成逐表 count/hash；总 hash同时绑定31段公共 migration、50段
+`to_jsonb(row)` 经稳定 JSON、字节长度前缀形成逐表 count/hash；总 hash同时绑定31段公共 migration、51段
 enterprise migration、对象引用 count/hash 和总行数。tenant 的 cell/version/updatedAt 及 pending projection cell
 和易失协调 owner/generation/lease 在内容 hash 中规范为占位符，另以 route 断言要求 homeRegion/status 不变且
 跨 Cell epoch 精确 +1。
@@ -1990,7 +1991,7 @@ rollback，控制面不得发布新 route。
 `BYPASSRLS` maintenance 账号不足以执行 replace rollback。回滚后 route epoch 仍从当前源 +1，不能恢复旧 epoch。
 
 当前实现包含维护命令、动态计划、流式传输、writer/quiescence/object/evidence 门禁及测试定义，只通过 typecheck、
-构建候选与文件规模静态检查；未运行测试、真实 PostgreSQL 31+50 双库、对象存储复制、控制面 route 发布、
+构建候选与文件规模静态检查；未运行测试、真实 PostgreSQL 31+51 双库、对象存储复制、控制面 route 发布、
 故障注入或跨 Cell 演练，因此 `ENT-DATA-005` 保持 `in_progress`，不能作为 H3 或生产门禁证据。
 
 #### 11.1.4 Cell Worker 多实例协调
@@ -2118,9 +2119,60 @@ SHA-256 `receiptHash`；不匹配、错误 schema 或拒绝响应均不能完成
 `deleted` 并停用成员关系。仍有 processing export 时删除返回
 `tenant_lifecycle_pending`，避免删除完成后迟到导出重新生成 artifact。执行器失败时
 tombstone 保留且可重试。当前生命周期请求、终态和越权尝试已追加审计事件；
-retention 窗口和受控审计导出的创建/下载已由 `ENT-UI-008` 实现；业务表/对象清单、
-对象物理删除和 Provider 删除收敛继续由 `ENT-REL-002` 完成，不能仅凭基础 lifecycle job 和本地审计代码宣称
-数据生命周期生产门禁通过。
+retention 窗口和受控审计导出的创建/下载已由 `ENT-UI-008` 实现；`ENT-REL-002` 已增加首批对象物理删除
+和 Provider 收敛回执代码候选，但真实环境门禁仍未执行。
+
+### 12.1 数据生命周期收敛
+
+`0051_enterprise_data_lifecycle` 不复制 tenant job 或 audit export 状态机。新增
+`data_lifecycle_jobs` 只保存 `tenant + source + object` 删除范围：
+
+```text
+data_lifecycle_jobs(
+  tenant_id, id, job_type=object.delete, data_class=audit_export,
+  source_id, object_key, object_sha256, size_bytes,
+  retention_days, retention_until, status, attempts,
+  next_attempt_at, lease_expires_at, completion_outcome,
+  receipt_hash, error_code, completed_at, created_at, updated_at
+)
+```
+
+表使用 tenant-first 主外键、forced RLS、唯一 `tenant + dataClass + sourceId`，删除范围与终态不可改写或删除，
+attempt 只能单调加一。`audit_export_jobs` 首次进入 completed 时，数据库 trigger 以同一事务自动登记对象 job；
+历史 completed 导出迁移时按相同唯一键 backfill。processing/failed 导出没有对象实体回执，不能创建删除 job。
+审计导出的显式 1..30 天保存期、完成时对象 SHA/size 和 expiresAt 被固化为 job 范围；后续修改租户套餐或
+默认保存天数不回写历史。新的 audit export INSERT 会锁定对应 tenant 行，tenant 已不是 active 时数据库拒绝；
+API 也在正常路径返回 `tenant_lifecycle_pending`，避免删除请求之后出现迟到导出。
+
+`platform_pending_work` 增加 actor-null 的 `data_lifecycle` kind。正常 dueAt 等于保存截止时间；tenant 首次进入
+`deletion_requested` 时数据库只把既有生命周期 pending row 提前到当前数据库时间，不改写保存期证据。
+Cell Worker 继续经过 Cell forced-RLS、owner/generation/coordination lease、tenant route 锁和 job attempt/lease
+两级 claim。tenant 已请求删除时 Repository 可忽略尚未到期窗口立即 claim；跨 Cell、旧 generation 或旧 attempt
+均不能 finalize。
+
+`EnterpriseAuditExportArtifactStore.delete` 是唯一首批对象 Adapter：
+
+1. 验证 key 严格属于配置 prefix 下的 `tenants/{tenantId}/{exportId}.jsonl`，路径逃逸失败闭合。
+2. S3-compatible 存储先 Head；不存在返回独立 `already_absent`，存在才 Delete。
+3. Delete 返回后再次 Head；只有 404/NoSuchKey 才生成 `deleted` 回执，对象仍存在或网络结果未知继续 retry。
+4. 非生产 local store 使用同一语义执行 `stat -> rm -> stat`；production 配置 local 仍为 not ready。
+5. receipt SHA-256 绑定 schema version、operation、内部 object key 与真实 outcome；audit 仅保存 data class、
+   source ID、retentionUntil、outcome/错误码和 receipt hash，不保存 object key、bucket、endpoint 或凭据。
+
+job 最多自动尝试10次并有上限15分钟的退避；明确非法 key 或重试耗尽进入 failed，证据仍不可删除。
+failed 不被当作“已清理”，也不会因为 pending projection 移除而允许 tenant 删除。tenant delete Worker 在调用
+外部 lifecycle executor 前同时读取本租户所有 data lifecycle job 和 processing audit export；任一对象
+processing/failed 或导出仍 processing 即返回 processing，保留 `deletion_requested` tombstone。
+
+生产 HTTP executor 对 `tenant.delete` 的 completed 响应还必须包含规范化 convergence：tenantId/jobId、
+database tombstone manifest，以及 object/provider 两组 `discovered = deleted + alreadyAbsent`、
+`remainingCount=0` 和 manifest hash；receiptHash 必须等于规范化结构 SHA-256。缺组、计数不守恒、remaining 非零、
+hash 不匹配或 Provider 未配置却伪造完成均返回 `deletion_not_converged`。非生产 local executor仍只表示封闭演示
+目录被清理，不可作为 S3/Provider/数据库生产证据。
+
+当前代码候选只把 audit export 对象直接接入物理 Adapter；其他会议、录音、授权证据和外部 Provider 删除必须由
+真实生命周期服务在 object/provider manifest 中逐项证明。`0051`、真实 PostgreSQL/forced-RLS、S3 consistency、
+并发/重启/网络故障和 Provider 清单均未执行，`ENT-REL-002` 保持 `in_progress`，不能宣称数据生命周期生产门禁通过。
 
 公开路由配置使用 `ENTERPRISE_PUBLIC_ROUTES_JSON`，以 `cellId` 为键保存
 `homeRegion`、HTTPS API 域名和 WSS RTC 域名；签名密钥使用至少 32 字节的
@@ -2439,7 +2491,7 @@ SDK 默认链/工作负载身份，或同时提供 Access Key 与 Secret Key，�
 `ENTERPRISE_AUDIT_EXPORT_LOCAL_DIR` 仅允许非生产封闭演示。API 下载不返回 bucket、object key 或凭据，
 而是重新执行 membership/RBAC/route guard，从对象存储读取后同时核对数据库 size/hash 与实际 SHA-256，
 并记录 completed/failed/denied 下载审计。到期对象返回410；S3 Expires 元数据不等于物理删除证据，
-真实 purge、对象清单和恢复对账继续由 `ENT-REL-002/003` 验收。
+真实 purge、对象清单和恢复对账继续由 `ENT-REL-002/003` 验收；`0051` 的静态候选不替代真实 S3/Provider 证据。
 
 数据分析页当前只支持用户明确输入 session ID 的质量、Provider、usage/ledger 与 trace 下钻。
 会议/客服/营销聚合 API 和版本化单位价格表未实现，页面固定显示 not_ready/not_configured，

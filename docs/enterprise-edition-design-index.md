@@ -1,6 +1,6 @@
 # 无界AI企业版设计文档索引
 
-版本：v1.62
+版本：v1.63
 日期：2026-07-20
 状态：SaaS 详细设计基线，已纳入统一通讯平台和 PostgreSQL Primary 演进
 
@@ -46,15 +46,15 @@ cell Worker、JSON/SQLite 演示导入，以及全业务表 Primary 切换/恢�
 无界AI主产品公共 PostgreSQL migration、Primary Runtime、可靠 Inbox/Outbox、
 fencing、Billing/Product Records、verify-full 和韧性代码已形成稳定提交 `fe1c3c2`，并由
 `ENT-DATA-007` 合入企业分支。企业版已经完成单 driver、双 manifest、同库身份和分权
-连接的本地自动化，当前 manifest 为公共31段、enterprise 50段；`ENT-DATA-008` 和
+连接的本地自动化，当前 manifest 为公共31段、enterprise 51段；`ENT-DATA-008` 和
 `ENT-CORE-013/014/015` 已完成公共通讯 tenant scope、企业业务会话绑定、签名 Worker dispatch fence
 及设备/声音/录制策略快照的代码/本地自动化，但不能继承主产品 staging 验收。`ENT-DATA-009` 已增加
 31+16 migration manifest 的历史本地证据、全表主键分页 count/hash、WAL 水位、writer fence、签名
-cutover/restore 证据和 production startup 绑定门禁；当前 `0017..0050` 必须按31+50重新生成切换证据。
+cutover/restore 证据和 production startup 绑定门禁；当前 `0017..0051` 必须按31+51重新生成切换证据。
 `ENT-DATA-005` 已增加单租户跨 Cell 的签名 export/cutover/rollback 维护链路：动态覆盖全部
 enterprise tenant 表和公共 tenant communication scope，检查活动会话/租约、源只读与旧 writer 清退，
 以目标空租户、外键顺序流式导入、对象引用 receipt、逐表 count/SHA-256 和 route epoch +1 对账失败闭合；
-回滚从当前 Cell 反向全量覆盖旧 Cell。当前只通过静态门禁，未执行真实31+50 PostgreSQL、对象复制、
+回滚从当前 Cell 反向全量覆盖旧 Cell。当前只通过静态门禁，未执行真实31+51 PostgreSQL、对象复制、
 控制面路由发布或跨 Cell 演练，任务保持 `in_progress`。
 `ENT-DATA-006` 已把 `platform_pending_work` 升级为同 Cell 多实例持久协调队列：Cell 角色只能在
 forced-RLS 与数据库 trigger 下更新 owner/generation/lease 三类协调列，使用单事务
@@ -69,6 +69,13 @@ API 浏览器 CORS 已从任意 Origin 反射收敛为生产默认同源、显�
 通过动态代码构造加载；iOS release 已移除 ATS 任意网络加载。当前静态扫描 P0/P1 为0、依赖高危/严重为0，但仍有14个 moderate 项属于同一
 OpenTelemetry 临时例外；真实隔离环境渗透、独立 reviewer、密钥轮换/恢复和外部 SAST 报告均未执行，
 `AC-ENT-0050` 未通过，任务保持 `in_progress`，不得宣称“零漏洞”或企业生产安全门禁已通过。
+`ENT-REL-002` 已复用 audit export、tenant lifecycle 和 `platform_pending_work` 三条既有真值，增加
+`0051` forced-RLS `data_lifecycle_jobs`：审计导出完成时在同一数据库事务自动登记不可变保存期/对象摘要，
+到期或租户删除时由 Cell Worker 以 owner/generation/lease 处理真实对象删除，并在删除后再次 HEAD/本地存在性
+复核；已不存在也只以显式 `already_absent` 回执收敛。数据库在创建导出时锁定 tenant 并拒绝删除期迟到导出，
+租户删除在任何对象 job 或 processing audit export 未完成时不会调用最终执行器，
+HTTP 删除执行器还必须返回数据库/对象/Provider 三段 remaining=0 的 hash 绑定回执。当前仅通过静态候选门禁，
+未执行 `0051`、真实 S3/PostgreSQL/forced-RLS/故障注入或 Provider 清理，任务保持 `in_progress`。
 `ENT-CORE-004` 已增加 tenant-scoped source/version/chunk、草稿审核发布状态机、发布后不可变约束、
 locale/country/product/effective-time 检索和知识引用 ID；
 `ENT-CORE-005` 已增加版本化 term pack/script template、审核发布和生效窗口、发布后不可变约束，
@@ -80,7 +87,7 @@ count/hash 聚合和 dispatch 服务端限额。真实设备/Provider、支付�
 tenant/route、Provider、subscription、budget 和 usage aggregate 接入企业工作台。两项本轮均未执行自动化、浏览器
 或 PostgreSQL 测试，保持 `in_progress`，业务聚合和货币价格缺失时仍明确 not_ready/not_configured。
 `ENT-UI-008` 已增加审计筛选/详情、显式 session 下钻和有目的/范围/保留期/hash 的受控导出；
-未配置加密对象存储时明确 not_ready，物理对象清理仍由 `ENT-REL-002` 验收。本轮同样只完成静态门禁，
+未配置加密对象存储时明确 not_ready；到期物理清理已接入 `ENT-REL-002` 静态候选，但仍待真实对象存储验收。本轮同样只完成静态门禁，
 不能据此宣称 PostgreSQL、对象存储、H2/H3 或生产门禁通过。
 `ENT-UI-009` 已增加持久化 system/light/dark 主题、320/600/960/1280 响应式规则、动态字号、跳至主内容、
 路由焦点、可聚焦横向表格与明确 ARIA 语义；本轮只形成静态代码候选，未完成浏览器、200% 缩放、键盘、
@@ -284,6 +291,7 @@ PostgreSQL/Salesforce sandbox、Worker 故障注入或浏览器验收，`AC-ENT-
 - [ENT-MTG-007 Android MediaProjection 实现与静态门禁证据](./evidence/ent-mtg-007-android-media-projection-2026-07-19.md)
 - [ENT-MTG-008 Web 系统音频实现与静态门禁证据](./evidence/ent-mtg-008-web-system-audio-2026-07-19.md)
 - [ENT-MTG-009 自适应共享布局实现与静态门禁证据](./evidence/ent-mtg-009-adaptive-screen-layout-2026-07-19.md)
+- [ENT-REL-002 数据生命周期实现与静态门禁证据](./evidence/ent-rel-002-data-lifecycle-2026-07-20.md)
 
 ## 4. 统一约束
 

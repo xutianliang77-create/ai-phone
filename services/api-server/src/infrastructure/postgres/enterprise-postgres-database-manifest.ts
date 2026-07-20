@@ -58,6 +58,7 @@ export const enterpriseCutoverCriticalTables = [
   "enterprise.marketing_crm_syncs",
   "ai_phone.recording_artifacts",
   "enterprise.meeting_artifacts",
+  "enterprise.data_lifecycle_jobs",
 ] as const;
 
 export async function collectEnterpriseDatabaseManifest(

@@ -1,8 +1,10 @@
 import { createHash } from "node:crypto";
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import { dirname, resolve, sep } from "node:path";
 import {
+  DeleteObjectCommand,
   GetObjectCommand,
+  HeadObjectCommand,
   PutObjectCommand,
   S3Client,
 } from "@aws-sdk/client-s3";
@@ -18,6 +20,11 @@ export type AuditExportArtifactReadResult =
   | { status: "ready"; body: Buffer; sizeBytes: number; sha256: string }
   | { status: "not_found" | "retry"; reasonCode: string };
 
+export type AuditExportArtifactDeleteResult =
+  | { status: "converged"; outcome: "deleted" | "already_absent";
+      receiptHash: string }
+  | { status: "retry" | "failed"; reasonCode: string };
+
 export interface EnterpriseAuditExportArtifactStore {
   readonly ready: boolean;
   readonly reasonCode?: string;
@@ -28,6 +35,7 @@ export interface EnterpriseAuditExportArtifactStore {
     expiresAt: string;
   }): Promise<AuditExportArtifactWriteResult>;
   get(objectKey: string): Promise<AuditExportArtifactReadResult>;
+  delete(objectKey: string): Promise<AuditExportArtifactDeleteResult>;
   close(): void;
 }
 
@@ -118,6 +126,24 @@ function s3Store(config: AuditExportS3Config): EnterpriseAuditExportArtifactStor
           : { status: "retry", reasonCode: "audit_export_store_unavailable" };
       }
     },
+    async delete(objectKey) {
+      if (!validObjectKey(config.objectPrefix, objectKey)) {
+        return { status: "failed", reasonCode: "audit_export_artifact_key_invalid" };
+      }
+      try {
+        const before = await s3ObjectExists(client, config.bucket, objectKey);
+        if (!before) return convergedDeletion(objectKey, "already_absent");
+        await client.send(new DeleteObjectCommand({
+          Bucket: config.bucket,
+          Key: objectKey,
+        }));
+        return await s3ObjectExists(client, config.bucket, objectKey)
+          ? { status: "retry", reasonCode: "audit_export_artifact_still_present" }
+          : convergedDeletion(objectKey, "deleted");
+      } catch {
+        return { status: "retry", reasonCode: "audit_export_store_unavailable" };
+      }
+    },
     close() { client.destroy(); },
   };
 }
@@ -155,6 +181,29 @@ function localStore(root: string): EnterpriseAuditExportArtifactStore {
           : { status: "retry", reasonCode: "audit_export_store_unavailable" };
       }
     },
+    async delete(objectKey) {
+      let file: string;
+      try { file = localPath(root, objectKey); }
+      catch {
+        return { status: "failed", reasonCode: "audit_export_artifact_key_invalid" };
+      }
+      try {
+        await stat(file);
+      } catch (error) {
+        return (error as { code?: string }).code === "ENOENT"
+          ? convergedDeletion(objectKey, "already_absent")
+          : { status: "retry", reasonCode: "audit_export_store_unavailable" };
+      }
+      try {
+        await rm(file, { force: true });
+        await stat(file);
+        return { status: "retry", reasonCode: "audit_export_artifact_still_present" };
+      } catch (error) {
+        return (error as { code?: string }).code === "ENOENT"
+          ? convergedDeletion(objectKey, "deleted")
+          : { status: "retry", reasonCode: "audit_export_store_unavailable" };
+      }
+    },
     close() {},
   };
 }
@@ -165,6 +214,7 @@ function unavailableStore(reasonCode: string): EnterpriseAuditExportArtifactStor
     reasonCode,
     async put() { return { status: "retry", reasonCode }; },
     async get() { return { status: "retry", reasonCode }; },
+    async delete() { return { status: "retry", reasonCode }; },
     close() {},
   };
 }
@@ -217,6 +267,21 @@ function localPath(root: string, objectKey: string) {
 function stored(objectKey: string, body: Buffer) {
   return { status: "stored" as const, objectKey, sizeBytes: body.byteLength, sha256: sha256(body) };
 }
+function convergedDeletion(
+  objectKey: string,
+  outcome: "deleted" | "already_absent",
+) {
+  return {
+    status: "converged" as const,
+    outcome,
+    receiptHash: sha256(Buffer.from(JSON.stringify({
+      schemaVersion: 1,
+      operation: "audit_export.delete",
+      objectKey,
+      outcome,
+    }))),
+  };
+}
 function sha256(value: Buffer) { return createHash("sha256").update(value).digest("hex"); }
 function uuid(value: string) { return /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(value); }
 function normalizedPrefix(value: string | undefined) {
@@ -231,6 +296,15 @@ function validEndpoint(value: string | undefined) {
 function notFound(error: unknown) {
   const value = error as { name?: string; $metadata?: { httpStatusCode?: number } };
   return value.name === "NoSuchKey" || value.$metadata?.httpStatusCode === 404;
+}
+async function s3ObjectExists(client: S3Client, bucket: string, objectKey: string) {
+  try {
+    await client.send(new HeadObjectCommand({ Bucket: bucket, Key: objectKey }));
+    return true;
+  } catch (error) {
+    if (notFound(error)) return false;
+    throw error;
+  }
 }
 async function bodyBuffer(body: AsyncIterable<Uint8Array | string>) {
   const chunks: Buffer[] = [];

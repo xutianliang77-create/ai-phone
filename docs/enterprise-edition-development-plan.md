@@ -1,6 +1,6 @@
 # 无界AI企业版开发方案与计划
 
-版本：v1.70
+版本：v1.71
 日期：2026-07-20
 状态：E0 执行计划，已对齐统一通讯平台和 PostgreSQL Primary 收敛
 
@@ -20,14 +20,14 @@
 
 - `ENT-CORE-001/002/003` 已到 `ready_for_acceptance`；Tenant/Member、RBAC 和 `apps/enterprise-web` 生产应用基础可供后续任务复用。
 - Enterprise Web 已冻结 React 19、TypeScript 5.9、Vite 8、React Router 7 和 Vitest/Testing Library 技术基线，并实现真实登录、会话恢复和租户上下文。
-- `ENT-DATA-001` 已实现五十段 PostgreSQL up/down migration、复合 FK、强制 RLS、migration runner、schema verify 和归档 smoke；`0017..0041` 增加知识、会议、客服与 Campaign/Lead/Consent/Suppression/Country Policy，`0042/0043` 增加不可变活动 validation/decision snapshot 和执行栅栏，`0044` 增加 Scheduler claim/lease/hold 栅栏，`0045` 增加 PSTN dispatch/状态证据/任务转换栅栏，`0046` 增加 Marketing Agent profile/run/turn 栅栏，`0047` 增加人工接管策略、桥接证据和超时收敛栅栏，`0048` 增加 Outcome/内部 requested action 不可变证据栅栏，`0049` 增加 CRM sync/receipt 栅栏，`0050` 增加 Cell Worker queue owner/generation/lease 协调栅栏。历史本地 PostgreSQL 16 验证不替代当前31+50 staging migrate/restore/PITR，任务保持 `in_progress`。
+- `ENT-DATA-001` 已实现五十一段 PostgreSQL up/down migration、复合 FK、强制 RLS、migration runner、schema verify 和归档 smoke；`0017..0041` 增加知识、会议、客服与 Campaign/Lead/Consent/Suppression/Country Policy，`0042/0043` 增加不可变活动 validation/decision snapshot 和执行栅栏，`0044` 增加 Scheduler claim/lease/hold 栅栏，`0045` 增加 PSTN dispatch/状态证据/任务转换栅栏，`0046` 增加 Marketing Agent profile/run/turn 栅栏，`0047` 增加人工接管策略、桥接证据和超时收敛栅栏，`0048` 增加 Outcome/内部 requested action 不可变证据栅栏，`0049` 增加 CRM sync/receipt 栅栏，`0050` 增加 Cell Worker queue owner/generation/lease 协调栅栏，`0051` 增加对象生命周期账本与删除栅栏。历史本地 PostgreSQL 16 验证不替代当前31+51 staging migrate/restore/PITR，任务保持 `in_progress`。
 - `ENT-CORE-005` 已完成版本化术语包、话术模板、审核发布、有效时间解析、统一运行时引用和租户隔离矩阵，进入 `ready_for_acceptance`；真实 ASR/翻译/LLM Worker 消费和 A1/H3 仍待验收。
 - `ENT-DATA-002` 已完成单一 `legacy|postgres` Repository runtime、HTTP 全链路注入、fail-closed 启动选择和独立 cell Worker。PostgreSQL 模式不回退、不双写；API 不执行跨租户恢复扫描，Worker 通过 cell forced RLS 发现最小引用后进入 tenant transaction 复核并 claim/finalize。代码和本地自动化进入 `ready_for_acceptance`，真实 PostgreSQL 并发、容量和恢复仍待 H3。
 - `ENT-DATA-004` 已完成 JSON/SQLite 源读取、SQLite 副本 `quick_check`、空目标事务导入和六集合 count/SHA-256 读回对账；不一致回滚，且明确只用于内部演示数据迁移。真实 PostgreSQL import/reconcile 证据仍待 H3。
 - `ENT-DATA-005` 已形成 PostgreSQL-only 单租户跨 Cell 维护命令：签名 export/cutover/rollback evidence、
   活动会话/租约清退、源只读/旧 writer 为零、动态 tenant/scope 表计划、外键顺序流式导入、对象 receipt、
   route epoch +1 和逐表 count/SHA-256 对账。回滚反向覆盖最新数据而非启用陈旧副本。当前只通过静态门禁，
-  测试、真实31+50双库、对象复制、路由发布和跨 Cell 故障演练未执行，保持 `in_progress`。
+  测试、真实31+51双库、对象复制、路由发布和跨 Cell 故障演练未执行，保持 `in_progress`。
 - `ENT-DATA-006` 已形成 PostgreSQL-only 多实例协调候选：持久 queue owner/generation/lease、Cell-scoped
   `SKIP LOCKED` claim、并发处理、heartbeat/fence 和稳定 Provider 幂等键均已接入；Redis 不承担真值。
   测试、`0050` 真实 migrate/forced-RLS、双进程故障恢复和 Provider sandbox 未执行，保持 `in_progress`。
@@ -44,6 +44,9 @@
 - `ENT-UI-007` 已完成成员/权益/区域/Provider/预算与用量二级设置导航，按 `tenant:read`、`member:read`、`billing:read/write`、`usage:read` 分别发现和守卫入口。区域只读，Provider 不接收/回显敏感配置，套餐变更只接受精确服务端 plan/version 并稳定重试幂等键，预算更新带 expectedVersion，用量只展示服务端 ledger 聚合；任务进入 `ready_for_acceptance`。本地 Chromium 1440/390px 只验证隔离 fixture 布局，不替代 UI-009/010、真实 PostgreSQL staging、账务/Provider 或生产放行。
 - `ENT-UI-004` 已接入租户/区域、Provider、subscription、预算、usage aggregate 和会话 trace report 的首批工作台。页面按 scope 决定是否发起 billing/usage/audit 请求，预算只和同类别、同单位、同 UTC 账期聚合比较；业务聚合与价格表缺失时明确 not_ready/not_configured。当前仅通过静态类型检查和生产 Web 构建，按本轮要求未执行自动化、浏览器和 PostgreSQL 验证，任务保持 `in_progress`。
 - `ENT-UI-008` 已实现审计筛选、签名 cursor、脱敏详情、显式 session 下钻和真实受控 JSONL 导出链路。导出由 PostgreSQL job/cell Worker 处理，强制目的、范围、保留期、幂等和 hash/size 回执；客户端只经重新鉴权的 API 下载，不获取对象存储凭据或 key。未配置对象存储、业务聚合或价格表时明确 not_ready/not_configured。按本轮要求未执行自动化、浏览器、migration 或双租户验证，任务保持 `in_progress`。
+- `ENT-REL-002` 已形成 `0051`、forced-RLS 数据生命周期账本、审计导出到期物理删除、Delete 后实体复核、
+  Cell Worker 多实例协调、删除期迟到导出栅栏、租户删除前置阻断及数据库/对象/Provider 三段收敛回执代码候选。当前只覆盖已登记的
+  audit export 对象和 tenant lifecycle 外部清单；未运行测试、真实 PostgreSQL/S3/Provider/故障注入，保持 `in_progress`。
 - `ENT-UI-009` 已实现持久化 system/light/dark 主题选择、浅深色品牌令牌、响应式租户/导航/页面收敛、动态字号、路由焦点、跳转主内容、可聚焦横向数据区和真实按钮/表格语义。当前仅形成静态代码候选；320/600/960/1280/1440、200% 缩放、键盘、axe、视觉回归和真机仍待 `ENT-UI-010` 恢复测试后验收，因此保持 `in_progress`。
 - `ENT-UI-010` 已实现三浏览器引擎、九角色、五档宽度、双主题、键盘、axe 和视觉回归的 Playwright 门禁定义，以及 release matrix、bundle 体积/敏感信息/fixture/元数据扫描、clean HEAD 约束和脱敏客户端错误/性能事件链路。CI 已对齐 Node 24 并上传失败证据；本轮未运行 unit/API/E2E 或生成视觉基线，release gate 仍会失败闭合，任务保持 `in_progress`。
 - `ENT-UI-011` 已实现与个人主导航隔离的 Flutter 企业入口：每次进入重新读取账号、active membership、签名 route document、`/enterprise/v1/me` scopes 和 Provider capability，严格核对 member/tenant/region/cell/route epoch/公开 URL/有效期。工作台与告警只展示已取得的服务端真值，会议/接管按 scope 发现且在 tenant-scoped API 未实现时明确 `not_ready`，不复用个人版路径。当前仅通过 `flutter analyze`，Flutter test、构建、真机、动态字体和横竖屏按要求未执行，任务保持 `in_progress`。
@@ -408,7 +411,7 @@ CORE-001/002 验收
 
 E0 基线完成后已形成 `ENT-MTG-001/002` 代码候选；未通过真实 PostgreSQL、tenant/RBAC/token 攻击、Provider、浏览器与真机门禁，仍不能计为 E1 完成。
 
-当前进展：`ENT-DATA-001` 已完成五十段 schema 代码，等待 staging PostgreSQL migrate/restore/PITR
+当前进展：`ENT-DATA-001` 已完成五十一段 schema 代码，等待 staging PostgreSQL migrate/restore/PITR
 证据；`ENT-CS-001..012` 已分别形成客服领域/恢复 runtime、统一入站 Adapter、tenant RAG、Support Agent、
 Tool Registry 授权边界、只读 Adapter 租约执行、可逆写确认/密文 Outbox、不可执行高风险接管和坐席
 queue/SLA/exclusive claim、坐席工作台、工单/回拨可靠后续动作和质检分析代码候选；`ENT-MKT-001..005` 已形成
@@ -432,7 +435,8 @@ Adapter 静态候选；`AC-ENT-0046`、`0049` migration/RLS、真实 sandbox、W
 并发写入一致性、价格表、浏览器和容量验收均未完成，保持 `in_progress`；
 当前5秒快照不得宣称流式完成，requested action 不得宣称外部已执行。
 `ENT-DATA-005` 当前仅完成静态代码候选；真实 Cell 停写、对象 receipt、双库导入/回滚、控制面 route 发布和
-`AC-ENT-0048` 未执行。staging `ENT-DATA-009` 和 `ENT-REL-002/003` 的对象清理、跨故障域/PITR 仍未通过。
+`AC-ENT-0048` 未执行。`ENT-REL-002` 已形成对象清理静态候选，但 `AC-ENT-0051` 及 staging 真实收敛未通过；
+`ENT-DATA-009/REL-003` 的跨故障域/PITR 仍未通过。
 `ENT-DATA-006` 已进入 PostgreSQL 持久队列协调静态候选：`0050` 增加 Cell-scoped owner/generation/lease，
 Worker 以 `FOR UPDATE SKIP LOCKED` 原子 claim、并发处理、续租和条件释放，具体 job/outbox attempt/CAS 与稳定
 event/job ID 继续承担最终副作用 fence。`AC-ENT-0049`、`0050` migrate/down/forward、forced-RLS 最小权限、
@@ -440,3 +444,6 @@ event/job ID 继续承担最终副作用 fence。`AC-ENT-0049`、`0050` migrate/
 `ENT-REL-001` 已进入企业安全门禁静态候选：高置信 SAST/密钥扫描与依赖 audit 已执行，CI、隔离渗透 runner、
 HMAC evidence/release verifier 和 CORS/固定模块加载修复已形成代码；真实 test/staging 攻击、外部 scanner、
 独立 reviewer、密钥轮换/恢复及 `AC-ENT-0050` 未执行，不能宣称零漏洞或企业安全门禁通过。
+`ENT-REL-002` 已进入数据生命周期静态候选：`0051` 及 Repository/Worker/Adapter/receipt 负向测试均已定义；
+真实 migration/forced-RLS、双租户、S3 Delete+Head、Provider 清单、重启/网络故障和租户删除演练未执行，
+不能宣称对象已清理、`AC-ENT-0051` 通过或企业数据生命周期 production ready。

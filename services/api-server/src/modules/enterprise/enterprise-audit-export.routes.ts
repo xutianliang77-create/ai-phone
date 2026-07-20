@@ -43,6 +43,12 @@ export async function registerEnterpriseAuditExportRoutes(
       request, reply, runtime, routeService, "audit:export", true,
     );
     if (!access) return;
+    if (access.tenant.status !== "active") {
+      return sendError(
+        reply, 409, "tenant_lifecycle_pending",
+        "Audit export rejected during tenant lifecycle",
+      );
+    }
     const idempotencyKey = idempotencyHeader(request);
     if (!idempotencyKey) {
       return sendError(reply, 400, "idempotency_key_required", "Idempotency key required");
