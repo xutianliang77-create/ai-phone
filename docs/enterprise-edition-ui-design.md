@@ -1,6 +1,6 @@
 # 无界AI企业版 UI 详细设计
 
-版本：v1.31
+版本：v1.32
 日期：2026-07-20
 状态：设计基线；企业 Web 公共组件、首批设置/工作台、响应式/主题/无障碍和 Web/iOS/Android 成员屏幕共享代码候选已实现，正式验收仍在开发
 
@@ -270,9 +270,17 @@ budget、usage aggregate 和显式 session trace report。卡片沿用同一 Mat
   Material Icons、Campaign 卡片、既有 token、1px outline、8px 圆角和 `StatusPanel`，不增加第二套图标或色板。
 - 面板只列出尚无 Outcome 的终态通话；写权限用户先读取单通话最终 revision 字幕和已交付 Agent turn，再选择分类、
   意向、摘要和一个内部后续动作。需要客户表态的分类在未选字幕证据时禁用提交，服务端仍负责最终证据校验。
-- 顶部四项固定区分“已固化/后续动作/可处理终态/外部已执行”；最后一项当前恒为0。列表把 action 显示为
+- 顶部四项固定区分“已固化/后续动作/可处理终态/CRM 已同步”；最后一项只统计有 Provider GET 对账回执的记录。列表把 action 显示为
   `requested/外部未执行`，不得将预约请求、回拨请求或资料发送请求渲染成已预约、已回拨或已发送。
 - 760px 以下四列收敛两列，420px 以下单列；证据和长摘要允许换行，手机号只显示服务端脱敏 hint，hash 只显示短前缀。
+- `ENT-MKT-013` 在每条 Outcome 内复用同一 `assignment_turned_in` Material Icon 和 secondary button 增加
+  “同步到 CRM”。只有 `campaign:write` 且该 Outcome 尚无 sync 时显示；点击后按钮进入“正在请求”，HTTP 202
+  只提示“已进入加密 Outbox”，不用成功色或成功 Snackbar。
+- CRM 状态与 Outcome/action 分层展示：`pending` 为“等待 Provider 回执”并显示尝试次数，`synced` 为“已对账”并
+  可打开服务端返回的 Salesforce HTTPS 记录，`failed` 为“终态失败”并显示受控 reason code。只读角色可看状态但无按钮；
+  not_ready、403/404/409/503 复用统一阻断/错误语义，不回退 fixture 或浏览器缓存。
+- 外链固定 `target=_blank` + `rel=noreferrer`；页面不渲染 OAuth、login URL、object mapping、payload、配置 fingerprint
+  或 Provider 原始响应。窄屏、浅深色、键盘焦点、动态字号继续继承 Outcome 面板，不增加第二套图标/颜色/间距。
 
 ### 8.3 AI 客服坐席台
 

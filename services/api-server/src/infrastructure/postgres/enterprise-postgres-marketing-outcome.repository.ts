@@ -20,6 +20,14 @@ import {
 export class EnterpriseMarketingOutcomePostgresRepository {
   constructor(private readonly session: EnterpriseTenantPostgresSession) {}
 
+  async find(outcomeId: string) {
+    const result = await this.session.query<OutcomeRow>(`${selectOutcome}
+      WHERE outcome.tenant_id = $1 AND outcome.id = $2
+        AND outcome.evidence_status = 'verified' LIMIT 1
+    `, [uuid(outcomeId)]);
+    return result.rows[0] ? mapOutcome(result.rows[0]) : null;
+  }
+
   async list(campaignId: string, limit = 100) {
     const result = await this.session.query<OutcomeRow>(`${selectOutcome}
       WHERE outcome.tenant_id = $1 AND outcome.campaign_id = $2

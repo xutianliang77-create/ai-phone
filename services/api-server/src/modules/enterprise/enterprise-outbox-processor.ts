@@ -15,11 +15,13 @@ import type { EnterpriseMeetingCalendarPublishReceipt } from
   "./enterprise-meeting-calendar.js";
 import type { EnterpriseSupportWritePublishReceipt } from
   "./enterprise-support-write-tool.js";
+import type { EnterpriseMarketingCrmPublishReceipt } from
+  "./enterprise-marketing-crm.js";
 
 export interface EnterpriseOutboxPublisher {
   publish(event: Readonly<EnterpriseOutboxEventRecord>): Promise<
     | { status: "completed"; receipt?: EnterpriseMeetingCalendarPublishReceipt |
-        EnterpriseSupportWritePublishReceipt }
+        EnterpriseSupportWritePublishReceipt | EnterpriseMarketingCrmPublishReceipt }
     | { status: "retry"; reason: string }
   >;
 }

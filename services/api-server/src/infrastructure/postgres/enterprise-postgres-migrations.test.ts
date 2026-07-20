@@ -58,7 +58,7 @@ describe("enterprise PostgreSQL migrations", () => {
       "0045_enterprise_marketing_pstn_dispatch",
       "0046_enterprise_marketing_agent",
       "0047_enterprise_marketing_handoff", "0048_enterprise_marketing_outcomes",
-    ]);
+      "0049_enterprise_marketing_crm_sync"]);
     for (const migration of migrations) { expect(migration.up.trim()).not.toBe("");
       expect(migration.down.trim()).not.toBe("");
       expect(migration.checksum).toMatch(/^[a-f0-9]{64}$/); }
@@ -84,7 +84,7 @@ describe("enterprise PostgreSQL migrations", () => {
     expect(sql).toContain("CREATE TABLE enterprise.marketing_pstn_dispatches"); expect(sql).toContain("marketing_pstn_dispatches_tenant_isolation");
     for (const table of ["marketing_agent_profiles", "marketing_agent_runs",
       "marketing_agent_turns", "marketing_handoff_policies", "marketing_handoffs",
-      "marketing_next_actions"])
+      "marketing_next_actions", "marketing_crm_syncs"])
       expect(sql).toContain(`CREATE TABLE enterprise.${table}`);
     expect(sql).toContain("'marketing_agent_profiles', 'marketing_agent_runs', 'marketing_agent_turns'");
     expect(sql).toContain("'provisioning_failed'");

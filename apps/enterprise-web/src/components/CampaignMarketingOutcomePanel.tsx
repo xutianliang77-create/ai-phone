@@ -7,10 +7,13 @@ import type {
   EnterpriseMarketingMonitoringCallResponse,
   EnterpriseMarketingMonitoringSnapshotResponse,
   EnterpriseMarketingNextActionKind,
+  EnterpriseMarketingCrmSyncListResponse,
   EnterpriseMarketingOutcomeListResponse,
 } from "@translation/contracts";
 import type { EnterpriseApi, EnterpriseContentRequestContext } from
   "../api/enterprise-api.js";
+import { enterpriseMarketingCrmApi,
+  type EnterpriseMarketingCrmApi } from "../api/enterprise-marketing-crm-api.js";
 import { apiErrorState } from "../business-state.js";
 import { enterpriseIcons } from "../icon-registry.js";
 import { MaterialIcon } from "./MaterialIcon.js";
@@ -18,7 +21,8 @@ import { StatusPanel } from "./StatusPanel.js";
 
 type LoadState = { status: "idle" | "loading" } |
   { status: "ready"; outcomes: EnterpriseMarketingOutcomeListResponse;
-    monitor: EnterpriseMarketingMonitoringSnapshotResponse } |
+    monitor: EnterpriseMarketingMonitoringSnapshotResponse;
+    crm: EnterpriseMarketingCrmSyncListResponse } |
   { status: "failed"; error: unknown };
 type DetailState = { status: "idle" } | { status: "loading" } |
   { status: "ready"; value: EnterpriseMarketingMonitoringCallResponse } |
@@ -29,25 +33,45 @@ interface FormState { dispatchId: string; disposition: EnterpriseMarketingDispos
   evidence: Set<string> }
 
 export default function CampaignMarketingOutcomePanel({ api, context, campaign,
-  canWrite }: { api: EnterpriseApi; context: EnterpriseContentRequestContext;
-  campaign: EnterpriseCampaignDto; canWrite: boolean }) {
+  canWrite, crmApi = enterpriseMarketingCrmApi }: { api: EnterpriseApi;
+  context: EnterpriseContentRequestContext; campaign: EnterpriseCampaignDto;
+  canWrite: boolean; crmApi?: EnterpriseMarketingCrmApi }) {
   const [load, setLoad] = useState<LoadState>({ status: "idle" });
   const [detail, setDetail] = useState<DetailState>({ status: "idle" });
   const [form, setForm] = useState<FormState>(emptyForm);
   const [notice, setNotice] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [syncing, setSyncing] = useState<string | null>(null);
   const keys = useRef(new Map<string, string>());
   const requestVersion = useRef(0);
 
   async function refresh() {
     setLoad({ status: "loading" });
     try {
-      const [outcomes, monitor] = await Promise.all([
+      const [outcomes, monitor, crm] = await Promise.all([
         api.listCampaignMarketingOutcomes(context, campaign.id),
         api.getCampaignMarketingMonitoring(context, campaign.id),
+        crmApi.list(context, campaign.id),
       ]);
-      setLoad({ status: "ready", outcomes, monitor });
+      setLoad({ status: "ready", outcomes, monitor, crm });
     } catch (error) { setLoad({ status: "failed", error }); }
+  }
+
+  async function syncOutcome(outcomeId: string, version: number) {
+    if (!canWrite || syncing) return;
+    const fingerprint = `crm:${outcomeId}:${version}`;
+    setSyncing(outcomeId); setNotice(null);
+    try {
+      const result = await crmApi.request(context, campaign.id,
+        outcomeId, version, commandKey(keys.current, fingerprint));
+      keys.current.delete(fingerprint);
+      setNotice(result.status === "created"
+        ? "CRM 同步请求已进入加密 Outbox；收到 Salesforce 对账回执前不会显示成功。"
+        : "已复用同一 CRM 同步请求，未创建重复外部记录。");
+      await refresh();
+    } catch (error) { setNotice(error instanceof Error ? error.message :
+      "CRM Provider 未配置或同步请求失败");
+    } finally { setSyncing(null); }
   }
 
   async function selectCall(dispatchId: string) {
@@ -118,7 +142,7 @@ export default function CampaignMarketingOutcomePanel({ api, context, campaign,
           <article><span>后续动作</span><strong>{
             load.outcomes.counts.nextActionRequested}</strong></article>
           <article><span>可处理终态</span><strong>{candidates.length}</strong></article>
-          <article><span>外部已执行</span><strong>0</strong></article>
+          <article><span>CRM 已同步</span><strong>{load.crm.counts.synced}</strong></article>
         </div>
         {canWrite && candidates.length ? <label className="campaign-outcome-call">选择终态通话
           <select value={form.dispatchId} onChange={(event) => {
@@ -132,7 +156,8 @@ export default function CampaignMarketingOutcomePanel({ api, context, campaign,
           ? <StatusPanel state="empty" description="暂无终态通话或已固化 Outcome。" /> : null}
         <OutcomeForm state={detail} form={form} setForm={setForm}
           saving={saving} onSubmit={() => void createOutcome()} />
-        <OutcomeList value={load.outcomes} />
+        <OutcomeList value={load.outcomes} crm={load.crm} canWrite={canWrite}
+          syncing={syncing} onSync={(id, version) => void syncOutcome(id, version)} />
       </> : null}
     </div>
   </details>;
@@ -194,10 +219,15 @@ function EvidenceCheck({ id, label, form, setForm }: { id: string; label: string
       event.target.checked ? evidence.add(id) : evidence.delete(id);
       setForm({ ...form, evidence }); }} /><span>{label}</span></label>;
 }
-function OutcomeList({ value }: { value: EnterpriseMarketingOutcomeListResponse }) {
+function OutcomeList({ value, crm, canWrite, syncing, onSync }: {
+  value: EnterpriseMarketingOutcomeListResponse;
+  crm: EnterpriseMarketingCrmSyncListResponse; canWrite: boolean;
+  syncing: string | null; onSync: (outcomeId: string, version: number) => void;
+}) {
   if (!value.outcomes.length) return null;
-  return <ul className="campaign-outcome-list">{value.outcomes.map((outcome) =>
-    <li key={outcome.id}><header><strong>{dispositionLabel(outcome.disposition)}</strong>
+  return <ul className="campaign-outcome-list">{value.outcomes.map((outcome) => {
+    const sync = crm.syncs.find((item) => item.outcomeId === outcome.id);
+    return <li key={outcome.id}><header><strong>{dispositionLabel(outcome.disposition)}</strong>
       <small>{outcome.lead.phoneHint} · {dateTime(outcome.createdAt)}</small></header>
       <p>{outcome.summary}</p><small>意向 {outcome.intentLevel} · 证据 {
         outcome.evidence.length} 项 · {outcome.evidenceHash.slice(0, 10)}…</small>
@@ -205,8 +235,22 @@ function OutcomeList({ value }: { value: EnterpriseMarketingOutcomeListResponse 
         <MaterialIcon name={enterpriseIcons.campaign.nextAction} /><span>{
           nextActionLabel(outcome.nextAction.kind)} · requested{
           outcome.nextAction.dueAt ? ` · ${dateTime(outcome.nextAction.dueAt)}` : ""}
-          ；外部未执行</span></p> : null}</li>)}</ul>;
+          ；外部未执行</span></p> : null}
+      {sync ? <p className="campaign-scheduler-boundary"><MaterialIcon
+        name={enterpriseIcons.campaign.outcome} /><span>Salesforce · {
+          crmStatus(sync.status)} · 尝试 {sync.attempts}{sync.lastErrorCode
+          ? ` · ${sync.lastErrorCode}` : ""}{sync.providerRecordUrl
+          ? <> · <a href={sync.providerRecordUrl} target="_blank"
+            rel="noreferrer">查看记录</a></> : null}</span></p>
+        : canWrite ? <button className="button button--secondary" type="button"
+          disabled={syncing !== null} onClick={() => onSync(outcome.id, outcome.version)}>
+          <MaterialIcon name={enterpriseIcons.campaign.outcome} />{
+            syncing === outcome.id ? "正在请求" : "同步到 CRM"}</button> : null}</li>;
+  })}</ul>;
 }
+
+function crmStatus(value: "pending" | "synced" | "failed") { return value === "synced"
+  ? "已对账" : value === "pending" ? "等待 Provider 回执" : "终态失败"; }
 
 const dispositions = [["completed_unclassified", "已完成/待分类"],
   ["no_interest", "无意向"], ["potential_lead", "潜在线索"],

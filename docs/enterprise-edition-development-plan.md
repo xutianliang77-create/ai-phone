@@ -1,6 +1,6 @@
 # 无界AI企业版开发方案与计划
 
-版本：v1.65
+版本：v1.66
 日期：2026-07-20
 状态：E0 执行计划，已对齐统一通讯平台和 PostgreSQL Primary 收敛
 
@@ -20,7 +20,7 @@
 
 - `ENT-CORE-001/002/003` 已到 `ready_for_acceptance`；Tenant/Member、RBAC 和 `apps/enterprise-web` 生产应用基础可供后续任务复用。
 - Enterprise Web 已冻结 React 19、TypeScript 5.9、Vite 8、React Router 7 和 Vitest/Testing Library 技术基线，并实现真实登录、会话恢复和租户上下文。
-- `ENT-DATA-001` 已实现四十八段 PostgreSQL up/down migration、复合 FK、强制 RLS、migration runner、schema verify 和归档 smoke；`0017..0041` 增加知识、会议、客服与 Campaign/Lead/Consent/Suppression/Country Policy，`0042/0043` 增加不可变活动 validation/decision snapshot 和执行栅栏，`0044` 增加 Scheduler claim/lease/hold 栅栏，`0045` 增加 PSTN dispatch/状态证据/任务转换栅栏，`0046` 增加 Marketing Agent profile/run/turn 栅栏，`0047` 增加人工接管策略、桥接证据和超时收敛栅栏，`0048` 增加 Outcome/内部 requested action 不可变证据栅栏。历史本地 PostgreSQL 16 验证不替代当前31+48 staging migrate/restore/PITR，任务保持 `in_progress`。
+- `ENT-DATA-001` 已实现四十九段 PostgreSQL up/down migration、复合 FK、强制 RLS、migration runner、schema verify 和归档 smoke；`0017..0041` 增加知识、会议、客服与 Campaign/Lead/Consent/Suppression/Country Policy，`0042/0043` 增加不可变活动 validation/decision snapshot 和执行栅栏，`0044` 增加 Scheduler claim/lease/hold 栅栏，`0045` 增加 PSTN dispatch/状态证据/任务转换栅栏，`0046` 增加 Marketing Agent profile/run/turn 栅栏，`0047` 增加人工接管策略、桥接证据和超时收敛栅栏，`0048` 增加 Outcome/内部 requested action 不可变证据栅栏，`0049` 增加 CRM sync/receipt 栅栏。历史本地 PostgreSQL 16 验证不替代当前31+49 staging migrate/restore/PITR，任务保持 `in_progress`。
 - `ENT-CORE-005` 已完成版本化术语包、话术模板、审核发布、有效时间解析、统一运行时引用和租户隔离矩阵，进入 `ready_for_acceptance`；真实 ASR/翻译/LLM Worker 消费和 A1/H3 仍待验收。
 - `ENT-DATA-002` 已完成单一 `legacy|postgres` Repository runtime、HTTP 全链路注入、fail-closed 启动选择和独立 cell Worker。PostgreSQL 模式不回退、不双写；API 不执行跨租户恢复扫描，Worker 通过 cell forced RLS 发现最小引用后进入 tenant transaction 复核并 claim/finalize。代码和本地自动化进入 `ready_for_acceptance`，真实 PostgreSQL 并发、容量和恢复仍待 H3。
 - `ENT-DATA-004` 已完成 JSON/SQLite 源读取、SQLite 副本 `quick_check`、空目标事务导入和六集合 count/SHA-256 读回对账；不一致回滚，且明确只用于内部演示数据迁移。真实 PostgreSQL import/reconcile 证据仍待 H3。
@@ -92,6 +92,11 @@
   `0048` 不可变 Outcome/单一 requested action、稳定 evidence/source hash、幂等/并发防重、tenant Repository/runtime/API
   和同风格 Web 面板。当前不调用 CRM/日历/消息 Provider，页面明确外部已执行为0；未运行自动化、`0048`/forced-RLS、
   真实 PostgreSQL/PSTN/Agent 通话或浏览器验收，保持 `in_progress`。下一开发项为 `ENT-MKT-013` CRM Adapter。
+- `ENT-MKT-013` 已形成独立 `0049` CRM sync 聚合、加密 Outbox、稳定 External ID、Salesforce
+  OAuth Client Credentials/REST PATCH upsert、GET 对账、Worker 重试/finalize、tenant/config fingerprint、
+  API/Web 降级和 mock/contract 测试定义。缺租户绑定、OAuth、API version、对象/字段或 payload keyring 时
+  明确 not_ready；202/Outbox/MKT-012 requested 均不是 CRM 成功。真实 Salesforce sandbox 未提供，且未运行
+  自动化、PostgreSQL/RLS、故障注入或浏览器验收，任务保持 `blocked`。
 - `ENT-MTG-004` 已形成 `0024`、单会议活动租约唯一约束、acquire/pause/resume/renew/stop 幂等 CAS、代际发布身份、最小权限 LiveKit grant、cell Worker 到期回收和撤销 outbox 代码候选。Web/iOS/Android 采集仍分别属于 MTG-005/006/007；本轮未运行 migration、并发、forced-RLS、Worker 或真实 LiveKit 测试，保持 `in_progress`。
 - `ENT-MTG-005` 已形成成员 Web 屏幕共享代码候选：浏览器用户手势选择内容后读取真实 `displaySurface`，再申请租约并用独立 Room 发布；首次续租绑定 track SID，后续按10秒续租；观看端只接受服务端当前 publisher identity，暂停/停止先断本地发布且撤销 pending 保持可见。系统音频、访客发布、iOS/Android、simulcast 和主持人强停不在本任务内；本轮未运行测试或真实 LiveKit/浏览器门禁，保持 `in_progress`。
 - `ENT-MTG-006` 已形成 iOS ReplayKit 代码候选：主 App 持有短期发布 grant 并维持独立屏幕 Room，Broadcast Upload Extension 只经 App Group Unix socket 发送视频样本；token-free 控制清单以 share/generation/nonce 和 lease expiry 失败闭合，系统停止、超时和离会均先清理本地再收敛服务端租约。当前未构建/安装 App，未执行真机后台、真实 LiveKit、网络切换和权限矩阵，保持 `in_progress`。
@@ -384,7 +389,7 @@ CORE-001/002 验收
 
 E0 基线完成后已形成 `ENT-MTG-001/002` 代码候选；未通过真实 PostgreSQL、tenant/RBAC/token 攻击、Provider、浏览器与真机门禁，仍不能计为 E1 完成。
 
-当前进展：`ENT-DATA-001` 已完成四十八段 schema 代码，等待 staging PostgreSQL migrate/restore/PITR
+当前进展：`ENT-DATA-001` 已完成四十九段 schema 代码，等待 staging PostgreSQL migrate/restore/PITR
 证据；`ENT-CS-001..012` 已分别形成客服领域/恢复 runtime、统一入站 Adapter、tenant RAG、Support Agent、
 Tool Registry 授权边界、只读 Adapter 租约执行、可逆写确认/密文 Outbox、不可执行高风险接管和坐席
 queue/SLA/exclusive claim、坐席工作台、工单/回拨可靠后续动作和质检分析代码候选；`ENT-MKT-001..005` 已形成
@@ -402,6 +407,8 @@ forced-RLS、响应丢失对账和浏览器均未完成，状态保持 `blocked`
 均未完成，状态保持 `in_progress`。`ENT-MKT-011` 已进入真实人工接管代码候选；`AC-ENT-0044`、
 真实 PostgreSQL/RLS、PSTN Provider、坐席媒体、300ms停播和浏览器验收均未完成，状态保持 `in_progress`。
 `ENT-MKT-012` 已进入不可变 Outcome/requested action 代码候选；`AC-ENT-0045`、`0048` migration/RLS、
-双租户、真实通话和浏览器验收均未完成，状态保持 `in_progress`。下一项为 `ENT-MKT-013` CRM Adapter；
+双租户、真实通话和浏览器验收均未完成，状态保持 `in_progress`。`ENT-MKT-013` 已进入 Salesforce CRM
+Adapter 静态候选；`AC-ENT-0046`、`0049` migration/RLS、真实 sandbox、Worker 故障恢复和浏览器验收均未完成，
+真实账号缺失使其保持 `blocked`；
 当前5秒快照不得宣称流式完成，requested action 不得宣称外部已执行。
 staging `ENT-DATA-009` 和 `ENT-REL-002/003` 的对象清理、跨故障域/PITR 仍未通过。

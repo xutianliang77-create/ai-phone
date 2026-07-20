@@ -55,6 +55,7 @@ export const enterpriseCutoverCriticalTables = [
   "enterprise.marketing_handoffs",
   "enterprise.marketing_outcomes",
   "enterprise.marketing_next_actions",
+  "enterprise.marketing_crm_syncs",
   "ai_phone.recording_artifacts",
   "enterprise.meeting_artifacts",
 ] as const;

@@ -1,6 +1,6 @@
 # 无界AI企业版技术架构
 
-版本：v1.47
+版本：v1.48
 日期：2026-07-20
 状态：SaaS 详细架构基线，已对齐统一通讯平台和 PostgreSQL Primary
 
@@ -578,6 +578,35 @@ Repository 只接受当前最终字幕 revision 和已交付 Agent turn，服务
 本层不调用 CRM、日历、消息或 PSTN Provider，也不建立外部 Outbox；`requested` 只表示内部待办已固化。
 外部 Adapter、重试和 receipt 归 `ENT-MKT-013`。当前未执行 `0048`、真实 PostgreSQL/RLS、双租户、真实通话或浏览器门禁，
 仍为 `in_progress`。
+
+### 7.13 CRM Outbox 与 Salesforce Adapter
+
+`ENT-MKT-013` 在 Outcome 真值之外增加 `0049` forced-RLS `marketing_crm_syncs`，不修改
+`marketing_outcomes` 或 `marketing_next_actions`。API 事务只创建单一 sync + 加密 Outbox + 审计；Worker 事务外
+调用 Salesforce，随后以 receipt 在第二个 tenant transaction 原子收敛 sync/outbox。
+
+```mermaid
+flowchart LR
+    Outcome["immutable Outcome"] --> Command["tenant command + stable External ID"]
+    Command --> Tx1["Tx1: CRM sync + AES-GCM outbox"]
+    Tx1 --> Worker["cell Worker"]
+    Worker --> OAuth["Salesforce OAuth client credentials"]
+    OAuth --> Patch["PATCH sObject by External ID"]
+    Patch --> Reconcile["GET same External ID and compare payload"]
+    Reconcile --> Receipt["record ID + URL + response hash"]
+    Receipt --> Tx2["Tx2: sync/outbox finalize + audit"]
+    Patch -. "timeout / 429 / 5xx" .-> Retry["same event + same External ID"]
+    Retry --> Worker
+```
+
+Outbox 明文只保存 tenant/sync/outcome、Provider/object、External ID、payload/config hash 和密文；摘要、意向和
+后续动作只在 AES-256-GCM envelope 内。AAD 绑定 tenant/sync/campaign/outcome/External ID，Worker 同时比较租户绑定、
+sObject 和不含 secret 的配置 fingerprint，阻断密文搬运或旧配置误投。Salesforce Adapter 使用专用集成用户，
+OAuth secret 仅驻留服务器；PATCH 仅被接受仍不足以完成，GET 必须返回同 External ID、同规范载荷和有效 Record ID。
+
+401 重新取 token；超时、429、5xx 和对账暂不可用保持 pending 并指数退避。稳定 External ID 使响应丢失后的重试成为
+同一记录 upsert，而不是第二次 create。明确协议/权限/字段拒绝可收敛 failed，但不回滚通话终态、结算或 Outcome。
+当前未执行 `0049`、真实 PostgreSQL/RLS、Salesforce sandbox、故障注入和浏览器门禁，任务因真实账号缺失保持 `blocked`。
 
 ## 8. AI 客服架构
 

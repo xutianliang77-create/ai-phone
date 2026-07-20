@@ -1,6 +1,6 @@
 # 无界AI企业版详细技术设计
 
-版本：v1.63
+版本：v1.64
 日期：2026-07-20
 状态：统一通讯平台与 PostgreSQL Primary 收敛详细技术方案
 
@@ -21,11 +21,11 @@
 | RBAC | `ready_for_acceptance` | 已有23个 scope、九角色矩阵、统一服务端 guard 和越权测试；新增质检 scope 的自动化尚未恢复执行 |
 | SaaS tenant lifecycle | `ready_for_acceptance` | 已有幂等开通、暂停、导出/删除执行器、租约、有界恢复和 receipt 校验；真实对象存储/Provider 清理服务尚待验收 |
 | Append-only audit | `ready_for_acceptance` | 已有 tenant-scoped 查询、HMAC cursor、成员/RBAC/租户生命周期埋点和 SQLite/PostgreSQL 不可变约束；受控导出已进入 UI-008 开发，真实 PostgreSQL 验收仍待执行 |
-| PostgreSQL schema | `implemented` | 已有四十八段 up/down migration、tenant-first 索引、复合 FK、强制 RLS、user directory、cell pending projection、opaque subject identity、企业通讯/dispatch/策略、usage/billing、knowledge/terminology、observability trace、受控审计导出、Meeting、客服、Campaign/Lead/Consent/Suppression/Country Policy、活动审批快照、Scheduler、PSTN dispatch、Marketing Agent、人工接管和 Outcome 栅栏；尚无真实 migrate/restore/PITR 证据 |
+| PostgreSQL schema | `implemented` | 已有四十九段 up/down migration、tenant-first 索引、复合 FK、强制 RLS、user directory、cell pending projection、opaque subject identity、企业通讯/dispatch/策略、usage/billing、knowledge/terminology、observability trace、受控审计导出、Meeting、客服、Campaign/Lead/Consent/Suppression/Country Policy、活动审批快照、Scheduler、PSTN dispatch、Marketing Agent、人工接管、Outcome 和 CRM sync 栅栏；尚无真实 migrate/restore/PITR 证据 |
 | Tenant-scoped Repository | `ready_for_acceptance` | 已有 tenant/user/cell scoped transaction、subject guard、单一 `legacy|postgres` runtime、HTTP 全链路注入、独立 cell Worker，以及 Tenant/Member/Audit、Directory、lifecycle、Inbox/Outbox、budget、billing/entitlement、usage accounting、knowledge、terminology 和共享 unit-of-work；尚无真实 PostgreSQL H3 证据 |
 | Enterprise Inbox/Outbox | `ready_for_acceptance` | 已有 tenant-scoped 去重、稳定 payload hash、领域/inbox/outbox 原子提交、lease/retry/recovery 和100次重放门禁；真实 PostgreSQL 并发与 Provider sandbox 尚待验收 |
 | SQLite/JSON 演示数据导入 | `ready_for_acceptance` | 已有维护窗口、SQLite 临时副本与 quick_check、空目标事务导入、六集合 count/SHA-256 读回对账和不一致回滚；仅限内部演示数据 |
-| 公共 Primary Runtime 收敛 | `ready_for_acceptance` | 已合入上游稳定提交 `fe1c3c2`；公共31段与 enterprise 48段 manifest 由一个启动编排验证，driver、数据库身份和分权连接失败均在监听前闭合；尚无真实 PostgreSQL H3 证据 |
+| 公共 Primary Runtime 收敛 | `ready_for_acceptance` | 已合入上游稳定提交 `fe1c3c2`；公共31段与 enterprise 49段 manifest 由一个启动编排验证，driver、数据库身份和分权连接失败均在监听前闭合；尚无真实 PostgreSQL H3 证据 |
 | 企业链路追踪 | `in_progress` | 平台 trace 已进入 tenant context、PostgreSQL session、communication binding、usage event/ledger 与会话报告；本轮未执行测试和真实 PostgreSQL 门禁，货币成本因无价格表明确 not configured |
 | 企业工作台真值投影 | `in_progress` | Web 已读取 tenant/route、Provider、subscription、budget、usage aggregate 和显式 session trace report；业务聚合与价格表缺失时明确 not ready/not configured，本轮未执行自动化、浏览器或 PostgreSQL 门禁 |
 | 审计与分析 | `in_progress` | Web 已接入审计筛选/详情、显式 session 下钻和受控 JSONL 导出；`0020`、Repository/API/cell Worker/加密对象存储边界已实现，本轮未执行 migration、双租户、对象存储或浏览器测试；业务聚合/价格表与物理对象清理仍未完成 |
@@ -53,10 +53,11 @@
 | Marketing 实时监控 | `in_progress` | 已有 `campaign:read` 的 tenant-scoped 汇总/单通话只读投影、最终字幕/Agent/Provider 证据、延迟/新鲜度/失败分类和同风格 Web 快照面板；当前明确为5秒非流式快照，未执行自动化、真实 PostgreSQL/RLS、通话、浏览器或 Realtime Gateway 验收 |
 | Marketing 真实人工接管 | `in_progress` | `0047`、审批冻结策略、Marketing→Support Session 桥接、复用 exclusive claim、AI 数据库停播 fence、HTTPS Provider 300ms停音/坐席加入回执、超时收敛和 Web 分层状态已形成代码候选；未执行自动化、migration/RLS、真实 PostgreSQL/PSTN/坐席或300ms验收 |
 | Marketing Outcome | `in_progress` | `0048` 升级不可变 Outcome 并新增 forced-RLS requested action；终态 task/dispatch/run、最终字幕/已交付 turn、handoff/suppression/Provider 失败证据、稳定 hash、单 task 唯一、幂等/并发 guard、API 与同风格 Web 面板已形成代码候选；不执行外部动作，未运行自动化、migration/RLS、真实通话或浏览器验收 |
+| Marketing CRM Adapter | `blocked` | `0049` CRM sync、AES-GCM Outbox、稳定 External ID、Salesforce OAuth/REST upsert、GET 对账 receipt、Worker finalize、API/Web 和 mock/contract 测试已形成候选；真实 Salesforce sandbox 缺失且未运行 migration/RLS/故障注入/浏览器验收 |
 | 营销授权证据 | `in_progress` | `0039`、对象实体验证、Campaign/Lead/purpose 绑定、不可变登记/撤回、服务端有效性解析、task insert/reschedule 数据库 guard 和同风格 Web 面板已形成代码候选；真实 S3/KMS、PostgreSQL/RLS、并发、浏览器和法务抽样未验收 |
 | 营销禁拨名单 | `in_progress` | `0040`、tenant/global 不可变记录、拒绝/撤回来源、Repository/runtime/API、同号码事务锁、task insert/reschedule guard、跨活动待任务取消和同风格 Web 面板已形成代码候选；全局注册表明确 not_configured，真实 PostgreSQL/RLS、并发、浏览器和名单同步未验收 |
 | 企业术语与话术版本 | `ready_for_acceptance` | enterprise `0018`、共享契约、Term Pack/Script Template Repository/runtime/API 已实现稳定资源、递增 revision、review/publish、有效期解析、hash 校验和同一术语版本运行时引用；仅有自动化和本地 PostgreSQL 16 普通角色证据，真实 Worker/Provider、A1/H3 未通过 |
-| Primary 全量切换/恢复证据 | `ready_for_acceptance` | 工具按运行时动态校验 manifest/全业务表；`c9b5be2` 历史证据为31+16/81张表，当前31+48/125张表必须重新生成签名证据；异地 WAL/PITR/H3 未通过 |
+| Primary 全量切换/恢复证据 | `ready_for_acceptance` | 工具按运行时动态校验 manifest/全业务表；`c9b5be2` 历史证据为31+16/81张表，当前31+49/126张表必须重新生成签名证据；异地 WAL/PITR/H3 未通过 |
 | PostgreSQL 控制面/业务聚合 | `designed` | 后续 CORE/MTG/CS/MKT 领域任务范围，不能从公共 Repository runtime 推导为已实现 |
 | SQLite | `demo_only` | 仅本地开发、自动化和封闭演示，不承载真实企业试点数据 |
 | PSTN/CRM/OCR | `not_ready` 或按环境探测 | 未配置必须明确降级，不生成虚假外部对象或成功状态 |
@@ -451,6 +452,29 @@ Outcome insert trigger 要求 account actor 和当前 tenant context，重验 ta
 分类、意向和后续动作组合在模块与数据库双重校验。Outcome/action 均 append-only，task/outcome 各自唯一；action status
 当前只能为 `requested`。deferred constraint trigger 保证 Outcome 声明 next action 时同一事务恰有一条 kind/due/evidence hash
 完全匹配的 action，事务结束前缺失或重复均失败。
+
+#### 2.2.9 Marketing CRM sync
+
+```text
+marketing_crm_syncs(
+  id, tenant_id, campaign_id, outcome_id, provider, status,
+  external_record_key, object_api_name, payload_hash, provider_fingerprint,
+  request_hash, idempotency_key, outbox_event_id,
+  provider_record_id, provider_record_url, provider_response_hash,
+  attempts, last_error_code, created_by,
+  created_at, updated_at, synced_at, version
+)
+```
+
+`0049` 对每个 Outcome 只允许一个 sync，并对 tenant/provider/external key、actor/idempotency key 建唯一约束。
+身份字段、payload/config hash、Outbox 关联和创建者不可变；状态仅允许 pending 在 attempt 严格增加时保持 pending 或
+单向进入 synced/failed。synced 必须同时有 Salesforce Record ID、HTTPS URL、response hash 和 syncedAt；failed
+必须有受控 reason code。表启用 forced RLS，并纳入 schema verify、subject column 和 cutover critical manifest。
+
+Outbox payload 仅含路由字段和 `emcrm1` AES-256-GCM envelope。AAD 为
+`tenantId/syncId/campaignId/outcomeId/externalRecordKey`；密钥来自独立
+`ENTERPRISE_MARKETING_CRM_PAYLOAD_*` keyring。明文包含 Outcome disposition、intent、summary、evidence/source hash、
+lead ID/phone hint 和内部 next action，不落 Outbox JSON、sync 表、audit 或日志。
 
 ### 2.3 AI 客服
 
@@ -1178,6 +1202,24 @@ disposition/intent/action 组合与 evidence eligibility，然后一次写 Outco
 Outbox 或 Provider 调用，相关外部完成证据归 `ENT-MKT-013`。legacy/SQLite runtime 明确 unavailable。当前测试只定义未运行，
 真实 `0048` migrate/down、forced-RLS/双租户、并发、通话和浏览器仍待验收。
 
+`ENT-MKT-013` 暴露 `GET /enterprise/v1/campaigns/:campaignId/crm-syncs` 和
+`POST /enterprise/v1/campaigns/:campaignId/outcomes/:outcomeId/crm-sync`。读取要求 `campaign:read`，请求要求
+`campaign:write`、active membership、签名 route、`Idempotency-Key` 和 `expectedOutcomeVersion`。事务先验证当前
+Campaign/Outcome/version 和单一 sync，再由 command service 校验 tenant-bound Salesforce 配置及 CRM payload keyring，
+原子写 sync + Outbox + audit；HTTP 202 只表示入队。
+
+Salesforce 配置要求 `ENTERPRISE_CRM_PROVIDER=salesforce`、租户 UUID、HTTPS My Domain/login URL、Client ID/Secret、
+受控 API version、sObject API name、External ID field 和 payload field。Worker 用 OAuth Client Credentials 获取 token，
+向 `/services/data/{version}/sobjects/{object}/{externalField}/{stableKey}` 发送 PATCH；随后 GET 同一资源并比较 External ID、
+规范 JSON 载荷和 15/18 位 Record ID。只有 GET 对账结果才产生 `marketing_crm` synced receipt。401 重新取 token；
+408/409/425/429/5xx、传输失败、receipt 不完整或 GET 暂不可用继续同 event/同 stable key 指数退避。400/403/404 等
+明确拒绝形成 failed receipt。Worker 在第二个 tenant transaction 原子更新 sync/outbox/audit，CRM 故障不回滚 Outcome、
+通话终态或结算。
+
+tenant binding、object name 与不含 secret 的 configuration fingerprint 必须同时匹配入队快照，避免旧 Worker、跨租户
+密文或配置漂移误投。缺配置时 API 返回 not_ready，Provider 未回执时 Web 固定显示 pending。当前未运行 `0049`
+migrate/down/forward、forced-RLS/双租户、并发/崩溃/未知响应、真实 Salesforce sandbox 或浏览器验收。
+
 ## 7. Agent Runtime
 
 每个 Agent turn 输入：
@@ -1876,7 +1918,7 @@ baseline 文件 hash，验证源库默认只读、写探针返回 SQLSTATE `2500
 整行 hash、主键、migration 或 server version 不一致都会生成签名 `mismatch` 并以非零退出。
 
 生产 startup gate 只接受 `environment=staging` 的 matched cutover evidence，且运行时
-commit/image/topology、cutover ID、target logical ID、当前 system identifier/OID 和31+48
+commit/image/topology、cutover ID、target logical ID、当前 system identifier/OID 和31+49
 manifest 必须逐项一致。本地 PostgreSQL 16 演练已验证81张表、8张含记录关键表、增量后17行
 全库 hash、writer fence、隔离 `pg_dump/pg_restore` 和单行篡改失败；证据见
 `docs/evidence/ent-data-009-local-drill-2026-07-18.md`。这只证明机制可执行，不是异地主机

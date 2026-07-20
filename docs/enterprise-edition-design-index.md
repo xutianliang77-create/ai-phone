@@ -1,6 +1,6 @@
 # 无界AI企业版设计文档索引
 
-版本：v1.57
+版本：v1.58
 日期：2026-07-20
 状态：SaaS 详细设计基线，已纳入统一通讯平台和 PostgreSQL Primary 演进
 
@@ -46,11 +46,11 @@ cell Worker、JSON/SQLite 演示导入，以及全业务表 Primary 切换/恢�
 无界AI主产品公共 PostgreSQL migration、Primary Runtime、可靠 Inbox/Outbox、
 fencing、Billing/Product Records、verify-full 和韧性代码已形成稳定提交 `fe1c3c2`，并由
 `ENT-DATA-007` 合入企业分支。企业版已经完成单 driver、双 manifest、同库身份和分权
-连接的本地自动化，当前 manifest 为公共31段、enterprise 48段；`ENT-DATA-008` 和
+连接的本地自动化，当前 manifest 为公共31段、enterprise 49段；`ENT-DATA-008` 和
 `ENT-CORE-013/014/015` 已完成公共通讯 tenant scope、企业业务会话绑定、签名 Worker dispatch fence
 及设备/声音/录制策略快照的代码/本地自动化，但不能继承主产品 staging 验收。`ENT-DATA-009` 已增加
 31+16 migration manifest 的历史本地证据、全表主键分页 count/hash、WAL 水位、writer fence、签名
-cutover/restore 证据和 production startup 绑定门禁；当前 `0017..0048` 必须按31+48重新生成切换证据。
+cutover/restore 证据和 production startup 绑定门禁；当前 `0017..0049` 必须按31+49重新生成切换证据。
 `ENT-CORE-004` 已增加 tenant-scoped source/version/chunk、草稿审核发布状态机、发布后不可变约束、
 locale/country/product/effective-time 检索和知识引用 ID；
 `ENT-CORE-005` 已增加版本化 term pack/script template、审核发布和生效窗口、发布后不可变约束，
@@ -213,6 +213,13 @@ Session 原子物化，并复用 `support_agent_claims` 作为唯一坐席领取
 后续动作只保存 `requested`，页面明确外部已执行为0；CRM/日历/消息 Adapter 和 receipt 属于 `ENT-MKT-013`。
 当前只形成静态代码候选；未运行自动化、真实 PostgreSQL/RLS、双租户、真实通话或浏览器验收，
 `AC-ENT-0045` 未通过，任务保持 `in_progress`。下一项为 `ENT-MKT-013` CRM Adapter。
+`ENT-MKT-013` 已增加 `0049` forced-RLS CRM sync 聚合、AES-256-GCM Outbox、稳定 External ID、
+Salesforce OAuth Client Credentials REST upsert、PATCH 后 GET 对账回执、指数退避 Worker finalize、
+tenant/provider fingerprint 绑定、mock contract 和同风格 Web 状态入口。缺失租户绑定、OAuth、API 版本、
+对象/External ID/载荷字段或密钥时明确 `not_ready`；Outbox 请求和 MKT-012 `requested` 均不代表 CRM 成功。
+当前只形成代码与静态门禁候选，未运行自动化、`0049` migrate/down/forward、forced-RLS 双租户、真实
+PostgreSQL/Salesforce sandbox、Worker 故障注入或浏览器验收，`AC-ENT-0046` 未通过；由于真实 Salesforce
+账号仍缺失，任务保持 `blocked`。
 当前按要求未执行
 测试、migration、RLS、RBAC/ticket/evidence 攻击、并发共享、Worker/Provider、四人媒体、浏览器、真机与重启恢复，
 因此上述任务均保持 `in_progress`。

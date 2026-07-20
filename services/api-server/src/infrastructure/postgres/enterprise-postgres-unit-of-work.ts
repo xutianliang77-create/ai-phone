@@ -112,6 +112,8 @@ import { EnterpriseMarketingHandoffPostgresRepository } from
   "./enterprise-postgres-marketing-handoff.repository.js";
 import { EnterpriseMarketingOutcomePostgresRepository } from
   "./enterprise-postgres-marketing-outcome.repository.js";
+import { EnterpriseMarketingCrmPostgresRepository } from
+  "./enterprise-postgres-marketing-crm.repository.js";
 
 export interface EnterprisePostgresUnitOfWork {
   tenant: EnterpriseTenantPostgresRepository;
@@ -158,6 +160,7 @@ export interface EnterprisePostgresUnitOfWork {
   marketingMonitoring: EnterpriseMarketingMonitoringPostgresRepository;
   marketingHandoffs: EnterpriseMarketingHandoffPostgresRepository;
   marketingOutcomes: EnterpriseMarketingOutcomePostgresRepository;
+  marketingCrm: EnterpriseMarketingCrmPostgresRepository;
 }
 
 export function withEnterprisePostgresUnitOfWork<T>(
@@ -224,6 +227,7 @@ export function withEnterprisePostgresUnitOfWork<T>(
         new EnterpriseMarketingHandoffPostgresRepository(session),
       marketingOutcomes:
         new EnterpriseMarketingOutcomePostgresRepository(session),
+      marketingCrm: new EnterpriseMarketingCrmPostgresRepository(session),
     }),
   );
 }

@@ -1,6 +1,6 @@
 # 无界AI企业版详细功能设计
 
-版本：v1.44
+版本：v1.45
 日期：2026-07-20
 状态：SaaS 详细设计基线，已对齐统一通讯平台
 
@@ -400,6 +400,21 @@ Provider、usage/ledger 和 trace；跨会话业务聚合与货币成本尚未�
   “外部已执行 0”，不得生成模拟成功。
 - 当前只形成 `0048`、PostgreSQL Repository/runtime/API 和同风格 Web 静态代码候选；未运行 migration/RLS、双租户、
   真实通话、浏览器或 Provider 验收，不能宣称 Outcome 通过企业生产门禁。
+
+#### 5.6.2 CRM Adapter 首批实现边界
+
+- 首个 Provider 为 Salesforce。运营人员可对已固化 Outcome 发起一次 CRM 同步；API 只返回“已入队”，页面在
+  Provider GET 对账回执到达前显示“等待 Provider 回执”，不得显示已同步。
+- 服务端为 tenant + Outcome 生成稳定 External ID，同一个 Outbox 事件在超时、429、5xx、401 token 更新或进程重启后
+  仍使用同一 ID upsert；外部恢复后只收敛到一个 Salesforce 记录。
+- Salesforce 管理员必须配置专用集成用户、OAuth Client Credentials、API 版本、自定义对象、External ID 字段和载荷
+  字段。凭据只在 Worker 服务器读取；浏览器、DTO、审计和 Outbox 明文均不包含 secret 或 Outcome 摘要。
+- CRM sync 聚合只保存 payload hash、Provider/config fingerprint、外部 ID/URL、尝试次数、错误码和 receipt hash；
+  disposition/intent/summary/next action 仅存在于 AES-256-GCM 加密 Outbox payload 与目标 CRM 记录。
+- 缺租户绑定、OAuth、字段映射或 payload keyring 时明确 not_ready；CRM 故障不回滚 Outcome、通话终态、结算或
+  MKT-012 requested action。Provider 明确拒绝可形成终态 failed，未知结果继续重试而不声称失败或成功。
+- 当前仅形成 `0049`、Repository/runtime/API/Worker/Salesforce Adapter、mock/contract 测试定义和同风格 Web 静态候选；
+  未运行 migration/RLS、双租户、真实 Salesforce sandbox、故障注入或浏览器验收，不能宣称 CRM 已通过生产门禁。
 
 ## 6. AI 客服
 

@@ -33,6 +33,10 @@ import { createEnterpriseSupportWriteOutboxPublisher } from
   "./modules/enterprise/enterprise-support-write-outbox.js";
 import { unavailableEnterpriseSupportWriteAdapter } from
   "./modules/enterprise/enterprise-support-write-tool.js";
+import { createEnterpriseMarketingCrmOutboxPublisher } from
+  "./modules/enterprise/enterprise-marketing-crm-outbox.js";
+import { createEnvironmentEnterpriseSalesforceCrmProvider } from
+  "./modules/enterprise/enterprise-salesforce-crm-provider.js";
 
 if (process.argv[1] &&
   import.meta.url === pathToFileURL(process.argv[1]).href) {
@@ -76,13 +80,16 @@ export async function runEnterprisePostgresWorkerMain() {
       lifecycleExecutor: createEnvironmentTenantLifecycleExecutor(),
       outboxPublisher: createEnterpriseSupportWriteOutboxPublisher({
         adapter: unavailableEnterpriseSupportWriteAdapter(),
-        fallback: createEnterpriseMeetingCalendarOutboxPublisher({
-          provider: createEnvironmentGoogleCalendarProvider(),
-          fallback: createEnterpriseMeetingScreenShareOutboxPublisher({
-            provider: createEnvironmentEnterpriseMeetingScreenShareProvider(),
-            fallback: createEnvironmentEnterpriseOutboxPublisher(),
-            rtcUrl: (process.env.LIVEKIT_URL ??
-              process.env.LIVEKIT_WS_URL ?? "").trim(),
+        fallback: createEnterpriseMarketingCrmOutboxPublisher({
+          provider: createEnvironmentEnterpriseSalesforceCrmProvider(),
+          fallback: createEnterpriseMeetingCalendarOutboxPublisher({
+            provider: createEnvironmentGoogleCalendarProvider(),
+            fallback: createEnterpriseMeetingScreenShareOutboxPublisher({
+              provider: createEnvironmentEnterpriseMeetingScreenShareProvider(),
+              fallback: createEnvironmentEnterpriseOutboxPublisher(),
+              rtcUrl: (process.env.LIVEKIT_URL ??
+                process.env.LIVEKIT_WS_URL ?? "").trim(),
+            }),
           }),
         }),
       }),

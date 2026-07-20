@@ -50,6 +50,8 @@ import { createEnterprisePostgresMarketingHandoffRuntime } from
   "./enterprise-postgres-marketing-handoff-runtime.js";
 import { createEnterprisePostgresMarketingOutcomeRuntime } from
   "./enterprise-postgres-marketing-outcome-runtime.js";
+import { createEnvironmentEnterprisePostgresMarketingCrmRuntime } from
+  "./enterprise-postgres-marketing-crm-runtime.js";
 
 export function createEnterprisePostgresBusinessRuntimes(
   pool: EnterpriseTenantPostgresPool,
@@ -85,5 +87,6 @@ export function createEnterprisePostgresBusinessRuntimes(
     ...createEnterprisePostgresMarketingHandoffRuntime(
       pool, marketingHandoffProvider),
     ...createEnterprisePostgresMarketingOutcomeRuntime(pool),
+    ...createEnvironmentEnterprisePostgresMarketingCrmRuntime(pool),
   };
 }

@@ -184,6 +184,19 @@ async function processRef(
     return finalized.status === "completed" ? "completed" :
       finalized.status === "retried" ? "retried" : "failed";
   }
+  if (event.eventType === "marketing.crm.sync.requested") {
+    if (!options.runtime.finalizeMarketingCrmOutbox) {
+      throw new Error("Marketing CRM runtime is missing");
+    }
+    const finalized = await options.runtime.finalizeMarketingCrmOutbox({
+      context: createEnterpriseTenantContext({ tenantId: event.tenantId,
+        actorUserId: "system:enterprise-marketing-crm", traceId: event.traceId }),
+      eventId: event.id, attempt: event.attempts,
+      result: marketingCrmResult(result), now,
+    });
+    return finalized.status === "completed" ? "completed" :
+      finalized.status === "retried" ? "retried" : "failed";
+  }
   if (event.eventType === "support.tool.write.requested") {
     if (!options.runtime.finalizeSupportWriteToolOutbox) {
       throw new Error("Support write tool runtime is missing");
@@ -272,6 +285,14 @@ function meetingCalendarResult(result: Awaited<ReturnType<
   return result.receipt?.kind === "meeting_calendar"
     ? { status: "completed" as const, receipt: result.receipt }
     : { status: "retry" as const, reason: "calendar_provider_receipt_invalid" };
+}
+
+function marketingCrmResult(result: Awaited<ReturnType<
+  EnterpriseOutboxPublisher["publish"]>>) {
+  if (result.status === "retry") return result;
+  return result.receipt?.kind === "marketing_crm"
+    ? { status: "completed" as const, receipt: result.receipt }
+    : { status: "retry" as const, reason: "crm_provider_receipt_invalid" };
 }
 
 function supportWriteResult(result: Awaited<ReturnType<
