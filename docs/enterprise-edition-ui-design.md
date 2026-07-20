@@ -1,6 +1,6 @@
 # 无界AI企业版 UI 详细设计
 
-版本：v1.32
+版本：v1.33
 日期：2026-07-20
 状态：设计基线；企业 Web 公共组件、首批设置/工作台、响应式/主题/无障碍和 Web/iOS/Android 成员屏幕共享代码候选已实现，正式验收仍在开发
 
@@ -281,6 +281,12 @@ budget、usage aggregate 和显式 session trace report。卡片沿用同一 Mat
   not_ready、403/404/409/503 复用统一阻断/错误语义，不回退 fixture 或浏览器缓存。
 - 外链固定 `target=_blank` + `rel=noreferrer`；页面不渲染 OAuth、login URL、object mapping、payload、配置 fingerprint
   或 Provider 原始响应。窄屏、浅深色、键盘焦点、动态字号继续继承 Outcome 面板，不增加第二套图标/颜色/间距。
+- `ENT-MKT-014` 在同一 Campaign 卡片追加默认折叠的“活动分析”，复用 `query_stats/data_usage/block` 既有 Material Icons、
+  token、1px outline、8px 圆角和 `StatusPanel`。组件与 API 都随 Outcome lazy chunk 加载，不扩大初始 Campaign 数据请求。
+- 顶部漏斗以五个等宽事实卡呈现相邻阶段数量和转化率；无分母显示“起点/—”。结果区明确写“正向兴趣不等于成交”、
+  “CRM 仅已对账”；价格表缺失用 tertiary `价格表未配置` 胶囊和破折号金额，不用成功色。
+- 国家拆分使用可聚焦横向表格，运行版本使用自适应卡片并只展示短 UUID；完整 ID 仅在 title。760px 以下漏斗/指标两列，
+  420px 以下单列；浅深色、键盘、动态字号和错误/空状态继续继承既有企业组件。
 
 ### 8.3 AI 客服坐席台
 

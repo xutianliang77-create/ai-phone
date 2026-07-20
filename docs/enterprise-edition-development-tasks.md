@@ -1,6 +1,6 @@
 # 无界AI企业版开发任务
 
-版本：v1.69
+版本：v1.70
 日期：2026-07-20
 状态：E0 开发中，已对齐统一通讯平台和 PostgreSQL Primary 收敛
 
@@ -250,7 +250,7 @@ claim、断线回收和人工接通均未验收，任务保持 `in_progress`。
 | ENT-MKT-011 | 人工接管 | MKT-009、CS-009 | 冻结 handoff policy、Marketing→Support bridge、唯一 claim、Provider 停播/坐席加入回执、超时收敛 | 只有有效 claim、AI 数据库 fence 和 300ms Provider 停播+坐席加入回执同时成立才显示 active；未配置/回拨不伪造成功 | in_progress |
 | ENT-MKT-012 | Outcome | MKT-009 | `0048`、终态证据绑定、不可变 disposition/intent、单一 requested next action、Repository/runtime/API/Web | 单 task 只有一个 Outcome；分类与 evidence 可复现；不把 requested 当外部完成 | in_progress |
 | ENT-MKT-013 | CRM Adapter | MKT-012、CORE-008 | `0049`、加密 Outbox、稳定 External ID、Salesforce OAuth/REST Adapter、GET 对账 receipt、Worker finalize、API/Web、mock/contract tests | 外部失败恢复后同一 External ID 只形成一个记录；无 receipt 不显示成功；缺配置失败闭合 | blocked |
-| ENT-MKT-014 | 活动分析 | MKT-012、OBS-001 | funnel、cost、complaint | 指标可按国家/活动/版本拆分 | todo |
+| ENT-MKT-014 | 活动分析 | MKT-012、OBS-001 | repeatable-read PostgreSQL 投影、funnel、verified Outcome、explicit complaint、usage/adjustment、CRM receipt、国家/执行版本拆分、lazy Web | 指标只来自服务端真值；零分母/无样本/无价格不补数；当前 Campaign、国家和冻结运行版本可拆分 | in_progress |
 
 `blocked` 只表示真实服务商账号未提供；Adapter、mock、contract test 和 UI 降级仍必须开发。
 
@@ -355,6 +355,14 @@ token，429/5xx/传输未知保持 pending 指数退避，MKT-012 Outcome/通话
 mock/contract/Provider/载荷测试定义和静态类型门禁；未运行 Vitest/API/Repository、`0049` migrate/down/forward、
 forced-RLS 双租户、并发/崩溃恢复、真实 PostgreSQL/Salesforce sandbox 或浏览器。因此 `AC-ENT-0046` 未通过；
 真实 Salesforce 账号未提供，任务保持 `blocked`。
+
+`ENT-MKT-014` 已形成 PostgreSQL-only 活动分析 Repository/runtime/API 和同风格 lazy Web 面板。API 在
+`REPEATABLE READ READ ONLY` tenant transaction 内读取 active Lead、task、PSTN receipt、verified Outcome、明确
+Campaign-origin complaint suppression、immutable usage event/ledger adjustment 与已对账 CRM receipt；不新增分析表或
+第二套状态真值。总体漏斗、Outcome/投诉/CRM、用量以及国家/冻结 execution version 同时返回；无样本为
+`no_call_samples`，无价格表时货币金额固定 `null + pricing_not_configured`。记录映射、SQL evidence fence 和 read-only
+snapshot 测试已定义但未运行；未运行 Vitest/API/Repository、真实 PostgreSQL/forced-RLS、双租户、并发写入、浏览器或
+容量验收。因此 `AC-ENT-0047` 未通过，任务保持 `in_progress`。
 
 ## 7. P2 企业发布
 

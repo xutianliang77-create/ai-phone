@@ -13,6 +13,166 @@
   background: var(--color-container);
 }
 
+.campaign-analytics {
+  border: 1px solid var(--color-outline-variant);
+  border-radius: var(--radius);
+  background: var(--color-surface);
+}
+
+.campaign-analytics > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  cursor: pointer;
+}
+
+.campaign-analytics > summary span,
+.campaign-analytics__boundary,
+.campaign-analytics-cost header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.campaign-analytics > summary small,
+.campaign-analytics small,
+.campaign-analytics__timestamp {
+  color: var(--color-outline);
+}
+
+.campaign-analytics__body {
+  display: grid;
+  gap: 16px;
+  padding: 0 12px 12px;
+}
+
+.campaign-analytics__body h3,
+.campaign-analytics__boundary,
+.campaign-analytics-cost p {
+  margin: 0;
+}
+
+.campaign-analytics__boundary {
+  align-items: flex-start;
+  padding: 12px;
+  border-radius: var(--radius);
+  background: var(--color-surface-high);
+}
+
+.campaign-analytics__boundary span {
+  display: grid;
+  gap: 3px;
+}
+
+.campaign-analytics-funnel {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.campaign-analytics-funnel li,
+.campaign-analytics-grid article,
+.campaign-analytics-versions article {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding: 12px;
+  border-radius: var(--radius);
+  background: var(--color-surface-high);
+}
+
+.campaign-analytics-funnel strong,
+.campaign-analytics-grid strong {
+  font-size: 1.35rem;
+}
+
+.campaign-analytics-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.campaign-analytics-cost,
+.campaign-analytics-breakdowns {
+  display: grid;
+  gap: 10px;
+}
+
+.campaign-analytics-cost header {
+  justify-content: space-between;
+}
+
+.campaign-analytics__not-ready {
+  padding: 4px 8px;
+  border-radius: 999px;
+  color: var(--color-tertiary);
+  background: color-mix(in srgb, var(--color-tertiary) 10%, transparent);
+  font-size: .75rem;
+  font-weight: 700;
+}
+
+.campaign-analytics-usage,
+.campaign-analytics-versions,
+.campaign-analytics-versions dl {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+}
+
+.campaign-analytics-usage {
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+}
+
+.campaign-analytics-usage div {
+  padding: 10px;
+  border: 1px solid var(--color-outline-variant);
+  border-radius: var(--radius);
+}
+
+.campaign-analytics-usage dd,
+.campaign-analytics-versions dd {
+  margin: 3px 0;
+  font-weight: 700;
+}
+
+.campaign-analytics-table {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.campaign-analytics-table table {
+  width: 100%;
+  min-width: 600px;
+  border-collapse: collapse;
+}
+
+.campaign-analytics-table th,
+.campaign-analytics-table td {
+  padding: 8px;
+  border-bottom: 1px solid var(--color-outline-variant);
+  text-align: left;
+}
+
+.campaign-analytics-versions {
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+}
+
+.campaign-analytics-versions header,
+.campaign-analytics-versions dl div {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.campaign-analytics-versions dt {
+  color: var(--color-outline);
+}
+
 .campaign-monitor > summary {
   display: flex;
   align-items: center;
@@ -701,6 +861,8 @@
   .country-policy-card dd { text-align: left; }
   .campaign-validation-card dl { grid-template-columns: 1fr 1fr; }
   .campaign-scheduler-counts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .campaign-analytics-funnel { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .campaign-analytics-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .campaign-approval-actions > * { width: 100%; }
 }
 
@@ -715,4 +877,6 @@
   .consent-card footer { align-items: stretch; flex-direction: column; }
   .campaign-validation-card dl { grid-template-columns: 1fr; }
   .campaign-scheduler-fences { grid-template-columns: 1fr; }
+  .campaign-analytics-funnel,
+  .campaign-analytics-grid { grid-template-columns: 1fr; }
 }

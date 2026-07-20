@@ -18,6 +18,7 @@ import { apiErrorState } from "../business-state.js";
 import { enterpriseIcons } from "../icon-registry.js";
 import { MaterialIcon } from "./MaterialIcon.js";
 import { StatusPanel } from "./StatusPanel.js";
+import CampaignMarketingAnalyticsPanel from "./CampaignMarketingAnalyticsPanel.js";
 
 type LoadState = { status: "idle" | "loading" } |
   { status: "ready"; outcomes: EnterpriseMarketingOutcomeListResponse;
@@ -120,7 +121,7 @@ export default function CampaignMarketingOutcomePanel({ api, context, campaign,
       call.dispatchStatus) && !load.outcomes.outcomes.some((outcome) =>
       outcome.taskId === call.taskId)), [load]);
 
-  return <details className="campaign-monitor campaign-outcome" onToggle={(event) => {
+  return <><details className="campaign-monitor campaign-outcome" onToggle={(event) => {
     if (event.currentTarget.open && load.status === "idle") void refresh();
   }}><summary><span><MaterialIcon name={enterpriseIcons.campaign.outcome} />
     通话结果</span><small>{load.status === "ready"
@@ -160,7 +161,7 @@ export default function CampaignMarketingOutcomePanel({ api, context, campaign,
           syncing={syncing} onSync={(id, version) => void syncOutcome(id, version)} />
       </> : null}
     </div>
-  </details>;
+  </details><CampaignMarketingAnalyticsPanel context={context} campaign={campaign} /></>;
 }
 
 function OutcomeForm({ state, form, setForm, saving, onSubmit }: {

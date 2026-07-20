@@ -1,6 +1,6 @@
 # 无界AI企业版技术架构
 
-版本：v1.48
+版本：v1.49
 日期：2026-07-20
 状态：SaaS 详细架构基线，已对齐统一通讯平台和 PostgreSQL Primary
 
@@ -607,6 +607,29 @@ OAuth secret 仅驻留服务器；PATCH 仅被接受仍不足以完成，GET 必
 401 重新取 token；超时、429、5xx 和对账暂不可用保持 pending 并指数退避。稳定 External ID 使响应丢失后的重试成为
 同一记录 upsert，而不是第二次 create。明确协议/权限/字段拒绝可收敛 failed，但不回滚通话终态、结算或 Outcome。
 当前未执行 `0049`、真实 PostgreSQL/RLS、Salesforce sandbox、故障注入和浏览器门禁，任务因真实账号缺失保持 `blocked`。
+
+### 7.14 活动分析只读投影
+
+`ENT-MKT-014` 不新增分析事实表、事件消费者或异步物化任务。租户成员持 `campaign:read` 和有效签名 route 后，API 以
+`REPEATABLE READ READ ONLY` tenant transaction 读取现有事实，避免在并发 Outcome/receipt/adjustment 写入期间让
+分子与分母来自不同时间点。
+
+```mermaid
+flowchart LR
+    Lead["Campaign Lead + country"] --> Snapshot["repeatable-read analytics snapshot"]
+    Task["task + PSTN dispatch"] --> Snapshot
+    Outcome["verified Outcome"] --> Snapshot
+    Complaint["explicit complaint suppression"] --> Snapshot
+    Usage["usage event + ledger adjustment"] --> Snapshot
+    Receipt["reconciled CRM receipt"] --> Snapshot
+    Snapshot --> Funnel["funnel + outcome counts"]
+    Snapshot --> Cost["usage net; money not configured"]
+    Snapshot --> Dimensions["country + frozen execution version"]
+```
+
+执行版本键由 run 上冻结的 profile version、Term Pack/Script Template version ID、Agent Provider fingerprint，及 dispatch
+上的 PSTN Provider/fingerprint 组成，不按当前可变配置回填历史。Campaign-origin complaint 可进入总体/国家指标；只有
+来源标识精确等于该 run communication session 的投诉才进入版本指标。当前未执行真实 PostgreSQL/RLS、负载或浏览器验收。
 
 ## 8. AI 客服架构
 

@@ -1,6 +1,6 @@
 # 无界AI企业版设计文档索引
 
-版本：v1.58
+版本：v1.59
 日期：2026-07-20
 状态：SaaS 详细设计基线，已纳入统一通讯平台和 PostgreSQL Primary 演进
 
@@ -220,6 +220,12 @@ tenant/provider fingerprint 绑定、mock contract 和同风格 Web 状态入口
 当前只形成代码与静态门禁候选，未运行自动化、`0049` migrate/down/forward、forced-RLS 双租户、真实
 PostgreSQL/Salesforce sandbox、Worker 故障注入或浏览器验收，`AC-ENT-0046` 未通过；由于真实 Salesforce
 账号仍缺失，任务保持 `blocked`。
+`ENT-MKT-014` 已增加 PostgreSQL-only 活动分析只读投影和同风格 Web 面板。API 在
+`REPEATABLE READ READ ONLY` 快照中从 Campaign Lead、task、PSTN dispatch、verified Outcome、明确
+`complaint` suppression、usage event/ledger adjustment 与已对账 CRM receipt 计算漏斗、用量和国家/执行版本拆分；
+不建立第二套分析真值。当前没有单位价格表，货币金额固定为 `null + pricing_not_configured`；无通话样本显示
+`no_call_samples`，不补数。当前只通过静态门禁，未运行自动化、真实 PostgreSQL/RLS、浏览器或容量验收，
+`AC-ENT-0047` 未通过，任务保持 `in_progress`。
 当前按要求未执行
 测试、migration、RLS、RBAC/ticket/evidence 攻击、并发共享、Worker/Provider、四人媒体、浏览器、真机与重启恢复，
 因此上述任务均保持 `in_progress`。

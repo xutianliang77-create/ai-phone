@@ -114,6 +114,8 @@ import { EnterpriseMarketingOutcomePostgresRepository } from
   "./enterprise-postgres-marketing-outcome.repository.js";
 import { EnterpriseMarketingCrmPostgresRepository } from
   "./enterprise-postgres-marketing-crm.repository.js";
+import { EnterpriseMarketingAnalyticsPostgresRepository } from
+  "./enterprise-postgres-marketing-analytics.repository.js";
 
 export interface EnterprisePostgresUnitOfWork {
   tenant: EnterpriseTenantPostgresRepository;
@@ -161,12 +163,14 @@ export interface EnterprisePostgresUnitOfWork {
   marketingHandoffs: EnterpriseMarketingHandoffPostgresRepository;
   marketingOutcomes: EnterpriseMarketingOutcomePostgresRepository;
   marketingCrm: EnterpriseMarketingCrmPostgresRepository;
+  marketingAnalytics: EnterpriseMarketingAnalyticsPostgresRepository;
 }
 
 export function withEnterprisePostgresUnitOfWork<T>(
   pool: EnterpriseTenantPostgresPool,
   context: EnterpriseTenantContext,
   operation: (unit: EnterprisePostgresUnitOfWork) => Promise<T>,
+  options: { readOnlyRepeatableRead?: boolean } = {},
 ) {
   return withEnterpriseTenantPostgresSession(
     pool,
@@ -228,6 +232,8 @@ export function withEnterprisePostgresUnitOfWork<T>(
       marketingOutcomes:
         new EnterpriseMarketingOutcomePostgresRepository(session),
       marketingCrm: new EnterpriseMarketingCrmPostgresRepository(session),
+      marketingAnalytics: new EnterpriseMarketingAnalyticsPostgresRepository(session),
     }),
+    options,
   );
 }

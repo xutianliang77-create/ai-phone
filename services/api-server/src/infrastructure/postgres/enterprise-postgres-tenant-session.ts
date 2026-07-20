@@ -42,11 +42,14 @@ export async function withEnterpriseTenantPostgresSession<T>(
   pool: EnterpriseTenantPostgresPool,
   context: EnterpriseTenantContext,
   operation: (session: EnterpriseTenantPostgresSession) => Promise<T>,
+  options: { readOnlyRepeatableRead?: boolean } = {},
 ) {
   const client = await pool.connect();
   let transactionStarted = false;
   try {
-    await client.query("BEGIN");
+    await client.query(options.readOnlyRepeatableRead
+      ? "BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY"
+      : "BEGIN");
     transactionStarted = true;
     await client.query(
       "SELECT set_config('app.tenant_id', $1, true)",

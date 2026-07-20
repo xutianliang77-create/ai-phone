@@ -1,6 +1,6 @@
 # 无界AI企业版详细技术设计
 
-版本：v1.64
+版本：v1.65
 日期：2026-07-20
 状态：统一通讯平台与 PostgreSQL Primary 收敛详细技术方案
 
@@ -54,6 +54,7 @@
 | Marketing 真实人工接管 | `in_progress` | `0047`、审批冻结策略、Marketing→Support Session 桥接、复用 exclusive claim、AI 数据库停播 fence、HTTPS Provider 300ms停音/坐席加入回执、超时收敛和 Web 分层状态已形成代码候选；未执行自动化、migration/RLS、真实 PostgreSQL/PSTN/坐席或300ms验收 |
 | Marketing Outcome | `in_progress` | `0048` 升级不可变 Outcome 并新增 forced-RLS requested action；终态 task/dispatch/run、最终字幕/已交付 turn、handoff/suppression/Provider 失败证据、稳定 hash、单 task 唯一、幂等/并发 guard、API 与同风格 Web 面板已形成代码候选；不执行外部动作，未运行自动化、migration/RLS、真实通话或浏览器验收 |
 | Marketing CRM Adapter | `blocked` | `0049` CRM sync、AES-GCM Outbox、稳定 External ID、Salesforce OAuth/REST upsert、GET 对账 receipt、Worker finalize、API/Web 和 mock/contract 测试已形成候选；真实 Salesforce sandbox 缺失且未运行 migration/RLS/故障注入/浏览器验收 |
+| Marketing 活动分析 | `in_progress` | PostgreSQL repeatable-read 只读投影、漏斗/Outcome/明确投诉/usage+adjustment/CRM receipt 指标、国家/冻结执行版本拆分和 lazy Web 面板已形成候选；无价格表保持 pricing_not_configured，未运行自动化/真实 PostgreSQL/RLS/浏览器/容量验收 |
 | 营销授权证据 | `in_progress` | `0039`、对象实体验证、Campaign/Lead/purpose 绑定、不可变登记/撤回、服务端有效性解析、task insert/reschedule 数据库 guard 和同风格 Web 面板已形成代码候选；真实 S3/KMS、PostgreSQL/RLS、并发、浏览器和法务抽样未验收 |
 | 营销禁拨名单 | `in_progress` | `0040`、tenant/global 不可变记录、拒绝/撤回来源、Repository/runtime/API、同号码事务锁、task insert/reschedule guard、跨活动待任务取消和同风格 Web 面板已形成代码候选；全局注册表明确 not_configured，真实 PostgreSQL/RLS、并发、浏览器和名单同步未验收 |
 | 企业术语与话术版本 | `ready_for_acceptance` | enterprise `0018`、共享契约、Term Pack/Script Template Repository/runtime/API 已实现稳定资源、递增 revision、review/publish、有效期解析、hash 校验和同一术语版本运行时引用；仅有自动化和本地 PostgreSQL 16 普通角色证据，真实 Worker/Provider、A1/H3 未通过 |
@@ -1219,6 +1220,24 @@ Salesforce 配置要求 `ENTERPRISE_CRM_PROVIDER=salesforce`、租户 UUID、HTT
 tenant binding、object name 与不含 secret 的 configuration fingerprint 必须同时匹配入队快照，避免旧 Worker、跨租户
 密文或配置漂移误投。缺配置时 API 返回 not_ready，Provider 未回执时 Web 固定显示 pending。当前未运行 `0049`
 migrate/down/forward、forced-RLS/双租户、并发/崩溃/未知响应、真实 Salesforce sandbox 或浏览器验收。
+
+`ENT-MKT-014` 暴露 `GET /enterprise/v1/campaigns/:campaignId/analytics`，只允许 active membership、
+`campaign:read` 和有效签名 route。legacy/SQLite 返回 `enterprise_postgres_required`，跨租户或不存在 Campaign 表现为404。
+Repository 在 `REPEATABLE READ READ ONLY` tenant transaction 内并行读取同一快照：
+
+1. 漏斗按 active Campaign Lead、已物化 task、`accepted_at`、`answered_at` 和 `evidence_status=verified` Outcome 依次计数；
+   相邻阶段分母为0时 rate 为 null。
+2. 正向兴趣只含 `potential_lead/appointment_requested`；next action 只计 requested；CRM 只计 `status=synced` receipt。
+3. 投诉只计 `source=complaint + origin_campaign_id`。总体/国家使用明确 Campaign 归属；版本只使用
+   `source_reference=communication_session_id` 的精确会话归属，其他投诉不会猜测版本。
+4. 用量从 `tenant_usage_events` 连接 `marketing_call_task` hold，并叠加引用原 settle ledger 的 adjustment，分别返回
+   settled/adjustment/net/event count。货币对象固定 `amount=null/currency=null/reasonCode=pricing_not_configured`。
+5. 国家来自冻结 Lead country；执行版本键包含 run 的 profile version、Term Pack/Script Template version ID、Agent
+   fingerprint 和 dispatch 的 PSTN Provider/fingerprint。没有 run 的 call 仍进入总体/国家，但不伪造版本。
+
+响应声明 `snapshot=repeatable_read`、`outcomeEvidence=verified_only`、`complaintEvidence=explicit_suppression_only` 和
+`externalSuccess=reconciled_receipt_only`。Web 只在面板展开时发起分析请求，代码随 Outcome lazy chunk 加载；当前未运行测试、真实 PostgreSQL/RLS、
+浏览器或容量门禁，不能据此宣称成本、投诉率或活动分析已通过生产验收。
 
 ## 7. Agent Runtime
 

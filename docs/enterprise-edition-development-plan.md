@@ -1,6 +1,6 @@
 # 无界AI企业版开发方案与计划
 
-版本：v1.66
+版本：v1.67
 日期：2026-07-20
 状态：E0 执行计划，已对齐统一通讯平台和 PostgreSQL Primary 收敛
 
@@ -97,6 +97,9 @@
   API/Web 降级和 mock/contract 测试定义。缺租户绑定、OAuth、API version、对象/字段或 payload keyring 时
   明确 not_ready；202/Outbox/MKT-012 requested 均不是 CRM 成功。真实 Salesforce sandbox 未提供，且未运行
   自动化、PostgreSQL/RLS、故障注入或浏览器验收，任务保持 `blocked`。
+- `ENT-MKT-014` 已形成 PostgreSQL repeatable-read 只读分析投影、漏斗、明确投诉、usage/adjustment、CRM 对账成功数、
+  国家/执行版本拆分和 lazy Web 面板。当前无单位价格表，货币金额保持空值；未运行自动化、真实 PostgreSQL/RLS、
+  浏览器或容量验收，任务保持 `in_progress`。
 - `ENT-MTG-004` 已形成 `0024`、单会议活动租约唯一约束、acquire/pause/resume/renew/stop 幂等 CAS、代际发布身份、最小权限 LiveKit grant、cell Worker 到期回收和撤销 outbox 代码候选。Web/iOS/Android 采集仍分别属于 MTG-005/006/007；本轮未运行 migration、并发、forced-RLS、Worker 或真实 LiveKit 测试，保持 `in_progress`。
 - `ENT-MTG-005` 已形成成员 Web 屏幕共享代码候选：浏览器用户手势选择内容后读取真实 `displaySurface`，再申请租约并用独立 Room 发布；首次续租绑定 track SID，后续按10秒续租；观看端只接受服务端当前 publisher identity，暂停/停止先断本地发布且撤销 pending 保持可见。系统音频、访客发布、iOS/Android、simulcast 和主持人强停不在本任务内；本轮未运行测试或真实 LiveKit/浏览器门禁，保持 `in_progress`。
 - `ENT-MTG-006` 已形成 iOS ReplayKit 代码候选：主 App 持有短期发布 grant 并维持独立屏幕 Room，Broadcast Upload Extension 只经 App Group Unix socket 发送视频样本；token-free 控制清单以 share/generation/nonce 和 lease expiry 失败闭合，系统停止、超时和离会均先清理本地再收敛服务端租约。当前未构建/安装 App，未执行真机后台、真实 LiveKit、网络切换和权限矩阵，保持 `in_progress`。
@@ -409,6 +412,7 @@ forced-RLS、响应丢失对账和浏览器均未完成，状态保持 `blocked`
 `ENT-MKT-012` 已进入不可变 Outcome/requested action 代码候选；`AC-ENT-0045`、`0048` migration/RLS、
 双租户、真实通话和浏览器验收均未完成，状态保持 `in_progress`。`ENT-MKT-013` 已进入 Salesforce CRM
 Adapter 静态候选；`AC-ENT-0046`、`0049` migration/RLS、真实 sandbox、Worker 故障恢复和浏览器验收均未完成，
-真实账号缺失使其保持 `blocked`；
+真实账号缺失使其保持 `blocked`。`ENT-MKT-014` 已进入活动分析静态候选；`AC-ENT-0047`、真实 PostgreSQL/RLS、
+并发写入一致性、价格表、浏览器和容量验收均未完成，保持 `in_progress`；
 当前5秒快照不得宣称流式完成，requested action 不得宣称外部已执行。
 staging `ENT-DATA-009` 和 `ENT-REL-002/003` 的对象清理、跨故障域/PITR 仍未通过。

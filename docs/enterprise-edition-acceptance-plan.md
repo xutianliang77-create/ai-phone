@@ -1,6 +1,6 @@
 # 无界AI企业版验收任务与计划
 
-版本：v1.62
+版本：v1.63
 日期：2026-07-20
 状态：可执行验收计划，已对齐统一通讯平台和 PostgreSQL Primary 收敛
 
@@ -117,6 +117,7 @@ Mock 只能验证协议，不能替代 iPhone/Web、真实 LiveKit、真实模�
 | AC-ENT-0044 | Marketing 真实人工接管 | `0047` 策略/桥接表 tenant-first FK、forced RLS、状态与幂等/terminal 栅栏有效；handoff policy 只在未提交草稿可编辑，只引用当前 tenant active Support Queue 和 PSTN Channel，并进入审批 snapshot/hash；handoff turn delivered 与 Marketing→Support Session bridge、`handoff_requested` AI 数据库停播 fence 同事务；坐席只通过既有 `support_agent_claims` 互斥领取，不得存在第二套 claim 真值；工作台只在当前 claim/session/fence 有效时以稳定幂等键调用事务外 HTTPS Provider；Provider 必须在300ms内返回 AI 音频已停止且坐席已加入的完整回执才标记 media active，超时/迟到/非 HTTPS/无幂等或加入保证均失败闭合；超时无 claim 只可收敛为 `timed_out/callback_required`，未收到物理 Provider receipt 不得声称挂断、回拨或接管成功 |
 | AC-ENT-0045 | Marketing Outcome | `0048` Outcome/action tenant-first FK、forced RLS、append-only/终态/组合/deferred action 栅栏有效；只允许 active membership、签名 route、`campaign:read/write` 访问同租户 Campaign；同 task 并发和幂等重放只能得到一个 Outcome，legacy 行也阻断重复；证据只能引用当前最终字幕 revision、已交付 Agent turn 和匹配终态 task/dispatch/run/handoff/suppression/Provider 失败事实，hash 可复现且不复制客户原文；分类、意向和 next action 不矛盾，退订/无效号码/失败有专属服务端依据；后续动作最多一条且只为 `requested`，没有 CRM/日历/消息 receipt 时不得显示已回拨、已预约、已发送或已同步 |
 | AC-ENT-0046 | Marketing CRM Adapter | `0049` CRM sync tenant-first FK、forced RLS、单 Outcome/单 External ID、状态/attempt/receipt trigger 和 cutover critical manifest 有效；只允许 active membership、签名 route、`campaign:read/write` 访问同租户 Campaign/Outcome；同键重放、多键并发、Worker 崩溃、401、429/5xx、PATCH 响应丢失和 GET 暂不可用均复用同一 Outbox event/External ID，恢复后 Salesforce 只存在一个记录且本地只生成一个 synced receipt；AES-GCM AAD、tenant binding、sObject/config fingerprint、key rotation 和旧 Worker 漂移阻断跨租户/跨配置投递；HTTP 202、MKT-012 requested、PATCH 201/204 或不完整 Provider 响应不得显示成功，只有 GET 对账匹配 External ID/载荷/Record ID 后才 synced；CRM 故障不回滚通话终态、结算或 Outcome；缺 OAuth/租户/对象/字段/keyring 明确 not_ready，浏览器/DTO/日志/审计不泄露 secret 或明文摘要 |
+| AC-ENT-0047 | Marketing 活动分析 | 只允许 active membership、签名 route 和 `campaign:read` 读取同租户 Campaign；单响应全部指标来自一个 repeatable-read/read-only 快照，legacy/SQLite、跨租户、旧 route 和伪造 ID 失败闭合；漏斗只按 active Lead、task、Provider acceptedAt、answeredAt、verified Outcome，相邻分母为0返回 null；正向兴趣不冒充成交，requested/pending/PATCH accepted 不冒充 CRM 成功；投诉只计明确 complaint + origin Campaign，版本投诉还须精确 session 归属；用量逐项可追溯 usage event/settle/adjustment，净量不等于货币成本，无价格表时金额/currency 为 null 且 pricing_not_configured；国家与冻结 profile/术语/话术/Agent/PSTN fingerprint 拆分合计可复算，缺 run 不伪造版本；无样本明确 no_call_samples，Web 不回退缓存/fixture |
 
 `ENT-CS-005` 当前只形成 `AC-ENT-0026` 的代码候选；自动化、migration up/down/forward、
 forced-RLS 双租户、并发发布、Worker 竞态和真实 Provider/Adapter 均未执行。Agent `toolRequest`
@@ -778,6 +779,18 @@ failed、只读、not_ready、外链、320/600/960/1280、浅深色、键盘和�
 当前只形成代码、测试定义和静态类型门禁候选；未运行 Vitest/API/Repository、`0049` migrate/down/forward、普通角色
 forced-RLS、双租户、并发/崩溃、真实 PostgreSQL/Salesforce sandbox、浏览器或容量验收。因此 `AC-ENT-0046` 未通过；
 真实 Salesforce 账号未提供，`ENT-MKT-013` 保持 `blocked`。
+
+`ENT-MKT-014` 按 `AC-ENT-0047` 增加九组矩阵：角色/租户矩阵覆盖 owner/admin/marketing/auditor 读取、其他角色、
+跨 tenant/Campaign、伪造 ID 和旧 route；一致性矩阵在 Outcome/CRM receipt/usage adjustment 并发写入时验证单响应
+repeatable-read 快照；漏斗矩阵覆盖空 Lead、只有 task、accepted 未 answered、answered 无 Outcome、verified/legacy Outcome
+及零分母；分类矩阵覆盖正向兴趣、requested、CRM pending/failed/synced；投诉矩阵覆盖 complaint 与 manual/withdrawal/
+contact_request、origin Campaign、跨 Campaign Lead 和有/无精确 session reference；用量矩阵覆盖 settle、正负 adjustment、
+多 category/unit、超安全整数和无事件；价格矩阵固定 no price 为 null/not_configured，不把秒/token/hold 当金额；维度矩阵
+复核国家合计、冻结 profile/term/script/Agent/PSTN fingerprint、缺 run 和版本漂移；Web 矩阵覆盖 lazy load、无样本、
+403/404/503、横向表格、320/600/960/1280、浅深色、键盘和无 fixture/敏感 ID 泄露。
+
+当前只形成代码、测试定义和静态门禁候选；未运行 Vitest/API/Repository、真实 PostgreSQL/forced-RLS、双租户、并发写入、
+真实 usage/Outcome/CRM 数据、价格表、浏览器或容量验收。因此 `AC-ENT-0047` 未通过，`ENT-MKT-014` 保持 `in_progress`。
 
 ### 9.1 合规预检
 

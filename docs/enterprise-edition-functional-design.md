@@ -1,6 +1,6 @@
 # 无界AI企业版详细功能设计
 
-版本：v1.45
+版本：v1.46
 日期：2026-07-20
 状态：SaaS 详细设计基线，已对齐统一通讯平台
 
@@ -378,7 +378,7 @@ Provider、usage/ledger 和 trace；跨会话业务聚合与货币成本尚未�
 
 ### 5.6 结果和分析
 
-- 结果分类：无意向、潜在线索、预约成功、需回访、拒绝联系、无效号码。
+- 结果分类：无意向、潜在线索、预约请求、需回访、拒绝联系、无效号码和通话失败；预约请求不等于预约成功。
 - 自动生成摘要、需求、异议、意向等级、承诺和下一步。
 - 预约、回访和资料发送必须形成可追踪任务。
 - 支持结果推送 CRM Adapter，并保存外部对象 ID。
@@ -415,6 +415,19 @@ Provider、usage/ledger 和 trace；跨会话业务聚合与货币成本尚未�
   MKT-012 requested action。Provider 明确拒绝可形成终态 failed，未知结果继续重试而不声称失败或成功。
 - 当前仅形成 `0049`、Repository/runtime/API/Worker/Salesforce Adapter、mock/contract 测试定义和同风格 Web 静态候选；
   未运行 migration/RLS、双租户、真实 Salesforce sandbox、故障注入或浏览器验收，不能宣称 CRM 已通过生产门禁。
+
+#### 5.6.3 活动分析首批实现边界
+
+- 运营人员在单个 Campaign 卡片展开“活动分析”，读取同一 PostgreSQL 一致性快照；页面不从浏览器缓存、轮询结果或
+  fixture 重建指标。当前活动本身就是“按活动”维度，并同时展示国家和冻结执行版本拆分。
+- 漏斗固定为有效线索、已物化任务、Provider 接受、真实接听、verified Outcome；比率只使用相邻阶段，分母为0时返回
+  `null`，不显示100%、0%或估算值。正向兴趣只含 `potential_lead/appointment_requested`，不等于成交。
+- 投诉只统计 `suppression_entries.source=complaint` 且 `origin_campaign_id` 明确绑定本活动的不可变记录；执行版本拆分只
+  统计 `source_reference` 与 communication session 精确相等的投诉，不能从退订、风险词或低意向推断投诉。
+- 用量从 immutable usage event、settle ledger 和 adjustment 计算结算量、调整量、净量与事件数。没有价格表时货币金额
+  必须保持空值并显示 `pricing_not_configured`，不得把秒数、token 或 hold 额度冒充成本。
+- CRM 只统计 `synced` 且已经 GET 对账的 receipt；pending、failed、HTTP 202、PATCH accepted 和内部 requested action
+  都不进入外部成功数。当前只形成 API/Repository/Web/测试定义的静态候选，未完成真实 PostgreSQL/RLS、浏览器或容量验收。
 
 ## 6. AI 客服
 

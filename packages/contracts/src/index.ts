@@ -10,6 +10,7 @@ export * from "./api/enterprise-marketing-monitoring.js";
 export * from "./api/enterprise-marketing-handoff.js";
 export * from "./api/enterprise-marketing-outcome.js";
 export * from "./api/enterprise-marketing-crm.js";
+export * from "./api/enterprise-marketing-analytics.js";
 export * from "./api/enterprise-lead-import.js";
 export * from "./api/enterprise-marketing-consent.js";
 export * from "./api/enterprise-marketing-suppression.js";
