@@ -2,6 +2,11 @@ import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { checkPlatformCapacityResult } from "./platform_capacity_result.mjs";
+import {
+  enterprisePostgresDrSigningKey,
+  resolveEnterprisePostgresDrBinding,
+  verifyEnterprisePostgresDrResult,
+} from "./enterprise_postgres_dr_evidence.mjs";
 
 const haModes = new Set(["managed_ha", "patroni_etcd"]);
 const walModes = new Set(["provider_managed_object_storage", "wal_g_object_storage"]);
@@ -29,10 +34,13 @@ export function checkPostgresProductionResilience(options = {}) {
   issues.push(...capacityCheck.issues);
   const result = readJson(file, "PostgreSQL resilience result", issues);
   if (!result) return output(file, topology, capacity, issues);
-  if (result.schemaVersion !== 1) issues.push("Resilience schemaVersion must be 1");
+  if (result.schemaVersion !== 2) issues.push("Resilience schemaVersion must be 2");
   if (result.status !== "passed") issues.push("Resilience status must be passed");
   if (result.environment !== "staging") {
     issues.push("Resilience drill must run in isolated staging");
+  }
+  if (!timestamp(result.completedAt)) {
+    issues.push("Resilience completedAt is invalid");
   }
   if (!validRunId(result.runId)) issues.push("Resilience runId is invalid");
   if (existsSync(topology) && result.topologySha256 !== sha256(topology)) {
@@ -41,6 +49,12 @@ export function checkPostgresProductionResilience(options = {}) {
   if (existsSync(capacity) && result.capacityResultSha256 !== sha256(capacity)) {
     issues.push("Resilience result does not match the capacity result");
   }
+  checkEnterpriseBinding({
+    root,
+    topology,
+    result,
+    env: options.env ?? process.env,
+  }, issues);
   checkObjectives(result.objectives, issues);
   checkHa(result.ha, result.objectives, issues);
   checkWal(result.wal, result.objectives, issues);
@@ -49,6 +63,9 @@ export function checkPostgresProductionResilience(options = {}) {
 }
 
 function checkObjectives(objectives, issues) {
+  if (!validId(objectives?.slaApprovalId) || !digest(objectives?.slaApprovalSha256)) {
+    issues.push("PostgreSQL RPO/RTO objectives must bind approved SLA evidence");
+  }
   if (!integerInRange(objectives?.maxRpoSeconds, 0, 300)) {
     issues.push("PostgreSQL max RPO must be 0-300 seconds");
   }
@@ -73,7 +90,17 @@ function checkHa(ha, objectives, issues) {
   const failover = ha?.automaticFailover;
   if (failover?.status !== "passed" || failover.healthControllerInitiated !== true ||
     failover.fencingPassed !== true || failover.oldPrimaryWriteRejected !== true ||
-    failover.endpointSwitched !== true || failover.oldPrimaryRejoined !== true) {
+    failover.writeRejectionSqlState !== "25006" ||
+    failover.oldRouteEpochWriteRejected !== true ||
+    failover.oldWorkerGenerationRejected !== true ||
+    failover.endpointSwitched !== true || failover.oldPrimaryRejoined !== true ||
+    failover.rejoinedPrimaryAcceptsWrites !== false ||
+    !integerInRange(failover.oldPrimaryTimeline, 1, Number.MAX_SAFE_INTEGER) ||
+    !integerInRange(
+      failover.newPrimaryTimeline,
+      failover.oldPrimaryTimeline + 1,
+      Number.MAX_SAFE_INTEGER,
+    ) || !integerInRange(failover.promotionGeneration, 1, Number.MAX_SAFE_INTEGER)) {
     issues.push("Automatic failover, fencing, endpoint switch, and rejoin must pass");
   }
   if (!within(failover?.observedRpoSeconds, objectives?.maxRpoSeconds) ||
@@ -86,7 +113,11 @@ function checkWal(wal, objectives, issues) {
   if (!walModes.has(wal?.mode)) issues.push("Unsupported off-host WAL mode");
   if (wal?.targetClass !== "off_host_object_storage" || wal.offHost !== true ||
     wal.encryptedInTransit !== true || wal.encryptedAtRest !== true ||
-    wal.immutable !== true || !integerInRange(wal.retentionDays, 30, 3650)) {
+    wal.immutable !== true ||
+    !["compliance_lock", "provider_retention_lock"].includes(
+      wal.immutabilityMode,
+    ) || !validId(wal.failureDomain) ||
+    !integerInRange(wal.retentionDays, 30, 3650)) {
     issues.push("WAL target must be encrypted, immutable off-host object storage");
   }
   if (wal?.unresolvedArchiveFailures !== 0 ||
@@ -96,8 +127,42 @@ function checkWal(wal, objectives, issues) {
   const restore = wal?.restoreDrill;
   if (restore?.status !== "passed" || restore.source !== "off_host_object_storage" ||
     restore.checksumVerified !== true || restore.recoveryTargetReached !== true ||
+    !timestamp(restore.recoveryTargetTime) || !validId(restore.targetMarkerId) ||
+    restore.preTargetMarkerPresent !== true ||
+    restore.postTargetMarkerAbsent !== true ||
+    !digest(restore.targetDataSha256) ||
+    restore.targetDataSha256 !== restore.restoredDataSha256 ||
+    !digest(restore.targetCriticalManifestSha256) ||
+    restore.targetCriticalManifestSha256 !==
+      restore.restoredCriticalManifestSha256 ||
     !within(restore.observedDataLossSeconds, objectives?.maxRpoSeconds)) {
     issues.push("Off-host checksum/PITR restore drill must pass within RPO");
+  }
+}
+
+function checkEnterpriseBinding(input, issues) {
+  try {
+    const binding = resolveEnterprisePostgresDrBinding({
+      root: input.root,
+      topologyFile: input.topology,
+      env: input.env,
+    });
+    verifyEnterprisePostgresDrResult(
+      input.result,
+      binding,
+      enterprisePostgresDrSigningKey(input.env),
+    );
+    if (input.result.ha?.automaticFailover?.databaseSystemIdentifier !==
+      binding.database.systemIdentifier) {
+      throw new Error("Failover database identity does not match cutover evidence");
+    }
+    if (input.result.wal?.failureDomain &&
+      input.result.ha?.nodes?.some((node) =>
+        node.failureDomain === input.result.wal.failureDomain)) {
+      throw new Error("Backup target must use a different failure domain");
+    }
+  } catch (error) {
+    issues.push(error instanceof Error ? error.message : "Enterprise DR evidence invalid");
   }
 }
 
@@ -153,6 +218,14 @@ function integerInRange(value, minimum, maximum) {
 function within(value, maximum) {
   return typeof value === "number" && Number.isFinite(value) && value >= 0 &&
     typeof maximum === "number" && value <= maximum;
+}
+
+function timestamp(value) {
+  return typeof value === "string" && Number.isFinite(Date.parse(value));
+}
+
+function digest(value) {
+  return typeof value === "string" && /^[a-f0-9]{64}$/.test(value);
 }
 
 function output(file, topology, capacity, issues, result) {

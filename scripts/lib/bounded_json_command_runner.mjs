@@ -9,6 +9,8 @@ export class BoundedJsonCommandRunner {
     this.root = options.root ?? process.cwd();
     this.gracefulDrainSeconds = options.gracefulDrainSeconds;
     this.outputDirectory = path.resolve(this.root, options.outputDirectory);
+    this.persistRawOutput = options.persistRawOutput ?? true;
+    this.validateResult = options.validateResult;
     this.children = new Set();
     mkdirSync(path.join(this.outputDirectory, "commands"), { recursive: true });
   }
@@ -31,7 +33,12 @@ export class BoundedJsonCommandRunner {
         clearTimeout(timer);
         options.signal?.removeEventListener("abort", aborted);
         this.children.delete(child);
-        persistEvidence(this.outputDirectory, options.label, stdout, stderr);
+        if (this.persistRawOutput) {
+          persistEvidence(this.outputDirectory, options.label, stdout, stderr);
+        } else if (value !== undefined) {
+          persistEvidence(this.outputDirectory, options.label,
+            Buffer.from(JSON.stringify(value)), Buffer.alloc(0));
+        }
         if (error) reject(error);
         else resolve(value);
       };
@@ -69,11 +76,16 @@ export class BoundedJsonCommandRunner {
           ));
           return;
         }
+        let value;
         try {
-          finish(null, JSON.parse(stdout.toString("utf8")));
+          value = JSON.parse(stdout.toString("utf8"));
         } catch {
           finish(new Error(`${options.label} did not emit one JSON document on stdout`));
+          return;
         }
+        try { this.validateResult?.(value, options.label); }
+        catch (error) { finish(error); return; }
+        finish(null, value);
       });
     });
   }

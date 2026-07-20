@@ -12,9 +12,16 @@ import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 import { BoundedJsonCommandRunner } from "./lib/bounded_json_command_runner.mjs";
+import {
+  enterprisePostgresDrSigningKey,
+  resolveEnterprisePostgresDrBinding,
+  signEnterprisePostgresDrResult,
+} from "./lib/enterprise_postgres_dr_evidence.mjs";
 import { checkPlatformCapacityResult } from "./lib/platform_capacity_result.mjs";
 import { checkPlatformTopology } from "./lib/platform_topology_config.mjs";
 import { runPostgresResilienceDrill } from "./lib/postgres_resilience_drill.mjs";
+import { assertPostgresResilienceAttestation } from
+  "./lib/postgres_resilience_attestation.mjs";
 import { loadPostgresResilienceDrillConfig } from
   "./lib/postgres_resilience_drill_config.mjs";
 
@@ -47,6 +54,10 @@ const capacity = checkPlatformCapacityResult({
   topology: topologyFile,
 });
 if (capacity.status !== "ready") fail(capacity.issues.join("; "));
+const enterpriseBinding = resolveEnterprisePostgresDrBinding({
+  root,
+  topologyFile,
+});
 const outputDirectory = repositoryDirectory(root, outputOption);
 mkdirSync(outputDirectory, { recursive: true });
 const eventFile = path.join(outputDirectory, "events.jsonl");
@@ -61,6 +72,8 @@ const runner = new BoundedJsonCommandRunner({
   root,
   outputDirectory,
   gracefulDrainSeconds: config.safety.gracefulDrainSeconds,
+  persistRawOutput: false,
+  validateResult: assertPostgresResilienceAttestation,
 });
 
 try {
@@ -71,6 +84,7 @@ try {
     signal: abortController.signal,
     topologySha256: sha256(topologyFile),
     capacityResultSha256: sha256(capacityFile),
+    enterpriseBinding,
     onEvent: (event) => appendFileSync(eventFile, `${JSON.stringify(event)}\n`),
   });
   writeJson(detailFile, {
@@ -83,14 +97,18 @@ try {
     steps: drill.steps,
   });
   drill.result.evidence = evidenceFiles(root, outputDirectory, [eventFile, detailFile]);
-  writeJson(resultFile, drill.result);
+  const result = signEnterprisePostgresDrResult(
+    drill.result,
+    enterprisePostgresDrSigningKey(),
+  );
+  writeJson(resultFile, result);
   if (promoteLatest) {
-    if (drill.result.status !== "passed") fail("Only a passed drill may be promoted");
+    if (result.status !== "passed") fail("Only a passed drill may be promoted");
     copyFileSync(resultFile, path.join(root, "outputs/postgres-resilience/latest.json"));
   }
-  if (json) console.log(JSON.stringify({ ...drill.result, resultFile }, null, 2));
-  else console.log(`PostgreSQL resilience drill ${drill.result.status}: ${resultFile}`);
-  if (drill.result.status !== "passed") process.exitCode = 1;
+  if (json) console.log(JSON.stringify({ ...result, resultFile }, null, 2));
+  else console.log(`PostgreSQL resilience drill ${result.status}: ${resultFile}`);
+  if (result.status !== "passed") process.exitCode = 1;
 } catch (error) {
   await runner.shutdown().catch(() => undefined);
   fail(error instanceof Error ? error.message : String(error));

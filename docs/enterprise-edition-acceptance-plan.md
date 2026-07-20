@@ -1,6 +1,6 @@
 # 无界AI企业版验收任务与计划
 
-版本：v1.67
+版本：v1.68
 日期：2026-07-20
 状态：可执行验收计划，已对齐统一通讯平台和 PostgreSQL Primary 收敛
 
@@ -122,6 +122,7 @@ Mock 只能验证协议，不能替代 iPhone/Web、真实 LiveKit、真实模�
 | AC-ENT-0049 | Cell Worker 多实例协调 | `0050` up/down/forward 后 pending queue 协调列、约束、索引、forced-RLS Cell policy 与 transition trigger 有效；Cell 最小权限角色只能更新当前 Cell 的 owner/generation/coordination lease，owner 必须等于 `app.worker_id` 且 lease 不超过数据库当前时间五分钟，修改 tenant/resource/work kind/due/business lease、伪造 tenant context 或跨 Cell 行均拒绝；至少两个独立 Worker 对同一批 due work 并发 claim 100轮，每项同时只有一个 owner/generation，`SKIP LOCKED` 不形成全局串行；heartbeat 仅由当前未过期 owner 延长，旧 owner/generation renew/release/finalize 更新0行；分别在 queue claim 前、tenant claim 后、Provider 接受后、finalize 前 kill -9，确认租约到期由更高 generation/attempt 重领且 terminal/ledger/audit 只提交一次；生命周期、对象和所有 Outbox Provider 重试复用稳定 job/event ID，允许传输尝试重放但 sandbox 业务副作用只能一个；单项 finalize/heartbeat/poll 故障不阻断同批其他项或下一轮；无 Redis 时正确性不变，Redis 丢失/重复通知不能改变 claim/完成状态；迁移时活动协调 lease 阻断，反向导入清空 owner/lease且旧 Cell claim 拒绝 |
 | AC-ENT-0050 | 企业候选版本安全门禁 | 锁定同一 candidate commit；Git tracked/untracked 高置信 SAST/密钥规则 manifest 完整且 P0/P1 为0，输出不含命中源码/凭据；production dependency audit 无 high/critical，任何临时例外只允许较低等级并精确绑定 advisory/版本/owner/缓解/到期，漂移或到期拒绝且报告不得称零漏洞；隔离 test/staging 渗透至少覆盖未认证、tenant header/baggage 伪造、跨租户、角色提权、webhook 签名/重放和 payload 上限，远端强制 HTTPS/host allowlist且拒绝 production；凭据只从环境变量注入，evidence 不含请求/响应正文，HMAC 绑定 commit/origin/plan hash/runner/时间窗/attempt/finding，七天内验签且 P0/P1 为0；独立 reviewer 复核外部 SAST/DAST、渗透原始日志与复测，密钥轮换/旧 key 拒绝/备份恢复完成；浏览器 CORS 生产默认同源且精确 allowlist，wildcard/Origin 反射拒绝 |
 | AC-ENT-0051 | 数据生命周期 | `0051` up/down/forward 后 `data_lifecycle_jobs` tenant-first FK、forced RLS、不可变范围/终态/attempt trigger 与 pending-work `data_lifecycle` kind 有效；completed audit export 在同事务唯一登记 source/object SHA/size/retention deadline，失败或 processing 导出不登记，历史完成导出 backfill 不重复；未到期不 claim，到期及 tenant `deletion_requested` 立即 due，双 Worker owner/generation/lease 只产生一个有效 attempt；S3-compatible/local Adapter 对存在对象 Delete 后再次 Head/stat，仍存在、超时、5xx、非法 key、未配置和未知结果均不完成，已不存在以 `already_absent` 独立回执收敛；finalize attempt CAS、receipt SHA 和 append-only audit 不含 object key/bucket/endpoint；任一 processing/failed object job 阻断 tenant executor，外部 delete receipt 必须绑定 tenant/job、database tombstone、object/provider manifest，三组 remaining=0、count 守恒且规范化 SHA 匹配后才允许 tenant `deleted`；跨租户 ID/RLS、旧 Cell/route/generation、重启、响应丢失和删除后迟到 export 均失败闭合 |
+| AC-ENT-0052 | PostgreSQL 备份和灾备 | schema-v2 灾备结果使用独立 HMAC，精确绑定已验签的 staging/matched enterprise cutover、candidate commit/image、topology、cutover/run ID、目标 system identifier/OID/database manifest、当前公共31段/enterprise 51段 manifest，以及已批准 SLA 的 evidence ID/SHA-256；缺失、过期、错误环境、错误候选、清单漂移、同一 HMAC key、路径越界和签名/证据篡改均在 Provider 命令前失败。所有 shell-free Adapter attestation 精确回显 run/group/step、staging、verify-full；至少两个独立数据库主机跨两个故障域，并使用与其均不同的备份故障域。健康控制器自动切换后 timeline 严格递增、promotion generation 有效；旧主写返回 SQLSTATE `25006`，旧 route epoch/Worker generation 副作用拒绝，新 endpoint identity 匹配 cutover，原主只以 timeline 一致且 `acceptsWrites=false` 的 standby 重入。base backup/WAL 传输和静态加密，具有对象 version、未决归档失败为0、归档延迟不超目标、至少30天 retention 以及 compliance/provider retention lock。隔离 PITR 指定时间和 marker，证明 target 前 marker 存在、target 后 marker 不存在，目标/恢复全量数据及关键 tenant/session/ledger/audit/suppression/consent/object manifest SHA-256 分别相等。自动切换和 PITR 实测 RPO/RTO 均不超过已批准 SLA；未批准或未实测时不得承诺数值。签名结果和 evidence 只保存脱敏身份/hash/时间/指标，不含凭据、endpoint、bucket、object key 或命令输出敏感正文 |
 
 `ENT-CS-005` 当前只形成 `AC-ENT-0026` 的代码候选；自动化、migration up/down/forward、
 forced-RLS 双租户、并发发布、Worker 竞态和真实 Provider/Adapter 均未执行。Agent `toolRequest`
@@ -942,6 +943,11 @@ dependency high/critical 为0，但14个 moderate 仍属于未到期 OpenTelemet
 租户删除前置阻断、三段 convergence receipt 及静态测试定义；未运行测试、真实 PostgreSQL migration/forced-RLS、
 S3-compatible 对象存储、Provider 删除、双 Worker/kill -9 或跨租户矩阵，因此任务保持 `in_progress`，
 不能把本地 demo、typecheck 或未执行的测试定义作为对象清理/生产门禁证据。
+
+`ENT-REL-003` 当前只形成 `AC-ENT-0052` 的 schema-v2 enterprise binding、独立 HMAC、固定演练序列、
+attestation/fencing/backup/PITR verifier 和静态测试定义；未运行测试，也未配置 Provider Adapter、真实 capacity/
+cutover evidence、第二数据库故障域、第三备份故障域、DCS、不可变对象锁或隔离恢复目标。因而任务保持
+`in_progress`，不能把示例 JSON、typecheck、静态校验或签名自检作为自动选主、PITR、RPO/RTO、H3 或生产放行证据。
 
 具体 RPO/RTO 由企业 SLA 确定；未确定前不能在材料中承诺数值。
 

@@ -1,6 +1,6 @@
 # 无界AI企业版 UI 详细设计
 
-版本：v1.37
+版本：v1.38
 日期：2026-07-20
 状态：设计基线；企业 Web 公共组件、首批设置/工作台、响应式/主题/无障碍和 Web/iOS/Android 成员屏幕共享代码候选已实现，正式验收仍在开发
 
@@ -438,6 +438,12 @@ budget、usage aggregate 和显式 session trace report。卡片沿用同一 Mat
 - `ENT-REL-001` 不新增租户可操作的“安全扫描通过”开关。SAST、依赖、密钥和渗透 verdict 只属于平台
   发布流水线与审计证据；若以后在状态页展示，只能显示候选版本、`ready/not_ready`、时间和脱敏 finding
   计数，不能显示源代码行、目标 URL、token、请求/响应正文或把临时依赖例外表述为零漏洞。
+- `ENT-REL-003` 不增加租户或普通运维人员可点击的“切主”“隔离旧主”“恢复备份”按钮。未来状态页继续
+  复用现有卡片、八态组件和 Material Icons：数据库切换用 `dns_outlined`，不可变备份用
+  `backup_outlined`，PITR 用 `restore_outlined`，任一阻断统一用 `warning_amber_outlined`。页面只展示
+  cutover、automatic failover、fencing、backup lock、PITR 五个脱敏子状态、候选版本和测量时间；不得展示
+  endpoint、bucket、object key、凭据或内部命令。未执行、失败、证据缺失或过期一律 `not_ready`，不能因配置
+  已填写而显示绿色成功。
 
 ## 9. Flutter 企业入口
 

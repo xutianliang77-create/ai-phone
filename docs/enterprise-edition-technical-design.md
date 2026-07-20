@@ -1,6 +1,6 @@
 # 无界AI企业版详细技术设计
 
-版本：v1.69
+版本：v1.70
 日期：2026-07-20
 状态：统一通讯平台与 PostgreSQL Primary 收敛详细技术方案
 
@@ -61,6 +61,7 @@
 | 营销禁拨名单 | `in_progress` | `0040`、tenant/global 不可变记录、拒绝/撤回来源、Repository/runtime/API、同号码事务锁、task insert/reschedule guard、跨活动待任务取消和同风格 Web 面板已形成代码候选；全局注册表明确 not_configured，真实 PostgreSQL/RLS、并发、浏览器和名单同步未验收 |
 | 企业术语与话术版本 | `ready_for_acceptance` | enterprise `0018`、共享契约、Term Pack/Script Template Repository/runtime/API 已实现稳定资源、递增 revision、review/publish、有效期解析、hash 校验和同一术语版本运行时引用；仅有自动化和本地 PostgreSQL 16 普通角色证据，真实 Worker/Provider、A1/H3 未通过 |
 | Primary 全量切换/恢复证据 | `ready_for_acceptance` | 工具按运行时动态校验 manifest/全业务表；`c9b5be2` 历史证据为31+16/81张表，当前31+51/127张表必须重新生成签名证据；异地 WAL/PITR/H3 未通过 |
+| PostgreSQL 备份和灾备 | `in_progress` | schema-v2 HMAC 结果已绑定当前 enterprise cutover、候选版本、数据库 identity 与31+51 manifest，并定义自动切换/三层 fencing/第三故障域不可变备份/PITR marker+hash 门禁；测试定义未执行，真实跨故障域、异地主机、RPO/RTO 和 H3 未通过 |
 | PostgreSQL 控制面/业务聚合 | `designed` | 后续 CORE/MTG/CS/MKT 领域任务范围，不能从公共 Repository runtime 推导为已实现 |
 | SQLite | `demo_only` | 仅本地开发、自动化和封闭演示，不承载真实企业试点数据 |
 | PSTN/CRM/OCR | `not_ready` 或按环境探测 | 未配置必须明确降级，不生成虚假外部对象或成功状态 |
@@ -1927,7 +1928,7 @@ Worker dispatch ticket 升级为 v2，并将 `policySnapshotId + policyVersion` 
 `ENT-DATA-009` 的维护工具在 `REPEATABLE READ READ ONLY` 快照内枚举 `ai_phone` 与
 `enterprise` 全部业务表（排除 migration 元表），要求每张表存在主键，按复合主键
 keyset pagination 读取 `to_jsonb(row)` 规范文本。每行以字节长度前缀加入 SHA-256，
-形成 table count/hash/last-key hash，再汇总公共31段、企业47段 checksum、关键表、
+形成 table count/hash/last-key hash，再汇总公共31段、企业51段 checksum、关键表、
 总行数和全库 hash。维护账号必须是受审计的 superuser 或 `BYPASSRLS` 全读角色，不能复用
 tenant/directory/cell 应用凭证。
 
@@ -1944,6 +1945,35 @@ manifest 必须逐项一致。本地 PostgreSQL 16 演练已验证81张表、8�
 全库 hash、writer fence、隔离 `pg_dump/pg_restore` 和单行篡改失败；证据见
 `docs/evidence/ent-data-009-local-drill-2026-07-18.md`。这只证明机制可执行，不是异地主机
 不可变 WAL/PITR、跨故障域自动选主或 RPO/RTO 证据，后者仍属于 `ENT-REL-003`/H3。
+
+#### 11.1.2.1 企业备份和灾备证据门禁
+
+`ENT-REL-003` 复用 `scripts/run_postgres_resilience_drill.mjs` 和现有 release checker，但把结果升级为
+schema v2。runner 在创建输出目录和执行任何 Provider 命令前读取 repository-relative cutover evidence，
+用 `ENTERPRISE_CUTOVER_EVIDENCE_HMAC_KEY` 验签，并要求其为 staging/matched/cutover，源目标数据库 hash
+一致，且 commit、image、topology、target system identifier/OID、公共31段和 enterprise 51段 manifest 与
+当前候选精确一致。DR 结果再由不同的 `ENTERPRISE_POSTGRES_DR_EVIDENCE_HMAC_KEY` 签名；相同密钥、缺密钥、
+绝对/越界/符号链接逃逸路径、旧切换证据或 manifest 漂移均在命令执行前失败。
+
+Provider Adapter 仍由受控配置提供，runner 不经 shell 执行，且每一步必须返回唯一 JSON attestation：
+`schemaVersion=1`、`status=passed`、`environment=staging`、`tlsMode=verify-full`，并精确回显注入的
+`runId/group/step`。固定序列为 baseline、off-host base backup、WAL archive、health-controller failover、
+old-primary fencing、endpoint verify、old-primary rebuild/rejoin、off-host PITR、isolated restore verification。
+每个 step 还使用精确字段白名单和安全字符串约束；额外字段在持久化前拒绝，灾备 runner 不保存原始 stderr。
+任一步超时、退出非零、返回额外/错误身份或中断时，不能继续生成可提升的 `passed` 结果。
+
+自动切换必须证明 PostgreSQL timeline 严格递增、promotion generation 有效、新 endpoint 的 system identifier
+等于 cutover 目标；旧主写探针返回 SQLSTATE `25006`，旧 route epoch 与旧 Worker generation 副作用均被拒绝，
+原主只以 `standby + acceptsWrites=false + timelineMatches=true` 重入。base backup/WAL 必须位于不同于全部数据库
+HA 节点的第三故障域，传输和静态加密，具有对象 version、至少30天保留及 `compliance_lock` 或
+`provider_retention_lock`。PITR 必须指定恢复时间和 target marker，在隔离数据库证明 target 前 marker 存在、
+target 后 marker 不存在，并使目标/恢复的全量数据 SHA-256 与关键 manifest SHA-256 分别相等。
+
+production checker 重新计算 topology/capacity/evidence 文件 hash、当前31+51 manifest 和企业 DR binding，再验
+schema-v2 签名，而不是相信 result 的 `status` 字段；RPO/RTO objective 还必须携带批准 SLA 的 evidence ID 和
+SHA-256，并一并进入签名结果。当前仓库未配置 Provider Adapter、第二数据库故障域、第三
+备份故障域、DCS、对象锁、真实 capacity/cutover evidence，也未执行测试定义或演练，因此此实现仅为静态候选；
+不得宣称 `AC-ENT-0052`、真实 PITR、批准 RPO/RTO、H3 或企业生产门禁通过。
 
 #### 11.1.3 单租户 Cell 迁移、对账与回滚
 

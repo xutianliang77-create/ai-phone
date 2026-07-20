@@ -1,6 +1,6 @@
 # 无界AI企业版开发方案与计划
 
-版本：v1.71
+版本：v1.72
 日期：2026-07-20
 状态：E0 执行计划，已对齐统一通讯平台和 PostgreSQL Primary 收敛
 
@@ -36,6 +36,11 @@
   计划 hash、时间窗和六类攻击；CI 新增独立静态安全 job。API CORS 已收敛到生产同源/精确 allowlist，固定
   LiveKit 模块不再动态构造代码。当前 P0/P1 静态 finding 为0且依赖无 high/critical，但14个 moderate 仍是
   限期例外；真实渗透、独立复核、外部 SAST/DAST 和密钥轮换/恢复未执行，任务保持 `in_progress`。
+- `ENT-REL-003` 已形成 PostgreSQL 灾备静态候选：在任何 Provider step 前验签当前 enterprise cutover，
+  绑定 commit/image/topology、目标数据库 identity 和31+51 manifest；schema-v2 签名结果要求自动切换 timeline/
+  generation、旧主/旧 route/旧 Worker fencing、只读 standby 重入、独立备份故障域不可变锁和 PITR marker/hash。
+  测试定义未运行，Provider Adapter、真实容量/cutover evidence、跨故障域基础设施、异地对象锁和批准 SLA 均缺失，
+  `AC-ENT-0052`/H3 未通过，保持 `in_progress`。
 - `ENT-DATA-003` 已完成 tenant-scoped Inbox/Outbox、事务内领域提交、100次重放去重、lease/retry/recovery 和 SQLite/迁移自动化，进入 `ready_for_acceptance`；真实 PostgreSQL 并发 claim 和 Provider sandbox 仍是验收门禁。
 - `ENT-DATA-007` 已合入上游稳定提交 `fe1c3c2`，用唯一 `API_STORAGE_DRIVER`、公共/enterprise 双 manifest 验证、同库 name/OID 校验和 tenant/directory/cell/migration/maintenance 分权连接收敛 API 与 cell Worker；代码和本地自动化进入 `ready_for_acceptance`，真实 PostgreSQL H3 未执行。
 - `ENT-UI-001` 已完成生产令牌、Material Icons 注册表、Flutter 对照和浏览器验证，等待验收；`ENT-UI-002` 已完成共享 scope 真值、九角色导航矩阵、嵌套路由 guard 和 `ENT-CORE-011` 签名 route document；`ENT-UI-003` 已完成八态组件矩阵及 Provider/冲突/job 真值联调，均等待验收。
@@ -408,6 +413,7 @@ CORE-001/002 验收
 | 12 | `ENT-DATA-005` | 验收单租户 Cell 停写、对象复制、全表导入/对账、route 发布和反向回滚证据；静态代码候选已完成 |
 | 13 | `ENT-DATA-009` | 验收 staging 全量/增量 hash、writer fence、切换/回滚和旧写入者清退证据；本地机制代码已完成 |
 | 14 | `ENT-UI-004..012` | 完成公共页面、响应式、无障碍、Web 发布门禁、Flutter 企业入口和访客参会壳代码候选 |
+| 15 | `ENT-REL-003` | 配置真实 Provider Adapter 与三故障域拓扑，执行自动切换、旧主三层 fencing、不可变备份和 PITR，独立复核签名 schema-v2 证据与批准 RPO/RTO |
 
 E0 基线完成后已形成 `ENT-MTG-001/002` 代码候选；未通过真实 PostgreSQL、tenant/RBAC/token 攻击、Provider、浏览器与真机门禁，仍不能计为 E1 完成。
 
@@ -436,7 +442,8 @@ Adapter 静态候选；`AC-ENT-0046`、`0049` migration/RLS、真实 sandbox、W
 当前5秒快照不得宣称流式完成，requested action 不得宣称外部已执行。
 `ENT-DATA-005` 当前仅完成静态代码候选；真实 Cell 停写、对象 receipt、双库导入/回滚、控制面 route 发布和
 `AC-ENT-0048` 未执行。`ENT-REL-002` 已形成对象清理静态候选，但 `AC-ENT-0051` 及 staging 真实收敛未通过；
-`ENT-DATA-009/REL-003` 的跨故障域/PITR 仍未通过。
+`ENT-REL-003` 已有 schema-v2 签名编排和 release verifier 静态候选，但 Provider Adapter、真实跨故障域自动
+切换、异地主机不可变备份/PITR 和批准 RPO/RTO 均未执行，`AC-ENT-0052`/H3 仍未通过。
 `ENT-DATA-006` 已进入 PostgreSQL 持久队列协调静态候选：`0050` 增加 Cell-scoped owner/generation/lease，
 Worker 以 `FOR UPDATE SKIP LOCKED` 原子 claim、并发处理、续租和条件释放，具体 job/outbox attempt/CAS 与稳定
 event/job ID 继续承担最终副作用 fence。`AC-ENT-0049`、`0050` migrate/down/forward、forced-RLS 最小权限、

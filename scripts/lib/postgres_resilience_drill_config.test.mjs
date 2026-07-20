@@ -26,12 +26,18 @@ describe("PostgreSQL resilience drill config", () => {
     const value = config();
     value.safety.restoreDatabase = "ai_phone_staging";
     value.safety.tlsMode = "require";
+    value.safety.requireEnterpriseCutoverEvidence = false;
+    value.objectives.slaApprovalSha256 = "placeholder";
     value.wal.requireImmutability = false;
     const checked = validatePostgresResilienceDrillConfig(value);
 
     expect(checked.status).toBe("not_ready");
     expect(checked.issues).toContain("restoreDatabase must be a dedicated isolated database");
     expect(checked.issues).toContain("PostgreSQL TLS must be verify-full");
+    expect(checked.issues).toContain("Enterprise cutover evidence must be required");
+    expect(checked.issues).toContain(
+      "RPO/RTO objectives must bind an approved SLA evidence hash",
+    );
     expect(checked.issues).toContain("WAL encryption and immutability are mandatory");
   });
 });

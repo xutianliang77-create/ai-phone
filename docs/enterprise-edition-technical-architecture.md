@@ -1,6 +1,6 @@
 # 无界AI企业版技术架构
 
-版本：v1.53
+版本：v1.54
 日期：2026-07-20
 状态：SaaS 详细架构基线，已对齐统一通讯平台和 PostgreSQL Primary
 
@@ -903,6 +903,16 @@ Worker 无权依据缓存继续执行敏感能力。
 commit、image digest、topology hash、目标 logical ID、system identifier/OID、公共31段与
 企业51段 manifest，并证明源库 writer fence、旧 API/Worker 角色会话为0、目标可写和
 二次全量 hash 一致。本地逻辑恢复证据不提升为跨故障域 HA/PITR 结论。
+
+`ENT-REL-003` 在该单一 cutover 真值之后增加 Provider 无关的灾备证据层，不建立第二套数据库状态：
+`signed cutover evidence -> enterprise DR binding -> bounded shell-free Provider steps -> signed schema-v2 result
+-> production resilience verifier`。binding 固定候选 commit/image、topology、cutover/run ID、目标数据库
+system identifier/OID/manifest 和当前31+51 migration；cutover 与 DR 使用不同 HMAC key。命令 attestation
+必须回显 run/group/step，并按固定顺序完成 baseline、异地 base backup/WAL、健康控制器自动切换、旧主数据库+
+route epoch+Worker generation 三层 fencing、服务发现、旧主只读 standby 重入、隔离 PITR 与 hash 复核。
+备份故障域必须不同于全部 HA 数据库故障域，且证明加密、对象版本和 compliance/provider retention lock。
+Provider Adapter、容量证据、真实故障域或任一 marker/hash 缺失时不启动演练或不签发 passed；仓库不替运营方
+选择云厂商、DCS、主机、bucket 或 KMS，也不把静态配置提升为 RPO/RTO 结论。
 
 ### 9.5 多实例 Worker 协调
 

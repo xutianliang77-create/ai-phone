@@ -11,9 +11,11 @@ environment that matches the production topology:
   endpoint/service-discovery switch, and rebuild/rejoin of the old primary;
 - encrypted WAL and base backups stored in off-host object storage, with retention,
   immutability, archive-lag alerting, and a restore sourced from that remote copy;
-- RPO/RTO measurements inside the approved objectives;
+- RPO/RTO measurements inside objectives bound to an approved SLA evidence ID/SHA-256;
 - the independent 25/50/100 capacity gate and a 120-minute real mixed-traffic soak;
 - immutable evidence files whose SHA-256 values are recorded in the result manifest.
+- a schema-v2 result HMAC-bound to the enterprise cutover evidence, candidate commit,
+  image digest, database identity, and current public31/enterprise51 manifests.
 
 Copy `result.example.json` into the ignored `outputs/postgres-resilience/` evidence
 directory. Do not change `status` to `passed` from configuration alone; populate it
@@ -42,6 +44,16 @@ The drill runs this fixed sequence:
 6. restore from the off-host copy into a distinct `ai_phone_restore_*` database;
 7. verify checksum equality, recovery target, and write isolation.
 
+Every command attestation must echo the injected `runId`, `group`, and `step`.
+Each step also has an exact field allowlist; unexpected Provider output is rejected
+before persistence, and this drill does not retain raw stderr.
+Failover evidence must include increasing PostgreSQL timeline and promotion
+generation, SQLSTATE `25006` old-writer rejection, and rejected old route/Worker
+generations. Backup evidence must identify a third failure domain and an enforced
+compliance/provider retention lock. PITR verification must prove a pre-target
+marker exists and a post-target marker is absent, then compare full and critical
+manifest hashes in the isolated restore database.
+
 Every command is executed without a shell and must emit one JSON attestation.
 The runner refuses to start unless the topology is verified, the real mixed-load
 capacity result has passed, the source database is exactly `ai_phone_staging`,
@@ -50,6 +62,11 @@ acknowledgement matches exactly.
 
 ```bash
 export POSTGRES_RESILIENCE_STAGING_ACK=WUJIE_POSTGRES_RESILIENCE_STAGING_ONLY
+export ENTERPRISE_CUTOVER_EVIDENCE_FILE=outputs/enterprise-cutover/cutover.json
+export ENTERPRISE_CUTOVER_EVIDENCE_HMAC_KEY=replace-from-secret-manager
+export ENTERPRISE_POSTGRES_DR_EVIDENCE_HMAC_KEY=replace-with-a-distinct-secret
+export ENTERPRISE_RUNTIME_GIT_COMMIT=replace-with-candidate-commit
+export ENTERPRISE_RUNTIME_IMAGE_DIGEST=sha256:replace-with-image-digest
 npm run postgres:resilience-drill -- \
   --config infra/postgres/production-resilience/drill.json \
   --promote-latest
@@ -58,3 +75,6 @@ npm run postgres:resilience-drill -- \
 This repository supplies the orchestration and fail-closed evidence contract.
 It deliberately does not select a cloud provider, second host, bucket, KMS key,
 or Patroni DCS on behalf of the operator.
+Missing Provider adapters, cutover evidence, either HMAC key, a real capacity
+result, or a second/backup failure domain is `not_ready`; the runner never emits
+or promotes a synthetic pass.

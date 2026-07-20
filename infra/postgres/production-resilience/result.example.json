@@ -1,11 +1,34 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "status": "unexecuted",
   "environment": "staging",
   "runId": "replace-after-resilience-drill",
   "topologySha256": "replace-with-topology-sha256",
   "capacityResultSha256": "replace-with-capacity-result-sha256",
+  "enterprise": {
+    "gitCommit": "replace-with-candidate-commit",
+    "imageDigest": "sha256:replace-with-64-hex-image-digest",
+    "topologySha256": "replace-with-topology-sha256",
+    "cutoverEvidenceSha256": "replace-with-cutover-evidence-sha256",
+    "cutoverId": "replace-with-cutover-id",
+    "cutoverRunId": "replace-with-cutover-run-id",
+    "database": {
+      "logicalId": "replace-with-logical-id",
+      "name": "replace-with-database-name",
+      "systemIdentifier": "replace-with-system-identifier",
+      "oid": "replace-with-database-oid",
+      "manifestSha256": "replace-with-database-manifest-sha256"
+    },
+    "migrations": {
+      "publicCount": 31,
+      "enterpriseCount": 51,
+      "sha256": "replace-with-combined-migration-manifest-sha256"
+    }
+  },
+  "completedAt": "replace-with-completion-timestamp",
   "objectives": {
+    "slaApprovalId": "replace-with-approved-sla-id",
+    "slaApprovalSha256": "replace-with-approved-sla-evidence-sha256",
     "maxRpoSeconds": 300,
     "maxRtoSeconds": 120
   },
@@ -24,6 +47,14 @@
       "oldPrimaryWriteRejected": false,
       "endpointSwitched": false,
       "oldPrimaryRejoined": false,
+      "writeRejectionSqlState": null,
+      "oldRouteEpochWriteRejected": false,
+      "oldWorkerGenerationRejected": false,
+      "rejoinedPrimaryAcceptsWrites": null,
+      "oldPrimaryTimeline": null,
+      "newPrimaryTimeline": null,
+      "promotionGeneration": null,
+      "databaseSystemIdentifier": null,
       "observedRpoSeconds": null,
       "observedRtoSeconds": null
     }
@@ -35,6 +66,8 @@
     "encryptedInTransit": false,
     "encryptedAtRest": false,
     "immutable": false,
+    "immutabilityMode": null,
+    "failureDomain": null,
     "retentionDays": 30,
     "unresolvedArchiveFailures": 0,
     "maxObservedArchiveLagSeconds": null,
@@ -43,8 +76,17 @@
       "source": "off_host_object_storage",
       "checksumVerified": false,
       "recoveryTargetReached": false,
+      "recoveryTargetTime": null,
+      "targetMarkerId": null,
+      "preTargetMarkerPresent": false,
+      "postTargetMarkerAbsent": false,
+      "targetDataSha256": null,
+      "restoredDataSha256": null,
+      "targetCriticalManifestSha256": null,
+      "restoredCriticalManifestSha256": null,
       "observedDataLossSeconds": null
     }
   },
-  "evidence": []
+  "evidence": [],
+  "signature": "generated-by-the-dr-runner"
 }

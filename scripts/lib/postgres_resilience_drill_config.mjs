@@ -66,6 +66,9 @@ function validateSafety(safety, issues) {
     issues.push("restoreDatabase must be a dedicated isolated database");
   }
   if (safety.tlsMode !== "verify-full") issues.push("PostgreSQL TLS must be verify-full");
+  if (safety.requireEnterpriseCutoverEvidence !== true) {
+    issues.push("Enterprise cutover evidence must be required");
+  }
   if (safety.allowAutomaticFailover !== true || safety.allowRestoreTargetCreation !== true) {
     issues.push("Failover and isolated restore must be explicitly enabled");
   }
@@ -75,6 +78,9 @@ function validateSafety(safety, issues) {
 }
 
 function validateObjectives(objectives, issues) {
+  if (!validId(objectives?.slaApprovalId) || !sha256(objectives?.slaApprovalSha256)) {
+    issues.push("RPO/RTO objectives must bind an approved SLA evidence hash");
+  }
   if (!integer(objectives?.maxRpoSeconds, 0, 300)) {
     issues.push("maxRpoSeconds must be 0-300");
   }
@@ -140,6 +146,10 @@ function safeRelativePath(value) {
 
 function validId(value) {
   return typeof value === "string" && /^[A-Za-z0-9._-]{2,120}$/.test(value);
+}
+
+function sha256(value) {
+  return typeof value === "string" && /^[a-f0-9]{64}$/.test(value);
 }
 
 function integer(value, minimum, maximum) {

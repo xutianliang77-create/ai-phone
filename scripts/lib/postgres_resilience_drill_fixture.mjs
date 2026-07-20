@@ -9,11 +9,13 @@ export function validPostgresResilienceDrillConfig() {
       sourceDatabase: "ai_phone_staging",
       restoreDatabase: "ai_phone_restore_drill_01",
       tlsMode: "verify-full",
+      requireEnterpriseCutoverEvidence: true,
       allowAutomaticFailover: true,
       allowRestoreTargetCreation: true,
       gracefulDrainSeconds: 30,
     },
-    objectives: { maxRpoSeconds: 300, maxRtoSeconds: 120 },
+    objectives: { slaApprovalId: "sla-approval-001",
+      slaApprovalSha256: "9".repeat(64), maxRpoSeconds: 300, maxRtoSeconds: 120 },
     ha: {
       mode: "managed_ha",
       nodes: [

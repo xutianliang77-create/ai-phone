@@ -1,6 +1,6 @@
 # 无界AI企业版开发任务
 
-版本：v1.74
+版本：v1.75
 日期：2026-07-20
 状态：E0 开发中，已对齐统一通讯平台和 PostgreSQL Primary 收敛
 
@@ -44,6 +44,11 @@
   pending-work、对象 Delete 后实体复核、attempt/CAS/receipt/audit、租户删除前置阻断和三段 convergence receipt
   静态候选；删除期迟到导出由 API 拒绝及 tenant 行锁数据库 trigger 双重栅栏，processing audit export 也阻断
   最终删除。测试已定义但未运行，真实 PostgreSQL/S3/Provider/故障注入缺失，保持 `in_progress`。
+- `ENT-REL-003` 已将既有 resilience runner/checker 升级为 enterprise schema-v2 灾备证据门禁：独立 HMAC
+  绑定当前 staging cutover、commit/image/topology、目标数据库 identity、公共31段/enterprise 51段 manifest；
+  step attestation、timeline/generation、SQLSTATE `25006`、旧 route/Worker fence、只读 standby 重入、第三故障域
+  不可变备份锁和 PITR marker/全量+关键 hash 全部失败闭合。测试定义未运行，且无 Provider Adapter、真实容量/
+  cutover evidence、第二数据库/第三备份故障域或 SLA 实测，`AC-ENT-0052`/H3 未通过，保持 `in_progress`。
 - `ENT-CORE-004` 已新增 enterprise `0017`、共享契约、tenant Knowledge Repository/runtime 和七个服务端路由：source、递增 revision、一次性 chunk 集、review、publish、列表和检索均绑定 membership/RBAC/route document。服务端生成 chunk/content SHA-256 与 citation；数据库要求 review+非空 chunk 才能发布，并冻结 published version/chunk。检索强制 tenant/locale/country/product/effective-time，只取每个 source 最新有效 published revision；review、过期和跨租户数据返回空。代码、定向矩阵及一次性 PostgreSQL 16 普通角色 forced-RLS/down-up 验证完成，进入 `ready_for_acceptance`；embedding Provider、真实对象存储、恶意文档扫描和生产 A1/H3 尚未验收。
 - `ENT-CORE-005` 已新增 enterprise `0018`、共享契约、Term Pack/Script Template Repository/runtime 和十三个服务端路由。稳定资源下的 revision 由服务端行锁递增，内容规范化后生成 SHA-256，review 后内容/hash 与 published 版本不可修改；resolver 强制 tenant/source-target locale/country/product/purpose/effective-time，只返回有效 published 版本，并给 ASR、翻译、LLM 同一 `termPackVersionId`，可选话术只给 LLM。代码、定向矩阵和一次性 PostgreSQL 16 非 owner/非 BYPASSRLS 普通角色 down-forward 验证完成，进入 `ready_for_acceptance`；真实 Worker/Provider、A1/H3 尚未验收。
 - `ENT-CORE-009` 已完成租户创建/区域开通幂等、失败重试、暂停、导出和删除执行器；导出固化 tenant/member/job 与 actor scope 快照，执行使用租约、有界重试和 receipt hash，删除只在 receipt 校验后进入 `deleted`，等待真实生命周期服务与对象存储验收。
@@ -393,7 +398,7 @@ snapshot 测试已定义但未运行；未运行 Vitest/API/Repository、真实 
 | ENT-DATA-009 | Primary 数据切换和全量对账 | DATA-007/008、CORE-013/014 | 全量/增量 count/hash、水位、writer fence、cutover/rollback/restore 签名证据 | 旧 writer 清退；切换前后 tenant/session/ledger/object 引用一致 | ready_for_acceptance |
 | ENT-REL-001 | 企业安全门禁 | CORE-002/006 | 高置信 SAST/密钥、依赖例外、隔离渗透 runner、签名 release evidence | P0/P1 为0；同 commit 七天内六类渗透证据验签；临时例外未过期且显式披露 | in_progress |
 | ENT-REL-002 | 数据生命周期 | DATA-001/003 | `0051` retention snapshot、audit export object delete job、Cell Worker、tenant delete convergence receipt | 删除范围不可变且可审计；Delete 后实体不存在；对象/Provider remaining=0 前租户不完成 | in_progress |
-| ENT-REL-003 | 备份和灾备 | DATA-005/009 | 跨故障域自动切换、旧主 fencing、异地主机不可变备份、PITR | 达到约定 RPO/RTO，旧主不能恢复写入 | todo |
+| ENT-REL-003 | 备份和灾备 | DATA-005/009 | schema-v2 HMAC 企业绑定、跨故障域自动切换、旧主三层 fencing、第三故障域不可变备份、PITR marker/hash | 达到批准 RPO/RTO；旧主/旧 route/旧 Worker 不能恢复写入；签名证据可复核 | in_progress |
 | ENT-REL-004 | 灰度和熔断 | OBS-001 | tenant flag、kill switch、runbook | 单租户异常可隔离停止 | todo |
 | ENT-REL-005 | 企业发布材料 | 全部 | 文档、SLA、隐私、管理员手册 | 发布清单全部有证据 | todo |
 | ENT-REL-006 | SaaS 控制面高可用 | CORE-009/010/011 | directory、provisioning、status | 控制面故障不破坏进行中会话 | todo |
