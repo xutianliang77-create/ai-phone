@@ -140,6 +140,8 @@ function approvalLabel(value: EnterpriseCampaignDto["approvalStatus"]) { return 
 function issueLabel(issue: EnterpriseCampaignValidationIssue) { const label = ({
   schedule_start_required: "缺少开始时间", schedule_start_elapsed: "开始时间已过",
   campaign_has_no_active_leads: "没有有效线索", country_policy_missing: "国家策略缺失",
+  marketing_handoff_policy_missing: "人工接管策略缺失",
+  marketing_handoff_resource_not_ready: "人工接管队列或 PSTN 渠道未就绪",
   country_policy_not_yet_effective: "国家策略尚未生效", country_policy_expired: "国家策略已过期",
   lead_country_mismatch: "线索国家不在活动范围", lead_timezone_invalid: "线索时区无效",
   consent_missing: "线索缺少目标时间有效授权", target_suppressed: "线索命中禁拨",

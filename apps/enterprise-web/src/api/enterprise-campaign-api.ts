@@ -21,7 +21,10 @@ import type {
   EnterpriseMarketingAgentProfileResponse,
   EnterpriseMarketingMonitoringCallResponse,
   EnterpriseMarketingMonitoringSnapshotResponse,
+  EnterpriseMarketingHandoffPolicyResponse,
+  EnterpriseMarketingHandoffStatusResponse,
   UpsertEnterpriseMarketingAgentProfileRequest,
+  UpsertEnterpriseMarketingHandoffPolicyRequest,
   EnterpriseCountryPoliciesResponse,
   EnterpriseCountryPolicyResponse,
   EnterpriseCampaignCountryPolicyReadinessResponse,
@@ -67,6 +70,11 @@ export interface EnterpriseCampaignApi {
   getCampaignMarketingMonitoringCall(context: EnterpriseContentRequestContext,
     campaignId: string, dispatchId: string):
     Promise<EnterpriseMarketingMonitoringCallResponse>;
+  getCampaignMarketingHandoff(context: EnterpriseContentRequestContext,
+    campaignId: string): Promise<EnterpriseMarketingHandoffStatusResponse>;
+  upsertCampaignMarketingHandoff(context: EnterpriseContentRequestContext,
+    campaignId: string, input: UpsertEnterpriseMarketingHandoffPolicyRequest,
+    idempotencyKey: string): Promise<EnterpriseMarketingHandoffPolicyResponse>;
   listCampaignLeads(context: EnterpriseContentRequestContext, campaignId: string):
     Promise<EnterpriseCampaignLeadsResponse>;
   listLeadImportBatches(context: EnterpriseContentRequestContext, campaignId: string):
@@ -169,6 +177,15 @@ export function createEnterpriseCampaignApi(
       `${campaigns}/${encodeURIComponent(campaignId)}/monitoring/calls/${
         encodeURIComponent(dispatchId)}`,
       { headers: headers(context) },
+    ),
+    getCampaignMarketingHandoff: (context, campaignId) => request(
+      `${campaigns}/${encodeURIComponent(campaignId)}/handoff`,
+      { headers: headers(context) },
+    ),
+    upsertCampaignMarketingHandoff: (context, campaignId, input, key) => request(
+      `${campaigns}/${encodeURIComponent(campaignId)}/handoff`,
+      { method: "PUT", headers: { ...headers(context), "idempotency-key": key },
+        body: JSON.stringify(input) },
     ),
     listCampaignLeads: (context, campaignId) => request(
       `${campaigns}/${encodeURIComponent(campaignId)}/leads`,

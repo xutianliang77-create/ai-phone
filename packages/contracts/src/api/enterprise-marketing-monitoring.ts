@@ -12,6 +12,8 @@ import type {
   ProviderOperationStatus,
   ProviderOperationType,
 } from "../communication/provider-operations.js";
+import type { EnterpriseMarketingHandoffEvidenceDto } from
+  "./enterprise-marketing-handoff.js";
 
 export type EnterpriseMarketingMonitorAttention =
   | "none"
@@ -111,6 +113,7 @@ export interface EnterpriseMarketingMonitoringCallResponse {
     finalRevisions: EnterpriseMarketingMonitorCaptionDto[];
   };
   agentTurns: EnterpriseMarketingMonitorAgentTurnDto[];
+  handoff?: EnterpriseMarketingHandoffEvidenceDto;
   providerOperations: Array<{
     id: string;
     provider: CommunicationProvider;

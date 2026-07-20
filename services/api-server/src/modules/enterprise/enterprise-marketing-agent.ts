@@ -167,14 +167,19 @@ export function enterpriseMarketingAgentDeterministicIntent(
 export function enterpriseMarketingAgentFallback(input: {
   locale: string;
   reasonCode: string;
-  kind?: "handoff" | "end";
+  kind?: "handoff" | "handoff_unavailable" | "end";
 }): EnterpriseMarketingAgentTurnOutput {
   const handoff = input.kind === "handoff";
+  const handoffUnavailable = input.kind === "handoff_unavailable";
   const chinese = input.locale.toLowerCase().startsWith("zh");
-  return { spokenText: handoff
-    ? chinese
-      ? "当前通话无法完成转接，我会立即结束本次 AI 通话。"
-      : "A human transfer is not available in this call. I will end this AI call now."
+  return { spokenText: handoff || handoffUnavailable
+    ? input.reasonCode === "marketing_agent_handoff_queued"
+      ? chinese
+        ? "已请求人工坐席，请稍候；接通前 AI 将停止发言。"
+        : "A human agent has been requested. Please hold; AI will stop speaking before connection."
+      : chinese
+        ? "当前通话无法完成转接，我会立即结束本次 AI 通话。"
+        : "A human transfer is not available in this call. I will end this AI call now."
     : chinese
       ? "当前无法从已审核资料中可靠确认，我会立即结束本次通话。"
       : "I cannot confirm that from approved information. I will end this call now.",

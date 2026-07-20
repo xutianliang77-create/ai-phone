@@ -1,6 +1,6 @@
 # 无界AI企业版详细功能设计
 
-版本：v1.42
+版本：v1.43
 日期：2026-07-20
 状态：SaaS 详细设计基线，已对齐统一通讯平台
 
@@ -316,7 +316,8 @@ Provider、usage/ledger 和 trace；跨会话业务聚合与货币成本尚未�
 - 服务端只接受严格结构输出，拒绝额外 thinking/tool 字段、越界 citation、跳过资格问题、未交付 disclosure、以及价格、
   付款、退款、合同、医疗、法律或金融保证。文本只有在再次通过 TTS authorize 后才可播放，播放完成才推进状态。
 - 退订意图由服务端确定性识别，在同一 tenant transaction 写入不可变 suppression 并返回结束话术；不依赖 LLM 是否遵循。
-  转人工只写 `handoff_requested` 并停止 AI，真实坐席接管仍属于 `ENT-MKT-011`，当前未配置时如实说明不可转接。
+  转人工先写 `handoff_requested` 并停止 AI；`ENT-MKT-011` 再把已冻结策略物化为 Support Queue 桥接，
+  当前 Provider 未配置或无300ms停播/坐席加入保证时仍如实说明不可完成媒体转接。
 - 同一通话只允许切换到 Campaign 已配置且能解析同一 product/country/purpose 的 published 内容版本；不允许临时翻译或
   自由生成另一语言事实。Web 复用既有 Material Icons 与 Campaign 卡片，只展示真实 profile/readiness，不模拟通话成功。
 - 当前为代码和静态门禁候选；未运行 migration、forced-RLS、真实 PostgreSQL/LLM/PSTN、浏览器或通话验收，不能宣称
@@ -353,10 +354,27 @@ Provider、usage/ledger 和 trace；跨会话业务聚合与货币成本尚未�
   反向恢复原始输入。字幕无样本时显示“无样本”，不生成示例对话。
 - 当前传输明确为5秒服务端快照，只有面板展开时刷新；API 返回 `streamStatus=not_configured`，页面固定显示“非流式”。
   Realtime Gateway/可靠订阅尚未接入，不能把轮询快照宣称为实时流成功。
-- 本任务没有拨号、静音、挂断或接管命令。`handoff_requested` 仅作为需要关注的真实状态显示，实际坐席 claim、媒体切换
-  和 AI 停播仍属于 `ENT-MKT-011`；Outcome/后续动作仍属于 `ENT-MKT-012`。
+- `ENT-MKT-010` 监控面板仍没有拨号、静音、挂断或接管命令；接管从 `ENT-MKT-011` 的 Campaign 策略和
+  Support 坐席工作台进入，不在监控读投影上新建命令真值。Outcome/后续动作仍属于 `ENT-MKT-012`。
 - 当前只形成 PostgreSQL 读投影、API 和 Web 静态代码候选；未运行 PostgreSQL/RLS、双租户、真实通话、浏览器、负载或
   Realtime Gateway 验收，不能宣称实时监控通过企业生产门禁。
+
+#### 5.5.2 真实人工接管首批实现边界
+
+- 运营人员在活动未提交草稿中绑定当前租户的 active Support Queue、PSTN Support Channel、
+  10..86400秒等待时间和超时结束/需回拨策略。设置进入活动审批 snapshot/hash，批准后不可暗改。
+- handoff 话术完成播放后，Marketing run 保持 `handoff_requested` AI 数据库停播 fence，并在同一 tenant
+  事务中创建绑定原 dispatch/call/Lead 的 Support Customer/Session 桥接。任一写入失败整体回滚。
+- 桥接会话直接进入现有 Support Queue，坐席仍通过 `support_agent_claims` 互斥领取、续租、释放和改派；
+  `marketing_handoffs` 不保存 claim ID，不制造第二套坐席归属真值。
+- 坐席打开工作台时，服务端先复核 active claim、`human_active` session 和 AI fence，再使用稳定幂等键调用
+  事务外 HTTPS Provider。页面把“领取成功”、“AI 数据库已停播”和“媒体已接管”分层展示。
+- 媒体只有在300ms内收到 AI 音频已停止且坐席已加入的完整 Provider receipt 才能显示 active。缺配置、
+  非 HTTPS、无 Provider 幂等保证、无坐席加入保证、超时或回执不完整都明确 `not_ready/failed`。
+- 超时且未领取的桥接会话由 cell Worker 收敛为 `timed_out` 或 `callback_required`。后者只是需要后续
+  回拨的不可变证据，不是回拨已排程/已接通；未有 Provider receipt 不声称已挂断。
+- 当前只形成 PostgreSQL/API/Adapter/Web 静态代码候选；未执行真实 migration/RLS、PSTN/坐席媒体、300ms、
+  浏览器或容量验收，不构成企业生产门禁通过结论。
 
 ### 5.6 结果和分析
 

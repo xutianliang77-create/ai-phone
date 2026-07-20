@@ -21,6 +21,8 @@ const CampaignMarketingAgentPanel = lazy(() =>
   import("../components/CampaignMarketingAgentPanel.js"));
 const CampaignMarketingMonitoringPanel = lazy(() =>
   import("../components/CampaignMarketingMonitoringPanel.js"));
+const CampaignMarketingHandoffPanel = lazy(() =>
+  import("../components/CampaignMarketingHandoffPanel.js"));
 
 type LoadState =
   | { status: "loading" }
@@ -218,6 +220,11 @@ export function CampaignsPage() {
           {context ? <Suspense fallback={<StatusPanel state="loading"
             description="正在加载 Marketing Agent 配置。" />}>
             <CampaignMarketingAgentPanel api={api} context={context}
+              campaign={campaign} canWrite={canWrite} />
+          </Suspense> : null}
+          {context ? <Suspense fallback={<StatusPanel state="loading"
+            description="正在加载人工接管策略。" />}>
+            <CampaignMarketingHandoffPanel api={api} context={context}
               campaign={campaign} canWrite={canWrite} />
           </Suspense> : null}
           {context ? <Suspense fallback={<StatusPanel state="loading"

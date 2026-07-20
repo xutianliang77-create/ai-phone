@@ -18,11 +18,19 @@ import { withEnterprisePostgresUnitOfWork } from
   "./enterprise-postgres-unit-of-work.js";
 import type { EnterpriseTenantPostgresPool } from
   "./enterprise-postgres-tenant-session.js";
+import { enterpriseMarketingHandoffReadiness,
+  materializeEnterpriseMarketingHandoff } from
+  "./enterprise-postgres-marketing-handoff-materializer.js";
+import { createEnvironmentEnterpriseMarketingHandoffProvider,
+  type EnterpriseMarketingHandoffProvider } from
+  "../../modules/enterprise/enterprise-marketing-handoff-provider.js";
 
 type Runtime = Required<EnterpriseMarketingAgentRepositoryRuntime>;
 
 export function createEnterprisePostgresMarketingAgentRuntime(
   pool: EnterpriseTenantPostgresPool,
+  handoffProvider: EnterpriseMarketingHandoffProvider =
+    createEnvironmentEnterpriseMarketingHandoffProvider(),
 ): Runtime {
   return {
     listMarketingAgentProfiles(input) {
@@ -115,8 +123,13 @@ export function createEnterprisePostgresMarketingAgentRuntime(
         if (!("turn" in created) || !created.turn || !created.run) {
           return { status: "not_ready" as const };
         }
-        const intent = enterpriseMarketingAgentDeterministicIntent(
-          input.customerText, content.profile);
+        let intent: "generate" | "opt_out" | "handoff" | "handoff_unavailable" =
+          enterpriseMarketingAgentDeterministicIntent(input.customerText, content.profile);
+        if (intent === "handoff" && ((await enterpriseMarketingHandoffReadiness(
+          unit, run.campaignId)).status !== "ready" ||
+          handoffProvider.readiness().status !== "ready")) {
+          intent = "handoff_unavailable";
+        }
         return { status: "ready" as const, run: created.run, turn: created.turn,
           content, evidence, directive: intent, context,
           replayed: created.status === "replayed" };
@@ -184,8 +197,20 @@ export function createEnterprisePostgresMarketingAgentRuntime(
       return withAgentUnit(pool, input.ticket.tenantId, input.traceId, async (unit) => {
         const result = await unit.marketingAgents.deliverTurn(
           input.ticket, input.turnId, input.now);
-        return result ? { status: "delivered" as const, ...result }
-          : { status: "conflict" as const };
+        if (!result) return { status: "conflict" as const };
+        if (result.turn.output?.action !== "handoff") {
+          return { status: "delivered" as const, ...result };
+        }
+        const context = createEnterpriseTenantContext({ tenantId: input.ticket.tenantId,
+          actorUserId: "system:enterprise-marketing-agent", traceId: input.traceId });
+        const handoff = await materializeEnterpriseMarketingHandoff(
+          unit, result.run, input.now, context);
+        return { status: "delivered" as const, ...result,
+          handoff: handoff.status === "created" || handoff.status === "replayed"
+            ? { status: handoff.status === "created" ? "queued" as const
+              : "replayed" as const, supportSessionId: handoff.handoff.supportSessionId }
+            : { status: handoff.status,
+              ...("reasonCode" in handoff ? { reasonCode: handoff.reasonCode } : {}) } };
       });
     },
     finalizeMarketingAgent(input) {

@@ -111,7 +111,8 @@ export function registerEnterpriseMarketingAgentProviderRoutes(
         now: new Date().toISOString() });
       return result.status === "delivered" ? reply.send({ status: "delivered",
         runId: result.run.id, turnId: result.turn.id,
-        runStatus: result.run.status }) : conflict(reply);
+        runStatus: result.run.status,
+        ...(result.handoff ? { handoff: result.handoff } : {}) }) : conflict(reply);
     });
 
   app.post("/provider/enterprise/marketing-agent/finalize", async (request, reply) => {
@@ -136,8 +137,13 @@ async function generate(provider: EnterpriseMarketingAgentProvider,
     status: "ended" as const };
   if (prepared.directive === "handoff") return {
     output: enterpriseMarketingAgentFallback({ locale: prepared.content.profile.locale,
-      kind: "handoff", reasonCode: "marketing_agent_handoff_not_configured" }),
-    status: "handoff" as const,
+      kind: "handoff", reasonCode: "marketing_agent_handoff_queued" }),
+    status: "handoff" as const };
+  if (prepared.directive === "handoff_unavailable") return {
+    output: enterpriseMarketingAgentFallback({ locale: prepared.content.profile.locale,
+      kind: "handoff_unavailable",
+      reasonCode: "marketing_agent_handoff_not_configured" }),
+    status: "ended" as const,
     failureCode: "marketing_agent_handoff_not_configured" };
   const result = await provider.generate({ locale: prepared.content.profile.locale,
     customerText, recentTurns: prepared.context,

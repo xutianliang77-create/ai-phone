@@ -15,6 +15,7 @@ export async function buildEnterpriseCampaignValidationSnapshot(input: {
   creationKey: string; creationRequestHash: string;
 }): Promise<EnterpriseCampaignValidationSnapshotRecord> {
   const targetAt = input.campaign.schedule.startAt;
+  const handoffPolicy = await loadHandoffPolicy(input.session, input.campaign.id);
   const campaignSnapshot = { name: input.campaign.name,
     objective: input.campaign.objective, ownerUserId: input.campaign.ownerUserId,
     countryCodes: input.campaign.countryCodes,
@@ -30,13 +31,13 @@ export async function buildEnterpriseCampaignValidationSnapshot(input: {
   const validTimezones = await loadTimezones(input.session, input.campaign.id, leads);
   const issues = issuesFor({ campaign: input.campaign, targetAt, leads,
     activePolicies: policies.active, allPolicies: policies.all, consents,
-    suppressions, validTimezones, validatedAt: input.validatedAt });
+    suppressions, validTimezones, validatedAt: input.validatedAt, handoffPolicy });
   const campaignHash = digest(campaignSnapshot);
   const policySetHash = digest(policies.active);
   const leadSetHash = digest(leads); const consentSetHash = digest(consents);
   const suppressionSetHash = digest(suppressions);
   const snapshotHash = digest({ campaignHash, targetAt, policySetHash, leadSetHash,
-    consentSetHash, suppressionSetHash });
+    consentSetHash, suppressionSetHash, handoffPolicy });
   return { id: input.id, tenantId: input.campaign.tenantId,
     campaignId: input.campaign.id, sourceCampaignVersion: input.campaign.version,
     status: issues.length ? "blocked" : "ready", ...(targetAt ? { targetAt } : {}),
@@ -224,11 +225,18 @@ function issuesFor(input: { campaign: EnterpriseCampaignRecord; targetAt?: strin
   allPolicies: Awaited<ReturnType<typeof loadPolicies>>["all"];
   consents: EnterpriseCampaignConsentSnapshotItem[];
   suppressions: EnterpriseCampaignSuppressionSnapshotItem[];
-  validTimezones: Set<string>; validatedAt: string }) {
+  validTimezones: Set<string>; validatedAt: string;
+  handoffPolicy: Awaited<ReturnType<typeof loadHandoffPolicy>> }) {
   const issues: EnterpriseCampaignValidationIssue[] = [];
   if (!input.targetAt) issues.push({ code: "schedule_start_required" });
   else if (input.targetAt <= input.validatedAt) issues.push({ code: "schedule_start_elapsed" });
   if (!input.leads.length) issues.push({ code: "campaign_has_no_active_leads" });
+  if (!input.handoffPolicy) issues.push({ code: "marketing_handoff_policy_missing" });
+  else if (input.handoffPolicy.queueStatus !== "active" ||
+    input.handoffPolicy.channelStatus !== "active" ||
+    input.handoffPolicy.channelType !== "pstn") {
+    issues.push({ code: "marketing_handoff_resource_not_ready" });
+  }
   if (input.targetAt) for (const countryCode of input.campaign.countryCodes) {
     if (input.activePolicies.some((policy) => policy.countryCode === countryCode)) continue;
     const versions = input.allPolicies.filter((policy) => policy.countryCode === countryCode);
@@ -251,6 +259,43 @@ function issuesFor(input: { campaign: EnterpriseCampaignRecord; targetAt?: strin
       code: "target_suppressed", leadId: lead.leadId });
   }
   return issues;
+}
+
+async function loadHandoffPolicy(session: EnterpriseTenantPostgresSession,
+  campaignId: string) {
+  const result = await session.query<{ id: string; version: number | string;
+    support_queue_id: string; support_channel_id: string;
+    timeout_seconds: number | string; timeout_action: string;
+    callback_delay_seconds: number | string | null; queue_status: string;
+    channel_status: string; channel_type: string }>(`
+    SELECT policy.id, policy.version, policy.support_queue_id,
+      policy.support_channel_id, policy.timeout_seconds, policy.timeout_action,
+      policy.callback_delay_seconds, queue_record.status AS queue_status,
+      channel_record.status AS channel_status,
+      channel_record.channel_type AS channel_type
+    FROM enterprise.marketing_handoff_policies policy
+    JOIN enterprise.support_queues queue_record
+      ON queue_record.tenant_id = policy.tenant_id
+      AND queue_record.id = policy.support_queue_id
+    JOIN enterprise.support_channels channel_record
+      ON channel_record.tenant_id = policy.tenant_id
+      AND channel_record.id = policy.support_channel_id
+    WHERE policy.tenant_id = $1 AND policy.campaign_id = $2
+    FOR SHARE OF policy, queue_record, channel_record
+  `, [uuid(campaignId)]);
+  const row = result.rows[0];
+  if (!row) return null;
+  if (row.timeout_action !== "end_call" && row.timeout_action !== "callback") {
+    throw new Error("Invalid handoff policy action");
+  }
+  return { id: uuid(row.id), version: positive(row.version),
+    supportQueueId: uuid(row.support_queue_id),
+    supportChannelId: uuid(row.support_channel_id),
+    timeoutSeconds: positive(row.timeout_seconds), timeoutAction: row.timeout_action,
+    callbackDelaySeconds: row.callback_delay_seconds === null
+      ? null : positive(row.callback_delay_seconds),
+    queueStatus: row.queue_status, channelStatus: row.channel_status,
+    channelType: row.channel_type };
 }
 
 interface LeadRow extends Record<string, unknown> { lead_id: string; lead_version: number | string;

@@ -175,7 +175,7 @@ export class EnterpriseMarketingAgentPostgresRepository {
     `, [turn.id, iso(now), turn.version]);
     if (!result.rows[0]) return null;
     let completed = run;
-    if (turn.output.action !== "continue") {
+    if (turn.output.action === "end_call") {
       const updated = await this.session.query<MarketingAgentRunRow>(`
         UPDATE enterprise.marketing_agent_runs SET status = 'completed',
           updated_at = $3, version = version + 1
@@ -221,7 +221,7 @@ export class EnterpriseMarketingAgentPostgresRepository {
   private async findByDispatch(id: string) { const result = await this.session.query<MarketingAgentRunRow>(`
     SELECT * FROM enterprise.marketing_agent_runs WHERE tenant_id = $1 AND dispatch_id = $2`,
     [uuid(id)]); return result.rows[0] ? mapMarketingAgentRun(result.rows[0]) : null; }
-  private async findRun(id: string, lock = false) { const result = await this.session.query<MarketingAgentRunRow>(`
+  async findRun(id: string, lock = false) { const result = await this.session.query<MarketingAgentRunRow>(`
     SELECT * FROM enterprise.marketing_agent_runs WHERE tenant_id = $1 AND id = $2 ${lock ? "FOR UPDATE" : ""}`,
     [uuid(id)]); return result.rows[0] ? mapMarketingAgentRun(result.rows[0]) : null; }
   private async findTurn(id: string, lock = false) { const result = await this.session.query<MarketingAgentTurnRow>(`

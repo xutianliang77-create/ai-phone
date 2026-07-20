@@ -21,7 +21,8 @@ export function SupportConversationPanel({
   const fallback = workbench.conversationContext;
   return <main className="support-conversation" aria-labelledby="support-conversation-title">
     <header className="support-session-header">
-      <div><span className="support-session-header__eyebrow">人工服务中</span>
+      <div><span className="support-session-header__eyebrow">{
+        workbench.marketingHandoff ? "营销人工接管" : "人工服务中"}</span>
         <h2 id="support-conversation-title">
           {workbench.session.intent || "客服会话"}
         </h2>
@@ -34,6 +35,12 @@ export function SupportConversationPanel({
       </div>
     </header>
     <section className="support-call-controls" aria-label="通话控制">
+      {workbench.marketingHandoff ? <button className="support-control" type="button"
+        disabled title={workbench.marketingHandoff.media.reasonCode ??
+          workbench.marketingHandoff.media.status}>
+        <MaterialIcon name={enterpriseIcons.action.takeover} /><span>媒体接管</span>
+        <small>{workbench.marketingHandoff.media.status}</small>
+      </button> : null}
       <UnavailableControl icon={enterpriseIcons.support.mute} label="静音"
         reason="LiveKit 坐席控制未接入" />
       <UnavailableControl icon={enterpriseIcons.support.transfer} label="转组"

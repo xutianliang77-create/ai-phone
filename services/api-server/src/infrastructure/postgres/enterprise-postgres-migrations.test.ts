@@ -57,12 +57,11 @@ describe("enterprise PostgreSQL migrations", () => {
       "0044_enterprise_marketing_scheduler",
       "0045_enterprise_marketing_pstn_dispatch",
       "0046_enterprise_marketing_agent",
+      "0047_enterprise_marketing_handoff",
     ]);
-    for (const migration of migrations) {
-      expect(migration.up.trim()).not.toBe("");
+    for (const migration of migrations) { expect(migration.up.trim()).not.toBe("");
       expect(migration.down.trim()).not.toBe("");
-      expect(migration.checksum).toMatch(/^[a-f0-9]{64}$/);
-    }
+      expect(migration.checksum).toMatch(/^[a-f0-9]{64}$/); }
   });
 
   it("declares tenant-first keys, composite foreign keys and forced RLS", () => {
@@ -84,8 +83,9 @@ describe("enterprise PostgreSQL migrations", () => {
     expect(sql).toContain("ENABLE ROW LEVEL SECURITY"); expect(sql).toContain("FORCE ROW LEVEL SECURITY");
     expect(sql).toContain("enterprise.current_tenant_id()"); expect(sql).toContain("CREATE TABLE enterprise.tenant_jobs");
     expect(sql).toContain("CREATE TABLE enterprise.marketing_pstn_dispatches"); expect(sql).toContain("marketing_pstn_dispatches_tenant_isolation");
-    for (const table of ["profiles", "runs", "turns"])
-      expect(sql).toContain(`CREATE TABLE enterprise.marketing_agent_${table}`);
+    for (const table of ["marketing_agent_profiles", "marketing_agent_runs",
+      "marketing_agent_turns", "marketing_handoff_policies", "marketing_handoffs"])
+      expect(sql).toContain(`CREATE TABLE enterprise.${table}`);
     expect(sql).toContain("'marketing_agent_profiles', 'marketing_agent_runs', 'marketing_agent_turns'");
     expect(sql).toContain("'provisioning_failed'");
     expect(sql).toContain("scope_snapshot jsonb");

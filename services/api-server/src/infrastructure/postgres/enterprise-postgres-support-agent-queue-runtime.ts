@@ -9,7 +9,7 @@ import type { EnterpriseTenantPostgresPool } from
   "./enterprise-postgres-tenant-session.js";
 import { withEnterprisePostgresUnitOfWork } from
   "./enterprise-postgres-unit-of-work.js";
-import { stopEnterpriseSupportAgent } from
+import { stopEnterpriseSessionAi } from
   "./enterprise-postgres-support-workbench-runtime.js";
 
 type Runtime = Pick<EnterpriseSupportRepositoryRuntime,
@@ -70,7 +70,7 @@ export function createEnterprisePostgresSupportAgentQueueRuntime(
           const stopped = replaySession.status === "human_active" &&
             replaySession.activeAgentClaimId === prior.id && prior.status === "active" &&
             prior.leaseExpiresAt > input.now
-            ? await stopEnterpriseSupportAgent(unit, input.sessionId, input.now)
+            ? await stopEnterpriseSessionAi(unit, input.sessionId, input.now)
             : null;
           return { status: "replayed", claim: prior, session: replaySession,
             ...(stopped ? { aiSpeechFence: stopped.fence } : {}) };
@@ -133,7 +133,7 @@ export function createEnterprisePostgresSupportAgentQueueRuntime(
         if (activated.status !== "updated") {
           throw new Error("Support claim session activation failed");
         }
-        const stopped = await stopEnterpriseSupportAgent(unit, session.id, input.now);
+        const stopped = await stopEnterpriseSessionAi(unit, session.id, input.now);
         await audit(unit, input.context, { action: "support.claim.create",
           resourceType: "support_agent_claim", resourceId: created.claim.id,
           createdAt: input.now, details: { sessionId: session.id,

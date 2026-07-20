@@ -48,7 +48,7 @@ export interface EnterpriseMarketingAgentRepositoryRuntime {
     turn: EnterpriseMarketingAgentTurnRecord;
     content: EnterpriseMarketingAgentResolvedContent;
     evidence: EnterpriseKnowledgeSearchResultDto[];
-    directive: "generate" | "opt_out" | "handoff";
+    directive: "generate" | "opt_out" | "handoff" | "handoff_unavailable";
     context: EnterpriseMarketingAgentRunRecord["contextDocument"];
     replayed: boolean } | { status: "not_ready" | "idempotency_conflict" } |
     StorageRequired>;
@@ -71,7 +71,9 @@ export interface EnterpriseMarketingAgentRepositoryRuntime {
   deliverMarketingAgentTurn?(input: { ticket: EnterpriseMarketingAgentTicketPayload;
     traceId: string; turnId: string; now: string }): Promise<
       { status: "delivered"; run: EnterpriseMarketingAgentRunRecord;
-        turn: EnterpriseMarketingAgentTurnRecord } |
+        turn: EnterpriseMarketingAgentTurnRecord;
+        handoff?: { status: "queued" | "replayed" | "not_configured" | "not_ready";
+          supportSessionId?: string; reasonCode?: string } } |
       { status: "conflict" } | StorageRequired>;
   finalizeMarketingAgent?(input: { ticket: EnterpriseMarketingAgentTicketPayload;
     traceId: string; outcome: "completed" | "failed"; now: string }): Promise<

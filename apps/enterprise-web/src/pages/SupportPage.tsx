@@ -184,7 +184,7 @@ export function SupportPage() {
         next.set("sessionId", item.sessionId);
         return next;
       });
-      setNotice("接管成功；服务端已建立 AI 停止发言栅栏。");
+      setNotice("已取得坐席租约；正在验证 AI 停播与媒体接入回执。");
       await loadWorkItems();
     } catch (error) {
       setNotice(`接管失败：${errorLabel(error)}`);

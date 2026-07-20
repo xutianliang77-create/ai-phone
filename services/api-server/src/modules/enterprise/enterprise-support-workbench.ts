@@ -10,6 +10,9 @@ import type { EnterpriseSupportHighRiskHandoffRecord } from
 import type { EnterpriseSupportSessionAggregate } from "./enterprise-support.js";
 import type { EnterpriseSupportWriteAdapter } from
   "./enterprise-support-write-tool.js";
+import type { EnterpriseMarketingHandoffEvidenceDto } from "@translation/contracts";
+import type { EnterpriseMarketingAgentRunStatus } from
+  "./enterprise-marketing-agent.js";
 
 export interface EnterpriseSupportTranscriptSegment {
   segmentId: string;
@@ -29,8 +32,10 @@ export interface EnterpriseSupportTranscriptSegment {
 export type EnterpriseSupportAiSpeechFence = {
   status: "stopped" | "not_started" | "terminal";
   verifiedAt: string;
+  source?: "support_agent" | "marketing_agent";
   runId?: string;
-  runStatus?: EnterpriseSupportAgentRunRecord["status"];
+  runStatus?: EnterpriseSupportAgentRunRecord["status"] |
+    EnterpriseMarketingAgentRunStatus;
 };
 
 export interface EnterpriseSupportWorkbenchSnapshot {
@@ -38,6 +43,7 @@ export interface EnterpriseSupportWorkbenchSnapshot {
   aggregate: EnterpriseSupportSessionAggregate;
   claim: EnterpriseSupportAgentClaimRecord;
   aiSpeechFence: EnterpriseSupportAiSpeechFence;
+  marketingHandoff?: EnterpriseMarketingHandoffEvidenceDto;
   agentRun?: EnterpriseSupportAgentRunRecord;
   conversationContext: EnterpriseSupportAgentRecentTurn[];
   agentTurns: EnterpriseSupportAgentTurnRecord[];

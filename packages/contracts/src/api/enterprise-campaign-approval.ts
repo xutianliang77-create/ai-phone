@@ -4,6 +4,8 @@ export type EnterpriseCampaignValidationIssueCode =
   | "schedule_start_required"
   | "schedule_start_elapsed"
   | "campaign_has_no_active_leads"
+  | "marketing_handoff_policy_missing"
+  | "marketing_handoff_resource_not_ready"
   | "country_policy_missing"
   | "country_policy_not_yet_effective"
   | "country_policy_expired"

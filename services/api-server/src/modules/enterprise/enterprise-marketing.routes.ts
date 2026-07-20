@@ -29,6 +29,8 @@ import { registerEnterpriseMarketingAgentRoutes } from
   "./enterprise-marketing-agent.routes.js";
 import { registerEnterpriseMarketingMonitoringRoutes } from
   "./enterprise-marketing-monitoring.routes.js";
+import { registerEnterpriseMarketingHandoffRoutes } from
+  "./enterprise-marketing-handoff.routes.js";
 
 export function registerEnterpriseMarketingRoutes(app: FastifyInstance,
   routeService: TenantRouteService, runtime: EnterpriseRepositoryRuntime) {
@@ -47,6 +49,7 @@ export function registerEnterpriseMarketingRoutes(app: FastifyInstance,
   registerEnterpriseMarketingAgentRoutes(app, routeService, runtime,
     agentProvider, agentBinding);
   registerEnterpriseMarketingMonitoringRoutes(app, routeService, runtime);
+  registerEnterpriseMarketingHandoffRoutes(app, routeService, runtime);
   registerEnterpriseMarketingPstnRoutes(app, routeService, runtime,
     createEnvironmentEnterpriseMarketingPstnProvider(), agentProvider, agentBinding);
 }

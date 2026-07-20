@@ -1,6 +1,6 @@
 # 无界AI企业版技术架构
 
-版本：v1.45
+版本：v1.46
 日期：2026-07-20
 状态：SaaS 详细架构基线，已对齐统一通讯平台和 PostgreSQL Primary
 
@@ -500,8 +500,9 @@ turn delivered`。只有 disclosure delivered 才能生成后续话术；只有�
 真实 playout 回执才推进对话。Provider 调用在事务外，complete 时重验 profile/content/evidence hash，避免知识、术语或
 话术在生成期间漂移。最近上下文受 turn 数和字节数上限约束，原始客户文本只保存 hash，不进入审计。
 
-资格问题、退订和转人工先由服务端确定性规则处理。退订在同一 tenant transaction 追加 suppression 并结束；转人工只
-进入 `handoff_requested`，由 `ENT-MKT-011` 建立真实坐席接管，未配置时 Agent 明确说明无法转接后停止。一般回答必须
+资格问题、退订和转人工先由服务端确定性规则处理。退订在同一 tenant transaction 追加 suppression 并结束；转人工先
+进入 `handoff_requested`，再由 `ENT-MKT-011` 根据审批冻结的 Support Queue/PSTN Channel 策略建立桥接。Provider 未配置或
+无300ms停播/坐席加入保证时 Agent 明确说明无法完成媒体转接后停止。一般回答必须
 引用当前 tenant-scoped published knowledge；无证据、禁语、承诺性内容、越界 citation、Provider 不可用或签名 runtime
 未配置都失败闭合。`ENT-MKT-010` 才提供实时监控，本层不伪造 dashboard、人工接管或 Outcome。
 
@@ -520,6 +521,40 @@ ticket、prompt、知识正文和审计敏感字段不进入响应。
 快照计算 Provider 接受、接听和状态 age，并把 unknown/failed、Agent failed、handoff requested、风险信号、15秒活跃状态
 陈旧和10秒未交付告知映射为明确关注原因。当前 HTTP 传输是5秒快照且 `streamStatus=not_configured`；客户端只在面板
 展开时刷新，不得把它标为 Realtime Gateway 已连接。可靠 WSS/SSE 订阅、接管命令和 Outcome 分别留给后续独立任务。
+
+### 7.11 Marketing 真实人工接管
+
+`ENT-MKT-011` 不新建第二套坐席队列。`0047` 只新增 forced-RLS `marketing_handoff_policies`
+和 `marketing_handoffs`：前者绑定 Campaign、active Support Queue、active PSTN Support Channel、超时和回拨策略；
+后者绑定 Marketing run/dispatch/call task/Lead/communication session 与桥接 Support Session，但不保存
+claim ID。坐席归属始终以既有 `support_agent_claims` 为唯一真值。
+
+```mermaid
+flowchart LR
+    Turn["Marketing handoff turn delivered"] --> Fence["run handoff_requested; AI DB fence"]
+    Fence --> Bridge["marketing_handoffs + Support Session"]
+    Bridge --> Queue["existing Support Queue"]
+    Queue --> Claim["support_agent_claims exclusive claim"]
+    Claim --> Workbench["Support workbench revalidates claim/session/fence"]
+    Workbench --> Provider["HTTPS media adapter; 300 ms deadline"]
+    Provider -->|"stop + operator receipt"| Active["media active"]
+    Provider -->|"missing/late/invalid"| NotReady["not_ready or failed"]
+```
+
+活动只在 `draft + not_submitted` 可修改策略。Campaign approval snapshot 把策略和当时资源状态并入 hash；
+缺策略、queue/channel 失活或跨 tenant 引用都使审批失败闭合。handoff 话术只在 TTS delivered
+后物化；桥接写入、Support Customer/Session 创建与 `handoff_requested` fence 位于同一 tenant Unit of Work。
+
+工作台激活先复核 active claim、`human_active` Support Session 和 Marketing AI fence，再以 handoff/claim 绑定的
+稳定幂等键在事务外调用 Provider。Adapter 只接受 HTTPS，要求 Provider 声明幂等、operator join 和
+`AI_STOP_GUARANTEE_MS=300`。HTTP 调用在300ms本地 abort；响应必须同时携带不超过300ms的 stop latency、
+AI 停止时间、坐席加入时间和 receipt ID，才持久化为 media active。数据库 fence 与物理媒体回执
+分层展示，任一层不完整都不得声称已接管。
+
+超时 cell Worker 只选择已过期且无 active claim 的 bridge，终结 shadow Support Session 并记录
+`timed_out` 或 `callback_required`。审计固定 `physicalProviderAction=not_verified`；物理挂断和真实回拨
+仍需独立 Provider/Outbox receipt，不由状态变更推断。当前未执行 `0047`、真实 PostgreSQL/RLS、
+PSTN/坐席媒体或300ms门禁，仍为 `in_progress`。
 
 ## 8. AI 客服架构
 

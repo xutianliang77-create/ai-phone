@@ -121,6 +121,7 @@ function publicWorkbench(
       version: workbench.claim.version,
     },
     aiSpeechFence: workbench.aiSpeechFence,
+    marketingHandoff: workbench.marketingHandoff,
     channel: {
       channelType: aggregate.channel.channelType,
       provider: aggregate.channel.provider,
@@ -142,10 +143,16 @@ function publicWorkbench(
       handoffSlaSeconds: aggregate.queue.handoffSlaSeconds,
       claimLeaseSeconds: aggregate.queue.claimLeaseSeconds,
     } : undefined,
-    communication: aggregate.communicationBinding ? {
+    communication: workbench.marketingHandoff ? {
+      sessionId: workbench.marketingHandoff.communicationSessionId,
+      status: workbench.marketingHandoff.media.status,
+      source: "marketing_outbound",
+      updatedAt: workbench.marketingHandoff.updatedAt,
+    } : aggregate.communicationBinding ? {
       sessionId: aggregate.communicationBinding.communicationSessionId,
       status: aggregate.communicationBinding.status,
       generation: aggregate.communicationBinding.generation,
+      source: "support_inbound",
       updatedAt: aggregate.communicationBinding.updatedAt,
     } : undefined,
     cases: aggregate.cases.map((item) => ({
@@ -205,6 +212,10 @@ function publicWorkbench(
       mute: notReady("livekit_agent_control_not_integrated"),
       transferQueue: notReady("support_queue_transfer_not_implemented"),
       endCall: notReady("livekit_agent_control_not_integrated"),
+      mediaTakeover: workbench.marketingHandoff?.media.status === "active"
+        ? { status: "ready", aiStopDeadlineMs: 300 }
+        : notReady(workbench.marketingHandoff?.media.reasonCode ??
+          "marketing_handoff_media_not_active"),
       createTicket: followupControl(workbench.followupReadiness),
       callback: followupControl(workbench.followupReadiness),
     },

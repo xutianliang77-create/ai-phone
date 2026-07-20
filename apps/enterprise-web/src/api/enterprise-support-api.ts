@@ -1,4 +1,5 @@
-import type { EnterpriseSupportRagResponse } from "@translation/contracts";
+import type { EnterpriseMarketingHandoffEvidenceDto,
+  EnterpriseSupportRagResponse } from "@translation/contracts";
 import type { EnterpriseContentRequestContext } from "./enterprise-api.js";
 
 type EnterpriseRequester = <T>(path: string, init?: RequestInit) => Promise<T>;
@@ -68,9 +69,11 @@ export interface EnterpriseSupportWorkbenchDto {
   aiSpeechFence: {
     status: "stopped" | "not_started" | "terminal";
     verifiedAt: string;
+    source?: "support_agent" | "marketing_agent";
     runId?: string;
     runStatus?: string;
   };
+  marketingHandoff?: EnterpriseMarketingHandoffEvidenceDto;
   channel: { channelType: string; provider: string; status: string };
   customer: {
     id: string; externalId?: string; displayName?: string; locale?: string;
@@ -81,7 +84,8 @@ export interface EnterpriseSupportWorkbenchDto {
     claimLeaseSeconds: number;
   };
   communication?: {
-    sessionId: string; status: string; generation: number; updatedAt: string;
+    sessionId: string; status: string; generation?: number;
+    source?: "support_inbound" | "marketing_outbound"; updatedAt: string;
   };
   cases: Array<{
     id: string; subject: string; status: string; summary?: string;

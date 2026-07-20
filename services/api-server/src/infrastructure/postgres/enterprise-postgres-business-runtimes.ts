@@ -44,6 +44,10 @@ import { createEnterprisePostgresMarketingAgentRuntime } from
   "./enterprise-postgres-marketing-agent-runtime.js";
 import { createEnterprisePostgresMarketingMonitoringRuntime } from
   "./enterprise-postgres-marketing-monitoring-runtime.js";
+import { createEnvironmentEnterpriseMarketingHandoffProvider } from
+  "../../modules/enterprise/enterprise-marketing-handoff-provider.js";
+import { createEnterprisePostgresMarketingHandoffRuntime } from
+  "./enterprise-postgres-marketing-handoff-runtime.js";
 
 export function createEnterprisePostgresBusinessRuntimes(
   pool: EnterpriseTenantPostgresPool,
@@ -52,11 +56,14 @@ export function createEnterprisePostgresBusinessRuntimes(
   const supportWriteCommand = createEnterpriseSupportWriteCommandService({
     adapter: unavailableEnterpriseSupportWriteAdapter(),
   });
+  const marketingHandoffProvider =
+    createEnvironmentEnterpriseMarketingHandoffProvider();
   return {
     ...createEnterprisePostgresMeetingFeatureRuntimes(pool, dispatchSigningSecret),
     ...createEnterprisePostgresSupportRuntime(pool),
     ...createEnterprisePostgresSupportAgentQueueRuntime(pool),
-    ...createEnterprisePostgresSupportWorkbenchRuntime(pool, supportWriteCommand),
+    ...createEnterprisePostgresSupportWorkbenchRuntime(
+      pool, supportWriteCommand, marketingHandoffProvider),
     ...createEnterprisePostgresSupportFollowupRuntime(pool, supportWriteCommand),
     ...createEnterprisePostgresSupportQualityRuntime(pool),
     ...createEnterprisePostgresSupportAgentRuntime(pool),
@@ -71,7 +78,9 @@ export function createEnterprisePostgresBusinessRuntimes(
     ...createEnterprisePostgresCampaignApprovalRuntime(pool),
     ...createEnterprisePostgresMarketingSchedulerRuntime(pool),
     ...createEnterprisePostgresMarketingPstnRuntime(pool),
-    ...createEnterprisePostgresMarketingAgentRuntime(pool),
+    ...createEnterprisePostgresMarketingAgentRuntime(pool, marketingHandoffProvider),
     ...createEnterprisePostgresMarketingMonitoringRuntime(pool),
+    ...createEnterprisePostgresMarketingHandoffRuntime(
+      pool, marketingHandoffProvider),
   };
 }

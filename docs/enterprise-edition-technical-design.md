@@ -1,6 +1,6 @@
 # 无界AI企业版详细技术设计
 
-版本：v1.61
+版本：v1.62
 日期：2026-07-20
 状态：统一通讯平台与 PostgreSQL Primary 收敛详细技术方案
 
@@ -21,11 +21,11 @@
 | RBAC | `ready_for_acceptance` | 已有23个 scope、九角色矩阵、统一服务端 guard 和越权测试；新增质检 scope 的自动化尚未恢复执行 |
 | SaaS tenant lifecycle | `ready_for_acceptance` | 已有幂等开通、暂停、导出/删除执行器、租约、有界恢复和 receipt 校验；真实对象存储/Provider 清理服务尚待验收 |
 | Append-only audit | `ready_for_acceptance` | 已有 tenant-scoped 查询、HMAC cursor、成员/RBAC/租户生命周期埋点和 SQLite/PostgreSQL 不可变约束；受控导出已进入 UI-008 开发，真实 PostgreSQL 验收仍待执行 |
-| PostgreSQL schema | `implemented` | 已有四十六段 up/down migration、tenant-first 索引、复合 FK、强制 RLS、user directory、cell pending projection、opaque subject identity、企业通讯/dispatch/策略、usage/billing、knowledge/terminology、observability trace、受控审计导出、Meeting、客服、Campaign/Lead/Consent/Suppression/Country Policy、活动审批快照、Scheduler、PSTN dispatch 和 Marketing Agent 栅栏；尚无真实 migrate/restore/PITR 证据 |
+| PostgreSQL schema | `implemented` | 已有四十七段 up/down migration、tenant-first 索引、复合 FK、强制 RLS、user directory、cell pending projection、opaque subject identity、企业通讯/dispatch/策略、usage/billing、knowledge/terminology、observability trace、受控审计导出、Meeting、客服、Campaign/Lead/Consent/Suppression/Country Policy、活动审批快照、Scheduler、PSTN dispatch、Marketing Agent 和人工接管栅栏；尚无真实 migrate/restore/PITR 证据 |
 | Tenant-scoped Repository | `ready_for_acceptance` | 已有 tenant/user/cell scoped transaction、subject guard、单一 `legacy|postgres` runtime、HTTP 全链路注入、独立 cell Worker，以及 Tenant/Member/Audit、Directory、lifecycle、Inbox/Outbox、budget、billing/entitlement、usage accounting、knowledge、terminology 和共享 unit-of-work；尚无真实 PostgreSQL H3 证据 |
 | Enterprise Inbox/Outbox | `ready_for_acceptance` | 已有 tenant-scoped 去重、稳定 payload hash、领域/inbox/outbox 原子提交、lease/retry/recovery 和100次重放门禁；真实 PostgreSQL 并发与 Provider sandbox 尚待验收 |
 | SQLite/JSON 演示数据导入 | `ready_for_acceptance` | 已有维护窗口、SQLite 临时副本与 quick_check、空目标事务导入、六集合 count/SHA-256 读回对账和不一致回滚；仅限内部演示数据 |
-| 公共 Primary Runtime 收敛 | `ready_for_acceptance` | 已合入上游稳定提交 `fe1c3c2`；公共31段与 enterprise 46段 manifest 由一个启动编排验证，driver、数据库身份和分权连接失败均在监听前闭合；尚无真实 PostgreSQL H3 证据 |
+| 公共 Primary Runtime 收敛 | `ready_for_acceptance` | 已合入上游稳定提交 `fe1c3c2`；公共31段与 enterprise 47段 manifest 由一个启动编排验证，driver、数据库身份和分权连接失败均在监听前闭合；尚无真实 PostgreSQL H3 证据 |
 | 企业链路追踪 | `in_progress` | 平台 trace 已进入 tenant context、PostgreSQL session、communication binding、usage event/ledger 与会话报告；本轮未执行测试和真实 PostgreSQL 门禁，货币成本因无价格表明确 not configured |
 | 企业工作台真值投影 | `in_progress` | Web 已读取 tenant/route、Provider、subscription、budget、usage aggregate 和显式 session trace report；业务聚合与价格表缺失时明确 not ready/not configured，本轮未执行自动化、浏览器或 PostgreSQL 门禁 |
 | 审计与分析 | `in_progress` | Web 已接入审计筛选/详情、显式 session 下钻和受控 JSONL 导出；`0020`、Repository/API/cell Worker/加密对象存储边界已实现，本轮未执行 migration、双租户、对象存储或浏览器测试；业务聚合/价格表与物理对象清理仍未完成 |
@@ -51,10 +51,11 @@
 | Campaign 聚合 | `in_progress` | `0037..0045`、共享契约、Lead/Consent/Suppression/Policy/Approval、确定性 task 物化、Scheduler claim/lease/hold、scoped PSTN dispatch、tenant Repository/runtime/API 和同风格 Web 页面已形成代码候选；未执行自动化、migration/RLS、真实 PSTN、并发或浏览器验收 |
 | Marketing Agent | `in_progress` | `0046`、版本化国家/locale profile、PSTN 同事务 run、服务端 disclosure/turn/TTS 状态机、短期签名 runtime ticket、严格 LLM Adapter、knowledge citation/禁语校验、退订 suppression 和 Campaign Web 配置已形成代码候选；未执行自动化、migration/RLS、真实 LLM/PSTN 通话或浏览器验收 |
 | Marketing 实时监控 | `in_progress` | 已有 `campaign:read` 的 tenant-scoped 汇总/单通话只读投影、最终字幕/Agent/Provider 证据、延迟/新鲜度/失败分类和同风格 Web 快照面板；当前明确为5秒非流式快照，未执行自动化、真实 PostgreSQL/RLS、通话、浏览器或 Realtime Gateway 验收 |
+| Marketing 真实人工接管 | `in_progress` | `0047`、审批冻结策略、Marketing→Support Session 桥接、复用 exclusive claim、AI 数据库停播 fence、HTTPS Provider 300ms停音/坐席加入回执、超时收敛和 Web 分层状态已形成代码候选；未执行自动化、migration/RLS、真实 PostgreSQL/PSTN/坐席或300ms验收 |
 | 营销授权证据 | `in_progress` | `0039`、对象实体验证、Campaign/Lead/purpose 绑定、不可变登记/撤回、服务端有效性解析、task insert/reschedule 数据库 guard 和同风格 Web 面板已形成代码候选；真实 S3/KMS、PostgreSQL/RLS、并发、浏览器和法务抽样未验收 |
 | 营销禁拨名单 | `in_progress` | `0040`、tenant/global 不可变记录、拒绝/撤回来源、Repository/runtime/API、同号码事务锁、task insert/reschedule guard、跨活动待任务取消和同风格 Web 面板已形成代码候选；全局注册表明确 not_configured，真实 PostgreSQL/RLS、并发、浏览器和名单同步未验收 |
 | 企业术语与话术版本 | `ready_for_acceptance` | enterprise `0018`、共享契约、Term Pack/Script Template Repository/runtime/API 已实现稳定资源、递增 revision、review/publish、有效期解析、hash 校验和同一术语版本运行时引用；仅有自动化和本地 PostgreSQL 16 普通角色证据，真实 Worker/Provider、A1/H3 未通过 |
-| Primary 全量切换/恢复证据 | `ready_for_acceptance` | 工具按运行时动态校验 manifest/全业务表；`c9b5be2` 历史证据为31+16/81张表，当前31+46/122张表必须重新生成签名证据；异地 WAL/PITR/H3 未通过 |
+| Primary 全量切换/恢复证据 | `ready_for_acceptance` | 工具按运行时动态校验 manifest/全业务表；`c9b5be2` 历史证据为31+16/81张表，当前31+47/124张表必须重新生成签名证据；异地 WAL/PITR/H3 未通过 |
 | PostgreSQL 控制面/业务聚合 | `designed` | 后续 CORE/MTG/CS/MKT 领域任务范围，不能从公共 Repository runtime 推导为已实现 |
 | SQLite | `demo_only` | 仅本地开发、自动化和封闭演示，不承载真实企业试点数据 |
 | PSTN/CRM/OCR | `not_ready` 或按环境探测 | 未配置必须明确降级，不生成虚假外部对象或成功状态 |
@@ -391,6 +392,35 @@ PSTN task 的 `dispatching -> dispatched` trigger 现在还要求同 dispatch �
 PSTN 已接受但 Agent runtime/profile/content 未准备完成时整笔 finalize 回滚。Agent 写 tenant suppression 只开放给固定
 system actor、`contact_request` 来源和当前 run Lead，其他 actor/scope 仍由原 `0040` 约束拒绝。表和 trigger 不依赖
 SQLite/JSON fallback；非 PostgreSQL runtime 明确 unavailable。
+
+#### 2.2.7 Marketing 人工接管
+
+```text
+marketing_handoff_policies(
+  id, tenant_id, campaign_id, support_queue_id, support_channel_id,
+  timeout_seconds, timeout_action, callback_delay_seconds,
+  created_by, creation_key, creation_request_hash,
+  last_command_key, last_command_hash, created_at, updated_at, version
+)
+
+marketing_handoffs(
+  id, tenant_id, marketing_agent_run_id, dispatch_id, campaign_id, lead_id,
+  communication_session_id, support_session_id, support_queue_id,
+  support_channel_id, policy_id, policy_version, timeout_action,
+  callback_delay_seconds, status, ai_fenced_at, timeout_at,
+  media_requested_at, media_completed_at, provider_fingerprint,
+  provider_receipt_hash, failure_code, created_at, updated_at, version
+)
+```
+
+`0047` 为两表启用 forced RLS 和 tenant-first 复合 FK。policy 以 tenant/Campaign 唯一，创建身份和
+首次请求不可改写，后续只能带递增 version/服务端时间在未提交草稿修改。bridge 以 run、
+dispatch 和 Support Session 各自唯一，insert trigger 要求 system actor、delivered handoff turn、完全匹配的
+run/dispatch/campaign/Lead/communication session 及 `handoff_requested` Support Session。
+
+bridge 只允许 `queued|media_not_ready -> media_not_ready|active|timed_out|callback_required|failed`，以及
+`active -> completed|failed`；不得删除，身份/策略/fence/timeout 字段不得改写。account actor 更新时 DB
+再复核其为当前 active claim 坐席；system timeout actor 只能经受控路径收敛过期记录。
 
 ### 2.3 AI 客服
 
@@ -1065,7 +1095,7 @@ complete 再次匹配 run/turn/version，将严格输出和压缩上下文原子
 qualification 必须逐条使用 profile 原问题；服务端同时阻断价格、付款、退款、合同、医疗、法律、金融保证类措辞。
 
 退订和转人工不交给 LLM 自由判断：命中 profile 词表后服务端分别写 suppression+end，或写 handoff_requested+stop。后者
-不等于坐席已接通，真实 handoff 属于 `ENT-MKT-011`。TTS 前必须 authorize，playout 后必须 delivered；终态文本交付后 run
+不等于坐席已接通；`ENT-MKT-011` 只在冻结策略、唯一 claim、AI fence 和 Provider 媒体回执分层完整时才能证明接管。TTS 前必须 authorize，playout 后必须 delivered；终态文本交付后 run
 收敛，PSTN 先终态时 finalize 仍通过同一 ticket fence 收口。Provider 或知识失败使用明确降级话术并停止，不生成外部
 成功、Outcome、资料发送、预约或回访记录。
 
@@ -1078,6 +1108,31 @@ tenant 或 actor 覆盖。Campaign 级 snapshot 返回最多100条最近 dispatc
 状态 age 以服务端 `generatedAt` 计算；accepted/answered 超15秒未变化标记 stale，accepted/answered 且10秒未交付
 disclosure 标记 warning，unknown/failed/Agent failed 标记 critical。当前 `transport.mode=snapshot`、
 `refreshAfterMs=5000`、`streamStatus=not_configured`，因此 UI 必须写明“非流式”，不能用轮询冒充 WSS/SSE 成功。
+
+`ENT-MKT-011` 用 `0047` 增加 `marketing_handoff_policies` 和 `marketing_handoffs`。策略只能在
+Campaign=`draft` 且 approval=`not_submitted` 时写入，引用当前 tenant 的 active Support Queue 和 PSTN
+Support Channel，timeout 限制10..86400秒，callback delay 限制60..604800秒。审批快照包含完整
+policy/resource 状态，snapshot/hash 漂移使 approve 失败闭合。
+
+handoff turn 真实 delivered 后，runtime 在同一 tenant Unit of Work 内保留 Marketing run
+`handoff_requested`、复核 dispatch/task/communication binding，建立 shadow Support Customer/Session、依次推进
+`created -> waiting -> handoff_requested`，并写入 bridge。任一状态或绑定失败整体回滚。bridge 不存 claim ID；
+existing `support_agent_claims` 及其 lease/reassign guard 仍是唯一坐席真值。
+
+Support workbench 通过 communication session 解析 bridge，读取原 Marketing transcript。activate 先复核
+active claim、`human_active` shadow session 和 delivered handoff turn 形成的 AI 数据库 fence，然后在事务外
+调用 environment Provider，再回 tenant transaction 写回执。其中 DB fence 不代表物理音频已停止；media
+active 必须有同一 handoff/claim 的 Provider receipt。
+
+Provider 只接受 `pstn_http|pstn_fonoster` 和 HTTPS URL，token 至少16字节，并要求显式声明
+idempotency、operator join 和 `AI_STOP_GUARANTEE_MS=300`。请求携带稳定幂等键并在300ms abort；响应需
+`status=completed`、`stopLatencyMs<=300`、规范 stop/join timestamp 与 receipt ID，且 join 不得早于 stop。
+缺任一字段、超时、迟到或 HTTP 错误均不得写 media active。
+
+内部 timeout 入口要求内部密钥、签名 route document 与当前 tenant/homeRegion/cellId/routeEpoch，
+批量处理最多100条已过期且无 active claim 的 bridge。Worker 结束 shadow Support Session，再写
+`timed_out` 或 `callback_required`和审计 `physicalProviderAction=not_verified`。这一收敛不执行物理挂断，
+也不得声称回拨已排程/已接通。真实 Provider/PostgreSQL/300ms 证据缺失时任务保持 `in_progress`。
 
 ## 7. Agent Runtime
 
@@ -1765,7 +1820,7 @@ Worker dispatch ticket 升级为 v2，并将 `policySnapshotId + policyVersion` 
 `ENT-DATA-009` 的维护工具在 `REPEATABLE READ READ ONLY` 快照内枚举 `ai_phone` 与
 `enterprise` 全部业务表（排除 migration 元表），要求每张表存在主键，按复合主键
 keyset pagination 读取 `to_jsonb(row)` 规范文本。每行以字节长度前缀加入 SHA-256，
-形成 table count/hash/last-key hash，再汇总公共31段、企业45段 checksum、12张关键表、
+形成 table count/hash/last-key hash，再汇总公共31段、企业47段 checksum、关键表、
 总行数和全库 hash。维护账号必须是受审计的 superuser 或 `BYPASSRLS` 全读角色，不能复用
 tenant/directory/cell 应用凭证。
 
@@ -1777,7 +1832,7 @@ baseline 文件 hash，验证源库默认只读、写探针返回 SQLSTATE `2500
 整行 hash、主键、migration 或 server version 不一致都会生成签名 `mismatch` 并以非零退出。
 
 生产 startup gate 只接受 `environment=staging` 的 matched cutover evidence，且运行时
-commit/image/topology、cutover ID、target logical ID、当前 system identifier/OID 和31+46
+commit/image/topology、cutover ID、target logical ID、当前 system identifier/OID 和31+47
 manifest 必须逐项一致。本地 PostgreSQL 16 演练已验证81张表、8张含记录关键表、增量后17行
 全库 hash、writer fence、隔离 `pg_dump/pg_restore` 和单行篡改失败；证据见
 `docs/evidence/ent-data-009-local-drill-2026-07-18.md`。这只证明机制可执行，不是异地主机

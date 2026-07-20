@@ -188,6 +188,19 @@ function CallDetail({ value }: { value: EnterpriseMarketingMonitoringCallRespons
         name={enterpriseIcons.campaign.risk} /><div><strong>需要关注</strong>
         <p>{[...call.attentionReasons, ...call.failureCodes].join(" · ")}</p></div>
       </div> : null}
+    {value.handoff ? <section><h4><MaterialIcon
+      name={enterpriseIcons.action.takeover} />人工接管证据</h4>
+      <dl className="campaign-monitor-facts">
+        <div><dt>AI 停播栅栏</dt><dd>{value.handoff.aiFence.status} · {
+          value.handoff.aiFence.deadlineMs} ms</dd></div>
+        <div><dt>媒体接通</dt><dd>{value.handoff.media.status}</dd></div>
+        <div><dt>Support 会话</dt><dd>{
+          value.handoff.supportSessionId.slice(0, 8)}…</dd></div>
+        <div><dt>超时动作</dt><dd>{value.handoff.timeoutAction} · {
+          dateTime(value.handoff.timeoutAt)}</dd></div>
+      </dl>{value.handoff.media.reasonCode ? <p
+        className="campaign-scheduler-boundary">{value.handoff.media.reasonCode}</p> : null}
+    </section> : null}
     <section><h4><MaterialIcon name={enterpriseIcons.campaign.captions} />
       最终修订字幕</h4>
       {value.captions.status === "no_samples" ? <StatusPanel state="empty"

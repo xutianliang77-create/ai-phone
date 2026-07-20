@@ -57,7 +57,7 @@ ENTERPRISE_MIGRATION_DATABASE_URL='postgresql://...' \
 
 两种启用模式都在恢复任务、Fastify 构建和端口监听前失败闭合，并在校验后关闭连接。
 `verify` 不写 migration；`migrate_verify` 始终在 migration 后执行相同 schema verify。
-统一启动编排先验证公共31段 manifest 和签名 cutover evidence，再验证 enterprise 46段
+统一启动编排先验证公共31段 manifest 和签名 cutover evidence，再验证 enterprise 47段
 manifest，并核对两个 verdict 的 database name/OID；任一失败都关闭已创建资源且不监听。
 
 基础 migration `0004` 至 `0010` 中，`0004` 增加 tenant lifecycle 状态和 job，`0005` 增加
@@ -176,7 +176,7 @@ SQLSTATE `25006`、旧 writer 会话为0、target 可写和二次全量 hash 相
 
 生产启动只接受 `environment=staging` 的 `cutover/matched` 签名证据，并绑定当前
 commit、image digest、topology hash、目标 logical ID、数据库 system identifier/OID 和
-31+46 migration manifest。`c9b5be2` 的31+16本地证据会被门禁拒绝，必须重新生成；
+31+47 migration manifest。`c9b5be2` 的31+16本地证据会被门禁拒绝，必须重新生成；
 本地同机 `pg_dump/pg_restore` 只能证明逻辑恢复与对账机制；
 跨故障域自动切换、异地主机不可变 WAL/PITR 和 RPO/RTO 仍由 `ENT-REL-003`/H3 验收。
 
@@ -299,3 +299,25 @@ ENTERPRISE_MARKETING_AGENT_TICKET_TTL_SECONDS=300..3600
 
 缺任一必需配置、profile 或 published 内容时 PSTN 失败闭合。SQLite/JSON 不承载该 runtime；当前未执行 `0046`、真实
 PostgreSQL/RLS、LLM/PSTN/媒体或浏览器门禁，不能据此宣称 Marketing Agent 已生产就绪。
+
+## Marketing handoff
+
+`ENT-MKT-011` 由 migration `0047` 新增 forced-RLS `marketing_handoff_policies/handoffs`。
+活动审批快照固化 Support Queue、PSTN Channel、超时和回拨策略；handoff 话术确认播放后，Marketing Agent
+保留 `handoff_requested` 停播栅栏，并原子创建桥接 Support Session。坐席继续复用 `support_agent_claims`，
+不创建第二套抢单表。工作台只有收到 Provider 的 AI 音频停止和坐席加入回执后才显示媒体 `active`。
+
+默认媒体 Adapter 不可用。启用时必须同时配置：
+
+```text
+ENTERPRISE_MARKETING_HANDOFF_PROVIDER=pstn_http|pstn_fonoster
+ENTERPRISE_MARKETING_HANDOFF_BRIDGE_URL=https://...
+ENTERPRISE_MARKETING_HANDOFF_BRIDGE_TOKEN=至少16字节
+ENTERPRISE_MARKETING_HANDOFF_IDEMPOTENCY_GUARANTEED=true
+ENTERPRISE_MARKETING_HANDOFF_OPERATOR_JOIN_GUARANTEED=true
+ENTERPRISE_MARKETING_HANDOFF_AI_STOP_GUARANTEE_MS=300
+```
+
+超时 Worker 通过 `POST /internal/enterprise/marketing/handoffs/timeouts` 处理已过期且无人领取的桥接会话；
+`callback_required` 只表示需要后续人工/Provider 回拨，不表示真实回拨已建立。当前未执行 `0047`、真实
+PostgreSQL/RLS、PSTN 音频、坐席加入或300ms时限验收，不能据此宣称真实人工接管已通过生产门禁。

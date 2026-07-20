@@ -1,6 +1,6 @@
 # 无界AI企业版 UI 详细设计
 
-版本：v1.29
+版本：v1.30
 日期：2026-07-20
 状态：设计基线；企业 Web 公共组件、首批设置/工作台、响应式/主题/无障碍和 Web/iOS/Android 成员屏幕共享代码候选已实现，正式验收仍在开发
 
@@ -259,6 +259,13 @@ budget、usage aggregate 和显式 session trace report。卡片沿用同一 Mat
   汇总显示全部/活跃/需关注/失败，列表显示脱敏号码 hint、dispatch/Agent 状态、证据新鲜度和接听延迟。
 - 单通话详情按延迟、失败/风险、最终修订字幕、Agent turn 与 Provider operation 分组；无字幕、无 turn 或无 operation 均用
   empty 状态，不补零或示例文本。760px 以下四列收敛两列，420px 以下单列；本面板没有接管、挂断或 Outcome 按钮。
+- `ENT-MKT-011` 在同一 Campaign 卡片中增加“人工接管”策略面板，复用 `pan_tool_alt/queue/call/
+  timer/callback` Material Icons、Primary/Signal 语义、1px outline、8px 圆角和统一 `StatusPanel`，不增加
+  第二套图标或状态色。
+- 面板展示 Support Queue ID、PSTN Channel ID、超时秒数和“结束通话/需人工回拨”策略；回拨时才
+  显示 delay。只在未提交草稿且有 `campaign:write` 时显示保存按钮，其他状态显示审批冻结说明。
+- readiness 分开显示策略资源和媒体 Provider。Provider 卡明示 HTTPS/幂等/坐席加入/300ms 停播要求；
+  `ready` 也只表示配置声明就绪，固定附带“仍需真实 PostgreSQL/PSTN/坐席验收”，不显示已接通。
 
 ### 8.3 AI 客服坐席台
 
@@ -271,6 +278,10 @@ budget、usage aggregate 和显式 session trace report。卡片沿用同一 Mat
 ```
 
 - 接管是珊瑚色高关注操作；接管成功后 AI 发言控件立即禁用。
+- Marketing 桥接会话仍进入同一等待队列和三栏工作台，不新建“营销坐席”导航。实时会话栏使用
+  `smart_toy_off/verified_user/call` 分层显示“AI 数据库已停播”、“Provider 媒体待就绪”、“坐席媒体已加入”。
+- claim 成功不等于媒体成功；只有服务端返回 AI stop 和 operator join receipt 才用成功色显示 active。
+  `not_configured/not_ready/failed`、超时和 `callback_required` 均保留 reason code 和文字说明，不用图标单独传达。
 - 知识建议必须显示来源、版本和有效范围；无可信知识时明确“无法确认”。
 - 客户敏感字段默认遮罩，按权限临时显示并写入审计。
 - `ENT-CS-010` Web 代码候选复用企业壳、8px 圆角、Primary/Signal 颜色与 Material Icons：队列使用
