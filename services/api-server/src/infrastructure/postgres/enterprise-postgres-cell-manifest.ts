@@ -226,7 +226,12 @@ function canonicalJsonSql(table: string) {
       'updated_at', '$route_updated_at'))::text`;
   }
   if (table === "enterprise.platform_pending_work") {
-    return `(to_jsonb(source_row) || jsonb_build_object('cell_id', '$cell'))::text`;
+    return `(to_jsonb(source_row) || jsonb_build_object(
+      'cell_id', '$cell',
+      'coordination_owner', '$coordination_owner',
+      'coordination_generation', '$coordination_generation',
+      'coordination_lease_expires_at', '$coordination_lease_expires_at'
+    ))::text`;
   }
   return "to_jsonb(source_row)::text";
 }

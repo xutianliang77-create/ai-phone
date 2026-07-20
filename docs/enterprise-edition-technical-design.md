@@ -1,6 +1,6 @@
 # 无界AI企业版详细技术设计
 
-版本：v1.66
+版本：v1.67
 日期：2026-07-20
 状态：统一通讯平台与 PostgreSQL Primary 收敛详细技术方案
 
@@ -21,11 +21,11 @@
 | RBAC | `ready_for_acceptance` | 已有23个 scope、九角色矩阵、统一服务端 guard 和越权测试；新增质检 scope 的自动化尚未恢复执行 |
 | SaaS tenant lifecycle | `ready_for_acceptance` | 已有幂等开通、暂停、导出/删除执行器、租约、有界恢复和 receipt 校验；真实对象存储/Provider 清理服务尚待验收 |
 | Append-only audit | `ready_for_acceptance` | 已有 tenant-scoped 查询、HMAC cursor、成员/RBAC/租户生命周期埋点和 SQLite/PostgreSQL 不可变约束；受控导出已进入 UI-008 开发，真实 PostgreSQL 验收仍待执行 |
-| PostgreSQL schema | `implemented` | 已有四十九段 up/down migration、tenant-first 索引、复合 FK、强制 RLS、user directory、cell pending projection、opaque subject identity、企业通讯/dispatch/策略、usage/billing、knowledge/terminology、observability trace、受控审计导出、Meeting、客服、Campaign/Lead/Consent/Suppression/Country Policy、活动审批快照、Scheduler、PSTN dispatch、Marketing Agent、人工接管、Outcome 和 CRM sync 栅栏；尚无真实 migrate/restore/PITR 证据 |
+| PostgreSQL schema | `implemented` | 已有五十段 up/down migration、tenant-first 索引、复合 FK、强制 RLS、user directory、cell pending projection/coordination、opaque subject identity、企业通讯/dispatch/策略、usage/billing、knowledge/terminology、observability trace、受控审计导出、Meeting、客服、Campaign/Lead/Consent/Suppression/Country Policy、活动审批快照、Scheduler、PSTN dispatch、Marketing Agent、人工接管、Outcome 和 CRM sync 栅栏；尚无真实 migrate/restore/PITR 证据 |
 | Tenant-scoped Repository | `ready_for_acceptance` | 已有 tenant/user/cell scoped transaction、subject guard、单一 `legacy|postgres` runtime、HTTP 全链路注入、独立 cell Worker，以及 Tenant/Member/Audit、Directory、lifecycle、Inbox/Outbox、budget、billing/entitlement、usage accounting、knowledge、terminology 和共享 unit-of-work；尚无真实 PostgreSQL H3 证据 |
 | Enterprise Inbox/Outbox | `ready_for_acceptance` | 已有 tenant-scoped 去重、稳定 payload hash、领域/inbox/outbox 原子提交、lease/retry/recovery 和100次重放门禁；真实 PostgreSQL 并发与 Provider sandbox 尚待验收 |
 | SQLite/JSON 演示数据导入 | `ready_for_acceptance` | 已有维护窗口、SQLite 临时副本与 quick_check、空目标事务导入、六集合 count/SHA-256 读回对账和不一致回滚；仅限内部演示数据 |
-| 公共 Primary Runtime 收敛 | `ready_for_acceptance` | 已合入上游稳定提交 `fe1c3c2`；公共31段与 enterprise 49段 manifest 由一个启动编排验证，driver、数据库身份和分权连接失败均在监听前闭合；尚无真实 PostgreSQL H3 证据 |
+| 公共 Primary Runtime 收敛 | `ready_for_acceptance` | 已合入上游稳定提交 `fe1c3c2`；公共31段与 enterprise 50段 manifest 由一个启动编排验证，driver、数据库身份和分权连接失败均在监听前闭合；尚无真实 PostgreSQL H3 证据 |
 | 企业链路追踪 | `in_progress` | 平台 trace 已进入 tenant context、PostgreSQL session、communication binding、usage event/ledger 与会话报告；本轮未执行测试和真实 PostgreSQL 门禁，货币成本因无价格表明确 not configured |
 | 企业工作台真值投影 | `in_progress` | Web 已读取 tenant/route、Provider、subscription、budget、usage aggregate 和显式 session trace report；业务聚合与价格表缺失时明确 not ready/not configured，本轮未执行自动化、浏览器或 PostgreSQL 门禁 |
 | 审计与分析 | `in_progress` | Web 已接入审计筛选/详情、显式 session 下钻和受控 JSONL 导出；`0020`、Repository/API/cell Worker/加密对象存储边界已实现，本轮未执行 migration、双租户、对象存储或浏览器测试；业务聚合/价格表与物理对象清理仍未完成 |
@@ -58,7 +58,7 @@
 | 营销授权证据 | `in_progress` | `0039`、对象实体验证、Campaign/Lead/purpose 绑定、不可变登记/撤回、服务端有效性解析、task insert/reschedule 数据库 guard 和同风格 Web 面板已形成代码候选；真实 S3/KMS、PostgreSQL/RLS、并发、浏览器和法务抽样未验收 |
 | 营销禁拨名单 | `in_progress` | `0040`、tenant/global 不可变记录、拒绝/撤回来源、Repository/runtime/API、同号码事务锁、task insert/reschedule guard、跨活动待任务取消和同风格 Web 面板已形成代码候选；全局注册表明确 not_configured，真实 PostgreSQL/RLS、并发、浏览器和名单同步未验收 |
 | 企业术语与话术版本 | `ready_for_acceptance` | enterprise `0018`、共享契约、Term Pack/Script Template Repository/runtime/API 已实现稳定资源、递增 revision、review/publish、有效期解析、hash 校验和同一术语版本运行时引用；仅有自动化和本地 PostgreSQL 16 普通角色证据，真实 Worker/Provider、A1/H3 未通过 |
-| Primary 全量切换/恢复证据 | `ready_for_acceptance` | 工具按运行时动态校验 manifest/全业务表；`c9b5be2` 历史证据为31+16/81张表，当前31+49/126张表必须重新生成签名证据；异地 WAL/PITR/H3 未通过 |
+| Primary 全量切换/恢复证据 | `ready_for_acceptance` | 工具按运行时动态校验 manifest/全业务表；`c9b5be2` 历史证据为31+16/81张表，当前31+50/126张表必须重新生成签名证据；异地 WAL/PITR/H3 未通过 |
 | PostgreSQL 控制面/业务聚合 | `designed` | 后续 CORE/MTG/CS/MKT 领域任务范围，不能从公共 Repository runtime 推导为已实现 |
 | SQLite | `demo_only` | 仅本地开发、自动化和封闭演示，不承载真实企业试点数据 |
 | PSTN/CRM/OCR | `not_ready` 或按环境探测 | 未配置必须明确降级，不生成虚假外部对象或成功状态 |
@@ -1937,7 +1937,7 @@ baseline 文件 hash，验证源库默认只读、写探针返回 SQLSTATE `2500
 整行 hash、主键、migration 或 server version 不一致都会生成签名 `mismatch` 并以非零退出。
 
 生产 startup gate 只接受 `environment=staging` 的 matched cutover evidence，且运行时
-commit/image/topology、cutover ID、target logical ID、当前 system identifier/OID 和31+49
+commit/image/topology、cutover ID、target logical ID、当前 system identifier/OID 和31+50
 manifest 必须逐项一致。本地 PostgreSQL 16 演练已验证81张表、8张含记录关键表、增量后17行
 全库 hash、writer fence、隔离 `pg_dump/pg_restore` 和单行篡改失败；证据见
 `docs/evidence/ent-data-009-local-drill-2026-07-18.md`。这只证明机制可执行，不是异地主机
@@ -1957,9 +1957,10 @@ run/migration/tenant ID、源/目标 Cell 与 logical database ID、commit、ima
 `tenant_id`；发现任何没有 selector 的 enterprise 表立即失败。公共 `ai_phone` 只选择同时具有
 `scope_type + scope_id` 的表，并固定 `scope_type=tenant/scope_id=tenantId`。每表必须有主键；非延迟外键生成
 导入拓扑，延迟外键由目标事务 `SET CONSTRAINTS ALL DEFERRED` 处理。复合主键 keyset pagination 每页最多5000行，
-`to_jsonb(row)` 经稳定 JSON、字节长度前缀形成逐表 count/hash；总 hash同时绑定31段公共 migration、49段
+`to_jsonb(row)` 经稳定 JSON、字节长度前缀形成逐表 count/hash；总 hash同时绑定31段公共 migration、50段
 enterprise migration、对象引用 count/hash 和总行数。tenant 的 cell/version/updatedAt 及 pending projection cell
-在内容 hash 中规范为 route 占位符，另以 route 断言要求 homeRegion/status 不变且跨 Cell epoch 精确 +1。
+和易失协调 owner/generation/lease 在内容 hash 中规范为占位符，另以 route 断言要求 homeRegion/status 不变且
+跨 Cell epoch 精确 +1。
 
 迁移前置门禁如下：
 
@@ -1988,8 +1989,48 @@ rollback，控制面不得发布新 route。
 `BYPASSRLS` maintenance 账号不足以执行 replace rollback。回滚后 route epoch 仍从当前源 +1，不能恢复旧 epoch。
 
 当前实现包含维护命令、动态计划、流式传输、writer/quiescence/object/evidence 门禁及测试定义，只通过 typecheck、
-构建候选与文件规模静态检查；未运行测试、真实 PostgreSQL 31+49 双库、对象存储复制、控制面 route 发布、
+构建候选与文件规模静态检查；未运行测试、真实 PostgreSQL 31+50 双库、对象存储复制、控制面 route 发布、
 故障注入或跨 Cell 演练，因此 `ENT-DATA-005` 保持 `in_progress`，不能作为 H3 或生产门禁证据。
+
+#### 11.1.4 Cell Worker 多实例协调
+
+`ENT-DATA-006` 在既有 `platform_pending_work` 安全投影上增加三列协调真值：
+`coordination_owner`、`coordination_generation`、`coordination_lease_expires_at`。业务 `due_at` 和
+`lease_expires_at` 仍由 tenant job/outbox/screen-share 的原事务 trigger 投影；协调列只决定哪个 Cell Worker
+实例可进入具体 tenant claim，不替代 job/outbox 状态、attempt、CAS 或终态。
+
+Cell discovery 连接继续只设置 `app.cell_id/worker_id/trace_id`。新增的窄更新入口只接受
+`enterprise.platform_pending_work`，拒绝其他表、非协调列和非 Cell 范围 SQL。数据库 forced-RLS policy 与
+`guard_platform_pending_work_cell_claim` trigger 双重限制更新：
+
+1. 空闲或已过期 claim 只能以 `generation + 1` 建立新 owner；owner 必须等于 transaction-local
+   `app.worker_id`，lease 必须是数据库时钟之后且不超过五分钟；
+2. 当前 owner 只能在 lease 未过期时延长到更晚时间，延长后的截止时间仍不得超过数据库当前时间五分钟；
+3. release 必须保持相同 generation 并同时清空 owner/lease；
+4. 旧 owner/generation 的 renew/release 更新0行，不能解除或覆盖新实例 claim；
+5. Cell 角色不能修改 tenant、resource、work kind、due time 或业务 lease。
+
+批量 claim 使用单一 CTE：按 `due_at/work_kind/tenant/resource` 稳定排序，以
+`FOR UPDATE SKIP LOCKED` 锁定当前 Cell 已到期且两类 lease 均可用的记录，再在同一事务写 owner、generation 和
+lease 并返回最小引用。已 claim 的批次并发处理，避免顺序等待使后排租约在执行前过期；每条工作在进入具体
+tenant transaction 前先续租，并在处理期间以 lease 的三分之一周期 heartbeat。heartbeat/owner/generation
+失效时停止开始新的处理；finally 条件 release，终态 trigger 已删除投影时按幂等 no-op 处理。
+所有 due/expiry 判断和新 lease 截止时间均由 PostgreSQL `clock_timestamp()` 生成，Worker 只提交受配置门禁限制的
+lease 毫秒数；实例本机时钟不能提前 claim、延长过期所有权或制造跨实例时间真值。
+
+故障收敛分四层：Worker 在 queue claim 前退出时没有业务副作用；queue claim 后、tenant claim 前退出时由协调
+lease 到期重领；tenant claim 后、Provider 前退出时还要等待业务 lease；Provider 已接受但 finalize 前退出时，
+下一实例使用更高协调 generation/attempt 重试相同稳定 event/job ID，Provider Adapter 必须去重。旧 attempt 的
+tenant finalize 由现有 CAS 拒绝。该设计不声称 exactly-once transport，只保证单一有效 claim、可恢复执行和
+幂等业务副作用。
+
+Cell 迁移 quiescence 同时检查业务 lease 与协调 lease；反向导入 `platform_pending_work` 时保留单调 generation，
+但清空 source owner/lease，避免把旧 Cell 实例所有权复制到目标。Redis 不在本任务正确性路径中，未来只能作为
+可丢失的 poll 唤醒优化。
+
+当前 `0050` up/down、Cell SQL guard、claim/renew/release、heartbeat、双实例竞争、过期重领、旧 generation 和
+Provider 稳定幂等键测试均已定义但未运行；真实 PostgreSQL forced-RLS、两个进程、kill -9、网络分区和 Provider
+去重证据缺失，因此 `ENT-DATA-006` 保持 `in_progress`，不能作为 H1/H3 或企业生产门禁证据。
 
 ### 11.2 事务和一致性边界
 

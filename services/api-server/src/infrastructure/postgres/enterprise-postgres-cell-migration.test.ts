@@ -116,6 +116,32 @@ describe("ENT-DATA-005 tenant manifest reconcile", () => {
     expect(transferred).toContain("9007199254740993");
   });
 
+  it("excludes ephemeral queue ownership from Cell content hashes", async () => {
+    let sql = "";
+    await forEachEnterpriseCellPage({
+      async query<Row extends Record<string, unknown>>(statement: string) {
+        sql = statement;
+        return { rows: [] as Row[] };
+      },
+    }, {
+      name: "enterprise.platform_pending_work",
+      schema: "enterprise",
+      table: "platform_pending_work",
+      primaryKey: ["work_kind", "tenant_id", "resource_id"],
+      insertColumns: ["cell_id", "tenant_id", "work_kind", "resource_id"],
+      dependencies: ["enterprise.tenants"],
+      selector: "tenant_id",
+      derived: true,
+    }, tenantId, 2, () => undefined);
+    expect(sql).toContain("'coordination_owner', '$coordination_owner'");
+    expect(sql).toContain(
+      "'coordination_generation', '$coordination_generation'",
+    );
+    expect(sql).toContain(
+      "'coordination_lease_expires_at', '$coordination_lease_expires_at'",
+    );
+  });
+
   it("allows only the explicit route epoch change while preserving all hashes", () => {
     const source = manifest("source-db", "cell-a", 7, 0);
     const target = structuredClone(source);
@@ -206,7 +232,7 @@ function manifest(
       serverVersionNum: "160000" },
     route: { homeRegion: "ap-southeast", cellId, version, status: "active" },
     publicMigrations: ["031_communication_resource_scope"],
-    enterpriseMigrations: [{ id: "0049", checksum: "3".repeat(64) }],
+    enterpriseMigrations: [{ id: "0050", checksum: "3".repeat(64) }],
     tables,
     objectReferences: { count: objectCount, sha256: "4".repeat(64) },
     totalCount: 5,

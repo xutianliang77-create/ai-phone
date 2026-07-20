@@ -22,6 +22,7 @@ export async function processEnterpriseAuditExport(input: {
   auditExport: EnterpriseAuditExportRecord;
   now: Date;
   traceId: string;
+  beforeFinalize?: () => Promise<void>;
 }) {
   const events = await withEnterprisePostgresUnitOfWork(
     input.pool,
@@ -75,10 +76,11 @@ export async function processEnterpriseAuditExport(input: {
       });
 }
 
-function finalize(
+async function finalize(
   input: Parameters<typeof processEnterpriseAuditExport>[0],
   result: EnterpriseAuditExportFinalization,
 ) {
+  await input.beforeFinalize?.();
   const context = createEnterpriseTenantContext({
     tenantId: input.auditExport.tenantId,
     actorUserId: "system:enterprise-audit-export",

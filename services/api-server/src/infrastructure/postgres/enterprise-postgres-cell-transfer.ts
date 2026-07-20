@@ -220,7 +220,10 @@ async function assertTenantQuiescent(
       OR EXISTS(SELECT 1 FROM enterprise.worker_dispatch_grants
         WHERE tenant_id = $1::uuid AND status IN ('issued', 'accepted'))
       OR EXISTS(SELECT 1 FROM enterprise.platform_pending_work
-        WHERE tenant_id = $1::uuid AND lease_expires_at > clock_timestamp())
+        WHERE tenant_id = $1::uuid AND (
+          lease_expires_at > clock_timestamp() OR
+          coordination_lease_expires_at > clock_timestamp()
+        ))
       OR EXISTS(SELECT 1 FROM ai_phone.worker_dispatches
         WHERE scope_type = 'tenant' AND scope_id = $1
           AND status IN ('reserved', 'dispatching', 'dispatched', 'ready', 'draining'))
@@ -298,6 +301,8 @@ function targetRecord(
     result.updated_at = changedAt;
   } else if (table === "enterprise.platform_pending_work") {
     result.cell_id = targetCellId;
+    result.coordination_owner = null;
+    result.coordination_lease_expires_at = null;
   }
   return result;
 }

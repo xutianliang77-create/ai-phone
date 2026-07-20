@@ -58,7 +58,7 @@ describe("enterprise PostgreSQL migrations", () => {
       "0045_enterprise_marketing_pstn_dispatch",
       "0046_enterprise_marketing_agent",
       "0047_enterprise_marketing_handoff", "0048_enterprise_marketing_outcomes",
-      "0049_enterprise_marketing_crm_sync"]);
+      "0049_enterprise_marketing_crm_sync", "0050_enterprise_worker_coordination"]);
     for (const migration of migrations) { expect(migration.up.trim()).not.toBe("");
       expect(migration.down.trim()).not.toBe("");
       expect(migration.checksum).toMatch(/^[a-f0-9]{64}$/); }
@@ -103,7 +103,7 @@ describe("enterprise PostgreSQL migrations", () => {
     expect(sql).toContain("user_tenant_directory_tenant_read");
     expect(sql).toContain("enterprise.current_user_id()");
     expect(sql).toContain("CREATE TABLE enterprise.platform_pending_work");
-    expect(sql).toContain("platform_pending_work_cell_read");
+    expect(sql).toContain("platform_pending_work_cell_read"); expect(sql).toContain("platform_pending_work_cell_claim"); expect(sql).toContain("coordination_generation"); expect(sql).toContain("platform_pending_work_cell_claim_guard"); expect(sql).toContain("current_setting('app.worker_id'");
     expect(sql).toContain("enterprise.current_cell_id()");
     expect(sql).toContain("enterprise_tenant_job_pending_work");
     expect(sql).toContain("enterprise_outbox_pending_work");

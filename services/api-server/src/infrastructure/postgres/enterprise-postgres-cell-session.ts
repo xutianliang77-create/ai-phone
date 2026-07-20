@@ -10,6 +10,10 @@ export interface EnterpriseCellPostgresSession {
     sql: string,
     values?: unknown[],
   ): Promise<{ rows: Row[] }>;
+  queryCoordination<Row extends Record<string, unknown>>(
+    sql: string,
+    values?: unknown[],
+  ): Promise<{ rows: Row[] }>;
 }
 
 export async function withEnterpriseCellPostgresSession<T>(
@@ -48,6 +52,13 @@ export async function withEnterpriseCellPostgresSession<T>(
         assertCellDiscoverySql(sql);
         return client.query<Row>(sql, [cellId, ...values]);
       },
+      queryCoordination<Row extends Record<string, unknown>>(
+        sql: string,
+        values: unknown[] = [],
+      ) {
+        assertCellCoordinationSql(sql);
+        return client.query<Row>(sql, [cellId, ...values]);
+      },
     });
     const result = await operation(session);
     await client.query("COMMIT");
@@ -66,12 +77,48 @@ export async function withEnterpriseCellPostgresSession<T>(
   }
 }
 
+function assertCellCoordinationSql(sql: string) {
+  const normalized = normalizedSql(sql);
+  const tableRefs = [...normalized.matchAll(
+    /\benterprise\.([a-z_][a-z0-9_]*)\b/gi,
+  )].map((match) => match[1]!.toLowerCase());
+  const setClause = normalized.match(
+    /\bupdate\s+enterprise\.platform_pending_work(?:\s+(?:as\s+)?[a-z_][a-z0-9_]*)?\s+set\s+([\s\S]*?)(?:\s+from\s+|\s+where\s+)/i,
+  )?.[1];
+  const assignments = setClause?.split(",").map((item) =>
+    item.match(/^\s*(?:[a-z_][a-z0-9_]*\.)?([a-z_][a-z0-9_]*)\s*=/i)?.[1]
+      ?.toLowerCase()
+  ) ?? [];
+  const allowed = new Set([
+    "coordination_owner",
+    "coordination_generation",
+    "coordination_lease_expires_at",
+  ]);
+  const withClaim = /^with\b/i.test(normalized);
+  const selectCount = normalized.match(/\bselect\b/gi)?.length ?? 0;
+  if (
+    !/\bupdate\s+enterprise\.platform_pending_work\b/i.test(normalized) ||
+    tableRefs.length < 1 ||
+    tableRefs.some((table) => table !== "platform_pending_work") ||
+    !/\bcell_id\s*=\s*\$1\b/i.test(normalized) ||
+    !/\breturning\b/i.test(normalized) ||
+    /\b(?:insert|delete|alter|drop|truncate|grant|revoke|join|or|union)\b/i.test(normalized) ||
+    normalized.includes(";") ||
+    assignments.length < 1 ||
+    assignments.some((column) => !column || !allowed.has(column)) ||
+    new Set(assignments).size !== assignments.length ||
+    (withClaim && (selectCount !== 1 ||
+      !/\bfor\s+update\s+skip\s+locked\b/i.test(normalized))) ||
+    (!withClaim && selectCount !== 0)
+  ) {
+    throw new Error(
+      "Enterprise cell SQL must be a cell-scoped pending-work coordination update",
+    );
+  }
+}
+
 function assertCellDiscoverySql(sql: string) {
-  const normalized = sql
-    .replace(/--.*$/gm, "")
-    .replace(/\/\*[\s\S]*?\*\//g, "")
-    .replace(/\s+/g, " ")
-    .trim();
+  const normalized = normalizedSql(sql);
   const tableRefs = [...normalized.matchAll(
     /\benterprise\.([a-z_][a-z0-9_]*)\b/gi,
   )].map((match) => match[1]!.toLowerCase());
@@ -97,6 +144,14 @@ function assertCellDiscoverySql(sql: string) {
       "Enterprise cell SQL must be a cell-scoped pending-work SELECT",
     );
   }
+}
+
+function normalizedSql(sql: string) {
+  return sql
+    .replace(/--.*$/gm, "")
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function requiredCellId(value: string) {

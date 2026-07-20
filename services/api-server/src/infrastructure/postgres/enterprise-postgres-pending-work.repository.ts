@@ -16,7 +16,7 @@ import {
 import { enterpriseMeetingScreenShareMaxPauseSeconds } from
   "./enterprise-postgres-meeting-screen-share-runtime.js";
 
-interface PendingWorkRow extends Record<string, unknown> {
+export interface EnterprisePostgresPendingWorkRow extends Record<string, unknown> {
   cell_id: unknown;
   tenant_id: unknown;
   work_kind: unknown;
@@ -70,7 +70,7 @@ export function listEnterprisePostgresPendingWork(input: {
       traceId: input.traceId,
     },
     async (session) => {
-      const result = await session.query<PendingWorkRow>(`
+      const result = await session.query<EnterprisePostgresPendingWorkRow>(`
         SELECT cell_id, tenant_id, work_kind, resource_id, actor_id
         FROM enterprise.platform_pending_work
         WHERE cell_id = $1 AND due_at <= $2
@@ -81,7 +81,9 @@ export function listEnterprisePostgresPendingWork(input: {
         ORDER BY due_at, work_kind, tenant_id, resource_id
         LIMIT $3
       `, [input.now, input.limit]);
-      return result.rows.map((row) => mapPendingWorkRow(row, session.cellId));
+      return result.rows.map((row) =>
+        mapEnterprisePostgresPendingWorkRow(row, session.cellId)
+      );
     },
   );
 }
@@ -175,8 +177,8 @@ export async function claimEnterprisePostgresPendingWork(input: {
   );
 }
 
-function mapPendingWorkRow(
-  row: PendingWorkRow,
+export function mapEnterprisePostgresPendingWorkRow(
+  row: EnterprisePostgresPendingWorkRow,
   cellId: string,
 ): EnterprisePostgresPendingWorkRef {
   const rowCellId = requiredText(row.cell_id);

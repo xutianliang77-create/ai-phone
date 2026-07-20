@@ -1,14 +1,21 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
-  list: vi.fn(),
+  claimBatch: vi.fn(),
   claim: vi.fn(),
   finalizeOutbox: vi.fn(),
 }));
 
 vi.mock("./enterprise-postgres-pending-work.repository.js", () => ({
-  listEnterprisePostgresPendingWork: mocks.list,
   claimEnterprisePostgresPendingWork: mocks.claim,
+}));
+vi.mock("./enterprise-postgres-worker-coordination.repository.js", () => ({
+  claimEnterprisePostgresPendingWorkBatch: mocks.claimBatch,
+}));
+vi.mock("./enterprise-postgres-worker-coordination.js", () => ({
+  withEnterprisePostgresWorkClaim: (input: {
+    operation: (lease: { assertOwned(): Promise<void> }) => unknown;
+  }) => input.operation({ assertOwned: async () => undefined }),
 }));
 vi.mock("./enterprise-postgres-unit-of-work.js", () => ({
   withEnterprisePostgresUnitOfWork: (
@@ -34,7 +41,7 @@ describe("enterprise PostgreSQL cell worker", () => {
   });
 
   it("executes and finalizes claimed lifecycle work", async () => {
-    mocks.list.mockResolvedValue([{
+    mocks.claimBatch.mockResolvedValue([{
       cellId: "cn-cell-01",
       tenantId,
       workKind: "tenant_lifecycle",
@@ -88,7 +95,7 @@ describe("enterprise PostgreSQL cell worker", () => {
       availableAt: now.toISOString(),
       createdAt: now.toISOString(),
     };
-    mocks.list.mockResolvedValue([{
+    mocks.claimBatch.mockResolvedValue([{
       cellId: "cn-cell-01",
       tenantId,
       workKind: "outbox",
@@ -118,7 +125,7 @@ describe("enterprise PostgreSQL cell worker", () => {
   });
 
   it("isolates a failed item and keeps batch accounting explicit", async () => {
-    mocks.list.mockResolvedValue([{
+    mocks.claimBatch.mockResolvedValue([{
       cellId: "cn-cell-01",
       tenantId,
       workKind: "tenant_lifecycle",
@@ -139,7 +146,7 @@ describe("enterprise PostgreSQL cell worker", () => {
   it("reports a failed poll without terminating the worker loop", async () => {
     const controller = new AbortController();
     const onError = vi.fn(() => controller.abort());
-    mocks.list.mockRejectedValue(new Error("database unavailable"));
+    mocks.claimBatch.mockRejectedValue(new Error("database unavailable"));
     await runEnterprisePostgresWorkerLoop({
       ...fixture({}),
       signal: controller.signal,

@@ -19,9 +19,13 @@ import type {
 } from "./enterprise-postgres-client.js";
 import {
   claimEnterprisePostgresPendingWork,
-  listEnterprisePostgresPendingWork,
-  type EnterprisePostgresPendingWorkRef,
 } from "./enterprise-postgres-pending-work.repository.js";
+import {
+  claimEnterprisePostgresPendingWorkBatch,
+  type EnterprisePostgresPendingWorkClaim,
+} from "./enterprise-postgres-worker-coordination.repository.js";
+import { withEnterprisePostgresWorkClaim } from
+  "./enterprise-postgres-worker-coordination.js";
 import {
   withEnterprisePostgresUnitOfWork,
 } from "./enterprise-postgres-unit-of-work.js";
@@ -42,12 +46,12 @@ export async function runEnterprisePostgresWorkerBatch(options: {
   now?: Date;
 }) {
   const now = options.now ?? new Date();
-  const refs = await listEnterprisePostgresPendingWork({
+  const refs = await claimEnterprisePostgresPendingWorkBatch({
     pool: options.discoveryPool,
     cellId: options.config.cellId,
     workerId: options.config.workerId,
     traceId: workerTrace(options.config.workerId, now),
-    now: now.toISOString(),
+    leaseMs: options.config.leaseMs,
     limit: options.config.batchSize,
   });
   const counts = {
@@ -57,13 +61,12 @@ export async function runEnterprisePostgresWorkerBatch(options: {
     busy: 0,
     failed: 0,
   };
-  for (const ref of refs) {
-    try {
-      const result = await processRef(options, ref, now);
-      counts[result] += 1;
-    } catch {
-      counts.failed += 1;
-    }
+  const results = await Promise.all(refs.map(async (ref) => {
+    try { return await processRef(options, ref, now); }
+    catch { return "failed" as const; }
+  }));
+  for (const result of results) {
+    counts[result] += 1;
   }
   return counts;
 }
@@ -95,10 +98,26 @@ export async function runEnterprisePostgresWorkerLoop(options: {
 
 async function processRef(
   options: Parameters<typeof runEnterprisePostgresWorkerBatch>[0],
-  ref: EnterprisePostgresPendingWorkRef,
+  ref: EnterprisePostgresPendingWorkClaim,
   now: Date,
 ): Promise<"completed" | "retried" | "busy" | "failed"> {
   const traceId = `${workerTrace(options.config.workerId, now)}:${ref.resourceId}`;
+  return withEnterprisePostgresWorkClaim({
+    pool: options.discoveryPool,
+    claim: ref,
+    leaseMs: options.config.leaseMs,
+    traceId,
+    operation: (lease) => processClaimedRef(options, ref, now, traceId, lease),
+  });
+}
+
+async function processClaimedRef(
+  options: Parameters<typeof runEnterprisePostgresWorkerBatch>[0],
+  ref: EnterprisePostgresPendingWorkClaim,
+  now: Date,
+  traceId: string,
+  lease: { assertOwned(): Promise<void> },
+): Promise<"completed" | "retried" | "busy" | "failed"> {
   const claimed = await claimEnterprisePostgresPendingWork({
     pool: options.tenantPool,
     cellId: options.config.cellId,
@@ -111,6 +130,7 @@ async function processRef(
   });
   if (claimed.result.status !== "claimed") return "busy";
   if (claimed.workKind === "screen_share") return "completed";
+  await lease.assertOwned();
   if (claimed.workKind === "tenant_lifecycle") {
     const job = claimed.result.job;
     const execution = {
@@ -128,6 +148,7 @@ async function processRef(
     } catch {
       result = { status: "retry" as const, reason: "executor_unavailable" };
     }
+    await lease.assertOwned();
     const finalized = await options.runtime.finalizeTenantLifecycleJob({
       context: createEnterpriseTenantContext({
         tenantId: job.tenantId,
@@ -151,6 +172,7 @@ async function processRef(
       auditExport: claimed.result.auditExport,
       now,
       traceId,
+      beforeFinalize: lease.assertOwned,
     });
     return auditExport.status === "completed"
       ? "completed"
@@ -166,6 +188,7 @@ async function processRef(
   } catch {
     result = { status: "retry" as const, reason: "publisher_unavailable" };
   }
+  await lease.assertOwned();
   if (event.eventType === "meeting.calendar.create.requested") {
     if (!options.runtime.finalizeMeetingCalendarOutbox) {
       throw new Error("Meeting calendar runtime is missing");

@@ -1,6 +1,6 @@
 # 无界AI企业版详细功能设计
 
-版本：v1.47
+版本：v1.48
 日期：2026-07-20
 状态：SaaS 详细设计基线，已对齐统一通讯平台
 
@@ -949,6 +949,9 @@ service-account Adapter、可注入 mock 以及 Web/Flutter 状态入口。自�
 - 语音故障不得阻断字幕；模型故障必须明确降级。
 - 所有外呼、工具写入、共享控制和导出操作必须幂等。
 - 网络恢复、App 重启和 Worker 重启后任务必须收敛到唯一状态。
+- 同一 Cell 的多个 Worker 必须通过 PostgreSQL 持久队列租约竞争工作；进程内数组、定时器或 Redis
+  通知不能成为 claim 真值。实例退出后只允许租约到期重领，旧 owner/generation 不能 finalize；外部重试
+  必须复用原 event/job ID，允许传输尝试重放但不能产生重复业务副作用。
 - 取消、接管、禁拨、撤回和主持人停止必须使旧 generation/fencing token 失效，迟到的
   MT、TTS、Agent、Provider 或媒体结果不能恢复已经结束的状态。
 - 大租户持续负载时，小租户的登录、会议和客服必须在已声明配额内继续可用；超载只能

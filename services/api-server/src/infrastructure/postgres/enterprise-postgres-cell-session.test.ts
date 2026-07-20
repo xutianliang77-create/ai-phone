@@ -79,6 +79,38 @@ describe("enterprise PostgreSQL cell session", () => {
     }
   });
 
+  it("allows only scoped coordination-column updates", async () => {
+    const fixture = poolFixture();
+    await withEnterpriseCellPostgresSession(
+      fixture.pool,
+      { cellId, workerId: "worker-a", traceId: "trace-claim" },
+      (session) => session.queryCoordination(`
+        UPDATE enterprise.platform_pending_work
+        SET coordination_owner = $2,
+          coordination_generation = coordination_generation + 1,
+          coordination_lease_expires_at = $3
+        WHERE cell_id = $1 AND resource_id = $4::uuid
+        RETURNING coordination_generation
+      `, ["worker-a", "2026-07-20T04:00:30.000Z", "id"]),
+    );
+    expect(fixture.calls.some(({ sql, values }) =>
+      sql.includes("coordination_generation + 1") && values?.[0] === cellId
+    )).toBe(true);
+
+    const rejected = poolFixture();
+    await expect(withEnterpriseCellPostgresSession(
+      rejected.pool,
+      { cellId, workerId: "worker-a", traceId: "trace-invalid" },
+      (session) => session.queryCoordination(`
+        UPDATE enterprise.platform_pending_work
+        SET due_at = $2
+        WHERE cell_id = $1
+        RETURNING resource_id
+      `, ["2026-07-20T04:00:30.000Z"]),
+    )).rejects.toThrow("coordination update");
+    expect(rejected.calls.at(-1)?.sql).toBe("ROLLBACK");
+  });
+
   it("rejects invalid cell identifiers before opening a connection", async () => {
     const fixture = poolFixture();
     await expect(withEnterpriseCellPostgresSession(

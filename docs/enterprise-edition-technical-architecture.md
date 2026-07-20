@@ -1,6 +1,6 @@
 # 无界AI企业版技术架构
 
-版本：v1.50
+版本：v1.51
 日期：2026-07-20
 状态：SaaS 详细架构基线，已对齐统一通讯平台和 PostgreSQL Primary
 
@@ -891,7 +891,8 @@ Worker 无权依据缓存继续执行敏感能力。
 
 1. tenant runtime：设置 `app.tenant_id`，访问 tenant-owned 公共和企业表；
 2. directory runtime：只设置 `app.user_id`，只读本人目录投影；
-3. cell discovery runtime：只设置 `app.cell_id/worker_id/trace_id`，只读最小 pending 引用；
+3. cell coordination runtime：只设置 `app.cell_id/worker_id/trace_id`，读取最小 pending 引用，并且只可更新
+   `coordination_owner/generation/lease`；
 4. migrator/backup/restore：独立受审计 maintenance 凭证，不进入 API/Worker 常驻池。
 
 启动顺序固定为公共 manifest、企业 manifest、双 schema verify、RLS/identity/role verify，
@@ -899,8 +900,21 @@ Worker 无权依据缓存继续执行敏感能力。
 
 生产 PostgreSQL 启动还必须验证企业签名 cutover evidence：证据绑定 staging 环境、
 commit、image digest、topology hash、目标 logical ID、system identifier/OID、公共31段与
-企业45段 manifest，并证明源库 writer fence、旧 API/Worker 角色会话为0、目标可写和
+企业50段 manifest，并证明源库 writer fence、旧 API/Worker 角色会话为0、目标可写和
 二次全量 hash 一致。本地逻辑恢复证据不提升为跨故障域 HA/PITR 结论。
+
+### 9.5 多实例 Worker 协调
+
+`ENT-DATA-006` 不引入第二套消息或租户状态真值。`platform_pending_work` 继续由 tenant job/outbox/screen-share
+原事务 trigger 同步，`0050` 只增加协调 owner、单调 generation 和到期时间。每批发现与占用在同一数据库
+事务内通过 `FOR UPDATE SKIP LOCKED` 完成；Cell RLS 只暴露当前 Cell，更新 trigger 进一步拒绝 Cell 角色改变
+tenant、work kind、resource、due time 或业务 lease。
+
+Worker 并发处理已占用记录，并以 owner+generation 续租；续租失败时不开始新的副作用，完成或重试后条件释放。
+实例崩溃不需要进程内恢复清单：协调租约和具体 job/outbox lease 到期后由另一实例以更高 generation 重领。
+真正的业务完成仍由 tenant transaction 中的 attempt/CAS/终态约束确认；生命周期 executor、对象写入和 Outbox
+Provider 始终复用稳定 job/event ID。这里保证的是单一有效 claim 与副作用幂等收敛，不承诺网络请求只发送一次。
+Redis 若引入只能发送“可能有工作”的短暂唤醒，不参与 owner、generation、完成状态或恢复决策。
 
 ## 10. 安全架构
 
