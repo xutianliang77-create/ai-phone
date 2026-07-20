@@ -25,6 +25,7 @@ import {
   type EnterpriseProviderReadinessService,
 } from "./modules/enterprise/enterprise-provider-readiness.js";
 import { registerEnterpriseProviderReadinessRoutes } from "./modules/enterprise/enterprise-provider-readiness.routes.js";
+import { registerEnterpriseReleaseControlRoutes } from "./modules/enterprise/enterprise-release-control.routes.js";
 import { registerEnterpriseCommunicationPolicyRoutes } from "./modules/enterprise/enterprise-communication-policy.routes.js";
 import {
   registerEnterpriseUsageBudgetRoutes,
@@ -232,6 +233,7 @@ export async function buildApp(dependencies: {
     providerReadinessService,
     enterpriseRepositoryRuntime,
   );
+  registerEnterpriseReleaseControlRoutes(app, tenantRouteService, enterpriseRepositoryRuntime);
   await registerEnterpriseAuditRoutes(
     app,
     dependencies.auditCursorService ??
@@ -313,7 +315,6 @@ export async function buildApp(dependencies: {
   await registerVoiceIdentityRoutes(app);
   return app;
 }
-
 function serializeRequest(request: {
   method?: string;
   url?: string;

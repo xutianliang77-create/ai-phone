@@ -21,7 +21,7 @@
     },
     "migrations": {
       "publicCount": 31,
-      "enterpriseCount": 51,
+      "enterpriseCount": 52,
       "sha256": "replace-with-combined-migration-manifest-sha256"
     }
   },

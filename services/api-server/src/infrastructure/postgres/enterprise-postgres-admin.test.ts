@@ -15,7 +15,7 @@ describe("enterprise PostgreSQL schema verification", () => {
     );
 
     expect(evidence).toEqual({
-      migrations: 51,
+      migrations: 52,
       tenantTables: enterpriseTenantTableNames.length,
       compositeForeignKeys: 12,
       subjectColumns: enterpriseSubjectColumns.length,

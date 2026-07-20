@@ -118,6 +118,8 @@ import { EnterpriseMarketingAnalyticsPostgresRepository } from
   "./enterprise-postgres-marketing-analytics.repository.js";
 import { EnterpriseDataLifecyclePostgresRepository } from
   "./enterprise-postgres-data-lifecycle.repository.js";
+import { EnterpriseReleaseControlPostgresRepository } from
+  "./enterprise-postgres-release-control.repository.js";
 
 export interface EnterprisePostgresUnitOfWork {
   tenant: EnterpriseTenantPostgresRepository;
@@ -167,6 +169,7 @@ export interface EnterprisePostgresUnitOfWork {
   marketingCrm: EnterpriseMarketingCrmPostgresRepository;
   marketingAnalytics: EnterpriseMarketingAnalyticsPostgresRepository;
   dataLifecycle: EnterpriseDataLifecyclePostgresRepository;
+  releaseControls: EnterpriseReleaseControlPostgresRepository;
 }
 
 export function withEnterprisePostgresUnitOfWork<T>(
@@ -237,6 +240,7 @@ export function withEnterprisePostgresUnitOfWork<T>(
       marketingCrm: new EnterpriseMarketingCrmPostgresRepository(session),
       marketingAnalytics: new EnterpriseMarketingAnalyticsPostgresRepository(session),
       dataLifecycle: new EnterpriseDataLifecyclePostgresRepository(session),
+      releaseControls: new EnterpriseReleaseControlPostgresRepository(session),
     }),
     options,
   );

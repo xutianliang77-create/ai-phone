@@ -17,6 +17,8 @@ import { createEnterpriseTenantContext } from "./enterprise-tenant-context.js";
 import { requireTenantRouteDocument } from "./enterprise-tenant-route.routes.js";
 import { decodeTenantRouteDocument, type TenantRouteService } from
   "./enterprise-tenant-route.js";
+import { recordEnterpriseReleaseOutcome, requireEnterpriseReleaseCapability } from
+  "./enterprise-release-control.guard.js";
 
 export function registerEnterpriseMarketingPstnRoutes(app: FastifyInstance,
   routeService: TenantRouteService, runtime: EnterpriseRepositoryRuntime,
@@ -58,6 +60,12 @@ export function registerEnterpriseMarketingPstnRoutes(app: FastifyInstance,
       if (routeService.verify(document, body).status !== "verified") {
         return routeRejected(reply);
       }
+      const traceId = enterpriseRequestTraceId(request);
+      const context = createEnterpriseTenantContext({ tenantId: body.tenantId,
+        actorUserId: "system:marketing-pstn", traceId });
+      if (!await requireEnterpriseReleaseCapability(
+        reply, runtime, context, "marketing.pstn",
+      )) return;
       const readiness = provider.readiness();
       if (readiness.status !== "ready" || readiness.provider === "unavailable" ||
         !readiness.fingerprint) return providerNotReady(reply, readiness.reasonCode);
@@ -71,7 +79,6 @@ export function registerEnterpriseMarketingPstnRoutes(app: FastifyInstance,
       }
       if (!runtime.prepareMarketingPstnDispatch ||
         !runtime.finalizeMarketingPstnDispatch) return postgresRequired(reply);
-      const traceId = enterpriseRequestTraceId(request);
       const identity = { tenantId: body.tenantId, taskId: body.taskId,
         generation: body.dispatchGeneration };
       const runId = marketingPstnIdentity({ kind: "agent_run", ...identity });
@@ -101,6 +108,10 @@ export function registerEnterpriseMarketingPstnRoutes(app: FastifyInstance,
         return agentNotReady(reply, prepared.status);
       }
       if (prepared.status === "already_accepted") {
+        const recorded = await recordEnterpriseReleaseOutcome({ runtime, context,
+          capability: "marketing.pstn", operationId: prepared.dispatch.id,
+          outcome: "success", actorId: "system:marketing-pstn-dispatch" });
+        if (!recorded) return releaseOutcomeUnavailable(reply);
         return reply.send(response("already_accepted", prepared.dispatch));
       }
       if (prepared.status !== "prepared") return dispatchRejected(reply, prepared.status);
@@ -108,6 +119,11 @@ export function registerEnterpriseMarketingPstnRoutes(app: FastifyInstance,
       const finalized = await runtime.finalizeMarketingPstnDispatch({
         tenantId: body.tenantId, dispatchId: prepared.dispatch.id,
         result: providerResult, traceId, now: new Date() });
+      const recorded = await recordEnterpriseReleaseOutcome({ runtime, context,
+        capability: "marketing.pstn", operationId: prepared.dispatch.id,
+        outcome: providerResult.status === "accepted" ? "success" : "failure",
+        actorId: "system:marketing-pstn-dispatch" });
+      if (!recorded) return releaseOutcomeUnavailable(reply);
       if (finalized.status === "storage_required") return postgresRequired(reply);
       if (finalized.status === "billing_rejected") return sendError(reply, 503,
         "marketing_pstn_billing_reconciliation_required",
@@ -203,3 +219,5 @@ function agentNotReady(reply: FastifyReply, reason?: string) { return sendError(
   503, "marketing_agent_not_ready", reason ?? "Marketing Agent is not ready"); }
 function dispatchRejected(reply: FastifyReply, reason: string) { return sendError(reply,
   409, `marketing_pstn_${reason}`, "Marketing PSTN dispatch rejected"); }
+function releaseOutcomeUnavailable(reply: FastifyReply) { return sendError(reply, 503,
+  "release_outcome_not_recorded", "Release outcome was not recorded"); }

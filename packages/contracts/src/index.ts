@@ -22,6 +22,7 @@ export * from "./api/enterprise-meeting-calendar.js";
 export * from "./api/enterprise-audit.js";
 export * from "./api/enterprise-billing.js";
 export * from "./api/enterprise-observability.js";
+export * from "./api/enterprise-release-control.js";
 export * from "./api/enterprise-knowledge.js";
 export * from "./api/enterprise-terminology.js";
 export * from "./api/enterprise-support.js";

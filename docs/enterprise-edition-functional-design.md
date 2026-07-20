@@ -1,6 +1,6 @@
 # 无界AI企业版详细功能设计
 
-版本：v1.51
+版本：v1.52
 日期：2026-07-20
 状态：SaaS 详细设计基线，已对齐统一通讯平台
 
@@ -885,7 +885,7 @@ service-account Adapter、可注入 mock 以及 Web/Flutter 状态入口。自�
   PITR 已验证；证据需显示环境、commit/image/topology、cutover ID 和最近验证时间。
   本地或同故障域恢复只能显示“机制已验证”，不能显示“生产灾备就绪”。
 - `ENT-REL-003` 只建立服务端演练和放行证据门禁，不向租户提供 promote、failover、fence 或 restore
-  操作。灾备 readiness 只有在同一签名 schema-v2 结果绑定当前 enterprise cutover、31+51 manifest、
+  操作。灾备 readiness 只有在同一签名 schema-v2 结果绑定当前 enterprise cutover、31+52 manifest、
   自动切换/旧主隔离、异地不可变备份和 PITR hash 后才可为 ready；缺 Adapter、容量、证据或任一实测值
   必须显示 `not_ready`。RPO/RTO 只展示批准目标和本次实测，不得在真实演练与 SLA 批准前承诺数值。
 
@@ -924,6 +924,21 @@ service-account Adapter、可注入 mock 以及 Web/Flutter 状态入口。自�
   必须来自受控内部流程并写审计，避免租户角色给自己减免用量。
 - SQLite/JSON 不承载企业计量真值，继续明确返回 PostgreSQL required。当前完成的是本地数据库
   机制与自动化，不等于真实支付、开票、A1/H3 或企业生产账务门禁通过。
+
+### 8.5 租户灰度、kill switch 与能力熔断
+
+- 首批受控能力固定为屏幕 OCR、Support Agent、客服写工具和 Marketing PSTN。租户是否进入灰度只由
+  server-side tenant control 决定；客户端开关、header 或本地缓存不能开启能力。
+- 每条控制记录必须有 owner、到期时间、连续失败阈值和版本。记录缺失、灰度关闭、到期、kill switch
+  激活、circuit open 或普通请求遇到 half-open 时，所有新副作用失败闭合；安全结束、停用和历史只读不被阻断。
+- kill switch 只隔离目标 tenant + capability，不暂停其他租户，也不代替 `ENT-REL-007` 的配额、并发和
+  noisy-neighbor 限流。已经被 Provider 接受的动作进入既有幂等/对账/取消链路，不能伪装成“从未发生”。
+- 连续服务端 dispatch/Provider 失败达到阈值时 circuit 从 closed 进入 open；普通会话不得用来试探恢复。
+  值班人员复核依赖后，以第二探针密钥进入 half-open；唯一探针成功回到 closed，失败立即重开。
+- owner/admin/member/auditor 仅按现有 `tenant:read` 查看脱敏状态，不能通过租户 RBAC 改写平台控制。
+  控制变更和 outcome 均使用独立 operation ID、版本条件更新和 append-only 事件证据。
+- 当前只形成 PostgreSQL runtime、内部 API 和三条副作用 guard 的代码候选；未运行测试、真实数据库、
+  Provider 故障或值班演练，因此不得显示“灰度/熔断生产就绪”。
 
 ## 9. 核心流程契约
 

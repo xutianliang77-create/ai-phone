@@ -15,7 +15,7 @@ environment that matches the production topology:
 - the independent 25/50/100 capacity gate and a 120-minute real mixed-traffic soak;
 - immutable evidence files whose SHA-256 values are recorded in the result manifest.
 - a schema-v2 result HMAC-bound to the enterprise cutover evidence, candidate commit,
-  image digest, database identity, and current public31/enterprise51 manifests.
+  image digest, database identity, and current public31/enterprise52 manifests.
 
 Copy `result.example.json` into the ignored `outputs/postgres-resilience/` evidence
 directory. Do not change `status` to `passed` from configuration alone; populate it

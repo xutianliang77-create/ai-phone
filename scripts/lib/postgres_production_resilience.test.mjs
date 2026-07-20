@@ -278,7 +278,7 @@ function writeMigrations(root) {
   for (const id of publicMigrations) {
     writeFileSync(path.join(publicDirectory, `${id}.sql`), `-- ${id}\n`);
   }
-  const enterpriseMigrations = Array.from({ length: 51 }, (_, index) => {
+  const enterpriseMigrations = Array.from({ length: 52 }, (_, index) => {
     const id = `${String(index + 1).padStart(4, "0")}_enterprise`;
     const up = `-- ${id} up\n`;
     const down = `-- ${id} down\n`;

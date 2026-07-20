@@ -1,6 +1,6 @@
 # 无界AI企业版 UI 详细设计
 
-版本：v1.38
+版本：v1.39
 日期：2026-07-20
 状态：设计基线；企业 Web 公共组件、首批设置/工作台、响应式/主题/无障碍和 Web/iOS/Android 成员屏幕共享代码候选已实现，正式验收仍在开发
 
@@ -532,3 +532,10 @@ queue age、claim owner、generation 或 lease，只能读取脱敏聚合，并�
 `ENT-REL-002` 同样是服务端生命周期收敛任务。当前 UI 只消费已有导出 `expired` 与 append-only audit 真值；
 在未提供 tenant-scoped 只读生命周期投影前，不新增进度条、成功徽标或重试按钮。对象/Provider 未配置或故障
 必须保持 `not_ready/failed`，不能用倒计时结束推断物理删除完成。
+
+`ENT-REL-004` 当前不向 tenant owner/admin 提供灰度、kill switch、begin probe 或阈值编辑按钮；这些动作属于
+平台值班控制面，不映射为租户 RBAC。未来状态投影只能消费 `GET /enterprise/v1/release-controls`，沿用既有
+状态卡、颜色与 Material Icons：`toggle_on_outlined` 表示已灰度，`toggle_off_outlined` 表示关闭，
+`emergency_home_outlined` 表示 kill switch，`electrical_services_outlined` 表示 circuit open/half-open；
+图标旁必须同时显示文字、owner、到期时间和最后更新时间，不能仅靠颜色。缺记录、过期或接口失败显示
+`not_ready`，不得从客户端开关推断 ready。当前未实现页面，也未执行浏览器或无障碍验收。

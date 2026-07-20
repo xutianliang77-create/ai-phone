@@ -58,7 +58,7 @@ describe("enterprise PostgreSQL migrations", () => {
       "0046_enterprise_marketing_agent",
       "0047_enterprise_marketing_handoff", "0048_enterprise_marketing_outcomes",
       "0049_enterprise_marketing_crm_sync", "0050_enterprise_worker_coordination",
-      "0051_enterprise_data_lifecycle"]);
+      "0051_enterprise_data_lifecycle", "0052_enterprise_release_controls"]);
     for (const migration of migrations) { expect(migration.up.trim()).not.toBe("");
       expect(migration.down.trim()).not.toBe("");
       expect(migration.checksum).toMatch(/^[a-f0-9]{64}$/); }

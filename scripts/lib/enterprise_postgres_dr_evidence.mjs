@@ -34,7 +34,7 @@ export function resolveEnterprisePostgresDrBinding(options = {}) {
   if (!/^[0-9a-f]{7,40}$/i.test(gitCommit) ||
     !/^sha256:[0-9a-f]{64}$/i.test(imageDigest) ||
     migrations.publicMigrations.length !== 31 ||
-    migrations.enterpriseMigrations.length !== 51) {
+    migrations.enterpriseMigrations.length !== 52) {
     throw new Error("Enterprise DR candidate or migration manifest is invalid");
   }
   if (cutover.phase !== "cutover" || cutover.status !== "matched" ||
@@ -94,7 +94,7 @@ export function isEnterprisePostgresDrBinding(value) {
     validId(value.database?.systemIdentifier) && validId(value.database?.oid) &&
     sha256(value.database?.manifestSha256) &&
     value.migrations?.publicCount === 31 &&
-    value.migrations?.enterpriseCount === 51 && sha256(value.migrations?.sha256);
+    value.migrations?.enterpriseCount === 52 && sha256(value.migrations?.sha256);
 }
 
 function readyCutoverEvidence(value) {

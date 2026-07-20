@@ -12,6 +12,8 @@ import { registerEnterpriseSupportAgentWorkerRoutes } from
 import { createEnterpriseTenantContext } from "./enterprise-tenant-context.js";
 import { requireTenantRouteDocument } from "./enterprise-tenant-route.routes.js";
 import type { TenantRouteService } from "./enterprise-tenant-route.js";
+import { recordEnterpriseReleaseOutcome, requireEnterpriseReleaseCapability } from
+  "./enterprise-release-control.guard.js";
 
 export function registerEnterpriseSupportAgentRoutes(
   app: FastifyInstance,
@@ -35,15 +37,24 @@ export function registerEnterpriseSupportAgentRoutes(
       const body = startRequest(request.body);
       if (!uuid(sessionId) || !body) return invalid(reply);
       if (!runtime.prepareSupportAgent) return postgresRequired(reply);
+      const context = createEnterpriseTenantContext({ tenantId: access.tenant.id,
+        actorUserId: access.account.id, actorRole: access.member.role,
+        traceId: enterpriseRequestTraceId(request) });
+      if (!await requireEnterpriseReleaseCapability(
+        reply, runtime, context, "support.agent",
+      )) return;
       const result = await runtime.prepareSupportAgent({
-        context: createEnterpriseTenantContext({ tenantId: access.tenant.id,
-          actorUserId: access.account.id, actorRole: access.member.role,
-          traceId: enterpriseRequestTraceId(request) }),
+        context,
         sessionId, ...body, now: new Date().toISOString(),
       });
       if (result.status === "storage_required") return postgresRequired(reply);
       if (result.status !== "ready") return notReady(reply, result.reasonCode);
       const dispatched = await dispatchService.ensure(result.dispatch);
+      const recorded = await recordEnterpriseReleaseOutcome({ runtime, context,
+        capability: "support.agent", operationId: result.dispatch.runId,
+        outcome: dispatched.status === "ready" ? "success" : "failure",
+        actorId: "system:support-agent-dispatch" });
+      if (!recorded) return notReady(reply, "release_outcome_not_recorded");
       if (dispatched.status !== "ready") return notReady(reply, dispatched.reasonCode);
       return reply.send(result.dispatch);
     },

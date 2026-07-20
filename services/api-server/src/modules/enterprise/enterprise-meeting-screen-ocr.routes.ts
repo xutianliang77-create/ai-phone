@@ -22,6 +22,8 @@ import { requireTenantRouteDocument } from "./enterprise-tenant-route.routes.js"
 import type { TenantRouteService } from "./enterprise-tenant-route.js";
 import { registerEnterpriseMeetingScreenOcrWorkerRoutes } from
   "./enterprise-meeting-screen-ocr-worker.routes.js";
+import { recordEnterpriseReleaseOutcome, requireEnterpriseReleaseCapability } from
+  "./enterprise-release-control.guard.js";
 
 export function registerEnterpriseMeetingScreenOcrRoutes(
   app: FastifyInstance,
@@ -60,6 +62,9 @@ export function registerEnterpriseMeetingScreenOcrRoutes(
       if (!runtime.enableMeetingScreenOcr ||
         !runtime.updateMeetingScreenOcrRunStatus) return postgresRequired(reply);
       const context = tenantContext(access, request);
+      if (!await requireEnterpriseReleaseCapability(
+        reply, runtime, context, "meeting.screen_ocr",
+      )) return;
       const result = await runtime.enableMeetingScreenOcr({
         context, meetingId, ...body, idempotencyKey,
         requestHash: screenOcrRequestHash({
@@ -72,6 +77,11 @@ export function registerEnterpriseMeetingScreenOcrRoutes(
       let view = result.view;
       if (result.dispatch) {
         const dispatched = await dispatch.ensure(result.dispatch);
+        const recorded = await recordEnterpriseReleaseOutcome({ runtime, context,
+          capability: "meeting.screen_ocr", operationId: result.dispatch.run.id,
+          outcome: dispatched.status === "ready" ? "success" : "failure",
+          actorId: "system:meeting-screen-ocr-dispatch" });
+        if (!recorded) return rejected(reply, "release_outcome_not_recorded");
         if (dispatched.status !== "ready") {
           await runtime.updateMeetingScreenOcrRunStatus({
             context, meetingId, runId: result.dispatch.run.id,
@@ -165,6 +175,7 @@ function rejected(reply: FastifyReply, status: string) {
     route_not_ready: [503, "route_not_ready"],
     conflict: [409, "screen_ocr_conflict"],
     idempotency_conflict: [409, "idempotency_conflict"],
+    release_outcome_not_recorded: [503, "release_outcome_not_recorded"],
   };
   const [code, reason] = mapping[status] ?? [503, "enterprise_postgres_required"];
   return sendError(reply, code, reason, "Meeting screen OCR request rejected");
