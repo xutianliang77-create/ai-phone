@@ -32,6 +32,7 @@ class LiveKitCallRoomClient implements CallRoomClient {
     _emit(const CallRoomSnapshot(
       status: CallRoomConnectionStatus.connecting,
       microphoneEnabled: false,
+      microphonePausedForPlayback: false,
       remoteParticipantCount: 0,
     ));
 
@@ -238,6 +239,7 @@ class LiveKitCallRoomClient implements CallRoomClient {
     livekit.Room room, {
     CallRoomConnectionStatus? status,
     bool? microphoneEnabled,
+    bool? microphonePausedForPlayback,
     String? message,
     List<CallRoomCaption>? captions,
   }) {
@@ -246,6 +248,7 @@ class LiveKitCallRoomClient implements CallRoomClient {
       status: status ?? _current.status,
       microphoneEnabled:
           microphoneEnabled ?? (participant?.isMicrophoneEnabled() ?? false),
+      microphonePausedForPlayback: microphonePausedForPlayback,
       remoteParticipantCount: room.remoteParticipants.values
           .where(
               (participant) => isHumanCallRoomParticipant(participant.identity))
@@ -283,7 +286,11 @@ class LiveKitCallRoomClient implements CallRoomClient {
         fullDuplexEnabled: _fullDuplexEnabled,
         duplexDegraded: _duplexDegraded,
         onMicrophoneChanged: (enabled) {
-          _emit(_snapshotFromRoom(room, microphoneEnabled: enabled));
+          _emit(_snapshotFromRoom(
+            room,
+            microphoneEnabled: enabled,
+            microphonePausedForPlayback: !enabled,
+          ));
         },
       ));
     }

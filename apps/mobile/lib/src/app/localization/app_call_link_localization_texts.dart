@@ -57,6 +57,10 @@ const appCallLinkLocalizationTexts = <String, Map<String, String>>{
     'zh': '已入房，麦克风未发布',
     'en': 'Joined, microphone not published',
   },
+  'callRoomMicrophonePausedForPlayback': {
+    'zh': '译音播放中，麦克风暂挂',
+    'en': 'Translated audio playing, microphone temporarily paused',
+  },
   'callRoomReconnecting': {'zh': '正在重连', 'en': 'Reconnecting'},
   'callRoomRemoteParticipants': {'zh': '对方人数', 'en': 'Guests'},
   'callRoomCaptions': {'zh': '通话字幕', 'en': 'Call captions'},
