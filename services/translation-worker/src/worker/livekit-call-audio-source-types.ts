@@ -81,7 +81,7 @@ export interface LiveKitCallAudioTrackLifecycleEvent {
   speakerRole: CallAudioSpeakerRole | null;
   outcome: "subscription_requested" | "subscription_unsupported" |
     "ignored_unknown_role" | "ignored_translation_tts" |
-    "ignored_non_audio" | "accepted";
+    "ignored_non_audio" | "ignored_duplicate_role" | "accepted";
   publicationKind?: string | number | null;
 }
 
