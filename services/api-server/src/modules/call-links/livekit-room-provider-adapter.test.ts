@@ -55,12 +55,25 @@ describe("LiveKit room provider adapter", () => {
       { topic: "translation.captions" },
     );
   });
+
+  it("removes a rejected duplicate participant", async () => {
+    const client = fakeClient();
+    const adapter = new LiveKitRoomProviderAdapter(config(), client);
+
+    await adapter.removeParticipant("call_1", "call_1:guest:duplicate");
+
+    expect(client.removeParticipant).toHaveBeenCalledWith(
+      "call_1",
+      "call_1:guest:duplicate",
+    );
+  });
 });
 
 function fakeClient() {
   return {
     createRoom: vi.fn(async () => ({})),
     listParticipants: vi.fn(async () => []),
+    removeParticipant: vi.fn(async () => ({})),
     sendData: vi.fn(async () => ({})),
   };
 }

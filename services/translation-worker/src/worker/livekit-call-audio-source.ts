@@ -11,6 +11,7 @@ import {
 import { deferred } from "./livekit-call-audio-utils.js";
 import { LiveKitCallAudioTrackRuntime } from "./livekit-call-audio-track-runtime.js";
 import {
+  audioIngestMaxFrames,
   audioSourceKey,
   LiveKitCallAudioTrackRegistry,
   loadRtcNodeModule,
@@ -18,6 +19,7 @@ import {
 import { LiveKitCallDiagnostics } from "./livekit-call-diagnostics.js";
 import { LiveKitCallSipTrackGate } from "./livekit-call-sip-track-gate.js";
 import { LiveKitCallTrackLifecycle } from "./livekit-call-track-lifecycle.js";
+import { LiveKitCallRoleTrackGate } from "./livekit-call-role-track-gate.js";
 import type {
   LiveKitCallAudioSourceOptions,
   RtcNodeModule,
@@ -29,8 +31,6 @@ export type {
   RtcNodeModule,
   RtcRoom,
 } from "./livekit-call-audio-source-types.js";
-
-const DEFAULT_AUDIO_INGEST_MAX_FRAMES = 20;
 
 export class LiveKitCallAudioSource {
   private room: RtcRoom | null = null;
@@ -53,6 +53,7 @@ export class LiveKitCallAudioSource {
   private readonly trackRuntimes = new Set<LiveKitCallAudioTrackRuntime>();
   private readonly trackTasks = new Set<Promise<void>>();
   private readonly activeAudioTracks = new LiveKitCallAudioTrackRegistry();
+  private readonly roleTrackGate = new LiveKitCallRoleTrackGate();
   private readonly disconnected = deferred<void>();
   private readonly pipelineReady = deferred<void>();
   private readonly sipTrackGate: LiveKitCallSipTrackGate;
@@ -208,8 +209,16 @@ export class LiveKitCallAudioSource {
   ) {
     if (this.startedTracks.has(track)) return;
     this.startedTracks.add(track);
+    if (!this.roleTrackGate.reserve(speakerRole, sourceKey)) {
+      this.trackLifecycle.duplicateRoleIgnored(speakerRole);
+      return;
+    }
     await this.activeAudioTracks.stopPrevious(sourceKey);
-    if (this.ingestStopped) return;
+    if (this.ingestStopped) {
+      this.roleTrackGate.release(speakerRole, sourceKey);
+      return;
+    }
+    this.roleTrackGate.reserve(speakerRole, sourceKey);
     this.trackLifecycle.legStarted(speakerRole);
 
     const stream = new rtc.AudioStream(track, {
@@ -223,7 +232,7 @@ export class LiveKitCallAudioSource {
       legId,
       speakerRole,
       stream,
-      capacityFrames: this.audioIngestMaxFrames(),
+      capacityFrames: audioIngestMaxFrames(this.options.audioIngestMaxFrames),
       pipelineReady: this.pipelineReady.promise,
       worker: this.options.worker,
       nextSequence: () => ++this.sequenceByRole[speakerRole],
@@ -236,7 +245,8 @@ export class LiveKitCallAudioSource {
     task = runtime.run()
       .catch((error) => this.handleAudioTrackError(error))
       .finally(() => {
-        this.activeAudioTracks.deleteIfCurrent(sourceKey, runtime);
+        const removed = this.activeAudioTracks.deleteIfCurrent(sourceKey, runtime);
+        if (removed) this.roleTrackGate.release(speakerRole, sourceKey);
         this.trackRuntimes.delete(runtime);
         this.trackTasks.delete(task);
       });
@@ -278,14 +288,6 @@ export class LiveKitCallAudioSource {
     } catch {
       // Error observers must not replace the original media failure.
     }
-  }
-
-  private audioIngestMaxFrames() {
-    const configured = this.options.audioIngestMaxFrames ??
-      DEFAULT_AUDIO_INGEST_MAX_FRAMES;
-    return Number.isInteger(configured) && configured > 0
-      ? configured
-      : DEFAULT_AUDIO_INGEST_MAX_FRAMES;
   }
 
   private attachRoomListeners(room: RtcRoom, rtc: RtcNodeModule) {
