@@ -28,6 +28,9 @@ class _AutoFollowScrollViewState extends State<AutoFollowScrollView> {
   bool _followLatest = true;
   bool _showJumpToLatest = false;
   bool _scrollScheduled = false;
+  bool _scrollAnimating = false;
+  bool _scrollPending = false;
+  bool _userScrollActive = false;
 
   @override
   void initState() {
@@ -85,14 +88,24 @@ class _AutoFollowScrollViewState extends State<AutoFollowScrollView> {
 
   bool _handleScrollNotification(ScrollNotification notification) {
     if (notification.metrics.axis != Axis.vertical) return false;
-    final nearBottom = notification.metrics.extentAfter <= _bottomThreshold;
-    if (nearBottom == _followLatest && _showJumpToLatest == !nearBottom) {
-      return false;
+    if (notification is ScrollStartNotification &&
+        notification.dragDetails != null) {
+      _userScrollActive = true;
     }
-    setState(() {
-      _followLatest = nearBottom;
-      _showJumpToLatest = !nearBottom;
-    });
+    final userDriven = _userScrollActive ||
+        notification is ScrollUpdateNotification &&
+            notification.dragDetails != null ||
+        notification is OverscrollNotification &&
+            notification.dragDetails != null;
+    if (!userDriven) return false;
+    final nearBottom = notification.metrics.extentAfter <= _bottomThreshold;
+    if (nearBottom != _followLatest || _showJumpToLatest == nearBottom) {
+      setState(() {
+        _followLatest = nearBottom;
+        _showJumpToLatest = !nearBottom;
+      });
+    }
+    if (notification is ScrollEndNotification) _userScrollActive = false;
     return false;
   }
 
@@ -112,37 +125,56 @@ class _AutoFollowScrollViewState extends State<AutoFollowScrollView> {
   }
 
   void _scheduleScrollToLatest({int retries = 8}) {
-    if (_scrollScheduled) return;
+    if (_scrollScheduled || _scrollAnimating) {
+      _scrollPending = true;
+      return;
+    }
     _scrollScheduled = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _scrollScheduled = false;
-      if (!mounted || !_scrollController.hasClients) return;
-      final position = _scrollController.position;
-      if (!position.hasContentDimensions) {
-        if (retries > 0) _scheduleScrollToLatest(retries: retries - 1);
-        return;
-      }
-      final targetOffset = position.maxScrollExtent;
-      if (!targetOffset.isFinite) return;
-      unawaited(
-        _scrollController
-            .animateTo(
-          targetOffset,
-          duration: const Duration(milliseconds: 220),
-          curve: Curves.easeOut,
-        )
-            .then((_) {
-          if (!mounted) return;
-          if (!_isNearBottom && retries > 0) {
-            _scheduleScrollToLatest(retries: retries - 1);
-            return;
-          }
-          setState(() {
-            _followLatest = true;
-            _showJumpToLatest = false;
-          });
-        }).catchError((Object _) {}),
-      );
+      unawaited(_scrollToLatest(retries));
     });
+  }
+
+  Future<void> _scrollToLatest(int retries) async {
+    _scrollScheduled = false;
+    if (!mounted || !_scrollController.hasClients) return;
+    final position = _scrollController.position;
+    if (!position.hasContentDimensions) {
+      if (retries > 0) _scheduleScrollToLatest(retries: retries - 1);
+      return;
+    }
+    final targetOffset = position.maxScrollExtent;
+    if (!targetOffset.isFinite) return;
+    _scrollAnimating = true;
+    try {
+      await _scrollController.animateTo(
+        targetOffset,
+        duration: const Duration(milliseconds: 220),
+        curve: Curves.easeOut,
+      );
+    } catch (_) {
+      // A real user drag may cancel programmatic scrolling.
+    } finally {
+      _scrollAnimating = false;
+    }
+    if (!mounted) return;
+    if (!_isNearBottom && !_followLatest) {
+      _scrollPending = false;
+      return;
+    }
+    if (!_isNearBottom && retries > 0) {
+      _scheduleScrollToLatest(retries: retries - 1);
+      return;
+    }
+    if (_followLatest != true || _showJumpToLatest) {
+      setState(() {
+        _followLatest = true;
+        _showJumpToLatest = false;
+      });
+    }
+    if (_scrollPending) {
+      _scrollPending = false;
+      _scheduleScrollToLatest();
+    }
   }
 }

@@ -168,6 +168,8 @@ class FakeCallRoomClient implements CallRoomClient {
   FakeCallRoomClient({
     this.message,
     this.captions = const <CallRoomCaption>[],
+    this.microphoneEnabled = true,
+    this.microphonePausedForPlayback = false,
   });
 
   final StreamController<CallRoomSnapshot> _snapshots =
@@ -176,6 +178,8 @@ class FakeCallRoomClient implements CallRoomClient {
   CallRoomToken? connectedToken;
   final String? message;
   final List<CallRoomCaption> captions;
+  final bool microphoneEnabled;
+  final bool microphonePausedForPlayback;
 
   @override
   Stream<CallRoomSnapshot> get snapshots => _snapshots.stream;
@@ -185,7 +189,8 @@ class FakeCallRoomClient implements CallRoomClient {
     connectedToken = token;
     _snapshots.add(CallRoomSnapshot(
       status: CallRoomConnectionStatus.connected,
-      microphoneEnabled: true,
+      microphoneEnabled: microphoneEnabled,
+      microphonePausedForPlayback: microphonePausedForPlayback,
       remoteParticipantCount: 1,
       message: message,
       captions: captions,

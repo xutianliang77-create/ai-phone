@@ -13,12 +13,14 @@ class CallRoomSnapshot {
     required this.status,
     required this.microphoneEnabled,
     required this.remoteParticipantCount,
+    this.microphonePausedForPlayback = false,
     this.message,
     this.captions = const <CallRoomCaption>[],
   });
 
   final CallRoomConnectionStatus status;
   final bool microphoneEnabled;
+  final bool microphonePausedForPlayback;
   final int remoteParticipantCount;
   final String? message;
   final List<CallRoomCaption> captions;
@@ -27,6 +29,7 @@ class CallRoomSnapshot {
       : this(
           status: CallRoomConnectionStatus.disconnected,
           microphoneEnabled: false,
+          microphonePausedForPlayback: false,
           remoteParticipantCount: 0,
           message: message,
           captions: const <CallRoomCaption>[],
@@ -35,6 +38,7 @@ class CallRoomSnapshot {
   CallRoomSnapshot copyWith({
     CallRoomConnectionStatus? status,
     bool? microphoneEnabled,
+    bool? microphonePausedForPlayback,
     int? remoteParticipantCount,
     String? message,
     List<CallRoomCaption>? captions,
@@ -42,6 +46,8 @@ class CallRoomSnapshot {
     return CallRoomSnapshot(
       status: status ?? this.status,
       microphoneEnabled: microphoneEnabled ?? this.microphoneEnabled,
+      microphonePausedForPlayback:
+          microphonePausedForPlayback ?? this.microphonePausedForPlayback,
       remoteParticipantCount:
           remoteParticipantCount ?? this.remoteParticipantCount,
       message: message ?? this.message,

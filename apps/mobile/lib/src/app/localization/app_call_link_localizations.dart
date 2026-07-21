@@ -28,6 +28,8 @@ extension AppCallLinkLocalizations on AppLocalizations {
   String get callRoomConnecting => text('callRoomConnecting');
   String get callRoomConnected => text('callRoomConnected');
   String get callRoomConnectedNoMic => text('callRoomConnectedNoMic');
+  String get callRoomMicrophonePausedForPlayback =>
+      text('callRoomMicrophonePausedForPlayback');
   String get callRoomReconnecting => text('callRoomReconnecting');
   String get callRoomRemoteParticipants => text('callRoomRemoteParticipants');
   String get callRoomCaptions => text('callRoomCaptions');
