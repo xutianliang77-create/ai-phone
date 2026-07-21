@@ -95,8 +95,8 @@ function eventRow(values: unknown[]) {
     budget_id: values[2], hold_id: values[3], ledger_entry_id: values[4],
     category: values[5], unit: values[6], amount: String(values[7]),
     source_type: values[8], source_ref: values[9], idempotency_key: values[10],
-    request_hash: values[11], occurred_at: values[12], received_at: values[13],
-    metadata: JSON.parse(String(values[14])),
+    request_hash: values[11], trace_id: values[12], occurred_at: values[13],
+    received_at: values[14], metadata: JSON.parse(String(values[15])),
   };
 }
 

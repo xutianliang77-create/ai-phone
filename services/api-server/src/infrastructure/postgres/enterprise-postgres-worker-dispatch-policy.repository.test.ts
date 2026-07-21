@@ -90,6 +90,7 @@ function bindingRow() {
     route_epoch: "7",
     policy_version: "policy-1",
     entitlement_version: "entitlement-1",
+    trace_id: "trace-policy",
     generation: "3",
     last_event_sequence: "9",
     last_event_at: "2026-07-18T05:00:30.000Z",

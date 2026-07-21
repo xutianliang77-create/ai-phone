@@ -1,4 +1,5 @@
 import { render, screen, waitFor, within } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import {
@@ -140,9 +141,11 @@ function renderPage(api: EnterpriseApi) {
     account: account(),
   }));
   return render(
-    <AuthProvider api={api} storage={storage}>
-      <MemberSettingsPage />
-    </AuthProvider>,
+    <MemoryRouter>
+      <AuthProvider api={api} storage={storage}>
+        <MemberSettingsPage />
+      </AuthProvider>
+    </MemoryRouter>,
   );
 }
 

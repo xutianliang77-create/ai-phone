@@ -135,13 +135,13 @@ BEGIN
             WHERE suppression.tenant_id = NEW.tenant_id
               AND suppression.phone_hash = lead.phone_hash
               AND suppression.scope IN ('tenant', 'global'))
-          AND EXISTS (SELECT 1 FROM jsonb_array_elements(policy.calling_windows) window(item)
-            WHERE (window.item ->> 'weekday')::integer = extract(isodow FROM
+          AND EXISTS (SELECT 1 FROM jsonb_array_elements(policy.calling_windows) calling_window(item)
+            WHERE (calling_window.item ->> 'weekday')::integer = extract(isodow FROM
                 NEW.updated_at AT TIME ZONE lead.timezone)::integer
-              AND (window.item ->> 'startMinute')::integer <=
+              AND (calling_window.item ->> 'startMinute')::integer <=
                 extract(hour FROM NEW.updated_at AT TIME ZONE lead.timezone)::integer * 60 +
                 extract(minute FROM NEW.updated_at AT TIME ZONE lead.timezone)::integer
-              AND (window.item ->> 'endMinute')::integer >
+              AND (calling_window.item ->> 'endMinute')::integer >
                 extract(hour FROM NEW.updated_at AT TIME ZONE lead.timezone)::integer * 60 +
                 extract(minute FROM NEW.updated_at AT TIME ZONE lead.timezone)::integer)
       ) OR NOT EXISTS (
@@ -261,7 +261,7 @@ BEGIN
   SET status = 'cancelled', outcome_code = 'suppressed', claimed_at = NULL,
     claim_owner = NULL, claim_token_hash = NULL, lease_expires_at = NULL,
     usage_hold_id = NULL,
-    updated_at = GREATEST(NEW.created_at, task.updated_at + interval '1 millisecond'),
+    updated_at = GREATEST(NEW.created_at, task.updated_at + interval '1 millisecond')
   FROM enterprise.marketing_leads lead
   WHERE task.tenant_id = NEW.tenant_id AND lead.tenant_id = task.tenant_id
     AND lead.id = task.lead_id AND lead.phone_hash = NEW.phone_hash

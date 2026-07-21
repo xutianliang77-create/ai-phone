@@ -154,6 +154,22 @@ export async function verifyEnterprisePostgresSchema(client: PostgresMigrationCl
     WHERE n.nspname = 'enterprise' AND c.relkind = 'r'
   `);
   const byName = new Map(tables.rows.map((row) => [row.table_name, row]));
+  const tenantRoot = byName.get("tenants");
+  if (!tenantRoot || !tenantRoot.rls || !tenantRoot.force_rls) {
+    throw new Error("Enterprise tenant root RLS is not forced");
+  }
+  const tenantRootPolicies = await client.query<{ count: string }>(`
+    SELECT count(*)::text AS count FROM pg_policies
+    WHERE schemaname = 'enterprise' AND tablename = 'tenants'
+      AND policyname = 'tenants_tenant_isolation'
+      AND permissive = 'PERMISSIVE' AND roles = ARRAY['public']::name[]
+      AND cmd = 'ALL'
+      AND qual = '(id = enterprise.current_tenant_id())'
+      AND with_check = '(id = enterprise.current_tenant_id())'
+  `);
+  if (Number(tenantRootPolicies.rows[0]?.count) !== 1) {
+    throw new Error("Enterprise tenant root isolation policy is missing");
+  }
   const missing = enterpriseTenantTableNames.filter((name) => !byName.has(name));
   const unsafe = enterpriseTenantTableNames.filter((name) => {
     const row = byName.get(name);

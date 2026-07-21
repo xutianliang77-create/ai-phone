@@ -11,6 +11,8 @@ import {
   enterprisePostgresStartupMode,
   runEnterprisePostgresStartupGate,
 } from "./enterprise-postgres-startup-gate.js";
+import { loadEnterprisePostgresMigrations } from
+  "./enterprise-postgres-migrations.js";
 
 describe("enterprise PostgreSQL startup gate", () => {
   it("is disabled by default without creating a database client", async () => {
@@ -46,7 +48,11 @@ describe("enterprise PostgreSQL startup gate", () => {
     expect(result).toMatchObject({
       status: "verified",
       mode: "verify",
-      evidence: { migrations: 18, rls: "forced", subjectColumns: 23 },
+      evidence: {
+        migrations: loadEnterprisePostgresMigrations().length,
+        rls: "forced",
+        subjectColumns: enterpriseSubjectColumns.length,
+      },
     });
     expect(fixture.config).toEqual({
       connectionString: "postgresql://enterprise.example/app",
@@ -110,15 +116,25 @@ function clientFixture(subjectType = "text") {
       }
       if (sql.includes("FROM pg_class")) {
         return {
-          rows: enterpriseTenantTableNames.map((table_name) => ({
+          rows: ["tenants", ...enterpriseTenantTableNames].map((table_name) => ({
             table_name,
             rls: true,
             force_rls: true,
           })) as Row[],
         };
       }
+      if (sql.includes("FROM pg_policies")) {
+        const exact = sql.includes("permissive = 'PERMISSIVE'") &&
+          sql.includes("roles = ARRAY['public']::name[]") &&
+          sql.includes("cmd = 'ALL'") &&
+          sql.includes("qual = '(id = enterprise.current_tenant_id())'") &&
+          sql.includes("with_check = '(id = enterprise.current_tenant_id())'");
+        return { rows: [{ count: exact ? "1" : "0" }] as Row[] };
+      }
       if (sql.includes("schema_migrations")) {
-        return { rows: [{ count: "18" }] as Row[] };
+        return {
+          rows: [{ count: String(loadEnterprisePostgresMigrations().length) }] as Row[],
+        };
       }
       if (sql.includes("FROM pg_constraint")) {
         return { rows: [{ count: "12" }] as Row[] };

@@ -207,8 +207,9 @@ function usageEventRow(values: unknown[]) {
     source_ref: values[9],
     idempotency_key: values[10],
     request_hash: values[11],
-    occurred_at: values[12],
-    received_at: values[13],
+    trace_id: values[12],
+    occurred_at: values[13],
+    received_at: values[14],
     metadata: {},
   };
 }

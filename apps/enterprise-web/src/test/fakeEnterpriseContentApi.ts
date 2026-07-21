@@ -57,7 +57,7 @@ export function fakeEnterpriseContentApi(): ContentApi {
     listMembers: vi.fn().mockResolvedValue({ members: [] }),
     createMember: vi.fn(),
     updateMember: vi.fn(),
-    getBillingEntitlements: vi.fn(),
+    getBillingEntitlements: vi.fn().mockRejectedValue(new Error("not configured")),
     getSessionTraceReport: vi.fn(),
     reportClientEvent: vi.fn().mockResolvedValue({ accepted: true, traceId: "trace-client" }),
     listAuditEvents: vi.fn().mockResolvedValue({ events: [] }),

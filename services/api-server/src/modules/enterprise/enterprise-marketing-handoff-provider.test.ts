@@ -29,7 +29,7 @@ describe("enterprise marketing handoff provider", () => {
       status: "completed", receiptId: "receipt-1", stopLatencyMs: 287,
       aiAudioStoppedAt: "2026-07-20T00:00:00.287Z",
       operatorJoinedAt: "2026-07-20T00:00:00.290Z",
-    }), { status: 200, headers: { "content-type": "application/json" }));
+    }), { status: 200, headers: { "content-type": "application/json" } }));
     const provider = createEnvironmentEnterpriseMarketingHandoffProvider({
       env: configured(), fetcher,
     });

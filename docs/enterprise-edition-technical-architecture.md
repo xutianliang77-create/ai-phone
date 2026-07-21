@@ -1,7 +1,7 @@
 # 无界AI企业版技术架构
 
-版本：v1.55
-日期：2026-07-20
+版本：v1.56
+日期：2026-07-21
 状态：SaaS 详细架构基线，已对齐统一通讯平台和 PostgreSQL Primary
 
 ## 1. 架构目标
@@ -177,8 +177,8 @@ object-storage
 | 账号、Tenant、RBAC、企业命令 | `services/api-server` | 先按 domain module 隔离；只有独立扩缩容或故障域需要时才拆服务 |
 | Enterprise Repository runtime/cell Worker | `services/api-server/src/modules/enterprise`、`services/api-server/src/infrastructure/postgres` | API 使用单一 `legacy|postgres` runtime；独立启动的 cell Worker 仅以 cell discovery 和 tenant transaction 角色 claim/finalize |
 | Communication Session、Provider Operation、Dispatch、Recording 和 Usage | 上游稳定提交 `fe1c3c2` 已导入企业分支，`ENT-DATA-008/CORE-013/014/015` 已补 tenant scope、企业业务绑定、签名 dispatch fence 和企业运行策略快照 | 公共 runtime 已成为代码基线；dispatch 必须先通过服务端 policy snapshot 与授权 fence，真实 Provider/设备仍待验收 |
-| PostgreSQL Primary 基础 | 公共31段 migration/Primary Runtime 与企业现有52段 migration | 已收敛为一个 Storage Driver/启动编排和两个有序 manifest；按 tenant/directory/cell/migration/maintenance 使用最小权限连接，等待真实 H3 验收 |
-| Release Control | enterprise `0052`、tenant-scoped control/event、服务端 guard 与内部探针 API | 平台变更、租户只读；缺记录/过期/kill/open/普通 half-open 全部失败闭合，等待真实故障演练 |
+| PostgreSQL Primary 基础 | 公共31段 migration/Primary Runtime 与企业现有53段 migration | 已收敛为一个 Storage Driver/启动编排和两个有序 manifest；按 tenant/directory/cell/migration/maintenance 使用最小权限连接，等待真实 H3 验收 |
+| Release Control | enterprise `0052/0053`、tenant-scoped control/event、tenant root RLS、服务端 guard 与内部探针 API | 本机 PostgreSQL 16.14 普通角色双租户、两个连接池竞争和双 API 进程同库读取已通过；Provider 故障、SLO、告警和值班演练仍待完成 |
 | 受控审计导出 | enterprise `0020`、Audit Export API/Repository、cell Worker、加密对象存储 Adapter | API 只创建/查询/鉴权下载；cell Worker 在 tenant transaction 取数并保存 hash/size/expiry，客户端不获得对象存储 key/凭据 |
 | 数据生命周期 | enterprise `0051`、Data Lifecycle Repository、cell Worker、对象删除/复核 Adapter、tenant deletion convergence receipt | 导出完成原子登记删除 job；到期/租户删除复用 pending-work 协调；对象复核不存在及数据库/对象/Provider remaining=0 后才完成，不建立第二套 tenant/export 真值 |
 | Enterprise Knowledge | enterprise `0017`、Knowledge Repository/runtime/API | source/revision/chunk/review/publish、发布后不可变、四维有效期检索和 citation 已接入；embedding Provider 未配置时保持确定性文本检索，不声明向量 readiness |
@@ -902,13 +902,13 @@ Worker 无权依据缓存继续执行敏感能力。
 
 生产 PostgreSQL 启动还必须验证企业签名 cutover evidence：证据绑定 staging 环境、
 commit、image digest、topology hash、目标 logical ID、system identifier/OID、公共31段与
-企业52段 manifest，并证明源库 writer fence、旧 API/Worker 角色会话为0、目标可写和
+企业53段 manifest，并证明源库 writer fence、旧 API/Worker 角色会话为0、目标可写和
 二次全量 hash 一致。本地逻辑恢复证据不提升为跨故障域 HA/PITR 结论。
 
 `ENT-REL-003` 在该单一 cutover 真值之后增加 Provider 无关的灾备证据层，不建立第二套数据库状态：
 `signed cutover evidence -> enterprise DR binding -> bounded shell-free Provider steps -> signed schema-v2 result
 -> production resilience verifier`。binding 固定候选 commit/image、topology、cutover/run ID、目标数据库
-system identifier/OID/manifest 和当前31+52 migration；cutover 与 DR 使用不同 HMAC key。命令 attestation
+system identifier/OID/manifest 和当前31+53 migration；cutover 与 DR 使用不同 HMAC key。命令 attestation
 必须回显 run/group/step，并按固定顺序完成 baseline、异地 base backup/WAL、健康控制器自动切换、旧主数据库+
 route epoch+Worker generation 三层 fencing、服务发现、旧主只读 standby 重入、隔离 PITR 与 hash 复核。
 备份故障域必须不同于全部 HA 数据库故障域，且证明加密、对象版本和 compliance/provider retention lock。

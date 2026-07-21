@@ -43,7 +43,7 @@ describe("enterprise static security gate", () => {
       ],
     });
     expect(result.findings.map((finding) => finding.ruleId)).toEqual([
-      "ENT-SAST-010", "ENT-SAST-014",
+      "ENT-SAST-014", "ENT-SAST-010",
     ]);
   });
 

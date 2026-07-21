@@ -28,7 +28,7 @@ describe("enterprise role navigation render matrix", () => {
   it("keeps a hidden nested route forbidden when opened directly", async () => {
     renderRole("marketing_member", "/support/session-a");
 
-    expect(await screen.findByRole("heading", { name: "AI 客服" })).toBeVisible();
+    expect(await screen.findByRole("heading", { name: "坐席工作台" })).toBeVisible();
     expect(screen.getByRole("heading", { name: "无权访问" })).toBeVisible();
     expect(screen.queryByRole("link", { name: /AI 客服/ })).not.toBeInTheDocument();
   });

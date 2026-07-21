@@ -227,6 +227,7 @@ function bindingRow(overrides: Record<string, unknown> = {}) {
     route_epoch: "7",
     policy_version: "policy-v1",
     entitlement_version: "entitlement-v1",
+    trace_id: "trace-binding",
     generation: "1",
     last_event_sequence: "0",
     last_event_at: null,

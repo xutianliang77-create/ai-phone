@@ -163,6 +163,7 @@ const tenantRouteService = createTenantRouteService({
   signingSecret: "test-client-event-route-signing-secret-32-bytes",
   publicRoutes: {
     "cn-cell-01": {
+      homeRegion: "cn",
       apiBaseUrl: "https://api-cn.enterprise.example",
       rtcUrl: "wss://rtc-cn.enterprise.example",
     },

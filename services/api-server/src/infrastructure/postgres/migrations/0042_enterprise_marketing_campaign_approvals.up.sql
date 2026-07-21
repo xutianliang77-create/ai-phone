@@ -278,18 +278,18 @@ ALTER TABLE enterprise.marketing_campaigns ADD COLUMN approval_snapshot_id uuid,
     REFERENCES enterprise.marketing_campaign_approval_decisions (tenant_id, id);
 
 CREATE OR REPLACE FUNCTION enterprise.marketing_campaign_approval_is_current(
-  campaign_id uuid, decision_id uuid
+  target_campaign_id uuid, target_decision_id uuid
 ) RETURNS boolean LANGUAGE sql AS $$
   SELECT EXISTS (
     SELECT 1 FROM enterprise.marketing_campaigns campaign
     JOIN enterprise.marketing_campaign_approval_decisions decision
-      ON decision.tenant_id = campaign.tenant_id AND decision.id = decision_id
+      ON decision.tenant_id = campaign.tenant_id AND decision.id = target_decision_id
       AND decision.campaign_id = campaign.id AND decision.decision = 'approved'
     JOIN enterprise.marketing_campaign_validation_snapshots validation
       ON validation.tenant_id = decision.tenant_id
       AND validation.id = decision.validation_snapshot_id
     WHERE campaign.tenant_id = enterprise.current_tenant_id()
-      AND campaign.id = campaign_id AND campaign.approval_snapshot_id = decision.id
+      AND campaign.id = target_campaign_id AND campaign.approval_snapshot_id = decision.id
       AND campaign.policy_version = validation.snapshot_hash
       AND validation.status = 'ready'
       AND enterprise.marketing_campaign_validation_matches(validation.id)

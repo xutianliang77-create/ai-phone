@@ -53,7 +53,14 @@ export async function migrateEnterprisePostgres(
         throw new Error(`Migration checksum mismatch: ${migration.id}`);
       }
       if (checksum) continue;
-      await client.query(migration.up);
+      try {
+        await client.query(migration.up);
+      } catch (error) {
+        const detail = error instanceof Error ? error.message : String(error);
+        throw new Error(`Enterprise migration failed: ${migration.id}: ${detail}`, {
+          cause: error,
+        });
+      }
       await client.query(
         "INSERT INTO enterprise.schema_migrations(id, checksum) VALUES ($1, $2)",
         [migration.id, migration.checksum],

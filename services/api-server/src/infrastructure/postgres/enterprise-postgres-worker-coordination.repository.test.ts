@@ -103,14 +103,14 @@ describe("enterprise PostgreSQL worker coordination", () => {
     expect(malformed.calls.at(-1)?.sql).toBe("ROLLBACK");
 
     const unopened = poolFixture(() => []);
-    await expect(claimEnterprisePostgresPendingWorkBatch({
+    expect(() => claimEnterprisePostgresPendingWorkBatch({
       pool: unopened.pool,
       cellId,
       workerId,
       traceId: "trace-expired",
       leaseMs: 999,
       limit: 10,
-    })).rejects.toThrow("lease duration");
+    })).toThrow("lease duration");
     expect(unopened.calls).toEqual([]);
   });
 

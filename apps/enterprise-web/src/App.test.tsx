@@ -38,10 +38,13 @@ describe("enterprise application entry", () => {
 
     expect(await screen.findByRole("navigation", { name: "企业版主导航" })).toBeVisible();
     expect(screen.getByRole("heading", { name: "工作台" })).toBeVisible();
-    expect(screen.getByText("Tenant A")).toBeVisible();
-    expect(screen.getByText(/cn-cell-01/)).toBeVisible();
-    expect(screen.getByRole("heading", { name: "Provider readiness" })).toBeVisible();
-    expect(screen.getAllByText("not_configured")).toHaveLength(4);
+    expect(screen.getByRole("combobox", { name: "切换当前企业" }))
+      .toHaveValue("tenant-a");
+    expect(document.querySelector(".topbar__context"))
+      .toHaveTextContent("cn · cn-cell-01");
+    expect(screen.getByText("Provider 就绪")).toBeVisible();
+    expect(screen.getByText("0/4")).toBeVisible();
+    expect(screen.getAllByText(/未配置（provider_not_configured）/)).toHaveLength(4);
   });
 
   it("requires an explicit choice when the account has multiple tenants", async () => {

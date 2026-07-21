@@ -2,9 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   createEnterpriseTenantContext,
 } from "../../modules/enterprise/enterprise-tenant-context.js";
-import type {
-  EnterpriseWorkerDispatchTicketPayload,
-} from "../../modules/enterprise/enterprise-worker-dispatch-ticket.js";
+import type { EnterpriseWorkerDispatchTicketPayload } from
+  "../../modules/enterprise/enterprise-worker-dispatch-ticket.js";
 import type {
   EnterpriseTenantPostgresSession,
 } from "./enterprise-postgres-tenant-session.js";
@@ -331,6 +330,7 @@ function bindingRow(change: Record<string, unknown> = {}) {
     route_epoch: "7",
     policy_version: "policy-1",
     entitlement_version: "entitlement-1",
+    trace_id: "trace-1",
     generation: "3",
     last_event_sequence: "9",
     last_event_at: "2026-07-18T05:00:30.000Z",

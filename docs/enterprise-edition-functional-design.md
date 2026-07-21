@@ -1,7 +1,7 @@
 # 无界AI企业版详细功能设计
 
-版本：v1.52
-日期：2026-07-20
+版本：v1.53
+日期：2026-07-21
 状态：SaaS 详细设计基线，已对齐统一通讯平台
 
 ## 1. 产品定位
@@ -885,7 +885,7 @@ service-account Adapter、可注入 mock 以及 Web/Flutter 状态入口。自�
   PITR 已验证；证据需显示环境、commit/image/topology、cutover ID 和最近验证时间。
   本地或同故障域恢复只能显示“机制已验证”，不能显示“生产灾备就绪”。
 - `ENT-REL-003` 只建立服务端演练和放行证据门禁，不向租户提供 promote、failover、fence 或 restore
-  操作。灾备 readiness 只有在同一签名 schema-v2 结果绑定当前 enterprise cutover、31+52 manifest、
+  操作。灾备 readiness 只有在同一签名 schema-v2 结果绑定当前 enterprise cutover、31+53 manifest、
   自动切换/旧主隔离、异地不可变备份和 PITR hash 后才可为 ready；缺 Adapter、容量、证据或任一实测值
   必须显示 `not_ready`。RPO/RTO 只展示批准目标和本次实测，不得在真实演练与 SLA 批准前承诺数值。
 

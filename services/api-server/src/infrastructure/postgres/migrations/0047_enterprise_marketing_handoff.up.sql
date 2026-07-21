@@ -165,7 +165,7 @@ CREATE TRIGGER marketing_handoff_policies_guard
   FOR EACH ROW EXECUTE FUNCTION enterprise.guard_marketing_handoff_policy();
 
 CREATE OR REPLACE FUNCTION enterprise.marketing_handoff_policy_is_ready(
-  campaign_id uuid
+  target_campaign_id uuid
 ) RETURNS boolean LANGUAGE sql STABLE AS $$
   SELECT EXISTS (
     SELECT 1 FROM enterprise.marketing_handoff_policies policy
@@ -176,7 +176,7 @@ CREATE OR REPLACE FUNCTION enterprise.marketing_handoff_policy_is_ready(
       ON channel_record.tenant_id = policy.tenant_id
       AND channel_record.id = policy.support_channel_id
     WHERE policy.tenant_id = enterprise.current_tenant_id()
-      AND policy.campaign_id = campaign_id AND queue_record.status = 'active'
+      AND policy.campaign_id = target_campaign_id AND queue_record.status = 'active'
       AND channel_record.status = 'active' AND channel_record.channel_type = 'pstn'
   )
 $$;

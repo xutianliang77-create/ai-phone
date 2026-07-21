@@ -11,11 +11,11 @@ import type {
 describe("enterprise PostgreSQL schema verification", () => {
   it("accepts the current migration count", async () => {
     const evidence = await verifyEnterprisePostgresSchema(
-      new VerifyClient("51"),
+      new VerifyClient("53"),
     );
 
     expect(evidence).toEqual({
-      migrations: 52,
+      migrations: 53,
       tenantTables: enterpriseTenantTableNames.length,
       compositeForeignKeys: 12,
       subjectColumns: enterpriseSubjectColumns.length,
@@ -25,14 +25,20 @@ describe("enterprise PostgreSQL schema verification", () => {
   });
 
   it("rejects a stale migration count", async () => {
-    await expect(verifyEnterprisePostgresSchema(new VerifyClient("50")))
-      .rejects.toThrow("Migration count is not 51");
+    await expect(verifyEnterprisePostgresSchema(new VerifyClient("52")))
+      .rejects.toThrow("Migration count is not 53");
   });
 
   it("rejects stale UUID subject columns", async () => {
     await expect(verifyEnterprisePostgresSchema(
-      new VerifyClient("51", "uuid"),
+      new VerifyClient("53", "uuid"),
     )).rejects.toThrow("subject columns are not text");
+  });
+
+  it("rejects a missing or relaxed tenant root policy", async () => {
+    await expect(verifyEnterprisePostgresSchema(
+      new VerifyClient("53", "text", false),
+    )).rejects.toThrow("tenant root isolation policy is missing");
   });
 });
 
@@ -40,6 +46,7 @@ class VerifyClient implements PostgresMigrationClient {
   constructor(
     private readonly migrationCount: string,
     private readonly subjectType = "text",
+    private readonly tenantPolicyValid = true,
   ) {}
 
   async query<Row extends Record<string, unknown>>(sql: string) {
@@ -48,12 +55,20 @@ class VerifyClient implements PostgresMigrationClient {
     }
     if (sql.includes("FROM pg_class")) {
       return {
-        rows: enterpriseTenantTableNames.map((table_name) => ({
+        rows: ["tenants", ...enterpriseTenantTableNames].map((table_name) => ({
           table_name,
           rls: true,
           force_rls: true,
         })) as Row[],
       };
+    }
+    if (sql.includes("FROM pg_policies")) {
+      const exact = sql.includes("permissive = 'PERMISSIVE'") &&
+        sql.includes("roles = ARRAY['public']::name[]") &&
+        sql.includes("cmd = 'ALL'") &&
+        sql.includes("qual = '(id = enterprise.current_tenant_id())'") &&
+        sql.includes("with_check = '(id = enterprise.current_tenant_id())'");
+      return { rows: [{ count: exact && this.tenantPolicyValid ? "1" : "0" }] as Row[] };
     }
     if (sql.includes("schema_migrations")) {
       return { rows: [{ count: this.migrationCount }] as Row[] };

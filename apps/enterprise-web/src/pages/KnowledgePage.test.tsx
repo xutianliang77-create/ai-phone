@@ -1,4 +1,5 @@
 import { render, screen, waitFor } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import type {
@@ -107,11 +108,11 @@ describe("enterprise knowledge and terminology page", () => {
     const user = userEvent.setup();
     renderPage(api);
 
-    await user.click(await screen.findByRole("tab", { name: /术语包/ }));
+    await user.click(await screen.findByRole("button", { name: /术语包/ }));
     expect(await screen.findByText("1 个术语 · ASR / 翻译 / Agent")).toBeVisible();
     expect(screen.getByText("使用范围：support")).toBeVisible();
 
-    await user.click(screen.getByRole("tab", { name: /话术模板/ }));
+    await user.click(screen.getByRole("button", { name: /话术模板/ }));
     expect(await screen.findByText("2 必说 · 1 禁语")).toBeVisible();
     expect(screen.getByText("support · active")).toBeVisible();
   });
@@ -126,9 +127,11 @@ function renderPage(api: EnterpriseApi) {
     account: account(),
   }));
   return render(
-    <AuthProvider api={api} storage={storage}>
-      <KnowledgePage />
-    </AuthProvider>,
+    <MemoryRouter>
+      <AuthProvider api={api} storage={storage}>
+        <KnowledgePage />
+      </AuthProvider>
+    </MemoryRouter>,
   );
 }
 
