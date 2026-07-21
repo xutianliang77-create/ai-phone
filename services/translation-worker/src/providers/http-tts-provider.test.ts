@@ -319,12 +319,35 @@ describe("HttpTtsProvider", () => {
     const provider = new HttpTtsProvider({
       endpoint: "https://tts.example.com/synthesize",
       warmupEndpoint: "https://tts.example.com/warmup",
+      warmupMaxMs: 5,
+      timeoutMs: 1000,
+      fetchFn: async () => {
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        return response(200, {
+          cached: false,
+          elapsedMs: 1,
+          firstAudioMs: 700,
+          provider: "voxcpm2",
+          model: "VoxCPM2",
+        });
+      },
+    });
+
+    await expect(provider.warmup!({
+      signal: new AbortController().signal,
+    })).rejects.toThrow("warmup exceeded 5ms");
+  });
+
+  it("uses current request latency when a cached warmup reports historical cold-start time", async () => {
+    const provider = new HttpTtsProvider({
+      endpoint: "https://tts.example.com/synthesize",
+      warmupEndpoint: "https://tts.example.com/warmup",
       warmupMaxMs: 500,
       timeoutMs: 1000,
       fetchFn: async () => response(200, {
-        cached: false,
-        elapsedMs: 800,
-        firstAudioMs: 700,
+        cached: true,
+        elapsedMs: 38_495,
+        firstAudioMs: 192,
         provider: "voxcpm2",
         model: "VoxCPM2",
       }),
@@ -332,7 +355,12 @@ describe("HttpTtsProvider", () => {
 
     await expect(provider.warmup!({
       signal: new AbortController().signal,
-    })).rejects.toThrow("warmup exceeded 500ms");
+    })).resolves.toMatchObject({
+      cached: true,
+      firstAudioMs: 192,
+      provider: "voxcpm2",
+      model: "VoxCPM2",
+    });
   });
 });
 
