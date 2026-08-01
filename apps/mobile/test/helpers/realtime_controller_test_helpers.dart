@@ -21,6 +21,7 @@ RealtimeController realtimeControllerForTest(
   bool autoSpeakTranslation = false,
   AudioSessionCoordinator? audioSessionCoordinator,
   SpeechCaptureGate? speechCaptureGate,
+  String realtimeMode = 'conversation',
 }) {
   return RealtimeController(
     repository: repository,
@@ -38,6 +39,7 @@ RealtimeController realtimeControllerForTest(
       deviceAsrAutoDownloadModel: false,
       deviceAsrModelChunkMs: 2240,
       serverOwnedHistory: true,
+      realtimeMode: realtimeMode,
     ),
   );
 }
@@ -140,6 +142,7 @@ class FakeAudioCapture implements AudioCapture {
   final bool failStop;
   int stopCalls = 0;
   int startCalls = 0;
+  final startedConfigs = <AudioCaptureConfig>[];
 
   @override
   Stream<AudioFrame> get frames => _frames.stream;
@@ -150,6 +153,7 @@ class FakeAudioCapture implements AudioCapture {
   @override
   Future<void> start(AudioCaptureConfig config) async {
     startCalls += 1;
+    startedConfigs.add(config);
     if (failStart) throw StateError('microphone start failed');
   }
 

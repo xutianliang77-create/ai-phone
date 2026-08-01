@@ -12,7 +12,10 @@ export function checkMobileChineseInterface(root) {
     root,
     "apps/mobile/lib/src/app/localization/app_localization_texts.dart",
     [
-      ["ai phone", "English product app title exists"],
+      [
+        "'appTitle': {'zh': '无界AI', 'en': '无界AI'}",
+        "Flutter product name uses 无界AI",
+      ],
       ["中英实时同声传译", "Chinese realtime subtitle exists"],
       ["英译中", "Chinese English-to-Chinese direction label exists"],
       ["中译英", "Chinese Chinese-to-English direction label exists"],
@@ -127,15 +130,15 @@ export function checkMobileChineseInterface(root) {
     ],
   );
   requireContains(checks, root, "apps/mobile/ios/Runner/zh-Hans.lproj/InfoPlist.strings", [
-    ["\"CFBundleDisplayName\" = \"ai phone\"", "iOS display name uses ai phone"],
+    ["\"CFBundleDisplayName\" = \"无界AI\"", "iOS display name uses 无界AI"],
     ["\"NSMicrophoneUsageDescription\"", "iOS Chinese microphone permission exists"],
     ["\"NSLocalNetworkUsageDescription\"", "iOS Chinese local network permission exists"],
   ]);
   requireContains(checks, root, "apps/mobile/android/app/src/main/res/values/strings.xml", [
-    ["<string name=\"app_name\">ai phone</string>", "Android default app name uses ai phone"],
+    ["<string name=\"app_name\">无界AI</string>", "Android default app name uses 无界AI"],
   ]);
   requireContains(checks, root, "apps/mobile/android/app/src/main/res/values-zh/strings.xml", [
-    ["<string name=\"app_name\">ai phone</string>", "Android zh app name uses ai phone"],
+    ["<string name=\"app_name\">无界AI</string>", "Android zh app name uses 无界AI"],
   ]);
 
   const failures = checks.filter((check) => !check.pass);

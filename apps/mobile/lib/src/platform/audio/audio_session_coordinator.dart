@@ -63,7 +63,7 @@ class AudioSessionEvent {
 abstract interface class AudioSessionCoordinator {
   Stream<AudioSessionEvent> get events;
 
-  Future<void> beginCapture();
+  Future<void> beginCapture({bool voiceProcessing = true});
   Future<void> endCapture();
   Future<void> dispose();
 }
@@ -75,7 +75,7 @@ class NoopAudioSessionCoordinator implements AudioSessionCoordinator {
   Stream<AudioSessionEvent> get events => const Stream.empty();
 
   @override
-  Future<void> beginCapture() async {}
+  Future<void> beginCapture({bool voiceProcessing = true}) async {}
 
   @override
   Future<void> endCapture() async {}
@@ -112,8 +112,11 @@ class SystemAudioSessionCoordinator implements AudioSessionCoordinator {
   }
 
   @override
-  Future<void> beginCapture() =>
-      _methodChannel.invokeMethod<void>('beginCapture');
+  Future<void> beginCapture({bool voiceProcessing = true}) =>
+      _methodChannel.invokeMethod<void>(
+        'beginCapture',
+        <String, Object?>{'voiceProcessing': voiceProcessing},
+      );
 
   @override
   Future<void> endCapture() => _methodChannel.invokeMethod<void>('endCapture');

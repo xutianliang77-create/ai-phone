@@ -36,7 +36,8 @@ describe("checkMobileChineseInterface", () => {
 
   test("fails when Chinese runtime message evidence is missing", () => {
     tempDir = makeProject({
-      localizationTextsDart: "const appTitle = 'ai phone';",
+      localizationTextsDart:
+        "const appLocalizationTexts = {'appTitle': {'zh': '无界AI', 'en': '无界AI'}};",
     });
 
     const result = checkMobileChineseInterface(tempDir);
@@ -44,6 +45,17 @@ describe("checkMobileChineseInterface", () => {
     expect(result.status).toBe("not_ready");
     expect(result.failures.map((failure) => failure.label)).toContain(
       "Chinese realtime disconnect status exists",
+    );
+  });
+
+  test("fails when release surfaces still use the legacy product name", () => {
+    tempDir = makeProject({ productName: "ai phone" });
+
+    const result = checkMobileChineseInterface(tempDir);
+
+    expect(result.status).toBe("not_ready");
+    expect(result.failures.map((failure) => failure.label)).toContain(
+      "Flutter product name uses 无界AI",
     );
   });
 
@@ -63,6 +75,7 @@ describe("checkMobileChineseInterface", () => {
 
 function makeProject(overrides = {}) {
   const root = mkdtempSync(path.join(tmpdir(), "mobile-chinese-"));
+  const productName = overrides.productName ?? "无界AI";
   write(root, "apps/mobile/lib/src/app/app.dart", overrides.appDart ?? `
 class TranslationApp {
   const TranslationApp({this.locale = const Locale('zh')});
@@ -73,7 +86,9 @@ class TranslationApp {
 `);
   write(root, "apps/mobile/lib/src/app/localization/app_localization_texts.dart", overrides.localizationTextsDart ?? `
 const locales = [Locale('zh'), Locale('en')];
-const appTitle = 'ai phone';
+const appLocalizationTexts = {
+  'appTitle': {'zh': '${productName}', 'en': '${productName}'},
+};
 const subtitle = '中英实时同声传译';
 const toChinese = '英译中';
 const toEnglish = '中译英';
@@ -148,15 +163,15 @@ testWidgets('refreshes audio session diagnostics after self-test start fails', (
 });
 `);
   write(root, "apps/mobile/ios/Runner/zh-Hans.lproj/InfoPlist.strings", `
-"CFBundleDisplayName" = "ai phone";
-"NSMicrophoneUsageDescription" = "ai phone 需要使用麦克风。";
-"NSLocalNetworkUsageDescription" = "ai phone 需要连接局域网。";
+"CFBundleDisplayName" = "${productName}";
+"NSMicrophoneUsageDescription" = "${productName} 需要使用麦克风。";
+"NSLocalNetworkUsageDescription" = "${productName} 需要连接局域网。";
 `);
   write(root, "apps/mobile/android/app/src/main/res/values/strings.xml", `
-<resources><string name="app_name">ai phone</string></resources>
+<resources><string name="app_name">${productName}</string></resources>
 `);
   write(root, "apps/mobile/android/app/src/main/res/values-zh/strings.xml", `
-<resources><string name="app_name">ai phone</string></resources>
+<resources><string name="app_name">${productName}</string></resources>
 `);
   return root;
 }

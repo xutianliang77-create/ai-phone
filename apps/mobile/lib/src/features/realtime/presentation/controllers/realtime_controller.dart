@@ -93,6 +93,7 @@ class RealtimeController extends ChangeNotifier {
   Future<void> _speechChain = Future<void>.value();
   Future<void> _asrTextChain = Future<void>.value();
   int _speechGeneration = 0;
+  bool _speechOutputActive = false;
   final SpeechCaptureGate _speechCaptureGate;
   final Set<String> _speechEchoSegmentIds = <String>{};
   RealtimeStatus _status = RealtimeStatus.idle;
@@ -124,6 +125,7 @@ class RealtimeController extends ChangeNotifier {
   int? get remainingSeconds => _remainingSeconds;
   bool get lowBalance => _lowBalance;
   RealtimeGatewayDiagnostic? get gatewayDiagnostic => _gatewayDiagnostic;
+  bool get speechOutputActive => _speechOutputActive;
 
   void setAutoSpeakTranslation(bool enabled) {
     if (_autoSpeakTranslation == enabled) return;
@@ -208,9 +210,22 @@ class RealtimeController extends ChangeNotifier {
   Future<void> _startAudioCapture() async {
     await _audioCapture.requestPermission();
     await _audioSubscription?.cancel();
-    _audioSubscription = _audioCapture.frames.listen(_sendAudioFrame);
-    await _audioCapture.start(const AudioCaptureConfig());
-    await _audioSessionCoordinator.beginCapture();
+    final voiceProcessing = _config.realtimeMode == 'conversation';
+    await _audioSessionCoordinator.beginCapture(
+      voiceProcessing: voiceProcessing,
+    );
+    try {
+      _audioSubscription = _audioCapture.frames.listen(_sendAudioFrame);
+      await _audioCapture.start(AudioCaptureConfig(
+        echoCancel: voiceProcessing,
+        noiseSuppress: voiceProcessing,
+      ));
+    } catch (_) {
+      await _audioSubscription?.cancel();
+      _audioSubscription = null;
+      await ignoreCleanupError(_audioSessionCoordinator.endCapture);
+      rethrow;
+    }
   }
 
   Future<void> _prepareDeviceAsr() async {
@@ -263,6 +278,12 @@ class RealtimeController extends ChangeNotifier {
 
   void _notify() {
     if (!_disposed) notifyListeners();
+  }
+
+  void _setSpeechOutputActive(bool active) {
+    if (_speechOutputActive == active) return;
+    _speechOutputActive = active;
+    _notify();
   }
 
   void _replaceSegmentsFromDrafts() {

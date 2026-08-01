@@ -55,6 +55,25 @@ void main() {
     expect(controller.message, 'scan_translation_unavailable');
   });
 
+  test('does not silently change the selected target language', () async {
+    final translator = _FakeTranslationProvider();
+    final controller = ScanTranslationController(
+      ocrProvider: const _FakeOcrProvider('Welcome'),
+      translationProvider: translator,
+      pickImagePath: (_) async => _picked('/tmp/sign.jpg'),
+      historyRepository: _FakeSessionHistoryRepository(),
+    );
+
+    await controller.selectImage(ScanImageSource.gallery);
+    await controller.recognizeSelectedImage();
+    await controller.translateRecognizedText();
+
+    expect(controller.targetLanguage, 'en');
+    expect(controller.translatedText, 'Welcome');
+    expect(controller.status, ScanTranslationStatus.translated);
+    expect(translator.lastTargetLanguage, isNull);
+  });
+
   test('reports no text when OCR result is empty', () async {
     final controller = ScanTranslationController(
       ocrProvider: const _FakeOcrProvider(''),
