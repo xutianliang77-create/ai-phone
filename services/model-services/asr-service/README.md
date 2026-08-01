@@ -51,9 +51,11 @@ playback because VAD alone cannot distinguish device playback from live speech.
 
 Qwen3 ASR freezes one endpoint policy per session. Realtime `conversation`,
 `listening`, `call_link`, and `pstn` sessions therefore remain isolated even
-when processed concurrently. The deployment defaults use 900, 1400, 900, and
-1100 ms endpoint silence respectively; tune them only through the corresponding
-`ASR_QWEN3_*_ENDPOINT_SILENCE_MS` variables.
+when processed concurrently. The deployment defaults use 600, 1400, 600, and
+1100 ms endpoint silence respectively. The 600 ms conversation/call-link
+candidate retained 26/27 accuracy in three repeated RTX 5090 runs on 2026-07-23;
+listening and PSTN keep their longer safety windows. Tune them only through the
+corresponding `ASR_QWEN3_*_ENDPOINT_SILENCE_MS` variables.
 
 `ASR_QWEN3_MIXED_LANGUAGE_RETRY_ENABLED=false` remains off by default. In an
 isolated A/B run it can retry an `auto` segment with the English route when the

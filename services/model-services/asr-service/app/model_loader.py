@@ -128,6 +128,12 @@ def load_vad_provider(config: AsrConfig, fallback_energy_threshold: int):
 
 
 def qwen3_endpoint_policies(config: AsrConfig):
+    min_audio_by_mode = {
+        "conversation": config.qwen3_conversation_min_audio_ms,
+        "listening": config.qwen3_min_audio_ms,
+        "call_link": config.qwen3_min_audio_ms,
+        "pstn": config.qwen3_min_audio_ms,
+    }
     silence_by_mode = {
         "conversation": config.qwen3_conversation_endpoint_silence_ms,
         "listening": config.qwen3_listening_endpoint_silence_ms,
@@ -137,7 +143,7 @@ def qwen3_endpoint_policies(config: AsrConfig):
     return {
         mode: EndpointPolicy(
             mode=mode,
-            min_audio_ms=config.qwen3_min_audio_ms,
+            min_audio_ms=min_audio_by_mode[mode],
             endpoint_silence_ms=silence_ms,
             max_audio_ms=config.qwen3_max_audio_ms,
             preroll_ms=config.qwen3_preroll_ms,

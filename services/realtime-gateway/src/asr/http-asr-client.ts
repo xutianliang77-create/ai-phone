@@ -55,6 +55,7 @@ export interface HttpAsrBoundaryRequest extends HttpAsrFlushRequest {
 
 interface HttpAsrResponse {
   segmentId?: string;
+  revision?: number;
   text?: string;
   language?: string;
   confidence?: number;
@@ -219,6 +220,9 @@ export class HttpAsrClient {
 
     return {
       segmentId: body.segmentId ?? fallbackSegmentId,
+      ...(Number.isInteger(body.revision) && Number(body.revision) >= 0
+        ? { revision: Number(body.revision) }
+        : {}),
       text,
       language: body.language,
       confidence: body.confidence,
