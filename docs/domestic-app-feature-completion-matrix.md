@@ -1,7 +1,7 @@
 # 国内版 App 功能完成度矩阵
 
-版本：v1.2  
-日期：2026-07-08  
+版本：v1.3
+日期：2026-07-22
 依据：`docs/domestic-app-detailed-functional-design.md`、`docs/domestic-edition-development-plan.md`、`docs/domestic-edition-acceptance-plan.md`、`docs/domestic-design-review-action-plan.md`、`docs/domestic-account-identity-compliance-design.md`、`docs/domestic-technical-design-merge-plan.md`、`docs/domestic-realtime-billing-data-design.md`、`docs/llm-asr-refinement-and-record-review-functional-design.md`、`docs/llm-asr-refinement-functional-design.md`、`docs/llm-record-review-functional-design.md`、`docs/fluidvoice-source-review-and-adoption-plan.md`
 
 ## 1. 状态口径
@@ -16,16 +16,42 @@
 
 ## 2. 总体结论
 
-当前国内版已经具备 P0/P1 的主要产品骨架：五 Tab、中文界面、端侧同传、在线模型路由、历史、扫描、Call Link 控制面、AI Agent 控制面、PSTN Bridge 骨架、支付服务端和发布门禁均已成形。
+当前国内版已经具备 P0/P1 的主要产品骨架：五 Tab、中文界面、端侧同传、在线模型路由、历史、扫描、Call Link 控制面、AI Agent 控制面、PSTN Bridge 骨架、支付服务端和发布门禁均已成形。本文下方的 2026-07-22 校准层优先于旧行中的历史描述。
 
-距离“发布的产品水平”仍有四类关键缺口：
+距离“发布的产品水平”仍有五类关键缺口：
 
 - 真实体验验收：iPhone/Android 真机同传、在线模式、Call Link 双端 5 分钟、TTS 听感、OCR 40 张素材。
 - 生产配置：`release/domestic/release.env`、支付商户、告警 webhook、公网 LiveKit DNS/TLS、PSTN Bridge 真实上游。
-- 真实媒体闭环：Call Link 已有脚本级 Beelink media readiness，但还未完成真人 Host + Guest + Worker + ASR/翻译/TTS 听感闭环。
+- 真实媒体闭环：服务端自动化真实 LiveKit + ASR/MT/TTS 已通过 32 分钟/151 段长稳；iPhone 当时仅完成 candidate 安装、启动和存活，未加入该房间，不能计为真机 UI 通过。
 - 商业电话能力：PSTN/AI Agent 控制面和内部媒体闭环已有，真实服务商媒体协议、拨号合规和灰度发布仍未完成。
 - 设计审核新增阻断：账号身份、微信 WebView WebRTC 基础能力、首启隐私同意和云端语音敏感信息单独同意已完成基础实现，仍需真机和合规文案验收；被叫告知、面对面自动朗读防回声、FireRedASR2 实时策略、单位经济、Android 国内端侧 ASR 都必须补齐后才能宣称发布级。
 - 外部技术设计评审稿已完成合并口径确认：当前 P0/P1 保留现有 Flutter + Node/TypeScript + Python + LiveKit + CoreML/Nemotron 架构，sherpa-onnx、Go 微服务和完整平台化数据栈列为后续目标架构 TODO。
+
+### 2.1 2026-07-21 最新验收校准
+
+- 代码自动化基线：API `128 files / 441 tests`、Translation Worker `48 files / 188 tests`、Flutter `362 tests`，以及相关 analyze/typecheck/build 在 2026-07-21 记录中通过。
+- 服务端真实媒体基线：会话 `981ff159-603b-400d-a9ac-2d77c0000a5a` 运行 32 分 0.518 秒，151 段 transcript/translation/TTS/playback 全部闭环，ingest drop/gap/backpressure 均为 0。
+- iOS candidate：`0.1.0 (2026072101)`、Bundle `cn.qkxy.realtimeinterpreter`，已安装并独立启动；未作为上述长跑房间的 Host/Guest，所以长字幕 UI 仍为 `not-run`。
+- 记录/待办已有本地和 API 持久化实现及重开详情回归；扫描已有目标语言选择、OCR、翻译、保存和分享自动化。这两项的真机跨重启/系统分享仍为 `not-run`。
+- 任何服务、容器、设备或安装状态继续使用前必须实时探测，本节不代表 2026-07-22 当前运行状态。
+
+### 2.2 P0 产品审计清单（2026-07-22）
+
+| ID | 复现/证据 | 用户影响 | 代码或文档位置 | 验收标准 |
+| --- | --- | --- | --- | --- |
+| P0-01 | 旧矩阵宣称 Call Link 无真实媒体闭环 | 错误排期或虚报完成 | 本文、`PROGRESS_LOG.md` 最新交接 | 同时写明“服务端长稳通过”和“iPhone UI not-run” |
+| P0-02 | 通话首页未探测任何服务却固定显示“安全连接已就绪” | 未知/断网被伪装成可用 | `call_home_page.dart` | 首页不宣称已连接，进入通话时再显示真实连接状态 |
+| P0-03 | 同传页朗读只有图标，无“关闭/已开启/正在播音” | 用户无法区分无声、排队和故障 | `realtime_status_bar.dart`、`realtime_controller_speech.dart` | 三种状态可见且与实际播放同步 |
+| P0-04 | 发布门禁要求旧名 `ai phone`，实际发布面为“无界AI” | 正确版本被误判 `not_ready` | `mobile_chinese_interface_check.mjs` | 要求 Flutter/iOS/Android 三处均为“无界AI”，旧名回归时失败 |
+| P0-05 | 扫描识别语言与目标相同时会静默反转用户选择 | 输出语言与用户目标不一致 | `scan_translation_controller.dart` | 目标语言仅由用户修改；同语种时保留原文且不改选择 |
+| P0-06 | iPhone 未加入 30 分钟/100 段专用房间 | 长字幕跟随、回底、前后台和内存风险未被真机证明 | `subtitle_timeline.dart`、`auto_follow_scroll_view.dart` | 真机 30 分钟/100 段，不强拉上滑用户，回底后恢复跟随，无异常增存 |
+| P0-07 | Safari/Chrome/微信 WebView 权限、无声和降级仅有代码/自动化 | 受邀方可卡在无声或无权限且不知如何恢复 | `call-web-guest-script.ts`、`join_call_link_page.dart` | 三类浏览器真机覆盖加入、授权、解锁音频、仅字幕和恢复引导 |
+| P0-08 | “我的”中“同传设置/语言与行业/朗读声音”都打开同一完整面板 | 入口重复，标题与内容不匹配 | `settings_home_page.dart`、`realtime_preferences_page.dart` | 各入口聚焦对应分组，或收敛为一个清晰入口 |
+| P0-09 | 记录/待办已有持久化回归，但无真机跨重启和系统分享证据 | 待办状态或导出可能只在测试替身中成立 | `session_detail_page.dart`、`local_session_store.dart` | 真机勾选后重启仍保留，分享成功/取消/失败均有可理解结果 |
+
+首批最小修复为 P0-02 至 P0-05：先增加失败回归，再只修状态文案/暴露、发布名门禁和扫描目标语言不变式。P0-06、07、09 需要真机或浏览器环境，不得用服务端长稳或 Widget 测试代替。
+
+首批本地结果：P0-02 至 P0-05 已实施；Flutter 全量 `365 tests`、`flutter analyze`、品牌/移动端发布静态门禁和 `git diff --check` 通过。这只证明当前本地代码与静态发布元数据，不代表商店上架或真机产品验收完成。
 
 ## 3. P0 内测功能
 

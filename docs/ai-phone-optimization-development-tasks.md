@@ -71,13 +71,13 @@ VoxCPM2 真流式 TTS 和 P2-A3 可观测性；逐项状态见架构任务计划
 
 - `OPT-VAD-001`：`accepted`。Beelink 已上线 MarbleNet ONNX CPU 主 VAD，阈值 0.5；NeMo/ONNX 概率最大误差 `2.38e-7`，低音量真机语音、静音和三档非语音噪声及真实 HTTP ASR 均通过。
 - `OPT-VAD-002`：`in_progress（代码完成，统一验收待执行）`。VAD Provider 已输出配置/实际 Provider、概率摘要、speech ratio、fallback 次数/原因和模型 fingerprint；Gateway 在结束前按 session 拉取，API 仅白名单保存脱敏诊断。尚未部署到 Beelink 做故障注入复验，完成前不标记 accepted。
-- `OPT-VAD-003`：`in_progress（代码完成，统一验收待执行）`。会话模式已通过 token 进入 Gateway/ASR；App 对话与聆听分别映射 `conversation/listening`，LiveKit 与 PSTN Worker 分别固定 `call_link/pstn`。ASR 首帧冻结 session 策略并拒绝中途改模式；默认端点静音为 900/1400/900/1100ms。尚未部署和执行四模式固定语料门禁。
+- `OPT-VAD-003`：`in_progress（conversation 实时 pacing A/B 通过，完整统一验收待执行）`。会话模式已通过 token 进入 Gateway/ASR；App 对话与聆听分别映射 `conversation/listening`，LiveKit 与 PSTN Worker 分别固定 `call_link/pstn`。ASR 首帧冻结 session 策略并拒绝中途改模式；2026-07-25 真实 pacing 27 条 A/B 中，`conversation minAudio=1000ms + endpoint=600ms` 保持 26/27，端点 final P50 从 1392ms 降至 998ms；两条约 705/782ms 自然停顿样本均保持全文且正确拆为两段。候选尚未部署，仍需 canonical 大集、真机、生产负载和回滚门禁；`listening/pstn` 不随本候选改变。
 - `OPT-VAD-004`：`in_progress（代码完成，统一验收待执行）`。final segment 已贯通 `timing + speaker + vadContext`；历史、本地 finalization outbox、Markdown/CSV 导出和远端 review 使用同一 speech 区间、端点原因及模型/策略 fingerprint，不持久化逐帧概率或 PCM。
 - `OPT-RT-001`：代码和自动化门禁完成。
 - `OPT-RT-002`：`accepted`。App 结束前持久化按 `sessionId` 隔离的 finalization outbox，网络恢复、冷启动和回前台会重试保存与结束；API 校验路径 ID、请求体 ID、账号和幂等键，并对同一 session 串行、不同 session 并行结算。iPhone 断网复验 session `7a576a03-d139-4e42-a473-bb0ee13fb63a` 自动收敛 ended，2段字幕完整、hold=0、仅一条 `-21` 秒 ledger，未暴露原始超时。
 - `OPT-RT-003`：`accepted`。RT-003B 三轮 silence 断句及翻译延迟通过；RT-003A 已禁止 `max_duration` 硬切段使用上下文 LLM、拒绝超出 raw 支持范围的扩写，并按 raw continuation 合并。Qwen3 ASR 去重现仅作用于时间重叠结果，重复讲话不会再被误删；动态纠错 context 回显在 ASR Provider 入口拦截。iPhone session `c7c915b7-d5d2-4ab0-9e3d-58f52adb92ad` 三轮同句产生3段译文，无未来后缀扩写、重复后缀或领域词泄露，427帧零丢失、hold=0、单次结算。
 - `OPT-RT-004`：`todo（可靠性验收）`。代码和自动化门禁完成；call end 先给尾句 MT 默认 1500ms 有界落地窗口，再取消 TTS/播放和关闭 Provider，无响应任务超时后立即收敛。既有 RT-004A/B 冒烟不替代 100 次尾句原文和译文保存率，完成前不得标记 accepted。
-- `OPT-RT-005`：`accepted`。Gateway 按字幕顺序逐条合成，暂停、结束和断线取消在途及待处理 TTS，App 顺序播放并清空残留。VoxCPM2 已修复48k误标24k、正文控制提示泄露和自然声音音量过低；自然声音与当前个人克隆均达到约 `-18 dBFS`、ASR 回听只有正文。iPhone 两轮真机验收通过：长测 session `99812932-3d12-4675-bc00-b1ae87a65e3f` 连续19段、结束/取消 session `c9251e1b-8cca-45db-bdf5-12766ab2d016` 连续6段，用户确认顺序、取消和结束后残留均正常；两轮均零丢帧、hold=0、单次结算。
+- `OPT-RT-005`：`accepted（现有整段播放）`。Gateway 按字幕顺序逐条合成，暂停、结束和断线取消在途及待处理 TTS，App 顺序播放并清空残留。VoxCPM2 已修复48k误标24k、正文控制提示泄露和自然声音音量过低；自然声音与当前个人克隆均达到约 `-18 dBFS`、ASR 回听只有正文。iPhone 两轮真机验收通过：长测 session `99812932-3d12-4675-bc00-b1ae87a65e3f` 连续19段、结束/取消 session `c9251e1b-8cca-45db-bdf5-12766ab2d016` 连续6段，用户确认顺序、取消和结束后残留均正常；两轮均零丢帧、hold=0、单次结算。`/tts/stream` 真模型首 PCM P95 已到 25ms，但 800/1000/1200ms Gateway 预填在长句上仍出现 `-710/-439/-391ms` 的续段到达余量，且当前 App 每个 `audio.output` 都重建播放器，因此流式候选保持关闭；必须先完成连续追加播放及无缝真机门，不能用该候选替换现有整段路径。
 - `OPT-TERM-001`：`in_progress（代码完成，统一验收待执行）`。App 同传设置已支持通用、商业、科技、医疗、旅游、餐饮、娱乐单选并持久化；API 校验后把选择和词库版本写入 realtime response/token；Gateway 按 session 选择统一生成 ASR hotwords/corrections、翻译 glossary 和 LLM 保护字段，旧客户端继续回退服务器默认包。自动化门禁通过，Beelink 与 iPhone 尚未部署验收。
 - `OPT-OBS-001`：`in_progress（代码完成，统一验收待执行）`。新增账号隔离的 `/sessions/:sessionId/quality-report`，按 session 汇总翻译覆盖率、延迟均值/P95/最大值、丢帧、VAD fallback、端点原因、说话人、overlap 和 Provider 指纹；报告不包含字幕正文、音频或逐帧概率。API 自动化通过，真实 session 报告和告警阈值尚待统一验收。
 - `OPT-DATA-001`：`in_progress（代码完成，迁移验收待执行）`。服务器新增 Node 24 SQLite WAL 存储驱动，按实体 ID 增量提交；不同 ID 不互相覆盖，同 ID 陈旧写入显式冲突。session segment 使用独立表和外键级联，账号、会话、用量、账本、术语、Agent 和声音资料继续复用现有 Repository API。默认本地仍可用 JSON，Beelink 通过受控开关迁移。
@@ -107,6 +107,13 @@ VoxCPM2 真流式 TTS 和 P2-A3 可观测性；逐项状态见架构任务计划
 - `OPT-SPK-006`：`in_progress`。已修复 Gateway 合并批次错误使用末帧时间的问题；ASR boundary API 已通过真实 PCM 回切，左右段时间轴连续、右侧音频保留且 VAD 不重置。2秒脱敏诊断窗口、boundary hit/miss/error、确认延迟、回切时长、endpoint race 和丢帧指标已贯通。iPhone 真人双人换人断句通过；短停顿竞态、多人诊断和断网快照仍待完成。
 - `OPT-SPK-007`：`in_progress`。`turnId + revision` 已贯通 ASR、Gateway 事件、API session、Flutter 字幕和历史；不同 turn 禁止语义合并，批量 ASR 结果按音频时间排序，同 segment 只处理最高 revision。固定双声源和 iPhone 双人输出顺序通过；多人乱序、TTS 和计费幂等仍待联合验收。
 - `OPT-SPK-008`：`in_progress`。App、API 和 Speaker Service 默认人数已统一为4；turn 语言画像、revision、overlap/unknown 保护边界、App 和导出已贯通。Gateway 已修复短首轮次只出现一个可靠窗口时无法建立基线、以及 Streaming Sortformer 在两个80ms帧内修订起点时候选被错误清空的问题；真实模型矩阵仍显示四人 DER `4.44%`、重叠 `3.63%`、一分钟稳定性 `3.77%` 通过，普通双人 `22.05%`、1.2秒快速轮换 `35.42%` 未通过。快速轮换预测20段全部落入同一模型槽位，属于模型身份区分门禁，不能用语种或文本规则伪造 speaker；真人三至四人和混合句仍待统一验收。
+- `OPT-SPK-009`：`todo（真实声学 slot/cardinality 稳定性）`。冻结现有
+  `SPEAKER_MIN_DURATION_ON_MS=100` 与跨确认边界字幕拆分，不再降低
+  Sortformer/coordinator 阈值；使用同一多人素材做多轮受控真实声学 A/B，
+  以匿名槽位数量、同人复用、异人误合并和跨轮波动作为硬门。
+- `OPT-SPK-010`：`todo（speakerCount 呈现口径）`。人数统计只计算已确认的
+  非 `unknown` speaker；`unknown` 字幕和诊断仍保留，但不得作为一位真实人物
+  计入用户可见人数。
 - `OPT-DEP-001`：`accepted`。API/Gateway 已作为 Docker Compose 发布单元迁入 Beelink `3110/3111`，119条历史和7份声音引用已保留；iPhone Profile 已切换到 Beelink，Mac `3110/3111` 停止后真机仍上传540帧并保存57秒会话，真实 speaker-turn 全链路通过。
 - `OPT-DEP-002`：`in_progress`。Beelink 已承载 LiveKit、API、Gateway、ASR、Speaker、翻译和 LLM；Translation Worker 已编入同一镜像，但按 call 启动和 VoxCPM2 在线加载仍需联合验收。
 - `OPT-DEP-003`：`accepted`。iPhone Profile 仅包含 `http://100.110.127.117:3110`，构建产物未发现旧 Mac 地址、模型端口或内部密钥；Mac API/Gateway 停止后在线真机链路通过。
@@ -150,6 +157,8 @@ VoxCPM2 真流式 TTS 和 P2-A3 可观测性；逐项状态见架构任务计划
 | OPT-SPK-006 | 说话人驱动 ASR Turn Buffer | 2秒 PCM 环形缓冲、按边界回切、连续 VAD 与 turn 状态分离 | OPT-SPK-005 | 快速换人不进入同一 ASR 段，切 turn 不重置连续 VAD |
 | OPT-SPK-007 | Speaker-turn 翻译队列 | `turnId + revision`、同 speaker 语义合并、上下文翻译和有序输出 | OPT-SPK-006、OPT-LLM-001 | 不跨 speaker 拼接翻译，返回顺序与音频时间轴一致 |
 | OPT-SPK-008 | 多人和混合语种策略 | 默认4人、overlap、unknown、revision、dominant/mixed language | OPT-SPK-005 | 对话和聆听不限定2人，中英混说不触发硬断点或 speaker 切换 |
+| OPT-SPK-009 | 真实声学 slot/cardinality 稳定性 | 固定100ms与边界拆分，多轮同素材受控声学 A/B | OPT-SPK-008 | 多轮匿名槽位数量稳定，同人复用且无异人误合并 |
+| OPT-SPK-010 | speakerCount 呈现口径 | 用户人数排除 unknown，诊断仍保留 unknown | OPT-SPK-008 | 用户可见人数只统计已确认非 unknown speaker |
 | OPT-CALL-001 | Call Link 真人双端闭环 | Host、Guest、Worker、字幕、译音、历史 | OPT-RT-003、OPT-RT-005、OPT-MOB-001 | 双端连续 30 分钟，无乱序和不可恢复断线 |
 | OPT-CALL-002 | 通话页产品分层 | 核心入口、实验入口、不可用能力隐藏 | OPT-UI-004 | 首屏不展示不可用 PSTN 为主要操作 |
 | OPT-CALL-003 | Call 聚合持久化与恢复 | `callId=sessionId`、call legs、API 周期恢复、废止进程内 Call Link 真值 | OPT-DATA-004 | API 重启后链接、参与者、历史和终态可恢复，未完成播放不重放 |

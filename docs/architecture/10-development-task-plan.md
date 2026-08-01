@@ -485,6 +485,26 @@ IVR 和真机接管均未验证，Autonomous 仍默认关闭。外部运营坐�
 move/end、未知结果恢复、脱敏投影和 App 接受/拒绝/三方确认流程；默认 flag 关闭，
 尚未连接真实 LiveKit/SIP/trunk 或真机，不能标记 accepted、可部署或已完成外部转接。
 
+### 8.1 Voice Agent 后台工作与可靠播报补缺
+
+本批只借鉴 Qwen Audio Agent 的后台任务和播报可靠性设计，不替换现有
+LiveKit AgentSession、Translation Runtime、playback 事件或 PostgreSQL outbox。
+详细决策见 `12-qwen-audio-agent-gap-adoption-plan.md`。
+
+| 优先级 | 任务 | 交付 | 状态 |
+| --- | --- | --- | --- |
+| P0 | `ARC-VOICE-WORK-001` | `workId`、作用域 generation、失效规则和跨端 golden fixtures | TODO |
+| P0 | `ARC-VOICE-DELIVERY-001` | delivery ledger、客户端播放回执、服务端/客户端 playback 语义映射 | TODO |
+| P0 | `ARC-VOICE-WINDOW-001` | 翻译优先的 AnnouncementWindow 和打断/过期测试 | TODO |
+| P0 | `ARC-VOICE-RELIABILITY-001` | Host/Origin、防 DNS rebinding、稳定重连退避、Agent-only watchdog、音频时长门 | TODO |
+| P1 | `ARC-VOICE-WORK-002` | PostgreSQL Work Store、durable queue、transactional outbox、create/cancel/status | TODO |
+| P1 | `ARC-VOICE-PERMISSION-001` | 有界实时工具面和当前 turn 明确授权证据 | TODO |
+| P2 | `ARC-VOICE-OWNERSHIP-001` | `sessionId + legId + clientInstanceId` ownership/takeover | TODO |
+| P2 | `ARC-VOICE-PROVIDER-001` | 可选 Qwen Audio Agent Provider shadow，不进入默认翻译链 | TODO |
+
+当前状态：**设计待评审，未实施**。新功能必须默认关闭；P0 合同与失败测试通过前，
+不得接入后台 runner、真实工具或客户端播报。
+
 ## 9. Platform P1-F：Speech 与模型性能
 
 | 任务 | 交付 | 关联 |
