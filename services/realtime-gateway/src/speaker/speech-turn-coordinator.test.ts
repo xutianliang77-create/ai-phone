@@ -102,6 +102,58 @@ describe("speech turn coordinator", () => {
     ])).toBeNull();
     expect(coordinator.currentSpeaker("sess_1")).toBe("speaker_1");
   });
+
+  it("requires stronger confidence for a newly observed speaker id", () => {
+    const coordinator = establishedCoordinator();
+
+    expect(coordinator.observe("sess_1", [
+      span("speaker_2", 480, 800, { confidence: 0.69 }),
+    ])).toBeNull();
+    expect(coordinator.observe("sess_1", [
+      span("speaker_2", 480, 1120, { confidence: 0.69 }),
+    ])).toBeNull();
+    expect(coordinator.currentSpeaker("sess_1")).toBe("speaker_1");
+  });
+
+  it("keeps the normal confidence gate when returning to a known speaker", () => {
+    const coordinator = establishedCoordinator();
+
+    expect(coordinator.observe("sess_1", [
+      span("speaker_2", 480, 800, { confidence: 0.8 }),
+    ])).toBeNull();
+    expect(coordinator.observe("sess_1", [
+      span("speaker_2", 480, 1120, { confidence: 0.8 }),
+    ])?.nextSpeakerId).toBe("speaker_2");
+    expect(coordinator.observe("sess_1", [
+      span("speaker_1", 1120, 1440, { confidence: 0.61 }),
+    ])).toBeNull();
+    expect(coordinator.observe("sess_1", [
+      span("speaker_1", 1120, 1760, { confidence: 0.61 }),
+    ])?.nextSpeakerId).toBe("speaker_1");
+  });
+
+  it("rejects a weak identity split but accepts the next stable speaker", () => {
+    const coordinator = establishedCoordinator();
+
+    expect(coordinator.observe("sess_1", [
+      span("speaker_3", 480, 800, { confidence: 0.78 }),
+    ])).toBeNull();
+    expect(coordinator.observe("sess_1", [
+      span("speaker_3", 480, 1120, { confidence: 0.78 }),
+    ])?.nextSpeakerId).toBe("speaker_3");
+    expect(coordinator.observe("sess_1", [
+      span("speaker_2", 1120, 1440, { confidence: 0.65 }),
+    ])).toBeNull();
+    expect(coordinator.observe("sess_1", [
+      span("speaker_2", 1120, 1760, { confidence: 0.65 }),
+    ])).toBeNull();
+    expect(coordinator.observe("sess_1", [
+      span("speaker_4", 1760, 2080, { confidence: 0.73 }),
+    ])).toBeNull();
+    expect(coordinator.observe("sess_1", [
+      span("speaker_4", 1760, 2400, { confidence: 0.73 }),
+    ])?.nextSpeakerId).toBe("speaker_4");
+  });
 });
 
 function establishedCoordinator() {

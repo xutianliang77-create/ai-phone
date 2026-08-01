@@ -50,6 +50,8 @@ class HealthResponse(BaseModel):
     mode: Literal["active", "contract", "shadow"]
     voiceIdentityProvider: str = "off"
     voiceIdentityAvailable: bool = False
+    sessionAliasProvider: str = "off"
+    sessionAliasAvailable: bool = False
 
 
 class VoiceIdentityEnrollRequest(BaseModel):
@@ -69,3 +71,16 @@ class VoiceIdentityMatchRequest(BaseModel):
 class VoiceIdentityMatchResponse(BaseModel):
     embeddingRef: str | None = None
     confidence: float = Field(ge=0, le=1)
+
+
+class SessionAliasObserveRequest(BaseModel):
+    rawSpeakerId: str = Field(min_length=1)
+    audioBase64: str = Field(min_length=1)
+    overlap: bool = False
+
+
+class SessionAliasObserveResponse(BaseModel):
+    rawSpeakerId: str
+    evidenceMs: int = Field(ge=0)
+    eligible: bool
+    similarities: dict[str, float]

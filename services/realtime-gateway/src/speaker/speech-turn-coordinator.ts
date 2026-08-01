@@ -13,6 +13,7 @@ export interface SpeechTurnCoordinatorOptions {
   minimumEvidenceMs?: number;
   minimumDominanceRatio?: number;
   minimumConfidence?: number;
+  minimumNovelSpeakerConfidence?: number;
   stableWindows?: number;
   tailToleranceMs?: number;
   candidateStartToleranceMs?: number;
@@ -28,6 +29,7 @@ interface CandidateState {
 interface SessionState {
   currentSpeakerId?: string;
   candidate?: CandidateState;
+  confirmedSpeakerIds: Set<string>;
 }
 
 interface TailEvidence {
@@ -42,6 +44,7 @@ interface TailEvidence {
 const DEFAULT_MINIMUM_EVIDENCE_MS = 240;
 const DEFAULT_MINIMUM_DOMINANCE_RATIO = 0.65;
 const DEFAULT_MINIMUM_CONFIDENCE = 0.6;
+const DEFAULT_MINIMUM_NOVEL_SPEAKER_CONFIDENCE = 0.7;
 const DEFAULT_STABLE_WINDOWS = 2;
 const DEFAULT_TAIL_TOLERANCE_MS = 80;
 const DEFAULT_CANDIDATE_START_TOLERANCE_MS = 160;
@@ -50,6 +53,7 @@ export class SpeechTurnCoordinator {
   private readonly minimumEvidenceMs: number;
   private readonly minimumDominanceRatio: number;
   private readonly minimumConfidence: number;
+  private readonly minimumNovelSpeakerConfidence: number;
   private readonly stableWindows: number;
   private readonly tailToleranceMs: number;
   private readonly candidateStartToleranceMs: number;
@@ -62,6 +66,9 @@ export class SpeechTurnCoordinator {
       DEFAULT_MINIMUM_DOMINANCE_RATIO;
     this.minimumConfidence = options.minimumConfidence ??
       DEFAULT_MINIMUM_CONFIDENCE;
+    this.minimumNovelSpeakerConfidence =
+      options.minimumNovelSpeakerConfidence ??
+        DEFAULT_MINIMUM_NOVEL_SPEAKER_CONFIDENCE;
     this.stableWindows = options.stableWindows ?? DEFAULT_STABLE_WINDOWS;
     this.tailToleranceMs = options.tailToleranceMs ?? DEFAULT_TAIL_TOLERANCE_MS;
     this.candidateStartToleranceMs = options.candidateStartToleranceMs ??
@@ -71,7 +78,7 @@ export class SpeechTurnCoordinator {
   observe(sessionId: string, spans: SpeakerSpan[]): SpeechTurnBoundary | null {
     const state = this.stateFor(sessionId);
     const evidence = dominantTailEvidence(spans, this.tailToleranceMs);
-    if (!evidence || !this.isReliable(evidence)) {
+    if (!evidence || !this.isReliable(evidence, state)) {
       state.candidate = undefined;
       return null;
     }
@@ -81,6 +88,7 @@ export class SpeechTurnCoordinator {
     }
     if (!state.currentSpeakerId) {
       state.currentSpeakerId = evidence.speakerId;
+      state.confirmedSpeakerIds.add(evidence.speakerId);
       state.candidate = undefined;
       return null;
     }
@@ -95,6 +103,7 @@ export class SpeechTurnCoordinator {
 
     const previousSpeakerId = state.currentSpeakerId;
     state.currentSpeakerId = evidence.speakerId;
+    state.confirmedSpeakerIds.add(evidence.speakerId);
     state.candidate = undefined;
     if (!previousSpeakerId) return null;
     return {
@@ -115,14 +124,19 @@ export class SpeechTurnCoordinator {
     this.sessions.delete(sessionId);
   }
 
-  private isReliable(evidence: TailEvidence) {
+  private isReliable(evidence: TailEvidence, state: SessionState) {
+    const minimumConfidence = state.confirmedSpeakerIds.has(evidence.speakerId)
+      ? this.minimumConfidence
+      : this.minimumNovelSpeakerConfidence;
     return evidence.evidenceMs >= this.minimumEvidenceMs &&
       evidence.dominanceRatio >= this.minimumDominanceRatio &&
-      evidence.confidence >= this.minimumConfidence;
+      evidence.confidence >= minimumConfidence;
   }
 
   private stateFor(sessionId: string) {
-    const state = this.sessions.get(sessionId) ?? {};
+    const state = this.sessions.get(sessionId) ?? {
+      confirmedSpeakerIds: new Set<string>(),
+    };
     this.sessions.set(sessionId, state);
     return state;
   }

@@ -4,10 +4,13 @@ from fastapi import APIRouter, Header, HTTPException, Response, status
 
 from app.config import SpeakerConfig
 from app.engine import SpeakerEngine
+from app.session_alias import DisabledSessionSpeakerEmbeddingEngine
 from app.voice_identity import VoiceIdentityEngine
 from app.schemas import (
     CreateSpeakerSessionRequest,
     HealthResponse,
+    SessionAliasObserveRequest,
+    SessionAliasObserveResponse,
     SpeakerAudioFrame,
     SpeakerSpansResponse,
     VoiceIdentityEnrollRequest,
@@ -21,8 +24,12 @@ def create_router(
     engine: SpeakerEngine,
     identity_engine: VoiceIdentityEngine,
     config: SpeakerConfig,
+    session_alias_engine=None,
 ) -> APIRouter:
     router = APIRouter()
+    alias_engine = (
+        session_alias_engine or DisabledSessionSpeakerEmbeddingEngine()
+    )
 
     @router.get("/health", response_model=HealthResponse)
     async def health() -> HealthResponse:
@@ -34,6 +41,8 @@ def create_router(
             mode=speaker_service_mode(config.provider),
             voiceIdentityProvider=config.voice_identity_provider,
             voiceIdentityAvailable=identity_engine.available,
+            sessionAliasProvider=config.session_alias_provider,
+            sessionAliasAvailable=alias_engine.available,
         )
 
     @router.post(
@@ -87,7 +96,44 @@ def create_router(
     ):
         require_api_key(config, authorization)
         await engine.create_session(request)
+        await alias_engine.create_session(request.sessionId)
         return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+    @router.post(
+        "/speaker/sessions/{session_id}/aliases/observe",
+        response_model=SessionAliasObserveResponse,
+    )
+    async def observe_session_alias(
+        session_id: str,
+        request: SessionAliasObserveRequest,
+        authorization: str | None = Header(default=None),
+    ) -> SessionAliasObserveResponse:
+        require_api_key(config, authorization)
+        if not alias_engine.available:
+            raise HTTPException(
+                status_code=503,
+                detail="Session speaker alias provider unavailable",
+            )
+        try:
+            observed = await alias_engine.observe(
+                session_id,
+                request.rawSpeakerId,
+                request.audioBase64,
+                request.overlap,
+            )
+        except KeyError as exc:
+            raise HTTPException(
+                status_code=404,
+                detail="Speaker alias session not found",
+            ) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return SessionAliasObserveResponse(
+            rawSpeakerId=observed.rawSpeakerId,
+            evidenceMs=observed.evidenceMs,
+            eligible=observed.eligible,
+            similarities=observed.similarities,
+        )
 
     @router.post("/speaker/frames", response_model=SpeakerSpansResponse)
     async def push_audio(
@@ -118,6 +164,7 @@ def create_router(
     ):
         require_api_key(config, authorization)
         await engine.close_session(session_id)
+        await alias_engine.close_session(session_id)
         return Response(status_code=status.HTTP_204_NO_CONTENT)
 
     return router
