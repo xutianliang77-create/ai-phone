@@ -21,6 +21,8 @@ run_device_command() {
 
 DEVICE_ID="${DEVICE_ID:-}"
 SERVER_BASE_URL="${SERVER_BASE_URL:-}"
+BUILD_NUMBER="${BUILD_NUMBER:-}"
+REALTIME_MODE="${REALTIME_MODE:-conversation}"
 
 if [[ -z "$DEVICE_ID" ]]; then
   echo "DEVICE_ID is required." >&2
@@ -31,6 +33,17 @@ if [[ -z "$SERVER_BASE_URL" ]]; then
   echo "SERVER_BASE_URL is required and must point to the server-side deployment." >&2
   exit 2
 fi
+if [[ -n "$BUILD_NUMBER" && ! "$BUILD_NUMBER" =~ ^[0-9]+$ ]]; then
+  echo "BUILD_NUMBER must contain digits only." >&2
+  exit 2
+fi
+case "$REALTIME_MODE" in
+  conversation|meeting|classroom|business) ;;
+  *)
+    echo "REALTIME_MODE must be conversation, meeting, classroom, or business." >&2
+    exit 2
+    ;;
+esac
 
 case "$SERVER_BASE_URL" in
   *://localhost*|*://127.0.0.1*|*://0.0.0.0*|*://\[::1\]*)
@@ -39,7 +52,7 @@ case "$SERVER_BASE_URL" in
     ;;
 esac
 
-if ! curl --fail --silent --show-error \
+if ! curl --noproxy '*' --fail --silent --show-error \
   --connect-timeout 3 \
   --max-time 5 \
   "$SERVER_BASE_URL/health" >/dev/null; then
@@ -50,10 +63,17 @@ fi
 
 cd "$MOBILE_DIR"
 
-flutter build ios --profile \
-  --dart-define="API_BASE_URL=$SERVER_BASE_URL" \
-  --dart-define=SERVER_OWNED_HISTORY=true \
+build_args=(
+  --profile
+  --dart-define="API_BASE_URL=$SERVER_BASE_URL"
+  --dart-define="REALTIME_MODE=$REALTIME_MODE"
+  --dart-define=SERVER_OWNED_HISTORY=true
   --dart-define=USE_MOCK_AUDIO=false
+)
+if [[ -n "$BUILD_NUMBER" ]]; then
+  build_args+=(--build-number="$BUILD_NUMBER")
+fi
+flutter build ios "${build_args[@]}"
 
 if [[ ! -d "$APP_PATH" ]]; then
   echo "Profile build did not produce $APP_PATH" >&2
@@ -95,4 +115,5 @@ run_device_command xcrun devicectl device process launch \
   "$BUNDLE_ID"
 
 echo "Installed and independently launched Profile App: $BUNDLE_ID"
+echo "Configured realtime mode: $REALTIME_MODE"
 echo "Manually close and reopen the App from the iPhone home screen to complete launch acceptance."
