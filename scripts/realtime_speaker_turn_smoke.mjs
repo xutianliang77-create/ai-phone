@@ -17,6 +17,9 @@ const fixturePaths = env(
 const frameMs = numberEnv("SPEAKER_TURN_FRAME_MS", 80);
 const tailMs = numberEnv("SPEAKER_TURN_TAIL_MS", 2500);
 const timeoutMs = numberEnv("SPEAKER_TURN_TIMEOUT_MS", 60_000);
+const sessionMode = env("SPEAKER_TURN_MODE", "conversation");
+const sourceLanguage = env("SPEAKER_TURN_SOURCE_LANGUAGE", "auto");
+const targetLanguage = env("SPEAKER_TURN_TARGET_LANGUAGE", "zh");
 const evidencePath = resolve(env(
   "SPEAKER_TURN_EVIDENCE",
   `.cache/realtime-speaker-turn/${timestamp()}/result.json`,
@@ -39,6 +42,10 @@ const evidence = {
   fixturePaths,
   sessionId: session.sessionId,
   eventTypes: events.map((event) => event.type),
+  transcriptEvents: events.filter((event) =>
+    event.type === "transcript.final" ||
+    event.type === "translation.final"
+  ),
   gatewayHealth,
   speakerHealth,
   detail,
@@ -59,9 +66,9 @@ async function createSession() {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({
-      mode: "conversation",
-      sourceLanguage: "auto",
-      targetLanguage: "zh",
+      mode: sessionMode,
+      sourceLanguage,
+      targetLanguage,
       autoReverseTargetLanguage: true,
       voiceOutput: false,
       speakerAttribution: {
@@ -88,9 +95,10 @@ async function streamSession(session) {
   const fixture = joinNoGapWavFixtures(fixturePaths);
   const bytesPerFrame = Math.round(fixture.sampleRate * 2 * frameMs / 1000);
   const events = [];
-  const ws = new WebSocket(
-    `${session.endpoint}?token=${encodeURIComponent(session.realtimeToken)}`,
-  );
+  const ws = new WebSocket(session.endpoint, [
+    "ai-phone.realtime.v1",
+    `ai-phone.token.${session.realtimeToken}`,
+  ]);
   await waitForSocketOpen(ws);
   const ended = waitForSessionEnded(ws, events);
   const startedAt = Date.now();
