@@ -72,8 +72,10 @@ export interface RealtimeEnv {
   speakerHttpApiKey?: string;
   speakerHttpTimeoutMs: number;
   ttsHttpEndpoint?: string;
+  ttsHttpStreamEndpoint?: string;
   ttsHttpApiKey?: string;
   ttsHttpTimeoutMs: number;
+  ttsStreamPrefillMs: number;
   sessionEventSink: SessionEventSinkName;
   apiBaseUrl: string;
   internalApiSecret?: string;
@@ -239,8 +241,15 @@ export function loadEnv(): RealtimeEnv {
     speakerHttpApiKey: env.SPEAKER_HTTP_API_KEY,
     speakerHttpTimeoutMs: Number(env.SPEAKER_HTTP_TIMEOUT_MS ?? 2000),
     ttsHttpEndpoint: env.TTS_HTTP_ENDPOINT,
+    ttsHttpStreamEndpoint: env.TTS_HTTP_STREAM_ENDPOINT,
     ttsHttpApiKey: env.TTS_HTTP_API_KEY,
     ttsHttpTimeoutMs: Number(env.TTS_HTTP_TIMEOUT_MS ?? 30_000),
+    ttsStreamPrefillMs: boundedInteger(
+      env.TTS_STREAM_PREFILL_MS,
+      800,
+      200,
+      2000,
+    ),
     sessionEventSink: parseSessionEventSinkName(env.SESSION_EVENT_SINK),
     apiBaseUrl: env.API_BASE_URL ?? "http://127.0.0.1:3100",
     internalApiSecret: env.INTERNAL_API_SECRET,
