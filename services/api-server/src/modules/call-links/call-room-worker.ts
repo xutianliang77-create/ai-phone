@@ -24,6 +24,7 @@ export interface CallRoomDataPublisher {
   ensureRoom?(roomName: string): Promise<void>;
   hasParticipant?(roomName: string, participantIdentity: string): Promise<boolean>;
   listParticipantIdentities?(roomName: string): Promise<string[]>;
+  removeParticipant?(roomName: string, participantIdentity: string): Promise<void>;
   publish(roomName: string, event: CallRoomDataEvent): Promise<void>;
 }
 
@@ -89,6 +90,24 @@ export async function confirmCallRoomParticipant(
       if (attempt < 3) await delay(75);
     }
     return { ok: true, connected: false };
+  } catch (error) {
+    return { ok: false, issues: [errorMessage(error)] };
+  }
+}
+
+export async function removeCallRoomParticipant(
+  record: CallLinkRecord,
+  participantIdentity: string,
+): Promise<{ ok: true } | { ok: false; issues: string[] }> {
+  const config = getLiveKitRoomConfig();
+  if (!config.ok) return { ok: false, issues: config.issues };
+  const publisher = testPublisher ?? new LiveKitRoomDataPublisher(config.config);
+  if (!publisher.removeParticipant) {
+    return { ok: false, issues: ["Call room participant removal is unavailable"] };
+  }
+  try {
+    await publisher.removeParticipant(record.roomName, participantIdentity);
+    return { ok: true };
   } catch (error) {
     return { ok: false, issues: [errorMessage(error)] };
   }
@@ -219,6 +238,10 @@ class LiveKitRoomDataPublisher implements CallRoomDataPublisher {
 
   async listParticipantIdentities(roomName: string) {
     return this.adapter.listParticipantIdentities(roomName);
+  }
+
+  async removeParticipant(roomName: string, participantIdentity: string) {
+    await this.adapter.removeParticipant(roomName, participantIdentity);
   }
 
   async publish(roomName: string, event: CallRoomDataEvent) {

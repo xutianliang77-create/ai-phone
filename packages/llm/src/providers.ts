@@ -105,6 +105,16 @@ export async function refineAsrWithFallback(
         ]),
       };
     }
+    if (changesProtectedSurface(local.optimizedText, postProcessed.text, input)) {
+      return {
+        ...local,
+        fallbackReason: "protected_surface_changed",
+        warnings: unique([
+          ...local.warnings,
+          "llm_refinement_changed_protected_surface",
+        ]),
+      };
+    }
     if (addsUnsupportedContent(local.optimizedText, postProcessed.text)) {
       return {
         ...local,
@@ -149,6 +159,67 @@ function addsUnsupportedContent(rawText: string, optimizedText: string) {
 
 function comparableCharacters(value: string) {
   return Array.from(value.toLowerCase().replace(/[^a-z0-9\u3400-\u9fff]+/gu, ""));
+}
+
+function changesProtectedSurface(
+  rawText: string,
+  optimizedText: string,
+  input: AsrRefinementInput,
+) {
+  const raw = protectedSurfaces(rawText);
+  const optimized = protectedSurfaces(optimizedText);
+  if (raw.join("\n") === optimized.join("\n")) return false;
+  if (optimized.length < raw.length) return true;
+
+  const evidence = [
+    ...(input.previousSegments ?? []).flatMap((segment) => [
+      segment.rawText,
+      segment.optimizedText,
+    ]),
+    ...(input.protectedTerms ?? []),
+    ...(input.glossary ?? []).flatMap((term) => [term.source, term.target]),
+  ].filter((value): value is string => Boolean(value))
+    .map((value) => value.normalize("NFKC").toLowerCase());
+  return !optimized.every((surface) =>
+    evidence.some((value) => value.includes(surface))
+  );
+}
+
+function protectedSurfaces(value: string) {
+  const normalized = value.normalize("NFKC");
+  const surfaces = new Set<string>();
+  const chineseNumber = "[零〇一二两三四五六七八九十百千万亿点\\d]";
+  const patterns = [
+    new RegExp(
+      `${chineseNumber}+(?:到|至|[-~—])${chineseNumber}+` +
+        "(?:位数?|元|块|岁|年|月|日|号|人|个|倍|之间)?",
+      "g",
+    ),
+    new RegExp(
+      `${chineseNumber}+(?:万元|亿元|元|块|岁|年|月|日|号|人|个|倍)`,
+      "g",
+    ),
+    /\d+(?:[.,]\d+)?%?/g,
+  ];
+  for (const pattern of patterns) {
+    for (const match of normalized.matchAll(pattern)) {
+      surfaces.add(match[0].toLowerCase());
+    }
+  }
+  for (const match of normalized.matchAll(/\b[A-Za-z][A-Za-z0-9._+-]*\b/g)) {
+    const token = match[0];
+    const upper = [...token].filter((character) =>
+      character >= "A" && character <= "Z"
+    ).length;
+    if (
+      /\d/.test(token) ||
+      upper >= 2 ||
+      ["api", "app", "atm", "gdp", "url"].includes(token.toLowerCase())
+    ) {
+      surfaces.add(token.toLowerCase());
+    }
+  }
+  return [...surfaces].sort();
 }
 
 function longestCommonSubsequenceLength(first: string[], second: string[]) {

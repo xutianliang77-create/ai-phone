@@ -40,6 +40,43 @@ void main() {
     expect(audioSession.endCaptureCalls, 1);
   });
 
+  test('preserves external program audio in meeting capture', () async {
+    final repository = FakeRealtimeRepository();
+    final capture = FakeAudioCapture();
+    final audioSession = FakeAudioSessionCoordinator();
+    final controller = realtimeControllerForTest(
+      repository,
+      capture,
+      audioSessionCoordinator: audioSession,
+      realtimeMode: 'meeting',
+    );
+    addTearDown(controller.dispose);
+
+    await controller.start();
+
+    expect(audioSession.voiceProcessingValues, <bool>[false]);
+    expect(capture.startedConfigs.single.echoCancel, isFalse);
+    expect(capture.startedConfigs.single.noiseSuppress, isFalse);
+  });
+
+  test('keeps voice processing for conversation capture', () async {
+    final repository = FakeRealtimeRepository();
+    final capture = FakeAudioCapture();
+    final audioSession = FakeAudioSessionCoordinator();
+    final controller = realtimeControllerForTest(
+      repository,
+      capture,
+      audioSessionCoordinator: audioSession,
+    );
+    addTearDown(controller.dispose);
+
+    await controller.start();
+
+    expect(audioSession.voiceProcessingValues, <bool>[true]);
+    expect(capture.startedConfigs.single.echoCancel, isTrue);
+    expect(capture.startedConfigs.single.noiseSuppress, isTrue);
+  });
+
   test('does not restart capture while the realtime session is paused',
       () async {
     final repository = FakeRealtimeRepository();
@@ -138,10 +175,10 @@ void main() {
 
   test('forwards capture ownership to the native coordinator', () async {
     const channel = MethodChannel('test/audio_session');
-    final calls = <String>[];
+    final calls = <MethodCall>[];
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(channel, (call) async {
-      calls.add(call.method);
+      calls.add(call);
       return null;
     });
     addTearDown(() {
@@ -153,10 +190,14 @@ void main() {
       eventChannel: const EventChannel('test/audio_session/events'),
     );
 
-    await coordinator.beginCapture();
+    await coordinator.beginCapture(voiceProcessing: false);
     await coordinator.endCapture();
 
-    expect(calls, ['beginCapture', 'endCapture']);
+    expect(calls.map((call) => call.method),
+        <String>['beginCapture', 'endCapture']);
+    expect(calls.first.arguments, <String, Object?>{
+      'voiceProcessing': false,
+    });
   });
 }
 

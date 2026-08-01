@@ -210,3 +210,27 @@ warm transfer：
 - https://docs.livekit.io/agents/logic/fallback-strategies/
 - https://docs.livekit.io/telephony/making-calls/outbound-calls/
 - https://docs.livekit.io/telephony/features/transfers/warm/
+
+## 13. 实时前台与持久后台
+
+无界AI保留现有 Translation Runtime 和 Voice Agent AgentSession，只在 Agent
+内部增加两条执行通道：
+
+- 实时前台：翻译、字幕、当前轮直接回复、打断和接管。
+- 持久后台：耗时工具、查询、委托任务和可延迟结果。
+
+实时前台只暴露 create/cancel/status/time/memory/permission 等有界工具；复杂业务
+工具由后台 Agent 和 Tool Gateway 按现有 L0-L3 权限执行。后台 Work 完成后不得
+直接插播，必须通过 AnnouncementWindow：
+
+1. 用户没有说话。
+2. 当前回复和翻译 TTS 没有生成、排队或播放。
+3. 目标 leg 在线且 generation 有效。
+4. session 没有接管、转接或结束。
+
+优先级固定为实时翻译高于当前 Agent 回复，当前 Agent 回复高于后台结果。结果生成
+和交付分开记录，只有目标客户端真实播放结束回执才确认播报交付。不得以此重定义
+现有服务端 playback 生命周期。
+
+完整 ID、状态机、采用/拒绝清单和实施门见
+`12-qwen-audio-agent-gap-adoption-plan.md`。

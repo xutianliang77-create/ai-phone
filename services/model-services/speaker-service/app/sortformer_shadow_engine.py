@@ -33,6 +33,9 @@ class SortformerShadowEngine:
         profile: StreamingProfile,
         onset: float = 0.5,
         offset: float = 0.5,
+        pad_offset_ms: int = 0,
+        min_duration_on_ms: int = 0,
+        min_duration_off_ms: int = 0,
         model=None,
     ) -> None:
         if model is None:
@@ -51,6 +54,9 @@ class SortformerShadowEngine:
         self._runtime = SortformerStreamingRuntime(model, profile)
         self._onset = onset
         self._offset = offset
+        self._pad_offset_ms = pad_offset_ms
+        self._min_duration_on_ms = min_duration_on_ms
+        self._min_duration_off_ms = min_duration_off_ms
         self._sessions: dict[str, _Session] = {}
 
     async def create_session(self, request: CreateSpeakerSessionRequest) -> None:
@@ -93,6 +99,9 @@ class SortformerShadowEngine:
                 timeline_origin_ms=frame.timestampMs,
                 onset=self._onset,
                 offset=self._offset,
+                pad_offset_ms=self._pad_offset_ms,
+                min_duration_on_ms=self._min_duration_on_ms,
+                min_duration_off_ms=self._min_duration_off_ms,
             )
         elif session.resume_pending and session.decoder is not None:
             session.decoder.align_next_frame(frame.timestampMs)

@@ -35,6 +35,8 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('跨语言沟通'), findsOneWidget);
+    expect(find.text('安全连接已就绪'), findsNothing);
+    expect(find.text('连接状态将在进入通话时检查'), findsOneWidget);
     await tester.scrollUntilVisible(
       find.text('通话内容由你掌控'),
       200,

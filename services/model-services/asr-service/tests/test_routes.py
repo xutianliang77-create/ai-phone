@@ -3,6 +3,7 @@ from fastapi.testclient import TestClient
 from app.config import AsrConfig
 from app.audio_buffer import FrameVadDecision
 from app.main import create_app
+from app.model_loader import qwen3_endpoint_policies
 from app.routes import frame_vad_headers
 import json
 import struct
@@ -50,6 +51,31 @@ def test_runtime_fingerprint_tracks_mixed_language_retry() -> None:
     assert disabled.runtime_parameters() != enabled.runtime_parameters()
     assert disabled.runtime_parameters()["mixedLanguageRetryEnabled"] is False
     assert enabled.runtime_parameters()["mixedLanguageRetryEnabled"] is True
+
+
+def test_realtime_endpoint_defaults_keep_fast_and_listening_modes_distinct() -> None:
+    config = AsrConfig(provider="qwen3_asr")
+
+    minimums = config.runtime_parameters()["minAudioByMode"]
+    assert minimums == {
+        "conversation": 1000,
+        "listening": 1800,
+        "call_link": 1800,
+        "pstn": 1800,
+    }
+    policies = config.runtime_parameters()["endpointSilenceByMode"]
+    assert policies == {
+        "conversation": 600,
+        "listening": 1400,
+        "call_link": 600,
+        "pstn": 1100,
+    }
+    endpoint_policies = qwen3_endpoint_policies(config)
+    assert endpoint_policies["conversation"].min_audio_ms == 1000
+    assert endpoint_policies["conversation"].endpoint_silence_ms == 600
+    assert endpoint_policies["listening"].min_audio_ms == 1800
+    assert endpoint_policies["call_link"].min_audio_ms == 1800
+    assert endpoint_policies["pstn"].min_audio_ms == 1800
 
 
 def test_metrics_exposes_runtime_identity_without_secrets() -> None:

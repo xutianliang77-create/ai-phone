@@ -8,15 +8,14 @@ import {
 import {
   confirmCallRoomParticipant,
   ensureCallRoom,
+  removeCallRoomParticipant,
 } from "./call-room-worker.js";
 import { getCallLinkWorkerSupervisor } from "./call-link-worker-supervisor.js";
 import {
   type CallLinkRecord,
-  hasActiveCallWorker,
   findCallLink,
-  hasActiveHumanCallPair,
-  registerCallLeg,
 } from "./call-links.service.js";
+import { admitCallRoomRole } from "./call-room-role-admission.js";
 import { withSessionWriteLock } from "../sessions/session-write-coordinator.js";
 import { loadEnv } from "../../config/env.js";
 import { findSession } from "../sessions/sessions-runtime.repository.js";
@@ -25,7 +24,10 @@ import {
   type GuestTicketFailure,
 } from "./call-guest-ticket.js";
 import { consumeCallGuestTicket } from "./call-guest-ticket-runtime.js";
-import { getCallRoomResourceLimits } from "./call-room-resource-limits.js";
+import {
+  parseCallRoomParticipantName,
+  parseCallRoomParticipantRole,
+} from "./call-room-entry-validation.js";
 
 export function registerCallRoomEntryRoute(app: FastifyInstance) {
   app.post("/call-links/:callId/room-token", async (request, reply) => {
@@ -36,7 +38,7 @@ export function registerCallRoomEntryRoute(app: FastifyInstance) {
       participantRole: string;
       role: string;
     }>;
-    const participantRole = parseParticipantRole(
+    const participantRole = parseCallRoomParticipantRole(
       body.participantRole ?? body.role,
     );
     if (!participantRole) {
@@ -51,7 +53,7 @@ export function registerCallRoomEntryRoute(app: FastifyInstance) {
       ? await requireAccount(request, reply)
       : null;
     if (participantRole === "host" && !account) return;
-    const participantName = parseParticipantName(body.participantName);
+    const participantName = parseCallRoomParticipantName(body.participantName);
     if (!participantName.ok) {
       return sendError(
         reply,
@@ -126,7 +128,7 @@ export function registerCallRoomEntryRoute(app: FastifyInstance) {
       participantRole: string;
       token: string;
     }>;
-    const participantRole = parseParticipantRole(body.participantRole);
+    const participantRole = parseCallRoomParticipantRole(body.participantRole);
     if (!participantRole || !body.participantIdentity || !body.token) {
       return sendError(
         reply,
@@ -189,20 +191,57 @@ export function registerCallRoomEntryRoute(app: FastifyInstance) {
         participantRole,
         account?.id,
       );
-      if (!current.ok) return current;
-      await registerCallLeg({
-        callId: current.record.callId,
+      if (!current.ok) return { kind: "validation" as const, result: current };
+      const admission = await admitCallRoomRole({
+        record: current.record,
         participantIdentity: body.participantIdentity!,
         participantRole,
-        joinType: participantRole === "host" ? "app" : "web",
       });
+      if (admission.kind !== "admitted") {
+        return { ...admission, record: current.record };
+      }
       return {
+        kind: "committed" as const,
         ...current,
-        ready: await hasActiveHumanCallPair(current.record.callId),
-        workerPresent: await hasActiveCallWorker(current.record.callId),
+        ready: admission.ready,
+        workerPresent: admission.workerPresent,
       };
     });
-    if (!committed.ok) return sendEntryError(reply, committed);
+    if (committed.kind === "validation") {
+      return sendEntryError(reply, committed.result);
+    }
+    if (committed.kind === "presence_failed" ||
+      committed.kind === "role_conflict") {
+      const removed = await removeCallRoomParticipant(
+        committed.record,
+        body.participantIdentity,
+      );
+      if (!removed.ok) {
+        request.log.error({
+          callId: committed.record.callId,
+          participantIdentity: body.participantIdentity,
+          issues: removed.issues,
+        }, "Rejected duplicate call participant could not be removed");
+      }
+      if (committed.kind === "presence_failed") {
+        request.log.error({
+          callId: committed.record.callId,
+          issues: committed.issues,
+        }, "Existing call participant verification failed");
+        return sendError(
+          reply,
+          503,
+          "call_room_participant_check_failed",
+          "Call room participant could not be verified",
+        );
+      }
+      return sendError(
+        reply,
+        409,
+        "call_room_participant_role_in_use",
+        "Another participant is already connected for this role",
+      );
+    }
 
     if (committed.ready && !committed.workerPresent) {
       try {
@@ -289,23 +328,6 @@ function sendEntryError(
   result: Exclude<EntryValidation, { ok: true }>,
 ) {
   return sendError(reply, result.status, result.code, result.message);
-}
-
-function parseParticipantRole(value: unknown) {
-  if (value === undefined || value === "guest") return "guest" as const;
-  return value === "host" ? ("host" as const) : null;
-}
-
-function parseParticipantName(value: unknown):
-  | { ok: true; value?: string }
-  | { ok: false } {
-  if (value === undefined) return { ok: true };
-  if (typeof value !== "string") return { ok: false };
-  const normalized = value.trim();
-  return Array.from(normalized).length <=
-      getCallRoomResourceLimits().maxParticipantNameCharacters
-    ? { ok: true, ...(normalized ? { value: normalized } : {}) }
-    : { ok: false };
 }
 
 function sendGuestTicketError(

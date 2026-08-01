@@ -58,6 +58,118 @@ def test_decoder_exposes_active_span_without_closing_it() -> None:
     assert decoder.active_spans()[0].startMs == 5000
 
 
+def test_decoder_bridges_a_short_speaker_gap() -> None:
+    decoder = SpeakerActivityDecoder(
+        max_speakers=2,
+        timeline_origin_ms=0,
+        onset=0.56,
+        offset=0.56,
+        pad_offset_ms=20,
+        min_duration_off_ms=320,
+    )
+
+    spans = decoder.consume([
+        [0.9, 0.1],
+        [0.1, 0.1],
+        [0.1, 0.1],
+        [0.1, 0.1],
+        [0.9, 0.1],
+    ], start_frame=0)
+
+    assert spans == []
+    assert decoder.flush()[0].model_dump() == {
+        "speakerId": "speaker_1",
+        "startMs": 0,
+        "endMs": 400,
+        "confidence": 0.9,
+        "overlap": False,
+        "final": True,
+    }
+
+
+def test_decoder_confirms_a_long_gap_without_delaying_new_speaker() -> None:
+    decoder = SpeakerActivityDecoder(
+        max_speakers=2,
+        timeline_origin_ms=0,
+        onset=0.56,
+        offset=0.56,
+        pad_offset_ms=20,
+        min_duration_off_ms=320,
+    )
+
+    spans = decoder.consume([
+        [0.9, 0.1],
+        [0.1, 0.9],
+        [0.1, 0.8],
+        [0.1, 0.8],
+        [0.1, 0.8],
+        [0.1, 0.8],
+    ], start_frame=0)
+
+    assert [(item.speakerId, item.startMs, item.endMs, item.overlap) for item in spans] == [
+        ("speaker_1", 0, 100, False),
+    ]
+    assert decoder.active_spans()[0].model_dump() == {
+        "speakerId": "speaker_2",
+        "startMs": 80,
+        "endMs": 480,
+        "confidence": 0.82,
+        "overlap": False,
+        "final": False,
+    }
+
+
+def test_decoder_keeps_a_one_frame_new_speaker_pending() -> None:
+    decoder = SpeakerActivityDecoder(
+        max_speakers=2,
+        timeline_origin_ms=0,
+        min_duration_on_ms=100,
+    )
+
+    assert decoder.consume([[0.9, 0.1]], start_frame=0) == []
+    assert decoder.active_spans() == []
+    assert decoder.consume([[0.1, 0.1]], start_frame=1) == []
+    assert decoder.flush() == []
+
+
+def test_decoder_backfills_a_confirmed_pending_speaker_start() -> None:
+    decoder = SpeakerActivityDecoder(
+        max_speakers=2,
+        timeline_origin_ms=1000,
+        min_duration_on_ms=100,
+    )
+
+    assert decoder.consume([[0.9, 0.1]], start_frame=0) == []
+    assert decoder.consume([[0.8, 0.1]], start_frame=1) == []
+
+    confirmed = decoder.active_spans()[0].model_dump()
+    assert confirmed == {
+        "speakerId": "speaker_1",
+        "startMs": 1000,
+        "endMs": 1160,
+        "confidence": confirmed["confidence"],
+        "overlap": False,
+        "final": False,
+    }
+    assert confirmed["confidence"] == pytest.approx(0.85)
+
+
+def test_decoder_does_not_publish_pending_overlap() -> None:
+    decoder = SpeakerActivityDecoder(
+        max_speakers=2,
+        timeline_origin_ms=0,
+        min_duration_on_ms=100,
+    )
+    decoder.consume([[0.9, 0.1], [0.9, 0.1]], start_frame=0)
+
+    decoder.consume([[0.9, 0.9]], start_frame=2)
+
+    assert [
+        (item.speakerId, item.overlap)
+        for item in decoder.active_spans()
+    ] == [("speaker_1", False)]
+
+
 def test_pcm_buffer_resamples_24khz_as_one_continuous_stream() -> None:
     buffer = PcmStreamBuffer()
     source = array("h", [1000, -1000] * 12000).tobytes()
@@ -90,6 +202,9 @@ def test_sortformer_engine_ignores_duplicate_or_out_of_order_frames() -> None:
     engine = SortformerShadowEngine.__new__(SortformerShadowEngine)
     engine._onset = 0.5
     engine._offset = 0.5
+    engine._pad_offset_ms = 0
+    engine._min_duration_on_ms = 0
+    engine._min_duration_off_ms = 0
     session = _Session(max_speakers=4, runtime_state=None)
 
     assert engine._append(session, _frame(sequence=2)) is True

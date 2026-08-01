@@ -128,9 +128,11 @@ class _CallRoomStatus extends StatelessWidget {
   String _statusText(AppLocalizations l10n) {
     return switch (snapshot.status) {
       CallRoomConnectionStatus.connecting => l10n.callRoomConnecting,
-      CallRoomConnectionStatus.connected => snapshot.microphoneEnabled
-          ? l10n.callRoomConnected
-          : l10n.callRoomConnectedNoMic,
+      CallRoomConnectionStatus.connected => snapshot.microphonePausedForPlayback
+          ? l10n.callRoomMicrophonePausedForPlayback
+          : snapshot.microphoneEnabled
+              ? l10n.callRoomConnected
+              : l10n.callRoomConnectedNoMic,
       CallRoomConnectionStatus.reconnecting => l10n.callRoomReconnecting,
       CallRoomConnectionStatus.disconnected => l10n.callRoomDisconnected,
     };

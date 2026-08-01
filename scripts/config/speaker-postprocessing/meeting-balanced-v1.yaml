@@ -1,0 +1,8 @@
+# AliMeeting-tuned candidate. Requires cross-suite validation before deployment.
+parameters:
+  onset: 0.56
+  offset: 0.56
+  pad_onset: 0.0
+  pad_offset: 0.02
+  min_duration_on: 0.0
+  min_duration_off: 0.32

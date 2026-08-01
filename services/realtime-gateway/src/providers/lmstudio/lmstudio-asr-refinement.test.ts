@@ -81,6 +81,27 @@ describe("lmstudio ASR refinement", () => {
     expect(provider.calls).toBe(0);
     expect(result.text).toBe("今天下午三点我们讨论产品计划，确认负责。");
   });
+
+  it("uses the LLM for an explicit numeric anomaly at max duration", async () => {
+    const provider = new SpyLlmProvider();
+    await refineRealtimeTranscript({
+      provider,
+      enabled: true,
+      minConfidence: 0.72,
+      session: session(),
+      transcript: {
+        segmentId: "qwen3_seg_801",
+        text: "就是十八到五位之间的色彩颜色。",
+        language: "zh",
+        confidence: 0.9,
+        endpointReason: "max_duration",
+      },
+      targetLanguage: "en",
+      previousSegments: [{ rawText: "年轻人这一块儿，十八到三。" }],
+    });
+
+    expect(provider.calls).toBe(1);
+  });
 });
 
 class SpyLlmProvider implements LlmProvider {

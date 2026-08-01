@@ -6,6 +6,7 @@ class FakeAudioSessionCoordinator implements AudioSessionCoordinator {
   final _events = StreamController<AudioSessionEvent>.broadcast();
   int beginCaptureCalls = 0;
   int endCaptureCalls = 0;
+  final voiceProcessingValues = <bool>[];
 
   @override
   Stream<AudioSessionEvent> get events => _events.stream;
@@ -13,8 +14,9 @@ class FakeAudioSessionCoordinator implements AudioSessionCoordinator {
   void emit(AudioSessionEvent event) => _events.add(event);
 
   @override
-  Future<void> beginCapture() async {
+  Future<void> beginCapture({bool voiceProcessing = true}) async {
     beginCaptureCalls += 1;
+    voiceProcessingValues.add(voiceProcessing);
   }
 
   @override

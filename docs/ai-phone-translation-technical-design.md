@@ -244,7 +244,7 @@ VAD 只能区分语音和非语音，不能识别设备自身 TTS。扬声器自
 | Call Link | 600-900ms | 300ms | 8s | 配合独立 participant track |
 | PSTN | 500-800ms | 300ms | 8s | 兼容 8kHz 电话音频 |
 
-当前生产 Qwen3-ASR 仍使用 `1100ms` 端点作为统一安全基线。代码已支持按 session 冻结 `conversation/listening/call_link/pstn` 四种策略，并分别配置 900/1400/900/1100ms；统一验收完成前不部署到生产，避免一次上线同时改变模型和断句策略。
+当前已部署 Qwen3-ASR 仍保留旧端点配置。代码支持按 session 冻结 `conversation/listening/call_link/pstn` 四种策略；2026-07-23 固定 27 条语料三轮 A/B 后，代码与部署候选改为 600/1400/600/1100ms，600ms 的 conversation/call_link 三轮均保持 26/27。自然停顿、实时 pacing、真机和生产负载验收完成前不部署，避免把批次结果误当生产结论。
 
 ### 8.3 多说话人和混合语种
 

@@ -9,13 +9,34 @@ export interface SpeakerAlignment {
   timing: SegmentTimingDto;
 }
 
+export interface SpeakerAlignmentEvaluation {
+  alignment: SpeakerAlignment | null;
+  hasDirectEvidence: boolean;
+}
+
 export function alignSpeakerSpan(
   timing: SegmentTimingDto | undefined,
   spans: SpeakerSpan[],
   minimumEvidenceMs = 160,
   minimumDominanceRatio = 0.55,
 ): SpeakerAlignment | null {
-  if (!timing || spans.length === 0) return null;
+  return evaluateSpeakerSpan(
+    timing,
+    spans,
+    minimumEvidenceMs,
+    minimumDominanceRatio,
+  ).alignment;
+}
+
+export function evaluateSpeakerSpan(
+  timing: SegmentTimingDto | undefined,
+  spans: SpeakerSpan[],
+  minimumEvidenceMs = 160,
+  minimumDominanceRatio = 0.55,
+): SpeakerAlignmentEvaluation {
+  if (!timing || spans.length === 0) {
+    return { alignment: null, hasDirectEvidence: false };
+  }
   const ranked = aggregateBySpeaker(timing, spans)
     .sort((left, right) => right.overlapMs - left.overlapMs);
   const best = ranked[0];
@@ -30,21 +51,29 @@ export function alignSpeakerSpan(
     !best ||
     best.overlapMs < minimumEvidenceMs ||
     best.overlapMs / Math.max(1, totalEvidenceMs) < minimumDominanceRatio
-  ) return unknownAlignment(timing, activeSpeakerIds);
+  ) {
+    return {
+      alignment: unknownAlignment(timing, activeSpeakerIds),
+      hasDirectEvidence: ranked.length > 0,
+    };
+  }
   return {
-    speaker: {
-      speakerId: best.speakerId,
-      role: "speaker",
-      source: "diarization",
-      ...(typeof best.confidence === "number"
-        ? { confidence: best.confidence }
-        : {}),
+    alignment: {
+      speaker: {
+        speakerId: best.speakerId,
+        role: "speaker",
+        source: "diarization",
+        ...(typeof best.confidence === "number"
+          ? { confidence: best.confidence }
+          : {}),
+      },
+      timing: {
+        ...timing,
+        ...(best.overlap ? { overlap: true } : {}),
+        ...(activeSpeakerIds.length > 0 ? { activeSpeakerIds } : {}),
+      },
     },
-    timing: {
-      ...timing,
-      ...(best.overlap ? { overlap: true } : {}),
-      ...(activeSpeakerIds.length > 0 ? { activeSpeakerIds } : {}),
-    },
+    hasDirectEvidence: true,
   };
 }
 

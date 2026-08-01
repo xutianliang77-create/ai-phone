@@ -12,7 +12,7 @@ interface RealtimeTtsOutputQueueOptions {
   voice?: RealtimeVoiceConfig;
   synthesizer: Pick<
     HttpTtsSynthesizer,
-    "enabled" | "synthesize" | "cancelSession" | "closeSession"
+    "enabled" | "synthesizeStream" | "cancelSession" | "closeSession"
   >;
   isSessionActive: () => boolean;
   maxPendingOutputs?: number;
@@ -43,8 +43,13 @@ export class RealtimeTtsOutputQueue {
     this.tail = this.tail.then(async () => {
       if (!this.canEmit(generation)) return;
       try {
-        const audio = await this.options.synthesizer.synthesize(event, this.options.voice);
-        if (audio && this.canEmit(generation)) send(audio);
+        for await (const audio of this.options.synthesizer.synthesizeStream(
+          event,
+          this.options.voice,
+        )) {
+          if (!this.canEmit(generation)) return;
+          send(audio);
+        }
       } catch (error) {
         if (this.canEmit(generation)) {
           logRealtimeTtsFailure(event.sessionId, event.segmentId, error);

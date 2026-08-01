@@ -71,6 +71,30 @@ export class DelayedAsrProvider extends FakeAsrProvider {
   }
 }
 
+export class UnknownSpeakerAsrProvider extends FakeAsrProvider {
+  private calls = 0;
+
+  constructor(private readonly includeTiming = true) {
+    super();
+  }
+
+  override async transcribe(): Promise<AsrProviderResult> {
+    this.calls += 1;
+    const transcript = await super.transcribe();
+    if (!transcript || Array.isArray(transcript)) return transcript;
+    return {
+      ...transcript,
+      segmentId: `seg_${this.calls}`,
+      speaker: {
+        speakerId: "unknown",
+        role: "unknown" as const,
+        source: "unknown" as const,
+      },
+      ...(this.includeTiming ? {} : { timing: undefined }),
+    };
+  }
+}
+
 export class OneShotSpeakerProvider extends FakeSpeakerProvider {
   private calls = 0;
   override async pushAudio() {
@@ -159,6 +183,20 @@ export class SwitchingSpeakerProvider extends FakeSpeakerProvider {
     if (this.calls === 2) return [speakerSpan("speaker_1", 0, 480)];
     if (this.calls === 3) return [speakerSpan("speaker_2", 480, 720)];
     return [speakerSpan("speaker_2", 480, 960)];
+  }
+}
+
+export class ReturningSpeakerProvider extends FakeSpeakerProvider {
+  private calls = 0;
+
+  override async pushAudio() {
+    this.calls += 1;
+    if (this.calls === 1) return [speakerSpan("speaker_1", 0, 240)];
+    if (this.calls === 2) return [speakerSpan("speaker_1", 0, 480)];
+    if (this.calls === 3) return [speakerSpan("speaker_2", 480, 720)];
+    if (this.calls === 4) return [speakerSpan("speaker_2", 480, 960)];
+    if (this.calls === 5) return [speakerSpan("speaker_1", 960, 1200)];
+    return [speakerSpan("speaker_1", 960, 1440)];
   }
 }
 

@@ -48,6 +48,7 @@ export interface AsrRefinementResult {
     | "provider_error"
     | "language_mismatch"
     | "content_expansion"
+    | "protected_surface_changed"
     | "disabled";
 }
 

@@ -19,6 +19,9 @@ class SpeakerConfig:
     spkcache_len: int
     onset: float
     offset: float
+    pad_offset_ms: int = 0
+    min_duration_on_ms: int = 0
+    min_duration_off_ms: int = 0
     voice_identity_provider: str = "off"
     voice_identity_model_id: str = (
         "/data/models/translation-model-eval/models/titanet/"
@@ -26,12 +29,23 @@ class SpeakerConfig:
     )
     voice_identity_store_dir: str = "/data/ai-phone/speaker-identities"
     voice_identity_encryption_key: str = ""
+    session_alias_provider: str = "off"
+    session_alias_model_id: str = (
+        "/data/models/translation-model-eval/models/titanet/"
+        "speakerverification_en_titanet_large.nemo"
+    )
+    session_alias_minimum_evidence_ms: int = 1500
 
 
 def load_config() -> SpeakerConfig:
     provider = os.getenv("SPEAKER_MODEL_PROVIDER", "mock")
     if provider not in ("mock", "sortformer", "sortformer_shadow"):
         raise ValueError(f"Unsupported speaker provider: {provider}")
+    session_alias_provider = os.getenv("SESSION_SPEAKER_ALIAS_PROVIDER", "off")
+    if session_alias_provider not in ("off", "nemo_titanet"):
+        raise ValueError(
+            f"Unsupported session speaker alias provider: {session_alias_provider}",
+        )
     return SpeakerConfig(
         provider=provider,
         model_id=os.getenv(
@@ -47,6 +61,13 @@ def load_config() -> SpeakerConfig:
         spkcache_len=int(os.getenv("SPEAKER_CACHE_LEN", "188")),
         onset=float(os.getenv("SPEAKER_ONSET", "0.5")),
         offset=float(os.getenv("SPEAKER_OFFSET", "0.5")),
+        pad_offset_ms=int(os.getenv("SPEAKER_PAD_OFFSET_MS", "0")),
+        min_duration_on_ms=int(
+            os.getenv("SPEAKER_MIN_DURATION_ON_MS", "0"),
+        ),
+        min_duration_off_ms=int(
+            os.getenv("SPEAKER_MIN_DURATION_OFF_MS", "0"),
+        ),
         voice_identity_provider=os.getenv("VOICE_IDENTITY_PROVIDER", "off"),
         voice_identity_model_id=os.getenv(
             "VOICE_IDENTITY_MODEL_ID",
@@ -61,4 +82,13 @@ def load_config() -> SpeakerConfig:
             "VOICE_IDENTITY_ENCRYPTION_KEY",
             "",
         ).strip(),
+        session_alias_provider=session_alias_provider,
+        session_alias_model_id=os.getenv(
+            "SESSION_SPEAKER_ALIAS_MODEL_ID",
+            "/data/models/translation-model-eval/models/titanet/"
+            "speakerverification_en_titanet_large.nemo",
+        ),
+        session_alias_minimum_evidence_ms=int(
+            os.getenv("SESSION_SPEAKER_ALIAS_MINIMUM_EVIDENCE_MS", "1500"),
+        ),
     )

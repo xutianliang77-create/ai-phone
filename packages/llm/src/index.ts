@@ -15,6 +15,7 @@ export {
 } from "./providers.js";
 export { OpenAiCompatibleLlmProvider } from "./openai-compatible-provider.js";
 export {
+  hasExplicitAsrCorrectionSignal,
   shouldUseContextualAsrRefinement,
   type AsrRefinementPolicyInput,
   type RecentAsrSegment,

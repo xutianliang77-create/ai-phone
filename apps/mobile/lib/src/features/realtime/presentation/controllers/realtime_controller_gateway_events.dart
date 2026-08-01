@@ -90,17 +90,33 @@ extension RealtimeControllerGatewayEvents on RealtimeController {
     if (event.type == 'transcript.partial' && event.segmentId != null) {
       final text = _cleanRealtimeText(event.text);
       if (text != null) {
-        _upsertSegment(
-          event.segmentId!,
-          appendSourceText: text,
-          sourceLanguage: event.language,
-          confidence: event.confidence,
-          stage: 'asr',
-          speaker: event.speaker,
-          timing: event.timing,
-          vadContext: event.vadContext,
-          languageProfile: event.languageProfile,
-        );
+        final revision = event.revision;
+        if (revision == null) {
+          _upsertSegment(
+            event.segmentId!,
+            appendSourceText: text,
+            sourceLanguage: event.language,
+            confidence: event.confidence,
+            stage: 'asr',
+            speaker: event.speaker,
+            timing: event.timing,
+            vadContext: event.vadContext,
+            languageProfile: event.languageProfile,
+          );
+        } else {
+          _upsertSegment(
+            event.segmentId!,
+            revision: revision,
+            sourceText: text,
+            sourceLanguage: event.language,
+            confidence: event.confidence,
+            stage: 'asr',
+            speaker: event.speaker,
+            timing: event.timing,
+            vadContext: event.vadContext,
+            languageProfile: event.languageProfile,
+          );
+        }
       }
     }
     if (event.type == 'transcript.final' && event.segmentId != null) {

@@ -218,6 +218,44 @@ void main() {
     expect(find.textContaining('在线同传剩余 15 秒'), findsOneWidget);
   });
 
+  testWidgets('shows whether translation speech is off, enabled, or playing',
+      (WidgetTester tester) async {
+    Future<void> pumpStatus({
+      required bool autoSpeakTranslation,
+      bool speechOutputActive = false,
+    }) {
+      return tester.pumpWidget(MaterialApp(
+        locale: const Locale('zh'),
+        localizationsDelegates: const <LocalizationsDelegate<dynamic>>[
+          AppLocalizations.delegate,
+          GlobalMaterialLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+        ],
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: Scaffold(
+          body: RealtimeStatusBar(
+            status: RealtimeStatus.active,
+            autoSpeakTranslation: autoSpeakTranslation,
+            speechOutputActive: speechOutputActive,
+          ),
+        ),
+      ));
+    }
+
+    await pumpStatus(autoSpeakTranslation: false);
+    expect(find.text('朗读：关闭'), findsOneWidget);
+
+    await pumpStatus(autoSpeakTranslation: true);
+    expect(find.text('朗读：已开启'), findsOneWidget);
+
+    await pumpStatus(
+      autoSpeakTranslation: true,
+      speechOutputActive: true,
+    );
+    expect(find.text('正在播音'), findsOneWidget);
+  });
+
   testWidgets('keeps low balance warning visible with latest error summary',
       (WidgetTester tester) async {
     await tester.pumpWidget(const MaterialApp(

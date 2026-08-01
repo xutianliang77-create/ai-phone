@@ -3,6 +3,8 @@ import { LiveKitCallAudioTrackRuntime } from
 import type { RtcNodeModule } from "./livekit-call-audio-source-types.js";
 import type { CallAudioSpeakerRole } from "./types.js";
 
+const defaultAudioIngestMaxFrames = 20;
+
 interface ActiveAudioTrack {
   runtime: LiveKitCallAudioTrackRuntime;
   task: Promise<void>;
@@ -29,7 +31,9 @@ export class LiveKitCallAudioTrackRegistry {
   deleteIfCurrent(sourceKey: string, runtime: LiveKitCallAudioTrackRuntime) {
     if (this.active.get(sourceKey)?.runtime === runtime) {
       this.active.delete(sourceKey);
+      return true;
     }
+    return false;
   }
 }
 
@@ -57,4 +61,10 @@ export async function loadRtcNodeModule(
       { cause: error },
     );
   }
+}
+
+export function audioIngestMaxFrames(configured?: number) {
+  return Number.isInteger(configured) && configured! > 0
+    ? configured!
+    : defaultAudioIngestMaxFrames;
 }

@@ -6,6 +6,8 @@ import {
   isAsrEvalAcceptable,
   mergeAsrEvalHotwords,
   parseAsrEvalDomainPacks,
+  parseAsrEvalMode,
+  parseAsrEvalSampleIds,
   parseAsrEvalSourceLanguage,
   requiredAsrEvalEndpoint,
 } from "./http_asr_batch_eval.mjs";
@@ -68,5 +70,14 @@ describe("HTTP ASR batch eval", () => {
     expect(parseAsrEvalSourceLanguage("en-US")).toBe("en");
     expect(() => parseAsrEvalSourceLanguage("turn"))
       .toThrow("Unsupported ASR eval source language: turn");
+  });
+
+  it("validates realtime mode and optional sample filters", () => {
+    expect(parseAsrEvalMode(undefined)).toBe("conversation");
+    expect(parseAsrEvalMode("call_link")).toBe("call_link");
+    expect(() => parseAsrEvalMode("meeting"))
+      .toThrow("Unsupported ASR eval mode: meeting");
+    expect(parseAsrEvalSampleIds("zh_short_001, mixed_001,zh_short_001"))
+      .toEqual(["zh_short_001", "mixed_001"]);
   });
 });

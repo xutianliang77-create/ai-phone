@@ -34,8 +34,8 @@ class RecordAudioCapture implements AudioCapture {
         encoder: AudioEncoder.pcm16bits,
         sampleRate: config.sampleRate,
         numChannels: 1,
-        echoCancel: true,
-        noiseSuppress: true,
+        echoCancel: config.echoCancel,
+        noiseSuppress: config.noiseSuppress,
         streamBufferSize: _byteLength(config),
       ),
     );

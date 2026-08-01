@@ -60,6 +60,7 @@ Unified Session Data + Ledger + Events
 | `09-performance-reliability-capacity.md` | 容量准入、背压、故障域、SLO 和规模化设计 |
 | `10-development-task-plan.md` | ARC/OPT 映射、开发批次、依赖和完成定义 |
 | `11-platform-acceptance-plan.md` | 安全、数据、SIP、Dispatch、Egress/Ingress 和容量验收 |
+| `12-qwen-audio-agent-gap-adoption-plan.md` | 借鉴 Qwen Audio Agent 补齐后台工作与可靠播报，不替换现有主线 |
 
 ## 3. 当前代码依据
 

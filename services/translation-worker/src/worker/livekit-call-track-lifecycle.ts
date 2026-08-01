@@ -63,6 +63,14 @@ export class LiveKitCallTrackLifecycle {
     this.emit({ event: "audio_leg_started", speakerRole, outcome: "accepted" });
   }
 
+  duplicateRoleIgnored(speakerRole: CallAudioSpeakerRole) {
+    this.emit({
+      event: "track_subscribed",
+      speakerRole,
+      outcome: "ignored_duplicate_role",
+    });
+  }
+
   private emit(event: LiveKitCallAudioTrackLifecycleEvent) {
     try {
       this.observer?.(event);
