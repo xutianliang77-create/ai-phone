@@ -127,6 +127,11 @@ class FakeTtsSynthesizer {
     return this.run(event);
   }
 
+  async *synthesizeStream(event: TranslationEvent) {
+    const audio = await this.synthesize(event);
+    if (audio) yield audio;
+  }
+
   closeSession(sessionId: string) {
     this.closed.push(sessionId);
   }

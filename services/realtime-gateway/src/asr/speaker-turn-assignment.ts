@@ -29,7 +29,11 @@ export class SpeakerTurnAssignment {
     transcript: TranscriptResult,
     turn: SpeakerTurnReference,
   ): TranscriptResult {
-    return { ...transcript, ...turn };
+    return {
+      ...transcript,
+      turnId: turn.turnId,
+      revision: transcript.revision ?? turn.revision,
+    };
   }
 
   clear(sessionId: string) {

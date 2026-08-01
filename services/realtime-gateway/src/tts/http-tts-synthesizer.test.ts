@@ -71,6 +71,39 @@ describe("http tts synthesizer", () => {
     });
   });
 
+  it("emits an 800ms prefill and one remainder from the streaming endpoint", async () => {
+    const synthesizer = new HttpTtsSynthesizer({
+      ...baseEnv(),
+      ttsHttpStreamEndpoint: "http://models.local:8002/tts/stream",
+      ttsStreamPrefillMs: 800,
+    });
+    const pcm = Buffer.alloc(7_680).toString("base64");
+    const events = [
+      { type: "metadata", firstAudioMs: 25 },
+      ...Array.from({ length: 7 }, (_, index) => ({
+        type: "audio_chunk",
+        format: "pcm16",
+        sampleRate: 24_000,
+        sequence: index + 1,
+        data: pcm,
+      })),
+      { type: "final", audioDurationMs: 1120 },
+    ];
+    vi.stubGlobal("fetch", async () => new Response(
+      `${events.map((event) => JSON.stringify(event)).join("\n")}\n`,
+    ));
+
+    const audio = [];
+    for await (const chunk of synthesizer.synthesizeStream(translation("seg_stream"))) {
+      audio.push(chunk);
+    }
+
+    expect(audio).toHaveLength(2);
+    expect(audio.map((chunk) => Buffer.from(chunk.data, "base64").length))
+      .toEqual([38_400, 15_360]);
+    expect(audio.map((chunk) => chunk.sequence)).toEqual([1, 2]);
+  });
+
   it("aborts an in-flight request when its session closes", async () => {
     const synthesizer = new HttpTtsSynthesizer({
       ...baseEnv(),
@@ -155,6 +188,7 @@ function baseEnv(): RealtimeEnv {
     asrHttpEndpoint: "http://models.local:8021/asr/transcribe",
     asrHttpTimeoutMs: 100,
     ttsHttpTimeoutMs: 100,
+    ttsStreamPrefillMs: 800,
     sessionEventSink: "noop",
     apiBaseUrl: "http://127.0.0.1:3100",
     sessionSyncTimeoutMs: 100,

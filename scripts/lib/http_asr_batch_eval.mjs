@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { spawnSync } from "node:child_process";
 import {
   asrCorrectionTermsForPacks,
   asrHotwordsForTerminology,
@@ -47,6 +50,21 @@ export function parseAsrEvalSourceLanguage(value) {
   if (["zh", "zh-CN"].includes(normalized)) return "zh";
   if (["en", "en-US"].includes(normalized)) return "en";
   throw new Error(`Unsupported ASR eval source language: ${normalized}`);
+}
+
+export function parseAsrEvalMode(value) {
+  const normalized = value?.trim() || "conversation";
+  if (["conversation", "listening", "call_link", "pstn"].includes(normalized)) {
+    return normalized;
+  }
+  throw new Error(`Unsupported ASR eval mode: ${normalized}`);
+}
+
+export function parseAsrEvalSampleIds(value) {
+  if (!value?.trim()) return [];
+  return [...new Set(
+    value.split(",").map((item) => item.trim()).filter(Boolean),
+  )];
 }
 
 export function asrEvalLexicon(packs) {
@@ -100,6 +118,147 @@ export function asrEvalCharErrorRate(expected, actual) {
 
 export function roundAsrEval(value) {
   return Math.round(value * 1000) / 1000;
+}
+
+export function prepareAsrEvalWav(path, runDir) {
+  const header = readPcm16MonoWav(path, { headerOnly: true });
+  if ([8000, 16000, 24000].includes(header.sampleRate)) {
+    return { path, temporary: false };
+  }
+  const outPath = join(
+    runDir,
+    `.tmp-${Date.now()}-${Math.random().toString(16).slice(2)}.wav`,
+  );
+  const result = spawnSync("ffmpeg", [
+    "-y", "-hide_banner", "-loglevel", "error",
+    "-i", path, "-ac", "1", "-ar", "16000", "-sample_fmt", "s16", outPath,
+  ], { stdio: "pipe" });
+  if (result.status !== 0) {
+    const detail = result.error?.message
+      ?? result.stderr?.toString()
+      ?? "unknown error";
+    throw new Error(`ffmpeg failed for ${path}: ${detail}`);
+  }
+  return { path: outPath, temporary: true };
+}
+
+export function readPcm16MonoWav(path, options = {}) {
+  const buffer = readFileSync(path);
+  if (
+    buffer.toString("ascii", 0, 4) !== "RIFF"
+    || buffer.toString("ascii", 8, 12) !== "WAVE"
+  ) {
+    throw new Error(`Not a wav file: ${path}`);
+  }
+  let offset = 12;
+  let fmt = null;
+  let data = null;
+  while (offset + 8 <= buffer.length) {
+    const id = buffer.toString("ascii", offset, offset + 4);
+    const size = buffer.readUInt32LE(offset + 4);
+    const start = offset + 8;
+    if (id === "fmt ") {
+      fmt = {
+        audioFormat: buffer.readUInt16LE(start),
+        channels: buffer.readUInt16LE(start + 2),
+        sampleRate: buffer.readUInt32LE(start + 4),
+        bitsPerSample: buffer.readUInt16LE(start + 14),
+      };
+    } else if (id === "data") {
+      data = buffer.subarray(start, start + size);
+    }
+    offset = start + size + (size % 2);
+  }
+  if (
+    !fmt
+    || fmt.audioFormat !== 1
+    || fmt.channels !== 1
+    || fmt.bitsPerSample !== 16
+  ) {
+    throw new Error(`Unsupported wav format: ${path}`);
+  }
+  if (options.headerOnly) return { sampleRate: fmt.sampleRate };
+  if (!data) throw new Error(`Missing wav data chunk: ${path}`);
+  return { sampleRate: fmt.sampleRate, pcm: data };
+}
+
+export function upsamplePcm16By2(pcm) {
+  const samples = pcm.length / 2;
+  const output = Buffer.alloc(samples * 4);
+  for (let index = 0; index < samples; index += 1) {
+    const value = pcm.readInt16LE(index * 2);
+    output.writeInt16LE(value, index * 4);
+    output.writeInt16LE(value, index * 4 + 2);
+  }
+  return output;
+}
+
+export function asrEvalLatencySummary(values) {
+  if (values.length === 0) return null;
+  const ordered = [...values].sort((a, b) => a - b);
+  return {
+    min: ordered[0],
+    p50: ordered[Math.floor((ordered.length - 1) * 0.5)],
+    p95: ordered[Math.ceil(ordered.length * 0.95) - 1],
+    max: ordered.at(-1),
+  };
+}
+
+export function renderAsrEvalSummary(summary) {
+  const lines = [
+    `# ${summary.modelId} ASR Eval`,
+    "",
+    `- Provider: \`${summary.providerId}\``,
+    `- Domain packs: ${renderPacks(summary.domainPacks)}`,
+    `- Sample terms as hotwords: ${summary.includeSampleTerms}`,
+    `- Source language override: ${summary.sourceLanguageOverride ?? "per-sample"}`,
+    `- Mode: \`${summary.mode}\``,
+    `- Realtime pacing: ${summary.realtimePacing}`,
+    `- Endpoint final latency: ${JSON.stringify(summary.endpointFinalLatencyMs)}`,
+    `- Total: ${summary.total}`,
+    `- Pass: ${summary.pass}`,
+    `- Fail: ${summary.fail}`,
+    "",
+    "| Group | Pass/Total |",
+    "| --- | ---: |",
+  ];
+  for (const [group, item] of Object.entries(summary.groups)) {
+    lines.push(`| \`${group}\` | ${item.pass}/${item.total} |`);
+  }
+  lines.push(
+    "",
+    "| Sample | Result | Metric | Text |",
+    "| --- | --- | --- | --- |",
+  );
+  for (const item of summary.results) {
+    const missing = item.missingTerms.length > 0
+      ? `; missing ${item.missingTerms.join(", ")}`
+      : "";
+    lines.push(
+      `| \`${item.sampleId}\` | ${item.acceptable ? "pass" : "fail"} | `
+      + `${item.metric} ${item.score}${missing} | `
+      + `${escapeAsrEvalCell(item.finalText || "空")} |`,
+    );
+  }
+  return `${lines.join("\n")}\n`;
+}
+
+export function asrEvalProviderSlug(id) {
+  return String(id).replace(/[^a-z0-9_-]+/gi, "-").replace(/^-+|-+$/g, "");
+}
+
+export function compactAsrEvalStamp(date) {
+  return date.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}Z$/, "Z");
+}
+
+function renderPacks(packs) {
+  return packs.length > 0
+    ? packs.map((item) => `\`${item}\``).join(", ")
+    : "none";
+}
+
+function escapeAsrEvalCell(value) {
+  return String(value).replace(/\|/g, "\\|").replace(/\n/g, " ");
 }
 
 function normalizeProtectedText(value) {

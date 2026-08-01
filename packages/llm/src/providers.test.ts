@@ -67,6 +67,34 @@ describe("LLM providers", () => {
       "llm_refinement_added_unsupported_content",
     );
   });
+
+  it("rejects numeric or entity changes without contextual evidence", async () => {
+    const numeric = await refineAsrWithFallback(
+      new ProtectedSurfaceChangingProvider("预算是十二万元，型号 A-120。"),
+      {
+        sessionId: "s1",
+        segmentId: "seg1",
+        sourceLanguage: "zh",
+        targetLanguage: "en",
+        rawText: "预算是二十万元，型号 A-120。",
+      },
+    );
+    const entity = await refineAsrWithFallback(
+      new ProtectedSurfaceChangingProvider("我们使用 Open API。"),
+      {
+        sessionId: "s1",
+        segmentId: "seg2",
+        sourceLanguage: "zh",
+        targetLanguage: "en",
+        rawText: "我们使用 OpenAI API。",
+      },
+    );
+
+    expect(numeric.optimizedText).toBe("预算是二十万元，型号 A-120。");
+    expect(numeric.fallbackReason).toBe("protected_surface_changed");
+    expect(entity.optimizedText).toBe("我们使用 OpenAI API。");
+    expect(entity.fallbackReason).toBe("protected_surface_changed");
+  });
 });
 
 class TranslatingLlmProvider implements LlmProvider {
@@ -109,5 +137,16 @@ class ExpandingLlmProvider extends TranslatingLlmProvider {
       optimizedText:
         "今天下午三点我们讨论产品计划，确认负责人和截止日期，然后发送给所有参会人员。",
     };
+  }
+}
+
+class ProtectedSurfaceChangingProvider extends TranslatingLlmProvider {
+  constructor(private readonly text: string) {
+    super();
+  }
+
+  override async refineAsr(input: AsrRefinementInput) {
+    const base = await super.refineAsr(input);
+    return { ...base, optimizedText: this.text };
   }
 }

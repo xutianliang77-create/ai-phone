@@ -1,5 +1,7 @@
 import base64
 from dataclasses import replace
+import io
+import wave
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -133,3 +135,102 @@ def test_voice_identity_contract_reports_unavailable_provider() -> None:
 
     assert response.status_code == 503
     assert response.json()["detail"] == "Voice identity provider unavailable"
+
+
+class FakeSessionAliasEngine:
+    available = True
+
+    def __init__(self) -> None:
+        self.sessions: set[str] = set()
+
+    async def create_session(self, session_id: str) -> None:
+        self.sessions.add(session_id)
+
+    async def observe(
+        self,
+        session_id: str,
+        raw_speaker_id: str,
+        audio_base64: str,
+        overlap: bool,
+    ):
+        assert session_id in self.sessions
+        assert raw_speaker_id == "speaker_2"
+        assert audio_base64
+        assert overlap is False
+        return type("Observation", (), {
+            "rawSpeakerId": raw_speaker_id,
+            "evidenceMs": 1600,
+            "eligible": True,
+            "similarities": {"speaker_1": 0.6326},
+        })()
+
+    async def close_session(self, session_id: str) -> None:
+        self.sessions.discard(session_id)
+
+
+def test_session_alias_contract_is_scoped_to_speaker_session() -> None:
+    alias_engine = FakeSessionAliasEngine()
+    app = FastAPI()
+    app.include_router(create_router(
+        create_engine(config()),
+        FakeVoiceIdentityEngine(),
+        config(),
+        alias_engine,
+    ))
+    client = TestClient(app)
+
+    created = client.post("/speaker/sessions", json={
+        "sessionId": "sess_1",
+        "options": {"mode": "diarization", "maxSpeakers": 2},
+    })
+    observed = client.post(
+        "/speaker/sessions/sess_1/aliases/observe",
+        json={
+            "rawSpeakerId": "speaker_2",
+            "audioBase64": wav_base64(1600),
+            "overlap": False,
+        },
+    )
+    closed = client.delete("/speaker/sessions/sess_1")
+
+    assert created.status_code == 204
+    assert observed.json() == {
+        "rawSpeakerId": "speaker_2",
+        "evidenceMs": 1600,
+        "eligible": True,
+        "similarities": {"speaker_1": 0.6326},
+    }
+    assert closed.status_code == 204
+    assert alias_engine.sessions == set()
+
+
+def test_session_alias_contract_reports_disabled_provider() -> None:
+    client = TestClient(create_app(config()))
+    client.post("/speaker/sessions", json={
+        "sessionId": "sess_1",
+        "options": {"mode": "diarization", "maxSpeakers": 2},
+    })
+
+    response = client.post(
+        "/speaker/sessions/sess_1/aliases/observe",
+        json={
+            "rawSpeakerId": "speaker_2",
+            "audioBase64": wav_base64(1600),
+            "overlap": False,
+        },
+    )
+
+    assert response.status_code == 503
+    assert response.json()["detail"] == (
+        "Session speaker alias provider unavailable"
+    )
+
+
+def wav_base64(duration_ms: int) -> str:
+    output = io.BytesIO()
+    with wave.open(output, "wb") as handle:
+        handle.setnchannels(1)
+        handle.setsampwidth(2)
+        handle.setframerate(16000)
+        handle.writeframes(b"\x00\x00" * (16 * duration_ms))
+    return base64.b64encode(output.getvalue()).decode()

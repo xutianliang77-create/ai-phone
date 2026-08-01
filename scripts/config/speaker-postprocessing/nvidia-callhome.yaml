@@ -1,0 +1,8 @@
+# NVIDIA NeMo upstream CallHome development-set parameters.
+parameters:
+  onset: 0.641
+  offset: 0.561
+  pad_onset: 0.229
+  pad_offset: 0.079
+  min_duration_on: 0.511
+  min_duration_off: 0.296

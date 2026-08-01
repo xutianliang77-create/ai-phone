@@ -18,15 +18,23 @@ export function shouldUseContextualAsrRefinement(input: AsrRefinementPolicyInput
   const text = input.rawText.trim();
   if (text.length < 2) return false;
 
-  const local = applyAsrLocalRules(text, input.protectedTerms);
-  if (local.operations.includes("term_correction")) return true;
-  if (local.operations.includes("identifier_correction")) return true;
-  if (hasKnownAsrConfusion(text)) return true;
-  if (hasSuspiciousRepetition(text)) return true;
+  if (hasExplicitAsrCorrectionSignal(text, input.protectedTerms)) return true;
   if (hasLowConfidence(input.confidence)) return true;
   if (looksLikeFragmentAfterRecentContext(text, input.previousSegments)) return true;
 
   return false;
+}
+
+export function hasExplicitAsrCorrectionSignal(
+  text: string,
+  protectedTerms: string[],
+) {
+  const local = applyAsrLocalRules(text, protectedTerms);
+  return local.operations.includes("term_correction") ||
+    local.operations.includes("identifier_correction") ||
+    hasKnownAsrConfusion(text) ||
+    hasSuspiciousRepetition(text) ||
+    hasSuspiciousNumericRange(text);
 }
 
 function hasLowConfidence(confidence: number | undefined) {
@@ -42,6 +50,12 @@ function hasSuspiciousRepetition(text: string) {
     /([\u4e00-\u9fff]{2,5})\1{1,}/.test(text) ||
     /\b([A-Za-z]{2,})\s+\1\b/i.test(text) ||
     /([我你他她它])\1{2,}(?=[\u4e00-\u9fff])/.test(text)
+  );
+}
+
+function hasSuspiciousNumericRange(text: string) {
+  return /[零〇一二两三四五六七八九十百千万亿\d]+(?:到|至)[零〇一二两三四五六七八九十百千万亿\d]+位(?:之间)?/.test(
+    text,
   );
 }
 

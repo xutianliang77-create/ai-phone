@@ -37,10 +37,11 @@ class AsrConfig:
     qwen3_max_inference_batch_size: int = 1
     qwen3_max_new_tokens: int = 256
     qwen3_min_audio_ms: int = 1800
+    qwen3_conversation_min_audio_ms: int = 1000
     qwen3_endpoint_silence_ms: int = 1100
-    qwen3_conversation_endpoint_silence_ms: int = 900
+    qwen3_conversation_endpoint_silence_ms: int = 600
     qwen3_listening_endpoint_silence_ms: int = 1400
-    qwen3_call_link_endpoint_silence_ms: int = 900
+    qwen3_call_link_endpoint_silence_ms: int = 600
     qwen3_pstn_endpoint_silence_ms: int = 1100
     qwen3_max_audio_ms: int = 10000
     qwen3_preroll_ms: int = 400
@@ -87,6 +88,12 @@ class AsrConfig:
             "maxInferenceBatchSize": self.qwen3_max_inference_batch_size,
             "maxNewTokens": self.qwen3_max_new_tokens,
             "minAudioMs": self.qwen3_min_audio_ms,
+            "minAudioByMode": {
+                "conversation": self.qwen3_conversation_min_audio_ms,
+                "listening": self.qwen3_min_audio_ms,
+                "call_link": self.qwen3_min_audio_ms,
+                "pstn": self.qwen3_min_audio_ms,
+            },
             "endpointSilenceMs": self.qwen3_endpoint_silence_ms,
             "endpointSilenceByMode": {
                 "conversation": self.qwen3_conversation_endpoint_silence_ms,
@@ -153,17 +160,20 @@ def load_config() -> AsrConfig:
         ),
         qwen3_max_new_tokens=int(os.getenv("ASR_QWEN3_MAX_NEW_TOKENS", "256")),
         qwen3_min_audio_ms=int(os.getenv("ASR_QWEN3_MIN_AUDIO_MS", "1800")),
+        qwen3_conversation_min_audio_ms=int(
+            os.getenv("ASR_QWEN3_CONVERSATION_MIN_AUDIO_MS", "1000")
+        ),
         qwen3_endpoint_silence_ms=int(
             os.getenv("ASR_QWEN3_ENDPOINT_SILENCE_MS", "1100")
         ),
         qwen3_conversation_endpoint_silence_ms=int(
-            os.getenv("ASR_QWEN3_CONVERSATION_ENDPOINT_SILENCE_MS", "900")
+            os.getenv("ASR_QWEN3_CONVERSATION_ENDPOINT_SILENCE_MS", "600")
         ),
         qwen3_listening_endpoint_silence_ms=int(
             os.getenv("ASR_QWEN3_LISTENING_ENDPOINT_SILENCE_MS", "1400")
         ),
         qwen3_call_link_endpoint_silence_ms=int(
-            os.getenv("ASR_QWEN3_CALL_LINK_ENDPOINT_SILENCE_MS", "900")
+            os.getenv("ASR_QWEN3_CALL_LINK_ENDPOINT_SILENCE_MS", "600")
         ),
         qwen3_pstn_endpoint_silence_ms=int(
             os.getenv("ASR_QWEN3_PSTN_ENDPOINT_SILENCE_MS", "1100")
