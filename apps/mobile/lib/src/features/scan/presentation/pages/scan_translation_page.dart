@@ -290,11 +290,14 @@ class _StatusLine extends StatelessWidget {
       ScanTranslationStatus.saved => l10n.scanStatusMessage('scan_saved'),
       ScanTranslationStatus.failed => l10n.warning,
     };
-    final direction = controller.sourceLanguage == 'zh'
-        ? '${l10n.chinese} -> ${l10n.english}'
-        : controller.sourceLanguage == 'en'
-            ? '${l10n.english} -> ${l10n.chinese}'
-            : l10n.unknown;
+    final source = switch (controller.sourceLanguage) {
+      'zh' => l10n.chinese,
+      'en' => l10n.english,
+      _ => l10n.isChinese ? '自动识别' : 'Auto detect',
+    };
+    final target =
+        controller.targetLanguage == 'zh' ? l10n.chinese : l10n.english;
+    final direction = '$source -> $target';
     return Text('${l10n.statusLine(status)} · $direction');
   }
 }

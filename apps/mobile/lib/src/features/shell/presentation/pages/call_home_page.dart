@@ -31,14 +31,18 @@ class CallHomePage extends StatelessWidget {
                   width: 7,
                   height: 7,
                   decoration: BoxDecoration(
-                    color: Theme.of(context).colorScheme.primary,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
                     shape: BoxShape.circle,
                   ),
                 ),
                 const SizedBox(width: 8),
-                Text(
-                  l10n.isChinese ? '安全连接已就绪' : 'Secure connection ready',
-                  style: Theme.of(context).textTheme.bodySmall,
+                Expanded(
+                  child: Text(
+                    l10n.isChinese
+                        ? '连接状态将在进入通话时检查'
+                        : 'Connection is checked when you enter a call',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
                 ),
               ],
             ),

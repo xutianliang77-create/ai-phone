@@ -131,6 +131,7 @@ class _RealtimePageState extends State<RealtimePage>
             autoSpeakTranslation:
                 _realtimeAutoSpeakSupported && _settings.autoSpeakTranslation,
             autoSpeakEnabled: _realtimeAutoSpeakSupported,
+            speechOutputActive: controller.speechOutputActive,
             onAutoSpeakChanged: _toggleAutoSpeakTranslation,
           ),
         ),

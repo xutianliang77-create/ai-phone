@@ -169,9 +169,6 @@ class ScanTranslationController extends ChangeNotifier {
     }
 
     sourceLanguage = detectTextLanguage(text);
-    if (sourceLanguage == targetLanguage) {
-      targetLanguage = sourceLanguage == 'zh' ? 'en' : 'zh';
-    }
     status = ScanTranslationStatus.translating;
     savedSessionId = null;
     message = null;

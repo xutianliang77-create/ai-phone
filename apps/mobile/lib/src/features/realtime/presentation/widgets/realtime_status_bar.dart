@@ -13,6 +13,7 @@ class RealtimeStatusBar extends StatelessWidget {
     this.lowBalance = false,
     this.autoSpeakTranslation = false,
     this.autoSpeakEnabled = true,
+    this.speechOutputActive = false,
     this.onAutoSpeakChanged,
     super.key,
   });
@@ -24,6 +25,7 @@ class RealtimeStatusBar extends StatelessWidget {
   final bool lowBalance;
   final bool autoSpeakTranslation;
   final bool autoSpeakEnabled;
+  final bool speechOutputActive;
   final ValueChanged<bool>? onAutoSpeakChanged;
 
   @override
@@ -73,20 +75,47 @@ class RealtimeStatusBar extends StatelessWidget {
               ],
             ),
           ),
-          IconButton(
-            tooltip: l10n.autoSpeakTranslationLabel,
-            onPressed: autoSpeakEnabled && onAutoSpeakChanged != null
-                ? () => onAutoSpeakChanged!(!autoSpeakTranslation)
-                : null,
-            icon: Icon(
-              autoSpeakTranslation
-                  ? Icons.record_voice_over
-                  : Icons.voice_over_off_outlined,
-            ),
+          Column(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              SizedBox(
+                width: 44,
+                height: 38,
+                child: IconButton(
+                  tooltip: l10n.autoSpeakTranslationLabel,
+                  onPressed: autoSpeakEnabled && onAutoSpeakChanged != null
+                      ? () => onAutoSpeakChanged!(!autoSpeakTranslation)
+                      : null,
+                  icon: Icon(
+                    autoSpeakTranslation
+                        ? Icons.record_voice_over
+                        : Icons.voice_over_off_outlined,
+                  ),
+                ),
+              ),
+              Text(
+                _speechStatusText(l10n),
+                style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                      color: speechOutputActive
+                          ? colors.primary
+                          : colors.onSurfaceVariant,
+                    ),
+              ),
+            ],
           ),
         ],
       ),
     );
+  }
+
+  String _speechStatusText(AppLocalizations l10n) {
+    if (!autoSpeakEnabled || !autoSpeakTranslation) {
+      return l10n.isChinese ? '朗读：关闭' : 'Speech: off';
+    }
+    if (speechOutputActive) {
+      return l10n.isChinese ? '正在播音' : 'Speaking';
+    }
+    return l10n.isChinese ? '朗读：已开启' : 'Speech: on';
   }
 
   String _statusText(AppLocalizations l10n) {

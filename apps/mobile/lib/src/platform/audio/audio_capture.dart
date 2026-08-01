@@ -15,8 +15,12 @@ class AudioCaptureConfig {
   const AudioCaptureConfig({
     this.sampleRate = 24000,
     this.frameDurationMs = 40,
+    this.echoCancel = true,
+    this.noiseSuppress = true,
   });
 
   final int sampleRate;
   final int frameDurationMs;
+  final bool echoCancel;
+  final bool noiseSuppress;
 }

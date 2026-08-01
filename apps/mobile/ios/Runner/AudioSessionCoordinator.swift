@@ -10,6 +10,7 @@ final class AudioSessionCoordinator: NSObject, FlutterStreamHandler {
   private let session = AVAudioSession.sharedInstance()
   private let lock = NSLock()
   private var captureOwners = Set<String>()
+  private var captureVoiceProcessing = [String: Bool]()
   private var playbackOwners = Set<String>()
   private var configured = false
   private var interrupted = false
@@ -48,7 +49,12 @@ final class AudioSessionCoordinator: NSObject, FlutterStreamHandler {
     switch call.method {
     case "beginCapture":
       do {
-        try beginCapture(owner: flutterCaptureOwner)
+        let arguments = call.arguments as? [String: Any]
+        let voiceProcessing = arguments?["voiceProcessing"] as? Bool ?? true
+        try beginCapture(
+          owner: flutterCaptureOwner,
+          voiceProcessing: voiceProcessing
+        )
         result(nil)
       } catch {
         result(FlutterError(
@@ -82,8 +88,12 @@ final class AudioSessionCoordinator: NSObject, FlutterStreamHandler {
     return nil
   }
 
-  func beginCapture(owner: String) throws {
-    try begin(owner: owner, role: .capture)
+  func beginCapture(owner: String, voiceProcessing: Bool = true) throws {
+    try begin(
+      owner: owner,
+      role: .capture,
+      voiceProcessing: voiceProcessing
+    )
   }
 
   func endCapture(owner: String) {
@@ -98,11 +108,18 @@ final class AudioSessionCoordinator: NSObject, FlutterStreamHandler {
     end(owner: owner, role: .playback)
   }
 
-  private func begin(owner: String, role: Role) throws {
+  private func begin(
+    owner: String,
+    role: Role,
+    voiceProcessing: Bool = true
+  ) throws {
     lock.lock()
     defer { lock.unlock() }
     if contains(owner: owner, role: role) { return }
     insert(owner: owner, role: role)
+    if role == .capture {
+      captureVoiceProcessing[owner] = voiceProcessing
+    }
     do {
       try activateLocked()
     } catch {
@@ -130,18 +147,31 @@ final class AudioSessionCoordinator: NSObject, FlutterStreamHandler {
   }
 
   private func remove(owner: String, role: Role) {
-    if role == .capture { captureOwners.remove(owner) }
+    if role == .capture {
+      captureOwners.remove(owner)
+      captureVoiceProcessing.removeValue(forKey: owner)
+    }
     else { playbackOwners.remove(owner) }
   }
 
   private func activateLocked() throws {
     guard !interrupted else { return }
     if !configured {
-      try session.setCategory(
-        .playAndRecord,
-        mode: .voiceChat,
-        options: [.allowBluetooth, .defaultToSpeaker]
-      )
+      let voiceProcessing = captureOwners.isEmpty ||
+        captureVoiceProcessing.values.contains(true)
+      if voiceProcessing {
+        try session.setCategory(
+          .playAndRecord,
+          mode: .voiceChat,
+          options: [.allowBluetooth, .defaultToSpeaker]
+        )
+      } else {
+        try session.setCategory(
+          .playAndRecord,
+          mode: .measurement,
+          options: [.allowBluetooth, .defaultToSpeaker, .mixWithOthers]
+        )
+      }
       try session.setPreferredIOBufferDuration(0.02)
       configured = true
     }

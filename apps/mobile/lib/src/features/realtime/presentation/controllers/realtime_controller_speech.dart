@@ -1,6 +1,12 @@
 part of 'realtime_controller.dart';
 
 extension RealtimeControllerSpeech on RealtimeController {
+  void _setSpeechOutputActive(bool active) {
+    if (_speechOutputActive == active) return;
+    _speechOutputActive = active;
+    _notify();
+  }
+
   void _speakTranslationIfNeeded(String text, String targetLanguage) {
     final speaker = _speechOutputProvider;
     final speechText = text.trim();
@@ -36,6 +42,7 @@ extension RealtimeControllerSpeech on RealtimeController {
       },
     );
     _speechCaptureGate.beginPlayback(text: text, language: language);
+    _setSpeechOutputActive(true);
     try {
       await speaker.speak(text: text, language: language).timeout(
             _speechTimeoutFor(text),
@@ -47,6 +54,7 @@ extension RealtimeControllerSpeech on RealtimeController {
     } finally {
       if (generation == _speechGeneration) {
         _speechCaptureGate.endPlayback();
+        _setSpeechOutputActive(false);
         await _recordDeviceAsrDiagnosticEvent(
           'tts.end',
           payload: <String, Object?>{
@@ -78,6 +86,7 @@ extension RealtimeControllerSpeech on RealtimeController {
       },
     );
     _speechCaptureGate.reset();
+    _setSpeechOutputActive(false);
     await _speechOutputProvider?.stop();
     await _pcmAudioOutputPlayer?.stop();
   }
@@ -118,6 +127,7 @@ extension RealtimeControllerSpeech on RealtimeController {
       },
     );
     _speechCaptureGate.beginPlayback();
+    _setSpeechOutputActive(true);
     try {
       await player
           .play(
@@ -132,6 +142,7 @@ extension RealtimeControllerSpeech on RealtimeController {
     } finally {
       if (generation == _speechGeneration) {
         _speechCaptureGate.endPlayback();
+        _setSpeechOutputActive(false);
         await _recordDeviceAsrDiagnosticEvent(
           'tts.end',
           payload: <String, Object?>{
