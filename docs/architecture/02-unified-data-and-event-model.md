@@ -250,3 +250,50 @@ provider binding，不作为业务主键。
 - voice embedding、参考音频和录音使用独立对象权限，不进入普通 session JSON。
 - 用户删除 session 时删除正文、摘要和媒体对象；账本保留必要脱敏关联。
 - Agent prompt 只获取完成任务所需的最小字段，工具参数单独审计。
+
+## 9. 后台 Work 与可靠播报扩展
+
+该扩展只补充语音 Agent 的后台工作和交付语义，不改变现有
+`agent_tasks/agent_runs`、Translation Runtime 或 playback 事件。
+
+### 9.1 ID 兼容
+
+- `communicationSessionId` 是架构语义名称；现行合同和存储继续使用
+  `sessionId`，不得创建第二个并行 ID。
+- 新增 `workId` 和 `deliveryAttemptId`。
+- provider `itemId` 仅保存为 adapter-local `providerItemId`。
+- 新合同使用 `turnGeneration`、`playbackGeneration` 和
+  `dispatchGeneration`；现有 playback v1 的 `generation` 由 adapter
+  兼容映射，不做破坏性重命名。
+
+### 9.2 Work 状态
+
+```text
+queued -> running -> delegated -> finalizing -> completed
+  |          |           |             |
+  +----------+-----------+-------------+-> failed
+
+queued/running/delegated/finalizing
+  -> cancelling -> cancelled / failed
+```
+
+`agent.work.accepted` 表示命令已校验并入队，不作为持久状态。Work 使用
+`submissionKey` 幂等；进程重启后从 PostgreSQL/持久队列恢复，不批量失败。
+
+### 9.3 Delivery 状态
+
+```text
+generated -> claimed -> queued_for_playback
+          -> playback_started -> playback_ended
+```
+
+非终态可进入 `cancelled/failed/expired`。用户打断时终止当前
+`deliveryAttemptId`；如允许重播，创建新尝试，不让旧记录倒退。
+
+现有 `playback.queued/started/interrupted/ended/failed` 继续描述服务端
+sink/LiveKit source 生命周期。客户端实际设备播放使用新增的
+`client.playback.started/ended/failed` 回执；后台结果只有收到可信目标客户端的
+ended 回执才算已交付。
+
+详细采用、兼容和回滚设计见
+`12-qwen-audio-agent-gap-adoption-plan.md`。
