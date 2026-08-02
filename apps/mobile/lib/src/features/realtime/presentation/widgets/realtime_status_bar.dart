@@ -38,6 +38,7 @@ class RealtimeStatusBar extends StatelessWidget {
       if (lowBalance && remainingSeconds != null)
         l10n.realtimeLowBalanceWarning(remainingSeconds!),
     ];
+    final statusAnnouncement = lines.join('\n');
     final colors = Theme.of(context).colorScheme;
     final statusColor = status == RealtimeStatus.failed
         ? colors.error
@@ -66,11 +67,16 @@ class RealtimeStatusBar extends StatelessWidget {
                   style: Theme.of(context).textTheme.titleMedium,
                 ),
                 const SizedBox(height: 2),
-                Text(
-                  lines.join('\n'),
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: statusColor,
-                      ),
+                Semantics(
+                  liveRegion: true,
+                  label: statusAnnouncement,
+                  excludeSemantics: true,
+                  child: Text(
+                    statusAnnouncement,
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: statusColor,
+                        ),
+                  ),
                 ),
               ],
             ),
