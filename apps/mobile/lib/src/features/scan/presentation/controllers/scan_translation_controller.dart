@@ -84,12 +84,19 @@ class ScanTranslationController extends ChangeNotifier {
   }
 
   void setTargetLanguage(String language) {
-    if (isBusy || (language != 'zh' && language != 'en')) return;
+    if (isBusy ||
+        (language != 'zh' && language != 'en') ||
+        language == targetLanguage) {
+      return;
+    }
     targetLanguage = language;
     translatedText = '';
     translatedBlocks = const <ScanTranslatedBlock>[];
     savedSessionId = null;
-    if (recognizedText.isNotEmpty) status = ScanTranslationStatus.recognized;
+    if (recognizedText.isNotEmpty) {
+      status = ScanTranslationStatus.recognized;
+      message = null;
+    }
     notifyListeners();
   }
 

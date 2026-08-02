@@ -74,6 +74,44 @@ void main() {
     expect(translator.lastTargetLanguage, isNull);
   });
 
+  test('keeps a completed translation when the target is unchanged', () async {
+    final controller = ScanTranslationController(
+      ocrProvider: const _FakeOcrProvider('你好'),
+      translationProvider: _FakeTranslationProvider(),
+      pickImagePath: (_) async => _picked('/tmp/menu.jpg'),
+      historyRepository: _FakeSessionHistoryRepository(),
+    );
+
+    await controller.selectImage(ScanImageSource.gallery);
+    await controller.recognizeSelectedImage();
+    await controller.translateRecognizedText();
+    controller.setTargetLanguage('en');
+
+    expect(controller.status, ScanTranslationStatus.translated);
+    expect(controller.translatedText, 'Hello');
+  });
+
+  test('clears a stale translation error after changing the target', () async {
+    final controller = ScanTranslationController(
+      ocrProvider: const _FakeOcrProvider('未收录菜单'),
+      translationProvider: _FakeTranslationProvider(),
+      pickImagePath: (_) async => _picked('/tmp/menu.jpg'),
+      historyRepository: _FakeSessionHistoryRepository(),
+    );
+
+    await controller.selectImage(ScanImageSource.gallery);
+    await controller.recognizeSelectedImage();
+    await controller.translateRecognizedText();
+    expect(controller.message, 'scan_translation_unavailable');
+
+    controller.setTargetLanguage('zh');
+
+    expect(controller.targetLanguage, 'zh');
+    expect(controller.recognizedText, '未收录菜单');
+    expect(controller.message, isNull);
+    expect(controller.status, ScanTranslationStatus.recognized);
+  });
+
   test('reports no text when OCR result is empty', () async {
     final controller = ScanTranslationController(
       ocrProvider: const _FakeOcrProvider(''),
