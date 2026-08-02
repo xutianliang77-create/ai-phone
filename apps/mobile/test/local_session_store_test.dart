@@ -94,6 +94,94 @@ void main() {
     expect(await store.listSessions(), isEmpty);
   });
 
+  test('excludes unknown attribution from local speaker counts', () async {
+    final store = LocalSessionStore(
+      file: storeFile,
+      now: () => DateTime.utc(2026, 7, 26, 10, 1),
+    );
+
+    await store.saveEndedSession(
+      sessionId: 'unknown_only',
+      createdAt: DateTime.utc(2026, 7, 26, 10),
+      segments: const <SubtitleSegment>[
+        SubtitleSegment(
+          id: 'unknown_1',
+          sourceText: '暂时无法确认说话人',
+          translatedText: 'The speaker is not confirmed yet',
+          speaker: SpeakerAttribution(
+            speakerId: 'unknown',
+            role: 'unknown',
+            source: 'unknown',
+          ),
+        ),
+      ],
+    );
+
+    expect(
+      (await store.listSessions()).single.speakerCount,
+      0,
+    );
+    expect(
+      (await store.getSession('unknown_only'))
+          .segments
+          .single
+          .speaker
+          ?.speakerId,
+      'unknown',
+    );
+
+    await store.saveEndedSession(
+      sessionId: 'mixed_speakers',
+      createdAt: DateTime.utc(2026, 7, 26, 10),
+      segments: const <SubtitleSegment>[
+        SubtitleSegment(
+          id: 'unknown_1',
+          sourceText: '暂时无法确认说话人',
+          translatedText: 'The speaker is not confirmed yet',
+          speaker: SpeakerAttribution(
+            speakerId: 'unknown',
+            role: 'unknown',
+            source: 'unknown',
+          ),
+        ),
+        SubtitleSegment(
+          id: 'speaker_1_a',
+          sourceText: '第一位说话人',
+          translatedText: 'First speaker',
+          speaker: SpeakerAttribution(
+            speakerId: 'speaker_1',
+            role: 'speaker',
+            source: 'diarization',
+          ),
+        ),
+        SubtitleSegment(
+          id: 'speaker_1_b',
+          sourceText: '还是第一位说话人',
+          translatedText: 'Still the first speaker',
+          speaker: SpeakerAttribution(
+            speakerId: 'speaker_1',
+            role: 'speaker',
+            source: 'diarization',
+          ),
+        ),
+        SubtitleSegment(
+          id: 'speaker_2',
+          sourceText: '第二位说话人',
+          translatedText: 'Second speaker',
+          speaker: SpeakerAttribution(
+            speakerId: 'speaker_2',
+            role: 'speaker',
+            source: 'diarization',
+          ),
+        ),
+      ],
+    );
+
+    final mixed = (await store.listSessions())
+        .singleWhere((session) => session.sessionId == 'mixed_speakers');
+    expect(mixed.speakerCount, 2);
+  });
+
   test('persists action item completion across store instances', () async {
     await storeFile.writeAsString(jsonEncode(<String, Object?>{
       'sessions': <Object?>[

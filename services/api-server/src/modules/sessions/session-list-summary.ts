@@ -7,8 +7,11 @@ export function sessionListSummary(session: SessionRecord) {
     Boolean(segment.sourceText.trim() || segment.translatedText.trim()));
   const speakers = new Set(
     session.segments
-      .map((segment) => segment.speaker?.speakerId)
-      .filter((speakerId): speakerId is string => Boolean(speakerId)),
+      .map((segment) => segment.speaker?.speakerId.trim())
+      .filter((speakerId): speakerId is string =>
+        speakerId !== undefined && speakerId.length > 0 &&
+        speakerId.toLowerCase() !== "unknown"
+      ),
   );
   return {
     kind: sessionKind(session),

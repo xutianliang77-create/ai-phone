@@ -244,8 +244,10 @@ String? _firstTargetLanguage(SessionDetail detail) {
 
 int _localSpeakerCount(SessionDetail detail) {
   return detail.segments
-      .map((segment) => segment.speaker?.speakerId)
+      .map((segment) => segment.speaker?.speakerId.trim())
       .whereType<String>()
+      .where((speakerId) =>
+          speakerId.isNotEmpty && speakerId.toLowerCase() != 'unknown')
       .toSet()
       .length;
 }
