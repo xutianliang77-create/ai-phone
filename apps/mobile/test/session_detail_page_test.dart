@@ -46,6 +46,29 @@ void main() {
     expect(repository.revokedTermIds.single, 'term_1');
   });
 
+  testWidgets('shows a localized offline detail state and retries',
+      (WidgetTester tester) async {
+    final repository = _FakeSessionHistoryRepository(
+      getSessionError: Exception('ClientException: failed host lookup'),
+      getSessionFailures: 1,
+    );
+    await tester.pumpWidget(_TestApp(
+      child: SessionDetailPage(sessionId: 's1', repository: repository),
+    ));
+    await tester.pumpAndSettle();
+
+    expect(find.text('网络连接失败，请检查 API 服务是否可用'), findsOneWidget);
+    expect(find.text('重试'), findsOneWidget);
+
+    await tester.tap(find.text('重试'));
+    await tester.pumpAndSettle();
+
+    expect(repository.getSessionCalls, 2);
+    expect(repository.requestedSessionIds, <String>['s1', 's1']);
+    expect(find.widgetWithText(Tab, '字幕'), findsOneWidget);
+    expect(find.textContaining('今天下午三点开会'), findsWidgets);
+  });
+
   testWidgets('generates server review and refreshes detail',
       (WidgetTester tester) async {
     final repository = _FakeSessionHistoryRepository();
@@ -181,12 +204,18 @@ class _FakeSessionHistoryRepository extends SessionHistoryRepository {
   _FakeSessionHistoryRepository({
     this.withActionItems = false,
     this.actionItemError,
+    this.getSessionError,
+    this.getSessionFailures = 0,
   }) : super(shareService: _FakeFileShareService());
 
   final bool withActionItems;
   final Object? actionItemError;
+  final Object? getSessionError;
+  final int getSessionFailures;
   bool generatedReview = false;
   bool actionItemCompleted = false;
+  int getSessionCalls = 0;
+  final List<String> requestedSessionIds = <String>[];
   final List<({int index, bool completed})> actionUpdates =
       <({int index, bool completed})>[];
   final List<TermbaseTerm> confirmedTerms = <TermbaseTerm>[];
@@ -194,6 +223,11 @@ class _FakeSessionHistoryRepository extends SessionHistoryRepository {
 
   @override
   Future<SessionDetail> getSession(String sessionId) async {
+    getSessionCalls += 1;
+    requestedSessionIds.add(sessionId);
+    if (getSessionError != null && getSessionCalls <= getSessionFailures) {
+      throw getSessionError!;
+    }
     return _detail(
       sessionId,
       reviewJson: withActionItems ? _actionReview() : null,

@@ -90,7 +90,24 @@ class _SessionHistoryPageState extends State<SessionHistoryPage> {
                 }
                 if (snapshot.hasError) {
                   return Center(
-                    child: Text(context.l10n.errorMessage(snapshot.error!)),
+                    child: Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: <Widget>[
+                          Text(
+                            context.l10n.errorMessage(snapshot.error!),
+                            textAlign: TextAlign.center,
+                          ),
+                          const SizedBox(height: 12),
+                          FilledButton.icon(
+                            onPressed: _reload,
+                            icon: const Icon(Icons.refresh),
+                            label: Text(_text('重试', 'Retry')),
+                          ),
+                        ],
+                      ),
+                    ),
                   );
                 }
                 final sessions = snapshot.data!

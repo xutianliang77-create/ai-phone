@@ -56,9 +56,11 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('shows a localized offline state', (WidgetTester tester) async {
+  testWidgets('shows a localized offline state and retries',
+      (WidgetTester tester) async {
     final repository = _FakeSessionHistoryRepository(
       listError: Exception('ClientException: failed host lookup'),
+      listFailuresBeforeRecovery: 1,
     );
 
     await tester.pumpWidget(_TestApp(
@@ -67,6 +69,19 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('网络连接失败，请检查 API 服务是否可用'), findsOneWidget);
+    expect(find.text('重试'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('搜索'));
+    await tester.pumpAndSettle();
+    tester.widget<TextField>(find.byType(TextField)).controller!.text = '同传';
+    await tester.pump();
+
+    await tester.tap(find.text('重试'));
+    await tester.pumpAndSettle();
+
+    expect(repository.listCalls, 2);
+    expect(repository.queries, <String>['', '同传']);
+    expect(find.text('同传记录'), findsOneWidget);
   });
 }
 
@@ -99,15 +114,26 @@ class _TestApp extends StatelessWidget {
 }
 
 class _FakeSessionHistoryRepository extends SessionHistoryRepository {
-  _FakeSessionHistoryRepository({this.listError})
-      : super(shareService: _FakeFileShareService());
+  _FakeSessionHistoryRepository({
+    this.listError,
+    this.listFailuresBeforeRecovery,
+  }) : super(shareService: _FakeFileShareService());
 
   final Object? listError;
+  final int? listFailuresBeforeRecovery;
   bool generatedReview = false;
+  int listCalls = 0;
+  final List<String> queries = <String>[];
 
   @override
   Future<List<SessionListItem>> listSessions({String query = ''}) async {
-    if (listError != null) throw listError!;
+    listCalls += 1;
+    queries.add(query);
+    if (listError != null &&
+        (listFailuresBeforeRecovery == null ||
+            listCalls <= listFailuresBeforeRecovery!)) {
+      throw listError!;
+    }
     return <SessionListItem>[
       SessionListItem(
         sessionId: 's1',
