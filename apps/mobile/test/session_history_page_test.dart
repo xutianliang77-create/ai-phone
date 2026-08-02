@@ -95,6 +95,7 @@ void main() {
     await tester.tap(find.byTooltip('搜索'));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField), '既要');
+    await tester.pump(const Duration(milliseconds: 300));
     await tester.pumpAndSettle();
     await tester.tap(find.text('同传记录'));
     await tester.pumpAndSettle();
@@ -102,6 +103,36 @@ void main() {
     expect(find.text('找到 1 / 2 段'), findsOneWidget);
     expect(find.text('会后发送纪要'), findsOneWidget);
     expect(find.text('今天下午三点开会'), findsNothing);
+  });
+
+  testWidgets('debounces rapid input and submits the latest query immediately',
+      (WidgetTester tester) async {
+    final repository = _FakeSessionHistoryRepository();
+    await tester.pumpWidget(_TestApp(
+      child: SessionHistoryPage(repository: repository),
+    ));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('搜索'));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.byType(TextField), '纪');
+    await tester.pump(const Duration(milliseconds: 100));
+    await tester.enterText(find.byType(TextField), '纪要');
+    await tester.pump(const Duration(milliseconds: 100));
+    await tester.enterText(find.byType(TextField), '纪要确认');
+    await tester.pump(const Duration(milliseconds: 299));
+    expect(repository.queries, <String>['']);
+
+    await tester.pump(const Duration(milliseconds: 1));
+    await tester.pumpAndSettle();
+    expect(repository.queries, <String>['', '纪要确认']);
+
+    await tester.enterText(find.byType(TextField), '立即搜索');
+    await tester.testTextInput.receiveAction(TextInputAction.search);
+    await tester.pumpAndSettle();
+    expect(repository.queries, <String>['', '纪要确认', '立即搜索']);
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(repository.queries, <String>['', '纪要确认', '立即搜索']);
   });
 
   testWidgets('closing search clears the hidden record filter',
@@ -115,12 +146,12 @@ void main() {
     await tester.tap(find.byTooltip('搜索'));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField), '纪要');
-    await tester.pumpAndSettle();
+    await tester.pump(const Duration(milliseconds: 100));
     await tester.tap(find.byTooltip('清除'));
     await tester.pumpAndSettle();
 
     expect(find.byType(TextField), findsNothing);
-    expect(repository.queries, <String>['', '纪要', '']);
+    expect(repository.queries, <String>['', '']);
   });
 }
 
