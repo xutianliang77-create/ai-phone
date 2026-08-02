@@ -70,13 +70,23 @@ class ApiSessionEventSink implements SessionEventSink {
       });
       return;
     }
-    if (
-      event.type === "translation.final" ||
-      event.type === "translation.failed"
-    ) {
-      const translatedText = cleanRealtimeText(
-        event.type === "translation.failed" ? event.message : event.text,
-      );
+    if (event.type === "translation.failed") {
+      await this.upsertSegment({
+        sessionId: event.sessionId,
+        segmentId: event.segmentId,
+        turnId: event.turnId,
+        revision: event.revision,
+        dominantLanguage: event.dominantLanguage,
+        detectedLanguages: event.detectedLanguages,
+        mixedLanguage: event.mixedLanguage,
+        targetLanguage: event.language,
+        stage: event.stage ?? "translation",
+        ...(event.provider ? { provider: event.provider } : {}),
+      });
+      return;
+    }
+    if (event.type === "translation.final") {
+      const translatedText = cleanRealtimeText(event.text);
       if (!translatedText) return;
       await this.upsertSegment({
         sessionId: event.sessionId,
@@ -88,13 +98,8 @@ class ApiSessionEventSink implements SessionEventSink {
         detectedLanguages: event.detectedLanguages,
         mixedLanguage: event.mixedLanguage,
         targetLanguage: event.language,
-        stage: event.type === "translation.failed"
-          ? event.stage ?? "translation"
-          : "translation",
-        ...(event.type === "translation.failed" && event.provider
-          ? { provider: event.provider }
-          : {}),
-        ...(event.type === "translation.final" && event.providerUsage
+        stage: "translation",
+        ...(event.providerUsage
           ? {
               provider: event.providerUsage.provider,
               model: event.providerUsage.model,
@@ -102,13 +107,13 @@ class ApiSessionEventSink implements SessionEventSink {
               providerUsage: event.providerUsage,
             }
           : {}),
-        ...(event.type === "translation.final" && event.speaker
+        ...(event.speaker
           ? { speaker: event.speaker }
           : {}),
-        ...(event.type === "translation.final" && event.timing
+        ...(event.timing
           ? { timing: event.timing }
           : {}),
-        ...(event.type === "translation.final" && event.vadContext
+        ...(event.vadContext
           ? { vadContext: event.vadContext }
           : {}),
       });

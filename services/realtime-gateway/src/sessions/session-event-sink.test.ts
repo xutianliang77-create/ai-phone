@@ -80,6 +80,14 @@ describe("session event sink", () => {
         },
       });
       await sink.record({
+        type: "translation.failed",
+        sessionId: "sess_1",
+        segmentId: "seg_1",
+        message: "Translation unavailable",
+        language: "zh",
+        stage: "translation",
+      });
+      await sink.record({
         type: "translation.final",
         sessionId: "sess_1",
         segmentId: "seg_1",
@@ -129,6 +137,15 @@ describe("session event sink", () => {
             vadModelFingerprint: "a".repeat(64),
             endpointPolicyFingerprint: "b".repeat(64),
           },
+        },
+      },
+      {
+        url: "http://127.0.0.1:3100/internal/realtime/segments",
+        body: {
+          sessionId: "sess_1",
+          segmentId: "seg_1",
+          targetLanguage: "zh",
+          stage: "translation",
         },
       },
       {

@@ -23,18 +23,6 @@ extension RealtimeControllerGatewayEvents on RealtimeController {
         event,
         displayMessage: _gatewayErrorMessage(event),
       );
-      _upsertSegment(
-        event.segmentId!,
-        turnId: event.turnId,
-        revision: event.revision,
-        translatedText: event.message ?? 'Translation unavailable',
-        targetLanguage: event.language,
-        stage: event.stage ?? 'translation',
-        provider: event.provider,
-        model: event.model,
-        latencyMs: event.latencyMs,
-        languageProfile: event.languageProfile,
-      );
       _message = event.message;
       _notify();
       return;
