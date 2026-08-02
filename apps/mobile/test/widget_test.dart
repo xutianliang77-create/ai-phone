@@ -1,11 +1,14 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:translation_mobile/src/app/app.dart';
 import 'package:translation_mobile/src/app/localization/app_localizations.dart';
+import 'package:translation_mobile/src/app/theme.dart';
 import 'package:translation_mobile/src/features/compliance/data/compliance_consent_store.dart';
 import 'package:translation_mobile/src/features/compliance/data/consent_audit_uploader.dart';
+import 'package:translation_mobile/src/features/compliance/presentation/pages/compliance_consent_gate.dart';
 import 'package:translation_mobile/src/features/realtime/presentation/controllers/realtime_controller.dart';
 import 'package:translation_mobile/src/features/realtime/presentation/widgets/realtime_status_bar.dart';
 
@@ -170,6 +173,68 @@ void main() {
     expect(uploader.records.single.scene, 'app_start');
     expect(find.text('无界AI'), findsNothing);
     expect(find.text('开始'), findsOneWidget);
+  });
+
+  testWidgets('uses Apple typography and dynamic colors on iOS',
+      (WidgetTester tester) async {
+    await tester.pumpWidget(MaterialApp(
+      locale: const Locale('zh'),
+      localizationsDelegates: const <LocalizationsDelegate<dynamic>>[
+        AppLocalizations.delegate,
+        GlobalMaterialLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+      ],
+      supportedLocales: AppLocalizations.supportedLocales,
+      theme: buildAppTheme().copyWith(platform: TargetPlatform.iOS),
+      home: ComplianceConsentGate(
+        store: MemoryComplianceConsentStore(),
+        consentAuditUploader: _FakeConsentAuditUploader(),
+        child: const SizedBox.shrink(),
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    final titleFinder = find.byKey(
+      const ValueKey('compliance-consent-title'),
+    );
+    final titleContext = tester.element(titleFinder);
+    final title = tester.widget<Text>(titleFinder);
+    final cupertinoText = CupertinoTheme.of(titleContext).textTheme;
+    expect(
+      title.style?.fontFamily,
+      cupertinoText.navLargeTitleTextStyle.fontFamily,
+    );
+    expect(
+      title.style?.color,
+      CupertinoDynamicColor.resolve(CupertinoColors.label, titleContext),
+    );
+    final page = tester.widget<Scaffold>(
+      find.byKey(const ValueKey('compliance-consent-page')),
+    );
+    expect(
+      page.backgroundColor,
+      CupertinoDynamicColor.resolve(
+        CupertinoColors.systemGroupedBackground,
+        titleContext,
+      ),
+    );
+    final notice = tester.widget<DecoratedBox>(
+      find.byKey(const ValueKey('compliance-consent-notice')),
+    );
+    expect(
+      (notice.decoration as BoxDecoration).color,
+      CupertinoDynamicColor.resolve(
+        CupertinoColors.secondarySystemGroupedBackground,
+        titleContext,
+      ),
+    );
+    expect(
+      tester
+          .widget<CheckboxListTile>(find.byType(CheckboxListTile))
+          .activeColor,
+      CupertinoDynamicColor.resolve(CupertinoColors.systemBlue, titleContext),
+    );
   });
 
   testWidgets('localizes realtime status bar API errors',

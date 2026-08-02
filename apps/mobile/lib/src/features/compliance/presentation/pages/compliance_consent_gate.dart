@@ -4,6 +4,7 @@ import '../../../../app/localization/app_localizations.dart';
 import '../../data/consent_audit_uploader.dart';
 import '../../data/compliance_consent_store.dart';
 import '../../data/compliance_document.dart';
+import 'compliance_consent_visuals.dart';
 
 class ComplianceConsentGate extends StatefulWidget {
   const ComplianceConsentGate({
@@ -39,9 +40,12 @@ class _ComplianceConsentGateState extends State<ComplianceConsentGate> {
   Widget build(BuildContext context) {
     final accepted = _accepted;
     if (accepted == null) {
-      return const ColoredBox(
-        color: Color(0xffeef6f4),
-        child: Center(child: CircularProgressIndicator()),
+      final visuals = ConsentVisuals.resolve(context);
+      return ColoredBox(
+        color: visuals.background,
+        child: Center(
+          child: CircularProgressIndicator(color: visuals.accent),
+        ),
       );
     }
     if (accepted) return widget.child;
@@ -99,32 +103,68 @@ class _ConsentPage extends StatelessWidget {
     final isChinese = l10n.isChinese;
     final privacy = complianceDocument(ComplianceDocumentKind.privacy);
     final terms = complianceDocument(ComplianceDocumentKind.terms);
+    final visuals = ConsentVisuals.resolve(context);
     return Scaffold(
-      backgroundColor: const Color(0xffeef6f4),
+      key: const ValueKey('compliance-consent-page'),
+      backgroundColor: visuals.background,
       body: SafeArea(
         child: ListView(
           padding: const EdgeInsets.fromLTRB(20, 24, 20, 28),
           children: <Widget>[
             Text(
+              key: const ValueKey('compliance-consent-title'),
               isChinese ? '首次使用前请确认' : 'Before You Continue',
-              style: Theme.of(context).textTheme.headlineMedium,
+              style: visuals.largeTitle,
             ),
             const SizedBox(height: 12),
             Text(
+              key: const ValueKey('compliance-consent-intro'),
               isChinese
                   ? '请阅读并同意用户协议、隐私政策和语音敏感信息处理说明。'
                   : 'Please review and accept the terms, privacy policy, '
                       'and sensitive voice-processing notice.',
-              style: Theme.of(context).textTheme.bodyLarge,
+              style: visuals.body,
             ),
             const SizedBox(height: 18),
-            _NoticeCard(isChinese: isChinese),
+            _NoticeCard(isChinese: isChinese, visuals: visuals),
             const SizedBox(height: 12),
-            _DocumentTile(document: privacy, isChinese: isChinese),
-            _DocumentTile(document: terms, isChinese: isChinese),
+            DecoratedBox(
+              key: const ValueKey('compliance-consent-document-group'),
+              decoration: BoxDecoration(
+                color: visuals.groupedSurface,
+                border: Border.all(color: visuals.separator, width: 0.5),
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(14),
+                child: Column(
+                  children: <Widget>[
+                    _DocumentTile(
+                      document: privacy,
+                      isChinese: isChinese,
+                      visuals: visuals,
+                    ),
+                    Divider(
+                      height: 1,
+                      thickness: 0.5,
+                      indent: 16,
+                      color: visuals.separator,
+                    ),
+                    _DocumentTile(
+                      document: terms,
+                      isChinese: isChinese,
+                      visuals: visuals,
+                    ),
+                  ],
+                ),
+              ),
+            ),
             const SizedBox(height: 12),
             CheckboxListTile(
               value: checked,
+              activeColor: visuals.accent,
+              checkColor: visuals.onAccent,
+              side: BorderSide(color: visuals.secondaryText, width: 1.25),
               controlAffinity: ListTileControlAffinity.leading,
               contentPadding: EdgeInsets.zero,
               onChanged:
@@ -133,16 +173,29 @@ class _ConsentPage extends StatelessWidget {
                 isChinese
                     ? '我已阅读并同意《用户协议》和《隐私政策》'
                     : 'I have read and agree to the Terms and Privacy Policy',
+                style: visuals.rowTitle,
               ),
               subtitle: Text(
                 isChinese
                     ? '未同意前不会进入 App 主功能。'
                     : 'The app experience starts only after acceptance.',
+                style: visuals.caption,
               ),
             ),
             const SizedBox(height: 8),
             FilledButton(
               onPressed: onAccept,
+              style: FilledButton.styleFrom(
+                minimumSize: const Size.fromHeight(50),
+                backgroundColor: visuals.accent,
+                foregroundColor: visuals.onAccent,
+                disabledBackgroundColor: visuals.disabledFill,
+                disabledForegroundColor: visuals.tertiaryText,
+                textStyle: visuals.action,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
               child: Text(saving
                   ? (isChinese ? '正在保存' : 'Saving')
                   : (isChinese ? '同意并继续' : 'Accept and Continue')),
@@ -155,9 +208,10 @@ class _ConsentPage extends StatelessWidget {
 }
 
 class _NoticeCard extends StatelessWidget {
-  const _NoticeCard({required this.isChinese});
+  const _NoticeCard({required this.isChinese, required this.visuals});
 
   final bool isChinese;
+  final ConsentVisuals visuals;
 
   @override
   Widget build(BuildContext context) {
@@ -173,20 +227,21 @@ class _NoticeCard extends StatelessWidget {
             'Non-essential SDKs are not initialized before consent. Records can be reviewed or deleted from Privacy & Compliance.',
           ];
     return DecoratedBox(
+      key: const ValueKey('compliance-consent-notice'),
       decoration: BoxDecoration(
-        color: Colors.white,
-        border: Border.all(color: const Color(0xffcfdcda)),
-        borderRadius: BorderRadius.circular(8),
+        color: visuals.groupedSurface,
+        border: Border.all(color: visuals.separator, width: 0.5),
+        borderRadius: BorderRadius.circular(14),
       ),
       child: Padding(
-        padding: const EdgeInsets.all(14),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: items
               .map(
                 (item) => Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 4),
-                  child: Text('• $item'),
+                  padding: const EdgeInsets.symmetric(vertical: 5),
+                  child: Text('• $item', style: visuals.notice),
                 ),
               )
               .toList(),
@@ -200,24 +255,41 @@ class _DocumentTile extends StatelessWidget {
   const _DocumentTile({
     required this.document,
     required this.isChinese,
+    required this.visuals,
   });
 
   final ComplianceDocument document;
   final bool isChinese;
+  final ConsentVisuals visuals;
 
   @override
   Widget build(BuildContext context) {
     return ExpansionTile(
-      tilePadding: EdgeInsets.zero,
-      title: Text(document.title(isChinese: isChinese)),
-      subtitle: Text(document.subtitle(isChinese: isChinese)),
+      tilePadding: const EdgeInsets.symmetric(horizontal: 16),
+      childrenPadding: const EdgeInsets.only(bottom: 4),
+      backgroundColor: Colors.transparent,
+      collapsedBackgroundColor: Colors.transparent,
+      iconColor: visuals.secondaryText,
+      collapsedIconColor: visuals.secondaryText,
+      textColor: visuals.primaryText,
+      collapsedTextColor: visuals.primaryText,
+      shape: const Border(),
+      collapsedShape: const Border(),
+      title: Text(
+        document.title(isChinese: isChinese),
+        style: visuals.rowTitle,
+      ),
+      subtitle: Text(
+        document.subtitle(isChinese: isChinese),
+        style: visuals.caption,
+      ),
       children: document
           .sections(isChinese: isChinese)
           .map(
             (section) => ListTile(
-              contentPadding: EdgeInsets.zero,
-              title: Text(section.title),
-              subtitle: Text(section.body),
+              contentPadding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
+              title: Text(section.title, style: visuals.sectionTitle),
+              subtitle: Text(section.body, style: visuals.sectionBody),
             ),
           )
           .toList(),
