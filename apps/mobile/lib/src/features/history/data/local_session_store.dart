@@ -5,6 +5,7 @@ import 'package:path_provider/path_provider.dart';
 
 import '../../realtime/domain/entities/subtitle_segment.dart';
 import '../../../shared/domain/speaker_attribution.dart';
+import 'local_session_export.dart';
 import 'session_history_models.dart';
 
 class LocalSessionStore {
@@ -64,6 +65,8 @@ class LocalSessionStore {
                 revision: segment.revision,
                 sourceText: segment.sourceText,
                 translatedText: segment.translatedText,
+                rawText: segment.rawText,
+                optimizedText: segment.optimizedText,
                 sourceLanguage: segment.sourceLanguage,
                 targetLanguage: segment.targetLanguage,
                 confidence: segment.confidence,
@@ -93,12 +96,10 @@ class LocalSessionStore {
     String format = 'markdown',
   }) async {
     final detail = await getSession(sessionId);
-    final content = _markdown(detail);
-    return SessionExport(
-      sessionId: sessionId,
-      filename: 'translation-session-$sessionId.md',
-      mimeType: 'text/markdown',
-      content: content,
+    return formatLocalSessionExport(
+      detail,
+      format: format,
+      serializedDetail: _detailToJson(detail),
     );
   }
 
@@ -274,6 +275,9 @@ Map<String, Object?> _detailToJson(SessionDetail detail) {
         if (segment.revision != null) 'revision': segment.revision,
         'sourceText': segment.sourceText,
         'translatedText': segment.translatedText,
+        if (segment.rawText != null) 'rawText': segment.rawText,
+        if (segment.optimizedText != null)
+          'optimizedText': segment.optimizedText,
         if (segment.sourceLanguage != null)
           'sourceLanguage': segment.sourceLanguage,
         if (segment.targetLanguage != null)
@@ -291,52 +295,6 @@ Map<String, Object?> _detailToJson(SessionDetail detail) {
       };
     }).toList(),
   };
-}
-
-String _markdown(SessionDetail detail) {
-  final buffer = StringBuffer()
-    ..writeln('# Translation Session')
-    ..writeln()
-    ..writeln('- Session: ${detail.sessionId}')
-    ..writeln('- Created: ${detail.createdAt.toIso8601String()}')
-    ..writeln('- Status: ${detail.status}')
-    ..writeln();
-  for (final segment in detail.segments) {
-    if (segment.speaker != null) {
-      buffer.writeln(
-        'Speaker: ${segment.speaker!.label(isChinese: true)}',
-      );
-    }
-    buffer
-      ..writeln('## ${segment.id}')
-      ..writeln()
-      ..writeln(segment.sourceText)
-      ..writeln()
-      ..writeln(segment.translatedText)
-      ..writeln();
-    _writeSegmentDiagnostics(buffer, segment);
-  }
-  return buffer.toString();
-}
-
-void _writeSegmentDiagnostics(StringBuffer buffer, SessionSegment segment) {
-  final diagnostics = <String>[
-    if (segment.sourceLanguage != null)
-      'Source language: ${segment.sourceLanguage}',
-    if (segment.targetLanguage != null)
-      'Target language: ${segment.targetLanguage}',
-    if (segment.confidence != null) 'Confidence: ${segment.confidence}',
-    if (segment.stage != null) 'Stage: ${segment.stage}',
-    if (segment.latencyMs != null) 'Latency: ${segment.latencyMs}ms',
-  ];
-  if (diagnostics.isEmpty) return;
-  buffer
-    ..writeln('Diagnostics')
-    ..writeln();
-  for (final item in diagnostics) {
-    buffer.writeln('- $item');
-  }
-  buffer.writeln();
 }
 
 class LocalSessionNotFoundException implements Exception {

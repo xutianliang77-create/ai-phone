@@ -1,6 +1,6 @@
 # ai phone 优化验收方案
 
-版本：v1.22
+版本：v1.23
 日期：2026-08-02
 任务来源：`docs/ai-phone-optimization-development-tasks.md`
 
@@ -146,9 +146,9 @@ TTS 回灌指标由 App playback gate/AEC 验收，不能把 VAD 对合成语音
 | 验收编号 | 对应任务 | 通过标准 |
 | --- | --- | --- |
 | AC-LLM-001 | OPT-LLM-001 | 100 条样本无 thinking、提示词或 JSON 外文本；超时回退原文 |
-| AC-LLM-002 | OPT-LLM-002 | raw、optimized、translated 可追溯且导出一致 |
+| AC-LLM-002 | OPT-LLM-002 | raw、optimized、translated 可追溯且导出一致；端侧记录保存重载后三层文本不丢，Markdown/TXT/JSON/CSV 的扩展名、MIME 和内容与选择一致 |
 | AC-LLM-003 | OPT-LLM-003 | 摘要、决定、待办、事实均有 evidence segment |
-| AC-UI-006 | OPT-UI-006 | 历史列表展示标题、日期、时长、语言和摘要；两步内可查看纪要、全文、术语和待办；全文为空时已有 review 内容仍可达；长全文可搜索四层文本、查看匹配/总段数并按段展开 raw ASR |
+| AC-UI-006 | OPT-UI-006 | 历史列表展示标题、日期、时长、语言和摘要；两步内可查看纪要、全文、术语和待办；全文为空时已有 review 内容仍可达；长全文可搜索四层文本、查看匹配/总段数并按段展开 raw ASR；端侧重启后仍保留 raw/optimized/译文并可按所选格式导出 |
 | AC-TERM-001 | OPT-TERM-001 | 六个行业包中英文词均能用于热词、翻译和保护字段 |
 | AC-SPK-001 | OPT-SPK-001 | Call Link/PSTN 独立音轨角色归属准确，字幕、历史、导出和 review 字段一致 |
 | AC-SPK-002 | OPT-SPK-002、OPT-SPK-003 | 双人/多人固定语料达到 DER、切换延迟和 30 分钟标签稳定性门槛，不跨 speaker 合并 |
