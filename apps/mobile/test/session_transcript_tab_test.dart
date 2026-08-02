@@ -81,6 +81,20 @@ void main() {
     expect(find.text('会议纪要已经发送'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('does not hide the transcript for a carried review-only query',
+      (WidgetTester tester) async {
+    await tester.pumpWidget(_TestApp(
+      child: SessionTranscriptTab(
+        segments: _segments(),
+        initialQuery: '只存在于纪要的词',
+      ),
+    ));
+
+    expect(find.text('共 120 段'), findsOneWidget);
+    expect(find.text('会议纪要已经发送'), findsOneWidget);
+    expect(find.text('未找到匹配内容'), findsNothing);
+  });
 }
 
 List<SessionSegment> _segments() {

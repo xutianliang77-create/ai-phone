@@ -83,6 +83,45 @@ void main() {
     expect(repository.queries, <String>['', '同传']);
     expect(find.text('同传记录'), findsOneWidget);
   });
+
+  testWidgets('opens a search result at its matching transcript segment',
+      (WidgetTester tester) async {
+    final repository = _FakeSessionHistoryRepository();
+    await tester.pumpWidget(_TestApp(
+      child: SessionHistoryPage(repository: repository),
+    ));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('搜索'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField), '既要');
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('同传记录'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('找到 1 / 2 段'), findsOneWidget);
+    expect(find.text('会后发送纪要'), findsOneWidget);
+    expect(find.text('今天下午三点开会'), findsNothing);
+  });
+
+  testWidgets('closing search clears the hidden record filter',
+      (WidgetTester tester) async {
+    final repository = _FakeSessionHistoryRepository();
+    await tester.pumpWidget(_TestApp(
+      child: SessionHistoryPage(repository: repository),
+    ));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('搜索'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField), '纪要');
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('清除'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(TextField), findsNothing);
+    expect(repository.queries, <String>['', '纪要', '']);
+  });
 }
 
 class _TestApp extends StatelessWidget {
@@ -210,6 +249,8 @@ class _FakeSessionHistoryRepository extends SessionHistoryRepository {
         SessionSegment(
           id: '2',
           sourceText: '会后发送纪要',
+          rawText: '会后发送既要',
+          optimizedText: '会后发送纪要',
           translatedText: 'Send meeting notes after the meeting',
         ),
       ],

@@ -23,8 +23,12 @@ class LocalSessionStore {
         .where((session) {
           if (normalizedQuery.isEmpty) return true;
           return session.segments.any((segment) {
-            return segment.sourceText.toLowerCase().contains(normalizedQuery) ||
-                segment.translatedText.toLowerCase().contains(normalizedQuery);
+            return <String>[
+              segment.sourceText,
+              segment.rawText ?? '',
+              segment.optimizedText ?? '',
+              segment.translatedText,
+            ].any((text) => text.toLowerCase().contains(normalizedQuery));
           });
         })
         .map(_toListItem)

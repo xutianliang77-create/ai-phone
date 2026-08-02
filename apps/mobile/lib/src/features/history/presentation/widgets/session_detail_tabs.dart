@@ -19,6 +19,7 @@ class SessionDetailTabs extends StatelessWidget {
     required this.onUpdateActionItem,
     required this.onGenerateReview,
     required this.generatingReview,
+    this.initialTranscriptQuery = '',
     super.key,
   });
 
@@ -31,6 +32,7 @@ class SessionDetailTabs extends StatelessWidget {
   final UpdateSessionActionItem onUpdateActionItem;
   final VoidCallback onGenerateReview;
   final bool generatingReview;
+  final String initialTranscriptQuery;
 
   @override
   Widget build(BuildContext context) {
@@ -51,7 +53,10 @@ class SessionDetailTabs extends StatelessWidget {
           Expanded(
             child: TabBarView(
               children: <Widget>[
-                SessionTranscriptTab(segments: detail.segments),
+                SessionTranscriptTab(
+                  segments: detail.segments,
+                  initialQuery: initialTranscriptQuery,
+                ),
                 SessionMinutesTab(
                   review: review,
                   hasServerReview: detail.reviewJson != null,

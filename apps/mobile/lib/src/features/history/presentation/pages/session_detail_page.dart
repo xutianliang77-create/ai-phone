@@ -16,12 +16,14 @@ class SessionDetailPage extends StatefulWidget {
     required this.sessionId,
     this.repository,
     this.autoGenerateReview = false,
+    this.initialTranscriptQuery = '',
     super.key,
   });
 
   final String sessionId;
   final SessionHistoryRepository? repository;
   final bool autoGenerateReview;
+  final String initialTranscriptQuery;
 
   @override
   State<SessionDetailPage> createState() => _SessionDetailPageState();
@@ -150,6 +152,7 @@ class _SessionDetailPageState extends State<SessionDetailPage> {
                   onUpdateActionItem: _updateActionItem,
                   onGenerateReview: _generateReview,
                   generatingReview: _generatingReview,
+                  initialTranscriptQuery: widget.initialTranscriptQuery,
                 ),
               ),
             ],

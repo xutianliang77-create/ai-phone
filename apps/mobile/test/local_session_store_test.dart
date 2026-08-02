@@ -36,7 +36,7 @@ void main() {
           revision: 2,
           sourceText: 'hello',
           rawText: 'hallo',
-          optimizedText: 'hello',
+          optimizedText: 'hello revised',
           translatedText: '你好',
           sourceLanguage: 'en',
           targetLanguage: 'zh',
@@ -70,12 +70,14 @@ void main() {
     expect(sessions.single.sessionId, 'local_1');
     expect(sessions.single.status, 'ended');
     expect(sessions.single.consumedSeconds, 10);
+    expect(await store.listSessions(query: 'hallo'), hasLength(1));
+    expect(await store.listSessions(query: 'revised'), hasLength(1));
 
     final detail = await store.getSession('local_1');
     expect(detail.segments, hasLength(1));
     expect(detail.segments.single.translatedText, '你好');
     expect(detail.segments.single.rawText, 'hallo');
-    expect(detail.segments.single.optimizedText, 'hello');
+    expect(detail.segments.single.optimizedText, 'hello revised');
     expect(detail.segments.single.turnId, 'turn_1');
     expect(detail.segments.single.revision, 2);
     expect(detail.segments.single.provider, 'ios_system');
@@ -93,6 +95,7 @@ void main() {
     expect(export.filename, 'translation-session-local_1.md');
     expect(export.content, contains('hallo'));
     expect(export.content, contains('hello'));
+    expect(export.content, contains('hello revised'));
     expect(export.content, isNot(contains('Provider: ios_system')));
 
     await store.deleteSession('local_1');

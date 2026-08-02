@@ -1,6 +1,6 @@
 # ai phone 优化开发任务清单
 
-版本：v4.24
+版本：v4.25
 日期：2026-08-02
 关联：`docs/domestic-app-detailed-functional-design.md`、`docs/ai-phone-translation-technical-design.md`、`docs/domestic-design-review-action-plan.md`
 
@@ -183,7 +183,10 @@ SPK-008-A -> OPT-RT-004/OPT-VAD-003 -> UI/记录/扫描/发布真机验收`。�
 或译文本地搜索；有修正的段落默认只展示优化文本和译文，原始识别按段展开，不丢失可追溯性。
 端侧会话保存和 JSON 重载现保留 `rawText/optimizedText`，不再让上述全文层级在重启后退化；
 本地 Markdown/TXT/JSON/CSV 导出按用户选择生成对应扩展名、MIME 和三层文本内容。真实系统
-分享面板、文件接收端编码与真机四入口/长全文操作仍须验收。
+分享面板、文件接收端编码与真机四入口/长全文操作仍须验收。端侧记录列表搜索已与在线合同
+对齐为原文、raw、optimized和译文四层；打开字幕命中的记录会把查询带入全文并直接过滤到
+匹配段。若列表只因纪要、待办或术语命中，全文保持完整而不显示假空状态；关闭列表搜索会
+清空查询并重新加载完整记录。真机键盘焦点、返回后的查询状态和真实100+段记录仍须验收。
 
 `OPT-UI-007` 当前为 `code-ready（“我的”发布身份与账号返回刷新 CPU 回归通过，未构建/
 部署）`：页面显示 App 名、版本、构建号和区域版状态且不暴露内部地址；Profile 构建合同

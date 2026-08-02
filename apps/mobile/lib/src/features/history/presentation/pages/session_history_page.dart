@@ -40,7 +40,7 @@ class _SessionHistoryPageState extends State<SessionHistoryPage> {
         title: Text(context.l10n.history),
         actions: <Widget>[
           IconButton(
-            onPressed: () => setState(() => _showSearch = !_showSearch),
+            onPressed: _toggleSearch,
             icon: Icon(_showSearch ? Icons.close : Icons.search),
             tooltip: _showSearch ? context.l10n.clear : context.l10n.search,
           ),
@@ -140,11 +140,21 @@ class _SessionHistoryPageState extends State<SessionHistoryPage> {
     });
   }
 
+  void _toggleSearch() {
+    final closing = _showSearch;
+    if (closing) _searchController.clear();
+    setState(() {
+      _showSearch = !closing;
+      if (closing) _sessions = _repository.listSessions();
+    });
+  }
+
   Future<void> _openSession(String sessionId) async {
     await Navigator.of(context).push(MaterialPageRoute<void>(
       builder: (_) => SessionDetailPage(
         sessionId: sessionId,
         repository: _repository,
+        initialTranscriptQuery: _searchController.text.trim(),
       ),
     ));
     if (mounted) _reload();

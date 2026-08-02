@@ -6,9 +6,14 @@ import '../../../../app/localization/app_realtime_timeline_localizations.dart';
 import '../../data/session_history_models.dart';
 
 class SessionTranscriptTab extends StatefulWidget {
-  const SessionTranscriptTab({required this.segments, super.key});
+  const SessionTranscriptTab({
+    required this.segments,
+    this.initialQuery = '',
+    super.key,
+  });
 
   final List<SessionSegment> segments;
+  final String initialQuery;
 
   @override
   State<SessionTranscriptTab> createState() => _SessionTranscriptTabState();
@@ -19,6 +24,19 @@ class _SessionTranscriptTabState extends State<SessionTranscriptTab> {
   final Set<String> _expandedRawSegmentIds = <String>{};
   bool _showSearch = false;
   String _query = '';
+
+  @override
+  void initState() {
+    super.initState();
+    final initialQuery = widget.initialQuery.trim();
+    if (widget.segments.any(
+      (segment) => _containsQuery(segment, initialQuery),
+    )) {
+      _query = initialQuery;
+    }
+    _showSearch = _query.isNotEmpty;
+    _searchController.text = _query;
+  }
 
   @override
   void dispose() {
@@ -74,7 +92,7 @@ class _SessionTranscriptTabState extends State<SessionTranscriptTab> {
                   child: TextField(
                     key: const ValueKey('transcript-search-field'),
                     controller: _searchController,
-                    autofocus: true,
+                    autofocus: !searching,
                     maxLines: 1,
                     textInputAction: TextInputAction.search,
                     decoration: InputDecoration(
@@ -194,7 +212,11 @@ class _SessionTranscriptTabState extends State<SessionTranscriptTab> {
   }
 
   bool _matchesQuery(SessionSegment segment) {
-    final query = _query.trim().toLowerCase();
+    return _containsQuery(segment, _query);
+  }
+
+  bool _containsQuery(SessionSegment segment, String value) {
+    final query = value.trim().toLowerCase();
     if (query.isEmpty) return true;
     return <String>[
       segment.sourceText,
