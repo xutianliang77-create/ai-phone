@@ -1,6 +1,6 @@
 # 无界AI优化任务快照
 
-- 日期：2026-08-02
+- 初始日期：2026-08-02；最近校准：2026-08-03
 - 用途：当前执行视图；完整历史仍以 `docs/ai-phone-optimization-development-tasks.md` 为准
 - 原则：模型选型、隔离优化、生产迁移和产品验收分开计数
 
@@ -14,6 +14,8 @@
 | `OPT-RT-005` 当前整段 TTS 队列 | accepted | 流式候选未过连续追加播放门，保持关闭 |
 | `OPT-SPK-005` speaker 边界基础 | accepted | 固定 `min_duration_on=100ms` 与跨确认边界字幕拆分 |
 | `OPT-DEP-001/003` 两层拓扑 | accepted | 手机直连服务器；不引入 Mac 运行依赖 |
+| `OPT-UI-006` iOS 记录产品闭环 | accepted | 120段长记录、四入口、四层搜索、弱网顺序、四格式系统分享、横屏和真机语义顺序均通过 |
+| `OPT-SCAN-001A` 扫描布局与实体保护 | accepted | 真实表格、Dell铭牌、斜拍小票和菜单的布局路由、展开、缩放及技术实体保护通过 |
 
 ## 当前优化队列
 
@@ -29,9 +31,9 @@ UI、TTS 和 Agent 架构改动混在同一回归里。
 | 5 | `OPT-RT-004` 尾句可靠性 | todo，代码已有 | 真实 Qwen+Hy-MT2 下结束 100 次，原文和译文保存率均不低于 99% |
 | 6 | `OPT-VAD-003` 分模式 endpoint | in_progress，600ms 仅候选 | canonical 大集、真实 pacing、真机、生产负载和回滚门全部通过后才可部署 |
 | 7 | `OPT-LLM-001/002` + `OPT-TERM-001` 受控纠错 | in_progress | 独立未见控制集证明有修复、零错短句不变、数字/拉丁实体无新增错误，并记录 revision 到达时间 |
-| 8 | `OPT-UI-001~005` 长会话、连接状态与发布呈现 | code-ready/in_progress；失败状态与字幕隔离，连接/余额 live-region、最新 pending 单提醒、partial 降噪及 320dp/200% 已过 CPU 回归 | 小屏、横屏、深色、VoiceOver/TalkBack 长稳、长会话和真实 Profile/Release 截图 |
-| 9 | `OPT-UI-006/007` 记录产品验收 + “我的”发布身份 | in_progress/code-ready；记录错误恢复、四个一级入口、空全文不遮蔽其他review、列表到长全文四层搜索连续性及300ms请求合并、段数导航/raw按需展开、端侧三层文本重载及四格式导出、窄屏大字体、发布身份及账号返回刷新已过 CPU 回归 | 真机弱网确认搜索请求量、键盘/返回状态、四入口、长全文和术语/待办操作；真实分享面板及接收端编码；Profile 页面、bundle、诊断版本一致；真机登录/退出返回状态正确 |
-| 10 | `OPT-SCAN-001` 扫描目标语言与复杂版面 | 主链路通过；目标语言、4×4表格碰撞、宽度字号、极端堆叠回退及缩放控件保留区已过CPU回归 | 真机换向状态正确；真实菜单、表格、斜拍及长短译文视觉验收通过 |
+| 8 | `OPT-UI-001~005` 长会话、连接状态与发布呈现 | code-ready/in_progress；真机横屏、120段长记录、连接/余额 live-region、最新 pending 单提醒、partial 降噪和iOS深色协议页已通过 | 用户实体机完成一次VoiceOver耳听焦点抽查；最终生产Profile/Release截图与20次冷启动另门验收 |
+| 9 | `OPT-UI-007` “我的”发布身份 | in_progress；真机页面、测试bundle和Dart define身份一致，不显示内部地址；账号返回刷新CPU回归通过 | 用真实账号完成登录/退出/注销后返回刷新；最终Profile页面、bundle和诊断版本一致 |
+| 10 | `OPT-SCAN-001B` OCR语言优先级 | code-ready，CPU真实菜单A/B和37项回归通过，未提交 | 解锁Mac后在隔离iPhone包复测同一英文菜单裁切与印刷菜单；通过后独立push，不把手写菜单识别误报为已解决 |
 
 ## 暂不进入当前冲刺
 
@@ -49,6 +51,7 @@ UI、TTS 和 Agent 架构改动混在同一回归里。
 
 ## 推荐执行顺序
 
-先完成 `OPT-ASR-002` 的一个单变量隔离合同，再做 `OPT-SPK-009/010 + SPK-008-A`；
-随后收口 `OPT-RT-004/OPT-VAD-003`，最后统一跑 UI、记录、扫描与发布呈现真机验收。
-每项失败只回退该 feature/config，不回退已验收主链。
+当前用户要求禁止GPU，因此先完成`OPT-SCAN-001B`隔离真机门，再做`OPT-UI-007`真实账号返回、
+VoiceOver人工耳听和最终iOS发布门。`OPT-ASR-002`、`OPT-SPK-009/SPK-008-A`、
+`OPT-RT-004/OPT-VAD-003`及FireRed复测保持冻结，直到用户另行允许GPU和服务器窗口。
+每项失败只回退该feature/config，不回退已验收主链。
