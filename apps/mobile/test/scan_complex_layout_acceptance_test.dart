@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -81,6 +82,8 @@ void main() {
       );
       expect(overlay.overlaps(control), isFalse, reason: '$icon obscures text');
     }
+    final overlayText = tester.widget<Text>(find.text(block.translation));
+    expect(overlayText.textScaler!.scale(10), 11);
     expect(tester.takeException(), isNull);
   });
 
@@ -182,6 +185,80 @@ void main() {
       }
     }
   });
+
+  test('keeps representative iPhone overlays fully readable at large text', () {
+    final fixtures =
+        <({String name, Size canvas, List<ScanTranslatedBlock> blocks})>[
+      (
+        name: 'menu',
+        canvas: const Size(369, 369 / 0.78),
+        blocks: _menuBlocks(),
+      ),
+      (
+        name: 'table',
+        canvas: const Size(369, 369 / 1.55),
+        blocks: _iphoneTableBlocks(),
+      ),
+      (
+        name: 'skewed-document',
+        canvas: const Size(369, 369 / 0.82),
+        blocks: _skewedDocumentBlocks(),
+      ),
+    ];
+
+    for (final fixture in fixtures) {
+      final placements = layoutScanTranslationOverlays(
+        blocks: fixture.blocks,
+        canvas: fixture.canvas,
+        textDirection: TextDirection.ltr,
+        textScaler: const TextScaler.linear(1.1),
+        reservedRect: Rect.fromLTWH(
+          fixture.canvas.width - 152,
+          fixture.canvas.height - 56,
+          144,
+          48,
+        ),
+      );
+      for (final placement in placements) {
+        final painter = TextPainter(
+          text: TextSpan(
+            text: placement.block.translation,
+            style: TextStyle(
+              fontSize: placement.fontSize,
+              height: 1.1,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          maxLines: scanTranslationOverlayMaxLines,
+          ellipsis: '…',
+          textDirection: TextDirection.ltr,
+          textScaler: const TextScaler.linear(1.1),
+        )..layout(maxWidth: placement.rect.width - 6);
+        expect(
+          painter.didExceedMaxLines,
+          isFalse,
+          reason:
+              '${fixture.name}: ${placement.block.translation}; rect=${placement.rect}; font=${placement.fontSize}',
+        );
+        expect(
+          _paintedHeight(painter, placement.block.translation),
+          lessThanOrEqualTo(placement.rect.height - 4 + 0.01),
+          reason:
+              '${fixture.name}: ${placement.block.translation}; rect=${placement.rect}; font=${placement.fontSize}',
+        );
+      }
+    }
+  });
+}
+
+double _paintedHeight(TextPainter painter, String text) {
+  final boxes = painter.getBoxesForSelection(
+    TextSelection(baseOffset: 0, extentOffset: text.length),
+  );
+  return boxes.fold<double>(
+    painter.height,
+    (height, box) => math.max(height, box.bottom),
+  );
 }
 
 List<ScanTranslatedBlock> _menuBlocks() {
@@ -223,6 +300,23 @@ List<ScanTranslatedBlock> _tableBlocks() {
         height: 0.12,
       ),
       translation: 'Field ${index + 1} value',
+    );
+  });
+}
+
+List<ScanTranslatedBlock> _iphoneTableBlocks() {
+  return List<ScanTranslatedBlock>.generate(16, (index) {
+    final column = index % 4;
+    final row = index ~/ 4;
+    return ScanTranslatedBlock(
+      source: MobileOcrBlock(
+        text: '单元格 ${index + 1}',
+        left: 0.02 + column * 0.24,
+        top: 0.02 + row * 0.23,
+        width: 0.2,
+        height: 0.14,
+      ),
+      translation: 'Table item ${index + 1} with price',
     );
   });
 }

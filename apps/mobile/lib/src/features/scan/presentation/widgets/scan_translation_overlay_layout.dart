@@ -3,6 +3,9 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../controllers/scan_translation_controller.dart';
+import 'scan_translation_text_layout.dart';
+
+export 'scan_translation_text_layout.dart' show scanTranslationOverlayMaxLines;
 
 class ScanTranslationOverlayPlacement {
   const ScanTranslationOverlayPlacement({
@@ -28,11 +31,18 @@ List<ScanTranslationOverlayPlacement> layoutScanTranslationOverlays({
   final occupied = <Rect>[if (reservedRect != null) reservedRect];
   for (final block in blocks) {
     final source = _sourceRect(block, canvas);
-    final width = _overlayWidth(source.width, canvas);
+    final width = _overlayWidth(
+      block.translation,
+      source.width,
+      canvas,
+      textDirection: textDirection,
+      textScaler: textScaler,
+    );
     final fontSize = _fontSize(
       block.translation,
       sourceHeight: source.height,
       width: width,
+      textDirection: textDirection,
       textScaler: textScaler,
     );
     final height = _overlayHeight(
@@ -83,8 +93,10 @@ double _fontSize(
   String text, {
   required double sourceHeight,
   required double width,
+  required TextDirection textDirection,
   required TextScaler textScaler,
 }) {
+  const minimum = 10.0;
   var size = (sourceHeight * 0.62).clamp(12.0, 18.0);
   final length = text.runes.length;
   if (length > 18) size -= 1.5;
@@ -97,13 +109,43 @@ double _fontSize(
         math.max(1.0, width - 6) * 3 / (length * scaledGlyphWidth);
     size = math.min(size, widthBudget);
   }
-  return size.clamp(10.0, 18.0);
+  size = size.clamp(minimum, 18.0);
+  while (size > minimum) {
+    final painter = layoutScanTranslationText(
+      text: text,
+      fontSize: size,
+      maxWidth: width - 10,
+      textDirection: textDirection,
+      textScaler: textScaler,
+    );
+    if (!painter.didExceedMaxLines) return size;
+    size -= 0.5;
+  }
+  return minimum;
 }
 
-double _overlayWidth(double sourceWidth, Size canvas) {
+double _overlayWidth(
+  String text,
+  double sourceWidth,
+  Size canvas, {
+  required TextDirection textDirection,
+  required TextScaler textScaler,
+}) {
   final minimum = math.min(48.0, canvas.width);
   final maximum = math.min(180.0, canvas.width);
-  return sourceWidth.clamp(minimum, maximum);
+  var width = sourceWidth.clamp(minimum, maximum);
+  while (width < maximum) {
+    final painter = layoutScanTranslationText(
+      text: text,
+      fontSize: 10,
+      maxWidth: width - 10,
+      textDirection: textDirection,
+      textScaler: textScaler,
+    );
+    if (!painter.didExceedMaxLines) return width;
+    width = math.min(maximum, width + 4);
+  }
+  return maximum;
 }
 
 double _overlayHeight({
@@ -115,18 +157,21 @@ double _overlayHeight({
   required TextScaler textScaler,
   required Size canvas,
 }) {
-  final painter = TextPainter(
-    text: TextSpan(
-      text: text,
-      style: TextStyle(fontSize: fontSize, height: 1.1),
-    ),
-    maxLines: 3,
+  final painter = layoutScanTranslationText(
+    text: text,
+    fontSize: fontSize,
+    maxWidth: width - 10,
     textDirection: textDirection,
     textScaler: textScaler,
-  )..layout(maxWidth: math.max(1, width - 6));
+  );
   final minimum = math.min(24.0, canvas.height);
   final maximum = math.max(minimum, math.min(canvas.height * 0.4, 120.0));
-  return math.max(sourceHeight, painter.height + 4).clamp(minimum, maximum);
+  return math
+      .max(
+        sourceHeight,
+        paintedScanTranslationTextHeight(painter, text) + 4,
+      )
+      .clamp(minimum, maximum);
 }
 
 Rect? _nearestFreeRect(Rect preferred, List<Rect> occupied, Size canvas) {
@@ -198,7 +243,7 @@ List<ScanTranslationOverlayPlacement> _layoutDenseGrid({
   final aspectRatio = canvas.width / math.max(1.0, canvas.height);
   final columns = math.max(
     1,
-    math.min(count, math.sqrt(count * aspectRatio).ceil()),
+    math.min(count, math.sqrt(count * aspectRatio).floor()),
   );
   const gap = 2.0;
   var rows = (count / columns).ceil();
@@ -249,13 +294,15 @@ double _denseFontSize(
 }) {
   var size = math.min(14.0, math.max(8.0, (rect.height - 4) / 1.1));
   while (size > 8) {
-    final painter = TextPainter(
-      text: TextSpan(text: text, style: TextStyle(fontSize: size, height: 1.1)),
-      maxLines: 3,
+    final painter = layoutScanTranslationText(
+      text: text,
+      fontSize: size,
+      maxWidth: rect.width - 10,
       textDirection: textDirection,
       textScaler: textScaler,
-    )..layout(maxWidth: math.max(1, rect.width - 6));
-    if (!painter.didExceedMaxLines && painter.height <= rect.height - 4) {
+    );
+    if (!painter.didExceedMaxLines &&
+        paintedScanTranslationTextHeight(painter, text) <= rect.height - 4) {
       return size;
     }
     size -= 1;

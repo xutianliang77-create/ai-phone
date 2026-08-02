@@ -31,6 +31,7 @@ class _ScanImageTranslationViewState extends State<ScanImageTranslationView> {
   static const double _zoomControlsInset = 8;
   static const double _zoomControlsWidth = 144;
   static const double _zoomControlsHeight = 48;
+  static const TextScaler _maximumOverlayTextScaler = TextScaler.linear(1.1);
 
   final TransformationController _transformationController =
       TransformationController();
@@ -161,11 +162,12 @@ class _ScanImageTranslationViewState extends State<ScanImageTranslationView> {
     }
     return LayoutBuilder(
       builder: (context, constraints) {
+        final overlayTextScaler = _overlayTextScaler(context);
         final placements = layoutScanTranslationOverlays(
           blocks: widget.translatedBlocks,
           canvas: constraints.biggest,
           textDirection: Directionality.of(context),
-          textScaler: MediaQuery.textScalerOf(context),
+          textScaler: overlayTextScaler,
           reservedRect: Rect.fromLTWH(
             constraints.maxWidth - _zoomControlsInset - _zoomControlsWidth,
             constraints.maxHeight - _zoomControlsInset - _zoomControlsHeight,
@@ -194,8 +196,9 @@ class _ScanImageTranslationViewState extends State<ScanImageTranslationView> {
                         const EdgeInsets.symmetric(horizontal: 3, vertical: 2),
                     child: Text(
                       placement.block.translation,
-                      maxLines: 3,
+                      maxLines: scanTranslationOverlayMaxLines,
                       overflow: TextOverflow.ellipsis,
+                      textScaler: overlayTextScaler,
                       style: TextStyle(
                         color: Theme.of(context).colorScheme.onSurface,
                         fontSize: placement.fontSize,
@@ -210,6 +213,13 @@ class _ScanImageTranslationViewState extends State<ScanImageTranslationView> {
         );
       },
     );
+  }
+
+  TextScaler _overlayTextScaler(BuildContext context) {
+    final ambient = MediaQuery.textScalerOf(context);
+    return ambient.scale(14) <= _maximumOverlayTextScaler.scale(14)
+        ? ambient
+        : _maximumOverlayTextScaler;
   }
 
   void _syncScale() {
