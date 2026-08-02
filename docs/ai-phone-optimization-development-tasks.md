@@ -1,8 +1,14 @@
 # ai phone 优化开发任务清单
 
-版本：v4.7
-日期：2026-07-19
+版本：v4.17
+日期：2026-08-02
 关联：`docs/domestic-app-detailed-functional-design.md`、`docs/ai-phone-translation-technical-design.md`、`docs/domestic-design-review-action-plan.md`
+
+当前执行快照：`docs/wujie-ai-optimization-task-status-2026-08-02.md`
+
+ASR 选型权威决策：`docs/asr-selection-decision-2026-08-02.md`。服务器/多语种主
+ASR 已冻结为 Qwen3-ASR 1.7B；后续只优化已选链路，不再把历史候选横评列为当前
+赛马任务。选型 accepted 不表示生产路由、端口或模型 revision 已迁移。
 
 新增统一架构任务来源：
 
@@ -48,6 +54,9 @@ VoxCPM2 真流式 TTS 和 P2-A3 可观测性；逐项状态见架构任务计划
 | OPT-RT-003 | SegmentAssembler | partial/final、合并窗口、端点、去重、强制输出 | 无 | 被中间切断的句子可合并，超时不会长期无字幕 |
 | OPT-RT-004 | 最后一句 flush 加固 | App、Gateway、ASR flush 统一协议 | OPT-RT-001、OPT-RT-003 | 结束后无正常段落只有原文没有译文 |
 | OPT-RT-005 | 在线 TTS 顺序队列 | session/segment 队列、取消、超时、失败降级 | OPT-RT-001 | 连续 20 句字幕和朗读顺序一致，结束后无残留播放 |
+| OPT-ASR-001 | 服务器/多语种 ASR 选型冻结 | Qwen3-ASR 1.7B 决策记录、证据边界和重开条件 | 无 | 选型结果唯一且不再把历史候选误列为当前赛马；生产迁移单独验收 |
+| OPT-ASR-002 | 已选 Qwen 链路质量与延迟 | 声学/VAD、稳定可读 partial、endpoint、静音幻觉、实体/术语和 revision 门 | OPT-ASR-001、OPT-VAD-001、OPT-RT-003 | 同一冻结合同通过隔离、真实 pacing、真机、负载和回滚门后才可迁移生产 |
+| OPT-ASR-003 | FireRedASR2-AED 官方复测 | 同中英 2+2 冻结 smoke4、哈希锁、准确率/尾延迟和能力边界报告 | OPT-ASR-001、共享 GPU 安全窗口 | 只在明确释放 GPU 后跑官方 AED smoke4；记录主 ASR NO-GO 与段后候选结论，不跑 formal、不改生产选型 |
 | OPT-VAD-001 | 服务器 MarbleNet 主 VAD | VAD Provider、ONNX 运行时、固定预处理资产、RMS 降级 | 无 | 低音量可检出，静音和三档非语音噪声不触发，真实在线链路可转写 |
 | OPT-VAD-002 | VAD 观测和故障诊断 | session 指标、fallback 告警、模型 fingerprint、端点原因 | OPT-VAD-001 | 可按 session 判断实际 Provider、概率摘要、fallback 和端点原因；后续由 OPT-OBS-001 汇总 |
 | OPT-VAD-003 | 模式化端点策略 | 对话、聆听、Call Link、PSTN 参数配置和回归语料 | OPT-VAD-001、OPT-RT-003 | 各模式断句和延迟达标，可独立回退统一 1100ms 基线 |
@@ -69,6 +78,21 @@ VoxCPM2 真流式 TTS 和 P2-A3 可观测性；逐项状态见架构任务计划
 
 当前实现状态：
 
+- `OPT-ASR-001`：`accepted（模型选型）`。无界AI服务器/多语种主 ASR 固定为
+  `Qwen/Qwen3-ASR-1.7B`；Whisper、Nemotron、Parakeet、Moonshine、VibeVoice-ASR、
+  Fun-ASR Nano/MLT、FireRedASR2 和 Zipformer 不再属于当前赛马队列。该状态不代表
+  当前生产服务已迁移，详见 `docs/asr-selection-decision-2026-08-02.md`。
+- `OPT-ASR-002`：`in_progress（仅隔离优化）`。聆听/会议固定为 Qwen 1.7 初稿 +
+  受控段后 LLM/MOSS revision；当前研究基线保留 v7 `unfixed_chunk_num=7 + 200ms`，
+  v8/v9/v10/shadow-midpoint 均 NO-GO。优化目标是首个稳定、可读 partial，而不是首个
+  非空字符；尚未取得生产迁移验收。
+- `OPT-ASR-003`：`todo（等待共享 GPU 安全窗口）`。仅复测官方
+  `FireRedTeam/FireRedASR2-AED`中英 2+2 smoke4；冻结合同和 CPU/文件预检已完成。
+  历史任务`019f2378-979b-7b40-b497-897752639718`确实跑过256项FireRed合成TTS
+  可懂度代理，但使用`fireredasr 0.0.2 + strict=False + beam1 + batch8`，不是canonical
+  真实语音或原生partial评测，不能替代本TODO。
+  官方 AED 无原生 partial/token，因此不具备取代 Qwen 实时主 ASR 的条件；若段后
+  准确率与尾延迟过门，也只进入单独 second-pass/revision 评估。
 - `OPT-VAD-001`：`accepted`。Beelink 已上线 MarbleNet ONNX CPU 主 VAD，阈值 0.5；NeMo/ONNX 概率最大误差 `2.38e-7`，低音量真机语音、静音和三档非语音噪声及真实 HTTP ASR 均通过。
 - `OPT-VAD-002`：`in_progress（代码完成，统一验收待执行）`。VAD Provider 已输出配置/实际 Provider、概率摘要、speech ratio、fallback 次数/原因和模型 fingerprint；Gateway 在结束前按 session 拉取，API 仅白名单保存脱敏诊断。尚未部署到 Beelink 做故障注入复验，完成前不标记 accepted。
 - `OPT-VAD-003`：`in_progress（conversation 实时 pacing A/B 通过，完整统一验收待执行）`。会话模式已通过 token 进入 Gateway/ASR；App 对话与聆听分别映射 `conversation/listening`，LiveKit 与 PSTN Worker 分别固定 `call_link/pstn`。ASR 首帧冻结 session 策略并拒绝中途改模式；2026-07-25 真实 pacing 27 条 A/B 中，`conversation minAudio=1000ms + endpoint=600ms` 保持 26/27，端点 final P50 从 1392ms 降至 998ms；两条约 705/782ms 自然停顿样本均保持全文且正确拆为两段。候选尚未部署，仍需 canonical 大集、真机、生产负载和回滚门禁；`listening/pstn` 不随本候选改变。
@@ -95,7 +119,7 @@ VoxCPM2 真流式 TTS 和 P2-A3 可观测性；逐项状态见架构任务计划
 - `OPT-IOS-002`：`todo（20次冷启动验收）`。崩溃上报和发布安装链路保留，必须在最终 Profile/Release 包完成20次桌面冷启动并归档 crash report 后结项。
 - `OPT-MOB-001`：iPhone `accepted`。iPhone 后台、锁屏、来电和蓝牙耳机切换均通过；Android 真机验收统一列为 TODO，并在 iOS 产品化完成后启动。
 - `OPT-MOB-002`：iPhone `accepted`。iPhone 20句连续采集、蓝牙切换、Listening 静音和声音偏好恢复均通过；Android 真机验收统一列为 TODO，并在 iOS 产品化完成后启动。
-- `OPT-UI-001`：代码和自动化门禁完成；`idle/connecting/active/paused/ending/ended/failed` 只展示当前可执行操作，主操作固定在同一槽位，连接中可取消且迟到 session 不会恢复同传。iPhone/Android 真机布局与点击体验验收待执行。
+- `OPT-UI-001`：代码和自动化门禁完成；`idle/connecting/active/paused/ending/ended/failed` 只展示当前可执行操作，主操作固定在同一槽位，连接中可取消且迟到 session 不会恢复同传。`translation.failed` 只进入状态诊断、恢复入口和结构化元数据，不再作为译文写入实时字幕、历史或导出；原文继续保留。iPhone/Android 真机布局与点击体验验收待执行。
 - `OPT-UI-002`：代码和自动化门禁完成；字幕区移除固定 420dp 高度并占满剩余空间，最后一段标记当前句，译文 final 前显示 pending，动态高度字幕可自动跟随并在用户上滑后提供回到底部。iPhone/Android 真机小屏、横屏和 200% 字体验收待执行。
 - `OPT-UI-003`：`in_progress（代码完成，真机验收待执行）`。同传设置按使用模式、运行模式、语言与行业、声音分组；运行中真实禁用不可修改控件并显示原因，提供“结束后修改”动作，主页面自动朗读快捷键仍可用。
 - `OPT-UI-004`：`in_progress（代码完成，真机验收待执行）`。新增浅色/深色设计 Token，区分主操作、错误和提醒色；卡片和 segmented control 统一8px圆角，字幕与核心控制保留 Semantics。等待深色、200%字体和 VoiceOver/TalkBack 验收。
@@ -111,15 +135,18 @@ VoxCPM2 真流式 TTS 和 P2-A3 可观测性；逐项状态见架构任务计划
   `SPEAKER_MIN_DURATION_ON_MS=100` 与跨确认边界字幕拆分，不再降低
   Sortformer/coordinator 阈值；使用同一多人素材做多轮受控真实声学 A/B，
   以匿名槽位数量、同人复用、异人误合并和跨轮波动作为硬门。
-- `OPT-SPK-010`：`todo（speakerCount 呈现口径）`。人数统计只计算已确认的
-  非 `unknown` speaker；`unknown` 字幕和诊断仍保留，但不得作为一位真实人物
-  计入用户可见人数。
+- `OPT-SPK-010`：`code-ready（CPU 回归通过，未部署）`。API 会话摘要与移动端本地
+  回退人数统计均只计算唯一、非空且非 `unknown` 的 speaker ID；`unknown` 字幕和
+  诊断仍保留，但不得作为一位真实人物计入用户可见人数。部署后真机历史呈现仍待验收。
 - `OPT-DEP-001`：`accepted`。API/Gateway 已作为 Docker Compose 发布单元迁入 Beelink `3110/3111`，119条历史和7份声音引用已保留；iPhone Profile 已切换到 Beelink，Mac `3110/3111` 停止后真机仍上传540帧并保存57秒会话，真实 speaker-turn 全链路通过。
 - `OPT-DEP-002`：`in_progress`。Beelink 已承载 LiveKit、API、Gateway、ASR、Speaker、翻译和 LLM；Translation Worker 已编入同一镜像，但按 call 启动和 VoxCPM2 在线加载仍需联合验收。
 - `OPT-DEP-003`：`accepted`。iPhone Profile 仅包含 `http://100.110.127.117:3110`，构建产物未发现旧 Mac 地址、模型端口或内部密钥；Mac API/Gateway 停止后在线真机链路通过。
 
 当前排期冻结：
 
+- `OPT-ASR-001`：`accepted（选型冻结）`；不得继续用新候选替代已选 Qwen3-ASR
+  1.7B。`OPT-ASR-002` 只做已选链路的单变量、隔离优化；`OPT-ASR-003` 是用户明确
+  重开的一次确认性 TODO，不恢复无边界 ASR 赛马。
 - `OPT-VOICE-002`：`todo（真机盲听验收）`。代码、固定音色和 Beelink 部署保留，方言 v2 连续10句尚未验收。
 - `OPT-RT-004`：`todo（100次尾句可靠性）`。已有 A/B 冒烟不替代可靠性门禁。
 - Android 真机：`todo（iOS 产品化后）`。当前 iOS 产品化里程碑不以 Android 真机结果作为退出条件；Android AudioSession、TTS、UI、ASR、VAD 和长稳验收统一后置。
@@ -128,6 +155,8 @@ VoxCPM2 真流式 TTS 和 P2-A3 可观测性；逐项状态见架构任务计划
 
 | 子任务 | 工作内容 | 预计工作量 | 当前状态 | 验收证据 |
 | --- | --- | ---: | --- | --- |
+| ASR-001-A | Qwen3-ASR 1.7B 选型固化 | 已完成 | accepted | 决策记录、隔离证据、重开条件和历史 POC 取代标记齐全 |
+| ASR-002-A | 已选 Qwen 链路单变量优化 | 逐合同评估 | in_progress | 稳定可读、final、空白/重复/幻觉、实体保护和 revision 新增错误门同时通过 |
 | SPK-005-A | iPhone 双人无停顿快速换人 | 已完成 | accepted | 真人真机正确显示“说话人 1/2”，切换 speaker 时正确断句、不跨人合并 |
 | SPK-005-B | Speaker Provider 启用和容错 | 已完成 | deployed | Gateway 缺省配置兜底、2秒推理超时、失败日志、重复/乱序帧幂等；固定双声源产生两个 turn |
 | SPK-006-0 | 批量音频时间轴修复 | 已完成 | accepted | 合并帧保留首帧 `timestampMs` 和末帧 sequence，自动化覆盖 |
@@ -139,7 +168,25 @@ VoxCPM2 真流式 TTS 和 P2-A3 可观测性；逐项状态见架构任务计划
 | SPK-008-A | 多人/混合语种验收 | 1-2天 | in_progress | Gateway 短首轮次和160ms起点修订已修复；四人、重叠和一分钟稳定性模型矩阵通过，模型短轮次仍未达标，真人三至四人、中英夹杂和 unknown 待验收 |
 | DEP-001-A | Gateway/API 迁入 Beelink | 已完成 | accepted | Docker、数据迁移、App 切址、Mac 停机和服务器真机全链路通过 |
 
-当前关键路径：`部署遗留会话恢复 -> 断网 End 新文案复验 -> SPK-008-A 真人多人/混合语种`。服务器发布单元、Mac 停机和双人链路已验证；短轮次矩阵失败项不能通过放宽 DER 门槛结项。
+当前说话人链关键路径：`部署遗留会话恢复 -> 断网 End 新文案复验 -> SPK-008-A 真人多人/混合语种`。服务器发布单元、Mac 停机和双人链路已验证；短轮次矩阵失败项不能通过放宽 DER 门槛结项。
+
+2026-08-02 当前优化总顺序：`OPT-ASR-002 单变量隔离门 -> OPT-SPK-009/010 +
+SPK-008-A -> OPT-RT-004/OPT-VAD-003 -> UI/记录/扫描/发布真机验收`。完整不超过
+10项的执行视图见 `docs/wujie-ai-optimization-task-status-2026-08-02.md`。
+
+`OPT-UI-006` 当前为 `in_progress（记录错误恢复已通过 CPU 回归，未部署）`：历史列表
+加载失败时可保留当前搜索词并重试；详情加载失败时可保留当前 session 并在原页恢复；
+导出失败显示本地化反馈且恢复导出控件。真实分享面板仍须真机验收。
+
+`OPT-UI-007` 当前为 `code-ready（“我的”发布身份与账号返回刷新 CPU 回归通过，未构建/
+部署）`：页面显示 App 名、版本、构建号和区域版状态且不暴露内部地址；Profile 构建合同
+从 pubspec 取得默认发布身份，并用同一值驱动 iOS bundle、Dart UI 和诊断报告；登录、退出
+或注销修改 session 后返回“我的”会重新读取账号状态。
+
+`OPT-SCAN-001` 当前为 `in_progress（目标语言与复杂版面算法 CPU 回归通过，真图待验收）`：
+重复选择当前目标语言不会清空已完成译文；真正切换目标会保留OCR原文并失效旧结果。译文
+框优先保持OCR宽度、按框宽/框高/字符宽度/系统字号联合缩放；常规密集块就近避让，无空位
+时按原视觉顺序进入无碰撞网格。表格、斜拍和真实长短译文仍须真机视觉验收。
 
 ## 3. P1 灰度任务
 
@@ -149,6 +196,7 @@ VoxCPM2 真流式 TTS 和 P2-A3 可观测性；逐项状态见架构任务计划
 | OPT-LLM-002 | segment 三文本结构 | raw、merged/optimized、translated 和诊断字段 | OPT-LLM-001 | 历史可追溯原始识别、优化和译文 |
 | OPT-LLM-003 | 结构化会后 review | 摘要、决定、待办、事实、风险、问题、证据 | OPT-LLM-002 | API 输出可校验 JSON，结论可回溯 segment |
 | OPT-UI-006 | 历史与纪要重构 | AI 标题、日期、时长、语言、摘要、四视图 | OPT-LLM-003 | 用户可在两步内查看纪要、全文和术语 |
+| OPT-UI-007 | “我的”与发布身份 | App 名、版本、构建号、区域版和账号/发布信息 | OPT-UI-004 | 真机页面与 bundle/诊断版本一致，不显示内部地址，账号状态和发布版本可核验 |
 | OPT-TERM-001 | 行业和术语选择 | 商业、科技、医疗、旅游、餐饮、娱乐 | OPT-LLM-002 | App 选择行业后 ASR 热词、翻译术语、LLM 保护字段生效 |
 | OPT-SPK-001 | 说话人统一数据契约 | speaker id、角色、标签、来源和置信度贯通字幕、历史、导出、review | OPT-RT-003 | Call Link 独立音轨可准确显示我/对方，普通同传兼容匿名 speaker |
 | OPT-SPK-002 | 流式说话人分离 Provider | 独立 harness、Streaming Sortformer 评测、时间区间输出 | OPT-SPK-001 | 双人和多人固定语料达到 DER、切换延迟和标签稳定性门槛 |
