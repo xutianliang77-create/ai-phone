@@ -5,6 +5,7 @@ import '../../data/session_history_models.dart';
 import '../../data/session_review.dart';
 import 'session_action_items_tab.dart';
 import 'session_minutes_tab.dart';
+import 'session_terms_tab.dart';
 import 'session_transcript_tab.dart';
 
 class SessionDetailTabs extends StatelessWidget {
@@ -36,13 +37,14 @@ class SessionDetailTabs extends StatelessWidget {
     final review = buildSessionReview(detail);
     final chinese = context.l10n.isChinese;
     return DefaultTabController(
-      length: 3,
+      length: 4,
       child: Column(
         children: <Widget>[
           TabBar(
             tabs: <Widget>[
-              Tab(text: chinese ? '字幕' : 'Transcript'),
+              Tab(text: context.l10n.transcript),
               Tab(text: chinese ? '纪要' : 'Notes'),
+              Tab(text: context.l10n.terms),
               Tab(text: chinese ? '待办' : 'Actions'),
             ],
           ),
@@ -53,12 +55,15 @@ class SessionDetailTabs extends StatelessWidget {
                 SessionMinutesTab(
                   review: review,
                   hasServerReview: detail.reviewJson != null,
-                  confirmedTermIds: confirmedTermIds,
-                  pendingTermKeys: pendingTermKeys,
-                  onConfirmTerm: onConfirmTerm,
-                  onRevokeTerm: onRevokeTerm,
                   onGenerateReview: onGenerateReview,
                   generatingReview: generatingReview,
+                ),
+                SessionTermsTab(
+                  terms: review.terms,
+                  confirmedTermIds: confirmedTermIds,
+                  pendingTermKeys: pendingTermKeys,
+                  onConfirm: onConfirmTerm,
+                  onRevoke: onRevokeTerm,
                 ),
                 SessionActionItemsTab(
                   items: review.actionItems,

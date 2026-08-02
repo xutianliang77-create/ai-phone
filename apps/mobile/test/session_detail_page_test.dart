@@ -8,7 +8,7 @@ import 'package:translation_mobile/src/features/history/presentation/pages/sessi
 import 'package:translation_mobile/src/platform/sharing/file_share_service.dart';
 
 void main() {
-  testWidgets('shows summary highlights transcript and terms tabs',
+  testWidgets('shows full text notes terms and actions as separate tabs',
       (WidgetTester tester) async {
     final repository = _FakeSessionHistoryRepository();
     await tester.pumpWidget(_TestApp(
@@ -19,8 +19,9 @@ void main() {
     ));
     await tester.pumpAndSettle();
 
-    expect(find.widgetWithText(Tab, '字幕'), findsOneWidget);
+    expect(find.widgetWithText(Tab, '全文'), findsOneWidget);
     expect(find.widgetWithText(Tab, '纪要'), findsOneWidget);
+    expect(find.widgetWithText(Tab, '术语'), findsOneWidget);
     expect(find.widgetWithText(Tab, '待办'), findsOneWidget);
     expect(
       find.textContaining('Meeting at three this afternoon',
@@ -33,6 +34,9 @@ void main() {
     expect(find.byTooltip('生成会议纪要'), findsWidgets);
     expect(find.text('重点'), findsOneWidget);
     expect(find.textContaining('今天下午三点开会'), findsWidgets);
+    expect(find.text('subtitles'), findsNothing);
+    await tester.tap(find.widgetWithText(Tab, '术语'));
+    await tester.pumpAndSettle();
     expect(find.text('字幕'), findsWidgets);
     expect(find.text('subtitles'), findsOneWidget);
 
@@ -65,7 +69,7 @@ void main() {
 
     expect(repository.getSessionCalls, 2);
     expect(repository.requestedSessionIds, <String>['s1', 's1']);
-    expect(find.widgetWithText(Tab, '字幕'), findsOneWidget);
+    expect(find.widgetWithText(Tab, '全文'), findsOneWidget);
     expect(find.textContaining('今天下午三点开会'), findsWidgets);
   });
 
@@ -157,7 +161,7 @@ void main() {
     ));
     await tester.pumpAndSettle();
 
-    for (final label in <String>['字幕', '纪要', '待办']) {
+    for (final label in <String>['全文', '纪要', '术语', '待办']) {
       await tester.tap(find.widgetWithText(Tab, label));
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);

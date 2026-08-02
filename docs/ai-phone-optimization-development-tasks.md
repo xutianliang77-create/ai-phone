@@ -1,6 +1,6 @@
 # ai phone 优化开发任务清单
 
-版本：v4.20
+版本：v4.21
 日期：2026-08-02
 关联：`docs/domestic-app-detailed-functional-design.md`、`docs/ai-phone-translation-technical-design.md`、`docs/domestic-design-review-action-plan.md`
 
@@ -174,9 +174,11 @@ VoxCPM2 真流式 TTS 和 P2-A3 可观测性；逐项状态见架构任务计划
 SPK-008-A -> OPT-RT-004/OPT-VAD-003 -> UI/记录/扫描/发布真机验收`。完整不超过
 10项的执行视图见 `docs/wujie-ai-optimization-task-status-2026-08-02.md`。
 
-`OPT-UI-006` 当前为 `in_progress（记录错误恢复已通过 CPU 回归，未部署）`：历史列表
-加载失败时可保留当前搜索词并重试；详情加载失败时可保留当前 session 并在原页恢复；
-导出失败显示本地化反馈且恢复导出控件。真实分享面板仍须真机验收。
+`OPT-UI-006` 当前为 `in_progress（记录错误恢复与四视图信息架构已通过 CPU 回归，未部署）`：
+历史列表加载失败时可保留当前搜索词并重试；详情加载失败时可保留当前 session 并在原页恢复；
+导出失败显示本地化反馈且恢复导出控件。记录详情现将“全文/纪要/术语/待办”暴露为
+四个一级标签，已有独立术语页承接确认/撤销，不再把术语重复埋在纪要底部；术语操作、待办持久化
+及 320dp/200% 字体四标签可达性回归通过。真实分享面板与真机四入口操作仍须验收。
 
 `OPT-UI-007` 当前为 `code-ready（“我的”发布身份与账号返回刷新 CPU 回归通过，未构建/
 部署）`：页面显示 App 名、版本、构建号和区域版状态且不暴露内部地址；Profile 构建合同
@@ -196,7 +198,7 @@ SPK-008-A -> OPT-RT-004/OPT-VAD-003 -> UI/记录/扫描/发布真机验收`。�
 | OPT-LLM-001 | LLM 实时纠错边界 | no-thinking、JSON schema、超时回退 | OPT-RT-003 | 思考过程不污染字幕，超时使用原文 |
 | OPT-LLM-002 | segment 三文本结构 | raw、merged/optimized、translated 和诊断字段 | OPT-LLM-001 | 历史可追溯原始识别、优化和译文 |
 | OPT-LLM-003 | 结构化会后 review | 摘要、决定、待办、事实、风险、问题、证据 | OPT-LLM-002 | API 输出可校验 JSON，结论可回溯 segment |
-| OPT-UI-006 | 历史与纪要重构 | AI 标题、日期、时长、语言、摘要、四视图 | OPT-LLM-003 | 用户可在两步内查看纪要、全文和术语 |
+| OPT-UI-006 | 历史与纪要重构 | AI 标题、日期、时长、语言、摘要、四视图 | OPT-LLM-003 | 用户可在两步内查看纪要、全文、术语和待办 |
 | OPT-UI-007 | “我的”与发布身份 | App 名、版本、构建号、区域版和账号/发布信息 | OPT-UI-004 | 真机页面与 bundle/诊断版本一致，不显示内部地址，账号状态和发布版本可核验 |
 | OPT-TERM-001 | 行业和术语选择 | 商业、科技、医疗、旅游、餐饮、娱乐 | OPT-LLM-002 | App 选择行业后 ASR 热词、翻译术语、LLM 保护字段生效 |
 | OPT-SPK-001 | 说话人统一数据契约 | speaker id、角色、标签、来源和置信度贯通字幕、历史、导出、review | OPT-RT-003 | Call Link 独立音轨可准确显示我/对方，普通同传兼容匿名 speaker |
