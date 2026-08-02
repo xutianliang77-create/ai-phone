@@ -5,6 +5,13 @@ const installScript = readFileSync(
   new URL("../install_ios_profile_test.sh", import.meta.url),
   "utf8",
 );
+const diagnosticsReport = readFileSync(
+  new URL(
+    "../../apps/mobile/lib/src/features/device_asr/data/core_ml_nemotron_diagnostics_report.dart",
+    import.meta.url,
+  ),
+  "utf8",
+);
 
 describe("iOS profile install contract", () => {
   it("validates and forwards the selected realtime mode", () => {
@@ -23,5 +30,26 @@ describe("iOS profile install contract", () => {
     expect(installScript).toContain(
       "curl --noproxy '*' --fail --silent --show-error",
     );
+  });
+
+  it("uses one release identity for the bundle and Dart UI", () => {
+    expect(installScript).toContain(
+      'APP_VERSION="${APP_VERSION:-$PUBSPEC_APP_VERSION}"',
+    );
+    expect(installScript).toContain(
+      'BUILD_NUMBER="${BUILD_NUMBER:-$PUBSPEC_BUILD_NUMBER}"',
+    );
+    expect(installScript).toContain('--build-name="$APP_VERSION"');
+    expect(installScript).toContain('--build-number="$BUILD_NUMBER"');
+    expect(installScript).toContain(
+      '--dart-define="APP_VERSION=$APP_VERSION"',
+    );
+    expect(installScript).toContain(
+      '--dart-define="BUILD_NUMBER=$BUILD_NUMBER"',
+    );
+    expect(diagnosticsReport).toContain(
+      "String.fromEnvironment(\n    'BUILD_NUMBER',",
+    );
+    expect(diagnosticsReport).not.toContain("'APP_BUILD_NUMBER'");
   });
 });

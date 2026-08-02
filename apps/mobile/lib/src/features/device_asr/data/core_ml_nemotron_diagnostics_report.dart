@@ -14,7 +14,7 @@ class CoreMlNemotronDiagnosticsReport {
     defaultValue: '0.1.0',
   );
   static const _appBuildNumber = String.fromEnvironment(
-    'APP_BUILD_NUMBER',
+    'BUILD_NUMBER',
     defaultValue: '1',
   );
 
