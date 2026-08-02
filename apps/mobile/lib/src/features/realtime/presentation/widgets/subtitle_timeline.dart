@@ -65,6 +65,7 @@ class _SubtitleTimelineState extends State<SubtitleTimeline> {
       children: <Widget>[
         for (var index = 0; index < widget.segments.length; index++) ...[
           _SubtitleEntry(
+            key: ValueKey('subtitle-${widget.segments[index].id}'),
             segment: widget.segments[index],
             isCurrent: index == widget.segments.length - 1,
             visualizerActive: widget.visualizerActive,
@@ -95,6 +96,7 @@ class _SubtitleEntry extends StatelessWidget {
     required this.isCurrent,
     required this.visualizerActive,
     required this.visualizerPaused,
+    super.key,
   });
 
   final SubtitleSegment segment;
@@ -110,16 +112,17 @@ class _SubtitleEntry extends StatelessWidget {
     final speakerLabel = speaker?.label(isChinese: context.l10n.isChinese);
     final overlap = segment.timing?.overlap == true;
     final mixedLanguage = segment.languageProfile?.mixedLanguage == true;
+    final entryLabel = [
+      if (isCurrent) context.l10n.currentSubtitle,
+      if (speakerLabel != null) speakerLabel,
+      if (overlap) context.l10n.overlappingSpeech,
+      if (mixedLanguage) context.l10n.mixedLanguage,
+      segment.sourceText,
+      if (segment.translatedText.trim().isNotEmpty) segment.translatedText,
+    ].join('，');
     return Semantics(
       container: true,
-      label: [
-        if (isCurrent) context.l10n.currentSubtitle,
-        if (speakerLabel != null) speakerLabel,
-        if (overlap) context.l10n.overlappingSpeech,
-        if (mixedLanguage) context.l10n.mixedLanguage,
-        segment.sourceText,
-        if (segment.translatedText.trim().isNotEmpty) segment.translatedText,
-      ].join('，'),
+      explicitChildNodes: true,
       child: ColoredBox(
         color: isCurrent
             ? theme.colorScheme.primary.withValues(alpha: 0.035)
@@ -140,37 +143,54 @@ class _SubtitleEntry extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: <Widget>[
-                  if (speaker != null || overlap || mixedLanguage) ...[
-                    _SegmentMetadata(
-                      speaker: speaker,
-                      overlap: overlap,
-                      mixedLanguage: mixedLanguage,
+                  Semantics(
+                    container: true,
+                    label: entryLabel,
+                    excludeSemantics: true,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: <Widget>[
+                        if (speaker != null || overlap || mixedLanguage) ...[
+                          _SegmentMetadata(
+                            speaker: speaker,
+                            overlap: overlap,
+                            mixedLanguage: mixedLanguage,
+                          ),
+                          const SizedBox(height: 6),
+                        ],
+                        if (isCurrent) ...[
+                          Text(
+                            context.l10n.currentSubtitle,
+                            style: theme.textTheme.labelMedium?.copyWith(
+                              color: theme.colorScheme.primary,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                        ],
+                        Text(
+                          segment.sourceText,
+                          style: theme.textTheme.titleMedium,
+                        ),
+                        if (segment.translatedText.trim().isNotEmpty) ...[
+                          const SizedBox(height: 6),
+                          Text(
+                            segment.translatedText,
+                            style: theme.textTheme.bodyLarge?.copyWith(
+                              color: theme.colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                        ],
+                      ],
                     ),
-                    const SizedBox(height: 6),
-                  ],
-                  if (isCurrent) ...[
-                    Text(
-                      context.l10n.currentSubtitle,
-                      style: theme.textTheme.labelMedium?.copyWith(
-                        color: theme.colorScheme.primary,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                  ],
-                  Text(segment.sourceText, style: theme.textTheme.titleMedium),
-                  if (segment.translatedText.trim().isNotEmpty) ...[
-                    const SizedBox(height: 6),
-                    Text(
-                      segment.translatedText,
-                      style: theme.textTheme.bodyLarge?.copyWith(
-                        color: theme.colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                  ],
+                  ),
                   if (pending) ...[
                     const SizedBox(height: 8),
-                    _TranslationPending(label: context.l10n.translationPending),
+                    _TranslationPending(
+                      key: ValueKey('subtitle-pending-${segment.id}'),
+                      label: context.l10n.translationPending,
+                      announce: isCurrent,
+                    ),
                   ],
                 ],
               ),
@@ -276,16 +296,23 @@ Color _speakerColor(ColorScheme colors, String speakerId) {
 }
 
 class _TranslationPending extends StatelessWidget {
-  const _TranslationPending({required this.label});
+  const _TranslationPending({
+    required this.label,
+    required this.announce,
+    super.key,
+  });
 
   final String label;
+  final bool announce;
 
   @override
   Widget build(BuildContext context) {
     final color = Theme.of(context).colorScheme.primary;
     return Semantics(
-      liveRegion: true,
+      container: true,
+      liveRegion: announce,
       label: label,
+      excludeSemantics: true,
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: <Widget>[
