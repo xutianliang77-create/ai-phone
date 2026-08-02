@@ -11,6 +11,9 @@ class SessionTranscriptTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (segments.isEmpty) {
+      return Center(child: Text(context.l10n.noSavedSubtitles));
+    }
     return ListView.separated(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
       itemCount: segments.length,

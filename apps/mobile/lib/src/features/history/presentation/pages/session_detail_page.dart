@@ -131,9 +131,6 @@ class _SessionDetailPageState extends State<SessionDetailPage> {
             );
           }
           final detail = _currentDetail ?? snapshot.data!;
-          if (detail.segments.isEmpty) {
-            return Center(child: Text(context.l10n.noSavedSubtitles));
-          }
           return Column(
             children: <Widget>[
               SessionDetailOverview(
