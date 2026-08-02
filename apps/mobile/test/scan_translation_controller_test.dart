@@ -161,6 +161,64 @@ void main() {
     expect(controller.message, 'scan_translation_unavailable');
     expect(controller.isBusy, isFalse);
   });
+
+  test('protects mixed manufacturer model and numeric entities', () async {
+    const source = '制造商 Dell Technologies 型号 DPS-750AB-29A 输入 100-240V';
+    final translator = _EntityEchoTranslationProvider();
+    final controller = ScanTranslationController(
+      ocrProvider: const _FakeOcrProvider(source),
+      translationProvider: translator,
+      pickImagePath: (_) async => _picked('/tmp/label.jpg'),
+      historyRepository: _FakeSessionHistoryRepository(),
+    );
+
+    await controller.selectImage(ScanImageSource.gallery);
+    await controller.recognizeSelectedImage();
+    await controller.translateRecognizedText();
+
+    expect(translator.input, isNot(contains('Dell Technologies')));
+    expect(translator.input, isNot(contains('DPS-750AB-29A')));
+    expect(translator.input, isNot(contains('100-240V')));
+    expect(controller.translatedText, contains('Dell Technologies'));
+    expect(controller.translatedText, contains('DPS-750AB-29A'));
+    expect(controller.translatedText, contains('100-240V'));
+  });
+
+  test('bypasses translation for a standalone certification mark', () async {
+    final controller = ScanTranslationController(
+      ocrProvider: const _FakeOcrProvider('CE'),
+      translationProvider: _ThrowingTranslationProvider(),
+      pickImagePath: (_) async => _picked('/tmp/label.jpg'),
+      historyRepository: _FakeSessionHistoryRepository(),
+    );
+    controller.setTargetLanguage('zh');
+
+    await controller.selectImage(ScanImageSource.gallery);
+    await controller.recognizeSelectedImage();
+    await controller.translateRecognizedText();
+
+    expect(controller.status, ScanTranslationStatus.translated);
+    expect(controller.translatedText, 'CE');
+  });
+
+  test('normalizes the Vision CE confusable before translation', () async {
+    final controller = ScanTranslationController(
+      ocrProvider: const _FakeOcrProvider('C€'),
+      translationProvider: _ThrowingTranslationProvider(),
+      pickImagePath: (_) async => _picked('/tmp/label.jpg'),
+      historyRepository: _FakeSessionHistoryRepository(),
+    );
+    controller.setTargetLanguage('zh');
+
+    await controller.selectImage(ScanImageSource.gallery);
+    await controller.recognizeSelectedImage();
+    await controller.translateRecognizedText();
+
+    expect(controller.recognizedText, 'CE');
+    expect(controller.recognizedBlocks.single.text, 'CE');
+    expect(controller.status, ScanTranslationStatus.translated);
+    expect(controller.translatedText, 'CE');
+  });
 }
 
 PickedScanImage _picked(String path) {
@@ -274,5 +332,27 @@ class _ThrowingTranslationProvider implements MobileTranslationProvider {
     MobileTranslationConfig config,
   ) {
     throw StateError('translation provider offline');
+  }
+}
+
+class _EntityEchoTranslationProvider implements MobileTranslationProvider {
+  String input = '';
+
+  @override
+  Future<void> dispose() async {}
+
+  @override
+  Future<MobileTranslationResult?> translate(
+    String text,
+    MobileTranslationConfig config,
+  ) async {
+    input = text;
+    return MobileTranslationResult(
+      text: text
+          .replaceAll('制造商', 'Manufacturer')
+          .replaceAll('型号', 'model')
+          .replaceAll('输入', 'input'),
+      provider: 'entity_echo',
+    );
   }
 }

@@ -4,6 +4,7 @@ import '../../../history/data/session_history_repository.dart';
 import '../../../../platform/ocr/mobile_ocr_provider.dart';
 import '../../../../platform/translation/mobile_translation_provider.dart';
 import '../../../../platform/translation/text_language_detector.dart';
+import '../../domain/scan_translation_entity_protector.dart';
 
 enum ScanImageSource { camera, gallery }
 
@@ -146,8 +147,12 @@ class ScanTranslationController extends ChangeNotifier {
 
     try {
       final result = await _ocrProvider.recognizeImage(path);
-      recognizedText = result?.text.trim() ?? '';
-      recognizedBlocks = result?.blocks ?? const <MobileOcrBlock>[];
+      recognizedText = normalizeScanTranslationEntities(
+        result?.text.trim() ?? '',
+      );
+      recognizedBlocks = (result?.blocks ?? const <MobileOcrBlock>[])
+          .map(_normalizeOcrBlock)
+          .toList(growable: false);
     } on Object {
       status = ScanTranslationStatus.failed;
       message = 'scan_ocr_failed';
@@ -164,6 +169,16 @@ class ScanTranslationController extends ChangeNotifier {
 
     status = ScanTranslationStatus.recognized;
     notifyListeners();
+  }
+
+  MobileOcrBlock _normalizeOcrBlock(MobileOcrBlock block) {
+    return MobileOcrBlock(
+      text: normalizeScanTranslationEntities(block.text),
+      left: block.left,
+      top: block.top,
+      width: block.width,
+      height: block.height,
+    );
   }
 
   Future<void> translateRecognizedText() async {
@@ -217,14 +232,17 @@ class ScanTranslationController extends ChangeNotifier {
 
   Future<String> _translateText(String text, String detectedLanguage) async {
     if (detectedLanguage == targetLanguage) return text;
+    final entityProtector = ScanTranslationEntityProtector(text);
+    if (entityProtector.canBypassTranslation) return text;
     final result = await _translationProvider.translate(
-      text,
+      entityProtector.translationInput,
       MobileTranslationConfig(
         sourceLanguage: detectedLanguage,
         targetLanguage: targetLanguage,
       ),
     );
-    return result?.text.trim() ?? '';
+    final translation = result?.text.trim() ?? '';
+    return translation.isEmpty ? '' : entityProtector.restore(translation);
   }
 
   Future<void> save() async {
