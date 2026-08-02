@@ -15,6 +15,7 @@ import '../../../../platform/translation/mobile_translation_provider.dart';
 import '../../../../platform/translation/phrasebook_translation_provider.dart';
 import '../controllers/scan_translation_controller.dart';
 import '../widgets/scan_image_translation_view.dart';
+import '../widgets/scan_text_comparison_view.dart';
 
 class ScanTranslationPage extends StatefulWidget {
   const ScanTranslationPage({

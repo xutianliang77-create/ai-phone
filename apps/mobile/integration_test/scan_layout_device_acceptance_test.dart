@@ -10,6 +10,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:translation_mobile/src/app/localization/app_localizations.dart';
 import 'package:translation_mobile/src/features/scan/presentation/controllers/scan_translation_controller.dart';
 import 'package:translation_mobile/src/features/scan/presentation/widgets/scan_image_translation_view.dart';
+import 'package:translation_mobile/src/features/scan/presentation/widgets/scan_text_comparison_view.dart';
 import 'package:translation_mobile/src/platform/ocr/mobile_ocr_provider.dart';
 
 void main() {
@@ -31,7 +32,11 @@ void main() {
       ));
       await tester.pumpAndSettle();
 
-      _expectReadableAndCollisionFree(tester, fixture.name, fixture.blocks);
+      if (fixture.name == 'table') {
+        await _expectDenseListFallback(tester, fixture.blocks);
+      } else {
+        _expectReadableAndCollisionFree(tester, fixture.name, fixture.blocks);
+      }
       final screenshotName = 'scan-${fixture.name}';
       final bytes = await binding.takeScreenshot(screenshotName);
       final directory = await getApplicationDocumentsDirectory();
@@ -44,6 +49,7 @@ void main() {
           'fixtures': <String>['menu', 'table', 'skewed-document'],
           'textScale': 2,
           'collisionFree': true,
+          'denseListFallback': true,
           'zoomControlsClear': true,
           'screenshots': screenshots,
         })}');
@@ -82,19 +88,65 @@ class _FixtureApp extends StatelessWidget {
       ),
       home: Scaffold(
         body: SafeArea(
-          child: Padding(
+          child: ListView(
             padding: const EdgeInsets.all(12),
-            child: ScanImageTranslationView(
-              imageBytes: _whitePixel,
-              aspectRatio: aspectRatio,
-              translatedBlocks: blocks,
-              translatedText: translatedText,
-            ),
+            children: <Widget>[
+              ScanImageTranslationView(
+                imageBytes: _whitePixel,
+                aspectRatio: aspectRatio,
+                translatedBlocks: blocks,
+                translatedText: translatedText,
+              ),
+              if (blocks.isNotEmpty) ...<Widget>[
+                const SizedBox(height: 12),
+                ScanTextComparisonView(
+                  sourceText:
+                      blocks.map((block) => block.source.text).join('\n'),
+                  translatedText: translatedText,
+                  translatedBlocks: blocks,
+                ),
+              ],
+            ],
           ),
         ),
       ),
     );
   }
+}
+
+Future<void> _expectDenseListFallback(
+  WidgetTester tester,
+  List<ScanTranslatedBlock> blocks,
+) async {
+  expect(
+    find.byKey(const ValueKey('scan-translation-list-fallback-notice')),
+    findsOneWidget,
+  );
+  expect(
+    find.byKey(const ValueKey('scan-translation-overlay-0')),
+    findsNothing,
+  );
+  expect(
+    find.byKey(const ValueKey('scan-translation-list-fallback')),
+    findsOneWidget,
+  );
+
+  final firstItem = find.byKey(const ValueKey('scan-translation-list-item-0'));
+  await tester.ensureVisible(firstItem);
+  await tester.tap(firstItem);
+  await tester.pumpAndSettle();
+
+  expect(
+    find.byKey(const ValueKey('scan-translation-list-source-0')),
+    findsOneWidget,
+  );
+  expect(
+    find.byKey(const ValueKey('scan-translation-list-translation-0')),
+    findsOneWidget,
+  );
+  expect(find.text(blocks.first.source.text), findsWidgets);
+  expect(find.text(blocks.first.translation), findsWidgets);
+  expect(tester.takeException(), isNull);
 }
 
 void _expectReadableAndCollisionFree(
@@ -110,8 +162,9 @@ void _expectReadableAndCollisionFree(
   ];
   for (var index = 0; index < blocks.length; index += 1) {
     final translation = blocks[index].translation;
+    final overlay = find.byKey(ValueKey('scan-translation-overlay-$index'));
     final paragraph = tester.renderObject<RenderParagraph>(
-      find.text(translation),
+      find.descendant(of: overlay, matching: find.byType(Text)),
     );
     final lastGlyphBoxes = paragraph.getBoxesForSelection(
       TextSelection(
