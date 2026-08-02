@@ -1,6 +1,6 @@
 # ai phone 优化开发任务清单
 
-版本：v4.17
+版本：v4.18
 日期：2026-08-02
 关联：`docs/domestic-app-detailed-functional-design.md`、`docs/ai-phone-translation-technical-design.md`、`docs/domestic-design-review-action-plan.md`
 
@@ -186,7 +186,8 @@ SPK-008-A -> OPT-RT-004/OPT-VAD-003 -> UI/记录/扫描/发布真机验收`。�
 `OPT-SCAN-001` 当前为 `in_progress（目标语言与复杂版面算法 CPU 回归通过，真图待验收）`：
 重复选择当前目标语言不会清空已完成译文；真正切换目标会保留OCR原文并失效旧结果。译文
 框优先保持OCR宽度、按框宽/框高/字符宽度/系统字号联合缩放；常规密集块就近避让，无空位
-时按原视觉顺序进入无碰撞网格。表格、斜拍和真实长短译文仍须真机视觉验收。
+时按原视觉顺序进入无碰撞网格；右下缩放控件区域已加入布局保留区，常规布局和密集网格
+回退均不得把译文放到控件下方。表格、斜拍和真实长短译文仍须真机视觉验收。
 
 ## 3. P1 灰度任务
 
@@ -214,7 +215,7 @@ SPK-008-A -> OPT-RT-004/OPT-VAD-003 -> UI/记录/扫描/发布真机验收`。�
 | OPT-CALL-005 | 按 target leg 可取消播放 | source/target leg 队列、TTS cancel、LiveKit stop、迟到帧拒绝 | OPT-CALL-004、OPT-RT-005 | 两个方向可并行；取消一侧不阻塞或取消另一侧 |
 | OPT-CALL-006 | VoIP 全双工抢话 | AEC exact reference、MarbleNet VAD、300-500ms pre-roll、InterruptionController、feature flag | OPT-CALL-005、OPT-MOB-001、OPT-VAD-001 | TTS 播放中可自然开口，P95 300ms 内停播且首音节保留，无回声误触发 |
 | OPT-CALL-007 | 全双工降级、恢复与观测 | AEC/clear 故障降级、Worker 重启收敛、playback/barge 指标和质量报告 | OPT-CALL-006、OPT-OBS-001 | 故障自动切半双工或字幕，不残留旧音频、不丢历史、不重复结算 |
-| OPT-SCAN-001 | 扫描流程重构 | `todo（主链路真机通过，复杂版面回贴优化待完成）`；OCR、Hy-MT2 翻译、原图/译图切换和整图缩放可用，仍需优化译文框碰撞、字号自适应及表格/斜拍版面回贴 | OPT-UI-004 | 译文按原图区域回贴；无坐标 Provider 明确降级为整段叠加，不产生错位假象；复杂版面无明显遮挡或重叠 |
+| OPT-SCAN-001 | 扫描流程重构 | `in_progress（目标语言、碰撞/字号、密集回退及缩放控件保留区CPU回归通过，真图/真机待验收）`；OCR、Hy-MT2翻译、原图/译图切换和整图缩放主链保留 | OPT-UI-004 | 译文按原图区域回贴；无坐标Provider明确降级为整段叠加，不产生错位假象；真实菜单、表格和斜拍版面无明显遮挡或重叠 |
 | OPT-DATA-001 | SQLite WAL Repository | account、session、segment、usage、terms、outbox | OPT-RT-002、OPT-LLM-002 | 事务、外键、幂等和 quick_check 通过 |
 | OPT-DATA-002 | SQLite 备份与恢复 | 一致性快照、对象目录批次、损坏阻断 | OPT-DATA-001 | 恢复后 session、ledger 和对象 hash 一致 |
 | OPT-DATA-004 | 通话事务、inbox/outbox 和并发隔离 | call legs、playbacks、inbox、outbox、版本/CAS、唯一约束 | OPT-DATA-001 | 50并发 session 不串写；同 session 冲突可检测；结束、settle、hold release、outbox 原子提交 |

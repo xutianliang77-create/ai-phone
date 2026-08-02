@@ -28,6 +28,9 @@ class ScanImageTranslationView extends StatefulWidget {
 class _ScanImageTranslationViewState extends State<ScanImageTranslationView> {
   static const double _minScale = 1;
   static const double _maxScale = 5;
+  static const double _zoomControlsInset = 8;
+  static const double _zoomControlsWidth = 144;
+  static const double _zoomControlsHeight = 48;
 
   final TransformationController _transformationController =
       TransformationController();
@@ -120,8 +123,8 @@ class _ScanImageTranslationViewState extends State<ScanImageTranslationView> {
                       ),
                     ),
                     Positioned(
-                      right: 8,
-                      bottom: 8,
+                      right: _zoomControlsInset,
+                      bottom: _zoomControlsInset,
                       child: _ZoomControls(
                         scale: _scale,
                         minScale: _minScale,
@@ -163,6 +166,12 @@ class _ScanImageTranslationViewState extends State<ScanImageTranslationView> {
           canvas: constraints.biggest,
           textDirection: Directionality.of(context),
           textScaler: MediaQuery.textScalerOf(context),
+          reservedRect: Rect.fromLTWH(
+            constraints.maxWidth - _zoomControlsInset - _zoomControlsWidth,
+            constraints.maxHeight - _zoomControlsInset - _zoomControlsHeight,
+            _zoomControlsWidth,
+            _zoomControlsHeight,
+          ),
         );
         return Stack(
           children: <Widget>[

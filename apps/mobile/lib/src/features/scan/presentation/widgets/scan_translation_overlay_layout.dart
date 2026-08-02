@@ -21,10 +21,11 @@ List<ScanTranslationOverlayPlacement> layoutScanTranslationOverlays({
   required Size canvas,
   required TextDirection textDirection,
   required TextScaler textScaler,
+  Rect? reservedRect,
 }) {
   if (canvas.isEmpty) return const <ScanTranslationOverlayPlacement>[];
   final placements = <ScanTranslationOverlayPlacement>[];
-  final occupied = <Rect>[];
+  final occupied = <Rect>[if (reservedRect != null) reservedRect];
   for (final block in blocks) {
     final source = _sourceRect(block, canvas);
     final width = _overlayWidth(source.width, canvas);
@@ -54,6 +55,7 @@ List<ScanTranslationOverlayPlacement> layoutScanTranslationOverlays({
         canvas: canvas,
         textDirection: textDirection,
         textScaler: textScaler,
+        reservedRect: reservedRect,
       );
     }
     occupied.add(rect);
@@ -180,6 +182,7 @@ List<ScanTranslationOverlayPlacement> _layoutDenseGrid({
   required Size canvas,
   required TextDirection textDirection,
   required TextScaler textScaler,
+  required Rect? reservedRect,
 }) {
   final count = blocks.length;
   if (count == 0) return const <ScanTranslationOverlayPlacement>[];
@@ -197,20 +200,31 @@ List<ScanTranslationOverlayPlacement> _layoutDenseGrid({
     1,
     math.min(count, math.sqrt(count * aspectRatio).ceil()),
   );
-  final rows = (count / columns).ceil();
-  final cellWidth = canvas.width / columns;
-  final cellHeight = canvas.height / rows;
   const gap = 2.0;
+  var rows = (count / columns).ceil();
+  var availableCells = <Rect>[];
+  while (availableCells.length < count) {
+    final cellWidth = canvas.width / columns;
+    final cellHeight = canvas.height / rows;
+    availableCells = <Rect>[];
+    for (var rank = 0; rank < rows * columns; rank++) {
+      final column = rank % columns;
+      final row = rank ~/ columns;
+      final rect = Rect.fromLTWH(
+        column * cellWidth + gap / 2,
+        row * cellHeight + gap / 2,
+        math.max(1, cellWidth - gap),
+        math.max(1, cellHeight - gap),
+      );
+      if (reservedRect == null || !rect.inflate(1).overlaps(reservedRect)) {
+        availableCells.add(rect);
+      }
+    }
+    if (availableCells.length < count) rows += 1;
+  }
   final rects = List<Rect?>.filled(count, null);
   for (var rank = 0; rank < ordered.length; rank++) {
-    final column = rank % columns;
-    final row = rank ~/ columns;
-    rects[ordered[rank].index] = Rect.fromLTWH(
-      column * cellWidth + gap / 2,
-      row * cellHeight + gap / 2,
-      math.max(1, cellWidth - gap),
-      math.max(1, cellHeight - gap),
-    );
+    rects[ordered[rank].index] = availableCells[rank];
   }
   return List.generate(count, (index) {
     final rect = rects[index]!;
