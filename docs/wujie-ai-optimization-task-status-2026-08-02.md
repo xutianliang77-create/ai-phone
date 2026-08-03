@@ -16,6 +16,7 @@
 | `OPT-DEP-001/003` 两层拓扑 | accepted | 手机直连服务器；不引入 Mac 运行依赖 |
 | `OPT-UI-006` iOS 记录产品闭环 | accepted | 120段长记录、四入口、四层搜索、弱网顺序、四格式系统分享、横屏和真机语义顺序均通过 |
 | `OPT-SCAN-001A` 扫描布局与实体保护 | accepted | 真实表格、Dell铭牌、斜拍小票和菜单的布局路由、展开、缩放及技术实体保护通过 |
+| `OPT-SCAN-001B` OCR语言优先级 | accepted | CPU真实菜单A/B、37项回归及隔离iPhone印刷/粉笔菜单通过；手写误字仍明确保留为能力边界 |
 
 ## 当前优化队列
 
@@ -33,7 +34,7 @@ UI、TTS 和 Agent 架构改动混在同一回归里。
 | 7 | `OPT-LLM-001/002` + `OPT-TERM-001` 受控纠错 | in_progress | 独立未见控制集证明有修复、零错短句不变、数字/拉丁实体无新增错误，并记录 revision 到达时间 |
 | 8 | `OPT-UI-001~005` 长会话、连接状态与发布呈现 | code-ready/in_progress；真机横屏、120段长记录、连接/余额 live-region、最新 pending 单提醒、partial 降噪和iOS深色协议页已通过 | 用户实体机完成一次VoiceOver耳听焦点抽查；最终生产Profile/Release截图与20次冷启动另门验收 |
 | 9 | `OPT-UI-007` “我的”发布身份 | in_progress；真机页面、测试bundle和Dart define身份一致，不显示内部地址；账号返回刷新CPU回归通过 | 用真实账号完成登录/退出/注销后返回刷新；最终Profile页面、bundle和诊断版本一致 |
-| 10 | `OPT-SCAN-001B` OCR语言优先级 | code-ready，CPU真实菜单A/B和37项回归通过，未提交 | 解锁Mac后在隔离iPhone包复测同一英文菜单裁切与印刷菜单；通过后独立push，不把手写菜单识别误报为已解决 |
+| 10 | `OPT-IOS-001/002` 最终iOS发布门 | in_progress/todo | 统一Profile/Release独立安装，核对页面、bundle和诊断身份并完成20次桌面冷启动与崩溃归档 |
 
 ## 暂不进入当前冲刺
 
@@ -51,7 +52,7 @@ UI、TTS 和 Agent 架构改动混在同一回归里。
 
 ## 推荐执行顺序
 
-当前用户要求禁止GPU，因此先完成`OPT-SCAN-001B`隔离真机门，再做`OPT-UI-007`真实账号返回、
-VoiceOver人工耳听和最终iOS发布门。`OPT-ASR-002`、`OPT-SPK-009/SPK-008-A`、
+当前用户要求禁止GPU，因此先做`OPT-UI-007`真实账号返回，再做VoiceOver人工耳听和最终iOS发布门。
+`OPT-ASR-002`、`OPT-SPK-009/SPK-008-A`、
 `OPT-RT-004/OPT-VAD-003`及FireRed复测保持冻结，直到用户另行允许GPU和服务器窗口。
 每项失败只回退该feature/config，不回退已验收主链。
