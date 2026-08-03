@@ -85,14 +85,20 @@ VoxCPM2 真流式 TTS 和 P2-A3 可观测性；逐项状态见架构任务计划
 - `OPT-ASR-002`：`in_progress（仅隔离优化）`。聆听/会议固定为 Qwen 1.7 初稿 +
   受控段后 LLM/MOSS revision；当前研究基线保留 v7 `unfixed_chunk_num=7 + 200ms`，
   v8/v9/v10/shadow-midpoint 均 NO-GO。优化目标是首个稳定、可读 partial，而不是首个
-  非空字符；尚未取得生产迁移验收。
-- `OPT-ASR-003`：`todo（等待共享 GPU 安全窗口）`。仅复测官方
-  `FireRedTeam/FireRedASR2-AED`中英 2+2 smoke4；冻结合同和 CPU/文件预检已完成。
+  非空字符。2026-08-03 已冻结统一的343条完整隔离suite及12条smoke视图，后续按多语、
+  英文、会议、电话、真实中英混说、MUSAN噪声和实体诊断分层报告，不生成全局总分；
+  数据准备完成不等于模型或生产迁移验收。Auto语言路由v2的CPU状态机已通过：可靠LID为
+  中文或英文时只放行中英混说，检测到其他语言后锁为该语种单语，拉丁文字或实体本身不
+  触发英语切换；该结果不证明真实音频LID准确率，必须先用12语真实音频校准置信度、锁定
+  时间、误放行率和锁后抖动，再讨论生产实装。
+- `OPT-ASR-003`：`completed（官方 smoke4 完成，实时主 ASR NO-GO）`。官方
+  `FireRedTeam/FireRedASR2-AED`中英 2+2 为4/4，中文 CER 3.03%、英文 WER 7.69%，
+  音频结束到 final p95 349.6ms，checkpoint 零 missing/unexpected。
   历史任务`019f2378-979b-7b40-b497-897752639718`确实跑过256项FireRed合成TTS
   可懂度代理，但使用`fireredasr 0.0.2 + strict=False + beam1 + batch8`，不是canonical
-  真实语音或原生partial评测，不能替代本TODO。
+  真实语音或原生partial评测，不能替代本次官方结果。
   官方 AED 无原生 partial/token，因此不具备取代 Qwen 实时主 ASR 的条件；若段后
-  准确率与尾延迟过门，也只进入单独 second-pass/revision 评估。
+  使用，仍须另冻 second-pass/revision 合同；本次未跑 formal、未修改生产选型。
 - `OPT-VAD-001`：`accepted`。Beelink 已上线 MarbleNet ONNX CPU 主 VAD，阈值 0.5；NeMo/ONNX 概率最大误差 `2.38e-7`，低音量真机语音、静音和三档非语音噪声及真实 HTTP ASR 均通过。
 - `OPT-VAD-002`：`in_progress（代码完成，统一验收待执行）`。VAD Provider 已输出配置/实际 Provider、概率摘要、speech ratio、fallback 次数/原因和模型 fingerprint；Gateway 在结束前按 session 拉取，API 仅白名单保存脱敏诊断。尚未部署到 Beelink 做故障注入复验，完成前不标记 accepted。
 - `OPT-VAD-003`：`in_progress（conversation 实时 pacing A/B 通过，完整统一验收待执行）`。会话模式已通过 token 进入 Gateway/ASR；App 对话与聆听分别映射 `conversation/listening`，LiveKit 与 PSTN Worker 分别固定 `call_link/pstn`。ASR 首帧冻结 session 策略并拒绝中途改模式；2026-07-25 真实 pacing 27 条 A/B 中，`conversation minAudio=1000ms + endpoint=600ms` 保持 26/27，端点 final P50 从 1392ms 降至 998ms；两条约 705/782ms 自然停顿样本均保持全文且正确拆为两段。候选尚未部署，仍需 canonical 大集、真机、生产负载和回滚门禁；`listening/pstn` 不随本候选改变。
@@ -145,8 +151,8 @@ VoxCPM2 真流式 TTS 和 P2-A3 可观测性；逐项状态见架构任务计划
 当前排期冻结：
 
 - `OPT-ASR-001`：`accepted（选型冻结）`；不得继续用新候选替代已选 Qwen3-ASR
-  1.7B。`OPT-ASR-002` 只做已选链路的单变量、隔离优化；`OPT-ASR-003` 是用户明确
-  重开的一次确认性 TODO，不恢复无边界 ASR 赛马。
+  1.7B。`OPT-ASR-002` 只做已选链路的单变量、隔离优化；`OPT-ASR-003` 官方确认
+  已完成并关闭，不恢复无边界 ASR 赛马。
 - `OPT-VOICE-002`：`todo（真机盲听验收）`。代码、固定音色和 Beelink 部署保留，方言 v2 连续10句尚未验收。
 - `OPT-RT-004`：`todo（100次尾句可靠性）`。已有 A/B 冒烟不替代可靠性门禁。
 - Android 真机：`todo（iOS 产品化后）`。当前 iOS 产品化里程碑不以 Android 真机结果作为退出条件；Android AudioSession、TTS、UI、ASR、VAD 和长稳验收统一后置。
