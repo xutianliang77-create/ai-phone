@@ -33,7 +33,7 @@ UI、TTS 和 Agent 架构改动混在同一回归里。
 | 6 | `OPT-VAD-003` 分模式 endpoint | in_progress，600ms 仅候选 | canonical 大集、真实 pacing、真机、生产负载和回滚门全部通过后才可部署 |
 | 7 | `OPT-LLM-001/002` + `OPT-TERM-001` 受控纠错 | in_progress | 独立未见控制集证明有修复、零错短句不变、数字/拉丁实体无新增错误，并记录 revision 到达时间 |
 | 8 | `OPT-UI-001~005` 长会话、连接状态与发布呈现 | code-ready/in_progress；真机横屏、120段长记录、连接/余额 live-region、最新 pending 单提醒、partial 降噪和iOS深色协议页已通过 | 用户实体机完成一次VoiceOver耳听焦点抽查；最终生产Profile/Release截图与20次冷启动另门验收 |
-| 9 | `OPT-UI-007` “我的”发布身份 | in_progress；真机页面、测试bundle和Dart define身份一致，不显示内部地址；账号返回刷新CPU回归通过 | 用真实账号完成登录/退出/注销后返回刷新；最终Profile页面、bundle和诊断版本一致 |
+| 9 | `OPT-UI-007` “我的”发布身份 | in_progress；真机页面、测试bundle和Dart define身份一致，不显示内部地址；隔离真实API账号的登录、退出、注销后返回刷新通过 | 最终Profile页面、bundle和诊断版本一致；不得用生产账号替代隔离验收 |
 | 10 | `OPT-IOS-001/002` 最终iOS发布门 | in_progress/todo；锁屏fail-fast、30秒设备超时和一次受控重试已通过 | 统一Profile/Release独立安装，核对页面、bundle和诊断身份并完成20次桌面冷启动与崩溃归档 |
 
 ## 暂不进入当前冲刺
@@ -52,7 +52,8 @@ UI、TTS 和 Agent 架构改动混在同一回归里。
 
 ## 推荐执行顺序
 
-当前用户要求禁止GPU，因此先做`OPT-UI-007`真实账号返回，再做VoiceOver人工耳听和最终iOS发布门。
+当前用户要求禁止GPU，因此下一步先做VoiceOver人工耳听，再做最终iOS发布门；
+`OPT-UI-007`账号返回已经由隔离真实API账号通过，但整个任务仍需最终Profile身份门。
 `OPT-ASR-002`、`OPT-SPK-009/SPK-008-A`、
 `OPT-RT-004/OPT-VAD-003`及FireRed复测保持冻结，直到用户另行允许GPU和服务器窗口。
 每项失败只回退该feature/config，不回退已验收主链。

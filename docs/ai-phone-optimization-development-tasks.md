@@ -170,8 +170,8 @@ VoxCPM2 真流式 TTS 和 P2-A3 可观测性；逐项状态见架构任务计划
 
 当前说话人链关键路径：`部署遗留会话恢复 -> 断网 End 新文案复验 -> SPK-008-A 真人多人/混合语种`。服务器发布单元、Mac 停机和双人链路已验证；短轮次矩阵失败项不能通过放宽 DER 门槛结项。
 
-2026-08-03 在“禁止使用GPU”的当前合同下，执行顺序调整为：`OPT-UI-007真实账号返回
--> VoiceOver人工耳听 -> iOS最终发布门`；模型、speaker、尾句和endpoint
+2026-08-03 在“禁止使用GPU”的当前合同下，`OPT-UI-007`隔离账号返回已经通过，执行顺序调整为：
+`VoiceOver人工耳听 -> iOS最终发布门`；模型、speaker、尾句和endpoint
 任务保持冻结，不据此改写其原排期。完整不超过
 10项的执行视图见 `docs/wujie-ai-optimization-task-status-2026-08-02.md`。
 
@@ -192,11 +192,13 @@ VoxCPM2 真流式 TTS 和 P2-A3 可观测性；逐项状态见架构任务计划
 新旧响应顺序、返回查询保持、横屏和语义顺序；Markdown/TXT/JSON/CSV真实iOS系统分享面板4/4
 通过且文件已拉回核验。完整VoiceOver人工耳听仍归`OPT-UI-004`，不作为本任务重复门。
 
-`OPT-UI-007` 当前为 `in_progress（发布身份真机通过，真实账号返回待验收）`：页面显示 App 名、
+`OPT-UI-007` 当前为 `in_progress（发布身份真机和隔离真实API账号返回通过，最终Profile身份待验收）`：页面显示 App 名、
 版本、构建号和区域版状态且不暴露内部地址；Profile 构建合同
 从 pubspec 取得默认发布身份，并用同一值驱动 iOS bundle、Dart UI 和诊断报告；登录、退出
-或注销修改 session 后返回“我的”会重新读取账号状态。隔离真机包已确认页面身份与Dart define一致；
-仍需最终Profile包核对页面、bundle和诊断报告，并用真实账号验证登录/退出/注销后的返回刷新。
+或注销修改 session 后返回“我的”会重新读取账号状态。2026-08-03隔离真机包使用独立CPU-only API完成
+登录、退出、注销请求三条真实请求链，返回“我的”分别刷新为已登录或登录入口；注销服务语义核验为
+`deletion_requested`且session清零，未伪称物理清除，也未触碰生产账号。仍需最终Profile包核对页面、
+bundle和诊断报告。
 
 `OPT-SCAN-001` 当前拆为`001A accepted（布局与实体保护）`和
 `001B accepted（OCR语言优先级）`：
