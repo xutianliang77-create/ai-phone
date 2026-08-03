@@ -201,10 +201,17 @@ class _AccountPageState extends State<AccountPage> {
 
   Future<void> _logout() async {
     final token = _session?.token;
+    var remoteLogoutFailed = false;
     await _run(() async {
-      if (token != null) await _client.logout(token);
+      if (token != null) {
+        try {
+          await _client.logout(token);
+        } catch (_) {
+          remoteLogoutFailed = true;
+        }
+      }
       await _clearLocalSession();
-      _message = '已退出登录';
+      _message = remoteLogoutFailed ? '已退出本机；服务器会话将在登录令牌到期后失效' : '已退出登录';
     });
   }
 

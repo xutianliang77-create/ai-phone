@@ -56,6 +56,28 @@ void main() {
     expect(find.text('手机号'), findsOneWidget);
   });
 
+  testWidgets('clears the local session when remote logout fails',
+      (tester) async {
+    final client = _FakeAccountApiClient()..failLogout = true;
+    final store = MemoryAccountSessionStore(
+      const AccountSession(
+        token: 'token_1',
+        expiresAtIso: '2026-08-01T00:00:00.000Z',
+      ),
+    );
+    await tester.pumpWidget(_TestApp(
+      child: AccountPage(client: client, sessionStore: store),
+    ));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('退出登录'));
+    await tester.pumpAndSettle();
+
+    expect(store.session, isNull);
+    expect(find.text('手机号'), findsOneWidget);
+    expect(find.text('已退出本机；服务器会话将在登录令牌到期后失效'), findsOneWidget);
+  });
+
   testWidgets('requests account deletion after confirmation', (tester) async {
     final client = _FakeAccountApiClient();
     final store = MemoryAccountSessionStore(
@@ -96,6 +118,7 @@ class _FakeAccountApiClient extends AccountApiClient {
 
   String? loggedOutToken;
   String? deletedToken;
+  bool failLogout = false;
 
   @override
   Future<PhoneCodeChallenge> requestPhoneCode(String phone) async {
@@ -139,6 +162,12 @@ class _FakeAccountApiClient extends AccountApiClient {
 
   @override
   Future<void> logout(String token) async {
+    if (failLogout) {
+      throw const AccountApiException(
+        '/auth/logout failed: network_error',
+        <String, Object?>{},
+      );
+    }
     loggedOutToken = token;
   }
 
