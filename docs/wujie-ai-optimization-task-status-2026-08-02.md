@@ -34,7 +34,7 @@ UI、TTS 和 Agent 架构改动混在同一回归里。
 | 7 | `OPT-LLM-001/002` + `OPT-TERM-001` 受控纠错 | in_progress | 独立未见控制集证明有修复、零错短句不变、数字/拉丁实体无新增错误，并记录 revision 到达时间 |
 | 8 | `OPT-UI-001~005` 长会话、连接状态与发布呈现 | code-ready/in_progress；真机横屏、120段长记录、连接/余额 live-region、最新 pending 单提醒、partial 降噪和iOS深色协议页已通过 | 用户实体机完成一次VoiceOver耳听焦点抽查；最终生产Profile/Release截图与20次冷启动另门验收 |
 | 9 | `OPT-UI-007` “我的”发布身份 | in_progress；真机页面、测试bundle和Dart define身份一致，不显示内部地址；账号返回刷新CPU回归通过 | 用真实账号完成登录/退出/注销后返回刷新；最终Profile页面、bundle和诊断版本一致 |
-| 10 | `OPT-IOS-001/002` 最终iOS发布门 | in_progress/todo | 统一Profile/Release独立安装，核对页面、bundle和诊断身份并完成20次桌面冷启动与崩溃归档 |
+| 10 | `OPT-IOS-001/002` 最终iOS发布门 | in_progress/todo；锁屏fail-fast、30秒设备超时和一次受控重试已通过 | 统一Profile/Release独立安装，核对页面、bundle和诊断身份并完成20次桌面冷启动与崩溃归档 |
 
 ## 暂不进入当前冲刺
 
