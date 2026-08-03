@@ -122,7 +122,7 @@ VoxCPM2 真流式 TTS 和 P2-A3 可观测性；逐项状态见架构任务计划
 - `OPT-UI-001`：代码和自动化门禁完成；`idle/connecting/active/paused/ending/ended/failed` 只展示当前可执行操作，主操作固定在同一槽位，连接中可取消且迟到 session 不会恢复同传。`translation.failed` 只进入状态诊断、恢复入口和结构化元数据，不再作为译文写入实时字幕、历史或导出；原文继续保留。iPhone/Android 真机布局与点击体验验收待执行。
 - `OPT-UI-002`：代码和自动化门禁完成；字幕区移除固定 420dp 高度并占满剩余空间，最后一段标记当前句，译文 final 前显示 pending，动态高度字幕可自动跟随并在用户上滑后提供回到底部。长会话中字幕内容按 segment id 保持语义节点稳定，每段原文/译文只读一次；只有最新 pending 使用简短 live-region，历史 pending 和同段 partial 扩写不抢读。iPhone/Android 真机小屏、横屏、200% 字体及读屏长稳验收待执行。
 - `OPT-UI-003`：`in_progress（代码完成，真机验收待执行）`。同传设置按使用模式、运行模式、语言与行业、声音分组；运行中真实禁用不可修改控件并显示原因，提供“结束后修改”动作，主页面自动朗读快捷键仍可用。
-- `OPT-UI-004`：`in_progress（代码完成，真机验收待执行）`。新增浅色/深色设计 Token，区分主操作、错误和提醒色；卡片和 segmented control 统一8px圆角，字幕与核心控制保留 Semantics。连接断开、重连、恢复及低余额状态已统一为本地化 live-region；字幕 pending 已限制为仅最新段简短提醒，不再合并并重复抢读 partial 内容。320dp/200%字体组合回归通过；仍等待深色和 VoiceOver/TalkBack 真机验收。
+- `OPT-UI-004`：`in_progress（iOS VoiceOver 人工耳听通过，Android 后置）`。新增浅色/深色设计 Token，区分主操作、错误和提醒色；卡片和 segmented control 统一8px圆角，字幕与核心控制保留 Semantics。连接断开、重连、恢复及低余额状态已统一为本地化 live-region；字幕 pending 已限制为仅最新段简短提醒，不再合并并重复抢读 partial 内容。320dp/200%字体组合回归通过；iPhone 14 Pro 在隔离 current-commit Release 包中确认语义桥和辅助导航开启，用户于实体屏幕完成 VoiceOver 全屏耳听并确认内容准确。该结果不替代最终生产 Profile/Release 门；Android TalkBack 按当前里程碑后置。
 - `OPT-UI-005`：`in_progress（截图链路完成，最终素材待生成）`。现有真实 App 截图脚本和发布门禁保留；最终素材必须从统一 Profile/Release 构建分别生成，不接受 Debug 标识或测试占位图。
 - `OPT-SPK-001`：统一 contract、Call Link participant track、Session Repository、字幕、历史、review 和导出代码完成；真实双端角色归属验收待执行。
 - `OPT-SPK-002`：Streaming Sortformer 已在 Beelink 以正式 `provider=sortformer/mode=active` 部署，HTTP Provider、ASR 并行旁路、时间对齐、故障降级和固定双声源测试通过；抢话、重叠、四人和正式真人 RTTM 门禁仍待执行。
@@ -170,8 +170,8 @@ VoxCPM2 真流式 TTS 和 P2-A3 可观测性；逐项状态见架构任务计划
 
 当前说话人链关键路径：`部署遗留会话恢复 -> 断网 End 新文案复验 -> SPK-008-A 真人多人/混合语种`。服务器发布单元、Mac 停机和双人链路已验证；短轮次矩阵失败项不能通过放宽 DER 门槛结项。
 
-2026-08-03 在“禁止使用GPU”的当前合同下，`OPT-UI-007`隔离账号返回已经通过，执行顺序调整为：
-`VoiceOver人工耳听 -> iOS最终发布门`；模型、speaker、尾句和endpoint
+2026-08-03 在“禁止使用GPU”的当前合同下，`OPT-UI-007`隔离账号返回和 iPhone VoiceOver 人工耳听已经通过，下一项为
+`iOS最终发布门`；模型、speaker、尾句和endpoint
 任务保持冻结，不据此改写其原排期。完整不超过
 10项的执行视图见 `docs/wujie-ai-optimization-task-status-2026-08-02.md`。
 
@@ -190,7 +190,7 @@ VoxCPM2 真流式 TTS 和 P2-A3 可观测性；逐项状态见架构任务计划
 “搜索”立即执行，关闭搜索或页面销毁会取消待发Timer，避免逐字请求和退出后的迟到查询。
 2026-08-02真机已通过120段记录、四入口、四层搜索、300ms请求合并、键盘提交、加载态、
 新旧响应顺序、返回查询保持、横屏和语义顺序；Markdown/TXT/JSON/CSV真实iOS系统分享面板4/4
-通过且文件已拉回核验。完整VoiceOver人工耳听仍归`OPT-UI-004`，不作为本任务重复门。
+通过且文件已拉回核验。完整VoiceOver人工耳听已在`OPT-UI-004`通过，不作为本任务重复门。
 
 `OPT-UI-007` 当前为 `in_progress（发布身份真机和隔离真实API账号返回通过，最终Profile身份待验收）`：页面显示 App 名、
 版本、构建号和区域版状态且不暴露内部地址；Profile 构建合同
