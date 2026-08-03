@@ -32,6 +32,20 @@ describe("iOS profile install contract", () => {
     );
   });
 
+  it("fails fast when the iPhone is locked and bounds device commands", () => {
+    expect(installScript).toContain(
+      'DEVICE_COMMAND_TIMEOUT_SECONDS="${DEVICE_COMMAND_TIMEOUT_SECONDS:-30}"',
+    );
+    expect(installScript).toContain(
+      'DEVICE_COMMAND_ATTEMPTS="${DEVICE_COMMAND_ATTEMPTS:-2}"',
+    );
+    expect(installScript).toContain("device info lockState");
+    expect(installScript).toContain("result.passcodeRequired");
+    expect(installScript).toContain("iPhone must be unlocked");
+    expect(installScript.match(/if ! require_unlocked_device/g)).toHaveLength(2);
+    expect(installScript).toContain('--timeout "$DEVICE_COMMAND_TIMEOUT_SECONDS"');
+  });
+
   it("uses one release identity for the bundle and Dart UI", () => {
     expect(installScript).toContain(
       'APP_VERSION="${APP_VERSION:-$PUBSPEC_APP_VERSION}"',

@@ -4,19 +4,47 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 MOBILE_DIR="$ROOT_DIR/apps/mobile"
 APP_PATH="$MOBILE_DIR/build/ios/iphoneos/Runner.app"
+DEVICE_COMMAND_TIMEOUT_SECONDS="${DEVICE_COMMAND_TIMEOUT_SECONDS:-30}"
+DEVICE_COMMAND_ATTEMPTS="${DEVICE_COMMAND_ATTEMPTS:-2}"
 
 run_device_command() {
   local attempt
-  for attempt in 1 2 3; do
+  for ((attempt = 1; attempt <= DEVICE_COMMAND_ATTEMPTS; attempt++)); do
     if "$@"; then
       return 0
     fi
-    if [[ "$attempt" -lt 3 ]]; then
-      echo "Device connection failed (attempt $attempt/3); retrying..." >&2
+    if [[ "$attempt" -lt "$DEVICE_COMMAND_ATTEMPTS" ]]; then
+      echo "Device connection failed (attempt $attempt/$DEVICE_COMMAND_ATTEMPTS); retrying..." >&2
       sleep 3
     fi
   done
   return 1
+}
+
+require_unlocked_device() {
+  local lock_state_json passcode_required
+  lock_state_json="$(mktemp "${TMPDIR:-/tmp}/wujie-ai-ios-lock-state.XXXXXX")"
+  if ! run_device_command xcrun devicectl device info lockState \
+    --device "$DEVICE_ID" \
+    --timeout "$DEVICE_COMMAND_TIMEOUT_SECONDS" \
+    --json-output "$lock_state_json" >/dev/null; then
+    rm -f "$lock_state_json"
+    echo "Unable to verify the iPhone lock state." >&2
+    return 1
+  fi
+  if ! passcode_required="$(
+    /usr/bin/plutil -extract result.passcodeRequired raw -o - \
+      "$lock_state_json" 2>/dev/null
+  )"; then
+    rm -f "$lock_state_json"
+    echo "Unable to read the iPhone lock state." >&2
+    return 1
+  fi
+  rm -f "$lock_state_json"
+  if [[ "$passcode_required" != "false" ]]; then
+    echo "iPhone must be unlocked before building or installing the Profile App." >&2
+    return 1
+  fi
 }
 
 DEVICE_ID="${DEVICE_ID:-}"
@@ -51,6 +79,15 @@ if [[ ! "$BUILD_NUMBER" =~ ^[0-9]+$ ]]; then
   echo "BUILD_NUMBER must contain digits only." >&2
   exit 2
 fi
+if [[ ! "$DEVICE_COMMAND_TIMEOUT_SECONDS" =~ ^[1-9][0-9]*$ ]] ||
+  ((DEVICE_COMMAND_TIMEOUT_SECONDS < 5 || DEVICE_COMMAND_TIMEOUT_SECONDS > 120)); then
+  echo "DEVICE_COMMAND_TIMEOUT_SECONDS must be between 5 and 120." >&2
+  exit 2
+fi
+if [[ ! "$DEVICE_COMMAND_ATTEMPTS" =~ ^[1-3]$ ]]; then
+  echo "DEVICE_COMMAND_ATTEMPTS must be between 1 and 3." >&2
+  exit 2
+fi
 case "$REALTIME_MODE" in
   conversation|meeting|classroom|business) ;;
   *)
@@ -65,6 +102,10 @@ case "$SERVER_BASE_URL" in
     exit 2
     ;;
 esac
+
+if ! require_unlocked_device; then
+  exit 2
+fi
 
 if ! curl --noproxy '*' --fail --silent --show-error \
   --connect-timeout 3 \
@@ -121,11 +162,17 @@ if [[ -z "$BUNDLE_ID" ]]; then
   exit 1
 fi
 
+if ! require_unlocked_device; then
+  exit 2
+fi
+
 run_device_command xcrun devicectl device install app \
   --device "$DEVICE_ID" \
+  --timeout "$DEVICE_COMMAND_TIMEOUT_SECONDS" \
   "$APP_PATH"
 run_device_command xcrun devicectl device process launch \
   --device "$DEVICE_ID" \
+  --timeout "$DEVICE_COMMAND_TIMEOUT_SECONDS" \
   --terminate-existing \
   "$BUNDLE_ID"
 
