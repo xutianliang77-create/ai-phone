@@ -231,7 +231,10 @@ class _FakeOcrProvider implements MobileOcrProvider {
   Future<void> dispose() async {}
 
   @override
-  Future<MobileOcrResult?> recognizeImage(String imagePath) async {
+  Future<MobileOcrResult?> recognizeImage(
+    String imagePath, {
+    List<String>? preferredScripts,
+  }) async {
     return MobileOcrResult(
       text: text,
       provider: 'fake',

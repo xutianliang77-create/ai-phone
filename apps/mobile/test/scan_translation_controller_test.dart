@@ -74,6 +74,42 @@ void main() {
     expect(translator.lastTargetLanguage, isNull);
   });
 
+  test('prioritizes the likely source script from the selected target',
+      () async {
+    final englishSourceOcr = _RecordingOcrProvider('Welcome');
+    final toChinese = ScanTranslationController(
+      ocrProvider: englishSourceOcr,
+      translationProvider: _FakeTranslationProvider(),
+      pickImagePath: (_) async => _picked('/tmp/menu.jpg'),
+      historyRepository: _FakeSessionHistoryRepository(),
+    );
+    toChinese.setTargetLanguage('zh');
+
+    await toChinese.selectImage(ScanImageSource.gallery);
+    await toChinese.recognizeSelectedImage();
+
+    expect(
+      englishSourceOcr.lastPreferredScripts,
+      <String>['latin', 'chinese'],
+    );
+
+    final chineseSourceOcr = _RecordingOcrProvider('菜单');
+    final toEnglish = ScanTranslationController(
+      ocrProvider: chineseSourceOcr,
+      translationProvider: _FakeTranslationProvider(),
+      pickImagePath: (_) async => _picked('/tmp/menu.jpg'),
+      historyRepository: _FakeSessionHistoryRepository(),
+    );
+
+    await toEnglish.selectImage(ScanImageSource.gallery);
+    await toEnglish.recognizeSelectedImage();
+
+    expect(
+      chineseSourceOcr.lastPreferredScripts,
+      <String>['chinese', 'latin'],
+    );
+  });
+
   test('keeps a completed translation when the target is unchanged', () async {
     final controller = ScanTranslationController(
       ocrProvider: const _FakeOcrProvider('你好'),
@@ -282,7 +318,10 @@ class _FakeOcrProvider implements MobileOcrProvider {
   Future<void> dispose() async {}
 
   @override
-  Future<MobileOcrResult?> recognizeImage(String imagePath) async {
+  Future<MobileOcrResult?> recognizeImage(
+    String imagePath, {
+    List<String>? preferredScripts,
+  }) async {
     return MobileOcrResult(
       text: text,
       provider: 'fake',
@@ -298,6 +337,25 @@ class _FakeOcrProvider implements MobileOcrProvider {
               ),
             ],
     );
+  }
+}
+
+class _RecordingOcrProvider implements MobileOcrProvider {
+  _RecordingOcrProvider(this.text);
+
+  final String text;
+  List<String>? lastPreferredScripts;
+
+  @override
+  Future<void> dispose() async {}
+
+  @override
+  Future<MobileOcrResult?> recognizeImage(
+    String imagePath, {
+    List<String>? preferredScripts,
+  }) async {
+    lastPreferredScripts = preferredScripts;
+    return MobileOcrResult(text: text, provider: 'recording');
   }
 }
 

@@ -14,24 +14,36 @@ class PlatformOcrProvider implements MobileOcrProvider {
   final List<String> scripts;
 
   @override
-  Future<MobileOcrResult?> recognizeImage(String imagePath) async {
+  Future<MobileOcrResult?> recognizeImage(
+    String imagePath, {
+    List<String>? preferredScripts,
+  }) async {
+    final effectiveScripts = _effectiveScripts(preferredScripts);
     final result = await _channel.invokeMapMethod<String, Object?>(
       'recognizeImage',
       <String, Object?>{
         'imagePath': imagePath,
-        'scripts': scripts,
+        'scripts': effectiveScripts,
       },
     );
     return MobileOcrResult(
       text: (result?['text'] as String? ?? '').trim(),
       provider: result?['provider'] as String? ?? 'platform_ocr',
-      scripts: _stringList(result?['scripts']) ?? scripts,
+      scripts: _stringList(result?['scripts']) ?? effectiveScripts,
       blocks: _blocks(result?['blocks']),
     );
   }
 
   @override
   Future<void> dispose() async {}
+
+  List<String> _effectiveScripts(List<String>? preferredScripts) {
+    final preferred = preferredScripts
+        ?.where((script) => script == 'chinese' || script == 'latin')
+        .toSet()
+        .toList(growable: false);
+    return preferred == null || preferred.isEmpty ? scripts : preferred;
+  }
 
   List<String>? _stringList(Object? value) {
     if (value is! List) return null;

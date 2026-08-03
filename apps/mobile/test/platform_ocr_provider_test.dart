@@ -41,4 +41,32 @@ void main() {
     expect(result?.blocks.single.width, 0.5);
     expect(result?.blocks.single.height, 0.1);
   });
+
+  test('forwards an explicit OCR script priority to the native bridge',
+      () async {
+    Object? sentArguments;
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (call) async {
+      sentArguments = call.arguments;
+      return <String, Object?>{
+        'text': 'MARKET MENU',
+        'provider': 'ios_vision',
+        'scripts': <String>['latin', 'chinese'],
+      };
+    });
+
+    final result = await PlatformOcrProvider().recognizeImage(
+      '/tmp/menu.png',
+      preferredScripts: const <String>['latin', 'chinese'],
+    );
+
+    expect(
+      sentArguments,
+      <String, Object?>{
+        'imagePath': '/tmp/menu.png',
+        'scripts': <String>['latin', 'chinese'],
+      },
+    );
+    expect(result?.scripts, <String>['latin', 'chinese']);
+  });
 }

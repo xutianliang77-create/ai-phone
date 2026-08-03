@@ -146,7 +146,12 @@ class ScanTranslationController extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final result = await _ocrProvider.recognizeImage(path);
+      final result = await _ocrProvider.recognizeImage(
+        path,
+        preferredScripts: targetLanguage == 'zh'
+            ? const <String>['latin', 'chinese']
+            : const <String>['chinese', 'latin'],
+      );
       recognizedText = normalizeScanTranslationEntities(
         result?.text.trim() ?? '',
       );

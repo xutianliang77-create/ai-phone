@@ -29,7 +29,10 @@ class MobileOcrBlock {
 }
 
 abstract interface class MobileOcrProvider {
-  Future<MobileOcrResult?> recognizeImage(String imagePath);
+  Future<MobileOcrResult?> recognizeImage(
+    String imagePath, {
+    List<String>? preferredScripts,
+  });
 
   Future<void> dispose() async {}
 }
