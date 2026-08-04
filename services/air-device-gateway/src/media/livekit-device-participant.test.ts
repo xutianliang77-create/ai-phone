@@ -1,0 +1,220 @@
+import { describe, expect, it, vi } from "vitest";
+import {
+  AirDeviceLiveKitParticipant,
+  airDeviceParticipantProfile,
+} from "./livekit-device-participant.js";
+
+describe("Air device LiveKit guest participant", () => {
+  it("keeps the existing host/guest/worker model with explicit Air attributes", () => {
+    expect(airDeviceParticipantProfile({
+      communicationSessionId: "session-1",
+      deviceId: "air-001",
+      leaseId: "lease-1",
+      callGeneration: 3,
+    })).toEqual({
+      identity: "session-1:guest:air:air-001",
+      attributes: {
+        "ai.phone.call_id": "session-1",
+        "ai.phone.communication_session_id": "session-1",
+        "ai.phone.participant_role": "guest",
+        "ai.phone.transport": "air780",
+        "ai.phone.device_id": "air-001",
+        "ai.phone.lease_id": "lease-1",
+        "ai.phone.call_generation": "3",
+      },
+    });
+  });
+
+  it("publishes only device downlink and subscribes only to exact target TTS", async () => {
+    const room = {
+      connect: vi.fn().mockResolvedValue(undefined),
+      publishPcmTrack: vi.fn().mockResolvedValue(undefined),
+      setSubscribed: vi.fn().mockResolvedValue(undefined),
+    };
+    const participant = new AirDeviceLiveKitParticipant({
+      room,
+      communicationSessionId: "session-1",
+      deviceId: "air-001",
+      leaseId: "lease-1",
+      callGeneration: 3,
+      token: "signed-token",
+      wsUrl: "wss://livekit.example.cn",
+    });
+    await participant.connect();
+    await participant.publishDownlink(new Int16Array(160), 8_000);
+    await participant.handleRemoteTrack({
+      sid: "raw-host",
+      name: "host-microphone",
+      publisherIdentity: "session-1:host:app",
+    });
+    const target = Buffer.from("session-1:guest:air:air-001").toString("base64url");
+    await participant.handleRemoteTrack({
+      sid: "tts-guest",
+      name: `translation-tts-guest-24000.${target}`,
+      publisherIdentity: "session-1:worker:translation",
+      admission: {
+        trackSid: "tts-guest",
+        trackName: `translation-tts-guest-24000.${target}`,
+        publisherIdentity: "session-1:worker:translation",
+        communicationSessionId: "session-1",
+        targetParticipantIdentity: "session-1:guest:air:air-001",
+        deviceId: "air-001",
+        leaseId: "lease-1",
+        callGeneration: 3,
+      },
+    });
+
+    expect(room.connect).toHaveBeenCalledWith(
+      "wss://livekit.example.cn",
+      "signed-token",
+      { autoSubscribe: false },
+    );
+    expect(room.publishPcmTrack).toHaveBeenCalledWith(
+      "air780-downlink-air-001",
+      expect.any(Int16Array),
+      8_000,
+    );
+    expect(room.setSubscribed).toHaveBeenNthCalledWith(1, "raw-host", false);
+    expect(room.setSubscribed).toHaveBeenNthCalledWith(2, "tts-guest", true);
+  });
+
+  it.each([
+    {
+      label: "cross-session publisher",
+      publisherIdentity: "session-2:worker:translation",
+      admission: {
+        trackSid: "forged-track",
+        trackName: "translation-tts-guest-24000.c2Vzc2lvbi0xOmd1ZXN0OmFpcjphaXItMDAx",
+        publisherIdentity: "session-2:worker:translation",
+        communicationSessionId: "session-1",
+        targetParticipantIdentity: "session-1:guest:air:air-001",
+        deviceId: "air-001",
+        leaseId: "lease-1",
+        callGeneration: 3,
+      },
+    },
+    {
+      label: "old lease",
+      publisherIdentity: "session-1:worker:translation",
+      admission: {
+        trackSid: "forged-track",
+        trackName: "translation-tts-guest-24000.c2Vzc2lvbi0xOmd1ZXN0OmFpcjphaXItMDAx",
+        publisherIdentity: "session-1:worker:translation",
+        communicationSessionId: "session-1",
+        targetParticipantIdentity: "session-1:guest:air:air-001",
+        deviceId: "air-001",
+        leaseId: "lease-old",
+        callGeneration: 3,
+      },
+    },
+    {
+      label: "old generation",
+      publisherIdentity: "session-1:worker:translation",
+      admission: {
+        trackSid: "forged-track",
+        trackName: "translation-tts-guest-24000.c2Vzc2lvbi0xOmd1ZXN0OmFpcjphaXItMDAx",
+        publisherIdentity: "session-1:worker:translation",
+        communicationSessionId: "session-1",
+        targetParticipantIdentity: "session-1:guest:air:air-001",
+        deviceId: "air-001",
+        leaseId: "lease-1",
+        callGeneration: 2,
+      },
+    },
+    {
+      label: "cross-device admission",
+      publisherIdentity: "session-1:worker:translation",
+      admission: {
+        trackSid: "forged-track",
+        trackName: "translation-tts-guest-24000.c2Vzc2lvbi0xOmd1ZXN0OmFpcjphaXItMDAx",
+        publisherIdentity: "session-1:worker:translation",
+        communicationSessionId: "session-1",
+        targetParticipantIdentity: "session-1:guest:air:air-001",
+        deviceId: "air-002",
+        leaseId: "lease-1",
+        callGeneration: 3,
+      },
+    },
+    {
+      label: "missing server admission",
+      publisherIdentity: "session-1:worker:translation",
+      admission: undefined,
+    },
+    {
+      label: "admission replayed for another track",
+      publisherIdentity: "session-1:worker:translation",
+      admission: {
+        trackSid: "previous-track",
+        trackName: "translation-tts-guest-24000.c2Vzc2lvbi0xOmd1ZXN0OmFpcjphaXItMDAx",
+        publisherIdentity: "session-1:worker:translation",
+        communicationSessionId: "session-1",
+        targetParticipantIdentity: "session-1:guest:air:air-001",
+        deviceId: "air-001",
+        leaseId: "lease-1",
+        callGeneration: 3,
+      },
+    },
+  ])("rejects $label even when the target track name is forged", async (input) => {
+    const setSubscribed = vi.fn().mockResolvedValue(undefined);
+    const participant = new AirDeviceLiveKitParticipant({
+      room: {
+        connect: vi.fn().mockResolvedValue(undefined),
+        publishPcmTrack: vi.fn().mockResolvedValue(undefined),
+        setSubscribed,
+      },
+      communicationSessionId: "session-1",
+      deviceId: "air-001",
+      leaseId: "lease-1",
+      callGeneration: 3,
+      token: "signed-token",
+      wsUrl: "wss://livekit.example.cn",
+    });
+    const target = Buffer.from("session-1:guest:air:air-001").toString("base64url");
+
+    await participant.handleRemoteTrack({
+      sid: "forged-track",
+      name: `translation-tts-guest-24000.${target}`,
+      publisherIdentity: input.publisherIdentity,
+      admission: input.admission,
+    });
+
+    expect(setSubscribed).toHaveBeenCalledWith("forged-track", false);
+  });
+
+  it("keeps autoSubscribe false and raw audio denied across reconnects", async () => {
+    const room = {
+      connect: vi.fn().mockResolvedValue(undefined),
+      publishPcmTrack: vi.fn().mockResolvedValue(undefined),
+      setSubscribed: vi.fn().mockResolvedValue(undefined),
+    };
+    const participant = new AirDeviceLiveKitParticipant({
+      room,
+      communicationSessionId: "session-1",
+      deviceId: "air-001",
+      leaseId: "lease-1",
+      callGeneration: 3,
+      token: "signed-token",
+      wsUrl: "wss://livekit.example.cn",
+    });
+
+    await participant.connect();
+    await participant.connect();
+    await participant.handleRemoteTrack({
+      sid: "raw-after-reconnect",
+      name: "air780-downlink-other-device",
+      publisherIdentity: "session-1:guest:air:air-002",
+    });
+
+    expect(room.connect).toHaveBeenCalledTimes(2);
+    expect(room.connect).toHaveBeenNthCalledWith(
+      2,
+      "wss://livekit.example.cn",
+      "signed-token",
+      { autoSubscribe: false },
+    );
+    expect(room.setSubscribed).toHaveBeenCalledWith(
+      "raw-after-reconnect",
+      false,
+    );
+  });
+});

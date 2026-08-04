@@ -2,6 +2,7 @@ import type { ExternalMediaProviderJob } from "./ingress.js";
 
 export type CommunicationProvider =
   | "livekit"
+  | "air780_volte"
   | "livekit_sip"
   | "livekit_dispatch"
   | "livekit_egress"
@@ -14,6 +15,7 @@ export type ProviderCapability =
   | "room"
   | "publish_audio"
   | "subscribe_audio"
+  | "phone_outbound"
   | "sip_inbound"
   | "sip_outbound"
   | "dtmf"
@@ -62,6 +64,7 @@ export interface ProviderAdapterFailure {
   retryable: boolean;
   reconciliationRequired: boolean;
   externalOperationId?: string;
+  externalResourceId?: string;
 }
 
 export type ProviderAdapterResult<TResult = unknown> =
@@ -80,7 +83,8 @@ export interface MediaRoomProvider {
   ): Promise<ProviderAdapterResult<{ roomName: string }>>;
 }
 
-export interface TelephonyProvider {
+/** Compatibility boundary for the existing LiveKit SIP participant path. */
+export interface SipParticipantProvider {
   createParticipant(
     request: ProviderAdapterRequest<{
       roomName: string;

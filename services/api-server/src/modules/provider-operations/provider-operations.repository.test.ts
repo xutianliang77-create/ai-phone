@@ -77,6 +77,33 @@ describe("provider operations repository", () => {
     expect(conflict.status).toBe("external_id_conflict");
     expect(conflict.operation.status).toBe("accepted");
   });
+
+  it("requires reconciliation after a phone dial timeout and blocks a second dial", () => {
+    const first = beginProviderOperation({
+      ...operationInput(),
+      provider: "air780_volte",
+      operationType: "phone_outbound",
+      idempotencyKey: "phone-outbound:session-1",
+    }).operation;
+    expect(updateProviderOperation({
+      operationId: first.id,
+      status: "unknown",
+      expectedVersion: first.version,
+      errorClass: "timeout",
+    })).toMatchObject({ status: "updated", operation: { status: "unknown" } });
+
+    const retry = beginProviderOperation({
+      ...operationInput(),
+      provider: "air780_volte",
+      operationType: "phone_outbound",
+      idempotencyKey: "phone-outbound:session-1:retry",
+    });
+    expect(retry).toMatchObject({
+      status: "session_conflict",
+      operation: { id: first.id, status: "unknown" },
+    });
+    expect(getStoreSnapshot().providerOperations).toHaveLength(1);
+  });
 });
 
 function operationInput(overrides = {}) {

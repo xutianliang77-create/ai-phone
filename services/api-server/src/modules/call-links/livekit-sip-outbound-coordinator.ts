@@ -1,7 +1,7 @@
 import { createHmac } from "node:crypto";
 import type {
   CreateSipOutboundCallRequest,
-  TelephonyProvider,
+  SipParticipantProvider,
 } from "@translation/contracts";
 import {
   beginProviderOperation,
@@ -15,7 +15,7 @@ import { LiveKitSipProviderAdapter } from "./livekit-sip-provider-adapter.js";
 import { liveKitSipParticipantIdentity } from "./livekit-sip-identity.js";
 import type { LiveKitSipConfig } from "./livekit-sip-readiness.js";
 
-type ProviderFactory = (config: LiveKitSipConfig) => TelephonyProvider;
+type ProviderFactory = (config: LiveKitSipConfig) => SipParticipantProvider;
 let testProviderFactory: ProviderFactory | null = null;
 
 export function setLiveKitSipOutboundProviderFactoryForTests(

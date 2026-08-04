@@ -1,0 +1,92 @@
+test_id,gate,evidence_level,scenario,repetitions,pass_criteria,blocking,current_status
+AIR-G0-001,Gate0A,H2,冻结Air8780V4 V2046-113 CORE和诊断007 SHA,1,身份和哈希完整且可复现,yes,passed_h2
+AIR-G0-002,Gate0B,H2,核验连续PCM注入合同和有限RAW zbuff PoC,1,EXT_SRC_DONE refill underrun stop clear语义明确,yes,blocked
+AIR-G0-003,Gate0A,H2,cc.record电话上下行双缓冲,1,两路均非空且方向可区分,yes,passed_h2
+AIR-G0-004,Gate0A,H2,cc.quality窄带8k附加profile,5,返回值和实际采样率一致,no,planned
+AIR-G0-005,Gate0A,H2,cc.quality宽带16k,1,返回值和实际采样率一致,yes,passed_h2
+AIR-G0-006,Gate0B,H2,8k PCM16LE 1kHz注入,5,频率误差<=1%且无错速,yes,planned
+AIR-G0-007,Gate0B,H2,16k PCM16LE 1kHz注入,5,频率误差<=1%且无错速,yes,planned
+AIR-G0-008,Gate0B,H2,300至3400Hz扫频,3,无明显截断爆音且证据可对齐,yes,planned
+AIR-G0-009,Gate0B,H2,中文英文和混说人声,20,对端可懂且无旧缓冲重复,yes,planned
+AIR-G0-010,Gate0B,H2,静音和低幅噪声,5,无自激无旧音频无持续爆音,yes,planned
+AIR-G0-011,Gate0B,H2,连续30分钟上行注入,1,0崩溃0卡死且队列RAM不线性增长,yes,planned
+AIR-G0-012,Gate0B,H2,500次start stop,500,500个确定终态且旧音频0帧,yes,planned
+AIR-G0-013,Gate0B,H2,播放中clear,100,P95<=300ms且旧音频0帧,yes,planned
+AIR-G0-014,Gate0B,H2,故意造成buffer underrun,20,可观测且恢复不重复旧帧,yes,planned
+AIR-G0-015,Gate0B,H2,USB VUART拔插重连,20,旧lease和fence全部失效且不重拨,yes,planned
+AIR-G0-016,Gate0B,H2,呼出生命周期与注入门禁,20,拨号振铃接通挂断事件单调,yes,planned
+AIR-G0-017,Gate0B,H2,呼入生命周期与注入门禁,20,来电接通挂断事件单调,yes,planned
+AIR-G0-018,Gate0B,H2,对端挂断时停止注入,20,模块事件和音频在确定时间内结束,yes,planned
+AIR-G0-019,Gate0B,H2,本端挂断时清理注入,20,停止注入并清空所有buffer,yes,planned
+AIR-G0-020,Gate0B,H2,ESP32 ES8388模拟音频桥,1,数字路径失败时质量成本长稳满足总计划,yes,not_run
+AIR-G0A-021,Gate0A,H2,真实电信10000 VoLTE COUNT_ONLY 59.542秒,1,上下行各297回调且199至201ms空回调丢帧队列均0,yes,passed_h2
+AIR-G0A-022,Gate0A,H2,原始PCM USB VUART双向15.359秒,1,每路76帧486400字节sequence gap为0且写错误0,yes,passed_h2
+AIR-G0A-023,Gate0A,H2,外部看门狗空闲449.99秒,1,feed 45至90且无重启无USB重枚举,yes,passed_h2
+AIR-G1-001,Gate1,H0,VUART golden frame,10,Node编码解码一致,yes,passed_h0
+AIR-G1-002,Gate1,H0,CRC错误帧,20,进入状态机前100%拒绝,yes,passed_h0
+AIR-G1-003,Gate1,H1,sequence gap,20,gap计数并补静音且不重传,yes,planned
+AIR-G1-004,Gate1,H1,重复音频帧,20,不重复播放,yes,planned
+AIR-G1-005,Gate1,H1,乱序迟到音频帧,20,旧帧丢弃且指标增加,yes,planned
+AIR-G1-006,Gate1,H1,重复控制commandId,100,副作用恰好一次,yes,passed_h0
+AIR-G1-007,Gate1,H1,相同commandId不同payload,20,冲突拒绝并报警,yes,passed_h0
+AIR-G1-008,Gate1,H1,stale fencing token,100,dial hangup DTMF PCM全部拒绝,yes,passed_h0
+AIR-G1-009,Gate1,H2,双向16k吞吐,1,控制心跳正常且吞吐余量>=2倍,yes,planned
+AIR-G1-010,Gate1,H2,backpressure和队列上限,20,无无限增长且drop可观测,yes,planned
+AIR-G1-011,Gate1,H2,firmware restart,20,设备进入确定终态且不重拨,yes,planned
+AIR-G1-012,Gate1,H4,真实拨号控制循环,100,0重复拨号0悬挂call和lease,yes,planned
+AIR-G2-001,Gate2,H1,设备注册和heartbeat,20,能力固件和时间正确保存,yes,passed_h0
+AIR-G2-002,Gate2,H3,双请求并发claim同一设备,100,只有一个CAS成功,yes,planned
+AIR-G2-003,Gate2,H1,同session重复claim,100,返回同一lease,yes,passed_h0
+AIR-G2-004,Gate2,H3,lease renew与expiry,50,版本和expiresAt单调,yes,planned
+AIR-G2-005,Gate2,H3,heartbeat过期quarantine,20,不立即复用给第二通电话,yes,planned
+AIR-G2-006,Gate2,H3,Gateway崩溃恢复,20,新实例恢复且旧fence失效,yes,planned
+AIR-G2-007,Gate2,H3,API PostgreSQL重启,20,session lease operation无丢失,yes,planned
+AIR-G2-008,Gate2,H3,provider timeout后reconcile,20,不产生第二通电话,yes,planned
+AIR-G2-009,Gate2,H1,Air guest token绑定,20,session device lease不匹配均拒绝,yes,passed_h0
+AIR-G2-010,Gate2,H1,日志和trace脱敏,1,无明文号码ICCID IMEI token音频正文,yes,planned
+AIR-G3-001,Gate3,H2,Air guest角色和transport属性,10,host guest worker模型保持一致,yes,passed_h0
+AIR-G3-002,Gate3,H2,Gateway autoSubscribe false,10,连接时默认不订阅任何远端轨,yes,passed_h0
+AIR-G3-003,Gate3,H3,App原声到Air,20,Air实际收帧0,yes,planned
+AIR-G3-004,Gate3,H3,Air电话下行到App,20,App实际收帧0,yes,planned
+AIR-G3-005,Gate3,H3,Worker订阅两条原声,20,两方向ASR输入均完整,yes,planned
+AIR-G3-006,Gate3,H3,guest目标TTS,20,仅精确Air leg收到译音,yes,passed_h0
+AIR-G3-007,Gate3,H3,host目标TTS,20,仅精确App leg收到译音,yes,planned
+AIR-G3-008,Gate3,H3,非目标TTS和伪造track,50,端点实际收帧0,yes,passed_h0
+AIR-G3-009,Gate3,H3,token过期篡改和旧lease,50,全部拒绝,yes,planned
+AIR-G3-010,Gate3,H3,LiveKit reconnect后重新授权,20,权限不扩大且旧轨不恢复,yes,planned
+AIR-G3-011,Gate3,H3,媒体隔离30分钟,1,raw leak错向TTS旧generation均0帧,yes,planned
+AIR-G4-001,Gate4,H4,人工翻译正常接听,20,双向字幕译音挂断结算闭环,yes,planned
+AIR-G4-002,Gate4,H4,中英双向与混说,40,final译文比例>=99%且双方可懂,yes,planned
+AIR-G4-003,Gate4,H4,忙线,20,确定终态且计费0,yes,planned
+AIR-G4-004,Gate4,H4,无人接,20,确定终态且计费0,yes,planned
+AIR-G4-005,Gate4,H4,拒接与无效号码,20,无悬挂资源且计费0,yes,planned
+AIR-G4-006,Gate4,H4,App在dialing或ringing取消,20,只挂断一次且无接通计费,yes,planned
+AIR-G4-007,Gate4,H4,对端挂断,20,媒体Worker lease hold全部释放,yes,planned
+AIR-G4-008,Gate4,H4,网络切换和LiveKit重连,20,不重拨且媒体恢复或明确失败,yes,planned
+AIR-G4-009,Gate4,H4,ASR MT TTS timeout,30,按stage降级且挂断结算可用,yes,planned
+AIR-G4-010,Gate4,H4,人工电话60分钟,1,0崩溃0不可恢复断线0线性增长,yes,planned
+AIR-G4-011,Gate4,H4,回答时间和唯一结算,50,每通恰好一条settle且时长一致,yes,planned
+AIR-G4-012,Gate4,H4,真实拨号全旅程,100,0重复0悬挂且100个确定终态,yes,planned
+AIR-G5-001,Gate5,H4,AI开场披露和同意,20,对方拒绝后立即退出,yes,planned
+AIR-G5-002,Gate5,H4,任务授权allowlist和频控,20,拨号前全部完成,yes,planned
+AIR-G5-003,Gate5,H4,IVR和受控DTMF,20,只发送授权步骤且结果可对账,yes,planned
+AIR-G5-004,Gate5,H4,用户取消AI电话,20,挂断一次取消旧generation和工具,yes,planned
+AIR-G5-005,Gate5,H4,pause和resume,20,保持同一电话且不把pause当hangup,yes,planned
+AIR-G5-006,Gate5,H4,人工同通接管,20,session和providerCallId不变且不重拨,yes,planned
+AIR-G5-007,Gate5,H4,高风险负例,50,100%阻断或要求人工确认,yes,planned
+AIR-G5-008,Gate5,H4,工具命令重复和乱序,100,副作用恰好一次,yes,planned
+AIR-G5-009,Gate5,H4,接收方拒绝AI,20,立即停止说话挂断并正确结算,yes,planned
+AIR-G5-010,Gate5,H4,Agent crash reconcile,20,不重拨且恢复或明确失败,yes,planned
+AIR-G6-001,Gate6,H3,通话中USB丢失,20,unknown或ending且旧fence失效,yes,planned
+AIR-G6-002,Gate6,H3,通话中Air reboot,20,quarantine且不自动重拨,yes,planned
+AIR-G6-003,Gate6,H3,Gateway SIGKILL,20,新实例恢复且旧实例命令拒绝,yes,planned
+AIR-G6-004,Gate6,H3,LiveKit server断开,20,电话状态不由presence改写,yes,planned
+AIR-G6-005,Gate6,H3,Translation Worker crash,20,旧译音不回放且重派或失败明确,yes,planned
+AIR-G6-006,Gate6,H3,PostgreSQL短时不可用,20,operation不重复且恢复后收敛,yes,planned
+AIR-G6-007,Gate6,H3,inbox outbox重复乱序,1000,状态终态结算均不回退不重复,yes,planned
+AIR-G6-008,Gate6,H3,N加1资源请求,50,明确capacity拒绝且活动电话不受影响,yes,planned
+AIR-G7-001,Gate7,H5,移动联通电信VoLTE,3,目标场景三运营商均通过,yes,planned
+AIR-G7-002,Gate7,H5,弱信号和切网,20,恢复或确定失败且不重拨,yes,planned
+AIR-G7-003,Gate7,H5,8小时混合soak,1,0崩溃0泄漏0重复拨号结算,yes,planned
+AIR-G7-004,Gate7,H5,多设备并发和隔离,100,N台最多N通且不串设备SIM房间,yes,planned
+AIR-G7-005,Gate7,H5,白名单小规模试用,1,隐私退款投诉和远程禁用闭环,yes,planned

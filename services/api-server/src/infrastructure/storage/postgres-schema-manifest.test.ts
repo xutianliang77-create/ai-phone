@@ -7,9 +7,9 @@ import {
 
 describe("PostgreSQL schema manifest", () => {
   it("pins the complete ordered migration set", () => {
-    expect(expectedPostgresMigrations).toHaveLength(31);
+    expect(expectedPostgresMigrations).toHaveLength(32);
     expect(expectedPostgresMigrations.at(-1)).toBe(
-      "031_voice_agent_recording_consent",
+      "032_air_device_call_control",
     );
     expect(comparePostgresMigrations([...expectedPostgresMigrations])).toEqual({
       missing: [],
@@ -22,9 +22,28 @@ describe("PostgreSQL schema manifest", () => {
       ...expectedPostgresMigrations.slice(0, -1),
       "999_unknown",
     ])).toEqual({
-      missing: ["031_voice_agent_recording_consent"],
+      missing: ["032_air_device_call_control"],
       extra: ["999_unknown"],
     });
+  });
+
+  it("pins fenced Air device leases and separate carrier/LiveKit state", () => {
+    const sql = readFileSync(new URL(
+      "../../../../../infra/postgres/migrations/032_air_device_call_control.sql",
+      import.meta.url,
+    ), "utf8");
+    expect(sql).toContain("CREATE TABLE IF NOT EXISTS ai_phone.air_devices");
+    expect(sql).toContain("CREATE TABLE IF NOT EXISTS ai_phone.air_device_leases");
+    expect(sql).toContain("CREATE TABLE IF NOT EXISTS ai_phone.air_device_calls");
+    expect(sql).toContain("air_device_leases_one_active_device_idx");
+    expect(sql).toContain("pg_advisory_xact_lock");
+    expect(sql).toContain("fencing_token");
+    expect(sql).toContain("carrier_state");
+    expect(sql).toContain("livekit_participant_state");
+    expect(sql).toContain("INSERT INTO ai_phone.reliable_outbox_events");
+    expect(sql).toContain("status = 'quarantined'");
+    expect(sql).toContain("renew_air_device_lease");
+    expect(sql).toContain("release_air_device_lease");
   });
 
   it("pins the live projection compatibility repair", () => {

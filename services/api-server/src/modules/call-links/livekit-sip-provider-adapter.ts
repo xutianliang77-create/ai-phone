@@ -7,8 +7,8 @@ import {
 import type {
   ProviderAdapterRequest,
   ProviderAdapterResult,
+  SipParticipantProvider,
   TelephonyControlProvider,
-  TelephonyProvider,
 } from "@translation/contracts";
 import type { LiveKitSipConfig } from "./livekit-sip-readiness.js";
 import { liveKitApiUrl } from "./livekit-room-provider-adapter.js";
@@ -49,7 +49,7 @@ interface LiveKitRoomClient {
 }
 
 export class LiveKitSipProviderAdapter
-  implements TelephonyProvider, TelephonyControlProvider {
+  implements SipParticipantProvider, TelephonyControlProvider {
   private readonly client: LiveKitSipClient;
   private readonly roomClient: LiveKitRoomClient;
 

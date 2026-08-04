@@ -12,6 +12,7 @@ export * from "./communication/identifiers.js";
 export * from "./communication/livekit-compatibility.js";
 export * from "./communication/provider-adapters.js";
 export * from "./communication/provider-operations.js";
+export * from "./communication/telephony.js";
 export * from "./communication/sip-controls.js";
 export * from "./communication/worker-dispatch.js";
 export * from "./communication/voice-agent-runtime.js";
