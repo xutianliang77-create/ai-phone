@@ -1,0 +1,52 @@
+-- Generated from air780.vuart.session-payload.v1.
+-- The Lua codec exists; execution remains pending on a Lua/LuatOS runtime.
+return {
+    schema = "air780.vuart.session-payload.v1",
+    status = "frozen_h0_node_lua_runtime_pending",
+    vectors = {
+        call_state_connected = {
+            binding = {
+                communication_session_id = "comm-1",
+                provider_call_id = "air-call-1",
+                device_id = "air-780-1",
+                lease_id = "lease-1",
+                fencing_token = 7,
+                call_generation = 3,
+            },
+            event_sequence = 16909060,
+            carrier_state = "connected",
+            carrier_cause = "none",
+            frame_flags = 0,
+            frame_sequence = 287454020,
+            timestamp_ms = "72623859790382856",
+            payload_bytes = 55,
+            payload_hex = "0103000000070000000000000006636f6d6d2d310a6169722d63616c6c2d31096169722d3738302d31076c656173652d31040302010300",
+            frame_bytes = 79,
+            frame_hex = "41490106000044332211080706050403020137000103000000070000000000000006636f6d6d2d310a6169722d63616c6c2d31096169722d3738302d31076c656173652d31040302010300ba6b6913",
+        },
+        audio_downlink_16k_200ms = {
+            binding = {
+                communication_session_id = "comm-1",
+                provider_call_id = "air-call-1",
+                device_id = "air-780-1",
+                lease_id = "lease-1",
+                fencing_token = 7,
+                call_generation = 3,
+            },
+            media_sequence = 168496141,
+            sample_rate_hz = 16000,
+            duration_ms = 200,
+            channels = 1,
+            sample_format = "pcm_s16le",
+            pcm_bytes = 6400,
+            pcm_pattern = "zero_based_index_mod_256",
+            frame_flags = 0,
+            frame_sequence = 1432778632,
+            timestamp_ms = "1230066625199609624",
+            payload_bytes = 6461,
+            payload_sha256 = "1d791f519ad5e737aa2138195cbeccb9e627901eba0b2001234f33f26c0ff997",
+            frame_bytes = 6485,
+            frame_sha256 = "12247b45cf6a132542436ec18c6a284deedc88aacd252af702a119c6626048d2",
+        },
+    },
+}

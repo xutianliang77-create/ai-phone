@@ -72,7 +72,8 @@ Gate 0 已按硬件现实拆分：
 - 板端真实回调为每路 6,400 bytes/200 ms。主机接入 LiveKit 时必须在 Beelink
   侧重切为 10 × 640-byte/20-ms 帧；不得修改已稳定的板端缓冲。
 - VUART v1 host codec 已实现：magic/version/type/flags/sequence/timestamp/
-  payload length/CRC32，音频固定 20 ms。
+  payload length/CRC32；设备边界音频保持 6,400 bytes/200 ms，LiveKit 20 ms
+  frame 只在 Beelink 主机侧生成。
 - 模拟设备已验证 commandId 幂等、stale fence 拒绝和 carrier event 权威状态。
 - LiveKit guest 模拟适配已验证 `autoSubscribe=false`，只发布 Air 电话下行，
   只订阅精确目标 TTS track。

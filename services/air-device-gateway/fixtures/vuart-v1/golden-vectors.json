@@ -1,0 +1,54 @@
+{
+  "schema": "air780.vuart.session-payload.v1",
+  "status": "frozen_h0_node_lua_runtime_pending",
+  "vectors": {
+    "callStateConnected": {
+      "binding": {
+        "communicationSessionId": "comm-1",
+        "providerCallId": "air-call-1",
+        "deviceId": "air-780-1",
+        "leaseId": "lease-1",
+        "fencingToken": 7,
+        "callGeneration": 3
+      },
+      "eventSequence": 16909060,
+      "carrierState": "connected",
+      "carrierCause": "none",
+      "frame": {
+        "flags": 0,
+        "sequence": 287454020,
+        "timestampMs": "72623859790382856"
+      },
+      "payloadBytes": 55,
+      "payloadHex": "0103000000070000000000000006636f6d6d2d310a6169722d63616c6c2d31096169722d3738302d31076c656173652d31040302010300",
+      "frameBytes": 79,
+      "frameHex": "41490106000044332211080706050403020137000103000000070000000000000006636f6d6d2d310a6169722d63616c6c2d31096169722d3738302d31076c656173652d31040302010300ba6b6913"
+    },
+    "audioDownlink16k200ms": {
+      "binding": {
+        "communicationSessionId": "comm-1",
+        "providerCallId": "air-call-1",
+        "deviceId": "air-780-1",
+        "leaseId": "lease-1",
+        "fencingToken": 7,
+        "callGeneration": 3
+      },
+      "mediaSequence": 168496141,
+      "sampleRateHz": 16000,
+      "durationMs": 200,
+      "channels": 1,
+      "sampleFormat": "pcm_s16le",
+      "pcmBytes": 6400,
+      "pcmPattern": "zero_based_index_mod_256",
+      "frame": {
+        "flags": 0,
+        "sequence": 1432778632,
+        "timestampMs": "1230066625199609624"
+      },
+      "payloadBytes": 6461,
+      "payloadSha256": "1d791f519ad5e737aa2138195cbeccb9e627901eba0b2001234f33f26c0ff997",
+      "frameBytes": 6485,
+      "frameSha256": "12247b45cf6a132542436ec18c6a284deedc88aacd252af702a119c6626048d2"
+    }
+  }
+}

@@ -177,7 +177,8 @@ sequence gap=0；约 449.99 秒看门狗无重启或 USB 重枚举。
 ### 8.1 协议门槛
 
 - VUART v1 golden frame 跨 Node/Lua 一致；字段 little-endian、CRC32 一致。
-- 8 kHz 每帧 320 bytes，16 kHz 每帧 640 bytes，固定 20 ms。
+- Air780→Beelink 的 v1 会话音频固定 16 kHz、PCM16LE mono、6,400 bytes/200 ms；
+  Beelink→LiveKit 再重切为 10 个 640-byte/20-ms frame。
 - 板端稳定输出保持每路 6,400 bytes/200 ms；Beelink Gateway 必须把每块重切为
   10 个 640-byte/20-ms 帧后发布 LiveKit，并保留原始 device sequence、
   subframe index 和 call generation。不得为了迎合 LiveKit 修改板端缓冲。

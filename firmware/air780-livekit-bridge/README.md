@@ -17,11 +17,40 @@ subframe index 和 call generation。
 - 帧头：`magic(2) + version(1) + type(1) + flags(2) + sequence(4) +
   timestamp_ms(8) + payload_length(2)`；尾部 `crc32(4)`。
 - 多字节字段：little-endian。
-- 音频：PCM16LE mono、20 ms；8 kHz 为 320 bytes，16 kHz 为 640 bytes。
+- 会话音频 payload：PCM16LE mono、16 kHz、200 ms、6,400 bytes；Beelink
+  发布 LiveKit 前再无损重切为 10 × 640-byte/20-ms frame。
 - 音频帧不重传；sequence gap 由接收方计数并补静音。
 - 控制命令必须携带 `commandId + leaseId + fencingToken`，重复 commandId
   只返回相同结果，旧 fence 必须拒绝。
 - P0 仅发送电话下行给 LiveKit，不把电话上行原声发布给 App。
+
+`CALL_STATE`、`AUDIO_DOWNLINK` 和 `AUDIO_UPLINK` 的精确 payload 布局见
+`docs/poc/air780-vuart-v1-session-payload-schema-20260804.md`。诊断 007 的
+`WJAI/1` 文本头不属于生产协议。`HELLO/HEARTBEAT/DIAL/HANGUP/DTMF/ACK/ERROR`
+布局见 `docs/poc/air780-vuart-v1-command-payload-schema-20260804.md`。
+
+Lua session codec 为 `vuart_v1_codec.lua`，golden 自检入口为：
+
+```lua
+local result = assert(require("vuart_v1_golden_selftest").run())
+log.info("vuart_v1_golden", result.ok, result.schema)
+```
+
+该自检尚未在 V2046-113 或其他 Lua runtime 执行；未取得日志前状态保持
+`LUA_RUNTIME_PENDING`，不得写成 Node/Lua golden 已通过。
+
+command profile 的独立 golden 自检入口为：
+
+```lua
+local result = assert(require("vuart_v1_command_golden_selftest").run())
+log.info("vuart_v1_command_golden", result.ok, result.schema)
+```
+
+该入口同样尚未在目标 runtime 执行，不得据源码存在声明拨号或 DTMF 已实机通过。
+
+Beelink Gateway 已有纯软件 command ingress + replay guard H0：mock transport 可验证
+ACK 丢失重放时副作用恰好一次、冲突命令不执行、旧 fence/generation 全拒绝。它尚未
+连接真实 VUART 或板端 Lua ledger，不能替代 V2046-113 self-test 和真实控制验收。
 
 下一步只有两种合法输入：
 
