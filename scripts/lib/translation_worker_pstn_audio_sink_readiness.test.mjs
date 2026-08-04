@@ -18,6 +18,8 @@ describe("buildTranslationWorkerPstnAudioSinkConfig", () => {
     expect(config.workerEnv.TRANSLATION_WORKER_AUDIO_FRAME_SINK_PORT).toBe("3512");
     expect(config.workerEnv.ASR_HTTP_ENDPOINT).toBe("http://127.0.0.1:3513/asr/transcribe");
     expect(config.workerEnv.TTS_AUDIO_SINK_ENDPOINT).toBe("http://127.0.0.1:3513/tts/play");
+    expect(config.workerEnv.TTS_PROVIDER).toBe("mock-tts");
+    expect(config.workerEnv.TTS_MODEL).toBe("mock-phone-voice");
   });
 });
 
@@ -25,7 +27,20 @@ describe("probeTranslationWorkerPstnAudioSink", () => {
   test("passes when a PSTN frame produces captions and TTS playback", async () => {
     const checks = [];
     const issues = [];
-    const mock = recordingMock();
+    const mock = recordingMock({ includeEvents: false });
+    mock.playbackRequests.length = 0;
+    setTimeout(() => {
+      mock.eventRequests.push({
+        body: { events: [{ type: "translation.final", translatedText: "电话来音已翻译" }] },
+      });
+      mock.playbackRequests.push({
+        body: {
+          callId: "call-pstn-smoke",
+          targetSpeakerRole: "host",
+          audio: { format: "pcm16" },
+        },
+      });
+    }, 10);
 
     await probeTranslationWorkerPstnAudioSink({
       baseUrl: "http://127.0.0.1:3512",
@@ -35,6 +50,7 @@ describe("probeTranslationWorkerPstnAudioSink", () => {
       issues,
       actions: [],
       timeoutMs: 1000,
+      settleTimeoutMs: 100,
       fetchFn: fakeWorkerFetch(mock),
     });
 
@@ -64,6 +80,7 @@ describe("probeTranslationWorkerPstnAudioSink", () => {
       issues,
       actions: [],
       timeoutMs: 1000,
+      settleTimeoutMs: 10,
       fetchFn: fakeWorkerFetch(null),
     });
 

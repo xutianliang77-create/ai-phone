@@ -6,6 +6,7 @@ import {
   listen,
   openPort,
   requestJson,
+  sleep,
   startNpmWorkspaceService,
   stopServices,
   waitForHttpService,
@@ -123,11 +124,13 @@ export async function buildPstnInternalMediaLoopConfig(options = {}) {
 export async function probePstnInternalMediaLoop(options) {
   await recordServiceIdentities(options);
 
+  const callPayload = agentCallPayload();
   const route = await requestJson(`${options.bridgeBaseUrl}/agent-calls`, {
     ...options,
     method: "POST",
     bearerToken: options.bridgeApiKey,
-    body: agentCallPayload(),
+    headers: { "idempotency-key": callPayload.idempotencyKey },
+    body: callPayload,
   });
   const routeOk = route.status === 200 &&
     route.body?.providerCallId === "upstream-call-loop" &&
@@ -151,10 +154,28 @@ export async function probePstnInternalMediaLoop(options) {
     acceptedFrameId: accepted.body?.acceptedFrameId,
   });
 
+  await waitForLoopEffects(options);
   recordLoopEffects(options);
   if (options.checks.some((check) => check.status === "fail")) {
     options.issues.push("PSTN internal media loop smoke failed.");
     options.actions.push("Check PSTN Bridge -> Translation Worker -> TTS -> media writer wiring.");
+  }
+}
+
+async function waitForLoopEffects(options) {
+  const timeoutMs = Number(options.settleTimeoutMs ??
+    Math.min(options.timeoutMs ?? 5_000, 5_000));
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const events = options.mock.eventRequests
+      .flatMap((request) => request.body?.events ?? []);
+    if (options.mock.asrRequests.length > 0 &&
+      events.some((event) => event.type === "translation.final") &&
+      options.mock.audioRequests.length > 0 &&
+      options.mock.mediaWriteRequests.length > 0) {
+      return;
+    }
+    await sleep(25);
   }
 }
 
@@ -198,6 +219,9 @@ function recordLoopEffects(options) {
   ), {
     eventBatchCount: options.mock.eventRequests.length,
     eventTypes: events.map((event) => event.type),
+    workerStatuses: events
+      .filter((event) => event.type === "worker.status")
+      .map((event) => ({ segmentId: event.segmentId, text: event.text, stage: event.stage })),
   });
 
   const audio = options.mock.audioRequests[0];
@@ -256,6 +280,8 @@ function workerEnv(port, mockBaseUrl, bridgeBaseUrl) {
     LMSTUDIO_TIMEOUT_MS: "5000",
     TTS_HTTP_ENDPOINT: `${mockBaseUrl}/tts/synthesize`,
     TTS_HTTP_TIMEOUT_MS: "5000",
+    TTS_PROVIDER: "mock-tts",
+    TTS_MODEL: "mock-phone-voice",
     TTS_AUDIO_SINK_ENDPOINT: `${bridgeBaseUrl}/translated-audio`,
     TTS_AUDIO_SINK_API_KEY: BRIDGE_API_KEY,
     TTS_AUDIO_SINK_TIMEOUT_MS: "5000",

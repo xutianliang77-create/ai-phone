@@ -7,6 +7,7 @@ import {
   listen,
   openPort,
   requestJson,
+  sleep,
   startNpmWorkspaceService,
   stopServices,
   waitForHttpService,
@@ -103,6 +104,8 @@ export async function buildTranslationWorkerPstnAudioSinkConfig(options = {}) {
       LMSTUDIO_TIMEOUT_MS: "5000",
       TTS_HTTP_ENDPOINT: `${mockBaseUrl}/tts/synthesize`,
       TTS_HTTP_TIMEOUT_MS: "5000",
+      TTS_PROVIDER: "mock-tts",
+      TTS_MODEL: "mock-phone-voice",
       TTS_AUDIO_SINK_ENDPOINT: `${mockBaseUrl}/tts/play`,
       TTS_AUDIO_SINK_TIMEOUT_MS: "5000",
     },
@@ -161,10 +164,27 @@ export async function probeTranslationWorkerPstnAudioSink(options) {
     status: duplicate.body?.status,
   });
 
+  await waitForEndToEndEffects(options);
   recordEndToEndChecks(options);
   if (options.checks.some((check) => check.status === "fail")) {
     options.issues.push("Translation Worker PSTN audio sink smoke failed.");
     options.actions.push("Check ASR, translation, TTS, event API, and TTS audio sink wiring.");
+  }
+}
+
+async function waitForEndToEndEffects(options) {
+  const timeoutMs = Number(options.settleTimeoutMs ??
+    Math.min(options.timeoutMs ?? 5_000, 5_000));
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const events = options.mock.eventRequests
+      .flatMap((request) => request.body?.events ?? []);
+    if (options.mock.translationRequests.length > 0 &&
+      events.some((event) => event.type === "translation.final") &&
+      options.mock.playbackRequests.length > 0) {
+      return;
+    }
+    await sleep(25);
   }
 }
 
@@ -189,6 +209,9 @@ function recordEndToEndChecks(options) {
   ), {
     eventBatchCount: options.mock.eventRequests.length,
     eventTypes: events.map((event) => event.type),
+    workerStatuses: events
+      .filter((event) => event.type === "worker.status")
+      .map((event) => ({ segmentId: event.segmentId, text: event.text, stage: event.stage })),
   });
 
   const playback = options.mock.playbackRequests[0]?.body;
@@ -249,12 +272,27 @@ function createMockProviderServer() {
     }
     if (request.method === "POST" && request.url === "/internal/call-links/call-pstn-smoke/events") {
       eventRequests.push({ body, authorization: request.headers.authorization });
-      sendJson(response, 200, { status: "ok" });
+      sendJson(response, 200, {
+        status: "ok",
+        playbackBindings: playbackBindings(
+          body?.events,
+          "call-pstn-smoke:guest",
+          "call-pstn-smoke:host",
+        ),
+      });
       return;
     }
     sendJson(response, 404, { error: { message: `unexpected ${request.method} ${request.url}` } });
   });
   return { server, asrRequests, translationRequests, ttsRequests, playbackRequests, eventRequests, flushRequests };
+}
+
+function playbackBindings(events, sourceLegId, targetLegId) {
+  return (events ?? []).flatMap((event) =>
+    event.type === "playback.queued" && event.playbackId && event.generation
+      ? [{ playbackId: event.playbackId, generation: event.generation, sourceLegId, targetLegId }]
+      : []
+  );
 }
 
 function audioFramePayload() {

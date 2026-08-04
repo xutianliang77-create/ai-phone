@@ -16,6 +16,10 @@ describe("buildPstnProviderStatusEventConfig", () => {
     expect(config.apiBaseUrl).toBe("http://127.0.0.1:3426");
     expect(config.bridgeBaseUrl).toBe("http://127.0.0.1:3427");
     expect(config.timeoutMs).toBe(1234);
+    expect(config.apiEnv.AUTH_TEST_PHONE).toBe("13800138000");
+    expect(config.apiEnv.AUTH_TEST_CODE).toBe("246810");
+    expect(config.apiEnv.AGENT_CALL_PROVIDER_ADAPTER).toBe("pstn_http");
+    expect(config.apiEnv.PSTN_PROVIDER_IDEMPOTENCY_GUARANTEED).toBe("true");
     expect(config.bridgeEnv.PSTN_BRIDGE_STATUS_WEBHOOK_ENDPOINT)
       .toBe("http://127.0.0.1:3426/webhooks/pstn/agent-calls");
   });
@@ -39,6 +43,7 @@ describe("probePstnProviderStatusEvent", () => {
     expect(checks.map((check) => [check.name, check.status])).toEqual([
       ["api_service_identity", "pass"],
       ["pstn_bridge_service_identity", "pass"],
+      ["account_login", "pass"],
       ["agent_draft_queued", "pass"],
       ["provider_status_event_requires_signature", "pass"],
       ["provider_status_event_rejects_invalid_payload", "pass"],
@@ -79,6 +84,18 @@ function fakeStatusFetch(options) {
     }
     if (path === "/health" && parsed.port === "3427") {
       return jsonResponse(200, { service: "pstn-bridge" });
+    }
+    if (path === "/auth/phone/login") {
+      return body?.phone === "13800138000" && body?.code === "246810"
+        ? jsonResponse(200, {
+          token: "local-status-account-token",
+          account: { id: "account-1" },
+        })
+        : jsonResponse(401, { error: { message: "Phone login failed" } });
+    }
+    if (path.startsWith("/ai-calling-agent/") &&
+      init.headers?.authorization !== "Bearer local-status-account-token") {
+      return jsonResponse(401, { error: { message: "Account login required" } });
     }
     if (path === "/ai-calling-agent/drafts" && init.method === "POST") {
       return jsonResponse(200, { draft });

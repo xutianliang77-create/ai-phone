@@ -3,10 +3,13 @@ import { mkdirSync, rmSync } from "node:fs";
 import path from "node:path";
 import { probeAgentCallInsufficientBalance } from "./agent_call_worker_usage_probe.mjs";
 import {
+  waitForDraftStatus,
+  waitForWorkerDispatch,
+} from "./agent_call_worker_waiters.mjs";
+import {
   errorMessage,
   openPort,
   requestJson,
-  sleep,
   startNpmWorkspaceService,
   stopServices,
   waitForHttpService,
@@ -16,6 +19,8 @@ const INTERNAL_SECRET = "local-agent-call-internal-secret";
 const BRIDGE_API_KEY = "local-pstn-bridge-secret";
 const PSTN_WEBHOOK_SECRET = "local-pstn-webhook-secret-32-chars";
 const CONSENT_VERSION = "cn-agent-v1";
+const TEST_ACCOUNT_PHONE = "13800138000";
+const TEST_ACCOUNT_CODE = "246810";
 
 export async function buildAgentCallWorkerReadinessConfig(options = {}) {
   const root = options.root ?? process.cwd();
@@ -47,8 +52,12 @@ export async function buildAgentCallWorkerReadinessConfig(options = {}) {
       API_PORT: String(apiPort),
       API_DATA_FILE: dataFile,
       ACTIVE_PLAN_CODE: "free",
+      AUTH_TEST_PHONE: TEST_ACCOUNT_PHONE,
+      AUTH_TEST_CODE: TEST_ACCOUNT_CODE,
       INTERNAL_API_SECRET: INTERNAL_SECRET,
       AGENT_CALL_WORKER_ENABLED: "true",
+      AGENT_CALL_PROVIDER_ADAPTER: "pstn_http",
+      PSTN_PROVIDER_IDEMPOTENCY_GUARANTEED: "true",
       CALL_PROVIDER_POLICY: "domestic_pstn_bridge",
       PSTN_PROVIDER: "domestic_bridge",
       PSTN_ACCOUNT_ID: "local-pstn-account",
@@ -62,6 +71,7 @@ export async function buildAgentCallWorkerReadinessConfig(options = {}) {
     workerEnv: {
       API_BASE_URL: apiBaseUrl,
       INTERNAL_API_SECRET: INTERNAL_SECRET,
+      AGENT_CALL_WORKER_ID: "readiness-agent-worker",
       AGENT_CALL_WORKER_BATCH_SIZE: "5",
       AGENT_CALL_WORKER_POLL_INTERVAL_MS: "250",
       TRANSLATION_WORKER_API_TIMEOUT_MS: "5000",
@@ -174,8 +184,22 @@ export async function probeAgentCallWorkerFlow(options) {
   record(checks, "internal_queue_requires_secret", authRejected, { httpStatus: unauth.status });
   if (!authRejected) issues.push("Internal agent call queue did not reject unauthenticated requests.");
 
-  const draft = (await requestJson(`${config.apiBaseUrl}/ai-calling-agent/drafts`, {
+  const login = (await requestJson(`${config.apiBaseUrl}/auth/phone/login`, {
     ...options,
+    method: "POST",
+    body: { phone: TEST_ACCOUNT_PHONE, code: TEST_ACCOUNT_CODE },
+  })).body;
+  const accountToken = login?.token;
+  const accountLoginOk = typeof accountToken === "string" &&
+    accountToken.length > 0 && Boolean(login?.account?.id);
+  record(checks, "account_login", accountLoginOk, {
+    accountId: login?.account?.id ?? null,
+  });
+  if (!accountLoginOk) throw new Error("Isolated test account login failed.");
+  const authenticatedOptions = { ...options, bearerToken: accountToken };
+
+  const draft = (await requestJson(`${config.apiBaseUrl}/ai-calling-agent/drafts`, {
+    ...authenticatedOptions,
     method: "POST",
     body: {
       scenario: "booking",
@@ -194,7 +218,7 @@ export async function probeAgentCallWorkerFlow(options) {
 
   const authorized = (await requestJson(
     `${config.apiBaseUrl}/ai-calling-agent/drafts/${encodeURIComponent(draft.id)}/authorize`,
-    { ...options, method: "POST", body: { userConfirmed: true, consentPromptVersion: CONSENT_VERSION } },
+    { ...authenticatedOptions, method: "POST", body: { userConfirmed: true, consentPromptVersion: CONSENT_VERSION } },
   )).body?.draft;
   record(checks, "agent_draft_authorized", authorized?.status === "authorized", {
     status: authorized?.status,
@@ -202,7 +226,7 @@ export async function probeAgentCallWorkerFlow(options) {
 
   const queued = (await requestJson(
     `${config.apiBaseUrl}/ai-calling-agent/drafts/${encodeURIComponent(draft.id)}/start`,
-    { ...options, method: "POST", body: { consentPromptVersion: CONSENT_VERSION } },
+    { ...authenticatedOptions, method: "POST", body: { consentPromptVersion: CONSENT_VERSION } },
   )).body?.draft;
   const queuedOk = queued?.status === "queued" && Boolean(queued?.callId);
   record(checks, "agent_draft_queued", queuedOk, {
@@ -212,7 +236,10 @@ export async function probeAgentCallWorkerFlow(options) {
   if (!queuedOk) throw new Error("Agent draft did not enter queued status.");
 
   await options.beforeWorkerWait?.({ draft: queued });
-  const dispatch = await options.waitForWorkerDispatch({ ...options, draft: queued });
+  const dispatch = await options.waitForWorkerDispatch({
+    ...authenticatedOptions,
+    draft: queued,
+  });
   const bridgeCall = dispatch.bridgeCall;
   const bridgeOk = bridgeCall?.body?.draftId === queued.id &&
     bridgeCall?.body?.callId === queued.callId;
@@ -229,7 +256,7 @@ export async function probeAgentCallWorkerFlow(options) {
   });
 
   const final = dispatch.final ?? await waitForDraftStatus({
-    ...options,
+    ...authenticatedOptions,
     draftId: queued.id,
     expectedStatus: "in_progress",
   });
@@ -251,7 +278,7 @@ export async function probeAgentCallWorkerFlow(options) {
     nextStep: "真实联调时替换为服务商完成结果。",
   };
   const completed = (await requestJson(`${config.apiBaseUrl}/webhooks/pstn/agent-calls`, {
-    ...options,
+    ...authenticatedOptions,
     method: "POST",
     headers: {
       "x-translation-pstn-signature": signPstnWebhookBody(
@@ -275,7 +302,14 @@ export async function probeAgentCallWorkerFlow(options) {
     issues.push("PSTN completed webhook did not update the agent call.");
     actions.push(`Inspect API log at ${config.logs.api}.`);
   }
-  await probeAgentCallInsufficientBalance({ ...options, config, checks, issues, actions, consentVersion: CONSENT_VERSION });
+  await probeAgentCallInsufficientBalance({
+    ...authenticatedOptions,
+    config,
+    checks,
+    issues,
+    actions,
+    consentVersion: CONSENT_VERSION,
+  });
   return {
     draftId: queued.id,
     callId: queued.callId,
@@ -285,44 +319,6 @@ export async function probeAgentCallWorkerFlow(options) {
 
 function startService(config, name, script, workspace, env) {
   return startNpmWorkspaceService({ root: config.root, logPath: config.logs[name], name, script, workspace, env });
-}
-
-async function waitForWorkerDispatch(context) {
-  const deadline = Date.now() + context.config.timeoutMs;
-  while (Date.now() < deadline) {
-    if (context.worker?.exited) {
-      throw new Error(`worker exited early; see ${context.worker.logPath}`);
-    }
-    const latest = (await requestJson(
-      `${context.config.apiBaseUrl}/ai-calling-agent/drafts/${encodeURIComponent(context.draft.id)}`,
-      { ...context, allowError: true },
-    )).body?.draft;
-    if (latest?.status === "in_progress") {
-      return {
-        final: latest,
-        bridgeCall: {
-          headers: { authorization: "present" },
-          body: { draftId: context.draft.id, callId: context.draft.callId },
-        },
-      };
-    }
-    await sleep(250);
-  }
-  throw new Error(`worker did not call PSTN bridge; see ${context.config.logs.worker}`);
-}
-
-async function waitForDraftStatus(context) {
-  const deadline = Date.now() + context.config.timeoutMs;
-  let latest = null;
-  while (Date.now() < deadline) {
-    latest = (await requestJson(
-      `${context.config.apiBaseUrl}/ai-calling-agent/drafts/${encodeURIComponent(context.draftId)}`,
-      context,
-    )).body?.draft;
-    if (latest?.status === context.expectedStatus) return latest;
-    await sleep(250);
-  }
-  return latest;
 }
 
 function record(checks, name, ok, details = {}) {

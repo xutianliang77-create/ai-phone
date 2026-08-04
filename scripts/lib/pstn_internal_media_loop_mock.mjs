@@ -44,7 +44,14 @@ export function createLoopMockServer() {
     }
     if (request.method === "POST" && request.url === "/internal/call-links/call-loop/events") {
       eventRequests.push({ body, headers: authHeader(request) });
-      sendJson(response, 200, { status: "ok" });
+      sendJson(response, 200, {
+        status: "ok",
+        playbackBindings: playbackBindings(
+          body?.events,
+          "call-loop:guest",
+          "call-loop:host",
+        ),
+      });
       return;
     }
     sendJson(response, 404, { error: { message: `unexpected ${request.method} ${request.url}` } });
@@ -52,8 +59,17 @@ export function createLoopMockServer() {
   return { server, asrRequests, eventRequests, audioRequests, mediaWriteRequests };
 }
 
+function playbackBindings(events, sourceLegId, targetLegId) {
+  return (events ?? []).flatMap((event) =>
+    event.type === "playback.queued" && event.playbackId && event.generation
+      ? [{ playbackId: event.playbackId, generation: event.generation, sourceLegId, targetLegId }]
+      : []
+  );
+}
+
 export function agentCallPayload() {
   return {
+    idempotencyKey: "agent-call:call-loop",
     draftId: "draft-loop",
     callId: "call-loop",
     targetPhone: "+8613800138000",

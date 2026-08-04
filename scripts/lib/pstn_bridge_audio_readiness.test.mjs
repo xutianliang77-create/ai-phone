@@ -90,6 +90,10 @@ function fakeBridgeFetch(upstream) {
       return jsonResponse(400, { error: { code: "invalid_translated_audio" } });
     }
     if (path === "/agent-calls") {
+      if (!body.idempotencyKey ||
+        init.headers?.["idempotency-key"] !== body.idempotencyKey) {
+        return jsonResponse(400, { error: { code: "invalid_agent_call" } });
+      }
       return jsonResponse(200, {
         status: "in_progress",
         providerCallId: "upstream-call-audio-smoke",
@@ -97,6 +101,10 @@ function fakeBridgeFetch(upstream) {
       });
     }
     if (path === "/translated-audio") {
+      if (!body.sessionId || !body.playbackId || !Number.isInteger(body.generation) ||
+        !body.sourceLegId || !body.targetLegId) {
+        return jsonResponse(400, { error: { code: "invalid_translated_audio" } });
+      }
       upstream?.audioRequests.push({
         headers: { authorization: "Bearer local-pstn-upstream-secret" },
         body: {

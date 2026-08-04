@@ -14,6 +14,8 @@ const INTERNAL_SECRET = "local-status-event-internal-secret";
 const PSTN_WEBHOOK_SECRET = "local-pstn-status-webhook-secret-32";
 const PROVIDER_WEBHOOK_SECRET = "local-provider-status-webhook-secret";
 const CONSENT_VERSION = "cn-agent-v1";
+const TEST_ACCOUNT_PHONE = "13800138000";
+const TEST_ACCOUNT_CODE = "246810";
 
 export async function checkPstnProviderStatusEventReadiness(options = {}) {
   const config = await buildPstnProviderStatusEventConfig(options);
@@ -80,8 +82,12 @@ export async function buildPstnProviderStatusEventConfig(options = {}) {
       API_PORT: String(apiPort),
       API_DATA_FILE: dataFile,
       ACTIVE_PLAN_CODE: "free",
+      AUTH_TEST_PHONE: TEST_ACCOUNT_PHONE,
+      AUTH_TEST_CODE: TEST_ACCOUNT_CODE,
       INTERNAL_API_SECRET: INTERNAL_SECRET,
       AGENT_CALL_WORKER_ENABLED: "true",
+      AGENT_CALL_PROVIDER_ADAPTER: "pstn_http",
+      PSTN_PROVIDER_IDEMPOTENCY_GUARANTEED: "true",
       CALL_PROVIDER_POLICY: "domestic_pstn_bridge",
       PSTN_PROVIDER: "domestic_bridge",
       PSTN_ACCOUNT_ID: "local-pstn-account",
@@ -111,7 +117,21 @@ export async function probePstnProviderStatusEvent(options) {
   record(checks, "pstn_bridge_service_identity", bridgeHealth.status === 200 &&
     bridgeHealth.body?.service === "pstn-bridge", { httpStatus: bridgeHealth.status });
 
-  const draft = await createQueuedDraft(config, options);
+  const login = (await requestJson(`${config.apiBaseUrl}/auth/phone/login`, {
+    ...options,
+    method: "POST",
+    body: { phone: TEST_ACCOUNT_PHONE, code: TEST_ACCOUNT_CODE },
+  })).body;
+  const accountToken = login?.token;
+  const accountLoginOk = typeof accountToken === "string" &&
+    accountToken.length > 0 && Boolean(login?.account?.id);
+  record(checks, "account_login", accountLoginOk, {
+    accountId: login?.account?.id ?? null,
+  });
+  if (!accountLoginOk) throw new Error("Isolated test account login failed.");
+  const authenticatedOptions = { ...options, bearerToken: accountToken };
+
+  const draft = await createQueuedDraft(config, authenticatedOptions);
   record(checks, "agent_draft_queued", draft.status === "queued" && Boolean(draft.callId), {
     draftId: draft.id,
     callId: draft.callId,
@@ -141,7 +161,7 @@ export async function probePstnProviderStatusEvent(options) {
     ...options,
     body: statusEvent({ callId: draft.callId, eventId: "provider-status-answered" }),
   });
-  const inProgress = await fetchDraft(config, draft.id, options);
+  const inProgress = await fetchDraft(config, draft.id, authenticatedOptions);
   const inProgressOk = answered.status === 200 && inProgress.status === "in_progress" &&
     inProgress.providerCallId === "provider-call-status-smoke";
   record(checks, "provider_status_event_updates_in_progress", inProgressOk, {
@@ -171,7 +191,7 @@ export async function probePstnProviderStatusEvent(options) {
       resultSummary: "provider completed call",
     }),
   });
-  const final = await fetchDraft(config, draft.id, options);
+  const final = await fetchDraft(config, draft.id, authenticatedOptions);
   const completedOk = completed.status === 200 && final.status === "completed" &&
     final.resultSummary === "provider completed call" &&
     final.consumedSeconds === 12 &&
