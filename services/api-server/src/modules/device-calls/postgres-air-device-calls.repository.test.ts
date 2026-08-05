@@ -37,6 +37,39 @@ describe("PostgreSQL Air device calls", () => {
     );
   });
 
+  it("terminalizes a durably recorded dial after a definitive command rejection", async () => {
+    const fixture = pool([{
+      ...callRow,
+      carrier_state: "failed",
+      livekit_participant_state: "absent",
+      version: "2",
+    }]);
+    const repository = new PostgresAirDeviceCallsRepository(fixture.pool);
+
+    await expect(repository.recordDialRejected({
+      providerCallId: "air-call-1",
+      providerOperationId: "op-1",
+      communicationSessionId: "session-1",
+      deviceId: "air-001",
+      leaseId: "lease-1",
+      fencingToken: 7,
+      roomName: "call_session-1",
+      participantIdentity: "session-1:guest:air:air-001",
+      callGeneration: 3,
+    })).resolves.toMatchObject({
+      providerCallId: "air-call-1",
+      carrierState: "failed",
+      callGeneration: 3,
+    });
+    expect(fixture.query).toHaveBeenCalledWith(
+      expect.stringMatching(
+        /carrier_state = 'failed'[\s\S]+carrier_state = 'dialing'[\s\S]+device\.call\.failed/,
+      ),
+      ["air-call-1", "session-1", "op-1", "air-001", "lease-1", 7,
+        "call_session-1", "session-1:guest:air:air-001", 3],
+    );
+  });
+
   it("accepts only the exact active call generation and fence", async () => {
     const current = pool([{ current: true }]);
     const repository = new PostgresAirDeviceCallsRepository(current.pool);
@@ -50,6 +83,55 @@ describe("PostgreSQL Air device calls", () => {
     await expect(new PostgresAirDeviceCallsRepository(stale.pool)
       .assertCallBinding({ ...binding(), callGeneration: 2 }))
       .rejects.toBeInstanceOf(DeviceCallBindingConflict);
+  });
+
+  it("loads a control binding only for the active call and current lease", async () => {
+    const fixture = pool([callRow]);
+    const repository = new PostgresAirDeviceCallsRepository(fixture.pool);
+
+    await expect(repository.findActiveBinding({
+      communicationSessionId: "session-1",
+      providerOperationId: "op-1",
+    })).resolves.toEqual({
+      providerCallId: "air-call-1",
+      participantIdentity: "session-1:guest:air:air-001",
+      roomName: "call_session-1",
+      carrierState: "unknown",
+      callGeneration: 3,
+      deviceLease: {
+        deviceId: "air-001",
+        leaseId: "lease-1",
+        fencingToken: 7,
+      },
+    });
+    expect(fixture.query).toHaveBeenCalledWith(
+      expect.stringMatching(/provider_operation_id = \$2[\s\S]+air_device_lease_is_current/),
+      ["session-1", "op-1"],
+    );
+  });
+
+  it("loads the exact call status after a terminal carrier state", async () => {
+    const fixture = pool([{
+      ...callRow,
+      carrier_state: "disconnected",
+      livekit_participant_state: "disconnected",
+    }]);
+    const repository = new PostgresAirDeviceCallsRepository(fixture.pool);
+
+    await expect(repository.findCallStatus({
+      communicationSessionId: "session-1",
+      providerOperationId: "op-1",
+    })).resolves.toMatchObject({
+      providerCallId: "air-call-1",
+      carrierState: "disconnected",
+      liveKitParticipantState: "disconnected",
+      deviceId: "air-001",
+      callGeneration: 3,
+    });
+    expect(fixture.query).toHaveBeenCalledWith(
+      expect.not.stringContaining("air_device_lease_is_current"),
+      ["session-1", "op-1"],
+    );
   });
 
   it("lists only bounded calls that require carrier reconciliation", async () => {

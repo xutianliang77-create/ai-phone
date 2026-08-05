@@ -4,14 +4,16 @@ import { Air780DeviceProviderAdapter } from "./air780-device-provider-adapter.js
 describe("Air780 business telephony provider", () => {
   it("maps place_phone_call to one fenced device dial command", async () => {
     const assertLease = vi.fn();
-    const dial = vi.fn().mockResolvedValue({
-      providerCallId: "air-call-1",
-      state: "dialing",
-    });
+    const dial = vi.fn(async (input: { providerCallId: string }) => ({
+      providerCallId: input.providerCallId,
+      state: "dialing" as const,
+    }));
     const recordDial = vi.fn().mockResolvedValue(undefined);
+    const recordDialRejected = vi.fn().mockResolvedValue(undefined);
     const provider = new Air780DeviceProviderAdapter({
       leaseVerifier: { assertLease },
-      callRecorder: { recordDial },
+      callRecorder: { recordDial, recordDialRejected },
+      roomAccessIssuer: roomAccessIssuer(),
       gateway: {
         dial,
         hangup: vi.fn(),
@@ -44,28 +46,40 @@ describe("Air780 business telephony provider", () => {
     expect(result).toMatchObject({
       ok: true,
       provider: "air780_volte",
-      externalResourceId: "air-call-1",
+      externalResourceId: expect.stringMatching(/^air_[0-9a-f]{32}$/),
       result: { state: "dialing", deviceId: "air-001" },
     });
     expect(assertLease).toHaveBeenCalledOnce();
     expect(dial).toHaveBeenCalledWith(expect.objectContaining({
       commandId: "op-1",
+      providerOperationId: "op-1",
       idempotencyKey: "place_phone_call:session-1",
       communicationSessionId: "session-1",
       fencingToken: 3,
+      callGeneration: 3,
+      providerCallId: expect.stringMatching(/^air_[0-9a-f]{32}$/),
+      roomAccess: {
+        wsUrl: "wss://livekit.example.cn",
+        token: "device-room-token",
+        expiresAt: "2099-01-01T00:00:00.000Z",
+      },
     }));
     expect(recordDial).toHaveBeenCalledWith(expect.objectContaining({
       providerOperationId: "op-1",
-      providerCallId: "air-call-1",
+      providerCallId: expect.stringMatching(/^air_[0-9a-f]{32}$/),
       callGeneration: 3,
     }));
+    expect(recordDial.mock.invocationCallOrder[0])
+      .toBeLessThan(dial.mock.invocationCallOrder[0]!);
+    expect(recordDialRejected).not.toHaveBeenCalled();
   });
 
   it("rejects a session binding mismatch before touching the device", async () => {
     const dial = vi.fn();
     const provider = new Air780DeviceProviderAdapter({
       leaseVerifier: { assertLease: vi.fn() },
-      callRecorder: { recordDial: vi.fn() },
+      callRecorder: { recordDial: vi.fn(), recordDialRejected: vi.fn() },
+      roomAccessIssuer: roomAccessIssuer(),
       gateway: {
         dial,
         hangup: vi.fn(),
@@ -107,7 +121,8 @@ describe("Air780 business telephony provider", () => {
     });
     const provider = new Air780DeviceProviderAdapter({
       leaseVerifier: { assertLease: vi.fn() },
-      callRecorder: { recordDial: vi.fn() },
+      callRecorder: { recordDial: vi.fn(), recordDialRejected: vi.fn() },
+      roomAccessIssuer: roomAccessIssuer(),
       gateway: {
         dial,
         hangup: vi.fn(),
@@ -138,15 +153,13 @@ describe("Air780 business telephony provider", () => {
     expect(dial).not.toHaveBeenCalled();
   });
 
-  it("requires reconciliation when call persistence fails after one dial", async () => {
-    const dial = vi.fn().mockResolvedValue({
-      providerCallId: "air-call-1",
-      state: "dialing",
-    });
+  it("does not dial when the bound LiveKit guest token cannot be issued", async () => {
+    const dial = vi.fn();
     const provider = new Air780DeviceProviderAdapter({
       leaseVerifier: { assertLease: vi.fn() },
-      callRecorder: {
-        recordDial: vi.fn().mockRejectedValue(new Error("database unavailable")),
+      callRecorder: { recordDial: vi.fn(), recordDialRejected: vi.fn() },
+      roomAccessIssuer: {
+        issue: vi.fn().mockRejectedValue(new Error("token unavailable")),
       },
       gateway: {
         dial,
@@ -156,8 +169,8 @@ describe("Air780 business telephony provider", () => {
       },
     });
 
-    await expect(provider.placePhoneCall({
-      operationId: "op-persist",
+    const result = await provider.placePhoneCall({
+      operationId: "op-token",
       sessionId: "session-1",
       expectedVersion: 1,
       idempotencyKey: "place_phone_call:session-1",
@@ -175,12 +188,24 @@ describe("Air780 business telephony provider", () => {
           fencingToken: 3,
         },
       },
-    })).resolves.toMatchObject({
+    });
+
+    expect(result).toMatchObject({
       ok: false,
       errorClass: "unavailable",
-      reconciliationRequired: true,
-      externalResourceId: "air-call-1",
+      reconciliationRequired: false,
     });
-    expect(dial).toHaveBeenCalledOnce();
+    expect(dial).not.toHaveBeenCalled();
   });
+
 });
+
+function roomAccessIssuer() {
+  return {
+    issue: vi.fn().mockResolvedValue({
+      wsUrl: "wss://livekit.example.cn",
+      token: "device-room-token",
+      expiresAt: "2099-01-01T00:00:00.000Z",
+    }),
+  };
+}

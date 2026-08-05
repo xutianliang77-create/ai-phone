@@ -1,11 +1,7 @@
 local codec = require("vuart_v1_codec")
-local golden = require("vuart_v1_golden_vectors")
+local golden = require("vuart_v1_golden_vec")
 
 local crypto = rawget(_G, "crypto")
-if not crypto then
-    local ok, loaded = pcall(require, "crypto")
-    if ok then crypto = loaded end
-end
 
 local M = {}
 
@@ -99,6 +95,29 @@ function M.run()
         "audio frame sha256")
     assert_equal(must(codec.decode_frame(audio_frame)).payload, audio_payload,
         "decoded audio frame payload")
+
+    local uplink = golden.vectors.audio_uplink_16k_200ms
+    local uplink_payload = must(codec.encode_audio(merge(uplink.binding, {
+        media_sequence = uplink.media_sequence,
+        pcm = pcm,
+    })))
+    assert_equal(#uplink_payload, uplink.payload_bytes, "uplink payload bytes")
+    assert_equal(crypto.sha256(uplink_payload):lower(), uplink.payload_sha256,
+        "uplink payload sha256")
+    local decoded_uplink = must(codec.decode_audio(uplink_payload))
+    assert_equal(decoded_uplink.media_sequence, uplink.media_sequence,
+        "uplink media sequence")
+    assert_equal(decoded_uplink.pcm, pcm, "uplink PCM")
+    local uplink_frame = must(codec.encode_frame({
+        type = 17,
+        flags = uplink.frame_flags,
+        sequence = uplink.frame_sequence,
+        timestamp_ms = uplink.timestamp_ms,
+        payload = uplink_payload,
+    }))
+    assert_equal(#uplink_frame, uplink.frame_bytes, "uplink frame bytes")
+    assert_equal(crypto.sha256(uplink_frame):lower(), uplink.frame_sha256,
+        "uplink frame sha256")
 
     assert_rejected(codec.decode_call_state,
         string.char(2) .. call_payload:sub(2), "bad payload version")

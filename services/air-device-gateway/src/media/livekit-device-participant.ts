@@ -15,18 +15,34 @@ export interface DeviceRemoteTrack {
   };
 }
 
+export interface DeviceSubscribedAudioFrame {
+  trackSid: string;
+  samples: Int16Array;
+  sampleRate: 16_000;
+}
+
 export interface AirDeviceRoomClient {
   connect(
     wsUrl: string,
     token: string,
     options: { autoSubscribe: false },
   ): Promise<void>;
+  disconnect?(): Promise<void>;
   publishPcmTrack(
     name: string,
     samples: Int16Array,
     sampleRate: 8_000 | 16_000,
   ): Promise<void>;
   setSubscribed(trackSid: string, subscribed: boolean): Promise<void>;
+  onConnectionState?(
+    listener: (state: "reconnecting" | "joined" | "disconnected") => void,
+  ): () => void;
+  onRemoteTrackPublished?(
+    listener: (track: Omit<DeviceRemoteTrack, "admission">) => void,
+  ): () => void;
+  onSubscribedAudioFrame?(
+    listener: (frame: DeviceSubscribedAudioFrame) => void,
+  ): () => void;
 }
 
 export function airDeviceParticipantProfile(input: {
@@ -107,10 +123,12 @@ export class AirDeviceLiveKitParticipant {
       admission.deviceId === this.options.deviceId &&
       admission.leaseId === this.options.leaseId &&
       admission.callGeneration === this.options.callGeneration;
+    const subscribed = isTranslationWorker && isExactTarget && hasExactAdmission;
     await this.options.room.setSubscribed(
       track.sid,
-      isTranslationWorker && isExactTarget && hasExactAdmission,
+      subscribed,
     );
+    return subscribed;
   }
 }
 

@@ -33,6 +33,10 @@ import {
   updateAgentRun,
   updateAgentToolExecution,
 } from "./agent-orchestration-runtime.repository.js";
+import {
+  agentCallDialOperationType,
+  configuredAgentCallProvider,
+} from "./agent-call-provider-profile.js";
 
 export async function claimQueuedAgentCalls(input: {
   workerId: string;
@@ -112,7 +116,7 @@ async function claimOne(
   const operation = await beginProviderOperation({
     sessionId: draft.callId,
     provider,
-    operationType: "sip_outbound",
+    operationType: agentCallDialOperationType(),
     operationKey: draft.id,
     idempotencyKey: `agent-dial:${draft.callId}`,
     requestHash: dialRequestHash(draft),
@@ -312,9 +316,7 @@ function tokenHash(value: string) {
 }
 
 function agentCallProvider(): CommunicationProvider | null {
-  const value = process.env.AGENT_CALL_PROVIDER_ADAPTER;
-  return value === "livekit_sip" || value === "pstn_http" || value === "pstn_fonoster"
-    ? value : null;
+  return configuredAgentCallProvider();
 }
 
 function boundedLimit(value: number) {

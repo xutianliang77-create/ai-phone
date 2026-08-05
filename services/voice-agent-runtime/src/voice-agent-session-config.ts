@@ -1,11 +1,42 @@
 import { inference } from "@livekit/agents";
+import { LLM as OpenAILLM } from "@livekit/agents-plugin-openai";
 import type { VoiceAgentRuntimeSnapshotDto } from "@translation/contracts";
 import type { VoiceAgentRuntimeEnv } from "./config.js";
+import { LocalHttpSTT } from "./local-http-stt.js";
+import { LocalHttpTTS } from "./local-http-tts.js";
 
 export function buildVoiceAgentModels(
   env: VoiceAgentRuntimeEnv,
   language: "zh" | "en",
 ) {
+  if (env.modelProvider === "local_http") {
+    return {
+      stt: new LocalHttpSTT({
+        baseUrl: env.localAsrUrl,
+        ...(env.localAsrApiKey ? { apiKey: env.localAsrApiKey } : {}),
+        language,
+        model: env.sttModel,
+        timeoutMs: env.localModelTimeoutMs,
+      }),
+      llm: new OpenAILLM({
+        baseURL: env.localLlmBaseUrl,
+        apiKey: env.localLlmApiKey,
+        model: env.llmModel,
+        temperature: 0,
+        parallelToolCalls: false,
+        maxCompletionTokens: 512,
+      }),
+      tts: new LocalHttpTTS({
+        baseUrl: env.localTtsUrl,
+        ...(env.localTtsApiKey ? { apiKey: env.localTtsApiKey } : {}),
+        language,
+        model: env.ttsModel,
+        voice: env.ttsVoice,
+        timeoutMs: env.localModelTimeoutMs,
+        ...(env.ttsEvidenceDir ? { evidenceDir: env.ttsEvidenceDir } : {}),
+      }),
+    };
+  }
   const gateway = {
     ...(env.inferenceUrl ? { baseURL: env.inferenceUrl } : {}),
     apiKey: env.inferenceApiKey,

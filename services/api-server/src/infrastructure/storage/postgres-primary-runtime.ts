@@ -17,6 +17,12 @@ import { PostgresBillingQueriesRepository } from
   "../../modules/billing/postgres-billing-queries.repository.js";
 import { PostgresBillingNotificationsRepository } from
   "../../modules/billing/postgres-billing-notifications.repository.js";
+import { PostgresAirDeviceCallsRepository } from
+  "../../modules/device-calls/postgres-air-device-calls.repository.js";
+import { PostgresAirDeviceCallEvents } from
+  "../../modules/device-calls/postgres-air-device-call-events.js";
+import { PostgresAirDeviceRegistryRepository } from
+  "../../modules/device-calls/postgres-air-device-registry.repository.js";
 import { PostgresIngressRepository } from
   "../../modules/ingress/postgres-ingress.repository.js";
 import { PostgresProviderOperationsRepository } from
@@ -53,12 +59,14 @@ import { PostgresReliableOutboxRepository } from
 
 export function createPostgresPrimaryRuntime() {
   const pool = new Pool(buildPostgresPrimaryPoolConfig());
+  const reliableInbox = new PostgresReliableInboxRepository(pool);
+  const reliableOutbox = new PostgresReliableOutboxRepository(pool);
   return {
     pool,
     leases: new PostgresAggregateLeaseRepository(pool),
     commandRetention: new PostgresPrimaryCommandRetention(pool),
-    reliableInbox: new PostgresReliableInboxRepository(pool),
-    reliableOutbox: new PostgresReliableOutboxRepository(pool),
+    reliableInbox,
+    reliableOutbox,
     productRecords: new PostgresProductRecordsRepository(pool),
     sessions: new PostgresSessionsRepository(pool),
     sessionCompletion: new PostgresSessionCompletionRepository(pool),
@@ -80,6 +88,12 @@ export function createPostgresPrimaryRuntime() {
     billing: new PostgresBillingRepository(pool),
     billingQueries: new PostgresBillingQueriesRepository(pool),
     billingNotifications: new PostgresBillingNotificationsRepository(pool),
+    airDeviceRegistry: new PostgresAirDeviceRegistryRepository(pool),
+    airDeviceCalls: new PostgresAirDeviceCallsRepository(pool),
+    airDeviceCallEvents: new PostgresAirDeviceCallEvents({
+      inbox: reliableInbox,
+      outbox: reliableOutbox,
+    }),
     close: () => pool.end(),
   };
 }

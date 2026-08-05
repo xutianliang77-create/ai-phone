@@ -1,4 +1,4 @@
--- Generated from air780.vuart.command-payload.v1.
+-- Generated from air780.vuart.command-payload.v1; filename fits Luatools' limit.
 -- The Lua command codec exists; runtime execution remains pending.
 return {
     schema = "air780.vuart.command-payload.v1",

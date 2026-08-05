@@ -88,6 +88,20 @@ V2046 的 `cc.extern_source()` 可接受 RAW PCM `zbuff`，但现有证据只覆
 本次没有打开串口，故不把 Windows 上的 007/audio_v2 运行态误写成 Beelink 当前
 运行态；也没有修改用户组、udev、服务、固件或发起真实电话。
 
+### 4.1 2026-08-04 14:04 +08:00 串口授权后快照
+
+用户明确授权打开 Air780 串口后，重新实时核对并仅打开用户 VUART if06。当前
+`INFO` 已确认板端为 `WUJIE_AIR_GATE0_DIAG 000.999.007`、V2046/Air780EHV、
+`audio_mode_actual=audio_v2`、`count_only=true`、`buffer_size=6400`；两次
+`STATS` 均为 `call_generation=0`、`quality=0`、上下行 callbacks/bytes=0，且
+832 ms 内没有增长。探测后 USB 仍为 Bus 001 Device 009，稳定 symlink 未变，
+内核窗口内没有断开/重连记录。
+
+本次没有修改 `dialout`/udev/systemd，没有刷机、拨号、DTMF 或音频注入。详细
+命令边界、响应哈希和首个 `PING` 的保留异常见
+`docs/acceptance/air780-if06-safe-serial-probe-20260804.md`。该证据只覆盖诊断 007
+文本协议，不代表生产 VUART v1 板端 runtime 或 Gate 0B 已通过。
+
 ## 5. 对 Air Device Gateway / LiveKit 的冻结规则
 
 - Gateway 按每路 6,400-byte/200-ms 块接收，并校验板端 sequence 与

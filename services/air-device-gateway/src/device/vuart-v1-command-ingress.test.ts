@@ -142,4 +142,61 @@ describe("Air Gateway VUART command ingress and replay guard", () => {
     expect(apply).toHaveBeenCalledTimes(1);
     expect(new Set(transport.requests().map((request) => request.sequence)).size).toBe(1);
   });
+
+  it("bounds unique in-flight commands while still coalescing an exact duplicate", async () => {
+    let release!: (value: null) => void;
+    const transport = {
+      exchange: vi.fn().mockImplementation(() =>
+        new Promise<null>((resolve) => { release = resolve; })),
+    };
+    const ingress = new AirDeviceGatewayCommandIngress(transport, {
+      maxAttempts: 1,
+      maxInFlightCommands: 1,
+    });
+
+    const first = ingress.execute(dial());
+    const duplicate = ingress.execute(dial());
+    await vi.waitFor(() => expect(transport.exchange).toHaveBeenCalledTimes(1));
+    expect(await ingress.execute(dial({
+      providerOperationId: "operation-2",
+      commandId: "command-2",
+      idempotencyKey: "air-command:comm-1:3:2",
+    }))).toEqual({ status: "overloaded", reason: "pending_limit", attempts: 0 });
+    expect(ingress.metrics()).toMatchObject({ pendingCommands: 1,
+      peakPendingCommands: 1, capacityRejections: 1, coalescedRequests: 1 });
+
+    release(null);
+    expect(await Promise.all([first, duplicate])).toEqual([
+      { status: "timeout_reconcile_required", commandId: "command-1", attempts: 1 },
+      { status: "timeout_reconcile_required", commandId: "command-1", attempts: 1 },
+    ]);
+  });
+
+  it("bounds the device replay ledger without evicting an applied command", async () => {
+    const apply = vi.fn<VuartV1CommandEffect>().mockResolvedValue({ status: "applied" });
+    const guard = new VuartV1CommandReplayGuard(apply, { maxRecords: 1 });
+    guard.bind(binding);
+    const transport = new FixtureVuartV1CommandTransport(guard);
+    const ingress = new AirDeviceGatewayCommandIngress(transport, {
+      maxAttempts: 1,
+      initialSequence: 100,
+    });
+
+    expect(await ingress.execute(dial())).toMatchObject({ status: "ack" });
+    expect(await ingress.execute(dial({
+      providerOperationId: "operation-2",
+      commandId: "command-2",
+      idempotencyKey: "air-command:comm-1:3:2",
+    }))).toMatchObject({ status: "error",
+      error: { errorCode: "internal_error" } });
+    const restoredIngress = new AirDeviceGatewayCommandIngress(transport, {
+      maxAttempts: 1,
+      initialSequence: 100,
+    });
+    expect(await restoredIngress.execute(dial())).toMatchObject({ status: "ack" });
+
+    expect(apply).toHaveBeenCalledTimes(1);
+    expect(guard.metrics()).toMatchObject({ ledgerRecords: 1,
+      pendingCommands: 0, ledgerCapacityRejections: 1, responseReplays: 1 });
+  });
 });

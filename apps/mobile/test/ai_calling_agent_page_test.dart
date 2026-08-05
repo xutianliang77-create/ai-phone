@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:translation_mobile/src/features/compliance/data/voice_processing_consent_store.dart';
 import 'package:translation_mobile/src/features/ai_calling_agent/data/ai_calling_agent_api_client.dart';
+import 'package:translation_mobile/src/features/ai_calling_agent/presentation/widgets/ai_calling_agent_draft_panel.dart';
 
 import 'support/ai_calling_agent_test_support.dart';
 
@@ -133,6 +134,53 @@ void main() {
     expect(client.takeoverDraftIds, <String>['draft_1']);
     expect(find.text('状态：已请求接管'), findsOneWidget);
     expect(find.text('已记录人工接管请求。'), findsOneWidget);
+  });
+
+  testWidgets('shows Air states separately and gates takeover on carrier',
+      (tester) async {
+    var takeoverCount = 0;
+    Widget panel(AiCallingAgentDraft draft) => MaterialApp(
+          home: Scaffold(
+            body: AiCallingAgentDraftPanel(
+              draft: draft,
+              busy: false,
+              onAuthorize: () {},
+              onStart: () {},
+              onRefresh: () {},
+              onTakeover: () => takeoverCount += 1,
+              onCancel: () {},
+            ),
+          ),
+        );
+
+    await tester.pumpWidget(panel(agentDraft(
+      status: 'in_progress',
+      callId: 'call_1',
+      executionProvider: 'air780_volte',
+      carrierState: 'ringing',
+      liveKitParticipantState: 'joined',
+    )));
+
+    expect(find.text('电话网络：振铃中'), findsOneWidget);
+    expect(find.text('LiveKit：已加入'), findsOneWidget);
+    expect(
+      tester.widget<OutlinedButton>(
+        find.widgetWithText(OutlinedButton, '人工接管'),
+      ).onPressed,
+      isNull,
+    );
+
+    await tester.pumpWidget(panel(agentDraft(
+      status: 'in_progress',
+      callId: 'call_1',
+      executionProvider: 'air780_volte',
+      carrierState: 'connected',
+      liveKitParticipantState: 'reconnecting',
+    )));
+    expect(find.text('电话网络：已接通'), findsOneWidget);
+    expect(find.text('LiveKit：重连中'), findsOneWidget);
+    await tester.tap(find.widgetWithText(OutlinedButton, '人工接管'));
+    expect(takeoverCount, 1);
   });
 
   testWidgets('cancels agent draft before authorization', (tester) async {

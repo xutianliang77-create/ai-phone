@@ -1,5 +1,8 @@
-import type { Pool, QueryResultRow } from "pg";
-import type { AirDeviceRegistrationDto } from "@translation/contracts";
+import type { Pool, PoolClient, QueryResultRow } from "pg";
+import type {
+  AirDeviceHeartbeatRequest,
+  AirDeviceRegistrationDto,
+} from "@translation/contracts";
 import { DeviceLeaseConflict } from "./device-lease-registry.js";
 
 export interface PostgresAirDeviceLease {
@@ -49,6 +52,81 @@ export class PostgresAirDeviceRegistryRepository {
     }
   }
 
+  async processHeartbeat(
+    client: Pick<PoolClient, "query">,
+    input: AirDeviceHeartbeatRequest & { leaseTtlSeconds: number },
+  ) {
+    if (input.activeBinding) {
+      const current = await client.query(`
+        SELECT 1 FROM ai_phone.air_device_calls
+        WHERE provider_call_id = $1 AND communication_session_id = $2
+          AND device_id = $3 AND lease_id = $4 AND fencing_token = $5
+          AND call_generation = $6
+          AND ai_phone.air_device_lease_is_current($3, $4, $5)
+        FOR UPDATE
+      `, [input.activeBinding.providerCallId,
+        input.activeBinding.communicationSessionId,
+        input.activeBinding.deviceId, input.activeBinding.leaseId,
+        input.activeBinding.fencingToken, input.activeBinding.callGeneration]);
+      if (current.rowCount !== 1) {
+        throw new DeviceLeaseConflict("Stale Air device heartbeat binding");
+      }
+    }
+
+    const registered = await client.query<DeviceRow>(`
+      INSERT INTO ai_phone.air_devices AS device(
+        device_id, firmware_version, protocol_version,
+        supported_sample_rates, status, last_heartbeat_at,
+        boot_id, heartbeat_sequence, device_uptime_ms,
+        heartbeat_observed_at
+      ) VALUES ($1, $2, $3, $4,
+        CASE WHEN $8 IN ('ready', 'in_call') THEN 'ready' ELSE $8 END,
+        now(), $5, $6, $7, $9::timestamptz)
+      ON CONFLICT(device_id) DO UPDATE SET
+        firmware_version = EXCLUDED.firmware_version,
+        protocol_version = EXCLUDED.protocol_version,
+        supported_sample_rates = EXCLUDED.supported_sample_rates,
+        last_heartbeat_at = now(),
+        boot_id = EXCLUDED.boot_id,
+        heartbeat_sequence = EXCLUDED.heartbeat_sequence,
+        device_uptime_ms = EXCLUDED.device_uptime_ms,
+        heartbeat_observed_at = EXCLUDED.heartbeat_observed_at,
+        status = CASE
+          WHEN EXCLUDED.status IN ('quarantined', 'fault') THEN EXCLUDED.status
+          WHEN device.status = 'offline' THEN 'ready'
+          ELSE device.status END,
+        version = device.version + 1,
+        updated_at = now()
+      WHERE device.boot_id IS NULL OR (
+        EXCLUDED.heartbeat_observed_at >= device.heartbeat_observed_at AND (
+          EXCLUDED.boot_id <> device.boot_id OR (
+            EXCLUDED.heartbeat_sequence > device.heartbeat_sequence AND
+            EXCLUDED.device_uptime_ms > device.device_uptime_ms
+          )
+        )
+      )
+      RETURNING *
+    `, [input.deviceId, input.firmwareVersion, input.protocolVersion,
+      input.supportedSampleRates, input.bootId, input.heartbeatSequence,
+      input.uptimeMs, input.deviceState, input.observedAt]);
+    const device = registered.rows[0];
+    if (!device) throw new DeviceLeaseConflict("Stale Air device heartbeat");
+
+    if (input.activeBinding) {
+      const renewed = await client.query<LeaseRow>(`
+        SELECT * FROM ai_phone.renew_air_device_lease($1, $2, $3, $4)
+      `, [input.activeBinding.deviceId, input.activeBinding.leaseId,
+        input.activeBinding.fencingToken, input.leaseTtlSeconds]);
+      if (!renewed.rows[0]) {
+        throw new DeviceLeaseConflict("Stale Air device lease renewal");
+      }
+    }
+    return {
+      registration: fromDeviceRow(device),
+      leaseRenewed: Boolean(input.activeBinding),
+    };
+  }
+
   async claim(input: {
     communicationSessionId: string;
     leaseId: string;
@@ -70,6 +148,23 @@ export class PostgresAirDeviceRegistryRepository {
       const row = result.rows[0];
       if (!row) throw new DeviceLeaseConflict("No ready Air device");
       return fromLeaseRow(row);
+    } finally {
+      client.release();
+    }
+  }
+
+  async findActiveLease(
+    communicationSessionId: string,
+  ): Promise<PostgresAirDeviceLease | null> {
+    const client = await this.pool.connect();
+    try {
+      const result = await client.query<LeaseRow>(`
+        SELECT * FROM ai_phone.air_device_leases
+        WHERE communication_session_id = $1 AND status = 'active'
+          AND expires_at > now()
+        LIMIT 1
+      `, [communicationSessionId]);
+      return result.rows[0] ? fromLeaseRow(result.rows[0]) : null;
     } finally {
       client.release();
     }

@@ -1,6 +1,6 @@
 # Air780 VUART v1 Command Payload Schema
 
-状态：`FROZEN_H0_NODE / LUA_RUNTIME_PENDING`
+状态：`FROZEN_H1_SERIAL_FIXTURE_PASS / NODE_LUA_GOLDEN_PASS / PROD_RUNTIME_HOST_PASS / REAL_TTY_PENDING`
 日期：2026-08-04
 
 本文冻结 VUART v1 的 `HELLO`、`HEARTBEAT`、`DIAL`、`HANGUP`、`DTMF`、
@@ -27,8 +27,10 @@
   carrier 或 media sequence。
 - `bootId` 每次 Lua/CORE 启动必须变化。Gateway 发现新 bootId 时进入 quarantine，
   先 reconcile carrier/lease，禁止自动重发不确定结果的 DIAL。
-- 当前 golden HELLO 只声明已具备证据的 call control 与电话下行采集；Gate 0B 未通过
-  前不得声明电话上行 PCM injection，DTMF 未实测前也不得声明 DTMF capability。
+- 冻结 golden HELLO 仍以 `0x03` 保存旧 call-control/downlink 证据。V2048 Gate 0B
+  已证明 8/16 kHz `cc.input` 数字 stream，production candidate `001.002.000` 因此以
+  `0x07` 进入独立板端自检；在新 bundle 的 Lua golden/runtime 和真实 VUART 未通过前，
+  该 bit 只能写候选能力，不能写产品发布已验证。DTMF 未实测前仍不得声明 DTMF。
 
 ## 2. HELLO
 
@@ -142,22 +144,54 @@ ledger 在同一 boot 的 lease 生命周期与 reconnect quarantine 期间不�
 ## 7. Golden vectors 与当前边界
 
 - Node JSON：`services/air-device-gateway/fixtures/vuart-v1/command-golden-vectors.json`
-- Lua table：`firmware/air780-livekit-bridge/vuart_v1_command_golden_vectors.lua`
+- Lua table：`firmware/air780-livekit-bridge/vuart_v1_cmd_vec.lua`
 - Node codec：`services/air-device-gateway/src/device/vuart-v1-command-payload.ts`
 - Gateway ingress：`services/air-device-gateway/src/device/vuart-v1-command-ingress.ts`
 - H0 replay guard：`services/air-device-gateway/src/device/vuart-v1-command-replay-guard.ts`
+- boot admission：`services/air-device-gateway/src/device/air-device-boot-admission.ts`
+- serial command exchange：
+  `services/air-device-gateway/src/device/vuart-v1-serial-command-exchange.ts`
 - mock exchange transport：
   `services/air-device-gateway/src/device/vuart-v1-command-transport-fixture.ts`
-- Lua codec：`firmware/air780-livekit-bridge/vuart_v1_command_codec.lua`
-- Lua self-test：`firmware/air780-livekit-bridge/vuart_v1_command_golden_selftest.lua`
+- Lua codec：`firmware/air780-livekit-bridge/vuart_v1_cmd_codec.lua`
+- Lua self-test：`firmware/air780-livekit-bridge/vuart_v1_cmd_test.lua`
+- Lua stream decoder：`firmware/air780-livekit-bridge/vuart_v1_stream.lua`
+- Lua replay ledger：`firmware/air780-livekit-bridge/vuart_v1_ledger.lua`
+- Lua control runtime：`firmware/air780-livekit-bridge/vuart_v1_runtime.lua`
+- 主机执行的 Lua behavior suite：
+  `firmware/air780-livekit-bridge/vuart_v1_prod_test.lua`
+- 生产 core manifest：`firmware/air780-livekit-bridge/PROD_MANIFEST.sha256`
 
 七组 vector 保存 HELLO、活动 HEARTBEAT、DIAL、HANGUP、DTMF、ACK 和冲突 ERROR 的
-完整 payload/frame hex。当前 Mac 无 Lua/LuatOS runtime；只有 Node codec 与静态 Lua
-合同已执行，状态保持 `LUA_RUNTIME_PENDING`。V2046-113 目标 self-test 未运行前不得
-标记 `NODE_LUA_GOLDEN_PASS`，也不得宣称真实拨号、DTMF 或 Gate 0B 已通过。
+完整 payload/frame hex。V2046-113 隔离 self-test 已输出 session/command/FINAL PASS，
+证据 `outputs/air780-gate0/windows-ui-helpers/r4-soc-log.txt` 的 SHA-256 为
+`1241f914c2408a7f5e1d1d24d3c423bf0696e7c4d60084c5706c8e0f851407b2`；取证后诊断 007
+已恢复。因此 codec/vector 状态为 `NODE_LUA_GOLDEN_PASS`，但仍不得宣称真实拨号、
+DTMF 或 Gate 0B 已通过。
 
-Gateway H0 已通过 mock transport 验证：首次 ACK 丢失后重放完全相同的 command
-frame，副作用仍恰好一次；旧 fence 与旧 generation 在 ledger 和执行器之前 100%
-拒绝；相同 commandId 不同 payload 及相同 idempotencyKey 换 commandId 均返回冲突。
-该 guard 是内存参考实现，尚未接真实 serial runtime 或板端持久 ledger；新 bootId、
-Gateway 重启和设备重启仍必须 quarantine/reconcile，不能据 H0 宣称崩溃恢复完成。
+生产 Lua core 通过 Wasmoon 的 Lua 5.4 VM 在主机实际执行，不是字符串扫描。behavior
+suite 覆盖 frame 分片/粘包/CRC、输入 buffer 硬上限、HELLO/HEARTBEAT、byte-identical
+ACK replay、commandId/idempotencyKey 冲突、旧 fence/generation 全拒绝、same-generation
+redial、重复唯一 HANGUP、ledger capacity、同 boot reconnect 和新 boot ledger 边界。
+mock carrier 与 behavior suite 不在 `PROD_MANIFEST.sha256`；历史默认 capability 为 `0x03`，
+测试中启用 DTMF capability 只证明软件分支，不是目标板 DTMF 证据。
+
+Gateway H1 已通过 `FixtureSerialTransport` 的真实 envelope/CRC 字节流验证：分片、粘包、
+乱序 ACK/ERROR 可按完整 command context 精确关联；伪造、损坏、迟到 response 被隔离；
+timeout、disconnect、admission revoke 和 pending memory 均有界。HELLO/HEARTBEAT admission
+会拒绝旧 boot、sequence/uptime 回退、心跳超时、错误 binding、缺失 capability、旧 lease/fence/
+generation；USB disconnect 或新 boot 会撤销 admission、取消在途 exchange，并在每次重试
+前重新门禁，禁止 quarantine 期间再次写 DIAL。
+
+replay ledger 同样有硬上限；已应用记录不为腾空间而驱逐，满载的新命令返回无副作用的
+`internal_error`。Gateway 重启 fixture 只在重建完全相同的冻结 command frame
+（含原始 sequence/timestamp/payload）后允许同 boot ACK replay，保持本规范的“缓存 ACK
+携带首次 requestFrameSequence”不变。真实 PostgreSQL inbox/outbox/CAS 尚未实现，因此
+不能把 fixture 重建写成跨进程 durability 已完成。
+
+生产 candidate `001.002.000` 已在 `production/main.lua` 接入有界 LuatOS VUART、真实
+`cc.dial`/`cc.hangUp`、6,400-byte 电话下行和 binary `AUDIO_UPLINK`→V2048 string
+`cc.input`；Wasmoon 主机组合测试已覆盖 binding、sequence/gap/duplicate/out-of-order、
+8 kHz 转换、partial write/backpressure 和 terminal stop，但新 bundle 仍未下载到板端。
+新 boot 意味着设备易失 ledger 不可信；必须先对账 carrier/lease 和模糊 DIAL 结果，
+不能仅凭 ready heartbeat 再次拨号。DTMF 因当前 `cc` API 无发送能力而明确不支持。

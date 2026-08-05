@@ -1,9 +1,5 @@
 local M = {}
 local crypto = rawget(_G, "crypto")
-if not crypto then
-    local ok, loaded = pcall(require, "crypto")
-    if ok then crypto = loaded end
-end
 local PAYLOAD_VERSION = 1
 local FRAME_VERSION = 1
 local SAMPLE_RATE_HZ = 16000

@@ -11,7 +11,9 @@ const logger = pino({ name: "agent-call-worker" });
 export function buildDefaultAgentCallDispatcher() {
   const env = loadEnv();
   if (!env.agentCallWorkerId) return null;
-  const bridge = env.agentCallProviderAdapter === "livekit_sip"
+  const bridge = ["air780_volte", "livekit_sip"].includes(
+    env.agentCallProviderAdapter ?? "",
+  )
     ? new HttpVoiceAgentRuntimeProvider({
         apiBaseUrl: env.apiBaseUrl,
         internalApiSecret: env.internalApiSecret,

@@ -5,7 +5,17 @@
   "main": "dist/index.js",
   "scripts": {
     "build": "tsc -p tsconfig.json",
+    "dev": "tsx src/main.ts",
+    "start": "node dist/main.js",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run src"
+  },
+  "devDependencies": {
+    "wasmoon": "^1.16.0"
+  },
+  "dependencies": {
+    "@livekit/rtc-node": "^0.13.30",
+    "@translation/contracts": "file:../../packages/contracts",
+    "serialport": "^13.0.0"
   }
 }

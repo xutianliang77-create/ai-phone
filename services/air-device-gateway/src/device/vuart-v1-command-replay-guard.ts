@@ -33,6 +33,10 @@ export interface VuartV1CommandReplayMetrics {
   bindingMismatches: number;
   invalidPayloads: number;
   effectErrors: number;
+  ledgerCapacityRejections: number;
+  ledgerRecords: number;
+  pendingCommands: number;
+  maxRecords: number;
 }
 
 interface ReplayRecord {
@@ -57,6 +61,7 @@ export class VuartV1CommandReplayGuard {
   private readonly records = new Map<string, ReplayRecord>();
   private readonly pending = new Map<string, PendingRecord>();
   private readonly idempotencyOwners = new Map<string, string>();
+  private readonly maxRecords: number;
   private readonly counters: VuartV1CommandReplayMetrics = {
     commandsApplied: 0,
     ackReplays: 0,
@@ -67,9 +72,21 @@ export class VuartV1CommandReplayGuard {
     bindingMismatches: 0,
     invalidPayloads: 0,
     effectErrors: 0,
+    ledgerCapacityRejections: 0,
+    ledgerRecords: 0,
+    pendingCommands: 0,
+    maxRecords: 0,
   };
 
-  constructor(private readonly effect: VuartV1CommandEffect) {}
+  constructor(
+    private readonly effect: VuartV1CommandEffect,
+    options: { maxRecords?: number } = {},
+  ) {
+    this.maxRecords = options.maxRecords ?? 1_024;
+    if (!Number.isInteger(this.maxRecords) || this.maxRecords < 1) {
+      throw new Error("VUART replay maxRecords must be a positive integer");
+    }
+  }
 
   bind(input: AirDeviceSessionBinding) {
     assertBinding(input);
@@ -90,6 +107,10 @@ export class VuartV1CommandReplayGuard {
         throw new Error("VUART command guard fence cannot decrease");
       }
     }
+    if (this.pending.size > 0) {
+      throw new Error("VUART command guard cannot change binding while commands pending");
+    }
+    this.clearLedger();
     this.activeBinding = { ...input };
   }
 
@@ -135,6 +156,10 @@ export class VuartV1CommandReplayGuard {
     if (owner && owner !== command.commandId) {
       return this.conflict(command, frame.sequence);
     }
+    if (this.records.size + this.pending.size >= this.maxRecords) {
+      this.counters.ledgerCapacityRejections += 1;
+      return this.error(command, frame.sequence, "internal_error");
+    }
 
     this.idempotencyOwners.set(command.idempotencyKey, command.commandId);
     const reply = this.executeOnce(command, frame.sequence);
@@ -157,7 +182,13 @@ export class VuartV1CommandReplayGuard {
   }
 
   metrics(): VuartV1CommandReplayMetrics {
-    return { ...this.counters };
+    return { ...this.counters, ledgerRecords: this.records.size,
+      pendingCommands: this.pending.size, maxRecords: this.maxRecords };
+  }
+
+  private clearLedger() {
+    this.records.clear();
+    this.idempotencyOwners.clear();
   }
 
   private async executeOnce(command: VuartV1DeviceCommand, sequence: number) {

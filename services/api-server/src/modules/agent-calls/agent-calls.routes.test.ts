@@ -1,13 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { buildApp } from "../../app.js";
 import { getStoreSnapshot } from "../../infrastructure/storage/json-store.js";
-import {
-  captureAgentCallEnv,
-  clearAgentCallEnv,
-  configureAgentExecutionEnv,
-  createAuthorizedDraft,
-  restoreAgentCallEnv,
-} from "./agent-calls.test-support.js";
+import { captureAgentCallEnv, clearAgentCallEnv, configureAgentExecutionEnv,
+  createAuthorizedDraft, restoreAgentCallEnv } from "./agent-calls.test-support.js";
 describe("agent call routes", () => {
   let previousEnv: Record<string, string | undefined>;
 
@@ -20,6 +15,11 @@ describe("agent call routes", () => {
     store.usagePlanCodes = {};
     store.usageHolds = [];
     store.billingLedger = [];
+    store.sessions = [];
+    store.providerOperations = [];
+    store.agentRuns = [];
+    store.agentSteps = [];
+    store.agentToolExecutions = [];
   });
 
   afterEach(() => {
@@ -191,10 +191,23 @@ describe("agent call routes", () => {
 
     expect(queued.json().draft).toMatchObject({
       status: "queued",
-      executionProvider: "domestic_bridge",
+      executionProvider: "pstn_http",
     });
     expect(queued.json().draft.callId).toEqual(expect.any(String));
     expect(queued.json().draft.queuedAt).toEqual(expect.any(String));
+    expect(getStoreSnapshot().agentToolExecutions).toContainEqual(
+      expect.objectContaining({
+        toolName: "place_phone_call",
+        idempotencyKey: `agent-dial:${queued.json().draft.callId}`,
+      }),
+    );
+    expect(getStoreSnapshot().providerOperations).toContainEqual(
+      expect.objectContaining({
+        provider: "pstn_http",
+        operationType: "phone_outbound",
+        sessionId: queued.json().draft.callId,
+      }),
+    );
     expect(inProgress.json().draft).toMatchObject({
       status: "in_progress",
       providerCallId: "provider-call-1",

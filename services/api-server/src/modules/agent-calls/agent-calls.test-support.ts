@@ -25,6 +25,10 @@ const envKeys = [
   "VOICE_AGENT_RECORDING_CONSENT_TEXT_ZH",
   "VOICE_AGENT_RECORDING_CONSENT_TEXT_EN",
   "VOICE_AGENT_RECORDING_CONSENT_TTL_SECONDS",
+  "API_STORAGE_DRIVER",
+  "AIR_DEVICE_GATEWAY_BASE_URL",
+  "AIR_DEVICE_GATEWAY_API_SECRET",
+  "AIR_DEVICE_GATEWAY_TIMEOUT_MS",
 ];
 
 export async function createAuthorizedDraft(
@@ -70,6 +74,19 @@ export function configureAgentExecutionEnv() {
   process.env.PSTN_CONSENT_PROMPT_VERSION = "cn-agent-v1";
   process.env.PSTN_RECORDING_DISCLOSURE_ENABLED = "true";
   process.env.PSTN_MAX_CALL_MINUTES = "30";
+}
+
+export function configureAirAgentExecutionEnv() {
+  process.env.AGENT_CALL_WORKER_ENABLED = "true";
+  process.env.AGENT_CALL_PROVIDER_ADAPTER = "air780_volte";
+  process.env.AGENT_CALL_WORKER_LEASE_SECONDS = "45";
+  process.env.AGENT_CALL_RECONCILIATION_TIMEOUT_SECONDS = "7200";
+  process.env.PSTN_PROVIDER_IDEMPOTENCY_GUARANTEED = "true";
+  process.env.INTERNAL_API_SECRET = "internal-secret-for-agent";
+  process.env.API_STORAGE_DRIVER = "postgres";
+  process.env.AIR_DEVICE_GATEWAY_BASE_URL = "https://air-gateway.example.cn";
+  process.env.AIR_DEVICE_GATEWAY_API_SECRET = "g".repeat(32);
+  process.env.AIR_DEVICE_GATEWAY_TIMEOUT_MS = "5000";
 }
 
 export function captureAgentCallEnv() {

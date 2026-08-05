@@ -81,16 +81,44 @@ describe("Air VUART v1 session payload golden vectors", () => {
     });
   });
 
+  it("matches the frozen AUDIO_UPLINK envelope and decodes the same PCM", () => {
+    const vector = golden.vectors.audioUplink16k200ms;
+    const pcm = patternedPcm();
+    const payload = encodeVuartV1AudioPayload({
+      ...vector.binding,
+      mediaSequence: vector.mediaSequence,
+      payload: pcm,
+    });
+    const encoded = encodeVuartFrame({
+      type: VuartFrameType.AUDIO_UPLINK,
+      flags: vector.frame.flags,
+      sequence: vector.frame.sequence,
+      timestampMs: BigInt(vector.frame.timestampMs),
+      payload,
+    });
+
+    expect(payload.byteLength).toBe(vector.payloadBytes);
+    expect(sha256(payload)).toBe(vector.payloadSha256);
+    expect(encoded.byteLength).toBe(vector.frameBytes);
+    expect(sha256(encoded)).toBe(vector.frameSha256);
+    expect(decodeVuartV1AudioPayload(
+      decodeVuartFrame(encoded).payload,
+    )).toEqual({ ...vector.binding, mediaSequence: vector.mediaSequence,
+      payload: pcm });
+  });
+
   it("keeps the Lua golden table synchronized with the Node vectors", () => {
     const lua = readFileSync(new URL(
-      "../../../../firmware/air780-livekit-bridge/vuart_v1_golden_vectors.lua",
+      "../../../../firmware/air780-livekit-bridge/vuart_v1_golden_vec.lua",
       import.meta.url,
     ), "utf8");
     const call = golden.vectors.callStateConnected;
     const audio = golden.vectors.audioDownlink16k200ms;
+    const uplink = golden.vectors.audioUplink16k200ms;
 
     for (const expected of [
       `schema = "${golden.schema}"`,
+      `status = "${golden.status}"`,
       `communication_session_id = "${call.binding.communicationSessionId}"`,
       `provider_call_id = "${call.binding.providerCallId}"`,
       `device_id = "${call.binding.deviceId}"`,
@@ -111,6 +139,12 @@ describe("Air VUART v1 session payload golden vectors", () => {
       `payload_sha256 = "${audio.payloadSha256}"`,
       `frame_bytes = ${audio.frameBytes}`,
       `frame_sha256 = "${audio.frameSha256}"`,
+      "audio_uplink_16k_200ms = {",
+      `media_sequence = ${uplink.mediaSequence}`,
+      `frame_sequence = ${uplink.frame.sequence}`,
+      `timestamp_ms = "${uplink.frame.timestampMs}"`,
+      `payload_sha256 = "${uplink.payloadSha256}"`,
+      `frame_sha256 = "${uplink.frameSha256}"`,
     ]) {
       expect(lua).toContain(expected);
     }
@@ -247,18 +281,15 @@ function frame(type: number, payload: Uint8Array): VuartFrame {
     payload,
   };
 }
-
 function patternedPcm() {
   return Uint8Array.from({ length: 6_400 }, (_, index) => index % 256);
 }
-
 function join(left: Uint8Array, right: Uint8Array) {
   const value = new Uint8Array(left.byteLength + right.byteLength);
   value.set(left);
   value.set(right, left.byteLength);
   return value;
 }
-
 function sha256(value: Uint8Array) {
   return createHash("sha256").update(value).digest("hex");
 }
@@ -273,9 +304,11 @@ function fromHex(value: string) {
 
 interface GoldenVectors {
   schema: string;
+  status: string;
   vectors: {
     callStateConnected: CallStateGolden;
     audioDownlink16k200ms: AudioGolden;
+    audioUplink16k200ms: AudioGolden;
   };
 }
 

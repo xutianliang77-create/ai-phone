@@ -1,3 +1,4 @@
+-- Keep this filename within Luatools' 24-byte limit.
 local M = {}
 local VERSION = 1
 local MIN_AUDIO_PAYLOAD_BYTES = 6461

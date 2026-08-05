@@ -160,6 +160,34 @@ void main() {
     expect(draft.resultSummary, '已完成预约。');
   });
 
+  test('parses carrier and LiveKit state independently', () async {
+    final client = AiCallingAgentApiClient(
+      baseUrl: Uri.parse('http://127.0.0.1:3100'),
+      accountSessionStore: _sessionStore(),
+      client: MockClient((request) async => _jsonResponse(
+            {
+              'draft': _draftJson(
+                status: 'in_progress',
+                callId: 'call_1',
+                executionProvider: 'air780_volte',
+                carrierState: 'ringing',
+                liveKitParticipantState: 'joined',
+                deviceId: 'air-001',
+                callGeneration: 7,
+              ),
+            },
+            200,
+          )),
+    );
+
+    final draft = await client.getDraft(draftId: 'draft_1');
+
+    expect(draft.carrierState, 'ringing');
+    expect(draft.liveKitParticipantState, 'joined');
+    expect(draft.deviceId, 'air-001');
+    expect(draft.callGeneration, 7);
+  });
+
   test('cancels drafts with the user cancellation reason', () async {
     final client = AiCallingAgentApiClient(
       baseUrl: Uri.parse('http://127.0.0.1:3100'),
@@ -211,6 +239,10 @@ Map<String, Object?> _draftJson({
   String? callId,
   String? executionProvider,
   String? resultSummary,
+  String? carrierState,
+  String? liveKitParticipantState,
+  String? deviceId,
+  int? callGeneration,
 }) {
   return {
     'id': 'draft_1',
@@ -224,6 +256,11 @@ Map<String, Object?> _draftJson({
     if (callId != null) 'callId': callId,
     if (executionProvider != null) 'executionProvider': executionProvider,
     if (resultSummary != null) 'resultSummary': resultSummary,
+    if (carrierState != null) 'carrierState': carrierState,
+    if (liveKitParticipantState != null)
+      'liveKitParticipantState': liveKitParticipantState,
+    if (deviceId != null) 'deviceId': deviceId,
+    if (callGeneration != null) 'callGeneration': callGeneration,
     'createdAt': '2026-07-03T00:00:00.000Z',
     'updatedAt': '2026-07-03T00:00:00.000Z',
   };

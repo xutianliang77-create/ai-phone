@@ -29,6 +29,16 @@ export type AirDeviceStatus =
   | "offline"
   | "fault";
 
+export type AirDeviceCarrierState = "dialing" | "ringing" | "connected" |
+  "disconnected" | "busy" | "failed" | "unknown";
+
+export type AirDeviceCarrierCause = "none" | "local_hangup" |
+  "remote_hangup" | "busy" | "no_answer" | "rejected" |
+  "network_error" | "device_error" | "unknown";
+
+export type AirDeviceLiveKitParticipantState = "absent" | "joining" |
+  "joined" | "reconnecting" | "disconnected";
+
 export interface AirDeviceRegistrationDto {
   deviceId: string;
   firmwareVersion: string;
@@ -58,12 +68,60 @@ export interface AirDeviceCallDto {
   deviceId: string;
   leaseId: string;
   fencingToken: number;
-  carrierState: "dialing" | "ringing" | "connected" | "disconnected" |
-    "busy" | "failed" | "unknown";
-  liveKitParticipantState: "absent" | "joining" | "joined" |
-    "reconnecting" | "disconnected";
+  carrierState: AirDeviceCarrierState;
+  liveKitParticipantState: AirDeviceLiveKitParticipantState;
   callGeneration: number;
   version: number;
+  connectedAt?: string;
+  endedAt?: string;
+}
+
+export interface AirDeviceCarrierEventRequest {
+  eventId: string;
+  communicationSessionId: string;
+  providerCallId: string;
+  deviceId: string;
+  leaseId: string;
+  fencingToken: number;
+  callGeneration: number;
+  eventSequence: number;
+  carrierState: AirDeviceCarrierState;
+  carrierCause: AirDeviceCarrierCause;
+  occurredAt: string;
+}
+
+export interface AirDeviceLiveKitParticipantEventRequest {
+  eventId: string;
+  communicationSessionId: string;
+  providerCallId: string;
+  deviceId: string;
+  leaseId: string;
+  fencingToken: number;
+  callGeneration: number;
+  eventSequence: number;
+  liveKitParticipantState: AirDeviceLiveKitParticipantState;
+  occurredAt: string;
+}
+
+export interface AirDeviceHeartbeatRequest {
+  eventId: string;
+  deviceId: string;
+  bootId: string;
+  firmwareVersion: string;
+  protocolVersion: string;
+  supportedSampleRates: Array<8_000 | 16_000>;
+  heartbeatSequence: number;
+  uptimeMs: string;
+  deviceState: "ready" | "in_call" | "quarantined" | "fault";
+  observedAt: string;
+  activeBinding?: {
+    communicationSessionId: string;
+    providerCallId: string;
+    deviceId: string;
+    leaseId: string;
+    fencingToken: number;
+    callGeneration: number;
+  };
 }
 
 export interface AirDeviceTrackAdmissionDto {
@@ -75,6 +133,12 @@ export interface AirDeviceTrackAdmissionDto {
   deviceId: string;
   leaseId: string;
   callGeneration: number;
+}
+
+export interface AirDeviceTrackAdmissionRequest extends
+AirDeviceTrackAdmissionDto {
+  roomName: string;
+  fencingToken: number;
 }
 
 export interface PlacePhoneCallPayload {
@@ -91,6 +155,7 @@ export interface PlacePhoneCallPayload {
 export interface PhoneCallControlPayload {
   communicationSessionId: string;
   providerCallId: string;
+  callGeneration: number;
   deviceLease?: DeviceLeaseBinding;
 }
 

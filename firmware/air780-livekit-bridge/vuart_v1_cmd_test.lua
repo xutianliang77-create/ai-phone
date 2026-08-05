@@ -1,6 +1,6 @@
-local codec = require("vuart_v1_command_codec")
+local codec = require("vuart_v1_cmd_codec")
 local frame_codec = require("vuart_v1_codec")
-local golden = require("vuart_v1_command_golden_vectors")
+local golden = require("vuart_v1_cmd_vec")
 
 local M = {}
 

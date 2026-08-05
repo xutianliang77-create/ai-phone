@@ -58,6 +58,14 @@ export function normalizeAgentCallPhone(value: string) {
   return value.trim().replace(/[^\d+]/g, "").replace(/^\+86/, "");
 }
 
+export function toAgentCallE164Phone(value: string) {
+  const phone = normalizeAgentCallPhone(value);
+  if (/^\+[1-9]\d{7,14}$/.test(phone)) return phone;
+  if (/^1[3-9]\d{9}$/.test(phone)) return `+86${phone}`;
+  if (/^0\d{9,11}$/.test(phone)) return `+86${phone.slice(1)}`;
+  return null;
+}
+
 export function isValidAgentCallPhone(value: string) {
   const phone = normalizeAgentCallPhone(value);
   if (/^\+[1-9]\d{7,14}$/.test(phone)) return true;

@@ -52,6 +52,25 @@ describe("PostgreSQL Air device registry", () => {
     expect(fixture.release).toHaveBeenCalledOnce();
   });
 
+  it("loads only the current active lease for a communication session", async () => {
+    const fixture = pool([{ ...leaseRow }]);
+    const repository = new PostgresAirDeviceRegistryRepository(fixture.pool);
+
+    await expect(repository.findActiveLease("session-1")).resolves.toEqual({
+      deviceId: "air-001",
+      leaseId: "lease-1",
+      communicationSessionId: "session-1",
+      ownerId: "gateway-instance-1",
+      fencingToken: 7,
+      expiresAt: "2026-08-04T03:00:30.000Z",
+      version: 1,
+    });
+    expect(fixture.query).toHaveBeenCalledWith(
+      expect.stringMatching(/communication_session_id = \$1[\s\S]+status = 'active'/),
+      ["session-1"],
+    );
+  });
+
   it("rejects a stale lease returned by the database assertion", async () => {
     const fixture = pool([{ current: false }]);
     const repository = new PostgresAirDeviceRegistryRepository(fixture.pool);
@@ -91,6 +110,43 @@ describe("PostgreSQL Air device registry", () => {
       ["air-001", "lease-1", 7, 30],
     );
   });
+
+  it("applies one monotonic boot heartbeat and lease renewal in one claim transaction", async () => {
+    const query = vi.fn()
+      .mockResolvedValueOnce({ rowCount: 1, rows: [{ exists: 1 }] })
+      .mockResolvedValueOnce({ rowCount: 1, rows: [deviceRow] })
+      .mockResolvedValueOnce({ rowCount: 1, rows: [leaseRow] });
+    const repository = new PostgresAirDeviceRegistryRepository({} as never);
+
+    await expect(repository.processHeartbeat({ query } as never, {
+      ...heartbeat,
+      leaseTtlSeconds: 60,
+    })).resolves.toMatchObject({
+      registration: { deviceId: "air-001" },
+      leaseRenewed: true,
+    });
+
+    expect(query).toHaveBeenCalledTimes(3);
+    expect(query.mock.calls[0]?.[1]).toEqual([
+      "air-call-1", "session-1", "air-001", "lease-1", 7, 3,
+    ]);
+    expect(query.mock.calls[1]?.[0]).toContain(
+      "EXCLUDED.heartbeat_sequence > device.heartbeat_sequence",
+    );
+    expect(query.mock.calls[2]?.[1]).toEqual(["air-001", "lease-1", 7, 60]);
+  });
+
+  it("rejects a stale or out-of-order board heartbeat", async () => {
+    const query = vi.fn().mockResolvedValue({ rowCount: 0, rows: [] });
+    const repository = new PostgresAirDeviceRegistryRepository({} as never);
+
+    await expect(repository.processHeartbeat({ query } as never, {
+      ...heartbeat,
+      deviceState: "ready",
+      activeBinding: undefined,
+      leaseTtlSeconds: 60,
+    })).rejects.toBeInstanceOf(DeviceLeaseConflict);
+  });
 });
 
 const leaseRow = {
@@ -112,6 +168,27 @@ const deviceRow = {
   last_heartbeat_at: new Date("2026-08-04T03:00:00.000Z"),
   fencing_token: "7",
   version: "3",
+};
+
+const heartbeat = {
+  eventId: "air_hb_1",
+  deviceId: "air-001",
+  bootId: "boot-1",
+  firmwareVersion: "production-r2",
+  protocolVersion: "vuart-v1",
+  supportedSampleRates: [16_000] as Array<16_000>,
+  heartbeatSequence: 10,
+  uptimeMs: "10000",
+  deviceState: "in_call" as const,
+  observedAt: "2026-08-04T12:00:00.000Z",
+  activeBinding: {
+    communicationSessionId: "session-1",
+    providerCallId: "air-call-1",
+    deviceId: "air-001",
+    leaseId: "lease-1",
+    fencingToken: 7,
+    callGeneration: 3,
+  },
 };
 
 function pool(rows: unknown[]) {

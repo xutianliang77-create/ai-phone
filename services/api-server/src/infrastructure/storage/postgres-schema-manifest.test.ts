@@ -7,9 +7,9 @@ import {
 
 describe("PostgreSQL schema manifest", () => {
   it("pins the complete ordered migration set", () => {
-    expect(expectedPostgresMigrations).toHaveLength(32);
+    expect(expectedPostgresMigrations).toHaveLength(35);
     expect(expectedPostgresMigrations.at(-1)).toBe(
-      "032_air_device_call_control",
+      "035_agent_task_call_reference_projection",
     );
     expect(comparePostgresMigrations([...expectedPostgresMigrations])).toEqual({
       missing: [],
@@ -22,9 +22,39 @@ describe("PostgreSQL schema manifest", () => {
       ...expectedPostgresMigrations.slice(0, -1),
       "999_unknown",
     ])).toEqual({
-      missing: ["032_air_device_call_control"],
+      missing: ["035_agent_task_call_reference_projection"],
       extra: ["999_unknown"],
     });
+  });
+
+  it("keeps Agent task call references synchronized on projection updates", () => {
+    const sql = readFileSync(new URL(
+      "../../../../../infra/postgres/migrations/035_agent_task_call_reference_projection.sql",
+      import.meta.url,
+    ), "utf8");
+    expect(sql).toContain("call_id = EXCLUDED.call_id");
+    expect(sql).toContain("session_id = EXCLUDED.session_id");
+    expect(sql).toContain("payload->>'callId'");
+  });
+
+  it("pins boot-bound monotonic device heartbeat state", () => {
+    const sql = readFileSync(new URL(
+      "../../../../../infra/postgres/migrations/034_air_device_heartbeats.sql",
+      import.meta.url,
+    ), "utf8");
+    expect(sql).toContain("boot_id");
+    expect(sql).toContain("heartbeat_sequence");
+    expect(sql).toContain("device_uptime_ms");
+    expect(sql).toContain("heartbeat_observed_at");
+  });
+
+  it("pins separate monotonic carrier and LiveKit event sequences", () => {
+    const sql = readFileSync(new URL(
+      "../../../../../infra/postgres/migrations/033_air_device_call_event_sequences.sql",
+      import.meta.url,
+    ), "utf8");
+    expect(sql).toContain("carrier_event_sequence");
+    expect(sql).toContain("livekit_event_sequence");
   });
 
   it("pins fenced Air device leases and separate carrier/LiveKit state", () => {

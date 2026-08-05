@@ -143,6 +143,9 @@ AiCallingAgentDraft agentDraft({
   List<String> riskReasons = const <String>[],
   String? callId,
   String? resultSummary,
+  String? executionProvider,
+  String? carrierState,
+  String? liveKitParticipantState,
 }) {
   return AiCallingAgentDraft(
     id: 'draft_1',
@@ -155,5 +158,8 @@ AiCallingAgentDraft agentDraft({
     riskReasons: riskReasons,
     callId: callId,
     resultSummary: resultSummary,
+    executionProvider: executionProvider,
+    carrierState: carrierState,
+    liveKitParticipantState: liveKitParticipantState,
   );
 }

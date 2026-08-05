@@ -1,4 +1,4 @@
-import { inference, voice } from "@livekit/agents";
+import { llm, voice } from "@livekit/agents";
 import type { JobContext } from "@livekit/agents";
 import {
   type DataPacketKind,
@@ -16,19 +16,23 @@ import type { VoiceAgentRuntimeEnv } from "./config.js";
 import type { ProcessData } from "./agent-definition.js";
 import type { VoiceAgentRuntimeApiClient } from "./runtime-api-client.js";
 import type { VoiceAgentDispatchTicket } from "./runtime-ticket.js";
-import {
-  buildVoiceAgentTools,
-  type VoiceAgentUserData,
-} from "./runtime-tools.js";
+import { startWithReplyAuthorizationPaused } from "./agent-session-start-gate.js";
+import { configureVoiceAgentSessionAudio,
+  type LiveKitTargetAudioOutput } from "./livekit-target-audio-output.js";
+import { buildVoiceAgentTools,
+  type VoiceAgentUserData } from "./runtime-tools.js";
 import { parseVoiceAgentControl } from "./voice-agent-control.js";
+import { assertVoiceAgentCalleeBinding } from "./voice-agent-participant-binding.js";
 import {
-  buildVoiceAgentModels,
-  voiceAgentInstructions,
-} from "./voice-agent-session-config.js";
+  discloseAndGenerateReply,
+  playVoiceAgentDisclosure,
+  voiceAgentReplyInstructions,
+} from "./voice-agent-disclosure.js";
+import { buildVoiceAgentModels,
+  voiceAgentInstructions } from "./voice-agent-session-config.js";
 
 const logger = pino({ name: "voice-agent-session" });
 const controlTopic = "voice-agent.control.v1";
-
 export class ManagedVoiceAgentSession {
   private session?: voice.AgentSession<VoiceAgentUserData>;
   private amd?: voice.AMD;
@@ -36,6 +40,9 @@ export class ManagedVoiceAgentSession {
   private stopped = false;
   private endingSent = false;
   private takeover = false;
+  private sessionClosed = false;
+  private targetAudioOutput?: LiveKitTargetAudioOutput;
+  private targetAudioAbort?: AbortController;
   private readonly handledControls = new Set<string>();
 
   constructor(private readonly input: {
@@ -86,26 +93,38 @@ export class ManagedVoiceAgentSession {
       },
     });
     this.session = session;
-    session.pauseReplyAuthorization();
     const closed = new Promise<void>((resolve) => {
-      session.once(voice.AgentSessionEventTypes.Close, () => resolve());
+      session.once(voice.AgentSessionEventTypes.Close, () => {
+        this.sessionClosed = true;
+        this.targetAudioAbort?.abort();
+        resolve();
+      });
     });
-    await session.start({
+    const audio = configureVoiceAgentSessionAudio(session, {
+      room: this.input.ctx.room,
+      telephonyProvider: this.input.snapshot.telephonyProvider,
+      publisherIdentity: this.input.snapshot.participantIdentity,
+      targetParticipantIdentity: this.input.snapshot.calleeParticipantIdentity,
+    });
+    this.targetAudioOutput = audio.output;
+    this.targetAudioAbort = audio.abortController;
+    await startWithReplyAuthorizationPaused(session, {
       agent,
       room: this.input.ctx.room,
       inputOptions: {
-        participantIdentity: this.input.snapshot.sipParticipantIdentity,
-        participantKinds: [ParticipantKind.SIP],
+        participantIdentity: this.input.snapshot.calleeParticipantIdentity,
+        participantKinds: [this.input.snapshot.telephonyProvider === "livekit_sip"
+          ? ParticipantKind.SIP
+          : ParticipantKind.STANDARD],
         closeOnDisconnect: true,
         deleteRoomOnClose: false,
       },
-      outputOptions: {
-        audioEnabled: true,
-        transcriptionEnabled: true,
-        syncTranscription: true,
-      },
+      outputOptions: audio.roomOutputOptions,
       record: false,
     });
+    if (this.targetAudioOutput) {
+      await this.targetAudioOutput.start(this.targetAudioAbort!.signal);
+    }
     const room = this.input.ctx.room;
     const onControl = (
       data: Uint8Array,
@@ -118,14 +137,10 @@ export class ManagedVoiceAgentSession {
       await this.report("ready");
       this.startHeartbeat();
       const participant = await this.input.ctx.waitForParticipant(
-        this.input.snapshot.sipParticipantIdentity,
+        this.input.snapshot.calleeParticipantIdentity,
       );
-      if (participant.kind !== ParticipantKind.SIP ||
-        participant.attributes["translation.sessionId"] !==
-          this.input.snapshot.sessionId) {
-        throw new Error("SIP participant binding failed");
-      }
-      await this.classifyAndBegin(models.llm);
+      assertVoiceAgentCalleeBinding(this.input.snapshot, participant);
+      await this.classifyAndBegin(models.llm, closed);
       await closed;
     } finally {
       room.off(RoomEvent.DataReceived, onControl);
@@ -136,6 +151,7 @@ export class ManagedVoiceAgentSession {
     if (this.stopped) return;
     this.stopped = true;
     if (this.heartbeat) clearInterval(this.heartbeat);
+    this.targetAudioAbort?.abort();
     if (errorClass && !this.takeover) {
       await this.input.api.hangup({
         snapshot: this.input.snapshot,
@@ -145,6 +161,7 @@ export class ManagedVoiceAgentSession {
     }
     await this.amd?.aclose().catch(() => {});
     await this.session?.close().catch(() => {});
+    await this.targetAudioOutput?.close().catch(() => {});
     if (errorClass) {
       await this.report("failed", { errorClass }).catch(() => {});
     }
@@ -154,10 +171,10 @@ export class ManagedVoiceAgentSession {
     }
   }
 
-  private async classifyAndBegin(llm: inference.LLM) {
+  private async classifyAndBegin(model: llm.LLM, closed: Promise<void>) {
     const amd = new voice.AMD(this.session!, {
-      llm: this.input.env.amdModel ?? llm,
-      participantIdentity: this.input.snapshot.sipParticipantIdentity,
+      llm: this.input.env.amdModel ?? model,
+      participantIdentity: this.input.snapshot.calleeParticipantIdentity,
       interruptOnMachine: false,
       noSpeechTimeoutMs: this.input.env.amdNoSpeechTimeoutMs,
       detectionTimeoutMs: this.input.env.amdDetectionTimeoutMs,
@@ -165,6 +182,7 @@ export class ManagedVoiceAgentSession {
     });
     this.amd = amd;
     const prediction = await amd.execute();
+    if (this.sessionClosed) return;
     const category = prediction.category as VoiceAgentAmdCategory;
     await this.report("amd_classified", {
       amdCategory: category,
@@ -181,7 +199,7 @@ export class ManagedVoiceAgentSession {
       return;
     }
     if (category === "machine-vm") {
-      await this.handleVoicemail(prediction.reason);
+      await this.handleVoicemail(prediction.reason, closed);
       return;
     }
     if (category === "machine-ivr") {
@@ -195,27 +213,21 @@ export class ManagedVoiceAgentSession {
       });
       return;
     }
-    await this.discloseAndStart();
+    await this.discloseAndStart(closed);
   }
 
-  private async discloseAndStart() {
-    await this.report("disclosure_started");
-    await this.session!.say(this.input.snapshot.disclosureText, {
-      allowInterruptions: false,
-      addToChatCtx: true,
-    }).waitForPlayout();
-    await this.report("disclosure_completed");
-    this.session!.resumeReplyAuthorization();
-    this.session!.generateReply({
-      instructions: this.input.snapshot.recordingConsent
-        ? `Before discussing the objective, ask exactly: "${
-            this.input.snapshot.recordingConsent.promptText
-          }" Wait for an explicit yes or no. Call record_recording_consent with the exact transcribed answer. A refusal must be recorded as revoked and the call may continue without recording. If consent is later withdrawn, call the tool again immediately.`
-        : "Continue with the approved objective now. Stay within the approved script and tools.",
+  private async discloseAndStart(closed: Promise<void>) {
+    await discloseAndGenerateReply({
+      session: this.session!,
+      disclosureText: this.input.snapshot.disclosureText,
+      replyInstructions: voiceAgentReplyInstructions(this.input.snapshot),
+      closed,
+      isClosed: () => this.sessionClosed,
+      report: (event) => this.report(event),
     });
   }
 
-  private async handleVoicemail(reason: string) {
+  private async handleVoicemail(reason: string, closed: Promise<void>) {
     if (!this.input.env.voicemailEnabled) {
       await this.finish({
         outcome: "unresolved",
@@ -226,12 +238,15 @@ export class ManagedVoiceAgentSession {
       });
       return;
     }
-    await this.report("disclosure_started");
-    await this.session!.say(
-      `${this.input.snapshot.disclosureText} ${this.input.snapshot.approvedScript}`,
-      { allowInterruptions: false, addToChatCtx: true },
-    ).waitForPlayout();
-    await this.report("disclosure_completed");
+    const played = await playVoiceAgentDisclosure({
+      session: this.session!,
+      disclosureText:
+        `${this.input.snapshot.disclosureText} ${this.input.snapshot.approvedScript}`,
+      closed,
+      isClosed: () => this.sessionClosed,
+      report: (event) => this.report(event),
+    });
+    if (!played) return;
     await this.finish({
       outcome: "partial",
       summary: "A disclosed voicemail message was left.",

@@ -7,14 +7,23 @@ import {
   type VuartV1ErrorPayload,
 } from "./vuart-v1-command-payload.js";
 import { VuartFrameType, type VuartFrame } from "./vuart-frame.js";
+import type { AirDeviceCommandBlockReason } from "./air-device-boot-admission.js";
 
 export interface VuartV1CommandExchangeTransport {
   exchange(request: Omit<VuartFrame, "version">): Promise<VuartFrame | null>;
+  cancelPending?(reason: string): void;
+}
+
+export interface AirDeviceCommandAdmission {
+  commandBlockReason(command: VuartV1DeviceCommand): AirDeviceCommandBlockReason | null;
+  onAdmissionRevoked?(listener: () => void): () => void;
 }
 
 export type AirDeviceGatewayCommandResult =
   | { status: "ack"; ack: VuartV1AckPayload; attempts: number }
   | { status: "error"; error: VuartV1ErrorPayload; attempts: number }
+  | { status: "blocked"; reason: AirDeviceCommandBlockReason; attempts: number }
+  | { status: "overloaded"; reason: "pending_limit"; attempts: 0 }
   | { status: "timeout_reconcile_required"; commandId: string; attempts: number };
 
 export interface AirDeviceGatewayCommandIngressMetrics {
@@ -25,6 +34,10 @@ export interface AirDeviceGatewayCommandIngressMetrics {
   deviceErrors: number;
   timeouts: number;
   invalidResponses: number;
+  blockedCommands: number;
+  capacityRejections: number;
+  pendingCommands: number;
+  peakPendingCommands: number;
 }
 
 interface InFlightCommand {
@@ -35,6 +48,10 @@ interface InFlightCommand {
 export class AirDeviceGatewayCommandIngress {
   private nextSequence: number;
   private readonly maxAttempts: number;
+  private readonly maxInFlightCommands: number;
+  private readonly admission?: AirDeviceCommandAdmission;
+  private readonly externalSequence?: () => number;
+  private readonly unsubscribeAdmission?: () => void;
   private readonly nowMs: () => bigint;
   private readonly inFlight = new Map<string, InFlightCommand>();
   private readonly counters: AirDeviceGatewayCommandIngressMetrics = {
@@ -45,14 +62,22 @@ export class AirDeviceGatewayCommandIngress {
     deviceErrors: 0,
     timeouts: 0,
     invalidResponses: 0,
+    blockedCommands: 0,
+    capacityRejections: 0,
+    pendingCommands: 0,
+    peakPendingCommands: 0,
   };
 
   constructor(
     private readonly transport: VuartV1CommandExchangeTransport,
     options: { maxAttempts?: number; initialSequence?: number;
-      nowMs?: () => bigint } = {},
+      nowMs?: () => bigint; maxInFlightCommands?: number;
+      admission?: AirDeviceCommandAdmission; nextSequence?: () => number } = {},
   ) {
     this.maxAttempts = options.maxAttempts ?? 2;
+    this.maxInFlightCommands = options.maxInFlightCommands ?? 64;
+    this.admission = options.admission;
+    this.externalSequence = options.nextSequence;
     this.nextSequence = options.initialSequence ?? 0;
     this.nowMs = options.nowMs ?? (() => BigInt(Date.now()));
     if (!Number.isInteger(this.maxAttempts) ||
@@ -62,6 +87,12 @@ export class AirDeviceGatewayCommandIngress {
     if (!isUint32(this.nextSequence)) {
       throw new Error("VUART command initialSequence must be uint32");
     }
+    if (!Number.isInteger(this.maxInFlightCommands) ||
+      this.maxInFlightCommands < 1) {
+      throw new Error("VUART command maxInFlightCommands must be positive");
+    }
+    this.unsubscribeAdmission = this.admission?.onAdmissionRevoked?.(() =>
+      this.transport.cancelPending?.("boot_admission_revoked"));
   }
 
   execute(command: VuartV1DeviceCommand): Promise<AirDeviceGatewayCommandResult> {
@@ -77,6 +108,17 @@ export class AirDeviceGatewayCommandIngress {
       return existing.result;
     }
 
+    const blockReason = this.admission?.commandBlockReason(command);
+    if (blockReason) {
+      this.counters.blockedCommands += 1;
+      return Promise.resolve({ status: "blocked", reason: blockReason, attempts: 0 });
+    }
+    if (this.inFlight.size >= this.maxInFlightCommands) {
+      this.counters.capacityRejections += 1;
+      return Promise.resolve({ status: "overloaded", reason: "pending_limit",
+        attempts: 0 });
+    }
+
     const sequence = this.allocateSequence();
     const result = this.exchange(command, {
       type,
@@ -87,6 +129,10 @@ export class AirDeviceGatewayCommandIngress {
     });
     this.counters.commandsStarted += 1;
     this.inFlight.set(command.commandId, { signature, result });
+    this.counters.peakPendingCommands = Math.max(
+      this.counters.peakPendingCommands,
+      this.inFlight.size,
+    );
     void result.finally(() => {
       if (this.inFlight.get(command.commandId)?.result === result) {
         this.inFlight.delete(command.commandId);
@@ -96,7 +142,11 @@ export class AirDeviceGatewayCommandIngress {
   }
 
   metrics(): AirDeviceGatewayCommandIngressMetrics {
-    return { ...this.counters };
+    return { ...this.counters, pendingCommands: this.inFlight.size };
+  }
+
+  dispose() {
+    this.unsubscribeAdmission?.();
   }
 
   private async exchange(
@@ -104,6 +154,11 @@ export class AirDeviceGatewayCommandIngress {
     request: Omit<VuartFrame, "version">,
   ): Promise<AirDeviceGatewayCommandResult> {
     for (let attempt = 1; attempt <= this.maxAttempts; attempt += 1) {
+      const blockReason = this.admission?.commandBlockReason(command);
+      if (blockReason) {
+        this.counters.blockedCommands += 1;
+        return { status: "blocked", reason: blockReason, attempts: attempt - 1 };
+      }
       this.counters.transportAttempts += 1;
       const response = await this.transport.exchange(cloneRequest(request));
       if (!response) continue;
@@ -151,6 +206,11 @@ export class AirDeviceGatewayCommandIngress {
   }
 
   private allocateSequence() {
+    if (this.externalSequence) {
+      const value = this.externalSequence();
+      if (!isUint32(value)) throw new Error("VUART frame sequence must be uint32");
+      return value;
+    }
     const value = this.nextSequence;
     this.nextSequence = (this.nextSequence + 1) >>> 0;
     return value;

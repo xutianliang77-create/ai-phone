@@ -18,10 +18,12 @@ Gate 0 已按硬件现实拆分：
   (`audio_v2`) 已在真实 VoLTE 中取得双向 16 kHz PCM；每路固定
   6,400 bytes/200 ms，COUNT_ONLY 59.542 秒和原始 VUART 15.359 秒均无
   sequence gap。
-- Gate 0B 仍未验证：当前不能宣称 Air780EHV 已支持无界AI连续实时译音注入。
-- Air780EHV 示例出现 `cc.extern_source()` + RAW `zbuff`，说明存在裸 PCM
-  调用形态，但现有证据只证明一次性内存文件源；没有证明连续拼接、clear、打断、
-  来去电生命周期、远端可懂度和 30 分钟稳定运行。
+- Gate 0B 仍未验证：V2046-113 的 RAW zbuff 路径已在真实通话首块被拒绝，当前不能
+  宣称 Air780EHV 已支持无界AI连续实时译音注入。
+- 官方文档、源码和 V2048-113 发布 ELF 已确认新的数字路径：一次
+  `cc.extern_source(true, ...)` 启动 stream，随后以 Lua string 调用 `cc.input()`；
+  V2046 没有该 API。V2048 host 候选已处理部分写入、FIFO 背压、结束和 generation
+  清理，但尚未取得实板连续拼接、clear、打断、远端可懂度和 30 分钟证据。
 - 因此必须取得 Gate 0B 数字路径或模拟音频桥路径的实测结论，才能进入生产
   App/Worker/Agent
   主链开发。
@@ -36,11 +38,14 @@ Gate 0 已按硬件现实拆分：
 
 ## Gate 0B-D：量产固件连续数字 PCM
 
-当前 CORE 与 Lua 资产已锁定；Gate 0B-D 仍需补齐：
+V2046-113 + 诊断007继续作为冻结回退基线；Gate 0B-D 的独立 V2048-113 候选由
+`firmware/air780-livekit-bridge/GATE0B_V2048_CORE_MANIFEST.tsv` 和
+`GATE0B_FLASH_MANIFEST.tsv` 固定。V2048-113 的 `cc.input` zbuff 分支存在发布实现风险，
+候选只允许 string 输入。Gate 0B-D 仍需补齐：
 
-1. `cc.extern_source()` 连续 PCM 上行的缓冲区所有权、`EXT_SRC_DONE`、
-   refill/underrun/clear 语义。
-2. 有限 RAW zbuff 可复现 PoC，禁止用整文件播放或模块内置 TTS 代替。
+1. `cc.extern_source(true, ...)` + `cc.input()` 连续 PCM 上行的 FIFO、
+   partial-write/refill/underrun、`EXT_SRC_DONE` 和 clear 语义。
+2. 有限 RAW string stream 可复现 PoC，禁止用整文件播放或模块内置 TTS 代替。
 3. 8/16 kHz PCM16LE mono 连续拼接、远端可懂度和端到端延迟。
 4. 呼入/呼出、接通前后、对端挂断、USB/VUART 重连时的生命周期。
 5. 30 分钟长稳、真实打断、旧 generation 清理和原声泄漏 0。

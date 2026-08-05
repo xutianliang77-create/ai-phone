@@ -85,7 +85,7 @@ describe("Air VUART v1 command golden vectors", () => {
 
   it("keeps the command Lua golden table synchronized", () => {
     const lua = readFileSync(new URL(
-      "../../../../firmware/air780-livekit-bridge/vuart_v1_command_golden_vectors.lua",
+      "../../../../firmware/air780-livekit-bridge/vuart_v1_cmd_vec.lua",
       import.meta.url,
     ), "utf8");
     expect(lua).toContain(`schema = "${golden.schema}"`);

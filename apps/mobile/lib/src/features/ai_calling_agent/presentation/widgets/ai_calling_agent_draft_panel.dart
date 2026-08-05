@@ -28,8 +28,12 @@ class AiCallingAgentDraftPanel extends StatelessWidget {
         draft.status == 'draft' && !draft.requiresHumanTakeover;
     final canStart = draft.status == 'authorized';
     final canRefresh = _startedStatus(draft.status);
+    final carrierAllowsTakeover =
+        draft.executionProvider != 'air780_volte' ||
+            draft.carrierState == 'connected';
     final canTakeover = draft.status == 'requires_human_takeover' ||
         (draft.callId != null &&
+            carrierAllowsTakeover &&
             (draft.status == 'in_progress' ||
                 draft.status == 'takeover_requested'));
     final canCancel = draft.status == 'draft' ||
@@ -54,6 +58,13 @@ class AiCallingAgentDraftPanel extends StatelessWidget {
             if (draft.callId != null) ...[
               const SizedBox(height: 4),
               SelectableText('Call ID：${draft.callId}'),
+            ],
+            if (draft.executionProvider == 'air780_volte') ...[
+              const SizedBox(height: 4),
+              Text('电话网络：${_carrierStateText(draft.carrierState)}'),
+              Text(
+                'LiveKit：${_liveKitParticipantStateText(draft.liveKitParticipantState)}',
+              ),
             ],
             const SizedBox(height: 8),
             Text('话术预览', style: Theme.of(context).textTheme.titleMedium),
@@ -146,6 +157,29 @@ class AiCallingAgentDraftPanel extends StatelessWidget {
 
   String _riskText(String riskLevel) {
     return riskLevel == 'requires_human_takeover' ? '需要接管' : '低';
+  }
+
+  String _carrierStateText(String? state) {
+    return switch (state) {
+      'dialing' => '拨号中',
+      'ringing' => '振铃中',
+      'connected' => '已接通',
+      'disconnected' => '已结束',
+      'busy' => '忙线',
+      'failed' => '失败',
+      _ => '状态未知',
+    };
+  }
+
+  String _liveKitParticipantStateText(String? state) {
+    return switch (state) {
+      'absent' => '未加入',
+      'joining' => '加入中',
+      'joined' => '已加入',
+      'reconnecting' => '重连中',
+      'disconnected' => '已离开',
+      _ => '状态未知',
+    };
   }
 
   String _riskReasonText(String reason) {

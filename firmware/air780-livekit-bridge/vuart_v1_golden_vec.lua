@@ -1,8 +1,8 @@
--- Generated from air780.vuart.session-payload.v1.
+-- Generated from air780.vuart.session-payload.v1; filename fits Luatools' limit.
 -- The Lua codec exists; execution remains pending on a Lua/LuatOS runtime.
 return {
     schema = "air780.vuart.session-payload.v1",
-    status = "frozen_h0_node_lua_runtime_pending",
+    status = "frozen_h3_node_lua_host_pass_board_pending",
     vectors = {
         call_state_connected = {
             binding = {
@@ -47,6 +47,30 @@ return {
             payload_sha256 = "1d791f519ad5e737aa2138195cbeccb9e627901eba0b2001234f33f26c0ff997",
             frame_bytes = 6485,
             frame_sha256 = "12247b45cf6a132542436ec18c6a284deedc88aacd252af702a119c6626048d2",
+        },
+        audio_uplink_16k_200ms = {
+            binding = {
+                communication_session_id = "comm-1",
+                provider_call_id = "air-call-1",
+                device_id = "air-780-1",
+                lease_id = "lease-1",
+                fencing_token = 7,
+                call_generation = 3,
+            },
+            media_sequence = 270544960,
+            sample_rate_hz = 16000,
+            duration_ms = 200,
+            channels = 1,
+            sample_format = "pcm_s16le",
+            pcm_bytes = 6400,
+            pcm_pattern = "zero_based_index_mod_256",
+            frame_flags = 0,
+            frame_sequence = 2578103244,
+            timestamp_ms = "2387509390608836392",
+            payload_bytes = 6461,
+            payload_sha256 = "1a169b6f86be792759255d604099610aa674234b53184b04687e10bf3dca185a",
+            frame_bytes = 6485,
+            frame_sha256 = "e5ebd3eb30d2f566b9a287b0d3a92595e8ca00d762810ea3ec52f30fa8e46cdd",
         },
     },
 }

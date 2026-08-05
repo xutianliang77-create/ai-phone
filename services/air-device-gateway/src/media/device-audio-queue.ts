@@ -137,6 +137,13 @@ export class BoundedDeviceAudioQueue {
     return this.frames.length;
   }
 
+  discardQueuedFrames(callGeneration: number) {
+    if (callGeneration !== this.activeGeneration) return 0;
+    const discarded = this.frames.length;
+    this.clearFrames();
+    return discarded;
+  }
+
   metrics(): DeviceAudioQueueMetrics {
     return { ...this.counters };
   }

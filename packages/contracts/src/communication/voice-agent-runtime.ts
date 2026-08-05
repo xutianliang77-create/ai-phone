@@ -60,7 +60,15 @@ export interface VoiceAgentRuntimeSnapshotDto {
   sessionId: string;
   roomName: string;
   participantIdentity: string;
-  sipParticipantIdentity: string;
+  telephonyProvider: "air780_volte" | "livekit_sip";
+  calleeParticipantIdentity: string;
+  airDeviceBinding?: {
+    deviceId: string;
+    leaseId: string;
+    callGeneration: number;
+  };
+  /** Compatibility field for older SIP Voice Agent runtimes. */
+  sipParticipantIdentity?: string;
   generation: number;
   run: AgentRunDto;
   mode: Extract<AgentExecutionMode, "autonomous">;
@@ -110,4 +118,6 @@ export interface VoiceAgentToolAuthorization {
   executionId: string;
   authorized: boolean;
   reason?: string;
+  executionMode?: "livekit_sip" | "provider_api";
+  providerStatus?: "succeeded" | "unknown";
 }

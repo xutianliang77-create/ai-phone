@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import type {
   PhoneCallControlPayload,
   PhoneCallResult,
@@ -18,11 +19,13 @@ interface DeviceLeaseVerifier {
   }): void;
 }
 
-interface AirDeviceGatewayClient {
+export interface AirDeviceGatewayClient {
   dial(input: DeviceCommandBinding & {
+    providerCallId: string;
     phoneNumberReference: string;
     participantIdentity: string;
     roomName: string;
+    roomAccess: AirDeviceRoomAccess;
   }): Promise<{ providerCallId: string; state: PhoneCallStatus["state"] }>;
   hangup(input: DeviceCommandBinding & {
     providerCallId: string;
@@ -37,32 +40,54 @@ interface AirDeviceGatewayClient {
 }
 
 interface DeviceCallRecorder {
-  recordDial(input: {
-    providerCallId: string;
-    providerOperationId: string;
-    communicationSessionId: string;
-    deviceId: string;
-    leaseId: string;
-    fencingToken: number;
-    roomName: string;
-    participantIdentity: string;
-    callGeneration: number;
-  }): Promise<unknown>;
+  recordDial(input: DeviceCallRecordInput): Promise<unknown>;
+  recordDialRejected(input: DeviceCallRecordInput): Promise<unknown>;
 }
 
-interface DeviceCommandBinding {
+interface DeviceCallRecordInput {
+  providerCallId: string;
+  providerOperationId: string;
+  communicationSessionId: string;
+  deviceId: string;
+  leaseId: string;
+  fencingToken: number;
+  roomName: string;
+  participantIdentity: string;
+  callGeneration: number;
+}
+
+export interface AirDeviceRoomAccess {
+  wsUrl: string;
+  token: string;
+  expiresAt: string;
+}
+
+interface DeviceRoomAccessIssuer {
+  issue(input: {
+    communicationSessionId: string;
+    roomName: string;
+    deviceId: string;
+    leaseId: string;
+    callGeneration: number;
+  }): Promise<AirDeviceRoomAccess>;
+}
+
+export interface DeviceCommandBinding {
+  providerOperationId: string;
   commandId: string;
   idempotencyKey: string;
   communicationSessionId: string;
   deviceId: string;
   leaseId: string;
   fencingToken: number;
+  callGeneration: number;
 }
 
 export class Air780DeviceProviderAdapter implements TelephonyProvider {
   constructor(private readonly dependencies: {
     leaseVerifier: DeviceLeaseVerifier;
     callRecorder: DeviceCallRecorder;
+    roomAccessIssuer: DeviceRoomAccessIssuer;
     gateway: AirDeviceGatewayClient;
   }) {}
 
@@ -82,32 +107,61 @@ export class Air780DeviceProviderAdapter implements TelephonyProvider {
       return failure("invalid_request", false, false);
     }
     const lease = payload.deviceLease;
-    let providerCallId: string | undefined;
+    const providerCallId = airDeviceProviderCallId(request.operationId);
+    let roomAccess: AirDeviceRoomAccess;
     try {
       this.assertLease(lease);
+      roomAccess = await this.dependencies.roomAccessIssuer.issue({
+        communicationSessionId: payload.communicationSessionId,
+        roomName: payload.roomName,
+        deviceId: lease.deviceId,
+        leaseId: lease.leaseId,
+        callGeneration: payload.callGeneration,
+      });
+    } catch (error) {
+      if (error instanceof Error && error.name === "DeviceLeaseConflict") {
+        return classify(error);
+      }
+      return failure("unavailable", true, false);
+    }
+    const callRecord = {
+      providerCallId,
+      providerOperationId: request.operationId,
+      communicationSessionId: payload.communicationSessionId,
+      deviceId: lease.deviceId,
+      leaseId: lease.leaseId,
+      fencingToken: lease.fencingToken,
+      roomName: payload.roomName,
+      participantIdentity: payload.participantIdentity,
+      callGeneration: payload.callGeneration,
+    };
+    try {
+      await this.dependencies.callRecorder.recordDial(callRecord);
+    } catch {
+      return failure("unavailable", true, false, providerCallId);
+    }
+    try {
       const result = await this.dependencies.gateway.dial({
-        ...commandBinding(request, payload.communicationSessionId, lease),
+        ...commandBinding(
+          request,
+          payload.communicationSessionId,
+          lease,
+          payload.callGeneration,
+        ),
+        providerCallId,
         phoneNumberReference: payload.phoneNumberReference,
         participantIdentity: payload.participantIdentity,
         roomName: payload.roomName,
+        roomAccess,
       });
-      providerCallId = result.providerCallId;
-      await this.dependencies.callRecorder.recordDial({
-        providerCallId: result.providerCallId,
-        providerOperationId: request.operationId,
-        communicationSessionId: payload.communicationSessionId,
-        deviceId: lease.deviceId,
-        leaseId: lease.leaseId,
-        fencingToken: lease.fencingToken,
-        roomName: payload.roomName,
-        participantIdentity: payload.participantIdentity,
-        callGeneration: payload.callGeneration,
-      });
+      if (result.providerCallId !== providerCallId) {
+        throw new Error("Air Gateway provider call binding conflict");
+      }
       return {
         ok: true,
         provider: "air780_volte",
         externalOperationId: request.operationId,
-        externalResourceId: result.providerCallId,
+        externalResourceId: providerCallId,
         capabilities: [
           "phone_outbound",
           "dtmf",
@@ -117,13 +171,26 @@ export class Air780DeviceProviderAdapter implements TelephonyProvider {
         ],
         result: {
           communicationSessionId: payload.communicationSessionId,
-          providerCallId: result.providerCallId,
+          providerCallId,
           participantIdentity: payload.participantIdentity,
           state: result.state,
           deviceId: lease.deviceId,
         },
       };
     } catch (error) {
+      if (error instanceof Error && [
+        "DeviceCommandRejected",
+        "DeviceCommandNotDispatched",
+      ].includes(error.name)) {
+        try {
+          await this.dependencies.callRecorder.recordDialRejected(callRecord);
+        } catch {
+          return failure("unavailable", true, true, providerCallId);
+        }
+        if (error.name === "DeviceCommandNotDispatched") {
+          return failure("unavailable", true, false, providerCallId);
+        }
+      }
       return classify(error, providerCallId);
     }
   }
@@ -162,7 +229,9 @@ export class Air780DeviceProviderAdapter implements TelephonyProvider {
   ): Promise<ProviderAdapterResult<PhoneCallStatus>> {
     const payload = request.payload;
     if (!validRequestBinding(request, payload.communicationSessionId) ||
-      !payload.providerCallId || !payload.deviceLease) {
+      !payload.providerCallId || !payload.deviceLease ||
+      !Number.isInteger(payload.callGeneration) || payload.callGeneration < 0 ||
+      payload.callGeneration > 0xffffffff) {
       return failure("invalid_request", false, false);
     }
     try {
@@ -171,6 +240,7 @@ export class Air780DeviceProviderAdapter implements TelephonyProvider {
         request,
         payload.communicationSessionId,
         payload.deviceLease,
+        payload.callGeneration,
       ));
       return {
         ok: true,
@@ -210,13 +280,20 @@ function commandBinding(
   request: ProviderAdapterRequest<unknown>,
   communicationSessionId: string,
   lease: NonNullable<PlacePhoneCallPayload["deviceLease"]>,
+  callGeneration: number,
 ): DeviceCommandBinding {
   return {
+    providerOperationId: request.operationId,
     commandId: request.operationId,
     idempotencyKey: request.idempotencyKey,
     communicationSessionId,
+    callGeneration,
     ...lease,
   };
+}
+
+export function airDeviceProviderCallId(operationId: string) {
+  return `air_${createHash("sha256").update(operationId).digest("hex").slice(0, 32)}`;
 }
 
 function classify(
@@ -225,6 +302,12 @@ function classify(
 ): ProviderAdapterResult<never> {
   if (error instanceof Error && error.name === "DeviceLeaseConflict") {
     return failure("conflict", false, false, externalResourceId);
+  }
+  if (error instanceof Error && error.name === "DeviceCommandRejected") {
+    return failure("conflict", false, false, externalResourceId);
+  }
+  if (error instanceof Error && error.name === "DeviceCommandNotDispatched") {
+    return failure("unavailable", true, false, externalResourceId);
   }
   if (error instanceof Error &&
     (error.name === "AbortError" || error.name === "TimeoutError")) {

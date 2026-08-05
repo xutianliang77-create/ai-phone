@@ -60,6 +60,36 @@ describe("PostgreSQL Air device carrier events", () => {
       "gateway-instance-1",
     );
   });
+
+  it("updates LiveKit participant state without changing carrier authority", async () => {
+    const query = vi.fn()
+      .mockResolvedValueOnce({ rows: [{
+        ...callRow,
+        carrier_state: "connected",
+        livekit_participant_state: "joining",
+        livekit_event_sequence: "1",
+      }] })
+      .mockResolvedValueOnce({ rows: [{
+        ...callRow,
+        carrier_state: "connected",
+        livekit_participant_state: "joined",
+        livekit_event_sequence: "2",
+        version: "5",
+      }] });
+    const fixture = dependencies(query);
+    const events = new PostgresAirDeviceCallEvents(fixture.dependencies);
+
+    await expect(events.processLiveKitParticipantEvent(liveKitEvent("joined")))
+      .resolves.toMatchObject({
+        carrierState: "connected",
+        liveKitParticipantState: "joined",
+      });
+    expect(query.mock.calls[1]?.[0]).toContain("livekit_event_sequence");
+    expect(fixture.outbox.enqueue).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ eventType: "device.livekit.joined" }),
+    );
+  });
 });
 
 function eventInput(carrierState: "connected") {
@@ -72,8 +102,26 @@ function eventInput(carrierState: "connected") {
     leaseId: "lease-1",
     fencingToken: 7,
     callGeneration: 3,
+    eventSequence: 10,
     carrierState,
+    carrierCause: "none" as const,
     occurredAt: "2026-08-04T03:00:10.000Z",
+  };
+}
+
+function liveKitEvent(liveKitParticipantState: "joined") {
+  return {
+    eventId: "livekit-event-2",
+    claimOwner: "gateway-instance-1",
+    communicationSessionId: "session-1",
+    providerCallId: "air-call-1",
+    deviceId: "air-001",
+    leaseId: "lease-1",
+    fencingToken: 7,
+    callGeneration: 3,
+    eventSequence: 2,
+    liveKitParticipantState,
+    occurredAt: "2026-08-04T03:00:09.000Z",
   };
 }
 
@@ -90,6 +138,8 @@ const callRow = {
   version: "4",
   room_name: "call_session-1",
   participant_identity: "session-1:guest:air:air-001",
+  carrier_event_sequence: "9",
+  livekit_event_sequence: "1",
 };
 
 const callDto = {

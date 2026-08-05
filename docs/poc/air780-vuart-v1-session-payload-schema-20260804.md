@@ -1,6 +1,6 @@
 # Air780 VUART v1 Session Payload Schema
 
-状态：`FROZEN_H0_NODE / LUA_RUNTIME_PENDING`
+状态：`FROZEN_H3_NODE_LUA_HOST_PASS / AUDIO_UPLINK_BOARD_PENDING`
 日期：2026-08-04
 
 本文冻结 VUART v1 中进入 Air Device Gateway 会话路由的三类 payload：
@@ -91,6 +91,12 @@ carrier gap 误报。运营商/VoLTE event 是电话状态权威，LiveKit joine
 10 个 640-byte/20-ms frame，并携带 `(mediaSequence, subframeIndex 0..9,
 callGeneration)`。不得把板端缓冲改成 640 bytes 或 48,000 bytes。
 
+LiveKit→Air780 的 wire payload 同样固定为 16 kHz/6,400 bytes；Gateway 从唯一已准入
+TTS track 收集 10 个 16 kHz/20-ms frame 后才形成一个 `AUDIO_UPLINK`。板端在 source
+边界读取真实 `cc.quality()`：quality 2 原样送入 16 kHz `cc.input`，quality 1 将该块
+有界降采样为 8 kHz/3,200 bytes 后送入 8 kHz `cc.input`。这不会修改 VUART v1 payload
+或板端接收块大小，也不允许 Gateway 根据 LiveKit joined 猜测 carrier 格式。
+
 音频不重传。duplicate/out-of-order 直接丢弃；gap、missing chunk、backpressure 和
 drop 必须计数。断连、terminal carrier state 或新 generation 开始时必须清空旧队列。
 
@@ -99,15 +105,17 @@ drop 必须计数。断连、terminal carrier state 或新 generation 开始时�
 规范资产：
 
 - Node/JSON：`services/air-device-gateway/fixtures/vuart-v1/golden-vectors.json`
-- Lua table：`firmware/air780-livekit-bridge/vuart_v1_golden_vectors.lua`
+- Lua table：`firmware/air780-livekit-bridge/vuart_v1_golden_vec.lua`
 
-小型 `CALL_STATE` vector 保存完整 payload/frame hex。6,400-byte 音频 vector 使用
+小型 `CALL_STATE` vector 保存完整 payload/frame hex。`AUDIO_DOWNLINK` 和
+`AUDIO_UPLINK` 两个 6,400-byte 音频 vector 使用
 `pcm[i] = i mod 256` 的零基模式，并保存 payload/frame byte length 与 SHA-256，避免
 在源码中复制超过 14 KiB 的 hex。Node 测试必须同时核对 Lua table 中的同一组值。
 
-当前 Mac 没有 Lua/LuatOS runtime。Lua codec 和 golden self-test 源码已经生成，
-但只能由 Node 做静态合同校验，不能标记为 Lua codec 已执行。必须在目标 LuatOS
-runtime 运行 self-test 后才能提升状态；真实 VUART/USB 互通仍需现场授权。
+Node 已核对两个方向的长度、payload/frame SHA-256 和 Lua table 同步；Wasmoon 已执行
+生产 Lua runtime 的 AUDIO_UPLINK binding/sequence 行为。新增 uplink golden vector 尚未
+在目标 LuatOS runtime 执行，因此 production bundle 板端运行前状态保持
+`AUDIO_UPLINK_BOARD_PENDING`；不得沿用旧 session-vector 自检替代本次取证。
 
 Lua 实现只使用显式逐字节 little-endian 编码，避免不同 CORE 对 pack 格式细节的
 差异；frame CRC32 和 golden SHA-256 使用 LuatOS `crypto` API。接口依据：
@@ -127,5 +135,6 @@ Lua 实现只使用显式逐字节 little-endian 编码，避免不同 CORE 对 
 - 声明长度与剩余字节不一致、截断或存在尾随字节；
 - session/device/lease/fence/generation 与当前活动绑定不完全一致。
 
-本 schema 的 H0 通过不提升 Gate 0B。连续数字 PCM 回灌、远端可懂度、延迟、
-clear/打断、原声泄漏 0 和长稳仍为 `BLOCKED_UNVERIFIED`。
+本 schema 的 H3 通过不等于 LiveKit/TTS→PSTN 通过。Gate 0B 板端生成 PCM 的 8 kHz
+数字流已通过，但真实 LiveKit TTS 的板端 bundle、自检、远端可懂度、延迟、
+clear/打断、原声泄漏 0 和长稳仍为 `PARTIAL/BLOCKED_UNVERIFIED`。

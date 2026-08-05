@@ -28,6 +28,10 @@ class AiCallingAgentDraft {
     this.callId,
     this.providerCallId,
     this.executionProvider,
+    this.carrierState,
+    this.liveKitParticipantState,
+    this.deviceId,
+    this.callGeneration,
     this.queuedAt,
     this.startedAt,
     this.completedAt,
@@ -58,6 +62,10 @@ class AiCallingAgentDraft {
   final String? callId;
   final String? providerCallId;
   final String? executionProvider;
+  final String? carrierState;
+  final String? liveKitParticipantState;
+  final String? deviceId;
+  final int? callGeneration;
   final String? queuedAt;
   final String? startedAt;
   final String? completedAt;
@@ -94,6 +102,10 @@ class AiCallingAgentDraft {
       callId: json['callId'] as String?,
       providerCallId: json['providerCallId'] as String?,
       executionProvider: json['executionProvider'] as String?,
+      carrierState: json['carrierState'] as String?,
+      liveKitParticipantState: json['liveKitParticipantState'] as String?,
+      deviceId: json['deviceId'] as String?,
+      callGeneration: json['callGeneration'] as int?,
       queuedAt: json['queuedAt'] as String?,
       startedAt: json['startedAt'] as String?,
       completedAt: json['completedAt'] as String?,

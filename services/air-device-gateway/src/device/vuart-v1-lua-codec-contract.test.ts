@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
 
 const firmwareUrl = new URL(
@@ -7,23 +8,32 @@ const firmwareUrl = new URL(
 );
 const codec = readFileSync(new URL("vuart_v1_codec.lua", firmwareUrl), "utf8");
 const selftest = readFileSync(
-  new URL("vuart_v1_golden_selftest.lua", firmwareUrl),
+  new URL("vuart_v1_golden_test.lua", firmwareUrl),
   "utf8",
 );
 const vectors = readFileSync(
-  new URL("vuart_v1_golden_vectors.lua", firmwareUrl),
+  new URL("vuart_v1_golden_vec.lua", firmwareUrl),
   "utf8",
 );
 const commandCodec = readFileSync(
-  new URL("vuart_v1_command_codec.lua", firmwareUrl),
+  new URL("vuart_v1_cmd_codec.lua", firmwareUrl),
   "utf8",
 );
 const commandSelftest = readFileSync(
-  new URL("vuart_v1_command_golden_selftest.lua", firmwareUrl),
+  new URL("vuart_v1_cmd_test.lua", firmwareUrl),
   "utf8",
 );
 const commandVectors = readFileSync(
-  new URL("vuart_v1_command_golden_vectors.lua", firmwareUrl),
+  new URL("vuart_v1_cmd_vec.lua", firmwareUrl),
+  "utf8",
+);
+const runtimeMain = readFileSync(new URL("main.lua", firmwareUrl), "utf8");
+const runtimeSelftest = readFileSync(
+  new URL("vuart_v1_rt_test.lua", firmwareUrl),
+  "utf8",
+);
+const runtimeManifest = readFileSync(
+  new URL("SELFTEST_MANIFEST.sha256", firmwareUrl),
   "utf8",
 );
 
@@ -55,10 +65,17 @@ describe("Air VUART v1 Lua codec static contract", () => {
     expect(selftest).toContain("crypto.sha256");
   });
 
+  it("uses the LuatOS crypto core library without an explicit require", () => {
+    for (const source of [codec, selftest, runtimeMain, runtimeSelftest]) {
+      expect(source).not.toMatch(/require\s*\(\s*["']crypto["']\s*\)/);
+    }
+  });
+
   it("checks both positive golden vectors and malformed payload rejection", () => {
     for (const assertion of [
       "golden.vectors.call_state_connected",
       "golden.vectors.audio_downlink_16k_200ms",
+      "golden.vectors.audio_uplink_16k_200ms",
       "call.payload_hex",
       "call.frame_hex",
       "audio.payload_sha256",
@@ -75,8 +92,8 @@ describe("Air VUART v1 Lua codec static contract", () => {
     expect(selftest).not.toContain("WJAI/1");
   });
 
-  it("keeps runtime execution explicitly pending", () => {
-    expect(vectors).toContain("frozen_h0_node_lua_runtime_pending");
+  it("keeps the new uplink vector board execution explicitly pending", () => {
+    expect(vectors).toContain("frozen_h3_node_lua_host_pass_board_pending");
     expect(vectors).not.toContain("node_lua_golden_pass");
   });
 });
@@ -108,5 +125,59 @@ describe("Air VUART v1 Lua command codec static contract", () => {
     expect(commandCodec).not.toContain("WJAI/1");
     expect(commandCodec).not.toMatch(/json\.(encode|decode)/);
     expect(commandSelftest).not.toContain("WJAI/1");
+  });
+});
+
+describe("Air VUART v1 target self-test runtime contract", () => {
+  it("runs both frozen suites and only passes when both succeed", () => {
+    expect(runtimeSelftest).toContain('require("vuart_v1_golden_test")');
+    expect(runtimeSelftest).toContain(
+      'require("vuart_v1_cmd_test")',
+    );
+    expect(runtimeSelftest).toContain("pcall(operation)");
+    expect(runtimeSelftest).toContain("run_suite(session_selftest.run)");
+    expect(runtimeSelftest).toContain("run_suite(command_selftest.run)");
+    expect(runtimeSelftest).toContain("session.ok and command.ok");
+  });
+
+  it("boots as an isolated board validation runtime without a text VUART", () => {
+    expect(runtimeMain).toContain('PROJECT = "WUJIE_AIR_VUART_V1_SELFTEST"');
+    expect(runtimeMain).toContain('require("vuart_v1_rt_test")');
+    expect(runtimeMain).toContain("sys.taskInit(run_selftest)");
+    expect(runtimeMain).toContain("air153C_wtd");
+    expect(runtimeMain).not.toContain("WJAI/1");
+    expect(runtimeMain).not.toContain("uart.setup");
+    expect(runtimeMain).not.toMatch(/cc\.(dial|accept|hangUp)/);
+  });
+
+  it("does not hard-code a target-runtime PASS before the board run", () => {
+    expect(runtimeMain).not.toContain("NODE_LUA_GOLDEN_PASS");
+    expect(runtimeSelftest).not.toContain("NODE_LUA_GOLDEN_PASS");
+  });
+
+  it("pins every Lua file in the board self-test bundle by SHA-256", () => {
+    const requiredFiles = [
+      "main.lua",
+      "vuart_v1_codec.lua",
+      "vuart_v1_cmd_codec.lua",
+      "vuart_v1_cmd_test.lua",
+      "vuart_v1_cmd_vec.lua",
+      "vuart_v1_golden_test.lua",
+      "vuart_v1_golden_vec.lua",
+      "vuart_v1_rt_test.lua",
+    ];
+    for (const file of requiredFiles) {
+      expect(Buffer.byteLength(file, "utf8")).toBeLessThanOrEqual(24);
+    }
+    const entries = runtimeManifest.trim().split("\n").map((line) => {
+      const match = line.match(/^([0-9a-f]{64})  ([A-Za-z0-9_.-]+)$/);
+      expect(match).not.toBeNull();
+      return { hash: match![1], file: match![2] };
+    });
+    expect(entries.map(({ file }) => file)).toEqual(requiredFiles);
+    for (const { file, hash } of entries) {
+      const bytes = readFileSync(new URL(file, firmwareUrl));
+      expect(createHash("sha256").update(bytes).digest("hex")).toBe(hash);
+    }
   });
 });

@@ -1,0 +1,11 @@
+ARG BASE_IMAGE=ai-phone-server:air780-candidate-20260805T1436
+FROM ${BASE_IMAGE}
+
+USER root
+
+COPY services/voice-agent-runtime/dist /app/services/voice-agent-runtime/dist
+COPY services/voice-agent-runtime/src /app/services/voice-agent-runtime/src
+
+LABEL ai.phone.hotfix="voice-visible-exact-target-20260805T1624"
+
+USER node

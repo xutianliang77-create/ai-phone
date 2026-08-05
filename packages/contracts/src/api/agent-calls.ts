@@ -1,3 +1,8 @@
+import type {
+  AirDeviceCarrierState,
+  AirDeviceLiveKitParticipantState,
+} from "../communication/telephony.js";
+
 export type AiCallingAgentScenario =
   | "booking"
   | "customer_support"
@@ -90,6 +95,10 @@ export interface AiCallingAgentDraftDto {
   callId?: string;
   providerCallId?: string;
   executionProvider?: string;
+  carrierState?: AirDeviceCarrierState;
+  liveKitParticipantState?: AirDeviceLiveKitParticipantState;
+  deviceId?: string;
+  callGeneration?: number;
   queuedAt?: string;
   startedAt?: string;
   completedAt?: string;

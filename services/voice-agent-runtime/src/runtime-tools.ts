@@ -58,6 +58,12 @@ export function buildVoiceAgentTools(data: VoiceAgentUserData) {
           idempotencyKey: `${data.snapshot.run.id}:${options.toolCallId}`,
           arguments: args,
         });
+        if (authorization.executionMode === "provider_api") {
+          if (authorization.providerStatus !== "succeeded") {
+            throw new Error("Air DTMF requires provider reconciliation");
+          }
+          return { pressed: args.digit };
+        }
         try {
           const localParticipant = data.room.localParticipant;
           if (!localParticipant) throw new Error("Voice Agent is not connected");
