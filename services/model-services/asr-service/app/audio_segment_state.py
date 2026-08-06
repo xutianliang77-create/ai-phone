@@ -16,6 +16,17 @@ class PcmAudioSegment:
 
 
 @dataclass(frozen=True)
+class ActivePcmAudio:
+    pcm: bytes
+    sample_rate: int
+    start_sequence: int
+    end_sequence: int
+    duration_ms: int
+    start_timestamp_ms: int
+    end_timestamp_ms: int
+
+
+@dataclass(frozen=True)
 class FrameVadDecision:
     sequence: int
     timestamp_ms: int

@@ -26,6 +26,7 @@ export interface TranscriptResult {
   segmentId: string;
   turnId?: string;
   revision?: number;
+  isFinal?: boolean;
   text: string;
   language: TranslationLanguageCode;
   dominantLanguage?: TranslationLanguageCode;

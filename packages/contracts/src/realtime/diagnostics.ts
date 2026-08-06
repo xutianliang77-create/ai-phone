@@ -112,6 +112,39 @@ export interface RealtimeAsrEndpointPolicyDto {
   fingerprint: string;
 }
 
+export type StablePartialRejectionReason =
+  | "no_text"
+  | "insufficient_units"
+  | "duplicate_partial"
+  | "backtrack"
+  | "language_gate"
+  | "context_echo";
+
+export type StablePartialLanguageEvidence =
+  | "empty"
+  | "zh"
+  | "en"
+  | "zh_en"
+  | "other";
+
+export interface RealtimeStablePartialDiagnosticsDto {
+  enabled: boolean;
+  policy: string;
+  eligibleSegmentCount: number;
+  activeSegment: boolean;
+  decodeCount: number;
+  decisionCount?: number;
+  emittedCount: number;
+  rejectionCounts?: Partial<Record<StablePartialRejectionReason, number>>;
+  languageEvidenceSource?: "qwen_streaming_state_label";
+  languageEvidenceCounts?: Partial<
+    Record<StablePartialLanguageEvidence, number>
+  >;
+  languageGateCounts?: Partial<Record<StablePartialLanguageEvidence, number>>;
+  firstStablePartialLatencyMs?: number;
+  lastStablePartialLatencyMs?: number;
+}
+
 export interface RealtimeVadDiagnosticsDto {
   configuredProvider: "marblenet" | "rms";
   activeProvider: "marblenet" | "rms" | "rms_fallback";
@@ -126,6 +159,7 @@ export interface RealtimeVadDiagnosticsDto {
   fallbackReason?: "assets_missing" | "load_failed" | "runtime_failed";
   modelFingerprint?: string;
   endpointPolicy: RealtimeAsrEndpointPolicyDto;
+  stablePartial?: RealtimeStablePartialDiagnosticsDto;
 }
 
 export interface RealtimeAudioLegDiagnosticsDto {

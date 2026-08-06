@@ -5,6 +5,7 @@ from app.pcm_audio import PcmSessionBuffer, audio_duration_ms, pcm16_rms
 from app.schemas import AsrTranscribeRequest
 from app.endpoint_policy import EndpointPolicy, segment_vad_context, uniform_endpoint_policies
 from app.audio_segment_state import (
+    ActivePcmAudio,
     FrameVadDecision,
     PcmAudioSegment,
     PcmChunk,
@@ -74,6 +75,7 @@ class RealtimePcmSegmenter:
             request.sessionId,
             pcm,
             request.sampleRate,
+            threshold=policy.vad_threshold,
         )
         state.latest_vad = FrameVadDecision(
             sequence=request.sequence,
@@ -155,6 +157,22 @@ class RealtimePcmSegmenter:
     def frame_vad_decision(self, session_id: str) -> FrameVadDecision | None:
         state = self._states.get(session_id)
         return state.latest_vad if state else None
+
+    def active_audio(self, session_id: str) -> ActivePcmAudio | None:
+        state = self._states.get(session_id)
+        if not state or not state.has_voice or not state.chunks or not state.sample_rate:
+            return None
+        return ActivePcmAudio(
+            pcm=b"".join(chunk.pcm for chunk in state.chunks),
+            sample_rate=state.sample_rate,
+            start_sequence=state.chunks[0].sequence,
+            end_sequence=state.chunks[-1].sequence,
+            duration_ms=state.buffered_ms,
+            start_timestamp_ms=state.chunks[0].timestamp_ms,
+            end_timestamp_ms=(
+                state.chunks[-1].timestamp_ms + state.chunks[-1].duration_ms
+            ),
+        )
 
     def close(self, session_id: str) -> None:
         self._states.pop(session_id, None)

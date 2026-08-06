@@ -24,6 +24,8 @@ import {
 import {
   cleanText,
   defaultScript,
+  fallbackAgentCallResultSummary,
+  isPlaceholderAgentCallSummary,
   isAgentCallCancellable,
   isScenario,
 } from "./agent-call-repository-helpers.js";
@@ -167,6 +169,12 @@ export async function cancelAgentCallDraft(
     next.cancellationReason = cleanText(request.reason, 200) || "user_cancelled";
     next.cancelledAt = now;
     next.updatedAt = now;
+    if (!next.resultSummary || isPlaceholderAgentCallSummary(next.resultSummary)) {
+      next.resultSummary = fallbackAgentCallResultSummary("cancelled", Boolean(next.callId));
+    }
+    if (next.callId && !next.nextStep) {
+      next.nextStep = "如需明确业务结果，请在通话记录中补充确认；不得因摘要缺失自动重拨。";
+    }
     if (releaseHeldUsage) next.usageSettledAt = now;
     return next;
   }, "agent.task.cancelled", "cancelled");
@@ -233,6 +241,12 @@ export async function recordAgentCallRuntimeResult(
     next.resultSummary = cleanText(value.summary, 800) || next.resultSummary;
     next.nextStep = cleanText(value.nextStep, 300) ||
       cleanText(value.unresolvedItems.join("；"), 300) || next.nextStep;
+    if (next.status === "in_progress") {
+      next.status = "reconciliation_required";
+      next.workerLeaseExpiresAt = undefined;
+      next.nextStep = next.nextStep ||
+        "AI 已结束发言，等待电话网络终态后结算。";
+    }
     next.updatedAt = new Date().toISOString();
     return next;
   }, "agent.task.runtime_result", "updated");

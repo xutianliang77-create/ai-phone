@@ -40,6 +40,8 @@ export class ProviderRouter {
         asrRefinementProvider: createLlmProvider(llmConfigFromEnv(env)),
         asrRefinementEnabled: env.llmRefinementEnabled,
         asrRefinementMinConfidence: env.llmMinConfidence,
+        listeningMaxContinuationBufferMs:
+          env.listeningMaxContinuationBufferMs,
       });
     }
     if (env?.resolvedProvider === "qwen_live") {
@@ -57,6 +59,8 @@ export class ProviderRouter {
         asrRefinementProvider: createLlmProvider(llmConfigFromEnv(env)),
         asrRefinementEnabled: env.llmRefinementEnabled,
         asrRefinementMinConfidence: env.llmMinConfidence,
+        listeningMaxContinuationBufferMs:
+          env.listeningMaxContinuationBufferMs,
       });
     }
     return new MockRealtimeProvider();

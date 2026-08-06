@@ -224,6 +224,6 @@ for _ in {1..60}; do
   sleep 2
 done
 remote_compose "ps"
-remote_compose "logs --tail=120 api gateway translation-agent"
+remote_compose "logs --tail=120 wujie-ai"
 echo "Core candidate deployment did not become healthy" >&2
 exit 1

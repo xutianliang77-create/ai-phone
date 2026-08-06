@@ -113,6 +113,8 @@ describe("speech turn coordinator", () => {
       span("speaker_2", 480, 1120, { confidence: 0.69 }),
     ])).toBeNull();
     expect(coordinator.currentSpeaker("sess_1")).toBe("speaker_1");
+    expect(coordinator.isConfirmedSpeaker("sess_1", "speaker_1")).toBe(true);
+    expect(coordinator.isConfirmedSpeaker("sess_1", "speaker_2")).toBe(false);
   });
 
   it("keeps the normal confidence gate when returning to a known speaker", () => {

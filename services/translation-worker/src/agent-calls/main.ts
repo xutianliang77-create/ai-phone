@@ -55,8 +55,12 @@ async function main() {
     stopped = true;
   });
   while (!stopped) {
-    const dispatched = await dispatcher.dispatchOnce();
-    logger.info({ dispatched }, "Agent call dispatch cycle completed.");
+    try {
+      const dispatched = await dispatcher.dispatchOnce();
+      logger.info({ dispatched }, "Agent call dispatch cycle completed.");
+    } catch (error) {
+      logger.warn({ err: error }, "Agent call dispatch cycle failed; retrying.");
+    }
     await delay(env.agentCallWorkerPollIntervalMs);
   }
 }

@@ -51,13 +51,13 @@ function sanitizedVad(
     analyzedFrameCount: value.analyzedFrameCount,
     speechFrameCount: value.speechFrameCount,
     speechFrameRatio: value.speechFrameRatio,
-    ...(value.probabilityMin !== undefined
+    ...(value.probabilityMin != null
       ? { probabilityMin: value.probabilityMin }
       : {}),
-    ...(value.probabilityMax !== undefined
+    ...(value.probabilityMax != null
       ? { probabilityMax: value.probabilityMax }
       : {}),
-    ...(value.probabilityMean !== undefined
+    ...(value.probabilityMean != null
       ? { probabilityMean: value.probabilityMean }
       : {}),
     fallbackCount: value.fallbackCount,
@@ -66,6 +66,45 @@ function sanitizedVad(
       ? { modelFingerprint: value.modelFingerprint }
       : {}),
     endpointPolicy: { ...value.endpointPolicy },
+    ...(value.stablePartial
+      ? { stablePartial: sanitizedStablePartial(value.stablePartial) }
+      : {}),
+  };
+}
+
+function sanitizedStablePartial(
+  value: NonNullable<
+    NonNullable<RealtimeSessionDiagnosticsDto["vad"]>["stablePartial"]
+  >,
+) {
+  return {
+    enabled: value.enabled,
+    policy: value.policy,
+    eligibleSegmentCount: value.eligibleSegmentCount,
+    activeSegment: value.activeSegment,
+    decodeCount: value.decodeCount,
+    ...(value.decisionCount !== undefined
+      ? { decisionCount: value.decisionCount }
+      : {}),
+    emittedCount: value.emittedCount,
+    ...(value.rejectionCounts
+      ? { rejectionCounts: { ...value.rejectionCounts } }
+      : {}),
+    ...(value.languageEvidenceSource
+      ? { languageEvidenceSource: value.languageEvidenceSource }
+      : {}),
+    ...(value.languageEvidenceCounts
+      ? { languageEvidenceCounts: { ...value.languageEvidenceCounts } }
+      : {}),
+    ...(value.languageGateCounts
+      ? { languageGateCounts: { ...value.languageGateCounts } }
+      : {}),
+    ...(value.firstStablePartialLatencyMs != null
+      ? { firstStablePartialLatencyMs: value.firstStablePartialLatencyMs }
+      : {}),
+    ...(value.lastStablePartialLatencyMs != null
+      ? { lastStablePartialLatencyMs: value.lastStablePartialLatencyMs }
+      : {}),
   };
 }
 
@@ -123,17 +162,109 @@ function isVadDiagnostics(value: unknown) {
     value.probabilityMin,
     value.probabilityMax,
     value.probabilityMean,
-  ].filter((item) => item !== undefined);
+  ].filter((item) => item != null);
   return configuredProviders.has(value.configuredProvider as string) &&
     activeProviders.has(value.activeProvider as string) &&
     [value.analyzedFrameCount, value.speechFrameCount, value.fallbackCount]
       .every(isNonNegativeInteger) &&
     (value.speechFrameCount as number) <= (value.analyzedFrameCount as number) &&
     probabilities.every(isProbability) &&
-    (value.fallbackReason === undefined ||
+    (value.fallbackReason == null ||
       fallbackReasons.has(value.fallbackReason as string)) &&
     (value.modelFingerprint === undefined || isFingerprint(value.modelFingerprint)) &&
-    isEndpointPolicy(value.endpointPolicy);
+    isEndpointPolicy(value.endpointPolicy) &&
+    (value.stablePartial === undefined ||
+      isStablePartialDiagnostics(value.stablePartial));
+}
+
+function isStablePartialDiagnostics(value: unknown) {
+  if (!isRecord(value)) return false;
+  const counts = [
+    value.eligibleSegmentCount,
+    value.decodeCount,
+    value.decisionCount,
+    value.emittedCount,
+  ].filter((item) => item !== undefined);
+  const latencies = [
+    value.firstStablePartialLatencyMs,
+    value.lastStablePartialLatencyMs,
+  ].filter((item) => item != null);
+  const languageEvidenceTotal = countTotal(value.languageEvidenceCounts);
+  const languageGateTotal = countTotal(value.languageGateCounts);
+  const languageGateRejections = isRecord(value.rejectionCounts)
+    ? Number(value.rejectionCounts.language_gate ?? 0)
+    : 0;
+  const hasLanguageEvidence = value.languageEvidenceSource !== undefined ||
+    value.languageEvidenceCounts !== undefined ||
+    value.languageGateCounts !== undefined;
+  return typeof value.enabled === "boolean" &&
+    typeof value.activeSegment === "boolean" &&
+    typeof value.policy === "string" && value.policy.length > 0 &&
+    value.policy.length <= 80 &&
+    counts.every(isNonNegativeInteger) &&
+    (value.emittedCount as number) <= (value.decodeCount as number) &&
+    (value.decisionCount === undefined ||
+      (value.decisionCount as number) <= (value.decodeCount as number) &&
+      (value.emittedCount as number) <= (value.decisionCount as number) &&
+      rejectionTotal(value.rejectionCounts) + (value.emittedCount as number) ===
+        value.decisionCount) &&
+    (!hasLanguageEvidence ||
+      value.languageEvidenceSource === "qwen_streaming_state_label" &&
+      value.decisionCount !== undefined &&
+      isStablePartialLanguageCounts(value.languageEvidenceCounts) &&
+      languageEvidenceTotal === value.decisionCount &&
+      isStablePartialLanguageCounts(value.languageGateCounts) &&
+      languageGateTotal === languageGateRejections &&
+      languageGateCountsAreEvidence(value.languageGateCounts, value.languageEvidenceCounts)) &&
+    latencies.every(isNonNegativeFinite) &&
+    (value.rejectionCounts === undefined ||
+      isStablePartialRejectionCounts(value.rejectionCounts));
+}
+
+function countTotal(value: unknown) {
+  if (!isRecord(value)) return 0;
+  return Object.values(value).reduce<number>(
+    (total, count) => total + (typeof count === "number" ? count : 0),
+    0,
+  );
+}
+
+function rejectionTotal(value: unknown) {
+  if (!isRecord(value)) return 0;
+  return Object.values(value).reduce<number>(
+    (total, count) => total + (typeof count === "number" ? count : 0),
+    0,
+  );
+}
+
+function isStablePartialRejectionCounts(value: unknown) {
+  if (!isRecord(value)) return false;
+  const allowed = new Set([
+    "no_text",
+    "insufficient_units",
+    "duplicate_partial",
+    "backtrack",
+    "language_gate",
+    "context_echo",
+  ]);
+  return Object.entries(value).every(
+    ([key, count]) => allowed.has(key) && isNonNegativeInteger(count),
+  );
+}
+
+function isStablePartialLanguageCounts(value: unknown) {
+  if (!isRecord(value)) return false;
+  const allowed = new Set(["empty", "zh", "en", "zh_en", "other"]);
+  return Object.entries(value).every(
+    ([key, count]) => allowed.has(key) && isNonNegativeInteger(count),
+  );
+}
+
+function languageGateCountsAreEvidence(gate: unknown, evidence: unknown) {
+  if (!isRecord(gate) || !isRecord(evidence)) return false;
+  return Object.entries(gate).every(
+    ([key, count]) => Number(count) <= Number(evidence[key] ?? 0),
+  );
 }
 
 function isEndpointPolicy(value: Record<string, unknown>) {
@@ -165,6 +296,10 @@ function isNonNegativeInteger(value: unknown) {
 function isProbability(value: unknown) {
   return typeof value === "number" && Number.isFinite(value) &&
     value >= 0 && value <= 1;
+}
+
+function isNonNegativeFinite(value: unknown) {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0;
 }
 
 function isFingerprint(value: unknown) {

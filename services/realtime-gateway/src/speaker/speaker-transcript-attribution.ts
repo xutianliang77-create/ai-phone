@@ -21,6 +21,7 @@ export function attributeSpeakerTranscripts(
   spans: SpeakerSpan[],
   fallbackSpeakerId: (transcript: TranscriptResult) => string | undefined,
   boundaries: SpeakerBoundaryGuard[] = [],
+  isConfirmedSpeakerId: (speakerId: string) => boolean = () => true,
 ) {
   return transcripts.map((transcript) => {
     const crossedBoundaries = boundaries.filter((boundary) =>
@@ -38,13 +39,14 @@ export function attributeSpeakerTranscripts(
       spans,
     );
     if (
-      alignment &&
-      (alignment.speaker.speakerId !== "unknown" || hasDirectEvidence)
+      alignment?.speaker.speakerId !== undefined &&
+      alignment.speaker.speakerId !== "unknown" &&
+      isConfirmedSpeakerId(alignment.speaker.speakerId)
     ) {
       return { ...transcript, ...alignment };
     }
     const stableSpeakerId = fallbackSpeakerId(transcript);
-    if (stableSpeakerId) {
+    if (stableSpeakerId && isConfirmedSpeakerId(stableSpeakerId)) {
       return {
         ...transcript,
         ...(alignment?.timing ? { timing: alignment.timing } : {}),
@@ -55,8 +57,15 @@ export function attributeSpeakerTranscripts(
         },
       };
     }
+    if (
+      alignment?.speaker.speakerId === "unknown" &&
+      hasDirectEvidence
+    ) {
+      return { ...transcript, ...alignment };
+    }
     return {
       ...transcript,
+      ...(alignment?.timing ? { timing: alignment.timing } : {}),
       speaker: {
         speakerId: "unknown",
         role: "unknown" as const,

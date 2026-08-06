@@ -43,7 +43,7 @@ TRANSLATION_BASE_URL="${TRANSLATION_BASE_URL:-http://$TRANSLATION_SERVICE_HOST:8
 TTS_HTTP_ENDPOINT="${TTS_HTTP_ENDPOINT:-http://$TTS_SERVICE_HOST:8002/tts/synthesize}"
 TTS_STREAM_ENDPOINT="${TTS_STREAM_ENDPOINT:-http://$TTS_SERVICE_HOST:8002/tts/stream}"
 TTS_WARMUP_ENDPOINT="${TTS_WARMUP_ENDPOINT:-http://$TTS_SERVICE_HOST:8002/tts/warmup}"
-TTS_READINESS_URL="${TTS_READINESS_URL:-http://$TTS_SERVICE_HOST:8002/ready}"
+TTS_READINESS_URL="${TTS_READINESS_URL:-http://$TTS_SERVICE_HOST:8002/health}"
 LLM_BASE_URL="${LLM_BASE_URL:-http://$LLM_SERVICE_HOST:1234/v1}"
 LIVEKIT_WORKER_URL="${LIVEKIT_WORKER_URL:-ws://127.0.0.1:7880}"
 API_STATUS_URL="${API_STATUS_URL:-http://$PUBLIC_HOST:$API_PORT/health}"
@@ -64,7 +64,61 @@ CALL_FULL_DUPLEX_ENABLED="${CALL_FULL_DUPLEX_ENABLED:-false}"
 AI_PHONE_COMPOSE_PROFILES="${AI_PHONE_COMPOSE_PROFILES:-}"
 AGENT_STABILITY_WINDOW_SECONDS="${AGENT_STABILITY_WINDOW_SECONDS:-30}"
 AGENT_STABILITY_TIMEOUT_SECONDS="${AGENT_STABILITY_TIMEOUT_SECONDS:-180}"
-TRANSLATION_AGENT_CONTAINER_NAME="${TRANSLATION_AGENT_CONTAINER_NAME:-ai-phone-translation-agent}"
+FAST_START_STABILITY_WINDOW_SECONDS="${FAST_START_STABILITY_WINDOW_SECONDS:-5}"
+WUJIE_AI_APP_CONTAINER_NAME="${WUJIE_AI_APP_CONTAINER_NAME:-ai-phone-wujie-ai}"
+WUJIE_AI_AGENT_CALL_WORKER_ENABLED="${WUJIE_AI_AGENT_CALL_WORKER_ENABLED:-false}"
+WUJIE_AI_AIR_DEVICE_GATEWAY_ENABLED="${WUJIE_AI_AIR_DEVICE_GATEWAY_ENABLED:-false}"
+WUJIE_AI_VOICE_AGENT_ENABLED=false
+WUJIE_AI_SRT_INGRESS_ENABLED=false
+if [[ ",$AI_PHONE_COMPOSE_PROFILES," == *",voice-agent,"* ]]; then
+  WUJIE_AI_VOICE_AGENT_ENABLED=true
+  WUJIE_AI_AGENT_CALL_WORKER_ENABLED=true
+fi
+if [[ ",$AI_PHONE_COMPOSE_PROFILES," == *",air-device-gateway,"* ]]; then
+  WUJIE_AI_AIR_DEVICE_GATEWAY_ENABLED=true
+fi
+if [[ ",$AI_PHONE_COMPOSE_PROFILES," == *",srt-ingress,"* ]]; then
+  WUJIE_AI_SRT_INGRESS_ENABLED=true
+fi
+
+case "$MODE" in
+  sync|deploy|start|status) ;;
+  *) echo "Usage: $0 [sync|deploy|start|status]" >&2; exit 2 ;;
+esac
+
+if [[ "$MODE" == "start" && -z "${AI_PHONE_IMAGE_TAG:-}" ]]; then
+  IMAGE_TAG="$(ssh "$REMOTE_HOST" \
+    "if test -s '$REMOTE_RUNTIME/ai-phone-image-tag'; then \
+       cat '$REMOTE_RUNTIME/ai-phone-image-tag'; \
+     else \
+       docker inspect -f '{{.Config.Image}}' '$WUJIE_AI_APP_CONTAINER_NAME' 2>/dev/null | \
+         sed 's#^ai-phone-server:##'; \
+     fi")"
+  for key in \
+    WUJIE_AI_AGENT_CALL_WORKER_ENABLED \
+    WUJIE_AI_VOICE_AGENT_ENABLED \
+    WUJIE_AI_AIR_DEVICE_GATEWAY_ENABLED \
+    WUJIE_AI_SRT_INGRESS_ENABLED; do
+    value="$(ssh "$REMOTE_HOST" \
+      "docker inspect '$WUJIE_AI_APP_CONTAINER_NAME' --format '{{range .Config.Env}}{{println .}}{{end}}' \
+       2>/dev/null | awk -F= -v key='$key' '\$1 == key {print \$2; exit}'")"
+    [[ "$value" == "true" || "$value" == "false" ]] || {
+      echo "Cannot recover $key from the existing Wujie AI container" >&2
+      exit 2
+    }
+    case "$key" in
+      WUJIE_AI_AGENT_CALL_WORKER_ENABLED) WUJIE_AI_AGENT_CALL_WORKER_ENABLED="$value" ;;
+      WUJIE_AI_VOICE_AGENT_ENABLED) WUJIE_AI_VOICE_AGENT_ENABLED="$value" ;;
+      WUJIE_AI_AIR_DEVICE_GATEWAY_ENABLED) WUJIE_AI_AIR_DEVICE_GATEWAY_ENABLED="$value" ;;
+      WUJIE_AI_SRT_INGRESS_ENABLED) WUJIE_AI_SRT_INGRESS_ENABLED="$value" ;;
+    esac
+  done
+fi
+
+[[ "$IMAGE_TAG" =~ ^[A-Za-z0-9_.-]+$ ]] || {
+  echo "AI_PHONE_IMAGE_TAG contains unsafe characters" >&2
+  exit 2
+}
 
 for value in \
   "$PUBLIC_HOST" "$INTERNAL_SERVICE_HOST" "$API_BIND_HOST" \
@@ -100,20 +154,22 @@ for port in "$API_PORT" "$REALTIME_PORT" "$LIVEKIT_AGENT_PORT" \
   }
 done
 
-if [[ "$MODE" != "status" ]]; then
+if [[ "$MODE" == "sync" || "$MODE" == "deploy" ]]; then
   npm --prefix "$ROOT_DIR" run check:source-build -- --json
 fi
-
-case "$MODE" in
-  sync|deploy|status) ;;
-  *) echo "Usage: $0 [sync|deploy|status]" >&2; exit 2 ;;
-esac
 
 remote_compose() {
   ssh "$REMOTE_HOST" \
     "AI_PHONE_ENV_FILE='$REMOTE_RUNTIME/server.env' \
      AI_PHONE_DATA_DIR='$REMOTE_RUNTIME/data' \
+     AIR_GATEWAY_STATE_DIR='$REMOTE_RUNTIME/data/gateway-state' \
+     AIR_GATEWAY_HOST_DEV_DIR='/dev' \
+     AIR_GATEWAY_DEVICE_GROUP='dialout' \
      AI_PHONE_IMAGE_TAG='$IMAGE_TAG' \
+     WUJIE_AI_AGENT_CALL_WORKER_ENABLED='$WUJIE_AI_AGENT_CALL_WORKER_ENABLED' \
+     WUJIE_AI_AIR_DEVICE_GATEWAY_ENABLED='$WUJIE_AI_AIR_DEVICE_GATEWAY_ENABLED' \
+     WUJIE_AI_VOICE_AGENT_ENABLED='$WUJIE_AI_VOICE_AGENT_ENABLED' \
+     WUJIE_AI_SRT_INGRESS_ENABLED='$WUJIE_AI_SRT_INGRESS_ENABLED' \
      COMPOSE_PROFILES='$AI_PHONE_COMPOSE_PROFILES' \
      docker compose -p ai-phone -f '$REMOTE_SOURCE/infra/ai-phone-server/docker-compose.yaml' $*"
 }
@@ -123,7 +179,7 @@ wait_for_translation_agent_stability() {
   local poll_seconds=2 elapsed=0
   while (( elapsed < AGENT_STABILITY_TIMEOUT_SECONDS )); do
     snapshot="$(ssh "$REMOTE_HOST" \
-      "container='$TRANSLATION_AGENT_CONTAINER_NAME'; \
+      "container='$WUJIE_AI_APP_CONTAINER_NAME'; \
        state=\$(docker inspect -f '{{.State.Running}}|{{.RestartCount}}' \"\$container\" 2>/dev/null || true); \
        printf '%s' \"\$state\"" 2>/dev/null || true)"
     tts_ready="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 3 \
@@ -216,6 +272,14 @@ NODE
 }
 
 if [[ "$MODE" == "status" ]]; then
+  wait_for_translation_agent_stability
+  status
+  exit 0
+fi
+
+if [[ "$MODE" == "start" ]]; then
+  remote_compose 'up -d --no-build --remove-orphans'
+  AGENT_STABILITY_WINDOW_SECONDS="$FAST_START_STABILITY_WINDOW_SECONDS"
   wait_for_translation_agent_stability
   status
   exit 0
@@ -658,16 +722,19 @@ if [[ "$MODE" == "sync" ]]; then
 fi
 
 remote_compose "build"
+ssh "$REMOTE_HOST" \
+  "printf '%s\\n' '$IMAGE_TAG' > '$REMOTE_RUNTIME/ai-phone-image-tag'; \
+   chmod 600 '$REMOTE_RUNTIME/ai-phone-image-tag'"
 
 if [[ "${MIGRATE_SQLITE:-false}" == "true" ]]; then
   backup_stamp="$(date -u +%Y%m%dT%H%M%SZ)"
   previous_driver="$(ssh "$REMOTE_HOST" \
     "awk -F= '/^API_STORAGE_DRIVER=/{print \$2}' '$REMOTE_RUNTIME/server.env' | tail -1")"
-  remote_compose "stop gateway api"
+  remote_compose "stop wujie-ai"
   migration_services_stopped=true
   recover_migration_services() {
     if [[ "$migration_services_stopped" == "true" ]]; then
-      remote_compose "start api gateway" || true
+      remote_compose "start wujie-ai" || true
     fi
   }
   trap recover_migration_services ERR
@@ -682,14 +749,14 @@ if [[ "${MIGRATE_SQLITE:-false}" == "true" ]]; then
            '$REMOTE_RUNTIME/data/api-store.sqlite.pre-migration-$backup_stamp'; \
        fi"
     remote_compose \
-      "run --rm --no-deps api npm run storage:migrate-json -- \
+      "run --rm --no-deps wujie-ai npm run storage:migrate-json -- \
        /data/ai-phone/api-store.json /data/ai-phone/api-store.sqlite"
   fi
   remote_compose \
-    "run --rm --no-deps api npm run storage:check -- \
+    "run --rm --no-deps wujie-ai npm run storage:check -- \
      /data/ai-phone/api-store.sqlite"
   remote_compose \
-    "run --rm --no-deps api npm run storage:backup -- \
+    "run --rm --no-deps wujie-ai npm run storage:backup -- \
      /data/ai-phone/api-store.sqlite \
      /data/ai-phone/api-store.sqlite.backup-$backup_stamp"
   ssh "$REMOTE_HOST" "ENV_FILE='$REMOTE_RUNTIME/server.env' bash -s" <<'REMOTE'
@@ -717,7 +784,7 @@ for _ in {1..60}; do
      curl -fsS "$GATEWAY_STATUS_URL" >/dev/null 2>&1 &&
      NO_PROXY='*' no_proxy='*' curl -fsS "$CALL_PUBLIC_BASE_URL/health" >/dev/null 2>&1; then
     if [[ "${MIGRATE_SQLITE:-false}" == "true" ]]; then
-      remote_compose "exec -T api npm run storage:check -- /data/ai-phone/api-store.sqlite"
+      remote_compose "exec -T wujie-ai npm run storage:check -- /data/ai-phone/api-store.sqlite"
     fi
     if wait_for_translation_agent_stability; then
       status
@@ -728,6 +795,6 @@ for _ in {1..60}; do
   sleep 2
 done
 remote_compose "ps"
-remote_compose "logs --tail=120 api gateway translation-agent"
+remote_compose "logs --tail=120 wujie-ai"
 echo "ai phone server deployment did not become healthy" >&2
 exit 1

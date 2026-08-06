@@ -23,6 +23,8 @@ import {
 } from "./agent-call-gray-policy.js";
 import {
   cleanText,
+  fallbackAgentCallResultSummary,
+  isPlaceholderAgentCallSummary,
   defaultScript,
   isAgentCallCancellable,
   isScenario,
@@ -202,6 +204,12 @@ export function cancelAgentCallDraft(
       draft.cancellationReason = cleanText(request.reason, 200) || "user_cancelled";
       draft.cancelledAt = now;
       draft.updatedAt = now;
+      if (!draft.resultSummary || isPlaceholderAgentCallSummary(draft.resultSummary)) {
+        draft.resultSummary = fallbackAgentCallResultSummary("cancelled", Boolean(draft.callId));
+      }
+      if (draft.callId && !draft.nextStep) {
+        draft.nextStep = "如需明确业务结果，请在通话记录中补充确认；不得因摘要缺失自动重拨。";
+      }
       if (releaseHeldUsage && draft.callId) {
         releaseUsageHold(userId, draft.callId);
         draft.usageSettledAt = now;
@@ -286,6 +294,12 @@ export function recordAgentCallRuntimeResult(
     draft.resultSummary = cleanText(result.summary, 800) || draft.resultSummary;
     draft.nextStep = cleanText(result.nextStep, 300) ||
       cleanText(result.unresolvedItems.join("；"), 300) || draft.nextStep;
+    if (draft.status === "in_progress") {
+      draft.status = "reconciliation_required";
+      draft.nextStep = draft.nextStep ||
+        "AI 已结束发言，等待电话网络终态后结算。";
+      clearAgentCallLease(draft);
+    }
     draft.updatedAt = new Date().toISOString();
     persistStoreSnapshot();
     return draft;

@@ -1,8 +1,10 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AsrProvider } from "../../asr/asr-provider.js";
 import { LmStudioRealtimeProvider } from "./lmstudio-realtime-provider.js";
 
 describe("lmstudio realtime provider continuation", () => {
+  afterEach(() => vi.useRealTimers());
+
   it("translates max-duration raw continuation only once", async () => {
     const translateInputs: Array<{ text: string }> = [];
     const provider = new LmStudioRealtimeProvider({
@@ -46,7 +48,96 @@ describe("lmstudio realtime provider continuation", () => {
       targetLanguage: "en",
     }]);
   });
+
+  it("releases a listening max-duration segment at the configured bound", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(0);
+    const provider = timeoutProvider(1200);
+    await provider.createSession({
+      sessionId: "sess_1",
+      asrEndpointMode: "listening",
+      sourceLanguage: "zh",
+      targetLanguage: "en",
+      voiceOutput: false,
+    });
+
+    expect(await audioEvents(provider, 1)).toEqual(["transcript.partial"]);
+    vi.advanceTimersByTime(1199);
+    expect(await audioEvents(provider, 2)).toEqual([]);
+    vi.advanceTimersByTime(1);
+    expect(await audioEvents(provider, 3)).toEqual([
+      "transcript.final",
+      "translation.final",
+    ]);
+  });
+
+  it("keeps the default continuation bound outside listening mode", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(0);
+    const provider = timeoutProvider(1200);
+    await provider.createSession({
+      sessionId: "sess_1",
+      asrEndpointMode: "conversation",
+      sourceLanguage: "zh",
+      targetLanguage: "en",
+      voiceOutput: false,
+    });
+
+    expect(await audioEvents(provider, 1)).toEqual(["transcript.partial"]);
+    vi.advanceTimersByTime(1200);
+    expect(await audioEvents(provider, 2)).toEqual([]);
+    vi.advanceTimersByTime(3800);
+    expect(await audioEvents(provider, 3)).toEqual([
+      "transcript.final",
+      "translation.final",
+    ]);
+  });
 });
+
+function timeoutProvider(listeningMaxContinuationBufferMs: number) {
+  return new LmStudioRealtimeProvider({
+    baseUrl: "http://127.0.0.1:1234/v1",
+    model: "tencent/Hy-MT2-1.8B",
+    timeoutMs: 100,
+    listeningMaxContinuationBufferMs,
+    asrProvider: queuedAsrProviderWithEmptyFrames(),
+    translationClient: {
+      translate: async () => "We will discuss the product plan today.",
+      healthCheck: async () => true,
+    },
+  });
+}
+
+async function audioEvents(
+  provider: LmStudioRealtimeProvider,
+  sequence: number,
+) {
+  const events = [];
+  for await (const event of provider.sendAudio(audioFrame(sequence))) {
+    events.push(event.type);
+  }
+  return events;
+}
+
+function queuedAsrProviderWithEmptyFrames(): AsrProvider {
+  let first = true;
+  return {
+    createSession: async () => undefined,
+    transcribe: async () => {
+      if (!first) return null;
+      first = false;
+      return {
+        segmentId: "qwen3_seg_1",
+        text: "今天下午讨论产品计划，",
+        language: "zh" as const,
+        endpointReason: "max_duration" as const,
+      };
+    },
+    flush: async () => null,
+    closeSession: async () => undefined,
+    healthCheck: async () => true,
+  };
+}
 
 function queuedAsrProvider(): AsrProvider {
   const queue = [

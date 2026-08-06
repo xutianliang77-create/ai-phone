@@ -1,4 +1,4 @@
-from typing import Literal
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, Field
 
@@ -7,6 +7,16 @@ LanguageCode = str
 TranslationLanguageCode = str
 AudioFormat = Literal["pcm16"]
 AsrEndpointMode = Literal["conversation", "listening", "call_link", "pstn"]
+StablePartialRejectionReason = Literal[
+    "no_text",
+    "insufficient_units",
+    "duplicate_partial",
+    "backtrack",
+    "language_gate",
+    "context_echo",
+]
+StablePartialLanguageEvidence = Literal["empty", "zh", "en", "zh_en", "other"]
+NonNegativeCount = Annotated[int, Field(ge=0)]
 
 
 class HealthResponse(BaseModel):
@@ -56,6 +66,8 @@ class AsrBoundaryRequest(AsrFlushRequest):
 
 class AsrTranscribeResponse(BaseModel):
     segmentId: str
+    revision: int | None = Field(default=None, ge=0)
+    isFinal: bool = True
     text: str
     language: TranslationLanguageCode
     confidence: float | None = Field(default=None, ge=0, le=1)
@@ -76,7 +88,30 @@ class AsrEndpointPolicyDiagnostics(BaseModel):
     endpointSilenceMs: int = Field(ge=0)
     maxAudioMs: int = Field(gt=0)
     prerollMs: int = Field(ge=0)
+    vadThreshold: float | None = Field(default=None, ge=0, le=1)
     fingerprint: str
+
+
+class StablePartialDiagnostics(BaseModel):
+    enabled: bool
+    policy: str = Field(min_length=1, max_length=80)
+    eligibleSegmentCount: int = Field(ge=0)
+    activeSegment: bool
+    decodeCount: int = Field(ge=0)
+    decisionCount: int = Field(ge=0)
+    emittedCount: int = Field(ge=0)
+    rejectionCounts: dict[StablePartialRejectionReason, NonNegativeCount] = Field(
+        default_factory=dict
+    )
+    languageEvidenceSource: Literal["qwen_streaming_state_label"]
+    languageEvidenceCounts: dict[
+        StablePartialLanguageEvidence, NonNegativeCount
+    ] = Field(default_factory=dict)
+    languageGateCounts: dict[
+        StablePartialLanguageEvidence, NonNegativeCount
+    ] = Field(default_factory=dict)
+    firstStablePartialLatencyMs: float | None = Field(default=None, ge=0)
+    lastStablePartialLatencyMs: float | None = Field(default=None, ge=0)
 
 
 class VadDiagnosticsResponse(BaseModel):
@@ -95,3 +130,4 @@ class VadDiagnosticsResponse(BaseModel):
     ] | None = None
     modelFingerprint: str | None = None
     endpointPolicy: AsrEndpointPolicyDiagnostics
+    stablePartial: StablePartialDiagnostics | None = None

@@ -43,12 +43,23 @@ class AsrConfig:
     qwen3_listening_endpoint_silence_ms: int = 1400
     qwen3_call_link_endpoint_silence_ms: int = 600
     qwen3_pstn_endpoint_silence_ms: int = 1100
+    qwen3_listening_vad_threshold: float | None = None
     qwen3_max_audio_ms: int = 10000
+    qwen3_listening_max_audio_ms: int = 10000
     qwen3_preroll_ms: int = 400
     qwen3_vad_energy_threshold: int = 350
     qwen3_context: str = ""
     qwen3_english_context: str = ""
     qwen3_mixed_language_retry_enabled: bool = False
+    qwen3_listening_stable_partial_enabled: bool = False
+    qwen3_vllm_gpu_memory_utilization: float = 0.35
+    qwen3_vllm_max_model_len: int = 8192
+    qwen3_vllm_max_num_seqs: int = 1
+    qwen3_vllm_enforce_eager: bool = True
+    qwen3_vllm_unfixed_chunk_num: int = 7
+    qwen3_vllm_unfixed_token_num: int = 5
+    qwen3_startup_timeout_ms: int = 30000
+    qwen3_max_active_sessions: int = 1
 
     def runtime_parameters(self) -> dict[str, object]:
         common: dict[str, object] = {
@@ -81,7 +92,7 @@ class AsrConfig:
                 "prerollMs": self.firered_preroll_ms,
                 "vadEnergyThreshold": self.firered_vad_energy_threshold,
             }
-        return {
+        parameters = {
             **common,
             "dtype": self.qwen3_dtype,
             "deviceMap": self.qwen3_device_map,
@@ -101,13 +112,53 @@ class AsrConfig:
                 "call_link": self.qwen3_call_link_endpoint_silence_ms,
                 "pstn": self.qwen3_pstn_endpoint_silence_ms,
             },
+            "vadThresholdByMode": {
+                "conversation": self.vad_threshold,
+                "listening": (
+                    self.qwen3_listening_vad_threshold
+                    if self.qwen3_listening_vad_threshold is not None
+                    else self.vad_threshold
+                ),
+                "call_link": self.vad_threshold,
+                "pstn": self.vad_threshold,
+            },
             "maxAudioMs": self.qwen3_max_audio_ms,
+            "maxAudioByMode": {
+                "conversation": self.qwen3_max_audio_ms,
+                "listening": self.qwen3_listening_max_audio_ms,
+                "call_link": self.qwen3_max_audio_ms,
+                "pstn": self.qwen3_max_audio_ms,
+            },
             "prerollMs": self.qwen3_preroll_ms,
             "vadEnergyThreshold": self.qwen3_vad_energy_threshold,
             "contextSha256": _text_fingerprint(self.qwen3_context),
             "englishContextSha256": _text_fingerprint(self.qwen3_english_context),
             "mixedLanguageRetryEnabled": self.qwen3_mixed_language_retry_enabled,
+            "listeningStablePartial": {
+                "enabled": (
+                    self.qwen3_listening_stable_partial_enabled
+                    and self.provider == "qwen3_asr_vllm"
+                ),
+                "languageGate": "zh_or_auto_detected_zh",
+                "decodeScheduleMs": [500, 700, 900, 1000],
+                "steadyDecodeMs": 1000,
+                "minimumReadableUnits": 2,
+                "unfixedChunkNum": 4,
+                "unfixedTokenNum": 5,
+            },
         }
+        if self.provider == "qwen3_asr_vllm":
+            parameters.update({
+                "gpuMemoryUtilization": self.qwen3_vllm_gpu_memory_utilization,
+                "maxModelLen": self.qwen3_vllm_max_model_len,
+                "maxNumSeqs": self.qwen3_vllm_max_num_seqs,
+                "enforceEager": self.qwen3_vllm_enforce_eager,
+                "unfixedChunkNum": self.qwen3_vllm_unfixed_chunk_num,
+                "unfixedTokenNum": self.qwen3_vllm_unfixed_token_num,
+                "startupTimeoutMs": self.qwen3_startup_timeout_ms,
+                "maxActiveSessions": self.qwen3_max_active_sessions,
+            })
+        return parameters
 
 
 def load_config() -> AsrConfig:
@@ -178,7 +229,13 @@ def load_config() -> AsrConfig:
         qwen3_pstn_endpoint_silence_ms=int(
             os.getenv("ASR_QWEN3_PSTN_ENDPOINT_SILENCE_MS", "1100")
         ),
+        qwen3_listening_vad_threshold=_optional_float_env(
+            "ASR_QWEN3_LISTENING_VAD_THRESHOLD"
+        ),
         qwen3_max_audio_ms=int(os.getenv("ASR_QWEN3_MAX_AUDIO_MS", "10000")),
+        qwen3_listening_max_audio_ms=int(
+            os.getenv("ASR_QWEN3_LISTENING_MAX_AUDIO_MS", "10000")
+        ),
         qwen3_preroll_ms=int(os.getenv("ASR_QWEN3_PREROLL_MS", "400")),
         qwen3_vad_energy_threshold=int(
             os.getenv("ASR_QWEN3_VAD_ENERGY_THRESHOLD", "350")
@@ -189,8 +246,46 @@ def load_config() -> AsrConfig:
             os.getenv("ASR_QWEN3_MIXED_LANGUAGE_RETRY_ENABLED", "false").lower()
             == "true"
         ),
+        qwen3_listening_stable_partial_enabled=(
+            os.getenv(
+                "ASR_QWEN3_LISTENING_STABLE_PARTIAL_ENABLED",
+                "false",
+            ).lower()
+            == "true"
+        ),
+        qwen3_vllm_gpu_memory_utilization=float(
+            os.getenv("ASR_QWEN3_VLLM_GPU_MEMORY_UTILIZATION", "0.35")
+        ),
+        qwen3_vllm_max_model_len=int(
+            os.getenv("ASR_QWEN3_VLLM_MAX_MODEL_LEN", "8192")
+        ),
+        qwen3_vllm_max_num_seqs=int(
+            os.getenv("ASR_QWEN3_VLLM_MAX_NUM_SEQS", "1")
+        ),
+        qwen3_vllm_enforce_eager=(
+            os.getenv("ASR_QWEN3_VLLM_ENFORCE_EAGER", "true").lower() == "true"
+        ),
+        qwen3_vllm_unfixed_chunk_num=int(
+            os.getenv("ASR_QWEN3_VLLM_UNFIXED_CHUNK_NUM", "7")
+        ),
+        qwen3_vllm_unfixed_token_num=int(
+            os.getenv("ASR_QWEN3_VLLM_UNFIXED_TOKEN_NUM", "5")
+        ),
+        qwen3_startup_timeout_ms=int(
+            os.getenv("ASR_QWEN3_STARTUP_TIMEOUT_MS", "30000")
+        ),
+        qwen3_max_active_sessions=int(
+            os.getenv("ASR_QWEN3_MAX_ACTIVE_SESSIONS", "1")
+        ),
     )
 
 
 def _text_fingerprint(value: str) -> str:
     return sha256(value.encode("utf-8")).hexdigest()
+
+
+def _optional_float_env(name: str) -> float | None:
+    raw = os.getenv(name)
+    if raw is None or not raw.strip():
+        return None
+    return float(raw)

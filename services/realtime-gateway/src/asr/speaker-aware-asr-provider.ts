@@ -183,6 +183,10 @@ export class SpeakerAwareAsrProvider implements AsrProvider {
         return this.turnCoordinator.currentSpeaker(frame.sessionId);
       },
       this.boundariesBySession.get(frame.sessionId) ?? [],
+      (speakerId) => this.turnCoordinator.isConfirmedSpeaker(
+        frame.sessionId,
+        speakerId,
+      ),
     );
     return providerResult(await this.applyVoiceIdentities(frame.sessionId, attributed));
   }
@@ -206,6 +210,10 @@ export class SpeakerAwareAsrProvider implements AsrProvider {
       spans,
       () => this.turnCoordinator.currentSpeaker(sessionId),
       this.boundariesBySession.get(sessionId) ?? [],
+      (speakerId) => this.turnCoordinator.isConfirmedSpeaker(
+        sessionId,
+        speakerId,
+      ),
     );
     return providerResult(await this.applyVoiceIdentities(sessionId, attributed));
   }

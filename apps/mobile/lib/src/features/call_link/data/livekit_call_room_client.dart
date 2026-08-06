@@ -24,7 +24,10 @@ class LiveKitCallRoomClient implements CallRoomClient {
   Stream<CallRoomSnapshot> get snapshots => _snapshots.stream;
 
   @override
-  Future<void> connect(CallRoomToken token) async {
+  Future<void> connect(
+    CallRoomToken token, {
+    bool enableMicrophone = true,
+  }) async {
     if (_disposed) return;
     await _disposeRoom(disconnectFirst: true);
     _fullDuplexEnabled = token.fullDuplexEnabled;
@@ -40,6 +43,7 @@ class LiveKitCallRoomClient implements CallRoomClient {
       roomOptions: const livekit.RoomOptions(
         adaptiveStream: false,
         dynacast: false,
+        defaultAudioOutputOptions: livekit.AudioOutputOptions(speakerOn: true),
       ),
     );
     final listener = room.createListener();
@@ -63,8 +67,9 @@ class LiveKitCallRoomClient implements CallRoomClient {
       );
       _syncLocalTrackPermissions(room);
       await room.localParticipant?.setMicrophoneEnabled(
-        true,
-        audioCaptureOptions: callRoomAudioCaptureOptions,
+        enableMicrophone,
+        audioCaptureOptions:
+            enableMicrophone ? callRoomAudioCaptureOptions : null,
       );
       await _syncRemoteAudioSubscriptions(room,
           localRole: token.participantRole,
@@ -72,7 +77,7 @@ class LiveKitCallRoomClient implements CallRoomClient {
       _emit(_snapshotFromRoom(
         room,
         status: CallRoomConnectionStatus.connected,
-        microphoneEnabled: true,
+        microphoneEnabled: enableMicrophone,
       ));
     } catch (error) {
       await _disposeRoom(disconnectFirst: true);

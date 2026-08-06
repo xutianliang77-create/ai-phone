@@ -30,6 +30,7 @@ export interface RealtimeEnv {
   maxMessagesPerSecond: number;
   maxAudioFramesPerSecond: number;
   maxPendingAudioMs: number;
+  listeningMaxContinuationBufferMs: number;
   maxPendingControlEvents: number;
   maxPendingTtsOutputs: number;
   handshakeRateLimitPerMinute: number;
@@ -149,6 +150,12 @@ export function loadEnv(): RealtimeEnv {
       6000,
       500,
       30_000,
+    ),
+    listeningMaxContinuationBufferMs: boundedInteger(
+      env.REALTIME_LISTENING_MAX_CONTINUATION_BUFFER_MS,
+      5000,
+      250,
+      5000,
     ),
     maxPendingControlEvents: boundedInteger(
       env.REALTIME_MAX_PENDING_CONTROL_EVENTS,

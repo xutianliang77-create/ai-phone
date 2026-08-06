@@ -169,6 +169,41 @@ def test_endpoint_policy_is_frozen_and_isolated_per_session() -> None:
     assert segmenter.diagnostics("pstn")["endpointPolicy"]["mode"] == "pstn"
 
 
+def test_vad_threshold_is_frozen_and_isolated_per_mode() -> None:
+    vad = ThresholdAwareVadProvider(probability=0.1)
+    segmenter = RealtimePcmSegmenter(
+        min_audio_ms=1000,
+        endpoint_silence_ms=1000,
+        max_audio_ms=2000,
+        preroll_ms=40,
+        vad_energy_threshold=350,
+        vad_provider=vad,
+        endpoint_policies={
+            "conversation": EndpointPolicy(
+                "conversation", 1000, 1000, 2000, 40, 0.5
+            ),
+            "listening": EndpointPolicy(
+                "listening", 1000, 1000, 2000, 40, 0.05
+            ),
+            "call_link": EndpointPolicy("call_link", 1000, 1000, 2000, 40, 0.5),
+            "pstn": EndpointPolicy("pstn", 1000, 1000, 2000, 40, 0.5),
+        },
+    )
+
+    segmenter.append(request(1, voice_pcm(), session_id="conversation"))
+    segmenter.append(
+        request(1, voice_pcm(), session_id="listening", mode="listening")
+    )
+
+    assert segmenter.frame_vad_decision("conversation").voiced is False
+    assert segmenter.frame_vad_decision("listening").voiced is True
+    assert vad.thresholds == {"conversation": 0.5, "listening": 0.05}
+    assert (
+        segmenter.diagnostics("listening")["endpointPolicy"]["vadThreshold"]
+        == 0.05
+    )
+
+
 def test_endpoint_mode_cannot_change_inside_session() -> None:
     segmenter = realtime_segmenter()
     segmenter.append(request(1, voice_pcm(), mode="conversation"))
@@ -265,7 +300,13 @@ class TrackingVadProvider:
     def __init__(self) -> None:
         self.reset_count = 0
 
-    def analyze(self, session_id: str, pcm: bytes, sample_rate: int):
+    def analyze(
+        self,
+        session_id: str,
+        pcm: bytes,
+        sample_rate: int,
+        threshold: float | None = None,
+    ):
         from app.vad import VadDecision
 
         return VadDecision(voiced=True, probability=0.9, provider=self.name)
@@ -278,3 +319,31 @@ class TrackingVadProvider:
 
     def diagnostics(self, session_id: str):
         return {}
+
+
+class ThresholdAwareVadProvider(TrackingVadProvider):
+    def __init__(self, probability: float) -> None:
+        super().__init__()
+        self.probability = probability
+        self.thresholds: dict[str, float | None] = {}
+
+    def analyze(
+        self,
+        session_id: str,
+        pcm: bytes,
+        sample_rate: int,
+        threshold: float | None = None,
+    ):
+        del pcm, sample_rate
+        from app.vad import VadDecision
+
+        self.thresholds[session_id] = threshold
+        effective_threshold = 0.5 if threshold is None else threshold
+        return VadDecision(
+            voiced=self.probability >= effective_threshold,
+            probability=self.probability,
+            provider=self.name,
+        )
+
+    def diagnostics(self, session_id: str):
+        return {"threshold": self.thresholds.get(session_id)}

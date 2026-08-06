@@ -1,7 +1,15 @@
-# ai phone Server Unit
+# 无界 AI Server Unit
 
-This Compose unit runs the API and realtime Gateway on the same Beelink host as
-LiveKit and the model services. The App only connects to ports 3110 and 3111.
+无界 AI 的应用运行单元只有一个容器：`wujie-ai`。API、realtime gateway、
+Translation/Voice Agent、Air780 Gateway 和 SRT bridge 都是这个容器内的受控
+进程，不按功能拆成容器。容器通过 host network 暴露各自端口；App 只连接 API
+和 realtime 入口。LiveKit、PostgreSQL、ASR/TTS/LLM 等是外部基础设施，不属于
+无界 AI 应用容器。
+
+`WUJIE_AI_*_ENABLED` 只控制容器内是否启动对应进程，不会创建额外容器。
+AI 代打队列调度器同样运行在该容器内；启用
+`WUJIE_AI_AGENT_CALL_WORKER_ENABLED=true`（或兼容的
+`AGENT_CALL_WORKER_ENABLED=true`）即可启动，不会新增容器。
 
 Runtime state is outside the source tree:
 
@@ -17,6 +25,22 @@ MIGRATE_LOCAL_DATA=true scripts/deploy_beelink_app_services.sh deploy
 scripts/deploy_beelink_app_services.sh status
 ```
 
+After a successful deployment, the image tag is pinned in
+`/data/models/ai-phone-server/runtime/ai-phone-image-tag`. For a host reboot or
+container restart, use the fast start path:
+
+```bash
+REMOTE_HOST=beelink@192.168.1.146 scripts/deploy_beelink_app_services.sh start
+```
+
+`start` recovers the pinned image and the currently enabled in-container
+processes, then runs `docker compose up -d --no-build`; it does not rsync source,
+run `npm ci`, rebuild the image, rewrite secrets, or touch the data volume.
+Its default readiness-stability window is 5 seconds (override with
+`FAST_START_STABILITY_WINDOW_SECONDS` when the host is recovering from a full
+reboot). Use `deploy` only when source or runtime configuration has intentionally
+changed.
+
 `MIGRATE_LOCAL_DATA=true` is only for the initial Mac-to-Beelink test data
 migration. Later deployments preserve the server-side data volume.
 
@@ -31,7 +55,7 @@ MIGRATE_SQLITE=true scripts/deploy_beelink_app_services.sh deploy
 Create a consistent online backup with:
 
 ```bash
-docker exec ai-phone-api npm run storage:backup -- \
+docker exec ai-phone-wujie-ai npm run storage:backup -- \
   /data/ai-phone/api-store.sqlite /data/ai-phone/backups/api-store.sqlite
 ```
 

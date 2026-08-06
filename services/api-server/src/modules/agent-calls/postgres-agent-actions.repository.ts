@@ -84,8 +84,34 @@ export class PostgresAgentActionsRepository {
           return recordDomainCommand(transaction, command, {
             status: execution.requestHash === input.requestHash
               ? "replayed" : "payload_conflict",
-            execution,
+              execution,
           });
+        }
+        // A sensitive tool is single-flight per run. LiveKit can retry a
+        // function call with a new tool-call id while the first authorization
+        // is still being completed; returning the active execution keeps the
+        // retry idempotent instead of surfacing the partial-index violation
+        // as HTTP 500.
+        if (input.riskLevel === "sensitive") {
+          const active = await transaction.queryRead<IdRow>(`
+            SELECT id FROM ai_phone.tool_executions
+            WHERE run_id = $1 AND risk_level = 'sensitive'
+              AND status IN ('requested', 'approved', 'running')
+            ORDER BY created_at ASC LIMIT 1
+          `, [input.runId]);
+          if (active[0]) {
+            const existing = await transaction.read<PostgresAgentToolRecord>(
+              "agentToolExecutions",
+              active[0].id,
+            );
+            if (!existing) throw new Error("Active Agent tool primary record is missing");
+            const execution = requireAgentTool(existing.payload, active[0].id);
+            return recordDomainCommand(transaction, command, {
+              status: execution.toolName === input.toolName
+                ? "existing" : "active_conflict",
+              execution,
+            });
+          }
         }
         const execution: PostgresAgentToolRecord = {
           id: stableDomainId("agent_tool", `${input.runId}:${input.idempotencyKey}`),

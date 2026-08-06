@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { SpeakerAwareAsrProvider } from "./speaker-aware-asr-provider.js";
 import {
+  BriefNovelSpeakerProvider,
   DelayedAsrProvider,
   FakeAsrProvider,
   FakeSpeakerProvider,
@@ -136,6 +137,27 @@ describe("speaker aware asr provider", () => {
     });
   });
 
+  it("does not publish a brief unconfirmed model slot as a new speaker", async () => {
+    const provider = new SpeakerAwareAsrProvider(
+      new BriefNovelSlotAsrProvider(),
+      new BriefNovelSpeakerProvider(),
+    );
+    await provider.createSession(session);
+
+    expect(await provider.transcribe(frame)).toBeNull();
+    expect(await provider.transcribe({ ...frame, sequence: 2 })).toBeNull();
+    const transcript = await provider.transcribe({ ...frame, sequence: 3 });
+
+    expect(transcript).toMatchObject({
+      text: "brief model slot",
+      speaker: {
+        speakerId: "speaker_1",
+        role: "speaker",
+        source: "diarization",
+      },
+    });
+  });
+
 });
 
 class OutOfWindowAsrProvider extends FakeAsrProvider {
@@ -157,5 +179,25 @@ class ConfidentSpeakerProvider extends FakeSpeakerProvider {
       endMs: 1900,
       confidence: 0.9,
     }];
+  }
+}
+
+class BriefNovelSlotAsrProvider extends FakeAsrProvider {
+  private calls = 0;
+
+  override async transcribe() {
+    this.calls += 1;
+    if (this.calls < 3) return null;
+    return {
+      segmentId: "brief_slot",
+      text: "brief model slot",
+      language: "en" as const,
+      timing: { startMs: 480, endMs: 640, source: "client" as const },
+      speaker: {
+        speakerId: "unknown",
+        role: "unknown" as const,
+        source: "unknown" as const,
+      },
+    };
   }
 }

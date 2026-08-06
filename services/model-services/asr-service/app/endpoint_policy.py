@@ -13,6 +13,7 @@ class EndpointPolicy:
     endpoint_silence_ms: int
     max_audio_ms: int
     preroll_ms: int
+    vad_threshold: float | None = None
 
     @property
     def fingerprint(self) -> str:
@@ -26,6 +27,7 @@ class EndpointPolicy:
             "endpointSilenceMs": self.endpoint_silence_ms,
             "maxAudioMs": self.max_audio_ms,
             "prerollMs": self.preroll_ms,
+            "vadThreshold": self.vad_threshold,
             "fingerprint": self.fingerprint,
         }
 
@@ -35,6 +37,7 @@ def uniform_endpoint_policies(
     endpoint_silence_ms: int,
     max_audio_ms: int,
     preroll_ms: int,
+    vad_threshold: float | None = None,
 ) -> dict[str, EndpointPolicy]:
     return {
         mode: EndpointPolicy(
@@ -43,6 +46,7 @@ def uniform_endpoint_policies(
             endpoint_silence_ms=endpoint_silence_ms,
             max_audio_ms=max_audio_ms,
             preroll_ms=preroll_ms,
+            vad_threshold=vad_threshold,
         )
         for mode in ASR_ENDPOINT_MODES
     }

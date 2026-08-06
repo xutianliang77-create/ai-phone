@@ -120,6 +120,11 @@ export class SpeechTurnCoordinator {
     return this.sessions.get(sessionId)?.currentSpeakerId;
   }
 
+  isConfirmedSpeaker(sessionId: string, speakerId: string) {
+    return this.sessions.get(sessionId)?.confirmedSpeakerIds.has(speakerId) ??
+      false;
+  }
+
   clear(sessionId: string) {
     this.sessions.delete(sessionId);
   }

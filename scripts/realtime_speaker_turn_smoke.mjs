@@ -20,6 +20,23 @@ const timeoutMs = numberEnv("SPEAKER_TURN_TIMEOUT_MS", 60_000);
 const sessionMode = env("SPEAKER_TURN_MODE", "conversation");
 const sourceLanguage = env("SPEAKER_TURN_SOURCE_LANGUAGE", "auto");
 const targetLanguage = env("SPEAKER_TURN_TARGET_LANGUAGE", "zh");
+const expectedSpeakerCount = numberEnv("SPEAKER_TURN_EXPECTED_SPEAKERS", 2);
+const minimumSegments = numberEnv(
+  "SPEAKER_TURN_MIN_SEGMENTS",
+  expectedSpeakerCount,
+);
+const requireBoundary = booleanEnv(
+  "SPEAKER_TURN_REQUIRE_BOUNDARY",
+  expectedSpeakerCount > 1,
+);
+const requiredLanguages = env(
+  "SPEAKER_TURN_REQUIRED_LANGUAGES",
+  "zh,en",
+).split(",").map((value) => value.trim()).filter(Boolean);
+const maximumHistoryLatencyMs = numberEnv(
+  "SPEAKER_TURN_MAX_END_PERSISTENCE_MS",
+  1500,
+);
 const evidencePath = resolve(env(
   "SPEAKER_TURN_EVIDENCE",
   `.cache/realtime-speaker-turn/${timestamp()}/result.json`,
@@ -29,19 +46,45 @@ const gatewayHealth = await fetchGatewayHealth();
 const speakerHealthUrl = env("SPEAKER_HEALTH_URL", `${gatewayHealth.speakerEndpoint}/health`);
 const speakerHealth = await fetchJsonUrl(speakerHealthUrl);
 const session = await createSession();
-const events = await streamSession(session);
+const stream = await streamSession(session);
+const events = stream.events;
 const detail = await waitForHistory(session.sessionId);
+const historyObservedAtMs = Date.now();
+const historyReady = detail.status === "ended" &&
+  detail.segments?.length >= minimumSegments && Boolean(detail.diagnostics);
+const endDelivery = {
+  sentAtMs: stream.endSentAtMs,
+  eventAtMs: stream.endedEventAtMs,
+  eventLatencyMs: stream.endedEventAtMs - stream.endSentAtMs,
+  historyObservedAtMs,
+  historyLatencyMs: historyObservedAtMs - stream.endSentAtMs,
+  historyReady,
+};
 const readiness = evaluateRealtimeSpeakerTurnReadiness({
   gatewayHealth,
   speakerHealth,
   detail,
+  endDelivery,
+}, {
+  expectedSpeakerCount,
+  requireBoundary,
+  requiredLanguages,
+  maximumHistoryLatencyMs,
 });
 const evidence = {
   generatedAt: new Date().toISOString(),
   apiBaseUrl,
   fixturePaths,
   sessionId: session.sessionId,
+  gateOptions: {
+    expectedSpeakerCount,
+    minimumSegments,
+    requireBoundary,
+    requiredLanguages,
+  },
   eventTypes: events.map((event) => event.type),
+  sessionEndedEvent: events.find((event) => event.type === "session.ended") ?? null,
+  endDelivery,
   transcriptEvents: events.filter((event) =>
     event.type === "transcript.final" ||
     event.type === "translation.final"
@@ -117,10 +160,12 @@ async function streamSession(session) {
     await sleep(frameMs);
   }
   await sleep(tailMs);
+  const endSentAtMs = Date.now();
   ws.send(JSON.stringify({ type: "session.end", sessionId: session.sessionId }));
   await ended;
+  const endedEventAtMs = Date.now();
   ws.close();
-  return events;
+  return { events, endSentAtMs, endedEventAtMs };
 }
 
 function waitForSocketOpen(ws) {
@@ -155,7 +200,11 @@ async function waitForHistory(sessionId) {
   let detail;
   while (Date.now() < deadline) {
     detail = await fetchJsonUrl(`${apiBaseUrl}/sessions/${sessionId}`);
-    if (detail.status === "ended" && detail.segments?.length >= 2 && detail.diagnostics) {
+    if (
+      detail.status === "ended" &&
+      detail.segments?.length >= minimumSegments &&
+      detail.diagnostics
+    ) {
       return detail;
     }
     await sleep(200);
@@ -181,6 +230,14 @@ function numberEnv(name, fallback) {
   const value = Number(env(name, String(fallback)));
   if (!Number.isFinite(value) || value <= 0) throw new Error(`${name} must be positive`);
   return value;
+}
+
+function booleanEnv(name, fallback) {
+  const value = process.env[name]?.trim();
+  if (!value) return fallback;
+  if (value === "true") return true;
+  if (value === "false") return false;
+  throw new Error(`${name} must be true or false`);
 }
 
 function timestamp() {

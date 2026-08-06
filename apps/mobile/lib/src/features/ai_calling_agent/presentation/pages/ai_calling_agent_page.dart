@@ -1,7 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../../../app/app_config.dart';
 import '../../../account/presentation/widgets/account_required_panel.dart';
+import '../../../call_link/data/call_link_api_client.dart';
+import '../../../call_link/data/call_room_client.dart';
+import '../../../call_link/data/livekit_call_room_client.dart';
 import '../../../compliance/data/voice_processing_consent_store.dart';
 import '../../../compliance/presentation/widgets/voice_processing_consent_dialog.dart';
 import '../../data/ai_calling_agent_api_client.dart';
@@ -19,11 +24,15 @@ const _disclosurePromptVersion = 'domestic-ai-agent-disclosure-v1';
 class AiCallingAgentPage extends StatefulWidget {
   const AiCallingAgentPage({
     this.client,
+    this.callClient,
+    this.roomClient,
     this.voiceConsentStore,
     super.key,
   });
 
   final AiCallingAgentApiClient? client;
+  final CallLinkApiClient? callClient;
+  final CallRoomClient? roomClient;
   final VoiceProcessingConsentStore? voiceConsentStore;
 
   @override
@@ -34,6 +43,11 @@ class _AiCallingAgentPageState extends State<AiCallingAgentPage> {
   late final AiCallingAgentApiClient _client = widget.client ??
       AiCallingAgentApiClient(baseUrl: AppConfig.fromEnvironment().apiBaseUrl);
   late final bool _ownsClient = widget.client == null;
+  late final CallLinkApiClient _callClient = widget.callClient ??
+      CallLinkApiClient(baseUrl: AppConfig.fromEnvironment().apiBaseUrl);
+  late final CallRoomClient _roomClient =
+      widget.roomClient ?? LiveKitCallRoomClient();
+  late final bool _ownsRoomClient = widget.roomClient == null;
   late final VoiceProcessingConsentStore _voiceConsentStore =
       widget.voiceConsentStore ?? const FileVoiceProcessingConsentStore();
   final TextEditingController _targetNameController = TextEditingController();
@@ -49,17 +63,29 @@ class _AiCallingAgentPageState extends State<AiCallingAgentPage> {
   bool _loading = false;
   bool _draftsLoading = false;
   bool _recipientDisclosureConfirmed = false;
+  StreamSubscription<CallRoomSnapshot>? _roomSubscription;
+  Timer? _pollTimer;
+  CallRoomSnapshot _roomSnapshot = const CallRoomSnapshot.disconnected();
+  String? _roomCallId;
+  Future<void>? _roomSync;
   @override
   void initState() {
     super.initState();
+    _roomSubscription = _roomClient.snapshots.listen((snapshot) {
+      if (mounted) setState(() => _roomSnapshot = snapshot);
+    });
     WidgetsBinding.instance.addPostFrameCallback((_) => _loadDrafts());
   }
 
   @override
   void dispose() {
+    _pollTimer?.cancel();
+    unawaited(_roomSubscription?.cancel());
+    if (_ownsRoomClient) unawaited(_roomClient.dispose());
     _targetNameController.dispose();
     _targetPhoneController.dispose();
     _objectiveController.dispose();
+    if (widget.callClient == null) _callClient.close();
     if (_ownsClient) _client.close();
     super.dispose();
   }
@@ -118,6 +144,14 @@ class _AiCallingAgentPageState extends State<AiCallingAgentPage> {
             ],
             if (_draft != null) ...[
               const SizedBox(height: 16),
+              if (_roomSnapshot.status != CallRoomConnectionStatus.disconnected)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Text(
+                    'LiveKit 监听：${_roomStatusText(_roomSnapshot.status)} · '
+                    '麦克风：${_roomSnapshot.microphoneEnabled ? '已开启' : '已关闭'}',
+                  ),
+                ),
               AiCallingAgentDraftPanel(
                 key: _draftPanelKey,
                 draft: _draft!,
@@ -201,22 +235,35 @@ class _AiCallingAgentPageState extends State<AiCallingAgentPage> {
         draftId: draft.id,
         consentPromptVersion: _consentPromptVersion,
       ));
-      _notice = '已进入执行队列，可刷新查看进度。';
+      _notice = '已进入执行队列，通话接通后 App 会自动接收 LiveKit 双向译音。';
     });
   }
 
   Future<void> _refreshDraft() async {
+    await _fetchDraft(showNotice: true);
+  }
+
+  Future<void> _fetchDraft({required bool showNotice}) async {
     final draft = _draft;
     if (draft == null) return;
-    await _run(() async {
-      _setDraft(await _client.getDraft(draftId: draft.id));
-      _notice = '状态已刷新。';
-    });
+    final previousStatus = draft.status;
+    try {
+      final next = await _client.getDraft(draftId: draft.id);
+      if (!mounted) return;
+      setState(() {
+        _setDraft(next);
+        if (showNotice) _notice = '状态已刷新。';
+      });
+      _notifyTerminalTransition(previousStatus, next);
+    } catch (error) {
+      if (mounted && showNotice) setState(() => _error = error);
+    }
   }
 
   Future<void> _requestTakeover() async {
     final draft = _draft;
     if (draft == null || !await _ensureVoiceConsent()) return;
+    await _disconnectRoomForTakeover();
     if (draft.status != 'takeover_requested') {
       await _run(() async {
         _setDraft(await _client.requestTakeover(
@@ -242,7 +289,11 @@ class _AiCallingAgentPageState extends State<AiCallingAgentPage> {
         takeoverReadyAt: takeover.takeoverReadyAt,
       ),
     ));
-    if (mounted) await _refreshDraft();
+    if (mounted) {
+      await _refreshDraft();
+      final current = _draft;
+      if (current != null) unawaited(_syncDraftLifecycle(current));
+    }
   }
 
   Future<void> _cancelDraft() async {
@@ -250,7 +301,14 @@ class _AiCallingAgentPageState extends State<AiCallingAgentPage> {
     if (draft == null) return;
     await _run(() async {
       _setDraft(await _client.cancelDraft(draftId: draft.id));
-      _notice = '已取消任务，未发起拨号。';
+      final hangup = _client.lastCancellation;
+      _notice = switch (hangup?.status) {
+        'accepted' => '已取消任务，已向同一通话发送挂断请求。请刷新确认电话网络已结束。',
+        'requested' => '已取消任务，已请求通话运行时挂断。请刷新确认电话网络已结束。',
+        'unknown' => '已取消任务，但挂断结果待对账；请勿重新拨号。',
+        'failed' => '已取消任务，但挂断失败；请刷新状态并人工确认电话是否仍在通话。',
+        _ => '已取消任务，未发起拨号。',
+      };
     });
   }
 
@@ -278,6 +336,7 @@ class _AiCallingAgentPageState extends State<AiCallingAgentPage> {
       _error = null;
       _notice = '已打开任务。';
     });
+    unawaited(_syncDraftLifecycle(draft));
     _scrollToDraft();
   }
 
@@ -287,6 +346,116 @@ class _AiCallingAgentPageState extends State<AiCallingAgentPage> {
       draft,
       ..._drafts.where((item) => item.id != draft.id),
     ];
+    unawaited(_syncDraftLifecycle(draft));
+  }
+
+  Future<void> _syncDraftLifecycle(AiCallingAgentDraft draft) async {
+    if (_isPollingStatus(draft.status)) {
+      _pollTimer ??= Timer.periodic(
+        const Duration(seconds: 2),
+        (_) => unawaited(_fetchDraft(showNotice: false)),
+      );
+    } else {
+      _pollTimer?.cancel();
+      _pollTimer = null;
+    }
+
+    if (draft.status == 'in_progress' && draft.callId != null) {
+      await _connectRoomForMonitoring(draft.callId!);
+    } else if (_roomCallId != null) {
+      await _disconnectRoomForTakeover();
+    }
+  }
+
+  bool _isPollingStatus(String status) {
+    return status == 'queued' ||
+        status == 'dispatching' ||
+        status == 'reconciliation_required' ||
+        status == 'in_progress' ||
+        status == 'takeover_requested';
+  }
+
+  Future<void> _connectRoomForMonitoring(String callId) {
+    final active = _roomSync;
+    if (active != null) return active;
+    if (_roomCallId == callId &&
+        _roomSnapshot.status != CallRoomConnectionStatus.disconnected) {
+      return Future<void>.value();
+    }
+    final task = _connectRoomForMonitoringOnce(callId);
+    _roomSync = task;
+    return task.whenComplete(() {
+      if (identical(_roomSync, task)) _roomSync = null;
+    });
+  }
+
+  Future<void> _connectRoomForMonitoringOnce(String callId) async {
+    try {
+      final token = await _callClient.createRoomToken(
+        callId: callId,
+        participantRole: 'host',
+        participantName: 'ai-monitor',
+      );
+      await _roomClient.connect(token, enableMicrophone: false);
+      try {
+        await _callClient.confirmRoomConnected(token);
+      } catch (_) {
+        await _roomClient.disconnect();
+        rethrow;
+      }
+      _roomCallId = callId;
+    } catch (error) {
+      if (mounted) {
+        setState(() => _notice = 'LiveKit 监听暂未连接：$error');
+      }
+    }
+  }
+
+  Future<void> _disconnectRoomForTakeover() async {
+    _roomCallId = null;
+    await _roomClient.disconnect();
+  }
+
+  void _notifyTerminalTransition(
+    String previousStatus,
+    AiCallingAgentDraft next,
+  ) {
+    if (previousStatus == next.status) return;
+    final resultReady = next.status == 'reconciliation_required' &&
+        next.resultSummary != null;
+    if (!_isTerminalStatus(next.status) && !resultReady) return;
+    if (_isTerminalStatus(next.status)) {
+      _pollTimer?.cancel();
+      _pollTimer = null;
+    }
+    final message = resultReady
+        ? 'AI 代打已结束，电话正在对账：${next.resultSummary}'
+        : switch (next.status) {
+            'completed' => 'AI 代打已结束：${next.resultSummary ?? '任务已完成'}',
+            'failed' => 'AI 代打已结束：${next.failureReason ?? '任务失败'}',
+            'cancelled' => 'AI 代打已取消，电话线路已进入清理流程。',
+            _ => 'AI 代打已结束。',
+          };
+    _notice = message;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(SnackBar(content: Text(message)));
+    });
+  }
+
+  bool _isTerminalStatus(String status) {
+    return status == 'completed' || status == 'failed' || status == 'cancelled';
+  }
+
+  String _roomStatusText(CallRoomConnectionStatus status) {
+    return switch (status) {
+      CallRoomConnectionStatus.connecting => '连接中',
+      CallRoomConnectionStatus.connected => '已连接，正在播放双方译音',
+      CallRoomConnectionStatus.reconnecting => '重连中',
+      CallRoomConnectionStatus.disconnected => '未连接',
+    };
   }
 
   Future<void> _run(Future<void> Function() action) async {

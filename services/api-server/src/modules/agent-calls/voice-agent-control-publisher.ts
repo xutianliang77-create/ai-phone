@@ -16,8 +16,11 @@ export async function publishVoiceAgentControl(input: {
 }) {
   const call = await findCallLink(input.callId);
   const config = getLiveKitRoomConfig();
-  const dispatch = await findWorkerDispatch(input.callId);
-  const identities = (await findSession(input.callId))?.callLegs
+  // Worker dispatches and call legs are keyed by the communication session.
+  // callId is kept as the external call-link reference and may diverge from
+  // sessionId for non-legacy adapters.
+  const dispatch = await findWorkerDispatch(call?.sessionId ?? input.callId);
+  const identities = (await findSession(call?.sessionId ?? input.callId))?.callLegs
     ?.filter((leg) => leg.status === "active" && leg.participantRole === "worker")
     .map((leg) => leg.participantIdentity) ?? [];
   if (!call || call.purpose !== "voice_agent" || !config.ok || !dispatch ||

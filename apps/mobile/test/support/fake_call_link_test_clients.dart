@@ -185,11 +185,14 @@ class FakeCallRoomClient implements CallRoomClient {
   Stream<CallRoomSnapshot> get snapshots => _snapshots.stream;
 
   @override
-  Future<void> connect(CallRoomToken token) async {
+  Future<void> connect(
+    CallRoomToken token, {
+    bool enableMicrophone = true,
+  }) async {
     connectedToken = token;
     _snapshots.add(CallRoomSnapshot(
       status: CallRoomConnectionStatus.connected,
-      microphoneEnabled: microphoneEnabled,
+      microphoneEnabled: enableMicrophone && microphoneEnabled,
       microphonePausedForPlayback: microphonePausedForPlayback,
       remoteParticipantCount: 1,
       message: message,

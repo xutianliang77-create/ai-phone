@@ -2,6 +2,7 @@ from fastapi.testclient import TestClient
 
 from app.config import AsrConfig
 from app.audio_buffer import FrameVadDecision
+from app.endpoint_policy import EndpointPolicy
 from app.main import create_app
 from app.model_loader import qwen3_endpoint_policies
 from app.routes import frame_vad_headers
@@ -53,6 +54,17 @@ def test_runtime_fingerprint_tracks_mixed_language_retry() -> None:
     assert enabled.runtime_parameters()["mixedLanguageRetryEnabled"] is True
 
 
+def test_vllm_runtime_parameters_are_explicit_and_fingerprinted() -> None:
+    parameters = AsrConfig(provider="qwen3_asr_vllm").runtime_parameters()
+
+    assert parameters["gpuMemoryUtilization"] == 0.35
+    assert parameters["maxModelLen"] == 8192
+    assert parameters["maxNumSeqs"] == 1
+    assert parameters["enforceEager"] is True
+    assert parameters["unfixedChunkNum"] == 7
+    assert parameters["unfixedTokenNum"] == 5
+    assert parameters["startupTimeoutMs"] == 30000
+    assert parameters["maxActiveSessions"] == 1
 def test_realtime_endpoint_defaults_keep_fast_and_listening_modes_distinct() -> None:
     config = AsrConfig(provider="qwen3_asr")
 
@@ -76,6 +88,49 @@ def test_realtime_endpoint_defaults_keep_fast_and_listening_modes_distinct() -> 
     assert endpoint_policies["listening"].min_audio_ms == 1800
     assert endpoint_policies["call_link"].min_audio_ms == 1800
     assert endpoint_policies["pstn"].min_audio_ms == 1800
+
+
+def test_listening_vad_threshold_does_not_change_other_modes() -> None:
+    config = AsrConfig(
+        provider="qwen3_asr",
+        vad_threshold=0.5,
+        qwen3_listening_vad_threshold=0.05,
+    )
+
+    assert config.runtime_parameters()["vadThresholdByMode"] == {
+        "conversation": 0.5,
+        "listening": 0.05,
+        "call_link": 0.5,
+        "pstn": 0.5,
+    }
+    policies = qwen3_endpoint_policies(config)
+    assert policies["listening"].vad_threshold == 0.05
+    assert policies["conversation"].vad_threshold == 0.5
+    assert policies["call_link"].vad_threshold == 0.5
+    assert policies["pstn"].vad_threshold == 0.5
+    assert policies["listening"].fingerprint != EndpointPolicy(
+        "listening", 1800, 1400, 10000, 400, 0.5
+    ).fingerprint
+
+
+def test_listening_max_audio_does_not_change_other_modes() -> None:
+    config = AsrConfig(
+        provider="qwen3_asr",
+        qwen3_max_audio_ms=10000,
+        qwen3_listening_max_audio_ms=6000,
+    )
+
+    assert config.runtime_parameters()["maxAudioByMode"] == {
+        "conversation": 10000,
+        "listening": 6000,
+        "call_link": 10000,
+        "pstn": 10000,
+    }
+    policies = qwen3_endpoint_policies(config)
+    assert policies["listening"].max_audio_ms == 6000
+    assert policies["conversation"].max_audio_ms == 10000
+    assert policies["call_link"].max_audio_ms == 10000
+    assert policies["pstn"].max_audio_ms == 10000
 
 
 def test_metrics_exposes_runtime_identity_without_secrets() -> None:

@@ -16,6 +16,8 @@ import {
 import type { AgentCallRecord } from "./agent-call-record.js";
 import {
   cleanText,
+  fallbackAgentCallResultSummary,
+  isPlaceholderAgentCallSummary,
   normalizedSeconds,
 } from "./agent-call-repository-helpers.js";
 import {
@@ -195,6 +197,13 @@ export function applyAgentCallStatusMutation(
   if (consumed !== null) draft.consumedSeconds = consumed;
   draft.providerCallId = cleanText(request.providerCallId, 120) || draft.providerCallId;
   draft.resultSummary = cleanText(request.resultSummary, 800) || draft.resultSummary;
+  if ((request.status === "completed" || request.status === "failed") &&
+    (!draft.resultSummary || isPlaceholderAgentCallSummary(draft.resultSummary))) {
+    draft.resultSummary = fallbackAgentCallResultSummary(
+      request.status,
+      Boolean(draft.callId),
+    );
+  }
   draft.failureReason = cleanText(request.failureReason, 300) || draft.failureReason;
   draft.nextStep = cleanText(request.nextStep, 300) || draft.nextStep;
   if (request.status !== "in_progress") draft.workerLeaseExpiresAt = undefined;

@@ -33,6 +33,8 @@ interface NodeSerialPort {
   on(event: "close", listener: () => void): this;
   on(event: "error", listener: (error: Error) => void): this;
   off(event: "data", listener: (data: Uint8Array) => void): this;
+  off(event: "close", listener: () => void): this;
+  off(event: "error", listener: (error: Error) => void): this;
 }
 
 export interface NodeSerialTransportOptions {
@@ -55,7 +57,8 @@ export class NodeSerialTransport implements SerialTransport {
   private dataAttached = false;
   private readonly dataListeners = new Set<SerialDataListener>();
   private readonly disconnectListeners = new Set<SerialDisconnectListener>();
-  private readonly port: NodeSerialPort;
+  private readonly portFactory: (options: SerialPortOptions) => NodeSerialPort;
+  private port?: NodeSerialPort;
   private readonly platform: NodeJS.Platform;
   private readonly linuxDtrSetter: (
     fileDescriptor: number,
@@ -69,17 +72,7 @@ export class NodeSerialTransport implements SerialTransport {
     const portFactory = options.portFactory ?? defaultPortFactory;
     this.platform = options.platform ?? process.platform;
     this.linuxDtrSetter = options.linuxDtrSetter ?? setLinuxDtrWithInheritedFd;
-    this.port = portFactory({
-      path,
-      baudRate: 115200,
-      dataBits: 8,
-      stopBits: 1,
-      parity: "none",
-      autoOpen: false,
-      lock: true,
-    });
-    this.port.on("close", this.handleClose);
-    this.port.on("error", this.handleError);
+    this.portFactory = portFactory;
   }
 
   get isOpen() {
@@ -88,50 +81,59 @@ export class NodeSerialTransport implements SerialTransport {
 
   async open() {
     if (this.ready) return;
-    if (!this.port.isOpen) {
-      await invokeSerial((callback) => this.port.open(callback), "Serial open failed");
+    const port = this.ensurePort();
+    if (!port.isOpen) {
+      await invokeSerial((callback) => port.open(callback), "Serial open failed");
     }
     try {
-      await this.setDtr(true, "DTR assertion failed");
+      await this.setDtr(port, true, "DTR assertion failed");
     } catch (error) {
-      await this.closePhysicalPort();
+      await this.closePhysicalPort(port);
+      this.retirePort(port);
       throw error;
     }
-    this.attachData();
+    this.attachData(port);
     this.ready = true;
   }
 
   async close() {
     this.ready = false;
-    this.detachData();
-    if (!this.port.isOpen) return;
+    const port = this.port;
+    if (!port) return;
+    this.detachData(port);
+    if (!port.isOpen) {
+      this.retirePort(port);
+      return;
+    }
 
     this.intentionalClose = true;
     let releaseError: Error | undefined;
     try {
-      await this.setDtr(false, "DTR release failed");
+      await this.setDtr(port, false, "DTR release failed");
     } catch (error) {
       releaseError = asError(error);
     }
     try {
-      await invokeSerial((callback) => this.port.close(callback), "Serial close failed");
+      await invokeSerial((callback) => port.close(callback), "Serial close failed");
     } finally {
       this.intentionalClose = false;
+      this.retirePort(port);
     }
     if (releaseError) throw releaseError;
   }
 
   async write(data: Uint8Array) {
-    if (!this.ready || !this.port.isOpen) {
+    const port = this.port;
+    if (!this.ready || !port?.isOpen) {
       throw new Error("Serial transport is not open");
     }
     const copy = Uint8Array.from(data);
     await invokeSerial(
-      (callback) => this.port.write(copy, callback),
+      (callback) => port.write(copy, callback),
       "Serial write failed",
     );
     await invokeSerial(
-      (callback) => this.port.drain(callback),
+      (callback) => port.drain(callback),
       "Serial drain failed",
     );
   }
@@ -144,6 +146,24 @@ export class NodeSerialTransport implements SerialTransport {
   onDisconnect(listener: SerialDisconnectListener) {
     this.disconnectListeners.add(listener);
     return () => this.disconnectListeners.delete(listener);
+  }
+
+  private ensurePort() {
+    if (this.port?.isOpen) return this.port;
+    if (this.port) this.retirePort(this.port);
+    const port = this.portFactory({
+      path: this.path,
+      baudRate: 115200,
+      dataBits: 8,
+      stopBits: 1,
+      parity: "none",
+      autoOpen: false,
+      lock: true,
+    });
+    this.port = port;
+    port.on("close", this.handleClose);
+    port.on("error", this.handleError);
+    return port;
   }
 
   private readonly handleData = (data: Uint8Array) => {
@@ -165,15 +185,15 @@ export class NodeSerialTransport implements SerialTransport {
     if (wasReady && !this.intentionalClose) this.publishDisconnect("serial_error");
   };
 
-  private attachData() {
+  private attachData(port: NodeSerialPort) {
     if (this.dataAttached) return;
-    this.port.on("data", this.handleData);
+    port.on("data", this.handleData);
     this.dataAttached = true;
   }
 
-  private detachData() {
+  private detachData(port = this.port) {
     if (!this.dataAttached) return;
-    this.port.off("data", this.handleData);
+    port?.off("data", this.handleData);
     this.dataAttached = false;
   }
 
@@ -181,10 +201,10 @@ export class NodeSerialTransport implements SerialTransport {
     for (const listener of this.disconnectListeners) listener(reason);
   }
 
-  private async setDtr(asserted: boolean, failurePrefix: string) {
+  private async setDtr(port: NodeSerialPort, asserted: boolean, failurePrefix: string) {
     if (this.platform !== "linux") {
       await invokeSerial(
-        (callback) => this.port.set(
+        (callback) => port.set(
           asserted ? assertedSignals : releasedSignals,
           callback,
         ),
@@ -193,7 +213,7 @@ export class NodeSerialTransport implements SerialTransport {
       return;
     }
 
-    const fileDescriptor = nativeFileDescriptor(this.port);
+    const fileDescriptor = nativeFileDescriptor(port);
     if (fileDescriptor === null) {
       throw new Error(`${failurePrefix}: native serial descriptor is unavailable`);
     }
@@ -205,16 +225,23 @@ export class NodeSerialTransport implements SerialTransport {
     }
   }
 
-  private async closePhysicalPort() {
+  private async closePhysicalPort(port: NodeSerialPort) {
     this.ready = false;
-    this.detachData();
-    if (!this.port.isOpen) return;
+    this.detachData(port);
+    if (!port.isOpen) return;
     this.intentionalClose = true;
     try {
-      await invokeSerial((callback) => this.port.close(callback), "Serial close failed");
+      await invokeSerial((callback) => port.close(callback), "Serial close failed");
     } finally {
       this.intentionalClose = false;
     }
+  }
+
+  private retirePort(port: NodeSerialPort) {
+    this.detachData(port);
+    port.off("close", this.handleClose);
+    port.off("error", this.handleError);
+    if (this.port === port) this.port = undefined;
   }
 }
 

@@ -32,6 +32,9 @@ class AsrService:
         }
 
     def vad_diagnostics(self, session_id: str) -> dict[str, object] | None:
+        engine_diagnostics = getattr(self.engine, "diagnostics", None)
+        if engine_diagnostics:
+            return engine_diagnostics(session_id)
         segmenter = getattr(self.engine, "segmenter", None)
         diagnostics = getattr(segmenter, "diagnostics", None)
         return diagnostics(session_id) if diagnostics else None

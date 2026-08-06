@@ -28,6 +28,66 @@ describe("realtime speaker turn readiness", () => {
     expect(result.errors.join(" ")).toContain("sortformer/active");
     expect(result.errors.join(" ")).toContain("Expected 2 speakers");
   });
+
+  it("accepts one persisted speaker without a false boundary", () => {
+    const detail = {
+      status: "ended",
+      segments: [segment("a", "turn_1", "speaker_1", "en", 0)],
+      diagnostics: {
+        audio: { droppedFrameCount: 0 },
+        speakerTurns: {
+          confirmedBoundaryCount: 0,
+          commitHitCount: 0,
+          commitMissCount: 0,
+          commitErrorCount: 0,
+          endpointRaceCount: 0,
+        },
+      },
+    };
+    const result = evaluateRealtimeSpeakerTurnReadiness({
+      gatewayHealth: { speakerProvider: "http", sessionEventSink: "api" },
+      speakerHealth: { provider: "sortformer", mode: "active" },
+      detail,
+    }, {
+      expectedSpeakerCount: 1,
+      requireBoundary: false,
+      requiredLanguages: ["en"],
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.speakerIds).toEqual(["speaker_1"]);
+    expect(result.turnIds).toEqual(["turn_1"]);
+  });
+
+  it("rejects a false second speaker in a single-speaker gate", () => {
+    const detail = sessionDetail();
+    detail.segments[1].dominantLanguage = "en";
+    const result = evaluateRealtimeSpeakerTurnReadiness({
+      gatewayHealth: { speakerProvider: "http", sessionEventSink: "api" },
+      speakerHealth: { provider: "sortformer", mode: "active" },
+      detail,
+    }, {
+      expectedSpeakerCount: 1,
+      requireBoundary: false,
+      requiredLanguages: ["en"],
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.errors.join(" ")).toContain("Expected 1 speakers");
+    expect(result.errors.join(" ")).toContain("Unexpected speaker boundary");
+  });
+
+  it("rejects session end persistence above the latency gate", () => {
+    const result = evaluateRealtimeSpeakerTurnReadiness({
+      gatewayHealth: { speakerProvider: "http", sessionEventSink: "api" },
+      speakerHealth: { provider: "sortformer", mode: "active" },
+      detail: sessionDetail(),
+      endDelivery: { historyReady: true, historyLatencyMs: 1501 },
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.errors.join(" ")).toContain("1501ms");
+  });
 });
 
 function sessionDetail() {

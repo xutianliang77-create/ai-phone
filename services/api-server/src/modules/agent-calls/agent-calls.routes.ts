@@ -8,6 +8,7 @@ import type {
 import { sendError } from "../../infrastructure/http/errors.js";
 import { requireAccount } from "../account/account-auth.js";
 import { findCallLink } from "../call-links/call-links.service.js";
+import { withSessionWriteLock } from "../sessions/session-write-coordinator.js";
 import { registerAgentCallInternalRoutes } from "./agent-call-internal.routes.js";
 import { registerAgentCallPstnWebhookRoutes } from "./agent-call-pstn-webhook.routes.js";
 import {
@@ -40,6 +41,7 @@ import { findAgentDialProviderOperation } from
 import { isAgentCallCarrierConnected } from
   "./agent-call-telephony-runtime.js";
 import { toAgentCallReadDto } from "./agent-call-status-projection.js";
+import { executeVoiceAgentPhoneHangup } from "./voice-agent-phone-control.js";
 
 export async function registerAgentCallRoutes(app: FastifyInstance) {
   app.addHook("onClose", async () => {
@@ -267,19 +269,44 @@ export async function registerAgentCallRoutes(app: FastifyInstance) {
           draft: toDto(result.draft),
         });
       }
+      let hangup: {
+        status: "not_started" | "requested" | "accepted" | "unknown" | "failed";
+        code: string;
+        replayed?: boolean;
+      } = { status: "not_started", code: "phone_not_started" };
       if (result.draft.callId) {
-        const control = await publishVoiceAgentControl({
-          callId: result.draft.callId,
-          command: "cancel",
-        });
-        if (!control.ok) {
-          request.log.warn(
-            { callId: result.draft.callId, code: control.code },
-            "Voice Agent cancellation will use heartbeat fallback",
-          );
+        const call = await findCallLink(result.draft.callId);
+        if (call && result.draft.providerOperationId) {
+          const phone = await withSessionWriteLock(call.sessionId, () =>
+            executeVoiceAgentPhoneHangup({
+              call,
+              providerOperationId: result.draft.providerOperationId!,
+              idempotencyKey: `voice-agent-hangup:${call.sessionId}`,
+            }));
+          hangup = {
+            status: phone.ok ? "accepted" : phone.code === "unknown"
+              ? "unknown" : "failed",
+            code: phone.code,
+            ...("replayed" in phone ? { replayed: phone.replayed } : {}),
+          };
+        }
+        if (hangup.status !== "accepted" && hangup.status !== "unknown") {
+          const control = await publishVoiceAgentControl({
+            callId: result.draft.callId,
+            command: "cancel",
+          });
+          if (control.ok && hangup.status === "not_started") {
+            hangup = { status: "requested", code: "control_published" };
+          }
+          if (!control.ok) {
+            request.log.warn(
+              { callId: result.draft.callId, code: control.code },
+              "Voice Agent cancellation will use heartbeat fallback",
+            );
+          }
         }
       }
-      return { draft: toDto(result.draft) };
+      return { draft: toDto(result.draft), hangup };
     },
   );
 

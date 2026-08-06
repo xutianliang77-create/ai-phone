@@ -13,7 +13,7 @@ void main() {
     expect(callRoomTtsTrackTargetRole('microphone'), isNull);
   });
 
-  test('allows only target-role TTS tracks', () {
+  test('allows a host monitor to hear every room audio publication', () {
     expect(
       shouldSubscribeCallRoomAudioTrack(
         trackName: 'translation-tts-host-16000',
@@ -23,15 +23,26 @@ void main() {
     );
     expect(
       shouldSubscribeCallRoomAudioTrack(
-        trackName: 'translation-tts-guest-16000',
+        trackName:
+            'translation-tts-guest-16000.${callRoomLegToken('call-1:guest:phone')}',
         localRole: 'host',
       ),
-      isFalse,
+      isTrue,
     );
     expect(
       shouldSubscribeCallRoomAudioTrack(
         trackName: 'participant-microphone',
         localRole: 'host',
+      ),
+      isTrue,
+    );
+  });
+
+  test('keeps non-host roles restricted to admitted TTS tracks', () {
+    expect(
+      shouldSubscribeCallRoomAudioTrack(
+        trackName: 'air780-downlink-air-1',
+        localRole: 'guest',
       ),
       isFalse,
     );

@@ -40,12 +40,16 @@ const compose = readFileSync(
   new URL("../../infra/ai-phone-server/docker-compose.yaml", import.meta.url),
   "utf8",
 );
+const appEntrypoint = readFileSync(
+  new URL("../../infra/ai-phone-server/app-container-entrypoint.mjs", import.meta.url),
+  "utf8",
+);
 
 describe("Beelink app deployment contract", () => {
   it("builds before freezing writes and migrates before enabling SQLite", () => {
     expectInOrder([
       'remote_compose "build"',
-      'remote_compose "stop gateway api"',
+      'remote_compose "stop wujie-ai"',
       "api-store.json.backup-$backup_stamp",
       "npm run storage:migrate-json",
       "npm run storage:check",
@@ -53,6 +57,15 @@ describe("Beelink app deployment contract", () => {
       "set_env API_STORAGE_DRIVER sqlite",
       'remote_compose "up -d --no-build --remove-orphans"',
     ]);
+  });
+
+  it("provides a pinned-image fast start without rebuilding or syncing", () => {
+    expect(script).toContain("sync|deploy|start|status");
+    expect(script).toContain("ai-phone-image-tag");
+    expect(script).toContain('TTS_READINESS_URL="${TTS_READINESS_URL:-http://$TTS_SERVICE_HOST:8002/health}"');
+    expect(script).toContain('if [[ \"$MODE\" == \"start\" ]]; then');
+    expect(script).toContain("remote_compose 'up -d --no-build --remove-orphans'");
+    expect(script).not.toContain('remote_compose \"build\"\n  wait_for_translation_agent_stability');
   });
 
   it("preserves an existing database before a fresh JSON migration", () => {
@@ -124,9 +137,14 @@ describe("Beelink app deployment contract", () => {
     expect(candidateScript).toContain("docker compose -p '$COMPOSE_PROJECT_NAME'");
     expect(candidateScript).not.toContain("tailscale serve");
     expect(compose).toContain(
+      "container_name: ${AI_PHONE_CONTAINER_PREFIX:-ai-phone}-wujie-ai",
+    );
+    expect(compose).toContain("app-container-entrypoint.mjs");
+    expect(appEntrypoint).toContain('services/translation-worker/dist/agent-calls/main.js');
+    expect(compose).not.toContain(
       "container_name: ${AI_PHONE_CONTAINER_PREFIX:-ai-phone}-api",
     );
-    expect(compose).toContain(
+    expect(compose).not.toContain(
       "container_name: ${AI_PHONE_CONTAINER_PREFIX:-ai-phone}-translation-agent",
     );
   });

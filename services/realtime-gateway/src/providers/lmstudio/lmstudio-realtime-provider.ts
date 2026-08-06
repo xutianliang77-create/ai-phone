@@ -7,6 +7,7 @@ import type { RealtimeProvider, RealtimeProviderSession, TextSegmentInput } from
 import { LmStudioClient } from "./lmstudio-client.js";
 import { isUsableTranslation, providerUsage } from "./lmstudio-translation-output.js";
 import { transcriptVariantsForTranslation } from "./transcript-chunks.js";
+import { routeAsrTranscript } from "./lmstudio-asr-transcript-routing.js";
 import {
   RealtimeTranscriptRefiner,
 } from "./lmstudio-asr-refinement.js";
@@ -35,12 +36,16 @@ export class LmStudioRealtimeProvider implements RealtimeProvider {
   private readonly model: string;
   private sessions = new Map<string, RealtimeProviderSession>();
   private semanticSegments = new SegmentAssembler();
+  private readonly listeningSemanticSegments: SegmentAssembler;
 
   constructor(options: LmStudioRealtimeProviderOptions) {
     this.name = options.providerName ?? "lmstudio";
     this.model = options.model;
     this.client = options.translationClient ?? new LmStudioClient(options);
     this.asrProvider = options.asrProvider ?? new MockAsrProvider();
+    this.listeningSemanticSegments = new SegmentAssembler({
+      maxContinuationBufferMs: options.listeningMaxContinuationBufferMs,
+    });
     this.transcriptRefiner = new RealtimeTranscriptRefiner({
       provider: options.asrRefinementProvider ?? new OffLlmProvider(),
       enabled: options.asrRefinementEnabled === true,
@@ -81,7 +86,7 @@ export class LmStudioRealtimeProvider implements RealtimeProvider {
       yield* this.flushExpiredSemanticSegments(session);
       return;
     }
-    for (const transcript of transcripts) yield* this.processTranscript(session, transcript);
+    for (const transcript of transcripts) yield* routeAsrTranscript(session, transcript, (item) => this.processTranscript(session, item));
   }
 
   async *sendText(
@@ -151,6 +156,7 @@ export class LmStudioRealtimeProvider implements RealtimeProvider {
     this.sessions.delete(sessionId);
     this.transcriptRefiner.clear(sessionId);
     this.semanticSegments.clear(sessionId);
+    this.listeningSemanticSegments.clear(sessionId);
     await this.asrProvider.closeSession(sessionId);
   }
 
@@ -170,7 +176,7 @@ export class LmStudioRealtimeProvider implements RealtimeProvider {
   ): AsyncGenerator<ServerRealtimeEvent> {
     const text = cleanRealtimeText(transcript.text);
     if (!text) return;
-    const assembled = this.semanticSegments.push(session.sessionId, {
+    const assembled = this.semanticSegmentsFor(session).push(session.sessionId, {
       ...transcript,
       text,
       ...analyzeTurnLanguage(text, transcript.language),
@@ -191,15 +197,21 @@ export class LmStudioRealtimeProvider implements RealtimeProvider {
     session: RealtimeProviderSession,
     emitTranscript = true,
   ): AsyncGenerator<ServerRealtimeEvent> {
-    for (const transcript of this.semanticSegments.flush(session.sessionId)) {
+    for (const transcript of this.semanticSegmentsFor(session).flush(session.sessionId)) {
       yield* this.translateTranscript(session, transcript, emitTranscript);
     }
   }
 
   private async *flushExpiredSemanticSegments(session: RealtimeProviderSession) {
-    for (const transcript of this.semanticSegments.drainExpired(session.sessionId)) {
+    for (const transcript of this.semanticSegmentsFor(session).drainExpired(session.sessionId)) {
       yield* this.translateTranscript(session, transcript);
     }
+  }
+
+  private semanticSegmentsFor(session: RealtimeProviderSession) {
+    return session.asrEndpointMode === "listening"
+      ? this.listeningSemanticSegments
+      : this.semanticSegments;
   }
 
   private async *translateTranscript(

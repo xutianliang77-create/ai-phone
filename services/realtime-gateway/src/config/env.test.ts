@@ -32,6 +32,7 @@ describe("realtime gateway env", () => {
     expect(env.speakerHttpTimeoutMs).toBe(2000);
     expect(env.ttsHttpStreamEndpoint).toBeUndefined();
     expect(env.ttsStreamPrefillMs).toBe(800);
+    expect(env.listeningMaxContinuationBufferMs).toBe(5000);
   });
 
   it("lets explicit environment variables override model routing defaults", () => {
@@ -47,6 +48,14 @@ describe("realtime gateway env", () => {
     process.env = { REALTIME_BIND_HOST: "10.20.30.41" };
 
     expect(loadEnv().host).toBe("10.20.30.41");
+  });
+
+  it("configures the listening continuation buffer independently", () => {
+    process.env = {
+      REALTIME_LISTENING_MAX_CONTINUATION_BUFFER_MS: "1200",
+    };
+
+    expect(loadEnv().listeningMaxContinuationBufferMs).toBe(1200);
   });
 });
 

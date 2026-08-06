@@ -63,7 +63,13 @@ export function registerAirDeviceTrackAdmissionRoutes(app: FastifyInstance) {
         );
       }
       request.log.error(
-        { trackSid: input.trackSid, err: error },
+        {
+          trackSid: input.trackSid,
+          reason: error instanceof Error
+            ? (error as Error & { code?: string }).code
+            : undefined,
+          err: error,
+        },
         "Air device track admission failed",
       );
       return sendError(

@@ -35,8 +35,13 @@ export async function createAirDeviceTrackAdmission(input: {
   callVerifier: CallBindingVerifier;
   nowMs: number;
 }): Promise<AirDeviceTrackAdmissionDto> {
-  if (!validBinding(input) || !Number.isFinite(dependencies.nowMs)) {
-    throw new Error("Invalid Air device track admission");
+  const validation = airDeviceTrackAdmissionValidationReason(input);
+  if (validation !== "ok" || !Number.isFinite(dependencies.nowMs)) {
+    const error = new Error("Invalid Air device track admission");
+    Object.assign(error, {
+      code: validation !== "ok" ? validation : "clock",
+    });
+    throw error;
   }
   await dependencies.leaseVerifier.assertLease({
     deviceId: input.deviceId,
@@ -63,7 +68,7 @@ export async function createAirDeviceTrackAdmission(input: {
   };
 }
 
-function validBinding(input: {
+export function airDeviceTrackAdmissionValidationReason(input: {
   communicationSessionId: string;
   roomName: string;
   deviceId: string;
@@ -74,25 +79,30 @@ function validBinding(input: {
   trackSid: string;
   trackName: string;
   publisherIdentity: string;
-}) {
+}): "ok" | "communication_session_id" | "device_id" |
+  "lease_id" | "track_sid" | "fencing_token" | "call_generation" |
+  "room_name" | "target_identity" | "publisher_identity" | "track_name" {
   const identifier = /^[A-Za-z0-9_-]+$/;
   if (!identifier.test(input.communicationSessionId) ||
-    input.communicationSessionId.length > 160 ||
-    !identifier.test(input.deviceId) || input.deviceId.length > 128 ||
-    !identifier.test(input.leaseId) || input.leaseId.length > 128 ||
-    !identifier.test(input.trackSid) || input.trackSid.length > 160 ||
-    !Number.isSafeInteger(input.fencingToken) || input.fencingToken < 1 ||
-    !Number.isInteger(input.callGeneration) || input.callGeneration < 0 ||
-    input.callGeneration > 0xffffffff) return false;
+    input.communicationSessionId.length > 160) return "communication_session_id";
+  if (!identifier.test(input.deviceId) || input.deviceId.length > 128) return "device_id";
+  if (!identifier.test(input.leaseId) || input.leaseId.length > 128) return "lease_id";
+  if (!identifier.test(input.trackSid) || input.trackSid.length > 160) return "track_sid";
+  if (!Number.isSafeInteger(input.fencingToken) || input.fencingToken < 1) return "fencing_token";
+  if (!Number.isInteger(input.callGeneration) || input.callGeneration < 0 ||
+    input.callGeneration > 0xffffffff) return "call_generation";
   const targetIdentity =
     `${input.communicationSessionId}:guest:air:${input.deviceId}`;
   const workerPrefix = `${input.communicationSessionId}:worker:`;
   const workerSuffix = input.publisherIdentity.slice(workerPrefix.length);
   const targetToken = Buffer.from(targetIdentity).toString("base64url");
-  return input.roomName === `call_${input.communicationSessionId}` &&
-    input.targetParticipantIdentity === targetIdentity &&
-    input.publisherIdentity.startsWith(workerPrefix) &&
-    identifier.test(workerSuffix) && workerSuffix.length <= 128 &&
-    new RegExp(`^translation-tts-guest-[1-9][0-9]*\\.${targetToken}$`)
-      .test(input.trackName);
+  if (input.roomName !== `call_${input.communicationSessionId}`) return "room_name";
+  if (input.targetParticipantIdentity !== targetIdentity) return "target_identity";
+  if (!input.publisherIdentity.startsWith(workerPrefix) ||
+    !identifier.test(workerSuffix) || workerSuffix.length > 128) {
+    return "publisher_identity";
+  }
+  if (!new RegExp(`^translation-tts-guest-[1-9][0-9]*\\.${targetToken}$`)
+    .test(input.trackName)) return "track_name";
+  return "ok";
 }

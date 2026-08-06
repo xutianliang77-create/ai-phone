@@ -4,6 +4,9 @@ import 'package:http/http.dart' as http;
 
 import '../../account/data/account_auth_headers.dart';
 import '../../account/data/account_session_store.dart';
+import 'ai_calling_agent_api_error.dart';
+
+export 'ai_calling_agent_api_error.dart';
 
 class AiCallingAgentDraft {
   const AiCallingAgentDraft({
@@ -36,6 +39,7 @@ class AiCallingAgentDraft {
     this.startedAt,
     this.completedAt,
     this.failedAt,
+    this.consumedSeconds,
     this.resultSummary,
     this.failureReason,
     this.nextStep,
@@ -70,6 +74,7 @@ class AiCallingAgentDraft {
   final String? startedAt;
   final String? completedAt;
   final String? failedAt;
+  final int? consumedSeconds;
   final String? resultSummary;
   final String? failureReason;
   final String? nextStep;
@@ -110,6 +115,7 @@ class AiCallingAgentDraft {
       startedAt: json['startedAt'] as String?,
       completedAt: json['completedAt'] as String?,
       failedAt: json['failedAt'] as String?,
+      consumedSeconds: (json['consumedSeconds'] as num?)?.toInt(),
       resultSummary: json['resultSummary'] as String?,
       failureReason: json['failureReason'] as String?,
       nextStep: json['nextStep'] as String?,
@@ -134,6 +140,8 @@ class AiCallingAgentApiClient {
   final Uri _baseUrl;
   final http.Client _client;
   final AccountSessionStore _accountSessionStore;
+
+  AiCallingAgentCancellation? lastCancellation;
 
   Future<List<AiCallingAgentDraft>> listDrafts() async {
     final response = await _client.get(
@@ -225,8 +233,10 @@ class AiCallingAgentApiClient {
       body: jsonEncode({'consentPromptVersion': consentPromptVersion}),
     );
     if (!_isSuccess(response)) {
-      throw AiCallingAgentApiException(
-          'Start agent call failed: ${response.body}');
+      throw AiCallingAgentApiException.fromResponse(
+        'Start agent call failed',
+        response,
+      );
     }
     return _draftFromBody(response.body);
   }
@@ -298,6 +308,7 @@ class AiCallingAgentApiClient {
       throw AiCallingAgentApiException(
           'Cancel agent draft failed: ${response.body}');
     }
+    lastCancellation = parseAiCallingAgentCancellation(response.body);
     return _draftFromBody(response.body);
   }
 
@@ -323,13 +334,4 @@ class AiCallingAgentApiClient {
           : const <String, String>{},
     );
   }
-}
-
-class AiCallingAgentApiException implements Exception {
-  const AiCallingAgentApiException(this.message);
-
-  final String message;
-
-  @override
-  String toString() => message;
 }

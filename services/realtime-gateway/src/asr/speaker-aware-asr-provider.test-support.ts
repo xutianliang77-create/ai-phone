@@ -52,7 +52,12 @@ export class FakeSpeakerProvider implements SpeakerAttributionProvider {
     if (this.failStart) throw new Error("speaker unavailable");
   }
   async pushAudio() {
-    return [{ speakerId: "speaker_2", startMs: 900, endMs: 1900 }];
+    return [{
+      speakerId: "speaker_2",
+      startMs: 900,
+      endMs: 1900,
+      confidence: 0.9,
+    }];
   }
   async flush() {
     return [];
@@ -100,7 +105,12 @@ export class OneShotSpeakerProvider extends FakeSpeakerProvider {
   override async pushAudio() {
     this.calls += 1;
     return this.calls === 1
-      ? [{ speakerId: "speaker_2", startMs: 900, endMs: 1900 }]
+      ? [{
+          speakerId: "speaker_2",
+          startMs: 900,
+          endMs: 1900,
+          confidence: 0.9,
+        }]
       : [];
   }
 }
@@ -113,8 +123,20 @@ export class UpdatingSpeakerProvider extends FakeSpeakerProvider {
       speakerId: "speaker_2",
       startMs: 900,
       endMs: this.calls === 1 ? 1200 : 1900,
+      confidence: 0.9,
       final: this.calls > 1,
     }];
+  }
+}
+
+export class BriefNovelSpeakerProvider extends FakeSpeakerProvider {
+  private calls = 0;
+
+  override async pushAudio() {
+    this.calls += 1;
+    if (this.calls === 1) return [speakerSpan("speaker_1", 0, 240)];
+    if (this.calls === 2) return [speakerSpan("speaker_1", 0, 480)];
+    return [speakerSpan("speaker_2", 480, 640, 0.578)];
   }
 }
 
@@ -200,6 +222,11 @@ export class ReturningSpeakerProvider extends FakeSpeakerProvider {
   }
 }
 
-function speakerSpan(speakerId: string, startMs: number, endMs: number) {
-  return { speakerId, startMs, endMs, confidence: 0.9, final: false };
+function speakerSpan(
+  speakerId: string,
+  startMs: number,
+  endMs: number,
+  confidence = 0.9,
+) {
+  return { speakerId, startMs, endMs, confidence, final: false };
 }

@@ -127,6 +127,25 @@ describe("Node real serial transport", () => {
     expect(transport.isOpen).toBe(false);
     expect(onDisconnect).toHaveBeenCalledWith("serial_close");
   });
+
+  it("creates a fresh port after a hot-unplug before retrying", async () => {
+    const first = new FakePort();
+    const second = new FakePort();
+    const ports = [first, second];
+    const portFactory = vi.fn(() => ports.shift() as never);
+    const transport = new NodeSerialTransport(stableVuartPath, {
+      platform: "win32",
+      portFactory,
+    });
+
+    await transport.open();
+    first.unexpectedClose();
+    await transport.open();
+
+    expect(portFactory).toHaveBeenCalledTimes(2);
+    expect(second.calls.slice(0, 2)).toEqual(["open", "set:dtr:on"]);
+    expect(transport.isOpen).toBe(true);
+  });
 });
 
 function transportFor(port: FakePort) {

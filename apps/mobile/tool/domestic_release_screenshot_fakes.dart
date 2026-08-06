@@ -141,7 +141,8 @@ class FakeCallLinkApiClient extends CallLinkApiClient {
       sessionId: 'call_release',
       roomName: 'call_release',
       roomProvider: 'livekit',
-      joinUrl: 'https://call.example.cn/join/call_release?ticket=release-ticket',
+      joinUrl:
+          'https://call.example.cn/join/call_release?ticket=release-ticket',
       hostUrl: 'https://call.example.cn/host/call_release',
       status: 'created',
       expiresAt: DateTime.utc(2026, 7, 4, 12),
@@ -187,7 +188,10 @@ class FakeCallRoomClient implements CallRoomClient {
   Stream<CallRoomSnapshot> get snapshots => _snapshots.stream;
 
   @override
-  Future<void> connect(CallRoomToken token) async {
+  Future<void> connect(
+    CallRoomToken token, {
+    bool enableMicrophone = true,
+  }) async {
     _snapshots.add(CallRoomSnapshot(
       status: CallRoomConnectionStatus.connected,
       microphoneEnabled: true,

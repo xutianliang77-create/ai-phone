@@ -43,19 +43,19 @@ flowchart LR
 
 ## 3. 服务器内部部署
 
-服务器程序作为一个发布单元，建议使用 Docker Compose 或等效 systemd bundle 管理：
+无界 AI 作为一个发布单元、一个应用容器（`wujie-ai`）管理。下面是容器内的逻辑
+进程/组件，不得按这些功能拆成应用容器；LiveKit、数据库和模型服务属于外部基础设施：
 
 ```text
-reverse-proxy
-api-server
-realtime-gateway
-translation-worker
-livekit
-asr-service
-translation-service
-tts-service
-speaker-service
-llm-runtime
+wujie-ai application container
+  api-server
+  realtime-gateway
+  translation-worker
+  optional voice-agent / Air780 gateway / SRT bridge
+
+external infrastructure
+  reverse-proxy / LiveKit / PostgreSQL(or SQLite data volume)
+  ASR / translation / TTS / speaker / LLM services
 ```
 
 `MarbleNet VAD` 是 `asr-service` 内部 Speech Frontend，不增加第三个部署节点或公开端口。ONNX、Mel 预处理资产和 Qwen3-ASR 随同一个服务器发布单元管理。

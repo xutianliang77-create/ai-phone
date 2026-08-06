@@ -17,6 +17,7 @@ describe("http asr client", () => {
         return response(200, {
           segmentId: "seg_1",
           revision: 2,
+          isFinal: false,
           text: "hello",
           language: "en",
           confidence: 0.88,
@@ -47,6 +48,7 @@ describe("http asr client", () => {
     expect(transcript).toEqual({
       segmentId: "seg_1",
       revision: 2,
+      isFinal: false,
       text: "hello",
       language: "en",
       confidence: 0.88,

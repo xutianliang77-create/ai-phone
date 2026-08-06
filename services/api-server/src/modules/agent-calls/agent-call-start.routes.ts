@@ -64,6 +64,12 @@ export function registerAgentCallStartRoute(app: FastifyInstance) {
             code: `agent_call_${startPolicy.code}`,
             message: startPolicy.message,
           },
+          ...(startPolicy.retryAfterSeconds !== undefined
+            ? { retryAfterSeconds: startPolicy.retryAfterSeconds }
+            : {}),
+          ...(startPolicy.nextAllowedAt !== undefined
+            ? { nextAllowedAt: startPolicy.nextAllowedAt }
+            : {}),
           draft: toDto(draft),
         });
       }

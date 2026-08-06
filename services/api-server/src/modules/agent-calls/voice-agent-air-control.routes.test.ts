@@ -150,14 +150,16 @@ describe("Voice Agent Air participant and controls", () => {
     expect(dtmfReplay.statusCode).toBe(200);
     expect(sendPhoneDtmf).toHaveBeenCalledTimes(1);
 
-    const hangupRequest = {
-      method: "POST" as const,
-      url: `/internal/ai-calling-agent/drafts/${draftId}/tools/hangup_call/execute`,
-      headers: internalHeaders,
-      payload: { ticket: "signed-ticket", reason: "runtime_failed" },
-    };
-    expect((await app.inject(hangupRequest)).statusCode).toBe(202);
-    expect((await app.inject(hangupRequest)).statusCode).toBe(202);
+    const cancelled = await app.inject({
+      method: "POST",
+      url: `/ai-calling-agent/drafts/${draftId}/cancel`,
+      payload: { reason: "user_cancelled" },
+    });
+    expect(cancelled.statusCode).toBe(200);
+    expect(cancelled.json()).toMatchObject({
+      draft: { status: "cancelled" },
+      hangup: { status: "accepted" },
+    });
     await app.close();
 
     expect(hangupPhoneCall).toHaveBeenCalledTimes(1);

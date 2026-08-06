@@ -28,9 +28,8 @@ class AiCallingAgentDraftPanel extends StatelessWidget {
         draft.status == 'draft' && !draft.requiresHumanTakeover;
     final canStart = draft.status == 'authorized';
     final canRefresh = _startedStatus(draft.status);
-    final carrierAllowsTakeover =
-        draft.executionProvider != 'air780_volte' ||
-            draft.carrierState == 'connected';
+    final carrierAllowsTakeover = draft.executionProvider != 'air780_volte' ||
+        draft.carrierState == 'connected';
     final canTakeover = draft.status == 'requires_human_takeover' ||
         (draft.callId != null &&
             carrierAllowsTakeover &&
@@ -80,7 +79,8 @@ class AiCallingAgentDraftPanel extends StatelessWidget {
                   Chip(label: Text(_riskReasonText(reason))),
               ],
             ),
-            if (_hasExecutionText(draft)) ...[
+            if (_hasExecutionText(draft) ||
+                _isTerminalStatus(draft.status)) ...[
               const SizedBox(height: 12),
               _ExecutionText(draft: draft),
             ],
@@ -136,6 +136,10 @@ class AiCallingAgentDraftPanel extends StatelessWidget {
     return draft.resultSummary != null ||
         draft.failureReason != null ||
         draft.nextStep != null;
+  }
+
+  bool _isTerminalStatus(String status) {
+    return status == 'completed' || status == 'failed' || status == 'cancelled';
   }
 
   String _statusText(String status) {
@@ -205,7 +209,13 @@ class _ExecutionText extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
+        if (draft.consumedSeconds != null)
+          Text('本次通话时长：${draft.consumedSeconds} 秒'),
         if (draft.resultSummary != null) Text('结果摘要：${draft.resultSummary}'),
+        if (draft.resultSummary == null && draft.status == 'cancelled')
+          const Text('结果摘要：通话已结束，暂无业务结果摘要。'),
+        if (draft.resultSummary == null && draft.status == 'completed')
+          const Text('结果摘要：通话已结束，但服务商未返回结构化业务结果。'),
         if (draft.failureReason != null) Text('失败原因：${draft.failureReason}'),
         if (draft.nextStep != null) Text('下一步：${draft.nextStep}'),
       ],

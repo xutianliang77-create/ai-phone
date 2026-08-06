@@ -118,7 +118,10 @@ class CallRoomCaption {
 abstract class CallRoomClient {
   Stream<CallRoomSnapshot> get snapshots;
 
-  Future<void> connect(CallRoomToken token);
+  Future<void> connect(
+    CallRoomToken token, {
+    bool enableMicrophone = true,
+  });
 
   Future<void> disconnect();
 

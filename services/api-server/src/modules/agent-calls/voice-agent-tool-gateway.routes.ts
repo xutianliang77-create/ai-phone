@@ -117,6 +117,30 @@ export function registerVoiceAgentToolGatewayRoutes(app: FastifyInstance) {
       if (!("execution" in requested)) {
         return sendError(reply, 409, "voice_agent_run_missing", "Agent run unavailable");
       }
+      if (requested.status === "active_conflict") {
+        return sendError(
+          reply,
+          409,
+          "voice_agent_sensitive_tool_active",
+          "Another sensitive agent action is already in progress",
+        );
+      }
+      // A retry may arrive with a new LiveKit tool-call id while the same
+      // sensitive execution is still active. Reuse that execution and do not
+      // reset an already requested/ready takeover.
+      if (requested.status === "existing") {
+        if (params.toolName === "request_takeover" &&
+          binding.draft.status !== "takeover_requested") {
+          await requestAgentCallTakeover(binding.draft.userId, binding.draft.id, {
+            reason: String(body.arguments.reason).slice(0, 200),
+          });
+        }
+        return {
+          executionId: requested.execution.id,
+          authorized: true,
+          replayed: true,
+        };
+      }
       if (!decision.authorized) {
         await updateAgentToolExecution({
           executionId: requested.execution.id,
