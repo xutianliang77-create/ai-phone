@@ -18,6 +18,7 @@ import {
   type AirGatewayCommandBinding,
   type AirGatewayDialRequest,
   type ParsedAirGatewayCommandRequest,
+  summarizeAirGatewayCommandRequest,
 } from "./air-gateway-command-request.js";
 
 export type { AirGatewayCommandBinding, AirGatewayDialRequest } from
@@ -105,6 +106,10 @@ export class AirGatewayCommandService {
     const parsed = parseAirGatewayCommandRequest(value, this.now());
     if (!parsed) {
       this.counters.invalidRequests += 1;
+      console.warn(JSON.stringify({
+        event: "air_gateway_command_schema_invalid",
+        summary: summarizeAirGatewayCommandRequest(value, this.now()),
+      }));
       return { status: "invalid_request", reason: "command_schema_invalid" };
     }
     const signature = airGatewayCommandRequestSignature(parsed.request);

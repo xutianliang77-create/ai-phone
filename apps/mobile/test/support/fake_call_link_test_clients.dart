@@ -19,7 +19,9 @@ class FakeCallLinkApiClient extends CallLinkApiClient {
   int connectionConfirmCount = 0;
   int ticketRotateCount = 0;
   int sipOutboundCount = 0;
+  int air780OutboundCount = 0;
   int sipHangupCount = 0;
+  int air780HangupCount = 0;
   final List<String> sipDtmfDigits = <String>[];
   final List<String> sipTransferTargets = <String>[];
   String? lastGuestTicket;
@@ -116,6 +118,28 @@ class FakeCallLinkApiClient extends CallLinkApiClient {
   }
 
   @override
+  Future<SipOutboundCall> startAir780Outbound({
+    required String callId,
+    required String targetPhone,
+    required String sourceLanguage,
+    required String targetLanguage,
+    required bool disclosureConfirmed,
+  }) async {
+    air780OutboundCount += 1;
+    return SipOutboundCall(
+      callId: callId,
+      sessionId: callId,
+      roomName: 'call_$callId',
+      operationId: 'op_air_1',
+      provider: 'air780_volte',
+      status: 'accepted',
+      replayed: false,
+      participantIdentity: '$callId:guest:air:device-1',
+      providerCallId: 'air-call-1',
+    );
+  }
+
+  @override
   Future<CallLinkEndResult> endCallLink({required String callId}) async {
     endedCallIds.add(callId);
     return CallLinkEndResult(
@@ -131,6 +155,12 @@ class FakeCallLinkApiClient extends CallLinkApiClient {
   Future<SipControlResult> hangupSip({required String callId}) async {
     sipHangupCount += 1;
     return _control('sip_hangup');
+  }
+
+  @override
+  Future<SipControlResult> hangupAir780({required String callId}) async {
+    air780HangupCount += 1;
+    return _control('phone_hangup');
   }
 
   @override
@@ -176,6 +206,7 @@ class FakeCallRoomClient implements CallRoomClient {
       StreamController<CallRoomSnapshot>.broadcast();
 
   CallRoomToken? connectedToken;
+  bool translationMediaOnly = false;
   final String? message;
   final List<CallRoomCaption> captions;
   final bool microphoneEnabled;
@@ -188,8 +219,10 @@ class FakeCallRoomClient implements CallRoomClient {
   Future<void> connect(
     CallRoomToken token, {
     bool enableMicrophone = true,
+    bool translationMediaOnly = false,
   }) async {
     connectedToken = token;
+    this.translationMediaOnly = translationMediaOnly;
     _snapshots.add(CallRoomSnapshot(
       status: CallRoomConnectionStatus.connected,
       microphoneEnabled: enableMicrophone && microphoneEnabled,

@@ -73,6 +73,78 @@ export class PostgresAirDeviceRegistryRepository {
       }
     }
 
+    // A carrier terminal event can be lost after a user hangup.  The board's
+    // ready heartbeat is the only safe recovery signal: only recover calls
+    // whose lease is already expired and for which no newer lease exists.
+    // Never recover an in-call heartbeat or a device with an active lease.
+    const recoveredStaleCalls = input.deviceState === "ready" && !input.activeBinding
+      ? await client.query<{ provider_call_id: string }>(`
+        WITH stale_calls AS (
+          SELECT c.provider_call_id, c.communication_session_id,
+            c.provider_operation_id
+          FROM ai_phone.air_device_calls AS c
+          JOIN ai_phone.air_device_leases AS lease
+            ON lease.device_id = c.device_id
+            AND lease.lease_id = c.lease_id
+            AND lease.fencing_token = c.fencing_token
+          WHERE c.device_id = $1
+            AND c.carrier_state IN ('dialing', 'ringing', 'connected', 'unknown')
+            AND (lease.status = 'expired' OR
+              (lease.status = 'active' AND lease.expires_at <= now()))
+            AND NOT EXISTS (
+              SELECT 1 FROM ai_phone.air_device_leases AS newer
+              WHERE newer.device_id = c.device_id
+                AND newer.status = 'active' AND newer.expires_at > now()
+            )
+        ), updated_calls AS (
+          UPDATE ai_phone.air_device_calls AS c
+          SET carrier_state = 'failed', ended_at = COALESCE(c.ended_at, now()),
+            version = c.version + 1, updated_at = now()
+          FROM stale_calls AS stale
+          WHERE c.provider_call_id = stale.provider_call_id
+            AND c.carrier_state IN ('dialing', 'ringing', 'connected', 'unknown')
+          RETURNING c.provider_call_id, c.communication_session_id,
+            c.provider_operation_id, c.version, c.device_id, c.lease_id,
+            c.fencing_token, c.call_generation
+        ), updated_operations AS (
+          UPDATE ai_phone.provider_operations AS operation
+          SET status = 'failed', last_error_class = 'carrier_reconciliation_unknown',
+            completion_observed_at = COALESCE(operation.completion_observed_at, now()),
+            completion_observed_event = 'heartbeat_ready_recovery',
+            ended_at = COALESCE(operation.ended_at, now()),
+            version = operation.version + 1, updated_at = now()
+          FROM updated_calls AS call
+          WHERE operation.session_id = call.communication_session_id
+            AND operation.provider = 'air780_volte'
+            AND operation.operation_type IN ('phone_outbound', 'phone_hangup')
+            AND operation.status IN ('in_flight', 'accepted', 'active', 'unknown')
+          RETURNING operation.id
+        ), outboxed AS (
+          INSERT INTO ai_phone.reliable_outbox_events(
+            id, idempotency_key, session_id, aggregate_version, sequence,
+            event_type, event_version, payload
+          )
+          SELECT 'air-call-recovered-' || call.provider_call_id,
+            'air-call-recovered-' || call.provider_call_id,
+            call.communication_session_id, call.version, call.version,
+            'device.call.failed', 1,
+            jsonb_build_object(
+              'providerCallId', call.provider_call_id,
+              'deviceId', call.device_id,
+              'leaseId', call.lease_id,
+              'fencingToken', call.fencing_token,
+              'callGeneration', call.call_generation,
+              'reason', 'heartbeat_ready_recovery'
+            )
+          FROM updated_calls AS call
+          ON CONFLICT(idempotency_key) DO NOTHING
+          RETURNING id
+        )
+        SELECT provider_call_id FROM updated_calls
+      `, [input.deviceId])
+      : { rowCount: 0, rows: [] };
+    const recoveredDevice = (recoveredStaleCalls.rowCount ?? 0) > 0;
+
     const registered = await client.query<DeviceRow>(`
       INSERT INTO ai_phone.air_devices AS device(
         device_id, firmware_version, protocol_version,
@@ -93,6 +165,7 @@ export class PostgresAirDeviceRegistryRepository {
         heartbeat_observed_at = EXCLUDED.heartbeat_observed_at,
         status = CASE
           WHEN EXCLUDED.status IN ('quarantined', 'fault') THEN EXCLUDED.status
+          WHEN $10::boolean AND device.status = 'quarantined' THEN 'ready'
           WHEN device.status = 'offline' THEN 'ready'
           ELSE device.status END,
         version = device.version + 1,
@@ -108,7 +181,7 @@ export class PostgresAirDeviceRegistryRepository {
       RETURNING *
     `, [input.deviceId, input.firmwareVersion, input.protocolVersion,
       input.supportedSampleRates, input.bootId, input.heartbeatSequence,
-      input.uptimeMs, input.deviceState, input.observedAt]);
+      input.uptimeMs, input.deviceState, input.observedAt, recoveredDevice]);
     const device = registered.rows[0];
     if (!device) throw new DeviceLeaseConflict("Stale Air device heartbeat");
 

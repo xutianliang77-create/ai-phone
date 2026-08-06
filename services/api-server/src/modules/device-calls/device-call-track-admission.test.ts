@@ -64,6 +64,22 @@ describe("Air device TTS track admission", () => {
       nowMs: 1_722_741_200_000,
     })).rejects.toThrow(DeviceLeaseConflict);
   });
+
+  it("accepts the identity assigned by LiveKit Agents", async () => {
+    const input = {
+      ...validInput(),
+      publisherIdentity: "translation-session-1-g3",
+    };
+
+    await expect(createAirDeviceTrackAdmission(input, {
+      leaseVerifier: { assertLease: vi.fn() },
+      callVerifier: { assertCallBinding: vi.fn() },
+      nowMs: 1_722_741_200_000,
+    })).resolves.toMatchObject({
+      publisherIdentity: input.publisherIdentity,
+      targetParticipantIdentity: input.targetParticipantIdentity,
+    });
+  });
 });
 
 function validInput() {

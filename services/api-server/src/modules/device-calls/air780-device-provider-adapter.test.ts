@@ -10,6 +10,14 @@ describe("Air780 business telephony provider", () => {
     }));
     const recordDial = vi.fn().mockResolvedValue(undefined);
     const recordDialRejected = vi.fn().mockResolvedValue(undefined);
+    const deviceLease = {
+      deviceId: "air-001",
+      leaseId: "lease-1",
+      fencingToken: 3,
+      ownerId: "internal-owner",
+      version: 9,
+      expiresAt: "2099-01-01T00:00:00.000Z",
+    };
     const provider = new Air780DeviceProviderAdapter({
       leaseVerifier: { assertLease },
       callRecorder: { recordDial, recordDialRejected },
@@ -35,11 +43,7 @@ describe("Air780 business telephony provider", () => {
         roomName: "call_session-1",
         phoneNumberReference: "+8613800138000",
         participantIdentity: "session-1:guest:air:air-001",
-        deviceLease: {
-          deviceId: "air-001",
-          leaseId: "lease-1",
-          fencingToken: 3,
-        },
+        deviceLease,
       },
     });
 
@@ -64,6 +68,22 @@ describe("Air780 business telephony provider", () => {
         expiresAt: "2099-01-01T00:00:00.000Z",
       },
     }));
+    const dialInput = dial.mock.calls[0]?.[0] as Record<string, unknown>;
+    expect(Object.keys(dialInput).sort()).toEqual([
+      "callGeneration",
+      "commandId",
+      "communicationSessionId",
+      "deviceId",
+      "fencingToken",
+      "idempotencyKey",
+      "leaseId",
+      "participantIdentity",
+      "phoneNumberReference",
+      "providerCallId",
+      "providerOperationId",
+      "roomAccess",
+      "roomName",
+    ]);
     expect(recordDial).toHaveBeenCalledWith(expect.objectContaining({
       providerOperationId: "op-1",
       providerCallId: expect.stringMatching(/^air_[0-9a-f]{32}$/),

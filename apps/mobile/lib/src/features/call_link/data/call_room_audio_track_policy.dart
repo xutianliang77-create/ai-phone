@@ -26,23 +26,26 @@ bool shouldSubscribeCallRoomAudioTrack({
   required String trackName,
   required String localRole,
   String? localParticipantIdentity,
+  bool translationMediaOnly = false,
 }) {
-  // A signed App host is the room monitor / human takeover endpoint. It must
-  // hear every remote audio publication in the room, including the Air780
-  // carrier downlink and both worker-produced TTS directions. The Air guest
-  // remains restricted by its server-side admission and never uses this path.
-  if (localRole == 'host') return trackName.trim().isNotEmpty;
+  // AI calling and human takeover retain the existing room-monitor behavior.
+  if (!translationMediaOnly && localRole == 'host') {
+    return trackName.trim().isNotEmpty;
+  }
   final targetRole = callRoomTtsTrackTargetRole(trackName);
   if (targetRole == null) return false;
   final targetLegToken = callRoomTtsTrackTargetLegToken(trackName);
-  // The App is a room monitor. It must hear both translated directions:
-  // host-target TTS is the phone side translated for the App and guest-target
-  // TTS is the App side translated for the phone. Raw microphone/downlink
-  // tracks remain denied because only translation TTS names are accepted.
   if (targetRole == localRole) {
+    if (translationMediaOnly) {
+      return targetLegToken != null &&
+          localParticipantIdentity != null &&
+          targetLegToken == callRoomLegToken(localParticipantIdentity);
+    }
     return targetLegToken == null ||
         (localParticipantIdentity != null &&
             targetLegToken == callRoomLegToken(localParticipantIdentity));
   }
+  // Translation-only endpoints must not receive the opposite leg's TTS.
+  if (translationMediaOnly) return false;
   return targetLegToken != null;
 }

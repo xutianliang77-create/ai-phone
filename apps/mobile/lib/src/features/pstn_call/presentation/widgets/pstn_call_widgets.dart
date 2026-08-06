@@ -188,14 +188,14 @@ class PstnCallReviewCard extends StatelessWidget {
                 label: Text(busy
                     ? _text('正在建立安全通话', 'Starting secure call')
                     : canDial
-                    ? _text(
-                        '开始拨打',
-                        'Start call',
-                      )
-                    : _text(
-                        '当前不发起真实外呼',
-                        'Real calling is not enabled',
-                      )),
+                        ? _text(
+                            '开始拨打',
+                            'Start call',
+                          )
+                        : _text(
+                            '当前不发起真实外呼',
+                            'Real calling is not enabled',
+                          )),
               ),
             ),
           ],
@@ -216,6 +216,7 @@ class PstnActiveCallCard extends StatelessWidget {
     required this.onEnd,
     required this.onDtmf,
     required this.onTransfer,
+    this.supportsSipControls = true,
     this.endResult,
     this.error,
     super.key,
@@ -228,6 +229,7 @@ class PstnActiveCallCard extends StatelessWidget {
   final VoidCallback onEnd;
   final ValueChanged<String> onDtmf;
   final VoidCallback onTransfer;
+  final bool supportsSipControls;
   final CallLinkEndResult? endResult;
   final Object? error;
 
@@ -262,35 +264,38 @@ class PstnActiveCallCard extends StatelessWidget {
               ),
             ],
             if (endResult == null) ...<Widget>[
-              const SizedBox(height: 12),
-              Text(
-                _text('拨号键盘', 'Keypad'),
-                style: Theme.of(context).textTheme.labelLarge,
-              ),
-              const SizedBox(height: 8),
-              GridView.count(
-                crossAxisCount: 3,
-                mainAxisSpacing: 8,
-                crossAxisSpacing: 8,
-                childAspectRatio: 2.1,
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                children: '123456789*0#'.split('').map((digit) {
-                  return OutlinedButton(
-                    onPressed: busy || !connected ? null : () => onDtmf(digit),
-                    child: Text(digit),
-                  );
-                }).toList(growable: false),
-              ),
-              const SizedBox(height: 8),
-              SizedBox(
-                width: double.infinity,
-                child: TextButton.icon(
-                  onPressed: busy || !connected ? null : onTransfer,
-                  icon: const Icon(Icons.phone_forwarded_outlined),
-                  label: Text(_text('转接电话', 'Transfer call')),
+              if (supportsSipControls) ...<Widget>[
+                const SizedBox(height: 12),
+                Text(
+                  _text('拨号键盘', 'Keypad'),
+                  style: Theme.of(context).textTheme.labelLarge,
                 ),
-              ),
+                const SizedBox(height: 8),
+                GridView.count(
+                  crossAxisCount: 3,
+                  mainAxisSpacing: 8,
+                  crossAxisSpacing: 8,
+                  childAspectRatio: 2.1,
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  children: '123456789*0#'.split('').map((digit) {
+                    return OutlinedButton(
+                      onPressed:
+                          busy || !connected ? null : () => onDtmf(digit),
+                      child: Text(digit),
+                    );
+                  }).toList(growable: false),
+                ),
+                const SizedBox(height: 8),
+                SizedBox(
+                  width: double.infinity,
+                  child: TextButton.icon(
+                    onPressed: busy || !connected ? null : onTransfer,
+                    icon: const Icon(Icons.phone_forwarded_outlined),
+                    label: Text(_text('转接电话', 'Transfer call')),
+                  ),
+                ),
+              ],
               const SizedBox(height: 4),
               SizedBox(
                 width: double.infinity,

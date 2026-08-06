@@ -214,6 +214,44 @@ void main() {
     expect(result.operationId, 'op_1');
   });
 
+  test('starts an Air780 outbound participant through the phone endpoint',
+      () async {
+    final client = CallLinkApiClient(
+      baseUrl: Uri.parse('http://127.0.0.1:3100'),
+      accountSessionStore: _sessionStore(),
+      client: MockClient((request) async {
+        expect(request.method, 'POST');
+        expect(request.url.path, '/call-links/call_1/air780-outbound');
+        expect(request.headers['authorization'], 'Bearer test-token');
+        return http.Response(
+          jsonEncode(<String, Object?>{
+            'callId': 'call_1',
+            'sessionId': 'call_1',
+            'roomName': 'call_call_1',
+            'operationId': 'op_air_1',
+            'provider': 'air780_volte',
+            'status': 'accepted',
+            'replayed': false,
+            'participantIdentity': 'call_1:guest:air:device-1',
+            'providerCallId': 'air-call-1',
+          }),
+          202,
+        );
+      }),
+    );
+
+    final result = await client.startAir780Outbound(
+      callId: 'call_1',
+      targetPhone: '+8613800000000',
+      sourceLanguage: 'zh',
+      targetLanguage: 'en',
+      disclosureConfirmed: true,
+    );
+
+    expect(result.provider, 'air780_volte');
+    expect(result.participantIdentity, 'call_1:guest:air:device-1');
+  });
+
   test('ends call links from API', () async {
     final client = CallLinkApiClient(
       baseUrl: Uri.parse('http://127.0.0.1:3100'),

@@ -36,6 +36,8 @@ class SipOutboundCall {
   }
 }
 
+typedef PhoneOutboundCall = SipOutboundCall;
+
 class SipControlResult {
   const SipControlResult({
     required this.operationId,

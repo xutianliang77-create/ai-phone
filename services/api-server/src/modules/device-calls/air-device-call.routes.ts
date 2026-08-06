@@ -11,7 +11,7 @@ import { getRepositoryRuntime } from
 import { sendError } from "../../infrastructure/http/errors.js";
 import { DeviceCallBindingConflict } from
   "./postgres-air-device-calls.repository.js";
-import { convergeAirDeviceAgentCall } from
+import { convergeAirDeviceCall } from
   "./air-device-agent-call-convergence.js";
 import { DeviceLeaseConflict } from "./device-lease-registry.js";
 import { parseAirDeviceHeartbeatRequest } from
@@ -76,7 +76,7 @@ export function registerAirDeviceCallRoutes(app: FastifyInstance) {
         ...event,
         claimOwner: `air-gateway-event:${process.env.INSTANCE_ID ?? process.pid}`,
       });
-      await convergeAirDeviceAgentCall(event, call);
+      await convergeAirDeviceCall(event, call);
       return { status: "accepted", call };
     } catch (error) {
       if (error instanceof DeviceCallBindingConflict) {

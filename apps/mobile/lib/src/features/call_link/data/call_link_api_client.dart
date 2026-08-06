@@ -241,6 +241,33 @@ class CallLinkApiClient {
     return SipOutboundCall.fromJson(json);
   }
 
+  Future<SipOutboundCall> startAir780Outbound({
+    required String callId,
+    required String targetPhone,
+    required String sourceLanguage,
+    required String targetLanguage,
+    required bool disclosureConfirmed,
+  }) async {
+    final response = await _client.post(
+      _baseUrl.resolve('/call-links/$callId/air780-outbound'),
+      headers: await _authHeaders(json: true),
+      body: jsonEncode({
+        'targetPhone': targetPhone,
+        'sourceLanguage': sourceLanguage,
+        'targetLanguage': targetLanguage,
+        'disclosureConfirmed': disclosureConfirmed,
+      }),
+    );
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw CallLinkApiException(
+        'Start Air780 outbound failed: ${response.body}',
+      );
+    }
+    return SipOutboundCall.fromJson(
+      jsonDecode(response.body) as Map<String, Object?>,
+    );
+  }
+
   Future<SipControlResult> sendSipDtmf({
     required String callId,
     required String digit,
@@ -267,6 +294,22 @@ class CallLinkApiClient {
 
   Future<SipControlResult> hangupSip({required String callId}) {
     return _sipControl(callId: callId, action: 'hangup', body: const {});
+  }
+
+  Future<SipControlResult> hangupAir780({required String callId}) async {
+    final response = await _client.post(
+      _baseUrl.resolve('/call-links/$callId/air780-hangup'),
+      headers: await _authHeaders(json: true),
+      body: jsonEncode(const <String, Object?>{}),
+    );
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw CallLinkApiException(
+        'Air780 hangup failed: ${response.body}',
+      );
+    }
+    return SipControlResult.fromJson(
+      jsonDecode(response.body) as Map<String, Object?>,
+    );
   }
 
   Future<SipControlResult> _sipControl({

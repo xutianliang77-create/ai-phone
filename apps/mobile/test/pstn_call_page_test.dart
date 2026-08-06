@@ -125,7 +125,11 @@ void main() {
     );
     await tester.tap(find.text('检查拨号信息'));
     await tester.pumpAndSettle();
-    await tester.ensureVisible(find.text('开始拨打'));
+    await tester.scrollUntilVisible(
+      find.text('开始拨打'),
+      180,
+      scrollable: find.byType(Scrollable).first,
+    );
     await tester.pumpAndSettle();
     await tester.tap(find.text('开始拨打'));
     await tester.pumpAndSettle();
@@ -135,6 +139,7 @@ void main() {
     expect(apiClient.connectionConfirmCount, 1);
     expect(apiClient.sipOutboundCount, 1);
     expect(roomClient.connectedToken?.participantRole, 'host');
+    expect(roomClient.translationMediaOnly, isTrue);
     expect(find.text('电话已接通'), findsOneWidget);
   });
 

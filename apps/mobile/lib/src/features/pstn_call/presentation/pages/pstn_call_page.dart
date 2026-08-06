@@ -36,8 +36,8 @@ class PstnCallPage extends StatefulWidget {
 }
 
 class _PstnCallPageState extends State<PstnCallPage> {
-  late final CallLinkApiClient _apiClient = widget.apiClient ??
-      CallLinkApiClient(baseUrl: widget.config.apiBaseUrl);
+  late final CallLinkApiClient _apiClient =
+      widget.apiClient ?? CallLinkApiClient(baseUrl: widget.config.apiBaseUrl);
   late final CallRoomClient _roomClient =
       widget.roomClient ?? LiveKitCallRoomClient();
   late final PstnCallSession _session = PstnCallSession(
@@ -312,6 +312,7 @@ class _PstnCallPageState extends State<PstnCallPage> {
         targetPhone: _normalizedPhone!,
         sourceLanguage: _hostLanguage,
         targetLanguage: _calleeLanguage,
+        provider: _readiness?.provider ?? 'livekit_sip',
       );
       if (mounted) setState(() => _sipCall = call);
     } on Object catch (error) {
@@ -343,7 +344,8 @@ class _PstnCallPageState extends State<PstnCallPage> {
 
   void _showMessage(String message) => ScaffoldMessenger.of(context)
       .showSnackBar(SnackBar(content: Text(message)));
-  String _languageName(String code) => translationLanguageName(code, chinese: _isChinese);
+  String _languageName(String code) =>
+      translationLanguageName(code, chinese: _isChinese);
   String _text(String chinese, String english) =>
       _isChinese ? chinese : english;
 }

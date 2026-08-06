@@ -72,6 +72,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(roomClient.connectedToken?.participantRole, 'host');
+    expect(roomClient.translationMediaOnly, isFalse);
     expect(find.textContaining('LiveKit 监听：已连接'), findsOneWidget);
     expect(find.textContaining('麦克风：已关闭'), findsOneWidget);
   });

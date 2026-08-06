@@ -124,6 +124,7 @@ export type TtsVoiceMode =
 
 export interface TtsVoiceConfig {
   mode: TtsVoiceMode;
+  presetId?: string;
   voiceProfileId?: string;
   referenceAudioId?: string;
   referenceTranscript?: string;

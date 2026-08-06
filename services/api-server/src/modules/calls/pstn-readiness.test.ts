@@ -90,10 +90,47 @@ describe("pstn readiness", () => {
     process.env.LIVEKIT_SIP_MEDIA_ROUTING_MODE = "translated_tracks_only";
     expect(getPstnReadiness()).toMatchObject({ status: "ready", issues: [] });
   });
+
+  it("requires the Air780 gateway, event secret, and PostgreSQL runtime", () => {
+    process.env.CALL_PROVIDER_POLICY = "pstn_enabled";
+    process.env.PSTN_PROVIDER = "air780_volte";
+
+    const readiness = getPstnReadiness();
+
+    expect(readiness.status).toBe("not_ready");
+    expect(readiness.issues).toEqual(expect.arrayContaining([
+      "pstn AIR_DEVICE_GATEWAY_BASE_URL is invalid",
+      "pstn AIR_DEVICE_GATEWAY_API_SECRET must be at least 32 bytes",
+      "pstn missing AIR_DEVICE_GATEWAY_EVENT_SECRET",
+      "pstn Air780 translation calls require API_STORAGE_DRIVER=postgres",
+    ]));
+  });
+
+  it("passes Air780 readiness when the software and gateway contracts are configured", () => {
+    process.env.CALL_PROVIDER_POLICY = "pstn_enabled";
+    process.env.PSTN_PROVIDER = "air780_volte";
+    process.env.AIR_DEVICE_GATEWAY_BASE_URL = "https://air-gateway.example.cn";
+    process.env.AIR_DEVICE_GATEWAY_API_SECRET = "air-gateway-api-secret-with-32-chars";
+    process.env.AIR_DEVICE_GATEWAY_EVENT_SECRET = "air-gateway-event-secret-with-32-chars";
+    process.env.PSTN_CONSENT_PROMPT_VERSION = "air780-v1";
+    process.env.PSTN_RECORDING_DISCLOSURE_ENABLED = "true";
+    process.env.PSTN_MAX_CALL_MINUTES = "60";
+    process.env.API_STORAGE_DRIVER = "postgres";
+
+    expect(getPstnReadiness()).toMatchObject({
+      status: "ready",
+      provider: "air780_volte",
+      issues: [],
+    });
+  });
 });
 
 const envKeys = [
   "CALL_PROVIDER_POLICY",
+  "API_STORAGE_DRIVER",
+  "AIR_DEVICE_GATEWAY_BASE_URL",
+  "AIR_DEVICE_GATEWAY_API_SECRET",
+  "AIR_DEVICE_GATEWAY_EVENT_SECRET",
   "PSTN_PROVIDER",
   "PSTN_ACCOUNT_ID",
   "PSTN_API_KEY",

@@ -288,7 +288,11 @@ function commandBinding(
     idempotencyKey: request.idempotencyKey,
     communicationSessionId,
     callGeneration,
-    ...lease,
+    // Keep database lease metadata out of the VUART command envelope.
+    // The Gateway schema accepts only the fenced device binding fields.
+    deviceId: lease.deviceId,
+    leaseId: lease.leaseId,
+    fencingToken: lease.fencingToken,
   };
 }
 

@@ -95,11 +95,16 @@ export function airDeviceTrackAdmissionValidationReason(input: {
     `${input.communicationSessionId}:guest:air:${input.deviceId}`;
   const workerPrefix = `${input.communicationSessionId}:worker:`;
   const workerSuffix = input.publisherIdentity.slice(workerPrefix.length);
+  const agentPrefix = `translation-${input.communicationSessionId.slice(0, 12)}-g`;
+  const agentSuffix = input.publisherIdentity.slice(agentPrefix.length);
   const targetToken = Buffer.from(targetIdentity).toString("base64url");
   if (input.roomName !== `call_${input.communicationSessionId}`) return "room_name";
   if (input.targetParticipantIdentity !== targetIdentity) return "target_identity";
-  if (!input.publisherIdentity.startsWith(workerPrefix) ||
-    !identifier.test(workerSuffix) || workerSuffix.length > 128) {
+  const canonicalWorkerIdentity = input.publisherIdentity.startsWith(workerPrefix) &&
+    identifier.test(workerSuffix) && workerSuffix.length <= 128;
+  const liveKitAgentIdentity = input.publisherIdentity.startsWith(agentPrefix) &&
+    /^[1-9][0-9]*$/.test(agentSuffix);
+  if (!canonicalWorkerIdentity && !liveKitAgentIdentity) {
     return "publisher_identity";
   }
   if (!new RegExp(`^translation-tts-guest-[1-9][0-9]*\\.${targetToken}$`)

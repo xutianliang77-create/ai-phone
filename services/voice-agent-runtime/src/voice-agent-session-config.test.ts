@@ -36,6 +36,20 @@ describe("Voice Agent model selection", () => {
     expect(models.llm.model).toBe("local/voice-agent-gemma-12b");
   });
 
+  it("uses the global default TTS voice when no user voice is configured", () => {
+    stubBaseEnv();
+    vi.stubEnv("VOICE_AGENT_MODEL_PROVIDER", "local_http");
+    vi.stubEnv("VOICE_AGENT_LOCAL_ASR_URL", "http://asr.local/");
+    vi.stubEnv("VOICE_AGENT_LOCAL_TTS_URL", "http://tts.local/");
+    vi.stubEnv("VOICE_AGENT_LOCAL_LLM_BASE_URL", "http://llm.local/v1/");
+    vi.stubEnv("VOICE_AGENT_LOCAL_LLM_API_KEY", "local-placeholder");
+    vi.stubEnv("VOICE_AGENT_TTS_VOICE", "");
+
+    const env = loadVoiceAgentRuntimeEnv();
+
+    expect(env.ttsVoice).toBe("zh_female_natural");
+  });
+
   it("rejects a relative TTS evidence directory", () => {
     stubBaseEnv();
     vi.stubEnv("VOICE_AGENT_MODEL_PROVIDER", "local_http");

@@ -103,12 +103,9 @@ export class AirDeviceLiveKitParticipant {
 
   async handleRemoteTrack(track: DeviceRemoteTrack) {
     const targetToken = Buffer.from(this.identity).toString("base64url");
-    const isTranslationWorker = track.publisherIdentity.startsWith(
-      `${this.options.communicationSessionId}:worker:`,
-    ) && /^[A-Za-z0-9_-]{1,128}$/.test(
-      track.publisherIdentity.slice(
-        `${this.options.communicationSessionId}:worker:`.length,
-      ),
+    const isTranslationWorker = isTranslationWorkerIdentity(
+      track.publisherIdentity,
+      this.options.communicationSessionId,
     );
     const isExactTarget = new RegExp(
       `^translation-tts-guest-[1-9][0-9]*\\.${targetToken}$`,
@@ -130,6 +127,19 @@ export class AirDeviceLiveKitParticipant {
     );
     return subscribed;
   }
+}
+
+function isTranslationWorkerIdentity(
+  publisherIdentity: string,
+  communicationSessionId: string,
+) {
+  const workerPrefix = `${communicationSessionId}:worker:`;
+  const canonicalWorker = publisherIdentity.startsWith(workerPrefix) &&
+    /^[A-Za-z0-9_-]{1,128}$/.test(publisherIdentity.slice(workerPrefix.length));
+  const agentPrefix = `translation-${communicationSessionId.slice(0, 12)}-g`;
+  const liveKitAgent = publisherIdentity.startsWith(agentPrefix) &&
+    /^[1-9][0-9]*$/.test(publisherIdentity.slice(agentPrefix.length));
+  return canonicalWorker || liveKitAgent;
 }
 
 function assertIdentifier(value: string, name: string, maximum = 128) {

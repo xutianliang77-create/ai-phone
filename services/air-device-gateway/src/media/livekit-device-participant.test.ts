@@ -78,6 +78,46 @@ describe("Air device LiveKit guest participant", () => {
     expect(room.setSubscribed).toHaveBeenNthCalledWith(2, "tts-guest", true);
   });
 
+  it("subscribes to TTS published by the LiveKit Agent identity", async () => {
+    const room = {
+      connect: vi.fn().mockResolvedValue(undefined),
+      publishPcmTrack: vi.fn().mockResolvedValue(undefined),
+      setSubscribed: vi.fn().mockResolvedValue(undefined),
+    };
+    const participant = new AirDeviceLiveKitParticipant({
+      room,
+      communicationSessionId: "a550dd47-c54e-4fce-b7c0-27e66b5dc5ef",
+      deviceId: "air-001",
+      leaseId: "lease-1",
+      callGeneration: 3,
+      token: "signed-token",
+      wsUrl: "wss://livekit.example.cn",
+    });
+    const target = Buffer.from(
+      "a550dd47-c54e-4fce-b7c0-27e66b5dc5ef:guest:air:air-001",
+    ).toString("base64url");
+    const trackName = `translation-tts-guest-24000.${target}`;
+    const publisherIdentity = "translation-a550dd47-c54-g1";
+
+    await expect(participant.handleRemoteTrack({
+      sid: "tts-agent",
+      name: trackName,
+      publisherIdentity,
+      admission: {
+        trackSid: "tts-agent",
+        trackName,
+        publisherIdentity,
+        communicationSessionId: "a550dd47-c54e-4fce-b7c0-27e66b5dc5ef",
+        targetParticipantIdentity:
+          "a550dd47-c54e-4fce-b7c0-27e66b5dc5ef:guest:air:air-001",
+        deviceId: "air-001",
+        leaseId: "lease-1",
+        callGeneration: 3,
+      },
+    })).resolves.toBe(true);
+    expect(room.setSubscribed).toHaveBeenCalledWith("tts-agent", true);
+  });
+
   it.each([
     {
       label: "cross-session publisher",

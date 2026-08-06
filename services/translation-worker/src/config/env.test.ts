@@ -35,6 +35,10 @@ describe("translation worker env", () => {
     expect(env.asrProvider).toBe("http_fireredasr2_aed");
     expect(env.asrModel).toBe("FireRedASR2-AED");
     expect(env.translationProvider).toBe("hymt2_self_hosted");
+    expect(env.ttsVoice).toEqual({
+      mode: "preset",
+      presetId: "zh_female_natural",
+    });
   });
 
   it("lets explicit environment variables override model routing defaults", () => {
@@ -59,6 +63,17 @@ describe("translation worker env", () => {
       voiceProfileId: "my_voice",
       referenceAudioId: "my_voice",
       controlPrompt: "clear and calm",
+    });
+  });
+
+  it("uses the configured preset as the global TTS fallback", () => {
+    process.env = {
+      TTS_VOICE_PRESET_ID: "en_female_natural",
+    };
+
+    expect(loadEnv().ttsVoice).toEqual({
+      mode: "preset",
+      presetId: "en_female_natural",
     });
   });
 

@@ -272,10 +272,12 @@ function parseAudioSampleRate(value: string | undefined): 16000 | 24000 {
 }
 
 function parseTtsVoiceConfig(env: Record<string, string | undefined>): TtsVoiceConfig | undefined {
-  const mode = parseTtsVoiceMode(env.TTS_VOICE_MODE);
-  if (!mode) return undefined;
+  const mode = parseTtsVoiceMode(env.TTS_VOICE_MODE) ?? "preset";
   return {
     mode,
+    ...(mode === "preset"
+      ? { presetId: env.TTS_VOICE_PRESET_ID?.trim() || "zh_female_natural" }
+      : {}),
     ...optionalString("voiceProfileId", env.TTS_VOICE_PROFILE_ID),
     ...optionalString("referenceAudioId", env.TTS_VOICE_REFERENCE_AUDIO_ID),
     ...optionalString("referenceTranscript", env.TTS_VOICE_REFERENCE_TRANSCRIPT),

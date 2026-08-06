@@ -47,6 +47,7 @@ class _PstnCallControlPanelState extends State<PstnCallControlPanel> {
       onEnd: widget.onEnd,
       onDtmf: _sendDtmf,
       onTransfer: _showTransferDialog,
+      supportsSipControls: widget.call.provider == 'livekit_sip',
       endResult: widget.endResult,
       error: _error ?? widget.error,
     );

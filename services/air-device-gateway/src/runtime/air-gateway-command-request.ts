@@ -93,6 +93,36 @@ export function airGatewayCommandRequestSignature(value: object) {
   return createHash("sha256").update(JSON.stringify(value)).digest("hex");
 }
 
+/** Returns a token-free snapshot for schema rejection diagnostics. */
+export function summarizeAirGatewayCommandRequest(value: unknown, now: Date) {
+  if (!isObject(value)) return { valueType: typeof value };
+  const roomAccess = isObject(value.roomAccess) ? value.roomAccess : null;
+  return {
+    keys: Object.keys(value).sort(),
+    type: typeof value.type === "string" ? value.type : typeof value.type,
+    binding: Object.fromEntries(commonKeys.map((key) => [
+      key,
+      summarizeValue(value[key]),
+    ])),
+    phoneNumberReference: summarizePhone(value.phoneNumberReference),
+    participantIdentity: summarizeValue(value.participantIdentity),
+    roomName: summarizeValue(value.roomName),
+    roomAccess: roomAccess
+      ? {
+          keys: Object.keys(roomAccess).sort(),
+          wsUrl: summarizeValue(roomAccess.wsUrl),
+          tokenLength: typeof roomAccess.token === "string"
+            ? Buffer.byteLength(roomAccess.token)
+            : null,
+          expiresAt: summarizeValue(roomAccess.expiresAt),
+          expired: typeof roomAccess.expiresAt === "string"
+            ? Date.parse(roomAccess.expiresAt) <= now.getTime()
+            : null,
+        }
+      : null,
+  };
+}
+
 function parseBinding(value: Record<string, unknown>): AirGatewayCommandBinding | null {
   const providerOperationId = identifier(value.providerOperationId, 200);
   const commandId = identifier(value.commandId, 128);
@@ -153,6 +183,16 @@ function text(value: unknown, maximum: number) {
       Buffer.byteLength(value) <= maximum
     ? value
     : null;
+}
+
+function summarizeValue(value: unknown) {
+  if (typeof value !== "string") return typeof value;
+  return `${value.slice(0, 12)}…(${value.length})`;
+}
+
+function summarizePhone(value: unknown) {
+  if (typeof value !== "string") return typeof value;
+  return `${value.slice(0, 3)}***${value.slice(-4)}(${value.length})`;
 }
 
 function isObject(value: unknown): value is Record<string, unknown> {

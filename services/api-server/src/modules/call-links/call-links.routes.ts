@@ -30,6 +30,7 @@ import { withSessionWriteLock } from "../sessions/session-write-coordinator.js";
 import { registerCallLinkInternalRoutes } from "./call-link-internal.routes.js";
 import { getCallRoomResourceLimits } from "./call-room-resource-limits.js";
 import { registerCallLinkSipRoutes } from "./call-link-sip.routes.js";
+import { registerCallLinkAir780Routes } from "./call-link-air780.routes.js";
 import { registerCallLinkSipControlRoutes } from "./call-link-sip-control.routes.js";
 import { registerCallLinkSipInboundRoutes } from "./call-link-sip-inbound.routes.js";
 import { registerLiveKitSipWebhookRoutes } from "./livekit-sip-webhook.routes.js";
@@ -44,6 +45,7 @@ export async function registerCallLinkRoutes(app: FastifyInstance) {
   registerCallRoomEntryRoute(app);
   registerCallLinkInternalRoutes(app);
   registerCallLinkSipRoutes(app);
+  registerCallLinkAir780Routes(app);
   registerCallLinkSipControlRoutes(app);
   registerCallLinkSipInboundRoutes(app);
   registerLiveKitSipWebhookRoutes(app);

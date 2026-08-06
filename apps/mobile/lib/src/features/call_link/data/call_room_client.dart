@@ -121,6 +121,7 @@ abstract class CallRoomClient {
   Future<void> connect(
     CallRoomToken token, {
     bool enableMicrophone = true,
+    bool translationMediaOnly = false,
   });
 
   Future<void> disconnect();

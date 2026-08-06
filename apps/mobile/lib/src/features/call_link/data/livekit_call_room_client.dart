@@ -19,6 +19,7 @@ class LiveKitCallRoomClient implements CallRoomClient {
   bool _disposed = false;
   bool _fullDuplexEnabled = false;
   bool _duplexDegraded = false;
+  bool _translationMediaOnly = false;
 
   @override
   Stream<CallRoomSnapshot> get snapshots => _snapshots.stream;
@@ -27,11 +28,13 @@ class LiveKitCallRoomClient implements CallRoomClient {
   Future<void> connect(
     CallRoomToken token, {
     bool enableMicrophone = true,
+    bool translationMediaOnly = false,
   }) async {
     if (_disposed) return;
     await _disposeRoom(disconnectFirst: true);
     _fullDuplexEnabled = token.fullDuplexEnabled;
     _duplexDegraded = false;
+    _translationMediaOnly = translationMediaOnly;
     _emit(const CallRoomSnapshot(
       status: CallRoomConnectionStatus.connecting,
       microphoneEnabled: false,
@@ -65,7 +68,10 @@ class LiveKitCallRoomClient implements CallRoomClient {
         token.token,
         connectOptions: const livekit.ConnectOptions(autoSubscribe: false),
       );
-      _syncLocalTrackPermissions(room);
+      _syncLocalTrackPermissions(
+        room,
+        callId: token.callId,
+      );
       await room.localParticipant?.setMicrophoneEnabled(
         enableMicrophone,
         audioCaptureOptions:
@@ -124,18 +130,18 @@ class LiveKitCallRoomClient implements CallRoomClient {
         ));
       })
       ..on<livekit.RoomReconnectedEvent>((_) {
-        _syncLocalTrackPermissions(room);
+        _syncLocalTrackPermissions(room, callId: callId);
         _emit(_snapshotFromRoom(
           room,
           status: CallRoomConnectionStatus.connected,
         ));
       })
       ..on<livekit.ParticipantConnectedEvent>((_) {
-        _syncLocalTrackPermissions(room);
+        _syncLocalTrackPermissions(room, callId: callId);
         _emit(_snapshotFromRoom(room));
       })
       ..on<livekit.ParticipantDisconnectedEvent>((_) {
-        _syncLocalTrackPermissions(room);
+        _syncLocalTrackPermissions(room, callId: callId);
         _emit(_snapshotFromRoom(room));
       })
       ..on<livekit.TrackPublishedEvent>((event) {
@@ -170,6 +176,7 @@ class LiveKitCallRoomClient implements CallRoomClient {
       ..on<livekit.RoomDisconnectedEvent>((event) {
         _fullDuplexEnabled = false;
         _duplexDegraded = false;
+        _translationMediaOnly = false;
         _emit(CallRoomSnapshot.disconnected(
           message: event.reason == null ? null : 'LiveKit: ${event.reason}',
         ));
@@ -192,10 +199,15 @@ class LiveKitCallRoomClient implements CallRoomClient {
     }
   }
 
-  void _syncLocalTrackPermissions(livekit.Room room) {
+  void _syncLocalTrackPermissions(
+    livekit.Room room, {
+    required String callId,
+  }) {
     final workerPermissions = room.remoteParticipants.values
         .where((participant) =>
-            callRoomParticipantRole(participant.identity) == 'worker')
+            callRoomParticipantRole(participant.identity) == 'worker' ||
+            (_translationMediaOnly &&
+                _isTranslationAgentParticipant(participant, callId)))
         .map((participant) => livekit.ParticipantTrackPermission(
               participant.identity,
               true,
@@ -208,6 +220,21 @@ class LiveKitCallRoomClient implements CallRoomClient {
     );
   }
 
+  bool _isTranslationAgentParticipant(
+    livekit.RemoteParticipant participant,
+    String callId,
+  ) {
+    if (callRoomParticipantRole(participant.identity) == 'worker') return true;
+    if (participant.kind != livekit.ParticipantKind.AGENT) return false;
+    final prefix =
+        'translation-${callId.substring(0, callId.length < 12 ? callId.length : 12)}-g';
+    final generation = participant.identity.startsWith(prefix)
+        ? participant.identity.substring(prefix.length)
+        : '';
+    return generation.isNotEmpty &&
+        RegExp(r'^[1-9][0-9]*$').hasMatch(generation);
+  }
+
   Future<void> _subscribeRemoteAudioPublication(
     livekit.RemoteTrackPublication publication, {
     required String localRole,
@@ -218,6 +245,7 @@ class LiveKitCallRoomClient implements CallRoomClient {
       trackName: publication.name,
       localRole: localRole,
       localParticipantIdentity: localParticipantIdentity,
+      translationMediaOnly: _translationMediaOnly,
     )) {
       await publication.unsubscribe();
       return;
@@ -235,6 +263,7 @@ class LiveKitCallRoomClient implements CallRoomClient {
       trackName: publication.name,
       localRole: localRole,
       localParticipantIdentity: localParticipantIdentity,
+      translationMediaOnly: _translationMediaOnly,
     )) {
       await publication.unsubscribe();
     }
@@ -327,6 +356,7 @@ class LiveKitCallRoomClient implements CallRoomClient {
     _room = null;
     _fullDuplexEnabled = false;
     _duplexDegraded = false;
+    _translationMediaOnly = false;
     if (listener != null) {
       await _ignoreErrors(listener.dispose);
     }

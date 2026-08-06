@@ -147,6 +147,32 @@ describe("PostgreSQL Air device registry", () => {
       leaseTtlSeconds: 60,
     })).rejects.toBeInstanceOf(DeviceLeaseConflict);
   });
+
+  it("recovers an expired call only after a ready heartbeat", async () => {
+    const query = vi.fn()
+      .mockResolvedValueOnce({
+        rowCount: 1,
+        rows: [{ provider_call_id: "air-call-old" }],
+      })
+      .mockResolvedValueOnce({
+        rowCount: 1,
+        rows: [{ ...deviceRow, status: "ready" }],
+      });
+    const repository = new PostgresAirDeviceRegistryRepository({} as never);
+
+    await expect(repository.processHeartbeat({ query } as never, {
+      ...heartbeat,
+      deviceState: "ready",
+      activeBinding: undefined,
+      leaseTtlSeconds: 60,
+    })).resolves.toMatchObject({
+      registration: { status: "ready" },
+      leaseRenewed: false,
+    });
+    expect(query).toHaveBeenCalledTimes(2);
+    expect(query.mock.calls[0]?.[0]).toContain("heartbeat_ready_recovery");
+    expect(query.mock.calls[1]?.[1]?.at(-1)).toBe(true);
+  });
 });
 
 const leaseRow = {

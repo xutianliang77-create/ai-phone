@@ -71,7 +71,8 @@ export function loadVoiceAgentRuntimeEnv(): VoiceAgentRuntimeEnv {
     sttModel: required("VOICE_AGENT_STT_MODEL"),
     llmModel: required("VOICE_AGENT_LLM_MODEL"),
     ttsModel: required("VOICE_AGENT_TTS_MODEL"),
-    ttsVoice: required("VOICE_AGENT_TTS_VOICE"),
+    // Keep the runtime-wide fallback deterministic when no user voice is set.
+    ttsVoice: process.env.VOICE_AGENT_TTS_VOICE?.trim() || "zh_female_natural",
     ...optionalAbsoluteDirectory(
       "ttsEvidenceDir",
       "VOICE_AGENT_TTS_EVIDENCE_DIR",
