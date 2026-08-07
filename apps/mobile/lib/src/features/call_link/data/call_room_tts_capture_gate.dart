@@ -17,6 +17,13 @@ class CallRoomTtsCaptureGate {
     return remaining;
   }
 
+  Duration holdCooldown() {
+    final now = _now();
+    final minimum = now.add(cooldown);
+    if (_blockedUntil.isBefore(minimum)) _blockedUntil = minimum;
+    return remaining;
+  }
+
   Duration get remaining {
     final value = _blockedUntil.difference(_now());
     return value.isNegative ? Duration.zero : value;

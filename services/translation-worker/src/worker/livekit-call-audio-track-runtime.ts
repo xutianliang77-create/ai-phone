@@ -1,5 +1,7 @@
 import {
   AudioIngestRingBuffer,
+  assertLosslessAudioMetrics,
+  type AudioIngestOverflowPolicy,
   type AudioIngestMetrics,
 } from "./audio-ingest-ring-buffer.js";
 import {
@@ -20,6 +22,7 @@ interface LiveKitCallAudioTrackRuntimeOptions {
   speakerRole: CallAudioSpeakerRole;
   stream: ReadableStream<RtcAudioFrame>;
   capacityFrames: number;
+  overflowPolicy?: AudioIngestOverflowPolicy;
   pipelineReady: Promise<void>;
   worker: CallSpeechPipeline;
   nextSequence: () => number;
@@ -40,6 +43,7 @@ export class LiveKitCallAudioTrackRuntime {
       legId: options.legId,
       speakerRole: options.speakerRole,
       capacityFrames: options.capacityFrames,
+      overflowPolicy: options.overflowPolicy ?? "reject_newest",
       onMetrics: options.onMetrics,
     });
   }
@@ -47,7 +51,13 @@ export class LiveKitCallAudioTrackRuntime {
   async run() {
     await this.options.pipelineReady;
     await Promise.all([this.readAudioStream(), this.consumeAudio()]);
-    if (!this.isStopped()) this.queue.report("drained");
+    if (!this.isStopped()) {
+      const metrics = this.queue.metrics("drained");
+      this.queue.report("drained");
+      if (this.options.overflowPolicy !== "drop_oldest") {
+        assertLosslessAudioMetrics(metrics);
+      }
+    }
   }
 
   stop(discardPending: boolean) {
@@ -61,7 +71,7 @@ export class LiveKitCallAudioTrackRuntime {
       while (!this.isStopped()) {
         const result = await this.reader.read();
         if (result.done) break;
-        this.queue.enqueue({
+        const accepted = this.queue.enqueue({
           type: "audio.frame",
           sessionId: this.options.callId,
           speakerRole: this.options.speakerRole,
@@ -71,6 +81,9 @@ export class LiveKitCallAudioTrackRuntime {
           sampleRate: normalizeSampleRate(result.value.sampleRate),
           data: int16Base64(result.value.data),
         });
+        if (!accepted) {
+          throw new Error("Audio ingest backpressure rejected newest frame");
+        }
       }
     } catch (error) {
       if (!this.isStopped()) throw error;

@@ -233,6 +233,7 @@ export class LiveKitCallAudioSource {
       speakerRole,
       stream,
       capacityFrames: audioIngestMaxFrames(this.options.audioIngestMaxFrames),
+      overflowPolicy: this.options.audioIngestOverflowPolicy,
       pipelineReady: this.pipelineReady.promise,
       worker: this.options.worker,
       nextSequence: () => ++this.sequenceByRole[speakerRole],

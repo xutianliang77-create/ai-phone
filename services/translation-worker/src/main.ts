@@ -199,7 +199,7 @@ function logAudioIngestMetrics(
     if (metrics.backpressureEvents !== 1 && metrics.backpressureEvents % 25 !== 0) {
       return;
     }
-    logger.warn(data, "Audio ingest backpressure dropped stale frames");
+    logger.warn(data, "Audio ingest backpressure requires controlled degradation");
     return;
   }
   if (metrics.event === "sequence_gap") {

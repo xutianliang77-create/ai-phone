@@ -20,6 +20,8 @@ class LiveKitCallRoomClient implements CallRoomClient {
   bool _fullDuplexEnabled = false;
   bool _duplexDegraded = false;
   bool _translationMediaOnly = false;
+  int? _latestPipelineGeneration;
+  final Map<String, int> _latestPlaybackGenerations = <String, int>{};
 
   @override
   Stream<CallRoomSnapshot> get snapshots => _snapshots.stream;
@@ -35,6 +37,8 @@ class LiveKitCallRoomClient implements CallRoomClient {
     _fullDuplexEnabled = token.fullDuplexEnabled;
     _duplexDegraded = false;
     _translationMediaOnly = translationMediaOnly;
+    _latestPipelineGeneration = null;
+    _latestPlaybackGenerations.clear();
     _emit(const CallRoomSnapshot(
       status: CallRoomConnectionStatus.connecting,
       microphoneEnabled: false,
@@ -276,6 +280,12 @@ class LiveKitCallRoomClient implements CallRoomClient {
     bool? microphonePausedForPlayback,
     String? message,
     List<CallRoomCaption>? captions,
+    CallRoomConversationState? conversationState,
+    CallRoomPlaybackState? playbackState,
+    String? activePlaybackId,
+    int? pipelineGeneration,
+    String? lastEventType,
+    bool clearActivePlaybackId = false,
   }) {
     final participant = room.localParticipant;
     return _current.copyWith(
@@ -289,6 +299,12 @@ class LiveKitCallRoomClient implements CallRoomClient {
           .length,
       message: message,
       captions: captions,
+      conversationState: conversationState,
+      playbackState: playbackState,
+      activePlaybackId: activePlaybackId,
+      pipelineGeneration: pipelineGeneration,
+      lastEventType: lastEventType,
+      clearActivePlaybackId: clearActivePlaybackId,
     );
   }
 
@@ -304,19 +320,44 @@ class LiveKitCallRoomClient implements CallRoomClient {
       expectedCallId: callId,
       expectedRoomName: roomName,
     );
+    if (!_acceptPipelineGeneration(payload.pipelineGeneration)) return;
+    if (!_acceptPlaybackGeneration(payload.playbackId, payload.generation)) {
+      return;
+    }
     if (payload.duplexMode == 'half_duplex') {
       _duplexDegraded = true;
     } else if (payload.duplexMode == 'full_duplex') {
       _duplexDegraded = false;
     }
     final caption = payload.caption;
-    if (caption != null &&
-        caption.ttsReady &&
-        caption.speakerRole != localRole &&
-        caption.audioDurationMs != null) {
-      unawaited(_ttsCapture.blockFor(
+    final remotePlayback = payload.speakerRole != null &&
+        payload.speakerRole != localRole &&
+        payload.playbackId != null;
+    if (remotePlayback && payload.eventType == 'playback.started') {
+      unawaited(_ttsCapture.onPlaybackStarted(
         room: room,
-        caption: caption,
+        playbackId: payload.playbackId!,
+        generation: payload.generation,
+        audioDurationMs: caption?.audioDurationMs,
+        fullDuplexEnabled: _fullDuplexEnabled,
+        duplexDegraded: _duplexDegraded,
+        onMicrophoneChanged: (enabled) {
+          _emit(_snapshotFromRoom(
+            room,
+            microphoneEnabled: enabled,
+            microphonePausedForPlayback: !enabled,
+          ));
+        },
+      ));
+    } else if (remotePlayback &&
+        (payload.eventType == 'playback.ended' ||
+            payload.eventType == 'playback.interrupted' ||
+            payload.eventType == 'playback.failed' ||
+            payload.eventType == 'barge_in.confirmed')) {
+      unawaited(_ttsCapture.onPlaybackFinished(
+        room: room,
+        playbackId: payload.playbackId!,
+        generation: payload.generation,
         fullDuplexEnabled: _fullDuplexEnabled,
         duplexDegraded: _duplexDegraded,
         onMicrophoneChanged: (enabled) {
@@ -332,7 +373,36 @@ class LiveKitCallRoomClient implements CallRoomClient {
       room,
       message: payload.message,
       captions: caption == null ? null : _mergeCaption(caption),
+      conversationState: payload.conversationState,
+      playbackState: payload.playbackState,
+      activePlaybackId: payload.playbackId,
+      pipelineGeneration: payload.pipelineGeneration,
+      lastEventType: payload.eventType,
+      clearActivePlaybackId:
+          payload.playbackState == CallRoomPlaybackState.ended ||
+              payload.playbackState == CallRoomPlaybackState.interrupted ||
+              payload.playbackState == CallRoomPlaybackState.failed,
     ));
+  }
+
+  bool _acceptPipelineGeneration(int? generation) {
+    if (generation == null) return true;
+    final latest = _latestPipelineGeneration;
+    if (latest != null && generation < latest) return false;
+    if (latest == null || generation > latest) {
+      _latestPipelineGeneration = generation;
+    }
+    return true;
+  }
+
+  bool _acceptPlaybackGeneration(String? playbackId, int? generation) {
+    if (playbackId == null || generation == null) return true;
+    final latest = _latestPlaybackGenerations[playbackId];
+    if (latest != null && generation < latest) return false;
+    if (latest == null || generation > latest) {
+      _latestPlaybackGenerations[playbackId] = generation;
+    }
+    return true;
   }
 
   List<CallRoomCaption> _mergeCaption(CallRoomCaption caption) {
@@ -357,6 +427,8 @@ class LiveKitCallRoomClient implements CallRoomClient {
     _fullDuplexEnabled = false;
     _duplexDegraded = false;
     _translationMediaOnly = false;
+    _latestPipelineGeneration = null;
+    _latestPlaybackGenerations.clear();
     if (listener != null) {
       await _ignoreErrors(listener.dispose);
     }

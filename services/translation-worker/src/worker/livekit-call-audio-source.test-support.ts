@@ -69,7 +69,7 @@ export function sourceForTest(
   worker: RecordingWorker,
   overrides: Pick<
     LiveKitCallAudioSourceOptions,
-    "audioIngestMaxFrames" | "onCallEnded" | "onDiagnostics" |
+    "audioIngestMaxFrames" | "audioIngestOverflowPolicy" | "onCallEnded" | "onDiagnostics" |
       "onIngestMetrics" | "onTrackLifecycle" | "rtcStatsIntervalMs"
   > = {},
 ) {
@@ -94,6 +94,7 @@ export function sourceForTest(
       },
     },
     loadRtcNode: async () => rtc.module,
+    audioIngestOverflowPolicy: "drop_oldest",
     ...overrides,
   });
 }

@@ -165,7 +165,7 @@ export interface RealtimeVadDiagnosticsDto {
 export interface RealtimeAudioLegDiagnosticsDto {
   legId: string;
   speakerRole: "host" | "guest";
-  dropPolicy: "drop_oldest";
+  dropPolicy: "drop_oldest" | "reject_newest";
   capacityFrames: number;
   receivedFrames: number;
   dequeuedFrames: number;

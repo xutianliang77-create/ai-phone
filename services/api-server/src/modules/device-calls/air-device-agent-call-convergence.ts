@@ -101,28 +101,28 @@ async function convergeAirDeviceCallLink(
   event: AirDeviceCarrierEventRequest,
   call: AirDeviceCallDto,
 ) {
-  const operation = await findProviderOperation(call.providerOperationId);
-  if (!operation || operation.provider !== "air780_volte" ||
-    operation.operationType !== "phone_outbound" ||
-    operation.sessionId !== event.communicationSessionId) {
-    return null;
-  }
-  if (event.carrierState === "connected") {
-    if (["active", "succeeded", "failed", "cancelled"].includes(operation.status)) {
-      return operation;
-    }
-    const updated = await updateProviderOperation({
-      operationId: operation.id,
-      status: "active",
-      expectedVersion: operation.version,
-      externalResourceId: event.providerCallId,
-      now: new Date(event.occurredAt),
-    });
-    return "operation" in updated ? updated.operation : operation;
-  }
-  if (!terminalCarrierState(event.carrierState)) return operation;
-
   try {
+    const operation = await findProviderOperation(call.providerOperationId);
+    if (!operation || operation.provider !== "air780_volte" ||
+      operation.operationType !== "phone_outbound" ||
+      operation.sessionId !== event.communicationSessionId) {
+      return null;
+    }
+    if (event.carrierState === "connected") {
+      if (["active", "succeeded", "failed", "cancelled"].includes(operation.status)) {
+        return operation;
+      }
+      const updated = await updateProviderOperation({
+        operationId: operation.id,
+        status: "active",
+        expectedVersion: operation.version,
+        externalResourceId: event.providerCallId,
+        now: new Date(event.occurredAt),
+      });
+      return "operation" in updated ? updated.operation : operation;
+    }
+    if (!terminalCarrierState(event.carrierState)) return operation;
+
     return await withSessionWriteLock(record.callId, async () => {
       const current = await findProviderOperation(operation.id) ?? operation;
       if (["succeeded", "failed", "cancelled"].includes(current.status)) {
@@ -158,7 +158,9 @@ async function convergeAirDeviceCallLink(
       return terminal;
     });
   } finally {
-    await releaseCallLease(call);
+    if (terminalCarrierState(event.carrierState)) {
+      await releaseCallLease(call);
+    }
   }
 }
 

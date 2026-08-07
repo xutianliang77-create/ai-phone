@@ -106,6 +106,11 @@ class _CallRoomStatus extends StatelessWidget {
           '${l10n.callRoomRemoteParticipants}：'
           '${_remoteParticipantCount()}',
         ),
+        const SizedBox(height: 4),
+        Text(
+          '${l10n.isChinese ? '实时状态' : 'Live state'}：'
+          '${_conversationText(l10n)}',
+        ),
         if (snapshot.message != null) ...[
           const SizedBox(height: 4),
           Text(snapshot.message!),
@@ -135,6 +140,27 @@ class _CallRoomStatus extends StatelessWidget {
               : l10n.callRoomConnectedNoMic,
       CallRoomConnectionStatus.reconnecting => l10n.callRoomReconnecting,
       CallRoomConnectionStatus.disconnected => l10n.callRoomDisconnected,
+    };
+  }
+
+  String _conversationText(AppLocalizations l10n) {
+    if (!l10n.isChinese) {
+      return switch (snapshot.conversationState) {
+        CallRoomConversationState.idle => 'Idle',
+        CallRoomConversationState.listening => 'Listening',
+        CallRoomConversationState.endpointing => 'Ending turn',
+        CallRoomConversationState.thinking => 'Thinking',
+        CallRoomConversationState.speaking => 'Speaking',
+        CallRoomConversationState.interrupted => 'Interrupted',
+      };
+    }
+    return switch (snapshot.conversationState) {
+      CallRoomConversationState.idle => '空闲',
+      CallRoomConversationState.listening => '正在监听',
+      CallRoomConversationState.endpointing => '正在收尾',
+      CallRoomConversationState.thinking => '正在处理',
+      CallRoomConversationState.speaking => '正在播放译音',
+      CallRoomConversationState.interrupted => '已打断',
     };
   }
 }

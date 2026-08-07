@@ -8,6 +8,24 @@ enum CallRoomConnectionStatus {
   reconnecting,
 }
 
+enum CallRoomConversationState {
+  idle,
+  listening,
+  endpointing,
+  thinking,
+  speaking,
+  interrupted,
+}
+
+enum CallRoomPlaybackState {
+  idle,
+  queued,
+  started,
+  ended,
+  interrupted,
+  failed,
+}
+
 class CallRoomSnapshot {
   const CallRoomSnapshot({
     required this.status,
@@ -16,6 +34,11 @@ class CallRoomSnapshot {
     this.microphonePausedForPlayback = false,
     this.message,
     this.captions = const <CallRoomCaption>[],
+    this.conversationState = CallRoomConversationState.idle,
+    this.playbackState = CallRoomPlaybackState.idle,
+    this.activePlaybackId,
+    this.pipelineGeneration,
+    this.lastEventType,
   });
 
   final CallRoomConnectionStatus status;
@@ -24,6 +47,11 @@ class CallRoomSnapshot {
   final int remoteParticipantCount;
   final String? message;
   final List<CallRoomCaption> captions;
+  final CallRoomConversationState conversationState;
+  final CallRoomPlaybackState playbackState;
+  final String? activePlaybackId;
+  final int? pipelineGeneration;
+  final String? lastEventType;
 
   const CallRoomSnapshot.disconnected({String? message})
       : this(
@@ -33,6 +61,8 @@ class CallRoomSnapshot {
           remoteParticipantCount: 0,
           message: message,
           captions: const <CallRoomCaption>[],
+          conversationState: CallRoomConversationState.idle,
+          playbackState: CallRoomPlaybackState.idle,
         );
 
   CallRoomSnapshot copyWith({
@@ -42,6 +72,12 @@ class CallRoomSnapshot {
     int? remoteParticipantCount,
     String? message,
     List<CallRoomCaption>? captions,
+    CallRoomConversationState? conversationState,
+    CallRoomPlaybackState? playbackState,
+    String? activePlaybackId,
+    int? pipelineGeneration,
+    String? lastEventType,
+    bool clearActivePlaybackId = false,
   }) {
     return CallRoomSnapshot(
       status: status ?? this.status,
@@ -52,6 +88,13 @@ class CallRoomSnapshot {
           remoteParticipantCount ?? this.remoteParticipantCount,
       message: message ?? this.message,
       captions: captions ?? this.captions,
+      conversationState: conversationState ?? this.conversationState,
+      playbackState: playbackState ?? this.playbackState,
+      activePlaybackId: clearActivePlaybackId
+          ? null
+          : activePlaybackId ?? this.activePlaybackId,
+      pipelineGeneration: pipelineGeneration ?? this.pipelineGeneration,
+      lastEventType: lastEventType ?? this.lastEventType,
     );
   }
 }
@@ -72,6 +115,11 @@ class CallRoomCaption {
     this.voiceProfileId,
     this.firstAudioMs,
     this.audioDurationMs,
+    this.isPartial = false,
+    this.isTranslationDelta = false,
+    this.playbackState = CallRoomPlaybackState.idle,
+    this.playbackId,
+    this.generation,
   });
 
   final String segmentId;
@@ -89,6 +137,11 @@ class CallRoomCaption {
   final String? voiceProfileId;
   final int? firstAudioMs;
   final int? audioDurationMs;
+  final bool isPartial;
+  final bool isTranslationDelta;
+  final CallRoomPlaybackState playbackState;
+  final String? playbackId;
+  final int? generation;
 
   CallRoomCaption merge(CallRoomCaption next) {
     return CallRoomCaption(
@@ -106,6 +159,13 @@ class CallRoomCaption {
       voiceProfileId: _nonEmpty(next.voiceProfileId) ?? voiceProfileId,
       firstAudioMs: next.firstAudioMs ?? firstAudioMs,
       audioDurationMs: next.audioDurationMs ?? audioDurationMs,
+      isPartial: next.isPartial,
+      isTranslationDelta: next.isTranslationDelta,
+      playbackState: next.playbackState == CallRoomPlaybackState.idle
+          ? playbackState
+          : next.playbackState,
+      playbackId: next.playbackId ?? playbackId,
+      generation: next.generation ?? generation,
     );
   }
 

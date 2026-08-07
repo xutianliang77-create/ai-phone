@@ -10,7 +10,10 @@ export const callRoomCaptionTopic = "translation.captions";
 
 export type CallRoomDataEventType =
   | "worker.status"
+  | "agent.thinking"
+  | "transcript.partial"
   | "transcript.final"
+  | "translation.delta"
   | "translation.final"
   | "tts.ready"
   | "playback.queued"

@@ -62,9 +62,13 @@ docker exec ai-phone-wujie-ai npm run storage:backup -- \
 Restore requires the API to be stopped and `API_STORAGE_MAINTENANCE=true`.
 
 The generated test environment intentionally keeps the test account enabled.
-Before production release, use `NODE_ENV=production`, disable
-`API_TEST_AUTO_ACCOUNT`, remove the fixed test code, configure SMS/payment and
-rotate all secrets.
+The stable deployment script defaults to the test profile so this environment
+is not accidentally locked out. Before production release, prepare an
+existing `server.env` with `NODE_ENV=production`, PostgreSQL primary storage,
+real SMS settings, no fixed test account/code, loopback-only internal binds,
+and an explicit `wss://` realtime endpoint, then run with
+`AI_PHONE_DEPLOY_PROFILE=production`. The production profile fails closed and
+never generates a test env or changes these security settings implicitly.
 
 ## Isolated core production candidate
 

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   AudioIngestRingBuffer,
+  assertLosslessAudioMetrics,
   type AudioIngestMetrics,
 } from "./audio-ingest-ring-buffer.js";
 
@@ -66,5 +67,49 @@ describe("AudioIngestRingBuffer", () => {
       droppedFrames: 2,
       queueDepthFrames: 0,
     });
+  });
+
+  it("rejects newest frames for a controlled lossless leg", () => {
+    const metrics: AudioIngestMetrics[] = [];
+    const queue = new AudioIngestRingBuffer<{ sequence: number }>({
+      callId: "call_1",
+      legId: "guest:1",
+      speakerRole: "guest",
+      capacityFrames: 1,
+      overflowPolicy: "reject_newest",
+      onMetrics: (snapshot) => metrics.push(snapshot),
+    });
+
+    expect(queue.enqueue({ sequence: 1 })).toBe(true);
+    expect(queue.enqueue({ sequence: 2 })).toBe(false);
+    expect(metrics.at(-1)).toMatchObject({
+      event: "backpressure",
+      dropPolicy: "reject_newest",
+      droppedFrames: 1,
+      backpressureEvents: 1,
+    });
+  });
+
+  it("fails the controlled acceptance gate on any loss or unfinished work", () => {
+    expect(() => assertLosslessAudioMetrics({
+      receivedFrames: 10,
+      processedFrames: 10,
+      failedFrames: 0,
+      droppedFrames: 0,
+      sequenceGapFrames: 0,
+      backpressureEvents: 0,
+      queueDepthFrames: 0,
+      inFlightFrames: 0,
+    })).not.toThrow();
+    expect(() => assertLosslessAudioMetrics({
+      receivedFrames: 10,
+      processedFrames: 8,
+      failedFrames: 0,
+      droppedFrames: 2,
+      sequenceGapFrames: 2,
+      backpressureEvents: 1,
+      queueDepthFrames: 0,
+      inFlightFrames: 0,
+    })).toThrow("dropped_frames,sequence_gaps,backpressure,frame_accounting");
   });
 });

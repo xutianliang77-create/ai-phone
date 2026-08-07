@@ -46,6 +46,27 @@ const appEntrypoint = readFileSync(
 );
 
 describe("Beelink app deployment contract", () => {
+  it("requires an explicit production profile and fails closed before env generation", () => {
+    expect(script).toContain('AI_PHONE_DEPLOY_PROFILE="${AI_PHONE_DEPLOY_PROFILE:-test}"');
+    expect(script).toContain("production_env_preflight");
+    expect(script).toContain("refusing to generate a test env");
+    expect(script).toContain("require_value API_TEST_AUTO_ACCOUNT false");
+    expect(script).toContain("require_value API_STORAGE_DRIVER postgres");
+    expect(script).toContain("Production profile requires $key to bind loopback");
+    expect(script).toContain("Production profile requires an explicit REALTIME_WS_ENDPOINT=wss://...");
+  });
+
+  it("keeps translation ingest cadence and bounded capacity explicit", () => {
+    expect(script).toContain(
+      'TRANSLATION_WORKER_AUDIO_FRAME_SIZE_MS="${TRANSLATION_WORKER_AUDIO_FRAME_SIZE_MS:-200}"',
+    );
+    expect(script).toContain(
+      'TRANSLATION_WORKER_AUDIO_INGEST_MAX_FRAMES="${TRANSLATION_WORKER_AUDIO_INGEST_MAX_FRAMES:-40}"',
+    );
+    expect(script).toContain('set_env TRANSLATION_WORKER_AUDIO_FRAME_SIZE_MS');
+    expect(script).toContain('set_env TRANSLATION_WORKER_AUDIO_INGEST_MAX_FRAMES');
+  });
+
   it("builds before freezing writes and migrates before enabling SQLite", () => {
     expectInOrder([
       'remote_compose "build"',

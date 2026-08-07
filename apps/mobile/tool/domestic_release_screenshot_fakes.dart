@@ -191,6 +191,7 @@ class FakeCallRoomClient implements CallRoomClient {
   Future<void> connect(
     CallRoomToken token, {
     bool enableMicrophone = true,
+    bool translationMediaOnly = false,
   }) async {
     _snapshots.add(CallRoomSnapshot(
       status: CallRoomConnectionStatus.connected,

@@ -1,4 +1,7 @@
-import type { AudioIngestMetrics } from "./audio-ingest-ring-buffer.js";
+import type {
+  AudioIngestMetrics,
+  AudioIngestOverflowPolicy,
+} from "./audio-ingest-ring-buffer.js";
 import type {
   RealtimeAudioLegDiagnosticsDto,
   RealtimeRtcDiagnosticsDto,
@@ -24,6 +27,7 @@ export interface LiveKitCallAudioSourceOptions {
   audioSampleRate: 16000 | 24000;
   audioFrameSizeMs: number;
   audioIngestMaxFrames?: number;
+  audioIngestOverflowPolicy?: AudioIngestOverflowPolicy;
   sipStatusClient?: CallSipStatusReporter;
   ttsTrackAccessClient?: CallTtsTrackAccessAuthorizer;
   onError?: (error: unknown) => void;
