@@ -43,6 +43,8 @@ class AsrConfig:
     qwen3_listening_endpoint_silence_ms: int = 1400
     qwen3_call_link_endpoint_silence_ms: int = 600
     qwen3_pstn_endpoint_silence_ms: int = 1100
+    qwen3_call_link_min_voiced_ms: int = 240
+    qwen3_pstn_min_voiced_ms: int = 240
     qwen3_listening_vad_threshold: float | None = None
     qwen3_max_audio_ms: int = 10000
     qwen3_listening_max_audio_ms: int = 10000
@@ -111,6 +113,12 @@ class AsrConfig:
                 "listening": self.qwen3_listening_endpoint_silence_ms,
                 "call_link": self.qwen3_call_link_endpoint_silence_ms,
                 "pstn": self.qwen3_pstn_endpoint_silence_ms,
+            },
+            "minVoicedByMode": {
+                "conversation": 0,
+                "listening": 0,
+                "call_link": self.qwen3_call_link_min_voiced_ms,
+                "pstn": self.qwen3_pstn_min_voiced_ms,
             },
             "vadThresholdByMode": {
                 "conversation": self.vad_threshold,
@@ -228,6 +236,12 @@ def load_config() -> AsrConfig:
         ),
         qwen3_pstn_endpoint_silence_ms=int(
             os.getenv("ASR_QWEN3_PSTN_ENDPOINT_SILENCE_MS", "1100")
+        ),
+        qwen3_call_link_min_voiced_ms=int(
+            os.getenv("ASR_QWEN3_CALL_LINK_MIN_VOICED_MS", "240")
+        ),
+        qwen3_pstn_min_voiced_ms=int(
+            os.getenv("ASR_QWEN3_PSTN_MIN_VOICED_MS", "240")
         ),
         qwen3_listening_vad_threshold=_optional_float_env(
             "ASR_QWEN3_LISTENING_VAD_THRESHOLD"

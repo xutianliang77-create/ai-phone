@@ -80,6 +80,58 @@ def test_realtime_segmenter_flushes_active_speech() -> None:
     assert segment.endpoint_reason == "flush"
 
 
+def test_realtime_segmenter_requires_minimum_voiced_duration() -> None:
+    segmenter = RealtimePcmSegmenter(
+        min_audio_ms=120,
+        endpoint_silence_ms=80,
+        max_audio_ms=1000,
+        preroll_ms=40,
+        vad_energy_threshold=350,
+        endpoint_policies={
+            "conversation": EndpointPolicy("conversation", 120, 80, 1000, 40),
+            "listening": EndpointPolicy("listening", 120, 80, 1000, 40),
+            "call_link": EndpointPolicy(
+                "call_link", 120, 80, 1000, 40, min_voiced_ms=80
+            ),
+            "pstn": EndpointPolicy("pstn", 120, 80, 1000, 40),
+        },
+    )
+
+    assert segmenter.append(request(1, voice_pcm(), mode="call_link")) is None
+    assert segmenter.append(request(2, silence_pcm(), mode="call_link")) is None
+    assert segmenter.append(request(3, silence_pcm(), mode="call_link")) is None
+
+    assert segmenter.append(request(4, voice_pcm(), mode="call_link")) is None
+    assert segmenter.append(request(5, voice_pcm(), mode="call_link")) is None
+    assert segmenter.append(request(6, silence_pcm(), mode="call_link")) is None
+    segment = segmenter.append(request(7, silence_pcm(), mode="call_link"))
+
+    assert segment is not None
+    assert segment.duration_ms == 160
+    assert segment.pcm == voice_pcm() * 2 + silence_pcm() * 2
+
+
+def test_realtime_segmenter_discards_short_voiced_flush() -> None:
+    segmenter = RealtimePcmSegmenter(
+        min_audio_ms=1000,
+        endpoint_silence_ms=1000,
+        max_audio_ms=2000,
+        preroll_ms=40,
+        vad_energy_threshold=350,
+        endpoint_policies={
+            "conversation": EndpointPolicy("conversation", 1000, 1000, 2000, 40),
+            "listening": EndpointPolicy("listening", 1000, 1000, 2000, 40),
+            "call_link": EndpointPolicy(
+                "call_link", 1000, 1000, 2000, 40, min_voiced_ms=80
+            ),
+            "pstn": EndpointPolicy("pstn", 1000, 1000, 2000, 40),
+        },
+    )
+
+    assert segmenter.append(request(1, voice_pcm(), mode="call_link")) is None
+    assert segmenter.flush("sess_1") is None
+
+
 def test_realtime_segmenter_does_not_flush_leading_silence() -> None:
     segmenter = realtime_segmenter(min_audio_ms=1000, endpoint_silence_ms=1000)
 

@@ -191,9 +191,18 @@ def qwen3_endpoint_policies(config: AsrConfig):
         "call_link": config.vad_threshold,
         "pstn": config.vad_threshold,
     }
+    min_voiced_by_mode = {
+        "conversation": 0,
+        "listening": 0,
+        "call_link": config.qwen3_call_link_min_voiced_ms,
+        "pstn": config.qwen3_pstn_min_voiced_ms,
+    }
     for mode, threshold in vad_threshold_by_mode.items():
         if not 0 <= threshold <= 1:
             raise ValueError(f"ASR VAD threshold for {mode} must be between 0 and 1")
+    for mode, min_voiced_ms in min_voiced_by_mode.items():
+        if min_voiced_ms < 0:
+            raise ValueError(f"ASR minimum voiced duration for {mode} must be >= 0")
     return {
         mode: EndpointPolicy(
             mode=mode,
@@ -202,6 +211,7 @@ def qwen3_endpoint_policies(config: AsrConfig):
             max_audio_ms=max_audio_by_mode[mode],
             preroll_ms=config.qwen3_preroll_ms,
             vad_threshold=vad_threshold_by_mode[mode],
+            min_voiced_ms=min_voiced_by_mode[mode],
         )
         for mode, silence_ms in silence_by_mode.items()
     }

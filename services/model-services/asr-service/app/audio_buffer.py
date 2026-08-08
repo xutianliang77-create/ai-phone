@@ -15,6 +15,7 @@ from app.audio_segment_state import (
     segment_from_chunks,
     split_chunks_at,
     trim_preroll,
+    voiced_duration_ms,
 )
 
 if TYPE_CHECKING:
@@ -103,6 +104,10 @@ class RealtimePcmSegmenter:
         state = self._states.get(session_id)
         if not state or not state.has_voice or not state.chunks or not state.sample_rate:
             return None
+        if state.voiced_ms < self._policy(state).min_voiced_ms:
+            reset_active_segment(state)
+            self.vad_provider.reset_session(session_id)
+            return None
 
         audio = b"".join(chunk.pcm for chunk in state.chunks)
         segment = PcmAudioSegment(
@@ -131,6 +136,8 @@ class RealtimePcmSegmenter:
             state.sample_rate,
         )
         if not previous_chunks or not any(chunk.voiced for chunk in previous_chunks):
+            return None
+        if voiced_duration_ms(previous_chunks) < self._policy(state).min_voiced_ms:
             return None
 
         segment = segment_from_chunks(
@@ -200,6 +207,7 @@ class RealtimePcmSegmenter:
         state.chunks = [*state.preroll, chunk]
         state.preroll = []
         state.buffered_ms = sum(item.duration_ms for item in state.chunks)
+        state.voiced_ms = chunk.duration_ms
         state.trailing_silence_ms = 0
         return self._emit_if_ready(state, request)
 
@@ -212,6 +220,7 @@ class RealtimePcmSegmenter:
         state.chunks.append(chunk)
         state.buffered_ms += chunk.duration_ms
         if chunk.voiced:
+            state.voiced_ms += chunk.duration_ms
             state.trailing_silence_ms = 0
         else:
             state.trailing_silence_ms += chunk.duration_ms
@@ -227,6 +236,10 @@ class RealtimePcmSegmenter:
         reached_min = state.buffered_ms >= policy.min_audio_ms
         reached_max = state.buffered_ms >= policy.max_audio_ms
         if not ((reached_min and has_endpoint) or reached_max):
+            return None
+        if state.voiced_ms < policy.min_voiced_ms:
+            reset_active_segment(state)
+            self.vad_provider.reset_session(request.sessionId)
             return None
 
         audio = b"".join(chunk.pcm for chunk in state.chunks)

@@ -1,4 +1,5 @@
 from fastapi.testclient import TestClient
+import pytest
 
 from app.config import AsrConfig
 from app.audio_buffer import FrameVadDecision
@@ -82,12 +83,27 @@ def test_realtime_endpoint_defaults_keep_fast_and_listening_modes_distinct() -> 
         "call_link": 600,
         "pstn": 1100,
     }
+    assert config.runtime_parameters()["minVoicedByMode"] == {
+        "conversation": 0,
+        "listening": 0,
+        "call_link": 240,
+        "pstn": 240,
+    }
     endpoint_policies = qwen3_endpoint_policies(config)
     assert endpoint_policies["conversation"].min_audio_ms == 1000
     assert endpoint_policies["conversation"].endpoint_silence_ms == 600
     assert endpoint_policies["listening"].min_audio_ms == 1800
     assert endpoint_policies["call_link"].min_audio_ms == 1800
     assert endpoint_policies["pstn"].min_audio_ms == 1800
+    assert endpoint_policies["call_link"].min_voiced_ms == 240
+    assert endpoint_policies["pstn"].min_voiced_ms == 240
+
+
+def test_negative_minimum_voiced_duration_is_rejected() -> None:
+    with pytest.raises(ValueError, match="minimum voiced duration"):
+        qwen3_endpoint_policies(
+            AsrConfig(provider="qwen3_asr", qwen3_call_link_min_voiced_ms=-1)
+        )
 
 
 def test_listening_vad_threshold_does_not_change_other_modes() -> None:

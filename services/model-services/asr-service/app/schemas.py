@@ -89,6 +89,7 @@ class AsrEndpointPolicyDiagnostics(BaseModel):
     maxAudioMs: int = Field(gt=0)
     prerollMs: int = Field(ge=0)
     vadThreshold: float | None = Field(default=None, ge=0, le=1)
+    minVoicedMs: int = Field(ge=0)
     fingerprint: str
 
 
