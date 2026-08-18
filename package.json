@@ -124,5 +124,8 @@
     "tsx": "^4.23.1",
     "typescript": "^5.9.3",
     "vitest": "^4.0.15"
+  },
+  "optionalDependencies": {
+    "@ffmpeg-installer/linux-x64": "4.1.0"
   }
 }

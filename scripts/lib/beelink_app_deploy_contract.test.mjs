@@ -44,6 +44,14 @@ const appEntrypoint = readFileSync(
   new URL("../../infra/ai-phone-server/app-container-entrypoint.mjs", import.meta.url),
   "utf8",
 );
+const dockerfile = readFileSync(
+  new URL("../../infra/ai-phone-server/Dockerfile", import.meta.url),
+  "utf8",
+);
+const rootPackage = JSON.parse(readFileSync(
+  new URL("../../package.json", import.meta.url),
+  "utf8",
+));
 
 describe("Beelink app deployment contract", () => {
   it("requires an explicit production profile and fails closed before env generation", () => {
@@ -168,6 +176,19 @@ describe("Beelink app deployment contract", () => {
     expect(compose).not.toContain(
       "container_name: ${AI_PHONE_CONTAINER_PREFIX:-ai-phone}-translation-agent",
     );
+  });
+
+  it("builds runtime dependencies only from the committed lockfile", () => {
+    expect(rootPackage.optionalDependencies).toMatchObject({
+      "@ffmpeg-installer/linux-x64": "4.1.0",
+    });
+    expect(dockerfile).toContain("RUN npm ci &&");
+    expect(dockerfile).toContain(
+      "test -x node_modules/@ffmpeg-installer/linux-x64/ffmpeg",
+    );
+    expect(dockerfile).toContain("npm prune --omit=dev");
+    expect(dockerfile).not.toContain("npm install --no-save");
+    expect(dockerfile).not.toContain("--package-lock=false");
   });
 
   it("gates the listening deployment on real Hy-MT2 and meeting speaker services", () => {

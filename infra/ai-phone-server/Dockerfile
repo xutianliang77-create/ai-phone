@@ -19,7 +19,6 @@ COPY infra/postgres ./infra/postgres
 COPY infra/ai-phone-server/app-container-entrypoint.mjs ./infra/ai-phone-server/app-container-entrypoint.mjs
 
 RUN npm ci && \
-    npm install --no-save --package-lock=false @ffmpeg-installer/linux-x64@4.1.0 && \
     test -x node_modules/@ffmpeg-installer/linux-x64/ffmpeg && \
     npm run build -w @translation/contracts && \
     npm run build -w @translation/llm && \
@@ -32,6 +31,7 @@ RUN npm ci && \
     npm run build -w @translation/srt-ingress-bridge && \
     npm run build -w @translation/voice-agent-runtime && \
     npm run build -w @translation/air-device-gateway && \
+    npm prune --omit=dev && \
     npm cache clean --force
 
 ENV NODE_ENV=production \

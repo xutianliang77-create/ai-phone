@@ -14,7 +14,7 @@
     "wasmoon": "^1.16.0"
   },
   "dependencies": {
-    "@livekit/rtc-node": "^0.13.30",
+    "@livekit/rtc-node": "0.13.33",
     "@translation/contracts": "file:../../packages/contracts",
     "serialport": "^13.0.0"
   }
