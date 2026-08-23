@@ -27,6 +27,7 @@ export function appendLiveKitSelfHostReadiness(context) {
   const result = (context.checkFn ?? checkLiveKitSelfHostConfig)({
     root: context.root,
     envFile: context.envFile,
+    requireSip: context.requireSip,
   });
   const ready = result.status === "ready";
   context.record(context.checks, "livekit_selfhost_config", ready, {

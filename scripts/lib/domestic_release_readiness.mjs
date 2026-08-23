@@ -104,6 +104,7 @@ export async function checkDomesticReleaseReadiness(options) {
     root: options.root,
     envFile: options.liveKitSelfHostEnvFile,
     checkFn: options.checkLiveKitSelfHostFn,
+    requireSip: !providerAcceptanceDeferred,
     checks,
     issues,
     actions,
@@ -186,7 +187,9 @@ export async function checkDomesticReleaseReadiness(options) {
     normalizeIssues,
   });
   await appendDomesticPaymentCallbacksLocalSmoke({
-    enabled: options.checkDomesticPaymentCallbacksLocalSmoke !== false,
+    enabled:
+      options.checkDomesticPaymentCallbacksLocalSmoke !== false &&
+      !providerAcceptanceDeferred,
     root: options.root,
     timeoutMs: options.timeoutMs,
     checkFn: options.checkDomesticPaymentCallbacksFn,
@@ -288,7 +291,9 @@ export async function checkDomesticReleaseReadiness(options) {
     status: issues.length === 0 ? "ready" : "not_ready",
     capabilityProfile,
     deferredCapabilities:
-      providerAcceptanceDeferred ? ["livekit_sip", "agent", "egress"] : [],
+      providerAcceptanceDeferred
+        ? ["livekit_sip", "agent", "egress", "payment"]
+        : [],
     apiBaseUrl,
     gatewayBaseUrl,
     pstnBridgeBaseUrl,
@@ -313,6 +318,7 @@ function markProviderChecksDeferred(checks) {
     "pstn_provider_status_event_readiness",
     "pstn_internal_media_loop_readiness",
     "agent_call_worker_readiness",
+    "domestic_payment_callbacks_local_smoke",
   ]);
   for (const check of checks) {
     if (!names.has(check.name) || check.details?.skipped !== true) continue;
