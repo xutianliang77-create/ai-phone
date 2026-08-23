@@ -93,6 +93,8 @@ async function streamSession(session, fixture, config) {
   const timeline = [];
   const started = deferred();
   const ended = deferred();
+  const closed = deferred();
+  void ended.promise.catch(() => undefined);
   const socket = new WebSocket(session.endpoint, [
     "ai-phone.realtime.v1",
     `ai-phone.token.${session.realtimeToken}`,
@@ -109,6 +111,7 @@ async function streamSession(session, fixture, config) {
     started.reject(error);
     ended.reject(error);
   });
+  socket.on("close", () => closed.resolve());
   await withTimeout(started.promise, config.sessionTimeoutMs, "session start");
 
   const bytesPerFrame = Math.round(fixture.sampleRate * 2 * config.frameMs / 1000);
@@ -149,6 +152,7 @@ async function streamSession(session, fixture, config) {
   const endedEvent = await withTimeout(ended.promise, config.sessionTimeoutMs, "session end");
   const endedAtMs = Date.now();
   socket.close();
+  await withTimeout(closed.promise, 2_000, "socket close");
   return {
     events,
     timeline,
