@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import '../../../app/app_config.dart';
+import '../../../app/app_build_identity.dart';
 import '../../realtime/data/api/api_health_client.dart';
 import '../../../platform/asr/asr_text_segment.dart';
 import '../../../platform/asr/mobile_asr_provider.dart';
@@ -66,10 +67,11 @@ class CoreMlNemotronDiagnosticsReport {
   Map<String, Object?> toJson() {
     return <String, Object?>{
       'capturedAt': capturedAt.toUtc().toIso8601String(),
-      'app': const <String, Object?>{
+      'app': <String, Object?>{
         'name': _appName,
         'version': _appVersion,
         'buildNumber': _appBuildNumber,
+        'buildIdentity': AppBuildIdentity.current.toJson(),
       },
       'runtimeConfig': <String, Object?>{
         'apiBaseUrl': config.apiBaseUrl.toString(),
@@ -80,15 +82,13 @@ class CoreMlNemotronDiagnosticsReport {
         'deviceAsrAutoDownloadModel': config.deviceAsrAutoDownloadModel,
         'deviceAsrModelChunkMs': config.deviceAsrModelChunkMs,
         'deviceAsrChunkDurationMs': config.deviceAsrChunkDurationMs,
-        'deviceAsrEndpointMinSpeechMs':
-            config.deviceAsrEndpointMinSpeechMs,
+        'deviceAsrEndpointMinSpeechMs': config.deviceAsrEndpointMinSpeechMs,
         'deviceAsrEndpointSilenceMs': config.deviceAsrEndpointSilenceMs,
         'deviceAsrEndpointSpeechThresholdRms':
             config.deviceAsrEndpointSpeechThresholdRms,
         'deviceAsrVadProvider': config.deviceAsrVadProvider,
         'deviceAsrVadThreshold': config.deviceAsrVadThreshold,
-        'deviceAsrVadNegativeThreshold':
-            config.deviceAsrVadNegativeThreshold,
+        'deviceAsrVadNegativeThreshold': config.deviceAsrVadNegativeThreshold,
         'deviceAsrVadPreRollMs': config.deviceAsrVadPreRollMs,
         'deviceAsrDiagnosticCaptureEnabled':
             config.deviceAsrDiagnosticCaptureEnabled,

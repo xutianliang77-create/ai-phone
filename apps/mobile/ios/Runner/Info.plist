@@ -24,6 +24,14 @@
 	<string>????</string>
 	<key>CFBundleVersion</key>
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
+	<key>WujieCandidateId</key>
+	<string>$(WUJIE_CANDIDATE_ID)</string>
+	<key>WujieSourceCommit</key>
+	<string>$(WUJIE_SOURCE_COMMIT)</string>
+	<key>WujieSourceTree</key>
+	<string>$(WUJIE_SOURCE_TREE)</string>
+	<key>WujieSourceState</key>
+	<string>$(WUJIE_SOURCE_STATE)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>NSAppTransportSecurity</key>
