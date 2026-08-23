@@ -88,6 +88,34 @@ describe("model routing config", () => {
       "ASR, translation, TTS, and speaker",
     );
   });
+
+  test("rejects drift from a colocated Wujie V1 runtime contract", () => {
+    const file = writeConfig(tempDirs, readyConfig());
+    writeFileSync(
+      path.join(path.dirname(file), "wujie-v1-runtime-contract.json"),
+      JSON.stringify({
+        modelRouting: {
+          activeProfile: "domestic",
+          asrProvider: "http_qwen3_asr_vllm",
+          asrModel: "Qwen3-ASR-1.7B-vLLM0.14-canary",
+          translationProvider: "hymt2_self_hosted",
+          translationModel: "tencent/Hy-MT2-1.8B",
+          ttsProvider: "voxcpm2",
+          ttsModel: "VoxCPM2",
+          speakerProvider: "off",
+          speakerModel: "nvidia/diar_streaming_sortformer_4spk-v2.1",
+        },
+      }),
+      "utf8",
+    );
+
+    const result = checkModelRoutingConfig(file);
+
+    expect(result.status).toBe("not_ready");
+    expect(result.issues).toContain(
+      "Active model routing does not match the Wujie V1 runtime contract.",
+    );
+  });
 });
 
 function readyConfig() {

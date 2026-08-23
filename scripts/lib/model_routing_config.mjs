@@ -1,4 +1,5 @@
 import { existsSync, readFileSync } from "node:fs";
+import path from "node:path";
 
 const DOMAINS = ["asr", "translation", "tts", "speaker"];
 const ALLOW_EMPTY_ENV_KEYS = new Set([
@@ -34,10 +35,53 @@ export function checkModelRoutingConfig(filePath) {
   }
 
   if (activeReady) checkActiveEnv(activeProfile, checks, issues);
+  checkWujieRuntimeContract(filePath, config, checks, issues);
   if (issues.length > 0) {
     actions.push("Fix model routing provider/model/env entries and rerun this check.");
   }
   return result(filePath, checks, issues, actions);
+}
+
+function checkWujieRuntimeContract(filePath, config, checks, issues) {
+  const contractPath = path.join(
+    path.dirname(filePath),
+    "wujie-v1-runtime-contract.json",
+  );
+  if (!existsSync(contractPath)) return;
+  let expected;
+  try {
+    expected = JSON.parse(readFileSync(contractPath, "utf8")).modelRouting;
+  } catch (error) {
+    record(checks, "model_routing_wujie_v1_contract", false, {
+      contractPath,
+      message: errorMessage(error),
+    });
+    issues.push("Wujie V1 runtime contract is not valid JSON.");
+    return;
+  }
+  const profile = config.profiles?.[expected?.activeProfile];
+  const actual = {
+    activeProfile: config.activeProfile,
+    asrProvider: profile?.asr?.provider,
+    asrModel: profile?.asr?.model,
+    translationProvider: profile?.translation?.provider,
+    translationModel: profile?.translation?.model,
+    ttsProvider: profile?.tts?.provider,
+    ttsModel: profile?.tts?.model,
+    speakerProvider: profile?.speaker?.provider,
+    speakerModel: profile?.speaker?.model,
+  };
+  const mismatches = Object.entries(expected ?? {})
+    .filter(([key, value]) => actual[key] !== value)
+    .map(([key, value]) => ({ key, expected: value, actual: actual[key] }));
+  const ready = Boolean(expected?.activeProfile && profile) && mismatches.length === 0;
+  record(checks, "model_routing_wujie_v1_contract", ready, {
+    contractPath,
+    mismatches,
+  });
+  if (!ready) {
+    issues.push("Active model routing does not match the Wujie V1 runtime contract.");
+  }
 }
 
 export function appendModelRoutingReadiness(context) {

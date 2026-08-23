@@ -2,6 +2,17 @@
   "schemaVersion": 1,
   "product": "wujie-ai",
   "profile": "domestic_ios_private_beta_v1",
+  "modelRouting": {
+    "activeProfile": "domestic_server_qwen3_hymt2_voxcpm2",
+    "asrProvider": "http_qwen3_asr_vllm",
+    "asrModel": "Qwen3-ASR-1.7B-vLLM0.14-canary",
+    "translationProvider": "hymt2_self_hosted",
+    "translationModel": "tencent/Hy-MT2-1.8B",
+    "ttsProvider": "voxcpm2",
+    "ttsModel": "VoxCPM2",
+    "speakerProvider": "http_streaming_sortformer",
+    "speakerModel": "nvidia/diar_streaming_sortformer_4spk-v2.1"
+  },
   "services": {
     "api": {
       "requiredForSession": true,
