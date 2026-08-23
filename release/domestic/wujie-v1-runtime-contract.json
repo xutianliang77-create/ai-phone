@@ -18,7 +18,8 @@
         "provider": "hymt2_self_hosted",
         "asrProvider": "http",
         "speakerProvider": "http"
-      }
+      },
+      "requiredTraceableRuntime": true
     },
     "asr": {
       "requiredForSession": true,

@@ -114,6 +114,12 @@ export interface RealtimeEnv {
   llmReasoningEffort?: string | null;
   llmMinConfidence: number;
   domainLexiconPacks: DomainLexiconPack[];
+  runtimeCandidateId?: string;
+  runtimeSourceCommit?: string;
+  runtimeSourceTree?: string;
+  runtimeImageId?: string;
+  runtimeConfigSha256?: string;
+  requireTraceableRuntime?: boolean;
 }
 
 export function loadEnv(): RealtimeEnv {
@@ -305,5 +311,14 @@ export function loadEnv(): RealtimeEnv {
     llmReasoningEffort: env.LLM_REASONING_EFFORT ?? "none",
     llmMinConfidence: Number(env.LLM_MIN_CONFIDENCE ?? 0.72),
     domainLexiconPacks: parseDomainLexiconPacks(env.DOMAIN_LEXICON_PACKS),
+    runtimeCandidateId: env.WUJIE_RUNTIME_CANDIDATE_ID?.trim() || undefined,
+    runtimeSourceCommit: env.WUJIE_RUNTIME_SOURCE_COMMIT?.trim() || undefined,
+    runtimeSourceTree: env.WUJIE_RUNTIME_SOURCE_TREE?.trim() || undefined,
+    runtimeImageId: env.WUJIE_RUNTIME_IMAGE_ID?.trim() || undefined,
+    runtimeConfigSha256: env.WUJIE_RUNTIME_CONFIG_SHA256?.trim() || undefined,
+    requireTraceableRuntime: parseBoolean(
+      env.WUJIE_REQUIRE_TRACEABLE_RUNTIME,
+      false,
+    ),
   };
 }

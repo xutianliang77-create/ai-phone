@@ -37,6 +37,12 @@ function fingerprintIssues(body, fields) {
   );
 }
 
+function traceableRuntimeIssues(body, required) {
+  return required && body?.runtimeIdentity?.traceable !== true
+    ? ["runtimeIdentity: missing or not traceable"]
+    : [];
+}
+
 async function probe(name, url, contract, timeoutMs) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -53,6 +59,7 @@ async function probe(name, url, contract, timeoutMs) {
       ...(!response.ok ? [`HTTP ${response.status}`] : []),
       ...matchesExpected(body, contract.expected),
       ...fingerprintIssues(body, contract.requiredFingerprintFields),
+      ...traceableRuntimeIssues(body, contract.requiredTraceableRuntime),
     ];
     return { name, url, ok: issues.length === 0, statusCode: response.status, issues, body };
   } catch (error) {

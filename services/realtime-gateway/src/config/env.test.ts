@@ -75,6 +75,26 @@ describe("realtime gateway env", () => {
     expect(loadEnv().llmRefinementEnabled).toBe(true);
   });
 
+  it("loads an optional traceable runtime identity", () => {
+    process.env = {
+      WUJIE_RUNTIME_CANDIDATE_ID: "wujie-v1-candidate",
+      WUJIE_RUNTIME_SOURCE_COMMIT: "a".repeat(40),
+      WUJIE_RUNTIME_SOURCE_TREE: "b".repeat(40),
+      WUJIE_RUNTIME_IMAGE_ID: `sha256:${"c".repeat(64)}`,
+      WUJIE_RUNTIME_CONFIG_SHA256: "d".repeat(64),
+      WUJIE_REQUIRE_TRACEABLE_RUNTIME: "true",
+    };
+
+    expect(loadEnv()).toMatchObject({
+      runtimeCandidateId: "wujie-v1-candidate",
+      runtimeSourceCommit: "a".repeat(40),
+      runtimeSourceTree: "b".repeat(40),
+      runtimeImageId: `sha256:${"c".repeat(64)}`,
+      runtimeConfigSha256: "d".repeat(64),
+      requireTraceableRuntime: true,
+    });
+  });
+
   it("configures the listening continuation buffer independently", () => {
     process.env = {
       REALTIME_LISTENING_MAX_CONTINUATION_BUFFER_MS: "1200",

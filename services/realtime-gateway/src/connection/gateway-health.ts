@@ -1,6 +1,11 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { RealtimeEnv } from "../config/env.js";
 import type { GatewayDependencyReadiness } from "./gateway-dependency-readiness.js";
+import {
+  gatewayRuntimeIdentity,
+  gatewayRuntimeIdentityIssues,
+  type GatewayRuntimeIdentity,
+} from "./gateway-runtime-identity.js";
 
 export interface GatewayHealthPayload {
   status: "ok" | "degraded" | "unavailable";
@@ -24,6 +29,7 @@ export interface GatewayHealthPayload {
   tokenTransport: "subprotocol" | "subprotocol_with_legacy_query";
   publicEntryProtection: GatewayProtectionReadiness;
   dependencyReadiness?: GatewayDependencyReadiness;
+  runtimeIdentity?: GatewayRuntimeIdentity;
   releaseReadiness: GatewayReleaseReadinessPayload;
 }
 
@@ -45,6 +51,7 @@ export function gatewayHealthPayload(
   protection: GatewayProtectionReadiness = unconfiguredProtection(env),
   dependencies?: GatewayDependencyReadiness,
 ): GatewayHealthPayload {
+  const runtimeIdentity = gatewayRuntimeIdentity(env);
   return {
     status: dependencies?.status === "not_ready"
       ? "unavailable"
@@ -71,6 +78,7 @@ export function gatewayHealthPayload(
       : "subprotocol",
     publicEntryProtection: protection,
     ...(dependencies ? { dependencyReadiness: dependencies } : {}),
+    ...(runtimeIdentity ? { runtimeIdentity } : {}),
     releaseReadiness: gatewayReleaseReadinessPayload(env, protection, dependencies),
   };
 }
@@ -130,6 +138,7 @@ function gatewayReleaseReadinessIssues(
   if (dependencies && !dependencies.releaseReady) {
     issues.push(...dependencies.issues, ...dependencies.warnings);
   }
+  issues.push(...gatewayRuntimeIdentityIssues(env));
   return issues;
 }
 

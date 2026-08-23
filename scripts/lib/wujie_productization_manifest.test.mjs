@@ -63,6 +63,32 @@ describe("Wujie productization evidence", () => {
     expect(evidence.services.speaker.ok).toBe(false);
   });
 
+  it("rejects a gateway that is healthy but has no traceable runtime identity", async () => {
+    const contract = {
+      profile: "test",
+      services: {
+        gateway: {
+          requiredForSession: true,
+          requiredForRelease: true,
+          requiredTraceableRuntime: true,
+          expected: { service: "realtime-gateway" },
+        },
+      },
+    };
+    const evidence = await probeRuntimeContract({
+      contract,
+      generatedAt: "2026-08-24T00:00:00.000Z",
+      urls: {
+        gateway: "data:application/json,%7B%22service%22%3A%22realtime-gateway%22%7D",
+      },
+    });
+
+    expect(evidence.releaseReady).toBe(false);
+    expect(evidence.services.gateway.issues).toContain(
+      "runtimeIdentity: missing or not traceable",
+    );
+  });
+
   it("fingerprints dirty source while excluding outputs from candidate input", () => {
     const directory = mkdtempSync(join(tmpdir(), "wujie-manifest-"));
     temporaryDirectories.push(directory);
