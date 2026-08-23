@@ -74,5 +74,10 @@
     "llm": "continue_with_raw_asr",
     "asr": "reject_new_online_session",
     "translation": "reject_new_online_session"
+  },
+  "realtimePolicy": {
+    "synchronousLlmRefinement": false,
+    "rawAsrTranslationMustNotWaitForRevision": true,
+    "listeningRevision": "asynchronous_candidate"
   }
 }

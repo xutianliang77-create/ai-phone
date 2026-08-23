@@ -64,6 +64,17 @@ describe("realtime gateway env", () => {
     });
   });
 
+  it("can disable synchronous realtime refinement without disabling other LLM work", () => {
+    process.env = {
+      LLM_REFINEMENT_ENABLED: "true",
+      REALTIME_LLM_REFINEMENT_ENABLED: "false",
+    };
+    expect(loadEnv().llmRefinementEnabled).toBe(false);
+
+    delete process.env.REALTIME_LLM_REFINEMENT_ENABLED;
+    expect(loadEnv().llmRefinementEnabled).toBe(true);
+  });
+
   it("configures the listening continuation buffer independently", () => {
     process.env = {
       REALTIME_LISTENING_MAX_CONTINUATION_BUFFER_MS: "1200",

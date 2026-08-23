@@ -289,7 +289,10 @@ export function loadEnv(): RealtimeEnv {
     llmApiKey: env.LLM_API_KEY ?? env.SUMMARY_API_KEY,
     llmCorrectionModel: env.LLM_CORRECTION_MODEL ?? env.LLM_MODEL,
     llmReviewModel: env.LLM_REVIEW_MODEL ?? env.SUMMARY_MODEL ?? env.LLM_MODEL,
-    llmRefinementEnabled: parseBoolean(env.LLM_REFINEMENT_ENABLED, false),
+    llmRefinementEnabled: parseBoolean(
+      env.REALTIME_LLM_REFINEMENT_ENABLED ?? env.LLM_REFINEMENT_ENABLED,
+      false,
+    ),
     llmReviewEnabled: parseBoolean(
       env.LLM_REVIEW_ENABLED,
       env.SESSION_REVIEW_PROVIDER === "openai_compatible",
