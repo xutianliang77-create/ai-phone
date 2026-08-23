@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { RealtimeEnv } from "../config/env.js";
 import { gatewayHealthPayload, gatewayReleaseReadinessPayload } from "./gateway-health.js";
 import { GatewayDependencyReadinessMonitor } from "./gateway-dependency-readiness.js";
+import { coreDependencyFailureStage } from "./gateway-dependency-readiness.js";
 
 const env = {
   provider: "hymt2_self_hosted",
@@ -49,6 +50,7 @@ describe("gateway dependency readiness", () => {
     const result = await monitor.refresh();
 
     expect(result).toMatchObject({ status: "ready", sessionReady: true, releaseReady: true });
+    expect(coreDependencyFailureStage(result)).toBeUndefined();
     expect(fetchFn).toHaveBeenCalledTimes(4);
   });
 
@@ -84,6 +86,7 @@ describe("gateway dependency readiness", () => {
 
     expect(result).toMatchObject({ status: "not_ready", sessionReady: false, releaseReady: false });
     expect(result.issues).toContain("translation: connection refused");
+    expect(coreDependencyFailureStage(result)).toBe("translation");
     expect(gatewayHealthPayload(env, undefined, result).status).toBe("unavailable");
   });
 });

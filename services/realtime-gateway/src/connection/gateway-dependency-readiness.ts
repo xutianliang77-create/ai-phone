@@ -97,6 +97,18 @@ export class GatewayDependencyReadinessMonitor {
   }
 }
 
+export function coreDependencyFailureStage(
+  readiness: GatewayDependencyReadiness,
+): "asr" | "translation" | "provider" | undefined {
+  if (readiness.sessionReady) return undefined;
+  const failed = readiness.services.find(
+    (service) => service.requiredForSession && service.status !== "ready",
+  );
+  return failed?.name === "asr" || failed?.name === "translation"
+    ? failed.name
+    : "provider";
+}
+
 function dependencyProbes(env: RealtimeEnv): DependencyProbe[] {
   const probes: DependencyProbe[] = [];
   if (env.asrProvider === "http" && env.asrHttpEndpoint) {

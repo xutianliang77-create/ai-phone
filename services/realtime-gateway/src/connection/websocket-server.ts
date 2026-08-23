@@ -22,6 +22,7 @@ import { handleTextSegment } from "./client-text-segment-handler.js";
 import { endpointModeForRealtimeMode } from "./realtime-endpoint-mode.js";
 import { admitRealtimeConnection, sendRealtimeEvent } from "./realtime-connection-admission.js";
 import { createRealtimeServerRuntime } from "./realtime-server-runtime.js";
+import { coreDependencyFailureStage } from "./gateway-dependency-readiness.js";
 
 const router = new ProviderRouter();
 export { normalizeClientTextLanguage } from "../protocol/client-text-language.js";
@@ -43,7 +44,15 @@ export function startWebSocketServer() {
     if (!attachment) return;
     const { session, generation, resumed } = attachment;
     let provider: RealtimeProvider;
+    let providerFailureStage: "provider" | "asr" | "translation" = "provider";
     try {
+      const dependencyFailure = coreDependencyFailureStage(
+        dependencyReadiness.readiness(),
+      );
+      if (dependencyFailure) {
+        providerFailureStage = dependencyFailure;
+        throw new Error(`Realtime ${dependencyFailure} dependency is unavailable`);
+      }
       provider = router.selectProvider(env);
       const domainLexiconPacks = domainLexiconPacksForSession(session, env);
       const terminology = await loadTerminologyForSession(session, env);
@@ -79,7 +88,7 @@ export function startWebSocketServer() {
       }
       sendRealtimeEvent(ws, buildError("provider_unavailable", "Realtime provider is unavailable", {
         sessionId: session.id,
-        stage: "provider",
+        stage: providerFailureStage,
         provider: env.provider,
         retryable: true,
       }));
