@@ -23,6 +23,8 @@ describe("realtime gateway env", () => {
     const env = loadEnv();
 
     expect(env.host).toBe("0.0.0.0");
+    expect(env.allowedHosts).toEqual([]);
+    expect(env.allowNonBrowserClientsWithoutOrigin).toBe(false);
     expect(env.provider).toBe("hymt2_self_hosted");
     expect(env.resolvedProvider).toBe("lmstudio");
     expect(env.lmStudioBaseUrl).toBe("http://models.local:8003/v1");
@@ -48,6 +50,18 @@ describe("realtime gateway env", () => {
     process.env = { REALTIME_BIND_HOST: "10.20.30.41" };
 
     expect(loadEnv().host).toBe("10.20.30.41");
+  });
+
+  it("configures exact hosts and the explicit native-client Origin exception", () => {
+    process.env = {
+      REALTIME_ALLOWED_HOSTS: "call.example.cn,call.example.cn:3111",
+      REALTIME_ALLOW_NON_BROWSER_CLIENTS_WITHOUT_ORIGIN: "true",
+    };
+
+    expect(loadEnv()).toMatchObject({
+      allowedHosts: ["call.example.cn", "call.example.cn:3111"],
+      allowNonBrowserClientsWithoutOrigin: true,
+    });
   });
 
   it("configures the listening continuation buffer independently", () => {

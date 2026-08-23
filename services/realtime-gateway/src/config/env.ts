@@ -3,25 +3,41 @@ import {
   parseDomainLexiconPacks,
   type DomainLexiconPack,
 } from "../domain/domain-lexicon.js";
+import {
+  boundedInteger,
+  commaSeparated,
+  parseAsrProviderName,
+  parseBoolean,
+  parseLlmProviderName,
+  parseProviderName,
+  parseRateLimitProvider,
+  parseRegionEdition,
+  parseSessionEventSinkName,
+  resolveProviderName,
+  type AsrProviderName,
+  type LlmProviderName,
+  type RealtimeProviderName,
+  type RegionEdition,
+  type ResolvedRealtimeProviderName,
+  type SessionEventSinkName,
+  type SpeakerProviderName,
+} from "./env-parsers.js";
 
-export type RealtimeProviderName =
-  | "mock"
-  | "openai"
-  | "lmstudio"
-  | "self_hosted"
-  | "hymt2_self_hosted"
-  | "qwen_live"
-  | "tencent_trtc";
-export type AsrProviderName = "mock" | "http";
-export type SpeakerProviderName = "off" | "http";
-export type SessionEventSinkName = "noop" | "api";
-export type RegionEdition = "domestic" | "international";
-export type LlmProviderName = "off" | "mock" | "openai_compatible";
+export type {
+  AsrProviderName,
+  LlmProviderName,
+  RealtimeProviderName,
+  RegionEdition,
+  SessionEventSinkName,
+  SpeakerProviderName,
+} from "./env-parsers.js";
 
 export interface RealtimeEnv {
   host: string;
   port: number;
+  allowedHosts: string[];
   allowedOrigins: string[];
+  allowNonBrowserClientsWithoutOrigin: boolean;
   trustProxyAddresses: string[];
   maxPayloadBytes: number;
   maxConnections: number;
@@ -42,7 +58,7 @@ export interface RealtimeEnv {
   realtimeTokenSecret: string;
   allowQueryToken?: boolean;
   provider: RealtimeProviderName;
-  resolvedProvider: "mock" | "openai" | "lmstudio" | "qwen_live" | "unsupported";
+  resolvedProvider: ResolvedRealtimeProviderName;
   regionEdition: RegionEdition;
   dataRegion: string;
   callProviderPolicy: string;
@@ -110,7 +126,12 @@ export function loadEnv(): RealtimeEnv {
   return {
     host: env.REALTIME_BIND_HOST?.trim() || "0.0.0.0",
     port: Number(env.REALTIME_PORT ?? 3001),
+    allowedHosts: commaSeparated(env.REALTIME_ALLOWED_HOSTS),
     allowedOrigins: commaSeparated(env.REALTIME_ALLOWED_ORIGINS),
+    allowNonBrowserClientsWithoutOrigin: parseBoolean(
+      env.REALTIME_ALLOW_NON_BROWSER_CLIENTS_WITHOUT_ORIGIN,
+      false,
+    ),
     trustProxyAddresses: commaSeparated(
       env.REALTIME_TRUST_PROXY_ADDRESSES ?? "127.0.0.1,::1",
     ),
@@ -282,68 +303,4 @@ export function loadEnv(): RealtimeEnv {
     llmMinConfidence: Number(env.LLM_MIN_CONFIDENCE ?? 0.72),
     domainLexiconPacks: parseDomainLexiconPacks(env.DOMAIN_LEXICON_PACKS),
   };
-}
-
-function parseRateLimitProvider(value: string | undefined): "memory" | "redis" {
-  if (value === "redis") return "redis";
-  if (value === "memory") return "memory";
-  return process.env.NODE_ENV === "production" ? "redis" : "memory";
-}
-
-function commaSeparated(value: string | undefined) {
-  return (value ?? "").split(",").map((item) => item.trim()).filter(Boolean);
-}
-
-function boundedInteger(
-  value: string | undefined,
-  fallback: number,
-  minimum: number,
-  maximum: number,
-) {
-  const parsed = Number(value);
-  return Number.isSafeInteger(parsed) && parsed >= minimum && parsed <= maximum
-    ? parsed
-    : fallback;
-}
-
-function parseProviderName(value: string | undefined): RealtimeProviderName {
-  if (value === "self_hosted") return "self_hosted";
-  if (value === "hymt2_self_hosted") return "hymt2_self_hosted";
-  if (value === "qwen_live") return "qwen_live";
-  if (value === "tencent_trtc") return "tencent_trtc";
-  if (value === "lmstudio") return "lmstudio";
-  return value === "openai" ? "openai" : "mock";
-}
-
-function resolveProviderName(
-  provider: RealtimeProviderName,
-): RealtimeEnv["resolvedProvider"] {
-  if (provider === "self_hosted" || provider === "hymt2_self_hosted") {
-    return "lmstudio";
-  }
-  if (provider === "qwen_live") return "qwen_live";
-  if (provider === "tencent_trtc") return "unsupported";
-  return provider;
-}
-
-function parseRegionEdition(value: string | undefined): RegionEdition {
-  return value === "international" ? "international" : "domestic";
-}
-
-function parseAsrProviderName(value: string | undefined): AsrProviderName {
-  return value === "http" ? "http" : "mock";
-}
-
-function parseSessionEventSinkName(value: string | undefined): SessionEventSinkName {
-  return value === "api" ? "api" : "noop";
-}
-
-function parseLlmProviderName(value: string | undefined): LlmProviderName {
-  if (value === "mock" || value === "openai_compatible") return value;
-  return "off";
-}
-
-function parseBoolean(value: string | undefined, fallback: boolean) {
-  if (value === undefined) return fallback;
-  return value === "1" || value.toLowerCase() === "true";
 }

@@ -30,6 +30,7 @@ export function startWebSocketServer() {
   const {
     env,
     protection,
+    dependencyReadiness,
     httpServer,
     server,
     sessionEventSink,
@@ -340,6 +341,7 @@ export function startWebSocketServer() {
   });
   httpServer.on("close", () => {
     void protection.close();
+    dependencyReadiness.close();
     disconnectFinalizers.close();
     server.close();
   });

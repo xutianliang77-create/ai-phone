@@ -4,7 +4,9 @@ import { gatewayHealthPayload, gatewayReleaseReadinessPayload } from "./gateway-
 
 const env: RealtimeEnv = {
   port: 3001,
+  allowedHosts: ["call.example.cn"],
   allowedOrigins: ["https://call.example.cn"],
+  allowNonBrowserClientsWithoutOrigin: true,
   trustProxyAddresses: ["127.0.0.1", "::1"],
   maxPayloadBytes: 65_536,
   maxConnections: 512,

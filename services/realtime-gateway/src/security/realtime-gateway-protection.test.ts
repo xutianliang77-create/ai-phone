@@ -5,6 +5,7 @@ import {
   RealtimeGatewayProtection,
   RealtimeMessageRateGuard,
   clientIpFromRequest,
+  normalizeHostHeader,
 } from "./realtime-gateway-protection.js";
 
 describe("realtime gateway public entry protection", () => {
@@ -29,6 +30,57 @@ describe("realtime gateway public entry protection", () => {
     await protection.close();
   });
 
+  it("rejects an unlisted or malformed Host before reserving capacity", async () => {
+    const protection = new RealtimeGatewayProtection(env());
+    await protection.start();
+
+    expect(await protection.reserve(request(
+      "https://call.example.cn",
+      "127.0.0.1",
+      "evil.example.cn",
+    ))).toMatchObject({
+      ok: false,
+      statusCode: 403,
+      reason: "host_not_allowed",
+    });
+    expect(await protection.reserve(request(
+      "https://call.example.cn",
+      "127.0.0.1",
+      "call.example.cn/path",
+    ))).toMatchObject({
+      ok: false,
+      reason: "host_not_allowed",
+    });
+    await protection.close();
+  });
+
+  it("requires an explicit non-browser policy when Origin is absent", async () => {
+    const blocked = new RealtimeGatewayProtection(env());
+    await blocked.start();
+    expect(await blocked.reserve(request())).toMatchObject({
+      ok: false,
+      statusCode: 403,
+      reason: "origin_not_allowed",
+    });
+    await blocked.close();
+
+    const allowed = new RealtimeGatewayProtection({
+      ...env(),
+      allowNonBrowserClientsWithoutOrigin: true,
+    });
+    await allowed.start();
+    expect(await allowed.reserve(request())).toMatchObject({ ok: true });
+    await allowed.close();
+  });
+
+  it("normalizes DNS case and IPv6 host headers without accepting paths", () => {
+    expect(normalizeHostHeader("CALL.EXAMPLE.CN:3111"))
+      .toBe("call.example.cn:3111");
+    expect(normalizeHostHeader("[::1]:3111")).toBe("[::1]:3111");
+    expect(normalizeHostHeader("call.example.cn/realtime")).toBeUndefined();
+    expect(normalizeHostHeader(" call.example.cn")).toBeUndefined();
+  });
+
   it("trusts forwarded addresses only from configured proxies", () => {
     expect(clientIpFromRequest(request(undefined, "127.0.0.1"), ["127.0.0.1"]))
       .toBe("203.0.113.9");
@@ -50,7 +102,9 @@ describe("realtime gateway public entry protection", () => {
 
 function env() {
   return {
+    allowedHosts: ["call.example.cn"],
     allowedOrigins: ["https://call.example.cn"],
+    allowNonBrowserClientsWithoutOrigin: false,
     trustProxyAddresses: ["127.0.0.1"],
     maxPayloadBytes: 65_536,
     maxConnections: 2,
@@ -69,9 +123,14 @@ function env() {
   } as RealtimeEnv;
 }
 
-function request(origin?: string, remoteAddress = "127.0.0.1") {
+function request(
+  origin?: string,
+  remoteAddress = "127.0.0.1",
+  host = "call.example.cn",
+) {
   return {
     headers: {
+      host,
       ...(origin ? { origin } : {}),
       "x-forwarded-for": "203.0.113.9",
     },
