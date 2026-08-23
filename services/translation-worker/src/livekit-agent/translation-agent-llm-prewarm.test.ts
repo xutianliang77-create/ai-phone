@@ -4,9 +4,9 @@ import { prewarmTranslationAgentLlm } from "./translation-agent-llm-prewarm.js";
 
 describe("prewarmTranslationAgentLlm", () => {
   it("skips disabled refinement", async () => {
-    await expect(prewarmTranslationAgentLlm({
-      llmConfig: config({ refinementEnabled: false }),
-    })).resolves.toEqual({
+    await expect(prewarmTranslationAgentLlm(prewarmEnv({
+      refinementEnabled: false,
+    }))).resolves.toEqual({
       status: "skipped",
       reason: "refinement_disabled",
     });
@@ -28,7 +28,7 @@ describe("prewarmTranslationAgentLlm", () => {
       });
     });
 
-    await expect(prewarmTranslationAgentLlm({ llmConfig: config() }, { fetchFn }))
+    await expect(prewarmTranslationAgentLlm(prewarmEnv(), { fetchFn }))
       .resolves.toMatchObject({
         status: "ready",
         provider: "openai_compatible",
@@ -39,11 +39,41 @@ describe("prewarmTranslationAgentLlm", () => {
   });
 
   it("fails closed when the configured provider is unavailable", async () => {
-    await expect(prewarmTranslationAgentLlm({ llmConfig: config() }, {
+    await expect(prewarmTranslationAgentLlm(prewarmEnv(), {
       fetchFn: async () => response(503, {}),
     })).rejects.toThrow("LLM is unavailable");
   });
+
+  it("uses the dedicated prewarm timeout instead of the realtime timeout", async () => {
+    const fetchFn = vi.fn<typeof fetch>(async (url) => {
+      await new Promise((resolvePromise) => setTimeout(resolvePromise, 10));
+      if (String(url).endsWith("/models")) {
+        return response(200, { data: [{ id: "qwen/qwen3.5-9b" }] });
+      }
+      return response(200, {
+        choices: [{ message: { content: JSON.stringify({
+          optimizedText: "准备就绪",
+          confidence: 0.99,
+          operations: [],
+          protectedTermsKept: ["准备就绪"],
+          warnings: [],
+        }) } }],
+      });
+    });
+
+    await expect(prewarmTranslationAgentLlm({
+      llmConfig: config({ correctionTimeoutMs: 1 }),
+      llmPrewarmTimeoutMs: 100,
+    }, { fetchFn })).resolves.toMatchObject({ status: "ready" });
+  });
 });
+
+function prewarmEnv(overrides: Partial<LlmConfig> = {}) {
+  return {
+    llmConfig: config(overrides),
+    llmPrewarmTimeoutMs: 100,
+  };
+}
 
 function config(overrides: Partial<LlmConfig> = {}): LlmConfig {
   return {

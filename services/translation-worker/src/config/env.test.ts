@@ -170,6 +170,20 @@ describe("translation worker env", () => {
     expect(loadEnv().ttsAgentPrewarmTimeoutMs).toBe(60000);
   });
 
+  it("keeps Agent LLM prewarm independent from the realtime correction timeout", () => {
+    process.env = { LLM_CORRECTION_TIMEOUT_MS: "1200" };
+    expect(loadEnv()).toMatchObject({
+      llmConfig: { correctionTimeoutMs: 1200 },
+      llmPrewarmTimeoutMs: 10000,
+    });
+
+    process.env.TRANSLATION_AGENT_LLM_PREWARM_TIMEOUT_MS = "15000";
+    expect(loadEnv().llmPrewarmTimeoutMs).toBe(15000);
+
+    process.env.TRANSLATION_AGENT_LLM_PREWARM_TIMEOUT_MS = "999";
+    expect(loadEnv().llmPrewarmTimeoutMs).toBe(10000);
+  });
+
   it("configures the PSTN audio sink bind address", () => {
     process.env = {
       TRANSLATION_WORKER_AUDIO_FRAME_SINK_HOST: "10.20.30.42",
