@@ -5,6 +5,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 MOBILE_DIR="$ROOT_DIR/apps/mobile"
 SERVER_BASE_URL="${SERVER_BASE_URL:-}"
 BUILD_MODE="${BUILD_MODE:-profile}"
+PRODUCT_PROFILE="${PRODUCT_PROFILE:-core_translation}"
 APP_VERSION="${APP_VERSION:-$(awk '/^version:/{split($2,v,"+"); print v[1]; exit}' "$MOBILE_DIR/pubspec.yaml")}"
 BUILD_NUMBER="${BUILD_NUMBER:-$(date '+%Y%m%d01')}"
 SOURCE_COMMIT="$(git -C "$ROOT_DIR" rev-parse HEAD)"
@@ -18,6 +19,10 @@ if [[ -z "$SERVER_BASE_URL" ]]; then
 fi
 if [[ "$BUILD_MODE" != "profile" && "$BUILD_MODE" != "release" ]]; then
   echo "BUILD_MODE must be profile or release" >&2
+  exit 2
+fi
+if [[ "$PRODUCT_PROFILE" != "core_translation" && "$PRODUCT_PROFILE" != "full" ]]; then
+  echo "PRODUCT_PROFILE must be core_translation or full" >&2
   exit 2
 fi
 if [[ ! "$BUILD_NUMBER" =~ ^[0-9]+$ ]]; then
@@ -45,6 +50,7 @@ WUJIE_CANDIDATE_ID="$CANDIDATE_ID" \
 WUJIE_SOURCE_COMMIT="$SOURCE_COMMIT" \
 WUJIE_SOURCE_TREE="$SOURCE_TREE" \
 WUJIE_SOURCE_STATE=clean \
+WUJIE_PRODUCT_PROFILE="$PRODUCT_PROFILE" \
 node "$ROOT_DIR/scripts/lib/write_ios_build_identity_xcconfig.mjs" \
   "$MOBILE_DIR/ios/Flutter/LocalIdentity.xcconfig"
 flutter build ios "--$BUILD_MODE" \
@@ -57,6 +63,7 @@ flutter build ios "--$BUILD_MODE" \
   --dart-define="SOURCE_COMMIT=$SOURCE_COMMIT" \
   --dart-define="SOURCE_TREE=$SOURCE_TREE" \
   --dart-define="SOURCE_STATE=clean" \
+  --dart-define="WUJIE_PRODUCT_PROFILE=$PRODUCT_PROFILE" \
   --dart-define="SERVER_OWNED_HISTORY=true" \
   --dart-define="USE_MOCK_AUDIO=false"
 
@@ -84,6 +91,7 @@ ACTUAL_CANDIDATE="$(/usr/libexec/PlistBuddy -c 'Print :WujieCandidateId' "$APP_P
 ACTUAL_COMMIT="$(/usr/libexec/PlistBuddy -c 'Print :WujieSourceCommit' "$APP_PATH/Info.plist")"
 ACTUAL_TREE="$(/usr/libexec/PlistBuddy -c 'Print :WujieSourceTree' "$APP_PATH/Info.plist")"
 ACTUAL_SOURCE_STATE="$(/usr/libexec/PlistBuddy -c 'Print :WujieSourceState' "$APP_PATH/Info.plist")"
+ACTUAL_PRODUCT_PROFILE="$(/usr/libexec/PlistBuddy -c 'Print :WujieProductProfile' "$APP_PATH/Info.plist")"
 [[ "$ACTUAL_VERSION" == "$APP_VERSION" && "$ACTUAL_BUILD" == "$BUILD_NUMBER" ]] || {
   echo "Built App identity does not match requested version/build" >&2
   exit 1
@@ -91,7 +99,8 @@ ACTUAL_SOURCE_STATE="$(/usr/libexec/PlistBuddy -c 'Print :WujieSourceState' "$AP
 [[ "$ACTUAL_CANDIDATE" == "$CANDIDATE_ID" &&
    "$ACTUAL_COMMIT" == "$SOURCE_COMMIT" &&
    "$ACTUAL_TREE" == "$SOURCE_TREE" &&
-   "$ACTUAL_SOURCE_STATE" == clean ]] || {
+   "$ACTUAL_SOURCE_STATE" == clean &&
+   "$ACTUAL_PRODUCT_PROFILE" == "$PRODUCT_PROFILE" ]] || {
   echo "Signed App source identity does not match the candidate input" >&2
   exit 1
 }
@@ -112,6 +121,7 @@ CANDIDATE_ID="$CANDIDATE_ID" SOURCE_COMMIT="$SOURCE_COMMIT" \
 SOURCE_TREE="$SOURCE_TREE" BUNDLE_ID="$BUNDLE_ID" \
 APP_VERSION="$ACTUAL_VERSION" BUILD_NUMBER="$ACTUAL_BUILD" \
 BUILD_MODE="$BUILD_MODE" SERVER_BASE_URL="$SERVER_BASE_URL" \
+PRODUCT_PROFILE="$PRODUCT_PROFILE" \
 APP_SHA256="$APP_SHA256" SIGNING_IDENTITY="$SIGNING_IDENTITY" \
 node "$ROOT_DIR/scripts/lib/write_ios_candidate_manifest.mjs" \
   "$OUTPUT_ROOT/candidate-manifest.json"

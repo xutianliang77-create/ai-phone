@@ -72,6 +72,7 @@ void main() {
         'sourceCommit': 'untraceable',
         'sourceTree': 'untraceable',
         'sourceState': 'unknown',
+        'productProfile': 'full',
         'traceable': false,
       },
     });

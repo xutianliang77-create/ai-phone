@@ -13,11 +13,16 @@ const candidateId = required("WUJIE_CANDIDATE_ID", /^[A-Za-z0-9._-]{1,96}$/u);
 const sourceCommit = required("WUJIE_SOURCE_COMMIT", /^[a-f0-9]{40}$/u);
 const sourceTree = required("WUJIE_SOURCE_TREE", /^[a-f0-9]{40}$/u);
 const sourceState = required("WUJIE_SOURCE_STATE", /^clean$/u);
+const productProfile = required(
+  "WUJIE_PRODUCT_PROFILE",
+  /^(core_translation|full)$/u,
+);
 
 writeFileSync(output, [
   `WUJIE_CANDIDATE_ID=${candidateId}`,
   `WUJIE_SOURCE_COMMIT=${sourceCommit}`,
   `WUJIE_SOURCE_TREE=${sourceTree}`,
   `WUJIE_SOURCE_STATE=${sourceState}`,
+  `WUJIE_PRODUCT_PROFILE=${productProfile}`,
   "",
 ].join("\n"), { mode: 0o600 });

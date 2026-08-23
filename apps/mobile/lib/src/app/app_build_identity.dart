@@ -4,6 +4,7 @@ class AppBuildIdentity {
     required this.sourceCommit,
     required this.sourceTree,
     required this.sourceState,
+    required this.productProfile,
   });
 
   static const current = AppBuildIdentity(
@@ -23,24 +24,31 @@ class AppBuildIdentity {
       'SOURCE_STATE',
       defaultValue: 'unknown',
     ),
+    productProfile: String.fromEnvironment(
+      'WUJIE_PRODUCT_PROFILE',
+      defaultValue: 'full',
+    ),
   );
 
   final String candidateId;
   final String sourceCommit;
   final String sourceTree;
   final String sourceState;
+  final String productProfile;
 
   bool get isTraceable =>
       RegExp(r'^[a-f0-9]{40}$').hasMatch(sourceCommit) &&
       RegExp(r'^[a-f0-9]{40}$').hasMatch(sourceTree) &&
       sourceState == 'clean' &&
-      candidateId != 'untraceable';
+      candidateId != 'untraceable' &&
+      (productProfile == 'core_translation' || productProfile == 'full');
 
   Map<String, Object?> toJson() => <String, Object?>{
         'candidateId': candidateId,
         'sourceCommit': sourceCommit,
         'sourceTree': sourceTree,
         'sourceState': sourceState,
+        'productProfile': productProfile,
         'traceable': isTraceable,
       };
 }

@@ -19,6 +19,7 @@ const manifest = {
   version: required("APP_VERSION"),
   buildNumber: required("BUILD_NUMBER"),
   buildMode: required("BUILD_MODE"),
+  productProfile: required("PRODUCT_PROFILE"),
   serverBaseUrl: required("SERVER_BASE_URL"),
   appAggregateSha256: required("APP_SHA256"),
   signingIdentity: required("SIGNING_IDENTITY"),

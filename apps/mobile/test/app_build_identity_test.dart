@@ -8,6 +8,7 @@ void main() {
       sourceCommit: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
       sourceTree: 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
       sourceState: 'clean',
+      productProfile: 'core_translation',
     );
 
     expect(identity.isTraceable, isTrue);
@@ -16,6 +17,7 @@ void main() {
       'sourceCommit': 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
       'sourceTree': 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
       'sourceState': 'clean',
+      'productProfile': 'core_translation',
       'traceable': true,
     });
   });
@@ -26,18 +28,21 @@ void main() {
       sourceCommit: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
       sourceTree: 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
       sourceState: 'dirty',
+      productProfile: 'core_translation',
     );
     const abbreviated = AppBuildIdentity(
       candidateId: 'wujie-ios-v1',
       sourceCommit: 'abcdef0',
       sourceTree: 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
       sourceState: 'clean',
+      productProfile: 'core_translation',
     );
     const unnamed = AppBuildIdentity(
       candidateId: 'untraceable',
       sourceCommit: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
       sourceTree: 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
       sourceState: 'clean',
+      productProfile: 'core_translation',
     );
 
     expect(dirty.isTraceable, isFalse);

@@ -32,6 +32,8 @@
 	<string>$(WUJIE_SOURCE_TREE)</string>
 	<key>WujieSourceState</key>
 	<string>$(WUJIE_SOURCE_STATE)</string>
+	<key>WujieProductProfile</key>
+	<string>$(WUJIE_PRODUCT_PROFILE)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>NSAppTransportSecurity</key>

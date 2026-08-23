@@ -30,6 +30,7 @@ describe("traceable iOS candidate contract", () => {
     expect(script).toContain('--dart-define="SOURCE_COMMIT=$SOURCE_COMMIT"');
     expect(script).toContain('--dart-define="SOURCE_TREE=$SOURCE_TREE"');
     expect(script).toContain('--dart-define="SOURCE_STATE=clean"');
+    expect(script).toContain('--dart-define="WUJIE_PRODUCT_PROFILE=$PRODUCT_PROFILE"');
     expect(identity).toContain("RegExp(r'^[a-f0-9]{40}$')");
   });
 
@@ -40,8 +41,10 @@ describe("traceable iOS candidate contract", () => {
     expect(script).toContain("Print :WujieCandidateId");
     expect(script).toContain("Print :WujieSourceCommit");
     expect(script).toContain("Print :WujieSourceTree");
+    expect(script).toContain("Print :WujieProductProfile");
     expect(infoPlist).toContain("$(WUJIE_CANDIDATE_ID)");
     expect(infoPlist).toContain("$(WUJIE_SOURCE_COMMIT)");
+    expect(infoPlist).toContain("$(WUJIE_PRODUCT_PROFILE)");
     expect(xcconfigWriter).toContain("WUJIE_SOURCE_STATE=${sourceState}");
     expect(writer).toContain("appAggregateSha256: required(\"APP_SHA256\")");
     expect(script).not.toContain("devicectl device install app");
