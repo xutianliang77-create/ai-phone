@@ -33,18 +33,32 @@ export function summarizeTailResults(results) {
 export function evaluateLongResult(result, options) {
   const translated = result.segments.filter((segment) => segment.translatedText?.trim()).length;
   const coverage = result.segments.length > 0 ? translated / result.segments.length : 0;
+  const frameCoverage = result.sequence > 0
+    ? result.receivedFrameCount / result.sequence
+    : 0;
   const errors = [
-    ...(result.wallDurationMs < options.minimumWallDurationMs
-      ? [`wall duration ${result.wallDurationMs}ms is below ${options.minimumWallDurationMs}ms`] : []),
+    ...(result.serverDurationMs < options.minimumWallDurationMs
+      ? [`server duration ${result.serverDurationMs}ms is below ${options.minimumWallDurationMs}ms`] : []),
     ...(result.segments.length < options.minimumSegments
       ? [`segment count ${result.segments.length} is below ${options.minimumSegments}`] : []),
     ...(coverage < options.minimumTranslationCoverage
       ? [`translation coverage ${coverage} is below ${options.minimumTranslationCoverage}`] : []),
+    ...(result.receivedFrameCount !== result.sequence
+      ? [`server received ${result.receivedFrameCount} of ${result.sequence} sent frames`] : []),
     ...(result.droppedFrameCount !== 0
       ? [`dropped frame count is ${result.droppedFrameCount}`] : []),
     ...(result.eventErrors.length > 0 ? ["realtime error events were emitted"] : []),
+    ...(result.endReason !== "client_request"
+      ? [`session ended with ${result.endReason ?? "unknown"}`] : []),
+    ...(result.flush?.status !== "completed"
+      ? [`session flush is ${result.flush?.status ?? "missing"}`] : []),
   ];
-  return { ok: errors.length === 0, errors, translationCoverage: coverage };
+  return {
+    ok: errors.length === 0,
+    errors,
+    translationCoverage: coverage,
+    frameCoverage,
+  };
 }
 
 function deferred() {
@@ -250,9 +264,12 @@ async function runLongGate(config, fixture) {
   const result = {
     sessionId: session.sessionId,
     sequence: stream.sequence,
+    receivedFrameCount: detail.diagnostics?.audio?.receivedFrameCount ?? -1,
     audioElapsedMs: stream.audioElapsedMs,
     wallDurationMs: stream.wallDurationMs,
+    serverDurationMs: durationBetween(detail.createdAt, detail.endedAt),
     endLatencyMs: stream.endLatencyMs,
+    endReason: stream.endedEvent.reason,
     segments,
     droppedFrameCount: detail.diagnostics?.audio?.droppedFrameCount ?? -1,
     eventErrors: stream.events.filter((event) => event.type === "error"),
@@ -267,6 +284,14 @@ async function runLongGate(config, fixture) {
       minimumTranslationCoverage: config.minimumTranslationCoverage,
     }),
   };
+}
+
+function durationBetween(startedAt, endedAt) {
+  const start = Date.parse(startedAt ?? "");
+  const end = Date.parse(endedAt ?? "");
+  return Number.isFinite(start) && Number.isFinite(end) && end >= start
+    ? end - start
+    : -1;
 }
 
 function numberEnv(name, fallback) {

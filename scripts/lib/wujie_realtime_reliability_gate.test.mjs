@@ -33,12 +33,17 @@ describe("Wujie realtime reliability gates", () => {
   it("gates wall time, segments, translations, drops and error events", () => {
     const result = {
       wallDurationMs: 1_800_001,
+      serverDurationMs: 1_800_001,
+      sequence: 22_000,
+      receivedFrameCount: 22_000,
       segments: Array.from({ length: 100 }, (_, index) => ({
         sourceText: `source ${index}`,
         translatedText: `translation ${index}`,
       })),
       droppedFrameCount: 0,
       eventErrors: [],
+      endReason: "client_request",
+      flush: { status: "completed" },
     };
     expect(evaluateLongResult(result, {
       minimumWallDurationMs: 1_800_000,
@@ -55,5 +60,35 @@ describe("Wujie realtime reliability gates", () => {
       minimumSegments: 100,
       minimumTranslationCoverage: 0.99,
     }).ok).toBe(false);
+  });
+
+  it("rejects client-wall-time false positives after a server time limit", () => {
+    const result = {
+      wallDurationMs: 1_846_290,
+      serverDurationMs: 1_800_409,
+      sequence: 22_705,
+      receivedFrameCount: 22_133,
+      segments: Array.from({ length: 256 }, (_, index) => ({
+        sourceText: `source ${index}`,
+        translatedText: `translation ${index}`,
+      })),
+      droppedFrameCount: 0,
+      eventErrors: [],
+      endReason: "time_limit",
+      flush: { status: "completed" },
+    };
+
+    const gate = evaluateLongResult(result, {
+      minimumWallDurationMs: 1_800_000,
+      minimumSegments: 100,
+      minimumTranslationCoverage: 0.99,
+    });
+
+    expect(gate.ok).toBe(false);
+    expect(gate.frameCoverage).toBeCloseTo(22_133 / 22_705);
+    expect(gate.errors).toEqual(expect.arrayContaining([
+      "server received 22133 of 22705 sent frames",
+      "session ended with time_limit",
+    ]));
   });
 });
