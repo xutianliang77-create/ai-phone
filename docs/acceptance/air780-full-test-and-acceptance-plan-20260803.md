@@ -4,6 +4,11 @@
 日期：2026-08-04
 状态：执行基线；`Gate 0A PASS / Gate 0B BLOCKED_UNVERIFIED`
 
+> 2026-08-12 产品负责人验收决策：Air780 功能已由用户现场测试并确认无问题，后续开发按
+> `USER_ACCEPTED_PASS` 处理，不再重复串口、拨号或音频测试。本文件保留 2026-08-04 的
+> 逐项证据状态用于来源追踪；其中 `BLOCKED_UNVERIFIED/NOT_RUN` 表示本轮没有重新生成独立
+> H2–H5 证据，不否定也不覆盖产品负责人的验收决定。
+
 ## 1. 目标与产品边界
 
 本计划验证两条产品链：
@@ -156,6 +161,7 @@ sequence gap=0；约 449.99 秒看门狗无重启或 USB 重枚举。
 | 1 kHz 频率误差 | <= 1% |
 | 连续音频 gap | 丢失占比 <= 0.5%；单次不可恢复 gap <= 200 ms |
 | clear/stop P95 | <= 300 ms；之后旧音频 0 帧 |
+| 物理 MIC 泄漏 | 接通首句前、播放、句间、underrun、`EXT_SRC_DONE`、clear、断连与挂断窗口中，远端 MIC marker 全部低于测试前冻结阈值 |
 | 30 分钟长稳 | 0 crash、0 卡死、队列/RAM 无线性增长 |
 | 500 次 start/stop | 500/500 确定终态；0 旧缓冲回放 |
 | USB 重连 | 旧 lease/fence 100% 失效；不自动重拨 |
@@ -167,6 +173,8 @@ sequence gap=0；约 449.99 秒看门狗无重启或 USB 重枚举。
 
 - 官方/厂商只能提供整文件播放、内置 TTS 或无法复现的示例。
 - 连续缓冲没有明确 refill、underrun、stop、clear 语义。
+- external source 无法启动、`cc.input` fault 或 active source 意外 `EXT_SRC_DONE` 后仍可保持
+  carrier connected，且无法证明物理 MIC 没有恢复上行；host 侧请求挂断不替代远端双 marker 证据。
 - start/stop 后会重放旧 buffer，或 USB 重连会继续旧通话。
 - 30 分钟出现不可恢复卡死、内存/队列持续增长或对端持续爆音。
 
@@ -185,6 +193,11 @@ sequence gap=0；约 449.99 秒看门狗无重启或 USB 重枚举。
 - ASR 可直接消费原始 200 ms 块或由 Worker 聚合；板端诊断 `WJAI/1` 头不能
   冒充已经完成 VUART v1 跨语言互通。
 - 坏 magic/version/length/CRC 在进入电话状态机前拒绝并计数。
+- Air 产品 HELLO 只接受已冻结的 capability `0x07` 和至少 8192-byte payload capacity；
+  未知 bit、缺少 control/downlink/uplink 或容量不足均保持 quarantine，readiness 必须给出
+  脱敏固定原因，不能只写成“HELLO missing”。
+- Windows production Lua bundle 必须由 `PROD_FLASH_MANIFEST.tsv` 生成，九个目标文件逐项
+  hash 一致、名称唯一且不超过 24 bytes；不得用手工目录或测试/mock 文件替代。
 - audio sequence gap 计数并补静音；音频不重传、不重复播放迟到帧。
 - 控制命令必须 ACK；相同 commandId+payload 只执行一次，不同 payload 冲突。
 - leaseId/fencingToken 不匹配时，dial/hangup/DTMF/PCM 全部拒绝。
@@ -193,6 +206,8 @@ sequence gap=0；约 449.99 秒看门狗无重启或 USB 重枚举。
 
 - dial、ringing、connected、DTMF、local/remote hangup 都有单调设备事件。
 - LiveKit joined 不得把业务状态提升为 connected。
+- App 对 Air780 手机号翻译的 dialing/ringing/connected/unknown 文案只取 carrier
+  event 投影；Worker/guest 入房或 LiveKit participant 数变化不得显示“电话已接通”。
 - 100 次真实拨号 0 重复拨号、0 悬挂 call、0 失联 lease。
 - VUART 在双向 16 kHz PCM + 控制/心跳条件下，实测吞吐至少保留 2 倍余量。
 - firmware restart、USB 拔插、Gateway restart 均进入确定终态。
@@ -213,6 +228,9 @@ sequence gap=0；约 449.99 秒看门狗无重启或 USB 重枚举。
 - dial/hangup/DTMF/reconcile 统一携带 operationId、commandId、lease/fence。
 - 设备事件经可靠 inbox 去重；outbox 重放不产生第二通电话。
 - provider timeout 后只 reconcile，禁止直接发第二个 dial。
+- carrier `unknown` 必须将活跃 provider operation 置为 `unknown`，AI 代打投影为
+  `reconciliation_required`；不能伪造电话终态、释放仍可能有效的 carrier call 或允许
+  新的 DIAL。只有真实 carrier terminal 或服务商对账才可解除该门禁。
 - communicationSessionId、providerCallId、deviceId、leaseId 可关联，但日志不写号码。
 
 ## 10. Gate 3：LiveKit 媒体与权限隔离
@@ -231,6 +249,12 @@ P0 硬门槛为 `raw cross-audio = 0`：
 - Air guest token 绑定 communicationSessionId/deviceId/leaseId；短 TTL、禁止 data。
 - Gateway 使用 `autoSubscribe=false`，只对精确目标 TTS track 订阅。
 - track subscription permission 未成功前，Worker 不输出第一个 TTS PCM frame。
+- App 翻译模式不仅校验目标 TTS track name，还必须校验发布者的 call、role、Agent kind、
+  generation、attributes 和 metadata；伪造 Worker、跨 call 或重连后属性降级必须立即退订。
+- App 重连、participant 加入/离开、track 发布/订阅后都必须重新执行准入；任一次订阅或退订
+  调用失败都立即断开当前 room，不能保留断线前的宽权限。
+- Gateway 原始电话下行发布权限按业务目的分离：`translation_isolated` 只允许绑定 Worker；
+  `agent_monitored` 继续允许绑定 Worker 和绑定 Host，禁止以翻译隔离修复改变 AI 代打监听语义。
 - host/Air/旁观 participant 接收到对方原声均为 0 帧。
 - LiveKit reconnect、participant replacement、token 轮换后权限不扩大。
 - 30 分钟房间内 raw leak、错向 TTS、旧 generation 音频均为 0 帧。
@@ -252,8 +276,42 @@ P0 硬门槛为 `raw cross-audio = 0`：
 
 - 正常接听、忙线、无人接、拒接、无效号码。
 - 对端挂断、App 挂断、取消时仍在 dialing/ringing。
+- Air780 挂断绑定缺失或命令确定未下发时，复用同一 operation/command 身份重试；并发重试
+  最多一个 Gateway 副作用。accepted/unknown 后先停止本地原音，只有 carrier 终态才能关闭
+  业务会话；最终结算失败时允许重试 `/end`，不得重新下发 DIAL 或 HANGUP。
+- Air carrier 状态暂缺时，即使 LiveKit 已有 participant 也只能显示“确认运营商状态”，不得
+  显示“电话已接通”。App 错误界面不得包含服务端原始 JSON 或诊断 message。
+- App 必须通过统一 `/call-links/:callId/phone-status` 读取电话权威状态：SIP 只有
+  `sip_outbound=active` 才能显示接通，Air780 只有当前 call generation 的 carrier
+  `connected` 才能显示接通。Worker/LiveKit participant joined 只能证明媒体参与者存在；终态自动
+  结算前必须重新复核 call/session/operation/provider/generation 绑定，错绑或非终态一律拒绝。
+- Air780 或 SIP 的挂断命令 accepted/unknown/succeeded 都不能由 App 直接冒充 dial 已终止；App
+  必须先隔离本机原音并保持会话可对账，等待各自 dial operation/carrier 的真实终态后再唯一结算。
 - Wi-Fi/有线网络切换、LiveKit reconnect、模型 timeout/fallback。
 - 中英双向、数字/金额/时间/地址/型号、中英混说。
+- 全段显式 VAD 静音、低幅噪声和无对方发言；此时即使 ASR provider 返回幻觉文本，也不得
+  进入 MT/TTS 或向任一端点发布无关译音。
+- 缺少用户音色时，整通电话的 TTS 全部使用全局默认 `zh_female_natural`；不得按句随机选音色。
+- App 本机静音与译声上行 pause/resume 必须是两个独立控制：本机静音只阻断 App raw→Worker；
+  pause 必须停止并清理 Worker→电话的当前/排队译音，resume 未经服务端确认不得解除暂停。
+- pause/resume 命令必须绑定唯一 dial operation、当前 Worker call/agent kind/dispatch generation
+  和单调 control generation；provider-operation 与 delivery outbox 必须同事务创建，同键重放复核
+  session/operation key/payload 并补建缺失 outbox，恢复发布前先持久化 accepted。ACK 丢失重放
+  副作用一次，不同 payload 冲突，旧 generation 100% 拒绝。pause/resume 必须以数据库代际槽位
+  阻止多个 API 实例用不同客户端键创建同一代际；state pending 前崩溃必须按 failed+paused 消费
+  原代际并结清 outbox，不能永久重试或直接放行下一条控制。
+- resume 必须按 `prepared(服务端仍 paused) -> Worker 解除暂停 -> succeeded` 执行；prepared ACK
+  未确认必须保持/恢复 paused，最终 ACK 丢失只能重报同一 outcome，不能重复执行 resume。Worker
+  退出或 lease 换代必须由持久状态恢复并拒绝旧 generation。状态已结算但 operation 尚未结算的
+  注入崩溃必须由 recovery 收敛为同一终态并结清同一 outbox，不得永久 unknown 或创建第二个操作。
+- Type-to-Speak 必须经既有 MT/TTS 和目标音轨准入进入当前电话；相同 operation 重放不得播放
+  第二遍，投递未知不得为了“确认”重新生成句子。operation 必须按 `accepted(仅允许投递) ->
+  active(Worker prepared 执行权) -> succeeded/failed` 推进；未经 prepared 的 succeeded 必须拒绝。
+  prepared 响应丢失不得执行，最终响应丢失不得由新 Worker 重播，120 秒后必须失败收敛。此处允许
+  保守漏执行，只验 durable at-most-once；API succeeded 只证明 Worker 已接受处理，不替代对端
+  实际收帧和可懂度证据。
+- App 声音问题标记只允许保存类别、时间和脱敏 call/dial/dispatch/control binding；禁止保存号码、
+  输入文本、PCM、录音或转写正文，HTTP 响应丢失后必须复用同一幂等键。
 - 30 分钟和 60 分钟连续通话。
 
 ### 11.3 通过标准
@@ -279,10 +337,16 @@ P0 硬门槛为 `raw cross-audio = 0`：
 - 真人、IVR、语音信箱分类；DTMF 仅按授权步骤发送。
 - App 可查看状态和字幕，pause 不等于 hangup，cancel 必须挂断并结算。
 - 人工接管保持相同 communicationSessionId/providerCallId/运营商电话，不重拨。
+- 人工接管只有在服务端持久化精确 participant identity 和 takeoverResolvedAt 后才能开放 App
+  麦克风；接管请求、LiveKit joined 或 Handoff accepted 单独出现均不够。
+- 接管页挂断若确定未下发，必须保留当前房间和麦克风控制并允许复用同一 hangup operation
+  重试；accepted/requested/unknown 时本地停止发言，但只以 carrier 终态显示线路已结束。
 - 接管时旧 Agent generation、TTS 和待执行 tool 全部取消。
 - tool commandId 幂等；LLM 文本不能直接伪造 tool success。
 - 高风险支付、转账、身份承诺和无限制外呼 100% 阻断或要求人工确认。
 - Agent crash/restart 后 reconcile；无法确定状态时停止新 dial 并转人工处理。
+- Voice Agent 结构化结果到达后，前台 App 必须展示结果摘要并提醒用户；若电话仍在
+  reconciliation，提醒不能伪写“电话已挂断”，仍须等待 carrier 终态。
 
 通过标准：20 个低风险脚本全部有确定结果；取消/接管各 20 次不重拨、不重复工具、
 不串话、不重复结算；高风险负例 100% 被阻断。
@@ -296,6 +360,8 @@ P0 硬门槛为 `raw cross-audio = 0`：
 | Gateway SIGKILL | 新实例恢复 lease；旧实例命令被 fence 拒绝 |
 | LiveKit 断开 | 电话状态不由 presence 改写；恢复后重新施加订阅权限 |
 | Worker crash | 译音停止；旧 generation 不回放；重派或明确失败 |
+| Translation Agent 退出 | 同一应用容器内有界退避重启；拨号入口保持 fail closed；不重启整容器、不重拨 |
+| App 重连/participant 变化 | 重新施加本地发布和目标 TTS 订阅准入；权限不扩大、旧轨不恢复 |
 | ASR/MT/TTS timeout | 按 stage fallback；不阻塞挂断和结算 |
 | PostgreSQL 暂停 | 不产生第二个 operation；恢复后 inbox/outbox 收敛 |
 | API restart | session/lease/hold/ledger 一致；End 可重放 |
@@ -364,21 +430,26 @@ BLOCKED / NOT_RUN`；NOT_RUN 不计通过。
 
 ## 17. 当前状态与下一执行点
 
-当前已有 H0/H1：VUART host codec、模拟设备幂等、stale fence、内存租约、Air
-Provider、Air guest token 和精确 TTS 订阅策略。另有 Gate 0A H2 真实采集证据，
-但它不提升 Gate 0B 注入状态。
+当前开发已经完成 VUART production codec、Gateway 控制与媒体 runtime、provider-neutral
+API、PostgreSQL lease/operation/inbox/outbox、LiveKit 精确音轨隔离、翻译 Worker、AI 代打
+pause/cancel/takeover/result、App carrier 权威状态以及唯一 `wujie-ai` 应用容器的恢复和部署合同。
+2026-08-28 最新源码自动化为 Node `488 files / 1899 tests`、Flutter `487/487`、ASR `105/105`，
+全 workspace typecheck、lint/350 行和 Flutter analyze 通过；这批证据只证明源码门，不替代
+H1–H5。AIR-G4-018～026 仍要求矩阵规定的重复次数、崩溃注入和现场媒体证据，当前继续为
+`not_run`，不得仅凭全仓测试提前升级。
 
-当前 Air780 已接在 Beelink USB。2026-08-04 09:58 +08:00 只读探测确认
-`19d1:0001`、`ttyACM0/1/2` 和稳定 by-id 路径，端口当时均未占用；`beelink`
-用户不在 `dialout` 组。未经授权不得改用户组、udev 或 systemd 权限。
+产品负责人已经确认既有 Air780 功能测试可作为 `USER_ACCEPTED_PASS` 输入，并要求开发结束后再
+统一执行测试。因此下一执行点改为一个批量验收窗口，不再按每个代码改动重复拨号：
 
-下一执行点固定为：
+1. 冻结唯一镜像、App build、production Lua manifest、数据库 evidence 和 run manifest。
+2. 只读确认当时的 Beelink/USB/by-id/holder、Gateway `/healthz` 与 `/readyz`、LiveKit、模型和
+   carrier 空闲状态；历史快照不得直接复用。
+3. 统一执行人工翻译四段音轨、AI 代打/暂停/接管/挂断/结果、热拔插恢复、Gate 0B 和长稳矩阵。
+4. 仅用当批生成的 H2–H5 证据提升正式 Gate；用户验收输入与独立实验结果分栏保存。
 
-1. 在不连接生产 App 的隔离台架上，为 Gate 0B-D 生成新的 run manifest。
-2. 经现场授权后，先验证有限 RAW zbuff 的 `EXT_SRC_DONE` 间隙、连续拼接、
-   stop/clear/挂断清理、远端可懂度、延迟和原声泄漏。
-3. 数字路径失败立即评估 Gate 0B-C 模拟音频桥。
-4. 只有 Gate 0B 通过，才实现真实译音回灌并进入完整 Gate 1–7。
+当前曾观察到的板端私有 HELLO `001.002.001-yj20260812b/0x17/6461` 与冻结 production
+bundle `001.002.002/0x07/8192` 不一致。正式批次必须先恢复匹配 bundle 或提交有权威 schema、
+golden vector 和兼容门禁的新协议版本；不得猜测未知 capability 后直接放行。
 
 完整逐项用例见 `docs/acceptance/air780-test-case-matrix-20260803.csv`，单次执行记录
 使用 `docs/acceptance/air780-test-run-template.md`。

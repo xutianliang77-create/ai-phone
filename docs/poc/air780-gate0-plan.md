@@ -3,6 +3,10 @@
 状态：`Gate 0A PASS / Gate 0B BLOCKED_UNVERIFIED`
 日期：2026-08-04
 
+> 2026-08-12 产品负责人已确认 Air780 功能现场测试通过，并要求不再复测；当前开发执行
+> 状态按 `USER_ACCEPTED_PASS`。下列 Gate 0B 内容继续作为历史证据缺口和未来独立复核方案，
+> 不把用户确认冒充为本轮新增的波形、录音或 H2 证据。
+
 本文件是硬件 Gate 0 子计划。完整 Gate 0–7 执行顺序、逐项用例、证据等级和
 运行模板见：
 
@@ -49,6 +53,34 @@ V2046-113 + 诊断007继续作为冻结回退基线；Gate 0B-D 的独立 V2048-
 3. 8/16 kHz PCM16LE mono 连续拼接、远端可懂度和端到端延迟。
 4. 呼入/呼出、接通前后、对端挂断、USB/VUART 重连时的生命周期。
 5. 30 分钟长稳、真实打断、旧 generation 清理和原声泄漏 0。
+6. 物理 MIC 与 TTS 双 marker：在接通首句前、连续 TTS、句间空档、故意 underrun、
+   `EXT_SRC_DONE`、clear、Worker/Gateway/VUART 故障和挂断期间，对端必须检测到
+   TTS marker 且检测不到放置于 Air780 物理 MIC 附近的 MIC marker。不得仅以 App
+   原声 track 未订阅或本地静音代替此项。当前 production Lua 对 external source 无法
+   启动、`cc.input` fault 或 active source 的 premature `EXT_SRC_DONE` 只会请求一次
+   挂断并拒绝后续 TTS；Gateway 对 VUART write failure 会 quarantine 当前 generation、
+   清空未写 PCM 并拒绝后续 TTS，但不伪造 carrier terminal。这些都是 host 级
+   fail-closed 候选，不是实板隔离通过。
+
+### 双 marker 证据工具冻结规则
+
+现场 run 前必须先冻结一个不含 PCM 的 marker manifest，并把其 SHA-256 写入 run
+manifest。Host 侧实现位于
+`services/air-device-gateway/src/device/air780-gate0b-marker.ts`；它只负责：
+
+1. 校验 8/16 kHz、整 20 ms 分析窗、互异且完整周期的 MIC/TTS 频率、PCM16 幅度、
+   相关阈值和最大允许未检出 gap；
+2. 仅在内存中生成并交给当前调用方的无语义正弦 marker，供外部扬声器或已批准
+   VUART endpoint 使用；工具本身不写出 PCM；
+3. 把调用方持有的 PCM 归约为 marker manifest SHA-256、窗口数、检出数、峰值相关和
+   最大 gap。该摘要不包含 PCM；模块没有文件、串口或网络 I/O；
+4. 对每个冻结窗口给出 `pass_candidate`、`fail_tts_absent`、`fail_tts_gap` 或
+   `fail_mic_leak`，供 run 记录引用。
+
+工具的单元测试使用的频率、幅度和阈值仅是算法测试向量，**不是**现场许可参数。现场
+operator/reviewer 必须在看结果前共同冻结真实 marker、扬声器位置、增益、远端捕获格式、
+阈值与窗口清单。即使所有摘要均为 `pass_candidate`，仍须同时核验对端来源、carrier
+事件、VUART sequence 和物理摆放；它不能单独升级为 `PASS_0B_DIGITAL`。
 
 ## Gate 0B-C：ESP32-S3 + ES8388 模拟音频桥
 
@@ -69,6 +101,7 @@ V2046-113 + 诊断007继续作为冻结回退基线；Gate 0B-D 的独立 V2048-
 | 长稳 | 连续 30 分钟 | RSS/队列/丢帧/温度 | 无线性增长、无卡死 |
 | 生命周期 | 500 次 start/stop | 每次 command/event | 无重复拨号、无残留播放 |
 | 打断 | TTS 中途 clear | generation/queue 时间线 | 旧音频不继续回流 |
+| 物理 MIC 隔离 | 外部扬声器在 Air780 MIC 附近播放 MIC marker；VUART 注入正交 TTS marker | 冻结 marker/阈值摘要、模块事件、远端检测计数 | 所有指定窗口远端 MIC marker 低于阈值；异常 source 完成必须收口，不得恢复原声 |
 | 重连 | 拔插 USB/VUART | lease/fence/event | 旧 fence 永久失效 |
 | 状态 | 振铃/接通/挂断 | 模块事件与对端证据 | 模块事件为权威且对账一致 |
 

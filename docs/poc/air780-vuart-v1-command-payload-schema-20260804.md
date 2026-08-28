@@ -49,7 +49,10 @@ capability bit：`0x01=CALL_CONTROL`、`0x02=AUDIO_DOWNLINK_16K`、
 未通过对应 Gate 时必须清零。
 
 `maxPayloadBytes >= 6461` 保证接收端能处理一个冻结的 6,400-byte PCM audio
-payload；它不是修改板端 200 ms 缓冲的许可。
+payload；它不是修改板端 200 ms 缓冲的许可。该值只是通用 v1 解码下限，不能覆盖
+最长合法 session binding。无界 AI 当前产品 profile 进一步固定要求 capability `0x07`
+且 `maxPayloadBytes >= 8192`；Gateway 在 HELLO admission 层拒绝未知 bit、缺失任一
+control/downlink/uplink 能力或容量不足的设备，并保持 quarantine。
 
 ## 3. HEARTBEAT
 
