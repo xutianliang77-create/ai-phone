@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math';
 
 import 'package:web_socket_channel/web_socket_channel.dart';
 
@@ -7,18 +8,28 @@ import '../../../../platform/audio/audio_frame.dart';
 import '../../../../platform/asr/asr_text_segment.dart';
 import '../api/realtime_session.dart';
 import 'gateway_realtime_event.dart';
+import 'realtime_reconnect_backoff.dart';
 
 class RealtimeGatewayClient {
-  static const int _maxReconnectAttempts = 3;
   static const Duration _connectTimeout = Duration(seconds: 8);
   static const Duration _controlTimeout = Duration(seconds: 12);
   static const Duration _endTimeout = Duration(seconds: 12);
 
+  RealtimeGatewayClient({
+    RealtimeReconnectBackoff reconnectBackoff =
+        const RealtimeReconnectBackoff(),
+    double Function()? reconnectJitterUnit,
+  })  : _reconnectBackoff = reconnectBackoff,
+        _reconnectJitterUnit = reconnectJitterUnit ?? Random().nextDouble;
+
   final StreamController<GatewayRealtimeEvent> _events =
       StreamController<GatewayRealtimeEvent>.broadcast();
+  final RealtimeReconnectBackoff _reconnectBackoff;
+  final double Function() _reconnectJitterUnit;
   WebSocketChannel? _channel;
   StreamSubscription<dynamic>? _subscription;
   Timer? _reconnectTimer;
+  Timer? _stableConnectionTimer;
   RealtimeSession? _session;
   bool _manualClose = false;
   bool _suspended = false;
@@ -48,6 +59,10 @@ class RealtimeGatewayClient {
       onDone: () => _handleDisconnect(generation),
     );
     await channel.ready.timeout(_connectTimeout);
+    if (generation != _connectionGeneration || !identical(_channel, channel)) {
+      throw StateError('Realtime connection closed before becoming ready');
+    }
+    _scheduleStableConnectionReset(generation);
   }
 
   Future<void> suspendForLifecycle() async {
@@ -68,7 +83,6 @@ class RealtimeGatewayClient {
     _suspended = false;
     try {
       await _open(session);
-      _reconnectAttempts = 0;
       return await resumeAndWait(sessionId, timeout: timeout);
     } catch (_) {
       return false;
@@ -143,6 +157,7 @@ class RealtimeGatewayClient {
   bool end(String sessionId) {
     _manualClose = true;
     _reconnectTimer?.cancel();
+    _stableConnectionTimer?.cancel();
     return _send({'type': 'session.end', 'sessionId': sessionId});
   }
 
@@ -180,6 +195,7 @@ class RealtimeGatewayClient {
     _manualClose = true;
     _suspended = false;
     _reconnectTimer?.cancel();
+    _stableConnectionTimer?.cancel();
     await _closeTransport();
   }
 
@@ -202,16 +218,23 @@ class RealtimeGatewayClient {
     if (event.type == 'session.ended') {
       _manualClose = true;
       _reconnectTimer?.cancel();
+      _stableConnectionTimer?.cancel();
     }
     _events.add(event);
   }
 
   void _handleDisconnect(int generation, [Object? error]) {
     if (generation != _connectionGeneration) return;
+    final subscription = _subscription;
+    final channel = _channel;
     _channel = null;
+    _subscription = null;
+    unawaited(subscription?.cancel());
+    unawaited(channel?.sink.close());
+    _stableConnectionTimer?.cancel();
     if (_manualClose || _suspended) return;
     if (_reconnectTimer?.isActive ?? false) return;
-    if (_reconnectAttempts >= _maxReconnectAttempts) {
+    if (_reconnectAttempts >= _reconnectBackoff.maxAttempts) {
       _events.add(const GatewayRealtimeEvent.connection(
         type: 'connection.closed',
         message: 'Realtime connection lost',
@@ -222,16 +245,19 @@ class RealtimeGatewayClient {
     _reconnectAttempts += 1;
     _events.add(GatewayRealtimeEvent.connection(
       type: 'connection.reconnecting',
-      message: 'Reconnecting ($_reconnectAttempts/$_maxReconnectAttempts)',
+      message:
+          'Reconnecting ($_reconnectAttempts/${_reconnectBackoff.maxAttempts})',
     ));
     _reconnectTimer?.cancel();
-    _reconnectTimer = Timer(Duration(seconds: _reconnectAttempts), () async {
+    final delay = _reconnectBackoff.delayForAttempt(
+      _reconnectAttempts,
+      jitterUnit: _reconnectJitterUnit(),
+    );
+    _reconnectTimer = Timer(delay, () async {
       final session = _session;
-      if (session == null || _manualClose) return;
+      if (session == null || _manualClose || _suspended) return;
       try {
-        await _subscription?.cancel();
         await _open(session);
-        _reconnectAttempts = 0;
         _events.add(const GatewayRealtimeEvent.connection(
           type: 'connection.reconnected',
           message: 'Realtime connection restored',
@@ -242,8 +268,25 @@ class RealtimeGatewayClient {
     });
   }
 
+  void _scheduleStableConnectionReset(int generation) {
+    _stableConnectionTimer?.cancel();
+    _stableConnectionTimer = Timer(
+      _reconnectBackoff.stableConnectionPeriod,
+      () {
+        if (generation != _connectionGeneration ||
+            _channel == null ||
+            _manualClose ||
+            _suspended) {
+          return;
+        }
+        _reconnectAttempts = 0;
+      },
+    );
+  }
+
   Future<void> _closeTransport() async {
     _connectionGeneration += 1;
+    _stableConnectionTimer?.cancel();
     final subscription = _subscription;
     final channel = _channel;
     _subscription = null;
