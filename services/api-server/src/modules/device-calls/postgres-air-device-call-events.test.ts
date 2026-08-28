@@ -135,6 +135,7 @@ const callRow = {
   carrier_state: "unknown",
   livekit_participant_state: "joined",
   call_generation: "3",
+  media_policy: "translation_isolated",
   version: "4",
   room_name: "call_session-1",
   participant_identity: "session-1:guest:air:air-001",
@@ -152,6 +153,7 @@ const callDto = {
   carrierState: "connected" as const,
   liveKitParticipantState: "joined" as const,
   callGeneration: 3,
+  mediaPolicy: "translation_isolated" as const,
   version: 5,
 };
 

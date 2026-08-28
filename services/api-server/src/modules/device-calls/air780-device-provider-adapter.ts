@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import type {
+  AirDeviceMediaPolicy,
   PhoneCallControlPayload,
   PhoneCallResult,
   PhoneCallStatus,
@@ -9,7 +10,6 @@ import type {
   SendPhoneDtmfPayload,
   TelephonyProvider,
 } from "@translation/contracts";
-
 interface DeviceLeaseVerifier {
   assertLease(input: {
     deviceId: string;
@@ -54,14 +54,15 @@ interface DeviceCallRecordInput {
   roomName: string;
   participantIdentity: string;
   callGeneration: number;
+  mediaPolicy: AirDeviceMediaPolicy;
 }
 
 export interface AirDeviceRoomAccess {
   wsUrl: string;
   token: string;
   expiresAt: string;
+  mediaPolicy: AirDeviceMediaPolicy;
 }
-
 interface DeviceRoomAccessIssuer {
   issue(input: {
     communicationSessionId: string;
@@ -69,6 +70,7 @@ interface DeviceRoomAccessIssuer {
     deviceId: string;
     leaseId: string;
     callGeneration: number;
+    mediaPolicy: AirDeviceMediaPolicy;
   }): Promise<AirDeviceRoomAccess>;
 }
 
@@ -97,6 +99,7 @@ export class Air780DeviceProviderAdapter implements TelephonyProvider {
     const payload = request.payload;
     if (!validRequestBinding(request, payload.communicationSessionId) ||
       payload.transport !== "air780_volte" ||
+      !isAirDeviceMediaPolicy(payload.mediaPolicy) ||
       !Number.isInteger(payload.callGeneration) || payload.callGeneration < 0 ||
       payload.callGeneration > 0xffffffff ||
       !/^\+[1-9]\d{7,14}$/.test(payload.phoneNumberReference) ||
@@ -117,7 +120,11 @@ export class Air780DeviceProviderAdapter implements TelephonyProvider {
         deviceId: lease.deviceId,
         leaseId: lease.leaseId,
         callGeneration: payload.callGeneration,
+        mediaPolicy: payload.mediaPolicy,
       });
+      if (roomAccess.mediaPolicy !== payload.mediaPolicy) {
+        throw new Error("Air device room media policy binding conflict");
+      }
     } catch (error) {
       if (error instanceof Error && error.name === "DeviceLeaseConflict") {
         return classify(error);
@@ -134,6 +141,7 @@ export class Air780DeviceProviderAdapter implements TelephonyProvider {
       roomName: payload.roomName,
       participantIdentity: payload.participantIdentity,
       callGeneration: payload.callGeneration,
+      mediaPolicy: payload.mediaPolicy,
     };
     try {
       await this.dependencies.callRecorder.recordDial(callRecord);
@@ -274,6 +282,10 @@ function validRequestBinding(
     Number.isInteger(request.expectedVersion) && request.expectedVersion >= 0 &&
     request.operationId.length > 0 && request.idempotencyKey.length > 0 &&
     Date.parse(request.deadlineAt) > Date.now();
+}
+
+function isAirDeviceMediaPolicy(value: unknown): value is AirDeviceMediaPolicy {
+  return value === "translation_isolated" || value === "agent_monitored";
 }
 
 function commandBinding(

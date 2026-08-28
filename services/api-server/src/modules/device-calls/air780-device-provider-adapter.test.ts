@@ -40,6 +40,7 @@ describe("Air780 business telephony provider", () => {
         communicationSessionId: "session-1",
         transport: "air780_volte",
         callGeneration: 3,
+        mediaPolicy: "translation_isolated",
         roomName: "call_session-1",
         phoneNumberReference: "+8613800138000",
         participantIdentity: "session-1:guest:air:air-001",
@@ -66,6 +67,7 @@ describe("Air780 business telephony provider", () => {
         wsUrl: "wss://livekit.example.cn",
         token: "device-room-token",
         expiresAt: "2099-01-01T00:00:00.000Z",
+        mediaPolicy: "translation_isolated",
       },
     }));
     const dialInput = dial.mock.calls[0]?.[0] as Record<string, unknown>;
@@ -88,6 +90,7 @@ describe("Air780 business telephony provider", () => {
       providerOperationId: "op-1",
       providerCallId: expect.stringMatching(/^air_[0-9a-f]{32}$/),
       callGeneration: 3,
+      mediaPolicy: "translation_isolated",
     }));
     expect(recordDial.mock.invocationCallOrder[0])
       .toBeLessThan(dial.mock.invocationCallOrder[0]!);
@@ -117,6 +120,7 @@ describe("Air780 business telephony provider", () => {
         communicationSessionId: "different-session",
         transport: "air780_volte",
         callGeneration: 3,
+        mediaPolicy: "translation_isolated",
         roomName: "call_session-1",
         phoneNumberReference: "+8613800138000",
         participantIdentity: "session-1:guest:air:air-001",
@@ -160,6 +164,7 @@ describe("Air780 business telephony provider", () => {
         communicationSessionId: "session-1",
         transport: "air780_volte",
         callGeneration: 3,
+        mediaPolicy: "translation_isolated",
         phoneNumberReference: "+8613800138000",
         deviceLease: {
           deviceId: "air-001",
@@ -199,6 +204,7 @@ describe("Air780 business telephony provider", () => {
         communicationSessionId: "session-1",
         transport: "air780_volte",
         callGeneration: 3,
+        mediaPolicy: "translation_isolated",
         roomName: "call_session-1",
         phoneNumberReference: "+8613800138000",
         participantIdentity: "session-1:guest:air:air-001",
@@ -218,6 +224,53 @@ describe("Air780 business telephony provider", () => {
     expect(dial).not.toHaveBeenCalled();
   });
 
+  it("does not dial when token and requested media policies differ", async () => {
+    const dial = vi.fn();
+    const provider = new Air780DeviceProviderAdapter({
+      leaseVerifier: { assertLease: vi.fn() },
+      callRecorder: { recordDial: vi.fn(), recordDialRejected: vi.fn() },
+      roomAccessIssuer: {
+        issue: vi.fn().mockResolvedValue({
+          wsUrl: "wss://livekit.example.cn",
+          token: "device-room-token",
+          expiresAt: "2099-01-01T00:00:00.000Z",
+          mediaPolicy: "agent_monitored",
+        }),
+      },
+      gateway: {
+        dial,
+        hangup: vi.fn(),
+        sendDtmf: vi.fn(),
+        reconcile: vi.fn(),
+      },
+    });
+
+    const result = await provider.placePhoneCall({
+      operationId: "op-policy-conflict",
+      sessionId: "session-1",
+      expectedVersion: 1,
+      idempotencyKey: "policy-conflict",
+      deadlineAt: new Date(Date.now() + 10_000).toISOString(),
+      payload: {
+        communicationSessionId: "session-1",
+        transport: "air780_volte",
+        callGeneration: 3,
+        mediaPolicy: "translation_isolated",
+        roomName: "call_session-1",
+        phoneNumberReference: "+8613800138000",
+        participantIdentity: "session-1:guest:air:air-001",
+        deviceLease: {
+          deviceId: "air-001",
+          leaseId: "lease-1",
+          fencingToken: 3,
+        },
+      },
+    });
+
+    expect(result).toMatchObject({ ok: false, errorClass: "unavailable" });
+    expect(dial).not.toHaveBeenCalled();
+  });
+
 });
 
 function roomAccessIssuer() {
@@ -226,6 +279,7 @@ function roomAccessIssuer() {
       wsUrl: "wss://livekit.example.cn",
       token: "device-room-token",
       expiresAt: "2099-01-01T00:00:00.000Z",
+      mediaPolicy: "translation_isolated",
     }),
   };
 }

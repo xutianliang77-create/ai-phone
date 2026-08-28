@@ -93,6 +93,7 @@ function dial() {
       wsUrl: "wss://livekit.example.cn",
       token: "device-room-token",
       expiresAt: "2099-01-01T00:00:00.000Z",
+      mediaPolicy: "translation_isolated" as const,
     },
   };
 }

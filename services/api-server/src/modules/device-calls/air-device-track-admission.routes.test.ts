@@ -81,4 +81,5 @@ const request = {
   ).toString("base64url")}`,
   publisherIdentity: "comm-1:worker:voice-agent-1",
 };
-const { roomName: _roomName, fencingToken: _fencingToken, ...admission } = request;
+const { roomName: _roomName, fencingToken: _fencingToken, ...binding } = request;
+const admission = { uplinkSource: "translated_tts", ...binding } as const;

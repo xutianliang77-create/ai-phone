@@ -18,6 +18,8 @@ import { parseAirDeviceHeartbeatRequest } from
   "./air-device-heartbeat-request.js";
 import { AirDeviceHeartbeatService } from
   "./air-device-heartbeat-service.js";
+import { registerAirDeviceMediaRecoveryRoutes } from
+  "./air-device-media-recovery.routes.js";
 
 interface CarrierEventProcessor {
   processCarrierEvent(input: AirDeviceCarrierEventRequest & {
@@ -49,6 +51,7 @@ export function setAirDeviceHeartbeatProcessorForTests(
 }
 
 export function registerAirDeviceCallRoutes(app: FastifyInstance) {
+  registerAirDeviceMediaRecoveryRoutes(app);
   app.post("/internal/device-calls/carrier-events", async (request, reply) => {
     if (!authorized(request.headers.authorization)) {
       return sendError(reply, 401, "internal_error", "Unauthorized device event");

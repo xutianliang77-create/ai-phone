@@ -102,6 +102,7 @@ function setup(options: {
         wsUrl: "wss://livekit.example.cn",
         token: "device-room-token",
         expiresAt: "2099-01-01T00:00:00.000Z",
+        mediaPolicy: "translation_isolated",
       }),
     },
     gateway: {
@@ -125,6 +126,7 @@ function request(operationId: string) {
       communicationSessionId: "session-1",
       transport: "air780_volte" as const,
       callGeneration: 3,
+      mediaPolicy: "translation_isolated" as const,
       roomName: "call_session-1",
       phoneNumberReference: "+8613800138000",
       participantIdentity: "session-1:guest:air:air-001",

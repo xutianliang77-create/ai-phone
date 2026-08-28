@@ -9,7 +9,14 @@ import { getRepositoryRuntime } from
   "../../infrastructure/storage/repository-runtime.js";
 import { createAirDeviceTrackAdmission } from
   "./device-call-track-admission.js";
+import {
+  createAirDeviceUplinkSourceAuthorizer,
+  DeviceCallMediaAdmissionConflict,
+} from "./device-call-uplink-source-authorizer.js";
 import { DeviceLeaseConflict } from "./device-lease-registry.js";
+import { getLiveKitRoomConfig } from "../call-links/call-room-readiness.js";
+import { LiveKitAirTrackBindingVerifier } from
+  "./livekit-air-track-binding-verifier.js";
 import { DeviceCallBindingConflict } from
   "./postgres-air-device-calls.repository.js";
 
@@ -54,7 +61,8 @@ export function registerAirDeviceTrackAdmissionRoutes(app: FastifyInstance) {
       return { status: "accepted", admission };
     } catch (error) {
       if (error instanceof DeviceLeaseConflict ||
-        error instanceof DeviceCallBindingConflict) {
+        error instanceof DeviceCallBindingConflict ||
+        error instanceof DeviceCallMediaAdmissionConflict) {
         return sendError(
           reply,
           409,
@@ -86,10 +94,18 @@ function resolveProcessor(): TrackAdmissionProcessor | null {
   if (testProcessor) return testProcessor;
   const runtime = getRepositoryRuntime();
   if (runtime.driver !== "postgres") return null;
+  const liveKit = getLiveKitRoomConfig();
+  if (!liveKit.ok) return null;
+  const sourceAuthorizer = createAirDeviceUplinkSourceAuthorizer(
+    runtime.postgres.airDeviceCalls,
+  );
+  const trackVerifier = new LiveKitAirTrackBindingVerifier(liveKit.config);
   return {
     admit: (input) => createAirDeviceTrackAdmission(input, {
       leaseVerifier: runtime.postgres.airDeviceRegistry,
       callVerifier: runtime.postgres.airDeviceCalls,
+      sourceAuthorizer,
+      trackVerifier,
       nowMs: Date.now(),
     }),
   };

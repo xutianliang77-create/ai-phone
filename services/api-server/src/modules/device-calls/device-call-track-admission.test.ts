@@ -12,8 +12,11 @@ describe("Air device TTS track admission", () => {
     await expect(createAirDeviceTrackAdmission(input, {
       leaseVerifier: { assertLease },
       callVerifier: { assertCallBinding },
+      sourceAuthorizer: { assertAuthorized: vi.fn() },
+      trackVerifier: { assertTrackBinding: vi.fn() },
       nowMs: 1_722_741_200_000,
     })).resolves.toEqual({
+      uplinkSource: "translated_tts",
       trackSid: "track-1",
       trackName: input.trackName,
       publisherIdentity: "session-1:worker:translation",
@@ -48,6 +51,8 @@ describe("Air device TTS track admission", () => {
     }, {
       leaseVerifier: { assertLease },
       callVerifier: { assertCallBinding: vi.fn() },
+      sourceAuthorizer: { assertAuthorized: vi.fn() },
+      trackVerifier: { assertTrackBinding: vi.fn() },
       nowMs: 1_722_741_200_000,
     })).rejects.toThrow("Invalid Air device track admission");
     expect(assertLease).not.toHaveBeenCalled();
@@ -61,6 +66,8 @@ describe("Air device TTS track admission", () => {
         },
       },
       callVerifier: { assertCallBinding: vi.fn() },
+      sourceAuthorizer: { assertAuthorized: vi.fn() },
+      trackVerifier: { assertTrackBinding: vi.fn() },
       nowMs: 1_722_741_200_000,
     })).rejects.toThrow(DeviceLeaseConflict);
   });
@@ -74,10 +81,32 @@ describe("Air device TTS track admission", () => {
     await expect(createAirDeviceTrackAdmission(input, {
       leaseVerifier: { assertLease: vi.fn() },
       callVerifier: { assertCallBinding: vi.fn() },
+      sourceAuthorizer: { assertAuthorized: vi.fn() },
+      trackVerifier: { assertTrackBinding: vi.fn() },
       nowMs: 1_722_741_200_000,
     })).resolves.toMatchObject({
       publisherIdentity: input.publisherIdentity,
       targetParticipantIdentity: input.targetParticipantIdentity,
+    });
+  });
+
+  it("classifies only an exact accepted Host microphone as takeover media", async () => {
+    const input = {
+      ...validInput(),
+      publisherIdentity: "session-1:host:user-1",
+      trackName: "microphone",
+    };
+
+    await expect(createAirDeviceTrackAdmission(input, {
+      leaseVerifier: { assertLease: vi.fn() },
+      callVerifier: { assertCallBinding: vi.fn() },
+      sourceAuthorizer: { assertAuthorized: vi.fn() },
+      trackVerifier: { assertTrackBinding: vi.fn() },
+      nowMs: 1_722_741_200_000,
+    })).resolves.toMatchObject({
+      uplinkSource: "takeover_microphone",
+      publisherIdentity: input.publisherIdentity,
+      trackName: "microphone",
     });
   });
 });

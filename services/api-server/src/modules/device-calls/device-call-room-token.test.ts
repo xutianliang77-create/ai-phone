@@ -18,6 +18,7 @@ describe("Air device call room token", () => {
       deviceId: "air-001",
       leaseId: "lease-1",
       callGeneration: 3,
+      mediaPolicy: "translation_isolated",
     });
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -34,6 +35,7 @@ describe("Air device call room token", () => {
       "ai.phone.device_id": "air-001",
       "ai.phone.lease_id": "lease-1",
       "ai.phone.call_generation": "3",
+      "ai.phone.media_policy": "translation_isolated",
     });
     expect(JSON.stringify(grants)).not.toContain("fencingToken");
     expect(grants.video).toMatchObject({
@@ -54,6 +56,7 @@ describe("Air device call room token", () => {
       deviceId: "air-001",
       leaseId: "lease-1",
       callGeneration: 3,
+      mediaPolicy: "agent_monitored",
     });
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -64,7 +67,17 @@ describe("Air device call room token", () => {
       deviceId: "air-001",
       leaseId: "lease-1",
       callGeneration: 3,
+      mediaPolicy: "agent_monitored",
     })).resolves.toBe(true);
+    await expect(verifyAirDeviceCallRoomToken({
+      token: result.token,
+      communicationSessionId: "session-1",
+      roomName: "call_session-1",
+      deviceId: "air-001",
+      leaseId: "lease-1",
+      callGeneration: 3,
+      mediaPolicy: "translation_isolated",
+    })).resolves.toBe(false);
     await expect(verifyAirDeviceCallRoomToken({
       token: result.token,
       communicationSessionId: "session-1",
@@ -72,6 +85,7 @@ describe("Air device call room token", () => {
       deviceId: "air-001",
       leaseId: "lease-stale",
       callGeneration: 3,
+      mediaPolicy: "agent_monitored",
     })).resolves.toBe(false);
   });
 
@@ -82,6 +96,7 @@ describe("Air device call room token", () => {
       deviceId: "air-001",
       leaseId: "lease-1",
       callGeneration: 3,
+      mediaPolicy: "translation_isolated",
     })).resolves.toMatchObject({ ok: false });
 
     const result = await createAirDeviceCallRoomToken({
@@ -90,6 +105,7 @@ describe("Air device call room token", () => {
       deviceId: "air-001",
       leaseId: "lease-1",
       callGeneration: 3,
+      mediaPolicy: "translation_isolated",
     });
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -100,6 +116,7 @@ describe("Air device call room token", () => {
       deviceId: "air-001",
       leaseId: "lease-1",
       callGeneration: 2,
+      mediaPolicy: "translation_isolated",
     })).resolves.toBe(false);
   });
 });

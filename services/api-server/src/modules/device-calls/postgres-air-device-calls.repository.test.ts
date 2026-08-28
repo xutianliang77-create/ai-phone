@@ -23,17 +23,20 @@ describe("PostgreSQL Air device calls", () => {
       roomName: "call_session-1",
       participantIdentity: "session-1:guest:air:air-001",
       callGeneration: 3,
+      mediaPolicy: "translation_isolated",
     })).resolves.toMatchObject({
       providerCallId: "air-call-1",
       carrierState: "dialing",
       callGeneration: 3,
+      mediaPolicy: "translation_isolated",
     });
     expect(fixture.query).toHaveBeenCalledWith(
       expect.stringMatching(
         /provider\.operation_type = 'phone_outbound'[\s\S]+reliable_outbox_events/,
       ),
       ["air-call-1", "session-1", "op-1", "air-001", "lease-1", 7,
-        "call_session-1", "session-1:guest:air:air-001", 3],
+        "call_session-1", "session-1:guest:air:air-001", 3,
+        "translation_isolated"],
     );
   });
 
@@ -56,6 +59,7 @@ describe("PostgreSQL Air device calls", () => {
       roomName: "call_session-1",
       participantIdentity: "session-1:guest:air:air-001",
       callGeneration: 3,
+      mediaPolicy: "translation_isolated",
     })).resolves.toMatchObject({
       providerCallId: "air-call-1",
       carrierState: "failed",
@@ -66,7 +70,8 @@ describe("PostgreSQL Air device calls", () => {
         /carrier_state = 'failed'[\s\S]+carrier_state = 'dialing'[\s\S]+device\.call\.failed/,
       ),
       ["air-call-1", "session-1", "op-1", "air-001", "lease-1", 7,
-        "call_session-1", "session-1:guest:air:air-001", 3],
+        "call_session-1", "session-1:guest:air:air-001", 3,
+        "translation_isolated"],
     );
   });
 
@@ -134,6 +139,47 @@ describe("PostgreSQL Air device calls", () => {
     );
   });
 
+  it("loads media admission state only for the current fenced generation", async () => {
+    const fixture = pool([{ ...callRow, carrier_state: "connected" }]);
+    const repository = new PostgresAirDeviceCallsRepository(fixture.pool);
+
+    await expect(repository.findCurrentCallStatus(binding())).resolves.toMatchObject({
+      carrierState: "connected",
+      mediaPolicy: "translation_isolated",
+      callGeneration: 3,
+    });
+    expect(fixture.query).toHaveBeenCalledWith(
+      expect.stringMatching(
+        /call_generation = \$5[\s\S]+air_device_lease_is_current/,
+      ),
+      ["session-1", "air-001", "lease-1", 7, 3],
+    );
+  });
+
+  it("loads recovery access only for the exact non-unknown active carrier call", async () => {
+    const fixture = pool([{ ...callRow, carrier_state: "connected" }]);
+    const repository = new PostgresAirDeviceCallsRepository(fixture.pool);
+    const recoveryBinding = {
+      ...binding(),
+      providerCallId: "air-call-1",
+    };
+
+    await expect(repository.findRecoverableMediaBinding(recoveryBinding))
+      .resolves.toMatchObject({
+        providerCallId: "air-call-1",
+        carrierState: "connected",
+        roomName: "call_session-1",
+        participantIdentity: "session-1:guest:air:air-001",
+        mediaPolicy: "translation_isolated",
+      });
+    expect(fixture.query).toHaveBeenCalledWith(
+      expect.stringMatching(
+        /provider_call_id = \$1[\s\S]+carrier_state IN \('dialing', 'ringing', 'connected'\)/,
+      ),
+      ["air-call-1", "session-1", "air-001", "lease-1", 7, 3],
+    );
+  });
+
   it("lists only bounded calls that require carrier reconciliation", async () => {
     const fixture = pool([callRow]);
     const repository = new PostgresAirDeviceCallsRepository(fixture.pool);
@@ -173,6 +219,7 @@ const callRow = {
   carrier_state: "unknown",
   livekit_participant_state: "joined",
   call_generation: "3",
+  media_policy: "translation_isolated",
   version: "4",
   room_name: "call_session-1",
   participant_identity: "session-1:guest:air:air-001",

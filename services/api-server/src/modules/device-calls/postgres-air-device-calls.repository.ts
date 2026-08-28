@@ -1,23 +1,21 @@
 import type { Pool, QueryResultRow } from "pg";
-import type { AirDeviceCallDto } from "@translation/contracts";
+import type { AirDeviceMediaRecoveryRequest } from "@translation/contracts";
+import {
+  airDeviceCallFromRow,
+  airDeviceControlBindingFromRow,
+  matchesAirDeviceDial,
+  type AirDeviceCallRecordInput,
+  type AirDeviceCallRow,
+} from "./postgres-air-device-call-record.js";
+
+export { airDeviceCallFromRow } from "./postgres-air-device-call-record.js";
+export type { AirDeviceCallRow } from "./postgres-air-device-call-record.js";
 
 export class DeviceCallBindingConflict extends Error {
   constructor() {
     super("Stale Air device call binding");
     this.name = "DeviceCallBindingConflict";
   }
-}
-
-interface AirDeviceCallRecordInput {
-  providerCallId: string;
-  providerOperationId: string;
-  communicationSessionId: string;
-  deviceId: string;
-  leaseId: string;
-  fencingToken: number;
-  roomName: string;
-  participantIdentity: string;
-  callGeneration: number;
 }
 
 export class PostgresAirDeviceCallsRepository {
@@ -32,9 +30,9 @@ export class PostgresAirDeviceCallsRepository {
             provider_call_id, communication_session_id, provider_operation_id,
             device_id, lease_id, fencing_token, room_name,
             participant_identity, carrier_state,
-            livekit_participant_state, call_generation
+            livekit_participant_state, call_generation, media_policy
           )
-          SELECT $1, $2, $3, $4, $5, $6, $7, $8, 'dialing', 'absent', $9
+          SELECT $1, $2, $3, $4, $5, $6, $7, $8, 'dialing', 'absent', $9, $10
           FROM ai_phone.provider_operations AS provider
           JOIN ai_phone.air_device_leases AS lease
             ON lease.lease_id = $5 AND lease.device_id = $4
@@ -67,7 +65,8 @@ export class PostgresAirDeviceCallsRepository {
               'deviceId', device_id,
               'leaseId', lease_id,
               'fencingToken', fencing_token,
-              'callGeneration', call_generation
+              'callGeneration', call_generation,
+              'mediaPolicy', media_policy
             )
           FROM saved WHERE true
           ON CONFLICT(idempotency_key) DO NOTHING RETURNING id
@@ -76,9 +75,11 @@ export class PostgresAirDeviceCallsRepository {
       `, [input.providerCallId, input.communicationSessionId,
         input.providerOperationId, input.deviceId, input.leaseId,
         input.fencingToken, input.roomName, input.participantIdentity,
-        input.callGeneration]);
+        input.callGeneration, input.mediaPolicy]);
       const row = result.rows[0];
-      if (!row || !matchesDial(row, input)) throw new DeviceCallBindingConflict();
+      if (!row || !matchesAirDeviceDial(row, input)) {
+        throw new DeviceCallBindingConflict();
+      }
       return airDeviceCallFromRow(row);
     } finally {
       client.release();
@@ -97,7 +98,8 @@ export class PostgresAirDeviceCallsRepository {
             AND provider_operation_id = $3 AND device_id = $4
             AND lease_id = $5 AND fencing_token = $6
             AND room_name = $7 AND participant_identity = $8
-            AND call_generation = $9 AND carrier_state = 'dialing'
+            AND call_generation = $9 AND media_policy = $10
+            AND carrier_state = 'dialing'
           RETURNING *
         ), saved AS (
           SELECT * FROM updated
@@ -107,7 +109,8 @@ export class PostgresAirDeviceCallsRepository {
             AND provider_operation_id = $3 AND device_id = $4
             AND lease_id = $5 AND fencing_token = $6
             AND room_name = $7 AND participant_identity = $8
-            AND call_generation = $9 AND carrier_state = 'failed'
+            AND call_generation = $9 AND media_policy = $10
+            AND carrier_state = 'failed'
             AND NOT EXISTS(SELECT 1 FROM updated)
           LIMIT 1
         ), outboxed AS (
@@ -125,6 +128,7 @@ export class PostgresAirDeviceCallsRepository {
               'leaseId', lease_id,
               'fencingToken', fencing_token,
               'callGeneration', call_generation,
+              'mediaPolicy', media_policy,
               'reason', 'command_rejected'
             )
           FROM saved WHERE true
@@ -134,9 +138,10 @@ export class PostgresAirDeviceCallsRepository {
       `, [input.providerCallId, input.communicationSessionId,
         input.providerOperationId, input.deviceId, input.leaseId,
         input.fencingToken, input.roomName, input.participantIdentity,
-        input.callGeneration]);
+        input.callGeneration, input.mediaPolicy]);
       const row = result.rows[0];
-      if (!row || row.carrier_state !== "failed" || !matchesDial(row, input)) {
+      if (!row || row.carrier_state !== "failed" ||
+        !matchesAirDeviceDial(row, input)) {
         throw new DeviceCallBindingConflict();
       }
       return airDeviceCallFromRow(row);
@@ -210,6 +215,65 @@ export class PostgresAirDeviceCallsRepository {
     }
   }
 
+  async findCurrentCallStatus(input: {
+    communicationSessionId: string;
+    deviceId: string;
+    leaseId: string;
+    fencingToken: number;
+    callGeneration: number;
+  }) {
+    const client = await this.pool.connect();
+    try {
+      const result = await client.query<AirDeviceCallRow>(`
+        SELECT * FROM ai_phone.air_device_calls
+        WHERE communication_session_id = $1 AND device_id = $2
+          AND lease_id = $3 AND fencing_token = $4
+          AND call_generation = $5
+          AND carrier_state IN ('dialing', 'ringing', 'connected', 'unknown')
+          AND ai_phone.air_device_lease_is_current(
+            device_id, lease_id, fencing_token
+          )
+        ORDER BY version DESC LIMIT 1
+      `, [input.communicationSessionId, input.deviceId, input.leaseId,
+        input.fencingToken, input.callGeneration]);
+      const row = result.rows[0];
+      return row ? airDeviceCallFromRow(row) : null;
+    } finally {
+      client.release();
+    }
+  }
+
+  async findRecoverableMediaBinding(input: AirDeviceMediaRecoveryRequest) {
+    const client = await this.pool.connect();
+    try {
+      const result = await client.query<AirDeviceCallRow>(`
+        SELECT * FROM ai_phone.air_device_calls
+        WHERE provider_call_id = $1 AND communication_session_id = $2
+          AND device_id = $3 AND lease_id = $4 AND fencing_token = $5
+          AND call_generation = $6
+          AND carrier_state IN ('dialing', 'ringing', 'connected')
+          AND ai_phone.air_device_lease_is_current(
+            device_id, lease_id, fencing_token
+          )
+        LIMIT 1
+      `, [input.providerCallId, input.communicationSessionId, input.deviceId,
+        input.leaseId, input.fencingToken, input.callGeneration]);
+      const row = result.rows[0];
+      if (!row) return null;
+      const call = airDeviceCallFromRow(row);
+      if (!row.room_name || !row.participant_identity) {
+        throw new Error("Invalid PostgreSQL Air device media binding");
+      }
+      return {
+        ...call,
+        roomName: row.room_name,
+        participantIdentity: row.participant_identity,
+      };
+    } finally {
+      client.release();
+    }
+  }
+
   async listReconcile(limit = 100) {
     if (!Number.isInteger(limit) || limit < 1 || limit > 500) {
       throw new Error("Invalid Air device reconciliation limit");
@@ -219,7 +283,8 @@ export class PostgresAirDeviceCallsRepository {
       const result = await client.query<AirDeviceCallRow>(`
         SELECT provider_call_id, communication_session_id,
           provider_operation_id, device_id, lease_id, fencing_token,
-          carrier_state, livekit_participant_state, call_generation, version
+          carrier_state, livekit_participant_state, call_generation,
+          media_policy, version
         FROM ai_phone.air_device_calls
         WHERE carrier_state IN ('dialing', 'ringing', 'connected', 'unknown')
         ORDER BY updated_at, provider_call_id LIMIT $1
@@ -233,88 +298,4 @@ export class PostgresAirDeviceCallsRepository {
 
 interface CurrentRow extends QueryResultRow {
   current: boolean;
-}
-
-export interface AirDeviceCallRow extends QueryResultRow {
-  provider_call_id: string;
-  communication_session_id: string;
-  provider_operation_id: string;
-  device_id: string;
-  lease_id: string;
-  fencing_token: string;
-  carrier_state: AirDeviceCallDto["carrierState"];
-  livekit_participant_state: AirDeviceCallDto["liveKitParticipantState"];
-  call_generation: string;
-  version: string;
-  room_name: string;
-  participant_identity: string;
-  carrier_event_sequence: string;
-  livekit_event_sequence: string;
-  connected_at?: Date | string | null;
-  ended_at?: Date | string | null;
-}
-
-function matchesDial(row: AirDeviceCallRow, input: AirDeviceCallRecordInput) {
-  return row.provider_call_id === input.providerCallId &&
-    row.provider_operation_id === input.providerOperationId &&
-    row.communication_session_id === input.communicationSessionId &&
-    row.device_id === input.deviceId && row.lease_id === input.leaseId &&
-    Number(row.fencing_token) === input.fencingToken &&
-    row.room_name === input.roomName &&
-    row.participant_identity === input.participantIdentity &&
-    Number(row.call_generation) === input.callGeneration;
-}
-
-export function airDeviceCallFromRow(row: AirDeviceCallRow): AirDeviceCallDto {
-  const fencingToken = Number(row.fencing_token);
-  const callGeneration = Number(row.call_generation);
-  const version = Number(row.version);
-  if (!row.provider_call_id || !row.communication_session_id ||
-    !row.provider_operation_id || !row.device_id || !row.lease_id ||
-    !Number.isSafeInteger(fencingToken) || fencingToken < 1 ||
-    !Number.isSafeInteger(callGeneration) || callGeneration < 0 ||
-    !Number.isSafeInteger(version) || version < 1) {
-    throw new Error("Invalid PostgreSQL Air device call");
-  }
-  const connectedAt = timestamp(row.connected_at);
-  const endedAt = timestamp(row.ended_at);
-  return {
-    providerCallId: row.provider_call_id,
-    communicationSessionId: row.communication_session_id,
-    providerOperationId: row.provider_operation_id,
-    deviceId: row.device_id,
-    leaseId: row.lease_id,
-    fencingToken,
-    carrierState: row.carrier_state,
-    liveKitParticipantState: row.livekit_participant_state,
-    callGeneration,
-    version,
-    ...(connectedAt ? { connectedAt } : {}),
-    ...(endedAt ? { endedAt } : {}),
-  };
-}
-
-function timestamp(value: Date | string | null | undefined) {
-  if (value === null || value === undefined) return null;
-  const parsed = value instanceof Date ? value : new Date(value);
-  return Number.isFinite(parsed.getTime()) ? parsed.toISOString() : null;
-}
-
-function airDeviceControlBindingFromRow(row: AirDeviceCallRow) {
-  const call = airDeviceCallFromRow(row);
-  if (!row.room_name || !row.participant_identity) {
-    throw new Error("Invalid PostgreSQL Air device control binding");
-  }
-  return {
-    providerCallId: call.providerCallId,
-    participantIdentity: row.participant_identity,
-    roomName: row.room_name,
-    carrierState: call.carrierState,
-    callGeneration: call.callGeneration,
-    deviceLease: {
-      deviceId: call.deviceId,
-      leaseId: call.leaseId,
-      fencingToken: call.fencingToken,
-    },
-  };
 }

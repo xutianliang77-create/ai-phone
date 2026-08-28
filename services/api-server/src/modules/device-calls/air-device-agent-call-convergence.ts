@@ -11,6 +11,7 @@ import { getVoiceAgentRuntimeSupervisor } from
   "../agent-calls/voice-agent-runtime-supervisor.js";
 import {
   findProviderOperation,
+  findSessionProviderOperation,
   updateProviderOperation,
 } from "../provider-operations/provider-operations-runtime.repository.js";
 import { completeSessionWithUsage } from "../sessions/session-completion.js";
@@ -40,6 +41,15 @@ export function airCarrierAgentStatusRequest(
       ...base,
       status: "in_progress",
       providerOperationStatus: "accepted",
+    };
+  }
+  if (event.carrierState === "unknown") {
+    return {
+      ...base,
+      status: "failed",
+      providerOperationStatus: "unknown",
+      failureReason: "carrier_unknown",
+      nextStep: "电话线路状态待服务商对账；对账完成前不得重拨。",
     };
   }
   if (!terminalCarrierState(event.carrierState)) return null;
@@ -121,11 +131,37 @@ async function convergeAirDeviceCallLink(
       });
       return "operation" in updated ? updated.operation : operation;
     }
+    if (event.carrierState === "unknown") {
+      if (["unknown", "succeeded", "failed", "cancelled"].includes(operation.status)) {
+        return operation;
+      }
+      const updated = await updateProviderOperation({
+        operationId: operation.id,
+        status: "unknown",
+        expectedVersion: operation.version,
+        externalResourceId: event.providerCallId,
+        errorClass: `carrier_${event.carrierCause}`,
+        now: new Date(event.occurredAt),
+      });
+      return "operation" in updated ? updated.operation : operation;
+    }
     if (!terminalCarrierState(event.carrierState)) return operation;
 
     return await withSessionWriteLock(record.callId, async () => {
       const current = await findProviderOperation(operation.id) ?? operation;
       if (["succeeded", "failed", "cancelled"].includes(current.status)) {
+        await settleTranslationHangupOperation(
+          event.communicationSessionId,
+          event.providerCallId,
+          call.endedAt ?? event.occurredAt,
+          event.carrierState,
+        );
+        // Session settlement and call-leg cleanup happen before the outbound
+        // operation becomes terminal. A crash can therefore leave only the
+        // room event delivery or Worker stop unfinished. Re-run those two
+        // idempotent cleanup steps when the carrier terminal event is replayed.
+        await deliverPendingCallRoomDataEvents(record).catch(() => undefined);
+        await getCallLinkWorkerSupervisor().stop(record.callId);
         return current;
       }
       const endedAt = call.endedAt ?? event.occurredAt;
@@ -153,6 +189,12 @@ async function convergeAirDeviceCallLink(
         now: new Date(endedAt),
       });
       const terminal = "operation" in updated ? updated.operation : current;
+      await settleTranslationHangupOperation(
+        event.communicationSessionId,
+        event.providerCallId,
+        endedAt,
+        event.carrierState,
+      );
       await deliverPendingCallRoomDataEvents(record).catch(() => undefined);
       await getCallLinkWorkerSupervisor().stop(record.callId);
       return terminal;
@@ -162,6 +204,44 @@ async function convergeAirDeviceCallLink(
       await releaseCallLease(call);
     }
   }
+}
+
+async function settleTranslationHangupOperation(
+  sessionId: string,
+  providerCallId: string,
+  observedAt: string,
+  carrierState: AirDeviceCarrierEventRequest["carrierState"],
+) {
+  let operation = await findSessionProviderOperation(
+    sessionId,
+    "phone_hangup",
+    "hangup",
+  );
+  if (!operation || ["succeeded", "failed", "cancelled"].includes(
+    operation.status,
+  )) return;
+  if (operation.status === "in_flight") {
+    const accepted = await updateProviderOperation({
+      operationId: operation.id,
+      status: "accepted",
+      expectedVersion: operation.version,
+      externalResourceId: providerCallId,
+      now: new Date(observedAt),
+    });
+    operation = "operation" in accepted && accepted.operation
+      ? accepted.operation
+      : operation;
+  }
+  if (!["accepted", "active", "unknown"].includes(operation.status)) return;
+  await updateProviderOperation({
+    operationId: operation.id,
+    status: "succeeded",
+    expectedVersion: operation.version,
+    externalResourceId: providerCallId,
+    completionObservedAt: observedAt,
+    completionObservedEvent: `carrier_${carrierState}`,
+    now: new Date(observedAt),
+  });
 }
 
 function terminalCarrierState(state: AirDeviceCarrierEventRequest["carrierState"]) {

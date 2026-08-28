@@ -1,4 +1,5 @@
 import { AccessToken, TokenVerifier, TrackSource } from "livekit-server-sdk";
+import type { AirDeviceMediaPolicy } from "@translation/contracts";
 import { getLiveKitRoomConfig } from "../call-links/call-room-readiness.js";
 
 export interface AirDeviceCallRoomTokenResult {
@@ -10,6 +11,7 @@ export interface AirDeviceCallRoomTokenResult {
   deviceId: string;
   leaseId: string;
   callGeneration: number;
+  mediaPolicy: AirDeviceMediaPolicy;
   wsUrl: string;
   token: string;
   expiresAt: string;
@@ -21,6 +23,7 @@ export async function createAirDeviceCallRoomToken(input: {
   deviceId: string;
   leaseId: string;
   callGeneration: number;
+  mediaPolicy: AirDeviceMediaPolicy;
 }): Promise<AirDeviceCallRoomTokenResult | { ok: false; issues: string[] }> {
   const issues = validateBinding(input);
   if (issues.length > 0) return { ok: false, issues };
@@ -42,6 +45,7 @@ export async function createAirDeviceCallRoomToken(input: {
         deviceId: input.deviceId,
         leaseId: input.leaseId,
         callGeneration: input.callGeneration,
+        mediaPolicy: input.mediaPolicy,
       }),
       attributes,
     },
@@ -76,6 +80,7 @@ export async function verifyAirDeviceCallRoomToken(input: {
   deviceId: string;
   leaseId: string;
   callGeneration: number;
+  mediaPolicy: AirDeviceMediaPolicy;
 }) {
   const config = getLiveKitRoomConfig();
   if (!config.ok) return false;
@@ -113,6 +118,7 @@ function attributesFor(input: {
   deviceId: string;
   leaseId: string;
   callGeneration: number;
+  mediaPolicy: AirDeviceMediaPolicy;
 }) {
   return {
     "ai.phone.call_id": input.communicationSessionId,
@@ -122,6 +128,7 @@ function attributesFor(input: {
     "ai.phone.device_id": input.deviceId,
     "ai.phone.lease_id": input.leaseId,
     "ai.phone.call_generation": String(input.callGeneration),
+    "ai.phone.media_policy": input.mediaPolicy,
   };
 }
 
@@ -131,6 +138,7 @@ function validateBinding(input: {
   deviceId: string;
   leaseId: string;
   callGeneration: number;
+  mediaPolicy: AirDeviceMediaPolicy;
 }) {
   const issues: string[] = [];
   if (!/^[A-Za-z0-9_-]{1,160}$/.test(input.communicationSessionId)) {
@@ -152,7 +160,14 @@ function validateBinding(input: {
     input.callGeneration > 0xffffffff) {
     issues.push("callGeneration is invalid");
   }
+  if (!isAirDeviceMediaPolicy(input.mediaPolicy)) {
+    issues.push("mediaPolicy is invalid");
+  }
   return issues;
+}
+
+function isAirDeviceMediaPolicy(value: unknown): value is AirDeviceMediaPolicy {
+  return value === "translation_isolated" || value === "agent_monitored";
 }
 
 function hasOnlyMicrophoneSource(value: unknown) {

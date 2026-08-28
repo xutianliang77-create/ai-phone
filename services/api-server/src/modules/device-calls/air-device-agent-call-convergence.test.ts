@@ -40,6 +40,17 @@ describe("Air carrier Agent call convergence", () => {
       failureReason: "carrier_no_answer",
     });
   });
+
+  it("marks an unknown carrier state for reconciliation instead of ignoring it", () => {
+    expect(airCarrierAgentStatusRequest(event("unknown", {
+      carrierCause: "unknown",
+    }), call)).toMatchObject({
+      status: "failed",
+      providerOperationStatus: "unknown",
+      failureReason: "carrier_unknown",
+      nextStep: expect.stringContaining("不得重拨"),
+    });
+  });
 });
 
 function event(
@@ -72,6 +83,7 @@ const call: AirDeviceCallDto = {
   carrierState: "disconnected",
   liveKitParticipantState: "joined",
   callGeneration: 7,
+  mediaPolicy: "agent_monitored",
   version: 4,
   connectedAt: "2026-08-04T12:00:10.000Z",
   endedAt: "2026-08-04T12:00:20.500Z",
