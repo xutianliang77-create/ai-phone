@@ -131,7 +131,10 @@ class RealtimeApiClient {
         )
         .timeout(_requestTimeout);
     if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw RealtimeApiException('Finalize session failed: ${response.body}');
+      throw RealtimeApiException(
+        'Finalize session failed: ${response.body}',
+        statusCode: response.statusCode,
+      );
     }
   }
 
@@ -183,9 +186,10 @@ class RealtimeApiClient {
 }
 
 class RealtimeApiException implements Exception {
-  const RealtimeApiException(this.message);
+  const RealtimeApiException(this.message, {this.statusCode});
 
   final String message;
+  final int? statusCode;
 
   @override
   String toString() => message;

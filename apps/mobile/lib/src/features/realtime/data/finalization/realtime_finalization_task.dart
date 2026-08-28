@@ -49,3 +49,41 @@ class RealtimeFinalizationTask {
     );
   }
 }
+
+class RealtimeFinalizationQuarantineRecord {
+  const RealtimeFinalizationQuarantineRecord({
+    required this.task,
+    required this.reason,
+    required this.quarantinedAt,
+  });
+
+  final RealtimeFinalizationTask task;
+  final String reason;
+  final DateTime quarantinedAt;
+
+  Map<String, Object?> toJson() => <String, Object?>{
+        'task': task.toJson(),
+        'reason': reason,
+        'quarantinedAt': quarantinedAt.toUtc().toIso8601String(),
+      };
+
+  static RealtimeFinalizationQuarantineRecord? fromJson(Object? value) {
+    if (value is! Map) return null;
+    final json = Map<String, Object?>.from(value);
+    final task = RealtimeFinalizationTask.fromJson(json['task']);
+    final reason = json['reason'];
+    final quarantinedAt =
+        DateTime.tryParse(json['quarantinedAt'] as String? ?? '');
+    if (task == null ||
+        reason is! String ||
+        reason.isEmpty ||
+        quarantinedAt == null) {
+      return null;
+    }
+    return RealtimeFinalizationQuarantineRecord(
+      task: task,
+      reason: reason,
+      quarantinedAt: quarantinedAt,
+    );
+  }
+}

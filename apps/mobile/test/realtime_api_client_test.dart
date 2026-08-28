@@ -142,6 +142,27 @@ void main() {
       'idempotencyKey': 'finalize:session-a',
     });
   });
+
+  test('preserves finalization HTTP status for retry policy', () async {
+    final api = RealtimeApiClient(
+      baseUrl: Uri.parse('http://127.0.0.1:3100'),
+      accountSessionStore: _sessionStore(),
+      client: MockClient((_) async => http.Response('missing', 404)),
+    );
+
+    await expectLater(
+      api.finalizeSession(
+        sessionId: 'missing-session',
+        segments: const [],
+        billableSeconds: 3,
+        idempotencyKey: 'finalize:missing-session',
+      ),
+      throwsA(
+        isA<RealtimeApiException>()
+            .having((error) => error.statusCode, 'statusCode', 404),
+      ),
+    );
+  });
 }
 
 MemoryAccountSessionStore _sessionStore() {
