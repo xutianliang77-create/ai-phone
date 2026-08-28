@@ -24,6 +24,7 @@ import {
   heartbeatFrame,
   helloFrame,
   reconcile,
+  recoveryAccess,
   request,
   roomClient,
   samplesToBytes,
@@ -40,15 +41,22 @@ describe("Air device Gateway runtime", () => {
     const publish = vi.fn(async () => undefined);
     const publishLiveKit = vi.fn(async () => undefined);
     const publishHeartbeat = vi.fn(async () => undefined);
+    const recoverMedia = vi.fn(async () => recoveryAccess());
     const admitTrack = vi.fn(async (request: AirDeviceTrackAdmissionRequest) => {
       const { roomName: _room, fencingToken: _fence, ...admission } = request;
-      return admission;
+      return { uplinkSource: "translated_tts" as const, ...admission };
     });
     runtime = new AirDeviceGatewayRuntime({
       config,
       serial,
       createRoom: () => room,
-      carrierClient: { publish, publishLiveKit, publishHeartbeat, admitTrack },
+      carrierClient: {
+        publish,
+        publishLiveKit,
+        publishHeartbeat,
+        recoverMedia,
+        admitTrack,
+      },
       commandLedger: {
         load: async () => [],
         upsert: async () => undefined,
@@ -72,7 +80,8 @@ describe("Air device Gateway runtime", () => {
       .not.toHaveProperty("activeBinding");
     const readiness = await fetch(`${baseUrl}/readyz`);
     expect(readiness.status).toBe(200);
-    expect(await readiness.json()).toMatchObject({
+    const readinessBody = await readiness.json();
+    expect(readinessBody).toMatchObject({
       ready: true,
       tty: "open",
       dtr: "asserted",
@@ -80,7 +89,16 @@ describe("Air device Gateway runtime", () => {
       heartbeat: "observed",
       bootAdmission: "reconciling",
       room: "absent",
+      protocol: {
+        stream: { framesDecoded: 2, invalidFrames: 0 },
+        admission: { invalidFrames: 0, invalidFrameReasons: {} },
+      },
     });
+    const readinessJson = JSON.stringify(readinessBody);
+    expect(readinessJson).not.toContain(binding.deviceId);
+    expect(readinessJson).not.toContain(binding.providerCallId);
+    expect(readinessJson).not.toContain("boot-1");
+    expect(readinessJson).not.toMatch(/callerNumber|rawEvent|firmwareVersion/);
 
     const dialResponse = fetch(`${baseUrl}/v1/device-commands`, request(dial));
     await vi.waitFor(() => expect(serial.writes()).toHaveLength(1));
@@ -110,13 +128,25 @@ describe("Air device Gateway runtime", () => {
     expect(room.connect).toHaveBeenCalledWith(
       "wss://livekit.example.cn/",
       "room-token",
-      { autoSubscribe: false },
+      {
+        autoSubscribe: false,
+        communicationSessionId: "comm-1",
+        mediaPolicy: "translation_isolated",
+      },
     );
     await vi.waitFor(() => expect(publishLiveKit).toHaveBeenCalledTimes(2));
     expect(publishLiveKit.mock.calls.map(([event]) =>
       event.liveKitParticipantState)).toEqual(["joining", "joined"]);
 
     serial.receive(audioFrame());
+    expect(room.publishPcmTrack).not.toHaveBeenCalled();
+    expect(runtime.readiness().media).toMatchObject({
+      nonConnectedDownlinkDrops: 1,
+    });
+
+    serial.receive(callStateFrame());
+    await vi.waitFor(() => expect(publish).toHaveBeenCalledOnce());
+    serial.receive(audioFrame({ frameSequence: 5, mediaSequence: 2 }));
     await vi.waitFor(() => expect(room.publishPcmTrack).toHaveBeenCalledTimes(10));
     expect(room.publishPcmTrack.mock.calls.every(([name, samples, sampleRate]) =>
       name === `air780-downlink-${binding.deviceId}` &&
@@ -124,8 +154,6 @@ describe("Air device Gateway runtime", () => {
     expect(samplesToBytes(room.publishPcmTrack.mock.calls.flatMap(([, samples]) =>
       [...samples]))).toEqual(devicePcm);
 
-    serial.receive(callStateFrame());
-    await vi.waitFor(() => expect(publish).toHaveBeenCalledOnce());
     expect(publish).toHaveBeenCalledWith(expect.objectContaining({
       communicationSessionId: binding.communicationSessionId,
       carrierState: "connected",
@@ -172,6 +200,23 @@ describe("Air device Gateway runtime", () => {
       writtenChunks: 1,
       droppedChunks: 0,
     });
+
+    serial.receive(callStateFrame({
+      frameSequence: 6,
+      eventSequence: 2,
+      carrierState: "unknown",
+    }));
+    await vi.waitFor(() => expect(room.disconnect).toHaveBeenCalledOnce());
+    expect(runtime.readiness().media).toMatchObject({
+      ttsUplink: { ready: false },
+      router: { terminalClears: 0 },
+    });
+    room.emitAudioFrame({
+      trackSid: "TR_tts_1",
+      samples: new Int16Array(320),
+      sampleRate: 16_000,
+    });
+    expect(serial.writes()).toHaveLength(2);
   });
 
   it("fails startup before opening serial when the command ledger cannot load", async () => {
@@ -185,6 +230,7 @@ describe("Air device Gateway runtime", () => {
         publish: async () => undefined,
         publishLiveKit: async () => undefined,
         publishHeartbeat: async () => undefined,
+        recoverMedia: async () => recoveryAccess(),
         admitTrack: async () => { throw new Error("not requested"); },
       },
       commandLedger: {
@@ -211,9 +257,10 @@ describe("Air device Gateway runtime", () => {
         publish: async () => undefined,
         publishLiveKit: async () => undefined,
         publishHeartbeat: async () => undefined,
+        recoverMedia: async () => recoveryAccess(),
         admitTrack: async (request) => {
           const { roomName: _room, fencingToken: _fence, ...admission } = request;
-          return admission;
+          return { uplinkSource: "translated_tts" as const, ...admission };
         },
       },
       commandLedger: {
@@ -263,4 +310,5 @@ describe("Air device Gateway runtime", () => {
       media: { router: { unboundFrames: 1, disconnects: 1 } },
     });
   });
+
 });

@@ -78,12 +78,16 @@ export function helloFrame() {
       capabilityFlags: VuartV1Capability.CALL_CONTROL |
         VuartV1Capability.AUDIO_DOWNLINK_16K |
         VuartV1Capability.AUDIO_UPLINK_16K,
-      maxPayloadBytes: 6_461,
+      maxPayloadBytes: 8_192,
     }),
   });
 }
 
-export function heartbeatFrame() {
+export function heartbeatFrame(input: {
+  heartbeatSequence?: number;
+  deviceState?: "ready" | "in_call";
+} = {}) {
+  const deviceState = input.deviceState ?? "ready";
   return encodeVuartFrame({
     type: VuartFrameType.HEARTBEAT,
     flags: 0,
@@ -92,37 +96,45 @@ export function heartbeatFrame() {
     payload: encodeVuartV1HeartbeatPayload({
       deviceId: binding.deviceId,
       bootId: "boot-1",
-      heartbeatSequence: 1,
+      heartbeatSequence: input.heartbeatSequence ?? 1,
       uptimeMs: 1_000n,
-      deviceState: "ready",
+      deviceState,
+      ...(deviceState === "in_call" ? { activeBinding: binding } : {}),
     }),
   });
 }
 
-export function callStateFrame() {
+export function callStateFrame(input: {
+  frameSequence?: number;
+  eventSequence?: number;
+  carrierState?: "connected" | "unknown";
+} = {}) {
   return encodeVuartFrame({
     type: VuartFrameType.CALL_STATE,
     flags: 0,
-    sequence: 4,
+    sequence: input.frameSequence ?? 4,
     timestampMs: 3_000n,
     payload: encodeVuartV1CallStatePayload({
       ...binding,
-      eventSequence: 1,
-      carrierState: "connected",
-      carrierCause: "none",
+      eventSequence: input.eventSequence ?? 1,
+      carrierState: input.carrierState ?? "connected",
+      carrierCause: input.carrierState === "unknown" ? "unknown" : "none",
     }),
   });
 }
 
-export function audioFrame() {
+export function audioFrame(input: {
+  frameSequence?: number;
+  mediaSequence?: number;
+} = {}) {
   return encodeVuartFrame({
     type: VuartFrameType.AUDIO_DOWNLINK,
     flags: 0,
-    sequence: 3,
+    sequence: input.frameSequence ?? 3,
     timestampMs: 2_000n,
     payload: encodeVuartV1AudioPayload({
       ...binding,
-      mediaSequence: 1,
+      mediaSequence: input.mediaSequence ?? 1,
       payload: devicePcm,
     }),
   });
@@ -162,6 +174,7 @@ export const dial = {
     wsUrl: "wss://livekit.example.cn",
     token: "room-token",
     expiresAt: "2099-01-01T00:00:00.000Z",
+    mediaPolicy: "translation_isolated" as const,
   },
 };
 
@@ -172,6 +185,19 @@ export const reconcile = {
   idempotencyKey: "reconcile:comm-1:1",
   ...binding,
 };
+
+export function recoveryAccess() {
+  return {
+    ...binding,
+    roomName: dial.roomName,
+    participantIdentity: dial.participantIdentity,
+    carrierState: "connected" as const,
+    roomAccess: {
+      ...dial.roomAccess,
+      token: "recovery-room-token",
+    },
+  };
+}
 
 export const config: AirGatewayDaemonConfig = {
   hardware: {

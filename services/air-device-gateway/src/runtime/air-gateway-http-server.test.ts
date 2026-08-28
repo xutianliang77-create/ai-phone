@@ -97,6 +97,36 @@ describe("Air Gateway HTTP server", () => {
 
     expect(statuses).toEqual([409, 429, 503]);
   });
+
+  it("separates process health from physical device admission", async () => {
+    const server = createAirGatewayHttpServer({
+      commandService: { execute: vi.fn() },
+      apiSecret: secret,
+      health: () => ({ healthy: true, process: "ready", deviceReady: false }),
+      readiness: () => ({ ready: false, bootAdmission: "quarantined" }),
+    });
+    await new Promise<void>((resolve, reject) => {
+      server.once("error", reject);
+      server.listen(0, "127.0.0.1", resolve);
+    });
+    const address = server.address() as AddressInfo;
+    close = () => new Promise<void>((resolve, reject) =>
+      server.close((error) => error ? reject(error) : resolve()));
+
+    const health = await fetch(`http://127.0.0.1:${address.port}/healthz`);
+    const readiness = await fetch(`http://127.0.0.1:${address.port}/readyz`);
+
+    expect(health.status).toBe(200);
+    expect(await health.json()).toMatchObject({
+      healthy: true,
+      deviceReady: false,
+    });
+    expect(readiness.status).toBe(503);
+    expect(await readiness.json()).toMatchObject({
+      ready: false,
+      bootAdmission: "quarantined",
+    });
+  });
 });
 
 async function start(

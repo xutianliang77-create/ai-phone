@@ -3,6 +3,8 @@ import type {
   AirDeviceCarrierEventRequest,
   AirDeviceHeartbeatRequest,
   AirDeviceLiveKitParticipantEventRequest,
+  AirDeviceMediaRecoveryAccessDto,
+  AirDeviceMediaRecoveryRequest,
   AirDeviceTrackAdmissionDto,
   AirDeviceTrackAdmissionRequest,
 } from "@translation/contracts";
@@ -39,6 +41,20 @@ export class HttpAirGatewayCarrierEventClient {
     await this.post("heartbeats", event, "heartbeat");
   }
 
+  async recoverMedia(
+    request: AirDeviceMediaRecoveryRequest,
+  ): Promise<AirDeviceMediaRecoveryAccessDto> {
+    const body = await this.post(
+      "media-recovery-access",
+      request,
+      "media recovery",
+    );
+    if (!matchesMediaRecoveryAccess(body.access, request)) {
+      throw new Error("Air device media recovery response is invalid");
+    }
+    return body.access;
+  }
+
   async admitTrack(
     request: AirDeviceTrackAdmissionRequest,
   ): Promise<AirDeviceTrackAdmissionDto> {
@@ -52,10 +68,12 @@ export class HttpAirGatewayCarrierEventClient {
 
   private async post(
     path: "carrier-events" | "livekit-events" | "heartbeats" |
-      "track-admissions",
+      "track-admissions" | "media-recovery-access",
     event: AirDeviceCarrierEventRequest | AirDeviceHeartbeatRequest |
-      AirDeviceLiveKitParticipantEventRequest | AirDeviceTrackAdmissionRequest,
-    label: "carrier" | "LiveKit" | "heartbeat" | "track admission",
+      AirDeviceLiveKitParticipantEventRequest | AirDeviceTrackAdmissionRequest |
+      AirDeviceMediaRecoveryRequest,
+    label: "carrier" | "LiveKit" | "heartbeat" | "track admission" |
+      "media recovery",
   ) {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), this.config.timeoutMs);
@@ -100,17 +118,66 @@ export class HttpAirGatewayCarrierEventClient {
   }
 }
 
+function matchesMediaRecoveryAccess(
+  value: unknown,
+  request: AirDeviceMediaRecoveryRequest,
+): value is AirDeviceMediaRecoveryAccessDto {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const access = value as Record<string, unknown>;
+  const roomAccess = access.roomAccess;
+  const keys = ["communicationSessionId", "providerCallId", "deviceId",
+    "leaseId", "fencingToken", "callGeneration", "roomName",
+    "participantIdentity", "carrierState", "roomAccess"];
+  if (Object.keys(access).length !== keys.length ||
+    !keys.every((key) => key in access) ||
+    !roomAccess || typeof roomAccess !== "object" || Array.isArray(roomAccess)) {
+    return false;
+  }
+  const room = roomAccess as Record<string, unknown>;
+  return access.communicationSessionId === request.communicationSessionId &&
+    access.providerCallId === request.providerCallId &&
+    access.deviceId === request.deviceId && access.leaseId === request.leaseId &&
+    access.fencingToken === request.fencingToken &&
+    access.callGeneration === request.callGeneration &&
+    access.roomName === `call_${request.communicationSessionId}` &&
+    access.participantIdentity ===
+      `${request.communicationSessionId}:guest:air:${request.deviceId}` &&
+    ["dialing", "ringing", "connected"].includes(String(access.carrierState)) &&
+    Object.keys(room).length === 4 &&
+    ["wsUrl", "token", "expiresAt", "mediaPolicy"]
+      .every((key) => key in room) &&
+    validRoomAccess(room);
+}
+
+function validRoomAccess(room: Record<string, unknown>) {
+  if (typeof room.token !== "string" || room.token.length === 0 ||
+    typeof room.expiresAt !== "string" ||
+    Date.parse(room.expiresAt) <= Date.now() ||
+    (room.mediaPolicy !== "translation_isolated" &&
+      room.mediaPolicy !== "agent_monitored")) return false;
+  try {
+    const url = new URL(String(room.wsUrl));
+    const loopback = ["localhost", "127.0.0.1", "[::1]", "::1"]
+      .includes(url.hostname);
+    return url.protocol === "wss:" || (url.protocol === "ws:" && loopback);
+  } catch {
+    return false;
+  }
+}
+
 function matchesTrackAdmission(
   value: unknown,
   request: AirDeviceTrackAdmissionRequest,
 ): value is AirDeviceTrackAdmissionDto {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   const admission = value as Record<string, unknown>;
-  const keys = ["trackSid", "trackName", "publisherIdentity",
+  const keys = ["uplinkSource", "trackSid", "trackName", "publisherIdentity",
     "communicationSessionId", "targetParticipantIdentity", "deviceId",
     "leaseId", "callGeneration"];
   return Object.keys(admission).length === keys.length &&
     keys.every((key) => key in admission) &&
+    (admission.uplinkSource === "translated_tts" ||
+      admission.uplinkSource === "takeover_microphone") &&
     admission.trackSid === request.trackSid &&
     admission.trackName === request.trackName &&
     admission.publisherIdentity === request.publisherIdentity &&
@@ -226,6 +293,21 @@ export class AirGatewayCarrierStateRegistry {
     this.observations.set(bindingKey(binding), {
       binding,
       state: phoneState(event.carrierState),
+      observedAt: observedAt.toISOString(),
+    });
+    if (this.observations.size > 32) {
+      this.observations.delete(this.observations.keys().next().value!);
+    }
+  }
+
+  restore(
+    binding: AirDeviceSessionBinding,
+    state: "dialing" | "ringing" | "connected",
+    observedAt = new Date(),
+  ) {
+    this.observations.set(bindingKey(binding), {
+      binding: { ...binding },
+      state,
       observedAt: observedAt.toISOString(),
     });
     if (this.observations.size > 32) {

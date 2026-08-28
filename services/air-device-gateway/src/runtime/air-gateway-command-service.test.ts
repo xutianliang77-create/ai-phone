@@ -48,6 +48,26 @@ describe("Air Gateway HTTP command service", () => {
     expect(fixture.apply).toHaveBeenCalledOnce();
   });
 
+  it("requires an explicit Air raw-media policy in the command binding", async () => {
+    const fixture = setup();
+    const valid = dial();
+    const { mediaPolicy: _removed, ...unboundAccess } = valid.roomAccess;
+
+    expect(await fixture.service.execute({
+      ...valid,
+      commandId: "missing-policy",
+      idempotencyKey: "missing-policy",
+      roomAccess: unboundAccess,
+    })).toEqual({ status: "invalid_request", reason: "command_schema_invalid" });
+    expect(await fixture.service.execute(dial({
+      commandId: "invalid-policy",
+      idempotencyKey: "invalid-policy",
+      roomAccess: { ...valid.roomAccess, mediaPolicy: "broadcast_all" },
+    }))).toEqual({ status: "invalid_request", reason: "command_schema_invalid" });
+    expect(fixture.prepareRoom).not.toHaveBeenCalled();
+    expect(fixture.apply).not.toHaveBeenCalled();
+  });
+
   it("caches ACK-loss as reconcile-required and never redials", async () => {
     const fixture = setup();
     fixture.transport.dropNextResponses(2);
@@ -290,6 +310,7 @@ function dial(overrides: Record<string, unknown> = {}) {
       wsUrl: "wss://livekit.example.cn",
       token: "room-token",
       expiresAt: "2026-08-04T12:05:00.000Z",
+      mediaPolicy: "translation_isolated",
     },
     ...overrides,
   };

@@ -12,7 +12,8 @@ describe("Air Gateway admitted TTS uplink", () => {
     for (let subframe = 0; subframe < 10; subframe += 1) {
       const samples = pcmFrame(subframe);
       expected.push(...samples);
-      expect(fixture.uplink.accept({ ...binding, samples, sampleRate: 16_000 }))
+      expect(fixture.uplink.accept({ ...binding, uplinkSource: "translated_tts",
+        samples, sampleRate: 16_000 }))
         .toMatchObject({ accepted: true });
     }
     await fixture.uplink.flush();
@@ -57,12 +58,14 @@ describe("Air Gateway admitted TTS uplink", () => {
     fixture.uplink.resume(binding);
     fixture.connected = false;
     expect(fixture.uplink.accept({ ...binding,
+      uplinkSource: "translated_tts",
       samples: pcmFrame(0), sampleRate: 16_000 })).toEqual({
       accepted: false,
       reason: "carrier_not_connected",
     });
     fixture.connected = true;
     expect(fixture.uplink.accept({ ...binding, leaseId: "stale-lease",
+      uplinkSource: "translated_tts",
       samples: pcmFrame(0), sampleRate: 16_000 })).toEqual({
       accepted: false,
       reason: "binding_mismatch",
@@ -72,6 +75,7 @@ describe("Air Gateway admitted TTS uplink", () => {
     fixture.current = next;
     fixture.uplink.resume(next);
     expect(fixture.uplink.accept({ ...binding,
+      uplinkSource: "translated_tts",
       samples: pcmFrame(0), sampleRate: 16_000 })).toEqual({
       accepted: false,
       reason: "stale_generation",
@@ -90,16 +94,73 @@ describe("Air Gateway admitted TTS uplink", () => {
     fixture.uplink.resume(binding);
 
     expect(fixture.uplink.accept({ ...binding,
+      uplinkSource: "translated_tts",
       samples: new Int16Array(160), sampleRate: 8_000 })).toEqual({
       accepted: false,
       reason: "unsupported_format",
     });
     expect(fixture.uplink.accept({ ...binding,
+      uplinkSource: "translated_tts",
       samples: new Int16Array(319), sampleRate: 16_000 })).toEqual({
       accepted: false,
       reason: "unsupported_format",
     });
     expect(fixture.uplink.metrics().invalidFrames).toBe(2);
+  });
+
+  it("quarantines the active generation after a serial write failure", async () => {
+    const fixture = setup({ write: async () => {
+      throw new Error("serial write failed");
+    } });
+    fixture.uplink.resume(binding);
+
+    offerChunk(fixture.uplink, 0);
+    await fixture.uplink.flush();
+
+    expect(fixture.uplink.metrics()).toMatchObject({
+      ready: false,
+      writeFailures: 1,
+      writtenChunks: 0,
+      droppedChunks: 1,
+      suspensions: 1,
+      queuedChunks: 0,
+      outstandingChunks: 0,
+    });
+    expect(fixture.uplink.accept({ ...binding, uplinkSource: "translated_tts",
+      samples: pcmFrame(10),
+      sampleRate: 16_000 })).toEqual({
+      accepted: false,
+      reason: "inactive_generation",
+    });
+  });
+
+  it("clears partial Agent audio before switching to the Host microphone", () => {
+    const fixture = setup();
+    fixture.uplink.resume(binding);
+    for (let index = 0; index < 5; index += 1) {
+      fixture.uplink.accept({ ...binding, uplinkSource: "translated_tts",
+        samples: pcmFrame(index), sampleRate: 16_000 });
+    }
+
+    expect(fixture.uplink.accept({
+      ...binding,
+      uplinkSource: "takeover_microphone",
+      samples: pcmFrame(10),
+      sampleRate: 16_000,
+    })).toMatchObject({ accepted: true, chunkQueued: false });
+    expect(fixture.uplink.accept({
+      ...binding,
+      uplinkSource: "translated_tts",
+      samples: pcmFrame(11),
+      sampleRate: 16_000,
+    })).toEqual({ accepted: false, reason: "source_conflict" });
+    expect(fixture.uplink.metrics()).toMatchObject({
+      activeUplinkSource: "takeover_microphone",
+      partialFrames: 1,
+      clearedPartialFrames: 5,
+      sourceSwitches: 1,
+      sourceConflicts: 1,
+    });
   });
 });
 
@@ -133,7 +194,8 @@ function setup(options: {
 
 function offerChunk(uplink: AirGatewayTtsUplink, seed: number) {
   for (let index = 0; index < 10; index += 1) {
-    uplink.accept({ ...binding, samples: pcmFrame(seed + index),
+    uplink.accept({ ...binding, uplinkSource: "translated_tts",
+      samples: pcmFrame(seed + index),
       sampleRate: 16_000 });
   }
 }

@@ -1,5 +1,6 @@
 import type { AirDeviceSessionBinding } from
   "../device/device-session-router.js";
+import type { AirDeviceUplinkSource } from "@translation/contracts";
 import { VuartFrameType, type VuartFrame } from "../device/vuart-frame.js";
 import { encodeVuartV1AudioPayload } from
   "../device/vuart-v1-payload.js";
@@ -9,16 +10,18 @@ const SAMPLES_PER_FRAME = 320;
 const FRAMES_PER_CHUNK = 10;
 
 export interface SessionBoundTtsFrame extends AirDeviceSessionBinding {
+  uplinkSource: AirDeviceUplinkSource;
   samples: Int16Array;
   sampleRate: 16_000;
 }
 
 type Rejection = "inactive_generation" | "stale_generation" |
   "binding_mismatch" | "carrier_not_connected" | "unsupported_format" |
-  "backpressure";
+  "backpressure" | "source_conflict";
 
 interface PendingChunk {
   binding: AirDeviceSessionBinding;
+  uplinkSource: AirDeviceUplinkSource;
   mediaSequence: number;
   payload: Uint8Array;
 }
@@ -29,6 +32,7 @@ export class AirGatewayTtsUplink {
   private ready = false;
   private epoch = 0;
   private nextMediaSequence = 0;
+  private activeUplinkSource?: AirDeviceUplinkSource;
   private partial: Int16Array[] = [];
   private readonly chunks: PendingChunk[] = [];
   private writing = false;
@@ -49,6 +53,11 @@ export class AirGatewayTtsUplink {
     clearedPartialFrames: 0,
     clearedQueuedChunks: 0,
     suspensions: 0,
+    sourceSwitches: 0,
+    sourceConflicts: 0,
+    sourceBoundaryClears: 0,
+    translatedTtsFrames: 0,
+    takeoverMicrophoneFrames: 0,
   };
 
   constructor(private readonly dependencies: {
@@ -82,6 +91,7 @@ export class AirGatewayTtsUplink {
       this.latestGeneration = binding.callGeneration;
       this.nextMediaSequence = 0;
     }
+    this.activeUplinkSource = undefined;
     this.ready = true;
   }
 
@@ -92,6 +102,15 @@ export class AirGatewayTtsUplink {
     this.epoch += 1;
     this.counters.suspensions += 1;
     this.clearPending();
+    this.activeUplinkSource = undefined;
+    return true;
+  }
+
+  discardPending(binding: AirDeviceSessionBinding) {
+    if (!this.active || !sameBinding(binding, this.active)) return false;
+    this.counters.sourceBoundaryClears += 1;
+    this.clearPending();
+    this.activeUplinkSource = undefined;
     return true;
   }
 
@@ -111,8 +130,25 @@ export class AirGatewayTtsUplink {
       return { accepted: false, reason: "carrier_not_connected" };
     }
 
+    if (this.activeUplinkSource === "takeover_microphone" &&
+      input.uplinkSource !== "takeover_microphone") {
+      this.counters.sourceConflicts += 1;
+      return { accepted: false, reason: "source_conflict" };
+    }
+    if (this.activeUplinkSource &&
+      this.activeUplinkSource !== input.uplinkSource) {
+      this.counters.sourceSwitches += 1;
+      this.clearPending();
+    }
+    this.activeUplinkSource = input.uplinkSource;
+
     this.partial.push(Int16Array.from(input.samples));
     this.counters.acceptedFrames += 1;
+    if (input.uplinkSource === "translated_tts") {
+      this.counters.translatedTtsFrames += 1;
+    } else {
+      this.counters.takeoverMicrophoneFrames += 1;
+    }
     if (this.partial.length < FRAMES_PER_CHUNK) {
       return { accepted: true, chunkQueued: false };
     }
@@ -126,7 +162,12 @@ export class AirGatewayTtsUplink {
       this.counters.droppedFrames += FRAMES_PER_CHUNK;
       return { accepted: false, reason: "backpressure" };
     }
-    this.chunks.push({ binding: { ...this.active! }, mediaSequence, payload });
+    this.chunks.push({
+      binding: { ...this.active! },
+      uplinkSource: input.uplinkSource,
+      mediaSequence,
+      payload,
+    });
     this.startDrain();
     return { accepted: true, chunkQueued: true, mediaSequence };
   }
@@ -140,6 +181,7 @@ export class AirGatewayTtsUplink {
       ...this.counters,
       ready: this.ready,
       activeGeneration: this.active?.callGeneration,
+      activeUplinkSource: this.activeUplinkSource,
       partialFrames: this.partial.length,
       queuedChunks: this.chunks.length,
       outstandingChunks: this.outstandingChunks(),
@@ -177,6 +219,7 @@ export class AirGatewayTtsUplink {
       const chunk = this.chunks.shift();
       if (!chunk) return;
       if (!this.active || !sameBinding(chunk.binding, this.active) ||
+        chunk.uplinkSource !== this.activeUplinkSource ||
         !sameBinding(this.dependencies.currentBinding() ?? {}, this.active)) {
         this.counters.droppedChunks += 1;
         this.counters.droppedFrames += FRAMES_PER_CHUNK;
@@ -200,6 +243,7 @@ export class AirGatewayTtsUplink {
         this.counters.writeFailures += 1;
         this.counters.droppedChunks += 1;
         this.counters.droppedFrames += FRAMES_PER_CHUNK;
+        this.suspend(chunk.binding.callGeneration);
         return;
       } finally {
         this.writing = false;

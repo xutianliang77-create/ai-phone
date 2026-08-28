@@ -97,8 +97,8 @@ describe("Air Gateway carrier event client", () => {
         bootId: "boot-1",
         firmwareVersion: "production-r2",
         protocolVersion: 1,
-        capabilityFlags: 3,
-        maxPayloadBytes: 6461,
+        capabilityFlags: 7,
+        maxPayloadBytes: 8192,
       },
       heartbeat: {
         deviceId: "air-780-1",
@@ -112,6 +112,7 @@ describe("Air Gateway carrier event client", () => {
       staleBootFrames: 0,
       staleHeartbeats: 0,
       invalidFrames: 0,
+      invalidFrameReasons: {},
       reconcileCompletions: 1,
       disconnects: 0,
     }, new Date("2026-08-04T12:00:02.000Z"));
@@ -137,7 +138,8 @@ describe("Air Gateway carrier event client", () => {
 
   it("accepts only an exact server-fenced TTS track admission", async () => {
     const request = trackAdmissionRequest();
-    const { roomName: _roomName, fencingToken: _fence, ...admission } = request;
+    const { roomName: _roomName, fencingToken: _fence, ...binding } = request;
+    const admission = { uplinkSource: "translated_tts", ...binding };
     const fetchFn = vi.fn(async () => new Response(JSON.stringify({
       status: "accepted",
       admission,
@@ -155,7 +157,50 @@ describe("Air Gateway carrier event client", () => {
       expect.objectContaining({ body: JSON.stringify(request) }),
     );
   });
+
+  it("requests fresh media-only access for the exact active generation", async () => {
+    const request = bindingOfCarrier();
+    const access = {
+      ...request,
+      roomName: "call_comm-1",
+      participantIdentity: "comm-1:guest:air:air-780-1",
+      carrierState: "connected",
+      roomAccess: {
+        wsUrl: "wss://livekit.example.cn",
+        token: "fresh-recovery-token",
+        expiresAt: "2099-01-01T00:00:00.000Z",
+        mediaPolicy: "translation_isolated",
+      },
+    };
+    const fetchFn = vi.fn(async () => new Response(JSON.stringify({
+      status: "accepted",
+      access,
+    }), { status: 200 }));
+    const client = new HttpAirGatewayCarrierEventClient({
+      apiBaseUrl: "https://api.example.cn",
+      apiSecret: secret,
+      timeoutMs: 1_000,
+    }, fetchFn);
+
+    await expect(client.recoverMedia(request)).resolves.toEqual(access);
+    expect(fetchFn).toHaveBeenCalledWith(
+      "https://api.example.cn/internal/device-calls/media-recovery-access",
+      expect.objectContaining({ body: JSON.stringify(request) }),
+    );
+    expect(JSON.stringify(request)).not.toContain("phoneNumber");
+  });
 });
+
+function bindingOfCarrier() {
+  return {
+    communicationSessionId: carrier.communicationSessionId,
+    providerCallId: carrier.providerCallId,
+    deviceId: carrier.deviceId,
+    leaseId: carrier.leaseId,
+    fencingToken: carrier.fencingToken,
+    callGeneration: carrier.callGeneration,
+  };
+}
 
 function trackAdmissionRequest() {
   const targetParticipantIdentity = "comm-1:guest:air:air-780-1";

@@ -1,8 +1,10 @@
 import { createHash } from "node:crypto";
+import type { AirDeviceMediaPolicy } from "@translation/contracts";
 import {
   encodeVuartV1CommandPayload,
   type VuartV1DeviceCommand,
 } from "../device/vuart-v1-command-payload.js";
+import type { AirGatewayRoomRequest } from "./air-gateway-room-request.js";
 
 const IDENTIFIER = /^[A-Za-z0-9][A-Za-z0-9._:-]*$/;
 
@@ -13,16 +15,10 @@ export const AIR_GATEWAY_PHONE_STATES = new Set([
 export type AirGatewayCarrierState = "dialing" | "ringing" | "connected" |
   "ending" | "completed" | "failed" | "unknown";
 
-export interface AirGatewayDialRequest extends AirGatewayCommandBinding {
+export interface AirGatewayDialRequest extends AirGatewayCommandBinding,
+AirGatewayRoomRequest {
   type: "dial";
   phoneNumberReference: string;
-  participantIdentity: string;
-  roomName: string;
-  roomAccess: {
-    wsUrl: string;
-    token: string;
-    expiresAt: string;
-  };
 }
 
 export interface AirGatewayCommandBinding {
@@ -115,6 +111,7 @@ export function summarizeAirGatewayCommandRequest(value: unknown, now: Date) {
             ? Buffer.byteLength(roomAccess.token)
             : null,
           expiresAt: summarizeValue(roomAccess.expiresAt),
+          mediaPolicy: summarizeValue(roomAccess.mediaPolicy),
           expired: typeof roomAccess.expiresAt === "string"
             ? Date.parse(roomAccess.expiresAt) <= now.getTime()
             : null,
@@ -144,22 +141,31 @@ function parseBinding(value: Record<string, unknown>): AirGatewayCommandBinding 
 }
 
 function parseRoomAccess(value: unknown, now: Date) {
-  if (!isObject(value) || !exactKeys(value, ["wsUrl", "token", "expiresAt"])) {
+  if (!isObject(value) || !exactKeys(
+    value,
+    ["wsUrl", "token", "expiresAt", "mediaPolicy"],
+  )) {
     return null;
   }
   const token = text(value.token, 8_192);
   const expiresAt = text(value.expiresAt, 64);
-  if (!token || !expiresAt || Date.parse(expiresAt) <= now.getTime()) return null;
+  const mediaPolicy = value.mediaPolicy;
+  if (!token || !expiresAt || Date.parse(expiresAt) <= now.getTime() ||
+    !isAirDeviceMediaPolicy(mediaPolicy)) return null;
   try {
     const url = new URL(String(value.wsUrl));
     const loopback = ["localhost", "127.0.0.1", "[::1]", "::1"]
       .includes(url.hostname);
     if ((url.protocol !== "wss:" && !(url.protocol === "ws:" && loopback)) ||
       url.username || url.password || url.hash) return null;
-    return { wsUrl: url.toString(), token, expiresAt };
+    return { wsUrl: url.toString(), token, expiresAt, mediaPolicy };
   } catch {
     return null;
   }
+}
+
+function isAirDeviceMediaPolicy(value: unknown): value is AirDeviceMediaPolicy {
+  return value === "translation_isolated" || value === "agent_monitored";
 }
 
 function validCommand(command: VuartV1DeviceCommand) {

@@ -3,6 +3,8 @@ import type {
   AirDeviceCarrierEventRequest,
   AirDeviceHeartbeatRequest,
   AirDeviceLiveKitParticipantEventRequest,
+  AirDeviceMediaRecoveryAccessDto,
+  AirDeviceMediaRecoveryRequest,
   AirDeviceTrackAdmissionDto,
   AirDeviceTrackAdmissionRequest,
 } from "@translation/contracts";
@@ -10,9 +12,8 @@ import type { AirDeviceRoomClient } from
   "../media/livekit-device-participant.js";
 import { BoundedDeviceAudioQueue } from "../media/device-audio-queue.js";
 import { AirDeviceBootAdmission, type AirDeviceBootAdmissionSnapshot } from "../device/air-device-boot-admission.js";
-import { AirDeviceSessionRouter, type AirDeviceSessionBinding } from "../device/device-session-router.js";
+import { AirDeviceSessionRouter } from "../device/device-session-router.js";
 import type { SerialTransport } from "../device/serial-transport.js";
-import { VuartFrameType } from "../device/vuart-frame.js";
 import { VuartSerialFrameTransport } from "../device/vuart-serial-frame-transport.js";
 import { VuartV1PayloadDecoder } from "../device/vuart-v1-payload.js";
 import { VuartV1Capability } from "../device/vuart-v1-command-payload.js";
@@ -23,9 +24,7 @@ import { VuartV1SerialCommandExchange } from
 import type { AirGatewayDaemonConfig } from "./air-gateway-config.js";
 import { AirGatewayCarrierEventDispatcher } from "./air-gateway-carrier-dispatcher.js";
 import {
-  airGatewayCarrierEventRequest,
   airGatewayHeartbeatRequest,
-  airGatewayLiveKitEventRequest,
   AirGatewayCarrierStateRegistry,
 } from "./air-gateway-carrier-client.js";
 import { AirGatewayCommandService } from "./air-gateway-command-service.js";
@@ -33,9 +32,11 @@ import type { AirGatewayCommandLedger } from "./air-gateway-command-ledger.js";
 import { FileAirGatewayCommandLedger } from "./file-air-gateway-command-ledger.js";
 import { createAirGatewayHttpServer } from "./air-gateway-http-server.js";
 import { AirGatewayAudioPump } from "./air-gateway-audio-pump.js";
-import { AirGatewayRoomSession, type SessionBoundLiveKitParticipantState } from "./air-gateway-room-session.js";
+import { AirGatewayRoomSession } from "./air-gateway-room-session.js";
 import {
   bindingOf,
+  airGatewayProcessHealth,
+  airGatewayProtocolReadiness,
   createAirGatewayEventOutboxes,
   createUint32SequenceAllocator,
   sameSessionBinding,
@@ -43,6 +44,11 @@ import {
 } from "./air-device-gateway-runtime-support.js";
 import { AirGatewayTtsUplink } from "./air-gateway-tts-uplink.js";
 import { SerialReconnectSupervisor } from "./serial-reconnect-supervisor.js";
+import { AirGatewayMediaRecovery } from "./air-gateway-media-recovery.js";
+import { AirGatewayDeviceBindingController } from
+  "./air-gateway-device-binding-controller.js";
+import { AirGatewayRuntimeMediaController } from
+  "./air-gateway-runtime-media-controller.js";
 
 export class AirDeviceGatewayRuntime {
   private readonly frames: VuartSerialFrameTransport;
@@ -58,6 +64,9 @@ export class AirDeviceGatewayRuntime {
   private readonly liveKitDispatcher: AirGatewayCarrierEventDispatcher<AirDeviceLiveKitParticipantEventRequest>;
   private readonly heartbeatDispatcher: AirGatewayCarrierEventDispatcher<AirDeviceHeartbeatRequest>;
   private readonly serialRecovery: SerialReconnectSupervisor;
+  private readonly mediaRecovery: AirGatewayMediaRecovery;
+  private readonly bindingController: AirGatewayDeviceBindingController;
+  private readonly mediaController: AirGatewayRuntimeMediaController;
   private readonly router: AirDeviceSessionRouter;
   private readonly commandService: AirGatewayCommandService;
   private readonly server;
@@ -73,12 +82,15 @@ export class AirDeviceGatewayRuntime {
       publish(event: AirDeviceCarrierEventRequest): Promise<void>;
       publishLiveKit(event: AirDeviceLiveKitParticipantEventRequest): Promise<void>;
       publishHeartbeat(event: AirDeviceHeartbeatRequest): Promise<void>;
+      recoverMedia(input: AirDeviceMediaRecoveryRequest):
+        Promise<AirDeviceMediaRecoveryAccessDto>;
       admitTrack(request: AirDeviceTrackAdmissionRequest):
         Promise<AirDeviceTrackAdmissionDto>;
     };
     commandLedger?: AirGatewayCommandLedger;
     eventOutboxes?: AirGatewayEventOutboxes;
     now?: () => Date;
+    serialRecoveryRetryDelayMs?: number;
   }) {
     const now = options.now ?? (() => new Date());
     const allocateHostFrameSequence = createUint32SequenceAllocator();
@@ -86,13 +98,21 @@ export class AirDeviceGatewayRuntime {
       createAirGatewayEventOutboxes(options.config.eventOutboxDirectory);
     this.audioQueue = new BoundedDeviceAudioQueue(100);
     this.frames = new VuartSerialFrameTransport(options.serial);
-    this.serialRecovery = new SerialReconnectSupervisor(this.frames);
+    this.serialRecovery = new SerialReconnectSupervisor(this.frames, {
+      retryDelayMs: options.serialRecoveryRetryDelayMs,
+    });
     this.admission = new AirDeviceBootAdmission({
       expectedDeviceId: options.config.deviceId,
       heartbeatTimeoutMs: options.config.heartbeatTimeoutMs,
+      requiredCapabilityFlags: VuartV1Capability.CALL_CONTROL |
+        VuartV1Capability.AUDIO_DOWNLINK_16K |
+        VuartV1Capability.AUDIO_UPLINK_16K,
+      minimumMaxPayloadBytes: 8_192,
       frameSource: this.frames,
-      onHeartbeatAccepted: (snapshot) =>
-        this.publishHeartbeat(snapshot, now()),
+      onHeartbeatAccepted: (snapshot) => {
+        this.publishHeartbeat(snapshot, now());
+        this.mediaRecovery.observe(snapshot);
+      },
     });
     this.exchange = new VuartV1SerialCommandExchange(this.frames, {
       responseTimeoutMs: options.config.responseTimeoutMs,
@@ -132,48 +152,59 @@ export class AirDeviceGatewayRuntime {
       createRoom: options.createRoom,
       admitTrack: (request) => options.carrierClient.admitTrack(request),
       onTtsFrame: (frame) => { this.ttsUplink.accept(frame); },
-      initialEventSequence: now().getTime() * 1_000,
-      onParticipantState: (event) => {
-        this.handleRoomMediaState(event);
-        const bootId = this.admission.snapshot().bootId;
-        if (bootId) {
-          void this.liveKitDispatcher.enqueue(
-            airGatewayLiveKitEventRequest(event, bootId, now()),
-          ).catch(() => undefined);
-        }
+      onUplinkBoundary: (binding) => {
+        this.ttsUplink.discardPending(binding);
       },
+      initialEventSequence: now().getTime() * 1_000,
+      onParticipantState: (event) => this.mediaController.handleRoom(event),
     });
     this.router = new AirDeviceSessionRouter({
       queue: this.audioQueue,
       decoder: new VuartV1PayloadDecoder(),
-      onCarrierEvent: (event) => {
-        const observedAt = now();
-        this.carrier.observe(event, observedAt);
-        const bootId = this.admission.snapshot().bootId;
-        if (bootId) {
-          void this.carrierDispatcher.enqueue(
-            airGatewayCarrierEventRequest(event, bootId, observedAt),
-          ).catch(() => undefined);
-        }
-        if (["disconnected", "busy", "failed"].includes(event.carrierState)) {
-          this.audioPump.suspend();
-          this.ttsUplink.suspend(event.callGeneration);
-          this.audioQueue.discardQueuedFrames(event.callGeneration);
-          void this.room.clear(event).catch(() => undefined);
-        }
-      },
+      onCarrierEvent: (event) => this.mediaController.handleCarrier(event),
     });
     this.audioPump = new AirGatewayAudioPump({
       queue: this.audioQueue,
       currentBinding: () => this.router.binding(),
       currentRoom: (binding) => this.room.client(binding),
     });
-    this.unsubscribeFrame = this.frames.onFrame((frame) => {
-      if (frame.type !== VuartFrameType.AUDIO_DOWNLINK &&
-        frame.type !== VuartFrameType.CALL_STATE) return;
-      const result = this.router.route(frame);
-      if (result.accepted && result.kind === "audio") this.audioPump.notify();
+    this.mediaController = new AirGatewayRuntimeMediaController({
+      admission: this.admission,
+      router: this.router,
+      carrier: this.carrier,
+      room: this.room,
+      queue: this.audioQueue,
+      pump: this.audioPump,
+      tts: this.ttsUplink,
+      carrierDispatcher: this.carrierDispatcher,
+      liveKitDispatcher: this.liveKitDispatcher,
+      now,
     });
+    this.bindingController = new AirGatewayDeviceBindingController({
+      deviceId: options.config.deviceId,
+      admission: this.admission,
+      router: this.router,
+      suspendMedia: (binding) => {
+        this.audioPump.suspend();
+        this.ttsUplink.suspend(binding.callGeneration);
+      },
+    });
+    this.mediaRecovery = new AirGatewayMediaRecovery({
+      requestAccess: (binding) => options.carrierClient.recoverMedia(binding),
+      isRecovered: (binding) => {
+        const active = this.router.binding();
+        return Boolean(active && sameSessionBinding(active, binding) &&
+          this.room.client(binding));
+      },
+      isStillAuthoritative: (binding, bootId) =>
+        this.bindingController.isStillAuthoritative(binding, bootId),
+      restoreDevice: (binding) => this.bindingController.restore(binding),
+      restoreCarrier: (binding, state) => this.carrier.restore(binding, state, now()),
+      prepareRoom: (request) => this.room.prepare(request),
+      rollbackDevice: (binding) => this.bindingController.rollback(binding),
+    });
+    this.unsubscribeFrame = this.frames.onFrame((frame) =>
+      this.mediaController.handleFrame(frame));
     this.unsubscribeDisconnect = this.frames.onDisconnect((reason) => {
       this.audioPump.suspend();
       this.ttsUplink.suspend();
@@ -183,9 +214,9 @@ export class AirDeviceGatewayRuntime {
     });
     this.commandService = new AirGatewayCommandService({
       ingress: this.ingress,
-      prepareDevice: (request) => this.prepareDevice(request),
+      prepareDevice: (request) => this.bindingController.prepare(request),
       prepareRoom: (request) => this.room.prepare(request),
-      rollbackDevice: (request) => this.rollbackDevice(request),
+      rollbackDevice: (request) => this.bindingController.rollback(request),
       clearRoom: (request) => this.room.clear(bindingOf(request)),
       observeCarrier: (binding) => this.carrier.reconcile(binding),
       ledger: options.commandLedger ??
@@ -197,6 +228,7 @@ export class AirDeviceGatewayRuntime {
       commandService: this.commandService,
       apiSecret: options.config.commandApiSecret,
       commandTimeoutMs: options.config.commandTimeoutMs,
+      health: () => airGatewayProcessHealth(this.started, this.readiness()),
       readiness: () => this.readiness(),
     });
   }
@@ -209,7 +241,14 @@ export class AirDeviceGatewayRuntime {
       this.liveKitDispatcher.initialize(),
       this.heartbeatDispatcher.initialize(),
     ]);
-    await this.frames.open();
+    try {
+      await this.frames.open();
+    } catch {
+      // The stable by-id path can be absent while USB is re-enumerating. Keep
+      // the local control endpoint fail-closed and retry; do not make a
+      // transient device absence into a permanently dead in-container process.
+      this.serialRecovery.recoverStartupFailure("serial_startup_open_failed");
+    }
     try {
       await new Promise<void>((resolve, reject) => {
         const onError = (error: Error) => reject(error);
@@ -221,6 +260,7 @@ export class AirDeviceGatewayRuntime {
       });
       this.started = true;
     } catch (error) {
+      await this.serialRecovery.stop();
       await this.frames.close().catch(() => undefined);
       throw error;
     }
@@ -240,6 +280,7 @@ export class AirDeviceGatewayRuntime {
     this.carrierDispatcher.dispose();
     this.liveKitDispatcher.dispose();
     this.heartbeatDispatcher.dispose();
+    await this.mediaRecovery.stop();
     this.audioPump.suspend();
     this.ttsUplink.suspend();
     await this.room.shutdown().catch(() => undefined);
@@ -274,29 +315,21 @@ export class AirDeviceGatewayRuntime {
       hello: boot.hello ? "observed" : "missing",
       heartbeat: boot.heartbeat ? "observed" : "missing",
       bootAdmission: boot.state,
+      protocol: airGatewayProtocolReadiness(this.frames.metrics(), boot),
       serialRecovery: this.serialRecovery.metrics(),
+      mediaRecovery: this.mediaRecovery.metrics(),
       room: this.room.snapshot().state,
       commands: this.commandService.metrics(),
       carrierEvents,
       liveKitEvents,
       heartbeatEvents: { ...this.heartbeatEvents, ...heartbeatDispatcher },
       media: {
+        ...this.mediaController.metrics(),
         ...this.audioPump.metrics(),
         ttsUplink: this.ttsUplink.metrics(),
         router: this.router.metrics(),
       },
     };
-  }
-
-  private handleRoomMediaState(event: SessionBoundLiveKitParticipantState) {
-    if (event.liveKitParticipantState === "joined") {
-      this.audioPump.resume();
-      this.ttsUplink.resume(event);
-      return;
-    }
-    this.audioPump.suspend();
-    this.ttsUplink.suspend(event.callGeneration);
-    this.audioQueue.discardQueuedFrames(event.callGeneration);
   }
 
   private publishHeartbeat(
@@ -312,38 +345,4 @@ export class AirDeviceGatewayRuntime {
     }
   }
 
-  private prepareDevice(input: AirDeviceSessionBinding & { type: string }) {
-    if (input.deviceId !== this.options.config.deviceId) {
-      throw new Error("Air Gateway command targets another device");
-    }
-    const binding = bindingOf(input);
-    const active = this.router.binding();
-    if (active && !sameSessionBinding(active, binding)) {
-      throw new Error("Air Gateway device session is already bound");
-    }
-    const boot = this.admission.snapshot();
-    if (!boot.bootId || !boot.heartbeat) {
-      throw new Error("Air Gateway device boot is not ready");
-    }
-    if (boot.state !== "admitted" || !boot.authorizedBinding ||
-      !sameSessionBinding(boot.authorizedBinding, binding)) {
-      this.admission.completeReconcile({
-        bootId: boot.bootId,
-        authorizedBinding: binding,
-      });
-    }
-    if (!active) {
-      this.router.bind(binding);
-      return true;
-    }
-    return false;
-  }
-
-  private rollbackDevice(input: AirDeviceSessionBinding) {
-    const active = this.router.binding();
-    if (!active || !sameSessionBinding(active, bindingOf(input))) return;
-    this.audioPump.suspend();
-    this.ttsUplink.suspend(input.callGeneration);
-    this.router.disconnect("dial_pre_dispatch_rollback");
-  }
 }

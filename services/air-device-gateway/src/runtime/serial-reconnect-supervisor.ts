@@ -11,6 +11,7 @@ export class SerialReconnectSupervisor {
   private lastReason?: string;
   private readonly counters = {
     disconnects: 0,
+    startupOpenFailures: 0,
     attempts: 0,
     failures: 0,
     recoveries: 0,
@@ -29,8 +30,17 @@ export class SerialReconnectSupervisor {
   }
 
   recover(reason: string) {
+    this.beginRecovery(reason, true);
+  }
+
+  recoverStartupFailure(reason: string) {
+    this.beginRecovery(reason, false);
+  }
+
+  private beginRecovery(reason: string, isDisconnect: boolean) {
     if (this.state === "stopped") return;
-    this.counters.disconnects += 1;
+    if (isDisconnect) this.counters.disconnects += 1;
+    else this.counters.startupOpenFailures += 1;
     this.lastReason = reason;
     if (this.state === "recovering") return;
     this.state = "recovering";

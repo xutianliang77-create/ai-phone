@@ -15,7 +15,11 @@ describe("Air Gateway LiveKit room session", () => {
     expect(fixture.room.connect).toHaveBeenCalledWith(
       "wss://livekit.example.cn/",
       "room-token",
-      { autoSubscribe: false },
+      {
+        autoSubscribe: false,
+        communicationSessionId: "comm-1",
+        mediaPolicy: "translation_isolated",
+      },
     );
     expect(fixture.session.snapshot()).toMatchObject({
       state: "connected",
@@ -145,6 +149,7 @@ describe("Air Gateway LiveKit room session", () => {
     expect(fixture.onTtsFrame).toHaveBeenCalledOnce();
     expect(fixture.onTtsFrame).toHaveBeenCalledWith({
       ...binding,
+      uplinkSource: "translated_tts",
       trackSid: "TR_tts_1",
       samples,
       sampleRate: 16_000,
@@ -160,6 +165,44 @@ describe("Air Gateway LiveKit room session", () => {
     expect(fixture.onTtsFrame).toHaveBeenCalledOnce();
     expect(fixture.session.snapshot()).toMatchObject({ ttsFramesRejected: 3 });
   });
+
+  it("switches atomically from Agent TTS to the accepted Host microphone", async () => {
+    const fixture = setup();
+    await fixture.session.prepare(dial({
+      roomAccess: {
+        ...dial().roomAccess,
+        mediaPolicy: "agent_monitored",
+      },
+    }));
+    const target = "comm-1:guest:air:air-780-1";
+    const ttsName = `translation-tts-guest-1.${Buffer.from(target)
+      .toString("base64url")}`;
+    const samples = new Int16Array(320);
+
+    fixture.emitRemoteTrack({
+      sid: "TR_tts_1",
+      name: ttsName,
+      publisherIdentity: "comm-1:worker:voice-agent-1",
+    });
+    await vi.waitFor(() => expect(fixture.room.setSubscribed)
+      .toHaveBeenCalledWith("TR_tts_1", true));
+    fixture.emitRemoteTrack({
+      sid: "TR_host_1",
+      name: "microphone",
+      publisherIdentity: "comm-1:host:user-1",
+    });
+    await vi.waitFor(() => expect(fixture.room.setSubscribed)
+      .toHaveBeenCalledWith("TR_host_1", true));
+
+    fixture.emitAudioFrame({ trackSid: "TR_tts_1", samples, sampleRate: 16_000 });
+    fixture.emitAudioFrame({ trackSid: "TR_host_1", samples, sampleRate: 16_000 });
+    expect(fixture.onTtsFrame).toHaveBeenLastCalledWith(expect.objectContaining({
+      trackSid: "TR_host_1",
+      uplinkSource: "takeover_microphone",
+    }));
+    expect(fixture.onUplinkBoundary).toHaveBeenCalledWith(binding);
+    expect(fixture.room.setSubscribed).toHaveBeenCalledWith("TR_tts_1", false);
+  });
 });
 
 function setup() {
@@ -170,6 +213,7 @@ function setup() {
     name: string;
     publisherIdentity: string;
   }) => void) | undefined;
+  let unavailableTrackListener: ((trackSid: string) => void) | undefined;
   let audioFrameListener: ((frame: {
     trackSid: string;
     samples: Int16Array;
@@ -188,6 +232,10 @@ function setup() {
       remoteTrackListener = listener;
       return () => { remoteTrackListener = undefined; };
     }),
+    onRemoteTrackUnpublished: vi.fn((listener) => {
+      unavailableTrackListener = listener;
+      return () => { unavailableTrackListener = undefined; };
+    }),
     onSubscribedAudioFrame: vi.fn((listener) => {
       audioFrameListener = listener;
       return () => { audioFrameListener = undefined; };
@@ -196,15 +244,20 @@ function setup() {
   const createRoom = vi.fn(() => room);
   const onParticipantState = vi.fn();
   const onTtsFrame = vi.fn();
+  const onUplinkBoundary = vi.fn();
   const admitTrack = vi.fn(async (request: ReturnType<typeof admissionRequest>) => {
     const { roomName: _room, fencingToken: _fence, ...admission } = request;
-    return admission;
+    const uplinkSource = request.trackName === "microphone"
+      ? "takeover_microphone" as const
+      : "translated_tts" as const;
+    return { uplinkSource, ...admission };
   });
   return {
     room,
     createRoom,
     onParticipantState,
     onTtsFrame,
+    onUplinkBoundary,
     admitTrack,
     emitConnectionState: (state: "reconnecting" | "joined" |
       "disconnected") => connectionListener?.(state),
@@ -213,6 +266,8 @@ function setup() {
       name: string;
       publisherIdentity: string;
     }) => remoteTrackListener?.(track),
+    emitRemoteTrackUnavailable: (trackSid: string) =>
+      unavailableTrackListener?.(trackSid),
     emitAudioFrame: (frame: {
       trackSid: string;
       samples: Int16Array;
@@ -223,6 +278,7 @@ function setup() {
       onParticipantState,
       admitTrack,
       onTtsFrame,
+      onUplinkBoundary,
     }),
   };
 }
@@ -256,6 +312,7 @@ function dial(overrides: Record<string, unknown> = {}) {
       wsUrl: "wss://livekit.example.cn/",
       token: "room-token",
       expiresAt: "2099-01-01T00:00:00.000Z",
+      mediaPolicy: "translation_isolated" as const,
     },
     ...overrides,
   };

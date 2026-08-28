@@ -5,6 +5,10 @@ import type {
   AirDeviceLiveKitParticipantEventRequest,
 } from "@translation/contracts";
 import type { AirDeviceSessionBinding } from "../device/device-session-router.js";
+import type { AirDeviceBootAdmissionSnapshot } from
+  "../device/air-device-boot-admission.js";
+import type { VuartStreamMetrics } from
+  "../device/vuart-serial-frame-transport.js";
 import type { AirGatewayEventOutbox } from "./air-gateway-carrier-dispatcher.js";
 import { FileAirGatewayEventOutbox } from "./file-air-gateway-event-outbox.js";
 
@@ -61,4 +65,42 @@ export function sameSessionBinding(
     left.deviceId === right.deviceId && left.leaseId === right.leaseId &&
     left.fencingToken === right.fencingToken &&
     left.callGeneration === right.callGeneration;
+}
+
+export function airGatewayProtocolReadiness(
+  stream: VuartStreamMetrics,
+  admission: AirDeviceBootAdmissionSnapshot,
+) {
+  return {
+    stream,
+    admission: {
+      invalidFrames: admission.invalidFrames,
+      invalidFrameReasons: admission.invalidFrameReasons,
+      staleBootFrames: admission.staleBootFrames,
+      staleHeartbeats: admission.staleHeartbeats,
+      ...(admission.lastInvalidFrameReason
+        ? { lastInvalidFrameReason: admission.lastInvalidFrameReason }
+        : {}),
+    },
+  };
+}
+
+export function airGatewayProcessHealth(
+  started: boolean,
+  readiness: {
+    ready: boolean;
+    carrierEvents: { persistenceHealthy: boolean };
+    liveKitEvents: { persistenceHealthy: boolean };
+    heartbeatEvents: { persistenceHealthy: boolean };
+  },
+) {
+  const persistenceHealthy = readiness.carrierEvents.persistenceHealthy &&
+    readiness.liveKitEvents.persistenceHealthy &&
+    readiness.heartbeatEvents.persistenceHealthy;
+  return {
+    healthy: started && persistenceHealthy,
+    process: started ? "ready" : "starting",
+    persistence: persistenceHealthy ? "ready" : "unavailable",
+    deviceReady: readiness.ready,
+  };
 }

@@ -12,6 +12,7 @@ export function createAirGatewayHttpServer(options: {
   apiSecret: string;
   maxBodyBytes?: number;
   commandTimeoutMs?: number;
+  health?: () => { healthy: boolean; [key: string]: unknown };
   readiness?: () => { ready: boolean; [key: string]: unknown };
 }) {
   const maxBodyBytes = options.maxBodyBytes ?? 32_768;
@@ -31,6 +32,7 @@ export function createAirGatewayHttpServer(options: {
       apiSecret: options.apiSecret,
       maxBodyBytes,
       commandTimeoutMs,
+      health: options.health,
       readiness: options.readiness,
     }).catch(() => send(response, 503, {
       status: "unavailable",
@@ -47,8 +49,13 @@ async function handle(
   response: ServerResponse,
   service: CommandService,
   options: { apiSecret: string; maxBodyBytes: number; commandTimeoutMs: number;
+    health?: () => { healthy: boolean; [key: string]: unknown };
     readiness?: () => { ready: boolean; [key: string]: unknown } },
 ) {
+  if (request.url === "/healthz" && request.method === "GET") {
+    const health = options.health?.() ?? { healthy: true };
+    return send(response, health.healthy ? 200 : 503, health);
+  }
   if (request.url === "/readyz" && request.method === "GET") {
     const readiness = options.readiness?.() ?? { ready: true };
     return send(response, readiness.ready ? 200 : 503, readiness);

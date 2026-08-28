@@ -22,6 +22,27 @@ describe("Serial reconnect supervisor", () => {
     });
     await supervisor.stop();
   });
+
+  it("distinguishes an initial unavailable device from a later disconnect", async () => {
+    const target = new ReconnectTarget(1);
+    const supervisor = new SerialReconnectSupervisor(target, {
+      retryDelayMs: 1,
+    });
+
+    supervisor.recoverStartupFailure("serial_startup_open_failed");
+    await vi.waitFor(() => expect(target.isOpen).toBe(true));
+
+    expect(supervisor.metrics()).toMatchObject({
+      state: "idle",
+      disconnects: 0,
+      startupOpenFailures: 1,
+      attempts: 2,
+      failures: 1,
+      recoveries: 1,
+      lastReason: "serial_startup_open_failed",
+    });
+    await supervisor.stop();
+  });
 });
 
 class ReconnectTarget {
