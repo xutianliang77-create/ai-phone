@@ -1,15 +1,34 @@
+import 'dart:convert';
+
 import '../../call_link/data/call_link_api_client.dart';
 import '../../call_link/data/call_room_client.dart';
 
+part 'pstn_call_session_controls.dart';
+
 class PstnCallSession {
-  PstnCallSession({required this.apiClient, required this.roomClient});
+  PstnCallSession({
+    required this.apiClient,
+    required this.roomClient,
+    this.controlPollInterval = const Duration(milliseconds: 250),
+    this.controlPollAttempts = 16,
+  }) : assert(controlPollAttempts > 0);
 
   final CallLinkApiClient apiClient;
   final CallRoomClient roomClient;
+  final Duration controlPollInterval;
+  final int controlPollAttempts;
   CallLink? _link;
   SipOutboundCall? _phoneCall;
+  _DtmfAttempt? _pendingDtmf;
+  _TranslationUplinkAttempt? _pendingTranslationUplink;
+  _TypedTextAttempt? _pendingTypedText;
+  _DiagnosticMarkerAttempt? _pendingDiagnosticMarker;
+  bool _microphoneMuted = false;
+  bool _translationUplinkPaused = false;
 
   CallLink? get link => _link;
+  bool get microphoneMuted => _microphoneMuted;
+  bool get translationUplinkPaused => _translationUplinkPaused;
 
   Future<SipOutboundCall> start({
     required String targetPhone,
@@ -44,6 +63,8 @@ class PstnCallSession {
               disclosureConfirmed: true,
             );
       _phoneCall = call;
+      _microphoneMuted = false;
+      _translationUplinkPaused = false;
       return call;
     } on Object {
       await _compensateFailedStart(link);
@@ -54,51 +75,109 @@ class PstnCallSession {
   Future<CallLinkEndResult?> end() async {
     final link = _link;
     if (link == null) return null;
-    if (_phoneCall != null) {
+    final phoneCall = _phoneCall;
+    if (phoneCall?.provider == 'air780_volte') {
+      final hangup = await apiClient.hangupAir780(callId: link.callId);
+      if (hangup.status == 'failed' || hangup.status == 'cancelled') {
+        throw const CallLinkApiException(
+          'Air780 hangup was not dispatched; the call remains active',
+          code: 'air780_hangup_not_dispatched',
+        );
+      }
+      await _quarantineLocalMedia();
+      // Carrier state, not command acceptance or LiveKit presence, closes an
+      // Air780 session. Keep the room binding until the terminal event arrives.
+      return null;
+    }
+    if (phoneCall != null) {
+      final hangup = await apiClient.hangupSip(callId: link.callId);
+      if (hangup.status == 'failed' || hangup.status == 'cancelled') {
+        throw const CallLinkApiException(
+          'SIP hangup was not dispatched; the call remains active',
+          code: 'sip_hangup_not_dispatched',
+        );
+      }
+      await _quarantineLocalMedia();
+      // SIP provider operation/webhook state, not command acceptance or room
+      // presence, closes the dial and triggers final business settlement.
+      return null;
+    }
+    return _finalize();
+  }
+
+  Future<void> _quarantineLocalMedia() async {
+    try {
+      await roomClient.setMicrophoneEnabled(false);
+      _microphoneMuted = true;
+    } on Object {
+      // If mute cannot be confirmed, leave the room so raw audio cannot keep
+      // flowing while provider termination is being reconciled.
       try {
-        if (_phoneCall!.provider == 'air780_volte') {
-          await apiClient.hangupAir780(callId: link.callId);
-        } else {
-          await apiClient.hangupSip(callId: link.callId);
-        }
+        await roomClient.disconnect();
       } on Object {
-        // Session finalization remains mandatory even if provider cleanup is uncertain.
+        // Provider state remains authoritative for business finalization.
       }
     }
+  }
+
+  Future<CallLinkEndResult?> finalizeAfterCarrierEnd() {
+    final phoneCall = _phoneCall;
+    if (phoneCall != null && phoneCall.provider != 'air780_volte') {
+      throw StateError('Carrier finalization is only valid for Air780 calls');
+    }
+    return finalizeAfterProviderEnd();
+  }
+
+  SipOutboundCall applyProviderStatus(PhoneCallStatus status) {
+    final phoneCall = _phoneCall;
+    if (phoneCall == null ||
+        phoneCall.callId != status.callId ||
+        phoneCall.sessionId != status.sessionId ||
+        phoneCall.operationId != status.operationId ||
+        phoneCall.provider != status.provider ||
+        (phoneCall.callGeneration != null &&
+            status.callGeneration != null &&
+            phoneCall.callGeneration != status.callGeneration)) {
+      throw StateError('Phone provider status binding does not match session');
+    }
+    final current = phoneCall.withProviderStatus(status);
+    _phoneCall = current;
+    return current;
+  }
+
+  Future<CallLinkEndResult?> finalizeAfterProviderEnd() {
+    final phoneCall = _phoneCall;
+    if (phoneCall == null || !_isProviderTerminal(phoneCall)) {
+      throw StateError('Phone provider has not reached a terminal state');
+    }
+    return _finalize();
+  }
+
+  bool _isProviderTerminal(SipOutboundCall call) {
+    if (call.provider == 'air780_volte') {
+      return call.carrierState == 'disconnected' ||
+          call.carrierState == 'busy' ||
+          call.carrierState == 'failed';
+    }
+    return call.status == 'succeeded' ||
+        call.status == 'failed' ||
+        call.status == 'cancelled';
+  }
+
+  Future<CallLinkEndResult?> _finalize() async {
+    final link = _link;
+    if (link == null) return null;
     await roomClient.disconnect();
     final result = await apiClient.endCallLink(callId: link.callId);
     _link = null;
     _phoneCall = null;
+    _pendingDtmf = null;
+    _pendingTranslationUplink = null;
+    _pendingTypedText = null;
+    _pendingDiagnosticMarker = null;
+    _microphoneMuted = false;
+    _translationUplinkPaused = false;
     return result;
-  }
-
-  Future<SipControlResult> sendDtmf(String digit) {
-    final link = _link;
-    if (link == null ||
-        _phoneCall == null ||
-        _phoneCall!.provider != 'livekit_sip') {
-      throw const CallLinkApiException('DTMF is only available for SIP calls');
-    }
-    return apiClient.sendSipDtmf(
-      callId: link.callId,
-      digit: digit,
-      idempotencyKey: _controlKey('dtmf'),
-    );
-  }
-
-  Future<SipControlResult> transfer(String targetPhone) {
-    final link = _link;
-    if (link == null ||
-        _phoneCall == null ||
-        _phoneCall!.provider != 'livekit_sip') {
-      throw const CallLinkApiException(
-          'Transfer is only available for SIP calls');
-    }
-    return apiClient.transferSip(
-      callId: link.callId,
-      targetPhone: targetPhone,
-      idempotencyKey: _controlKey('transfer'),
-    );
   }
 
   Future<void> dispose({
@@ -129,8 +208,11 @@ class PstnCallSession {
     }
     _link = null;
     _phoneCall = null;
+    _pendingDtmf = null;
+    _pendingTranslationUplink = null;
+    _pendingTypedText = null;
+    _pendingDiagnosticMarker = null;
+    _microphoneMuted = false;
+    _translationUplinkPaused = false;
   }
-
-  String _controlKey(String action) =>
-      '$action:${DateTime.now().microsecondsSinceEpoch}';
 }

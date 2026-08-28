@@ -12,8 +12,12 @@ import '../../../compliance/data/voice_processing_consent_store.dart';
 import '../../../compliance/presentation/widgets/voice_processing_consent_dialog.dart';
 import '../../data/pstn_call_readiness_client.dart';
 import '../../data/pstn_call_session.dart';
+import '../pstn_call_error_message.dart';
 import '../widgets/pstn_call_widgets.dart';
 import '../widgets/pstn_call_control_panel.dart';
+
+part 'pstn_call_form_actions.dart';
+part 'pstn_call_lifecycle.dart';
 
 class PstnCallPage extends StatefulWidget {
   const PstnCallPage({
@@ -46,9 +50,12 @@ class _PstnCallPageState extends State<PstnCallPage> {
   );
   late final VoiceProcessingConsentStore _voiceConsentStore =
       widget.voiceConsentStore ?? const FileVoiceProcessingConsentStore();
+
+  void _updateState(VoidCallback update) => setState(update);
   final _formKey = GlobalKey<FormState>();
   final _phoneController = TextEditingController();
   StreamSubscription<CallRoomSnapshot>? _roomSubscription;
+  Timer? _phoneStatusTimer;
   String _hostLanguage = 'zh';
   String _calleeLanguage = 'en';
   bool _disclosureConfirmed = false;
@@ -62,6 +69,9 @@ class _PstnCallPageState extends State<PstnCallPage> {
   CallRoomSnapshot _roomSnapshot = const CallRoomSnapshot.disconnected();
   Object? _callError;
   bool _callBusy = false;
+  bool _hangupPending = false;
+  bool _phoneFinalizing = false;
+  bool _phoneStatusPolling = false;
 
   bool get _isChinese => Localizations.localeOf(context).languageCode == 'zh';
 
@@ -78,6 +88,7 @@ class _PstnCallPageState extends State<PstnCallPage> {
 
   @override
   void dispose() {
+    _phoneStatusTimer?.cancel();
     _phoneController.dispose();
     unawaited(_roomSubscription?.cancel());
     unawaited(_session.dispose(
@@ -218,6 +229,7 @@ class _PstnCallPageState extends State<PstnCallPage> {
                   call: _sipCall!,
                   roomSnapshot: _roomSnapshot,
                   endBusy: _callBusy,
+                  hangupPending: _hangupPending,
                   chinese: _isChinese,
                   onEnd: _endCall,
                   defaultCountry: widget.config.region.defaultCountry,
@@ -231,7 +243,7 @@ class _PstnCallPageState extends State<PstnCallPage> {
               ] else if (_callError != null) ...<Widget>[
                 const SizedBox(height: 12),
                 Text(
-                  _callError.toString(),
+                  pstnCallErrorMessage(_callError!, chinese: _isChinese),
                   style: TextStyle(color: theme.colorScheme.error),
                 ),
               ],
@@ -241,111 +253,4 @@ class _PstnCallPageState extends State<PstnCallPage> {
       ),
     );
   }
-
-  String? _validatePhone(String? value) {
-    final phone = _normalizePhone(value ?? '');
-    if (!RegExp(r'^\+[1-9]\d{7,14}$').hasMatch(phone)) {
-      return _text(
-          '请输入有效的手机号和国家/地区码', 'Enter a valid number with country code');
-    }
-    return null;
-  }
-
-  String _normalizePhone(String value) {
-    var phone = value.replaceAll(RegExp(r'[^\d+]'), '');
-    if (!phone.startsWith('+') &&
-        widget.config.region.defaultCountry == 'CN' &&
-        RegExp(r'^1[3-9]\d{9}$').hasMatch(phone)) {
-      phone = '+86$phone';
-    }
-    return phone;
-  }
-
-  void _review() {
-    if (!_formKey.currentState!.validate()) return;
-    if (_hostLanguage == _calleeLanguage) {
-      _showMessage(_text('请选择不同的我方和对方语言', 'Choose two different languages'));
-      return;
-    }
-    if (!_disclosureConfirmed) {
-      _showMessage(_text('请先确认通话告知规则', 'Confirm the call disclosure first'));
-      return;
-    }
-    setState(() {
-      _normalizedPhone = _normalizePhone(_phoneController.text);
-      _reviewed = true;
-    });
-  }
-
-  Future<void> _loadReadiness() async {
-    if (_loading || !widget.config.region.isPstnEnabled) return;
-    setState(() {
-      _loading = true;
-      _readiness = null;
-      _readinessError = null;
-    });
-    try {
-      final readiness = await widget.readinessFetcher(widget.config.apiBaseUrl);
-      if (mounted) setState(() => _readiness = readiness);
-    } on Object catch (error) {
-      if (mounted) setState(() => _readinessError = error);
-    } finally {
-      if (mounted) setState(() => _loading = false);
-    }
-  }
-
-  Future<void> _startCall() async {
-    if (_callBusy || _sipCall != null || _normalizedPhone == null) return;
-    final consent = await ensureVoiceProcessingConsent(
-      context: context,
-      store: _voiceConsentStore,
-      scene: VoiceProcessingConsentScene.callLink,
-    );
-    if (!consent || !mounted) return;
-    setState(() {
-      _callBusy = true;
-      _callError = null;
-      _endResult = null;
-    });
-    try {
-      final call = await _session.start(
-        targetPhone: _normalizedPhone!,
-        sourceLanguage: _hostLanguage,
-        targetLanguage: _calleeLanguage,
-        provider: _readiness?.provider ?? 'livekit_sip',
-      );
-      if (mounted) setState(() => _sipCall = call);
-    } on Object catch (error) {
-      if (mounted) setState(() => _callError = error);
-    } finally {
-      if (mounted) setState(() => _callBusy = false);
-    }
-  }
-
-  Future<void> _endCall() async {
-    if (_callBusy || _session.link == null) return;
-    setState(() {
-      _callBusy = true;
-      _callError = null;
-    });
-    try {
-      final result = await _session.end();
-      if (mounted) setState(() => _endResult = result);
-    } on Object catch (error) {
-      if (mounted) setState(() => _callError = error);
-    } finally {
-      if (mounted) setState(() => _callBusy = false);
-    }
-  }
-
-  void _clearReview() {
-    if (_reviewed) setState(() => _reviewed = false);
-  }
-
-  void _showMessage(String message) => ScaffoldMessenger.of(context)
-      .showSnackBar(SnackBar(content: Text(message)));
-  String _languageName(String code) =>
-      translationLanguageName(code, chinese: _isChinese);
-  String _text(String chinese, String english) =>
-      _isChinese ? chinese : english;
 }
