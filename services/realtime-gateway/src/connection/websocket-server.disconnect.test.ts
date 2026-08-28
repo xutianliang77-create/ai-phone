@@ -25,6 +25,8 @@ describe("websocket disconnect recovery", () => {
     setEnv("REALTIME_PROVIDER", "mock");
     setEnv("ASR_PROVIDER", "mock");
     setEnv("SESSION_EVENT_SINK", "noop");
+    setEnv("REALTIME_ALLOWED_HOSTS", "127.0.0.1");
+    setEnv("REALTIME_ALLOW_NON_BROWSER_CLIENTS_WITHOUT_ORIGIN", "true");
     const server = startWebSocketServer();
     await new Promise<void>((resolve) => server.once("listening", resolve));
     const address = server.address();
@@ -33,13 +35,13 @@ describe("websocket disconnect recovery", () => {
     }
     const url = `ws://127.0.0.1:${address.port}/realtime?token=${token()}`;
 
-    const first = new WebSocket(url);
+    const first = new WebSocket(url, { headers: { host: "127.0.0.1" } });
     await waitForEvent(first, "session.started");
     first.close();
     await new Promise<void>((resolve) => first.once("close", resolve));
     await waitFor(() => getSession(sessionId)?.status === "connecting");
 
-    const second = new WebSocket(url);
+    const second = new WebSocket(url, { headers: { host: "127.0.0.1" } });
     await waitForEvent(second, "session.started");
     second.send(JSON.stringify({ type: "session.resume", sessionId }));
     await waitForEvent(second, "session.resumed");

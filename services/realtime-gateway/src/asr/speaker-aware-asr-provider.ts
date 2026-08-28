@@ -15,6 +15,8 @@ import { SpeakerTurnDiagnostics } from "./speaker-turn-diagnostics.js";
 import { SpeakerTurnAssignment } from "./speaker-turn-assignment.js";
 import { RecentPcmAudioBuffer } from "../speaker/recent-pcm-audio-buffer.js";
 import type { VoiceIdentityMatcher } from "../speaker/voice-identity-matcher.js";
+import { applyVoiceIdentities } from
+  "../speaker/speaker-voice-identity.js";
 import {
   SpeakerSpanCapture,
   speakerSpanCaptureOptionsFromEnvironment,
@@ -332,26 +334,14 @@ export class SpeakerAwareAsrProvider implements AsrProvider {
     sessionId: string,
     transcripts: TranscriptResult[],
   ) {
-    const userId = this.identitySessions.get(sessionId);
-    const matcher = this.identityMatcher;
-    const audio = this.identityAudio.get(sessionId);
-    if (!userId || !matcher || !audio) return transcripts;
-    const cache = this.identitiesBySpeaker.get(sessionId)!;
-    return await Promise.all(transcripts.map(async (transcript) => {
-      const diarizedId = transcript.speaker?.speakerId ?? "unknown";
-      const cached = cache.get(diarizedId);
-      if (cached) return { ...transcript, speaker: cached };
-      const audioBase64 = audio.wavBase64(transcript.timing);
-      if (!audioBase64) return transcript;
-      try {
-        const identity = await matcher.match({ userId, audioBase64 });
-        if (!identity) return transcript;
-        if (diarizedId !== "unknown") cache.set(diarizedId, identity);
-        return { ...transcript, speaker: identity };
-      } catch (error) {
-        this.recordSpeakerFailure(sessionId, "identity", error);
-        return transcript;
-      }
-    }));
+    return applyVoiceIdentities({
+      transcripts,
+      userId: this.identitySessions.get(sessionId),
+      matcher: this.identityMatcher,
+      audio: this.identityAudio.get(sessionId),
+      cache: this.identitiesBySpeaker.get(sessionId),
+      onFailure: (error) =>
+        this.recordSpeakerFailure(sessionId, "identity", error),
+    });
   }
 }

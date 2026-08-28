@@ -7,6 +7,35 @@ import type {
 import type { RealtimeProviderSession } from "../realtime-provider.js";
 import { realtimeLogger } from "../../metrics/realtime-metrics.js";
 import type { TranscriptResult } from "../../asr/asr-provider.js";
+import type { RefinedTranscript } from "./lmstudio-asr-refinement.js";
+import { turnLanguageEventFields } from
+  "../../segments/turn-language-profile.js";
+
+export function transcriptFinalEvent(
+  session: RealtimeProviderSession,
+  transcript: TranscriptResult,
+  refinement: RefinedTranscript,
+): ServerRealtimeEvent {
+  return {
+    type: "transcript.final",
+    sessionId: session.sessionId,
+    segmentId: transcript.segmentId,
+    turnId: transcript.turnId,
+    revision: transcript.revision,
+    text: refinement.text,
+    rawText: refinement.rawText,
+    ...(refinement.optimizedText
+      ? { optimizedText: refinement.optimizedText }
+      : {}),
+    language: transcript.language,
+    ...turnLanguageEventFields(transcript),
+    confidence: transcript.confidence,
+    refinement: refinement.refinement,
+    speaker: transcript.speaker,
+    timing: transcript.timing,
+    vadContext: transcript.vadContext,
+  };
+}
 
 export function terminologyFor(
   session: RealtimeProviderSession,

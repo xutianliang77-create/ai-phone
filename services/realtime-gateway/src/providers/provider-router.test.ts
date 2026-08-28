@@ -4,7 +4,9 @@ import { ProviderRouter } from "./provider-router.js";
 
 const baseEnv: RealtimeEnv = {
   port: 3001,
+  allowedHosts: ["localhost:3001"],
   allowedOrigins: [],
+  allowNonBrowserClientsWithoutOrigin: false,
   trustProxyAddresses: ["127.0.0.1", "::1"],
   maxPayloadBytes: 65_536,
   maxConnections: 512,

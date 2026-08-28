@@ -18,6 +18,7 @@ import {
   realtimeLogTranslationFailure,
   targetLanguageForTranscript,
   terminologyFor,
+  transcriptFinalEvent,
   translationFailed,
 } from "./lmstudio-realtime-helpers.js";
 import { shouldPreserveSpelledIdentifier } from "./spelled-identifier.js";
@@ -241,22 +242,7 @@ export class LmStudioRealtimeProvider implements RealtimeProvider {
     );
     const text = refinement.text;
     if (emitTranscript) {
-      yield {
-        type: "transcript.final",
-        sessionId: session.sessionId,
-        segmentId: transcript.segmentId,
-        turnId: transcript.turnId,
-        revision: transcript.revision,
-        text,
-        rawText: refinement.rawText,
-        ...(refinement.optimizedText ? { optimizedText: refinement.optimizedText } : {}),
-        language: transcript.language,
-        ...turnLanguageEventFields(transcript),
-        confidence: transcript.confidence,
-        refinement: refinement.refinement,
-        speaker: transcript.speaker, timing: transcript.timing,
-        vadContext: transcript.vadContext,
-      };
+      yield transcriptFinalEvent(session, transcript, refinement);
     }
 
     try {
