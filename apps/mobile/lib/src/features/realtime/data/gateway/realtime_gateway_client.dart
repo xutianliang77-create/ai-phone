@@ -10,6 +10,10 @@ import '../api/realtime_session.dart';
 import 'gateway_realtime_event.dart';
 import 'realtime_reconnect_audio_buffer.dart';
 import 'realtime_reconnect_backoff.dart';
+import 'realtime_gateway_transport.dart';
+
+export 'realtime_gateway_transport.dart'
+    show realtimeGatewayEndpoint, realtimeGatewayProtocols;
 
 class RealtimeGatewayClient {
   static const Duration _connectTimeout = Duration(seconds: 8);
@@ -343,10 +347,3 @@ class RealtimeGatewayClient {
     return drain;
   }
 }
-
-Uri realtimeGatewayEndpoint(RealtimeSession session) => session.endpoint;
-
-Iterable<String> realtimeGatewayProtocols(RealtimeSession session) => <String>[
-      'ai-phone.realtime.v1',
-      'ai-phone.token.${session.realtimeToken}',
-    ];
