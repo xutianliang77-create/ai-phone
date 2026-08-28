@@ -137,6 +137,24 @@ export function updateCommand(input: {
   );
 }
 
+export function retryCommand(input: {
+  fence: PostgresAggregateFence;
+  commandId: string;
+  operationId: string;
+  expectedVersion: number;
+}): PrimaryCommandIdentity {
+  if (!bounded(input.commandId, 200)) throw new Error("Invalid provider command id");
+  return commandIdentity(
+    input.fence.aggregateId,
+    "provider_operation.retry",
+    `retry:${input.commandId}`,
+    {
+      operationId: input.operationId,
+      expectedVersion: input.expectedVersion,
+    },
+  );
+}
+
 function commandIdentity(
   sessionId: string,
   commandType: string,
@@ -181,6 +199,24 @@ export function nextOperation(
   if (input.status === "active") next.answeredAt ??= updatedAt;
   if (providerOperationTerminalStatuses.has(input.status)) next.endedAt ??= updatedAt;
   return next;
+}
+
+export function nextRetriedOperation(
+  operation: ProviderOperationRecord,
+  now = new Date(),
+) {
+  const {
+    endedAt: _endedAt,
+    lastErrorClass: _lastErrorClass,
+    ...current
+  } = operation;
+  return {
+    ...current,
+    status: "in_flight" as const,
+    attempt: operation.attempt + 1,
+    version: operation.version + 1,
+    updatedAt: now.toISOString(),
+  };
 }
 
 export async function enqueueChanged(
@@ -241,7 +277,7 @@ export function canTransition(
   if (current === "accepted") {
     return ["active", "succeeded", "failed", "unknown"].includes(next);
   }
-  return current === "active" && ["succeeded", "failed"].includes(next);
+  return current === "active" && ["succeeded", "failed", "unknown"].includes(next);
 }
 
 export function providerOperationId(

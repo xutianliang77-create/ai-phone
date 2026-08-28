@@ -12,6 +12,8 @@ import {
 import { getRepositoryRuntime } from
   "../../infrastructure/storage/repository-runtime.js";
 import * as legacy from "./provider-operations.repository.js";
+import type { ProviderOperationOutboxFactory } from
+  "./provider-operation-record.js";
 
 export async function beginProviderOperation(input: {
   sessionId: string;
@@ -20,6 +22,7 @@ export async function beginProviderOperation(input: {
   operationKey?: string;
   idempotencyKey: string;
   requestHash: string;
+  outboxFactory?: ProviderOperationOutboxFactory;
   now?: Date;
 }) {
   const runtime = getRepositoryRuntime();
@@ -62,11 +65,60 @@ export async function updateProviderOperation(input: {
   );
 }
 
+export async function retryProviderOperation(input: {
+  operationId: string;
+  expectedVersion: number;
+  now?: Date;
+}) {
+  const runtime = getRepositoryRuntime();
+  if (runtime.driver !== "postgres") {
+    return legacy.retryProviderOperation(input);
+  }
+  const operation = await runtime.postgres.providerOperations.find(
+    input.operationId,
+  );
+  if (!operation) return { status: "not_found" as const };
+  const requestHash = repositoryRequestHash(input);
+  const commandId = repositoryCommandId({
+    aggregateId: operation.sessionId,
+    operation: "provider-operation-retry",
+    version: input.expectedVersion,
+    requestHash,
+  });
+  return withPostgresRepositoryFence(
+    { aggregateType: "communication_session", aggregateId: operation.sessionId },
+    (fence) => runtime.postgres.providerOperations.retry({
+      ...input,
+      commandId,
+      fence,
+    }),
+  );
+}
+
 export function findProviderOperation(operationId: string) {
   const runtime = getRepositoryRuntime();
   return runtime.driver === "postgres"
     ? runtime.postgres.providerOperations.find(operationId)
     : Promise.resolve(legacy.findProviderOperation(operationId));
+}
+
+export function findProviderOperationByIdempotency(
+  provider: CommunicationProvider,
+  operationType: ProviderOperationType,
+  idempotencyKey: string,
+) {
+  const runtime = getRepositoryRuntime();
+  return runtime.driver === "postgres"
+    ? runtime.postgres.providerOperations.findIdempotency(
+      provider,
+      operationType,
+      idempotencyKey,
+    )
+    : Promise.resolve(legacy.findProviderOperationByIdempotency(
+      provider,
+      operationType,
+      idempotencyKey,
+    ));
 }
 
 export function findSessionProviderOperation(
