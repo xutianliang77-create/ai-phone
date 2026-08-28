@@ -180,9 +180,9 @@ export function loadEnv(): RealtimeEnv {
     ),
     listeningMaxContinuationBufferMs: boundedInteger(
       env.REALTIME_LISTENING_MAX_CONTINUATION_BUFFER_MS,
-      5000,
+      7500,
       250,
-      5000,
+      15_000,
     ),
     maxPendingControlEvents: boundedInteger(
       env.REALTIME_MAX_PENDING_CONTROL_EVENTS,

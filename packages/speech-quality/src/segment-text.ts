@@ -2,7 +2,14 @@ import type { SpeechTranscript } from "./speech-transcript.js";
 import { shouldHoldForNextSegment } from "./segment-boundary.js";
 import { analyzeTurnLanguage } from "./turn-language-profile.js";
 
-export function mergeTranscriptParts(parts: SpeechTranscript[]): SpeechTranscript {
+export interface MergeTranscriptPartsOptions {
+  allowSingleCharacterCjkOverlap?: boolean;
+}
+
+export function mergeTranscriptParts(
+  parts: SpeechTranscript[],
+  options: MergeTranscriptPartsOptions = {},
+): SpeechTranscript {
   const first = parts[0];
   const last = parts.at(-1) ?? first;
   const text = parts
@@ -13,6 +20,7 @@ export function mergeTranscriptParts(parts: SpeechTranscript[]): SpeechTranscrip
         part.text,
         first.language,
         parts[index].endpointReason === "max_duration",
+        options.allowSingleCharacterCjkOverlap === true,
       ),
       first.text.trim(),
     );
@@ -112,6 +120,7 @@ function mergeText(
   nextText: string,
   language: string,
   hardContinuation = false,
+  allowSingleCharacterCjkOverlap = false,
 ) {
   const previous = hardContinuation
     ? previousText.trim().replace(/[.。]+$/u, "").trim()
@@ -125,7 +134,12 @@ function mergeText(
   if (nextCanonical.startsWith(previousCanonical)) return next;
   if (previousCanonical.startsWith(nextCanonical)) return previous;
 
-  const overlap = overlapLength(previous, next, language);
+  const overlap = overlapLength(
+    previous,
+    next,
+    language,
+    hardContinuation && allowSingleCharacterCjkOverlap,
+  );
   const remainder = overlap > 0 ? next.slice(overlap).trimStart() : next;
   if (!remainder) return previous;
   return shouldJoinWithoutSpace(previous, remainder)
@@ -138,18 +152,34 @@ function stripIncompleteJoinPunctuation(text: string, language: string) {
   return text.replace(/[.。]+$/u, "").trim();
 }
 
-function overlapLength(previous: string, next: string, language: string) {
+function overlapLength(
+  previous: string,
+  next: string,
+  language: string,
+  allowSingleCharacterCjkOverlap: boolean,
+) {
   const previousLower = previous.toLowerCase();
   const nextLower = next.toLowerCase();
-  const minimum = 2;
+  const minimum = allowSingleCharacterCjkOverlap ? 1 : 2;
   const maximum = Math.min(previous.length, next.length);
   for (let length = maximum; length >= minimum; length -= 1) {
     if (previousLower.slice(-length) !== nextLower.slice(0, length)) continue;
+    if (length === 1 && !isSafeSingleCjkOverlap(next[0], language)) continue;
     if (language !== "zh" && !isEnglishWordOverlap(previous, next, length)) continue;
     return length;
   }
   return 0;
 }
+
+function isSafeSingleCjkOverlap(character: string, language: string) {
+  return language === "zh" &&
+    /\p{Script=Han}/u.test(character) &&
+    !protectedSingleCharacterEntities.has(character);
+}
+
+const protectedSingleCharacterEntities = new Set(Array.from(
+  "零〇一二三四五六七八九十百千万亿两点元角分壹贰叁肆伍陆柒捌玖拾佰仟",
+));
 
 function isEnglishWordOverlap(previous: string, next: string, length: number) {
   const previousStart = previous.length - length;

@@ -8,9 +8,7 @@ import { LmStudioClient } from "./lmstudio-client.js";
 import { isUsableTranslation, providerUsage } from "./lmstudio-translation-output.js";
 import { transcriptVariantsForTranslation } from "./transcript-chunks.js";
 import { routeAsrTranscript } from "./lmstudio-asr-transcript-routing.js";
-import {
-  RealtimeTranscriptRefiner,
-} from "./lmstudio-asr-refinement.js";
+import { RealtimeTranscriptRefiner } from "./lmstudio-asr-refinement.js";
 import { SegmentAssembler } from "../../segments/segment-assembler.js";
 import {
   errorMessage,
@@ -28,6 +26,7 @@ import {
   analyzeTurnLanguage,
   turnLanguageEventFields,
 } from "../../segments/turn-language-profile.js";
+import { continuationTombstones } from "./lmstudio-continuation-events.js";
 
 export class LmStudioRealtimeProvider implements RealtimeProvider {
   readonly name: string;
@@ -46,6 +45,7 @@ export class LmStudioRealtimeProvider implements RealtimeProvider {
     this.asrProvider = options.asrProvider ?? new MockAsrProvider();
     this.listeningSemanticSegments = new SegmentAssembler({
       maxContinuationBufferMs: options.listeningMaxContinuationBufferMs,
+      emitMaxDurationRevisions: true,
     });
     this.transcriptRefiner = new RealtimeTranscriptRefiner({
       provider: options.asrRefinementProvider ?? new OffLlmProvider(),
@@ -87,7 +87,7 @@ export class LmStudioRealtimeProvider implements RealtimeProvider {
       yield* this.flushExpiredSemanticSegments(session);
       return;
     }
-    for (const transcript of transcripts) yield* routeAsrTranscript(session, transcript, (item) => this.processTranscript(session, item));
+    for (const transcript of transcripts) yield* routeAsrTranscript(session, transcript, (item) => this.processTranscript(session, item), (item) => this.semanticSegmentsFor(session).previewContinuation(session.sessionId, item) ?? item);
   }
 
   async *sendText(
@@ -189,6 +189,7 @@ export class LmStudioRealtimeProvider implements RealtimeProvider {
         ...assembled.partial,
       };
     }
+    for (const event of continuationTombstones(session, transcript, assembled.supersededSegmentIds)) yield event;
     for (const readyTranscript of assembled.ready) {
       yield* this.translateTranscript(session, readyTranscript, emitTranscript);
     }

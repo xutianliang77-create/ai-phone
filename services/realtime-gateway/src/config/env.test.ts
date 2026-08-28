@@ -34,7 +34,7 @@ describe("realtime gateway env", () => {
     expect(env.speakerHttpTimeoutMs).toBe(2000);
     expect(env.ttsHttpStreamEndpoint).toBeUndefined();
     expect(env.ttsStreamPrefillMs).toBe(800);
-    expect(env.listeningMaxContinuationBufferMs).toBe(5000);
+    expect(env.listeningMaxContinuationBufferMs).toBe(7500);
   });
 
   it("lets explicit environment variables override model routing defaults", () => {

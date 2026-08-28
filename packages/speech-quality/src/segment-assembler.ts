@@ -4,6 +4,7 @@ import {
   shouldHoldForNextSegment,
 } from "./segment-boundary.js";
 import { canonicalSegmentText, mergeTranscriptParts } from "./segment-text.js";
+import { MaxDurationContinuationRevisionCoordinator } from "./max-duration-continuation-revision.js";
 
 interface PendingSegment {
   parts: SpeechTranscript[];
@@ -29,11 +30,13 @@ export interface SegmentAssemblerOptions {
   maxStructuredBufferMs?: number;
   maxRememberedFinals?: number;
   duplicateTextWindowMs?: number;
+  emitMaxDurationRevisions?: boolean;
 }
 
 export interface SegmentPushResult {
   ready: SpeechTranscript[];
   partial?: SpeechTranscript;
+  supersededSegmentIds?: string[];
 }
 
 const DEFAULT_MAX_BUFFERED_SEGMENTS = 3;
@@ -52,6 +55,7 @@ export class SegmentAssembler {
   private readonly maxStructuredBufferMs: number;
   private readonly maxRememberedFinals: number;
   private readonly duplicateTextWindowMs: number;
+  private readonly continuationRevisions: MaxDurationContinuationRevisionCoordinator;
   private readonly sessions = new Map<string, SessionAssemblyState>();
 
   constructor(options: SegmentAssemblerOptions = {}) {
@@ -64,10 +68,30 @@ export class SegmentAssembler {
       DEFAULT_MAX_STRUCTURED_BUFFER_MS;
     this.maxRememberedFinals = options.maxRememberedFinals ?? DEFAULT_MAX_REMEMBERED_FINALS;
     this.duplicateTextWindowMs = options.duplicateTextWindowMs ?? DEFAULT_DUPLICATE_TEXT_WINDOW_MS;
+    this.continuationRevisions = new MaxDurationContinuationRevisionCoordinator({
+      enabled: options.emitMaxDurationRevisions === true,
+      maxWindowMs: this.maxContinuationBufferMs,
+    });
   }
 
   push(sessionId: string, transcript: SpeechTranscript, nowMs = Date.now()): SegmentPushResult {
     const state = this.stateFor(sessionId);
+    const continuation = this.continuationRevisions.push(sessionId, transcript, nowMs);
+    if (continuation.handled) {
+      if (!continuation.transcript) return { ready: [] };
+      this.remember(
+        state,
+        continuation.transcript,
+        continuation.consumedSegmentIds ?? [continuation.transcript.segmentId],
+        nowMs,
+      );
+      return {
+        ready: [continuation.transcript],
+        ...(continuation.supersededSegmentIds
+          ? { supersededSegmentIds: continuation.supersededSegmentIds }
+          : {}),
+      };
+    }
     if (this.isAlreadyEmitted(state, transcript, nowMs)) return { ready: [] };
     const pending = state.pending;
     if (!pending) return this.acceptNew(state, transcript, nowMs);
@@ -98,6 +122,7 @@ export class SegmentAssembler {
   }
 
   drainExpired(sessionId: string, nowMs = Date.now()) {
+    this.continuationRevisions.expire(sessionId, nowMs);
     const state = this.sessions.get(sessionId);
     if (!state?.pending ||
         nowMs - state.pending.createdAtMs < this.bufferMs(state.pending)) return [];
@@ -105,12 +130,22 @@ export class SegmentAssembler {
   }
 
   flush(sessionId: string, nowMs = Date.now()) {
+    this.continuationRevisions.clear(sessionId);
     const state = this.sessions.get(sessionId);
     return state?.pending ? this.releasePending(state, nowMs) : [];
   }
 
   clear(sessionId: string) {
     this.sessions.delete(sessionId);
+    this.continuationRevisions.clear(sessionId);
+  }
+
+  previewContinuation(
+    sessionId: string,
+    transcript: SpeechTranscript,
+    nowMs = Date.now(),
+  ) {
+    return this.continuationRevisions.preview(sessionId, transcript, nowMs);
   }
 
   private acceptNew(

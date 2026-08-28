@@ -10,14 +10,17 @@ export async function* routeAsrTranscript(
   processFinal: (
     transcript: TranscriptResult,
   ) => AsyncGenerator<ServerRealtimeEvent>,
+  rewritePartial: (transcript: TranscriptResult) => TranscriptResult =
+    (transcript) => transcript,
 ): AsyncGenerator<ServerRealtimeEvent> {
   if (transcript.isFinal !== false) {
     yield* processFinal(transcript);
     return;
   }
-  const text = cleanRealtimeText(transcript.text);
-  if (!text || transcript.timing?.overlap === true) return;
-  const partial = { ...transcript };
+  const rewritten = rewritePartial(transcript);
+  const text = cleanRealtimeText(rewritten.text);
+  if (!text || rewritten.timing?.overlap === true) return;
+  const partial = { ...rewritten };
   delete partial.isFinal;
   yield {
     type: "transcript.partial",
