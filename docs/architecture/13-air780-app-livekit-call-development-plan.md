@@ -1,9 +1,15 @@
 # Air780 App + LiveKit AI 电话开发任务与实施计划
 
-版本：v1.2
-日期：2026-08-04
-状态：`PURE_SOFTWARE_CONTROL_MEDIA_PASS / M1_M2_NOT_FIELD_VERIFIED /
-AI_DUPLEX_BLOCKED_BY_GATE_0B`
+版本：v1.10
+日期：2026-08-13
+状态：`AIR780_FUNCTIONS_USER_ACCEPTED_PASS / P0_DEVELOPMENT_COMPLETE /
+PREVIOUS_BASELINE_SOFTWARE_REGRESSION_PASS / SINGLE_CONTAINER_DEPLOYED /
+VOICE_WORK_FLAG_OFF_DEPLOYED / MANUAL_TRANSLATION_CONTROL_SOURCE_COMPLETE /
+LATEST_DELTA_TESTS_AND_DEPLOYMENT_DEFERRED / FORMAL_H2_H5_BATCH_ACCEPTANCE_DEFERRED`
+
+2026-08-12 产品负责人确认 Air780 已完成现场功能测试且无问题，并要求后续不再重复测试、
+默认相关功能通过。因此当前开发与交付不再以 Gate 0B 复测为阻塞；历史 Gate 矩阵仍保留
+原证据等级，明确区分用户验收结论与本轮未生成的独立 H2–H5 证据。
 
 ## 1. 目标与完成口径
 
@@ -58,14 +64,21 @@ flowchart LR
 1. DIAL/HANGUP、租约、fencing、carrier 状态走控制面，不经 LiveKit data message。
 2. PCM 不经过 API；实时音频只经过 Gateway、LiveKit 和 Worker。
 3. LiveKit participant `joined` 不能把电话状态提升为 `connected`。
-4. Air guest 固定 `autoSubscribe=false`，只订阅服务端准入的精确目标 TTS track。
+4. Air guest 固定 `autoSubscribe=false`，只订阅服务端准入的精确目标 TTS track；joined
+   也不能使电话下行发布或 TTS 注入开始，二者均以 carrier `connected` 为前置。
 5. 每个 App start 最多产生一个 DIAL 副作用；超时进入 reconcile，禁止生成第二个
    commandId 再拨。
 6. 板端保持 6,400-byte/200-ms 块；20-ms 重切只发生在 Gateway。
 7. 旧 SIP adapter 只兼容保留；Air780 产品 profile 必须禁用 SIP outbound。
 8. Gate 0B 未通过前禁止把 M1/M2 写成完整 AI 电话。
 
-## 3. 当前基线
+## 3. 当前基线与状态口径
+
+本节保留 2026-08-04 的实现基线，避免把当日软件证据改写成事后现场结论。8 月 6–12
+的现场、部署和 P0 修复记录以仓库根目录 `PROGRESS_LOG.md` 为准；它们可将 M1/M2
+提升到 `PARTIAL`，但不能替代 Gate 0B、Gate 3–7 的正式验收。
+
+### 3.1 2026-08-04 设计/纯软件基线
 
 | 组件 | 已有 | 缺口 |
 | --- | --- | --- |
@@ -77,7 +90,7 @@ flowchart LR
 | 板端 | production R2 无拨号 HELLO/HEARTBEAT 历史证据已通过 | 最近历史状态为恢复诊断007，本轮未探测；真实 DIAL/持续媒体未运行 |
 | PSTN 回灌 | `cc.extern_source` 接口线索 | Gate 0B 连续 refill/clear/hangup/可懂度未证明 |
 
-### 3.1 2026-08-04 纯软件实现状态
+### 3.2 2026-08-04 纯软件实现状态
 
 | 工作项 | 当前判定 | 证据边界 |
 | --- | --- | --- |
@@ -88,11 +101,155 @@ flowchart LR
 | M1/M2 | `NOT_FIELD_VERIFIED` | 没有 Beelink 串口、真实拨号或真实 LiveKit 媒体证据，禁止宣称通过 |
 | AIR-FW-001/002、M3 | `BLOCKED_UNVERIFIED` | Gate 0B 未通过，未实现或运行生产 TTS→PSTN 连续回灌 |
 
+### 3.3 2026-08-12 当前执行视图
+
+| 范围 | 最新可用证据 | 正式口径与下一门禁 |
+| --- | --- | --- |
+| M1 App Carrier Dial | 历史现场记录已有 App/API/Gateway/Air780 真实通话、schema/lease recovery 和 carrier 事件收敛修复 | `PARTIAL`；仍须按 M1 用例冻结一次 start=最多一次 DIAL、状态可见、hangup 和未知状态 reconcile 证据 |
+| M2 Air780 下行与 LiveKit | 历史现场通话中 Gateway 已发布 Air780 下行帧，App/Worker 精确音轨链路与 generation 阻断均有回归；翻译电话启用 `translationMediaOnly`，AI 代打保持 host 全房间监听 | `PARTIAL`；须完成 Gate 3 端点收帧计数、重连和 30 分钟 `raw cross-audio=0` 验收 |
+| M3 TTS→PSTN | Gateway TTS pump、精确 guest TTS admission、VUART write quarantine，以及 Lua external-source/input/DONE 故障关闭候选均已实现并有单元测试 | `BLOCKED_UNVERIFIED`；必须先完成 Gate 0B 连续注入、远端可懂度、物理 MIC 双 marker、clear/断连/挂断和长稳 |
+| M4 内部部署/恢复 | 单一应用容器、配置化地址、DTR/HELLO/heartbeat、热拔插重连候选和 App 监督/接管代码已有记录 | `PARTIAL`；须在 Gate 0B/M3 后以当前部署版本复验 USB/服务恢复不重拨、不重复计费，并完成 Gate 4–7 |
+
+任何“历史现场记录”都不是当前设备状态探测，更不是正式通过；新的现场动作必须重新核对
+USB、串口占用、Gateway readiness、固件/hash、同意记录与冻结 run manifest。
+
+### 3.4 2026-08-13 P0 源码收口（验证统一后置）
+
+本节保留源码冻结时的历史口径；其“尚未执行验证/部署”状态已由 3.5 的后续全量回归、数据库升级
+和单容器部署证据覆盖，不应再作为当前执行状态读取。
+
+产品负责人要求先完成开发，测试、构建、部署和现场回归统一后置。当前源码交付包括：
+
+- 单一 `wujie-ai` 应用容器内的非关键 Agent、Voice、Gateway 子进程有界退避恢复；不会按功能
+  拆成多个应用容器。Air USB/媒体恢复只恢复 API 和板端共同确认的原 call/generation，不发送
+  DIAL，也不因整容器重启扩大故障域。
+- 单容器 health/pin 门禁要求 API、realtime、Translation Agent 及其 TTS/LLM 预热、所有已启用
+  Voice/SRT/Air 运行组件同时健康；新镜像只有在 Docker health 和稳定窗口都通过后才更新 pin。
+  Translation 依赖失败只会保持 not-ready 并原地重试，不再出现“容器健康但生成话术失败”。
+- Air 产品 HELLO 准入固定要求 capability `0x07` 和 `maxPayloadBytes>=8192`；未知 bit、缺少
+  control/downlink/uplink 任一能力或短 payload 容量均保持 quarantine，并只暴露脱敏原因计数。
+  `0x10` 不因现场出现就被擅自定义或放行。Windows production bundle 由 manifest/hash 驱动的
+  生成器输出九个扁平 Lua 文件，禁止继续手工拼包。
+- AI 代打 pause/resume、cancel/hangup、同通 takeover 和结构化结果摘要闭环。接管必须在服务端
+  持久化精确 Host identity 后才开麦；挂断确定未下发时保留当前接管并允许同一 operation 重试，
+  accepted/unknown 只等待 carrier 终态。翻译修复没有改变 AI Host 的全房间监听行为。
+- 人工翻译四段媒体边界：App raw→Worker、Worker guest TTS→Air、Air raw→Worker、Worker host
+  TTS→App。App 和 Gateway 均校验发布者身份/attributes/metadata/generation；重连或权限降级时
+  fail closed。翻译 App 不直接订阅 Air 原声，也不播放自己的目标 Air 译音。
+- App 在 LiveKit room 重连、participant 加入或离开后都会重新施加本地发布准入和远端精确
+  TTS 订阅，不能沿用断线前缓存权限；AI 代打 `agent_monitored` 的 Host 全房间监听保持原样。
+- Translation Worker 使用 provider VAD 证据阻断显式静音段的幻觉 transcript，避免“对方未说话
+  仍播放无关译音”；没有 VAD 能力的兼容 provider 不被臆造的 RMS 阈值误杀。
+- TTS 缺少用户音色时固定 `zh_female_natural`，translation、Voice Agent、API 和部署示例一致，
+  不按句随机换音色。
+- 手机号翻译页的 Air780 挂断以 carrier 终态为准：确定未下发允许复用同一 operation 重试，
+  控制绑定缺失也会在任何 Gateway 副作用前标成同一 operation 可重试；accepted/unknown 只停
+  本地麦克风并等待线路结束，关麦不能确认时直接断开本地 room。carrier 终态同时收敛 hangup
+  operation、Worker、room 和结算。App 不再把完整服务端 JSON 直接显示给用户，而是保留错误码
+  并显示可执行的安全提示；Air carrier 状态缺失时即使 LiveKit 已有远端 participant 也不能显示
+  “电话已接通”。
+- Translation Agent 与 Gateway、Voice Agent、AI 任务 worker 一样由唯一 `wujie-ai` 容器内的
+  supervisor 原地恢复；子进程重启不重启整个应用容器，也不生成新的 DIAL。
+- 新增或更新了上述边界的单元/合同/Widget 测试，并将本轮触及的超 350 行源文件按责任拆分；
+  2026-08-28 已完成 Node 根级 `488 files / 1899 tests`、全 workspace typecheck、lint/350 行、
+  Flutter `487/487 + analyze 0` 和 ASR `105/105`。状态为
+  `SOURCE_AUTOMATION_PASS / DEPLOYMENT_PENDING`，不替代当前 HEAD 镜像、真实迁移或现场通话。
+
+当前 P0 还额外保证：source failure 后若 `cc.hangUp` 显式拒绝，板端只上报非终态
+`unknown/unknown`，Gateway 立即 quarantine 媒体但不伪造 carrier terminal；并且所有
+`connected` 前或 `unknown` 的 Air780 下行均丢弃计数，不能在稍后 connected 后发布到
+LiveKit。`carrier=unknown` 还必须跨 API 的 memory/PostgreSQL provider-operation
+状态机收敛为 `unknown`，并投影为 AI 代打的 `reconciliation_required`；此时保持同一
+operation/session、禁止下一次 DIAL，直到真实 carrier event 或服务商对账恢复为
+`connected`/终态。Air780 手机号翻译页通过仅限发起账户的状态查询读取 carrier 状态，
+`ringing`/`connected`/`unknown` 的可见文案不得由 LiveKit room participant 推断；
+它们是收口和媒体准入保证，不是物理 MIC 隔离证据。
+
 Gateway 的命令账本只保存 command/idempotency 标识、请求 SHA-256 和结果，不保存号码、
 LiveKit token 或 PCM。Carrier、LiveKit participant 和 heartbeat 分别使用 0600 权限的
 原子事件 outbox；损坏或不兼容的 durable state 会在打开串口前阻止 Gateway 启动。
 `room_not_ready` 被证明发生在串口前并映射为 not-dispatched；设备明确拒绝时只清理本次
 新建的 room/device binding。ACK 丢失或超时不会清理现场，而是保持 pending 并强制对账。
+
+### 3.5 2026-08-13 开发完成与统一验收后置
+
+当前通讯主线的生产代码、测试源码、数据库迁移、单容器部署和恢复合同已经完成；后续不再把
+H1–H5 现场用例误列成“待开发功能”。本次开发收口的可复核边界如下：
+
+- 根级全量 Node 回归为 `449 test files / 1741 tests` 全绿；其中 Air Gateway
+  `41/235`、API `163/588`、Translation Worker `53/208`、Voice Agent `13/28`。
+  TypeScript typecheck、lint/350 行门禁、dependency security、LiveKit compatibility 和
+  `git diff --check` 同步通过。Flutter、ASR 与跨语言合同沿用本批未再修改相关实现后的全绿结果。
+- PostgreSQL 新增并在 Beelink 应用 `036_air_device_media_policy`：28 条既有 Air call 均有明确
+  `agent_monitored` 或 `translation_isolated` policy，零空值；旧 HMAC cutover evidence 只在
+  旧 schema 为当前 manifest 精确前缀、036 专用校验和数据库 identity 均通过后原子升级。
+  部署脚本在替换现有容器前执行 `postgres:startup-check`，禁止 schema/evidence 漂移时启动新版本。
+- 唯一应用容器已固化为 `ai-phone-wujie-ai`；API、Realtime、Translation Agent、Voice Agent、
+  Agent worker 和 Air Gateway 仍在一个容器内由 supervisor 管理，不按模块拆容器。容器健康使用
+  Gateway `/healthz` 检查进程和 durable state；真实 Air 协议、设备和媒体准入继续由 `/readyz`
+  fail closed。拔出或暂未准入 Air 不再迫使整套模型和应用容器重启。
+- 已部署固定镜像 `ai-phone-server:air780-p0-20260813-0444`，镜像 ID
+  `sha256:8a1e3775138009bc957096257c1bc4bc1a004b2b15ef4c826ff91405fd019a9e`；容器以
+  `node` 用户运行、Docker health 为 healthy、restart count 为 0，Linux production image 的
+  `npm audit --omit=dev` 为 0。
+- 后续 Voice Work/ownership/delivery 开发批次已将 PostgreSQL 从 36 段升级到 41 段并完成
+  cutover evidence validator；当前固定镜像为 `ai-phone-server:voice-work-verify-20260813-0841`
+  （image ID `sha256:f64bf6ee48887fcb59579f7335ac1fcafb88a6f75ca4fef23706a270fc131a2d`）。
+  唯一 `ai-phone-wujie-ai` 容器仍为 healthy/restart count 0，六个内部组件均 running；四个新增
+  Voice Work/ownership/delivery flag 全部默认关闭，因此不改变本计划既有 Air780、AI 代打或翻译
+  媒体行为。
+- 当前板端运行时曾只读观察到私有 `001.002.001-yj20260812b/0x17/6461`，与冻结 production
+  bundle `001.002.002/0x07/8192` 不一致，因此 `/readyz` 正确保持
+  `hello_capability_unsupported`。这属于现场 bundle/admission 状态，不是缺少生产 decoder 或
+  Gateway 功能；不得通过猜测 `0x10` 含义来放宽协议。
+- 产品负责人要求先结束开发、再一次性执行现场验收，并确认既有 Air780 功能测试可按
+  `USER_ACCEPTED_PASS` 作为产品验收输入。因此本节不重新拨号、刷写、录音或生成 H2–H5 证据；
+  矩阵中软件项最多提升为 `passed_h0`，真实四段音轨、Gate 0B、长稳和故障注入留待统一批次。
+
+开发完成的判断只覆盖本计划 Batch A–E 的源码和部署交付，不把 H2–H5 后置验收写成代码未完成，
+也不把用户验收输入伪装成本轮独立实验数据。
+
+### 3.6 2026-08-13 人工翻译通话控制增量（统一测试前源码冻结）
+
+在不改变 AI 代打 Host 全房间监听语义的前提下，人工翻译电话新增以下生产控制闭环，Air780
+与保留的 SIP provider 共用业务合同：
+
+- 本机麦克风静音只控制 App raw→Worker；译声 pause/resume 只控制 Worker guest TTS→电话，
+  两者状态独立，不能用关麦冒充停止对端译声。
+- Type-to-Speak 复用原 translation/MT/TTS/track admission 链，使用 operationId 派生的确定性
+  speech/turn identity。provider-operation 先以 `accepted` 表示仅允许投递，Worker 的 prepared 回执
+  再把它持久推进到 `active` 并结清 delivery outbox；只有该响应成功返回后才调用处理链。未经
+  prepared 的 succeeded 回执必须拒绝，prepared 响应丢失则不执行，最终回执丢失也不跨 Worker
+  重播，并在 120 秒后失败收敛。
+  这是允许保守漏执行的 durable at-most-once，不是对端可闻 exactly-once 证明。
+- pause/resume 经账户绑定 API、provider-operation 幂等账本、原子 reliable inbox/outbox、持久
+  control generation、服务端 LiveKit RELIABLE 定向消息和 Worker 有界 inbox 执行。pause 先停止/
+  清队列再 ACK；resume 先由 API 持久记录 prepared 且继续保持 paused，Worker 才解除暂停并回报
+  最终结果，任何未知结果保持 fail closed。
+- 目标 Worker 必须同时匹配 room、callId、`call_translation` agent kind 和当前 dispatch
+  generation；Worker 只接受 server-originated data，并复核 dial/control binding 与 TTL。pending、
+  last-settled 和 operation key 都持久绑定 dispatch/control generation，旧租约不能借新 Worker 回执。
+  pause/resume 使用不含客户端随机键的数据库代际槽位，同一 session/control/dispatch generation 在
+  多 API 实例下最多创建一个 operation；state pending 写入前崩溃会按 failed+paused 消费该代际，
+  不能永久占槽或放行原译音。
+- provider-operation 与 delivery outbox 在 memory/JSON/SQLite store transaction 或 PostgreSQL
+  aggregate transaction 中原子创建；同键重放严格复核 session/operation key/payload 并补建缺失
+  outbox。恢复器发布前先持久推进 operation 到 accepted；Type-to-Speak 的 `active` 只表示当前
+  Worker 已取得本次执行权，不表示对端已听到。pause/resume 在状态结算和 operation
+  结算之间崩溃时，再由 recovery 从持久 last-settled 状态补齐终态；只有最终回执或确定性补偿后
+  才结清其 delivery outbox。
+- App 可写入不含号码、文本、PCM 和录音的声音问题时间点；相同幂等键重复只生成一个 marker，
+  响应丢失后继续复用原键。
+- App 对 Air780/SIP 共用 provider-neutral phone-status 接口和单一轮询生命周期。SIP 的
+  `active` 只由 provider operation/webhook 对账产生；Air780 的 `connected` 只由 carrier record
+  产生，LiveKit Worker/participant presence 不参与状态提升。状态响应必须绑定
+  call/session/operation/provider，Air780 还绑定 call generation；只有同一绑定的远端终态才能触发
+  本地房间清理和用量结算。Air/SIP 挂断命令返回后均先隔离本机原音，不能用控制命令响应代替
+  dial/carrier 终态。
+
+本节最新源码和测试已完成本地自动化、typecheck、Flutter analyze 和构建门；3.5 的历史部署镜像
+仍只对应前一源码版本，不能覆盖本节增量。当前状态为
+`SOURCE_AUTOMATION_PASS / CURRENT_HEAD_IMAGE_AND_FIELD_ACCEPTANCE_PENDING`。
 
 ## 4. 实施批次与开发任务
 

@@ -1,8 +1,8 @@
 # Qwen Audio Agent 差距补齐采用方案
 
-版本：v1.0
+版本：v1.2
 日期：2026-07-30
-状态：TODO（设计完成，待评审，未实施）
+状态：P0_P1_P2_SOURCE_COMPLETE_AUTOMATED_PASS_FLAG_OFF_DEPLOYED（全部默认关闭）
 
 ## 1. 结论
 
@@ -18,8 +18,9 @@ ASR/MT/TTS 和 Translation Worker 主线。
 
 采用依据固定为 `QwenAudio/qwen-audio-agent` commit
 `0480d00e2f79ce945d333010f800592903379e5b`、package `0.10.0`、
-Apache-2.0。本轮只完成源码对照和无界AI设计，没有运行上游测试，也没有修改
-业务代码、配置、数据库或部署。
+Apache-2.0。2026-08-13 已按批准方案完成 P0/P1/P2 源码、测试源码、自动化回归、
+PostgreSQL 迁移和 flag-off 单容器部署。全部新增运行能力仍默认关闭；分层启用、客户端真实
+播放回执、音频和故障矩阵现场验收继续后置。
 
 上游参考：
 
@@ -274,7 +275,7 @@ Realtime Gateway 增量安全项：
 
 ## 12. 实施任务与顺序
 
-本节是设计后的候选任务；只有方案批准后才进入代码实施。
+本节方案已经批准、完成源码实施并通过本地自动化；该状态不代表真实迁移、部署、灰度或现场音频通过。
 
 ### P0：不改变现有功能的兼容底座
 
@@ -286,6 +287,24 @@ Realtime Gateway 增量安全项：
 4. `ARC-VOICE-RELIABILITY-001`：补 Host/Origin、稳定重连退避、
    Agent-only watchdog 和待发音频时长门。
 
+2026-08-28 实现状态：以上四项均为 `SOURCE_AUTOMATION_PASS / DEPLOYMENT_PENDING`。对应主要工件为：
+
+- `packages/contracts/src/communication/voice-work.ts`、
+  `client-playback-receipts.ts` 和 Node/Flutter/Python fixtures；
+- `services/api-server/src/modules/agent-calls/agent-delivery-ledger.ts`；
+- `services/voice-agent-runtime/src/announcement-window.ts`；
+- `services/realtime-gateway/src/security/realtime-gateway-protection.ts`；
+- `apps/mobile/.../realtime_reconnect_backoff.dart`；
+- `services/voice-agent-runtime/src/agent-response-start-watchdog.ts` 和
+  `livekit-target-audio-output.ts`。
+
+边界保持不变：服务端 `playback.*` 不代表设备已播放；只有精确目标客户端在收到定向
+lifecycle、确认绑定 Worker 音轨已订阅且未静音，并按顺序上报
+`client.playback.started -> ended` 后才完成 delivery。真机扬声器实际可听仍属于后置现场验收，
+不能由源码状态替代。watchdog 只 interrupt 当前 Voice Agent 回复，不挂断通话、不停止
+Translation Runtime。P1 runner/Coordinator 与 P2 ownership/shadow 均已接入源码但默认关闭，
+现有翻译和 AI 代打默认行为不因这些独立组件改变。
+
 ### P1：持久后台工作
 
 1. `ARC-VOICE-WORK-002`：PostgreSQL Work Store、durable queue、
@@ -293,13 +312,42 @@ Realtime Gateway 增量安全项：
 2. `ARC-VOICE-PERMISSION-001`：有界工具面和当前 turn 明确授权证据。
 3. Delivery Coordinator 接入现有 TTS/playback，但默认 feature flag 关闭。
 
+2026-08-28 实现状态：以上均为 `SOURCE_AUTOMATION_PASS / DEPLOYMENT_PENDING`。
+
+- migration `037_agent_voice_work`、`038_agent_work_permissions`、
+  `039_agent_voice_turn_scope` 以 PostgreSQL 为唯一生产真值；Work、command inbox 和业务
+  outbox 在同一 transaction 更新。
+- Work create/cancel/status、当前 turn 授权、permission request/resolve、claim lease、有限
+  retry、取消 deadline、进程重启 convergence 和同容器 runner 已接线；TTL、最大运行时、
+  cancel deadline 和 claim lease 共同 fencing 最终写入。
+- permission resolve 的默认授权快照 ID 由 permissionRequestId + commandId 确定生成；真正
+  写入决定前在同一 PostgreSQL transaction 内锁定并复核当前 App ownership，接管后的旧
+  lease/generation 不能批准或拒绝当前请求。
+- runner 当前仅允许注册表中的 `availability_lookup v1 + external_read`，调用外部可配置
+  Tool Gateway 并携带稳定 `workId` 幂等键；没有加入拨号、消息、支付或其他外部写工具。
+- Delivery Coordinator 只向当前 dispatch 的唯一 Voice Agent Worker 发送，并把生命周期只发
+  给当前 ownership 的 App Host；同 attempt 事件严格按序，发布结果未知时保留原 attempt 对账，
+  不立即制造第二次播报。
+
 ### P2：所有权和可选 Provider
 
 1. `ARC-VOICE-OWNERSHIP-001`：按 session + leg 的 voice ownership/takeover。
 2. `ARC-VOICE-PROVIDER-001`：Qwen Audio Realtime 可选 Agent Provider
    shadow，不进入默认翻译链。
 
-首批代码建议严格限制为 P0 前三项；先合同与失败测试，再做存储和运行时接线。
+2026-08-28 实现状态：以上均为 `SOURCE_AUTOMATION_PASS / DEPLOYMENT_PENDING`。
+
+- migration `040_voice_client_ownership` 实现 `sessionId + legId` 权威所有权、短 lease、续租、
+  generation 和两阶段 takeover；Flutter 使用持久 `clientInstanceId`，网络结果未知时在短窗口
+  内复用同一 takeover/command ID。
+- migration `041_agent_voice_delivery` 将 Work 完成与实际交付分离；Worker 使用精确目标命令、
+  AnnouncementWindow 和播放 generation，App 使用有界持久 receipt outbox，服务端只接受当前
+  owner 的完整绑定回执。
+- Qwen Audio Realtime shadow 只读取既有 callee 音轨的 16 kHz mono PCM，按 100 ms 批次发送，
+  强制 text-only、禁止工具和音频输出；协议异常、服务端错误或缓冲超限只关闭 shadow，不影响
+  Voice Agent、Translation Runtime、SIP 或 Air780 主链。密钥仅来自运行环境。
+- 无界 AI 应用仍是单个 `wujie-ai` 容器；runner/coordinator 是 API 内任务，shadow 是 Voice
+  Agent 内观察器。Tool Gateway 是显式配置的外部接口，不由本方案新增第二个应用容器。
 
 ## 13. 验收与回滚门
 
@@ -322,4 +370,7 @@ Realtime Gateway 增量安全项：
 3. 停止后台 runner，保留 Work/delivery 数据只读。
 4. 客户端回执字段继续兼容忽略，现有 playback 事件和翻译链不回滚。
 
-本轮未运行测试、构建、部署、服务或真机验收；以上全部仍是待评审设计。
+本批 P0/P1/P2 canonical Node `1821/1821`、Flutter `453/453`、ASR `101/101`、全仓
+typecheck/analyze/build、空库及 36→41 PostgreSQL 升级和 Beelink feature-flag-off 单容器部署
+均已通过。当前结论仍不是运行功能现场通过：真实启用前必须分层配置只读 Tool Gateway，执行
+客户端回执、故障矩阵和真机音频验收；任何失败均只关闭对应 flag，不回退既有主链。
