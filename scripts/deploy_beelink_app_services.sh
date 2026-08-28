@@ -53,6 +53,9 @@ if [[ "$AI_PHONE_DEPLOY_PROFILE" == "production" && -z "$REALTIME_WS_ENDPOINT" ]
   echo "Production profile requires an explicit REALTIME_WS_ENDPOINT=wss://..." >&2
   exit 2
 fi
+realtime_ws_authority="${REALTIME_WS_ENDPOINT#*://}"
+REALTIME_ALLOWED_HOSTS="${REALTIME_ALLOWED_HOSTS:-${realtime_ws_authority%%/*},$INTERNAL_SERVICE_HOST:$REALTIME_PORT}"
+REALTIME_ALLOW_NON_BROWSER_CLIENTS_WITHOUT_ORIGIN="${REALTIME_ALLOW_NON_BROWSER_CLIENTS_WITHOUT_ORIGIN:-true}"
 PUBLIC_RATE_LIMIT_REDIS_URL="${PUBLIC_RATE_LIMIT_REDIS_URL:-redis://127.0.0.1:6379/1}"
 SRT_INGRESS_BRIDGE_BASE_URL="${SRT_INGRESS_BRIDGE_BASE_URL:-http://$INTERNAL_SERVICE_HOST:$SRT_INGRESS_PORT}"
 ASR_HTTP_ENDPOINT="${ASR_HTTP_ENDPOINT:-http://$ASR_SERVICE_HOST:8021/asr/transcribe}"
@@ -86,6 +89,7 @@ CALL_FULL_DUPLEX_ENABLED="${CALL_FULL_DUPLEX_ENABLED:-false}"
 AI_PHONE_COMPOSE_PROFILES="${AI_PHONE_COMPOSE_PROFILES:-}"
 AGENT_STABILITY_WINDOW_SECONDS="${AGENT_STABILITY_WINDOW_SECONDS:-30}"
 AGENT_STABILITY_TIMEOUT_SECONDS="${AGENT_STABILITY_TIMEOUT_SECONDS:-180}"
+APP_HEALTH_STABILITY_WINDOW_SECONDS="${APP_HEALTH_STABILITY_WINDOW_SECONDS:-10}"
 FAST_START_STABILITY_WINDOW_SECONDS="${FAST_START_STABILITY_WINDOW_SECONDS:-5}"
 WUJIE_AI_APP_CONTAINER_NAME="${WUJIE_AI_APP_CONTAINER_NAME:-ai-phone-wujie-ai}"
 WUJIE_AI_AGENT_CALL_WORKER_ENABLED="${WUJIE_AI_AGENT_CALL_WORKER_ENABLED:-false}"
@@ -148,6 +152,7 @@ for value in \
   "$VOICE_AGENT_BIND_HOST" "$SRT_INGRESS_BIND_HOST" \
   "$TRANSLATION_WORKER_AUDIO_FRAME_SINK_HOST" \
   "$API_TRUST_PROXY_ADDRESSES" "$REALTIME_TRUST_PROXY_ADDRESSES" \
+  "$REALTIME_ALLOWED_HOSTS" "$REALTIME_ALLOW_NON_BROWSER_CLIENTS_WITHOUT_ORIGIN" \
   "$CALL_PUBLIC_BASE_URL" "$CALL_LIVEKIT_URL" \
   "$API_BASE_URL" "$REALTIME_WS_ENDPOINT" "$PUBLIC_RATE_LIMIT_REDIS_URL" \
   "$SRT_INGRESS_BRIDGE_BASE_URL" "$ASR_HTTP_ENDPOINT" \
@@ -194,6 +199,17 @@ remote_compose() {
      WUJIE_AI_SRT_INGRESS_ENABLED='$WUJIE_AI_SRT_INGRESS_ENABLED' \
      COMPOSE_PROFILES='$AI_PHONE_COMPOSE_PROFILES' \
      docker compose -p ai-phone -f '$REMOTE_SOURCE/infra/ai-phone-server/docker-compose.yaml' $*"
+}
+
+postgres_startup_preflight() {
+  local storage_driver
+  storage_driver="$(ssh "$REMOTE_HOST" \
+    "awk -F= '/^API_STORAGE_DRIVER=/{value=substr(\$0,index(\$0,\"=\")+1)} END{print value}' \
+     '$REMOTE_RUNTIME/server.env'")"
+  [[ "$storage_driver" == "postgres" ]] || return 0
+  echo "Checking PostgreSQL primary startup admission before container replacement"
+  remote_compose \
+    "run --rm --no-deps wujie-ai npm run postgres:startup-check"
 }
 
 production_env_preflight() {
@@ -258,6 +274,37 @@ REMOTE
 }
 
 production_env_preflight
+
+wait_for_wujie_container_health() {
+  local stable_seconds=0 previous_restarts="" snapshot
+  local running health restarts poll_seconds=2 elapsed=0
+  while (( elapsed < AGENT_STABILITY_TIMEOUT_SECONDS )); do
+    snapshot="$(ssh "$REMOTE_HOST" \
+      "docker inspect '$WUJIE_AI_APP_CONTAINER_NAME' \
+       --format '{{.State.Running}}|{{if .State.Health}}{{.State.Health.Status}}{{else}}missing{{end}}|{{.RestartCount}}' \
+       2>/dev/null || true" 2>/dev/null || true)"
+    IFS='|' read -r running health restarts <<<"$snapshot"
+    if [[ "$running" == "true" && "$health" == "healthy" ]]; then
+      if [[ -n "$previous_restarts" && "$restarts" == "$previous_restarts" ]]; then
+        stable_seconds=$((stable_seconds + poll_seconds))
+      else
+        stable_seconds=0
+      fi
+      previous_restarts="$restarts"
+      if (( stable_seconds >= APP_HEALTH_STABILITY_WINDOW_SECONDS )); then
+        echo "Wujie AI container healthy for ${stable_seconds}s with restartCount=$restarts"
+        return 0
+      fi
+    else
+      stable_seconds=0
+      previous_restarts="$restarts"
+    fi
+    sleep "$poll_seconds"
+    elapsed=$((elapsed + poll_seconds))
+  done
+  echo "Wujie AI container did not satisfy the health stability gate" >&2
+  return 1
+}
 
 wait_for_translation_agent_stability() {
   local stable_seconds=0 previous_restarts="" snapshot info agent_name tts_ready
@@ -357,14 +404,18 @@ NODE
 }
 
 if [[ "$MODE" == "status" ]]; then
+  wait_for_wujie_container_health
   wait_for_translation_agent_stability
   status
   exit 0
 fi
 
 if [[ "$MODE" == "start" ]]; then
+  postgres_startup_preflight
   remote_compose 'up -d --no-build --remove-orphans'
+  APP_HEALTH_STABILITY_WINDOW_SECONDS="$FAST_START_STABILITY_WINDOW_SECONDS"
   AGENT_STABILITY_WINDOW_SECONDS="$FAST_START_STABILITY_WINDOW_SECONDS"
+  wait_for_wujie_container_health
   wait_for_translation_agent_stability
   status
   exit 0
@@ -373,6 +424,8 @@ fi
 ssh "$REMOTE_HOST" "mkdir -p '$REMOTE_SOURCE' '$REMOTE_RUNTIME/data/voice-references'"
 rsync -az --delete \
   --exclude='.git/' \
+  --exclude='.env*' \
+  --exclude='release/domestic/release.env' \
   --exclude='.cache/' \
   --exclude='.data/' \
   --exclude='apps/' \
@@ -380,6 +433,7 @@ rsync -az --delete \
   --exclude='docs/' \
   --exclude='model-eval/' \
   --exclude='node_modules/' \
+  --exclude='outputs/' \
   --exclude='test-apps/' \
   --exclude='test-audio/' \
   --exclude='services/model-services/' \
@@ -403,6 +457,8 @@ ssh "$REMOTE_HOST" \
    TRANSLATION_WORKER_AUDIO_INGEST_MAX_FRAMES='$TRANSLATION_WORKER_AUDIO_INGEST_MAX_FRAMES' \
    API_TRUST_PROXY_ADDRESSES='$API_TRUST_PROXY_ADDRESSES' \
    REALTIME_TRUST_PROXY_ADDRESSES='$REALTIME_TRUST_PROXY_ADDRESSES' \
+   REALTIME_ALLOWED_HOSTS='$REALTIME_ALLOWED_HOSTS' \
+   REALTIME_ALLOW_NON_BROWSER_CLIENTS_WITHOUT_ORIGIN='$REALTIME_ALLOW_NON_BROWSER_CLIENTS_WITHOUT_ORIGIN' \
    API_PORT='$API_PORT' \
    REALTIME_PORT='$REALTIME_PORT' \
    LIVEKIT_AGENT_PORT='$LIVEKIT_AGENT_PORT' \
@@ -447,6 +503,8 @@ PUBLIC_RATE_LIMIT_KEY_PREFIX=wujie:public
 PUBLIC_RATE_LIMIT_KEY_SECRET=$public_rate_limit_secret
 PUBLIC_RATE_LIMIT_CONNECT_TIMEOUT_MS=1500
 REALTIME_ALLOWED_ORIGINS=$CALL_PUBLIC_BASE_URL
+REALTIME_ALLOWED_HOSTS=$REALTIME_ALLOWED_HOSTS
+REALTIME_ALLOW_NON_BROWSER_CLIENTS_WITHOUT_ORIGIN=$REALTIME_ALLOW_NON_BROWSER_CLIENTS_WITHOUT_ORIGIN
 REALTIME_TRUST_PROXY_ADDRESSES=$REALTIME_TRUST_PROXY_ADDRESSES
 REALTIME_MAX_PAYLOAD_BYTES=65536
 REALTIME_MAX_CONNECTIONS=512
@@ -505,6 +563,8 @@ VOICE_PROFILE_REFERENCE_DIR=/data/ai-phone/voice-references
 REALTIME_TOKEN_SECRET=$token_secret
 REALTIME_ALLOW_QUERY_TOKEN=false
 REALTIME_ALLOWED_ORIGINS=$CALL_PUBLIC_BASE_URL
+REALTIME_ALLOWED_HOSTS=$REALTIME_ALLOWED_HOSTS
+REALTIME_ALLOW_NON_BROWSER_CLIENTS_WITHOUT_ORIGIN=$REALTIME_ALLOW_NON_BROWSER_CLIENTS_WITHOUT_ORIGIN
 REALTIME_TRUST_PROXY_ADDRESSES=$REALTIME_TRUST_PROXY_ADDRESSES
 REALTIME_MAX_PAYLOAD_BYTES=65536
 REALTIME_MAX_CONNECTIONS=512
@@ -570,6 +630,24 @@ VOICE_AGENT_JOB_MEMORY_LIMIT_MB=1024
 VOICE_AGENT_BIND_HOST=$VOICE_AGENT_BIND_HOST
 VOICE_AGENT_PORT=$VOICE_AGENT_PORT
 VOICE_AGENT_API_TIMEOUT_MS=10000
+VOICE_AGENT_RESPONSE_START_TIMEOUT_MS=12000
+VOICE_AGENT_MAX_PENDING_AUDIO_MS=6000
+VOICE_AGENT_MAX_PENDING_AUDIO_CHUNKS=300
+VOICE_AGENT_BACKGROUND_WORK_ENABLED=false
+VOICE_AGENT_WORK_RUNNER_ENABLED=false
+VOICE_AGENT_DELIVERY_COORDINATOR_ENABLED=false
+VOICE_AGENT_OWNERSHIP_ENABLED=false
+VOICE_AGENT_AUDIO_REALTIME_SHADOW_ENABLED=false
+VOICE_AGENT_AUDIO_REALTIME_SHADOW_ENDPOINT=
+VOICE_AGENT_AUDIO_REALTIME_SHADOW_API_KEY=
+VOICE_AGENT_AUDIO_REALTIME_SHADOW_MODEL=qwen-audio-3.0-realtime-flash
+VOICE_AGENT_AUDIO_REALTIME_SHADOW_MAX_BUFFERED_MS=2000
+VOICE_AGENT_AUDIO_REALTIME_SHADOW_MAX_BUFFERED_CHUNKS=20
+VOICE_AGENT_AUDIO_REALTIME_SHADOW_CONNECT_TIMEOUT_MS=5000
+AGENT_DELIVERY_COORDINATOR_OWNER=agent-delivery-beelink
+AGENT_DELIVERY_COORDINATOR_POLL_MS=1000
+AGENT_DELIVERY_COORDINATOR_LEASE_SECONDS=30
+AGENT_DELIVERY_COORDINATOR_CONCURRENCY=2
 VOICE_AGENT_AMD_NO_SPEECH_TIMEOUT_MS=12000
 VOICE_AGENT_AMD_DETECTION_TIMEOUT_MS=30000
 VOICE_AGENT_VOICEMAIL_ENABLED=false
@@ -687,6 +765,8 @@ ssh "$REMOTE_HOST" \
    TRANSLATION_WORKER_AUDIO_INGEST_MAX_FRAMES='$TRANSLATION_WORKER_AUDIO_INGEST_MAX_FRAMES' \
    API_TRUST_PROXY_ADDRESSES='$API_TRUST_PROXY_ADDRESSES' \
    REALTIME_TRUST_PROXY_ADDRESSES='$REALTIME_TRUST_PROXY_ADDRESSES' \
+   REALTIME_ALLOWED_HOSTS='$REALTIME_ALLOWED_HOSTS' \
+   REALTIME_ALLOW_NON_BROWSER_CLIENTS_WITHOUT_ORIGIN='$REALTIME_ALLOW_NON_BROWSER_CLIENTS_WITHOUT_ORIGIN' \
    API_PORT='$API_PORT' \
    REALTIME_PORT='$REALTIME_PORT' \
    LIVEKIT_AGENT_PORT='$LIVEKIT_AGENT_PORT' \
@@ -735,6 +815,8 @@ set_env API_HEALTH_URL "$API_HEALTH_URL"
 set_env REALTIME_BIND_HOST "$REALTIME_BIND_HOST"
 set_env REALTIME_PORT "$REALTIME_PORT"
 set_env REALTIME_TRUST_PROXY_ADDRESSES "$REALTIME_TRUST_PROXY_ADDRESSES"
+set_env REALTIME_ALLOWED_HOSTS "$REALTIME_ALLOWED_HOSTS"
+set_env REALTIME_ALLOW_NON_BROWSER_CLIENTS_WITHOUT_ORIGIN "$REALTIME_ALLOW_NON_BROWSER_CLIENTS_WITHOUT_ORIGIN"
 set_env REALTIME_WS_ENDPOINT "$REALTIME_WS_ENDPOINT"
 set_env GATEWAY_HEALTH_URL "$GATEWAY_HEALTH_URL"
 set_env PUBLIC_RATE_LIMIT_REDIS_URL "$PUBLIC_RATE_LIMIT_REDIS_URL"
@@ -775,6 +857,31 @@ set_env LIVEKIT_VOICE_AGENT_NAME "voice-agent-runtime"
 set_env VOICE_AGENT_BIND_HOST "$VOICE_AGENT_BIND_HOST"
 set_env VOICE_AGENT_PORT "$VOICE_AGENT_PORT"
 set_env VOICE_AGENT_HEALTH_URL "$VOICE_AGENT_HEALTH_URL"
+set_env VOICE_AGENT_RESPONSE_START_TIMEOUT_MS "12000"
+set_env VOICE_AGENT_MAX_PENDING_AUDIO_MS "6000"
+set_env VOICE_AGENT_MAX_PENDING_AUDIO_CHUNKS "300"
+set_env VOICE_AGENT_BACKGROUND_WORK_ENABLED "false"
+set_env VOICE_AGENT_WORK_RUNNER_ENABLED "false"
+set_env VOICE_AGENT_DELIVERY_COORDINATOR_ENABLED "false"
+set_env VOICE_AGENT_OWNERSHIP_ENABLED "false"
+if ! grep -q '^VOICE_AGENT_AUDIO_REALTIME_SHADOW_ENABLED=' "$ENV_FILE"; then
+  set_env VOICE_AGENT_AUDIO_REALTIME_SHADOW_ENABLED "false"
+fi
+if ! grep -q '^VOICE_AGENT_AUDIO_REALTIME_SHADOW_ENDPOINT=' "$ENV_FILE"; then
+  set_env VOICE_AGENT_AUDIO_REALTIME_SHADOW_ENDPOINT ""
+fi
+if ! grep -q '^VOICE_AGENT_AUDIO_REALTIME_SHADOW_API_KEY=' "$ENV_FILE"; then
+  set_env VOICE_AGENT_AUDIO_REALTIME_SHADOW_API_KEY ""
+fi
+set_env VOICE_AGENT_AUDIO_REALTIME_SHADOW_MODEL \
+  "qwen-audio-3.0-realtime-flash"
+set_env VOICE_AGENT_AUDIO_REALTIME_SHADOW_MAX_BUFFERED_MS "2000"
+set_env VOICE_AGENT_AUDIO_REALTIME_SHADOW_MAX_BUFFERED_CHUNKS "20"
+set_env VOICE_AGENT_AUDIO_REALTIME_SHADOW_CONNECT_TIMEOUT_MS "5000"
+set_env AGENT_DELIVERY_COORDINATOR_OWNER "agent-delivery-beelink"
+set_env AGENT_DELIVERY_COORDINATOR_POLL_MS "1000"
+set_env AGENT_DELIVERY_COORDINATOR_LEASE_SECONDS "30"
+set_env AGENT_DELIVERY_COORDINATOR_CONCURRENCY "2"
 set_env SRT_INGRESS_HEALTH_URL "$SRT_INGRESS_HEALTH_URL"
 set_env CALL_BARGE_IN_MIN_SPEECH_MS "240"
 set_env CALL_BARGE_IN_MIN_PROBABILITY "0.5"
@@ -815,9 +922,7 @@ if [[ "$MODE" == "sync" ]]; then
 fi
 
 remote_compose "build"
-ssh "$REMOTE_HOST" \
-  "printf '%s\\n' '$IMAGE_TAG' > '$REMOTE_RUNTIME/ai-phone-image-tag'; \
-   chmod 600 '$REMOTE_RUNTIME/ai-phone-image-tag'"
+postgres_startup_preflight
 
 if [[ "${MIGRATE_SQLITE:-false}" == "true" ]]; then
   backup_stamp="$(date -u +%Y%m%dT%H%M%SZ)"
@@ -879,9 +984,17 @@ for _ in {1..60}; do
     if [[ "${MIGRATE_SQLITE:-false}" == "true" ]]; then
       remote_compose "exec -T wujie-ai npm run storage:check -- /data/ai-phone/api-store.sqlite"
     fi
-    if wait_for_translation_agent_stability; then
-      status
-      exit 0
+    if wait_for_wujie_container_health; then
+      if wait_for_translation_agent_stability; then
+        ssh "$REMOTE_HOST" \
+          "set -euo pipefail; \
+           image_tag_file=\$(mktemp '$REMOTE_RUNTIME/.ai-phone-image-tag.XXXXXX'); \
+           printf '%s\\n' '$IMAGE_TAG' > \"\$image_tag_file\"; \
+           chmod 600 \"\$image_tag_file\"; \
+           mv \"\$image_tag_file\" '$REMOTE_RUNTIME/ai-phone-image-tag'"
+        status
+        exit 0
+      fi
     fi
     break
   fi
