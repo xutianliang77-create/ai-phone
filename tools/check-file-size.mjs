@@ -35,9 +35,10 @@ function walk(dir) {
       continue;
     }
     if (!extensions.has(extOf(path))) continue;
-    const lines = stat.size === 0
+    const source = readFileSync(path, "utf8");
+    const lines = source.length === 0
       ? 0
-      : readFileSync(path, "utf8").split("\n").length;
+      : source.split("\n").length - (source.endsWith("\n") ? 1 : 0);
     if (lines > maxLines) violations.push(`${path}: ${lines} lines`);
   }
 }
