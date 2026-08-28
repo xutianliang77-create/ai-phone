@@ -98,7 +98,6 @@ async function handleTypeToSpeak(
       return controlFailure(409, "translation_control_operation_conflict",
         "Translation control conflicts");
     }
-    const startedAt = existing?.startedAt ?? new Date().toISOString();
     const result = await beginProviderOperation({
       sessionId: binding.record.sessionId,
       provider: "livekit",
@@ -117,7 +116,6 @@ async function handleTypeToSpeak(
         dialOperationId: binding.dial.id,
         dispatchGeneration: operationBinding.dispatchGeneration,
         controlGeneration: operationBinding.controlGeneration,
-        startedAt,
         command: {
           type: "translation.type_to_speak",
           text: body.text,
@@ -201,7 +199,6 @@ async function handleUplinkControl(
       controlGeneration: binding.state.controlGeneration + 1,
       dispatchGeneration: binding.dispatch.generation,
     };
-    const startedAt = existing?.startedAt ?? new Date().toISOString();
     const begun = await beginProviderOperation({
       sessionId: binding.record.sessionId,
       provider: "livekit",
@@ -219,7 +216,6 @@ async function handleUplinkControl(
         dialOperationId: binding.dial.id,
         dispatchGeneration: operationBinding.dispatchGeneration,
         controlGeneration: operationBinding.controlGeneration,
-        startedAt,
         command: {
           type: "translation.uplink_pause",
           paused: body.paused,

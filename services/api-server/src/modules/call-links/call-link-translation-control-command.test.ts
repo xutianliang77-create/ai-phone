@@ -17,7 +17,6 @@ describe("translation control command", () => {
       dialOperationId: "dial-1",
       dispatchGeneration: 7,
       controlGeneration: 3,
-      startedAt: "2026-08-13T08:00:00.000Z",
       command: {
         type: "translation.type_to_speak",
         text: "请稍等",
@@ -25,7 +24,9 @@ describe("translation control command", () => {
       },
     });
 
-    expect(factory(operation())).toMatchObject({
+    const persisted = operation();
+    const first = factory(persisted);
+    expect(first).toMatchObject({
       idempotencyKey: "translation-control-delivery:control-1",
       sessionId: "call-1",
       eventType: "translation_call_control.delivery",
@@ -43,6 +44,10 @@ describe("translation control command", () => {
         },
       },
     });
+    expect(factory({
+      ...persisted,
+      updatedAt: "2026-08-13T08:00:01.000Z",
+    })).toEqual(first);
   });
 
   it("names provider idempotency independently of Air780 and SIP", () => {

@@ -30,7 +30,6 @@ export function translationControlOutboxFactory(input: {
   dialOperationId: string;
   dispatchGeneration: number;
   controlGeneration: number;
-  startedAt: string;
   command: {
     type: "translation.type_to_speak";
     text: string;
@@ -60,7 +59,7 @@ function createTranslationControlCommand(
     controlOperationId: operation.id,
     dispatchGeneration: input.dispatchGeneration,
     controlGeneration: input.controlGeneration,
-    ...translationControlCommandWindow(input.startedAt),
+    ...translationControlCommandWindow(operation.startedAt),
   };
   return input.command.type === "translation.type_to_speak"
     ? {
