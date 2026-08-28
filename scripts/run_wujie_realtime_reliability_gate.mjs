@@ -50,7 +50,7 @@ export function evaluateLongResult(result, options) {
     ...(result.eventErrors.length > 0 ? ["realtime error events were emitted"] : []),
     ...(result.endReason !== "client_request"
       ? [`session ended with ${result.endReason ?? "unknown"}`] : []),
-    ...(result.flush?.status !== "completed"
+    ...(!isLosslessFlush(result.flush)
       ? [`session flush is ${result.flush?.status ?? "missing"}`] : []),
   ];
   return {
@@ -59,6 +59,15 @@ export function evaluateLongResult(result, options) {
     translationCoverage: coverage,
     frameCoverage,
   };
+}
+
+function isLosslessFlush(flush) {
+  return (flush?.status === "completed" || flush?.status === "empty") &&
+    flush.audioFlushed === true &&
+    flush.providerFlushed === true &&
+    flush.translationFailedCount === 0 &&
+    flush.unresolvedSegmentCount === 0 &&
+    flush.pipelineErrorCount === 0;
 }
 
 function deferred() {
