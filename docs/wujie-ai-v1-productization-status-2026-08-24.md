@@ -74,7 +74,7 @@
 | 能力 | Code | Runtime | Device E2E | Release | 当前证据/缺口 |
 | --- | --- | --- | --- | --- | --- |
 | V1 产品范围与延期边界 | accepted | 不适用 | 不适用 | accepted | `core_translation` 保留同传、聆听、Call Link Beta、记录、扫描、输入朗读；PSTN/Agent/支付/实名声纹隐藏 |
-| WIP 拆分与提交边界 | accepted | 不适用 | 不适用 | conditional | 485个非outputs WIP文件已拆为43个功能提交并全量回归；旧依赖diff由安全基线替代并保留可恢复stash，文档随本批收口后工作树仅保留outputs |
+| WIP 拆分与提交边界 | accepted | 不适用 | 不适用 | conditional | 485个非outputs WIP文件已拆为44个功能/测试提交并全量回归；旧依赖diff由安全基线替代并保留精确回滚stash，工作树仅保留outputs |
 | 模型选择与 active routing | accepted | accepted_runtime_candidate | pending | pending | traceable acceptance候选实装Qwen1.7+MarbleNet/Hy-MT2/VoxCPM2/Sortformer；100轮前后身份不漂移 |
 | Gateway 活依赖 readiness | accepted | accepted_runtime_candidate | pending | pending | V1合同前后均6/6服务通过，100轮中provider_unavailable/429均为0 |
 | Gateway runtime identity | accepted | accepted_runtime_candidate | pending | pending | candidate/commit/tree/image/config与0600 manifest一致，traceable=true；商业release env仍独立未过 |
@@ -163,7 +163,7 @@
 
 - 从冻结基线的混合 WIP 中重新盘点出222个tracked修改和263个非`outputs/`新文件；按 Contracts、PostgreSQL、
   Provider Operation、Air780固件/设备/媒体、Call Link、Agent Work/ownership/delivery、Translation Worker、
-  Voice Runtime、Mobile、ASR、Realtime、容器/部署工具分成43个功能提交。代码收口点=`319646a`；未push。
+  Voice Runtime、Mobile、ASR、Realtime、容器/部署工具分成44个功能/测试提交。代码与保护合同收口点=`4fb962b`；未push。
 - 旧依赖WIP使用低于已验证安全分支的LiveKit/Fastify/RTC版本，没有直接提交。13个精确文件先保存为可恢复stash，随后采用
   已验证安全提交并只补FFI/WebSocket等源码直接依赖。`npm ci`、audit和dependency gate均为0漏洞，LiveKit
   compatibility通过。
