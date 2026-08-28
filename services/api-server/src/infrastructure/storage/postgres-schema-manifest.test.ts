@@ -7,9 +7,9 @@ import {
 
 describe("PostgreSQL schema manifest", () => {
   it("pins the complete ordered migration set", () => {
-    expect(expectedPostgresMigrations).toHaveLength(35);
+    expect(expectedPostgresMigrations).toHaveLength(41);
     expect(expectedPostgresMigrations.at(-1)).toBe(
-      "035_agent_task_call_reference_projection",
+      "041_agent_voice_delivery",
     );
     expect(comparePostgresMigrations([...expectedPostgresMigrations])).toEqual({
       missing: [],
@@ -22,7 +22,7 @@ describe("PostgreSQL schema manifest", () => {
       ...expectedPostgresMigrations.slice(0, -1),
       "999_unknown",
     ])).toEqual({
-      missing: ["035_agent_task_call_reference_projection"],
+      missing: ["041_agent_voice_delivery"],
       extra: ["999_unknown"],
     });
   });
@@ -55,6 +55,84 @@ describe("PostgreSQL schema manifest", () => {
     ), "utf8");
     expect(sql).toContain("carrier_event_sequence");
     expect(sql).toContain("livekit_event_sequence");
+  });
+
+  it("pins the Air device raw-media policy", () => {
+    const sql = readFileSync(new URL(
+      "../../../../../infra/postgres/migrations/036_air_device_media_policy.sql",
+      import.meta.url,
+    ), "utf8");
+    expect(sql).toContain("media_policy");
+    expect(sql).toContain("translation_isolated");
+    expect(sql).toContain("agent_monitored");
+  });
+
+  it("pins durable Agent Work leases, cancellation, and outbox state", () => {
+    const sql = readFileSync(new URL(
+      "../../../../../infra/postgres/migrations/037_agent_voice_work.sql",
+      import.meta.url,
+    ), "utf8");
+    expect(sql).toContain("CREATE TABLE IF NOT EXISTS ai_phone.agent_works");
+    expect(sql).toContain("UNIQUE(session_id, actor_id, tool_name, submission_key)");
+    expect(sql).toContain("sealed_arguments");
+    expect(sql).toContain("FOR UPDATE SKIP LOCKED");
+    expect(sql).toContain("pg_advisory_xact_lock");
+    expect(sql).toContain("status = 'cancelling'");
+    expect(sql).toContain("cancel_deadline_at");
+    expect(sql).toContain("claim_agent_works");
+    expect(sql).toContain("claim_expires_at = LEAST(");
+    expect(sql).toContain("COALESCE(work.cancel_deadline_at, work.expires_at)");
+  });
+
+  it("pins server-authoritative current-turn Work authorization", () => {
+    const sql = readFileSync(new URL(
+      "../../../../../infra/postgres/migrations/038_agent_work_permissions.sql",
+      import.meta.url,
+    ), "utf8");
+    expect(sql).toContain("ai_phone.agent_permission_requests");
+    expect(sql).toContain("ai_phone.agent_turn_authorizations");
+    expect(sql).toContain("explicit_instruction_evidence_hash");
+    expect(sql).toContain("authorizer_evidence_hash");
+    expect(sql).toContain("sealed_arguments");
+    expect(sql).toContain("agent_works_authorization_snapshot_fk");
+    expect(sql).toContain("VALIDATE CONSTRAINT");
+  });
+
+  it("pins server-authoritative voice turn generations and event replay", () => {
+    const sql = readFileSync(new URL(
+      "../../../../../infra/postgres/migrations/039_agent_voice_turn_scope.sql",
+      import.meta.url,
+    ), "utf8");
+    expect(sql).toContain("ai_phone.agent_voice_turn_scopes");
+    expect(sql).toContain("ai_phone.agent_voice_turn_events");
+    expect(sql).toContain("explicit_instruction_evidence_hash");
+    expect(sql).toContain("event_hash");
+    expect(sql).toContain("result_turn_generation");
+    expect(sql).toContain("user_speaking");
+    expect(sql).toContain("final_transcript");
+  });
+
+  it("pins leased Voice Client ownership and confirmed takeover fencing", () => {
+    const sql = readFileSync(new URL(
+      "../../../../../infra/postgres/migrations/040_voice_client_ownership.sql",
+      import.meta.url,
+    ), "utf8");
+    expect(sql).toContain("ai_phone.voice_client_ownerships");
+    expect(sql).toContain("ai_phone.voice_client_takeovers");
+    expect(sql).toContain("expected_generation");
+    expect(sql).toContain("voice_client_takeover_pending_idx");
+  });
+
+  it("pins durable delivery attempts separately from client receipts", () => {
+    const sql = readFileSync(new URL(
+      "../../../../../infra/postgres/migrations/041_agent_voice_delivery.sql",
+      import.meta.url,
+    ), "utf8");
+    expect(sql).toContain("ai_phone.agent_delivery_attempts");
+    expect(sql).toContain("ai_phone.agent_delivery_receipts");
+    expect(sql).toContain("client.playback.ended");
+    expect(sql).toContain("claim_agent_deliveries");
+    expect(sql).toContain("FOR UPDATE SKIP LOCKED");
   });
 
   it("pins fenced Air device leases and separate carrier/LiveKit state", () => {

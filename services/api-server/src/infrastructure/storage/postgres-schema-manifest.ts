@@ -34,6 +34,12 @@ export const expectedPostgresMigrations = [
   "033_air_device_call_event_sequences",
   "034_air_device_heartbeats",
   "035_agent_task_call_reference_projection",
+  "036_air_device_media_policy",
+  "037_agent_voice_work",
+  "038_agent_work_permissions",
+  "039_agent_voice_turn_scope",
+  "040_voice_client_ownership",
+  "041_agent_voice_delivery",
 ] as const;
 
 export function comparePostgresMigrations(applied: string[]) {
