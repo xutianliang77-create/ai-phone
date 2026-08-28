@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { llm, tool } from "@livekit/agents";
 import type { Room } from "@livekit/rtc-node";
 import {
+  type AgentVoiceTurnScopeDto,
   sipDtmfCode,
   type VoiceAgentRuntimeSnapshotDto,
   type VoiceAgentStructuredResultDto,
@@ -9,6 +10,9 @@ import {
 import { z } from "zod";
 import type { VoiceAgentRuntimeApiClient } from "./runtime-api-client.js";
 import type { VoiceAgentDispatchTicket } from "./runtime-ticket.js";
+import { buildBackgroundWorkTools } from "./runtime-background-work-tools.js";
+import type { VoiceAgentInteractionState } from
+  "./voice-agent-interaction-state.js";
 
 export interface VoiceAgentUserData {
   api: VoiceAgentRuntimeApiClient;
@@ -18,6 +22,9 @@ export interface VoiceAgentUserData {
   resultReported: boolean;
   takeoverRequested: boolean;
   recordingConsentStatus?: "granted" | "revoked";
+  backgroundWorkEnabled: boolean;
+  interaction: VoiceAgentInteractionState;
+  currentTurn?: AgentVoiceTurnScopeDto;
 }
 
 const dtmfSchema = z.object({
@@ -167,5 +174,6 @@ export function buildVoiceAgentTools(data: VoiceAgentUserData) {
       },
     }));
   }
+  tools.push(...buildBackgroundWorkTools(data));
   return tools;
 }
