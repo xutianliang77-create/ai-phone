@@ -1,14 +1,19 @@
 import { describe, expect, it, vi } from "vitest";
 import { RtcNodeAirDeviceRoomClient } from
   "./rtc-node-air-device-room-client.js";
+import { rtcNodeRoomFixture as rtcFixture } from
+  "./rtc-node-air-device-room-client.test-support.js";
 
 describe("rtc-node Air device room client", () => {
   it("connects with autoSubscribe=false and publishes exact PCM frames", async () => {
     const fixture = rtcFixture();
-    const client = new RtcNodeAirDeviceRoomClient(fixture.module);
+    const setPermissions = vi.fn();
+    const client = new RtcNodeAirDeviceRoomClient(fixture.module, setPermissions);
 
     await client.connect("wss://livekit.example.cn", "bound-token", {
       autoSubscribe: false,
+      communicationSessionId: "comm-1",
+      mediaPolicy: "translation_isolated",
     });
     const samples = Int16Array.from({ length: 320 }, (_, index) => index - 160);
     await client.publishPcmTrack("air780-downlink-air-1", samples, 16_000);
@@ -19,6 +24,10 @@ describe("rtc-node Air device room client", () => {
       { autoSubscribe: false, dynacast: false },
     );
     expect(fixture.publishTrack).toHaveBeenCalledOnce();
+    expect(setPermissions).toHaveBeenCalledWith(
+      fixture.room.localParticipant,
+      [],
+    );
     expect(fixture.captureFrame).toHaveBeenCalledWith(expect.objectContaining({
       data: samples,
       sampleRate: 16_000,
@@ -36,9 +45,11 @@ describe("rtc-node Air device room client", () => {
         setSubscribed,
       }]]),
     });
-    const client = new RtcNodeAirDeviceRoomClient(fixture.module);
+    const client = new RtcNodeAirDeviceRoomClient(fixture.module, vi.fn());
     await client.connect("wss://livekit.example.cn", "bound-token", {
       autoSubscribe: false,
+      communicationSessionId: "comm-1",
+      mediaPolicy: "translation_isolated",
     });
 
     await client.setSubscribed("track-1", true);
@@ -51,11 +62,13 @@ describe("rtc-node Air device room client", () => {
 
   it("reads subscribed remote audio as copied 16k/20ms mono frames", async () => {
     const fixture = rtcFixture();
-    const client = new RtcNodeAirDeviceRoomClient(fixture.module);
+    const client = new RtcNodeAirDeviceRoomClient(fixture.module, vi.fn());
     const observed: unknown[] = [];
     client.onSubscribedAudioFrame((frame) => observed.push(frame));
     await client.connect("wss://livekit.example.cn", "bound-token", {
       autoSubscribe: false,
+      communicationSessionId: "comm-1",
+      mediaPolicy: "translation_isolated",
     });
 
     const publication = { sid: "track-tts", name: "translation-tts" };
@@ -84,30 +97,56 @@ describe("rtc-node Air device room client", () => {
     });
   });
 
+  it("reports subscription and publication boundaries to the media assembler", async () => {
+    const fixture = rtcFixture();
+    const client = new RtcNodeAirDeviceRoomClient(fixture.module, vi.fn());
+    const unavailable: string[] = [];
+    client.onRemoteTrackUnpublished((trackSid) => unavailable.push(trackSid));
+    await client.connect("wss://livekit.example.cn", "bound-token", {
+      autoSubscribe: false,
+      communicationSessionId: "comm-1",
+      mediaPolicy: "translation_isolated",
+    });
+
+    fixture.emit("trackUnsubscribed", {}, { sid: "TR_1" });
+    fixture.emit("trackUnpublished", { sid: "TR_2" });
+
+    expect(unavailable).toEqual(["TR_1", "TR_2"]);
+  });
+
   it("fails closed when callers try to enable auto-subscribe", async () => {
     const fixture = rtcFixture();
-    const client = new RtcNodeAirDeviceRoomClient(fixture.module);
+    const client = new RtcNodeAirDeviceRoomClient(fixture.module, vi.fn());
 
     await expect(client.connect("wss://livekit.example.cn", "token", {
       autoSubscribe: true,
-    } as { autoSubscribe: false })).rejects.toThrow("autoSubscribe=false");
+      communicationSessionId: "comm-1",
+      mediaPolicy: "translation_isolated",
+    } as never)).rejects.toThrow("autoSubscribe=false");
     expect(fixture.room.connect).not.toHaveBeenCalled();
   });
 
-  it("forwards reconnect and disconnect lifecycle events", () => {
+  it("forwards reconnect and disconnect lifecycle events", async () => {
     const fixture = rtcFixture();
-    const client = new RtcNodeAirDeviceRoomClient(fixture.module);
+    const client = new RtcNodeAirDeviceRoomClient(fixture.module, vi.fn());
     const observed: string[] = [];
     client.onConnectionState((state) => observed.push(state));
 
+    await client.connect("wss://livekit.example.cn", "bound-token", {
+      autoSubscribe: false,
+      communicationSessionId: "comm-1",
+      mediaPolicy: "translation_isolated",
+    });
+
     fixture.emit("reconnecting");
     fixture.emit("reconnected");
+    await vi.waitFor(() => expect(observed).toEqual(["reconnecting", "joined"]));
     fixture.emit("disconnected");
 
     expect(observed).toEqual(["reconnecting", "joined", "disconnected"]);
   });
 
-  it("fails closed on reconnect and re-emits tracks for fresh admission", () => {
+  it("fails closed on reconnect and re-emits tracks for fresh admission", async () => {
     const fixture = rtcFixture();
     const setSubscribed = vi.fn();
     fixture.room.remoteParticipants.set("worker-1", {
@@ -118,14 +157,21 @@ describe("rtc-node Air device room client", () => {
         setSubscribed,
       }]]),
     });
-    const client = new RtcNodeAirDeviceRoomClient(fixture.module);
+    const client = new RtcNodeAirDeviceRoomClient(fixture.module, vi.fn());
     const observed: unknown[] = [];
     client.onRemoteTrackPublished((track) => observed.push(track));
+
+    await client.connect("wss://livekit.example.cn", "bound-token", {
+      autoSubscribe: false,
+      communicationSessionId: "comm-1",
+      mediaPolicy: "translation_isolated",
+    });
 
     fixture.emit("reconnecting");
     fixture.emit("reconnected");
 
     expect(setSubscribed).toHaveBeenCalledWith(false);
+    await vi.waitFor(() => expect(observed).toHaveLength(2));
     expect(observed).toEqual([
       {
         sid: "track-1",
@@ -139,109 +185,67 @@ describe("rtc-node Air device room client", () => {
       },
     ]);
   });
-});
 
-function rtcFixture() {
-  const listeners = new Map<string, Set<(...args: any[]) => void>>();
-  const audioControllers: ReadableStreamDefaultController<{
-    data: Int16Array;
-    sampleRate: number;
-    channels: number;
-    samplesPerChannel: number;
-  }>[] = [];
-  let audioStreamOptions: unknown;
-  const captureFrame = vi.fn(async () => undefined);
-  const publishTrack = vi.fn(async () => ({ sid: "local-track-1" }));
-  const room = {
-    isConnected: false,
-    connect: vi.fn(async () => { room.isConnected = true; }),
-    disconnect: vi.fn(async () => { room.isConnected = false; }),
-    on: vi.fn((event: string, listener: (...args: any[]) => void) => {
-      const registered = listeners.get(event) ??
-        new Set<(...args: any[]) => void>();
-      registered.add(listener);
-      listeners.set(event, registered);
-      return room;
-    }),
-    localParticipant: { publishTrack },
-    remoteParticipants: new Map<string, {
-      identity?: string;
-      trackPublications: Map<string, {
-        sid: string;
-        name?: string;
-        setSubscribed(value: boolean): void;
-      }>;
-    }>(),
-  };
-  class Room { constructor() { return room; } }
-  class AudioSource {
-    captureFrame = captureFrame;
-    clearQueue = vi.fn();
-    close = vi.fn(async () => undefined);
-    constructor(readonly sampleRate: number, readonly channels: number) {}
-  }
-  class AudioFrame {
-    constructor(
-      readonly data: Int16Array,
-      readonly sampleRate: number,
-      readonly channels: number,
-      readonly samplesPerChannel: number,
-    ) {}
-  }
-  class AudioStream extends ReadableStream<{
-    data: Int16Array;
-    sampleRate: number;
-    channels: number;
-    samplesPerChannel: number;
-  }> {
-    constructor(_track: unknown, options: unknown) {
-      let saved!: ReadableStreamDefaultController<{
-        data: Int16Array;
-        sampleRate: number;
-        channels: number;
-        samplesPerChannel: number;
-      }>;
-      super({ start: (controller) => { saved = controller; } });
-      audioStreamOptions = options;
-      audioControllers.push(saved);
-    }
-  }
-  class TrackPublishOptions { source = 0; }
-  const track = { close: vi.fn(async () => undefined) };
-  return {
-    captureFrame,
-    publishTrack,
-    room,
-    module: {
-      Room,
-      AudioSource,
-      AudioFrame,
-      AudioStream,
-      LocalAudioTrack: {
-        createAudioTrack: vi.fn(() => track),
+  it("enforces purpose-aware raw downlink permissions", async () => {
+    const fixture = rtcFixture();
+    fixture.room.remoteParticipants.set("comm-1:worker:translation", {
+      identity: "comm-1:worker:translation",
+      attributes: {
+        "ai.phone.call_id": "comm-1",
+        "ai.phone.participant_role": "worker",
       },
-      TrackPublishOptions,
-      TrackSource: { SOURCE_MICROPHONE: 2 },
-      RoomEvent: {
-        Reconnecting: 'reconnecting',
-        Reconnected: 'reconnected',
-        Disconnected: 'disconnected',
-        TrackPublished: 'trackPublished',
-        TrackSubscribed: 'trackSubscribed',
-        TrackUnsubscribed: 'trackUnsubscribed',
+      trackPublications: new Map(),
+    });
+    fixture.room.remoteParticipants.set("comm-1:host:12345678-1234-1234", {
+      identity: "comm-1:host:12345678-1234-1234",
+      attributes: {
+        "ai.phone.call_id": "comm-1",
+        "ai.phone.participant_role": "host",
       },
-    },
-    get audioStreamOptions() { return audioStreamOptions; },
-    pushAudio: (frame: {
-      data: Int16Array;
-      sampleRate: number;
-      channels: number;
-      samplesPerChannel: number;
-    }) => audioControllers.at(-1)?.enqueue({
-      ...frame,
-      data: Int16Array.from(frame.data),
-    }),
-    emit: (event: string, ...args: any[]) =>
-      listeners.get(event)?.forEach((listener) => listener(...args)),
-  };
-}
+      trackPublications: new Map(),
+    });
+    const translationPermissions = vi.fn();
+    const translation = new RtcNodeAirDeviceRoomClient(
+      fixture.module,
+      translationPermissions,
+    );
+    await translation.connect("wss://livekit.example.cn", "token", {
+      autoSubscribe: false,
+      communicationSessionId: "comm-1",
+      mediaPolicy: "translation_isolated",
+    });
+    expect(translationPermissions).toHaveBeenLastCalledWith(
+      fixture.room.localParticipant,
+      ["comm-1:worker:translation"],
+    );
+
+    await translation.disconnect();
+    const monitoredPermissions = vi.fn();
+    const monitored = new RtcNodeAirDeviceRoomClient(
+      fixture.module,
+      monitoredPermissions,
+    );
+    await monitored.connect("wss://livekit.example.cn", "token", {
+      autoSubscribe: false,
+      communicationSessionId: "comm-1",
+      mediaPolicy: "agent_monitored",
+    });
+    expect(monitoredPermissions).toHaveBeenLastCalledWith(
+      fixture.room.localParticipant,
+      ["comm-1:host:12345678-1234-1234", "comm-1:worker:translation"],
+    );
+  });
+
+  it("fails room preparation when publish permissions cannot be installed", async () => {
+    const fixture = rtcFixture();
+    const client = new RtcNodeAirDeviceRoomClient(fixture.module, () => {
+      throw new Error("permission unavailable");
+    });
+    await expect(client.connect("wss://livekit.example.cn", "token", {
+      autoSubscribe: false,
+      communicationSessionId: "comm-1",
+      mediaPolicy: "translation_isolated",
+    })).rejects.toThrow("permission unavailable");
+    expect(fixture.room.disconnect).toHaveBeenCalledOnce();
+  });
+});

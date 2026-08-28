@@ -82,6 +82,19 @@ export class BoundedDeviceAudioQueue {
     this.lastDeviceSequence = undefined;
   }
 
+  restoreGeneration(callGeneration: number) {
+    assertUint32(callGeneration, "callGeneration");
+    if (this.activeGeneration !== undefined) {
+      throw new Error("Cannot restore while a callGeneration is active");
+    }
+    if (callGeneration !== this.latestGeneration) {
+      throw new Error("Only the latest callGeneration can be restored");
+    }
+    this.clearFrames();
+    this.activeGeneration = callGeneration;
+    this.lastDeviceSequence = undefined;
+  }
+
   endGeneration(callGeneration: number) {
     if (callGeneration !== this.activeGeneration) {
       throw new Error("Cannot end an inactive callGeneration");

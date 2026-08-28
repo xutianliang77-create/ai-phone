@@ -121,4 +121,25 @@ describe("bounded Air device audio queue", () => {
       clearedFrames: 20,
     });
   });
+
+  it("restores only the retired latest generation after a transport reset", () => {
+    const queue = new BoundedDeviceAudioQueue(20);
+    queue.beginGeneration(7);
+    queue.enqueue({
+      payload: devicePayload(1),
+      deviceSequence: 9,
+      callGeneration: 7,
+    });
+    queue.endGeneration(7);
+
+    queue.restoreGeneration(7);
+    expect(queue.enqueue({
+      payload: devicePayload(2),
+      deviceSequence: 1,
+      callGeneration: 7,
+    })).toEqual({ accepted: true, framesEnqueued: 10 });
+    expect(() => queue.restoreGeneration(7)).toThrow("is active");
+    queue.endGeneration(7);
+    expect(() => queue.restoreGeneration(6)).toThrow("latest");
+  });
 });

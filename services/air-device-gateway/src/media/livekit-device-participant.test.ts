@@ -37,6 +37,7 @@ describe("Air device LiveKit guest participant", () => {
       deviceId: "air-001",
       leaseId: "lease-1",
       callGeneration: 3,
+      mediaPolicy: "translation_isolated",
       token: "signed-token",
       wsUrl: "wss://livekit.example.cn",
     });
@@ -53,6 +54,7 @@ describe("Air device LiveKit guest participant", () => {
       name: `translation-tts-guest-24000.${target}`,
       publisherIdentity: "session-1:worker:translation",
       admission: {
+        uplinkSource: "translated_tts",
         trackSid: "tts-guest",
         trackName: `translation-tts-guest-24000.${target}`,
         publisherIdentity: "session-1:worker:translation",
@@ -67,7 +69,11 @@ describe("Air device LiveKit guest participant", () => {
     expect(room.connect).toHaveBeenCalledWith(
       "wss://livekit.example.cn",
       "signed-token",
-      { autoSubscribe: false },
+      {
+        autoSubscribe: false,
+        communicationSessionId: "session-1",
+        mediaPolicy: "translation_isolated",
+      },
     );
     expect(room.publishPcmTrack).toHaveBeenCalledWith(
       "air780-downlink-air-001",
@@ -90,6 +96,7 @@ describe("Air device LiveKit guest participant", () => {
       deviceId: "air-001",
       leaseId: "lease-1",
       callGeneration: 3,
+      mediaPolicy: "translation_isolated",
       token: "signed-token",
       wsUrl: "wss://livekit.example.cn",
     });
@@ -104,6 +111,7 @@ describe("Air device LiveKit guest participant", () => {
       name: trackName,
       publisherIdentity,
       admission: {
+        uplinkSource: "translated_tts",
         trackSid: "tts-agent",
         trackName,
         publisherIdentity,
@@ -114,8 +122,45 @@ describe("Air device LiveKit guest participant", () => {
         leaseId: "lease-1",
         callGeneration: 3,
       },
-    })).resolves.toBe(true);
+    })).resolves.toBe("translated_tts");
     expect(room.setSubscribed).toHaveBeenCalledWith("tts-agent", true);
+  });
+
+  it("subscribes to the exact server-admitted Host microphone after takeover", async () => {
+    const room = {
+      connect: vi.fn().mockResolvedValue(undefined),
+      publishPcmTrack: vi.fn().mockResolvedValue(undefined),
+      setSubscribed: vi.fn().mockResolvedValue(undefined),
+    };
+    const participant = new AirDeviceLiveKitParticipant({
+      room,
+      communicationSessionId: "session-1",
+      deviceId: "air-001",
+      leaseId: "lease-1",
+      callGeneration: 3,
+      mediaPolicy: "agent_monitored",
+      token: "signed-token",
+      wsUrl: "wss://livekit.example.cn",
+    });
+    const publisherIdentity = "session-1:host:user-1";
+
+    await expect(participant.handleRemoteTrack({
+      sid: "host-microphone",
+      name: "microphone",
+      publisherIdentity,
+      admission: {
+        uplinkSource: "takeover_microphone",
+        trackSid: "host-microphone",
+        trackName: "microphone",
+        publisherIdentity,
+        communicationSessionId: "session-1",
+        targetParticipantIdentity: "session-1:guest:air:air-001",
+        deviceId: "air-001",
+        leaseId: "lease-1",
+        callGeneration: 3,
+      },
+    })).resolves.toBe("takeover_microphone");
+    expect(room.setSubscribed).toHaveBeenCalledWith("host-microphone", true);
   });
 
   it.each([
@@ -123,6 +168,7 @@ describe("Air device LiveKit guest participant", () => {
       label: "cross-session publisher",
       publisherIdentity: "session-2:worker:translation",
       admission: {
+        uplinkSource: "translated_tts",
         trackSid: "forged-track",
         trackName: "translation-tts-guest-24000.c2Vzc2lvbi0xOmd1ZXN0OmFpcjphaXItMDAx",
         publisherIdentity: "session-2:worker:translation",
@@ -137,6 +183,7 @@ describe("Air device LiveKit guest participant", () => {
       label: "old lease",
       publisherIdentity: "session-1:worker:translation",
       admission: {
+        uplinkSource: "translated_tts",
         trackSid: "forged-track",
         trackName: "translation-tts-guest-24000.c2Vzc2lvbi0xOmd1ZXN0OmFpcjphaXItMDAx",
         publisherIdentity: "session-1:worker:translation",
@@ -151,6 +198,7 @@ describe("Air device LiveKit guest participant", () => {
       label: "old generation",
       publisherIdentity: "session-1:worker:translation",
       admission: {
+        uplinkSource: "translated_tts",
         trackSid: "forged-track",
         trackName: "translation-tts-guest-24000.c2Vzc2lvbi0xOmd1ZXN0OmFpcjphaXItMDAx",
         publisherIdentity: "session-1:worker:translation",
@@ -165,6 +213,7 @@ describe("Air device LiveKit guest participant", () => {
       label: "cross-device admission",
       publisherIdentity: "session-1:worker:translation",
       admission: {
+        uplinkSource: "translated_tts",
         trackSid: "forged-track",
         trackName: "translation-tts-guest-24000.c2Vzc2lvbi0xOmd1ZXN0OmFpcjphaXItMDAx",
         publisherIdentity: "session-1:worker:translation",
@@ -184,6 +233,7 @@ describe("Air device LiveKit guest participant", () => {
       label: "admission replayed for another track",
       publisherIdentity: "session-1:worker:translation",
       admission: {
+        uplinkSource: "translated_tts",
         trackSid: "previous-track",
         trackName: "translation-tts-guest-24000.c2Vzc2lvbi0xOmd1ZXN0OmFpcjphaXItMDAx",
         publisherIdentity: "session-1:worker:translation",
@@ -206,6 +256,7 @@ describe("Air device LiveKit guest participant", () => {
       deviceId: "air-001",
       leaseId: "lease-1",
       callGeneration: 3,
+      mediaPolicy: "translation_isolated",
       token: "signed-token",
       wsUrl: "wss://livekit.example.cn",
     });
@@ -233,6 +284,7 @@ describe("Air device LiveKit guest participant", () => {
       deviceId: "air-001",
       leaseId: "lease-1",
       callGeneration: 3,
+      mediaPolicy: "translation_isolated",
       token: "signed-token",
       wsUrl: "wss://livekit.example.cn",
     });
@@ -250,7 +302,11 @@ describe("Air device LiveKit guest participant", () => {
       2,
       "wss://livekit.example.cn",
       "signed-token",
-      { autoSubscribe: false },
+      {
+        autoSubscribe: false,
+        communicationSessionId: "session-1",
+        mediaPolicy: "translation_isolated",
+      },
     );
     expect(room.setSubscribed).toHaveBeenCalledWith(
       "raw-after-reconnect",

@@ -1,9 +1,15 @@
+import type {
+  AirDeviceMediaPolicy,
+  AirDeviceUplinkSource,
+} from "@translation/contracts";
+
 export interface DeviceRemoteTrack {
   sid: string;
   name: string;
   publisherIdentity: string;
   /** Binding returned by the trusted server track-admission check. */
   admission?: {
+    uplinkSource: AirDeviceUplinkSource;
     trackSid: string;
     trackName: string;
     publisherIdentity: string;
@@ -25,7 +31,11 @@ export interface AirDeviceRoomClient {
   connect(
     wsUrl: string,
     token: string,
-    options: { autoSubscribe: false },
+    options: {
+      autoSubscribe: false;
+      communicationSessionId: string;
+      mediaPolicy: AirDeviceMediaPolicy;
+    },
   ): Promise<void>;
   disconnect?(): Promise<void>;
   publishPcmTrack(
@@ -40,6 +50,7 @@ export interface AirDeviceRoomClient {
   onRemoteTrackPublished?(
     listener: (track: Omit<DeviceRemoteTrack, "admission">) => void,
   ): () => void;
+  onRemoteTrackUnpublished?(listener: (trackSid: string) => void): () => void;
   onSubscribedAudioFrame?(
     listener: (frame: DeviceSubscribedAudioFrame) => void,
   ): () => void;
@@ -79,6 +90,7 @@ export class AirDeviceLiveKitParticipant {
     deviceId: string;
     leaseId: string;
     callGeneration: number;
+    mediaPolicy: AirDeviceMediaPolicy;
     token: string;
     wsUrl: string;
   }) {
@@ -89,7 +101,11 @@ export class AirDeviceLiveKitParticipant {
     await this.options.room.connect(
       this.options.wsUrl,
       this.options.token,
-      { autoSubscribe: false },
+      {
+        autoSubscribe: false,
+        communicationSessionId: this.options.communicationSessionId,
+        mediaPolicy: this.options.mediaPolicy,
+      },
     );
   }
 
@@ -102,6 +118,12 @@ export class AirDeviceLiveKitParticipant {
   }
 
   async handleRemoteTrack(track: DeviceRemoteTrack) {
+    const source = this.admittedUplinkSource(track);
+    await this.options.room.setSubscribed(track.sid, source !== null);
+    return source;
+  }
+
+  admittedUplinkSource(track: DeviceRemoteTrack): AirDeviceUplinkSource | null {
     const targetToken = Buffer.from(this.identity).toString("base64url");
     const isTranslationWorker = isTranslationWorkerIdentity(
       track.publisherIdentity,
@@ -120,12 +142,20 @@ export class AirDeviceLiveKitParticipant {
       admission.deviceId === this.options.deviceId &&
       admission.leaseId === this.options.leaseId &&
       admission.callGeneration === this.options.callGeneration;
-    const subscribed = isTranslationWorker && isExactTarget && hasExactAdmission;
-    await this.options.room.setSubscribed(
-      track.sid,
-      subscribed,
+    const isTakeoverHost = isTakeoverHostIdentity(
+      track.publisherIdentity,
+      this.options.communicationSessionId,
     );
-    return subscribed;
+    if (!hasExactAdmission) return null;
+    if (admission.uplinkSource === "translated_tts" &&
+      isTranslationWorker && isExactTarget) {
+      return "translated_tts";
+    }
+    if (admission.uplinkSource === "takeover_microphone" &&
+      isTakeoverHost && track.name === "microphone") {
+      return "takeover_microphone";
+    }
+    return null;
   }
 }
 
@@ -140,6 +170,15 @@ function isTranslationWorkerIdentity(
   const liveKitAgent = publisherIdentity.startsWith(agentPrefix) &&
     /^[1-9][0-9]*$/.test(publisherIdentity.slice(agentPrefix.length));
   return canonicalWorker || liveKitAgent;
+}
+
+function isTakeoverHostIdentity(
+  publisherIdentity: string,
+  communicationSessionId: string,
+) {
+  const prefix = `${communicationSessionId}:host:`;
+  return publisherIdentity.startsWith(prefix) &&
+    /^[A-Za-z0-9_-]{1,128}$/.test(publisherIdentity.slice(prefix.length));
 }
 
 function assertIdentifier(value: string, name: string, maximum = 128) {

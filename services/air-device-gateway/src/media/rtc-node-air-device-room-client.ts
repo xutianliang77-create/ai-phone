@@ -3,76 +3,23 @@ import type {
   DeviceSubscribedAudioFrame,
   DeviceRemoteTrack,
 } from "./livekit-device-participant.js";
+import type { AirDeviceMediaPolicy } from "@translation/contracts";
+import { maySubscribeToAirDownlink } from
+  "./air-downlink-subscription-policy.js";
+import { setRtcNodeTrackSubscriptionPermissions } from
+  "./rtc-node-track-permissions.js";
+import { RtcNodeAirDeviceAudioReaders } from
+  "./rtc-node-air-device-audio-readers.js";
+import type {
+  AirGatewayRtcNodeModule,
+  RtcAudioSource,
+  RtcRemoteParticipant,
+  RtcRemotePublication,
+  RtcRoomInstance,
+  RtcTrack,
+} from "./rtc-node-air-device-types.js";
 
-interface RtcAudioSource {
-  captureFrame(frame: unknown): Promise<void>;
-  clearQueue(): void;
-  close(): Promise<void>;
-}
-
-interface RtcTrack {
-  close(closeSource?: boolean): Promise<void>;
-}
-
-interface RtcRoom {
-  isConnected: boolean;
-  connect(url: string, token: string, options: {
-    autoSubscribe: boolean;
-    dynacast: boolean;
-  }): Promise<void>;
-  disconnect(): Promise<void>;
-  on(event: string, listener: (...args: never[]) => void): unknown;
-  localParticipant?: {
-    publishTrack(track: RtcTrack, options: unknown): Promise<{ sid?: string }>;
-  };
-  remoteParticipants: Map<string, RtcRemoteParticipant>;
-}
-
-interface RtcRemotePublication {
-  sid?: string;
-  name?: string;
-  setSubscribed(subscribed: boolean): void;
-}
-
-interface RtcRemoteAudioFrame {
-  data: Int16Array;
-  sampleRate: number;
-  channels: number;
-  samplesPerChannel: number;
-}
-
-interface RtcRemoteParticipant {
-  identity?: string;
-  trackPublications: Map<string, RtcRemotePublication>;
-}
-
-export interface AirGatewayRtcNodeModule {
-  Room: new () => RtcRoom;
-  AudioSource: new (sampleRate: number, channels: number) => RtcAudioSource;
-  AudioFrame: new (
-    data: Int16Array,
-    sampleRate: number,
-    channels: number,
-    samplesPerChannel: number,
-  ) => unknown;
-  AudioStream: new (
-    track: unknown,
-    options: { sampleRate: number; numChannels: number; frameSizeMs: number },
-  ) => ReadableStream<RtcRemoteAudioFrame>;
-  LocalAudioTrack: {
-    createAudioTrack(name: string, source: RtcAudioSource): RtcTrack;
-  };
-  TrackPublishOptions: new () => { source: number };
-  TrackSource: { SOURCE_MICROPHONE: number };
-  RoomEvent: {
-    Reconnecting: string;
-    Reconnected: string;
-    Disconnected: string;
-    TrackPublished: string;
-    TrackSubscribed: string;
-    TrackUnsubscribed: string;
-  };
-}
+export type { AirGatewayRtcNodeModule } from "./rtc-node-air-device-types.js";
 
 interface PublishedTrack {
   source: RtcAudioSource;
@@ -81,7 +28,7 @@ interface PublishedTrack {
 }
 
 export class RtcNodeAirDeviceRoomClient implements AirDeviceRoomClient {
-  private readonly room: RtcRoom;
+  private readonly room: RtcRoomInstance;
   private readonly tracks = new Map<string, PublishedTrack>();
   private readonly connectionListeners = new Set<(
     state: "reconnecting" | "joined" | "disconnected",
@@ -89,26 +36,42 @@ export class RtcNodeAirDeviceRoomClient implements AirDeviceRoomClient {
   private readonly remoteTrackListeners = new Set<(
     track: Omit<DeviceRemoteTrack, "admission">,
   ) => void>();
+  private readonly remoteTrackUnavailableListeners = new Set<(
+    trackSid: string,
+  ) => void>();
   private readonly audioFrameListeners = new Set<(
     frame: DeviceSubscribedAudioFrame,
   ) => void>();
-  private readonly audioReaders = new Map<string,
-    ReadableStreamDefaultReader<RtcRemoteAudioFrame>>();
+  private readonly audioReaders: RtcNodeAirDeviceAudioReaders;
+  private publishPolicy?: {
+    communicationSessionId: string;
+    mediaPolicy: AirDeviceMediaPolicy;
+  };
+  private permissionSync = Promise.resolve();
+  private permissionFailed = false;
 
-  constructor(private readonly rtc: AirGatewayRtcNodeModule) {
+  constructor(
+    private readonly rtc: AirGatewayRtcNodeModule,
+    private readonly setPublishPermissions = setRtcNodeTrackSubscriptionPermissions,
+  ) {
     this.room = new rtc.Room();
+    this.audioReaders = new RtcNodeAirDeviceAudioReaders(rtc, (frame) => {
+      for (const listener of this.audioFrameListeners) listener(frame);
+    });
     this.room.on(rtc.RoomEvent.Reconnecting, () => {
       this.unsubscribeAllRemoteTracks();
-      this.stopAllAudioReaders();
+      this.audioReaders.stopAll();
       this.emit("reconnecting");
     });
     this.room.on(rtc.RoomEvent.Reconnected, () => {
-      this.emit("joined");
-      this.emitExistingRemoteTracks();
+      this.schedulePermissionSync(() => {
+        this.emit("joined");
+        this.emitExistingRemoteTracks();
+      });
     });
     this.room.on(rtc.RoomEvent.Disconnected, () => {
       this.unsubscribeAllRemoteTracks();
-      this.stopAllAudioReaders();
+      this.audioReaders.stopAll();
       this.emit("disconnected");
     });
     this.room.on(rtc.RoomEvent.TrackPublished, (
@@ -118,26 +81,61 @@ export class RtcNodeAirDeviceRoomClient implements AirDeviceRoomClient {
     this.room.on(rtc.RoomEvent.TrackSubscribed, (
       track: unknown,
       publication: RtcRemotePublication,
-    ) => this.startAudioReader(track, publication));
+    ) => this.audioReaders.start(track, publication));
     this.room.on(rtc.RoomEvent.TrackUnsubscribed, (
       _track: unknown,
       publication: RtcRemotePublication,
-    ) => publication.sid && this.stopAudioReader(publication.sid));
+    ) => {
+      if (!publication.sid) return;
+      this.audioReaders.stop(publication.sid);
+      this.emitRemoteTrackUnavailable(publication.sid);
+    });
+    this.room.on(rtc.RoomEvent.TrackUnpublished, (
+      publication: RtcRemotePublication,
+    ) => {
+      if (!publication.sid) return;
+      this.audioReaders.stop(publication.sid);
+      this.emitRemoteTrackUnavailable(publication.sid);
+    });
+    this.room.on(rtc.RoomEvent.ParticipantConnected, () =>
+      this.schedulePermissionSync());
+    this.room.on(rtc.RoomEvent.ParticipantDisconnected, () =>
+      this.schedulePermissionSync());
+    this.room.on(rtc.RoomEvent.ParticipantAttributesChanged, () =>
+      this.schedulePermissionSync());
+    this.room.on(rtc.RoomEvent.ParticipantMetadataChanged, () =>
+      this.schedulePermissionSync());
   }
 
   async connect(
     wsUrl: string,
     token: string,
-    options: { autoSubscribe: false },
+    options: {
+      autoSubscribe: false;
+      communicationSessionId: string;
+      mediaPolicy: AirDeviceMediaPolicy;
+    },
   ) {
     if (options.autoSubscribe !== false) {
       throw new Error("Air device room requires autoSubscribe=false");
     }
     if (this.room.isConnected) throw new Error("Air device room is already connected");
-    await this.room.connect(wsUrl, token, {
-      autoSubscribe: false,
-      dynacast: false,
-    });
+    this.publishPolicy = {
+      communicationSessionId: options.communicationSessionId,
+      mediaPolicy: options.mediaPolicy,
+    };
+    this.permissionFailed = false;
+    try {
+      await this.room.connect(wsUrl, token, {
+        autoSubscribe: false,
+        dynacast: false,
+      });
+      await this.enqueuePermissionSync();
+    } catch (error) {
+      this.publishPolicy = undefined;
+      if (this.room.isConnected) await this.room.disconnect().catch(() => undefined);
+      throw error;
+    }
   }
 
   async publishPcmTrack(
@@ -147,6 +145,10 @@ export class RtcNodeAirDeviceRoomClient implements AirDeviceRoomClient {
   ) {
     if (!this.room.isConnected || !this.room.localParticipant) {
       throw new Error("Air device LiveKit room is not connected");
+    }
+    await this.permissionSync;
+    if (this.permissionFailed) {
+      throw new Error("Air device LiveKit publish permissions failed closed");
     }
     if (samples.length !== sampleRate / 50) {
       throw new Error("Air device LiveKit PCM frame must be exactly 20ms");
@@ -200,13 +202,18 @@ export class RtcNodeAirDeviceRoomClient implements AirDeviceRoomClient {
     return () => this.remoteTrackListeners.delete(listener);
   }
 
+  onRemoteTrackUnpublished(listener: (trackSid: string) => void) {
+    this.remoteTrackUnavailableListeners.add(listener);
+    return () => this.remoteTrackUnavailableListeners.delete(listener);
+  }
+
   onSubscribedAudioFrame(listener: (frame: DeviceSubscribedAudioFrame) => void) {
     this.audioFrameListeners.add(listener);
     return () => this.audioFrameListeners.delete(listener);
   }
 
   async disconnect() {
-    this.stopAllAudioReaders();
+    this.audioReaders.stopAll();
     const tracks = [...this.tracks.values()];
     this.tracks.clear();
     for (const { source, track } of tracks) {
@@ -215,6 +222,7 @@ export class RtcNodeAirDeviceRoomClient implements AirDeviceRoomClient {
       await source.close().catch(() => undefined);
     }
     if (this.room.isConnected) await this.room.disconnect();
+    this.publishPolicy = undefined;
   }
 
   private emit(state: "reconnecting" | "joined" | "disconnected") {
@@ -246,6 +254,12 @@ export class RtcNodeAirDeviceRoomClient implements AirDeviceRoomClient {
     for (const listener of this.remoteTrackListeners) listener(track);
   }
 
+  private emitRemoteTrackUnavailable(trackSid: string) {
+    for (const listener of this.remoteTrackUnavailableListeners) {
+      listener(trackSid);
+    }
+  }
+
   private unsubscribeAllRemoteTracks() {
     for (const participant of this.room.remoteParticipants.values()) {
       for (const publication of participant.trackPublications.values()) {
@@ -254,56 +268,48 @@ export class RtcNodeAirDeviceRoomClient implements AirDeviceRoomClient {
     }
   }
 
-  private startAudioReader(track: unknown, publication: RtcRemotePublication) {
-    if (!publication.sid) return;
-    this.stopAudioReader(publication.sid);
-    const stream = new this.rtc.AudioStream(track, {
-      sampleRate: 16_000,
-      numChannels: 1,
-      frameSizeMs: 20,
-    });
-    const reader = stream.getReader();
-    this.audioReaders.set(publication.sid, reader);
-    void this.consumeAudio(publication.sid, reader);
+  private schedulePermissionSync(after?: () => void) {
+    if (!this.room.isConnected || !this.publishPolicy) return;
+    const sync = this.enqueuePermissionSync();
+    void sync.then(() => after?.())
+      .catch((error) => this.failPublishPermissions(error));
   }
 
-  private async consumeAudio(
-    trackSid: string,
-    reader: ReadableStreamDefaultReader<RtcRemoteAudioFrame>,
-  ) {
-    try {
-      while (this.audioReaders.get(trackSid) === reader) {
-        const { done, value } = await reader.read();
-        if (done) return;
-        if (value.sampleRate !== 16_000 || value.channels !== 1 ||
-          value.samplesPerChannel !== 320 || value.data.length !== 320) continue;
-        const frame: DeviceSubscribedAudioFrame = {
-          trackSid,
-          samples: Int16Array.from(value.data),
-          sampleRate: 16_000,
+  private enqueuePermissionSync() {
+    const sync = this.permissionSync.then(() => this.syncPublishPermissions());
+    this.permissionSync = sync;
+    return sync;
+  }
+
+  private async syncPublishPermissions() {
+    const localParticipant = this.room.localParticipant;
+    const policy = this.publishPolicy;
+    if (!localParticipant || !policy || !this.room.isConnected) {
+      throw new Error("Air device LiveKit publish policy is unbound");
+    }
+    const allowed = [...this.room.remoteParticipants.entries()]
+      .flatMap(([identity, participant]) => {
+        const candidate = {
+          identity: participant.identity ?? identity,
+          metadata: participant.metadata,
+          attributes: participant.attributes,
         };
-        for (const listener of this.audioFrameListeners) listener(frame);
-      }
-    } catch {
-      // A cancelled reader is an expected subscription lifecycle boundary.
-    } finally {
-      if (this.audioReaders.get(trackSid) === reader) {
-        this.audioReaders.delete(trackSid);
-      }
-    }
+        return maySubscribeToAirDownlink({ ...policy, participant: candidate })
+          ? [candidate.identity]
+          : [];
+      })
+      .sort((left, right) => left.localeCompare(right));
+    await this.setPublishPermissions(localParticipant, allowed);
   }
 
-  private stopAudioReader(trackSid: string) {
-    const reader = this.audioReaders.get(trackSid);
-    if (!reader) return;
-    this.audioReaders.delete(trackSid);
-    void reader.cancel().catch(() => undefined);
-  }
-
-  private stopAllAudioReaders() {
-    for (const trackSid of [...this.audioReaders.keys()]) {
-      this.stopAudioReader(trackSid);
-    }
+  private failPublishPermissions(error: unknown) {
+    if (this.permissionFailed) return;
+    this.permissionFailed = true;
+    console.error(JSON.stringify({
+      event: "air_livekit_publish_permissions_failed",
+      errorClass: error instanceof Error ? error.name : "unknown",
+    }));
+    void this.room.disconnect().catch(() => undefined);
   }
 }
 
