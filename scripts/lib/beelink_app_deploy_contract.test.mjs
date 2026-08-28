@@ -48,12 +48,30 @@ const dockerfile = readFileSync(
   new URL("../../infra/ai-phone-server/Dockerfile", import.meta.url),
   "utf8",
 );
+const dockerIgnore = readFileSync(
+  new URL("../../.dockerignore", import.meta.url),
+  "utf8",
+);
 const rootPackage = JSON.parse(readFileSync(
   new URL("../../package.json", import.meta.url),
   "utf8",
 ));
 
 describe("Beelink app deployment contract", () => {
+  it("keeps private environments and generated evidence out of sync and images", () => {
+    expect(script).toContain("--exclude='.env*'");
+    expect(script).toContain("--exclude='release/domestic/release.env'");
+    expect(script).toContain("--exclude='outputs/'");
+    expect(dockerIgnore).toContain("**/.env*");
+    expect(dockerIgnore).toContain("release/domestic/release.env");
+    expect(dockerIgnore).toContain("outputs");
+  });
+
+  it("copies the enabled Air780 readiness healthcheck into the single app image", () => {
+    expect(compose).toContain("container-healthcheck.mjs");
+    expect(dockerfile).toContain("container-healthcheck.mjs");
+  });
+
   it("requires an explicit production profile and fails closed before env generation", () => {
     expect(script).toContain('AI_PHONE_DEPLOY_PROFILE="${AI_PHONE_DEPLOY_PROFILE:-test}"');
     expect(script).toContain("production_env_preflight");
@@ -95,6 +113,37 @@ describe("Beelink app deployment contract", () => {
     expect(script).toContain('if [[ \"$MODE\" == \"start\" ]]; then');
     expect(script).toContain("remote_compose 'up -d --no-build --remove-orphans'");
     expect(script).not.toContain('remote_compose \"build\"\n  wait_for_translation_agent_stability');
+  });
+
+  it("pins a deploy image only after the new container is stable", () => {
+    const deployFlow = script.slice(script.lastIndexOf('remote_compose "build"'));
+    const up = deployFlow.indexOf(
+      'remote_compose "up -d --no-build --remove-orphans"',
+    );
+    const healthy = deployFlow.indexOf(
+      "if wait_for_wujie_container_health; then",
+    );
+    const stable = deployFlow.indexOf(
+      "if wait_for_translation_agent_stability; then",
+    );
+    const pin = deployFlow.indexOf(".ai-phone-image-tag.XXXXXX");
+    expect(up).toBeGreaterThanOrEqual(0);
+    expect(healthy).toBeGreaterThan(up);
+    expect(stable).toBeGreaterThan(healthy);
+    expect(pin).toBeGreaterThan(stable);
+    expect(deployFlow).toContain(
+      "mv \\\"\\$image_tag_file\\\" '$REMOTE_RUNTIME/ai-phone-image-tag'",
+    );
+  });
+
+  it("requires the single application container health gate in every run mode", () => {
+    expect(script).toContain("wait_for_wujie_container_health");
+    expect(script).toMatch(
+      /if \[\[ "\$MODE" == "status" \]\]; then\n\s+wait_for_wujie_container_health/,
+    );
+    expect(script).toMatch(
+      /if \[\[ "\$MODE" == "start" \]\]; then[\s\S]*?wait_for_wujie_container_health[\s\S]*?wait_for_translation_agent_stability/,
+    );
   });
 
   it("preserves an existing database before a fresh JSON migration", () => {
@@ -178,6 +227,23 @@ describe("Beelink app deployment contract", () => {
     expect(compose).not.toContain(
       "container_name: ${AI_PHONE_CONTAINER_PREFIX:-ai-phone}-translation-agent",
     );
+  });
+
+  it("restarts recoverable workers inside the single application container", () => {
+    expect(appEntrypoint).toContain("recoverable component");
+    expect(appEntrypoint).toContain("scheduleRestart(component");
+    expect(appEntrypoint).toContain("WUJIE_AI_CHILD_RESTART_INITIAL_MS");
+    expect(appEntrypoint).toContain("WUJIE_AI_CHILD_RESTART_MAX_MS");
+    expect(appEntrypoint).toContain("WUJIE_AI_CHILD_STABLE_UPTIME_MS");
+    expect(appEntrypoint).toContain("WUJIE_AI_SUPERVISOR_STATE_FILE");
+    expect(appEntrypoint).toContain("writeSupervisorState()");
+    expect(appEntrypoint).toContain(
+      'componentStates.set(component.name, "restarting")',
+    );
+    const services = compose.slice(compose.indexOf("services:"));
+    expect(services.match(/^  [a-zA-Z0-9_-]+:\s*$/gm)).toEqual([
+      "  wujie-ai:",
+    ]);
   });
 
   it("builds runtime dependencies only from the committed lockfile", () => {
