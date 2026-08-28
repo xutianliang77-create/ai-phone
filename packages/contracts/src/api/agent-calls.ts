@@ -90,6 +90,9 @@ export interface AiCallingAgentDraftDto {
   takeoverReadyAt?: string;
   takeoverResolvedAt?: string;
   takeoverReason?: string;
+  agentControlState?: "running" | "paused";
+  agentPausedAt?: string;
+  agentResumedAt?: string;
   cancelledAt?: string;
   cancellationReason?: string;
   callId?: string;

@@ -20,12 +20,15 @@ export type VoiceAgentRuntimeEventType =
   | "amd_classified"
   | "ivr_detected"
   | "takeover_ready"
+  | "response_start_timeout"
+  | "audio_capacity_exceeded"
   | "structured_result"
   | "failed"
   | "ending";
 
 export type VoiceAgentRuntimeCommand =
   | "continue"
+  | "pause"
   | "takeover"
   | "cancel";
 
@@ -34,7 +37,7 @@ export interface VoiceAgentControlMessage {
   controlId: string;
   callId: string;
   generation: number;
-  command: "takeover" | "cancel" | "resume";
+  command: "pause" | "takeover" | "cancel" | "resume";
   issuedAt: string;
   expiresAt: string;
 }

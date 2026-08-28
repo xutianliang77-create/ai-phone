@@ -5,6 +5,11 @@ import type {
 
 export type PhoneCallTransport = "air780_volte" | "livekit_sip";
 
+/** Controls who may subscribe to the raw Air780 downlink track. */
+export type AirDeviceMediaPolicy =
+  | "translation_isolated"
+  | "agent_monitored";
+
 export type PhoneCallState =
   | "dialing"
   | "ringing"
@@ -71,6 +76,7 @@ export interface AirDeviceCallDto {
   carrierState: AirDeviceCarrierState;
   liveKitParticipantState: AirDeviceLiveKitParticipantState;
   callGeneration: number;
+  mediaPolicy: AirDeviceMediaPolicy;
   version: number;
   connectedAt?: string;
   endedAt?: string;
@@ -124,7 +130,34 @@ export interface AirDeviceHeartbeatRequest {
   };
 }
 
+/**
+ * Requests fresh, purpose-bound room access for an already active carrier
+ * call. This operation restores media only; it must never dispatch DIAL.
+ */
+export interface AirDeviceMediaRecoveryRequest {
+  communicationSessionId: string;
+  providerCallId: string;
+  deviceId: string;
+  leaseId: string;
+  fencingToken: number;
+  callGeneration: number;
+}
+
+export interface AirDeviceMediaRecoveryAccessDto extends
+AirDeviceMediaRecoveryRequest {
+  roomName: string;
+  participantIdentity: string;
+  carrierState: "dialing" | "ringing" | "connected";
+  roomAccess: {
+    wsUrl: string;
+    token: string;
+    expiresAt: string;
+    mediaPolicy: AirDeviceMediaPolicy;
+  };
+}
+
 export interface AirDeviceTrackAdmissionDto {
+  uplinkSource: AirDeviceUplinkSource;
   trackSid: string;
   trackName: string;
   publisherIdentity: string;
@@ -135,8 +168,19 @@ export interface AirDeviceTrackAdmissionDto {
   callGeneration: number;
 }
 
-export interface AirDeviceTrackAdmissionRequest extends
-AirDeviceTrackAdmissionDto {
+export type AirDeviceUplinkSource =
+  | "translated_tts"
+  | "takeover_microphone";
+
+export interface AirDeviceTrackAdmissionRequest {
+  trackSid: string;
+  trackName: string;
+  publisherIdentity: string;
+  communicationSessionId: string;
+  targetParticipantIdentity: string;
+  deviceId: string;
+  leaseId: string;
+  callGeneration: number;
   roomName: string;
   fencingToken: number;
 }
@@ -148,6 +192,8 @@ export interface PlacePhoneCallPayload {
   roomName: string;
   phoneNumberReference: string;
   participantIdentity: string;
+  /** Required by the Air780 adapter; SIP providers ignore this field. */
+  mediaPolicy?: AirDeviceMediaPolicy;
   deviceLease?: DeviceLeaseBinding;
   initialDtmf?: string;
 }
