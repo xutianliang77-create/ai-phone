@@ -3,6 +3,8 @@ import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { hasLockedLinuxFfmpegRuntime } from
+  "./lib/source_build_runtime_contract.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const result = checkSourceBuildReadiness(root);
@@ -50,6 +52,7 @@ export function checkSourceBuildReadiness(
   const dockerfile = read(
     path.join(repositoryRoot, "infra/ai-phone-server/Dockerfile"),
   );
+  const packageJson = read(path.join(repositoryRoot, "package.json"));
   for (const workspace of [
     "@translation/contracts",
     "@translation/llm",
@@ -69,12 +72,7 @@ export function checkSourceBuildReadiness(
   if (!dockerfile.includes("npm ci")) {
     issues.push("Dockerfile must install the locked dependency graph with npm ci");
   }
-  if (
-    !dockerfile.includes("@ffmpeg-installer/linux-x64@4.1.0") ||
-    !dockerfile.includes(
-      "test -x node_modules/@ffmpeg-installer/linux-x64/ffmpeg",
-    )
-  ) {
+  if (!hasLockedLinuxFfmpegRuntime(packageJson, dockerfile)) {
     issues.push("Dockerfile must install and verify the LiveKit Linux ffmpeg runtime");
   }
 
