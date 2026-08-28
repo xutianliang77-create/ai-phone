@@ -65,3 +65,21 @@ export function createRealtimeServerRuntime() {
     disconnectFinalizers,
   };
 }
+
+export function listenRealtimeServerRuntime(
+  runtime: ReturnType<typeof createRealtimeServerRuntime>,
+) {
+  const { env, protection, dependencyReadiness, httpServer, server,
+    disconnectFinalizers } = runtime;
+  httpServer.listen(env.port, env.host, () => {
+    realtimeLogger.info({ host: env.host, port: env.port },
+      "Realtime gateway started");
+  });
+  httpServer.on("close", () => {
+    void protection.close();
+    dependencyReadiness.close();
+    disconnectFinalizers.close();
+    server.close();
+  });
+  return httpServer;
+}

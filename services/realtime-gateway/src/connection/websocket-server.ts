@@ -21,13 +21,14 @@ import { logSpeakerAttributionConfigured, resolveSpeakerAttribution } from "./sp
 import { handleTextSegment } from "./client-text-segment-handler.js";
 import { endpointModeForRealtimeMode } from "./realtime-endpoint-mode.js";
 import { admitRealtimeConnection, sendRealtimeEvent } from "./realtime-connection-admission.js";
-import { createRealtimeServerRuntime } from "./realtime-server-runtime.js";
+import { createRealtimeServerRuntime, listenRealtimeServerRuntime } from "./realtime-server-runtime.js";
 import { coreDependencyFailureStage } from "./gateway-dependency-readiness.js";
 
 const router = new ProviderRouter();
 export { normalizeClientTextLanguage } from "../protocol/client-text-language.js";
 
 export function startWebSocketServer() {
+  const runtime = createRealtimeServerRuntime();
   const {
     env,
     protection,
@@ -37,7 +38,7 @@ export function startWebSocketServer() {
     sessionEventSink,
     usageBalanceClient,
     disconnectFinalizers,
-  } = createRealtimeServerRuntime();
+  } = runtime;
 
   server.on("connection", async (ws, request) => {
     const attachment = admitRealtimeConnection(ws, request, env);
@@ -345,14 +346,5 @@ export function startWebSocketServer() {
     ws.on("close", () => { void cleanupConnection(); });
   });
 
-  httpServer.listen(env.port, env.host, () => {
-    realtimeLogger.info({ host: env.host, port: env.port }, "Realtime gateway started");
-  });
-  httpServer.on("close", () => {
-    void protection.close();
-    dependencyReadiness.close();
-    disconnectFinalizers.close();
-    server.close();
-  });
-  return httpServer;
+  return listenRealtimeServerRuntime(runtime);
 }
