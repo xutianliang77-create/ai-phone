@@ -58,6 +58,21 @@ export interface VuartV1HelloPayload {
   maxPayloadBytes: number;
 }
 
+export type VuartV1HelloPayloadErrorCode =
+  | "protocol_version_unsupported"
+  | "capability_flags_unsupported"
+  | "audio_payload_capacity_unsupported";
+
+export class VuartV1HelloPayloadError extends Error {
+  constructor(
+    readonly code: VuartV1HelloPayloadErrorCode,
+    message: string,
+  ) {
+    super(message);
+    this.name = "VuartV1HelloPayloadError";
+  }
+}
+
 export interface VuartV1HeartbeatPayload {
   deviceId: string;
   bootId: string;
@@ -97,15 +112,26 @@ export function encodeVuartV1HelloPayload(input: VuartV1HelloPayload) {
   writer.identifier(input.deviceId, 128, "deviceId");
   writer.identifier(input.bootId, 128, "bootId");
   writer.identifier(input.firmwareVersion, 64, "firmwareVersion");
-  if (input.protocolVersion !== VERSION) throw new Error("protocol version unsupported");
+  if (input.protocolVersion !== VERSION) {
+    throw new VuartV1HelloPayloadError(
+      "protocol_version_unsupported",
+      "protocol version unsupported",
+    );
+  }
   writer.u8(input.protocolVersion, "protocolVersion");
   if (!isUint(input.capabilityFlags, MAX_CAPABILITY_FLAGS)) {
-    throw new Error("VUART v1 capability flags unsupported");
+    throw new VuartV1HelloPayloadError(
+      "capability_flags_unsupported",
+      "VUART v1 capability flags unsupported",
+    );
   }
   writer.u16(input.capabilityFlags, "capabilityFlags");
   if (!isUint(input.maxPayloadBytes, 0xffff) ||
     input.maxPayloadBytes < MIN_AUDIO_PAYLOAD_BYTES) {
-    throw new Error("VUART v1 max payload bytes cannot carry audio");
+    throw new VuartV1HelloPayloadError(
+      "audio_payload_capacity_unsupported",
+      "VUART v1 max payload bytes cannot carry audio",
+    );
   }
   writer.u16(input.maxPayloadBytes, "maxPayloadBytes");
   return writer.take();

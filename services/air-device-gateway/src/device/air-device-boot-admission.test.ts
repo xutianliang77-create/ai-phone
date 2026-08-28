@@ -193,6 +193,52 @@ describe("Air device HELLO/HEARTBEAT boot admission", () => {
     expect(admission.commandBlockReason(dial())).toBe("device_not_ready");
     expect(admission.snapshot()).toMatchObject({ heartbeatAgeMs: 101 });
   });
+
+  it("classifies an unsupported HELLO capability without exposing its payload", () => {
+    const admission = new AirDeviceBootAdmission({
+      expectedDeviceId: binding.deviceId,
+    });
+    const payload = encodeVuartV1HelloPayload({
+      deviceId: binding.deviceId,
+      bootId: "boot-1",
+      firmwareVersion: "production",
+      protocolVersion: 1,
+      capabilityFlags: 0x07,
+      maxPayloadBytes: 8_192,
+    });
+    payload[payload.byteLength - 4] = 0x17;
+
+    admission.observe(frame(VuartFrameType.HELLO, payload));
+
+    expect(admission.snapshot()).toMatchObject({
+      state: "quarantined",
+      invalidFrames: 1,
+      invalidFrameReasons: { hello_capability_unsupported: 1 },
+      lastInvalidFrameReason: "hello_capability_unsupported",
+    });
+    expect(admission.snapshot().hello).toBeUndefined();
+  });
+
+  it("enforces the production media capability and payload-capacity profile", () => {
+    const admission = new AirDeviceBootAdmission({
+      expectedDeviceId: binding.deviceId,
+      requiredCapabilityFlags: 0x07,
+      minimumMaxPayloadBytes: 8_192,
+    });
+
+    admission.observe(hello("boot-1", 0x03));
+    expect(admission.snapshot()).toMatchObject({
+      lastInvalidFrameReason: "hello_required_capability_missing",
+      invalidFrameReasons: { hello_required_capability_missing: 1 },
+    });
+
+    admission.observe(hello("boot-1", 0x07));
+    expect(admission.snapshot()).toMatchObject({
+      lastInvalidFrameReason: "hello_audio_capacity_unsupported",
+      invalidFrameReasons: { hello_audio_capacity_unsupported: 1 },
+    });
+    expect(admission.snapshot().hello).toBeUndefined();
+  });
 });
 
 function admittedBoot(bootId: string) {

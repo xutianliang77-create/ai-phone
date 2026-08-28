@@ -1,5 +1,12 @@
 import type { AirDeviceSessionBinding } from "./device-session-router.js";
 import {
+  airDeviceBootAdmissionPolicy,
+  airDeviceBootInvalidPayloadReason,
+  airDeviceHelloPolicyRejection,
+  type AirDeviceBootAdmissionPolicy,
+  type AirDeviceBootInvalidFrameReason,
+} from "./air-device-boot-diagnostics.js";
+import {
   decodeVuartV1HeartbeatPayload,
   decodeVuartV1HelloPayload,
   VuartV1Capability,
@@ -31,6 +38,8 @@ export interface AirDeviceBootAdmissionSnapshot {
   staleBootFrames: number;
   staleHeartbeats: number;
   invalidFrames: number;
+  invalidFrameReasons: Partial<Record<AirDeviceBootInvalidFrameReason, number>>;
+  lastInvalidFrameReason?: AirDeviceBootInvalidFrameReason;
   reconcileCompletions: number;
   disconnects: number;
 }
@@ -47,6 +56,7 @@ export class AirDeviceBootAdmission {
   private authorizedBinding?: AirDeviceSessionBinding;
   private readonly heartbeatTimeoutMs: number;
   private readonly nowMs: () => number;
+  private readonly policy: AirDeviceBootAdmissionPolicy;
   private readonly retiredBootIds: string[] = [];
   private readonly revocationListeners = new Set<() => void>();
   private readonly unsubscribeFrame?: () => void;
@@ -59,12 +69,18 @@ export class AirDeviceBootAdmission {
     reconcileCompletions: 0,
     disconnects: 0,
   };
+  private readonly invalidFrameReasons: Partial<
+    Record<AirDeviceBootInvalidFrameReason, number>
+  > = {};
+  private lastInvalidFrameReason?: AirDeviceBootInvalidFrameReason;
 
   constructor(private readonly options: {
     expectedDeviceId: string;
     onReconcileRequired?: (snapshot: AirDeviceBootAdmissionSnapshot) => void;
     onHeartbeatAccepted?: (snapshot: AirDeviceBootAdmissionSnapshot) => void;
     heartbeatTimeoutMs?: number;
+    requiredCapabilityFlags?: number;
+    minimumMaxPayloadBytes?: number;
     nowMs?: () => number;
     frameSource?: {
       onFrame(listener: (frame: VuartFrame) => void): () => void;
@@ -74,6 +90,7 @@ export class AirDeviceBootAdmission {
     if (!options.expectedDeviceId) throw new Error("expectedDeviceId is required");
     this.heartbeatTimeoutMs = options.heartbeatTimeoutMs ?? 15_000;
     this.nowMs = options.nowMs ?? Date.now;
+    this.policy = airDeviceBootAdmissionPolicy(options);
     if (!Number.isInteger(this.heartbeatTimeoutMs) ||
       this.heartbeatTimeoutMs < 1) {
       throw new Error("heartbeatTimeoutMs must be a positive integer");
@@ -85,7 +102,7 @@ export class AirDeviceBootAdmission {
 
   observe(frame: VuartFrame) {
     if (frame.flags !== 0) {
-      this.counters.invalidFrames += 1;
+      this.recordInvalidFrame("frame_flags_unsupported");
       return;
     }
     try {
@@ -94,8 +111,8 @@ export class AirDeviceBootAdmission {
       } else if (frame.type === VuartFrameType.HEARTBEAT) {
         this.observeHeartbeat(decodeVuartV1HeartbeatPayload(frame.payload));
       }
-    } catch {
-      this.counters.invalidFrames += 1;
+    } catch (error) {
+      this.recordInvalidFrame(airDeviceBootInvalidPayloadReason(frame.type, error));
     }
   }
 
@@ -189,12 +206,21 @@ export class AirDeviceBootAdmission {
         ? { authorizedBinding: { ...this.authorizedBinding } }
         : {}),
       ...this.counters,
+      invalidFrameReasons: { ...this.invalidFrameReasons },
+      ...(this.lastInvalidFrameReason
+        ? { lastInvalidFrameReason: this.lastInvalidFrameReason }
+        : {}),
     };
   }
 
   private observeHello(hello: VuartV1HelloPayload) {
+    const policyRejection = airDeviceHelloPolicyRejection(hello, this.policy);
+    if (policyRejection) {
+      this.recordInvalidFrame(policyRejection);
+      return;
+    }
     if (hello.deviceId !== this.options.expectedDeviceId) {
-      this.counters.invalidFrames += 1;
+      this.recordInvalidFrame("device_identity_mismatch");
       return;
     }
     if (this.retiredBootIds.includes(hello.bootId)) {
@@ -203,7 +229,7 @@ export class AirDeviceBootAdmission {
     }
     if (this.hello?.bootId === hello.bootId) {
       if (!sameHello(this.hello, hello)) {
-        this.counters.invalidFrames += 1;
+        this.recordInvalidFrame("hello_changed_within_boot");
         this.heartbeat = undefined;
         this.heartbeatObservedAtMs = undefined;
         this.authorizedBinding = undefined;
@@ -229,7 +255,7 @@ export class AirDeviceBootAdmission {
 
   private observeHeartbeat(heartbeat: VuartV1HeartbeatPayload) {
     if (heartbeat.deviceId !== this.options.expectedDeviceId) {
-      this.counters.invalidFrames += 1;
+      this.recordInvalidFrame("device_identity_mismatch");
       return;
     }
     if (!this.hello || heartbeat.bootId !== this.hello.bootId) {
@@ -274,6 +300,12 @@ export class AirDeviceBootAdmission {
 
   private heartbeatAgeMs() {
     return Math.max(0, this.nowMs() - (this.heartbeatObservedAtMs ?? this.nowMs()));
+  }
+
+  private recordInvalidFrame(reason: AirDeviceBootInvalidFrameReason) {
+    this.counters.invalidFrames += 1;
+    this.invalidFrameReasons[reason] = (this.invalidFrameReasons[reason] ?? 0) + 1;
+    this.lastInvalidFrameReason = reason;
   }
 }
 

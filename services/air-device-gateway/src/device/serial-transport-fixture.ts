@@ -6,17 +6,29 @@ import type {
 
 export class FixtureSerialTransport implements SerialTransport {
   private opened = false;
+  private remainingOpenFailures: number;
   private readonly dataListeners = new Set<SerialDataListener>();
   private readonly disconnectListeners = new Set<SerialDisconnectListener>();
   private readonly written: Uint8Array[] = [];
+  openAttempts = 0;
 
-  constructor(readonly path: string) {}
+  constructor(
+    readonly path: string,
+    options: { openFailures?: number } = {},
+  ) {
+    this.remainingOpenFailures = options.openFailures ?? 0;
+  }
 
   get isOpen() {
     return this.opened;
   }
 
   async open() {
+    this.openAttempts += 1;
+    if (this.remainingOpenFailures > 0) {
+      this.remainingOpenFailures -= 1;
+      throw new Error("Serial transport is unavailable");
+    }
     this.opened = true;
   }
 
