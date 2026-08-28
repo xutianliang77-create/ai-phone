@@ -8,6 +8,7 @@ import '../../../../platform/audio/audio_frame.dart';
 import '../../../../platform/asr/asr_text_segment.dart';
 import '../api/realtime_session.dart';
 import 'gateway_realtime_event.dart';
+import 'realtime_reconnect_audio_buffer.dart';
 import 'realtime_reconnect_backoff.dart';
 
 class RealtimeGatewayClient {
@@ -19,13 +20,17 @@ class RealtimeGatewayClient {
     RealtimeReconnectBackoff reconnectBackoff =
         const RealtimeReconnectBackoff(),
     double Function()? reconnectJitterUnit,
+    RealtimeReconnectAudioBuffer? reconnectAudioBuffer,
   })  : _reconnectBackoff = reconnectBackoff,
-        _reconnectJitterUnit = reconnectJitterUnit ?? Random().nextDouble;
+        _reconnectJitterUnit = reconnectJitterUnit ?? Random().nextDouble,
+        _reconnectAudioBuffer =
+            reconnectAudioBuffer ?? RealtimeReconnectAudioBuffer();
 
   final StreamController<GatewayRealtimeEvent> _events =
       StreamController<GatewayRealtimeEvent>.broadcast();
   final RealtimeReconnectBackoff _reconnectBackoff;
   final double Function() _reconnectJitterUnit;
+  final RealtimeReconnectAudioBuffer _reconnectAudioBuffer;
   WebSocketChannel? _channel;
   StreamSubscription<dynamic>? _subscription;
   Timer? _reconnectTimer;
@@ -33,8 +38,11 @@ class RealtimeGatewayClient {
   RealtimeSession? _session;
   bool _manualClose = false;
   bool _suspended = false;
+  bool _transportReady = false;
   int _reconnectAttempts = 0;
   int _connectionGeneration = 0;
+  RealtimeReconnectAudioDrain _lastReconnectAudioDrain =
+      RealtimeReconnectAudioDrain.empty;
 
   Stream<GatewayRealtimeEvent> get events => _events.stream;
 
@@ -43,10 +51,13 @@ class RealtimeGatewayClient {
     _manualClose = false;
     _suspended = false;
     _reconnectAttempts = 0;
+    _reconnectAudioBuffer.clear();
+    _lastReconnectAudioDrain = RealtimeReconnectAudioDrain.empty;
     await _open(session);
   }
 
   Future<void> _open(RealtimeSession session) async {
+    _transportReady = false;
     final generation = ++_connectionGeneration;
     final channel = WebSocketChannel.connect(
       realtimeGatewayEndpoint(session),
@@ -54,7 +65,7 @@ class RealtimeGatewayClient {
     );
     _channel = channel;
     _subscription = channel.stream.listen(
-      _handleMessage,
+      (message) => _handleMessage(generation, message),
       onError: (Object error) => _handleDisconnect(generation, error),
       onDone: () => _handleDisconnect(generation),
     );
@@ -62,12 +73,15 @@ class RealtimeGatewayClient {
     if (generation != _connectionGeneration || !identical(_channel, channel)) {
       throw StateError('Realtime connection closed before becoming ready');
     }
+    _transportReady = true;
+    _lastReconnectAudioDrain = _flushReconnectAudio(session.sessionId);
     _scheduleStableConnectionReset(generation);
   }
 
   Future<void> suspendForLifecycle() async {
     _suspended = true;
     _reconnectTimer?.cancel();
+    _reconnectAudioBuffer.clear();
     await _closeTransport();
   }
 
@@ -90,6 +104,17 @@ class RealtimeGatewayClient {
   }
 
   bool sendAudio(String sessionId, AudioFrame frame) {
+    if (!_transportReady || _channel == null) {
+      if (_shouldBufferReconnectAudio(sessionId)) {
+        _reconnectAudioBuffer.add(frame);
+        return true;
+      }
+      return false;
+    }
+    return _sendAudioFrame(sessionId, frame);
+  }
+
+  bool _sendAudioFrame(String sessionId, AudioFrame frame) {
     return _send({
       'type': 'audio.frame',
       'sessionId': sessionId,
@@ -158,6 +183,7 @@ class RealtimeGatewayClient {
     _manualClose = true;
     _reconnectTimer?.cancel();
     _stableConnectionTimer?.cancel();
+    _reconnectAudioBuffer.clear();
     return _send({'type': 'session.end', 'sessionId': sessionId});
   }
 
@@ -196,6 +222,7 @@ class RealtimeGatewayClient {
     _suspended = false;
     _reconnectTimer?.cancel();
     _stableConnectionTimer?.cancel();
+    _reconnectAudioBuffer.clear();
     await _closeTransport();
   }
 
@@ -211,7 +238,8 @@ class RealtimeGatewayClient {
     return true;
   }
 
-  void _handleMessage(dynamic message) {
+  void _handleMessage(int generation, dynamic message) {
+    if (generation != _connectionGeneration) return;
     if (message is! String) return;
     final json = jsonDecode(message) as Map<String, Object?>;
     final event = GatewayRealtimeEvent.fromJson(json);
@@ -219,6 +247,7 @@ class RealtimeGatewayClient {
       _manualClose = true;
       _reconnectTimer?.cancel();
       _stableConnectionTimer?.cancel();
+      _reconnectAudioBuffer.clear();
     }
     _events.add(event);
   }
@@ -227,6 +256,7 @@ class RealtimeGatewayClient {
     if (generation != _connectionGeneration) return;
     final subscription = _subscription;
     final channel = _channel;
+    _transportReady = false;
     _channel = null;
     _subscription = null;
     unawaited(subscription?.cancel());
@@ -258,9 +288,11 @@ class RealtimeGatewayClient {
       if (session == null || _manualClose || _suspended) return;
       try {
         await _open(session);
-        _events.add(const GatewayRealtimeEvent.connection(
+        _events.add(GatewayRealtimeEvent.connection(
           type: 'connection.reconnected',
           message: 'Realtime connection restored',
+          replayedAudioMs: _lastReconnectAudioDrain.replayedAudioMs,
+          droppedAudioMs: _lastReconnectAudioDrain.droppedAudioMs,
         ));
       } catch (_) {
         _handleDisconnect(_connectionGeneration);
@@ -287,12 +319,28 @@ class RealtimeGatewayClient {
   Future<void> _closeTransport() async {
     _connectionGeneration += 1;
     _stableConnectionTimer?.cancel();
+    _transportReady = false;
     final subscription = _subscription;
     final channel = _channel;
     _subscription = null;
     _channel = null;
     await subscription?.cancel();
     await channel?.sink.close();
+  }
+
+  bool _shouldBufferReconnectAudio(String sessionId) {
+    return _reconnectAttempts > 0 &&
+        _session?.sessionId == sessionId &&
+        !_manualClose &&
+        !_suspended;
+  }
+
+  RealtimeReconnectAudioDrain _flushReconnectAudio(String sessionId) {
+    final drain = _reconnectAudioBuffer.drain();
+    for (final frame in drain.frames) {
+      _sendAudioFrame(sessionId, frame);
+    }
+    return drain;
   }
 }
 

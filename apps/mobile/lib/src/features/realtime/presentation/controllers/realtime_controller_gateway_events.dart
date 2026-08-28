@@ -46,7 +46,7 @@ extension RealtimeControllerGatewayEvents on RealtimeController {
       } else {
         _setStatus(RealtimeStatus.active);
       }
-      _message = event.message;
+      _message = _reconnectRecoveryMessage(event);
       _notify();
       return;
     }
@@ -203,6 +203,14 @@ extension RealtimeControllerGatewayEvents on RealtimeController {
       default:
         return null;
     }
+  }
+
+  String? _reconnectRecoveryMessage(GatewayRealtimeEvent event) {
+    final replayedAudioMs = event.replayedAudioMs ?? 0;
+    final droppedAudioMs = event.droppedAudioMs ?? 0;
+    if (droppedAudioMs <= 0) return event.message;
+    return 'Realtime connection restored; replayed $replayedAudioMs ms; '
+        'missed $droppedAudioMs ms';
   }
 
   void _handleRemoteSessionEnded(GatewayRealtimeEvent event) {

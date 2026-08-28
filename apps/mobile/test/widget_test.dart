@@ -258,6 +258,12 @@ void main() {
     expect(zh.runtimeMessage('Realtime connection lost'), '实时连接已断开');
     expect(zh.runtimeMessage('Realtime connection restored'), '实时连接已恢复');
     expect(zh.runtimeMessage('Reconnecting (2/3)'), '正在重连 (2/3)');
+    expect(
+      zh.runtimeMessage(
+        'Realtime connection restored; replayed 2400 ms; missed 1600 ms',
+      ),
+      '实时连接已恢复；已补传 2.4 秒，约 1.6 秒语音未上传',
+    );
     expect(zh.runtimeMessage('Session time limit reached'), '本次会话已达到时长上限');
     expect(zh.runtimeMessage('Diagnostics report ready'), '诊断报告已生成');
     expect(

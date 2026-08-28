@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -6,6 +7,7 @@ import 'package:translation_mobile/src/features/realtime/data/api/realtime_sessi
 import 'package:translation_mobile/src/features/realtime/data/gateway/gateway_realtime_event.dart';
 import 'package:translation_mobile/src/features/realtime/data/gateway/realtime_gateway_client.dart';
 import 'package:translation_mobile/src/features/realtime/data/gateway/realtime_reconnect_backoff.dart';
+import 'package:translation_mobile/src/platform/audio/audio_frame.dart';
 
 void main() {
   test('reconnects the same session after three transient handshake failures',
@@ -37,12 +39,20 @@ void main() {
     await client.connect(session);
     await server.waitForAcceptedConnections(1);
     server.rejectNextConnections(3);
+    final reconnecting = client.events
+        .firstWhere((event) => event.type == 'connection.reconnecting');
     final reconnected = client.events
         .firstWhere((event) => event.type == 'connection.reconnected');
 
     await server.acceptedSockets.single.close();
-    await reconnected.timeout(const Duration(seconds: 2));
+    await reconnecting.timeout(const Duration(seconds: 2));
+    for (var sequence = 1; sequence <= 40; sequence += 1) {
+      expect(
+          client.sendAudio('session-reconnect', audioFrame(sequence)), isTrue);
+    }
+    final recovery = await reconnected.timeout(const Duration(seconds: 2));
     await server.waitForAcceptedConnections(2);
+    await server.waitForReceivedMessages(connectionIndex: 1, count: 24);
 
     expect(server.rejectedConnections, 3);
     expect(server.acceptedSockets, hasLength(2));
@@ -58,7 +68,23 @@ void main() {
       server.requestedProtocols,
       everyElement(contains('ai-phone.token.token-reconnect')),
     );
+    final replayed = server.receivedMessagesByConnection[1]
+        .map((message) => jsonDecode(message) as Map<String, Object?>)
+        .toList(growable: false);
+    expect(replayed.map((message) => message['sequence']),
+        List<int>.generate(24, (index) => index + 17));
+    expect(recovery.replayedAudioMs, 2400);
+    expect(recovery.droppedAudioMs, 1600);
   });
+}
+
+AudioFrame audioFrame(int sequence) {
+  return AudioFrame(
+    sequence: sequence,
+    timestampMs: sequence * 100,
+    sampleRate: 24000,
+    bytes: List<int>.filled(4800, 0),
+  );
 }
 
 class _ReconnectWebSocketServer {
@@ -67,6 +93,7 @@ class _ReconnectWebSocketServer {
   final HttpServer _server;
   final StreamSubscription<HttpRequest> _requests;
   final List<WebSocket> acceptedSockets = <WebSocket>[];
+  final List<List<String>> receivedMessagesByConnection = <List<String>>[];
   final List<String> requestedProtocols = <String>[];
   final List<Completer<void>> _connectionWaiters = <Completer<void>>[];
   int rejectedConnections = 0;
@@ -99,6 +126,20 @@ class _ReconnectWebSocketServer {
     }
   }
 
+  Future<void> waitForReceivedMessages({
+    required int connectionIndex,
+    required int count,
+  }) async {
+    final deadline = DateTime.now().add(const Duration(seconds: 2));
+    while (receivedMessagesByConnection.length <= connectionIndex ||
+        receivedMessagesByConnection[connectionIndex].length < count) {
+      if (DateTime.now().isAfter(deadline)) {
+        throw TimeoutException('Timed out waiting for replayed audio');
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+    }
+  }
+
   Future<void> close() async {
     await _requests.cancel();
     for (final socket in acceptedSockets) {
@@ -124,6 +165,11 @@ class _ReconnectWebSocketServer {
           protocols.isEmpty ? null : protocols.first,
     );
     acceptedSockets.add(socket);
+    final received = <String>[];
+    receivedMessagesByConnection.add(received);
+    socket.listen((message) {
+      if (message is String) received.add(message);
+    });
     for (final waiter in _connectionWaiters) {
       if (!waiter.isCompleted) waiter.complete();
     }

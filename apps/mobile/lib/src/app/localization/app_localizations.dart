@@ -290,6 +290,16 @@ class AppLocalizations {
     if (reconnectMatch != null) {
       return '正在重连 (${reconnectMatch.group(1)}/${reconnectMatch.group(2)})';
     }
+    final recoveryGapMatch = RegExp(
+      r'^Realtime connection restored; replayed (\d+) ms; missed (\d+) ms$',
+    ).firstMatch(message);
+    if (recoveryGapMatch != null) {
+      final replayedSeconds =
+          (int.parse(recoveryGapMatch.group(1)!) / 1000).toStringAsFixed(1);
+      final missedSeconds =
+          (int.parse(recoveryGapMatch.group(2)!) / 1000).toStringAsFixed(1);
+      return '实时连接已恢复；已补传 $replayedSeconds 秒，约 $missedSeconds 秒语音未上传';
+    }
     if (message.startsWith('Device ASR is unavailable: ')) {
       final reason = message.substring('Device ASR is unavailable: '.length);
       return '端侧 ASR 当前不可用：${diagnosticsValue(reason)}';
@@ -321,6 +331,7 @@ class AppLocalizations {
 extension AppLocalizationsBuildContext on BuildContext {
   AppLocalizations get l10n => AppLocalizations.of(this);
 }
+
 class _AppLocalizationsDelegate
     extends LocalizationsDelegate<AppLocalizations> {
   const _AppLocalizationsDelegate();

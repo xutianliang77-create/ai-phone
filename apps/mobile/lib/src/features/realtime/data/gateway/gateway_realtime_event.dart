@@ -29,6 +29,8 @@ class GatewayRealtimeEvent {
     this.sampleRate,
     this.sequence,
     this.data,
+    this.replayedAudioMs,
+    this.droppedAudioMs,
     this.flush,
     this.speaker,
     this.timing,
@@ -62,6 +64,8 @@ class GatewayRealtimeEvent {
   final int? sampleRate;
   final int? sequence;
   final String? data;
+  final int? replayedAudioMs;
+  final int? droppedAudioMs;
   final GatewayRealtimeFlushSummary? flush;
   final SpeakerAttribution? speaker;
   final SegmentTiming? timing;
@@ -71,6 +75,8 @@ class GatewayRealtimeEvent {
   const GatewayRealtimeEvent.connection({
     required this.type,
     this.message,
+    this.replayedAudioMs,
+    this.droppedAudioMs,
   })  : sessionId = null,
         segmentId = null,
         turnId = null,
@@ -137,6 +143,8 @@ class GatewayRealtimeEvent {
       sampleRate: (json['sampleRate'] as num?)?.toInt(),
       sequence: (json['sequence'] as num?)?.toInt(),
       data: json['data'] as String?,
+      replayedAudioMs: (json['replayedAudioMs'] as num?)?.toInt(),
+      droppedAudioMs: (json['droppedAudioMs'] as num?)?.toInt(),
       flush: flushJson is Map
           ? GatewayRealtimeFlushSummary.fromJson(
               Map<String, Object?>.from(flushJson),

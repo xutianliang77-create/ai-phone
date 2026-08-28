@@ -260,7 +260,10 @@ class RealtimeController extends ChangeNotifier {
 
   void _sendAudioFrame(AudioFrame frame) {
     final session = _session;
-    if (session == null || _status != RealtimeStatus.active) return;
+    final active = _status == RealtimeStatus.active;
+    final reconnecting = _status == RealtimeStatus.connecting &&
+        _statusBeforeReconnect == RealtimeStatus.active;
+    if (session == null || (!active && !reconnecting)) return;
     if (_speechCaptureGate.blocksCapture) return;
     _repository.sendAudio(session.sessionId, frame);
   }
