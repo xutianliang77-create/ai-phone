@@ -1,59 +1,61 @@
-import { llm, voice } from "@livekit/agents";
-import type { JobContext } from "@livekit/agents";
+import { voice } from "@livekit/agents";
 import {
   type DataPacketKind,
   ParticipantKind,
   type RemoteParticipant,
   RoomEvent,
 } from "@livekit/rtc-node";
-import type {
-  VoiceAgentAmdCategory,
-  VoiceAgentRuntimeSnapshotDto,
-  VoiceAgentStructuredResultDto,
-} from "@translation/contracts";
 import pino from "pino";
-import type { VoiceAgentRuntimeEnv } from "./config.js";
-import type { ProcessData } from "./agent-definition.js";
 import type { VoiceAgentRuntimeApiClient } from "./runtime-api-client.js";
-import type { VoiceAgentDispatchTicket } from "./runtime-ticket.js";
+import type { ManagedVoiceAgentSessionInput } from
+  "./voice-agent-session-input.js";
 import { startWithReplyAuthorizationPaused } from "./agent-session-start-gate.js";
-import { configureVoiceAgentSessionAudio,
-  type LiveKitTargetAudioOutput } from "./livekit-target-audio-output.js";
+import { configureVoiceAgentSessionAudio } from
+  "./livekit-target-audio-config.js";
+import type { LiveKitTargetAudioOutput } from
+  "./livekit-target-audio-output.js";
 import { buildVoiceAgentTools,
   type VoiceAgentUserData } from "./runtime-tools.js";
-import { parseVoiceAgentControl } from "./voice-agent-control.js";
 import { assertVoiceAgentCalleeBinding } from "./voice-agent-participant-binding.js";
-import {
-  discloseAndGenerateReply,
-  playVoiceAgentDisclosure,
-  voiceAgentReplyInstructions,
-} from "./voice-agent-disclosure.js";
 import { buildVoiceAgentModels,
   voiceAgentInstructions } from "./voice-agent-session-config.js";
+import { AgentResponseStartWatchdog } from
+  "./agent-response-start-watchdog.js";
+import { VoiceAgentTurnObserver } from "./voice-agent-turn-observer.js";
+import { AgentDeliveryPlayback } from "./agent-delivery-playback.js";
+import { VoiceAgentInteractionState } from
+  "./voice-agent-interaction-state.js";
+import { VoiceAgentAudioShadow } from "./voice-agent-audio-shadow.js";
+import { VoiceAgentConversationFlow } from
+  "./voice-agent-conversation-flow.js";
+import { VoiceAgentSessionControl } from "./voice-agent-session-control.js";
 
 const logger = pino({ name: "voice-agent-session" });
-const controlTopic = "voice-agent.control.v1";
 export class ManagedVoiceAgentSession {
   private session?: voice.AgentSession<VoiceAgentUserData>;
-  private amd?: voice.AMD;
-  private heartbeat?: NodeJS.Timeout;
+  private conversation?: VoiceAgentConversationFlow;
   private stopped = false;
   private endingSent = false;
-  private takeover = false;
   private sessionClosed = false;
   private targetAudioOutput?: LiveKitTargetAudioOutput;
   private targetAudioAbort?: AbortController;
-  private readonly handledControls = new Set<string>();
+  private responseStartWatchdog?: AgentResponseStartWatchdog;
+  private turnObserver?: VoiceAgentTurnObserver;
+  private audioRealtimeShadow?: VoiceAgentAudioShadow;
+  private readonly interaction = new VoiceAgentInteractionState();
+  private readonly control: VoiceAgentSessionControl;
+  private deliveryPlayback?: AgentDeliveryPlayback;
 
-  constructor(private readonly input: {
-    env: VoiceAgentRuntimeEnv;
-    api: VoiceAgentRuntimeApiClient;
-    ticket: VoiceAgentDispatchTicket;
-    snapshot: VoiceAgentRuntimeSnapshotDto;
-    workerId: string;
-    jobId: string;
-    ctx: JobContext<ProcessData>;
-  }) {}
+  constructor(private readonly input: ManagedVoiceAgentSessionInput) {
+    this.control = new VoiceAgentSessionControl({
+      runtime: input,
+      interaction: this.interaction,
+      session: () => this.session,
+      deliveryPlayback: () => this.deliveryPlayback,
+      report: (event) => this.report(event),
+      onError: (error, message) => logger.warn({ err: error }, message),
+    });
+  }
 
   async run() {
     const userData: VoiceAgentUserData = {
@@ -64,7 +66,23 @@ export class ManagedVoiceAgentSession {
       resultReported: false,
       takeoverRequested: false,
       recordingConsentStatus: undefined,
+      backgroundWorkEnabled: this.input.env.backgroundWorkEnabled,
+      interaction: this.interaction,
     };
+    if (this.input.env.backgroundWorkEnabled) {
+      this.turnObserver = new VoiceAgentTurnObserver({
+        api: this.input.api,
+        snapshot: this.input.snapshot,
+        ticket: this.input.ticket,
+        onScope: (scope) => {
+          userData.currentTurn = scope;
+        },
+        onError: (error) => logger.warn(
+          { err: error },
+          "Voice Agent turn scope update failed closed",
+        ),
+      });
+    }
     const models = buildVoiceAgentModels(
       this.input.env,
       this.input.snapshot.language,
@@ -93,9 +111,56 @@ export class ManagedVoiceAgentSession {
       },
     });
     this.session = session;
+    this.conversation = new VoiceAgentConversationFlow({
+      runtime: this.input,
+      session,
+      interaction: this.interaction,
+      isClosed: () => this.sessionClosed,
+      report: (event, extra) => this.report(event, extra),
+    });
+    this.responseStartWatchdog = new AgentResponseStartWatchdog({
+      timeoutMs: this.input.env.responseStartTimeoutMs,
+      onTimeout: () => this.cancelTimedOutAgentReply(),
+      onError: (error) => logger.warn(
+        { err: error },
+        "Voice Agent response-start watchdog callback failed",
+      ),
+    });
+    const onAgentStateChanged = (event: {
+      newState: "initializing" | "idle" | "listening" | "thinking" | "speaking";
+    }) => {
+      this.responseStartWatchdog?.observe(event.newState);
+      this.interaction.observeAgentState(event.newState);
+    };
+    const onUserStateChanged = (event: {
+      newState: "speaking" | "listening" | "away";
+      createdAt: number;
+    }) => {
+      this.interaction.observeUserState(event.newState);
+      if (event.newState === "speaking") {
+        this.turnObserver?.userSpeaking(event.createdAt);
+      }
+    };
+    const onUserInputTranscribed = (event: {
+      transcript: string;
+      isFinal: boolean;
+      createdAt: number;
+    }) => {
+      if (event.isFinal) {
+        this.turnObserver?.finalTranscript(event.transcript, event.createdAt);
+      }
+    };
+    session.on(voice.AgentSessionEventTypes.AgentStateChanged, onAgentStateChanged);
+    session.on(voice.AgentSessionEventTypes.UserStateChanged, onUserStateChanged);
+    session.on(
+      voice.AgentSessionEventTypes.UserInputTranscribed,
+      onUserInputTranscribed,
+    );
     const closed = new Promise<void>((resolve) => {
       session.once(voice.AgentSessionEventTypes.Close, () => {
         this.sessionClosed = true;
+        this.interaction.setSessionState("ended");
+        this.responseStartWatchdog?.close();
         this.targetAudioAbort?.abort();
         resolve();
       });
@@ -105,6 +170,17 @@ export class ManagedVoiceAgentSession {
       telephonyProvider: this.input.snapshot.telephonyProvider,
       publisherIdentity: this.input.snapshot.participantIdentity,
       targetParticipantIdentity: this.input.snapshot.calleeParticipantIdentity,
+      maxPendingAudioMs: this.input.env.maxPendingAudioMs,
+      maxPendingAudioChunks: this.input.env.maxPendingAudioChunks,
+      onCapacityExceeded: (evidence) => {
+        logger.error(evidence, "Voice Agent pending audio capacity exceeded");
+        void this.report("audio_capacity_exceeded", {
+          errorClass: evidence.code,
+        }).catch((error) => logger.warn(
+          { err: error },
+          "Voice Agent audio capacity event report failed",
+        ));
+      },
     });
     this.targetAudioOutput = audio.output;
     this.targetAudioAbort = audio.abortController;
@@ -125,24 +201,50 @@ export class ManagedVoiceAgentSession {
     if (this.targetAudioOutput) {
       await this.targetAudioOutput.start(this.targetAudioAbort!.signal);
     }
+    if (this.input.env.deliveryCoordinatorEnabled) {
+      this.deliveryPlayback = new AgentDeliveryPlayback({
+        api: this.input.api,
+        ticket: this.input.ticket,
+        snapshot: this.input.snapshot,
+        session,
+        interaction: this.interaction,
+        ...(this.targetAudioOutput
+          ? { targetAudioOutput: this.targetAudioOutput }
+          : {}),
+      });
+    }
     const room = this.input.ctx.room;
     const onControl = (
       data: Uint8Array,
       participant?: RemoteParticipant,
       _kind?: DataPacketKind,
       topic?: string,
-    ) => this.handleControl(data, participant, topic ?? "");
+    ) => this.control.handleData(data, participant, _kind, topic ?? "");
     room.on(RoomEvent.DataReceived, onControl);
     try {
       await this.report("ready");
-      this.startHeartbeat();
+      this.control.startHeartbeat();
       const participant = await this.input.ctx.waitForParticipant(
         this.input.snapshot.calleeParticipantIdentity,
       );
       assertVoiceAgentCalleeBinding(this.input.snapshot, participant);
-      await this.classifyAndBegin(models.llm, closed);
+      this.startAudioRealtimeShadow(participant);
+      await this.conversation.classifyAndBegin(models.llm, closed);
       await closed;
     } finally {
+      session.off(
+        voice.AgentSessionEventTypes.AgentStateChanged,
+        onAgentStateChanged,
+      );
+      session.off(
+        voice.AgentSessionEventTypes.UserStateChanged,
+        onUserStateChanged,
+      );
+      session.off(
+        voice.AgentSessionEventTypes.UserInputTranscribed,
+        onUserInputTranscribed,
+      );
+      this.responseStartWatchdog?.close();
       room.off(RoomEvent.DataReceived, onControl);
     }
   }
@@ -150,17 +252,24 @@ export class ManagedVoiceAgentSession {
   async stop(errorClass?: string) {
     if (this.stopped) return;
     this.stopped = true;
-    if (this.heartbeat) clearInterval(this.heartbeat);
+    this.interaction.setSessionState("ending");
+    this.control.stopHeartbeat();
+    this.deliveryPlayback?.beginClose();
+    this.responseStartWatchdog?.close();
+    await this.turnObserver?.end().catch(() => {});
+    await this.audioRealtimeShadow?.close().catch(() => {});
     this.targetAudioAbort?.abort();
-    if (errorClass && !this.takeover) {
+    this.targetAudioOutput?.clearBuffer();
+    if (errorClass && !this.control.takeover) {
       await this.input.api.hangup({
         snapshot: this.input.snapshot,
         ticket: this.input.ticket,
         reason: "runtime_failed",
       }).catch(() => {});
     }
-    await this.amd?.aclose().catch(() => {});
+    await this.conversation?.close().catch(() => {});
     await this.session?.close().catch(() => {});
+    await this.deliveryPlayback?.close().catch(() => {});
     await this.targetAudioOutput?.close().catch(() => {});
     if (errorClass) {
       await this.report("failed", { errorClass }).catch(() => {});
@@ -171,166 +280,45 @@ export class ManagedVoiceAgentSession {
     }
   }
 
-  private async classifyAndBegin(model: llm.LLM, closed: Promise<void>) {
-    const amd = new voice.AMD(this.session!, {
-      llm: this.input.env.amdModel ?? model,
-      participantIdentity: this.input.snapshot.calleeParticipantIdentity,
-      interruptOnMachine: false,
-      noSpeechTimeoutMs: this.input.env.amdNoSpeechTimeoutMs,
-      detectionTimeoutMs: this.input.env.amdDetectionTimeoutMs,
-      waitUntilFinished: true,
+  private startAudioRealtimeShadow(participant: RemoteParticipant) {
+    const config = this.input.env.audioRealtimeShadow;
+    if (!config || this.audioRealtimeShadow || this.stopped) return;
+    const shadow = new VoiceAgentAudioShadow({
+      config,
+      room: this.input.ctx.room,
+      participant,
+      onError: (error) => logger.warn({
+        errorClass: shadowErrorClass(error),
+        sessionId: this.input.snapshot.sessionId,
+        generation: this.input.snapshot.generation,
+      }, "Qwen Audio realtime shadow stopped without affecting primary Agent"),
+      onStopped: (telemetry) => logger.info({
+        ...telemetry,
+        sessionId: this.input.snapshot.sessionId,
+        generation: this.input.snapshot.generation,
+      }, "Qwen Audio realtime shadow closed"),
     });
-    this.amd = amd;
-    const prediction = await amd.execute();
-    if (this.sessionClosed) return;
-    const category = prediction.category as VoiceAgentAmdCategory;
-    await this.report("amd_classified", {
-      amdCategory: category,
-      transcriptSummary: prediction.transcript.slice(0, 500),
-    });
-    if (category === "machine-unavailable") {
-      await this.finish({
-        outcome: "failed",
-        summary: "The destination was unavailable.",
-        evidence: [prediction.reason],
-        unresolvedItems: [this.input.snapshot.objective],
-        nextStep: "Retry only after provider reconciliation.",
-      });
-      return;
-    }
-    if (category === "machine-vm") {
-      await this.handleVoicemail(prediction.reason, closed);
-      return;
-    }
-    if (category === "machine-ivr") {
-      await this.report("ivr_detected", {
-        amdCategory: category,
-        transcriptSummary: prediction.transcript.slice(0, 500),
-      });
-      this.session!.resumeReplyAuthorization();
-      this.session!.generateReply({
-        instructions: "Navigate only the IVR needed for the approved objective. Use send_dtmf one digit at a time. If a human answers, disclose the AI identity before discussing the task.",
-      });
-      return;
-    }
-    await this.discloseAndStart(closed);
+    this.audioRealtimeShadow = shadow;
+    void shadow.start();
   }
 
-  private async discloseAndStart(closed: Promise<void>) {
-    await discloseAndGenerateReply({
-      session: this.session!,
-      disclosureText: this.input.snapshot.disclosureText,
-      replyInstructions: voiceAgentReplyInstructions(this.input.snapshot),
-      closed,
-      isClosed: () => this.sessionClosed,
-      report: (event) => this.report(event),
-    });
-  }
-
-  private async handleVoicemail(reason: string, closed: Promise<void>) {
-    if (!this.input.env.voicemailEnabled) {
-      await this.finish({
-        outcome: "unresolved",
-        summary: "Voicemail detected; no message was left by policy.",
-        evidence: [reason],
-        unresolvedItems: [this.input.snapshot.objective],
-        nextStep: "Ask the user whether a disclosed voicemail may be left.",
-      });
-      return;
-    }
-    const played = await playVoiceAgentDisclosure({
-      session: this.session!,
-      disclosureText:
-        `${this.input.snapshot.disclosureText} ${this.input.snapshot.approvedScript}`,
-      closed,
-      isClosed: () => this.sessionClosed,
-      report: (event) => this.report(event),
-    });
-    if (!played) return;
-    await this.finish({
-      outcome: "partial",
-      summary: "A disclosed voicemail message was left.",
-      evidence: [reason],
-      unresolvedItems: ["A human response was not obtained."],
-      nextStep: "Wait for a callback or retry under user authorization.",
-    });
-  }
-
-  private async finish(result: VoiceAgentStructuredResultDto) {
-    await this.report("structured_result", { result });
-    await this.input.api.hangup({
-      snapshot: this.input.snapshot,
-      ticket: this.input.ticket,
-      reason: "task_finished",
-    });
-    this.session?.shutdown({ drain: true, reason: "task_finished" });
-  }
-
-  private startHeartbeat() {
-    let running = false;
-    this.heartbeat = setInterval(() => {
-      if (running || this.stopped) return;
-      running = true;
-      void this.report("heartbeat")
-        .then((response) => this.applyCommand(response.command))
-        .catch((error) => logger.warn({ err: error }, "Voice Agent heartbeat failed"))
-        .finally(() => {
-          running = false;
-        });
-    }, this.input.env.heartbeatSeconds * 1000);
-    this.heartbeat.unref();
-  }
-
-  private handleControl(
-    data: Uint8Array,
-    participant: RemoteParticipant | undefined,
-    topic: string,
-  ) {
-    if (participant !== undefined || topic !== controlTopic) return;
-    const message = parseVoiceAgentControl(data);
-    if (!message || message.callId !== this.input.snapshot.callId ||
-      message.generation !== this.input.snapshot.generation ||
-      Date.parse(message.expiresAt) <= Date.now() ||
-      Date.parse(message.issuedAt) > Date.now() + 5_000 ||
-      this.handledControls.has(message.controlId)) return;
-    this.handledControls.add(message.controlId);
-    if (this.handledControls.size > 100) {
-      this.handledControls.delete(this.handledControls.values().next().value!);
-    }
-    void this.applyCommand(message.command).catch((error) =>
-      logger.warn({ err: error }, "Voice Agent control failed"));
-  }
-
-  private async applyCommand(command: "continue" | "takeover" | "cancel" | "resume") {
-    if (command === "continue" || command === "resume") {
-      if (!this.takeover) return;
-      this.takeover = false;
-      this.session?.input.setAudioEnabled(true);
-      this.session?.output.setAudioEnabled(true);
-      this.session?.resumeReplyAuthorization();
-      this.session?.generateReply({
-        instructions: "The human declined takeover. Resume the approved task without repeating completed steps.",
-      });
-      return;
-    }
-    if (command === "cancel") {
-      await this.input.api.hangup({
-        snapshot: this.input.snapshot,
-        ticket: this.input.ticket,
-        reason: "task_cancelled",
-      }).catch(() => {});
-      this.session?.shutdown({ drain: false, reason: "task_cancelled" });
-      return;
-    }
-    if (this.takeover) return;
-    this.takeover = true;
-    this.session?.pauseReplyAuthorization();
+  private async cancelTimedOutAgentReply() {
+    if (this.stopped || this.sessionClosed || this.control.paused ||
+        this.control.takeover) return;
+    logger.warn({
+      callId: this.input.snapshot.callId,
+      generation: this.input.snapshot.generation,
+      timeoutMs: this.input.env.responseStartTimeoutMs,
+    }, "Voice Agent response start timed out");
     const interrupted = this.session?.interrupt({ force: true });
     if (interrupted) await interrupted.await.catch(() => {});
-    this.session?.output.audio?.clearBuffer();
-    this.session?.output.setAudioEnabled(false);
-    this.session?.input.setAudioEnabled(false);
-    await this.report("takeover_ready");
+    this.targetAudioOutput?.clearBuffer();
+    await this.report("response_start_timeout", {
+      errorClass: "agent_response_start_timeout",
+    }).catch((error) => logger.warn(
+      { err: error },
+      "Voice Agent response timeout event report failed",
+    ));
   }
 
   private report(
@@ -346,4 +334,12 @@ export class ManagedVoiceAgentSession {
       ...extra,
     });
   }
+}
+
+function shadowErrorClass(error: unknown) {
+  if (error instanceof Error && /^shadow_[a-z0-9_]{1,72}$/.test(error.message)) {
+    return error.message;
+  }
+  const value = error instanceof Error ? error.name : "shadow_error";
+  return /^[a-zA-Z0-9_.:-]{1,80}$/.test(value) ? value : "shadow_error";
 }

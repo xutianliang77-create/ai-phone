@@ -15,6 +15,11 @@ interface VoiceAgentRuntimeBaseEnv {
   jobMemoryWarnMB: number;
   jobMemoryLimitMB: number;
   heartbeatSeconds: number;
+  responseStartTimeoutMs: number;
+  maxPendingAudioMs: number;
+  maxPendingAudioChunks: number;
+  backgroundWorkEnabled: boolean;
+  deliveryCoordinatorEnabled: boolean;
   sttModel: string;
   llmModel: string;
   ttsModel: string;
@@ -24,6 +29,16 @@ interface VoiceAgentRuntimeBaseEnv {
   amdNoSpeechTimeoutMs: number;
   amdDetectionTimeoutMs: number;
   voicemailEnabled: boolean;
+  audioRealtimeShadow?: QwenAudioRealtimeShadowConfig;
+}
+
+export interface QwenAudioRealtimeShadowConfig {
+  endpoint: string;
+  apiKey: string;
+  model: string;
+  maxBufferedAudioMs: number;
+  maxBufferedChunks: number;
+  connectTimeoutMs: number;
 }
 
 export type VoiceAgentRuntimeEnv = VoiceAgentRuntimeBaseEnv & (
@@ -46,8 +61,8 @@ export type VoiceAgentRuntimeEnv = VoiceAgentRuntimeBaseEnv & (
 );
 
 export function loadVoiceAgentRuntimeEnv(): VoiceAgentRuntimeEnv {
-  if (process.env.VOICE_AGENT_ENABLED !== "true" ||
-    process.env.VOICE_AGENT_AUTONOMOUS_ENABLED !== "true" ||
+  if (!enabled(process.env.VOICE_AGENT_ENABLED) ||
+    !enabled(process.env.VOICE_AGENT_AUTONOMOUS_ENABLED) ||
     process.env.VOICE_AGENT_RUNTIME_PROVIDER !== "livekit_dispatch") {
     throw new Error("Autonomous Voice Agent runtime is disabled");
   }
@@ -68,6 +83,18 @@ export function loadVoiceAgentRuntimeEnv(): VoiceAgentRuntimeEnv {
     jobMemoryLimitMB: integer("VOICE_AGENT_JOB_MEMORY_LIMIT_MB", 1024, 256, 16384),
     heartbeatSeconds:
       integer("VOICE_AGENT_DISPATCH_HEARTBEAT_SECONDS", 15, 5, 60),
+    responseStartTimeoutMs:
+      integer("VOICE_AGENT_RESPONSE_START_TIMEOUT_MS", 12_000, 1_000, 60_000),
+    maxPendingAudioMs:
+      integer("VOICE_AGENT_MAX_PENDING_AUDIO_MS", 6_000, 500, 30_000),
+    maxPendingAudioChunks:
+      integer("VOICE_AGENT_MAX_PENDING_AUDIO_CHUNKS", 300, 10, 2_000),
+    backgroundWorkEnabled:
+      enabled(process.env.VOICE_AGENT_BACKGROUND_WORK_ENABLED),
+    deliveryCoordinatorEnabled:
+      enabled(process.env.VOICE_AGENT_DELIVERY_COORDINATOR_ENABLED) &&
+      enabled(process.env.VOICE_AGENT_BACKGROUND_WORK_ENABLED) &&
+      enabled(process.env.VOICE_AGENT_OWNERSHIP_ENABLED),
     sttModel: required("VOICE_AGENT_STT_MODEL"),
     llmModel: required("VOICE_AGENT_LLM_MODEL"),
     ttsModel: required("VOICE_AGENT_TTS_MODEL"),
@@ -84,7 +111,8 @@ export function loadVoiceAgentRuntimeEnv(): VoiceAgentRuntimeEnv {
       integer("VOICE_AGENT_AMD_NO_SPEECH_TIMEOUT_MS", 12_000, 2_000, 60_000),
     amdDetectionTimeoutMs:
       integer("VOICE_AGENT_AMD_DETECTION_TIMEOUT_MS", 30_000, 5_000, 120_000),
-    voicemailEnabled: process.env.VOICE_AGENT_VOICEMAIL_ENABLED === "true",
+    voicemailEnabled: enabled(process.env.VOICE_AGENT_VOICEMAIL_ENABLED),
+    ...optionalQwenAudioRealtimeShadow(),
   };
   const modelProvider = process.env.VOICE_AGENT_MODEL_PROVIDER?.trim() ||
     "livekit_inference";
@@ -161,4 +189,67 @@ function optionalAbsoluteDirectory<Key extends string>(key: Key, name: string) {
     throw new Error(`${name} must be an absolute non-root directory`);
   }
   return { [key]: absolute } as Record<Key, string>;
+}
+
+function optionalQwenAudioRealtimeShadow(): {
+  audioRealtimeShadow?: QwenAudioRealtimeShadowConfig;
+} {
+  if (!enabled(process.env.VOICE_AGENT_AUDIO_REALTIME_SHADOW_ENABLED)) {
+    return {};
+  }
+  const endpoint = required("VOICE_AGENT_AUDIO_REALTIME_SHADOW_ENDPOINT");
+  let parsed: URL;
+  try {
+    parsed = new URL(endpoint);
+  } catch {
+    throw new Error(
+      "VOICE_AGENT_AUDIO_REALTIME_SHADOW_ENDPOINT must be a WSS URL",
+    );
+  }
+  if (parsed.protocol !== "wss:" || parsed.username || parsed.password ||
+      parsed.search || parsed.hash) {
+    throw new Error(
+      "VOICE_AGENT_AUDIO_REALTIME_SHADOW_ENDPOINT must be a WSS URL",
+    );
+  }
+  return {
+    audioRealtimeShadow: {
+      endpoint: parsed.toString(),
+      apiKey: required("VOICE_AGENT_AUDIO_REALTIME_SHADOW_API_KEY", 8),
+      model: modelName(
+        process.env.VOICE_AGENT_AUDIO_REALTIME_SHADOW_MODEL,
+        "qwen-audio-3.0-realtime-flash",
+      ),
+      maxBufferedAudioMs: integer(
+        "VOICE_AGENT_AUDIO_REALTIME_SHADOW_MAX_BUFFERED_MS",
+        2_000,
+        100,
+        10_000,
+      ),
+      maxBufferedChunks: integer(
+        "VOICE_AGENT_AUDIO_REALTIME_SHADOW_MAX_BUFFERED_CHUNKS",
+        20,
+        1,
+        100,
+      ),
+      connectTimeoutMs: integer(
+        "VOICE_AGENT_AUDIO_REALTIME_SHADOW_CONNECT_TIMEOUT_MS",
+        5_000,
+        500,
+        30_000,
+      ),
+    },
+  };
+}
+
+function enabled(value: string | undefined) {
+  return value?.trim().toLowerCase() === "true";
+}
+
+function modelName(value: string | undefined, fallback: string) {
+  const result = value?.trim() || fallback;
+  if (!/^[A-Za-z0-9._/-]{1,120}$/.test(result)) {
+    throw new Error("VOICE_AGENT_AUDIO_REALTIME_SHADOW_MODEL is invalid");
+  }
+  return result;
 }
