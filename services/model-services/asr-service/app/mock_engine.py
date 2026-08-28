@@ -36,6 +36,30 @@ class MockAsrEngine:
             },
         )
 
+    async def transcribe_segment(
+        self,
+        request: AsrTranscribeRequest,
+    ) -> AsrTranscribeResponse:
+        language = transcript_language(request)
+        text = (
+            "hello, this is a realtime translation test"
+            if language == "en"
+            else "你好，这是一次实时翻译测试。"
+        )
+        return AsrTranscribeResponse(
+            segmentId=f"asr_device_vad_{request.sequence}",
+            text=text,
+            language=language,
+            confidence=0.9,
+            timing={
+                "startMs": request.timestampMs,
+                "endMs": request.timestampMs,
+                "source": "client",
+            },
+            endpointReason="device_vad",
+            vadContext={"provider": "external", "source": "esp32-afe-v1"},
+        )
+
     async def flush(
         self,
         session_id: str,

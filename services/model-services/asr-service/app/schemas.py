@@ -29,6 +29,7 @@ class HealthResponse(BaseModel):
     vadConfiguredProvider: str
     vadFallbackReason: str | None = None
     vadModelFingerprint: str | None = None
+    externalBoundarySupported: bool
     runtimeSignatureVersion: Literal[1] = 1
     runtimeFingerprint: str = Field(pattern=r"^[a-f0-9]{64}$")
 
@@ -78,6 +79,7 @@ class AsrTranscribeResponse(BaseModel):
         "max_duration",
         "flush",
         "speaker_boundary",
+        "device_vad",
     ] | None = None
     vadContext: dict[str, object] | None = None
 

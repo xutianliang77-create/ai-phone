@@ -7,8 +7,7 @@ from app.endpoint_policy import EndpointPolicy
 from app.main import create_app
 from app.model_loader import qwen3_endpoint_policies
 from app.routes import frame_vad_headers
-import json
-import struct
+from tests.route_test_support import flush_payload, payload
 
 
 def test_health_route() -> None:
@@ -30,6 +29,7 @@ def test_health_route() -> None:
         "vadConfiguredProvider": "rms",
         "vadFallbackReason": None,
         "vadModelFingerprint": None,
+        "externalBoundarySupported": True,
         "runtimeSignatureVersion": 1,
     }
 
@@ -202,6 +202,20 @@ def test_transcribe_route_returns_transcript() -> None:
     assert response.json()["language"] == "en"
 
 
+def test_external_segment_route_marks_device_boundary_and_skips_frame_vad() -> None:
+    client = TestClient(create_app(AsrConfig(mock_emit_every_frames=8)))
+
+    response = client.post("/asr/transcribe-segment", json=payload(sequence=1))
+
+    assert response.status_code == 200
+    assert response.json()["endpointReason"] == "device_vad"
+    assert response.json()["vadContext"] == {
+        "provider": "external",
+        "source": "esp32-afe-v1",
+    }
+    assert "x-asr-vad-provider" not in response.headers
+
+
 def test_frame_vad_headers_preserve_marblenet_signal() -> None:
     headers = frame_vad_headers(FrameVadDecision(
         sequence=9,
@@ -246,6 +260,16 @@ def test_transcribe_route_requires_api_key_when_configured() -> None:
 
     assert response.status_code == 401
 
+
+def test_external_segment_route_requires_api_key_when_configured() -> None:
+    client = TestClient(create_app(AsrConfig(
+        api_key="asr-secret",
+        mock_emit_every_frames=1,
+    )))
+
+    response = client.post("/asr/transcribe-segment", json=payload(sequence=1))
+
+    assert response.status_code == 401
 
 def test_transcribe_route_rejects_wrong_api_key() -> None:
     client = TestClient(create_app(AsrConfig(
@@ -315,71 +339,3 @@ def test_close_session_route_requires_api_key_when_configured() -> None:
     response = client.delete("/asr/sessions/sess_1")
 
     assert response.status_code == 401
-
-
-def test_stream_route_accepts_binary_pcm_and_flushes() -> None:
-    client = TestClient(create_app(AsrConfig(mock_emit_every_frames=1)))
-    with client.websocket_connect("/asr/stream") as websocket:
-        websocket.send_json({
-            "type": "session.open",
-            "sessionId": "stream_1:guest",
-            "sourceLanguage": "auto",
-            "targetLanguage": "zh",
-            "mode": "call_link",
-        })
-        assert websocket.receive_json()["type"] == "session.ready"
-        websocket.send_bytes(stream_frame(sequence=1, request_id="frame:1"))
-        result = websocket.receive_json()
-        assert result["type"] == "asr.result"
-        assert result["requestId"] == "frame:1"
-        assert result["sequence"] == 1
-        assert result["transcript"]["language"] == "en"
-        websocket.send_json({"type": "session.flush", "requestId": "flush:1"})
-        assert websocket.receive_json()["type"] == "session.flushed"
-
-
-def test_stream_route_rejects_wrong_api_key() -> None:
-    client = TestClient(create_app(AsrConfig(api_key="asr-secret")))
-    with client.websocket_connect("/asr/stream") as websocket:
-        websocket.send_json({
-            "type": "session.open",
-            "sessionId": "stream_1:guest",
-            "apiKey": "wrong",
-        })
-        try:
-            websocket.receive_json()
-            assert False, "expected websocket disconnect"
-        except Exception:
-            pass
-
-
-def payload(sequence: int) -> dict:
-    return {
-        "sessionId": "sess_1",
-        "sequence": sequence,
-        "timestampMs": sequence,
-        "format": "pcm16",
-        "sampleRate": 24000,
-        "data": "AA==",
-        "sourceLanguage": "en",
-        "targetLanguage": "zh",
-    }
-
-
-def flush_payload() -> dict:
-    return {
-        "sourceLanguage": "en",
-        "targetLanguage": "zh",
-    }
-
-
-def stream_frame(sequence: int, request_id: str) -> bytes:
-    header = json.dumps({
-        "type": "audio.frame",
-        "requestId": request_id,
-        "sequence": sequence,
-        "timestampMs": sequence * 100,
-        "format": "pcm16",
-        "sampleRate": 24000,
-    }).encode("utf-8")
-    return struct.pack(">I", len(header)) + header + b"\x00\x00"

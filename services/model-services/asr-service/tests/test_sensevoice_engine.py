@@ -8,6 +8,7 @@ from app.sensevoice_engine import (
     extract_text,
     infer_transcript_language,
     normalize_transcript,
+    pcm16_signal_metrics,
 )
 
 
@@ -33,6 +34,34 @@ async def test_sensevoice_engine_buffers_audio_until_min_duration() -> None:
     assert second.text == "hello from sensevoice"
     assert second.language == "en"
     assert runner.last_language == "en"
+    assert runner.last_sample_rate == 24000
+
+
+async def test_sensevoice_external_segment_bypasses_service_vad() -> None:
+    runner = FakeSenseVoiceRunner()
+    engine = SenseVoiceEngine(
+        model_dir="iic/SenseVoiceSmall",
+        device="cpu",
+        min_audio_ms=1000,
+        endpoint_silence_ms=1000,
+        runner=runner,
+    )
+
+    def unexpected_vad(_request):
+        raise AssertionError("service VAD must not inspect an ESP32-bounded segment")
+
+    engine.segmenter.append = unexpected_vad
+    transcript = await engine.transcribe_segment(
+        request(sequence=7, pcm=voice_pcm(), source_language="en")
+    )
+
+    assert transcript is not None
+    assert transcript.segmentId == "sensevoice_device_vad_7"
+    assert transcript.endpointReason == "device_vad"
+    assert transcript.vadContext == {
+        "provider": "external",
+        "source": "esp32-afe-v1",
+    }
     assert runner.last_sample_rate == 24000
 
 
@@ -110,6 +139,17 @@ def test_normalize_transcript_removes_case_space_and_punctuation() -> None:
     assert normalize_transcript(" <sil> [noise] ") == ""
     assert normalize_transcript(" <|nospeech|> (no speech) ") == ""
     assert normalize_transcript("你好 <sil> ") == "你好"
+
+
+def test_pcm_metrics_report_duration_energy_peak_and_zero_ratio() -> None:
+    pcm = struct.pack("<" + "h" * 16000, *([0] * 8000 + [1000] * 8000))
+
+    metrics = pcm16_signal_metrics(pcm, 16000)
+
+    assert metrics["duration_ms"] == 1000
+    assert metrics["rms"] > 0
+    assert metrics["peak"] == 1000
+    assert metrics["zero_percent"] == 50.0
 
 
 class FakeSenseVoiceRunner:
