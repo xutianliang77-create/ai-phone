@@ -2,6 +2,7 @@ import type {
   CallAudioFrame,
   CallAudioSpeakerRole,
   CallSpeechPipeline,
+  CallTranslationControlPipeline,
   CallTtsAudioSink,
   SpeechPipelineMode,
   SpeechToSpeechProvider,
@@ -15,7 +16,8 @@ export interface SpeechPipelineRouterOptions {
   onShadowError?: (error: unknown) => void;
 }
 
-export class SpeechPipelineRouter implements CallSpeechPipeline {
+export class SpeechPipelineRouter implements
+CallSpeechPipeline, CallTranslationControlPipeline {
   private shadowChain: Promise<void> = Promise.resolve();
 
   constructor(private readonly options: SpeechPipelineRouterOptions) {
@@ -87,6 +89,28 @@ export class SpeechPipelineRouter implements CallSpeechPipeline {
   setTtsVoice(voice: TtsVoiceConfig) {
     this.options.cascade.setTtsVoice(voice);
     this.options.native?.setTtsVoice(voice);
+  }
+
+  setTranslatedUplinkPaused(callId: string, paused: boolean) {
+    return this.controlPipeline().setTranslatedUplinkPaused(callId, paused);
+  }
+
+  processTypedText(
+    input: Parameters<CallTranslationControlPipeline["processTypedText"]>[0],
+  ) {
+    return this.controlPipeline().processTypedText(input);
+  }
+
+  private controlPipeline() {
+    if (this.options.mode === "native") {
+      throw new Error("Translation controls require the cascade pipeline");
+    }
+    const pipeline = this.options.cascade as
+      Partial<CallTranslationControlPipeline>;
+    if (!pipeline.setTranslatedUplinkPaused || !pipeline.processTypedText) {
+      throw new Error("Cascade translation controls are unavailable");
+    }
+    return pipeline as CallTranslationControlPipeline;
   }
 
   private enqueueShadow(operation: () => Promise<void>) {
