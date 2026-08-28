@@ -50,6 +50,9 @@ require_unlocked_device() {
 DEVICE_ID="${DEVICE_ID:-}"
 SERVER_BASE_URL="${SERVER_BASE_URL:-}"
 REALTIME_MODE="${REALTIME_MODE:-conversation}"
+VOICE_AGENT_BACKGROUND_WORK_ENABLED="${VOICE_AGENT_BACKGROUND_WORK_ENABLED:-false}"
+VOICE_AGENT_OWNERSHIP_ENABLED="${VOICE_AGENT_OWNERSHIP_ENABLED:-false}"
+VOICE_AGENT_DELIVERY_COORDINATOR_ENABLED="${VOICE_AGENT_DELIVERY_COORDINATOR_ENABLED:-false}"
 PUBSPEC_RELEASE_VERSION="$(
   awk '/^version:[[:space:]]*/ { print $2; exit }' "$MOBILE_DIR/pubspec.yaml"
 )"
@@ -96,6 +99,16 @@ case "$REALTIME_MODE" in
     ;;
 esac
 
+for feature_flag in \
+  "$VOICE_AGENT_BACKGROUND_WORK_ENABLED" \
+  "$VOICE_AGENT_OWNERSHIP_ENABLED" \
+  "$VOICE_AGENT_DELIVERY_COORDINATOR_ENABLED"; do
+  if [[ "$feature_flag" != "true" && "$feature_flag" != "false" ]]; then
+    echo "Voice Agent feature flags must be true or false." >&2
+    exit 2
+  fi
+done
+
 case "$SERVER_BASE_URL" in
   *://localhost*|*://127.0.0.1*|*://0.0.0.0*|*://\[::1\]*)
     echo "SERVER_BASE_URL must be reachable from the iPhone and cannot be local-only." >&2
@@ -126,6 +139,9 @@ build_args=(
   --dart-define="BUILD_NUMBER=$BUILD_NUMBER"
   --dart-define="API_BASE_URL=$SERVER_BASE_URL"
   --dart-define="REALTIME_MODE=$REALTIME_MODE"
+  --dart-define="VOICE_AGENT_BACKGROUND_WORK_ENABLED=$VOICE_AGENT_BACKGROUND_WORK_ENABLED"
+  --dart-define="VOICE_AGENT_OWNERSHIP_ENABLED=$VOICE_AGENT_OWNERSHIP_ENABLED"
+  --dart-define="VOICE_AGENT_DELIVERY_COORDINATOR_ENABLED=$VOICE_AGENT_DELIVERY_COORDINATOR_ENABLED"
   --dart-define=SERVER_OWNED_HISTORY=true
   --dart-define=USE_MOCK_AUDIO=false
 )
