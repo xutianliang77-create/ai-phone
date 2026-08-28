@@ -20,6 +20,21 @@ export interface ApiEnv {
   realtimeStaleSessionSweepSeconds: number;
   livekitSipReconciliationGraceSeconds: number;
   callFullDuplexEnabled: boolean;
+  voiceAgentBackgroundWorkEnabled: boolean;
+  voiceAgentWorkRunnerEnabled: boolean;
+  voiceAgentDeliveryCoordinatorEnabled: boolean;
+  voiceAgentOwnershipEnabled: boolean;
+  agentDeliveryCoordinatorOwner: string;
+  agentDeliveryCoordinatorPollMs: number;
+  agentDeliveryCoordinatorLeaseSeconds: number;
+  agentDeliveryCoordinatorConcurrency: number;
+  agentWorkRunnerOwner: string;
+  agentWorkRunnerPollMs: number;
+  agentWorkRunnerLeaseSeconds: number;
+  agentWorkRunnerConcurrency: number;
+  agentWorkToolGatewayUrl?: string;
+  agentWorkToolGatewaySecret?: string;
+  agentWorkToolGatewayTimeoutMs: number;
 }
 
 export function loadEnv(): ApiEnv {
@@ -82,6 +97,66 @@ export function loadEnv(): ApiEnv {
       30,
     ),
     callFullDuplexEnabled: parseBoolean(process.env.CALL_FULL_DUPLEX_ENABLED),
+    voiceAgentBackgroundWorkEnabled:
+      parseBoolean(process.env.VOICE_AGENT_BACKGROUND_WORK_ENABLED),
+    voiceAgentWorkRunnerEnabled:
+      parseBoolean(process.env.VOICE_AGENT_WORK_RUNNER_ENABLED),
+    voiceAgentDeliveryCoordinatorEnabled:
+      parseBoolean(process.env.VOICE_AGENT_DELIVERY_COORDINATOR_ENABLED),
+    voiceAgentOwnershipEnabled:
+      parseBoolean(process.env.VOICE_AGENT_OWNERSHIP_ENABLED),
+    agentDeliveryCoordinatorOwner:
+      process.env.AGENT_DELIVERY_COORDINATOR_OWNER?.trim() ||
+      `agent-delivery-${process.env.HOSTNAME?.trim() || "local"}`,
+    agentDeliveryCoordinatorPollMs: boundedInteger(
+      process.env.AGENT_DELIVERY_COORDINATOR_POLL_MS,
+      1_000,
+      250,
+      30_000,
+    ),
+    agentDeliveryCoordinatorLeaseSeconds: boundedInteger(
+      process.env.AGENT_DELIVERY_COORDINATOR_LEASE_SECONDS,
+      30,
+      5,
+      120,
+    ),
+    agentDeliveryCoordinatorConcurrency: boundedInteger(
+      process.env.AGENT_DELIVERY_COORDINATOR_CONCURRENCY,
+      2,
+      1,
+      8,
+    ),
+    agentWorkRunnerOwner: process.env.AGENT_WORK_RUNNER_OWNER?.trim() ||
+      `agent-work-${process.env.HOSTNAME?.trim() || "local"}`,
+    agentWorkRunnerPollMs: boundedInteger(
+      process.env.AGENT_WORK_RUNNER_POLL_MS,
+      1_000,
+      250,
+      30_000,
+    ),
+    agentWorkRunnerLeaseSeconds: boundedInteger(
+      process.env.AGENT_WORK_RUNNER_LEASE_SECONDS,
+      60,
+      5,
+      300,
+    ),
+    agentWorkRunnerConcurrency: boundedInteger(
+      process.env.AGENT_WORK_RUNNER_CONCURRENCY,
+      2,
+      1,
+      8,
+    ),
+    ...optionalHttpUrl("agentWorkToolGatewayUrl", "AGENT_WORK_TOOL_GATEWAY_URL"),
+    ...optionalText(
+      "agentWorkToolGatewaySecret",
+      "AGENT_WORK_TOOL_GATEWAY_SECRET",
+    ),
+    agentWorkToolGatewayTimeoutMs: boundedInteger(
+      process.env.AGENT_WORK_TOOL_GATEWAY_TIMEOUT_MS,
+      20_000,
+      1_000,
+      60_000,
+    ),
   };
 }
 
@@ -107,7 +182,32 @@ function commaSeparated(value: string | undefined) {
 }
 
 function parseBoolean(value: string | undefined) {
+  return isEnabledEnvironmentValue(value);
+}
+
+export function isEnabledEnvironmentValue(value: string | undefined) {
   return value?.trim().toLowerCase() === "true";
+}
+
+function optionalHttpUrl<Key extends string>(key: Key, name: string) {
+  const value = process.env[name]?.trim();
+  if (!value) return {};
+  let parsed: URL;
+  try {
+    parsed = new URL(value);
+  } catch {
+    throw new Error(`${name} must be an HTTP URL`);
+  }
+  if (!["http:", "https:"].includes(parsed.protocol) ||
+    parsed.username || parsed.password || parsed.search || parsed.hash) {
+    throw new Error(`${name} must be an HTTP URL without credentials or query`);
+  }
+  return { [key]: value.replace(/\/+$/, "") } as Record<Key, string>;
+}
+
+function optionalText<Key extends string>(key: Key, name: string) {
+  const value = process.env[name]?.trim();
+  return value ? { [key]: value } as Record<Key, string> : {};
 }
 
 function positiveNumber(value: string | undefined, fallback: number) {
