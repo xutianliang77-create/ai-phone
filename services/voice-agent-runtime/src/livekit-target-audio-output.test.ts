@@ -2,10 +2,15 @@ import { initializeLogger, voice } from "@livekit/agents";
 import { AudioFrame } from "@livekit/rtc-node";
 import { describe, expect, it, vi } from "vitest";
 import {
+  LiveKitTargetAudioOutput,
+} from "./livekit-target-audio-output.js";
+import {
   configureVoiceAgentSessionAudio,
   liveKitVoiceAgentRoomOutputOptions,
+} from "./livekit-target-audio-config.js";
+import {
   voiceAgentTargetTrackName,
-} from "./livekit-target-audio-output.js";
+} from "./livekit-target-audio-support.js";
 
 initializeLogger({ pretty: false, level: "silent" });
 
@@ -51,6 +56,7 @@ describe("LiveKit Voice Agent target audio output", () => {
     });
     const output = routing.output!;
     await output.start(routing.abortController!.signal);
+    const observation = output.observeNextSegment();
     const frame = new AudioFrame(new Int16Array(480), 24_000, 1, 480);
     await output.captureFrame(frame);
     output.flush();
@@ -70,6 +76,10 @@ describe("LiveKit Voice Agent target audio output", () => {
     expect(publishTrack.mock.calls[0]?.[1]).toMatchObject({ source: "microphone" });
     expect(waitForSubscription).toHaveBeenCalledOnce();
     expect(captures).toEqual([frame]);
+    await expect(observation.started).resolves.toMatchObject({ audible: true });
+    await expect(observation.finished).resolves.toMatchObject({
+      interrupted: false,
+    });
   });
 
   it("fails closed when the room publisher identity is not the bound worker", async () => {
@@ -114,4 +124,130 @@ describe("LiveKit Voice Agent target audio output", () => {
         Buffer.from("session-1:guest:air:air-001").toString("base64url")
       }`);
   });
+
+  it("rejects and reports a pending chunk overflow without accepting it", async () => {
+    const fixture = capacityFixture({
+      maxPendingAudioMs: 6_000,
+      maxPendingAudioChunks: 1,
+    });
+    await fixture.output.start(fixture.abortController.signal);
+    const first = fixture.output.captureFrame(fixture.frame);
+    await vi.waitFor(() => expect(fixture.captureFrame).toHaveBeenCalledOnce());
+
+    await expect(fixture.output.captureFrame(fixture.frame)).rejects
+      .toMatchObject({
+        name: "VoiceAgentAudioCapacityError",
+        evidence: {
+          code: "voice_agent_pending_audio_capacity_exceeded",
+          pendingAudioChunks: 2,
+          maxPendingAudioChunks: 1,
+        },
+      });
+    expect(fixture.onCapacityExceeded).toHaveBeenCalledWith(expect.objectContaining({
+      code: "voice_agent_pending_audio_capacity_exceeded",
+      pendingAudioChunks: 2,
+    }));
+    fixture.releaseCapture();
+    await first;
+    await fixture.output.close();
+  });
+
+  it("uses the duration limit for the RTC queue and concurrent pending audio", async () => {
+    const fixture = capacityFixture({
+      maxPendingAudioMs: 30,
+      maxPendingAudioChunks: 10,
+    });
+    await fixture.output.start(fixture.abortController.signal);
+    expect(fixture.sourceQueueSizeMs).toBe(30);
+    const first = fixture.output.captureFrame(fixture.frame);
+    await vi.waitFor(() => expect(fixture.captureFrame).toHaveBeenCalledOnce());
+
+    await expect(fixture.output.captureFrame(fixture.frame)).rejects
+      .toMatchObject({
+        evidence: {
+          pendingAudioMs: 40,
+          maxPendingAudioMs: 30,
+        },
+      });
+    fixture.releaseCapture();
+    await first;
+    await fixture.output.close();
+  });
+
+  it("does not report a first audio frame when an observation is cleared", async () => {
+    const fixture = capacityFixture({
+      maxPendingAudioMs: 6_000,
+      maxPendingAudioChunks: 10,
+    });
+    await fixture.output.start(fixture.abortController.signal);
+    const observation = fixture.output.observeNextSegment();
+
+    fixture.output.clearBuffer();
+
+    await expect(observation.started).resolves.toMatchObject({ audible: false });
+    await expect(observation.finished).resolves.toMatchObject({
+      interrupted: true,
+      playbackPosition: 0,
+    });
+    await fixture.output.close();
+  });
 });
+
+function capacityFixture(input: {
+  maxPendingAudioMs: number;
+  maxPendingAudioChunks: number;
+}) {
+  let releaseCapture = () => {};
+  let sourceQueueSizeMs: number | undefined;
+  const captureFrame = vi.fn(() => new Promise<void>((resolve) => {
+    releaseCapture = resolve;
+  }));
+  const source = {
+    captureFrame,
+    clearQueue: vi.fn(),
+    waitForPlayout: vi.fn(async () => {}),
+    close: vi.fn(async () => {}),
+  };
+  const rtc = {
+    AudioSource: class {
+      constructor(_sampleRate: number, _channels: number, queueSizeMs?: number) {
+        sourceQueueSizeMs = queueSizeMs;
+        return source;
+      }
+    },
+    LocalAudioTrack: {
+      createAudioTrack() {
+        return { close: vi.fn(async () => {}) };
+      },
+    },
+    TrackPublishOptions: class { source?: unknown; },
+    TrackSource: { SOURCE_MICROPHONE: "microphone" },
+  };
+  const room = {
+    localParticipant: {
+      identity: "session-1:worker:voice-agent",
+      publishTrack: vi.fn(async () => ({
+        waitForSubscription: vi.fn(async () => {}),
+      })),
+    },
+  };
+  const onCapacityExceeded = vi.fn();
+  const output = new LiveKitTargetAudioOutput({
+    room: room as never,
+    rtc: rtc as never,
+    publisherIdentity: "session-1:worker:voice-agent",
+    targetParticipantIdentity: "session-1:guest:air:air-001",
+    maxPendingAudioMs: input.maxPendingAudioMs,
+    maxPendingAudioChunks: input.maxPendingAudioChunks,
+    onCapacityExceeded,
+  });
+  return {
+    output,
+    abortController: new AbortController(),
+    frame: new AudioFrame(new Int16Array(480), 24_000, 1, 480),
+    captureFrame,
+    onCapacityExceeded,
+    get sourceQueueSizeMs() { return sourceQueueSizeMs; },
+    releaseCapture: () => releaseCapture(),
+  };
+}
