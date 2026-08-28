@@ -3,11 +3,6 @@ import {
   isCallRoomEndedError,
   type CallRoomEndedError,
 } from "./call-room-event-client.js";
-import {
-  isLiveKitTtsAudioSupported,
-  LiveKitTtsAudioSink,
-  type LiveKitTtsRtcModule,
-} from "./livekit-tts-audio-sink.js";
 import { deferred } from "./livekit-call-audio-utils.js";
 import { LiveKitCallAudioTrackRuntime } from "./livekit-call-audio-track-runtime.js";
 import {
@@ -20,6 +15,8 @@ import { LiveKitCallDiagnostics } from "./livekit-call-diagnostics.js";
 import { LiveKitCallSipTrackGate } from "./livekit-call-sip-track-gate.js";
 import { LiveKitCallTrackLifecycle } from "./livekit-call-track-lifecycle.js";
 import { LiveKitCallRoleTrackGate } from "./livekit-call-role-track-gate.js";
+import { attachLiveKitCallTtsSink } from
+  "./livekit-call-tts-sink-attachment.js";
 import type {
   LiveKitCallAudioSourceOptions,
   RtcNodeModule,
@@ -31,7 +28,6 @@ export type {
   RtcNodeModule,
   RtcRoom,
 } from "./livekit-call-audio-source-types.js";
-
 export class LiveKitCallAudioSource {
   private room: RtcRoom | null = null;
   private rtc: RtcNodeModule | null = null;
@@ -61,7 +57,11 @@ export class LiveKitCallAudioSource {
   private readonly trackLifecycle: LiveKitCallTrackLifecycle;
   constructor(private readonly options: LiveKitCallAudioSourceOptions) {
     this.diagnostics = new LiveKitCallDiagnostics(options);
-    this.trackLifecycle = new LiveKitCallTrackLifecycle(options.onTrackLifecycle);
+    this.trackLifecycle = new LiveKitCallTrackLifecycle({
+      callId: options.callId,
+      access: options.inputTrackAccessClient,
+      observer: options.onTrackLifecycle,
+    });
     this.sipTrackGate = new LiveKitCallSipTrackGate({
       callId: options.callId,
       statusClient: options.sipStatusClient,
@@ -81,15 +81,24 @@ export class LiveKitCallAudioSource {
     this.ownsRoomConnection = true;
 
     if (token.ttsVoice) this.options.worker.setTtsVoice(token.ttsVoice);
+    this.trackLifecycle.bindWorker(token.participantIdentity);
     this.attachRoomListeners(room, rtc);
     await room.connect(token.wsUrl, token.token, {
-      autoSubscribe: true,
+      autoSubscribe: false,
       dynacast: false,
     });
     this.diagnostics.startRtc(room);
-    this.attachLiveKitTtsSink(room, rtc, token.callId, token.participantIdentity);
+    attachLiveKitCallTtsSink({
+      room,
+      rtc,
+      callId: token.callId,
+      participantIdentity: token.participantIdentity,
+      worker: this.options.worker,
+      trackAccessClient: this.options.ttsTrackAccessClient,
+    });
     try {
       await this.startPipeline();
+      await this.reconcileExistingPublications(room, rtc);
     } catch (error) {
       await this.stop().catch(() => undefined);
       throw error;
@@ -101,19 +110,25 @@ export class LiveKitCallAudioSource {
     this.room = input.room;
     this.rtc = input.rtc;
     if (input.ttsVoice) this.options.worker.setTtsVoice(input.ttsVoice);
+    this.trackLifecycle.bindWorker(
+      input.participantIdentity,
+      input.dispatchGeneration,
+    );
     this.attachRoomListeners(input.room, input.rtc);
     this.diagnostics.startRtc(input.room);
-    this.attachLiveKitTtsSink(
-      input.room,
-      input.rtc,
-      this.options.callId,
-      input.participantIdentity,
-    );
+    attachLiveKitCallTtsSink({
+      room: input.room,
+      rtc: input.rtc,
+      callId: this.options.callId,
+      participantIdentity: input.participantIdentity,
+      worker: this.options.worker,
+      trackAccessClient: this.options.ttsTrackAccessClient,
+    });
     await this.startPipeline();
-    this.reconcileExistingPublications(input.room, input.rtc);
+    await this.reconcileExistingPublications(input.room, input.rtc);
   }
 
-  private reconcileExistingPublications(room: RtcRoom, rtc: RtcNodeModule) {
+  private async reconcileExistingPublications(room: RtcRoom, rtc: RtcNodeModule) {
     for (const participant of room.remoteParticipants?.values() ?? []) {
       for (const publication of participant.trackPublications?.values() ?? []) {
         if (publication.track) {
@@ -124,7 +139,11 @@ export class LiveKitCallAudioSource {
             rtc,
           ).catch((error) => this.handleAudioTrackError(error));
         } else {
-          this.trackLifecycle.subscribePublication(publication, participant, rtc);
+          await this.trackLifecycle.subscribePublication(
+            publication,
+            participant,
+            rtc,
+          );
         }
       }
     }
@@ -177,7 +196,7 @@ export class LiveKitCallAudioSource {
     participant: unknown,
     rtc: RtcNodeModule,
   ) {
-    const speakerRole = this.trackLifecycle.acceptSubscribedTrack(
+    const speakerRole = await this.trackLifecycle.acceptSubscribedTrack(
       track,
       publication,
       participant,
@@ -193,12 +212,6 @@ export class LiveKitCallAudioSource {
       rtc,
     })) return;
     await this.startAudioTrack(track, speakerRole, rtc, sourceKey);
-  }
-
-  private async handleParticipantAttributesChanged(
-    participant: unknown,
-  ) {
-    await this.sipTrackGate.handleParticipantAttributesChanged(participant);
   }
 
   private async startAudioTrack(
@@ -299,19 +312,29 @@ export class LiveKitCallAudioSource {
       })
       .on(rtc.RoomEvent.Disconnected, () => {
         this.sipTrackGate.clear();
+        this.trackLifecycle.clear();
         this.options.worker.markCallEnded?.(this.options.callId);
         this.stopIngest(true);
         this.disconnected.resolve();
       });
     if (rtc.RoomEvent.ParticipantAttributesChanged) {
       room.on(rtc.RoomEvent.ParticipantAttributesChanged, (_changed, participant) => {
-        void this.handleParticipantAttributesChanged(participant)
+        void this.sipTrackGate.handleParticipantAttributesChanged(participant)
           .catch((error) => this.handleAudioTrackError(error));
       });
     }
     if (rtc.RoomEvent.TrackPublished) {
       room.on(rtc.RoomEvent.TrackPublished, (publication, participant) => {
-        this.trackLifecycle.subscribePublication(publication, participant, rtc);
+        void this.trackLifecycle.subscribePublication(
+          publication,
+          participant,
+          rtc,
+        );
+      });
+    }
+    if (rtc.RoomEvent.TrackUnpublished) {
+      room.on(rtc.RoomEvent.TrackUnpublished, (publication) => {
+        this.trackLifecycle.forgetPublication(publication);
       });
     }
   }
@@ -322,27 +345,5 @@ export class LiveKitCallAudioSource {
     } finally {
       this.pipelineReady.resolve();
     }
-  }
-
-  private attachLiveKitTtsSink(
-    room: RtcRoom,
-    rtc: RtcNodeModule,
-    callId: string,
-    participantIdentity: string,
-  ) {
-    if (!isLiveKitTtsAudioSupported(room, rtc)) return;
-    this.options.worker.addTtsAudioSink(new LiveKitTtsAudioSink({
-      room,
-      rtc: rtc as LiveKitTtsRtcModule,
-      ...(this.options.ttsTrackAccessClient ? {
-        trackAccess: {
-          authorizeTrack: (request) =>
-            this.options.ttsTrackAccessClient!.authorizeTrack(callId, {
-              workerIdentity: participantIdentity,
-              ...request,
-            }),
-        },
-      } : {}),
-    }));
   }
 }
