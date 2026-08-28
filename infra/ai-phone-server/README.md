@@ -6,10 +6,60 @@ Translation/Voice Agent、Air780 Gateway 和 SRT bridge 都是这个容器内的
 和 realtime 入口。LiveKit、PostgreSQL、ASR/TTS/LLM 等是外部基础设施，不属于
 无界 AI 应用容器。
 
+容器健康检查始终要求 API、realtime gateway 和默认启用的 Translation Agent
+已连接；Translation Agent 还必须完成真实 TTS/LLM 预热并写入本容器内的 readiness
+文件。启用 Voice Agent 或 SRT 时对应进程也必须健康；当
+`WUJIE_AI_AIR_DEVICE_GATEWAY_ENABLED=true` 时，容器检查 Air Gateway 的
+`/healthz`，要求进程和持久 outbox/inbox 健康。物理 Air780 的串口、HELLO、
+HEARTBEAT 和 boot admission 由独立 `/readyz` 表示；未准入时拨号与媒体仍然
+fail-closed，但不会把可热插拔外设的暂时缺席升级成整个无界 AI 应用容器故障。
+这也保证 USB 拔插恢复由 Gateway 子进程处理，不要求重启 API、Realtime、Agent
+或整个容器。两个状态都不会让 Docker 自动拨号、重刷设备或释放电话媒体。
+
 `WUJIE_AI_*_ENABLED` 只控制容器内是否启动对应进程，不会创建额外容器。
 AI 代打队列调度器同样运行在该容器内；启用
 `WUJIE_AI_AGENT_CALL_WORKER_ENABLED=true`（或兼容的
 `AGENT_CALL_WORKER_ENABLED=true`）即可启动，不会新增容器。
+
+## Voice Work、可靠播报与 Qwen shadow
+
+后台 Voice Work、客户端 ownership、可靠播报和 Qwen Audio Realtime shadow 的源码已经
+接入，但在统一测试、migration 演练和现场验收前保持关闭：
+
+```dotenv
+VOICE_AGENT_BACKGROUND_WORK_ENABLED=false
+VOICE_AGENT_WORK_RUNNER_ENABLED=false
+VOICE_AGENT_OWNERSHIP_ENABLED=false
+VOICE_AGENT_DELIVERY_COORDINATOR_ENABLED=false
+VOICE_AGENT_AUDIO_REALTIME_SHADOW_ENABLED=false
+```
+
+Work runner 与 Delivery Coordinator 都运行在现有 API 进程内；Qwen shadow 运行在现有
+Voice Agent 子进程内，不创建新的无界 AI 容器。`AGENT_WORK_TOOL_GATEWAY_URL` 仅指向一个由
+部署方明确管理、实现 `workId` 幂等的外部工具接口，本仓库不会为它自动创建容器。当前策略
+只注册 `availability_lookup v1` 只读工具；未注册的工具以及外部写副作用全部 fail closed。
+App 的 permission resolve 会携带当前 ownership lease/generation；服务端在同一数据库事务内
+锁定并复核所有权后才写入决定，接管后的旧客户端不能继续授权。
+
+启用 runner 时必须同时配置 PostgreSQL primary、Work payload key、至少 16 字节的 Tool
+Gateway secret，并保证 claim lease 比 gateway timeout 至少长 5 秒。启用 Delivery
+Coordinator 时必须同时启用 background work 与 ownership。API 会在监听端口前校验这些依赖；
+配置不完整时直接拒绝启动。Qwen shadow 还要求不含凭据/query/fragment 的 `wss://` endpoint
+和单独 API key；它只做 text-only 观察，不能调用工具、生成产品回复或向 SIP/Air780/App
+发布音频。所有密钥只能留在私有 `server.env`，不得进入镜像或仓库。
+
+上述能力已通过源码自动化，但本次 WIP 拆分本身不等于当前提交已迁移、已部署或可灰度。
+所有新 flag 继续默认关闭；启用前必须从干净提交重跑 PostgreSQL、单容器和既有 AI 代打、
+翻译、SIP、Air780 回归，再按 background work → ownership → delivery → shadow 的顺序逐层开启。
+
+Translation Agent、Air780 Gateway、Voice Agent、AI 代打队列和 SRT bridge
+属于可原地恢复的非关键进程；异常退出后由同一容器内的 supervisor 按有界指数
+退避重启，不会重启 API、realtime 或整个 `wujie-ai` 容器。拨号入口仍会在 Worker
+没有真正就绪时 fail closed，不会因容器继续存活而绕过媒体准入。退避由
+`WUJIE_AI_CHILD_RESTART_INITIAL_MS`、`WUJIE_AI_CHILD_RESTART_MAX_MS` 和
+`WUJIE_AI_CHILD_STABLE_UPTIME_MS` 控制。Air780 USB 重新枚举后 Gateway 使用
+稳定 by-id 路径恢复串口；若 carrier 仍在通话，则只恢复同一 session/lease/
+fence/generation 的 LiveKit 媒体，不重新下发 DIAL。
 
 Runtime state is outside the source tree:
 

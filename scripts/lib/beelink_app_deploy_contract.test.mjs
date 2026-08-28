@@ -169,6 +169,8 @@ describe("Beelink app deployment contract", () => {
       "container_name: ${AI_PHONE_CONTAINER_PREFIX:-ai-phone}-wujie-ai",
     );
     expect(compose).toContain("app-container-entrypoint.mjs");
+    expect(compose).toContain("container-healthcheck.mjs");
+    expect(dockerfile).toContain("container-healthcheck.mjs");
     expect(appEntrypoint).toContain('services/translation-worker/dist/agent-calls/main.js');
     expect(compose).not.toContain(
       "container_name: ${AI_PHONE_CONTAINER_PREFIX:-ai-phone}-api",

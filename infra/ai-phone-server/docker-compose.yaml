@@ -22,6 +22,10 @@ services:
       WUJIE_AI_VOICE_AGENT_ENABLED: ${WUJIE_AI_VOICE_AGENT_ENABLED:-false}
       WUJIE_AI_AIR_DEVICE_GATEWAY_ENABLED: ${WUJIE_AI_AIR_DEVICE_GATEWAY_ENABLED:-false}
       WUJIE_AI_SRT_INGRESS_ENABLED: ${WUJIE_AI_SRT_INGRESS_ENABLED:-false}
+      WUJIE_AI_CHILD_RESTART_INITIAL_MS: ${WUJIE_AI_CHILD_RESTART_INITIAL_MS:-1000}
+      WUJIE_AI_CHILD_RESTART_MAX_MS: ${WUJIE_AI_CHILD_RESTART_MAX_MS:-30000}
+      WUJIE_AI_CHILD_STABLE_UPTIME_MS: ${WUJIE_AI_CHILD_STABLE_UPTIME_MS:-60000}
+      AIR_GATEWAY_HEALTH_URL: ${AIR_GATEWAY_HEALTH_URL:-http://127.0.0.1:8780/healthz}
       AIR_GATEWAY_SERIAL_PATH: ${AIR_GATEWAY_SERIAL_PATH:-/dev/serial/by-id/usb-AirM2M_AirM2M_Compo_000000000001-if06}
     command: ["node", "infra/ai-phone-server/app-container-entrypoint.mjs"]
     volumes:
@@ -47,8 +51,9 @@ services:
       - ${AIR_GATEWAY_DEVICE_GROUP:-dialout}
     healthcheck:
       test:
-        - CMD-SHELL
-        - node -e "fetch(process.env.API_HEALTH_URL||'http://127.0.0.1:3110/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"
+        - CMD
+        - node
+        - infra/ai-phone-server/container-healthcheck.mjs
       interval: 5s
       timeout: 3s
       retries: 30

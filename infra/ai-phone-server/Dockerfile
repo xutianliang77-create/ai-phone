@@ -16,7 +16,9 @@ COPY services/srt-ingress-bridge ./services/srt-ingress-bridge
 COPY services/voice-agent-runtime ./services/voice-agent-runtime
 COPY services/air-device-gateway ./services/air-device-gateway
 COPY infra/postgres ./infra/postgres
-COPY infra/ai-phone-server/app-container-entrypoint.mjs ./infra/ai-phone-server/app-container-entrypoint.mjs
+COPY infra/ai-phone-server/app-container-entrypoint.mjs \
+  infra/ai-phone-server/container-healthcheck.mjs \
+  ./infra/ai-phone-server/
 
 RUN npm ci && \
     test -x node_modules/@ffmpeg-installer/linux-x64/ffmpeg && \
