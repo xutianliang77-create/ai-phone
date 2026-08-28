@@ -10,6 +10,8 @@
     "postgres:check": "tsx src/infrastructure/storage/postgres-admin.ts check",
     "postgres:import": "tsx src/infrastructure/storage/postgres-admin.ts import",
     "postgres:audit": "tsx src/infrastructure/storage/postgres-admin.ts audit",
+    "postgres:startup-check": "tsx src/infrastructure/storage/postgres-admin.ts startup-check",
+    "postgres:upgrade-evidence": "tsx src/infrastructure/storage/postgres-admin.ts upgrade-evidence",
     "postgres:staging-acceptance": "tsx src/infrastructure/storage/postgres-staging-acceptance.ts",
     "postgres:load-acceptance": "tsx src/infrastructure/storage/postgres-load-acceptance.ts",
     "postgres:soak-acceptance": "tsx src/infrastructure/storage/postgres-soak-acceptance.ts",
