@@ -60,6 +60,8 @@ class FakeAiCallingAgentClient extends AiCallingAgentApiClient {
   final List<String> startedDraftIds = <String>[];
   final List<String> refreshedDraftIds = <String>[];
   final List<String> takeoverDraftIds = <String>[];
+  final List<String> pausedDraftIds = <String>[];
+  final List<String> resumedDraftIds = <String>[];
   final List<String> cancelledDraftIds = <String>[];
 
   @override
@@ -133,6 +135,30 @@ class FakeAiCallingAgentClient extends AiCallingAgentApiClient {
   }
 
   @override
+  Future<AiCallingAgentDraft> pauseDraft({required String draftId}) async {
+    pausedDraftIds.add(draftId);
+    return agentDraft(
+      status: 'in_progress',
+      callId: 'call_1',
+      executionProvider: 'air780_volte',
+      carrierState: 'connected',
+      agentControlState: 'paused',
+    );
+  }
+
+  @override
+  Future<AiCallingAgentDraft> resumeDraft({required String draftId}) async {
+    resumedDraftIds.add(draftId);
+    return agentDraft(
+      status: 'in_progress',
+      callId: 'call_1',
+      executionProvider: 'air780_volte',
+      carrierState: 'connected',
+      agentControlState: 'running',
+    );
+  }
+
+  @override
   Future<AiCallingAgentDraft> cancelDraft({
     required String draftId,
     String reason = 'user_cancelled',
@@ -149,10 +175,12 @@ AiCallingAgentDraft agentDraft({
   List<String> riskReasons = const <String>[],
   String? callId,
   String? takeoverReadyAt,
+  String? takeoverResolvedAt,
   String? resultSummary,
   String? executionProvider,
   String? carrierState,
   String? liveKitParticipantState,
+  String agentControlState = 'running',
 }) {
   return AiCallingAgentDraft(
     id: 'draft_1',
@@ -165,9 +193,11 @@ AiCallingAgentDraft agentDraft({
     riskReasons: riskReasons,
     callId: callId,
     takeoverReadyAt: takeoverReadyAt,
+    takeoverResolvedAt: takeoverResolvedAt,
     resultSummary: resultSummary,
     executionProvider: executionProvider,
     carrierState: carrierState,
     liveKitParticipantState: liveKitParticipantState,
+    agentControlState: agentControlState,
   );
 }

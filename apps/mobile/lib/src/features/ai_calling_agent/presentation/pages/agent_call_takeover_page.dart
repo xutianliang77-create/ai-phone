@@ -45,6 +45,7 @@ class _AgentCallTakeoverPageState extends State<AgentCallTakeoverPage> {
   bool _ready = false;
   bool _busy = false;
   bool _ended = false;
+  bool _hangupPending = false;
   bool _acceptInFlight = false;
   bool _accepted = false;
   String? _participantIdentity;
@@ -95,13 +96,15 @@ class _AgentCallTakeoverPageState extends State<AgentCallTakeoverPage> {
               Text(
                 _ended
                     ? '通话已结束'
-                    : _accepted
-                        ? '已接入，请直接与对方通话'
-                        : connected
-                            ? '已加入人工通话房间，等待 AI 停止发言…'
-                            : _ready
-                                ? 'AI 已停止发言，可以安全接入'
-                                : '可先加入房间，AI 停止发言后会自动完成接管',
+                    : _hangupPending
+                        ? '挂断请求已发送，等待电话网络确认…'
+                        : _accepted
+                            ? '已接入，请直接与对方通话'
+                            : connected
+                                ? '已加入人工通话房间，等待 AI 停止发言…'
+                                : _ready
+                                    ? 'AI 已停止发言，可以安全接入'
+                                    : '可先加入房间，AI 停止发言后会自动完成接管',
                 textAlign: TextAlign.center,
                 style: Theme.of(context).textTheme.titleMedium,
               ),
@@ -127,13 +130,13 @@ class _AgentCallTakeoverPageState extends State<AgentCallTakeoverPage> {
                 Text(_notice!, textAlign: TextAlign.center),
               ],
               const Spacer(),
-              if (!connected && !_ended)
+              if (!connected && !_ended && !_hangupPending)
                 FilledButton.icon(
                   onPressed: !_busy ? _connect : null,
                   icon: const Icon(Icons.call),
                   label: Text(_ready ? '进入人工通话' : '加入人工通话（等待 AI）'),
                 ),
-              if (!connected && !_ended) ...[
+              if (!connected && !_ended && !_hangupPending) ...[
                 const SizedBox(height: 8),
                 OutlinedButton.icon(
                   onPressed: _busy ? null : _resumeAgent,
@@ -174,14 +177,28 @@ class _AgentCallTakeoverPageState extends State<AgentCallTakeoverPage> {
     try {
       final draft = await _agentClient.getDraft(draftId: widget.draftId);
       if (!mounted) return;
-      if (draft.takeoverReadyAt != null) {
-        if (!_ready) setState(() => _ready = true);
-        await _acceptIfReady();
-      } else if (draft.status == 'completed' ||
-          draft.status == 'failed' ||
-          draft.status == 'cancelled') {
+      if (draft.status == 'cancelled') {
+        final carrierEnded = draft.executionProvider != 'air780_volte' ||
+            _isTerminalCarrierState(draft.carrierState);
+        if (carrierEnded) {
+          _pollTimer?.cancel();
+          setState(() {
+            _ended = true;
+            _hangupPending = false;
+            _notice = '电话网络已确认结束。';
+          });
+        } else if (!_hangupPending) {
+          setState(() {
+            _hangupPending = true;
+            _notice = '任务已取消，正在等待电话网络确认挂断。';
+          });
+        }
+      } else if (draft.status == 'completed' || draft.status == 'failed') {
         _pollTimer?.cancel();
         setState(() => _ended = true);
+      } else if (draft.takeoverReadyAt != null) {
+        if (!_ready) setState(() => _ready = true);
+        await _acceptIfReady();
       }
     } catch (error) {
       if (mounted) setState(() => _error = error);
@@ -196,7 +213,11 @@ class _AgentCallTakeoverPageState extends State<AgentCallTakeoverPage> {
         participantName: 'human-takeover',
       );
       try {
-        await _roomClient.connect(token);
+        await _roomClient.connect(
+          token,
+          enableMicrophone: false,
+          airTakeoverUplink: true,
+        );
         await _callClient.confirmRoomConnected(token);
         _participantIdentity = token.participantIdentity;
         if (_ready) {
@@ -222,10 +243,14 @@ class _AgentCallTakeoverPageState extends State<AgentCallTakeoverPage> {
     if (_room.status != CallRoomConnectionStatus.connected) return;
     _acceptInFlight = true;
     try {
-      await _agentClient.acceptTakeover(
+      final acceptedDraft = await _agentClient.acceptTakeover(
         draftId: widget.draftId,
         participantIdentity: participantIdentity,
       );
+      if (acceptedDraft.takeoverResolvedAt == null) {
+        throw StateError('接管绑定尚未确认，麦克风保持关闭，请重试。');
+      }
+      await _roomClient.setMicrophoneEnabled(true);
       if (mounted) {
         setState(() {
           _accepted = true;
@@ -248,21 +273,32 @@ class _AgentCallTakeoverPageState extends State<AgentCallTakeoverPage> {
         reason: 'human_takeover_hangup',
       );
       final hangup = _agentClient.lastCancellation;
-      await _roomClient.disconnect();
-      _pollTimer?.cancel();
+      final definitelyFailed = hangup?.status == 'failed';
+      if (!definitelyFailed) {
+        try {
+          await _roomClient.setMicrophoneEnabled(false);
+        } on Object {
+          // The carrier hangup remains authoritative if local media already left.
+        }
+        await _roomClient.disconnect();
+      }
       if (mounted) {
         setState(() {
-          _ended = true;
+          _hangupPending = !definitelyFailed;
           _notice = switch (hangup?.status) {
-            'accepted' => '已结束本次通话，已向 Air780 发送挂断请求。',
-            'requested' => '已结束本次通话，运行时正在处理挂断。',
-            'unknown' => '已结束任务，但电话挂断结果待对账。',
-            'failed' => '任务已取消，但电话挂断失败，请刷新确认线路状态。',
-            _ => '已结束本次通话。',
+            'accepted' => '已向 Air780 发送挂断请求，等待电话网络终态。',
+            'requested' => '运行时正在处理挂断，等待电话网络终态。',
+            'unknown' => '挂断结果待对账；不会重复下发，请等待电话网络终态。',
+            'failed' => '挂断未下发，当前通话仍可接管；请点击“结束本次通话”重试。',
+            _ => '任务已取消，正在确认电话线路状态。',
           };
         });
       }
     });
+  }
+
+  bool _isTerminalCarrierState(String? state) {
+    return state == 'disconnected' || state == 'busy' || state == 'failed';
   }
 
   Future<void> _openOperatorConsult() async {

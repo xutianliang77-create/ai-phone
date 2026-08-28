@@ -11,6 +11,8 @@ class AiCallingAgentDraftPanel extends StatelessWidget {
     required this.onRefresh,
     required this.onTakeover,
     required this.onCancel,
+    this.onPause,
+    this.onResume,
     super.key,
   });
 
@@ -21,13 +23,14 @@ class AiCallingAgentDraftPanel extends StatelessWidget {
   final VoidCallback onRefresh;
   final VoidCallback onTakeover;
   final VoidCallback onCancel;
+  final VoidCallback? onPause;
+  final VoidCallback? onResume;
 
   @override
   Widget build(BuildContext context) {
     final canAuthorize =
         draft.status == 'draft' && !draft.requiresHumanTakeover;
     final canStart = draft.status == 'authorized';
-    final canRefresh = _startedStatus(draft.status);
     final carrierAllowsTakeover = draft.executionProvider != 'air780_volte' ||
         draft.carrierState == 'connected';
     final canTakeover = draft.status == 'requires_human_takeover' ||
@@ -35,6 +38,16 @@ class AiCallingAgentDraftPanel extends StatelessWidget {
             carrierAllowsTakeover &&
             (draft.status == 'in_progress' ||
                 draft.status == 'takeover_requested'));
+    final isPaused = draft.agentControlState == 'paused';
+    final canPause =
+        draft.status == 'in_progress' && carrierAllowsTakeover && !isPaused;
+    final canResume =
+        draft.status == 'in_progress' && carrierAllowsTakeover && isPaused;
+    final isCancelledCall = draft.status == 'cancelled' && draft.callId != null;
+    final canRetryHangup = isCancelledCall &&
+        (draft.executionProvider != 'air780_volte' ||
+            !_isTerminalCarrierState(draft.carrierState));
+    final canRefresh = _startedStatus(draft.status) || canRetryHangup;
     final canCancel = draft.status == 'draft' ||
         draft.status == 'authorized' ||
         draft.status == 'queued' ||
@@ -42,7 +55,8 @@ class AiCallingAgentDraftPanel extends StatelessWidget {
         draft.status == 'reconciliation_required' ||
         draft.status == 'in_progress' ||
         draft.status == 'requires_human_takeover' ||
-        draft.status == 'takeover_requested';
+        draft.status == 'takeover_requested' ||
+        canRetryHangup;
     return DecoratedBox(
       decoration: BoxDecoration(
         border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
@@ -64,6 +78,10 @@ class AiCallingAgentDraftPanel extends StatelessWidget {
               Text(
                 'LiveKit：${_liveKitParticipantStateText(draft.liveKitParticipantState)}',
               ),
+            ],
+            if (draft.status == 'in_progress') ...[
+              const SizedBox(height: 4),
+              Text('AI 发言：${isPaused ? '已暂停' : '运行中'}'),
             ],
             const SizedBox(height: 8),
             Text('话术预览', style: Theme.of(context).textTheme.titleMedium),
@@ -105,6 +123,18 @@ class AiCallingAgentDraftPanel extends StatelessWidget {
                   label: const Text('刷新状态'),
                 ),
                 OutlinedButton.icon(
+                  onPressed:
+                      busy || !canPause || onPause == null ? null : onPause,
+                  icon: const Icon(Icons.pause_circle_outline),
+                  label: const Text('暂停 AI'),
+                ),
+                OutlinedButton.icon(
+                  onPressed:
+                      busy || !canResume || onResume == null ? null : onResume,
+                  icon: const Icon(Icons.play_circle_outline),
+                  label: const Text('恢复 AI'),
+                ),
+                OutlinedButton.icon(
                   onPressed: busy || !canTakeover ? null : onTakeover,
                   icon: const Icon(Icons.pan_tool_alt_outlined),
                   label: Text(
@@ -112,8 +142,10 @@ class AiCallingAgentDraftPanel extends StatelessWidget {
                 ),
                 OutlinedButton.icon(
                   onPressed: busy || !canCancel ? null : onCancel,
-                  icon: const Icon(Icons.cancel_outlined),
-                  label: const Text('取消任务'),
+                  icon: Icon(isCancelledCall
+                      ? Icons.phone_disabled_outlined
+                      : Icons.cancel_outlined),
+                  label: Text(isCancelledCall ? '重试挂断' : '取消任务'),
                 ),
               ],
             ),
@@ -140,6 +172,10 @@ class AiCallingAgentDraftPanel extends StatelessWidget {
 
   bool _isTerminalStatus(String status) {
     return status == 'completed' || status == 'failed' || status == 'cancelled';
+  }
+
+  bool _isTerminalCarrierState(String? state) {
+    return state == 'disconnected' || state == 'busy' || state == 'failed';
   }
 
   String _statusText(String status) {

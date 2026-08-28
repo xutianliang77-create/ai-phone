@@ -14,6 +14,9 @@ class AppConfig {
     required this.deviceAsrModelChunkMs,
     required this.serverOwnedHistory,
     this.appErrorReportingEnabled = true,
+    this.voiceAgentBackgroundWorkEnabled = false,
+    this.voiceAgentOwnershipEnabled = false,
+    this.voiceAgentDeliveryCoordinatorEnabled = false,
     this.appVersion = '0.1.0',
     this.buildNumber = '1',
     this.deviceAsrChunkDurationMs = 320,
@@ -75,6 +78,9 @@ class AppConfig {
   final String domainLexiconPack;
   final bool serverOwnedHistory;
   final bool appErrorReportingEnabled;
+  final bool voiceAgentBackgroundWorkEnabled;
+  final bool voiceAgentOwnershipEnabled;
+  final bool voiceAgentDeliveryCoordinatorEnabled;
   final String appVersion;
   final String buildNumber;
   final RegionEditionConfig region;
@@ -173,6 +179,15 @@ class AppConfig {
       'APP_ERROR_REPORTING_ENABLED',
       defaultValue: true,
     );
+    const voiceAgentBackgroundWorkEnabled = bool.fromEnvironment(
+      'VOICE_AGENT_BACKGROUND_WORK_ENABLED',
+    );
+    const voiceAgentOwnershipEnabled = bool.fromEnvironment(
+      'VOICE_AGENT_OWNERSHIP_ENABLED',
+    );
+    const voiceAgentDeliveryCoordinatorEnabled = bool.fromEnvironment(
+      'VOICE_AGENT_DELIVERY_COORDINATOR_ENABLED',
+    );
     const realtimeVoiceOutputMode = String.fromEnvironment(
       'REALTIME_VOICE_OUTPUT_MODE',
       defaultValue: 'off',
@@ -225,6 +240,10 @@ class AppConfig {
       domainLexiconPack: domainLexiconPack,
       serverOwnedHistory: serverOwnedHistory,
       appErrorReportingEnabled: appErrorReportingEnabled,
+      voiceAgentBackgroundWorkEnabled: voiceAgentBackgroundWorkEnabled,
+      voiceAgentOwnershipEnabled: voiceAgentOwnershipEnabled,
+      voiceAgentDeliveryCoordinatorEnabled:
+          voiceAgentDeliveryCoordinatorEnabled,
       appVersion: appVersion,
       buildNumber: buildNumber,
       region: region,
@@ -278,6 +297,10 @@ class AppConfig {
       domainLexiconPack: domainLexiconPack ?? this.domainLexiconPack,
       serverOwnedHistory: serverOwnedHistory,
       appErrorReportingEnabled: appErrorReportingEnabled,
+      voiceAgentBackgroundWorkEnabled: voiceAgentBackgroundWorkEnabled,
+      voiceAgentOwnershipEnabled: voiceAgentOwnershipEnabled,
+      voiceAgentDeliveryCoordinatorEnabled:
+          voiceAgentDeliveryCoordinatorEnabled,
       appVersion: appVersion,
       buildNumber: buildNumber,
       region: region,

@@ -27,19 +27,75 @@ void main() {
     await tester.tap(find.text('进入人工通话'));
     await tester.pump(const Duration(milliseconds: 50));
     expect(find.text('结束本次通话'), findsOneWidget);
+    expect(roomClient.airTakeoverUplink, isTrue);
+    expect(roomClient.activeMicrophoneEnabled, isTrue);
 
     await tester.tap(find.text('结束本次通话'));
     await tester.pump(const Duration(milliseconds: 100));
 
     expect(agentClient.cancelledDraftIds, ['draft_1']);
     expect(callClient.sipHangupCount, 0);
-    expect(find.text('通话已结束'), findsOneWidget);
+    expect(find.textContaining('等待电话网络确认'), findsOneWidget);
     expect(find.textContaining('已向 Air780 发送挂断请求'), findsOneWidget);
+  });
+
+  testWidgets('keeps microphone closed until takeover binding is persisted',
+      (tester) async {
+    final agentClient = _TakeoverAgentClient(resolveTakeover: false);
+    final roomClient = FakeCallRoomClient();
+    await tester.pumpWidget(MaterialApp(
+      home: AgentCallTakeoverPage(
+        draftId: 'draft_1',
+        callId: 'call_1',
+        takeoverReadyAt: '2026-08-06T07:00:00.000Z',
+        agentClient: agentClient,
+        callClient: FakeCallLinkApiClient(),
+        roomClient: roomClient,
+      ),
+    ));
+
+    await tester.pump(const Duration(milliseconds: 50));
+    await tester.tap(find.text('进入人工通话'));
+    await tester.pump(const Duration(milliseconds: 100));
+
+    expect(roomClient.activeMicrophoneEnabled, isFalse);
+    expect(find.textContaining('接管绑定尚未确认'), findsOneWidget);
+  });
+
+  testWidgets('keeps takeover active when hangup was definitely not dispatched',
+      (tester) async {
+    final agentClient = _TakeoverAgentClient(hangupStatus: 'failed');
+    final roomClient = FakeCallRoomClient();
+    await tester.pumpWidget(MaterialApp(
+      home: AgentCallTakeoverPage(
+        draftId: 'draft_1',
+        callId: 'call_1',
+        takeoverReadyAt: '2026-08-06T07:00:00.000Z',
+        agentClient: agentClient,
+        callClient: FakeCallLinkApiClient(),
+        roomClient: roomClient,
+      ),
+    ));
+    await tester.pump(const Duration(milliseconds: 50));
+    await tester.tap(find.text('进入人工通话'));
+    await tester.pump(const Duration(milliseconds: 50));
+    await tester.tap(find.text('结束本次通话'));
+    await tester.pump(const Duration(milliseconds: 100));
+
+    expect(roomClient.activeMicrophoneEnabled, isTrue);
+    expect(find.text('结束本次通话'), findsOneWidget);
+    expect(find.textContaining('挂断未下发'), findsOneWidget);
   });
 }
 
 class _TakeoverAgentClient extends FakeAiCallingAgentClient {
-  final List<String> cancelledDraftIds = <String>[];
+  _TakeoverAgentClient({
+    this.resolveTakeover = true,
+    this.hangupStatus = 'accepted',
+  });
+
+  final bool resolveTakeover;
+  final String hangupStatus;
 
   @override
   Future<AiCallingAgentDraft> getDraft({required String draftId}) async {
@@ -61,6 +117,7 @@ class _TakeoverAgentClient extends FakeAiCallingAgentClient {
       status: 'takeover_requested',
       callId: 'call_1',
       takeoverReadyAt: '2026-08-06T07:00:00.000Z',
+      takeoverResolvedAt: resolveTakeover ? '2026-08-06T07:00:01.000Z' : null,
     );
   }
 
@@ -70,9 +127,11 @@ class _TakeoverAgentClient extends FakeAiCallingAgentClient {
     String reason = 'user_cancelled',
   }) async {
     cancelledDraftIds.add(draftId);
-    lastCancellation = const AiCallingAgentCancellation(
-      status: 'accepted',
-      code: 'phone_hangup_accepted',
+    lastCancellation = AiCallingAgentCancellation(
+      status: hangupStatus,
+      code: hangupStatus == 'failed'
+          ? 'phone_hangup_unavailable'
+          : 'phone_hangup_accepted',
     );
     return agentDraft(status: 'cancelled', callId: 'call_1');
   }
