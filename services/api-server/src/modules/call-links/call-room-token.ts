@@ -35,8 +35,6 @@ export async function createCallRoomToken(options: {
   const config = getLiveKitRoomConfig();
   if (!config.ok) return { ok: false, issues: config.issues };
 
-  const nowSeconds = Math.floor(Date.now() / 1000);
-  const expiresAtSeconds = nowSeconds + config.config.tokenTtlSeconds;
   const participantIdentity = [
     options.callId,
     options.participantRole,
@@ -70,6 +68,12 @@ export async function createCallRoomToken(options: {
     canSubscribe: true,
     canUpdateOwnMetadata: false,
   });
+  const signed = await signWithExactTtl(
+    accessToken,
+    config.config.apiKey,
+    config.config.apiSecret,
+    config.config.tokenTtlSeconds,
+  );
   return {
     ok: true,
     callId: options.callId,
@@ -78,10 +82,28 @@ export async function createCallRoomToken(options: {
     wsUrl: config.config.livekitUrl,
     participantIdentity,
     participantRole: options.participantRole,
-    token: await accessToken.toJwt(),
-    expiresAt: new Date(expiresAtSeconds * 1000).toISOString(),
+    token: signed.token,
+    expiresAt: new Date(signed.expiresAtSeconds * 1000).toISOString(),
     fullDuplexEnabled: options.fullDuplexEnabled === true,
   };
+}
+
+async function signWithExactTtl(
+  accessToken: AccessToken,
+  apiKey: string,
+  apiSecret: string,
+  ttlSeconds: number,
+) {
+  const verifier = new TokenVerifier(apiKey, apiSecret);
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const token = await accessToken.toJwt();
+    const grants = await verifier.verify(token);
+    if (grants.exp !== undefined && grants.nbf !== undefined &&
+      grants.exp - grants.nbf === ttlSeconds) {
+      return { token, expiresAtSeconds: grants.exp };
+    }
+  }
+  throw new Error("LiveKit token TTL could not be signed exactly");
 }
 
 export async function verifyCallRoomConnectionToken(options: {

@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import type {
+  AirDeviceMediaPolicy,
   DeviceLeaseBinding,
   PhoneCallControlPayload,
   PlacePhoneCallPayload,
@@ -33,6 +34,7 @@ export interface Air780CallLinkTelephonyRuntime {
   resolveControlPayload(input: {
     record: CallLinkRecord;
     operation: ProviderOperationRecord;
+    action: "dtmf" | "hangup";
   }): Promise<PhoneCallControlPayload>;
   releasePayload(payload: PlacePhoneCallPayload): Promise<void>;
 }
@@ -81,7 +83,12 @@ export function getAir780CallLinkTelephonyRuntime():
         issue: async (input) => {
           const result = await createAirDeviceCallRoomToken(input);
           if (!result.ok) throw new Error("Air device room access is unavailable");
-          return { wsUrl: result.wsUrl, token: result.token, expiresAt: result.expiresAt };
+          return {
+            wsUrl: result.wsUrl,
+            token: result.token,
+            expiresAt: result.expiresAt,
+            mediaPolicy: result.mediaPolicy,
+          };
         },
       },
       leaseRegistry: repository.postgres.airDeviceRegistry,
@@ -120,7 +127,13 @@ function createRuntime(input: {
       deviceId: string;
       leaseId: string;
       callGeneration: number;
-    }): Promise<{ wsUrl: string; token: string; expiresAt: string }>;
+      mediaPolicy: AirDeviceMediaPolicy;
+    }): Promise<{
+      wsUrl: string;
+      token: string;
+      expiresAt: string;
+      mediaPolicy: AirDeviceMediaPolicy;
+    }>;
   };
   leaseRegistry: {
     claim(input: {
@@ -173,24 +186,35 @@ function createRuntime(input: {
         communicationSessionId: record.sessionId,
         transport: "air780_volte",
         callGeneration: lease.fencingToken,
+        mediaPolicy: "translation_isolated",
         roomName: record.roomName,
         phoneNumberReference: targetPhone,
         participantIdentity: `${record.sessionId}:guest:air:${lease.deviceId}`,
         deviceLease: lease,
       };
     },
-    resolveControlPayload: async ({ record, operation }) => {
+    resolveControlPayload: async ({ record, operation, action }) => {
       const binding = await input.callRecorder.findActiveBinding({
         communicationSessionId: record.sessionId,
         providerOperationId: operation.id,
       });
       if (binding) {
+        if (action === "dtmf" && binding.carrierState !== "connected") {
+          throw new DeviceLeaseConflict(
+            "Air device call must be connected before DTMF",
+          );
+        }
         return {
           communicationSessionId: record.sessionId,
           providerCallId: binding.providerCallId,
           callGeneration: binding.callGeneration,
           deviceLease: binding.deviceLease,
         };
+      }
+      if (action === "dtmf") {
+        throw new DeviceLeaseConflict(
+          "Air device connected call binding is unavailable",
+        );
       }
       const lease = await input.leaseRegistry.findActiveLease(record.sessionId);
       if (!lease) throw new DeviceLeaseConflict("Air device call binding is unavailable");
@@ -221,6 +245,7 @@ interface DeviceCallRecordInput {
   roomName: string;
   participantIdentity: string;
   callGeneration: number;
+  mediaPolicy: AirDeviceMediaPolicy;
 }
 
 function stableLeaseId(sessionId: string) {

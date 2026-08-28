@@ -63,6 +63,8 @@ export function registerCallLinkTtsTrackAccessRoutes(app: FastifyInstance) {
         return {
           callId: record.callId,
           status: "authorized",
+          targetParticipantIdentity: body.targetLegId,
+          trackSid: body.trackSid,
           participantCount: result.participantCount,
         };
       } catch {
@@ -86,14 +88,22 @@ type TrackAccessRequest = {
 };
 
 function parseTrackAccess(value: unknown): TrackAccessRequest | null {
-  if (!value || typeof value !== "object") return null;
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const body = value as Record<string, unknown>;
-  if (!boundedString(body.workerIdentity, 256) ||
+  if (!exactKeys(body, ["workerIdentity", "targetLegId", "targetSpeakerRole",
+    "trackSid", "trackName"]) || !boundedString(body.workerIdentity, 256) ||
     !boundedString(body.targetLegId, 256) ||
     !["host", "guest"].includes(String(body.targetSpeakerRole)) ||
     !boundedString(body.trackSid, 128) ||
     !boundedString(body.trackName, 512)) return null;
   return body as TrackAccessRequest;
+}
+
+function exactKeys(value: object, expected: string[]) {
+  const actual = Object.keys(value).sort();
+  const wanted = [...expected].sort();
+  return actual.length === wanted.length &&
+    actual.every((key, index) => key === wanted[index]);
 }
 
 function matchesTargetTrackName(request: TrackAccessRequest) {

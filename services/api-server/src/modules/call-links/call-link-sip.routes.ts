@@ -25,6 +25,8 @@ import {
 } from "./livekit-sip-readiness.js";
 import { liveKitSipParticipantIdentity } from "./livekit-sip-identity.js";
 import { parsePhoneOutboundRequest } from "./call-link-phone-request.js";
+import { configureCallLinkTranslationState } from
+  "./call-link-translation-state.repository.js";
 
 export function setLiveKitSipProviderFactoryForTests(
   factory: Parameters<typeof setLiveKitSipOutboundProviderFactoryForTests>[0],
@@ -81,6 +83,12 @@ export function registerCallLinkSipRoutes(app: FastifyInstance) {
     const started = await withSessionWriteLock(params.callId, async () => {
       const validation = await validateDial(params.callId, account.id);
       if (!validation.ok) return validation;
+      if (!await configureCallLinkTranslationState({
+        sessionId: validation.record.sessionId,
+        sourceLanguage: parsed.sourceLanguage,
+        targetLanguage: parsed.targetLanguage,
+      })) return failure(409, "translation_language_binding_conflict",
+        "Translation language binding conflicts");
       return {
         ok: true as const,
         record: validation.record,

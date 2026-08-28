@@ -12,6 +12,8 @@ import { mergeSessionNodeDiagnostics } from
 import { withSessionWriteLock } from
   "../sessions/session-write-coordinator.js";
 import { getCallLinkTtsVoice } from "./call-link-tts-voice.js";
+import { findCallLinkTranslationState } from
+  "./call-link-translation-state.repository.js";
 import { findCallLink, registerCallLeg } from "./call-links.service.js";
 import { getCallLinkWorkerSupervisor } from "./call-link-worker-supervisor.js";
 
@@ -93,6 +95,9 @@ export function registerWorkerDispatchRuntimeRoutes(app: FastifyInstance) {
       jobId: body.jobId,
     });
     const ttsVoice = await getCallLinkTtsVoice(call.userId);
+    const translationControl = await findCallLinkTranslationState(
+      call.sessionId,
+    );
     return {
       callId: call.callId,
       sessionId: call.sessionId,
@@ -100,6 +105,14 @@ export function registerWorkerDispatchRuntimeRoutes(app: FastifyInstance) {
       generation: claim.generation,
       participantIdentity: body.participantIdentity,
       ttsVoice,
+      ...(translationControl ? {
+        translationControl: {
+          sourceLanguage: translationControl.sourceLanguage,
+          targetLanguage: translationControl.targetLanguage,
+          uplinkPaused: translationControl.uplinkPaused,
+          controlGeneration: translationControl.controlGeneration,
+        },
+      } : {}),
     };
   });
 

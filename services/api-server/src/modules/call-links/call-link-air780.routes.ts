@@ -1,12 +1,11 @@
 import type { FastifyInstance } from "fastify";
 import { sendError } from "../../infrastructure/http/errors.js";
 import { requireAccount } from "../account/account-auth.js";
+import { getRepositoryRuntime } from
+  "../../infrastructure/storage/repository-runtime.js";
 import { completeSessionWithUsage } from "../sessions/session-completion.js";
 import { endCallLegs } from "../sessions/sessions-runtime.repository.js";
 import { withSessionWriteLock } from "../sessions/session-write-coordinator.js";
-import {
-  findSessionProviderOperation,
-} from "../provider-operations/provider-operations-runtime.repository.js";
 import type { ProviderOperationRecord } from
   "../provider-operations/provider-operation-record.js";
 import { getCallLinkWorkerSupervisor } from "./call-link-worker-supervisor.js";
@@ -25,11 +24,59 @@ import {
 import {
   beginProviderOperation,
   findProviderOperation,
+  findSessionProviderOperation,
+  updateProviderOperation,
 } from "../provider-operations/provider-operations-runtime.repository.js";
 import { executeAir780CallLinkHangup } from
   "./air780-call-link-outbound-coordinator.js";
-
+import {
+  air780HangupResponse,
+  air780OutboundResponse,
+} from "./call-link-air780-response.js";
+import { configureCallLinkTranslationState } from
+  "./call-link-translation-state.repository.js";
 export function registerCallLinkAir780Routes(app: FastifyInstance) {
+  app.get("/call-links/:callId/air780-status", async (request, reply) => {
+    const account = await requireAccount(request, reply);
+    if (!account) return;
+    const params = request.params as { callId: string };
+    const record = await findCallLink(params.callId);
+    if (!record) {
+      return sendError(reply, 404, "call_link_not_found", "Call link not found");
+    }
+    if (record.userId !== account.id) {
+      return sendError(reply, 403, "account_forbidden", "Account cannot access this resource");
+    }
+    const operation = await findSessionProviderOperation(
+      record.sessionId,
+      "phone_outbound",
+    );
+    if (!operation || operation.provider !== "air780_volte") {
+      return sendError(reply, 404, "air780_outbound_missing", "Air780 outbound call is missing");
+    }
+    const runtime = getRepositoryRuntime();
+    const call = runtime.driver === "postgres"
+      ? await runtime.postgres.airDeviceCalls.findCallStatus({
+        communicationSessionId: record.sessionId,
+        providerOperationId: operation.id,
+      })
+      : null;
+    return {
+      callId: record.callId,
+      sessionId: record.sessionId,
+      operationId: operation.id,
+      provider: operation.provider,
+      providerOperationStatus: operation.status,
+      ...(operation.externalResourceId
+        ? { providerCallId: operation.externalResourceId }
+        : {}),
+      ...(call ? {
+        carrierState: call.carrierState,
+        callGeneration: call.callGeneration,
+      } : {}),
+    };
+  });
+
   app.post("/call-links/:callId/air780-outbound", async (request, reply) => {
     const account = await requireAccount(request, reply);
     if (!account) return;
@@ -82,6 +129,12 @@ export function registerCallLinkAir780Routes(app: FastifyInstance) {
     const started = await withSessionWriteLock(params.callId, async () => {
       const current = await validateDial(params.callId, account.id);
       if (!current.ok) return current;
+      if (!await configureCallLinkTranslationState({
+        sessionId: current.record.sessionId,
+        sourceLanguage: parsed.sourceLanguage,
+        targetLanguage: parsed.targetLanguage,
+      })) return failure(409, "translation_language_binding_conflict",
+        "Translation language binding conflicts");
       return {
         ok: true as const,
         record: current.record,
@@ -102,7 +155,7 @@ export function registerCallLinkAir780Routes(app: FastifyInstance) {
       );
     }
     if (started.operation.status === "replayed") {
-      return reply.status(202).send(responseBody(
+      return reply.status(202).send(air780OutboundResponse(
         started.record,
         started.operation.operation,
         true,
@@ -114,7 +167,7 @@ export function registerCallLinkAir780Routes(app: FastifyInstance) {
       operation: started.operation.operation,
     });
     if (result.ok) {
-      return reply.status(202).send(responseBody(
+      return reply.status(202).send(air780OutboundResponse(
         started.record,
         result.operation,
         result.replayed,
@@ -123,7 +176,7 @@ export function registerCallLinkAir780Routes(app: FastifyInstance) {
       ));
     }
     if (result.reconciliationRequired) {
-      return reply.status(202).send(responseBody(
+      return reply.status(202).send(air780OutboundResponse(
         started.record,
         result.operation,
         false,
@@ -171,8 +224,21 @@ export function registerCallLinkAir780Routes(app: FastifyInstance) {
       started.operation.status === "session_conflict") {
       return sendError(reply, 409, "air780_hangup_operation_conflict", "Hangup conflicts with an existing operation");
     }
-    if (started.operation.status === "replayed") {
-      return reply.status(202).send(phoneControlResponse(
+    const retryableUndispatchedHangup =
+      started.operation.status === "replayed" &&
+      started.operation.operation.status === "failed" &&
+      started.operation.operation.lastErrorClass === "unavailable";
+    if (started.operation.status === "replayed" &&
+      !retryableUndispatchedHangup) {
+      if (["failed", "cancelled"].includes(started.operation.operation.status)) {
+        return sendError(
+          reply,
+          503,
+          "air780_hangup_failed",
+          "Air780 hangup was rejected",
+        );
+      }
+      return reply.status(202).send(air780HangupResponse(
         started.record.callId,
         started.operation.operation,
         true,
@@ -183,8 +249,18 @@ export function registerCallLinkAir780Routes(app: FastifyInstance) {
       payload = await runtime.runtime.resolveControlPayload({
         record: started.record,
         operation: started.dial,
+        action: "hangup",
       });
     } catch {
+      // No provider side effect can occur before the binding resolves. Mark
+      // this exact hangup operation as definitely undispatched so a later
+      // request can safely retry it without creating a new command identity.
+      await updateProviderOperation({
+        operationId: started.operation.operation.id,
+        status: "failed",
+        expectedVersion: started.operation.operation.version,
+        errorClass: "unavailable",
+      });
       return sendError(reply, 409, "air780_call_binding_missing", "Air780 call binding is unavailable");
     }
     const result = await executeAir780CallLinkHangup({
@@ -195,13 +271,17 @@ export function registerCallLinkAir780Routes(app: FastifyInstance) {
     });
     const current = await findProviderOperation(started.operation.operation.id) ??
       started.operation.operation;
-    if (!result.ok && !result.reconciliationRequired) {
+    const convergedDespiteRetryRace = ["accepted", "active", "succeeded"]
+      .includes(current.status);
+    if (!result.ok && !result.reconciliationRequired &&
+      !convergedDespiteRetryRace) {
       return sendError(reply, 503, "air780_hangup_failed", "Air780 hangup was rejected");
     }
-    return reply.status(202).send(phoneControlResponse(
+    return reply.status(202).send(air780HangupResponse(
       started.record.callId,
       current,
-      false,
+      started.operation.status === "replayed" ||
+        (result.ok && result.replayed),
     ));
   });
 }
@@ -247,42 +327,6 @@ async function validateControl(callId: string, accountId: string): Promise<Contr
   }
   return { ok: true, record, dial };
 }
-
-function responseBody(
-  record: CallLinkRecord,
-  operation: ProviderOperationRecord,
-  replayed: boolean,
-  participantIdentity?: string,
-  providerCallId?: string,
-) {
-  return {
-    callId: record.callId,
-    sessionId: record.sessionId,
-    roomName: record.roomName,
-    operationId: operation.id,
-    provider: operation.provider,
-    status: operation.status,
-    replayed,
-    ...(participantIdentity ? { participantIdentity } : {}),
-    ...(providerCallId ? { providerCallId } : {}),
-  };
-}
-
-function phoneControlResponse(
-  callId: string,
-  operation: ProviderOperationRecord,
-  replayed: boolean,
-) {
-  return {
-    callId,
-    sessionId: operation.sessionId,
-    operationId: operation.id,
-    operationType: "phone_hangup" as const,
-    status: operation.status,
-    replayed,
-  };
-}
-
 function sendValidationError(
   reply: Parameters<typeof sendError>[0],
   result: Exclude<DialValidation | ControlValidation, { ok: true }>,
@@ -297,7 +341,6 @@ function failure(
 ): Exclude<DialValidation | ControlValidation, { ok: true }> {
   return { ok: false, status, code, message };
 }
-
 function failUnansweredCall(record: CallLinkRecord) {
   return withSessionWriteLock(record.callId, async () => {
     const session = await completeSessionWithUsage(record.sessionId, { billableSeconds: 0 });

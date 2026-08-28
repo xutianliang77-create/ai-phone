@@ -31,10 +31,20 @@ import { registerCallLinkInternalRoutes } from "./call-link-internal.routes.js";
 import { getCallRoomResourceLimits } from "./call-room-resource-limits.js";
 import { registerCallLinkSipRoutes } from "./call-link-sip.routes.js";
 import { registerCallLinkAir780Routes } from "./call-link-air780.routes.js";
+import { registerCallLinkAir780DtmfRoutes } from
+  "./call-link-air780-dtmf.routes.js";
+import { registerCallLinkTranslationControlRoutes } from
+  "./call-link-translation-control.routes.js";
+import { registerCallLinkPhoneStatusRoutes } from
+  "./call-link-phone-status.routes.js";
+import { registerCallLinkDiagnosticMarkerRoutes } from
+  "./call-link-diagnostic-marker.routes.js";
 import { registerCallLinkSipControlRoutes } from "./call-link-sip-control.routes.js";
 import { registerCallLinkSipInboundRoutes } from "./call-link-sip-inbound.routes.js";
 import { registerLiveKitSipWebhookRoutes } from "./livekit-sip-webhook.routes.js";
 import { registerCallLinkTtsTrackAccessRoutes } from "./call-link-tts-track-access.routes.js";
+import { registerCallLinkInputTrackAccessRoutes } from
+  "./call-link-input-track-access.routes.js";
 import { registerWorkerDispatchRuntimeRoutes } from "./worker-dispatch-runtime.routes.js";
 import { registerRecordingRoutes } from "../recordings/recording.routes.js";
 
@@ -46,10 +56,15 @@ export async function registerCallLinkRoutes(app: FastifyInstance) {
   registerCallLinkInternalRoutes(app);
   registerCallLinkSipRoutes(app);
   registerCallLinkAir780Routes(app);
+  registerCallLinkAir780DtmfRoutes(app);
+  registerCallLinkPhoneStatusRoutes(app);
+  registerCallLinkTranslationControlRoutes(app);
+  registerCallLinkDiagnosticMarkerRoutes(app);
   registerCallLinkSipControlRoutes(app);
   registerCallLinkSipInboundRoutes(app);
   registerLiveKitSipWebhookRoutes(app);
   registerCallLinkTtsTrackAccessRoutes(app);
+  registerCallLinkInputTrackAccessRoutes(app);
   registerWorkerDispatchRuntimeRoutes(app);
   registerRecordingRoutes(app);
 

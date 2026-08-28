@@ -5,7 +5,10 @@ import {
 
 export function parsePhoneOutboundRequest(
   body: unknown,
-): CreatePhoneOutboundCallRequest | null {
+): (CreatePhoneOutboundCallRequest & {
+  sourceLanguage: "zh" | "en";
+  targetLanguage: "zh" | "en";
+}) | null {
   if (!body || typeof body !== "object") return null;
   const value = body as Record<string, unknown>;
   const targetPhone = typeof value.targetPhone === "string"
@@ -31,8 +34,8 @@ export function parsePhoneOutboundRequest(
   }
   return {
     targetPhone,
-    sourceLanguage,
-    targetLanguage,
+    sourceLanguage: sourceLanguage as "zh" | "en",
+    targetLanguage: targetLanguage as "zh" | "en",
     disclosureConfirmed: true,
     ...(initialDtmf ? { initialDtmf } : {}),
   };

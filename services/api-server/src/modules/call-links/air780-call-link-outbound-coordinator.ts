@@ -120,6 +120,15 @@ export async function executeAir780CallLinkHangup(input: {
   return executePhoneControl({ ...input, action: "hangup" });
 }
 
+export async function executeAir780CallLinkDtmf(input: {
+  operation: ProviderOperationRecord;
+  provider: TelephonyProvider;
+  payload: PhoneCallControlPayload & { digits: string };
+  timeoutMs: number;
+}) {
+  return executePhoneControl({ ...input, action: "dtmf" });
+}
+
 export function air780CallLinkOutboundRequestHash(
   record: CallLinkRecord,
   request: CreatePhoneOutboundCallRequest,
