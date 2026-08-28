@@ -334,8 +334,7 @@ async function main() {
   const report = mode === "tail"
     ? await runTailGate(config, fixture)
     : await runLongGate(config, fixture);
-  const output = resolve(process.env.WUJIE_GATE_EVIDENCE ??
-    `.cache/wujie-productization-batch1/${mode}-reliability-gate.json`);
+  const output = resolve(process.env.WUJIE_GATE_EVIDENCE ?? `.cache/wujie-productization-batch1/${mode}-reliability-gate.json`);
   mkdirSync(dirname(output), { recursive: true });
   writeFileSync(output, `${JSON.stringify({
     schemaVersion: 1,
@@ -348,6 +347,4 @@ async function main() {
   if (!report.summary.ok) process.exitCode = 2;
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  await main();
-}
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) await main();
