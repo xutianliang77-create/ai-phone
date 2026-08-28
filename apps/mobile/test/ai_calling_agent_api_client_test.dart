@@ -209,6 +209,37 @@ void main() {
 
     expect(draft.status, 'cancelled');
   });
+
+  test('pauses and resumes the same agent draft', () async {
+    var requestIndex = 0;
+    final client = AiCallingAgentApiClient(
+      baseUrl: Uri.parse('http://127.0.0.1:3100'),
+      accountSessionStore: _sessionStore(),
+      client: MockClient((request) async {
+        _expectAuth(request);
+        expect(request.method, 'POST');
+        final action = requestIndex++ == 0 ? 'pause' : 'resume';
+        expect(
+          request.url.path,
+          '/ai-calling-agent/drafts/draft_1/$action',
+        );
+        return _jsonResponse({
+          'draft': _draftJson(
+            status: 'in_progress',
+            callId: 'call_1',
+            agentControlState: action == 'pause' ? 'paused' : 'running',
+          ),
+        }, 200);
+      }),
+    );
+
+    final paused = await client.pauseDraft(draftId: 'draft_1');
+    final resumed = await client.resumeDraft(draftId: 'draft_1');
+
+    expect(paused.agentControlState, 'paused');
+    expect(resumed.agentControlState, 'running');
+    expect(requestIndex, 2);
+  });
 }
 
 MemoryAccountSessionStore _sessionStore() {
@@ -243,6 +274,7 @@ Map<String, Object?> _draftJson({
   String? liveKitParticipantState,
   String? deviceId,
   int? callGeneration,
+  String? agentControlState,
 }) {
   return {
     'id': 'draft_1',
@@ -261,6 +293,7 @@ Map<String, Object?> _draftJson({
       'liveKitParticipantState': liveKitParticipantState,
     if (deviceId != null) 'deviceId': deviceId,
     if (callGeneration != null) 'callGeneration': callGeneration,
+    if (agentControlState != null) 'agentControlState': agentControlState,
     'createdAt': '2026-07-03T00:00:00.000Z',
     'updatedAt': '2026-07-03T00:00:00.000Z',
   };
