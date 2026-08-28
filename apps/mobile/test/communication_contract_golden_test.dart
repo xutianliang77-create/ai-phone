@@ -9,13 +9,21 @@ void main() {
   test('Flutter decodes and re-encodes communication v1 golden fixtures', () {
     final command = fixture('command.json');
     final event = fixture('event.json');
+    final work = fixture('agent-work-command.json');
+    final receipt = fixture('client-playback-ended-event.json');
 
     final decodedCommand = CommunicationContractEnvelope.fromJson(command);
     final decodedEvent = CommunicationContractEnvelope.fromJson(event);
+    final decodedWork = CommunicationContractEnvelope.fromJson(work);
+    final decodedReceipt = CommunicationContractEnvelope.fromJson(receipt);
 
     expect(decodedCommand.toJson(), command);
     expect(decodedEvent.toJson(), event);
+    expect(decodedWork.toJson(), work);
+    expect(decodedReceipt.toJson(), receipt);
     expect(decodedEvent.json['playbackId'], 'playback_001');
+    expect(decodedWork.json['workId'], 'work_001');
+    expect(decodedReceipt.json['deliveryAttemptId'], 'delivery_002');
   });
 
   test('Flutter accepts additive fields and rejects breaking versions', () {
