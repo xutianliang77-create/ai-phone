@@ -6,7 +6,7 @@ local ledger_module = require("vuart_v1_ledger")
 local M = {}
 local FRAME = { hello = 1, heartbeat = 2, dial = 3, hangup = 4,
     dtmf = 5, call_state = 6, audio_downlink = 16, audio_uplink = 17,
-    ack = 32, error = 33 }
+    ack = 32, error = 33, link_ack = 34 }
 local TERMINAL_STATE = { disconnected = true, busy = true, failed = true }
 local COMMAND_ERROR = { unsupported_command = true, stale_fence = true,
     binding_mismatch = true, stale_generation = true,
@@ -78,6 +78,8 @@ function M.new(options)
         active_binding = nil,
         last_binding = nil,
         hangup_pending = false,
+        last_sent_link_sequences = {},
+        last_acked_link_sequences = {},
         counters = {
             commands_received = 0, commands_applied = 0, response_replays = 0,
             idempotency_conflicts = 0, stale_fences = 0, stale_generations = 0,
@@ -90,6 +92,8 @@ function M.new(options)
             audio_uplink_gap_events = 0, audio_uplink_missing_chunks = 0,
             audio_uplink_binding_mismatches = 0,
             audio_uplink_without_binding = 0,
+            link_acks_received = 0, link_ack_duplicates = 0,
+            link_ack_out_of_order = 0, link_ack_invalid = 0,
         },
     }
 
@@ -100,15 +104,16 @@ function M.new(options)
     end
 
     local function encode_output(self, frame_type, payload)
+        local sequence = allocate_sequence(self)
         local encoded, message = frame_codec.encode_frame({
             type = frame_type,
             flags = 0,
-            sequence = allocate_sequence(self),
+            sequence = sequence,
             timestamp_ms = self.now_ms(),
             payload = payload,
         })
         require_value(encoded, message or "frame encoding failed")
-        return encoded
+        return encoded, sequence
     end
 
     local function emit_encoded(self, encoded)
@@ -121,9 +126,9 @@ function M.new(options)
     end
 
     local function send_payload(self, frame_type, payload)
-        local encoded = encode_output(self, frame_type, payload)
+        local encoded, sequence = encode_output(self, frame_type, payload)
         emit_encoded(self, encoded)
-        return encoded
+        return encoded, sequence
     end
 
     local function send_error(self, command, request_sequence, error_code)
@@ -343,6 +348,38 @@ function M.new(options)
         end
     end
 
+    local function handle_link_ack(self, frame)
+        if frame.flags ~= 0 then
+            self.counters.link_ack_invalid = self.counters.link_ack_invalid + 1
+            return
+        end
+        local acknowledgement = frame_codec.decode_link_ack(frame.payload)
+        if not acknowledgement then
+            self.counters.link_ack_invalid = self.counters.link_ack_invalid + 1
+            return
+        end
+        local frame_type = acknowledgement.acknowledged_type
+        local sent = self.last_sent_link_sequences[frame_type]
+        local previous = self.last_acked_link_sequences[frame_type]
+        local sequence = acknowledgement.acknowledged_sequence
+        if sent == nil or sequence > sent then
+            self.counters.link_ack_invalid = self.counters.link_ack_invalid + 1
+            return
+        end
+        if previous ~= nil and sequence <= previous then
+            if sequence == previous then
+                self.counters.link_ack_duplicates =
+                    self.counters.link_ack_duplicates + 1
+            else
+                self.counters.link_ack_out_of_order =
+                    self.counters.link_ack_out_of_order + 1
+            end
+            return
+        end
+        self.last_acked_link_sequences[frame_type] = sequence
+        self.counters.link_acks_received = self.counters.link_acks_received + 1
+    end
+
     local function send_hello(self)
         local payload, message = command_codec.encode_hello({
             device_id = self.device_id,
@@ -353,7 +390,9 @@ function M.new(options)
             max_payload_bytes = self.max_payload_bytes,
         })
         require_value(payload, message or "HELLO encoding failed")
-        return send_payload(self, FRAME.hello, payload)
+        local encoded, sequence = send_payload(self, FRAME.hello, payload)
+        self.last_sent_link_sequences[FRAME.hello] = sequence
+        return encoded
     end
 
     local function send_heartbeat(self)
@@ -367,7 +406,9 @@ function M.new(options)
         })
         require_value(payload, message or "HEARTBEAT encoding failed")
         self.heartbeat_sequence = (self.heartbeat_sequence + 1) % 4294967296
-        return send_payload(self, FRAME.heartbeat, payload)
+        local encoded, sequence = send_payload(self, FRAME.heartbeat, payload)
+        self.last_sent_link_sequences[FRAME.heartbeat] = sequence
+        return encoded
     end
 
     function state:start()
@@ -387,6 +428,8 @@ function M.new(options)
                 handle_command(self, frame)
             elseif frame.type == FRAME.audio_uplink then
                 handle_audio_uplink(self, frame)
+            elseif frame.type == FRAME.link_ack then
+                handle_link_ack(self, frame)
             end
         end
     end

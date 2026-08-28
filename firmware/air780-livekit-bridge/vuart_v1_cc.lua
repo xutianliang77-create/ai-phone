@@ -20,10 +20,13 @@ function M.new(options)
         audio_ready = false,
         cc_initialized = false,
         record_configured = false,
+        record_active = false,
         ready = false,
         call_state = "idle",
         audio_quality = 0,
         hangup_pending = false,
+        source_failure_pending = false,
+        memory_failed = false,
         terminal_emitted = false,
         last_event = nil,
         event_handler = options.on_event,
@@ -36,6 +39,9 @@ function M.new(options)
             dial_calls = 0, hangup_calls = 0, downlink_frames = 0,
             downlink_drops = 0, uplink_discarded = 0,
             uplink_frames = 0, uplink_drops = 0, quality_failures = 0,
+            source_failure_hangups = 0, source_failure_hangup_failures = 0,
+            source_failure_unknown_events = 0,
+            memory_failures = 0,
         },
     }
 
@@ -50,13 +56,15 @@ function M.new(options)
         end
     end
 
-    local function delete_buffer(buffer)
-        if buffer then pcall(buffer.del, buffer) end
+    local function clear_buffer(buffer)
+        if not buffer then return end
+        pcall(buffer.used, buffer, 0)
+        pcall(buffer.seek, buffer, 0)
     end
 
     local function record_callback(self, is_downlink, point)
         local group = is_downlink and self.buffers.down or self.buffers.up
-        local buffer = point == 0 and group[1] or point == 1 and group[2] or nil
+        local buffer = point == 1 and group[1] or point == 2 and group[2] or nil
         if not buffer then
             self.counters.downlink_drops = self.counters.downlink_drops + 1
             return
@@ -64,22 +72,22 @@ function M.new(options)
         local used_ok, used = pcall(buffer.used, buffer)
         if not used_ok or type(used) ~= "number" then
             self.counters.downlink_drops = self.counters.downlink_drops + 1
-            delete_buffer(buffer)
+            clear_buffer(buffer)
             return
         end
         if not is_downlink then
             self.counters.uplink_discarded =
                 self.counters.uplink_discarded + 1
-            delete_buffer(buffer)
+            clear_buffer(buffer)
             return
         end
         if used ~= self.buffer_size then
             self.counters.downlink_drops = self.counters.downlink_drops + 1
-            delete_buffer(buffer)
+            clear_buffer(buffer)
             return
         end
         local query_ok, pcm = pcall(buffer.query, buffer)
-        delete_buffer(buffer)
+        clear_buffer(buffer)
         if not query_ok or type(pcm) ~= "string" or #pcm ~= self.buffer_size then
             self.counters.downlink_drops = self.counters.downlink_drops + 1
             return
@@ -134,14 +142,33 @@ function M.new(options)
             function(is_downlink, point)
                 record_callback(self, is_downlink, point)
             end)
-        local called, result = pcall(self.cc_api.record, true,
-            buffers.up[1], buffers.up[2], buffers.down[1], buffers.down[2])
-        if not registered or not called or result ~= true then
+        if not registered then
             self.counters.record_failures = self.counters.record_failures + 1
             return false
         end
         self.record_configured = true
         return true
+    end
+
+    local function start_record(self)
+        if not self.enable_downlink then return true end
+        if self.record_active then return true end
+        if not self.record_configured or not self.buffers then return false end
+        local called, result = pcall(self.cc_api.record, true,
+            self.buffers.up[1], self.buffers.up[2],
+            self.buffers.down[1], self.buffers.down[2])
+        if not called or result ~= true then
+            self.counters.record_failures = self.counters.record_failures + 1
+            return false
+        end
+        self.record_active = true
+        return true
+    end
+
+    local function stop_record(self)
+        if not self.record_active then return end
+        pcall(self.cc_api.record, false)
+        self.record_active = false
     end
 
     local function notify_ready(self)
@@ -171,11 +198,42 @@ function M.new(options)
 
     local function terminal(self, carrier_state, carrier_cause)
         if self.call_state == "idle" or self.terminal_emitted then return end
+        stop_record(self)
+        if self.source_failure_pending then
+            carrier_state = "failed"
+            carrier_cause = "device_error"
+        end
         self.terminal_emitted = true
         emit(self, carrier_state, carrier_cause)
         self.call_state = "idle"
         self.audio_quality = 0
         self.hangup_pending = false
+        self.source_failure_pending = false
+    end
+
+    local function fail_closed_on_source_failure(self)
+        if self.call_state ~= "connected" or self.hangup_pending then
+            return false
+        end
+        self.source_failure_pending = true
+        -- Block any second source-failure action even if the carrier API
+        -- explicitly rejects the hangup. In that case report a non-terminal
+        -- unknown state so the host quarantines media and reconciles; do not
+        -- invent a carrier terminal while the physical call may remain up.
+        self.hangup_pending = true
+        local called, accepted = pcall(self.cc_api.hangUp, self.sim_id)
+        if not called or accepted == false then
+            self.counters.source_failure_hangup_failures =
+                self.counters.source_failure_hangup_failures + 1
+            self.counters.source_failure_unknown_events =
+                self.counters.source_failure_unknown_events + 1
+            emit(self, "unknown", "unknown")
+            return false
+        end
+        self.counters.hangup_calls = self.counters.hangup_calls + 1
+        self.counters.source_failure_hangups =
+            self.counters.source_failure_hangups + 1
+        return true
     end
 
     local function carrier_event(self, status)
@@ -192,16 +250,28 @@ function M.new(options)
                 local called, quality = pcall(self.cc_api.quality)
                 if called and (quality == 1 or quality == 2) then
                     self.audio_quality = quality
+                    if not start_record(self) then
+                        self.audio_quality = 0
+                        self.counters.quality_failures =
+                            self.counters.quality_failures + 1
+                        fail_closed_on_source_failure(self)
+                        return
+                    end
                 else
                     self.audio_quality = 0
                     self.counters.quality_failures =
                         self.counters.quality_failures + 1
+                    fail_closed_on_source_failure(self)
+                    return
                 end
             end
             emit(self, "connected", "none")
         elseif status == "EXT_SRC_DONE" and self.uplink then
             local metrics = self.uplink:metrics()
-            self.uplink:on_done(metrics.generation)
+            local handled = self.uplink:on_done(metrics.generation)
+            if handled ~= true and metrics.call_active then
+                fail_closed_on_source_failure(self)
+            end
         elseif status == "MAKE_CALL_FAILED" and self.call_state ~= "idle" then
             terminal(self, "failed", "network_error")
         elseif status == "DISCONNECTED" or status == "HANGUP_CALL_DONE" then
@@ -247,6 +317,7 @@ function M.new(options)
         state.call_state = "dialing"
         state.audio_quality = 0
         state.hangup_pending = false
+        state.source_failure_pending = false
         state.terminal_emitted = false
         state.last_event = nil
         return { status = "applied" }
@@ -257,8 +328,8 @@ function M.new(options)
             or state.hangup_pending then
             return { status = "rejected", error_code = "invalid_state" }
         end
-        local called = pcall(state.cc_api.hangUp, state.sim_id)
-        if not called then
+        local called, accepted = pcall(state.cc_api.hangUp, state.sim_id)
+        if not called or accepted == false then
             return { status = "rejected", error_code = "internal_error" }
         end
         state.counters.hangup_calls = state.counters.hangup_calls + 1
@@ -272,7 +343,8 @@ function M.new(options)
 
     function state.audio_uplink(pcm, media_sequence, generation)
         if not state.ready or state.call_state ~= "connected"
-            or state.audio_quality == 0 or type(state.uplink) ~= "table" then
+            or state.hangup_pending or state.audio_quality == 0
+            or type(state.uplink) ~= "table" then
             state.counters.uplink_drops = state.counters.uplink_drops + 1
             return false
         end
@@ -288,6 +360,10 @@ function M.new(options)
             state.counters.uplink_frames = state.counters.uplink_frames + 1
         else
             state.counters.uplink_drops = state.counters.uplink_drops + 1
+            local after = state.uplink:metrics()
+            if after.call_active and after.faulted then
+                fail_closed_on_source_failure(state)
+            end
         end
         return accepted == true
     end
@@ -297,6 +373,35 @@ function M.new(options)
         local metrics = state.uplink:metrics()
         if not metrics.call_active then return true end
         return state.uplink:stop(generation)
+    end
+
+    function state:fail_closed(_reason)
+        if self.memory_failed then return true end
+        self.memory_failed = true
+        self.ready = false
+        self.counters.memory_failures = self.counters.memory_failures + 1
+        stop_record(self)
+        if type(self.uplink) == "table" then
+            local metrics = self.uplink:metrics()
+            if metrics.call_active then pcall(self.uplink.stop, self.uplink, metrics.generation) end
+        end
+        if self.call_state == "idle" or self.hangup_pending then return true end
+
+        self.source_failure_pending = true
+        self.hangup_pending = true
+        local called, accepted = pcall(self.cc_api.hangUp, self.sim_id)
+        if not called or accepted == false then
+            self.counters.source_failure_hangup_failures =
+                self.counters.source_failure_hangup_failures + 1
+            self.counters.source_failure_unknown_events =
+                self.counters.source_failure_unknown_events + 1
+            emit(self, "unknown", "unknown")
+            return false
+        end
+        self.counters.hangup_calls = self.counters.hangup_calls + 1
+        self.counters.source_failure_hangups =
+            self.counters.source_failure_hangups + 1
+        return true
     end
 
     function state.is_connected()
@@ -309,7 +414,10 @@ function M.new(options)
         output.ready = self.ready
         output.call_state = self.call_state
         output.record_configured = self.record_configured
+        output.record_active = self.record_active
         output.audio_quality = self.audio_quality
+        output.memory_failed = self.memory_failed
+        output.hangup_pending = self.hangup_pending
         if self.uplink then output.uplink = self.uplink:metrics() end
         return output
     end

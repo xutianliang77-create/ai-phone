@@ -18,6 +18,7 @@ const productionSources = [
   ["vuart_v1_uart.lua", "vuart_v1_uart.lua"],
   ["vuart_v1_uplink.lua", "vuart_v1_uplink.lua"],
   ["vuart_v1_cc.lua", "vuart_v1_cc.lua"],
+  ["vuart_v1_memory.lua", "vuart_v1_memory.lua"],
 ] as const;
 
 const behaviorFiles = [
@@ -109,25 +110,32 @@ describe("Air780 LuatOS production entry", () => {
         end
         local function zbuffer()
           local value = { value = "" }
-          function value:used() return #self.value end
+          function value:used(next_used)
+            if next_used ~= nil then
+              if next_used == 0 then self.value = "" end
+              return next_used
+            end
+            return #self.value
+          end
           function value:query() return self.value end
-          function value:del() self.value = "" end
+          function value:seek() return true end
           buffers[#buffers + 1] = value
           return value
         end
 
         uart = host_object({
           VUART_0 = 9,
-          setup = function(id, baud, bits, stop)
-            assert(id == 9 and baud == 115200 and bits == 8 and stop == 1)
+          setup = function(id, baud, bits, stop, parity, order, buffer_bytes)
+            assert(id == 1 and baud == 921600 and bits == 8 and stop == 1)
+            assert(parity == nil and order == nil and buffer_bytes == 16384)
             return 0
           end,
           on = function(id, event, callback)
-            assert(id == 9 and event == "receive")
+            assert(id == 1 and event == "receive")
             receive_callback = callback
           end,
           write = function(id, value)
-            assert(id == 9)
+            assert(id == 1)
             writes[#writes + 1] = value
             return #value
           end,
@@ -142,7 +150,8 @@ describe("Air780 LuatOS production entry", () => {
           init = function(sim_id) assert(sim_id == 0); init_calls = init_calls + 1; return true end,
           on = function(event, callback) assert(event == "record"); _G.record_callback = callback end,
           record = function(enabled, up1, up2, down1, down2)
-            assert(enabled and up1 and up2 and down1 and down2)
+            if not enabled then return true end
+            assert(up1 and up2 and down1 and down2)
             record_calls = record_calls + 1
             return true
           end,
@@ -194,7 +203,14 @@ describe("Air780 LuatOS production entry", () => {
           end,
           sha256 = function(value) return value end,
         }
-        rtos = { version = function() return "V2048" end }
+        rtos = {
+          version = function() return "V2048" end,
+          meminfo = function(kind)
+            if kind == "lua" then return 4194304, 200000, 220000 end
+            assert(kind == "sys")
+            return 3211264, 300000, 350000
+          end,
+        }
         package.preload.air153C_wtd = function()
           return { init = function() end, feed_dog = function() end }
         end
@@ -213,7 +229,7 @@ describe("Air780 LuatOS production entry", () => {
         assert(sys_run_called == true and receive_callback ~= nil)
         assert(audio_setup_calls == 1 and init_calls == 0 and #writes == 0)
         subscriptions.CC_IND("READY")
-        assert(init_calls == 1 and record_calls == 1 and #buffers == 4)
+        assert(init_calls == 1 and record_calls == 0 and #buffers == 4)
         assert(#writes == 2)
         local frame = assert(require("vuart_v1_codec").decode_frame(writes[1]))
         local hello = assert(require("vuart_v1_cmd_codec").decode_hello(frame.payload))
@@ -221,6 +237,8 @@ describe("Air780 LuatOS production entry", () => {
         assert(hello.device_id == "air780-01020304")
         assert(hello.boot_id == string.rep("aa", 16))
         assert(type(loop_timers[5000]) == "function")
+        assert(type(loop_timers[3000]) == "function")
+        loop_timers[3000]()
         loop_timers[5000]()
         assert(#writes == 4)
         local periodic_hello = assert(require("vuart_v1_codec").decode_frame(writes[3]))
@@ -252,20 +270,21 @@ describe("Air780 LuatOS production entry", () => {
           timestamp_ms = "1",
           payload = assert(command_codec.encode_command(command)),
         }))
-        receive_callback(9, #uart_read_value)
+        receive_callback(1, #uart_read_value)
         assert(dial_calls == 1)
         assert(frame_codec.decode_frame(writes[#writes]).type == 32)
         subscriptions.CC_IND("MAKE_CALL_OK")
         subscriptions.CC_IND("CONNECTED")
         subscriptions.CC_IND("AUDIO_START")
+        assert(record_calls == 1)
         buffers[3].value = string.rep("d", 6400)
-        record_callback(true, 0)
+        record_callback(true, 1)
         local audio_frame = assert(frame_codec.decode_frame(writes[#writes]))
         local audio = assert(frame_codec.decode_audio(audio_frame.payload))
         assert(audio_frame.type == 16 and audio.pcm == string.rep("d", 6400))
         local write_count = #writes
         buffers[1].value = string.rep("u", 6400)
-        record_callback(false, 0)
+        record_callback(false, 1)
         assert(#writes == write_count)
         local uplink = {
           communication_session_id = command.communication_session_id,
@@ -281,11 +300,11 @@ describe("Air780 LuatOS production entry", () => {
           type = 17, flags = 0, sequence = 2, timestamp_ms = "2",
           payload = assert(frame_codec.encode_audio(uplink)),
         }))
-        receive_callback(9, #uart_read_value)
+        receive_callback(1, #uart_read_value)
         assert(source_starts == 1 and source_stops == 0 and input_bytes == 6400)
         return PROJECT .. ":" .. VERSION
       `);
-      expect(result).toBe("WUJIE_AIR_VUART_V1_PROD:001.002.001");
+      expect(result).toBe("WUJIE_AIR_VUART_V1_PROD:001.004.001");
     } finally {
       lua.global.close();
     }

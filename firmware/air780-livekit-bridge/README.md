@@ -84,6 +84,12 @@ V2046/Air780EHV、`audio_v2`、COUNT_ONLY 和 6,400-byte buffer。
 有界二进制 stream decoder、同 boot replay ledger、控制 runtime 和 TTS uplink。它与八文件
 self-test manifest 分离，mock carrier 与测试文件不进入生产 manifest。
 
+production entry `001.004.001` 在打开物理 UART1、初始化 CC 或配置录音之前，必须同时确认 LuatOS CORE 至少为
+V2048 且 `cc.extern_source` 与 `cc.input` 都存在；V2046、未知 CORE 或缺少 stream API 时仅
+记录 `requires_v2048` 或 `cc_stream_api_unavailable` 并 fail closed。该守卫防止将依赖
+`cc.input` 的 V2048 production bundle 误下载到冻结的 V2046 回退基线；它不构成 Gate 0B
+通过，也不授权切换 CORE。
+
 生产 core 已由 Vitest 内嵌的 Lua 5.4 VM 真正执行，覆盖：任意分片、两帧粘包、CRC
 损坏、输入缓冲硬上限；HELLO/HEARTBEAT；ACK 丢失后的 byte-identical replay；相同
 commandId 或 idempotencyKey 冲突；所有旧 fence/generation 拒绝；same-generation
@@ -99,17 +105,47 @@ runtime 通过依赖注入接收 binary write、clock 与 carrier adapter。ledg
 ## LuatOS production entry
 
 独立生产入口为 `production/main.lua`，不覆盖已完成取证的 self-test `main.lua`。
-`PROD_FLASH_MANIFEST.tsv` 固定九个源文件的 SHA-256 和 Luatools 扁平目标文件名；目标
+`PROD_FLASH_MANIFEST.tsv` 固定十个源文件的 SHA-256 和 Luatools 扁平目标文件名；目标
 `main.lua` 来自 `production/main.lua`，mock、behavior test 和诊断 007 均不进入刷写包。
 
-`vuart_v1_uart.lua` 使用目标板已验证的 `uart.VUART_0`、`uart.setup(115200, 8, 1)`、
+不要再手工拼接 Windows 刷写目录。仓库根目录提供确定性 bundle 生成器；它只接受空输出
+目录，逐项校验 manifest、源文件 SHA-256、生产文件白名单、目标文件名唯一性和 Luatools
+24-byte 文件名限制，复制后再次复算 hash：
+
+```bash
+npm run prepare:air780-production-bundle -- \
+  --output /absolute/path/to/empty/air780-production-bundle
+```
+
+输出目录只有 manifest 固定的九个 Lua 文件；CORE 不包含在该目录中，生成 bundle 也不构成
+刷写或运行授权。当前产品 entry 固定声明 capability `0x07` 和 `max_payload_bytes=8192`；
+Gateway 产品准入会拒绝未知 capability、缺少任一控制/上下行媒体能力或低于 8192 的声明。
+
+`vuart_v1_memory.lua` 每 3 秒按 LuatOS 官方 `rtos.meminfo("lua")` 与
+`rtos.meminfo("sys")` 契约记录 total/used/peak/free 数值水位，不记录设备身份、
+号码或 PCM。候选 G0 门槛暂定两个区域各至少剩余 128 KiB；接口异常或低于
+门槛时故障状态在本次 boot 中不可恢复，关闭 UART，隔离 runtime，并对活动
+电话只请求一次安全挂断。该 128 KiB 是候选保护值，不是量产结论；最终门槛
+必须由 V2048 真机空闲、UART、媒体和 30 分钟通话曲线冻结。
+
+G0 物理串口使用 frame type `34` 的 `LINK_ACK`证明 ESP 已正确解码 Air
+`HELLO/HEARTBEAT` 及其 CRC。payload 固定 14 B：`version(1) +
+acknowledged_type(1) + acknowledged_sequence(4) + receiver_uptime_ms(8)`，全部小端。
+它不携带 binding、lease、fence、号码、命令或 PCM，不能授权任何电话
+副作用。Air 只接受对应已发 HELLO/HEARTBEAT sequence 的前进 ACK，对重复、
+过时或未发序号分别计数；每 3 秒的结构化遥测只输出这些计数。
+
+`vuart_v1_uart.lua` 的生产 profile 使用物理 `UART1`、`921600/8N1` 和显式
+`16384` 字节 RX buffer；USB `uart.VUART_0/115200` 只保留在隔离诊断包中，不属于
+ESP32 产品互联路径。transport 使用 `uart.setup`、
 receive callback、`uart.read`、`uart.write` 和 `uart.close` 接口。TX 是最多八个完整 frame
 的有界 FIFO，支持 partial write、零写入 10 ms 重试和单次 pump 最多四次 write；满载
 只丢整个新 frame并计数。RX 每次 callback 有读取次数与单次字节上限，回调异常不会
 逃逸到 LuatOS UART callback。
 
 `vuart_v1_cc.lua` 只有在 `CC_IND READY`、ES8311 setup 成功且实际框架为 `audio_v2`
-后才执行一次 `cc.init(0)`。DIAL/HANGUP 调用真实 `cc.dial`/`cc.hangUp`，`MAKE_CALL_OK`、
+后才执行一次 `cc.init(0)`；四个 6400 B buffer 和 record callback 可提前准备，但
+`cc.record(true, ...)` 只在真实 `AUDIO_START` 后打开，terminal 时关闭。DIAL/HANGUP 调用真实 `cc.dial`/`cc.hangUp`，`MAKE_CALL_OK`、
 `CONNECTED/SPEECH_START/AUDIO_START`、`MAKE_CALL_FAILED`、`DISCONNECTED` 和
 `HANGUP_CALL_DONE` 映射为 carrier 权威状态；重复 connected/terminal event 去重，
 `INCOMINGCALL` 不自动接听或绑定业务会话。当前 CORE 的 `cc` 模块没有 DTMF API，
@@ -120,7 +156,32 @@ Gate 0A 已验证的电话下行采集通过四个 6,400-byte zbuff 双缓冲接
 buffer并计数，绝不写入 VUART。`vuart_v1_uplink.lua` 只消费精确 session-bound binary
 `AUDIO_UPLINK`：quality 2 的 16 kHz/6,400-byte PCM 直通，quality 1 先按相邻样本平均
 降为 8 kHz/3,200 bytes；队列最多两个 chunk，处理 partial write、零写入/backpressure、
-gap/duplicate/out-of-order、旧 generation 和 terminal `extern_source(nil)` 清理。
+gap/duplicate/out-of-order、旧 generation 和 terminal `extern_source(nil)` 清理。若当前
+generation 的 external source 无法启动、`cc.input` 已把 uplink 置为 fault，或 active
+source 在 carrier terminal 前意外产生 `EXT_SRC_DONE`，cc adapter 会拒绝后续 TTS，并只
+请求一次 `cc.hangUp`，不能静默继续通话。该 host/Lua fail-closed 行为会等待实际 carrier
+terminal，再以 `failed/device_error` 上报，不能把媒体安全故障伪装为用户主动挂断。它不
+证明板端物理 MIC 已隔离；接通首句前、句间空档、underrun 和该异常窗口仍须以 Gate 0B
+的双 marker 远端检测取证。
+
+若 `cc.hangUp` 明确返回 `false` 或抛错，adapter 不会假造 terminal：它保持当前
+generation 的 TTS 禁止状态、拒绝重复 hangup，并上报非终态 `unknown/unknown`，让 Gateway
+quarantine 媒体并等待真实 carrier terminal 或对账。只有后续真实 terminal 才收敛为
+`failed/device_error`。普通 HANGUP 也必须在 `cc.hangUp` 未明确返回 `false` 时才 ACK；
+这样 API 的取消/挂断不会把设备拒绝误写成成功。
+
+`vuart_v1_uplink.enqueue()` 不会掩盖首次 `cc.input` fault：启动 source 后的首个 pump
+失败会在同一次 `AUDIO_UPLINK` 调用返回失败，使 carrier adapter 立即执行上述收口，
+不等待下一段 TTS 触发。
+
+Beelink Gateway 的 `AirGatewayTtsUplink` 对 VUART 写失败会 suspend 当前 generation、
+清空未写 PCM 并拒绝后续同 generation 的 TTS；它不会把主机写失败伪装成 carrier 已断开，
+仍等待 Air780 的真实 terminal event 或串口重连后的对账。该 host quarantine 同样不替代
+Gate 0B 的远端 marker 证据。
+
+Gateway 只会在真实 carrier `connected` 已观察到后发布 Air780 下行并接收 TTS；入房 joined
+不是媒体开关。任何 connected 前或 `unknown` 时到达的电话下行会被计数并丢弃；收到
+`unknown` 时 Gateway 会清空 TTS/downlink queue 并退出设备 room，但不伪造 carrier terminal。
 
 生产入口使用 `mcu.unique_id()` 生成稳定 deviceId、`crypto.trng(16)` 生成每次启动变化
 的 bootId；随机源或设备身份不可用时 fail closed。它保留 GPIO24 外部看门狗，只有

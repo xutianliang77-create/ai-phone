@@ -288,6 +288,38 @@ function M.decode_audio(payload)
     end, payload)
 end
 
+function M.encode_link_ack(input)
+    return protect(function(value)
+        require_value(value.acknowledged_type == 1
+            or value.acknowledged_type == 2,
+            "link acknowledgement type must be HELLO or HEARTBEAT")
+        require_value(is_uint(value.acknowledged_sequence, 0xFFFFFFFF),
+            "acknowledged_sequence must be uint32")
+        return string.char(PAYLOAD_VERSION, value.acknowledged_type)
+            .. encode_u32_le(value.acknowledged_sequence)
+            .. encode_u64_decimal_le(value.receiver_uptime_ms)
+    end, input)
+end
+
+function M.decode_link_ack(payload)
+    return protect(function(value)
+        local reader = new_reader(value)
+        require_value(read_u8(reader, "payload_version") == PAYLOAD_VERSION,
+            "payload version unsupported")
+        local acknowledged_type = read_u8(reader, "acknowledged_type")
+        require_value(acknowledged_type == 1 or acknowledged_type == 2,
+            "link acknowledgement type must be HELLO or HEARTBEAT")
+        local output = {
+            acknowledged_type = acknowledged_type,
+            acknowledged_sequence = read_u32_le(reader, "acknowledged_sequence"),
+            receiver_uptime_ms = decode_u64_decimal_le(
+                read_bytes(reader, 8, "receiver_uptime_ms")),
+        }
+        assert_end(reader)
+        return output
+    end, payload)
+end
+
 local function require_crypto(name)
     require_value(crypto and type(crypto[name]) == "function",
         "crypto." .. name .. " unavailable")

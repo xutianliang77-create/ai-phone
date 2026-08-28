@@ -119,6 +119,22 @@ function M.run()
     assert_equal(crypto.sha256(uplink_frame):lower(), uplink.frame_sha256,
         "uplink frame sha256")
 
+    local link_ack = must(codec.encode_link_ack({
+        acknowledged_type = 2,
+        acknowledged_sequence = 0x11223344,
+        receiver_uptime_ms = "72623859790382856",
+    }))
+    assert_equal(#link_ack, 14, "link acknowledgement payload bytes")
+    assert_equal(codec.to_hex(link_ack), "0102443322110807060504030201",
+        "link acknowledgement payload hex")
+    local decoded_link_ack = must(codec.decode_link_ack(link_ack))
+    assert_equal(decoded_link_ack.acknowledged_type, 2,
+        "link acknowledgement type")
+    assert_equal(decoded_link_ack.acknowledged_sequence, 0x11223344,
+        "link acknowledgement sequence")
+    assert_equal(decoded_link_ack.receiver_uptime_ms, "72623859790382856",
+        "link acknowledgement uptime")
+
     assert_rejected(codec.decode_call_state,
         string.char(2) .. call_payload:sub(2), "bad payload version")
     assert_rejected(codec.decode_call_state,
@@ -132,6 +148,11 @@ function M.run()
     local corrupt_frame = call_frame:sub(1, -2)
         .. string.char((call_frame:byte(-1) + 1) % 256)
     assert_rejected(codec.decode_frame, corrupt_frame, "bad frame crc32")
+    assert_rejected(codec.encode_link_ack, {
+        acknowledged_type = 3,
+        acknowledged_sequence = 1,
+        receiver_uptime_ms = "1",
+    }, "invalid link acknowledgement type")
 
     return {
         ok = true,

@@ -46,6 +46,8 @@ describe("Air VUART v1 Lua codec static contract", () => {
       "decode_audio",
       "encode_frame",
       "decode_frame",
+      "encode_link_ack",
+      "decode_link_ack",
       "to_hex",
     ]) {
       expect(codec).toContain(`function M.${operation}`);

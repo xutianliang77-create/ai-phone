@@ -4,6 +4,11 @@ local function require_value(condition, message)
     if not condition then error("vuart_v1_uart: " .. message, 0) end
 end
 
+local function positive_integer(value)
+    return type(value) == "number" and value > 0
+        and value == math.floor(value)
+end
+
 function M.new(options)
     require_value(type(options) == "table", "options required")
     require_value(type(options.uart_api) == "table", "uart_api required")
@@ -15,6 +20,10 @@ function M.new(options)
         uart_api = options.uart_api,
         sys_api = options.sys_api,
         uart_id = options.uart_id,
+        baud_rate = options.baud_rate or 115200,
+        data_bits = options.data_bits or 8,
+        stop_bits = options.stop_bits or 1,
+        rx_buffer_bytes = options.rx_buffer_bytes or 1024,
         on_bytes = options.on_bytes,
         queue_limit = options.queue_limit or 8,
         max_read_bytes = options.max_read_bytes or 8192,
@@ -33,6 +42,13 @@ function M.new(options)
             tx_write_calls = 0, tx_bytes = 0, tx_zero_or_error = 0,
         },
     }
+    require_value(positive_integer(state.baud_rate), "invalid baud_rate")
+    require_value(state.data_bits == 8, "data_bits must be 8")
+    require_value(state.stop_bits == 1, "stop_bits must be 1")
+    require_value(positive_integer(state.rx_buffer_bytes)
+        and state.rx_buffer_bytes >= 1024
+        and state.rx_buffer_bytes <= 16384,
+        "rx_buffer_bytes must be 1024..16384")
 
     local function depth(self)
         return #self.queue + (self.active and 1 or 0)
@@ -103,13 +119,21 @@ function M.new(options)
             end
             reads = reads + 1
             if requested then requested = requested - #chunk end
-        until reads >= self.max_reads_per_callback or not requested or requested <= 0
+        until reads >= self.max_reads_per_callback
+            or (requested and requested <= 0)
     end
 
     function state:open()
         if self.opened then return true end
-        local called, result = pcall(self.uart_api.setup, self.uart_id,
-            115200, 8, 1)
+        local called, result = pcall(
+            self.uart_api.setup,
+            self.uart_id,
+            self.baud_rate,
+            self.data_bits,
+            self.stop_bits,
+            nil,
+            nil,
+            self.rx_buffer_bytes)
         if not called or result ~= 0 then return false end
         self.opened = true
         local registered = pcall(self.uart_api.on, self.uart_id, "receive",

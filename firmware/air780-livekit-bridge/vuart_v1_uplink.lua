@@ -183,9 +183,12 @@ function M.new(options)
         if not start_source(self) then
             table.remove(self.queue)
             self.counters.dropped_chunks = self.counters.dropped_chunks + 1
+            self.faulted = true
             return false, "source_start"
         end
-        self:pump(generation)
+        if not self:pump(generation) then
+            return false, "input_failure"
+        end
         return true
     end
 

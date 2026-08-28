@@ -16,11 +16,14 @@ local function assert_uart_transport()
     local received, transmitted, timers = {}, {}, {}
     local callback
     local uart_api = {
-        setup = function(id, baud, bits, stop)
+        setup = function(id, baud, bits, stop, parity, order, buffer_bytes)
             assert_equal(id, 7, "UART id")
-            assert_equal(baud, 115200, "UART baud")
+            assert_equal(baud, 921600, "UART baud")
             assert_equal(bits, 8, "UART bits")
             assert_equal(stop, 1, "UART stop bits")
+            assert_equal(parity, nil, "UART default parity")
+            assert_equal(order, nil, "UART default bit order")
+            assert_equal(buffer_bytes, 16384, "UART RX buffer")
             return 0
         end,
         on = function(_, event, value)
@@ -43,6 +46,8 @@ local function assert_uart_transport()
         uart_api = uart_api,
         sys_api = { timerStart = function(fn) timers[#timers + 1] = fn end },
         uart_id = 7,
+        baud_rate = 921600,
+        rx_buffer_bytes = 16384,
         on_bytes = function(value) received[#received + 1] = value end,
     })
     assert_equal(transport:open(), true, "UART open")
@@ -94,7 +99,8 @@ end
 
 local function assert_cc_adapter()
     local subscription, record_callback
-    local init_calls, dial_calls, hangup_calls, record_calls = 0, 0, 0, 0
+    local init_calls, dial_calls, hangup_calls = 0, 0, 0
+    local record_start_calls, record_stop_calls = 0, 0
     local dial_ok, hangup_error = true, false
     local ready_calls, downlink_frames = 0, 0
     local events, buffers = {}, {}
@@ -109,12 +115,17 @@ local function assert_cc_adapter()
             record_callback = callback
         end,
         record = function(enabled, up1, up2, down1, down2)
-            if not enabled or not up1 or not up2 or not down1 or not down2 then
+            if not enabled then
+                record_stop_calls = record_stop_calls + 1
+                return true
+            end
+            if not up1 or not up2 or not down1 or not down2 then
                 error("cc record buffers missing", 0)
             end
-            record_calls = record_calls + 1
+            record_start_calls = record_start_calls + 1
             return true
         end,
+        quality = function() return 2 end,
         dial = function(sim_id, number)
             assert_equal(sim_id, 0, "cc dial SIM")
             assert_equal(number, "+8613800138000", "cc dial target")
@@ -132,9 +143,15 @@ local function assert_cc_adapter()
         create = function(size)
             assert_equal(size, 6400, "cc zbuff size")
             local buffer = { value = "" }
-            function buffer:used() return #self.value end
+            function buffer:used(value)
+                if value ~= nil then
+                    if value == 0 then self.value = "" end
+                    return value
+                end
+                return #self.value
+            end
             function buffer:query() return self.value end
-            function buffer:del() self.value = "" end
+            function buffer:seek() return true end
             buffers[#buffers + 1] = buffer
             return buffer
         end,
@@ -163,7 +180,7 @@ local function assert_cc_adapter()
     subscription("READY")
     subscription("READY")
     assert_equal(init_calls, 1, "cc init exactly once")
-    assert_equal(record_calls, 1, "cc record exactly once")
+    assert_equal(record_start_calls, 0, "cc record waits for active call audio")
     assert_equal(ready_calls, 1, "cc ready exactly once")
     assert_equal(#buffers, 4, "cc double buffers")
 
@@ -174,17 +191,19 @@ local function assert_cc_adapter()
     subscription("MAKE_CALL_OK")
     subscription("CONNECTED")
     subscription("SPEECH_START")
+    subscription("AUDIO_START")
     assert_equal(events[1], "dialing:none", "cc dialing event")
     assert_equal(events[2], "connected:none", "cc connected event")
     assert_equal(#events, 2, "cc connected dedupe")
     assert_equal(adapter.is_connected(), true, "cc connected authority")
 
     buffers[3].value = string.rep("d", 6400)
-    record_callback(true, 0)
+    assert_equal(record_start_calls, 1, "cc record starts on AUDIO_START")
+    record_callback(true, 1)
     assert_equal(downlink_frames, 1, "cc downlink delivery")
     assert_equal(buffers[3]:used(), 0, "cc downlink buffer cleared")
     buffers[1].value = string.rep("u", 6400)
-    record_callback(false, 0)
+    record_callback(false, 1)
     assert_equal(downlink_frames, 1, "cc raw uplink isolation")
     assert_equal(buffers[1]:used(), 0, "cc uplink buffer cleared")
     assert_equal(adapter.dtmf({ digits = "1" }).error_code,
@@ -194,6 +213,7 @@ local function assert_cc_adapter()
     assert_equal(adapter.hangup({}).status, "rejected", "cc duplicate hangup")
     subscription("DISCONNECTED")
     subscription("HANGUP_CALL_DONE")
+    assert_equal(record_stop_calls, 1, "cc record stops on terminal")
     assert_equal(events[3], "disconnected:local_hangup", "cc terminal event")
     assert_equal(#events, 3, "cc terminal dedupe")
     assert_equal(hangup_calls, 1, "cc hangup exactly once")
