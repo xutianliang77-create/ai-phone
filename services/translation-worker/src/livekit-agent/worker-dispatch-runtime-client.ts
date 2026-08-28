@@ -24,6 +24,12 @@ export interface WorkerRuntimeSnapshot {
   generation: number;
   participantIdentity: string;
   ttsVoice?: TtsVoiceConfig;
+  translationControl?: {
+    sourceLanguage: "zh" | "en";
+    targetLanguage: "zh" | "en";
+    uplinkPaused: boolean;
+    controlGeneration: number;
+  };
 }
 
 export function parseWorkerDispatchMetadata(value: string) {

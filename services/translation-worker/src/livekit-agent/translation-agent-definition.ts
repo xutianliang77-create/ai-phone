@@ -1,4 +1,4 @@
-import { defineAgent } from "@livekit/agents";
+import { AutoSubscribe, defineAgent } from "@livekit/agents";
 import * as rtc from "@livekit/rtc-node";
 import pino from "pino";
 import { loadEnv, type TranslationWorkerEnv } from "../config/env.js";
@@ -6,6 +6,8 @@ import { buildDefaultSpeechPipeline } from "../main.js";
 import { HttpCallSipStatusClient } from "../worker/call-sip-status-client.js";
 import { HttpCallSipControlClient } from "../worker/call-sip-control-client.js";
 import { HttpCallTtsTrackAccessClient } from "../worker/call-tts-track-access-client.js";
+import { HttpCallInputTrackAccessClient } from
+  "../worker/call-input-track-access-client.js";
 import {
   CallDiagnosticsReporter,
   HttpCallDiagnosticsClient,
@@ -21,6 +23,10 @@ import {
   WorkerDispatchRuntimeClient,
 } from "./worker-dispatch-runtime-client.js";
 import { attachSipControlHandler } from "./sip-control-handler.js";
+import { attachTranslationCallControlHandler } from
+  "./translation-call-control-handler.js";
+import { HttpTranslationCallControlClient } from
+  "../worker/translation-call-control-client.js";
 
 const logger = pino({ name: "translation-livekit-agent" });
 
@@ -48,7 +54,7 @@ export default defineAgent<TranslationAgentProcessData>({
       internalApiSecret: env.internalApiSecret,
       timeoutMs: env.apiTimeoutMs,
     });
-    await ctx.connect();
+    await ctx.connect(undefined, AutoSubscribe.SUBSCRIBE_NONE);
     const participantIdentity = ctx.agent?.identity;
     if (!participantIdentity) throw new Error("LiveKit Agent has no participant identity");
     const snapshot = await runtimeClient.snapshot({
@@ -61,6 +67,17 @@ export default defineAgent<TranslationAgentProcessData>({
       snapshot.generation !== ticket.generation) {
       throw new Error("Worker runtime snapshot binding failed");
     }
+    const worker = buildDefaultSpeechPipeline();
+    const translationControl = snapshot.translationControl ?? {
+      sourceLanguage: "zh" as const,
+      targetLanguage: "en" as const,
+      uplinkPaused: false,
+      controlGeneration: 1,
+    };
+    await worker.setTranslatedUplinkPaused(
+      snapshot.callId,
+      translationControl.uplinkPaused,
+    );
     attachSipControlHandler({
       room: ctx.room,
       dataReceivedEvent: rtc.RoomEvent.DataReceived,
@@ -71,6 +88,24 @@ export default defineAgent<TranslationAgentProcessData>({
         timeoutMs: env.apiTimeoutMs,
       }),
       onError: (error) => logger.warn({ err: error }, "SIP DTMF control failed"),
+    });
+    attachTranslationCallControlHandler({
+      room: ctx.room,
+      dataReceivedEvent: rtc.RoomEvent.DataReceived,
+      callId: snapshot.callId,
+      dispatchGeneration: snapshot.generation,
+      initialControlGeneration: translationControl.controlGeneration,
+      initialUplinkPaused: translationControl.uplinkPaused,
+      pipeline: worker,
+      reporter: new HttpTranslationCallControlClient({
+        apiBaseUrl: env.apiBaseUrl,
+        internalApiSecret: env.internalApiSecret,
+        timeoutMs: env.apiTimeoutMs,
+      }),
+      onError: (error) => logger.warn(
+        { err: error },
+        "Translation call control failed",
+      ),
     });
     const diagnostics = new CallDiagnosticsReporter({
       env,
@@ -83,7 +118,7 @@ export default defineAgent<TranslationAgentProcessData>({
     });
     const source = new LiveKitCallAudioSource({
       callId: snapshot.callId,
-      worker: buildDefaultSpeechPipeline(),
+      worker,
       audioSampleRate: env.audioSampleRate,
       audioFrameSizeMs: env.audioFrameSizeMs,
       audioIngestMaxFrames: env.audioIngestMaxFrames,
@@ -94,6 +129,11 @@ export default defineAgent<TranslationAgentProcessData>({
         timeoutMs: env.apiTimeoutMs,
       }),
       ttsTrackAccessClient: new HttpCallTtsTrackAccessClient({
+        apiBaseUrl: env.apiBaseUrl,
+        internalApiSecret: env.internalApiSecret,
+        timeoutMs: env.apiTimeoutMs,
+      }),
+      inputTrackAccessClient: new HttpCallInputTrackAccessClient({
         apiBaseUrl: env.apiBaseUrl,
         internalApiSecret: env.internalApiSecret,
         timeoutMs: env.apiTimeoutMs,
@@ -136,6 +176,7 @@ export default defineAgent<TranslationAgentProcessData>({
         room: ctx.room as unknown as RtcRoom,
         rtc: rtc as unknown as RtcNodeModule,
         participantIdentity,
+        dispatchGeneration: snapshot.generation,
         ttsVoice: snapshot.ttsVoice,
       });
       await runtimeClient.event({
