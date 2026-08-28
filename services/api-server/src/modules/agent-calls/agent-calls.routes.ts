@@ -31,6 +31,11 @@ import { getVoiceAgentRuntimeSupervisor } from "./voice-agent-runtime-supervisor
 import { registerVoiceAgentToolGatewayRoutes } from
   "./voice-agent-tool-gateway.routes.js";
 import { registerAgentCallTakeoverRoutes } from "./agent-call-takeover.routes.js";
+import { registerAgentCallPauseRoutes } from "./agent-call-pause.routes.js";
+import { registerAgentWorkRoutes } from "./agent-work.routes.js";
+import { registerVoiceClientOwnershipRoutes } from
+  "./voice-client-ownership.routes.js";
+import { registerAgentDeliveryRoutes } from "./agent-delivery.routes.js";
 import { publishVoiceAgentControl } from "./voice-agent-control-publisher.js";
 import { registerAgentConsultRoutes } from "./agent-consult.routes.js";
 import { registerAgentConsultControlRoutes } from "./agent-consult-control.routes.js";
@@ -53,6 +58,10 @@ export async function registerAgentCallRoutes(app: FastifyInstance) {
   registerVoiceAgentRuntimeRoutes(app);
   registerVoiceAgentToolGatewayRoutes(app);
   registerAgentCallTakeoverRoutes(app);
+  registerAgentCallPauseRoutes(app);
+  registerAgentWorkRoutes(app);
+  registerVoiceClientOwnershipRoutes(app);
+  registerAgentDeliveryRoutes(app);
   registerAgentAssistRoutes(app);
   registerAgentConsultRoutes(app);
   registerAgentConsultControlRoutes(app);

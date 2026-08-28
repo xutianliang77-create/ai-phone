@@ -19,6 +19,8 @@ import {
   rejectAgentHandoff,
 } from "./agent-orchestration-runtime.repository.js";
 import { publishVoiceAgentControl } from "./voice-agent-control-publisher.js";
+import { hasPersistedTakeoverBinding } from
+  "./agent-call-takeover-binding.js";
 
 export function registerAgentCallTakeoverRoutes(app: FastifyInstance) {
   app.post(
@@ -34,6 +36,16 @@ export function registerAgentCallTakeoverRoutes(app: FastifyInstance) {
         draft.status !== "takeover_requested" ||
         !draft.takeoverReadyAt) {
         return conflict(reply, "agent_takeover_not_ready", "Takeover is not ready");
+      }
+      if (draft.takeoverResolvedAt) {
+        if (draft.takeoverParticipantIdentity !== participantIdentity) {
+          return conflict(
+            reply,
+            "agent_takeover_host_conflict",
+            "Takeover is already bound to another host",
+          );
+        }
+        return { draft: toAgentCallDto(draft) };
       }
       const call = await findCallLink(draft.callId);
       const hostLeg = (await findSession(draft.callId))?.callLegs?.find((leg) =>
@@ -54,8 +66,19 @@ export function registerAgentCallTakeoverRoutes(app: FastifyInstance) {
       if (!run || !await acceptAgentHandoff(run.id)) {
         return conflict(reply, "agent_handoff_conflict", "Handoff cannot be accepted");
       }
-      const resolved = await resolveAgentCallTakeover(draft.id);
-      return { draft: toAgentCallDto(resolved ?? draft) };
+      const resolved = await resolveAgentCallTakeover(
+        draft.id,
+        participantIdentity,
+      );
+      if (!resolved ||
+        !hasPersistedTakeoverBinding(resolved, participantIdentity)) {
+        return conflict(
+          reply,
+          "agent_takeover_resolution_conflict",
+          "Takeover binding was not persisted; retry without enabling microphone",
+        );
+      }
+      return { draft: toAgentCallDto(resolved) };
     },
   );
 

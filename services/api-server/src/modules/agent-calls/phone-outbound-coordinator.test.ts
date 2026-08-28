@@ -119,6 +119,7 @@ function payload() {
     communicationSessionId: "session-1",
     transport: "air780_volte" as const,
     callGeneration: 1,
+    mediaPolicy: "agent_monitored" as const,
     roomName: "call_session-1",
     phoneNumberReference: "+8613800138000",
     participantIdentity: "session-1:guest:air:air-001",

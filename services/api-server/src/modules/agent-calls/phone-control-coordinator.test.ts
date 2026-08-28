@@ -84,6 +84,88 @@ describe("phone control coordinator", () => {
     });
     expect(hangupPhoneCall).toHaveBeenCalledTimes(1);
   });
+
+  it("quarantines uncertain Air DTMF and never sends it twice", async () => {
+    const sendPhoneDtmf = vi.fn<TelephonyProvider["sendPhoneDtmf"]>(
+      async () => ({
+        ok: false,
+        provider: "air780_volte",
+        errorClass: "timeout",
+        retryable: true,
+        reconciliationRequired: true,
+      }),
+    );
+    const operation = startedOperation("phone_dtmf", "tool-uncertain");
+    const provider = telephonyProvider({ sendPhoneDtmf });
+
+    const first = await executePhoneControl({
+      action: "dtmf",
+      operation,
+      provider,
+      payload: { ...payload(), digits: "9" },
+      timeoutMs: 1_000,
+    });
+    const replay = await executePhoneControl({
+      action: "dtmf",
+      operation,
+      provider,
+      payload: { ...payload(), digits: "9" },
+      timeoutMs: 1_000,
+    });
+
+    expect(first).toMatchObject({
+      ok: false,
+      reconciliationRequired: true,
+      errorClass: "timeout",
+    });
+    expect(replay).toMatchObject({
+      ok: false,
+      reconciliationRequired: true,
+      errorClass: "timeout",
+    });
+    expect(sendPhoneDtmf).toHaveBeenCalledTimes(1);
+  });
+
+  it("retries a definitely undispatched Air hangup with the same command", async () => {
+    const hangupPhoneCall = vi.fn<TelephonyProvider["hangupPhoneCall"]>()
+      .mockResolvedValueOnce({
+        ok: false,
+        provider: "air780_volte",
+        errorClass: "unavailable",
+        retryable: true,
+        reconciliationRequired: false,
+      })
+      .mockImplementation(async (request) => success(request, "ending"));
+    const operation = startedOperation("phone_hangup", "voice-agent-runtime");
+    const provider = telephonyProvider({ hangupPhoneCall });
+
+    const first = await executePhoneControl({
+      action: "hangup",
+      operation,
+      provider,
+      payload: payload(),
+      timeoutMs: 1_000,
+    });
+    const replay = await executePhoneControl({
+      action: "hangup",
+      operation,
+      provider,
+      payload: payload(),
+      timeoutMs: 1_000,
+    });
+
+    expect(first).toMatchObject({
+      ok: false,
+      reconciliationRequired: false,
+      errorClass: "unavailable",
+    });
+    expect(replay).toMatchObject({ ok: true, replayed: true });
+    expect(hangupPhoneCall).toHaveBeenCalledTimes(2);
+    expect(hangupPhoneCall.mock.calls[1]?.[0]).toMatchObject({
+      operationId: operation.id,
+      idempotencyKey: operation.idempotencyKey,
+    });
+  });
 });
 
 function startedOperation(
@@ -134,7 +216,7 @@ function telephonyProvider(overrides: Partial<TelephonyProvider>): TelephonyProv
 
 function success(
   request: Parameters<TelephonyProvider["sendPhoneDtmf"]>[0],
-  state: "active",
+  state: "active" | "ending",
 ) {
   return {
     ok: true as const,

@@ -260,6 +260,7 @@ function airRuntime(
       communicationSessionId: call.sessionId,
       transport: "air780_volte" as const,
       callGeneration: 1,
+      mediaPolicy: "agent_monitored" as const,
       roomName: call.roomName,
       phoneNumberReference: draft.targetPhone,
       participantIdentity: `${call.sessionId}:guest:air:air-001`,

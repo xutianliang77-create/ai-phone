@@ -5,7 +5,6 @@ import type {
   CreateAiCallingAgentDraftRequest,
   PstnAgentCallWebhookRequest,
   RequestAiCallingAgentTakeoverRequest,
-  VoiceAgentStructuredResultDto,
 } from "@translation/contracts";
 import {
   getStoreSnapshot,
@@ -164,10 +163,12 @@ export function requestAgentCallTakeover(
   if (!draft) return null;
   if (!["requires_human_takeover", "in_progress", "takeover_requested"]
     .includes(draft.status)) return draft;
+  if (draft.status === "takeover_requested") return draft;
   const now = new Date().toISOString();
   draft.status = "takeover_requested";
   draft.takeoverReadyAt = undefined;
   draft.takeoverResolvedAt = undefined;
+  draft.takeoverParticipantIdentity = undefined;
   draft.takeoverReason = cleanText(request.reason, 200) || "user_requested";
   draft.takeoverRequestedAt = now;
   draft.updatedAt = now;
@@ -195,6 +196,9 @@ export function cancelAgentCallDraft(
     return runStoreTransaction(() => {
       const draft = findAgentCallDraft(userId, draftId);
       if (!draft) return { status: "not_found" as const };
+      if (draft.status === "cancelled") {
+        return { status: "replayed" as const, draft };
+      }
       if (!isAgentCallCancellable(draft.status)) {
         return { status: "invalid_state" as const, draft };
       }
@@ -238,18 +242,25 @@ export function resumeAgentCallAfterTakeover(userId: string, draftId: string) {
     const draft = findAgentCallDraft(userId, draftId);
     if (!draft || draft.status !== "takeover_requested") return null;
     draft.status = "in_progress";
+    draft.agentControlState = "running";
+    draft.agentResumedAt = new Date().toISOString();
     draft.takeoverResolvedAt ??= new Date().toISOString();
+    draft.takeoverParticipantIdentity = undefined;
     draft.updatedAt = draft.takeoverResolvedAt;
     persistStoreSnapshot();
     return draft;
   });
 }
 
-export function resolveAgentCallTakeover(draftId: string) {
+export function resolveAgentCallTakeover(
+  draftId: string,
+  participantIdentity: string,
+) {
   return runStoreTransaction(() => {
     const draft = findAgentCallDraftById(draftId);
     if (!draft || draft.status !== "takeover_requested") return null;
     draft.takeoverResolvedAt = new Date().toISOString();
+    draft.takeoverParticipantIdentity = participantIdentity;
     draft.updatedAt = draft.takeoverResolvedAt;
     persistStoreSnapshot();
     return draft;
@@ -282,28 +293,6 @@ export function updateAgentCallFromPstnWebhook(
   draft.providerWebhookEventIds = [...seen, eventId].slice(-100);
   persistStoreSnapshot();
   return { status: "updated" as const, draft };
-}
-
-export function recordAgentCallRuntimeResult(
-  draftId: string,
-  result: VoiceAgentStructuredResultDto,
-) {
-  return runStoreTransaction(() => {
-    const draft = findAgentCallDraftById(draftId);
-    if (!draft) return null;
-    draft.resultSummary = cleanText(result.summary, 800) || draft.resultSummary;
-    draft.nextStep = cleanText(result.nextStep, 300) ||
-      cleanText(result.unresolvedItems.join("；"), 300) || draft.nextStep;
-    if (draft.status === "in_progress") {
-      draft.status = "reconciliation_required";
-      draft.nextStep = draft.nextStep ||
-        "AI 已结束发言，等待电话网络终态后结算。";
-      clearAgentCallLease(draft);
-    }
-    draft.updatedAt = new Date().toISOString();
-    persistStoreSnapshot();
-    return draft;
-  });
 }
 
 export function failAgentCallRuntime(draftId: string, failureReason: string) {

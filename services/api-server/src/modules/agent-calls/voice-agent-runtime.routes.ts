@@ -11,8 +11,9 @@ import { withSessionWriteLock } from "../sessions/session-write-coordinator.js";
 import {
   findAgentCallDraftById,
   markAgentCallTakeoverReady,
-  recordAgentCallRuntimeResult,
 } from "./agent-calls-runtime.repository.js";
+import { recordAgentCallRuntimeResult } from
+  "./agent-call-runtime-result-runtime.repository.js";
 import { failAgentCallRuntime } from "./agent-call-webhook-runtime.js";
 import { isInternalAuthorized } from "./agent-call-route-helpers.js";
 import {
@@ -35,6 +36,8 @@ import { resolveVoiceAgentPhoneSnapshotBinding } from
   "./voice-agent-phone-snapshot-binding.js";
 import { voiceAgentRecordingConsentSnapshot } from
   "./voice-agent-recording-consent.js";
+import { resolveVoiceAgentRuntimeCommand } from
+  "./voice-agent-runtime-command.js";
 import {
   applyVoiceAgentRecordingConsent,
 } from "./voice-agent-recording-consent-event.js";
@@ -218,11 +221,10 @@ export function registerVoiceAgentRuntimeRoutes(app: FastifyInstance) {
         callId: binding.call.callId,
         generation: dispatch.generation,
         dispatchStatus: dispatch.status,
-        command: handoffTimedOut
-          ? "cancel"
-          : currentDraft.status === "takeover_requested"
-          ? "takeover"
-          : currentDraft.status === "cancelled" ? "cancel" : "continue",
+        command: resolveVoiceAgentRuntimeCommand({
+          draft: currentDraft,
+          handoffTimedOut,
+        }),
         leaseExpiresAt: dispatch.leaseExpiresAt,
         replayed: existing !== null,
       };

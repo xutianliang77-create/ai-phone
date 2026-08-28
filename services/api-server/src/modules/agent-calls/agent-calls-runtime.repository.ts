@@ -4,7 +4,6 @@ import type {
   CancelAiCallingAgentDraftRequest,
   CreateAiCallingAgentDraftRequest,
   RequestAiCallingAgentTakeoverRequest,
-  VoiceAgentStructuredResultDto,
 } from "@translation/contracts";
 import { withPostgresRepositoryFence } from
   "../../infrastructure/storage/postgres-repository-fence.js";
@@ -125,11 +124,13 @@ export async function requestAgentCallTakeover(
   if (!current) return null;
   if (!["requires_human_takeover", "in_progress", "takeover_requested"]
     .includes(current.status)) return current;
+  if (current.status === "takeover_requested") return current;
   const result = await mutateAgentCallTask(current, "takeover", request, (next) => {
     const now = new Date().toISOString();
     next.status = "takeover_requested";
     next.takeoverReadyAt = undefined;
     next.takeoverResolvedAt = undefined;
+    next.takeoverParticipantIdentity = undefined;
     next.takeoverReason = cleanText(request.reason, 200) || "user_requested";
     next.takeoverRequestedAt = now;
     next.updatedAt = now;
@@ -158,9 +159,8 @@ export async function cancelAgentCallDraft(
   }
   const current = await runtime.postgres.agentTasks.findOwned(userId, draftId);
   if (!current) return { status: "not_found" as const };
-  if (!isAgentCallCancellable(current.status)) {
-    return { status: "invalid_state" as const, draft: current };
-  }
+  if (current.status === "cancelled") return { status: "replayed" as const, draft: current };
+  if (!isAgentCallCancellable(current.status)) return { status: "invalid_state" as const, draft: current };
   const releaseHeldUsage = current.status === "queued" && Boolean(current.callId);
   const result = await mutateAgentCallTask(current, "cancel", request, (next) => {
     if (!isAgentCallCancellable(next.status)) return null;
@@ -207,50 +207,35 @@ export async function resumeAgentCallAfterTakeover(userId: string, draftId: stri
   const result = await mutateAgentCallTask(current, "takeover-resume", {}, (next) => {
     if (next.status !== "takeover_requested") return null;
     next.status = "in_progress";
+    next.agentControlState = "running";
+    next.agentResumedAt = now;
     next.takeoverResolvedAt ??= now;
+    next.takeoverParticipantIdentity = undefined;
     next.updatedAt = next.takeoverResolvedAt;
     return next;
   }, "agent.task.in_progress", "updated");
   return hasTask(result) ? result.task : null;
 }
 
-export async function resolveAgentCallTakeover(draftId: string) {
+export async function resolveAgentCallTakeover(
+  draftId: string,
+  participantIdentity: string,
+) {
   const runtime = getRepositoryRuntime();
-  if (runtime.driver !== "postgres") return legacy.resolveAgentCallTakeover(draftId);
+  if (runtime.driver !== "postgres") {
+    return legacy.resolveAgentCallTakeover(draftId, participantIdentity);
+  }
   const current = await runtime.postgres.agentTasks.find(draftId);
   if (!current || current.status !== "takeover_requested") return null;
   const now = new Date().toISOString();
   const result = await mutateAgentCallTask(current, "takeover-resolve", {}, (next) => {
     if (next.status !== "takeover_requested") return null;
     next.takeoverResolvedAt = now;
+    next.takeoverParticipantIdentity = participantIdentity;
     next.updatedAt = now;
     return next;
   }, "agent.task.takeover_resolved", "updated");
   return hasTask(result) ? result.task : null;
-}
-
-export async function recordAgentCallRuntimeResult(
-  draftId: string,
-  value: VoiceAgentStructuredResultDto,
-) {
-  const runtime = getRepositoryRuntime();
-  if (runtime.driver !== "postgres") return legacy.recordAgentCallRuntimeResult(draftId, value);
-  const current = await runtime.postgres.agentTasks.find(draftId);
-  if (!current) return null;
-  const result = await mutateAgentCallTask(current, "runtime-result", value, (next) => {
-    next.resultSummary = cleanText(value.summary, 800) || next.resultSummary;
-    next.nextStep = cleanText(value.nextStep, 300) ||
-      cleanText(value.unresolvedItems.join("；"), 300) || next.nextStep;
-    if (next.status === "in_progress") {
-      next.status = "reconciliation_required";
-      next.workerLeaseExpiresAt = undefined;
-      next.nextStep = next.nextStep ||
-        "AI 已结束发言，等待电话网络终态后结算。";
-    }
-    next.updatedAt = new Date().toISOString();
-    return next;
-  }, "agent.task.runtime_result", "updated");
-  return hasTask(result) ? result.task : current;
 }
 
 function buildDraft(

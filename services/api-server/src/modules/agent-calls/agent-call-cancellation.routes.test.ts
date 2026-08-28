@@ -73,6 +73,27 @@ describe("agent call cancellation", () => {
     expect(getStoreSnapshot().usageHolds).toHaveLength(0);
   });
 
+  it("treats repeated cancellation as an idempotent replay", async () => {
+    const app = await buildApp();
+    const draftId = await createAuthorizedDraft(app);
+    const request = {
+      method: "POST" as const,
+      url: `/ai-calling-agent/drafts/${draftId}/cancel`,
+      payload: { reason: "user_cancelled" },
+    };
+
+    const first = await app.inject(request);
+    const replay = await app.inject(request);
+    await app.close();
+
+    expect(first.statusCode).toBe(200);
+    expect(replay.statusCode).toBe(200);
+    expect(replay.json()).toMatchObject({
+      draft: { status: "cancelled" },
+      hangup: { status: "not_started", code: "phone_not_started" },
+    });
+  });
+
   it("does not cancel a draft owned by another user", () => {
     const draft = createAgentCallDraft("owner-user", {
       scenario: "booking",

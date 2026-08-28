@@ -39,14 +39,14 @@ describe("Voice Agent runtime readiness", () => {
     });
   });
 
-  it("requires an independent dispatch secret and complete model contract", () => {
+  it("uses the global natural voice when no user or environment voice is set", () => {
     configureReadyEnv();
     delete process.env.VOICE_AGENT_TTS_VOICE;
 
     const result = getVoiceAgentRuntimeReadiness();
 
-    expect(result.status).toBe("not_ready");
-    expect(result.issues).toContain("VOICE_AGENT_TTS_VOICE is required");
+    expect(result.status).toBe("ready");
+    expect(result.issues).not.toContain("VOICE_AGENT_TTS_VOICE is required");
   });
 
   it("reports ready for the reviewed fail-closed contract", () => {

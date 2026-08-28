@@ -5,6 +5,7 @@ import type {
 } from "@translation/contracts";
 import {
   findProviderOperation,
+  retryProviderOperation,
   updateProviderOperation,
 } from "../provider-operations/provider-operations-runtime.repository.js";
 import type { ProviderOperationRecord } from
@@ -25,29 +26,48 @@ type PhoneControlInput = {
 export async function executePhoneControl(input: PhoneControlInput) {
   const issue = bindingIssue(input);
   if (issue) return failure(input.operation, false, issue);
-  if (["accepted", "active", "succeeded"].includes(input.operation.status)) {
-    return success(input.operation, true);
+  let operation = input.operation;
+  if (["accepted", "active", "succeeded"].includes(operation.status)) {
+    return success(operation, true);
   }
-  if (["failed", "cancelled"].includes(input.operation.status)) {
-    return failure(
-      input.operation,
-      false,
-      input.operation.lastErrorClass ?? input.operation.status,
-    );
+  let retried = false;
+  if (operation.status === "failed") {
+    // Air maps a command that was never dispatched to failed/unavailable.
+    // Any outcome with possible side effects is stored as unknown and stays quarantined.
+    if (operation.lastErrorClass !== "unavailable") {
+      return failure(operation, false, operation.lastErrorClass ?? "failed");
+    }
+    const retry = await retryProviderOperation({
+      operationId: operation.id,
+      expectedVersion: operation.version,
+    });
+    if (retry.status !== "retried") {
+      const current = "operation" in retry ? retry.operation : operation;
+      return failure(
+        current,
+        current.status === "in_flight" || current.status === "unknown",
+        current.lastErrorClass ?? "hangup_retry_conflict",
+      );
+    }
+    operation = retry.operation;
+    retried = true;
   }
-  if (input.operation.status === "unknown") {
+  if (operation.status === "cancelled") {
+    return failure(operation, false, operation.lastErrorClass ?? "cancelled");
+  }
+  if (operation.status === "unknown") {
     return failure(
-      input.operation,
+      operation,
       true,
-      input.operation.lastErrorClass ?? "unknown",
+      operation.lastErrorClass ?? "unknown",
     );
   }
   try {
     const request = {
-      operationId: input.operation.id,
-      sessionId: input.operation.sessionId,
-      expectedVersion: input.operation.version,
-      idempotencyKey: input.operation.idempotencyKey,
+      operationId: operation.id,
+      sessionId: operation.sessionId,
+      expectedVersion: operation.version,
+      idempotencyKey: operation.idempotencyKey,
       deadlineAt: new Date(
         Date.now() + boundedTimeout(input.timeoutMs),
       ).toISOString(),
@@ -63,34 +83,34 @@ export async function executePhoneControl(input: PhoneControlInput) {
           payload: input.payload,
         });
     if (result.ok) {
-      if (result.provider !== input.operation.provider ||
-        result.result.communicationSessionId !== input.operation.sessionId ||
+      if (result.provider !== operation.provider ||
+        result.result.communicationSessionId !== operation.sessionId ||
         result.result.providerCallId !== input.payload.providerCallId) {
         return await recordFailure(
-          input.operation,
+          operation,
           true,
           "provider_binding_conflict",
         );
       }
       const updated = await updateProviderOperation({
-        operationId: input.operation.id,
+        operationId: operation.id,
         status: "accepted",
-        expectedVersion: input.operation.version,
+        expectedVersion: operation.version,
         externalOperationId: result.externalOperationId,
         externalResourceId: result.externalResourceId ??
           result.result.providerCallId,
       });
-      return success(await currentOperation(updated, input.operation), false);
+      return success(await currentOperation(updated, operation), retried);
     }
     return await recordFailure(
-      input.operation,
+      operation,
       result.reconciliationRequired,
       result.errorClass,
       result.externalOperationId,
       result.externalResourceId,
     );
   } catch {
-    return await recordFailure(input.operation, true, "provider_exception");
+    return await recordFailure(operation, true, "provider_exception");
   }
 }
 

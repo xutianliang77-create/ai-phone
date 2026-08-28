@@ -14,7 +14,6 @@ import { setAgentCallTelephonyRuntimeForTests } from
   "./agent-call-telephony-runtime.js";
 import { setVoiceAgentRuntimeSupervisorForTests } from
   "./voice-agent-runtime-supervisor.js";
-
 describe("Voice Agent phone execution route", () => {
   let previousEnv: Record<string, string | undefined>;
   let placePhoneCall: ReturnType<typeof vi.fn<TelephonyProvider["placePhoneCall"]>>;
@@ -55,6 +54,7 @@ describe("Voice Agent phone execution route", () => {
         communicationSessionId: call.sessionId,
         transport: "air780_volte",
         callGeneration: 1,
+        mediaPolicy: "agent_monitored",
         roomName: call.roomName,
         phoneNumberReference: draft.targetPhone!,
         participantIdentity: `${call.sessionId}:guest:air:air-001`,
@@ -102,7 +102,6 @@ describe("Voice Agent phone execution route", () => {
       else process.env[key] = value;
     }
   });
-
   it("dispatches Air through TelephonyProvider without SIP and replays once", async () => {
     const app = await buildApp();
     const { draftId, queued, claimed, claim } = await startAndClaim(app);
@@ -132,6 +131,7 @@ describe("Voice Agent phone execution route", () => {
     expect(placePhoneCall).toHaveBeenCalledWith(expect.objectContaining({
       payload: expect.objectContaining({
         transport: "air780_volte",
+        mediaPolicy: "agent_monitored",
         roomName: `call_${queued.json().draft.callId}`,
         deviceLease: expect.objectContaining({ fencingToken: 1 }),
       }),

@@ -87,16 +87,7 @@ async function applyTrustedWebhook(
 ) {
   const seen = draft.providerWebhookEventIds ?? [];
   if (seen.includes(eventId)) return { status: "duplicate" as const, draft };
-  const statusRequest: UpdateAiCallingAgentCallStatusRequest = {
-    status: request.status,
-    providerOperationStatus: request.status === "in_progress" ? "accepted"
-      : request.status === "completed" ? "succeeded" : "failed",
-    providerCallId: request.providerCallId,
-    consumedSeconds: request.consumedSeconds,
-    resultSummary: request.resultSummary,
-    failureReason: request.failureReason,
-    nextStep: request.nextStep,
-  };
+  const statusRequest = agentCallStatusRequestFromPstnWebhook(request);
   const changed = await mutateAgentCallTask(
     draft,
     `pstn-webhook:${eventId}`,
@@ -108,7 +99,8 @@ async function applyTrustedWebhook(
       updated.workerLeaseExpiresAt = undefined;
       return updated;
     },
-    `agent.task.${request.status}`,
+    `agent.task.${statusRequest.providerOperationStatus === "unknown"
+      ? "reconciliation_required" : request.status}`,
     "updated",
   );
   if (!("task" in changed) || !changed.task) {
@@ -116,4 +108,20 @@ async function applyTrustedWebhook(
   }
   await finalizeAgentCallStatus(changed.task, statusRequest);
   return { status: "updated" as const, draft: changed.task };
+}
+
+export function agentCallStatusRequestFromPstnWebhook(
+  request: PstnAgentCallWebhookRequest,
+): UpdateAiCallingAgentCallStatusRequest {
+  return {
+    status: request.status,
+    providerOperationStatus: request.providerOperationStatus ??
+      (request.status === "in_progress" ? "accepted"
+        : request.status === "completed" ? "succeeded" : "failed"),
+    providerCallId: request.providerCallId,
+    consumedSeconds: request.consumedSeconds,
+    resultSummary: request.resultSummary,
+    failureReason: request.failureReason,
+    nextStep: request.nextStep,
+  };
 }

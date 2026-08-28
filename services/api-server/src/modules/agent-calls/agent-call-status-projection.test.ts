@@ -67,5 +67,6 @@ const airCall: AirDeviceCallDto = {
   carrierState: "connected",
   liveKitParticipantState: "joined",
   callGeneration: 7,
+  mediaPolicy: "agent_monitored",
   version: 3,
 };

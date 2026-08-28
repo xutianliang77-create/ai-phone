@@ -153,6 +153,7 @@ function air780Runtime() {
           wsUrl: result.wsUrl,
           token: result.token,
           expiresAt: result.expiresAt,
+          mediaPolicy: result.mediaPolicy,
         };
       },
     },
@@ -181,6 +182,7 @@ function air780Runtime() {
         communicationSessionId: call.sessionId,
         transport: "air780_volte",
         callGeneration: lease.fencingToken,
+        mediaPolicy: "agent_monitored",
         roomName: call.roomName,
         phoneNumberReference,
         participantIdentity: `${call.sessionId}:guest:air:${lease.deviceId}`,
