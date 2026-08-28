@@ -1,3 +1,4 @@
+import 'agent_delivery_room_event.dart';
 import 'call_link_api_client.dart';
 import '../../../shared/domain/speaker_attribution.dart';
 
@@ -39,6 +40,7 @@ class CallRoomSnapshot {
     this.activePlaybackId,
     this.pipelineGeneration,
     this.lastEventType,
+    this.audibleRemoteAudioParticipantIdentities = const <String>{},
   });
 
   final CallRoomConnectionStatus status;
@@ -52,6 +54,7 @@ class CallRoomSnapshot {
   final String? activePlaybackId;
   final int? pipelineGeneration;
   final String? lastEventType;
+  final Set<String> audibleRemoteAudioParticipantIdentities;
 
   const CallRoomSnapshot.disconnected({String? message})
       : this(
@@ -78,6 +81,7 @@ class CallRoomSnapshot {
     int? pipelineGeneration,
     String? lastEventType,
     bool clearActivePlaybackId = false,
+    Set<String>? audibleRemoteAudioParticipantIdentities,
   }) {
     return CallRoomSnapshot(
       status: status ?? this.status,
@@ -95,6 +99,9 @@ class CallRoomSnapshot {
           : activePlaybackId ?? this.activePlaybackId,
       pipelineGeneration: pipelineGeneration ?? this.pipelineGeneration,
       lastEventType: lastEventType ?? this.lastEventType,
+      audibleRemoteAudioParticipantIdentities:
+          audibleRemoteAudioParticipantIdentities ??
+              this.audibleRemoteAudioParticipantIdentities,
     );
   }
 }
@@ -178,11 +185,24 @@ class CallRoomCaption {
 abstract class CallRoomClient {
   Stream<CallRoomSnapshot> get snapshots;
 
+  Stream<AgentDeliveryRoomEvent> get deliveryEvents =>
+      const Stream<AgentDeliveryRoomEvent>.empty();
+
   Future<void> connect(
     CallRoomToken token, {
     bool enableMicrophone = true,
     bool translationMediaOnly = false,
+    bool airTakeoverUplink = false,
   });
+
+  Future<void> setMicrophoneEnabled(bool enabled);
+
+  /// Confirms exact-participant inbound audio progress at the client. This is
+  /// transport/playout readiness evidence, not a claim about human audibility.
+  Future<bool> waitForRemoteAudioPlayoutEvidence(
+    String participantIdentity, {
+    required Duration timeout,
+  }) async => false;
 
   Future<void> disconnect();
 

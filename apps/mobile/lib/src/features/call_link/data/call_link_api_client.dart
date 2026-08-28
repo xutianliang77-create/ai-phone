@@ -4,124 +4,14 @@ import 'package:http/http.dart' as http;
 
 import '../../account/data/account_auth_headers.dart';
 import '../../account/data/account_session_store.dart';
+import 'call_link_models.dart';
 import 'sip_call_models.dart';
 
+export 'call_link_models.dart';
 export 'sip_call_models.dart';
 
-class CallLink {
-  const CallLink({
-    required this.callId,
-    required this.sessionId,
-    required this.roomName,
-    required this.roomProvider,
-    required this.joinUrl,
-    required this.hostUrl,
-    required this.status,
-    required this.expiresAt,
-    this.activeGuestCount = 0,
-  });
-
-  final String callId;
-  final String sessionId;
-  final String roomName;
-  final String roomProvider;
-  final String joinUrl;
-  final String hostUrl;
-  final String status;
-  final DateTime expiresAt;
-  final int activeGuestCount;
-
-  CallLink withJoinUrl(String value) => CallLink(
-        callId: callId,
-        sessionId: sessionId,
-        roomName: roomName,
-        roomProvider: roomProvider,
-        joinUrl: value,
-        hostUrl: hostUrl,
-        status: status,
-        expiresAt: expiresAt,
-        activeGuestCount: activeGuestCount,
-      );
-
-  factory CallLink.fromJson(Map<String, Object?> json) {
-    return CallLink(
-      callId: json['callId']! as String,
-      sessionId: (json['sessionId'] ?? json['callId'])! as String,
-      roomName: json['roomName']! as String,
-      roomProvider: json['roomProvider']! as String,
-      joinUrl: json['joinUrl']! as String,
-      hostUrl: json['hostUrl']! as String,
-      status: json['status']! as String,
-      expiresAt: DateTime.parse(json['expiresAt']! as String),
-      activeGuestCount: (json['activeGuestCount'] as num?)?.toInt() ?? 0,
-    );
-  }
-}
-
-class CallLinkEndResult {
-  const CallLinkEndResult({
-    required this.callId,
-    required this.sessionId,
-    required this.status,
-    required this.consumedSeconds,
-    required this.endedAt,
-  });
-
-  final String callId;
-  final String sessionId;
-  final String status;
-  final int consumedSeconds;
-  final DateTime? endedAt;
-
-  factory CallLinkEndResult.fromJson(Map<String, Object?> json) {
-    final endedAt = json['endedAt'];
-    return CallLinkEndResult(
-      callId: json['callId']! as String,
-      sessionId: json['sessionId']! as String,
-      status: json['status']! as String,
-      consumedSeconds: json['consumedSeconds']! as int,
-      endedAt: endedAt is String ? DateTime.parse(endedAt) : null,
-    );
-  }
-}
-
-class CallRoomToken {
-  const CallRoomToken({
-    required this.callId,
-    required this.provider,
-    required this.roomName,
-    required this.wsUrl,
-    required this.participantIdentity,
-    required this.participantRole,
-    required this.token,
-    required this.expiresAt,
-    this.fullDuplexEnabled = false,
-  });
-
-  final String callId;
-  final String provider;
-  final String roomName;
-  final String wsUrl;
-  final String participantIdentity;
-  final String participantRole;
-  final String token;
-  final DateTime expiresAt;
-  final bool fullDuplexEnabled;
-
-  factory CallRoomToken.fromJson(Map<String, Object?> json) {
-    return CallRoomToken(
-      callId: json['callId']! as String,
-      provider: json['provider']! as String,
-      roomName: json['roomName']! as String,
-      wsUrl: json['wsUrl']! as String,
-      participantIdentity: json['participantIdentity']! as String,
-      participantRole: json['participantRole']! as String,
-      token: json['token']! as String,
-      expiresAt: DateTime.parse(json['expiresAt']! as String),
-      fullDuplexEnabled: json['fullDuplexEnabled'] == true,
-    );
-  }
-}
+part 'call_link_translation_control_api.dart';
+part 'call_link_phone_status_api.dart';
 
 class CallLinkApiClient {
   CallLinkApiClient({
@@ -142,7 +32,7 @@ class CallLinkApiClient {
       headers: await _authHeaders(),
     );
     if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw CallLinkApiException('Create call link failed: ${response.body}');
+      throw _failure(response, 'Create call link failed');
     }
     final json = jsonDecode(response.body) as Map<String, Object?>;
     return CallLink.fromJson(json);
@@ -151,7 +41,7 @@ class CallLinkApiClient {
   Future<CallLink> getCallLink({required String callId}) async {
     final response = await _client.get(_baseUrl.resolve('/call-links/$callId'));
     if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw CallLinkApiException('Get call link failed: ${response.body}');
+      throw _failure(response, 'Get call link failed');
     }
     final json = jsonDecode(response.body) as Map<String, Object?>;
     return CallLink.fromJson(json);
@@ -176,7 +66,7 @@ class CallLinkApiClient {
       }),
     );
     if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw CallLinkApiException('Create room token failed: ${response.body}');
+      throw _failure(response, 'Create room token failed');
     }
     final json = jsonDecode(response.body) as Map<String, Object?>;
     return CallRoomToken.fromJson(json);
@@ -188,9 +78,7 @@ class CallLinkApiClient {
       headers: await _authHeaders(),
     );
     if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw CallLinkApiException(
-        'Rotate guest ticket failed: ${response.body}',
-      );
+      throw _failure(response, 'Rotate guest ticket failed');
     }
     final json = jsonDecode(response.body) as Map<String, Object?>;
     return json['joinUrl']! as String;
@@ -209,9 +97,7 @@ class CallLinkApiClient {
       }),
     );
     if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw CallLinkApiException(
-        'Confirm room connection failed: ${response.body}',
-      );
+      throw _failure(response, 'Confirm room connection failed');
     }
   }
 
@@ -233,9 +119,7 @@ class CallLinkApiClient {
       }),
     );
     if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw CallLinkApiException(
-        'Start SIP outbound failed: ${response.body}',
-      );
+      throw _failure(response, 'Start SIP outbound failed');
     }
     final json = jsonDecode(response.body) as Map<String, Object?>;
     return SipOutboundCall.fromJson(json);
@@ -259,14 +143,28 @@ class CallLinkApiClient {
       }),
     );
     if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw CallLinkApiException(
-        'Start Air780 outbound failed: ${response.body}',
-      );
+      throw _failure(response, 'Start Air780 outbound failed');
     }
     return SipOutboundCall.fromJson(
       jsonDecode(response.body) as Map<String, Object?>,
     );
   }
+
+  Future<Air780CallStatus> getAir780Status({required String callId}) async {
+    final response = await _client.get(
+      _baseUrl.resolve('/call-links/$callId/air780-status'),
+      headers: await _authHeaders(),
+    );
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw _failure(response, 'Get Air780 call status failed');
+    }
+    return Air780CallStatus.fromJson(
+      jsonDecode(response.body) as Map<String, Object?>,
+    );
+  }
+
+  Future<PhoneCallStatus> getPhoneStatus({required String callId}) =>
+      _getPhoneStatus(this, callId);
 
   Future<SipControlResult> sendSipDtmf({
     required String callId,
@@ -277,6 +175,27 @@ class CallLinkApiClient {
       callId: callId,
       action: 'dtmf',
       body: {'digit': digit, 'idempotencyKey': idempotencyKey},
+    );
+  }
+
+  Future<SipControlResult> sendAir780Dtmf({
+    required String callId,
+    required String digit,
+    required String idempotencyKey,
+  }) async {
+    final response = await _client.post(
+      _baseUrl.resolve('/call-links/$callId/air780-dtmf'),
+      headers: await _authHeaders(json: true),
+      body: jsonEncode({
+        'digit': digit,
+        'idempotencyKey': idempotencyKey,
+      }),
+    );
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw _failure(response, 'Air780 DTMF failed');
+    }
+    return SipControlResult.fromJson(
+      jsonDecode(response.body) as Map<String, Object?>,
     );
   }
 
@@ -303,14 +222,39 @@ class CallLinkApiClient {
       body: jsonEncode(const <String, Object?>{}),
     );
     if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw CallLinkApiException(
-        'Air780 hangup failed: ${response.body}',
-      );
+      throw _failure(response, 'Air780 hangup failed');
     }
     return SipControlResult.fromJson(
       jsonDecode(response.body) as Map<String, Object?>,
     );
   }
+
+  Future<TranslationCallControlResult> typeToSpeak({
+    required String callId,
+    required String text,
+    required String idempotencyKey,
+  }) => _typeToSpeak(this, callId, text, idempotencyKey);
+
+  Future<TranslationCallControlResult> setTranslationUplinkPaused({
+    required String callId,
+    required bool paused,
+    required String idempotencyKey,
+  }) => _setTranslationUplinkPaused(
+        this, callId, paused, idempotencyKey,
+      );
+
+  Future<TranslationCallControlResult> getTranslationControlStatus({
+    required String callId,
+    required String operationId,
+  }) => _getTranslationControlStatus(this, callId, operationId);
+
+  Future<CallDiagnosticMarkerResult> reportCallDiagnosticMarker({
+    required String callId,
+    required String category,
+    required String idempotencyKey,
+  }) => _reportCallDiagnosticMarker(
+        this, callId, category, idempotencyKey,
+      );
 
   Future<SipControlResult> _sipControl({
     required String callId,
@@ -323,7 +267,7 @@ class CallLinkApiClient {
       body: jsonEncode(body),
     );
     if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw CallLinkApiException('SIP $action failed: ${response.body}');
+      throw _failure(response, 'SIP $action failed');
     }
     return SipControlResult.fromJson(
       jsonDecode(response.body) as Map<String, Object?>,
@@ -336,7 +280,7 @@ class CallLinkApiClient {
       headers: await _authHeaders(),
     );
     if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw CallLinkApiException('End call link failed: ${response.body}');
+      throw _failure(response, 'End call link failed');
     }
     final json = jsonDecode(response.body) as Map<String, Object?>;
     return CallLinkEndResult.fromJson(json);
@@ -354,12 +298,40 @@ class CallLinkApiClient {
           : const <String, String>{},
     );
   }
+
+  CallLinkApiException _failure(http.Response response, String fallback) {
+    String? code;
+    try {
+      final decoded = jsonDecode(response.body);
+      if (decoded is Map<String, Object?>) {
+        final error = decoded['error'];
+        if (error is Map<String, Object?>) {
+          code = error['code'] as String?;
+        } else {
+          code = decoded['code'] as String?;
+        }
+      }
+    } on Object {
+      // Error bodies are never surfaced to the app UI.
+    }
+    return CallLinkApiException(
+      fallback,
+      code: code,
+      statusCode: response.statusCode,
+    );
+  }
 }
 
 class CallLinkApiException implements Exception {
-  const CallLinkApiException(this.message);
+  const CallLinkApiException(
+    this.message, {
+    this.code,
+    this.statusCode,
+  });
 
   final String message;
+  final String? code;
+  final int? statusCode;
 
   @override
   String toString() => message;

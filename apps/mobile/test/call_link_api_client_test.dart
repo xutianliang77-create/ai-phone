@@ -252,6 +252,36 @@ void main() {
     expect(result.participantIdentity, 'call_1:guest:air:device-1');
   });
 
+  test(
+      'reads the authoritative Air780 carrier status with account authorization',
+      () async {
+    final client = CallLinkApiClient(
+      baseUrl: Uri.parse('http://127.0.0.1:3100'),
+      accountSessionStore: _sessionStore(),
+      client: MockClient((request) async {
+        expect(request.method, 'GET');
+        expect(request.url.path, '/call-links/call_1/air780-status');
+        expect(request.headers['authorization'], 'Bearer test-token');
+        return http.Response(
+          jsonEncode(<String, Object?>{
+            'callId': 'call_1',
+            'sessionId': 'call_1',
+            'operationId': 'op_air_1',
+            'provider': 'air780_volte',
+            'providerOperationStatus': 'active',
+            'carrierState': 'ringing',
+          }),
+          200,
+        );
+      }),
+    );
+
+    final result = await client.getAir780Status(callId: 'call_1');
+
+    expect(result.providerOperationStatus, 'active');
+    expect(result.carrierState, 'ringing');
+  });
+
   test('ends call links from API', () async {
     final client = CallLinkApiClient(
       baseUrl: Uri.parse('http://127.0.0.1:3100'),

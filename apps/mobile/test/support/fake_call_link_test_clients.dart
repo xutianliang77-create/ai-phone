@@ -1,19 +1,22 @@
-import 'dart:async';
-
 import 'package:translation_mobile/src/features/account/data/account_auth_headers.dart';
 import 'package:translation_mobile/src/features/call_link/data/call_link_api_client.dart';
-import 'package:translation_mobile/src/features/call_link/data/call_room_client.dart';
+
+export 'fake_call_room_test_client.dart';
 
 class FakeCallLinkApiClient extends CallLinkApiClient {
   FakeCallLinkApiClient({
     this.tokenFails = false,
     this.authRequired = false,
     this.activeGuestCountAfterFetch = 0,
+    this.air780CarrierState = 'dialing',
+    this.sipProviderStatus = 'active',
   }) : super(baseUrl: Uri.parse('http://localhost'));
 
   final bool tokenFails;
   final bool authRequired;
   final int activeGuestCountAfterFetch;
+  final String air780CarrierState;
+  final String sipProviderStatus;
   int createCount = 0;
   int tokenCreateCount = 0;
   int connectionConfirmCount = 0;
@@ -22,8 +25,17 @@ class FakeCallLinkApiClient extends CallLinkApiClient {
   int air780OutboundCount = 0;
   int sipHangupCount = 0;
   int air780HangupCount = 0;
+  int air780StatusCount = 0;
+  int phoneStatusCount = 0;
   final List<String> sipDtmfDigits = <String>[];
+  final List<({String digit, String idempotencyKey})> air780DtmfAttempts =
+      <({String digit, String idempotencyKey})>[];
   final List<String> sipTransferTargets = <String>[];
+  final List<({bool paused, String idempotencyKey})>
+      translationUplinkAttempts = <({bool paused, String idempotencyKey})>[];
+  final List<({String text, String idempotencyKey})> typedTextAttempts =
+      <({String text, String idempotencyKey})>[];
+  final List<String> diagnosticCategories = <String>[];
   String? lastGuestTicket;
   final List<String> fetchedCallIds = <String>[];
   final List<String> endedCallIds = <String>[];
@@ -140,6 +152,34 @@ class FakeCallLinkApiClient extends CallLinkApiClient {
   }
 
   @override
+  Future<Air780CallStatus> getAir780Status({required String callId}) async {
+    air780StatusCount += 1;
+    return Air780CallStatus(
+      callId: callId,
+      sessionId: callId,
+      operationId: 'op_air_1',
+      provider: 'air780_volte',
+      providerOperationStatus:
+          air780CarrierState == 'unknown' ? 'unknown' : 'active',
+      carrierState: air780CarrierState,
+    );
+  }
+
+  @override
+  Future<Air780CallStatus> getPhoneStatus({required String callId}) async {
+    phoneStatusCount += 1;
+    if (air780OutboundCount > 0) return getAir780Status(callId: callId);
+    return Air780CallStatus(
+      callId: callId,
+      sessionId: callId,
+      operationId: 'op_1',
+      provider: 'livekit_sip',
+      providerOperationStatus: sipProviderStatus,
+      providerCallId: 'sip-call-1',
+    );
+  }
+
+  @override
   Future<CallLinkEndResult> endCallLink({required String callId}) async {
     endedCallIds.add(callId);
     return CallLinkEndResult(
@@ -174,6 +214,19 @@ class FakeCallLinkApiClient extends CallLinkApiClient {
   }
 
   @override
+  Future<SipControlResult> sendAir780Dtmf({
+    required String callId,
+    required String digit,
+    required String idempotencyKey,
+  }) async {
+    air780DtmfAttempts.add((
+      digit: digit,
+      idempotencyKey: idempotencyKey,
+    ));
+    return _control('phone_dtmf');
+  }
+
+  @override
   Future<SipControlResult> transferSip({
     required String callId,
     required String targetPhone,
@@ -182,6 +235,86 @@ class FakeCallLinkApiClient extends CallLinkApiClient {
     sipTransferTargets.add(targetPhone);
     return _control('sip_transfer');
   }
+
+  @override
+  Future<TranslationCallControlResult> setTranslationUplinkPaused({
+    required String callId,
+    required bool paused,
+    required String idempotencyKey,
+  }) async {
+    translationUplinkAttempts.add((
+      paused: paused,
+      idempotencyKey: idempotencyKey,
+    ));
+    return _translationControl(
+      callId: callId,
+      operationId: 'translation-uplink-${translationUplinkAttempts.length}',
+      operationType: 'translation_uplink_control',
+      uplinkPaused: paused,
+    );
+  }
+
+  @override
+  Future<TranslationCallControlResult> typeToSpeak({
+    required String callId,
+    required String text,
+    required String idempotencyKey,
+  }) async {
+    typedTextAttempts.add((text: text, idempotencyKey: idempotencyKey));
+    return _translationControl(
+      callId: callId,
+      operationId: 'type-to-speak-${typedTextAttempts.length}',
+      operationType: 'translation_type_to_speak',
+      uplinkPaused: false,
+    );
+  }
+
+  @override
+  Future<TranslationCallControlResult> getTranslationControlStatus({
+    required String callId,
+    required String operationId,
+  }) async => _translationControl(
+        callId: callId,
+        operationId: operationId,
+        operationType: operationId.startsWith('type-to-speak')
+            ? 'translation_type_to_speak'
+            : 'translation_uplink_control',
+        uplinkPaused: translationUplinkAttempts.isNotEmpty &&
+            translationUplinkAttempts.last.paused,
+      );
+
+  @override
+  Future<CallDiagnosticMarkerResult> reportCallDiagnosticMarker({
+    required String callId,
+    required String category,
+    required String idempotencyKey,
+  }) async {
+    diagnosticCategories.add(category);
+    return CallDiagnosticMarkerResult(
+      callId: callId,
+      sessionId: callId,
+      markerId: 'marker-${diagnosticCategories.length}',
+      category: category,
+      createdAt: DateTime.utc(2026, 8, 13, 8),
+      replayed: false,
+    );
+  }
+
+  TranslationCallControlResult _translationControl({
+    required String callId,
+    required String operationId,
+    required String operationType,
+    required bool uplinkPaused,
+  }) => TranslationCallControlResult(
+        callId: callId,
+        sessionId: callId,
+        operationId: operationId,
+        operationType: operationType,
+        status: 'succeeded',
+        replayed: false,
+        controlGeneration: translationUplinkAttempts.length + 1,
+        uplinkPaused: uplinkPaused,
+      );
 
   SipControlResult _control(String type) => SipControlResult(
         operationId: 'control_${type}_${sipDtmfDigits.length}',
@@ -192,54 +325,4 @@ class FakeCallLinkApiClient extends CallLinkApiClient {
 
   @override
   void close() {}
-}
-
-class FakeCallRoomClient implements CallRoomClient {
-  FakeCallRoomClient({
-    this.message,
-    this.captions = const <CallRoomCaption>[],
-    this.microphoneEnabled = true,
-    this.microphonePausedForPlayback = false,
-  });
-
-  final StreamController<CallRoomSnapshot> _snapshots =
-      StreamController<CallRoomSnapshot>.broadcast();
-
-  CallRoomToken? connectedToken;
-  bool translationMediaOnly = false;
-  final String? message;
-  final List<CallRoomCaption> captions;
-  final bool microphoneEnabled;
-  final bool microphonePausedForPlayback;
-
-  @override
-  Stream<CallRoomSnapshot> get snapshots => _snapshots.stream;
-
-  @override
-  Future<void> connect(
-    CallRoomToken token, {
-    bool enableMicrophone = true,
-    bool translationMediaOnly = false,
-  }) async {
-    connectedToken = token;
-    this.translationMediaOnly = translationMediaOnly;
-    _snapshots.add(CallRoomSnapshot(
-      status: CallRoomConnectionStatus.connected,
-      microphoneEnabled: enableMicrophone && microphoneEnabled,
-      microphonePausedForPlayback: microphonePausedForPlayback,
-      remoteParticipantCount: 1,
-      message: message,
-      captions: captions,
-    ));
-  }
-
-  @override
-  Future<void> disconnect() async {
-    _snapshots.add(const CallRoomSnapshot.disconnected());
-  }
-
-  @override
-  Future<void> dispose() async {
-    await _snapshots.close();
-  }
 }
