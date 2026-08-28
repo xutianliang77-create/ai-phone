@@ -9,6 +9,7 @@ class SegmentDraft {
     this.translatedText = '',
     this.turnId,
     this.revision,
+    this.recognitionRevision,
     this.rawText,
     this.optimizedText,
     this.sourceLanguage,
@@ -28,6 +29,7 @@ class SegmentDraft {
   final String id;
   final String? turnId;
   final int? revision;
+  final int? recognitionRevision;
   final String sourceText;
   final String translatedText;
   final String? rawText;
@@ -50,6 +52,7 @@ class SegmentDraft {
     String? translatedText,
     String? turnId,
     int? revision,
+    int? recognitionRevision,
     String? rawText,
     String? optimizedText,
     String? sourceLanguage,
@@ -64,22 +67,26 @@ class SegmentDraft {
     SegmentTiming? timing,
     Map<String, Object?>? vadContext,
     TurnLanguageProfile? languageProfile,
+    bool clearTranslation = false,
   }) {
     return SegmentDraft(
       id,
       sourceText: sourceText ?? this.sourceText,
-      translatedText: translatedText ?? this.translatedText,
+      translatedText:
+          clearTranslation ? '' : translatedText ?? this.translatedText,
       turnId: turnId ?? this.turnId,
       revision: revision ?? this.revision,
+      recognitionRevision: recognitionRevision ?? this.recognitionRevision,
       rawText: rawText ?? this.rawText,
       optimizedText: optimizedText ?? this.optimizedText,
       sourceLanguage: sourceLanguage ?? this.sourceLanguage,
-      targetLanguage: targetLanguage ?? this.targetLanguage,
+      targetLanguage:
+          clearTranslation ? null : targetLanguage ?? this.targetLanguage,
       confidence: confidence ?? this.confidence,
       stage: stage ?? this.stage,
-      provider: provider ?? this.provider,
-      model: model ?? this.model,
-      latencyMs: latencyMs ?? this.latencyMs,
+      provider: clearTranslation ? null : provider ?? this.provider,
+      model: clearTranslation ? null : model ?? this.model,
+      latencyMs: clearTranslation ? null : latencyMs ?? this.latencyMs,
       refinement: refinement ?? this.refinement,
       speaker: speaker ?? this.speaker,
       timing: timing ?? this.timing,
