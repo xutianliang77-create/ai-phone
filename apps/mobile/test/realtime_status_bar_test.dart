@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -93,5 +94,48 @@ void main() {
     expect(tester.takeException(), isNull);
     expect(tester.getSize(find.byType(RealtimeStatusBar)).width, 320);
     semantics.dispose();
+  });
+
+  testWidgets('keeps replayed and missed audio visible in an iPhone app bar',
+      (WidgetTester tester) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(390, 844);
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+
+    await tester.pumpWidget(MaterialApp(
+      locale: const Locale('zh'),
+      localizationsDelegates: const <LocalizationsDelegate<dynamic>>[
+        AppLocalizations.delegate,
+        GlobalMaterialLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+      ],
+      supportedLocales: AppLocalizations.supportedLocales,
+      home: Scaffold(
+        appBar: AppBar(
+          toolbarHeight: 76,
+          titleSpacing: 0,
+          title: const RealtimeStatusBar(
+            status: RealtimeStatus.active,
+            routeLabel: '自动识别 → 自动反向',
+            message:
+                'Realtime connection restored; replayed 2400 ms; missed 12000 ms',
+          ),
+          actions: const <Widget>[SizedBox(width: 48)],
+        ),
+      ),
+    ));
+
+    final status = find.text('已恢复·补2.4秒·漏传12秒');
+    expect(status, findsOneWidget);
+    final paragraph = tester.renderObject<RenderParagraph>(status);
+    expect(
+      paragraph.getMaxIntrinsicWidth(double.infinity),
+      lessThanOrEqualTo(paragraph.size.width + 0.5),
+    );
+    expect(tester.takeException(), isNull);
   });
 }

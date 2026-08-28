@@ -267,6 +267,24 @@ class AppLocalizations {
   }
 
   String runtimeMessage(String message) {
+    final recoveryGapMatch = RegExp(
+      r'^Realtime connection restored; replayed (\d+) ms; missed (\d+) ms$',
+    ).firstMatch(message);
+    if (recoveryGapMatch != null) {
+      String seconds(String rawMilliseconds) {
+        final milliseconds = int.parse(rawMilliseconds);
+        return milliseconds % 1000 == 0
+            ? '${milliseconds ~/ 1000}'
+            : (milliseconds / 1000).toStringAsFixed(1);
+      }
+
+      final replayedSeconds = seconds(recoveryGapMatch.group(1)!);
+      final missedSeconds = seconds(recoveryGapMatch.group(2)!);
+      if (isChinese) {
+        return '已恢复·补$replayedSeconds秒·漏传$missedSeconds秒';
+      }
+      return 'Restored·+${replayedSeconds}s·missed${missedSeconds}s';
+    }
     if (!isChinese) return message;
     final stripped = _stripErrorPrefix(message);
     if (stripped != message) return runtimeMessage(stripped);
@@ -289,16 +307,6 @@ class AppLocalizations {
         RegExp(r'^Reconnecting \((\d+)/(\d+)\)$').firstMatch(message);
     if (reconnectMatch != null) {
       return '正在重连 (${reconnectMatch.group(1)}/${reconnectMatch.group(2)})';
-    }
-    final recoveryGapMatch = RegExp(
-      r'^Realtime connection restored; replayed (\d+) ms; missed (\d+) ms$',
-    ).firstMatch(message);
-    if (recoveryGapMatch != null) {
-      final replayedSeconds =
-          (int.parse(recoveryGapMatch.group(1)!) / 1000).toStringAsFixed(1);
-      final missedSeconds =
-          (int.parse(recoveryGapMatch.group(2)!) / 1000).toStringAsFixed(1);
-      return '实时连接已恢复；已补传 $replayedSeconds 秒，约 $missedSeconds 秒语音未上传';
     }
     if (message.startsWith('Device ASR is unavailable: ')) {
       final reason = message.substring('Device ASR is unavailable: '.length);
