@@ -5,6 +5,7 @@ import type {
   TranslationEvent,
   TranslationFailedEvent,
 } from "@translation/contracts";
+import { cleanRealtimeText } from "../protocol/realtime-text.js";
 
 interface SegmentOutcome {
   transcriptFinal: boolean;
@@ -29,6 +30,11 @@ export class RealtimeFlushTracker {
       return;
     }
     if (!isSegmentOutcomeEvent(event)) return;
+    if (event.type === "transcript.final" && !cleanRealtimeText(event.text)) {
+      this.segments.delete(event.segmentId);
+      this.flushSegmentIds.delete(event.segmentId);
+      return;
+    }
 
     const outcome = this.segments.get(event.segmentId) ?? emptyOutcome();
     if (event.type === "transcript.final") outcome.transcriptFinal = true;
