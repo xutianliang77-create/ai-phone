@@ -9,8 +9,22 @@ import { PostgresAgentHandoffsRepository } from
   "../../modules/agent-calls/postgres-agent-handoffs.repository.js";
 import { PostgresAgentRunsRepository } from
   "../../modules/agent-calls/postgres-agent-runs.repository.js";
+import { PostgresAgentVoiceTurnsRepository } from
+  "../../modules/agent-calls/postgres-agent-voice-turns.repository.js";
 import { PostgresAgentTasksRepository } from
   "../../modules/agent-calls/postgres-agent-tasks.repository.js";
+import { PostgresAgentWorksRepository } from
+  "../../modules/agent-calls/postgres-agent-works.repository.js";
+import { PostgresAgentWorkPermissionsRepository } from
+  "../../modules/agent-calls/postgres-agent-work-permissions.repository.js";
+import { PostgresVoiceClientOwnershipRepository } from
+  "../../modules/agent-calls/postgres-voice-client-ownership.repository.js";
+import { PostgresAgentDeliveriesRepository } from
+  "../../modules/agent-calls/postgres-agent-delivery.repository.js";
+import { PostgresAgentDeliveryUpdates } from
+  "../../modules/agent-calls/postgres-agent-delivery-updates.js";
+import { PostgresAgentDeliveryClientEventsRepository } from
+  "../../modules/agent-calls/postgres-agent-delivery-client-events.repository.js";
 import { PostgresBillingRepository } from
   "../../modules/billing/postgres-billing.repository.js";
 import { PostgresBillingQueriesRepository } from
@@ -81,6 +95,14 @@ export function createPostgresPrimaryRuntime() {
     ingress: new PostgresIngressRepository(pool),
     agentRuns: new PostgresAgentRunsRepository(pool),
     agentTasks: new PostgresAgentTasksRepository(pool),
+    agentWorks: new PostgresAgentWorksRepository(pool),
+    agentWorkPermissions: new PostgresAgentWorkPermissionsRepository(pool),
+    agentVoiceTurns: new PostgresAgentVoiceTurnsRepository(pool),
+    voiceClientOwnerships: new PostgresVoiceClientOwnershipRepository(pool),
+    agentDeliveries: new PostgresAgentDeliveriesRepository(pool),
+    agentDeliveryUpdates: new PostgresAgentDeliveryUpdates(pool),
+    agentDeliveryClientEvents:
+      new PostgresAgentDeliveryClientEventsRepository(pool),
     agentActions: new PostgresAgentActionsRepository(pool),
     agentHandoffs: new PostgresAgentHandoffsRepository(pool),
     agentConsults: new PostgresAgentConsultsRepository(pool),
