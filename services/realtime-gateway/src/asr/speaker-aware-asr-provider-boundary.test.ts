@@ -174,6 +174,7 @@ describe("speaker aware ASR boundary handling", () => {
       speaker: { speakerId: "speaker_2" },
     });
   });
+
 });
 
 class CrossingBoundaryAsrProvider extends BoundaryAwareAsrProvider {

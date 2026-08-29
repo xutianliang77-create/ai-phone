@@ -3,7 +3,7 @@ import type { AudioFrame, SegmentTimingDto } from "@translation/contracts";
 interface BufferedFrame {
   timestampMs: number;
   durationMs: number;
-  sampleRate: number;
+  sampleRate: AudioFrame["sampleRate"];
   pcm: Buffer;
 }
 
@@ -41,9 +41,61 @@ export class RecentPcmAudioBuffer {
     return wav(pcm, sampleRate).toString("base64");
   }
 
+  framesBetween(input: {
+    sessionId: string;
+    startMs: number;
+    endMs: number;
+  }): AudioFrame[] {
+    const sampleRate = this.frames.find((frame) =>
+      intersectsRange(frame, input.startMs, input.endMs)
+    )?.sampleRate;
+    if (!sampleRate) return [];
+    let sequence = 0;
+    return this.frames.flatMap((frame) => {
+      if (frame.sampleRate !== sampleRate ||
+          !intersectsRange(frame, input.startMs, input.endMs)) return [];
+      const frameEndMs = frame.timestampMs + frame.durationMs;
+      const clippedStartMs = Math.max(frame.timestampMs, input.startMs);
+      const clippedEndMs = Math.min(frameEndMs, input.endMs);
+      const startSample = Math.max(0, Math.floor(
+        (clippedStartMs - frame.timestampMs) * sampleRate / 1000,
+      ));
+      const endSample = Math.min(frame.pcm.length / 2, Math.ceil(
+        (clippedEndMs - frame.timestampMs) * sampleRate / 1000,
+      ));
+      if (endSample <= startSample) return [];
+      return [{
+        type: "audio.frame" as const,
+        sessionId: input.sessionId,
+        sequence: ++sequence,
+        timestampMs: Math.round(
+          frame.timestampMs + startSample * 1000 / sampleRate,
+        ),
+        format: "pcm16" as const,
+        sampleRate,
+        data: frame.pcm.subarray(startSample * 2, endSample * 2)
+          .toString("base64"),
+      }];
+    });
+  }
+
+  latestEndMs() {
+    const last = this.frames.at(-1);
+    return last ? last.timestampMs + last.durationMs : undefined;
+  }
+
   clear() {
     this.frames.length = 0;
   }
+}
+
+function intersectsRange(
+  frame: BufferedFrame,
+  startMs: number,
+  endMs: number,
+) {
+  return frame.timestampMs < endMs &&
+    frame.timestampMs + frame.durationMs > startMs;
 }
 
 function intersects(frame: BufferedFrame, timing: SegmentTimingDto) {

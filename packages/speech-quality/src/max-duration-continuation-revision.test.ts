@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import { SegmentAssembler } from "./segment-assembler.js";
+import { MaxDurationContinuationRevisionCoordinator } from
+  "./max-duration-continuation-revision.js";
 import type { SpeechTranscript } from "./speech-transcript.js";
 
 describe("max-duration continuation revision", () => {
@@ -175,6 +177,31 @@ describe("max-duration continuation revision", () => {
     expect(assembler.flush("sess_1", 2000)).toEqual([]);
     expect(assembler.flush("sess_1", 3000)).toEqual([]);
   });
+
+  it("ends provisional continuation state after a speaker-boundary revision", () => {
+    const coordinator = new MaxDurationContinuationRevisionCoordinator({
+      enabled: true,
+      maxWindowMs: 7500,
+    });
+    const first = continuationTranscript({
+      segmentId: "seg_1", revision: 6, text: "前一位我觉得咱这个这个。",
+      endpointReason: "max_duration", startMs: 0, endMs: 6459,
+    });
+    const corrected = continuationTranscript({
+      segmentId: "seg_1", revision: 7, text: "前一位。",
+      endpointReason: "speaker_boundary", startMs: 0, endMs: 6000,
+    });
+
+    expect(coordinator.push("sess_1", first, 1000).handled).toBe(true);
+    expect(coordinator.push("sess_1", corrected, 2000)).toMatchObject({
+      handled: true,
+      transcript: corrected,
+    });
+    expect(coordinator.push("sess_1", {
+      ...corrected,
+      revision: 6,
+    }, 2100)).toEqual({ handled: false });
+  });
 });
 
 function revisionAssembler(maxContinuationBufferMs = 7500) {
@@ -187,7 +214,7 @@ function revisionAssembler(maxContinuationBufferMs = 7500) {
 function continuationTranscript(input: {
   segmentId: string;
   text: string;
-  endpointReason?: "max_duration" | "silence";
+  endpointReason?: "max_duration" | "silence" | "speaker_boundary";
   revision?: number;
   isFinal?: boolean;
   turnId?: string;

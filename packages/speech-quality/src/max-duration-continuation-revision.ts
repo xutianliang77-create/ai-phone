@@ -114,11 +114,15 @@ export class MaxDurationContinuationRevisionCoordinator {
     const previousRevision = pending.transcript.revision ?? 0;
     const incomingRevision = transcript.revision ?? 0;
     if (incomingRevision <= previousRevision) return { handled: true };
-    this.provisional.set(sessionId, {
-      transcript,
-      emittedAtMs: pending.emittedAtMs,
-      highestPreviewRevision: pending.highestPreviewRevision,
-    });
+    if (transcript.endpointReason === "max_duration") {
+      this.provisional.set(sessionId, {
+        transcript,
+        emittedAtMs: pending.emittedAtMs,
+        highestPreviewRevision: pending.highestPreviewRevision,
+      });
+    } else {
+      this.provisional.delete(sessionId);
+    }
     return {
       handled: true,
       transcript,
