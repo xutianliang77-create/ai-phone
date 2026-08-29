@@ -66,6 +66,7 @@ class ApiSessionEventSink implements SessionEventSink {
         refinement: event.refinement,
         speaker: event.speaker,
         timing: event.timing,
+        tokenTimings: event.tokenTimings,
         vadContext: event.vadContext,
       });
       return;
@@ -125,6 +126,7 @@ class ApiSessionEventSink implements SessionEventSink {
         segmentId: event.segmentId,
         turnId: event.turnId,
         revision: event.revision,
+        speakerRevision: event.speakerRevision,
         speaker: event.speaker,
         timing: event.timing,
       });

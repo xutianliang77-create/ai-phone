@@ -1,5 +1,6 @@
 import type {
   LanguageCode,
+  AsrTokenTimingDto,
   TranslationLanguageCode,
   SessionSegmentDto,
   SessionSegmentProviderUsageDto,
@@ -16,6 +17,7 @@ export interface SessionSegmentPatch {
   speechId?: string;
   turnId?: string;
   revision?: number;
+  speakerRevision?: number;
   pipelineGeneration?: number;
   pipelineTiming?: SpeechPipelineTimingDto;
   sourceText?: string;
@@ -36,6 +38,7 @@ export interface SessionSegmentPatch {
   refinement?: SessionSegmentRefinementDto;
   speaker?: SpeakerAttributionDto;
   timing?: SegmentTimingDto;
+  tokenTimings?: AsrTokenTimingDto[];
   vadContext?: SegmentVadContextDto;
 }
 
@@ -71,10 +74,18 @@ export function applySessionSegmentPatch(
   const isCurrentPipeline = isNewerRevision ||
     incomingRevision === currentRevision && incomingGeneration >= currentGeneration;
 
+  applySpeakerPatch(
+    segment,
+    patch,
+    currentRevision,
+    incomingRevision,
+  );
+
   if (isCurrentPipeline) {
     if (isNewerRevision || isNewerGeneration) {
       clearDerivedTranslation(segment);
       delete segment.pipelineTiming;
+      delete segment.tokenTimings;
     }
     applyRecognitionFields(segment, patch);
     applyTranslationFields(segment, patch);
@@ -105,10 +116,14 @@ export function createSessionSegment(patch: SessionSegmentPatch): SessionSegment
     translatedText: patch.translatedText ?? "",
   };
   applyRecognitionFields(segment, patch);
+  applySpeakerPatch(segment, patch, -1, patch.revision ?? 0);
   applyTranslationFields(segment, patch);
   if (patch.speechId) segment.speechId = patch.speechId;
   if (patch.turnId) segment.turnId = patch.turnId;
   if (typeof patch.revision === "number") segment.revision = patch.revision;
+  if (typeof patch.speakerRevision === "number") {
+    segment.speakerRevision = patch.speakerRevision;
+  }
   if (typeof patch.pipelineGeneration === "number") {
     segment.pipelineGeneration = patch.pipelineGeneration;
   }
@@ -151,6 +166,10 @@ function mergeCompleteSegment(
     revision: existing.revision === undefined && incoming.revision === undefined
       ? undefined
       : Math.max(existingRevision, incomingRevision),
+    speakerRevision: maximumOptional(
+      existing.speakerRevision,
+      incoming.speakerRevision,
+    ),
     pipelineGeneration:
       existing.pipelineGeneration === undefined &&
         incoming.pipelineGeneration === undefined
@@ -182,12 +201,11 @@ function mergeCompleteSegment(
       ? incoming.providerUsage
       : existing.providerUsage ?? incoming.providerUsage,
     refinement: existing.refinement ?? incoming.refinement,
-    speaker: incomingIsNewer
-      ? incoming.speaker ?? existing.speaker
-      : existing.speaker ?? incoming.speaker,
-    timing: incomingIsNewer
-      ? incoming.timing ?? existing.timing
-      : existing.timing ?? incoming.timing,
+    speaker: newerSpeakerValue(existing, incoming, "speaker", incomingIsNewer),
+    timing: newerSpeakerValue(existing, incoming, "timing", incomingIsNewer),
+    tokenTimings: incomingIsNewer
+      ? incoming.tokenTimings
+      : existing.tokenTimings ?? incoming.tokenTimings,
     vadContext: incomingIsNewer
       ? incoming.vadContext ?? existing.vadContext
       : existing.vadContext ?? incoming.vadContext,
@@ -234,8 +252,7 @@ function applyRecognitionFields(
   if (patch.sourceLanguage) segment.sourceLanguage = patch.sourceLanguage;
   if (typeof patch.confidence === "number") segment.confidence = patch.confidence;
   if (patch.refinement) segment.refinement = patch.refinement;
-  if (patch.speaker) segment.speaker = patch.speaker;
-  if (patch.timing) segment.timing = patch.timing;
+  if (patch.tokenTimings) segment.tokenTimings = patch.tokenTimings;
   if (patch.vadContext) segment.vadContext = patch.vadContext;
   if (patch.dominantLanguage) segment.dominantLanguage = patch.dominantLanguage;
   if (patch.detectedLanguages) segment.detectedLanguages = patch.detectedLanguages;
@@ -243,6 +260,61 @@ function applyRecognitionFields(
     segment.mixedLanguage = patch.mixedLanguage;
   }
   if (patch.stage && patch.stage !== "translation") segment.stage = patch.stage;
+}
+
+function applySpeakerPatch(
+  segment: SessionSegmentDto,
+  patch: SessionSegmentPatch,
+  currentTranscriptRevision: number,
+  incomingTranscriptRevision: number,
+) {
+  if (!patch.speaker && !patch.timing) return;
+  const explicitRevision = patch.speakerRevision;
+  if (explicitRevision === undefined) {
+    if (
+      segment.speakerRevision !== undefined ||
+      incomingTranscriptRevision < currentTranscriptRevision
+    ) return;
+  } else if (explicitRevision < (segment.speakerRevision ?? 0)) {
+    return;
+  }
+  if (patch.speaker) segment.speaker = patch.speaker;
+  if (patch.timing) segment.timing = patch.timing;
+  if (explicitRevision !== undefined) {
+    segment.speakerRevision = explicitRevision;
+  }
+}
+
+function newerSpeakerValue<
+  Key extends "speaker" | "timing",
+>(
+  existing: SessionSegmentDto,
+  incoming: SessionSegmentDto,
+  key: Key,
+  incomingIsNewer: boolean,
+): SessionSegmentDto[Key] {
+  if (
+    existing.speakerRevision === undefined &&
+    incoming.speakerRevision === undefined
+  ) {
+    return incomingIsNewer
+      ? incoming[key] ?? existing[key]
+      : existing[key] ?? incoming[key];
+  }
+  const existingRevision = existing.speakerRevision ?? 0;
+  const incomingRevision = incoming.speakerRevision ?? 0;
+  return incomingRevision > existingRevision
+    ? incoming[key] ?? existing[key]
+    : existing[key] ?? incoming[key];
+}
+
+function maximumOptional(
+  first: number | undefined,
+  second: number | undefined,
+) {
+  if (first === undefined) return second;
+  if (second === undefined) return first;
+  return Math.max(first, second);
 }
 
 function applyTranslationFields(

@@ -1,4 +1,5 @@
 import {
+  isAsrTokenTimings,
   isSegmentTiming,
   isSegmentVadContext,
   isSpeechPipelineTiming,
@@ -32,6 +33,7 @@ export function isValidSegmentPatch(
     isOptionalString(body.speechId) &&
     isOptionalString(body.turnId) &&
     isOptionalNonNegativeInteger(body.revision) &&
+    isOptionalNonNegativeInteger(body.speakerRevision) &&
     isOptionalPositiveInteger(body.pipelineGeneration) &&
     (body.pipelineTiming === undefined ||
       isSpeechPipelineTiming(body.pipelineTiming)) &&
@@ -39,6 +41,8 @@ export function isValidSegmentPatch(
     isRefinement(body.refinement) &&
     (body.speaker === undefined || isSpeakerAttribution(body.speaker)) &&
     (body.timing === undefined || isSegmentTiming(body.timing)) &&
+    (body.tokenTimings === undefined ||
+      isAsrTokenTimings(body.tokenTimings)) &&
     (body.vadContext === undefined || isSegmentVadContext(body.vadContext))
   );
 }
@@ -56,10 +60,12 @@ function hasSegmentDiagnostics(body: Partial<UpsertSessionSegmentRequest>) {
     body.refinement,
     body.speaker,
     body.timing,
+    body.tokenTimings,
     body.vadContext,
     body.speechId,
     body.turnId,
     body.revision,
+    body.speakerRevision,
     body.pipelineGeneration,
     body.pipelineTiming,
     body.dominantLanguage,
