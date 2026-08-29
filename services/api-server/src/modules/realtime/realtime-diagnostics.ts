@@ -1,5 +1,9 @@
 import type { RealtimeSessionDiagnosticsDto } from "@translation/contracts";
 import { parseRealtimeNodeDiagnostics } from "./realtime-node-diagnostics.js";
+import {
+  isSpeakerRevisionDiagnostics,
+  sanitizedSpeakerRevision,
+} from "./realtime-speaker-revision-diagnostics.js";
 
 export function parseRealtimeDiagnostics(
   value: unknown,
@@ -12,6 +16,10 @@ export function parseRealtimeDiagnostics(
   if (
     diagnostics.speakerTurns !== undefined &&
     !isSpeakerTurnDiagnostics(diagnostics.speakerTurns)
+  ) return undefined;
+  if (
+    diagnostics.speakerRevision !== undefined &&
+    !isSpeakerRevisionDiagnostics(diagnostics.speakerRevision)
   ) return undefined;
   if (diagnostics.vad !== undefined && !isVadDiagnostics(diagnostics.vad)) {
     return undefined;
@@ -35,6 +43,11 @@ export function parseRealtimeDiagnostics(
     },
     ...(diagnostics.speakerTurns
       ? { speakerTurns: sanitizedSpeakerTurns(diagnostics.speakerTurns) }
+      : {}),
+    ...(diagnostics.speakerRevision
+      ? { speakerRevision: sanitizedSpeakerRevision(
+          diagnostics.speakerRevision,
+        ) }
       : {}),
     ...(diagnostics.vad ? { vad: sanitizedVad(diagnostics.vad) } : {}),
     ...(nodes ? { nodes: nodes as NonNullable<RealtimeSessionDiagnosticsDto["nodes"]> } : {}),

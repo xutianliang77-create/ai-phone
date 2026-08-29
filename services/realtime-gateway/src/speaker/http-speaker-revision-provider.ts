@@ -20,7 +20,11 @@ export class HttpSpeakerRevisionProvider implements SpeakerRevisionProvider {
       body: JSON.stringify(request),
     });
     if (!response.ok) {
-      throw new Error(`Speaker revision failed with HTTP ${response.status}`);
+      const detail = await boundedErrorDetail(response);
+      throw new Error(
+        `Speaker revision failed with HTTP ${response.status}` +
+          (detail ? `: ${detail}` : ""),
+      );
     }
     return parseRevisionResult(await response.json(), request);
   }
@@ -56,6 +60,56 @@ export class HttpSpeakerRevisionProvider implements SpeakerRevisionProvider {
       clearTimeout(timer);
     }
   }
+}
+
+async function boundedErrorDetail(response: Response) {
+  const reader = response.body?.getReader();
+  if (!reader) return undefined;
+  const decoder = new TextDecoder();
+  let byteCount = 0;
+  let body = "";
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      byteCount += value.byteLength;
+      if (byteCount > 4_096) {
+        await reader.cancel();
+        return undefined;
+      }
+      body += decoder.decode(value, { stream: true });
+    }
+    body += decoder.decode();
+  } catch {
+    return undefined;
+  }
+  try {
+    const parsed = JSON.parse(body) as unknown;
+    if (!record(parsed)) return undefined;
+    return normalizedErrorDetail(parsed.detail);
+  } catch {
+    return undefined;
+  }
+}
+
+function normalizedErrorDetail(value: unknown) {
+  if (typeof value === "string") return normalizedText(value);
+  const first = Array.isArray(value) ? value[0] : undefined;
+  if (!record(first) || typeof first.msg !== "string") return undefined;
+  const location = Array.isArray(first.loc)
+    ? first.loc.filter((part) =>
+      typeof part === "string" || typeof part === "number"
+    ).join(".")
+    : "request";
+  return normalizedText(`${location || "request"}: ${first.msg}`);
+}
+
+function normalizedText(value: string) {
+  const detail = value
+    .replace(/[\u0000-\u001f\u007f]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  return detail ? detail.slice(0, 160) : undefined;
 }
 
 function parseRevisionResult(

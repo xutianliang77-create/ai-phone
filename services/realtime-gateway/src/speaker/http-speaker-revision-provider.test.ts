@@ -82,6 +82,56 @@ describe("HTTP speaker revision provider", () => {
 
     await expect(provider.revise(request())).rejects.toThrow(/match/);
   });
+
+  it("reports a bounded normalized worker failure reason", async () => {
+    globalThis.fetch = async () => Response.json(
+      { detail: "no speaker\nevidence" },
+      { status: 422 },
+    );
+    const provider = new HttpSpeakerRevisionProvider({
+      endpoint: "http://127.0.0.1:8122/revision",
+      timeoutMs: 1000,
+    });
+
+    await expect(provider.revise(request())).rejects.toThrow(
+      "Speaker revision failed with HTTP 422: no speaker evidence",
+    );
+  });
+
+  it("omits an oversized worker failure body", async () => {
+    globalThis.fetch = async () => Response.json(
+      { detail: "x".repeat(5_000) },
+      { status: 500 },
+    );
+    const provider = new HttpSpeakerRevisionProvider({
+      endpoint: "http://127.0.0.1:8122/revision",
+      timeoutMs: 1000,
+    });
+
+    await expect(provider.revise(request())).rejects.toThrow(
+      /^Speaker revision failed with HTTP 500$/,
+    );
+  });
+
+  it("reports a bounded request validation failure without input data", async () => {
+    globalThis.fetch = async () => Response.json({
+      detail: [{
+        type: "int_from_float",
+        loc: ["body", "windowEndMs"],
+        msg: "Input should be a valid integer",
+        input: "must-not-survive",
+      }],
+    }, { status: 422 });
+    const provider = new HttpSpeakerRevisionProvider({
+      endpoint: "http://127.0.0.1:8122/revision",
+      timeoutMs: 1000,
+    });
+
+    await expect(provider.revise(request())).rejects.toThrow(
+      "Speaker revision failed with HTTP 422: " +
+        "body.windowEndMs: Input should be a valid integer",
+    );
+  });
 });
 
 function request(): SpeakerRevisionRequest {

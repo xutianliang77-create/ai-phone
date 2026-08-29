@@ -216,7 +216,10 @@ export class SpeakerRevisionRealtimeProvider implements RealtimeProvider {
     } catch (error) {
       state.diagnostics.errorCount += 1;
       realtimeLogger.warn({
-        error,
+        errorName: error instanceof Error ? error.name : "UnknownError",
+        errorMessage: error instanceof Error
+          ? error.message
+          : "Unknown speaker revision failure",
         sessionId,
         generation: state.generation,
         mode: this.options.mode,

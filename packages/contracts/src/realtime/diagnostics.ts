@@ -107,6 +107,22 @@ export interface RealtimeSpeakerTurnDiagnosticsDto {
   boundaryReassignedCharacterCount?: number;
 }
 
+export interface RealtimeSpeakerRevisionDiagnosticsDto {
+  configuredProvider: "http";
+  mode: "shadow" | "apply";
+  requestCount: number;
+  completedCount: number;
+  acceptedCount: number;
+  emittedUpdateCount: number;
+  errorCount: number;
+  staleResultCount: number;
+  splitParentCount: number;
+  splitChildCount: number;
+  splitRejectedCount: number;
+  cardinalityMismatchCount: number;
+  lastLatencyMs?: number;
+}
+
 export interface RealtimeAsrEndpointPolicyDto {
   mode: "conversation" | "listening" | "call_link" | "pstn";
   minAudioMs: number;
@@ -226,6 +242,7 @@ export interface RealtimeSessionDiagnosticsDto {
   version: 1;
   audio: RealtimeAudioDiagnosticsDto;
   speakerTurns?: RealtimeSpeakerTurnDiagnosticsDto;
+  speakerRevision?: RealtimeSpeakerRevisionDiagnosticsDto;
   vad?: RealtimeVadDiagnosticsDto;
   nodes?: RealtimeNodeDiagnosticsDto[];
 }
