@@ -58,6 +58,21 @@ describe("speaker revision audio buffer", () => {
       sampleRate: 16000,
     });
   });
+
+  it("normalizes fractional frame boundaries to the integer worker contract", () => {
+    const buffer = new SpeakerRevisionAudioBuffer(2000);
+    const fractionalFrame = frame(1, 1000.25, 24000);
+    fractionalFrame.data = Buffer.alloc(24_001 * 2).toString("base64");
+    buffer.push(fractionalFrame);
+
+    const snapshot = buffer.snapshot("sess_1", 1);
+    expect(snapshot).toMatchObject({
+      windowStartMs: 1000,
+      windowEndMs: 2001,
+    });
+    expect(Number.isInteger(snapshot?.windowStartMs)).toBe(true);
+    expect(Number.isInteger(snapshot?.windowEndMs)).toBe(true);
+  });
 });
 
 function frame(

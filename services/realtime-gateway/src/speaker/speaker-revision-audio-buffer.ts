@@ -56,11 +56,13 @@ export class SpeakerRevisionAudioBuffer {
     const last = frames.at(-1)!;
     const pcm = Buffer.concat(frames.map((frame) => frame.pcm));
     if (pcm.length / 2 / first.sampleRate * 1000 < 1_000) return null;
+    const windowStartMs = Math.floor(first.timestampMs);
+    const windowEndMs = Math.ceil(last.timestampMs + last.durationMs);
     return {
       sessionId,
       generation,
-      windowStartMs: first.timestampMs,
-      windowEndMs: last.timestampMs + last.durationMs,
+      windowStartMs,
+      windowEndMs,
       sampleRate: first.sampleRate,
       audioPcm16: pcm.toString("base64"),
     } satisfies SpeakerRevisionRequest;
