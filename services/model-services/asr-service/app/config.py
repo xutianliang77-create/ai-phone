@@ -60,6 +60,10 @@ class AsrConfig:
     qwen3_vllm_enforce_eager: bool = True
     qwen3_vllm_unfixed_chunk_num: int = 7
     qwen3_vllm_unfixed_token_num: int = 5
+    qwen3_forced_aligner_enabled: bool = False
+    qwen3_forced_aligner_model_dir: str = ""
+    qwen3_forced_aligner_dtype: str = "bfloat16"
+    qwen3_forced_aligner_device_map: str = "cuda:0"
     qwen3_startup_timeout_ms: int = 30000
     qwen3_max_active_sessions: int = 1
 
@@ -142,6 +146,12 @@ class AsrConfig:
             "contextSha256": _text_fingerprint(self.qwen3_context),
             "englishContextSha256": _text_fingerprint(self.qwen3_english_context),
             "mixedLanguageRetryEnabled": self.qwen3_mixed_language_retry_enabled,
+            "forcedAligner": {
+                "enabled": self.qwen3_forced_aligner_enabled,
+                "modelConfigured": bool(self.qwen3_forced_aligner_model_dir),
+                "dtype": self.qwen3_forced_aligner_dtype,
+                "deviceMap": self.qwen3_forced_aligner_device_map,
+            },
             "listeningStablePartial": {
                 "enabled": (
                     self.qwen3_listening_stable_partial_enabled
@@ -284,6 +294,22 @@ def load_config() -> AsrConfig:
         ),
         qwen3_vllm_unfixed_token_num=int(
             os.getenv("ASR_QWEN3_VLLM_UNFIXED_TOKEN_NUM", "5")
+        ),
+        qwen3_forced_aligner_enabled=(
+            os.getenv("ASR_QWEN3_FORCED_ALIGNER_ENABLED", "false").lower()
+            == "true"
+        ),
+        qwen3_forced_aligner_model_dir=os.getenv(
+            "ASR_QWEN3_FORCED_ALIGNER_MODEL_DIR",
+            "",
+        ).strip(),
+        qwen3_forced_aligner_dtype=os.getenv(
+            "ASR_QWEN3_FORCED_ALIGNER_DTYPE",
+            "bfloat16",
+        ),
+        qwen3_forced_aligner_device_map=os.getenv(
+            "ASR_QWEN3_FORCED_ALIGNER_DEVICE_MAP",
+            "cuda:0",
         ),
         qwen3_startup_timeout_ms=int(
             os.getenv("ASR_QWEN3_STARTUP_TIMEOUT_MS", "30000")

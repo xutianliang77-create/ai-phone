@@ -11,6 +11,7 @@ from app.schemas import (
     AsrBoundaryRequest,
     AsrFlushRequest,
     AsrTranscribeRequest,
+    AsrTranscribeResponse,
     HealthResponse,
     VadDiagnosticsResponse,
 )
@@ -118,7 +119,12 @@ def create_router(
             raise HTTPException(status_code=404, detail="ASR diagnostics unavailable")
         return result
 
-    @router.post("/asr/transcribe", status_code=status.HTTP_200_OK)
+    @router.post(
+        "/asr/transcribe",
+        status_code=status.HTTP_200_OK,
+        response_model=AsrTranscribeResponse,
+        response_model_exclude_none=True,
+    )
     async def transcribe(
         request: AsrTranscribeRequest,
         response: Response,
@@ -142,7 +148,12 @@ def create_router(
         response.headers.update(headers)
         return transcript
 
-    @router.post("/asr/transcribe-segment", status_code=status.HTTP_200_OK)
+    @router.post(
+        "/asr/transcribe-segment",
+        status_code=status.HTTP_200_OK,
+        response_model=AsrTranscribeResponse,
+        response_model_exclude_none=True,
+    )
     async def transcribe_segment(
         request: AsrTranscribeRequest,
         authorization: str | None = Header(default=None),
@@ -163,7 +174,12 @@ def create_router(
             return Response(status_code=status.HTTP_204_NO_CONTENT)
         return transcript
 
-    @router.post("/asr/sessions/{session_id}/flush", status_code=status.HTTP_200_OK)
+    @router.post(
+        "/asr/sessions/{session_id}/flush",
+        status_code=status.HTTP_200_OK,
+        response_model=AsrTranscribeResponse,
+        response_model_exclude_none=True,
+    )
     async def flush(
         session_id: str,
         request: AsrFlushRequest,
@@ -179,6 +195,8 @@ def create_router(
     @router.post(
         "/asr/sessions/{session_id}/boundary",
         status_code=status.HTTP_200_OK,
+        response_model=AsrTranscribeResponse,
+        response_model_exclude_none=True,
     )
     async def commit_boundary(
         session_id: str,

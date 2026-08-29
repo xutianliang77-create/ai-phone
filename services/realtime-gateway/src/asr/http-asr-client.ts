@@ -1,6 +1,7 @@
 import type {
   AsrEndpointReason,
   AsrEndpointMode,
+  AsrTokenTimingDto,
   AudioFormat,
   LanguageCode,
   TranslationLanguageCode,
@@ -9,6 +10,7 @@ import type {
   RealtimeVadDiagnosticsDto,
 } from "@translation/contracts";
 import {
+  isAsrTokenTimings,
   isSegmentTiming,
   isSegmentVadContext,
   isSpeakerAttribution,
@@ -62,6 +64,7 @@ interface HttpAsrResponse {
   confidence?: number;
   speaker?: SpeakerAttributionDto;
   timing?: SegmentTimingDto;
+  tokenTimings?: AsrTokenTimingDto[];
   endpointReason?: string;
   vadContext?: unknown;
 }
@@ -230,6 +233,9 @@ export class HttpAsrClient {
       confidence: body.confidence,
       ...(isSpeakerAttribution(body.speaker) ? { speaker: body.speaker } : {}),
       ...(isSegmentTiming(body.timing) ? { timing: body.timing } : {}),
+      ...(isAsrTokenTimings(body.tokenTimings)
+        ? { tokenTimings: body.tokenTimings }
+        : {}),
       ...(isAsrEndpointReason(body.endpointReason)
         ? { endpointReason: body.endpointReason }
         : {}),

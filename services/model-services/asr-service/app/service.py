@@ -131,4 +131,4 @@ def corrected_response(
     )
     if text == response.text:
         return response
-    return response.model_copy(update={"text": text})
+    return response.model_copy(update={"text": text, "tokenTimings": None})

@@ -5,6 +5,8 @@ from typing import Protocol
 from app.audio_buffer import RealtimePcmSegmenter
 from app.endpoint_policy import EndpointPolicy
 from app.qwen3_context_guard import is_context_echo
+from app.qwen3_alignment_runtime import align_final_tokens
+from app.qwen3_forced_aligner import TranscriptForcedAligner
 from app.qwen3_mixed_language import retry_mixed_language_prefix
 from app.qwen3_prompt import (
     clean_correction_pairs,
@@ -77,6 +79,7 @@ class Qwen3AsrEngine:
         runner: Qwen3Runner | None = None,
         vad_provider: VadProvider | None = None,
         endpoint_policies: dict[str, EndpointPolicy] | None = None,
+        forced_aligner: TranscriptForcedAligner | None = None,
     ) -> None:
         self.runner = runner or LocalQwen3AsrRunner(
             model_dir=model_dir,
@@ -99,6 +102,7 @@ class Qwen3AsrEngine:
         self.context = context
         self.english_context = english_context
         self.mixed_language_retry_enabled = mixed_language_retry_enabled
+        self.forced_aligner = forced_aligner
         self.stable_partials = StableReadablePartialCoordinator(
             self.runner,
             listening_stable_partial_enabled,
@@ -110,6 +114,8 @@ class Qwen3AsrEngine:
             prewarm()
 
     def shutdown(self) -> None:
+        if self.forced_aligner is not None:
+            self.forced_aligner.shutdown()
         shutdown = getattr(self.runner, "shutdown", None)
         if shutdown is not None:
             shutdown()
@@ -244,6 +250,7 @@ class Qwen3AsrEngine:
         endpoint_reason: str,
     ) -> AsrTranscribeResponse | None:
         audio_path = write_temp_wav(pcm, sample_rate)
+        token_timings = None
         try:
             language = qwen3_language(source_language)
             context = qwen3_context(
@@ -274,12 +281,23 @@ class Qwen3AsrEngine:
                     primary_text=text,
                     retry_context=retry_context,
                 )
+            text = text.strip()
+            if not text or is_context_echo(text, context):
+                text = stable_partial_text.strip()
+            if text and not is_context_echo(text, context):
+                token_timings = await align_final_tokens(
+                    self.forced_aligner,
+                    audio_path,
+                    text,
+                    source_language,
+                    target_language,
+                    start_ms,
+                    end_ms,
+                    session_id,
+                )
         finally:
             os.unlink(audio_path)
 
-        text = text.strip()
-        if not text or is_context_echo(text, context):
-            text = stable_partial_text.strip()
         if not text or is_context_echo(text, context):
             return None
         if self._is_duplicate(session_id, text, start_ms, end_ms):
@@ -291,6 +309,7 @@ class Qwen3AsrEngine:
             text=text,
             language=transcript_language(text, source_language, target_language),
             confidence=None,
+            tokenTimings=token_timings,
             timing={
                 "startMs": start_ms,
                 "endMs": end_ms,

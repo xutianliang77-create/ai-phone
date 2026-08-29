@@ -1,6 +1,6 @@
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 LanguageCode = str
@@ -65,6 +65,29 @@ class AsrBoundaryRequest(AsrFlushRequest):
     boundaryMs: int = Field(ge=0)
 
 
+class AsrTokenTiming(BaseModel):
+    text: str = Field(min_length=1, max_length=200)
+    startMs: int = Field(ge=0)
+    endMs: int = Field(ge=0)
+    confidence: float | None = Field(default=None, ge=0, le=1)
+    characterStart: int | None = Field(default=None, ge=0)
+    characterEnd: int | None = Field(default=None, ge=0)
+
+    @model_validator(mode="after")
+    def validate_ranges(self):
+        if self.endMs < self.startMs:
+            raise ValueError("token timing end precedes start")
+        has_character_range = (
+            self.characterStart is not None or self.characterEnd is not None
+        )
+        if has_character_range and (
+            self.characterStart is None or self.characterEnd is None or
+            self.characterEnd < self.characterStart
+        ):
+            raise ValueError("token timing character range is invalid")
+        return self
+
+
 class AsrTranscribeResponse(BaseModel):
     segmentId: str
     revision: int | None = Field(default=None, ge=0)
@@ -74,6 +97,10 @@ class AsrTranscribeResponse(BaseModel):
     confidence: float | None = Field(default=None, ge=0, le=1)
     speaker: dict[str, object] | None = None
     timing: dict[str, object] | None = None
+    tokenTimings: list[AsrTokenTiming] | None = Field(
+        default=None,
+        max_length=2048,
+    )
     endpointReason: Literal[
         "silence",
         "max_duration",

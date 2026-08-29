@@ -33,6 +33,10 @@ export function transcriptFinalEvent(
     refinement: refinement.refinement,
     speaker: transcript.speaker,
     timing: transcript.timing,
+    tokenTimings: refinement.text === transcript.text
+      ? transcript.tokenTimings
+      : undefined,
+    rawTokenTimings: transcript.tokenTimings,
     vadContext: transcript.vadContext,
   };
 }

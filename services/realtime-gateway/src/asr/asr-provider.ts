@@ -5,6 +5,7 @@ import type {
   LanguageCode,
   TranslationLanguageCode,
   SegmentTimingDto,
+  AsrTokenTimingDto,
   SpeakerAttributionDto,
   SpeakerAttributionOptionsDto,
   RealtimeSessionDiagnosticsDto,
@@ -35,6 +36,7 @@ export interface TranscriptResult {
   confidence?: number;
   speaker?: SpeakerAttributionDto;
   timing?: SegmentTimingDto;
+  tokenTimings?: AsrTokenTimingDto[];
   endpointReason?: AsrEndpointReason;
   vadContext?: SegmentVadContextDto;
 }

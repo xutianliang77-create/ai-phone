@@ -6,6 +6,7 @@ from app.endpoint_policy import EndpointPolicy
 from app.mock_engine import MockAsrEngine
 from app.qwen3_engine import Qwen3AsrEngine
 from app.qwen3_hf_engine import LocalQwen3HfAsrRunner
+from app.qwen3_forced_aligner import LocalQwen3ForcedAligner
 from app.qwen3_vllm_engine import LocalQwen3VllmAsrRunner
 from app.schemas import LanguageCode, TranslationLanguageCode
 from app.schemas import AsrTranscribeRequest, AsrTranscribeResponse
@@ -87,6 +88,7 @@ def load_engine(config: AsrConfig) -> AsrEngine:
             mixed_language_retry_enabled=config.qwen3_mixed_language_retry_enabled,
             vad_provider=vad_provider,
             endpoint_policies=qwen3_endpoint_policies(config),
+            forced_aligner=load_qwen3_forced_aligner(config),
         )
     if config.provider == "qwen3_asr_hf":
         vad_provider = load_vad_provider(config, config.qwen3_vad_energy_threshold)
@@ -106,6 +108,7 @@ def load_engine(config: AsrConfig) -> AsrEngine:
             mixed_language_retry_enabled=config.qwen3_mixed_language_retry_enabled,
             vad_provider=vad_provider,
             endpoint_policies=qwen3_endpoint_policies(config),
+            forced_aligner=load_qwen3_forced_aligner(config),
             runner=LocalQwen3HfAsrRunner(
                 model_dir=config.qwen3_model_dir,
                 dtype=config.qwen3_dtype,
@@ -134,6 +137,7 @@ def load_engine(config: AsrConfig) -> AsrEngine:
             ),
             vad_provider=vad_provider,
             endpoint_policies=qwen3_endpoint_policies(config),
+            forced_aligner=load_qwen3_forced_aligner(config),
             runner=LocalQwen3VllmAsrRunner(
                 model_dir=config.qwen3_model_dir,
                 dtype=config.qwen3_dtype,
@@ -148,6 +152,20 @@ def load_engine(config: AsrConfig) -> AsrEngine:
             ),
         )
     raise ValueError(f"Unsupported ASR provider: {config.provider}")
+
+
+def load_qwen3_forced_aligner(config: AsrConfig):
+    if not config.qwen3_forced_aligner_enabled:
+        return None
+    if not config.qwen3_forced_aligner_model_dir:
+        raise ValueError(
+            "ASR_QWEN3_FORCED_ALIGNER_MODEL_DIR is required when enabled"
+        )
+    return LocalQwen3ForcedAligner(
+        model_dir=config.qwen3_forced_aligner_model_dir,
+        dtype=config.qwen3_forced_aligner_dtype,
+        device_map=config.qwen3_forced_aligner_device_map,
+    )
 
 
 def load_vad_provider(config: AsrConfig, fallback_energy_threshold: int):

@@ -273,6 +273,7 @@ def qwen_engine(
     runner: FakeQwen3Runner,
     min_audio_ms: int = 500,
     mixed_language_retry_enabled: bool = False,
+    forced_aligner=None,
 ) -> Qwen3AsrEngine:
     return Qwen3AsrEngine(
         model_dir="/unused",
@@ -288,6 +289,7 @@ def qwen_engine(
         context="",
         english_context="",
         mixed_language_retry_enabled=mixed_language_retry_enabled,
+        forced_aligner=forced_aligner,
         runner=runner,
     )
 

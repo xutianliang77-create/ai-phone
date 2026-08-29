@@ -7,6 +7,7 @@ import type { SessionSegmentProviderUsageDto } from "../api/realtime.js";
 import type { SessionSegmentRefinementDto } from "../api/realtime.js";
 import type { RealtimeError, RealtimeErrorStage } from "./errors.js";
 import type { TranslationLanguageCode } from "../shared/languages.js";
+import type { AsrTokenTimingDto } from "../shared/asr-timing.js";
 import type {
   SegmentTimingDto,
   SpeakerAttributionDto,
@@ -34,6 +35,9 @@ export interface TranscriptEvent {
   refinement?: SessionSegmentRefinementDto;
   speaker?: SpeakerAttributionDto;
   timing?: SegmentTimingDto;
+  tokenTimings?: AsrTokenTimingDto[];
+  /** Token offsets bound only to rawText, never to optimized text. */
+  rawTokenTimings?: AsrTokenTimingDto[];
   vadContext?: SegmentVadContextDto;
 }
 
@@ -117,6 +121,8 @@ export interface ClientTextSegmentEvent {
   language: TranslationLanguageCode;
   isFinal?: boolean;
   confidence?: number;
+  timing?: SegmentTimingDto;
+  tokenTimings?: AsrTokenTimingDto[];
 }
 
 export interface SessionEndedEvent {
