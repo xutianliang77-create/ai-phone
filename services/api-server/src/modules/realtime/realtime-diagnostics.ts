@@ -121,6 +121,21 @@ function sanitizedSpeakerTurns(
     maxConfirmationLatencyMs: value.maxConfirmationLatencyMs,
     committedAudioMs: value.committedAudioMs,
     endpointReasons: { ...value.endpointReasons },
+    ...(value.boundaryRevisionAttemptCount !== undefined
+      ? { boundaryRevisionAttemptCount: value.boundaryRevisionAttemptCount }
+      : {}),
+    ...(value.boundaryRevisionSuccessCount !== undefined
+      ? { boundaryRevisionSuccessCount: value.boundaryRevisionSuccessCount }
+      : {}),
+    ...(value.boundaryRevisionFailureCount !== undefined
+      ? { boundaryRevisionFailureCount: value.boundaryRevisionFailureCount }
+      : {}),
+    ...(value.boundaryReassignedCharacterCount !== undefined
+      ? {
+          boundaryReassignedCharacterCount:
+            value.boundaryReassignedCharacterCount,
+        }
+      : {}),
   };
 }
 
@@ -146,7 +161,21 @@ function isSpeakerTurnDiagnostics(value: unknown) {
     value.committedAudioMs,
   ];
   return counts.every(isNonNegativeInteger) &&
+    isBoundaryRevisionDiagnostics(value) &&
     isEndpointReasonCounts(value.endpointReasons);
+}
+
+function isBoundaryRevisionDiagnostics(value: Record<string, unknown>) {
+  const counts = [
+    value.boundaryRevisionAttemptCount,
+    value.boundaryRevisionSuccessCount,
+    value.boundaryRevisionFailureCount,
+    value.boundaryReassignedCharacterCount,
+  ];
+  if (counts.every((item) => item === undefined)) return true;
+  if (!counts.every(isNonNegativeInteger)) return false;
+  const [attempts, successes, failures] = counts as number[];
+  return successes + failures <= attempts;
 }
 
 function isVadDiagnostics(value: unknown) {

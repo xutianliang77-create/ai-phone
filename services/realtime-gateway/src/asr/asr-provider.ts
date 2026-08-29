@@ -49,6 +49,10 @@ export interface AsrSpeakerTurnDiagnostics {
   maxConfirmationLatencyMs: number;
   committedAudioMs: number;
   endpointReasons: Partial<Record<AsrEndpointReason, number>>;
+  boundaryRevisionAttemptCount?: number;
+  boundaryRevisionSuccessCount?: number;
+  boundaryRevisionFailureCount?: number;
+  boundaryReassignedCharacterCount?: number;
 }
 
 export interface AsrTurnBoundary {

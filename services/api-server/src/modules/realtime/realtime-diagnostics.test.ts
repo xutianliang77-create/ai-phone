@@ -20,6 +20,10 @@ describe("realtime diagnostics", () => {
         maxConfirmationLatencyMs: 400,
         committedAudioMs: 2300,
         endpointReasons: { speaker_boundary: 2, flush: 1 },
+        boundaryRevisionAttemptCount: 2,
+        boundaryRevisionSuccessCount: 1,
+        boundaryRevisionFailureCount: 1,
+        boundaryReassignedCharacterCount: 8,
         rawAudio: "must-not-survive",
       },
       transcript: "must-not-survive",
@@ -71,6 +75,12 @@ describe("realtime diagnostics", () => {
     });
 
     expect(diagnostics?.speakerTurns?.commitHitCount).toBe(2);
+    expect(diagnostics?.speakerTurns).toMatchObject({
+      boundaryRevisionAttemptCount: 2,
+      boundaryRevisionSuccessCount: 1,
+      boundaryRevisionFailureCount: 1,
+      boundaryReassignedCharacterCount: 8,
+    });
     expect(diagnostics).not.toHaveProperty("transcript");
     expect(diagnostics?.speakerTurns).not.toHaveProperty("rawAudio");
     expect(diagnostics?.vad?.endpointPolicy.mode).toBe("listening");
