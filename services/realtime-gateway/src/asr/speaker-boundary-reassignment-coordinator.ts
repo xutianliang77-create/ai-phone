@@ -13,6 +13,9 @@ import {
 import type { SpeechTurnBoundary } from
   "../speaker/speech-turn-coordinator.js";
 
+type AsrRequestExecutor = <T>(sessionId: string, request: () => Promise<T>) =>
+  Promise<T>;
+
 interface PendingBoundaryRevision {
   boundary: SpeechTurnBoundary;
   nextTurn: SpeakerTurnReference;
@@ -47,6 +50,8 @@ export class SpeakerBoundaryReassignmentCoordinator {
       maximumWitnessAudioMs?: number;
       maximumPendingAudioMs?: number;
     } = {},
+    private readonly executeRequest: AsrRequestExecutor = (_sessionId, request) =>
+      request(),
   ) {}
 
   createSession(session: AsrSession) {
@@ -229,22 +234,35 @@ export class SpeakerBoundaryReassignmentCoordinator {
     const results: TranscriptResult[] = [];
     let created = false;
     try {
-      await this.asr.createSession({
-        ...state.session,
-        sessionId: auxiliarySessionId,
-        asrEndpointMode: "conversation",
-        speakerAttribution: undefined,
-      });
+      await this.executeRequest(state.session.sessionId, () =>
+        this.asr.createSession({
+          ...state.session,
+          sessionId: auxiliarySessionId,
+          asrEndpointMode: "conversation",
+          speakerAttribution: undefined,
+        })
+      );
       created = true;
       for (const frame of frames) {
-        results.push(...asrResults(await this.asr.transcribe(frame)));
+        if (state.pending !== pending) break;
+        results.push(...asrResults(await this.executeRequest(
+          state.session.sessionId,
+          () => this.asr.transcribe(frame),
+        )));
       }
-      results.push(...asrResults(await this.asr.flush(auxiliarySessionId)));
+      if (state.pending === pending) {
+        results.push(...asrResults(await this.executeRequest(
+          state.session.sessionId,
+          () => this.asr.flush(auxiliarySessionId),
+        )));
+      }
     } catch {
       return undefined;
     } finally {
-      if (created) await this.asr.closeSession(auxiliarySessionId)
-        .catch(() => undefined);
+      if (created) await this.executeRequest(
+        state.session.sessionId,
+        () => this.asr.closeSession(auxiliarySessionId),
+      ).catch(() => undefined);
     }
     const witness = [...results].reverse().find((result) =>
       result.isFinal !== false && result.text.trim().length > 0
@@ -267,7 +285,6 @@ export class SpeakerBoundaryReassignmentCoordinator {
       endpointReason: "speaker_boundary" as const,
     };
   }
-
   private remember(state: SessionState, transcripts: TranscriptResult[]) {
     for (const transcript of transcripts) {
       if (transcript.isFinal === false || !transcript.timing) continue;

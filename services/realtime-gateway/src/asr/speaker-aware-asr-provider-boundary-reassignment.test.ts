@@ -23,7 +23,7 @@ describe("speaker aware ASR boundary reassignment", () => {
       speaker: { speakerId: "speaker_1" },
       timing: { endMs: 939 },
     });
-    expect(observed[10]).toEqual(expect.arrayContaining([
+    expect(observed[11]).toEqual(expect.arrayContaining([
       expect.objectContaining({
         segmentId: "seg_a",
         turnId: "turn_1",
@@ -43,6 +43,7 @@ describe("speaker aware ASR boundary reassignment", () => {
     ]));
     expect(asr.auxiliarySessions).toEqual(["sess_1-boundary-480"]);
     expect(asr.closedSessions).toEqual(asr.auxiliarySessions);
+    expect(asr.maxConcurrentRequests).toBe(1);
     expect(await provider.diagnostics("sess_1")).toMatchObject({
       speakerTurns: {
         commitMissCount: 1,
@@ -75,15 +76,18 @@ async function runBoundaryScenario(asrEndpointMode: "listening" | "conversation"
   for (let sequence = 1; sequence <= 10; sequence += 1) {
     observed.push(await provider.transcribe(pcmFrame(sequence)));
   }
-  await new Promise((resolve) => setTimeout(resolve, 0));
   observed.push(await provider.transcribe(pcmFrame(11)));
+  await new Promise((resolve) => setTimeout(resolve, 100));
+  observed.push(await provider.transcribe(pcmFrame(12)));
   return { asr, provider, observed };
 }
 
 class LateBoundaryWitnessAsrProvider implements AsrProvider {
   readonly auxiliarySessions: string[] = [];
   readonly closedSessions: string[] = [];
+  maxConcurrentRequests = 0;
   private mainCalls = 0;
+  private activeRequests = 0;
 
   async createSession(input: AsrSession) {
     if (input.sessionId !== session.sessionId) {
@@ -92,20 +96,28 @@ class LateBoundaryWitnessAsrProvider implements AsrProvider {
   }
 
   async transcribe(input: AudioFrame): Promise<AsrProviderResult> {
-    if (input.sessionId !== session.sessionId) return null;
-    this.mainCalls += 1;
-    if (this.mainCalls === 2) return previousTranscript();
-    if (this.mainCalls === 11) return nextTranscript();
-    return null;
+    return this.trackRequest(async () => {
+      if (input.sessionId !== session.sessionId) {
+        await new Promise((resolve) => setTimeout(resolve, 5));
+        return null;
+      }
+      this.mainCalls += 1;
+      if (this.mainCalls === 2) return previousTranscript();
+      if (this.mainCalls === 11) return nextTranscript();
+      return null;
+    });
   }
 
   async flush(sessionId: string): Promise<AsrProviderResult> {
-    if (sessionId === session.sessionId) return null;
-    return {
-      segmentId: `witness_${sessionId}`,
-      text: "我觉得咱们这个这个目标人群可以不",
-      language: "zh",
-    };
+    return this.trackRequest(async () => {
+      if (sessionId === session.sessionId) return null;
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      return {
+        segmentId: `witness_${sessionId}`,
+        text: "我觉得咱们这个这个目标人群可以不",
+        language: "zh" as const,
+      };
+    });
   }
 
   async commitBoundary() {
@@ -118,6 +130,19 @@ class LateBoundaryWitnessAsrProvider implements AsrProvider {
 
   async healthCheck() {
     return true;
+  }
+
+  private async trackRequest<T>(request: () => Promise<T>) {
+    this.activeRequests += 1;
+    this.maxConcurrentRequests = Math.max(
+      this.maxConcurrentRequests,
+      this.activeRequests,
+    );
+    try {
+      return await request();
+    } finally {
+      this.activeRequests -= 1;
+    }
   }
 }
 

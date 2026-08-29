@@ -13,10 +13,10 @@ import { SpeechTurnCoordinator } from "../speaker/speech-turn-coordinator.js";
 import { realtimeLogger } from "../metrics/realtime-metrics.js";
 import { SpeakerTurnDiagnostics } from "./speaker-turn-diagnostics.js";
 import { SpeakerTurnAssignment } from "./speaker-turn-assignment.js";
+import { AsrRequestScheduler } from "./asr-request-scheduler.js";
 import { RecentPcmAudioBuffer } from "../speaker/recent-pcm-audio-buffer.js";
 import type { VoiceIdentityMatcher } from "../speaker/voice-identity-matcher.js";
-import { applyVoiceIdentities } from
-  "../speaker/speaker-voice-identity.js";
+import { applyVoiceIdentities } from "../speaker/speaker-voice-identity.js";
 import {
   SpeakerSpanCapture,
   speakerSpanCaptureOptionsFromEnvironment,
@@ -41,8 +41,7 @@ export type { SpeakerSpanCaptureOptions } from "../speaker/speaker-span-capture.
 
 export class SpeakerAwareAsrProvider implements AsrProvider {
   private readonly spansBySession = new Map<string, SpeakerSpan[]>();
-  private readonly boundariesBySession =
-    new Map<string, SpeakerBoundaryGuard[]>();
+  private readonly boundariesBySession = new Map<string, SpeakerBoundaryGuard[]>();
   private readonly enabledSessions = new Set<string>();
   private readonly turnDiagnostics = new SpeakerTurnDiagnostics();
   private readonly turnAssignment = new SpeakerTurnAssignment();
@@ -54,6 +53,7 @@ export class SpeakerAwareAsrProvider implements AsrProvider {
     Map<string, NonNullable<TranscriptResult["speaker"]>>
   >();
   private readonly spanCapture: SpeakerSpanCapture;
+  private readonly asrRequests = new AsrRequestScheduler();
   private readonly boundaryReassignment: SpeakerBoundaryReassignmentCoordinator;
 
   constructor(
@@ -64,11 +64,13 @@ export class SpeakerAwareAsrProvider implements AsrProvider {
     spanCaptureOptions = speakerSpanCaptureOptionsFromEnvironment(),
   ) {
     this.spanCapture = new SpeakerSpanCapture(spanCaptureOptions);
-    this.boundaryReassignment = new SpeakerBoundaryReassignmentCoordinator(asr);
+    this.boundaryReassignment = new SpeakerBoundaryReassignmentCoordinator(
+      asr, {}, (sessionId, request) => this.asrRequests.run(sessionId, request),
+    );
   }
 
   async createSession(session: AsrSession) {
-    await this.asr.createSession(session);
+    await this.asrRequests.run(session.sessionId, () => this.asr.createSession(session));
     const options = session.speakerAttribution;
     if (!options || (options.mode !== "auto" &&
         options.mode !== "diarization")) return;
@@ -92,7 +94,6 @@ export class SpeakerAwareAsrProvider implements AsrProvider {
       this.recordSpeakerFailure(session.sessionId, "create", error);
     }
   }
-
   async transcribe(frame: AudioFrame) {
     if (!this.enabledSessions.has(frame.sessionId)) {
       return this.asr.transcribe(frame);
@@ -100,7 +101,7 @@ export class SpeakerAwareAsrProvider implements AsrProvider {
     this.boundaryReassignment.recordFrame(frame);
     this.identityAudio.get(frame.sessionId)?.push(frame);
     const [transcripts, nextSpans] = await Promise.all([
-      this.asr.transcribe(frame),
+      this.asrRequests.run(frame.sessionId, () => this.asr.transcribe(frame)),
       this.safePush(frame),
     ]);
     const spans = retainRecentSpeakerSpans(
@@ -213,10 +214,9 @@ export class SpeakerAwareAsrProvider implements AsrProvider {
     );
     return providerResult(await this.applyVoiceIdentities(frame.sessionId, reassigned));
   }
-
   async flush(sessionId: string) {
     const [transcripts, nextSpans] = await Promise.all([
-      this.asr.flush(sessionId),
+      this.asrRequests.run(sessionId, () => this.asr.flush(sessionId)),
       this.enabledSessions.has(sessionId)
         ? this.safeFlush(sessionId)
         : Promise.resolve([]),
@@ -248,7 +248,6 @@ export class SpeakerAwareAsrProvider implements AsrProvider {
     this.boundaryReassignment.finish(sessionId);
     return providerResult(await this.applyVoiceIdentities(sessionId, reassigned));
   }
-
   async diagnostics(sessionId: string) {
     const underlying = await this.asr.diagnostics?.(sessionId) ?? {};
     const speakerTurns = this.turnDiagnostics.snapshot(sessionId);
@@ -275,7 +274,7 @@ export class SpeakerAwareAsrProvider implements AsrProvider {
     this.identityAudio.delete(sessionId);
     this.identitiesBySpeaker.delete(sessionId);
     this.spanCapture.clearSession(sessionId);
-    await this.asr.closeSession(sessionId);
+    await this.asrRequests.run(sessionId, () => this.asr.closeSession(sessionId));
     if (speakerEnabled) {
       await this.speaker.closeSession(sessionId).catch(() => undefined);
     }
@@ -308,7 +307,9 @@ export class SpeakerAwareAsrProvider implements AsrProvider {
     if (!this.asr.commitBoundary) return { result: null, error: false };
     try {
       return {
-        result: await this.asr.commitBoundary({ sessionId, boundaryMs }),
+        result: await this.asrRequests.run(sessionId, () =>
+          this.asr.commitBoundary!({ sessionId, boundaryMs })
+        ),
         error: false,
       };
     } catch {
