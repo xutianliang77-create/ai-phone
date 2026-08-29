@@ -135,6 +135,14 @@ describe("lmstudio realtime provider continuation", () => {
       revision: 7,
       text: "我会整理会议纪要，并在下班前发给大家确认。",
     });
+    const rawTokenTimings = "rawTokenTimings" in revised[1]
+      ? revised[1].rawTokenTimings
+      : undefined;
+    expect(rawTokenTimings?.length).toBeGreaterThan(10);
+    expect(rawTokenTimings?.every((token) =>
+      revised[1].rawText?.slice(token.characterStart, token.characterEnd) ===
+        token.text
+    )).toBe(true);
     expect(revised[2]).toMatchObject({
       segmentId: "qwen3_seg_418",
       revision: 7,
@@ -250,6 +258,7 @@ function safeListeningContinuationProvider(): AsrProvider {
       text: "我会整。", language: "zh" as const,
       endpointReason: "max_duration" as const, speaker,
       timing: { startMs: 0, endMs: 6000, source: "client" as const },
+      tokenTimings: characterTimings("我会整。", 0),
     },
     {
       segmentId: "qwen3_seg_478", turnId: "turn_1", revision: 2,
@@ -262,6 +271,10 @@ function safeListeningContinuationProvider(): AsrProvider {
       text: "整理会议纪要，并在下班前发给大家确认。",
       language: "zh" as const, endpointReason: "silence" as const, speaker,
       timing: { startMs: 6001, endMs: 11600, source: "client" as const },
+      tokenTimings: characterTimings(
+        "整理会议纪要，并在下班前发给大家确认。",
+        6001,
+      ),
     },
   ];
   return {
@@ -271,6 +284,20 @@ function safeListeningContinuationProvider(): AsrProvider {
     closeSession: async () => undefined,
     healthCheck: async () => true,
   };
+}
+
+function characterTimings(text: string, startMs: number) {
+  return Array.from(text).flatMap((character, index) =>
+    /[，。,.]/u.test(character)
+      ? []
+      : [{
+          text: character,
+          startMs: startMs + index * 80,
+          endMs: startMs + (index + 1) * 80,
+          characterStart: index,
+          characterEnd: index + 1,
+        }]
+  );
 }
 
 function audioFrame(sequence: number) {

@@ -1,4 +1,5 @@
 import type {
+  AsrTokenTimingDto,
   AsrEndpointReason,
   SegmentTimingDto,
   SegmentVadContextDto,
@@ -21,6 +22,7 @@ export interface SpeechTranscript {
   confidence?: number;
   speaker?: SpeakerAttributionDto;
   timing?: SegmentTimingDto;
+  tokenTimings?: AsrTokenTimingDto[];
   endpointReason?: AsrEndpointReason;
   vadContext?: SegmentVadContextDto;
 }
