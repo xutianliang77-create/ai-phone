@@ -26,7 +26,8 @@ Sortformer 数量和 A→B→A 顺序正确；问题是边界在 ASR endpoint �
    跨过确认边界时建立 correction candidate。
 3. 等待后一 speaker 的正式 final；此时 Qwen endpoint 已清空活动 segment。边界后至少
    前置800ms、后置1.8秒的保留音频使用同一 Qwen session、每个 boundary 唯一的高位
-   sequence 重放并立即 flush。8021 的`MAX_ACTIVE_SESSIONS=1`不允许临时子会话；本方案
+   sequence 合并成一个内部PCM frame重放并立即 flush，避免逐小帧VAD裁掉前缀。8021 的
+   `MAX_ACTIVE_SESSIONS=1`不允许临时子会话；本方案
    不创建第二 session，不改模型服务，也不是新模型或独立证人。
 4. 只有同时获得以下三方证据才修订：
    - 前一 speaker 已发 transcript；

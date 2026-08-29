@@ -16,7 +16,6 @@ import { realtimeLogger } from "../metrics/realtime-metrics.js";
 
 type AsrRequestExecutor = <T>(sessionId: string, request: () => Promise<T>) =>
   Promise<T>;
-
 interface PendingBoundaryRevision {
   boundary: SpeechTurnBoundary;
   nextTurn: SpeakerTurnReference;
@@ -25,7 +24,6 @@ interface PendingBoundaryRevision {
   next?: TranscriptResult;
   attempted: boolean;
 }
-
 interface SessionState {
   session: AsrSession;
   audio: RecentPcmAudioBuffer;
@@ -33,17 +31,14 @@ interface SessionState {
   pending?: PendingBoundaryRevision;
   diagnostics: SpeakerBoundaryRevisionDiagnostics;
 }
-
 export interface SpeakerBoundaryRevisionDiagnostics {
   boundaryRevisionAttemptCount: number;
   boundaryRevisionSuccessCount: number;
   boundaryRevisionFailureCount: number;
   boundaryReassignedCharacterCount: number;
 }
-
 export class SpeakerBoundaryReassignmentCoordinator {
   private readonly sessions = new Map<string, SessionState>();
-
   constructor(
     private readonly asr: AsrProvider,
     private readonly options: {
@@ -55,7 +50,6 @@ export class SpeakerBoundaryReassignmentCoordinator {
     private readonly executeRequest: AsrRequestExecutor = (_sessionId, request) =>
       request(),
   ) {}
-
   createSession(session: AsrSession) {
     this.sessions.set(session.sessionId, {
       session,
@@ -64,11 +58,9 @@ export class SpeakerBoundaryReassignmentCoordinator {
       diagnostics: emptyDiagnostics(),
     });
   }
-
   recordFrame(frame: AudioFrame) {
     this.sessions.get(frame.sessionId)?.audio.push(frame);
   }
-
   recordCommitMiss(
     sessionId: string,
     boundary: SpeechTurnBoundary,
@@ -231,12 +223,11 @@ export class SpeakerBoundaryReassignmentCoordinator {
     const results: TranscriptResult[] = [];
     let flushed = false;
     try {
-      for (const frame of frames) {
-        results.push(...asrResults(await this.executeRequest(
-          state.session.sessionId,
-          () => this.asr.transcribe(frame),
-        )));
-      }
+      const replayFrame = mergeReplayFrames(frames);
+      results.push(...asrResults(await this.executeRequest(
+        state.session.sessionId,
+        () => this.asr.transcribe(replayFrame),
+      )));
       results.push(...asrResults(await this.executeRequest(
         state.session.sessionId,
         () => this.asr.flush(state.session.sessionId),
@@ -311,6 +302,16 @@ function safeNextTranscript(
 
 function replaySequenceBase(boundaryMs: number) {
   return 8_000_000_000_000_000 + Math.round(boundaryMs) % 1_000_000_000 * 1000;
+}
+
+function mergeReplayFrames(frames: AudioFrame[]): AudioFrame {
+  const first = frames[0];
+  return {
+    ...first,
+    data: Buffer.concat(frames.map((frame) =>
+      Buffer.from(frame.data, "base64")
+    )).toString("base64"),
+  };
 }
 
 function selectWitness(results: TranscriptResult[]) {

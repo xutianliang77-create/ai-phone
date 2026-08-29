@@ -47,10 +47,17 @@ describe("speaker boundary reassignment coordinator", () => {
       timing: { startMs: 50282 },
     });
     expect(asr.auxiliarySessions).toHaveLength(0);
-    expect(asr.transcribedFrames).toHaveLength(26);
-    expect(asr.transcribedFrames.every((frame) =>
-      frame.sessionId === "sess_1" && frame.sequence > 8_000_000_000_000_000
-    )).toBe(true);
+    expect(asr.transcribedFrames).toHaveLength(1);
+    expect(asr.transcribedFrames[0]).toMatchObject({
+      sessionId: "sess_1",
+      sequence: expect.any(Number),
+      timestampMs: 49482,
+    });
+    expect(asr.transcribedFrames[0].sequence).toBeGreaterThan(
+      8_000_000_000_000_000,
+    );
+    expect(Buffer.from(asr.transcribedFrames[0].data, "base64").length)
+      .toBe(124_800);
     expect(asr.closedSessions).toEqual([]);
     expect(coordinator.diagnostics("sess_1")).toEqual({
       boundaryRevisionAttemptCount: 1,
