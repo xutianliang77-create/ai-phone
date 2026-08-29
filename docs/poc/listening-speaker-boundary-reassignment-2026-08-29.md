@@ -44,7 +44,7 @@ Sortformer 数量和 A→B→A 顺序正确；问题是边界在 ASR endpoint �
 
 - commit outcome 必须为 miss，不能覆盖成功 commit；
 - 前段、后段必须分别绑定 previous/next confirmed speaker 和 turn；
-- 前段 timing 必须跨 boundary，越界范围限定为 80–1200ms；
+- 前段 timing 必须跨 boundary，越界范围限定为 80–1400ms；
 - 声学witness固定只允许160ms pre-roll，证据起点不得早于boundary−200ms；
 - 无 overlap、无 unknown、多 active speaker 时禁用；
 - witness 音频必须覆盖 boundary 后至少 1800ms，最多 2400ms；

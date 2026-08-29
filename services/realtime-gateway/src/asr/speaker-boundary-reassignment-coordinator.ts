@@ -295,7 +295,7 @@ function safePreviousTranscript(
   const active = [...new Set(timing.activeSpeakerIds ?? [])];
   const overrunMs = timing.endMs - boundary.boundaryMs;
   return timing.startMs < boundary.boundaryMs &&
-    overrunMs >= 80 && overrunMs <= 1_200 &&
+    overrunMs >= 80 && overrunMs <= 1_400 &&
     (active.length === 0 ||
       active.length === 1 && active[0] === boundary.previousSpeakerId);
 }
