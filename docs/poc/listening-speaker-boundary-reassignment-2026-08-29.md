@@ -25,7 +25,7 @@ Sortformer 数量和 A→B→A 顺序正确；问题是边界在 ASR endpoint �
 2. 记录最近已发 final transcript；只在 commit miss 且前一 transcript timing 确实
    跨过确认边界时建立 correction candidate。
 3. 等待后一 speaker 的正式 final；此时 Qwen endpoint 已清空活动 segment。边界后至少
-   前置160ms、后置至少1.8秒且最多2.4秒的保留音频使用同一 Qwen session、每个 boundary 唯一的高位
+   前置480ms、后置至少1.8秒且最多2.0秒的保留音频使用同一 Qwen session、每个 boundary 唯一的高位
    sequence 重放并立即 flush。8021 的`MAX_ACTIVE_SESSIONS=1`不允许临时子会话；本方案
    不创建第二 session，不改模型服务，也不是新模型或独立证人。
 4. 只有同时获得以下三方证据才修订：
@@ -45,7 +45,7 @@ Sortformer 数量和 A→B→A 顺序正确；问题是边界在 ASR endpoint �
 - commit outcome 必须为 miss，不能覆盖成功 commit；
 - 前段、后段必须分别绑定 previous/next confirmed speaker 和 turn；
 - 前段 timing 必须跨 boundary，越界范围限定为 80–1400ms；
-- 声学witness固定只允许160ms pre-roll，证据起点不得早于boundary−200ms；
+- 声学witness固定只允许480ms pre-roll，证据起点不得早于boundary−520ms，总窗口不得超过2.6秒；
 - 无 overlap、无 unknown、多 active speaker 时禁用；
 - witness 音频必须覆盖 boundary 后至少 1800ms，最多 2400ms；
 - correction 每条 boundary 最多运行一次，只能在后一正式 final 的 endpoint 内执行；

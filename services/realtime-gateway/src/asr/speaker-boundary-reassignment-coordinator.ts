@@ -217,9 +217,9 @@ export class SpeakerBoundaryReassignmentCoordinator {
     const boundaryMs = pending.boundary.boundaryMs;
     const startMs = Math.max(
       0,
-      boundaryMs - (this.options.witnessPreRollMs ?? 160),
+      boundaryMs - (this.options.witnessPreRollMs ?? 480),
     );
-    const endMs = boundaryMs + (this.options.maximumWitnessAudioMs ?? 2_400);
+    const endMs = boundaryMs + (this.options.maximumWitnessAudioMs ?? 2_000);
     const frames = state.audio.framesBetween({
       sessionId: state.session.sessionId,
       startMs,

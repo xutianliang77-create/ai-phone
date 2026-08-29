@@ -47,7 +47,7 @@ describe("speaker boundary reassignment coordinator", () => {
       timing: { startMs: 50282 },
     });
     expect(asr.auxiliarySessions).toHaveLength(0);
-    expect(asr.transcribedFrames).toHaveLength(26);
+    expect(asr.transcribedFrames).toHaveLength(25);
     expect(asr.transcribedFrames.every((frame) =>
       frame.sessionId === "sess_1" && frame.sequence > 8_000_000_000_000_000
     )).toBe(true);
@@ -274,12 +274,12 @@ function nextTranscript() {
 
 function boundaryFrames() {
   const frames = [];
-  for (let index = 0; index < 26; index += 1) {
+  for (let index = 0; index < 25; index += 1) {
     frames.push({
       type: "audio.frame" as const,
       sessionId: "sess_1",
       sequence: index + 1,
-      timestampMs: 50082 + index * 100,
+      timestampMs: 49782 + index * 100,
       format: "pcm16" as const,
       sampleRate: 24000 as const,
       data: Buffer.alloc(4800, 1).toString("base64"),
