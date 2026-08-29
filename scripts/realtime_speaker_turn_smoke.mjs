@@ -76,6 +76,7 @@ const evidence = {
   apiBaseUrl,
   fixturePaths,
   sessionId: session.sessionId,
+  audioStartedAtMs: stream.audioStartedAtMs,
   gateOptions: {
     expectedSpeakerCount,
     minimumSegments,
@@ -165,7 +166,7 @@ async function streamSession(session) {
   await ended;
   const endedEventAtMs = Date.now();
   ws.close();
-  return { events, endSentAtMs, endedEventAtMs };
+  return { events, audioStartedAtMs: startedAt, endSentAtMs, endedEventAtMs };
 }
 
 function waitForSocketOpen(ws) {

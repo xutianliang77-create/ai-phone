@@ -13,6 +13,8 @@ import {
 import type { SpeechTurnBoundary } from
   "../speaker/speech-turn-coordinator.js";
 import { realtimeLogger } from "../metrics/realtime-metrics.js";
+import { logSpeakerBoundaryReplay } from
+  "./speaker-boundary-replay-observability.js";
 
 type AsrRequestExecutor = <T>(sessionId: string, request: () => Promise<T>) =>
   Promise<T>;
@@ -107,19 +109,16 @@ export class SpeakerBoundaryReassignmentCoordinator {
     this.remember(state, revised);
     return revised;
   }
-
   diagnostics(sessionId: string): SpeakerBoundaryRevisionDiagnostics | undefined {
     const diagnostics = this.sessions.get(sessionId)?.diagnostics;
     return diagnostics ? { ...diagnostics } : undefined;
   }
-
   clear(sessionId: string) {
     const state = this.sessions.get(sessionId);
     state?.audio.clear();
     if (state) state.pending = undefined;
     this.sessions.delete(sessionId);
   }
-
   finish(sessionId: string) {
     const state = this.sessions.get(sessionId);
     const pending = state?.pending;
@@ -129,7 +128,6 @@ export class SpeakerBoundaryReassignmentCoordinator {
     }
     state.pending = undefined;
   }
-
   private applyPlan(
     state: SessionState,
     transcripts: TranscriptResult[],
@@ -168,7 +166,6 @@ export class SpeakerBoundaryReassignmentCoordinator {
       ),
     ];
   }
-
   private captureNext(
     pending: PendingBoundaryRevision,
     transcripts: TranscriptResult[],
@@ -179,7 +176,6 @@ export class SpeakerBoundaryReassignmentCoordinator {
     if (index >= 0) pending.next = transcripts[index];
     return index;
   }
-
   private witnessAudioReady(
     state: SessionState,
     pending: PendingBoundaryRevision,
@@ -189,7 +185,6 @@ export class SpeakerBoundaryReassignmentCoordinator {
       latestEndMs - pending.boundary.boundaryMs >=
         (this.options.minimumWitnessAudioMs ?? 1_800);
   }
-
   private expirePending(state: SessionState) {
     const pending = state.pending;
     const latestEndMs = state.audio.latestEndMs();
@@ -224,6 +219,11 @@ export class SpeakerBoundaryReassignmentCoordinator {
     let flushed = false;
     try {
       const replayFrame = mergeReplayFrames(frames);
+      logSpeakerBoundaryReplay(
+        state.session.sessionId,
+        boundaryMs,
+        replayFrame,
+      );
       results.push(...asrResults(await this.executeRequest(
         state.session.sessionId,
         () => this.asr.transcribe(replayFrame),
