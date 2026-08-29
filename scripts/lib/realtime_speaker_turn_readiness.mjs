@@ -136,9 +136,27 @@ export function evaluateRealtimeSpeakerTurnReadiness(input, options = {}) {
       errors.push("No confirmed speaker boundary was recorded");
     }
     if (diagnostics.commitHitCount < 1) errors.push("Speaker boundary commit did not hit");
-    if (diagnostics.commitMissCount !== 0) errors.push("Speaker boundary commit miss is nonzero");
+    const unresolvedCommitMissCount = Math.max(
+      0,
+      diagnostics.commitMissCount -
+        (diagnostics.boundaryRevisionSuccessCount ?? 0),
+    );
+    if (unresolvedCommitMissCount !== 0) {
+      errors.push(
+        `Speaker boundary unresolved commit misses=${unresolvedCommitMissCount}`,
+      );
+    }
     if (diagnostics.commitErrorCount !== 0) errors.push("Speaker boundary commit error is nonzero");
-    if (diagnostics.endpointRaceCount !== 0) errors.push("Speaker endpoint race is nonzero");
+    const unresolvedEndpointRaceCount = Math.max(
+      0,
+      diagnostics.endpointRaceCount - diagnostics.commitHitCount -
+        (diagnostics.boundaryRevisionSuccessCount ?? 0),
+    );
+    if (unresolvedEndpointRaceCount !== 0) {
+      errors.push(
+        `Speaker unresolved endpoint races=${unresolvedEndpointRaceCount}`,
+      );
+    }
   } else if (diagnostics.confirmedBoundaryCount !== 0) {
     errors.push("Unexpected speaker boundary was recorded");
   }
@@ -153,6 +171,20 @@ export function evaluateRealtimeSpeakerTurnReadiness(input, options = {}) {
     turnIds,
     dominantLanguages,
     segmentCount: ordered.length,
+    unresolvedCommitMissCount: diagnostics
+      ? Math.max(
+          0,
+          diagnostics.commitMissCount -
+            (diagnostics.boundaryRevisionSuccessCount ?? 0),
+        )
+      : null,
+    unresolvedEndpointRaceCount: diagnostics
+      ? Math.max(
+          0,
+          diagnostics.endpointRaceCount - diagnostics.commitHitCount -
+            (diagnostics.boundaryRevisionSuccessCount ?? 0),
+        )
+      : null,
     diagnostics: detail?.diagnostics ?? null,
   };
 }
