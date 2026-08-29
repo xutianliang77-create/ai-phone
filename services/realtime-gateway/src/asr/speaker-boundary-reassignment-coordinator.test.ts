@@ -46,9 +46,12 @@ describe("speaker boundary reassignment coordinator", () => {
       speaker: { speakerId: "speaker_3" },
       timing: { startMs: 50282 },
     });
-    expect(asr.auxiliarySessions).toHaveLength(1);
+    expect(asr.auxiliarySessions).toHaveLength(0);
     expect(asr.transcribedFrames).toHaveLength(24);
-    expect(asr.closedSessions).toEqual(asr.auxiliarySessions);
+    expect(asr.transcribedFrames.every((frame) =>
+      frame.sessionId === "sess_1" && frame.sequence > 8_000_000_000_000_000
+    )).toBe(true);
+    expect(asr.closedSessions).toEqual([]);
     expect(coordinator.diagnostics("sess_1")).toEqual({
       boundaryRevisionAttemptCount: 1,
       boundaryRevisionSuccessCount: 1,
@@ -74,7 +77,7 @@ describe("speaker boundary reassignment coordinator", () => {
     await settleAsyncWork();
     expect(await coordinator.process("sess_1", [nextTranscript()]))
       .toEqual([nextTranscript()]);
-    expect(asr.auxiliarySessions).toHaveLength(1);
+    expect(asr.auxiliarySessions).toHaveLength(0);
     expect(coordinator.diagnostics("sess_1")).toMatchObject({
       boundaryRevisionAttemptCount: 1,
       boundaryRevisionSuccessCount: 0,
@@ -82,7 +85,7 @@ describe("speaker boundary reassignment coordinator", () => {
     });
   });
 
-  it("does not block live transcripts while the boundary witness is running", async () => {
+  it("replays only after the next final and waits for its bounded witness", async () => {
     const asr = new DelayedBoundaryWitnessAsrProvider();
     const coordinator = new SpeakerBoundaryReassignmentCoordinator(asr);
     coordinator.createSession(session());
@@ -96,18 +99,22 @@ describe("speaker boundary reassignment coordinator", () => {
     );
 
     expect(await coordinator.process("sess_1", [])).toEqual([]);
-    expect(await coordinator.process("sess_1", [nextTranscript()]))
-      .toEqual([nextTranscript()]);
-    asr.resolveWitness("我觉得咱们这个这个目标人群可以不");
+    let settled = false;
+    const processing = coordinator.process("sess_1", [nextTranscript()])
+      .then((result) => {
+        settled = true;
+        return result;
+      });
     await settleAsyncWork();
-
-    expect(await coordinator.process("sess_1", [])).toEqual([
+    expect(settled).toBe(false);
+    asr.resolveWitness("我觉得咱们这个这个目标人群可以不");
+    expect(await processing).toEqual([
       expect.objectContaining({ segmentId: "seg_a", revision: 7 }),
       expect.objectContaining({ segmentId: "seg_b", revision: 8 }),
     ]);
   });
 
-  it("fails closed at session finish without waiting for an in-flight witness", async () => {
+  it("drops an unattempted candidate at session finish", async () => {
     const asr = new DelayedBoundaryWitnessAsrProvider();
     const coordinator = new SpeakerBoundaryReassignmentCoordinator(asr);
     coordinator.createSession(session());
@@ -124,16 +131,14 @@ describe("speaker boundary reassignment coordinator", () => {
     coordinator.finish("sess_1");
 
     expect(coordinator.diagnostics("sess_1")).toMatchObject({
-      boundaryRevisionAttemptCount: 1,
+      boundaryRevisionAttemptCount: 0,
       boundaryRevisionSuccessCount: 0,
-      boundaryRevisionFailureCount: 1,
+      boundaryRevisionFailureCount: 0,
     });
     expect(await coordinator.process("sess_1", [nextTranscript()]))
       .toEqual([nextTranscript()]);
-    asr.resolveWitness("我觉得咱们这个这个目标人群可以不");
-    await settleAsyncWork();
     expect(coordinator.diagnostics("sess_1").boundaryRevisionFailureCount)
-      .toBe(1);
+      .toBe(0);
   });
 
   it("does not register a miss without a safe crossing previous transcript", async () => {

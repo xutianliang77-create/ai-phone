@@ -93,12 +93,22 @@ export class SpeakerBoundaryReassignmentCoordinator {
     if (!state) return transcripts;
     this.expirePending(state);
     const pending = state.pending;
-    if (pending && !pending.attempted && this.witnessAudioReady(state, pending)) {
-      this.startWitness(state, pending);
-    }
     const nextIndex = state.pending
       ? this.captureNext(state.pending, transcripts)
       : -1;
+    if (pending && nextIndex >= 0 && !pending.attempted) {
+      if (!this.witnessAudioReady(state, pending)) {
+        state.pending = undefined;
+      } else {
+        pending.attempted = true;
+        state.diagnostics.boundaryRevisionAttemptCount += 1;
+        pending.witness = await this.redecodeWitness(state, pending);
+        if (!pending.witness) {
+          state.diagnostics.boundaryRevisionFailureCount += 1;
+          state.pending = undefined;
+        }
+      }
+    }
     const revised = this.applyPlan(state, transcripts, nextIndex);
     this.remember(state, revised);
     return revised;
@@ -167,31 +177,6 @@ export class SpeakerBoundaryReassignmentCoordinator {
     return index;
   }
 
-  private startWitness(
-    state: SessionState,
-    pending: PendingBoundaryRevision,
-  ) {
-    pending.attempted = true;
-    state.diagnostics.boundaryRevisionAttemptCount += 1;
-    void this.captureWitness(state, pending).catch(() => {
-      if (state.pending !== pending) return;
-      state.diagnostics.boundaryRevisionFailureCount += 1;
-      state.pending = undefined;
-    });
-  }
-
-  private async captureWitness(
-    state: SessionState,
-    pending: PendingBoundaryRevision,
-  ) {
-    const witness = await this.redecodeWitness(state, pending);
-    if (state.pending !== pending) return;
-    pending.witness = witness;
-    if (witness) return;
-    state.diagnostics.boundaryRevisionFailureCount += 1;
-    state.pending = undefined;
-  }
-
   private witnessAudioReady(
     state: SessionState,
     pending: PendingBoundaryRevision,
@@ -220,53 +205,37 @@ export class SpeakerBoundaryReassignmentCoordinator {
   ) {
     const startMs = pending.boundary.boundaryMs;
     const endMs = startMs + (this.options.maximumWitnessAudioMs ?? 2_400);
-    const auxiliarySessionId = boundarySessionId(
-      state.session.sessionId,
-      startMs,
-    );
     const frames = state.audio.framesBetween({
-      sessionId: auxiliarySessionId,
+      sessionId: state.session.sessionId,
       startMs,
       endMs,
+      sequenceBase: replaySequenceBase(startMs),
     });
     if (audioDurationMs(frames) <
         (this.options.minimumWitnessAudioMs ?? 1_800)) return undefined;
     const results: TranscriptResult[] = [];
-    let created = false;
+    let flushed = false;
     try {
-      await this.executeRequest(state.session.sessionId, () =>
-        this.asr.createSession({
-          ...state.session,
-          sessionId: auxiliarySessionId,
-          asrEndpointMode: "conversation",
-          speakerAttribution: undefined,
-        })
-      );
-      created = true;
       for (const frame of frames) {
-        if (state.pending !== pending) break;
         results.push(...asrResults(await this.executeRequest(
           state.session.sessionId,
           () => this.asr.transcribe(frame),
         )));
       }
-      if (state.pending === pending) {
-        results.push(...asrResults(await this.executeRequest(
-          state.session.sessionId,
-          () => this.asr.flush(auxiliarySessionId),
-        )));
-      }
+      results.push(...asrResults(await this.executeRequest(
+        state.session.sessionId,
+        () => this.asr.flush(state.session.sessionId),
+      )));
+      flushed = true;
     } catch {
       return undefined;
     } finally {
-      if (created) await this.executeRequest(
+      if (!flushed) await this.executeRequest(
         state.session.sessionId,
-        () => this.asr.closeSession(auxiliarySessionId),
+        () => this.asr.flush(state.session.sessionId),
       ).catch(() => undefined);
     }
-    const witness = [...results].reverse().find((result) =>
-      result.isFinal !== false && result.text.trim().length > 0
-    );
+    const witness = selectWitness(results);
     if (!witness) return undefined;
     return {
       ...witness,
@@ -325,8 +294,23 @@ function safeNextTranscript(
     transcript.speaker?.speakerId === pending.boundary.nextSpeakerId;
 }
 
-function boundarySessionId(sessionId: string, boundaryMs: number) {
-  return `${sessionId}-boundary-${Math.round(boundaryMs)}`;
+function replaySequenceBase(boundaryMs: number) {
+  return 8_000_000_000_000_000 + Math.round(boundaryMs) % 1_000_000_000 * 1000;
+}
+
+function selectWitness(results: TranscriptResult[]) {
+  return results.filter((result) =>
+    result.isFinal !== false && result.text.trim().length > 0
+  ).sort((left, right) =>
+    transcriptDurationMs(right) - transcriptDurationMs(left) ||
+    Array.from(right.text).length - Array.from(left.text).length
+  )[0];
+}
+
+function transcriptDurationMs(transcript: TranscriptResult) {
+  return transcript.timing
+    ? transcript.timing.endMs - transcript.timing.startMs
+    : 0;
 }
 
 function audioDurationMs(frames: AudioFrame[]) {

@@ -24,10 +24,10 @@ Sortformer 数量和 A→B→A 顺序正确；问题是边界在 ASR endpoint �
 1. Gateway 为启用 diarization 的 session 保留最近 8 秒原始 PCM 帧。
 2. 记录最近已发 final transcript；只在 commit miss 且前一 transcript timing 确实
    跨过确认边界时建立 correction candidate。
-3. 等待边界后至少 1.8 秒、最多取 2.4 秒音频；使用同一 ASR Provider 的临时子会话，
-   按原始帧 pacing 顺序送入并 flush。该重解码在异步旁路运行，不阻塞主 ASR、partial
-   或音频入队；同一主session的请求和witness请求通过公平串行队列交替进入单并发Qwen服务，
-   避免HTTP 429；不是新模型或独立证人。
+3. 等待后一 speaker 的正式 final；此时 Qwen endpoint 已清空活动 segment。边界后至少
+   1.8 秒、最多 2.4 秒的保留音频使用同一 Qwen session、每个 boundary 唯一的高位
+   sequence 重放并立即 flush。8021 的`MAX_ACTIVE_SESSIONS=1`不允许临时子会话；本方案
+   不创建第二 session，不改模型服务，也不是新模型或独立证人。
 4. 只有同时获得以下三方证据才修订：
    - 前一 speaker 已发 transcript；
    - 边界后重解码 witness；
@@ -47,9 +47,11 @@ Sortformer 数量和 A→B→A 顺序正确；问题是边界在 ASR endpoint �
 - 前段 timing 必须跨 boundary，越界范围限定为 80–1200ms；
 - 无 overlap、无 unknown、多 active speaker 时禁用；
 - witness 音频必须覆盖 boundary 后至少 1800ms，最多 2400ms；
-- correction 每条 boundary 最多运行一次，临时 session 必须关闭；
-- 主链不等待 witness；结束时尚未形成三方证据的候选按失败关闭，不拖慢 flush；
-- Qwen请求不得并发；每次只串行一个短请求，不能把整个2.4秒witness作为不可抢占临界区；
+- correction 每条 boundary 最多运行一次，只能在后一正式 final 的 endpoint 内执行；
+- replay sequence使用隔离高位命名空间且每个boundary唯一，不能与当前或未来客户端sequence冲突；
+- Qwen请求不得并发；后一final在有界replay完成后发布，期间WebSocket仍可接收入队；必须测
+  revision附加延迟及`droppedFrameCount=0`；
+- 结束时尚未形成三方证据的候选直接关闭，不在flush后启动replay；
 - 前段 suffix/witness prefix 最少 4 个有效字符，相似度至少 0.75；
 - witness/后段必须有至少 2 个精确连续字符重叠；
 - 对齐区域出现拉丁字母、阿拉伯数字、中文数字、金额符号时，必须精确匹配，禁止模糊删除；
@@ -72,9 +74,9 @@ Sortformer 数量和 A→B→A 顺序正确；问题是边界在 ASR endpoint �
 2. commit hit 不启动重解码；
 3. 不同 speaker/turn、overlap、unknown、时间 gap、无 witness、低相似度均不修订；
 4. 数字和拉丁实体不允许模糊删改；
-5. 临时 ASR session 按序创建、送帧、flush、close，失败只尝试一次；
-6. witness 运行期间主链仍立即放行下一段，witness 完成后才发更高 revision；
-7. 故意延迟auxiliary请求并紧接发送主帧，底层最大并发必须为1，失败不得吞掉后续请求；
+5. 同一 ASR session 以隔离sequence按序重放并flush，失败只尝试一次且必须清空replay buffer；
+6. 故意延迟replay请求时，底层最大并发必须为1，后一final等待replay但新音频仍可入队；
+7. 8021日志不得出现第二active session或HTTP 429，replay后未来客户端sequence仍可识别；
 8. 两个 segment 使用原 ID 升 revision，API 和 iOS 清旧译文并重新翻译；
 9. continuation 7500ms与中文一字去重测试保持不变；
 10. 同一 AliMeeting 真机重跑：speaker run仍为 A→B→A，cross-speaker suffix=0，

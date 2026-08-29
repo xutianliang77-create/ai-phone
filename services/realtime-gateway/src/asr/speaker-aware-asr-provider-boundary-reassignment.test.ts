@@ -23,7 +23,7 @@ describe("speaker aware ASR boundary reassignment", () => {
       speaker: { speakerId: "speaker_1" },
       timing: { endMs: 939 },
     });
-    expect(observed[11]).toEqual(expect.arrayContaining([
+    expect(observed[10]).toEqual(expect.arrayContaining([
       expect.objectContaining({
         segmentId: "seg_a",
         turnId: "turn_1",
@@ -41,8 +41,8 @@ describe("speaker aware ASR boundary reassignment", () => {
         timing: expect.objectContaining({ startMs: 480 }),
       }),
     ]));
-    expect(asr.auxiliarySessions).toEqual(["sess_1-boundary-480"]);
-    expect(asr.closedSessions).toEqual(asr.auxiliarySessions);
+    expect(asr.auxiliarySessions).toEqual([]);
+    expect(asr.closedSessions).toEqual([]);
     expect(asr.maxConcurrentRequests).toBe(1);
     expect(await provider.diagnostics("sess_1")).toMatchObject({
       speakerTurns: {
@@ -88,6 +88,7 @@ class LateBoundaryWitnessAsrProvider implements AsrProvider {
   maxConcurrentRequests = 0;
   private mainCalls = 0;
   private activeRequests = 0;
+  private replaying = false;
 
   async createSession(input: AsrSession) {
     if (input.sessionId !== session.sessionId) {
@@ -97,7 +98,8 @@ class LateBoundaryWitnessAsrProvider implements AsrProvider {
 
   async transcribe(input: AudioFrame): Promise<AsrProviderResult> {
     return this.trackRequest(async () => {
-      if (input.sessionId !== session.sessionId) {
+      if (input.sequence > 8_000_000_000_000_000) {
+        this.replaying = true;
         await new Promise((resolve) => setTimeout(resolve, 5));
         return null;
       }
@@ -110,7 +112,8 @@ class LateBoundaryWitnessAsrProvider implements AsrProvider {
 
   async flush(sessionId: string): Promise<AsrProviderResult> {
     return this.trackRequest(async () => {
-      if (sessionId === session.sessionId) return null;
+      if (sessionId !== session.sessionId || !this.replaying) return null;
+      this.replaying = false;
       await new Promise((resolve) => setTimeout(resolve, 5));
       return {
         segmentId: `witness_${sessionId}`,

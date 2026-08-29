@@ -13,6 +13,7 @@ describe("recent PCM audio buffer", () => {
       sessionId: "boundary-session",
       startMs: 1050,
       endMs: 1250,
+      sequenceBase: 8_000_000_000_000_000,
     });
 
     expect(selected.map((item) => ({
@@ -20,9 +21,9 @@ describe("recent PCM audio buffer", () => {
       timestampMs: item.timestampMs,
       bytes: Buffer.from(item.data, "base64").length,
     }))).toEqual([
-      { sequence: 1, timestampMs: 1050, bytes: 1600 },
-      { sequence: 2, timestampMs: 1100, bytes: 3200 },
-      { sequence: 3, timestampMs: 1200, bytes: 1600 },
+      { sequence: 8_000_000_000_000_001, timestampMs: 1050, bytes: 1600 },
+      { sequence: 8_000_000_000_000_002, timestampMs: 1100, bytes: 3200 },
+      { sequence: 8_000_000_000_000_003, timestampMs: 1200, bytes: 1600 },
     ]);
     expect(buffer.latestEndMs()).toBe(1300);
   });

@@ -45,6 +45,7 @@ export class RecentPcmAudioBuffer {
     sessionId: string;
     startMs: number;
     endMs: number;
+    sequenceBase?: number;
   }): AudioFrame[] {
     const sampleRate = this.frames.find((frame) =>
       intersectsRange(frame, input.startMs, input.endMs)
@@ -67,7 +68,7 @@ export class RecentPcmAudioBuffer {
       return [{
         type: "audio.frame" as const,
         sessionId: input.sessionId,
-        sequence: ++sequence,
+        sequence: (input.sequenceBase ?? 0) + ++sequence,
         timestampMs: Math.round(
           frame.timestampMs + startSample * 1000 / sampleRate,
         ),
