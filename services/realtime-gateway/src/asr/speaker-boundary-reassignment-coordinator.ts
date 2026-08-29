@@ -15,6 +15,11 @@ import type { SpeechTurnBoundary } from
 import { realtimeLogger } from "../metrics/realtime-metrics.js";
 import { logSpeakerBoundaryReplay } from
   "./speaker-boundary-replay-observability.js";
+import {
+  prepareSpeakerBoundaryReplay,
+  replayFrameEndMs,
+  selectSpeakerBoundaryWitness,
+} from "./speaker-boundary-replay.js";
 
 type AsrRequestExecutor = <T>(sessionId: string, request: () => Promise<T>) =>
   Promise<T>;
@@ -24,6 +29,7 @@ interface PendingBoundaryRevision {
   previous: TranscriptResult;
   witness?: TranscriptResult;
   next?: TranscriptResult;
+  replayFrame?: AudioFrame;
   attempted: boolean;
 }
 interface SessionState {
@@ -84,25 +90,36 @@ export class SpeakerBoundaryReassignmentCoordinator {
     return true;
   }
 
-  async process(sessionId: string, transcripts: TranscriptResult[]) {
+  async process(
+    sessionId: string,
+    transcripts: TranscriptResult[],
+    replaySafe = true,
+  ) {
     const state = this.sessions.get(sessionId);
     if (!state) return transcripts;
     this.expirePending(state);
     const pending = state.pending;
+    if (pending && !pending.replayFrame &&
+        this.witnessAudioReady(state, pending)) {
+      pending.replayFrame = prepareSpeakerBoundaryReplay(state.audio, {
+        sessionId: state.session.sessionId,
+        boundaryMs: pending.boundary.boundaryMs,
+        preRollMs: this.options.witnessPreRollMs ?? 800,
+        postRollMs: this.options.maximumWitnessAudioMs ?? 1_800,
+        minimumAudioMs: this.options.minimumWitnessAudioMs ?? 1_800,
+      });
+    }
     const nextIndex = state.pending
       ? this.captureNext(state.pending, transcripts)
       : -1;
-    if (pending && nextIndex >= 0 && !pending.attempted) {
-      if (!this.witnessAudioReady(state, pending)) {
+    if (pending?.replayFrame && pending.next && replaySafe &&
+        !pending.attempted) {
+      pending.attempted = true;
+      state.diagnostics.boundaryRevisionAttemptCount += 1;
+      pending.witness = await this.redecodeWitness(state, pending);
+      if (!pending.witness) {
+        state.diagnostics.boundaryRevisionFailureCount += 1;
         state.pending = undefined;
-      } else {
-        pending.attempted = true;
-        state.diagnostics.boundaryRevisionAttemptCount += 1;
-        pending.witness = await this.redecodeWitness(state, pending);
-        if (!pending.witness) {
-          state.diagnostics.boundaryRevisionFailureCount += 1;
-          state.pending = undefined;
-        }
       }
     }
     const revised = this.applyPlan(state, transcripts, nextIndex);
@@ -201,29 +218,17 @@ export class SpeakerBoundaryReassignmentCoordinator {
     state: SessionState,
     pending: PendingBoundaryRevision,
   ) {
+    const replayFrame = pending.replayFrame;
+    if (!replayFrame) return undefined;
     const boundaryMs = pending.boundary.boundaryMs;
-    const startMs = Math.max(
-      0,
-      boundaryMs - (this.options.witnessPreRollMs ?? 800),
+    logSpeakerBoundaryReplay(
+      state.session.sessionId,
+      boundaryMs,
+      replayFrame,
     );
-    const endMs = boundaryMs + (this.options.maximumWitnessAudioMs ?? 1_800);
-    const frames = state.audio.framesBetween({
-      sessionId: state.session.sessionId,
-      startMs,
-      endMs,
-      sequenceBase: replaySequenceBase(startMs),
-    });
-    if (audioDurationMs(frames) <
-        (this.options.minimumWitnessAudioMs ?? 1_800)) return undefined;
     const results: TranscriptResult[] = [];
     let flushed = false;
     try {
-      const replayFrame = mergeReplayFrames(frames);
-      logSpeakerBoundaryReplay(
-        state.session.sessionId,
-        boundaryMs,
-        replayFrame,
-      );
       results.push(...asrResults(await this.executeRequest(
         state.session.sessionId,
         () => this.asr.transcribe(replayFrame),
@@ -241,7 +246,7 @@ export class SpeakerBoundaryReassignmentCoordinator {
         () => this.asr.flush(state.session.sessionId),
       ).catch(() => undefined);
     }
-    const witness = selectWitness(results);
+    const witness = selectSpeakerBoundaryWitness(results);
     if (!witness) return undefined;
     return {
       ...witness,
@@ -253,8 +258,8 @@ export class SpeakerBoundaryReassignmentCoordinator {
         source: "diarization" as const,
       },
       timing: {
-        startMs: frames[0].timestampMs,
-        endMs: frameEndMs(frames.at(-1)!),
+        startMs: replayFrame.timestampMs,
+        endMs: replayFrameEndMs(replayFrame),
         source: "client" as const,
       },
       endpointReason: "speaker_boundary" as const,
@@ -298,46 +303,6 @@ function safeNextTranscript(
   return transcript.isFinal !== false &&
     transcript.turnId === pending.nextTurn.turnId &&
     transcript.speaker?.speakerId === pending.boundary.nextSpeakerId;
-}
-
-function replaySequenceBase(boundaryMs: number) {
-  return 8_000_000_000_000_000 + Math.round(boundaryMs) % 1_000_000_000 * 1000;
-}
-
-function mergeReplayFrames(frames: AudioFrame[]): AudioFrame {
-  const first = frames[0];
-  return {
-    ...first,
-    data: Buffer.concat(frames.map((frame) =>
-      Buffer.from(frame.data, "base64")
-    )).toString("base64"),
-  };
-}
-
-function selectWitness(results: TranscriptResult[]) {
-  return results.filter((result) =>
-    result.isFinal !== false && result.text.trim().length > 0
-  ).sort((left, right) =>
-    transcriptDurationMs(right) - transcriptDurationMs(left) ||
-    Array.from(right.text).length - Array.from(left.text).length
-  )[0];
-}
-
-function transcriptDurationMs(transcript: TranscriptResult) {
-  return transcript.timing
-    ? transcript.timing.endMs - transcript.timing.startMs
-    : 0;
-}
-
-function audioDurationMs(frames: AudioFrame[]) {
-  return frames.reduce((total, frame) =>
-    total + Buffer.byteLength(frame.data, "base64") / 2 /
-      frame.sampleRate * 1000, 0);
-}
-
-function frameEndMs(frame: AudioFrame) {
-  return frame.timestampMs + Buffer.byteLength(frame.data, "base64") / 2 /
-    frame.sampleRate * 1000;
 }
 
 function emptyDiagnostics(): SpeakerBoundaryRevisionDiagnostics {

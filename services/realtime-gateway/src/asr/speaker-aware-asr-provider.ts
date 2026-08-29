@@ -211,6 +211,9 @@ export class SpeakerAwareAsrProvider implements AsrProvider {
     const reassigned = await this.boundaryReassignment.process(
       frame.sessionId,
       attributed,
+      boundary === null && regularTurns.some((transcript) =>
+        transcript.isFinal !== false && transcript.endpointReason !== undefined
+      ),
     );
     return providerResult(await this.applyVoiceIdentities(frame.sessionId, reassigned));
   }
@@ -244,6 +247,7 @@ export class SpeakerAwareAsrProvider implements AsrProvider {
     const reassigned = await this.boundaryReassignment.process(
       sessionId,
       attributed,
+      true,
     );
     this.boundaryReassignment.finish(sessionId);
     return providerResult(await this.applyVoiceIdentities(sessionId, reassigned));
@@ -260,7 +264,6 @@ export class SpeakerAwareAsrProvider implements AsrProvider {
       },
     };
   }
-
   async closeSession(sessionId: string) {
     const speakerEnabled = this.enabledSessions.delete(sessionId);
     this.spansBySession.delete(sessionId);
@@ -280,11 +283,9 @@ export class SpeakerAwareAsrProvider implements AsrProvider {
     }
     this.turnDiagnostics.clear(sessionId);
   }
-
   async healthCheck() {
     return this.asr.healthCheck();
   }
-
   private async safePush(frame: AudioFrame) {
     try {
       return await this.speaker.pushAudio(frame);
@@ -293,7 +294,6 @@ export class SpeakerAwareAsrProvider implements AsrProvider {
       return [];
     }
   }
-
   private async safeFlush(sessionId: string) {
     try {
       return await this.speaker.flush(sessionId);

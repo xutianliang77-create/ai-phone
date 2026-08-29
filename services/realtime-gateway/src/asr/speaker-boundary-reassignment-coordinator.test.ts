@@ -121,6 +121,36 @@ describe("speaker boundary reassignment coordinator", () => {
     ]);
   });
 
+  it("defers replay until a later endpoint is safe", async () => {
+    const coordinator = new SpeakerBoundaryReassignmentCoordinator(
+      new BoundaryWitnessAsrProvider(
+        "我觉得咱们这个这个目标人群可以不",
+      ),
+    );
+    coordinator.createSession(session());
+    await coordinator.process("sess_1", [previousTranscript()]);
+    for (const item of boundaryFrames()) coordinator.recordFrame(item);
+    coordinator.recordCommitMiss(
+      "sess_1",
+      boundary(),
+      { turnId: "turn_1", revision: 0 },
+      { turnId: "turn_2", revision: 0 },
+    );
+
+    expect(await coordinator.process(
+      "sess_1",
+      [nextTranscript()],
+      false,
+    )).toEqual([nextTranscript()]);
+    expect(coordinator.diagnostics("sess_1")).toMatchObject({
+      boundaryRevisionAttemptCount: 0,
+    });
+    expect(await coordinator.process("sess_1", [], true)).toEqual([
+      expect.objectContaining({ segmentId: "seg_a", revision: 7 }),
+      expect.objectContaining({ segmentId: "seg_b", revision: 8 }),
+    ]);
+  });
+
   it("drops an unattempted candidate at session finish", async () => {
     const asr = new DelayedBoundaryWitnessAsrProvider();
     const coordinator = new SpeakerBoundaryReassignmentCoordinator(asr);
