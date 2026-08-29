@@ -8,57 +8,92 @@ export interface SpeakerBoundaryReassignmentPlan {
   movedCharacterCount: number;
 }
 
-export function planSpeakerBoundaryReassignment(input: {
+export type SpeakerBoundaryReassignmentRejectionReason =
+  | "unsafe_evidence"
+  | "suffix_alignment"
+  | "previous_result"
+  | "witness_next_alignment"
+  | "revision_growth";
+
+export interface SpeakerBoundaryReassignmentDecision {
+  plan: SpeakerBoundaryReassignmentPlan | null;
+  rejectionReason?: SpeakerBoundaryReassignmentRejectionReason;
+}
+
+interface SpeakerBoundaryReassignmentInput {
   previous: TranscriptResult;
   witness: TranscriptResult;
   next: TranscriptResult;
   boundary: SpeechTurnBoundary;
-}): SpeakerBoundaryReassignmentPlan | null {
+}
+
+export function planSpeakerBoundaryReassignment(
+  input: SpeakerBoundaryReassignmentInput,
+) {
+  return evaluateSpeakerBoundaryReassignment(input).plan;
+}
+
+export function evaluateSpeakerBoundaryReassignment(
+  input: SpeakerBoundaryReassignmentInput,
+): SpeakerBoundaryReassignmentDecision {
   const { previous, witness, next, boundary } = input;
-  if (!safeTranscriptEvidence(previous, witness, next, boundary)) return null;
+  if (!safeTranscriptEvidence(previous, witness, next, boundary)) {
+    return rejected("unsafe_evidence");
+  }
   const suffix = fuzzySuffixPrefix(previous.text, witness.text);
-  if (!suffix) return null;
+  if (!suffix) return rejected("suffix_alignment");
   const previousText = removeNormalizedSuffix(previous.text, suffix.leftLength);
   const nextText = mergeWitnessWithNext(witness.text, next.text);
-  if (!previousText || !nextText || normalized(previousText).length < 4 ||
-      !safeRevisionGrowth(suffix, witness.text, next.text, nextText)) {
-    return null;
+  if (!previousText || normalized(previousText).length < 4) {
+    return rejected("previous_result");
+  }
+  if (!nextText) return rejected("witness_next_alignment");
+  if (!safeRevisionGrowth(suffix, witness.text, next.text, nextText)) {
+    return rejected("revision_growth");
   }
   return {
-    previous: {
-      ...previous,
-      revision: (previous.revision ?? 0) + 1,
-      text: ensureSentenceEnd(previousText),
-      endpointReason: "speaker_boundary",
-      timing: {
-        ...previous.timing!,
-        endMs: boundary.boundaryMs,
-        overlap: false,
-        activeSpeakerIds: [boundary.previousSpeakerId],
+    plan: {
+      previous: {
+        ...previous,
+        revision: (previous.revision ?? 0) + 1,
+        text: ensureSentenceEnd(previousText),
+        endpointReason: "speaker_boundary",
+        timing: {
+          ...previous.timing!,
+          endMs: boundary.boundaryMs,
+          overlap: false,
+          activeSpeakerIds: [boundary.previousSpeakerId],
+        },
+        ...(previous.vadContext
+          ? {
+              vadContext: {
+                ...previous.vadContext,
+                endpointReason: "speaker_boundary" as const,
+              },
+            }
+          : {}),
       },
-      ...(previous.vadContext
-        ? {
-            vadContext: {
-              ...previous.vadContext,
-              endpointReason: "speaker_boundary" as const,
-            },
-          }
-        : {}),
-    },
-    next: {
-      ...next,
-      revision: (next.revision ?? 0) + 1,
-      text: nextText,
-      timing: {
-        ...next.timing!,
-        startMs: boundary.boundaryMs,
-        overlap: false,
-        activeSpeakerIds: [boundary.nextSpeakerId],
+      next: {
+        ...next,
+        revision: (next.revision ?? 0) + 1,
+        text: nextText,
+        timing: {
+          ...next.timing!,
+          startMs: boundary.boundaryMs,
+          overlap: false,
+          activeSpeakerIds: [boundary.nextSpeakerId],
+        },
       },
+      movedText: suffix.leftText,
+      movedCharacterCount: Array.from(suffix.leftText).length,
     },
-    movedText: suffix.leftText,
-    movedCharacterCount: Array.from(suffix.leftText).length,
   };
+}
+
+function rejected(
+  rejectionReason: SpeakerBoundaryReassignmentRejectionReason,
+): SpeakerBoundaryReassignmentDecision {
+  return { plan: null, rejectionReason };
 }
 
 function safeRevisionGrowth(

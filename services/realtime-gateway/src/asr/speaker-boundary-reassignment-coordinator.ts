@@ -8,10 +8,11 @@ import {
 import type { SpeakerTurnReference } from "./speaker-turn-assignment.js";
 import { RecentPcmAudioBuffer } from "../speaker/recent-pcm-audio-buffer.js";
 import {
-  planSpeakerBoundaryReassignment,
+  evaluateSpeakerBoundaryReassignment,
 } from "../speaker/speaker-boundary-reassignment.js";
 import type { SpeechTurnBoundary } from
   "../speaker/speech-turn-coordinator.js";
+import { realtimeLogger } from "../metrics/realtime-metrics.js";
 
 type AsrRequestExecutor = <T>(sessionId: string, request: () => Promise<T>) =>
   Promise<T>;
@@ -143,15 +144,24 @@ export class SpeakerBoundaryReassignmentCoordinator {
   ) {
     const pending = state.pending;
     if (!pending?.witness || !pending.next) return transcripts;
-    const plan = planSpeakerBoundaryReassignment({
+    const decision = evaluateSpeakerBoundaryReassignment({
       previous: pending.previous,
       witness: pending.witness,
       next: pending.next,
       boundary: pending.boundary,
     });
+    const plan = decision.plan;
     state.pending = undefined;
     if (!plan) {
       state.diagnostics.boundaryRevisionFailureCount += 1;
+      realtimeLogger.info({
+        sessionId: state.session.sessionId,
+        boundaryMs: pending.boundary.boundaryMs,
+        rejectionReason: decision.rejectionReason,
+        previousCharacters: Array.from(pending.previous.text).length,
+        witnessCharacters: Array.from(pending.witness.text).length,
+        nextCharacters: Array.from(pending.next.text).length,
+      }, "Speaker boundary reassignment evidence rejected");
       return transcripts;
     }
     state.diagnostics.boundaryRevisionSuccessCount += 1;
