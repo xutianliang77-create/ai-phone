@@ -20,7 +20,7 @@ describe("speaker boundary reassignment", () => {
         turnId: "turn_2",
         speakerId: "speaker_3",
         text: "我觉得咱们这个这个目标人群可以不",
-        startMs: 50282,
+        startMs: 50122,
         endMs: 52682,
       }),
       next: transcript({

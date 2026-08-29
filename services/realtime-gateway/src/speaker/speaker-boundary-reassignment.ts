@@ -129,7 +129,7 @@ function safeTranscriptEvidence(
   if (previous.timing!.startMs >= boundary.boundaryMs ||
       overrunMs < 80 || overrunMs > 1_200) return false;
   const witnessDurationMs = witness.timing!.endMs - witness.timing!.startMs;
-  return witness.timing!.startMs >= boundary.boundaryMs - 120 &&
+  return witness.timing!.startMs >= boundary.boundaryMs - 200 &&
     witnessDurationMs >= 1_800 && witnessDurationMs <= 2_600 &&
     next.timing!.endMs > boundary.boundaryMs &&
     next.timing!.startMs >= boundary.boundaryMs - 200;

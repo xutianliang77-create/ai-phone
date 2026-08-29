@@ -50,6 +50,7 @@ export class SpeakerBoundaryReassignmentCoordinator {
       minimumWitnessAudioMs?: number;
       maximumWitnessAudioMs?: number;
       maximumPendingAudioMs?: number;
+      witnessPreRollMs?: number;
     } = {},
     private readonly executeRequest: AsrRequestExecutor = (_sessionId, request) =>
       request(),
@@ -213,8 +214,12 @@ export class SpeakerBoundaryReassignmentCoordinator {
     state: SessionState,
     pending: PendingBoundaryRevision,
   ) {
-    const startMs = pending.boundary.boundaryMs;
-    const endMs = startMs + (this.options.maximumWitnessAudioMs ?? 2_400);
+    const boundaryMs = pending.boundary.boundaryMs;
+    const startMs = Math.max(
+      0,
+      boundaryMs - (this.options.witnessPreRollMs ?? 160),
+    );
+    const endMs = boundaryMs + (this.options.maximumWitnessAudioMs ?? 2_400);
     const frames = state.audio.framesBetween({
       sessionId: state.session.sessionId,
       startMs,
@@ -257,7 +262,7 @@ export class SpeakerBoundaryReassignmentCoordinator {
         source: "diarization" as const,
       },
       timing: {
-        startMs,
+        startMs: frames[0].timestampMs,
         endMs: frameEndMs(frames.at(-1)!),
         source: "client" as const,
       },
