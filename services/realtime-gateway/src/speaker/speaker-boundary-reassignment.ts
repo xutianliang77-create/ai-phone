@@ -105,7 +105,7 @@ function safeRevisionGrowth(
   const witnessLength = normalized(witnessText).length;
   const growth = normalized(revisedNextText).length -
     normalized(originalNextText).length;
-  return witnessLength <= 48 &&
+  return witnessLength <= 48 && suffix.leftLength <= 12 &&
     growth >= Math.max(2, suffix.leftLength - 2) &&
     growth <= suffix.leftLength + 4;
 }
@@ -129,7 +129,7 @@ function safeTranscriptEvidence(
   if (previous.timing!.startMs >= boundary.boundaryMs ||
       overrunMs < 80 || overrunMs > 1_400) return false;
   const witnessDurationMs = witness.timing!.endMs - witness.timing!.startMs;
-  return witness.timing!.startMs >= boundary.boundaryMs - 520 &&
+  return witness.timing!.startMs >= boundary.boundaryMs - 840 &&
     witnessDurationMs >= 1_800 && witnessDurationMs <= 2_600 &&
     next.timing!.endMs > boundary.boundaryMs &&
     next.timing!.startMs >= boundary.boundaryMs - 200;

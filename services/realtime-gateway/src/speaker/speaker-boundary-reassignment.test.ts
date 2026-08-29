@@ -20,8 +20,8 @@ describe("speaker boundary reassignment", () => {
         turnId: "turn_2",
         speakerId: "speaker_3",
         text: "我觉得咱们这个这个目标人群可以不",
-        startMs: 49802,
-        endMs: 52282,
+        startMs: 49482,
+        endMs: 52082,
       }),
       next: transcript({
         segmentId: "seg_b",
@@ -72,13 +72,18 @@ describe("speaker boundary reassignment", () => {
       witnessText:
         "我觉得咱们这个这个这里出现了完全没有声学依据的大段新增内容人群可以不",
     }],
+    ["moved suffix too long", {
+      previousText: "前文内容。甲乙丙丁戊己庚辛壬癸子丑寅",
+      witnessText: "甲乙丙丁戊己庚辛壬癸子丑寅目标人群",
+      nextText: "目标人群继续讨论。",
+    }],
   ])("fails closed on %s", (_label, change) => {
     const plan = planSpeakerBoundaryReassignment({
       previous: transcript({
         segmentId: "seg_a",
         turnId: "turn_1",
         speakerId: change.previousSpeaker ?? "speaker_1",
-        text: "大家的看法。那我觉得咱这个这个。",
+        text: change.previousText ?? "大家的看法。那我觉得咱这个这个。",
         startMs: 32000,
         endMs: change.previousEndMs ?? 50741,
         overlap: change.overlap,

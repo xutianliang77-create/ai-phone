@@ -25,7 +25,7 @@ Sortformer 数量和 A→B→A 顺序正确；问题是边界在 ASR endpoint �
 2. 记录最近已发 final transcript；只在 commit miss 且前一 transcript timing 确实
    跨过确认边界时建立 correction candidate。
 3. 等待后一 speaker 的正式 final；此时 Qwen endpoint 已清空活动 segment。边界后至少
-   前置480ms、后置至少1.8秒且最多2.0秒的保留音频使用同一 Qwen session、每个 boundary 唯一的高位
+   前置800ms、后置1.8秒的保留音频使用同一 Qwen session、每个 boundary 唯一的高位
    sequence 重放并立即 flush。8021 的`MAX_ACTIVE_SESSIONS=1`不允许临时子会话；本方案
    不创建第二 session，不改模型服务，也不是新模型或独立证人。
 4. 只有同时获得以下三方证据才修订：
@@ -45,7 +45,7 @@ Sortformer 数量和 A→B→A 顺序正确；问题是边界在 ASR endpoint �
 - commit outcome 必须为 miss，不能覆盖成功 commit；
 - 前段、后段必须分别绑定 previous/next confirmed speaker 和 turn；
 - 前段 timing 必须跨 boundary，越界范围限定为 80–1400ms；
-- 声学witness固定只允许480ms pre-roll，证据起点不得早于boundary−520ms，总窗口不得超过2.6秒；
+- 声学witness固定只允许800ms pre-roll，证据起点不得早于boundary−840ms，总窗口不得超过2.6秒；
 - 无 overlap、无 unknown、多 active speaker 时禁用；
 - witness 音频必须覆盖 boundary 后至少 1800ms，最多 2400ms；
 - correction 每条 boundary 最多运行一次，只能在后一正式 final 的 endpoint 内执行；
@@ -54,6 +54,7 @@ Sortformer 数量和 A→B→A 顺序正确；问题是边界在 ASR endpoint �
   revision附加延迟及`droppedFrameCount=0`；
 - 结束时尚未形成三方证据的候选直接关闭，不在flush后启动replay；
 - 前段 suffix/witness prefix 最少 4 个有效字符，相似度至少 0.75；
+- 可移动suffix最多12个有效字符；更长候选直接拒绝，不从前说话人扩张；
 - witness/后段必须有至少 2 个精确连续字符重叠；
 - 对齐区域出现拉丁字母、阿拉伯数字、中文数字、金额符号时，必须精确匹配，禁止模糊删除；
 - 任一 revision 结果为空、文本增长异常或时间不连续时拒绝。
