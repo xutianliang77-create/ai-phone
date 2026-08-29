@@ -22,6 +22,10 @@ import {
   type SessionEventSinkName,
   type SpeakerProviderName,
 } from "./env-parsers.js";
+import {
+  loadSpeakerRevisionEnv,
+  type SpeakerRevisionEnv,
+} from "./speaker-revision-env.js";
 
 export type {
   AsrProviderName,
@@ -32,7 +36,7 @@ export type {
   SpeakerProviderName,
 } from "./env-parsers.js";
 
-export interface RealtimeEnv {
+export interface RealtimeEnv extends SpeakerRevisionEnv {
   host: string;
   port: number;
   allowedHosts: string[];
@@ -274,6 +278,7 @@ export function loadEnv(): RealtimeEnv {
     speakerHttpBaseUrl: env.SPEAKER_HTTP_BASE_URL,
     speakerHttpApiKey: env.SPEAKER_HTTP_API_KEY,
     speakerHttpTimeoutMs: Number(env.SPEAKER_HTTP_TIMEOUT_MS ?? 2000),
+    ...loadSpeakerRevisionEnv(env),
     ttsHttpEndpoint: env.TTS_HTTP_ENDPOINT,
     ttsHttpStreamEndpoint: env.TTS_HTTP_STREAM_ENDPOINT,
     ttsHttpApiKey: env.TTS_HTTP_API_KEY,

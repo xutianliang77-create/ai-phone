@@ -1,7 +1,12 @@
 import type {
+  AsrEndpointReason,
+  AsrTokenTimingDto,
   AudioFrame,
   AsrEndpointMode,
   LanguageCode,
+  SegmentTimingDto,
+  SegmentVadContextDto,
+  SpeakerAttributionDto,
   TranslationLanguageCode,
   ServerRealtimeEvent,
   TermbaseTermDto,
@@ -26,10 +31,21 @@ export interface RealtimeProviderSession {
 export interface TextSegmentInput {
   sessionId: string;
   segmentId: string;
+  turnId?: string;
+  revision?: number;
   text: string;
   language: TranslationLanguageCode;
+  dominantLanguage?: TranslationLanguageCode;
+  detectedLanguages?: TranslationLanguageCode[];
+  mixedLanguage?: boolean;
   isFinal: boolean;
   confidence?: number;
+  speaker?: SpeakerAttributionDto;
+  timing?: SegmentTimingDto;
+  tokenTimings?: AsrTokenTimingDto[];
+  endpointReason?: AsrEndpointReason;
+  vadContext?: SegmentVadContextDto;
+  finalizeImmediately?: boolean;
 }
 
 export interface RealtimeProvider {

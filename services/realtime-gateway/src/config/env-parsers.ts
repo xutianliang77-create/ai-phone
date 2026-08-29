@@ -14,6 +14,8 @@ export type ResolvedRealtimeProviderName =
   | "unsupported";
 export type AsrProviderName = "mock" | "http";
 export type SpeakerProviderName = "off" | "http";
+export type SpeakerRevisionProviderName = "off" | "http";
+export type SpeakerRevisionMode = "shadow" | "apply";
 export type SessionEventSinkName = "noop" | "api";
 export type RegionEdition = "domestic" | "international";
 export type LlmProviderName = "off" | "mock" | "openai_compatible";
@@ -83,6 +85,22 @@ export function parseLlmProviderName(
 ): LlmProviderName {
   if (value === "mock" || value === "openai_compatible") return value;
   return "off";
+}
+
+export function parseSpeakerRevisionProvider(
+  value: string | undefined,
+): SpeakerRevisionProviderName {
+  const normalized = value?.trim().toLowerCase() || "off";
+  if (normalized === "off" || normalized === "http") return normalized;
+  throw new Error(`Unsupported SPEAKER_REVISION_PROVIDER: ${normalized}`);
+}
+
+export function parseSpeakerRevisionMode(
+  value: string | undefined,
+): SpeakerRevisionMode {
+  const normalized = value?.trim().toLowerCase() || "shadow";
+  if (normalized === "shadow" || normalized === "apply") return normalized;
+  throw new Error(`Unsupported SPEAKER_REVISION_MODE: ${normalized}`);
 }
 
 export function parseBoolean(value: string | undefined, fallback: boolean) {

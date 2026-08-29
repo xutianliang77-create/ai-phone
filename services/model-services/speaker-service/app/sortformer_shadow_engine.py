@@ -3,6 +3,7 @@ import base64
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from app.model_device import resolve_model_device
 from app.pcm_stream_buffer import PcmStreamBuffer
 from app.schemas import CreateSpeakerSessionRequest, SpeakerAudioFrame, SpeakerSpan
 from app.sortformer_streaming_runtime import (
@@ -33,24 +34,30 @@ class SortformerShadowEngine:
         profile: StreamingProfile,
         onset: float = 0.5,
         offset: float = 0.5,
+        device: str = "auto",
         pad_offset_ms: int = 0,
         min_duration_on_ms: int = 0,
         min_duration_off_ms: int = 0,
         model=None,
     ) -> None:
+        resolved_device = resolve_model_device(device)
         if model is None:
             from nemo.collections.asr.models import SortformerEncLabelModel
 
-            model = (
-                SortformerEncLabelModel.restore_from(
+            if Path(model_id).is_file():
+                model = SortformerEncLabelModel.restore_from(
                     restore_path=model_id,
-                    map_location="cuda",
+                    map_location=resolved_device,
                     strict=False,
                 )
-                if Path(model_id).is_file()
-                else SortformerEncLabelModel.from_pretrained(model_id)
-            )
+            else:
+                model = SortformerEncLabelModel.from_pretrained(
+                    model_id,
+                    map_location=resolved_device,
+                )
+            model.to(resolved_device)
         model.eval()
+        self.device = resolved_device
         self._runtime = SortformerStreamingRuntime(model, profile)
         self._onset = onset
         self._offset = offset

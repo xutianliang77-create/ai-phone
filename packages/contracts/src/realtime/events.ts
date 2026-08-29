@@ -65,6 +65,7 @@ export interface SpeakerUpdatedEvent {
   segmentId: string;
   turnId?: string;
   revision?: number;
+  speakerRevision?: number;
   speaker: SpeakerAttributionDto;
   timing?: SegmentTimingDto;
 }

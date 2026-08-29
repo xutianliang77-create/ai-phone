@@ -151,4 +151,13 @@ describe("provider router", () => {
       asrProvider: "http",
     })).toThrow("ASR_HTTP_ENDPOINT");
   });
+
+  it("requires a revision endpoint only when speaker revision is enabled", () => {
+    expect(() => new ProviderRouter().selectProvider({
+      ...baseEnv,
+      provider: "lmstudio",
+      resolvedProvider: "lmstudio",
+      speakerRevisionProvider: "http",
+    })).toThrow("SPEAKER_REVISION_HTTP_ENDPOINT");
+  });
 });

@@ -27,6 +27,7 @@ import {
   turnLanguageEventFields,
 } from "../../segments/turn-language-profile.js";
 import { continuationTombstones } from "./lmstudio-continuation-events.js";
+import { transcriptFromTextSegment } from "./lmstudio-text-segment-input.js";
 
 export class LmStudioRealtimeProvider implements RealtimeProvider {
   readonly name: string;
@@ -107,18 +108,18 @@ export class LmStudioRealtimeProvider implements RealtimeProvider {
 
     yield* this.flushExpiredSemanticSegments(session);
 
-    const transcript = {
-      segmentId: segment.segmentId,
-      text,
-      language: segment.language,
-      confidence: segment.confidence,
-    };
+    const transcript = transcriptFromTextSegment(segment, text);
     if (!segment.isFinal) {
       yield {
         type: "transcript.partial",
         sessionId: segment.sessionId,
         ...transcript,
       };
+      return;
+    }
+
+    if (segment.finalizeImmediately) {
+      yield* this.translateTranscript(session, transcript);
       return;
     }
 

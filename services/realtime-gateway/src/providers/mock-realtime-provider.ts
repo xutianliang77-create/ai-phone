@@ -59,6 +59,8 @@ export class MockRealtimeProvider implements RealtimeProvider {
       text: segment.text,
       language: segment.language,
       confidence: segment.confidence,
+      timing: segment.timing,
+      tokenTimings: segment.tokenTimings,
     };
     if (!segment.isFinal) return;
 
