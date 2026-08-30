@@ -214,7 +214,9 @@ Playwright、axe 或视觉回归，也未生成/审批截图基线，因此 AC-U
 所选 tenant、短期签名 route document、region/cell/epoch、`/enterprise/v1/me` scopes 和 Provider capability；401 会清理
 会话与企业选择，离线或上下文不一致不显示缓存工作区。五入口使用 Material Icons；会议和接管分别按
 `meeting:read`、`support:takeover` 发现。会议现读取 tenant-scoped API、换取短期 grant 并使用独立企业 LiveKit 音频
-客户端，不复用个人同传或 Call Link；接管未实现时仍明确 `not_ready`。当前只通过 `flutter analyze`，未运行 Flutter test、构建、动态字体、横竖屏或真机矩阵，因此该候选不能
+客户端，不复用个人同传或 Call Link；接管读取 tenant queue/work-item，以稳定幂等键 claim，按 version/lease 续租并激活
+最小 workbench，数据库 claim、AI speech fence 和 Provider media receipt 分层展示。App 后台、租户切换、401、续租或
+真值冲突先移除本地控制，释放未知时由租约到期收敛，不显示乐观接管成功。当前只通过 `flutter analyze`，未运行 Flutter test、构建、动态字体、横竖屏或真机矩阵，因此该候选不能
 作为 AC-UI-001..006/008..011、A1 或移动端生产放行证据，任务保持 `in_progress`。
 
 `ENT-UI-012` 当前 Web 代码候选把 `/join/:meetingId` 放在成员 `AuthProvider/AppShell` 外，不读取账号、membership、

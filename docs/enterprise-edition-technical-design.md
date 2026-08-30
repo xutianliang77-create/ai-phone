@@ -2707,9 +2707,14 @@ cell、route epoch、expiry、非本地 HTTPS/WSS URL、非空签名和 capabili
 工作台只展示 tenant/route/scope/Provider document，告警只从 tenant 状态和非 ready capability 派生。会议页把完整
 route document 用 base64url JSON 放入 `x-enterprise-route-document`，从 route 的 `apiBaseUrl` 读取租户 Meeting 列表并
 换取短期 RTC grant；独立 `EnterpriseMeetingRoomClient` 只启用麦克风和远端音频订阅，不复用个人 Call Link 客户端。
-接管队列 API 尚未实现，继续固定 `not_ready`。
+接管页现通过独立 Flutter support client 调用 tenant-scoped queue/work-item/claim/renew/release/workbench API。
+响应严格核对 queue/session/claim、当前 member subject、version、lease、AI speech fence 和时间；同一 claim 请求在网络
+未知时保留原幂等键。claim 后按不超过30秒且早于租约一半的节奏续租；App 离开前台、租户切换、续租/刷新冲突或401时
+先清除本地控制，再以 `agent_disconnect` 释放，未知结果由有界服务端租约收敛。工作台把数据库 claim、AI 已停播和
+Provider media takeover 分三层显示；只有服务端 `mediaTakeover=ready` 才显示坐席媒体已加入，其他情况保留 reason code，
+不接个人版 AI 代打或 Call Link。
 
-本批仅通过 Flutter 静态分析；未运行 test、build、真机、动态字体或横竖屏，故 `ENT-UI-011` 保持 `in_progress`。
+本批 Flutter 静态分析通过；未运行 test、build、真机、动态字体或横竖屏，故 `ENT-UI-011` 保持 `in_progress`。
 
 ### 19.6 Web 访客参会壳
 

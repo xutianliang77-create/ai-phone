@@ -127,7 +127,8 @@ bundle 敏感信息与 clean commit 扫描，以及签名租户上下文中的�
 未执行，任务保持 `in_progress`，不能据此宣称 AC-UI 或 Web release gate 已通过。
 `ENT-UI-011` 已增加与个人主导航隔离的 Flutter 企业入口，重新校验账号、active membership、签名 route、
 region/cell/scope 和 Provider document，并按 scope 发现工作台、会议、接管、告警、我的；会议页现读取 tenant-scoped
-Meeting API、换取短期 RTC grant 并使用独立企业 LiveKit 音频客户端，接管仍在 API 未闭合时明确 not_ready。
+Meeting API、换取短期 RTC grant 并使用独立企业 LiveKit 音频客户端；接管页已接 queue/work-item/claim/lease/workbench，
+将数据库 claim、AI speech fence 和 Provider media receipt 分层展示，后台/冲突时先清除本地控制。
 当前只通过 Flutter 静态分析，测试、构建和真机门禁未执行。
 `ENT-UI-012` 已增加独立于成员 AuthProvider/AppShell 的 Web 访客参会壳，fragment guest token 清除后只驻留内存，
 query/非法凭据/清除失败均拒绝；访客可显式用加密邀请换取仅允许麦克风发布和订阅的短期 RTC grant，
@@ -331,6 +332,7 @@ PostgreSQL/Salesforce sandbox、Worker 故障注入或浏览器验收，`AC-ENT-
 - [Enterprise Tenant Admission 值班手册](./runbooks/enterprise-tenant-admission.md)
 - [ENT-REL-008 订阅生命周期代码候选证据](./evidence/ent-rel-008-subscription-lifecycle-2026-08-31.md)
 - [Enterprise Subscription Lifecycle 值班手册](./runbooks/enterprise-subscription-lifecycle.md)
+- [ENT-UI-011 Flutter 企业人工接管代码候选](./evidence/ent-ui-011-flutter-takeover-2026-08-31.md)
 - [企业发布材料目录](./release/enterprise-service-description.md)
 - [Enterprise Release Control 值班手册](./runbooks/enterprise-release-control.md)
 

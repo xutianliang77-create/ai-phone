@@ -99,7 +99,10 @@ class _EnterpriseShellPageState extends State<EnterpriseShellPage> {
           label: '接管',
           icon: Icons.pan_tool_alt_outlined,
           selectedIcon: Icons.pan_tool_alt,
-          page: EnterpriseTakeoverPage(workspace: workspace),
+          page: EnterpriseTakeoverPage(
+            client: widget.client,
+            workspace: workspace,
+          ),
         ),
       _EnterpriseDestination(
         label: '告警',

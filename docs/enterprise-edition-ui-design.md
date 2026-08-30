@@ -456,7 +456,7 @@ budget、usage aggregate 和显式 session trace report。卡片沿用同一 Mat
 - “会议”只向有 `meeting:read` 的成员显示，“接管”只向有 `support:takeover` 的成员显示；隐藏入口不替代服务端 guard。
 - 工作台只展示个人待办、会议、告警和用量，不提供批量导入和复杂策略编辑。
 - 企业入口使用独立壳与 Material Icons outlined/filled 图标对，不把个人同传、Call Link 或 AI 代打直接映射为企业成功。
-- 当前工作台和告警只显示 tenant/route/scope/Provider 服务端真值；企业会议列表与接管队列 API 未闭合前显示“尚未就绪”。
+- 当前工作台和告警只显示 tenant/route/scope/Provider 服务端真值；企业接管读取当前租户队列和等待项，领取后分层显示数据库 claim、AI 停播栅栏与 Provider 媒体状态。没有 Provider 回执时只显示“媒体尚未就绪”，不能用绿色提示替代。
 - 无会话、会话过期、401、离线、成员/租户/region/cell/route 不一致时不进入或恢复缓存工作区。
 - 紧急接管和强制停止共享仍需服务端 scope，离线状态不提供乐观成功。
 - iOS/Android 会议内使用与 Web 相同的 `mobile_screen_share_outlined` / `stop_screen_share_outlined` 图标语义和 Material 3 卡片；
