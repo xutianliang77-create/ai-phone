@@ -26,7 +26,6 @@ import {
 } from "./speaker-high-context-delivery.js";
 import { recordSkippedParentDiagnostics } from
   "./speaker-revision-skip-diagnostics.js";
-
 export type SpeakerRevisionMode = "shadow" | "apply";
 
 interface RevisionSessionState {
@@ -169,6 +168,7 @@ export class SpeakerRevisionRealtimeProvider implements RealtimeProvider {
           state.diagnostics.splitRejectedCount += 1;
           if (
             plan.reason === "canonical_cardinality_mismatch" ||
+            plan.reason === "output_cardinality_mismatch" ||
             plan.reason === "speaker_count_growth" ||
             plan.reason === "single_speaker_collapse"
           ) {

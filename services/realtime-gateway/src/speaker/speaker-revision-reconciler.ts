@@ -62,6 +62,7 @@ function updateForSegment(
   labelMapping: Record<string, string>,
 ): SpeakerUpdatedEvent[] {
   const timing = segment.timing!;
+  if (timing.overlap === true) return [];
   const durationMs = Math.max(1, timing.endMs - timing.startMs);
   const intersections = spans.flatMap((span) => {
     const duration = intersection(

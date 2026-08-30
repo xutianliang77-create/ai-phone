@@ -20,6 +20,7 @@ export type SpeakerFirstRejectionReason =
   | "speaker_count_growth"
   | "revision_rejected"
   | "canonical_cardinality_mismatch"
+  | "output_cardinality_mismatch"
   | HighContextSplitRejectionReason;
 
 export type SpeakerFirstSegmentationPlan =
@@ -125,6 +126,25 @@ export function planSpeakerFirstSegmentation(
       timing: normalizedTiming,
     }];
   });
+  const updateBySegment = new Map(
+    speakerUpdates.map((item) => [item.segmentId, item]),
+  );
+  const outputSpeakerIds = new Set([
+    ...revisedSegments.filter((segment) => !parents.has(segment.segmentId))
+      .flatMap((segment) => {
+        const speaker = updateBySegment.get(segment.segmentId)?.speaker ??
+          normalizeSpeaker(segment.speaker, speakerIdMapping);
+        const speakerId = usableSpeakerId(speaker);
+        return speakerId ? [speakerId] : [];
+      }),
+    ...transcripts.flatMap((transcript) => {
+      const speakerId = usableSpeakerId(transcript.speaker);
+      return speakerId ? [speakerId] : [];
+    }),
+  ]);
+  if (outputSpeakerIds.size !== revision.speakerCount) {
+    return rejected("output_cardinality_mismatch");
+  }
 
   return {
     accepted: true,

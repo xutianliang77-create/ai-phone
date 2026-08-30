@@ -80,6 +80,27 @@ describe("speaker revision reconciler", () => {
     ]);
   });
 
+  it("does not erase an existing streaming overlap", () => {
+    const input = segment("overlap", 0, 1_000, "unknown");
+    input.timing = {
+      ...input.timing!,
+      overlap: true,
+      activeSpeakerIds: ["speaker_1", "speaker_2"],
+    };
+    const result = reconcileSpeakerRevision({
+      sessionId: "sess_1",
+      generation: 1,
+      windowStartMs: 0,
+      windowEndMs: 1_000,
+      provider: "sortformer_high_context",
+      speakerCount: 1,
+      spans: [{ speakerId: "S01", startMs: 0, endMs: 1_000 }],
+    }, [input]);
+
+    expect(result.accepted).toBe(true);
+    expect(result.updates).toEqual([]);
+  });
+
   it("rejects stale, cross-session, and malformed revision evidence", () => {
     const malformed = iphoneRevision();
     malformed.spans[1] = { ...malformed.spans[1], startMs: 200 };

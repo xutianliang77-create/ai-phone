@@ -110,6 +110,31 @@ describe("speaker-first segmentation", () => {
       item.speaker.speakerId,
     ])).toContainEqual(["gap_slot", "unknown"]);
   });
+
+  it("rejects an accepted revision that loses a claimed speaker", () => {
+    const plan = planSpeakerFirstSegmentation({
+      sessionId: "sess_1",
+      generation: 1,
+      windowStartMs: 0,
+      windowEndMs: 2_000,
+      provider: "sortformer_high_context",
+      speakerCount: 2,
+      spans: [
+        { speakerId: "S01", startMs: 0, endMs: 1_000, confidence: 0.95 },
+        { speakerId: "S02", startMs: 800, endMs: 1_400, confidence: 0.92 },
+        { speakerId: "S01", startMs: 1_400, endMs: 2_000, confidence: 0.94 },
+      ],
+    }, [
+      segment("loss_1", "speaker_1", 0, 800, "甲乙丙丁"),
+      segment("loss_2", "speaker_2", 800, 1_400, "戊己庚辛"),
+      segment("loss_3", "speaker_1", 1_400, 2_000, "壬癸子丑"),
+    ]);
+
+    expect(plan).toMatchObject({
+      accepted: false,
+      reason: "output_cardinality_mismatch",
+    });
+  });
 });
 
 function revision(): SpeakerRevisionResult {
