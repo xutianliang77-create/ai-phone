@@ -18,15 +18,18 @@ export class EnterpriseBillingLifecycleProcessPostgresRepository {
     leaseGeneration: number;
     workerId: string;
   }) {
-    const now = await this.databaseNow();
     const commandResult = await this.session.query<BillingLifecycleRow>(`
-      SELECT * FROM enterprise.billing_lifecycle_commands
+      SELECT command.*, clock_timestamp() AS database_now
+      FROM enterprise.billing_lifecycle_commands command
       WHERE tenant_id = $1 AND id = $2 FOR UPDATE
     `, [uuid(input.commandId)]);
+    const now = commandResult.rows[0]
+      ? timestamp(commandResult.rows[0].database_now) : null;
     const command = commandResult.rows[0] ? mapBillingLifecycleCommand(
       commandResult.rows[0], this.session.context.tenantId,
     ) : null;
     if (!command) return { status: "not_found" as const };
+    if (!now) throw new Error("Billing lifecycle database time is missing");
     if (command.status === "completed") {
       return { status: "completed" as const, command };
     }
@@ -195,12 +198,6 @@ export class EnterpriseBillingLifecycleProcessPostgresRepository {
       WHERE tenant_id = $1 AND id = $2 FOR UPDATE
     `, [uuid(id)]);
     return result.rows[0] ?? null;
-  }
-  private async databaseNow() {
-    const result = await this.session.query<{ now: unknown }>(
-      "SELECT clock_timestamp() AS now",
-    );
-    return timestamp(result.rows[0]?.now);
   }
   private async account() {
     const result = await this.session.query<BillingRow>(`

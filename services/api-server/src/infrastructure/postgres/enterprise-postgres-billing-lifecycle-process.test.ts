@@ -21,6 +21,8 @@ describe("enterprise billing lifecycle processor", () => {
     expect(session.account.status).toBe("past_due");
     expect(session.subscription.status).toBe("past_due");
     expect(session.decisionCount).toBe(1);
+    expect(session.calls[0]).toContain("clock_timestamp() AS database_now");
+    expect(session.calls[0]).toContain("WHERE tenant_id = $1");
   });
 
   it("suspends only after past_due and closes the bounded usage period", async () => {
@@ -81,7 +83,7 @@ class LifecycleSession {
     lease_owner: "worker-01", lease_generation: 1,
     lease_expires_at: "2026-08-31T00:20:00.000Z", error_code: null,
     completed_at: null, created_at: "2026-08-31T00:00:00.000Z",
-    updated_at: "2026-08-31T00:00:00.000Z", version: 2,
+    updated_at: "2026-08-31T00:00:00.000Z", version: 2, database_now: now,
   };
   readonly event: Record<string, unknown>;
   readonly account: Record<string, unknown>;
@@ -89,6 +91,7 @@ class LifecycleSession {
   decisionCount = 0;
   projectionDisabled = false;
   latestAppliedEffectiveAt: string | null = null;
+  readonly calls: string[] = [];
 
   constructor(eventType: string, accountStatus: string, subscriptionStatus: string) {
     this.event = { id: eventId, tenant_id: tenantId, event_type: eventType,
@@ -110,9 +113,7 @@ class LifecycleSession {
 
   async query<Row extends Record<string, unknown>>(sql: string, values: unknown[] = []) {
     const normalized = sql.replace(/\s+/g, " ");
-    if (normalized.includes("SELECT clock_timestamp() AS now")) {
-      return rows<Row>([{ now }]);
-    }
+    this.calls.push(normalized);
     if (normalized.includes("FROM enterprise.billing_lifecycle_commands") &&
       normalized.includes("FOR UPDATE")) return rows<Row>([this.command]);
     if (normalized.includes("FROM enterprise.billing_provider_events")) {
