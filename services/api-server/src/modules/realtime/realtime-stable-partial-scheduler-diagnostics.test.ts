@@ -41,6 +41,28 @@ describe("stable partial scheduler diagnostics", () => {
       expect(parseRealtimeDiagnostics(input(value))).toBeUndefined();
     }
   });
+
+  it("accepts null latency sentinels before a streaming push completes", () => {
+    const parsed = parseRealtimeDiagnostics(input({
+      ...scheduler,
+      averagePushLatencyMs: null,
+      maxPushLatencyMs: null,
+      firstStablePartialLatencyMs: null,
+      lastStablePartialLatencyMs: null,
+    }));
+
+    expect(parsed?.vad?.stablePartial).toBeDefined();
+    expect(parsed?.vad?.stablePartial).not.toHaveProperty(
+      "averagePushLatencyMs",
+    );
+    expect(parsed?.vad?.stablePartial).not.toHaveProperty("maxPushLatencyMs");
+    expect(parsed?.vad?.stablePartial).not.toHaveProperty(
+      "firstStablePartialLatencyMs",
+    );
+    expect(parsed?.vad?.stablePartial).not.toHaveProperty(
+      "lastStablePartialLatencyMs",
+    );
+  });
 });
 
 

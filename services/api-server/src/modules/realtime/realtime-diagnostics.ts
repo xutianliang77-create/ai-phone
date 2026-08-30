@@ -269,7 +269,7 @@ function isStablePartialDiagnostics(value: unknown) {
 }
 
 function optionalLessOrEqual(left: unknown, right: unknown) {
-  return left === undefined || right === undefined ||
+  return left == null || right == null ||
     typeof left === "number" && typeof right === "number" && left <= right;
 }
 function countTotal(value: unknown) {

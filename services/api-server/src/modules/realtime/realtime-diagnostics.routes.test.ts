@@ -78,6 +78,33 @@ describe("realtime diagnostic persistence", () => {
     expect(response.statusCode).toBe(400);
     expect(response.json().error.code).toBe("invalid_session_diagnostics");
   });
+
+  it("persists ASR null latency sentinels without a diagnostics 400", async () => {
+    const app = await buildApp();
+    const sessionId = await createRealtimeSession(app);
+    const response = await app.inject({
+      method: "POST",
+      url: `/internal/realtime/sessions/${sessionId}/end`,
+      headers: internalHeaders,
+      payload: {
+        billableSeconds: 0,
+        diagnostics: emptyPushLatencyDiagnostics(),
+      },
+    });
+    const detail = await app.inject({
+      method: "GET",
+      url: `/sessions/${sessionId}`,
+    });
+    await app.close();
+
+    expect(response.statusCode).toBe(200);
+    expect(detail.json().diagnostics.vad.stablePartial).not.toHaveProperty(
+      "averagePushLatencyMs",
+    );
+    expect(detail.json().diagnostics.vad.stablePartial).not.toHaveProperty(
+      "maxPushLatencyMs",
+    );
+  });
 });
 
 async function createRealtimeSession(
@@ -155,4 +182,62 @@ function validDiagnostics() {
       },
     },
   } as const;
+}
+
+function emptyPushLatencyDiagnostics() {
+  const diagnostics = validDiagnostics();
+  return {
+    ...diagnostics,
+    audio: {
+      receivedFrameCount: 0,
+      processedBatchCount: 0,
+      droppedFrameCount: 0,
+    },
+    speakerTurns: {
+      confirmedBoundaryCount: 0,
+      commitHitCount: 0,
+      commitMissCount: 0,
+      commitErrorCount: 0,
+      endpointRaceCount: 0,
+      averageConfirmationLatencyMs: 0,
+      maxConfirmationLatencyMs: 0,
+      committedAudioMs: 0,
+      endpointReasons: {},
+    },
+    vad: {
+      ...diagnostics.vad,
+      analyzedFrameCount: 0,
+      speechFrameCount: 0,
+      speechFrameRatio: 0,
+      probabilityMin: null,
+      probabilityMax: null,
+      probabilityMean: null,
+      stablePartial: {
+        enabled: true,
+        policy: "qwen17_chunk_aware_extension_survival_zh_v5",
+        minimumPushAudioMs: 40,
+        eligibleSegmentCount: 0,
+        activeSegment: false,
+        decodeCount: 0,
+        decisionCount: 0,
+        emittedCount: 0,
+        rejectionCounts: {},
+        languageEvidenceSource: "qwen_streaming_state_label",
+        languageEvidenceCounts: {},
+        languageGateCounts: {},
+        scheduledPushCount: 0,
+        completedPushCount: 0,
+        coalescedObservationCount: 0,
+        invalidatedPushCount: 0,
+        inFlight: false,
+        resultReady: false,
+        pendingAudioMs: 0,
+        maxPendingAudioMs: 0,
+        averagePushLatencyMs: null,
+        maxPushLatencyMs: null,
+        firstStablePartialLatencyMs: null,
+        lastStablePartialLatencyMs: null,
+      },
+    },
+  };
 }
