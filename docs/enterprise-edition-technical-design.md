@@ -2724,6 +2724,10 @@ meeting ID 只接受8至128位 URL-safe 标识；guest token 只接受32至4096�
 query token 一律拒绝，避免被服务端 access log/referrer 捕获；fragment 读取后立即用 `history.replaceState` 清除地址栏，
 清除失败即失败闭合。凭据只驻留当前 JavaScript 内存，不写 local/session storage、不显示、不记录。
 
+访客入会前必须由用户显式点击设备检查；仅调用 `getUserMedia({audio:true,video:false})`，不枚举或持久化设备 ID/
+label，不读取 guest token。权限拒绝、无设备、非安全上下文/无 mediaDevices 和设备不可读分别显示明确状态；无论
+成功或失败都在 `finally` 停止全部临时 track。只有检查 ready 才开放入会，重新检查不会复用旧 track。
+
 访客点击入会后才把内存中的邀请提交给 `/enterprise/v1/meetings/:meetingId/guest-join`。成功响应必须为 LiveKit、
 meeting ID 与路径一致、未过期，并声明 microphone/subscribe=true、camera/data/screenShare=false；随后独立
 `EnterpriseMeetingRoomClient` 才连接 RTC 并申请麦克风。原始异常、token 和 access token 均不显示或记录。

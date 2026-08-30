@@ -3,6 +3,9 @@ import { useParams } from "react-router-dom";
 import { createEnterpriseApi } from "../api/enterprise-api.js";
 import { MaterialIcon } from "../components/MaterialIcon.js";
 import { StatusPanel } from "../components/StatusPanel.js";
+import { checkEnterpriseGuestMicrophone,
+  type EnterpriseGuestMicrophoneCheckStatus } from
+  "../guest/enterprise-guest-device-check.js";
 import { consumeGuestInvitation } from "../guest/guest-invitation.js";
 import { enterpriseIcons } from "../icon-registry.js";
 import {
@@ -36,16 +39,24 @@ export function GuestMeetingPage() {
   const [failure, setFailure] = useState<string | null>(null);
   const [captionLanguage, setCaptionLanguage] = useState<"zh" | "en">("zh");
   const [translatedAudioEnabled, setTranslatedAudioEnabled] = useState(false);
+  const [microphoneCheck, setMicrophoneCheck] =
+    useState<EnterpriseGuestMicrophoneCheckStatus>("idle");
+  const [microphoneReason, setMicrophoneReason] = useState<string>();
   const roomClient = useRef<EnterpriseMeetingRoomClient | null>(null);
+  const deviceCheckGeneration = useRef(0);
 
   useEffect(() => {
     const client = new EnterpriseMeetingRoomClient(setRoom);
     roomClient.current = client;
-    return () => { void client.disconnect(); };
+    return () => {
+      deviceCheckGeneration.current += 1;
+      void client.disconnect();
+    };
   }, []);
 
   async function join() {
-    if (invitation.status !== "ready" || busy || !roomClient.current) return;
+    if (invitation.status !== "ready" || microphoneCheck !== "ready" ||
+      busy || !roomClient.current) return;
     setBusy(true);
     setFailure(null);
     try {
@@ -63,6 +74,17 @@ export function GuestMeetingPage() {
 
   async function leave() {
     await roomClient.current?.disconnect();
+  }
+
+  async function checkMicrophone() {
+    if (microphoneCheck === "checking" || room.status !== "disconnected") return;
+    const generation = ++deviceCheckGeneration.current;
+    setMicrophoneCheck("checking");
+    setMicrophoneReason(undefined);
+    const result = await checkEnterpriseGuestMicrophone();
+    if (generation !== deviceCheckGeneration.current) return;
+    setMicrophoneCheck(result.status);
+    setMicrophoneReason(result.reasonCode);
   }
 
   return (
@@ -84,6 +106,9 @@ export function GuestMeetingPage() {
                   <p>凭据只保留在当前页面内存；服务端只签发麦克风发布和音频订阅能力。</p></div>
               </div>
               <div className="guest-capability-list">
+                <CapabilityRow icon={enterpriseIcons.guest.microphone}
+                  label="入会前麦克风检查" value={microphoneCheckLabel(microphoneCheck)}
+                  ready={microphoneCheck === "ready"} />
                 <CapabilityRow icon={enterpriseIcons.guest.microphone} label="麦克风"
                   value={microphoneLabel(room)} ready={room.microphoneEnabled} />
                 <CapabilityRow icon="groups" label="远端参会者"
@@ -91,10 +116,20 @@ export function GuestMeetingPage() {
               </div>
               <div className="guest-meeting-actions">
                 {room.status === "disconnected" ? (
-                  <button className="button button--primary" type="button"
-                    disabled={busy} onClick={() => void join()}>
-                    <MaterialIcon name="login" />{busy ? "正在入会" : "加入音频会议"}
-                  </button>
+                  <>
+                    <button className="button button--secondary" type="button"
+                      disabled={busy || microphoneCheck === "checking"}
+                      onClick={() => void checkMicrophone()}>
+                      <MaterialIcon name="mic_external_on" />
+                      {microphoneCheck === "checking" ? "正在检查" :
+                        microphoneCheck === "ready" ? "重新检查麦克风" : "检查麦克风"}
+                    </button>
+                    <button className="button button--primary" type="button"
+                      disabled={busy || microphoneCheck !== "ready"}
+                      onClick={() => void join()}>
+                      <MaterialIcon name="login" />{busy ? "正在入会" : "加入音频会议"}
+                    </button>
+                  </>
                 ) : (
                   <>
                     <button className="button button--secondary" type="button"
@@ -109,6 +144,12 @@ export function GuestMeetingPage() {
                   </>
                 )}
               </div>
+              {microphoneCheck !== "idle" && microphoneCheck !== "ready" &&
+                microphoneCheck !== "checking" ? (
+                  <p className="guest-device-check-error" role="status">
+                    {microphoneCheckDescription(microphoneCheck, microphoneReason)}
+                  </p>
+                ) : null}
             </section>
           ) : null}
         </div>
@@ -133,8 +174,8 @@ function InvitationStatus(props: {
   if (props.failure) return <StatusPanel state="not_ready" title="暂时无法入会"
     description={props.failure} />;
   if (props.status === "ready") return <StatusPanel state="processing"
-    title="邀请已验证待换票"
-    description="链接中的加密邀请已移除；点击入会后才向服务端换取短期 RTC 凭据。" />;
+    title="邀请已验证，等待设备检查"
+    description="链接中的加密邀请已移除；先显式检查麦克风，检查完成会立即停止临时轨道，入会时才换取短期 RTC 凭据。" />;
   return <StatusPanel state="forbidden"
     title={props.status === "missing" ? "缺少会议邀请" : "会议邀请无效"}
     description="请让主持人重新发送完整邀请链接。凭据只接受 URL fragment，不接受 query 参数。" />;
@@ -163,8 +204,34 @@ function GuestFeature(props: { icon: string; title: string; description: string 
 }
 
 function microphoneLabel(room: EnterpriseMeetingRoomSnapshot) {
-  if (room.status === "connecting") return "正在连接并请求浏览器权限";
+  if (room.status === "connecting") return "正在连接会议";
   if (room.status === "reconnecting") return "正在重连";
   if (room.status === "connected") return room.microphoneEnabled ? "已打开" : "已静音";
-  return "入会后请求权限";
+  return "尚未加入";
+}
+
+function microphoneCheckLabel(status: EnterpriseGuestMicrophoneCheckStatus) {
+  return {
+    idle: "尚未检查",
+    checking: "正在检查",
+    ready: "可用，临时轨道已停止",
+    denied: "浏览器拒绝权限",
+    not_found: "没有可用麦克风",
+    unavailable: "浏览器能力不可用",
+    failed: "检查失败",
+  }[status];
+}
+
+function microphoneCheckDescription(
+  status: EnterpriseGuestMicrophoneCheckStatus,
+  reasonCode?: string,
+) {
+  const description = status === "denied"
+    ? "浏览器未授予麦克风权限。请在地址栏权限设置中允许后重新检查。"
+    : status === "not_found"
+    ? "未发现可用麦克风。请连接设备后重新检查。"
+    : status === "unavailable"
+    ? "当前浏览器或非安全页面不能访问麦克风。请使用受支持的 HTTPS 浏览器。"
+    : "麦克风暂时无法读取，请关闭其他占用程序后重新检查。";
+  return reasonCode ? `${description}（${reasonCode}）` : description;
 }

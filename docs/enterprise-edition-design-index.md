@@ -132,7 +132,8 @@ Meeting API、换取短期 RTC grant 并使用独立企业 LiveKit 音频客户�
 当前只通过 Flutter 静态分析，测试、构建和真机门禁未执行。
 `ENT-UI-012` 已增加独立于成员 AuthProvider/AppShell 的 Web 访客参会壳，fragment guest token 清除后只驻留内存，
 query/非法凭据/清除失败均拒绝；访客可显式用加密邀请换取仅允许麦克风发布和订阅的短期 RTC grant，
-字幕与共享仍保持 not_ready。测试与浏览器设备门禁未执行。
+入会前还必须用户点击麦克风检查，临时 audio track 在检查结束立即停止；拒绝、无设备和不安全上下文均明确显示。
+共享仍保持 not_ready。测试与浏览器设备门禁未执行。
 `ENT-MTG-001` 已增加 Meeting/Participant/Artifact 领域状态机、`0021` schema 约束、tenant-scoped PostgreSQL
 Repository/runtime 和包含 communication binding 的恢复聚合读取。`ENT-MTG-002` 已形成创建/邀请/成员与访客入会、
 加密邀请、短期 LiveKit grant、Web/Flutter 入口代码候选。`ENT-MTG-003` 新增 `0023`、tenant-aware Worker
@@ -333,6 +334,7 @@ PostgreSQL/Salesforce sandbox、Worker 故障注入或浏览器验收，`AC-ENT-
 - [ENT-REL-008 订阅生命周期代码候选证据](./evidence/ent-rel-008-subscription-lifecycle-2026-08-31.md)
 - [Enterprise Subscription Lifecycle 值班手册](./runbooks/enterprise-subscription-lifecycle.md)
 - [ENT-UI-011 Flutter 企业人工接管代码候选](./evidence/ent-ui-011-flutter-takeover-2026-08-31.md)
+- [ENT-UI-012 Web 访客设备检查代码候选](./evidence/ent-ui-012-guest-device-check-2026-08-31.md)
 - [企业发布材料目录](./release/enterprise-service-description.md)
 - [Enterprise Release Control 值班手册](./runbooks/enterprise-release-control.md)
 

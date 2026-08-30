@@ -221,8 +221,9 @@ Playwright、axe 或视觉回归，也未生成/审批截图基线，因此 AC-U
 
 `ENT-UI-012` 当前 Web 代码候选把 `/join/:meetingId` 放在成员 `AuthProvider/AppShell` 外，不读取账号、membership、
 tenant 导航或成员数据。guest token 只接受 URL fragment，query token、非法 meeting/token、地址栏清理失败均拒绝；
-有效凭据清除地址后只驻留页面内存，不进入 storage、日志或 UI。访客点击后才以加密邀请换取短期 RTC grant，
-客户端只开放麦克风发布和订阅，并明确禁止 data/camera/screenShare；字幕和共享保持 `not_ready`。当前仅有
+有效凭据清除地址后只驻留页面内存，不进入 storage、日志或 UI。用户必须先显式检查麦克风，检查仅请求 audio，
+完成后立即停止全部临时 track；拒绝、无设备、不安全上下文和不可读分态显示，ready 前入会禁用。访客点击后才以
+加密邀请换取短期 RTC grant，客户端只开放麦克风发布和订阅，并明确禁止 data/camera/screenShare；共享保持 `not_ready`。当前仅有
 typecheck/build/bundle 静态证据，未运行 token 攻击测试、浏览器、
 权限、设备、axe 或视觉矩阵，不能满足 token 单会议约束、AC-UI-004/005/008..012、AC-MTG 或 A1。
 
