@@ -1,6 +1,6 @@
 # 无界AI企业版开发任务
 
-版本：v1.81
+版本：v1.82
 日期：2026-08-31
 状态：E0 开发中，已对齐统一通讯平台和 PostgreSQL Primary 收敛
 
@@ -101,6 +101,12 @@
 - `ENT-UI-010` 已增加独立 Playwright 三引擎配置、九角色 route 矩阵、320/600/960/1280/1440 双主题截图、动态字体/键盘/axe/客户端遥测用例、固定 release matrix、生产 bundle 体积/源码映射/敏感信息/fixture/发布元数据扫描和 Node 24 CI release-candidate job。浏览器异常只在本地生成 SHA-256 截断 fingerprint，携带 path/app version/commit，经 Bearer、tenant 与签名 route document 上报；服务端拒绝额外字段并只写结构化日志。当前只完成 typecheck、生产构建和静态 bundle 门禁，按要求未运行 unit/API/Playwright/axe/视觉回归，且视觉基线未生成，任务保持 `in_progress`。
 - `ENT-UI-011` 已在个人版“我的”中增加独立企业工作区入口，并实现账号过期清理、active membership 发现、显式多租户选择、短期签名 route/region/cell/scope/Provider document 重新校验，以及工作台、会议、接管、告警、我的五入口。会议只向 `meeting:read` 显示，现读取 tenant-scoped Meeting 列表、换取短期 RTC grant 并通过独立企业 LiveKit 客户端加入音频；接管已接入 tenant-scoped queue/work-item/claim/renew/release/workbench API，严格核对 session/queue/agent/version，网络未知重用幂等键，按服务端 lease 续租，App 离开前台、租约冲突或真值刷新失败立即移除本地控制。页面分别展示数据库 claim、AI 停播栅栏和 Provider 坐席媒体回执，不把 claim 冒充物理接管成功，也不复用个人 AI 代打或 Call Link。当前 `flutter analyze` 通过；按要求未运行 Flutter test、构建、真机、动态字体或横竖屏验证，任务保持 `in_progress`。
 - `ENT-UI-012` 已增加完全位于成员 `AuthProvider/AppShell` 之外的 `/join/:meetingId` Web 访客壳，不发起账号、membership 或 tenant 请求，也不渲染租户导航和成员数据。邀请只接受 `#token=` fragment，拒绝 query token、非法 meeting ID/token，并立即从地址栏清除后只存页面内存；清除失败即拒绝。访客必须显式点击麦克风检查；客户端只请求 audio、禁用 video，区分拒绝/无设备/不安全上下文/不可读，检查完成在 `finally` 停止全部临时 track，成功后才开放入会。入会再以加密邀请换取短期 RTC grant，客户端只开放麦克风和订阅；数据、摄像头与共享继续关闭且不回退个人 Call Link。当前只完成 typecheck/静态转译与文件门禁，token 攻击、浏览器权限和设备矩阵按要求未执行，任务保持 `in_progress`。
+- `ENT-UI-013` 已把 `/contacts` 从 placeholder 替换为两个 scope-aware 只读目录。新增共享 DTO、四条
+  PostgreSQL-only API、Marketing/Support 分域 Repository、只读可重复读 UOW 和 tenant/kind/seek/expiry 绑定的独立
+  HMAC cursor；Web 只显示服务端最小脱敏投影，并以请求 generation 隔离租户、页签、分页和详情竞态。未返回号码
+  密文/hash、attributes、证据/Outcome/Case 文本、CRM URL 或渠道配置，也不按号码/外部 ID 合并 Lead/Customer。
+  当前 Contracts/Web/API typecheck、静态转译、文件和安全门禁通过；自动化、真实 PostgreSQL/RLS 和浏览器/
+  无障碍矩阵按要求未运行，保持 `in_progress`。
 - `ENT-CS-010` 已形成 tenant-scoped workbench activate/read API、claim 与 Agent run cancel 原子栅栏、旧 claim 恢复栅栏、最终字幕 revision 投影、客户/知识/风险/历史聚合和同风格三栏 Web 坐席台。字幕以2.5秒只读轮询，claim 按当前时间续一个 queue lease；乱序快照不覆盖较新 lease。静音、转组、结束、工单和回呼没有安全 Provider/API 时 disabled + reasonCode，不伪造成功。当前只完成 typecheck/构建/静态门禁，按要求未运行自动化、真实 PostgreSQL/RLS、Worker/TTS、LiveKit、浏览器或真实坐席媒体，任务保持 `in_progress`。
 - `ENT-CS-012` 已形成 `0036` forced-RLS 质检规则/复核/发现、`quality:read/manage`、终态会话与 Agent run 双 guard、规则/source hash 精确重放、五类确定性结构发现、最新复核 Dashboard 和同风格证据详情。语义模型未配置时 review 固定 partial/not_configured、错误回答率为 null，不以无引用率替代。当前只完成静态门禁，按要求未运行自动化、真实 PostgreSQL/RLS、浏览器、自动批处理或人工金标质量验收，任务保持 `in_progress`。
 - `ENT-MKT-001` 已形成共享 Campaign 契约、`0037` 创建幂等/owner FK/状态 trigger、forced-RLS 命令幂等账本、tenant-scoped Repository/runtime、list/read/create/draft patch/aggregate schedule API 和同风格 Web 页面。三类写命令同键同 hash 精确重放；schedule 需要 `campaign:approve`，且未审批、非 approved、无 policyVersion 或无未来 startAt 均失败闭合；成功也不创建 task 或调用 PSTN。当前只完成静态门禁，自动化、真实 PostgreSQL/RLS、浏览器、线索/策略/审批/Scheduler/Provider 均未验收，任务保持 `in_progress`。
@@ -154,8 +160,9 @@
 | ENT-UI-010 | Web 自动化与发布门禁 | UI-002..009 | unit、contract、E2E、视觉回归、bundle 和错误监控 | 角色×页面×状态矩阵通过；生产构建无示例数据 | in_progress |
 | ENT-UI-011 | Flutter 企业入口 | UI-001/002、CORE-002 | 工作台、会议、接管、告警和我的入口 | 不复制批量管理；离线/越权不显示乐观成功 | in_progress |
 | ENT-UI-012 | Web 访客参会壳 | CORE-003、MTG-002 | guest token 入会、设备检查、字幕和共享入口 | token 仅访问指定 meeting；不暴露租户导航和成员数据 | in_progress |
+| ENT-UI-013 | 客户与线索目录 | UI-002/003、MKT-002/003/004/012/013、CS-001/010 | 分域只读 DTO/API/Repository、签名分页、脱敏列表与详情 | Lead/Customer 不跨域合并；scope/tenant/cursor 均失败闭合；敏感字段不出服务端 | in_progress |
 
-`ENT-CORE-003` 的生产脚手架、登录和构建已完成；`ENT-UI-001/002/003/005/006/007` 已进入验收，`ENT-UI-004/008/009/010/011/012` 因暂缓测试或依赖未完成保持开发中。Provider capability、租户生命周期 job、成员关系、知识/术语/话术版本、区域、权益、预算和用量聚合已使用服务端真值；Flutter 企业会议与 Web guest session 已接 MTG-003 的个人字幕偏好和服务端定向字幕消费代码候选，Provider/Worker 未就绪时继续明确降级，定向 TTS 与访客共享尚未开放；已认证成员的 Web/iOS/Android 共享分别形成 MTG-005/006/007 代码候选。静态 HTML 原型、未执行的测试定义和静态无障碍检查不进入生产验收，也不能替代浏览器、键盘、axe、视觉回归和真机矩阵。
+`ENT-CORE-003` 的生产脚手架、登录和构建已完成；`ENT-UI-001/002/003/005/006/007` 已进入验收，`ENT-UI-004/008/009/010/011/012/013` 因暂缓测试或依赖未完成保持开发中。Provider capability、租户生命周期 job、成员关系、知识/术语/话术版本、区域、权益、预算和用量聚合已使用服务端真值；Flutter 企业会议与 Web guest session 已接 MTG-003 的个人字幕偏好和服务端定向字幕消费代码候选，Provider/Worker 未就绪时继续明确降级，定向 TTS 与访客共享尚未开放；已认证成员的 Web/iOS/Android 共享分别形成 MTG-005/006/007 代码候选。客户与线索目录只消费 PostgreSQL 分域最小投影，不建立新的跨域主数据。静态 HTML 原型、未执行的测试定义和静态无障碍检查不进入生产验收，也不能替代浏览器、键盘、axe、视觉回归和真机矩阵。
 
 ## 4. P0 企业会议
 

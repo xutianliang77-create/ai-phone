@@ -1,6 +1,6 @@
 # 无界AI企业版详细功能设计
 
-版本：v1.57
+版本：v1.58
 日期：2026-08-31
 状态：SaaS 详细设计基线，已对齐统一通讯平台
 
@@ -71,7 +71,7 @@ Provider Adapter、可靠事件和会话历史能力，并新增：
 | --- | --- | --- | --- | --- |
 | 工作台 | 全部成员 | readiness、待办、用量、告警、最近会话 | 进入待处理对象、查看降级原因 | `tenant:read` |
 | 外呼活动 | 管理员、营销团队 | 活动状态、授权覆盖、国家策略、预算、漏斗 | 创建、校验、审批、启动、暂停、取消 | `campaign:read`、`campaign:write`、`campaign:approve` |
-| 客户与线索 | 营销团队、客服主管 | 客户档案、线索、授权、禁拨和历史会话 | 导入、去重、撤回、跟进 | 业务资源 scope + 数据范围 |
+| 客户与线索 | 营销团队、客服主管 | 客户档案、线索、授权、禁拨和历史会话 | 查看目录并进入对应业务详情 | `campaign:read` 或 `support:read`；写操作仍回到原业务页面 |
 | 客服队列 | 客服主管、坐席 | 等待队列、SLA、实时会话和接管状态 | claim、接管、转组、结束 | `support:read`、`support:manage`、`support:takeover` |
 | 企业会议 | 主持人、成员 | 日程、参会者、字幕语言、共享和材料 | 创建、入会、共享控制、发布材料 | `meeting:read`、`meeting:write`、`screen_share:stop` |
 | 知识与术语 | 管理员、业务主管 | source、版本、解析状态、生效范围和引用 | 上传、审核、发布、停用 | `knowledge:read`、`knowledge:publish` |
@@ -80,6 +80,13 @@ Provider Adapter、可靠事件和会话历史能力，并新增：
 | 企业设置 | owner、admin | 成员、角色、套餐、区域、渠道和保存期限 | 邀请、停用、配置、申请迁移 | `tenant:read`、`tenant:write`、`member:read`、`member:write` |
 
 页面只按服务端返回的 scopes 隐藏或禁用入口，不得把前端可见性当作授权。直接调用 API、伪造 scope 或重放旧页面请求仍必须由服务端拒绝。
+
+`ENT-UI-013` 把“客户与线索”从导航占位改为两个互不推断身份的只读目录。营销页只向
+`campaign:read` 展示线索、脱敏号码/外部编号、活动数、服务端授权资格、禁拨、最近已验证结果和 CRM 状态；
+客服页只向 `support:read` 展示客户档案、同意范围、会话数、待处理工单及有限的最近状态历史。两个目录不按
+电话 hash、外部 ID 或显示名称在客户端合并，也不返回号码密文/hash、客户 attributes、授权证据正文、Outcome
+摘要、CRM URL 或工单正文。PostgreSQL、签名游标或签名 tenant route 未就绪时明确显示 `not_ready`，不回退到
+SQLite/JSON 或 fixture。
 
 ### 3.2 客户端分工
 

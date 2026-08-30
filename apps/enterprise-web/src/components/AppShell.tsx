@@ -21,6 +21,7 @@ import { MeetingsPage } from "../pages/MeetingsPage.js";
 import { AnalyticsPage } from "../pages/AnalyticsPage.js";
 import { SupportPage } from "../pages/SupportPage.js";
 import { CampaignsPage } from "../pages/CampaignsPage.js";
+import { ContactsPage } from "../pages/ContactsPage.js";
 import { PageFrame } from "./PageFrame.js";
 import { EnterpriseTelemetry } from "./EnterpriseTelemetry.js";
 import {
@@ -177,6 +178,17 @@ export function AppShell() {
               )}
           />
           <Route
+            path="/contacts/*"
+            element={routeAllowed(state.context.scopes, "/contacts")
+              ? <ContactsPage />
+              : (
+                <PageFrame title="客户与线索" description="客户、线索、授权与禁拨">
+                  <StatusPanel state="forbidden"
+                    description="当前账号缺少 campaign:read 或 support:read，未读取任何客户目录。" />
+                </PageFrame>
+              )}
+          />
+          <Route
             path="/analytics/*"
             element={routeAllowed(state.context.scopes, "/analytics")
               ? <AnalyticsPage />
@@ -214,7 +226,8 @@ export function AppShell() {
           {enterpriseNavigation.slice(1).filter(({ path }) =>
             path !== "/knowledge" && path !== "/analytics" &&
             path !== "/audit" && path !== "/settings"
-            && path !== "/meetings" && path !== "/support" && path !== "/campaigns"
+            && path !== "/meetings" && path !== "/support" &&
+            path !== "/campaigns" && path !== "/contacts"
           ).map((item) => (
             <Route
               key={item.path}

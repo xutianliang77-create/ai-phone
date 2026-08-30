@@ -1,6 +1,6 @@
 # 无界AI企业版设计文档索引
 
-版本：v1.70
+版本：v1.71
 日期：2026-08-31
 状态：SaaS 详细设计基线，已纳入统一通讯平台和 PostgreSQL Primary 演进
 
@@ -134,6 +134,10 @@ Meeting API、换取短期 RTC grant 并使用独立企业 LiveKit 音频客户�
 query/非法凭据/清除失败均拒绝；访客可显式用加密邀请换取仅允许麦克风发布和订阅的短期 RTC grant，
 入会前还必须用户点击麦克风检查，临时 audio track 在检查结束立即停止；拒绝、无设备和不安全上下文均明确显示。
 共享仍保持 not_ready。测试与浏览器设备门禁未执行。
+`ENT-UI-013` 已把客户与线索占位页替换为 Marketing Lead/Support Customer 两个 scope-aware 只读目录，新增
+PostgreSQL tenant Repository/runtime、四条 API、独立 HMAC seek cursor、服务端最小脱敏 DTO 和 Web 请求代际隔离。
+两个业务域不按号码或外部 ID 合并；Contracts/Web/API typecheck 已通过，真实 PostgreSQL/RLS、API 功能、
+浏览器和无障碍测试仍未执行。
 `ENT-MTG-001` 已增加 Meeting/Participant/Artifact 领域状态机、`0021` schema 约束、tenant-scoped PostgreSQL
 Repository/runtime 和包含 communication binding 的恢复聚合读取。`ENT-MTG-002` 已形成创建/邀请/成员与访客入会、
 加密邀请、短期 LiveKit grant、Web/Flutter 入口代码候选。`ENT-MTG-003` 新增 `0023`、tenant-aware Worker
@@ -335,6 +339,7 @@ PostgreSQL/Salesforce sandbox、Worker 故障注入或浏览器验收，`AC-ENT-
 - [Enterprise Subscription Lifecycle 值班手册](./runbooks/enterprise-subscription-lifecycle.md)
 - [ENT-UI-011 Flutter 企业人工接管代码候选](./evidence/ent-ui-011-flutter-takeover-2026-08-31.md)
 - [ENT-UI-012 Web 访客设备检查代码候选](./evidence/ent-ui-012-guest-device-check-2026-08-31.md)
+- [ENT-UI-013 客户与线索目录代码候选](./evidence/ent-ui-013-contact-directory-2026-08-31.md)
 - [企业发布材料目录](./release/enterprise-service-description.md)
 - [Enterprise Release Control 值班手册](./runbooks/enterprise-release-control.md)
 

@@ -2,6 +2,7 @@ export * from "./api/auth.js";
 export * from "./api/agent-calls.js";
 export * from "./api/enterprise.js";
 export * from "./api/enterprise-campaign.js";
+export * from "./api/enterprise-contact-directory.js";
 export * from "./api/enterprise-campaign-approval.js";
 export * from "./api/enterprise-marketing-scheduler.js";
 export * from "./api/enterprise-marketing-pstn.js";

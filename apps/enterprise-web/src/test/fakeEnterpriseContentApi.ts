@@ -50,6 +50,8 @@ type ContentApi = Pick<EnterpriseApi,
   | "getCampaignCountryPolicyReadiness"
   | "getCampaignApproval" | "validateCampaign" | "approveCampaign"
   | "rejectCampaign"
+  | "listEnterpriseLeads" | "getEnterpriseLead"
+  | "listEnterpriseCustomers" | "getEnterpriseCustomer"
 >;
 
 export function fakeEnterpriseContentApi(): ContentApi {
@@ -173,6 +175,10 @@ export function fakeEnterpriseContentApi(): ContentApi {
     validateCampaign: vi.fn().mockRejectedValue(new Error("not configured")),
     approveCampaign: vi.fn().mockRejectedValue(new Error("not configured")),
     rejectCampaign: vi.fn().mockRejectedValue(new Error("not configured")),
+    listEnterpriseLeads: vi.fn().mockResolvedValue({ leads: [] }),
+    getEnterpriseLead: vi.fn().mockRejectedValue(new Error("not configured")),
+    listEnterpriseCustomers: vi.fn().mockResolvedValue({ customers: [] }),
+    getEnterpriseCustomer: vi.fn().mockRejectedValue(new Error("not configured")),
     getCampaign: vi.fn(),
     createCampaign: vi.fn(),
     updateCampaign: vi.fn(),

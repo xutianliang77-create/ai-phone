@@ -1,6 +1,6 @@
 # 无界AI企业版开发方案与计划
 
-版本：v1.77
+版本：v1.78
 日期：2026-08-31
 状态：E0 执行计划，已对齐统一通讯平台和 PostgreSQL Primary 收敛
 
@@ -74,6 +74,11 @@
 - `ENT-UI-010` 已实现三浏览器引擎、九角色、五档宽度、双主题、键盘、axe 和视觉回归的 Playwright 门禁定义，以及 release matrix、bundle 体积/敏感信息/fixture/元数据扫描、clean HEAD 约束和脱敏客户端错误/性能事件链路。CI 已对齐 Node 24 并上传失败证据；本轮未运行 unit/API/E2E 或生成视觉基线，release gate 仍会失败闭合，任务保持 `in_progress`。
 - `ENT-UI-011` 已实现与个人主导航隔离的 Flutter 企业入口：每次进入重新读取账号、active membership、签名 route document、`/enterprise/v1/me` scopes 和 Provider capability，严格核对 member/tenant/region/cell/route epoch/公开 URL/有效期。会议按 scope 发现并使用独立企业 RTC；接管已接 tenant queue/work-item/claim/renew/release/workbench，以稳定幂等键和服务端版本/租约收敛，数据库 claim、AI 停播和 Provider 媒体分别显示，后台或冲突先移除本地控制。当前 `flutter analyze` 通过，Flutter test、构建、真机、动态字体和横竖屏按要求未执行，任务保持 `in_progress`。
 - `ENT-UI-012` 已实现公开 `/join/:meetingId` 访客壳并放在成员 AuthProvider 之外；邀请凭据只接受 fragment、清除地址后只驻留内存，query/格式错误/历史清理失败均拒绝。访客必须先显式点击麦克风检查；只请求 audio、禁用 video，拒绝/无设备/不安全上下文分态显示，并在检查结束立即停止临时 track；ready 后才开放入会。入会再以加密邀请换取短期 RTC grant，独立企业 LiveKit 客户端只发布麦克风和订阅音频；不读取 tenant/member，不调用个人 Call Link，数据、摄像头和共享明确未开放。当前仅通过 typecheck/静态转译和文件规模静态门禁，任务保持 `in_progress`。
+- `ENT-UI-013` 已把 `/contacts` 占位路由替换为 Marketing Lead 与 Support Customer 两个只读目录，新增共享 DTO、
+  PostgreSQL-only tenant Repository/runtime、`campaign:read`/`support:read` 路由、独立 HMAC seek cursor 和服务端最小
+  脱敏投影。Web 按 scope 显示页签，租户/页签/分页/详情请求以 generation 作废旧响应，不跨域推断同一客户。
+  当前 Contracts/Web/API typecheck、静态转译、文件和安全门禁通过；API/PostgreSQL、浏览器和无障碍测试按
+  功能优先要求延后，保持 `in_progress`。
 - `ENT-MTG-001` 已实现 Meeting/Participant/Artifact 领域模型、CAS 状态机、`0021` 数据库状态/身份/时间/恢复约束、tenant-scoped Repository 和 Primary runtime adapter。聚合读取把 meeting、participant、artifact 与唯一 communication binding 合并，恢复入口只返回 provisioning/active/ending；缺 binding 可见而不伪造。当前只通过 API typecheck、文件规模和 diff 门禁，未运行 migration、forced-RLS、并发 CAS、重启恢复或自动化，保持 `in_progress`。
 - `ENT-CS-001` 已形成 `0028`、Support Channel/Customer/Queue/Session/Case/Tool 领域模型、数据库状态与身份 guard、幂等会话创建、support communication binding 原子绑定、tenant-scoped Repository/runtime 和非终态恢复代码候选。当前只执行静态门禁，未运行 migration、forced-RLS、CAS、重启恢复或自动化，保持 `in_progress`。
 - `ENT-CS-002` 已形成共享 PSTN/Web/App 入站契约、短期 tenant/channel/route dispatch ticket、内部授权/入站 API、实时 Provider readiness、Inbox hash 去重、客户 hash 归并和统一 session/binding/audit/Outbox 事务代码候选。Provider webhook 签名仍由 edge Adapter 负责；当前未运行自动化、真实 Provider、并发或重启恢复，保持 `in_progress`。

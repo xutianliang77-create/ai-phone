@@ -1,6 +1,6 @@
 # 无界AI企业版验收任务与计划
 
-版本：v1.74
+版本：v1.75
 日期：2026-08-31
 状态：可执行验收计划，已对齐统一通讯平台和 PostgreSQL Primary 收敛
 
@@ -194,6 +194,7 @@ Provider 链路成功。
 | AC-UI-010 | 键盘与无障碍 | 核心流程全键盘可达；焦点可见；正文/按钮满足 WCAG AA；图标按钮有名称 | axe/等效扫描、人工键盘记录 |
 | AC-UI-011 | 生产构建边界 | 无示例租户/指标、内部 Provider 地址、密钥、调试入口或静态原型数据 | bundle scan、Release smoke |
 | AC-UI-012 | 前端可观测性 | 页面错误带安全 trace ID；前端错误和性能可按 tenant/route/version 追踪且不含敏感字段 | error event、日志脱敏检查 |
+| AC-UI-013 | 客户与线索目录隔离 | `campaign:read`/`support:read` 分别只读取当前 tenant 的 Lead/Customer；签名 cursor 不能跨 tenant/kind/expiry 重放；响应不含密文/hash/attributes/证据或业务正文；切租户/页签时旧响应不可覆盖 | API 角色×租户×cursor 矩阵、PostgreSQL forced-RLS、浏览器竞态与 bundle/响应敏感字段扫描 |
 
 页面验收至少覆盖：工作台、外呼活动、客服坐席台、企业会议、客户与线索、知识与术语、数据分析、合规与审计、企业设置，以及 Web 访客参会页和 Flutter 企业入口。
 
@@ -226,6 +227,13 @@ tenant 导航或成员数据。guest token 只接受 URL fragment，query token�
 加密邀请换取短期 RTC grant，客户端只开放麦克风发布和订阅，并明确禁止 data/camera/screenShare；共享保持 `not_ready`。当前仅有
 typecheck/build/bundle 静态证据，未运行 token 攻击测试、浏览器、
 权限、设备、axe 或视觉矩阵，不能满足 token 单会议约束、AC-UI-004/005/008..012、AC-MTG 或 A1。
+
+`ENT-UI-013` 当前代码候选实现 Marketing Lead 与 Support Customer 两个 PostgreSQL-only 只读目录，路由分别要求
+`campaign:read`/`support:read`、active membership 和签名 tenant route。列表游标以独立 HMAC 绑定 tenant、目录类型、
+seek key 和过期时间；Repository 在只读可重复读 tenant transaction 中运行并再次校验行 tenant/customer correlation。
+Web 不跨域合并，租户、页签、分页和详情请求使用 generation 作废旧响应。Contracts/Web/API typecheck 已通过，但未
+运行 API/RBAC、真实 PostgreSQL/forced-RLS、跨租户/游标攻击、浏览器竞态、axe 或视觉矩阵，因此 AC-UI-013、
+A1 和 H3 均未通过。
 
 `ENT-UI-006` 当前代码候选覆盖知识源、术语包、话术模板三类稳定资源和修订列表，显式显示
 draft/review/published/expired、生效范围和只读快照；所有内容请求携带当前 tenant 与签名 route document，

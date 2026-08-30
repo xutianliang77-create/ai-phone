@@ -1,6 +1,6 @@
 # 无界AI企业版详细技术设计
 
-版本：v1.76
+版本：v1.77
 日期：2026-08-31
 状态：统一通讯平台与 PostgreSQL Primary 收敛详细技术方案
 
@@ -863,6 +863,10 @@ PUT    /enterprise/v1/script-template-versions/:versionId/content
 POST   /enterprise/v1/script-template-versions/:versionId/publish
 POST   /enterprise/v1/runtime-terminology/resolve
 GET    /enterprise/v1/audit-events
+GET    /enterprise/v1/leads
+GET    /enterprise/v1/leads/:leadId
+GET    /enterprise/v1/customers
+GET    /enterprise/v1/customers/:customerId
 POST   /enterprise/v1/communication-policies
 ```
 
@@ -883,6 +887,15 @@ POST   /enterprise/v1/communication-policies
 不重复生成 accepted/terminal 事件。SQLite 使用独立表和 UPDATE/DELETE 拒绝触发器；
 PostgreSQL `0006_enterprise_audit_append_only` 增加结果/JSON 对象约束、tenant-first
 查询索引和相同不可变触发器。
+
+客户与线索目录只支持 PostgreSQL runtime。`/leads*` 要求 `campaign:read`，`/customers*` 要求
+`support:read`，四条路由同时要求 active membership 与有效签名 tenant route document；请求体和查询参数不能覆盖
+tenant。列表 `limit` 为1至100、默认50，HMAC cursor 使用独立至少32字节的
+`ENTERPRISE_CONTACT_CURSOR_SECRET`，绑定 tenant、`leads|customers`、`updatedAt/id` 和60至3600秒有效期；缺少或
+非法配置返回 `contact_cursor_not_configured`，过期/篡改/跨租户/跨目录复用分别失败闭合。两个 Repository 只在
+`REPEATABLE READ READ ONLY` tenant transaction 中查询各自领域，数据库行映射再次核对 tenant，Support 历史还核对
+customer correlation。响应不包含号码密文/hash、attributes、证据正文、Outcome/Case 文本、Provider URL、内部配置
+或请求 hash。
 
 ### 3.3 外呼营销
 
@@ -3069,6 +3082,22 @@ guide、operations/incident runbook 和 release checklist。每种恰好一份�
 `check:enterprise-release-materials` 默认从当前 Git HEAD 取得 expected commit，并强制接收真实 image digest。
 示例 manifest 固定为 draft/pending，不可直接放行。当前只形成代码、文档模板和未执行测试定义；没有真实
 A0–A3/H1–H3、批准 SLA、六方审批或候选镜像，因此 readiness 仍为 `not_ready`，不代表 A4 或生产门禁通过。
+
+### 19.18 客户与线索只读目录（ENT-UI-013）
+
+Web `/contacts` 使用 `campaign:read` 与 `support:read` 独立发现两个页签。每次租户、页签、分页或详情请求都使用
+单调递增的客户端 generation；旧租户、旧页签和被后续请求取代的响应不能写入当前列表、错误或 loading 状态。
+客户端只渲染 DTO，不接收全量记录后自行脱敏，也不把 Lead 和 Customer 按显示字段合并。
+
+Lead Repository 从 `marketing_leads` 出发，以 tenant-first lateral projection 计算 active campaign 数、当前时间点的
+授权资格、tenant/global suppression、最近 `evidence_status=verified` Outcome 和其 CRM sync 状态。Customer
+Repository 从 `customer_profiles` 出发，聚合会话数、开放工单数、最近会话，并在详情中最多返回20条会话和20条工单
+状态元数据；不读取 intent、subject、summary、resolution 或 channel config。分页使用 `(updated_at,id)` 降序 seek，
+只在确有下一页时签发 cursor。PostgreSQL、route 或 cursor signing 未就绪时不回退 legacy/SQLite/JSON。
+
+当前代码候选已通过 Contracts/Web/API typecheck、目录 esbuild、文件规模、diff 和企业静态安全门禁；按功能优先指令
+未运行 API、PostgreSQL、浏览器、axe 或视觉测试，因此保持 `in_progress`，不能作为双租户 RLS、AC-UI-013、
+A1/H3 或企业生产放行证据。
 
 ## 20. 错误、重试和客户端动作
 

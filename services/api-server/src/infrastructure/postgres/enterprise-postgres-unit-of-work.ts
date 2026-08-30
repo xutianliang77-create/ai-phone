@@ -124,6 +124,10 @@ import { EnterpriseTenantAdmissionPostgresRepository } from
   "./enterprise-postgres-tenant-admission.js";
 import { EnterpriseBillingLifecyclePostgresRepository } from
   "./enterprise-postgres-billing-lifecycle.repository.js";
+import { EnterpriseLeadDirectoryPostgresRepository } from
+  "./enterprise-postgres-contact-directory-leads.js";
+import { EnterpriseCustomerDirectoryPostgresRepository } from
+  "./enterprise-postgres-contact-directory-customers.js";
 
 export interface EnterprisePostgresUnitOfWork {
   tenant: EnterpriseTenantPostgresRepository;
@@ -176,6 +180,8 @@ export interface EnterprisePostgresUnitOfWork {
   releaseControls: EnterpriseReleaseControlPostgresRepository;
   admissions: EnterpriseTenantAdmissionPostgresRepository;
   billingLifecycle: EnterpriseBillingLifecyclePostgresRepository;
+  leadDirectory: EnterpriseLeadDirectoryPostgresRepository;
+  customerDirectory: EnterpriseCustomerDirectoryPostgresRepository;
 }
 
 export function withEnterprisePostgresUnitOfWork<T>(
@@ -249,6 +255,8 @@ export function withEnterprisePostgresUnitOfWork<T>(
       releaseControls: new EnterpriseReleaseControlPostgresRepository(session),
       admissions: new EnterpriseTenantAdmissionPostgresRepository(session),
       billingLifecycle: new EnterpriseBillingLifecyclePostgresRepository(session),
+      leadDirectory: new EnterpriseLeadDirectoryPostgresRepository(session),
+      customerDirectory: new EnterpriseCustomerDirectoryPostgresRepository(session),
     }),
     options,
   );

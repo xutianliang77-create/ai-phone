@@ -32,6 +32,8 @@ import { createEnterpriseSupportQualityApi, type EnterpriseSupportQualityApi } f
   "./enterprise-support-quality-api.js";
 import { createEnterpriseCampaignApi, type EnterpriseCampaignApi } from
   "./enterprise-campaign-api.js";
+import { createEnterpriseContactApi, type EnterpriseContactApi } from
+  "./enterprise-contact-api.js";
 import {
   configuredEnterpriseBaseUrl,
   createEnterpriseBinaryRequester,
@@ -59,7 +61,7 @@ export interface EnterprisePublicationInput {
 
 export interface EnterpriseApi extends EnterpriseMemberApi, EnterpriseSettingsApi,
   EnterpriseAuditApi, EnterpriseMeetingApi, EnterpriseSupportApi,
-  EnterpriseSupportQualityApi, EnterpriseCampaignApi {
+  EnterpriseSupportQualityApi, EnterpriseCampaignApi, EnterpriseContactApi {
   requestCode(phone: string): Promise<PhoneCodeRequestResponse>;
   login(phone: string, code: string): Promise<PhoneLoginResponse>;
   listTenants(token: string): Promise<EnterpriseTenantListResponse>;
@@ -175,6 +177,7 @@ export function createEnterpriseApi(
     ...createEnterpriseSupportApi(request, contentHeaders),
     ...createEnterpriseSupportQualityApi(request, contentHeaders),
     ...createEnterpriseCampaignApi(request, contentHeaders),
+    ...createEnterpriseContactApi(request, contentHeaders),
     requestCode: (phone) => request("/auth/phone/request-code", {
       method: "POST",
       body: JSON.stringify({ phone }),
