@@ -1,0 +1,37 @@
+{
+  "schemaVersion": 1,
+  "product": "ai-phone-enterprise",
+  "releaseId": "replace-with-release-id",
+  "version": "replace-with-version",
+  "generatedAt": "replace-with-iso-8601-time",
+  "candidate": {
+    "commitSha": "replace-with-40-character-commit",
+    "imageDigest": "sha256:replace-with-64-character-image-digest"
+  },
+  "artifacts": [
+    { "kind": "service_description", "path": "docs/release/enterprise-service-description.md", "sha256": "replace-with-sha256", "status": "draft" },
+    { "kind": "release_notes", "path": "docs/release/enterprise-release-notes.md", "sha256": "replace-with-sha256", "status": "draft" },
+    { "kind": "service_level_agreement", "path": "docs/release/enterprise-service-level-agreement.md", "sha256": "replace-with-sha256", "status": "draft" },
+    { "kind": "privacy_and_data_processing", "path": "docs/release/enterprise-privacy-and-data-processing.md", "sha256": "replace-with-sha256", "status": "draft" },
+    { "kind": "administrator_guide", "path": "docs/release/enterprise-administrator-guide.md", "sha256": "replace-with-sha256", "status": "draft" },
+    { "kind": "operations_and_incident_runbook", "path": "docs/release/enterprise-operations-and-incident-runbook.md", "sha256": "replace-with-sha256", "status": "draft" },
+    { "kind": "release_checklist", "path": "docs/release/enterprise-release-checklist.md", "sha256": "replace-with-sha256", "status": "draft" }
+  ],
+  "gateEvidence": [
+    { "gate": "A0", "status": "pending", "acceptanceIds": [] },
+    { "gate": "A1", "status": "pending", "acceptanceIds": [] },
+    { "gate": "A2", "status": "pending", "acceptanceIds": [] },
+    { "gate": "A3", "status": "pending", "acceptanceIds": [] },
+    { "gate": "H1", "status": "pending", "acceptanceIds": [] },
+    { "gate": "H2", "status": "pending", "acceptanceIds": [] },
+    { "gate": "H3", "status": "pending", "acceptanceIds": [] }
+  ],
+  "approvals": [
+    { "role": "product", "status": "pending" },
+    { "role": "engineering", "status": "pending" },
+    { "role": "security", "status": "pending" },
+    { "role": "privacy", "status": "pending" },
+    { "role": "operations", "status": "pending" },
+    { "role": "legal", "status": "pending" }
+  ]
+}

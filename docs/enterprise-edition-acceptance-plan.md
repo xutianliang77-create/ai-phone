@@ -1,7 +1,7 @@
 # 无界AI企业版验收任务与计划
 
-版本：v1.70
-日期：2026-07-21
+版本：v1.71
+日期：2026-08-31
 状态：可执行验收计划，已对齐统一通讯平台和 PostgreSQL Primary 收敛
 
 ## 1. 验收目标
@@ -124,6 +124,7 @@ Mock 只能验证协议，不能替代 iPhone/Web、真实 LiveKit、真实模�
 | AC-ENT-0051 | 数据生命周期 | `0051` up/down/forward 后 `data_lifecycle_jobs` tenant-first FK、forced RLS、不可变范围/终态/attempt trigger 与 pending-work `data_lifecycle` kind 有效；completed audit export 在同事务唯一登记 source/object SHA/size/retention deadline，失败或 processing 导出不登记，历史完成导出 backfill 不重复；未到期不 claim，到期及 tenant `deletion_requested` 立即 due，双 Worker owner/generation/lease 只产生一个有效 attempt；S3-compatible/local Adapter 对存在对象 Delete 后再次 Head/stat，仍存在、超时、5xx、非法 key、未配置和未知结果均不完成，已不存在以 `already_absent` 独立回执收敛；finalize attempt CAS、receipt SHA 和 append-only audit 不含 object key/bucket/endpoint；任一 processing/failed object job 阻断 tenant executor，外部 delete receipt 必须绑定 tenant/job、database tombstone、object/provider manifest，三组 remaining=0、count 守恒且规范化 SHA 匹配后才允许 tenant `deleted`；跨租户 ID/RLS、旧 Cell/route/generation、重启、响应丢失和删除后迟到 export 均失败闭合 |
 | AC-ENT-0052 | PostgreSQL 备份和灾备 | schema-v2 灾备结果使用独立 HMAC，精确绑定已验签的 staging/matched enterprise cutover、candidate commit/image、topology、cutover/run ID、目标 system identifier/OID/database manifest、当前公共31段/enterprise 53段 manifest，以及已批准 SLA 的 evidence ID/SHA-256；缺失、过期、错误环境、错误候选、清单漂移、同一 HMAC key、路径越界和签名/证据篡改均在 Provider 命令前失败。所有 shell-free Adapter attestation 精确回显 run/group/step、staging、verify-full；至少两个独立数据库主机跨两个故障域，并使用与其均不同的备份故障域。健康控制器自动切换后 timeline 严格递增、promotion generation 有效；旧主写返回 SQLSTATE `25006`，旧 route epoch/Worker generation 副作用拒绝，新 endpoint identity 匹配 cutover，原主只以 timeline 一致且 `acceptsWrites=false` 的 standby 重入。base backup/WAL 传输和静态加密，具有对象 version、未决归档失败为0、归档延迟不超目标、至少30天 retention 以及 compliance/provider retention lock。隔离 PITR 指定时间和 marker，证明 target 前 marker 存在、target 后 marker 不存在，目标/恢复全量数据及关键 tenant/session/ledger/audit/suppression/consent/object manifest SHA-256 分别相等。自动切换和 PITR 实测 RPO/RTO 均不超过已批准 SLA；未批准或未实测时不得承诺数值。签名结果和 evidence 只保存脱敏身份/hash/时间/指标，不含凭据、endpoint、bucket、object key 或命令输出敏感正文 |
 | AC-ENT-0053 | 租户灰度、kill switch 与能力熔断 | `0052/0053` up/down/forward 后 release control/event 使用 tenant-first key、forced RLS、身份/version/half-open trigger 与 append-only event，tenant root 具有精确自租户 policy，普通非 owner/非 `BYPASSRLS` 应用角色可取得当前 tenant 行锁而看不到其他 tenant；owner/到期/阈值/operation ID 缺失或越界拒绝。租户所有角色仅 `tenant:read` 查看本租户脱敏状态，跨租户 ID/RLS 返回不可见；控制变更只接受独立内部 key+operator，probe decision/outcome 还要求不同的第二 key。缺记录、disabled、expired、kill active、open、普通 half-open、legacy/SQLite 均在 Provider/dispatch 副作用前拒绝；Support Agent、Screen OCR、Marketing PSTN 至少各验证一次 guard。两个 API 实例并发上报同 operation 只计一次，连续失败精确在阈值 open，kill 只停止目标 tenant+capability，新副作用停止延迟满足批准 SLO且不影响另一租户；安全结束、已接受 Provider 对账/结算继续收敛。open 不用客户会话探测；值班按 runbook 复核告警、依赖与影响后 begin probe，唯一专用 probe 成功 closed、失败重开，旧/重放 probe 不改变状态。告警、trace、追加证据和 on-call 时间线可关联且不含 secret/客户正文；真实 PostgreSQL、双租户、Provider 故障和独立 reviewer 演练全部通过后方可放行 |
+| AC-ENT-0054 | 企业候选发布材料 | schema-v1 manifest 固定 product/release/version、40位 commit 和 image digest；运行时 expected commit/image 与 manifest 一致。服务说明、发布说明、SLA、隐私/数据处理、管理员手册、运维/事件手册和发布清单各恰好一份且 approved，根内相对普通文件无穿越/符号链接/草稿标记，大小受限且 SHA-256 一致。A0–A3/H1–H3 各恰好一份 passed evidence，acceptance IDs、reviewer、时间、文件 hash、commit/image 完整一致；产品、工程、安全、隐私、运维、法务六类审批全部有效。任一材料、hash、审批、证据或候选绑定缺失时 CLI 和 `/health/release-ready` 均 not_ready；国内 App 材料、主产品证据、旧候选、mock、单节点 PostgreSQL 和口头批准均不能替代。H3 未绑定批准 SLA 和跨故障域 RPO/RTO 实测时不得承诺数值 |
 
 `ENT-CS-005` 当前只形成 `AC-ENT-0026` 的代码候选；自动化、migration up/down/forward、
 forced-RLS 双租户、并发发布、Worker 竞态和真实 Provider/Adapter 均未执行。Agent `toolRequest`
@@ -958,6 +959,19 @@ API全量233文件829项、Enterprise Web 13文件74项和全 Node 433文件1609
 跨故障域 staging/H3 或 on-call 演练，因此任务仍为 `in_progress`，`AC-ENT-0053` 未通过。
 
 具体 RPO/RTO 由企业 SLA 确定；未确定前不能在材料中承诺数值。
+
+### 12.1 企业发布材料验收
+
+`ENT-REL-005` 按 `AC-ENT-0054` 执行五组矩阵：manifest 结构矩阵覆盖错误 product/schema、占位
+release/version、非法 commit/image 和 expected identity 漂移；文件矩阵覆盖缺失、重复、未知 kind、绝对路径、
+目录穿越、符号链接、空/超限文件、hash 漂移和已批准材料草稿标记；证据矩阵覆盖 A0–A3/H1–H3 缺失、
+pending、跨候选、空 acceptance ID、旧 reviewer/时间和内容篡改；审批矩阵覆盖六个职责的缺失、重复、pending
+和未来时间；集成矩阵确认国内材料 ready 不能绕过企业 not_ready，健康响应不暴露材料正文、文件内容、凭据或
+内部路径以外的敏感配置。
+
+当前只形成 validator、CLI、健康/发布门集成、七份候选文档和未执行的测试定义。示例 manifest 固定为
+draft/pending；没有真实候选 image、A0–A3/H1–H3 证据、批准 SLA 或六方审批。本轮按要求未运行自动化，
+`AC-ENT-0054` 未通过，`ENT-REL-005` 保持 `in_progress`，不得宣称 A4 或企业生产发布材料 ready。
 
 ## 13. 验收执行顺序
 

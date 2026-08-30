@@ -33,6 +33,7 @@
     "check:domestic-release-env": "node scripts/check_domestic_release_env_file.mjs",
     "check:domestic-local-stack": "node scripts/check_domestic_local_stack.mjs",
     "check:domestic-release-materials": "tsx services/api-server/src/modules/health/check-release-materials.ts",
+    "check:enterprise-release-materials": "tsx services/api-server/src/modules/health/check-enterprise-release-materials.ts",
     "check:mobile-app-release-ready": "node scripts/check_mobile_app_release_readiness.mjs",
     "generate:domestic-release-screenshots": "cd apps/mobile && flutter --no-version-check test tool/domestic_release_screenshots_test.dart --update-goldens --no-pub",
     "configure:mobile-release-identity": "node scripts/configure_mobile_release_identity.mjs",

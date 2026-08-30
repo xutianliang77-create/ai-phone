@@ -1,7 +1,7 @@
 # 无界AI企业版详细技术设计
 
-版本：v1.72
-日期：2026-07-21
+版本：v1.73
+日期：2026-08-31
 状态：统一通讯平台与 PostgreSQL Primary 收敛详细技术方案
 
 ## 1. 设计原则
@@ -2950,6 +2950,27 @@ AI 复核复用 `@translation/llm` 的 OpenAI-compatible Adapter，默认关闭�
 不以客户端字幕缓存回填。当前未运行 migration/down、forced-RLS/跨租户、fan-out/revision/hash、幂等/CAS、Provider
 hallucination、发布竞争、浏览器/Flutter/真机或外部导出 Adapter 门禁，因此任务保持 `in_progress`，不代表 A1/H3 或
 企业生产门禁通过。
+
+### 19.17 企业发布材料门禁（ENT-REL-005）
+
+`ENTERPRISE_RELEASE_MATERIALS_FILE` 指向 schema-v1 JSON manifest。服务端只接受 product 固定为
+`ai-phone-enterprise`、非占位 release/version、40位 commit 和 `sha256:` image digest。生产还配置
+`ENTERPRISE_RELEASE_CANDIDATE_COMMIT`、`ENTERPRISE_RELEASE_IMAGE_DIGEST`；任一不一致失败闭合。
+`ENTERPRISE_RELEASE_REPOSITORY_ROOT` 只定义材料挂载根，所有引用必须为根内相对普通文件，绝对路径、
+目录穿越、符号链接、空文件、超过2MiB、SHA-256不匹配和已批准文件中的草稿标记全部拒绝。
+
+manifest 固定要求七类材料：service description、release notes、SLA、privacy/data processing、administrator
+guide、operations/incident runbook 和 release checklist。每种恰好一份且为 approved，含审批人和非未来时间。
+同时固定要求 A0/A1/A2/A3/H1/H2/H3 七组 evidence；每组恰好一份、状态 passed、acceptance ID 非空、
+证据文件 hash 正确，并与 manifest 的 commit/image 完全一致。产品、工程、安全、隐私、运维和法务六个
+职责审批也必须全部 approved。
+
+`getEnterpriseReleaseMaterialsReadiness` 进入 `/health` 的独立
+`enterpriseReleaseMaterialsReadiness`，并作为 `/health/release-ready` 的强制组成。国内版
+`RELEASE_MATERIALS_FILE` 即使 ready，也不能抵消企业材料缺失。CLI
+`check:enterprise-release-materials` 默认从当前 Git HEAD 取得 expected commit，并强制接收真实 image digest。
+示例 manifest 固定为 draft/pending，不可直接放行。当前只形成代码、文档模板和未执行测试定义；没有真实
+A0–A3/H1–H3、批准 SLA、六方审批或候选镜像，因此 readiness 仍为 `not_ready`，不代表 A4 或生产门禁通过。
 
 ## 20. 错误、重试和客户端动作
 

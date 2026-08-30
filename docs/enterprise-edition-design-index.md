@@ -1,7 +1,7 @@
 # 无界AI企业版设计文档索引
 
-版本：v1.66
-日期：2026-07-21
+版本：v1.67
+日期：2026-08-31
 状态：SaaS 详细设计基线，已纳入统一通讯平台和 PostgreSQL Primary 演进
 
 ## 1. 产品边界
@@ -90,6 +90,10 @@ enterprise 53段、`53 -> 52 -> 51 -> 53` down/forward、普通角色双租户 R
 open/half-open/probe/close/kill 和追加证据不可变验证，并用两个 API 进程读取同库状态；定向6文件32项通过。
 真实 Support/OCR/PSTN Provider 故障、kill SLO、告警和值班独立复核仍未执行，因此 `AC-ENT-0053` 未通过，
 任务保持 `in_progress`，该本机单节点证据不等于 staging/H3 或生产门禁。
+`ENT-REL-005` 已增加企业 SaaS 候选发布材料 schema、文件/hash/候选绑定 validator、CLI 和
+`/health/release-ready` 强制门禁，并提供服务说明、发布说明、SLA、隐私/数据处理、管理员、运维/事件和发布清单
+七份候选文档。A0–A3/H1–H3 任一缺失、跨候选、文件漂移、草稿或六方审批不全均返回 not_ready；本轮未运行
+测试，也没有真实候选 image、验收证据、批准 SLA 或审批，因此任务保持 `in_progress`，不代表 A4/生产 ready。
 `ENT-CORE-004` 已增加 tenant-scoped source/version/chunk、草稿审核发布状态机、发布后不可变约束、
 locale/country/product/effective-time 检索和知识引用 ID；
 `ENT-CORE-005` 已增加版本化 term pack/script template、审核发布和生效窗口、发布后不可变约束，
@@ -308,6 +312,8 @@ PostgreSQL/Salesforce sandbox、Worker 故障注入或浏览器验收，`AC-ENT-
 - [ENT-REL-002 数据生命周期实现与静态门禁证据](./evidence/ent-rel-002-data-lifecycle-2026-07-20.md)
 - [ENT-REL-003 备份和灾备实现与静态门禁证据](./evidence/ent-rel-003-backup-disaster-recovery-2026-07-20.md)
 - [ENT-REL-004 灰度和熔断实现与静态门禁证据](./evidence/ent-rel-004-rollout-circuit-breaker-2026-07-20.md)
+- [ENT-REL-005 企业发布材料代码候选证据](./evidence/ent-rel-005-enterprise-release-materials-2026-08-31.md)
+- [企业发布材料目录](./release/enterprise-service-description.md)
 - [Enterprise Release Control 值班手册](./runbooks/enterprise-release-control.md)
 
 ## 4. 统一约束

@@ -9,6 +9,8 @@ import { getDiagnosticsDeploymentReadiness } from "../diagnostics/diagnostics-al
 import { diagnosticsAdminStatus } from "../diagnostics/diagnostics-auth.js";
 import { sessionReviewProviderStatus } from "../sessions/session-review.js";
 import { getReleaseMaterialsReadiness } from "./release-materials-readiness.js";
+import { getEnterpriseReleaseMaterialsReadiness } from
+  "./enterprise-release-materials-readiness.js";
 import { getReleaseReadiness } from "./release-readiness.js";
 import { getRepositoryStorageStatus } from
   "../../infrastructure/storage/repository-runtime.js";
@@ -35,6 +37,8 @@ export async function registerHealthRoutes(app: FastifyInstance) {
     const smsReadiness = getSmsDeploymentReadiness();
     const diagnosticsReadiness = await getDiagnosticsDeploymentReadiness();
     const releaseMaterialsReadiness = getReleaseMaterialsReadiness();
+    const enterpriseReleaseMaterialsReadiness =
+      getEnterpriseReleaseMaterialsReadiness();
     const sessionReview = sessionReviewProviderStatus();
     const workerDispatchReadiness = getLiveKitDispatchReadiness();
     const egressReadiness = getLiveKitEgressReadiness();
@@ -88,6 +92,7 @@ export async function registerHealthRoutes(app: FastifyInstance) {
       telemetryReadiness,
       diagnosticsReadiness,
       releaseMaterialsReadiness,
+      enterpriseReleaseMaterialsReadiness,
     };
   });
 

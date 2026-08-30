@@ -1,7 +1,7 @@
 # 无界AI企业版开发任务
 
-版本：v1.77
-日期：2026-07-21
+版本：v1.78
+日期：2026-08-31
 状态：E0 开发中，已对齐统一通讯平台和 PostgreSQL Primary 收敛
 
 ## 1. 状态定义
@@ -57,6 +57,11 @@
   两个 API 进程读取同库状态一致并拒绝缺失 probe key，定向6文件32项、API全量233文件829项及全 Node
   433文件1609项通过。真实 Support/OCR/PSTN Provider
   故障、kill SLO/告警、独立 reviewer 和 on-call runbook 未执行，`AC-ENT-0053` 未通过，保持 `in_progress`。
+- `ENT-REL-005` 已形成独立企业 SaaS 发布材料 schema/validator/CLI 和 `/health/release-ready` 强制门禁，
+  固定候选 commit/image、七类批准材料、A0–A3/H1–H3 同候选证据及产品/工程/安全/隐私/运维/法务六方审批。
+  七份候选文档与 draft/pending 示例 manifest 已提供；根外路径、符号链接、文件/hash漂移、跨候选证据和草稿批准
+  均失败闭合。测试定义已增加但按要求未运行，真实候选镜像、验收证据、SLA 与审批不存在，`AC-ENT-0054`
+  未通过，任务保持 `in_progress`，不能宣称发布材料或 A4 ready。
 - `ENT-CORE-004` 已新增 enterprise `0017`、共享契约、tenant Knowledge Repository/runtime 和七个服务端路由：source、递增 revision、一次性 chunk 集、review、publish、列表和检索均绑定 membership/RBAC/route document。服务端生成 chunk/content SHA-256 与 citation；数据库要求 review+非空 chunk 才能发布，并冻结 published version/chunk。检索强制 tenant/locale/country/product/effective-time，只取每个 source 最新有效 published revision；review、过期和跨租户数据返回空。代码、定向矩阵及一次性 PostgreSQL 16 普通角色 forced-RLS/down-up 验证完成，进入 `ready_for_acceptance`；embedding Provider、真实对象存储、恶意文档扫描和生产 A1/H3 尚未验收。
 - `ENT-CORE-005` 已新增 enterprise `0018`、共享契约、Term Pack/Script Template Repository/runtime 和十三个服务端路由。稳定资源下的 revision 由服务端行锁递增，内容规范化后生成 SHA-256，review 后内容/hash 与 published 版本不可修改；resolver 强制 tenant/source-target locale/country/product/purpose/effective-time，只返回有效 published 版本，并给 ASR、翻译、LLM 同一 `termPackVersionId`，可选话术只给 LLM。代码、定向矩阵和一次性 PostgreSQL 16 非 owner/非 BYPASSRLS 普通角色 down-forward 验证完成，进入 `ready_for_acceptance`；真实 Worker/Provider、A1/H3 尚未验收。
 - `ENT-CORE-009` 已完成租户创建/区域开通幂等、失败重试、暂停、导出和删除执行器；导出固化 tenant/member/job 与 actor scope 快照，执行使用租约、有界重试和 receipt hash，删除只在 receipt 校验后进入 `deleted`，等待真实生命周期服务与对象存储验收。
@@ -408,17 +413,18 @@ snapshot 测试已定义但未运行；未运行 Vitest/API/Repository、真实 
 | ENT-REL-002 | 数据生命周期 | DATA-001/003 | `0051` retention snapshot、audit export object delete job、Cell Worker、tenant delete convergence receipt | 删除范围不可变且可审计；Delete 后实体不存在；对象/Provider remaining=0 前租户不完成 | in_progress |
 | ENT-REL-003 | 备份和灾备 | DATA-005/009 | schema-v2 HMAC 企业绑定、跨故障域自动切换、旧主三层 fencing、第三故障域不可变备份、PITR marker/hash | 达到批准 RPO/RTO；旧主/旧 route/旧 Worker 不能恢复写入；签名证据可复核 | in_progress |
 | ENT-REL-004 | 灰度和熔断 | OBS-001 | tenant flag、kill switch、runbook | 单租户异常可隔离停止 | in_progress |
-| ENT-REL-005 | 企业发布材料 | 全部 | 文档、SLA、隐私、管理员手册 | 发布清单全部有证据 | todo |
+| ENT-REL-005 | 企业发布材料 | 全部 | 候选身份、七类 hash 锁定文档、A0–A3/H1–H3 证据、六方审批、CLI/health gate | 发布清单全部有同候选证据；缺失或漂移时 fail closed | in_progress |
 | ENT-REL-006 | SaaS 控制面高可用 | CORE-009/010/011 | directory、provisioning、status | 控制面故障不破坏进行中会话 | todo |
 | ENT-REL-007 | 租户限流和熔断 | CORE-010/014、OBS-001 | quota、dispatch capacity、concurrency、kill switch | 单租户异常不拖垮共享 cell | todo |
 | ENT-REL-008 | 订阅和欠费状态 | CORE-010/012 | renew/past_due/suspend/resume | 不误停进行中安全链路，不漏账 | todo |
 
-2026-07-21 的两个本机 API 进程真实健康检查确认这四项不能标记为已运行完成：`ENT-REL-005` 为
-`releaseMaterialsReadiness=not_ready`，明确缺 `RELEASE_MATERIALS_FILE`；`ENT-REL-006` 为
+2026-08-31 `ENT-REL-005` 已从单一国内 `RELEASE_MATERIALS_FILE` 扩展为独立
+`ENTERPRISE_RELEASE_MATERIALS_FILE` 候选门禁，但没有真实候选证据和审批，仍为 `in_progress`。
+`ENT-REL-006` 为
 `platformScaleReadiness=disabled`、`topologyStatus=candidate_unverified`、`telemetry=disabled`，手工启动两个进程
 不等于控制面高可用；`ENT-REL-007` 尚无租户 quota/共享 Cell 公平调度与容量保护实现，REL-004 release control
 不能冒充限流器；`ENT-REL-008` 的 `/health/ready` 因必需支付 Provider 未配置返回503，尚无完整
-renew/past_due/suspend/resume 生命周期。四项继续保持 `todo`，未伪造 ready 或生产可用。
+renew/past_due/suspend/resume 生命周期。`ENT-REL-006/007/008` 继续保持 `todo`，未伪造 ready 或生产可用。
 
 ## 8. 任务到验收的映射
 

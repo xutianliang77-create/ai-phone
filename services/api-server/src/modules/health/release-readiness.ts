@@ -5,6 +5,8 @@ import { getDiagnosticsDeploymentReadiness } from "../diagnostics/diagnostics-al
 import { getAccountDeploymentReadiness } from "../account/account-readiness.js";
 import { getSmsDeploymentReadiness } from "../account/sms-provider.js";
 import { getReleaseMaterialsReadiness } from "./release-materials-readiness.js";
+import { getEnterpriseReleaseMaterialsReadiness } from
+  "./enterprise-release-materials-readiness.js";
 import { getLiveKitDispatchReadiness } from "../worker-dispatches/livekit-dispatch-readiness.js";
 import { getLiveKitEgressReadiness } from "../recordings/livekit-egress-readiness.js";
 import { getPostgresProjectionReadiness } from "../../infrastructure/storage/postgres-projection-status.js";
@@ -26,6 +28,8 @@ export async function getReleaseReadiness() {
   const smsReadiness = getSmsDeploymentReadiness();
   const diagnosticsReadiness = await getDiagnosticsDeploymentReadiness();
   const releaseMaterialsReadiness = getReleaseMaterialsReadiness();
+  const enterpriseReleaseMaterialsReadiness =
+    getEnterpriseReleaseMaterialsReadiness();
   const workerDispatchReadiness = getLiveKitDispatchReadiness();
   const egressReadiness = getLiveKitEgressReadiness();
   const postgresProjectionReadiness = getPostgresProjectionReadiness();
@@ -44,6 +48,7 @@ export async function getReleaseReadiness() {
     ...smsReadiness.issues,
     ...diagnosticsReadiness.issues,
     ...releaseMaterialsReadiness.issues,
+    ...enterpriseReleaseMaterialsReadiness.issues,
     ...workerDispatchReadiness.issues,
     ...egressReadiness.issues,
     ...postgresProjectionReadiness.issues,
@@ -66,6 +71,7 @@ export async function getReleaseReadiness() {
     smsReadiness,
     diagnosticsReadiness,
     releaseMaterialsReadiness,
+    enterpriseReleaseMaterialsReadiness,
     workerDispatchReadiness,
     egressReadiness,
     postgresProjectionReadiness,

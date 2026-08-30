@@ -16,6 +16,8 @@ import {
   readyManifest,
   writeManifest,
 } from "./release-materials-readiness-test-helpers.js";
+import { configureEnterpriseReleaseMaterialsEnv } from
+  "./enterprise-release-materials-readiness-test-helpers.js";
 
 describe("health routes", () => {
   let previousEnv: Record<string, string | undefined>;
@@ -195,6 +197,7 @@ describe("health routes", () => {
     configureCallRoomEnv();
     configureDiagnosticsEnv();
     configureReleaseMaterialsEnv(tempDirs);
+    configureEnterpriseReleaseMaterialsEnv(tempDirs);
     const app = await buildApp();
     const response = await app.inject({
       method: "GET",
@@ -209,12 +212,33 @@ describe("health routes", () => {
     expect(response.json().issues).toContain("sms missing SMS_PROVIDER");
   });
 
+  it("fails release readiness when enterprise materials are not configured", async () => {
+    configureAccountEnv();
+    configurePaymentEnv();
+    configureCallRoomEnv();
+    configureSmsEnv();
+    configureDiagnosticsEnv();
+    configureReleaseMaterialsEnv(tempDirs);
+    const app = await buildApp();
+    const response = await app.inject({
+      method: "GET",
+      url: "/health/release-ready",
+    });
+    await app.close();
+
+    expect(response.statusCode).toBe(503);
+    expect(response.json().enterpriseReleaseMaterialsReadiness.issues).toContain(
+      "enterprise release materials missing ENTERPRISE_RELEASE_MATERIALS_FILE",
+    );
+  });
+
   it("fails release readiness when account release safety is not configured", async () => {
     configurePaymentEnv();
     configureCallRoomEnv();
     configureSmsEnv();
     configureDiagnosticsEnv();
     configureReleaseMaterialsEnv(tempDirs);
+    configureEnterpriseReleaseMaterialsEnv(tempDirs);
     const app = await buildApp();
     const response = await app.inject({
       method: "GET",
@@ -248,6 +272,7 @@ describe("health routes", () => {
     configureSmsEnv();
     configureDiagnosticsEnv();
     configureReleaseMaterialsEnv(tempDirs);
+    configureEnterpriseReleaseMaterialsEnv(tempDirs);
     const app = await buildApp();
     const response = await app.inject({
       method: "GET",
@@ -271,6 +296,7 @@ describe("health routes", () => {
       paymentReadiness: { status: "ready" },
       smsReadiness: { status: "ready", provider: "http" },
       releaseMaterialsReadiness: { status: "ready" },
+      enterpriseReleaseMaterialsReadiness: { status: "ready" },
     });
   });
 
