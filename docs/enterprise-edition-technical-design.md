@@ -1,6 +1,6 @@
 # 无界AI企业版详细技术设计
 
-版本：v1.74
+版本：v1.75
 日期：2026-08-31
 状态：统一通讯平台与 PostgreSQL Primary 收敛详细技术方案
 
@@ -21,13 +21,13 @@
 | RBAC | `ready_for_acceptance` | 已有23个 scope、九角色矩阵、统一服务端 guard 和越权测试；新增质检 scope 的自动化尚未恢复执行 |
 | SaaS tenant lifecycle | `ready_for_acceptance` | 已有幂等开通、暂停、导出/删除执行器、租约、有界恢复和 receipt 校验；真实对象存储/Provider 清理服务尚待验收 |
 | Append-only audit | `ready_for_acceptance` | 已有 tenant-scoped 查询、HMAC cursor、成员/RBAC/租户生命周期埋点和 SQLite/PostgreSQL 不可变约束；受控导出已进入 UI-008 开发，真实 PostgreSQL 验收仍待执行 |
-| PostgreSQL schema | `implemented` | 已有五十四段 up/down migration、tenant-first 索引、复合 FK、强制 RLS、user directory、cell/control-plane pending projection/coordination、opaque subject identity、企业通讯/dispatch/策略、usage/billing、knowledge/terminology、observability trace、受控审计导出、数据生命周期、Release Control、Meeting、客服、Campaign/Lead/Consent/Suppression/Country Policy、活动审批快照、Scheduler、PSTN dispatch、Marketing Agent、人工接管、Outcome 和 CRM sync 栅栏；尚无真实 migrate/restore/PITR 证据 |
+| PostgreSQL schema | `implemented` | 已有五十五段 up/down migration、tenant-first 索引、复合 FK、强制 RLS、user directory、cell/control-plane pending projection/coordination、tenant admission、opaque subject identity、企业通讯/dispatch/策略、usage/billing、knowledge/terminology、observability trace、受控审计导出、数据生命周期、Release Control、Meeting、客服、Campaign/Lead/Consent/Suppression/Country Policy、活动审批快照、Scheduler、PSTN dispatch、Marketing Agent、人工接管、Outcome 和 CRM sync 栅栏；尚无真实 migrate/restore/PITR 证据 |
 | Tenant-scoped Repository | `ready_for_acceptance` | 已有 tenant/user/cell scoped transaction、subject guard、单一 `legacy|postgres` runtime、HTTP 全链路注入、独立 cell Worker，以及 Tenant/Member/Audit、Directory、lifecycle、Inbox/Outbox、budget、billing/entitlement、usage accounting、knowledge、terminology 和共享 unit-of-work；尚无真实 PostgreSQL H3 证据 |
 | Enterprise Inbox/Outbox | `ready_for_acceptance` | 已有 tenant-scoped 去重、稳定 payload hash、领域/inbox/outbox 原子提交、lease/retry/recovery 和100次重放门禁；真实 PostgreSQL 并发与 Provider sandbox 尚待验收 |
 | 企业安全门禁 | `in_progress` | 已有21条高置信 SAST/密钥规则、精确依赖例外、隔离 test/staging 渗透 runner、commit/计划/时间窗 HMAC evidence verifier 和 CI 静态 job；本轮静态 P0/P1 为0且依赖无 high/critical，但14个 moderate 仍为限期 OpenTelemetry 例外，真实渗透/独立复核/密钥轮换未执行 |
 | 数据生命周期 | `in_progress` | `0051` 已登记 audit export retention/object 删除 job，复用 Cell queue 协调，Delete 后实体复核、attempt CAS、append-only receipt/audit 和 tenant delete 三段收敛回执已形成候选；未执行真实 migration/S3/Provider/故障注入 |
 | SQLite/JSON 演示数据导入 | `ready_for_acceptance` | 已有维护窗口、SQLite 临时副本与 quick_check、空目标事务导入、六集合 count/SHA-256 读回对账和不一致回滚；仅限内部演示数据 |
-| 公共 Primary Runtime 收敛 | `ready_for_acceptance` | 已合入上游稳定提交 `fe1c3c2`；公共31段与 enterprise 54段 manifest 由一个启动编排验证，driver、数据库身份和分权连接失败均在监听前闭合；尚无真实 PostgreSQL H3 证据 |
+| 公共 Primary Runtime 收敛 | `ready_for_acceptance` | 已合入上游稳定提交 `fe1c3c2`；公共31段与 enterprise 55段 manifest 由一个启动编排验证，driver、数据库身份和分权连接失败均在监听前闭合；尚无真实 PostgreSQL H3 证据 |
 | 企业链路追踪 | `in_progress` | 平台 trace 已进入 tenant context、PostgreSQL session、communication binding、usage event/ledger 与会话报告；本轮未执行测试和真实 PostgreSQL 门禁，货币成本因无价格表明确 not configured |
 | 企业工作台真值投影 | `in_progress` | Web 已读取 tenant/route、Provider、subscription、budget、usage aggregate 和显式 session trace report；业务聚合与价格表缺失时明确 not ready/not configured，本轮未执行自动化、浏览器或 PostgreSQL 门禁 |
 | 审计与分析 | `in_progress` | Web 已接入审计筛选/详情、显式 session 下钻和受控 JSONL 导出；`0020/0051`、Repository/API/cell Worker/加密对象存储与到期物理清理边界已实现，本轮未执行 migration、双租户、对象存储或浏览器测试；业务聚合/价格表与真实对象清理验收仍未完成 |
@@ -60,10 +60,11 @@
 | 营销授权证据 | `in_progress` | `0039`、对象实体验证、Campaign/Lead/purpose 绑定、不可变登记/撤回、服务端有效性解析、task insert/reschedule 数据库 guard 和同风格 Web 面板已形成代码候选；真实 S3/KMS、PostgreSQL/RLS、并发、浏览器和法务抽样未验收 |
 | 营销禁拨名单 | `in_progress` | `0040`、tenant/global 不可变记录、拒绝/撤回来源、Repository/runtime/API、同号码事务锁、task insert/reschedule guard、跨活动待任务取消和同风格 Web 面板已形成代码候选；全局注册表明确 not_configured，真实 PostgreSQL/RLS、并发、浏览器和名单同步未验收 |
 | 企业术语与话术版本 | `ready_for_acceptance` | enterprise `0018`、共享契约、Term Pack/Script Template Repository/runtime/API 已实现稳定资源、递增 revision、review/publish、有效期解析、hash 校验和同一术语版本运行时引用；仅有自动化和本地 PostgreSQL 16 普通角色证据，真实 Worker/Provider、A1/H3 未通过 |
-| Primary 全量切换/恢复证据 | `ready_for_acceptance` | 工具按运行时动态校验 manifest/全业务表；`c9b5be2` 历史证据为31+16/81张表，当前31+54必须重新生成签名证据；异地 WAL/PITR/H3 未通过 |
-| PostgreSQL 备份和灾备 | `in_progress` | schema-v2 HMAC 结果已绑定当前 enterprise cutover、候选版本、数据库 identity 与31+54 manifest，并定义自动切换/三层 fencing/第三故障域不可变备份/PITR marker+hash 门禁；测试定义未执行，真实跨故障域、异地主机、RPO/RTO 和 H3 未通过 |
+| Primary 全量切换/恢复证据 | `ready_for_acceptance` | 工具按运行时动态校验 manifest/全业务表；`c9b5be2` 历史证据为31+16/81张表，当前31+55必须重新生成签名证据；异地 WAL/PITR/H3 未通过 |
+| PostgreSQL 备份和灾备 | `in_progress` | schema-v2 HMAC 结果已绑定当前 enterprise cutover、候选版本、数据库 identity 与31+55 manifest，并定义自动切换/三层 fencing/第三故障域不可变备份/PITR marker+hash 门禁；测试定义未执行，真实跨故障域、异地主机、RPO/RTO 和 H3 未通过 |
 | 灰度和熔断 | `in_progress` | `0052/0053` forced-RLS 控制/追加事件及 tenant root policy、PostgreSQL runtime、内部变更/探针 API 和三条服务端 guard 已形成；本机 PostgreSQL 16.14 普通角色双租户、并发和双 API 进程已通过，真实 Provider 故障、kill SLO、告警和 on-call 演练未完成 |
 | SaaS 控制面高可用 | `in_progress` | `0054`、独立 control-plane role/session、实例和 provision projection 租约、SKIP LOCKED Worker、异步202开通、套餐变更 fail-closed、同候选 status CLI 和运行手册已形成；测试定义未执行，真实 PostgreSQL/双实例/故障域/kill/区域自治未验收 |
+| 租户限流和共享 Cell 公平 | `in_progress` | `0055`、四能力 Cell/tenant policy/state/request、并发/速率/有限队列、加权虚拟完成时间、runtime/operator 函数、reconcile Worker，以及 Worker Dispatch/Marketing PSTN/Screen Share admission fence 已形成；测试定义未执行，真实 RLS/并发/公平/容量/soak 未验收 |
 | PostgreSQL 控制面/业务聚合 | `designed` | 后续 CORE/MTG/CS/MKT 领域任务范围，不能从公共 Repository runtime 推导为已实现 |
 | SQLite | `demo_only` | 仅本地开发、自动化和封闭演示，不承载真实企业试点数据 |
 | PSTN/CRM/OCR | `not_ready` 或按环境探测 | 未配置必须明确降级，不生成虚假外部对象或成功状态 |
@@ -1942,7 +1943,7 @@ baseline 文件 hash，验证源库默认只读、写探针返回 SQLSTATE `2500
 整行 hash、主键、migration 或 server version 不一致都会生成签名 `mismatch` 并以非零退出。
 
 生产 startup gate 只接受 `environment=staging` 的 matched cutover evidence，且运行时
-commit/image/topology、cutover ID、target logical ID、当前 system identifier/OID 和31+54
+commit/image/topology、cutover ID、target logical ID、当前 system identifier/OID 和31+55
 manifest 必须逐项一致。本地 PostgreSQL 16 演练已验证81张表、8张含记录关键表、增量后17行
 全库 hash、writer fence、隔离 `pg_dump/pg_restore` 和单行篡改失败；证据见
 `docs/evidence/ent-data-009-local-drill-2026-07-18.md`。这只证明机制可执行，不是异地主机
@@ -1953,7 +1954,7 @@ manifest 必须逐项一致。本地 PostgreSQL 16 演练已验证81张表、8�
 `ENT-REL-003` 复用 `scripts/run_postgres_resilience_drill.mjs` 和现有 release checker，但把结果升级为
 schema v2。runner 在创建输出目录和执行任何 Provider 命令前读取 repository-relative cutover evidence，
 用 `ENTERPRISE_CUTOVER_EVIDENCE_HMAC_KEY` 验签，并要求其为 staging/matched/cutover，源目标数据库 hash
-一致，且 commit、image、topology、target system identifier/OID、公共31段和 enterprise 54段 manifest 与
+一致，且 commit、image、topology、target system identifier/OID、公共31段和 enterprise 55段 manifest 与
 当前候选精确一致。DR 结果再由不同的 `ENTERPRISE_POSTGRES_DR_EVIDENCE_HMAC_KEY` 签名；相同密钥、缺密钥、
 绝对/越界/符号链接逃逸路径、旧切换证据或 manifest 漂移均在命令执行前失败。
 
@@ -1971,7 +1972,7 @@ HA 节点的第三故障域，传输和静态加密，具有对象 version、至
 `provider_retention_lock`。PITR 必须指定恢复时间和 target marker，在隔离数据库证明 target 前 marker 存在、
 target 后 marker 不存在，并使目标/恢复的全量数据 SHA-256 与关键 manifest SHA-256 分别相等。
 
-production checker 重新计算 topology/capacity/evidence 文件 hash、当前31+54 manifest 和企业 DR binding，再验
+production checker 重新计算 topology/capacity/evidence 文件 hash、当前31+55 manifest 和企业 DR binding，再验
 schema-v2 签名，而不是相信 result 的 `status` 字段；RPO/RTO objective 还必须携带批准 SLA 的 evidence ID 和
 SHA-256，并一并进入签名结果。当前仓库未配置 Provider Adapter、第二数据库故障域、第三
 备份故障域、DCS、对象锁、真实 capacity/cutover evidence，也未执行测试定义或演练，因此此实现仅为静态候选；
@@ -2023,7 +2024,7 @@ rollback，控制面不得发布新 route。
 `BYPASSRLS` maintenance 账号不足以执行 replace rollback。回滚后 route epoch 仍从当前源 +1，不能恢复旧 epoch。
 
 当前实现包含维护命令、动态计划、流式传输、writer/quiescence/object/evidence 门禁及测试定义，只通过 typecheck、
-构建候选与文件规模静态检查；未运行测试、真实 PostgreSQL 31+54 双库、对象存储复制、控制面 route 发布、
+构建候选与文件规模静态检查；未运行测试、真实 PostgreSQL 31+55 双库、对象存储复制、控制面 route 发布、
 故障注入或跨 Cell 演练，因此 `ENT-DATA-005` 保持 `in_progress`，不能作为 H3 或生产门禁证据。
 
 #### 11.1.4 Cell Worker 多实例协调
@@ -2358,6 +2359,31 @@ document，SQLite/JSON 明确返回 `enterprise_postgres_required`。
 
 本批本地 PostgreSQL 16 证据只覆盖 migration、forced RLS、不可变/一致性/负净额 guard、runtime
 和 count/hash 对账机制。它不连接支付、开票或退款 Provider，也不替代 A1、H3、真实关账或生产验收。
+
+### 13.4 Tenant Admission 与共享 Cell 公平（ENT-REL-007）
+
+`0055_enterprise_tenant_admission` 增加 Cell policy/state、Cell-Tenant state 和 tenant request。Policy 固定
+四种 capability 的 Cell总并发、默认租户并发、rate/window、Cell/tenant queue 和 TTL；tenant state 保存
+active/queued、weight、last virtual finish 与 rate window；request 保存稳定 resource/idempotency/hash、units、
+status、virtual finish 和 lease。表全部 forced RLS，PUBLIC 无表权限；runtime 只能调用验证 `$1=current_tenant_id`
+的 reserve/renew/release/active 函数。operator apply/weight/status/reconcile 函数从 PUBLIC 撤权，只授予独立 admission role。
+
+reserve 先锁 tenant 和 Cell policy/state，以数据库时钟过期旧 queue/lease，再计算
+`max(cell.virtual_time, tenant.last_finish) + units/weight`。只在 Cell active、租户 `min(entitlement, platform limit)`、
+rate window 和有限队列全部允许时 admit；eligible head 按 virtual finish/queuedAt/tenant/request 稳定选择，使用
+`FOR UPDATE SKIP LOCKED`。queue full/not_ready/queued 都不创建后续业务副作用。计数是请求表的可重建投影；独立
+reconcile Worker 周期过期并只在漂移时更新 state，不能以 Redis/进程内 semaphore 覆盖。
+
+Worker Dispatch 在 public capacity/grant 前 reserve；accept/authorize/heartbeat/refresh/finalize/cancel 将 admission
+作为第三道 lease fence。Marketing Scheduler 在 usage hold/claim 前 reserve，PSTN prepare 前 active check，accepted/
+webhook 续租到最多配置通话时长，已知失败和终态 release；未知结果只保留有界 lease。Screen Share 使用
+tenant/meeting/idempotency 的确定性 share UUID，acquire/renew/resume/stop/force-stop/revocation 与 admission 同事务。
+
+Policy manifest 绑定 candidate commit/image，要求每个 Cell 四能力齐全、key 唯一和所有数值有界；apply 使用
+expectedVersion，tenant weight 只在 active/queued 均为0时修改。`enterprise:admission status` 先 reconcile 再输出
+无 tenant 明细的 Cell/capability 汇总。API 通过不同的只读 observer 连接调用 aggregate readiness，最多缓存1秒；
+policy未应用、version/limit漂移或计数越界时 `/health/release-ready` 失败。全局 admission 表不进入 Cell tenant 复制，任何 queued/admitted 请求阻断迁移。
+当前未运行 `0055`、普通角色RLS、真实并发/权重/速率/队列、Provider故障、25/50/100或120分钟soak，保持 in_progress。
 
 ## 14. 降级策略
 

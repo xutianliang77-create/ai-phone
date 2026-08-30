@@ -58,7 +58,8 @@ describe("enterprise PostgreSQL migrations", () => {
       "0047_enterprise_marketing_handoff", "0048_enterprise_marketing_outcomes",
       "0049_enterprise_marketing_crm_sync", "0050_enterprise_worker_coordination",
       "0051_enterprise_data_lifecycle", "0052_enterprise_release_controls",
-      "0053_enterprise_tenant_root_rls", "0054_enterprise_control_plane_ha"]);
+      "0053_enterprise_tenant_root_rls", "0054_enterprise_control_plane_ha",
+      "0055_enterprise_tenant_admission"]);
     for (const migration of migrations) { expect(migration.up.trim()).not.toBe("");
       expect(migration.down.trim()).not.toBe("");
       expect(migration.checksum).toMatch(/^[a-f0-9]{64}$/); }
@@ -69,7 +70,6 @@ describe("enterprise PostgreSQL migrations", () => {
       .map(({ up }) => up)
       .join("\n");
     const rollbackSql = migrations.map(({ down }) => down).join("\n");
-
     expect(sql).toContain("CREATE SCHEMA IF NOT EXISTS enterprise");
     expect(sql).toMatch(/tenant_id uuid NOT NULL/g);
     expect(sql).toContain("UNIQUE (tenant_id, id)");

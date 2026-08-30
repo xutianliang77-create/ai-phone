@@ -21,6 +21,8 @@ import type { EnterpriseTenantPostgresPool } from
   "./enterprise-postgres-tenant-session.js";
 import { resolveMarketingAgentContent } from
   "./enterprise-postgres-marketing-agent-runtime.js";
+import { marketingAdmissionId, marketingAdmissionOwner } from
+  "./enterprise-postgres-marketing-admission.js";
 
 type Runtime = Required<EnterpriseMarketingPstnRepositoryRuntime>;
 
@@ -107,6 +109,7 @@ export function createEnterprisePostgresMarketingPstnRuntime(
             if (!await unit.marketingPstn.acceptTask(accepted, now)) {
               throw new Error("Marketing PSTN task acceptance conflict");
             }
+            await renewMarketingAdmission(unit, accepted, input.now);
             await transitionBinding(unit, accepted, "active", now);
             await unit.marketingPstn.markOutbox(accepted,
               { publishedAt: now, availableAt: now });
@@ -121,7 +124,12 @@ export function createEnterprisePostgresMarketingPstnRuntime(
           const retryAt = new Date(input.now.getTime() + 30_000).toISOString();
           await unit.marketingPstn.markOutbox(failed, { availableAt: retryAt,
             errorCode: input.result.errorClass });
-          if (!unknown) await unit.marketingPstn.releaseFailedHold(failed, now);
+          if (!unknown) {
+            await unit.marketingPstn.releaseFailedHold(failed, now);
+            await releaseMarketingAdmission(unit, failed, now);
+          } else {
+            await renewMarketingAdmission(unit, failed, input.now);
+          }
           await audit(unit, context, failed, "marketing_pstn.dispatch",
             "failed", now);
           return { status: unknown ? "reconciliation_required" as const : "failed" as const,
@@ -159,6 +167,7 @@ export function createEnterprisePostgresMarketingPstnRuntime(
             if (!await unit.marketingPstn.acceptTask(accepted, now)) {
               throw new Error("Marketing PSTN webhook acceptance conflict");
             }
+            await renewMarketingAdmission(unit, accepted, input.now);
             await transitionBinding(unit, accepted, "active", now);
             await unit.marketingPstn.markOutbox(accepted,
               { publishedAt: now, availableAt: now });
@@ -172,6 +181,11 @@ export function createEnterprisePostgresMarketingPstnRuntime(
           if (!updated) return { status: "not_found" as const };
           const changed = updated.version !== dispatch.version;
           if (changed) await applyBindingEvent(unit, updated, event.status, now);
+          if (event.status === "completed" || event.status === "failed") {
+            await releaseMarketingAdmission(unit, updated, now);
+          } else {
+            await renewMarketingAdmission(unit, updated, input.now);
+          }
           await unit.events.insertInbox(inbox(context, source, event.eventId,
             payload, now));
           await audit(unit, context, updated, `marketing_pstn.${event.status}`,
@@ -188,6 +202,39 @@ export function createEnterprisePostgresMarketingPstnRuntime(
 
 class BillingRejected extends Error {}
 class MarketingAgentRunConflict extends Error {}
+
+async function renewMarketingAdmission(
+  unit: EnterprisePostgresUnitOfWork,
+  dispatch: EnterpriseMarketingPstnDispatchRecord,
+  now: Date,
+) {
+  const grantId = marketingAdmissionId(
+    dispatch.tenantId, dispatch.taskId, dispatch.dispatchGeneration,
+  );
+  const leaseExpiresAt = new Date(
+    now.getTime() + pstnMaxCallMinutes() * 60_000,
+  ).toISOString();
+  const renewed = await unit.admissions.renew({ capability: "marketing_pstn",
+    grantId, workerId: marketingAdmissionOwner(dispatch.taskId),
+    leaseExpiresAt, now: now.toISOString() });
+  if (!renewed) throw new Error("Marketing PSTN admission lease lost");
+}
+
+async function releaseMarketingAdmission(
+  unit: EnterprisePostgresUnitOfWork,
+  dispatch: EnterpriseMarketingPstnDispatchRecord,
+  now: string,
+) {
+  const released = await unit.admissions.release({ capability: "marketing_pstn",
+    grantId: marketingAdmissionId(dispatch.tenantId, dispatch.taskId,
+      dispatch.dispatchGeneration), now });
+  if (!released) throw new Error("Marketing PSTN admission release lost");
+}
+
+function pstnMaxCallMinutes() {
+  const value = Number(process.env.PSTN_MAX_CALL_MINUTES ?? 30);
+  return Number.isInteger(value) && value >= 1 && value <= 30 ? value : 30;
+}
 
 async function settle(unit: EnterprisePostgresUnitOfWork,
   dispatch: EnterpriseMarketingPstnDispatchRecord, now: Date) {

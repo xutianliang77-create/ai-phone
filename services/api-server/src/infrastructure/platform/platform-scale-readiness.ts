@@ -4,6 +4,8 @@ import { postgresPrimaryCutoverAuthorization } from
   "../storage/repository-runtime.js";
 import { getEnterpriseControlPlaneConfigReadiness } from
   "../postgres/enterprise-control-plane-config.js";
+import { getEnterpriseAdmissionConfigReadiness } from
+  "../postgres/enterprise-admission-config.js";
 
 export function getPlatformScaleReadiness() {
   const enabled = process.env.PLATFORM_MULTI_NODE_ENABLED === "true";
@@ -19,6 +21,7 @@ export function getPlatformScaleReadiness() {
   const telemetry = getPlatformTelemetryReadiness();
   const routing = getPlatformRoutingReadiness();
   const controlPlane = getEnterpriseControlPlaneConfigReadiness();
+  const admission = getEnterpriseAdmissionConfigReadiness();
   const issues = enabled ? [
     ...(storageDriver === "postgres"
       ? []
@@ -41,6 +44,9 @@ export function getPlatformScaleReadiness() {
     ...(controlPlane.status === "configured"
       ? []
       : ["Multi-node mode requires configured enterprise control-plane HA"]),
+    ...(admission.status === "configured"
+      ? []
+      : ["Multi-node mode requires configured tenant admission"]),
   ] : [];
   return {
     status: !enabled ? "disabled" as const
@@ -57,6 +63,7 @@ export function getPlatformScaleReadiness() {
     telemetry: telemetry.status,
     routing,
     controlPlane,
+    admission,
     issues,
   };
 }

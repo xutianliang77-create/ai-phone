@@ -1,6 +1,6 @@
 # 无界AI企业版技术架构
 
-版本：v1.57
+版本：v1.58
 日期：2026-08-31
 状态：SaaS 详细架构基线，已对齐统一通讯平台和 PostgreSQL Primary
 
@@ -177,8 +177,9 @@ object-storage
 | 账号、Tenant、RBAC、企业命令 | `services/api-server` | 先按 domain module 隔离；只有独立扩缩容或故障域需要时才拆服务 |
 | Enterprise Repository runtime/cell Worker | `services/api-server/src/modules/enterprise`、`services/api-server/src/infrastructure/postgres` | API 使用单一 `legacy|postgres` runtime；独立启动的 cell Worker 仅以 cell discovery 和 tenant transaction 角色 claim/finalize |
 | Communication Session、Provider Operation、Dispatch、Recording 和 Usage | 上游稳定提交 `fe1c3c2` 已导入企业分支，`ENT-DATA-008/CORE-013/014/015` 已补 tenant scope、企业业务绑定、签名 dispatch fence 和企业运行策略快照 | 公共 runtime 已成为代码基线；dispatch 必须先通过服务端 policy snapshot 与授权 fence，真实 Provider/设备仍待验收 |
-| PostgreSQL Primary 基础 | 公共31段 migration/Primary Runtime 与企业现有53段 migration | 已收敛为一个 Storage Driver/启动编排和两个有序 manifest；按 tenant/directory/cell/migration/maintenance 使用最小权限连接，等待真实 H3 验收 |
+| PostgreSQL Primary 基础 | 公共31段 migration/Primary Runtime 与企业现有55段 migration | 已收敛为一个 Storage Driver/启动编排和两个有序 manifest；按 tenant/directory/cell/control-plane/admission/migration/maintenance 使用最小权限连接，等待真实 H3 验收 |
 | Release Control | enterprise `0052/0053`、tenant-scoped control/event、tenant root RLS、服务端 guard 与内部探针 API | 本机 PostgreSQL 16.14 普通角色双租户、两个连接池竞争和双 API 进程同库读取已通过；Provider 故障、SLO、告警和值班演练仍待完成 |
+| Tenant Admission | enterprise `0055`、四能力policy/state/request、runtime/operator functions、admin/reconcile Worker | Worker/PSTN/Screen Share已接入并保持entitlement/预算/release-control独立；真实双租户公平、容量和soak待验收 |
 | 受控审计导出 | enterprise `0020`、Audit Export API/Repository、cell Worker、加密对象存储 Adapter | API 只创建/查询/鉴权下载；cell Worker 在 tenant transaction 取数并保存 hash/size/expiry，客户端不获得对象存储 key/凭据 |
 | 数据生命周期 | enterprise `0051`、Data Lifecycle Repository、cell Worker、对象删除/复核 Adapter、tenant deletion convergence receipt | 导出完成原子登记删除 job；到期/租户删除复用 pending-work 协调；对象复核不存在及数据库/对象/Provider remaining=0 后才完成，不建立第二套 tenant/export 真值 |
 | Enterprise Knowledge | enterprise `0017`、Knowledge Repository/runtime/API | source/revision/chunk/review/publish、发布后不可变、四维有效期检索和 citation 已接入；embedding Provider 未配置时保持确定性文本检索，不声明向量 readiness |
@@ -908,7 +909,7 @@ commit、image digest、topology hash、目标 logical ID、system identifier/OI
 `ENT-REL-003` 在该单一 cutover 真值之后增加 Provider 无关的灾备证据层，不建立第二套数据库状态：
 `signed cutover evidence -> enterprise DR binding -> bounded shell-free Provider steps -> signed schema-v2 result
 -> production resilience verifier`。binding 固定候选 commit/image、topology、cutover/run ID、目标数据库
-system identifier/OID/manifest 和当前31+54 migration；cutover 与 DR 使用不同 HMAC key。命令 attestation
+system identifier/OID/manifest 和当前31+55 migration；cutover 与 DR 使用不同 HMAC key。命令 attestation
 必须回显 run/group/step，并按固定顺序完成 baseline、异地 base backup/WAL、健康控制器自动切换、旧主数据库+
 route epoch+Worker generation 三层 fencing、服务发现、旧主只读 standby 重入、隔离 PITR 与 hash 复核。
 备份故障域必须不同于全部 HA 数据库故障域，且证明加密、对象版本和 compliance/provider retention lock。
@@ -1087,6 +1088,22 @@ commit/image 且 lease 未过期的实例。该机制不参与已建立的 RTC/T
 大租户持续、单 Provider 故障、单 cell 降级执行；发布前还要完成至少120分钟的真实
 API/LiveKit/SIP/ASR/MT/TTS/Agent/Egress 混合流量。数据库控制面 soak 不能替代真实媒体容量；
 未获得测试证据前不标注具体并发或 SLA 数字。
+
+### 15.1 PostgreSQL Tenant Admission
+
+`0055` 在 entitlement/业务 dispatch 之间加入共享 Cell admission。Cell policy 固定总并发、默认租户并发、
+rate/window、Cell/tenant queue 和 TTL；Cell/Tenant state 保存计数、weight、virtual finish 和速率窗口；tenant
+request 保存稳定 resource/idempotency/hash、状态和 lease。四张表 forced RLS，表权限不向 PUBLIC 开放；
+普通 runtime 只能调用校验 current tenant 的 SECURITY DEFINER 函数，operator config/status 函数只授权独立角色。
+
+每个 Cell/capability 的 state 行锁是准入串行点，算法在满足 Cell总量、租户有效上限和速率的 queued 请求中按
+`virtualFinish, queuedAt, tenantId, requestId` 选择。virtual finish 使用 `units/weight`，因此权重大租户可获得批准
+份额，但达到自身上限后不会头阻塞其他租户。队列满/过期和 admission lease 过期有确定终态；reconcile Worker
+使用数据库时钟过期并从 request 重算计数，不依赖进程内计数或 Redis。
+
+Worker Dispatch、Marketing PSTN 和 Screen Share 在外部副作用前取得并复核 admission；已有 entitlement、预算、
+release control、业务 generation 和公共 capacity 继续独立生效。结束/取消/撤销/已知失败同事务 release，heartbeat
+续租，未知结果只保留批准时长。全局 admission 控制表不进入 tenant Cell 数据迁移，活动请求直接阻断迁移。
 
 ## 16. 不可破坏的架构不变量
 

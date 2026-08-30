@@ -34,12 +34,29 @@ export function checkPlatformCapacityResult(options = {}) {
   checkStages(result.stages, issues);
   checkSoak(result.soak, issues);
   checkAdmission(result.admission, issues);
+  checkTenantFairness(result.tenantFairness, issues);
   checkTotals(result.totals, issues);
   if (result.failureInjection?.status !== "passed") {
     issues.push("Failure-injection acceptance did not pass");
   }
   checkEvidence(root, result.evidence, issues);
   return output(resultFile, topologyFile, issues, result);
+}
+
+function checkTenantFairness(fairness, issues) {
+  if (!fairness || fairness.status !== "passed" ||
+    !Number.isInteger(fairness.realTenantCount) ||
+    fairness.realTenantCount < 2 || fairness.smallTenantSloPassed !== true ||
+    fairness.starvationCount !== 0 || fairness.cellLimitExceededCount !== 0 ||
+    fairness.queueLimitExceededCount !== 0 ||
+    fairness.rateLimitBypassCount !== 0 ||
+    !Array.isArray(fairness.testedWeights) ||
+    [1, 2, 4].some((weight) => !fairness.testedWeights.includes(weight)) ||
+    !Array.isArray(fairness.capabilities) ||
+    ["translation_runtime", "voice_agent_runtime", "marketing_pstn",
+      "screen_share"].some((item) => !fairness.capabilities.includes(item))) {
+    issues.push("Tenant admission fairness gate did not pass");
+  }
 }
 
 function checkStages(stages, issues) {

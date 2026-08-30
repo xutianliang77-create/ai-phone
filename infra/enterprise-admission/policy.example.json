@@ -1,0 +1,60 @@
+{
+  "schemaVersion": 1,
+  "candidateCommit": "replace-with-40-character-commit",
+  "imageDigest": "sha256:replace-with-64-character-image-digest",
+  "policies": [
+    {
+      "cellId": "cn-cell-01",
+      "capability": "translation_runtime",
+      "totalConcurrencyLimit": 100,
+      "defaultTenantConcurrencyLimit": 8,
+      "defaultRateLimit": 60,
+      "rateWindowSeconds": 60,
+      "totalQueueLimit": 500,
+      "defaultTenantQueueLimit": 50,
+      "queueTtlSeconds": 120,
+      "status": "active",
+      "expectedVersion": 0
+    },
+    {
+      "cellId": "cn-cell-01",
+      "capability": "voice_agent_runtime",
+      "totalConcurrencyLimit": 50,
+      "defaultTenantConcurrencyLimit": 4,
+      "defaultRateLimit": 30,
+      "rateWindowSeconds": 60,
+      "totalQueueLimit": 250,
+      "defaultTenantQueueLimit": 25,
+      "queueTtlSeconds": 120,
+      "status": "active",
+      "expectedVersion": 0
+    },
+    {
+      "cellId": "cn-cell-01",
+      "capability": "marketing_pstn",
+      "totalConcurrencyLimit": 50,
+      "defaultTenantConcurrencyLimit": 4,
+      "defaultRateLimit": 30,
+      "rateWindowSeconds": 60,
+      "totalQueueLimit": 250,
+      "defaultTenantQueueLimit": 25,
+      "queueTtlSeconds": 120,
+      "status": "active",
+      "expectedVersion": 0
+    },
+    {
+      "cellId": "cn-cell-01",
+      "capability": "screen_share",
+      "totalConcurrencyLimit": 50,
+      "defaultTenantConcurrencyLimit": 4,
+      "defaultRateLimit": 30,
+      "rateWindowSeconds": 60,
+      "totalQueueLimit": 250,
+      "defaultTenantQueueLimit": 25,
+      "queueTtlSeconds": 120,
+      "status": "active",
+      "expectedVersion": 0
+    }
+  ],
+  "tenantWeights": []
+}

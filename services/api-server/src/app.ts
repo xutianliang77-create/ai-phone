@@ -111,6 +111,8 @@ import {
 import {
   createEnvironmentEnterpriseControlPlaneAvailability,
 } from "./modules/enterprise/enterprise-control-plane-availability.js";
+import { createEnvironmentEnterpriseAdmissionAvailability } from
+  "./modules/enterprise/enterprise-admission-availability.js";
 import type { AppDependencies } from "./app-dependencies.js";
 import { registerHealthRoutes } from "./modules/health/health.routes.js";
 import { registerModelRoutes } from "./modules/models/models.routes.js";
@@ -153,13 +155,18 @@ export async function buildApp(dependencies: AppDependencies = {}) {
   const controlPlaneAvailability =
     dependencies.enterpriseControlPlaneAvailability ??
       createEnvironmentEnterpriseControlPlaneAvailability();
+  const admissionAvailability = dependencies.enterpriseAdmissionAvailability ??
+    createEnvironmentEnterpriseAdmissionAvailability();
   app.addHook("onClose", () => auditExportArtifactStore.close());
   app.addHook("onClose", () => controlPlaneAvailability.close());
+  app.addHook("onClose", () => admissionAvailability.close());
   registerPlatformTelemetryHooks(app);
   await app.register(cors, { origin: apiCorsOrigin() });
   await registerAccountRoutes(app);
   await registerAgentCallRoutes(app);
-  await registerHealthRoutes(app, controlPlaneAvailability);
+  await registerHealthRoutes(
+    app, controlPlaneAvailability, admissionAvailability,
+  );
   registerIngressRoutes(app);
   await registerModelRoutes(app);
   await registerBillingRoutes(app);

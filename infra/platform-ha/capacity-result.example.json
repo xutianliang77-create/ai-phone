@@ -48,6 +48,22 @@
     "unboundedQueueObserved": false,
     "status": "unexecuted"
   },
+  "tenantFairness": {
+    "status": "unexecuted",
+    "realTenantCount": 0,
+    "testedWeights": [1, 2, 4],
+    "capabilities": [
+      "translation_runtime",
+      "voice_agent_runtime",
+      "marketing_pstn",
+      "screen_share"
+    ],
+    "smallTenantSloPassed": false,
+    "starvationCount": 0,
+    "cellLimitExceededCount": 0,
+    "queueLimitExceededCount": 0,
+    "rateLimitBypassCount": 0
+  },
   "failureInjection": {
     "status": "unexecuted"
   },

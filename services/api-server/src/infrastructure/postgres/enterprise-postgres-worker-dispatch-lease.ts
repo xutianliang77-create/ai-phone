@@ -10,12 +10,17 @@ import {
   mapEnterpriseWorkerDispatchGrantRow,
   type EnterpriseWorkerDispatchGrantRow,
 } from "./enterprise-postgres-worker-dispatch-record.js";
+import { EnterpriseTenantAdmissionPostgresRepository } from
+  "./enterprise-postgres-tenant-admission.js";
 
 export class EnterpriseWorkerDispatchLeasePostgresRepository {
+  private readonly admission: EnterpriseTenantAdmissionPostgresRepository;
   constructor(
     private readonly session: EnterpriseTenantPostgresSession,
     private readonly lifecycle: EnterpriseWorkerDispatchLifecyclePostgresRepository,
-  ) {}
+  ) {
+    this.admission = new EnterpriseTenantAdmissionPostgresRepository(session);
+  }
 
   async heartbeat(input: LeaseInput): Promise<EnterpriseWorkerDispatchLifecycleResult> {
     const now = input.now ?? new Date();
@@ -113,6 +118,16 @@ export class EnterpriseWorkerDispatchLeasePostgresRepository {
     `, [input.workerId, leaseExpiresAt, timestamp, reservationId]);
     if (!dispatch.rows[0] || !capacity.rows[0]) {
       throw new Error(`Enterprise dispatch ${operation} lost public fence`);
+    }
+    const admitted = await this.admission.renew({
+      capability: input.payload.capability,
+      grantId: input.payload.ticketId,
+      workerId: input.workerId,
+      leaseExpiresAt,
+      now: timestamp,
+    });
+    if (!admitted) {
+      throw new Error(`Enterprise dispatch ${operation} lost admission fence`);
     }
   }
 

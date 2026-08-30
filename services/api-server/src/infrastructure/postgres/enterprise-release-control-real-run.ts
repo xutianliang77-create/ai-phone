@@ -146,7 +146,7 @@ try {
   assert.equal(databaseEvidence.eventMutationSqlState, "55000");
   assert.equal(databaseEvidence.eventCount, 6);
   assert.equal(databaseEvidence.publicMigrations, 31);
-  assert.equal(databaseEvidence.enterpriseMigrations, 54);
+  assert.equal(databaseEvidence.enterpriseMigrations, 55);
   assert.equal(databaseEvidence.superuser, false);
   assert.equal(databaseEvidence.bypassRls, false);
 

@@ -18,13 +18,12 @@ import {
 } from "./release-materials-readiness-test-helpers.js";
 import { configureEnterpriseReleaseMaterialsEnv } from
   "./enterprise-release-materials-readiness-test-helpers.js";
-import { fixedEnterpriseControlPlaneAvailability } from
-  "../enterprise/enterprise-control-plane-availability.js";
-
+import { configureEnterpriseAdmissionEnv } from "./enterprise-admission-readiness-test-helper.js";
+import { readyAdmissionAvailability, readyControlPlaneAvailability } from
+  "./enterprise-runtime-readiness-test-helper.js";
 describe("health routes", () => {
   let previousEnv: Record<string, string | undefined>;
   const tempDirs: string[] = [];
-
   beforeEach(() => {
     previousEnv = captureEnv();
     clearEnv();
@@ -275,8 +274,10 @@ describe("health routes", () => {
     configureDiagnosticsEnv();
     configureReleaseMaterialsEnv(tempDirs);
     configureEnterpriseReleaseMaterialsEnv(tempDirs);
+    configureEnterpriseAdmissionEnv(tempDirs);
     const app = await buildApp({
       enterpriseControlPlaneAvailability: readyControlPlaneAvailability(),
+      enterpriseAdmissionAvailability: readyAdmissionAvailability(),
     });
     const response = await app.inject({
       method: "GET",
@@ -329,20 +330,6 @@ describe("health routes", () => {
     );
   });
 });
-
-function readyControlPlaneAvailability() {
-  return fixedEnterpriseControlPlaneAvailability({
-    status: "ready",
-    region: "cn-north",
-    activeInstances: 2,
-    drainingInstances: 0,
-    incompatibleInstances: 0,
-    expectedReplicas: 2,
-    dueProvisionJobs: 0,
-    backlogAgeSeconds: 0,
-    issues: [],
-  });
-}
 
 function configureReleaseMaterialsEnv(tempDirs: string[]) {
   process.env.RELEASE_MATERIALS_FILE = writeManifest(tempDirs, readyManifest());

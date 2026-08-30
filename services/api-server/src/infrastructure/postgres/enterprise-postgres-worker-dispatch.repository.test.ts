@@ -12,7 +12,7 @@ import {
 } from "./enterprise-postgres-worker-dispatch.repository.js";
 import { billingAccountRow, entitlementRow, policyRow, subscriptionRow } from
   "./enterprise-postgres-worker-dispatch-policy-fixture.test-helper.js";
-
+import { admissionTestRows } from "./enterprise-postgres-admission-test-helper.js";
 const tenantId = "00000000-0000-4000-8000-000000000001";
 const now = new Date("2026-07-18T05:00:00.000Z");
 describe("enterprise PostgreSQL worker dispatch", () => {
@@ -20,7 +20,6 @@ describe("enterprise PostgreSQL worker dispatch", () => {
     const fixture = issueFixture();
     const repository = new EnterpriseWorkerDispatchPostgresRepository(fixture.session);
     const result = await repository.issue(issueInput());
-
     expect(result.status).toBe("created");
     if (result.status !== "created") throw new Error("expected dispatch grant");
     expect(result.grant).toMatchObject({
@@ -39,7 +38,6 @@ describe("enterprise PostgreSQL worker dispatch", () => {
       sql.includes("SELECT id FROM enterprise.tenants") && sql.includes("FOR UPDATE")
     )).toBe(true);
   });
-
   it("refuses dispatch before inserts when tenant capacity is exhausted", async () => {
     const fixture = issueFixture({ used: 2 });
     const repository = new EnterpriseWorkerDispatchPostgresRepository(fixture.session);
@@ -262,6 +260,8 @@ function baseSession(calls: Call[], handlers: {
     ) {
       return invoke<Row>("worker", sql, values, handlers.worker(sql, values));
     },
+    queryAdmission<Row extends Record<string, unknown>>(sql: string, values?: unknown[]) {
+      return invoke<Row>("enterprise", sql, values, admissionTestRows(sql, values)); },
   } satisfies EnterpriseTenantPostgresSession;
 }
 

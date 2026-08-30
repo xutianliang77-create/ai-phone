@@ -21,6 +21,8 @@ describe("enterprise PostgreSQL connection roles", () => {
       ENTERPRISE_CELL_DATABASE_URL: "postgresql://cell/app",
       ENTERPRISE_CONTROL_PLANE_DATABASE_URL: "postgresql://control/app",
       ENTERPRISE_CONTROL_PLANE_OBSERVER_DATABASE_URL: "postgresql://observer/app",
+      ENTERPRISE_ADMISSION_DATABASE_URL: "postgresql://admission/app",
+      ENTERPRISE_ADMISSION_OBSERVER_DATABASE_URL: "postgresql://admission-observer/app",
       ENTERPRISE_MIGRATION_DATABASE_URL: "postgresql://migration/app",
       ENTERPRISE_MAINTENANCE_DATABASE_URL: "postgresql://maintenance/app",
       POSTGRES_SSL_MODE: "verify-full",
@@ -33,6 +35,10 @@ describe("enterprise PostgreSQL connection roles", () => {
       .toBe("postgresql://control/app");
     expect(requiredEnterprisePostgresDatabaseUrl(env, "control_plane_observer"))
       .toBe("postgresql://observer/app");
+    expect(requiredEnterprisePostgresDatabaseUrl(env, "admission"))
+      .toBe("postgresql://admission/app");
+    expect(requiredEnterprisePostgresDatabaseUrl(env, "admission_observer"))
+      .toBe("postgresql://admission-observer/app");
     expect(requiredEnterprisePostgresDatabaseUrl(env, "migration"))
       .toBe("postgresql://migration/app");
     expect(requiredEnterprisePostgresDatabaseUrl(env, "maintenance"))
@@ -59,6 +65,16 @@ describe("enterprise PostgreSQL connection roles", () => {
       ENTERPRISE_DATABASE_URL: "postgresql://legacy-shared/app",
     }, "control_plane_observer")).toThrow(
       "ENTERPRISE_CONTROL_PLANE_OBSERVER_DATABASE_URL is required",
+    );
+    expect(() => requiredEnterprisePostgresDatabaseUrl({
+      NODE_ENV: "production",
+      ENTERPRISE_DATABASE_URL: "postgresql://legacy-shared/app",
+    }, "admission")).toThrow("ENTERPRISE_ADMISSION_DATABASE_URL is required");
+    expect(() => requiredEnterprisePostgresDatabaseUrl({
+      NODE_ENV: "production",
+      ENTERPRISE_DATABASE_URL: "postgresql://legacy-shared/app",
+    }, "admission_observer")).toThrow(
+      "ENTERPRISE_ADMISSION_OBSERVER_DATABASE_URL is required",
     );
   });
 

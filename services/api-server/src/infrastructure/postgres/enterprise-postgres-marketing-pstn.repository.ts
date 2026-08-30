@@ -15,6 +15,10 @@ import type { EnterpriseTenantPostgresSession } from
   "./enterprise-postgres-tenant-session.js";
 import { ensureMarketingPstnBinding, marketingPstnSafetyFenceIsCurrent } from
   "./enterprise-postgres-marketing-pstn-binding.js";
+import { EnterpriseTenantAdmissionPostgresRepository } from
+  "./enterprise-postgres-tenant-admission.js";
+import { marketingAdmissionId, marketingAdmissionOwner } from
+  "./enterprise-postgres-marketing-admission.js";
 import { code, count, errorCode, eventKey, hash, iso, language, mapDispatch,
   positive, sameFence, uuid, validClaim, type CountRow, type DispatchRow,
   type TaskRow } from
@@ -69,6 +73,12 @@ export class EnterpriseMarketingPstnPostgresRepository {
         request: this.callRequest(task, replay, input.keyring, input.enterpriseAgent) };
     }
     if (!validClaim(task, input)) return { status: "claim_rejected" as const };
+    const admitted = await new EnterpriseTenantAdmissionPostgresRepository(
+      this.session,
+    ).active({ capability: "marketing_pstn",
+      grantId: marketingAdmissionId(task.tenant_id, task.id, input.generation),
+      workerId: marketingAdmissionOwner(task.id), now: input.now });
+    if (!admitted) return { status: "claim_rejected" as const };
     if (!await marketingPstnSafetyFenceIsCurrent(this.session, task, input.now)) {
       return { status: "policy_rejected" as const };
     }

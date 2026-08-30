@@ -16,6 +16,8 @@ membership、RBAC、route document 和 forced RLS 才是最终守卫。
 
 - 发布知识、术语包和话术前完成审核；会话只引用已发布且在有效期内的不可变版本。
 - 配置区域、Provider、套餐、entitlement、预算和告警；`not_ready` 时不得强行开始副作用。
+- 租户管理员不能修改平台 Cell 总容量、租户 admission weight、rate 或 queue；容量拒绝按页面给出的真实
+  not_ready/queue/capacity 状态处理，不通过重复切租户或客户端参数绕过。
 - 分别配置端侧/云端 ASR、翻译、TTS、声纹、录音和诊断授权及保存期限。
 - 不向客户端、浏览器或普通成员提供 Provider 密钥、数据库地址或平台内部控制密钥。
 

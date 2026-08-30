@@ -1,6 +1,6 @@
 # 无界AI企业版验收任务与计划
 
-版本：v1.72
+版本：v1.73
 日期：2026-08-31
 状态：可执行验收计划，已对齐统一通讯平台和 PostgreSQL Primary 收敛
 
@@ -118,14 +118,15 @@ Mock 只能验证协议，不能替代 iPhone/Web、真实 LiveKit、真实模�
 | AC-ENT-0045 | Marketing Outcome | `0048` Outcome/action tenant-first FK、forced RLS、append-only/终态/组合/deferred action 栅栏有效；只允许 active membership、签名 route、`campaign:read/write` 访问同租户 Campaign；同 task 并发和幂等重放只能得到一个 Outcome，legacy 行也阻断重复；证据只能引用当前最终字幕 revision、已交付 Agent turn 和匹配终态 task/dispatch/run/handoff/suppression/Provider 失败事实，hash 可复现且不复制客户原文；分类、意向和 next action 不矛盾，退订/无效号码/失败有专属服务端依据；后续动作最多一条且只为 `requested`，没有 CRM/日历/消息 receipt 时不得显示已回拨、已预约、已发送或已同步 |
 | AC-ENT-0046 | Marketing CRM Adapter | `0049` CRM sync tenant-first FK、forced RLS、单 Outcome/单 External ID、状态/attempt/receipt trigger 和 cutover critical manifest 有效；只允许 active membership、签名 route、`campaign:read/write` 访问同租户 Campaign/Outcome；同键重放、多键并发、Worker 崩溃、401、429/5xx、PATCH 响应丢失和 GET 暂不可用均复用同一 Outbox event/External ID，恢复后 Salesforce 只存在一个记录且本地只生成一个 synced receipt；AES-GCM AAD、tenant binding、sObject/config fingerprint、key rotation 和旧 Worker 漂移阻断跨租户/跨配置投递；HTTP 202、MKT-012 requested、PATCH 201/204 或不完整 Provider 响应不得显示成功，只有 GET 对账匹配 External ID/载荷/Record ID 后才 synced；CRM 故障不回滚通话终态、结算或 Outcome；缺 OAuth/租户/对象/字段/keyring 明确 not_ready，浏览器/DTO/日志/审计不泄露 secret 或明文摘要 |
 | AC-ENT-0047 | Marketing 活动分析 | 只允许 active membership、签名 route 和 `campaign:read` 读取同租户 Campaign；单响应全部指标来自一个 repeatable-read/read-only 快照，legacy/SQLite、跨租户、旧 route 和伪造 ID 失败闭合；漏斗只按 active Lead、task、Provider acceptedAt、answeredAt、verified Outcome，相邻分母为0返回 null；正向兴趣不冒充成交，requested/pending/PATCH accepted 不冒充 CRM 成功；投诉只计明确 complaint + origin Campaign，版本投诉还须精确 session 归属；用量逐项可追溯 usage event/settle/adjustment，净量不等于货币成本，无价格表时金额/currency 为 null 且 pricing_not_configured；国家与冻结 profile/术语/话术/Agent/PSTN fingerprint 拆分合计可复算，缺 run 不伪造版本；无样本明确 no_call_samples，Web 不回退缓存/fixture |
-| AC-ENT-0048 | 单租户 Cell 迁移与回滚 | 只有 maintenance 模式和受审计全读角色可 export/cutover，rollback replace 还必须是 superuser；源 tenant 无非终态 session/dispatch、活动 lease/hold，源库只读且旧 API/Worker writer 为0，目标可写且 tenant 为空；动态计划覆盖全部 enterprise tenant 表和12类公共 tenant communication scope，任何无 selector/无主键/schema 或31+54 migration 漂移均失败；全局 control-plane instance/pending 表不进入 Cell 数据复制，活动 provision claim 必须阻断迁移；签名 export 绑定 tenant、Cell、数据库身份、commit/image/topology，cutover 精确引用前序文件 hash；对象引用非0时必须有同 migration/tenant/方向/count/hash 的签名复制 receipt；目标 serializable 导入后记录、session、ledger、audit、consent、suppression、对象引用逐表 count/SHA-256 全等，homeRegion/status 不变且 route epoch 精确+1，失败目标零部分数据且不发布 route；回滚必须从当前 Cell 导出最新快照、反向全量覆盖旧 Cell、再次 epoch+1 和全表对账，不能直接启用陈旧副本；旧 route/旧 Cell 写入和 Worker claim 均拒绝 |
+| AC-ENT-0048 | 单租户 Cell 迁移与回滚 | 只有 maintenance 模式和受审计全读角色可 export/cutover，rollback replace 还必须是 superuser；源 tenant 无非终态 session/dispatch、活动 lease/hold，源库只读且旧 API/Worker writer 为0，目标可写且 tenant 为空；动态计划覆盖全部 enterprise tenant 表和12类公共 tenant communication scope，任何无 selector/无主键/schema 或31+55 migration 漂移均失败；全局 control-plane/admission policy/state/request 表不进入 Cell 数据复制，活动 provision claim 或 queued/admitted admission 必须阻断迁移；签名 export 绑定 tenant、Cell、数据库身份、commit/image/topology，cutover 精确引用前序文件 hash；对象引用非0时必须有同 migration/tenant/方向/count/hash 的签名复制 receipt；目标 serializable 导入后记录、session、ledger、audit、consent、suppression、对象引用逐表 count/SHA-256 全等，homeRegion/status 不变且 route epoch 精确+1，失败目标零部分数据且不发布 route；回滚必须从当前 Cell 导出最新快照、反向全量覆盖旧 Cell、再次 epoch+1 和全表对账，不能直接启用陈旧副本；旧 route/旧 Cell 写入和 Worker claim 均拒绝 |
 | AC-ENT-0049 | Cell Worker 多实例协调 | `0050` up/down/forward 后 pending queue 协调列、约束、索引、forced-RLS Cell policy 与 transition trigger 有效；Cell 最小权限角色只能更新当前 Cell 的 owner/generation/coordination lease，owner 必须等于 `app.worker_id` 且 lease 不超过数据库当前时间五分钟，修改 tenant/resource/work kind/due/business lease、伪造 tenant context 或跨 Cell 行均拒绝；至少两个独立 Worker 对同一批 due work 并发 claim 100轮，每项同时只有一个 owner/generation，`SKIP LOCKED` 不形成全局串行；heartbeat 仅由当前未过期 owner 延长，旧 owner/generation renew/release/finalize 更新0行；分别在 queue claim 前、tenant claim 后、Provider 接受后、finalize 前 kill -9，确认租约到期由更高 generation/attempt 重领且 terminal/ledger/audit 只提交一次；生命周期、对象和所有 Outbox Provider 重试复用稳定 job/event ID，允许传输尝试重放但 sandbox 业务副作用只能一个；单项 finalize/heartbeat/poll 故障不阻断同批其他项或下一轮；无 Redis 时正确性不变，Redis 丢失/重复通知不能改变 claim/完成状态；迁移时活动协调 lease 阻断，反向导入清空 owner/lease且旧 Cell claim 拒绝 |
 | AC-ENT-0050 | 企业候选版本安全门禁 | 锁定同一 candidate commit；Git tracked/untracked 高置信 SAST/密钥规则 manifest 完整且 P0/P1 为0，输出不含命中源码/凭据；production dependency audit 无 high/critical，任何临时例外只允许较低等级并精确绑定 advisory/版本/owner/缓解/到期，漂移或到期拒绝且报告不得称零漏洞；隔离 test/staging 渗透至少覆盖未认证、tenant header/baggage 伪造、跨租户、角色提权、webhook 签名/重放和 payload 上限，远端强制 HTTPS/host allowlist且拒绝 production；凭据只从环境变量注入，evidence 不含请求/响应正文，HMAC 绑定 commit/origin/plan hash/runner/时间窗/attempt/finding，七天内验签且 P0/P1 为0；独立 reviewer 复核外部 SAST/DAST、渗透原始日志与复测，密钥轮换/旧 key 拒绝/备份恢复完成；浏览器 CORS 生产默认同源且精确 allowlist，wildcard/Origin 反射拒绝 |
 | AC-ENT-0051 | 数据生命周期 | `0051` up/down/forward 后 `data_lifecycle_jobs` tenant-first FK、forced RLS、不可变范围/终态/attempt trigger 与 pending-work `data_lifecycle` kind 有效；completed audit export 在同事务唯一登记 source/object SHA/size/retention deadline，失败或 processing 导出不登记，历史完成导出 backfill 不重复；未到期不 claim，到期及 tenant `deletion_requested` 立即 due，双 Worker owner/generation/lease 只产生一个有效 attempt；S3-compatible/local Adapter 对存在对象 Delete 后再次 Head/stat，仍存在、超时、5xx、非法 key、未配置和未知结果均不完成，已不存在以 `already_absent` 独立回执收敛；finalize attempt CAS、receipt SHA 和 append-only audit 不含 object key/bucket/endpoint；任一 processing/failed object job 阻断 tenant executor，外部 delete receipt 必须绑定 tenant/job、database tombstone、object/provider manifest，三组 remaining=0、count 守恒且规范化 SHA 匹配后才允许 tenant `deleted`；跨租户 ID/RLS、旧 Cell/route/generation、重启、响应丢失和删除后迟到 export 均失败闭合 |
-| AC-ENT-0052 | PostgreSQL 备份和灾备 | schema-v2 灾备结果使用独立 HMAC，精确绑定已验签的 staging/matched enterprise cutover、candidate commit/image、topology、cutover/run ID、目标 system identifier/OID/database manifest、当前公共31段/enterprise 54段 manifest，以及已批准 SLA 的 evidence ID/SHA-256；缺失、过期、错误环境、错误候选、清单漂移、同一 HMAC key、路径越界和签名/证据篡改均在 Provider 命令前失败。所有 shell-free Adapter attestation 精确回显 run/group/step、staging、verify-full；至少两个独立数据库主机跨两个故障域，并使用与其均不同的备份故障域。健康控制器自动切换后 timeline 严格递增、promotion generation 有效；旧主写返回 SQLSTATE `25006`，旧 route epoch/Worker generation 副作用拒绝，新 endpoint identity 匹配 cutover，原主只以 timeline 一致且 `acceptsWrites=false` 的 standby 重入。base backup/WAL 传输和静态加密，具有对象 version、未决归档失败为0、归档延迟不超目标、至少30天 retention 以及 compliance/provider retention lock。隔离 PITR 指定时间和 marker，证明 target 前 marker 存在、target 后 marker 不存在，目标/恢复全量数据及关键 tenant/session/ledger/audit/suppression/consent/object manifest SHA-256 分别相等。自动切换和 PITR 实测 RPO/RTO 均不超过已批准 SLA；未批准或未实测时不得承诺数值。签名结果和 evidence 只保存脱敏身份/hash/时间/指标，不含凭据、endpoint、bucket、object key 或命令输出敏感正文 |
+| AC-ENT-0052 | PostgreSQL 备份和灾备 | schema-v2 灾备结果使用独立 HMAC，精确绑定已验签的 staging/matched enterprise cutover、candidate commit/image、topology、cutover/run ID、目标 system identifier/OID/database manifest、当前公共31段/enterprise 55段 manifest，以及已批准 SLA 的 evidence ID/SHA-256；缺失、过期、错误环境、错误候选、清单漂移、同一 HMAC key、路径越界和签名/证据篡改均在 Provider 命令前失败。所有 shell-free Adapter attestation 精确回显 run/group/step、staging、verify-full；至少两个独立数据库主机跨两个故障域，并使用与其均不同的备份故障域。健康控制器自动切换后 timeline 严格递增、promotion generation 有效；旧主写返回 SQLSTATE `25006`，旧 route epoch/Worker generation 副作用拒绝，新 endpoint identity 匹配 cutover，原主只以 timeline 一致且 `acceptsWrites=false` 的 standby 重入。base backup/WAL 传输和静态加密，具有对象 version、未决归档失败为0、归档延迟不超目标、至少30天 retention 以及 compliance/provider retention lock。隔离 PITR 指定时间和 marker，证明 target 前 marker 存在、target 后 marker 不存在，目标/恢复全量数据及关键 tenant/session/ledger/audit/suppression/consent/object manifest SHA-256 分别相等。自动切换和 PITR 实测 RPO/RTO 均不超过已批准 SLA；未批准或未实测时不得承诺数值。签名结果和 evidence 只保存脱敏身份/hash/时间/指标，不含凭据、endpoint、bucket、object key 或命令输出敏感正文 |
 | AC-ENT-0053 | 租户灰度、kill switch 与能力熔断 | `0052/0053` up/down/forward 后 release control/event 使用 tenant-first key、forced RLS、身份/version/half-open trigger 与 append-only event，tenant root 具有精确自租户 policy，普通非 owner/非 `BYPASSRLS` 应用角色可取得当前 tenant 行锁而看不到其他 tenant；owner/到期/阈值/operation ID 缺失或越界拒绝。租户所有角色仅 `tenant:read` 查看本租户脱敏状态，跨租户 ID/RLS 返回不可见；控制变更只接受独立内部 key+operator，probe decision/outcome 还要求不同的第二 key。缺记录、disabled、expired、kill active、open、普通 half-open、legacy/SQLite 均在 Provider/dispatch 副作用前拒绝；Support Agent、Screen OCR、Marketing PSTN 至少各验证一次 guard。两个 API 实例并发上报同 operation 只计一次，连续失败精确在阈值 open，kill 只停止目标 tenant+capability，新副作用停止延迟满足批准 SLO且不影响另一租户；安全结束、已接受 Provider 对账/结算继续收敛。open 不用客户会话探测；值班按 runbook 复核告警、依赖与影响后 begin probe，唯一专用 probe 成功 closed、失败重开，旧/重放 probe 不改变状态。告警、trace、追加证据和 on-call 时间线可关联且不含 secret/客户正文；真实 PostgreSQL、双租户、Provider 故障和独立 reviewer 演练全部通过后方可放行 |
 | AC-ENT-0054 | 企业候选发布材料 | schema-v1 manifest 固定 product/release/version、40位 commit 和 image digest；运行时 expected commit/image 与 manifest 一致。服务说明、发布说明、SLA、隐私/数据处理、管理员手册、运维/事件手册和发布清单各恰好一份且 approved，根内相对普通文件无穿越/符号链接/草稿标记，大小受限且 SHA-256 一致。A0–A3/H1–H3 各恰好一份 passed evidence，acceptance IDs、reviewer、时间、文件 hash、commit/image 完整一致；产品、工程、安全、隐私、运维、法务六类审批全部有效。任一材料、hash、审批、证据或候选绑定缺失时 CLI 和 `/health/release-ready` 均 not_ready；国内 App 材料、主产品证据、旧候选、mock、单节点 PostgreSQL 和口头批准均不能替代。H3 未绑定批准 SLA 和跨故障域 RPO/RTO 实测时不得承诺数值 |
 | AC-ENT-0055 | SaaS 控制面高可用 | `0054` up/down/forward 后 instance/pending 两表 forced RLS、实例/投影/协调 trigger 和 tenant/job 复合 FK 有效；control-plane role 非 owner/superuser/BYPASSRLS，只能以 transaction-local worker ID 读控制引用和更新自身/claim 协调列，tenant role 不能改协调或删除活动 projection。PostgreSQL create/retry 原子保存 tenant/owner/job/Directory/projection 后202，配置缺失在写前503；两个以上同区域、同 commit/image、不同 worker ID 实例并发 `SKIP LOCKED` 每 job 仅一 claim，相同 ID 活动租约拒绝，崩溃到期后 generation+1 重领，旧 instance/work generation 在 Provider 前、Provider 后和 finalize 前均不能激活 tenant。Worker 必须重读真实 tenant job/actor/type/status，投影无 payload且不成为第二状态真值；未知 Provider 结果以稳定 tenant ID 查询/重试。status 只计同候选未过期实例并用数据库时钟计算 backlog，副本不足、候选混跑、超 SLO 非零。控制面全停时新开通/套餐变更不可用且无半条记录，已有 route/Worker ticket 的会议、客服、外呼仍可安全结束、结算和审计；恢复/滚动排空不重复开通、不撤销活动区域会话 |
+| AC-ENT-0056 | 租户限流与共享 Cell 公平 | `0055` up/down/forward 后 Cell policy/state、Cell-Tenant state、tenant request 全部 forced RLS；PUBLIC 无表权限，tenant runtime functions 只接受 current tenant，operator config/status/reconcile 函数只授予独立 admission role，伪造 tenant/cell/operator、直接表写和跨租户读取全部拒绝。每个 Cell 的 translation/voice-agent/marketing-PSTN/screen-share 四能力 policy 与候选 commit/image 一致；Cell/tenant concurrency、rate/window、Cell/tenant queue/TTL 边界逐一验证，实际租户并发为 entitlement 与平台限制较小值。权重1/2/4混合持续请求按 virtual finish 稳定选择，只从满足自身并发/速率的 eligible 请求取 head；大租户满载不头阻塞小租户，小租户在批准SLO内获得准入。队列满有界429/明确重试且无无界内存；同 idempotency/hash 重放同 request，异 hash冲突。Worker Dispatch、Marketing PSTN、Screen Share 在副作用前 active check，heartbeat/accepted续租，结束/取消/撤销/已知失败release，崩溃/未知结果到期后reconcile重算且旧lease不能授权。queued/admitted 阻断Cell迁移；25/50/100阶梯、70%目标利用率120分钟真实混合soak无OOM、重复Provider副作用、重复结算或丢终态 |
 
 `ENT-CS-005` 当前只形成 `AC-ENT-0026` 的代码候选；自动化、migration up/down/forward、
 forced-RLS 双租户、并发发布、Worker 竞态和真实 Provider/Adapter 均未执行。Agent `toolRequest`
@@ -894,7 +895,7 @@ contact_request、origin Campaign、跨 Campaign Lead 和有/无精确 session r
 
 - PostgreSQL 作为所有真实 SaaS 租户的初始真源。
 - 内部 SQLite 演示数据可以迁移，但不能作为客户生产迁移路径的必要依赖。
-- 验收 commit 锁定的公共31段 manifest（基线从 `fe1c3c2` 演进）与 enterprise 54段 migration manifest 在隔离企业数据库从空库完整执行；两个 manifest 的顺序、checksum、schema verify 和 down/forward 策略均有证据，不能只跑其中一套。
+- 验收 commit 锁定的公共31段 manifest（基线从 `fe1c3c2` 演进）与 enterprise 55段 migration manifest 在隔离企业数据库从空库完整执行；两个 manifest 的顺序、checksum、schema verify 和 down/forward 策略均有证据，不能只跑其中一套。
 - 每个进程只有一个 Storage Driver 和 startup verdict；HTTP、企业 Repository、统一通讯会话和 cell Worker 使用同一 verified Primary Runtime，不存在 fallback、shadow read、dual write 或按路由混用。
 - 应用 tenant、user directory、cell discovery、migration、maintenance 分别使用最小权限角色；生产 TLS 使用 `verify-full`。应用角色没有 `BYPASSRLS`、表 owner、DDL 或关闭 RLS 权限。
 - 公共 communication session、participant、media leg、dispatch、Provider operation、playback 和相关账本全部具有 tenant scope、复合 FK 和 `FORCE ROW LEVEL SECURITY`；使用跨租户 ID、缺 scope、伪造 owner/user 过滤做负向验证。
@@ -904,14 +905,14 @@ contact_request、origin Campaign、跨 Campaign Lead 和有/无精确 session r
 - accounts、tenant、communication session、segment、campaign、support、meeting、ledger 和 object hash 数量与规范化 SHA-256 一致。
 - 单租户 Cell 迁移只允许停机一致性窗口：源 tenant 的 communication binding、dispatch grant、公共 dispatch、
   capacity hold 和 pending lease 均无活动项，源数据库只读、旧 writer 为0；目标 tenant 为空且数据库可写。
-- 以真实31+54 staging 双库执行 `export -> object receipt -> cutover -> reconcile`，确认全部 enterprise tenant 表、
+- 以真实31+55 staging 双库执行 `export -> object receipt -> cutover -> reconcile`，确认全部 enterprise tenant 表、
   公共 tenant communication scope、ledger/audit/consent/suppression 与对象引用逐表 count/hash 一致，目标 route
   epoch 精确+1；篡改 export/evidence/object receipt、遗漏一表、目标预置 tenant 或保留旧 writer 必须非零失败且不发布路由。
 - cutover 后在新 Cell 写入一组可追溯增量，再停止新 Cell 并执行 rollback；旧 Cell 必须被最新快照反向全量替换、
   epoch 再+1、不可变历史不丢失，不能只恢复 cutover 前旧副本。注入清除、导入、trigger 重新启用和最终对账故障，
   验证目标事务整体回滚且原可恢复副本仍完整。
 - 全量复制后记录增量水位，切换时获取 writer fence、清退旧 API/Worker、重放剩余 inbox/outbox，再做第二次 count/hash；切换或对账失败可按书面决策回滚，旧 writer 不能继续写入。
-- staging startup 必须拒绝 local evidence、签名篡改、错误 cutover/target ID、错误 commit/image/topology、错误 system identifier/OID、缺 baseline 引用、未清退 writer 或任一31+54 migration 漂移。维护工具只验证 fence，不自动执行 promote 或隔离旧主。
+- staging startup 必须拒绝 local evidence、签名篡改、错误 cutover/target ID、错误 commit/image/topology、错误 system identifier/OID、缺 baseline 引用、未清退 writer 或任一31+55 migration 漂移。维护工具只验证 fence，不自动执行 promote 或隔离旧主。
 - migration 后使用普通应用角色验证 `FORCE ROW LEVEL SECURITY`；确认 user directory self policy、tenant projection policy、成员投影同步和跨租户拒绝均生效。
 - 使用独立 cell Worker 角色验证 pending projection forced RLS、trigger 同步、空 cell 失败闭合、旧 cell 拒绝和 tenant transaction 原子 claim。
 - 使用 API 应用角色验证 PostgreSQL runtime 只在 startup gate `verified` 后创建；非法或 `dual_write` driver、连接/校验失败均不得监听端口，也不得回退到 legacy。
@@ -986,8 +987,23 @@ tenant/job；并发矩阵以至少两个进程、50个任务证明 `SKIP LOCKED`
 网络分区矩阵确认旧 generation 永远不能恢复写入或激活 tenant。
 
 当前只形成 migration、session/repository/Worker、API guard、status CLI、运行手册和未执行测试定义。本轮按要求
-未运行自动化、真实31+54 PostgreSQL、两个实例、故障注入、区域 provisioner 或数据面自治验证，
+未运行自动化、真实31+55 PostgreSQL、两个实例、故障注入、区域 provisioner 或数据面自治验证，
 `AC-ENT-0055` 未通过，`ENT-REL-006` 保持 `in_progress`，不能把 config `configured` 或单机 status 称为 HA。
+
+### 12.3 租户限流与共享 Cell 公平验收
+
+`ENT-REL-007` 按 `AC-ENT-0056` 执行八组矩阵：schema/权限覆盖 `0055` up/down/forward、forced-RLS、
+runtime函数tenant绑定、operator函数PUBLIC撤权/专用GRANT和直接表写；policy矩阵覆盖四能力缺失、候选漂移、
+expectedVersion、数值上下界、disabled和权重活动冲突；并发矩阵覆盖Cell/tenant上限及entitlement较小值；rate/queue
+矩阵覆盖窗口前后1ms、Cell/tenant queue满、TTL和同键重放/异hash；公平矩阵以权重1/2/4、大租户持续与小租户突发
+验证eligible-head无头阻塞及批准SLO；生命周期矩阵覆盖Worker accept/heartbeat/refresh/finalize/cancel、PSTN
+prepare/accepted/unknown/webhook、Screen Share acquire/renew/stop/revoke；故障矩阵在reserve/业务写/Provider/renew/release
+各阶段kill并用reconcile重建准确计数；容量矩阵执行25/50/100与120分钟真实混合流量，核对拒绝、OOM、队列、Provider
+副作用、usage/ledger和终态。
+
+当前只形成 migration、runtime/operator functions、policy parser/admin/worker、三条业务集成、health/release gate、
+运行手册和未执行测试定义。本轮未运行真实31+55 PostgreSQL、专用角色GRANT/RLS、双租户公平、媒体/Provider、
+阶梯/soak或独立reviewer，`AC-ENT-0056` 未通过，`ENT-REL-007` 保持 `in_progress`。
 
 ## 13. 验收执行顺序
 

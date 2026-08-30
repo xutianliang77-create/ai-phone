@@ -5,7 +5,7 @@ import {
 } from "../../modules/enterprise/enterprise-meeting-screen-share.js";
 import {
   recordScreenShareMeetingStarted as recordMeetingStarted,
-  recordScreenShareRevocations as recordRevocations,
+  recordScreenShareRevocations as recordRevocationEvents,
   recordScreenShareState as recordState,
 } from "./enterprise-postgres-meeting-screen-share-events.js";
 import type { EnterpriseTenantPostgresPool } from
@@ -113,6 +113,20 @@ export function createEnterprisePostgresMeetingScreenShareRuntime(
         if (activeCount >= entitlement.limit) {
           return { status: "capacity_denied" as const };
         }
+        const admissionLeaseExpiresAt = new Date(
+          input.now.getTime() + leaseSeconds() * 1_000,
+        ).toISOString();
+        const admission = await unit.admissions.reserve({
+          capability: "screen_share", resourceType: "screen_share",
+          grantId: input.shareId,
+          idempotencyKey: `screen-share:${input.idempotencyKey}`,
+          requestHash: input.requestHash, tenantLimit: entitlement.limit,
+          leaseExpiresAt: admissionLeaseExpiresAt,
+          now: input.now.toISOString(),
+        });
+        if (admission.status !== "admitted") {
+          return { status: "capacity_denied" as const };
+        }
         const result = await unit.meetingScreenShares.acquire({
           id: input.shareId,
           meetingId: meeting.id,
@@ -132,7 +146,11 @@ export function createEnterprisePostgresMeetingScreenShareRuntime(
         });
         await recordRevocations(unit, input.context, result.revoked, input.now);
         if (result.status === "created") {
+          await syncShareAdmission(unit, result.share, input.now);
           await recordState(unit, input.context, result.share, "acquire", input.now);
+        } else {
+          await unit.admissions.release({ capability: "screen_share",
+            grantId: input.shareId, now: input.now.toISOString() });
         }
         return result;
       });
@@ -181,6 +199,7 @@ export function createEnterprisePostgresMeetingScreenShareRuntime(
         });
         await recordRevocations(unit, input.context, result.revoked, input.now);
         if (result.status === "updated") {
+          await syncShareAdmission(unit, result.share, input.now);
           await recordState(unit, input.context, result.share, input.command, input.now);
         }
         return result;
@@ -213,6 +232,7 @@ export function createEnterprisePostgresMeetingScreenShareRuntime(
         });
         await recordRevocations(unit, input.context, result.revoked, input.now);
         if (result.status === "updated") {
+          await syncShareAdmission(unit, result.share, input.now);
           await recordState(
             unit, input.context, result.share, "force_stop", input.now,
           );
@@ -221,6 +241,38 @@ export function createEnterprisePostgresMeetingScreenShareRuntime(
       });
     },
   };
+}
+
+async function recordRevocations(
+  unit: EnterprisePostgresUnitOfWork,
+  context: Parameters<typeof recordRevocationEvents>[1],
+  revoked: Parameters<typeof recordRevocationEvents>[2],
+  now: Date,
+) {
+  await recordRevocationEvents(unit, context, revoked, now);
+  for (const item of revoked) {
+    await unit.admissions.release({ capability: "screen_share",
+      grantId: item.shareId, now: now.toISOString() });
+  }
+}
+
+async function syncShareAdmission(
+  unit: EnterprisePostgresUnitOfWork,
+  share: import("../../modules/enterprise/enterprise-meeting-screen-share.js")
+    .EnterpriseMeetingScreenShareRecord,
+  now: Date,
+) {
+  if (share.status === "ended") {
+    const released = await unit.admissions.release({ capability: "screen_share",
+      grantId: share.id, now: now.toISOString() });
+    if (!released) throw new Error("Screen share admission release lost");
+    return;
+  }
+  if (!share.leaseExpiresAt) throw new Error("Screen share admission lease missing");
+  const renewed = await unit.admissions.renew({ capability: "screen_share",
+    grantId: share.id, workerId: `screen-share:${share.id}`,
+    leaseExpiresAt: share.leaseExpiresAt, now: now.toISOString() });
+  if (!renewed) throw new Error("Screen share admission lease lost");
 }
 
 async function meetingScope(

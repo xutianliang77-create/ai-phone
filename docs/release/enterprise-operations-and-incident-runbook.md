@@ -7,6 +7,7 @@
 1. 锁定候选 commit、镜像 digest、公共和 enterprise migration manifest。
 2. 在隔离 staging 执行 A0–A3、H1–H3，并生成绑定候选身份的证据文件和 SHA-256。
 3. 复核安全例外、密钥、Provider readiness、容量、告警、值班表、备份/WAL/PITR 和回滚点。
+   容量复核必须包含四能力 admission policy、独立角色GRANT、live status、双租户公平和队列reconcile证据。
 4. 完成产品、工程、安全、隐私、运维和法务审批后运行企业发布材料 checker。
 5. checker 或 `/health/release-ready` 非 ready 时禁止进入生产灰度。
 

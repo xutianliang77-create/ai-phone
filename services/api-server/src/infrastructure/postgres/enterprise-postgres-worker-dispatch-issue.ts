@@ -24,7 +24,10 @@ import {
 import {
   EnterpriseEntitlementResolutionPostgresRepository,
 } from "./enterprise-postgres-entitlement-resolution.js";
-
+import { deterministicEnterpriseGrantId } from "./enterprise-postgres-tenant-admission.js";
+import { reserveEnterpriseWorkerDispatchAdmission,
+  type EnterpriseDispatchAdmissionReject } from
+  "./enterprise-postgres-worker-dispatch-admission.js";
 export interface IssueEnterpriseWorkerDispatchInput {
   communicationSessionId: string;
   capability: EnterpriseWorkerCapability;
@@ -44,7 +47,8 @@ export type IssueEnterpriseWorkerDispatchResult =
   | { status: "policy_unresolved" | "policy_denied" }
   | { status: "entitlement_unavailable" | "entitlement_denied" }
   | { status: "idempotency_conflict" }
-  | { status: "capacity_exhausted"; used: number; limit: number };
+  | { status: "capacity_exhausted"; used: number; limit: number }
+  | EnterpriseDispatchAdmissionReject;
 
 export class EnterpriseWorkerDispatchIssuePostgresRepository {
   constructor(private readonly session: EnterpriseTenantPostgresSession) {}
@@ -157,7 +161,22 @@ export class EnterpriseWorkerDispatchIssuePostgresRepository {
     `, [normalized.communicationSessionId, binding.generation]);
     if (conflictingDispatch.rows[0]) return { status: "dispatch_conflict" };
 
-    const grantId = randomUUID();
+    const grantId = deterministicEnterpriseGrantId({
+      tenantId: this.session.context.tenantId,
+      capability: normalized.capability,
+      idempotencyKey: normalized.idempotencyKey,
+    });
+    const admission = await reserveEnterpriseWorkerDispatchAdmission({
+      session: this.session,
+      capability: normalized.capability,
+      grantId,
+      idempotencyKey: normalized.idempotencyKey,
+      requestHash: normalized.requestHash,
+      tenantLimit: entitlement.limit,
+      leaseExpiresAt: capacityLease,
+      now: issuedAt,
+    });
+    if (admission) return admission;
     const dispatchId = `enterprise-dispatch:${grantId}`;
     const capacityId = capacity?.id ?? `enterprise-capacity:${randomUUID()}`;
     await this.storeCapacity({

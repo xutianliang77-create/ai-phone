@@ -121,6 +121,7 @@ Worker 使用独立 cell discovery 凭证和共享 tenant pool，不持有 direc
 生产环境必须显式配置 `ENTERPRISE_DIRECTORY_DATABASE_URL`、
 `ENTERPRISE_CELL_DATABASE_URL`、`ENTERPRISE_CONTROL_PLANE_DATABASE_URL`、
 `ENTERPRISE_CONTROL_PLANE_OBSERVER_DATABASE_URL`、
+`ENTERPRISE_ADMISSION_DATABASE_URL`、
 `ENTERPRISE_MIGRATION_DATABASE_URL` 和维护凭证，
 不得使用 `BYPASSRLS` 应用角色扫描或修改全租户数据。
 
@@ -149,6 +150,28 @@ backlog 年龄；低于 `EXPECTED_REPLICAS`、候选混跑或 backlog 超过批�
 状态，不能代替跨故障域、网络分区、kill -9、容量或独立 reviewer 验收。
 API 节点另配置唯一 `ENTERPRISE_CONTROL_PLANE_OBSERVER_ID`，以同一只读控制面角色查询最多缓存1秒的 live
 snapshot；新开通、重试、套餐变更和 release readiness 只有在 live status 为 ready 时继续。
+
+## Tenant admission and shared-cell fairness
+
+Migration `0055` 增加四能力 Cell policy/state、Cell-Tenant state 和 tenant admission request。普通 tenant runtime
+没有表权限，只调用校验 current tenant 的 reserve/renew/release/active 函数。平台 admission 角色通过独立
+`ENTERPRISE_ADMISSION_DATABASE_URL` 取得由DBA显式授予的 config/weight/status/reconcile 函数执行权；API 使用不同的
+只读 `ENTERPRISE_ADMISSION_OBSERVER_DATABASE_URL` 调用 aggregate readiness，API 环境不注入 operator URL/ID。
+不要授予表、
+tenant runtime、migration、maintenance 或 `BYPASSRLS`。
+
+Policy 文件必须绑定当前 candidate commit/image，并为每个 Cell 同时包含 translation/voice-agent/marketing-PSTN/
+screen-share。先 apply，再 status，最后启动 reconcile Worker：
+
+```bash
+npm run enterprise:admission -- apply
+npm run enterprise:admission -- status
+npm run dev:enterprise-admission
+```
+
+Runtime 在现有 entitlement、usage budget、Release Control 和业务 generation 前后继续复核，不把 Admission 当作
+账务或副作用真值。Worker Dispatch、Marketing PSTN 和 Screen Share 的 admission lease 随业务 heartbeat/终态
+收敛；过期和计数漂移由 reconcile Worker 从 request 表重建。配置/单机 status 不代表真实公平或容量验收。
 
 ## Knowledge versions
 

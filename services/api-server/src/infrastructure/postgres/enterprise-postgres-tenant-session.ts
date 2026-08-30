@@ -1,7 +1,7 @@
 import type {
   EnterpriseTenantContext,
 } from "../../modules/enterprise/enterprise-tenant-context.js";
-
+import { assertEnterpriseAdmissionSql } from "./enterprise-postgres-admission-sql.js";
 export interface EnterpriseTenantPostgresClient {
   query<Row extends Record<string, unknown>>(
     sql: string,
@@ -9,11 +9,9 @@ export interface EnterpriseTenantPostgresClient {
   ): Promise<{ rows: Row[] }>;
   release(): void;
 }
-
 export interface EnterpriseTenantPostgresPool {
   connect(): Promise<EnterpriseTenantPostgresClient>;
 }
-
 export interface EnterpriseTenantPostgresSession {
   readonly context: EnterpriseTenantContext;
   queryTenantRecord<Row extends Record<string, unknown>>(
@@ -36,6 +34,7 @@ export interface EnterpriseTenantPostgresSession {
     sql: string,
     values?: unknown[],
   ): Promise<{ rows: Row[] }>;
+  queryAdmission?<Row extends Record<string, unknown>>(sql: string, values?: unknown[]): Promise<{ rows: Row[] }>;
 }
 
 export async function withEnterpriseTenantPostgresSession<T>(
@@ -107,6 +106,9 @@ export async function withEnterpriseTenantPostgresSession<T>(
         assertWorkerDispatchSql(sql);
         return client.query<Row>(sql, ["tenant", context.tenantId, ...values]);
       },
+      queryAdmission<Row extends Record<string, unknown>>(sql: string, values: unknown[] = []) {
+        assertEnterpriseAdmissionSql(sql);
+        return client.query<Row>(sql, [context.tenantId, ...values]); },
     });
     const result = await operation(session);
     await client.query("COMMIT");

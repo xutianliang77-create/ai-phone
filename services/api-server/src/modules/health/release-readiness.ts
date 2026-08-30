@@ -19,6 +19,8 @@ import { getVoiceAgentRuntimeReadiness } from
   "../agent-calls/voice-agent-runtime-readiness.js";
 import { getAgentConsultReadiness } from
   "../agent-calls/agent-consult-readiness.js";
+import { getEnterpriseAdmissionConfigReadiness } from
+  "../../infrastructure/postgres/enterprise-admission-config.js";
 
 export async function getReleaseReadiness() {
   const accountReadiness = getAccountDeploymentReadiness();
@@ -40,6 +42,7 @@ export async function getReleaseReadiness() {
   const telemetryReadiness = getPlatformTelemetryReadiness();
   const voiceAgentRuntimeReadiness = getVoiceAgentRuntimeReadiness();
   const agentConsultReadiness = getAgentConsultReadiness();
+  const enterpriseAdmissionReadiness = getEnterpriseAdmissionConfigReadiness();
   const issues = [
     ...accountReadiness.issues,
     ...paymentReadiness.issues,
@@ -49,6 +52,7 @@ export async function getReleaseReadiness() {
     ...diagnosticsReadiness.issues,
     ...releaseMaterialsReadiness.issues,
     ...enterpriseReleaseMaterialsReadiness.issues,
+    ...enterpriseAdmissionReadiness.issues,
     ...workerDispatchReadiness.issues,
     ...egressReadiness.issues,
     ...postgresProjectionReadiness.issues,
@@ -72,6 +76,7 @@ export async function getReleaseReadiness() {
     diagnosticsReadiness,
     releaseMaterialsReadiness,
     enterpriseReleaseMaterialsReadiness,
+    enterpriseAdmissionReadiness,
     workerDispatchReadiness,
     egressReadiness,
     postgresProjectionReadiness,

@@ -116,6 +116,10 @@ export async function discoverEnterpriseCellTables(
 const globalEnterpriseTables = new Set([
   "control_plane_instances",
   "control_plane_pending_work",
+  "cell_admission_policies",
+  "cell_admission_state",
+  "cell_tenant_admission_state",
+  "tenant_admission_requests",
 ]);
 
 const derivedEnterpriseTables = new Set([

@@ -10,6 +10,7 @@ infra/livekit-selfhost/caddy_config/
 infra/livekit-selfhost/redis_data/
 release/domestic/release.env
 release/enterprise/release-materials.json
+infra/enterprise-admission/policy.json
 apps/mobile/android/key.properties
 apps/mobile/android/release/*.jks
 apps/mobile/android/release/*.keystore

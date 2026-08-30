@@ -1,6 +1,6 @@
 # 无界AI企业版详细功能设计
 
-版本：v1.55
+版本：v1.56
 日期：2026-08-31
 状态：SaaS 详细设计基线，已对齐统一通讯平台
 
@@ -899,7 +899,7 @@ service-account Adapter、可注入 mock 以及 Web/Flutter 状态入口。自�
   PITR 已验证；证据需显示环境、commit/image/topology、cutover ID 和最近验证时间。
   本地或同故障域恢复只能显示“机制已验证”，不能显示“生产灾备就绪”。
 - `ENT-REL-003` 只建立服务端演练和放行证据门禁，不向租户提供 promote、failover、fence 或 restore
-  操作。灾备 readiness 只有在同一签名 schema-v2 结果绑定当前 enterprise cutover、31+54 manifest、
+  操作。灾备 readiness 只有在同一签名 schema-v2 结果绑定当前 enterprise cutover、31+55 manifest、
   自动切换/旧主隔离、异地不可变备份和 PITR hash 后才可为 ready；缺 Adapter、容量、证据或任一实测值
   必须显示 `not_ready`。RPO/RTO 只展示批准目标和本次实测，不得在真实演练与 SLA 批准前承诺数值。
 
@@ -953,6 +953,21 @@ service-account Adapter、可注入 mock 以及 Web/Flutter 状态入口。自�
   控制变更和 outcome 均使用独立 operation ID、版本条件更新和 append-only 事件证据。
 - 当前只形成 PostgreSQL runtime、内部 API 和三条副作用 guard 的代码候选；未运行测试、真实数据库、
   Provider 故障或值班演练，因此不得显示“灰度/熔断生产就绪”。
+
+### 8.6 租户准入、限流与共享 Cell 公平
+
+- Entitlement 决定租户购买上限；Admission 再应用 Cell 总并发、平台租户并发、速率窗口和有限队列，实际
+  上限取两者较小值。预算/ledger 和 Release Control 仍独立复核，任何一层拒绝都不能创建外部副作用。
+- 每个 Cell 必须同时配置翻译 Worker、Voice Agent、Marketing PSTN 和 Screen Share 四种 capability；缺失、
+  disabled、policy 候选身份漂移或数据库不可用时明确 `not_ready`，不得回退进程内 semaphore、Redis 或客户端计数。
+- 请求以稳定 idempotency/hash 入队；服务端按 `max(cell virtual time, tenant last finish) + units/weight` 计算
+  虚拟完成时间，并只从满足自身并发和速率的请求中选择最小值。大租户达到上限不能阻塞其他合格小租户。
+- Cell/tenant 队列均有上限和 TTL；queue full 返回有界重试，不允许无界积压。admission lease 与 Worker/PSTN/
+  Screen Share 生命周期一同 renew/release，崩溃和未知结果只通过 lease 到期及数据库 reconcile 收敛。
+- 权重由平台独立管理角色按 expectedVersion 配置，只能在目标租户无 active/queued admission 时修改；租户管理员
+  只能读取自己服务的真实容量结果，不能提交 weight、Cell limit、rate 或 queue limit。
+- queued/admitted admission 会阻断 tenant Cell 迁移；全局 policy/state/request 不随租户业务表复制。当前代码和
+  测试定义存在但未运行真实共享 Cell/容量门禁，因此不能展示 noisy-neighbor production ready。
 
 ## 9. 核心流程契约
 

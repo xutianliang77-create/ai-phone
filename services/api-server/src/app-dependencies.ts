@@ -30,6 +30,8 @@ import type { EnterpriseSupportInboundTicketService } from
   "./modules/enterprise/enterprise-support-inbound-ticket.js";
 import type { EnterpriseControlPlaneAvailabilityService } from
   "./modules/enterprise/enterprise-control-plane-availability.js";
+import type { EnterpriseAdmissionAvailabilityService } from
+  "./modules/enterprise/enterprise-admission-availability.js";
 
 export interface AppDependencies {
   tenantProvisioner?: TenantProvisioner;
@@ -49,4 +51,5 @@ export interface AppDependencies {
   enterpriseSupportAgentProvider?: EnterpriseSupportAgentProvider;
   enterpriseSupportAgentDispatchService?: EnterpriseSupportAgentDispatchService;
   enterpriseControlPlaneAvailability?: EnterpriseControlPlaneAvailabilityService;
+  enterpriseAdmissionAvailability?: EnterpriseAdmissionAvailabilityService;
 }

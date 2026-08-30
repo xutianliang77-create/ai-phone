@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { EnterpriseScope } from "@translation/contracts";
 import { sendError } from "../../infrastructure/http/errors.js";
@@ -17,6 +16,7 @@ import { createEnterpriseMeetingScreenShareToken } from
   "./enterprise-meeting-screen-share-token.js";
 import {
   enterpriseMeetingScreenSharePublisherIdentity,
+  enterpriseMeetingScreenShareId,
   enterpriseMeetingScreenShareRoomName,
   type EnterpriseMeetingScreenShareRecord,
   type EnterpriseMeetingScreenShareRevocation,
@@ -79,7 +79,9 @@ export function registerEnterpriseMeetingScreenShareRoutes(
       if (!tokenReady(access.route.rtcUrl)) return providerNotReady(reply);
       const now = new Date();
       const result = await runtime.acquireMeetingScreenShare({
-        context: tenantContext(access, request), meetingId, shareId: randomUUID(),
+        context: tenantContext(access, request), meetingId,
+        shareId: enterpriseMeetingScreenShareId({ tenantId: access.tenant.id,
+          meetingId, idempotencyKey }),
         ...body, idempotencyKey,
         requestHash: screenShareRequestHash({
           actorUserId: access.account.id, meetingId, command: "acquire", body,

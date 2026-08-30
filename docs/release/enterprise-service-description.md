@@ -23,6 +23,8 @@ CRM、日历、通讯渠道、PSTN 和对象存储均通过受控 Adapter 接入
   不能决定权限。
 - 会议、客服和营销各自保存业务聚合，但统一引用 `communicationSessionId`。
 - 外部副作用使用幂等键、Inbox/Outbox、generation 和 Provider receipt 收敛。
+- 共享 Cell 在 entitlement、预算和 release control 之外执行租户并发、速率、有限队列和加权公平准入；
+  配置或数据库不可用时新高成本副作用失败闭合。
 
 ## 3. 角色和管理责任
 

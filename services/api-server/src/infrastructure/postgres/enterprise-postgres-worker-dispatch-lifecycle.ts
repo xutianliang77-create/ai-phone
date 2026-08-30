@@ -23,6 +23,8 @@ import {
   evaluateEnterpriseWorkerPolicyFence,
   type EnterpriseWorkerPolicyRejectStatus,
 } from "./enterprise-postgres-worker-policy-fence.js";
+import { EnterpriseTenantAdmissionPostgresRepository } from
+  "./enterprise-postgres-tenant-admission.js";
 
 type RejectStatus = Exclude<
   EnterpriseWorkerFenceResult["status"],
@@ -41,7 +43,10 @@ type InspectResult =
   | { rejected: RejectStatus | EnterpriseWorkerPolicyRejectStatus };
 
 export class EnterpriseWorkerDispatchLifecyclePostgresRepository {
-  constructor(private readonly session: EnterpriseTenantPostgresSession) {}
+  private readonly admission: EnterpriseTenantAdmissionPostgresRepository;
+  constructor(private readonly session: EnterpriseTenantPostgresSession) {
+    this.admission = new EnterpriseTenantAdmissionPostgresRepository(session);
+  }
 
   async accept(input: {
     payload: EnterpriseWorkerDispatchTicketPayload;
@@ -83,6 +88,10 @@ export class EnterpriseWorkerDispatchLifecyclePostgresRepository {
     if (!capacityUpdated.rows[0]) {
       throw new Error("Enterprise capacity accept lost fence");
     }
+    const admissionUpdated = await this.admission.renew({
+      capability: input.payload.capability, grantId: inspected.grant.id,
+      workerId: input.workerId, leaseExpiresAt, now: now.toISOString() });
+    if (!admissionUpdated) throw new Error("Enterprise admission accept lost fence");
     return {
       status: "accepted",
       grant: mapEnterpriseWorkerDispatchGrantRow(
@@ -219,7 +228,12 @@ export class EnterpriseWorkerDispatchLifecyclePostgresRepository {
       now: input.now,
     });
     if ("rejected" in policy) return policy;
-    const publicFence = await this.publicFence(grant, input.payload, input.now);
+    const publicFence = await this.publicFence(
+      grant,
+      input.payload,
+      input.workerId,
+      input.now,
+    );
     return publicFence ?? { grant, policy: policy.policy };
   }
 
@@ -239,6 +253,7 @@ export class EnterpriseWorkerDispatchLifecyclePostgresRepository {
   private async publicFence(
     grant: EnterpriseWorkerDispatchGrantRecord,
     payload: EnterpriseWorkerDispatchTicketPayload,
+    workerId: string,
     now: Date,
   ): Promise<{ rejected: "dispatch_lost" | "capacity_lost" } | null> {
     const dispatch = await this.session.queryWorkerDispatch<DispatchRow>(`
@@ -263,6 +278,10 @@ export class EnterpriseWorkerDispatchLifecyclePostgresRepository {
       Date.parse(capacity.rows[0].lease_expires_at) <= now.getTime()) {
       return { rejected: "capacity_lost" as const };
     }
+    const admitted = await this.admission.active({ capability: payload.capability,
+      grantId: grant.id, ...(grant.status === "accepted" ? { workerId } : {}),
+      now: now.toISOString() });
+    if (!admitted) return { rejected: "capacity_lost" as const };
     return null;
   }
 
@@ -287,6 +306,9 @@ export class EnterpriseWorkerDispatchLifecyclePostgresRepository {
     if (!dispatch.rows[0] || !capacity.rows[0]) {
       throw new Error("Enterprise dispatch finalize lost public fence");
     }
+    const released = await this.admission.release({
+      capability: grant.capability, grantId: grant.id, now: timestamp });
+    if (!released) throw new Error("Enterprise dispatch finalize lost admission");
   }
 }
 

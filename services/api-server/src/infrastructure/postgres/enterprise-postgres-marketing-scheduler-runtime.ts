@@ -12,6 +12,8 @@ import type { EnterpriseTenantPostgresPool } from
   "./enterprise-postgres-tenant-session.js";
 import { withEnterprisePostgresUnitOfWork } from
   "./enterprise-postgres-unit-of-work.js";
+import { marketingAdmissionHash, marketingAdmissionId,
+  marketingAdmissionOwner } from "./enterprise-postgres-marketing-admission.js";
 
 type Runtime = Required<EnterpriseMarketingSchedulerRepositoryRuntime>;
 const entitlementKey = "worker.voice_agent_runtime.concurrent";
@@ -69,15 +71,36 @@ export function createEnterprisePostgresMarketingSchedulerRuntime(
             .toISOString();
           const requestHash = marketingSchedulerHoldHash({ taskId: task.id, generation,
             amount: input.holdSeconds, leaseExpiresAt });
+          const admissionIdempotencyKey =
+            `marketing-admission:${task.id}:g${generation}`;
+          const admissionId = marketingAdmissionId(
+            input.tenantId, task.id, generation,
+          );
+          const admission = await unit.admissions.reserve({
+            capability: "marketing_pstn", resourceType: "marketing_pstn",
+            grantId: admissionId, idempotencyKey: admissionIdempotencyKey,
+            requestHash: marketingAdmissionHash(task.id, generation),
+            tenantLimit: value.limit, leaseExpiresAt, now,
+          });
+          if (admission.status !== "admitted") {
+            capacitySkipped += 1; continue;
+          }
+          const releaseAdmission = () => unit.admissions.release({
+            capability: "marketing_pstn", grantId: admissionId, now,
+          });
           const hold = await unit.usageBudgets.hold({ category: "marketing_call_seconds",
             unit: "seconds", amount: input.holdSeconds, sourceType: "marketing_call_task",
             sourceRef: task.id, idempotencyKey: `scheduler-hold:${task.id}:g${generation}`,
             requestHash, expiresAt: leaseExpiresAt, now: input.now });
           if (hold.status === "budget_not_configured") {
-            budgetBlocked = "not_configured"; break;
+            await releaseAdmission(); budgetBlocked = "not_configured"; break;
           }
-          if (hold.status === "budget_paused") { budgetBlocked = "paused"; break; }
-          if (hold.status === "budget_exhausted") { budgetBlocked = "exhausted"; break; }
+          if (hold.status === "budget_paused") {
+            await releaseAdmission(); budgetBlocked = "paused"; break;
+          }
+          if (hold.status === "budget_exhausted") {
+            await releaseAdmission(); budgetBlocked = "exhausted"; break;
+          }
           if (hold.status === "idempotency_conflict") {
             throw new Error("Marketing scheduler usage hold conflict");
           }
@@ -89,6 +112,11 @@ export function createEnterprisePostgresMarketingSchedulerRuntime(
             schedulerId: input.schedulerId, tokenHash: token.hash,
             usageHoldId: hold.hold.id, leaseExpiresAt, now });
           if (!claimed) throw new Error("Marketing scheduler task claim conflict");
+          if (!await unit.admissions.renew({ capability: "marketing_pstn",
+            grantId: admissionId, workerId: marketingAdmissionOwner(task.id),
+            leaseExpiresAt, now })) {
+            throw new Error("Marketing scheduler admission lease lost");
+          }
           tasks.push({ ...claimed, usageHoldId: hold.hold.id,
             claimOwner: input.schedulerId, claimTokenHash: token.hash,
             leaseExpiresAt, claimToken: token.token });
