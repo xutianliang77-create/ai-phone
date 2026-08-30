@@ -1,4 +1,11 @@
+import type {
+  SpeakerTurnCoordinatorDecisionReason,
+} from "@translation/contracts";
 import type { SpeakerSpan } from "./speaker-attribution-provider.js";
+import {
+  dominantTailEvidence,
+  type TailEvidence,
+} from "./speech-turn-evidence.js";
 
 export interface SpeechTurnBoundary {
   previousSpeakerId: string;
@@ -30,15 +37,10 @@ interface SessionState {
   currentSpeakerId?: string;
   candidate?: CandidateState;
   confirmedSpeakerIds: Set<string>;
-}
-
-interface TailEvidence {
-  speakerId: string;
-  startMs: number;
-  endMs: number;
-  evidenceMs: number;
-  confidence: number;
-  dominanceRatio: number;
+  coordinatorDecisionCounts: Partial<Record<
+    SpeakerTurnCoordinatorDecisionReason,
+    number
+  >>;
 }
 
 const DEFAULT_MINIMUM_EVIDENCE_MS = 240;
@@ -77,33 +79,52 @@ export class SpeechTurnCoordinator {
 
   observe(sessionId: string, spans: SpeakerSpan[]): SpeechTurnBoundary | null {
     const state = this.stateFor(sessionId);
-    const evidence = dominantTailEvidence(spans, this.tailToleranceMs);
-    if (!evidence || !this.isReliable(evidence, state)) {
+    const result = dominantTailEvidence(spans, this.tailToleranceMs);
+    if (!result.evidence) {
+      this.recordDecision(state, result.rejectionReason);
+      state.candidate = undefined;
+      return null;
+    }
+    const evidence = result.evidence;
+    const rejectionReason = this.reliabilityRejection(evidence, state);
+    if (rejectionReason) {
+      this.recordDecision(state, rejectionReason);
       state.candidate = undefined;
       return null;
     }
     if (state.currentSpeakerId === evidence.speakerId) {
+      this.recordDecision(state, "current_speaker");
       state.candidate = undefined;
       return null;
     }
     if (!state.currentSpeakerId) {
       state.currentSpeakerId = evidence.speakerId;
       state.confirmedSpeakerIds.add(evidence.speakerId);
+      this.recordDecision(state, "initial_speaker_confirmed");
       state.candidate = undefined;
       return null;
     }
 
+    const resetReason = candidateResetReason(
+      state.candidate,
+      evidence,
+      this.candidateStartToleranceMs,
+    );
     const candidate = updateCandidate(
       state.candidate,
       evidence,
       this.candidateStartToleranceMs,
     );
     state.candidate = candidate;
-    if (candidate.observations < this.stableWindows) return null;
+    if (candidate.observations < this.stableWindows) {
+      this.recordDecision(state, resetReason ?? "stable_window_pending");
+      return null;
+    }
 
     const previousSpeakerId = state.currentSpeakerId;
     state.currentSpeakerId = evidence.speakerId;
     state.confirmedSpeakerIds.add(evidence.speakerId);
+    this.recordDecision(state, "boundary_confirmed");
     state.candidate = undefined;
     if (!previousSpeakerId) return null;
     return {
@@ -125,26 +146,72 @@ export class SpeechTurnCoordinator {
       false;
   }
 
+  recordNoSpanObservation(sessionId: string) {
+    this.recordDecision(this.stateFor(sessionId), "no_span");
+  }
+
+  diagnostics(sessionId: string) {
+    const state = this.sessions.get(sessionId);
+    if (!state) return undefined;
+    return {
+      coordinatorDecisionCounts: { ...state.coordinatorDecisionCounts },
+      confirmedSpeakerCount: state.confirmedSpeakerIds.size,
+    };
+  }
+
   clear(sessionId: string) {
     this.sessions.delete(sessionId);
   }
 
-  private isReliable(evidence: TailEvidence, state: SessionState) {
+  private reliabilityRejection(
+    evidence: TailEvidence,
+    state: SessionState,
+  ): SpeakerTurnCoordinatorDecisionReason | undefined {
+    if (evidence.evidenceMs < this.minimumEvidenceMs) {
+      return "evidence_too_short";
+    }
+    if (evidence.dominanceRatio < this.minimumDominanceRatio) {
+      return "dominance_too_low";
+    }
+    const knownSpeaker = state.confirmedSpeakerIds.has(evidence.speakerId);
     const minimumConfidence = state.confirmedSpeakerIds.has(evidence.speakerId)
       ? this.minimumConfidence
       : this.minimumNovelSpeakerConfidence;
-    return evidence.evidenceMs >= this.minimumEvidenceMs &&
-      evidence.dominanceRatio >= this.minimumDominanceRatio &&
-      evidence.confidence >= minimumConfidence;
+    if (evidence.confidence >= minimumConfidence) return undefined;
+    return knownSpeaker
+      ? "known_confidence_too_low"
+      : "novel_confidence_too_low";
+  }
+
+  private recordDecision(
+    state: SessionState,
+    reason: SpeakerTurnCoordinatorDecisionReason,
+  ) {
+    state.coordinatorDecisionCounts[reason] =
+      (state.coordinatorDecisionCounts[reason] ?? 0) + 1;
   }
 
   private stateFor(sessionId: string) {
     const state = this.sessions.get(sessionId) ?? {
       confirmedSpeakerIds: new Set<string>(),
+      coordinatorDecisionCounts: {},
     };
     this.sessions.set(sessionId, state);
     return state;
   }
+}
+
+function candidateResetReason(
+  current: CandidateState | undefined,
+  evidence: TailEvidence,
+  startToleranceMs: number,
+): SpeakerTurnCoordinatorDecisionReason | undefined {
+  if (!current) return undefined;
+  if (current.speakerId !== evidence.speakerId) return "candidate_reset_label";
+  if (Math.abs(current.startMs - evidence.startMs) > startToleranceMs) {
+    return "candidate_reset_start_drift";
+  }
+  return undefined;
 }
 
 function updateCandidate(
@@ -171,133 +238,4 @@ function updateCandidate(
     lastEndMs: evidence.endMs,
     observations: current.observations + 1,
   };
-}
-
-function dominantTailEvidence(
-  spans: SpeakerSpan[],
-  tailToleranceMs: number,
-): TailEvidence | null {
-  const usable = spans.filter((span) =>
-    span.overlap !== true &&
-    span.endMs > span.startMs &&
-    typeof span.confidence === "number"
-  );
-  const latestEndMs = usable.reduce(
-    (latest, span) => Math.max(latest, span.endMs),
-    0,
-  );
-  if (latestEndMs === 0) return null;
-
-  const candidates = [...new Set(
-    usable
-      .filter((span) => latestEndMs - span.endMs <= tailToleranceMs)
-      .map((span) => span.speakerId),
-  )].map((speakerId) => speakerTailEvidence(
-    speakerId,
-    latestEndMs,
-    usable,
-    tailToleranceMs,
-  )).filter((item): item is TailEvidence => item !== null);
-
-  return candidates.sort((left, right) =>
-    right.evidenceMs - left.evidenceMs ||
-    right.confidence - left.confidence
-  )[0] ?? null;
-}
-
-function speakerTailEvidence(
-  speakerId: string,
-  latestEndMs: number,
-  spans: SpeakerSpan[],
-  tailToleranceMs: number,
-): TailEvidence | null {
-  const intervals = mergeIntervals(
-    spans
-      .filter((span) => span.speakerId === speakerId)
-      .map((span) => ({ startMs: span.startMs, endMs: span.endMs })),
-    tailToleranceMs,
-  );
-  const tail = [...intervals].reverse().find(
-    (interval) => latestEndMs - interval.endMs <= tailToleranceMs,
-  );
-  if (!tail) return null;
-
-  const evidenceMs = overlapForSpeaker(spans, speakerId, tail.startMs, tail.endMs);
-  const totalEvidenceMs = [...new Set(spans.map((span) => span.speakerId))]
-    .reduce(
-      (total, id) => total + overlapForSpeaker(spans, id, tail.startMs, tail.endMs),
-      0,
-    );
-  const confidence = weightedConfidence(
-    spans.filter((span) => span.speakerId === speakerId),
-    tail.startMs,
-    tail.endMs,
-  );
-  if (confidence === null) return null;
-  return {
-    speakerId,
-    startMs: tail.startMs,
-    endMs: tail.endMs,
-    evidenceMs,
-    confidence,
-    dominanceRatio: evidenceMs / Math.max(1, totalEvidenceMs),
-  };
-}
-
-function overlapForSpeaker(
-  spans: SpeakerSpan[],
-  speakerId: string,
-  startMs: number,
-  endMs: number,
-) {
-  return mergeIntervals(
-    spans
-      .filter((span) => span.speakerId === speakerId)
-      .map((span) => ({
-        startMs: Math.max(startMs, span.startMs),
-        endMs: Math.min(endMs, span.endMs),
-      }))
-      .filter((interval) => interval.endMs > interval.startMs),
-    0,
-  ).reduce((total, interval) => total + interval.endMs - interval.startMs, 0);
-}
-
-function weightedConfidence(
-  spans: SpeakerSpan[],
-  startMs: number,
-  endMs: number,
-) {
-  const evidence = spans.flatMap((span) => {
-    if (typeof span.confidence !== "number") return [];
-    const weight = Math.max(
-      0,
-      Math.min(endMs, span.endMs) - Math.max(startMs, span.startMs),
-    );
-    return weight > 0 ? [{ value: span.confidence, weight }] : [];
-  });
-  const weight = evidence.reduce((total, item) => total + item.weight, 0);
-  if (weight === 0) return null;
-  return evidence.reduce(
-    (total, item) => total + item.value * item.weight,
-    0,
-  ) / weight;
-}
-
-function mergeIntervals(
-  intervals: Array<{ startMs: number; endMs: number }>,
-  gapToleranceMs: number,
-) {
-  const sorted = [...intervals].sort((left, right) =>
-    left.startMs - right.startMs || left.endMs - right.endMs
-  );
-  const merged: Array<{ startMs: number; endMs: number }> = [];
-  for (const interval of sorted) {
-    const previous = merged.at(-1);
-    if (!previous || interval.startMs > previous.endMs + gapToleranceMs) {
-      merged.push({ ...interval });
-    } else {
-      previous.endMs = Math.max(previous.endMs, interval.endMs);
-    }
-  }
-  return merged;
 }

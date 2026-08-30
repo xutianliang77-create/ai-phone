@@ -141,6 +141,13 @@ function validDiagnostics() {
       maxConfirmationLatencyMs: 720,
       committedAudioMs: 2500,
       endpointReasons: { speaker_boundary: 1, flush: 1 },
+      coordinatorDecisionCounts: {
+        initial_speaker_confirmed: 1,
+        current_speaker: 2,
+        stable_window_pending: 1,
+        boundary_confirmed: 1,
+      },
+      confirmedSpeakerCount: 2,
     },
     vad: {
       configuredProvider: "marblenet",

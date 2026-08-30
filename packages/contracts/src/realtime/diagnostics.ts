@@ -107,6 +107,11 @@ export interface RealtimeSpeakerTurnDiagnosticsDto {
   boundaryReassignedCharacterCount?: number;
   unresolvedCommitMissCount?: number;
   boundaryOutcomeCounts?: Partial<Record<SpeakerBoundaryOutcome, number>>;
+  coordinatorDecisionCounts?: Partial<Record<
+    SpeakerTurnCoordinatorDecisionReason,
+    number
+  >>;
+  confirmedSpeakerCount?: number;
 }
 
 export type SpeakerBoundaryOutcome =
@@ -116,6 +121,21 @@ export type SpeakerBoundaryOutcome =
   | "token_timing_split"
   | "noop_after_endpoint"
   | "unresolved";
+
+export type SpeakerTurnCoordinatorDecisionReason =
+  | "no_span"
+  | "overlap_only"
+  | "missing_confidence"
+  | "evidence_too_short"
+  | "dominance_too_low"
+  | "novel_confidence_too_low"
+  | "known_confidence_too_low"
+  | "current_speaker"
+  | "candidate_reset_label"
+  | "candidate_reset_start_drift"
+  | "stable_window_pending"
+  | "initial_speaker_confirmed"
+  | "boundary_confirmed";
 
 export interface RealtimeSpeakerRevisionDiagnosticsDto {
   configuredProvider: "http";

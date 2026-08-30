@@ -7,9 +7,10 @@ import type {
   TermbaseTermDto,
   SegmentTimingDto,
   AsrTokenTimingDto,
+  RealtimeSessionDiagnosticsDto,
   SpeakerAttributionDto,
   SpeakerAttributionOptionsDto,
-  RealtimeSessionDiagnosticsDto,
+  SpeakerTurnCoordinatorDecisionReason,
   SegmentVadContextDto,
 } from "@translation/contracts";
 
@@ -67,6 +68,11 @@ export interface AsrSpeakerTurnDiagnostics {
     "unresolved",
     number
   >>;
+  coordinatorDecisionCounts?: Partial<Record<
+    SpeakerTurnCoordinatorDecisionReason,
+    number
+  >>;
+  confirmedSpeakerCount?: number;
 }
 
 export interface AsrTurnBoundary {

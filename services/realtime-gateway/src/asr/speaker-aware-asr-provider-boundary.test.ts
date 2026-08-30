@@ -7,12 +7,34 @@ import {
   frame,
   LateProtectedIdentifierAsrProvider,
   LateTokenTimedAsrProvider,
+  OneShotSpeakerProvider,
   RacingAsrProvider,
   session,
   SwitchingSpeakerProvider,
 } from "./speaker-aware-asr-provider.test-support.js";
 
 describe("speaker aware ASR boundary handling", () => {
+  it("counts an empty speaker response without changing the active speaker", async () => {
+    const provider = new SpeakerAwareAsrProvider(
+      new BoundaryAwareAsrProvider(),
+      new OneShotSpeakerProvider(),
+    );
+    await provider.createSession(session);
+
+    await provider.transcribe({ ...frame, sequence: 1 });
+    await provider.transcribe({ ...frame, sequence: 2 });
+
+    expect(await provider.diagnostics("sess_1")).toMatchObject({
+      speakerTurns: {
+        coordinatorDecisionCounts: {
+          initial_speaker_confirmed: 1,
+          no_span: 1,
+        },
+        confirmedSpeakerCount: 1,
+      },
+    });
+  });
+
   it("commits ASR audio when a new speaker boundary becomes stable", async () => {
     const asr = new BoundaryAwareAsrProvider();
     const provider = new SpeakerAwareAsrProvider(
@@ -42,6 +64,13 @@ describe("speaker aware ASR boundary handling", () => {
         commitErrorCount: 0,
         averageConfirmationLatencyMs: 480,
         committedAudioMs: 480,
+        coordinatorDecisionCounts: {
+          initial_speaker_confirmed: 1,
+          current_speaker: 1,
+          stable_window_pending: 1,
+          boundary_confirmed: 1,
+        },
+        confirmedSpeakerCount: 2,
       },
     });
   });

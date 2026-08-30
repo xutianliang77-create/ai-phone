@@ -113,6 +113,9 @@ export class SpeakerAwareAsrProvider implements AsrProvider {
     );
     this.spansBySession.set(frame.sessionId, spans);
     this.turnDiagnostics.recordFrame(frame.sessionId, frame, nextSpans.length);
+    if (nextSpans.length === 0) {
+      this.turnCoordinator.recordNoSpanObservation(frame.sessionId);
+    }
     const boundary = nextSpans.length > 0
       ? this.turnCoordinator.observe(frame.sessionId, spans)
       : null;
@@ -215,6 +218,7 @@ export class SpeakerAwareAsrProvider implements AsrProvider {
       ...underlying,
       speakerTurns: {
         ...speakerTurns,
+        ...(this.turnCoordinator.diagnostics(sessionId) ?? {}),
         ...(this.boundaryReassignment.diagnostics(sessionId) ?? {}),
       },
     };
@@ -270,6 +274,7 @@ export class SpeakerAwareAsrProvider implements AsrProvider {
       return [];
     }
   }
+
   private async safeFlush(sessionId: string) {
     try {
       return await this.speaker.flush(sessionId);

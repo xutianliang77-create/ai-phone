@@ -1,4 +1,7 @@
-import type { RealtimeSessionDiagnosticsDto } from "@translation/contracts";
+import type {
+  RealtimeSessionDiagnosticsDto,
+  SpeakerTurnCoordinatorDecisionReason,
+} from "@translation/contracts";
 
 type SpeakerTurnDiagnostics = NonNullable<
   RealtimeSessionDiagnosticsDto["speakerTurns"]
@@ -36,6 +39,16 @@ export function sanitizedSpeakerTurns(value: SpeakerTurnDiagnostics) {
     ...(value.boundaryOutcomeCounts
       ? { boundaryOutcomeCounts: { ...value.boundaryOutcomeCounts } }
       : {}),
+    ...(value.coordinatorDecisionCounts
+      ? {
+          coordinatorDecisionCounts: {
+            ...value.coordinatorDecisionCounts,
+          },
+        }
+      : {}),
+    ...(value.confirmedSpeakerCount !== undefined
+      ? { confirmedSpeakerCount: value.confirmedSpeakerCount }
+      : {}),
   };
 }
 
@@ -54,8 +67,47 @@ export function isSpeakerTurnDiagnostics(value: unknown) {
   return counts.every(isNonNegativeInteger) &&
     isBoundaryRevisionDiagnostics(value) &&
     isSpeakerBoundaryOutcomeDiagnostics(value) &&
+    isCoordinatorDecisionDiagnostics(value) &&
     isEndpointReasonCounts(value.endpointReasons);
 }
+
+function isCoordinatorDecisionDiagnostics(value: Record<string, unknown>) {
+  const confirmedSpeakerCount = value.confirmedSpeakerCount;
+  if (
+    confirmedSpeakerCount !== undefined &&
+    (!isNonNegativeInteger(confirmedSpeakerCount) || confirmedSpeakerCount > 4)
+  ) return false;
+  const counts = value.coordinatorDecisionCounts;
+  if (counts === undefined) return true;
+  if (!isRecord(counts) || confirmedSpeakerCount === undefined) return false;
+  if (!Object.entries(counts).every(([key, count]) =>
+    coordinatorDecisionReasons.has(key) && isNonNegativeInteger(count)
+  )) return false;
+  const initialCount = Number(counts.initial_speaker_confirmed ?? 0);
+  const boundaryCount = Number(counts.boundary_confirmed ?? 0);
+  return initialCount <= 1 &&
+    boundaryCount === value.confirmedBoundaryCount &&
+    (confirmedSpeakerCount === 0 ? initialCount === 0 : initialCount === 1);
+}
+
+const coordinatorDecisionReasonValues = [
+  "no_span",
+  "overlap_only",
+  "missing_confidence",
+  "evidence_too_short",
+  "dominance_too_low",
+  "novel_confidence_too_low",
+  "known_confidence_too_low",
+  "current_speaker",
+  "candidate_reset_label",
+  "candidate_reset_start_drift",
+  "stable_window_pending",
+  "initial_speaker_confirmed",
+  "boundary_confirmed",
+] as const satisfies readonly SpeakerTurnCoordinatorDecisionReason[];
+const coordinatorDecisionReasons = new Set<string>(
+  coordinatorDecisionReasonValues,
+);
 
 function isSpeakerBoundaryOutcomeDiagnostics(
   value: Record<string, unknown>,
@@ -118,6 +170,6 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
-function isNonNegativeInteger(value: unknown) {
+function isNonNegativeInteger(value: unknown): value is number {
   return typeof value === "number" && Number.isInteger(value) && value >= 0;
 }
