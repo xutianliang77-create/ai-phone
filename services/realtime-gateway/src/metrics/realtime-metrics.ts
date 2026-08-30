@@ -11,3 +11,9 @@ export const realtimeLogger = pino({
     log: redactLogObject,
   },
 });
+
+export function loggableError(error: unknown) {
+  return error instanceof Error
+    ? { name: error.name, message: error.message, stack: error.stack }
+    : { name: "UnknownError", message: String(error) };
+}

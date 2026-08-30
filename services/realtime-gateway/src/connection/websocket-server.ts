@@ -1,7 +1,7 @@
 import type { SessionEndReason } from "@translation/contracts";
 import { AudioFrameBatcher } from "./audio-frame-batcher.js";
 import { clearAudioFrameLog, logAudioFrameReceived } from "../metrics/audio-frame-logger.js";
-import { realtimeLogger } from "../metrics/realtime-metrics.js";
+import { loggableError, realtimeLogger } from "../metrics/realtime-metrics.js";
 import { clearTextSegmentLog } from "../metrics/text-segment-logger.js";
 import { parseIncomingEvent } from "../protocol/incoming-event-parser.js";
 import { buildError } from "../protocol/outgoing-event-builder.js";
@@ -23,7 +23,6 @@ import { endpointModeForRealtimeMode } from "./realtime-endpoint-mode.js";
 import { admitRealtimeConnection, sendRealtimeEvent } from "./realtime-connection-admission.js";
 import { createRealtimeServerRuntime, listenRealtimeServerRuntime } from "./realtime-server-runtime.js";
 import { coreDependencyFailureStage } from "./gateway-dependency-readiness.js";
-
 const router = new ProviderRouter();
 export { normalizeClientTextLanguage } from "../protocol/client-text-language.js";
 
@@ -127,7 +126,8 @@ export function startWebSocketServer() {
       provider,
       send: sendRealtime,
       onError: (error) => {
-        realtimeLogger.error({ error, sessionId: session.id }, "Realtime audio processing failed");
+        realtimeLogger.error({ error: loggableError(error),
+          sessionId: session.id }, "Realtime audio processing failed");
         sendRealtime(buildError("provider_unavailable", "Realtime audio processing failed", {
           sessionId: session.id,
           stage: "asr",

@@ -10,7 +10,7 @@ import type {
   SpeakerSpan,
 } from "../speaker/speaker-attribution-provider.js";
 import { SpeechTurnCoordinator } from "../speaker/speech-turn-coordinator.js";
-import { realtimeLogger } from "../metrics/realtime-metrics.js";
+import { loggableError, realtimeLogger } from "../metrics/realtime-metrics.js";
 import { SpeakerTurnDiagnostics } from "./speaker-turn-diagnostics.js";
 import { SpeakerTurnAssignment } from "./speaker-turn-assignment.js";
 import { AsrRequestScheduler } from "./asr-request-scheduler.js";
@@ -305,7 +305,7 @@ export class SpeakerAwareAsrProvider implements AsrProvider {
       sessionId,
       stage,
       count,
-      error,
+      error: loggableError(error),
     }, "Speaker attribution side path failed");
   }
 
