@@ -70,7 +70,7 @@ function input(stablePartial: Record<string, unknown>) {
       },
       stablePartial: {
         enabled: true,
-        policy: "qwen17_latest_only_40ms_extension_survival_zh_v4",
+        policy: "qwen17_chunk_aware_extension_survival_zh_v5",
         eligibleSegmentCount: 1,
         activeSegment: true,
         decodeCount: 2,

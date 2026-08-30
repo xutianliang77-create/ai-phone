@@ -42,12 +42,13 @@ class LatestPartialPushScheduler:
         self._push = push
         self._model_state = model_state
         self._sample_rate = sample_rate
-        self._minimum_push_bytes = round(
-            sample_rate * minimum_push_audio_ms / 1000
-        ) * 2
+        self._minimum_push_bytes = max(
+            2,
+            round(sample_rate * minimum_push_audio_ms / 1000) * 2,
+        )
         self._metrics = metrics
         self._pending = bytearray()
-        self._pending_end_timestamp_ms = 0
+        self._pending_start_timestamp_ms: float | None = None
         self._task: asyncio.Task[PartialDecode] | None = None
         self._completed: PartialDecode | None = None
         self._error: BaseException | None = None
@@ -58,29 +59,42 @@ class LatestPartialPushScheduler:
         if pcm:
             if self._task is not None:
                 self._metrics.coalesced_observation_count += 1
+            if not self._pending:
+                self._pending_start_timestamp_ms = (
+                    end_timestamp_ms
+                    - len(pcm) / 2 / self._sample_rate * 1000
+                )
             self._pending.extend(pcm)
-            self._pending_end_timestamp_ms = end_timestamp_ms
 
     def start(self) -> None:
+        required_bytes, exact_model_target = self._push_requirement()
         if (
             self._invalidated
             or self._task is not None
             or self._completed is not None
             or self._error is not None
             or not self._pending
-            or len(self._pending) < self._minimum_push_bytes
+            or len(self._pending) < required_bytes
         ):
             self._record_pending_highwater()
             return
-        pcm = bytes(self._pending)
-        self._pending.clear()
+        push_bytes = required_bytes if exact_model_target else len(self._pending)
+        pcm = bytes(self._pending[:push_bytes])
+        del self._pending[:push_bytes]
+        end_timestamp_ms = round(
+            (self._pending_start_timestamp_ms or 0)
+            + push_bytes / 2 / self._sample_rate * 1000
+        )
+        self._pending_start_timestamp_ms = (
+            float(end_timestamp_ms) if self._pending else None
+        )
         task = asyncio.create_task(asyncio.to_thread(
             _push_audio,
             self._push,
             self._model_state,
             pcm,
             self._sample_rate,
-            self._pending_end_timestamp_ms,
+            end_timestamp_ms,
         ))
         self._task = task
         self._metrics.scheduled_count += 1
@@ -119,6 +133,7 @@ class LatestPartialPushScheduler:
             self._completed = None
             self._error = None
         self._pending.clear()
+        self._pending_start_timestamp_ms = None
 
     @property
     def result_ready(self) -> bool:
@@ -158,6 +173,17 @@ class LatestPartialPushScheduler:
             self._metrics.max_pending_audio_ms,
             self.pending_audio_ms,
         )
+
+    def _push_requirement(self) -> tuple[int, bool]:
+        model_samples = getattr(self._model_state, "chunk_size_samples", 0)
+        try:
+            model_samples = int(model_samples)
+        except (TypeError, ValueError):
+            model_samples = 0
+        if model_samples <= 0:
+            return self._minimum_push_bytes, False
+        source_samples = round(model_samples * self._sample_rate / 16000)
+        return max(self._minimum_push_bytes, source_samples * 2), True
 
 
 def _push_audio(

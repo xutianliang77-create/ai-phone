@@ -30,6 +30,86 @@ class BlockingStreamingRunner:
         return state.chunk_id, text, "Chinese"
 
 
+class ChunkAwareBlockingRunner(BlockingStreamingRunner):
+    def new_streaming_state(self, _language: str | None, _context: str):
+        return SimpleNamespace(chunk_id=0, chunk_size_samples=8000)
+
+    def push_streaming(self, state, audio: np.ndarray):
+        result = super().push_streaming(state, audio)
+        state.chunk_size_samples = 3200
+        return result
+
+
+class ScheduledChunkRunner(BlockingStreamingRunner):
+    next_sizes = [3200, 3200, 1600, 16000, 16000, 16000, 16000, 16000]
+
+    def new_streaming_state(self, _language: str | None, _context: str):
+        return SimpleNamespace(chunk_id=0, chunk_size_samples=8000)
+
+    def push_streaming(self, state, audio: np.ndarray):
+        result = super().push_streaming(state, audio)
+        state.chunk_size_samples = self.next_sizes[state.chunk_id - 1]
+        return result
+
+
+async def test_does_not_start_the_six_second_decode_before_finalization() -> None:
+    decode_points = [500, 700, 900, 1000, 2000, 3000, 4000, 5000]
+    runner = ScheduledChunkRunner(["会议开始"] * len(decode_points))
+    coordinator = StableReadablePartialCoordinator(runner, enabled=True)
+
+    for index, duration_ms in enumerate(decode_points):
+        await assert_nonblocking_observe(
+            coordinator,
+            runner,
+            index,
+            duration_ms,
+        )
+        await release_and_wait(coordinator, runner, index, index + 1)
+        await coordinator.observe(request(), audio(duration_ms), "")
+
+    assert await coordinator.observe(request(), audio(5980), "") is None
+    diagnostics = coordinator.diagnostics("sess_1")
+    assert diagnostics["scheduledPushCount"] == 8
+    assert diagnostics["inFlight"] is False
+    assert diagnostics["pendingAudioMs"] == 980
+    finalization = await coordinator.finish("sess_1")
+
+    assert finalization is not None
+    assert coordinator.diagnostics("sess_1")["invalidatedPushCount"] == 0
+    assert runner.push_sizes == [
+        8000,
+        3200,
+        3200,
+        1600,
+        16000,
+        16000,
+        16000,
+        16000,
+    ]
+
+
+async def test_follows_model_chunk_targets_and_keeps_excess_pcm_pending() -> None:
+    runner = ChunkAwareBlockingRunner(["会议开始", "会议开始了"])
+    coordinator = StableReadablePartialCoordinator(runner, enabled=True)
+
+    assert await coordinator.observe(request(), audio(480), "") is None
+    diagnostics = coordinator.diagnostics("sess_1")
+    assert diagnostics["scheduledPushCount"] == 0
+    assert diagnostics["pendingAudioMs"] == 480
+
+    await assert_nonblocking_observe(coordinator, runner, 0, 500)
+    assert await coordinator.observe(request(), audio(800), "") is None
+    assert coordinator.diagnostics("sess_1")["pendingAudioMs"] == 300
+    await release_and_wait(coordinator, runner, 0, 1)
+    assert await coordinator.observe(request(), audio(800), "") is None
+    assert await asyncio.to_thread(runner.started[1].wait, 1)
+    assert coordinator.diagnostics("sess_1")["pendingAudioMs"] == 100
+    await release_and_wait(coordinator, runner, 1, 2)
+
+    assert runner.push_sizes == [8000, 3200]
+    assert coordinator.diagnostics("sess_1")["scheduledPushCount"] == 2
+
+
 async def test_combines_twenty_millisecond_frames_into_forty_ms_pushes() -> None:
     runner = BlockingStreamingRunner(["会议", "会议开始"])
     coordinator = StableReadablePartialCoordinator(runner, enabled=True)

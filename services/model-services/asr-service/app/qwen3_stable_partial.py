@@ -212,7 +212,7 @@ class StableReadablePartialCoordinator:
         state = self._states.get(session_id)
         return {
             "enabled": self.enabled,
-            "policy": "qwen17_latest_only_40ms_extension_survival_zh_v4",
+            "policy": "qwen17_chunk_aware_extension_survival_zh_v5",
             "minimumPushAudioMs": STABLE_PARTIAL_MIN_PUSH_AUDIO_MS,
             "eligibleSegmentCount": metrics.eligible_segment_count,
             "activeSegment": session_id in self._states,
