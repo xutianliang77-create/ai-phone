@@ -9,6 +9,8 @@ import type {
   SessionReviewTermDto,
 } from "@translation/contracts";
 import type { SessionRecord } from "./session-record.js";
+import { orderSessionSegmentsChronologically } from
+  "./session-segment-order.js";
 import {
   recordRemoteReviewFailure,
   recordRemoteReviewSuccess,
@@ -58,7 +60,9 @@ export async function generateSessionReview(
 }
 
 function remoteReviewSegments(session: SessionRecord) {
-  return sampleSegmentsForRemoteReview(session.segments)
+  return sampleSegmentsForRemoteReview(
+    orderSessionSegmentsChronologically(session.segments),
+  )
     .map((segment) => ({
       id: segment.id,
       rawText: compactReviewText(segment.rawText, maxReviewSourceCharacters),
@@ -165,7 +169,7 @@ function toSessionReviewResponse(
 }
 
 function textSegments(session: SessionRecord) {
-  return session.segments
+  return orderSessionSegmentsChronologically(session.segments)
     .map((segment) => ({
       id: segment.id,
       sourceText: (

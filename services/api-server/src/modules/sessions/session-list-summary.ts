@@ -1,12 +1,15 @@
 import type { SessionRecord } from "./session-record.js";
+import { orderSessionSegmentsChronologically } from
+  "./session-segment-order.js";
 
 const TITLE_MAX_LENGTH = 36;
 
 export function sessionListSummary(session: SessionRecord) {
-  const firstSegment = session.segments.find((segment) =>
+  const segments = orderSessionSegmentsChronologically(session.segments);
+  const firstSegment = segments.find((segment) =>
     Boolean(segment.sourceText.trim() || segment.translatedText.trim()));
   const speakers = new Set(
-    session.segments
+    segments
       .map((segment) => segment.speaker?.speakerId.trim())
       .filter((speakerId): speakerId is string =>
         speakerId !== undefined && speakerId.length > 0 &&

@@ -14,6 +14,7 @@ import '../../../../platform/speech/speech_text_normalizer.dart';
 import '../../../../platform/translation/mobile_translation_provider.dart';
 import '../../../../platform/translation/supported_translation_language.dart';
 import '../../../../shared/domain/speaker_attribution.dart';
+import '../../../../shared/domain/segment_timeline_order.dart';
 import '../../../../shared/domain/turn_language_profile.dart';
 import '../../data/api/realtime_session.dart';
 import '../../data/gateway/gateway_realtime_event.dart';
@@ -281,13 +282,6 @@ class RealtimeController extends ChangeNotifier {
 
   void _notify() {
     if (!_disposed) notifyListeners();
-  }
-
-  void _replaceSegmentsFromDrafts() {
-    _segments
-      ..clear()
-      ..addAll(_drafts.values.map((draft) => draft.toSegment()));
-    _notify();
   }
 
   void _fail(String message) {

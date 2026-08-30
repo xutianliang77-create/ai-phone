@@ -97,6 +97,17 @@ extension RealtimeControllerSegments on RealtimeController {
     if (_drafts.remove(id) == null) return;
     _replaceSegmentsFromDrafts();
   }
+
+  void _replaceSegmentsFromDrafts() {
+    final ordered = orderTimelineByTiming(
+      _drafts.values.map((draft) => draft.toSegment()),
+      timingOf: (segment) => segment.timing,
+    );
+    _segments
+      ..clear()
+      ..addAll(ordered);
+    _notify();
+  }
 }
 
 String? _cleanRealtimeText(String? text) {

@@ -26,6 +26,8 @@ import {
   mergeSessionSegments,
   type SessionSegmentPatch,
 } from "./session-segment-merge.js";
+import { orderSessionSegmentsChronologically } from
+  "./session-segment-order.js";
 import {
   sessionMatchesQuery,
   sessionSpeakerSummary,
@@ -249,6 +251,7 @@ export function upsertSegment(sessionId: string, patch: SessionSegmentPatch) {
     const existing = next.segments.find((segment) => segment.id === patch.segmentId);
     if (existing) applySessionSegmentPatch(existing, patch);
     else next.segments.push(createSessionSegment(patch));
+    next.segments = orderSessionSegmentsChronologically(next.segments);
     next.review = null;
     next.lastActivityAt = new Date().toISOString();
   }, () => legacy.upsertSegment(sessionId, patch));

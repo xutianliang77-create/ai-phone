@@ -6,6 +6,8 @@ import type {
 } from "@translation/contracts";
 import type { SessionRecord } from "./session-record.js";
 import { sessionListSummary } from "./session-list-summary.js";
+import { orderSessionSegmentsChronologically } from
+  "./session-segment-order.js";
 
 export function toSessionListItem(session: SessionRecord): SessionListItem {
   return {
@@ -23,7 +25,7 @@ export function toSessionListItem(session: SessionRecord): SessionListItem {
 export function toSessionDetail(session: SessionRecord): SessionDetailResponse {
   return {
     ...toSessionListItem(session),
-    segments: session.segments,
+    segments: orderSessionSegmentsChronologically(session.segments),
     ...(session.playbacks?.length ? { playbacks: session.playbacks } : {}),
     review: session.review ?? null,
     ...(session.diagnostics ? { diagnostics: session.diagnostics } : {}),
@@ -42,12 +44,16 @@ export function toSessionExport(
       content: JSON.stringify(toSessionDetail(session), null, 2),
     };
   }
+  const orderedSession = {
+    ...session,
+    segments: orderSessionSegmentsChronologically(session.segments),
+  };
   if (format === "csv") {
     return {
       sessionId: session.id,
       filename: `session-${session.id}.csv`,
       mimeType: "text/csv",
-      content: toCsv(session),
+      content: toCsv(orderedSession),
     };
   }
 
@@ -55,7 +61,9 @@ export function toSessionExport(
     sessionId: session.id,
     filename: `session-${session.id}.${format === "markdown" ? "md" : "txt"}`,
     mimeType: format === "markdown" ? "text/markdown" : "text/plain",
-    content: format === "markdown" ? toMarkdown(session) : toPlainText(session),
+    content: format === "markdown"
+      ? toMarkdown(orderedSession)
+      : toPlainText(orderedSession),
   };
 }
 

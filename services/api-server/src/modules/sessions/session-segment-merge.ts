@@ -11,6 +11,8 @@ import type {
   SpeechPipelineTimingDto,
   SpeakerAttributionDto,
 } from "@translation/contracts";
+import { orderSessionSegmentsChronologically } from
+  "./session-segment-order.js";
 
 export interface SessionSegmentPatch {
   segmentId: string;
@@ -57,7 +59,7 @@ export function mergeSessionSegments(
     }
     merged[index] = mergeCompleteSegment(merged[index], incoming);
   }
-  return merged;
+  return orderSessionSegmentsChronologically(merged);
 }
 
 export function applySessionSegmentPatch(

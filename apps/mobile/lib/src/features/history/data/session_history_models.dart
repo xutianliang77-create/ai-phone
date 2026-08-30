@@ -1,4 +1,5 @@
 import '../../../shared/domain/speaker_attribution.dart';
+import '../../../shared/domain/segment_timeline_order.dart';
 import '../../../shared/domain/turn_language_profile.dart';
 
 class SessionListItem {
@@ -193,10 +194,12 @@ class SessionDetail extends SessionListItem {
       sourceLanguage: json['sourceLanguage'] as String?,
       targetLanguage: json['targetLanguage'] as String?,
       speakerCount: (json['speakerCount'] as num?)?.toInt() ?? 0,
-      segments: (json['segments']! as List<dynamic>)
-          .cast<Map<String, Object?>>()
-          .map(SessionSegment.fromJson)
-          .toList(),
+      segments: orderTimelineByTiming(
+        (json['segments']! as List<dynamic>)
+            .cast<Map<String, Object?>>()
+            .map(SessionSegment.fromJson),
+        timingOf: (segment) => segment.timing,
+      ),
       reviewJson: json['review'] == null
           ? null
           : (json['review']! as Map<String, Object?>),
