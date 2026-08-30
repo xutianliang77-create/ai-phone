@@ -82,7 +82,6 @@ describe("speaker-first segmentation", () => {
     });
     if (!plan.accepted) return;
     expect(plan.speakerUpdates.map((item) => item.segmentId)).toEqual([
-      "seg_1",
       "seg_2",
       "seg_3",
       "seg_4",
@@ -120,14 +119,13 @@ describe("speaker-first segmentation", () => {
       provider: "sortformer_high_context",
       speakerCount: 2,
       spans: [
-        { speakerId: "S01", startMs: 0, endMs: 1_000, confidence: 0.95 },
-        { speakerId: "S02", startMs: 800, endMs: 1_400, confidence: 0.92 },
-        { speakerId: "S01", startMs: 1_400, endMs: 2_000, confidence: 0.94 },
+        { speakerId: "S01", startMs: 0, endMs: 800, confidence: 0.95 },
+        { speakerId: "S02", startMs: 1_200, endMs: 1_600, confidence: 0.92 },
       ],
     }, [
       segment("loss_1", "speaker_1", 0, 800, "甲乙丙丁"),
-      segment("loss_2", "speaker_2", 800, 1_400, "戊己庚辛"),
-      segment("loss_3", "speaker_1", 1_400, 2_000, "壬癸子丑"),
+      segment("loss_2", "speaker_2", 800, 1_000, "戊己庚辛"),
+      segment("loss_3", "speaker_1", 1_600, 2_000, "壬癸子丑"),
     ]);
 
     expect(plan).toMatchObject({

@@ -59,7 +59,7 @@ describe("high-context speaker revision delivery", () => {
     });
   });
 
-  it("rejects speaker updates when the output loses claimed cardinality", async () => {
+  it("applies an update when known-speaker preservation keeps cardinality", async () => {
     const provider = new SpeakerRevisionRealtimeProvider(
       new UpdatesOnlyRealtimeProvider(),
       new HighContextRevisionProvider(),
@@ -82,14 +82,24 @@ describe("high-context speaker revision delivery", () => {
 
     const flushed = await flush(provider);
 
-    expect(flushed).toEqual([]);
+    expect(flushed).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        type: "speaker.updated",
+        segmentId: "seg_2",
+        speaker: expect.objectContaining({ speakerId: "speaker_2" }),
+      }),
+    ]));
+    expect(flushed.some((event) =>
+      event.type === "speaker.updated" && event.segmentId === "seg_1"
+    )).toBe(false);
     await expect(provider.diagnostics!("sess_1")).resolves.toMatchObject({
       speakerRevision: {
-        acceptedCount: 0,
+        acceptedCount: 1,
         splitParentCount: 0,
         splitChildCount: 0,
-        splitRejectedCount: 1,
-        cardinalityMismatchCount: 1,
+        splitSkippedParentCount: 1,
+        splitSkippedReasonCounts: { missing_token_timing: 1 },
+        cardinalityMismatchCount: 0,
       },
     });
   });

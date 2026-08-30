@@ -99,10 +99,13 @@ function updateForSegment(
   const meaningful = ranked.filter((item) => item.share >= SECONDARY_SHARE);
   const overlapIds = explicitOverlapIds(intersections, labelMapping);
   const crossesBoundary = meaningful.length > 1 && overlapIds.length < 2;
-  const revisedSpeaker = crossesBoundary || dominant.share < DOMINANT_SHARE
-    ? unknownSpeaker()
-    : diarizedSpeaker(dominant.speakerId);
   const hasExplicitOverlap = overlapIds.length >= 2;
+  const ambiguous = crossesBoundary || dominant.share < DOMINANT_SHARE;
+  const existingKnownSpeaker = knownSpeaker(segment.speaker);
+  if (ambiguous && existingKnownSpeaker && !hasExplicitOverlap) return [];
+  const revisedSpeaker = ambiguous
+    ? existingKnownSpeaker ?? unknownSpeaker()
+    : diarizedSpeaker(dominant.speakerId);
   const activeSpeakerIds = hasExplicitOverlap
     ? overlapIds
     : crossesBoundary
@@ -165,6 +168,13 @@ function diarizedSpeaker(speakerId: string): SpeakerAttributionDto {
 
 function unknownSpeaker(): SpeakerAttributionDto {
   return { speakerId: "unknown", role: "unknown", source: "unknown" };
+}
+
+function knownSpeaker(value: SpeakerAttributionDto | undefined) {
+  return value?.speakerId && value.speakerId !== "unknown" &&
+      value.role !== "unknown"
+    ? value
+    : undefined;
 }
 
 function sameSpeaker(

@@ -6,7 +6,7 @@ import {
 import type { SpeakerRevisionResult } from "./speaker-revision-provider.js";
 
 describe("speaker revision reconciler", () => {
-  it("uses a verified two-speaker window without changing transcript fields", () => {
+  it("uses a verified window without degrading a known boundary speaker", () => {
     const result = reconcileSpeakerRevision(iphoneRevision(), [
       segment("seg_1", 0, 6_000, "speaker_1"),
       segment("seg_2", 6_000, 12_100, "speaker_1"),
@@ -19,20 +19,6 @@ describe("speaker revision reconciler", () => {
       S02: "speaker_2",
     });
     expect(result.updates).toEqual([
-      expect.objectContaining({
-        type: "speaker.updated",
-        segmentId: "seg_2",
-        speakerRevision: 1,
-        speaker: {
-          speakerId: "unknown",
-          role: "unknown",
-          source: "unknown",
-        },
-        timing: expect.objectContaining({
-          overlap: false,
-          activeSpeakerIds: ["speaker_1", "speaker_2"],
-        }),
-      }),
       expect.objectContaining({
         type: "speaker.updated",
         segmentId: "seg_3",
