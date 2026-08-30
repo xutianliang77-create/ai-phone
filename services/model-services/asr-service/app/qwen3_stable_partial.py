@@ -151,6 +151,7 @@ class StableReadablePartialCoordinator:
             return None
         if not publish:
             state.final_fallback = confirmed
+            self._reject(metrics, "final_fallback")
             return None
         if state.last_partial:
             pending = state.pending_extension

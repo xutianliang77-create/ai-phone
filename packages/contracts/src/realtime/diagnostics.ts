@@ -200,7 +200,8 @@ export type StablePartialRejectionReason =
   | "backtrack"
   | "language_gate"
   | "context_echo"
-  | "extension_pending";
+  | "extension_pending"
+  | "final_fallback";
 
 export type StablePartialLanguageEvidence =
   | "empty"

@@ -63,6 +63,23 @@ describe("stable partial scheduler diagnostics", () => {
       "lastStablePartialLatencyMs",
     );
   });
+
+  it("accounts for a confirmed decode used only as the final fallback", () => {
+    const parsed = parseRealtimeDiagnostics(input({
+      ...scheduler,
+      decisionCount: 2,
+      emittedCount: 0,
+      rejectionCounts: {
+        insufficient_units: 1,
+        final_fallback: 1,
+      },
+    }));
+
+    expect(parsed?.vad?.stablePartial?.rejectionCounts).toEqual({
+      insufficient_units: 1,
+      final_fallback: 1,
+    });
+  });
 });
 
 

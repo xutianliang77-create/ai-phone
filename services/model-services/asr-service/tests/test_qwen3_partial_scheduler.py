@@ -211,6 +211,10 @@ async def test_finish_waits_for_one_push_to_preserve_an_empty_final_fallback() -
     diagnostics = coordinator.diagnostics("sess_1")
     assert diagnostics["decisionCount"] == 2
     assert diagnostics["emittedCount"] == 0
+    assert diagnostics["rejectionCounts"] == {
+        "insufficient_units": 1,
+        "final_fallback": 1,
+    }
     assert diagnostics["invalidatedPushCount"] == 0
 
 

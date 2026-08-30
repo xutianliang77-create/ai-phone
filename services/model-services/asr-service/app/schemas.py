@@ -15,6 +15,7 @@ StablePartialRejectionReason = Literal[
     "language_gate",
     "context_echo",
     "extension_pending",
+    "final_fallback",
 ]
 StablePartialLanguageEvidence = Literal["empty", "zh", "en", "zh_en", "other"]
 NonNegativeCount = Annotated[int, Field(ge=0)]

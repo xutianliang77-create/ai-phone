@@ -173,6 +173,10 @@ async def test_flush_uses_one_inflight_confirmation_when_no_partial_was_sent() -
     diagnostics = engine.diagnostics("sess_1")["stablePartial"]
     assert diagnostics["decisionCount"] == 2
     assert diagnostics["emittedCount"] == 0
+    assert diagnostics["rejectionCounts"] == {
+        "insufficient_units": 1,
+        "final_fallback": 1,
+    }
 
 
 def frame(
