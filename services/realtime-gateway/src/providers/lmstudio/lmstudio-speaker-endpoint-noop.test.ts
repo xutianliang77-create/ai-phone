@@ -26,6 +26,22 @@ describe("speaker endpoint no-op", () => {
     ])).toEqual({ accepted: false, reason: "crossing_parent" });
   });
 
+  it("accepts a VAD timing overrun when all text tokens end before the boundary", () => {
+    expect(evaluateSpeakerEndpointNoop(boundary(), [
+      {
+        ...transcript("previous", "turn_1", "speaker_1", 0, 5320),
+        lastTokenEndMs: 5000,
+      },
+      transcript("next", "turn_2", "speaker_2", 5320, 8000),
+    ])).toEqual({
+      accepted: true,
+      previousSegmentId: "previous",
+      nextSegmentId: "next",
+      previousGapMs: 100,
+      nextGapMs: 220,
+    });
+  });
+
   it("rejects unknown or overlap evidence", () => {
     expect(evaluateSpeakerEndpointNoop(boundary(), [
       transcript("previous", "turn_1", "unknown", 0, 5000, true),

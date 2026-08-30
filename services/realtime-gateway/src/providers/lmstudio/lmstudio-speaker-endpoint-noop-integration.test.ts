@@ -78,6 +78,8 @@ function final(
   endMs: number,
   text: string,
 ) {
+  const characters = Array.from(text);
+  const tokenDurationMs = (endMs - startMs) / characters.length;
   return {
     segmentId,
     turnId,
@@ -90,10 +92,10 @@ function final(
       source: "diarization" as const,
     },
     timing: { startMs, endMs, source: "client" as const },
-    tokenTimings: Array.from(text).map((token, index) => ({
+    tokenTimings: characters.map((token, index) => ({
       text: token,
-      startMs: startMs + index * 80,
-      endMs: startMs + (index + 1) * 80,
+      startMs: startMs + index * tokenDurationMs,
+      endMs: startMs + (index + 1) * tokenDurationMs,
       characterStart: index,
       characterEnd: index + 1,
     })),

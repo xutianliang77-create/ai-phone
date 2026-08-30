@@ -14,6 +14,7 @@ export interface SpeakerEndpointTranscriptEvidence {
   startMs: number;
   endMs: number;
   overlap: boolean;
+  lastTokenEndMs?: number;
 }
 
 export type SpeakerEndpointNoopDecision =
@@ -49,6 +50,7 @@ export class SpeakerEndpointTranscriptHistory {
       startMs: timing.startMs,
       endMs: timing.endMs,
       overlap: timing.overlap === true,
+      ...lastTokenEnd(transcript),
     });
     while (this.items.size > 128) {
       this.items.delete(this.items.keys().next().value!);
@@ -66,14 +68,14 @@ export function evaluateSpeakerEndpointNoop(
 ): SpeakerEndpointNoopDecision {
   if (transcripts.some((transcript) =>
     transcript.startMs < boundary.boundaryMs &&
-    transcript.endMs > boundary.boundaryMs
+    textEndMs(transcript) > boundary.boundaryMs
   )) return rejected("crossing_parent");
   const previous = transcripts
     .filter((transcript) =>
       transcript.turnId === boundary.previousTurnId &&
-      transcript.endMs <= boundary.boundaryMs
+      textEndMs(transcript) <= boundary.boundaryMs
     )
-    .sort((left, right) => right.endMs - left.endMs)[0];
+    .sort((left, right) => textEndMs(right) - textEndMs(left))[0];
   if (!previous) return rejected("missing_previous_final");
   const next = transcripts
     .filter((transcript) =>
@@ -87,7 +89,7 @@ export function evaluateSpeakerEndpointNoop(
     !knownSpeaker(next, boundary.nextSpeakerId) ||
     hasUnknownGapEvidence(transcripts, previous, next)
   ) return rejected("unknown_or_overlap");
-  const previousGapMs = boundary.boundaryMs - previous.endMs;
+  const previousGapMs = boundary.boundaryMs - textEndMs(previous);
   const nextGapMs = next.startMs - boundary.boundaryMs;
   if (previousGapMs > MAX_ENDPOINT_GAP_MS) {
     return rejected("previous_gap_exceeded");
@@ -102,6 +104,10 @@ export function evaluateSpeakerEndpointNoop(
     previousGapMs,
     nextGapMs,
   };
+}
+
+function textEndMs(transcript: SpeakerEndpointTranscriptEvidence) {
+  return transcript.lastTokenEndMs ?? transcript.endMs;
 }
 
 function knownSpeaker(
@@ -129,4 +135,11 @@ function rejected(
   reason: SpeakerEndpointNoopRejectionReason,
 ): SpeakerEndpointNoopDecision {
   return { accepted: false, reason };
+}
+
+function lastTokenEnd(transcript: TranscriptResult) {
+  const tokens = transcript.tokenTimings ?? [];
+  return tokens.length === 0
+    ? {}
+    : { lastTokenEndMs: Math.max(...tokens.map((token) => token.endMs)) };
 }
