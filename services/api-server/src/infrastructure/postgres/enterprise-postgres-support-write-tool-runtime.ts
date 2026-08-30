@@ -29,10 +29,12 @@ import { withEnterprisePostgresUnitOfWork } from
   "./enterprise-postgres-unit-of-work.js";
 import { supportWriteDecisionReplay } from
   "./enterprise-postgres-support-write-tool-replay.js";
+import { completeSupportWriteDecisionTurn } from
+  "./enterprise-postgres-support-write-tool-decision.js";
 
 type Runtime = Required<Pick<EnterpriseRepositoryRuntime,
   "prepareSupportWriteConfirmation" | "confirmSupportWriteTool" |
-  "finalizeSupportWriteToolOutbox">>;
+  "completeSupportWriteDecisionTurn" | "finalizeSupportWriteToolOutbox">>;
 type Unit = Parameters<Parameters<typeof withEnterprisePostgresUnitOfWork>[2]>[0];
 type PrepareInput = Parameters<Runtime["prepareSupportWriteConfirmation"]>[0];
 const confirmationTtlMilliseconds = 120_000;
@@ -55,9 +57,10 @@ export function createEnterprisePostgresSupportWriteToolRuntime(
         if (checked.status !== "ready") return checked;
         const now = input.now ?? new Date();
         if (!futureCallback(checked.tool, now)) return { status: "invalid_arguments" as const };
-        const confirmation = enterpriseSupportWriteConfirmation({
+        let confirmation: ReturnType<typeof enterpriseSupportWriteConfirmation>;
+        try { confirmation = enterpriseSupportWriteConfirmation({
           tool: checked.tool, locale: authorized.run.locale,
-        });
+        }); } catch { return { status: "invalid_arguments" as const }; }
         if (checked.execution.status === "awaiting_confirmation" &&
           checked.execution.confirmationChallengeId &&
           checked.execution.confirmationExpiresAt &&
@@ -182,6 +185,10 @@ export function createEnterprisePostgresSupportWriteToolRuntime(
         return { status: "processing" as const,
           executionId: checked.execution.id, outboxEventId: eventId };
       });
+    },
+
+    completeSupportWriteDecisionTurn(input) {
+      return completeSupportWriteDecisionTurn(pool, command, input);
     },
 
     finalizeSupportWriteToolOutbox(input) {

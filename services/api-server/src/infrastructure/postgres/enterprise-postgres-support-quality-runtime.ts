@@ -79,6 +79,7 @@ export function createEnterprisePostgresSupportQualityRuntime(
         const rule = await unit.supportQuality.resolveRule(run.locale);
         if (!rule) return { status: "rule_not_configured" as const };
         const turns = await unit.supportAgents.listTurnsForRun(run.id);
+        const toolExecutions = await unit.supportToolExecutions.list(session.id);
         const sourceHash = enterpriseSupportQualityHash({ session: {
           id: session.id, status: session.status, version: session.version,
           updatedAt: session.updatedAt }, run: { id: run.id, status: run.status,
@@ -86,7 +87,20 @@ export function createEnterprisePostgresSupportQualityRuntime(
           turns: turns.map((turn) => ({ id: turn.id, sequence: turn.sequence,
             status: turn.status, version: turn.version, evidenceHash: turn.evidenceHash,
             output: turn.output, failureCode: turn.failureCode,
-            deliveredAt: turn.deliveredAt })) });
+            deliveredAt: turn.deliveredAt })),
+          toolExecutions: toolExecutions.map((execution) => ({
+            id: execution.id, toolName: execution.toolName,
+            riskLevel: execution.riskLevel, status: execution.status,
+            customerId: execution.customerId,
+            toolDefinitionId: execution.toolDefinitionId,
+            toolRevision: execution.toolRevision,
+            argumentsHash: execution.argumentsHash,
+            requestHash: execution.requestHash,
+            idempotencyKey: execution.idempotencyKey,
+            confirmationTurnId: execution.confirmationTurnId,
+            resultHash: execution.resultHash, failureCode: execution.failureCode,
+            version: execution.version, updatedAt: execution.updatedAt,
+          })) });
         const prior = await unit.supportQuality.findReview(
           session.id, rule.id, sourceHash,
         );
@@ -95,7 +109,8 @@ export function createEnterprisePostgresSupportQualityRuntime(
           session.id}:${rule.id}:${sourceHash}`);
         const evaluated = evaluateEnterpriseSupportQuality({
           tenantId: input.context.tenantId, supportSessionId: session.id,
-          runId: run.id, reviewId, rule, turns, createdAt: analyzedAt,
+          runId: run.id, reviewId, rule, turns, toolExecutions,
+          createdAt: analyzedAt,
         });
         if (!evaluated) return { status: "no_agent_data" as const };
         const counts = findingCounts(evaluated.findings);

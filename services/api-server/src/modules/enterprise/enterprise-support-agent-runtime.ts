@@ -3,6 +3,7 @@ import type {
   EnterpriseSupportAgentRecentTurn,
   EnterpriseSupportAgentTurnOutput,
   EnterpriseSupportAgentWorkerSnapshot,
+  EnterpriseSupportToolDefinitionDto,
   EnterpriseSupportRagResponse,
 } from "@translation/contracts";
 import type { EnterpriseSupportAgentRunRecord,
@@ -40,7 +41,8 @@ export interface EnterpriseSupportAgentRepositoryRuntime {
     | { status: "ready"; run: EnterpriseSupportAgentRunRecord;
         turn: EnterpriseSupportAgentTurnRecord;
         resolution: EnterpriseSupportRagResponse;
-        context: EnterpriseSupportAgentRecentTurn[]; replayed: boolean }
+        context: EnterpriseSupportAgentRecentTurn[];
+        toolDefinitions: EnterpriseSupportToolDefinitionDto[]; replayed: boolean }
     | { status: string }
   >;
   completeSupportAgentTurn?(input: WorkerInput & {
@@ -48,6 +50,9 @@ export interface EnterpriseSupportAgentRepositoryRuntime {
     status: "generated" | "degraded" | "handoff";
     providerFingerprint?: string; failureCode?: string;
     customerText: string; context: EnterpriseSupportAgentRecentTurn[];
+    toolResultEvidence?: { executionId: string; resultHash: string };
+    toolConfirmationEvidence?: { executionId: string; confirmationId: string;
+      arguments: Record<string, unknown> };
   }): Promise<
     | { status: "updated"; run: EnterpriseSupportAgentRunRecord;
         turn: EnterpriseSupportAgentTurnRecord }

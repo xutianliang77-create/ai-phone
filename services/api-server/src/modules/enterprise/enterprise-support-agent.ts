@@ -2,9 +2,12 @@ import { createHash } from "node:crypto";
 import type {
   EnterpriseSupportAgentConversationState,
   EnterpriseSupportAgentRecentTurn,
+  EnterpriseSupportToolDefinitionDto,
   EnterpriseSupportAgentTurnOutput,
 } from "@translation/contracts";
 import type { EnterpriseSupportRagResponse } from "@translation/contracts";
+import { validateEnterpriseSupportToolArguments } from
+  "./enterprise-support-tool-registry.js";
 
 export const enterpriseSupportAgentRunStatuses = [
   "active", "handoff_requested", "ending", "completed", "failed", "cancelled",
@@ -71,6 +74,7 @@ export interface EnterpriseSupportAgentProviderInput {
   recentTurns: EnterpriseSupportAgentRecentTurn[];
   conversationState: EnterpriseSupportAgentConversationState;
   evidence: Extract<EnterpriseSupportRagResponse, { status: "grounded" }>["evidence"];
+  toolDefinitions: EnterpriseSupportToolDefinitionDto[];
 }
 
 export type EnterpriseSupportAgentProviderResult =
@@ -103,18 +107,25 @@ export function compactEnterpriseSupportAgentContext(
 export function validateEnterpriseSupportAgentOutput(
   value: unknown,
   allowedCitations: ReadonlySet<string>,
+  toolDefinitions: readonly EnterpriseSupportToolDefinitionDto[] = [],
 ): EnterpriseSupportAgentTurnOutput | null {
   const output = record(value);
   const keys = output ? Object.keys(output) : [];
   if (!output || keys.sort().join(",") !== [
     "conversationState", "intent", "knowledgeCitations", "riskSignals",
     "spokenText", "toolRequest",
-  ].sort().join(",") || !bounded(output.spokenText, 2_000) ||
+  ].sort().join(",") ||
     !["qualify", "answer", "handoff", "end"].includes(String(output.intent)) ||
-    output.toolRequest !== null || !Array.isArray(output.riskSignals) ||
+    !Array.isArray(output.riskSignals) ||
     !Array.isArray(output.knowledgeCitations) ||
     !["qualifying", "answering", "handoff", "ending"]
       .includes(String(output.conversationState))) return null;
+  const toolRequest = output.toolRequest === null ? null :
+    validateToolRequest(output.toolRequest, toolDefinitions);
+  if (output.toolRequest !== null && !toolRequest) return null;
+  if (toolRequest ? output.spokenText !== "" : !bounded(output.spokenText, 2_000)) {
+    return null;
+  }
   if (output.riskSignals.length > 16 || output.knowledgeCitations.length > 16 ||
     new Set(output.riskSignals).size !== output.riskSignals.length ||
     new Set(output.knowledgeCitations).size !== output.knowledgeCitations.length ||
@@ -123,7 +134,13 @@ export function validateEnterpriseSupportAgentOutput(
       typeof item !== "string" || !allowedCitations.has(item)
     )) return null;
   const citations = [...new Set(output.knowledgeCitations as string[])];
-  if (["answer", "qualify"].includes(String(output.intent)) && citations.length === 0) {
+  if (["answer", "qualify"].includes(String(output.intent)) &&
+    citations.length === 0 && !toolRequest) {
+    return null;
+  }
+  if (toolRequest && (output.intent !== "answer" ||
+    output.conversationState !== "answering" || output.riskSignals.length > 0 ||
+    citations.length > 0)) {
     return null;
   }
   if (output.riskSignals.length > 0 && output.intent !== "handoff") return null;
@@ -131,14 +148,32 @@ export function validateEnterpriseSupportAgentOutput(
     handoff: "handoff", end: "ending" }[String(output.intent)];
   if (output.conversationState !== expectedState) return null;
   return {
-    spokenText: String(output.spokenText).trim(),
+    spokenText: toolRequest ? "" : String(output.spokenText).trim(),
     intent: output.intent as EnterpriseSupportAgentTurnOutput["intent"],
-    toolRequest: null,
+    toolRequest,
     riskSignals: [...new Set(output.riskSignals as string[])],
     knowledgeCitations: citations,
     conversationState: output.conversationState as
       EnterpriseSupportAgentTurnOutput["conversationState"],
   };
+}
+
+function validateToolRequest(value: unknown,
+  definitions: readonly EnterpriseSupportToolDefinitionDto[]) {
+  const request = record(value);
+  if (!request || Object.keys(request).sort().join(",") !==
+    ["arguments", "toolName"].sort().join(",") ||
+    typeof request.toolName !== "string") return null;
+  const definition = definitions.find((item) => item.status === "active" &&
+    item.toolName === request.toolName);
+  if (!definition) return null;
+  try {
+    const prepared = validateEnterpriseSupportToolArguments(
+      definition.inputSchema, request.arguments,
+    );
+    return { toolName: definition.toolName,
+      arguments: { ...prepared.arguments } };
+  } catch { return null; }
 }
 
 export function enterpriseSupportAgentFallback(

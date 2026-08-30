@@ -1,6 +1,6 @@
 # 无界AI企业版详细技术设计
 
-版本：v1.78
+版本：v1.79
 日期：2026-08-31
 状态：统一通讯平台与 PostgreSQL Primary 收敛详细技术方案
 
@@ -44,9 +44,9 @@
 | 企业知识版本 | `ready_for_acceptance` | enterprise `0017`、Knowledge Repository/runtime/API 已实现 source/revision/chunk/review/publish、发布后不可变、四维时间检索和稳定 citation；当前仅有确定性文本检索，本地普通角色验证不代表 embedding Provider、对象存储、恶意文档或 A1/H3 已通过 |
 | 客服 Tenant RAG | `in_progress` | 已将客服活动会话绑定到 tenant-scoped Knowledge Repository，返回逐条 evidence/citation 或确定性无答案转人工指令，并固化不含 query/content 的引用审计；未执行测试、真实 PostgreSQL、召回质量或 Support Agent 生成门禁 |
 | Support Agent | `in_progress` | `0029`、strict JSON schema Provider、API-owned turn runtime、独立 LiveKit Worker cell、上下文压缩、无证据/超时降级和 generation-bound TTS authorize fence 已形成代码候选；未执行自动化、migration/RLS、真实 LLM/ASR/TTS/LiveKit、取消竞态或接管验收 |
-| Tool Registry | `in_progress` | `0030`、不可变工具 revision、固定风险/scope/确认映射、封闭输入 schema、签名 Worker fence、幂等授权记录和 DB insert guard 已形成代码候选；Agent 仍不输出工具请求，只读执行见 CS-006，客户确认/高风险流程属于 CS-007/008，未执行自动化、migration/RLS 或真实 Provider 验收 |
-| 只读 Tool Adapter | `in_progress` | `0031`、order/logistics/inventory 严格 Adapter contract、默认 not_configured runtime、可注入 simulated mock、claim/事务外调用/fenced finalize、结果 hash/稳定回放和客户归属 guard 已形成代码候选；Agent 仍不输出工具请求，未执行自动化、migration/RLS、并发租约或真实 Provider 验收 |
-| 可逆写 Tool Adapter | `in_progress` | `0032`、ticket/callback/note 严格 Adapter contract、120秒客户 turn 确认、AES-GCM Outbox、Cell Worker 重试、Provider 幂等/fingerprint fence 和 execution/outbox 原子终结已形成代码候选；默认 not_configured、mock simulated=true，Agent 仍不输出工具请求，未执行自动化、migration/RLS、崩溃恢复或真实 Provider 验收 |
+| Tool Registry | `in_progress` | `0030`、不可变工具 revision、固定风险/scope/确认映射、封闭输入 schema、签名 Worker fence、幂等授权记录和 DB insert guard 已形成代码候选；Agent 仅可提议当前 active/受支持定义，未执行自动化、migration/RLS 或真实 Provider 验收 |
+| 只读 Tool Adapter | `in_progress` | `0031`、order/logistics/inventory 严格 Adapter contract、tenant HTTPS Provider、claim/事务外调用/fenced finalize、结果 hash/稳定回放、客户归属和确定性话术已接 Agent；默认 not_configured，未执行自动化、migration/RLS、并发租约或真实 Provider 验收 |
+| 可逆写 Tool Adapter | `in_progress` | `0032`、ticket/callback/note 严格 Adapter contract、120秒客户 turn 确认、AES-GCM Outbox、Cell Worker 重试、Provider 幂等/fingerprint fence 和 confirmation turn/execution/outbox 原子编排已接 Agent；默认 not_configured，未执行自动化、migration/RLS、崩溃恢复或真实 Provider 验收 |
 | 高风险人工接管 | `in_progress` | `0033`、forced-RLS/不可变 handoff request、run/session/customer/revision/arguments/risk evidence 绑定、幂等冲突和 run/session 原子 handoff 已形成代码候选；不创建 execution/Outbox/Provider 调用，坐席队列属于 CS-009，未执行自动化、migration/RLS、并发或真实接管验收 |
 | 坐席队列 | `in_progress` | `0034`、queue SLA/lease、forced-RLS exclusive claim、session deferred binding、self-claim/release/renew 和 manager reassign API 已形成代码候选；测试已定义但未运行，真实 migration/RLS/并发/坐席未验收 |
 | 工单与回拨 | `in_progress` | `0035`、forced-RLS callback/followup、claim/session 双 version、确定性幂等业务 ID、AES-GCM Outbox、Worker 同键重试、case/callback 原子收敛和 Web 表单已形成代码候选；默认 Provider not_configured，未执行自动化、migration/RLS、崩溃恢复或真实 Ticket/Callback 验收 |
@@ -1275,20 +1275,24 @@ Repository 在 `REPEATABLE READ READ ONLY` tenant transaction 内并行读取同
 
 ```json
 {
-  "spokenText": "...",
-  "intent": "qualify|answer|handoff|end",
-  "toolRequest": null,
+  "spokenText": "",
+  "intent": "answer",
+  "toolRequest": {
+    "toolName": "order.lookup",
+    "arguments": { "orderId": "ORDER-123" }
+  },
   "riskSignals": [],
-  "knowledgeCitations": ["knowledge_version:block_id"],
-  "conversationState": "qualifying"
+  "knowledgeCitations": [],
+  "conversationState": "answering"
 }
 ```
 
 禁止输出思考过程。`spokenText` 在发送 TTS 前经过品牌、禁语、事实引用和国家告知检查。
 
 `ENT-CS-004` 将该契约实现为 strict `json_schema` 请求，并显式发送 `enable_thinking=false`。解析器要求六字段精确匹配；
-额外 `thinking/reasoning/analysis`、非 `null` 工具请求、无证据的 `answer/qualify`、不属于本轮 evidence 的 citation，
-以及带风险但未 handoff 的输出全部拒绝。Prompt、客户 query、evidence content 和 thinking 不写日志/审计；审计只写
+额外 `thinking/reasoning/analysis`、非 active/不受支持工具、schema 外参数、普通无证据 `answer/qualify`、
+不属于本轮 evidence 的 citation，以及带风险但未 handoff 的输出全部拒绝。工具提议必须 `spokenText=""`，不能在
+执行前声明结果。Prompt、客户 query、evidence content 和 thinking 不写日志/审计；审计只写
 run/turn、generation、result count、knowledge version/block/citation/content hash。
 
 生成分为 prepare/Provider/complete 三段。prepare 在 tenant transaction 中校验 ticket、lease、binding、policy、
@@ -1305,7 +1309,7 @@ cell/route/generation 绑定变化。LLM stream 被中断时向未完成 HTTP �
 
 ### 7.1 Tool Registry 与服务端授权
 
-`ENT-CS-005` 不放开 Agent 的 `toolRequest`，而是先提供一个供后续 Adapter 调用的内部授权网关。
+`ENT-CS-005` 提供 Agent 工具提议必须经过的内部授权网关；`ENT-CS-013` 才允许严格模型输出进入该网关。
 管理 API 用 `support:manage` 创建/发布/退役定义，用 `support:read` 列表；每个路由同时要求 active
 membership 和签名 tenant route document。客户端提交的 risk/scope/confirmation 必须精确符合服务端固定映射：
 
@@ -1355,8 +1359,9 @@ SHA-256 和失败码。CHECK/trigger 固定 read 状态形状，禁止 attempt �
 库存 mock 只绑定单一 tenant。生产组合只注册 unavailable Adapter，因此未配置外部系统时返回
 `not_configured`；mock readiness 和响应固定 `simulated=true`，不得作为真实 Provider 证据。
 
-本任务不改变 Support Agent 六字段输出，`toolRequest` 仍为 `null`；模型到授权/执行的自动编排、
-高风险人工接管和真实 ERP/物流/库存凭据分别留给后续任务与试点配置。
+`ENT-CS-013` 现把 read tool proposal 接到 authorize/execute-read，并在 completed execution、result hash、
+Provider reference 和 customer/session fence 再验证后生成确定性本地化话术；Adapter 结果正文不再交回 LLM。
+`simulated=true` 的结果在话术中显式说明。真实 ERP/物流/库存凭据仍由试点配置提供。
 
 ### 7.3 可逆写确认、密文 Outbox 与一次性副作用
 
@@ -1370,6 +1375,10 @@ payload keyring 任一缺失时返回 `not_configured`，不创建确认挑战�
 `tool_executions`，有效期120秒。`confirm-write` 必须引用同 challenge 和挑战后新产生的同 run/session
 客户 turn，且原始确认文本 SHA-256 必须等于 turn 中不可变 hash；只接受封闭的确认/拒绝短语，含糊
 回复保持 awaiting，不执行。回拨 `scheduledAt` 在挑战和确认时均需晚于服务端当前时间。
+
+结构化 arguments 仍不进入 `tool_executions` 或 audit；但为让客户实际听到并让 TTS authorize 绑定精确文本，
+最小确认复述会作为 `support_agent_turns.spoken_text` 和有界 run context 保存，按客服会话保留策略处理。这不是
+Adapter payload 或外部成功证据；高敏工具继续只能人工接管，不能通过确认话术进入本路径。
 
 确认事务先以 execution version CAS 写入 response/turn/Provider evidence 和 `write_outbox_event_id`，再
 插入唯一 `support.tool.write.requested`；到 Outbox 的原始参数使用 AES-256-GCM，AAD 绑定 tenant/
@@ -1386,9 +1395,9 @@ Cell Worker Publisher 在解密前验证 event/aggregate/tenant、payload hash�
 Outbox、Provider、attempt、结果和终态形状，拒绝确认前入队、证据替换、attempt 跳跃和终态改写；down
 migration 在已经确认或产生外部写证据时失败闭合。
 
-生产 API 和 Worker 默认均使用 unavailable Adapter；可注入 tenant-bound mock 以相同幂等键多次调用时
-只记录一次有效效果并固定 `simulated=true`。这不是工单/CRM/回拨 Provider 的真实成功证据。Support
-Agent 输出仍固定 `toolRequest=null`，自动从模型请求推进确认不属于本批。
+生产 API 和 Worker 默认均使用 unavailable Adapter；显式 HTTPS 配置按 tenant allowlist 启用真实 Adapter，
+两端必须计算相同 fingerprint，写能力还必须声明幂等保证。可注入 tenant-bound mock 以相同幂等键多次调用时
+只记录一次有效效果并固定 `simulated=true`，这不是工单/CRM/回拨 Provider 的真实成功证据。
 
 ### 7.4 高风险接管请求与不可执行边界
 
@@ -1542,6 +1551,46 @@ Material 图标、StatusPanel 和既有响应式/主题 token，管理表单仅�
 
 本批定义 `AC-ENT-0033`。当前未运行 API/RBAC、Repository、migration/down-forward、forced-RLS 双租户、并发、
 浏览器、axe 或人工语义金标矩阵；也未实现自动批处理或语义 Adapter，因此 `ENT-CS-012` 保持 `in_progress`。
+
+### 7.9 Support Agent 工具自动编排
+
+`ENT-CS-013` 在 `/internal/enterprise/support-agent/turns` 内增加 API-owned tool orchestration。prepare transaction
+除 RAG evidence 外还读取当前 tenant active Tool Registry；只向 Provider 暴露固定 read/write allowlist 和 high-risk
+定义，最多32项且规范 JSON 总量不超过64 KiB。动态 strict schema 将每个 `toolName` 与其 input schema 配对；解析器
+再次查 active definition 并重算 arguments hash。模型只能提议，不能获得 Adapter 凭据、tenant/customer/session ID，
+也不能直接调用 Provider。
+
+read proposal 以 `support.tool:<turnId>` 作为稳定幂等键调用 authorize 和 execute-read。完成结果在 complete transaction
+再次核对 execution/run/session/customer/definition/request hash/result hash/simulated，再用封闭 formatter 生成最终
+`spokenText`；普通 LLM 不接触工具结果。not_configured、超时、无 receipt、租约丢失或非法结果统一 handoff/degraded，
+不会播报成功。
+
+reversible proposal 先调用 prepare-write-confirmation；响应只向内部 Worker 返回 execution/challenge/tool/原始 arguments
+和 expiry，Worker 仅存内存；结构化 arguments 不落 execution/audit，客户可听的最小复述作为 Agent turn/context
+按会话保留。下一客户 turn 携带该 pending binding；确认/取消由确定性词表解析。确认时在同一 tenant
+transaction 校验 challenge 后 turn、sequence、customer text hash、未过期、active revision、参数 hash、Adapter readiness
+和未来回拨时间，然后原子完成 Agent turn、写 execution decision、密封 Outbox 并追加审计；任何后段 fence 失败都回滚
+整个 turn/decision。确认话术只说明“正在提交，以系统记录为准”；Provider 完成仍由 Cell Worker receipt 终结。含糊回复
+重放原确认提示，过期、Worker 重启丢失 pending 或配置漂移时 Outbox 为0并转人工/要求重新发起。
+
+high-risk proposal 复用 `ENT-CS-008`：authorize 已原子推进 run/session handoff。turn complete 特例只允许同一 prepared
+turn 保存 handoff 话术并保持既有 handoff 状态；随后 TTS fence 仍拒绝普通回答。不存在 high-risk execution、确认或
+Outbox。
+
+质检 `answer_without_citation` 不把工具证据伪装为 Knowledge citation。分析 source hash 额外绑定 session 的 tool
+execution ID/name/risk/status/version/result hash/confirmation turn；只有 execution idempotency 精确等于
+`support.tool:<turnId>`，或数据库 `confirmationTurnId` 精确等于该 turn 时，确定性工具/确认话术才免于无引用 finding。
+普通无引用 answer/qualify、任意相邻 execution 或跨会话工具仍照常命中。
+
+环境 Adapter 使用 `ENTERPRISE_SUPPORT_TOOL_HTTP_*`。`ENABLED=true` 时要求 base URL、至少16字节 token、Provider ID、
+tenant UUID allowlist，并分别启用 read/write；production 只接受 HTTPS，本地非生产只额外允许 loopback HTTP。写能力
+只有 `IDEMPOTENCY_GUARANTEED=true` 才 ready。请求固定为 schemaVersion/tenant/customer/execution/idempotency/tool/
+arguments，响应限制64 KiB并严格收敛为 completed/failed/retry。API 与 Cell Worker 对非秘密配置计算相同 fingerprint；
+token 轮换不改变在途幂等身份，endpoint/tenant/capability 漂移会让 Outbox 保持 retry。
+
+当前 Contracts、API Server 和 Voice Agent Runtime typecheck 已通过；按功能优先要求未运行自动化、真实 PostgreSQL/RLS、
+LLM structured output、LiveKit、HTTP Provider 或并发/崩溃验收，因此 `ENT-CS-013` 保持 `in_progress`，不代表
+`AC-ENT-0058` 或生产工具链通过。
 
 ## 8. RAG 和知识版本
 

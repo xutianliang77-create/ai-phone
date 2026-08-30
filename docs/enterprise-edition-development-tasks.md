@@ -1,6 +1,6 @@
 # 无界AI企业版开发任务
 
-版本：v1.83
+版本：v1.84
 日期：2026-08-31
 状态：E0 开发中，已对齐统一通讯平台和 PostgreSQL Primary 收敛
 
@@ -114,6 +114,12 @@
   无障碍矩阵按要求未运行，保持 `in_progress`。
 - `ENT-CS-010` 已形成 tenant-scoped workbench activate/read API、claim 与 Agent run cancel 原子栅栏、旧 claim 恢复栅栏、最终字幕 revision 投影、客户/知识/风险/历史聚合和同风格三栏 Web 坐席台。字幕以2.5秒只读轮询，claim 按当前时间续一个 queue lease；乱序快照不覆盖较新 lease。静音、转组、结束、工单和回呼没有安全 Provider/API 时 disabled + reasonCode，不伪造成功。当前只完成 typecheck/构建/静态门禁，按要求未运行自动化、真实 PostgreSQL/RLS、Worker/TTS、LiveKit、浏览器或真实坐席媒体，任务保持 `in_progress`。
 - `ENT-CS-012` 已形成 `0036` forced-RLS 质检规则/复核/发现、`quality:read/manage`、终态会话与 Agent run 双 guard、规则/source hash 精确重放、五类确定性结构发现、最新复核 Dashboard 和同风格证据详情。语义模型未配置时 review 固定 partial/not_configured、错误回答率为 null，不以无引用率替代。当前只完成静态门禁，按要求未运行自动化、真实 PostgreSQL/RLS、浏览器、自动批处理或人工金标质量验收，任务保持 `in_progress`。
+- `ENT-CS-013` 已把 Support Agent strict output 扩展为当前 tenant active tool proposal，并建立 API-owned
+  propose→authorize→read execute/confirmation/high-risk handoff 编排。read 结果经 execution/result hash 重验后用确定性
+  话术输出；reversible confirmation turn、execution decision 和 AES-GCM Outbox 同事务；high-risk 只保留 handoff。
+  API/Cell Worker 共用显式 tenant allowlist HTTPS Adapter fingerprint，未配置时 not_configured，mock 不自动启用。
+  Contracts/API/Voice Runtime typecheck 和静态门禁通过；自动化、真实 PostgreSQL/RLS、LLM/LiveKit/HTTP Provider、
+  并发和崩溃恢复按要求未运行，保持 `in_progress`。
 - `ENT-MKT-001` 已形成共享 Campaign 契约、`0037` 创建幂等/owner FK/状态 trigger、forced-RLS 命令幂等账本、tenant-scoped Repository/runtime、list/read/create/draft patch/aggregate schedule API 和同风格 Web 页面。三类写命令同键同 hash 精确重放；schedule 需要 `campaign:approve`，且未审批、非 approved、无 policyVersion 或无未来 startAt 均失败闭合；成功也不创建 task 或调用 PSTN。当前只完成静态门禁，自动化、真实 PostgreSQL/RLS、浏览器、线索/策略/审批/Scheduler/Provider 均未验收，任务保持 `in_progress`。
 - `ENT-MTG-001` 已增加 `0021` Meeting 聚合约束、Meeting/Participant/Artifact 领域记录与状态机、tenant-scoped PostgreSQL Repository、统一 runtime adapter 和可恢复聚合读取。meeting CAS 只允许 scheduled→provisioning→active→ending→ended 及受控取消/失败；参与者身份强制 user/external XOR、host 与 meeting host 一致，artifact 类型/发布状态受约束；聚合同时返回唯一 communication binding，重启恢复读取 provisioning/active/ending。当前未运行 migration、RLS/并发/恢复测试，任务保持 `in_progress`。
 - `ENT-MTG-004` 已增加 `0024`、单会议活动租约唯一约束、append-only 命令账本、acquire/pause/resume/renew/stop 幂等 CAS、route/entitlement/participant fence、代际发布 identity 和仅屏幕源 LiveKit grant。cell Worker 依据 forced-RLS pending-work 到期回收并通过 outbox 幂等移除旧发布者；Provider 未配置或撤销失败返回 pending，不伪造完成。当前按要求未运行 migration、Repository/API/Worker、并发、forced-RLS 或真实 LiveKit 测试，任务保持 `in_progress`。
@@ -233,7 +239,7 @@ read/reversible/high-risk 与 scope/confirmation 的映射，限制封闭 primit
 重验 Worker ticket/lease/binding/policy/route/generation/run/session。参数只落 SHA-256，幂等冲突拒绝；
 只读只进入 `requested`，可逆写只进入 `awaiting_confirmation`，高风险只返回人工接管且不创建
 execution。数据库复合 FK/insert trigger 同样拒绝未注册、非 active、策略错配或高风险自动执行；
-升级会取消已存非终态旧 execution。Agent `toolRequest` 仍为 `null`；只读执行见 `ENT-CS-006`，
+升级会取消已存非终态旧 execution。Agent 自动编排见 `ENT-CS-013`；只读执行见 `ENT-CS-006`，
 可逆写确认见 `ENT-CS-007`，不可执行高风险接管见 `ENT-CS-008`。测试已定义但按要求未运行，真实 migration/forced-RLS、并发发布、双租户、
 Provider/Adapter 和客户确认均未验收，任务保持 `in_progress`。
 
@@ -241,8 +247,8 @@ Provider/Adapter 和客户确认均未验收，任务保持 `in_progress`。
 `order.lookup/logistics.lookup/inventory.lookup` 严格 Adapter contract、默认 unavailable runtime、
 tenant-bound simulated mock，以及 claim -> 事务外5秒调用 -> fenced finalize。每次执行重验签名 Worker
 ticket、run、session/customer、active revision、schema/arguments hash 和 lease；订单/物流按当前客户
-过滤，库存按 tenant 绑定，完成回放重验结果结构和 SHA-256，旧租约与迟到结果拒绝。Agent
-`toolRequest` 仍为 `null`，真实 ERP/物流/库存 Provider 未配置。测试文件已定义但按要求未运行，真实
+过滤，库存按 tenant 绑定，完成回放重验结果结构和 SHA-256，旧租约与迟到结果拒绝。`ENT-CS-013` 已把
+active read proposal 接到本链，并以确定性话术回传；真实 ERP/物流/库存 Provider 未配置。测试文件已定义但按要求未运行，真实
 migration/forced-RLS、双租户、并发重领、崩溃恢复和 Provider 均未验收，任务保持 `in_progress`。
 
 `ENT-CS-007` 已形成 `0032` 可逆写 confirmation/run/turn/outbox/attempt/result 状态，固定
@@ -250,7 +256,7 @@ migration/forced-RLS、双租户、并发重领、崩溃恢复和 Provider 均�
 hash/sequence 绑定、AES-256-GCM Outbox、Provider idempotency/fingerprint fence、Cell Worker 相同
 幂等键恢复，以及 execution/outbox/audit 原子 finalize。未确认、含糊/过期确认、参数或 revision 变化、
 Adapter/keyring 未配置均不会入队；未知网络结果只重试，确定 receipt 才完成。生产默认 unavailable，
-mock 固定 `simulated=true`；Agent `toolRequest` 仍为 `null`。测试文件已定义但按要求未运行，真实
+mock 固定 `simulated=true`；`ENT-CS-013` 已接入模型提议、确认提示和确认 turn 原子编排。测试文件已定义但按要求未运行，真实
 migration/forced-RLS、双租户、并发确认、崩溃窗口、Provider 端幂等和真实工单/回拨/备注均未验收，
 任务保持 `in_progress`。
 
@@ -292,6 +298,7 @@ claim、断线回收和人工接通均未验收，任务保持 `in_progress`。
 | ENT-CS-010 | 坐席工作台 | CS-009、CS-004 | workbench activate/read、Agent cancel fence、字幕/客户/知识/风险/历史、lease heartbeat、显式媒体降级 | 接管上下文完整；后续 AI 授权失败闭合；物理停播与媒体控制待真实验收 | in_progress |
 | ENT-CS-011 | 工单和回拨 | CS-007 | `0035`、case/callback/followup、密文 outbox、Worker finalize、Web 表单 | 外部未知结果同键重试且不阻塞结束；真实 Provider/RLS/崩溃恢复待验收 | in_progress |
 | ENT-CS-012 | 质检分析 | CS-004、OBS-001 | `0036`、`quality:read/manage`、不可变规则/复核/发现、终态 source hash、五类结构规则、Dashboard/证据详情 | 定位未告知、无引用、风险未转人工、禁用承诺和未送达；语义错误率不伪造 | in_progress |
+| ENT-CS-013 | Support Agent 工具编排 | CS-004/005/006/007/008 | active tool schema、模型提议、服务端授权/执行、确定性 read 话术、write pending confirmation、high-risk handoff、tenant HTTPS Adapter | 模型不能直调；未 receipt 不称成功；确认/重放/崩溃不重复写；配置缺失失败闭合 | in_progress |
 
 ## 6. P1/P2 出海外呼营销
 

@@ -1,6 +1,6 @@
 # 无界AI企业版设计文档索引
 
-版本：v1.72
+版本：v1.73
 日期：2026-08-31
 状态：SaaS 详细设计基线，已纳入统一通讯平台和 PostgreSQL Primary 演进
 
@@ -178,19 +178,19 @@ LiveKit/ASR/TTS、取消/接管竞态和重启恢复未执行，保持 `in_progr
 `ENT-CS-005` 已增加 `0030` forced-RLS Tool Registry、不可变 revision、固定
 risk/scope/confirmation 映射、封闭 primitive schema、签名 Worker fence、参数 hash、幂等授权记录和
 DB insert guard。只读只创建 `requested`，可逆写只创建 `awaiting_confirmation`，高风险只返回人工接管且不创建
-execution；Agent 工具输出仍未开放，只读执行见 `ENT-CS-006`，可逆写确认/密文 Outbox/Worker 收敛见
+execution；Agent 工具输出由 `ENT-CS-013` 严格接入，只读执行见 `ENT-CS-006`，可逆写确认/密文 Outbox/Worker 收敛见
 `ENT-CS-007`，不可执行高风险接管见 `ENT-CS-008`。`ENT-CS-007` 固定 ticket/callback/note，确认绑定挑战后客户
 turn，未知 Provider 结果使用相同幂等键重试，默认 unavailable、mock simulated=true。当前只进入静态门禁，
 migration/RLS、自动化、并发发布、双租户和真实 Provider/Adapter 未执行，保持 `in_progress`。
 `ENT-CS-006` 已增加 `0031` read execution attempt/lease/result 状态、order/logistics/inventory 严格
 Adapter contract、默认 not_configured runtime、tenant-bound simulated mock，以及 transaction claim、
 事务外限时调用和 lease/version/definition/session/customer fenced finalize。完成回放重新校验结果并重算
-hash；Agent `toolRequest` 仍为 `null`，真实 Provider 未配置。当前只通过静态门禁，测试、真实 migration/
+hash；active read proposal 已接入确定性话术，真实 Provider 未配置。当前只通过静态门禁，测试、真实 migration/
 forced-RLS、双租户、并发重领、崩溃恢复和 Provider 验收未执行，保持 `in_progress`。
 `ENT-CS-007` 已增加 `0032`、120秒确认挑战、挑战后客户 turn hash/sequence 绑定、ticket/callback/note
 严格 Adapter、AES-GCM Outbox、Cell Worker 同幂等键恢复和 execution/outbox 原子 finalize。未确认、含糊/
 过期确认、参数/工具版本变化或配置缺失均不入队；未知网络结果不写确定失败。生产默认 unavailable，
-mock 固定 simulated=true，Agent `toolRequest` 仍为 `null`。测试、真实 migration/forced-RLS、并发确认、
+mock 固定 simulated=true，模型提议/确认 turn 已由 `ENT-CS-013` 编排。测试、真实 migration/forced-RLS、并发确认、
 崩溃恢复和真实 Provider 均未执行，保持 `in_progress`。
 `ENT-CS-008` 已增加 `0033` forced-RLS/append-only high-risk handoff request，将退款、付款、身份验证及
 其他 high-risk 请求绑定到 run/session/customer/active revision/arguments hash/risk evidence hash；首次
@@ -216,6 +216,11 @@ PostgreSQL/RLS、崩溃恢复和真实 Ticket/Callback Provider 未验收，保�
 同风格 Web Dashboard/证据详情。语义模型未配置时 review 固定 partial/not_configured、错误回答率为 null，
 不以无引用率冒充语义错误率。当前只通过静态门禁，自动化、真实 PostgreSQL/RLS、浏览器、自动批处理和
 人工金标质量验收未执行，保持 `in_progress`。
+`ENT-CS-013` 已增加当前 tenant active tool strict schema、API-owned propose/authorize/execute 编排、read completed
+结果确定性话术、write pending confirmation 与确认 turn/execution/加密 Outbox 原子事务，以及 high-risk handoff
+TTS 特例。生产 API/Cell Worker 可共用 tenant allowlist HTTPS Adapter，配置/tenant/capability/fingerprint 漂移均
+失败闭合；默认 not_configured 且不启用 mock。Contracts/API/Voice Runtime 静态门禁通过，真实 PostgreSQL/RLS、
+LLM/LiveKit/HTTP Provider、双租户、并发与崩溃恢复未验收，保持 `in_progress`。
 `ENT-MKT-001` 已增加共享 Campaign 契约、`0037` 聚合约束/创建幂等键/owner 复合外键/状态 trigger、
 tenant-scoped PostgreSQL Repository/runtime，以及 list/read/create/draft update/aggregate schedule API；三类写命令
 均携带请求 SHA-256，草稿更新和待调度命令复用 forced-RLS `idempotency_keys` 精确重放。
@@ -310,6 +315,7 @@ PostgreSQL/Salesforce sandbox、Worker 故障注入或浏览器验收，`AC-ENT-
 - [ENT-CS-010 坐席工作台实现与静态门禁证据](./evidence/ent-cs-010-support-workbench-2026-07-19.md)
 - [ENT-CS-011 工单与回拨实现和静态门禁证据](./evidence/ent-cs-011-support-followups-2026-07-19.md)
 - [ENT-CS-012 客服质检分析实现和静态门禁证据](./evidence/ent-cs-012-support-quality-2026-07-19.md)
+- [ENT-CS-013 Support Agent 工具编排代码候选](./evidence/ent-cs-013-support-agent-tool-orchestration-2026-08-31.md)
 - [ENT-MKT-001 Campaign 聚合实现和静态门禁证据](./evidence/ent-mkt-001-campaign-aggregate-2026-07-19.md)
 - [ENT-MKT-002 线索导入实现和静态门禁证据](./evidence/ent-mkt-002-lead-import-2026-07-19.md)
 - [ENT-MKT-003 授权证据实现和静态门禁证据](./evidence/ent-mkt-003-marketing-consent-2026-07-19.md)

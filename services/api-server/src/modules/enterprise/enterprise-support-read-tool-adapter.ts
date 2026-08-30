@@ -161,6 +161,39 @@ export function normalizeEnterpriseSupportReadToolResult(
   return null;
 }
 
+export function enterpriseSupportReadToolSpokenText(input: {
+  locale: string;
+  result: EnterpriseSupportReadToolResult;
+  simulated: boolean;
+}) {
+  const chinese = input.locale.toLowerCase().startsWith("zh");
+  const prefix = input.simulated
+    ? chinese ? "以下是模拟数据。" : "The following is simulated data. " : "";
+  const result = input.result;
+  if (result.kind === "order") {
+    if (!result.found) return `${prefix}${chinese
+      ? `未查询到订单 ${result.orderId}。`
+      : `I could not find order ${result.orderId}.`}`;
+    return `${prefix}${chinese
+      ? `订单 ${result.orderId} 当前状态为 ${result.status}，更新时间 ${result.updatedAt}。`
+      : `Order ${result.orderId} is ${result.status}, updated at ${result.updatedAt}.`}`;
+  }
+  if (result.kind === "logistics") {
+    if (!result.found) return `${prefix}${chinese
+      ? `未查询到物流单 ${result.trackingNumber}。`
+      : `I could not find shipment ${result.trackingNumber}.`}`;
+    return `${prefix}${chinese
+      ? `物流单 ${result.trackingNumber} 当前状态为 ${result.status}，最新进展是${result.lastEvent}，更新时间 ${result.updatedAt}。`
+      : `Shipment ${result.trackingNumber} is ${result.status}. The latest event is ${result.lastEvent}, updated at ${result.updatedAt}.`}`;
+  }
+  if (!result.found) return `${prefix}${chinese
+    ? `未查询到商品 ${result.sku} 的库存。`
+    : `I could not find inventory for ${result.sku}.`}`;
+  return `${prefix}${chinese
+    ? `商品 ${result.sku} 的库存状态为 ${result.availability}，数量 ${result.quantity}，更新时间 ${result.updatedAt}。`
+    : `Inventory for ${result.sku} is ${result.availability}, quantity ${result.quantity}, updated at ${result.updatedAt}.`}`;
+}
+
 function readIdentifier(toolName: EnterpriseSupportReadToolName,
   value: Record<string, unknown>) {
   const key = { "order.lookup": "orderId", "logistics.lookup": "trackingNumber",

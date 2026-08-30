@@ -77,10 +77,15 @@ export type EnterpriseSupportAgentConversationState =
   | "handoff"
   | "ending";
 
+export interface EnterpriseSupportAgentToolRequest {
+  toolName: string;
+  arguments: Record<string, unknown>;
+}
+
 export interface EnterpriseSupportAgentTurnOutput {
   spokenText: string;
   intent: EnterpriseSupportAgentIntent;
-  toolRequest: null;
+  toolRequest: EnterpriseSupportAgentToolRequest | null;
   riskSignals: string[];
   knowledgeCitations: string[];
   conversationState: EnterpriseSupportAgentConversationState;
@@ -123,6 +128,15 @@ export interface EnterpriseSupportAgentTurnRequest {
   idempotencyKey: string;
   customerText: string;
   recentTurns: EnterpriseSupportAgentRecentTurn[];
+  pendingConfirmation?: EnterpriseSupportAgentPendingConfirmation;
+}
+
+export interface EnterpriseSupportAgentPendingConfirmation {
+  executionId: string;
+  confirmationId: string;
+  toolName: "ticket.create" | "callback.schedule" | "note.add";
+  arguments: Record<string, unknown>;
+  expiresAt: string;
 }
 
 export interface EnterpriseSupportAgentTurnResponse {
@@ -133,6 +147,11 @@ export interface EnterpriseSupportAgentTurnResponse {
   output: EnterpriseSupportAgentTurnOutput;
   providerFingerprint?: string;
   reasonCode?: string;
+  toolAction?: {
+    status: "confirmation_required";
+    confirmation: EnterpriseSupportAgentPendingConfirmation;
+    promptHash: string;
+  };
 }
 
 export type EnterpriseSupportToolRiskLevel =

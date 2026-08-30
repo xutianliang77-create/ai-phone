@@ -1,6 +1,6 @@
 # 无界AI企业版详细功能设计
 
-版本：v1.59
+版本：v1.60
 日期：2026-08-31
 状态：SaaS 详细设计基线，已对齐统一通讯平台
 
@@ -553,12 +553,14 @@ LLM 生成企业事实。每次检索只审计维度、结果数和逐条知识�
 
 - AI 接待只在已有 support session、queue、communication binding、活动 entitlement 和当前通讯策略快照均有效时启动；
   客户端不能提交 tenant、cell、route epoch、generation 或模型地址。
-- 每轮只消费服务端返回的当前 published RAG evidence。没有证据时不调用 LLM，而是使用本地化固定话术说明无法确认并转人工；
-  Provider 未配置、超时、不可用或返回非法 JSON 时采用同一显式降级路径，不显示或播报“成功回答”。
+- 每轮只消费服务端返回的当前 published RAG evidence 和当前租户 active、服务端支持的工具定义。没有证据且没有
+  可用工具时不调用 LLM，而是使用本地化固定话术说明无法确认并转人工；有工具时模型也只能提出结构化请求，不能
+  用工具替代企业事实证据。Provider 未配置、超时、不可用或返回非法 JSON 时采用同一显式降级路径。
 - 模型输出必须严格等于 `spokenText/intent/toolRequest/riskSignals/knowledgeCitations/conversationState` 六字段；
-  `thinking/reasoning/analysis` 或任何额外字段均拒绝。`ENT-CS-005` 建立注册和授权边界，
-  `ENT-CS-006` 增加独立只读执行入口；Agent 生成尚未接入该入口，`toolRequest` 仍固定为 `null`。
-- `answer/qualify` 必须至少引用一条本轮 evidence，引用只能是服务端给出的 citation 子集；任何风险信号必须转人工。
+  `thinking/reasoning/analysis` 或任何额外字段均拒绝。普通回答的 `toolRequest=null`；工具提议必须是当前 active
+  definition 的精确 `{toolName,arguments}`，并把 `spokenText` 留空，不能夹带结果声明。
+- 普通 `answer/qualify` 必须至少引用一条本轮 evidence，引用只能是服务端给出的 citation 子集；工具结果话术由
+  服务端从已完成 execution/receipt 确定性生成，不把 Provider 原始正文再交给 LLM。任何风险信号必须转人工。
 - 最近上下文最多12轮、单轮1500字节、整体8000字节，并以 hash、幂等键和递增 sequence 保存；客户输入单独只保存 SHA-256，
   恢复所需的受限上下文按租户数据生命周期处理。
 - 每个 Worker ticket 固定 tenant/session/cell/route epoch/policy/entitlement/generation。回复完成后、TTS 播放前必须再次向 API 授权；
@@ -637,8 +639,23 @@ LLM 只能提出结构化工具请求；Policy Engine 校验租户、客户、�
   表述为工单系统、CRM 或回拨系统已成功。
 
 本阶段仍不包含退款、支付或身份验证 Adapter，也不把“授权/确认记录已创建”、Outbox 已入队、mock
-结果或静态检查表述为外部业务操作已成功。Support Agent 的 `toolRequest` 仍固定为 `null`，模型到
-确认入口的自动编排不在本批开放。
+结果或静态检查表述为外部业务操作已成功。
+
+`ENT-CS-013` 把上述三类工具接入 Support Agent 主链：
+
+- 服务端每轮只向模型提供当前 tenant 最多32个、合计不超过64 KiB 的 active 定义；只读/可逆写还必须属于固定
+  Adapter allowlist。动态 JSON Schema 将 tool name 和 arguments 限制为精确 revision，服务端再次校验。
+- 只读提议使用 turn 派生的稳定幂等键完成 authorize、15秒租约 claim、事务外 Adapter 和 fenced finalize；只有
+  `completed + resultHash + providerReference` 才生成本地化确定性回复，`simulated=true` 必须在话术中披露。
+- 可逆写提议只生成120秒确认挑战。结构化 arguments 不进入 execution/audit，Worker 仅在内存保留待确认参数；
+  客户实际听到的最小复述作为 Agent spoken turn/context 按会话保留策略保存。确认/取消的新客户 turn 以 hash/sequence/
+  challenge 绑定，确认 turn、execution decision 和 AES-GCM Outbox 在同一事务提交。确认话术只说“正在提交”，
+  外部完成仍以异步 receipt/工作台记录为准；含糊回复重新复述，过期或丢失状态转人工且 Outbox 为0。
+- 高风险提议复用既有不可执行 handoff request，先原子停止 AI run/session，再只播放转人工话术；不创建 execution
+  或 Outbox。任何 Adapter/config/schema/fingerprint/fence 异常都失败闭合，不能退化为其他风险等级。
+- 生产 HTTP Adapter 只在显式启用、HTTPS、至少16字节服务凭据、Provider ID 和 tenant UUID allowlist 完整时 ready；
+  API 与 Cell Worker 从同一配置计算 fingerprint。写能力还必须声明 Provider 幂等保证。未配置时仍明确
+  `not_configured`，不会自动启用 mock。
 
 `ENT-CS-008` 把退款、付款、身份验证以及其他登记为 `high_risk` 的请求收敛为不可执行的人工接管请求：
 

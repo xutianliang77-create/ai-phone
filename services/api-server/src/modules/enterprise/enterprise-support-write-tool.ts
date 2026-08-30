@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import type {
+  EnterpriseSupportAgentTurnOutput,
   EnterpriseSupportWriteToolResult,
   EnterpriseSupportWriteToolSummary,
 } from "@translation/contracts";
@@ -131,6 +132,9 @@ export function enterpriseSupportWriteConfirmation(input: {
       ? { kind: "callback", ...input.tool.value }
       : { kind: "note", ...input.tool.value };
   const prompt = confirmationPrompt(summary, input.locale);
+  if (Buffer.byteLength(prompt) > 2_000) {
+    throw new Error("support_write_confirmation_prompt_too_large");
+  }
   return { summary, prompt,
     promptHash: enterpriseSupportAgentRequestHash({ summary, prompt }) };
 }
@@ -144,6 +148,22 @@ export function enterpriseSupportConfirmationDecision(value: unknown) {
   if (new Set(["no", "reject", "cancel", "i do not confirm", "否", "取消",
     "不确认", "不同意"]).has(normalized)) return "rejected" as const;
   return null;
+}
+
+export function enterpriseSupportWriteDecisionOutput(
+  locale: string,
+  decision: "confirmed" | "rejected",
+): EnterpriseSupportAgentTurnOutput {
+  const chinese = locale.toLowerCase().startsWith("zh");
+  const spokenText = decision === "confirmed"
+    ? chinese
+      ? "已收到您的确认，操作正在提交，最终结果以系统记录为准。"
+      : "Your confirmation was received. The request is being submitted; the system record is the final result."
+    : chinese
+      ? "已取消该操作，不会提交到外部系统。"
+      : "The action has been cancelled and will not be submitted to the external system.";
+  return { spokenText, intent: "answer", toolRequest: null, riskSignals: [],
+    knowledgeCitations: [], conversationState: "answering" };
 }
 
 export function normalizeEnterpriseSupportWriteResult(

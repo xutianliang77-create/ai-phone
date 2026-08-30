@@ -22,8 +22,8 @@ import { createEnterprisePostgresSupportQualityRuntime } from
   "./enterprise-postgres-support-quality-runtime.js";
 import { createEnterpriseSupportWriteCommandService } from
   "../../modules/enterprise/enterprise-support-write-command.js";
-import { unavailableEnterpriseSupportWriteAdapter } from
-  "../../modules/enterprise/enterprise-support-write-tool.js";
+import { createEnvironmentEnterpriseSupportToolAdapters } from
+  "../../modules/enterprise/enterprise-support-tool-http-adapter.js";
 import { createEnterprisePostgresCampaignRuntime } from
   "./enterprise-postgres-campaign-runtime.js";
 import { createEnterprisePostgresLeadImportRuntime } from
@@ -65,8 +65,9 @@ export function createEnterprisePostgresBusinessRuntimes(
   pool: EnterpriseTenantPostgresPool,
   dispatchSigningSecret: string,
 ) {
+  const supportToolAdapters = createEnvironmentEnterpriseSupportToolAdapters();
   const supportWriteCommand = createEnterpriseSupportWriteCommandService({
-    adapter: unavailableEnterpriseSupportWriteAdapter(),
+    adapter: supportToolAdapters.write,
   });
   const marketingHandoffProvider =
     createEnvironmentEnterpriseMarketingHandoffProvider();
@@ -80,7 +81,7 @@ export function createEnterprisePostgresBusinessRuntimes(
     ...createEnterprisePostgresSupportQualityRuntime(pool),
     ...createEnterprisePostgresSupportAgentRuntime(pool),
     ...createEnterprisePostgresSupportToolRuntime(pool),
-    ...createEnterprisePostgresSupportReadToolRuntime(pool),
+    ...createEnterprisePostgresSupportReadToolRuntime(pool, supportToolAdapters.read),
     ...createEnterprisePostgresSupportWriteToolRuntime(pool, supportWriteCommand),
     ...createEnterprisePostgresCampaignRuntime(pool),
     ...createEnterprisePostgresLeadImportRuntime(pool),

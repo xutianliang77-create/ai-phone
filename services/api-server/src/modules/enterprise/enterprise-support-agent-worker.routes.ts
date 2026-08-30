@@ -1,14 +1,15 @@
 import { timingSafeEqual } from "node:crypto";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
-import type { EnterpriseSupportAgentTurnOutput,
-  EnterpriseSupportAgentTurnResponse } from "@translation/contracts";
+import type { EnterpriseSupportAgentTurnResponse } from "@translation/contracts";
 import { sendError } from "../../infrastructure/http/errors.js";
 import { enterpriseRequestTraceId } from "./enterprise-auth.js";
 import type { EnterpriseRepositoryRuntime } from "./enterprise-repository-runtime.js";
 import {
-  enterpriseSupportAgentFallback,
   type EnterpriseSupportAgentProvider,
 } from "./enterprise-support-agent.js";
+import { orchestratePendingSupportWriteDecision, recoverSupportAgentToolAction,
+  orchestrateSupportAgentOutput } from
+  "./enterprise-support-agent-tool-orchestrator.js";
 
 export function registerEnterpriseSupportAgentWorkerRoutes(
   app: FastifyInstance,
@@ -58,26 +59,35 @@ export function registerEnterpriseSupportAgentWorkerRoutes(
       customerText: body.customerText, recentTurns: body.recentTurns });
     if (!("run" in prepared)) return workerResult(reply, prepared);
     if (prepared.turn.output) {
-      return reply.send(turnResponse(prepared.turn, prepared.run.generation));
+      const toolAction = await recoverSupportAgentToolAction({ runtime, provider,
+        prepared, customerText: body.customerText, worker: common });
+      return reply.send(turnResponse(prepared.turn, prepared.run.generation,
+        toolAction));
     }
-    const generated: { output: EnterpriseSupportAgentTurnOutput;
-      status: "generated" | "degraded" | "handoff";
-      providerFingerprint?: string; failureCode?: string } =
-      prepared.resolution.status === "no_evidence"
-      ? { output: enterpriseSupportAgentFallback(
-          prepared.run.locale, "support_agent_no_evidence",
-        ), status: "handoff" as const,
-        failureCode: "support_agent_no_evidence" }
-      : await generate(provider, prepared, body.customerText);
+    const pending = body.pendingConfirmation
+      ? await orchestratePendingSupportWriteDecision({ runtime, prepared,
+          pending: body.pendingConfirmation, customerText: body.customerText,
+          worker: common }) : null;
+    if (pending?.completed) {
+      return reply.send(turnResponse(pending.turn, pending.run.generation));
+    }
+    const generated = pending?.generated ??
+      await orchestrateSupportAgentOutput({ runtime, provider,
+        prepared, customerText: body.customerText, worker: common });
     const completed = await runtime.completeSupportAgentTurn({ ...common,
       runId: prepared.run.id, turnId: prepared.turn.id,
       output: generated.output, status: generated.status,
       ...(generated.providerFingerprint
         ? { providerFingerprint: generated.providerFingerprint } : {}),
       ...(generated.failureCode ? { failureCode: generated.failureCode } : {}),
+      ...(generated.toolResultEvidence
+        ? { toolResultEvidence: generated.toolResultEvidence } : {}),
+      ...(generated.toolConfirmationEvidence
+        ? { toolConfirmationEvidence: generated.toolConfirmationEvidence } : {}),
       customerText: body.customerText, context: prepared.context });
     if (!("turn" in completed)) return workerResult(reply, completed);
-    return reply.send(turnResponse(completed.turn, completed.run.generation));
+    return reply.send(turnResponse(completed.turn, completed.run.generation,
+      generated.toolAction));
   });
 
   app.post("/internal/enterprise/support-agent/tts/authorize",
@@ -110,32 +120,12 @@ export function registerEnterpriseSupportAgentWorkerRoutes(
   });
 }
 
-async function generate(
-  provider: EnterpriseSupportAgentProvider,
-  prepared: Extract<Awaited<ReturnType<NonNullable<
-    EnterpriseRepositoryRuntime["prepareSupportAgentTurn"]>>>, { status: "ready" }>,
-  customerText: string,
-) {
-  const result = await provider.generate({ sessionId: prepared.run.supportSessionId,
-    locale: prepared.run.locale, countryCode: prepared.run.countryCode,
-    productCode: prepared.run.productCode, customerText,
-    recentTurns: prepared.context,
-    conversationState: prepared.run.conversationState,
-    evidence: prepared.resolution.status === "grounded"
-      ? prepared.resolution.evidence : [] });
-  if (result.status === "ready") return { output: result.output,
-    status: result.output.intent === "handoff" ? "handoff" as const :
-      "generated" as const, providerFingerprint: result.providerFingerprint };
-  return { output: enterpriseSupportAgentFallback(prepared.run.locale,
-    result.reasonCode), status: "degraded" as const,
-    failureCode: failureCode(result.reasonCode) };
-}
-
 function turnResponse(
   turn: { id: string; sequence: number; status: string;
     output?: EnterpriseSupportAgentTurnResponse["output"];
     providerFingerprint?: string; failureCode?: string },
   generation: number,
+  toolAction?: EnterpriseSupportAgentTurnResponse["toolAction"],
 ): EnterpriseSupportAgentTurnResponse {
   if (!turn.output) throw new Error("Support Agent turn output is missing");
   const status = turn.failureCode ? "degraded" :
@@ -143,7 +133,8 @@ function turnResponse(
   return { status, turnId: turn.id, sequence: turn.sequence, generation,
     output: turn.output,
     ...(turn.providerFingerprint ? { providerFingerprint: turn.providerFingerprint } : {}),
-    ...(turn.failureCode ? { reasonCode: turn.failureCode } : {}) };
+    ...(turn.failureCode ? { reasonCode: turn.failureCode } : {}),
+    ...(toolAction ? { toolAction } : {}) };
 }
 
 function workerRequest(value: unknown) {
@@ -156,18 +147,36 @@ function workerRequest(value: unknown) {
 }
 function turnRequest(value: unknown) {
   const body = record(value);
-  if (!body || !exact(body, ["ticket", "workerCellId", "workerId", "inputTurnId",
-    "idempotencyKey", "customerText", "recentTurns"])) return null;
+  const required = ["ticket", "workerCellId", "workerId", "inputTurnId",
+    "idempotencyKey", "customerText", "recentTurns"];
+  if (!body || !exact(body, body.pendingConfirmation === undefined
+    ? required : [...required, "pendingConfirmation"])) return null;
   const worker = workerRequest({ ticket: body.ticket,
     workerCellId: body.workerCellId, workerId: body.workerId });
   if (!worker || !code(body.inputTurnId, 160) || !code(body.idempotencyKey, 160) ||
     !bounded(body.customerText, 4_000) || !Array.isArray(body.recentTurns) ||
     body.recentTurns.length > 12) return null;
   const recentTurns = body.recentTurns.map(recentTurn);
-  return recentTurns.some((turn) => !turn) ? null : { ...worker,
+  const pending = body.pendingConfirmation === undefined ? undefined
+    : pendingConfirmation(body.pendingConfirmation);
+  return recentTurns.some((turn) => !turn) || body.pendingConfirmation !== undefined &&
+    !pending ? null : { ...worker,
     inputTurnId: body.inputTurnId, idempotencyKey: body.idempotencyKey,
     customerText: body.customerText,
-    recentTurns: recentTurns as Array<{ role: "customer" | "assistant"; text: string }> };
+    recentTurns: recentTurns as Array<{ role: "customer" | "assistant"; text: string }>,
+    ...(pending ? { pendingConfirmation: pending } : {}) };
+}
+function pendingConfirmation(value: unknown) {
+  const item = record(value);
+  if (!item || !exact(item, ["executionId", "confirmationId", "toolName",
+    "arguments", "expiresAt"]) || !uuid(item.executionId) ||
+    !uuid(item.confirmationId) || !["ticket.create", "callback.schedule", "note.add"]
+      .includes(String(item.toolName)) || !timestamp(item.expiresAt)) return null;
+  const args = record(item.arguments);
+  return args && Buffer.byteLength(JSON.stringify(args)) <= 8_192
+    ? { executionId: item.executionId, confirmationId: item.confirmationId,
+        toolName: item.toolName as "ticket.create" | "callback.schedule" | "note.add",
+        arguments: args, expiresAt: item.expiresAt as string } : null;
 }
 function recentTurn(value: unknown) {
   const turn = record(value);
@@ -218,7 +227,7 @@ function exact(value: Record<string, unknown>, keys: string[]) { return Object.k
 function bounded(value: unknown, max: number, min = 1): value is string { return typeof value === "string" && Buffer.byteLength(value.trim()) >= min && Buffer.byteLength(value.trim()) <= max; }
 function code(value: unknown, max: number): value is string { return typeof value === "string" && Buffer.byteLength(value) <= max && /^[A-Za-z0-9][A-Za-z0-9._:-]*$/.test(value); }
 function uuid(value: unknown): value is string { return typeof value === "string" && /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(value); }
-function failureCode(value: string) { return /^[a-z][a-z0-9_]{1,79}$/.test(value) ? value : "support_agent_provider_failed"; }
+function timestamp(value: unknown): value is string { return typeof value === "string" && Number.isFinite(Date.parse(value)) && new Date(value).toISOString() === value; }
 function leaseSeconds() { return envInt("ENTERPRISE_SUPPORT_AGENT_WORKER_LEASE_SECONDS", 45, 15, 300); }
 function ticketTtlSeconds() { return envInt("ENTERPRISE_SUPPORT_AGENT_TICKET_TTL_SECONDS", 300, 30, 300); }
 function envInt(name: string, fallback: number, min: number, max: number) { const value = Number(process.env[name] ?? fallback); return Number.isInteger(value) && value >= min && value <= max ? value : fallback; }

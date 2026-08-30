@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
-import type { EnterpriseSupportAgentTurnRecord } from
-  "./enterprise-support-agent.js";
+import { enterpriseSupportAgentRequestHash,
+  type EnterpriseSupportAgentTurnRecord } from "./enterprise-support-agent.js";
 import type { EnterpriseSupportTranscriptSegment } from
   "./enterprise-support-workbench.js";
 import type { EnterpriseToolExecutionRecord } from "./enterprise-support.js";
@@ -67,7 +67,9 @@ export interface EnterpriseSupportQualityDetail {
 export function evaluateEnterpriseSupportQuality(input: {
   tenantId: string; supportSessionId: string; runId: string; reviewId: string;
   rule: EnterpriseSupportQualityRuleVersionRecord;
-  turns: EnterpriseSupportAgentTurnRecord[]; createdAt: string;
+  turns: EnterpriseSupportAgentTurnRecord[];
+  toolExecutions: EnterpriseToolExecutionRecord[];
+  createdAt: string;
 }) {
   const turns = [...input.turns].sort((left, right) => left.sequence - right.sequence);
   const outputTurns = turns.filter((turn) => turn.output);
@@ -85,7 +87,9 @@ export function evaluateEnterpriseSupportQuality(input: {
     for (const turn of delivered) {
       const output = turn.output!;
       if (["answer", "qualify"].includes(output.intent) &&
-        output.knowledgeCitations.length === 0) {
+        output.knowledgeCitations.length === 0 &&
+        !toolBacked(turn, input.toolExecutions, input.runId,
+          input.supportSessionId)) {
         findings.push(finding(input, turn, "answer_without_citation", "high"));
       }
       if (output.riskSignals.length > 0 && output.intent !== "handoff") {
@@ -97,6 +101,21 @@ export function evaluateEnterpriseSupportQuality(input: {
     }
   }
   return { findings, evaluatedTurnCount: delivered.length, evaluatedRuleCount: 5 };
+}
+
+function toolBacked(turn: EnterpriseSupportAgentTurnRecord,
+  executions: EnterpriseToolExecutionRecord[], runId: string, sessionId: string) {
+  return executions.some((execution) => {
+    if (execution.sessionId !== sessionId || !execution.toolDefinitionId ||
+      execution.toolRevision === undefined || !execution.argumentsHash) return false;
+    const requestHash = enterpriseSupportAgentRequestHash({ runId, sessionId,
+      customerId: execution.customerId,
+      definitionId: execution.toolDefinitionId,
+      revision: execution.toolRevision, argumentsHash: execution.argumentsHash });
+    return execution.requestHash === requestHash && (
+      execution.idempotencyKey === `support.tool:${turn.id}` ||
+      execution.confirmationTurnId === turn.id);
+  });
 }
 
 export function enterpriseSupportQualityHash(value: unknown) {

@@ -1,6 +1,6 @@
 # 无界AI企业版验收任务与计划
 
-版本：v1.76
+版本：v1.77
 日期：2026-08-31
 状态：可执行验收计划，已对齐统一通讯平台和 PostgreSQL Primary 收敛
 
@@ -128,21 +128,28 @@ Mock 只能验证协议，不能替代 iPhone/Web、真实 LiveKit、真实模�
 | AC-ENT-0055 | SaaS 控制面高可用 | `0054` up/down/forward 后 instance/pending 两表 forced RLS、实例/投影/协调 trigger 和 tenant/job 复合 FK 有效；control-plane role 非 owner/superuser/BYPASSRLS，只能以 transaction-local worker ID 读控制引用和更新自身/claim 协调列，tenant role 不能改协调或删除活动 projection。PostgreSQL create/retry 原子保存 tenant/owner/job/Directory/projection 后202，配置缺失在写前503；两个以上同区域、同 commit/image、不同 worker ID 实例并发 `SKIP LOCKED` 每 job 仅一 claim，相同 ID 活动租约拒绝，崩溃到期后 generation+1 重领，旧 instance/work generation 在 Provider 前、Provider 后和 finalize 前均不能激活 tenant。Worker 必须重读真实 tenant job/actor/type/status，投影无 payload且不成为第二状态真值；未知 Provider 结果以稳定 tenant ID 查询/重试。status 只计同候选未过期实例并用数据库时钟计算 backlog，副本不足、候选混跑、超 SLO 非零。控制面全停时新开通/套餐变更不可用且无半条记录，已有 route/Worker ticket 的会议、客服、外呼仍可安全结束、结算和审计；恢复/滚动排空不重复开通、不撤销活动区域会话 |
 | AC-ENT-0056 | 租户限流与共享 Cell 公平 | `0055` up/down/forward 后 Cell policy/state、Cell-Tenant state、tenant request 全部 forced RLS；PUBLIC 无表权限，tenant runtime functions 只接受 current tenant，operator config/status/reconcile 函数只授予独立 admission role，伪造 tenant/cell/operator、直接表写和跨租户读取全部拒绝。每个 Cell 的 translation/voice-agent/marketing-PSTN/screen-share 四能力 policy 与候选 commit/image 一致；Cell/tenant concurrency、rate/window、Cell/tenant queue/TTL 边界逐一验证，实际租户并发为 entitlement 与平台限制较小值。权重1/2/4混合持续请求按 virtual finish 稳定选择，只从满足自身并发/速率的 eligible 请求取 head；大租户满载不头阻塞小租户，小租户在批准SLO内获得准入。队列满有界429/明确重试且无无界内存；同 idempotency/hash 重放同 request，异 hash冲突。Worker Dispatch、Marketing PSTN、Screen Share 在副作用前 active check，heartbeat/accepted续租，结束/取消/撤销/已知失败release，崩溃/未知结果到期后reconcile重算且旧lease不能授权。queued/admitted 阻断Cell迁移；25/50/100阶梯、70%目标利用率120分钟真实混合soak无OOM、重复Provider副作用、重复结算或丢终态 |
 | AC-ENT-0057 | 订阅和欠费生命周期 | `0056` up/down/forward 后 subscription状态约束、provider event/command/decision tenant-first FK、forced RLS、append-only event/decision、account/subscription/command transition trigger和pending-work投影有效；tenant/普通API/PUBLIC不能写入或跨租户读取，rollback遇到past_due/suspended/cancelled失败闭合。内部入口只有配置Provider、至少32字节独立HMAC、固定规范正文和30–900秒时间窗才接收；错签名、错Provider、未知字段、过期/未来、同event异hash和跨租户subscription全部在状态改变前拒绝。payment_failed只允许active→past_due并立即阻断新高成本dispatch；grace_expired只允许past_due→suspended并禁用当前projection；renewed/payment_recovered生成新active subscription/snapshot、旧版本superseded/retired；cancelled关闭账户/取消订阅。逆序或状态不匹配只追加ignored decision。进行中人工接管、已接受Provider、结束/撤销/结算/审计可按冻结entitlement安全排空，旧ticket不能创建新副作用。Cell Worker同时验证coordination和command owner/generation/expiry；在claim、状态写、aggregate、audit、finalize前后kill，最多一个decision/新subscription/ledger aggregate且到期由更高generation恢复。关闭账期按实际category/unit重建ledger count/hash/watermark并经财务抽样一致；活动command阻断Cell迁移。状态API只允许billing:read+当前route且不泄露payload/签名/lease；Provider未配置时internal API和release health 503，不伪造续费成功 |
+| AC-ENT-0058 | Support Agent 工具自动编排 | 模型只收到当前 tenant active 且服务端支持、总量有界的 Tool Registry schema；非 active/未知工具、额外参数、错类型、模型非空预执行 spokenText 均在 authorize 前拒绝，Worker 不持有 Provider SDK/凭据。read 使用 turn 稳定幂等键，authorize/requested、15秒 lease、事务外 Provider、二次 run/session/customer/definition/result hash fence 完整；只有 completed receipt/reference 可生成确定性话术，simulated 必须披露，超时/迟到/配置缺失不称成功。reversible write 只生成120秒挑战；结构化 pending arguments 不落 execution/audit，客户可听的最小确认复述只作为受保留策略约束的 Agent turn/context；确认后客户 turn 的 run/sequence/text hash/challenge/expiry/arguments/revision/future callback 全匹配，Agent turn、execution decision、AES-GCM Outbox 和审计同事务；含糊重问、取消无 Outbox、并发确认或响应丢失最多一个 Outbox，Worker 重启丢 pending 不得执行。high-risk 只创建 handoff request 并原子推进 run/session，execution/Outbox/Provider 调用为0，普通 TTS 被拒绝。HTTP Adapter 生产强制 HTTPS、token、Provider ID、tenant UUID allowlist，API/Cell Worker fingerprint 一致且 write 声明幂等；错 tenant、配置漂移、非法/超大响应、未知网络结果均失败闭合并复用原 key。真实 PostgreSQL forced-RLS 双租户、LLM structured output、LiveKit 中断、HTTP Provider、并发/崩溃/重启矩阵全部通过后方可放行 |
 
 `ENT-CS-005` 当前只形成 `AC-ENT-0026` 的代码候选；自动化、migration up/down/forward、
-forced-RLS 双租户、并发发布、Worker 竞态和真实 Provider/Adapter 均未执行。Agent `toolRequest`
-仍固定为 `null`，不能用授权记录代替外部成功证据。
+forced-RLS 双租户、并发发布、Worker 竞态和真实 Provider/Adapter 均未执行。`ENT-CS-013` 已允许严格
+active tool proposal 进入授权网关，但仍不能用提议或授权记录代替外部成功证据。
 
 `ENT-CS-006` 当前只形成 `AC-ENT-0027` 的 migration、Repository/runtime/API、严格 Adapter contract、
 默认 unavailable 和 simulated mock 代码候选；测试已定义但按要求未运行，真实 PostgreSQL
 up/down/forward、forced-RLS 双租户、并发 claim/reclaim、进程崩溃、Provider 超时和真实 ERP/物流/
-库存链路均未执行，因此任务保持 `in_progress`，不能作为 A0/A2/H2/H3 或生产成功证据。
+库存链路均未执行；虽已接入 Agent 编排，任务仍保持 `in_progress`，不能作为 A0/A2/H2/H3 或生产成功证据。
 
 `ENT-CS-007` 当前只形成 `AC-ENT-0028` 的 `0032`、Repository/runtime/API、确认 turn 证据、AES-GCM
 Outbox、Worker Publisher/finalize、严格 Adapter contract、默认 unavailable 和 tenant-bound simulated
 mock 代码候选；测试已定义但按要求未运行，真实 PostgreSQL up/down/forward、forced-RLS 双租户、
 并发/重复确认、崩溃窗口、key rotation、未知 Provider 结果及真实工单/CRM/回拨链路均未执行，因此
 任务保持 `in_progress`，不能作为 A0/A2/H2/H3 或生产成功证据。
+
+`ENT-CS-013` 当前形成 `AC-ENT-0058` 的 strict tool proposal、服务端三类编排、确定性 read 话术、确认 turn/
+execution/Outbox 原子事务、high-risk handoff TTS 特例、Voice Worker pending confirmation 和 tenant allowlist HTTPS
+Adapter 代码候选。Contracts/API/Voice Runtime typecheck、esbuild、文件与静态安全门禁通过；按要求未运行
+unit/API/migration/forced-RLS、真实 LLM/ASR/TTS/LiveKit、HTTP Provider、双租户、并发确认、响应丢失或崩溃恢复，
+因此 `AC-ENT-0058` 未通过，不能宣称 Support Agent 已在生产完成任何外部工具动作。
 
 `ENT-CS-008` 当前只形成 `AC-ENT-0029` 的 `0033`、Repository/runtime、high-risk 分类、不可变 hash
 证据、幂等请求、run/session 原子状态迁移和 TTS handoff fence 代码候选；测试已定义但按要求未运行，

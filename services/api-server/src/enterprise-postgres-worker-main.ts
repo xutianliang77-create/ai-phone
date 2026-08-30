@@ -31,8 +31,8 @@ import { createEnvironmentGoogleCalendarProvider } from
   "./modules/enterprise/enterprise-google-calendar-provider.js";
 import { createEnterpriseSupportWriteOutboxPublisher } from
   "./modules/enterprise/enterprise-support-write-outbox.js";
-import { unavailableEnterpriseSupportWriteAdapter } from
-  "./modules/enterprise/enterprise-support-write-tool.js";
+import { createEnvironmentEnterpriseSupportToolAdapters } from
+  "./modules/enterprise/enterprise-support-tool-http-adapter.js";
 import { createEnterpriseMarketingCrmOutboxPublisher } from
   "./modules/enterprise/enterprise-marketing-crm-outbox.js";
 import { createEnvironmentEnterpriseSalesforceCrmProvider } from
@@ -69,6 +69,7 @@ export async function runEnterprisePostgresWorkerMain() {
   );
   const controller = new AbortController();
   const auditExportArtifactStore = createEnvironmentAuditExportArtifactStore();
+  const supportToolAdapters = createEnvironmentEnterpriseSupportToolAdapters();
   process.once("SIGINT", () => controller.abort());
   process.once("SIGTERM", () => controller.abort());
   try {
@@ -79,7 +80,7 @@ export async function runEnterprisePostgresWorkerMain() {
       config,
       lifecycleExecutor: createEnvironmentTenantLifecycleExecutor(),
       outboxPublisher: createEnterpriseSupportWriteOutboxPublisher({
-        adapter: unavailableEnterpriseSupportWriteAdapter(),
+        adapter: supportToolAdapters.write,
         fallback: createEnterpriseMarketingCrmOutboxPublisher({
           provider: createEnvironmentEnterpriseSalesforceCrmProvider(),
           fallback: createEnterpriseMeetingCalendarOutboxPublisher({

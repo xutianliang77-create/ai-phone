@@ -1,12 +1,14 @@
 import { randomUUID } from "node:crypto";
 import { DEFAULT_API_CONNECT_OPTIONS, llm } from "@livekit/agents";
-import type { EnterpriseSupportAgentWorkerSnapshot } from "@translation/contracts";
+import type { EnterpriseSupportAgentPendingConfirmation,
+  EnterpriseSupportAgentWorkerSnapshot } from "@translation/contracts";
 import type { SupportAgentApiClient } from "./support-agent-api-client.js";
 import type { SupportAgentTicket } from "./support-agent-ticket.js";
 
 export class ApiBackedSupportAgentLlm extends llm.LLM {
   private readonly authorized: Array<{ runId: string; turnId: string;
     stopAfterPlayout: boolean }> = [];
+  private pendingConfirmation?: EnterpriseSupportAgentPendingConfirmation;
 
   constructor(private readonly input: {
     api: SupportAgentApiClient;
@@ -40,7 +42,10 @@ export class ApiBackedSupportAgentLlm extends llm.LLM {
         recentTurns: history.slice(0, currentIndex).slice(-12).map((item) => ({
           role: item.role === "user" ? "customer" as const : "assistant" as const,
           text: item.text,
-        })), signal });
+        })), ...(this.pendingConfirmation
+          ? { pendingConfirmation: this.pendingConfirmation } : {}), signal });
+      this.pendingConfirmation = response.toolAction?.status ===
+        "confirmation_required" ? response.toolAction.confirmation : undefined;
       const permit = await this.input.api.authorizeTts({ ticket: this.input.ticket(),
         workerId: this.input.workerId, runId: this.input.snapshot.runId,
         turnId: response.turnId, signal });

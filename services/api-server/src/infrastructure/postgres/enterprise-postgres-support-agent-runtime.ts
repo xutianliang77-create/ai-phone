@@ -4,7 +4,6 @@ import type { EnterpriseRepositoryRuntime } from
 import {
   compactEnterpriseSupportAgentContext,
   enterpriseSupportAgentRequestHash,
-  validateEnterpriseSupportAgentOutput,
 } from "../../modules/enterprise/enterprise-support-agent.js";
 import { enterpriseSupportRagResponse } from
   "../../modules/enterprise/enterprise-support-rag.js";
@@ -19,6 +18,9 @@ import type { EnterpriseTenantPostgresPool } from
   "./enterprise-postgres-tenant-session.js";
 import { withEnterprisePostgresUnitOfWork } from
   "./enterprise-postgres-unit-of-work.js";
+import { listSupportAgentToolDefinitions,
+  validateSupportAgentCompletionOutput } from
+  "./enterprise-postgres-support-agent-tool-output.js";
 import {
   auditSupportAgent,
   auditSupportAgentRag,
@@ -115,7 +117,6 @@ export function createEnterprisePostgresSupportAgentRuntime(
         } };
       });
     },
-
     acceptSupportAgentWorker(input) {
       return withSupportAgentWorker(pool, input, async (unit, payload) => {
         const accepted = await unit.workerDispatches.accept({ payload,
@@ -127,14 +128,12 @@ export function createEnterprisePostgresSupportAgentRuntime(
         return { status: "accepted" as const, snapshot: snapshot(authorized.run) };
       });
     },
-
     heartbeatSupportAgentWorker(input) {
       return withSupportAgentWorker(pool, input, (unit, payload) =>
         unit.workerDispatches.heartbeat({ payload,
           workerCellId: input.workerCellId, workerId: input.workerId,
           leaseSeconds: input.leaseSeconds, now: input.now }));
     },
-
     refreshSupportAgentWorker(input) {
       return withSupportAgentWorker(pool, input, async (unit, payload) => {
         const refreshed = await unit.workerDispatches.refresh({ payload,
@@ -149,7 +148,6 @@ export function createEnterprisePostgresSupportAgentRuntime(
             signingSecret: secret }), expiresAt: next.expiresAt };
       });
     },
-
     prepareSupportAgentTurn(input) {
       return withSupportAgentWorker(pool, input, async (unit, payload) => {
         const authorized = await authorizeSupportAgentWorker(unit, payload, input);
@@ -178,11 +176,12 @@ export function createEnterprisePostgresSupportAgentRuntime(
           actorUserId: "system:enterprise-support-agent",
           traceId: input.traceId,
         }), run.supportSessionId, resolution, now);
+        const toolDefinitions = await listSupportAgentToolDefinitions(unit);
         return { status: "ready" as const, run, turn: turn.turn,
-          resolution, context: [...context], replayed: turn.status === "replayed" };
+          resolution, context: [...context], toolDefinitions,
+          replayed: turn.status === "replayed" };
       });
     },
-
     completeSupportAgentTurn(input) {
       return withSupportAgentWorker(pool, input, async (unit, payload) => {
         const authorized = await authorizeSupportAgentWorker(unit, payload, input);
@@ -197,15 +196,19 @@ export function createEnterprisePostgresSupportAgentRuntime(
           locale: authorized.run.locale, results,
         });
         const allowed = new Set(resolution.evidence.map((item) => item.citation));
-        const output = validateEnterpriseSupportAgentOutput(input.output, allowed);
+        const output = await validateSupportAgentCompletionOutput(
+          unit, authorized.run, input, allowed, now,
+        );
         const validStatus = input.status === "generated"
           ? output?.intent !== "handoff"
           : output?.intent === "handoff";
         const turn = await unit.supportAgents.findTurn(input.turnId, true);
-        if (!output || !validStatus || !turn || turn.evidenceHash !==
+        const toolBacked = Boolean(input.toolResultEvidence ||
+          input.toolConfirmationEvidence);
+        if (!output || !validStatus || !turn || (!toolBacked && turn.evidenceHash !==
           enterpriseSupportAgentRequestHash(resolution.evidence.map((item) => ({
             citation: item.citation, contentHash: item.contentHash,
-          })))) return { status: "output_rejected" };
+          }))))) return { status: "output_rejected" };
         const context = compactEnterpriseSupportAgentContext([
           ...input.context, { role: "customer", text: input.customerText },
           { role: "assistant", text: output.spokenText },
@@ -224,20 +227,22 @@ export function createEnterprisePostgresSupportAgentRuntime(
           const session = await unit.support.findSession(
             authorized.run.supportSessionId, true,
           );
-          if (!session || session.status !== "ai_active") {
+          if (!session || !["ai_active", "handoff_requested"]
+            .includes(session.status)) {
             throw new Error("Support Agent handoff lost session fence");
           }
-          const transitioned = await unit.support.transition({ sessionId: session.id,
-            status: "handoff_requested", expectedVersion: session.version,
-            occurredAt: now.toISOString() });
-          if (transitioned.status !== "updated") {
-            throw new Error("Support Agent handoff transition failed");
+          if (session.status === "ai_active") {
+            const transitioned = await unit.support.transition({ sessionId: session.id,
+              status: "handoff_requested", expectedVersion: session.version,
+              occurredAt: now.toISOString() });
+            if (transitioned.status !== "updated") {
+              throw new Error("Support Agent handoff transition failed");
+            }
           }
         }
         return completed;
       });
     },
-
     authorizeSupportAgentTts(input) {
       return withSupportAgentWorker(pool, input, async (unit, payload) => {
         const authorized = await authorizeSupportAgentWorker(unit, payload, input);

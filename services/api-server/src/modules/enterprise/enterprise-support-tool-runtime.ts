@@ -10,6 +10,9 @@ import type { PreparedEnterpriseSupportToolDefinition } from
 import type { EnterpriseTenantContext } from "./enterprise-tenant-context.js";
 import type { EnterpriseSupportWritePublishReceipt } from
   "./enterprise-support-write-tool.js";
+import type { EnterpriseSupportAgentRecentTurn } from "@translation/contracts";
+import type { EnterpriseSupportAgentRunRecord,
+  EnterpriseSupportAgentTurnRecord } from "./enterprise-support-agent.js";
 
 type StorageRequired = { status: "storage_required" };
 type WorkerInput = {
@@ -102,6 +105,25 @@ export interface EnterpriseSupportToolRepositoryRuntime {
     arguments: Record<string, unknown>;
   }): Promise<
     | EnterpriseSupportWriteDecisionResponse
+    | { status: "confirmation_unrecognized" | "confirmation_expired" |
+        "not_configured" | "not_found" | "invalid_arguments" |
+        "unsupported_tool" | "definition_not_active" |
+        "execution_mismatch" | "run_mismatch" | "conflict";
+        reasonCode?: string }
+    | { status: string }
+  >;
+  completeSupportWriteDecisionTurn?(input: WorkerInput & {
+    runId: string;
+    turnId: string;
+    executionId: string;
+    confirmationId: string;
+    customerText: string;
+    arguments: Record<string, unknown>;
+    context: EnterpriseSupportAgentRecentTurn[];
+  }): Promise<
+    | { status: "updated"; run: EnterpriseSupportAgentRunRecord;
+        turn: EnterpriseSupportAgentTurnRecord;
+        decision: "processing" | "rejected" }
     | { status: "confirmation_unrecognized" | "confirmation_expired" |
         "not_configured" | "not_found" | "invalid_arguments" |
         "unsupported_tool" | "definition_not_active" |

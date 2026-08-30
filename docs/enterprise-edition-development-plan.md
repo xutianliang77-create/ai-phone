@@ -1,6 +1,6 @@
 # 无界AI企业版开发方案与计划
 
-版本：v1.79
+版本：v1.80
 日期：2026-08-31
 状态：E0 执行计划，已对齐统一通讯平台和 PostgreSQL Primary 收敛
 
@@ -91,6 +91,11 @@
 - `ENT-CS-010` 已形成 workbench activate/read API、claim 时 Agent run cancel、旧 claim 恢复栅栏、tenant-scoped 最终字幕、客户/知识/风险/历史聚合、expected-version lease heartbeat 和三栏 Web 坐席台。没有安全 Provider/API 的静音、转组、结束、工单和回呼固定 not_ready。当前只完成静态门禁；自动化、真实 PostgreSQL/RLS、Worker/TTS、LiveKit 300ms停播、浏览器和真实坐席媒体未验收，保持 `in_progress`。
 - `ENT-CS-011` 已形成 `0035` callback/followup forced-RLS schema、claim/session 双版本命令、确定性幂等业务 ID、密文 Outbox、Cell Worker 同键重试与 case/callback 最终投影，并在三栏坐席台增加 readiness 驱动的工单/回拨表单。默认 Adapter/keyring 未配置时不落数据且控件 not_ready；simulated 明示非真实效果。当前只完成静态门禁，自动化、真实 PostgreSQL/RLS、并发/崩溃恢复、浏览器和真实 Ticket/Callback Provider 未验收，保持 `in_progress`。
 - `ENT-CS-012` 已形成 `0036` forced-RLS 规则/复核/发现、独立 `quality:read/manage`、终态会话 source hash、五类确定性结构规则、最新复核 Dashboard 和证据详情代码候选。语义模型未配置时 review 固定 partial/not_configured、错误回答率为空。当前只完成静态门禁，自动化、真实 PostgreSQL/RLS、浏览器和语义质量金标未验收，保持 `in_progress`。
+- `ENT-CS-013` 已把当前 tenant active Tool Registry 接入 Support Agent strict schema；模型仅提议，API 负责
+  authorize/read execute/write confirmation/high-risk handoff。read completed result 用确定性话术；write confirmation
+  turn、execution decision 与加密 Outbox 同事务；API/Cell Worker 使用相同 tenant allowlist HTTPS Adapter fingerprint。
+  默认未配置、mock 不自动启用。Contracts/API/Voice Runtime typecheck 和静态门禁通过；真实 PostgreSQL/RLS、
+  LLM/LiveKit/HTTP Provider、并发与崩溃恢复按要求延后，保持 `in_progress`。
 - `ENT-MKT-001` 已形成 `0037`、共享契约、创建与变更命令幂等、tenant Repository/runtime/API 和 Web Campaign 草稿/列表代码候选。聚合 schedule 要求 approve scope、幂等键、CAS、approved 状态/审批、policyVersion 和未来 startAt；不生成 call task、usage hold、Outbox 或 PSTN 请求。当前只完成静态门禁，真实 PostgreSQL/RLS、浏览器和 MKT-002..008 依赖均未验收，保持 `in_progress`。
 - `ENT-MKT-002` 已形成 `0038`、CSV/API 规范化、libphonenumber E.164、AES-GCM 号码密文、tenant HMAC 去重、
   可回滚批次、逐行报告、PostgreSQL Repository/runtime/API 和同风格 Campaign 线索面板代码候选。整批身份冲突零
@@ -287,9 +292,10 @@ CORE-001/002 验收
    fenced finalize、严格结果/hash 回放和 customer ownership guard；`ENT-CS-007` 已形成 ticket/callback/note
    严格 contract、120秒客户 turn 确认、AES-GCM Outbox、Provider 幂等/fingerprint fence、Cell Worker
    恢复与 execution/outbox 原子 finalize 代码候选；`ENT-CS-008` 已形成不可执行 high-risk handoff
-   request、run/session/customer/revision/risk evidence 绑定、幂等重放和 run/session 原子接管代码候选。
-   四项均待恢复自动化、真实 PostgreSQL/RLS/并发与崩溃恢复验收；真实 Provider 仍待 CS-006/007
-   配置。`ENT-CS-009` 已形成 queue SLA/lease、exclusive claim、self-release/renew 和 manager reassign
+   request、run/session/customer/revision/risk evidence 绑定、幂等重放和 run/session 原子接管代码候选；
+   `ENT-CS-013` 已形成模型提议到三类 Policy 的 API-owned 编排、确定性 read 话术、原子 write confirmation turn
+   和 tenant allowlist HTTPS Adapter。五项均待恢复自动化、真实 PostgreSQL/RLS/并发与崩溃恢复验收；真实
+   Provider 仍待 CS-006/007/013 配置。`ENT-CS-009` 已形成 queue SLA/lease、exclusive claim、self-release/renew 和 manager reassign
    代码候选，待恢复真实 PostgreSQL/RLS/并发与断线回收验收。
 6. `ENT-CS-010` 已形成客服坐席工作台、字幕快照、客户/知识/风险上下文、Agent cancel fence 和 lease
    heartbeat 代码候选；下一阶段补 Worker interrupt/ack、真实 LiveKit 媒体控制、浏览器与 AC-ENT-0031 验收。
@@ -451,12 +457,12 @@ CORE-001/002 验收
 E0 基线完成后已形成 `ENT-MTG-001/002` 代码候选；未通过真实 PostgreSQL、tenant/RBAC/token 攻击、Provider、浏览器与真机门禁，仍不能计为 E1 完成。
 
 当前进展：`ENT-DATA-001` 已完成五十六段 schema 代码，等待 staging PostgreSQL migrate/restore/PITR
-证据；`ENT-CS-001..012` 已分别形成客服领域/恢复 runtime、统一入站 Adapter、tenant RAG、Support Agent、
+证据；`ENT-CS-001..013` 已分别形成客服领域/恢复 runtime、统一入站 Adapter、tenant RAG、Support Agent、
 Tool Registry 授权边界、只读 Adapter 租约执行、可逆写确认/密文 Outbox、不可执行高风险接管和坐席
 queue/SLA/exclusive claim、坐席工作台、工单/回拨可靠后续动作和质检分析代码候选；`ENT-MKT-001..005` 已形成
 Campaign 聚合、线索导入、授权证据、禁拨与国家策略和同风格 Web 页面代码候选。因测试暂缓、migration/真实恢复、
 真实 Provider、浏览器或真机门禁未完成，`ENT-OBS-001`、`ENT-UI-004/008/009/010/011/012/013`、
-`ENT-MTG-001..013`、`ENT-CS-001..012` 和 `ENT-MKT-001..007` 继续保持
+`ENT-MTG-001..013`、`ENT-CS-001..013` 和 `ENT-MKT-001..007` 继续保持
 `in_progress`。恢复测试时除既有 CS-001..008 矩阵外，还必须执行 CS-009..012/MKT-001 的 up/down/forward、forced-RLS
 双租户、角色×操作、同会话双 claim、lease 到期、release/reassign、后续动作幂等与 Provider 重试、崩溃回滚
 和重启恢复矩阵。

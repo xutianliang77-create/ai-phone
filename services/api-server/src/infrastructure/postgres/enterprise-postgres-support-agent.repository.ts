@@ -117,7 +117,9 @@ export class EnterpriseSupportAgentPostgresRepository {
     const run = await this.findRun(input.runId, true);
     const turn = await this.findTurn(input.turnId, true);
     if (!run || !turn || turn.runId !== run.id) return { status: "not_found" as const };
-    if (turn.status !== "prepared" || run.status !== "active") {
+    const alreadyHandoff = run.status === "handoff_requested" &&
+      input.status === "handoff" && input.output.intent === "handoff";
+    if (turn.status !== "prepared" || run.status !== "active" && !alreadyHandoff) {
       return { status: "conflict" as const };
     }
     const completedAt = timestamp(input.completedAt);
@@ -141,11 +143,11 @@ export class EnterpriseSupportAgentPostgresRepository {
         conversation_state = $4, context_document = $5::jsonb,
         context_hash = $6, last_turn_sequence = $7, updated_at = $8,
         version = version + 1
-      WHERE tenant_id = $1 AND id = $2 AND version = $9 AND status = 'active'
+      WHERE tenant_id = $1 AND id = $2 AND version = $9 AND status = $10
       RETURNING *
     `, [run.id, runStatus, output.conversationState,
       JSON.stringify(input.contextDocument), hash(input.contextHash), turn.sequence,
-      completedAt, run.version]);
+      completedAt, run.version, run.status]);
     if (!updatedRun.rows[0]) throw new Error("Support Agent run update lost turn fence");
     return { status: "updated" as const, run: mapRun(updatedRun.rows[0]),
       turn: mapTurn(updatedTurn.rows[0]) };

@@ -1,6 +1,6 @@
 # 无界AI企业版技术架构
 
-版本：v1.61
+版本：v1.62
 日期：2026-08-31
 状态：SaaS 详细架构基线，已对齐统一通讯平台和 PostgreSQL Primary
 
@@ -708,8 +708,9 @@ OpenAI-compatible Provider，并在回写前再次执行相同 fence。
 
 `enterprise.support_agent_runs/turns` 是可恢复状态真值，均使用 tenant-first FK、forced RLS、幂等/hash、递增 sequence
 和单向状态 trigger。turn 不保存独立原始客户文本，只保存 SHA-256；run 保存最多12轮的有界恢复上下文。模型输出使用
-strict JSON Schema，禁用 thinking，拒绝额外字段、引用越界、无引用回答和风险未转人工。无证据、Provider 未配置、超时、
-不可用或非法输出均生成确定性 handoff/degraded 结果。
+strict JSON Schema，禁用 thinking，拒绝额外字段、引用越界、无证据普通回答和风险未转人工。无证据但存在 active
+工具时只允许模型提出结构化 tool request；无证据且无工具、Provider 未配置、超时、不可用或非法输出均生成确定性
+handoff/degraded 结果。
 
 TTS 不把“生成成功”当作播放许可。Worker 在把 `spokenText` 交给 TTS 前调用独立 authorize endpoint，API 再次读取当前
 dispatch/policy/generation；只有匹配的 run/turn/text 获得许可。短期 ticket 在到期前轮换并复核 tenant/session/cell/route/
@@ -747,13 +748,27 @@ dispatch、binding、policy、route epoch、generation 和 run fence。客户与
 定义、风险与确认策略错配及高风险自动执行，因此跳过 HTTP runtime 也不能将非法工具记录推进为
 可执行状态。
 
+#### 8.5.1 Agent 工具编排与 HTTPS Provider
+
+`ENT-CS-013` 将模型提议、授权和执行留在 API-owned generation 内。模型每轮只看到当前 tenant 中 active、服务端
+Adapter 支持且总 schema 不超过64 KiB 的定义；tool proposal 的 `spokenText` 必须为空，不能在执行前进入 TTS。
+API 使用 turn 派生幂等键调用既有授权网关：read 完成后只从严格结果生成确定性话术；reversible write 先把确认挑战
+回给 Worker，下一客户 turn 的确认/取消与 execution decision、加密 Outbox 同事务；high-risk 先推进 run/session
+handoff，再只允许 handoff TTS。Worker 不加载 Provider SDK，也不直接调用工具。
+
+生产 Adapter 是 tenant allowlist 的 HTTP 边界。只有显式启用、HTTPS、服务 token、Provider ID 和 tenant UUID 列表
+完整时 ready；本地非生产只允许 loopback HTTP。请求固定发送 tenant/customer/execution/idempotency/tool/arguments，
+响应必须是封闭的 completed/failed/retry 结构。API 与 Cell Worker 对 base URL、Provider ID、tenant allowlist 和
+read/write 能力计算同一 fingerprint；写能力还要求 `idempotencyGuaranteed=true`，漂移时 Outbox 只重试不误判完成。
+
 ### 8.6 只读 Tool Adapter 执行单元
 
 `ENT-CS-006` 的只读路径在 tenant transaction 中 claim `requested` execution，事务外调用
 tenant-bound Adapter，再在新的 tenant transaction 中复核 ticket、run、session/customer、active
 definition、lease 和 version 后 finalize。`0031` 保存 attempt、lease、Provider fingerprint、
 `simulated`、有界结果与 hash，并由 trigger 拒绝过期完成、租约篡改、终态改写和迟到结果。生产
-runtime 默认未配置；可注入 mock 只用于协议和客户归属验证，不伪造真实外部系统成功。高风险接管
+runtime 默认未配置；显式 HTTP 配置可接真实 Provider，可注入 mock 只用于协议和客户归属验证且必须披露
+simulated。高风险接管
 由 `ENT-CS-008` 的独立不可执行请求收敛。
 
 ### 8.7 可逆写 Tool Adapter 执行单元
@@ -767,8 +782,8 @@ Cell Worker 复用现有 cell discovery、tenant forced-RLS claim 和恢复循�
 调用 tenant-bound Adapter。Provider readiness 必须声明 `idempotencyGuaranteed=true`，且 fingerprint/
 `simulated` 必须与确认时完全一致。网络超时、异常或缺失 receipt 只用相同幂等键回退重试；完成或带
 reference 的确定失败才在同一 tenant transaction 中递增 attempt、写 execution 终态、发布 Outbox
-并追加审计。默认 API/Worker Adapter 均 unavailable；没有真实 Provider 配置时不会进入确认或产生
-伪业务对象。
+并追加审计。默认 API/Worker Adapter 均 unavailable；只有两者加载同一 HTTPS 配置与 fingerprint 才能完成。
+没有真实 Provider 配置时不会进入确认或产生伪业务对象。
 
 ### 8.8 高风险人工接管单元
 

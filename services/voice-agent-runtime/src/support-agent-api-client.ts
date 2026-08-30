@@ -1,5 +1,6 @@
 import type {
   EnterpriseSupportAgentRecentTurn,
+  EnterpriseSupportAgentPendingConfirmation,
   EnterpriseSupportAgentTurnResponse,
   EnterpriseSupportAgentWorkerSnapshot,
 } from "@translation/contracts";
@@ -30,12 +31,15 @@ export class SupportAgentApiClient {
     ticket: SupportAgentTicket; workerId: string; inputTurnId: string;
     idempotencyKey: string; customerText: string;
     recentTurns: EnterpriseSupportAgentRecentTurn[];
+    pendingConfirmation?: EnterpriseSupportAgentPendingConfirmation;
     signal?: AbortSignal;
   }) {
     return this.post<EnterpriseSupportAgentTurnResponse>("turns", {
       ...this.worker(input.ticket, input.workerId),
       inputTurnId: input.inputTurnId, idempotencyKey: input.idempotencyKey,
       customerText: input.customerText, recentTurns: input.recentTurns,
+      ...(input.pendingConfirmation
+        ? { pendingConfirmation: input.pendingConfirmation } : {}),
     }, input.signal);
   }
   authorizeTts(input: { ticket: SupportAgentTicket; workerId: string;
