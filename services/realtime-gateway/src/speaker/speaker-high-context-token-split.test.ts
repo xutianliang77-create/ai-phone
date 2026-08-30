@@ -109,6 +109,60 @@ describe("high-context Sortformer token split", () => {
     });
   });
 
+  it("keeps safe parent splits when another crossing parent has no safe token boundary", () => {
+    const mixed = segments();
+    mixed[0] = {
+      ...mixed[0],
+      tokenTimings: undefined,
+      rawTokenTimings: tokens("甲乙丙丁戊己庚辛", 1_000).map((item) => ({
+        ...item,
+        startMs: 1_000 + Math.round((item.startMs - 1_000) * 0.4),
+        endMs: 1_000 + Math.round((item.endMs - 1_000) * 0.4),
+      })),
+    };
+    mixed[1] = {
+      ...mixed[1],
+      tokenTimings: [
+        {
+          text: "戊",
+          startMs: 1_800,
+          endMs: 2_300,
+          characterStart: 0,
+          characterEnd: 1,
+        },
+        {
+          text: "己",
+          startMs: 2_500,
+          endMs: 2_900,
+          characterStart: 1,
+          characterEnd: 2,
+        },
+      ],
+    };
+    const returning = revision();
+    returning.spans = [
+      { speakerId: "S01", startMs: 0, endMs: 600, confidence: 0.9 },
+      { speakerId: "S02", startMs: 600, endMs: 1_400, confidence: 0.9 },
+      { speakerId: "S01", startMs: 1_400, endMs: 2_000, confidence: 0.9 },
+    ];
+
+    const plan = planHighContextTokenSplits(returning, mixed);
+
+    expect(plan).toMatchObject({
+      accepted: true,
+      parentSegmentIds: ["seg_2"],
+      skippedParents: [{
+        segmentId: "seg_1",
+        reason: "no_safe_token_boundary",
+      }],
+    });
+    if (!plan.accepted) return;
+    expect(plan.transcripts.map((item) => item.segmentId)).toEqual([
+      "seg_2",
+      "seg_2:speaker:1",
+    ]);
+  });
+
   it("accepts a speaker change across the listening silence window", () => {
     const pausedRevision = revision();
     pausedRevision.spans[1] = {

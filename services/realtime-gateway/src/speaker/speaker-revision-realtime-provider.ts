@@ -24,6 +24,8 @@ import {
   assertCompleteSplitDelivery,
   protectedTermsFor,
 } from "./speaker-high-context-delivery.js";
+import { recordSkippedParentDiagnostics } from
+  "./speaker-revision-skip-diagnostics.js";
 
 export type SpeakerRevisionMode = "shadow" | "apply";
 
@@ -43,6 +45,8 @@ interface RevisionSessionState {
     splitParentCount: number;
     splitChildCount: number;
     splitRejectedCount: number;
+    splitSkippedParentCount: number;
+    splitSkippedReasonCounts: Record<string, number>;
     cardinalityMismatchCount: number;
     lastLatencyMs?: number;
   };
@@ -88,6 +92,8 @@ export class SpeakerRevisionRealtimeProvider implements RealtimeProvider {
         splitParentCount: 0,
         splitChildCount: 0,
         splitRejectedCount: 0,
+        splitSkippedParentCount: 0,
+        splitSkippedReasonCounts: {},
         cardinalityMismatchCount: 0,
       },
     });
@@ -155,6 +161,8 @@ export class SpeakerRevisionRealtimeProvider implements RealtimeProvider {
           parentCount: plan.parentSegmentIds.length,
           childCount: plan.transcripts.length,
           speakerUpdateCount: plan.speakerUpdates.length,
+          skippedParentCount: plan.skippedParents.length,
+          skippedReasons: plan.skippedParents.map((item) => item.reason),
           latencyMs: revision.latencyMs,
         }, "Speaker-first high-context segmentation completed");
         if (!plan.accepted) {
@@ -172,6 +180,7 @@ export class SpeakerRevisionRealtimeProvider implements RealtimeProvider {
           state.diagnostics.acceptedCount += 1;
           state.diagnostics.splitParentCount += plan.parentSegmentIds.length;
           state.diagnostics.splitChildCount += plan.transcripts.length;
+          recordSkippedParentDiagnostics(state.diagnostics, plan.skippedParents);
           return;
         }
         const staged = await this.stageTokenSplitTranslations(
@@ -181,6 +190,7 @@ export class SpeakerRevisionRealtimeProvider implements RealtimeProvider {
         state.diagnostics.acceptedCount += 1;
         state.diagnostics.splitParentCount += plan.parentSegmentIds.length;
         state.diagnostics.splitChildCount += plan.transcripts.length;
+        recordSkippedParentDiagnostics(state.diagnostics, plan.skippedParents);
         state.diagnostics.emittedUpdateCount += plan.speakerUpdates.length;
         for (const event of [...plan.speakerUpdates, ...staged]) {
           this.record(event);
@@ -308,6 +318,7 @@ export class SpeakerRevisionRealtimeProvider implements RealtimeProvider {
     sessionId: string,
     transcripts: TranscriptResult[],
   ) {
+    if (transcripts.length === 0) return [];
     if (!this.base.sendText) {
       throw new Error("Realtime provider cannot translate split transcripts");
     }

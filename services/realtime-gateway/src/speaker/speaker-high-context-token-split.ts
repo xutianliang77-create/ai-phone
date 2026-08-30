@@ -38,6 +38,7 @@ export type HighContextTokenSplitPlan =
       accepted: true;
       transcripts: TranscriptResult[];
       parentSegmentIds: string[];
+      skippedParents: SkippedTokenSplitParent[];
       labelMapping: Record<string, string>;
     }
   | {
@@ -45,8 +46,14 @@ export type HighContextTokenSplitPlan =
       reason: HighContextSplitRejectionReason;
       transcripts: [];
       parentSegmentIds: [];
+      skippedParents: SkippedTokenSplitParent[];
       labelMapping: Record<string, string>;
     };
+
+export interface SkippedTokenSplitParent {
+  segmentId: string;
+  reason: SpeakerTokenSplitRejectionReason;
+}
 
 interface SpeakerRun extends SpeakerSpan {
   turnId: string;
@@ -105,6 +112,7 @@ export function planHighContextTokenSplits(
     baselineSpeakerIds.has(speakerId);
   const splitTranscripts: TranscriptResult[] = [];
   const parentSegmentIds: string[] = [];
+  const skippedParents: SkippedTokenSplitParent[] = [];
 
   for (const segment of orderedSegments(segments)) {
     const transcript = transcriptResult(segment);
@@ -120,7 +128,11 @@ export function planHighContextTokenSplits(
       protectedTerms,
     );
     if (!split.accepted) {
-      return rejected(`token_split_${split.reason}`, labelMapping);
+      skippedParents.push({
+        segmentId: segment.segmentId,
+        reason: split.reason,
+      });
+      continue;
     }
     const revisionNumber = (segment.revision ?? 0) + 1;
     splitTranscripts.push(...split.transcripts.map((child) => ({
@@ -131,12 +143,20 @@ export function planHighContextTokenSplits(
   }
 
   if (splitTranscripts.length === 0) {
-    return rejected("no_crossing_transcript", labelMapping);
+    const firstRejection = skippedParents[0];
+    return rejected(
+      firstRejection
+        ? `token_split_${firstRejection.reason}`
+        : "no_crossing_transcript",
+      labelMapping,
+      skippedParents,
+    );
   }
   return {
     accepted: true,
     transcripts: splitTranscripts,
     parentSegmentIds,
+    skippedParents,
     labelMapping,
   };
 }
@@ -256,12 +276,14 @@ function weightedConfidence(
 function rejected(
   reason: HighContextSplitRejectionReason,
   labelMapping: Record<string, string> = {},
+  skippedParents: SkippedTokenSplitParent[] = [],
 ): HighContextTokenSplitPlan {
   return {
     accepted: false,
     reason,
     transcripts: [],
     parentSegmentIds: [],
+    skippedParents,
     labelMapping,
   };
 }

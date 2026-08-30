@@ -7,6 +7,7 @@ import type { TranscriptResult } from "../asr/asr-provider.js";
 import {
   planHighContextTokenSplits,
   type HighContextSplitRejectionReason,
+  type SkippedTokenSplitParent,
   type StoredTranscriptFinal,
 } from "./speaker-high-context-token-split.js";
 import type { SpeakerRevisionResult } from "./speaker-revision-provider.js";
@@ -27,6 +28,7 @@ export type SpeakerFirstSegmentationPlan =
       transcripts: TranscriptResult[];
       speakerUpdates: SpeakerUpdatedEvent[];
       parentSegmentIds: string[];
+      skippedParents: SkippedTokenSplitParent[];
       speakerIdMapping: Record<string, string>;
     }
   | {
@@ -35,6 +37,7 @@ export type SpeakerFirstSegmentationPlan =
       transcripts: [];
       speakerUpdates: [];
       parentSegmentIds: [];
+      skippedParents: [];
       speakerIdMapping: Record<string, string>;
     };
 
@@ -69,11 +72,16 @@ export function planSpeakerFirstSegmentation(
     protectedTerms,
     reconciled.labelMapping,
   );
-  if (!split.accepted && split.reason !== "no_crossing_transcript") {
+  if (
+    !split.accepted &&
+    split.reason !== "no_crossing_transcript" &&
+    !(split.reason.startsWith("token_split_") && reconciled.updates.length > 0)
+  ) {
     return rejected(split.reason);
   }
 
   const parentSegmentIds = split.accepted ? split.parentSegmentIds : [];
+  const skippedParents = split.skippedParents;
   const parents = new Set(parentSegmentIds);
   const speakerIdMapping = contiguousSpeakerMapping(
     revision,
@@ -121,6 +129,7 @@ export function planSpeakerFirstSegmentation(
     transcripts,
     speakerUpdates,
     parentSegmentIds,
+    skippedParents,
     speakerIdMapping,
   };
 }
@@ -239,6 +248,7 @@ function rejected(
     transcripts: [],
     speakerUpdates: [],
     parentSegmentIds: [],
+    skippedParents: [],
     speakerIdMapping: {},
   };
 }

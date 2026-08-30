@@ -64,17 +64,30 @@ describe("speaker-first segmentation", () => {
     });
   });
 
-  it("does not split text when authoritative token timing is absent", () => {
+  it("keeps safe speaker-only updates when token splitting is unavailable", () => {
     const withoutTiming = segments().map((segment) => ({
       ...segment,
       rawTokenTimings: undefined,
     }));
 
-    expect(planSpeakerFirstSegmentation(revision(), withoutTiming))
-      .toMatchObject({
-        accepted: false,
-        reason: "token_split_missing_token_timing",
-      });
+    const plan = planSpeakerFirstSegmentation(revision(), withoutTiming);
+
+    expect(plan).toMatchObject({
+      accepted: true,
+      transcripts: [],
+      skippedParents: [
+        { segmentId: "seg_1", reason: "missing_token_timing" },
+        { segmentId: "seg_4", reason: "missing_token_timing" },
+      ],
+    });
+    if (!plan.accepted) return;
+    expect(plan.speakerUpdates.map((item) => item.segmentId)).toEqual([
+      "seg_1",
+      "seg_2",
+      "seg_3",
+      "seg_4",
+      "seg_5",
+    ]);
   });
 });
 
