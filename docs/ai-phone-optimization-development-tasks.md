@@ -100,13 +100,20 @@ VoxCPM2 真流式 TTS 和 P2-A3 可观测性；逐项状态见架构任务计划
   真实语音或原生partial评测，不能替代本次官方结果。
   官方 AED 无原生 partial/token，因此不具备取代 Qwen 实时主 ASR 的条件；若段后
   使用，仍须另冻 second-pass/revision 合同；本次未跑 formal、未修改生产选型。
-- `OPT-ASR-004`：`todo（真机尾段语义完整性）`。2026-08-31候选真机session
+- `OPT-ASR-004`：`in_progress（尾段内容门通过，同步pacing harness未通过）`。2026-08-31候选真机session
   `9fdfb4f8-eb79-4967-a67b-bf43b2838a82`机械flush、翻译、finalize和历史均通过，
-  但冻结真值末句21个规范字只保留10个，漏掉“比如说饺子啊，食材啊，这边”对应
-  11字；该问题属于ASR内容删除，不能归因MT或网络，也不能以“存在最后一个final”
-  宣称尾段通过。下一门只用隔离fixture和真实pacing拆分VAD endpoint、ASR flush、
-  max-duration continuation与静音尾部保留，建立末1.5秒字符保留率门；不重播真机、
-  不改主模型选型、不用LLM扩写补不存在的声学证据。
+  且已保留输入末1.5秒可由TextGrid硬证明的“叫他们配合你”以及软诊断“还有相关”。
+  原先按完整TextGrid区间要求“比如说饺子啊，食材啊，这边”属于真值错误：该区间
+  延续到1862.62秒，而冻结输入在1860.00秒句中截断；截断后的文字不得作为硬门，
+  否则会把模型续写幻觉误判为正确。现有证据因此不支持真机尾段漏字。任务继续保留为
+  可靠性确认：下一门用一次paired隔离真实pacing比较EOF flush与追加1500ms静音的自然
+  endpoint，硬门只要求可听输入证据完整、无重复/幻觉、scheduler清空；不重播真机、
+  不改主模型选型、不用LLM扩写不存在的声学证据。随后在常驻18122上各跑一次
+  `eof_flush/tail_silence(+1500ms)`：两臂均输出“情况，叫他们配合你，还有相关”，
+  硬尾证据覆盖100%、EOF后新语音0、scheduler与session清空，内容门通过；但同步HTTP
+  adapter累计pacing lag P95分别为`6.30s/91.41s`，B臂源60秒发送耗时157.56秒，
+  因此不能标记真实pacing通过，也不重复该同步smoke。若继续本项，须改用有界非阻塞
+  ingress或既有Gateway pacing路径；当前不需要修改ASR/VAD/MT生产代码。
 - `OPT-VAD-001`：`accepted`。Beelink 已上线 MarbleNet ONNX CPU 主 VAD，阈值 0.5；NeMo/ONNX 概率最大误差 `2.38e-7`，低音量真机语音、静音和三档非语音噪声及真实 HTTP ASR 均通过。
 - `OPT-VAD-002`：`in_progress（代码完成，统一验收待执行）`。VAD Provider 已输出配置/实际 Provider、概率摘要、speech ratio、fallback 次数/原因和模型 fingerprint；Gateway 在结束前按 session 拉取，API 仅白名单保存脱敏诊断。尚未部署到 Beelink 做故障注入复验，完成前不标记 accepted。
 - `OPT-VAD-003`：`in_progress（conversation 实时 pacing A/B 通过，完整统一验收待执行）`。会话模式已通过 token 进入 Gateway/ASR；App 对话与聆听分别映射 `conversation/listening`，LiveKit 与 PSTN Worker 分别固定 `call_link/pstn`。ASR 首帧冻结 session 策略并拒绝中途改模式；2026-07-25 真实 pacing 27 条 A/B 中，`conversation minAudio=1000ms + endpoint=600ms` 保持 26/27，端点 final P50 从 1392ms 降至 998ms；两条约 705/782ms 自然停顿样本均保持全文且正确拆为两段。候选尚未部署，仍需 canonical 大集、真机、生产负载和回滚门禁；`listening/pstn` 不随本候选改变。
