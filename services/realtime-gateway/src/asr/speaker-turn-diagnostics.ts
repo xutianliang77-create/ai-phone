@@ -33,6 +33,7 @@ type SpeakerBoundaryOutcome =
   | "commit_error"
   | "witness_reassignment"
   | "token_timing_split"
+  | "noop_after_endpoint"
   | "unresolved";
 
 const DIAGNOSTIC_WINDOW_MS = 2_000;
@@ -95,7 +96,10 @@ export class SpeakerTurnDiagnostics {
   resolveBoundary(
     sessionId: string,
     boundaryMs: number,
-    outcome: "witness_reassignment" | "token_timing_split",
+    outcome:
+      | "witness_reassignment"
+      | "token_timing_split"
+      | "noop_after_endpoint",
   ) {
     const boundary = this.stateFor(sessionId).boundaryOutcomes.find((item) =>
       item.boundaryMs === boundaryMs && item.outcome === "unresolved"

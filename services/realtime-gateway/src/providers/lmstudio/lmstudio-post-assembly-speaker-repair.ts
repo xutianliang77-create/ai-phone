@@ -1,5 +1,6 @@
 import type {
   RealtimeSpeakerAssemblyRepairDiagnosticsDto,
+  SpeakerEndpointNoopRejectionReason,
   SpeakerTokenSplitRejectionReason,
 } from "@translation/contracts";
 import type {
@@ -8,11 +9,13 @@ import type {
   TranscriptResult,
 } from "../../asr/asr-provider.js";
 import { realtimeLogger } from "../../metrics/realtime-metrics.js";
-import { protectedTermsFor } from
-  "../../speaker/speaker-high-context-delivery.js";
-import { reconcileRealtimeSpeakerTokenBoundaries } from
-  "../../speaker/speaker-realtime-token-reconciliation.js";
+import { protectedTermsFor } from "../../speaker/speaker-high-context-delivery.js";
+import { reconcileRealtimeSpeakerTokenBoundaries } from "../../speaker/speaker-realtime-token-reconciliation.js";
 import type { RealtimeProviderSession } from "../realtime-provider.js";
+import {
+  evaluateSpeakerEndpointNoop,
+  SpeakerEndpointTranscriptHistory,
+} from "./lmstudio-speaker-endpoint-noop.js";
 
 interface PendingTranscript {
   transcript: TranscriptResult;
@@ -22,6 +25,8 @@ interface PendingTranscript {
 interface SessionState {
   enabled: boolean;
   pending: Map<string, PendingTranscript>;
+  history: SpeakerEndpointTranscriptHistory;
+  noopEvaluatedBoundaryMs: Set<number>;
   lastEvidenceFingerprint?: string;
   diagnostics: RepairDiagnostics;
 }
@@ -41,6 +46,12 @@ interface RepairDiagnostics {
   >>;
   totalWaitMs: number;
   maxWaitMs: number;
+  noopEvaluationCount: number;
+  noopAcceptedCount: number;
+  noopRejectionReasonCounts: Partial<Record<
+    SpeakerEndpointNoopRejectionReason,
+    number
+  >>;
 }
 
 const MAX_PENDING_TRANSCRIPTS = 12;
@@ -60,6 +71,8 @@ export class PostAssemblySpeakerRepairCoordinator {
     this.sessions.set(session.sessionId, {
       enabled,
       pending: new Map(),
+      history: new SpeakerEndpointTranscriptHistory(),
+      noopEvaluatedBoundaryMs: new Set(),
       diagnostics: emptyDiagnostics(),
     });
   }
@@ -75,6 +88,9 @@ export class PostAssemblySpeakerRepairCoordinator {
       if (result.resolvedBoundaryMs.length === 0) {
         this.remember(session.sessionId, transcript);
       }
+    }
+    for (const transcript of repaired) {
+      this.sessions.get(session.sessionId)?.history.remember(transcript);
     }
     return repaired;
   }
@@ -117,6 +133,9 @@ export class PostAssemblySpeakerRepairCoordinator {
         revision,
       }));
       repaired.push(...revisions);
+      for (const transcript of revisions) {
+        state.history.remember(transcript);
+      }
       const waitMs = Math.max(0, nowMs - pending.storedAtMs);
       state.diagnostics.delayedRepairAcceptedCount += 1;
       state.diagnostics.revisionEmittedCount += revisions.length;
@@ -139,6 +158,46 @@ export class PostAssemblySpeakerRepairCoordinator {
 
   clear(sessionId: string) {
     this.sessions.delete(sessionId);
+  }
+
+  finalizeEndpointNoops(session: RealtimeProviderSession) {
+    const state = this.sessions.get(session.sessionId);
+    if (!state?.enabled || !this.asr.resolveSpeakerBoundaryNoops) return;
+    const evidence = this.asr.speakerBoundaryEvidence?.(session.sessionId);
+    if (!evidence) return;
+    for (const boundary of evidence.boundaries) {
+      if (state.noopEvaluatedBoundaryMs.has(boundary.boundaryMs)) continue;
+      state.noopEvaluatedBoundaryMs.add(boundary.boundaryMs);
+      state.diagnostics.noopEvaluationCount += 1;
+      const decision = evaluateSpeakerEndpointNoop(
+        boundary,
+        state.history.values(),
+      );
+      if (!decision.accepted) {
+        state.diagnostics.noopRejectionReasonCounts[decision.reason] =
+          (state.diagnostics.noopRejectionReasonCounts[decision.reason] ?? 0) +
+          1;
+        realtimeLogger.info({
+          sessionId: session.sessionId,
+          boundaryMs: boundary.boundaryMs,
+          reason: decision.reason,
+        }, "Speaker endpoint no-op kept unresolved");
+        continue;
+      }
+      state.diagnostics.noopAcceptedCount += 1;
+      this.asr.resolveSpeakerBoundaryNoops(
+        session.sessionId,
+        [boundary.boundaryMs],
+      );
+      realtimeLogger.info({
+        sessionId: session.sessionId,
+        boundaryMs: boundary.boundaryMs,
+        previousSegmentId: decision.previousSegmentId,
+        nextSegmentId: decision.nextSegmentId,
+        previousGapMs: decision.previousGapMs,
+        nextGapMs: decision.nextGapMs,
+      }, "Speaker endpoint no-op finalized");
+    }
   }
 
   diagnostics(
@@ -167,6 +226,11 @@ export class PostAssemblySpeakerRepairCoordinator {
             diagnostics.delayedRepairAcceptedCount,
         ),
       maxWaitMs: diagnostics.maxWaitMs,
+      noopEvaluationCount: diagnostics.noopEvaluationCount,
+      noopAcceptedCount: diagnostics.noopAcceptedCount,
+      noopRejectionReasonCounts: {
+        ...diagnostics.noopRejectionReasonCounts,
+      },
     };
   }
 
@@ -236,6 +300,7 @@ export class PostAssemblySpeakerRepairCoordinator {
       state.pending.delete(state.pending.keys().next().value!);
     }
   }
+
 }
 
 function emptyDiagnostics(): RepairDiagnostics {
@@ -251,6 +316,9 @@ function emptyDiagnostics(): RepairDiagnostics {
     rejectionReasonCounts: {},
     totalWaitMs: 0,
     maxWaitMs: 0,
+    noopEvaluationCount: 0,
+    noopAcceptedCount: 0,
+    noopRejectionReasonCounts: {},
   };
 }
 

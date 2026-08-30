@@ -63,6 +63,7 @@ export interface AsrSpeakerTurnDiagnostics {
     "commit_error" |
     "witness_reassignment" |
     "token_timing_split" |
+    "noop_after_endpoint" |
     "unresolved",
     number
   >>;
@@ -104,6 +105,7 @@ export interface AsrProvider {
     sessionId: string,
   ): AsrSpeakerBoundaryEvidence | undefined;
   resolveSpeakerBoundaries?(sessionId: string, boundaryMs: number[]): void;
+  resolveSpeakerBoundaryNoops?(sessionId: string, boundaryMs: number[]): void;
   diagnostics?(
     sessionId: string,
   ): Promise<Partial<RealtimeSessionDiagnosticsDto>>;

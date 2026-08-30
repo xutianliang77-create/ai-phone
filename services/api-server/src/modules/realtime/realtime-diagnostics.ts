@@ -33,6 +33,12 @@ export function parseRealtimeDiagnostics(
     diagnostics.speakerAssemblyRepair !== undefined &&
     !isSpeakerAssemblyRepairDiagnostics(diagnostics.speakerAssemblyRepair)
   ) return undefined;
+  if (
+    diagnostics.speakerAssemblyRepair?.noopAcceptedCount !== undefined &&
+    diagnostics.speakerTurns?.boundaryOutcomeCounts !== undefined &&
+    (diagnostics.speakerTurns.boundaryOutcomeCounts.noop_after_endpoint ?? 0) !==
+      diagnostics.speakerAssemblyRepair.noopAcceptedCount
+  ) return undefined;
   if (diagnostics.vad !== undefined && !isVadDiagnostics(diagnostics.vad)) {
     return undefined;
   }

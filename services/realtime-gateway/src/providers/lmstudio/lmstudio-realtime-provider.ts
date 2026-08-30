@@ -148,6 +148,7 @@ export class LmStudioRealtimeProvider implements RealtimeProvider {
     }
     for (const transcript of transcripts) yield* this.processTranscript(session, transcript);
     yield* this.flushSemanticSegments(session);
+    this.speakerBoundaryRepair.finalizeEndpointNoops(session);
   }
 
   async closeSession(sessionId: string) {

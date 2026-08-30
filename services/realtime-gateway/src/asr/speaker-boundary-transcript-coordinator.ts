@@ -178,6 +178,17 @@ export class SpeakerBoundaryTranscriptCoordinator {
     this.applyTokenTimingResolutions(sessionId, boundaryMs);
   }
 
+  resolveEndpointNoops(sessionId: string, boundaryMs: number[]) {
+    for (const timestamp of boundaryMs) {
+      this.turnDiagnostics.resolveBoundary(
+        sessionId,
+        timestamp,
+        "noop_after_endpoint",
+      );
+      this.boundaryReassignment.resolveBoundary(sessionId, timestamp);
+    }
+  }
+
   applyWitnessResolutions(sessionId: string) {
     for (
       const boundaryMs of

@@ -2,6 +2,41 @@ import { describe, expect, it } from "vitest";
 import { parseRealtimeDiagnostics } from "./realtime-diagnostics.js";
 
 describe("speaker assembly repair diagnostics", () => {
+  it("matches accepted no-ops to the speaker boundary outcome ledger", () => {
+    const payload = {
+      version: 1,
+      audio: {
+        receivedFrameCount: 1,
+        processedBatchCount: 1,
+        droppedFrameCount: 0,
+      },
+      speakerTurns: {
+        confirmedBoundaryCount: 1,
+        commitHitCount: 0,
+        commitMissCount: 1,
+        commitErrorCount: 0,
+        endpointRaceCount: 0,
+        averageConfirmationLatencyMs: 800,
+        maxConfirmationLatencyMs: 800,
+        committedAudioMs: 0,
+        endpointReasons: {},
+        unresolvedCommitMissCount: 0,
+        boundaryOutcomeCounts: { noop_after_endpoint: 1 },
+      },
+      speakerAssemblyRepair: assemblyRepairNoop(),
+    };
+
+    expect(parseRealtimeDiagnostics(payload)).toBeDefined();
+    expect(parseRealtimeDiagnostics({
+      ...payload,
+      speakerAssemblyRepair: {
+        ...payload.speakerAssemblyRepair,
+        noopAcceptedCount: 0,
+        noopRejectionReasonCounts: { missing_next_final: 1 },
+      },
+    })).toBeUndefined();
+  });
+
   it("sanitizes bounded counters without retaining source payload", () => {
     const diagnostics = parseRealtimeDiagnostics({
       version: 1,
@@ -24,6 +59,9 @@ describe("speaker assembly repair diagnostics", () => {
         rejectionReasonCounts: { no_safe_token_boundary: 1 },
         averageWaitMs: 2200,
         maxWaitMs: 2200,
+        noopEvaluationCount: 1,
+        noopAcceptedCount: 1,
+        noopRejectionReasonCounts: {},
         rawText: "must-not-survive",
       },
     });
@@ -42,6 +80,9 @@ describe("speaker assembly repair diagnostics", () => {
       rejectionReasonCounts: { no_safe_token_boundary: 1 },
       averageWaitMs: 2200,
       maxWaitMs: 2200,
+      noopEvaluationCount: 1,
+      noopAcceptedCount: 1,
+      noopRejectionReasonCounts: {},
     });
   });
 
@@ -73,6 +114,11 @@ describe("speaker assembly repair diagnostics", () => {
       averageWaitMs: 1001,
       maxWaitMs: 1000,
     }],
+    ["no-op reasons do not match evaluations", {
+      noopEvaluationCount: 1,
+      noopAcceptedCount: 0,
+      noopRejectionReasonCounts: {},
+    }],
   ])("rejects diagnostics when %s", (_label, patch) => {
     expect(parseRealtimeDiagnostics({
       version: 1,
@@ -95,8 +141,32 @@ describe("speaker assembly repair diagnostics", () => {
         rejectionReasonCounts: {},
         averageWaitMs: 0,
         maxWaitMs: 0,
+        noopEvaluationCount: 0,
+        noopAcceptedCount: 0,
+        noopRejectionReasonCounts: {},
         ...patch,
       },
     })).toBeUndefined();
   });
 });
+
+function assemblyRepairNoop() {
+  return {
+    enabled: true,
+    cachedParentCount: 2,
+    boundaryEvidenceArrivalCount: 1,
+    repairAttemptCount: 2,
+    repairAcceptedCount: 0,
+    delayedRepairAcceptedCount: 0,
+    repairRejectedCount: 0,
+    revisionEmittedCount: 0,
+    expiredParentCount: 0,
+    pendingParentCount: 2,
+    rejectionReasonCounts: {},
+    averageWaitMs: 0,
+    maxWaitMs: 0,
+    noopEvaluationCount: 1,
+    noopAcceptedCount: 1,
+    noopRejectionReasonCounts: {},
+  };
+}

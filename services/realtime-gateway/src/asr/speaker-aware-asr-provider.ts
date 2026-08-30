@@ -237,6 +237,9 @@ export class SpeakerAwareAsrProvider implements AsrProvider {
       boundaryMs,
     );
   }
+  resolveSpeakerBoundaryNoops(sessionId: string, boundaryMs: number[]) {
+    this.boundaryTranscripts.resolveEndpointNoops(sessionId, boundaryMs);
+  }
   async closeSession(sessionId: string) {
     const speakerEnabled = this.enabledSessions.delete(sessionId);
     this.spansBySession.delete(sessionId);

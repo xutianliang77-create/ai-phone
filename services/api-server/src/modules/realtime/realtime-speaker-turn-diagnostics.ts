@@ -69,6 +69,7 @@ function isSpeakerBoundaryOutcomeDiagnostics(
     "commit_error",
     "witness_reassignment",
     "token_timing_split",
+    "noop_after_endpoint",
     "unresolved",
   ]);
   if (Object.entries(outcomes).some(([key, count]) =>
@@ -77,7 +78,7 @@ function isSpeakerBoundaryOutcomeDiagnostics(
   const count = (key: string) => Number(outcomes[key] ?? 0);
   const total = [...allowed].reduce((sum, key) => sum + count(key), 0);
   const resolvedMisses = count("witness_reassignment") +
-    count("token_timing_split");
+    count("token_timing_split") + count("noop_after_endpoint");
   return total === value.confirmedBoundaryCount &&
     count("commit_hit") === value.commitHitCount &&
     count("commit_error") === value.commitErrorCount &&

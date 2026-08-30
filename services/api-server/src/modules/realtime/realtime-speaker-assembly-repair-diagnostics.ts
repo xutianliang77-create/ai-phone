@@ -23,6 +23,17 @@ export function sanitizedSpeakerAssemblyRepair(
     rejectionReasonCounts: { ...value.rejectionReasonCounts },
     averageWaitMs: value.averageWaitMs,
     maxWaitMs: value.maxWaitMs,
+    ...(value.noopEvaluationCount !== undefined
+      ? { noopEvaluationCount: value.noopEvaluationCount }
+      : {}),
+    ...(value.noopAcceptedCount !== undefined
+      ? { noopAcceptedCount: value.noopAcceptedCount }
+      : {}),
+    ...(value.noopRejectionReasonCounts
+      ? { noopRejectionReasonCounts: {
+          ...value.noopRejectionReasonCounts,
+        } }
+      : {}),
   };
 }
 
@@ -47,7 +58,7 @@ export function isSpeakerAssemblyRepairDiagnostics(
       !validRejectionReasons(
         value.rejectionReasonCounts,
         Number(value.repairRejectedCount),
-      )) return false;
+      ) || !validNoopDiagnostics(value)) return false;
   const cached = Number(value.cachedParentCount);
   const attempts = Number(value.repairAttemptCount);
   const accepted = Number(value.repairAcceptedCount);
@@ -62,6 +73,8 @@ export function isSpeakerAssemblyRepairDiagnostics(
     ...counts,
     averageWaitMs,
     maxWaitMs,
+    value.noopEvaluationCount ?? 0,
+    value.noopAcceptedCount ?? 0,
   ].every((count) => Number(count) === 0);
   return delayed <= accepted &&
     accepted + rejected <= attempts &&
@@ -70,6 +83,34 @@ export function isSpeakerAssemblyRepairDiagnostics(
     averageWaitMs <= maxWaitMs &&
     (delayed > 0 || averageWaitMs === 0 && maxWaitMs === 0) &&
     disabledIsEmpty;
+}
+
+function validNoopDiagnostics(value: Record<string, unknown>) {
+  const evaluations = value.noopEvaluationCount;
+  const accepted = value.noopAcceptedCount;
+  const reasons = value.noopRejectionReasonCounts;
+  if (
+    evaluations === undefined && accepted === undefined &&
+    reasons === undefined
+  ) return true;
+  if (
+    !isNonNegativeInteger(evaluations) ||
+    !isNonNegativeInteger(accepted) || !isRecord(reasons) ||
+    Number(accepted) > Number(evaluations)
+  ) return false;
+  const allowed = new Set([
+    "crossing_parent",
+    "missing_previous_final",
+    "missing_next_final",
+    "previous_gap_exceeded",
+    "next_gap_exceeded",
+    "unknown_or_overlap",
+  ]);
+  const entries = Object.entries(reasons);
+  return entries.every(([reason, count]) =>
+    allowed.has(reason) && isNonNegativeInteger(count)
+  ) && entries.reduce((sum, [, count]) => sum + Number(count), 0) ===
+    Number(evaluations) - Number(accepted);
 }
 
 function validRejectionReasons(value: unknown, expectedTotal: number) {

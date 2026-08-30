@@ -114,6 +114,7 @@ export type SpeakerBoundaryOutcome =
   | "commit_error"
   | "witness_reassignment"
   | "token_timing_split"
+  | "noop_after_endpoint"
   | "unresolved";
 
 export interface RealtimeSpeakerRevisionDiagnosticsDto {
@@ -154,7 +155,21 @@ export interface RealtimeSpeakerAssemblyRepairDiagnosticsDto {
   >>;
   averageWaitMs: number;
   maxWaitMs: number;
+  noopEvaluationCount?: number;
+  noopAcceptedCount?: number;
+  noopRejectionReasonCounts?: Partial<Record<
+    SpeakerEndpointNoopRejectionReason,
+    number
+  >>;
 }
+
+export type SpeakerEndpointNoopRejectionReason =
+  | "crossing_parent"
+  | "missing_previous_final"
+  | "missing_next_final"
+  | "previous_gap_exceeded"
+  | "next_gap_exceeded"
+  | "unknown_or_overlap";
 
 export type SpeakerTokenSplitRejectionReason =
   | "not_final"
