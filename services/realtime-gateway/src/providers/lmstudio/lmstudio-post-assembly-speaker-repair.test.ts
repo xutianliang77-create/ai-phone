@@ -58,10 +58,66 @@ describe("lmstudio post-assembly speaker repair", () => {
     expect(resolvedBoundaryMs).toEqual([6001]);
     expect(translated.slice(1)).toEqual([events[1].text, events[3].text]);
   });
+
+  it("revises an already translated parent when boundary evidence arrives later", async () => {
+    const fixture = boundaryContinuationProvider(false);
+    const provider = new LmStudioRealtimeProvider({
+      baseUrl: "http://127.0.0.1:1234/v1",
+      model: "tencent/Hy-MT2-1.8B",
+      timeoutMs: 100,
+      asrProvider: fixture.asr,
+      translationClient: {
+        translate: async (input) => `translated:${input.text}`,
+        healthCheck: async () => true,
+      },
+    });
+    await provider.createSession({
+      sessionId: "sess_1",
+      asrEndpointMode: "listening",
+      sourceLanguage: "zh",
+      targetLanguage: "en",
+      voiceOutput: false,
+    });
+
+    await audioEvents(provider, 1);
+    const original = [];
+    for await (const event of provider.sendAudio(audioFrame(2))) {
+      original.push(event);
+    }
+    expect(original.map((event) => event.type)).toEqual([
+      "transcript.final",
+      "transcript.final",
+      "translation.final",
+    ]);
+    fixture.enableEvidence();
+    const revised = [];
+    for await (const event of provider.sendAudio(audioFrame(3))) {
+      revised.push(event);
+    }
+
+    expect(revised.map((event) => event.type)).toEqual([
+      "transcript.final",
+      "translation.final",
+      "transcript.final",
+      "translation.final",
+    ]);
+    expect(revised[0]).toMatchObject({
+      segmentId: "boundary_parent",
+      speaker: { speakerId: "speaker_1" },
+    });
+    expect(revised[2]).toMatchObject({
+      segmentId: "boundary_parent:speaker:1",
+      speaker: { speakerId: "speaker_2" },
+    });
+    expect(revised[0].revision).toBeGreaterThan(original[1].revision ?? 0);
+    expect(revised[2].revision).toBe(revised[0].revision);
+    expect(fixture.resolvedBoundaryMs).toEqual([6001]);
+  });
 });
 
-function boundaryContinuationProvider() {
+function boundaryContinuationProvider(initialEvidence = true) {
   const resolvedBoundaryMs: number[] = [];
+  let evidenceReady = initialEvidence;
   const speaker = {
     speakerId: "speaker_1",
     role: "speaker" as const,
@@ -97,7 +153,7 @@ function boundaryContinuationProvider() {
     flush: async () => null,
     closeSession: async () => undefined,
     healthCheck: async () => true,
-    speakerBoundaryEvidence: () => ({
+    speakerBoundaryEvidence: () => evidenceReady ? ({
       boundaries: [{
         boundaryMs: 6001,
         previousSpeakerId: "speaker_1",
@@ -121,12 +177,18 @@ function boundaryContinuationProvider() {
         },
       ],
       confirmedSpeakerIds: ["speaker_1", "speaker_2"],
-    }),
+    }) : undefined,
     resolveSpeakerBoundaries: (_sessionId, boundaryMs) => {
       resolvedBoundaryMs.push(...boundaryMs);
     },
   };
-  return { asr, resolvedBoundaryMs };
+  return {
+    asr,
+    resolvedBoundaryMs,
+    enableEvidence: () => {
+      evidenceReady = true;
+    },
+  };
 }
 
 function characterTimings(text: string, startMs: number, stepMs: number) {
