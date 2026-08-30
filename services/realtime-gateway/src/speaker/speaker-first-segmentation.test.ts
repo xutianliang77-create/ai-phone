@@ -89,6 +89,27 @@ describe("speaker-first segmentation", () => {
       "seg_5",
     ]);
   });
+
+  it("demotes a residual raw slot without high-context support", () => {
+    const plan = planSpeakerFirstSegmentation(revisionWithGap(), [
+      segment("gap_1", "speaker_1", 0, 1_000, "甲乙丙丁"),
+      segment("gap_2", "speaker_3", 1_200, 1_500, "戊己"),
+      segment("gap_3", "speaker_2", 1_500, 2_200, "庚辛壬癸"),
+      segment("gap_slot", "speaker_3", 2_250, 2_500, "子丑"),
+      segment("gap_5", "speaker_1", 2_600, 4_000, "寅卯辰巳"),
+    ]);
+
+    if (!plan.accepted) throw new Error(plan.reason);
+    expect(plan.speakerIdMapping).toMatchObject({
+      speaker_1: "speaker_1",
+      speaker_2: "speaker_2",
+      speaker_3: "unknown",
+    });
+    expect(plan.speakerUpdates.map((item) => [
+      item.segmentId,
+      item.speaker.speakerId,
+    ])).toContainEqual(["gap_slot", "unknown"]);
+  });
 });
 
 function revision(): SpeakerRevisionResult {
@@ -103,6 +124,22 @@ function revision(): SpeakerRevisionResult {
       { speakerId: "S01", startMs: 0, endMs: 600, confidence: 0.95 },
       { speakerId: "S02", startMs: 600, endMs: 2_000, confidence: 0.92 },
       { speakerId: "S01", startMs: 2_000, endMs: 3_000, confidence: 0.94 },
+    ],
+  };
+}
+
+function revisionWithGap(): SpeakerRevisionResult {
+  return {
+    sessionId: "sess_1",
+    generation: 1,
+    windowStartMs: 0,
+    windowEndMs: 4_000,
+    provider: "sortformer_high_context",
+    speakerCount: 2,
+    spans: [
+      { speakerId: "S01", startMs: 0, endMs: 1_000, confidence: 0.95 },
+      { speakerId: "S02", startMs: 1_200, endMs: 2_200, confidence: 0.92 },
+      { speakerId: "S01", startMs: 2_600, endMs: 4_000, confidence: 0.94 },
     ],
   };
 }

@@ -86,8 +86,10 @@ export function planSpeakerFirstSegmentation(
   const speakerIdMapping = contiguousSpeakerMapping(
     revision,
     reconciled.labelMapping,
-    revisedSegments,
   );
+  for (const speakerId of speakerIds(revisedSegments)) {
+    if (!speakerIdMapping[speakerId]) speakerIdMapping[speakerId] = "unknown";
+  }
   const transcripts = split.accepted
     ? split.transcripts.map((item) => normalizeTranscript(
       item,
@@ -155,20 +157,10 @@ function applySpeakerUpdates(
 function contiguousSpeakerMapping(
   revision: SpeakerRevisionResult,
   revisionLabels: Record<string, string>,
-  segments: SpeakerFirstStoredTranscript[],
 ) {
-  const ordered = [...segments].sort((left, right) =>
-    (left.timing?.startMs ?? Number.MAX_SAFE_INTEGER) -
-      (right.timing?.startMs ?? Number.MAX_SAFE_INTEGER)
-  );
   const mapping: Record<string, string> = {};
   for (const span of revision.spans) {
     const speakerId = revisionLabels[span.speakerId];
-    if (!speakerId || mapping[speakerId]) continue;
-    mapping[speakerId] = `speaker_${Object.keys(mapping).length + 1}`;
-  }
-  for (const segment of ordered) {
-    const speakerId = usableSpeakerId(segment.speaker);
     if (!speakerId || mapping[speakerId]) continue;
     mapping[speakerId] = `speaker_${Object.keys(mapping).length + 1}`;
   }
@@ -191,9 +183,11 @@ function normalizeSpeaker(
   mapping: Record<string, string>,
 ) {
   const speakerId = usableSpeakerId(speaker);
-  return speakerId
-    ? { ...speaker!, speakerId: mapping[speakerId] ?? speakerId }
-    : speaker;
+  if (!speakerId) return speaker;
+  const normalized = mapping[speakerId] ?? speakerId;
+  return normalized === "unknown"
+    ? unknownSpeaker()
+    : { ...speaker!, speakerId: normalized };
 }
 
 function normalizeTiming(
@@ -201,11 +195,12 @@ function normalizeTiming(
   mapping: Record<string, string>,
 ) {
   if (!timing?.activeSpeakerIds) return timing;
+  const activeSpeakerIds = [...new Set(timing.activeSpeakerIds.map((speakerId) =>
+    mapping[speakerId] ?? speakerId
+  ))].filter((speakerId) => speakerId !== "unknown");
   return {
     ...timing,
-    activeSpeakerIds: [...new Set(timing.activeSpeakerIds.map((speakerId) =>
-      mapping[speakerId] ?? speakerId
-    ))],
+    activeSpeakerIds,
   };
 }
 
