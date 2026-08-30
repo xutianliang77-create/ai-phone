@@ -78,6 +78,9 @@ const envKeys = [
   "ENTERPRISE_ADMISSION_OPERATOR_ID",
   "ENTERPRISE_ADMISSION_POLICY_FILE",
   "ENTERPRISE_ADMISSION_RECONCILE_INTERVAL_MS",
+  "ENTERPRISE_BILLING_LIFECYCLE_PROVIDER",
+  "ENTERPRISE_BILLING_LIFECYCLE_SIGNING_SECRET",
+  "ENTERPRISE_BILLING_LIFECYCLE_REPLAY_SECONDS",
   "API_STORAGE_DRIVER",
 ];
 
@@ -119,6 +122,13 @@ export function configureAccountEnv() {
   process.env.AUTH_OTP_SECRET = "otp_secret_012345678901234567890123";
   delete process.env.AUTH_DEBUG_OTP;
   process.env.API_TEST_AUTO_ACCOUNT = "false";
+}
+
+export function configureEnterpriseBillingLifecycleEnv() {
+  process.env.ENTERPRISE_BILLING_LIFECYCLE_PROVIDER = "billing-adapter";
+  process.env.ENTERPRISE_BILLING_LIFECYCLE_SIGNING_SECRET =
+    "billing-lifecycle-secret-01234567890123456789";
+  process.env.ENTERPRISE_BILLING_LIFECYCLE_REPLAY_SECONDS = "300";
 }
 
 export function configureDiagnosticsEnv() {

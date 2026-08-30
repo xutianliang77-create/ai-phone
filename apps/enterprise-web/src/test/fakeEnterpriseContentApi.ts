@@ -3,7 +3,7 @@ import type { EnterpriseApi } from "../api/enterprise-api.js";
 
 type ContentApi = Pick<EnterpriseApi,
   | "listMembers" | "createMember" | "updateMember"
-  | "getBillingEntitlements" | "changeSubscription"
+  | "getBillingEntitlements" | "getBillingLifecycleStatus" | "changeSubscription"
   | "getSessionTraceReport"
   | "reportClientEvent"
   | "listAuditEvents" | "listAuditExports" | "createAuditExport" | "downloadAuditExport"
@@ -58,6 +58,7 @@ export function fakeEnterpriseContentApi(): ContentApi {
     createMember: vi.fn(),
     updateMember: vi.fn(),
     getBillingEntitlements: vi.fn().mockRejectedValue(new Error("not configured")),
+    getBillingLifecycleStatus: vi.fn().mockRejectedValue(new Error("not configured")),
     getSessionTraceReport: vi.fn(),
     reportClientEvent: vi.fn().mockResolvedValue({ accepted: true, traceId: "trace-client" }),
     listAuditEvents: vi.fn().mockResolvedValue({ events: [] }),

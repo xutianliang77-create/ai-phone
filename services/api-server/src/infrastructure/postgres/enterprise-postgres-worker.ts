@@ -39,6 +39,7 @@ import {
   runEnterpriseDataLifecycleClaim,
 } from
   "./enterprise-postgres-worker-data-lifecycle.js";
+import { finishEnterpriseBillingLifecycleWork } from "./enterprise-postgres-worker-billing-lifecycle.js";
 
 export async function runEnterprisePostgresWorkerBatch(options: {
   discoveryPool: EnterprisePostgresPool;
@@ -131,8 +132,9 @@ async function processClaimedRef(
     leaseExpiresAt: new Date(
       now.getTime() + options.config.leaseMs,
     ).toISOString(),
-    traceId,
+    traceId, workerId: options.config.workerId,
   });
+  if (claimed.workKind === "billing_lifecycle") return finishEnterpriseBillingLifecycleWork(options.tenantPool, claimed.result, options.config.workerId, traceId, lease.assertOwned);
   if (claimed.result.status !== "claimed") return "busy";
   if (claimed.workKind === "screen_share") return "completed";
   await lease.assertOwned();

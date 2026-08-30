@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   finalizeDataLifecycle: vi.fn(),
   appendAudit: vi.fn(),
   outstandingDataLifecycle: vi.fn(),
+  billingLifecycle: vi.fn(),
 }));
 
 vi.mock("./enterprise-postgres-pending-work.repository.js", () => ({
@@ -34,6 +35,9 @@ vi.mock("./enterprise-postgres-unit-of-work.js", () => ({
     tenant: { appendAuditEvent: mocks.appendAudit },
   }),
 }));
+vi.mock("./enterprise-postgres-worker-billing-lifecycle.js", () => ({
+  finishEnterpriseBillingLifecycleWork: mocks.billingLifecycle,
+}));
 
 import {
   runEnterprisePostgresWorkerBatch,
@@ -50,6 +54,7 @@ describe("enterprise PostgreSQL cell worker", () => {
     vi.clearAllMocks();
     mocks.outstandingDataLifecycle.mockResolvedValue(0);
     mocks.appendAudit.mockResolvedValue(undefined);
+    mocks.billingLifecycle.mockResolvedValue("completed");
   });
 
   it("executes and finalizes claimed lifecycle work", async () => {
@@ -163,6 +168,24 @@ describe("enterprise PostgreSQL cell worker", () => {
         result: { status: "completed", outcome: "deleted",
           receiptHash: "b".repeat(64) },
       }),
+    );
+  });
+
+  it("hands a claimed billing command to the fenced lifecycle worker", async () => {
+    const command = { id: jobId, tenantId, eventId: jobId,
+      status: "processing", dueAt: now.toISOString(), attempts: 1,
+      leaseOwner: "worker-01", leaseGeneration: 1,
+      leaseExpiresAt: new Date(now.getTime() + 30_000).toISOString(),
+      createdAt: now.toISOString(), updatedAt: now.toISOString(), version: 2 };
+    mocks.claimBatch.mockResolvedValue([{ cellId: "cn-cell-01", tenantId,
+      workKind: "billing_lifecycle", resourceId: jobId }]);
+    mocks.claim.mockResolvedValue({ workKind: "billing_lifecycle",
+      result: { status: "claimed", command } });
+    const result = await runEnterprisePostgresWorkerBatch(fixture({}));
+    expect(result.completed).toBe(1);
+    expect(mocks.billingLifecycle).toHaveBeenCalledWith(
+      expect.anything(), { status: "claimed", command }, "worker-01",
+      expect.stringContaining(jobId), expect.any(Function),
     );
   });
 

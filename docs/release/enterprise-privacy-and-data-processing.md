@@ -16,6 +16,8 @@
 
 L3/L4 使用最小化、加密、区域限制、purpose-specific authorization、保存期限和删除流程。
 原始屏幕帧不落业务数据库；日志、trace 和错误响应不得包含客户正文或凭据。
+账务 lifecycle 只保存 Provider event标识、规范请求/原始载荷SHA-256、状态决定和账期，不保存Provider原始正文、
+签名或密钥；其保存期限、财务/争议冻结和删除例外须在正式DPA中明确。
 
 ## 3. 授权与营销合规
 

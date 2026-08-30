@@ -122,6 +122,8 @@ import { EnterpriseReleaseControlPostgresRepository } from
   "./enterprise-postgres-release-control.repository.js";
 import { EnterpriseTenantAdmissionPostgresRepository } from
   "./enterprise-postgres-tenant-admission.js";
+import { EnterpriseBillingLifecyclePostgresRepository } from
+  "./enterprise-postgres-billing-lifecycle.repository.js";
 
 export interface EnterprisePostgresUnitOfWork {
   tenant: EnterpriseTenantPostgresRepository;
@@ -173,6 +175,7 @@ export interface EnterprisePostgresUnitOfWork {
   dataLifecycle: EnterpriseDataLifecyclePostgresRepository;
   releaseControls: EnterpriseReleaseControlPostgresRepository;
   admissions: EnterpriseTenantAdmissionPostgresRepository;
+  billingLifecycle: EnterpriseBillingLifecyclePostgresRepository;
 }
 
 export function withEnterprisePostgresUnitOfWork<T>(
@@ -245,6 +248,7 @@ export function withEnterprisePostgresUnitOfWork<T>(
       dataLifecycle: new EnterpriseDataLifecyclePostgresRepository(session),
       releaseControls: new EnterpriseReleaseControlPostgresRepository(session),
       admissions: new EnterpriseTenantAdmissionPostgresRepository(session),
+      billingLifecycle: new EnterpriseBillingLifecyclePostgresRepository(session),
     }),
     options,
   );

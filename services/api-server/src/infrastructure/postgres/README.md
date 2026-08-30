@@ -157,6 +157,15 @@ Migration `0055` 增加四能力 Cell policy/state、Cell-Tenant state 和 tenan
 没有表权限，只调用校验 current tenant 的 reserve/renew/release/active 函数。平台 admission 角色通过独立
 `ENTERPRISE_ADMISSION_DATABASE_URL` 取得由DBA显式授予的 config/weight/status/reconcile 函数执行权；API 使用不同的
 只读 `ENTERPRISE_ADMISSION_OBSERVER_DATABASE_URL` 调用 aggregate readiness，API 环境不注入 operator URL/ID。
+
+Migration `0056` 增加 tenant-scoped billing provider event、lifecycle command 和不可变 decision，并把
+`billing_lifecycle` 投影到既有 Cell Worker pending queue。API 仅在 PostgreSQL 且配置
+`ENTERPRISE_BILLING_LIFECYCLE_PROVIDER`、至少32字节独立
+`ENTERPRISE_BILLING_LIFECYCLE_SIGNING_SECRET` 与30–900秒 replay window 时接受内部标准化事件；未配置返回503。
+Cell Worker 使用外层 coordination generation 和内层 command owner/generation/expiry，状态、entitlement、账期
+aggregate、audit 与command terminal同事务。活动 lifecycle command 阻断 Cell migration；`0056` rollback 遇到
+past_due/suspended/cancelled subscription 时失败闭合。操作步骤见
+`docs/runbooks/enterprise-subscription-lifecycle.md`。
 不要授予表、
 tenant runtime、migration、maintenance 或 `BYPASSRLS`。
 

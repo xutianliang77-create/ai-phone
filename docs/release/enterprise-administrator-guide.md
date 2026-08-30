@@ -33,6 +33,10 @@ membership、RBAC、route document 和 forced RLS 才是最终守卫。
 受控 adjustment。审计导出应填写目的、范围、保存期限并保护下载；删除前核对数据库、对象和
 Provider receipt，不能把“已请求”当作“已删除”。
 
+订阅状态只从签名账务 Adapter 更新。`past_due/suspended` 时管理员不能通过重复提交套餐、客户端参数或旧
+entitlement 绕过；页面应显示当前账户/订阅、账期和最后决定。恢复后必须重新加载新 entitlement version。
+进行中人工接管或已接受通话允许安全结束，但不得据此启动新高成本任务。
+
 ## 5. 故障和升级
 
 遇到 degraded/not_ready 先查看 capability、trace ID、租户灰度和 circuit 状态。管理员只能查看

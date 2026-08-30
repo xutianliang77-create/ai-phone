@@ -32,6 +32,8 @@ import { getEnterpriseAdmissionConfigReadiness } from
   "../../infrastructure/postgres/enterprise-admission-config.js";
 import type { EnterpriseAdmissionAvailabilityService } from
   "../enterprise/enterprise-admission-availability.js";
+import { getEnterpriseBillingLifecycleReadiness } from
+  "../enterprise/enterprise-billing-lifecycle-auth.js";
 
 export async function registerHealthRoutes(
   app: FastifyInstance,
@@ -63,6 +65,8 @@ export async function registerHealthRoutes(
     const controlPlaneHaReadiness = await controlPlaneAvailability.status();
     const enterpriseAdmissionReadiness = getEnterpriseAdmissionConfigReadiness();
     const enterpriseAdmissionLiveReadiness = await admissionAvailability.status();
+    const enterpriseBillingLifecycleReadiness =
+      getEnterpriseBillingLifecycleReadiness();
     return {
       status: "ok",
       service: "api-server",
@@ -109,6 +113,7 @@ export async function registerHealthRoutes(
       controlPlaneHaReadiness,
       enterpriseAdmissionReadiness,
       enterpriseAdmissionLiveReadiness,
+      enterpriseBillingLifecycleReadiness,
     };
   });
 
@@ -126,6 +131,8 @@ export async function registerHealthRoutes(
     const releaseReadiness = await getReleaseReadiness();
     const controlPlaneHaReadiness = await controlPlaneAvailability.status();
     const enterpriseAdmissionLiveReadiness = await admissionAvailability.status();
+    const enterpriseBillingLifecycleReadiness =
+      getEnterpriseBillingLifecycleReadiness();
     const issues = [...new Set([
       ...releaseReadiness.issues,
       ...(controlPlaneHaReadiness.status === "ready"
@@ -134,6 +141,9 @@ export async function registerHealthRoutes(
       ...(enterpriseAdmissionLiveReadiness.status === "ready"
         ? []
         : enterpriseAdmissionLiveReadiness.issues),
+      ...(enterpriseBillingLifecycleReadiness.status === "ready"
+        ? []
+        : enterpriseBillingLifecycleReadiness.issues),
     ])];
     const status = issues.length === 0 ? "ready" as const : "not_ready" as const;
     return reply.status(status === "ready" ? 200 : 503).send({
@@ -142,6 +152,7 @@ export async function registerHealthRoutes(
       issues,
       controlPlaneHaReadiness,
       enterpriseAdmissionLiveReadiness,
+      enterpriseBillingLifecycleReadiness,
     });
   });
 }

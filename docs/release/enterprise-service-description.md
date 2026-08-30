@@ -25,6 +25,8 @@ CRM、日历、通讯渠道、PSTN 和对象存储均通过受控 Adapter 接入
 - 外部副作用使用幂等键、Inbox/Outbox、generation 和 Provider receipt 收敛。
 - 共享 Cell 在 entitlement、预算和 release control 之外执行租户并发、速率、有限队列和加权公平准入；
   配置或数据库不可用时新高成本副作用失败闭合。
+- 订阅 payment failed 后停止新高成本任务，但已建立的人工接管、Provider operation、结束、结算和审计按冻结
+  entitlement 安全排空；续费/恢复生成新的不可变 subscription/entitlement 版本，Provider 未配置时明确 not_ready。
 
 ## 3. 角色和管理责任
 

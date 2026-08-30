@@ -12,6 +12,7 @@
 - 新增或变更的企业功能及对应 `ENT-*` 任务。
 - API、数据库 migration、通讯契约和 Provider Adapter 兼容性变化。
 - 租户、角色、国家、区域、Cell、套餐或数据生命周期影响。
+- Subscription lifecycle migration、Provider签名兼容性、欠费阻断、进行中安全排空、恢复新权益版本和账期对账影响。
 - 已知限制、明确降级、未配置 Provider 和仍未通过的验收门。
 - 升级顺序、数据库前向/回退边界、客户端最低版本及回滚条件。
 

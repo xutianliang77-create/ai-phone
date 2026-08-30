@@ -1,6 +1,6 @@
 # 无界AI企业版技术架构
 
-版本：v1.58
+版本：v1.59
 日期：2026-08-31
 状态：SaaS 详细架构基线，已对齐统一通讯平台和 PostgreSQL Primary
 
@@ -177,9 +177,10 @@ object-storage
 | 账号、Tenant、RBAC、企业命令 | `services/api-server` | 先按 domain module 隔离；只有独立扩缩容或故障域需要时才拆服务 |
 | Enterprise Repository runtime/cell Worker | `services/api-server/src/modules/enterprise`、`services/api-server/src/infrastructure/postgres` | API 使用单一 `legacy|postgres` runtime；独立启动的 cell Worker 仅以 cell discovery 和 tenant transaction 角色 claim/finalize |
 | Communication Session、Provider Operation、Dispatch、Recording 和 Usage | 上游稳定提交 `fe1c3c2` 已导入企业分支，`ENT-DATA-008/CORE-013/014/015` 已补 tenant scope、企业业务绑定、签名 dispatch fence 和企业运行策略快照 | 公共 runtime 已成为代码基线；dispatch 必须先通过服务端 policy snapshot 与授权 fence，真实 Provider/设备仍待验收 |
-| PostgreSQL Primary 基础 | 公共31段 migration/Primary Runtime 与企业现有55段 migration | 已收敛为一个 Storage Driver/启动编排和两个有序 manifest；按 tenant/directory/cell/control-plane/admission/migration/maintenance 使用最小权限连接，等待真实 H3 验收 |
+| PostgreSQL Primary 基础 | 公共31段 migration/Primary Runtime 与企业现有56段 migration | 已收敛为一个 Storage Driver/启动编排和两个有序 manifest；按 tenant/directory/cell/control-plane/admission/migration/maintenance 使用最小权限连接，等待真实 H3 验收 |
 | Release Control | enterprise `0052/0053`、tenant-scoped control/event、tenant root RLS、服务端 guard 与内部探针 API | 本机 PostgreSQL 16.14 普通角色双租户、两个连接池竞争和双 API 进程同库读取已通过；Provider 故障、SLO、告警和值班演练仍待完成 |
 | Tenant Admission | enterprise `0055`、四能力policy/state/request、runtime/operator functions、admin/reconcile Worker | Worker/PSTN/Screen Share已接入并保持entitlement/预算/release-control独立；真实双租户公平、容量和soak待验收 |
+| Subscription Lifecycle | enterprise `0056`、签名账务入口、provider event/command/decision、Cell Worker和状态API | 欠费阻断新副作用，进行中链路按冻结权益安全排空；恢复生成新订阅/权益版本并重建账期聚合；真实支付/财务门禁待验收 |
 | 受控审计导出 | enterprise `0020`、Audit Export API/Repository、cell Worker、加密对象存储 Adapter | API 只创建/查询/鉴权下载；cell Worker 在 tenant transaction 取数并保存 hash/size/expiry，客户端不获得对象存储 key/凭据 |
 | 数据生命周期 | enterprise `0051`、Data Lifecycle Repository、cell Worker、对象删除/复核 Adapter、tenant deletion convergence receipt | 导出完成原子登记删除 job；到期/租户删除复用 pending-work 协调；对象复核不存在及数据库/对象/Provider remaining=0 后才完成，不建立第二套 tenant/export 真值 |
 | Enterprise Knowledge | enterprise `0017`、Knowledge Repository/runtime/API | source/revision/chunk/review/publish、发布后不可变、四维有效期检索和 citation 已接入；embedding Provider 未配置时保持确定性文本检索，不声明向量 readiness |
@@ -903,13 +904,13 @@ Worker 无权依据缓存继续执行敏感能力。
 
 生产 PostgreSQL 启动还必须验证企业签名 cutover evidence：证据绑定 staging 环境、
 commit、image digest、topology hash、目标 logical ID、system identifier/OID、公共31段与
-企业53段 manifest，并证明源库 writer fence、旧 API/Worker 角色会话为0、目标可写和
+企业56段 manifest，并证明源库 writer fence、旧 API/Worker 角色会话为0、目标可写和
 二次全量 hash 一致。本地逻辑恢复证据不提升为跨故障域 HA/PITR 结论。
 
 `ENT-REL-003` 在该单一 cutover 真值之后增加 Provider 无关的灾备证据层，不建立第二套数据库状态：
 `signed cutover evidence -> enterprise DR binding -> bounded shell-free Provider steps -> signed schema-v2 result
 -> production resilience verifier`。binding 固定候选 commit/image、topology、cutover/run ID、目标数据库
-system identifier/OID/manifest 和当前31+55 migration；cutover 与 DR 使用不同 HMAC key。命令 attestation
+system identifier/OID/manifest 和当前31+56 migration；cutover 与 DR 使用不同 HMAC key。命令 attestation
 必须回显 run/group/step，并按固定顺序完成 baseline、异地 base backup/WAL、健康控制器自动切换、旧主数据库+
 route epoch+Worker generation 三层 fencing、服务发现、旧主只读 standby 重入、隔离 PITR 与 hash 复核。
 备份故障域必须不同于全部 HA 数据库故障域，且证明加密、对象版本和 compliance/provider retention lock。
@@ -1104,6 +1105,23 @@ request 保存稳定 resource/idempotency/hash、状态和 lease。四张表 for
 Worker Dispatch、Marketing PSTN 和 Screen Share 在外部副作用前取得并复核 admission；已有 entitlement、预算、
 release control、业务 generation 和公共 capacity 继续独立生效。结束/取消/撤销/已知失败同事务 release，heartbeat
 续租，未知结果只保留批准时长。全局 admission 控制表不进入 tenant Cell 数据迁移，活动请求直接阻断迁移。
+
+### 15.2 PostgreSQL Subscription Lifecycle
+
+`0056` 把外部账务事实分成三层：`billing_provider_events` 保存 Provider event ID、原始载荷 hash 和规范请求
+hash，且只能追加；`billing_lifecycle_commands` 是 Cell Worker 的可恢复租约命令；
+`billing_lifecycle_decisions` 保存旧/新账户与订阅状态、结果版本和关账区间，且只能追加。三表都使用
+tenant-first 复合 FK 与 forced RLS。Provider 事件只经 HMAC、300秒默认重放窗和配置 Provider 名称进入；
+未配置时 API/health 均失败闭合。
+
+Cell Worker 先取得 `platform_pending_work` 的 cell-scoped coordination generation，再在 tenant transaction
+领取 lifecycle command；状态、entitlement projection、decision、usage aggregate、audit 和 command 完成同事务提交。
+崩溃前提交为0，崩溃后提交由同 event/command 去重；外层协调 lease 或内层 command generation 丢失都会回滚。
+活动 lifecycle command 阻断 tenant Cell 迁移，终态 provider event/decision/command 随租户数据迁移。
+
+欠费状态不回写已发 ticket/binding 的冻结 entitlement，也不在媒体/Provider 调用中途撤销安全结束权限；新 dispatch
+仍从当前 active account/subscription/snapshot 解析，因此 `past_due/suspended/closed` 立即拒绝新高成本副作用。
+恢复/续费始终创建新 subscription/snapshot，旧版本只允许历史会话完成，不能恢复签发。
 
 ## 16. 不可破坏的架构不变量
 

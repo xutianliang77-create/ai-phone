@@ -59,6 +59,7 @@ export class EnterpriseBillingAccountPostgresRepository {
     account: EnterpriseBillingAccountRecord,
     now: string,
   ) {
+    if (account.status !== "active") return;
     const tenant = await this.session.queryTenantRecord<TenantPlanRow>(`
       SELECT plan_code, created_at FROM enterprise.tenants WHERE id = $1
     `);

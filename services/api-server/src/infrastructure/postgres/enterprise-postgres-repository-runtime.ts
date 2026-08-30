@@ -32,7 +32,7 @@ import { createEnterprisePostgresMeetingRuntime } from "./enterprise-postgres-me
 import { createEnterprisePostgresMeetingTranslationRuntime } from "./enterprise-postgres-meeting-translation-runtime.js";
 import { createEnterprisePostgresMeetingScreenShareRuntime } from "./enterprise-postgres-meeting-screen-share-runtime.js";
 import { createEnterprisePostgresMeetingMaterialRuntime } from "./enterprise-postgres-meeting-material-runtime.js";
-import { createEnterprisePostgresBusinessRuntimes } from "./enterprise-postgres-business-runtimes.js";
+import { createEnterprisePostgresBusinessRuntimes } from "./enterprise-postgres-business-runtimes.js"; import { createEnterprisePostgresBillingLifecycleRuntime } from "./enterprise-postgres-billing-lifecycle-runtime.js";
 export function createPostgresEnterpriseRepositoryRuntime(
   pools: EnterprisePostgresPool | {
     tenantPool: EnterprisePostgresPool;
@@ -60,6 +60,7 @@ export function createPostgresEnterpriseRepositoryRuntime(
     ...createEnterprisePostgresMeetingMaterialRuntime(pool),
     ...createEnterprisePostgresBusinessRuntimes(pool,
       process.env.ENTERPRISE_WORKER_DISPATCH_SIGNING_SECRET?.trim() ?? ""),
+    ...createEnterprisePostgresBillingLifecycleRuntime(pool),
     resolveContext(input) {
       return resolveEnterprisePostgresContext({
         pool: split.directoryPool,

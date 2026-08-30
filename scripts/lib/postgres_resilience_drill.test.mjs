@@ -223,6 +223,6 @@ function binding() {
       oid: "42",
       manifestSha256: "f".repeat(64),
     },
-    migrations: { publicCount: 31, enterpriseCount: 55, sha256: "1".repeat(64) },
+    migrations: { publicCount: 31, enterpriseCount: 56, sha256: "1".repeat(64) },
   };
 }

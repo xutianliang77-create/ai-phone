@@ -8,6 +8,8 @@
 2. 在隔离 staging 执行 A0–A3、H1–H3，并生成绑定候选身份的证据文件和 SHA-256。
 3. 复核安全例外、密钥、Provider readiness、容量、告警、值班表、备份/WAL/PITR 和回滚点。
    容量复核必须包含四能力 admission policy、独立角色GRANT、live status、双租户公平和队列reconcile证据。
+   账务复核必须包含签名 Provider Adapter、renew/past_due/suspend/recover/cancel、Worker崩溃重领、旧会话
+   安全排空和关闭账期 ledger count/hash 财务抽样。
 4. 完成产品、工程、安全、隐私、运维和法务审批后运行企业发布材料 checker。
 5. checker 或 `/health/release-ready` 非 ready 时禁止进入生产灰度。
 
@@ -21,6 +23,8 @@ Provider、数据库、Outbox、账本和业务 SLI；错误率、延迟、审�
 租户能力熔断使用 PostgreSQL release control 真值。kill switch 只阻止目标 tenant/capability 的
 新副作用，已经接受的 Provider operation 继续安全对账、结算和审计。回滚不能绕过 schema
 兼容性、writer fence、route epoch 或 Worker generation；未知 Provider 结果用原幂等键重试查询。
+订阅事故使用 [Subscription Lifecycle 值班手册](../runbooks/enterprise-subscription-lifecycle.md)，禁止手工更新状态、
+删除 event/decision 或复活旧 entitlement。`0056` down 遇到未remediate的欠费/暂停/取消状态必须保持失败闭合。
 
 ## 4. 事件响应
 

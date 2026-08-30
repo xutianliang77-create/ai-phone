@@ -98,6 +98,21 @@ describe("enterprise PostgreSQL billing entitlement", () => {
       sql.includes("INSERT INTO enterprise.subscriptions")
     )).toBe(false);
   });
+
+  it("does not recreate an active subscription for a delinquent account", async () => {
+    const fixture = billingFixture({ accountStatus: "past_due" });
+    const account = await new EnterpriseBillingEntitlementPostgresRepository(
+      fixture.session,
+    ).ensureAccount({ now });
+    expect(account.status).toBe("past_due");
+    expect(fixture.calls.some(({ sql }) =>
+      sql.includes("INSERT INTO enterprise.subscriptions") ||
+      sql.includes("INSERT INTO enterprise.entitlement_snapshots")
+    )).toBe(false);
+    expect(fixture.calls.some(({ sql }) =>
+      sql.includes("SELECT plan_code") && sql.includes("enterprise.tenants")
+    )).toBe(false);
+  });
 });
 
 function changeInput() {
@@ -115,6 +130,7 @@ function billingFixture(input: {
   entitlementEnabled?: boolean;
   replayHash?: string;
   subscriptionEnd?: string;
+  accountStatus?: "active" | "past_due" | "suspended" | "closed";
 } = {}) {
   const calls: Call[] = [];
   const context = createEnterpriseTenantContext({
@@ -134,7 +150,7 @@ function billingFixture(input: {
         subscription_id: oldSubscriptionId,
         entitlement_snapshot_id: oldEntitlementId }] : [];
     } else if (sql.includes("billing_accounts") && sql.includes("SELECT")) {
-      rows = [accountRow()];
+      rows = [accountRow(input.accountStatus)];
     } else if (sql.includes("billing_plan_versions") && sql.includes("SELECT")) {
       rows = [values.includes("standard-2026-07") ? targetPlanRow() : migrationPlanRow()];
     } else if (sql.includes("subscriptions") && sql.includes("SELECT")) {
@@ -180,8 +196,9 @@ function billingFixture(input: {
   return { calls, session };
 }
 
-function accountRow() {
-  return { id: accountId, tenant_id: tenantId, status: "active", currency: "CNY",
+function accountRow(status: "active" | "past_due" | "suspended" | "closed" =
+  "active") {
+  return { id: accountId, tenant_id: tenantId, status, currency: "CNY",
     billing_contact_subject_id: null, created_at: "2026-07-01T00:00:00.000Z",
     updated_at: "2026-07-01T00:00:00.000Z", version: "1" };
 }

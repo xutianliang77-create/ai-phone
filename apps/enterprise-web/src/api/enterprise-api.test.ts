@@ -189,6 +189,7 @@ describe("enterprise API client", () => {
     const context = contentContext();
 
     await api.getBillingEntitlements(context);
+    await api.getBillingLifecycleStatus(context);
     await api.changeSubscription(context, {
       planCode: "enterprise_growth",
       planVersion: "2026-07",
@@ -209,22 +210,23 @@ describe("enterprise API client", () => {
 
     expect(fetcher.mock.calls.map(([url]) => url)).toEqual([
       "/api/saas/v1/tenants/tenant-a/entitlements",
+      "/api/saas/v1/tenants/tenant-a/subscription/lifecycle",
       "/api/saas/v1/tenants/tenant-a/subscription/change",
       "/api/enterprise/v1/usage/budgets",
       "/api/enterprise/v1/usage/budgets/llm_input_tokens",
       "/api/enterprise/v1/usage/aggregates",
     ]);
     expect(fetcher.mock.calls.map(([, init]) => init?.method)).toEqual([
-      undefined, "POST", undefined, "PUT", undefined,
+      undefined, undefined, "POST", undefined, "PUT", undefined,
     ]);
-    expect(JSON.parse(String(fetcher.mock.calls[1]?.[1]?.body))).toEqual({
+    expect(JSON.parse(String(fetcher.mock.calls[2]?.[1]?.body))).toEqual({
       planCode: "enterprise_growth",
       planVersion: "2026-07",
       seats: 12,
       billingCycle: "annual",
       idempotencyKey: "change-a",
     });
-    expect(JSON.parse(String(fetcher.mock.calls[3]?.[1]?.body))).not.toHaveProperty("tenantId");
+    expect(JSON.parse(String(fetcher.mock.calls[4]?.[1]?.body))).not.toHaveProperty("tenantId");
     for (const call of fetcher.mock.calls) {
       const headers = call[1]?.headers as Record<string, string>;
       expect(headers["x-tenant-id"]).toBe("tenant-a");

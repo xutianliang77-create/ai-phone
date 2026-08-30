@@ -1,6 +1,6 @@
 # 无界AI企业版详细功能设计
 
-版本：v1.56
+版本：v1.57
 日期：2026-08-31
 状态：SaaS 详细设计基线，已对齐统一通讯平台
 
@@ -899,7 +899,7 @@ service-account Adapter、可注入 mock 以及 Web/Flutter 状态入口。自�
   PITR 已验证；证据需显示环境、commit/image/topology、cutover ID 和最近验证时间。
   本地或同故障域恢复只能显示“机制已验证”，不能显示“生产灾备就绪”。
 - `ENT-REL-003` 只建立服务端演练和放行证据门禁，不向租户提供 promote、failover、fence 或 restore
-  操作。灾备 readiness 只有在同一签名 schema-v2 结果绑定当前 enterprise cutover、31+55 manifest、
+  操作。灾备 readiness 只有在同一签名 schema-v2 结果绑定当前 enterprise cutover、31+56 manifest、
   自动切换/旧主隔离、异地不可变备份和 PITR hash 后才可为 ready；缺 Adapter、容量、证据或任一实测值
   必须显示 `not_ready`。RPO/RTO 只展示批准目标和本次实测，不得在真实演练与 SLA 批准前承诺数值。
 
@@ -969,6 +969,26 @@ service-account Adapter、可注入 mock 以及 Web/Flutter 状态入口。自�
 - queued/admitted admission 会阻断 tenant Cell 迁移；全局 policy/state/request 不随租户业务表复制。当前代码和
   测试定义存在但未运行真实共享 Cell/容量门禁，因此不能展示 noisy-neighbor production ready。
 
+### 8.7 订阅续费、欠费、暂停和恢复
+
+- Billing Account 的客户可见状态固定为 `active -> past_due -> suspended -> closed`；Subscription 另保留
+  `active/past_due/suspended/superseded/cancelled`，不以删除历史订阅表达续费或恢复。
+- 只有经过内部 HMAC、时间窗和 Provider 名称校验的标准化账务事件可以推进状态。浏览器、租户管理员、客户端
+  `tenantId`、支付回调 URL 或数据库裸 ID 都不能直接改变订阅；相同 Provider event 精确重放，不同载荷冲突。
+- `payment_failed` 立即阻断新会议 Worker、外呼、屏幕共享等高成本副作用，但不强制中断已建立的紧急人工接管、
+  已接受通话、会话结束、结算和审计。已有 Worker/会话继续使用其创建时冻结的 entitlement version 安全排空。
+- `grace_expired` 进入 suspended，并停止签发/续期新的活动权益。短租约能力在租约结束后自然停止；停止、撤销、
+  挂断、结算和数据导出等安全收敛路径不被欠费 guard 反向阻断。
+- `renewed/payment_recovered` 不复活或改写旧行，而是把旧 subscription/snapshot 标记为
+  `superseded/retired`，生成新账期 subscription、entitlement snapshot 和 projection。旧客户端或旧 Worker
+  不能用旧 entitlement 获取新副作用；新请求必须重新解析当前版本。
+- `cancelled` 关闭账务账户、取消订阅、退休当前权益并禁用 projection；历史 usage、ledger、decision 和 audit
+  保持不可变。每个关闭账期按真实 ledger 中存在的 category/unit 重建 count/hash 聚合，不能漏账或客户端估算。
+- 企业设置只读状态接口展示当前账户/订阅、账期和最后一次事件/决定，不展示 Provider 原始载荷、签名、密钥或
+  内部队列。Provider/密钥未配置时健康与内部入口明确 `not_ready/503`，不得制造续费成功。
+- 当前形成 PostgreSQL、Repository、Worker、API 和测试定义代码候选；未执行真实支付 Provider、账期、RLS、
+  故障恢复或财务抽样，因此不能显示订阅生命周期 production ready。
+
 ## 9. 核心流程契约
 
 ### 9.1 首次开通
@@ -1006,6 +1026,15 @@ service-account Adapter、可注入 mock 以及 Web/Flutter 状态入口。自�
 | 主流程 | acquire lease → 发布 screen track → 自适应订阅 → pause/resume → stop/revoke |
 | 成功结果 | 同一会议只有一个 active/paused share；主持人停止后旧 track 不能恢复 |
 | 失败处理 | OCR、翻译或系统音频失败不终止画面；RTC 断开后租约超时收敛为 ended |
+
+### 9.5 订阅欠费与恢复
+
+| 项目 | 设计 |
+| --- | --- |
+| 前置条件 | PostgreSQL、当前 billing account/subscription、签名账务 Adapter 和 Cell Worker ready |
+| 主流程 | Provider event 去重 → pending command → Worker 租约 → 状态决定 → 权益投影/账期聚合 → audit |
+| 成功结果 | 新高成本任务按当前状态阻断或恢复；旧会话安全排空；账期 ledger count/hash 可重建 |
+| 失败处理 | 签名、重放、状态、租约或事务任一步失败均不部分提交；未知结果等待同 command 更高 generation 重领 |
 
 ## 10. 非功能要求
 

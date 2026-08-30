@@ -15,6 +15,8 @@ import {
 } from "./enterprise-postgres-subject-id.js";
 import { enterpriseMeetingScreenShareMaxPauseSeconds } from
   "./enterprise-postgres-meeting-screen-share-runtime.js";
+import { createEnterpriseAuditEvent } from
+  "../../modules/enterprise/enterprise-audit.repository.js";
 
 export interface EnterprisePostgresPendingWorkRow extends Record<string, unknown> {
   cell_id: unknown;
@@ -55,6 +57,12 @@ export type EnterprisePostgresPendingWorkRef =
       cellId: string;
       tenantId: string;
       workKind: "data_lifecycle";
+      resourceId: string;
+    }
+  | {
+      cellId: string;
+      tenantId: string;
+      workKind: "billing_lifecycle";
       resourceId: string;
     };
 
@@ -101,6 +109,7 @@ export async function claimEnterprisePostgresPendingWork(input: {
   now: string;
   leaseExpiresAt: string;
   traceId: string;
+  workerId?: string;
 }) {
   assertTimestamp(input.now);
   assertTimestamp(input.leaseExpiresAt);
@@ -118,14 +127,17 @@ export async function claimEnterprisePostgresPendingWork(input: {
     ? "system:enterprise-outbox"
     : input.ref.workKind === "data_lifecycle"
     ? "system:enterprise-data-lifecycle"
+    : input.ref.workKind === "billing_lifecycle"
+    ? "system:enterprise-billing-lifecycle"
     : "system:enterprise-screen-share";
+  const context = createEnterpriseTenantContext({
+    tenantId: input.ref.tenantId,
+    actorUserId,
+    traceId: input.traceId,
+  });
   return withEnterprisePostgresUnitOfWork(
     input.pool,
-    createEnterpriseTenantContext({
-      tenantId: input.ref.tenantId,
-      actorUserId,
-      traceId: input.traceId,
-    }),
+    context,
     async (unit) => {
       const tenant = await unit.tenant.findTenant({ lock: true });
       if (!tenant || tenant.cellId !== input.cellId) {
@@ -186,6 +198,31 @@ export async function claimEnterprisePostgresPendingWork(input: {
           }),
         };
       }
+      if (input.ref.workKind === "billing_lifecycle") {
+        const result = await unit.billingLifecycle.claim({
+          commandId: input.ref.resourceId,
+          workerId: input.workerId ?? `enterprise-worker:${input.cellId}`,
+          now: input.now,
+          leaseExpiresAt: input.leaseExpiresAt,
+        });
+        if (result.status === "failed") {
+          await unit.tenant.appendAuditEvent(createEnterpriseAuditEvent({
+            context,
+            action: "subscription.lifecycle.retry_exhausted",
+            resourceType: "subscription_lifecycle_command",
+            resourceId: result.command.id,
+            result: "failed",
+            details: { eventId: result.command.eventId,
+              attempts: result.command.attempts,
+              errorCode: result.command.errorCode ?? "retry_exhausted" },
+            createdAt: input.now,
+          }));
+        }
+        return {
+          workKind: input.ref.workKind,
+          result,
+        };
+      }
       return {
         workKind: input.ref.workKind,
         result: await unit.events.claimOutbox({
@@ -218,7 +255,8 @@ export function mapEnterprisePostgresPendingWorkRow(
     };
   }
   if ((row.work_kind === "outbox" || row.work_kind === "screen_share" ||
-    row.work_kind === "data_lifecycle") &&
+    row.work_kind === "data_lifecycle" ||
+    row.work_kind === "billing_lifecycle") &&
     row.actor_id == null) {
     return { cellId, tenantId, workKind: row.work_kind, resourceId };
   }

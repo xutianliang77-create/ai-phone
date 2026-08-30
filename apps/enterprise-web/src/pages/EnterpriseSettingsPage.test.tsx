@@ -4,6 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import type {
   AccountDto,
+  EnterpriseBillingLifecycleStatusResponse,
   EnterpriseContextResponse,
   EnterpriseScope,
 } from "@translation/contracts";
@@ -76,6 +77,23 @@ describe("enterprise service settings", () => {
     expect(await screen.findByText(/订阅已更新为 enterprise_growth@2026-07/)).toBeVisible();
   });
 
+  it("shows delinquency truth even when no active entitlement is available", async () => {
+    const api = createApi(["tenant:read", "billing:read", "billing:write"]);
+    api.getBillingEntitlements = vi.fn().mockRejectedValue(
+      new EnterpriseApiError(404, "entitlement_not_found", "Not found", "trace-past-due"),
+    );
+    api.getBillingLifecycleStatus = vi.fn().mockResolvedValue(billingLifecycle({
+      accountStatus: "past_due", subscriptionStatus: "past_due",
+      lastEventType: "payment_failed", lastDecisionReason: "payment_failed",
+    }));
+    renderWithApi("/settings/billing", api);
+
+    expect(await screen.findByText("past_due / past_due")).toBeVisible();
+    expect(screen.getByText(/当前状态阻断新高成本任务/)).toBeVisible();
+    expect(screen.getByText(/当前订阅状态没有活动 entitlement/)).toBeVisible();
+    expect(screen.queryByRole("button", { name: "提交变更" })).not.toBeInTheDocument();
+  });
+
   it("updates a budget with its server version and renders ledger aggregates as read-only", async () => {
     const api = createApi(["tenant:read", "billing:read", "billing:write", "usage:read"]);
     api.listUsageBudgets = vi.fn().mockResolvedValue({ budgets: [budget()] });
@@ -137,6 +155,7 @@ function createApi(scopes: EnterpriseScope[]): EnterpriseApi {
     getContext: vi.fn().mockResolvedValue({ ...membership(), scopes } satisfies EnterpriseContextResponse),
     getProviderCapabilities: vi.fn().mockResolvedValue({ capabilities: [provider()] }),
     getBillingEntitlements: vi.fn().mockResolvedValue(entitlements()),
+    getBillingLifecycleStatus: vi.fn().mockResolvedValue(billingLifecycle()),
   };
 }
 
@@ -163,6 +182,19 @@ function entitlements() {
     subscription: { id: "subscription-a", tenantId: "tenant-a", billingAccountId: "billing-a", planCode: "enterprise_growth", planVersion: "2026-07", status: "active", seats: 12, billingCycle: "annual", currentPeriodStart: now, currentPeriodEnd: "2027-07-19T00:00:00Z", createdAt: now, updatedAt: now, version: 3 },
     entitlement: { id: "entitlement-a", tenantId: "tenant-a", billingAccountId: "billing-a", subscriptionId: "subscription-a", entitlementVersion: "ent-3", status: "active" as const, planCode: "enterprise_growth", planVersion: "2026-07", entitlements: { "meeting.seats": { enabled: true, limit: 12 } }, effectiveFrom: now, createdAt: now },
   };
+}
+
+function billingLifecycle(overrides: Partial<EnterpriseBillingLifecycleStatusResponse> = {}) {
+  return { ...baseBillingLifecycle(), ...overrides };
+}
+
+function baseBillingLifecycle(): EnterpriseBillingLifecycleStatusResponse {
+  return { accountStatus: "active", subscriptionId: "subscription-a",
+    subscriptionStatus: "active",
+    currentPeriodStart: "2026-07-19T00:00:00Z",
+    currentPeriodEnd: "2027-07-19T00:00:00Z",
+    lastEventType: "renewed" as const, lastDecisionAction: "applied" as const,
+    lastDecisionReason: "renewed", updatedAt: "2026-07-19T00:00:00Z" };
 }
 
 function budget() {

@@ -2,6 +2,7 @@ import type {
   ChangeEnterpriseSubscriptionRequest,
   ConfigureEnterpriseUsageBudgetRequest,
   EnterpriseEntitlementsResponse,
+  EnterpriseBillingLifecycleStatusResponse,
   EnterpriseProviderCapabilitiesResponse,
   EnterpriseSessionTraceReportResponse,
   EnterpriseUsageBudgetsResponse,
@@ -21,6 +22,9 @@ export interface EnterpriseSettingsApi {
   getBillingEntitlements(
     context: EnterpriseContentRequestContext,
   ): Promise<EnterpriseEntitlementsResponse>;
+  getBillingLifecycleStatus(
+    context: EnterpriseContentRequestContext,
+  ): Promise<EnterpriseBillingLifecycleStatusResponse>;
   getSessionTraceReport(
     token: string,
     tenantId: string,
@@ -54,6 +58,10 @@ export function createEnterpriseSettingsApi(
     ),
     getBillingEntitlements: (context) => request(
       `/saas/v1/tenants/${encodeURIComponent(context.tenantId)}/entitlements`,
+      { headers: headers(context) },
+    ),
+    getBillingLifecycleStatus: (context) => request(
+      `/saas/v1/tenants/${encodeURIComponent(context.tenantId)}/subscription/lifecycle`,
       { headers: headers(context) },
     ),
     getSessionTraceReport: (token, tenantId, sessionId) => request(

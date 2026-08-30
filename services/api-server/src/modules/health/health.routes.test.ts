@@ -8,6 +8,7 @@ import {
   configureAccountEnv,
   configureCallRoomEnv,
   configureDiagnosticsEnv,
+  configureEnterpriseBillingLifecycleEnv,
   configurePaymentEnv,
   configureSmsEnv,
   restoreEnv,
@@ -275,6 +276,7 @@ describe("health routes", () => {
     configureReleaseMaterialsEnv(tempDirs);
     configureEnterpriseReleaseMaterialsEnv(tempDirs);
     configureEnterpriseAdmissionEnv(tempDirs);
+    configureEnterpriseBillingLifecycleEnv();
     const app = await buildApp({
       enterpriseControlPlaneAvailability: readyControlPlaneAvailability(),
       enterpriseAdmissionAvailability: readyAdmissionAvailability(),
@@ -302,6 +304,10 @@ describe("health routes", () => {
       smsReadiness: { status: "ready", provider: "http" },
       releaseMaterialsReadiness: { status: "ready" },
       enterpriseReleaseMaterialsReadiness: { status: "ready" },
+      enterpriseBillingLifecycleReadiness: {
+        status: "ready",
+        provider: "billing-adapter",
+      },
     });
   });
 

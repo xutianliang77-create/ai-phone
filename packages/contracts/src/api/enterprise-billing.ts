@@ -115,6 +115,21 @@ export interface EnterpriseEntitlementsResponse {
   entitlement: EnterpriseEntitlementSnapshotDto;
 }
 
+export interface EnterpriseBillingLifecycleStatusResponse {
+  accountStatus: "active" | "past_due" | "suspended" | "closed";
+  subscriptionId: string;
+  subscriptionStatus:
+    | "active" | "past_due" | "suspended" | "superseded" | "cancelled";
+  currentPeriodStart: string;
+  currentPeriodEnd: string;
+  lastEventType?:
+    | "renewed" | "payment_failed" | "grace_expired"
+    | "payment_recovered" | "cancelled";
+  lastDecisionAction?: "applied" | "ignored";
+  lastDecisionReason?: string;
+  updatedAt: string;
+}
+
 export interface EnterpriseUsagePeriodAggregateDto {
   id: string;
   tenantId: string;

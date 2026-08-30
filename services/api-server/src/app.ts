@@ -33,6 +33,8 @@ import {
 import {
   registerEnterpriseBillingEntitlementRoutes,
 } from "./modules/enterprise/enterprise-billing-entitlement.routes.js";
+import { registerEnterpriseBillingLifecycleRoutes } from
+  "./modules/enterprise/enterprise-billing-lifecycle.routes.js";
 import { registerEnterpriseKnowledgeRoutes } from "./modules/enterprise/enterprise-knowledge.routes.js";
 import {
   registerEnterpriseTerminologyRoutes,
@@ -201,6 +203,11 @@ export async function buildApp(dependencies: AppDependencies = {}) {
     tenantRouteService,
     enterpriseRepositoryRuntime,
     controlPlaneAvailability,
+  );
+  registerEnterpriseBillingLifecycleRoutes(
+    app,
+    tenantRouteService,
+    enterpriseRepositoryRuntime,
   );
   await registerEnterpriseKnowledgeRoutes(
     app,

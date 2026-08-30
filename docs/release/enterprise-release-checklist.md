@@ -24,7 +24,8 @@
 - [ ] Provider 未配置、超时、部分响应和未知结果均明确降级，不伪造成功。
 - [ ] tenant 灰度、kill switch、告警、值班、客户通知和回滚决策人已确认。
 - [ ] 四能力 tenant admission policy 绑定候选；共享Cell公平、速率/队列、过期reconcile和真实混合容量通过。
+- [ ] 签名账务 Adapter、五类订阅事件、双Worker恢复、进行中安全排空、状态API和关闭账期财务对账通过。
 - [ ] rollback 不丢最新数据，旧 route/Worker/writer 永久失败闭合。
-- [ ] 用量、账本、审计、授权、禁拨、对象和生命周期 count/hash 对账完成。
+- [ ] 用量、账本、审计、授权、禁拨、对象、billing event/decision 和生命周期 count/hash 对账完成。
 
 任何一项未完成时 manifest 保持 `not_ready`，不得以口头批准或历史其他候选证据代替。
