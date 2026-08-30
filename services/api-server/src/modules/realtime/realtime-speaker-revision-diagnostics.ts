@@ -4,6 +4,20 @@ type SpeakerRevisionDiagnostics = NonNullable<
   RealtimeSessionDiagnosticsDto["speakerRevision"]
 >;
 
+const TOKEN_SPLIT_REJECTION_REASONS = new Set([
+  "not_final",
+  "missing_timing",
+  "missing_token_timing",
+  "invalid_token_timing",
+  "explicit_overlap",
+  "unconfirmed_boundary",
+  "turn_lineage_mismatch",
+  "protected_surface",
+  "no_safe_token_boundary",
+  "sortformer_evidence_mismatch",
+  "text_conservation_failed",
+]);
+
 export function sanitizedSpeakerRevision(value: SpeakerRevisionDiagnostics) {
   return {
     configuredProvider: value.configuredProvider,
@@ -17,6 +31,8 @@ export function sanitizedSpeakerRevision(value: SpeakerRevisionDiagnostics) {
     splitParentCount: value.splitParentCount,
     splitChildCount: value.splitChildCount,
     splitRejectedCount: value.splitRejectedCount,
+    splitSkippedParentCount: value.splitSkippedParentCount ?? 0,
+    splitSkippedReasonCounts: value.splitSkippedReasonCounts ?? {},
     cardinalityMismatchCount: value.cardinalityMismatchCount,
     ...(value.lastLatencyMs !== undefined
       ? { lastLatencyMs: value.lastLatencyMs }
@@ -46,6 +62,7 @@ export function isSpeakerRevisionDiagnostics(
   const errorCount = value.errorCount as number;
   const staleResultCount = value.staleResultCount as number;
   const splitRejectedCount = value.splitRejectedCount as number;
+  const splitSkippedParentCount = value.splitSkippedParentCount ?? 0;
   const cardinalityMismatchCount = value.cardinalityMismatchCount as number;
   return value.configuredProvider === "http" &&
     (value.mode === "shadow" || value.mode === "apply") &&
@@ -54,9 +71,24 @@ export function isSpeakerRevisionDiagnostics(
     errorCount <= requestCount &&
     acceptedCount <= completedCount &&
     splitRejectedCount <= completedCount &&
+    isNonNegativeInteger(splitSkippedParentCount) &&
+    validSkippedReasonCounts(
+      value.splitSkippedReasonCounts,
+      Number(splitSkippedParentCount),
+    ) &&
     cardinalityMismatchCount <= splitRejectedCount &&
     (value.mode !== "shadow" || value.emittedUpdateCount === 0) &&
     (value.lastLatencyMs === undefined || isNonNegativeFinite(value.lastLatencyMs));
+}
+
+function validSkippedReasonCounts(value: unknown, expectedTotal: number) {
+  if (value === undefined) return expectedTotal === 0;
+  if (!isRecord(value)) return false;
+  const entries = Object.entries(value);
+  return entries.every(([reason, count]) =>
+    TOKEN_SPLIT_REJECTION_REASONS.has(reason) && isNonNegativeInteger(count)
+  ) && entries.reduce((total, [, count]) => total + Number(count), 0) ===
+    expectedTotal;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

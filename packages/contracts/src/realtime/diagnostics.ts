@@ -119,9 +119,27 @@ export interface RealtimeSpeakerRevisionDiagnosticsDto {
   splitParentCount: number;
   splitChildCount: number;
   splitRejectedCount: number;
+  splitSkippedParentCount?: number;
+  splitSkippedReasonCounts?: Partial<Record<
+    SpeakerTokenSplitRejectionReason,
+    number
+  >>;
   cardinalityMismatchCount: number;
   lastLatencyMs?: number;
 }
+
+export type SpeakerTokenSplitRejectionReason =
+  | "not_final"
+  | "missing_timing"
+  | "missing_token_timing"
+  | "invalid_token_timing"
+  | "explicit_overlap"
+  | "unconfirmed_boundary"
+  | "turn_lineage_mismatch"
+  | "protected_surface"
+  | "no_safe_token_boundary"
+  | "sortformer_evidence_mismatch"
+  | "text_conservation_failed";
 
 export interface RealtimeAsrEndpointPolicyDto {
   mode: "conversation" | "listening" | "call_link" | "pstn";

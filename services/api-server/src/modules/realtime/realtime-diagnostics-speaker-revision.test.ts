@@ -64,6 +64,10 @@ describe("high-context speaker revision diagnostics", () => {
         splitParentCount: 2,
         splitChildCount: 4,
         splitRejectedCount: 0,
+        splitSkippedParentCount: 2,
+        splitSkippedReasonCounts: {
+          no_safe_token_boundary: 2,
+        },
         cardinalityMismatchCount: 0,
         lastLatencyMs: 1810.6,
         rawAudio: "must-not-survive",
@@ -82,6 +86,10 @@ describe("high-context speaker revision diagnostics", () => {
       splitParentCount: 2,
       splitChildCount: 4,
       splitRejectedCount: 0,
+      splitSkippedParentCount: 2,
+      splitSkippedReasonCounts: {
+        no_safe_token_boundary: 2,
+      },
       cardinalityMismatchCount: 0,
       lastLatencyMs: 1810.6,
     });
@@ -114,6 +122,14 @@ describe("high-context speaker revision diagnostics", () => {
     ["a counter is negative", {
       requestCount: -1,
     }],
+    ["skipped reason totals do not match", {
+      splitSkippedParentCount: 2,
+      splitSkippedReasonCounts: { no_safe_token_boundary: 1 },
+    }],
+    ["an unknown skipped reason is reported", {
+      splitSkippedParentCount: 1,
+      splitSkippedReasonCounts: { unsafe_guess: 1 },
+    }],
   ])("rejects diagnostics when %s", (_label, patch) => {
     expect(parseRealtimeDiagnostics({
       version: 1,
@@ -134,6 +150,8 @@ describe("high-context speaker revision diagnostics", () => {
         splitParentCount: 0,
         splitChildCount: 0,
         splitRejectedCount: 0,
+        splitSkippedParentCount: 0,
+        splitSkippedReasonCounts: {},
         cardinalityMismatchCount: 0,
         ...patch,
       },
