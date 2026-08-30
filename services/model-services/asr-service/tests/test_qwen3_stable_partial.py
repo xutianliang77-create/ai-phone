@@ -1,3 +1,4 @@
+import asyncio
 from types import SimpleNamespace
 
 import numpy as np
@@ -39,9 +40,11 @@ async def test_emits_only_an_adjacent_confirmed_chinese_prefix() -> None:
     coordinator = StableReadablePartialCoordinator(runner, enabled=True)
     request = asr_request()
 
-    assert await coordinator.observe(request, active_audio(500), "") is None
-    partial = await coordinator.observe(request, active_audio(700), "")
-    backtrack = await coordinator.observe(request, active_audio(900), "")
+    assert await observe_settled(
+        coordinator, request, active_audio(500)
+    ) is None
+    partial = await observe_settled(coordinator, request, active_audio(700))
+    backtrack = await observe_settled(coordinator, request, active_audio(900))
 
     assert partial is not None
     assert partial.segmentId == "qwen3_seg_1"
@@ -50,7 +53,7 @@ async def test_emits_only_an_adjacent_confirmed_chinese_prefix() -> None:
     assert partial.text == "会议开始"
     assert partial.language == "zh"
     assert backtrack is None
-    finalization = coordinator.finish("sess_1")
+    finalization = await coordinator.finish("sess_1")
     assert finalization is not None
     assert finalization.segment_id == "qwen3_seg_1"
     assert finalization.revision == 1
@@ -65,8 +68,10 @@ async def test_identical_decodes_are_valid_confirmation_evidence() -> None:
     runner = FakeStreamingRunner(["今天开会。", "今天开会。"])
     coordinator = StableReadablePartialCoordinator(runner, enabled=True)
 
-    assert await coordinator.observe(asr_request(), active_audio(500), "") is None
-    partial = await coordinator.observe(asr_request(), active_audio(700), "")
+    assert await observe_settled(
+        coordinator, asr_request(), active_audio(500)
+    ) is None
+    partial = await observe_settled(coordinator, asr_request(), active_audio(700))
 
     assert partial is not None
     assert partial.text == "今天开会。"
@@ -90,8 +95,9 @@ async def test_gates_partial_to_listening_and_detected_chinese() -> None:
 
     german_runner = FakeStreamingRunner(["Guten Tag", "Guten Tag"], "German")
     auto = StableReadablePartialCoordinator(german_runner, enabled=True)
-    assert await auto.observe(asr_request(source_language="auto"), active_audio(500), "") is None
-    assert await auto.observe(asr_request(source_language="auto"), active_audio(700), "") is None
+    request = asr_request(source_language="auto")
+    assert await observe_settled(auto, request, active_audio(500)) is None
+    assert await observe_settled(auto, request, active_audio(700)) is None
     diagnostics = auto.diagnostics("sess_1")
     assert diagnostics["emittedCount"] == 0
     assert diagnostics["rejectionCounts"] == {
@@ -105,8 +111,12 @@ async def test_reports_privacy_safe_stable_partial_rejection_reasons() -> None:
         FakeStreamingRunner(["", ""]),
         enabled=True,
     )
-    assert await empty.observe(asr_request(), active_audio(500), "") is None
-    assert await empty.observe(asr_request(), active_audio(700), "") is None
+    assert await observe_settled(
+        empty, asr_request(), active_audio(500)
+    ) is None
+    assert await observe_settled(
+        empty, asr_request(), active_audio(700)
+    ) is None
     assert empty.diagnostics("sess_1")["rejectionCounts"] == {"no_text": 2}
 
     echoed_text = "这是用于检测上下文回声的长文本内容一二三四五六七八九十"
@@ -115,11 +125,11 @@ async def test_reports_privacy_safe_stable_partial_rejection_reasons() -> None:
         FakeStreamingRunner([echoed_text, echoed_text]),
         enabled=True,
     )
-    assert await context_echo.observe(
-        asr_request(), active_audio(500), context
+    assert await observe_settled(
+        context_echo, asr_request(), active_audio(500), context
     ) is None
-    assert await context_echo.observe(
-        asr_request(), active_audio(700), context
+    assert await observe_settled(
+        context_echo, asr_request(), active_audio(700), context
     ) is None
     assert context_echo.diagnostics("sess_1")["rejectionCounts"] == {
         "insufficient_units": 1,
@@ -133,7 +143,11 @@ async def test_reports_privacy_safe_stable_partial_rejection_reasons() -> None:
         enabled=True,
     )
     for duration_ms in (500, 700, 900, 1000):
-        await duplicate.observe(asr_request(), active_audio(duration_ms), "")
+        await observe_settled(
+            duplicate,
+            asr_request(),
+            active_audio(duration_ms),
+        )
     assert duplicate.diagnostics("sess_1")["rejectionCounts"] == {
         "insufficient_units": 1,
         "duplicate_partial": 1,
@@ -151,12 +165,12 @@ async def test_reports_native_language_evidence_without_changing_the_gate() -> N
     request = asr_request(source_language="auto")
 
     for duration_ms in (500, 700, 900):
-        assert await coordinator.observe(
+        assert await observe_settled(
+            coordinator,
             request,
             active_audio(duration_ms),
-            "",
         ) is None
-    partial = await coordinator.observe(request, active_audio(1000), "")
+    partial = await observe_settled(coordinator, request, active_audio(1000))
 
     assert partial is not None
     assert partial.text == "会议开始"
@@ -220,3 +234,30 @@ def active_audio(duration_ms: int) -> ActivePcmAudio:
         start_timestamp_ms=0,
         end_timestamp_ms=duration_ms,
     )
+
+
+async def wait_for_completed_push(
+    coordinator: StableReadablePartialCoordinator,
+    count: int,
+) -> None:
+    async def wait() -> None:
+        while coordinator.diagnostics("sess_1").get("completedPushCount", 0) < count:
+            await asyncio.sleep(0.001)
+
+    await asyncio.wait_for(wait(), timeout=1)
+
+
+async def observe_settled(
+    coordinator: StableReadablePartialCoordinator,
+    request: AsrTranscribeRequest,
+    audio: ActivePcmAudio,
+    context: str = "",
+):
+    result = await coordinator.observe(request, audio, context)
+    scheduled = coordinator.diagnostics(request.sessionId).get(
+        "scheduledPushCount",
+        0,
+    )
+    await wait_for_completed_push(coordinator, scheduled)
+    drained = await coordinator.observe(request, audio, context)
+    return drained if drained is not None else result

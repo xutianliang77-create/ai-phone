@@ -141,7 +141,7 @@ class Qwen3AsrEngine:
                     corrections=request.corrections,
                 ),
             )
-        partial = self.stable_partials.finish(request.sessionId)
+        partial = await self.stable_partials.finish(request.sessionId)
         return await self._transcribe_segment(
             session_id=request.sessionId,
             segment_id=(
@@ -169,7 +169,7 @@ class Qwen3AsrEngine:
         segment = self.segmenter.flush(session_id)
         if segment is None:
             return None
-        partial = self.stable_partials.finish(session_id)
+        partial = await self.stable_partials.finish(session_id)
         hotwords, corrections = self._session_prompt_by_session.get(session_id, ([], []))
         return await self._transcribe_segment(
             session_id=session_id,
@@ -199,7 +199,7 @@ class Qwen3AsrEngine:
         segment = self.segmenter.commit_boundary(session_id, boundary_ms)
         if segment is None:
             return None
-        partial = self.stable_partials.finish(session_id)
+        partial = await self.stable_partials.finish(session_id)
         hotwords, corrections = self._session_prompt_by_session.get(session_id, ([], []))
         return await self._transcribe_segment(
             session_id=session_id,

@@ -72,7 +72,12 @@ partial is published only when adjacent model decodes share at least two
 effective letters or numbers; single-character `嗯/啊/呃/哦` fillers are ignored
 only for the comparison. Batch final remains authoritative and reuses the same
 segment ID with a newer revision. Other modes and non-Chinese auto detections
-continue to emit final transcripts only.
+continue to emit final transcripts only. Streaming pushes use one in-flight
+decode per session: audio intake never waits for a partial, frames received
+during inference are coalesced into the next push, and endpoint finalization
+invalidates pending partial work before the batch final takes the model lock.
+Session diagnostics expose only bounded scheduler counters and latency values;
+they never persist pending audio or candidate text.
 
 `ASR_QWEN3_MIXED_LANGUAGE_RETRY_ENABLED=false` remains off by default. In an
 isolated A/B run it can retry an `auto` segment with the English route when the

@@ -140,6 +140,16 @@ class StablePartialDiagnostics(BaseModel):
     languageGateCounts: dict[
         StablePartialLanguageEvidence, NonNegativeCount
     ] = Field(default_factory=dict)
+    scheduledPushCount: int = Field(ge=0)
+    completedPushCount: int = Field(ge=0)
+    coalescedObservationCount: int = Field(ge=0)
+    invalidatedPushCount: int = Field(ge=0)
+    inFlight: bool
+    resultReady: bool
+    pendingAudioMs: float = Field(ge=0)
+    maxPendingAudioMs: float = Field(ge=0)
+    averagePushLatencyMs: float | None = Field(default=None, ge=0)
+    maxPushLatencyMs: float | None = Field(default=None, ge=0)
     firstStablePartialLatencyMs: float | None = Field(default=None, ge=0)
     lastStablePartialLatencyMs: float | None = Field(default=None, ge=0)
 

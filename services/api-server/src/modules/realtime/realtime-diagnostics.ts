@@ -135,6 +135,32 @@ function sanitizedStablePartial(
     ...(value.languageGateCounts
       ? { languageGateCounts: { ...value.languageGateCounts } }
       : {}),
+    ...(value.scheduledPushCount !== undefined
+      ? { scheduledPushCount: value.scheduledPushCount }
+      : {}),
+    ...(value.completedPushCount !== undefined
+      ? { completedPushCount: value.completedPushCount }
+      : {}),
+    ...(value.coalescedObservationCount !== undefined
+      ? { coalescedObservationCount: value.coalescedObservationCount }
+      : {}),
+    ...(value.invalidatedPushCount !== undefined
+      ? { invalidatedPushCount: value.invalidatedPushCount }
+      : {}),
+    ...(value.inFlight !== undefined ? { inFlight: value.inFlight } : {}),
+    ...(value.resultReady !== undefined ? { resultReady: value.resultReady } : {}),
+    ...(value.pendingAudioMs != null
+      ? { pendingAudioMs: value.pendingAudioMs }
+      : {}),
+    ...(value.maxPendingAudioMs != null
+      ? { maxPendingAudioMs: value.maxPendingAudioMs }
+      : {}),
+    ...(value.averagePushLatencyMs != null
+      ? { averagePushLatencyMs: value.averagePushLatencyMs }
+      : {}),
+    ...(value.maxPushLatencyMs != null
+      ? { maxPushLatencyMs: value.maxPushLatencyMs }
+      : {}),
     ...(value.firstStablePartialLatencyMs != null
       ? { firstStablePartialLatencyMs: value.firstStablePartialLatencyMs }
       : {}),
@@ -188,8 +214,16 @@ function isStablePartialDiagnostics(value: unknown) {
     value.decodeCount,
     value.decisionCount,
     value.emittedCount,
+    value.scheduledPushCount,
+    value.completedPushCount,
+    value.coalescedObservationCount,
+    value.invalidatedPushCount,
   ].filter((item) => item !== undefined);
   const latencies = [
+    value.pendingAudioMs,
+    value.maxPendingAudioMs,
+    value.averagePushLatencyMs,
+    value.maxPushLatencyMs,
     value.firstStablePartialLatencyMs,
     value.lastStablePartialLatencyMs,
   ].filter((item) => item != null);
@@ -206,6 +240,12 @@ function isStablePartialDiagnostics(value: unknown) {
     typeof value.policy === "string" && value.policy.length > 0 &&
     value.policy.length <= 80 &&
     counts.every(isNonNegativeInteger) &&
+    (value.inFlight === undefined || typeof value.inFlight === "boolean") &&
+    (value.resultReady === undefined || typeof value.resultReady === "boolean") &&
+    optionalLessOrEqual(value.completedPushCount, value.scheduledPushCount) &&
+    optionalLessOrEqual(value.invalidatedPushCount, value.completedPushCount) &&
+    optionalLessOrEqual(value.pendingAudioMs, value.maxPendingAudioMs) &&
+    optionalLessOrEqual(value.averagePushLatencyMs, value.maxPushLatencyMs) &&
     (value.emittedCount as number) <= (value.decodeCount as number) &&
     (value.decisionCount === undefined ||
       (value.decisionCount as number) <= (value.decodeCount as number) &&
@@ -223,6 +263,11 @@ function isStablePartialDiagnostics(value: unknown) {
     latencies.every(isNonNegativeFinite) &&
     (value.rejectionCounts === undefined ||
       isStablePartialRejectionCounts(value.rejectionCounts));
+}
+
+function optionalLessOrEqual(left: unknown, right: unknown) {
+  return left === undefined || right === undefined ||
+    typeof left === "number" && typeof right === "number" && left <= right;
 }
 
 function countTotal(value: unknown) {

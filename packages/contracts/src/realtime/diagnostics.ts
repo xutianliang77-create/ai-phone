@@ -222,6 +222,16 @@ export interface RealtimeStablePartialDiagnosticsDto {
     Record<StablePartialLanguageEvidence, number>
   >;
   languageGateCounts?: Partial<Record<StablePartialLanguageEvidence, number>>;
+  scheduledPushCount?: number;
+  completedPushCount?: number;
+  coalescedObservationCount?: number;
+  invalidatedPushCount?: number;
+  inFlight?: boolean;
+  resultReady?: boolean;
+  pendingAudioMs?: number;
+  maxPendingAudioMs?: number;
+  averagePushLatencyMs?: number;
+  maxPushLatencyMs?: number;
   firstStablePartialLatencyMs?: number;
   lastStablePartialLatencyMs?: number;
 }

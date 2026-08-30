@@ -1,26 +1,30 @@
 from __future__ import annotations
 
-import asyncio
 from dataclasses import dataclass, field
 from time import monotonic
 from typing import Callable
-import unicodedata
-
-import numpy as np
 
 from app.audio_segment_state import ActivePcmAudio
 from app.qwen3_context_guard import is_context_echo
+from app.qwen3_partial_policy import (
+    confirmed_readable_prefix,
+    is_chinese_partial as _is_chinese_partial,
+    language_evidence as _language_evidence,
+)
+from app.qwen3_partial_scheduler import (
+    LatestPartialPushScheduler,
+    PartialDecode,
+    PartialPushMetrics,
+    pcm16_to_float_16k,
+)
 from app.schemas import AsrTranscribeRequest, AsrTranscribeResponse
 from app.sensevoice_engine import transcript_language
-
 
 STABLE_PARTIAL_DECODE_SCHEDULE_MS = (500, 700, 900, 1000)
 STABLE_PARTIAL_STEADY_DECODE_MS = 1000
 STABLE_PARTIAL_MINIMUM_UNITS = 2
 STABLE_PARTIAL_UNFIXED_CHUNK_NUM = 4
 STABLE_PARTIAL_UNFIXED_TOKEN_NUM = 5
-IGNORED_DISCOURSE_FILLERS = frozenset({"啊", "呃", "嗯", "哦"})
-
 
 @dataclass(frozen=True)
 class StablePartialFinalization:
@@ -31,18 +35,23 @@ class StablePartialFinalization:
 
 @dataclass
 class _PartialState:
+    session_id: str
     segment_id: str
-    model_state: object
+    source_language: str
+    target_language: str
+    context: str
     sample_rate: int
     source_bytes_consumed: int
     start_sequence: int
     start_timestamp_ms: int
+    scheduler: LatestPartialPushScheduler
     previous_decode: str = ""
     last_partial: str = ""
     next_revision: int = 0
     decode_count: int = 0
     emitted_count: int = 0
     audio_started_at: float = 0.0
+    final_fallback: str = ""
 
 
 @dataclass
@@ -56,6 +65,7 @@ class _PartialMetrics:
     language_gate_counts: dict[str, int] = field(default_factory=dict)
     first_stable_partial_latency_ms: float | None = None
     last_stable_partial_latency_ms: float | None = None
+    pushes: PartialPushMetrics = field(default_factory=PartialPushMetrics)
 
 
 class StableReadablePartialCoordinator:
@@ -81,26 +91,31 @@ class StableReadablePartialCoordinator:
             state = self._replace_state(request, active_audio, context)
         delta = active_audio.pcm[state.source_bytes_consumed :]
         state.source_bytes_consumed = len(active_audio.pcm)
-        if not delta or self._push is None:
-            return None
-
-        samples = pcm16_to_float_16k(delta, active_audio.sample_rate)
-        decode_id, text, model_language = await asyncio.to_thread(
-            self._push,
-            state.model_state,
-            samples,
+        state.scheduler.append(delta, active_audio.end_timestamp_ms)
+        response = self._completed_response(
+            state,
+            state.scheduler.take_completed(),
         )
-        if decode_id <= state.decode_count:
+        state.scheduler.start()
+        return response
+
+    def _completed_response(
+        self,
+        state: _PartialState,
+        result: PartialDecode | None,
+        publish: bool = True,
+    ) -> AsrTranscribeResponse | None:
+        if result is None or result.decode_id <= state.decode_count:
             return None
-        completed = decode_id - state.decode_count
-        state.decode_count = decode_id
-        metrics = self._metrics_for(request.sessionId)
+        completed = result.decode_id - state.decode_count
+        state.decode_count = result.decode_id
+        metrics = self._metrics_for(state.session_id)
         metrics.decode_count += completed
         metrics.decision_count += 1
-        language_evidence = _language_evidence(model_language)
+        language_evidence = _language_evidence(result.model_language)
         self._count(metrics.language_evidence_counts, language_evidence)
 
-        text = str(text or "").strip()
+        text = str(result.text or "").strip()
         if not text:
             self._reject(metrics, "no_text")
             return None
@@ -119,12 +134,15 @@ class StableReadablePartialCoordinator:
         if state.last_partial and not confirmed.startswith(state.last_partial):
             self._reject(metrics, "backtrack")
             return None
-        if not _is_chinese_partial(request.sourceLanguage, model_language):
+        if not _is_chinese_partial(state.source_language, result.model_language):
             self._count(metrics.language_gate_counts, language_evidence)
             self._reject(metrics, "language_gate")
             return None
-        if is_context_echo(confirmed, context):
+        if is_context_echo(confirmed, state.context):
             self._reject(metrics, "context_echo")
+            return None
+        if not publish:
+            state.final_fallback = confirmed
             return None
 
         state.last_partial = confirmed
@@ -146,31 +164,39 @@ class StableReadablePartialCoordinator:
             text=confirmed,
             language=transcript_language(
                 confirmed,
-                request.sourceLanguage,
-                request.targetLanguage,
+                state.source_language,
+                state.target_language,
             ),
             timing={
                 "startMs": state.start_timestamp_ms,
-                "endMs": active_audio.end_timestamp_ms,
+                "endMs": result.end_timestamp_ms,
                 "source": "client",
             },
         )
 
-    def finish(self, session_id: str) -> StablePartialFinalization | None:
+    async def finish(self, session_id: str) -> StablePartialFinalization | None:
         state = self._states.pop(session_id, None)
         if state is None:
             return None
+        if not state.last_partial:
+            try:
+                result = await state.scheduler.wait_for_completed()
+            except Exception:
+                result = None
+            self._completed_response(state, result, publish=False)
+        state.scheduler.invalidate()
         return StablePartialFinalization(
             segment_id=state.segment_id,
             revision=(state.next_revision if state.emitted_count else None),
-            text=state.last_partial,
+            text=state.last_partial or state.final_fallback,
         )
 
     def diagnostics(self, session_id: str) -> dict[str, object]:
         metrics = self._metrics.get(session_id, _PartialMetrics())
+        state = self._states.get(session_id)
         return {
             "enabled": self.enabled,
-            "policy": "qwen17_adjacent_prefix_zh_v1",
+            "policy": "qwen17_latest_only_adjacent_prefix_zh_v2",
             "eligibleSegmentCount": metrics.eligible_segment_count,
             "activeSegment": session_id in self._states,
             "decodeCount": metrics.decode_count,
@@ -180,26 +206,46 @@ class StableReadablePartialCoordinator:
             "languageEvidenceSource": "qwen_streaming_state_label",
             "languageEvidenceCounts": dict(metrics.language_evidence_counts),
             "languageGateCounts": dict(metrics.language_gate_counts),
+            "scheduledPushCount": metrics.pushes.scheduled_count,
+            "completedPushCount": metrics.pushes.completed_count,
+            "coalescedObservationCount": metrics.pushes.coalesced_observation_count,
+            "invalidatedPushCount": metrics.pushes.invalidated_count,
+            "inFlight": metrics.pushes.active_count > 0,
+            "resultReady": bool(state and state.scheduler.result_ready),
+            "pendingAudioMs": round(
+                state.scheduler.pending_audio_ms if state else 0.0,
+                3,
+            ),
+            "maxPendingAudioMs": round(metrics.pushes.max_pending_audio_ms, 3),
+            **(
+                {
+                    "averagePushLatencyMs": round(
+                        metrics.pushes.total_latency_ms
+                        / metrics.pushes.timed_count, 3,
+                    ),
+                    "maxPushLatencyMs": round(metrics.pushes.max_latency_ms, 3),
+                }
+                if metrics.pushes.timed_count else {}
+            ),
             **(
                 {
                     "firstStablePartialLatencyMs": (
                         metrics.first_stable_partial_latency_ms
                     )
                 }
-                if metrics.first_stable_partial_latency_ms is not None
-                else {}
+                if metrics.first_stable_partial_latency_ms is not None else {}
             ),
             **(
                 {"lastStablePartialLatencyMs": metrics.last_stable_partial_latency_ms}
-                if metrics.last_stable_partial_latency_ms is not None
-                else {}
+                if metrics.last_stable_partial_latency_ms is not None else {}
             ),
         }
 
     def clear(self, session_id: str) -> None:
-        self._states.pop(session_id, None)
+        state = self._states.pop(session_id, None)
+        if state is not None:
+            state.scheduler.invalidate()
         self._metrics.pop(session_id, None)
-
     def _eligible(self, request: AsrTranscribeRequest) -> bool:
         if not self.enabled or request.mode != "listening":
             return False
@@ -227,21 +273,35 @@ class StableReadablePartialCoordinator:
         audio: ActivePcmAudio,
         context: str,
     ) -> _PartialState:
-        if self._new_state is None:
+        if self._new_state is None or self._push is None:
             raise RuntimeError("stable partial runner is unavailable")
+        previous = self._states.get(request.sessionId)
+        if previous is not None:
+            previous.scheduler.invalidate()
         requested_language = request.sourceLanguage.strip().lower().replace("_", "-")
         language = "Chinese" if requested_language != "auto" else None
+        metrics = self._metrics_for(request.sessionId)
+        model_state = self._new_state(language, context)
         state = _PartialState(
+            session_id=request.sessionId,
             segment_id=f"qwen3_seg_{audio.start_sequence}",
-            model_state=self._new_state(language, context),
+            source_language=request.sourceLanguage,
+            target_language=request.targetLanguage,
+            context=context,
             sample_rate=audio.sample_rate,
             source_bytes_consumed=0,
             start_sequence=audio.start_sequence,
             start_timestamp_ms=audio.start_timestamp_ms,
+            scheduler=LatestPartialPushScheduler(
+                self._push,
+                model_state,
+                audio.sample_rate,
+                metrics.pushes,
+            ),
             audio_started_at=monotonic() - audio.duration_ms / 1000,
         )
         self._states[request.sessionId] = state
-        self._metrics_for(request.sessionId).eligible_segment_count += 1
+        metrics.eligible_segment_count += 1
         return state
 
     def _metrics_for(self, session_id: str) -> _PartialMetrics:
@@ -254,66 +314,3 @@ class StableReadablePartialCoordinator:
     @staticmethod
     def _count(counts: dict[str, int], key: str) -> None:
         counts[key] = counts.get(key, 0) + 1
-
-
-def confirmed_readable_prefix(
-    previous: str,
-    current: str,
-    minimum_units: int,
-) -> str | None:
-    if not previous or not current:
-        return None
-    index = 0
-    limit = min(len(previous), len(current))
-    while index < limit and previous[index] == current[index]:
-        index += 1
-    prefix = current[:index].rstrip()
-    return prefix if len(normalized_content(prefix)) >= minimum_units else None
-
-
-def normalized_content(text: str) -> str:
-    return "".join(
-        character
-        for character in str(text or "")
-        if unicodedata.category(character)[:1] in {"L", "N"}
-        and character not in IGNORED_DISCOURSE_FILLERS
-    )
-
-
-def pcm16_to_float_16k(pcm: bytes, sample_rate: int) -> np.ndarray:
-    samples = np.frombuffer(pcm, dtype="<i2").astype(np.float32) / 32768
-    if sample_rate == 16000:
-        return samples
-    if sample_rate != 24000:
-        raise ValueError(f"unsupported streaming sample rate: {sample_rate}")
-    from scipy.signal import resample_poly
-
-    return resample_poly(samples, 2, 3).astype(np.float32, copy=False)
-
-
-def _is_chinese_partial(source_language: str, model_language: str) -> bool:
-    source = source_language.strip().lower().replace("_", "-")
-    if source != "auto":
-        return True
-    detected = str(model_language or "").strip().lower().replace("_", "-")
-    return detected in {"zh", "zh-cn", "chinese"}
-
-
-def _language_evidence(model_language: str) -> str:
-    detected = str(model_language or "").strip().lower().replace("_", "-")
-    if not detected:
-        return "empty"
-    parts = {
-        part.strip()
-        for part in detected.replace(";", ",").split(",")
-        if part.strip()
-    }
-    chinese = {"zh", "zh-cn", "chinese"}
-    english = {"en", "en-us", "en-gb", "english"}
-    if parts and parts <= chinese:
-        return "zh"
-    if parts and parts <= english:
-        return "en"
-    if parts and parts <= chinese | english and parts & chinese and parts & english:
-        return "zh_en"
-    return "other"
