@@ -21,10 +21,10 @@ export function retainRecentSpeakerSpans(
   return spans.filter((span) => span.endMs >= cutoffMs);
 }
 
-export function retainRecentSpeakerBoundaries(
-  existing: SpeakerBoundaryGuard[],
-  boundary: SpeakerBoundaryGuard,
-) {
+export function retainRecentSpeakerBoundaries<T extends SpeakerBoundaryGuard>(
+  existing: T[],
+  boundary: T,
+): T[] {
   const cutoffMs = boundary.boundaryMs - retentionMs;
   return [...existing, boundary].filter((item) =>
     item.boundaryMs >= cutoffMs

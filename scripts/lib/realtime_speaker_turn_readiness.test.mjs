@@ -106,6 +106,26 @@ describe("realtime speaker turn readiness", () => {
     expect(result.unresolvedEndpointRaceCount).toBe(0);
   });
 
+  it("accepts a commit miss resolved by the token timing boundary ledger", () => {
+    const detail = sessionDetail();
+    detail.diagnostics.speakerTurns.confirmedBoundaryCount = 2;
+    detail.diagnostics.speakerTurns.commitMissCount = 1;
+    detail.diagnostics.speakerTurns.unresolvedCommitMissCount = 0;
+    detail.diagnostics.speakerTurns.boundaryOutcomeCounts = {
+      commit_hit: 1,
+      token_timing_split: 1,
+    };
+
+    const result = evaluateRealtimeSpeakerTurnReadiness({
+      gatewayHealth: { speakerProvider: "http", sessionEventSink: "api" },
+      speakerHealth: { provider: "sortformer", mode: "active" },
+      detail,
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.unresolvedCommitMissCount).toBe(0);
+  });
+
   it("rejects commit misses left unresolved after revision", () => {
     const detail = sessionDetail();
     detail.diagnostics.speakerTurns.commitMissCount = 2;

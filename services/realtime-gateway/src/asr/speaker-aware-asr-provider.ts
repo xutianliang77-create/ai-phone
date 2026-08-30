@@ -23,25 +23,21 @@ import {
   type SpeakerSpanCaptureOptions,
 } from "../speaker/speaker-span-capture.js";
 import {
-  retainRecentSpeakerBoundaries,
   retainRecentSpeakerSpans,
 } from "../speaker/speaker-evidence-retention.js";
 import { SpeakerBoundaryReassignmentCoordinator } from
   "./speaker-boundary-reassignment-coordinator.js";
 import {
   attributeSpeakerTranscripts,
-  crossesBoundary,
   providerResult,
-  removeOverlappingTranscripts,
-  turnForTranscript,
-  type SpeakerBoundaryGuard,
 } from "../speaker/speaker-transcript-attribution.js";
+import { SpeakerBoundaryTranscriptCoordinator } from
+  "./speaker-boundary-transcript-coordinator.js";
 
 export type { SpeakerSpanCaptureOptions } from "../speaker/speaker-span-capture.js";
 
 export class SpeakerAwareAsrProvider implements AsrProvider {
   private readonly spansBySession = new Map<string, SpeakerSpan[]>();
-  private readonly boundariesBySession = new Map<string, SpeakerBoundaryGuard[]>();
   private readonly enabledSessions = new Set<string>();
   private readonly turnDiagnostics = new SpeakerTurnDiagnostics();
   private readonly turnAssignment = new SpeakerTurnAssignment();
@@ -55,6 +51,7 @@ export class SpeakerAwareAsrProvider implements AsrProvider {
   private readonly spanCapture: SpeakerSpanCapture;
   private readonly asrRequests = new AsrRequestScheduler();
   private readonly boundaryReassignment: SpeakerBoundaryReassignmentCoordinator;
+  private readonly boundaryTranscripts: SpeakerBoundaryTranscriptCoordinator;
 
   constructor(
     private readonly asr: AsrProvider,
@@ -67,6 +64,12 @@ export class SpeakerAwareAsrProvider implements AsrProvider {
     this.boundaryReassignment = new SpeakerBoundaryReassignmentCoordinator(
       asr, {}, (sessionId, request) => this.asrRequests.run(sessionId, request),
     );
+    this.boundaryTranscripts = new SpeakerBoundaryTranscriptCoordinator(
+      this.turnDiagnostics,
+      this.turnAssignment,
+      this.boundaryReassignment,
+      this.turnCoordinator,
+    );
   }
 
   async createSession(session: AsrSession) {
@@ -78,7 +81,7 @@ export class SpeakerAwareAsrProvider implements AsrProvider {
       await this.speaker.createSession({ sessionId: session.sessionId, options });
       this.enabledSessions.add(session.sessionId);
       this.spansBySession.set(session.sessionId, []);
-      this.boundariesBySession.set(session.sessionId, []);
+      this.boundaryTranscripts.createSession(session);
       this.turnCoordinator.clear(session.sessionId);
       this.turnAssignment.clear(session.sessionId);
       if (session.asrEndpointMode === "listening") {
@@ -119,69 +122,18 @@ export class SpeakerAwareAsrProvider implements AsrProvider {
       boundary,
       currentSpeakerId: this.turnCoordinator.currentSpeaker(frame.sessionId),
     });
-    if (boundary) this.boundariesBySession.set(
-      frame.sessionId,
-      retainRecentSpeakerBoundaries(
-        this.boundariesBySession.get(frame.sessionId) ?? [], boundary,
-      ),
-    );
     const regularTurns = asrResults(transcripts);
-    const turnChange = boundary
-      ? this.turnAssignment.advance(frame.sessionId)
-      : null;
-    const currentTurn = turnChange?.previous ??
-      this.turnAssignment.current(frame.sessionId);
     const commit = boundary
       ? await this.safeCommitBoundary(frame.sessionId, boundary.boundaryMs)
       : { result: null, error: false };
-    const committedTurns = asrResults(commit.result).map((transcript) => ({
-      ...this.turnAssignment.assign(transcript, currentTurn),
-      speaker: transcript.speaker ?? {
-        speakerId: boundary?.previousSpeakerId ?? "unknown",
-        role: "speaker" as const,
-        source: "diarization" as const,
-      },
-    }));
-    const filteredRegularTurns = (committedTurns.length > 0
-      ? removeOverlappingTranscripts(regularTurns, committedTurns)
-      : regularTurns).map((transcript) => this.turnAssignment.assign(
-        transcript,
-        turnForTranscript(
-          transcript,
-          boundary?.boundaryMs,
-          currentTurn,
-          turnChange?.next,
-        ),
-      ));
-    if (boundary) {
-      const endpointRaceCount = regularTurns.filter(
-        (item) => crossesBoundary(item, boundary.boundaryMs),
-      ).length;
-      this.turnDiagnostics.recordBoundary(
-        frame.sessionId,
-        boundary,
-        commit.error ? "error" : committedTurns.length > 0 ? "hit" : "miss",
-        committedTurns,
-        endpointRaceCount,
-      );
-      if (!commit.error && committedTurns.length === 0 && turnChange?.next) {
-        this.boundaryReassignment.recordCommitMiss(
-          frame.sessionId,
-          boundary,
-          currentTurn,
-          turnChange.next,
-        );
-      }
-      realtimeLogger.info({
-        sessionId: frame.sessionId,
-        ...boundary,
-        committedTranscriptCount: committedTurns.length,
-        endpointRaceCount,
-        commitError: commit.error,
-        ...this.turnDiagnostics.boundaryContext(frame.sessionId),
-      }, "Confirmed realtime speaker turn boundary");
-    }
-    const outgoing = [...filteredRegularTurns, ...committedTurns];
+    const boundaryResult = this.boundaryTranscripts.processFrame({
+      sessionId: frame.sessionId,
+      boundary,
+      regularTurns,
+      commit,
+      spans,
+    });
+    const outgoing = boundaryResult.outgoing;
     this.turnDiagnostics.recordTranscripts(frame.sessionId, outgoing);
     const attributed = attributeSpeakerTranscripts(
       outgoing,
@@ -189,20 +141,20 @@ export class SpeakerAwareAsrProvider implements AsrProvider {
       (transcript) => {
         if (
           boundary &&
-          transcript.turnId === currentTurn.turnId
+          transcript.turnId === boundaryResult.currentTurn.turnId
         ) {
           return boundary.previousSpeakerId;
         }
         if (
           boundary &&
-          turnChange?.next &&
-          transcript.turnId === turnChange.next.turnId
+          boundaryResult.turnChange?.next &&
+          transcript.turnId === boundaryResult.turnChange.next.turnId
         ) {
           return boundary.nextSpeakerId;
         }
         return this.turnCoordinator.currentSpeaker(frame.sessionId);
       },
-      this.boundariesBySession.get(frame.sessionId) ?? [],
+      this.boundaryTranscripts.boundaries(frame.sessionId),
       (speakerId) => this.turnCoordinator.isConfirmedSpeaker(
         frame.sessionId,
         speakerId,
@@ -215,6 +167,7 @@ export class SpeakerAwareAsrProvider implements AsrProvider {
         transcript.isFinal !== false && transcript.endpointReason !== undefined
       ),
     );
+    this.boundaryTranscripts.applyWitnessResolutions(frame.sessionId);
     return providerResult(await this.applyVoiceIdentities(frame.sessionId, reassigned));
   }
   async flush(sessionId: string) {
@@ -229,16 +182,17 @@ export class SpeakerAwareAsrProvider implements AsrProvider {
       nextSpans,
     );
     this.spansBySession.set(sessionId, spans);
-    const currentTurn = this.turnAssignment.current(sessionId);
-    const results = asrResults(transcripts).map((transcript) =>
-      this.turnAssignment.assign(transcript, currentTurn)
+    const results = this.boundaryTranscripts.processFlush(
+      sessionId,
+      asrResults(transcripts),
+      spans,
     );
     this.turnDiagnostics.recordTranscripts(sessionId, results);
     const attributed = attributeSpeakerTranscripts(
       results,
       spans,
       () => this.turnCoordinator.currentSpeaker(sessionId),
-      this.boundariesBySession.get(sessionId) ?? [],
+      this.boundaryTranscripts.boundaries(sessionId),
       (speakerId) => this.turnCoordinator.isConfirmedSpeaker(
         sessionId,
         speakerId,
@@ -249,6 +203,7 @@ export class SpeakerAwareAsrProvider implements AsrProvider {
       attributed,
       true,
     );
+    this.boundaryTranscripts.applyWitnessResolutions(sessionId);
     this.boundaryReassignment.finish(sessionId);
     return providerResult(await this.applyVoiceIdentities(sessionId, reassigned));
   }
@@ -267,7 +222,7 @@ export class SpeakerAwareAsrProvider implements AsrProvider {
   async closeSession(sessionId: string) {
     const speakerEnabled = this.enabledSessions.delete(sessionId);
     this.spansBySession.delete(sessionId);
-    this.boundariesBySession.delete(sessionId);
+    this.boundaryTranscripts.clear(sessionId);
     this.turnCoordinator.clear(sessionId);
     this.turnAssignment.clear(sessionId);
     this.boundaryReassignment.clear(sessionId);

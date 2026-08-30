@@ -4,7 +4,12 @@ import type {
   RealtimeProviderSession,
 } from "../providers/realtime-provider.js";
 
-export function protectedTermsFor(session: RealtimeProviderSession) {
+export function protectedTermsFor(
+  session: Pick<
+    RealtimeProviderSession,
+    "asrHotwords" | "asrCorrections" | "terminology"
+  >,
+) {
   return [...new Set([
     ...(session.asrHotwords ?? []),
     ...(session.asrCorrections ?? []).flatMap((item) => [

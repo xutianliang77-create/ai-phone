@@ -22,7 +22,18 @@ interface SessionState {
   maxConfirmationLatencyMs: number;
   committedAudioMs: number;
   endpointReasons: AsrSpeakerTurnDiagnostics["endpointReasons"];
+  boundaryOutcomes: Array<{
+    boundaryMs: number;
+    outcome: SpeakerBoundaryOutcome;
+  }>;
 }
+
+type SpeakerBoundaryOutcome =
+  | "commit_hit"
+  | "commit_error"
+  | "witness_reassignment"
+  | "token_timing_split"
+  | "unresolved";
 
 const DIAGNOSTIC_WINDOW_MS = 2_000;
 
@@ -52,6 +63,14 @@ export class SpeakerTurnDiagnostics {
     if (outcome === "hit") state.commitHitCount += 1;
     else if (outcome === "miss") state.commitMissCount += 1;
     else state.commitErrorCount += 1;
+    state.boundaryOutcomes.push({
+      boundaryMs: boundary.boundaryMs,
+      outcome: outcome === "hit"
+        ? "commit_hit"
+        : outcome === "error"
+        ? "commit_error"
+        : "unresolved",
+    });
     const latencyMs = Math.max(0, boundary.confirmedAtMs - boundary.boundaryMs);
     state.totalConfirmationLatencyMs += latencyMs;
     state.maxConfirmationLatencyMs = Math.max(
@@ -71,6 +90,25 @@ export class SpeakerTurnDiagnostics {
       if (!reason) continue;
       state.endpointReasons[reason] = (state.endpointReasons[reason] ?? 0) + 1;
     }
+  }
+
+  resolveBoundary(
+    sessionId: string,
+    boundaryMs: number,
+    outcome: "witness_reassignment" | "token_timing_split",
+  ) {
+    const boundary = this.stateFor(sessionId).boundaryOutcomes.find((item) =>
+      item.boundaryMs === boundaryMs && item.outcome === "unresolved"
+    );
+    if (!boundary) return false;
+    boundary.outcome = outcome;
+    return true;
+  }
+
+  unresolvedBoundaryMs(sessionId: string) {
+    return this.sessions.get(sessionId)?.boundaryOutcomes
+      .filter((item) => item.outcome === "unresolved")
+      .map((item) => item.boundaryMs) ?? [];
   }
 
   boundaryContext(sessionId: string) {
@@ -100,6 +138,10 @@ export class SpeakerTurnDiagnostics {
       maxConfirmationLatencyMs: state.maxConfirmationLatencyMs,
       committedAudioMs: state.committedAudioMs,
       endpointReasons: { ...state.endpointReasons },
+      unresolvedCommitMissCount: state.boundaryOutcomes.filter(
+        (item) => item.outcome === "unresolved",
+      ).length,
+      boundaryOutcomeCounts: countBoundaryOutcomes(state.boundaryOutcomes),
     };
   }
 
@@ -126,7 +168,18 @@ function createState(): SessionState {
     maxConfirmationLatencyMs: 0,
     committedAudioMs: 0,
     endpointReasons: {},
+    boundaryOutcomes: [],
   };
+}
+
+function countBoundaryOutcomes(
+  boundaries: SessionState["boundaryOutcomes"],
+) {
+  const counts: Partial<Record<SpeakerBoundaryOutcome, number>> = {};
+  for (const boundary of boundaries) {
+    counts[boundary.outcome] = (counts[boundary.outcome] ?? 0) + 1;
+  }
+  return counts;
 }
 
 function frameDurationMs(frame: AudioFrame) {

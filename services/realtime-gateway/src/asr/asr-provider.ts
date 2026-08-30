@@ -4,6 +4,7 @@ import type {
   AudioFrame,
   LanguageCode,
   TranslationLanguageCode,
+  TermbaseTermDto,
   SegmentTimingDto,
   AsrTokenTimingDto,
   SpeakerAttributionDto,
@@ -20,6 +21,7 @@ export interface AsrSession {
   targetLanguage: TranslationLanguageCode;
   asrHotwords?: string[];
   asrCorrections?: Array<{ fromText: string; toText: string }>;
+  terminology?: TermbaseTermDto[];
   speakerAttribution?: SpeakerAttributionOptionsDto;
 }
 
@@ -55,6 +57,15 @@ export interface AsrSpeakerTurnDiagnostics {
   boundaryRevisionSuccessCount?: number;
   boundaryRevisionFailureCount?: number;
   boundaryReassignedCharacterCount?: number;
+  unresolvedCommitMissCount?: number;
+  boundaryOutcomeCounts?: Partial<Record<
+    "commit_hit" |
+    "commit_error" |
+    "witness_reassignment" |
+    "token_timing_split" |
+    "unresolved",
+    number
+  >>;
 }
 
 export interface AsrTurnBoundary {

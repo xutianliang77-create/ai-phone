@@ -4,6 +4,10 @@ import {
   isSpeakerRevisionDiagnostics,
   sanitizedSpeakerRevision,
 } from "./realtime-speaker-revision-diagnostics.js";
+import {
+  isSpeakerTurnDiagnostics,
+  sanitizedSpeakerTurns,
+} from "./realtime-speaker-turn-diagnostics.js";
 
 export function parseRealtimeDiagnostics(
   value: unknown,
@@ -121,37 +125,6 @@ function sanitizedStablePartial(
   };
 }
 
-function sanitizedSpeakerTurns(
-  value: NonNullable<RealtimeSessionDiagnosticsDto["speakerTurns"]>,
-) {
-  return {
-    confirmedBoundaryCount: value.confirmedBoundaryCount,
-    commitHitCount: value.commitHitCount,
-    commitMissCount: value.commitMissCount,
-    commitErrorCount: value.commitErrorCount,
-    endpointRaceCount: value.endpointRaceCount,
-    averageConfirmationLatencyMs: value.averageConfirmationLatencyMs,
-    maxConfirmationLatencyMs: value.maxConfirmationLatencyMs,
-    committedAudioMs: value.committedAudioMs,
-    endpointReasons: { ...value.endpointReasons },
-    ...(value.boundaryRevisionAttemptCount !== undefined
-      ? { boundaryRevisionAttemptCount: value.boundaryRevisionAttemptCount }
-      : {}),
-    ...(value.boundaryRevisionSuccessCount !== undefined
-      ? { boundaryRevisionSuccessCount: value.boundaryRevisionSuccessCount }
-      : {}),
-    ...(value.boundaryRevisionFailureCount !== undefined
-      ? { boundaryRevisionFailureCount: value.boundaryRevisionFailureCount }
-      : {}),
-    ...(value.boundaryReassignedCharacterCount !== undefined
-      ? {
-          boundaryReassignedCharacterCount:
-            value.boundaryReassignedCharacterCount,
-        }
-      : {}),
-  };
-}
-
 function isAudioDiagnostics(value: unknown) {
   if (!isRecord(value)) return false;
   return [
@@ -159,36 +132,6 @@ function isAudioDiagnostics(value: unknown) {
     value.processedBatchCount,
     value.droppedFrameCount,
   ].every(isNonNegativeInteger);
-}
-
-function isSpeakerTurnDiagnostics(value: unknown) {
-  if (!isRecord(value)) return false;
-  const counts = [
-    value.confirmedBoundaryCount,
-    value.commitHitCount,
-    value.commitMissCount,
-    value.commitErrorCount,
-    value.endpointRaceCount,
-    value.averageConfirmationLatencyMs,
-    value.maxConfirmationLatencyMs,
-    value.committedAudioMs,
-  ];
-  return counts.every(isNonNegativeInteger) &&
-    isBoundaryRevisionDiagnostics(value) &&
-    isEndpointReasonCounts(value.endpointReasons);
-}
-
-function isBoundaryRevisionDiagnostics(value: Record<string, unknown>) {
-  const counts = [
-    value.boundaryRevisionAttemptCount,
-    value.boundaryRevisionSuccessCount,
-    value.boundaryRevisionFailureCount,
-    value.boundaryReassignedCharacterCount,
-  ];
-  if (counts.every((item) => item === undefined)) return true;
-  if (!counts.every(isNonNegativeInteger)) return false;
-  const [attempts, successes, failures] = counts as number[];
-  return successes + failures <= attempts;
 }
 
 function isVadDiagnostics(value: unknown) {
@@ -317,14 +260,6 @@ function isEndpointPolicy(value: Record<string, unknown>) {
     (value.minAudioMs as number) <= (value.maxAudioMs as number) &&
     typeof value.maxAudioMs === "number" && value.maxAudioMs > 0 &&
     isFingerprint(value.fingerprint);
-}
-
-function isEndpointReasonCounts(value: unknown) {
-  if (!isRecord(value)) return false;
-  const allowed = new Set(["silence", "max_duration", "flush", "speaker_boundary"]);
-  return Object.entries(value).every(
-    ([key, count]) => allowed.has(key) && isNonNegativeInteger(count),
-  );
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

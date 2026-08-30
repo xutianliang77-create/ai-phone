@@ -3,6 +3,83 @@ import { describe, expect, it } from "vitest";
 import { parseRealtimeDiagnostics } from "./realtime-diagnostics.js";
 
 describe("speaker boundary revision diagnostics", () => {
+  it("sanitizes a complete per-boundary outcome ledger", () => {
+    const diagnostics = parseRealtimeDiagnostics({
+      version: 1,
+      audio: {
+        receivedFrameCount: 1,
+        processedBatchCount: 1,
+        droppedFrameCount: 0,
+      },
+      speakerTurns: {
+        confirmedBoundaryCount: 2,
+        commitHitCount: 1,
+        commitMissCount: 1,
+        commitErrorCount: 0,
+        endpointRaceCount: 0,
+        averageConfirmationLatencyMs: 960,
+        maxConfirmationLatencyMs: 960,
+        committedAudioMs: 480,
+        endpointReasons: {},
+        unresolvedCommitMissCount: 0,
+        boundaryOutcomeCounts: {
+          commit_hit: 1,
+          token_timing_split: 1,
+        },
+      },
+    });
+
+    expect(diagnostics?.speakerTurns).toMatchObject({
+      unresolvedCommitMissCount: 0,
+      boundaryOutcomeCounts: {
+        commit_hit: 1,
+        token_timing_split: 1,
+      },
+    });
+  });
+
+  it.each([
+    ["outcome total differs from confirmed boundaries", {
+      unresolvedCommitMissCount: 0,
+      boundaryOutcomeCounts: { commit_hit: 1 },
+    }],
+    ["resolved and unresolved misses differ from the raw miss count", {
+      unresolvedCommitMissCount: 0,
+      boundaryOutcomeCounts: {
+        commit_hit: 1,
+        token_timing_split: 1,
+      },
+    }],
+    ["an unknown boundary outcome is reported", {
+      unresolvedCommitMissCount: 1,
+      boundaryOutcomeCounts: {
+        commit_hit: 1,
+        unsafe_guess: 1,
+      },
+    }],
+  ])("rejects diagnostics when %s", (_label, outcomePatch) => {
+    expect(parseRealtimeDiagnostics({
+      version: 1,
+      audio: {
+        receivedFrameCount: 1,
+        processedBatchCount: 1,
+        droppedFrameCount: 0,
+      },
+      speakerTurns: {
+        confirmedBoundaryCount: 2,
+        commitHitCount: 1,
+        commitMissCount: 0,
+        commitErrorCount: 0,
+        endpointRaceCount: 0,
+        averageConfirmationLatencyMs: 960,
+        maxConfirmationLatencyMs: 960,
+        committedAudioMs: 480,
+        endpointReasons: {},
+        ...outcomePatch,
+      },
+    })).toBeUndefined();
+  });
+
   it.each([
     ["outcomes exceed attempts", {
       boundaryRevisionAttemptCount: 1,

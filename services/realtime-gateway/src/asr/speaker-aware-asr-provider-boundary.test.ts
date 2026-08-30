@@ -5,6 +5,8 @@ import {
   BoundaryAwareAsrProvider,
   EmptyBoundaryRacingAsrProvider,
   frame,
+  LateProtectedIdentifierAsrProvider,
+  LateTokenTimedAsrProvider,
   RacingAsrProvider,
   session,
   SwitchingSpeakerProvider,
@@ -150,6 +152,73 @@ describe("speaker aware ASR boundary handling", () => {
       timing: {
         overlap: true,
         activeSpeakerIds: ["speaker_1", "speaker_2"],
+      },
+    });
+  });
+
+  it("safely splits a delayed final with token timing and retained speaker evidence", async () => {
+    const provider = new SpeakerAwareAsrProvider(
+      new LateTokenTimedAsrProvider(),
+      new SwitchingSpeakerProvider(),
+    );
+    await provider.createSession({ ...session, asrEndpointMode: "listening" });
+
+    for (let sequence = 1; sequence <= 4; sequence += 1) {
+      await provider.transcribe({ ...frame, sequence });
+    }
+    const transcripts = await provider.transcribe({ ...frame, sequence: 5 });
+
+    expect(transcripts).toMatchObject([
+      {
+        segmentId: "late_timed",
+        text: "first",
+        turnId: "turn_1",
+        speaker: { speakerId: "speaker_1" },
+        timing: { startMs: 0, endMs: 480, overlap: false },
+      },
+      {
+        segmentId: "late_timed:speaker:1",
+        text: "second",
+        turnId: "turn_2",
+        speaker: { speakerId: "speaker_2" },
+        timing: { startMs: 480, endMs: 960, overlap: false },
+      },
+    ]);
+    expect(await provider.diagnostics("sess_1")).toMatchObject({
+      speakerTurns: {
+        commitMissCount: 1,
+        unresolvedCommitMissCount: 0,
+        boundaryOutcomeCounts: { token_timing_split: 1 },
+      },
+    });
+  });
+
+  it("keeps a delayed Latin identifier fail-closed across a speaker boundary", async () => {
+    const provider = new SpeakerAwareAsrProvider(
+      new LateProtectedIdentifierAsrProvider(),
+      new SwitchingSpeakerProvider(),
+    );
+    await provider.createSession({ ...session, asrEndpointMode: "listening" });
+
+    for (let sequence = 1; sequence <= 4; sequence += 1) {
+      await provider.transcribe({ ...frame, sequence });
+    }
+    const transcript = await provider.transcribe({ ...frame, sequence: 5 });
+
+    expect(transcript).toMatchObject({
+      segmentId: "late_identifier",
+      text: "Qwen3-ASR",
+      speaker: { speakerId: "unknown" },
+      timing: {
+        overlap: true,
+        activeSpeakerIds: ["speaker_1", "speaker_2"],
+      },
+    });
+    expect(await provider.diagnostics("sess_1")).toMatchObject({
+      speakerTurns: {
+        commitMissCount: 1,
+        unresolvedCommitMissCount: 1,
+        boundaryOutcomeCounts: { unresolved: 1 },
       },
     });
   });

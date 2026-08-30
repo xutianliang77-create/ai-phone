@@ -105,7 +105,16 @@ export interface RealtimeSpeakerTurnDiagnosticsDto {
   boundaryRevisionSuccessCount?: number;
   boundaryRevisionFailureCount?: number;
   boundaryReassignedCharacterCount?: number;
+  unresolvedCommitMissCount?: number;
+  boundaryOutcomeCounts?: Partial<Record<SpeakerBoundaryOutcome, number>>;
 }
+
+export type SpeakerBoundaryOutcome =
+  | "commit_hit"
+  | "commit_error"
+  | "witness_reassignment"
+  | "token_timing_split"
+  | "unresolved";
 
 export interface RealtimeSpeakerRevisionDiagnosticsDto {
   configuredProvider: "http";

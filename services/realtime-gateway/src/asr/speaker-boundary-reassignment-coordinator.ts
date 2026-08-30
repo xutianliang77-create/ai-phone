@@ -38,6 +38,7 @@ interface SessionState {
   recent: TranscriptResult[];
   pending?: PendingBoundaryRevision;
   diagnostics: SpeakerBoundaryRevisionDiagnostics;
+  resolvedBoundaryMs: number[];
 }
 export interface SpeakerBoundaryRevisionDiagnostics {
   boundaryRevisionAttemptCount: number;
@@ -64,6 +65,7 @@ export class SpeakerBoundaryReassignmentCoordinator {
       audio: new RecentPcmAudioBuffer(),
       recent: [],
       diagnostics: emptyDiagnostics(),
+      resolvedBoundaryMs: [],
     });
   }
   recordFrame(frame: AudioFrame) {
@@ -130,6 +132,19 @@ export class SpeakerBoundaryReassignmentCoordinator {
     const diagnostics = this.sessions.get(sessionId)?.diagnostics;
     return diagnostics ? { ...diagnostics } : undefined;
   }
+  drainResolvedBoundaries(sessionId: string) {
+    const state = this.sessions.get(sessionId);
+    if (!state || state.resolvedBoundaryMs.length === 0) return [];
+    const resolved = [...state.resolvedBoundaryMs];
+    state.resolvedBoundaryMs.length = 0;
+    return resolved;
+  }
+  resolveBoundary(sessionId: string, boundaryMs: number) {
+    const state = this.sessions.get(sessionId);
+    if (state?.pending?.boundary.boundaryMs === boundaryMs) {
+      state.pending = undefined;
+    }
+  }
   clear(sessionId: string) {
     const state = this.sessions.get(sessionId);
     state?.audio.clear();
@@ -173,6 +188,7 @@ export class SpeakerBoundaryReassignmentCoordinator {
       return transcripts;
     }
     state.diagnostics.boundaryRevisionSuccessCount += 1;
+    state.resolvedBoundaryMs.push(pending.boundary.boundaryMs);
     state.diagnostics.boundaryReassignedCharacterCount +=
       plan.movedCharacterCount;
     if (nextIndex < 0) return [plan.previous, plan.next, ...transcripts];

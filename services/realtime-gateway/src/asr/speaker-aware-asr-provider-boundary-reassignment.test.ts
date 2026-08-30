@@ -51,6 +51,8 @@ describe("speaker aware ASR boundary reassignment", () => {
         boundaryRevisionSuccessCount: 1,
         boundaryRevisionFailureCount: 0,
         boundaryReassignedCharacterCount: 8,
+        unresolvedCommitMissCount: 0,
+        boundaryOutcomeCounts: { witness_reassignment: 1 },
       },
     });
   });

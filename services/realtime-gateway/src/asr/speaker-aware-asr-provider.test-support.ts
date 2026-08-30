@@ -196,6 +196,61 @@ export class EmptyBoundaryRacingAsrProvider extends RacingAsrProvider {
   }
 }
 
+export class LateTokenTimedAsrProvider extends BoundaryAwareAsrProvider {
+  private calls = 0;
+
+  override async transcribe() {
+    this.calls += 1;
+    if (this.calls !== 5) return null;
+    return {
+      segmentId: "late_timed",
+      text: "first second",
+      language: "en" as const,
+      timing: { startMs: 0, endMs: 960, source: "client" as const },
+      tokenTimings: [
+        token("first", 0, 5, 0, 400),
+        token("second", 6, 12, 560, 960),
+      ],
+      endpointReason: "silence" as const,
+    };
+  }
+
+  override async commitBoundary(
+    input: { sessionId: string; boundaryMs: number },
+  ) {
+    this.boundaries.push(input.boundaryMs);
+    return null;
+  }
+}
+
+export class LateProtectedIdentifierAsrProvider extends BoundaryAwareAsrProvider {
+  private calls = 0;
+
+  override async transcribe() {
+    this.calls += 1;
+    if (this.calls !== 5) return null;
+    return {
+      segmentId: "late_identifier",
+      text: "Qwen3-ASR",
+      language: "en" as const,
+      timing: { startMs: 0, endMs: 960, source: "client" as const },
+      tokenTimings: [
+        token("Qwen3", 0, 5, 0, 400),
+        token("-", 5, 6, 440, 520),
+        token("ASR", 6, 9, 560, 960),
+      ],
+      endpointReason: "silence" as const,
+    };
+  }
+
+  override async commitBoundary(
+    input: { sessionId: string; boundaryMs: number },
+  ) {
+    this.boundaries.push(input.boundaryMs);
+    return null;
+  }
+}
+
 export class SwitchingSpeakerProvider extends FakeSpeakerProvider {
   private calls = 0;
 
@@ -229,4 +284,14 @@ function speakerSpan(
   confidence = 0.9,
 ) {
   return { speakerId, startMs, endMs, confidence, final: false };
+}
+
+function token(
+  text: string,
+  characterStart: number,
+  characterEnd: number,
+  startMs: number,
+  endMs: number,
+) {
+  return { text, characterStart, characterEnd, startMs, endMs };
 }
