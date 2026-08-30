@@ -79,6 +79,9 @@ export async function discoverEnterpriseCellTables(
   const candidates = columns.rows.flatMap((row): EnterpriseCellTablePlan[] => {
     const schema = schemaName(row.table_schema);
     if (!schema || row.table_name === "schema_migrations") return [];
+    if (schema === "enterprise" && globalEnterpriseTables.has(row.table_name)) {
+      return [];
+    }
     const selector = selectorFor(schema, row.table_name, row.columns);
     if (!selector) {
       if (schema === "enterprise") {
@@ -97,7 +100,7 @@ export async function discoverEnterpriseCellTables(
     return [{ name, schema, table: row.table_name, primaryKey,
       insertColumns: row.insert_columns,
       dependencies: [], selector,
-      derived: name === "enterprise.platform_pending_work" }];
+      derived: derivedEnterpriseTables.has(name) }];
   });
   const selected = new Set(candidates.map((table) => table.name));
   for (const relation of foreignKeys.rows) {
@@ -109,6 +112,15 @@ export async function discoverEnterpriseCellTables(
   }
   return topologicalTables(candidates);
 }
+
+const globalEnterpriseTables = new Set([
+  "control_plane_instances",
+  "control_plane_pending_work",
+]);
+
+const derivedEnterpriseTables = new Set([
+  "enterprise.platform_pending_work",
+]);
 
 function selectorFor(schema: "ai_phone" | "enterprise", table: string, columns: string[]) {
   if (schema === "enterprise" && table === "tenants") return "tenant_root" as const;

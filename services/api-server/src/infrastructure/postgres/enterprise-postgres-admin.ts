@@ -17,6 +17,7 @@ import {
 
 export const enterpriseTenantTableNames = [
   "members", "user_tenant_directory", "platform_pending_work",
+  "control_plane_instances", "control_plane_pending_work",
   "api_credentials", "entitlements", "subscriptions",
   "knowledge_sources", "knowledge_versions", "knowledge_chunks", "term_packs",
   "term_pack_versions", "script_templates", "script_template_versions",
@@ -90,6 +91,7 @@ export const enterpriseSubjectColumns = [
   ["meeting_participants", "user_id"],
   ["tenant_jobs", "actor_id"],
   ["platform_pending_work", "actor_id"],
+  ["control_plane_pending_work", "actor_id"],
   ["policy_decisions", "actor_id"],
   ["audit_events", "actor_id"],
   ["idempotency_keys", "actor_id"],

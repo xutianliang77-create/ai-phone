@@ -8,7 +8,6 @@ import {
 describe("enterprise PostgreSQL migrations", () => {
   it("loads ordered reversible migrations with stable checksums", () => {
     const migrations = loadEnterprisePostgresMigrations();
-
     expect(migrations.map(({ id }) => id)).toEqual([
       "0001_enterprise_foundation",
       "0002_enterprise_business",
@@ -58,7 +57,8 @@ describe("enterprise PostgreSQL migrations", () => {
       "0046_enterprise_marketing_agent",
       "0047_enterprise_marketing_handoff", "0048_enterprise_marketing_outcomes",
       "0049_enterprise_marketing_crm_sync", "0050_enterprise_worker_coordination",
-      "0051_enterprise_data_lifecycle", "0052_enterprise_release_controls", "0053_enterprise_tenant_root_rls"]);
+      "0051_enterprise_data_lifecycle", "0052_enterprise_release_controls",
+      "0053_enterprise_tenant_root_rls", "0054_enterprise_control_plane_ha"]);
     for (const migration of migrations) { expect(migration.up.trim()).not.toBe("");
       expect(migration.down.trim()).not.toBe("");
       expect(migration.checksum).toMatch(/^[a-f0-9]{64}$/); }

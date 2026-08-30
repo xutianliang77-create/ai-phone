@@ -1,7 +1,7 @@
 # 无界AI企业版开发方案与计划
 
-版本：v1.74
-日期：2026-07-21
+版本：v1.75
+日期：2026-08-31
 状态：E0 执行计划，已对齐统一通讯平台和 PostgreSQL Primary 收敛
 
 ## 1. 开发原则
@@ -20,14 +20,14 @@
 
 - `ENT-CORE-001/002/003` 已到 `ready_for_acceptance`；Tenant/Member、RBAC 和 `apps/enterprise-web` 生产应用基础可供后续任务复用。
 - Enterprise Web 已冻结 React 19、TypeScript 5.9、Vite 8、React Router 7 和 Vitest/Testing Library 技术基线，并实现真实登录、会话恢复和租户上下文。
-- `ENT-DATA-001` 已实现五十三段 PostgreSQL up/down migration、复合 FK、强制 RLS、migration runner、schema verify 和归档 smoke；`0017..0041` 增加知识、会议、客服与 Campaign/Lead/Consent/Suppression/Country Policy，`0042/0043` 增加不可变活动 validation/decision snapshot 和执行栅栏，`0044` 增加 Scheduler claim/lease/hold 栅栏，`0045` 增加 PSTN dispatch/状态证据/任务转换栅栏，`0046` 增加 Marketing Agent profile/run/turn 栅栏，`0047` 增加人工接管策略、桥接证据和超时收敛栅栏，`0048` 增加 Outcome/内部 requested action 不可变证据栅栏，`0049` 增加 CRM sync/receipt 栅栏，`0050` 增加 Cell Worker queue owner/generation/lease 协调栅栏，`0051` 增加对象生命周期账本与删除栅栏，`0052` 增加租户灰度、kill switch、熔断状态与追加证据，`0053` 补齐 tenant root 自租户 forced-RLS policy。2026-07-21 本机官方 PostgreSQL 16.14 已通过31+53空库 migration 和 `53 -> 52 -> 51 -> 53` 回退/前进机制验证；这不替代 staging restore/PITR/H3，任务保持 `in_progress`。
+- `ENT-DATA-001` 已实现五十四段 PostgreSQL up/down migration、复合 FK、强制 RLS、migration runner、schema verify 和归档 smoke；`0017..0041` 增加知识、会议、客服与 Campaign/Lead/Consent/Suppression/Country Policy，`0042/0043` 增加不可变活动 validation/decision snapshot 和执行栅栏，`0044` 增加 Scheduler claim/lease/hold 栅栏，`0045` 增加 PSTN dispatch/状态证据/任务转换栅栏，`0046` 增加 Marketing Agent profile/run/turn 栅栏，`0047` 增加人工接管策略、桥接证据和超时收敛栅栏，`0048` 增加 Outcome/内部 requested action 不可变证据栅栏，`0049` 增加 CRM sync/receipt 栅栏，`0050` 增加 Cell Worker queue owner/generation/lease 协调栅栏，`0051` 增加对象生命周期账本与删除栅栏，`0052` 增加租户灰度、kill switch、熔断状态与追加证据，`0053` 补齐 tenant root 自租户 forced-RLS policy，`0054` 增加控制面多实例 HA。历史31+53本机证据已陈旧，当前31+54尚未执行真实 migration/down/forward，不替代 staging restore/PITR/H3。
 - `ENT-CORE-005` 已完成版本化术语包、话术模板、审核发布、有效时间解析、统一运行时引用和租户隔离矩阵，进入 `ready_for_acceptance`；真实 ASR/翻译/LLM Worker 消费和 A1/H3 仍待验收。
 - `ENT-DATA-002` 已完成单一 `legacy|postgres` Repository runtime、HTTP 全链路注入、fail-closed 启动选择和独立 cell Worker。PostgreSQL 模式不回退、不双写；API 不执行跨租户恢复扫描，Worker 通过 cell forced RLS 发现最小引用后进入 tenant transaction 复核并 claim/finalize。代码和本地自动化进入 `ready_for_acceptance`，真实 PostgreSQL 并发、容量和恢复仍待 H3。
 - `ENT-DATA-004` 已完成 JSON/SQLite 源读取、SQLite 副本 `quick_check`、空目标事务导入和六集合 count/SHA-256 读回对账；不一致回滚，且明确只用于内部演示数据迁移。真实 PostgreSQL import/reconcile 证据仍待 H3。
 - `ENT-DATA-005` 已形成 PostgreSQL-only 单租户跨 Cell 维护命令：签名 export/cutover/rollback evidence、
   活动会话/租约清退、源只读/旧 writer 为零、动态 tenant/scope 表计划、外键顺序流式导入、对象 receipt、
   route epoch +1 和逐表 count/SHA-256 对账。回滚反向覆盖最新数据而非启用陈旧副本。当前只通过静态门禁，
-  测试、真实31+53双库、对象复制、路由发布和跨 Cell 故障演练未执行，保持 `in_progress`。
+  测试、真实31+54双库、对象复制、路由发布和跨 Cell 故障演练未执行，保持 `in_progress`。
 - `ENT-DATA-006` 已形成 PostgreSQL-only 多实例协调候选：持久 queue owner/generation/lease、Cell-scoped
   `SKIP LOCKED` claim、并发处理、heartbeat/fence 和稳定 Provider 幂等键均已接入；Redis 不承担真值。
   测试、`0050` 真实 migrate/forced-RLS、双进程故障恢复和 Provider sandbox 未执行，保持 `in_progress`。
@@ -37,7 +37,7 @@
   LiveKit 模块不再动态构造代码。当前 P0/P1 静态 finding 为0且依赖无 high/critical，但14个 moderate 仍是
   限期例外；真实渗透、独立复核、外部 SAST/DAST 和密钥轮换/恢复未执行，任务保持 `in_progress`。
 - `ENT-REL-003` 已形成 PostgreSQL 灾备静态候选：在任何 Provider step 前验签当前 enterprise cutover，
-  绑定 commit/image/topology、目标数据库 identity 和31+53 manifest；schema-v2 签名结果要求自动切换 timeline/
+  绑定 commit/image/topology、目标数据库 identity 和31+54 manifest；schema-v2 签名结果要求自动切换 timeline/
   generation、旧主/旧 route/旧 Worker fencing、只读 standby 重入、独立备份故障域不可变锁和 PITR marker/hash。
   测试定义未运行，Provider Adapter、真实容量/cutover evidence、跨故障域基础设施、异地对象锁和批准 SLA 均缺失，
   `AC-ENT-0052`/H3 未通过，保持 `in_progress`。
@@ -48,6 +48,11 @@
   同 operation 竞争、open/probe/recovery/kill、追加证据不可变，并以两个 API 进程读取同库状态；定向6文件32项
   通过。真实 Provider 故障、kill SLO/告警、独立 reviewer 和 on-call 演练仍未执行，`AC-ENT-0053` 未通过，
   保持 `in_progress`；该结果不是 staging/H3 或生产放行证据。
+- `ENT-REL-005` 已形成候选 commit/image、七类材料、A0–A3/H1–H3 证据和六方审批的发布材料门禁；
+  测试、真实材料和审批未执行，保持 `in_progress`。
+- `ENT-REL-006` 已形成 `0054`、独立 control-plane role/session、实例/开通投影、SKIP LOCKED 多实例 Worker、
+  generation/lease、异步202、配置失败闭合、live status 和运行手册；真实31+54 PostgreSQL、双实例/故障域、
+  kill/network partition/区域自治未执行，保持 `in_progress`。
 - `ENT-DATA-003` 已完成 tenant-scoped Inbox/Outbox、事务内领域提交、100次重放去重、lease/retry/recovery 和 SQLite/迁移自动化，进入 `ready_for_acceptance`；真实 PostgreSQL 并发 claim 和 Provider sandbox 仍是验收门禁。
 - `ENT-DATA-007` 已合入上游稳定提交 `fe1c3c2`，用唯一 `API_STORAGE_DRIVER`、公共/enterprise 双 manifest 验证、同库 name/OID 校验和 tenant/directory/cell/migration/maintenance 分权连接收敛 API 与 cell Worker；代码和本地自动化进入 `ready_for_acceptance`，真实 PostgreSQL H3 未执行。
 - `ENT-UI-001` 已完成生产令牌、Material Icons 注册表、Flutter 对照和浏览器验证，等待验收；`ENT-UI-002` 已完成共享 scope 真值、九角色导航矩阵、嵌套路由 guard 和 `ENT-CORE-011` 签名 route document；`ENT-UI-003` 已完成八态组件矩阵及 Provider/冲突/job 真值联调，均等待验收。
@@ -423,10 +428,12 @@ CORE-001/002 验收
 | 14 | `ENT-UI-004..012` | 完成公共页面、响应式、无障碍、Web 发布门禁、Flutter 企业入口和访客参会壳代码候选 |
 | 15 | `ENT-REL-003` | 配置真实 Provider Adapter 与三故障域拓扑，执行自动切换、旧主三层 fencing、不可变备份和 PITR，独立复核签名 schema-v2 证据与批准 RPO/RTO |
 | 16 | `ENT-REL-004` | 在隔离 PostgreSQL/Provider 环境执行双租户灰度、kill 生效延迟、阈值 open、专用 half-open probe、恢复与值班 runbook 演练 |
+| 17 | `ENT-REL-005` | 生成绑定候选 commit/image 的发布 manifest，收集 A0–A3/H1–H3、批准 SLA/隐私/管理员/运维材料及六方审批，执行发布门禁 |
+| 18 | `ENT-REL-006` | 在真实 PostgreSQL 以两个以上同区域控制面实例执行 provision 并发、kill -9、generation fence、候选混跑、backlog、滚动排空和区域会话自治验收 |
 
 E0 基线完成后已形成 `ENT-MTG-001/002` 代码候选；未通过真实 PostgreSQL、tenant/RBAC/token 攻击、Provider、浏览器与真机门禁，仍不能计为 E1 完成。
 
-当前进展：`ENT-DATA-001` 已完成五十三段 schema 代码，等待 staging PostgreSQL migrate/restore/PITR
+当前进展：`ENT-DATA-001` 已完成五十四段 schema 代码，等待 staging PostgreSQL migrate/restore/PITR
 证据；`ENT-CS-001..012` 已分别形成客服领域/恢复 runtime、统一入站 Adapter、tenant RAG、Support Agent、
 Tool Registry 授权边界、只读 Adapter 租约执行、可逆写确认/密文 Outbox、不可执行高风险接管和坐席
 queue/SLA/exclusive claim、坐席工作台、工单/回拨可靠后续动作和质检分析代码候选；`ENT-MKT-001..005` 已形成

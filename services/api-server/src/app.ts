@@ -14,15 +14,12 @@ import { registerDiagnosticsRoutes } from "./modules/diagnostics/diagnostics.rou
 import { registerEnterpriseTenantRoutes } from "./modules/enterprise/enterprise-tenants.routes.js";
 import {
   createEnvironmentTenantProvisioner,
-  type TenantProvisioner,
 } from "./modules/enterprise/enterprise-tenant-provisioner.js";
 import {
   createEnvironmentTenantRouteService,
-  type TenantRouteService,
 } from "./modules/enterprise/enterprise-tenant-route.js";
 import {
   createEnterpriseProviderReadinessService,
-  type EnterpriseProviderReadinessService,
 } from "./modules/enterprise/enterprise-provider-readiness.js";
 import { registerEnterpriseProviderReadinessRoutes } from "./modules/enterprise/enterprise-provider-readiness.routes.js";
 import { registerEnterpriseReleaseControlRoutes } from "./modules/enterprise/enterprise-release-control.routes.js";
@@ -45,11 +42,9 @@ import {
 } from "./modules/enterprise/enterprise-script-template.routes.js";
 import {
   createEnvironmentTenantLifecycleExecutor,
-  type TenantLifecycleExecutor,
 } from "./modules/enterprise/enterprise-tenant-lifecycle-executor.js";
 import {
   createEnvironmentEnterpriseAuditCursorService,
-  type EnterpriseAuditCursorService,
 } from "./modules/enterprise/enterprise-audit-cursor.js";
 import {
   registerEnterpriseAuditRoutes,
@@ -85,44 +80,38 @@ import { registerEnterpriseMarketingRoutes } from
   "./modules/enterprise/enterprise-marketing.routes.js";
 import {
   createEnvironmentEnterpriseSupportAgentProvider,
-  type EnterpriseSupportAgentProvider,
 } from "./modules/enterprise/enterprise-support-agent-provider.js";
 import {
   createEnvironmentEnterpriseSupportAgentDispatchService,
-  type EnterpriseSupportAgentDispatchService,
 } from "./modules/enterprise/enterprise-support-agent-dispatch.js";
 import {
   createEnvironmentEnterpriseMeetingMaterialProvider,
-  type EnterpriseMeetingMaterialProvider,
 } from "./modules/enterprise/enterprise-meeting-material-provider.js";
 import {
   createEnvironmentEnterpriseMeetingScreenShareProvider,
-  type EnterpriseMeetingScreenShareProvider,
 } from "./modules/enterprise/enterprise-meeting-screen-share-provider.js";
 import {
   createEnvironmentEnterpriseMeetingScreenOcrDispatchService,
-  type EnterpriseMeetingScreenOcrDispatchService,
 } from "./modules/enterprise/enterprise-meeting-screen-ocr-dispatch.js";
 import {
   createEnvironmentEnterpriseMeetingInviteTokenService,
-  type EnterpriseMeetingInviteTokenService,
 } from "./modules/enterprise/enterprise-meeting-invite-token.js";
 import {
   createEnvironmentEnterpriseMeetingTranslationDispatchService,
-  type EnterpriseMeetingTranslationDispatchService,
 } from "./modules/enterprise/enterprise-meeting-translation-dispatch.js";
 import {
   createEnvironmentAuditExportArtifactStore,
-  type EnterpriseAuditExportArtifactStore,
 } from "./modules/enterprise/enterprise-audit-export-artifact-store.js";
 import {
   legacyEnterpriseRepositoryRuntime,
-  type EnterpriseRepositoryRuntime,
 } from "./modules/enterprise/enterprise-repository-runtime.js";
 import {
   createEnvironmentEnterpriseSupportInboundTicketService,
-  type EnterpriseSupportInboundTicketService,
 } from "./modules/enterprise/enterprise-support-inbound-ticket.js";
+import {
+  createEnvironmentEnterpriseControlPlaneAvailability,
+} from "./modules/enterprise/enterprise-control-plane-availability.js";
+import type { AppDependencies } from "./app-dependencies.js";
 import { registerHealthRoutes } from "./modules/health/health.routes.js";
 import { registerModelRoutes } from "./modules/models/models.routes.js";
 import { registerPlansRoutes } from "./modules/plans/plans.routes.js";
@@ -134,24 +123,7 @@ import { registerVoiceProfileRoutes } from "./modules/voice-profiles/voice-profi
 import { registerVoiceIdentityRoutes } from "./modules/voice-identities/voice-identities.routes.js";
 import { registerIngressRoutes } from "./modules/ingress/ingress.routes.js";
 import { registerPlatformTelemetryHooks } from "./infrastructure/observability/platform-telemetry.js";
-export async function buildApp(dependencies: {
-  tenantProvisioner?: TenantProvisioner;
-  tenantRouteService?: TenantRouteService;
-  tenantLifecycleExecutor?: TenantLifecycleExecutor;
-  providerReadinessService?: EnterpriseProviderReadinessService;
-  auditCursorService?: EnterpriseAuditCursorService;
-  auditExportArtifactStore?: EnterpriseAuditExportArtifactStore;
-  enterpriseRepositoryRuntime?: EnterpriseRepositoryRuntime;
-  enterpriseMeetingInviteTokenService?: EnterpriseMeetingInviteTokenService;
-  enterpriseMeetingTranslationDispatchService?:
-    EnterpriseMeetingTranslationDispatchService;
-  enterpriseMeetingScreenShareProvider?: EnterpriseMeetingScreenShareProvider;
-  enterpriseMeetingMaterialProvider?: EnterpriseMeetingMaterialProvider;
-  enterpriseMeetingScreenOcrDispatch?: EnterpriseMeetingScreenOcrDispatchService;
-  enterpriseSupportInboundTicketService?: EnterpriseSupportInboundTicketService;
-  enterpriseSupportAgentProvider?: EnterpriseSupportAgentProvider;
-  enterpriseSupportAgentDispatchService?: EnterpriseSupportAgentDispatchService;
-} = {}) {
+export async function buildApp(dependencies: AppDependencies = {}) {
   const app = Fastify({
     logger: {
       level: process.env.LOG_LEVEL ?? "info",
@@ -178,12 +150,16 @@ export async function buildApp(dependencies: {
     createEnterpriseProviderReadinessService();
   const supportInboundTickets = dependencies.enterpriseSupportInboundTicketService ??
     createEnvironmentEnterpriseSupportInboundTicketService();
+  const controlPlaneAvailability =
+    dependencies.enterpriseControlPlaneAvailability ??
+      createEnvironmentEnterpriseControlPlaneAvailability();
   app.addHook("onClose", () => auditExportArtifactStore.close());
+  app.addHook("onClose", () => controlPlaneAvailability.close());
   registerPlatformTelemetryHooks(app);
   await app.register(cors, { origin: apiCorsOrigin() });
   await registerAccountRoutes(app);
   await registerAgentCallRoutes(app);
-  await registerHealthRoutes(app);
+  await registerHealthRoutes(app, controlPlaneAvailability);
   registerIngressRoutes(app);
   await registerModelRoutes(app);
   await registerBillingRoutes(app);
@@ -196,6 +172,7 @@ export async function buildApp(dependencies: {
     dependencies.tenantLifecycleExecutor ??
       createEnvironmentTenantLifecycleExecutor(),
     enterpriseRepositoryRuntime,
+    controlPlaneAvailability,
   );
   await registerEnterpriseCommunicationPolicyRoutes(
     app,
@@ -216,6 +193,7 @@ export async function buildApp(dependencies: {
     app,
     tenantRouteService,
     enterpriseRepositoryRuntime,
+    controlPlaneAvailability,
   );
   await registerEnterpriseKnowledgeRoutes(
     app,

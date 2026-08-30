@@ -2,6 +2,8 @@ import { getPlatformTelemetryReadiness } from "../observability/platform-telemet
 import { getPlatformRoutingReadiness } from "./platform-session-routing.js";
 import { postgresPrimaryCutoverAuthorization } from
   "../storage/repository-runtime.js";
+import { getEnterpriseControlPlaneConfigReadiness } from
+  "../postgres/enterprise-control-plane-config.js";
 
 export function getPlatformScaleReadiness() {
   const enabled = process.env.PLATFORM_MULTI_NODE_ENABLED === "true";
@@ -16,6 +18,7 @@ export function getPlatformScaleReadiness() {
   );
   const telemetry = getPlatformTelemetryReadiness();
   const routing = getPlatformRoutingReadiness();
+  const controlPlane = getEnterpriseControlPlaneConfigReadiness();
   const issues = enabled ? [
     ...(storageDriver === "postgres"
       ? []
@@ -35,6 +38,9 @@ export function getPlatformScaleReadiness() {
       ? []
       : ["Multi-node mode requires ready OpenTelemetry export"]),
     ...routing.issues,
+    ...(controlPlane.status === "configured"
+      ? []
+      : ["Multi-node mode requires configured enterprise control-plane HA"]),
   ] : [];
   return {
     status: !enabled ? "disabled" as const
@@ -50,6 +56,7 @@ export function getPlatformScaleReadiness() {
     targetConcurrentSessions,
     telemetry: telemetry.status,
     routing,
+    controlPlane,
     issues,
   };
 }

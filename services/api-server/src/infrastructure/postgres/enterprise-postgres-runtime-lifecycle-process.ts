@@ -53,7 +53,8 @@ export function finalizePostgresTenantProvision(
       const member = await unit.tenant.findMemberByUserId(input.actorUserId);
       const job = await unit.lifecycle.lockJob(input.jobId);
       if (!tenant || !member || !job) return { status: "not_found" };
-      if (job.status !== "processing") {
+      if (job.status !== "processing" || job.type !== "tenant.provision" ||
+        tenant.status !== "provisioning") {
         return { status: "unchanged", tenant, member, job };
       }
       const now = new Date().toISOString();

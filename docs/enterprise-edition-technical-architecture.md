@@ -1,7 +1,7 @@
 # 无界AI企业版技术架构
 
-版本：v1.56
-日期：2026-07-21
+版本：v1.57
+日期：2026-08-31
 状态：SaaS 详细架构基线，已对齐统一通讯平台和 PostgreSQL Primary
 
 ## 1. 架构目标
@@ -908,7 +908,7 @@ commit、image digest、topology hash、目标 logical ID、system identifier/OI
 `ENT-REL-003` 在该单一 cutover 真值之后增加 Provider 无关的灾备证据层，不建立第二套数据库状态：
 `signed cutover evidence -> enterprise DR binding -> bounded shell-free Provider steps -> signed schema-v2 result
 -> production resilience verifier`。binding 固定候选 commit/image、topology、cutover/run ID、目标数据库
-system identifier/OID/manifest 和当前31+53 migration；cutover 与 DR 使用不同 HMAC key。命令 attestation
+system identifier/OID/manifest 和当前31+54 migration；cutover 与 DR 使用不同 HMAC key。命令 attestation
 必须回显 run/group/step，并按固定顺序完成 baseline、异地 base backup/WAL、健康控制器自动切换、旧主数据库+
 route epoch+Worker generation 三层 fencing、服务发现、旧主只读 standby 重入、隔离 PITR 与 hash 复核。
 备份故障域必须不同于全部 HA 数据库故障域，且证明加密、对象版本和 compliance/provider retention lock。
@@ -1049,6 +1049,23 @@ API/Worker 在创建 dispatch、调用 Provider 或提交高风险副作用前�
 RBAC scope。kill switch 的隔离粒度为 tenant + capability，安全结束路径不经过开启 guard。当前实现接入
 Support Agent、Meeting Screen OCR 和 Marketing PSTN；客服写工具仍由客户确认/高风险接管栅栏保护，自动写
 放量前还必须接入相同 guard。容量、配额、Cell 保护继续属于 `ENT-REL-007`，不能把本状态机称为限流器。
+
+### 14.2 控制面实例、投影和区域自治
+
+`0054` 为控制面建立两类全局 PostgreSQL 记录：`control_plane_instances` 保存 instance/region/candidate/
+generation/heartbeat/lease，`control_plane_pending_work` 是由 processing `tenant.provision` job 同事务 trigger
+维护的最小恢复投影。前者只用于活性/候选一致性，后者只用于发现；Tenant、Member、tenant job、Directory、
+cell 和 route epoch 仍是既有表的唯一真值。
+
+控制面 Worker 使用独立非 owner、非 `BYPASSRLS` 凭证，transaction-local worker identity 和 forced RLS；
+领取 projection 后必须通过 tenant-scoped Repository 重读 actor/job/type/status，再调用以 tenant ID 幂等的
+区域 provisioner，续租后才允许在 tenant transaction 中 finalize。API、控制面 Worker 和 Cell Worker 分权：
+控制面凭证不读取 tenant payload，Cell Worker 不读取 Directory，普通 API 不扫描全局 pending work。
+
+多实例无单点 leader；数据库行锁和租约决定每条工作的唯一当前 owner。实例排空只停止新 claim，正在执行的
+任务保持 lease 或安全释放；进程崩溃后等租约到期由更高 generation 重领。活性 status 只计同 region、同
+commit/image 且 lease 未过期的实例。该机制不参与已建立的 RTC/Translation/Agent 数据面会话，因此控制面故障
+不会撤销现有 route/Worker ticket；新控制面写入口则失败闭合。
 
 ## 15. 容量和服务目标
 

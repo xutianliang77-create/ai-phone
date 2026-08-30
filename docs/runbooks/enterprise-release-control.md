@@ -91,7 +91,7 @@
 
 ## 7. 证据和退出条件
 
-本机机制回归可在已完成31+53 migration、已创建两个空测试 tenant 的隔离 PostgreSQL 上执行：
+本机机制回归必须在当前已完成31+54 migration、已创建两个空测试 tenant 的隔离 PostgreSQL 上执行：
 
 ```bash
 ENTERPRISE_TENANT_DATABASE_URL='postgresql://<tenant-role>@<host>/<db>' \
@@ -106,7 +106,7 @@ npm run enterprise:release-control-acceptance
 并发只计一次、open/probe/recovery/kill、事件 UPDATE SQLSTATE `55000` 和公共31段/enterprise 53段。
 它不会调用真实 Provider，也不替代 kill SLO、告警或值班演练。
 
-一次有效演练至少保留：candidate commit/image、31+53 manifest、tenant/capability、前后 version、operation IDs、
+一次有效演练至少保留：candidate commit/image、31+54 manifest、tenant/capability、前后 version、operation IDs、
 trace IDs、告警时间线、目标/对照租户结果、Provider/dispatch 计数、kill 生效延迟、probe 结果和独立 reviewer。
 所有证据必须脱敏。只有 `AC-ENT-0053` 的真实 PostgreSQL forced-RLS、双租户、多实例、Provider 故障和 on-call
 演练全部通过后，才能把本手册状态从“代码候选”升级为“已验证”。

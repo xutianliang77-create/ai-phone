@@ -7,6 +7,8 @@
     "build": "tsc -p tsconfig.json && node ../../scripts/copy_enterprise_postgres_migrations.mjs",
     "dev": "tsx src/main.ts",
     "dev:enterprise-worker": "tsx src/enterprise-postgres-worker-main.ts",
+    "dev:enterprise-control-plane": "tsx src/enterprise-control-plane-worker-main.ts",
+    "enterprise:control-plane": "tsx src/infrastructure/postgres/enterprise-control-plane-admin.ts",
     "enterprise:postgres-data": "tsx src/infrastructure/postgres/enterprise-postgres-data-admin.ts",
     "enterprise:postgres-cutover": "tsx src/infrastructure/postgres/enterprise-postgres-cutover-admin.ts",
     "enterprise:postgres-cell": "tsx src/infrastructure/postgres/enterprise-postgres-cell-admin.ts",

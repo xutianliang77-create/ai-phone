@@ -26,6 +26,8 @@ export type EnterprisePostgresConnectionRole =
   | "tenant"
   | "directory"
   | "cell"
+  | "control_plane"
+  | "control_plane_observer"
   | "migration"
   | "maintenance";
 
@@ -139,6 +141,9 @@ function enterprisePostgresRoleVariable(role: EnterprisePostgresConnectionRole) 
     case "tenant": return "ENTERPRISE_TENANT_DATABASE_URL";
     case "directory": return "ENTERPRISE_DIRECTORY_DATABASE_URL";
     case "cell": return "ENTERPRISE_CELL_DATABASE_URL";
+    case "control_plane": return "ENTERPRISE_CONTROL_PLANE_DATABASE_URL";
+    case "control_plane_observer":
+      return "ENTERPRISE_CONTROL_PLANE_OBSERVER_DATABASE_URL";
     case "migration": return "ENTERPRISE_MIGRATION_DATABASE_URL";
     case "maintenance": return "ENTERPRISE_MAINTENANCE_DATABASE_URL";
   }

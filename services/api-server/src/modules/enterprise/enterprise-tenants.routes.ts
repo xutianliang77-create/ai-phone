@@ -34,6 +34,8 @@ import {
 import type {
   EnterpriseRepositoryRuntime,
 } from "./enterprise-repository-runtime.js";
+import type { EnterpriseControlPlaneAvailabilityService } from
+  "./enterprise-control-plane-availability.js";
 
 export async function registerEnterpriseTenantRoutes(
   app: FastifyInstance,
@@ -41,12 +43,14 @@ export async function registerEnterpriseTenantRoutes(
   tenantRouteService: TenantRouteService,
   tenantLifecycleExecutor: TenantLifecycleExecutor,
   runtime: EnterpriseRepositoryRuntime,
+  controlPlaneAvailability: EnterpriseControlPlaneAvailabilityService,
 ) {
   await registerEnterpriseTenantLifecycleRoutes(
     app,
     tenantProvisioner,
     tenantLifecycleExecutor,
     runtime,
+    controlPlaneAvailability,
   );
   await registerEnterpriseTenantRouteRoutes(app, tenantRouteService, runtime);
 

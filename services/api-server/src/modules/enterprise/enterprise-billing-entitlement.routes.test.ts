@@ -8,6 +8,8 @@ import {
   createTenantRouteService,
   encodeTenantRouteDocument,
 } from "./enterprise-tenant-route.js";
+import { fixedEnterpriseControlPlaneAvailability } from
+  "./enterprise-control-plane-availability.js";
 
 const tenantId = "00000000-0000-4000-8000-000000000001";
 
@@ -95,6 +97,33 @@ describe("enterprise billing entitlement routes", () => {
     expect(spoofed.statusCode).toBe(409);
     expect(legacy.statusCode).toBe(503);
     expect(legacy.json().error.code).toBe("enterprise_postgres_required");
+  });
+
+  it("rejects plan changes when live control-plane HA is unavailable", async () => {
+    const changeSubscription = vi.fn();
+    const app = await buildApp({
+      tenantRouteService: routeService,
+      enterpriseRepositoryRuntime: {
+        ...legacyEnterpriseRepositoryRuntime,
+        driver: "postgres",
+        changeSubscription,
+      },
+      enterpriseControlPlaneAvailability: fixedEnterpriseControlPlaneAvailability({
+        status: "not_ready",
+        issues: ["active replicas below minimum"],
+      }),
+    });
+    const response = await app.inject({
+      method: "POST",
+      url: `/saas/v1/tenants/${tenantId}/subscription/change`,
+      headers: headers("owner-token"),
+      payload: changeBody(),
+    });
+    await app.close();
+
+    expect(response.statusCode).toBe(503);
+    expect(response.json().error.code).toBe("control_plane_not_ready");
+    expect(changeSubscription).not.toHaveBeenCalled();
   });
 });
 

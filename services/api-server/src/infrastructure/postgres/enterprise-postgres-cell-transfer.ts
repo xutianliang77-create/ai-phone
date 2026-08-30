@@ -224,6 +224,9 @@ async function assertTenantQuiescent(
           lease_expires_at > clock_timestamp() OR
           coordination_lease_expires_at > clock_timestamp()
         ))
+      OR EXISTS(SELECT 1 FROM enterprise.control_plane_pending_work
+        WHERE tenant_id = $1::uuid
+          AND coordination_lease_expires_at > clock_timestamp())
       OR EXISTS(SELECT 1 FROM ai_phone.worker_dispatches
         WHERE scope_type = 'tenant' AND scope_id = $1
           AND status IN ('reserved', 'dispatching', 'dispatched', 'ready', 'draining'))

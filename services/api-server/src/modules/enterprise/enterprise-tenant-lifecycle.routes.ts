@@ -19,12 +19,15 @@ import {
 import type {
   EnterpriseRepositoryRuntime,
 } from "./enterprise-repository-runtime.js";
+import type { EnterpriseControlPlaneAvailabilityService } from
+  "./enterprise-control-plane-availability.js";
 
 export async function registerEnterpriseTenantLifecycleRoutes(
   app: FastifyInstance,
   provisioner: TenantProvisioner,
   lifecycleExecutor: TenantLifecycleExecutor,
   runtime: EnterpriseRepositoryRuntime,
+  controlPlaneAvailability: EnterpriseControlPlaneAvailabilityService,
 ) {
   app.post("/saas/v1/tenants", async (request, reply) => {
     const account = await requireAccount(request, reply);
@@ -37,6 +40,7 @@ export async function registerEnterpriseTenantLifecycleRoutes(
     if (!name || name.length < 2 || !homeRegion) {
       return sendError(reply, 400, "invalid_tenant", "Invalid tenant");
     }
+    if (!await controlPlaneReady(runtime, controlPlaneAvailability, reply)) return;
     const begun = await runtime.beginTenantCreation({
       ownerUserId: account.id,
       name,
@@ -49,6 +53,9 @@ export async function registerEnterpriseTenantLifecycleRoutes(
       return sendExistingProvision(reply, begun, 200);
     }
     if (!hasLifecycleRecords(begun)) return tenantNotFound(reply);
+    if (runtime.driver === "postgres") {
+      return sendProvisionResult(reply, begun, 201);
+    }
     const completed = await provisionTenant(
       runtime,
       provisioner,
@@ -64,6 +71,7 @@ export async function registerEnterpriseTenantLifecycleRoutes(
     const idempotencyKey = requireIdempotencyKey(request, reply);
     if (!idempotencyKey) return;
     const { tenantId } = request.params as { tenantId: string };
+    if (!await controlPlaneReady(runtime, controlPlaneAvailability, reply)) return;
     const begun = await runtime.beginTenantRetry({
       tenantId,
       actorUserId: account.id,
@@ -77,6 +85,9 @@ export async function registerEnterpriseTenantLifecycleRoutes(
     }
     if (begun.status === "existing") return sendExistingProvision(reply, begun, 200);
     if (!hasLifecycleRecords(begun)) return tenantNotFound(reply);
+    if (runtime.driver === "postgres") {
+      return sendProvisionResult(reply, begun, 200);
+    }
     const completed = await provisionTenant(
       runtime,
       provisioner,
@@ -138,6 +149,23 @@ export async function registerEnterpriseTenantLifecycleRoutes(
     if (!job) return sendError(reply, 404, "tenant_job_not_found", "Tenant job not found");
     return { job: toJobDto(job) };
   });
+}
+
+async function controlPlaneReady(
+  runtime: EnterpriseRepositoryRuntime,
+  controlPlaneAvailability: EnterpriseControlPlaneAvailabilityService,
+  reply: FastifyReply,
+) {
+  if (runtime.driver !== "postgres") return true;
+  const readiness = await controlPlaneAvailability.status();
+  if (readiness.status === "ready") return true;
+  sendError(
+    reply,
+    503,
+    "control_plane_not_ready",
+    "SaaS control plane is not ready",
+  );
+  return false;
 }
 
 async function provisionTenant(

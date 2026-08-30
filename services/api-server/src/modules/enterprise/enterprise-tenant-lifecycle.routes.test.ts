@@ -1,9 +1,13 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { buildApp } from "../../app.js";
 import { getStoreSnapshot } from "../../infrastructure/storage/json-store.js";
 import type {
   TenantLifecycleExecutor,
 } from "./enterprise-tenant-lifecycle-executor.js";
+import { legacyEnterpriseRepositoryRuntime } from
+  "./enterprise-repository-runtime.js";
+import { fixedEnterpriseControlPlaneAvailability } from
+  "./enterprise-control-plane-availability.js";
 
 describe("enterprise tenant lifecycle routes", () => {
   beforeEach(() => {
@@ -14,6 +18,8 @@ describe("enterprise tenant lifecycle routes", () => {
     store.enterpriseMembers = [];
     store.enterpriseTenantJobs = [];
   });
+
+  afterEach(() => vi.unstubAllEnvs());
 
   it("requires an idempotency key and does not duplicate provisioning", async () => {
     seedAccount("owner-user", "owner-token");
@@ -102,6 +108,67 @@ describe("enterprise tenant lifecycle routes", () => {
     expect(getStoreSnapshot().enterpriseTenants).toHaveLength(1);
   });
 
+  it("queues PostgreSQL provisioning for the HA control-plane worker", async () => {
+    seedAccount("owner-user", "owner-token");
+    vi.stubEnv("API_STORAGE_DRIVER", "postgres");
+    vi.stubEnv("ENTERPRISE_CONTROL_PLANE_ENABLED", "true");
+    vi.stubEnv("ENTERPRISE_CONTROL_PLANE_DATABASE_URL", "postgresql://control/db");
+    vi.stubEnv("ENTERPRISE_CONTROL_PLANE_REGION", "cn-north");
+    vi.stubEnv("ENTERPRISE_CONTROL_PLANE_BUILD_COMMIT", "a".repeat(40));
+    vi.stubEnv(
+      "ENTERPRISE_CONTROL_PLANE_IMAGE_DIGEST",
+      `sha256:${"b".repeat(64)}`,
+    );
+    let provisionCalls = 0;
+    const app = await buildApp({
+      enterpriseRepositoryRuntime: {
+        ...legacyEnterpriseRepositoryRuntime,
+        driver: "postgres",
+      },
+      tenantProvisioner: {
+        async provision() {
+          provisionCalls += 1;
+          return { status: "ready", cellId: "cn-cell-01" } as const;
+        },
+      },
+      enterpriseControlPlaneAvailability: readyControlPlaneAvailability(),
+    });
+    const response = await createTenant(
+      app,
+      "Queued Tenant",
+      "queued-tenant-create",
+    );
+    await app.close();
+
+    expect(response.statusCode).toBe(202);
+    expect(response.json()).toMatchObject({
+      tenant: { status: "provisioning" },
+      job: { type: "tenant.provision", status: "processing" },
+    });
+    expect(provisionCalls).toBe(0);
+  });
+
+  it("does not create a PostgreSQL tenant when control-plane HA is disabled", async () => {
+    seedAccount("owner-user", "owner-token");
+    vi.stubEnv("API_STORAGE_DRIVER", "postgres");
+    const app = await buildApp({
+      enterpriseRepositoryRuntime: {
+        ...legacyEnterpriseRepositoryRuntime,
+        driver: "postgres",
+      },
+    });
+    const response = await createTenant(
+      app,
+      "Blocked Tenant",
+      "blocked-tenant-create",
+    );
+    await app.close();
+
+    expect(response.statusCode).toBe(503);
+    expect(response.json().error.code).toBe("control_plane_not_ready");
+    expect(getStoreSnapshot().enterpriseTenants).toHaveLength(0);
+  });
+
   it("tracks lifecycle jobs without faking external completion", async () => {
     seedAccount("owner-user", "owner-token");
     const app = await readyApp();
@@ -175,6 +242,20 @@ describe("enterprise tenant lifecycle routes", () => {
     expect(getStoreSnapshot().enterpriseTenants[0]?.status).toBe("active");
   });
 });
+
+function readyControlPlaneAvailability() {
+  return fixedEnterpriseControlPlaneAvailability({
+    status: "ready",
+    region: "cn-north",
+    activeInstances: 2,
+    drainingInstances: 0,
+    incompatibleInstances: 0,
+    expectedReplicas: 2,
+    dueProvisionJobs: 0,
+    backlogAgeSeconds: 0,
+    issues: [],
+  });
+}
 
 function seedAccount(userId: string, token: string) {
   const now = new Date().toISOString();

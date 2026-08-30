@@ -132,7 +132,8 @@ export function finalizeEnterpriseTenantProvision(
       item.tenantId === job.tenantId && item.userId === job.actorUserId
     );
     if (!job || !tenant || !member) return { status: "not_found" as const };
-    if (job.status !== "processing") {
+    if (job.status !== "processing" || job.type !== "tenant.provision" ||
+      tenant.status !== "provisioning") {
       return { status: "unchanged" as const, tenant, member, job };
     }
     const now = new Date().toISOString();

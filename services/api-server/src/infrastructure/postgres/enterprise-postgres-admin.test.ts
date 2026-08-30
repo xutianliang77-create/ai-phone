@@ -11,11 +11,11 @@ import type {
 describe("enterprise PostgreSQL schema verification", () => {
   it("accepts the current migration count", async () => {
     const evidence = await verifyEnterprisePostgresSchema(
-      new VerifyClient("53"),
+      new VerifyClient("54"),
     );
 
     expect(evidence).toEqual({
-      migrations: 53,
+      migrations: 54,
       tenantTables: enterpriseTenantTableNames.length,
       compositeForeignKeys: 12,
       subjectColumns: enterpriseSubjectColumns.length,
@@ -26,18 +26,18 @@ describe("enterprise PostgreSQL schema verification", () => {
 
   it("rejects a stale migration count", async () => {
     await expect(verifyEnterprisePostgresSchema(new VerifyClient("52")))
-      .rejects.toThrow("Migration count is not 53");
+      .rejects.toThrow("Migration count is not 54");
   });
 
   it("rejects stale UUID subject columns", async () => {
     await expect(verifyEnterprisePostgresSchema(
-      new VerifyClient("53", "uuid"),
+      new VerifyClient("54", "uuid"),
     )).rejects.toThrow("subject columns are not text");
   });
 
   it("rejects a missing or relaxed tenant root policy", async () => {
     await expect(verifyEnterprisePostgresSchema(
-      new VerifyClient("53", "text", false),
+      new VerifyClient("54", "text", false),
     )).rejects.toThrow("tenant root isolation policy is missing");
   });
 });

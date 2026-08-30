@@ -18,6 +18,8 @@ import {
   requireTenantRouteDocument,
 } from "./enterprise-tenant-route.routes.js";
 import type { TenantRouteService } from "./enterprise-tenant-route.js";
+import type { EnterpriseControlPlaneAvailabilityService } from
+  "./enterprise-control-plane-availability.js";
 
 interface TenantParams { tenantId: string }
 
@@ -25,6 +27,7 @@ export async function registerEnterpriseBillingEntitlementRoutes(
   app: FastifyInstance,
   routeService: TenantRouteService,
   runtime: EnterpriseRepositoryRuntime,
+  controlPlaneAvailability: EnterpriseControlPlaneAvailabilityService,
 ) {
   app.get<{ Params: TenantParams }>(
     "/saas/v1/tenants/:tenantId/entitlements",
@@ -62,6 +65,15 @@ export async function registerEnterpriseBillingEntitlementRoutes(
       );
       if (!access) return;
       if (request.params.tenantId !== access.tenant.id) return mismatch(reply);
+      if (runtime.driver === "postgres" &&
+        (await controlPlaneAvailability.status()).status !== "ready") {
+        return sendError(
+          reply,
+          503,
+          "control_plane_not_ready",
+          "SaaS control plane is not ready",
+        );
+      }
       if (!runtime.changeSubscription) return postgresRequired(reply);
       const parsed = parseChange(request.body);
       if (!parsed) {

@@ -109,13 +109,46 @@ ENTERPRISE_MIGRATION_DATABASE_URL='postgresql://...' \
   查询不得 JOIN tenant-owned 表，候选记录必须再进入 tenant session 复核。
 - 平台恢复使用 `SET LOCAL app.cell_id = $1` 的 forced-RLS projection；projection
   不含 payload，发现引用在 claim 前必须重新进入 tenant session 核对当前 cell。
+- 控制面 provision 恢复使用独立 `ENTERPRISE_CONTROL_PLANE_DATABASE_URL`，API 活性查询使用只读
+  `ENTERPRISE_CONTROL_PLANE_OBSERVER_DATABASE_URL`，两者都设置
+  `SET LOCAL app.control_plane_worker_id = $1`；全局 projection 只保存 tenant/job/actor/region 引用和租约，
+  外部开通前仍通过 tenant Repository 重读真实 job，不能成为第二套租户状态真值。
 
 `API_STORAGE_DRIVER` 是唯一进程级 driver；旧 `ENTERPRISE_REPOSITORY_DRIVER` 为空或
 必须与其一致。API tenant Repository 复用公共 Primary pool，directory 使用独立凭证；
-Worker 使用独立 cell discovery 凭证和共享 tenant pool，不持有 directory 凭证。
+Worker 使用独立 cell discovery 凭证和共享 tenant pool，不持有 directory 凭证；控制面 Worker 使用
+独立 control-plane 凭证和共享 tenant pool，不持有 directory、migration 或 maintenance 凭证。
 生产环境必须显式配置 `ENTERPRISE_DIRECTORY_DATABASE_URL`、
-`ENTERPRISE_CELL_DATABASE_URL`、`ENTERPRISE_MIGRATION_DATABASE_URL` 和维护凭证，
+`ENTERPRISE_CELL_DATABASE_URL`、`ENTERPRISE_CONTROL_PLANE_DATABASE_URL`、
+`ENTERPRISE_CONTROL_PLANE_OBSERVER_DATABASE_URL`、
+`ENTERPRISE_MIGRATION_DATABASE_URL` 和维护凭证，
 不得使用 `BYPASSRLS` 应用角色扫描或修改全租户数据。
+
+## Control-plane HA
+
+Migration `0054` 增加 `control_plane_instances` 和由 `tenant.provision` job 触发维护的
+`control_plane_pending_work`。PostgreSQL 模式的创建/重试只持久化 tenant/member/job 并返回202；至少两个
+同区域控制面 Worker 通过 `FOR UPDATE SKIP LOCKED`、owner/generation/lease 领取。相同 worker ID 的旧租约
+未过期时新进程不能注册；claim、续租、释放和实例 heartbeat 都由 forced-RLS 与数据库 trigger 限制。
+
+启动 Worker：
+
+```bash
+API_STORAGE_DRIVER=postgres \
+ENTERPRISE_CONTROL_PLANE_ENABLED=true \
+ENTERPRISE_CONTROL_PLANE_DATABASE_URL='postgresql://control-role@db/app' \
+ENTERPRISE_CONTROL_PLANE_WORKER_ID='control-cn-01' \
+ENTERPRISE_CONTROL_PLANE_REGION='cn' \
+ENTERPRISE_CONTROL_PLANE_BUILD_COMMIT='<40-hex>' \
+ENTERPRISE_CONTROL_PLANE_IMAGE_DIGEST='sha256:<64-hex>' \
+npm run dev:enterprise-control-plane
+```
+
+`npm run enterprise:control-plane -- status` 从数据库报告同区域、同候选的 active/draining 实例数和 provision
+backlog 年龄；低于 `EXPECTED_REPLICAS`、候选混跑或 backlog 超过批准阈值返回非零。status 只证明即时数据库
+状态，不能代替跨故障域、网络分区、kill -9、容量或独立 reviewer 验收。
+API 节点另配置唯一 `ENTERPRISE_CONTROL_PLANE_OBSERVER_ID`，以同一只读控制面角色查询最多缓存1秒的 live
+snapshot；新开通、重试、套餐变更和 release readiness 只有在 live status 为 ready 时继续。
 
 ## Knowledge versions
 

@@ -26,8 +26,13 @@ import { getVoiceAgentRuntimeReadiness } from
   "../agent-calls/voice-agent-runtime-readiness.js";
 import { getAgentConsultReadiness } from
   "../agent-calls/agent-consult-readiness.js";
+import type { EnterpriseControlPlaneAvailabilityService } from
+  "../enterprise/enterprise-control-plane-availability.js";
 
-export async function registerHealthRoutes(app: FastifyInstance) {
+export async function registerHealthRoutes(
+  app: FastifyInstance,
+  controlPlaneAvailability: EnterpriseControlPlaneAvailabilityService,
+) {
   app.get("/health", async () => {
     const env = loadEnv();
     const accountReadiness = getAccountDeploymentReadiness();
@@ -50,6 +55,7 @@ export async function registerHealthRoutes(app: FastifyInstance) {
     const telemetryReadiness = getPlatformTelemetryReadiness();
     const voiceAgentRuntimeReadiness = getVoiceAgentRuntimeReadiness();
     const agentConsultReadiness = getAgentConsultReadiness();
+    const controlPlaneHaReadiness = await controlPlaneAvailability.status();
     return {
       status: "ok",
       service: "api-server",
@@ -93,6 +99,7 @@ export async function registerHealthRoutes(app: FastifyInstance) {
       diagnosticsReadiness,
       releaseMaterialsReadiness,
       enterpriseReleaseMaterialsReadiness,
+      controlPlaneHaReadiness,
     };
   });
 
@@ -108,7 +115,19 @@ export async function registerHealthRoutes(app: FastifyInstance) {
 
   app.get("/health/release-ready", async (_request, reply) => {
     const releaseReadiness = await getReleaseReadiness();
-    const statusCode = releaseReadiness.status === "ready" ? 200 : 503;
-    return reply.status(statusCode).send(releaseReadiness);
+    const controlPlaneHaReadiness = await controlPlaneAvailability.status();
+    const issues = [...new Set([
+      ...releaseReadiness.issues,
+      ...(controlPlaneHaReadiness.status === "ready"
+        ? []
+        : controlPlaneHaReadiness.issues),
+    ])];
+    const status = issues.length === 0 ? "ready" as const : "not_ready" as const;
+    return reply.status(status === "ready" ? 200 : 503).send({
+      ...releaseReadiness,
+      status,
+      issues,
+      controlPlaneHaReadiness,
+    });
   });
 }

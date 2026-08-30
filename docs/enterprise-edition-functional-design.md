@@ -1,6 +1,6 @@
 # 无界AI企业版详细功能设计
 
-版本：v1.54
+版本：v1.55
 日期：2026-08-31
 状态：SaaS 详细设计基线，已对齐统一通讯平台
 
@@ -171,6 +171,20 @@ Provider、usage/ledger 和 trace；跨会话业务聚合与货币成本尚未�
 - 企业状态页显示区域、服务健康、用量、事件和维护窗口。
 - Provider 故障由平台切换或降级，客户不配置模型地址。
 - 高级套餐可使用平台托管的专属容量或专属 SaaS cell，但仍由 AI Phone 运维，不属于私有化部署。
+
+### 4.5 SaaS 控制面高可用
+
+- PostgreSQL 模式的企业创建和 provision 重试先原子保存 tenant、owner、job、Directory 和无 payload
+  恢复投影，再返回 `processing`；HTTP 进程不直接执行区域开通，避免 API 提交后崩溃造成永久丢失或重复副作用。
+- 每个区域至少两个不同 worker ID 的控制面 Worker 使用数据库 `SKIP LOCKED`、owner/generation/lease
+  竞争任务。投影只保存 tenant/job/actor/homeRegion 引用；执行前重新进入 tenant Repository 复核真实 job，
+  不能成为第二套租户、成员、Directory 或 route 状态真值。
+- 实例注册绑定 region、build commit 和 image digest。相同 worker ID 的旧租约未过期时新进程不能启动；
+  claim/heartbeat/finalize 任一 generation 丢失后旧实例必须退出，迟到结果不能激活 tenant。
+- 控制面配置缺失或同候选 live 副本不足时拒绝新租户和套餐变更且不写半条数据。控制面全停时不能新开通/改套餐，但区域数据面、
+  LiveKit 和 Worker 不依赖控制面进程内状态，已取得有效 route/ticket 的进行中会话仍可安全结束。
+- 状态检查按区域报告同候选 active/draining 实例数、due provision backlog 和数据库计算的最老等待年龄；
+  副本不足、候选混跑或 backlog 超过批准阈值都为 `not_ready`。配置 ready 不等于真实 HA 已验收。
 
 ## 5. 出海 AI 外呼营销
 
@@ -885,7 +899,7 @@ service-account Adapter、可注入 mock 以及 Web/Flutter 状态入口。自�
   PITR 已验证；证据需显示环境、commit/image/topology、cutover ID 和最近验证时间。
   本地或同故障域恢复只能显示“机制已验证”，不能显示“生产灾备就绪”。
 - `ENT-REL-003` 只建立服务端演练和放行证据门禁，不向租户提供 promote、failover、fence 或 restore
-  操作。灾备 readiness 只有在同一签名 schema-v2 结果绑定当前 enterprise cutover、31+53 manifest、
+  操作。灾备 readiness 只有在同一签名 schema-v2 结果绑定当前 enterprise cutover、31+54 manifest、
   自动切换/旧主隔离、异地不可变备份和 PITR hash 后才可为 ready；缺 Adapter、容量、证据或任一实测值
   必须显示 `not_ready`。RPO/RTO 只展示批准目标和本次实测，不得在真实演练与 SLA 批准前承诺数值。
 
