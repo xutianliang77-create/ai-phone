@@ -295,6 +295,7 @@ function isStablePartialRejectionCounts(value: unknown) {
     "backtrack",
     "language_gate",
     "context_echo",
+    "extension_pending",
   ]);
   return Object.entries(value).every(
     ([key, count]) => allowed.has(key) && isNonNegativeInteger(count),

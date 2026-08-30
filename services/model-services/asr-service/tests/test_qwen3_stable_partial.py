@@ -150,7 +150,7 @@ async def test_reports_privacy_safe_stable_partial_rejection_reasons() -> None:
         )
     assert duplicate.diagnostics("sess_1")["rejectionCounts"] == {
         "insufficient_units": 1,
-        "duplicate_partial": 1,
+        "extension_pending": 1,
     }
 
 
@@ -187,6 +187,68 @@ async def test_reports_native_language_evidence_without_changing_the_gate() -> N
         "no_text": 1,
         "insufficient_units": 1,
         "language_gate": 1,
+    }
+
+
+async def test_does_not_publish_a_homophone_extension_that_backtracks_next() -> None:
+    coordinator = StableReadablePartialCoordinator(
+        FakeStreamingRunner([
+            "除了",
+            "除了伪",
+            "除了伟哥",
+            "除了伟哥很多",
+            "除了伪科普",
+        ]),
+        enabled=True,
+    )
+    emitted = []
+
+    for duration_ms in (500, 700, 900, 1000, 2000):
+        partial = await observe_settled(
+            coordinator,
+            asr_request(),
+            active_audio(duration_ms),
+        )
+        if partial is not None:
+            emitted.append(partial.text)
+
+    assert emitted == ["除了"]
+    assert coordinator.diagnostics("sess_1")["rejectionCounts"] == {
+        "duplicate_partial": 2,
+        "extension_pending": 1,
+        "insufficient_units": 1,
+    }
+
+
+async def test_publishes_a_correct_extension_after_one_more_survival_decode() -> None:
+    coordinator = StableReadablePartialCoordinator(
+        FakeStreamingRunner([
+            "会议开始",
+            "会议开始了",
+            "会议开始讨论",
+            "会议开始讨论产品",
+            "会议开始讨论产品计划",
+        ]),
+        enabled=True,
+    )
+    emitted = []
+
+    for duration_ms in (500, 700, 900, 1000, 2000):
+        partial = await observe_settled(
+            coordinator,
+            asr_request(),
+            active_audio(duration_ms),
+        )
+        if partial is not None:
+            emitted.append(partial.text)
+
+    assert emitted == ["会议开始", "会议开始讨论"]
+    diagnostics = coordinator.diagnostics("sess_1")
+    assert diagnostics["emittedCount"] == 2
+    assert diagnostics["rejectionCounts"] == {
+        "duplicate_partial": 1,
+        "extension_pending": 1,
+        "insufficient_units": 1,
     }
 
 

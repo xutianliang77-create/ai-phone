@@ -47,6 +47,7 @@ class _PartialState:
     scheduler: LatestPartialPushScheduler
     previous_decode: str = ""
     last_partial: str = ""
+    pending_extension: str = ""
     next_revision: int = 0
     decode_count: int = 0
     emitted_count: int = 0
@@ -117,6 +118,7 @@ class StableReadablePartialCoordinator:
 
         text = str(result.text or "").strip()
         if not text:
+            state.pending_extension = ""
             self._reject(metrics, "no_text")
             return None
         confirmed = confirmed_readable_prefix(
@@ -126,24 +128,37 @@ class StableReadablePartialCoordinator:
         )
         state.previous_decode = text
         if not confirmed:
+            state.pending_extension = ""
             self._reject(metrics, "insufficient_units")
             return None
         if confirmed == state.last_partial:
+            state.pending_extension = ""
             self._reject(metrics, "duplicate_partial")
             return None
         if state.last_partial and not confirmed.startswith(state.last_partial):
+            state.pending_extension = ""
             self._reject(metrics, "backtrack")
             return None
         if not _is_chinese_partial(state.source_language, result.model_language):
+            state.pending_extension = ""
             self._count(metrics.language_gate_counts, language_evidence)
             self._reject(metrics, "language_gate")
             return None
         if is_context_echo(confirmed, state.context):
+            state.pending_extension = ""
             self._reject(metrics, "context_echo")
             return None
         if not publish:
             state.final_fallback = confirmed
             return None
+        if state.last_partial:
+            pending = state.pending_extension
+            if not pending or not confirmed.startswith(pending):
+                state.pending_extension = confirmed
+                self._reject(metrics, "extension_pending")
+                return None
+            state.pending_extension = confirmed if confirmed != pending else ""
+            confirmed = pending
 
         state.last_partial = confirmed
         revision = state.next_revision
@@ -196,7 +211,7 @@ class StableReadablePartialCoordinator:
         state = self._states.get(session_id)
         return {
             "enabled": self.enabled,
-            "policy": "qwen17_latest_only_adjacent_prefix_zh_v2",
+            "policy": "qwen17_latest_only_extension_survival_zh_v3",
             "eligibleSegmentCount": metrics.eligible_segment_count,
             "activeSegment": session_id in self._states,
             "decodeCount": metrics.decode_count,

@@ -199,7 +199,8 @@ export type StablePartialRejectionReason =
   | "duplicate_partial"
   | "backtrack"
   | "language_gate"
-  | "context_echo";
+  | "context_echo"
+  | "extension_pending";
 
 export type StablePartialLanguageEvidence =
   | "empty"

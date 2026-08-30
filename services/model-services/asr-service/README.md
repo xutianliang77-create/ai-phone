@@ -70,9 +70,11 @@ explicit Chinese or auto-detected Chinese can emit stable partials. The frozen
 decode schedule is 500/700/900/1000 ms, followed by one-second updates. A
 partial is published only when adjacent model decodes share at least two
 effective letters or numbers; single-character `嗯/啊/呃/哦` fillers are ignored
-only for the comparison. Batch final remains authoritative and reuses the same
-segment ID with a newer revision. Other modes and non-Chinese auto detections
-continue to emit final transcripts only. Streaming pushes use one in-flight
+only for the comparison. The first stable prefix can publish immediately;
+subsequent growth remains pending until one more stable decode preserves that
+extension. Batch final remains authoritative and reuses the same segment ID
+with a newer revision. Other modes and non-Chinese auto detections continue to
+emit final transcripts only. Streaming pushes use one in-flight
 decode per session: audio intake never waits for a partial, frames received
 during inference are coalesced into the next push, and endpoint finalization
 invalidates pending partial work before the batch final takes the model lock.
