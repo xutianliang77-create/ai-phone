@@ -160,7 +160,10 @@ export class LmStudioRealtimeProvider implements RealtimeProvider {
   }
 
   async diagnostics(sessionId: string) {
-    return await this.asrProvider.diagnostics?.(sessionId) ?? {};
+    return {
+      ...(await this.asrProvider.diagnostics?.(sessionId) ?? {}),
+      speakerAssemblyRepair: this.speakerBoundaryRepair.diagnostics(sessionId),
+    };
   }
   async healthCheck() {
     return (

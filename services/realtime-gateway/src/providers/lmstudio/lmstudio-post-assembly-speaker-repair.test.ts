@@ -1,8 +1,9 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AsrProvider } from "../../asr/asr-provider.js";
 import { LmStudioRealtimeProvider } from "./lmstudio-realtime-provider.js";
 
 describe("lmstudio post-assembly speaker repair", () => {
+  afterEach(() => vi.useRealTimers());
   it("splits a max-duration continuation before translation", async () => {
     const { asr, resolvedBoundaryMs } = boundaryContinuationProvider();
     const translated: string[] = [];
@@ -112,6 +113,65 @@ describe("lmstudio post-assembly speaker repair", () => {
     expect(revised[0].revision).toBeGreaterThan(original[1].revision ?? 0);
     expect(revised[2].revision).toBe(revised[0].revision);
     expect(fixture.resolvedBoundaryMs).toEqual([6001]);
+    expect(await provider.diagnostics("sess_1")).toMatchObject({
+      speakerAssemblyRepair: {
+        enabled: true,
+        cachedParentCount: 2,
+        boundaryEvidenceArrivalCount: 1,
+        repairAttemptCount: 1,
+        repairAcceptedCount: 1,
+        delayedRepairAcceptedCount: 1,
+        repairRejectedCount: 0,
+        revisionEmittedCount: 2,
+        expiredParentCount: 0,
+        pendingParentCount: 0,
+        rejectionReasonCounts: {},
+        averageWaitMs: expect.any(Number),
+        maxWaitMs: expect.any(Number),
+      },
+    });
+  });
+
+  it("expires a cached parent after 15 seconds without boundary evidence", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(0);
+    const fixture = boundaryContinuationProvider(false);
+    const provider = new LmStudioRealtimeProvider({
+      baseUrl: "http://127.0.0.1:1234/v1",
+      model: "tencent/Hy-MT2-1.8B",
+      timeoutMs: 100,
+      asrProvider: fixture.asr,
+      translationClient: {
+        translate: async (input) => `translated:${input.text}`,
+        healthCheck: async () => true,
+      },
+    });
+    await provider.createSession({
+      sessionId: "sess_1",
+      asrEndpointMode: "listening",
+      sourceLanguage: "zh",
+      targetLanguage: "en",
+      voiceOutput: false,
+    });
+    await audioEvents(provider, 1);
+    await audioEvents(provider, 2);
+
+    expect(await provider.diagnostics("sess_1")).toMatchObject({
+      speakerAssemblyRepair: {
+        cachedParentCount: 2,
+        expiredParentCount: 0,
+        pendingParentCount: 1,
+      },
+    });
+    vi.advanceTimersByTime(15_001);
+    await audioEvents(provider, 3);
+
+    expect(await provider.diagnostics("sess_1")).toMatchObject({
+      speakerAssemblyRepair: {
+        expiredParentCount: 1,
+        pendingParentCount: 0,
+      },
+    });
   });
 });
 

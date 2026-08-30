@@ -86,9 +86,13 @@ function validSkippedReasonCounts(value: unknown, expectedTotal: number) {
   if (!isRecord(value)) return false;
   const entries = Object.entries(value);
   return entries.every(([reason, count]) =>
-    TOKEN_SPLIT_REJECTION_REASONS.has(reason) && isNonNegativeInteger(count)
+    isSpeakerTokenSplitRejectionReason(reason) && isNonNegativeInteger(count)
   ) && entries.reduce((total, [, count]) => total + Number(count), 0) ===
     expectedTotal;
+}
+
+export function isSpeakerTokenSplitRejectionReason(reason: string) {
+  return TOKEN_SPLIT_REJECTION_REASONS.has(reason);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

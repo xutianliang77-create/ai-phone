@@ -8,6 +8,10 @@ import {
   isSpeakerTurnDiagnostics,
   sanitizedSpeakerTurns,
 } from "./realtime-speaker-turn-diagnostics.js";
+import {
+  isSpeakerAssemblyRepairDiagnostics,
+  sanitizedSpeakerAssemblyRepair,
+} from "./realtime-speaker-assembly-repair-diagnostics.js";
 
 export function parseRealtimeDiagnostics(
   value: unknown,
@@ -24,6 +28,10 @@ export function parseRealtimeDiagnostics(
   if (
     diagnostics.speakerRevision !== undefined &&
     !isSpeakerRevisionDiagnostics(diagnostics.speakerRevision)
+  ) return undefined;
+  if (
+    diagnostics.speakerAssemblyRepair !== undefined &&
+    !isSpeakerAssemblyRepairDiagnostics(diagnostics.speakerAssemblyRepair)
   ) return undefined;
   if (diagnostics.vad !== undefined && !isVadDiagnostics(diagnostics.vad)) {
     return undefined;
@@ -51,6 +59,11 @@ export function parseRealtimeDiagnostics(
     ...(diagnostics.speakerRevision
       ? { speakerRevision: sanitizedSpeakerRevision(
           diagnostics.speakerRevision,
+        ) }
+      : {}),
+    ...(diagnostics.speakerAssemblyRepair
+      ? { speakerAssemblyRepair: sanitizedSpeakerAssemblyRepair(
+          diagnostics.speakerAssemblyRepair,
         ) }
       : {}),
     ...(diagnostics.vad ? { vad: sanitizedVad(diagnostics.vad) } : {}),

@@ -137,6 +137,25 @@ export interface RealtimeSpeakerRevisionDiagnosticsDto {
   lastLatencyMs?: number;
 }
 
+export interface RealtimeSpeakerAssemblyRepairDiagnosticsDto {
+  enabled: boolean;
+  cachedParentCount: number;
+  boundaryEvidenceArrivalCount: number;
+  repairAttemptCount: number;
+  repairAcceptedCount: number;
+  delayedRepairAcceptedCount: number;
+  repairRejectedCount: number;
+  revisionEmittedCount: number;
+  expiredParentCount: number;
+  pendingParentCount: number;
+  rejectionReasonCounts: Partial<Record<
+    SpeakerTokenSplitRejectionReason,
+    number
+  >>;
+  averageWaitMs: number;
+  maxWaitMs: number;
+}
+
 export type SpeakerTokenSplitRejectionReason =
   | "not_final"
   | "missing_timing"
@@ -270,6 +289,7 @@ export interface RealtimeSessionDiagnosticsDto {
   audio: RealtimeAudioDiagnosticsDto;
   speakerTurns?: RealtimeSpeakerTurnDiagnosticsDto;
   speakerRevision?: RealtimeSpeakerRevisionDiagnosticsDto;
+  speakerAssemblyRepair?: RealtimeSpeakerAssemblyRepairDiagnosticsDto;
   vad?: RealtimeVadDiagnosticsDto;
   nodes?: RealtimeNodeDiagnosticsDto[];
 }
