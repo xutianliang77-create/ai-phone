@@ -23,6 +23,7 @@ from app.sensevoice_engine import transcript_language
 STABLE_PARTIAL_DECODE_SCHEDULE_MS = (500, 700, 900, 1000)
 STABLE_PARTIAL_STEADY_DECODE_MS = 1000
 STABLE_PARTIAL_MINIMUM_UNITS = 2
+STABLE_PARTIAL_MIN_PUSH_AUDIO_MS = 40
 STABLE_PARTIAL_UNFIXED_CHUNK_NUM = 4
 STABLE_PARTIAL_UNFIXED_TOKEN_NUM = 5
 
@@ -211,7 +212,8 @@ class StableReadablePartialCoordinator:
         state = self._states.get(session_id)
         return {
             "enabled": self.enabled,
-            "policy": "qwen17_latest_only_extension_survival_zh_v3",
+            "policy": "qwen17_latest_only_40ms_extension_survival_zh_v4",
+            "minimumPushAudioMs": STABLE_PARTIAL_MIN_PUSH_AUDIO_MS,
             "eligibleSegmentCount": metrics.eligible_segment_count,
             "activeSegment": session_id in self._states,
             "decodeCount": metrics.decode_count,
@@ -312,6 +314,7 @@ class StableReadablePartialCoordinator:
                 model_state,
                 audio.sample_rate,
                 metrics.pushes,
+                STABLE_PARTIAL_MIN_PUSH_AUDIO_MS,
             ),
             audio_started_at=monotonic() - audio.duration_ms / 1000,
         )

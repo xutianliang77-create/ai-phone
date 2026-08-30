@@ -126,6 +126,7 @@ class AsrEndpointPolicyDiagnostics(BaseModel):
 class StablePartialDiagnostics(BaseModel):
     enabled: bool
     policy: str = Field(min_length=1, max_length=80)
+    minimumPushAudioMs: int = Field(ge=0)
     eligibleSegmentCount: int = Field(ge=0)
     activeSegment: bool
     decodeCount: int = Field(ge=0)

@@ -75,7 +75,8 @@ subsequent growth remains pending until one more stable decode preserves that
 extension. Batch final remains authoritative and reuses the same segment ID
 with a newer revision. Other modes and non-Chinese auto detections continue to
 emit final transcripts only. Streaming pushes use one in-flight
-decode per session: audio intake never waits for a partial, frames received
+decode per session and a 40 ms minimum push: audio intake never waits for a
+partial, 20 ms transport frames are paired before dispatch, frames received
 during inference are coalesced into the next push, and endpoint finalization
 invalidates pending partial work before the batch final takes the model lock.
 Session diagnostics expose only bounded scheduler counters and latency values;

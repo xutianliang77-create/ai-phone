@@ -56,7 +56,9 @@ async def test_stable_partial_and_batch_final_share_segment_revision_chain() -> 
     assert await engine.transcribe(frame(2, 500, 200)) is None
     await wait_for_completed_push(engine, 2)
     partial = await engine.transcribe(frame(3, 700, 20))
-    await wait_for_completed_push(engine, 3)
+    pending = engine.diagnostics("sess_1")["stablePartial"]
+    assert pending["scheduledPushCount"] == 2
+    assert pending["pendingAudioMs"] == 20
     final = await engine.flush("sess_1", "zh", "en")
 
     assert partial is not None
@@ -70,7 +72,7 @@ async def test_stable_partial_and_batch_final_share_segment_revision_chain() -> 
     assert final.isFinal is True
     assert final.endpointReason == "flush"
     assert final.text == "今天开会讨论产品计划。"
-    assert runner.partial_calls == 3
+    assert runner.partial_calls == 2
     assert runner.final_calls == 1
     assert engine.diagnostics("sess_1")["stablePartial"]["emittedCount"] == 1
 
@@ -97,7 +99,6 @@ async def test_promotes_last_stable_partial_when_silence_endpoint_final_is_empty
     assert await engine.transcribe(frame(2, 500, 200)) is None
     await wait_for_completed_push(engine, 2)
     partial = await engine.transcribe(frame(3, 700, 20))
-    await wait_for_completed_push(engine, 3)
     final = await engine.transcribe(frame(4, 720, 600, amplitude=0))
 
     assert partial is not None
@@ -132,7 +133,6 @@ async def test_promotes_last_stable_partial_when_flush_final_is_empty() -> None:
     assert await engine.transcribe(frame(2, 500, 200)) is None
     await wait_for_completed_push(engine, 2)
     partial = await engine.transcribe(frame(3, 700, 20))
-    await wait_for_completed_push(engine, 3)
     final = await engine.flush("sess_1", "zh", "en")
 
     assert partial is not None

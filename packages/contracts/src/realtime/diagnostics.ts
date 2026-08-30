@@ -212,6 +212,7 @@ export type StablePartialLanguageEvidence =
 export interface RealtimeStablePartialDiagnosticsDto {
   enabled: boolean;
   policy: string;
+  minimumPushAudioMs?: number;
   eligibleSegmentCount: number;
   activeSegment: boolean;
   decodeCount: number;

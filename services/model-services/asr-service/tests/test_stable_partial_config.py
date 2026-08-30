@@ -10,6 +10,8 @@ def test_vllm_runtime_fingerprint_contains_the_frozen_partial_policy() -> None:
         "decodeScheduleMs": [500, 700, 900, 1000],
         "steadyDecodeMs": 1000,
         "minimumReadableUnits": 2,
+        "minimumPushAudioMs": 40,
+        "extensionSurvivalDecodes": 1,
         "unfixedChunkNum": 4,
         "unfixedTokenNum": 5,
     }

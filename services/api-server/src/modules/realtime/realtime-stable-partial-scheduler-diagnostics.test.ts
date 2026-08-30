@@ -13,6 +13,7 @@ const scheduler = {
   maxPendingAudioMs: 400,
   averagePushLatencyMs: 25,
   maxPushLatencyMs: 30,
+  minimumPushAudioMs: 40,
 };
 
 
@@ -69,7 +70,7 @@ function input(stablePartial: Record<string, unknown>) {
       },
       stablePartial: {
         enabled: true,
-        policy: "qwen17_latest_only_extension_survival_zh_v3",
+        policy: "qwen17_latest_only_40ms_extension_survival_zh_v4",
         eligibleSegmentCount: 1,
         activeSegment: true,
         decodeCount: 2,

@@ -37,10 +37,14 @@ class LatestPartialPushScheduler:
         model_state: object,
         sample_rate: int,
         metrics: PartialPushMetrics,
+        minimum_push_audio_ms: int = 0,
     ) -> None:
         self._push = push
         self._model_state = model_state
         self._sample_rate = sample_rate
+        self._minimum_push_bytes = round(
+            sample_rate * minimum_push_audio_ms / 1000
+        ) * 2
         self._metrics = metrics
         self._pending = bytearray()
         self._pending_end_timestamp_ms = 0
@@ -64,6 +68,7 @@ class LatestPartialPushScheduler:
             or self._completed is not None
             or self._error is not None
             or not self._pending
+            or len(self._pending) < self._minimum_push_bytes
         ):
             self._record_pending_highwater()
             return

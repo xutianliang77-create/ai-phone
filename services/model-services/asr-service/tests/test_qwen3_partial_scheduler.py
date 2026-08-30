@@ -30,6 +30,28 @@ class BlockingStreamingRunner:
         return state.chunk_id, text, "Chinese"
 
 
+async def test_combines_twenty_millisecond_frames_into_forty_ms_pushes() -> None:
+    runner = BlockingStreamingRunner(["会议", "会议开始"])
+    coordinator = StableReadablePartialCoordinator(runner, enabled=True)
+
+    assert await coordinator.observe(request(), audio(20), "") is None
+    diagnostics = coordinator.diagnostics("sess_1")
+    if diagnostics["scheduledPushCount"] != 0:
+        runner.release[0].set()
+    assert diagnostics["scheduledPushCount"] == 0
+    assert diagnostics["pendingAudioMs"] == 20
+
+    await assert_nonblocking_observe(coordinator, runner, 0, 40)
+    await release_and_wait(coordinator, runner, 0, 1)
+    assert await coordinator.observe(request(), audio(60), "") is None
+    assert coordinator.diagnostics("sess_1")["pendingAudioMs"] == 20
+    await assert_nonblocking_observe(coordinator, runner, 1, 80)
+    await release_and_wait(coordinator, runner, 1, 2)
+
+    assert runner.push_sizes == [640, 640]
+    assert coordinator.diagnostics("sess_1")["scheduledPushCount"] == 2
+
+
 async def test_coalesces_audio_without_blocking_on_a_slow_decode() -> None:
     runner = BlockingStreamingRunner(["会议开始", "会议开始了"])
     coordinator = StableReadablePartialCoordinator(runner, enabled=True)

@@ -116,6 +116,8 @@ function sanitizedStablePartial(
   return {
     enabled: value.enabled,
     policy: value.policy,
+    ...(value.minimumPushAudioMs === undefined
+      ? {} : { minimumPushAudioMs: value.minimumPushAudioMs }),
     eligibleSegmentCount: value.eligibleSegmentCount,
     activeSegment: value.activeSegment,
     decodeCount: value.decodeCount,
@@ -211,6 +213,7 @@ function isStablePartialDiagnostics(value: unknown) {
   if (!isRecord(value)) return false;
   const counts = [
     value.eligibleSegmentCount,
+    value.minimumPushAudioMs,
     value.decodeCount,
     value.decisionCount,
     value.emittedCount,
@@ -269,7 +272,6 @@ function optionalLessOrEqual(left: unknown, right: unknown) {
   return left === undefined || right === undefined ||
     typeof left === "number" && typeof right === "number" && left <= right;
 }
-
 function countTotal(value: unknown) {
   if (!isRecord(value)) return 0;
   return Object.values(value).reduce<number>(
@@ -277,7 +279,6 @@ function countTotal(value: unknown) {
     0,
   );
 }
-
 function rejectionTotal(value: unknown) {
   if (!isRecord(value)) return 0;
   return Object.values(value).reduce<number>(
