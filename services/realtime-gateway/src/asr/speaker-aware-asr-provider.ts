@@ -219,6 +219,24 @@ export class SpeakerAwareAsrProvider implements AsrProvider {
       },
     };
   }
+  speakerBoundaryEvidence(sessionId: string) {
+    const boundaries = this.boundaryTranscripts.unresolvedBoundaries(sessionId);
+    if (boundaries.length === 0) return undefined;
+    return {
+      boundaries,
+      spans: [...(this.spansBySession.get(sessionId) ?? [])],
+      confirmedSpeakerIds: [...new Set(boundaries.flatMap((boundary) => [
+        boundary.previousSpeakerId,
+        boundary.nextSpeakerId,
+      ]))],
+    };
+  }
+  resolveSpeakerBoundaries(sessionId: string, boundaryMs: number[]) {
+    this.boundaryTranscripts.resolveTokenTimingBoundaries(
+      sessionId,
+      boundaryMs,
+    );
+  }
   async closeSession(sessionId: string) {
     const speakerEnabled = this.enabledSessions.delete(sessionId);
     this.spansBySession.delete(sessionId);

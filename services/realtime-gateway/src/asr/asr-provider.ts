@@ -73,6 +73,26 @@ export interface AsrTurnBoundary {
   boundaryMs: number;
 }
 
+export interface AsrSpeakerBoundaryEvidence {
+  boundaries: Array<{
+    boundaryMs: number;
+    previousSpeakerId: string;
+    nextSpeakerId: string;
+    previousTurnId?: string;
+    nextTurnId?: string;
+    confidence?: number;
+  }>;
+  spans: Array<{
+    speakerId: string;
+    startMs: number;
+    endMs: number;
+    confidence?: number;
+    overlap?: boolean;
+    final?: boolean;
+  }>;
+  confirmedSpeakerIds: string[];
+}
+
 export type AsrProviderResult = TranscriptResult | TranscriptResult[] | null;
 
 export interface AsrProvider {
@@ -80,6 +100,10 @@ export interface AsrProvider {
   transcribe(frame: AudioFrame): Promise<AsrProviderResult>;
   flush(sessionId: string): Promise<AsrProviderResult>;
   commitBoundary?(boundary: AsrTurnBoundary): Promise<AsrProviderResult>;
+  speakerBoundaryEvidence?(
+    sessionId: string,
+  ): AsrSpeakerBoundaryEvidence | undefined;
+  resolveSpeakerBoundaries?(sessionId: string, boundaryMs: number[]): void;
   diagnostics?(
     sessionId: string,
   ): Promise<Partial<RealtimeSessionDiagnosticsDto>>;

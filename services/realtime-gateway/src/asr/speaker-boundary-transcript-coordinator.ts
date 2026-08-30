@@ -164,6 +164,20 @@ export class SpeakerBoundaryTranscriptCoordinator {
     return this.boundariesBySession.get(sessionId) ?? [];
   }
 
+  unresolvedBoundaries(sessionId: string) {
+    if (!this.tokenSplitSessions.has(sessionId)) return [];
+    const unresolved = new Set(
+      this.turnDiagnostics.unresolvedBoundaryMs(sessionId),
+    );
+    return this.boundaries(sessionId).filter((boundary) =>
+      unresolved.has(boundary.boundaryMs)
+    );
+  }
+
+  resolveTokenTimingBoundaries(sessionId: string, boundaryMs: number[]) {
+    this.applyTokenTimingResolutions(sessionId, boundaryMs);
+  }
+
   applyWitnessResolutions(sessionId: string) {
     for (
       const boundaryMs of
@@ -258,14 +272,9 @@ export class SpeakerBoundaryTranscriptCoordinator {
         skippedParents: [],
       };
     }
-    const unresolvedBoundaryMs = new Set(
-      this.turnDiagnostics.unresolvedBoundaryMs(sessionId),
-    );
     return reconcileRealtimeSpeakerTokenBoundaries({
       transcripts,
-      boundaries: this.boundaries(sessionId).filter((boundary) =>
-        unresolvedBoundaryMs.has(boundary.boundaryMs)
-      ),
+      boundaries: this.unresolvedBoundaries(sessionId),
       spans,
       isConfirmedSpeakerId: (speakerId) =>
         this.turnCoordinator.isConfirmedSpeaker(sessionId, speakerId),

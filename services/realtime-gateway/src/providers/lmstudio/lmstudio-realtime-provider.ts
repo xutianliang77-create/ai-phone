@@ -28,6 +28,7 @@ import {
 } from "../../segments/turn-language-profile.js";
 import { continuationTombstones } from "./lmstudio-continuation-events.js";
 import { transcriptFromTextSegment } from "./lmstudio-text-segment-input.js";
+import { repairPostAssemblySpeakerBoundaries } from "./lmstudio-post-assembly-speaker-repair.js";
 
 export class LmStudioRealtimeProvider implements RealtimeProvider {
   readonly name: string;
@@ -191,7 +192,7 @@ export class LmStudioRealtimeProvider implements RealtimeProvider {
       };
     }
     for (const event of continuationTombstones(session, transcript, assembled.supersededSegmentIds)) yield event;
-    for (const readyTranscript of assembled.ready) {
+    for (const readyTranscript of repairPostAssemblySpeakerBoundaries(this.asrProvider, session, assembled.ready)) {
       yield* this.translateTranscript(session, readyTranscript, emitTranscript);
     }
   }
@@ -200,13 +201,13 @@ export class LmStudioRealtimeProvider implements RealtimeProvider {
     session: RealtimeProviderSession,
     emitTranscript = true,
   ): AsyncGenerator<ServerRealtimeEvent> {
-    for (const transcript of this.semanticSegmentsFor(session).flush(session.sessionId)) {
+    for (const transcript of repairPostAssemblySpeakerBoundaries(this.asrProvider, session, this.semanticSegmentsFor(session).flush(session.sessionId))) {
       yield* this.translateTranscript(session, transcript, emitTranscript);
     }
   }
 
   private async *flushExpiredSemanticSegments(session: RealtimeProviderSession) {
-    for (const transcript of this.semanticSegmentsFor(session).drainExpired(session.sessionId)) {
+    for (const transcript of repairPostAssemblySpeakerBoundaries(this.asrProvider, session, this.semanticSegmentsFor(session).drainExpired(session.sessionId))) {
       yield* this.translateTranscript(session, transcript);
     }
   }
