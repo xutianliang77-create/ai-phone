@@ -32,7 +32,8 @@ export function createEnvironmentEnterpriseAdmissionAvailability(options: {
   if (configured.status !== "configured") {
     return fixedEnterpriseAdmissionAvailability({
       status: configured.status,
-      policyCount: "policyCount" in configured ? configured.policyCount : 0,
+      policyCount: "policyCount" in configured &&
+        typeof configured.policyCount === "number" ? configured.policyCount : 0,
       activeUnits: 0,
       queuedUnits: 0,
       issues: configured.issues,
