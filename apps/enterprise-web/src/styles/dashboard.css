@@ -12,6 +12,59 @@
   background: var(--color-container);
 }
 
+.dashboard-business-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.dashboard-business-card {
+  display: grid;
+  gap: 16px;
+  padding: 18px;
+  border: 1px solid var(--color-outline-variant);
+  border-radius: var(--radius);
+  background: var(--color-surface-high);
+}
+
+.dashboard-business-card header {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.dashboard-business-card header div {
+  display: grid;
+  gap: 4px;
+}
+
+.dashboard-business-card header span,
+.dashboard-business-card dt {
+  color: var(--color-outline);
+  font-size: .75rem;
+}
+
+.dashboard-business-card header strong {
+  font-size: var(--font-title-medium-size);
+}
+
+.dashboard-business-card dl {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+}
+
+.dashboard-business-card dl div {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.dashboard-business-card dd {
+  margin: 0;
+  font-weight: 700;
+}
+
 .dashboard-metric {
   display: flex;
   min-height: 142px;
@@ -180,7 +233,8 @@
 
 @media (max-width: 1100px) {
   .dashboard-metrics,
-  .dashboard-report-grid {
+  .dashboard-report-grid,
+  .dashboard-business-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
@@ -188,6 +242,7 @@
 @media (max-width: 700px) {
   .dashboard-metrics,
   .dashboard-report-grid,
+  .dashboard-business-grid,
   .dashboard-trace-form {
     grid-template-columns: 1fr;
   }

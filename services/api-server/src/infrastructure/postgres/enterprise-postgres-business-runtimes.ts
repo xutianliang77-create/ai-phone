@@ -58,6 +58,8 @@ import { createEnterprisePostgresReleaseControlRuntime } from
   "./enterprise-postgres-release-control-runtime.js";
 import { createEnterprisePostgresContactDirectoryRuntime } from
   "./enterprise-postgres-contact-directory-runtime.js";
+import { createEnterprisePostgresDashboardRuntime } from
+  "./enterprise-postgres-dashboard-runtime.js";
 
 export function createEnterprisePostgresBusinessRuntimes(
   pool: EnterpriseTenantPostgresPool,
@@ -97,5 +99,6 @@ export function createEnterprisePostgresBusinessRuntimes(
     ...createEnterprisePostgresMarketingAnalyticsRuntime(pool),
     ...createEnterprisePostgresReleaseControlRuntime(pool),
     ...createEnterprisePostgresContactDirectoryRuntime(pool),
+    ...createEnterprisePostgresDashboardRuntime(pool),
   };
 }

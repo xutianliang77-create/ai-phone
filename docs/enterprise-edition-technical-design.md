@@ -1,6 +1,6 @@
 # 无界AI企业版详细技术设计
 
-版本：v1.77
+版本：v1.78
 日期：2026-08-31
 状态：统一通讯平台与 PostgreSQL Primary 收敛详细技术方案
 
@@ -29,7 +29,7 @@
 | SQLite/JSON 演示数据导入 | `ready_for_acceptance` | 已有维护窗口、SQLite 临时副本与 quick_check、空目标事务导入、六集合 count/SHA-256 读回对账和不一致回滚；仅限内部演示数据 |
 | 公共 Primary Runtime 收敛 | `ready_for_acceptance` | 已合入上游稳定提交 `fe1c3c2`；公共31段与 enterprise 56段 manifest 由一个启动编排验证，driver、数据库身份和分权连接失败均在监听前闭合；尚无真实 PostgreSQL H3 证据 |
 | 企业链路追踪 | `in_progress` | 平台 trace 已进入 tenant context、PostgreSQL session、communication binding、usage event/ledger 与会话报告；本轮未执行测试和真实 PostgreSQL 门禁，货币成本因无价格表明确 not configured |
-| 企业工作台真值投影 | `in_progress` | Web 已读取 tenant/route、Provider、subscription、budget、usage aggregate 和显式 session trace report；业务聚合与价格表缺失时明确 not ready/not configured，本轮未执行自动化、浏览器或 PostgreSQL 门禁 |
+| 企业工作台真值投影 | `in_progress` | Web 已读取 tenant/route、Provider、subscription、budget、usage aggregate、显式 session trace report 和 scope-aware Marketing/Support/Meeting 只读业务快照；价格表缺失仍明确 not configured，本轮未执行自动化、浏览器或 PostgreSQL 门禁 |
 | 审计与分析 | `in_progress` | Web 已接入审计筛选/详情、显式 session 下钻和受控 JSONL 导出；`0020/0051`、Repository/API/cell Worker/加密对象存储与到期物理清理边界已实现，本轮未执行 migration、双租户、对象存储或浏览器测试；业务聚合/价格表与真实对象清理验收仍未完成 |
 | 公共通讯 tenant scope | `ready_for_acceptance` | 公共 manifest 已增至31段；12张通讯资源表具有不可空 scope、复合 FK、写入 guard 和 forced RLS，企业 unit-of-work 只暴露 tenant-bound 白名单 Repository；尚无真实双租户 A1/H3 证据 |
 | 企业统一通讯会话绑定 | `ready_for_acceptance` | enterprise `0011` 和 tenant unit-of-work 已建立 Meeting/Support/Marketing 唯一绑定、route/policy/entitlement 快照及 generation/event-sequence 收敛状态机；尚无真实多实例、cell 迁移和 A1/H3 证据 |
@@ -867,6 +867,7 @@ GET    /enterprise/v1/leads
 GET    /enterprise/v1/leads/:leadId
 GET    /enterprise/v1/customers
 GET    /enterprise/v1/customers/:customerId
+GET    /enterprise/v1/dashboard/business-summary
 POST   /enterprise/v1/communication-policies
 ```
 
@@ -2636,8 +2637,16 @@ capability、billing entitlement、usage budget、UTC period aggregate，以及�
 
 预算告警只在 budget 与 aggregate 的 `category + unit + periodStart + periodEnd` 全部一致时计算百分比，禁止把秒、
 字符、token 或帧相加。用量表逐行显示不可变 ledger 聚合；无记录时显示 empty，不补零或绘制趋势。会话质量只按
-用户明确输入的 session ID 查询，当前没有“最近会话”列表 API，因此前端不得猜测最新会话。营销、客服和会议的
-服务端聚合尚未交付，业务状态区固定显示 not_ready；货币成本继续使用报告的 `pricing_not_configured`，前端不估价。
+用户明确输入的 session ID 查询，当前没有“最近会话”列表 API，因此前端不得猜测最新会话。
+
+`GET /enterprise/v1/dashboard/business-summary` 要求 `tenant:read`、active membership 和签名 route document，且只在
+PostgreSQL runtime 开放。服务端按成员角色分别计算 `campaign:read`、`support:read`、`meeting:read`；缺少的域返回
+`{status:"forbidden"}` 并且不执行其 SQL。已授权域在同一 `REPEATABLE READ READ ONLY` tenant transaction 中依次
+执行独立 aggregate：Marketing 只读 Campaign/Task，Support 只读 Queue/Session/Claim/Case，Meeting 只读
+Meeting/Participant；三个域没有 cross-domain join，也不写第二套 Dashboard 表。数据库 clock 产生 `generatedAt`，
+Support SLA 与 claim lease 均在该时间点求值。Web 以请求 generation 拒绝旧刷新结果，并在 tenant 切换时重新挂载，
+防止旧租户账务、用量或业务卡短暂复用。没有时间序列时只展示快照计数；货币成本继续使用报告的
+`pricing_not_configured`，前端不估价。
 
 本批只完成静态 typecheck 和 Enterprise Web 生产构建，尚未执行 component/API/browser/PostgreSQL 验证，任务保持
 `in_progress`。

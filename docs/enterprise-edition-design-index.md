@@ -1,6 +1,6 @@
 # 无界AI企业版设计文档索引
 
-版本：v1.71
+版本：v1.72
 日期：2026-08-31
 状态：SaaS 详细设计基线，已纳入统一通讯平台和 PostgreSQL Primary 演进
 
@@ -114,8 +114,9 @@ locale/country/product/effective-time 检索和知识引用 ID；
 不可变 plan/subscription/entitlement 版本、原始 usage event、append-only adjustment、账期
 count/hash 聚合和 dispatch 服务端限额。真实设备/Provider、支付账务环境、关账、A1/H2/H3 仍待完成。
 `ENT-OBS-001` 已提供 tenant-scoped 单会话质量/Provider/usage/ledger/audit 报告；`ENT-UI-004` 已把该报告与
-tenant/route、Provider、subscription、budget 和 usage aggregate 接入企业工作台。两项本轮均未执行自动化、浏览器
-或 PostgreSQL 测试，保持 `in_progress`，业务聚合和货币价格缺失时仍明确 not_ready/not_configured。
+tenant/route、Provider、subscription、budget、usage aggregate 及 scope-aware Marketing/Support/Meeting 只读快照
+接入企业工作台。快照不建第二套表、不跨域 join；无价格表仍明确 not_configured。两项未执行自动化、浏览器或
+真实 PostgreSQL/RLS 测试，保持 `in_progress`。
 `ENT-UI-008` 已增加审计筛选/详情、显式 session 下钻和有目的/范围/保留期/hash 的受控导出；
 未配置加密对象存储时明确 not_ready；到期物理清理已接入 `ENT-REL-002` 静态候选，但仍待真实对象存储验收。本轮同样只完成静态门禁，
 不能据此宣称 PostgreSQL、对象存储、H2/H3 或生产门禁通过。
@@ -340,6 +341,7 @@ PostgreSQL/Salesforce sandbox、Worker 故障注入或浏览器验收，`AC-ENT-
 - [ENT-UI-011 Flutter 企业人工接管代码候选](./evidence/ent-ui-011-flutter-takeover-2026-08-31.md)
 - [ENT-UI-012 Web 访客设备检查代码候选](./evidence/ent-ui-012-guest-device-check-2026-08-31.md)
 - [ENT-UI-013 客户与线索目录代码候选](./evidence/ent-ui-013-contact-directory-2026-08-31.md)
+- [ENT-UI-004 工作台业务快照代码候选](./evidence/ent-ui-004-dashboard-business-summary-2026-08-31.md)
 - [企业发布材料目录](./release/enterprise-service-description.md)
 - [Enterprise Release Control 值班手册](./runbooks/enterprise-release-control.md)
 

@@ -82,6 +82,7 @@ import { registerEnterpriseMarketingRoutes } from
   "./modules/enterprise/enterprise-marketing.routes.js";
 import { registerEnterpriseContactDirectoryRoutes } from "./modules/enterprise/enterprise-contact-directory.routes.js";
 import { createEnvironmentEnterpriseContactDirectoryCursorService } from "./modules/enterprise/enterprise-contact-directory-cursor.js";
+import { registerEnterpriseDashboardRoutes } from "./modules/enterprise/enterprise-dashboard.routes.js";
 import {
   createEnvironmentEnterpriseSupportAgentProvider,
 } from "./modules/enterprise/enterprise-support-agent-provider.js";
@@ -279,12 +280,11 @@ export async function buildApp(dependencies: AppDependencies = {}) {
     app, tenantRouteService, enterpriseRepositoryRuntime,
   );
   registerEnterpriseMarketingRoutes(app, tenantRouteService, enterpriseRepositoryRuntime);
-  registerEnterpriseContactDirectoryRoutes(
-    app,
-    tenantRouteService,
+  registerEnterpriseContactDirectoryRoutes(app, tenantRouteService,
     createEnvironmentEnterpriseContactDirectoryCursorService(),
-    enterpriseRepositoryRuntime,
-  );
+    enterpriseRepositoryRuntime);
+  registerEnterpriseDashboardRoutes(app, tenantRouteService,
+    enterpriseRepositoryRuntime);
   registerEnterpriseMeetingScreenShareRoutes(
     app,
     tenantRouteService,

@@ -1,6 +1,6 @@
 # 无界AI企业版开发任务
 
-版本：v1.82
+版本：v1.83
 日期：2026-08-31
 状态：E0 开发中，已对齐统一通讯平台和 PostgreSQL Primary 收敛
 
@@ -92,7 +92,12 @@
 - `ENT-UI-001` 已完成生产颜色/字号/尺寸/圆角令牌、Material Icons 语义注册表、Flutter 对照和依赖扫描，等待验收。
 - `ENT-UI-002` 已完成 active membership 租户选择、共享 role/scope 真值、九角色 route discovery、scope 导航、直接/嵌套路由 guard 及签名 route document 联调，等待验收。
 - `ENT-UI-003` 已完成八态注册表、语义图标、ARIA live/alert、trace ID、可行动入口和组件矩阵，并接入服务端 Provider capability、租户生命周期 job 及 409/412 冲突映射，等待验收。
-- `ENT-UI-004` 已实现企业工作台首批服务端真值投影：租户/区域、Provider capability、subscription、预算告警、不可变 ledger 账期聚合，以及按明确 session ID 查询的质量/Provider/usage/ledger trace 报告。预算只比较相同 category、unit 和 period 的服务端记录，不跨单位求和；无业务聚合、价格表或质量样本时分别显示 not_ready、not_configured 或 no_samples，不生成示例趋势。当前只完成 typecheck 和生产 Web 构建，按本轮要求未执行自动化、浏览器和 PostgreSQL 测试，状态保持 `in_progress`。
+- `ENT-UI-004` 已实现企业工作台服务端真值投影：租户/区域、Provider capability、subscription、预算告警、
+  不可变 ledger 账期聚合、显式 session trace，以及 scope-aware Marketing/Support/Meeting 业务快照。业务快照不建
+  第二套表，在同一 tenant 只读可重复读事务中分别汇总；无 scope 不执行该域 SQL，Web 以 generation/tenant key
+  拒绝旧响应。预算只比较相同 category、unit 和 period，不跨单位求和；无价格表/质量样本时分别显示
+  not_configured/no_samples，无时间序列不画趋势。Contracts/Web/API typecheck 和静态门禁通过；自动化、浏览器和
+  PostgreSQL/RLS 测试按要求未执行，状态保持 `in_progress`。
 - `ENT-UI-005` 已把成员目录、现有账号加入、角色/状态编辑和九角色 scope 说明接入企业 Web。成员请求绑定 Bearer、当前 tenant 与签名 route document，body 不接受 tenant 覆盖；只读角色、直接 URL、所有者和当前账号变更入口均失败闭合，服务端 membership/RBAC guard 仍是最终授权边界。当前成员 API 只接收已注册 userId 并直接创建 active membership，不发送短信、邮件或外部 Provider 邀请；代码与自动化完成，进入 `ready_for_acceptance`，真实邀请通道、浏览器矩阵和 PostgreSQL staging 仍待后续任务/正式验收。
 - `ENT-UI-006` 已把 Knowledge Source、Term Pack 和 Script Template 的稳定资源、修订、评审与发布接入企业 Web。所有请求携带当前 tenant 与签名 route document；只读角色不显示写入口，服务端仍执行 scope guard；draft/review/published/expired、loading/empty/not_ready/forbidden/conflict/failed 均使用真实响应且不回退到 SQLite/JSON。代码与自动化完成，进入 `ready_for_acceptance`；浏览器矩阵、真实 PostgreSQL staging、并发发布和外部 Worker/Provider 消费仍待正式验收。
 - `ENT-UI-007` 已把企业设置拆为成员、套餐与权益、区域与数据、Provider、预算与用量五个 scope-aware 二级入口。homeRegion/cell/route epoch/retention 只读且不显示签名；Provider 只读取 capability document，不接收密钥或伪造 ready；订阅变更复用幂等键，预算更新携带 expectedVersion，用量只展示不可变 ledger 账期聚合。只读角色和直接 URL 均在发请求前受 scope guard，503 不回退到 SQLite/JSON。代码、自动化、生产构建和隔离 Chromium 1440/390px 检查完成，进入 `ready_for_acceptance`；全浏览器/无障碍矩阵、真实 PostgreSQL staging、Provider 和账务生产门禁仍待正式验收。

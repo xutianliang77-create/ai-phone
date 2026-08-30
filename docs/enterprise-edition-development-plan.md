@@ -1,6 +1,6 @@
 # 无界AI企业版开发方案与计划
 
-版本：v1.78
+版本：v1.79
 日期：2026-08-31
 状态：E0 执行计划，已对齐统一通讯平台和 PostgreSQL Primary 收敛
 
@@ -65,7 +65,11 @@
 - `ENT-UI-006` 已完成 Knowledge Source、Term Pack、Script Template 的服务端真值页面、签名 route document 客户端、scope 写入口控制、draft/review/published/expired 与 PostgreSQL not_ready/forbidden/conflict 状态，进入 `ready_for_acceptance`；浏览器矩阵、真实 PostgreSQL 并发发布和 Worker/Provider 消费仍待 A1/H3。
 - `ENT-UI-005` 已完成成员目录、现有账号加入、角色/状态编辑和九角色 scope 说明，所有成员请求绑定当前 tenant 与签名 route document；无 `member:write` 不渲染写入口，直接 URL 无 scope 时不发起成员读取，所有者和当前账号不提供自改入口。当前接口不是短信/邮件/Provider 邀请服务，真实邀请通道仍待后续设计；任务进入 `ready_for_acceptance`，浏览器矩阵和真实 PostgreSQL staging 仍待 A0/H3。
 - `ENT-UI-007` 已完成成员/权益/区域/Provider/预算与用量二级设置导航，按 `tenant:read`、`member:read`、`billing:read/write`、`usage:read` 分别发现和守卫入口。区域只读，Provider 不接收/回显敏感配置，套餐变更只接受精确服务端 plan/version 并稳定重试幂等键，预算更新带 expectedVersion，用量只展示服务端 ledger 聚合；任务进入 `ready_for_acceptance`。本地 Chromium 1440/390px 只验证隔离 fixture 布局，不替代 UI-009/010、真实 PostgreSQL staging、账务/Provider 或生产放行。
-- `ENT-UI-004` 已接入租户/区域、Provider、subscription、预算、usage aggregate 和会话 trace report 的首批工作台。页面按 scope 决定是否发起 billing/usage/audit 请求，预算只和同类别、同单位、同 UTC 账期聚合比较；业务聚合与价格表缺失时明确 not_ready/not_configured。当前仅通过静态类型检查和生产 Web 构建，按本轮要求未执行自动化、浏览器和 PostgreSQL 验证，任务保持 `in_progress`。
+- `ENT-UI-004` 已接入租户/区域、Provider、subscription、预算、usage aggregate、会话 trace report 和
+  Marketing/Support/Meeting 业务快照。业务 API 以 `tenant:read`、签名 route 和当前角色 scope 守卫，在同一只读
+  PostgreSQL snapshot 中分别聚合且不跨域 join；Web 作废旧刷新并在租户切换时重挂载。预算仍只比较同类别、同单位、
+  同 UTC 账期；无时间序列不画趋势、无价格表明确 not_configured。Contracts/Web/API typecheck 与静态门禁通过，
+  自动化、浏览器和真实 PostgreSQL/RLS 验证按要求延后，任务保持 `in_progress`。
 - `ENT-UI-008` 已实现审计筛选、签名 cursor、脱敏详情、显式 session 下钻和真实受控 JSONL 导出链路。导出由 PostgreSQL job/cell Worker 处理，强制目的、范围、保留期、幂等和 hash/size 回执；客户端只经重新鉴权的 API 下载，不获取对象存储凭据或 key。未配置对象存储、业务聚合或价格表时明确 not_ready/not_configured。按本轮要求未执行自动化、浏览器、migration 或双租户验证，任务保持 `in_progress`。
 - `ENT-REL-002` 已形成 `0051`、forced-RLS 数据生命周期账本、审计导出到期物理删除、Delete 后实体复核、
   Cell Worker 多实例协调、删除期迟到导出栅栏、租户删除前置阻断及数据库/对象/Provider 三段收敛回执代码候选。当前只覆盖已登记的
@@ -436,7 +440,7 @@ CORE-001/002 验收
 | 11 | `ENT-CORE-004/005` | 知识、术语和话术版本闭环均已完成代码与本地机制验证，进入验收 |
 | 12 | `ENT-DATA-005` | 验收单租户 Cell 停写、对象复制、全表导入/对账、route 发布和反向回滚证据；静态代码候选已完成 |
 | 13 | `ENT-DATA-009` | 验收 staging 全量/增量 hash、writer fence、切换/回滚和旧写入者清退证据；本地机制代码已完成 |
-| 14 | `ENT-UI-004..012` | 完成公共页面、响应式、无障碍、Web 发布门禁、Flutter 企业入口和访客参会壳代码候选 |
+| 14 | `ENT-UI-004..013` | 完成公共页面、响应式、无障碍、Web 发布门禁、Flutter 企业入口、访客参会壳和客户目录代码候选 |
 | 15 | `ENT-REL-003` | 配置真实 Provider Adapter 与三故障域拓扑，执行自动切换、旧主三层 fencing、不可变备份和 PITR，独立复核签名 schema-v2 证据与批准 RPO/RTO |
 | 16 | `ENT-REL-004` | 在隔离 PostgreSQL/Provider 环境执行双租户灰度、kill 生效延迟、阈值 open、专用 half-open probe、恢复与值班 runbook 演练 |
 | 17 | `ENT-REL-005` | 生成绑定候选 commit/image 的发布 manifest，收集 A0–A3/H1–H3、批准 SLA/隐私/管理员/运维材料及六方审批，执行发布门禁 |
@@ -451,7 +455,7 @@ E0 基线完成后已形成 `ENT-MTG-001/002` 代码候选；未通过真实 Pos
 Tool Registry 授权边界、只读 Adapter 租约执行、可逆写确认/密文 Outbox、不可执行高风险接管和坐席
 queue/SLA/exclusive claim、坐席工作台、工单/回拨可靠后续动作和质检分析代码候选；`ENT-MKT-001..005` 已形成
 Campaign 聚合、线索导入、授权证据、禁拨与国家策略和同风格 Web 页面代码候选。因测试暂缓、migration/真实恢复、
-真实 Provider、浏览器或真机门禁未完成，`ENT-OBS-001`、`ENT-UI-004/008/009/010/011/012`、
+真实 Provider、浏览器或真机门禁未完成，`ENT-OBS-001`、`ENT-UI-004/008/009/010/011/012/013`、
 `ENT-MTG-001..013`、`ENT-CS-001..012` 和 `ENT-MKT-001..007` 继续保持
 `in_progress`。恢复测试时除既有 CS-001..008 矩阵外，还必须执行 CS-009..012/MKT-001 的 up/down/forward、forced-RLS
 双租户、角色×操作、同会话双 claim、lease 到期、release/reassign、后续动作幂等与 Provider 重试、崩溃回滚

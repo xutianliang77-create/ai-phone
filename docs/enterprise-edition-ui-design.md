@@ -1,6 +1,6 @@
 # 无界AI企业版 UI 详细设计
 
-版本：v1.40
+版本：v1.41
 日期：2026-08-31
 状态：设计基线；企业 Web 公共组件、首批设置/工作台、响应式/主题/无障碍和 Web/iOS/Android 成员屏幕共享代码候选已实现，正式验收仍在开发
 
@@ -205,10 +205,12 @@ Web 优先使用系统中文无衬线字体：`-apple-system`、`BlinkMacSystemF
 
 readiness 卡必须把 PostgreSQL、PSTN、CRM、Calendar、LiveKit 和策略版本分别展示，不能合并成一个绿色“系统正常”。
 
-当前 `ENT-UI-004` 首批实现只展示已有服务端契约可证明的 tenant/region、Provider capability、subscription、
-budget、usage aggregate 和显式 session trace report。卡片沿用同一 Material Icons 注册表、1px outline、8px 圆角
-和 Primary/Signal 语义；窄屏从四列收敛为两列和一列。PostgreSQL、LiveKit、策略版本以及会议/客服/营销汇总在服务端
-接口交付前必须显示 not_ready 或不渲染，不能并入“系统正常”。无 usage/quality 样本不绘制趋势，无价格表不显示金额。
+当前 `ENT-UI-004` 展示服务端契约可证明的 tenant/region、Provider capability、subscription、budget、usage
+aggregate、显式 session trace report，以及同一只读 tenant snapshot 中按 scope 返回的会议/客服/营销计数。业务卡
+沿用 Material `campaign/support_agent/groups`、1px outline、8px 圆角和浅深色 token；桌面三列、1100px 以下两列、
+700px 以下单列。卡片只显示总数、活动/等待/进行中、SLA/失败等确定性状态，不把三个域相加，不绘制无时间序列的
+趋势。PostgreSQL、LiveKit、策略版本未就绪仍单独 not_ready，不能并入“系统正常”；无 usage/quality 样本不画趋势，
+无价格表不显示金额。
 
 ### 8.2 外呼营销
 

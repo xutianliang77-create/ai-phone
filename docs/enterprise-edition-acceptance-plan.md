@@ -1,6 +1,6 @@
 # 无界AI企业版验收任务与计划
 
-版本：v1.75
+版本：v1.76
 日期：2026-08-31
 状态：可执行验收计划，已对齐统一通讯平台和 PostgreSQL Primary 收敛
 
@@ -195,6 +195,7 @@ Provider 链路成功。
 | AC-UI-011 | 生产构建边界 | 无示例租户/指标、内部 Provider 地址、密钥、调试入口或静态原型数据 | bundle scan、Release smoke |
 | AC-UI-012 | 前端可观测性 | 页面错误带安全 trace ID；前端错误和性能可按 tenant/route/version 追踪且不含敏感字段 | error event、日志脱敏检查 |
 | AC-UI-013 | 客户与线索目录隔离 | `campaign:read`/`support:read` 分别只读取当前 tenant 的 Lead/Customer；签名 cursor 不能跨 tenant/kind/expiry 重放；响应不含密文/hash/attributes/证据或业务正文；切租户/页签时旧响应不可覆盖 | API 角色×租户×cursor 矩阵、PostgreSQL forced-RLS、浏览器竞态与 bundle/响应敏感字段扫描 |
+| AC-UI-014 | 工作台业务快照 | `tenant:read` 和签名 route 生效；Marketing/Support/Meeting 只在对应 read scope 下执行，三域同一只读快照且不跨域 join；计数与 tenant SQL 对账，SLA/lease 使用同一数据库时间；无 scope/旧租户/旧刷新不泄露或覆盖；无时间序列不绘制趋势 | 九角色×双租户 API、PostgreSQL aggregate/forced-RLS 对账、并发刷新/切租户浏览器矩阵 |
 
 页面验收至少覆盖：工作台、外呼活动、客服坐席台、企业会议、客户与线索、知识与术语、数据分析、合规与审计、企业设置，以及 Web 访客参会页和 Flutter 企业入口。
 
@@ -261,12 +262,13 @@ signature；Provider 页面只展示 capability/status/reason/脱敏 fingerprint
 条件。本地隔离 Chromium 1440×1000 和 390×844 检查仅证明两个布局样本，未覆盖完整 AC-UI-008/009/010；正式
 接受仍需浏览器/键盘/axe 矩阵、真实 PostgreSQL staging、双租户攻击、真实 Provider/账务和 A1/H3 门禁。
 
-`ENT-UI-004` 当前实现把 tenant/region、Provider capability、subscription、budget、usage aggregate 和按明确
-session ID 查询的 trace report 投影到工作台。billing/usage/audit 数据只有具备对应 scope 才请求；预算告警只允许
-category、unit、period 全部相同的预算和聚合比较，不跨单位合计；业务汇总接口、单位价格或质量样本缺失时分别显示
-not_ready、not_configured 或 no_samples，不把不可用数据算作健康，也不生成示例趋势。本轮只执行 typecheck、生产
-Web build、文件规模和 diff 静态门禁，按要求未执行 component/API/browser/PostgreSQL 测试，因此尚不能声称满足
-AC-UI-003/004/005/006/008/009/010/011/012 或 AC-ENT-0017/0018/0019/0023，任务保持 `in_progress`。
+`ENT-UI-004` 当前实现把 tenant/region、Provider capability、subscription、budget、usage aggregate、明确 session
+trace report 和 scope-aware Marketing/Support/Meeting snapshot 投影到工作台。billing/usage/audit 数据只有具备对应
+scope 才请求；业务 snapshot 缺域 scope 时服务端不执行 SQL，已授权域在同一只读 PostgreSQL tenant snapshot 中分别
+聚合，Web generation/tenant key 拒绝旧响应。预算仍只允许 category、unit、period 全部相同后比较；单位价格或质量
+样本缺失分别显示 not_configured/no_samples，无时间序列不生成示例曲线。本轮只执行 Contracts/Web/API typecheck、
+文件规模、diff 和静态安全门禁，按要求未执行 component/API/browser/PostgreSQL/RLS 测试，因此尚不能声称满足
+AC-UI-014、AC-ENT-0017/0018/0019/0023、A1/H2/H3 或生产门禁，任务保持 `in_progress`。
 
 ### 4.2 浏览器和设备矩阵
 

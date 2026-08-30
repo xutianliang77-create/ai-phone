@@ -116,7 +116,7 @@ export function AppShell() {
         <Routes>
           <Route
             path="/"
-            element={<DashboardPage />}
+            element={<DashboardPage key={state.context.tenant.id} />}
           />
           <Route
             path="/settings/jobs/:jobId"

@@ -1,6 +1,6 @@
 # 无界AI企业版技术架构
 
-版本：v1.60
+版本：v1.61
 日期：2026-08-31
 状态：SaaS 详细架构基线，已对齐统一通讯平台和 PostgreSQL Primary
 
@@ -186,6 +186,7 @@ object-storage
 | Enterprise Knowledge | enterprise `0017`、Knowledge Repository/runtime/API | source/revision/chunk/review/publish、发布后不可变、四维有效期检索和 citation 已接入；embedding Provider 未配置时保持确定性文本检索，不声明向量 readiness |
 | Enterprise Terminology | enterprise `0018`、Term Pack/Script Template Repository/runtime/API | 稳定资源与不可变 revision、审核发布、生效时间解析已接入；resolver 向 ASR/翻译/LLM 返回同一术语版本引用，话术只供 LLM 使用 |
 | Contact Directory | `packages/contracts`、Enterprise Web、tenant API 与两套 PostgreSQL 只读 Repository | Marketing Lead 与 Support Customer 保持两个投影；scope、签名 route、forced RLS、行级 tenant correlation 和 HMAC cursor 共同约束读取，不建立跨域客户主数据 |
+| Dashboard Business Snapshot | `packages/contracts`、Enterprise Web、tenant API 与 Dashboard PostgreSQL Repository | 不建第二套聚合表；同一只读可重复读事务按当前角色 scope 分别统计 Marketing/Support/Meeting，三个域并列返回且互不 join |
 | Tenant Billing/Entitlement | `packages/contracts`、enterprise PostgreSQL migration `0014/0015` 与 tenant unit-of-work | billing account、版本化 plan/subscription/entitlement、预算和 dispatch fence 已接入；支付 Provider 尚未完成 |
 | Usage Accounting | enterprise migration `0016`、usage accounting Repository/runtime 和只读 API | 原始 event、append-only ledger/adjustment、可重建账期聚合、count/hash 对账及 forced RLS 已接入；真实账期关账和支付对账待验收 |
 | 实时信令、字幕和 playback 控制 | `services/realtime-gateway` | 保持无业务数据库直写，通过 API/事件提交业务结果 |

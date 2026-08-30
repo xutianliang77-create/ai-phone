@@ -128,6 +128,8 @@ import { EnterpriseLeadDirectoryPostgresRepository } from
   "./enterprise-postgres-contact-directory-leads.js";
 import { EnterpriseCustomerDirectoryPostgresRepository } from
   "./enterprise-postgres-contact-directory-customers.js";
+import { EnterpriseDashboardPostgresRepository } from
+  "./enterprise-postgres-dashboard.repository.js";
 
 export interface EnterprisePostgresUnitOfWork {
   tenant: EnterpriseTenantPostgresRepository;
@@ -182,6 +184,7 @@ export interface EnterprisePostgresUnitOfWork {
   billingLifecycle: EnterpriseBillingLifecyclePostgresRepository;
   leadDirectory: EnterpriseLeadDirectoryPostgresRepository;
   customerDirectory: EnterpriseCustomerDirectoryPostgresRepository;
+  dashboard: EnterpriseDashboardPostgresRepository;
 }
 
 export function withEnterprisePostgresUnitOfWork<T>(
@@ -257,6 +260,7 @@ export function withEnterprisePostgresUnitOfWork<T>(
       billingLifecycle: new EnterpriseBillingLifecyclePostgresRepository(session),
       leadDirectory: new EnterpriseLeadDirectoryPostgresRepository(session),
       customerDirectory: new EnterpriseCustomerDirectoryPostgresRepository(session),
+      dashboard: new EnterpriseDashboardPostgresRepository(session),
     }),
     options,
   );

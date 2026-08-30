@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
+  EnterpriseDashboardBusinessSummaryResponse,
   EnterpriseEntitlementsResponse,
   EnterpriseProviderCapabilityDocument,
   EnterpriseUsageBudgetDto,
@@ -12,6 +13,8 @@ import {
 import { useAuth } from "../auth/AuthContext.js";
 import { apiErrorState } from "../business-state.js";
 import { MaterialIcon } from "../components/MaterialIcon.js";
+import { DashboardBusinessStatus } from
+  "../components/DashboardBusinessStatus.js";
 import { PageFrame } from "../components/PageFrame.js";
 import { StatusPanel } from "../components/StatusPanel.js";
 import { SessionTracePanel } from "../components/SessionTracePanel.js";
@@ -54,38 +57,67 @@ export function DashboardPage() {
   const [usage, setUsage] = useState<Loadable<EnterpriseUsagePeriodAggregateDto[]>>(
     canReadUsage ? { state: "loading" } : { state: "idle" },
   );
+  const [business, setBusiness] =
+    useState<Loadable<EnterpriseDashboardBusinessSummaryResponse>>(
+      { state: "loading" },
+    );
   const [refreshing, setRefreshing] = useState(false);
+  const reloadGeneration = useRef(0);
 
   const reload = useCallback(async () => {
+    const tenantId = requestContext.tenantId;
+    const generation = ++reloadGeneration.current;
+    const current = () => generation === reloadGeneration.current &&
+      tenantId === requestContext.tenantId;
     setRefreshing(true);
     setProviders({ state: "loading" });
+    setBusiness({ state: "loading" });
     if (canReadBilling) {
       setBilling({ state: "loading" });
       setBudgets({ state: "loading" });
-    }
-    if (canReadUsage) setUsage({ state: "loading" });
+    } else { setBilling({ state: "idle" }); setBudgets({ state: "idle" }); }
+    if (canReadUsage) setUsage({ state: "loading" }); else setUsage({ state: "idle" });
     const requests: Promise<void>[] = [
       api.getProviderCapabilities(state.session.token, state.context.tenant.id)
-        .then((result) => setProviders({ state: "ready", data: result.capabilities }))
-        .catch((error: unknown) => setProviders({ state: "failed", error })),
+        .then((result) => { if (current()) setProviders(
+          { state: "ready", data: result.capabilities },
+        ); })
+        .catch((error: unknown) => { if (current()) setProviders(
+          { state: "failed", error },
+        ); }),
+      api.getEnterpriseDashboardBusinessSummary(requestContext)
+        .then((data) => { if (current()) setBusiness({ state: "ready", data }); })
+        .catch((error: unknown) => { if (current()) setBusiness(
+          { state: "failed", error },
+        ); }),
     ];
     if (canReadBilling) {
       requests.push(
         api.getBillingEntitlements(requestContext)
-          .then((data) => setBilling({ state: "ready", data }))
-          .catch((error: unknown) => setBilling({ state: "failed", error })),
+          .then((data) => { if (current()) setBilling({ state: "ready", data }); })
+          .catch((error: unknown) => { if (current()) setBilling(
+            { state: "failed", error },
+          ); }),
         api.listUsageBudgets(requestContext)
-          .then((result) => setBudgets({ state: "ready", data: result.budgets }))
-          .catch((error: unknown) => setBudgets({ state: "failed", error })),
+          .then((result) => { if (current()) setBudgets(
+            { state: "ready", data: result.budgets },
+          ); })
+          .catch((error: unknown) => { if (current()) setBudgets(
+            { state: "failed", error },
+          ); }),
       );
     }
     if (canReadUsage) {
       requests.push(api.listUsageAggregates(requestContext)
-        .then((result) => setUsage({ state: "ready", data: result.aggregates }))
-        .catch((error: unknown) => setUsage({ state: "failed", error })));
+        .then((result) => { if (current()) setUsage(
+          { state: "ready", data: result.aggregates },
+        ); })
+        .catch((error: unknown) => { if (current()) setUsage(
+          { state: "failed", error },
+        ); }));
     }
     await Promise.all(requests);
-    setRefreshing(false);
+    if (current()) setRefreshing(false);
   }, [api, canReadBilling, canReadUsage, requestContext, state.context.tenant.id,
     state.session.token]);
 
@@ -118,15 +150,11 @@ export function DashboardPage() {
         budgets={budgets}
         usage={usage}
         alerts={alerts}
+        business={business}
       />
       <UsageSection resource={usage} readable={canReadUsage} />
       <SessionTracePanel />
-      <section className="dashboard-section" aria-labelledby="business-status-title">
-        <SectionHeader icon={enterpriseIcons.dashboard.business} id="business-status-title"
-          title="业务状态" description="营销、客服和会议汇总必须来自对应服务端聚合。" />
-        <StatusPanel state="not_ready" title="业务汇总接口尚未交付"
-          description="当前不显示活动数、客服队列、会议趋势或示例数据；对应领域 API 完成后再接入。" />
-      </section>
+      <DashboardBusinessStatus resource={business} />
     </PageFrame>
   );
 }
@@ -170,8 +198,10 @@ function ActionSection(props: {
   budgets: Loadable<EnterpriseUsageBudgetDto[]>;
   usage: Loadable<EnterpriseUsagePeriodAggregateDto[]>;
   alerts: BudgetAlert[];
+  business: Loadable<EnterpriseDashboardBusinessSummaryResponse>;
 }) {
-  const loading = [props.providers, props.billing, props.budgets, props.usage]
+  const loading = [props.providers, props.billing, props.budgets, props.usage,
+    props.business]
     .some((resource) => resource.state === "loading");
   const actions: string[] = [];
   if (props.tenantStatus !== "active") actions.push(`租户当前状态为 ${props.tenantStatus}，新业务可能受限。`);
@@ -189,6 +219,18 @@ function ActionSection(props: {
   props.alerts.forEach((alert) => actions.push(
     `${usageCategoryPresentation[alert.budget.category].label}达到 ${alert.percent}%（阈值 ${alert.budget.alertThresholdPercent}%）。`,
   ));
+  if (props.business.state === "failed") {
+    actions.push("业务汇总暂不可读取；营销、客服和会议状态未被判定为正常。");
+  }
+  if (props.business.state === "ready") {
+    const { marketing, support, meetings } = props.business.data;
+    if (marketing.status === "ready" && marketing.attentionCampaigns > 0)
+      actions.push(`${marketing.attentionCampaigns} 个营销活动需要处理失败或审批失效状态。`);
+    if (support.status === "ready" && support.slaBreachedSessions > 0)
+      actions.push(`${support.slaBreachedSessions} 个客服等待会话已经超过 SLA。`);
+    if (meetings.status === "ready" && meetings.attentionMeetings > 0)
+      actions.push(`${meetings.attentionMeetings} 个会议处于失败状态。`);
+  }
   return <section className="dashboard-section" aria-labelledby="action-title">
     <SectionHeader icon={enterpriseIcons.dashboard.tasks} id="action-title" title="待办与告警"
       description="只根据当前租户的服务端状态生成，不使用示例任务。" />
@@ -198,6 +240,7 @@ function ActionSection(props: {
       : <ul className="dashboard-actions">{actions.map((action) => <li key={action}>{action}</li>)}</ul>}
   </section>;
 }
+
 
 function UsageSection({ resource, readable }: {
   resource: Loadable<EnterpriseUsagePeriodAggregateDto[]>;
