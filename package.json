@@ -41,6 +41,7 @@
     "check:livekit-room-media": "node scripts/check_livekit_room_media_readiness.mjs",
     "check:air780-livekit-tts-bridge": "tsx scripts/check_air780_livekit_tts_bridge.mjs",
     "prepare:air780-production-bundle": "node scripts/prepare_air780_luatools_bundle.mjs",
+    "prepare:air780-usb-production-bundle": "node scripts/prepare_air780_luatools_bundle.mjs --manifest PROD_USB_FLASH_MANIFEST.tsv",
     "check:livekit-compatibility": "node scripts/check_livekit_compatibility_profile.mjs",
     "list:livekit-sbom-images": "node scripts/list_livekit_sbom_images.mjs",
     "check:platform-topology": "node scripts/check_platform_topology.mjs",

@@ -4,6 +4,19 @@ local function require_value(condition, message)
     if not condition then error("vuart_v1_cc: " .. message, 0) end
 end
 
+local function is_uint32(value)
+    return type(value) == "number" and value > 0 and value <= 0xffffffff
+        and value == math.floor(value)
+end
+
+local EVENT_COUNTER = {
+    READY = "ready_events", MAKE_CALL_OK = "make_call_ok_events",
+    CONNECTED = "connected_events", SPEECH_START = "speech_start_events",
+    AUDIO_START = "audio_start_events", EXT_SRC_DONE = "ext_src_done_events",
+    DISCONNECTED = "disconnected_events",
+    HANGUP_CALL_DONE = "hangup_done_events",
+}
+
 function M.new(options)
     require_value(type(options) == "table", "options required")
     require_value(type(options.cc_api) == "table", "cc_api required")
@@ -11,6 +24,7 @@ function M.new(options)
 
     local state = {
         cc_api = options.cc_api,
+        now_ms = options.now_ms or function() return 0 end,
         sim_id = options.sim_id or 0,
         zbuff_api = options.zbuff_api,
         uplink = options.uplink,
@@ -23,12 +37,18 @@ function M.new(options)
         record_active = false,
         ready = false,
         call_state = "idle",
+        call_generation = 0,
         audio_quality = 0,
+        media_started = false,
         hangup_pending = false,
         source_failure_pending = false,
         memory_failed = false,
         terminal_emitted = false,
         last_event = nil,
+        last_raw_event = "none",
+        last_raw_event_ms = 0,
+        record_started_ms = 0,
+        media_started_ms = 0,
         event_handler = options.on_event,
         downlink_handler = options.on_downlink,
         ready_handler = options.on_ready,
@@ -42,6 +62,12 @@ function M.new(options)
             source_failure_hangups = 0, source_failure_hangup_failures = 0,
             source_failure_unknown_events = 0,
             memory_failures = 0,
+            ready_events = 0, make_call_ok_events = 0,
+            connected_events = 0, speech_start_events = 0,
+            audio_start_events = 0, ext_src_done_events = 0,
+            disconnected_events = 0, hangup_done_events = 0,
+            record_start_attempts = 0, record_starts = 0,
+            record_stops = 0, record_callbacks = 0,
         },
     }
 
@@ -63,6 +89,7 @@ function M.new(options)
     end
 
     local function record_callback(self, is_downlink, point)
+        self.counters.record_callbacks = self.counters.record_callbacks + 1
         local group = is_downlink and self.buffers.down or self.buffers.up
         local buffer = point == 1 and group[1] or point == 2 and group[2] or nil
         if not buffer then
@@ -154,6 +181,8 @@ function M.new(options)
         if not self.enable_downlink then return true end
         if self.record_active then return true end
         if not self.record_configured or not self.buffers then return false end
+        self.counters.record_start_attempts =
+            self.counters.record_start_attempts + 1
         local called, result = pcall(self.cc_api.record, true,
             self.buffers.up[1], self.buffers.up[2],
             self.buffers.down[1], self.buffers.down[2])
@@ -162,6 +191,8 @@ function M.new(options)
             return false
         end
         self.record_active = true
+        self.record_started_ms = self.now_ms()
+        self.counters.record_starts = self.counters.record_starts + 1
         return true
     end
 
@@ -169,6 +200,7 @@ function M.new(options)
         if not self.record_active then return end
         pcall(self.cc_api.record, false)
         self.record_active = false
+        self.counters.record_stops = self.counters.record_stops + 1
     end
 
     local function notify_ready(self)
@@ -206,7 +238,9 @@ function M.new(options)
         self.terminal_emitted = true
         emit(self, carrier_state, carrier_cause)
         self.call_state = "idle"
+        self.call_generation = 0
         self.audio_quality = 0
+        self.media_started = false
         self.hangup_pending = false
         self.source_failure_pending = false
     end
@@ -238,33 +272,46 @@ function M.new(options)
 
     local function carrier_event(self, status)
         self.counters.carrier_events = self.counters.carrier_events + 1
+        self.last_raw_event = status
+        self.last_raw_event_ms = self.now_ms()
+        local event_counter = EVENT_COUNTER[status]
+        if event_counter then
+            self.counters[event_counter] = self.counters[event_counter] + 1
+        end
         if status == "READY" then
             self.telephony_ready = true
             maybe_initialize(self)
         elseif status == "MAKE_CALL_OK" and self.call_state == "dialing" then
             emit(self, "dialing", "none")
-        elseif (status == "CONNECTED" or status == "SPEECH_START"
-            or status == "AUDIO_START") and self.call_state ~= "idle" then
+        elseif (status == "CONNECTED" or status == "SPEECH_START")
+            and self.call_state ~= "idle" then
             self.call_state = "connected"
-            if status == "AUDIO_START" then
-                local called, quality = pcall(self.cc_api.quality)
-                if called and (quality == 1 or quality == 2) then
-                    self.audio_quality = quality
-                    if not start_record(self) then
-                        self.audio_quality = 0
-                        self.counters.quality_failures =
-                            self.counters.quality_failures + 1
-                        fail_closed_on_source_failure(self)
-                        return
-                    end
-                else
-                    self.audio_quality = 0
-                    self.counters.quality_failures =
-                        self.counters.quality_failures + 1
-                    fail_closed_on_source_failure(self)
-                    return
-                end
+        elseif status == "AUDIO_START" and self.call_state ~= "idle" then
+            self.call_state = "connected"
+            if self.media_started then return end
+            local called, quality = pcall(self.cc_api.quality)
+            if not called or (quality ~= 1 and quality ~= 2) then
+                self.audio_quality = 0
+                self.counters.quality_failures =
+                    self.counters.quality_failures + 1
+                fail_closed_on_source_failure(self)
+                return
             end
+            self.audio_quality = quality
+            if not start_record(self) then
+                self.audio_quality = 0
+                fail_closed_on_source_failure(self)
+                return
+            end
+            if type(self.uplink) ~= "table"
+                or not self.uplink:begin_call(self.call_generation, quality) then
+                self.audio_quality = 0
+                stop_record(self)
+                fail_closed_on_source_failure(self)
+                return
+            end
+            self.media_started = true
+            self.media_started_ms = self.now_ms()
             emit(self, "connected", "none")
         elseif status == "EXT_SRC_DONE" and self.uplink then
             local metrics = self.uplink:metrics()
@@ -308,6 +355,10 @@ function M.new(options)
         if not state.ready or state.call_state ~= "idle" then
             return { status = "rejected", error_code = "invalid_state" }
         end
+        if type(command) ~= "table"
+            or not is_uint32(command.call_generation) then
+            return { status = "rejected", error_code = "invalid_state" }
+        end
         local called, result = pcall(state.cc_api.dial, state.sim_id,
             command.dial_target_e164)
         if not called or result ~= true then
@@ -315,7 +366,11 @@ function M.new(options)
         end
         state.counters.dial_calls = state.counters.dial_calls + 1
         state.call_state = "dialing"
+        state.call_generation = command.call_generation
         state.audio_quality = 0
+        state.media_started = false
+        state.record_started_ms = 0
+        state.media_started_ms = 0
         state.hangup_pending = false
         state.source_failure_pending = false
         state.terminal_emitted = false
@@ -344,16 +399,16 @@ function M.new(options)
     function state.audio_uplink(pcm, media_sequence, generation)
         if not state.ready or state.call_state ~= "connected"
             or state.hangup_pending or state.audio_quality == 0
-            or type(state.uplink) ~= "table" then
+            or type(state.uplink) ~= "table"
+            or generation ~= state.call_generation then
             state.counters.uplink_drops = state.counters.uplink_drops + 1
             return false
         end
         local metrics = state.uplink:metrics()
-        if not metrics.call_active then
-            if not state.uplink:begin_call(generation, state.audio_quality) then
-                state.counters.uplink_drops = state.counters.uplink_drops + 1
-                return false
-            end
+        if not metrics.call_active or metrics.generation ~= generation then
+            state.counters.uplink_drops = state.counters.uplink_drops + 1
+            fail_closed_on_source_failure(state)
+            return false
         end
         local accepted = state.uplink:enqueue(generation, media_sequence, pcm)
         if accepted then
@@ -413,11 +468,17 @@ function M.new(options)
         for key, value in pairs(self.counters) do output[key] = value end
         output.ready = self.ready
         output.call_state = self.call_state
+        output.call_generation = self.call_generation
         output.record_configured = self.record_configured
         output.record_active = self.record_active
         output.audio_quality = self.audio_quality
+        output.media_started = self.media_started
         output.memory_failed = self.memory_failed
         output.hangup_pending = self.hangup_pending
+        output.last_raw_event = self.last_raw_event
+        output.last_raw_event_ms = self.last_raw_event_ms
+        output.record_started_ms = self.record_started_ms
+        output.media_started_ms = self.media_started_ms
         if self.uplink then output.uplink = self.uplink:metrics() end
         return output
     end

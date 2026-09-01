@@ -5,6 +5,7 @@ local FORMAT_BY_QUALITY = {
 }
 local SOURCE_PCM_BYTES = 6400
 local RETRY_MS = 10
+local SILENCE_REFILL_MS = 200
 
 local function require_value(condition, message)
     if not condition then error("vuart_v1_uplink: " .. message, 0) end
@@ -52,6 +53,7 @@ function M.new(options)
 
     local state = {
         cc_api = options.cc_api,
+        now_ms = options.now_ms or function() return 0 end,
         schedule = options.schedule,
         raw_codec = options.raw_codec,
         capacity_chunks = capacity,
@@ -67,11 +69,19 @@ function M.new(options)
         queue = {},
         pending_data = nil,
         pending_offset = 1,
+        pending_silence = false,
         pump_scheduled = false,
+        pump_ticket = 0,
+        last_written = 0,
+        last_free_len = 0,
+        scheduled_delay_ms = 0,
+        source_started_ms = 0,
+        last_input_ms = 0,
         last_media_sequence = nil,
         counters = {
             calls_started = 0, source_starts = 0, source_start_failures = 0,
             chunks_received = 0, chunks_written = 0, bytes_written = 0,
+            silence_chunks = 0, silence_bytes = 0,
             input_calls = 0, input_failures = 0, partial_writes = 0,
             zero_writes = 0, backpressure_events = 0, dropped_chunks = 0,
             duplicate_chunks = 0, out_of_order_chunks = 0,
@@ -86,19 +96,36 @@ function M.new(options)
         self.queue = {}
         self.pending_data = nil
         self.pending_offset = 1
+        self.pending_silence = false
         self.pump_scheduled = false
+        self.pump_ticket = self.pump_ticket + 1
     end
 
     local function outstanding(self)
-        return #self.queue + (self.pending_data and 1 or 0)
+        return #self.queue
+            + (self.pending_data and not self.pending_silence and 1 or 0)
     end
 
-    local function schedule_pump(self)
+    local function capacity_delay(self, free_len, required)
+        local missing = math.max(0, required - free_len)
+        if missing == 0 then return RETRY_MS end
+        local bytes_per_ms = self.sample_rate * 2 / 1000
+        return math.max(RETRY_MS, math.min(SILENCE_REFILL_MS,
+            math.ceil(missing / bytes_per_ms)))
+    end
+
+    local function schedule_pump(self, delay_ms)
         if self.pump_scheduled or not self.call_active
             or not self.source_active then return end
         self.pump_scheduled = true
+        self.scheduled_delay_ms = delay_ms or RETRY_MS
+        self.pump_ticket = self.pump_ticket + 1
+        local ticket = self.pump_ticket
         local generation = self.generation
-        self.schedule(function() self:pump(generation) end, RETRY_MS)
+        self.schedule(function()
+            if ticket ~= self.pump_ticket then return end
+            self:pump(generation, ticket)
+        end, delay_ms or RETRY_MS)
     end
 
     local function start_source(self)
@@ -111,6 +138,7 @@ function M.new(options)
             return false
         end
         self.source_active = true
+        self.source_started_ms = self.now_ms()
         self.counters.source_starts = self.counters.source_starts + 1
         return true
     end
@@ -135,7 +163,17 @@ function M.new(options)
         self.stop_pending = false
         self.faulted = false
         self.last_media_sequence = nil
+        self.last_written = 0
+        self.last_free_len = 0
+        self.scheduled_delay_ms = 0
+        self.source_started_ms = 0
+        self.last_input_ms = 0
         self.counters.calls_started = self.counters.calls_started + 1
+        if not start_source(self) then
+            self.faulted = true
+            return false
+        end
+        if not self:pump(generation) then return false end
         return true
     end
 
@@ -180,11 +218,9 @@ function M.new(options)
             return false, "invalid_chunk"
         end
         self.queue[#self.queue + 1] = converted
-        if not start_source(self) then
-            table.remove(self.queue)
-            self.counters.dropped_chunks = self.counters.dropped_chunks + 1
-            self.faulted = true
-            return false, "source_start"
+        if self.pending_silence and self.pending_offset == 1 then
+            self.pending_data = nil
+            self.pending_silence = false
         end
         if not self:pump(generation) then
             return false, "input_failure"
@@ -192,7 +228,11 @@ function M.new(options)
         return true
     end
 
-    function state:pump(generation)
+    function state:pump(generation, scheduled_ticket)
+        if scheduled_ticket and scheduled_ticket ~= self.pump_ticket then
+            return true
+        end
+        if not scheduled_ticket then self.pump_ticket = self.pump_ticket + 1 end
         self.pump_scheduled = false
         if generation ~= self.generation or not self.call_active
             or not self.source_active then
@@ -202,11 +242,15 @@ function M.new(options)
         end
         if not self.pending_data then
             self.pending_data = table.remove(self.queue, 1)
+            self.pending_silence = self.pending_data == nil
+            if self.pending_silence then
+                self.pending_data = string.rep("\0", self.chunk_size)
+            end
             self.pending_offset = 1
         end
-        if not self.pending_data then return true end
 
         local remaining = self.pending_data:sub(self.pending_offset)
+        self.last_input_ms = self.now_ms()
         self.counters.input_calls = self.counters.input_calls + 1
         local called, accepted, written, free_len = pcall(
             self.cc_api.input, true, remaining, false)
@@ -219,25 +263,47 @@ function M.new(options)
             return false
         end
         if written == 0 then
+            self.last_written = written
+            self.last_free_len = free_len
             self.counters.zero_writes = self.counters.zero_writes + 1
             if free_len == 0 then
                 self.counters.backpressure_events =
                     self.counters.backpressure_events + 1
             end
-            schedule_pump(self)
+            schedule_pump(self, capacity_delay(self, free_len, #remaining))
             return true
         end
-        self.counters.bytes_written = self.counters.bytes_written + written
+        self.last_written = written
+        self.last_free_len = free_len
+        if self.pending_silence then
+            self.counters.silence_bytes = self.counters.silence_bytes + written
+        else
+            self.counters.bytes_written = self.counters.bytes_written + written
+        end
         if written < #remaining then
             self.counters.partial_writes = self.counters.partial_writes + 1
         end
         self.pending_offset = self.pending_offset + written
         if self.pending_offset > #self.pending_data then
+            if self.pending_silence then
+                self.counters.silence_chunks =
+                    self.counters.silence_chunks + 1
+            else
+                self.counters.chunks_written =
+                    self.counters.chunks_written + 1
+            end
             self.pending_data = nil
             self.pending_offset = 1
-            self.counters.chunks_written = self.counters.chunks_written + 1
+            self.pending_silence = false
         end
-        if self.pending_data or #self.queue > 0 then schedule_pump(self) end
+        if self.pending_data or #self.queue > 0 then
+            local required = self.pending_data
+                and #self.pending_data - self.pending_offset + 1
+                or #self.queue[1]
+            schedule_pump(self, capacity_delay(self, free_len, required))
+        else
+            schedule_pump(self, SILENCE_REFILL_MS)
+        end
         return true
     end
 
@@ -299,6 +365,12 @@ function M.new(options)
         result.queue_depth = outstanding(self)
         result.pending_bytes = self.pending_data
             and #self.pending_data - self.pending_offset + 1 or 0
+        result.pending_silence = self.pending_silence
+        result.last_written = self.last_written
+        result.last_free_len = self.last_free_len
+        result.scheduled_delay_ms = self.scheduled_delay_ms
+        result.source_started_ms = self.source_started_ms
+        result.last_input_ms = self.last_input_ms
         return result
     end
 

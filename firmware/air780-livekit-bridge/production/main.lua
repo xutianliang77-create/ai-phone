@@ -1,5 +1,5 @@
 PROJECT = "WUJIE_AIR_VUART_V1_PROD"
-VERSION = "001.004.001"
+VERSION = "001.007.000"
 
 local WATCHDOG_PIN = 24
 local WATCHDOG_FEED_INTERVAL_MS = 10000
@@ -18,6 +18,9 @@ local uart_module = require("vuart_v1_uart")
 local cc_module = require("vuart_v1_cc")
 local uplink_module = require("vuart_v1_uplink")
 local memory_module = require("vuart_v1_memory")
+local mic_guard_module = require("vuart_v1_mic_guard")
+local transport_profile = require("vuart_v1_profile")
+local es8311 = require("es8311")
 
 -- LuatOS hardware APIs can be indexable host objects rather than Lua tables.
 -- Normalize only the functions used by the testable transport adapters.
@@ -172,6 +175,36 @@ else
                     link.link_ack_out_of_order or 0,
                     link.link_ack_invalid or 0)
             end
+            if carrier and type(carrier.metrics) == "function" then
+                local cc_metrics = carrier:metrics()
+                local source = cc_metrics.uplink or {}
+                log.info("vuart_v1_media", "cc",
+                    cc_metrics.call_generation or 0,
+                    cc_metrics.last_raw_event or "none",
+                    cc_metrics.last_raw_event_ms or 0,
+                    cc_metrics.connected_events or 0,
+                    cc_metrics.speech_start_events or 0,
+                    cc_metrics.audio_start_events or 0,
+                    cc_metrics.record_start_attempts or 0,
+                    cc_metrics.record_starts or 0,
+                    cc_metrics.record_callbacks or 0,
+                    cc_metrics.downlink_frames or 0,
+                    cc_metrics.downlink_drops or 0,
+                    cc_metrics.record_stops or 0)
+                log.info("vuart_v1_media", "source",
+                    source.generation or 0, source.quality or 0,
+                    source.source_starts or 0,
+                    source.source_start_failures or 0,
+                    source.input_calls or 0, source.input_failures or 0,
+                    source.silence_chunks or 0, source.silence_bytes or 0,
+                    source.last_written or 0, source.last_free_len or 0,
+                    source.scheduled_delay_ms or 0,
+                    source.source_started_ms or 0,
+                    source.last_input_ms or 0,
+                    source.partial_writes or 0, source.zero_writes or 0,
+                    source.backpressure_events or 0,
+                    source.faulted and 1 or 0)
+            end
         else
             log.error("vuart_v1_mem", "sample_invalid")
         end
@@ -182,10 +215,10 @@ else
     transport = uart_module.new({
         uart_api = UART_API,
         sys_api = sys,
-        uart_id = 1,
-        baud_rate = 921600,
-        rx_buffer_bytes = 16384,
-        max_read_bytes = 16384,
+        uart_id = transport_profile.uart_id,
+        baud_rate = transport_profile.baud_rate,
+        rx_buffer_bytes = transport_profile.rx_buffer_bytes,
+        max_read_bytes = transport_profile.max_read_bytes,
         queue_limit = 8,
         on_bytes = function(bytes)
             if not runtime or not started then return end
@@ -198,6 +231,7 @@ else
     })
     local uplink = uplink_module.new({
         cc_api = CC_API,
+        now_ms = function() return tonumber(uptime_ms()) or 0 end,
         raw_codec = 0,
         capacity_chunks = 2,
         schedule = function(callback, delay_ms)
@@ -206,6 +240,7 @@ else
     })
     carrier = cc_module.new({
         cc_api = CC_API,
+        now_ms = function() return tonumber(uptime_ms()) or 0 end,
         subscribe = function(topic, callback)
             sys.subscribe(topic, callback)
         end,
@@ -279,6 +314,18 @@ else
             log.error("vuart_v1_prod", "unexpected audio framework")
             return
         end
+        local muted, evidence = mic_guard_module.mute({
+            i2c_id = AUDIO_CONFIG.i2c_id,
+            set_volume = exaudio.mic_vol,
+            get_volume = es8311.get_mic_vol,
+        })
+        if not muted then
+            runtime:quarantine()
+            log.error("vuart_v1_prod", "microphone mute failed", evidence)
+            return
+        end
+        log.info("vuart_v1_prod", "MIC_INPUT_MUTED",
+            evidence.probe_readback, evidence.muted_readback)
         carrier:set_audio_ready(true)
     end
 

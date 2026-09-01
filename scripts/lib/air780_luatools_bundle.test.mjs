@@ -12,11 +12,16 @@ describe("Air780 Luatools bundle", () => {
   it("copies only hash-pinned production Lua files into an empty directory", async () => {
     const root = await mkdtemp(join(tmpdir(), "air780-source-"));
     const output = await mkdtemp(join(tmpdir(), "air780-output-"));
+    const usbOutput = await mkdtemp(join(tmpdir(), "air780-usb-output-"));
     const bytes = Buffer.from("return { ok = true }\n");
     const hash = createHash("sha256").update(bytes).digest("hex");
     await writeFile(join(root, "runtime.lua"), bytes);
     await writeFile(
       join(root, "PROD_FLASH_MANIFEST.tsv"),
+      `${hash}\truntime.lua\truntime.lua\n`,
+    );
+    await writeFile(
+      join(root, "PROD_USB_FLASH_MANIFEST.tsv"),
       `${hash}\truntime.lua\truntime.lua\n`,
     );
 
@@ -28,6 +33,14 @@ describe("Air780 Luatools bundle", () => {
     expect(summary).toMatchObject({ fileCount: 1,
       files: [{ target: "runtime.lua", hash }] });
     expect(await readFile(join(output, "runtime.lua"), "utf8"))
+      .toBe(bytes.toString("utf8"));
+    const usbSummary = await prepareAir780LuatoolsBundle({
+      firmwareRoot: root,
+      outputDirectory: usbOutput,
+      manifestName: "PROD_USB_FLASH_MANIFEST.tsv",
+    });
+    expect(usbSummary.fileCount).toBe(1);
+    expect(await readFile(join(usbOutput, "runtime.lua"), "utf8"))
       .toBe(bytes.toString("utf8"));
   });
 
