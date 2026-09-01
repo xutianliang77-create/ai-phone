@@ -1,5 +1,6 @@
 local uart_module = require("vuart_v1_uart")
 local cc_module = require("vuart_v1_cc")
+local uplink_module = require("vuart_v1_uplink")
 
 local M = {}
 
@@ -103,6 +104,7 @@ local function assert_cc_adapter()
     local record_start_calls, record_stop_calls = 0, 0
     local dial_ok, hangup_error = true, false
     local ready_calls, downlink_frames = 0, 0
+    local now_ms = 0
     local events, buffers = {}, {}
     local cc_api = {
         init = function(sim_id)
@@ -137,6 +139,8 @@ local function assert_cc_adapter()
             if hangup_error then error("mock hangup failed", 0) end
             hangup_calls = hangup_calls + 1
         end,
+        extern_source = function() return true end,
+        input = function(_, value) return true, #value, 6400 end,
     }
     local zbuff_api = {
         HEAP_AUTO = 1,
@@ -156,14 +160,22 @@ local function assert_cc_adapter()
             return buffer
         end,
     }
+    local uplink = uplink_module.new({
+        cc_api = cc_api,
+        now_ms = function() return now_ms end,
+        raw_codec = 0,
+        schedule = function() end,
+    })
     local adapter = cc_module.new({
         cc_api = cc_api,
+        now_ms = function() return now_ms end,
         subscribe = function(topic, callback)
             assert_equal(topic, "CC_IND", "cc subscription")
             subscription = callback
         end,
         zbuff_api = zbuff_api,
         enable_downlink = true,
+        uplink = uplink,
         on_ready = function() ready_calls = ready_calls + 1 end,
         on_event = function(carrier_state, carrier_cause)
             events[#events + 1] = carrier_state .. ":" .. carrier_cause
@@ -184,14 +196,27 @@ local function assert_cc_adapter()
     assert_equal(ready_calls, 1, "cc ready exactly once")
     assert_equal(#buffers, 4, "cc double buffers")
 
-    local dial = adapter.dial({ dial_target_e164 = "+8613800138000" })
+    local dial = adapter.dial({
+        dial_target_e164 = "+8613800138000", call_generation = 1,
+    })
     assert_equal(dial.status, "applied", "cc dial status")
-    assert_equal(adapter.dial({ dial_target_e164 = "+8613800138000" }).status,
+    assert_equal(adapter.dial({
+        dial_target_e164 = "+8613800138000", call_generation = 1,
+    }).status,
         "rejected", "cc duplicate dial")
     subscription("MAKE_CALL_OK")
+    now_ms = 10
     subscription("CONNECTED")
+    now_ms = 20
     subscription("SPEECH_START")
+    assert_equal(#events, 1, "cc waits for AUDIO_START before connected")
+    now_ms = 30
     subscription("AUDIO_START")
+    now_ms = 31
+    subscription("AUDIO_START")
+    local started_metrics = adapter:metrics()
+    assert_equal(started_metrics.record_started_ms, 30, "cc record start time")
+    assert_equal(started_metrics.media_started_ms, 30, "cc media start time")
     assert_equal(events[1], "dialing:none", "cc dialing event")
     assert_equal(events[2], "connected:none", "cc connected event")
     assert_equal(#events, 2, "cc connected dedupe")
@@ -218,7 +243,9 @@ local function assert_cc_adapter()
     assert_equal(#events, 3, "cc terminal dedupe")
     assert_equal(hangup_calls, 1, "cc hangup exactly once")
 
-    assert_equal(adapter.dial({ dial_target_e164 = "+8613800138000" }).status,
+    assert_equal(adapter.dial({
+        dial_target_e164 = "+8613800138000", call_generation = 2,
+    }).status,
         "applied", "cc next call")
     subscription("MAKE_CALL_FAILED")
     assert_equal(events[4], "failed:network_error", "cc failed event")
@@ -226,10 +253,14 @@ local function assert_cc_adapter()
     assert_equal(#events, 4, "cc incoming call isolation")
     assert_equal(dial_calls, 2, "cc dial effects")
     dial_ok = false
-    assert_equal(adapter.dial({ dial_target_e164 = "+8613800138000" }).error_code,
+    assert_equal(adapter.dial({
+        dial_target_e164 = "+8613800138000", call_generation = 3,
+    }).error_code,
         "internal_error", "cc synchronous dial failure")
     dial_ok = true
-    assert_equal(adapter.dial({ dial_target_e164 = "+8613800138000" }).status,
+    assert_equal(adapter.dial({
+        dial_target_e164 = "+8613800138000", call_generation = 3,
+    }).status,
         "applied", "cc dial before hangup failure")
     hangup_error = true
     assert_equal(adapter.hangup({}).error_code, "internal_error",
@@ -237,6 +268,12 @@ local function assert_cc_adapter()
     local metrics = adapter:metrics()
     assert_equal(metrics.downlink_frames, 1, "cc downlink metric")
     assert_equal(metrics.uplink_discarded, 1, "cc uplink discard metric")
+    assert_equal(metrics.audio_start_events, 2, "cc AUDIO_START metric")
+    assert_equal(metrics.record_start_attempts, 1, "cc record attempt metric")
+    assert_equal(metrics.record_starts, 1, "cc record start metric")
+    assert_equal(metrics.record_callbacks, 2, "cc record callback metric")
+    assert_equal(metrics.record_stops, 1, "cc record stop metric")
+    assert_equal(metrics.uplink.source_starts, 1, "cc source start exactly once")
 end
 
 function M.run()

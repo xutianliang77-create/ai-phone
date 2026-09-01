@@ -50,7 +50,9 @@ describe("Air780 production Lua hangup safety", () => {
         })
         subscriptions.CC_IND("READY")
         carrier:set_audio_ready(true)
-        assert(carrier.dial({ dial_target_e164 = "+8613800138000" }).status == "applied")
+        assert(carrier.dial({
+          dial_target_e164 = "+8613800138000", call_generation = 13,
+        }).status == "applied")
         subscriptions.CC_IND("CONNECTED")
         subscriptions.CC_IND("AUDIO_START")
         assert(carrier.audio_uplink(string.rep("\\1\\2", 3200), 0, 13) == false)
@@ -95,7 +97,9 @@ describe("Air780 production Lua hangup safety", () => {
         })
         subscriptions.CC_IND("READY")
         carrier:set_audio_ready(true)
-        assert(carrier.dial({ dial_target_e164 = "+8613800138000" }).status == "applied")
+        assert(carrier.dial({
+          dial_target_e164 = "+8613800138000", call_generation = 1,
+        }).status == "applied")
         subscriptions.CC_IND("CONNECTED")
         assert(carrier.hangup({}).status == "rejected")
         assert(carrier.hangup({}).error_code == "internal_error")

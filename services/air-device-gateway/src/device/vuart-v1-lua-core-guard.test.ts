@@ -8,6 +8,7 @@ const firmwareUrl = new URL(
 );
 const productionSources = [
   "production/main.lua",
+  "production/uart1_profile.lua",
   "vuart_v1_codec.lua",
   "vuart_v1_cmd_codec.lua",
   "vuart_v1_stream.lua",
@@ -17,6 +18,7 @@ const productionSources = [
   "vuart_v1_uplink.lua",
   "vuart_v1_cc.lua",
   "vuart_v1_memory.lua",
+  "vuart_v1_mic_guard.lua",
 ] as const;
 
 describe("Air780 LuatOS production core guard", () => {
@@ -24,7 +26,9 @@ describe("Air780 LuatOS production core guard", () => {
     const factory = new LuaFactory();
     for (const source of productionSources) {
       await factory.mountFile(
-        `/firmware/${source}`,
+        source === "production/uart1_profile.lua"
+          ? "/firmware/vuart_v1_profile.lua"
+          : `/firmware/${source}`,
         readFileSync(new URL(source, firmwareUrl)),
       );
     }
@@ -77,6 +81,9 @@ describe("Air780 LuatOS production core guard", () => {
             setup = function() audio_setup_calls = audio_setup_calls + 1; return true end,
             get_audio_mode = function() return "audio_v2" end,
           }
+        end
+        package.preload.es8311 = function()
+          return { get_mic_vol = function() return 0 end }
         end
 
         dofile("/firmware/production/main.lua")

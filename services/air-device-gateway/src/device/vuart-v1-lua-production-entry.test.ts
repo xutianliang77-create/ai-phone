@@ -8,8 +8,7 @@ const firmwareUrl = new URL(
   import.meta.url,
 );
 
-const productionSources = [
-  ["production/main.lua", "main.lua"],
+const runtimeSources = [
   ["vuart_v1_codec.lua", "vuart_v1_codec.lua"],
   ["vuart_v1_cmd_codec.lua", "vuart_v1_cmd_codec.lua"],
   ["vuart_v1_stream.lua", "vuart_v1_stream.lua"],
@@ -19,39 +18,56 @@ const productionSources = [
   ["vuart_v1_uplink.lua", "vuart_v1_uplink.lua"],
   ["vuart_v1_cc.lua", "vuart_v1_cc.lua"],
   ["vuart_v1_memory.lua", "vuart_v1_memory.lua"],
+  ["vuart_v1_mic_guard.lua", "vuart_v1_mic_guard.lua"],
 ] as const;
-
+const productionSources = [
+  ["production/main.lua", "main.lua"],
+  ["production/uart1_profile.lua", "vuart_v1_profile.lua"],
+  ...runtimeSources,
+] as const;
+const usbProductionSources = [
+  ["production/main.lua", "main.lua"],
+  ["production/usb_profile.lua", "vuart_v1_profile.lua"],
+  ...runtimeSources,
+] as const;
 const behaviorFiles = [
-  ...productionSources.slice(1).map(([source]) => source),
+  ...runtimeSources.map(([source]) => source),
   "vuart_v1_io_test.lua",
 ] as const;
-
+function assertProductionManifest(
+  manifestName: string,
+  expected: ReadonlyArray<readonly [string, string]>,
+) {
+  const manifest = readFileSync(new URL(manifestName, firmwareUrl), "utf8");
+  const entries = manifest.trim().split("\n").map((line) => {
+    const match = line.match(
+      /^([0-9a-f]{64})\t([A-Za-z0-9_./-]+)\t([A-Za-z0-9_.-]+)$/,
+    );
+    expect(match).not.toBeNull();
+    return { hash: match![1], source: match![2], target: match![3] };
+  });
+  expect(entries.map(({ source, target }) => [source, target]))
+    .toEqual(expected);
+  expect(new Set(entries.map(({ target }) => target)).size).toBe(entries.length);
+  for (const { hash, source, target } of entries) {
+    expect(Buffer.byteLength(target, "utf8"), target).toBeLessThanOrEqual(24);
+    const bytes = readFileSync(new URL(source, firmwareUrl));
+    expect(createHash("sha256").update(bytes).digest("hex"), source).toBe(hash);
+    expect(source).not.toMatch(/(?:test|mock)/);
+  }
+}
 describe("Air780 LuatOS production entry", () => {
   it("pins a flat Luatools bundle with no test files", () => {
-    const manifest = readFileSync(
-      new URL("PROD_FLASH_MANIFEST.tsv", firmwareUrl),
-      "utf8",
-    );
-    const entries = manifest.trim().split("\n").map((line) => {
-      const match = line.match(
-        /^([0-9a-f]{64})\t([A-Za-z0-9_./-]+)\t([A-Za-z0-9_.-]+)$/,
-      );
-      expect(match).not.toBeNull();
-      return { hash: match![1], source: match![2], target: match![3] };
-    });
-    expect(entries.map(({ source, target }) => [source, target]))
-      .toEqual(productionSources);
-    expect(new Set(entries.map(({ target }) => target)).size).toBe(entries.length);
-    for (const { hash, source, target } of entries) {
-      expect(Buffer.byteLength(target, "utf8"), target).toBeLessThanOrEqual(24);
-      const bytes = readFileSync(new URL(source, firmwareUrl));
-      expect(createHash("sha256").update(bytes).digest("hex"), source).toBe(hash);
-      expect(source).not.toMatch(/(?:test|mock)/);
-    }
+    assertProductionManifest("PROD_FLASH_MANIFEST.tsv", productionSources);
+    assertProductionManifest("PROD_USB_FLASH_MANIFEST.tsv", usbProductionSources);
   });
 
   it("keeps diagnostic text and private payloads out of production", () => {
-    for (const [source] of productionSources) {
+    const sources = new Set([
+      ...productionSources.map(([source]) => source),
+      ...usbProductionSources.map(([source]) => source),
+    ]);
+    for (const source of sources) {
       const body = readFileSync(new URL(source, firmwareUrl), "utf8");
       expect(body, source).not.toContain("WJAI/1");
       expect(body, source).not.toMatch(/json\.(?:encode|decode)/);
@@ -86,12 +102,15 @@ describe("Air780 LuatOS production entry", () => {
 
   it("boots the real production main with LuatOS API-compatible mocks", async () => {
     const factory = new LuaFactory();
-    for (const [source] of productionSources) {
+    for (const [source, target] of productionSources) {
       await factory.mountFile(
-        `/firmware/${source}`,
+        `/firmware/${target === "vuart_v1_profile.lua" ? target : source}`,
         readFileSync(new URL(source, firmwareUrl)),
       );
     }
+    await factory.mountFile("/firmware/usb_profile.lua", readFileSync(
+      new URL("production/usb_profile.lua", firmwareUrl),
+    ));
     const lua = await factory.createEngine();
     try {
       const result = await lua.doString(`
@@ -100,7 +119,8 @@ describe("Air780 LuatOS production entry", () => {
         local uart_read_value = ""
         local init_calls, record_calls, audio_setup_calls, dial_calls = 0, 0, 0, 0
         local source_starts, source_stops, input_bytes = 0, 0, 0
-        local buffers = {}
+        local mic_volume, mic_writes = 80, {}
+        local buffers, audio_start_order = {}, {}
         local function host_object(values, kind)
           local object = kind == "thread" and coroutine.create(function() end)
             or kind == "function" and function() end
@@ -146,13 +166,17 @@ describe("Air780 LuatOS production entry", () => {
           end,
           close = function() end,
         }, "thread")
+        local usb_profile = dofile("/firmware/usb_profile.lua")
+        assert(usb_profile.uart_id == 9 and usb_profile.baud_rate == 115200)
+        assert(usb_profile.rx_buffer_bytes == 16384
+          and usb_profile.max_read_bytes == 16384)
         cc = host_object({
           init = function(sim_id) assert(sim_id == 0); init_calls = init_calls + 1; return true end,
           on = function(event, callback) assert(event == "record"); _G.record_callback = callback end,
           record = function(enabled, up1, up2, down1, down2)
             if not enabled then return true end
             assert(up1 and up2 and down1 and down2)
-            record_calls = record_calls + 1
+            record_calls = record_calls + 1; audio_start_order[#audio_start_order + 1] = "record"
             return true
           end,
           dial = function() dial_calls = dial_calls + 1; return true end,
@@ -162,7 +186,7 @@ describe("Air780 LuatOS production entry", () => {
             if enabled == nil then source_stops = source_stops + 1; return true end
             assert(enabled and is_play and codec == 0 and loop)
             assert(rate == 16000 and bits == 16 and channels == 1 and signed)
-            source_starts = source_starts + 1
+            source_starts = source_starts + 1; audio_start_order[#audio_start_order + 1] = "source"
             return true
           end,
           input = function(is_play, value, is_end)
@@ -222,12 +246,25 @@ describe("Air780 LuatOS production entry", () => {
               return true
             end,
             get_audio_mode = function() return "audio_v2" end,
+            mic_vol = function(value)
+              mic_writes[#mic_writes + 1] = value
+              mic_volume = value
+              return true
+            end,
           }
         end
+        package.preload.es8311 = function() return {
+          get_mic_vol = function(i2c_id)
+            assert(i2c_id == 0)
+            return mic_volume
+          end,
+        } end
 
         dofile("/firmware/production/main.lua")
         assert(sys_run_called == true and receive_callback ~= nil)
         assert(audio_setup_calls == 1 and init_calls == 0 and #writes == 0)
+        assert(#mic_writes == 2 and mic_writes[1] == 10
+          and mic_writes[2] == 0 and mic_volume == 0)
         subscriptions.CC_IND("READY")
         assert(init_calls == 1 and record_calls == 0 and #buffers == 4)
         assert(#writes == 2)
@@ -276,7 +313,8 @@ describe("Air780 LuatOS production entry", () => {
         subscriptions.CC_IND("MAKE_CALL_OK")
         subscriptions.CC_IND("CONNECTED")
         subscriptions.CC_IND("AUDIO_START")
-        assert(record_calls == 1)
+        assert(record_calls == 1 and table.concat(audio_start_order, ",") == "record,source")
+        assert(source_starts == 1 and source_stops == 0 and input_bytes == 6400)
         buffers[3].value = string.rep("d", 6400)
         record_callback(true, 1)
         local audio_frame = assert(frame_codec.decode_frame(writes[#writes]))
@@ -301,10 +339,10 @@ describe("Air780 LuatOS production entry", () => {
           payload = assert(frame_codec.encode_audio(uplink)),
         }))
         receive_callback(1, #uart_read_value)
-        assert(source_starts == 1 and source_stops == 0 and input_bytes == 6400)
+        assert(source_starts == 1 and source_stops == 0 and input_bytes == 12800)
         return PROJECT .. ":" .. VERSION
       `);
-      expect(result).toBe("WUJIE_AIR_VUART_V1_PROD:001.004.001");
+      expect(result).toBe("WUJIE_AIR_VUART_V1_PROD:001.007.000");
     } finally {
       lua.global.close();
     }

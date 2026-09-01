@@ -36,13 +36,17 @@ describe("Air780 production Lua external-source safety", () => {
         })
         subscriptions.CC_IND("READY")
         carrier:set_audio_ready(true)
-        assert(carrier.dial({ dial_target_e164 = "+8613800138000" }).status == "applied")
+        assert(carrier.dial({
+          dial_target_e164 = "+8613800138000", call_generation = 1,
+        }).status == "applied")
         subscriptions.CC_IND("CONNECTED")
         assert(carrier:fail_closed("low_memory") == true)
         assert(hangup_calls == 1)
         assert(carrier:fail_closed("low_memory") == true)
         assert(hangup_calls == 1)
-        assert(carrier.dial({ dial_target_e164 = "+8613800138000" }).status == "rejected")
+        assert(carrier.dial({
+          dial_target_e164 = "+8613800138000", call_generation = 2,
+        }).status == "rejected")
         local metrics = carrier:metrics()
         assert(metrics.ready == false and metrics.memory_failures == 1)
         assert(metrics.hangup_pending == true)
@@ -88,13 +92,25 @@ describe("Air780 production Lua external-source safety", () => {
             subscribe = function(topic, callback) subscriptions[topic] = callback end,
             enable_downlink = true,
             zbuff_api = zbuff,
+            uplink = {
+              begin_call = function(_, generation)
+                return generation == 1
+              end,
+              metrics = function()
+                return { call_active = true, generation = 1 }
+              end,
+              enqueue = function() return true end,
+              stop = function() return true end,
+            },
             on_event = function(state, cause)
               events[#events + 1] = state .. ":" .. cause
             end,
           })
           subscriptions.CC_IND("READY")
           carrier:set_audio_ready(true)
-          assert(carrier.dial({ dial_target_e164 = "+8613800138000" }).status == "applied")
+          assert(carrier.dial({
+            dial_target_e164 = "+8613800138000", call_generation = 1,
+          }).status == "applied")
           subscriptions.CC_IND("CONNECTED")
           subscriptions.CC_IND("AUDIO_START")
           assert(hangup_calls == 1)
@@ -130,7 +146,7 @@ describe("Air780 production Lua external-source safety", () => {
         package.path = "/firmware/?.lua;" .. package.path
         local cc_module = require("vuart_v1_cc")
         local uplink_module = require("vuart_v1_uplink")
-        local subscriptions, hangup_calls, events = {}, 0, {}
+        local subscriptions, hangup_calls, events, inputs = {}, 0, {}, {}
         local cc = {
           init = function() return true end,
           dial = function() return true end,
@@ -139,6 +155,7 @@ describe("Air780 production Lua external-source safety", () => {
           extern_source = function() return true end,
           input = function(_, value, is_end)
             assert(is_end == false)
+            inputs[#inputs + 1] = value
             return true, #value, 6400
           end,
         }
@@ -158,10 +175,14 @@ describe("Air780 production Lua external-source safety", () => {
         })
         subscriptions.CC_IND("READY")
         carrier:set_audio_ready(true)
-        assert(carrier.dial({ dial_target_e164 = "+8613800138000" }).status == "applied")
+        assert(carrier.dial({
+          dial_target_e164 = "+8613800138000", call_generation = 7,
+        }).status == "applied")
         subscriptions.CC_IND("CONNECTED")
         subscriptions.CC_IND("AUDIO_START")
+        assert(#inputs == 1 and inputs[1] == string.rep("\\0", 6400))
         assert(carrier.audio_uplink(string.rep("\\1\\2", 3200), 0, 7) == true)
+        assert(#inputs == 2 and inputs[2] == string.rep("\\1\\2", 3200))
 
         subscriptions.CC_IND("EXT_SRC_DONE")
         subscriptions.CC_IND("EXT_SRC_DONE")
@@ -181,7 +202,7 @@ describe("Air780 production Lua external-source safety", () => {
     }
   });
 
-  it("fails closed if the first TTS frame cannot start its external source", async () => {
+  it("fails closed during AUDIO_START if the silent external source cannot start", async () => {
     const factory = new LuaFactory();
     await factory.mountFile("/firmware/vuart_v1_cc.lua", readFileSync(ccSource));
     await factory.mountFile(
@@ -195,8 +216,15 @@ describe("Air780 production Lua external-source safety", () => {
         local cc_module = require("vuart_v1_cc")
         local uplink_module = require("vuart_v1_uplink")
         local subscriptions, hangup_calls, events = {}, 0, {}
+        local record_starts, record_stops = 0, 0
         local cc = {
           init = function() return true end,
+          on = function() end,
+          record = function(on)
+            if on then record_starts = record_starts + 1
+            else record_stops = record_stops + 1 end
+            return true
+          end,
           dial = function() return true end,
           hangUp = function() hangup_calls = hangup_calls + 1 end,
           quality = function() return 2 end,
@@ -211,7 +239,8 @@ describe("Air780 production Lua external-source safety", () => {
         local carrier = cc_module.new({
           cc_api = cc,
           subscribe = function(topic, callback) subscriptions[topic] = callback end,
-          enable_downlink = false,
+          enable_downlink = true,
+          zbuff_api = { HEAP_AUTO = 0, create = function() return {} end },
           uplink = uplink,
           on_event = function(carrier_state, carrier_cause)
             events[#events + 1] = { state = carrier_state, cause = carrier_cause }
@@ -219,11 +248,13 @@ describe("Air780 production Lua external-source safety", () => {
         })
         subscriptions.CC_IND("READY")
         carrier:set_audio_ready(true)
-        assert(carrier.dial({ dial_target_e164 = "+8613800138000" }).status == "applied")
+        assert(carrier.dial({
+          dial_target_e164 = "+8613800138000", call_generation = 9,
+        }).status == "applied")
         subscriptions.CC_IND("CONNECTED")
         subscriptions.CC_IND("AUDIO_START")
-        assert(carrier.audio_uplink(string.rep("\\1\\2", 3200), 0, 9) == false)
         assert(hangup_calls == 1)
+        assert(record_starts == 1 and record_stops == 1)
         local metrics = carrier:metrics()
         assert(metrics.source_failure_hangups == 1)
         assert(metrics.source_failure_hangup_failures == 0)
@@ -239,7 +270,7 @@ describe("Air780 production Lua external-source safety", () => {
     }
   });
 
-  it("fails closed when the first TTS frame faults during cc.input", async () => {
+  it("fails closed during AUDIO_START when the first silent input faults", async () => {
     const factory = new LuaFactory();
     await factory.mountFile("/firmware/vuart_v1_cc.lua", readFileSync(ccSource));
     await factory.mountFile(
@@ -277,10 +308,11 @@ describe("Air780 production Lua external-source safety", () => {
         })
         subscriptions.CC_IND("READY")
         carrier:set_audio_ready(true)
-        assert(carrier.dial({ dial_target_e164 = "+8613800138000" }).status == "applied")
+        assert(carrier.dial({
+          dial_target_e164 = "+8613800138000", call_generation = 11,
+        }).status == "applied")
         subscriptions.CC_IND("CONNECTED")
         subscriptions.CC_IND("AUDIO_START")
-        assert(carrier.audio_uplink(string.rep("\\1\\2", 3200), 0, 11) == false)
         assert(hangup_calls == 1)
         local metrics = carrier:metrics()
         assert(metrics.source_failure_hangups == 1)
