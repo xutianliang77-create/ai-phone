@@ -29,7 +29,9 @@ class RecordAudioCapture implements AudioCapture {
   Future<void> start(AudioCaptureConfig config) async {
     await stop();
     _config = config;
-    final stream = await _activeRecorder.startStream(
+    final recorder = _activeRecorder;
+    await recorder.ios?.manageAudioSession(config.managePlatformAudioSession);
+    final stream = await recorder.startStream(
       RecordConfig(
         encoder: AudioEncoder.pcm16bits,
         sampleRate: config.sampleRate,

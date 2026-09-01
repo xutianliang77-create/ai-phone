@@ -57,6 +57,7 @@ void main() {
     expect(audioSession.voiceProcessingValues, <bool>[false]);
     expect(capture.startedConfigs.single.echoCancel, isFalse);
     expect(capture.startedConfigs.single.noiseSuppress, isFalse);
+    expect(capture.startedConfigs.single.managePlatformAudioSession, isFalse);
   });
 
   test('keeps voice processing for conversation capture', () async {
@@ -75,6 +76,23 @@ void main() {
     expect(audioSession.voiceProcessingValues, <bool>[true]);
     expect(capture.startedConfigs.single.echoCancel, isTrue);
     expect(capture.startedConfigs.single.noiseSuppress, isTrue);
+    expect(capture.startedConfigs.single.managePlatformAudioSession, isFalse);
+  });
+
+  test('lets the recorder own the platform session without a coordinator',
+      () async {
+    final repository = FakeRealtimeRepository();
+    final capture = FakeAudioCapture();
+    final controller = realtimeControllerForTest(
+      repository,
+      capture,
+      audioSessionCoordinator: const NoopAudioSessionCoordinator(),
+    );
+    addTearDown(controller.dispose);
+
+    await controller.start();
+
+    expect(capture.startedConfigs.single.managePlatformAudioSession, isTrue);
   });
 
   test('does not restart capture while the realtime session is paused',

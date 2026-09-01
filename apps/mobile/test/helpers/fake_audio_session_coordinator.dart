@@ -9,6 +9,9 @@ class FakeAudioSessionCoordinator implements AudioSessionCoordinator {
   final voiceProcessingValues = <bool>[];
 
   @override
+  bool get managesPlatformAudioSession => true;
+
+  @override
   Stream<AudioSessionEvent> get events => _events.stream;
 
   void emit(AudioSessionEvent event) => _events.add(event);

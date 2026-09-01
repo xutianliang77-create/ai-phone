@@ -220,6 +220,8 @@ class RealtimeController extends ChangeNotifier {
       await _audioCapture.start(AudioCaptureConfig(
         echoCancel: voiceProcessing,
         noiseSuppress: voiceProcessing,
+        managePlatformAudioSession:
+            !_audioSessionCoordinator.managesPlatformAudioSession,
       ));
     } catch (_) {
       await _audioSubscription?.cancel();

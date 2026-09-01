@@ -17,10 +17,12 @@ class AudioCaptureConfig {
     this.frameDurationMs = 40,
     this.echoCancel = true,
     this.noiseSuppress = true,
+    this.managePlatformAudioSession = true,
   });
 
   final int sampleRate;
   final int frameDurationMs;
   final bool echoCancel;
   final bool noiseSuppress;
+  final bool managePlatformAudioSession;
 }
