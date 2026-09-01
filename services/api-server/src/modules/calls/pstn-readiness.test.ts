@@ -69,6 +69,7 @@ describe("pstn readiness", () => {
   });
 
   it("surfaces pstn issues in release readiness", async () => {
+    process.env.DOMESTIC_RELEASE_CAPABILITY_PROFILE = "commercial_full";
     process.env.CALL_PROVIDER_POLICY = "domestic_pstn_bridge";
 
     const readiness = await getReleaseReadiness();
@@ -126,6 +127,7 @@ describe("pstn readiness", () => {
 });
 
 const envKeys = [
+  "DOMESTIC_RELEASE_CAPABILITY_PROFILE",
   "CALL_PROVIDER_POLICY",
   "API_STORAGE_DRIVER",
   "AIR_DEVICE_GATEWAY_BASE_URL",

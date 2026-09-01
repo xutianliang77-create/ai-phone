@@ -6,6 +6,8 @@ export function markProviderChecksDeferred(checks) {
     "pstn_internal_media_loop_readiness",
     "agent_call_worker_readiness",
     "domestic_payment_callbacks_local_smoke",
+    "diagnostics_alerting_local_smoke",
+    "release_materials_readiness",
   ]);
   for (const check of checks) {
     if (!names.has(check.name) || check.details?.skipped !== true) continue;

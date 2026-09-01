@@ -1,22 +1,7 @@
 const requiredText = [
-  "APPLE_IAP_BUNDLE_ID",
-  "APPLE_IAP_ROOT_CERT_SHA256",
-  "WECHAT_PAY_APP_ID",
-  "WECHAT_PAY_MCH_ID",
-  "WECHAT_PAY_WEBHOOK_SECRET",
-  "ALIPAY_APP_ID",
-  "ALIPAY_MERCHANT_ID",
-  "ALIPAY_WEBHOOK_SECRET",
   "LIVEKIT_API_KEY",
   "LIVEKIT_API_SECRET",
-  "DIAGNOSTICS_ADMIN_TOKEN",
-  "DIAGNOSTICS_ONCALL_CONTACT",
-  "DIAGNOSTICS_ALERT_WEBHOOK_SECRET",
   "AUTH_OTP_SECRET",
-  "SMS_PROVIDER",
-  "SMS_HTTP_API_KEY",
-  "SMS_HTTP_TEMPLATE_ID",
-  "SMS_SIGN_NAME",
   "REALTIME_PROVIDER",
   "MODEL_ROUTING_PROFILE",
   "TRANSLATION_PROVIDER",
@@ -34,6 +19,21 @@ const requiredText = [
 ];
 
 const fullReleaseRequiredText = [
+  "APPLE_IAP_BUNDLE_ID",
+  "APPLE_IAP_ROOT_CERT_SHA256",
+  "WECHAT_PAY_APP_ID",
+  "WECHAT_PAY_MCH_ID",
+  "WECHAT_PAY_WEBHOOK_SECRET",
+  "ALIPAY_APP_ID",
+  "ALIPAY_MERCHANT_ID",
+  "ALIPAY_WEBHOOK_SECRET",
+  "DIAGNOSTICS_ADMIN_TOKEN",
+  "DIAGNOSTICS_ONCALL_CONTACT",
+  "DIAGNOSTICS_ALERT_WEBHOOK_SECRET",
+  "SMS_PROVIDER",
+  "SMS_HTTP_API_KEY",
+  "SMS_HTTP_TEMPLATE_ID",
+  "SMS_SIGN_NAME",
   "PSTN_BRIDGE_API_KEY",
   "PSTN_BRIDGE_PROVIDER_WEBHOOK_SECRET",
   "PSTN_BRIDGE_MEDIA_WRITER_API_KEY",
@@ -43,16 +43,19 @@ const fullReleaseRequiredText = [
 
 const requiredHttps = [
   "PUBLIC_CALL_BASE_URL",
-  "PAYMENT_CALLBACK_BASE_URL",
-  "DIAGNOSTICS_ALERT_WEBHOOK_URL",
+];
+
+const coreServiceUrls = [
   "TRANSLATION_BASE_URL",
   "ASR_HTTP_ENDPOINT",
   "ASR_HTTP_FLUSH_ENDPOINT",
   "TTS_HTTP_ENDPOINT",
-  "SMS_HTTP_ENDPOINT",
 ];
 
 const fullReleaseRequiredHttps = [
+  "PAYMENT_CALLBACK_BASE_URL",
+  "DIAGNOSTICS_ALERT_WEBHOOK_URL",
+  "SMS_HTTP_ENDPOINT",
   "PSTN_BRIDGE_BASE_URL",
   "PSTN_BRIDGE_MEDIA_WRITER_ENDPOINT",
   "PSTN_BRIDGE_STATUS_WEBHOOK_ENDPOINT",
@@ -89,6 +92,7 @@ const secretMinimumLengths = {
 export function requireDomesticReleaseServiceConfig(context) {
   requireText(context);
   requireHttps(context);
+  requireCoreServiceUrls(context);
   requireSecretStrength(context);
   requireAppleRootFingerprint(context);
   requireLiveKit(context);
@@ -116,9 +120,19 @@ function requireHttps({ env, checks, issues, fullRelease }) {
   }
 }
 
+function requireCoreServiceUrls({ env, checks, issues, fullRelease }) {
+  for (const key of coreServiceUrls) {
+    const ok = fullRelease
+      ? isPublicUrl(env[key], ["https:"])
+      : isPrivateServiceUrl(env[key]);
+    record(checks, key, ok, { value: mask(env[key]) });
+    if (!ok) issues.push(`domestic release env invalid ${key}`);
+  }
+}
+
 function requireSecretStrength({ env, checks, issues, fullRelease }) {
   for (const [key, minLength] of Object.entries(secretMinimumLengths)) {
-    if (!fullRelease && key.startsWith("PSTN_")) continue;
+    if (!fullRelease && isCommercialOnlySecret(key)) continue;
     const value = env[key];
     if (!hasRealValue(value)) continue;
     const ok = value.trim().length >= minLength;
@@ -138,6 +152,44 @@ function requireAppleRootFingerprint({ env, checks, issues }) {
     expected: "64 hex characters",
   });
   if (!ok) issues.push("domestic release env invalid APPLE_IAP_ROOT_CERT_SHA256");
+}
+
+function isCommercialOnlySecret(key) {
+  return key.startsWith("PSTN_") || [
+    "WECHAT_PAY_WEBHOOK_SECRET",
+    "ALIPAY_WEBHOOK_SECRET",
+    "DIAGNOSTICS_ADMIN_TOKEN",
+    "DIAGNOSTICS_ALERT_WEBHOOK_SECRET",
+    "SMS_HTTP_API_KEY",
+  ].includes(key);
+}
+
+function isPrivateServiceUrl(value) {
+  if (!hasConfiguredValue(value)) return false;
+  try {
+    const url = new URL(value);
+    if (url.protocol === "https:") return true;
+    return url.protocol === "http:" && isPrivateHost(url.hostname);
+  } catch {
+    return false;
+  }
+}
+
+function hasConfiguredValue(value) {
+  return typeof value === "string" && value.trim().length > 0 &&
+    !/required|replace|example|your-|todo|待填|translation\.local/i.test(value);
+}
+
+function isPrivateHost(hostname) {
+  if (["localhost", "127.0.0.1", "::1"].includes(hostname)) return true;
+  const parts = hostname.split(".").map(Number);
+  if (parts.length !== 4 || parts.some((part) => !Number.isInteger(part))) {
+    return false;
+  }
+  return parts[0] === 10 ||
+    (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31) ||
+    (parts[0] === 192 && parts[1] === 168) ||
+    (parts[0] === 100 && parts[1] >= 64 && parts[1] <= 127);
 }
 
 function requireLiveKit({ env, checks, issues }) {

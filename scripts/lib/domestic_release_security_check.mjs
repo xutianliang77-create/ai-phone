@@ -1,9 +1,17 @@
 import { statSync } from "node:fs";
 
-export function requireReleaseSecurity(filePath, env, checks, issues) {
+export function requireReleaseSecurity(
+  filePath,
+  env,
+  checks,
+  issues,
+  options = {},
+) {
   requirePrivateFileMode(filePath, checks, issues);
   fixedValue(env, checks, issues, "PUBLIC_RATE_LIMIT_PROVIDER", "redis");
-  const redisUrlOk = publicTlsRedisUrl(env.PUBLIC_RATE_LIMIT_REDIS_URL);
+  const redisUrlOk = options.fullRelease
+    ? publicTlsRedisUrl(env.PUBLIC_RATE_LIMIT_REDIS_URL)
+    : coreRedisUrl(env.PUBLIC_RATE_LIMIT_REDIS_URL);
   record(checks, "PUBLIC_RATE_LIMIT_REDIS_URL", redisUrlOk, {
     value: mask(env.PUBLIC_RATE_LIMIT_REDIS_URL),
   });
@@ -15,6 +23,21 @@ export function requireReleaseSecurity(filePath, env, checks, issues) {
     record(checks, `${key}_absent`, ok, { configured: !ok });
     if (!ok) issues.push(`domestic release env forbids ${key}`);
   }
+}
+
+function coreRedisUrl(value) {
+  if (!hasConfiguredValue(value)) return false;
+  try {
+    const url = new URL(value);
+    return ["redis:", "rediss:"].includes(url.protocol);
+  } catch {
+    return false;
+  }
+}
+
+function hasConfiguredValue(value) {
+  return typeof value === "string" && value.trim().length > 0 &&
+    !/required|replace|example|your-|todo|待填|translation\.local/i.test(value);
 }
 
 function requirePrivateFileMode(filePath, checks, issues) {

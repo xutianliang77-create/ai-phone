@@ -79,7 +79,8 @@ export async function checkDomesticReleaseReadiness(options) {
     actions,
   });
   await appendReleaseMaterialsReadiness({
-    enabled: options.checkReleaseMaterials !== false,
+    enabled:
+      options.checkReleaseMaterials !== false && !providerAcceptanceDeferred,
     root: options.root,
     file: options.releaseMaterialsFile,
     timeoutMs: options.timeoutMs,
@@ -235,7 +236,9 @@ export async function checkDomesticReleaseReadiness(options) {
     normalizeIssues,
   });
   await appendDiagnosticsAlertingLocalSmoke({
-    enabled: options.checkDiagnosticsAlertingLocalSmoke !== false,
+    enabled:
+      options.checkDiagnosticsAlertingLocalSmoke !== false &&
+      !providerAcceptanceDeferred,
     root: options.root,
     timeoutMs: options.timeoutMs,
     checkFn: options.checkDiagnosticsAlertingLocalSmokeFn,
@@ -294,7 +297,15 @@ export async function checkDomesticReleaseReadiness(options) {
     capabilityProfile,
     deferredCapabilities:
       providerAcceptanceDeferred
-        ? ["livekit_sip", "agent", "egress", "payment"]
+        ? [
+          "livekit_sip",
+          "agent",
+          "egress",
+          "payment",
+          "sms",
+          "diagnostics_alerting",
+          "release_materials",
+        ]
         : [],
     apiBaseUrl,
     gatewayBaseUrl,

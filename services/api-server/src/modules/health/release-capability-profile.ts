@@ -7,6 +7,9 @@ const deferredCapabilities = [
   "agent",
   "egress",
   "payment",
+  "sms",
+  "diagnostics_alerting",
+  "release_materials",
 ] as const;
 
 export function getReleaseCapabilityProfileReadiness() {
