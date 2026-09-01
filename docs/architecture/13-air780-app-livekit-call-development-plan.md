@@ -11,6 +11,15 @@ LATEST_DELTA_TESTS_AND_DEPLOYMENT_DEFERRED / FORMAL_H2_H5_BATCH_ACCEPTANCE_DEFER
 默认相关功能通过。因此当前开发与交付不再以 Gate 0B 复测为阻塞；历史 Gate 矩阵仍保留
 原证据等级，明确区分用户验收结论与本轮未生成的独立 H2–H5 证据。
 
+> **2026-09-01 当前证据覆盖说明**：上述2026-08-12“默认通过”不再代表当前工程事实。
+> 001.006/001.007 两次真实无TTS通话均复现接通初段低噪；001.007在
+> `record→external source→首块零PCM ACK`后才上报connected，但低噪不变；真实电话期间
+> `routedAudioChunks/publishedFrames`仍无增长。官方接口和公开源码明确把external source定义为
+> “附加到录音/上行通道”，没有physical MIC source-select、TX replacement或route readback。
+> 因此当前口径覆盖为 `M1 PARTIAL / M2 FAIL / M3 BLOCKED_VENDOR_CORE_API /
+> Gate0B BLOCKED_UNVERIFIED`。CORE接口与供应商交付规格见
+> [14-air780-core-tx-replace-interface-spec-20260901.md](./14-air780-core-tx-replace-interface-spec-20260901.md)。
+
 ## 1. 目标与完成口径
 
 本计划把现有独立组件接成一条可从 App 发起的 Air780 电话产品链。目标架构固定为：
