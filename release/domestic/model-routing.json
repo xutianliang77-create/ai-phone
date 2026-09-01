@@ -3,7 +3,7 @@
   "activeProfile": "domestic_server_qwen3_hymt2_voxcpm2",
   "profiles": {
     "domestic_server_qwen3_hymt2_voxcpm2": {
-      "description": "Wujie V1 server route: Qwen3-ASR-1.7B vLLM + MarbleNet, Hy-MT2, VoxCPM2, and active CPU Sortformer.",
+      "description": "Wujie V1 isolated core route: Qwen3-ASR-1.7B vLLM + MarbleNet, Hy-MT2, VoxCPM2, active CPU Sortformer, and no shared LLM refinement.",
       "asr": {
         "provider": "http_qwen3_asr_vllm",
         "model": "Qwen3-ASR-1.7B-vLLM0.14-canary",
@@ -25,10 +25,10 @@
         "contract": "Internal HTTP side path: /speaker/sessions + /speaker/frames"
       },
       "llm": {
-        "provider": "openai_compatible",
-        "correctionModel": "qwen3.8-27b-uncensored-q4-k-m",
-        "reviewModel": "qwen3.8-27b-uncensored-q4-k-m",
-        "contract": "OpenAI-compatible /v1/chat/completions"
+        "provider": "off",
+        "correctionModel": "none",
+        "reviewModel": "none",
+        "contract": "Disabled in the isolated core route"
       },
       "env": {
         "gateway": {
@@ -44,24 +44,18 @@
           "SPEAKER_HTTP_BASE_URL": "http://127.0.0.1:8022",
           "SPEAKER_HTTP_API_KEY": "local-speaker-service-api-key",
           "SPEAKER_HTTP_TIMEOUT_MS": "2000",
-          "LLM_PROVIDER": "openai_compatible",
-          "LLM_BASE_URL": "http://127.0.0.1:18081/v1",
-          "LLM_CORRECTION_MODEL": "qwen3.8-27b-uncensored-q4-k-m",
-          "LLM_REVIEW_MODEL": "qwen3.8-27b-uncensored-q4-k-m",
-          "LLM_REFINEMENT_ENABLED": "true",
+          "LLM_PROVIDER": "off",
+          "LLM_REFINEMENT_ENABLED": "false",
           "REALTIME_LLM_REFINEMENT_ENABLED": "false",
-          "LLM_REVIEW_ENABLED": "true",
+          "LLM_REVIEW_ENABLED": "false",
           "LLM_CORRECTION_TIMEOUT_MS": "1200",
           "LLM_REVIEW_TIMEOUT_MS": "30000",
           "LLM_MIN_CONFIDENCE": "0.72"
         },
         "api": {
-          "LLM_PROVIDER": "openai_compatible",
-          "LLM_BASE_URL": "http://127.0.0.1:18081/v1",
-          "LLM_CORRECTION_MODEL": "qwen3.8-27b-uncensored-q4-k-m",
-          "LLM_REVIEW_MODEL": "qwen3.8-27b-uncensored-q4-k-m",
-          "LLM_REVIEW_ENABLED": "true",
-          "LLM_REFINEMENT_ENABLED": "true"
+          "LLM_PROVIDER": "off",
+          "LLM_REVIEW_ENABLED": "false",
+          "LLM_REFINEMENT_ENABLED": "false"
         },
         "translationWorker": {
           "TRANSLATION_BASE_URL": "http://127.0.0.1:8003/v1",
@@ -74,10 +68,8 @@
           "TTS_MODEL": "VoxCPM2",
           "TTS_HTTP_ENDPOINT": "http://127.0.0.1:8002/tts/synthesize",
           "TTS_HTTP_API_KEY": "local-tts-service-api-key",
-          "LLM_PROVIDER": "openai_compatible",
-          "LLM_BASE_URL": "http://127.0.0.1:18081/v1",
-          "LLM_CORRECTION_MODEL": "qwen3.8-27b-uncensored-q4-k-m",
-          "LLM_REFINEMENT_ENABLED": "true",
+          "LLM_PROVIDER": "off",
+          "LLM_REFINEMENT_ENABLED": "false",
           "LLM_CORRECTION_TIMEOUT_MS": "1200",
           "TRANSLATION_AGENT_LLM_PREWARM_TIMEOUT_MS": "10000"
         },

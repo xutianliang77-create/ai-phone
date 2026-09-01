@@ -21,6 +21,10 @@ const candidateScript = readFileSync(
   new URL("../deploy_beelink_core_candidate.sh", import.meta.url),
   "utf8",
 );
+const modelRouting = JSON.parse(readFileSync(
+  new URL("../../release/domestic/model-routing.json", import.meta.url),
+  "utf8",
+));
 const listeningGatewayScript = readFileSync(
   new URL("../deploy_beelink_listening_gateway_overlay.sh", import.meta.url),
   "utf8",
@@ -238,6 +242,19 @@ describe("Beelink app deployment contract", () => {
     expect(compose).not.toContain(
       "container_name: ${AI_PHONE_CONTAINER_PREFIX:-ai-phone}-translation-agent",
     );
+  });
+
+  it("keeps the isolated core route off the Maruko LLM", () => {
+    const profile = modelRouting.profiles[modelRouting.activeProfile];
+    expect(profile.llm.provider).toBe("off");
+    for (const group of ["gateway", "api", "translationWorker"]) {
+      expect(profile.env[group].LLM_PROVIDER).toBe("off");
+      expect(profile.env[group].LLM_REFINEMENT_ENABLED).toBe("false");
+    }
+    expect(profile.env.gateway.LLM_REVIEW_ENABLED).toBe("false");
+    expect(profile.env.api.LLM_REVIEW_ENABLED).toBe("false");
+    expect(JSON.stringify(profile)).not.toContain("18081");
+    expect(JSON.stringify(profile)).not.toContain("qwen3.8-27b");
   });
 
   it("restarts recoverable workers inside the single application container", () => {
