@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
 import { describe, expect, test } from "vitest";
 
 const script = readFileSync(
@@ -37,6 +38,18 @@ describe("core candidate runtime identity deployment contract", () => {
     const sourceBuild = script.indexOf("run check:source-build", isolation);
     expect(isolation).toBeGreaterThan(deployStart);
     expect(sourceBuild).toBeGreaterThan(isolation);
+  });
+
+  test("keeps the remote resource-isolation heredoc valid bash", () => {
+    const match = script.match(
+      /require_remote_resource_isolation\(\) \{[\s\S]*?<<'REMOTE'\n([\s\S]*?)\nREMOTE\n\}/,
+    );
+    expect(match).not.toBeNull();
+    const syntax = spawnSync("bash", ["-n"], {
+      input: match[1],
+      encoding: "utf8",
+    });
+    expect(syntax.status, syntax.stderr).toBe(0);
   });
 
   test("freezes source, image, and canonical config identity before start", () => {

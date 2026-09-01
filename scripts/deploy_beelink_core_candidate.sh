@@ -129,14 +129,14 @@ if docker ps --format '{{.Names}}' | grep -Eq '^maruko-'; then
 fi
 for cmdline in /proc/[0-9]*/cmdline; do
   [[ -r "$cmdline" ]] || continue
-  command="$(tr '\0' ' ' <"$cmdline")"
-  case "$command" in
-    *'/data/models/maruko-'*|*'/data/models/wanziaiphone/'*|
-    *'/data/models/xiaozhi-esp32-server/'*|*'/data/models/qwen38-'*)
-      echo "Core candidate requires a dedicated host; running Maruko process found" >&2
-      exit 2
-      ;;
-  esac
+  process_command="$(tr '\0' ' ' <"$cmdline")"
+  if [[ "$process_command" == *'/data/models/maruko-'* ||
+        "$process_command" == *'/data/models/wanziaiphone/'* ||
+        "$process_command" == *'/data/models/xiaozhi-esp32-server/'* ||
+        "$process_command" == *'/data/models/qwen38-'* ]]; then
+    echo "Core candidate requires a dedicated host; running Maruko process found" >&2
+    exit 2
+  fi
 done
 maruko_ports='18000,18002,18003,18004,18081,18084,18100,18788,18789,18883,18884,18887'
 if ss -H -ltn | awk -v protected="$maruko_ports" '
