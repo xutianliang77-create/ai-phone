@@ -15,6 +15,7 @@ COPY services/pstn-bridge ./services/pstn-bridge
 COPY services/srt-ingress-bridge ./services/srt-ingress-bridge
 COPY services/voice-agent-runtime ./services/voice-agent-runtime
 COPY services/air-device-gateway ./services/air-device-gateway
+COPY release/domestic/model-routing.json ./release/domestic/model-routing.json
 COPY infra/postgres ./infra/postgres
 COPY infra/ai-phone-server/app-container-entrypoint.mjs \
   infra/ai-phone-server/container-healthcheck.mjs \

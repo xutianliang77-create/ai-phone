@@ -72,6 +72,12 @@ describe("Beelink app deployment contract", () => {
     expect(dockerfile).toContain("container-healthcheck.mjs");
   });
 
+  it("copies the pinned model routing contract into the runtime image", () => {
+    expect(dockerfile).toContain(
+      "COPY release/domestic/model-routing.json ./release/domestic/model-routing.json",
+    );
+  });
+
   it("requires an explicit production profile and fails closed before env generation", () => {
     expect(script).toContain('AI_PHONE_DEPLOY_PROFILE="${AI_PHONE_DEPLOY_PROFILE:-test}"');
     expect(script).toContain("production_env_preflight");
