@@ -24,6 +24,21 @@ describe("core candidate runtime identity deployment contract", () => {
     expect(remoteMkdir).toBeGreaterThan(portCheck);
   });
 
+  test("blocks deployment and status on a host running Maruko resources", () => {
+    expect(script).toContain("require_remote_resource_isolation");
+    expect(script).toContain("running Maruko containers found");
+    expect(script).toContain("running Maruko process found");
+    expect(script).toContain("Maruko listener found");
+    const deployStart = script.lastIndexOf("preflight\nrequire_clean_source");
+    const isolation = script.indexOf(
+      "require_remote_resource_isolation",
+      deployStart,
+    );
+    const sourceBuild = script.indexOf("run check:source-build", isolation);
+    expect(isolation).toBeGreaterThan(deployStart);
+    expect(sourceBuild).toBeGreaterThan(isolation);
+  });
+
   test("freezes source, image, and canonical config identity before start", () => {
     for (const key of [
       "WUJIE_REQUIRE_TRACEABLE_RUNTIME",

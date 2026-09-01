@@ -128,6 +128,16 @@ release gate with `DOMESTIC_RELEASE_CAPABILITY_PROFILE=core_translation`.
 Preflight also rejects stable container names, the stable remote root, reserved
 ports, test accounts, debug OTP, and enabled SIP/Agent/Egress switches.
 
+The candidate also requires a dedicated application and compute resource
+domain. `WUJIE_RESOURCE_ISOLATION_MODE=dedicated_host`, an isolated
+`WUJIE_RESOURCE_DOMAIN`, and `WUJIE_DEDICATED_MODEL_HOSTS` are mandatory. Every
+model endpoint in both the private env and the selected model-routing profile
+must resolve to that allowlist. Before any remote write, deployment fails if the
+target has a running Maruko container, process root, or protected listener. It
+never stops Maruko automatically. A single non-MIG GPU cannot provide zero
+contention to both products concurrently, so the existing shared Beelink is not
+a valid simultaneous target; use a separate compute host/GPU.
+
 ```bash
 CANDIDATE_ENV_FILE=release/domestic/release.env \
   npm run check:core-candidate-deploy -- --json

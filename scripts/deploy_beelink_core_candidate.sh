@@ -15,7 +15,7 @@ PUBLIC_HOST="${PUBLIC_HOST:-100.110.127.117}"
 API_PORT="${API_PORT:-3320}"
 REALTIME_PORT="${REALTIME_PORT:-3321}"
 LIVEKIT_AGENT_PORT="${LIVEKIT_AGENT_PORT:-8381}"
-CANDIDATE_RESERVED_PORTS="${CANDIDATE_RESERVED_PORTS:-3110,3111,3210,3211,8081,8082,3310}"
+CANDIDATE_RESERVED_PORTS="${CANDIDATE_RESERVED_PORTS:-3110,3111,3210,3211,8081,8082,3310,18000,18002,18003,18004,18081,18084,18100,18788,18789,18883,18884,18887}"
 SOURCE_COMMIT="$(git -C "$ROOT_DIR" rev-parse HEAD)"
 SOURCE_TREE="$(git -C "$ROOT_DIR" rev-parse 'HEAD^{tree}')"
 RUNTIME_CANDIDATE_ID="${WUJIE_RUNTIME_CANDIDATE_ID:-wujie-core-${SOURCE_COMMIT:0:12}-$(date -u +%Y%m%dT%H%M%SZ)}"
@@ -120,7 +120,38 @@ remote_compose() {
        -f '$REMOTE_SOURCE/infra/ai-phone-server/docker-compose.yaml' $*"
 }
 
+require_remote_resource_isolation() {
+  ssh "$REMOTE_HOST" 'bash -s' <<'REMOTE'
+set -euo pipefail
+if docker ps --format '{{.Names}}' | grep -Eq '^maruko-'; then
+  echo "Core candidate requires a dedicated host; running Maruko containers found" >&2
+  exit 2
+fi
+for cmdline in /proc/[0-9]*/cmdline; do
+  [[ -r "$cmdline" ]] || continue
+  command="$(tr '\0' ' ' <"$cmdline")"
+  case "$command" in
+    *'/data/models/maruko-'*|*'/data/models/wanziaiphone/'*|
+    *'/data/models/xiaozhi-esp32-server/'*|*'/data/models/qwen38-'*)
+      echo "Core candidate requires a dedicated host; running Maruko process found" >&2
+      exit 2
+      ;;
+  esac
+done
+maruko_ports='18000,18002,18003,18004,18081,18084,18100,18788,18789,18883,18884,18887'
+if ss -H -ltn | awk -v protected="$maruko_ports" '
+  BEGIN { split(protected, ports, ","); for (index in ports) wanted[ports[index]]=1 }
+  { address=$4; sub(/^.*:/, "", address); if (wanted[address]) found=1 }
+  END { exit found ? 0 : 1 }
+'; then
+  echo "Core candidate requires a dedicated host; Maruko listener found" >&2
+  exit 2
+fi
+REMOTE
+}
+
 status() {
+  require_remote_resource_isolation
   remote_compose "ps"
   local api_health gateway_health agent_health runtime_manifest
   api_health="$(curl -fsS --max-time 5 "$API_STATUS_URL")"
@@ -192,6 +223,7 @@ fi
 
 preflight
 require_clean_source
+require_remote_resource_isolation
 npm --prefix "$ROOT_DIR" run check:source-build -- --json
 require_clean_source
 require_remote_ports_free

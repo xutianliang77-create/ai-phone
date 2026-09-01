@@ -1,11 +1,30 @@
-import { existsSync, statSync } from "node:fs";
+import { existsSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
-import { checkDomesticReleaseEnvFile } from
+import {
+  checkDomesticReleaseEnvFile,
+  parseEnvFile,
+} from
   "./domestic_release_env_file_check.mjs";
+import { renderModelRoutingEnv } from "./model_routing_config.mjs";
 
 const stableProjectNames = new Set(["ai-phone"]);
 const stableRemoteRoots = new Set(["/data/models/ai-phone-server"]);
-const defaultReservedPorts = [3110, 3111, 3210, 3211, 8081, 8082, 3310];
+const defaultReservedPorts = [
+  3110, 3111, 3210, 3211, 8081, 8082, 3310,
+  18000, 18002, 18003, 18004, 18081, 18084, 18100,
+  18788, 18789, 18883, 18884, 18887,
+];
+const modelEndpointKeys = new Set([
+  "ASR_HTTP_ENDPOINT",
+  "ASR_HTTP_FLUSH_ENDPOINT",
+  "ASR_HTTP_HEALTH_URL",
+  "TRANSLATION_BASE_URL",
+  "TTS_HTTP_ENDPOINT",
+  "TTS_STREAM_ENDPOINT",
+  "TTS_WARMUP_ENDPOINT",
+  "SPEAKER_HTTP_BASE_URL",
+  "LLM_BASE_URL",
+]);
 
 export function checkCoreTranslationCandidateDeploy(options = {}) {
   const root = path.resolve(options.root ?? process.cwd());
@@ -23,6 +42,7 @@ export function checkCoreTranslationCandidateDeploy(options = {}) {
   if (release.status !== "ready") issues.push(...release.issues);
   requireExactPrivateMode(envFile, checks, issues);
   requireCoreProfile(release.profile, checks, issues);
+  requireDedicatedResources(root, envFile, checks, issues);
 
   const composeProject = options.composeProject ?? "ai-phone-core-candidate";
   const containerPrefix = options.containerPrefix ?? composeProject;
@@ -68,6 +88,118 @@ export function checkCoreTranslationCandidateDeploy(options = {}) {
       ? []
       : ["Correct the candidate deployment contract before any remote write."],
   };
+}
+
+function requireDedicatedResources(root, envFile, checks, issues) {
+  const env = readCandidateEnv(envFile);
+  const modeReady = env.WUJIE_RESOURCE_ISOLATION_MODE === "dedicated_host";
+  record(checks, "candidate_resource_isolation_mode", modeReady, {
+    expected: "dedicated_host",
+    actual: env.WUJIE_RESOURCE_ISOLATION_MODE ?? "",
+  });
+  if (!modeReady) {
+    issues.push(
+      "core candidate requires WUJIE_RESOURCE_ISOLATION_MODE=dedicated_host",
+    );
+  }
+
+  const resourceDomain = env.WUJIE_RESOURCE_DOMAIN ?? "";
+  const domainReady = /^wujie-[a-z0-9][a-z0-9-]{2,62}$/.test(resourceDomain) &&
+    !/(maruko|xiaozhi)/i.test(resourceDomain);
+  record(checks, "candidate_resource_domain", domainReady, {
+    value: resourceDomain,
+  });
+  if (!domainReady) {
+    issues.push("core candidate requires an isolated WUJIE_RESOURCE_DOMAIN");
+  }
+
+  const dedicatedHosts = commaSeparated(env.WUJIE_DEDICATED_MODEL_HOSTS)
+    .map(normalizeHostname)
+    .filter(Boolean);
+  const hostsReady = dedicatedHosts.length > 0;
+  record(checks, "candidate_dedicated_model_hosts", hostsReady, {
+    hosts: dedicatedHosts,
+  });
+  if (!hostsReady) {
+    issues.push("core candidate requires WUJIE_DEDICATED_MODEL_HOSTS");
+  }
+
+  const endpoints = candidateModelEndpoints(root, env);
+  const violations = endpoints.filter((endpoint) =>
+    !endpoint.hostname || !dedicatedHosts.includes(endpoint.hostname)
+  );
+  const endpointsReady = endpoints.length > 0 && violations.length === 0;
+  record(checks, "candidate_model_endpoint_isolation", endpointsReady, {
+    endpoints: endpoints.map(endpointSummary),
+    violations: violations.map(endpointSummary),
+  });
+  if (!endpointsReady) {
+    issues.push(
+      "core candidate model endpoints must use WUJIE_DEDICATED_MODEL_HOSTS",
+    );
+  }
+}
+
+function readCandidateEnv(envFile) {
+  if (!existsSync(envFile)) return {};
+  return parseEnvFile(readFileSync(envFile, "utf8"));
+}
+
+function candidateModelEndpoints(root, env) {
+  const endpoints = endpointEntries("release_env", env);
+  if (!env.MODEL_ROUTING_FILE) return endpoints;
+  try {
+    const rendered = renderModelRoutingEnv(
+      path.resolve(root, env.MODEL_ROUTING_FILE),
+      env.MODEL_ROUTING_PROFILE,
+    );
+    for (const [group, values] of Object.entries(rendered.groups)) {
+      endpoints.push(...endpointEntries(`model_routing:${group}`, values));
+    }
+  } catch {
+    // The domestic release gate reports malformed routing separately.
+  }
+  return endpoints;
+}
+
+function endpointEntries(source, values) {
+  return Object.entries(values)
+    .filter(([key, value]) => modelEndpointKeys.has(key) && value)
+    .map(([key, value]) => {
+      try {
+        const url = new URL(value);
+        return {
+          source,
+          key,
+          hostname: normalizeHostname(url.hostname),
+          port: url.port || defaultPort(url.protocol),
+        };
+      } catch {
+        return { source, key, hostname: "", port: "" };
+      }
+    });
+}
+
+function endpointSummary(endpoint) {
+  return {
+    source: endpoint.source,
+    key: endpoint.key,
+    hostname: endpoint.hostname,
+    port: endpoint.port,
+  };
+}
+
+function commaSeparated(value = "") {
+  return value.split(",").map((item) => item.trim()).filter(Boolean);
+}
+
+function normalizeHostname(value = "") {
+  return value.trim().replace(/^\[|\]$/g, "").toLowerCase();
+}
+
+function defaultPort(protocol) {
+  return protocol === "https:" || protocol === "wss:" ? "443" :
+    protocol === "http:" || protocol === "ws:" ? "80" : "";
 }
 
 function requireExactPrivateMode(filePath, checks, issues) {
