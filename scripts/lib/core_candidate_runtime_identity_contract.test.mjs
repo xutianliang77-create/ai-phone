@@ -16,6 +16,14 @@ describe("core candidate runtime identity deployment contract", () => {
     expect(sync).toBeGreaterThan(preflight);
   });
 
+  test("checks live port ownership before creating the remote candidate", () => {
+    const preflight = script.lastIndexOf("preflight\nrequire_clean_source");
+    const portCheck = script.indexOf("require_remote_ports_free", preflight);
+    const remoteMkdir = script.indexOf('mkdir -p \'$REMOTE_SOURCE\'', portCheck);
+    expect(portCheck).toBeGreaterThan(preflight);
+    expect(remoteMkdir).toBeGreaterThan(portCheck);
+  });
+
   test("freezes source, image, and canonical config identity before start", () => {
     for (const key of [
       "WUJIE_REQUIRE_TRACEABLE_RUNTIME",

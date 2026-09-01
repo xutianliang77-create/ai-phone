@@ -209,6 +209,11 @@ describe("Beelink app deployment contract", () => {
     );
     expect(candidateScript).toContain("test \"$(stat -c '%a' \"$incoming\")\" = \"600\"");
     expect(candidateScript).toContain("install -m 600");
+    expect(candidateScript).toContain("require_remote_ports_free");
+    expect(candidateScript).not.toContain("--chmod=F600");
+    expect(candidateScript).toContain(
+      'rsync -a "$CANDIDATE_ENV_FILE"',
+    );
     expect(candidateScript).toContain("server.env.rollback");
     expect(candidateScript).toContain("--exclude='PROGRESS_LOG.md'");
     expect(candidateScript).toContain("--exclude='release/domestic/release.env'");

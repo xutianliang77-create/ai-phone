@@ -99,6 +99,17 @@ require_clean_source() {
   }
 }
 
+require_remote_ports_free() {
+  ssh "$REMOTE_HOST" \
+    "for port in '$API_PORT' '$REALTIME_PORT' '$LIVEKIT_AGENT_PORT'; do \
+       if ss -H -ltn | awk -v expected=\"\$port\" \
+         '{ address=\$4; sub(/^.*:/, \"\", address); if (address == expected) found=1 } \
+          END { exit found ? 0 : 1 }'; then \
+         echo \"Candidate port \$port is already in use\" >&2; exit 2; \
+       fi; \
+     done"
+}
+
 remote_compose() {
   ssh "$REMOTE_HOST" \
     "AI_PHONE_ENV_FILE='$REMOTE_RUNTIME/server.env' \
@@ -170,6 +181,7 @@ preflight
 require_clean_source
 npm --prefix "$ROOT_DIR" run check:source-build -- --json
 require_clean_source
+require_remote_ports_free
 ssh "$REMOTE_HOST" \
   "mkdir -p '$REMOTE_SOURCE' '$REMOTE_RUNTIME/data/voice-references'"
 rsync -az --delete \
@@ -188,7 +200,7 @@ rsync -az --delete \
   --exclude='test-audio/' \
   --exclude='services/model-services/' \
   "$ROOT_DIR/" "$REMOTE_HOST:$REMOTE_SOURCE/"
-rsync -a --chmod=F600 "$CANDIDATE_ENV_FILE" \
+rsync -a "$CANDIDATE_ENV_FILE" \
   "$REMOTE_HOST:$REMOTE_RUNTIME/release.env.incoming"
 
 ssh "$REMOTE_HOST" \
