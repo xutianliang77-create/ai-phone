@@ -138,12 +138,8 @@ for cmdline in /proc/[0-9]*/cmdline; do
     exit 2
   fi
 done
-maruko_ports='18000,18002,18003,18004,18081,18084,18100,18788,18789,18883,18884,18887'
-if ss -H -ltn | awk -v protected="$maruko_ports" '
-  BEGIN { split(protected, ports, ","); for (index in ports) wanted[ports[index]]=1 }
-  { address=$4; sub(/^.*:/, "", address); if (wanted[address]) found=1 }
-  END { exit found ? 0 : 1 }
-'; then
+if ss -H -ltn | grep -Eq \
+  ':(18000|18002|18003|18004|18081|18084|18100|18788|18789|18883|18884|18887)([[:space:]]|$)'; then
   echo "Core candidate requires a dedicated host; Maruko listener found" >&2
   exit 2
 fi

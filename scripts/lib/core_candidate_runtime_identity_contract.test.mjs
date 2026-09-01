@@ -52,6 +52,20 @@ describe("core candidate runtime identity deployment contract", () => {
     expect(syntax.status, syntax.stderr).toBe(0);
   });
 
+  test("rejects a protected Maruko listener in the remote guard", () => {
+    const match = script.match(
+      /require_remote_resource_isolation\(\) \{[\s\S]*?<<'REMOTE'\n([\s\S]*?)\nREMOTE\n\}/,
+    );
+    expect(match).not.toBeNull();
+    const probe = spawnSync("bash", ["-c", [
+      "docker() { :; }",
+      "ss() { printf 'LISTEN 0 128 127.0.0.1:18003 0.0.0.0:*\\n'; }",
+      match[1],
+    ].join("\n")], { encoding: "utf8" });
+    expect(probe.status).toBe(2);
+    expect(probe.stderr).toContain("Maruko listener found");
+  });
+
   test("freezes source, image, and canonical config identity before start", () => {
     for (const key of [
       "WUJIE_REQUIRE_TRACEABLE_RUNTIME",
