@@ -58,4 +58,19 @@ describe("core candidate runtime identity deployment contract", () => {
       "candidate runtime ${runtimeKey} does not match manifest",
     );
   });
+
+  test("keeps the advertised realtime endpoint and handshake host in lockstep", () => {
+    expect(script).toContain(
+      'set_env REALTIME_WS_ENDPOINT "ws://$PUBLIC_HOST:$REALTIME_PORT/realtime"',
+    );
+    expect(script).toContain(
+      'set_env REALTIME_ALLOWED_HOSTS "$PUBLIC_HOST:$REALTIME_PORT"',
+    );
+    expect(script).toContain(
+      "candidate Gateway does not allow its advertised realtime host",
+    );
+    expect(script).toContain(
+      'set_env REALTIME_ALLOW_NON_BROWSER_CLIENTS_WITHOUT_ORIGIN true',
+    );
+  });
 });

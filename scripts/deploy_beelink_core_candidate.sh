@@ -129,13 +129,26 @@ status() {
   runtime_manifest="$(ssh "$REMOTE_HOST" \
     "cat '$REMOTE_RUNTIME/candidate-manifest.json'")"
   API_HEALTH="$api_health" GATEWAY_HEALTH="$gateway_health" \
-    AGENT_HEALTH="$agent_health" RUNTIME_MANIFEST="$runtime_manifest" node <<'NODE'
+    AGENT_HEALTH="$agent_health" RUNTIME_MANIFEST="$runtime_manifest" \
+    EXPECTED_REALTIME_ENDPOINT="ws://$PUBLIC_HOST:$REALTIME_PORT/realtime" \
+    EXPECTED_REALTIME_HOST="$PUBLIC_HOST:$REALTIME_PORT" node <<'NODE'
 const api = JSON.parse(process.env.API_HEALTH);
 const gateway = JSON.parse(process.env.GATEWAY_HEALTH);
 const agent = JSON.parse(process.env.AGENT_HEALTH);
 const manifest = JSON.parse(process.env.RUNTIME_MANIFEST);
 if (api.status !== "ok") throw new Error("candidate API is not healthy");
 if (gateway.status !== "ok") throw new Error("candidate Gateway is not healthy");
+if (api.realtimeWsEndpoint !== process.env.EXPECTED_REALTIME_ENDPOINT) {
+  throw new Error("candidate API advertises an unexpected realtime endpoint");
+}
+if (!gateway.publicEntryProtection?.allowedHosts?.includes(
+  process.env.EXPECTED_REALTIME_HOST,
+)) {
+  throw new Error("candidate Gateway does not allow its advertised realtime host");
+}
+if (gateway.publicEntryProtection?.allowNonBrowserClientsWithoutOrigin !== true) {
+  throw new Error("candidate Gateway does not admit the native mobile client");
+}
 const profile = api.capabilityProfileReadiness;
 if (profile?.status !== "ready" || profile.profile !== "core_translation" ||
     profile.explicit !== true) {
@@ -248,6 +261,8 @@ set_env LIVEKIT_AGENT_PORT "$LIVEKIT_AGENT_PORT"
 set_env API_BASE_URL "http://127.0.0.1:$API_PORT"
 set_env API_HEALTH_URL "http://127.0.0.1:$API_PORT/health"
 set_env REALTIME_WS_ENDPOINT "ws://$PUBLIC_HOST:$REALTIME_PORT/realtime"
+set_env REALTIME_ALLOWED_HOSTS "$PUBLIC_HOST:$REALTIME_PORT"
+set_env REALTIME_ALLOW_NON_BROWSER_CLIENTS_WITHOUT_ORIGIN true
 set_env GATEWAY_HEALTH_URL "http://127.0.0.1:$REALTIME_PORT/health"
 set_env TRANSLATION_AGENT_HEALTH_URL \
   "http://127.0.0.1:$LIVEKIT_AGENT_PORT/worker"
