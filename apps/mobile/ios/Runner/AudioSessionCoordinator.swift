@@ -15,6 +15,7 @@ final class AudioSessionCoordinator: NSObject, FlutterStreamHandler {
   private var configured = false
   private var interrupted = false
   private var eventSink: FlutterEventSink?
+  private weak var lastInvalidatedEngine: AVAudioEngine?
 
   override init() {
     super.init()
@@ -29,6 +30,12 @@ final class AudioSessionCoordinator: NSObject, FlutterStreamHandler {
       selector: #selector(handleRouteChange(_:)),
       name: AVAudioSession.routeChangeNotification,
       object: session
+    )
+    NotificationCenter.default.addObserver(
+      self,
+      selector: #selector(handleEngineConfigurationChange(_:)),
+      name: .AVAudioEngineConfigurationChange,
+      object: nil
     )
   }
 
@@ -225,6 +232,24 @@ final class AudioSessionCoordinator: NSObject, FlutterStreamHandler {
       "type": "route.changed",
       "route": currentRoute(),
     ])
+  }
+
+  @objc private func handleEngineConfigurationChange(_ notification: Notification) {
+    guard let engine = notification.object as? AVAudioEngine else { return }
+    // The engine notification runs on an internal queue; never tear it down there.
+    DispatchQueue.main.async { [weak self, weak engine] in
+      guard let self, let engine, !engine.isRunning else { return }
+      var shouldRebuild = false
+      self.withLock {
+        guard self.captureOwners.contains(self.flutterCaptureOwner),
+              !self.interrupted, self.lastInvalidatedEngine !== engine else { return }
+        self.lastInvalidatedEngine = engine
+        shouldRebuild = true
+      }
+      if shouldRebuild {
+        self.eventSink?(["type": "capture.invalidated"])
+      }
+    }
   }
 
   private func currentRoute() -> String {

@@ -30,6 +30,7 @@ extension RealtimeControllerStart on RealtimeController {
   }
 
   Future<void> _startSession(int generation) async {
+    _captureInvalidated = false;
     _activeTimeClock.reset();
     _session = null;
     _remainingSeconds = null;

@@ -6,6 +6,7 @@ enum AudioSessionEventType {
   interruptionBegan,
   interruptionEnded,
   routeChanged,
+  captureInvalidated,
 }
 
 enum AudioOutputRoute {
@@ -47,6 +48,7 @@ class AudioSessionEvent {
       'interruption.began' => AudioSessionEventType.interruptionBegan,
       'interruption.ended' => AudioSessionEventType.interruptionEnded,
       'route.changed' => AudioSessionEventType.routeChanged,
+      'capture.invalidated' => AudioSessionEventType.captureInvalidated,
       _ => null,
     };
     if (type == null) return null;

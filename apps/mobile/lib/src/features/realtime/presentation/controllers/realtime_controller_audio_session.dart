@@ -10,6 +10,14 @@ extension RealtimeControllerAudioSession on RealtimeController {
   }
 
   void _handleAudioSessionEvent(AudioSessionEvent event) {
+    if (event.type == AudioSessionEventType.captureInvalidated) {
+      if (_status == RealtimeStatus.active ||
+          _status == RealtimeStatus.connecting) {
+        _captureInvalidated = true;
+        unawaited(_recoverCaptureAfterAudioChange(rebuildOnly: true));
+      }
+      return;
+    }
     if (event.type == AudioSessionEventType.routeChanged &&
         event.route != null) {
       _speechCaptureGate.updateRoute(event.route!);
@@ -19,10 +27,11 @@ extension RealtimeControllerAudioSession on RealtimeController {
         !event.shouldResume) {
       return;
     }
-    unawaited(_recoverCaptureAfterAudioInterruption());
+    unawaited(_recoverCaptureAfterAudioChange());
   }
 
-  Future<void> _recoverCaptureAfterAudioInterruption() async {
+  Future<void> _recoverCaptureAfterAudioChange(
+      {bool rebuildOnly = false}) async {
     if (_audioSessionRecoveryInFlight ||
         _status != RealtimeStatus.active ||
         _session == null ||
@@ -30,17 +39,18 @@ extension RealtimeControllerAudioSession on RealtimeController {
       return;
     }
     _audioSessionRecoveryInFlight = true;
+    _captureInvalidated = false;
     try {
       if (_usesDeviceAsr) {
         await _mobileAsrProvider?.stop();
-        await _audioSessionCoordinator.endCapture();
+        if (!rebuildOnly) await _audioSessionCoordinator.endCapture();
         await _drainDeviceAsrStopEvents();
         if (_status == RealtimeStatus.active && _session != null) {
           await _startMobileAsrProvider();
         }
       } else {
         await _audioCapture.stop();
-        await _audioSessionCoordinator.endCapture();
+        if (!rebuildOnly) await _audioSessionCoordinator.endCapture();
         await _audioSubscription?.cancel();
         _audioSubscription = null;
         if (_status == RealtimeStatus.active && _session != null) {
@@ -51,6 +61,9 @@ extension RealtimeControllerAudioSession on RealtimeController {
       _fail(await _failureMessage(error));
     } finally {
       _audioSessionRecoveryInFlight = false;
+      if (_captureInvalidated) {
+        unawaited(_recoverCaptureAfterAudioChange(rebuildOnly: true));
+      }
     }
   }
 

@@ -116,6 +116,7 @@ class RealtimeController extends ChangeNotifier {
   bool _resumeAfterLifecyclePause = false, _stopInFlight = false;
   bool _disposed = false;
   bool _audioSessionRecoveryInFlight = false;
+  bool _captureInvalidated = false;
   int _startGeneration = 0;
   Future<void>? _failureCleanup;
   final _localPartialFlush = _LocalPartialTranslationFlush();
@@ -274,6 +275,13 @@ class RealtimeController extends ChangeNotifier {
     if (!transition.changed) return true;
     _activeTimeClock.transition(_status, status);
     _status = transition.current;
+    if (status == RealtimeStatus.active && _captureInvalidated) {
+      unawaited(_recoverCaptureAfterAudioChange(rebuildOnly: true));
+    }
+    if (status != RealtimeStatus.active &&
+        status != RealtimeStatus.connecting) {
+      _captureInvalidated = false;
+    }
     if (!isTerminalRealtimeStatus(status)) _message = null;
     _notify();
     return true;

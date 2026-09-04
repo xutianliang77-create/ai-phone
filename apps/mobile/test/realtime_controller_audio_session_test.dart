@@ -7,12 +7,58 @@ import 'package:translation_mobile/src/features/realtime/presentation/controller
 import 'package:translation_mobile/src/platform/asr/asr_text_segment.dart';
 import 'package:translation_mobile/src/platform/asr/mobile_asr_provider.dart';
 import 'package:translation_mobile/src/platform/audio/audio_session_coordinator.dart';
+import 'package:translation_mobile/src/platform/audio/audio_capture.dart';
 
 import 'helpers/fake_audio_session_coordinator.dart';
 import 'helpers/realtime_controller_test_helpers.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  test('rebuilds invalidated capture without deactivating its audio session',
+      () async {
+    final repository = FakeRealtimeRepository();
+    final capture = FakeAudioCapture();
+    final audioSession = FakeAudioSessionCoordinator();
+    final controller = realtimeControllerForTest(repository, capture,
+        audioSessionCoordinator: audioSession, realtimeMode: 'meeting');
+    addTearDown(controller.dispose);
+    await controller.start();
+    final event =
+        AudioSessionEvent.tryFromMap(const {'type': 'capture.invalidated'});
+    expect(event, isNotNull);
+    audioSession.emit(event!);
+    await pumpEventQueue();
+    expect(controller.status, RealtimeStatus.active);
+    expect(capture.startCalls, 2);
+    expect(capture.stopCalls, 1);
+    expect(audioSession.endCaptureCalls, 0);
+    capture.emitFrame(1);
+    await pumpEventQueue();
+    expect(repository.sentFrameSequences, [1]);
+    await controller.pause();
+    audioSession.emit(event);
+    await pumpEventQueue();
+    expect(capture.startCalls, 2);
+    expect(controller.status, RealtimeStatus.paused);
+  });
+
+  test('reports a failed capture rebuild instead of silently running',
+      () async {
+    final repository = FakeRealtimeRepository();
+    final audioSession = FakeAudioSessionCoordinator();
+    final controller = realtimeControllerForTest(
+        repository, _FailingRebuildCapture(),
+        audioSessionCoordinator: audioSession);
+    addTearDown(controller.dispose);
+    await controller.start();
+    audioSession.emit(
+        AudioSessionEvent.tryFromMap(const {'type': 'capture.invalidated'})!);
+    await pumpEventQueue();
+    expect(controller.status, RealtimeStatus.failed);
+    expect(controller.message, contains('capture rebuild failed'));
+    expect(repository.endedSessionIds, ['sess_1']);
+  });
 
   test('restarts online capture after a resumable audio interruption',
       () async {
@@ -217,6 +263,14 @@ void main() {
       'voiceProcessing': false,
     });
   });
+}
+
+class _FailingRebuildCapture extends FakeAudioCapture {
+  @override
+  Future<void> start(AudioCaptureConfig config) async {
+    if (startCalls > 0) throw StateError('capture rebuild failed');
+    await super.start(config);
+  }
 }
 
 class _RestartOnlyAudioCapture extends FakeAudioCapture {
