@@ -124,6 +124,7 @@ export type TtsVoiceMode =
 
 export interface TtsVoiceConfig {
   mode: TtsVoiceMode;
+  presetId?: string;
   voiceProfileId?: string;
   referenceAudioId?: string;
   referenceTranscript?: string;
@@ -221,7 +222,8 @@ export interface CallTtsPlaybackInterruptInput {
   generation: number;
   targetLegId: string;
   targetSpeakerRole: CallAudioSpeakerRole;
-  reason: "barge_in" | "session_end" | "superseded" | "failure";
+  reason: "barge_in" | "manual_pause" | "session_end" |
+    "superseded" | "failure";
   idempotencyKey: string;
 }
 
@@ -257,6 +259,31 @@ export interface CallSpeechPipeline extends CallTtsVoiceSink {
   endCall(callId: string): Promise<void>;
   markCallEnded?(callId: string): void;
   addTtsAudioSink(sink: CallTtsAudioSink): void;
+}
+
+export interface TranslationUplinkPauseResult {
+  paused: boolean;
+  changed: boolean;
+  hadActivePlayback?: boolean;
+  interruption?: {
+    supported: boolean;
+    interrupted: boolean;
+    cleared: boolean;
+  };
+}
+
+export interface CallTranslationControlPipeline {
+  setTranslatedUplinkPaused(
+    callId: string,
+    paused: boolean,
+  ): Promise<TranslationUplinkPauseResult>;
+  processTypedText(input: {
+    callId: string;
+    controlOperationId: string;
+    text: string;
+    sourceLanguage: "zh" | "en";
+    targetLanguage: "zh" | "en";
+  }): Promise<void>;
 }
 
 export interface SpeechToSpeechProvider extends CallSpeechPipeline {

@@ -57,6 +57,15 @@ export class RealtimeGatewayProtection {
           !this.env.publicRateLimitKeySecret
         ? ["PUBLIC_RATE_LIMIT_KEY_SECRET is required"]
         : []),
+      ...(process.env.NODE_ENV === "production" &&
+          this.env.allowedHosts.length === 0
+        ? ["Production realtime entry protection requires REALTIME_ALLOWED_HOSTS"]
+        : []),
+      ...(this.env.allowedHosts.some(
+        (allowedHost) => normalizeHostHeader(allowedHost) === undefined,
+      )
+        ? ["REALTIME_ALLOWED_HOSTS contains an invalid exact host"]
+        : []),
       ...(limiter.status === "ready"
         ? []
         : ["Realtime handshake rate limiter is not connected"]),
@@ -75,13 +84,28 @@ export class RealtimeGatewayProtection {
       maxPendingAudioMs: this.env.maxPendingAudioMs,
       maxPendingControlEvents: this.env.maxPendingControlEvents,
       maxPendingTtsOutputs: this.env.maxPendingTtsOutputs,
+      allowedHosts: this.env.allowedHosts,
+      allowNonBrowserClientsWithoutOrigin:
+        this.env.allowNonBrowserClientsWithoutOrigin,
       issues,
     };
   }
 
+  hostAllowed(request: IncomingMessage) {
+    const requestHost = normalizeHostHeader(request.headers.host);
+    if (!requestHost) return false;
+    return this.env.allowedHosts.some(
+      (allowedHost) => normalizeHostHeader(allowedHost) === requestHost,
+    );
+  }
+
   originAllowed(request: IncomingMessage) {
-    const value = firstHeader(request.headers.origin);
-    if (!value) return true;
+    const rawValue = request.headers.origin;
+    if (rawValue === undefined) {
+      return this.env.allowNonBrowserClientsWithoutOrigin;
+    }
+    const value = singleHeader(rawValue);
+    if (!value) return false;
     let origin: string;
     try {
       origin = new URL(value).origin;
@@ -92,6 +116,9 @@ export class RealtimeGatewayProtection {
   }
 
   async reserve(request: IncomingMessage): Promise<UpgradeReservation | UpgradeRejection> {
+    if (!this.hostAllowed(request)) {
+      return { ok: false, statusCode: 403, reason: "host_not_allowed" };
+    }
     if (!this.originAllowed(request)) {
       return { ok: false, statusCode: 403, reason: "origin_not_allowed" };
     }
@@ -171,7 +198,7 @@ export function clientIpFromRequest(
 ) {
   const remote = normalizedIp(request.socket.remoteAddress) ?? "unknown";
   if (!trustedProxyAddresses.includes(remote)) return remote;
-  const forwarded = firstHeader(request.headers["x-forwarded-for"])
+  const forwarded = singleHeader(request.headers["x-forwarded-for"])
     ?.split(",")[0]?.trim();
   return normalizedIp(forwarded) ?? remote;
 }
@@ -182,8 +209,21 @@ function normalizedIp(value: string | undefined) {
   return isIP(normalized) ? normalized : undefined;
 }
 
-function firstHeader(value: string | string[] | undefined) {
-  return Array.isArray(value) ? value[0] : value;
+function singleHeader(value: string | string[] | undefined) {
+  if (Array.isArray(value)) return value.length === 1 ? value[0] : undefined;
+  return value;
+}
+
+export function normalizeHostHeader(value: string | undefined) {
+  if (!value || value !== value.trim() || /[/\\?#@,]/u.test(value)) {
+    return undefined;
+  }
+  try {
+    const parsed = new URL(`http://${value}`);
+    return parsed.hostname ? parsed.host.toLowerCase() : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 function capacityRejection(): UpgradeRejection {

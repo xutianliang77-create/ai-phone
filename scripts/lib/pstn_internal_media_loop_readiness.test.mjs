@@ -20,6 +20,8 @@ describe("buildPstnInternalMediaLoopConfig", () => {
       .toBe("http://127.0.0.1:3611/pstn/audio-frames");
     expect(config.workerEnv.TTS_AUDIO_SINK_ENDPOINT).toBe("http://127.0.0.1:3610/translated-audio");
     expect(config.workerEnv.ASR_HTTP_ENDPOINT).toBe("http://127.0.0.1:3612/asr/transcribe");
+    expect(config.workerEnv.TTS_PROVIDER).toBe("mock-tts");
+    expect(config.workerEnv.TTS_MODEL).toBe("mock-phone-voice");
   });
 });
 
@@ -38,6 +40,7 @@ describe("probePstnInternalMediaLoop", () => {
       issues,
       actions: [],
       timeoutMs: 1000,
+      settleTimeoutMs: 10,
       fetchFn: fakeLoopFetch(mock),
     });
 
@@ -67,6 +70,7 @@ describe("probePstnInternalMediaLoop", () => {
       issues,
       actions: [],
       timeoutMs: 1000,
+      settleTimeoutMs: 10,
       fetchFn: fakeLoopFetch(null),
     });
 
@@ -104,7 +108,7 @@ function recordingMock(options = {}) {
 }
 
 function fakeLoopFetch(mock) {
-  return async (url) => {
+  return async (url, init = {}) => {
     const pathname = new URL(url).pathname;
     if (pathname === "/health" && url.includes(":3610")) {
       return jsonResponse(200, { service: "pstn-bridge" });
@@ -113,6 +117,11 @@ function fakeLoopFetch(mock) {
       return jsonResponse(200, { service: "translation-worker-pstn-audio-frame-sink" });
     }
     if (pathname === "/agent-calls") {
+      const body = init.body ? JSON.parse(init.body) : null;
+      if (!body?.idempotencyKey ||
+        init.headers?.["idempotency-key"] !== body.idempotencyKey) {
+        return jsonResponse(400, { error: { code: "invalid_idempotency_key" } });
+      }
       return jsonResponse(200, { providerCallId: "upstream-call-loop", mediaStreamId: "upstream-stream-loop" });
     }
     if (pathname === "/media-frames") {

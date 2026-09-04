@@ -13,6 +13,8 @@ import { HttpCallRoomEventClient } from "./worker/call-room-event-client.js";
 import { HttpCallRoomTokenClient } from "./worker/call-room-token-client.js";
 import { HttpCallSipStatusClient } from "./worker/call-sip-status-client.js";
 import { HttpCallTtsTrackAccessClient } from "./worker/call-tts-track-access-client.js";
+import { HttpCallInputTrackAccessClient } from
+  "./worker/call-input-track-access-client.js";
 import { CallTranslationWorker } from "./worker/call-translation-worker.js";
 import { CallTranscriptRefiner } from "./worker/call-transcript-refiner.js";
 import {
@@ -26,7 +28,11 @@ import { callWorkerStatusEvent as statusEvent } from
   "./worker/call-worker-runtime-events.js";
 import type { ProviderFallbackTransition } from
   "./worker/provider-fallback-controller.js";
-import type { CallSpeechPipeline, SpeechToSpeechProvider } from "./worker/types.js";
+import type {
+  CallSpeechPipeline,
+  CallTranslationControlPipeline,
+  SpeechToSpeechProvider,
+} from "./worker/types.js";
 
 const logger = pino({ name: "translation-worker" });
 
@@ -99,7 +105,7 @@ function providerStageName(stage: ProviderFallbackTransition["stage"]) {
 export function buildDefaultSpeechPipeline(
   endpointMode: AsrEndpointMode = "call_link",
   native?: SpeechToSpeechProvider,
-): CallSpeechPipeline {
+): CallSpeechPipeline & CallTranslationControlPipeline {
   const env = loadEnv();
   return new SpeechPipelineRouter({
     mode: env.speechPipelineMode,
@@ -146,6 +152,11 @@ async function main() {
       timeoutMs: env.apiTimeoutMs,
     }),
     ttsTrackAccessClient: new HttpCallTtsTrackAccessClient({
+      apiBaseUrl: env.apiBaseUrl,
+      internalApiSecret: env.internalApiSecret,
+      timeoutMs: env.apiTimeoutMs,
+    }),
+    inputTrackAccessClient: new HttpCallInputTrackAccessClient({
       apiBaseUrl: env.apiBaseUrl,
       internalApiSecret: env.internalApiSecret,
       timeoutMs: env.apiTimeoutMs,
@@ -199,7 +210,7 @@ function logAudioIngestMetrics(
     if (metrics.backpressureEvents !== 1 && metrics.backpressureEvents % 25 !== 0) {
       return;
     }
-    logger.warn(data, "Audio ingest backpressure dropped stale frames");
+    logger.warn(data, "Audio ingest backpressure requires controlled degradation");
     return;
   }
   if (metrics.event === "sequence_gap") {

@@ -13,6 +13,25 @@ export function cleanText(value: unknown, maxLength: number) {
   return typeof value === "string" ? value.trim().slice(0, maxLength) : "";
 }
 
+export function fallbackAgentCallResultSummary(
+  status: "cancelled" | "completed" | "failed",
+  hasCall: boolean,
+) {
+  if (status === "cancelled") {
+    return hasCall
+      ? "通话已结束（用户取消），未生成业务结果摘要。"
+      : "任务已取消，未发起电话。";
+  }
+  if (status === "completed") {
+    return "通话已结束，但服务商未返回结构化业务结果。";
+  }
+  return "通话失败，服务商未返回结构化业务结果。";
+}
+
+export function isPlaceholderAgentCallSummary(value: unknown) {
+  return value === "Voice Agent runtime ready; phone dial accepted";
+}
+
 export function defaultScript(objective: string) {
   return `您好，我想咨询：${objective}`;
 }

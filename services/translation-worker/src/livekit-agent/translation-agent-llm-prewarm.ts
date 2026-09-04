@@ -4,7 +4,10 @@ import {
 } from "@translation/llm";
 import type { TranslationWorkerEnv } from "../config/env.js";
 
-type LlmPrewarmEnv = Pick<TranslationWorkerEnv, "llmConfig">;
+type LlmPrewarmEnv = Pick<
+  TranslationWorkerEnv,
+  "llmConfig" | "llmPrewarmTimeoutMs"
+>;
 
 export type TranslationAgentLlmPrewarmResult =
   | { status: "skipped"; reason: "refinement_disabled" }
@@ -27,7 +30,10 @@ export async function prewarmTranslationAgentLlm(
   if (issues.length > 0) {
     throw new Error(`Translation Agent LLM is not configured: ${issues.join("; ")}`);
   }
-  const provider = createLlmProvider(env.llmConfig, options.fetchFn);
+  const provider = createLlmProvider({
+    ...env.llmConfig,
+    correctionTimeoutMs: env.llmPrewarmTimeoutMs,
+  }, options.fetchFn);
   const health = await provider.healthCheck();
   if (health.status !== "ready") {
     throw new Error(

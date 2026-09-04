@@ -170,6 +170,71 @@ describe("CallTtsPlaybackQueue", () => {
     expect(played).toContain("opposite");
     expect(played).not.toContain("segment-2");
   });
+
+  it("drops queued and newly synthesized audio while translated uplink is paused", async () => {
+    const started = deferred<void>();
+    const release = deferred<void>();
+    const played: string[] = [];
+    const queue = new CallTtsPlaybackQueue(async () => undefined);
+    queue.addSink({
+      capabilities: {
+        bidirectionalMedia: true,
+        streamingWrite: true,
+        clearPlayback: true,
+      },
+      async play(input) {
+        played.push(input.segmentId);
+        if (input.segmentId === "active") {
+          started.resolve();
+          await release.promise;
+        }
+      },
+      async interrupt() {
+        release.resolve();
+        return { cleared: true };
+      },
+    });
+
+    queue.enqueue(playback("active", "host"));
+    queue.enqueue(playback("queued-before-pause", "host"));
+    await started.promise;
+    await queue.setTargetPaused({
+      callId: "call-1",
+      targetSpeakerRole: "guest",
+      paused: true,
+    });
+    queue.enqueue(playback("created-during-pause", "host"));
+    await queue.drain("call-1");
+    await queue.setTargetPaused({
+      callId: "call-1",
+      targetSpeakerRole: "guest",
+      paused: false,
+    });
+    queue.enqueue(playback("new-after-resume", "host"));
+    await queue.drain("call-1");
+
+    expect(played).toEqual(["active", "new-after-resume"]);
+  });
+
+  it("clears pause state on call cancellation without interrupt support", async () => {
+    const played: string[] = [];
+    const queue = new CallTtsPlaybackQueue(async () => undefined);
+    await queue.setTargetPaused({
+      callId: "call-1",
+      targetSpeakerRole: "guest",
+      paused: true,
+    });
+    await queue.cancelCall("call-1", "session_end");
+    queue.addSink({
+      async play(input) {
+        played.push(input.segmentId);
+      },
+    });
+    queue.enqueue(playback("next-call-audio", "host"));
+    await queue.drain("call-1");
+
+    expect(played).toEqual(["next-call-audio"]);
+  });
 });
 
 function playback(

@@ -65,6 +65,58 @@ void main() {
     expect(find.text('回到底部'), findsNothing);
   });
 
+  testWidgets('coalesces rapid tail updates without losing auto-follow',
+      (tester) async {
+    final history = List<SubtitleSegment>.generate(24, (index) {
+      return SubtitleSegment(
+        id: 'history_$index',
+        sourceText: 'source $index',
+        translatedText: 'translated $index',
+        stage: 'translation',
+      );
+    });
+    await tester.pumpWidget(_TestApp(segments: history));
+    await tester.pumpAndSettle();
+
+    await tester.pumpWidget(_TestApp(segments: <SubtitleSegment>[
+      ...history,
+      const SubtitleSegment(
+        id: 'burst',
+        sourceText: 'rapid source',
+        translatedText: '',
+        stage: 'asr',
+      ),
+    ]));
+    await tester.pump(const Duration(milliseconds: 20));
+    await tester.pumpWidget(_TestApp(segments: <SubtitleSegment>[
+      ...history,
+      const SubtitleSegment(
+        id: 'burst',
+        sourceText: 'rapid source',
+        translatedText: 'rapid translation',
+        stage: 'translation',
+      ),
+    ]));
+    await tester.pump(const Duration(milliseconds: 20));
+    await tester.pumpWidget(_TestApp(segments: <SubtitleSegment>[
+      ...history,
+      const SubtitleSegment(
+        id: 'burst',
+        sourceText: 'rapid source final',
+        translatedText: 'rapid translation final',
+        stage: 'final',
+      ),
+    ]));
+    await tester.pumpAndSettle();
+
+    expect(find.text('rapid translation final'), findsOneWidget);
+    expect(find.text('回到底部'), findsNothing);
+    expect(
+      tester.getBottomLeft(find.text('rapid translation final')).dy,
+      lessThan(280),
+    );
+  });
+
   testWidgets('marks the current sentence and shows translation pending',
       (tester) async {
     const pending = <SubtitleSegment>[

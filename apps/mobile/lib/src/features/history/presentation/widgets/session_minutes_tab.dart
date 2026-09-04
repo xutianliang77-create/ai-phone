@@ -2,16 +2,11 @@ import 'package:flutter/material.dart';
 
 import '../../../../app/localization/app_localizations.dart';
 import '../../data/session_review.dart';
-import 'session_terms_tab.dart';
 
 class SessionMinutesTab extends StatelessWidget {
   const SessionMinutesTab({
     required this.review,
     required this.hasServerReview,
-    required this.confirmedTermIds,
-    required this.pendingTermKeys,
-    required this.onConfirmTerm,
-    required this.onRevokeTerm,
     required this.onGenerateReview,
     required this.generatingReview,
     super.key,
@@ -19,10 +14,6 @@ class SessionMinutesTab extends StatelessWidget {
 
   final SessionReview review;
   final bool hasServerReview;
-  final Map<String, String> confirmedTermIds;
-  final Set<String> pendingTermKeys;
-  final ValueChanged<SessionTermSuggestion> onConfirmTerm;
-  final ValueChanged<SessionTermSuggestion> onRevokeTerm;
   final VoidCallback onGenerateReview;
   final bool generatingReview;
 
@@ -70,34 +61,6 @@ class SessionMinutesTab extends StatelessWidget {
           items: review.openQuestions,
         ),
         _HighlightSection(items: review.highlights),
-        if (review.terms.isNotEmpty) ...<Widget>[
-          const SizedBox(height: 20),
-          Text(chinese ? '术语建议' : 'Suggested terms',
-              style: Theme.of(context).textTheme.titleMedium),
-          const SizedBox(height: 6),
-          ...review.terms.map((term) {
-            final key = sessionTermKey(term);
-            final confirmed = confirmedTermIds.containsKey(key);
-            final pending = pendingTermKeys.contains(key);
-            return ListTile(
-              contentPadding: EdgeInsets.zero,
-              title: Text(term.sourceText),
-              subtitle: Text(term.translatedText),
-              trailing: pending
-                  ? const SizedBox.square(
-                      dimension: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : TextButton(
-                      onPressed: () =>
-                          confirmed ? onRevokeTerm(term) : onConfirmTerm(term),
-                      child: Text(confirmed
-                          ? (chinese ? '撤销' : 'Revoke')
-                          : (chinese ? '确认' : 'Confirm')),
-                    ),
-            );
-          }),
-        ],
       ],
     );
   }

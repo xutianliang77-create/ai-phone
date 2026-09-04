@@ -202,6 +202,69 @@ describe("session segment revision merge", () => {
     expect(segment.provider).toBeUndefined();
     expect(segment.targetLanguage).toBeUndefined();
   });
+
+  it("applies speaker-only revisions without clearing text or translation", () => {
+    const segment = createSessionSegment({
+      segmentId: "seg_1",
+      turnId: "turn_1",
+      revision: 3,
+      speakerRevision: 0,
+      sourceText: "今天讨论产品计划",
+      translatedText: "Today we discuss the product plan",
+      targetLanguage: "en",
+      stage: "translation",
+      provider: "hymt2_self_hosted",
+      speaker: speaker("speaker_1"),
+      timing: timing(0, 6000),
+      tokenTimings: [
+        { text: "今天", startMs: 0, endMs: 800 },
+      ],
+    });
+
+    applySessionSegmentPatch(segment, {
+      segmentId: "seg_1",
+      turnId: "turn_1",
+      speakerRevision: 1,
+      speaker: speaker("speaker_2"),
+      timing: timing(0, 6100),
+    });
+    applySessionSegmentPatch(segment, {
+      segmentId: "seg_1",
+      speakerRevision: 0,
+      speaker: speaker("speaker_1"),
+      timing: timing(0, 6000),
+    });
+    expect(segment).toMatchObject({
+      revision: 3,
+      speakerRevision: 1,
+      sourceText: "今天讨论产品计划",
+      translatedText: "Today we discuss the product plan",
+      targetLanguage: "en",
+      stage: "translation",
+      provider: "hymt2_self_hosted",
+      speaker: { speakerId: "speaker_2" },
+      timing: { startMs: 0, endMs: 6100 },
+      tokenTimings: [{ text: "今天", startMs: 0, endMs: 800 }],
+    });
+
+    applySessionSegmentPatch(segment, {
+      segmentId: "seg_1",
+      revision: 4,
+      sourceText: "今天讨论下一版产品计划",
+      speaker: speaker("speaker_1"),
+      timing: timing(0, 6200),
+    });
+
+    expect(segment).toMatchObject({
+      revision: 4,
+      speakerRevision: 1,
+      sourceText: "今天讨论下一版产品计划",
+      translatedText: "",
+      speaker: { speakerId: "speaker_2" },
+      timing: { startMs: 0, endMs: 6100 },
+    });
+    expect(segment.tokenTimings).toBeUndefined();
+  });
 });
 
 function speaker(speakerId: string) {

@@ -3,10 +3,10 @@
   "activeProfile": "domestic_server_qwen3_hymt2_voxcpm2",
   "profiles": {
     "domestic_server_qwen3_hymt2_voxcpm2": {
-      "description": "Domestic server-side high-quality route: original Qwen3-ASR-0.6B ASR, Hy-MT2 translation, VoxCPM2 TTS.",
+      "description": "Wujie V1 isolated core route: Qwen3-ASR-1.7B vLLM + MarbleNet, Hy-MT2, VoxCPM2, active CPU Sortformer, and no shared LLM refinement.",
       "asr": {
-        "provider": "http_qwen3_asr_original",
-        "model": "Qwen3-ASR-0.6B-original-tuned-v3",
+        "provider": "http_qwen3_asr_vllm",
+        "model": "Qwen3-ASR-1.7B-vLLM0.14-canary",
         "contract": "POST /asr/transcribe + POST /asr/sessions/:sessionId/flush"
       },
       "translation": {
@@ -25,10 +25,10 @@
         "contract": "Internal HTTP side path: /speaker/sessions + /speaker/frames"
       },
       "llm": {
-        "provider": "openai_compatible",
-        "correctionModel": "qwen/qwen3.5-9b",
-        "reviewModel": "qwen/qwen3.5-9b",
-        "contract": "OpenAI-compatible /v1/chat/completions"
+        "provider": "off",
+        "correctionModel": "none",
+        "reviewModel": "none",
+        "contract": "Disabled in the isolated core route"
       },
       "env": {
         "gateway": {
@@ -44,23 +44,18 @@
           "SPEAKER_HTTP_BASE_URL": "http://127.0.0.1:8022",
           "SPEAKER_HTTP_API_KEY": "local-speaker-service-api-key",
           "SPEAKER_HTTP_TIMEOUT_MS": "2000",
-          "LLM_PROVIDER": "openai_compatible",
-          "LLM_BASE_URL": "http://127.0.0.1:1234/v1",
-          "LLM_CORRECTION_MODEL": "qwen/qwen3.5-9b",
-          "LLM_REVIEW_MODEL": "qwen/qwen3.5-9b",
-          "LLM_REFINEMENT_ENABLED": "true",
-          "LLM_REVIEW_ENABLED": "true",
+          "LLM_PROVIDER": "off",
+          "LLM_REFINEMENT_ENABLED": "false",
+          "REALTIME_LLM_REFINEMENT_ENABLED": "false",
+          "LLM_REVIEW_ENABLED": "false",
           "LLM_CORRECTION_TIMEOUT_MS": "1200",
           "LLM_REVIEW_TIMEOUT_MS": "30000",
           "LLM_MIN_CONFIDENCE": "0.72"
         },
         "api": {
-          "LLM_PROVIDER": "openai_compatible",
-          "LLM_BASE_URL": "http://127.0.0.1:1234/v1",
-          "LLM_CORRECTION_MODEL": "qwen/qwen3.5-9b",
-          "LLM_REVIEW_MODEL": "qwen/qwen3.5-9b",
-          "LLM_REVIEW_ENABLED": "true",
-          "LLM_REFINEMENT_ENABLED": "true"
+          "LLM_PROVIDER": "off",
+          "LLM_REVIEW_ENABLED": "false",
+          "LLM_REFINEMENT_ENABLED": "false"
         },
         "translationWorker": {
           "TRANSLATION_BASE_URL": "http://127.0.0.1:8003/v1",
@@ -72,21 +67,41 @@
           "TTS_PROVIDER": "voxcpm2",
           "TTS_MODEL": "VoxCPM2",
           "TTS_HTTP_ENDPOINT": "http://127.0.0.1:8002/tts/synthesize",
-          "TTS_HTTP_API_KEY": "local-tts-service-api-key"
+          "TTS_HTTP_API_KEY": "local-tts-service-api-key",
+          "LLM_PROVIDER": "off",
+          "LLM_REFINEMENT_ENABLED": "false",
+          "LLM_CORRECTION_TIMEOUT_MS": "1200",
+          "TRANSLATION_AGENT_LLM_PREWARM_TIMEOUT_MS": "10000"
         },
         "asrService": {
-          "ASR_SERVICE_PROVIDER": "qwen3_asr",
-          "ASR_MODEL_VERSION": "Qwen3-ASR-0.6B-original-tuned-v3",
+          "ASR_SERVICE_PROVIDER": "qwen3_asr_vllm",
+          "ASR_MODEL_VERSION": "Qwen3-ASR-1.7B-vLLM0.14-canary",
           "ASR_SERVICE_API_KEY": "local-asr-service-api-key",
-          "ASR_QWEN3_MODEL_DIR": "/data/models/translation-model-eval/models/qwen3_asr_0_6b",
+          "ASR_QWEN3_MODEL_DIR": "/data/models/translation-model-eval/data/unified-multilingual-eval/experiments/asr-replacement-ab-v1-20260723/models/qwen3_asr_1_7b_modelscope",
           "ASR_QWEN3_DTYPE": "bfloat16",
           "ASR_QWEN3_DEVICE_MAP": "cuda:0",
+          "ASR_QWEN3_MAX_INFERENCE_BATCH_SIZE": "1",
+          "ASR_QWEN3_MAX_NEW_TOKENS": "256",
           "ASR_QWEN3_MIN_AUDIO_MS": "1800",
+          "ASR_QWEN3_CONVERSATION_MIN_AUDIO_MS": "1000",
           "ASR_QWEN3_ENDPOINT_SILENCE_MS": "1100",
+          "ASR_QWEN3_CONVERSATION_ENDPOINT_SILENCE_MS": "600",
+          "ASR_QWEN3_LISTENING_ENDPOINT_SILENCE_MS": "1400",
+          "ASR_QWEN3_CALL_LINK_ENDPOINT_SILENCE_MS": "600",
+          "ASR_QWEN3_PSTN_ENDPOINT_SILENCE_MS": "1100",
           "ASR_QWEN3_MAX_AUDIO_MS": "10000",
           "ASR_QWEN3_PREROLL_MS": "400",
-          "ASR_QWEN3_CONTEXT": "",
-          "ASR_QWEN3_ENGLISH_CONTEXT": ""
+          "ASR_QWEN3_VLLM_GPU_MEMORY_UTILIZATION": "0.22",
+          "ASR_QWEN3_VLLM_MAX_MODEL_LEN": "2048",
+          "ASR_QWEN3_VLLM_MAX_NUM_SEQS": "1",
+          "ASR_QWEN3_VLLM_UNFIXED_CHUNK_NUM": "7",
+          "ASR_QWEN3_VLLM_UNFIXED_TOKEN_NUM": "5",
+          "ASR_VAD_PROVIDER": "marblenet",
+          "ASR_VAD_MODEL_PATH": "/data/models/translation-model-eval/models/frame_vad_multilingual_marblenet_v2/frame_vad_multilingual_marblenet_v2.0.onnx",
+          "ASR_VAD_ASSETS_PATH": "/data/models/translation-model-eval/models/frame_vad_multilingual_marblenet_v2/frame_vad_multilingual_marblenet_v2.0.preprocessor.npz",
+          "ASR_VAD_THRESHOLD": "0.5",
+          "ASR_VAD_WINDOW_MS": "1000",
+          "ASR_VAD_SMOOTHING_FRAMES": "3"
         },
         "translationService": {
           "TRANSLATION_SERVICE_PROVIDER": "hymt2",
@@ -101,7 +116,7 @@
           "TTS_VOXCPM2_MODEL_DIR": "/data/models/translation-model-eval/data/tts-product-fit/models/openbmb_voxcpm2"
         },
         "speakerService": {
-          "SPEAKER_MODEL_PROVIDER": "sortformer_shadow",
+          "SPEAKER_MODEL_PROVIDER": "sortformer",
           "SPEAKER_MODEL_ID": "/data/models/translation-model-eval/models/sortformer/diar_streaming_sortformer_4spk-v2.1.nemo",
           "SPEAKER_SERVICE_API_KEY": "local-speaker-service-api-key",
           "SPEAKER_CHUNK_LEN": "6",
@@ -111,7 +126,10 @@
           "SPEAKER_CACHE_UPDATE_PERIOD": "144",
           "SPEAKER_CACHE_LEN": "188",
           "SPEAKER_ONSET": "0.5",
-          "SPEAKER_OFFSET": "0.5"
+          "SPEAKER_OFFSET": "0.5",
+          "SPEAKER_DEVICE": "cpu",
+          "SPEAKER_MIN_DURATION_ON_MS": "100",
+          "SPEAKER_MIN_DURATION_OFF_MS": "320"
         }
       }
     },

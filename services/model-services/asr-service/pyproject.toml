@@ -27,6 +27,7 @@ firered = [
 ]
 qwen = [
   "qwen-asr>=0.1",
+  "scipy>=1.11,<2",
   "torch>=2.3",
 ]
 

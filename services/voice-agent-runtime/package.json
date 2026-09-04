@@ -11,11 +11,16 @@
     "test": "vitest run src"
   },
   "dependencies": {
-    "@livekit/agents": "1.5.0",
-    "@livekit/protocol": "1.46.6",
-    "@livekit/rtc-node": "^0.13.30",
+    "@livekit/agents": "1.6.4",
+    "@livekit/agents-plugin-openai": "1.6.4",
+    "@livekit/protocol": "1.50.4",
+    "@livekit/rtc-node": "0.13.33",
     "@translation/contracts": "file:../../packages/contracts",
     "pino": "^10.1.0",
+    "ws": "^8.21.0",
     "zod": "4.1.8"
+  },
+  "devDependencies": {
+    "@types/ws": "^8.18.1"
   }
 }

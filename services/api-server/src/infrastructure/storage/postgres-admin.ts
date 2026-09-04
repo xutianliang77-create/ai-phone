@@ -14,10 +14,17 @@ import {
   comparePostgresMigrations,
   expectedPostgresMigrations,
 } from "./postgres-schema-manifest.js";
+import { upgradePostgresCutoverEvidence } from
+  "./postgres-cutover-evidence-upgrade.js";
+import { assertPostgresPrimaryStartup } from "./postgres-primary-startup.js";
 
 const command = process.argv[2];
-if (!["migrate", "check", "import", "audit"].includes(command ?? "")) {
-  throw new Error("Usage: postgres-admin.ts <migrate|check|import|audit>");
+if (!["migrate", "check", "import", "audit", "startup-check",
+  "upgrade-evidence"].includes(command ?? "")) {
+  throw new Error(
+    "Usage: postgres-admin.ts <migrate|check|import|audit|startup-check|" +
+      "upgrade-evidence>",
+  );
 }
 
 const pool = new Pool(buildPostgresPoolConfig({
@@ -29,9 +36,21 @@ try {
   if (command === "migrate") await migrate();
   else if (command === "check") await check();
   else if (command === "import") await importSnapshot();
-  else await auditSnapshot();
+  else if (command === "audit") await auditSnapshot();
+  else if (command === "startup-check") await startupCheck();
+  else await upgradeEvidence();
 } finally {
   await pool.end();
+}
+
+async function startupCheck() {
+  const result = await assertPostgresPrimaryStartup(pool);
+  process.stdout.write(`${JSON.stringify(result)}\n`);
+}
+
+async function upgradeEvidence() {
+  const result = await upgradePostgresCutoverEvidence(pool);
+  process.stdout.write(`${JSON.stringify(result)}\n`);
 }
 
 async function importSnapshot() {

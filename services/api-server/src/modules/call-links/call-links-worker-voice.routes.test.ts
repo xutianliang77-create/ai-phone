@@ -61,6 +61,26 @@ describe("call link worker voice route", () => {
     });
     expect(response.json().ttsVoice.voiceProfileId).toEqual(expect.any(String));
   });
+
+  it("returns a stable preset when the host has no voice profile", async () => {
+    const app = await buildApp();
+    const created = await app.inject({ method: "POST", url: "/call-links" });
+    const callId = created.json().callId as string;
+    const response = await app.inject({
+      method: "POST",
+      url: `/internal/call-links/${callId}/worker-room-token`,
+      headers: { authorization: "Bearer internal-secret-123" },
+      payload: { participantName: "translation-worker" },
+    });
+    await app.close();
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().ttsVoice).toEqual({
+      mode: "preset",
+      presetId: "zh_female_natural",
+      quality: "standard",
+    });
+  });
 });
 
 const envKeys = [

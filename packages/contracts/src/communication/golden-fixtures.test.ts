@@ -9,6 +9,10 @@ describe("communication v1 golden fixtures", () => {
   it("decodes the shared command and event fixtures", () => {
     const command = parseCommunicationCommand(fixture("command.json"));
     const event = parseCommunicationEvent(fixture("event.json"));
+    const work = parseCommunicationCommand(fixture("agent-work-command.json"));
+    const receipt = parseCommunicationEvent(
+      fixture("client-playback-ended-event.json"),
+    );
 
     expect(command).toMatchObject({
       contractVersion: 1,
@@ -22,6 +26,15 @@ describe("communication v1 golden fixtures", () => {
       sessionId: "session_001",
       playbackId: "playback_001",
       sequence: 42,
+    });
+    expect(work).toMatchObject({
+      workId: "work_001",
+      turnId: "turn_007",
+    });
+    expect(receipt).toMatchObject({
+      eventType: "client.playback.ended",
+      workId: "work_001",
+      deliveryAttemptId: "delivery_002",
     });
   });
 

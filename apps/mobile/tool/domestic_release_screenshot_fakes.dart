@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:translation_mobile/src/app/localization/app_localizations.dart';
+import 'package:translation_mobile/src/features/call_link/data/agent_delivery_room_event.dart';
 import 'package:translation_mobile/src/features/call_link/data/call_link_api_client.dart';
 import 'package:translation_mobile/src/features/call_link/data/call_room_client.dart';
 import 'package:translation_mobile/src/features/history/data/session_history_models.dart';
@@ -141,7 +142,8 @@ class FakeCallLinkApiClient extends CallLinkApiClient {
       sessionId: 'call_release',
       roomName: 'call_release',
       roomProvider: 'livekit',
-      joinUrl: 'https://call.example.cn/join/call_release?ticket=release-ticket',
+      joinUrl:
+          'https://call.example.cn/join/call_release?ticket=release-ticket',
       hostUrl: 'https://call.example.cn/host/call_release',
       status: 'created',
       expiresAt: DateTime.utc(2026, 7, 4, 12),
@@ -187,7 +189,16 @@ class FakeCallRoomClient implements CallRoomClient {
   Stream<CallRoomSnapshot> get snapshots => _snapshots.stream;
 
   @override
-  Future<void> connect(CallRoomToken token) async {
+  Stream<AgentDeliveryRoomEvent> get deliveryEvents =>
+      const Stream<AgentDeliveryRoomEvent>.empty();
+
+  @override
+  Future<void> connect(
+    CallRoomToken token, {
+    bool enableMicrophone = true,
+    bool translationMediaOnly = false,
+    bool airTakeoverUplink = false,
+  }) async {
     _snapshots.add(CallRoomSnapshot(
       status: CallRoomConnectionStatus.connected,
       microphoneEnabled: true,
@@ -196,6 +207,15 @@ class FakeCallRoomClient implements CallRoomClient {
       captions: captions,
     ));
   }
+
+  @override
+  Future<void> setMicrophoneEnabled(bool enabled) async {}
+
+  @override
+  Future<bool> waitForRemoteAudioPlayoutEvidence(
+    String participantIdentity, {
+    required Duration timeout,
+  }) async => false;
 
   @override
   Future<void> disconnect() async {

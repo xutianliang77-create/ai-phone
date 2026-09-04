@@ -13,15 +13,33 @@ export function evaluateAgentCallStartPolicy(input: {
   }
   const target = evaluateAgentCallTargetPolicy(input.targetPhone);
   if (!target.allowed) return target;
-  const limit = positiveInteger(process.env.AGENT_CALL_RATE_LIMIT_PER_HOUR, 3);
-  const since = (input.now ?? new Date()).getTime() - 60 * 60 * 1000;
+  // A value of 0 explicitly disables the product-level hourly gate.  Keep the
+  // default conservative for environments that do not opt out deliberately.
+  const now = input.now ?? new Date();
+  const limit = nonNegativeInteger(process.env.AGENT_CALL_RATE_LIMIT_PER_HOUR, 3);
+  if (limit === 0) return { allowed: true as const, rateLimitPerHour: 0 };
+  const since = now.getTime() - 60 * 60 * 1000;
   const recentStarts = input.drafts.filter((draft) =>
     draft.userId === input.userId &&
     draft.queuedAt != null &&
     Date.parse(draft.queuedAt) >= since
   ).length;
   if (recentStarts >= limit) {
-    return denied("rate_limited", "AI calling hourly rate limit exceeded", 429);
+    const oldest = input.drafts
+      .filter((draft) => draft.userId === input.userId && draft.queuedAt != null)
+      .map((draft) => Date.parse(draft.queuedAt!))
+      .filter((queuedAt) => Number.isFinite(queuedAt) && queuedAt >= since)
+      .sort((a, b) => a - b)[0];
+    const nextAllowedAt = Number.isFinite(oldest)
+      ? new Date(oldest + 60 * 60 * 1000)
+      : new Date(now.getTime() + 60 * 60 * 1000);
+    return denied("rate_limited", "AI calling hourly rate limit exceeded", 429, {
+      retryAfterSeconds: Math.max(
+        1,
+        Math.ceil((nextAllowedAt.getTime() - now.getTime()) / 1000),
+      ),
+      nextAllowedAt: nextAllowedAt.toISOString(),
+    });
   }
   return { allowed: true as const, rateLimitPerHour: limit };
 }
@@ -58,6 +76,14 @@ export function normalizeAgentCallPhone(value: string) {
   return value.trim().replace(/[^\d+]/g, "").replace(/^\+86/, "");
 }
 
+export function toAgentCallE164Phone(value: string) {
+  const phone = normalizeAgentCallPhone(value);
+  if (/^\+[1-9]\d{7,14}$/.test(phone)) return phone;
+  if (/^1[3-9]\d{9}$/.test(phone)) return `+86${phone}`;
+  if (/^0\d{9,11}$/.test(phone)) return `+86${phone.slice(1)}`;
+  return null;
+}
+
 export function isValidAgentCallPhone(value: string) {
   const phone = normalizeAgentCallPhone(value);
   if (/^\+[1-9]\d{7,14}$/.test(phone)) return true;
@@ -75,6 +101,16 @@ function positiveInteger(value: string | undefined, fallback: number) {
   return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
 }
 
-function denied(code: string, message: string, statusCode = 403) {
-  return { allowed: false as const, code, message, statusCode };
+function nonNegativeInteger(value: string | undefined, fallback: number) {
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed >= 0 ? parsed : fallback;
+}
+
+function denied(
+  code: string,
+  message: string,
+  statusCode = 403,
+  details: { retryAfterSeconds?: number; nextAllowedAt?: string } = {},
+) {
+  return { allowed: false as const, code, message, statusCode, ...details };
 }

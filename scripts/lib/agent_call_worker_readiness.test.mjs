@@ -18,7 +18,12 @@ describe("buildAgentCallWorkerReadinessConfig", () => {
     expect(config.timeoutMs).toBe(1234);
     expect(config.apiEnv.CALL_PROVIDER_POLICY).toBe("domestic_pstn_bridge");
     expect(config.apiEnv.PSTN_WEBHOOK_BASE_URL).toBe("https://calls.qkxy.cn");
+    expect(config.apiEnv.AUTH_TEST_PHONE).toBe("13800138000");
+    expect(config.apiEnv.AUTH_TEST_CODE).toBe("246810");
+    expect(config.apiEnv.AGENT_CALL_PROVIDER_ADAPTER).toBe("pstn_http");
+    expect(config.apiEnv.PSTN_PROVIDER_IDEMPOTENCY_GUARANTEED).toBe("true");
     expect(config.workerEnv.PSTN_BRIDGE_BASE_URL).toBe("http://127.0.0.1:3422");
+    expect(config.workerEnv.AGENT_CALL_WORKER_ID).toBe("readiness-agent-worker");
   });
 });
 
@@ -62,6 +67,7 @@ describe("probeAgentCallWorkerFlow", () => {
     expect(checks.map((check) => [check.name, check.status])).toEqual([
       ["api_service_identity", "pass"],
       ["internal_queue_requires_secret", "pass"],
+      ["account_login", "pass"],
       ["agent_draft_created", "pass"],
       ["agent_draft_authorized", "pass"],
       ["agent_draft_queued", "pass"],
@@ -73,6 +79,8 @@ describe("probeAgentCallWorkerFlow", () => {
     ]);
     expect(requests.find((request) => request.path.endsWith("/start"))?.body)
       .toEqual({ consentPromptVersion: "cn-agent-v1" });
+    expect(requests.find((request) => request.path === "/ai-calling-agent/drafts")
+      ?.headers.authorization).toBe("Bearer local-agent-account-token");
     expect(requests.find((request) => request.path === "/webhooks/pstn/agent-calls")?.body)
       .toMatchObject({ consumedSeconds: 300 });
   });
@@ -122,6 +130,18 @@ function fakeFetch(requests, state, options = {}) {
       return options.publicQueue
         ? jsonResponse(200, { drafts: [] })
         : jsonResponse(401, { error: { code: "internal_error" } });
+    }
+    if (path === "/auth/phone/login") {
+      return body?.phone === "13800138000" && body?.code === "246810"
+        ? jsonResponse(200, {
+          token: "local-agent-account-token",
+          account: { id: "account-1" },
+        })
+        : jsonResponse(401, { error: { message: "Phone login failed" } });
+    }
+    if (path.startsWith("/ai-calling-agent/") &&
+      init.headers?.authorization !== "Bearer local-agent-account-token") {
+      return jsonResponse(401, { error: { message: "Account login required" } });
     }
     if (path === "/ai-calling-agent/drafts" && init.method === "POST") {
       state.status = "draft";

@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { llm, tool } from "@livekit/agents";
 import type { Room } from "@livekit/rtc-node";
 import {
+  type AgentVoiceTurnScopeDto,
   sipDtmfCode,
   type VoiceAgentRuntimeSnapshotDto,
   type VoiceAgentStructuredResultDto,
@@ -9,6 +10,9 @@ import {
 import { z } from "zod";
 import type { VoiceAgentRuntimeApiClient } from "./runtime-api-client.js";
 import type { VoiceAgentDispatchTicket } from "./runtime-ticket.js";
+import { buildBackgroundWorkTools } from "./runtime-background-work-tools.js";
+import type { VoiceAgentInteractionState } from
+  "./voice-agent-interaction-state.js";
 
 export interface VoiceAgentUserData {
   api: VoiceAgentRuntimeApiClient;
@@ -18,6 +22,9 @@ export interface VoiceAgentUserData {
   resultReported: boolean;
   takeoverRequested: boolean;
   recordingConsentStatus?: "granted" | "revoked";
+  backgroundWorkEnabled: boolean;
+  interaction: VoiceAgentInteractionState;
+  currentTurn?: AgentVoiceTurnScopeDto;
 }
 
 const dtmfSchema = z.object({
@@ -58,6 +65,12 @@ export function buildVoiceAgentTools(data: VoiceAgentUserData) {
           idempotencyKey: `${data.snapshot.run.id}:${options.toolCallId}`,
           arguments: args,
         });
+        if (authorization.executionMode === "provider_api") {
+          if (authorization.providerStatus !== "succeeded") {
+            throw new Error("Air DTMF requires provider reconciliation");
+          }
+          return { pressed: args.digit };
+        }
         try {
           const localParticipant = data.room.localParticipant;
           if (!localParticipant) throw new Error("Voice Agent is not connected");
@@ -161,5 +174,6 @@ export function buildVoiceAgentTools(data: VoiceAgentUserData) {
       },
     }));
   }
+  tools.push(...buildBackgroundWorkTools(data));
   return tools;
 }

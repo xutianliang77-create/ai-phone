@@ -55,6 +55,99 @@ void main() {
     expect(controller.message, 'scan_translation_unavailable');
   });
 
+  test('does not silently change the selected target language', () async {
+    final translator = _FakeTranslationProvider();
+    final controller = ScanTranslationController(
+      ocrProvider: const _FakeOcrProvider('Welcome'),
+      translationProvider: translator,
+      pickImagePath: (_) async => _picked('/tmp/sign.jpg'),
+      historyRepository: _FakeSessionHistoryRepository(),
+    );
+
+    await controller.selectImage(ScanImageSource.gallery);
+    await controller.recognizeSelectedImage();
+    await controller.translateRecognizedText();
+
+    expect(controller.targetLanguage, 'en');
+    expect(controller.translatedText, 'Welcome');
+    expect(controller.status, ScanTranslationStatus.translated);
+    expect(translator.lastTargetLanguage, isNull);
+  });
+
+  test('prioritizes the likely source script from the selected target',
+      () async {
+    final englishSourceOcr = _RecordingOcrProvider('Welcome');
+    final toChinese = ScanTranslationController(
+      ocrProvider: englishSourceOcr,
+      translationProvider: _FakeTranslationProvider(),
+      pickImagePath: (_) async => _picked('/tmp/menu.jpg'),
+      historyRepository: _FakeSessionHistoryRepository(),
+    );
+    toChinese.setTargetLanguage('zh');
+
+    await toChinese.selectImage(ScanImageSource.gallery);
+    await toChinese.recognizeSelectedImage();
+
+    expect(
+      englishSourceOcr.lastPreferredScripts,
+      <String>['latin', 'chinese'],
+    );
+
+    final chineseSourceOcr = _RecordingOcrProvider('菜单');
+    final toEnglish = ScanTranslationController(
+      ocrProvider: chineseSourceOcr,
+      translationProvider: _FakeTranslationProvider(),
+      pickImagePath: (_) async => _picked('/tmp/menu.jpg'),
+      historyRepository: _FakeSessionHistoryRepository(),
+    );
+
+    await toEnglish.selectImage(ScanImageSource.gallery);
+    await toEnglish.recognizeSelectedImage();
+
+    expect(
+      chineseSourceOcr.lastPreferredScripts,
+      <String>['chinese', 'latin'],
+    );
+  });
+
+  test('keeps a completed translation when the target is unchanged', () async {
+    final controller = ScanTranslationController(
+      ocrProvider: const _FakeOcrProvider('你好'),
+      translationProvider: _FakeTranslationProvider(),
+      pickImagePath: (_) async => _picked('/tmp/menu.jpg'),
+      historyRepository: _FakeSessionHistoryRepository(),
+    );
+
+    await controller.selectImage(ScanImageSource.gallery);
+    await controller.recognizeSelectedImage();
+    await controller.translateRecognizedText();
+    controller.setTargetLanguage('en');
+
+    expect(controller.status, ScanTranslationStatus.translated);
+    expect(controller.translatedText, 'Hello');
+  });
+
+  test('clears a stale translation error after changing the target', () async {
+    final controller = ScanTranslationController(
+      ocrProvider: const _FakeOcrProvider('未收录菜单'),
+      translationProvider: _FakeTranslationProvider(),
+      pickImagePath: (_) async => _picked('/tmp/menu.jpg'),
+      historyRepository: _FakeSessionHistoryRepository(),
+    );
+
+    await controller.selectImage(ScanImageSource.gallery);
+    await controller.recognizeSelectedImage();
+    await controller.translateRecognizedText();
+    expect(controller.message, 'scan_translation_unavailable');
+
+    controller.setTargetLanguage('zh');
+
+    expect(controller.targetLanguage, 'zh');
+    expect(controller.recognizedText, '未收录菜单');
+    expect(controller.message, isNull);
+    expect(controller.status, ScanTranslationStatus.recognized);
+  });
+
   test('reports no text when OCR result is empty', () async {
     final controller = ScanTranslationController(
       ocrProvider: const _FakeOcrProvider(''),
@@ -167,7 +260,10 @@ class _FakeOcrProvider implements MobileOcrProvider {
   Future<void> dispose() async {}
 
   @override
-  Future<MobileOcrResult?> recognizeImage(String imagePath) async {
+  Future<MobileOcrResult?> recognizeImage(
+    String imagePath, {
+    List<String>? preferredScripts,
+  }) async {
     return MobileOcrResult(
       text: text,
       provider: 'fake',
@@ -183,6 +279,25 @@ class _FakeOcrProvider implements MobileOcrProvider {
               ),
             ],
     );
+  }
+}
+
+class _RecordingOcrProvider implements MobileOcrProvider {
+  _RecordingOcrProvider(this.text);
+
+  final String text;
+  List<String>? lastPreferredScripts;
+
+  @override
+  Future<void> dispose() async {}
+
+  @override
+  Future<MobileOcrResult?> recognizeImage(
+    String imagePath, {
+    List<String>? preferredScripts,
+  }) async {
+    lastPreferredScripts = preferredScripts;
+    return MobileOcrResult(text: text, provider: 'recording');
   }
 }
 

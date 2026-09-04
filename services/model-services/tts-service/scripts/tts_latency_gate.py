@@ -32,6 +32,9 @@ def main() -> int:
     )
     wall_times: list[int] = []
     first_audio: list[int] = []
+    stream_wall_times: list[int] = []
+    stream_model_first_audio: list[int] = []
+    stream_first_audio: list[int] = []
     for index in range(args.samples):
         started = time.perf_counter()
         result = post_json(
@@ -41,6 +44,14 @@ def main() -> int:
         )
         wall_times.append(round((time.perf_counter() - started) * 1000))
         first_audio.append(int(result["firstAudioMs"]))
+        stream = post_stream(
+            f"{args.base_url.rstrip('/')}/tts/stream",
+            request_payload(f"tts-stream-gate-{index + 1}", sample_text(index)),
+            args.api_key,
+        )
+        stream_wall_times.append(stream["wallMs"])
+        stream_model_first_audio.append(stream["modelFirstAudioMs"])
+        stream_first_audio.append(stream["firstAudioMs"])
 
     metrics = {
         "warmupElapsedMs": int(warmup["elapsedMs"]),
@@ -48,6 +59,9 @@ def main() -> int:
         "samples": args.samples,
         "wallMs": summary(wall_times),
         "firstAudioMs": summary(first_audio),
+        "streamWallMs": summary(stream_wall_times),
+        "streamModelFirstAudioMs": summary(stream_model_first_audio),
+        "streamFirstAudioMs": summary(stream_first_audio),
         "thresholds": {
             "coldMaxMs": args.cold_max_ms,
             "warmP95MaxMs": args.warm_p95_max_ms,
@@ -59,8 +73,8 @@ def main() -> int:
         failures.append("cold_warmup")
     if metrics["wallMs"]["p95"] > args.warm_p95_max_ms:
         failures.append("warm_wall_p95")
-    if metrics["firstAudioMs"]["p95"] > args.first_audio_p95_max_ms:
-        failures.append("first_audio_p95")
+    if metrics["streamFirstAudioMs"]["p95"] > args.first_audio_p95_max_ms:
+        failures.append("stream_first_audio_p95")
     metrics["passed"] = not failures
     metrics["failures"] = failures
     print(json.dumps(metrics, ensure_ascii=False, indent=2))
@@ -79,6 +93,51 @@ def post_json(url: str, payload: dict, api_key: str) -> dict:
     )
     with urlopen(request, timeout=120) as response:
         return json.load(response)
+
+
+def post_stream(url: str, payload: dict, api_key: str) -> dict[str, int]:
+    headers = {"content-type": "application/json"}
+    if api_key:
+        headers["authorization"] = f"Bearer {api_key}"
+    request = Request(
+        url,
+        data=json.dumps(payload).encode("utf-8"),
+        headers=headers,
+        method="POST",
+    )
+    started = time.perf_counter()
+    with urlopen(request, timeout=120) as response:
+        return consume_stream(response, started)
+
+
+def consume_stream(response, started: float, clock=time.perf_counter) -> dict[str, int]:
+    model_first_audio_ms: int | None = None
+    first_audio_ms: int | None = None
+    final_seen = False
+    for raw_line in response:
+        line = raw_line.decode("utf-8").strip()
+        if not line:
+            continue
+        event = json.loads(line)
+        if event.get("type") == "metadata":
+            model_first_audio_ms = int(event["firstAudioMs"])
+        elif event.get("type") == "audio_chunk" and event.get("data"):
+            if first_audio_ms is None:
+                first_audio_ms = round((clock() - started) * 1000)
+        elif event.get("type") == "final":
+            final_seen = True
+    wall_ms = round((clock() - started) * 1000)
+    if model_first_audio_ms is None:
+        raise ValueError("TTS stream returned no firstAudioMs metadata")
+    if first_audio_ms is None:
+        raise ValueError("TTS stream returned no playable audio chunk")
+    if not final_seen:
+        raise ValueError("TTS stream ended without a final event")
+    return {
+        "wallMs": wall_ms,
+        "modelFirstAudioMs": model_first_audio_ms,
+        "firstAudioMs": first_audio_ms,
+    }
 
 
 def request_payload(segment_id: str, text: str) -> dict:

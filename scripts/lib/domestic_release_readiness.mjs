@@ -26,6 +26,8 @@ import { appendTtsProviderReadiness } from "./domestic_release_tts_checks.mjs";
 import { appendQwenLiveSmoke } from "./domestic_release_qwen_checks.mjs";
 import { appendModelSelectionReadiness } from "./model_selection_readiness.mjs";
 import { appendModelRoutingReadiness } from "./model_routing_config.mjs";
+import { markProviderChecksDeferred } from
+  "./domestic_release_profile_checks.mjs";
 export async function checkDomesticReleaseReadiness(options) {
   const checks = [];
   const issues = [];
@@ -77,7 +79,8 @@ export async function checkDomesticReleaseReadiness(options) {
     actions,
   });
   await appendReleaseMaterialsReadiness({
-    enabled: options.checkReleaseMaterials !== false,
+    enabled:
+      options.checkReleaseMaterials !== false && !providerAcceptanceDeferred,
     root: options.root,
     file: options.releaseMaterialsFile,
     timeoutMs: options.timeoutMs,
@@ -104,6 +107,7 @@ export async function checkDomesticReleaseReadiness(options) {
     root: options.root,
     envFile: options.liveKitSelfHostEnvFile,
     checkFn: options.checkLiveKitSelfHostFn,
+    requireSip: !providerAcceptanceDeferred,
     checks,
     issues,
     actions,
@@ -186,7 +190,9 @@ export async function checkDomesticReleaseReadiness(options) {
     normalizeIssues,
   });
   await appendDomesticPaymentCallbacksLocalSmoke({
-    enabled: options.checkDomesticPaymentCallbacksLocalSmoke !== false,
+    enabled:
+      options.checkDomesticPaymentCallbacksLocalSmoke !== false &&
+      !providerAcceptanceDeferred,
     root: options.root,
     timeoutMs: options.timeoutMs,
     checkFn: options.checkDomesticPaymentCallbacksFn,
@@ -230,7 +236,9 @@ export async function checkDomesticReleaseReadiness(options) {
     normalizeIssues,
   });
   await appendDiagnosticsAlertingLocalSmoke({
-    enabled: options.checkDiagnosticsAlertingLocalSmoke !== false,
+    enabled:
+      options.checkDiagnosticsAlertingLocalSmoke !== false &&
+      !providerAcceptanceDeferred,
     root: options.root,
     timeoutMs: options.timeoutMs,
     checkFn: options.checkDiagnosticsAlertingLocalSmokeFn,
@@ -288,7 +296,17 @@ export async function checkDomesticReleaseReadiness(options) {
     status: issues.length === 0 ? "ready" : "not_ready",
     capabilityProfile,
     deferredCapabilities:
-      providerAcceptanceDeferred ? ["livekit_sip", "agent", "egress"] : [],
+      providerAcceptanceDeferred
+        ? [
+          "livekit_sip",
+          "agent",
+          "egress",
+          "payment",
+          "sms",
+          "diagnostics_alerting",
+          "release_materials",
+        ]
+        : [],
     apiBaseUrl,
     gatewayBaseUrl,
     pstnBridgeBaseUrl,
@@ -304,24 +322,6 @@ export async function checkDomesticReleaseReadiness(options) {
     issues,
     actions: [...new Set(actions)],
   };
-}
-
-function markProviderChecksDeferred(checks) {
-  const names = new Set([
-    "pstn_bridge_release_ready",
-    "pstn_provider_media_event_readiness",
-    "pstn_provider_status_event_readiness",
-    "pstn_internal_media_loop_readiness",
-    "agent_call_worker_readiness",
-  ]);
-  for (const check of checks) {
-    if (!names.has(check.name) || check.details?.skipped !== true) continue;
-    check.status = "deferred";
-    check.details = {
-      ...check.details,
-      disposition: "deferred_by_core_translation_profile",
-    };
-  }
 }
 
 export async function checkDomesticReleaseReadinessOnLocalStack(options) {

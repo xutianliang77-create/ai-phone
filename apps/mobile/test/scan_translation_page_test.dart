@@ -101,6 +101,35 @@ void main() {
     expect(find.text('未识别到文字，请换一张更清晰的图片'), findsOneWidget);
   });
 
+  testWidgets('keeps the visible scan direction aligned with the target',
+      (WidgetTester tester) async {
+    await tester.pumpWidget(_TestApp(
+      child: ScanTranslationPage(
+        ocrProvider: const _FakeOcrProvider('Welcome'),
+        translationProvider: _FakeTranslationProvider(),
+        historyRepository: _FakeSessionHistoryRepository(),
+        pickImagePath: (_) async => _picked('/tmp/sign.jpg'),
+      ),
+    ));
+
+    await tester.tap(find.text('相册'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('识别文字'));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.text('翻译'),
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.tap(find.text('翻译'));
+    await tester.pumpAndSettle();
+    await tester.drag(find.byType(ListView), const Offset(0, 600));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('英文 -> 英文'), findsOneWidget);
+    expect(find.text('English'), findsOneWidget);
+  });
+
   testWidgets(
       'keeps target language controls usable on a narrow large-text screen',
       (WidgetTester tester) async {
@@ -202,7 +231,10 @@ class _FakeOcrProvider implements MobileOcrProvider {
   Future<void> dispose() async {}
 
   @override
-  Future<MobileOcrResult?> recognizeImage(String imagePath) async {
+  Future<MobileOcrResult?> recognizeImage(
+    String imagePath, {
+    List<String>? preferredScripts,
+  }) async {
     return MobileOcrResult(
       text: text,
       provider: 'fake',

@@ -1,10 +1,16 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../../../app/app_config.dart';
 import '../../../account/presentation/widgets/account_required_panel.dart';
+import '../../../call_link/data/call_link_api_client.dart';
+import '../../../call_link/data/call_room_client.dart';
+import '../../../call_link/data/livekit_call_room_client.dart';
 import '../../../compliance/data/voice_processing_consent_store.dart';
 import '../../../compliance/presentation/widgets/voice_processing_consent_dialog.dart';
 import '../../data/ai_calling_agent_api_client.dart';
+import '../../data/agent_voice_control_controller.dart';
 import '../ai_calling_agent_policy.dart';
 import '../widgets/ai_calling_agent_draft_panel.dart';
 import '../widgets/ai_calling_agent_form.dart';
@@ -13,27 +19,51 @@ import '../widgets/ai_calling_agent_stage_bar.dart';
 import '../widgets/ai_calling_agent_task_list.dart';
 import 'agent_call_takeover_page.dart';
 
+part 'ai_calling_agent_actions.dart';
+part 'ai_calling_agent_lifecycle.dart';
+part 'ai_calling_agent_voice_control.dart';
+
 const _consentPromptVersion = 'domestic-ai-agent-consent-v1';
 const _disclosurePromptVersion = 'domestic-ai-agent-disclosure-v1';
 
 class AiCallingAgentPage extends StatefulWidget {
   const AiCallingAgentPage({
     this.client,
+    this.callClient,
+    this.roomClient,
     this.voiceConsentStore,
+    this.voiceControlEnabled,
     super.key,
   });
 
   final AiCallingAgentApiClient? client;
+  final CallLinkApiClient? callClient;
+  final CallRoomClient? roomClient;
   final VoiceProcessingConsentStore? voiceConsentStore;
+  final bool? voiceControlEnabled;
 
   @override
   State<AiCallingAgentPage> createState() => _AiCallingAgentPageState();
 }
 
 class _AiCallingAgentPageState extends State<AiCallingAgentPage> {
+  late final AppConfig _config = AppConfig.fromEnvironment();
   late final AiCallingAgentApiClient _client = widget.client ??
-      AiCallingAgentApiClient(baseUrl: AppConfig.fromEnvironment().apiBaseUrl);
+      AiCallingAgentApiClient(baseUrl: _config.apiBaseUrl);
   late final bool _ownsClient = widget.client == null;
+  late final CallLinkApiClient _callClient = widget.callClient ??
+      CallLinkApiClient(baseUrl: _config.apiBaseUrl);
+  late final CallRoomClient _roomClient =
+      widget.roomClient ?? LiveKitCallRoomClient();
+  late final bool _ownsRoomClient = widget.roomClient == null;
+  late final bool _voiceControlEnabled = widget.voiceControlEnabled ??
+      (_config.voiceAgentBackgroundWorkEnabled &&
+          _config.voiceAgentOwnershipEnabled &&
+          _config.voiceAgentDeliveryCoordinatorEnabled);
+  late final AgentVoiceControlController? _voiceControl =
+      _voiceControlEnabled
+          ? AgentVoiceControlController(api: _client, room: _roomClient)
+          : null;
   late final VoiceProcessingConsentStore _voiceConsentStore =
       widget.voiceConsentStore ?? const FileVoiceProcessingConsentStore();
   final TextEditingController _targetNameController = TextEditingController();
@@ -49,17 +79,40 @@ class _AiCallingAgentPageState extends State<AiCallingAgentPage> {
   bool _loading = false;
   bool _draftsLoading = false;
   bool _recipientDisclosureConfirmed = false;
+  StreamSubscription<CallRoomSnapshot>? _roomSubscription;
+  StreamSubscription<AgentVoiceControlSnapshot>? _voiceControlSubscription;
+  Timer? _pollTimer;
+  CallRoomSnapshot _roomSnapshot = const CallRoomSnapshot.disconnected();
+  String? _roomCallId;
+  Future<void>? _roomSync;
+  AgentVoiceControlSnapshot _voiceControlSnapshot =
+      const AgentVoiceControlSnapshot();
+
+  void _updateState(VoidCallback update) => setState(update);
+
   @override
   void initState() {
     super.initState();
+    _roomSubscription = _roomClient.snapshots.listen((snapshot) {
+      if (mounted) setState(() => _roomSnapshot = snapshot);
+    });
+    _voiceControlSubscription = _voiceControl?.snapshots.listen((snapshot) {
+      if (mounted) setState(() => _voiceControlSnapshot = snapshot);
+    });
     WidgetsBinding.instance.addPostFrameCallback((_) => _loadDrafts());
   }
 
   @override
   void dispose() {
+    _pollTimer?.cancel();
+    unawaited(_roomSubscription?.cancel());
+    unawaited(_voiceControlSubscription?.cancel());
+    unawaited(_voiceControl?.dispose());
+    if (_ownsRoomClient) unawaited(_roomClient.dispose());
     _targetNameController.dispose();
     _targetPhoneController.dispose();
     _objectiveController.dispose();
+    if (widget.callClient == null) _callClient.close();
     if (_ownsClient) _client.close();
     super.dispose();
   }
@@ -118,6 +171,15 @@ class _AiCallingAgentPageState extends State<AiCallingAgentPage> {
             ],
             if (_draft != null) ...[
               const SizedBox(height: 16),
+              if (_roomSnapshot.status != CallRoomConnectionStatus.disconnected)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Text(
+                    'LiveKit 监听：${_roomStatusText(_roomSnapshot.status)} · '
+                    '麦克风：${_roomSnapshot.microphoneEnabled ? '已开启' : '已关闭'}',
+                  ),
+                ),
+              if (_voiceControlEnabled) _buildVoiceControlPanel(),
               AiCallingAgentDraftPanel(
                 key: _draftPanelKey,
                 draft: _draft!,
@@ -125,6 +187,8 @@ class _AiCallingAgentPageState extends State<AiCallingAgentPage> {
                 onAuthorize: _authorizeDraft,
                 onStart: _startDraft,
                 onRefresh: _refreshDraft,
+                onPause: _pauseAgent,
+                onResume: _resumeAgent,
                 onTakeover: _requestTakeover,
                 onCancel: _cancelDraft,
               ),
@@ -143,150 +207,6 @@ class _AiCallingAgentPageState extends State<AiCallingAgentPage> {
         ),
       ),
     );
-  }
-
-  Future<void> _createDraft() async {
-    final objective = _objectiveController.text.trim();
-    final targetPhone = _targetPhoneController.text.trim();
-    if (objective.isEmpty) {
-      setState(() => _error = '请先填写本次电话目标');
-      return;
-    }
-    if (targetPhone.isNotEmpty && !isValidAgentCallPhone(targetPhone)) {
-      setState(() => _error = '请输入有效电话号码');
-      return;
-    }
-    await _run(() async {
-      final draft = await _client.createDraft(
-        scenario: _scenario,
-        objective: objective,
-        targetName: _targetNameController.text.trim(),
-        targetPhone: targetPhone,
-      );
-      _setDraft(draft);
-      _notice =
-          draft.requiresHumanTakeover ? '已识别高风险内容，请人工接管。' : '话术草稿已生成，请确认授权。';
-    });
-  }
-
-  Future<void> _authorizeDraft() async {
-    final draft = _draft;
-    if (draft == null) return;
-    if (!await _ensureVoiceConsent()) return;
-    if (!_recipientDisclosureConfirmed) {
-      setState(() => _error = '请先确认接通后向对方告知 AI 身份');
-      return;
-    }
-    if (!mounted) return;
-    await _run(() async {
-      final next = await _client.authorizeDraft(
-        draftId: draft.id,
-        consentPromptVersion: _consentPromptVersion,
-        recipientDisclosureConfirmed: true,
-        disclosurePromptVersion: _disclosurePromptVersion,
-      );
-      _setDraft(next);
-      _notice =
-          next.requiresHumanTakeover ? '风险内容需要人工接管，暂不自动外呼。' : '已授权，可开始执行。';
-    });
-  }
-
-  Future<void> _startDraft() async {
-    final draft = _draft;
-    if (draft == null) return;
-    if (!await _ensureVoiceConsent()) return;
-    if (!mounted) return;
-    await _run(() async {
-      _setDraft(await _client.startDraft(
-        draftId: draft.id,
-        consentPromptVersion: _consentPromptVersion,
-      ));
-      _notice = '已进入执行队列，可刷新查看进度。';
-    });
-  }
-
-  Future<void> _refreshDraft() async {
-    final draft = _draft;
-    if (draft == null) return;
-    await _run(() async {
-      _setDraft(await _client.getDraft(draftId: draft.id));
-      _notice = '状态已刷新。';
-    });
-  }
-
-  Future<void> _requestTakeover() async {
-    final draft = _draft;
-    if (draft == null || !await _ensureVoiceConsent()) return;
-    if (draft.status != 'takeover_requested') {
-      await _run(() async {
-        _setDraft(await _client.requestTakeover(
-          draftId: draft.id,
-          reason: 'user_requested_takeover',
-        ));
-        _notice = '已记录人工接管请求。';
-      });
-    }
-    final current = _draft;
-    final takeoverCallId = current?.callId;
-    if (!mounted ||
-        current == null ||
-        takeoverCallId == null ||
-        current.status != 'takeover_requested') {
-      return;
-    }
-    final takeover = current;
-    await Navigator.of(context).push(MaterialPageRoute<void>(
-      builder: (_) => AgentCallTakeoverPage(
-        draftId: takeover.id,
-        callId: takeoverCallId,
-        takeoverReadyAt: takeover.takeoverReadyAt,
-      ),
-    ));
-    if (mounted) await _refreshDraft();
-  }
-
-  Future<void> _cancelDraft() async {
-    final draft = _draft;
-    if (draft == null) return;
-    await _run(() async {
-      _setDraft(await _client.cancelDraft(draftId: draft.id));
-      _notice = '已取消任务，未发起拨号。';
-    });
-  }
-
-  Future<void> _loadDrafts() async {
-    if (_draftsLoading) return;
-    setState(() {
-      _draftsLoading = true;
-      _draftsError = null;
-    });
-    try {
-      final drafts = await _client.listDrafts();
-      if (!mounted) return;
-      setState(() => _drafts = drafts);
-    } catch (error) {
-      if (!mounted) return;
-      setState(() => _draftsError = error);
-    } finally {
-      if (mounted) setState(() => _draftsLoading = false);
-    }
-  }
-
-  void _selectDraft(AiCallingAgentDraft draft) {
-    setState(() {
-      _draft = draft;
-      _error = null;
-      _notice = '已打开任务。';
-    });
-    _scrollToDraft();
-  }
-
-  void _setDraft(AiCallingAgentDraft draft) {
-    _draft = draft;
-    _drafts = <AiCallingAgentDraft>[
-      draft,
-      ..._drafts.where((item) => item.id != draft.id),
-    ];
   }
 
   Future<void> _run(Future<void> Function() action) async {

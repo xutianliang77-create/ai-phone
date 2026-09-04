@@ -16,12 +16,14 @@ class SessionDetailPage extends StatefulWidget {
     required this.sessionId,
     this.repository,
     this.autoGenerateReview = false,
+    this.initialTranscriptQuery = '',
     super.key,
   });
 
   final String sessionId;
   final SessionHistoryRepository? repository;
   final bool autoGenerateReview;
+  final String initialTranscriptQuery;
 
   @override
   State<SessionDetailPage> createState() => _SessionDetailPageState();
@@ -110,13 +112,27 @@ class _SessionDetailPageState extends State<SessionDetailPage> {
           }
           if (_currentDetail == null && snapshot.hasError) {
             return Center(
-              child: Text(context.l10n.errorMessage(snapshot.error!)),
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: <Widget>[
+                    Text(
+                      context.l10n.errorMessage(snapshot.error!),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 12),
+                    FilledButton.icon(
+                      onPressed: _reloadDetail,
+                      icon: const Icon(Icons.refresh),
+                      label: Text(context.l10n.isChinese ? '重试' : 'Retry'),
+                    ),
+                  ],
+                ),
+              ),
             );
           }
           final detail = _currentDetail ?? snapshot.data!;
-          if (detail.segments.isEmpty) {
-            return Center(child: Text(context.l10n.noSavedSubtitles));
-          }
           return Column(
             children: <Widget>[
               SessionDetailOverview(
@@ -136,6 +152,7 @@ class _SessionDetailPageState extends State<SessionDetailPage> {
                   onUpdateActionItem: _updateActionItem,
                   onGenerateReview: _generateReview,
                   generatingReview: _generatingReview,
+                  initialTranscriptQuery: widget.initialTranscriptQuery,
                 ),
               ),
             ],
@@ -145,10 +162,18 @@ class _SessionDetailPageState extends State<SessionDetailPage> {
     );
   }
 
+  void _reloadDetail() {
+    setState(() {
+      _detail = _repository.getSession(widget.sessionId);
+    });
+  }
+
   Future<void> _shareExport(String format) async {
     setState(() => _exporting = true);
     try {
       await _repository.shareExport(widget.sessionId, format: format);
+    } catch (error) {
+      if (mounted) _showError(error);
     } finally {
       if (mounted) setState(() => _exporting = false);
     }

@@ -9,6 +9,7 @@ export function toAgentCallDto(record: AgentCallRecord) {
     workerLeaseExpiresAt: _leaseExpiresAt,
     workerLeaseAttempt: _leaseAttempt,
     providerOperationId: _providerOperationId,
+    takeoverParticipantIdentity: _takeoverParticipantIdentity,
     ...draft
   } = record;
   return draft;

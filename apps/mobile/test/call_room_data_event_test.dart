@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:translation_mobile/src/features/call_link/data/call_room_data_event.dart';
+import 'package:translation_mobile/src/features/call_link/data/call_room_client.dart';
 
 void main() {
   test('parses worker status data messages', () {
@@ -53,6 +54,55 @@ void main() {
     expect(payload.caption?.segmentId, 'segment-1');
     expect(payload.caption?.sourceText, 'hello');
     expect(payload.caption?.translatedText, '你好');
+  });
+
+  test('parses partial, thinking, and playback lifecycle events', () {
+    final partial = parseCallRoomData(utf8.encode(jsonEncode({
+      'type': 'transcript.partial',
+      'callId': 'call_1',
+      'roomName': 'call_call_1',
+      'segmentId': 'segment-1',
+      'speakerRole': 'guest',
+      'sourceLanguage': 'en',
+      'targetLanguage': 'zh',
+      'text': 'hel',
+      'turnId': 'turn-1',
+      'pipelineGeneration': 2,
+      'timestampMs': 2,
+    })));
+    expect(partial.caption?.isPartial, isTrue);
+    expect(partial.conversationState, CallRoomConversationState.listening);
+    expect(partial.pipelineGeneration, 2);
+
+    final thinking = parseCallRoomData(utf8.encode(jsonEncode({
+      'type': 'agent.thinking',
+      'callId': 'call_1',
+      'roomName': 'call_call_1',
+      'segmentId': 'turn-1',
+      'speakerRole': 'worker',
+      'text': '正在翻译',
+      'timestampMs': 3,
+    })));
+    expect(thinking.conversationState, CallRoomConversationState.thinking);
+    expect(thinking.message, '正在翻译');
+
+    final started = parseCallRoomData(utf8.encode(jsonEncode({
+      'type': 'playback.started',
+      'callId': 'call_1',
+      'roomName': 'call_call_1',
+      'segmentId': 'segment-1',
+      'speakerRole': 'guest',
+      'playbackId': 'pb-1',
+      'generation': 4,
+      'sourceLanguage': 'en',
+      'targetLanguage': 'zh',
+      'text': '你好',
+      'timestampMs': 4,
+    })));
+    expect(started.playbackState, CallRoomPlaybackState.started);
+    expect(started.conversationState, CallRoomConversationState.speaking);
+    expect(started.playbackId, 'pb-1');
+    expect(started.generation, 4);
   });
 
   test('parses tts ready events as caption voice metadata', () {

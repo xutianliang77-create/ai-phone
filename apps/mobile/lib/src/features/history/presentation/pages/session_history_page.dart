@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../../../app/app_config.dart';
@@ -17,10 +19,13 @@ class SessionHistoryPage extends StatefulWidget {
 }
 
 class _SessionHistoryPageState extends State<SessionHistoryPage> {
+  static const _searchDebounceDuration = Duration(milliseconds: 300);
+
   late final SessionHistoryRepository _repository = widget.repository ??
       SessionHistoryRepository.fromConfig(AppConfig.fromEnvironment());
   late final bool _ownsRepository = widget.repository == null;
   final TextEditingController _searchController = TextEditingController();
+  Timer? _searchDebounceTimer;
   late Future<List<SessionListItem>> _sessions = _repository.listSessions();
   SessionHistoryKind _kind = SessionHistoryKind.realtime;
   bool _showSearch = false;
@@ -28,6 +33,7 @@ class _SessionHistoryPageState extends State<SessionHistoryPage> {
 
   @override
   void dispose() {
+    _searchDebounceTimer?.cancel();
     _searchController.dispose();
     if (_ownsRepository) _repository.dispose();
     super.dispose();
@@ -40,7 +46,7 @@ class _SessionHistoryPageState extends State<SessionHistoryPage> {
         title: Text(context.l10n.history),
         actions: <Widget>[
           IconButton(
-            onPressed: () => setState(() => _showSearch = !_showSearch),
+            onPressed: _toggleSearch,
             icon: Icon(_showSearch ? Icons.close : Icons.search),
             tooltip: _showSearch ? context.l10n.clear : context.l10n.search,
           ),
@@ -77,7 +83,8 @@ class _SessionHistoryPageState extends State<SessionHistoryPage> {
                         hintText: context.l10n.search,
                       ),
                       textInputAction: TextInputAction.search,
-                      onChanged: (_) => _reload(),
+                      onChanged: (_) => _scheduleReload(),
+                      onSubmitted: (_) => _reload(),
                     ),
                   ),
           ),
@@ -90,7 +97,24 @@ class _SessionHistoryPageState extends State<SessionHistoryPage> {
                 }
                 if (snapshot.hasError) {
                   return Center(
-                    child: Text(context.l10n.errorMessage(snapshot.error!)),
+                    child: Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: <Widget>[
+                          Text(
+                            context.l10n.errorMessage(snapshot.error!),
+                            textAlign: TextAlign.center,
+                          ),
+                          const SizedBox(height: 12),
+                          FilledButton.icon(
+                            onPressed: _reload,
+                            icon: const Icon(Icons.refresh),
+                            label: Text(_text('重试', 'Retry')),
+                          ),
+                        ],
+                      ),
+                    ),
                   );
                 }
                 final sessions = snapshot.data!
@@ -118,8 +142,31 @@ class _SessionHistoryPageState extends State<SessionHistoryPage> {
   String _text(String zh, String en) => context.l10n.isChinese ? zh : en;
 
   void _reload() {
+    _searchDebounceTimer?.cancel();
+    _searchDebounceTimer = null;
     setState(() {
       _sessions = _repository.listSessions(query: _searchController.text);
+    });
+  }
+
+  void _scheduleReload() {
+    _searchDebounceTimer?.cancel();
+    _searchDebounceTimer = Timer(_searchDebounceDuration, () {
+      _searchDebounceTimer = null;
+      if (mounted) _reload();
+    });
+  }
+
+  void _toggleSearch() {
+    final closing = _showSearch;
+    if (closing) {
+      _searchDebounceTimer?.cancel();
+      _searchDebounceTimer = null;
+      _searchController.clear();
+    }
+    setState(() {
+      _showSearch = !closing;
+      if (closing) _sessions = _repository.listSessions();
     });
   }
 
@@ -128,6 +175,7 @@ class _SessionHistoryPageState extends State<SessionHistoryPage> {
       builder: (_) => SessionDetailPage(
         sessionId: sessionId,
         repository: _repository,
+        initialTranscriptQuery: _searchController.text.trim(),
       ),
     ));
     if (mounted) _reload();

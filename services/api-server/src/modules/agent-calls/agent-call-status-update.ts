@@ -7,6 +7,8 @@ import {
 import type { AgentCallRecord } from "./agent-call-record.js";
 import {
   cleanText,
+  fallbackAgentCallResultSummary,
+  isPlaceholderAgentCallSummary,
   isTerminalWorkerStatus,
   isWorkerStatus,
   normalizedSeconds,
@@ -56,6 +58,13 @@ export function applyAgentCallStatusUpdate(
   }
   draft.providerCallId = cleanText(request.providerCallId, 120) || draft.providerCallId;
   draft.resultSummary = cleanText(request.resultSummary, 800) || draft.resultSummary;
+  if ((request.status === "completed" || request.status === "failed") &&
+    (!draft.resultSummary || isPlaceholderAgentCallSummary(draft.resultSummary))) {
+    draft.resultSummary = fallbackAgentCallResultSummary(
+      request.status,
+      Boolean(draft.callId),
+    );
+  }
   draft.failureReason = cleanText(request.failureReason, 300) || draft.failureReason;
   draft.nextStep = cleanText(request.nextStep, 300) || draft.nextStep;
   draft.updatedAt = now;

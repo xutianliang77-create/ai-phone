@@ -1,9 +1,13 @@
+import importlib
+import os
+import sys
+
 import numpy as np
 
 
 class MarbleNetOnnxRuntime:
     def __init__(self, model_path: str, assets_path: str) -> None:
-        import onnxruntime as ort
+        ort = import_onnxruntime()
         import torch
 
         self._torch = torch
@@ -85,6 +89,20 @@ class MarbleNetOnnxRuntime:
                 (0, self._pad_to - remainder),
             )
         return features.float(), valid_frames
+
+
+def import_onnxruntime():
+    try:
+        return importlib.import_module("onnxruntime")
+    except ModuleNotFoundError as exc:
+        if exc.name != "onnxruntime":
+            raise
+        site_packages = os.getenv("ASR_ONNXRUNTIME_SITE_PACKAGES", "").strip()
+        if not site_packages:
+            raise
+        if site_packages not in sys.path:
+            sys.path.append(site_packages)
+        return importlib.import_module("onnxruntime")
 
 
 def pcm16_float_samples(

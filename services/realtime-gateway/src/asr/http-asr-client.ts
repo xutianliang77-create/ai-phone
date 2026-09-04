@@ -1,6 +1,7 @@
 import type {
   AsrEndpointReason,
   AsrEndpointMode,
+  AsrTokenTimingDto,
   AudioFormat,
   LanguageCode,
   TranslationLanguageCode,
@@ -9,6 +10,7 @@ import type {
   RealtimeVadDiagnosticsDto,
 } from "@translation/contracts";
 import {
+  isAsrTokenTimings,
   isSegmentTiming,
   isSegmentVadContext,
   isSpeakerAttribution,
@@ -55,11 +57,14 @@ export interface HttpAsrBoundaryRequest extends HttpAsrFlushRequest {
 
 interface HttpAsrResponse {
   segmentId?: string;
+  revision?: number;
+  isFinal?: boolean;
   text?: string;
   language?: string;
   confidence?: number;
   speaker?: SpeakerAttributionDto;
   timing?: SegmentTimingDto;
+  tokenTimings?: AsrTokenTimingDto[];
   endpointReason?: string;
   vadContext?: unknown;
 }
@@ -219,11 +224,18 @@ export class HttpAsrClient {
 
     return {
       segmentId: body.segmentId ?? fallbackSegmentId,
+      ...(Number.isInteger(body.revision) && Number(body.revision) >= 0
+        ? { revision: Number(body.revision) }
+        : {}),
+      ...(body.isFinal === false ? { isFinal: false } : {}),
       text,
       language: body.language,
       confidence: body.confidence,
       ...(isSpeakerAttribution(body.speaker) ? { speaker: body.speaker } : {}),
       ...(isSegmentTiming(body.timing) ? { timing: body.timing } : {}),
+      ...(isAsrTokenTimings(body.tokenTimings)
+        ? { tokenTimings: body.tokenTimings }
+        : {}),
       ...(isAsrEndpointReason(body.endpointReason)
         ? { endpointReason: body.endpointReason }
         : {}),

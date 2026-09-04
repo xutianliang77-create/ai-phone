@@ -32,6 +32,9 @@ class AsrService:
         }
 
     def vad_diagnostics(self, session_id: str) -> dict[str, object] | None:
+        engine_diagnostics = getattr(self.engine, "diagnostics", None)
+        if engine_diagnostics:
+            return engine_diagnostics(session_id)
         segmenter = getattr(self.engine, "segmenter", None)
         diagnostics = getattr(segmenter, "diagnostics", None)
         return diagnostics(session_id) if diagnostics else None
@@ -41,11 +44,27 @@ class AsrService:
         decision = getattr(segmenter, "frame_vad_decision", None)
         return decision(session_id) if decision else None
 
+    @property
+    def external_boundary_supported(self) -> bool:
+        return callable(getattr(self.engine, "transcribe_segment", None))
+
     async def transcribe(
         self,
         request: AsrTranscribeRequest,
     ) -> AsrTranscribeResponse | None:
         response = await self.engine.transcribe(request)
+        return corrected_response(response, request.corrections)
+
+    async def transcribe_segment(
+        self,
+        request: AsrTranscribeRequest,
+    ) -> AsrTranscribeResponse | None:
+        transcribe_segment = getattr(self.engine, "transcribe_segment", None)
+        if not callable(transcribe_segment):
+            raise NotImplementedError(
+                "active ASR provider does not support externally segmented audio"
+            )
+        response = await transcribe_segment(request)
         return corrected_response(response, request.corrections)
 
     async def flush(
@@ -112,4 +131,4 @@ def corrected_response(
     )
     if text == response.text:
         return response
-    return response.model_copy(update={"text": text})
+    return response.model_copy(update={"text": text, "tokenTimings": None})

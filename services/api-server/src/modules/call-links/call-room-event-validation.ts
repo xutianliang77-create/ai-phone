@@ -9,7 +9,10 @@ import type {
 
 const eventTypes = new Set<CallRoomDataEventType>([
   "worker.status",
+  "agent.thinking",
+  "transcript.partial",
   "transcript.final",
+  "translation.delta",
   "translation.final",
   "tts.ready",
   "playback.queued",

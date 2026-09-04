@@ -2,6 +2,7 @@ import type {
   LanguageCode,
   TranslationLanguageCode,
 } from "../shared/languages.js";
+import type { AsrTokenTimingDto } from "../shared/asr-timing.js";
 import type { PersistedRealtimeSessionState } from "../realtime/state-machine.js";
 import type {
   SegmentTimingDto,
@@ -58,6 +59,7 @@ export interface SessionSegmentDto {
   speechId?: string;
   turnId?: string;
   revision?: number;
+  speakerRevision?: number;
   pipelineGeneration?: number;
   pipelineTiming?: SpeechPipelineTimingDto;
   sourceText: string;
@@ -78,6 +80,7 @@ export interface SessionSegmentDto {
   refinement?: SessionSegmentRefinementDto;
   speaker?: SpeakerAttributionDto;
   timing?: SegmentTimingDto;
+  tokenTimings?: AsrTokenTimingDto[];
   vadContext?: SegmentVadContextDto;
 }
 
@@ -138,6 +141,7 @@ export interface UpsertSessionSegmentRequest {
   speechId?: string;
   turnId?: string;
   revision?: number;
+  speakerRevision?: number;
   pipelineGeneration?: number;
   pipelineTiming?: SpeechPipelineTimingDto;
   sourceText?: string;
@@ -158,6 +162,7 @@ export interface UpsertSessionSegmentRequest {
   refinement?: SessionSegmentRefinementDto;
   speaker?: SpeakerAttributionDto;
   timing?: SegmentTimingDto;
+  tokenTimings?: AsrTokenTimingDto[];
   vadContext?: SegmentVadContextDto;
 }
 

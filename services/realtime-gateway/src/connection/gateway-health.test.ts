@@ -4,7 +4,9 @@ import { gatewayHealthPayload, gatewayReleaseReadinessPayload } from "./gateway-
 
 const env: RealtimeEnv = {
   port: 3001,
+  allowedHosts: ["call.example.cn"],
   allowedOrigins: ["https://call.example.cn"],
+  allowNonBrowserClientsWithoutOrigin: true,
   trustProxyAddresses: ["127.0.0.1", "::1"],
   maxPayloadBytes: 65_536,
   maxConnections: 512,
@@ -128,6 +130,33 @@ describe("gateway health", () => {
       profile: "domestic",
       issues: [],
     });
+  });
+
+  it("exposes traceable runtime identity and gates incomplete identity", () => {
+    const traceableEnv = {
+      ...env,
+      provider: "hymt2_self_hosted" as const,
+      resolvedProvider: "lmstudio" as const,
+      runtimeCandidateId: "wujie-v1-candidate",
+      runtimeSourceCommit: "a".repeat(40),
+      runtimeSourceTree: "b".repeat(40),
+      runtimeImageId: `sha256:${"c".repeat(64)}`,
+      runtimeConfigSha256: "d".repeat(64),
+      requireTraceableRuntime: true,
+    };
+
+    expect(gatewayHealthPayload(traceableEnv).runtimeIdentity).toMatchObject({
+      candidateId: "wujie-v1-candidate",
+      traceable: true,
+    });
+    expect(gatewayReleaseReadinessPayload(traceableEnv).status).toBe("ready");
+
+    expect(gatewayReleaseReadinessPayload({
+      ...traceableEnv,
+      runtimeImageId: undefined,
+    }).issues).toContain(
+      "Release requires complete WUJIE_RUNTIME_* source, image, and config identity",
+    );
   });
 
   it("blocks release readiness for mock runtime settings", () => {

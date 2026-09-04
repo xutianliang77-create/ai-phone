@@ -16,6 +16,8 @@ import {
 import type { AgentCallRecord } from "./agent-call-record.js";
 import {
   cleanText,
+  fallbackAgentCallResultSummary,
+  isPlaceholderAgentCallSummary,
   normalizedSeconds,
 } from "./agent-call-repository-helpers.js";
 import {
@@ -33,6 +35,10 @@ import {
   updateAgentRun,
   updateAgentToolExecution,
 } from "./agent-orchestration-runtime.repository.js";
+import {
+  agentCallDialOperationType,
+  configuredAgentCallProvider,
+} from "./agent-call-provider-profile.js";
 
 export async function claimQueuedAgentCalls(input: {
   workerId: string;
@@ -112,7 +118,7 @@ async function claimOne(
   const operation = await beginProviderOperation({
     sessionId: draft.callId,
     provider,
-    operationType: "sip_outbound",
+    operationType: agentCallDialOperationType(),
     operationKey: draft.id,
     idempotencyKey: `agent-dial:${draft.callId}`,
     requestHash: dialRequestHash(draft),
@@ -191,6 +197,13 @@ export function applyAgentCallStatusMutation(
   if (consumed !== null) draft.consumedSeconds = consumed;
   draft.providerCallId = cleanText(request.providerCallId, 120) || draft.providerCallId;
   draft.resultSummary = cleanText(request.resultSummary, 800) || draft.resultSummary;
+  if ((request.status === "completed" || request.status === "failed") &&
+    (!draft.resultSummary || isPlaceholderAgentCallSummary(draft.resultSummary))) {
+    draft.resultSummary = fallbackAgentCallResultSummary(
+      request.status,
+      Boolean(draft.callId),
+    );
+  }
   draft.failureReason = cleanText(request.failureReason, 300) || draft.failureReason;
   draft.nextStep = cleanText(request.nextStep, 300) || draft.nextStep;
   if (request.status !== "in_progress") draft.workerLeaseExpiresAt = undefined;
@@ -312,9 +325,7 @@ function tokenHash(value: string) {
 }
 
 function agentCallProvider(): CommunicationProvider | null {
-  const value = process.env.AGENT_CALL_PROVIDER_ADAPTER;
-  return value === "livekit_sip" || value === "pstn_http" || value === "pstn_fonoster"
-    ? value : null;
+  return configuredAgentCallProvider();
 }
 
 function boundedLimit(value: number) {

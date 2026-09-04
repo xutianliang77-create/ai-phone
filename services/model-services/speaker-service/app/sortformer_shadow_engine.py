@@ -3,6 +3,7 @@ import base64
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from app.model_device import resolve_model_device
 from app.pcm_stream_buffer import PcmStreamBuffer
 from app.schemas import CreateSpeakerSessionRequest, SpeakerAudioFrame, SpeakerSpan
 from app.sortformer_streaming_runtime import (
@@ -33,24 +34,36 @@ class SortformerShadowEngine:
         profile: StreamingProfile,
         onset: float = 0.5,
         offset: float = 0.5,
+        device: str = "auto",
+        pad_offset_ms: int = 0,
+        min_duration_on_ms: int = 0,
+        min_duration_off_ms: int = 0,
         model=None,
     ) -> None:
+        resolved_device = resolve_model_device(device)
         if model is None:
             from nemo.collections.asr.models import SortformerEncLabelModel
 
-            model = (
-                SortformerEncLabelModel.restore_from(
+            if Path(model_id).is_file():
+                model = SortformerEncLabelModel.restore_from(
                     restore_path=model_id,
-                    map_location="cuda",
+                    map_location=resolved_device,
                     strict=False,
                 )
-                if Path(model_id).is_file()
-                else SortformerEncLabelModel.from_pretrained(model_id)
-            )
+            else:
+                model = SortformerEncLabelModel.from_pretrained(
+                    model_id,
+                    map_location=resolved_device,
+                )
+            model.to(resolved_device)
         model.eval()
+        self.device = resolved_device
         self._runtime = SortformerStreamingRuntime(model, profile)
         self._onset = onset
         self._offset = offset
+        self._pad_offset_ms = pad_offset_ms
+        self._min_duration_on_ms = min_duration_on_ms
+        self._min_duration_off_ms = min_duration_off_ms
         self._sessions: dict[str, _Session] = {}
 
     async def create_session(self, request: CreateSpeakerSessionRequest) -> None:
@@ -93,6 +106,9 @@ class SortformerShadowEngine:
                 timeline_origin_ms=frame.timestampMs,
                 onset=self._onset,
                 offset=self._offset,
+                pad_offset_ms=self._pad_offset_ms,
+                min_duration_on_ms=self._min_duration_on_ms,
+                min_duration_off_ms=self._min_duration_off_ms,
             )
         elif session.resume_pending and session.decoder is not None:
             session.decoder.align_next_frame(frame.timestampMs)

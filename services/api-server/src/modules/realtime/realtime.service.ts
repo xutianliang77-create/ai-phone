@@ -11,8 +11,8 @@ import { createUsageHold } from "../usage/usage-hold-runtime.service.js";
 import { getReadyVoiceProfileTtsConfig } from
   "../voice-profiles/voice-profiles-runtime.service.js";
 import { createRealtimeToken } from "./realtime-token.js";
+import { realtimeMaxSessionSeconds } from "./realtime-session-duration.js";
 
-const maxDurationSeconds = 1800;
 const realtimeStartHoldSeconds = 30;
 
 export async function createRealtimeSession(
@@ -21,6 +21,7 @@ export async function createRealtimeSession(
 ): Promise<CreateRealtimeSessionResponse | null> {
   const plan = await activePlanForUser(userId);
   const env = loadEnv();
+  const maxDurationSeconds = realtimeMaxSessionSeconds();
   const sessionId = randomUUID();
   const hold = await createUsageHold(userId, realtimeStartHoldSeconds, {
     sessionId,

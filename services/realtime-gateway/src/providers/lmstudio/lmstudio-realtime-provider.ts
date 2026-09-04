@@ -7,18 +7,10 @@ import type { RealtimeProvider, RealtimeProviderSession, TextSegmentInput } from
 import { LmStudioClient } from "./lmstudio-client.js";
 import { isUsableTranslation, providerUsage } from "./lmstudio-translation-output.js";
 import { transcriptVariantsForTranslation } from "./transcript-chunks.js";
-import {
-  RealtimeTranscriptRefiner,
-} from "./lmstudio-asr-refinement.js";
+import { routeAsrTranscript } from "./lmstudio-asr-transcript-routing.js";
+import { RealtimeTranscriptRefiner } from "./lmstudio-asr-refinement.js";
 import { SegmentAssembler } from "../../segments/segment-assembler.js";
-import {
-  errorMessage,
-  providerError,
-  realtimeLogTranslationFailure,
-  targetLanguageForTranscript,
-  terminologyFor,
-  translationFailed,
-} from "./lmstudio-realtime-helpers.js";
+import { errorMessage, providerError, realtimeLogTranslationFailure, targetLanguageForTranscript, terminologyFor, transcriptFinalEvent, translationFailed } from "./lmstudio-realtime-helpers.js";
 import { shouldPreserveSpelledIdentifier } from "./spelled-identifier.js";
 import type { LmStudioRealtimeProviderOptions, TranslationClient } from "./lmstudio-realtime-provider-options.js";
 import { orderedTurnTranscripts } from "../../asr/transcript-turn-order.js";
@@ -26,6 +18,9 @@ import {
   analyzeTurnLanguage,
   turnLanguageEventFields,
 } from "../../segments/turn-language-profile.js";
+import { continuationTombstones } from "./lmstudio-continuation-events.js";
+import { transcriptFromTextSegment } from "./lmstudio-text-segment-input.js";
+import { PostAssemblySpeakerRepairCoordinator } from "./lmstudio-post-assembly-speaker-repair.js";
 
 export class LmStudioRealtimeProvider implements RealtimeProvider {
   readonly name: string;
@@ -35,12 +30,19 @@ export class LmStudioRealtimeProvider implements RealtimeProvider {
   private readonly model: string;
   private sessions = new Map<string, RealtimeProviderSession>();
   private semanticSegments = new SegmentAssembler();
+  private readonly listeningSemanticSegments: SegmentAssembler;
+  private readonly speakerBoundaryRepair: PostAssemblySpeakerRepairCoordinator;
 
   constructor(options: LmStudioRealtimeProviderOptions) {
     this.name = options.providerName ?? "lmstudio";
     this.model = options.model;
     this.client = options.translationClient ?? new LmStudioClient(options);
     this.asrProvider = options.asrProvider ?? new MockAsrProvider();
+    this.speakerBoundaryRepair = new PostAssemblySpeakerRepairCoordinator(this.asrProvider);
+    this.listeningSemanticSegments = new SegmentAssembler({
+      maxContinuationBufferMs: options.listeningMaxContinuationBufferMs,
+      emitMaxDurationRevisions: true,
+    });
     this.transcriptRefiner = new RealtimeTranscriptRefiner({
       provider: options.asrRefinementProvider ?? new OffLlmProvider(),
       enabled: options.asrRefinementEnabled === true,
@@ -50,6 +52,7 @@ export class LmStudioRealtimeProvider implements RealtimeProvider {
 
   async createSession(session: RealtimeProviderSession) {
     this.sessions.set(session.sessionId, session);
+    this.speakerBoundaryRepair.createSession(session);
     await this.asrProvider.createSession(session);
   }
 
@@ -81,7 +84,7 @@ export class LmStudioRealtimeProvider implements RealtimeProvider {
       yield* this.flushExpiredSemanticSegments(session);
       return;
     }
-    for (const transcript of transcripts) yield* this.processTranscript(session, transcript);
+    for (const transcript of transcripts) yield* routeAsrTranscript(session, transcript, (item) => this.processTranscript(session, item), (item) => this.semanticSegmentsFor(session).previewContinuation(session.sessionId, item) ?? item);
   }
 
   async *sendText(
@@ -101,18 +104,18 @@ export class LmStudioRealtimeProvider implements RealtimeProvider {
 
     yield* this.flushExpiredSemanticSegments(session);
 
-    const transcript = {
-      segmentId: segment.segmentId,
-      text,
-      language: segment.language,
-      confidence: segment.confidence,
-    };
+    const transcript = transcriptFromTextSegment(segment, text);
     if (!segment.isFinal) {
       yield {
         type: "transcript.partial",
         sessionId: segment.sessionId,
         ...transcript,
       };
+      return;
+    }
+
+    if (segment.finalizeImmediately) {
+      yield* this.translateTranscript(session, transcript);
       return;
     }
 
@@ -145,17 +148,23 @@ export class LmStudioRealtimeProvider implements RealtimeProvider {
     }
     for (const transcript of transcripts) yield* this.processTranscript(session, transcript);
     yield* this.flushSemanticSegments(session);
+    this.speakerBoundaryRepair.finalizeEndpointNoops(session);
   }
 
   async closeSession(sessionId: string) {
     this.sessions.delete(sessionId);
     this.transcriptRefiner.clear(sessionId);
     this.semanticSegments.clear(sessionId);
+    this.listeningSemanticSegments.clear(sessionId);
+    this.speakerBoundaryRepair.clear(sessionId);
     await this.asrProvider.closeSession(sessionId);
   }
 
   async diagnostics(sessionId: string) {
-    return await this.asrProvider.diagnostics?.(sessionId) ?? {};
+    return {
+      ...(await this.asrProvider.diagnostics?.(sessionId) ?? {}),
+      speakerAssemblyRepair: this.speakerBoundaryRepair.diagnostics(sessionId),
+    };
   }
   async healthCheck() {
     return (
@@ -170,7 +179,7 @@ export class LmStudioRealtimeProvider implements RealtimeProvider {
   ): AsyncGenerator<ServerRealtimeEvent> {
     const text = cleanRealtimeText(transcript.text);
     if (!text) return;
-    const assembled = this.semanticSegments.push(session.sessionId, {
+    const assembled = this.semanticSegmentsFor(session).push(session.sessionId, {
       ...transcript,
       text,
       ...analyzeTurnLanguage(text, transcript.language),
@@ -182,7 +191,8 @@ export class LmStudioRealtimeProvider implements RealtimeProvider {
         ...assembled.partial,
       };
     }
-    for (const readyTranscript of assembled.ready) {
+    for (const event of continuationTombstones(session, transcript, assembled.supersededSegmentIds)) yield event;
+    for (const readyTranscript of this.speakerBoundaryRepair.repairReady(session, assembled.ready)) {
       yield* this.translateTranscript(session, readyTranscript, emitTranscript);
     }
   }
@@ -191,15 +201,22 @@ export class LmStudioRealtimeProvider implements RealtimeProvider {
     session: RealtimeProviderSession,
     emitTranscript = true,
   ): AsyncGenerator<ServerRealtimeEvent> {
-    for (const transcript of this.semanticSegments.flush(session.sessionId)) {
+    for (const transcript of this.speakerBoundaryRepair.repairReady(session, this.semanticSegmentsFor(session).flush(session.sessionId))) {
       yield* this.translateTranscript(session, transcript, emitTranscript);
     }
   }
 
   private async *flushExpiredSemanticSegments(session: RealtimeProviderSession) {
-    for (const transcript of this.semanticSegments.drainExpired(session.sessionId)) {
+    for (const transcript of this.speakerBoundaryRepair.repairReady(session, this.semanticSegmentsFor(session).drainExpired(session.sessionId))) {
       yield* this.translateTranscript(session, transcript);
     }
+    for (const transcript of this.speakerBoundaryRepair.repairPending(session)) yield* this.translateTranscript(session, transcript);
+  }
+
+  private semanticSegmentsFor(session: RealtimeProviderSession) {
+    return session.asrEndpointMode === "listening"
+      ? this.listeningSemanticSegments
+      : this.semanticSegments;
   }
 
   private async *translateTranscript(
@@ -229,22 +246,7 @@ export class LmStudioRealtimeProvider implements RealtimeProvider {
     );
     const text = refinement.text;
     if (emitTranscript) {
-      yield {
-        type: "transcript.final",
-        sessionId: session.sessionId,
-        segmentId: transcript.segmentId,
-        turnId: transcript.turnId,
-        revision: transcript.revision,
-        text,
-        rawText: refinement.rawText,
-        ...(refinement.optimizedText ? { optimizedText: refinement.optimizedText } : {}),
-        language: transcript.language,
-        ...turnLanguageEventFields(transcript),
-        confidence: transcript.confidence,
-        refinement: refinement.refinement,
-        speaker: transcript.speaker, timing: transcript.timing,
-        vadContext: transcript.vadContext,
-      };
+      yield transcriptFinalEvent(session, transcript, refinement);
     }
 
     try {

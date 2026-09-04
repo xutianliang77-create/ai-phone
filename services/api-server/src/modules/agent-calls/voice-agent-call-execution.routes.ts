@@ -2,11 +2,9 @@ import type { FastifyInstance } from "fastify";
 import { sendError } from "../../infrastructure/http/errors.js";
 import { ensureCallRoom } from "../call-links/call-room-worker.js";
 import { findCallLink } from "../call-links/call-links.service.js";
-import { executeLiveKitSipOutbound } from
-  "../call-links/livekit-sip-outbound-coordinator.js";
-import { getLiveKitSipConfig } from "../call-links/livekit-sip-readiness.js";
 import { findProviderOperation } from
   "../provider-operations/provider-operations-runtime.repository.js";
+import { withSessionWriteLock } from "../sessions/session-write-coordinator.js";
 import { findAgentCallDraftById } from "./agent-calls-runtime.repository.js";
 import {
   isInternalAuthorized,
@@ -14,6 +12,13 @@ import {
 import { verifyAgentCallLease } from "./agent-call-lease-runtime.repository.js";
 import { getVoiceAgentRuntimeReadiness } from "./voice-agent-runtime-readiness.js";
 import { getVoiceAgentRuntimeSupervisor } from "./voice-agent-runtime-supervisor.js";
+import {
+  configuredAgentCallProvider,
+  isAgentCallDialOperation,
+} from "./agent-call-provider-profile.js";
+import { getAgentCallTelephonyRuntime } from
+  "./agent-call-telephony-runtime.js";
+import { executePhoneOutbound } from "./phone-outbound-coordinator.js";
 
 export function registerVoiceAgentCallExecutionRoutes(app: FastifyInstance) {
   app.post(
@@ -31,15 +36,18 @@ export function registerVoiceAgentCallExecutionRoutes(app: FastifyInstance) {
         return sendError(reply, 409, "agent_call_lease_conflict", "Worker lease is invalid");
       }
       const readiness = getVoiceAgentRuntimeReadiness();
-      const sip = getLiveKitSipConfig();
-      if (readiness.status !== "ready" || !sip.ok) {
+      const configuredProvider = configuredAgentCallProvider();
+      const telephony = configuredProvider
+        ? getAgentCallTelephonyRuntime(configuredProvider)
+        : { ok: false as const, issues: ["Agent call provider is not configured"] };
+      if (readiness.status !== "ready" || !telephony.ok) {
         return reply.status(503).send({
           error: {
             code: "voice_agent_runtime_not_ready",
             message: "Voice Agent runtime is not configured",
           },
           readiness,
-          sipIssues: sip.ok ? [] : sip.issues,
+          telephonyIssues: telephony.ok ? [] : telephony.issues,
         });
       }
       if (!draft.callId || !draft.targetPhone || !draft.providerOperationId) {
@@ -63,10 +71,38 @@ export function registerVoiceAgentCallExecutionRoutes(app: FastifyInstance) {
       if (!room.ok) {
         return sendError(reply, 503, "agent_call_room_failed", "Agent call room failed");
       }
+      const operation = await findProviderOperation(draft.providerOperationId);
+      if (!operation || operation.sessionId !== call.sessionId ||
+        operation.provider !== configuredProvider ||
+        !isAgentCallDialOperation(operation)) {
+        return sendError(
+          reply,
+          409,
+          "agent_call_dial_operation_conflict",
+          "Agent dial operation binding failed",
+        );
+      }
+      let payload;
+      try {
+        payload = await telephony.runtime.buildPayload({ draft, call, operation });
+      } catch (error) {
+        request.log.error(
+          { draftId, err: error },
+          "Agent telephony binding preparation failed",
+        );
+        return sendError(
+          reply,
+          503,
+          "agent_call_telephony_binding_not_ready",
+          "Agent telephony binding is not ready",
+        );
+      }
       const runtime = getVoiceAgentRuntimeSupervisor();
       try {
         await runtime.ensure(call.callId);
       } catch (error) {
+        await Promise.resolve(telephony.runtime.releasePayload?.(payload))
+          .catch(() => undefined);
         request.log.error({ draftId, err: error }, "Voice Agent runtime dispatch failed");
         return sendError(
           reply,
@@ -75,58 +111,60 @@ export function registerVoiceAgentCallExecutionRoutes(app: FastifyInstance) {
           "Voice Agent runtime did not become ready",
         );
       }
-      const currentDraft = await findAgentCallDraftById(draftId);
-      if (!currentDraft ||
-        !verifyAgentCallLease(currentDraft, workerId, leaseToken)) {
-        await runtime.stop(call.callId);
-        return sendError(reply, 409, "agent_call_lease_conflict", "Worker lease expired");
-      }
-      const operation = await findProviderOperation(currentDraft.providerOperationId!);
-      if (!operation || operation.sessionId !== call.sessionId ||
-        operation.operationType !== "sip_outbound" ||
-        operation.provider !== "livekit_sip") {
-        await runtime.stop(call.callId);
-        return sendError(
-          reply,
-          409,
-          "agent_call_dial_operation_conflict",
-          "Agent dial operation binding failed",
-        );
-      }
-      const result = await executeLiveKitSipOutbound({
-        record: call,
-        operation,
-        config: sip.config,
-        request: {
-          targetPhone: currentDraft.targetPhone!,
-          sourceLanguage: currentDraft.language,
-          targetLanguage: currentDraft.language === "zh" ? "en" : "zh",
-          disclosureConfirmed: true,
-        },
-      });
-      if (result.ok) {
-        return reply.status(202).send({
-          status: "in_progress",
-          providerOperationStatus: "accepted",
-          providerCallId: result.operation.externalOperationId,
-          resultSummary: "Voice Agent runtime ready; SIP dial accepted",
+      return withSessionWriteLock(call.sessionId, async () => {
+        const currentDraft = await findAgentCallDraftById(draftId);
+        if (!currentDraft || currentDraft.status !== "dispatching" ||
+          !verifyAgentCallLease(currentDraft, workerId, leaseToken)) {
+          await runtime.stop(call.callId);
+          await Promise.resolve(telephony.runtime.releasePayload?.(payload))
+            .catch(() => undefined);
+          return sendError(
+            reply, 409, "agent_call_lease_conflict", "Worker lease expired",
+          );
+        }
+        if (currentDraft.providerOperationId !== operation.id) {
+          await runtime.stop(call.callId);
+          await Promise.resolve(telephony.runtime.releasePayload?.(payload))
+            .catch(() => undefined);
+          return sendError(
+            reply,
+            409,
+            "agent_call_dial_operation_conflict",
+            "Agent dial operation binding failed",
+          );
+        }
+        const result = await executePhoneOutbound({
+          operation,
+          provider: telephony.runtime.adapter,
+          payload,
+          timeoutMs: telephony.runtime.timeoutMs,
         });
-      }
-      if (result.reconciliationRequired) {
-        return reply.status(202).send({
+        if (result.ok) {
+          return reply.status(202).send({
+            status: "in_progress",
+            providerOperationStatus: "accepted",
+            providerCallId: result.providerCallId,
+            resultSummary: "Voice Agent runtime ready; phone dial accepted",
+          });
+        }
+        if (result.reconciliationRequired) {
+          return reply.status(202).send({
+            status: "failed",
+            providerOperationStatus: "unknown",
+            providerCallId: result.operation.externalOperationId,
+            failureReason: result.errorClass,
+            nextStep: "核对电话 provider 最终状态后再决定是否重试。",
+          });
+        }
+        await runtime.stop(call.callId);
+        await Promise.resolve(telephony.runtime.releasePayload?.(payload))
+          .catch(() => undefined);
+        return reply.status(200).send({
           status: "failed",
-          providerOperationStatus: "unknown",
-          providerCallId: result.operation.externalOperationId,
+          providerOperationStatus: "failed",
           failureReason: result.errorClass,
-          nextStep: "核对 LiveKit SIP participant 后再决定是否重试。",
+          nextStep: "检查电话 provider、号码策略和运行时 readiness。",
         });
-      }
-      await runtime.stop(call.callId);
-      return reply.status(200).send({
-        status: "failed",
-        providerOperationStatus: "failed",
-        failureReason: result.errorClass,
-        nextStep: "检查 SIP trunk、号码策略和运行时 readiness。",
       });
     },
   );

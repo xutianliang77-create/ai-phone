@@ -9,17 +9,23 @@ import type { LiveKitSipConfig } from
 import {
   beginProviderOperation,
   findProviderOperation,
-  findSessionProviderOperation,
   updateProviderOperation,
 } from "../provider-operations/provider-operations-runtime.repository.js";
+import { findAgentDialProviderOperation } from
+  "./agent-call-provider-operation.js";
 
 export async function executeVoiceAgentHangup(input: {
   call: CallLinkRecord;
   config: LiveKitSipConfig;
   idempotencyKey: string;
+  providerOperationId: string;
 }) {
-  const dial = await findSessionProviderOperation(input.call.sessionId, "sip_outbound");
-  if (!dial || !["accepted", "unknown", "active", "succeeded"]
+  const dial = await findAgentDialProviderOperation(
+    input.call.sessionId,
+    input.providerOperationId,
+  );
+  if (!dial || dial.provider !== "livekit_sip" ||
+    !["accepted", "unknown", "active", "succeeded"]
     .includes(dial.status)) {
     return { ok: false as const, code: "sip_not_started" };
   }

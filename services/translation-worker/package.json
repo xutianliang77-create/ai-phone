@@ -14,9 +14,10 @@
     "test": "vitest run src"
   },
   "dependencies": {
-    "@livekit/agents": "1.5.0",
-    "@livekit/protocol": "1.46.6",
-    "@livekit/rtc-node": "^0.13.30",
+    "@livekit/agents": "1.6.4",
+    "@livekit/protocol": "1.50.4",
+    "@livekit/rtc-ffi-bindings": "0.12.73",
+    "@livekit/rtc-node": "0.13.33",
     "@translation/contracts": "file:../../packages/contracts",
     "@translation/llm": "file:../../packages/llm",
     "@translation/speech-quality": "file:../../packages/speech-quality",

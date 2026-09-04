@@ -77,6 +77,12 @@ Playback Router / Captions / Events
 - `agent-runtime`：目标、对话记忆、工具调用、确认、接管和任务结果。
 - `speech-runtime`：共享音频、VAD、turn、ASR、TTS、播放和观测能力。
 
+Agent Runtime 内部再区分实时前台与持久后台：当前轮直接回复保留低延迟前台；
+复杂工具任务只通过有界命令快速受理，由持久后台执行。后台结果必须经过
+AnnouncementWindow 和客户端播放回执才能确认交付。该扩展不得阻塞或改写
+Translation Runtime，优先级固定为实时翻译高于任何后台播报。详细兼容边界见
+`12-qwen-audio-agent-gap-adoption-plan.md`。
+
 ### 2.5 模型服务层
 
 | 能力 | 当前主路由 | 统一接口目标 |

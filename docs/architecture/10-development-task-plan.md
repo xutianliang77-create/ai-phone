@@ -255,6 +255,34 @@ Feature flag：`LIVEKIT_AGENT_DISPATCH`
 - reservation TTL 和释放。
 - 过载时不接通后静默无字幕。
 
+### ARC-JOB-006 人工翻译通话实时控制
+
+交付：
+
+- Air780 与保留 SIP 共用 provider-neutral 的译声 pause/resume 和 Type-to-Speak 合同。
+- App 本机静音与电话目标译声暂停相互独立，不能用关闭 App 麦克风冒充清理已排队 TTS。
+- 控制命令绑定 call、唯一 dial operation、Worker dispatch generation 和单调 control generation。
+- provider-operation 与 delivery outbox 必须在 memory/JSON/SQLite 或 PostgreSQL 的同一事务中创建；
+  重放严格复核 session/operation key/payload，并能补建缺失 outbox。恢复发布前必须先持久化
+  accepted；定向 RELIABLE data、Worker 有界 inbox/outcome 和不同 payload 冲突均 fail closed。
+- pause 先 cancel generation、拒绝新排队项并 clear 当前播放，再上报成功；resume 采用
+  `prepared(仍 paused) -> Worker resume -> succeeded` 两阶段协议。prepared 未确认时恢复 paused；
+  最终 ACK 丢失重报同一 outcome，不重复执行 resume。
+- pending/last-settled/operation key 同时绑定 dispatch/control generation；状态和 operation 之间的
+  崩溃窗口由 recovery 确定性补偿。pause/resume 的 operation key 是数据库代际槽位，跨 API 实例
+  的不同客户端键不能并发占用同一代际；state pending 写入前崩溃按 failed+paused 消费该代际后
+  才能创建下一代。旧 Worker/旧 lease 结果 100% 拒绝。
+- Type-to-Speak 使用确定性 speech/turn identity 进入既有 MT/TTS/track admission，不建立旁路；
+  Worker 先取得持久 prepared 执行权，API 在允许执行前结清投递，prepared 回执丢失不执行，最终
+  回执丢失不跨 Worker 重播并在 120 秒后失败收敛。该边界是 durable at-most-once，不冒充远端
+  exactly-once 可闻。
+- 只保存脱敏问题 marker，不保存号码、文本、PCM 或录音；响应不明复用相同幂等键。
+
+当前进度（2026-08-28）：生产源码与测试源码已接线并完成自动化收口；Node 根级
+`488 files / 1899 tests`、全 workspace typecheck、lint/350 行门以及 Flutter
+`487/487 + analyze 0` 通过。状态为 `SOURCE_AUTOMATION_PASS / DEPLOYMENT_PENDING`；
+真实迁移、当前 HEAD 镜像、现场音轨和通话验收仍须独立执行。
+
 退出条件：
 
 - API 不再以手工环境变量作为默认启动方式。
@@ -484,6 +512,38 @@ IVR 和真机接管均未验证，Autonomous 仍默认关闭。外部运营坐�
 本地静态实现：独立私密房、operator SIP 身份、签名 webhook、可靠 inbox、幂等
 move/end、未知结果恢复、脱敏投影和 App 接受/拒绝/三方确认流程；默认 flag 关闭，
 尚未连接真实 LiveKit/SIP/trunk 或真机，不能标记 accepted、可部署或已完成外部转接。
+
+### 8.1 Voice Agent 后台工作与可靠播报补缺
+
+本批只借鉴 Qwen Audio Agent 的后台任务和播报可靠性设计，不替换现有
+LiveKit AgentSession、Translation Runtime、playback 事件或 PostgreSQL outbox。
+详细决策见 `12-qwen-audio-agent-gap-adoption-plan.md`。
+
+| 优先级 | 任务 | 交付 | 状态 |
+| --- | --- | --- | --- |
+| P0 | `ARC-VOICE-WORK-001` | `workId`、作用域 generation、失效规则和跨端 golden fixtures | SOURCE_COMPLETE_AUTOMATED_PASS_FLAG_OFF_DEPLOYED |
+| P0 | `ARC-VOICE-DELIVERY-001` | delivery ledger、客户端播放回执、服务端/客户端 playback 语义映射 | SOURCE_COMPLETE_AUTOMATED_PASS_FLAG_OFF_DEPLOYED |
+| P0 | `ARC-VOICE-WINDOW-001` | 翻译优先的 AnnouncementWindow 和打断/过期测试 | SOURCE_COMPLETE_AUTOMATED_PASS_FLAG_OFF_DEPLOYED |
+| P0 | `ARC-VOICE-RELIABILITY-001` | Host/Origin、防 DNS rebinding、稳定重连退避、Agent-only watchdog、音频时长门 | SOURCE_COMPLETE_AUTOMATED_PASS_FLAG_OFF_DEPLOYED |
+| P1 | `ARC-VOICE-WORK-002` | PostgreSQL Work Store、durable queue、transactional outbox、create/cancel/status | SOURCE_COMPLETE_AUTOMATED_PASS_FLAG_OFF_DEPLOYED |
+| P1 | `ARC-VOICE-PERMISSION-001` | 有界实时工具面和当前 turn 明确授权证据 | SOURCE_COMPLETE_AUTOMATED_PASS_FLAG_OFF_DEPLOYED |
+| P2 | `ARC-VOICE-OWNERSHIP-001` | `sessionId + legId + clientInstanceId` ownership/takeover | SOURCE_COMPLETE_AUTOMATED_PASS_FLAG_OFF_DEPLOYED |
+| P2 | `ARC-VOICE-PROVIDER-001` | 可选 Qwen Audio Agent Provider shadow，不进入默认翻译链 | SOURCE_COMPLETE_AUTOMATED_PASS_FLAG_OFF_DEPLOYED |
+
+当前状态：**P0/P1/P2 源码、自动化、迁移和 flag-off 单容器部署已完成，功能启用与现场验收后置**。P0 已冻结
+Work/Delivery/客户端播放回执合同与跨端 fixtures，并完成 AnnouncementWindow、安全门禁、
+重连、watchdog 和 Air 定向 TTS 容量保护。P1 新增 `037`～`039` PostgreSQL migration、
+Work/permission/current-turn store、幂等 create/cancel/status、claim/lease/retry/convergence、
+transactional outbox 和同容器 runner；权限批准在同一事务内锁定并复核当前客户端 ownership，
+默认授权快照 ID 可确定重放；后台可执行面当前只注册低风险只读
+`availability_lookup v1`，外部 Tool Gateway 必须支持 `workId` 幂等。P2 新增 `040`/`041`
+ownership/delivery migration、确认式 takeover、精确 Worker 定向播报、严格有序客户端生命周期
+事件、Flutter 持久回执 outbox，以及只观察电话对端音频的 Qwen Audio Realtime text-only
+shadow。所有新增 flag 默认关闭，不替换 Translation Runtime、不改变既有 AI 代打全房间监听、
+不修改 Air780/SIP 默认通话路径，也不新增按功能拆分的应用容器。canonical Node `1821/1821`、
+Flutter `453/453`、ASR `101/101`、全仓 typecheck/analyze/build 和 PostgreSQL 36→41 升级均已
+通过；Beelink 已以全部新增 flag 关闭的方式部署唯一 `wujie-ai` 容器。当前仍不能写成新功能
+现场通过或产品可用，分层启用、客户端真实回执、音频和故障矩阵继续后置。
 
 ## 9. Platform P1-F：Speech 与模型性能
 

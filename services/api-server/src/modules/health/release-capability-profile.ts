@@ -2,7 +2,15 @@ export type DomesticReleaseCapabilityProfile =
   | "core_translation"
   | "commercial_full";
 
-const deferredCapabilities = ["livekit_sip", "agent", "egress"] as const;
+const deferredCapabilities = [
+  "livekit_sip",
+  "agent",
+  "egress",
+  "payment",
+  "sms",
+  "diagnostics_alerting",
+  "release_materials",
+] as const;
 
 export function getReleaseCapabilityProfileReadiness() {
   const configured = process.env.DOMESTIC_RELEASE_CAPABILITY_PROFILE?.trim();

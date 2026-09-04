@@ -32,6 +32,8 @@ describe("websocket final flush", () => {
     setEnv("REALTIME_PROVIDER", "mock");
     setEnv("ASR_PROVIDER", "mock");
     setEnv("SESSION_EVENT_SINK", "noop");
+    setEnv("REALTIME_ALLOWED_HOSTS", "127.0.0.1");
+    setEnv("REALTIME_ALLOW_NON_BROWSER_CLIENTS_WITHOUT_ORIGIN", "true");
     const server = startWebSocketServer();
     await new Promise<void>((resolve) => server.once("listening", resolve));
     const address = server.address();
@@ -42,7 +44,7 @@ describe("websocket final flush", () => {
     const ws = new WebSocket(`ws://127.0.0.1:${address.port}/realtime`, [
       realtimeProtocol,
       realtimeTokenProtocol(token()),
-    ]);
+    ], { headers: { host: "127.0.0.1" } });
     await waitForEvent(ws, "session.started");
     expect(ws.protocol).toBe(realtimeProtocol);
     const finalEvents = collectUntilEnded(ws);

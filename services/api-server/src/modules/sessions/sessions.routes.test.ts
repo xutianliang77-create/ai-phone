@@ -157,6 +157,96 @@ describe("sessions routes", () => {
     });
   });
 
+  it("excludes unknown attribution from the user-visible speaker count", async () => {
+    const app = await buildApp();
+    const created = await app.inject({
+      method: "POST",
+      url: "/realtime/sessions",
+      payload: {
+        mode: "meeting",
+        sourceLanguage: "zh",
+        targetLanguage: "en",
+        voiceOutput: false,
+      },
+    });
+    const sessionId = created.json().sessionId as string;
+    await app.inject({
+      method: "POST",
+      url: `/sessions/${sessionId}/segments`,
+      payload: {
+        segments: [{
+          id: "unknown_1",
+          sourceText: "暂时无法确认说话人",
+          translatedText: "The speaker is not confirmed yet",
+          speaker: {
+            speakerId: "unknown",
+            role: "unknown",
+            source: "unknown",
+          },
+        }],
+      },
+    });
+
+    const unknownOnly = await app.inject({
+      method: "GET",
+      url: `/sessions/${sessionId}`,
+    });
+    expect(unknownOnly.json()).toMatchObject({
+      speakerCount: 0,
+      segments: [{
+        id: "unknown_1",
+        speaker: { speakerId: "unknown" },
+      }],
+    });
+
+    await app.inject({
+      method: "POST",
+      url: `/sessions/${sessionId}/segments`,
+      payload: {
+        segments: [
+          {
+            id: "speaker_1_a",
+            sourceText: "第一位说话人",
+            translatedText: "First speaker",
+            speaker: {
+              speakerId: "speaker_1",
+              role: "speaker",
+              source: "diarization",
+            },
+          },
+          {
+            id: "speaker_1_b",
+            sourceText: "还是第一位说话人",
+            translatedText: "Still the first speaker",
+            speaker: {
+              speakerId: "speaker_1",
+              role: "speaker",
+              source: "diarization",
+            },
+          },
+          {
+            id: "speaker_2",
+            sourceText: "第二位说话人",
+            translatedText: "Second speaker",
+            speaker: {
+              speakerId: "speaker_2",
+              role: "speaker",
+              source: "diarization",
+            },
+          },
+        ],
+      },
+    });
+
+    const list = await app.inject({ method: "GET", url: "/sessions" });
+    await app.close();
+
+    expect(list.json().sessions[0]).toMatchObject({
+      sessionId,
+      speakerCount: 2,
+    });
+  });
+
   it("searches generated review titles and action items", async () => {
     const app = await buildApp();
     const created = await app.inject({

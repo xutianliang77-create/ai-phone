@@ -23,6 +23,8 @@ describe("realtime gateway env", () => {
     const env = loadEnv();
 
     expect(env.host).toBe("0.0.0.0");
+    expect(env.allowedHosts).toEqual([]);
+    expect(env.allowNonBrowserClientsWithoutOrigin).toBe(false);
     expect(env.provider).toBe("hymt2_self_hosted");
     expect(env.resolvedProvider).toBe("lmstudio");
     expect(env.lmStudioBaseUrl).toBe("http://models.local:8003/v1");
@@ -30,6 +32,9 @@ describe("realtime gateway env", () => {
     expect(env.asrProvider).toBe("http");
     expect(env.asrHttpEndpoint).toBe("http://models.local:8001/asr/transcribe");
     expect(env.speakerHttpTimeoutMs).toBe(2000);
+    expect(env.ttsHttpStreamEndpoint).toBeUndefined();
+    expect(env.ttsStreamPrefillMs).toBe(800);
+    expect(env.listeningMaxContinuationBufferMs).toBe(7500);
   });
 
   it("lets explicit environment variables override model routing defaults", () => {
@@ -45,6 +50,57 @@ describe("realtime gateway env", () => {
     process.env = { REALTIME_BIND_HOST: "10.20.30.41" };
 
     expect(loadEnv().host).toBe("10.20.30.41");
+  });
+
+  it("configures exact hosts and the explicit native-client Origin exception", () => {
+    process.env = {
+      REALTIME_ALLOWED_HOSTS: "call.example.cn,call.example.cn:3111",
+      REALTIME_ALLOW_NON_BROWSER_CLIENTS_WITHOUT_ORIGIN: "true",
+    };
+
+    expect(loadEnv()).toMatchObject({
+      allowedHosts: ["call.example.cn", "call.example.cn:3111"],
+      allowNonBrowserClientsWithoutOrigin: true,
+    });
+  });
+
+  it("can disable synchronous realtime refinement without disabling other LLM work", () => {
+    process.env = {
+      LLM_REFINEMENT_ENABLED: "true",
+      REALTIME_LLM_REFINEMENT_ENABLED: "false",
+    };
+    expect(loadEnv().llmRefinementEnabled).toBe(false);
+
+    delete process.env.REALTIME_LLM_REFINEMENT_ENABLED;
+    expect(loadEnv().llmRefinementEnabled).toBe(true);
+  });
+
+  it("loads an optional traceable runtime identity", () => {
+    process.env = {
+      WUJIE_RUNTIME_CANDIDATE_ID: "wujie-v1-candidate",
+      WUJIE_RUNTIME_SOURCE_COMMIT: "a".repeat(40),
+      WUJIE_RUNTIME_SOURCE_TREE: "b".repeat(40),
+      WUJIE_RUNTIME_IMAGE_ID: `sha256:${"c".repeat(64)}`,
+      WUJIE_RUNTIME_CONFIG_SHA256: "d".repeat(64),
+      WUJIE_REQUIRE_TRACEABLE_RUNTIME: "true",
+    };
+
+    expect(loadEnv()).toMatchObject({
+      runtimeCandidateId: "wujie-v1-candidate",
+      runtimeSourceCommit: "a".repeat(40),
+      runtimeSourceTree: "b".repeat(40),
+      runtimeImageId: `sha256:${"c".repeat(64)}`,
+      runtimeConfigSha256: "d".repeat(64),
+      requireTraceableRuntime: true,
+    });
+  });
+
+  it("configures the listening continuation buffer independently", () => {
+    process.env = {
+      REALTIME_LISTENING_MAX_CONTINUATION_BUFFER_MS: "1200",
+    };
+
+    expect(loadEnv().listeningMaxContinuationBufferMs).toBe(1200);
   });
 });
 

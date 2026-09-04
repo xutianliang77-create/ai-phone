@@ -9,7 +9,15 @@ import { requireDomesticReleaseServiceConfig } from
   "./domestic_release_env_service_requirements.mjs";
 
 const releaseProfiles = ["core_translation", "commercial_full"];
-const deferredCapabilities = ["livekit_sip", "agent", "egress"];
+const deferredCapabilities = [
+  "livekit_sip",
+  "agent",
+  "egress",
+  "payment",
+  "sms",
+  "diagnostics_alerting",
+  "release_materials",
+];
 
 export function checkDomesticReleaseEnvFile(options = {}) {
   const root = options.root ?? process.cwd();
@@ -32,12 +40,14 @@ export function checkDomesticReleaseEnvFile(options = {}) {
   const fullRelease = profile === "commercial_full";
   requireDomesticReleaseServiceConfig({ env, checks, issues, fullRelease });
   requireFixedValues(env, checks, issues, profile);
-  requireReleaseArtifact(root, env, checks, issues, "RELEASE_MATERIALS_FILE");
+  if (fullRelease) {
+    requireReleaseArtifact(root, env, checks, issues, "RELEASE_MATERIALS_FILE");
+  }
   requireReleaseArtifact(root, env, checks, issues, "MODEL_SELECTION_FILE");
   requireReleaseArtifact(root, env, checks, issues, "MODEL_ROUTING_FILE");
   requireModelRouting(root, env, checks, issues);
   if (fullRelease) requirePstnProvider(env, checks, issues);
-  requireReleaseSecurity(filePath, env, checks, issues);
+  requireReleaseSecurity(filePath, env, checks, issues, { fullRelease });
   return result(filePath, checks, issues, profile);
 }
 
@@ -81,18 +91,9 @@ function requireFixedValues(env, checks, issues, profile) {
   fixedValue(env, checks, issues, "CALL_ROOM_PROVIDER", "livekit");
   fixedValue(env, checks, issues, "TTS_PROVIDER", "voxcpm2");
   fixedValue(env, checks, issues, "TTS_MODEL", "VoxCPM2");
-  fixedValue(env, checks, issues, "APPLE_IAP_ENVIRONMENT", "Production");
   fixedValue(env, checks, issues, "API_TEST_AUTO_ACCOUNT", "false");
   fixedValue(env, checks, issues, "AUTH_DEBUG_OTP", "false");
   fixedValue(env, checks, issues, "REALTIME_ALLOW_QUERY_TOKEN", "false");
-  fixedValue(env, checks, issues, "SMS_PROVIDER", "http");
-  boundedInteger(env, checks, issues, "SMS_HTTP_TIMEOUT_MS", 1000, 30000);
-  oneOf(env, checks, issues, "DIAGNOSTICS_ALERT_WEBHOOK_FORMAT", [
-    "generic",
-    "wecom",
-    "feishu",
-    "dingtalk",
-  ]);
   if (profile === "core_translation") {
     fixedValue(env, checks, issues, "CALL_PROVIDER_POLICY", "call_link_only");
     fixedValue(env, checks, issues, "AGENT_CALL_WORKER_ENABLED", "false");
@@ -116,6 +117,15 @@ function requireFixedValues(env, checks, issues, profile) {
     );
   }
   if (profile === "commercial_full") {
+    fixedValue(env, checks, issues, "APPLE_IAP_ENVIRONMENT", "Production");
+    fixedValue(env, checks, issues, "SMS_PROVIDER", "http");
+    boundedInteger(env, checks, issues, "SMS_HTTP_TIMEOUT_MS", 1000, 30000);
+    oneOf(env, checks, issues, "DIAGNOSTICS_ALERT_WEBHOOK_FORMAT", [
+      "generic",
+      "wecom",
+      "feishu",
+      "dingtalk",
+    ]);
     fixedValue(env, checks, issues, "PSTN_RECORDING_DISCLOSURE_ENABLED", "true");
     oneOf(env, checks, issues, "CALL_PROVIDER_POLICY", [
       "domestic_pstn_bridge",

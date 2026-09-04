@@ -1,11 +1,10 @@
-# Dependency security exceptions
+# Dependency security gate
 
-`otel-livekit-exception.json` is a narrow, expiring exception for one upstream
-advisory. It is not a zero-vulnerability claim. The gate fails if the audit set,
-severity, direct versions, mitigations, or expiry drift, and it also fails when a
-new advisory appears. Once LiveKit Agents publishes compatible patched OTel
-dependencies, upgrade it and delete the exception rather than extending it by
-default.
+`dependency-policy.json` requires a zero-vulnerability production audit and pins
+the reviewed LiveKit Agent and direct OpenTelemetry versions. The former
+temporary OpenTelemetry exception was retired after upgrading LiveKit Agents to
+the patched 1.6.4 release. The gate fails on any npm audit entry, dependency
+version drift, or removal of the trace-context-only ingress markers.
 
 Run:
 

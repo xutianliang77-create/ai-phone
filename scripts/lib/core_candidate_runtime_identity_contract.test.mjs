@@ -1,0 +1,144 @@
+import { readFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { describe, expect, test } from "vitest";
+
+const script = readFileSync(
+  new URL("../deploy_beelink_core_candidate.sh", import.meta.url),
+  "utf8",
+);
+
+describe("core candidate runtime identity deployment contract", () => {
+  test("copies the pinned model routing contract into the runtime image", () => {
+    const dockerfile = readFileSync(
+      new URL("../../infra/ai-phone-server/Dockerfile", import.meta.url), "utf8",
+    );
+    expect(dockerfile).toContain(
+      "COPY release/domestic/model-routing.json ./release/domestic/model-routing.json",
+    );
+  });
+
+  test("keeps the isolated core route off the Maruko LLM", () => {
+    const routing = JSON.parse(readFileSync(
+      new URL("../../release/domestic/model-routing.json", import.meta.url), "utf8",
+    ));
+    const profile = routing.profiles[routing.activeProfile];
+    expect(profile.llm.provider).toBe("off");
+    for (const group of ["gateway", "api", "translationWorker"]) {
+      expect(profile.env[group].LLM_PROVIDER).toBe("off");
+      expect(profile.env[group].LLM_REFINEMENT_ENABLED).toBe("false");
+    }
+    expect(profile.env.gateway.LLM_REVIEW_ENABLED).toBe("false");
+    expect(profile.env.api.LLM_REVIEW_ENABLED).toBe("false");
+    expect(JSON.stringify(profile)).not.toContain("18081");
+    expect(JSON.stringify(profile)).not.toContain("qwen3.8-27b");
+  });
+
+  test("refuses to sync a dirty source checkout", () => {
+    expect(script).toContain("require_clean_source");
+    expect(script).toContain("status --porcelain --untracked-files=normal");
+    const preflight = script.lastIndexOf("preflight\nrequire_clean_source");
+    const sync = script.indexOf("rsync -az --delete", preflight);
+    expect(preflight).toBeGreaterThanOrEqual(0);
+    expect(sync).toBeGreaterThan(preflight);
+  });
+
+  test("checks live port ownership before creating the remote candidate", () => {
+    const preflight = script.lastIndexOf("preflight\nrequire_clean_source");
+    const portCheck = script.indexOf("require_remote_ports_free", preflight);
+    const remoteMkdir = script.indexOf('mkdir -p \'$REMOTE_SOURCE\'', portCheck);
+    expect(portCheck).toBeGreaterThan(preflight);
+    expect(remoteMkdir).toBeGreaterThan(portCheck);
+  });
+
+  test("blocks deployment and status on a host running Maruko resources", () => {
+    expect(script).toContain("require_remote_resource_isolation");
+    expect(script).toContain("running Maruko containers found");
+    expect(script).toContain("running Maruko process found");
+    expect(script).toContain("Maruko listener found");
+    const deployStart = script.lastIndexOf("preflight\nrequire_clean_source");
+    const isolation = script.indexOf(
+      "require_remote_resource_isolation",
+      deployStart,
+    );
+    const sourceBuild = script.indexOf("run check:source-build", isolation);
+    expect(isolation).toBeGreaterThan(deployStart);
+    expect(sourceBuild).toBeGreaterThan(isolation);
+  });
+
+  test("keeps the remote resource-isolation heredoc valid bash", () => {
+    const match = script.match(
+      /require_remote_resource_isolation\(\) \{[\s\S]*?<<'REMOTE'\n([\s\S]*?)\nREMOTE\n\}/,
+    );
+    expect(match).not.toBeNull();
+    const syntax = spawnSync("bash", ["-n"], {
+      input: match[1],
+      encoding: "utf8",
+    });
+    expect(syntax.status, syntax.stderr).toBe(0);
+  });
+
+  test("rejects a protected Maruko listener in the remote guard", () => {
+    const match = script.match(
+      /require_remote_resource_isolation\(\) \{[\s\S]*?<<'REMOTE'\n([\s\S]*?)\nREMOTE\n\}/,
+    );
+    expect(match).not.toBeNull();
+    // Match the real SSH stdin path; -c embeds guard literals in Linux /proc.
+    const probe = spawnSync("bash", ["-s"], { input: [
+      "docker() { :; }",
+      "ss() { printf 'LISTEN 0 128 127.0.0.1:18003 0.0.0.0:*\\n'; }",
+      match[1],
+    ].join("\n"), encoding: "utf8" });
+    expect(probe.status).toBe(2);
+    expect(probe.stderr).toContain("Maruko listener found");
+  });
+
+  test("freezes source, image, and canonical config identity before start", () => {
+    for (const key of [
+      "WUJIE_REQUIRE_TRACEABLE_RUNTIME",
+      "WUJIE_RUNTIME_CANDIDATE_ID",
+      "WUJIE_RUNTIME_SOURCE_COMMIT",
+      "WUJIE_RUNTIME_SOURCE_TREE",
+      "WUJIE_RUNTIME_IMAGE_ID",
+      "WUJIE_RUNTIME_CONFIG_SHA256",
+    ]) {
+      expect(script).toContain(key);
+    }
+    expect(script).toContain("docker image inspect");
+    expect(script).toContain(
+      "grep -v '^WUJIE_RUNTIME_CONFIG_SHA256='",
+    );
+    const build = script.lastIndexOf('remote_compose "build"');
+    const inspect = script.indexOf("docker image inspect", build);
+    const start = script.indexOf(
+      'remote_compose "up -d --no-build --remove-orphans"',
+      inspect,
+    );
+    expect(build).toBeGreaterThanOrEqual(0);
+    expect(inspect).toBeGreaterThan(build);
+    expect(start).toBeGreaterThan(inspect);
+  });
+
+  test("writes a non-secret manifest and verifies Gateway identity against it", () => {
+    expect(script).toContain("candidate-manifest.json");
+    expect(script).toContain("environmentFileSha256");
+    expect(script).toContain("runtime?.traceable !== true");
+    expect(script).toContain(
+      "candidate runtime ${runtimeKey} does not match manifest",
+    );
+  });
+
+  test("keeps the advertised realtime endpoint and handshake host in lockstep", () => {
+    expect(script).toContain(
+      'set_env REALTIME_WS_ENDPOINT "ws://$PUBLIC_HOST:$REALTIME_PORT/realtime"',
+    );
+    expect(script).toContain(
+      'set_env REALTIME_ALLOWED_HOSTS "$PUBLIC_HOST:$REALTIME_PORT"',
+    );
+    expect(script).toContain(
+      "candidate Gateway does not allow its advertised realtime host",
+    );
+    expect(script).toContain(
+      'set_env REALTIME_ALLOW_NON_BROWSER_CLIENTS_WITHOUT_ORIGIN true',
+    );
+  });
+});

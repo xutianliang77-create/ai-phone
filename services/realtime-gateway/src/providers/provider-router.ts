@@ -6,6 +6,10 @@ import type { AsrProvider } from "../asr/asr-provider.js";
 import { SpeakerAwareAsrProvider } from "../asr/speaker-aware-asr-provider.js";
 import { HttpSpeakerAttributionProvider } from "../speaker/http-speaker-attribution-provider.js";
 import { ApiVoiceIdentityMatcher } from "../speaker/voice-identity-matcher.js";
+import { HttpSpeakerRevisionProvider } from
+  "../speaker/http-speaker-revision-provider.js";
+import { SpeakerRevisionRealtimeProvider } from
+  "../speaker/speaker-revision-realtime-provider.js";
 import type { RealtimeProvider } from "./realtime-provider.js";
 import { LmStudioRealtimeProvider } from "./lmstudio/lmstudio-realtime-provider.js";
 import { MockRealtimeProvider } from "./mock-realtime-provider.js";
@@ -29,7 +33,7 @@ export class ProviderRouter {
       });
     }
     if (env?.resolvedProvider === "lmstudio") {
-      return new LmStudioRealtimeProvider({
+      return withSpeakerRevision(new LmStudioRealtimeProvider({
         providerName: selfHostedProviderName(env.provider),
         baseUrl: env.lmStudioBaseUrl,
         model: env.lmStudioModel,
@@ -40,11 +44,13 @@ export class ProviderRouter {
         asrRefinementProvider: createLlmProvider(llmConfigFromEnv(env)),
         asrRefinementEnabled: env.llmRefinementEnabled,
         asrRefinementMinConfidence: env.llmMinConfidence,
-      });
+        listeningMaxContinuationBufferMs:
+          env.listeningMaxContinuationBufferMs,
+      }), env);
     }
     if (env?.resolvedProvider === "qwen_live") {
       assertQwenLiveConfig(env);
-      return new LmStudioRealtimeProvider({
+      return withSpeakerRevision(new LmStudioRealtimeProvider({
         providerName: "qwen_live",
         baseUrl: env.qwenBaseUrl,
         model: env.qwenModel,
@@ -57,10 +63,39 @@ export class ProviderRouter {
         asrRefinementProvider: createLlmProvider(llmConfigFromEnv(env)),
         asrRefinementEnabled: env.llmRefinementEnabled,
         asrRefinementMinConfidence: env.llmMinConfidence,
-      });
+        listeningMaxContinuationBufferMs:
+          env.listeningMaxContinuationBufferMs,
+      }), env);
     }
     return new MockRealtimeProvider();
   }
+}
+
+function withSpeakerRevision(
+  provider: RealtimeProvider,
+  env: RealtimeEnv,
+): RealtimeProvider {
+  if (env.speakerRevisionProvider !== "http") return provider;
+  if (!env.speakerRevisionHttpEndpoint) {
+    throw new Error(
+      "SPEAKER_REVISION_HTTP_ENDPOINT is required when " +
+        "SPEAKER_REVISION_PROVIDER=http",
+    );
+  }
+  return new SpeakerRevisionRealtimeProvider(
+    provider,
+    new HttpSpeakerRevisionProvider({
+      endpoint: env.speakerRevisionHttpEndpoint,
+      healthUrl: env.speakerRevisionHealthUrl,
+      apiKey: env.speakerRevisionHttpApiKey,
+      timeoutMs: env.speakerRevisionHttpTimeoutMs,
+    }),
+    {
+      mode: env.speakerRevisionMode,
+      maxWindowMs: env.speakerRevisionWindowMs,
+      tokenSplitEnabled: env.speakerRevisionTokenSplitEnabled,
+    },
+  );
 }
 
 function llmConfigFromEnv(env: RealtimeEnv): LlmConfig {

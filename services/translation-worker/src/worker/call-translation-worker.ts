@@ -5,6 +5,7 @@ import {
 } from "./call-asr-transcript-observation.js";
 import { CallCaptionPipeline } from "./call-caption-pipeline.js";
 import { CallInterruptionController } from "./call-interruption-controller.js";
+import { CallTtsWarmupController } from "./call-tts-warmup-controller.js";
 import { createCallTtsPlaybackQueue } from "./call-tts-playback-runtime.js";
 import type { CallTtsPlaybackQueue } from "./call-tts-playback-queue.js";
 import { KeyedAsyncQueue } from "./keyed-async-queue.js";
@@ -15,6 +16,8 @@ import {
 } from "./participant-turn-buffer.js";
 import { cleanCallTranscript } from "./transcript-text-normalizer.js";
 import { RecentTtsEchoFilter } from "./recent-tts-echo-filter.js";
+import { CallTranscriptSpeechAdmission } from
+  "./call-transcript-speech-admission.js";
 import {
   callWorkerStatusEvent as statusEvent,
   disabledCallDuplexConfig,
@@ -31,6 +34,7 @@ import type {
   TtsVoiceConfig,
 } from "./types.js";
 import { TurnCoordinator } from "./turn-coordinator.js";
+import { settlesWithin } from "./promise-settlement.js";
 export class CallTranslationWorker implements CallSpeechPipeline {
   private readonly asrProvider: CallAsrProvider;
   private readonly eventSink: CallRoomEventSink;
@@ -41,12 +45,11 @@ export class CallTranslationWorker implements CallSpeechPipeline {
   private readonly captionPipeline: CallCaptionPipeline;
   private readonly interruptionController: CallInterruptionController;
   private readonly recentTtsEchoes = new RecentTtsEchoFilter();
+  private readonly transcriptSpeechAdmission =
+    new CallTranscriptSpeechAdmission();
   private readonly turnCoordinator = new TurnCoordinator();
   private readonly endDrainGraceMs: number;
-  private readonly ttsWarmups = new Map<string, {
-    controller: AbortController;
-    task: Promise<void>;
-  }>();
+  private readonly ttsWarmupController: CallTtsWarmupController;
   constructor(options: CallTranslationWorkerOptions) {
     this.asrProvider = options.asrProvider;
     this.eventSink = options.eventSink;
@@ -66,6 +69,11 @@ export class CallTranslationWorker implements CallSpeechPipeline {
       nowMs: this.nowMs,
       terminology: options.terminology,
     });
+    this.ttsWarmupController = new CallTtsWarmupController(
+      this.captionPipeline,
+      this.eventSink,
+      this.nowMs,
+    );
     this.interruptionController = new CallInterruptionController({
       config: options.duplexConfig ?? disabledCallDuplexConfig,
       playbackQueue: this.playbackQueue,
@@ -74,9 +82,10 @@ export class CallTranslationWorker implements CallSpeechPipeline {
       onBargeIn: (callId, targetSpeakerRole) =>
         this.captionPipeline.cancelTargetSpeaker(callId, targetSpeakerRole),
     });
-    this.asrProvider.setVadDecisionSink?.((decision) =>
-      this.interruptionController.observe(decision)
-    );
+    this.asrProvider.setVadDecisionSink?.((decision) => {
+      this.transcriptSpeechAdmission.observe(decision);
+      this.interruptionController.observe(decision);
+    });
     if (options.ttsAudioSink) this.playbackQueue.addSink(options.ttsAudioSink);
   }
   addTtsAudioSink(sink: CallTtsAudioSink) {
@@ -85,11 +94,46 @@ export class CallTranslationWorker implements CallSpeechPipeline {
   setTtsVoice(voice: TtsVoiceConfig) {
     this.captionPipeline.setTtsVoice(voice);
   }
+  async setTranslatedUplinkPaused(callId: string, paused: boolean) {
+    const hadActivePlayback = Boolean(
+      this.playbackQueue.activePlaybackForSpeaker(callId, "guest"),
+    );
+    if (paused) this.captionPipeline.cancelTargetSpeaker(callId, "guest");
+    const result = await this.playbackQueue.setTargetPaused({
+      callId,
+      targetSpeakerRole: "guest",
+      paused,
+    });
+    return { ...result, hadActivePlayback };
+  }
+  async processTypedText(input: {
+    callId: string;
+    controlOperationId: string;
+    text: string;
+    sourceLanguage: "zh" | "en";
+    targetLanguage: "zh" | "en";
+  }) {
+    const text = cleanCallTranscript(input.text);
+    if (!text || input.sourceLanguage === input.targetLanguage) {
+      throw new Error("Invalid type-to-speak input");
+    }
+    const segmentId = `typed-${input.controlOperationId}`;
+    await this.captionPipeline.publish(input.callId, "host", {
+      segmentId,
+      speechId: `speech:host:${segmentId}`,
+      turnId: `turn:host:${segmentId}`,
+      revision: 1,
+      text,
+      language: input.sourceLanguage,
+      confidence: 1,
+    });
+  }
   async startCall(callId: string) {
-    await this.stopTtsWarmup(callId);
+    await this.ttsWarmupController.stop(callId);
     this.interruptionController.clear(callId);
     this.turnBuffer.clear(callId);
     this.recentTtsEchoes.clear(callId);
+    this.transcriptSpeechAdmission.clear(callId);
     this.captionPipeline.clear(callId);
     this.turnCoordinator.clear(callId);
     try {
@@ -110,7 +154,7 @@ export class CallTranslationWorker implements CallSpeechPipeline {
       ]);
       throw error;
     }
-    this.startTtsWarmup(callId);
+    this.ttsWarmupController.start(callId);
     await this.eventSink.publish(callId, [
       statusEvent("worker-started", "通话翻译 Worker 已启动", this.nowMs(), {
         stage: "worker",
@@ -197,7 +241,7 @@ export class CallTranslationWorker implements CallSpeechPipeline {
   }
 
   async endCall(callId: string) {
-    await this.stopTtsWarmup(callId);
+    await this.ttsWarmupController.stop(callId);
     try {
       await this.flushSpeaker(callId, "host");
       await this.flushSpeaker(callId, "guest");
@@ -232,6 +276,7 @@ export class CallTranslationWorker implements CallSpeechPipeline {
     } finally {
       this.turnBuffer.clear(callId);
       this.recentTtsEchoes.clear(callId);
+      this.transcriptSpeechAdmission.clear(callId);
       this.captionPipeline.clear(callId);
       this.interruptionController.clear(callId);
       this.turnCoordinator.clear(callId);
@@ -243,46 +288,26 @@ export class CallTranslationWorker implements CallSpeechPipeline {
     this.captionPipeline.cancel(callId);
   }
 
-  private startTtsWarmup(callId: string) {
-    const controller = new AbortController();
-    const runtime = {
-      controller,
-      task: Promise.resolve() as Promise<void>,
-    };
-    runtime.task = Promise.resolve()
-      .then(() => this.captionPipeline.warmupTts(callId, controller.signal))
-      .then(() => undefined)
-      .catch(async () => {
-        if (controller.signal.aborted) return;
-        await this.eventSink.publish(callId, [
-          statusEvent("tts-warmup-failed", "TTS 预热未通过，首句可能降级为冷启动", this.nowMs(), {
-            stage: "tts",
-            retryable: true,
-          }),
-        ]);
-      })
-      .catch(() => undefined)
-      .finally(() => {
-        if (this.ttsWarmups.get(callId) === runtime) {
-          this.ttsWarmups.delete(callId);
-        }
-      });
-    this.ttsWarmups.set(callId, runtime);
-  }
-
-  private async stopTtsWarmup(callId: string) {
-    const runtime = this.ttsWarmups.get(callId);
-    if (!runtime) return;
-    this.ttsWarmups.delete(callId);
-    runtime.controller.abort(new Error("Call ended during TTS warmup"));
-    await runtime.task;
-  }
-
   private async acceptTranscript(
     callId: string,
     speakerRole: CallAudioSpeakerRole,
     transcript: TranscriptSegment,
   ) {
+    const speechAdmission = this.transcriptSpeechAdmission.consume(
+      callId,
+      speakerRole,
+    );
+    if (speechAdmission === "rejected_explicit_silence") {
+      await this.eventSink.publish(callId, [
+        statusEvent(
+          `asr-silence-rejected-${speakerRole}-${transcript.segmentId}`,
+          "已抑制缺少语音证据的识别结果",
+          this.nowMs(),
+          { stage: "asr", retryable: false },
+        ),
+      ]);
+      return;
+    }
     const text = cleanCallTranscript(transcript.text);
     if (!text || isMeaninglessSpeechFragment(text)) return;
     if (this.recentTtsEchoes.matches(callId, speakerRole, text, this.nowMs())) {
@@ -305,10 +330,7 @@ export class CallTranslationWorker implements CallSpeechPipeline {
     await this.publishReady(ready, callId);
   }
 
-  private async publishReady(
-    ready: BufferedCallTranscript[],
-    callId: string,
-  ) {
+  private async publishReady(ready: BufferedCallTranscript[], callId: string) {
     for (const item of ready) {
       await this.captionPipeline.publish(callId, item.speakerRole, {
         ...item.transcript,
@@ -322,22 +344,5 @@ export class CallTranslationWorker implements CallSpeechPipeline {
 
   private enqueueProcessing(callId: string, operation: () => Promise<void>) {
     return this.processingQueue.enqueue(callId, operation);
-  }
-}
-
-async function settlesWithin(promise: Promise<void>, timeoutMs: number) {
-  if (timeoutMs <= 0) {
-    return Promise.race([promise.then(() => true), Promise.resolve(false)]);
-  }
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  try {
-    return await Promise.race([
-      promise.then(() => true),
-      new Promise<false>((resolve) => {
-        timer = setTimeout(() => resolve(false), timeoutMs);
-      }),
-    ]);
-  } finally {
-    if (timer) clearTimeout(timer);
   }
 }

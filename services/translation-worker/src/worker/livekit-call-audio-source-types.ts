@@ -1,4 +1,7 @@
-import type { AudioIngestMetrics } from "./audio-ingest-ring-buffer.js";
+import type {
+  AudioIngestMetrics,
+  AudioIngestOverflowPolicy,
+} from "./audio-ingest-ring-buffer.js";
 import type {
   RealtimeAudioLegDiagnosticsDto,
   RealtimeRtcDiagnosticsDto,
@@ -7,6 +10,8 @@ import type { CallRoomEndedError } from "./call-room-event-client.js";
 import type { HttpCallRoomTokenClient } from "./call-room-token-client.js";
 import type { CallSipStatusReporter } from "./call-sip-status-client.js";
 import type { CallTtsTrackAccessAuthorizer } from "./call-tts-track-access-client.js";
+import type { CallInputTrackAccessAuthorizer } from
+  "./call-input-track-access-client.js";
 import type {
   LiveKitTtsRtcModule,
   LiveKitTtsRoom,
@@ -24,8 +29,10 @@ export interface LiveKitCallAudioSourceOptions {
   audioSampleRate: 16000 | 24000;
   audioFrameSizeMs: number;
   audioIngestMaxFrames?: number;
+  audioIngestOverflowPolicy?: AudioIngestOverflowPolicy;
   sipStatusClient?: CallSipStatusReporter;
   ttsTrackAccessClient?: CallTtsTrackAccessAuthorizer;
+  inputTrackAccessClient?: CallInputTrackAccessAuthorizer;
   onError?: (error: unknown) => void;
   onCallEnded?: (error: CallRoomEndedError) => void;
   onIngestMetrics?: (metrics: AudioIngestMetrics) => void;
@@ -41,6 +48,7 @@ export interface RtcNodeModule extends Partial<LiveKitTtsRtcModule> {
   RoomEvent: {
     TrackSubscribed: string;
     TrackPublished?: string;
+    TrackUnpublished?: string;
     Disconnected: string;
     ParticipantAttributesChanged?: string;
   };
@@ -71,6 +79,8 @@ export interface RtcRemoteParticipant {
 }
 
 export interface RtcRemoteTrackPublication {
+  sid?: unknown;
+  name?: unknown;
   track?: unknown;
   kind?: unknown;
   setSubscribed?: (subscribed: boolean) => void;
@@ -81,7 +91,8 @@ export interface LiveKitCallAudioTrackLifecycleEvent {
   speakerRole: CallAudioSpeakerRole | null;
   outcome: "subscription_requested" | "subscription_unsupported" |
     "ignored_unknown_role" | "ignored_translation_tts" |
-    "ignored_non_audio" | "accepted";
+    "ignored_binding" |
+    "ignored_non_audio" | "ignored_duplicate_role" | "accepted";
   publicationKind?: string | number | null;
 }
 
@@ -99,5 +110,6 @@ export interface StartInRoomInput {
   room: RtcRoom;
   rtc: RtcNodeModule;
   participantIdentity: string;
+  dispatchGeneration?: number;
   ttsVoice?: TtsVoiceConfig;
 }

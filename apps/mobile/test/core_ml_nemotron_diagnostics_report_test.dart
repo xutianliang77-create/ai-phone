@@ -67,6 +67,14 @@ void main() {
       'name': 'translation_mobile',
       'version': '0.1.0',
       'buildNumber': '1',
+      'buildIdentity': <String, Object?>{
+        'candidateId': 'untraceable',
+        'sourceCommit': 'untraceable',
+        'sourceTree': 'untraceable',
+        'sourceState': 'unknown',
+        'productProfile': 'full',
+        'traceable': false,
+      },
     });
     expect(json['runtimeConfig'], <String, Object?>{
       'apiBaseUrl': 'http://192.168.2.10:3100',

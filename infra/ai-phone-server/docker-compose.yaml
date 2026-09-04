@@ -6,95 +6,54 @@ x-runtime: &runtime
   network_mode: host
   restart: unless-stopped
 
+# Wujie AI is one application container. API, realtime gateway, LiveKit
+# workers, and the optional Air780/SRT runtimes are supervised as processes by
+# app-container-entrypoint.mjs; they are not separate application containers.
 services:
-  api:
+  wujie-ai:
     <<: *runtime
     build:
       context: ../..
       dockerfile: infra/ai-phone-server/Dockerfile
-    container_name: ${AI_PHONE_CONTAINER_PREFIX:-ai-phone}-api
-    command: ["node", "services/api-server/dist/main.js"]
+    container_name: ${AI_PHONE_CONTAINER_PREFIX:-ai-phone}-wujie-ai
+    environment:
+      WUJIE_AI_TRANSLATION_AGENT_ENABLED: ${WUJIE_AI_TRANSLATION_AGENT_ENABLED:-true}
+      WUJIE_AI_AGENT_CALL_WORKER_ENABLED: ${WUJIE_AI_AGENT_CALL_WORKER_ENABLED:-false}
+      WUJIE_AI_VOICE_AGENT_ENABLED: ${WUJIE_AI_VOICE_AGENT_ENABLED:-false}
+      WUJIE_AI_AIR_DEVICE_GATEWAY_ENABLED: ${WUJIE_AI_AIR_DEVICE_GATEWAY_ENABLED:-false}
+      WUJIE_AI_SRT_INGRESS_ENABLED: ${WUJIE_AI_SRT_INGRESS_ENABLED:-false}
+      WUJIE_AI_CHILD_RESTART_INITIAL_MS: ${WUJIE_AI_CHILD_RESTART_INITIAL_MS:-1000}
+      WUJIE_AI_CHILD_RESTART_MAX_MS: ${WUJIE_AI_CHILD_RESTART_MAX_MS:-30000}
+      WUJIE_AI_CHILD_STABLE_UPTIME_MS: ${WUJIE_AI_CHILD_STABLE_UPTIME_MS:-60000}
+      AIR_GATEWAY_HEALTH_URL: ${AIR_GATEWAY_HEALTH_URL:-http://127.0.0.1:8780/healthz}
+      AIR_GATEWAY_SERIAL_PATH: ${AIR_GATEWAY_SERIAL_PATH:-/dev/serial/by-id/usb-AirM2M_AirM2M_Compo_000000000001-if06}
+    command: ["node", "infra/ai-phone-server/app-container-entrypoint.mjs"]
     volumes:
       - ${AI_PHONE_DATA_DIR}:/data/ai-phone
+      - ${AIR_GATEWAY_STATE_DIR:-/data/ai-phone/gateway-state}:/var/lib/ai-phone-air-gateway
+      # PostgreSQL TLS material is mounted read-only into the single app
+      # container; the runtime env points at the in-container path.
+      - ${POSTGRES_SSL_ROOT_CERT_HOST_PATH:-/data/models/ai-phone-postgres-dedicated/tls/root.crt}:${POSTGRES_SSL_ROOT_CERT_FILE:-/etc/ai-phone/postgres/root.crt}:ro
+      # The signed primary-cutover evidence is also read-only and must match
+      # the database identity before the API process is admitted.
+      - ${POSTGRES_CUTOVER_EVIDENCE_HOST_DIR:-/data/models/ai-phone-server/runtime/postgres-staging}:/data/ai-phone/postgres-staging:ro
+      # Share the host devtmpfs so udev-created ttyACM nodes and by-id links
+      # remain visible after USB hot-unplug/re-enumeration. A directory bind
+      # of /dev/serial/by-id captures the old udev directory and cannot heal
+      # without recreating the container.
+      - ${AIR_GATEWAY_HOST_DEV_DIR:-/dev}:/dev:rshared
+    device_cgroup_rules:
+      # AirM2M VUARTs are Linux USB ACM character devices (major 166). The
+      # shared /dev mount exposes current nodes; this rule limits access to
+      # the serial device class instead of granting arbitrary device access.
+      - "c 166:* rwm"
+    group_add:
+      - ${AIR_GATEWAY_DEVICE_GROUP:-dialout}
     healthcheck:
       test:
-        - CMD-SHELL
-        - node -e "fetch(process.env.API_HEALTH_URL||'http://127.0.0.1:3110/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"
-      interval: 5s
-      timeout: 3s
-      retries: 20
-
-  gateway:
-    <<: *runtime
-    container_name: ${AI_PHONE_CONTAINER_PREFIX:-ai-phone}-gateway
-    command: ["node", "services/realtime-gateway/dist/main.js"]
-    depends_on:
-      api:
-        condition: service_healthy
-    healthcheck:
-      test:
-        - CMD-SHELL
-        - node -e "fetch(process.env.GATEWAY_HEALTH_URL||'http://127.0.0.1:3111/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"
-      interval: 5s
-      timeout: 3s
-      retries: 20
-
-  translation-agent:
-    <<: *runtime
-    container_name: ${AI_PHONE_CONTAINER_PREFIX:-ai-phone}-translation-agent
-    command:
-      - node
-      - services/translation-worker/dist/livekit-agent/translation-agent-server.js
-      - start
-    depends_on:
-      api:
-        condition: service_healthy
-    stop_grace_period: 75s
-    healthcheck:
-      test:
-        - CMD-SHELL
-        - node -e "fetch(process.env.TRANSLATION_AGENT_HEALTH_URL||'http://127.0.0.1:8081/worker').then(async r=>{const b=await r.json();if(!r.ok||!b.agent_name)process.exit(1)}).catch(()=>process.exit(1))"
+        - CMD
+        - node
+        - infra/ai-phone-server/container-healthcheck.mjs
       interval: 5s
       timeout: 3s
       retries: 30
-
-  voice-agent:
-    <<: *runtime
-    profiles: ["voice-agent"]
-    container_name: ${AI_PHONE_CONTAINER_PREFIX:-ai-phone}-voice-agent
-    command:
-      - node
-      - services/voice-agent-runtime/dist/agent-server.js
-      - start
-    depends_on:
-      api:
-        condition: service_healthy
-    stop_grace_period: 105s
-    healthcheck:
-      test:
-        - CMD-SHELL
-        - node -e "fetch(process.env.VOICE_AGENT_HEALTH_URL||'http://127.0.0.1:8082/').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"
-      interval: 5s
-      timeout: 3s
-      retries: 36
-
-  srt-ingress-bridge:
-    image: ai-phone-srt-ingress-bridge:${AI_PHONE_IMAGE_TAG:-local}
-    pull_policy: never
-    profiles: ["srt-ingress"]
-    build:
-      context: ../..
-      dockerfile: infra/srt-ingress-bridge/Dockerfile
-    container_name: ${AI_PHONE_CONTAINER_PREFIX:-ai-phone}-srt-ingress-bridge
-    env_file:
-      - ${AI_PHONE_ENV_FILE}
-    network_mode: host
-    restart: unless-stopped
-    stop_grace_period: 20s
-    healthcheck:
-      test:
-        - CMD-SHELL
-        - node -e "fetch(process.env.SRT_INGRESS_HEALTH_URL||'http://127.0.0.1:'+(process.env.SRT_INGRESS_PORT||'3310')+'/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"
-      interval: 5s
-      timeout: 3s
-      retries: 20

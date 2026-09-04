@@ -1,0 +1,95 @@
+{
+  "schemaVersion": 1,
+  "product": "wujie-ai",
+  "profile": "domestic_ios_private_beta_v1",
+  "modelRouting": {
+    "activeProfile": "domestic_server_qwen3_hymt2_voxcpm2",
+    "asrProvider": "http_qwen3_asr_vllm",
+    "asrModel": "Qwen3-ASR-1.7B-vLLM0.14-canary",
+    "translationProvider": "hymt2_self_hosted",
+    "translationModel": "tencent/Hy-MT2-1.8B",
+    "ttsProvider": "voxcpm2",
+    "ttsModel": "VoxCPM2",
+    "speakerProvider": "http_streaming_sortformer",
+    "speakerModel": "nvidia/diar_streaming_sortformer_4spk-v2.1"
+  },
+  "services": {
+    "api": {
+      "requiredForSession": true,
+      "requiredForRelease": true,
+      "expected": {
+        "service": "api-server"
+      }
+    },
+    "gateway": {
+      "requiredForSession": true,
+      "requiredForRelease": true,
+      "expected": {
+        "service": "realtime-gateway",
+        "provider": "hymt2_self_hosted",
+        "asrProvider": "http",
+        "speakerProvider": "http"
+      },
+      "requiredTraceableRuntime": true
+    },
+    "asr": {
+      "requiredForSession": true,
+      "requiredForRelease": true,
+      "expected": {
+        "service": "asr-service",
+        "provider": "qwen3_asr_vllm",
+        "modelVersion": "Qwen3-ASR-1.7B-vLLM0.14-canary",
+        "vadProvider": "marblenet"
+      },
+      "requiredFingerprintFields": [
+        "runtimeFingerprint",
+        "vadModelFingerprint"
+      ]
+    },
+    "translation": {
+      "requiredForSession": true,
+      "requiredForRelease": true,
+      "expected": {
+        "service": "translation-service",
+        "provider": "hymt2",
+        "modelVersion": "tencent/Hy-MT2-1.8B"
+      },
+      "requiredFingerprintFields": [
+        "runtimeFingerprint"
+      ]
+    },
+    "tts": {
+      "requiredForSession": false,
+      "requiredForRelease": true,
+      "expected": {
+        "service": "tts-service",
+        "provider": "voxcpm2",
+        "modelVersion": "VoxCPM2"
+      },
+      "requiredFingerprintFields": [
+        "runtimeFingerprint"
+      ]
+    },
+    "speaker": {
+      "requiredForSession": false,
+      "requiredForRelease": true,
+      "expected": {
+        "service": "speaker-service",
+        "provider": "sortformer",
+        "mode": "active"
+      }
+    }
+  },
+  "degradationPolicy": {
+    "speaker": "continue_with_unknown_speaker",
+    "tts": "continue_with_captions_only",
+    "llm": "continue_with_raw_asr",
+    "asr": "reject_new_online_session",
+    "translation": "reject_new_online_session"
+  },
+  "realtimePolicy": {
+    "synchronousLlmRefinement": false,
+    "rawAsrTranslationMustNotWaitForRevision": true,
+    "listeningRevision": "asynchronous_candidate"
+  }
+}

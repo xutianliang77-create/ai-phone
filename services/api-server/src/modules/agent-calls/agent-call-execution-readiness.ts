@@ -3,15 +3,23 @@ import {
   autonomousAgentPolicyRequired,
   getAutonomousAgentReadiness,
 } from "./autonomous-agent-policy.js";
+import {
+  configuredAgentCallProvider,
+  isAgentCallProvider,
+} from "./agent-call-provider-profile.js";
+import { getAirDeviceGatewayConfig } from
+  "../device-calls/air-device-gateway-readiness.js";
 
 export function getAgentCallExecutionReadiness() {
   const pstnReadiness = getPstnReadiness();
   const autonomousReadiness = getAutonomousAgentReadiness();
+  const provider = configuredAgentCallProvider();
   const issues = [
     ...agentWorkerIssues(),
     ...agentProviderIssues(),
+    ...airProviderIssues(provider),
     ...agentLeaseIssues(),
-    ...pstnExecutionIssues(pstnReadiness),
+    ...telephonyExecutionIssues(provider, pstnReadiness),
     ...internalSecretIssues(),
     ...(autonomousAgentPolicyRequired() ? autonomousReadiness.issues : []),
   ];
@@ -26,6 +34,19 @@ export function getAgentCallExecutionReadiness() {
   };
 }
 
+function airProviderIssues(
+  provider: ReturnType<typeof configuredAgentCallProvider>,
+) {
+  if (provider !== "air780_volte") return [];
+  const gateway = getAirDeviceGatewayConfig();
+  return [
+    ...(process.env.API_STORAGE_DRIVER === "postgres"
+      ? []
+      : ["Air780 agent calls require API_STORAGE_DRIVER=postgres"]),
+    ...(gateway.ok ? [] : gateway.issues),
+  ];
+}
+
 function agentWorkerIssues() {
   return process.env.AGENT_CALL_WORKER_ENABLED === "true"
     ? []
@@ -34,8 +55,7 @@ function agentWorkerIssues() {
 
 function agentProviderIssues() {
   const provider = process.env.AGENT_CALL_PROVIDER_ADAPTER;
-  const valid = provider === "livekit_sip" || provider === "pstn_http" ||
-    provider === "pstn_fonoster";
+  const valid = isAgentCallProvider(provider);
   return [
     ...(valid ? [] : ["agent call provider adapter is not configured"]),
     ...(process.env.PSTN_PROVIDER_IDEMPOTENCY_GUARANTEED === "true"
@@ -60,9 +80,11 @@ function agentLeaseIssues() {
   ];
 }
 
-function pstnExecutionIssues(
+function telephonyExecutionIssues(
+  provider: ReturnType<typeof configuredAgentCallProvider>,
   pstnReadiness: ReturnType<typeof getPstnReadiness>,
 ) {
+  if (provider === "air780_volte") return [];
   if (!pstnReadiness.enabled) {
     return ["agent call execution requires domestic_pstn_bridge policy"];
   }

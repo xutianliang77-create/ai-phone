@@ -21,6 +21,8 @@ class CommunicationContractEnvelope {
       'turnId',
       'segmentId',
       'playbackId',
+      'workId',
+      'deliveryAttemptId',
       'agentRunId',
       'providerOperationId',
     ]) {

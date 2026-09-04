@@ -142,8 +142,17 @@ final class OcrBridge: NSObject {
 
   private func recognitionLanguages(for scripts: [String]) -> [String] {
     var languages: [String] = []
-    if scripts.contains("chinese") { languages.append("zh-Hans") }
-    if scripts.contains("latin") { languages.append("en-US") }
+    for script in scripts {
+      let language: String?
+      switch script {
+      case "chinese": language = "zh-Hans"
+      case "latin": language = "en-US"
+      default: language = nil
+      }
+      if let language, !languages.contains(language) {
+        languages.append(language)
+      }
+    }
     return languages.isEmpty ? ["zh-Hans", "en-US"] : languages
   }
 

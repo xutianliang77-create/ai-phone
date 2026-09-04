@@ -4,6 +4,7 @@ import '../../../history/data/session_history_repository.dart';
 import '../../../../platform/ocr/mobile_ocr_provider.dart';
 import '../../../../platform/translation/mobile_translation_provider.dart';
 import '../../../../platform/translation/text_language_detector.dart';
+import '../../domain/scan_translation_entity_protector.dart';
 
 enum ScanImageSource { camera, gallery }
 
@@ -84,12 +85,19 @@ class ScanTranslationController extends ChangeNotifier {
   }
 
   void setTargetLanguage(String language) {
-    if (isBusy || (language != 'zh' && language != 'en')) return;
+    if (isBusy ||
+        (language != 'zh' && language != 'en') ||
+        language == targetLanguage) {
+      return;
+    }
     targetLanguage = language;
     translatedText = '';
     translatedBlocks = const <ScanTranslatedBlock>[];
     savedSessionId = null;
-    if (recognizedText.isNotEmpty) status = ScanTranslationStatus.recognized;
+    if (recognizedText.isNotEmpty) {
+      status = ScanTranslationStatus.recognized;
+      message = null;
+    }
     notifyListeners();
   }
 
@@ -138,9 +146,18 @@ class ScanTranslationController extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final result = await _ocrProvider.recognizeImage(path);
-      recognizedText = result?.text.trim() ?? '';
-      recognizedBlocks = result?.blocks ?? const <MobileOcrBlock>[];
+      final result = await _ocrProvider.recognizeImage(
+        path,
+        preferredScripts: targetLanguage == 'zh'
+            ? const <String>['latin', 'chinese']
+            : const <String>['chinese', 'latin'],
+      );
+      recognizedText = normalizeScanTranslationEntities(
+        result?.text.trim() ?? '',
+      );
+      recognizedBlocks = (result?.blocks ?? const <MobileOcrBlock>[])
+          .map(_normalizeOcrBlock)
+          .toList(growable: false);
     } on Object {
       status = ScanTranslationStatus.failed;
       message = 'scan_ocr_failed';
@@ -159,6 +176,16 @@ class ScanTranslationController extends ChangeNotifier {
     notifyListeners();
   }
 
+  MobileOcrBlock _normalizeOcrBlock(MobileOcrBlock block) {
+    return MobileOcrBlock(
+      text: normalizeScanTranslationEntities(block.text),
+      left: block.left,
+      top: block.top,
+      width: block.width,
+      height: block.height,
+    );
+  }
+
   Future<void> translateRecognizedText() async {
     final text = recognizedText.trim();
     if (text.isEmpty) {
@@ -169,9 +196,6 @@ class ScanTranslationController extends ChangeNotifier {
     }
 
     sourceLanguage = detectTextLanguage(text);
-    if (sourceLanguage == targetLanguage) {
-      targetLanguage = sourceLanguage == 'zh' ? 'en' : 'zh';
-    }
     status = ScanTranslationStatus.translating;
     savedSessionId = null;
     message = null;
@@ -213,14 +237,17 @@ class ScanTranslationController extends ChangeNotifier {
 
   Future<String> _translateText(String text, String detectedLanguage) async {
     if (detectedLanguage == targetLanguage) return text;
+    final entityProtector = ScanTranslationEntityProtector(text);
+    if (entityProtector.canBypassTranslation) return text;
     final result = await _translationProvider.translate(
-      text,
+      entityProtector.translationInput,
       MobileTranslationConfig(
         sourceLanguage: detectedLanguage,
         targetLanguage: targetLanguage,
       ),
     );
-    return result?.text.trim() ?? '';
+    final translation = result?.text.trim() ?? '';
+    return translation.isEmpty ? '' : entityProtector.restore(translation);
   }
 
   Future<void> save() async {

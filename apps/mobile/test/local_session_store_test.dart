@@ -35,6 +35,8 @@ void main() {
           turnId: 'turn_1',
           revision: 2,
           sourceText: 'hello',
+          rawText: 'hallo',
+          optimizedText: 'hello revised',
           translatedText: '你好',
           sourceLanguage: 'en',
           targetLanguage: 'zh',
@@ -68,10 +70,14 @@ void main() {
     expect(sessions.single.sessionId, 'local_1');
     expect(sessions.single.status, 'ended');
     expect(sessions.single.consumedSeconds, 10);
+    expect(await store.listSessions(query: 'hallo'), hasLength(1));
+    expect(await store.listSessions(query: 'revised'), hasLength(1));
 
     final detail = await store.getSession('local_1');
     expect(detail.segments, hasLength(1));
     expect(detail.segments.single.translatedText, '你好');
+    expect(detail.segments.single.rawText, 'hallo');
+    expect(detail.segments.single.optimizedText, 'hello revised');
     expect(detail.segments.single.turnId, 'turn_1');
     expect(detail.segments.single.revision, 2);
     expect(detail.segments.single.provider, 'ios_system');
@@ -87,11 +93,148 @@ void main() {
 
     final export = await store.exportSession('local_1');
     expect(export.filename, 'translation-session-local_1.md');
+    expect(export.content, contains('hallo'));
     expect(export.content, contains('hello'));
+    expect(export.content, contains('hello revised'));
     expect(export.content, isNot(contains('Provider: ios_system')));
 
     await store.deleteSession('local_1');
     expect(await store.listSessions(), isEmpty);
+  });
+
+  test('exports each requested local format with all transcript layers',
+      () async {
+    final store = LocalSessionStore(
+      file: storeFile,
+      now: () => DateTime.utc(2026, 8, 2, 19, 30, 10),
+    );
+    await store.saveEndedSession(
+      sessionId: 'layered',
+      createdAt: DateTime.utc(2026, 8, 2, 19, 30),
+      segments: const <SubtitleSegment>[
+        SubtitleSegment(
+          id: 'seg_1',
+          sourceText: '会议纪要已经发送',
+          rawText: '会议既要已经发送',
+          optimizedText: '会议纪要已经发送',
+          translatedText: 'The meeting notes were sent',
+        ),
+      ],
+    );
+
+    final expected = <String, (String, String)>{
+      'markdown': ('.md', 'text/markdown'),
+      'txt': ('.txt', 'text/plain'),
+      'json': ('.json', 'application/json'),
+      'csv': ('.csv', 'text/csv'),
+    };
+    for (final entry in expected.entries) {
+      final export = await store.exportSession(
+        'layered',
+        format: entry.key,
+      );
+      expect(export.filename, endsWith(entry.value.$1));
+      expect(export.mimeType, entry.value.$2);
+      expect(export.content, contains('会议既要已经发送'));
+      expect(export.content, contains('会议纪要已经发送'));
+      expect(export.content, contains('The meeting notes were sent'));
+    }
+
+    final json = jsonDecode(
+      (await store.exportSession('layered', format: 'json')).content,
+    ) as Map<String, Object?>;
+    final segment =
+        (json['segments']! as List<Object?>).single as Map<String, Object?>;
+    expect(segment['rawText'], '会议既要已经发送');
+    expect(segment['optimizedText'], '会议纪要已经发送');
+  });
+
+  test('excludes unknown attribution from local speaker counts', () async {
+    final store = LocalSessionStore(
+      file: storeFile,
+      now: () => DateTime.utc(2026, 7, 26, 10, 1),
+    );
+
+    await store.saveEndedSession(
+      sessionId: 'unknown_only',
+      createdAt: DateTime.utc(2026, 7, 26, 10),
+      segments: const <SubtitleSegment>[
+        SubtitleSegment(
+          id: 'unknown_1',
+          sourceText: '暂时无法确认说话人',
+          translatedText: 'The speaker is not confirmed yet',
+          speaker: SpeakerAttribution(
+            speakerId: 'unknown',
+            role: 'unknown',
+            source: 'unknown',
+          ),
+        ),
+      ],
+    );
+
+    expect(
+      (await store.listSessions()).single.speakerCount,
+      0,
+    );
+    expect(
+      (await store.getSession('unknown_only'))
+          .segments
+          .single
+          .speaker
+          ?.speakerId,
+      'unknown',
+    );
+
+    await store.saveEndedSession(
+      sessionId: 'mixed_speakers',
+      createdAt: DateTime.utc(2026, 7, 26, 10),
+      segments: const <SubtitleSegment>[
+        SubtitleSegment(
+          id: 'unknown_1',
+          sourceText: '暂时无法确认说话人',
+          translatedText: 'The speaker is not confirmed yet',
+          speaker: SpeakerAttribution(
+            speakerId: 'unknown',
+            role: 'unknown',
+            source: 'unknown',
+          ),
+        ),
+        SubtitleSegment(
+          id: 'speaker_1_a',
+          sourceText: '第一位说话人',
+          translatedText: 'First speaker',
+          speaker: SpeakerAttribution(
+            speakerId: 'speaker_1',
+            role: 'speaker',
+            source: 'diarization',
+          ),
+        ),
+        SubtitleSegment(
+          id: 'speaker_1_b',
+          sourceText: '还是第一位说话人',
+          translatedText: 'Still the first speaker',
+          speaker: SpeakerAttribution(
+            speakerId: 'speaker_1',
+            role: 'speaker',
+            source: 'diarization',
+          ),
+        ),
+        SubtitleSegment(
+          id: 'speaker_2',
+          sourceText: '第二位说话人',
+          translatedText: 'Second speaker',
+          speaker: SpeakerAttribution(
+            speakerId: 'speaker_2',
+            role: 'speaker',
+            source: 'diarization',
+          ),
+        ),
+      ],
+    );
+
+    final mixed = (await store.listSessions())
+        .singleWhere((session) => session.sessionId == 'mixed_speakers');
+    expect(mixed.speakerCount, 2);
   });
 
   test('persists action item completion across store instances', () async {

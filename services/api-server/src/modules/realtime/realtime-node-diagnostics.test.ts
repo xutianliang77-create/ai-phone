@@ -23,6 +23,13 @@ describe("realtime node diagnostics", () => {
     expect(parseRealtimeNodeDiagnostics(input)).toBeUndefined();
   });
 
+  it("preserves the controlled reject-newest overflow policy", () => {
+    const input = node();
+    input.audioLegs[0]!.dropPolicy = "reject_newest";
+    expect(parseRealtimeNodeDiagnostics(input)?.audioLegs[0]?.dropPolicy)
+      .toBe("reject_newest");
+  });
+
   it("rejects RTC samples outside the runtime window", () => {
     const input = node();
     input.rtc.samples[0]!.observedAtMs = 999;

@@ -67,6 +67,15 @@ class CallRoomCaptions extends StatelessWidget {
                       color: theme.colorScheme.onSurfaceVariant,
                     ),
                   ),
+                if (caption.isPartial || caption.isTranslationDelta) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    caption.isPartial ? '识别中…' : '翻译中…',
+                    style: theme.textTheme.labelMedium?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
                 if (caption.ttsReady) ...[
                   const SizedBox(height: 4),
                   Row(

@@ -1,3 +1,15 @@
 9a0461b74426dc4417223db0fe822697ecd03fde:services/api-server/src/modules/realtime/realtime-session-state.routes.test.ts:generic-api-key:5
 ff62279c0fd3bb8428a48da2c299f6b08fecaac7:services/api-server/src/modules/sessions/session-speakers.routes.test.ts:generic-api-key:5
 e1eea92c892cd4b482f4c76c2134286d7504fd5a:services/api-server/src/modules/realtime/realtime-diagnostics.routes.test.ts:generic-api-key:5
+
+# Reviewed 2026-09-04: exact historical unit-test fixture occurrences only.
+# Sequential dummy hex strings or internal-secret-123/123456789; no runtime keys.
+fa5f80b3e85f0ea138e999b83119272affc71d14:services/api-server/src/modules/agent-calls/agent-work-runner.test.ts:generic-api-key:11
+3c4d046ecbfc3da3fb182dae0f29c37bc722f869:services/api-server/src/modules/call-links/call-link-air780.routes.test-support.ts:generic-api-key:169
+3c4d046ecbfc3da3fb182dae0f29c37bc722f869:services/api-server/src/modules/call-links/call-link-translation-control.routes.test.ts:generic-api-key:316
+cd6efc8f868a41a50711a3c740d5ac09bc2bf613:services/realtime-gateway/src/connection/gateway-dependency-readiness.test.ts:generic-api-key:16
+cd6efc8f868a41a50711a3c740d5ac09bc2bf613:services/realtime-gateway/src/connection/gateway-dependency-readiness.test.ts:generic-api-key:27
+cd6efc8f868a41a50711a3c740d5ac09bc2bf613:services/realtime-gateway/src/connection/gateway-dependency-readiness.test.ts:generic-api-key:31
+b9b3d29375452d90a89399c365181bf60f6698db:services/api-server/src/modules/call-links/call-link-air780.routes.test.ts:generic-api-key:332
+f94f0c5ad346d7af1e50513c358222fa7d1bce0e:services/api-server/src/modules/device-calls/device-call-room-token.test.ts:generic-api-key:122
+d55d48df8dd6d9b3d2bbf6b3ae93fe1a2b910da0:services/api-server/src/modules/call-links/call-room-role-admission.routes.test.ts:generic-api-key:129

@@ -69,7 +69,7 @@ void main() {
     expect(find.text('Listening'), findsOneWidget);
   });
 
-  testWidgets('keeps Listening silent without losing the Talk voice setting',
+  testWidgets('defaults Listening silent without losing the Talk voice setting',
       (tester) async {
     await pumpAcceptedApp(tester);
     await tester.tap(find.byTooltip('自动朗读译文'));
@@ -84,7 +84,7 @@ void main() {
     var selector = tester.widget<SegmentedButton<RealtimeVoiceOutputMode>>(
       find.byType(SegmentedButton<RealtimeVoiceOutputMode>),
     );
-    expect(selector.onSelectionChanged, isNull);
+    expect(selector.onSelectionChanged, isNotNull);
     expect(selector.selected,
         <RealtimeVoiceOutputMode>{RealtimeVoiceOutputMode.off});
 

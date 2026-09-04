@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 2,
+  "status": "enforced_zero_known_vulnerabilities",
+  "reviewedAt": "2026-08-18T10:30:00+08:00",
+  "requiredLiveKitVersions": {
+    "@livekit/agents": "1.6.4",
+    "@livekit/agents-plugin-openai": "1.6.4"
+  },
+  "requiredDirectVersions": {
+    "@opentelemetry/api": "1.9.1",
+    "@opentelemetry/core": "2.9.0",
+    "@opentelemetry/exporter-trace-otlp-proto": "0.220.0",
+    "@opentelemetry/resources": "2.9.0",
+    "@opentelemetry/sdk-trace-node": "2.9.0"
+  },
+  "requiredSourceMarkers": [
+    "W3CTraceContextPropagator",
+    "platformPropagationHeaders(request.headers)"
+  ],
+  "retiredException": {
+    "advisory": "GHSA-8988-4f7v-96qf",
+    "previousUpstreamVersion": "1.5.0",
+    "fixedUpstreamVersion": "1.6.4",
+    "reason": "LiveKit Agents now resolves patched OpenTelemetry and sharp dependencies"
+  }
+}

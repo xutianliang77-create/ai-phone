@@ -14,7 +14,8 @@
 1. 通过官方 SDK/API 集成，不复制上游内部状态机。
 2. 每项能力先经过本项目 adapter，再进入领域服务。
 3. LiveKit ID 只作为外部绑定，不成为业务主键。
-4. Translation Runtime 与 Voice Agent Runtime 独立部署、独立限容。
+4. Translation Runtime 与 Voice Agent Runtime 在逻辑上独立限容，但随无界 AI
+   一起运行在同一个 `wujie-ai` 应用容器内；不得按模块再拆应用容器。
 5. 新旧实现并存期间只允许一个权威写路径，禁止双控制器同时执行副作用。
 
 ## 2. 上游仓库采用矩阵
@@ -217,8 +218,9 @@ Ingress 用于企业直播、外部会议流、媒体文件和 WHIP 设备，不
 - Ingress participant 只能发布预期 source。
 - 重复使用 stream key 时创建新的 leg attempt，不覆盖旧 attempt。
 - Ingress 转码容量与实时语音 Worker 分池。
-- SRT bridge 使用独立镜像、显式 Compose profile、固定 UDP 端口池、任务数和最长
-  时长；connection URL 只在首次 create 响应返回，数据库只保存 `external_bridge_id`。
+- SRT bridge 作为 `wujie-ai` 容器内的可选进程运行，不使用独立镜像或独立应用容器；
+  仍使用固定 UDP 端口池、任务数和最长时长。connection URL 只在首次 create 响应返回，
+  数据库只保存 `external_bridge_id`。
 
 ## 11. 最小权限
 

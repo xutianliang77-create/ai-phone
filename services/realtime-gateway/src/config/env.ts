@@ -3,25 +3,45 @@ import {
   parseDomainLexiconPacks,
   type DomainLexiconPack,
 } from "../domain/domain-lexicon.js";
+import {
+  boundedInteger,
+  commaSeparated,
+  parseAsrProviderName,
+  parseBoolean,
+  parseLlmProviderName,
+  parseProviderName,
+  parseRateLimitProvider,
+  parseRegionEdition,
+  parseSessionEventSinkName,
+  resolveProviderName,
+  type AsrProviderName,
+  type LlmProviderName,
+  type RealtimeProviderName,
+  type RegionEdition,
+  type ResolvedRealtimeProviderName,
+  type SessionEventSinkName,
+  type SpeakerProviderName,
+} from "./env-parsers.js";
+import {
+  loadSpeakerRevisionEnv,
+  type SpeakerRevisionEnv,
+} from "./speaker-revision-env.js";
 
-export type RealtimeProviderName =
-  | "mock"
-  | "openai"
-  | "lmstudio"
-  | "self_hosted"
-  | "hymt2_self_hosted"
-  | "qwen_live"
-  | "tencent_trtc";
-export type AsrProviderName = "mock" | "http";
-export type SpeakerProviderName = "off" | "http";
-export type SessionEventSinkName = "noop" | "api";
-export type RegionEdition = "domestic" | "international";
-export type LlmProviderName = "off" | "mock" | "openai_compatible";
+export type {
+  AsrProviderName,
+  LlmProviderName,
+  RealtimeProviderName,
+  RegionEdition,
+  SessionEventSinkName,
+  SpeakerProviderName,
+} from "./env-parsers.js";
 
-export interface RealtimeEnv {
+export interface RealtimeEnv extends SpeakerRevisionEnv {
   host: string;
   port: number;
+  allowedHosts: string[];
   allowedOrigins: string[];
+  allowNonBrowserClientsWithoutOrigin: boolean;
   trustProxyAddresses: string[];
   maxPayloadBytes: number;
   maxConnections: number;
@@ -30,6 +50,7 @@ export interface RealtimeEnv {
   maxMessagesPerSecond: number;
   maxAudioFramesPerSecond: number;
   maxPendingAudioMs: number;
+  listeningMaxContinuationBufferMs: number;
   maxPendingControlEvents: number;
   maxPendingTtsOutputs: number;
   handshakeRateLimitPerMinute: number;
@@ -41,7 +62,7 @@ export interface RealtimeEnv {
   realtimeTokenSecret: string;
   allowQueryToken?: boolean;
   provider: RealtimeProviderName;
-  resolvedProvider: "mock" | "openai" | "lmstudio" | "qwen_live" | "unsupported";
+  resolvedProvider: ResolvedRealtimeProviderName;
   regionEdition: RegionEdition;
   dataRegion: string;
   callProviderPolicy: string;
@@ -72,8 +93,10 @@ export interface RealtimeEnv {
   speakerHttpApiKey?: string;
   speakerHttpTimeoutMs: number;
   ttsHttpEndpoint?: string;
+  ttsHttpStreamEndpoint?: string;
   ttsHttpApiKey?: string;
   ttsHttpTimeoutMs: number;
+  ttsStreamPrefillMs: number;
   sessionEventSink: SessionEventSinkName;
   apiBaseUrl: string;
   internalApiSecret?: string;
@@ -95,6 +118,12 @@ export interface RealtimeEnv {
   llmReasoningEffort?: string | null;
   llmMinConfidence: number;
   domainLexiconPacks: DomainLexiconPack[];
+  runtimeCandidateId?: string;
+  runtimeSourceCommit?: string;
+  runtimeSourceTree?: string;
+  runtimeImageId?: string;
+  runtimeConfigSha256?: string;
+  requireTraceableRuntime?: boolean;
 }
 
 export function loadEnv(): RealtimeEnv {
@@ -107,7 +136,12 @@ export function loadEnv(): RealtimeEnv {
   return {
     host: env.REALTIME_BIND_HOST?.trim() || "0.0.0.0",
     port: Number(env.REALTIME_PORT ?? 3001),
+    allowedHosts: commaSeparated(env.REALTIME_ALLOWED_HOSTS),
     allowedOrigins: commaSeparated(env.REALTIME_ALLOWED_ORIGINS),
+    allowNonBrowserClientsWithoutOrigin: parseBoolean(
+      env.REALTIME_ALLOW_NON_BROWSER_CLIENTS_WITHOUT_ORIGIN,
+      false,
+    ),
     trustProxyAddresses: commaSeparated(
       env.REALTIME_TRUST_PROXY_ADDRESSES ?? "127.0.0.1,::1",
     ),
@@ -147,6 +181,12 @@ export function loadEnv(): RealtimeEnv {
       6000,
       500,
       30_000,
+    ),
+    listeningMaxContinuationBufferMs: boundedInteger(
+      env.REALTIME_LISTENING_MAX_CONTINUATION_BUFFER_MS,
+      7500,
+      250,
+      15_000,
     ),
     maxPendingControlEvents: boundedInteger(
       env.REALTIME_MAX_PENDING_CONTROL_EVENTS,
@@ -238,9 +278,17 @@ export function loadEnv(): RealtimeEnv {
     speakerHttpBaseUrl: env.SPEAKER_HTTP_BASE_URL,
     speakerHttpApiKey: env.SPEAKER_HTTP_API_KEY,
     speakerHttpTimeoutMs: Number(env.SPEAKER_HTTP_TIMEOUT_MS ?? 2000),
+    ...loadSpeakerRevisionEnv(env),
     ttsHttpEndpoint: env.TTS_HTTP_ENDPOINT,
+    ttsHttpStreamEndpoint: env.TTS_HTTP_STREAM_ENDPOINT,
     ttsHttpApiKey: env.TTS_HTTP_API_KEY,
     ttsHttpTimeoutMs: Number(env.TTS_HTTP_TIMEOUT_MS ?? 30_000),
+    ttsStreamPrefillMs: boundedInteger(
+      env.TTS_STREAM_PREFILL_MS,
+      800,
+      200,
+      2000,
+    ),
     sessionEventSink: parseSessionEventSinkName(env.SESSION_EVENT_SINK),
     apiBaseUrl: env.API_BASE_URL ?? "http://127.0.0.1:3100",
     internalApiSecret: env.INTERNAL_API_SECRET,
@@ -252,7 +300,10 @@ export function loadEnv(): RealtimeEnv {
     llmApiKey: env.LLM_API_KEY ?? env.SUMMARY_API_KEY,
     llmCorrectionModel: env.LLM_CORRECTION_MODEL ?? env.LLM_MODEL,
     llmReviewModel: env.LLM_REVIEW_MODEL ?? env.SUMMARY_MODEL ?? env.LLM_MODEL,
-    llmRefinementEnabled: parseBoolean(env.LLM_REFINEMENT_ENABLED, false),
+    llmRefinementEnabled: parseBoolean(
+      env.REALTIME_LLM_REFINEMENT_ENABLED ?? env.LLM_REFINEMENT_ENABLED,
+      false,
+    ),
     llmReviewEnabled: parseBoolean(
       env.LLM_REVIEW_ENABLED,
       env.SESSION_REVIEW_PROVIDER === "openai_compatible",
@@ -265,69 +316,14 @@ export function loadEnv(): RealtimeEnv {
     llmReasoningEffort: env.LLM_REASONING_EFFORT ?? "none",
     llmMinConfidence: Number(env.LLM_MIN_CONFIDENCE ?? 0.72),
     domainLexiconPacks: parseDomainLexiconPacks(env.DOMAIN_LEXICON_PACKS),
+    runtimeCandidateId: env.WUJIE_RUNTIME_CANDIDATE_ID?.trim() || undefined,
+    runtimeSourceCommit: env.WUJIE_RUNTIME_SOURCE_COMMIT?.trim() || undefined,
+    runtimeSourceTree: env.WUJIE_RUNTIME_SOURCE_TREE?.trim() || undefined,
+    runtimeImageId: env.WUJIE_RUNTIME_IMAGE_ID?.trim() || undefined,
+    runtimeConfigSha256: env.WUJIE_RUNTIME_CONFIG_SHA256?.trim() || undefined,
+    requireTraceableRuntime: parseBoolean(
+      env.WUJIE_REQUIRE_TRACEABLE_RUNTIME,
+      false,
+    ),
   };
-}
-
-function parseRateLimitProvider(value: string | undefined): "memory" | "redis" {
-  if (value === "redis") return "redis";
-  if (value === "memory") return "memory";
-  return process.env.NODE_ENV === "production" ? "redis" : "memory";
-}
-
-function commaSeparated(value: string | undefined) {
-  return (value ?? "").split(",").map((item) => item.trim()).filter(Boolean);
-}
-
-function boundedInteger(
-  value: string | undefined,
-  fallback: number,
-  minimum: number,
-  maximum: number,
-) {
-  const parsed = Number(value);
-  return Number.isSafeInteger(parsed) && parsed >= minimum && parsed <= maximum
-    ? parsed
-    : fallback;
-}
-
-function parseProviderName(value: string | undefined): RealtimeProviderName {
-  if (value === "self_hosted") return "self_hosted";
-  if (value === "hymt2_self_hosted") return "hymt2_self_hosted";
-  if (value === "qwen_live") return "qwen_live";
-  if (value === "tencent_trtc") return "tencent_trtc";
-  if (value === "lmstudio") return "lmstudio";
-  return value === "openai" ? "openai" : "mock";
-}
-
-function resolveProviderName(
-  provider: RealtimeProviderName,
-): RealtimeEnv["resolvedProvider"] {
-  if (provider === "self_hosted" || provider === "hymt2_self_hosted") {
-    return "lmstudio";
-  }
-  if (provider === "qwen_live") return "qwen_live";
-  if (provider === "tencent_trtc") return "unsupported";
-  return provider;
-}
-
-function parseRegionEdition(value: string | undefined): RegionEdition {
-  return value === "international" ? "international" : "domestic";
-}
-
-function parseAsrProviderName(value: string | undefined): AsrProviderName {
-  return value === "http" ? "http" : "mock";
-}
-
-function parseSessionEventSinkName(value: string | undefined): SessionEventSinkName {
-  return value === "api" ? "api" : "noop";
-}
-
-function parseLlmProviderName(value: string | undefined): LlmProviderName {
-  if (value === "mock" || value === "openai_compatible") return value;
-  return "off";
-}
-
-function parseBoolean(value: string | undefined, fallback: boolean) {
-  if (value === undefined) return fallback;
-  return value === "1" || value.toLowerCase() === "true";
 }

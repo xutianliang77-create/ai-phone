@@ -6,6 +6,7 @@ enum AudioSessionEventType {
   interruptionBegan,
   interruptionEnded,
   routeChanged,
+  captureInvalidated,
 }
 
 enum AudioOutputRoute {
@@ -47,6 +48,7 @@ class AudioSessionEvent {
       'interruption.began' => AudioSessionEventType.interruptionBegan,
       'interruption.ended' => AudioSessionEventType.interruptionEnded,
       'route.changed' => AudioSessionEventType.routeChanged,
+      'capture.invalidated' => AudioSessionEventType.captureInvalidated,
       _ => null,
     };
     if (type == null) return null;
@@ -62,8 +64,9 @@ class AudioSessionEvent {
 
 abstract interface class AudioSessionCoordinator {
   Stream<AudioSessionEvent> get events;
+  bool get managesPlatformAudioSession;
 
-  Future<void> beginCapture();
+  Future<void> beginCapture({bool voiceProcessing = true});
   Future<void> endCapture();
   Future<void> dispose();
 }
@@ -72,10 +75,13 @@ class NoopAudioSessionCoordinator implements AudioSessionCoordinator {
   const NoopAudioSessionCoordinator();
 
   @override
+  bool get managesPlatformAudioSession => false;
+
+  @override
   Stream<AudioSessionEvent> get events => const Stream.empty();
 
   @override
-  Future<void> beginCapture() async {}
+  Future<void> beginCapture({bool voiceProcessing = true}) async {}
 
   @override
   Future<void> endCapture() async {}
@@ -100,6 +106,9 @@ class SystemAudioSessionCoordinator implements AudioSessionCoordinator {
   Stream<AudioSessionEvent>? _events;
 
   @override
+  bool get managesPlatformAudioSession => true;
+
+  @override
   Stream<AudioSessionEvent> get events {
     return _events ??= _eventChannel
         .receiveBroadcastStream()
@@ -112,8 +121,11 @@ class SystemAudioSessionCoordinator implements AudioSessionCoordinator {
   }
 
   @override
-  Future<void> beginCapture() =>
-      _methodChannel.invokeMethod<void>('beginCapture');
+  Future<void> beginCapture({bool voiceProcessing = true}) =>
+      _methodChannel.invokeMethod<void>(
+        'beginCapture',
+        <String, Object?>{'voiceProcessing': voiceProcessing},
+      );
 
   @override
   Future<void> endCapture() => _methodChannel.invokeMethod<void>('endCapture');

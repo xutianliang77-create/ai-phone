@@ -20,6 +20,10 @@ import { registerTextTranslationRoutes } from "./modules/translation/text-transl
 import { registerVoiceProfileRoutes } from "./modules/voice-profiles/voice-profiles.routes.js";
 import { registerVoiceIdentityRoutes } from "./modules/voice-identities/voice-identities.routes.js";
 import { registerIngressRoutes } from "./modules/ingress/ingress.routes.js";
+import { registerAirDeviceCallRoutes } from
+  "./modules/device-calls/air-device-call.routes.js";
+import { registerAirDeviceTrackAdmissionRoutes } from
+  "./modules/device-calls/air-device-track-admission.routes.js";
 import { registerPlatformTelemetryHooks } from "./infrastructure/observability/platform-telemetry.js";
 import { registerPlatformMetricsRoutes } from
   "./infrastructure/observability/platform-metrics.routes.js";
@@ -70,6 +74,8 @@ export async function buildApp(options: BuildAppOptions = {}) {
   registerPlatformMetricsRoutes(app);
   await registerAccountRoutes(app);
   await registerAgentCallRoutes(app);
+  registerAirDeviceCallRoutes(app);
+  registerAirDeviceTrackAdmissionRoutes(app);
   await registerHealthRoutes(app);
   registerIngressRoutes(app);
   await registerModelRoutes(app);

@@ -5,6 +5,7 @@ import type {
 } from "@translation/contracts";
 import type { HttpTtsSynthesizer } from "./http-tts-synthesizer.js";
 import { logRealtimeTtsFailure } from "./http-tts-synthesizer.js";
+import { buildError } from "../protocol/outgoing-event-builder.js";
 
 interface RealtimeTtsOutputQueueOptions {
   sessionId: string;
@@ -12,7 +13,7 @@ interface RealtimeTtsOutputQueueOptions {
   voice?: RealtimeVoiceConfig;
   synthesizer: Pick<
     HttpTtsSynthesizer,
-    "enabled" | "synthesize" | "cancelSession" | "closeSession"
+    "enabled" | "synthesizeStream" | "cancelSession" | "closeSession"
   >;
   isSessionActive: () => boolean;
   maxPendingOutputs?: number;
@@ -27,6 +28,17 @@ export class RealtimeTtsOutputQueue {
   private droppedOutputs = 0;
 
   constructor(private readonly options: RealtimeTtsOutputQueueOptions) {}
+
+  setVoiceOutput(enabled: boolean, presetId?: string) {
+    if (this.closed || (enabled && !this.options.synthesizer.enabled)) return false;
+    if (this.options.voiceOutput === enabled &&
+        (!presetId || (this.options.voice?.mode === "preset" &&
+          this.options.voice.presetId === presetId))) return true;
+    this.resetGeneration();
+    this.options.voiceOutput = enabled;
+    if (presetId) this.options.voice = { mode: "preset", presetId };
+    return true;
+  }
 
   enqueue(event: ServerRealtimeEvent, send: (event: ServerRealtimeEvent) => void) {
     if (event.type !== "translation.final"
@@ -43,11 +55,20 @@ export class RealtimeTtsOutputQueue {
     this.tail = this.tail.then(async () => {
       if (!this.canEmit(generation)) return;
       try {
-        const audio = await this.options.synthesizer.synthesize(event, this.options.voice);
-        if (audio && this.canEmit(generation)) send(audio);
+        for await (const audio of this.options.synthesizer.synthesizeStream(
+          event,
+          this.options.voice,
+        )) {
+          if (!this.canEmit(generation)) return;
+          send(audio);
+        }
       } catch (error) {
         if (this.canEmit(generation)) {
           logRealtimeTtsFailure(event.sessionId, event.segmentId, error);
+          const reason = error instanceof Error ? error.message : "TTS provider failed";
+          send(buildError("provider_unavailable", `语音合成失败：${reason}。字幕已保留`, {
+            sessionId: event.sessionId, stage: "tts", retryable: true,
+          }));
         }
       }
     }).finally(() => {

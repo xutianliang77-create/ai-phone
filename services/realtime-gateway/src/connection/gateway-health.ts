@@ -1,8 +1,14 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { RealtimeEnv } from "../config/env.js";
+import type { GatewayDependencyReadiness } from "./gateway-dependency-readiness.js";
+import {
+  gatewayRuntimeIdentity,
+  gatewayRuntimeIdentityIssues,
+  type GatewayRuntimeIdentity,
+} from "./gateway-runtime-identity.js";
 
 export interface GatewayHealthPayload {
-  status: "ok";
+  status: "ok" | "degraded" | "unavailable";
   service: "realtime-gateway";
   version: "0.1.0";
   provider: RealtimeEnv["provider"];
@@ -22,6 +28,8 @@ export interface GatewayHealthPayload {
   sessionEventSink: RealtimeEnv["sessionEventSink"];
   tokenTransport: "subprotocol" | "subprotocol_with_legacy_query";
   publicEntryProtection: GatewayProtectionReadiness;
+  dependencyReadiness?: GatewayDependencyReadiness;
+  runtimeIdentity?: GatewayRuntimeIdentity;
   releaseReadiness: GatewayReleaseReadinessPayload;
 }
 
@@ -41,9 +49,13 @@ export interface GatewayReleaseReadinessPayload {
 export function gatewayHealthPayload(
   env: RealtimeEnv,
   protection: GatewayProtectionReadiness = unconfiguredProtection(env),
+  dependencies?: GatewayDependencyReadiness,
 ): GatewayHealthPayload {
+  const runtimeIdentity = gatewayRuntimeIdentity(env);
   return {
-    status: "ok",
+    status: dependencies?.status === "not_ready"
+      ? "unavailable"
+      : dependencies?.status === "degraded" ? "degraded" : "ok",
     service: "realtime-gateway",
     version: "0.1.0",
     provider: env.provider,
@@ -65,7 +77,9 @@ export function gatewayHealthPayload(
       ? "subprotocol_with_legacy_query"
       : "subprotocol",
     publicEntryProtection: protection,
-    releaseReadiness: gatewayReleaseReadinessPayload(env, protection),
+    ...(dependencies ? { dependencyReadiness: dependencies } : {}),
+    ...(runtimeIdentity ? { runtimeIdentity } : {}),
+    releaseReadiness: gatewayReleaseReadinessPayload(env, protection, dependencies),
   };
 }
 
@@ -86,8 +100,9 @@ function translationModel(env: RealtimeEnv) {
 export function gatewayReleaseReadinessPayload(
   env: RealtimeEnv,
   protection?: GatewayProtectionReadiness,
+  dependencies?: GatewayDependencyReadiness,
 ): GatewayReleaseReadinessPayload {
-  const issues = gatewayReleaseReadinessIssues(env, protection);
+  const issues = gatewayReleaseReadinessIssues(env, protection, dependencies);
   return {
     status: issues.length === 0 ? "ready" : "not_ready",
     profile: env.regionEdition,
@@ -98,6 +113,7 @@ export function gatewayReleaseReadinessPayload(
 function gatewayReleaseReadinessIssues(
   env: RealtimeEnv,
   protection?: GatewayProtectionReadiness,
+  dependencies?: GatewayDependencyReadiness,
 ) {
   const issues: string[] = [];
   if (env.regionEdition === "domestic") appendDomesticProviderIssues(env, issues);
@@ -119,6 +135,10 @@ function gatewayReleaseReadinessIssues(
     issues.push("Release requires PUBLIC_RATE_LIMIT_KEY_SECRET");
   }
   if (protection?.status === "not_ready") issues.push(...protection.issues);
+  if (dependencies && !dependencies.releaseReady) {
+    issues.push(...dependencies.issues, ...dependencies.warnings);
+  }
+  issues.push(...gatewayRuntimeIdentityIssues(env));
   return issues;
 }
 
@@ -164,13 +184,14 @@ export function handleGatewayHttpRequest(
   response: ServerResponse,
   env: RealtimeEnv,
   protection: GatewayProtectionReadiness = unconfiguredProtection(env),
+  dependencies?: GatewayDependencyReadiness,
 ) {
   const url = new URL(request.url ?? "/", "http://127.0.0.1");
   if ((request.method === "GET" || request.method === "HEAD") && url.pathname === "/health") {
     writeJson(
       response,
       200,
-      gatewayHealthPayload(env, protection),
+      gatewayHealthPayload(env, protection, dependencies),
       request.method === "HEAD",
     );
     return;
@@ -179,7 +200,7 @@ export function handleGatewayHttpRequest(
     (request.method === "GET" || request.method === "HEAD") &&
     url.pathname === "/health/release-ready"
   ) {
-    const payload = gatewayReleaseReadinessPayload(env, protection);
+    const payload = gatewayReleaseReadinessPayload(env, protection, dependencies);
     writeJson(response, payload.status === "ready" ? 200 : 503, payload, request.method === "HEAD");
     return;
   }

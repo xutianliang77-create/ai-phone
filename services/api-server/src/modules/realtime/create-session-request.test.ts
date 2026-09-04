@@ -91,6 +91,10 @@ describe("create realtime session request", () => {
       ...payload("conversation"),
       domainLexiconPacks: ["legal"],
     }).ok).toBe(false);
+    expect(validateCreateRealtimeSessionRequest({
+      ...payload("conversation"),
+      domainLexiconPacks: ["cultivation"],
+    }).ok).toBe(false);
   });
 });
 

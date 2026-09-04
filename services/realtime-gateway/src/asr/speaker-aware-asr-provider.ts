@@ -2,7 +2,6 @@ import type { AudioFrame } from "@translation/contracts";
 import {
   asrResults,
   type AsrProvider,
-  type AsrProviderResult,
   type AsrSession,
   type TranscriptResult,
 } from "./asr-provider.js";
@@ -10,16 +9,34 @@ import type {
   SpeakerAttributionProvider,
   SpeakerSpan,
 } from "../speaker/speaker-attribution-provider.js";
-import { alignSpeakerSpan } from "../speaker/speaker-segment-aligner.js";
 import { SpeechTurnCoordinator } from "../speaker/speech-turn-coordinator.js";
-import { realtimeLogger } from "../metrics/realtime-metrics.js";
+import { loggableError, realtimeLogger } from "../metrics/realtime-metrics.js";
 import { SpeakerTurnDiagnostics } from "./speaker-turn-diagnostics.js";
 import { SpeakerTurnAssignment } from "./speaker-turn-assignment.js";
+import { AsrRequestScheduler } from "./asr-request-scheduler.js";
 import { RecentPcmAudioBuffer } from "../speaker/recent-pcm-audio-buffer.js";
 import type { VoiceIdentityMatcher } from "../speaker/voice-identity-matcher.js";
+import { applyVoiceIdentities } from "../speaker/speaker-voice-identity.js";
+import {
+  SpeakerSpanCapture,
+  speakerSpanCaptureOptionsFromEnvironment,
+  type SpeakerSpanCaptureOptions,
+} from "../speaker/speaker-span-capture.js";
+import {
+  retainRecentSpeakerSpans,
+} from "../speaker/speaker-evidence-retention.js";
+import { SpeakerBoundaryReassignmentCoordinator } from
+  "./speaker-boundary-reassignment-coordinator.js";
+import {
+  attributeSpeakerTranscripts,
+  providerResult,
+} from "../speaker/speaker-transcript-attribution.js";
+import { SpeakerBoundaryTranscriptCoordinator } from
+  "./speaker-boundary-transcript-coordinator.js";
+
+export type { SpeakerSpanCaptureOptions } from "../speaker/speaker-span-capture.js";
 
 export class SpeakerAwareAsrProvider implements AsrProvider {
-  private static readonly speakerSpanRetentionMs = 120_000;
   private readonly spansBySession = new Map<string, SpeakerSpan[]>();
   private readonly enabledSessions = new Set<string>();
   private readonly turnDiagnostics = new SpeakerTurnDiagnostics();
@@ -31,29 +48,46 @@ export class SpeakerAwareAsrProvider implements AsrProvider {
     string,
     Map<string, NonNullable<TranscriptResult["speaker"]>>
   >();
+  private readonly spanCapture: SpeakerSpanCapture;
+  private readonly asrRequests = new AsrRequestScheduler();
+  private readonly boundaryReassignment: SpeakerBoundaryReassignmentCoordinator;
+  private readonly boundaryTranscripts: SpeakerBoundaryTranscriptCoordinator;
 
   constructor(
     private readonly asr: AsrProvider,
     private readonly speaker: SpeakerAttributionProvider,
     private readonly turnCoordinator = new SpeechTurnCoordinator(),
     private readonly identityMatcher?: VoiceIdentityMatcher,
-  ) {}
+    spanCaptureOptions = speakerSpanCaptureOptionsFromEnvironment(),
+  ) {
+    this.spanCapture = new SpeakerSpanCapture(spanCaptureOptions);
+    this.boundaryReassignment = new SpeakerBoundaryReassignmentCoordinator(
+      asr, {}, (sessionId, request) => this.asrRequests.run(sessionId, request),
+    );
+    this.boundaryTranscripts = new SpeakerBoundaryTranscriptCoordinator(
+      this.turnDiagnostics,
+      this.turnAssignment,
+      this.boundaryReassignment,
+      this.turnCoordinator,
+    );
+  }
 
   async createSession(session: AsrSession) {
-    await this.asr.createSession(session);
+    await this.asrRequests.run(session.sessionId, () => this.asr.createSession(session));
     const options = session.speakerAttribution;
-    if (
-      !options ||
-      (options.mode !== "auto" && options.mode !== "diarization")
-    ) {
-      return;
-    }
+    if (!options || (options.mode !== "auto" &&
+        options.mode !== "diarization")) return;
     try {
       await this.speaker.createSession({ sessionId: session.sessionId, options });
       this.enabledSessions.add(session.sessionId);
       this.spansBySession.set(session.sessionId, []);
+      this.boundaryTranscripts.createSession(session);
       this.turnCoordinator.clear(session.sessionId);
       this.turnAssignment.clear(session.sessionId);
+      if (session.asrEndpointMode === "listening") {
+        this.boundaryReassignment.createSession(session);
+      }
+      this.spanCapture.registerSession(session.sessionId, session.asrEndpointMode);
       if (options.allowVoiceIdentity && session.userId && this.identityMatcher) {
         this.identitySessions.set(session.sessionId, session.userId);
         this.identityAudio.set(session.sessionId, new RecentPcmAudioBuffer());
@@ -63,171 +97,175 @@ export class SpeakerAwareAsrProvider implements AsrProvider {
       this.recordSpeakerFailure(session.sessionId, "create", error);
     }
   }
-
   async transcribe(frame: AudioFrame) {
     if (!this.enabledSessions.has(frame.sessionId)) {
       return this.asr.transcribe(frame);
     }
+    this.boundaryReassignment.recordFrame(frame);
     this.identityAudio.get(frame.sessionId)?.push(frame);
     const [transcripts, nextSpans] = await Promise.all([
-      this.asr.transcribe(frame),
+      this.asrRequests.run(frame.sessionId, () => this.asr.transcribe(frame)),
       this.safePush(frame),
     ]);
-    const spans = this.retainRecentSpans(frame.sessionId, nextSpans);
+    const spans = retainRecentSpeakerSpans(
+      this.spansBySession.get(frame.sessionId) ?? [],
+      nextSpans,
+    );
     this.spansBySession.set(frame.sessionId, spans);
     this.turnDiagnostics.recordFrame(frame.sessionId, frame, nextSpans.length);
+    if (nextSpans.length === 0) {
+      this.turnCoordinator.recordNoSpanObservation(frame.sessionId);
+    }
     const boundary = nextSpans.length > 0
       ? this.turnCoordinator.observe(frame.sessionId, spans)
       : null;
+    this.spanCapture.record({
+      frame,
+      rawSpans: nextSpans,
+      boundary,
+      currentSpeakerId: this.turnCoordinator.currentSpeaker(frame.sessionId),
+    });
     const regularTurns = asrResults(transcripts);
-    const turnChange = boundary
-      ? this.turnAssignment.advance(frame.sessionId)
-      : null;
-    const currentTurn = turnChange?.previous ??
-      this.turnAssignment.current(frame.sessionId);
     const commit = boundary
       ? await this.safeCommitBoundary(frame.sessionId, boundary.boundaryMs)
       : { result: null, error: false };
-    const committedTurns = asrResults(commit.result).map((transcript) => ({
-      ...this.turnAssignment.assign(transcript, currentTurn),
-      speaker: transcript.speaker ?? {
-        speakerId: boundary?.previousSpeakerId ?? "unknown",
-        role: "speaker" as const,
-        source: "diarization" as const,
-      },
-    }));
-    const filteredRegularTurns = (committedTurns.length > 0
-      ? removeOverlappingTranscripts(regularTurns, committedTurns)
-      : regularTurns).map((transcript) => this.turnAssignment.assign(
-        transcript,
-        turnForTranscript(
-          transcript,
-          boundary?.boundaryMs,
-          currentTurn,
-          turnChange?.next,
-        ),
-      ));
-    if (boundary) {
-      const endpointRaceCount = regularTurns.filter(
-        (item) => crossesBoundary(item, boundary.boundaryMs),
-      ).length;
-      this.turnDiagnostics.recordBoundary(
-        frame.sessionId,
-        boundary,
-        commit.error ? "error" : committedTurns.length > 0 ? "hit" : "miss",
-        committedTurns,
-        endpointRaceCount,
-      );
-      const context = this.turnDiagnostics.boundaryContext(frame.sessionId);
-      realtimeLogger.info({
-        sessionId: frame.sessionId,
-        previousSpeakerId: boundary.previousSpeakerId,
-        nextSpeakerId: boundary.nextSpeakerId,
-        boundaryMs: boundary.boundaryMs,
-        confirmedAtMs: boundary.confirmedAtMs,
-        confidence: boundary.confidence,
-        dominanceRatio: boundary.dominanceRatio,
-        committedTranscriptCount: committedTurns.length,
-        endpointRaceCount,
-        commitError: commit.error,
-        ...context,
-      }, "Confirmed realtime speaker turn boundary");
-    }
-    const outgoing = [...filteredRegularTurns, ...committedTurns];
+    const boundaryResult = this.boundaryTranscripts.processFrame({
+      sessionId: frame.sessionId,
+      boundary,
+      regularTurns,
+      commit,
+      spans,
+    });
+    const outgoing = boundaryResult.outgoing;
     this.turnDiagnostics.recordTranscripts(frame.sessionId, outgoing);
-    const attributed = asrResults(this.attributedResults(outgoing, spans));
-    return providerResult(await this.applyVoiceIdentities(frame.sessionId, attributed));
+    const attributed = attributeSpeakerTranscripts(
+      outgoing,
+      spans,
+      (transcript) => {
+        if (
+          boundary &&
+          transcript.turnId === boundaryResult.currentTurn.turnId
+        ) {
+          return boundary.previousSpeakerId;
+        }
+        if (
+          boundary &&
+          boundaryResult.turnChange?.next &&
+          transcript.turnId === boundaryResult.turnChange.next.turnId
+        ) {
+          return boundary.nextSpeakerId;
+        }
+        return this.turnCoordinator.currentSpeaker(frame.sessionId);
+      },
+      this.boundaryTranscripts.boundaries(frame.sessionId),
+      (speakerId) => this.turnCoordinator.isConfirmedSpeaker(
+        frame.sessionId,
+        speakerId,
+      ),
+    );
+    const reassigned = await this.boundaryReassignment.process(
+      frame.sessionId,
+      attributed,
+      boundary === null && regularTurns.some((transcript) =>
+        transcript.isFinal !== false && transcript.endpointReason !== undefined
+      ),
+    );
+    this.boundaryTranscripts.applyWitnessResolutions(frame.sessionId);
+    return providerResult(await this.applyVoiceIdentities(frame.sessionId, reassigned));
   }
-
   async flush(sessionId: string) {
     const [transcripts, nextSpans] = await Promise.all([
-      this.asr.flush(sessionId),
+      this.asrRequests.run(sessionId, () => this.asr.flush(sessionId)),
       this.enabledSessions.has(sessionId)
         ? this.safeFlush(sessionId)
         : Promise.resolve([]),
     ]);
-    const spans = this.retainRecentSpans(sessionId, nextSpans);
+    const spans = retainRecentSpeakerSpans(
+      this.spansBySession.get(sessionId) ?? [],
+      nextSpans,
+    );
     this.spansBySession.set(sessionId, spans);
-    const currentTurn = this.turnAssignment.current(sessionId);
-    const results = asrResults(transcripts).map((transcript) =>
-      this.turnAssignment.assign(transcript, currentTurn)
+    const results = this.boundaryTranscripts.processFlush(
+      sessionId,
+      asrResults(transcripts),
+      spans,
     );
     this.turnDiagnostics.recordTranscripts(sessionId, results);
-    const attributed = asrResults(this.attributedResults(results, spans));
-    return providerResult(await this.applyVoiceIdentities(sessionId, attributed));
+    const attributed = attributeSpeakerTranscripts(
+      results,
+      spans,
+      () => this.turnCoordinator.currentSpeaker(sessionId),
+      this.boundaryTranscripts.boundaries(sessionId),
+      (speakerId) => this.turnCoordinator.isConfirmedSpeaker(
+        sessionId,
+        speakerId,
+      ),
+    );
+    const reassigned = await this.boundaryReassignment.process(
+      sessionId,
+      attributed,
+      true,
+    );
+    this.boundaryTranscripts.applyWitnessResolutions(sessionId);
+    this.boundaryReassignment.finish(sessionId);
+    return providerResult(await this.applyVoiceIdentities(sessionId, reassigned));
   }
-
   async diagnostics(sessionId: string) {
     const underlying = await this.asr.diagnostics?.(sessionId) ?? {};
+    const speakerTurns = this.turnDiagnostics.snapshot(sessionId);
+    if (!speakerTurns) return underlying;
     return {
       ...underlying,
-      speakerTurns: this.turnDiagnostics.snapshot(sessionId),
+      speakerTurns: {
+        ...speakerTurns,
+        ...(this.turnCoordinator.diagnostics(sessionId) ?? {}),
+        ...(this.boundaryReassignment.diagnostics(sessionId) ?? {}),
+      },
     };
   }
-
+  speakerBoundaryEvidence(sessionId: string) {
+    const boundaries = this.boundaryTranscripts.unresolvedBoundaries(sessionId);
+    if (boundaries.length === 0) return undefined;
+    return {
+      boundaries,
+      spans: [...(this.spansBySession.get(sessionId) ?? [])],
+      confirmedSpeakerIds: [...new Set(boundaries.flatMap((boundary) => [
+        boundary.previousSpeakerId,
+        boundary.nextSpeakerId,
+      ]))],
+    };
+  }
+  resolveSpeakerBoundaries(sessionId: string, boundaryMs: number[]) {
+    this.boundaryTranscripts.resolveTokenTimingBoundaries(
+      sessionId,
+      boundaryMs,
+    );
+  }
+  resolveSpeakerBoundaryNoops(sessionId: string, boundaryMs: number[]) {
+    this.boundaryTranscripts.resolveEndpointNoops(sessionId, boundaryMs);
+  }
   async closeSession(sessionId: string) {
     const speakerEnabled = this.enabledSessions.delete(sessionId);
     this.spansBySession.delete(sessionId);
+    this.boundaryTranscripts.clear(sessionId);
     this.turnCoordinator.clear(sessionId);
     this.turnAssignment.clear(sessionId);
+    this.boundaryReassignment.clear(sessionId);
     this.speakerFailureCounts.delete(sessionId);
     this.identitySessions.delete(sessionId);
     this.identityAudio.get(sessionId)?.clear();
     this.identityAudio.delete(sessionId);
     this.identitiesBySpeaker.delete(sessionId);
-    await this.asr.closeSession(sessionId);
+    this.spanCapture.clearSession(sessionId);
+    await this.asrRequests.run(sessionId, () => this.asr.closeSession(sessionId));
     if (speakerEnabled) {
       await this.speaker.closeSession(sessionId).catch(() => undefined);
     }
     this.turnDiagnostics.clear(sessionId);
   }
-
   async healthCheck() {
     return this.asr.healthCheck();
   }
-
-  private attributedResults(
-    transcripts: TranscriptResult[],
-    spans: SpeakerSpan[],
-  ): AsrProviderResult {
-    const attributed = transcripts
-      .map((transcript) => {
-        if (transcript.speaker) return transcript;
-        const alignment = alignSpeakerSpan(transcript.timing, spans);
-        if (alignment) return { ...transcript, ...alignment };
-        return {
-          ...transcript,
-          speaker: {
-            speakerId: "unknown",
-            role: "unknown" as const,
-            source: "unknown" as const,
-          },
-        };
-      })
-      .sort((left, right) =>
-        (left.timing?.startMs ?? 0) - (right.timing?.startMs ?? 0)
-      );
-    if (attributed.length === 0) return null;
-    return attributed.length === 1 ? attributed[0] : attributed;
-  }
-
-  private retainRecentSpans(sessionId: string, nextSpans: SpeakerSpan[]) {
-    const indexed = new Map<string, SpeakerSpan>();
-    for (const span of [
-      ...(this.spansBySession.get(sessionId) ?? []),
-      ...nextSpans,
-    ]) {
-      indexed.set(`${span.speakerId}:${span.startMs}`, span);
-    }
-    const spans = [...indexed.values()];
-    const newestEndMs = spans.reduce(
-      (latest, span) => Math.max(latest, span.endMs),
-      0,
-    );
-    const cutoffMs = newestEndMs - SpeakerAwareAsrProvider.speakerSpanRetentionMs;
-    return spans.filter((span) => span.endMs >= cutoffMs);
-  }
-
   private async safePush(frame: AudioFrame) {
     try {
       return await this.speaker.pushAudio(frame);
@@ -250,7 +288,9 @@ export class SpeakerAwareAsrProvider implements AsrProvider {
     if (!this.asr.commitBoundary) return { result: null, error: false };
     try {
       return {
-        result: await this.asr.commitBoundary({ sessionId, boundaryMs }),
+        result: await this.asrRequests.run(sessionId, () =>
+          this.asr.commitBoundary!({ sessionId, boundaryMs })
+        ),
         error: false,
       };
     } catch {
@@ -270,7 +310,7 @@ export class SpeakerAwareAsrProvider implements AsrProvider {
       sessionId,
       stage,
       count,
-      error,
+      error: loggableError(error),
     }, "Speaker attribution side path failed");
   }
 
@@ -278,63 +318,14 @@ export class SpeakerAwareAsrProvider implements AsrProvider {
     sessionId: string,
     transcripts: TranscriptResult[],
   ) {
-    const userId = this.identitySessions.get(sessionId);
-    const matcher = this.identityMatcher;
-    const audio = this.identityAudio.get(sessionId);
-    if (!userId || !matcher || !audio) return transcripts;
-    const cache = this.identitiesBySpeaker.get(sessionId)!;
-    return await Promise.all(transcripts.map(async (transcript) => {
-      const diarizedId = transcript.speaker?.speakerId ?? "unknown";
-      const cached = cache.get(diarizedId);
-      if (cached) return { ...transcript, speaker: cached };
-      const audioBase64 = audio.wavBase64(transcript.timing);
-      if (!audioBase64) return transcript;
-      try {
-        const identity = await matcher.match({ userId, audioBase64 });
-        if (!identity) return transcript;
-        if (diarizedId !== "unknown") cache.set(diarizedId, identity);
-        return { ...transcript, speaker: identity };
-      } catch (error) {
-        this.recordSpeakerFailure(sessionId, "identity", error);
-        return transcript;
-      }
-    }));
+    return applyVoiceIdentities({
+      transcripts,
+      userId: this.identitySessions.get(sessionId),
+      matcher: this.identityMatcher,
+      audio: this.identityAudio.get(sessionId),
+      cache: this.identitiesBySpeaker.get(sessionId),
+      onFailure: (error) =>
+        this.recordSpeakerFailure(sessionId, "identity", error),
+    });
   }
-}
-
-function providerResult(results: TranscriptResult[]): AsrProviderResult {
-  if (results.length === 0) return null;
-  return results.length === 1 ? results[0] : results;
-}
-
-function removeOverlappingTranscripts(
-  regular: TranscriptResult[],
-  committed: TranscriptResult[],
-) {
-  return regular.filter((item) =>
-    !committed.some((boundaryItem) => timingsOverlap(item, boundaryItem))
-  );
-}
-
-function timingsOverlap(left: TranscriptResult, right: TranscriptResult) {
-  if (!left.timing || !right.timing) return false;
-  return left.timing.startMs < right.timing.endMs &&
-    right.timing.startMs < left.timing.endMs;
-}
-
-function crossesBoundary(transcript: TranscriptResult, boundaryMs: number) {
-  if (!transcript.timing) return false;
-  return transcript.timing.startMs < boundaryMs &&
-    transcript.timing.endMs > boundaryMs;
-}
-
-function turnForTranscript(
-  transcript: TranscriptResult,
-  boundaryMs: number | undefined,
-  previous: { turnId: string; revision: number },
-  next: { turnId: string; revision: number } | undefined,
-) {
-  if (!next || boundaryMs === undefined) return previous;
-  if (transcript.timing && transcript.timing.startMs < boundaryMs) return previous;
-  return next;
 }

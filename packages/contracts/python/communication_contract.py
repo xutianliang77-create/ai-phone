@@ -12,6 +12,8 @@ OPTIONAL_IDS = (
     "turnId",
     "segmentId",
     "playbackId",
+    "workId",
+    "deliveryAttemptId",
     "agentRunId",
     "providerOperationId",
 )

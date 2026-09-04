@@ -27,6 +27,7 @@ export function parseVoiceAgentRuntimeEvent(
   const events = [
     "ready", "heartbeat", "disclosure_started", "disclosure_completed",
     "recording_consent", "amd_classified", "ivr_detected", "takeover_ready",
+    "response_start_timeout", "audio_capacity_exceeded",
     "structured_result", "failed", "ending",
   ];
   if (!bounded(value.ticket, 4096) || !bounded(value.eventId, 128) ||

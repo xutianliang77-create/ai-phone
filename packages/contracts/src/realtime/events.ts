@@ -7,6 +7,7 @@ import type { SessionSegmentProviderUsageDto } from "../api/realtime.js";
 import type { SessionSegmentRefinementDto } from "../api/realtime.js";
 import type { RealtimeError, RealtimeErrorStage } from "./errors.js";
 import type { TranslationLanguageCode } from "../shared/languages.js";
+import type { AsrTokenTimingDto } from "../shared/asr-timing.js";
 import type {
   SegmentTimingDto,
   SpeakerAttributionDto,
@@ -34,6 +35,9 @@ export interface TranscriptEvent {
   refinement?: SessionSegmentRefinementDto;
   speaker?: SpeakerAttributionDto;
   timing?: SegmentTimingDto;
+  tokenTimings?: AsrTokenTimingDto[];
+  /** Token offsets bound only to rawText, never to optimized text. */
+  rawTokenTimings?: AsrTokenTimingDto[];
   vadContext?: SegmentVadContextDto;
 }
 
@@ -61,6 +65,7 @@ export interface SpeakerUpdatedEvent {
   segmentId: string;
   turnId?: string;
   revision?: number;
+  speakerRevision?: number;
   speaker: SpeakerAttributionDto;
   timing?: SegmentTimingDto;
 }
@@ -117,6 +122,8 @@ export interface ClientTextSegmentEvent {
   language: TranslationLanguageCode;
   isFinal?: boolean;
   confidence?: number;
+  timing?: SegmentTimingDto;
+  tokenTimings?: AsrTokenTimingDto[];
 }
 
 export interface SessionEndedEvent {
@@ -139,11 +146,20 @@ export interface SessionResumedEvent {
   sessionId: string;
 }
 
+export interface SessionVoiceOutputUpdatedEvent {
+  type: "session.voice_output.updated";
+  sessionId: string;
+  enabled: boolean;
+  accepted: boolean;
+  message?: string;
+}
+
 export type ClientRealtimeEvent =
   | AudioFrame
   | ClientTextSegmentEvent
   | { type: "session.pause"; sessionId: string }
   | { type: "session.resume"; sessionId: string }
+  | { type: "session.voice_output"; sessionId: string; enabled: boolean; presetId?: string }
   | { type: "session.end"; sessionId: string };
 
 export type ServerRealtimeEvent =
@@ -156,5 +172,6 @@ export type ServerRealtimeEvent =
   | UsageTickEvent
   | SessionPausedEvent
   | SessionResumedEvent
+  | SessionVoiceOutputUpdatedEvent
   | SessionEndedEvent
   | RealtimeError;

@@ -27,6 +27,21 @@ describe("checkLiveKitSelfHostConfig", () => {
     expect(result.releaseSnippet).toBe("LIVEKIT_URL=wss://livekit.qkxy.cn");
   });
 
+  test("does not require SIP configuration for core translation", () => {
+    const env = readyEnv();
+    delete env.LIVEKIT_SIP_OUTBOUND_TRUNK_ID;
+    delete env.LIVEKIT_SIP_IMAGE;
+    const file = writeEnv(tempDirs, env);
+
+    const result = checkLiveKitSelfHostConfig({
+      envFile: file,
+      requireSip: false,
+    });
+
+    expect(result.status).toBe("ready");
+    expect(result.issues.join("\n")).not.toContain("SIP");
+  });
+
   test("fails placeholders, shared domains, weak secrets and bad ports", () => {
     const file = writeEnv(
       tempDirs,

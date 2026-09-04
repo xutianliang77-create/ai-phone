@@ -26,12 +26,26 @@ bool shouldSubscribeCallRoomAudioTrack({
   required String trackName,
   required String localRole,
   String? localParticipantIdentity,
+  bool translationMediaOnly = false,
 }) {
+  // AI calling and human takeover retain the existing room-monitor behavior.
+  if (!translationMediaOnly && localRole == 'host') {
+    return trackName.trim().isNotEmpty;
+  }
   final targetRole = callRoomTtsTrackTargetRole(trackName);
   if (targetRole == null) return false;
-  if (targetRole != localRole) return false;
   final targetLegToken = callRoomTtsTrackTargetLegToken(trackName);
-  return targetLegToken == null ||
-      (localParticipantIdentity != null &&
-          targetLegToken == callRoomLegToken(localParticipantIdentity));
+  if (targetRole == localRole) {
+    if (translationMediaOnly) {
+      return targetLegToken != null &&
+          localParticipantIdentity != null &&
+          targetLegToken == callRoomLegToken(localParticipantIdentity);
+    }
+    return targetLegToken == null ||
+        (localParticipantIdentity != null &&
+            targetLegToken == callRoomLegToken(localParticipantIdentity));
+  }
+  // Translation-only endpoints must not receive the opposite leg's TTS.
+  if (translationMediaOnly) return false;
+  return targetLegToken != null;
 }

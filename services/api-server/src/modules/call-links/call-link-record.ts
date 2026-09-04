@@ -8,6 +8,44 @@ export interface CallLinkMetadata {
   expiresAt: string;
   purpose?: "human_call" | "voice_agent";
   guestTicket?: CallGuestTicketRecord;
+  translationControl?: CallLinkTranslationControlState;
+  diagnosticMarkers?: CallLinkDiagnosticMarker[];
+}
+
+export type CallLinkDiagnosticCategory =
+  | "cannot_hear_remote"
+  | "callee_cannot_hear_translation"
+  | "translation_incorrect"
+  | "unexpected_audio";
+
+export interface CallLinkDiagnosticMarker {
+  id: string;
+  category: CallLinkDiagnosticCategory;
+  createdAt: string;
+  controlGeneration?: number;
+  dispatchGeneration?: number;
+  dialOperationId?: string;
+}
+
+export interface CallLinkTranslationControlState {
+  sourceLanguage: "zh" | "en";
+  targetLanguage: "zh" | "en";
+  uplinkPaused: boolean;
+  controlGeneration: number;
+  updatedAt: string;
+  lastSettledOperationId?: string;
+  lastSettledControlGeneration?: number;
+  lastSettledDispatchGeneration?: number;
+  lastSettledRequestedPaused?: boolean;
+  lastSettledSucceeded?: boolean;
+  pending?: {
+    operationId: string;
+    idempotencyKey: string;
+    requestedPaused: boolean;
+    controlGeneration: number;
+    dispatchGeneration: number;
+    resumePreparedAt?: string;
+  };
 }
 
 export interface CallGuestTicketRecord {

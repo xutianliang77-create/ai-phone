@@ -37,7 +37,7 @@ export function postgresPrimaryConfigurationIssues() {
 export async function assertPostgresPrimaryStartup(pool: Pick<Pool, "query">) {
   const issues = postgresPrimaryConfigurationIssues();
   if (issues.length > 0) throw new Error(`PostgreSQL primary refused: ${issues.join("; ")}`);
-  const evidence = readEvidence();
+  const evidence = readVerifiedPostgresCutoverEvidence();
   const schema = await pool.query<{ version: string }>(
     "SELECT version FROM ai_phone.schema_migrations ORDER BY version",
   );
@@ -63,25 +63,33 @@ export async function assertPostgresPrimaryStartup(pool: Pick<Pool, "query">) {
   };
 }
 
-function readEvidence() {
+export function readVerifiedPostgresCutoverEvidence(options: {
+  requireCurrentSchema?: boolean;
+} = {}) {
   const file = process.env.POSTGRES_CUTOVER_EVIDENCE_FILE!.trim();
   const parsed = JSON.parse(readFileSync(file, "utf8")) as CutoverEvidence;
   if (parsed.formatVersion !== 1 || parsed.status !== "matched" ||
     parsed.cutoverId !== process.env.POSTGRES_CUTOVER_ID?.trim() ||
     parsed.localHash !== parsed.postgresHash || parsed.normalized.issues.length > 0 ||
-    JSON.stringify(parsed.schema.expected) !==
-      JSON.stringify([...expectedPostgresMigrations])) {
+    (options.requireCurrentSchema !== false &&
+      JSON.stringify(parsed.schema.expected) !==
+        JSON.stringify([...expectedPostgresMigrations]))) {
     throw new Error("PostgreSQL cutover evidence is invalid");
   }
   const { signature, ...unsigned } = parsed;
-  const expected = createHmac(
-    "sha256",
-    process.env.POSTGRES_CUTOVER_EVIDENCE_HMAC_KEY!,
-  ).update(stableJson(unsigned)).digest("hex");
+  const expected = signPostgresCutoverEvidence(unsigned);
   if (!safeEqual(signature, expected)) {
     throw new Error("PostgreSQL cutover evidence signature is invalid");
   }
   return parsed;
+}
+
+export function signPostgresCutoverEvidence(value: Record<string, unknown>) {
+  const key = process.env.POSTGRES_CUTOVER_EVIDENCE_HMAC_KEY;
+  if ((key?.length ?? 0) < 32) {
+    throw new Error("PostgreSQL cutover evidence signing key is invalid");
+  }
+  return createHmac("sha256", key!).update(stableJson(value)).digest("hex");
 }
 
 function safeEqual(left: unknown, right: string) {
@@ -97,7 +105,7 @@ function stableJson(value: unknown): string {
     .map(([key, item]) => `${JSON.stringify(key)}:${stableJson(item)}`).join(",")}}`;
 }
 
-interface CutoverEvidence {
+export interface CutoverEvidence extends Record<string, unknown> {
   formatVersion: 1;
   status: "matched";
   cutoverId: string;

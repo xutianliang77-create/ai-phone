@@ -1,3 +1,4 @@
+import 'agent_delivery_room_event.dart';
 import 'call_link_api_client.dart';
 import '../../../shared/domain/speaker_attribution.dart';
 
@@ -8,44 +9,99 @@ enum CallRoomConnectionStatus {
   reconnecting,
 }
 
+enum CallRoomConversationState {
+  idle,
+  listening,
+  endpointing,
+  thinking,
+  speaking,
+  interrupted,
+}
+
+enum CallRoomPlaybackState {
+  idle,
+  queued,
+  started,
+  ended,
+  interrupted,
+  failed,
+}
+
 class CallRoomSnapshot {
   const CallRoomSnapshot({
     required this.status,
     required this.microphoneEnabled,
     required this.remoteParticipantCount,
+    this.microphonePausedForPlayback = false,
     this.message,
     this.captions = const <CallRoomCaption>[],
+    this.conversationState = CallRoomConversationState.idle,
+    this.playbackState = CallRoomPlaybackState.idle,
+    this.activePlaybackId,
+    this.pipelineGeneration,
+    this.lastEventType,
+    this.audibleRemoteAudioParticipantIdentities = const <String>{},
   });
 
   final CallRoomConnectionStatus status;
   final bool microphoneEnabled;
+  final bool microphonePausedForPlayback;
   final int remoteParticipantCount;
   final String? message;
   final List<CallRoomCaption> captions;
+  final CallRoomConversationState conversationState;
+  final CallRoomPlaybackState playbackState;
+  final String? activePlaybackId;
+  final int? pipelineGeneration;
+  final String? lastEventType;
+  final Set<String> audibleRemoteAudioParticipantIdentities;
 
   const CallRoomSnapshot.disconnected({String? message})
       : this(
           status: CallRoomConnectionStatus.disconnected,
           microphoneEnabled: false,
+          microphonePausedForPlayback: false,
           remoteParticipantCount: 0,
           message: message,
           captions: const <CallRoomCaption>[],
+          conversationState: CallRoomConversationState.idle,
+          playbackState: CallRoomPlaybackState.idle,
         );
 
   CallRoomSnapshot copyWith({
     CallRoomConnectionStatus? status,
     bool? microphoneEnabled,
+    bool? microphonePausedForPlayback,
     int? remoteParticipantCount,
     String? message,
     List<CallRoomCaption>? captions,
+    CallRoomConversationState? conversationState,
+    CallRoomPlaybackState? playbackState,
+    String? activePlaybackId,
+    int? pipelineGeneration,
+    String? lastEventType,
+    bool clearActivePlaybackId = false,
+    Set<String>? audibleRemoteAudioParticipantIdentities,
   }) {
     return CallRoomSnapshot(
       status: status ?? this.status,
       microphoneEnabled: microphoneEnabled ?? this.microphoneEnabled,
+      microphonePausedForPlayback:
+          microphonePausedForPlayback ?? this.microphonePausedForPlayback,
       remoteParticipantCount:
           remoteParticipantCount ?? this.remoteParticipantCount,
       message: message ?? this.message,
       captions: captions ?? this.captions,
+      conversationState: conversationState ?? this.conversationState,
+      playbackState: playbackState ?? this.playbackState,
+      activePlaybackId: clearActivePlaybackId
+          ? null
+          : activePlaybackId ?? this.activePlaybackId,
+      pipelineGeneration: pipelineGeneration ?? this.pipelineGeneration,
+      lastEventType: lastEventType ?? this.lastEventType,
+      audibleRemoteAudioParticipantIdentities:
+          audibleRemoteAudioParticipantIdentities ??
+              this.audibleRemoteAudioParticipantIdentities,
     );
   }
 }
@@ -66,6 +122,11 @@ class CallRoomCaption {
     this.voiceProfileId,
     this.firstAudioMs,
     this.audioDurationMs,
+    this.isPartial = false,
+    this.isTranslationDelta = false,
+    this.playbackState = CallRoomPlaybackState.idle,
+    this.playbackId,
+    this.generation,
   });
 
   final String segmentId;
@@ -83,6 +144,11 @@ class CallRoomCaption {
   final String? voiceProfileId;
   final int? firstAudioMs;
   final int? audioDurationMs;
+  final bool isPartial;
+  final bool isTranslationDelta;
+  final CallRoomPlaybackState playbackState;
+  final String? playbackId;
+  final int? generation;
 
   CallRoomCaption merge(CallRoomCaption next) {
     return CallRoomCaption(
@@ -100,6 +166,13 @@ class CallRoomCaption {
       voiceProfileId: _nonEmpty(next.voiceProfileId) ?? voiceProfileId,
       firstAudioMs: next.firstAudioMs ?? firstAudioMs,
       audioDurationMs: next.audioDurationMs ?? audioDurationMs,
+      isPartial: next.isPartial,
+      isTranslationDelta: next.isTranslationDelta,
+      playbackState: next.playbackState == CallRoomPlaybackState.idle
+          ? playbackState
+          : next.playbackState,
+      playbackId: next.playbackId ?? playbackId,
+      generation: next.generation ?? generation,
     );
   }
 
@@ -112,7 +185,24 @@ class CallRoomCaption {
 abstract class CallRoomClient {
   Stream<CallRoomSnapshot> get snapshots;
 
-  Future<void> connect(CallRoomToken token);
+  Stream<AgentDeliveryRoomEvent> get deliveryEvents =>
+      const Stream<AgentDeliveryRoomEvent>.empty();
+
+  Future<void> connect(
+    CallRoomToken token, {
+    bool enableMicrophone = true,
+    bool translationMediaOnly = false,
+    bool airTakeoverUplink = false,
+  });
+
+  Future<void> setMicrophoneEnabled(bool enabled);
+
+  /// Confirms exact-participant inbound audio progress at the client. This is
+  /// transport/playout readiness evidence, not a claim about human audibility.
+  Future<bool> waitForRemoteAudioPlayoutEvidence(
+    String participantIdentity, {
+    required Duration timeout,
+  }) async => false;
 
   Future<void> disconnect();
 

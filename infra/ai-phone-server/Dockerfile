@@ -3,7 +3,7 @@ FROM node:24-bookworm-slim
 WORKDIR /app
 
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends ca-certificates && \
+    apt-get install -y --no-install-recommends ca-certificates python3 && \
     rm -rf /var/lib/apt/lists/*
 
 COPY package.json package-lock.json tsconfig.base.json ./
@@ -14,10 +14,14 @@ COPY services/translation-worker ./services/translation-worker
 COPY services/pstn-bridge ./services/pstn-bridge
 COPY services/srt-ingress-bridge ./services/srt-ingress-bridge
 COPY services/voice-agent-runtime ./services/voice-agent-runtime
+COPY services/air-device-gateway ./services/air-device-gateway
+COPY release/domestic/model-routing.json ./release/domestic/model-routing.json
 COPY infra/postgres ./infra/postgres
+COPY infra/ai-phone-server/app-container-entrypoint.mjs \
+  infra/ai-phone-server/container-healthcheck.mjs \
+  ./infra/ai-phone-server/
 
-RUN npm ci && \
-    npm install --no-save --package-lock=false @ffmpeg-installer/linux-x64@4.1.0 && \
+RUN npm ci --no-audit && \
     test -x node_modules/@ffmpeg-installer/linux-x64/ffmpeg && \
     npm run build -w @translation/contracts && \
     npm run build -w @translation/llm && \
@@ -29,6 +33,8 @@ RUN npm ci && \
     npm run build -w @translation/pstn-bridge && \
     npm run build -w @translation/srt-ingress-bridge && \
     npm run build -w @translation/voice-agent-runtime && \
+    npm run build -w @translation/air-device-gateway && \
+    npm prune --omit=dev --no-audit && \
     npm cache clean --force
 
 ENV NODE_ENV=production \
@@ -36,4 +42,4 @@ ENV NODE_ENV=production \
 
 USER node
 
-CMD ["node", "services/api-server/dist/main.js"]
+CMD ["node", "infra/ai-phone-server/app-container-entrypoint.mjs"]

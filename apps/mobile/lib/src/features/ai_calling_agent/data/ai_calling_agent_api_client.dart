@@ -4,111 +4,17 @@ import 'package:http/http.dart' as http;
 
 import '../../account/data/account_auth_headers.dart';
 import '../../account/data/account_session_store.dart';
+import 'ai_calling_agent_api_error.dart';
+import 'ai_calling_agent_models.dart';
+import 'agent_work_permission_models.dart';
+import 'voice_client_ownership_models.dart';
 
-class AiCallingAgentDraft {
-  const AiCallingAgentDraft({
-    required this.id,
-    required this.scenario,
-    required this.status,
-    required this.objective,
-    required this.suggestedScript,
-    required this.language,
-    required this.riskLevel,
-    required this.riskReasons,
-    this.targetName,
-    this.targetPhone,
-    this.consentPromptVersion,
-    this.authorizedAt,
-    this.takeoverRequestedAt,
-    this.takeoverReadyAt,
-    this.takeoverResolvedAt,
-    this.takeoverReason,
-    this.cancelledAt,
-    this.cancellationReason,
-    this.callId,
-    this.providerCallId,
-    this.executionProvider,
-    this.queuedAt,
-    this.startedAt,
-    this.completedAt,
-    this.failedAt,
-    this.resultSummary,
-    this.failureReason,
-    this.nextStep,
-  });
+export 'ai_calling_agent_api_error.dart';
+export 'ai_calling_agent_models.dart';
+export 'agent_work_permission_models.dart';
+export 'voice_client_ownership_models.dart';
 
-  final String id;
-  final String scenario;
-  final String status;
-  final String objective;
-  final String suggestedScript;
-  final String language;
-  final String riskLevel;
-  final List<String> riskReasons;
-  final String? targetName;
-  final String? targetPhone;
-  final String? consentPromptVersion;
-  final String? authorizedAt;
-  final String? takeoverRequestedAt;
-  final String? takeoverReadyAt;
-  final String? takeoverResolvedAt;
-  final String? takeoverReason;
-  final String? cancelledAt;
-  final String? cancellationReason;
-  final String? callId;
-  final String? providerCallId;
-  final String? executionProvider;
-  final String? queuedAt;
-  final String? startedAt;
-  final String? completedAt;
-  final String? failedAt;
-  final String? resultSummary;
-  final String? failureReason;
-  final String? nextStep;
-
-  bool get requiresHumanTakeover =>
-      status == 'requires_human_takeover' ||
-      status == 'takeover_requested' ||
-      riskLevel == 'requires_human_takeover';
-
-  factory AiCallingAgentDraft.fromJson(Map<String, Object?> json) {
-    return AiCallingAgentDraft(
-      id: json['id']! as String,
-      scenario: json['scenario']! as String,
-      status: json['status']! as String,
-      objective: json['objective']! as String,
-      suggestedScript: json['suggestedScript']! as String,
-      language: (json['language'] ?? 'zh') as String,
-      riskLevel: (json['riskLevel'] ?? 'low') as String,
-      riskReasons: _stringList(json['riskReasons']),
-      targetName: json['targetName'] as String?,
-      targetPhone: json['targetPhone'] as String?,
-      consentPromptVersion: json['consentPromptVersion'] as String?,
-      authorizedAt: json['authorizedAt'] as String?,
-      takeoverRequestedAt: json['takeoverRequestedAt'] as String?,
-      takeoverReadyAt: json['takeoverReadyAt'] as String?,
-      takeoverResolvedAt: json['takeoverResolvedAt'] as String?,
-      takeoverReason: json['takeoverReason'] as String?,
-      cancelledAt: json['cancelledAt'] as String?,
-      cancellationReason: json['cancellationReason'] as String?,
-      callId: json['callId'] as String?,
-      providerCallId: json['providerCallId'] as String?,
-      executionProvider: json['executionProvider'] as String?,
-      queuedAt: json['queuedAt'] as String?,
-      startedAt: json['startedAt'] as String?,
-      completedAt: json['completedAt'] as String?,
-      failedAt: json['failedAt'] as String?,
-      resultSummary: json['resultSummary'] as String?,
-      failureReason: json['failureReason'] as String?,
-      nextStep: json['nextStep'] as String?,
-    );
-  }
-
-  static List<String> _stringList(Object? value) {
-    if (value is! List) return const <String>[];
-    return value.whereType<String>().toList(growable: false);
-  }
-}
+part 'ai_calling_agent_voice_api.dart';
 
 class AiCallingAgentApiClient {
   AiCallingAgentApiClient({
@@ -122,6 +28,8 @@ class AiCallingAgentApiClient {
   final Uri _baseUrl;
   final http.Client _client;
   final AccountSessionStore _accountSessionStore;
+
+  AiCallingAgentCancellation? lastCancellation;
 
   Future<List<AiCallingAgentDraft>> listDrafts() async {
     final response = await _client.get(
@@ -213,8 +121,10 @@ class AiCallingAgentApiClient {
       body: jsonEncode({'consentPromptVersion': consentPromptVersion}),
     );
     if (!_isSuccess(response)) {
-      throw AiCallingAgentApiException(
-          'Start agent call failed: ${response.body}');
+      throw AiCallingAgentApiException.fromResponse(
+        'Start agent call failed',
+        response,
+      );
     }
     return _draftFromBody(response.body);
   }
@@ -248,6 +158,32 @@ class AiCallingAgentApiClient {
 
   Future<AiCallingAgentDraft> rejectTakeover({required String draftId}) {
     return _takeoverDecision(draftId: draftId, decision: 'reject');
+  }
+
+  Future<AiCallingAgentDraft> pauseDraft({required String draftId}) {
+    return _setPauseState(draftId: draftId, action: 'pause');
+  }
+
+  Future<AiCallingAgentDraft> resumeDraft({required String draftId}) {
+    return _setPauseState(draftId: draftId, action: 'resume');
+  }
+
+  Future<AiCallingAgentDraft> _setPauseState({
+    required String draftId,
+    required String action,
+  }) async {
+    final response = await _client.post(
+      _baseUrl.resolve('/ai-calling-agent/drafts/$draftId/$action'),
+      headers: await _authHeaders(json: true),
+      body: '{}',
+    );
+    if (!_isSuccess(response)) {
+      throw AiCallingAgentApiException.fromResponse(
+        '${action == 'pause' ? 'Pause' : 'Resume'} agent call failed',
+        response,
+      );
+    }
+    return _draftFromBody(response.body);
   }
 
   Future<AiCallingAgentDraft> _takeoverDecision({
@@ -286,11 +222,39 @@ class AiCallingAgentApiClient {
       throw AiCallingAgentApiException(
           'Cancel agent draft failed: ${response.body}');
     }
+    lastCancellation = parseAiCallingAgentCancellation(response.body);
     return _draftFromBody(response.body);
   }
 
   void close() {
     _client.close();
+  }
+
+  Future<Map<String, Object?>> _postJson(
+    String path,
+    Map<String, Object?> body,
+    String errorPrefix,
+  ) async {
+    final response = await _client.post(
+      _baseUrl.resolve(path),
+      headers: await _authHeaders(json: true),
+      body: jsonEncode(body),
+    );
+    return _jsonResponse(response, errorPrefix);
+  }
+
+  Map<String, Object?> _jsonResponse(
+    http.Response response,
+    String errorPrefix,
+  ) {
+    if (!_isSuccess(response)) {
+      throw AiCallingAgentApiException.fromResponse(errorPrefix, response);
+    }
+    final value = jsonDecode(response.body);
+    if (value is! Map<String, Object?>) {
+      throw AiCallingAgentApiException('$errorPrefix: invalid response');
+    }
+    return value;
   }
 
   AiCallingAgentDraft _draftFromBody(String body) {
@@ -311,13 +275,4 @@ class AiCallingAgentApiClient {
           : const <String, String>{},
     );
   }
-}
-
-class AiCallingAgentApiException implements Exception {
-  const AiCallingAgentApiException(this.message);
-
-  final String message;
-
-  @override
-  String toString() => message;
 }

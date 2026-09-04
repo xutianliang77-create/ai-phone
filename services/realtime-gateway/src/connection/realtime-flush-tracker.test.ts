@@ -90,6 +90,30 @@ describe("realtime flush tracker", () => {
       unresolvedSegmentCount: 0,
     });
   });
+
+  it("removes an absorbed continuation tombstone from flush accounting", () => {
+    const tracker = new RealtimeFlushTracker();
+    tracker.record(transcript("absorbed"));
+    tracker.beginFinalization();
+    tracker.record({
+      type: "transcript.final",
+      sessionId: "sess_1",
+      segmentId: "absorbed",
+      text: "",
+      language: "zh",
+    });
+
+    expect(tracker.summarize(successfulSteps())).toEqual({
+      status: "empty",
+      transcriptFinalCount: 0,
+      translationFinalCount: 0,
+      translationFailedCount: 0,
+      unresolvedSegmentCount: 0,
+      pipelineErrorCount: 0,
+      audioFlushed: true,
+      providerFlushed: true,
+    });
+  });
 });
 
 function transcript(segmentId: string): ServerRealtimeEvent {

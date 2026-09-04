@@ -108,11 +108,13 @@ void main() {
 
     expect(controller.segments.map((segment) => segment.id), <String>['asr_1']);
     expect(speaker.spoken, <(String, String)>[('第一句', 'zh')]);
+    expect(controller.speechOutputActive, isTrue);
     firstSpeech.complete(const SpeechOutputResult(
       provider: 'fake',
       language: 'zh',
     ));
     await Future<void>.delayed(const Duration(milliseconds: 400));
+    expect(controller.speechOutputActive, isFalse);
     asr.emit(const AsrTextSegment(id: 'asr_2', text: 'second', language: 'en'));
     await pumpEventQueue();
     expect(controller.segments.map((segment) => segment.id),

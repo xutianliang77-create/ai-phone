@@ -11,7 +11,7 @@ enum RealtimeProcessingMode { onDevice, online }
 enum RealtimeVoiceOutputMode { off, natural, myVoice }
 
 bool realtimeModeSupportsVoiceOutput(String realtimeMode) {
-  return realtimeMode == 'conversation';
+  return realtimeMode == 'conversation' || realtimeMode == 'meeting';
 }
 
 AppConfig applyRealtimeModeVoicePolicy(AppConfig config) {

@@ -77,6 +77,11 @@ python scripts/tts_latency_gate.py \
   --api-key "$TTS_HTTP_API_KEY"
 ```
 
+The gate keeps the whole-response latency metrics for compatibility, but its
+first-audio release threshold is applied to the client-observed arrival of the
+first playable PCM chunk from `/tts/stream`. `streamModelFirstAudioMs` records
+the model-reported value separately so transport buffering cannot be hidden.
+
 For release readiness, use the real VoxCPM2 endpoint and keep the default
 `provider=voxcpm2` and `model=VoxCPM2`. Set `TTS_SERVICE_API_KEY` on the
 service and use the same secret as `TTS_HTTP_API_KEY` in the Worker/release

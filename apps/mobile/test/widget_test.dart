@@ -5,7 +5,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:translation_mobile/src/app/app.dart';
 import 'package:translation_mobile/src/app/localization/app_localizations.dart';
 import 'package:translation_mobile/src/features/compliance/data/compliance_consent_store.dart';
-import 'package:translation_mobile/src/features/compliance/data/consent_audit_uploader.dart';
 import 'package:translation_mobile/src/features/realtime/presentation/controllers/realtime_controller.dart';
 import 'package:translation_mobile/src/features/realtime/presentation/widgets/realtime_status_bar.dart';
 
@@ -141,37 +140,6 @@ void main() {
     expect(find.text('生成话术草稿'), findsOneWidget);
   });
 
-  testWidgets('blocks app shell until initial compliance consent is accepted',
-      (WidgetTester tester) async {
-    final store = MemoryComplianceConsentStore();
-    final uploader = _FakeConsentAuditUploader();
-    await tester.pumpWidget(TranslationApp(
-      complianceConsentStore: store,
-      consentAuditUploader: uploader,
-    ));
-    await tester.pumpAndSettle();
-
-    expect(find.text('首次使用前请确认'), findsOneWidget);
-    expect(find.text('同意并继续'), findsOneWidget);
-    expect(find.text('开始'), findsNothing);
-
-    final acceptButton = tester.widget<FilledButton>(
-      find.widgetWithText(FilledButton, '同意并继续'),
-    );
-    expect(acceptButton.onPressed, isNull);
-
-    await tester.tap(find.textContaining('我已阅读并同意'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(FilledButton, '同意并继续'));
-    await tester.pumpAndSettle();
-
-    expect(store.record?.version, complianceConsentVersion);
-    expect(uploader.records.single.consentType, 'initial_privacy');
-    expect(uploader.records.single.scene, 'app_start');
-    expect(find.text('无界AI'), findsNothing);
-    expect(find.text('开始'), findsOneWidget);
-  });
-
   testWidgets('localizes realtime status bar API errors',
       (WidgetTester tester) async {
     await tester.pumpWidget(const MaterialApp(
@@ -290,6 +258,19 @@ void main() {
     expect(zh.runtimeMessage('Realtime connection lost'), '实时连接已断开');
     expect(zh.runtimeMessage('Realtime connection restored'), '实时连接已恢复');
     expect(zh.runtimeMessage('Reconnecting (2/3)'), '正在重连 (2/3)');
+    expect(
+      zh.runtimeMessage(
+        'Realtime connection restored; replayed 2400 ms; missed 1600 ms',
+      ),
+      '已恢复·补2.4秒·漏传1.6秒',
+    );
+    const en = AppLocalizations(Locale('en'));
+    expect(
+      en.runtimeMessage(
+        'Realtime connection restored; replayed 2400 ms; missed 12000 ms',
+      ),
+      'Restored·+2.4s·missed12s',
+    );
     expect(zh.runtimeMessage('Session time limit reached'), '本次会话已达到时长上限');
     expect(zh.runtimeMessage('Diagnostics report ready'), '诊断报告已生成');
     expect(
@@ -330,19 +311,4 @@ Future<void> pumpAcceptedApp(
     complianceConsentStore: MemoryComplianceConsentStore.accepted(),
   ));
   await tester.pump();
-}
-
-class _FakeConsentAuditUploader implements ConsentAuditUploader {
-  final records = <({String consentType, String scene})>[];
-
-  @override
-  Future<void> record({
-    required String consentType,
-    required String version,
-    required String scene,
-    required Locale locale,
-    String? acceptedAtIso,
-  }) async {
-    records.add((consentType: consentType, scene: scene));
-  }
 }

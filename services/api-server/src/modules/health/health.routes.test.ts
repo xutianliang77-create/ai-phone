@@ -115,6 +115,7 @@ describe("health routes", () => {
     configureAccountEnv();
     configurePaymentEnv();
     configureCallRoomEnv();
+    process.env.DOMESTIC_RELEASE_CAPABILITY_PROFILE = "commercial_full";
     const app = await buildApp();
     const response = await app.inject({
       method: "GET",
@@ -141,6 +142,7 @@ describe("health routes", () => {
     configureAccountEnv();
     configurePaymentEnv();
     configureCallRoomEnv();
+    process.env.DOMESTIC_RELEASE_CAPABILITY_PROFILE = "commercial_full";
     configureSmsEnv();
     configureDiagnosticsEnv();
     configureReleaseMaterialsEnv(tempDirs);
@@ -176,6 +178,7 @@ describe("health routes", () => {
     configureAccountEnv();
     configurePaymentEnv();
     configureCallRoomEnv();
+    process.env.DOMESTIC_RELEASE_CAPABILITY_PROFILE = "commercial_full";
     configureSmsEnv();
     configureDiagnosticsEnv();
     const app = await buildApp();
@@ -195,6 +198,7 @@ describe("health routes", () => {
     configureAccountEnv();
     configurePaymentEnv();
     configureCallRoomEnv();
+    process.env.DOMESTIC_RELEASE_CAPABILITY_PROFILE = "commercial_full";
     configureDiagnosticsEnv();
     configureReleaseMaterialsEnv(tempDirs);
     const app = await buildApp();

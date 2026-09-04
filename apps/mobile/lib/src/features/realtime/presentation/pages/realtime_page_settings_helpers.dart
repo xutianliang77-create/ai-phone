@@ -31,13 +31,25 @@ extension _RealtimePageSettingsActions on _RealtimePageState {
       return;
     }
     if (realtimeMode == _config.realtimeMode) return;
-    _replaceConfig(_config.copyWith(realtimeMode: realtimeMode));
+    if (_config.realtimeMode == 'conversation') {
+      _talkVoiceOutputMode = _settings.voiceOutputMode;
+    }
+    final settings = realtimeMode == 'meeting'
+        ? _settings.copyWith(voiceOutputMode: RealtimeVoiceOutputMode.off)
+        : _settings.copyWith(voiceOutputMode: _talkVoiceOutputMode);
+    final nextConfig = settings.applyTo(
+      _config.copyWith(realtimeMode: realtimeMode),
+    );
+    _replaceConfig(nextConfig, settings: settings);
+    if (realtimeMode == 'conversation') {
+      unawaited(_settingsStore.save(settings));
+    }
   }
 
   void _changeSettings(RealtimeRuntimeSettings settings) {
     if (!_canChangeSettings) {
       if (_isAutoSpeakOnlyChange(settings)) {
-        _applyAutoSpeakSetting(settings);
+        unawaited(_applyAutoSpeakSetting(settings));
         return;
       }
       _showSettingsLockedMessage();
@@ -60,11 +72,18 @@ extension _RealtimePageSettingsActions on _RealtimePageState {
         settings.autoSpeakTranslation != _settings.autoSpeakTranslation;
   }
 
-  void _applyAutoSpeakSetting(RealtimeRuntimeSettings settings) {
-    _safeSetState(() => _settings = settings);
-    controller.setAutoSpeakTranslation(
+  Future<void> _applyAutoSpeakSetting(RealtimeRuntimeSettings settings) async {
+    final current = controller;
+    final accepted = await current.setAutoSpeakTranslation(
       _realtimeAutoSpeakSupported && settings.autoSpeakTranslation,
+      voiceOutputMode:
+          realtimeVoiceOutputModeToString(settings.voiceOutputMode),
     );
+    if (!accepted || !mounted || current != controller) return;
+    _safeSetState(() {
+      _settings = settings;
+      _config = settings.applyTo(_config);
+    });
     unawaited(_settingsStore.save(settings));
   }
 

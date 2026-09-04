@@ -39,6 +39,9 @@
     "scaffold:domestic-release-env": "node scripts/scaffold_domestic_release_env.mjs",
     "check:call-link-livekit-worker": "node scripts/check_call_link_livekit_worker_readiness.mjs",
     "check:livekit-room-media": "node scripts/check_livekit_room_media_readiness.mjs",
+    "check:air780-livekit-tts-bridge": "tsx scripts/check_air780_livekit_tts_bridge.mjs",
+    "prepare:air780-production-bundle": "node scripts/prepare_air780_luatools_bundle.mjs",
+    "prepare:air780-usb-production-bundle": "node scripts/prepare_air780_luatools_bundle.mjs --manifest PROD_USB_FLASH_MANIFEST.tsv",
     "check:livekit-compatibility": "node scripts/check_livekit_compatibility_profile.mjs",
     "list:livekit-sbom-images": "node scripts/list_livekit_sbom_images.mjs",
     "check:platform-topology": "node scripts/check_platform_topology.mjs",
@@ -104,7 +107,9 @@
     "postgres:check": "npm run postgres:check -w @translation/api-server",
     "postgres:import": "npm run postgres:import -w @translation/api-server",
     "postgres:audit": "npm run postgres:audit -w @translation/api-server",
-    "check:postgres-primary-cutover": "node scripts/check_postgres_primary_cutover.mjs",
+    "postgres:startup-check": "npm run postgres:startup-check -w @translation/api-server",
+    "postgres:upgrade-evidence": "npm run postgres:upgrade-evidence -w @translation/api-server",
+    "check:postgres-primary-cutover": "node scripts/check_postgres_primary_cutover.mjs --release",
     "ios:nemotron:services": "bash scripts/ios_nemotron_start_services.sh",
     "ios:nemotron:smoke": "bash scripts/ios_nemotron_mvp_smoke.sh",
     "ios:nemotron:status": "node scripts/ios_nemotron_mvp_status.mjs",
@@ -123,5 +128,8 @@
     "tsx": "^4.23.1",
     "typescript": "^5.9.3",
     "vitest": "^4.0.15"
+  },
+  "optionalDependencies": {
+    "@ffmpeg-installer/linux-x64": "4.1.0"
   }
 }

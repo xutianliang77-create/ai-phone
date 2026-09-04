@@ -5,7 +5,17 @@ from typing import Protocol
 from app.audio_buffer import RealtimePcmSegmenter
 from app.endpoint_policy import EndpointPolicy
 from app.qwen3_context_guard import is_context_echo
+from app.qwen3_alignment_runtime import align_final_tokens
+from app.qwen3_forced_aligner import TranscriptForcedAligner
 from app.qwen3_mixed_language import retry_mixed_language_prefix
+from app.qwen3_prompt import (
+    clean_correction_pairs,
+    clean_prompt_words,
+    qwen3_context,
+    qwen3_language,
+    qwen3_torch_dtype,
+)
+from app.qwen3_stable_partial import StableReadablePartialCoordinator
 from app.schemas import LanguageCode, TranslationLanguageCode
 from app.schemas import AsrTranscribeRequest, AsrTranscribeResponse
 from app.sensevoice_engine import normalize_transcript, transcript_language, write_temp_wav
@@ -65,9 +75,11 @@ class Qwen3AsrEngine:
         context: str = "",
         english_context: str = "",
         mixed_language_retry_enabled: bool = False,
+        listening_stable_partial_enabled: bool = False,
         runner: Qwen3Runner | None = None,
         vad_provider: VadProvider | None = None,
         endpoint_policies: dict[str, EndpointPolicy] | None = None,
+        forced_aligner: TranscriptForcedAligner | None = None,
     ) -> None:
         self.runner = runner or LocalQwen3AsrRunner(
             model_dir=model_dir,
@@ -90,6 +102,23 @@ class Qwen3AsrEngine:
         self.context = context
         self.english_context = english_context
         self.mixed_language_retry_enabled = mixed_language_retry_enabled
+        self.forced_aligner = forced_aligner
+        self.stable_partials = StableReadablePartialCoordinator(
+            self.runner,
+            listening_stable_partial_enabled,
+        )
+
+    def prewarm(self) -> None:
+        prewarm = getattr(self.runner, "prewarm", None)
+        if prewarm is not None:
+            prewarm()
+
+    def shutdown(self) -> None:
+        if self.forced_aligner is not None:
+            self.forced_aligner.shutdown()
+        shutdown = getattr(self.runner, "shutdown", None)
+        if shutdown is not None:
+            shutdown()
 
     async def transcribe(
         self,
@@ -101,10 +130,25 @@ class Qwen3AsrEngine:
         )
         segment = self.segmenter.append(request)
         if segment is None:
-            return None
+            return await self.stable_partials.observe(
+                request,
+                self.segmenter.active_audio(request.sessionId),
+                qwen3_context(
+                    source_language=request.sourceLanguage,
+                    context=self.context,
+                    english_context=self.english_context,
+                    hotwords=request.hotwords,
+                    corrections=request.corrections,
+                ),
+            )
+        partial = await self.stable_partials.finish(request.sessionId)
         return await self._transcribe_segment(
             session_id=request.sessionId,
-            segment_id=f"qwen3_seg_{segment.end_sequence}",
+            segment_id=(
+                partial.segment_id if partial else f"qwen3_seg_{segment.end_sequence}"
+            ),
+            revision=partial.revision if partial else None,
+            stable_partial_text=partial.text if partial else "",
             pcm=segment.pcm,
             sample_rate=segment.sample_rate,
             source_language=request.sourceLanguage,
@@ -125,10 +169,15 @@ class Qwen3AsrEngine:
         segment = self.segmenter.flush(session_id)
         if segment is None:
             return None
+        partial = await self.stable_partials.finish(session_id)
         hotwords, corrections = self._session_prompt_by_session.get(session_id, ([], []))
         return await self._transcribe_segment(
             session_id=session_id,
-            segment_id=f"qwen3_flush_{segment.end_sequence}",
+            segment_id=(
+                partial.segment_id if partial else f"qwen3_flush_{segment.end_sequence}"
+            ),
+            revision=partial.revision if partial else None,
+            stable_partial_text=partial.text if partial else "",
             pcm=segment.pcm,
             sample_rate=segment.sample_rate,
             source_language=source_language,
@@ -150,10 +199,17 @@ class Qwen3AsrEngine:
         segment = self.segmenter.commit_boundary(session_id, boundary_ms)
         if segment is None:
             return None
+        partial = await self.stable_partials.finish(session_id)
         hotwords, corrections = self._session_prompt_by_session.get(session_id, ([], []))
         return await self._transcribe_segment(
             session_id=session_id,
-            segment_id=f"qwen3_boundary_{segment.end_sequence}",
+            segment_id=(
+                partial.segment_id
+                if partial
+                else f"qwen3_boundary_{segment.end_sequence}"
+            ),
+            revision=partial.revision if partial else None,
+            stable_partial_text=partial.text if partial else "",
             pcm=segment.pcm,
             sample_rate=segment.sample_rate,
             source_language=source_language,
@@ -167,13 +223,22 @@ class Qwen3AsrEngine:
 
     async def close_session(self, session_id: str) -> None:
         self.segmenter.close(session_id)
+        self.stable_partials.clear(session_id)
         self._recent_text_by_session.pop(session_id, None)
         self._session_prompt_by_session.pop(session_id, None)
+
+    def diagnostics(self, session_id: str) -> dict[str, object]:
+        return {
+            **self.segmenter.diagnostics(session_id),
+            "stablePartial": self.stable_partials.diagnostics(session_id),
+        }
 
     async def _transcribe_segment(
         self,
         session_id: str,
         segment_id: str,
+        revision: int | None,
+        stable_partial_text: str,
         pcm: bytes,
         sample_rate: int,
         source_language: LanguageCode,
@@ -185,6 +250,7 @@ class Qwen3AsrEngine:
         endpoint_reason: str,
     ) -> AsrTranscribeResponse | None:
         audio_path = write_temp_wav(pcm, sample_rate)
+        token_timings = None
         try:
             language = qwen3_language(source_language)
             context = qwen3_context(
@@ -215,19 +281,35 @@ class Qwen3AsrEngine:
                     primary_text=text,
                     retry_context=retry_context,
                 )
+            text = text.strip()
+            if not text or is_context_echo(text, context):
+                text = stable_partial_text.strip()
+            if text and not is_context_echo(text, context):
+                token_timings = await align_final_tokens(
+                    self.forced_aligner,
+                    audio_path,
+                    text,
+                    source_language,
+                    target_language,
+                    start_ms,
+                    end_ms,
+                    session_id,
+                )
         finally:
             os.unlink(audio_path)
 
-        text = text.strip()
         if not text or is_context_echo(text, context):
             return None
         if self._is_duplicate(session_id, text, start_ms, end_ms):
             return None
         return AsrTranscribeResponse(
             segmentId=segment_id,
+            revision=revision,
+            isFinal=True,
             text=text,
             language=transcript_language(text, source_language, target_language),
             confidence=None,
+            tokenTimings=token_timings,
             timing={
                 "startMs": start_ms,
                 "endMs": end_ms,
@@ -258,89 +340,3 @@ class Qwen3AsrEngine:
         recent.append((normalized, start_ms, end_ms))
         self._recent_text_by_session[session_id] = recent[-8:]
         return False
-
-
-def qwen3_language(source_language: LanguageCode) -> str | None:
-    if source_language in ("zh", "zh-CN", "Chinese"):
-        return "Chinese"
-    if source_language in ("en", "en-US", "English"):
-        return "English"
-    return None
-
-
-def qwen3_context(
-    source_language: LanguageCode,
-    context: str,
-    english_context: str,
-    hotwords: list[str] | None = None,
-    corrections: list[object] | None = None,
-) -> str:
-    prompt = hotword_context(hotwords or [], corrections or [])
-    if source_language in ("en", "en-US", "English"):
-        return join_context(english_context, prompt)
-    return join_context(context, prompt)
-
-
-def hotword_context(hotwords: list[str], corrections: list[object]) -> str:
-    words = clean_prompt_words(hotwords)
-    pairs = clean_correction_pairs(corrections)
-    parts: list[str] = []
-    if words:
-        parts.append("优先识别并保留以下热词的准确写法：" + "、".join(words[:120]) + "。")
-    if pairs:
-        rendered = "；".join(f"{source}=>{target}" for source, target in pairs[:60])
-        parts.append("常见误识别纠正：" + rendered + "。")
-    return "\n".join(parts)
-
-
-def join_context(base: str, prompt: str) -> str:
-    return "\n".join(part for part in [base.strip(), prompt.strip()] if part)
-
-
-def clean_prompt_words(words: list[str]) -> list[str]:
-    result: list[str] = []
-    seen: set[str] = set()
-    for word in words:
-        value = str(word).strip()
-        if not value or len(value) > 80:
-            continue
-        key = value.lower()
-        if key in seen:
-            continue
-        seen.add(key)
-        result.append(value)
-    return result
-
-
-def clean_correction_pairs(corrections: list[object]) -> list[tuple[str, str]]:
-    result: list[tuple[str, str]] = []
-    seen: set[tuple[str, str]] = set()
-    for item in corrections:
-        source = getattr(item, "fromText", None)
-        target = getattr(item, "toText", None)
-        if isinstance(item, dict):
-            source = item.get("fromText")
-            target = item.get("toText")
-        if isinstance(item, tuple) and len(item) == 2:
-            source, target = item
-        source_text = str(source or "").strip()
-        target_text = str(target or "").strip()
-        if not source_text or not target_text:
-            continue
-        key = (source_text.lower(), target_text.lower())
-        if key in seen:
-            continue
-        seen.add(key)
-        result.append((source_text, target_text))
-    return result
-
-
-def qwen3_torch_dtype(torch_module, dtype: str):
-    normalized = dtype.lower()
-    if normalized in ("bf16", "bfloat16"):
-        return torch_module.bfloat16
-    if normalized in ("fp16", "float16", "half"):
-        return torch_module.float16
-    if normalized in ("fp32", "float32"):
-        return torch_module.float32
-    raise ValueError(f"Unsupported Qwen3-ASR dtype: {dtype}")

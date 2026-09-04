@@ -52,7 +52,12 @@ export class FakeSpeakerProvider implements SpeakerAttributionProvider {
     if (this.failStart) throw new Error("speaker unavailable");
   }
   async pushAudio() {
-    return [{ speakerId: "speaker_2", startMs: 900, endMs: 1900 }];
+    return [{
+      speakerId: "speaker_2",
+      startMs: 900,
+      endMs: 1900,
+      confidence: 0.9,
+    }];
   }
   async flush() {
     return [];
@@ -71,12 +76,41 @@ export class DelayedAsrProvider extends FakeAsrProvider {
   }
 }
 
+export class UnknownSpeakerAsrProvider extends FakeAsrProvider {
+  private calls = 0;
+
+  constructor(private readonly includeTiming = true) {
+    super();
+  }
+
+  override async transcribe(): Promise<AsrProviderResult> {
+    this.calls += 1;
+    const transcript = await super.transcribe();
+    if (!transcript || Array.isArray(transcript)) return transcript;
+    return {
+      ...transcript,
+      segmentId: `seg_${this.calls}`,
+      speaker: {
+        speakerId: "unknown",
+        role: "unknown" as const,
+        source: "unknown" as const,
+      },
+      ...(this.includeTiming ? {} : { timing: undefined }),
+    };
+  }
+}
+
 export class OneShotSpeakerProvider extends FakeSpeakerProvider {
   private calls = 0;
   override async pushAudio() {
     this.calls += 1;
     return this.calls === 1
-      ? [{ speakerId: "speaker_2", startMs: 900, endMs: 1900 }]
+      ? [{
+          speakerId: "speaker_2",
+          startMs: 900,
+          endMs: 1900,
+          confidence: 0.9,
+        }]
       : [];
   }
 }
@@ -89,8 +123,20 @@ export class UpdatingSpeakerProvider extends FakeSpeakerProvider {
       speakerId: "speaker_2",
       startMs: 900,
       endMs: this.calls === 1 ? 1200 : 1900,
+      confidence: 0.9,
       final: this.calls > 1,
     }];
+  }
+}
+
+export class BriefNovelSpeakerProvider extends FakeSpeakerProvider {
+  private calls = 0;
+
+  override async pushAudio() {
+    this.calls += 1;
+    if (this.calls === 1) return [speakerSpan("speaker_1", 0, 240)];
+    if (this.calls === 2) return [speakerSpan("speaker_1", 0, 480)];
+    return [speakerSpan("speaker_2", 480, 640, 0.578)];
   }
 }
 
@@ -150,6 +196,61 @@ export class EmptyBoundaryRacingAsrProvider extends RacingAsrProvider {
   }
 }
 
+export class LateTokenTimedAsrProvider extends BoundaryAwareAsrProvider {
+  private calls = 0;
+
+  override async transcribe() {
+    this.calls += 1;
+    if (this.calls !== 5) return null;
+    return {
+      segmentId: "late_timed",
+      text: "first second",
+      language: "en" as const,
+      timing: { startMs: 0, endMs: 960, source: "client" as const },
+      tokenTimings: [
+        token("first", 0, 5, 0, 400),
+        token("second", 6, 12, 560, 960),
+      ],
+      endpointReason: "silence" as const,
+    };
+  }
+
+  override async commitBoundary(
+    input: { sessionId: string; boundaryMs: number },
+  ) {
+    this.boundaries.push(input.boundaryMs);
+    return null;
+  }
+}
+
+export class LateProtectedIdentifierAsrProvider extends BoundaryAwareAsrProvider {
+  private calls = 0;
+
+  override async transcribe() {
+    this.calls += 1;
+    if (this.calls !== 5) return null;
+    return {
+      segmentId: "late_identifier",
+      text: "Qwen3-ASR",
+      language: "en" as const,
+      timing: { startMs: 0, endMs: 960, source: "client" as const },
+      tokenTimings: [
+        token("Qwen3", 0, 5, 0, 400),
+        token("-", 5, 6, 440, 520),
+        token("ASR", 6, 9, 560, 960),
+      ],
+      endpointReason: "silence" as const,
+    };
+  }
+
+  override async commitBoundary(
+    input: { sessionId: string; boundaryMs: number },
+  ) {
+    this.boundaries.push(input.boundaryMs);
+    return null;
+  }
+}
+
 export class SwitchingSpeakerProvider extends FakeSpeakerProvider {
   private calls = 0;
 
@@ -162,6 +263,35 @@ export class SwitchingSpeakerProvider extends FakeSpeakerProvider {
   }
 }
 
-function speakerSpan(speakerId: string, startMs: number, endMs: number) {
-  return { speakerId, startMs, endMs, confidence: 0.9, final: false };
+export class ReturningSpeakerProvider extends FakeSpeakerProvider {
+  private calls = 0;
+
+  override async pushAudio() {
+    this.calls += 1;
+    if (this.calls === 1) return [speakerSpan("speaker_1", 0, 240)];
+    if (this.calls === 2) return [speakerSpan("speaker_1", 0, 480)];
+    if (this.calls === 3) return [speakerSpan("speaker_2", 480, 720)];
+    if (this.calls === 4) return [speakerSpan("speaker_2", 480, 960)];
+    if (this.calls === 5) return [speakerSpan("speaker_1", 960, 1200)];
+    return [speakerSpan("speaker_1", 960, 1440)];
+  }
+}
+
+function speakerSpan(
+  speakerId: string,
+  startMs: number,
+  endMs: number,
+  confidence = 0.9,
+) {
+  return { speakerId, startMs, endMs, confidence, final: false };
+}
+
+function token(
+  text: string,
+  characterStart: number,
+  characterEnd: number,
+  startMs: number,
+  endMs: number,
+) {
+  return { text, characterStart, characterEnd, startMs, endMs };
 }

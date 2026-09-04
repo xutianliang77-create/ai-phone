@@ -16,6 +16,17 @@ class PcmAudioSegment:
 
 
 @dataclass(frozen=True)
+class ActivePcmAudio:
+    pcm: bytes
+    sample_rate: int
+    start_sequence: int
+    end_sequence: int
+    duration_ms: int
+    start_timestamp_ms: int
+    end_timestamp_ms: int
+
+
+@dataclass(frozen=True)
 class FrameVadDecision:
     sequence: int
     timestamp_ms: int
@@ -46,6 +57,7 @@ class RealtimeSessionState:
     sample_rate: int | None = None
     last_sequence: int = 0
     has_voice: bool = False
+    voiced_ms: int = 0
     endpoint_policy: EndpointPolicy | None = None
     latest_vad: FrameVadDecision | None = None
 
@@ -63,6 +75,7 @@ def reset_active_segment(state: RealtimeSessionState) -> None:
     state.sample_rate = None
     state.last_sequence = 0
     state.has_voice = False
+    state.voiced_ms = 0
 
 
 def split_chunks_at(chunks: list[PcmChunk], boundary_ms: int, sample_rate: int):
@@ -141,6 +154,7 @@ def retain_chunks_after_boundary(
         state.buffered_ms = 0
         state.trailing_silence_ms = 0
         state.has_voice = False
+        state.voiced_ms = 0
         return
 
     state.chunks = chunks
@@ -148,6 +162,11 @@ def retain_chunks_after_boundary(
     state.buffered_ms = sum(chunk.duration_ms for chunk in chunks)
     state.trailing_silence_ms = trailing_silence_duration(chunks)
     state.has_voice = True
+    state.voiced_ms = voiced_duration_ms(chunks)
+
+
+def voiced_duration_ms(chunks: list[PcmChunk]) -> int:
+    return sum(chunk.duration_ms for chunk in chunks if chunk.voiced)
 
 
 def trailing_silence_duration(chunks: list[PcmChunk]) -> int:

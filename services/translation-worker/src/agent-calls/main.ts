@@ -11,7 +11,9 @@ const logger = pino({ name: "agent-call-worker" });
 export function buildDefaultAgentCallDispatcher() {
   const env = loadEnv();
   if (!env.agentCallWorkerId) return null;
-  const bridge = env.agentCallProviderAdapter === "livekit_sip"
+  const bridge = ["air780_volte", "livekit_sip"].includes(
+    env.agentCallProviderAdapter ?? "",
+  )
     ? new HttpVoiceAgentRuntimeProvider({
         apiBaseUrl: env.apiBaseUrl,
         internalApiSecret: env.internalApiSecret,
@@ -53,8 +55,12 @@ async function main() {
     stopped = true;
   });
   while (!stopped) {
-    const dispatched = await dispatcher.dispatchOnce();
-    logger.info({ dispatched }, "Agent call dispatch cycle completed.");
+    try {
+      const dispatched = await dispatcher.dispatchOnce();
+      logger.info({ dispatched }, "Agent call dispatch cycle completed.");
+    } catch (error) {
+      logger.warn({ err: error }, "Agent call dispatch cycle failed; retrying.");
+    }
     await delay(env.agentCallWorkerPollIntervalMs);
   }
 }

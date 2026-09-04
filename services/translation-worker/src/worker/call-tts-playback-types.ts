@@ -31,6 +31,7 @@ export interface PlaybackStartedInput extends PlaybackLifecycleInput {
 
 export type PlaybackInterruptReason =
   | "barge_in"
+  | "manual_pause"
   | "session_end"
   | "superseded"
   | "failure";

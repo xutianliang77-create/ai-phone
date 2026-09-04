@@ -4,23 +4,66 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 MOBILE_DIR="$ROOT_DIR/apps/mobile"
 APP_PATH="$MOBILE_DIR/build/ios/iphoneos/Runner.app"
+DEVICE_COMMAND_TIMEOUT_SECONDS="${DEVICE_COMMAND_TIMEOUT_SECONDS:-30}"
+DEVICE_COMMAND_ATTEMPTS="${DEVICE_COMMAND_ATTEMPTS:-2}"
 
 run_device_command() {
   local attempt
-  for attempt in 1 2 3; do
+  for ((attempt = 1; attempt <= DEVICE_COMMAND_ATTEMPTS; attempt++)); do
     if "$@"; then
       return 0
     fi
-    if [[ "$attempt" -lt 3 ]]; then
-      echo "Device connection failed (attempt $attempt/3); retrying..." >&2
+    if [[ "$attempt" -lt "$DEVICE_COMMAND_ATTEMPTS" ]]; then
+      echo "Device connection failed (attempt $attempt/$DEVICE_COMMAND_ATTEMPTS); retrying..." >&2
       sleep 3
     fi
   done
   return 1
 }
 
+require_unlocked_device() {
+  local lock_state_json passcode_required
+  lock_state_json="$(mktemp "${TMPDIR:-/tmp}/wujie-ai-ios-lock-state.XXXXXX")"
+  if ! run_device_command xcrun devicectl device info lockState \
+    --device "$DEVICE_ID" \
+    --timeout "$DEVICE_COMMAND_TIMEOUT_SECONDS" \
+    --json-output "$lock_state_json" >/dev/null; then
+    rm -f "$lock_state_json"
+    echo "Unable to verify the iPhone lock state." >&2
+    return 1
+  fi
+  if ! passcode_required="$(
+    /usr/bin/plutil -extract result.passcodeRequired raw -o - \
+      "$lock_state_json" 2>/dev/null
+  )"; then
+    rm -f "$lock_state_json"
+    echo "Unable to read the iPhone lock state." >&2
+    return 1
+  fi
+  rm -f "$lock_state_json"
+  if [[ "$passcode_required" != "false" ]]; then
+    echo "iPhone must be unlocked before building or installing the Profile App." >&2
+    return 1
+  fi
+}
+
 DEVICE_ID="${DEVICE_ID:-}"
 SERVER_BASE_URL="${SERVER_BASE_URL:-}"
+REALTIME_MODE="${REALTIME_MODE:-conversation}"
+VOICE_AGENT_BACKGROUND_WORK_ENABLED="${VOICE_AGENT_BACKGROUND_WORK_ENABLED:-false}"
+VOICE_AGENT_OWNERSHIP_ENABLED="${VOICE_AGENT_OWNERSHIP_ENABLED:-false}"
+VOICE_AGENT_DELIVERY_COORDINATOR_ENABLED="${VOICE_AGENT_DELIVERY_COORDINATOR_ENABLED:-false}"
+PUBSPEC_RELEASE_VERSION="$(
+  awk '/^version:[[:space:]]*/ { print $2; exit }' "$MOBILE_DIR/pubspec.yaml"
+)"
+if [[ ! "$PUBSPEC_RELEASE_VERSION" =~ ^([0-9]+(\.[0-9]+){2})\+([0-9]+)$ ]]; then
+  echo "apps/mobile/pubspec.yaml must define version as X.Y.Z+BUILD." >&2
+  exit 2
+fi
+PUBSPEC_APP_VERSION="${BASH_REMATCH[1]}"
+PUBSPEC_BUILD_NUMBER="${BASH_REMATCH[3]}"
+APP_VERSION="${APP_VERSION:-$PUBSPEC_APP_VERSION}"
+BUILD_NUMBER="${BUILD_NUMBER:-$PUBSPEC_BUILD_NUMBER}"
 
 if [[ -z "$DEVICE_ID" ]]; then
   echo "DEVICE_ID is required." >&2
@@ -31,6 +74,40 @@ if [[ -z "$SERVER_BASE_URL" ]]; then
   echo "SERVER_BASE_URL is required and must point to the server-side deployment." >&2
   exit 2
 fi
+if [[ ! "$APP_VERSION" =~ ^[0-9]+(\.[0-9]+){2}$ ]]; then
+  echo "APP_VERSION must use X.Y.Z numeric format." >&2
+  exit 2
+fi
+if [[ ! "$BUILD_NUMBER" =~ ^[0-9]+$ ]]; then
+  echo "BUILD_NUMBER must contain digits only." >&2
+  exit 2
+fi
+if [[ ! "$DEVICE_COMMAND_TIMEOUT_SECONDS" =~ ^[1-9][0-9]*$ ]] ||
+  ((DEVICE_COMMAND_TIMEOUT_SECONDS < 5 || DEVICE_COMMAND_TIMEOUT_SECONDS > 120)); then
+  echo "DEVICE_COMMAND_TIMEOUT_SECONDS must be between 5 and 120." >&2
+  exit 2
+fi
+if [[ ! "$DEVICE_COMMAND_ATTEMPTS" =~ ^[1-3]$ ]]; then
+  echo "DEVICE_COMMAND_ATTEMPTS must be between 1 and 3." >&2
+  exit 2
+fi
+case "$REALTIME_MODE" in
+  conversation|meeting|classroom|business) ;;
+  *)
+    echo "REALTIME_MODE must be conversation, meeting, classroom, or business." >&2
+    exit 2
+    ;;
+esac
+
+for feature_flag in \
+  "$VOICE_AGENT_BACKGROUND_WORK_ENABLED" \
+  "$VOICE_AGENT_OWNERSHIP_ENABLED" \
+  "$VOICE_AGENT_DELIVERY_COORDINATOR_ENABLED"; do
+  if [[ "$feature_flag" != "true" && "$feature_flag" != "false" ]]; then
+    echo "Voice Agent feature flags must be true or false." >&2
+    exit 2
+  fi
+done
 
 case "$SERVER_BASE_URL" in
   *://localhost*|*://127.0.0.1*|*://0.0.0.0*|*://\[::1\]*)
@@ -39,7 +116,11 @@ case "$SERVER_BASE_URL" in
     ;;
 esac
 
-if ! curl --fail --silent --show-error \
+if ! require_unlocked_device; then
+  exit 2
+fi
+
+if ! curl --noproxy '*' --fail --silent --show-error \
   --connect-timeout 3 \
   --max-time 5 \
   "$SERVER_BASE_URL/health" >/dev/null; then
@@ -50,10 +131,21 @@ fi
 
 cd "$MOBILE_DIR"
 
-flutter build ios --profile \
-  --dart-define="API_BASE_URL=$SERVER_BASE_URL" \
-  --dart-define=SERVER_OWNED_HISTORY=true \
+build_args=(
+  --profile
+  --build-name="$APP_VERSION"
+  --build-number="$BUILD_NUMBER"
+  --dart-define="APP_VERSION=$APP_VERSION"
+  --dart-define="BUILD_NUMBER=$BUILD_NUMBER"
+  --dart-define="API_BASE_URL=$SERVER_BASE_URL"
+  --dart-define="REALTIME_MODE=$REALTIME_MODE"
+  --dart-define="VOICE_AGENT_BACKGROUND_WORK_ENABLED=$VOICE_AGENT_BACKGROUND_WORK_ENABLED"
+  --dart-define="VOICE_AGENT_OWNERSHIP_ENABLED=$VOICE_AGENT_OWNERSHIP_ENABLED"
+  --dart-define="VOICE_AGENT_DELIVERY_COORDINATOR_ENABLED=$VOICE_AGENT_DELIVERY_COORDINATOR_ENABLED"
+  --dart-define=SERVER_OWNED_HISTORY=true
   --dart-define=USE_MOCK_AUDIO=false
+)
+flutter build ios "${build_args[@]}"
 
 if [[ ! -d "$APP_PATH" ]]; then
   echo "Profile build did not produce $APP_PATH" >&2
@@ -86,13 +178,21 @@ if [[ -z "$BUNDLE_ID" ]]; then
   exit 1
 fi
 
+if ! require_unlocked_device; then
+  exit 2
+fi
+
 run_device_command xcrun devicectl device install app \
   --device "$DEVICE_ID" \
+  --timeout "$DEVICE_COMMAND_TIMEOUT_SECONDS" \
   "$APP_PATH"
 run_device_command xcrun devicectl device process launch \
   --device "$DEVICE_ID" \
+  --timeout "$DEVICE_COMMAND_TIMEOUT_SECONDS" \
   --terminate-existing \
   "$BUNDLE_ID"
 
 echo "Installed and independently launched Profile App: $BUNDLE_ID"
+echo "Configured release identity: $APP_VERSION ($BUILD_NUMBER)"
+echo "Configured realtime mode: $REALTIME_MODE"
 echo "Manually close and reopen the App from the iPhone home screen to complete launch acceptance."

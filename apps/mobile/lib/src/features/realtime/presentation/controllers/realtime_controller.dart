@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/widgets.dart';
+import 'package:flutter/services.dart';
 
 import '../../../../app/app_config.dart';
 import '../../../../platform/audio/audio_capture.dart';
@@ -14,6 +15,7 @@ import '../../../../platform/speech/speech_text_normalizer.dart';
 import '../../../../platform/translation/mobile_translation_provider.dart';
 import '../../../../platform/translation/supported_translation_language.dart';
 import '../../../../shared/domain/speaker_attribution.dart';
+import '../../../../shared/domain/segment_timeline_order.dart';
 import '../../../../shared/domain/turn_language_profile.dart';
 import '../../data/api/realtime_session.dart';
 import '../../data/gateway/gateway_realtime_event.dart';
@@ -80,7 +82,7 @@ class RealtimeController extends ChangeNotifier {
         _autoSpeakTranslation = autoSpeakTranslation,
         _speechOutputTimeout = speechOutputTimeout;
 
-  final AppConfig _config;
+  AppConfig _config;
   final RealtimeRepository _repository;
   final AudioCapture _audioCapture;
   final MobileAsrProvider? _mobileAsrProvider;
@@ -89,10 +91,12 @@ class RealtimeController extends ChangeNotifier {
   final PcmAudioOutputPlayer? _pcmAudioOutputPlayer;
   final AudioSessionCoordinator _audioSessionCoordinator;
   bool _autoSpeakTranslation;
+  bool _voiceOutputUpdating = false;
   final Duration? _speechOutputTimeout;
   Future<void> _speechChain = Future<void>.value();
   Future<void> _asrTextChain = Future<void>.value();
   int _speechGeneration = 0;
+  bool _speechOutputActive = false;
   final SpeechCaptureGate _speechCaptureGate;
   final Set<String> _speechEchoSegmentIds = <String>{};
   RealtimeStatus _status = RealtimeStatus.idle;
@@ -112,6 +116,7 @@ class RealtimeController extends ChangeNotifier {
   bool _resumeAfterLifecyclePause = false, _stopInFlight = false;
   bool _disposed = false;
   bool _audioSessionRecoveryInFlight = false;
+  bool _captureInvalidated = false;
   int _startGeneration = 0;
   Future<void>? _failureCleanup;
   final _localPartialFlush = _LocalPartialTranslationFlush();
@@ -124,13 +129,9 @@ class RealtimeController extends ChangeNotifier {
   int? get remainingSeconds => _remainingSeconds;
   bool get lowBalance => _lowBalance;
   RealtimeGatewayDiagnostic? get gatewayDiagnostic => _gatewayDiagnostic;
-
-  void setAutoSpeakTranslation(bool enabled) {
-    if (_autoSpeakTranslation == enabled) return;
-    _autoSpeakTranslation = enabled;
-    if (!enabled) unawaited(_stopSpeaking());
-    _notify();
-  }
+  bool get speechOutputActive => _speechOutputActive;
+  bool get autoSpeakTranslation => _autoSpeakTranslation;
+  bool get voiceOutputUpdating => _voiceOutputUpdating;
 
   Future<void> pause() async {
     final session = _session;
@@ -208,9 +209,24 @@ class RealtimeController extends ChangeNotifier {
   Future<void> _startAudioCapture() async {
     await _audioCapture.requestPermission();
     await _audioSubscription?.cancel();
-    _audioSubscription = _audioCapture.frames.listen(_sendAudioFrame);
-    await _audioCapture.start(const AudioCaptureConfig());
-    await _audioSessionCoordinator.beginCapture();
+    final voiceProcessing = _config.realtimeMode == 'conversation';
+    await _audioSessionCoordinator.beginCapture(
+      voiceProcessing: voiceProcessing,
+    );
+    try {
+      _audioSubscription = _audioCapture.frames.listen(_sendAudioFrame);
+      await _audioCapture.start(AudioCaptureConfig(
+        echoCancel: voiceProcessing,
+        noiseSuppress: voiceProcessing,
+        managePlatformAudioSession:
+            !_audioSessionCoordinator.managesPlatformAudioSession,
+      ));
+    } catch (_) {
+      await _audioSubscription?.cancel();
+      _audioSubscription = null;
+      await ignoreCleanupError(_audioSessionCoordinator.endCapture);
+      rethrow;
+    }
   }
 
   Future<void> _prepareDeviceAsr() async {
@@ -245,7 +261,10 @@ class RealtimeController extends ChangeNotifier {
 
   void _sendAudioFrame(AudioFrame frame) {
     final session = _session;
-    if (session == null || _status != RealtimeStatus.active) return;
+    final active = _status == RealtimeStatus.active;
+    final reconnecting = _status == RealtimeStatus.connecting &&
+        _statusBeforeReconnect == RealtimeStatus.active;
+    if (session == null || (!active && !reconnecting)) return;
     if (_speechCaptureGate.blocksCapture) return;
     _repository.sendAudio(session.sessionId, frame);
   }
@@ -256,6 +275,13 @@ class RealtimeController extends ChangeNotifier {
     if (!transition.changed) return true;
     _activeTimeClock.transition(_status, status);
     _status = transition.current;
+    if (status == RealtimeStatus.active && _captureInvalidated) {
+      unawaited(_recoverCaptureAfterAudioChange(rebuildOnly: true));
+    }
+    if (status != RealtimeStatus.active &&
+        status != RealtimeStatus.connecting) {
+      _captureInvalidated = false;
+    }
     if (!isTerminalRealtimeStatus(status)) _message = null;
     _notify();
     return true;
@@ -263,13 +289,6 @@ class RealtimeController extends ChangeNotifier {
 
   void _notify() {
     if (!_disposed) notifyListeners();
-  }
-
-  void _replaceSegmentsFromDrafts() {
-    _segments
-      ..clear()
-      ..addAll(_drafts.values.map((draft) => draft.toSegment()));
-    _notify();
   }
 
   void _fail(String message) {

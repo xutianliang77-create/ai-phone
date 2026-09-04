@@ -83,7 +83,7 @@ def test_metrics_fails_closed_without_a_bearer_token() -> None:
 def test_synthesize_route_returns_tts_contract() -> None:
     client = TestClient(create_app(TtsConfig()))
 
-    response = client.post("/tts/synthesize", json=payload())
+    response = client.post("/tts/synthesize", json={**payload(), "language": "es-ES"})
 
     assert response.status_code == 200
     body = response.json()
@@ -95,6 +95,12 @@ def test_synthesize_route_returns_tts_contract() -> None:
     assert body["audio"]["format"] == "pcm16"
     assert body["audio"]["sampleRate"] == 16000
     assert body["audio"]["data"]
+
+
+def test_synthesize_route_rejects_an_invalid_language_tag() -> None:
+    client = TestClient(create_app(TtsConfig()))
+    response = client.post("/tts/synthesize", json={**payload(), "language": "auto"})
+    assert response.status_code == 422
 
 
 def test_synthesize_route_accepts_voice_design_contract() -> None:

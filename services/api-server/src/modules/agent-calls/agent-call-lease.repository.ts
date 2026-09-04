@@ -18,6 +18,10 @@ import {
   findAgentToolExecutionForTask,
   updateAgentToolExecution,
 } from "./agent-orchestration.repository.js";
+import {
+  agentCallDialOperationType,
+  configuredAgentCallProvider,
+} from "./agent-call-provider-profile.js";
 
 export function claimQueuedAgentCalls(input: {
   workerId: string;
@@ -42,7 +46,7 @@ export function claimQueuedAgentCalls(input: {
       const operation = beginProviderOperation({
         sessionId: draft.callId,
         provider,
-        operationType: "sip_outbound",
+        operationType: agentCallDialOperationType(),
         operationKey: draft.id,
         idempotencyKey,
         requestHash: dialRequestHash(draft),
@@ -278,10 +282,7 @@ function boundedLimit(value: number) {
 }
 
 function agentCallProvider(): CommunicationProvider | null {
-  const value = process.env.AGENT_CALL_PROVIDER_ADAPTER;
-  return value === "livekit_sip" || value === "pstn_http" || value === "pstn_fonoster"
-    ? value
-    : null;
+  return configuredAgentCallProvider();
 }
 
 function validProviderOperationStatus(value: unknown) {

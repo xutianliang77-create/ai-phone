@@ -59,6 +59,7 @@ class _RealtimePageState extends State<RealtimePage>
   late final bool _ownsVoicePresetClient;
   late AppConfig _config;
   late RealtimeRuntimeSettings _settings;
+  RealtimeVoiceOutputMode? _talkVoiceOutputMode;
   late RealtimeController controller;
   bool _onlineRecoveryInFlight = false;
   bool _voicePresetsLoading = true;
@@ -129,9 +130,12 @@ class _RealtimePageState extends State<RealtimePage>
             remainingSeconds: controller.remainingSeconds,
             lowBalance: controller.lowBalance,
             autoSpeakTranslation:
-                _realtimeAutoSpeakSupported && _settings.autoSpeakTranslation,
+                _realtimeAutoSpeakSupported && controller.autoSpeakTranslation,
             autoSpeakEnabled: _realtimeAutoSpeakSupported,
-            onAutoSpeakChanged: _toggleAutoSpeakTranslation,
+            speechOutputActive: controller.speechOutputActive,
+            onAutoSpeakChanged: controller.voiceOutputUpdating
+                ? null
+                : _toggleAutoSpeakTranslation,
           ),
         ),
         actions: <Widget>[
@@ -290,19 +294,14 @@ class _RealtimePageState extends State<RealtimePage>
   }
 
   void _replaceSettings(RealtimeRuntimeSettings settings) {
-    final nextConfig = settings.applyTo(_config);
-    final previousController = controller;
-    setState(() {
-      _settings = settings;
-      _config = nextConfig;
-      controller = _createRealtimePageController(this, _config);
-    });
-    previousController.dispose();
+    _replaceConfig(settings.applyTo(_config), settings: settings);
   }
 
-  void _replaceConfig(AppConfig nextConfig) {
+  void _replaceConfig(AppConfig nextConfig,
+      {RealtimeRuntimeSettings? settings}) {
     final previousController = controller;
     setState(() {
+      if (settings != null) _settings = settings;
       _config = nextConfig;
       controller = _createRealtimePageController(this, _config);
     });

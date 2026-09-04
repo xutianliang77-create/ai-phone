@@ -8,7 +8,7 @@ import { checkDependencySecurity } from "./lib/dependency_security.mjs";
 
 const root = path.resolve(fileURLToPath(new URL("..", import.meta.url)));
 const policy = JSON.parse(readFileSync(
-  path.join(root, "infra/dependency-security/otel-livekit-exception.json"),
+  path.join(root, "infra/dependency-security/dependency-policy.json"),
   "utf8",
 ));
 const auditRun = spawnSync("npm", ["audit", "--omit=dev", "--json"], {
@@ -38,10 +38,12 @@ const result = checkDependencySecurity({
     translationWorkerPackage.dependencies?.["@livekit/agents"],
     voiceAgentPackage.dependencies?.["@livekit/agents"],
   ],
+  agentPluginVersion:
+    voiceAgentPackage.dependencies?.["@livekit/agents-plugin-openai"],
   telemetrySource,
 });
 console.log(JSON.stringify(result, null, 2));
-if (result.status !== "accepted_with_temporary_exception") process.exit(1);
+if (result.status !== "ready") process.exit(1);
 
 function readJson(value) {
   return JSON.parse(readFileSync(path.join(root, value), "utf8"));

@@ -11,10 +11,20 @@ import type {
 import { playTtsAudioStream } from "./tts-playback-stream.js";
 import type {
   CallAudioSpeakerRole,
-  CallPlaybackBinding,
   CallTtsAudioSink,
   CallTtsAudioStream,
 } from "./types.js";
+import {
+  type ActivePlayback,
+  bindPlayback,
+  oppositeSpeakerRole,
+  type PlaybackConsumersReady,
+  type PlaybackLifecyclePublisher,
+  publishPlaybackLifecycle,
+  supportsPlaybackInterruption,
+  targetQueueKey,
+  targetRouteKey,
+} from "./call-tts-playback-routing.js";
 export type {
   PlaybackInput,
   PlaybackInterruptionResult,
@@ -23,10 +33,6 @@ export type {
   PlaybackLifecycleInput,
   PlaybackStartedInput,
 } from "./call-tts-playback-types.js";
-interface ActivePlayback {
-  input: PlaybackStartedInput;
-  controller: AbortController;
-}
 export class CallTtsPlaybackQueue {
   private readonly sinks: CallTtsAudioSink[] = [];
   private readonly routeQueue = new KeyedAsyncQueue();
@@ -35,14 +41,12 @@ export class CallTtsPlaybackQueue {
   private readonly routeEpochs = new Map<string, number>();
   private readonly active = new Map<string, ActivePlayback>();
   private readonly targetKeys = new Map<string, Set<string>>();
+  private readonly pausedRoutes = new Set<string>();
 
   constructor(
     private readonly onPlaybackError: (input: PlaybackInput) => Promise<void>,
     private readonly onPlaybackStarted?: (input: PlaybackStartedInput) => void,
-    private readonly onPlaybackLifecycle?: (
-      state: PlaybackLifecycle,
-      input: PlaybackLifecycleInput,
-    ) => Promise<CallPlaybackBinding | void>,
+    private readonly onPlaybackLifecycle?: PlaybackLifecyclePublisher,
   ) {}
 
   addSink(sink: CallTtsAudioSink) {
@@ -70,9 +74,16 @@ export class CallTtsPlaybackQueue {
     }
     const targetSpeakerRole = oppositeSpeakerRole(input.speakerRole);
     const routeKey = targetRouteKey(input.callId, targetSpeakerRole);
+    if (this.pausedRoutes.has(routeKey)) {
+      consumersReady?.resolve(false);
+      return;
+    }
     const routeEpoch = this.routeEpoch(routeKey);
     await this.routeQueue.enqueue(routeKey, async () => {
-      if (this.routeEpoch(routeKey) !== routeEpoch) {
+      if (
+        this.pausedRoutes.has(routeKey) ||
+        this.routeEpoch(routeKey) !== routeEpoch
+      ) {
         consumersReady?.resolve(false);
         return;
       }
@@ -102,11 +113,31 @@ export class CallTtsPlaybackQueue {
   }
 
   supportsInterruption() {
-    return this.sinks.length > 0 && this.sinks.every((sink) =>
-      sink.capabilities?.bidirectionalMedia === true &&
-      sink.capabilities.clearPlayback === true &&
-      Boolean(sink.interrupt)
-    );
+    return supportsPlaybackInterruption(this.sinks);
+  }
+
+  async setTargetPaused(input: {
+    callId: string;
+    targetSpeakerRole: CallAudioSpeakerRole;
+    paused: boolean;
+  }) {
+    const key = targetRouteKey(input.callId, input.targetSpeakerRole);
+    const alreadyPaused = this.pausedRoutes.has(key);
+    if (input.paused === alreadyPaused) {
+      return { paused: alreadyPaused, changed: false };
+    }
+    if (!input.paused) {
+      this.pausedRoutes.delete(key);
+      return { paused: false, changed: true };
+    }
+    this.pausedRoutes.add(key);
+    this.advanceRouteEpoch(key);
+    const interruption = await this.interruptSpeaker({
+      callId: input.callId,
+      targetSpeakerRole: input.targetSpeakerRole,
+      reason: "manual_pause",
+    });
+    return { paused: true, changed: true, interruption };
   }
 
   activePlaybackForSpeaker(
@@ -218,6 +249,7 @@ export class CallTtsPlaybackQueue {
   async cancelCall(callId: string, reason: PlaybackInterruptReason) {
     for (const role of ["host", "guest"] as const) {
       this.advanceRouteEpoch(targetRouteKey(callId, role));
+      this.pausedRoutes.delete(targetRouteKey(callId, role));
     }
     const active = [...this.active.values()].filter(
       (item) => item.input.callId === callId,
@@ -306,12 +338,7 @@ export class CallTtsPlaybackQueue {
     state: PlaybackLifecycle,
     input: PlaybackLifecycleInput,
   ) {
-    try {
-      return await this.onPlaybackLifecycle?.(state, input);
-    } catch {
-      if (state === "queued") throw new Error("Playback route could not be persisted");
-      return undefined;
-    }
+    return publishPlaybackLifecycle(this.onPlaybackLifecycle, state, input);
   }
 
   private rememberTargetKey(callId: string, key: string) {
@@ -320,30 +347,3 @@ export class CallTtsPlaybackQueue {
     this.targetKeys.set(callId, keys);
   }
 }
-
-interface PlaybackConsumersReady {
-  resolve: (ready: boolean) => void;
-  reject: (error: unknown) => void;
-}
-
-function bindPlayback(
-  input: PlaybackLifecycleInput,
-  binding: CallPlaybackBinding | void,
-): PlaybackStartedInput {
-  return {
-    ...input,
-    sourceLegId: binding?.sourceLegId ?? `${input.callId}:${input.speakerRole}`,
-    targetLegId: binding?.targetLegId ?? `${input.callId}:${input.targetSpeakerRole}`,
-  };
-}
-
-function oppositeSpeakerRole(role: CallAudioSpeakerRole): CallAudioSpeakerRole {
-  return role === "host" ? "guest" : "host";
-}
-
-function targetRouteKey(callId: string, role: CallAudioSpeakerRole) {
-  return `${callId}:route:${role}`;
-}
-
-const targetQueueKey = (callId: string, targetLegId: string) =>
-  `${callId}:target:${targetLegId}`;

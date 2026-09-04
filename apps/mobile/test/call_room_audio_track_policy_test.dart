@@ -13,18 +13,34 @@ void main() {
     expect(callRoomTtsTrackTargetRole('microphone'), isNull);
   });
 
-  test('allows only target-role TTS tracks', () {
+  test('keeps the AI host room monitor behavior unchanged', () {
     expect(
       shouldSubscribeCallRoomAudioTrack(
-        trackName: 'translation-tts-host-16000',
+        trackName: 'participant-microphone',
         localRole: 'host',
+      ),
+      isTrue,
+    );
+  });
+
+  test('restricts a translation-only host to its exact translated track', () {
+    const identity = 'call-1:host:participant-1';
+    final token = callRoomLegToken(identity);
+    expect(
+      shouldSubscribeCallRoomAudioTrack(
+        trackName: 'translation-tts-host-16000.$token',
+        localRole: 'host',
+        localParticipantIdentity: identity,
+        translationMediaOnly: true,
       ),
       isTrue,
     );
     expect(
       shouldSubscribeCallRoomAudioTrack(
-        trackName: 'translation-tts-guest-16000',
+        trackName:
+            'translation-tts-guest-16000.${callRoomLegToken('call-1:guest:phone')}',
         localRole: 'host',
+        translationMediaOnly: true,
       ),
       isFalse,
     );
@@ -32,6 +48,34 @@ void main() {
       shouldSubscribeCallRoomAudioTrack(
         trackName: 'participant-microphone',
         localRole: 'host',
+        translationMediaOnly: true,
+      ),
+      isFalse,
+    );
+    expect(
+      shouldSubscribeCallRoomAudioTrack(
+        trackName: 'translation-tts-host-16000',
+        localRole: 'host',
+        localParticipantIdentity: identity,
+        translationMediaOnly: true,
+      ),
+      isFalse,
+    );
+    expect(
+      shouldSubscribeCallRoomAudioTrack(
+        trackName: 'air780-downlink-air-1',
+        localRole: 'host',
+        translationMediaOnly: true,
+      ),
+      isFalse,
+    );
+  });
+
+  test('keeps non-host roles restricted to admitted TTS tracks', () {
+    expect(
+      shouldSubscribeCallRoomAudioTrack(
+        trackName: 'air780-downlink-air-1',
+        localRole: 'guest',
       ),
       isFalse,
     );

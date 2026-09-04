@@ -20,6 +20,8 @@ import {
   mergeSessionSegments,
   type SessionSegmentPatch,
 } from "./session-segment-merge.js";
+import { orderSessionSegmentsChronologically } from
+  "./session-segment-order.js";
 import { assertNewSessionPlacementAllowed } from "../../infrastructure/platform/platform-session-routing.js";
 import { sessionMatchesQuery } from "./sessions-runtime-views.js";
 
@@ -254,6 +256,7 @@ export function upsertSegment(
   } else {
     session.segments.push(createSessionSegment(patch));
   }
+  session.segments = orderSessionSegmentsChronologically(session.segments);
   session.review = null;
   session.lastActivityAt = new Date().toISOString();
   persistSessionMutation(session);

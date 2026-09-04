@@ -1,13 +1,21 @@
 import { randomUUID } from "node:crypto";
 import type {
+  AgentDeliveryCommand,
+  AgentDeliveryLifecycleEvent,
+  AgentVoiceTurnScopeDto,
+  AgentWorkDto,
+  AgentWorkCancelPayload,
   VoiceAgentRuntimeEventRequest,
   VoiceAgentRuntimeEventResponse,
   VoiceAgentRecordingConsentEvent,
   VoiceAgentRuntimeSnapshotDto,
   VoiceAgentStructuredResultDto,
   VoiceAgentToolAuthorization,
+  VoiceAgentPermissionRequestDto,
+  VoiceAgentTurnEventResponse,
 } from "@translation/contracts";
 import type { VoiceAgentDispatchTicket } from "./runtime-ticket.js";
+import { postVoiceAgentRuntimeApi } from "./runtime-api-http.js";
 
 export class VoiceAgentRuntimeApiClient {
   private readonly fetchFn: typeof fetch;
@@ -74,6 +82,182 @@ export class VoiceAgentRuntimeApiClient {
     );
   }
 
+  observeTurn(input: {
+    snapshot: VoiceAgentRuntimeSnapshotDto;
+    ticket: VoiceAgentDispatchTicket;
+    eventId?: string;
+    eventType: "user_speaking" | "final_transcript" | "session_ending";
+    observedAt: string;
+    explicitInstructionEvidenceHash?: string;
+  }) {
+    return this.post<VoiceAgentTurnEventResponse>(
+      `/internal/ai-calling-agent/drafts/${
+        encodeURIComponent(input.snapshot.draftId)
+      }/voice-turn-events`,
+      {
+        ticket: input.ticket.ticket,
+        eventId: input.eventId ?? randomUUID(),
+        eventType: input.eventType,
+        observedAt: input.observedAt,
+        ...(input.explicitInstructionEvidenceHash
+          ? { explicitInstructionEvidenceHash:
+              input.explicitInstructionEvidenceHash }
+          : {}),
+      },
+    );
+  }
+
+  requestWorkPermission(input: {
+    snapshot: VoiceAgentRuntimeSnapshotDto;
+    ticket: VoiceAgentDispatchTicket;
+    permissionRequestId: string;
+    commandId: string;
+    turn: AgentVoiceTurnScopeDto;
+    toolName: string;
+    toolVersion: string;
+    submissionKey: string;
+    arguments: Record<string, unknown>;
+    argumentsHash: string;
+    reasonCode: string;
+    expiresAt: string;
+  }) {
+    return this.post<{
+      replayed: boolean;
+      permission: VoiceAgentPermissionRequestDto;
+    }>(
+      `/internal/ai-calling-agent/drafts/${
+        encodeURIComponent(input.snapshot.draftId)
+      }/agent-work/permissions`,
+      {
+        ticket: input.ticket.ticket,
+        permissionRequestId: input.permissionRequestId,
+        commandId: input.commandId,
+        turnId: input.turn.turnId,
+        turnGeneration: input.turn.turnGeneration,
+        dispatchGeneration: input.turn.dispatchGeneration,
+        explicitInstructionEvidenceHash:
+          input.turn.explicitInstructionEvidenceHash,
+        toolName: input.toolName,
+        toolVersion: input.toolVersion,
+        submissionKey: input.submissionKey,
+        arguments: input.arguments,
+        argumentsHash: input.argumentsHash,
+        reasonCode: input.reasonCode,
+        expiresAt: input.expiresAt,
+      },
+    );
+  }
+
+  workPermissionStatus(input: {
+    snapshot: VoiceAgentRuntimeSnapshotDto;
+    ticket: VoiceAgentDispatchTicket;
+    permissionRequestId: string;
+  }) {
+    return this.post<{ permission: VoiceAgentPermissionRequestDto }>(
+      `/internal/ai-calling-agent/drafts/${
+        encodeURIComponent(input.snapshot.draftId)
+      }/agent-work/permissions/${
+        encodeURIComponent(input.permissionRequestId)
+      }/status`,
+      { ticket: input.ticket.ticket },
+    );
+  }
+
+  createWork(input: {
+    snapshot: VoiceAgentRuntimeSnapshotDto;
+    ticket: VoiceAgentDispatchTicket;
+    workId: string;
+    commandId: string;
+    turnId: string;
+    permissionRequestId: string;
+    authorizationSnapshotId: string;
+  }) {
+    return this.post<{ replayed: boolean; work: AgentWorkDto }>(
+      `/internal/ai-calling-agent/drafts/${
+        encodeURIComponent(input.snapshot.draftId)
+      }/agent-work`,
+      {
+        ticket: input.ticket.ticket,
+        workId: input.workId,
+        commandId: input.commandId,
+        turnId: input.turnId,
+        permissionRequestId: input.permissionRequestId,
+        authorizationSnapshotId: input.authorizationSnapshotId,
+      },
+    );
+  }
+
+  workStatus(input: {
+    snapshot: VoiceAgentRuntimeSnapshotDto;
+    ticket: VoiceAgentDispatchTicket;
+    workId: string;
+  }) {
+    return this.post<{ work: AgentWorkDto }>(
+      `/internal/ai-calling-agent/drafts/${
+        encodeURIComponent(input.snapshot.draftId)
+      }/agent-work/${encodeURIComponent(input.workId)}/status`,
+      { ticket: input.ticket.ticket },
+    );
+  }
+
+  cancelWork(input: {
+    snapshot: VoiceAgentRuntimeSnapshotDto;
+    ticket: VoiceAgentDispatchTicket;
+    workId: string;
+    commandId: string;
+    payload: AgentWorkCancelPayload;
+  }) {
+    return this.post<{ replayed: boolean; work: AgentWorkDto }>(
+      `/internal/ai-calling-agent/drafts/${
+        encodeURIComponent(input.snapshot.draftId)
+      }/agent-work/${encodeURIComponent(input.workId)}/cancel`,
+      {
+        ticket: input.ticket.ticket,
+        commandId: input.commandId,
+        payload: input.payload,
+      },
+    );
+  }
+
+  authorizeDelivery(input: {
+    snapshot: VoiceAgentRuntimeSnapshotDto;
+    ticket: VoiceAgentDispatchTicket;
+    command: AgentDeliveryCommand;
+  }) {
+    return this.post<{
+      authorized: true;
+      expiresAt: string;
+      playbackGeneration: number;
+    }>(
+      `/internal/ai-calling-agent/drafts/${
+        encodeURIComponent(input.snapshot.draftId)
+      }/agent-deliveries/${
+        encodeURIComponent(input.command.deliveryAttemptId)
+      }/authorize`,
+      { ticket: input.ticket.ticket, command: input.command },
+    );
+  }
+
+  deliveryLifecycle(input: {
+    snapshot: VoiceAgentRuntimeSnapshotDto;
+    ticket: VoiceAgentDispatchTicket;
+    event: AgentDeliveryLifecycleEvent;
+  }) {
+    return this.post<{
+      replayed: boolean;
+      status: string;
+      serverPlaybackState: string;
+      clientLifecycleQueued: true;
+    }>(
+      `/internal/ai-calling-agent/drafts/${
+        encodeURIComponent(input.snapshot.draftId)
+      }/agent-deliveries/${
+        encodeURIComponent(input.event.deliveryAttemptId)
+      }/lifecycle`,
+      { ticket: input.ticket.ticket, event: input.event },
+    );
+  }
+
   authorizeTool(input: {
     snapshot: VoiceAgentRuntimeSnapshotDto;
     ticket: VoiceAgentDispatchTicket;
@@ -128,24 +312,11 @@ export class VoiceAgentRuntimeApiClient {
   }
 
   private async post<T = unknown>(path: string, body: unknown) {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), this.options.timeoutMs);
-    try {
-      const response = await this.fetchFn(`${this.options.apiBaseUrl}${path}`, {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          authorization: `Bearer ${this.options.internalApiSecret}`,
-        },
-        body: JSON.stringify(body),
-        signal: controller.signal,
-      });
-      if (!response.ok) {
-        throw new Error(`Voice Agent API returned HTTP ${response.status}`);
-      }
-      return await response.json() as T;
-    } finally {
-      clearTimeout(timer);
-    }
+    return postVoiceAgentRuntimeApi<T>({
+      ...this.options,
+      fetchFn: this.fetchFn,
+      path,
+      body,
+    });
   }
 }

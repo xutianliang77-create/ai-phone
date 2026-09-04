@@ -1,4 +1,4 @@
-import type { Pool, QueryResultRow } from "pg";
+import type { Pool } from "pg";
 import type {
   CommunicationProvider,
   ProviderOperationStatus,
@@ -8,7 +8,12 @@ import {
   PostgresPrimaryStore,
   type PostgresAggregateFence,
 } from "../../infrastructure/storage/postgres-primary-store.js";
-import type { ProviderOperationRecord } from "./provider-operation-record.js";
+import type { ProviderOperationOutboxFactory, ProviderOperationRecord } from
+  "./provider-operation-record.js";
+import { enqueueProviderOperationOutbox } from
+  "./postgres-provider-operation-outbox.js";
+import { PostgresProviderOperationQueries } from
+  "./postgres-provider-operation-queries.js";
 import { currentPlatformTraceId } from
   "../../infrastructure/observability/platform-telemetry.js";
 import {
@@ -19,11 +24,11 @@ import {
   enqueueChanged,
   externalIdsMatch,
   mutationEventId,
-  nextOperation,
+  nextOperation, nextRetriedOperation,
   operationByIdempotency,
   providerOperationId,
   providerOperationTerminalStatuses,
-  recordCommand,
+  recordCommand, retryCommand,
   requireOperation,
   sessionOperation,
   updateCommand,
@@ -42,11 +47,18 @@ type UpdateResult = {
   operation: ProviderOperationRecord;
 };
 
+type RetryResult = { status: "not_found" } | {
+  status: "version_conflict" | "invalid_state" | "retried";
+  operation: ProviderOperationRecord;
+};
+
 export class PostgresProviderOperationsRepository {
   private readonly primary: PostgresPrimaryStore;
+  private readonly queries: PostgresProviderOperationQueries;
 
-  constructor(private readonly pool: Pick<Pool, "connect">) {
+  constructor(pool: Pick<Pool, "connect">) {
     this.primary = new PostgresPrimaryStore(pool);
+    this.queries = new PostgresProviderOperationQueries(pool);
   }
 
   async begin(input: {
@@ -56,6 +68,7 @@ export class PostgresProviderOperationsRepository {
     operationKey?: string;
     idempotencyKey: string;
     requestHash: string;
+    outboxFactory?: ProviderOperationOutboxFactory;
     fence: PostgresAggregateFence;
     now?: Date;
   }): Promise<BeginResult> {
@@ -71,12 +84,20 @@ export class PostgresProviderOperationsRepository {
             "providerOperations",
             replay.operation.id,
           );
-          return {
+          const result = {
             status: replay.status === "started" ? "replayed" as const : replay.status,
             operation: current
               ? requireOperation(current.payload, replay.operation.id)
               : replay.operation,
           };
+          if (result.status === "replayed") {
+            await enqueueProviderOperationOutbox(
+              transaction,
+              input.outboxFactory,
+              result.operation,
+            );
+          }
+          return result;
         }
         const sameKey = await operationByIdempotency(
           transaction,
@@ -85,13 +106,21 @@ export class PostgresProviderOperationsRepository {
           input.idempotencyKey,
         );
         if (sameKey) {
-          return recordCommand(transaction, command, {
+          const result = {
             status: sameKey.requestHash === input.requestHash &&
                 sameKey.sessionId === input.sessionId &&
                 sameKey.operationKey === input.operationKey
-              ? "replayed" : "payload_conflict",
+              ? "replayed" as const : "payload_conflict" as const,
             operation: sameKey,
-          });
+          };
+          if (result.status === "replayed") {
+            await enqueueProviderOperationOutbox(
+              transaction,
+              input.outboxFactory,
+              result.operation,
+            );
+          }
+          return recordCommand(transaction, command, result);
         }
         const sameSession = await sessionOperation(
           transaction,
@@ -137,6 +166,7 @@ export class PostgresProviderOperationsRepository {
         });
         const saved = requireOperation(stored?.payload, operation.id);
         await enqueueChanged(transaction, eventId, saved, "provider_operation.started");
+        await enqueueProviderOperationOutbox(transaction, input.outboxFactory, saved);
         return recordCommand(transaction, command, {
           status: "started",
           operation: saved,
@@ -224,9 +254,80 @@ export class PostgresProviderOperationsRepository {
     );
   }
 
+  async retry(input: {
+    operationId: string;
+    commandId: string;
+    expectedVersion: number;
+    fence: PostgresAggregateFence;
+    now?: Date;
+  }): Promise<RetryResult> {
+    assertSessionFence(input.fence, input.fence.aggregateId);
+    const command = retryCommand(input);
+    return this.primary.withAggregateTransaction<RetryResult>(
+      input.fence,
+      async (transaction) => {
+        const replay = await transaction.readCommandResult<RetryResult>(command);
+        if (replay) return replay;
+        const current = await transaction.read<ProviderOperationRecord>(
+          "providerOperations",
+          input.operationId,
+        );
+        if (!current) {
+          return recordCommand(transaction, command, { status: "not_found" });
+        }
+        const operation = requireOperation(current.payload, input.operationId);
+        if (operation.sessionId !== input.fence.aggregateId) {
+          throw new Error("Provider operation is outside the fenced session");
+        }
+        if (operation.version !== input.expectedVersion) {
+          return recordCommand(transaction, command, {
+            status: "version_conflict",
+            operation,
+          });
+        }
+        if (operation.status !== "failed" ||
+          !["phone_hangup", "phone_dtmf"].includes(operation.operationType) ||
+          operation.lastErrorClass !== "unavailable") {
+          return recordCommand(transaction, command, {
+            status: "invalid_state",
+            operation,
+          });
+        }
+        const next = nextRetriedOperation(operation, input.now);
+        const eventId = mutationEventId(command.commandId);
+        const stored = await transaction.mutate<ProviderOperationRecord>({
+          eventId,
+          namespace: "providerOperations",
+          recordKey: operation.id,
+          operation: "upsert",
+          payload: next,
+          expectedRecordVersion: current.recordVersion,
+        });
+        const saved = requireOperation(stored?.payload, operation.id);
+        await enqueueChanged(
+          transaction,
+          eventId,
+          saved,
+          "provider_operation.retried",
+        );
+        return recordCommand(transaction, command, {
+          status: "retried",
+          operation: saved,
+        });
+      },
+    );
+  }
+
   find(operationId: string) {
-    return this.primary.read<ProviderOperationRecord>("providerOperations", operationId)
-      .then((record) => record ? requireOperation(record.payload, operationId) : null);
+    return this.queries.find(operationId);
+  }
+
+  async findIdempotency(
+    provider: CommunicationProvider,
+    operationType: ProviderOperationType,
+    idempotencyKey: string,
+  ) {
+    return this.queries.findIdempotency(provider, operationType, idempotencyKey);
   }
 
   async findSession(
@@ -234,45 +335,12 @@ export class PostgresProviderOperationsRepository {
     operationType: ProviderOperationType,
     operationKey?: string,
   ) {
-    const ids = await this.queryIds(`
-      SELECT id FROM ai_phone.provider_operations
-      WHERE session_id = $1 AND operation_type = $2
-        AND operation_key IS NOT DISTINCT FROM $3
-    `, [sessionId, operationType, operationKey]);
-    return ids[0] ? this.readExisting(ids[0]) : null;
+    return this.queries.findSession(sessionId, operationType, operationKey);
   }
 
   async findActive(operationType: ProviderOperationType) {
-    const ids = await this.queryIds(`
-      SELECT id FROM ai_phone.provider_operations
-      WHERE operation_type = $1
-        AND status = ANY($2::text[])
-      ORDER BY updated_at, id
-    `, [operationType, ["in_flight", "accepted", "unknown", "active"]]);
-    return Promise.all(ids.map((id) => this.readExisting(id)));
+    return this.queries.findActive(operationType);
   }
-
-  private async readExisting(operationId: string) {
-    const operation = await this.find(operationId);
-    if (!operation) {
-      throw new Error("Normalized provider operation is missing its primary record");
-    }
-    return operation;
-  }
-
-  private async queryIds(sql: string, values: unknown[]) {
-    const client = await this.pool.connect();
-    try {
-      const result = await client.query<IdRow>(sql, values);
-      return result.rows.map((row) => row.id);
-    } finally {
-      client.release();
-    }
-  }
-}
-
-interface IdRow extends QueryResultRow {
-  id: string;
 }
 
 function isUniqueViolation(error: unknown) {

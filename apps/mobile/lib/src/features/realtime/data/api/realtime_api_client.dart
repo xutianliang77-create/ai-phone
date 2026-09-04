@@ -41,12 +41,14 @@ class RealtimeApiClient {
   final String _sourceLanguage;
   final String _targetLanguage;
   final bool _autoReverseTargetLanguage;
-  final String _voiceOutputMode;
+  String _voiceOutputMode;
   final String _voicePresetId;
   final String _termbaseId;
   final String _domainLexiconPack;
   final Duration _requestTimeout;
   final AccountSessionStore _accountSessionStore;
+
+  void setVoiceOutputMode(String mode) => _voiceOutputMode = mode;
 
   Future<RealtimeSession> createSession() async {
     final voice = await _voiceConfigForSession();
@@ -131,7 +133,10 @@ class RealtimeApiClient {
         )
         .timeout(_requestTimeout);
     if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw RealtimeApiException('Finalize session failed: ${response.body}');
+      throw RealtimeApiException(
+        'Finalize session failed: ${response.body}',
+        statusCode: response.statusCode,
+      );
     }
   }
 
@@ -183,9 +188,10 @@ class RealtimeApiClient {
 }
 
 class RealtimeApiException implements Exception {
-  const RealtimeApiException(this.message);
+  const RealtimeApiException(this.message, {this.statusCode});
 
   final String message;
+  final int? statusCode;
 
   @override
   String toString() => message;

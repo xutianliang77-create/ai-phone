@@ -29,11 +29,15 @@ class GatewayRealtimeEvent {
     this.sampleRate,
     this.sequence,
     this.data,
+    this.replayedAudioMs,
+    this.droppedAudioMs,
     this.flush,
     this.speaker,
     this.timing,
     this.vadContext,
     this.languageProfile,
+    this.voiceOutputEnabled,
+    this.voiceOutputAccepted,
   });
 
   final String type;
@@ -62,15 +66,21 @@ class GatewayRealtimeEvent {
   final int? sampleRate;
   final int? sequence;
   final String? data;
+  final int? replayedAudioMs;
+  final int? droppedAudioMs;
   final GatewayRealtimeFlushSummary? flush;
   final SpeakerAttribution? speaker;
   final SegmentTiming? timing;
   final Map<String, Object?>? vadContext;
   final TurnLanguageProfile? languageProfile;
+  final bool? voiceOutputEnabled;
+  final bool? voiceOutputAccepted;
 
   const GatewayRealtimeEvent.connection({
     required this.type,
     this.message,
+    this.replayedAudioMs,
+    this.droppedAudioMs,
   })  : sessionId = null,
         segmentId = null,
         turnId = null,
@@ -99,7 +109,9 @@ class GatewayRealtimeEvent {
         speaker = null,
         timing = null,
         vadContext = null,
-        languageProfile = null;
+        languageProfile = null,
+        voiceOutputEnabled = null,
+        voiceOutputAccepted = null;
 
   factory GatewayRealtimeEvent.fromJson(Map<String, Object?> json) {
     final providerUsage = json['providerUsage'] is Map<String, Object?>
@@ -137,6 +149,10 @@ class GatewayRealtimeEvent {
       sampleRate: (json['sampleRate'] as num?)?.toInt(),
       sequence: (json['sequence'] as num?)?.toInt(),
       data: json['data'] as String?,
+      voiceOutputEnabled: json['enabled'] as bool?,
+      voiceOutputAccepted: json['accepted'] as bool?,
+      replayedAudioMs: (json['replayedAudioMs'] as num?)?.toInt(),
+      droppedAudioMs: (json['droppedAudioMs'] as num?)?.toInt(),
       flush: flushJson is Map
           ? GatewayRealtimeFlushSummary.fromJson(
               Map<String, Object?>.from(flushJson),

@@ -78,6 +78,21 @@ Current behavior:
 - Migration `031_voice_agent_recording_consent` stores authoritative
   participant consent evidence and the Agent Task recording policy used by the
   Agent/Egress runners.
+- Migration `037_agent_voice_work` adds the PostgreSQL-only Voice Agent
+  background Work store. It separates Work state from reliable event
+  publication, enforces scoped `submissionKey` idempotency, bounded
+  attempts/runtime/owner concurrency, recoverable `SKIP LOCKED` claims, and
+  confirmation-based cancellation. Runtime creation and delivery remain
+  disabled until their feature flags are explicitly enabled.
+- Migration `038_agent_work_permissions` stores pending permission requests and
+  server-authoritative, current-turn authorization snapshots. A Work row must
+  reference an active snapshot whose run/session/leg/turn/actor/tool,
+  arguments hash, instruction evidence, policy, risk, side effects and scoped
+  generations all match; a model-supplied hash alone is never authorization.
+- Migration `039_agent_voice_turn_scope` makes the API authoritative for the
+  current voice-turn ID and monotonic turn/dispatch generations. Idempotent
+  speaking/final/end events invalidate stale permissions and Work before a new
+  tool request can be accepted.
 - Primary import now includes legacy usage maps, holds, ledger rows, and
   deterministic Agent request-hash/idempotency backfills. Audit compares every
   primary payload, normalized namespace counts, the exact migration manifest,
@@ -85,6 +100,16 @@ Current behavior:
   explicit cutover ID before startup can accept it.
 - Runtime adapters now cover every production Repository consumer and
   `npm run check:postgres-primary-cutover -- --summary` reports `0/0`.
+- `npm run postgres:startup-check` verifies the signed evidence, exact migration
+  manifest, and database identity without starting the API. Beelink deployment
+  runs this admission before replacing the existing application container.
+- A post-cutover additive migration must not rerun the legacy SQLite/JSON
+  reconciliation against a PostgreSQL primary that has accepted new writes.
+  `npm run postgres:upgrade-evidence` authenticates the previous evidence,
+  requires an exact schema prefix and a code-owned validator for every added
+  migration, verifies the live database identity, and atomically re-signs the
+  evidence. The evidence directory must be mounted writable only for this
+  administrative command; the application keeps it read-only.
 - Compile-time PostgreSQL primary authorization is enabled after isolated
   Beelink staging acceptance. This does not switch existing environments:
   `API_STORAGE_DRIVER` remains explicit, production still requires its own
@@ -95,7 +120,7 @@ Production/HA acceptance procedure:
 
 1. provision the target PostgreSQL database and least-privilege roles without
    reusing the accepted isolated staging database;
-2. set `verify-full` TLS and run all 31 migrations with
+2. set `verify-full` TLS and run every migration in the runtime manifest with
    `npm run postgres:migrate` twice;
 3. run `npm run postgres:check`, then `npm run postgres:import`;
 4. run `npm run postgres:audit` with `POSTGRES_CUTOVER_EVIDENCE_FILE` pointing

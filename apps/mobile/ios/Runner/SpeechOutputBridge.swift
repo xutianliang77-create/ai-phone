@@ -35,8 +35,8 @@ final class SpeechOutputBridge: NSObject, AVSpeechSynthesizerDelegate {
         case "speak":
             speak(call: call, result: result)
         case "stop":
+            finishPendingSpeech(error: speechError("speech_cancelled", "Speech playback was cancelled."))
             synthesizer.stopSpeaking(at: .immediate)
-            finishPendingSpeech()
             result(nil)
         default:
             result(FlutterMethodNotImplemented)
@@ -55,11 +55,14 @@ final class SpeechOutputBridge: NSObject, AVSpeechSynthesizerDelegate {
             return
         }
 
-        finishPendingSpeech()
-        let language = normalizedLanguageCode(
-            stringArgument("language", from: call),
-            fallback: "en"
-        )
+        finishPendingSpeech(error: speechError("speech_cancelled", "Speech playback was replaced."))
+        let language = (stringArgument("language", from: call) ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: "_", with: "-")
+        guard !language.isEmpty, let voice = AVSpeechSynthesisVoice(language: language) else {
+            result(speechError("speech_language_unavailable", "No system voice is available for \(language)."))
+            return
+        }
         do {
             try audioSessionCoordinator.beginPlayback(owner: audioSessionOwner)
         } catch {
@@ -75,7 +78,7 @@ final class SpeechOutputBridge: NSObject, AVSpeechSynthesizerDelegate {
         }
         let utterance = AVSpeechUtterance(string: text)
         let utteranceId = UUID()
-        utterance.voice = AVSpeechSynthesisVoice(language: voiceLanguage(language))
+        utterance.voice = voice
         utterance.rate = AVSpeechUtteranceDefaultSpeechRate
         pendingUtteranceId = utteranceId
         pendingUtterance = utterance
@@ -83,6 +86,7 @@ final class SpeechOutputBridge: NSObject, AVSpeechSynthesizerDelegate {
         pendingResponse = [
             "provider": "ios_system_tts",
             "language": language,
+            "voiceLanguage": voice.language,
         ]
         scheduleWatchdog(for: utteranceId, text: text)
         synthesizer.speak(utterance)
@@ -101,29 +105,12 @@ final class SpeechOutputBridge: NSObject, AVSpeechSynthesizerDelegate {
         didCancel utterance: AVSpeechUtterance
     ) {
         guard pendingUtterance === utterance else { return }
-        finishPendingSpeech()
+        finishPendingSpeech(error: speechError("speech_cancelled", "Speech playback was cancelled."))
     }
 
     private func stringArgument(_ name: String, from call: FlutterMethodCall) -> String? {
         let arguments = call.arguments as? [String: Any]
         return arguments?[name] as? String
-    }
-
-    private func normalizedLanguageCode(_ value: String?, fallback: String) -> String {
-        let lowercased = (value ?? fallback).trimmingCharacters(
-            in: .whitespacesAndNewlines
-        ).lowercased()
-        if lowercased.hasPrefix("zh") || lowercased.hasPrefix("cmn") {
-            return "zh"
-        }
-        if lowercased.hasPrefix("en") {
-            return "en"
-        }
-        return fallback
-    }
-
-    private func voiceLanguage(_ language: String) -> String {
-        language == "zh" ? "zh-CN" : "en-US"
     }
 
     private func scheduleWatchdog(for utteranceId: UUID, text: String) {
@@ -136,24 +123,23 @@ final class SpeechOutputBridge: NSObject, AVSpeechSynthesizerDelegate {
             guard let self = self, self.pendingUtteranceId == utteranceId else {
                 return
             }
+            self.finishPendingSpeech(error: speechError("speech_timeout", "Speech playback timed out."))
             self.synthesizer.stopSpeaking(at: .immediate)
-            self.finishPendingSpeech()
         }
     }
 
-    private func finishPendingSpeech() {
+    private func finishPendingSpeech(error: FlutterError? = nil) {
         watchdogTimer?.invalidate()
         watchdogTimer = nil
         pendingUtteranceId = nil
         pendingUtterance = nil
         audioSessionCoordinator.endPlayback(owner: audioSessionOwner)
         guard let result = pendingResult else { return }
-        result(pendingResponse ?? [
-            "provider": "ios_system_tts",
-            "language": "en",
-        ])
+        let response = pendingResponse
         pendingResult = nil
         pendingResponse = nil
+        if let error { result(error) }
+        else { result(response) }
     }
 }
 
@@ -201,7 +187,7 @@ final class PcmAudioOutputBridge: NSObject, AVAudioPlayerDelegate {
               sampleRate == 16000 || sampleRate == 24000,
               let encoded = arguments["data"] as? String,
               let pcm = Data(base64Encoded: encoded),
-              !pcm.isEmpty else {
+              !pcm.isEmpty, pcm.count.isMultiple(of: 2) else {
             result(FlutterError(
                 code: "invalid_pcm_audio",
                 message: "PCM16 audio output payload is invalid.",
@@ -221,9 +207,15 @@ final class PcmAudioOutputBridge: NSObject, AVAudioPlayerDelegate {
                 "provider": "server_pcm_tts",
                 "sampleRate": sampleRate,
             ]
+            guard player.prepareToPlay() else {
+                stop(error: speechError("pcm_audio_prepare_failed", "PCM audio could not be prepared."))
+                return
+            }
+            guard player.play() else {
+                stop(error: speechError("pcm_audio_start_failed", "PCM audio playback could not start."))
+                return
+            }
             scheduleWatchdog(duration: player.duration)
-            player.prepareToPlay()
-            player.play()
         } catch {
             audioSessionCoordinator.endPlayback(owner: audioSessionOwner)
             pendingResult = nil
@@ -236,24 +228,24 @@ final class PcmAudioOutputBridge: NSObject, AVAudioPlayerDelegate {
         }
     }
 
-    private func stop() {
+    private func stop(error: FlutterError? = nil) {
         watchdogTimer?.invalidate()
         watchdogTimer = nil
         player?.stop()
         player = nil
-        finishPending()
+        finishPending(error: error ?? speechError("pcm_audio_cancelled", "PCM playback was cancelled."))
     }
 
     func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
         guard self.player === player else { return }
         self.player = nil
-        finishPending()
+        finishPending(error: flag ? nil : speechError("pcm_audio_playback_failed", "PCM playback did not finish successfully."))
     }
 
     func audioPlayerDecodeErrorDidOccur(_ player: AVAudioPlayer, error: Error?) {
         guard self.player === player else { return }
         self.player = nil
-        finishPending()
+        finishPending(error: speechError("pcm_audio_decode_failed", error?.localizedDescription ?? "PCM audio decoding failed."))
     }
 
     private func scheduleWatchdog(duration: TimeInterval) {
@@ -263,21 +255,20 @@ final class PcmAudioOutputBridge: NSObject, AVAudioPlayerDelegate {
             withTimeInterval: timeout,
             repeats: false
         ) { [weak self] _ in
-            self?.stop()
+            self?.stop(error: speechError("pcm_audio_timeout", "PCM playback timed out."))
         }
     }
 
-    private func finishPending() {
+    private func finishPending(error: FlutterError? = nil) {
         watchdogTimer?.invalidate()
         watchdogTimer = nil
         audioSessionCoordinator.endPlayback(owner: audioSessionOwner)
         guard let result = pendingResult else { return }
-        result(pendingResponse ?? [
-            "provider": "server_pcm_tts",
-            "sampleRate": 24000,
-        ])
+        let response = pendingResponse
         pendingResult = nil
         pendingResponse = nil
+        if let error { result(error) }
+        else { result(response) }
     }
 
     private func wavData(fromPcm16 pcm: Data, sampleRate: Int) -> Data {
@@ -307,4 +298,8 @@ final class PcmAudioOutputBridge: NSObject, AVAudioPlayerDelegate {
         var littleEndian = value.littleEndian
         return Data(bytes: &littleEndian, count: MemoryLayout<UInt32>.size)
     }
+}
+
+private func speechError(_ code: String, _ message: String) -> FlutterError {
+    FlutterError(code: code, message: message, details: nil)
 }

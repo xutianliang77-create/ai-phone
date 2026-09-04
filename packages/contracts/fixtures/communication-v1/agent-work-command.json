@@ -1,0 +1,37 @@
+{
+  "contractVersion": 1,
+  "kind": "command",
+  "commandId": "cmd_agent_work_create_001",
+  "sessionId": "session_001",
+  "legId": "leg_host_001",
+  "turnId": "turn_007",
+  "workId": "work_001",
+  "agentRunId": "agent_run_001",
+  "expectedVersion": 3,
+  "idempotencyKey": "agent-work-create:session_001:work_001",
+  "issuedAt": "2026-07-30T08:00:00.000Z",
+  "deadlineAt": "2026-07-30T08:00:30.000Z",
+  "actor": {
+    "type": "user",
+    "id": "account_001"
+  },
+  "payload": {
+    "toolName": "availability_lookup",
+    "toolVersion": "1",
+    "submissionKey": "availability:turn_007:1",
+    "argumentsHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "consentSnapshotId": "consent_001",
+    "explicitInstructionEvidenceHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "policyVersion": "voice-work-v1",
+    "riskLevel": "low",
+    "sideEffectScopes": [
+      "external_read"
+    ],
+    "priority": "normal",
+    "turnGeneration": 4,
+    "dispatchGeneration": 2,
+    "maxAttempts": 3,
+    "maxRuntimeMs": 30000,
+    "expiresAt": "2026-07-30T08:05:00.000Z"
+  }
+}

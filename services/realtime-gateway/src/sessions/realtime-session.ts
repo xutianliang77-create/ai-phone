@@ -1,6 +1,7 @@
 import type {
   RealtimeSessionState,
   RealtimeTokenClaims,
+  RealtimeVoiceConfig,
 } from "@translation/contracts";
 
 export type RealtimeSessionStatus = Extract<
@@ -12,6 +13,8 @@ export interface RealtimeSession {
   id: string;
   userId: string;
   claims: RealtimeTokenClaims;
+  voiceOutputEnabled?: boolean;
+  voice?: RealtimeVoiceConfig;
   status: RealtimeSessionStatus;
   startedAt: number;
   activeStartedAt?: number;

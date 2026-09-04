@@ -4,10 +4,13 @@ import type {
   AudioFrame,
   LanguageCode,
   TranslationLanguageCode,
+  TermbaseTermDto,
   SegmentTimingDto,
+  AsrTokenTimingDto,
+  RealtimeSessionDiagnosticsDto,
   SpeakerAttributionDto,
   SpeakerAttributionOptionsDto,
-  RealtimeSessionDiagnosticsDto,
+  SpeakerTurnCoordinatorDecisionReason,
   SegmentVadContextDto,
 } from "@translation/contracts";
 
@@ -19,6 +22,7 @@ export interface AsrSession {
   targetLanguage: TranslationLanguageCode;
   asrHotwords?: string[];
   asrCorrections?: Array<{ fromText: string; toText: string }>;
+  terminology?: TermbaseTermDto[];
   speakerAttribution?: SpeakerAttributionOptionsDto;
 }
 
@@ -26,6 +30,7 @@ export interface TranscriptResult {
   segmentId: string;
   turnId?: string;
   revision?: number;
+  isFinal?: boolean;
   text: string;
   language: TranslationLanguageCode;
   dominantLanguage?: TranslationLanguageCode;
@@ -34,6 +39,7 @@ export interface TranscriptResult {
   confidence?: number;
   speaker?: SpeakerAttributionDto;
   timing?: SegmentTimingDto;
+  tokenTimings?: AsrTokenTimingDto[];
   endpointReason?: AsrEndpointReason;
   vadContext?: SegmentVadContextDto;
 }
@@ -48,11 +54,50 @@ export interface AsrSpeakerTurnDiagnostics {
   maxConfirmationLatencyMs: number;
   committedAudioMs: number;
   endpointReasons: Partial<Record<AsrEndpointReason, number>>;
+  boundaryRevisionAttemptCount?: number;
+  boundaryRevisionSuccessCount?: number;
+  boundaryRevisionFailureCount?: number;
+  boundaryReassignedCharacterCount?: number;
+  unresolvedCommitMissCount?: number;
+  boundaryOutcomeCounts?: Partial<Record<
+    "commit_hit" |
+    "commit_error" |
+    "witness_reassignment" |
+    "token_timing_split" |
+    "noop_after_endpoint" |
+    "unresolved",
+    number
+  >>;
+  coordinatorDecisionCounts?: Partial<Record<
+    SpeakerTurnCoordinatorDecisionReason,
+    number
+  >>;
+  confirmedSpeakerCount?: number;
 }
 
 export interface AsrTurnBoundary {
   sessionId: string;
   boundaryMs: number;
+}
+
+export interface AsrSpeakerBoundaryEvidence {
+  boundaries: Array<{
+    boundaryMs: number;
+    previousSpeakerId: string;
+    nextSpeakerId: string;
+    previousTurnId?: string;
+    nextTurnId?: string;
+    confidence?: number;
+  }>;
+  spans: Array<{
+    speakerId: string;
+    startMs: number;
+    endMs: number;
+    confidence?: number;
+    overlap?: boolean;
+    final?: boolean;
+  }>;
+  confirmedSpeakerIds: string[];
 }
 
 export type AsrProviderResult = TranscriptResult | TranscriptResult[] | null;
@@ -62,6 +107,11 @@ export interface AsrProvider {
   transcribe(frame: AudioFrame): Promise<AsrProviderResult>;
   flush(sessionId: string): Promise<AsrProviderResult>;
   commitBoundary?(boundary: AsrTurnBoundary): Promise<AsrProviderResult>;
+  speakerBoundaryEvidence?(
+    sessionId: string,
+  ): AsrSpeakerBoundaryEvidence | undefined;
+  resolveSpeakerBoundaries?(sessionId: string, boundaryMs: number[]): void;
+  resolveSpeakerBoundaryNoops?(sessionId: string, boundaryMs: number[]): void;
   diagnostics?(
     sessionId: string,
   ): Promise<Partial<RealtimeSessionDiagnosticsDto>>;

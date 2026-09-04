@@ -133,7 +133,9 @@ function parseDomainLexiconPacks(
 ): DomainLexiconPack[] | null | false {
   if (value === undefined) return null;
   if (!Array.isArray(value) || value.length === 0 || value.length > 8) return false;
-  if (!value.every(isDomainLexiconPack)) return false;
+  if (!value.every((item) =>
+    isDomainLexiconPack(item) && item !== "cultivation"
+  )) return false;
   return [...new Set(value)];
 }
 

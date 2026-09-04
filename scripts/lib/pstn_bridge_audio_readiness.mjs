@@ -140,11 +140,13 @@ export async function probePstnBridgeTranslatedAudio(options) {
     httpStatus: invalid.status,
   });
 
+  const callPayload = agentCallPayload();
   const route = await requestJson(`${options.baseUrl}/agent-calls`, {
     ...options,
     method: "POST",
     bearerToken: options.bridgeApiKey,
-    body: agentCallPayload(),
+    headers: { "idempotency-key": callPayload.idempotencyKey },
+    body: callPayload,
   });
   const routeOk = route.status === 200 &&
     route.body?.providerCallId === "upstream-call-audio-smoke" &&
@@ -268,6 +270,7 @@ function createPstnAudioUpstream() {
 
 function agentCallPayload() {
   return {
+    idempotencyKey: "agent-call:call-audio-smoke",
     draftId: "draft-audio-smoke",
     callId: "call-audio-smoke",
     targetPhone: "+8613800138000",
@@ -281,7 +284,12 @@ function agentCallPayload() {
 function translatedAudioPayload() {
   return {
     callId: "call-audio-smoke",
+    sessionId: "call-audio-smoke",
     segmentId: "seg-audio-smoke",
+    playbackId: "playback-audio-smoke",
+    generation: 1,
+    sourceLegId: "leg-host-audio-smoke",
+    targetLegId: "leg-guest-audio-smoke",
     sourceSpeakerRole: "host",
     targetSpeakerRole: "guest",
     language: "en",

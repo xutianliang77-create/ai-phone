@@ -11,8 +11,9 @@ import { mergeSessionNodeDiagnostics } from
   "../sessions/session-diagnostics-runtime.repository.js";
 import { withSessionWriteLock } from
   "../sessions/session-write-coordinator.js";
-import { getReadyVoiceProfileTtsConfig } from
-  "../voice-profiles/voice-profiles-runtime.service.js";
+import { getCallLinkTtsVoice } from "./call-link-tts-voice.js";
+import { findCallLinkTranslationState } from
+  "./call-link-translation-state.repository.js";
 import { findCallLink, registerCallLeg } from "./call-links.service.js";
 import { getCallLinkWorkerSupervisor } from "./call-link-worker-supervisor.js";
 
@@ -93,14 +94,25 @@ export function registerWorkerDispatchRuntimeRoutes(app: FastifyInstance) {
       workerId: body.workerId,
       jobId: body.jobId,
     });
-    const ttsVoice = await getReadyVoiceProfileTtsConfig(call.userId);
+    const ttsVoice = await getCallLinkTtsVoice(call.userId);
+    const translationControl = await findCallLinkTranslationState(
+      call.sessionId,
+    );
     return {
       callId: call.callId,
       sessionId: call.sessionId,
       roomName: call.roomName,
       generation: claim.generation,
       participantIdentity: body.participantIdentity,
-      ...(ttsVoice ? { ttsVoice } : {}),
+      ttsVoice,
+      ...(translationControl ? {
+        translationControl: {
+          sourceLanguage: translationControl.sourceLanguage,
+          targetLanguage: translationControl.targetLanguage,
+          uplinkPaused: translationControl.uplinkPaused,
+          controlGeneration: translationControl.controlGeneration,
+        },
+      } : {}),
     };
   });
 

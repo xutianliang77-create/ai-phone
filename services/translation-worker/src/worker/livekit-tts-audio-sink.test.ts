@@ -4,6 +4,12 @@ import {
   LiveKitTtsAudioSink,
   liveKitTtsTrackName,
 } from "./livekit-tts-audio-sink.js";
+import {
+  createFakeRtc,
+  FakeRoom,
+  pcm16,
+  waitUntil,
+} from "./livekit-tts-audio-sink.test-support.js";
 
 describe("LiveKitTtsAudioSink", () => {
   it("publishes a target-role audio track and captures PCM frames", async () => {
@@ -224,12 +230,24 @@ describe("LiveKitTtsAudioSink", () => {
   it("authorizes the target subscription before capturing any TTS audio", async () => {
     const rtc = createFakeRtc();
     const requests: unknown[] = [];
+    const events: string[] = [];
     const sink = new LiveKitTtsAudioSink({
       room: new FakeRoom(),
       rtc,
+      trackPermissions: {
+        allowTrack(targetIdentity, trackSid) {
+          expect(rtc.sources[0].captured).toEqual([]);
+          expect({ targetIdentity, trackSid }).toEqual({
+            targetIdentity: "guest-leg",
+            trackSid: "TR_1",
+          });
+          events.push("publisher_permission");
+        },
+      },
       trackAccess: {
         async authorizeTrack(request) {
           expect(rtc.sources[0].captured).toEqual([]);
+          events.push("server_authorization");
           requests.push(request);
         },
       },
@@ -257,78 +275,33 @@ describe("LiveKitTtsAudioSink", () => {
       trackSid: "TR_1",
       trackName: liveKitTtsTrackName("guest", 16000, "guest-leg"),
     }]);
+    expect(events).toEqual(["publisher_permission", "server_authorization"]);
     expect(rtc.sources[0].captured).toHaveLength(1);
   });
+
+  it("fails closed before capture when target-scoped publisher ACL is absent", async () => {
+    const rtc = createFakeRtc();
+    const sink = new LiveKitTtsAudioSink({
+      room: new FakeRoom(),
+      rtc,
+      trackAccess: { authorizeTrack: async () => undefined },
+    });
+
+    await expect(sink.play({
+      callId: "call_1",
+      segmentId: "seg_1",
+      playbackId: "pb_1",
+      generation: 1,
+      sourceLegId: "host-leg",
+      targetLegId: "guest-leg",
+      sourceSpeakerRole: "host",
+      targetSpeakerRole: "guest",
+      language: "en",
+      speech: {
+        audio: { format: "pcm16", sampleRate: 16000, data: pcm16([1, 2]) },
+      },
+      signal: new AbortController().signal,
+    })).rejects.toThrow("publisher permissions are unavailable");
+    expect(rtc.sources[0].captured).toEqual([]);
+  });
 });
-
-class FakeRoom {
-  readonly published: Array<{ track: unknown; options: unknown }> = [];
-  readonly localParticipant = {
-    publishTrack: async (track: unknown, options: unknown) => {
-      this.published.push({ track, options });
-      return { sid: "TR_1" };
-    },
-  };
-}
-
-function createFakeRtc(options: { captureDelayMs?: number } = {}) {
-  const sources: FakeAudioSource[] = [];
-  class FakeAudioFrame {
-    constructor(
-      readonly data: Int16Array,
-      readonly sampleRate: number,
-      readonly channels: number,
-      readonly samplesPerChannel: number,
-    ) {}
-  }
-  class FakeAudioSource {
-    readonly captured: FakeAudioFrame[] = [];
-    waited = 0;
-    cleared = 0;
-
-    constructor(readonly sampleRate: number, readonly channels: number) {
-      sources.push(this);
-    }
-
-    async captureFrame(frame: FakeAudioFrame) {
-      this.captured.push(frame);
-      if (options.captureDelayMs) {
-        await new Promise((resolve) => setTimeout(resolve, options.captureDelayMs));
-      }
-    }
-
-    async waitForPlayout() {
-      this.waited += 1;
-    }
-
-    clearQueue() {
-      this.cleared += 1;
-    }
-  }
-  return {
-    sources,
-    AudioFrame: FakeAudioFrame,
-    AudioSource: FakeAudioSource,
-    LocalAudioTrack: {
-      createAudioTrack: (name: string, source: FakeAudioSource) => ({ name, source }),
-    },
-    TrackPublishOptions: class {
-      source?: unknown;
-    },
-    TrackSource: { SOURCE_MICROPHONE: "microphone" },
-  };
-}
-
-function pcm16(samples: number[]) {
-  const buffer = Buffer.alloc(samples.length * 2);
-  samples.forEach((sample, index) => buffer.writeInt16LE(sample, index * 2));
-  return buffer.toString("base64");
-}
-
-async function waitUntil(predicate: () => boolean, timeoutMs = 100) {
-  const deadline = Date.now() + timeoutMs;
-  while (!predicate()) {
-    if (Date.now() >= deadline) throw new Error("condition not reached");
-    await new Promise((resolve) => setTimeout(resolve, 1));
-  }
-}

@@ -178,6 +178,23 @@ export class PostgresReliableOutboxRepository {
     return result;
   }
 
+  async acknowledgeByIdempotencyKey(idempotencyKey: string) {
+    const client = await this.pool.connect();
+    try {
+      const result = await client.query<{ id: string }>(`
+        UPDATE ai_phone.reliable_outbox_events
+        SET published_at = COALESCE(published_at, now()),
+            lease_owner = NULL,
+            lease_until = NULL
+        WHERE idempotency_key = $1 AND dead_lettered_at IS NULL
+        RETURNING id
+      `, [idempotencyKey]);
+      return result.rowCount === 1;
+    } finally {
+      client.release();
+    }
+  }
+
   async fail(id: string, owner: string, deadLetterAfter = 12) {
     return this.withLease(id, owner, `
       UPDATE ai_phone.reliable_outbox_events

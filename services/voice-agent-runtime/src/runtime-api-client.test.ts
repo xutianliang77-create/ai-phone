@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { VoiceAgentRuntimeApiClient } from "./runtime-api-client.js";
+import { VoiceAgentRuntimeApiError } from "./runtime-api-http.js";
 
 describe("VoiceAgentRuntimeApiClient", () => {
   it("binds snapshot requests to the dispatched call and internal secret", async () => {
@@ -45,6 +46,47 @@ describe("VoiceAgentRuntimeApiClient", () => {
       ticket: "signed-ticket",
       reason: "task_finished",
     });
+  });
+
+  it("preserves a bounded structured API code without exposing its message", async () => {
+    const fetchFn = vi.fn<typeof fetch>().mockResolvedValue(new Response(
+      JSON.stringify({
+        error: {
+          code: "delivery_owner_stale",
+          message: "private ownership diagnostics",
+        },
+      }),
+      { status: 409, headers: { "content-type": "application/json" } },
+    ));
+
+    await expect(createClient(fetchFn).authorizeDelivery({
+      snapshot: { draftId: "d1" } as never,
+      ticket: ticket(),
+      command: { deliveryAttemptId: "delivery-1" } as never,
+    })).rejects.toMatchObject({
+      name: "VoiceAgentRuntimeApiError",
+      code: "delivery_owner_stale",
+      statusCode: 409,
+      retryable: false,
+      message: expect.not.stringContaining("private ownership diagnostics"),
+    });
+  });
+
+  it("falls back safely when an error body exceeds the read limit", async () => {
+    const fetchFn = vi.fn<typeof fetch>().mockResolvedValue(new Response(
+      "x".repeat(16 * 1024 + 1),
+      { status: 503 },
+    ));
+
+    await expect(createClient(fetchFn).hangup({
+      snapshot: { draftId: "d1" } as never,
+      ticket: ticket(),
+      reason: "runtime_failed",
+    })).rejects.toEqual(expect.objectContaining<Partial<VoiceAgentRuntimeApiError>>({
+      code: "voice_agent_api_http_503",
+      statusCode: 503,
+      retryable: true,
+    }));
   });
 });
 

@@ -18,6 +18,8 @@ const legacyRepositories = new Set([
   "modules/agent-calls/agent-calls.repository.ts",
   "modules/agent-calls/agent-call-start.ts",
   "modules/agent-calls/agent-call-lease.repository.ts",
+  "modules/agent-calls/agent-call-pause.repository.ts",
+  "modules/agent-calls/agent-call-runtime-result.repository.ts",
   "modules/agent-calls/agent-call-status-update.ts",
   "modules/plans/plans.service.ts",
   "modules/usage/usage.service.ts",
@@ -35,6 +37,7 @@ const legacyRepositories = new Set([
   "modules/agent-calls/agent-consult.repository.ts",
   "modules/events/reliable-events.repository.ts",
   "modules/call-links/call-playbacks.repository.ts",
+  "modules/call-links/call-link-translation-state-legacy.repository.ts",
 ]);
 const snapshotAllowlist = new Set([
   "infrastructure/storage/postgres-cutover-audit.ts",
@@ -62,6 +65,8 @@ const legacyImportAllowlist = new Set([
   "modules/agent-calls/agent-calls-runtime.repository.ts",
   "modules/agent-calls/agent-call-start-runtime.ts",
   "modules/agent-calls/agent-call-lease-runtime.repository.ts",
+  "modules/agent-calls/agent-call-pause-runtime.repository.ts",
+  "modules/agent-calls/agent-call-runtime-result-runtime.repository.ts",
   "modules/agent-calls/agent-call-lease-recovery.ts",
   "modules/agent-calls/agent-call-webhook-runtime.ts",
   "modules/agent-calls/agent-orchestration-runtime.repository.ts",
@@ -80,13 +85,15 @@ const legacyImportAllowlist = new Set([
   "modules/voice-identities/voice-identities-runtime.service.ts",
   "modules/voice-identities/voice-identity-deletion-recovery-runtime.ts",
   "modules/voice-profiles/voice-profiles-runtime.service.ts",
+  "modules/call-links/call-link-translation-state.repository.ts",
 ]);
 const legacyImports = [];
 const snapshotImports = [];
 
 for (const file of sourceFiles(sourceRoot)) {
   const local = relative(sourceRoot, file);
-  if (local.endsWith(".test.ts") || legacyRepositories.has(local)) continue;
+  if (local.endsWith(".test.ts") || local.endsWith(".test-support.ts") ||
+    legacyRepositories.has(local)) continue;
   const source = readFileSync(file, "utf8");
   for (const imported of importSpecifiers(source)) {
     if (imported.typeOnly) continue;

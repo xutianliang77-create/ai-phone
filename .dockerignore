@@ -1,4 +1,7 @@
 .git
+.env*
+**/.env*
+release/domestic/release.env
 .cache
 .data
 .dart_tool
@@ -11,6 +14,7 @@ docs
 model-eval
 test-apps
 test-audio
+outputs
 services/model-services
 **/.venv*
 **/__pycache__

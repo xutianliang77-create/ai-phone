@@ -116,6 +116,27 @@ describe("PostgresReliableOutboxRepository.enqueue", () => {
       ["event_1", "outbox-test-owner"],
     );
   });
+
+  it("acknowledges an unpublished event by its exact idempotency key", async () => {
+    const query = vi.fn().mockResolvedValue({
+      rowCount: 1,
+      rows: [{ id: "event_1" }],
+    });
+    const release = vi.fn();
+    const repo = new PostgresReliableOutboxRepository({
+      connect: vi.fn().mockResolvedValue({ query, release }),
+    } as never);
+
+    await expect(repo.acknowledgeByIdempotencyKey(event.idempotencyKey))
+      .resolves.toBe(true);
+    expect(query).toHaveBeenCalledWith(
+      expect.stringContaining(
+        "WHERE idempotency_key = $1 AND dead_lettered_at IS NULL",
+      ),
+      [event.idempotencyKey],
+    );
+    expect(release).toHaveBeenCalledOnce();
+  });
 });
 
 function repository() {

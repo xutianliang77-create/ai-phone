@@ -56,9 +56,11 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('shows a localized offline state', (WidgetTester tester) async {
+  testWidgets('shows a localized offline state and retries',
+      (WidgetTester tester) async {
     final repository = _FakeSessionHistoryRepository(
       listError: Exception('ClientException: failed host lookup'),
+      listFailuresBeforeRecovery: 1,
     );
 
     await tester.pumpWidget(_TestApp(
@@ -67,6 +69,89 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('网络连接失败，请检查 API 服务是否可用'), findsOneWidget);
+    expect(find.text('重试'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('搜索'));
+    await tester.pumpAndSettle();
+    tester.widget<TextField>(find.byType(TextField)).controller!.text = '同传';
+    await tester.pump();
+
+    await tester.tap(find.text('重试'));
+    await tester.pumpAndSettle();
+
+    expect(repository.listCalls, 2);
+    expect(repository.queries, <String>['', '同传']);
+    expect(find.text('同传记录'), findsOneWidget);
+  });
+
+  testWidgets('opens a search result at its matching transcript segment',
+      (WidgetTester tester) async {
+    final repository = _FakeSessionHistoryRepository();
+    await tester.pumpWidget(_TestApp(
+      child: SessionHistoryPage(repository: repository),
+    ));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('搜索'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField), '既要');
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('同传记录'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('找到 1 / 2 段'), findsOneWidget);
+    expect(find.text('会后发送纪要'), findsOneWidget);
+    expect(find.text('今天下午三点开会'), findsNothing);
+  });
+
+  testWidgets('debounces rapid input and submits the latest query immediately',
+      (WidgetTester tester) async {
+    final repository = _FakeSessionHistoryRepository();
+    await tester.pumpWidget(_TestApp(
+      child: SessionHistoryPage(repository: repository),
+    ));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('搜索'));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.byType(TextField), '纪');
+    await tester.pump(const Duration(milliseconds: 100));
+    await tester.enterText(find.byType(TextField), '纪要');
+    await tester.pump(const Duration(milliseconds: 100));
+    await tester.enterText(find.byType(TextField), '纪要确认');
+    await tester.pump(const Duration(milliseconds: 299));
+    expect(repository.queries, <String>['']);
+
+    await tester.pump(const Duration(milliseconds: 1));
+    await tester.pumpAndSettle();
+    expect(repository.queries, <String>['', '纪要确认']);
+
+    await tester.enterText(find.byType(TextField), '立即搜索');
+    await tester.testTextInput.receiveAction(TextInputAction.search);
+    await tester.pumpAndSettle();
+    expect(repository.queries, <String>['', '纪要确认', '立即搜索']);
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(repository.queries, <String>['', '纪要确认', '立即搜索']);
+  });
+
+  testWidgets('closing search clears the hidden record filter',
+      (WidgetTester tester) async {
+    final repository = _FakeSessionHistoryRepository();
+    await tester.pumpWidget(_TestApp(
+      child: SessionHistoryPage(repository: repository),
+    ));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('搜索'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField), '纪要');
+    await tester.pump(const Duration(milliseconds: 100));
+    await tester.tap(find.byTooltip('清除'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(TextField), findsNothing);
+    expect(repository.queries, <String>['', '']);
   });
 }
 
@@ -99,15 +184,26 @@ class _TestApp extends StatelessWidget {
 }
 
 class _FakeSessionHistoryRepository extends SessionHistoryRepository {
-  _FakeSessionHistoryRepository({this.listError})
-      : super(shareService: _FakeFileShareService());
+  _FakeSessionHistoryRepository({
+    this.listError,
+    this.listFailuresBeforeRecovery,
+  }) : super(shareService: _FakeFileShareService());
 
   final Object? listError;
+  final int? listFailuresBeforeRecovery;
   bool generatedReview = false;
+  int listCalls = 0;
+  final List<String> queries = <String>[];
 
   @override
   Future<List<SessionListItem>> listSessions({String query = ''}) async {
-    if (listError != null) throw listError!;
+    listCalls += 1;
+    queries.add(query);
+    if (listError != null &&
+        (listFailuresBeforeRecovery == null ||
+            listCalls <= listFailuresBeforeRecovery!)) {
+      throw listError!;
+    }
     return <SessionListItem>[
       SessionListItem(
         sessionId: 's1',
@@ -184,6 +280,8 @@ class _FakeSessionHistoryRepository extends SessionHistoryRepository {
         SessionSegment(
           id: '2',
           sourceText: '会后发送纪要',
+          rawText: '会后发送既要',
+          optimizedText: '会后发送纪要',
           translatedText: 'Send meeting notes after the meeting',
         ),
       ],

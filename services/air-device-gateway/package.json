@@ -1,0 +1,22 @@
+{
+  "name": "@translation/air-device-gateway",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsx src/main.ts",
+    "start": "node dist/main.js",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run src"
+  },
+  "devDependencies": {
+    "wasmoon": "^1.16.0"
+  },
+  "dependencies": {
+    "@livekit/rtc-ffi-bindings": "0.12.73",
+    "@livekit/rtc-node": "0.13.33",
+    "@translation/contracts": "file:../../packages/contracts",
+    "serialport": "^13.0.0"
+  }
+}

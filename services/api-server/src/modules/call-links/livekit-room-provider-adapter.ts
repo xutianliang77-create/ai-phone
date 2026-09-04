@@ -13,6 +13,7 @@ interface LiveKitRoomApiClient {
     maxParticipants: number;
   }): Promise<unknown>;
   listParticipants(roomName: string): Promise<Array<{ identity?: string }>>;
+  removeParticipant(roomName: string, participantIdentity: string): Promise<unknown>;
   sendData(
     roomName: string,
     data: Uint8Array,
@@ -65,6 +66,10 @@ export class LiveKitRoomProviderAdapter implements MediaRoomProvider {
     return participants.flatMap(
       (participant) => participant.identity ? [participant.identity] : [],
     );
+  }
+
+  async removeParticipant(roomName: string, participantIdentity: string) {
+    await this.client.removeParticipant(roomName, participantIdentity);
   }
 
   async publish(

@@ -44,7 +44,9 @@ export function parseRealtimeNodeDiagnostics(
 function parseAudioLeg(value: unknown): RealtimeAudioLegDiagnosticsDto | undefined {
   if (!isRecord(value) || !boundedString(value.legId, 128) ||
     !["host", "guest"].includes(String(value.speakerRole)) ||
-    value.dropPolicy !== "drop_oldest") return undefined;
+    !["drop_oldest", "reject_newest"].includes(String(value.dropPolicy))) {
+    return undefined;
+  }
   const keys = [
     "capacityFrames", "receivedFrames", "dequeuedFrames", "processedFrames",
     "failedFrames", "inFlightFrames", "droppedFrames", "overflowDroppedFrames",
@@ -65,7 +67,7 @@ function parseAudioLeg(value: unknown): RealtimeAudioLegDiagnosticsDto | undefin
   return {
     legId: value.legId,
     speakerRole: value.speakerRole as "host" | "guest",
-    dropPolicy: "drop_oldest",
+    dropPolicy: value.dropPolicy as "drop_oldest" | "reject_newest",
     ...Object.fromEntries(keys.map((key) => [key, value[key]])),
     ...(value.firstReceivedSequence === undefined
       ? {} : { firstReceivedSequence: value.firstReceivedSequence }),

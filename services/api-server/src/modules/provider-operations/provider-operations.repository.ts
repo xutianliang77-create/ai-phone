@@ -10,7 +10,12 @@ import {
   runStoreTransaction,
 } from "../../infrastructure/storage/json-store.js";
 import { StorageConflictError } from "../../infrastructure/storage/sqlite-snapshot-store.js";
-import type { ProviderOperationRecord } from "./provider-operation-record.js";
+import type {
+  ProviderOperationOutboxFactory,
+  ProviderOperationRecord,
+} from "./provider-operation-record.js";
+import { attachProviderOperationOutbox } from
+  "./provider-operation-outbox.js";
 import { currentPlatformTraceId } from "../../infrastructure/observability/platform-telemetry.js";
 
 const terminalStatuses = new Set<ProviderOperationStatus>([
@@ -26,6 +31,7 @@ export function beginProviderOperation(input: {
   operationKey?: string;
   idempotencyKey: string;
   requestHash: string;
+  outboxFactory?: ProviderOperationOutboxFactory;
   now?: Date;
 }) {
   try {
@@ -43,6 +49,7 @@ function beginProviderOperationTransaction(input: {
   operationKey?: string;
   idempotencyKey: string;
   requestHash: string;
+  outboxFactory?: ProviderOperationOutboxFactory;
   now?: Date;
 }) {
   return runStoreTransaction(() => {
@@ -53,9 +60,15 @@ function beginProviderOperationTransaction(input: {
       operation.idempotencyKey === input.idempotencyKey
     );
     if (sameKey) {
-      return sameKey.requestHash === input.requestHash
-        ? { status: "replayed" as const, operation: sameKey }
-        : { status: "payload_conflict" as const, operation: sameKey };
+      if (sameKey.requestHash !== input.requestHash ||
+        sameKey.sessionId !== input.sessionId ||
+        sameKey.operationKey !== input.operationKey) {
+        return { status: "payload_conflict" as const, operation: sameKey };
+      }
+      if (attachOutbox(input.outboxFactory, sameKey, input.now)) {
+        persistStoreSnapshot();
+      }
+      return { status: "replayed" as const, operation: sameKey };
     }
     const sessionOperation = store.providerOperations.find((operation) =>
       operation.sessionId === input.sessionId &&
@@ -88,6 +101,7 @@ function beginProviderOperationTransaction(input: {
       ...(traceId ? { traceId } : {}),
     };
     store.providerOperations.push(operation);
+    attachOutbox(input.outboxFactory, operation, input.now);
     persistStoreSnapshot();
     return { status: "started" as const, operation };
   });
@@ -142,6 +156,34 @@ export function updateProviderOperation(input: {
   });
 }
 
+export function retryProviderOperation(input: {
+  operationId: string;
+  expectedVersion: number;
+  now?: Date;
+}) {
+  return runStoreTransaction(() => {
+    const operation = findProviderOperation(input.operationId);
+    if (!operation) return { status: "not_found" as const };
+    if (operation.version !== input.expectedVersion) {
+      return { status: "version_conflict" as const, operation };
+    }
+    if (operation.status !== "failed" ||
+      !["phone_hangup", "phone_dtmf"].includes(operation.operationType) ||
+      operation.lastErrorClass !== "unavailable") {
+      return { status: "invalid_state" as const, operation };
+    }
+    const now = (input.now ?? new Date()).toISOString();
+    operation.status = "in_flight";
+    operation.attempt += 1;
+    operation.version += 1;
+    operation.updatedAt = now;
+    delete operation.endedAt;
+    delete operation.lastErrorClass;
+    persistStoreSnapshot();
+    return { status: "retried" as const, operation };
+  });
+}
+
 function providerOperationId(
   sessionId: string,
   operationType: ProviderOperationType,
@@ -157,6 +199,18 @@ function providerOperationId(
 export function findProviderOperation(operationId: string) {
   return getStoreSnapshot().providerOperations.find(
     (operation) => operation.id === operationId,
+  ) ?? null;
+}
+
+export function findProviderOperationByIdempotency(
+  provider: CommunicationProvider,
+  operationType: ProviderOperationType,
+  idempotencyKey: string,
+) {
+  return getStoreSnapshot().providerOperations.find((operation) =>
+    operation.provider === provider &&
+    operation.operationType === operationType &&
+    operation.idempotencyKey === idempotencyKey
   ) ?? null;
 }
 
@@ -176,6 +230,18 @@ export function findActiveProviderOperations(operationType: ProviderOperationTyp
   return getStoreSnapshot().providerOperations.filter((operation) =>
     operation.operationType === operationType && !terminalStatuses.has(operation.status)
   );
+}
+
+function attachOutbox(
+  factory: ProviderOperationOutboxFactory | undefined,
+  operation: ProviderOperationRecord,
+  now: Date | undefined,
+) {
+  const store = getStoreSnapshot();
+  return attachProviderOperationOutbox(factory, operation, now, {
+    existing: store.outboxEvents,
+    push: (event) => store.outboxEvents.push(event),
+  });
 }
 
 function externalIdsMatch(
@@ -202,5 +268,5 @@ function canTransition(
   if (current === "accepted") {
     return ["active", "succeeded", "failed", "unknown"].includes(next);
   }
-  return current === "active" && ["succeeded", "failed"].includes(next);
+  return current === "active" && ["succeeded", "failed", "unknown"].includes(next);
 }

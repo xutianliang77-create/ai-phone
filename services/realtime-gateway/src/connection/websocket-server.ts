@@ -1,7 +1,7 @@
 import type { SessionEndReason } from "@translation/contracts";
 import { AudioFrameBatcher } from "./audio-frame-batcher.js";
 import { clearAudioFrameLog, logAudioFrameReceived } from "../metrics/audio-frame-logger.js";
-import { realtimeLogger } from "../metrics/realtime-metrics.js";
+import { loggableError, realtimeLogger } from "../metrics/realtime-metrics.js";
 import { clearTextSegmentLog } from "../metrics/text-segment-logger.js";
 import { parseIncomingEvent } from "../protocol/incoming-event-parser.js";
 import { buildError } from "../protocol/outgoing-event-builder.js";
@@ -21,28 +21,38 @@ import { logSpeakerAttributionConfigured, resolveSpeakerAttribution } from "./sp
 import { handleTextSegment } from "./client-text-segment-handler.js";
 import { endpointModeForRealtimeMode } from "./realtime-endpoint-mode.js";
 import { admitRealtimeConnection, sendRealtimeEvent } from "./realtime-connection-admission.js";
-import { createRealtimeServerRuntime } from "./realtime-server-runtime.js";
-
+import { createRealtimeServerRuntime, listenRealtimeServerRuntime } from "./realtime-server-runtime.js";
+import { coreDependencyFailureStage } from "./gateway-dependency-readiness.js";
 const router = new ProviderRouter();
 export { normalizeClientTextLanguage } from "../protocol/client-text-language.js";
 
 export function startWebSocketServer() {
+  const runtime = createRealtimeServerRuntime();
   const {
     env,
     protection,
+    dependencyReadiness,
     httpServer,
     server,
     sessionEventSink,
     usageBalanceClient,
     disconnectFinalizers,
-  } = createRealtimeServerRuntime();
+  } = runtime;
 
   server.on("connection", async (ws, request) => {
     const attachment = admitRealtimeConnection(ws, request, env);
     if (!attachment) return;
     const { session, generation, resumed } = attachment;
     let provider: RealtimeProvider;
+    let providerFailureStage: "provider" | "asr" | "translation" = "provider";
     try {
+      const dependencyFailure = coreDependencyFailureStage(
+        dependencyReadiness.readiness(),
+      );
+      if (dependencyFailure) {
+        providerFailureStage = dependencyFailure;
+        throw new Error(`Realtime ${dependencyFailure} dependency is unavailable`);
+      }
       provider = router.selectProvider(env);
       const domainLexiconPacks = domainLexiconPacksForSession(session, env);
       const terminology = await loadTerminologyForSession(session, env);
@@ -57,7 +67,7 @@ export function startWebSocketServer() {
         sourceLanguage: session.claims.sourceLanguage,
         targetLanguage: session.claims.targetLanguage,
         autoReverseTargetLanguage: session.claims.autoReverseTargetLanguage,
-        voiceOutput: session.claims.voiceOutput,
+        voiceOutput: session.voiceOutputEnabled ?? session.claims.voiceOutput,
         speakerAttribution,
         terminology,
         asrHotwords,
@@ -78,7 +88,7 @@ export function startWebSocketServer() {
       }
       sendRealtimeEvent(ws, buildError("provider_unavailable", "Realtime provider is unavailable", {
         sessionId: session.id,
-        stage: "provider",
+        stage: providerFailureStage,
         provider: env.provider,
         retryable: true,
       }));
@@ -116,7 +126,8 @@ export function startWebSocketServer() {
       provider,
       send: sendRealtime,
       onError: (error) => {
-        realtimeLogger.error({ error, sessionId: session.id }, "Realtime audio processing failed");
+        realtimeLogger.error({ error: loggableError(error),
+          sessionId: session.id }, "Realtime audio processing failed");
         sendRealtime(buildError("provider_unavailable", "Realtime audio processing failed", {
           sessionId: session.id,
           stage: "asr",
@@ -263,7 +274,7 @@ export function startWebSocketServer() {
             provider,
             audioBatcher,
             sendRealtime,
-            endRealtimeSession,
+            endRealtimeSession, ttsOutputQueue,
           ),
         (error) => {
           realtimeLogger.error({ error, sessionId: session.id }, "Realtime event processing failed");
@@ -335,13 +346,5 @@ export function startWebSocketServer() {
     ws.on("close", () => { void cleanupConnection(); });
   });
 
-  httpServer.listen(env.port, env.host, () => {
-    realtimeLogger.info({ host: env.host, port: env.port }, "Realtime gateway started");
-  });
-  httpServer.on("close", () => {
-    void protection.close();
-    disconnectFinalizers.close();
-    server.close();
-  });
-  return httpServer;
+  return listenRealtimeServerRuntime(runtime);
 }

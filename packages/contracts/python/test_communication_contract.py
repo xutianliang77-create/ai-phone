@@ -11,10 +11,16 @@ class CommunicationContractGoldenTest(unittest.TestCase):
     def test_python_decodes_shared_v1_fixtures(self) -> None:
         command = fixture("command.json")
         event = fixture("event.json")
+        work = fixture("agent-work-command.json")
+        receipt = fixture("client-playback-ended-event.json")
 
         self.assertEqual(parse_command(command), command)
         self.assertEqual(parse_event(event), event)
+        self.assertEqual(parse_command(work), work)
+        self.assertEqual(parse_event(receipt), receipt)
         self.assertEqual(event["playbackId"], "playback_001")
+        self.assertEqual(work["workId"], "work_001")
+        self.assertEqual(receipt["deliveryAttemptId"], "delivery_002")
 
     def test_additive_fields_are_compatible_and_versions_are_strict(self) -> None:
         event = fixture("event.json")

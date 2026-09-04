@@ -2,11 +2,13 @@ import { fileURLToPath } from "node:url";
 import {
   cli,
   ServerOptions,
-  WorkerPermissions,
 } from "@livekit/agents";
-import { TrackSource } from "@livekit/protocol";
 import { loadVoiceAgentRuntimeEnv } from "./config.js";
 import { parseVoiceAgentDispatchTicket } from "./runtime-ticket.js";
+import { voiceAgentParticipantIdentity } from
+  "./voice-agent-participant-identity.js";
+import { createVoiceAgentWorkerPermissions } from
+  "./voice-agent-worker-permissions.js";
 
 const workerLiveKitUrl = process.env.LIVEKIT_WORKER_URL?.trim();
 if (workerLiveKitUrl) process.env.LIVEKIT_URL = workerLiveKitUrl;
@@ -26,14 +28,7 @@ cli.runApp(new ServerOptions({
   initializeProcessTimeout: env.initializeTimeoutMs,
   jobMemoryWarnMB: env.jobMemoryWarnMB,
   jobMemoryLimitMB: env.jobMemoryLimitMB,
-  permissions: new WorkerPermissions(
-    true,
-    true,
-    false,
-    false,
-    [TrackSource.MICROPHONE],
-    true,
-  ),
+  permissions: createVoiceAgentWorkerPermissions(),
   requestFunc: async (request) => {
     const ticket = parseVoiceAgentDispatchTicket(request.job.metadata);
     if (!ticket || request.agentName !== env.agentName ||
@@ -44,7 +39,7 @@ cli.runApp(new ServerOptions({
     }
     await request.accept(
       "Voice Agent Runtime",
-      `voice-agent-${ticket.callId.slice(0, 12)}-g${ticket.generation}`,
+      voiceAgentParticipantIdentity(ticket),
       JSON.stringify({
         participantRole: "worker",
         runtime: "voice_agent",

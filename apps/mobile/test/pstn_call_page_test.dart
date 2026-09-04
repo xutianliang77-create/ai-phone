@@ -125,7 +125,11 @@ void main() {
     );
     await tester.tap(find.text('检查拨号信息'));
     await tester.pumpAndSettle();
-    await tester.ensureVisible(find.text('开始拨打'));
+    await tester.scrollUntilVisible(
+      find.text('开始拨打'),
+      180,
+      scrollable: find.byType(Scrollable).first,
+    );
     await tester.pumpAndSettle();
     await tester.tap(find.text('开始拨打'));
     await tester.pumpAndSettle();
@@ -135,7 +139,63 @@ void main() {
     expect(apiClient.connectionConfirmCount, 1);
     expect(apiClient.sipOutboundCount, 1);
     expect(roomClient.connectedToken?.participantRole, 'host');
+    expect(roomClient.translationMediaOnly, isTrue);
     expect(find.text('电话已接通'), findsOneWidget);
+  });
+
+  testWidgets(
+      'uses Air780 carrier state instead of LiveKit presence for call status',
+      (tester) async {
+    final apiClient = FakeCallLinkApiClient(
+      air780CarrierState: 'ringing',
+    );
+    await _pumpPage(
+      tester,
+      config: _config(const RegionEditionConfig.international()),
+      apiClient: apiClient,
+      roomClient: FakeCallRoomClient(),
+      voiceConsentStore: MemoryVoiceProcessingConsentStore.accepted(),
+      fetcher: (_) async => const PstnCallReadiness(
+        status: 'ready',
+        policy: 'pstn_enabled',
+        enabled: true,
+        provider: 'air780_volte',
+        issues: <String>[],
+      ),
+    );
+
+    await tester.enterText(
+      find.byKey(const Key('pstn-phone-field')),
+      '+8613800138000',
+    );
+    await tester.scrollUntilVisible(
+      find.byType(CheckboxListTile),
+      240,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.tap(find.byType(CheckboxListTile));
+    await tester.scrollUntilVisible(
+      find.text('检查拨号信息'),
+      180,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.tap(find.text('检查拨号信息'));
+    await tester.pumpAndSettle();
+    final dialButton = find.widgetWithText(FilledButton, '开始拨打');
+    await tester.scrollUntilVisible(
+      dialButton,
+      180,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.ensureVisible(dialButton);
+    await tester.pumpAndSettle();
+    await tester.tap(dialButton);
+    await tester.pump(const Duration(seconds: 2));
+    await tester.pumpAndSettle();
+
+    expect(apiClient.air780StatusCount, greaterThanOrEqualTo(1));
+    expect(find.text('对方电话振铃中'), findsOneWidget);
+    expect(find.text('电话已接通'), findsNothing);
   });
 
   testWidgets('rejects invalid number and missing disclosure', (tester) async {

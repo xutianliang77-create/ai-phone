@@ -9,8 +9,7 @@ import {
 } from "../provider-operations/provider-operations-runtime.repository.js";
 import { SessionVersionConflictError } from "../sessions/sessions-runtime.repository.js";
 import { withSessionWriteLock } from "../sessions/session-write-coordinator.js";
-import { getReadyVoiceProfileTtsConfig } from
-  "../voice-profiles/voice-profiles-runtime.service.js";
+import { getCallLinkTtsVoice } from "./call-link-tts-voice.js";
 import { getCallLinkWorkerSupervisor } from "./call-link-worker-supervisor.js";
 import {
   type CallLinkRecord,
@@ -170,7 +169,7 @@ export function registerCallLinkInternalRoutes(app: FastifyInstance) {
           participantRole: "worker",
           joinType: "worker",
         });
-        const ttsVoice = await getReadyVoiceProfileTtsConfig(record.userId);
+        const ttsVoice = await getCallLinkTtsVoice(record.userId);
         return {
           ...token,
           sessionId: record.sessionId,

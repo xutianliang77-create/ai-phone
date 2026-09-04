@@ -46,6 +46,7 @@ export function requireAgentTaskPrimary(value: unknown, taskId: string) {
   optional(task.callId, 160);
   optional(task.providerCallId, 200);
   optional(task.providerOperationId, 200);
+  optional(task.takeoverParticipantIdentity, 256);
   optional(task.workerLeaseOwner, 160);
   optional(task.workerLeaseTokenHash, 128);
   if (task.workerLeaseAttempt !== undefined && !nonnegative(task.workerLeaseAttempt)) {
@@ -55,10 +56,15 @@ export function requireAgentTaskPrimary(value: unknown, taskId: string) {
     task.authorizedAt, task.queuedAt, task.startedAt, task.completedAt,
     task.failedAt, task.cancelledAt, task.workerLeaseExpiresAt,
     task.takeoverRequestedAt, task.takeoverReadyAt, task.takeoverResolvedAt,
+    task.agentPausedAt, task.agentResumedAt,
   ]) {
     if (value !== undefined && !timestamp(value)) {
       throw new Error("Invalid PostgreSQL Agent task timestamp");
     }
+  }
+  if (task.agentControlState !== undefined &&
+    !["running", "paused"].includes(task.agentControlState)) {
+    throw new Error("Invalid PostgreSQL Agent task control state");
   }
   return task as AgentTaskPrimaryRecord;
 }

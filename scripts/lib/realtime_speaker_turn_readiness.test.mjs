@@ -28,6 +28,132 @@ describe("realtime speaker turn readiness", () => {
     expect(result.errors.join(" ")).toContain("sortformer/active");
     expect(result.errors.join(" ")).toContain("Expected 2 speakers");
   });
+
+  it("accepts one persisted speaker without a false boundary", () => {
+    const detail = {
+      status: "ended",
+      segments: [segment("a", "turn_1", "speaker_1", "en", 0)],
+      diagnostics: {
+        audio: { droppedFrameCount: 0 },
+        speakerTurns: {
+          confirmedBoundaryCount: 0,
+          commitHitCount: 0,
+          commitMissCount: 0,
+          commitErrorCount: 0,
+          endpointRaceCount: 0,
+        },
+      },
+    };
+    const result = evaluateRealtimeSpeakerTurnReadiness({
+      gatewayHealth: { speakerProvider: "http", sessionEventSink: "api" },
+      speakerHealth: { provider: "sortformer", mode: "active" },
+      detail,
+    }, {
+      expectedSpeakerCount: 1,
+      requireBoundary: false,
+      requiredLanguages: ["en"],
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.speakerIds).toEqual(["speaker_1"]);
+    expect(result.turnIds).toEqual(["turn_1"]);
+  });
+
+  it("rejects a false second speaker in a single-speaker gate", () => {
+    const detail = sessionDetail();
+    detail.segments[1].dominantLanguage = "en";
+    const result = evaluateRealtimeSpeakerTurnReadiness({
+      gatewayHealth: { speakerProvider: "http", sessionEventSink: "api" },
+      speakerHealth: { provider: "sortformer", mode: "active" },
+      detail,
+    }, {
+      expectedSpeakerCount: 1,
+      requireBoundary: false,
+      requiredLanguages: ["en"],
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.errors.join(" ")).toContain("Expected 1 speakers");
+    expect(result.errors.join(" ")).toContain("Unexpected speaker boundary");
+  });
+
+  it("rejects session end persistence above the latency gate", () => {
+    const result = evaluateRealtimeSpeakerTurnReadiness({
+      gatewayHealth: { speakerProvider: "http", sessionEventSink: "api" },
+      speakerHealth: { provider: "sortformer", mode: "active" },
+      detail: sessionDetail(),
+      endDelivery: { historyReady: true, historyLatencyMs: 1501 },
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.errors.join(" ")).toContain("1501ms");
+  });
+
+  it("accepts a commit miss repaired by a boundary revision", () => {
+    const detail = sessionDetail();
+    detail.diagnostics.speakerTurns.commitMissCount = 1;
+    detail.diagnostics.speakerTurns.boundaryRevisionSuccessCount = 1;
+    detail.diagnostics.speakerTurns.endpointRaceCount = 1;
+
+    const result = evaluateRealtimeSpeakerTurnReadiness({
+      gatewayHealth: { speakerProvider: "http", sessionEventSink: "api" },
+      speakerHealth: { provider: "sortformer", mode: "active" },
+      detail,
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.unresolvedCommitMissCount).toBe(0);
+    expect(result.unresolvedEndpointRaceCount).toBe(0);
+  });
+
+  it("accepts a commit miss resolved by the token timing boundary ledger", () => {
+    const detail = sessionDetail();
+    detail.diagnostics.speakerTurns.confirmedBoundaryCount = 2;
+    detail.diagnostics.speakerTurns.commitMissCount = 1;
+    detail.diagnostics.speakerTurns.unresolvedCommitMissCount = 0;
+    detail.diagnostics.speakerTurns.boundaryOutcomeCounts = {
+      commit_hit: 1,
+      token_timing_split: 1,
+    };
+
+    const result = evaluateRealtimeSpeakerTurnReadiness({
+      gatewayHealth: { speakerProvider: "http", sessionEventSink: "api" },
+      speakerHealth: { provider: "sortformer", mode: "active" },
+      detail,
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.unresolvedCommitMissCount).toBe(0);
+  });
+
+  it("rejects commit misses left unresolved after revision", () => {
+    const detail = sessionDetail();
+    detail.diagnostics.speakerTurns.commitMissCount = 2;
+    detail.diagnostics.speakerTurns.boundaryRevisionSuccessCount = 1;
+
+    const result = evaluateRealtimeSpeakerTurnReadiness({
+      gatewayHealth: { speakerProvider: "http", sessionEventSink: "api" },
+      speakerHealth: { provider: "sortformer", mode: "active" },
+      detail,
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.unresolvedCommitMissCount).toBe(1);
+  });
+
+  it("rejects endpoint races left unresolved", () => {
+    const detail = sessionDetail();
+    detail.diagnostics.speakerTurns.endpointRaceCount = 2;
+
+    const result = evaluateRealtimeSpeakerTurnReadiness({
+      gatewayHealth: { speakerProvider: "http", sessionEventSink: "api" },
+      speakerHealth: { provider: "sortformer", mode: "active" },
+      detail,
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.unresolvedEndpointRaceCount).toBe(1);
+  });
 });
 
 function sessionDetail() {

@@ -50,7 +50,7 @@ describe("LiveKitCallAudioSource", () => {
     expect(rtc.room.connected).toEqual({
       url: "wss://livekit.example.cn",
       token: "worker-token",
-      opts: { autoSubscribe: true, dynacast: false },
+      opts: { autoSubscribe: false, dynacast: false },
     });
     expect(worker.started).toEqual(["call_1"]);
     expect(worker.frames[0]).toMatchObject({

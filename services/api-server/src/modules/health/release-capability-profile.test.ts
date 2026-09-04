@@ -35,7 +35,15 @@ describe("release capability profile", () => {
       status: "ready",
       profile: "core_translation",
       explicit: false,
-      deferredCapabilities: ["livekit_sip", "agent", "egress"],
+      deferredCapabilities: [
+        "livekit_sip",
+        "agent",
+        "egress",
+        "payment",
+        "sms",
+        "diagnostics_alerting",
+        "release_materials",
+      ],
       issues: [],
     });
   });

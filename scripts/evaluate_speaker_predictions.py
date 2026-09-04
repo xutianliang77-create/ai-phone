@@ -6,14 +6,14 @@ from pathlib import Path
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--suite", required=True)
+    parser.add_argument("--suite", nargs="+", required=True)
     parser.add_argument("--predictions", required=True)
     parser.add_argument("--output")
     parser.add_argument("--max-der", type=float, default=0.20)
     parser.add_argument("--max-latency-ms", type=int, default=1200)
     args = parser.parse_args()
 
-    suite = json.loads(Path(args.suite).read_text())
+    suite = load_suites(args.suite)
     prediction_payload = json.loads(Path(args.predictions).read_text())
     cases = prediction_cases(prediction_payload, suite)
     results = [
@@ -51,6 +51,18 @@ def prediction_cases(payload, suite):
     if len(suite_by_id) != 1:
         raise ValueError("single prediction payload requires a one-case suite")
     return [(next(iter(suite_by_id.values())), payload["predicted"])]
+
+
+def load_suites(paths: list[str]) -> dict[str, object]:
+    cases = [
+        case
+        for path in paths
+        for case in json.loads(Path(path).read_text())["cases"]
+    ]
+    case_ids = [case["id"] for case in cases]
+    if len(case_ids) != len(set(case_ids)):
+        raise ValueError("suite case ids must be unique")
+    return {"cases": cases}
 
 
 def evaluate_case(case, predictions, max_der: float, max_latency_ms: int):
@@ -93,12 +105,30 @@ def annotation(spans):
     from pyannote.core import Annotation, Segment
 
     result = Annotation()
-    for index, span in enumerate(spans):
-        result[
-            Segment(span["startMs"] / 1000, span["endMs"] / 1000),
-            index,
-        ] = span["speakerId"]
+    grouped = {}
+    for span in spans:
+        grouped.setdefault(span["speakerId"], []).append(
+            (span["startMs"], span["endMs"]),
+        )
+    index = 0
+    for speaker_id, intervals in grouped.items():
+        for start_ms, end_ms in merge_intervals(intervals):
+            result[
+                Segment(start_ms / 1000, end_ms / 1000),
+                index,
+            ] = speaker_id
+            index += 1
     return result
+
+
+def merge_intervals(intervals):
+    merged = []
+    for start_ms, end_ms in sorted(intervals):
+        if merged and start_ms <= merged[-1][1]:
+            merged[-1] = (merged[-1][0], max(merged[-1][1], end_ms))
+        else:
+            merged.append((start_ms, end_ms))
+    return merged
 
 
 def metric_values(values):

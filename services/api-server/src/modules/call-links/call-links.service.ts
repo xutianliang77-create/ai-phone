@@ -195,6 +195,38 @@ export async function hasActiveCallWorker(callId: string) {
   );
 }
 
+export async function activeCallLegsForRole(
+  callId: string,
+  participantRole: CallParticipantRole,
+) {
+  const record = await findCallLink(callId);
+  if (!record || record.status === "ended") return [];
+  const session = await findSession(record.sessionId);
+  return (session?.callLegs ?? []).filter(
+    (leg) => leg.status === "active" &&
+      leg.participantRole === participantRole,
+  );
+}
+
+export async function endCallLeg(
+  callId: string,
+  participantIdentity: string,
+  endedAt = new Date().toISOString(),
+) {
+  const record = await findCallLink(callId);
+  if (!record || record.status === "ended") return null;
+  const session = await findSession(record.sessionId);
+  const leg = session?.callLegs?.find(
+    (candidate) => candidate.id === participantIdentity,
+  );
+  if (!leg || leg.status === "ended") return session;
+  return upsertCallLeg(record.sessionId, {
+    ...leg,
+    status: "ended",
+    endedAt,
+  });
+}
+
 export async function persistedCallRoomHumanPresence(callId: string) {
   const record = await findCallLink(callId);
   const session = record ? await findSession(record.sessionId) : null;

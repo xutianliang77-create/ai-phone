@@ -20,12 +20,15 @@ export type VoiceAgentRuntimeEventType =
   | "amd_classified"
   | "ivr_detected"
   | "takeover_ready"
+  | "response_start_timeout"
+  | "audio_capacity_exceeded"
   | "structured_result"
   | "failed"
   | "ending";
 
 export type VoiceAgentRuntimeCommand =
   | "continue"
+  | "pause"
   | "takeover"
   | "cancel";
 
@@ -34,7 +37,7 @@ export interface VoiceAgentControlMessage {
   controlId: string;
   callId: string;
   generation: number;
-  command: "takeover" | "cancel" | "resume";
+  command: "pause" | "takeover" | "cancel" | "resume";
   issuedAt: string;
   expiresAt: string;
 }
@@ -60,7 +63,15 @@ export interface VoiceAgentRuntimeSnapshotDto {
   sessionId: string;
   roomName: string;
   participantIdentity: string;
-  sipParticipantIdentity: string;
+  telephonyProvider: "air780_volte" | "livekit_sip";
+  calleeParticipantIdentity: string;
+  airDeviceBinding?: {
+    deviceId: string;
+    leaseId: string;
+    callGeneration: number;
+  };
+  /** Compatibility field for older SIP Voice Agent runtimes. */
+  sipParticipantIdentity?: string;
   generation: number;
   run: AgentRunDto;
   mode: Extract<AgentExecutionMode, "autonomous">;
@@ -110,4 +121,6 @@ export interface VoiceAgentToolAuthorization {
   executionId: string;
   authorized: boolean;
   reason?: string;
+  executionMode?: "livekit_sip" | "provider_api";
+  providerStatus?: "succeeded" | "unknown";
 }

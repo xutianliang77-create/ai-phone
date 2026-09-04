@@ -32,6 +32,10 @@ import {
 import { ensureAgentCallSession } from "./agent-call-session.js";
 import { startAgentCallDraft as startLegacyAgentCallDraft } from
   "./agent-call-start.js";
+import {
+  agentCallDialToolName,
+  configuredAgentCallProvider,
+} from "./agent-call-provider-profile.js";
 
 export async function startAgentCallDraft(
   userId: string,
@@ -137,10 +141,8 @@ function queue(current: AgentCallRecord, callId: string, now: string) {
   }
   current.status = "queued";
   current.callId = callId;
-  current.executionProvider = cleanText(
-    process.env.PSTN_PROVIDER ?? process.env.AGENT_CALL_PROVIDER_ADAPTER,
-    80,
-  ) || "domestic_bridge";
+  current.executionProvider = configuredAgentCallProvider() ??
+    (cleanText(process.env.PSTN_PROVIDER, 80) || "domestic_bridge");
   current.queuedAt = now;
   current.updatedAt = now;
   return current;
@@ -166,7 +168,7 @@ async function ensureStartArtifacts(
   })).digest("hex");
   const tool = await requestAgentToolExecution({
     runId: begun.run.id,
-    toolName: "place_sip_call",
+    toolName: agentCallDialToolName,
     toolVersion: "v1",
     argumentsHash,
     riskLevel: "sensitive",

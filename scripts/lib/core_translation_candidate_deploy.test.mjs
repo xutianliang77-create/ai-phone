@@ -1,4 +1,10 @@
-import { chmodSync, rmSync } from "node:fs";
+import {
+  chmodSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
+import path from "node:path";
 import { afterEach, describe, expect, test } from "vitest";
 import { checkCoreTranslationCandidateDeploy } from
   "./core_translation_candidate_deploy.mjs";
@@ -82,6 +88,50 @@ describe("core translation candidate deployment contract", () => {
       "domestic release env VOICE_AGENT_ENABLED must be false",
     ]));
   });
+
+  test("rejects a shared model host even when release endpoints are dedicated", () => {
+    const fixture = createCoreFixture(tempDirs);
+    const routingFile = path.join(
+      fixture.root,
+      "release/domestic/model-routing.json",
+    );
+    const routing = JSON.parse(readFileSync(routingFile, "utf8"));
+    routing.profiles.domestic_server_qwen3_hymt2_voxcpm2.env.gateway
+      .TRANSLATION_BASE_URL = "http://maruko-models.internal:8003/v1";
+    writeFileSync(routingFile, JSON.stringify(routing));
+
+    const result = checkCoreTranslationCandidateDeploy(fixture);
+
+    expect(result.status).toBe("not_ready");
+    expect(result.issues).toContain(
+      "core candidate model endpoints must use WUJIE_DEDICATED_MODEL_HOSTS",
+    );
+    const isolation = result.checks.find(
+      (check) => check.name === "candidate_model_endpoint_isolation",
+    );
+    expect(isolation.details.violations).toContainEqual(expect.objectContaining({
+      source: "model_routing:gateway",
+      key: "TRANSLATION_BASE_URL",
+      hostname: "maruko-models.internal",
+    }));
+  });
+
+  test("requires a dedicated host resource domain", () => {
+    const fixture = createCoreFixture(tempDirs, {
+      WUJIE_RESOURCE_ISOLATION_MODE: "shared",
+      WUJIE_RESOURCE_DOMAIN: "maruko-shared",
+      WUJIE_DEDICATED_MODEL_HOSTS: "",
+    });
+
+    const result = checkCoreTranslationCandidateDeploy(fixture);
+
+    expect(result.status).toBe("not_ready");
+    expect(result.issues).toEqual(expect.arrayContaining([
+      "core candidate requires WUJIE_RESOURCE_ISOLATION_MODE=dedicated_host",
+      "core candidate requires an isolated WUJIE_RESOURCE_DOMAIN",
+      "core candidate requires WUJIE_DEDICATED_MODEL_HOSTS",
+    ]));
+  });
 });
 
 function createCoreFixture(tempDirs, overrides = {}) {
@@ -96,6 +146,10 @@ function createCoreFixture(tempDirs, overrides = {}) {
     VOICE_AGENT_OPERATOR_CONSULT_ENABLED: "false",
     LIVEKIT_EGRESS_ENABLED: "false",
     LIVEKIT_EGRESS_ARTIFACT_WORKER_ENABLED: "false",
+    WUJIE_RESOURCE_ISOLATION_MODE: "dedicated_host",
+    WUJIE_RESOURCE_DOMAIN: "wujie-core-translation",
+    WUJIE_DEDICATED_MODEL_HOSTS:
+      "asr.qkxy.cn,translation.qkxy.cn,tts.qkxy.cn",
     ...overrides,
   }));
   return { root, envFile };

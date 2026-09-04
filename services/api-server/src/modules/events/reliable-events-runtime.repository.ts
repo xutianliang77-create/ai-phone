@@ -125,6 +125,18 @@ export async function markOutboxPublished(event: ClaimedOutboxEvent) {
   return true;
 }
 
+export async function markOutboxPublishedByIdempotencyKey(
+  idempotencyKey: string,
+) {
+  const runtime = getRepositoryRuntime();
+  if (runtime.driver !== "postgres") {
+    return Boolean(legacy.markOutboxPublished(idempotencyKey));
+  }
+  return runtime.postgres.reliableOutbox.acknowledgeByIdempotencyKey(
+    idempotencyKey,
+  );
+}
+
 export async function markOutboxFailed(
   event: ClaimedOutboxEvent,
   _error: unknown,

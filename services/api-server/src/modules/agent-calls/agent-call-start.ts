@@ -27,6 +27,10 @@ import {
 } from "./agent-orchestration.repository.js";
 import { ensureAgentCallSession } from "./agent-call-session.js";
 import { tryAcquireAgentCallMutation } from "./agent-call-mutation-lock.js";
+import {
+  agentCallDialToolName,
+  configuredAgentCallProvider,
+} from "./agent-call-provider-profile.js";
 
 export async function startAgentCallDraft(
   userId: string,
@@ -140,10 +144,8 @@ function commit(
   }
   draft.status = "queued";
   draft.callId = prepared.callId;
-  draft.executionProvider = cleanText(
-    process.env.PSTN_PROVIDER ?? process.env.AGENT_CALL_PROVIDER_ADAPTER,
-    80,
-  ) || "domestic_bridge";
+  draft.executionProvider = configuredAgentCallProvider() ??
+    (cleanText(process.env.PSTN_PROVIDER, 80) || "domestic_bridge");
   draft.queuedAt = prepared.now;
   draft.updatedAt = prepared.now;
   const run = beginAgentRun({
@@ -155,7 +157,7 @@ function commit(
   }).run;
   requestAgentToolExecution({
     runId: run.id,
-    toolName: "place_sip_call",
+    toolName: agentCallDialToolName,
     toolVersion: "v1",
     argumentsHash: createHash("sha256").update(JSON.stringify({
       callId: prepared.callId,

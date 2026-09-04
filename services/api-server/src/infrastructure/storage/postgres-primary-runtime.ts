@@ -9,14 +9,34 @@ import { PostgresAgentHandoffsRepository } from
   "../../modules/agent-calls/postgres-agent-handoffs.repository.js";
 import { PostgresAgentRunsRepository } from
   "../../modules/agent-calls/postgres-agent-runs.repository.js";
+import { PostgresAgentVoiceTurnsRepository } from
+  "../../modules/agent-calls/postgres-agent-voice-turns.repository.js";
 import { PostgresAgentTasksRepository } from
   "../../modules/agent-calls/postgres-agent-tasks.repository.js";
+import { PostgresAgentWorksRepository } from
+  "../../modules/agent-calls/postgres-agent-works.repository.js";
+import { PostgresAgentWorkPermissionsRepository } from
+  "../../modules/agent-calls/postgres-agent-work-permissions.repository.js";
+import { PostgresVoiceClientOwnershipRepository } from
+  "../../modules/agent-calls/postgres-voice-client-ownership.repository.js";
+import { PostgresAgentDeliveriesRepository } from
+  "../../modules/agent-calls/postgres-agent-delivery.repository.js";
+import { PostgresAgentDeliveryUpdates } from
+  "../../modules/agent-calls/postgres-agent-delivery-updates.js";
+import { PostgresAgentDeliveryClientEventsRepository } from
+  "../../modules/agent-calls/postgres-agent-delivery-client-events.repository.js";
 import { PostgresBillingRepository } from
   "../../modules/billing/postgres-billing.repository.js";
 import { PostgresBillingQueriesRepository } from
   "../../modules/billing/postgres-billing-queries.repository.js";
 import { PostgresBillingNotificationsRepository } from
   "../../modules/billing/postgres-billing-notifications.repository.js";
+import { PostgresAirDeviceCallsRepository } from
+  "../../modules/device-calls/postgres-air-device-calls.repository.js";
+import { PostgresAirDeviceCallEvents } from
+  "../../modules/device-calls/postgres-air-device-call-events.js";
+import { PostgresAirDeviceRegistryRepository } from
+  "../../modules/device-calls/postgres-air-device-registry.repository.js";
 import { PostgresIngressRepository } from
   "../../modules/ingress/postgres-ingress.repository.js";
 import { PostgresProviderOperationsRepository } from
@@ -53,12 +73,14 @@ import { PostgresReliableOutboxRepository } from
 
 export function createPostgresPrimaryRuntime() {
   const pool = new Pool(buildPostgresPrimaryPoolConfig());
+  const reliableInbox = new PostgresReliableInboxRepository(pool);
+  const reliableOutbox = new PostgresReliableOutboxRepository(pool);
   return {
     pool,
     leases: new PostgresAggregateLeaseRepository(pool),
     commandRetention: new PostgresPrimaryCommandRetention(pool),
-    reliableInbox: new PostgresReliableInboxRepository(pool),
-    reliableOutbox: new PostgresReliableOutboxRepository(pool),
+    reliableInbox,
+    reliableOutbox,
     productRecords: new PostgresProductRecordsRepository(pool),
     sessions: new PostgresSessionsRepository(pool),
     sessionCompletion: new PostgresSessionCompletionRepository(pool),
@@ -73,6 +95,14 @@ export function createPostgresPrimaryRuntime() {
     ingress: new PostgresIngressRepository(pool),
     agentRuns: new PostgresAgentRunsRepository(pool),
     agentTasks: new PostgresAgentTasksRepository(pool),
+    agentWorks: new PostgresAgentWorksRepository(pool),
+    agentWorkPermissions: new PostgresAgentWorkPermissionsRepository(pool),
+    agentVoiceTurns: new PostgresAgentVoiceTurnsRepository(pool),
+    voiceClientOwnerships: new PostgresVoiceClientOwnershipRepository(pool),
+    agentDeliveries: new PostgresAgentDeliveriesRepository(pool),
+    agentDeliveryUpdates: new PostgresAgentDeliveryUpdates(pool),
+    agentDeliveryClientEvents:
+      new PostgresAgentDeliveryClientEventsRepository(pool),
     agentActions: new PostgresAgentActionsRepository(pool),
     agentHandoffs: new PostgresAgentHandoffsRepository(pool),
     agentConsults: new PostgresAgentConsultsRepository(pool),
@@ -80,6 +110,12 @@ export function createPostgresPrimaryRuntime() {
     billing: new PostgresBillingRepository(pool),
     billingQueries: new PostgresBillingQueriesRepository(pool),
     billingNotifications: new PostgresBillingNotificationsRepository(pool),
+    airDeviceRegistry: new PostgresAirDeviceRegistryRepository(pool),
+    airDeviceCalls: new PostgresAirDeviceCallsRepository(pool),
+    airDeviceCallEvents: new PostgresAirDeviceCallEvents({
+      inbox: reliableInbox,
+      outbox: reliableOutbox,
+    }),
     close: () => pool.end(),
   };
 }

@@ -1,8 +1,4 @@
 import type { FastifyInstance } from "fastify";
-import {
-  isTranslationLanguage,
-  type CreateSipOutboundCallRequest,
-} from "@translation/contracts";
 import { sendError } from "../../infrastructure/http/errors.js";
 import { requireAccount } from "../account/account-auth.js";
 import { completeSessionWithUsage } from "../sessions/session-completion.js";
@@ -28,6 +24,9 @@ import {
   type LiveKitSipConfig,
 } from "./livekit-sip-readiness.js";
 import { liveKitSipParticipantIdentity } from "./livekit-sip-identity.js";
+import { parsePhoneOutboundRequest } from "./call-link-phone-request.js";
+import { configureCallLinkTranslationState } from
+  "./call-link-translation-state.repository.js";
 
 export function setLiveKitSipProviderFactoryForTests(
   factory: Parameters<typeof setLiveKitSipOutboundProviderFactoryForTests>[0],
@@ -40,7 +39,7 @@ export function registerCallLinkSipRoutes(app: FastifyInstance) {
     const account = await requireAccount(request, reply);
     if (!account) return;
     const params = request.params as { callId: string };
-    const parsed = parseRequest(request.body);
+    const parsed = parsePhoneOutboundRequest(request.body);
     if (!parsed) {
       return sendError(
         reply,
@@ -84,6 +83,12 @@ export function registerCallLinkSipRoutes(app: FastifyInstance) {
     const started = await withSessionWriteLock(params.callId, async () => {
       const validation = await validateDial(params.callId, account.id);
       if (!validation.ok) return validation;
+      if (!await configureCallLinkTranslationState({
+        sessionId: validation.record.sessionId,
+        sourceLanguage: parsed.sourceLanguage,
+        targetLanguage: parsed.targetLanguage,
+      })) return failure(409, "translation_language_binding_conflict",
+        "Translation language binding conflicts");
       return {
         ok: true as const,
         record: validation.record,
@@ -171,43 +176,11 @@ async function validateDial(
     return failure(409, "sip_host_not_connected", "Host must join before dialing");
   }
   const existing = await findSessionProviderOperation(record.sessionId, "sip_outbound");
-  if (presence.activeGuestCount > 0 && !existing) {
+  const existingPhone = await findSessionProviderOperation(record.sessionId, "phone_outbound");
+  if (existingPhone || (presence.activeGuestCount > 0 && !existing)) {
     return failure(409, "sip_guest_already_connected", "A guest is already connected");
   }
   return { ok: true, record };
-}
-
-function parseRequest(body: unknown): CreateSipOutboundCallRequest | null {
-  if (!body || typeof body !== "object") return null;
-  const value = body as Record<string, unknown>;
-  const targetPhone = typeof value.targetPhone === "string"
-    ? value.targetPhone.trim()
-    : "";
-  const sourceLanguage = typeof value.sourceLanguage === "string"
-    ? value.sourceLanguage
-    : "";
-  const targetLanguage = typeof value.targetLanguage === "string"
-    ? value.targetLanguage
-    : "";
-  const initialDtmf = typeof value.initialDtmf === "string"
-    ? value.initialDtmf.trim()
-    : undefined;
-  if (!/^\+[1-9]\d{7,14}$/.test(targetPhone) ||
-    !isTranslationLanguage(sourceLanguage) ||
-    !isTranslationLanguage(targetLanguage) ||
-    !["zh", "en"].includes(sourceLanguage) ||
-    !["zh", "en"].includes(targetLanguage) ||
-    sourceLanguage === targetLanguage || value.disclosureConfirmed !== true ||
-    (initialDtmf !== undefined && !/^[0-9*#A-Dw]{1,64}$/.test(initialDtmf))) {
-    return null;
-  }
-  return {
-    targetPhone,
-    sourceLanguage,
-    targetLanguage,
-    disclosureConfirmed: true,
-    ...(initialDtmf ? { initialDtmf } : {}),
-  };
 }
 
 function responseBody(

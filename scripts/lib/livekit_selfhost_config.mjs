@@ -35,8 +35,12 @@ const DEFAULTS = {
   LIVEKIT_TURN_TLS_PORT: "5349",
 };
 
-const REQUIRED_TEXT = ["LIVEKIT_DOMAIN", "LIVEKIT_TURN_DOMAIN", "LIVEKIT_API_KEY",
-  "LIVEKIT_API_SECRET", ...SIP_REQUIRED_TEXT];
+const REQUIRED_TEXT = [
+  "LIVEKIT_DOMAIN",
+  "LIVEKIT_TURN_DOMAIN",
+  "LIVEKIT_API_KEY",
+  "LIVEKIT_API_SECRET",
+];
 
 export function checkLiveKitSelfHostConfig(options = {}) {
   const root = options.root ?? process.cwd();
@@ -50,14 +54,15 @@ export function checkLiveKitSelfHostConfig(options = {}) {
   const env = normalizeEnv(parseEnvFile(options.envText ?? readFileSync(envFile, "utf8")));
   const checks = [];
   const issues = [];
+  const requireSip = options.requireSip !== false;
   if (!options.envText) requirePrivateEnvMode(envFile, checks, issues);
-  requireText(env, checks, issues);
+  requireText(env, checks, issues, requireSip);
   requireDomains(env, checks, issues);
   requireSecrets(env, checks, issues);
   requireImages(env, checks, issues);
   requirePorts(env, checks, issues);
   requireTurnTls(env, checks, issues);
-  validateLiveKitSipEnv(env, checks, issues);
+  if (requireSip) validateLiveKitSipEnv(env, checks, issues);
   validateLiveKitEgressEnv(env, checks, issues);
   validateLiveKitIngressEnv(env, checks, issues);
   return selfHostResult(envFile, checks, issues, env);
@@ -109,8 +114,9 @@ export function parseEnvFile(text) {
   return env;
 }
 
-function requireText(env, checks, issues) {
-  for (const key of REQUIRED_TEXT) {
+function requireText(env, checks, issues, requireSip) {
+  const names = requireSip ? [...REQUIRED_TEXT, ...SIP_REQUIRED_TEXT] : REQUIRED_TEXT;
+  for (const key of names) {
     const ok = hasRealValue(env[key]);
     record(checks, key, ok, { configured: ok });
     if (!ok) issues.push(`LiveKit self-host env missing ${key}`);

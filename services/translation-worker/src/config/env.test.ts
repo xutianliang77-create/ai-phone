@@ -35,6 +35,10 @@ describe("translation worker env", () => {
     expect(env.asrProvider).toBe("http_fireredasr2_aed");
     expect(env.asrModel).toBe("FireRedASR2-AED");
     expect(env.translationProvider).toBe("hymt2_self_hosted");
+    expect(env.ttsVoice).toEqual({
+      mode: "preset",
+      presetId: "zh_female_natural",
+    });
   });
 
   it("lets explicit environment variables override model routing defaults", () => {
@@ -59,6 +63,17 @@ describe("translation worker env", () => {
       voiceProfileId: "my_voice",
       referenceAudioId: "my_voice",
       controlPrompt: "clear and calm",
+    });
+  });
+
+  it("uses the configured preset as the global TTS fallback", () => {
+    process.env = {
+      TTS_VOICE_PRESET_ID: "en_female_natural",
+    };
+
+    expect(loadEnv().ttsVoice).toEqual({
+      mode: "preset",
+      presetId: "en_female_natural",
     });
   });
 
@@ -153,6 +168,20 @@ describe("translation worker env", () => {
 
     process.env = { TTS_AGENT_PREWARM_TIMEOUT_MS: "120001" };
     expect(loadEnv().ttsAgentPrewarmTimeoutMs).toBe(60000);
+  });
+
+  it("keeps Agent LLM prewarm independent from the realtime correction timeout", () => {
+    process.env = { LLM_CORRECTION_TIMEOUT_MS: "1200" };
+    expect(loadEnv()).toMatchObject({
+      llmConfig: { correctionTimeoutMs: 1200 },
+      llmPrewarmTimeoutMs: 10000,
+    });
+
+    process.env.TRANSLATION_AGENT_LLM_PREWARM_TIMEOUT_MS = "15000";
+    expect(loadEnv().llmPrewarmTimeoutMs).toBe(15000);
+
+    process.env.TRANSLATION_AGENT_LLM_PREWARM_TIMEOUT_MS = "999";
+    expect(loadEnv().llmPrewarmTimeoutMs).toBe(10000);
   });
 
   it("configures the PSTN audio sink bind address", () => {

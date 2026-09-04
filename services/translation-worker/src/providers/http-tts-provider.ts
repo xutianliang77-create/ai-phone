@@ -143,7 +143,7 @@ export class HttpTtsProvider implements CallTtsProvider {
     }, input.signal);
     if (!response.ok) throw new Error(`HTTP TTS warmup returned HTTP ${response.status}`);
     const body = await response.json() as Record<string, unknown>;
-    const elapsedMs = finiteOrUndefined(body.elapsedMs) ?? Date.now() - startedAt;
+    const elapsedMs = Date.now() - startedAt;
     if (this.options.warmupMaxMs && elapsedMs > this.options.warmupMaxMs) {
       throw new Error(`HTTP TTS warmup exceeded ${this.options.warmupMaxMs}ms`);
     }

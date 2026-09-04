@@ -3,6 +3,8 @@ import 'package:flutter/widgets.dart';
 import 'app_call_link_error_localizations.dart';
 import 'app_localization_texts.dart';
 
+part 'app_localizations_delegate.dart';
+
 class AppLocalizations {
   const AppLocalizations(this.locale);
 
@@ -267,6 +269,24 @@ class AppLocalizations {
   }
 
   String runtimeMessage(String message) {
+    final recoveryGapMatch = RegExp(
+      r'^Realtime connection restored; replayed (\d+) ms; missed (\d+) ms$',
+    ).firstMatch(message);
+    if (recoveryGapMatch != null) {
+      String seconds(String rawMilliseconds) {
+        final milliseconds = int.parse(rawMilliseconds);
+        return milliseconds % 1000 == 0
+            ? '${milliseconds ~/ 1000}'
+            : (milliseconds / 1000).toStringAsFixed(1);
+      }
+
+      final replayedSeconds = seconds(recoveryGapMatch.group(1)!);
+      final missedSeconds = seconds(recoveryGapMatch.group(2)!);
+      if (isChinese) {
+        return '已恢复·补$replayedSeconds秒·漏传$missedSeconds秒';
+      }
+      return 'Restored·+${replayedSeconds}s·missed${missedSeconds}s';
+    }
     if (!isChinese) return message;
     final stripped = _stripErrorPrefix(message);
     if (stripped != message) return runtimeMessage(stripped);
@@ -320,27 +340,4 @@ class AppLocalizations {
 
 extension AppLocalizationsBuildContext on BuildContext {
   AppLocalizations get l10n => AppLocalizations.of(this);
-}
-class _AppLocalizationsDelegate
-    extends LocalizationsDelegate<AppLocalizations> {
-  const _AppLocalizationsDelegate();
-
-  @override
-  bool isSupported(Locale locale) {
-    return AppLocalizations.supportedLocales.any(
-      (supportedLocale) => supportedLocale.languageCode == locale.languageCode,
-    );
-  }
-
-  @override
-  Future<AppLocalizations> load(Locale locale) {
-    final languageCode =
-        locale.languageCode.toLowerCase() == 'en' ? 'en' : 'zh';
-    return SynchronousFuture<AppLocalizations>(
-      AppLocalizations(Locale(languageCode)),
-    );
-  }
-
-  @override
-  bool shouldReload(_AppLocalizationsDelegate old) => false;
 }

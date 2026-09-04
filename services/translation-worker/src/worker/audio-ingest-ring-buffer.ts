@@ -7,12 +7,14 @@ export type AudioIngestMetricEvent =
   | "drained"
   | "stopped";
 
+export type AudioIngestOverflowPolicy = "drop_oldest" | "reject_newest";
+
 export interface AudioIngestMetrics {
   event: AudioIngestMetricEvent;
   callId: string;
   legId: string;
   speakerRole: CallAudioSpeakerRole;
-  dropPolicy: "drop_oldest";
+  dropPolicy: AudioIngestOverflowPolicy;
   capacityFrames: number;
   receivedFrames: number;
   dequeuedFrames: number;
@@ -31,11 +33,36 @@ export interface AudioIngestMetrics {
   lastProcessedSequence?: number;
 }
 
+/**
+ * Gate used by controlled media acceptance: a completed leg is lossless only
+ * when no frame was dropped, skipped, or left queued/in flight.
+ */
+export function assertLosslessAudioMetrics(
+  metrics: Pick<AudioIngestMetrics, "receivedFrames" | "processedFrames" |
+    "failedFrames" | "droppedFrames" | "sequenceGapFrames" |
+    "backpressureEvents" | "queueDepthFrames" | "inFlightFrames">,
+) {
+  const issues: string[] = [];
+  if (metrics.droppedFrames !== 0) issues.push("dropped_frames");
+  if (metrics.failedFrames !== 0) issues.push("failed_frames");
+  if (metrics.sequenceGapFrames !== 0) issues.push("sequence_gaps");
+  if (metrics.backpressureEvents !== 0) issues.push("backpressure");
+  if (metrics.queueDepthFrames !== 0) issues.push("queued_frames");
+  if (metrics.inFlightFrames !== 0) issues.push("in_flight_frames");
+  if (metrics.receivedFrames !== metrics.processedFrames + metrics.failedFrames) {
+    issues.push("frame_accounting");
+  }
+  if (issues.length > 0) {
+    throw new Error(`Audio ingest is not lossless: ${issues.join(",")}`);
+  }
+}
+
 interface AudioIngestRingBufferOptions {
   callId: string;
   legId: string;
   speakerRole: CallAudioSpeakerRole;
   capacityFrames: number;
+  overflowPolicy?: AudioIngestOverflowPolicy;
   onMetrics?: (metrics: AudioIngestMetrics) => void;
 }
 
@@ -81,6 +108,12 @@ export class AudioIngestRingBuffer<T extends { sequence: number }> {
     }
 
     if (this.size === this.buffer.length) {
+      if (this.options.overflowPolicy === "reject_newest") {
+        this.overflowDroppedFrames += 1;
+        this.backpressureEvents += 1;
+        this.emit("backpressure");
+        return false;
+      }
       this.buffer[this.head] = frame;
       this.head = (this.head + 1) % this.buffer.length;
       this.overflowDroppedFrames += 1;
@@ -154,7 +187,7 @@ export class AudioIngestRingBuffer<T extends { sequence: number }> {
       callId: this.options.callId,
       legId: this.options.legId,
       speakerRole: this.options.speakerRole,
-      dropPolicy: "drop_oldest",
+      dropPolicy: this.options.overflowPolicy ?? "drop_oldest",
       capacityFrames: this.buffer.length,
       receivedFrames: this.receivedFrames,
       dequeuedFrames: this.dequeuedFrames,

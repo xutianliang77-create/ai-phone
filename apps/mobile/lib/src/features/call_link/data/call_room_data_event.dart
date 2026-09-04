@@ -9,12 +9,26 @@ class CallRoomDataPayload {
     this.caption,
     this.duplexMode,
     this.degradationReason,
+    this.eventType,
+    this.conversationState,
+    this.playbackState,
+    this.playbackId,
+    this.generation,
+    this.pipelineGeneration,
+    this.speakerRole,
   });
 
   final String? message;
   final CallRoomCaption? caption;
   final String? duplexMode;
   final String? degradationReason;
+  final String? eventType;
+  final CallRoomConversationState? conversationState;
+  final CallRoomPlaybackState? playbackState;
+  final String? playbackId;
+  final int? generation;
+  final int? pipelineGeneration;
+  final String? speakerRole;
 }
 
 CallRoomDataPayload parseCallRoomData(
@@ -37,9 +51,31 @@ CallRoomDataPayload parseCallRoomData(
     }
     final type = payload['type'] as String?;
     final text = _string(payload['text']);
+    final eventType = type;
+    final playbackId = _string(payload['playbackId']);
+    final generation = _int(payload['generation']);
+    final pipelineGeneration = _int(payload['pipelineGeneration']);
+    final speakerRole = _string(payload['speakerRole']);
     if (type == 'worker.status') {
       return CallRoomDataPayload(
         message: _workerStatusMessage(payload, text),
+        conversationState: _workerConversationState(payload),
+        eventType: eventType,
+        playbackId: playbackId,
+        generation: generation,
+        pipelineGeneration: pipelineGeneration,
+        speakerRole: speakerRole,
+      );
+    }
+    if (type == 'agent.thinking') {
+      return CallRoomDataPayload(
+        message: text ?? 'AI 正在思考',
+        conversationState: CallRoomConversationState.thinking,
+        eventType: eventType,
+        playbackId: playbackId,
+        generation: generation,
+        pipelineGeneration: pipelineGeneration,
+        speakerRole: speakerRole,
       );
     }
     if (type == 'pipeline.degraded' || type == 'pipeline.restored') {
@@ -48,9 +84,19 @@ CallRoomDataPayload parseCallRoomData(
         message: degraded ? '全双工抢话已降级为半双工' : '全双工抢话已恢复',
         duplexMode: degraded ? 'half_duplex' : 'full_duplex',
         degradationReason: _string(payload['degradationReason']),
+        conversationState: degraded
+            ? CallRoomConversationState.listening
+            : CallRoomConversationState.idle,
+        eventType: eventType,
+        playbackId: playbackId,
+        generation: generation,
+        pipelineGeneration: pipelineGeneration,
+        speakerRole: speakerRole,
       );
     }
-    if (type == 'transcript.final' ||
+    if (type == 'transcript.partial' ||
+        type == 'transcript.final' ||
+        type == 'translation.delta' ||
         type == 'translation.final' ||
         type == 'tts.ready') {
       final caption = _captionFromPayload(payload, type!);
@@ -59,7 +105,46 @@ CallRoomDataPayload parseCallRoomData(
           !caption.ttsReady) {
         return const CallRoomDataPayload();
       }
-      return CallRoomDataPayload(caption: caption);
+      return CallRoomDataPayload(
+        caption: caption,
+        conversationState: type == 'transcript.partial'
+            ? CallRoomConversationState.listening
+            : type == 'translation.delta'
+                ? CallRoomConversationState.thinking
+                : null,
+        eventType: eventType,
+        playbackId: playbackId,
+        generation: generation,
+        pipelineGeneration: pipelineGeneration,
+        speakerRole: speakerRole,
+      );
+    }
+    if (type == 'playback.queued' ||
+        type == 'playback.started' ||
+        type == 'playback.interrupted' ||
+        type == 'playback.ended' ||
+        type == 'playback.failed' ||
+        type == 'barge_in.detected' ||
+        type == 'barge_in.confirmed') {
+      final playbackState = _playbackState(type);
+      return CallRoomDataPayload(
+        message: _playbackMessage(type!) ?? '通话音频状态更新',
+        conversationState: type == 'playback.started'
+            ? CallRoomConversationState.speaking
+            : type == 'barge_in.detected' || type == 'barge_in.confirmed'
+                ? CallRoomConversationState.interrupted
+                : playbackState == CallRoomPlaybackState.ended ||
+                        playbackState == CallRoomPlaybackState.interrupted ||
+                        playbackState == CallRoomPlaybackState.failed
+                    ? CallRoomConversationState.listening
+                    : null,
+        playbackState: playbackState,
+        eventType: eventType,
+        playbackId: playbackId,
+        generation: generation,
+        pipelineGeneration: pipelineGeneration,
+        speakerRole: speakerRole,
+      );
     }
     return const CallRoomDataPayload();
   } catch (_) {
@@ -72,7 +157,9 @@ bool _matchesCallRoom(
   required String? expectedCallId,
   required String? expectedRoomName,
 }) {
-  if (expectedCallId != null && payload['callId'] != expectedCallId) return false;
+  if (expectedCallId != null && payload['callId'] != expectedCallId) {
+    return false;
+  }
   if (expectedRoomName != null && payload['roomName'] != expectedRoomName) {
     return false;
   }
@@ -105,8 +192,12 @@ CallRoomCaption _captionFromPayload(
     targetLanguage: _string(payload['targetLanguage']) ?? 'auto',
     timestampMs:
         _int(payload['timestampMs']) ?? DateTime.now().millisecondsSinceEpoch,
-    sourceText: type == 'transcript.final' ? sourceText ?? text : sourceText,
-    translatedText: type == 'translation.final' || type == 'tts.ready'
+    sourceText: type == 'transcript.final' || type == 'transcript.partial'
+        ? sourceText ?? text
+        : sourceText,
+    translatedText: type == 'translation.final' ||
+            type == 'translation.delta' ||
+            type == 'tts.ready'
         ? translatedText ?? text
         : translatedText,
     ttsReady: type == 'tts.ready',
@@ -116,7 +207,49 @@ CallRoomCaption _captionFromPayload(
     voiceProfileId: _string(payload['voiceProfileId']),
     firstAudioMs: _int(payload['firstAudioMs']),
     audioDurationMs: _int(payload['audioDurationMs']),
+    isPartial: type == 'transcript.partial',
+    isTranslationDelta: type == 'translation.delta',
+    playbackState: _playbackState(type),
+    playbackId: _string(payload['playbackId']),
+    generation: _int(payload['generation']),
   );
+}
+
+CallRoomConversationState? _workerConversationState(
+  Map<String, Object?> payload,
+) {
+  return switch (_string(payload['stage'])) {
+    'asr' => CallRoomConversationState.listening,
+    'translation' || 'tts' => CallRoomConversationState.thinking,
+    _ => null,
+  };
+}
+
+CallRoomPlaybackState _playbackState(String? type) {
+  return switch (type) {
+    'playback.queued' => CallRoomPlaybackState.queued,
+    'playback.started' => CallRoomPlaybackState.started,
+    'playback.interrupted' ||
+    'barge_in.detected' ||
+    'barge_in.confirmed' =>
+      CallRoomPlaybackState.interrupted,
+    'playback.ended' => CallRoomPlaybackState.ended,
+    'playback.failed' => CallRoomPlaybackState.failed,
+    _ => CallRoomPlaybackState.idle,
+  };
+}
+
+String? _playbackMessage(String type) {
+  return switch (type) {
+    'playback.queued' => '译音已排队',
+    'playback.started' => '正在播放译音',
+    'playback.ended' => '译音播放完成',
+    'playback.interrupted' => '译音已中断',
+    'playback.failed' => '译音播放失败',
+    'barge_in.detected' => '检测到抢话，正在停止译音',
+    'barge_in.confirmed' => '已停止译音，恢复监听',
+    _ => null,
+  };
 }
 
 String? _workerStatusMessage(Map<String, Object?> payload, String? fallback) {

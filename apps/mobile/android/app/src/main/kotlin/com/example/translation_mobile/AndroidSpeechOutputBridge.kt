@@ -17,7 +17,7 @@ class AndroidSpeechOutputBridge(
     private var textToSpeechReady = false
     private var pendingResult: MethodChannel.Result? = null
     private var pendingUtteranceId: String? = null
-    private var pendingLanguage = "en"
+    private var pendingLanguage = ""
 
     fun register(messenger: BinaryMessenger) {
         MethodChannel(messenger, "translation_mobile/speech_output")
@@ -48,6 +48,12 @@ class AndroidSpeechOutputBridge(
             result.error("nothing_to_speak", "No text was provided for speech output.", null)
             return
         }
+        val language = rawLanguage?.trim()?.replace('_', '-').orEmpty()
+        val locale = Locale.forLanguageTag(language)
+        if (language.isEmpty() || locale.language.isEmpty() || locale.language == "und") {
+            result.error("speech_language_unavailable", "A valid speech language is required.", null)
+            return
+        }
         stopCurrent()
         try {
             audioSessionCoordinator.beginPlayback(audioSessionOwner)
@@ -55,7 +61,6 @@ class AndroidSpeechOutputBridge(
             result.error("audio_session_unavailable", error.localizedMessage, null)
             return
         }
-        val language = normalizeLanguage(rawLanguage)
         val utteranceId = "speech_${System.currentTimeMillis()}"
         pendingResult = result
         pendingUtteranceId = utteranceId
@@ -63,7 +68,10 @@ class AndroidSpeechOutputBridge(
         ensureTextToSpeech(
             onReady = { engine ->
                 if (pendingUtteranceId != utteranceId) return@ensureTextToSpeech
-                engine.language = Locale.forLanguageTag(languageTag(language))
+                if (engine.setLanguage(locale) < TextToSpeech.LANG_AVAILABLE) {
+                    finishError(utteranceId, "speech_language_unavailable", "No installed voice is available for $language.")
+                    return@ensureTextToSpeech
+                }
                 val status = engine.speak(
                     trimmed,
                     TextToSpeech.QUEUE_FLUSH,
@@ -111,13 +119,13 @@ class AndroidSpeechOutputBridge(
         }
 
         override fun onError(utteranceId: String?, errorCode: Int) {
-            activity.runOnUiThread { finishError(utteranceId) }
+            activity.runOnUiThread { finishError(utteranceId, message = "Android TextToSpeech error $errorCode.") }
         }
     }
 
     private fun stopCurrent() {
         textToSpeech?.stop()
-        finishSuccess(pendingUtteranceId)
+        finishError(pendingUtteranceId, "speech_cancelled", "Speech playback was cancelled.")
     }
 
     private fun finishSuccess(utteranceId: String?) {
@@ -129,13 +137,17 @@ class AndroidSpeechOutputBridge(
         )
     }
 
-    private fun finishError(utteranceId: String?) {
+    private fun finishError(
+        utteranceId: String?,
+        code: String = "text_to_speech_unavailable",
+        message: String = "Android TextToSpeech is unavailable."
+    ) {
         if (utteranceId == null || utteranceId != pendingUtteranceId) return
         val result = pendingResult
         clearPending()
         result?.error(
-            "text_to_speech_unavailable",
-            "Android TextToSpeech is unavailable.",
+            code,
+            message,
             null
         )
     }
@@ -146,13 +158,4 @@ class AndroidSpeechOutputBridge(
         audioSessionCoordinator.endPlayback(audioSessionOwner)
     }
 
-    private fun normalizeLanguage(value: String?): String {
-        val normalized = value?.trim()?.lowercase(Locale.US).orEmpty()
-        return when {
-            normalized.startsWith("zh") || normalized.startsWith("cmn") -> "zh"
-            else -> "en"
-        }
-    }
-
-    private fun languageTag(language: String) = if (language == "zh") "zh-CN" else "en-US"
 }

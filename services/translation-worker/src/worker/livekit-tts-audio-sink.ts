@@ -37,6 +37,10 @@ export interface LiveKitTtsTrackAccess {
   }): Promise<void>;
 }
 
+export interface LiveKitTtsTrackPermissions {
+  allowTrack(targetLegId: string, trackSid: string): void;
+}
+
 interface LiveKitAudioSource {
   captureFrame(frame: unknown): Promise<void>;
   clearQueue?: () => void;
@@ -63,6 +67,7 @@ export class LiveKitTtsAudioSink implements CallTtsAudioSink {
     rtc: LiveKitTtsRtcModule;
     frameSizeMs?: number;
     trackAccess?: LiveKitTtsTrackAccess;
+    trackPermissions?: LiveKitTtsTrackPermissions;
   }) {}
 
   async play(input: Parameters<CallTtsAudioSink["play"]>[0]) {
@@ -229,6 +234,10 @@ export class LiveKitTtsAudioSink implements CallTtsAudioSink {
       if (typeof publication.sid !== "string" || !publication.sid) {
         throw new Error("LiveKit TTS publication is missing a track SID");
       }
+      if (!this.options.trackPermissions) {
+        throw new Error("LiveKit TTS publisher permissions are unavailable");
+      }
+      this.options.trackPermissions.allowTrack(targetLegId, publication.sid);
       await this.options.trackAccess.authorizeTrack({
         targetLegId,
         targetSpeakerRole,

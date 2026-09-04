@@ -145,6 +145,32 @@ describe("realtime session finalizer", () => {
     });
   });
 
+  it("closes provider capacity before announcing session ended", async () => {
+    const session = createSession(claims());
+    const order: string[] = [];
+    const provider = providerWithoutTail();
+    provider.closeSession = async () => { order.push("provider.closed"); };
+    const flushTracker = new RealtimeFlushTracker();
+    const finalizer = new RealtimeSessionFinalizer({
+      sessionId: session.id,
+      provider,
+      audioBatcher: {
+        stopAccepting: vi.fn(),
+        flush: vi.fn(async () => undefined),
+      },
+      send: (event) => {
+        if (event.type === "session.ended") order.push("session.ended");
+      },
+      drainSessionSync: async () => undefined,
+      flushTracker,
+      onError: vi.fn(),
+    });
+
+    await finalizer.finalize("client_request");
+
+    expect(order).toEqual(["provider.closed", "session.ended"]);
+  });
+
   it("keeps the flush-time diagnostic snapshot after provider cleanup", async () => {
     const session = createSession(claims());
     const events: ServerRealtimeEvent[] = [];

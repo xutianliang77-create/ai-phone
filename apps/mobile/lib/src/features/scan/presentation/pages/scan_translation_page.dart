@@ -15,6 +15,7 @@ import '../../../../platform/translation/mobile_translation_provider.dart';
 import '../../../../platform/translation/phrasebook_translation_provider.dart';
 import '../controllers/scan_translation_controller.dart';
 import '../widgets/scan_image_translation_view.dart';
+import '../widgets/scan_text_comparison_view.dart';
 
 class ScanTranslationPage extends StatefulWidget {
   const ScanTranslationPage({
@@ -290,11 +291,14 @@ class _StatusLine extends StatelessWidget {
       ScanTranslationStatus.saved => l10n.scanStatusMessage('scan_saved'),
       ScanTranslationStatus.failed => l10n.warning,
     };
-    final direction = controller.sourceLanguage == 'zh'
-        ? '${l10n.chinese} -> ${l10n.english}'
-        : controller.sourceLanguage == 'en'
-            ? '${l10n.english} -> ${l10n.chinese}'
-            : l10n.unknown;
+    final source = switch (controller.sourceLanguage) {
+      'zh' => l10n.chinese,
+      'en' => l10n.english,
+      _ => l10n.isChinese ? '自动识别' : 'Auto detect',
+    };
+    final target =
+        controller.targetLanguage == 'zh' ? l10n.chinese : l10n.english;
+    final direction = '$source -> $target';
     return Text('${l10n.statusLine(status)} · $direction');
   }
 }

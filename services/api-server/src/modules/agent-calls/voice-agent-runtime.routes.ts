@@ -5,17 +5,15 @@ import type {
 } from "@translation/contracts";
 import { sendError } from "../../infrastructure/http/errors.js";
 import { registerCallLeg } from "../call-links/call-links.service.js";
-import { liveKitSipParticipantIdentity } from
-  "../call-links/livekit-sip-identity.js";
 import { findWorkerDispatch } from
   "../worker-dispatches/worker-dispatch-runtime.repository.js";
-import { getLiveKitSipConfig } from "../call-links/livekit-sip-readiness.js";
 import { withSessionWriteLock } from "../sessions/session-write-coordinator.js";
 import {
   findAgentCallDraftById,
   markAgentCallTakeoverReady,
-  recordAgentCallRuntimeResult,
 } from "./agent-calls-runtime.repository.js";
+import { recordAgentCallRuntimeResult } from
+  "./agent-call-runtime-result-runtime.repository.js";
 import { failAgentCallRuntime } from "./agent-call-webhook-runtime.js";
 import { isInternalAuthorized } from "./agent-call-route-helpers.js";
 import {
@@ -32,9 +30,14 @@ import {
   resolveVoiceAgentRuntimeCallBinding,
 } from
   "./voice-agent-runtime-binding.js";
-import { executeVoiceAgentHangup } from "./voice-agent-sip-control.js";
+import { executeVoiceAgentPhoneHangup } from
+  "./voice-agent-phone-control.js";
+import { resolveVoiceAgentPhoneSnapshotBinding } from
+  "./voice-agent-phone-snapshot-binding.js";
 import { voiceAgentRecordingConsentSnapshot } from
   "./voice-agent-recording-consent.js";
+import { resolveVoiceAgentRuntimeCommand } from
+  "./voice-agent-runtime-command.js";
 import {
   applyVoiceAgentRecordingConsent,
 } from "./voice-agent-recording-consent-event.js";
@@ -59,6 +62,18 @@ export function registerVoiceAgentRuntimeRoutes(app: FastifyInstance) {
         body.ticket,
       );
       if (!binding.ok) return bindingError(reply, binding.code);
+      const phone = await resolveVoiceAgentPhoneSnapshotBinding({
+        call: binding.call,
+        providerOperationId: binding.draft.providerOperationId!,
+      });
+      if (!phone.ok) {
+        return sendError(
+          reply,
+          phone.statusCode,
+          `voice_agent_phone_${phone.code}`,
+          "Voice Agent phone binding is unavailable",
+        );
+      }
       const recordingConsent = binding.draft.recordingRequested
         ? voiceAgentRecordingConsentSnapshot({
             language: binding.draft.language,
@@ -92,10 +107,18 @@ export function registerVoiceAgentRuntimeRoutes(app: FastifyInstance) {
         sessionId: binding.call.sessionId,
         roomName: binding.call.roomName,
         participantIdentity: body.participantIdentity,
-        sipParticipantIdentity: liveKitSipParticipantIdentity(
-          binding.call.sessionId,
-          binding.draft.providerOperationId!,
-        ),
+        telephonyProvider: phone.operation.provider,
+        calleeParticipantIdentity: phone.binding.participantIdentity,
+        ...(phone.binding.deviceLease ? {
+          airDeviceBinding: {
+            deviceId: phone.binding.deviceLease.deviceId,
+            leaseId: phone.binding.deviceLease.leaseId,
+            callGeneration: phone.binding.callGeneration,
+          },
+        } : {}),
+        ...(phone.operation.provider === "livekit_sip"
+          ? { sipParticipantIdentity: phone.binding.participantIdentity }
+          : {}),
         generation: binding.claim.generation,
         run: binding.run,
         mode: "autonomous",
@@ -180,7 +203,8 @@ export function registerVoiceAgentRuntimeRoutes(app: FastifyInstance) {
         }
       }
       if (!existing) {
-        await applyRuntimeEvent(binding, body, runtimeClaim);
+        await withSessionWriteLock(binding.call.sessionId, () =>
+          applyRuntimeEvent(binding, body, runtimeClaim));
       }
       const handoffTimedOut = body.event === "heartbeat"
         ? await expireHandoffIfNeeded(binding)
@@ -197,11 +221,10 @@ export function registerVoiceAgentRuntimeRoutes(app: FastifyInstance) {
         callId: binding.call.callId,
         generation: dispatch.generation,
         dispatchStatus: dispatch.status,
-        command: handoffTimedOut
-          ? "cancel"
-          : currentDraft.status === "takeover_requested"
-          ? "takeover"
-          : currentDraft.status === "cancelled" ? "cancel" : "continue",
+        command: resolveVoiceAgentRuntimeCommand({
+          draft: currentDraft,
+          handoffTimedOut,
+        }),
         leaseExpiresAt: dispatch.leaseExpiresAt,
         replayed: existing !== null,
       };
@@ -219,12 +242,10 @@ async function expireHandoffIfNeeded(
   const handoff = await findRequestedAgentHandoff(binding.run.id, "user");
   if (!handoff || Date.now() - Date.parse(handoff.requestedAt) <
       handoffTimeoutSeconds() * 1000) return false;
-  const sip = getLiveKitSipConfig();
-  if (!sip.ok) return false;
   const result = await withSessionWriteLock(binding.call.sessionId, () =>
-    executeVoiceAgentHangup({
+    executeVoiceAgentPhoneHangup({
       call: binding.call,
-      config: sip.config,
+      providerOperationId: binding.draft.providerOperationId!,
       idempotencyKey: `voice-agent-handoff-timeout:${binding.call.sessionId}`,
     }));
   if (!result.ok) return false;

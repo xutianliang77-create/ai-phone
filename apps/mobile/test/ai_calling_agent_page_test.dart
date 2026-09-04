@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:translation_mobile/src/features/compliance/data/voice_processing_consent_store.dart';
 import 'package:translation_mobile/src/features/ai_calling_agent/data/ai_calling_agent_api_client.dart';
+import 'package:translation_mobile/src/features/ai_calling_agent/presentation/widgets/ai_calling_agent_draft_panel.dart';
 
 import 'support/ai_calling_agent_test_support.dart';
+import 'support/fake_call_link_test_clients.dart';
 
 void main() {
   testWidgets('creates and authorizes low risk agent draft', (tester) async {
@@ -33,12 +35,46 @@ void main() {
     expect(client.startedDraftIds, <String>['draft_1']);
     expect(find.text('状态：排队中'), findsOneWidget);
     expect(find.text('Call ID：call_1'), findsOneWidget);
-    expect(find.text('已进入执行队列，可刷新查看进度。'), findsOneWidget);
+    expect(
+      find.text('已进入执行队列，通话接通后 App 会自动接收 LiveKit 双向译音。'),
+      findsOneWidget,
+    );
     await tester.tap(find.text('刷新状态'));
     await tester.pumpAndSettle();
     expect(client.refreshedDraftIds, <String>['draft_1']);
     expect(find.text('状态：已完成'), findsOneWidget);
     expect(find.text('结果摘要：已完成预约。'), findsOneWidget);
+    expect(find.text('AI 代打已结束：已完成预约。'), findsWidgets);
+  });
+
+  testWidgets(
+      'joins the LiveKit room as a muted monitor while the call is active',
+      (tester) async {
+    final roomClient = FakeCallRoomClient();
+    await pumpAgentPage(
+      tester,
+      client: _InProgressAgentClient(),
+      callClient: FakeCallLinkApiClient(),
+      roomClient: roomClient,
+      voiceConsentStore: MemoryVoiceProcessingConsentStore.accepted(),
+    );
+
+    await tester.enterText(find.byType(TextField).at(2), '预约牙医复诊');
+    await tester.tap(find.text('接通后先告知对方正在与 AI 通话'));
+    await tester.ensureVisible(find.text('生成话术草稿'));
+    await tester.tap(find.text('生成话术草稿'));
+    await tester.pumpAndSettle();
+    await tester.drag(find.byType(ListView), const Offset(0, -260));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('确认授权'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('开始执行'));
+    await tester.pumpAndSettle();
+
+    expect(roomClient.connectedToken?.participantRole, 'host');
+    expect(roomClient.translationMediaOnly, isFalse);
+    expect(find.textContaining('LiveKit 监听：已连接'), findsOneWidget);
+    expect(find.textContaining('麦克风：已关闭'), findsOneWidget);
   });
 
   testWidgets('requires voice consent before authorizing agent draft',
@@ -133,6 +169,55 @@ void main() {
     expect(client.takeoverDraftIds, <String>['draft_1']);
     expect(find.text('状态：已请求接管'), findsOneWidget);
     expect(find.text('已记录人工接管请求。'), findsOneWidget);
+  });
+
+  testWidgets('shows Air states separately and gates takeover on carrier',
+      (tester) async {
+    var takeoverCount = 0;
+    Widget panel(AiCallingAgentDraft draft) => MaterialApp(
+          home: Scaffold(
+            body: AiCallingAgentDraftPanel(
+              draft: draft,
+              busy: false,
+              onAuthorize: () {},
+              onStart: () {},
+              onRefresh: () {},
+              onTakeover: () => takeoverCount += 1,
+              onCancel: () {},
+            ),
+          ),
+        );
+
+    await tester.pumpWidget(panel(agentDraft(
+      status: 'in_progress',
+      callId: 'call_1',
+      executionProvider: 'air780_volte',
+      carrierState: 'ringing',
+      liveKitParticipantState: 'joined',
+    )));
+
+    expect(find.text('电话网络：振铃中'), findsOneWidget);
+    expect(find.text('LiveKit：已加入'), findsOneWidget);
+    expect(
+      tester
+          .widget<OutlinedButton>(
+            find.widgetWithText(OutlinedButton, '人工接管'),
+          )
+          .onPressed,
+      isNull,
+    );
+
+    await tester.pumpWidget(panel(agentDraft(
+      status: 'in_progress',
+      callId: 'call_1',
+      executionProvider: 'air780_volte',
+      carrierState: 'connected',
+      liveKitParticipantState: 'reconnecting',
+    )));
+    expect(find.text('电话网络：已接通'), findsOneWidget);
+    expect(find.text('LiveKit：重连中'), findsOneWidget);
+    await tester.tap(find.widgetWithText(OutlinedButton, '人工接管'));
+    expect(takeoverCount, 1);
   });
 
   testWidgets('cancels agent draft before authorization', (tester) async {
@@ -241,4 +326,20 @@ void main() {
     expect(find.text('生成话术草稿'), findsOneWidget);
     expect(find.byTooltip('刷新任务'), findsOneWidget);
   });
+}
+
+class _InProgressAgentClient extends FakeAiCallingAgentClient {
+  @override
+  Future<AiCallingAgentDraft> startDraft({
+    required String draftId,
+    required String consentPromptVersion,
+  }) async {
+    startedDraftIds.add(draftId);
+    return agentDraft(
+      status: 'in_progress',
+      callId: 'call_1',
+      executionProvider: 'livekit_sip',
+      carrierState: 'connected',
+    );
+  }
 }

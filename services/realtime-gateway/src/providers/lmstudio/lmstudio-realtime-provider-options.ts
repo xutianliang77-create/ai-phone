@@ -26,4 +26,5 @@ export interface LmStudioRealtimeProviderOptions {
   asrRefinementProvider?: LlmProvider;
   asrRefinementEnabled?: boolean;
   asrRefinementMinConfidence?: number;
+  listeningMaxContinuationBufferMs?: number;
 }

@@ -81,7 +81,8 @@ void main() {
     expect(controller.segments, isEmpty);
   });
 
-  test('strips gateway silence markers from mixed text', () async {
+  test('strips silence markers and keeps failures out of translations',
+      () async {
     final repository = FakeRealtimeRepository();
     final audio = FakeAudioCapture();
     final controller = realtimeControllerForTest(repository, audio);
@@ -101,10 +102,26 @@ void main() {
       text: '你好 <sil>',
       language: 'zh',
     ));
+    repository.emit(const GatewayRealtimeEvent(
+      type: 'transcript.final',
+      sessionId: 'sess_1',
+      segmentId: 'failed_1',
+      text: 'keep the source',
+    ));
+    repository.emit(const GatewayRealtimeEvent(
+      type: 'translation.failed',
+      sessionId: 'sess_1',
+      segmentId: 'failed_1',
+      message: 'Translation unavailable',
+      stage: 'translation',
+    ));
     await pumpEventQueue();
 
-    expect(controller.segments.single.sourceText, 'hello world');
-    expect(controller.segments.single.translatedText, '你好');
+    expect(controller.segments.first.sourceText, 'hello world');
+    expect(controller.segments.first.translatedText, '你好');
+    expect(controller.segments.last.sourceText, 'keep the source');
+    expect(controller.segments.last.translatedText, isEmpty);
+    expect(controller.message, 'Translation unavailable');
   });
 
   test('late translation cannot roll back a revised speaker label', () async {

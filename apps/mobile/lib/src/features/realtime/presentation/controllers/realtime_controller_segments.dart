@@ -39,9 +39,26 @@ extension RealtimeControllerSegments on RealtimeController {
     }
 
     final current = _drafts[id] ?? SegmentDraft(id);
-    final canReviseRecognition = revision == null ||
+    if (nextTranslatedText != null &&
+        revision != null &&
+        current.recognitionRevision != null &&
+        revision < current.recognitionRevision!) {
+      return;
+    }
+    final isRecognitionUpdate =
+        nextSourceText != null || nextAppendSourceText != null;
+    final canApplyEventRevision = revision == null ||
         current.revision == null ||
         revision >= current.revision!;
+    final canReviseRecognition = isRecognitionUpdate
+        ? revision == null ||
+            current.recognitionRevision == null ||
+            revision >= current.recognitionRevision!
+        : canApplyEventRevision;
+    final isNewerRecognitionRevision = nextSourceText != null &&
+        revision != null &&
+        current.recognitionRevision != null &&
+        revision > current.recognitionRevision!;
     final nextRevision = revision == null
         ? current.revision
         : current.revision == null || revision > current.revision!
@@ -50,6 +67,8 @@ extension RealtimeControllerSegments on RealtimeController {
     _drafts[id] = current.copyWith(
       turnId: current.turnId ?? turnId,
       revision: nextRevision,
+      recognitionRevision:
+          nextSourceText != null && canReviseRecognition ? revision : null,
       sourceText: canReviseRecognition
           ? nextSourceText ?? current.sourceText + (nextAppendSourceText ?? '')
           : current.sourceText,
@@ -69,6 +88,7 @@ extension RealtimeControllerSegments on RealtimeController {
       timing: canReviseRecognition ? timing : null,
       vadContext: canReviseRecognition ? vadContext : null,
       languageProfile: canReviseRecognition ? languageProfile : null,
+      clearTranslation: isNewerRecognitionRevision,
     );
     _replaceSegmentsFromDrafts();
   }
@@ -76,6 +96,17 @@ extension RealtimeControllerSegments on RealtimeController {
   void _removeSegment(String id) {
     if (_drafts.remove(id) == null) return;
     _replaceSegmentsFromDrafts();
+  }
+
+  void _replaceSegmentsFromDrafts() {
+    final ordered = orderTimelineByTiming(
+      _drafts.values.map((draft) => draft.toSegment()),
+      timingOf: (segment) => segment.timing,
+    );
+    _segments
+      ..clear()
+      ..addAll(ordered);
+    _notify();
   }
 }
 

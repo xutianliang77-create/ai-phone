@@ -38,6 +38,7 @@ describe("call room token", () => {
       "ai.phone.participant_role": "guest",
     });
     expect((grants.exp ?? 0) - (grants.nbf ?? 0)).toBe(120);
+    expect(Date.parse(result.expiresAt) / 1000).toBe(grants.exp);
   });
 
   it("verifies the exact call, room, identity, role, and minimal grants", async () => {

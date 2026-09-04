@@ -176,6 +176,33 @@ describe("realtime session state routes", () => {
       .not.toBe("active");
     await app.close();
   });
+
+  it("persists a late speaker child at its chronological position", async () => {
+    const app = await buildApp();
+    const sessionId = await createRealtimeSession(app);
+    const responses = [];
+    for (const segment of [
+      segmentPatch(sessionId, "parent", "speaker_1", 0, 1_000),
+      segmentPatch(sessionId, "next", "speaker_2", 1_400, 2_200),
+      segmentPatch(sessionId, "child", "speaker_2", 1_000, 1_600),
+    ]) {
+      responses.push(await app.inject({
+        method: "POST",
+        url: "/internal/realtime/segments",
+        headers: internalHeaders,
+        payload: segment,
+      }));
+    }
+    const detail = await app.inject({
+      method: "GET",
+      url: `/sessions/${sessionId}`,
+    });
+    await app.close();
+
+    expect(responses.every((response) => response.statusCode === 200)).toBe(true);
+    expect(detail.json().segments.map((segment: { id: string }) => segment.id))
+      .toEqual(["parent", "child", "next"]);
+  });
 });
 
 async function createRealtimeSession(
@@ -204,6 +231,27 @@ function finalizationPayload(sessionId: string, billableSeconds: number) {
       sourceText: "hello",
       translatedText: "你好",
     }],
+  };
+}
+
+function segmentPatch(
+  sessionId: string,
+  segmentId: string,
+  speakerId: string,
+  startMs: number,
+  endMs: number,
+) {
+  return {
+    sessionId,
+    segmentId,
+    sourceText: segmentId,
+    translatedText: `translated ${segmentId}`,
+    speaker: {
+      speakerId,
+      role: "speaker",
+      source: "diarization",
+    },
+    timing: { startMs, endMs, source: "model" },
   };
 }
 

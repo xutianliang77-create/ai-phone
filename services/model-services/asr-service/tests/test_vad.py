@@ -1,5 +1,8 @@
 import struct
+from types import SimpleNamespace
 
+import app.marblenet_runtime as marblenet_runtime
+from app.marblenet_runtime import import_onnxruntime
 from app.vad import (
     MarbleNetVadProvider,
     RmsVadProvider,
@@ -53,6 +56,31 @@ def test_marblenet_vad_uses_probability_threshold() -> None:
     assert speech == VadDecision(True, 0.5, "marblenet")
 
 
+def test_marblenet_vad_isolates_threshold_by_session() -> None:
+    provider = MarbleNetVadProvider(
+        runtime=FakeRuntime([0.1, 0.1]),
+        threshold=0.5,
+        window_ms=1000,
+        smoothing_frames=3,
+        fallback=RmsVadProvider(350),
+    )
+
+    listening = provider.analyze(
+        "listening",
+        voice_pcm(),
+        24_000,
+        threshold=0.05,
+    )
+    conversation = provider.analyze("conversation", voice_pcm(), 24_000)
+
+    assert listening == VadDecision(True, 0.1, "marblenet")
+    assert conversation == VadDecision(False, 0.1, "marblenet")
+    assert provider.diagnostics("listening")["threshold"] == 0.05
+    assert provider.diagnostics("listening")["speechFrameRatio"] == 1.0
+    assert provider.diagnostics("conversation")["threshold"] == 0.5
+    assert provider.diagnostics("conversation")["speechFrameRatio"] == 0.0
+
+
 def test_marblenet_vad_falls_back_after_runtime_failure() -> None:
     provider = MarbleNetVadProvider(
         runtime=FailingRuntime(),
@@ -93,6 +121,30 @@ def test_missing_marblenet_assets_are_explicit_fallback(tmp_path) -> None:
     assert diagnostics["configuredProvider"] == "marblenet"
     assert diagnostics["fallbackReason"] == "assets_missing"
     assert diagnostics["speechFrameRatio"] == 1.0
+
+
+def test_onnxruntime_can_be_loaded_from_an_isolated_fallback_path(
+    monkeypatch,
+) -> None:
+    imported = SimpleNamespace(name="onnxruntime")
+    calls = 0
+
+    def fake_import(name: str):
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            error = ModuleNotFoundError("onnxruntime is isolated")
+            error.name = "onnxruntime"
+            raise error
+        assert name == "onnxruntime"
+        return imported
+
+    monkeypatch.setenv("ASR_ONNXRUNTIME_SITE_PACKAGES", "/isolated/onnxruntime")
+    monkeypatch.setattr(marblenet_runtime.importlib, "import_module", fake_import)
+    monkeypatch.setattr(marblenet_runtime.sys, "path", [])
+
+    assert import_onnxruntime() is imported
+    assert "/isolated/onnxruntime" in marblenet_runtime.sys.path
 
 
 def silence_pcm() -> bytes:

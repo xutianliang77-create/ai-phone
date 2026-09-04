@@ -8,7 +8,7 @@ import {
 } from "./domestic_release_readiness_test_helpers.mjs";
 
 describe("domestic release readiness capability profile", () => {
-  test("marks SIP, Agent, and Egress deferred in core translation", async () => {
+  test("marks SIP, Agent, Egress, and payment deferred in core translation", async () => {
     const result = await checkDomesticReleaseReadiness({
       ...baseOptions(),
       capabilityProfile: "core_translation",
@@ -31,6 +31,10 @@ describe("domestic release readiness capability profile", () => {
       "livekit_sip",
       "agent",
       "egress",
+      "payment",
+      "sms",
+      "diagnostics_alerting",
+      "release_materials",
     ]);
     for (const name of [
       "pstn_bridge_release_ready",
@@ -38,6 +42,9 @@ describe("domestic release readiness capability profile", () => {
       "pstn_provider_status_event_readiness",
       "pstn_internal_media_loop_readiness",
       "agent_call_worker_readiness",
+      "domestic_payment_callbacks_local_smoke",
+      "diagnostics_alerting_local_smoke",
+      "release_materials_readiness",
     ]) {
       expect(result.checks.find((check) => check.name === name)).toMatchObject({
         status: "deferred",

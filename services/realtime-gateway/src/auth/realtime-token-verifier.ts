@@ -5,7 +5,11 @@ function signPayload(payload: string, secret: string) {
   return createHmac("sha256", secret).update(payload).digest("base64url");
 }
 
-export function verifyRealtimeToken(token: string, secret: string) {
+export function verifyRealtimeToken(
+  token: string,
+  secret: string,
+  canResumeExpired?: (claims: RealtimeTokenClaims) => boolean,
+) {
   const [payload, signature] = token.split(".");
   if (!payload || !signature) return null;
   const expected = signPayload(payload, secret);
@@ -13,6 +17,7 @@ export function verifyRealtimeToken(token: string, secret: string) {
   if (!timingSafeEqual(Buffer.from(signature), Buffer.from(expected))) return null;
   const json = Buffer.from(payload, "base64url").toString("utf8");
   const claims = JSON.parse(json) as RealtimeTokenClaims;
-  if (claims.expiresAt <= Math.floor(Date.now() / 1000)) return null;
+  if (claims.expiresAt <= Math.floor(Date.now() / 1000) &&
+      canResumeExpired?.(claims) !== true) return null;
   return claims;
 }

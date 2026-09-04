@@ -11,6 +11,11 @@ extension RealtimeControllerGatewayEvents on RealtimeController {
     }
     if (event.type == 'error') {
       final message = _gatewayErrorMessage(event);
+      if (event.stage == 'tts') {
+        _message = message;
+        _notify();
+        return;
+      }
       _gatewayDiagnostic = RealtimeGatewayDiagnostic.fromEvent(
         event,
         displayMessage: message,
@@ -22,18 +27,6 @@ extension RealtimeControllerGatewayEvents on RealtimeController {
       _gatewayDiagnostic = RealtimeGatewayDiagnostic.fromEvent(
         event,
         displayMessage: _gatewayErrorMessage(event),
-      );
-      _upsertSegment(
-        event.segmentId!,
-        turnId: event.turnId,
-        revision: event.revision,
-        translatedText: event.message ?? 'Translation unavailable',
-        targetLanguage: event.language,
-        stage: event.stage ?? 'translation',
-        provider: event.provider,
-        model: event.model,
-        latencyMs: event.latencyMs,
-        languageProfile: event.languageProfile,
       );
       _message = event.message;
       _notify();
@@ -58,7 +51,7 @@ extension RealtimeControllerGatewayEvents on RealtimeController {
       } else {
         _setStatus(RealtimeStatus.active);
       }
-      _message = event.message;
+      _message = _reconnectRecoveryMessage(event);
       _notify();
       return;
     }
@@ -90,17 +83,33 @@ extension RealtimeControllerGatewayEvents on RealtimeController {
     if (event.type == 'transcript.partial' && event.segmentId != null) {
       final text = _cleanRealtimeText(event.text);
       if (text != null) {
-        _upsertSegment(
-          event.segmentId!,
-          appendSourceText: text,
-          sourceLanguage: event.language,
-          confidence: event.confidence,
-          stage: 'asr',
-          speaker: event.speaker,
-          timing: event.timing,
-          vadContext: event.vadContext,
-          languageProfile: event.languageProfile,
-        );
+        final revision = event.revision;
+        if (revision == null) {
+          _upsertSegment(
+            event.segmentId!,
+            appendSourceText: text,
+            sourceLanguage: event.language,
+            confidence: event.confidence,
+            stage: 'asr',
+            speaker: event.speaker,
+            timing: event.timing,
+            vadContext: event.vadContext,
+            languageProfile: event.languageProfile,
+          );
+        } else {
+          _upsertSegment(
+            event.segmentId!,
+            revision: revision,
+            sourceText: text,
+            sourceLanguage: event.language,
+            confidence: event.confidence,
+            stage: 'asr',
+            speaker: event.speaker,
+            timing: event.timing,
+            vadContext: event.vadContext,
+            languageProfile: event.languageProfile,
+          );
+        }
       }
     }
     if (event.type == 'transcript.final' && event.segmentId != null) {
@@ -199,6 +208,14 @@ extension RealtimeControllerGatewayEvents on RealtimeController {
       default:
         return null;
     }
+  }
+
+  String? _reconnectRecoveryMessage(GatewayRealtimeEvent event) {
+    final replayedAudioMs = event.replayedAudioMs ?? 0;
+    final droppedAudioMs = event.droppedAudioMs ?? 0;
+    if (droppedAudioMs <= 0) return event.message;
+    return 'Realtime connection restored; replayed $replayedAudioMs ms; '
+        'missed $droppedAudioMs ms';
   }
 
   void _handleRemoteSessionEnded(GatewayRealtimeEvent event) {

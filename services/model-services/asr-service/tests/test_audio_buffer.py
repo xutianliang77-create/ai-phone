@@ -1,9 +1,13 @@
-import base64
-import struct
-
 from app.audio_buffer import PcmSessionBuffer, RealtimePcmSegmenter, audio_duration_ms
 from app.endpoint_policy import EndpointPolicy
-from app.schemas import AsrTranscribeRequest
+from tests.audio_buffer_support import (
+    TrackingVadProvider,
+    ThresholdAwareVadProvider,
+    realtime_segmenter,
+    request,
+    silence_pcm,
+    voice_pcm,
+)
 
 
 def test_audio_duration_ms_for_pcm16_mono() -> None:
@@ -78,6 +82,58 @@ def test_realtime_segmenter_flushes_active_speech() -> None:
     assert segment.duration_ms == 40
     assert segment.pcm == voice_pcm()
     assert segment.endpoint_reason == "flush"
+
+
+def test_realtime_segmenter_requires_minimum_voiced_duration() -> None:
+    segmenter = RealtimePcmSegmenter(
+        min_audio_ms=120,
+        endpoint_silence_ms=80,
+        max_audio_ms=1000,
+        preroll_ms=40,
+        vad_energy_threshold=350,
+        endpoint_policies={
+            "conversation": EndpointPolicy("conversation", 120, 80, 1000, 40),
+            "listening": EndpointPolicy("listening", 120, 80, 1000, 40),
+            "call_link": EndpointPolicy(
+                "call_link", 120, 80, 1000, 40, min_voiced_ms=80
+            ),
+            "pstn": EndpointPolicy("pstn", 120, 80, 1000, 40),
+        },
+    )
+
+    assert segmenter.append(request(1, voice_pcm(), mode="call_link")) is None
+    assert segmenter.append(request(2, silence_pcm(), mode="call_link")) is None
+    assert segmenter.append(request(3, silence_pcm(), mode="call_link")) is None
+
+    assert segmenter.append(request(4, voice_pcm(), mode="call_link")) is None
+    assert segmenter.append(request(5, voice_pcm(), mode="call_link")) is None
+    assert segmenter.append(request(6, silence_pcm(), mode="call_link")) is None
+    segment = segmenter.append(request(7, silence_pcm(), mode="call_link"))
+
+    assert segment is not None
+    assert segment.duration_ms == 160
+    assert segment.pcm == voice_pcm() * 2 + silence_pcm() * 2
+
+
+def test_realtime_segmenter_discards_short_voiced_flush() -> None:
+    segmenter = RealtimePcmSegmenter(
+        min_audio_ms=1000,
+        endpoint_silence_ms=1000,
+        max_audio_ms=2000,
+        preroll_ms=40,
+        vad_energy_threshold=350,
+        endpoint_policies={
+            "conversation": EndpointPolicy("conversation", 1000, 1000, 2000, 40),
+            "listening": EndpointPolicy("listening", 1000, 1000, 2000, 40),
+            "call_link": EndpointPolicy(
+                "call_link", 1000, 1000, 2000, 40, min_voiced_ms=80
+            ),
+            "pstn": EndpointPolicy("pstn", 1000, 1000, 2000, 40),
+        },
+    )
+
+    assert segmenter.append(request(1, voice_pcm(), mode="call_link")) is None
+    assert segmenter.flush("sess_1") is None
 
 
 def test_realtime_segmenter_does_not_flush_leading_silence() -> None:
@@ -169,6 +225,41 @@ def test_endpoint_policy_is_frozen_and_isolated_per_session() -> None:
     assert segmenter.diagnostics("pstn")["endpointPolicy"]["mode"] == "pstn"
 
 
+def test_vad_threshold_is_frozen_and_isolated_per_mode() -> None:
+    vad = ThresholdAwareVadProvider(probability=0.1)
+    segmenter = RealtimePcmSegmenter(
+        min_audio_ms=1000,
+        endpoint_silence_ms=1000,
+        max_audio_ms=2000,
+        preroll_ms=40,
+        vad_energy_threshold=350,
+        vad_provider=vad,
+        endpoint_policies={
+            "conversation": EndpointPolicy(
+                "conversation", 1000, 1000, 2000, 40, 0.5
+            ),
+            "listening": EndpointPolicy(
+                "listening", 1000, 1000, 2000, 40, 0.05
+            ),
+            "call_link": EndpointPolicy("call_link", 1000, 1000, 2000, 40, 0.5),
+            "pstn": EndpointPolicy("pstn", 1000, 1000, 2000, 40, 0.5),
+        },
+    )
+
+    segmenter.append(request(1, voice_pcm(), session_id="conversation"))
+    segmenter.append(
+        request(1, voice_pcm(), session_id="listening", mode="listening")
+    )
+
+    assert segmenter.frame_vad_decision("conversation").voiced is False
+    assert segmenter.frame_vad_decision("listening").voiced is True
+    assert vad.thresholds == {"conversation": 0.5, "listening": 0.05}
+    assert (
+        segmenter.diagnostics("listening")["endpointPolicy"]["vadThreshold"]
+        == 0.05
+    )
+
+
 def test_endpoint_mode_cannot_change_inside_session() -> None:
     segmenter = realtime_segmenter()
     segmenter.append(request(1, voice_pcm(), mode="conversation"))
@@ -214,67 +305,3 @@ def test_latest_frame_vad_decision_survives_segment_emission() -> None:
     assert decision.speech_probability == 0.9
     assert decision.provider == "tracking"
     assert decision.preroll_ms == 40
-
-
-def realtime_segmenter(
-    min_audio_ms: int = 120,
-    endpoint_silence_ms: int = 80,
-    max_audio_ms: int = 1000,
-) -> RealtimePcmSegmenter:
-    return RealtimePcmSegmenter(
-        min_audio_ms=min_audio_ms,
-        endpoint_silence_ms=endpoint_silence_ms,
-        max_audio_ms=max_audio_ms,
-        preroll_ms=40,
-        vad_energy_threshold=350,
-    )
-
-
-def silence_pcm() -> bytes:
-    return b"\0" * 1920
-
-
-def voice_pcm(amplitude: int = 1000) -> bytes:
-    return struct.pack("<" + "h" * 960, *([amplitude] * 960))
-
-
-def request(
-    sequence: int,
-    pcm: bytes | None = None,
-    timestamp_ms: int | None = None,
-    session_id: str = "sess_1",
-    mode: str = "conversation",
-) -> AsrTranscribeRequest:
-    audio = pcm or silence_pcm()
-    return AsrTranscribeRequest(
-        sessionId=session_id,
-        sequence=sequence,
-        timestampMs=timestamp_ms if timestamp_ms is not None else sequence,
-        format="pcm16",
-        sampleRate=24000,
-        data=base64.b64encode(audio).decode("ascii"),
-        sourceLanguage="en",
-        targetLanguage="zh",
-        mode=mode,
-    )
-
-
-class TrackingVadProvider:
-    name = "tracking"
-
-    def __init__(self) -> None:
-        self.reset_count = 0
-
-    def analyze(self, session_id: str, pcm: bytes, sample_rate: int):
-        from app.vad import VadDecision
-
-        return VadDecision(voiced=True, probability=0.9, provider=self.name)
-
-    def reset_session(self, session_id: str) -> None:
-        self.reset_count += 1
-
-    def close_session(self, session_id: str) -> None:
-        pass
-
-    def diagnostics(self, session_id: str):
-        return {}

@@ -82,6 +82,7 @@ export interface TranslationWorkerEnv {
   speechPipelineMode: SpeechPipelineMode;
   domainLexiconPacks: DomainLexiconPack[];
   llmConfig: LlmConfig;
+  llmPrewarmTimeoutMs: number;
   duplexConfig: CallDuplexConfig;
 }
 
@@ -186,6 +187,12 @@ export function loadEnv(): TranslationWorkerEnv {
     speechPipelineMode: parseSpeechPipelineMode(env.SPEECH_PIPELINE_MODE),
     domainLexiconPacks: parseDomainLexiconPacks(env.DOMAIN_LEXICON_PACKS),
     llmConfig: loadLlmConfig(env),
+    llmPrewarmTimeoutMs: boundedInteger(
+      env.TRANSLATION_AGENT_LLM_PREWARM_TIMEOUT_MS,
+      10_000,
+      1_000,
+      120_000,
+    ),
     duplexConfig: parseDuplexConfig(env),
   };
 }
@@ -272,10 +279,12 @@ function parseAudioSampleRate(value: string | undefined): 16000 | 24000 {
 }
 
 function parseTtsVoiceConfig(env: Record<string, string | undefined>): TtsVoiceConfig | undefined {
-  const mode = parseTtsVoiceMode(env.TTS_VOICE_MODE);
-  if (!mode) return undefined;
+  const mode = parseTtsVoiceMode(env.TTS_VOICE_MODE) ?? "preset";
   return {
     mode,
+    ...(mode === "preset"
+      ? { presetId: env.TTS_VOICE_PRESET_ID?.trim() || "zh_female_natural" }
+      : {}),
     ...optionalString("voiceProfileId", env.TTS_VOICE_PROFILE_ID),
     ...optionalString("referenceAudioId", env.TTS_VOICE_REFERENCE_AUDIO_ID),
     ...optionalString("referenceTranscript", env.TTS_VOICE_REFERENCE_TRANSCRIPT),

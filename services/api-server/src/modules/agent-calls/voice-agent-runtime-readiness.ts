@@ -30,7 +30,6 @@ export function getVoiceAgentRuntimeReadiness() {
     ...requiredIssue("VOICE_AGENT_STT_MODEL"),
     ...requiredIssue("VOICE_AGENT_LLM_MODEL"),
     ...requiredIssue("VOICE_AGENT_TTS_MODEL"),
-    ...requiredIssue("VOICE_AGENT_TTS_VOICE"),
     ...requiredIssue("VOICE_AGENT_DISCLOSURE_TEXT_ZH"),
     ...requiredIssue("VOICE_AGENT_DISCLOSURE_TEXT_EN"),
     ...nameIssue(),

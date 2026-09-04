@@ -7,6 +7,8 @@ export interface CommunicationIds {
   turnId?: string;
   segmentId?: string;
   playbackId?: string;
+  workId?: string;
+  deliveryAttemptId?: string;
   agentRunId?: string;
   providerOperationId?: string;
 }

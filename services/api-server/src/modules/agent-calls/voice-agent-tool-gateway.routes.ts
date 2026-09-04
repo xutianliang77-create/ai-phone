@@ -1,8 +1,6 @@
 import { createHash } from "node:crypto";
 import type { FastifyInstance } from "fastify";
 import { sendError } from "../../infrastructure/http/errors.js";
-import { findSessionProviderOperation } from
-  "../provider-operations/provider-operations-runtime.repository.js";
 import { withSessionWriteLock } from "../sessions/session-write-coordinator.js";
 import { isInternalAuthorized } from "./agent-call-route-helpers.js";
 import { requestAgentCallTakeover } from "./agent-calls-runtime.repository.js";
@@ -14,8 +12,12 @@ import {
 } from "./agent-orchestration-runtime.repository.js";
 import { resolveVoiceAgentRuntimeBinding } from
   "./voice-agent-runtime-binding.js";
-import { getLiveKitSipConfig } from "../call-links/livekit-sip-readiness.js";
-import { executeVoiceAgentHangup } from "./voice-agent-sip-control.js";
+import { findAgentDialProviderOperation } from
+  "./agent-call-provider-operation.js";
+import {
+  executeVoiceAgentPhoneDtmf,
+  executeVoiceAgentPhoneHangup,
+} from "./voice-agent-phone-control.js";
 
 export function registerVoiceAgentToolGatewayRoutes(app: FastifyInstance) {
   app.post(
@@ -40,10 +42,6 @@ export function registerVoiceAgentToolGatewayRoutes(app: FastifyInstance) {
         !await hasAgentRuntimeEvent(binding.run.id, "structured_result")) {
         return sendError(reply, 409, "voice_agent_result_required", "Result is required");
       }
-      const sip = getLiveKitSipConfig();
-      if (!sip.ok) {
-        return sendError(reply, 503, "livekit_sip_not_configured", "SIP is not configured");
-      }
       const requested = await requestAgentToolExecution({
         runId: binding.run.id,
         toolName: "hangup_call",
@@ -61,9 +59,9 @@ export function registerVoiceAgentToolGatewayRoutes(app: FastifyInstance) {
         status: "running",
       });
       const result = await withSessionWriteLock(binding.call.sessionId, () =>
-        executeVoiceAgentHangup({
+        executeVoiceAgentPhoneHangup({
           call: binding.call,
-          config: sip.config,
+          providerOperationId: binding.draft.providerOperationId!,
           idempotencyKey: `voice-agent-hangup:${binding.call.sessionId}`,
         }));
       await updateAgentToolExecution({
@@ -74,10 +72,10 @@ export function registerVoiceAgentToolGatewayRoutes(app: FastifyInstance) {
         ...("operation" in result && result.operation
           ? { providerOperationId: result.operation.id }
           : {}),
-        resultSummary: `SIP hangup ${result.code}`,
+        resultSummary: `Phone hangup ${result.code}`,
       });
       if (!result.ok && result.code !== "unknown") {
-        return sendError(reply, 503, "voice_agent_hangup_failed", "SIP hangup failed");
+        return sendError(reply, 503, "voice_agent_hangup_failed", "Phone hangup failed");
       }
       return reply.status(202).send({
         executionId: requested.execution.id,
@@ -119,6 +117,30 @@ export function registerVoiceAgentToolGatewayRoutes(app: FastifyInstance) {
       if (!("execution" in requested)) {
         return sendError(reply, 409, "voice_agent_run_missing", "Agent run unavailable");
       }
+      if (requested.status === "active_conflict") {
+        return sendError(
+          reply,
+          409,
+          "voice_agent_sensitive_tool_active",
+          "Another sensitive agent action is already in progress",
+        );
+      }
+      // A retry may arrive with a new LiveKit tool-call id while the same
+      // sensitive execution is still active. Reuse that execution and do not
+      // reset an already requested/ready takeover.
+      if (requested.status === "existing") {
+        if (params.toolName === "request_takeover" &&
+          binding.draft.status !== "takeover_requested") {
+          await requestAgentCallTakeover(binding.draft.userId, binding.draft.id, {
+            reason: String(body.arguments.reason).slice(0, 200),
+          });
+        }
+        return {
+          executionId: requested.execution.id,
+          authorized: true,
+          replayed: true,
+        };
+      }
       if (!decision.authorized) {
         await updateAgentToolExecution({
           executionId: requested.execution.id,
@@ -140,9 +162,49 @@ export function registerVoiceAgentToolGatewayRoutes(app: FastifyInstance) {
         executionId: requested.execution.id,
         status: "running",
       });
+      if (params.toolName === "send_dtmf" &&
+        decision.executionMode === "provider_api") {
+        const result = await withSessionWriteLock(binding.call.sessionId, () =>
+          executeVoiceAgentPhoneDtmf({
+            call: binding.call,
+            providerOperationId: binding.draft.providerOperationId!,
+            digit: String(body.arguments.digit),
+            operationKey: requested.execution.id,
+            idempotencyKey: `voice-agent-dtmf:${requested.execution.id}`,
+          }));
+        await updateAgentToolExecution({
+          executionId: requested.execution.id,
+          status: result.ok ? "succeeded" : result.code === "unknown"
+            ? "running"
+            : "failed",
+          ...("operation" in result && result.operation
+            ? { providerOperationId: result.operation.id }
+            : {}),
+          resultSummary: `Phone DTMF ${result.code}`,
+        });
+        if (!result.ok && result.code !== "unknown") {
+          return sendError(
+            reply,
+            503,
+            "voice_agent_dtmf_failed",
+            "Phone DTMF failed",
+          );
+        }
+        return {
+          executionId: requested.execution.id,
+          authorized: true,
+          executionMode: "provider_api",
+          providerStatus: result.ok ? "succeeded" : "unknown",
+          replayed: requested.status === "replayed" ||
+            ("replayed" in result && result.replayed),
+        };
+      }
       return {
         executionId: requested.execution.id,
         authorized: true,
+        ...(decision.executionMode
+          ? { executionMode: decision.executionMode }
+          : {}),
         replayed: requested.status === "replayed",
       };
     },
@@ -193,16 +255,20 @@ async function authorizeTool(
     if (typeof args.digit !== "string" || !/^[0-9*#A-D]$/.test(args.digit)) {
       return denied("invalid_dtmf_digit");
     }
-    const dial = await findSessionProviderOperation(
+    const dial = await findAgentDialProviderOperation(
       binding.call.sessionId,
-      "sip_outbound",
+      binding.draft.providerOperationId,
     );
-    if (!dial || dial.status !== "active") return denied("sip_not_active");
+    if (!dial || (dial.provider === "air780_volte"
+      ? !["accepted", "active", "succeeded"].includes(dial.status)
+      : dial.status !== "active")) return denied("phone_not_active");
     const [ivr, disclosed] = await Promise.all([
       hasAgentRuntimeEvent(binding.run.id, "ivr_detected"),
       hasAgentRuntimeEvent(binding.run.id, "disclosure_completed"),
     ]);
-    return ivr || disclosed ? allowed() : denied("disclosure_or_ivr_required");
+    return ivr || disclosed
+      ? allowed(dial.provider === "air780_volte" ? "provider_api" : "livekit_sip")
+      : denied("disclosure_or_ivr_required");
   }
   if (toolName === "request_takeover") {
     return typeof args.reason === "string" && args.reason.length > 0 &&
@@ -259,8 +325,11 @@ function hashArguments(value: Record<string, unknown>) {
   )).digest("hex");
 }
 
-function allowed() {
-  return { authorized: true as const };
+function allowed(executionMode?: "provider_api" | "livekit_sip") {
+  return {
+    authorized: true as const,
+    ...(executionMode ? { executionMode } : {}),
+  };
 }
 
 function denied(reason: string) {

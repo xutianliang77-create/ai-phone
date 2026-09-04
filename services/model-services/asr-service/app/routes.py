@@ -1,18 +1,17 @@
-from hmac import compare_digest
-
 import base64
 import json
-import struct
+from typing import Callable
 
 from fastapi import APIRouter, Header, HTTPException, Response, WebSocket, status
+from fastapi.responses import JSONResponse
 from pydantic import ValidationError
 
 from app.config import AsrConfig
-from app.audio_buffer import FrameVadDecision
 from app.schemas import (
     AsrBoundaryRequest,
     AsrFlushRequest,
     AsrTranscribeRequest,
+    AsrTranscribeResponse,
     HealthResponse,
     VadDiagnosticsResponse,
 )
@@ -21,31 +20,75 @@ from app.runtime_observability import (
     prometheus_model_metrics,
     require_metrics_token,
 )
+from app.resident_runtime import ResidentAsrRuntime, RuntimeUnavailable
+from app.route_helpers import (
+    admit_service,
+    decode_audio_frame,
+    frame_vad_headers,
+    require_api_key,
+    require_ready_service,
+    runtime_http_error,
+    stream_vad_decision,
+    valid_stream_api_key,
+)
 from app.service import AsrService
 
 
 def create_router(
-    service: AsrService,
+    service: AsrService | None,
     config: AsrConfig,
-    runtime_identity: RuntimeIdentity,
+    runtime_identity: Callable[[], RuntimeIdentity],
+    resident_runtime: ResidentAsrRuntime | None = None,
 ) -> APIRouter:
     router = APIRouter()
 
-    @router.get("/health", response_model=HealthResponse)
-    async def health() -> HealthResponse:
-        vad_health = service.vad_health_diagnostics
+    @router.get("/health")
+    async def health():
+        if resident_runtime is not None and not resident_runtime.is_ready:
+            return JSONResponse(
+                status_code=503,
+                content={
+                    "status": "unavailable",
+                    "service": "asr-service",
+                    "provider": config.provider,
+                    "modelVersion": config.model_version,
+                    **resident_runtime.snapshot(),
+                },
+            )
+        active_service = await require_ready_service(service, resident_runtime)
+        vad_health = active_service.vad_health_diagnostics
+        identity = runtime_identity()
         return HealthResponse(
             status="ok",
             service="asr-service",
             provider=config.provider,
             modelVersion=config.model_version,
-            vadProvider=service.vad_provider_name,
+            vadProvider=active_service.vad_provider_name,
             vadThreshold=config.vad_threshold,
             vadConfiguredProvider=str(vad_health["configuredProvider"]),
             vadFallbackReason=vad_health.get("fallbackReason"),
             vadModelFingerprint=vad_health.get("modelFingerprint"),
-            runtimeSignatureVersion=runtime_identity.signature_version,
-            runtimeFingerprint=runtime_identity.fingerprint,
+            externalBoundarySupported=active_service.external_boundary_supported,
+            runtimeSignatureVersion=identity.signature_version,
+            runtimeFingerprint=identity.fingerprint,
+        )
+
+    @router.get("/ready")
+    async def ready():
+        if resident_runtime is None:
+            return {
+                "state": "ready",
+                "ready": True,
+                "generation": 0,
+                "errorCode": None,
+                "activeSessions": 0,
+                "maxActiveSessions": None,
+                "readyWallMs": 0.0,
+            }
+        snapshot = resident_runtime.snapshot()
+        return JSONResponse(
+            status_code=200 if resident_runtime.is_ready else 503,
+            content=snapshot,
         )
 
     @router.get("/metrics")
@@ -54,7 +97,10 @@ def create_router(
     ) -> Response:
         require_metrics_token(config.metrics_bearer_token, authorization)
         return Response(
-            content=prometheus_model_metrics(runtime_identity, True),
+            content=prometheus_model_metrics(
+                runtime_identity(),
+                resident_runtime is None or resident_runtime.is_ready,
+            ),
             media_type="text/plain; version=0.0.4",
         )
 
@@ -67,20 +113,33 @@ def create_router(
         authorization: str | None = Header(default=None),
     ):
         require_api_key(config, authorization)
-        result = service.vad_diagnostics(session_id)
+        active_service = await require_ready_service(service, resident_runtime)
+        result = active_service.vad_diagnostics(session_id)
         if result is None:
             raise HTTPException(status_code=404, detail="ASR diagnostics unavailable")
         return result
 
-    @router.post("/asr/transcribe", status_code=status.HTTP_200_OK)
+    @router.post(
+        "/asr/transcribe",
+        status_code=status.HTTP_200_OK,
+        response_model=AsrTranscribeResponse,
+        response_model_exclude_none=True,
+    )
     async def transcribe(
         request: AsrTranscribeRequest,
         response: Response,
         authorization: str | None = Header(default=None),
     ):
         require_api_key(config, authorization)
-        transcript = await service.transcribe(request)
-        headers = frame_vad_headers(service.frame_vad_decision(request.sessionId))
+        active_service = await admit_service(
+            service,
+            resident_runtime,
+            request.sessionId,
+        )
+        transcript = await active_service.transcribe(request)
+        headers = frame_vad_headers(
+            active_service.frame_vad_decision(request.sessionId)
+        )
         if transcript is None:
             return Response(
                 status_code=status.HTTP_204_NO_CONTENT,
@@ -89,14 +148,46 @@ def create_router(
         response.headers.update(headers)
         return transcript
 
-    @router.post("/asr/sessions/{session_id}/flush", status_code=status.HTTP_200_OK)
+    @router.post(
+        "/asr/transcribe-segment",
+        status_code=status.HTTP_200_OK,
+        response_model=AsrTranscribeResponse,
+        response_model_exclude_none=True,
+    )
+    async def transcribe_segment(
+        request: AsrTranscribeRequest,
+        authorization: str | None = Header(default=None),
+    ):
+        """Transcribe one complete segment whose boundary came from the device."""
+
+        require_api_key(config, authorization)
+        active_service = await admit_service(
+            service,
+            resident_runtime,
+            request.sessionId,
+        )
+        try:
+            transcript = await active_service.transcribe_segment(request)
+        except NotImplementedError as exc:
+            raise HTTPException(status_code=501, detail=str(exc)) from exc
+        if transcript is None:
+            return Response(status_code=status.HTTP_204_NO_CONTENT)
+        return transcript
+
+    @router.post(
+        "/asr/sessions/{session_id}/flush",
+        status_code=status.HTTP_200_OK,
+        response_model=AsrTranscribeResponse,
+        response_model_exclude_none=True,
+    )
     async def flush(
         session_id: str,
         request: AsrFlushRequest,
         authorization: str | None = Header(default=None),
     ):
         require_api_key(config, authorization)
-        transcript = await service.flush(session_id, request)
+        active_service = await admit_service(service, resident_runtime, session_id)
+        transcript = await active_service.flush(session_id, request)
         if transcript is None:
             return Response(status_code=status.HTTP_204_NO_CONTENT)
         return transcript
@@ -104,6 +195,8 @@ def create_router(
     @router.post(
         "/asr/sessions/{session_id}/boundary",
         status_code=status.HTTP_200_OK,
+        response_model=AsrTranscribeResponse,
+        response_model_exclude_none=True,
     )
     async def commit_boundary(
         session_id: str,
@@ -111,7 +204,8 @@ def create_router(
         authorization: str | None = Header(default=None),
     ):
         require_api_key(config, authorization)
-        transcript = await service.commit_boundary(session_id, request)
+        active_service = await admit_service(service, resident_runtime, session_id)
+        transcript = await active_service.commit_boundary(session_id, request)
         if transcript is None:
             return Response(status_code=status.HTTP_204_NO_CONTENT)
         return transcript
@@ -122,7 +216,12 @@ def create_router(
         authorization: str | None = Header(default=None),
     ):
         require_api_key(config, authorization)
-        await service.close_session(session_id)
+        active_service = await require_ready_service(service, resident_runtime)
+        try:
+            await active_service.close_session(session_id)
+        finally:
+            if resident_runtime is not None:
+                await resident_runtime.release(session_id)
         return Response(status_code=status.HTTP_204_NO_CONTENT)
 
     @router.websocket("/asr/stream")
@@ -130,6 +229,8 @@ def create_router(
         await websocket.accept()
         session_id: str | None = None
         stream_config: dict | None = None
+        stream_service: AsrService | None = None
+        admitted = False
         try:
             opened = await websocket.receive_json()
             if opened.get("type") != "session.open":
@@ -150,6 +251,21 @@ def create_router(
                 "corrections": opened.get("corrections", []),
             }
             AsrFlushRequest.model_validate(stream_config)
+            if resident_runtime is not None:
+                try:
+                    stream_service = await resident_runtime.admit(session_id)
+                    admitted = True
+                except RuntimeUnavailable as exc:
+                    await websocket.close(
+                        code=1013 if exc.status_code == 503 else 4429,
+                        reason=exc.code,
+                    )
+                    return
+            else:
+                stream_service = service
+            if stream_service is None:
+                await websocket.close(code=1013, reason="asr_not_started")
+                return
             await websocket.send_json({
                 "type": "session.ready",
                 "sessionId": session_id,
@@ -166,8 +282,8 @@ def create_router(
                         "sessionId": session_id,
                         "data": base64.b64encode(pcm).decode("ascii"),
                     })
-                    transcript = await service.transcribe(request)
-                    decision = service.frame_vad_decision(session_id)
+                    transcript = await stream_service.transcribe(request)
+                    decision = stream_service.frame_vad_decision(session_id)
                     await websocket.send_json({
                         "type": "asr.result",
                         "requestId": header.get("requestId"),
@@ -182,7 +298,7 @@ def create_router(
                 command = json.loads(message.get("text") or "{}")
                 request_id = command.get("requestId")
                 if command.get("type") == "session.flush":
-                    transcript = await service.flush(
+                    transcript = await stream_service.flush(
                         session_id,
                         AsrFlushRequest.model_validate(stream_config),
                     )
@@ -196,7 +312,7 @@ def create_router(
                     })
                     continue
                 if command.get("type") == "session.close":
-                    await service.close_session(session_id)
+                    await stream_service.close_session(session_id)
                     await websocket.send_json({
                         "type": "session.closed",
                         "requestId": request_id,
@@ -207,77 +323,10 @@ def create_router(
                 return
         except (ValueError, KeyError, json.JSONDecodeError, ValidationError) as exc:
             await websocket.close(code=4400, reason=str(exc)[:120])
+        finally:
+            if admitted and session_id is not None and resident_runtime is not None:
+                if stream_service is not None:
+                    await stream_service.close_session(session_id)
+                await resident_runtime.release(session_id)
 
     return router
-
-
-def require_api_key(config: AsrConfig, authorization: str | None) -> None:
-    if not config.api_key:
-        return
-    if not authorization:
-        raise HTTPException(status_code=401, detail="Missing ASR service API key")
-    prefix = "Bearer "
-    if not authorization.startswith(prefix):
-        raise HTTPException(status_code=401, detail="Invalid ASR service auth scheme")
-    if not compare_digest(authorization[len(prefix):], config.api_key):
-        raise HTTPException(status_code=403, detail="Invalid ASR service API key")
-
-
-def valid_stream_api_key(config: AsrConfig, api_key: object) -> bool:
-    if not config.api_key:
-        return True
-    return isinstance(api_key, str) and compare_digest(api_key, config.api_key)
-
-
-def decode_audio_frame(payload: bytes) -> tuple[dict, bytes]:
-    if len(payload) < 5:
-        raise ValueError("ASR stream frame is too short")
-    header_size = struct.unpack(">I", payload[:4])[0]
-    if header_size <= 0 or header_size > 16 * 1024:
-        raise ValueError("ASR stream header size is invalid")
-    header_end = 4 + header_size
-    if header_end >= len(payload):
-        raise ValueError("ASR stream PCM payload is empty")
-    if len(payload) - header_end > 1024 * 1024:
-        raise ValueError("ASR stream PCM payload is too large")
-    header = json.loads(payload[4:header_end].decode("utf-8"))
-    if header.get("type") != "audio.frame":
-        raise ValueError("ASR stream binary message must be audio.frame")
-    request_id = header.get("requestId")
-    if not isinstance(request_id, str) or not request_id or len(request_id) > 160:
-        raise ValueError("ASR stream requestId is invalid")
-    return header, payload[header_end:]
-
-
-def stream_vad_decision(decision: FrameVadDecision | None) -> dict | None:
-    if decision is None:
-        return None
-    return {
-        "sequence": decision.sequence,
-        "timestampMs": decision.timestamp_ms,
-        "durationMs": decision.duration_ms,
-        "voiced": decision.voiced,
-        "probability": decision.speech_probability,
-        "provider": decision.provider,
-        "fallback": decision.provider == "rms_fallback",
-        "preRollMs": decision.preroll_ms,
-    }
-
-
-def frame_vad_headers(decision: FrameVadDecision | None) -> dict[str, str]:
-    if decision is None:
-        return {}
-    headers = {
-        "x-asr-vad-voiced": "true" if decision.voiced else "false",
-        "x-asr-vad-provider": decision.provider,
-        "x-asr-vad-sequence": str(decision.sequence),
-        "x-asr-vad-timestamp-ms": str(decision.timestamp_ms),
-        "x-asr-vad-duration-ms": str(decision.duration_ms),
-        "x-asr-vad-preroll-ms": str(decision.preroll_ms),
-        "x-asr-vad-fallback": (
-            "true" if decision.provider == "rms_fallback" else "false"
-        ),
-    }
-    if decision.speech_probability is not None:
-        headers["x-asr-vad-probability"] = str(decision.speech_probability)
-    return headers

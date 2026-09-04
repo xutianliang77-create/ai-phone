@@ -2,6 +2,10 @@
 
 Cross-platform AI translation and calling application for iOS and Android.
 
+Current tested candidate: [2026-09-04 core iPhone closeout](docs/operations/core-translation-closeout-20260904.md).
+The online iPhone core is accepted only within its documented test scope;
+Android production, full calling/media capabilities, and commercial release remain separately gated.
+
 ## Repository layout
 
 - `apps/mobile`: Flutter mobile application.

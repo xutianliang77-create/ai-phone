@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "profileVersion": "2026-07-17-livekit-sip-candidate",
+  "profileVersion": "2026-08-18-livekit-agents-1.6.4-security",
   "packages": {
     "serverSdk": {
       "package": "livekit-server-sdk",
@@ -14,7 +14,7 @@
     },
     "rtcNode": {
       "package": "@livekit/rtc-node",
-      "version": "0.13.30",
+      "version": "0.13.33",
       "status": "verified"
     },
     "flutterClient": {
@@ -24,8 +24,13 @@
     },
     "agentsJs": {
       "package": "@livekit/agents",
-      "version": "1.5.0",
-      "status": "candidate_unverified"
+      "version": "1.6.4",
+      "status": "candidate_verified"
+    },
+    "agentsOpenAi": {
+      "package": "@livekit/agents-plugin-openai",
+      "version": "1.6.4",
+      "status": "candidate_verified"
     }
   },
   "images": {

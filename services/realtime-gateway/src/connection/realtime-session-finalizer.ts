@@ -73,6 +73,8 @@ export class RealtimeSessionFinalizer {
     const session = getSession(this.options.sessionId);
     if (!session) return;
     const billableSeconds = sessionBillableSeconds(session);
+    await this.runStep("provider", () =>
+      this.options.provider.closeSession(this.options.sessionId));
     transitionStatus(session.id, "ended");
     this.options.send({
       type: "session.ended",

@@ -28,6 +28,7 @@ class VadProvider(Protocol):
         session_id: str,
         pcm: bytes,
         sample_rate: int,
+        threshold: float | None = None,
     ) -> VadDecision:
         ...
 
@@ -71,8 +72,9 @@ class RmsVadProvider:
         session_id: str,
         pcm: bytes,
         sample_rate: int,
+        threshold: float | None = None,
     ) -> VadDecision:
-        del sample_rate
+        del sample_rate, threshold
         from app.audio_buffer import pcm16_rms
 
         voiced = pcm16_rms(pcm) > self.energy_threshold
@@ -129,6 +131,7 @@ class MarbleNetVadProvider:
         self._failed = False
         self._fallback_reason: str | None = None
         self._fallback_sessions: set[str] = set()
+        self._threshold_by_session: dict[str, float] = {}
         self.metrics = VadMetricsStore()
 
     @property
@@ -140,10 +143,20 @@ class MarbleNetVadProvider:
         session_id: str,
         pcm: bytes,
         sample_rate: int,
+        threshold: float | None = None,
     ) -> VadDecision:
+        effective_threshold = self.threshold if threshold is None else threshold
+        if not 0 <= effective_threshold <= 1:
+            raise ValueError("VAD threshold must be between 0 and 1")
+        self._threshold_by_session[session_id] = effective_threshold
         if self._failed:
             self._fallback_sessions.add(session_id)
-            decision = self._fallback(session_id, pcm, sample_rate)
+            decision = self._fallback(
+                session_id,
+                pcm,
+                sample_rate,
+                effective_threshold,
+            )
             self.metrics.record(session_id, decision.voiced, None)
             return decision
 
@@ -171,11 +184,16 @@ class MarbleNetVadProvider:
             self._fallback_reason = "runtime_failed"
             self._fallback_sessions.add(session_id)
             self._audio_by_session.clear()
-            decision = self._fallback(session_id, pcm, sample_rate)
+            decision = self._fallback(
+                session_id,
+                pcm,
+                sample_rate,
+                effective_threshold,
+            )
             self.metrics.record(session_id, decision.voiced, None)
             return decision
         decision = VadDecision(
-            voiced=probability >= self.threshold,
+            voiced=probability >= effective_threshold,
             probability=probability,
             provider="marblenet",
         )
@@ -190,11 +208,13 @@ class MarbleNetVadProvider:
         self._audio_by_session.pop(session_id, None)
         self.metrics.clear(session_id)
         self._fallback_sessions.discard(session_id)
+        self._threshold_by_session.pop(session_id, None)
         self.fallback.close_session(session_id)
 
     def diagnostics(self, session_id: str) -> dict[str, object]:
         return {
             **self.health_diagnostics(),
+            "threshold": self._threshold_by_session.get(session_id, self.threshold),
             **self.metrics.snapshot(session_id),
             "fallbackCount": int(session_id in self._fallback_sessions),
         }
@@ -219,8 +239,14 @@ class MarbleNetVadProvider:
         session_id: str,
         pcm: bytes,
         sample_rate: int,
+        threshold: float,
     ) -> VadDecision:
-        decision = self.fallback.analyze(session_id, pcm, sample_rate)
+        decision = self.fallback.analyze(
+            session_id,
+            pcm,
+            sample_rate,
+            threshold=threshold,
+        )
         return VadDecision(
             voiced=decision.voiced,
             probability=decision.probability,

@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { alignSpeakerSpan } from "./speaker-segment-aligner.js";
+import {
+  alignSpeakerSpan,
+  evaluateSpeakerSpan,
+} from "./speaker-segment-aligner.js";
 
 describe("speaker segment aligner", () => {
   it("selects the speaker with the largest time overlap", () => {
@@ -31,6 +34,23 @@ describe("speaker segment aligner", () => {
       [{ speakerId: "speaker_1", startMs: 900, endMs: 1100 }],
     )).toMatchObject({
       speaker: { speakerId: "unknown", role: "unknown", source: "unknown" },
+    });
+  });
+
+  it("distinguishes weak direct evidence from no time overlap", () => {
+    expect(evaluateSpeakerSpan(
+      { startMs: 1000, endMs: 2000, source: "client" },
+      [{ speakerId: "speaker_1", startMs: 900, endMs: 1100 }],
+    )).toMatchObject({
+      alignment: { speaker: { speakerId: "unknown" } },
+      hasDirectEvidence: true,
+    });
+    expect(evaluateSpeakerSpan(
+      { startMs: 3000, endMs: 4000, source: "client" },
+      [{ speakerId: "speaker_1", startMs: 900, endMs: 1100 }],
+    )).toMatchObject({
+      alignment: { speaker: { speakerId: "unknown" } },
+      hasDirectEvidence: false,
     });
   });
 

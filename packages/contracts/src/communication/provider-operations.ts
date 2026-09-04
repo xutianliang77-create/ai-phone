@@ -1,6 +1,12 @@
 import type { CommunicationProvider } from "./provider-adapters.js";
 
 export type ProviderOperationType =
+  | "phone_outbound"
+  | "phone_dtmf"
+  | "phone_hangup"
+  | "phone_reconcile"
+  | "translation_type_to_speak"
+  | "translation_uplink_control"
   | "sip_outbound"
   | "sip_dtmf"
   | "sip_hangup"

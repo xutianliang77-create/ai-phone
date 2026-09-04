@@ -43,6 +43,8 @@ describe("internal TTS track access route", () => {
     expect(response.statusCode).toBe(200);
     expect(response.json()).toMatchObject({
       status: "authorized",
+      targetParticipantIdentity: call.guestIdentity,
+      trackSid: "TR_1",
       participantCount: 3,
     });
     expect(authorize).toHaveBeenCalledWith({

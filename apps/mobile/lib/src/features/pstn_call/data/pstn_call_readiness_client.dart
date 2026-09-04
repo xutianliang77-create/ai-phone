@@ -38,6 +38,7 @@ class PstnCallReadiness {
   final List<String> issues;
 
   bool get isReady => status == 'ready' && enabled;
+  bool get isAir780 => provider == 'air780_volte';
 }
 
 class PstnCallReadinessClient {

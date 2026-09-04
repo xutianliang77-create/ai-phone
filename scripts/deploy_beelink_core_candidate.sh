@@ -15,7 +15,10 @@ PUBLIC_HOST="${PUBLIC_HOST:-100.110.127.117}"
 API_PORT="${API_PORT:-3320}"
 REALTIME_PORT="${REALTIME_PORT:-3321}"
 LIVEKIT_AGENT_PORT="${LIVEKIT_AGENT_PORT:-8381}"
-CANDIDATE_RESERVED_PORTS="${CANDIDATE_RESERVED_PORTS:-3110,3111,3210,3211,8081,8082,3310}"
+CANDIDATE_RESERVED_PORTS="${CANDIDATE_RESERVED_PORTS:-3110,3111,3210,3211,8081,8082,3310,18000,18002,18003,18004,18081,18084,18100,18788,18789,18883,18884,18887}"
+SOURCE_COMMIT="$(git -C "$ROOT_DIR" rev-parse HEAD)"
+SOURCE_TREE="$(git -C "$ROOT_DIR" rev-parse 'HEAD^{tree}')"
+RUNTIME_CANDIDATE_ID="${WUJIE_RUNTIME_CANDIDATE_ID:-wujie-core-${SOURCE_COMMIT:0:12}-$(date -u +%Y%m%dT%H%M%SZ)}"
 API_STATUS_URL="http://$PUBLIC_HOST:$API_PORT/health"
 GATEWAY_STATUS_URL="http://$PUBLIC_HOST:$REALTIME_PORT/health"
 AGENT_STATUS_URL="http://$PUBLIC_HOST:$LIVEKIT_AGENT_PORT/worker"
@@ -31,6 +34,14 @@ esac
 }
 [[ "$AI_PHONE_IMAGE_TAG" =~ ^[A-Za-z0-9._-]+$ ]] || {
   echo "AI_PHONE_IMAGE_TAG contains unsafe characters" >&2
+  exit 2
+}
+[[ "$SOURCE_COMMIT" =~ ^[a-f0-9]{40}$ && "$SOURCE_TREE" =~ ^[a-f0-9]{40}$ ]] || {
+  echo "Candidate source commit/tree identity is invalid" >&2
+  exit 2
+}
+[[ "$RUNTIME_CANDIDATE_ID" =~ ^[A-Za-z0-9._-]{1,96}$ ]] || {
+  echo "WUJIE_RUNTIME_CANDIDATE_ID is invalid" >&2
   exit 2
 }
 for name in "$COMPOSE_PROJECT_NAME" "$AI_PHONE_CONTAINER_PREFIX"; do
@@ -78,6 +89,27 @@ preflight() {
     --reserved-ports "$CANDIDATE_RESERVED_PORTS"
 }
 
+require_clean_source() {
+  local dirty
+  dirty="$(git -C "$ROOT_DIR" status --porcelain --untracked-files=normal)"
+  [[ -z "$dirty" ]] || {
+    echo "Core candidate deploy requires a clean source checkout" >&2
+    printf '%s\n' "$dirty" >&2
+    exit 2
+  }
+}
+
+require_remote_ports_free() {
+  ssh "$REMOTE_HOST" \
+    "for port in '$API_PORT' '$REALTIME_PORT' '$LIVEKIT_AGENT_PORT'; do \
+       if ss -H -ltn | awk -v expected=\"\$port\" \
+         '{ address=\$4; sub(/^.*:/, \"\", address); if (address == expected) found=1 } \
+          END { exit found ? 0 : 1 }'; then \
+         echo \"Candidate port \$port is already in use\" >&2; exit 2; \
+       fi; \
+     done"
+}
+
 remote_compose() {
   ssh "$REMOTE_HOST" \
     "AI_PHONE_ENV_FILE='$REMOTE_RUNTIME/server.env' \
@@ -88,19 +120,62 @@ remote_compose() {
        -f '$REMOTE_SOURCE/infra/ai-phone-server/docker-compose.yaml' $*"
 }
 
+require_remote_resource_isolation() {
+  ssh "$REMOTE_HOST" 'bash -s' <<'REMOTE'
+set -euo pipefail
+if docker ps --format '{{.Names}}' | grep -Eq '^maruko-'; then
+  echo "Core candidate requires a dedicated host; running Maruko containers found" >&2
+  exit 2
+fi
+for cmdline in /proc/[0-9]*/cmdline; do
+  [[ -r "$cmdline" ]] || continue
+  process_command="$(tr '\0' ' ' <"$cmdline")"
+  if [[ "$process_command" == *'/data/models/maruko-'* ||
+        "$process_command" == *'/data/models/wanziaiphone/'* ||
+        "$process_command" == *'/data/models/xiaozhi-esp32-server/'* ||
+        "$process_command" == *'/data/models/qwen38-'* ]]; then
+    echo "Core candidate requires a dedicated host; running Maruko process found" >&2
+    exit 2
+  fi
+done
+if ss -H -ltn | grep -Eq \
+  ':(18000|18002|18003|18004|18081|18084|18100|18788|18789|18883|18884|18887)([[:space:]]|$)'; then
+  echo "Core candidate requires a dedicated host; Maruko listener found" >&2
+  exit 2
+fi
+REMOTE
+}
+
 status() {
+  require_remote_resource_isolation
   remote_compose "ps"
-  local api_health gateway_health agent_health
+  local api_health gateway_health agent_health runtime_manifest
   api_health="$(curl -fsS --max-time 5 "$API_STATUS_URL")"
   gateway_health="$(curl -fsS --max-time 5 "$GATEWAY_STATUS_URL")"
   agent_health="$(curl -fsS --max-time 5 "$AGENT_STATUS_URL")"
+  runtime_manifest="$(ssh "$REMOTE_HOST" \
+    "cat '$REMOTE_RUNTIME/candidate-manifest.json'")"
   API_HEALTH="$api_health" GATEWAY_HEALTH="$gateway_health" \
-    AGENT_HEALTH="$agent_health" node <<'NODE'
+    AGENT_HEALTH="$agent_health" RUNTIME_MANIFEST="$runtime_manifest" \
+    EXPECTED_REALTIME_ENDPOINT="ws://$PUBLIC_HOST:$REALTIME_PORT/realtime" \
+    EXPECTED_REALTIME_HOST="$PUBLIC_HOST:$REALTIME_PORT" node <<'NODE'
 const api = JSON.parse(process.env.API_HEALTH);
 const gateway = JSON.parse(process.env.GATEWAY_HEALTH);
 const agent = JSON.parse(process.env.AGENT_HEALTH);
+const manifest = JSON.parse(process.env.RUNTIME_MANIFEST);
 if (api.status !== "ok") throw new Error("candidate API is not healthy");
 if (gateway.status !== "ok") throw new Error("candidate Gateway is not healthy");
+if (api.realtimeWsEndpoint !== process.env.EXPECTED_REALTIME_ENDPOINT) {
+  throw new Error("candidate API advertises an unexpected realtime endpoint");
+}
+if (!gateway.publicEntryProtection?.allowedHosts?.includes(
+  process.env.EXPECTED_REALTIME_HOST,
+)) {
+  throw new Error("candidate Gateway does not allow its advertised realtime host");
+}
+if (gateway.publicEntryProtection?.allowNonBrowserClientsWithoutOrigin !== true) {
+  throw new Error("candidate Gateway does not admit the native mobile client");
+}
 const profile = api.capabilityProfileReadiness;
 if (profile?.status !== "ready" || profile.profile !== "core_translation" ||
     profile.explicit !== true) {
@@ -108,6 +183,21 @@ if (profile?.status !== "ready" || profile.profile !== "core_translation" ||
 }
 if (!String(agent.agent_name ?? "").includes("core-candidate")) {
   throw new Error("candidate Translation Agent identity is not isolated");
+}
+const runtime = gateway.runtimeIdentity;
+if (runtime?.traceable !== true) {
+  throw new Error("candidate Gateway runtime identity is not traceable");
+}
+for (const [runtimeKey, manifestKey] of [
+  ["candidateId", "candidateId"],
+  ["sourceCommit", "sourceCommit"],
+  ["sourceTree", "sourceTree"],
+  ["imageId", "imageId"],
+  ["configSha256", "configSha256"],
+]) {
+  if (runtime[runtimeKey] !== manifest[manifestKey]) {
+    throw new Error(`candidate runtime ${runtimeKey} does not match manifest`);
+  }
 }
 NODE
   echo "Core candidate ready on $PUBLIC_HOST:$API_PORT/$REALTIME_PORT/$LIVEKIT_AGENT_PORT"
@@ -128,7 +218,11 @@ if [[ "$MODE" == "down" ]]; then
 fi
 
 preflight
+require_clean_source
+require_remote_resource_isolation
 npm --prefix "$ROOT_DIR" run check:source-build -- --json
+require_clean_source
+require_remote_ports_free
 ssh "$REMOTE_HOST" \
   "mkdir -p '$REMOTE_SOURCE' '$REMOTE_RUNTIME/data/voice-references'"
 rsync -az --delete \
@@ -147,12 +241,14 @@ rsync -az --delete \
   --exclude='test-audio/' \
   --exclude='services/model-services/' \
   "$ROOT_DIR/" "$REMOTE_HOST:$REMOTE_SOURCE/"
-rsync -a --chmod=F600 "$CANDIDATE_ENV_FILE" \
+rsync -a "$CANDIDATE_ENV_FILE" \
   "$REMOTE_HOST:$REMOTE_RUNTIME/release.env.incoming"
 
 ssh "$REMOTE_HOST" \
   "REMOTE_RUNTIME='$REMOTE_RUNTIME' \
    COMPOSE_PROJECT_NAME='$COMPOSE_PROJECT_NAME' \
+   RUNTIME_CANDIDATE_ID='$RUNTIME_CANDIDATE_ID' \
+   SOURCE_COMMIT='$SOURCE_COMMIT' SOURCE_TREE='$SOURCE_TREE' \
    PUBLIC_HOST='$PUBLIC_HOST' API_PORT='$API_PORT' \
    REALTIME_PORT='$REALTIME_PORT' LIVEKIT_AGENT_PORT='$LIVEKIT_AGENT_PORT' \
    bash -s" <<'REMOTE'
@@ -193,6 +289,8 @@ set_env LIVEKIT_AGENT_PORT "$LIVEKIT_AGENT_PORT"
 set_env API_BASE_URL "http://127.0.0.1:$API_PORT"
 set_env API_HEALTH_URL "http://127.0.0.1:$API_PORT/health"
 set_env REALTIME_WS_ENDPOINT "ws://$PUBLIC_HOST:$REALTIME_PORT/realtime"
+set_env REALTIME_ALLOWED_HOSTS "$PUBLIC_HOST:$REALTIME_PORT"
+set_env REALTIME_ALLOW_NON_BROWSER_CLIENTS_WITHOUT_ORIGIN true
 set_env GATEWAY_HEALTH_URL "http://127.0.0.1:$REALTIME_PORT/health"
 set_env TRANSLATION_AGENT_HEALTH_URL \
   "http://127.0.0.1:$LIVEKIT_AGENT_PORT/worker"
@@ -205,6 +303,11 @@ set_env VOICE_PROFILE_REFERENCE_DIR /data/ai-phone/voice-references
 set_env PUBLIC_RATE_LIMIT_KEY_PREFIX \
   "wujie:candidate:$COMPOSE_PROJECT_NAME:public"
 set_env DEPLOYMENT_ENVIRONMENT staging-core-candidate
+set_env WUJIE_REQUIRE_TRACEABLE_RUNTIME true
+set_env WUJIE_RUNTIME_CANDIDATE_ID "$RUNTIME_CANDIDATE_ID"
+set_env WUJIE_RUNTIME_SOURCE_COMMIT "$SOURCE_COMMIT"
+set_env WUJIE_RUNTIME_SOURCE_TREE "$SOURCE_TREE"
+sed -i '/^WUJIE_RUNTIME_IMAGE_ID=/d;/^WUJIE_RUNTIME_CONFIG_SHA256=/d' "$next"
 chmod 600 "$next"
 if [[ -f "$target" ]]; then
   install -m 600 "$target" "$REMOTE_RUNTIME/server.env.rollback"
@@ -213,6 +316,63 @@ mv -f "$next" "$target"
 REMOTE
 
 remote_compose "build"
+ssh "$REMOTE_HOST" \
+  "REMOTE_RUNTIME='$REMOTE_RUNTIME' \
+   COMPOSE_PROJECT_NAME='$COMPOSE_PROJECT_NAME' \
+   AI_PHONE_IMAGE_TAG='$AI_PHONE_IMAGE_TAG' \
+   RUNTIME_CANDIDATE_ID='$RUNTIME_CANDIDATE_ID' \
+   SOURCE_COMMIT='$SOURCE_COMMIT' SOURCE_TREE='$SOURCE_TREE' \
+   bash -s" <<'REMOTE'
+set -euo pipefail
+umask 077
+target="$REMOTE_RUNTIME/server.env"
+manifest="$REMOTE_RUNTIME/candidate-manifest.json"
+image_id="$(docker image inspect "ai-phone-server:$AI_PHONE_IMAGE_TAG" \
+  --format '{{.Id}}')"
+[[ "$image_id" =~ ^sha256:[a-f0-9]{64}$ ]]
+set_env() {
+  local key="$1" value="$2"
+  if grep -q "^${key}=" "$target"; then
+    sed -i "s|^${key}=.*|${key}=${value}|" "$target"
+  else
+    printf '%s=%s\n' "$key" "$value" >>"$target"
+  fi
+}
+set_env WUJIE_RUNTIME_IMAGE_ID "$image_id"
+hash_input="$(mktemp "$REMOTE_RUNTIME/.runtime-config.XXXXXX")"
+trap 'rm -f "$hash_input"' EXIT
+grep -v '^WUJIE_RUNTIME_CONFIG_SHA256=' "$target" >"$hash_input"
+config_sha256="$(sha256sum "$hash_input" | awk '{print $1}')"
+set_env WUJIE_RUNTIME_CONFIG_SHA256 "$config_sha256"
+chmod 600 "$target"
+env_file_sha256="$(sha256sum "$target" | awk '{print $1}')"
+MANIFEST="$manifest" CANDIDATE_ID="$RUNTIME_CANDIDATE_ID" \
+  SOURCE_COMMIT="$SOURCE_COMMIT" SOURCE_TREE="$SOURCE_TREE" \
+  IMAGE_TAG="$AI_PHONE_IMAGE_TAG" IMAGE_ID="$image_id" \
+  CONFIG_SHA256="$config_sha256" ENV_FILE_SHA256="$env_file_sha256" \
+  COMPOSE_PROJECT_NAME="$COMPOSE_PROJECT_NAME" python3 - <<'PY'
+import json
+import os
+from datetime import datetime, timezone
+
+manifest = {
+    "schemaVersion": 1,
+    "generatedAt": datetime.now(timezone.utc).isoformat(),
+    "candidateId": os.environ["CANDIDATE_ID"],
+    "sourceCommit": os.environ["SOURCE_COMMIT"],
+    "sourceTree": os.environ["SOURCE_TREE"],
+    "imageTag": os.environ["IMAGE_TAG"],
+    "imageId": os.environ["IMAGE_ID"],
+    "configSha256": os.environ["CONFIG_SHA256"],
+    "environmentFileSha256": os.environ["ENV_FILE_SHA256"],
+    "composeProject": os.environ["COMPOSE_PROJECT_NAME"],
+}
+with open(os.environ["MANIFEST"], "w", encoding="utf-8") as output:
+    json.dump(manifest, output, ensure_ascii=False, indent=2)
+    output.write("\n")
+os.chmod(os.environ["MANIFEST"], 0o600)
+PY
+REMOTE
 remote_compose "up -d --no-build --remove-orphans"
 for _ in {1..60}; do
   if curl -fsS --max-time 3 "$API_STATUS_URL" >/dev/null 2>&1 &&
@@ -224,6 +384,6 @@ for _ in {1..60}; do
   sleep 2
 done
 remote_compose "ps"
-remote_compose "logs --tail=120 api gateway translation-agent"
+remote_compose "logs --tail=120 wujie-ai"
 echo "Core candidate deployment did not become healthy" >&2
 exit 1

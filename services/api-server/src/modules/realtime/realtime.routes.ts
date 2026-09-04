@@ -98,6 +98,7 @@ export async function registerRealtimeRoutes(app: FastifyInstance) {
       speechId: body.speechId,
       turnId: body.turnId,
       revision: body.revision,
+      speakerRevision: body.speakerRevision,
       pipelineGeneration: body.pipelineGeneration,
       pipelineTiming: body.pipelineTiming,
       sourceText: body.sourceText,
@@ -118,6 +119,7 @@ export async function registerRealtimeRoutes(app: FastifyInstance) {
       refinement: body.refinement,
       speaker: body.speaker,
       timing: body.timing,
+      tokenTimings: body.tokenTimings,
       vadContext: body.vadContext,
       });
       if (!session)

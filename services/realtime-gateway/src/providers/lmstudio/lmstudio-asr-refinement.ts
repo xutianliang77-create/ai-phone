@@ -10,7 +10,10 @@ import {
 } from "@translation/llm";
 import type { TranscriptResult } from "../../asr/asr-provider.js";
 import type { RealtimeProviderSession } from "../realtime-provider.js";
-import { shouldUseContextualAsrRefinement } from "./asr-refinement-policy.js";
+import {
+  hasExplicitAsrCorrectionSignal,
+  shouldUseContextualAsrRefinement,
+} from "./asr-refinement-policy.js";
 
 export interface RecentAsrSegment {
   rawText?: string;
@@ -71,8 +74,15 @@ export async function refineRealtimeTranscript(input: {
 }): Promise<RefinedTranscript> {
   const rawText = input.transcript.text;
   const protectedTerms = protectedTermsFor(input.session);
+  const explicitSignal = hasExplicitAsrCorrectionSignal(
+    rawText,
+    protectedTerms,
+  );
   const shouldUseLlm = input.enabled &&
-    input.transcript.endpointReason !== "max_duration" &&
+    (
+      input.transcript.endpointReason !== "max_duration" ||
+      explicitSignal
+    ) &&
     shouldUseContextualAsrRefinement({
     rawText,
     sourceLanguage: input.transcript.language,

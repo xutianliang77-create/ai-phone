@@ -7,6 +7,8 @@ import type {
 } from "@translation/contracts";
 import { sendError } from "../../infrastructure/http/errors.js";
 import { requireAccount } from "../account/account-auth.js";
+import { findCallLink } from "../call-links/call-links.service.js";
+import { withSessionWriteLock } from "../sessions/session-write-coordinator.js";
 import { registerAgentCallInternalRoutes } from "./agent-call-internal.routes.js";
 import { registerAgentCallPstnWebhookRoutes } from "./agent-call-pstn-webhook.routes.js";
 import {
@@ -29,13 +31,22 @@ import { getVoiceAgentRuntimeSupervisor } from "./voice-agent-runtime-supervisor
 import { registerVoiceAgentToolGatewayRoutes } from
   "./voice-agent-tool-gateway.routes.js";
 import { registerAgentCallTakeoverRoutes } from "./agent-call-takeover.routes.js";
-import { findSessionProviderOperation } from
-  "../provider-operations/provider-operations-runtime.repository.js";
+import { registerAgentCallPauseRoutes } from "./agent-call-pause.routes.js";
+import { registerAgentWorkRoutes } from "./agent-work.routes.js";
+import { registerVoiceClientOwnershipRoutes } from
+  "./voice-client-ownership.routes.js";
+import { registerAgentDeliveryRoutes } from "./agent-delivery.routes.js";
 import { publishVoiceAgentControl } from "./voice-agent-control-publisher.js";
 import { registerAgentConsultRoutes } from "./agent-consult.routes.js";
 import { registerAgentConsultControlRoutes } from "./agent-consult-control.routes.js";
 import { validateVoiceAgentRecordingAuthorization } from
   "./voice-agent-recording-consent.js";
+import { findAgentDialProviderOperation } from
+  "./agent-call-provider-operation.js";
+import { isAgentCallCarrierConnected } from
+  "./agent-call-telephony-runtime.js";
+import { toAgentCallReadDto } from "./agent-call-status-projection.js";
+import { executeVoiceAgentPhoneHangup } from "./voice-agent-phone-control.js";
 
 export async function registerAgentCallRoutes(app: FastifyInstance) {
   app.addHook("onClose", async () => {
@@ -47,6 +58,10 @@ export async function registerAgentCallRoutes(app: FastifyInstance) {
   registerVoiceAgentRuntimeRoutes(app);
   registerVoiceAgentToolGatewayRoutes(app);
   registerAgentCallTakeoverRoutes(app);
+  registerAgentCallPauseRoutes(app);
+  registerAgentWorkRoutes(app);
+  registerVoiceClientOwnershipRoutes(app);
+  registerAgentDeliveryRoutes(app);
   registerAgentAssistRoutes(app);
   registerAgentConsultRoutes(app);
   registerAgentConsultControlRoutes(app);
@@ -55,7 +70,12 @@ export async function registerAgentCallRoutes(app: FastifyInstance) {
   app.get("/ai-calling-agent/drafts", async (request, reply) => {
     const account = await requireAccount(request, reply);
     if (!account) return;
-    return { drafts: (await listAgentCallDrafts(account.id)).map(toDto) };
+    return {
+      drafts: await Promise.all(
+        (await listAgentCallDrafts(account.id)).map((draft) =>
+          toAgentCallReadDto(draft)),
+      ),
+    };
   });
 
   app.post("/ai-calling-agent/drafts", async (request, reply) => {
@@ -90,7 +110,7 @@ export async function registerAgentCallRoutes(app: FastifyInstance) {
         "agent_call_draft_not_found",
         "Draft not found",
       );
-    return { draft: toDto(draft) };
+    return { draft: await toAgentCallReadDto(draft) };
   });
 
   app.post(
@@ -179,12 +199,19 @@ export async function registerAgentCallRoutes(app: FastifyInstance) {
       if (!current) {
         return sendError(reply, 404, "agent_call_draft_not_found", "Draft not found");
       }
-      const dial = current.callId
-        ? await findSessionProviderOperation(current.callId, "sip_outbound")
+      const call = current.callId ? await findCallLink(current.callId) : null;
+      const dial = call
+        ? await findAgentDialProviderOperation(
+            call.sessionId,
+            current.providerOperationId,
+          )
         : null;
+      const carrierConnected = current.status === "in_progress" && call && dial
+        ? await isAgentCallCarrierConnected(call, dial)
+        : false;
       if (current.status !== "requires_human_takeover" &&
         current.status !== "takeover_requested" &&
-        (current.status !== "in_progress" || dial?.status !== "active")) {
+        (current.status !== "in_progress" || !carrierConnected)) {
         return sendError(
           reply,
           409,
@@ -251,19 +278,44 @@ export async function registerAgentCallRoutes(app: FastifyInstance) {
           draft: toDto(result.draft),
         });
       }
+      let hangup: {
+        status: "not_started" | "requested" | "accepted" | "unknown" | "failed";
+        code: string;
+        replayed?: boolean;
+      } = { status: "not_started", code: "phone_not_started" };
       if (result.draft.callId) {
-        const control = await publishVoiceAgentControl({
-          callId: result.draft.callId,
-          command: "cancel",
-        });
-        if (!control.ok) {
-          request.log.warn(
-            { callId: result.draft.callId, code: control.code },
-            "Voice Agent cancellation will use heartbeat fallback",
-          );
+        const call = await findCallLink(result.draft.callId);
+        if (call && result.draft.providerOperationId) {
+          const phone = await withSessionWriteLock(call.sessionId, () =>
+            executeVoiceAgentPhoneHangup({
+              call,
+              providerOperationId: result.draft.providerOperationId!,
+              idempotencyKey: `voice-agent-hangup:${call.sessionId}`,
+            }));
+          hangup = {
+            status: phone.ok ? "accepted" : phone.code === "unknown"
+              ? "unknown" : "failed",
+            code: phone.code,
+            ...("replayed" in phone ? { replayed: phone.replayed } : {}),
+          };
+        }
+        if (hangup.status !== "accepted" && hangup.status !== "unknown") {
+          const control = await publishVoiceAgentControl({
+            callId: result.draft.callId,
+            command: "cancel",
+          });
+          if (control.ok && hangup.status === "not_started") {
+            hangup = { status: "requested", code: "control_published" };
+          }
+          if (!control.ok) {
+            request.log.warn(
+              { callId: result.draft.callId, code: control.code },
+              "Voice Agent cancellation will use heartbeat fallback",
+            );
+          }
         }
       }
-      return { draft: toDto(result.draft) };
+      return { draft: toDto(result.draft), hangup };
     },
   );
 

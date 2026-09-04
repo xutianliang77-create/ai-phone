@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../../../../app/localization/app_localizations.dart';
 import '../controllers/scan_translation_controller.dart';
+import 'scan_translation_layout_policy.dart';
 import 'scan_translation_overlay_layout.dart';
 
 class ScanImageTranslationView extends StatefulWidget {
@@ -28,6 +29,10 @@ class ScanImageTranslationView extends StatefulWidget {
 class _ScanImageTranslationViewState extends State<ScanImageTranslationView> {
   static const double _minScale = 1;
   static const double _maxScale = 5;
+  static const double _zoomControlsInset = 8;
+  static const double _zoomControlsWidth = 144;
+  static const double _zoomControlsHeight = 48;
+  static const TextScaler _maximumOverlayTextScaler = TextScaler.linear(1.1);
 
   final TransformationController _transformationController =
       TransformationController();
@@ -53,6 +58,8 @@ class _ScanImageTranslationViewState extends State<ScanImageTranslationView> {
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
+    final useListFallback =
+        shouldUseScanTranslationListFallback(widget.translatedBlocks);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
@@ -114,14 +121,15 @@ class _ScanImageTranslationViewState extends State<ScanImageTranslationView> {
                               fit: BoxFit.fill,
                               semanticLabel: l10n.scanImageSelected,
                             ),
-                            if (_showTranslation) _translationLayer(context),
+                            if (_showTranslation && !useListFallback)
+                              _translationLayer(context),
                           ],
                         ),
                       ),
                     ),
                     Positioned(
-                      right: 8,
-                      bottom: 8,
+                      right: _zoomControlsInset,
+                      bottom: _zoomControlsInset,
                       child: _ZoomControls(
                         scale: _scale,
                         minScale: _minScale,
@@ -137,6 +145,26 @@ class _ScanImageTranslationViewState extends State<ScanImageTranslationView> {
             ),
           ),
         ),
+        if (_showTranslation && useListFallback) ...<Widget>[
+          const SizedBox(height: 8),
+          Container(
+            key: const ValueKey('scan-translation-list-fallback-notice'),
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.secondaryContainer,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Text(
+              l10n.isChinese
+                  ? '版面较密，译文已移到下方列表。点按条目可展开全文。'
+                  : 'Dense layout: translation is in the list below. Tap to expand.',
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: Theme.of(context).colorScheme.onSecondaryContainer,
+                  ),
+            ),
+          ),
+        ],
       ],
     );
   }
@@ -158,11 +186,18 @@ class _ScanImageTranslationViewState extends State<ScanImageTranslationView> {
     }
     return LayoutBuilder(
       builder: (context, constraints) {
+        final overlayTextScaler = _overlayTextScaler(context);
         final placements = layoutScanTranslationOverlays(
           blocks: widget.translatedBlocks,
           canvas: constraints.biggest,
           textDirection: Directionality.of(context),
-          textScaler: MediaQuery.textScalerOf(context),
+          textScaler: overlayTextScaler,
+          reservedRect: Rect.fromLTWH(
+            constraints.maxWidth - _zoomControlsInset - _zoomControlsWidth,
+            constraints.maxHeight - _zoomControlsInset - _zoomControlsHeight,
+            _zoomControlsWidth,
+            _zoomControlsHeight,
+          ),
         );
         return Stack(
           children: <Widget>[
@@ -185,8 +220,9 @@ class _ScanImageTranslationViewState extends State<ScanImageTranslationView> {
                         const EdgeInsets.symmetric(horizontal: 3, vertical: 2),
                     child: Text(
                       placement.block.translation,
-                      maxLines: 3,
+                      maxLines: scanTranslationOverlayMaxLines,
                       overflow: TextOverflow.ellipsis,
+                      textScaler: overlayTextScaler,
                       style: TextStyle(
                         color: Theme.of(context).colorScheme.onSurface,
                         fontSize: placement.fontSize,
@@ -201,6 +237,13 @@ class _ScanImageTranslationViewState extends State<ScanImageTranslationView> {
         );
       },
     );
+  }
+
+  TextScaler _overlayTextScaler(BuildContext context) {
+    final ambient = MediaQuery.textScalerOf(context);
+    return ambient.scale(14) <= _maximumOverlayTextScaler.scale(14)
+        ? ambient
+        : _maximumOverlayTextScaler;
   }
 
   void _syncScale() {
@@ -263,52 +306,6 @@ class _ZoomControls extends StatelessWidget {
           ),
         ],
       ),
-    );
-  }
-}
-
-class ScanTextComparisonView extends StatelessWidget {
-  const ScanTextComparisonView({
-    required this.sourceText,
-    required this.translatedText,
-    required this.translatedBlocks,
-    super.key,
-  });
-
-  final String sourceText;
-  final String translatedText;
-  final List<ScanTranslatedBlock> translatedBlocks;
-
-  @override
-  Widget build(BuildContext context) {
-    final pairs = translatedBlocks.isEmpty
-        ? <(String, String)>[(sourceText, translatedText)]
-        : translatedBlocks
-            .map((block) => (block.source.text, block.translation))
-            .toList(growable: false);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: <Widget>[
-        Text(
-          context.l10n.scanStatusMessage('scanTextComparison'),
-          style: Theme.of(context).textTheme.titleMedium,
-        ),
-        const SizedBox(height: 8),
-        for (var index = 0; index < pairs.length; index++) ...<Widget>[
-          SelectableText(
-            pairs[index].$1,
-            style: Theme.of(context).textTheme.bodyLarge,
-          ),
-          const SizedBox(height: 4),
-          SelectableText(
-            pairs[index].$2,
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
-                ),
-          ),
-          if (index != pairs.length - 1) const Divider(height: 24),
-        ],
-      ],
     );
   }
 }

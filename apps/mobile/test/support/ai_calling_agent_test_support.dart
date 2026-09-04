@@ -7,12 +7,16 @@ import 'package:translation_mobile/src/app/localization/app_localizations.dart';
 import 'package:translation_mobile/src/features/account/data/account_auth_headers.dart';
 import 'package:translation_mobile/src/features/ai_calling_agent/data/ai_calling_agent_api_client.dart';
 import 'package:translation_mobile/src/features/ai_calling_agent/presentation/pages/ai_calling_agent_page.dart';
+import 'package:translation_mobile/src/features/call_link/data/call_link_api_client.dart';
+import 'package:translation_mobile/src/features/call_link/data/call_room_client.dart';
 import 'package:translation_mobile/src/features/compliance/data/voice_processing_consent_store.dart';
 
 Future<void> pumpAgentPage(
   WidgetTester tester, {
   required FakeAiCallingAgentClient client,
   required VoiceProcessingConsentStore voiceConsentStore,
+  CallLinkApiClient? callClient,
+  CallRoomClient? roomClient,
   double textScale = 1,
 }) async {
   await tester.pumpWidget(MaterialApp(
@@ -32,6 +36,8 @@ Future<void> pumpAgentPage(
     ),
     home: AiCallingAgentPage(
       client: client,
+      callClient: callClient,
+      roomClient: roomClient,
       voiceConsentStore: voiceConsentStore,
     ),
   ));
@@ -54,6 +60,8 @@ class FakeAiCallingAgentClient extends AiCallingAgentApiClient {
   final List<String> startedDraftIds = <String>[];
   final List<String> refreshedDraftIds = <String>[];
   final List<String> takeoverDraftIds = <String>[];
+  final List<String> pausedDraftIds = <String>[];
+  final List<String> resumedDraftIds = <String>[];
   final List<String> cancelledDraftIds = <String>[];
 
   @override
@@ -127,6 +135,30 @@ class FakeAiCallingAgentClient extends AiCallingAgentApiClient {
   }
 
   @override
+  Future<AiCallingAgentDraft> pauseDraft({required String draftId}) async {
+    pausedDraftIds.add(draftId);
+    return agentDraft(
+      status: 'in_progress',
+      callId: 'call_1',
+      executionProvider: 'air780_volte',
+      carrierState: 'connected',
+      agentControlState: 'paused',
+    );
+  }
+
+  @override
+  Future<AiCallingAgentDraft> resumeDraft({required String draftId}) async {
+    resumedDraftIds.add(draftId);
+    return agentDraft(
+      status: 'in_progress',
+      callId: 'call_1',
+      executionProvider: 'air780_volte',
+      carrierState: 'connected',
+      agentControlState: 'running',
+    );
+  }
+
+  @override
   Future<AiCallingAgentDraft> cancelDraft({
     required String draftId,
     String reason = 'user_cancelled',
@@ -142,7 +174,13 @@ AiCallingAgentDraft agentDraft({
   String riskLevel = 'low',
   List<String> riskReasons = const <String>[],
   String? callId,
+  String? takeoverReadyAt,
+  String? takeoverResolvedAt,
   String? resultSummary,
+  String? executionProvider,
+  String? carrierState,
+  String? liveKitParticipantState,
+  String agentControlState = 'running',
 }) {
   return AiCallingAgentDraft(
     id: 'draft_1',
@@ -154,6 +192,12 @@ AiCallingAgentDraft agentDraft({
     riskLevel: riskLevel,
     riskReasons: riskReasons,
     callId: callId,
+    takeoverReadyAt: takeoverReadyAt,
+    takeoverResolvedAt: takeoverResolvedAt,
     resultSummary: resultSummary,
+    executionProvider: executionProvider,
+    carrierState: carrierState,
+    liveKitParticipantState: liveKitParticipantState,
+    agentControlState: agentControlState,
   );
 }

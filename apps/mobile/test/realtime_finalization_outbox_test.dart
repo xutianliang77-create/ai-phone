@@ -29,6 +29,53 @@ void main() {
     expect(tasks.single.segments.single['id'], 'segment-session-a');
     expect(jsonDecode(await file.readAsString()), isA<Map>());
   });
+
+  test('quarantines terminal tasks without deleting their payload', () async {
+    final directory = await Directory.systemTemp.createTemp('finalization-');
+    addTearDown(() => directory.delete(recursive: true));
+    final file = File('${directory.path}/outbox.json');
+    final outbox = FileRealtimeFinalizationOutbox(file: file);
+    final pending = task('missing-session', 12, withSegment: true);
+
+    await outbox.upsert(pending);
+    await outbox.quarantine(
+      pending,
+      reason: 'http_404_session_not_found',
+      quarantinedAt: DateTime.utc(2026, 8, 28, 5, 20),
+    );
+
+    expect(await outbox.load(), isEmpty);
+    final quarantined = await outbox.loadQuarantined();
+    expect(quarantined, hasLength(1));
+    expect(quarantined.single.task.sessionId, 'missing-session');
+    expect(quarantined.single.task.segments.single['sourceText'], 'hello');
+    expect(quarantined.single.reason, 'http_404_session_not_found');
+    expect(
+      quarantined.single.quarantinedAt,
+      DateTime.utc(2026, 8, 28, 5, 20),
+    );
+    final stored = jsonDecode(await file.readAsString()) as Map;
+    expect(stored['version'], 2);
+    expect(stored['tasks'], isEmpty);
+    expect(stored['quarantinedTasks'], hasLength(1));
+  });
+
+  test('loads a version 1 outbox with no quarantine records', () async {
+    final directory = await Directory.systemTemp.createTemp('finalization-');
+    addTearDown(() => directory.delete(recursive: true));
+    final file = File('${directory.path}/outbox.json');
+    final legacyTask = task('legacy-session', 3, withSegment: true);
+    await file.writeAsString(jsonEncode({
+      'version': 1,
+      'tasks': [legacyTask.toJson()],
+    }));
+    final outbox = FileRealtimeFinalizationOutbox(file: file);
+
+    final tasks = await outbox.load();
+
+    expect(tasks.single.sessionId, 'legacy-session');
+    expect(await outbox.loadQuarantined(), isEmpty);
+  });
 }
 
 RealtimeFinalizationTask task(

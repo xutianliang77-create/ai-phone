@@ -101,7 +101,108 @@ export interface RealtimeSpeakerTurnDiagnosticsDto {
   maxConfirmationLatencyMs: number;
   committedAudioMs: number;
   endpointReasons: Partial<Record<AsrEndpointReason, number>>;
+  boundaryRevisionAttemptCount?: number;
+  boundaryRevisionSuccessCount?: number;
+  boundaryRevisionFailureCount?: number;
+  boundaryReassignedCharacterCount?: number;
+  unresolvedCommitMissCount?: number;
+  boundaryOutcomeCounts?: Partial<Record<SpeakerBoundaryOutcome, number>>;
+  coordinatorDecisionCounts?: Partial<Record<
+    SpeakerTurnCoordinatorDecisionReason,
+    number
+  >>;
+  confirmedSpeakerCount?: number;
 }
+
+export type SpeakerBoundaryOutcome =
+  | "commit_hit"
+  | "commit_error"
+  | "witness_reassignment"
+  | "token_timing_split"
+  | "noop_after_endpoint"
+  | "unresolved";
+
+export type SpeakerTurnCoordinatorDecisionReason =
+  | "no_span"
+  | "overlap_only"
+  | "missing_confidence"
+  | "evidence_too_short"
+  | "dominance_too_low"
+  | "novel_confidence_too_low"
+  | "known_confidence_too_low"
+  | "current_speaker"
+  | "candidate_reset_label"
+  | "candidate_reset_start_drift"
+  | "stable_window_pending"
+  | "initial_speaker_confirmed"
+  | "boundary_confirmed";
+
+export interface RealtimeSpeakerRevisionDiagnosticsDto {
+  configuredProvider: "http";
+  mode: "shadow" | "apply";
+  requestCount: number;
+  completedCount: number;
+  acceptedCount: number;
+  emittedUpdateCount: number;
+  errorCount: number;
+  staleResultCount: number;
+  splitParentCount: number;
+  splitChildCount: number;
+  splitRejectedCount: number;
+  splitSkippedParentCount?: number;
+  splitSkippedReasonCounts?: Partial<Record<
+    SpeakerTokenSplitRejectionReason,
+    number
+  >>;
+  cardinalityMismatchCount: number;
+  lastLatencyMs?: number;
+}
+
+export interface RealtimeSpeakerAssemblyRepairDiagnosticsDto {
+  enabled: boolean;
+  cachedParentCount: number;
+  boundaryEvidenceArrivalCount: number;
+  repairAttemptCount: number;
+  repairAcceptedCount: number;
+  delayedRepairAcceptedCount: number;
+  repairRejectedCount: number;
+  revisionEmittedCount: number;
+  expiredParentCount: number;
+  pendingParentCount: number;
+  rejectionReasonCounts: Partial<Record<
+    SpeakerTokenSplitRejectionReason,
+    number
+  >>;
+  averageWaitMs: number;
+  maxWaitMs: number;
+  noopEvaluationCount?: number;
+  noopAcceptedCount?: number;
+  noopRejectionReasonCounts?: Partial<Record<
+    SpeakerEndpointNoopRejectionReason,
+    number
+  >>;
+}
+
+export type SpeakerEndpointNoopRejectionReason =
+  | "crossing_parent"
+  | "missing_previous_final"
+  | "missing_next_final"
+  | "previous_gap_exceeded"
+  | "next_gap_exceeded"
+  | "unknown_or_overlap";
+
+export type SpeakerTokenSplitRejectionReason =
+  | "not_final"
+  | "missing_timing"
+  | "missing_token_timing"
+  | "invalid_token_timing"
+  | "explicit_overlap"
+  | "unconfirmed_boundary"
+  | "turn_lineage_mismatch"
+  | "protected_surface"
+  | "no_safe_token_boundary"
+  | "sortformer_evidence_mismatch"
+  | "text_conservation_failed";
 
 export interface RealtimeAsrEndpointPolicyDto {
   mode: "conversation" | "listening" | "call_link" | "pstn";
@@ -110,6 +211,52 @@ export interface RealtimeAsrEndpointPolicyDto {
   maxAudioMs: number;
   prerollMs: number;
   fingerprint: string;
+}
+
+export type StablePartialRejectionReason =
+  | "no_text"
+  | "insufficient_units"
+  | "duplicate_partial"
+  | "backtrack"
+  | "language_gate"
+  | "context_echo"
+  | "extension_pending"
+  | "final_fallback";
+
+export type StablePartialLanguageEvidence =
+  | "empty"
+  | "zh"
+  | "en"
+  | "zh_en"
+  | "other";
+
+export interface RealtimeStablePartialDiagnosticsDto {
+  enabled: boolean;
+  policy: string;
+  minimumPushAudioMs?: number;
+  eligibleSegmentCount: number;
+  activeSegment: boolean;
+  decodeCount: number;
+  decisionCount?: number;
+  emittedCount: number;
+  rejectionCounts?: Partial<Record<StablePartialRejectionReason, number>>;
+  languageEvidenceSource?: "qwen_streaming_state_label";
+  languageEvidenceCounts?: Partial<
+    Record<StablePartialLanguageEvidence, number>
+  >;
+  languageGateCounts?: Partial<Record<StablePartialLanguageEvidence, number>>;
+  scheduledPushCount?: number;
+  completedPushCount?: number;
+  coalescedObservationCount?: number;
+  invalidatedPushCount?: number;
+  inFlight?: boolean;
+  resultReady?: boolean;
+  pendingAudioMs?: number;
+  maxPendingAudioMs?: number;
+  averagePushLatencyMs?: number;
+  maxPushLatencyMs?: number;
+  firstStablePartialLatencyMs?: number;
+  lastStablePartialLatencyMs?: number;
 }
 
 export interface RealtimeVadDiagnosticsDto {
@@ -126,12 +273,13 @@ export interface RealtimeVadDiagnosticsDto {
   fallbackReason?: "assets_missing" | "load_failed" | "runtime_failed";
   modelFingerprint?: string;
   endpointPolicy: RealtimeAsrEndpointPolicyDto;
+  stablePartial?: RealtimeStablePartialDiagnosticsDto;
 }
 
 export interface RealtimeAudioLegDiagnosticsDto {
   legId: string;
   speakerRole: "host" | "guest";
-  dropPolicy: "drop_oldest";
+  dropPolicy: "drop_oldest" | "reject_newest";
   capacityFrames: number;
   receivedFrames: number;
   dequeuedFrames: number;
@@ -188,6 +336,8 @@ export interface RealtimeSessionDiagnosticsDto {
   version: 1;
   audio: RealtimeAudioDiagnosticsDto;
   speakerTurns?: RealtimeSpeakerTurnDiagnosticsDto;
+  speakerRevision?: RealtimeSpeakerRevisionDiagnosticsDto;
+  speakerAssemblyRepair?: RealtimeSpeakerAssemblyRepairDiagnosticsDto;
   vad?: RealtimeVadDiagnosticsDto;
   nodes?: RealtimeNodeDiagnosticsDto[];
 }

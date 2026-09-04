@@ -2,10 +2,16 @@ import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 
 const nodePackagePaths = {
-  serverSdk: "node_modules/livekit-server-sdk",
-  browserClient: "node_modules/livekit-client",
-  rtcNode: "node_modules/@livekit/rtc-node",
-  agentsJs: "node_modules/@livekit/agents",
+  serverSdk: ["node_modules/livekit-server-sdk"],
+  browserClient: ["node_modules/livekit-client"],
+  rtcNode: ["node_modules/@livekit/rtc-node"],
+  agentsJs: [
+    "services/translation-worker/node_modules/@livekit/agents",
+    "services/voice-agent-runtime/node_modules/@livekit/agents",
+  ],
+  agentsOpenAi: [
+    "services/voice-agent-runtime/node_modules/@livekit/agents-plugin-openai",
+  ],
 };
 
 export function checkLiveKitCompatibilityProfile(options = {}) {
@@ -32,20 +38,25 @@ export function checkLiveKitCompatibilityProfile(options = {}) {
 }
 
 function checkNodePackages(profile, packageLock, issues) {
-  for (const [name, packagePath] of Object.entries(nodePackagePaths)) {
+  for (const [name, packagePaths] of Object.entries(nodePackagePaths)) {
     const expected = profile.packages?.[name];
-    const actual = packageLock.packages?.[packagePath]?.version ?? "";
+    const actual = packagePaths.map(
+      (packagePath) => packageLock.packages?.[packagePath]?.version ?? ""
+    );
     if (!expected) {
       issues.push(`LiveKit compatibility profile missing package ${name}`);
       continue;
     }
     if (expected.status === "not_integrated") {
-      if (actual) issues.push(`${expected.package} is installed but marked not_integrated`);
+      if (actual.some(Boolean)) {
+        issues.push(`${expected.package} is installed but marked not_integrated`);
+      }
       continue;
     }
-    if (!expected.version || actual !== expected.version) {
+    if (!expected.version || actual.some((version) => version !== expected.version)) {
       issues.push(
-        `${expected.package} version mismatch: expected ${expected.version}, actual ${actual}`,
+        `${expected.package} version mismatch: expected ${expected.version}, ` +
+          `actual ${actual.map((version) => version || "missing").join(",")}`,
       );
     }
   }

@@ -176,6 +176,117 @@ void main() {
     expect(placements.single.rect.right, lessThanOrEqualTo(320));
     expect(placements.single.rect.bottom, lessThanOrEqualTo(240));
   });
+
+  test('keeps a dense table inside the canvas without overlay collisions', () {
+    final blocks = List<ScanTranslatedBlock>.generate(16, (index) {
+      final column = index % 4;
+      final row = index ~/ 4;
+      return ScanTranslatedBlock(
+        source: MobileOcrBlock(
+          text: '单元格 ${index + 1}',
+          left: 0.02 + column * 0.24,
+          top: 0.02 + row * 0.23,
+          width: 0.2,
+          height: 0.14,
+        ),
+        translation: 'Table item ${index + 1} with price',
+      );
+    });
+    final placements = layoutScanTranslationOverlays(
+      blocks: blocks,
+      canvas: const Size(320, 240),
+      textDirection: TextDirection.ltr,
+      textScaler: const TextScaler.linear(1.3),
+    );
+
+    expect(placements, hasLength(blocks.length));
+    for (final placement in placements) {
+      expect(placement.rect.left, greaterThanOrEqualTo(0));
+      expect(placement.rect.top, greaterThanOrEqualTo(0));
+      expect(placement.rect.right, lessThanOrEqualTo(320));
+      expect(placement.rect.bottom, lessThanOrEqualTo(240));
+    }
+    for (var index = 0; index < placements.length; index++) {
+      for (var other = index + 1; other < placements.length; other++) {
+        expect(
+            placements[index].rect.overlaps(placements[other].rect), isFalse);
+      }
+    }
+  });
+
+  test('uses a smaller font when the same text has less horizontal space', () {
+    const translation = 'Adaptive translated menu label';
+    final placements = layoutScanTranslationOverlays(
+      blocks: <ScanTranslatedBlock>[
+        const ScanTranslatedBlock(
+          source: MobileOcrBlock(
+            text: '窄列',
+            left: 0.05,
+            top: 0.1,
+            width: 0.16,
+            height: 0.12,
+          ),
+          translation: translation,
+        ),
+        const ScanTranslatedBlock(
+          source: MobileOcrBlock(
+            text: '宽列',
+            left: 0.05,
+            top: 0.55,
+            width: 0.55,
+            height: 0.12,
+          ),
+          translation: translation,
+        ),
+      ],
+      canvas: const Size(320, 240),
+      textDirection: TextDirection.ltr,
+      textScaler: TextScaler.noScaling,
+    );
+
+    expect(placements, hasLength(2));
+    expect(
+      placements.last.fontSize - placements.first.fontSize,
+      greaterThanOrEqualTo(1),
+    );
+  });
+
+  test('uses a collision-free grid when OCR bounds are irreducibly stacked',
+      () {
+    final blocks = List<ScanTranslatedBlock>.generate(
+      20,
+      (index) => ScanTranslatedBlock(
+        source: const MobileOcrBlock(
+          text: '重叠文字',
+          left: 0.45,
+          top: 0.45,
+          width: 0.05,
+          height: 0.04,
+        ),
+        translation: 'Stacked translation ${index + 1}',
+      ),
+    );
+    final placements = layoutScanTranslationOverlays(
+      blocks: blocks,
+      canvas: const Size(240, 160),
+      textDirection: TextDirection.ltr,
+      textScaler: TextScaler.noScaling,
+    );
+
+    expect(placements, hasLength(blocks.length));
+    for (var index = 0; index < placements.length; index++) {
+      final placement = placements[index];
+      expect(identical(placement.block, blocks[index]), isTrue);
+      expect(placement.fontSize, inInclusiveRange(8, 14));
+      expect(placement.rect.left, greaterThanOrEqualTo(0));
+      expect(placement.rect.top, greaterThanOrEqualTo(0));
+      expect(placement.rect.right, lessThanOrEqualTo(240));
+      expect(placement.rect.bottom, lessThanOrEqualTo(160));
+      for (var other = index + 1; other < placements.length; other++) {
+        expect(placement.rect.overlaps(placements[other].rect), isFalse);
+      }
+    }
+  });
 }
 
 ScanTranslatedBlock _block(
