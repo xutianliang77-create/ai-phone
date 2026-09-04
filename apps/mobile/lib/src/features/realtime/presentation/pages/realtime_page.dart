@@ -59,6 +59,7 @@ class _RealtimePageState extends State<RealtimePage>
   late final bool _ownsVoicePresetClient;
   late AppConfig _config;
   late RealtimeRuntimeSettings _settings;
+  RealtimeVoiceOutputMode? _talkVoiceOutputMode;
   late RealtimeController controller;
   bool _onlineRecoveryInFlight = false;
   bool _voicePresetsLoading = true;

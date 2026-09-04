@@ -31,14 +31,19 @@ extension _RealtimePageSettingsActions on _RealtimePageState {
       return;
     }
     if (realtimeMode == _config.realtimeMode) return;
+    if (_config.realtimeMode == 'conversation') {
+      _talkVoiceOutputMode = _settings.voiceOutputMode;
+    }
     final settings = realtimeMode == 'meeting'
         ? _settings.copyWith(voiceOutputMode: RealtimeVoiceOutputMode.off)
-        : _settings;
+        : _settings.copyWith(voiceOutputMode: _talkVoiceOutputMode);
     final nextConfig = settings.applyTo(
       _config.copyWith(realtimeMode: realtimeMode),
     );
     _replaceConfig(nextConfig, settings: settings);
-    unawaited(_settingsStore.save(settings));
+    if (realtimeMode == 'conversation') {
+      unawaited(_settingsStore.save(settings));
+    }
   }
 
   void _changeSettings(RealtimeRuntimeSettings settings) {
