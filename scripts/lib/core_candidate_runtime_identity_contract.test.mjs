@@ -82,11 +82,12 @@ describe("core candidate runtime identity deployment contract", () => {
       /require_remote_resource_isolation\(\) \{[\s\S]*?<<'REMOTE'\n([\s\S]*?)\nREMOTE\n\}/,
     );
     expect(match).not.toBeNull();
-    const probe = spawnSync("bash", ["-c", [
+    // Match the real SSH stdin path; -c embeds guard literals in Linux /proc.
+    const probe = spawnSync("bash", ["-s"], { input: [
       "docker() { :; }",
       "ss() { printf 'LISTEN 0 128 127.0.0.1:18003 0.0.0.0:*\\n'; }",
       match[1],
-    ].join("\n")], { encoding: "utf8" });
+    ].join("\n"), encoding: "utf8" });
     expect(probe.status).toBe(2);
     expect(probe.stderr).toContain("Maruko listener found");
   });
