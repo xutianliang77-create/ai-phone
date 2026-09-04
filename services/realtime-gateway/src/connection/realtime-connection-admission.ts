@@ -4,11 +4,12 @@ import { verifyRealtimeToken } from "../auth/realtime-token-verifier.js";
 import { extractRealtimeConnectionToken } from
   "../auth/realtime-connection-token.js";
 import { buildError, serializeEvent } from "../protocol/outgoing-event-builder.js";
-import type { ServerRealtimeEvent } from "@translation/contracts";
+import type { RealtimeTokenClaims, ServerRealtimeEvent } from "@translation/contracts";
 import {
   activeSessionCount,
   attachSession,
   getSession,
+  sessionBillableSeconds,
 } from "../sessions/session-manager.js";
 import type { IncomingMessage } from "node:http";
 
@@ -21,7 +22,9 @@ export function admitRealtimeConnection(
     request,
     env.allowQueryToken === true,
   );
-  const claims = token ? verifyRealtimeToken(token, env.realtimeTokenSecret) : null;
+  const claims = token ? verifyRealtimeToken(
+    token, env.realtimeTokenSecret, canResumeExpiredToken,
+  ) : null;
   if (!claims) {
     sendRealtimeEvent(ws, buildError("invalid_token", "Invalid realtime token", {
       stage: "connection",
@@ -50,6 +53,16 @@ export function admitRealtimeConnection(
   }));
   ws.close();
   return null;
+}
+
+function canResumeExpiredToken(claims: RealtimeTokenClaims) {
+  const session = getSession(claims.sessionId);
+  return session?.status === "connecting" &&
+    session.userId === claims.userId &&
+    session.claims.issuedAt === claims.issuedAt &&
+    session.claims.expiresAt === claims.expiresAt &&
+    (session.disconnectDeadlineAt ?? 0) > Date.now() &&
+    sessionBillableSeconds(session) < session.claims.maxDurationSeconds;
 }
 
 export function sendRealtimeEvent(ws: WebSocket, event: ServerRealtimeEvent) {
