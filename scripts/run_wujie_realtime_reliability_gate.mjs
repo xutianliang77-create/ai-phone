@@ -1,4 +1,4 @@
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import WebSocket from "ws";
@@ -97,7 +97,7 @@ async function withTimeout(promise, timeoutMs, label) {
 async function createSession(config) {
   const response = await fetch(`${config.apiBaseUrl}/realtime/sessions`, {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: { "content-type": "application/json", ...apiAuthHeaders() },
     body: JSON.stringify({
       mode: config.sessionMode,
       sourceLanguage: config.sourceLanguage,
@@ -194,7 +194,7 @@ async function waitForHistory(apiBaseUrl, sessionId, minimumSegments, timeoutMs)
   const deadline = Date.now() + timeoutMs;
   let detail;
   while (Date.now() < deadline) {
-    const response = await fetch(`${apiBaseUrl}/sessions/${sessionId}`);
+    const response = await fetch(`${apiBaseUrl}/sessions/${sessionId}`, { headers: apiAuthHeaders() });
     if (response.ok) {
       detail = await response.json();
       if (detail.status === "ended" && detail.segments?.length >= minimumSegments) return detail;
@@ -307,15 +307,17 @@ function numberEnv(name, fallback) {
   const value = Number(process.env[name]);
   return Number.isFinite(value) ? value : fallback;
 }
+function apiAuthHeaders() {
+  const file = process.env.WUJIE_GATE_AUTH_TOKEN_FILE;
+  return file ? { authorization: `Bearer ${readFileSync(file, "utf8").trim()}` } : {};
+}
 
 async function main() {
   const mode = process.env.WUJIE_GATE_MODE ?? "tail";
   if (mode !== "tail" && mode !== "long") throw new Error(`unsupported mode ${mode}`);
-  const fixturePath = resolve(process.env.WUJIE_GATE_FIXTURE ?? (
-    mode === "tail"
-      ? "test-audio/realtime-online-eval-v1/clean-24k-wav/rt_p0_flush_001.wav"
-      : "test-audio/realtime-online-eval-v1/full-regression-24k.wav"
-  ));
+  const fixturePath = resolve(process.env.WUJIE_GATE_FIXTURE ?? (mode === "tail"
+    ? "test-audio/realtime-online-eval-v1/clean-24k-wav/rt_p0_flush_001.wav"
+    : "test-audio/realtime-online-eval-v1/full-regression-24k.wav"));
   const fixture = readPcm16MonoWav(fixturePath);
   const config = {
     apiBaseUrl: process.env.API_BASE_URL ?? "http://127.0.0.1:3110",
@@ -331,9 +333,7 @@ async function main() {
     minimumSegments: numberEnv("WUJIE_LONG_MIN_SEGMENTS", 100),
     minimumTranslationCoverage: numberEnv("WUJIE_LONG_MIN_TRANSLATION_COVERAGE", 0.99),
   };
-  const report = mode === "tail"
-    ? await runTailGate(config, fixture)
-    : await runLongGate(config, fixture);
+  const report = await (mode === "tail" ? runTailGate(config, fixture) : runLongGate(config, fixture));
   const output = resolve(process.env.WUJIE_GATE_EVIDENCE ?? `.cache/wujie-productization-batch1/${mode}-reliability-gate.json`);
   mkdirSync(dirname(output), { recursive: true });
   writeFileSync(output, `${JSON.stringify({

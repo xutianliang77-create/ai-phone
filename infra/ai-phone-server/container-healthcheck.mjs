@@ -70,6 +70,14 @@ export async function checkContainerHealth({
     if (!response.ok) {
       throw new Error(`${endpoint.name} health returned HTTP ${response.status}`);
     }
+    if (endpoint.name === "realtime") {
+      const body = await response.json().catch(() => null);
+      if (body?.status !== "ok" ||
+          body.dependencyReadiness?.sessionReady !== true ||
+          body.dependencyReadiness?.releaseReady !== true) {
+        throw new Error("realtime core dependencies are not ready");
+      }
+    }
   }
 
   await requireSupervisorReady(env, readFileFn);

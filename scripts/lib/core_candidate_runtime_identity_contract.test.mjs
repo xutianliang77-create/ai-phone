@@ -8,6 +8,31 @@ const script = readFileSync(
 );
 
 describe("core candidate runtime identity deployment contract", () => {
+  test("copies the pinned model routing contract into the runtime image", () => {
+    const dockerfile = readFileSync(
+      new URL("../../infra/ai-phone-server/Dockerfile", import.meta.url), "utf8",
+    );
+    expect(dockerfile).toContain(
+      "COPY release/domestic/model-routing.json ./release/domestic/model-routing.json",
+    );
+  });
+
+  test("keeps the isolated core route off the Maruko LLM", () => {
+    const routing = JSON.parse(readFileSync(
+      new URL("../../release/domestic/model-routing.json", import.meta.url), "utf8",
+    ));
+    const profile = routing.profiles[routing.activeProfile];
+    expect(profile.llm.provider).toBe("off");
+    for (const group of ["gateway", "api", "translationWorker"]) {
+      expect(profile.env[group].LLM_PROVIDER).toBe("off");
+      expect(profile.env[group].LLM_REFINEMENT_ENABLED).toBe("false");
+    }
+    expect(profile.env.gateway.LLM_REVIEW_ENABLED).toBe("false");
+    expect(profile.env.api.LLM_REVIEW_ENABLED).toBe("false");
+    expect(JSON.stringify(profile)).not.toContain("18081");
+    expect(JSON.stringify(profile)).not.toContain("qwen3.8-27b");
+  });
+
   test("refuses to sync a dirty source checkout", () => {
     expect(script).toContain("require_clean_source");
     expect(script).toContain("status --porcelain --untracked-files=normal");

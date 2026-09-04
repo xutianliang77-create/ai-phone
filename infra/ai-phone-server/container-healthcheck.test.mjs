@@ -1,6 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 import { checkContainerHealth } from "./container-healthcheck.mjs";
 
+const readyHttp = () => Response.json({
+  status: "ok",
+  dependencyReadiness: { sessionReady: true, releaseReady: true },
+});
+
 describe("single-container healthcheck", () => {
   const readyFile = vi.fn(async (path) => path.includes("supervisor")
     ? JSON.stringify({
@@ -18,7 +23,7 @@ describe("single-container healthcheck", () => {
     : "ready\n");
 
   it("requires core services when optional runtimes are disabled", async () => {
-    const fetchFn = vi.fn(async () => new Response(null, { status: 200 }));
+    const fetchFn = vi.fn(async () => readyHttp());
 
     await checkContainerHealth({
       env: { WUJIE_AI_AIR_DEVICE_GATEWAY_ENABLED: "false" },
@@ -42,7 +47,7 @@ describe("single-container healthcheck", () => {
   });
 
   it("requires a healthy Air780 Gateway process when that runtime is enabled", async () => {
-    const fetchFn = vi.fn(async () => new Response(null, { status: 200 }));
+    const fetchFn = vi.fn(async () => readyHttp());
 
     await checkContainerHealth({
       env: {
@@ -64,8 +69,8 @@ describe("single-container healthcheck", () => {
 
   it("fails when an enabled Gateway process or persistence is unhealthy", async () => {
     const fetchFn = vi.fn()
-      .mockResolvedValueOnce(new Response(null, { status: 200 }))
-      .mockResolvedValueOnce(new Response(null, { status: 200 }))
+      .mockResolvedValueOnce(readyHttp())
+      .mockResolvedValueOnce(readyHttp())
       .mockResolvedValueOnce(new Response(null, { status: 503 }));
 
     await expect(checkContainerHealth({
@@ -90,7 +95,7 @@ describe("single-container healthcheck", () => {
   });
 
   it("requires enabled Voice, SRT, and Translation dependency readiness", async () => {
-    const fetchFn = vi.fn(async () => new Response(null, { status: 200 }));
+    const fetchFn = vi.fn(async () => readyHttp());
     const readFileFn = vi.fn(async (path) => path.includes("supervisor")
       ? await readyFile(path)
       : "not_ready\n");
@@ -114,7 +119,7 @@ describe("single-container healthcheck", () => {
   });
 
   it("fails while an enabled in-container worker is restarting", async () => {
-    const fetchFn = vi.fn(async () => new Response(null, { status: 200 }));
+    const fetchFn = vi.fn(async () => readyHttp());
     const readFileFn = vi.fn(async (path) => path.includes("supervisor")
       ? JSON.stringify({
           version: 1,
@@ -132,5 +137,15 @@ describe("single-container healthcheck", () => {
       fetchFn,
       readFileFn,
     })).rejects.toThrow("component agent-call-worker is not running");
+  });
+
+  it("rejects HTTP 200 when realtime model dependencies are unavailable", async () => {
+    const fetchFn = vi.fn().mockResolvedValueOnce(readyHttp())
+      .mockResolvedValueOnce(Response.json({
+        status: "unavailable",
+        dependencyReadiness: { sessionReady: false, releaseReady: false },
+      }));
+    await expect(checkContainerHealth({ fetchFn, readFileFn: readyFile }))
+      .rejects.toThrow("realtime core dependencies are not ready");
   });
 });
