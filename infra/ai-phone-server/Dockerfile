@@ -21,7 +21,7 @@ COPY infra/ai-phone-server/app-container-entrypoint.mjs \
   infra/ai-phone-server/container-healthcheck.mjs \
   ./infra/ai-phone-server/
 
-RUN npm ci && \
+RUN npm ci --no-audit && \
     test -x node_modules/@ffmpeg-installer/linux-x64/ffmpeg && \
     npm run build -w @translation/contracts && \
     npm run build -w @translation/llm && \
@@ -34,7 +34,7 @@ RUN npm ci && \
     npm run build -w @translation/srt-ingress-bridge && \
     npm run build -w @translation/voice-agent-runtime && \
     npm run build -w @translation/air-device-gateway && \
-    npm prune --omit=dev && \
+    npm prune --omit=dev --no-audit && \
     npm cache clean --force
 
 ENV NODE_ENV=production \

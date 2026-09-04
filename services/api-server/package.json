@@ -30,7 +30,7 @@
     "@translation/contracts": "file:../../packages/contracts",
     "@translation/llm": "file:../../packages/llm",
     "@translation/platform-security": "file:../../packages/platform-security",
-    "fastify": "5.12.0",
+    "fastify": "5.12.1",
     "livekit-client": "^2.20.0",
     "livekit-server-sdk": "^2.16.0",
     "pg": "8.22.0",

@@ -255,7 +255,7 @@ describe("Beelink app deployment contract", () => {
     expect(rootPackage.optionalDependencies).toMatchObject({
       "@ffmpeg-installer/linux-x64": "4.1.0",
     });
-    expect(dockerfile).toContain("RUN npm ci &&");
+    expect(dockerfile).toContain("RUN npm ci --no-audit &&");
     expect(dockerfile).toContain(
       "test -x node_modules/@ffmpeg-installer/linux-x64/ffmpeg",
     );
