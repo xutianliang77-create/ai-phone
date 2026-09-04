@@ -37,7 +37,12 @@ describe("realtime tts output queue", () => {
     await queue.drain();
 
     expect(synthesizer.started).toEqual(range(3));
-    expect(sent.map((event) => event.segmentId)).toEqual(["seg_1", "seg_3"]);
+    expect(sent.filter((event) => event.type === "audio.output")
+      .map((event) => event.segmentId)).toEqual(["seg_1", "seg_3"]);
+    expect(sent.find((event) => event.type === "error")).toMatchObject({
+      code: "provider_unavailable", stage: "tts", retryable: true,
+      message: expect.stringContaining("tts unavailable"),
+    });
   });
 
   it("cancels in-flight and queued output when the session closes", async () => {

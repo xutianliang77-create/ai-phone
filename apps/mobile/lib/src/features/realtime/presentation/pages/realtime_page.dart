@@ -129,10 +129,12 @@ class _RealtimePageState extends State<RealtimePage>
             remainingSeconds: controller.remainingSeconds,
             lowBalance: controller.lowBalance,
             autoSpeakTranslation:
-                _realtimeAutoSpeakSupported && _settings.autoSpeakTranslation,
+                _realtimeAutoSpeakSupported && controller.autoSpeakTranslation,
             autoSpeakEnabled: _realtimeAutoSpeakSupported,
             speechOutputActive: controller.speechOutputActive,
-            onAutoSpeakChanged: _toggleAutoSpeakTranslation,
+            onAutoSpeakChanged: controller.voiceOutputUpdating
+                ? null
+                : _toggleAutoSpeakTranslation,
           ),
         ),
         actions: <Widget>[

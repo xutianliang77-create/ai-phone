@@ -1,9 +1,12 @@
-from typing import Literal
+from typing import Annotated, Literal
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, StringConstraints, model_validator
 
 
-LanguageCode = Literal["zh", "en"]
+LanguageCode = Annotated[
+    str,
+    StringConstraints(strip_whitespace=True, pattern=r"^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$"),
+]
 SpeakerRole = Literal["host", "guest"]
 AudioFormat = Literal["pcm16"]
 SampleRate = Literal[16000, 24000]

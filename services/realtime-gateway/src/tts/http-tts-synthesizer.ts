@@ -220,7 +220,7 @@ export class HttpTtsSynthesizer {
 function ttsPayload(event: TranslationEvent, voice?: RealtimeVoiceConfig) {
   return {
     text: event.text.trim(),
-    language: normalizeTtsLanguage(event.language),
+    language: event.language,
     speakerRole: "guest",
     segmentId: event.segmentId,
     ...(voice ? { voice } : {}),
@@ -270,10 +270,6 @@ function toLoggableError(error: unknown) {
     };
   }
   return { errorMessage: String(error) };
-}
-
-function normalizeTtsLanguage(language: string) {
-  return language === "zh" ? "zh" : "en";
 }
 
 function parseSampleRate(value: unknown): 16000 | 24000 | null {

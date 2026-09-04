@@ -67,7 +67,7 @@ export function startWebSocketServer() {
         sourceLanguage: session.claims.sourceLanguage,
         targetLanguage: session.claims.targetLanguage,
         autoReverseTargetLanguage: session.claims.autoReverseTargetLanguage,
-        voiceOutput: session.claims.voiceOutput,
+        voiceOutput: session.voiceOutputEnabled ?? session.claims.voiceOutput,
         speakerAttribution,
         terminology,
         asrHotwords,
@@ -274,7 +274,7 @@ export function startWebSocketServer() {
             provider,
             audioBatcher,
             sendRealtime,
-            endRealtimeSession,
+            endRealtimeSession, ttsOutputQueue,
           ),
         (error) => {
           realtimeLogger.error({ error, sessionId: session.id }, "Realtime event processing failed");

@@ -11,6 +11,11 @@ extension RealtimeControllerGatewayEvents on RealtimeController {
     }
     if (event.type == 'error') {
       final message = _gatewayErrorMessage(event);
+      if (event.stage == 'tts') {
+        _message = message;
+        _notify();
+        return;
+      }
       _gatewayDiagnostic = RealtimeGatewayDiagnostic.fromEvent(
         event,
         displayMessage: message,

@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/widgets.dart';
+import 'package:flutter/services.dart';
 
 import '../../../../app/app_config.dart';
 import '../../../../platform/audio/audio_capture.dart';
@@ -81,7 +82,7 @@ class RealtimeController extends ChangeNotifier {
         _autoSpeakTranslation = autoSpeakTranslation,
         _speechOutputTimeout = speechOutputTimeout;
 
-  final AppConfig _config;
+  AppConfig _config;
   final RealtimeRepository _repository;
   final AudioCapture _audioCapture;
   final MobileAsrProvider? _mobileAsrProvider;
@@ -90,6 +91,7 @@ class RealtimeController extends ChangeNotifier {
   final PcmAudioOutputPlayer? _pcmAudioOutputPlayer;
   final AudioSessionCoordinator _audioSessionCoordinator;
   bool _autoSpeakTranslation;
+  bool _voiceOutputUpdating = false;
   final Duration? _speechOutputTimeout;
   Future<void> _speechChain = Future<void>.value();
   Future<void> _asrTextChain = Future<void>.value();
@@ -127,13 +129,8 @@ class RealtimeController extends ChangeNotifier {
   bool get lowBalance => _lowBalance;
   RealtimeGatewayDiagnostic? get gatewayDiagnostic => _gatewayDiagnostic;
   bool get speechOutputActive => _speechOutputActive;
-
-  void setAutoSpeakTranslation(bool enabled) {
-    if (_autoSpeakTranslation == enabled) return;
-    _autoSpeakTranslation = enabled;
-    if (!enabled) unawaited(_stopSpeaking());
-    _notify();
-  }
+  bool get autoSpeakTranslation => _autoSpeakTranslation;
+  bool get voiceOutputUpdating => _voiceOutputUpdating;
 
   Future<void> pause() async {
     final session = _session;

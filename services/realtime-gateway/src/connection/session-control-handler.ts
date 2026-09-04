@@ -8,6 +8,7 @@ import { buildError } from "../protocol/outgoing-event-builder.js";
 import type { RealtimeProvider } from "../providers/realtime-provider.js";
 import { getSession, transitionStatus } from "../sessions/session-manager.js";
 import type { AudioFrameBatcher } from "./audio-frame-batcher.js";
+import type { RealtimeTtsOutputQueue } from "../tts/realtime-tts-output.js";
 
 type ControlEvent = Exclude<
   ClientRealtimeEvent,
@@ -21,6 +22,7 @@ export async function handleControlEvent(
   audioBatcher: AudioFrameBatcher,
   sendEvent: (event: ServerRealtimeEvent) => void,
   endRealtimeSession: (reason: SessionEndReason) => Promise<void>,
+  ttsOutput?: Pick<RealtimeTtsOutputQueue, "setVoiceOutput">,
 ) {
   const session = getSession(sessionId);
   if (!session) {
@@ -38,6 +40,27 @@ export async function handleControlEvent(
       stage: "session",
       retryable: false,
     }));
+    return;
+  }
+
+  if (event.type === "session.voice_output") {
+    const valid = typeof event.enabled === "boolean" &&
+      (event.presetId === undefined || (typeof event.presetId === "string" &&
+        /^[A-Za-z0-9_-]{1,80}$/.test(event.presetId))) &&
+      (!session.claims.mode || session.claims.mode === "conversation") &&
+      (session.status === "active" || session.status === "paused");
+    const accepted = valid &&
+      ttsOutput?.setVoiceOutput(event.enabled, event.presetId) === true;
+    if (accepted) {
+      session.voiceOutputEnabled = event.enabled;
+      if (event.presetId) session.voice = { mode: "preset", presetId: event.presetId };
+    }
+    sendEvent({
+      type: "session.voice_output.updated", sessionId,
+      enabled: session.voiceOutputEnabled ?? session.claims.voiceOutput,
+      accepted,
+      ...(!accepted ? { message: "无法应用语音播报设置，请保持字幕并重试" } : {}),
+    });
     return;
   }
 

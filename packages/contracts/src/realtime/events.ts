@@ -146,11 +146,20 @@ export interface SessionResumedEvent {
   sessionId: string;
 }
 
+export interface SessionVoiceOutputUpdatedEvent {
+  type: "session.voice_output.updated";
+  sessionId: string;
+  enabled: boolean;
+  accepted: boolean;
+  message?: string;
+}
+
 export type ClientRealtimeEvent =
   | AudioFrame
   | ClientTextSegmentEvent
   | { type: "session.pause"; sessionId: string }
   | { type: "session.resume"; sessionId: string }
+  | { type: "session.voice_output"; sessionId: string; enabled: boolean; presetId?: string }
   | { type: "session.end"; sessionId: string };
 
 export type ServerRealtimeEvent =
@@ -163,5 +172,6 @@ export type ServerRealtimeEvent =
   | UsageTickEvent
   | SessionPausedEvent
   | SessionResumedEvent
+  | SessionVoiceOutputUpdatedEvent
   | SessionEndedEvent
   | RealtimeError;

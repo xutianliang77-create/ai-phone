@@ -41,12 +41,14 @@ class RealtimeApiClient {
   final String _sourceLanguage;
   final String _targetLanguage;
   final bool _autoReverseTargetLanguage;
-  final String _voiceOutputMode;
+  String _voiceOutputMode;
   final String _voicePresetId;
   final String _termbaseId;
   final String _domainLexiconPack;
   final Duration _requestTimeout;
   final AccountSessionStore _accountSessionStore;
+
+  void setVoiceOutputMode(String mode) => _voiceOutputMode = mode;
 
   Future<RealtimeSession> createSession() async {
     final voice = await _voiceConfigForSession();

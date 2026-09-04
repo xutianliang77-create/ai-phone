@@ -11,8 +11,8 @@ export function createRealtimeTtsOutputQueue(
 ) {
   return new RealtimeTtsOutputQueue({
     sessionId: session.id,
-    voiceOutput: session.claims.voiceOutput,
-    voice: session.claims.voice,
+    voiceOutput: session.voiceOutputEnabled ?? session.claims.voiceOutput,
+    voice: session.voice ?? session.claims.voice,
     synthesizer: new HttpTtsSynthesizer(env),
     isSessionActive: () => getSession(session.id)?.status === "active",
     maxPendingOutputs: env.maxPendingTtsOutputs,

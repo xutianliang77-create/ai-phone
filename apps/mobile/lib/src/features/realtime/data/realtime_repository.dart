@@ -96,6 +96,14 @@ class RealtimeRepository {
     return _gatewayClient.resumeAndWait(sessionId);
   }
 
+  Future<void> setVoiceOutput(String sessionId, bool enabled,
+      {String? presetId}) {
+    return _gatewayClient.setVoiceOutput(sessionId, enabled,
+        presetId: presetId);
+  }
+
+  void configureVoiceOutput(String mode) => _apiClient.setVoiceOutputMode(mode);
+
   Future<void> suspendForLifecycle() {
     return _gatewayClient.suspendForLifecycle();
   }

@@ -14,6 +14,7 @@ import 'realtime_gateway_transport.dart';
 
 export 'realtime_gateway_transport.dart'
     show realtimeGatewayEndpoint, realtimeGatewayProtocols;
+part 'realtime_gateway_control.dart';
 
 class RealtimeGatewayClient {
   static const Duration _connectTimeout = Duration(seconds: 8);
@@ -183,6 +184,10 @@ class RealtimeGatewayClient {
     return completed;
   }
 
+  Future<void> setVoiceOutput(String sessionId, bool enabled,
+          {String? presetId}) =>
+      _setVoiceOutput(sessionId, enabled, presetId: presetId);
+
   bool end(String sessionId) {
     _manualClose = true;
     _reconnectTimer?.cancel();
@@ -203,22 +208,6 @@ class RealtimeGatewayClient {
         .catchError((Object _) => false);
     if (!end(sessionId)) return Future<bool>.value(false);
     return completed;
-  }
-
-  Future<bool> _waitForSessionEvent(
-    String type,
-    String sessionId,
-    Duration timeout,
-  ) {
-    return events
-        .firstWhere(
-          (event) =>
-              event.type == type &&
-              (event.sessionId == null || event.sessionId == sessionId),
-        )
-        .timeout(timeout)
-        .then((_) => true)
-        .catchError((Object _) => false);
   }
 
   Future<void> close() async {

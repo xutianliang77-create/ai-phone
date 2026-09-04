@@ -35,8 +35,8 @@ describe("http tts synthesizer", () => {
         type: "translation.final",
         sessionId: "sess_1",
         segmentId: "seg_1",
-        text: "hello",
-        language: "en",
+        text: "Hola",
+        language: "es",
       },
       {
         mode: "preset",
@@ -59,8 +59,8 @@ describe("http tts synthesizer", () => {
         "content-type": "application/json",
       },
       body: {
-        text: "hello",
-        language: "en",
+        text: "Hola",
+        language: "es",
         speakerRole: "guest",
         segmentId: "seg_1",
         voice: {
