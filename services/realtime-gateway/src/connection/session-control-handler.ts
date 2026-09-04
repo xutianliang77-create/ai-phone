@@ -47,7 +47,9 @@ export async function handleControlEvent(
     const valid = typeof event.enabled === "boolean" &&
       (event.presetId === undefined || (typeof event.presetId === "string" &&
         /^[A-Za-z0-9_-]{1,80}$/.test(event.presetId))) &&
-      (!session.claims.mode || session.claims.mode === "conversation") &&
+      (!session.claims.mode ||
+        session.claims.mode === "conversation" ||
+        session.claims.mode === "meeting") &&
       (session.status === "active" || session.status === "paused");
     const accepted = valid &&
       ttsOutput?.setVoiceOutput(event.enabled, event.presetId) === true;

@@ -112,8 +112,7 @@ void main() {
     expect(settings.domainLexiconPack, 'product');
   });
 
-  test('forces Listening sessions silent without losing the Talk preference',
-      () {
+  test('allows explicit speech output in Listening sessions', () {
     final listening = _baseConfig().copyWith(
       realtimeMode: 'meeting',
       realtimeVoiceOutputMode: 'my_voice',
@@ -124,7 +123,8 @@ void main() {
       listening.copyWith(realtimeMode: 'conversation'),
     );
 
-    expect(effectiveListening.realtimeVoiceOutputMode, 'off');
+    expect(realtimeModeSupportsVoiceOutput('meeting'), isTrue);
+    expect(effectiveListening.realtimeVoiceOutputMode, 'my_voice');
     expect(listening.realtimeVoiceOutputMode, 'my_voice');
     expect(effectiveTalk.realtimeVoiceOutputMode, 'my_voice');
   });

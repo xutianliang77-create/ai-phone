@@ -40,8 +40,8 @@ describe("realtime session control", () => {
     await handling;
   });
 
-  it("enables generation after a muted session starts and preserves the signed claims", async () => {
-    const session = createSession(claims());
+  it("enables generation in Listening and preserves the signed claims", async () => {
+    const session = createSession({ ...claims(), mode: "meeting" });
     const events: ServerRealtimeEvent[] = [];
     const tts = new RealtimeTtsOutputQueue({
       sessionId, voiceOutput: false, isSessionActive: () => true,

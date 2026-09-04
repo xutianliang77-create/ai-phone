@@ -2,8 +2,50 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:translation_mobile/src/app/app.dart';
 import 'package:translation_mobile/src/features/compliance/data/compliance_consent_store.dart';
+import 'package:translation_mobile/src/features/realtime/data/realtime_runtime_settings.dart';
+import 'package:translation_mobile/src/features/realtime/presentation/widgets/realtime_language_menu.dart';
+import 'package:translation_mobile/src/features/realtime/presentation/widgets/realtime_mode_selector.dart';
+import 'package:translation_mobile/src/features/realtime/presentation/widgets/realtime_settings_panel.dart';
+import 'package:translation_mobile/src/features/realtime/presentation/widgets/realtime_status_bar.dart';
 
 void main() {
+  testWidgets('Listening starts muted and permits speech after language changes',
+      (tester) async {
+    await _pumpApp(tester);
+    tester
+        .widget<RealtimeLanguageMenu>(find.byType(RealtimeLanguageMenu))
+        .onOpenRealtimeSettings();
+    await tester.pumpAndSettle();
+    tester
+        .widget<RealtimeModeSelector>(find.byType(RealtimeModeSelector))
+        .onChanged('meeting');
+    await tester.pumpAndSettle();
+    var panel = tester.widget<RealtimeSettingsPanel>(
+        find.byType(RealtimeSettingsPanel));
+    expect(panel.autoSpeakSupported, isTrue);
+    expect(panel.settings.autoSpeakTranslation, isFalse);
+    panel.onChanged(panel.settings.copyWith(targetLanguage: 'auto_reverse'));
+    await tester.pumpAndSettle();
+    final selector = tester.widget<SegmentedButton<RealtimeVoiceOutputMode>>(
+        find.byType(SegmentedButton<RealtimeVoiceOutputMode>));
+    expect(selector.onSelectionChanged, isNotNull);
+    selector.onSelectionChanged!({RealtimeVoiceOutputMode.natural});
+    await tester.pumpAndSettle();
+    panel = tester.widget<RealtimeSettingsPanel>(
+        find.byType(RealtimeSettingsPanel));
+    expect(panel.settings.autoSpeakTranslation, isTrue);
+    panel.onChanged(panel.settings.copyWith(targetLanguage: 'pt'));
+    await tester.pumpAndSettle();
+    panel = tester.widget<RealtimeSettingsPanel>(
+        find.byType(RealtimeSettingsPanel));
+    expect(panel.settings.targetLanguage, 'pt');
+    expect(panel.settings.autoSpeakTranslation, isTrue);
+    final bar = tester.widget<RealtimeStatusBar>(find.byType(RealtimeStatusBar));
+    expect(bar.autoSpeakEnabled, isTrue);
+    expect(bar.autoSpeakTranslation, isTrue);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('subtitle workspace grows with available page height',
       (tester) async {
     _configureView(tester, const Size(390, 700));

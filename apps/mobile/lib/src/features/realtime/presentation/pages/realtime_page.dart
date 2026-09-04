@@ -293,19 +293,14 @@ class _RealtimePageState extends State<RealtimePage>
   }
 
   void _replaceSettings(RealtimeRuntimeSettings settings) {
-    final nextConfig = settings.applyTo(_config);
-    final previousController = controller;
-    setState(() {
-      _settings = settings;
-      _config = nextConfig;
-      controller = _createRealtimePageController(this, _config);
-    });
-    previousController.dispose();
+    _replaceConfig(settings.applyTo(_config), settings: settings);
   }
 
-  void _replaceConfig(AppConfig nextConfig) {
+  void _replaceConfig(AppConfig nextConfig,
+      {RealtimeRuntimeSettings? settings}) {
     final previousController = controller;
     setState(() {
+      if (settings != null) _settings = settings;
       _config = nextConfig;
       controller = _createRealtimePageController(this, _config);
     });

@@ -31,7 +31,14 @@ extension _RealtimePageSettingsActions on _RealtimePageState {
       return;
     }
     if (realtimeMode == _config.realtimeMode) return;
-    _replaceConfig(_config.copyWith(realtimeMode: realtimeMode));
+    final settings = realtimeMode == 'meeting'
+        ? _settings.copyWith(voiceOutputMode: RealtimeVoiceOutputMode.off)
+        : _settings;
+    final nextConfig = settings.applyTo(
+      _config.copyWith(realtimeMode: realtimeMode),
+    );
+    _replaceConfig(nextConfig, settings: settings);
+    unawaited(_settingsStore.save(settings));
   }
 
   void _changeSettings(RealtimeRuntimeSettings settings) {
