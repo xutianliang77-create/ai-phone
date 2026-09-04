@@ -1,0 +1,129 @@
+{
+  "schemaVersion": 1,
+  "asOf": "2026-09-04",
+  "status": "CORE_IPHONE_TESTED_SCOPE_ACCEPTED",
+  "extendedMatrix": "PENDING",
+  "branch": "codex/optimization-m2-flexible-subtitles",
+  "remoteAtReadOnlyProbe": "948ab05504ccf254a1430e08ca2988d139c1f9e3",
+  "implementationCommitsAheadOfRemote": 28,
+  "implementationFreeze": {
+    "ios": {
+      "commit": "974deb487ea9db627ff7e7e1e4c66e6db7861876",
+      "tree": "1812802b775e3f9ca85219778bad93168b8ef672",
+      "candidate": "wujie-ios-capture-974deb4-2026090404",
+      "version": "0.1.0",
+      "build": "2026090404",
+      "bundleId": "cn.qkxy.realtimeinterpreter",
+      "distribution": "DEVELOPMENT_SIGNED_PROFILE_ONLINE_ONLY",
+      "codesignVerified": true,
+      "portableTreeSha256": "42e111b94776b607a45211b73f40c8eaeda339af6747efdac685ad91179de552",
+      "portableManifestSha256": "1ba35853faee2153d2a021f8dd4259d48fe8c2946e4f8d40930340b47fb76411",
+      "originalManifestSha256": "a07c61d34e003c18da5e7b615e2b6fbc3c435d5e1e7130107919cc6b42260245",
+      "entryCount": 70,
+      "bytes": 51130583
+    },
+    "backend": {
+      "commit": "d299ac35612277812a7f0f0b552d4d5e08bb7aa8",
+      "tree": "265789987a9a3a446107ebedd323c6bbd2ead116",
+      "imageTag": "ai-phone-server:core-closeout-d299ac3-20260904",
+      "imageId": "sha256:273c6912b08593ebc6ce9edc0b230bfe9aa187d01f3ce9d62982818859a83cbe",
+      "manifestSha256": "fed1ffea4284e3499e08b6ee529f58765fdc150dfded138834241eddd2151649",
+      "environmentMatchesManifest": true
+    }
+  },
+  "modelFingerprints": {
+    "asr": "e8cee9c350d85bd9156ad943a32bf6e81dbcd89ad7bd23d3da879245f9fba38d",
+    "hyMt2": "667fe2457e410d4621d7821756480d1a8c745ff465c063fb3f8372a595e00e62",
+    "voxCpm2": "953404d6ce11703accd10c615009ad32b7f437957ef476c4638543f1e425a886"
+  },
+  "historicalFinalHostTests": {
+    "flutter": 499,
+    "gateway": 319,
+    "ttsPython": 46,
+    "rerunForDocumentationCloseout": false
+  },
+  "deviceLongRun": {
+    "passed": true,
+    "input": "REAL_ACOUSTIC_IPHONE_BUILT_IN_MICROPHONE",
+    "voiceOutputEnabled": false,
+    "playbackSeconds": 1815.7069059610367,
+    "wallSessionMs": 2034841,
+    "receivedFrames": 20342,
+    "droppedFrames": 0,
+    "playbackWindowFrameLowerBound": 18126,
+    "completeTranslationPairs": 236,
+    "connectionAdmissions": 1,
+    "nativeEngineContinuous": true,
+    "finalizationDelayMs": 407,
+    "usageEntries": 1,
+    "billableSeconds": 2035,
+    "historyUserConfirmed": true,
+    "accuracyCertification": false
+  },
+  "shortLockResume": {
+    "passedForTestedWindow": true,
+    "awayFromForegroundMs": 5776,
+    "captureRestartAfterForegroundMs": 140,
+    "beforeTranslationPairs": 4,
+    "afterTranslationPairs": 3,
+    "usageEntries": 1,
+    "billableSeconds": 43
+  },
+  "realIncomingCall": {
+    "passedForTestedWindow": true,
+    "interruptionMs": 21343,
+    "engineRestartAfterForegroundMs": 217,
+    "beforeTranslationPairs": 2,
+    "afterTranslationPairs": 2,
+    "lastConnectionFrames": 97,
+    "lastConnectionDroppedFrames": 0,
+    "finalizationDelayMs": 228,
+    "usageEntries": 1,
+    "billableSeconds": 51,
+    "userConfirmed": true,
+    "interruptionFreeBillingVerified": false,
+    "pstnTranslationPhoneVerified": false
+  },
+  "directRollback": {
+    "iosCommit": "d299ac35612277812a7f0f0b552d4d5e08bb7aa8",
+    "iosBuild": "2026090403",
+    "iosPortableTreeSha256": "3b7ef20d0e5383b17408077b63f1a6d280f62d2b595f87b462b95ae3ac035d50",
+    "iosPortableManifestSha256": "d433b26cc69891baba8190822a9cb1b1fef8d8e2689872d7a770687c99c20bd0",
+    "iosCodesignVerified": true,
+    "backendCommit": "dcec4d8ebcc2f8ca4c5bfc07ea806634fd96e85d",
+    "backendImageId": "sha256:397a59a58c0bf33bb320002bc35d4befb7e99db83667dba7d8c7db5c46f979c1",
+    "backendManifestSha256": "f6850d87463d64ba0871244d2899ffa44dad47091da5559938d1863da8131373",
+    "sqliteBackupBytes": 2187264,
+    "sqliteBackupQuickCheck": "ok",
+    "restorePerformed": false,
+    "mustPreserveCurrentData": true
+  },
+  "portableDigestAlgorithm": "sha256-relative-entry-json-v1",
+  "privateEvidenceDigests": {
+    "deviceLongRunResult": "26347f005f3d234cc03499b5cb2333a47a6e17e9fa2ef486e6056112c99f2186",
+    "realIncomingCallResult": "b04ad0611a2a25345d71013249cf741cf9b691934bde12fe089eff317ada6018",
+    "shortLockTimeline": "62c472b7145f499d9a34643fed89a214956f5fbdc5952b138c2054479564ffd9",
+    "ttsLanguageResult": "4be561f7b29b7b3dcc21516be762885dbe5bd86e15f419e63e0b96e9e74eae5f"
+  },
+  "authorization": {
+    "push": false,
+    "stableEndpointCutover": false,
+    "storeSubmission": false,
+    "commercialRelease": false,
+    "automaticRetest": false,
+    "resourceCleanup": false
+  },
+  "excludedClaims": [
+    "ALL_DEVICE_OR_LANGUAGE_QUALITY_CERTIFIED",
+    "HEADSET_OR_TTS_30_MINUTE_STABILITY",
+    "ARBITRARILY_LONG_INTERRUPTIONS",
+    "INTERRUPTION_FREE_BILLING",
+    "ANDROID_PRODUCTION_RELEASE",
+    "OFFLINE_MODEL_DELIVERY_IN_CURRENT_APP",
+    "AIR780_END_TO_END_PHONE_READY",
+    "COMMERCIAL_PSTN_OR_LIVEKIT_REAL_PARTY_JOURNEY",
+    "FULL_UI_OCR_EXPORT_ACCESSIBILITY_MATRIX",
+    "FULL_DEV_DEPENDENCY_AUDIT_PASS",
+    "BACKUP_RESTORE_DRILL_PASS"
+  ]
+}

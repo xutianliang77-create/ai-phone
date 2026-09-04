@@ -1,5 +1,9 @@
 # 国内版 App 功能完成度矩阵
 
+> 历史矩阵：本页保留2026-07-22原始分层与证据。当前个人版iPhone在线核心候选以
+> [2026-09-04核心结项摘要](operations/core-translation-closeout-20260904.md)为准；
+> 已测核心通过不等于全功能或商业发布通过，旧“完成/未验”不能覆盖新版本限定结论。
+
 版本：v1.3
 日期：2026-07-22
 依据：`docs/domestic-app-detailed-functional-design.md`、`docs/domestic-edition-development-plan.md`、`docs/domestic-edition-acceptance-plan.md`、`docs/domestic-design-review-action-plan.md`、`docs/domestic-account-identity-compliance-design.md`、`docs/domestic-technical-design-merge-plan.md`、`docs/domestic-realtime-billing-data-design.md`、`docs/llm-asr-refinement-and-record-review-functional-design.md`、`docs/llm-asr-refinement-functional-design.md`、`docs/llm-record-review-functional-design.md`、`docs/fluidvoice-source-review-and-adoption-plan.md`

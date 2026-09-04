@@ -1,5 +1,9 @@
 # ai phone 优化验收方案
 
+> 历史验收账本：逐项故障、版本与后续记录均保留。当前个人版iPhone核心候选的固定身份、
+> 已测范围和剩余门禁见[2026-09-04核心结项摘要](operations/core-translation-closeout-20260904.md)。
+> 本页旧执行计划不自动触发重测，也不构成推送、商店或商业发布授权。
+
 版本：v1.25
 日期：2026-08-02
 任务来源：`docs/ai-phone-optimization-development-tasks.md`
