@@ -1,0 +1,45 @@
+{
+  "schemaVersion": 1,
+  "product": "Wujie AI",
+  "productVersion": "1.0.0",
+  "deploymentEdition": "private_cloud",
+  "releaseStage": "release_candidate",
+  "candidateNumber": 1,
+  "featureScope": "core_translation",
+  "sourceBaseline": "1cea02203c09a05b1978c52e0d3c56d04dc4f0bb",
+  "sourceBaselineTree": "0d658b86149843852fe14cc32d35f849f229a63d",
+  "baselineTag": "wujie-private-1.0-baseline-20260905",
+  "maintenanceBranch": "release/wujie-1.0-private",
+  "mobile": {
+    "version": "1.0.0",
+    "buildNumber": "2026090501",
+    "targetBuildMode": "release",
+    "bundleId": "cn.qkxy.realtimeinterpreter",
+    "previousAcceptedVersion": "0.1.0",
+    "previousAcceptedBuild": "2026090404",
+    "previousAcceptedSource": "974deb487ea9db627ff7e7e1e4c66e6db7861876",
+    "previousAcceptedPortableTreeSha256": "42e111b94776b607a45211b73f40c8eaeda339af6747efdac685ad91179de552",
+    "newBinaryDeviceAcceptanceRequired": true
+  },
+  "server": {
+    "compatibleAcceptedSource": "d299ac35612277812a7f0f0b552d4d5e08bb7aa8",
+    "compatibleAcceptedImageId": "sha256:273c6912b08593ebc6ce9edc0b230bfe9aa187d01f3ce9d62982818859a83cbe",
+    "apiProtocolVersion": "0.1.0",
+    "deploymentPerformedByThisReleasePreparation": false
+  },
+  "preservation": {
+    "acceptedBundlesUnchanged": true,
+    "privateProviderImplementationsRetained": true,
+    "modelWeightsAndRuntimeOverlaysVersionedSeparately": true,
+    "publicCloudChangesBelongToVersion": "1.1.0",
+    "cloudMigrationAutomatic": false
+  },
+  "gaGates": [
+    "signed release binary and source identity verified",
+    "new 1.0.0 binary device smoke and defined private deployment acceptance",
+    "private model dependencies genuinely ready in an approved resource window",
+    "distribution channel and recipient compatibility confirmed",
+    "release manifest, rollback and inherited optimization evidence complete"
+  ],
+  "note": "Product release version is independent of unchanged internal package/API protocol versions. This manifest is an RC plan, not a claim of GA deployment or store acceptance."
+}
