@@ -9,6 +9,9 @@ infra/livekit-selfhost/caddy_data/
 infra/livekit-selfhost/caddy_config/
 infra/livekit-selfhost/redis_data/
 release/domestic/release.env
+release/public/1.1.0/runtime.env
+release/public/1.1.0/private/
+release/public/1.1.0/data/
 apps/mobile/android/key.properties
 apps/mobile/android/release/*.jks
 apps/mobile/android/release/*.keystore

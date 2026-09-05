@@ -1,0 +1,65 @@
+{
+  "schemaVersion": 1,
+  "status": "development_line",
+  "product": "Wujie AI",
+  "targetProductVersion": "1.1.0",
+  "branch": "develop/wujie-1.1-public",
+  "createdFrom": {
+    "localReleaseTag": "wujie-private-v1.0.0",
+    "commit": "898ee517e7aac00b03bc79ff2d0597dd00fdbf56",
+    "tree": "5c564f99489f7bd62eae28ef75157f6e77a2c369",
+    "privateReleaseAcceptance": "V10_G5_LOCAL_RESTRICTED_RELEASE_ACCEPTANCE_PASS"
+  },
+  "versionIdentity": {
+    "inheritedMobileVersion": "1.0.0+2026090501",
+    "public11ReleaseVersionFrozen": false,
+    "public11ApplicationIdentityFrozen": false,
+    "freezeTask": "V11-03",
+    "reason": "V11-01 establishes lineage and CI only; it does not pre-empt the public application identity and release contract."
+  },
+  "dualVersionCi": {
+    "workflow": ".github/workflows/wujie-dual-version.yml",
+    "current11Ref": "event commit",
+    "frozen10Ref": "898ee517e7aac00b03bc79ff2d0597dd00fdbf56",
+    "nodeVersion": "24",
+    "flutterVersion": "3.44.1",
+    "gates": [
+      "public-11-node",
+      "private-10-node",
+      "public-11-mobile",
+      "private-10-mobile"
+    ]
+  },
+  "isolation": {
+    "productionSecretsAllowedInCi": false,
+    "productionDataAllowedInCi": false,
+    "private10DataImported": false,
+    "private10CredentialsImported": false,
+    "fixturePolicy": "repository synthetic and redacted fixtures only",
+    "requiredIgnorePatterns": [
+      "release/public/1.1.0/runtime.env",
+      "release/public/1.1.0/private/",
+      "release/public/1.1.0/data/"
+    ],
+    "forbiddenTrackedSuffixes": [
+      ".mobileprovision",
+      ".p12",
+      ".pfx",
+      ".jks",
+      ".keystore",
+      ".pem",
+      ".key",
+      ".sqlite",
+      ".sqlite3",
+      ".db",
+      ".dump"
+    ]
+  },
+  "scope": {
+    "v11Task": "V11-01",
+    "publicCloudRuntimeImplemented": false,
+    "providerCallsEnabled": false,
+    "deploymentPerformed": false,
+    "private10MaintenanceBranchChanged": false
+  }
+}

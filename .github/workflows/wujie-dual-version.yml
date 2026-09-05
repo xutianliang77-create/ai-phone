@@ -1,0 +1,103 @@
+name: Wujie dual-version gate
+
+on:
+  pull_request:
+  push:
+    branches:
+      - develop/wujie-1.1-public
+
+permissions:
+  contents: read
+
+concurrency:
+  group: wujie-dual-version-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CI: "true"
+  NODE_ENV: test
+  WUJIE_CI_DATA_MODE: synthetic_only
+  WUJIE_ALLOW_PRODUCTION_SECRETS: "false"
+  WUJIE_ALLOW_PRODUCTION_DATA: "false"
+
+jobs:
+  public-11-node:
+    name: Public 1.1 current Node
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run check:wujie-dual-version-ci
+      - run: npm run build
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run check:lines
+
+  private-10-node:
+    name: Private 1.0 frozen Node
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          ref: 898ee517e7aac00b03bc79ff2d0597dd00fdbf56
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run check:lines
+
+  public-11-mobile:
+    name: Public 1.1 current Flutter
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          persist-credentials: false
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
+        with:
+          channel: stable
+          flutter-version: 3.44.1
+          cache: true
+      - run: flutter pub get
+        working-directory: apps/mobile
+      - run: flutter analyze --no-pub
+        working-directory: apps/mobile
+      - run: flutter test --no-pub
+        working-directory: apps/mobile
+
+  private-10-mobile:
+    name: Private 1.0 frozen Flutter
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          ref: 898ee517e7aac00b03bc79ff2d0597dd00fdbf56
+          persist-credentials: false
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
+        with:
+          channel: stable
+          flutter-version: 3.44.1
+          cache: true
+      - run: flutter pub get
+        working-directory: apps/mobile
+      - run: flutter analyze --no-pub
+        working-directory: apps/mobile
+      - run: flutter test --no-pub
+        working-directory: apps/mobile
