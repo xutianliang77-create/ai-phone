@@ -15,10 +15,31 @@ import { realtimeMaxSessionSeconds } from "./realtime-session-duration.js";
 
 const realtimeStartHoldSeconds = 30;
 
+/** Fail before resolving voices, reserving quota or creating legacy state. */
+export function realtimeCreationBlocker(input: CreateRealtimeSessionRequest) {
+  if (input.processing?.processingMode === "local") return {
+    status: 400, code: "local_processing_session",
+    message: "Local processing does not create an online session",
+  };
+  if (input.processing !== undefined) return {
+    status: 503, code: "processing_contract_not_ready",
+    message: "Versioned online model processing is not available on this server yet",
+  };
+  // Reuse the S3 public deployment identity, not regionEdition or provider name.
+  // A malformed nonempty identity must not silently select the private path.
+  if (process.env.API_RESULT_SYNC_DEPLOYMENT_ID) return {
+    status: 503, code: "processing_contract_required",
+    message: "Public deployment requires a versioned online processing contract",
+  };
+  return undefined;
+}
+
 export async function createRealtimeSession(
   userId: string,
   input: CreateRealtimeSessionRequest,
 ): Promise<CreateRealtimeSessionResponse | null> {
+  const blocker = realtimeCreationBlocker(input);
+  if (blocker) throw new Error(blocker.code);
   const plan = await activePlanForUser(userId);
   const env = loadEnv();
   const maxDurationSeconds = realtimeMaxSessionSeconds();

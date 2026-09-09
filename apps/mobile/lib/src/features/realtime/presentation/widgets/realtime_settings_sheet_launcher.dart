@@ -17,6 +17,7 @@ void showRealtimeSettingsSheet({
   VoidCallback? onEndRequested,
   List<VoicePreset> voicePresets = const <VoicePreset>[],
   bool voicePresetsLoading = false,
+  Widget Function()? resourceSectionBuilder,
 }) {
   showModalBottomSheet<void>(
     context: context,
@@ -49,6 +50,7 @@ void showRealtimeSettingsSheet({
                 onEndRequested: onEndRequested,
                 voicePresets: voicePresets,
                 voicePresetsLoading: voicePresetsLoading,
+                resourceSection: resourceSectionBuilder?.call(),
               );
             },
           );

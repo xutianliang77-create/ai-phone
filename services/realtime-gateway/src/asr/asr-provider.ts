@@ -103,6 +103,7 @@ export interface AsrSpeakerBoundaryEvidence {
 export type AsrProviderResult = TranscriptResult | TranscriptResult[] | null;
 
 export interface AsrProvider {
+  setPartialListener?(sessionId:string,listener:(result:TranscriptResult)=>void):()=>void;
   createSession(session: AsrSession): Promise<void>;
   transcribe(frame: AudioFrame): Promise<AsrProviderResult>;
   flush(sessionId: string): Promise<AsrProviderResult>;

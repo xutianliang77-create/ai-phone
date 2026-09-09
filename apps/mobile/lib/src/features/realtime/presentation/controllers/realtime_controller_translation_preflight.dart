@@ -11,18 +11,38 @@ extension RealtimeControllerTranslationPreflight on RealtimeController {
         ? provider as MobileTranslationDiagnostics
         : null;
     if (diagnostics == null) return;
+    final configs = createOnDeviceTranslationPreflightConfigs(_config);
+    if (configs.isEmpty) {
+      if (_config.sourceLanguage == autoSourceLanguageCode &&
+          !_config.autoReverseTargetLanguage) {
+        return;
+      }
+      throw UnsupportedError(
+          'Select an explicit valid translation language pair');
+    }
     _message = 'Checking on-device translation language packs';
     _notify();
-    for (final config in createOnDeviceTranslationPreflightConfigs(_config)) {
-      final availability = await diagnostics.availability(config);
-      if (!availability.available) {
-        throw UnsupportedError(
-          _onDeviceTranslationUnavailableMessage(availability.reason),
-        );
-      }
+    for (final config in configs) {
+      await _checkOnDeviceTranslationResources(config);
     }
     _message = 'On-device translation ready';
     _notify();
+  }
+
+  Future<void> _checkOnDeviceTranslationResources(
+      MobileTranslationConfig config) async {
+    final provider = _mobileTranslationProvider;
+    if (provider is! MobileTranslationDiagnostics) return;
+    final availability =
+        await (provider as MobileTranslationDiagnostics).availability(config);
+    if (!availability.available) {
+      throw UnsupportedError(
+          _onDeviceTranslationUnavailableMessage(availability.reason));
+    }
+    if (!availability.matchesLanguagePair(config)) {
+      throw UnsupportedError(_onDeviceTranslationUnavailableMessage(
+          'translation_language_mismatch'));
+    }
   }
 }
 
@@ -31,7 +51,9 @@ String _onDeviceTranslationUnavailableMessage(String reason) {
     'language_pair_not_installed' =>
       'On-device translation language pack is not installed',
     'unsupported_language_pair' =>
-      'On-device translation only supports Chinese and English',
+      'The requested on-device translation language pair is not supported',
+    'translation_language_mismatch' =>
+      'On-device translation resources do not match the requested languages',
     'ios_translation_requires_ios_26' =>
       'On-device translation requires iOS 26 or newer',
     _ => 'On-device translation unavailable',

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:translation_mobile/src/app/app_config.dart';
@@ -14,8 +15,23 @@ import 'package:translation_mobile/src/platform/asr/mobile_asr_provider.dart';
 import 'package:translation_mobile/src/platform/audio/audio_capture.dart';
 import 'package:translation_mobile/src/platform/audio/audio_frame.dart';
 import 'package:translation_mobile/src/platform/translation/mobile_translation_provider.dart';
+import 'package:translation_mobile/src/features/history/data/local_session_store.dart';
+import 'package:translation_mobile/src/features/realtime/data/local_realtime_repository.dart';
+import 'helpers/fake_speech_output_provider.dart';
+
+part 'helpers/realtime_on_device_translation_fakes.dart';
+part 'helpers/realtime_device_language_cases.dart';
+part 'helpers/realtime_translation_failure_cases.dart';
+part 'helpers/realtime_local_rule_cases.dart';
+part 'helpers/realtime_hypothesis_cases.dart';
+part 'helpers/realtime_checkpoint_cases.dart';
 
 void main() {
+  deviceLanguageCases();
+  translationFailureCases();
+  localRuleCases();
+  hypothesisCases();
+  checkpointCases();
   test('uses on-device translation before Gateway for final ASR text',
       () async {
     final repository = _FakeRealtimeRepository();
@@ -38,7 +54,6 @@ void main() {
     await controller.stop();
     expect(repository.endedSegments.single.translatedText, '你好');
   });
-
   test('falls back to Gateway when local translation has no result', () async {
     final repository = _FakeRealtimeRepository();
     final asr = _FakeMobileAsrProvider();
@@ -60,7 +75,6 @@ void main() {
     expect(repository.sentTextSegments.single.text, 'unmapped');
     expect(controller.segments, isEmpty);
   });
-
   test('keeps source text locally when local translation has no result',
       () async {
     final repository = _FakeRealtimeRepository();
@@ -199,6 +213,8 @@ RealtimeController _controller(
   _FakeMobileAsrProvider asr,
   MobileTranslationProvider translator, {
   bool useLocalSessions = false,
+  String sourceLanguage = 'auto',
+  String targetLanguage = 'zh',
 }) {
   return RealtimeController(
     repository: repository,
@@ -211,6 +227,8 @@ RealtimeController _controller(
       useDeviceAsr: true,
       useLocalSessions: useLocalSessions,
       useOnDeviceTranslation: true,
+      sourceLanguage: sourceLanguage,
+      targetLanguage: targetLanguage,
       deviceAsrProvider: 'coreml_nemotron',
       deviceAsrLanguage: 'auto',
       deviceAsrAutoDownloadModel: false,
@@ -264,6 +282,7 @@ class _FakeRealtimeRepository extends RealtimeRepository {
 }
 
 class _FakeMobileAsrProvider implements MobileAsrProvider {
+  MobileAsrConfig? lastConfig;
   final _segments = StreamController<AsrTextSegment>.broadcast();
 
   @override
@@ -273,7 +292,9 @@ class _FakeMobileAsrProvider implements MobileAsrProvider {
   Future<void> requestPermission() async {}
 
   @override
-  Future<void> start(MobileAsrConfig config) async {}
+  Future<void> start(MobileAsrConfig config) async {
+    lastConfig = config;
+  }
 
   @override
   Future<void> stop() async {}
@@ -313,35 +334,3 @@ class _FakeTranslationProvider implements MobileTranslationProvider {
   @override
   Future<void> dispose() async {}
 }
-
-class _NoopAudioCapture implements AudioCapture {
-  @override
-  Stream<AudioFrame> get frames => const Stream<AudioFrame>.empty();
-
-  @override
-  Future<void> requestPermission() async {}
-
-  @override
-  Future<void> start(AudioCaptureConfig config) async {}
-
-  @override
-  Future<void> pause() async {}
-
-  @override
-  Future<void> resume() async {}
-
-  @override
-  Future<void> stop() async {}
-
-  @override
-  Future<void> dispose() async {}
-}
-
-class _NoopRealtimeApiClient extends RealtimeApiClient {
-  _NoopRealtimeApiClient() : super(baseUrl: Uri.parse('http://127.0.0.1'));
-
-  @override
-  void close() {}
-}
-
-class _NoopRealtimeGatewayClient extends RealtimeGatewayClient {}

@@ -114,6 +114,11 @@ class GatewayRealtimeEvent {
         voiceOutputAccepted = null;
 
   factory GatewayRealtimeEvent.fromJson(Map<String, Object?> json) {
+    if ((json['type'] == 'audio.boundary.committed' ||
+            json['type'] == 'audio.boundary.rejected') &&
+        json['sequence'] is! int) {
+      throw const FormatException('Invalid audio boundary sequence');
+    }
     final providerUsage = json['providerUsage'] is Map<String, Object?>
         ? json['providerUsage']! as Map<String, Object?>
         : null;

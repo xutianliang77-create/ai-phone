@@ -147,10 +147,10 @@ class VoiceProfileApiClient implements VoiceProfileClient {
   VoiceProfileApiClient({
     required Uri baseUrl,
     http.Client? client,
-    AccountSessionStore accountSessionStore = const FileAccountSessionStore(),
+    AccountSessionStore? accountSessionStore,
   })  : _baseUrl = baseUrl,
         _client = client ?? http.Client(),
-        _accountSessionStore = accountSessionStore;
+        _accountSessionStore = accountSessionStore ?? accountStoreForDeployment(baseUrl);
 
   final Uri _baseUrl;
   final http.Client _client;

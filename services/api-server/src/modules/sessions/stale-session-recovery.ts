@@ -8,6 +8,7 @@ import {
 import { listStaleSessionCandidates } from
   "./sessions-recovery.repository.js";
 import { withSessionWriteLock } from "./session-write-coordinator.js";
+import {finalizePublicSession,serverFinalizationRequest} from "./public-session-finalization.service.js";
 
 export interface StaleSessionRecoveryResult {
   inspectedCount: number;
@@ -34,6 +35,13 @@ export async function recoverStaleRealtimeSessions(options: {
     withSessionWriteLock(sessionId, async () => {
       const session = await findSession(sessionId);
       if (!session || isTerminalRealtimeSessionState(session.status)) return;
+      if(session.processingAuthorization){
+        if(session.publicRuntime?.stoppedAt&&!session.publicRuntime.uncertain){
+          await finalizePublicSession(session.id,session.userId,serverFinalizationRequest(session),{now,serverRecovery:true});
+          recoveredCount++;
+        }
+        return; // Unknown public evidence must not be ended at zero or release its hold.
+      }
       const lastActivityMs = Date.parse(
         session.lastActivityAt ?? session.createdAt,
       );

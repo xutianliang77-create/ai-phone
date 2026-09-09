@@ -1,6 +1,14 @@
-import type { TermbaseTermDto } from "@translation/contracts";
+import type { TermbaseTermDto,PublicModelAttemptEvent } from "@translation/contracts";
+import {randomUUID} from "node:crypto";
+import {googleTranslationRequest,parseGoogleTranslation} from "./google-translation-protocol.js";
+import {PublicTranslationError,validatePublicTranslation,abortable,readPublicJson,parsePublicTranslation,publicRequestMetadata,
+  type PublicTranslationMetadata} from "./lmstudio-public-protocol.js";
 
 export interface LmStudioClientOptions {
+  /** Protocol hardening only, not authorization or qualification. Default preserves 1.0. */
+  transportProfile?: "public_compatible"|"public_google";
+  google?:{protocol:"gemini"|"vertex";projectId?:string;location?:string;accessToken?:string;quotaProjectId?:string};
+  attemptRecorder?:{sessionId:string;leaseId:string;providerId:string;record:(event:PublicModelAttemptEvent)=>Promise<void>};
   baseUrl: string;
   model: string;
   apiKey?: string;
@@ -27,6 +35,8 @@ interface LmStudioErrorResponse {
 }
 
 export class LmStudioClient {
+  readonly supportsAbort=true as const;
+  readonly supportsAttemptContext=true as const;
   private readonly fetchFn: typeof fetch;
 
   constructor(private readonly options: LmStudioClientOptions) {
@@ -38,50 +48,96 @@ export class LmStudioClient {
     sourceLanguage: string;
     targetLanguage: string;
     terminology?: TermbaseTermDto[];
+    signal?:AbortSignal;
+    attemptContext?:{segmentId:string;revision:number};
   }) {
+    return (await this.translateWithMetadata(input)).text;
+  }
+
+  async translateWithMetadata(input:{text:string;sourceLanguage:string;targetLanguage:string;
+    terminology?:TermbaseTermDto[];signal?:AbortSignal;attemptContext?:{segmentId:string;revision:number}}):Promise<{text:string;metadata?:PublicTranslationMetadata}> {
+    const isPublic=this.options.transportProfile!==undefined,isGoogle=this.options.transportProfile==="public_google";
+    if(isPublic)validatePublicTranslation(this.options,input);
+    const journal=this.options.attemptRecorder;
+    if(journal&&(!isPublic||![journal.sessionId,journal.leaseId,journal.providerId,input.attemptContext?.segmentId].every(v=>typeof v==="string"&&v.trim()===v&&v.length>0&&v.length<=240)||
+      !Number.isSafeInteger(input.attemptContext?.revision)||Number(input.attemptContext?.revision)<0))throw new PublicTranslationError("public_attempt_configuration","not_sent");
+    if(input.signal?.aborted)throw isPublic?new PublicTranslationError("public_translation_cancelled","not_sent"):new DOMException("Aborted","AbortError");
     const controller = new AbortController();
+    const cancel=()=>controller.abort();input.signal?.addEventListener("abort",cancel,{once:true});
     const timer = setTimeout(() => controller.abort(), this.options.timeoutMs);
+    let sent=false;
+    let prepared=false,terminalAttempted=false;
+    const attempt:PublicModelAttemptEvent|undefined=journal?{sessionId:journal.sessionId,leaseId:journal.leaseId,providerId:journal.providerId,
+      modelId:this.options.model,attemptId:randomUUID(),segmentId:input.attemptContext!.segmentId,revision:input.attemptContext!.revision,component:"translation",state:"dispatching"}:undefined;
+    const record=async(event:PublicModelAttemptEvent)=>{
+      const deadline=new AbortController(),timeout=setTimeout(()=>deadline.abort(),5000);
+      try{await abortable(journal!.record(structuredClone(event)),deadline.signal);}finally{clearTimeout(timeout);}
+    };
     try {
-      const response = await this.fetchFn(this.chatCompletionsUrl(), {
-        method: "POST",
-        headers: this.headers(),
-        body: JSON.stringify({
-          model: this.options.model,
-          temperature: 0,
-          max_tokens: this.options.maxTokens ?? 512,
-          ...(this.reasoningEffortBody()),
-          ...(this.options.extraBody ?? {}),
-          messages: [
-            {
-              role: "system",
-              content: buildSystemPrompt(input.targetLanguage, input.terminology),
-            },
-            {
-              role: "user",
-              content: input.text,
-            },
-          ],
-        }),
-        signal: controller.signal,
+      const glossary=isPublic?input.terminology?.filter(t=>t.sourceLanguage===input.sourceLanguage&&t.targetLanguage===input.targetLanguage&&t.status==="active"):input.terminology;
+      const prompt=(isPublic?`Source language: ${languageName(input.sourceLanguage)}.\n`:"")+buildSystemPrompt(input.targetLanguage,glossary);
+      const google=isGoogle?googleTranslationRequest(this.options,prompt,input.text):undefined;
+      const body=JSON.stringify(google?.body??{
+          model: this.options.model,temperature: 0,max_tokens: this.options.maxTokens ?? 512,
+          ...(this.reasoningEffortBody()),...(this.options.extraBody ?? {}),
+          ...(isPublic?{stream:false}:{}),
+          messages:[{role:"system",content:prompt},
+            {role:"user",content:input.text}],
       });
+      if(isPublic&&Buffer.byteLength(body)>262144)throw new PublicTranslationError("public_translation_invalid_input","not_sent");
+      if(attempt){
+        try{await abortable(record(attempt),controller.signal);prepared=true;}catch{throw new PublicTranslationError("public_attempt_record_failed","not_sent");}
+      }
+      if(controller.signal.aborted)throw new DOMException("Aborted","AbortError");
+      sent=true;
+      const response = await abortable(this.fetchFn(google?.url??this.chatCompletionsUrl(), {
+        method: "POST",
+        headers: google?.headers??this.headers(),
+        body,
+        signal: controller.signal,
+        ...(isPublic?{redirect:"error" as const}:{}),
+      }),controller.signal);
       if (!response.ok) {
+        if(isPublic){void response.body?.cancel().catch(()=>{});
+          throw new PublicTranslationError(response.status===429?"public_translation_rate_limited":"public_translation_http_error",
+            response.status>=500||response.status===408?"uncertain":"rejected",response.status,publicRequestMetadata(response.headers.get("x-request-id")));}
         throw new Error(`LM Studio returned HTTP ${response.status}: ${await readError(response)}`);
       }
-      const body = await response.json() as ChatCompletionResponse;
-      const message = body.choices?.[0]?.message;
+      if(isPublic){
+        const result=(isGoogle?parseGoogleTranslation:parsePublicTranslation)(await readPublicJson(response,controller.signal),response.headers.get("x-request-id"));
+        if(attempt){terminalAttempted=true;try{await record({...attempt,state:"confirmed",metadata:result.metadata});}catch{throw new PublicTranslationError("public_attempt_record_failed","uncertain");}}
+        if(controller.signal.aborted)throw new DOMException("Aborted","AbortError");
+        return result;
+      }
+      const parsed = await abortable(response.json(),controller.signal) as ChatCompletionResponse;
+      const message = parsed.choices?.[0]?.message;
       const translation =
         stripThinking(message?.content ?? "") ||
         extractTranslationFromReasoning(message?.reasoning_content ?? "");
       if (!translation) {
         throw new Error("LM Studio returned empty translation after cleaning reasoning output");
       }
-      return translation;
+      return {text:translation};
+    } catch(error){
+      if(!isPublic)throw error;
+      const failure=error instanceof PublicTranslationError?error:new PublicTranslationError(controller.signal.aborted?(input.signal?.aborted?"public_translation_cancelled":"public_translation_timeout"):
+        "public_translation_transport_or_payload_error",sent?"uncertain":"not_sent");
+      if(attempt&&prepared&&!terminalAttempted){
+        terminalAttempted=true;
+        try{await record({...attempt,state:failure.outcome,failureCode:failure.code,...(failure.metadata?{metadata:failure.metadata}:{})});}
+        catch{throw new PublicTranslationError("public_attempt_record_failed",sent?"uncertain":"not_sent");}
+      }
+      throw failure;
     } finally {
       clearTimeout(timer);
+      input.signal?.removeEventListener("abort",cancel);
     }
   }
 
   async healthCheck() {
+    // A catalog 200 is not public component qualification. A supplier-specific
+    // readiness probe must be wired before the public entry gate can open.
+    if(this.options.transportProfile!==undefined)return false;
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), this.options.timeoutMs);
     try {
@@ -99,6 +155,12 @@ export class LmStudioClient {
   }
 
   private chatCompletionsUrl() {
+    if(this.options.transportProfile==="public_compatible"){
+      const base=this.options.baseUrl.replace(/\/$/,"");
+      if(base.endsWith("/chat/completions"))return base;
+      // A configured path is the API prefix, not necessarily /v1. Preserve it.
+      return `${base}${new URL(base).pathname==="/"?"/v1":""}/chat/completions`;
+    }
     return `${this.normalizedBaseUrl()}/v1/chat/completions`;
   }
 

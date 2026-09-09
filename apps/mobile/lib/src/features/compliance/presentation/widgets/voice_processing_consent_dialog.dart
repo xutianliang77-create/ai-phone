@@ -10,6 +10,7 @@ enum VoiceProcessingConsentScene {
   realtimeOnline,
   callLink,
   aiCallingAgent,
+  resultTextSync,
 }
 
 Future<bool> ensureVoiceProcessingConsent({
@@ -18,6 +19,9 @@ Future<bool> ensureVoiceProcessingConsent({
   required VoiceProcessingConsentScene scene,
   ConsentAuditUploader? consentAuditUploader,
 }) async {
+  if (scene == VoiceProcessingConsentScene.resultTextSync) {
+    return confirmResultTextSync(context);
+  }
   final record = await store.load();
   if (record?.version == voiceProcessingConsentVersion) return true;
   if (!context.mounted) return false;
@@ -46,18 +50,30 @@ Future<bool> ensureVoiceProcessingConsent({
   return true;
 }
 
+Future<bool> confirmResultTextSync(BuildContext context,
+        {String? destination}) async =>
+    await showDialog<bool>(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => _VoiceProcessingConsentDialog(
+            scene: VoiceProcessingConsentScene.resultTextSync,
+            destination: destination)) ??
+    false;
+
 String _sceneCode(VoiceProcessingConsentScene scene) {
   return switch (scene) {
     VoiceProcessingConsentScene.realtimeOnline => 'realtime_online',
     VoiceProcessingConsentScene.callLink => 'call_link',
     VoiceProcessingConsentScene.aiCallingAgent => 'ai_calling_agent',
+    VoiceProcessingConsentScene.resultTextSync => 'result_text_sync',
   };
 }
 
 class _VoiceProcessingConsentDialog extends StatefulWidget {
-  const _VoiceProcessingConsentDialog({required this.scene});
+  const _VoiceProcessingConsentDialog({required this.scene, this.destination});
 
   final VoiceProcessingConsentScene scene;
+  final String? destination;
 
   @override
   State<_VoiceProcessingConsentDialog> createState() =>
@@ -104,10 +120,18 @@ class _VoiceProcessingConsentDialogState
   }
 
   String _title(AppLocalizations l10n) {
+    if (widget.scene == VoiceProcessingConsentScene.resultTextSync) {
+      return l10n.isChinese ? '本会话原译文同步' : 'Session text synchronization';
+    }
     return l10n.isChinese ? '语音敏感信息处理确认' : 'Voice Data Processing Consent';
   }
 
   String _body(AppLocalizations l10n, VoiceProcessingConsentScene scene) {
+    if (scene == VoiceProcessingConsentScene.resultTextSync) {
+      return l10n.isChinese
+          ? '仅将本会话已完成的原文、优化文和译文保存到当前账号的服务器。此操作不上传音频、不启动模型推理、不结束或结算会话。允许后仍需点击“同步一次”，可随时撤销。\n${widget.destination ?? ""}'
+          : 'Save completed source, refined and translated text to the current account server. No audio upload, inference, session finalization or settlement. Sending is explicit and permission can be revoked.\n${widget.destination ?? ""}';
+    }
     if (!l10n.isChinese) {
       return '${_sceneName(l10n, scene)} may upload microphone audio, '
           'captions, translated text, and synthesized speech to cloud '
@@ -120,6 +144,11 @@ class _VoiceProcessingConsentDialogState
   }
 
   String _checkboxText(AppLocalizations l10n) {
+    if (widget.scene == VoiceProcessingConsentScene.resultTextSync) {
+      return l10n.isChinese
+          ? '我同意本会话的文本同步范围'
+          : 'I agree to this session text-sync scope';
+    }
     return l10n.isChinese
         ? '我同意本次使用云端语音转写、翻译和语音播放能力'
         : 'I agree to use cloud speech, translation, and playback features.';
@@ -131,12 +160,14 @@ class _VoiceProcessingConsentDialogState
         VoiceProcessingConsentScene.realtimeOnline => 'Online interpreting',
         VoiceProcessingConsentScene.callLink => 'Call Link',
         VoiceProcessingConsentScene.aiCallingAgent => 'AI Calling Agent',
+        VoiceProcessingConsentScene.resultTextSync => 'Text synchronization',
       };
     }
     return switch (scene) {
       VoiceProcessingConsentScene.realtimeOnline => '在线同传',
       VoiceProcessingConsentScene.callLink => '通话链接',
       VoiceProcessingConsentScene.aiCallingAgent => 'AI 代打电话',
+      VoiceProcessingConsentScene.resultTextSync => '文本同步',
     };
   }
 }

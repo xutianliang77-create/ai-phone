@@ -19,6 +19,7 @@ import '../controllers/realtime_controller.dart';
 import '../realtime_online_recovery_policy.dart';
 import '../realtime_settings_l10n.dart';
 import '../widgets/realtime_controls.dart';
+import '../widgets/realtime_resource_preparation_panel.dart';
 import '../widgets/realtime_language_menu.dart';
 import '../widgets/realtime_online_recovery_actions.dart';
 import '../widgets/realtime_settings_sheet_launcher.dart';
@@ -27,6 +28,7 @@ import '../widgets/subtitle_timeline.dart';
 
 part 'realtime_page_online_helpers.dart';
 part 'realtime_page_settings_helpers.dart';
+part 'realtime_page_result_sync.dart';
 
 class RealtimePage extends StatefulWidget {
   const RealtimePage({
@@ -37,6 +39,7 @@ class RealtimePage extends StatefulWidget {
     this.voiceConsentStore,
     this.accountSessionStore,
     this.voicePresetClient,
+    this.controllerFactory,
   });
 
   final AppConfig? config;
@@ -45,6 +48,7 @@ class RealtimePage extends StatefulWidget {
   final VoiceProcessingConsentStore? voiceConsentStore;
   final AccountSessionStore? accountSessionStore;
   final VoicePresetClient? voicePresetClient;
+  final RealtimeController Function(AppConfig config)? controllerFactory;
 
   @override
   State<RealtimePage> createState() => _RealtimePageState();
@@ -63,6 +67,8 @@ class _RealtimePageState extends State<RealtimePage>
   late RealtimeController controller;
   bool _onlineRecoveryInFlight = false;
   bool _voicePresetsLoading = true;
+  bool _voicePresetsInitialized = false;
+  int _voicePresetGeneration = 0;
   VoicePresetCatalog _voicePresetCatalog = const VoicePresetCatalog.empty();
   Timer? _finalizationReplayTimer;
 
@@ -72,9 +78,8 @@ class _RealtimePageState extends State<RealtimePage>
     _settingsStore = widget.settingsStore ?? const FileRealtimeSettingsStore();
     _voiceConsentStore =
         widget.voiceConsentStore ?? const FileVoiceProcessingConsentStore();
-    _accountSessionStore =
-        widget.accountSessionStore ?? const FileAccountSessionStore();
     final baseConfig = widget.config ?? AppConfig.fromEnvironment();
+    _accountSessionStore = widget.accountSessionStore ?? accountStoreForDeployment(baseConfig.apiBaseUrl);
     _ownsVoicePresetClient = widget.voicePresetClient == null;
     _voicePresetClient = widget.voicePresetClient ??
         VoicePresetClient(baseUrl: baseConfig.apiBaseUrl);
@@ -87,8 +92,7 @@ class _RealtimePageState extends State<RealtimePage>
       const Duration(seconds: 15),
       (_) => unawaited(controller.recoverPendingFinalizations()),
     );
-    unawaited(_loadSettings());
-    unawaited(_loadVoicePresets());
+    unawaited(_loadSettingsAndVoicePresets());
   }
 
   @override
@@ -179,6 +183,10 @@ class _RealtimePageState extends State<RealtimePage>
                     ),
                   ),
                 ),
+                if(controller.resultSyncAvailable) _resultSyncActions(this),
+                if(controller.publicFinalizationAvailable)
+                  TextButton(onPressed:controller.resultSyncBusy?null:controller.confirmPendingPublicFinalizations,
+                    child:Text(l10n.isChinese?'确认待结束会话':'Confirm pending session ends')),
                 RealtimeControls(
                   status: controller.status,
                   onStart: controller.start,
@@ -260,37 +268,35 @@ class _RealtimePageState extends State<RealtimePage>
     final savedSettings = await _settingsStore.load();
     if (!mounted || savedSettings == null) return;
     if (!_canChangeSettings) return;
-    _replaceSettings(_normalizeVoicePreset(savedSettings));
+    _replaceSettings(savedSettings);
   }
 
   Future<void> _loadVoicePresets() async {
+    final generation = ++_voicePresetGeneration;
+    if (_config.useLocalSessions) {
+      if (mounted) setState(() => _voicePresetsLoading = false);
+      return;
+    }
+    if (mounted) setState(() => _voicePresetsLoading = true);
     try {
       final catalog = await _voicePresetClient.load();
-      if (!mounted) return;
+      if (!mounted || generation != _voicePresetGeneration) return;
       setState(() {
         _voicePresetCatalog = catalog;
         _voicePresetsLoading = false;
       });
-      final normalized = _normalizeVoicePreset(_settings);
-      if (normalized.voicePresetId != _settings.voicePresetId) {
-        _replaceSettings(normalized);
-        unawaited(_settingsStore.save(normalized));
-      }
     } catch (_) {
-      if (mounted) setState(() => _voicePresetsLoading = false);
+      if (mounted && generation == _voicePresetGeneration) {
+        setState(() => _voicePresetsLoading = false);
+      }
     }
   }
 
-  RealtimeRuntimeSettings _normalizeVoicePreset(
-    RealtimeRuntimeSettings settings,
-  ) {
-    if (_voicePresetCatalog.presets.isEmpty ||
-        _voicePresetCatalog.find(settings.voicePresetId) != null) {
-      return settings;
-    }
-    return settings.copyWith(
-      voicePresetId: _voicePresetCatalog.defaultPresetId,
-    );
+  Future<void> _loadSettingsAndVoicePresets() async {
+    await _loadSettings();
+    if (!mounted) return;
+    _voicePresetsInitialized = true;
+    await _loadVoicePresets();
   }
 
   void _replaceSettings(RealtimeRuntimeSettings settings) {
@@ -300,12 +306,14 @@ class _RealtimePageState extends State<RealtimePage>
   void _replaceConfig(AppConfig nextConfig,
       {RealtimeRuntimeSettings? settings}) {
     final previousController = controller;
+    final modeChanged = _config.useLocalSessions != nextConfig.useLocalSessions;
     setState(() {
       if (settings != null) _settings = settings;
       _config = nextConfig;
       controller = _createRealtimePageController(this, _config);
     });
     previousController.dispose();
+    if (_voicePresetsInitialized && modeChanged) unawaited(_loadVoicePresets());
   }
 
   void _safeSetState(VoidCallback update) {

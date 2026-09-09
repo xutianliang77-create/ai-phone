@@ -23,7 +23,7 @@ class _AccountPageState extends State<AccountPage> {
       AccountApiClient(baseUrl: AppConfig.fromEnvironment().apiBaseUrl);
   late final bool _ownsClient = widget.client == null;
   late final AccountSessionStore _sessionStore =
-      widget.sessionStore ?? const FileAccountSessionStore();
+      widget.sessionStore ?? _client.createSessionStore();
   final _phoneController = TextEditingController();
   final _codeController = TextEditingController();
   AccountSession? _session;
@@ -160,7 +160,12 @@ class _AccountPageState extends State<AccountPage> {
       _loading = true;
     });
     await _run(() async {
-      _account = await _client.fetchMe(session.token);
+      if (!_client.sessionMatches(session)) throw StateError('登录身份不匹配，请重新登录');
+      final account = await _client.fetchMe(session.token);
+      if (_client.deploymentId.isNotEmpty && account.id != session.ownerId) {
+        throw StateError('服务器账号与登录凭据不匹配');
+      }
+      _account = account;
     }, clearSessionOnAuthError: true);
   }
 
@@ -179,10 +184,7 @@ class _AccountPageState extends State<AccountPage> {
     final code = _codeController.text.trim();
     await _run(() async {
       final result = await _client.loginWithPhoneCode(phone: phone, code: code);
-      final session = AccountSession(
-        token: result.token,
-        expiresAtIso: result.expiresAt.toIso8601String(),
-      );
+      final session = _client.sessionFromLogin(result);
       await _sessionStore.save(session);
       _session = session;
       _account = result.account;
@@ -203,6 +205,7 @@ class _AccountPageState extends State<AccountPage> {
     final token = _session?.token;
     var remoteLogoutFailed = false;
     await _run(() async {
+      await _clearLocalSession();
       if (token != null) {
         try {
           await _client.logout(token);
@@ -210,7 +213,6 @@ class _AccountPageState extends State<AccountPage> {
           remoteLogoutFailed = true;
         }
       }
-      await _clearLocalSession();
       _message = remoteLogoutFailed ? '已退出本机；服务器会话将在登录令牌到期后失效' : '已退出登录';
     });
   }
@@ -242,6 +244,7 @@ class _AccountPageState extends State<AccountPage> {
     final token = _session?.token;
     if (token == null) return;
     await _run(() async {
+      if (_client.deploymentId.isNotEmpty) await _clearLocalSession();
       await _client.requestDeletion(token);
       await _clearLocalSession();
       _message = '注销请求已提交，账号已退出';

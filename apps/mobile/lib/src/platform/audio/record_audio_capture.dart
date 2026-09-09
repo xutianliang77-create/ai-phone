@@ -5,8 +5,14 @@ import 'package:record/record.dart';
 
 import 'audio_capture.dart';
 import 'audio_frame.dart';
+import 'online_audio_endpoint.dart';
 
 class RecordAudioCapture implements AudioCapture {
+  RecordAudioCapture({AudioEndpointDetector? endpointDetector})
+      : _endpointDetector = endpointDetector ?? IosAudioEndpointDetector();
+  final AudioEndpointDetector _endpointDetector;
+  OnlineAudioEndpointProcessor? _endpoint;
+  int _generation = 0;
   final StreamController<AudioFrame> _frames =
       StreamController<AudioFrame>.broadcast();
   AudioRecorder? _recorder;
@@ -28,9 +34,20 @@ class RecordAudioCapture implements AudioCapture {
   @override
   Future<void> start(AudioCaptureConfig config) async {
     await stop();
+    final generation = ++_generation;
     _config = config;
+    if (config.publicEndpointing) {
+      final endpoint = OnlineAudioEndpointProcessor(
+          _endpointDetector, _frames.add, _frames.addError);
+      _endpoint = endpoint;
+      await endpoint.start(config.sampleRate, options: config.endpointOptions);
+      if (generation != _generation) {
+        throw const AudioCaptureException('音频启动已取消');
+      }
+    }
     final recorder = _activeRecorder;
     await recorder.ios?.manageAudioSession(config.managePlatformAudioSession);
+    if (generation != _generation) throw const AudioCaptureException('音频启动已取消');
     final stream = await recorder.startStream(
       RecordConfig(
         encoder: AudioEncoder.pcm16bits,
@@ -41,8 +58,14 @@ class RecordAudioCapture implements AudioCapture {
         streamBufferSize: _byteLength(config),
       ),
     );
+    if (generation != _generation) {
+      await recorder.stop();
+      throw const AudioCaptureException('音频启动已取消');
+    }
     _subscription = stream.listen(
-      _emitFrame,
+      (bytes) {
+        if (generation == _generation) _emitFrame(bytes);
+      },
       onError: _frames.addError,
     );
   }
@@ -59,11 +82,22 @@ class RecordAudioCapture implements AudioCapture {
 
   @override
   Future<void> stop() async {
-    await _subscription?.cancel();
+    _generation++;
+    final subscription = _subscription;
     _subscription = null;
     final recorder = _recorder;
-    if (recorder != null && await recorder.isRecording()) {
-      await recorder.stop();
+    final endpoint = _endpoint;
+    try {
+      await subscription?.cancel();
+      if (recorder != null && await recorder.isRecording()) {
+        await recorder.stop();
+      }
+    } finally {
+      if (identical(_endpoint, endpoint)) _endpoint = null;
+      if (endpoint != null) {
+        await endpoint.stop();
+        await Future<void>.delayed(Duration.zero);
+      }
     }
   }
 
@@ -81,14 +115,18 @@ class RecordAudioCapture implements AudioCapture {
 
   void _emitFrame(Uint8List bytes) {
     if (bytes.isEmpty) return;
-    _frames.add(
-      AudioFrame(
-        sequence: _sequence++,
-        timestampMs: DateTime.now().millisecondsSinceEpoch,
-        sampleRate: _config.sampleRate,
-        bytes: bytes.toList(growable: false),
-      ),
+    final frame = AudioFrame(
+      sequence: _sequence++,
+      timestampMs: DateTime.now().millisecondsSinceEpoch,
+      sampleRate: _config.sampleRate,
+      bytes: bytes.toList(growable: false),
     );
+    final endpoint = _endpoint;
+    if (endpoint != null) {
+      endpoint.add(frame);
+    } else {
+      _frames.add(frame);
+    }
   }
 
   int _byteLength(AudioCaptureConfig config) {

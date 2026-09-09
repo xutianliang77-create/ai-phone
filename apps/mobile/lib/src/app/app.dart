@@ -5,6 +5,7 @@ import 'app_language.dart';
 import 'localization/app_localizations.dart';
 import 'router.dart';
 import 'theme.dart';
+import '../features/shell/presentation/pages/main_shell_page.dart';
 import '../features/compliance/data/compliance_consent_store.dart';
 import '../features/compliance/data/consent_audit_uploader.dart';
 import '../features/compliance/presentation/pages/compliance_consent_gate.dart';
@@ -14,12 +15,14 @@ class TranslationApp extends StatefulWidget {
     this.locale = const Locale('zh'),
     this.complianceConsentStore,
     this.consentAuditUploader,
+    this.shellPage,
     super.key,
   });
 
   final Locale? locale;
   final ComplianceConsentStore? complianceConsentStore;
   final ConsentAuditUploader? consentAuditUploader;
+  final MainShellPage? shellPage;
 
   @override
   State<TranslationApp> createState() => _TranslationAppState();
@@ -54,7 +57,8 @@ class _TranslationAppState extends State<TranslationApp> {
       theme: buildAppTheme(),
       darkTheme: buildAppTheme(brightness: Brightness.dark),
       themeMode: ThemeMode.system,
-      onGenerateRoute: AppRouter.onGenerateRoute,
+      onGenerateRoute: (settings) =>
+          AppRouter.onGenerateRoute(settings, shellPage: widget.shellPage),
       builder: (context, child) => AppLanguageScope(
         locale: _locale ?? Localizations.localeOf(context),
         onChanged: _changeLocale,

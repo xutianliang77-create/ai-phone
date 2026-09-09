@@ -1,5 +1,6 @@
 import 'region_edition_config.dart';
 import '../platform/translation/supported_translation_language.dart';
+import '../platform/translation/translation_language_pair.dart';
 import '../features/realtime/data/voice_preset_catalog.dart';
 import '../features/realtime/data/domain_lexicon_pack.dart';
 
@@ -19,9 +20,9 @@ class AppConfig {
     this.voiceAgentDeliveryCoordinatorEnabled = false,
     this.appVersion = '0.1.0',
     this.buildNumber = '1',
-    this.deviceAsrChunkDurationMs = 320,
-    this.deviceAsrEndpointMinSpeechMs = 600,
-    this.deviceAsrEndpointSilenceMs = 900,
+    int? deviceAsrChunkDurationMs,
+    int? deviceAsrEndpointMinSpeechMs,
+    int? deviceAsrEndpointSilenceMs,
     this.deviceAsrEndpointSpeechThresholdRms = 0.006,
     this.deviceAsrVadProvider = 'fluidaudio_silero',
     this.deviceAsrVadThreshold = 0.6,
@@ -30,9 +31,12 @@ class AppConfig {
     this.deviceAsrDiagnosticCaptureEnabled = false,
     this.useLocalSessions = false,
     this.useOnDeviceTranslation = false,
+    bool? preferDeviceAsrOnline,
+    bool? preferOnDeviceTranslationOnline,
     this.onDeviceTranslationProvider = 'ios_system',
     this.onDeviceTranslationRequired = false,
     this.autoReverseTargetLanguage = true,
+    this.automaticLanguagePair,
     String realtimeVoiceOutputMode = 'off',
     String realtimeVoicePresetId = defaultRealtimeVoicePresetId,
     String domainLexiconPack = defaultDomainLexiconPack,
@@ -40,15 +44,23 @@ class AppConfig {
     String realtimeMode = 'conversation',
     String sourceLanguage = 'auto',
     String targetLanguage = 'zh',
-  })  : realtimeVoiceOutputMode =
+  })  : deviceAsrChunkDurationMs = deviceAsrChunkDurationMs ??
+            (deviceAsrProvider == 'apple_speech_transcriber' ? 32 : 320),
+        deviceAsrEndpointMinSpeechMs = deviceAsrEndpointMinSpeechMs ??
+            (deviceAsrProvider == 'apple_speech_transcriber' ? 96 : 600),
+        deviceAsrEndpointSilenceMs = deviceAsrEndpointSilenceMs ??
+            (deviceAsrProvider == 'apple_speech_transcriber' ? 640 : 900),
+        preferDeviceAsrOnline = preferDeviceAsrOnline ?? useDeviceAsr,
+        preferOnDeviceTranslationOnline =
+            preferOnDeviceTranslationOnline ?? useOnDeviceTranslation,
+        realtimeVoiceOutputMode =
             _normalizeRealtimeVoiceOutputMode(realtimeVoiceOutputMode),
-        sourceLanguage = _normalizeSourceLanguage(sourceLanguage),
+        sourceLanguage = normalizeSourceLanguageCode(sourceLanguage),
         realtimeVoicePresetId = _normalizeVoicePresetId(realtimeVoicePresetId),
         domainLexiconPack = normalizeDomainLexiconPack(domainLexiconPack),
-        targetLanguage = _normalizeTargetLanguage(targetLanguage),
+        targetLanguage = normalizeTargetLanguageCode(targetLanguage),
         realtimeMode = _normalizeRealtimeMode(realtimeMode),
         region = region ?? const RegionEditionConfig.domestic();
-
   final Uri apiBaseUrl;
   final bool useMockAudio;
   final bool useDeviceAsr;
@@ -70,9 +82,13 @@ class AppConfig {
   final bool deviceAsrDiagnosticCaptureEnabled;
   final bool useLocalSessions;
   final bool useOnDeviceTranslation;
+  // Legacy r6 preferences; online mode ignores them (r6.1).
+  final bool preferDeviceAsrOnline;
+  final bool preferOnDeviceTranslationOnline;
   final String onDeviceTranslationProvider;
   final bool onDeviceTranslationRequired;
   final bool autoReverseTargetLanguage;
+  final TranslationLanguagePair? automaticLanguagePair;
   final String realtimeVoiceOutputMode;
   final String realtimeVoicePresetId;
   final String domainLexiconPack;
@@ -84,7 +100,6 @@ class AppConfig {
   final String appVersion;
   final String buildNumber;
   final RegionEditionConfig region;
-
   static AppConfig fromEnvironment() {
     final region = RegionEditionConfig.fromEnvironment();
     const apiBaseUrl = String.fromEnvironment(
@@ -126,15 +141,15 @@ class AppConfig {
     );
     const deviceAsrChunkDurationMs = int.fromEnvironment(
       'DEVICE_ASR_CHUNK_DURATION_MS',
-      defaultValue: 320,
+      defaultValue: deviceAsrProvider == 'apple_speech_transcriber' ? 32 : 320,
     );
     const deviceAsrEndpointMinSpeechMs = int.fromEnvironment(
       'DEVICE_ASR_ENDPOINT_MIN_SPEECH_MS',
-      defaultValue: 600,
+      defaultValue: deviceAsrProvider == 'apple_speech_transcriber' ? 96 : 600,
     );
     const deviceAsrEndpointSilenceMs = int.fromEnvironment(
       'DEVICE_ASR_ENDPOINT_SILENCE_MS',
-      defaultValue: 900,
+      defaultValue: deviceAsrProvider == 'apple_speech_transcriber' ? 640 : 900,
     );
     const deviceAsrEndpointSpeechThresholdRmsRaw = String.fromEnvironment(
       'DEVICE_ASR_ENDPOINT_SPEECH_THRESHOLD_RMS',
@@ -227,8 +242,7 @@ class AppConfig {
       deviceAsrVadThreshold: deviceAsrVadThreshold,
       deviceAsrVadNegativeThreshold: deviceAsrVadNegativeThreshold,
       deviceAsrVadPreRollMs: deviceAsrVadPreRollMs,
-      deviceAsrDiagnosticCaptureEnabled:
-          deviceAsrDiagnosticCaptureEnabled,
+      deviceAsrDiagnosticCaptureEnabled: deviceAsrDiagnosticCaptureEnabled,
       useLocalSessions: useLocalSessions,
       useOnDeviceTranslation: useOnDeviceTranslation,
       onDeviceTranslationProvider: onDeviceTranslationProvider,
@@ -258,6 +272,8 @@ class AppConfig {
     bool? useLocalSessions,
     bool? useOnDeviceTranslation,
     bool? autoReverseTargetLanguage,
+    TranslationLanguagePair? automaticLanguagePair,
+    bool clearAutomaticLanguagePair = false,
     String? realtimeVoiceOutputMode,
     String? realtimeVoicePresetId,
     String? domainLexiconPack,
@@ -281,15 +297,19 @@ class AppConfig {
       deviceAsrVadThreshold: deviceAsrVadThreshold,
       deviceAsrVadNegativeThreshold: deviceAsrVadNegativeThreshold,
       deviceAsrVadPreRollMs: deviceAsrVadPreRollMs,
-      deviceAsrDiagnosticCaptureEnabled:
-          deviceAsrDiagnosticCaptureEnabled,
+      deviceAsrDiagnosticCaptureEnabled: deviceAsrDiagnosticCaptureEnabled,
       useLocalSessions: useLocalSessions ?? this.useLocalSessions,
       useOnDeviceTranslation:
           useOnDeviceTranslation ?? this.useOnDeviceTranslation,
+      preferDeviceAsrOnline: preferDeviceAsrOnline,
+      preferOnDeviceTranslationOnline: preferOnDeviceTranslationOnline,
       onDeviceTranslationProvider: onDeviceTranslationProvider,
       onDeviceTranslationRequired: onDeviceTranslationRequired,
       autoReverseTargetLanguage:
           autoReverseTargetLanguage ?? this.autoReverseTargetLanguage,
+      automaticLanguagePair: clearAutomaticLanguagePair
+          ? null
+          : automaticLanguagePair ?? this.automaticLanguagePair,
       realtimeVoiceOutputMode:
           realtimeVoiceOutputMode ?? this.realtimeVoiceOutputMode,
       realtimeVoicePresetId:
@@ -319,14 +339,6 @@ String _normalizeRealtimeVoiceOutputMode(String value) {
   final mode = value.trim().toLowerCase();
   if (mode == 'natural' || mode == 'my_voice') return mode;
   return 'off';
-}
-
-String _normalizeSourceLanguage(String value) {
-  return normalizeSourceLanguageCode(value);
-}
-
-String _normalizeTargetLanguage(String value) {
-  return normalizeTargetLanguageCode(value);
 }
 
 String _normalizeRealtimeMode(String value) {

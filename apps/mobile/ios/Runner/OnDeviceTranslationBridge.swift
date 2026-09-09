@@ -1,11 +1,15 @@
 import Flutter
 import Foundation
 import Translation
+import UIKit
 
 final class OnDeviceTranslationBridge {
   private let methodChannelName = "translation_mobile/on_device_translation"
+  private var resourcePreparation: AnyObject?
+  private var presenter: () -> UIViewController? = { nil }
 
-  func register(messenger: FlutterBinaryMessenger) {
+  func register(messenger: FlutterBinaryMessenger, presenter: @escaping () -> UIViewController? = { nil }) {
+    self.presenter = presenter
     let channel = FlutterMethodChannel(
       name: methodChannelName,
       binaryMessenger: messenger
@@ -21,6 +25,26 @@ final class OnDeviceTranslationBridge {
       isAvailable(call: call, result: result)
     case "translate":
       translate(call: call, result: result)
+    case "prepare", "cancelPreparation":
+      Task { @MainActor [weak self] in
+        guard let self else { return }
+        guard #available(iOS 26.0, *) else {
+          result(self.flutterError(code: "ios_translation_requires_ios_26", message: "iOS 26 is required.", details: nil)); return
+        }
+        do {
+          let args = call.arguments as? [String: Any] ?? [:]
+          let id = try validatedResourceRequestID(args)
+          if call.method == "cancelPreparation" {
+            if let preparation = self.resourcePreparation as? OnDeviceTranslationPreparation, preparation.id == id {
+              preparation.cancel()
+            }
+          } else { try await self.prepareResources(call: call, id: id) }
+          result(nil)
+        } catch {
+          result(self.flutterError(code: (error as? OnDeviceTranslationError)?.code ?? localResourcePreparationErrorCode(error),
+            message: error.localizedDescription, details: nil))
+        }
+      }
     default:
       result(FlutterMethodNotImplemented)
     }
@@ -95,11 +119,16 @@ final class OnDeviceTranslationBridge {
 
   @available(iOS 26.0, *)
   private func systemAvailabilityPayload(call: FlutterMethodCall) async -> [String: Any] {
-    guard let pair = languagePair(from: call) else {
+    if resourcePreparation != nil {
+      return ["available": false, "provider": "ios_system", "reason": "resource_preparation_busy"]
+    }
+    guard let pair = await languagePair(from: call) else {
       return [
         "available": false,
         "provider": "ios_system",
-        "reason": "unsupported_language_pair"
+        "reason": "unsupported_language_pair",
+        "sourceLanguage": stringArgument("sourceLanguage", from: call) ?? "",
+        "targetLanguage": stringArgument("targetLanguage", from: call) ?? ""
       ]
     }
     let status = await LanguageAvailability().status(
@@ -112,7 +141,10 @@ final class OnDeviceTranslationBridge {
       "sourceLanguage": pair.sourceCode,
       "targetLanguage": pair.targetCode,
       "status": statusName(status),
-      "reason": status == .installed ? "ready" : "language_pair_not_installed"
+      "reason": status == .installed ? "ready" :
+        status == .unsupported ? "unsupported_language_pair" : "language_pair_not_installed",
+      "sourceLocale": pair.source.minimalIdentifier,
+      "targetLocale": pair.target.minimalIdentifier
     ]
   }
 
@@ -121,10 +153,11 @@ final class OnDeviceTranslationBridge {
     text: String,
     call: FlutterMethodCall
   ) async throws -> [String: Any] {
-    guard let pair = languagePair(from: call) else {
+    guard resourcePreparation == nil else { throw LocalResourcePreparationError.busy }
+    guard let pair = await languagePair(from: call) else {
       throw OnDeviceTranslationError(
         code: "unsupported_language_pair",
-        message: "Only Chinese-English on-device translation is supported.",
+        message: "The requested source and target languages are not supported for on-device translation.",
         details: nil
       )
     }
@@ -133,8 +166,8 @@ final class OnDeviceTranslationBridge {
     let status = await availability.status(from: pair.source, to: pair.target)
     guard status == .installed else {
       throw OnDeviceTranslationError(
-        code: "language_pair_not_installed",
-        message: "The requested on-device translation language pair is not installed.",
+        code: status == .unsupported ? "unsupported_language_pair" : "language_pair_not_installed",
+        message: "The requested on-device translation language pair is not ready.",
         details: [
           "provider": "ios_system",
           "sourceLanguage": pair.sourceCode,
@@ -150,6 +183,15 @@ final class OnDeviceTranslationBridge {
     )
     try await session.prepareTranslation()
     let response = try await session.translate(text)
+    guard OnDeviceTranslationLanguage.matches(response.sourceLanguage, code: pair.sourceCode),
+          OnDeviceTranslationLanguage.matches(response.targetLanguage, code: pair.targetCode) else {
+      throw OnDeviceTranslationError(
+        code: "translation_language_mismatch",
+        message: "System translation returned a different language pair.",
+        details: ["sourceLocale": response.sourceLanguage.minimalIdentifier,
+                  "targetLocale": response.targetLanguage.minimalIdentifier]
+      )
+    }
     let translatedText = response.targetText.trimmingCharacters(
       in: .whitespacesAndNewlines
     )
@@ -164,50 +206,49 @@ final class OnDeviceTranslationBridge {
       "text": translatedText,
       "provider": "ios_system",
       "sourceLanguage": pair.sourceCode,
-      "targetLanguage": pair.targetCode
+      "targetLanguage": pair.targetCode,
+      "sourceLocale": response.sourceLanguage.minimalIdentifier,
+      "targetLocale": response.targetLanguage.minimalIdentifier
     ]
   }
 
   @available(iOS 26.0, *)
-  private func languagePair(from call: FlutterMethodCall) -> TranslationLanguagePair? {
-    let targetCode = normalizedLanguageCode(
-      stringArgument("targetLanguage", from: call),
-      fallback: "zh"
-    )
-    guard targetCode == "zh" || targetCode == "en" else { return nil }
-
-    var sourceCode = normalizedLanguageCode(
-      stringArgument("sourceLanguage", from: call),
-      fallback: "auto"
-    )
-    if sourceCode == "auto" {
-      sourceCode = targetCode == "zh" ? "en" : "zh"
+  @MainActor
+  private func prepareResources(call: FlutterMethodCall, id: String) async throws {
+    guard resourcePreparation == nil else { throw LocalResourcePreparationError.busy }
+    let args = call.arguments as? [String: Any] ?? [:]
+    _ = try authorizedResourceRequestID(args)
+    let operation = OnDeviceTranslationPreparation(id: id)
+    resourcePreparation = operation
+    defer { if resourcePreparation === operation { resourcePreparation = nil } }
+    guard let pair = await languagePair(from: call) else {
+      throw OnDeviceTranslationError(code: "unsupported_language_pair", message: "Unsupported language pair.", details: nil)
     }
-    guard sourceCode != targetCode,
-          (sourceCode == "zh" || sourceCode == "en") else {
-      return nil
+    try operation.ensureActive()
+    let status = await LanguageAvailability().status(from: pair.source, to: pair.target)
+    try operation.ensureActive()
+    if status == .installed { return }
+    guard status == .supported else {
+      throw OnDeviceTranslationError(code: "unsupported_language_pair", message: "Unsupported language pair.", details: nil)
     }
-
-    return TranslationLanguagePair(
-      source: Locale.Language(identifier: sourceCode),
-      target: Locale.Language(identifier: targetCode),
-      sourceCode: sourceCode,
-      targetCode: targetCode
-    )
+    // The SDK's installedSource initializer cannot obtain download permission.
+    // Use its attached SwiftUI task in a temporary sheet above the original App.
+    try await operation.run(source: pair.source, target: pair.target, presenter: presenter())
+    guard await LanguageAvailability().status(from: pair.source, to: pair.target) == .installed else {
+      throw LocalResourcePreparationError.notReady
+    }
   }
 
-  private func normalizedLanguageCode(_ value: String?, fallback: String) -> String {
-    let lowercased = (value ?? fallback).trimmingCharacters(
-      in: .whitespacesAndNewlines
-    ).lowercased()
-    if lowercased == "auto" { return "auto" }
-    if lowercased.hasPrefix("zh") || lowercased.hasPrefix("cmn") {
-      return "zh"
-    }
-    if lowercased.hasPrefix("en") {
-      return "en"
-    }
-    return fallback
+  @available(iOS 26.0, *)
+  private func languagePair(from call: FlutterMethodCall) async -> TranslationLanguagePair? {
+    guard let sourceCode = OnDeviceTranslationLanguage.code(stringArgument("sourceLanguage", from: call)),
+          let targetCode = OnDeviceTranslationLanguage.code(stringArgument("targetLanguage", from: call)),
+          sourceCode != targetCode else { return nil }
+    let supported = await LanguageAvailability().supportedLanguages
+    guard let source = OnDeviceTranslationLanguage.resolve(sourceCode, supported: supported),
+          let target = OnDeviceTranslationLanguage.resolve(targetCode, supported: supported) else { return nil }
+    return TranslationLanguagePair(source: source, target: target,
+                                   sourceCode: sourceCode, targetCode: targetCode)
   }
 
   @available(iOS 18.0, *)

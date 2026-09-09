@@ -17,6 +17,8 @@ void _openRealtimeSettingsForPage(_RealtimePageState state) {
     },
     voicePresets: state._voicePresetCatalog.presets,
     voicePresetsLoading: state._voicePresetsLoading,
+    resourceSectionBuilder: () =>
+        RealtimeResourcePreparationPanel(controller: state.controller),
   );
 }
 
@@ -68,6 +70,11 @@ extension _RealtimePageSettingsActions on _RealtimePageState {
     return settings.processingMode == _settings.processingMode &&
         settings.sourceLanguage == _settings.sourceLanguage &&
         settings.targetLanguage == _settings.targetLanguage &&
+        settings.selectedLanguagePair?.source ==
+            _settings.selectedLanguagePair?.source &&
+        settings.selectedLanguagePair?.target ==
+            _settings.selectedLanguagePair?.target &&
+        settings.domainLexiconPack == _settings.domainLexiconPack &&
         settings.voicePresetId == _settings.voicePresetId &&
         settings.autoSpeakTranslation != _settings.autoSpeakTranslation;
   }

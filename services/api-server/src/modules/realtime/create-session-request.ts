@@ -2,6 +2,8 @@ import {
   isDomainLexiconPack,
   isSupportedLanguage,
   isTranslationLanguage,
+  parseRealtimeProcessingRequest,
+  processingMatchesSession,
 } from "@translation/contracts";
 import type {
   CreateRealtimeSessionRequest,
@@ -91,6 +93,17 @@ export function validateCreateRealtimeSessionRequest(
   if (typeof voiceOutput !== "boolean") {
     return invalid("voiceOutput must be boolean");
   }
+  if (["processingMode", "processingContractVersion", "executionPlan",
+    "modelPolicyRevision", "languagePolicy", "syncPermission", "publicGrantRef",
+    "publicAccess"].some((key) => key in input)) {
+    return invalid("Processing fields must use the versioned processing contract");
+  }
+  const processing = parseRealtimeProcessingRequest(input.processing);
+  if (processing.status === "invalid") return invalid(processing.reason);
+  if (processing.status === "valid" && !processingMatchesSession(processing.value, {
+    sourceLanguage, targetLanguage, voiceOutput,
+    autoReverseTargetLanguage: autoReverseTargetLanguage === true,
+  })) return invalid("Processing language and voice settings must match the session");
   const parsedVoice = parseVoiceConfig(voice);
   if (parsedVoice === false) {
     return invalid("voice must be a valid realtime voice config");
@@ -113,6 +126,7 @@ export function validateCreateRealtimeSessionRequest(
   return {
     ok: true,
     value: {
+      ...(processing.status === "valid" ? { processing: processing.value } : {}),
       mode: mode as RealtimeMode,
       sourceLanguage,
       targetLanguage,

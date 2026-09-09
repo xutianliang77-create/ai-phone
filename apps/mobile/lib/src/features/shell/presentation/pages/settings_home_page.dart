@@ -27,7 +27,7 @@ class SettingsHomePage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
-    final sessionStore = accountSessionStore ?? const FileAccountSessionStore();
+    final sessionStore = accountSessionStore ?? accountStoreForDeployment(config.apiBaseUrl);
     final profile = capabilityProfile ?? ProductCapabilityProfile.current;
     return Scaffold(
       appBar: AppBar(title: Text(l10n.tabMe)),

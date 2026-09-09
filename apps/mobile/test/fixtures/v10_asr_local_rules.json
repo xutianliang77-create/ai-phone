@@ -1,0 +1,152 @@
+{
+  "baseline": "898ee517e7aac00b03bc79ff2d0597dd00fdbf56",
+  "sourceSha256": "09fa8cc7d7f8f746c4b82fdb3969299c6d26e06ef78a51323e1f5555c41cdc65",
+  "vectors": [
+    {
+      "raw": "我们测试同船，Twin3ASR、HiMT2、BoxCPM2、HiM T Two、Vox CPM Two、R120、A杠120 和 A杠幺二零。",
+      "terms": null,
+      "expected": {
+        "text": "我们测试同传，Qwen3 ASR、Hy-MT2、VoxCPM2、Hy-MT2、VoxCPM2、A-120、A-120 和 A-120。",
+        "operations": [
+          "term_correction",
+          "identifier_correction"
+        ],
+        "protectedTermsKept": [
+          "同传",
+          "Qwen3 ASR",
+          "Hy-MT2",
+          "VoxCPM2",
+          "A-120"
+        ],
+        "warnings": []
+      }
+    },
+    {
+      "raw": "<sil> hello <|nospeech|>",
+      "terms": null,
+      "expected": {
+        "text": "hello",
+        "operations": [],
+        "protectedTermsKept": [],
+        "warnings": []
+      }
+    },
+    {
+      "raw": "啊，现在我我读读出来不习惯了啊。",
+      "terms": null,
+      "expected": {
+        "text": "现在我读出来不习惯了。",
+        "operations": [
+          "disfluency_cleanup"
+        ],
+        "protectedTermsKept": [],
+        "warnings": []
+      }
+    },
+    {
+      "raw": "你为什么把这个座椅调这么低？",
+      "terms": null,
+      "expected": {
+        "text": "你为什么把这个座椅调这么低？",
+        "operations": [],
+        "protectedTermsKept": [],
+        "warnings": []
+      }
+    },
+    {
+      "raw": "我还我还我还受苦，我只能劝。",
+      "terms": null,
+      "expected": {
+        "text": "我还受苦，我只能劝。",
+        "operations": [
+          "disfluency_cleanup"
+        ],
+        "protectedTermsKept": [],
+        "warnings": []
+      }
+    },
+    {
+      "raw": "现在端局不稳定，会议既要稍后整理，端测 ASR 继续观察。",
+      "terms": null,
+      "expected": {
+        "text": "现在断句不稳定，会议纪要稍后整理，端侧 ASR 继续观察。",
+        "operations": [
+          "term_correction"
+        ],
+        "protectedTermsKept": [
+          "端侧",
+          "端侧 ASR",
+          "断句",
+          "会议纪要"
+        ],
+        "warnings": []
+      }
+    },
+    {
+      "raw": "注销二十份助机单材料，狗道化形再出关，我的下万六零石呢？这下老师出机油啊，顶多足够练机一枚。",
+      "terms": null,
+      "expected": {
+        "text": "注销二十份筑基丹材料，苟到化形再出关，我的三万六灵石呢？这下老师出机缘啊，顶多足够炼制一枚。",
+        "operations": [
+          "domain_term_correction",
+          "domain_phrase_correction"
+        ],
+        "protectedTermsKept": [
+          "筑基丹",
+          "灵石",
+          "化形",
+          "苟到化形"
+        ],
+        "warnings": []
+      }
+    },
+    {
+      "raw": "下午三点讨论报价合同，演唱会座位号和点票号在哪里？",
+      "terms": [
+        "报价",
+        "合同",
+        "检票口",
+        "座位号"
+      ],
+      "expected": {
+        "text": "下午三点讨论报价、合同，演唱会座位号和检票口在哪里？",
+        "operations": [
+          "domain_term_correction"
+        ],
+        "protectedTermsKept": [
+          "报价",
+          "合同",
+          "检票口",
+          "座位号"
+        ],
+        "warnings": []
+      }
+    },
+    {
+      "raw": "我想看一下甲状线节节的化验但和病力，确认过敏使和用药计量。",
+      "terms": [
+        "甲状腺",
+        "结节",
+        "化验单",
+        "病历",
+        "过敏史",
+        "用药剂量"
+      ],
+      "expected": {
+        "text": "我想看一下甲状腺结节的化验单和病历，确认过敏史和用药剂量。",
+        "operations": [
+          "domain_term_correction"
+        ],
+        "protectedTermsKept": [
+          "甲状腺",
+          "结节",
+          "化验单",
+          "病历",
+          "过敏史",
+          "用药剂量"
+        ],
+        "warnings": []
+      }
+    }
+  ]
+}

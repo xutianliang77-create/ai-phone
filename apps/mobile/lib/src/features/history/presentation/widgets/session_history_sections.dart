@@ -186,6 +186,8 @@ class _SessionRecordTile extends StatelessWidget {
             : '${session.speakerCount} people')
         : null;
     return <String>[
+      if (session.status == 'checkpoint')
+        chinese ? '未结束 · 已保存快照' : 'Unfinished · Saved snapshot',
       direction,
       _duration(session.consumedSeconds, chinese),
       if (people != null) people,

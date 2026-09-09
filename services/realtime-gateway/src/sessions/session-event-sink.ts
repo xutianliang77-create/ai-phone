@@ -1,21 +1,40 @@
 import type {
   ServerRealtimeEvent,
   UpsertSessionSegmentRequest,
+  PublicRuntimeObservation,
+  PublicRuntimeAck,
+  AudioFrame,
+  PublicModelAttemptEvent,PublicModelAttemptAck,
 } from "@translation/contracts";
+import {modelAttemptKey} from "@translation/contracts";
+import { PublicSessionEventSink, type PublicSessionBinding } from "./public-session-event-sink.js";
 import type { RealtimeEnv } from "../config/env.js";
 import { cleanRealtimeText } from "../protocol/realtime-text.js";
 
 export interface SessionEventSink {
+  modelAttempt?(event:PublicModelAttemptEvent):Promise<void>;
+  requiresConfirmation?: true;
+  acceptAudio?(frame:AudioFrame):void;
+  confirmAudio?():Promise<void>;
+  drain?():Promise<void>;
   record(event: ServerRealtimeEvent): Promise<void>;
   touch(sessionId: string, status: "active" | "paused"): Promise<void>;
+  runtime?(sessionId:string,event:PublicRuntimeObservation):Promise<PublicRuntimeAck>;
 }
 
-export function createSessionEventSink(env: RealtimeEnv): SessionEventSink {
+/** Binding must come from authenticated server admission, never a client event.
+ * Public handshake remains closed until that admission and adapters are wired. */
+export function bindPublicSessionEventSink(sink:SessionEventSink,binding:PublicSessionBinding) {
+  return new PublicSessionEventSink(sink,binding);
+}
+
+export function createSessionEventSink(env: RealtimeEnv,fetchFn?:typeof fetch): SessionEventSink {
   if (env.sessionEventSink !== "api") return new NoopSessionEventSink();
   return new ApiSessionEventSink({
     baseUrl: env.apiBaseUrl,
     internalApiSecret: env.internalApiSecret,
     timeoutMs: env.sessionSyncTimeoutMs,
+    fetchFn,
   });
 }
 
@@ -29,7 +48,26 @@ class ApiSessionEventSink implements SessionEventSink {
     baseUrl: string;
     internalApiSecret?: string;
     timeoutMs: number;
+    fetchFn?:typeof fetch;
   }) {}
+
+  async modelAttempt(event:PublicModelAttemptEvent){
+    if((this.options.internalApiSecret?.trim().length??0)<16)throw Error("public_attempt_auth_required");
+    const snapshot=structuredClone(event);
+    const ack=await this.post(`/internal/realtime/sessions/${encodeURIComponent(event.sessionId)}/model-attempts`,snapshot,3,true) as PublicModelAttemptAck;
+    if(!ack?.event||ack.costStatus!=="unknown"||!Number.isFinite(Date.parse(ack.recordedAt))||modelAttemptKey(ack.event)!==modelAttemptKey(snapshot))throw Error("public_attempt_ack_mismatch");
+  }
+
+  async runtime(sessionId:string,event:PublicRuntimeObservation){
+    if((this.options.internalApiSecret?.trim().length??0)<16)throw new Error("Public runtime requires internal authentication");
+    const observation=structuredClone(event);
+    const receipt=await this.post(`/internal/realtime/sessions/${encodeURIComponent(sessionId)}/runtime`,observation,3,true) as PublicRuntimeAck;
+    if(!receipt || receipt.sessionId!==sessionId ||
+        Object.entries(observation).some(([key,value])=>receipt[key as keyof PublicRuntimeAck]!==value) ||
+        ![receipt.deploymentId,receipt.ownerId,receipt.modelPolicyRevision].every(v=>typeof v==="string"&&v.length>0) ||
+        !["verified","uncertain"].includes(receipt.meterStatus))throw new Error("public_runtime_ack_mismatch");
+    return receipt;
+  }
 
   async record(event: ServerRealtimeEvent) {
     if (
@@ -150,22 +188,21 @@ class ApiSessionEventSink implements SessionEventSink {
     await this.post("/internal/realtime/segments", body);
   }
 
-  private async post(path: string, body: unknown, attempts = 1) {
+  private async post(path: string, body: unknown, attempts = 1, readReceipt = false) {
     for (let attempt = 1; attempt <= attempts; attempt += 1) {
       try {
-        await this.postOnce(path, body);
-        return;
+        return await this.postOnce(path, body, readReceipt);
       } catch (error) {
         if (attempt === attempts) throw error;
       }
     }
   }
 
-  private async postOnce(path: string, body: unknown) {
+  private async postOnce(path: string, body: unknown, readReceipt = false) {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), this.options.timeoutMs);
     try {
-      const response = await fetch(`${this.normalizedBaseUrl()}${path}`, {
+      const response = await (this.options.fetchFn??fetch)(`${this.normalizedBaseUrl()}${path}`, {
         method: "POST",
         headers: {
           "content-type": "application/json",
@@ -175,10 +212,12 @@ class ApiSessionEventSink implements SessionEventSink {
         },
         body: JSON.stringify(body),
         signal: controller.signal,
+        ...(readReceipt ? {redirect:"error" as const} : {}),
       });
       if (!response.ok) {
         throw new Error(`API session sync failed with HTTP ${response.status}`);
       }
+      if(readReceipt)return await response.json();
     } finally {
       clearTimeout(timer);
     }

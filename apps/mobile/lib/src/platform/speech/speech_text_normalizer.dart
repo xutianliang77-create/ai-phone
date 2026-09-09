@@ -1,3 +1,5 @@
+import '../translation/translation_language_pair.dart';
+
 const _zhDigitNames = <String, String>{
   '0': '零',
   '1': '幺',
@@ -27,10 +29,14 @@ const _enDigitNames = <String, String>{
 String normalizeSpeechOutputText(String text, String language) {
   final collapsed = text.replaceAll(RegExp(r'\s+'), ' ').trim();
   if (collapsed.isEmpty) return collapsed;
-  final digitNames = language == 'zh' ? _zhDigitNames : _enDigitNames;
+  final canonical = canonicalTranslationLanguageCode(language);
+  // Retain the validated zh/en optimizations; never rewrite other languages
+  // into English (including Traditional Chinese and Cantonese).
+  if (canonical != 'zh' && canonical != 'en') return collapsed;
+  final digitNames = canonical == 'zh' ? _zhDigitNames : _enDigitNames;
   return _normalizeAlphaNumericCodes(
     _normalizePhoneNumbers(
-      _normalizeCurrency(collapsed, language),
+      _normalizeCurrency(collapsed, canonical!),
       digitNames,
     ),
     digitNames,

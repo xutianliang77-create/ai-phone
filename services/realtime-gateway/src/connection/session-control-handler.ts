@@ -14,6 +14,7 @@ type ControlEvent = Exclude<
   ClientRealtimeEvent,
   { type: "audio.frame" } | ClientTextSegmentEvent
 >;
+const failedPublicPauses=new WeakSet<object>();
 
 export async function handleControlEvent(
   event: ControlEvent,
@@ -22,7 +23,8 @@ export async function handleControlEvent(
   audioBatcher: AudioFrameBatcher,
   sendEvent: (event: ServerRealtimeEvent) => void,
   endRealtimeSession: (reason: SessionEndReason) => Promise<void>,
-  ttsOutput?: Pick<RealtimeTtsOutputQueue, "setVoiceOutput">,
+  ttsOutput?: Pick<RealtimeTtsOutputQueue, "setVoiceOutput"> & Partial<Pick<RealtimeTtsOutputQueue,"suspend"|"resume"|"close">>,
+  confirmed?:{beforeFlush:()=>Promise<void>;drain:()=>Promise<void>},
 ) {
   const session = getSession(sessionId);
   if (!session) {
@@ -67,6 +69,17 @@ export async function handleControlEvent(
   }
 
   if (event.type === "session.pause") {
+    if(confirmed){
+      if(session.status!=="active"&&session.status!=="paused"){sendIllegalStateError(sendEvent,session.id,session.status,"pause");return;}
+      ttsOutput?.suspend?.();
+      audioBatcher.pauseAccepting();
+      if(session.status==="active"){
+        try{await audioBatcher.flush();await confirmed.beforeFlush();await flushProviderSession(provider,session.id,sendEvent,true);await confirmed.drain();}
+        catch(error){failedPublicPauses.add(session);transitionStatus(session.id,"paused");ttsOutput?.close?.();await provider.closeSession(session.id);throw error;}
+        transitionStatus(session.id,"paused");
+      }
+      sendEvent({type:"session.paused",sessionId:session.id});await confirmed.drain();return;
+    }
     const paused = transitionStatus(session.id, "paused");
     if (!paused?.transition.accepted) {
       sendIllegalStateError(sendEvent, session.id, session.status, "pause");
@@ -84,17 +97,20 @@ export async function handleControlEvent(
   }
 
   if (event.type === "session.resume") {
+    if(confirmed&&failedPublicPauses.has(session))throw Error("public_pause_recovery_required");
     const resumed = transitionStatus(session.id, "active");
     if (!resumed?.transition.accepted) {
       sendIllegalStateError(sendEvent, session.id, session.status, "resume");
       return;
     }
+    if(confirmed){sendEvent({type:"session.resumed",sessionId:session.id});await confirmed.drain();ttsOutput?.resume?.();audioBatcher.resumeAccepting();return;}
     if (resumed.transition.changed) audioBatcher.resumeAccepting();
     sendEvent({ type: "session.resumed", sessionId: session.id });
     return;
   }
 
   if (event.type === "session.end") {
+    if(confirmed)ttsOutput?.suspend?.();
     await endRealtimeSession("client_request");
   }
 }
@@ -103,10 +119,12 @@ export async function flushProviderSession(
   provider: RealtimeProvider,
   sessionId: string,
   sendEvent: (event: ServerRealtimeEvent) => void,
+  failOnError=false,
 ) {
   if (!provider.flushSession) return;
   for await (const outgoing of provider.flushSession(sessionId)) {
     sendEvent(outgoing);
+    if(failOnError&&(outgoing.type==="error"||outgoing.type==="translation.failed"))throw Error("public_provider_flush_failed");
   }
 }
 

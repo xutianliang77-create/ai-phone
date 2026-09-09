@@ -15,7 +15,13 @@ import {
 import { exportAccountData } from "./account-export-runtime.service.js";
 
 export async function registerAccountRoutes(app: FastifyInstance) {
+  app.get("/auth/deployment",async(_request,reply)=>{
+    const deploymentId=process.env.API_RESULT_SYNC_DEPLOYMENT_ID;
+    if(!deploymentId) return sendError(reply,503,"public_deployment_not_ready","Public deployment identity is not configured");
+    return {deploymentId};
+  });
   app.post("/auth/phone/request-code", async (request, reply) => {
+    if (!matchesDeployment(request.body, reply)) return;
     const body = request.body as Partial<{ phone: unknown }> | undefined;
     if (typeof body?.phone !== "string") {
       return sendError(reply, 400, "invalid_phone", "Invalid phone number");
@@ -29,10 +35,11 @@ export async function registerAccountRoutes(app: FastifyInstance) {
       if (retryAfter) reply.header("retry-after", retryAfter.toString());
       return sendError(reply, status, result.code, "Phone code request failed");
     }
-    return result;
+    return loginResponse(result);
   });
 
   app.post("/auth/phone/login", async (request, reply) => {
+    if (!matchesDeployment(request.body, reply)) return;
     const body = request.body as
       Partial<{ phone: unknown; code: unknown }> | undefined;
     if (typeof body?.phone !== "string" || typeof body?.code !== "string") {
@@ -45,7 +52,7 @@ export async function registerAccountRoutes(app: FastifyInstance) {
       const status = phoneLoginStatus(result.code);
       return sendError(reply, status, result.code, "Phone login failed");
     }
-    return result;
+    return loginResponse(result);
   });
 
   app.post("/auth/logout", async (request) => {
@@ -87,6 +94,20 @@ export async function registerAccountRoutes(app: FastifyInstance) {
     if (!account) return unauthorized(reply);
     return { account: await requestAccountDeletion(account) };
   });
+}
+
+function matchesDeployment(body: unknown, reply: Parameters<typeof sendError>[0]) {
+  const expected = process.env.API_RESULT_SYNC_DEPLOYMENT_ID;
+  const requested = body && typeof body === "object" ? (body as Record<string,unknown>).deploymentId : undefined;
+  if ((expected || requested !== undefined) && (!expected || requested !== expected)) {
+    sendError(reply,503,"deployment_identity_mismatch","Login deployment identity does not match");
+    return false;
+  }
+  return true;
+}
+function loginResponse<T extends object>(result:T) {
+  const deploymentId = process.env.API_RESULT_SYNC_DEPLOYMENT_ID;
+  return deploymentId ? {...result,deploymentId} : result;
 }
 
 async function requireAccount(request: FastifyRequest) {

@@ -23,6 +23,7 @@ extension RealtimeControllerSegments on RealtimeController {
     SegmentTiming? timing,
     Map<String, Object?>? vadContext,
     TurnLanguageProfile? languageProfile,
+    bool clearTranslation = false,
   }) {
     final nextSourceText = _cleanRealtimeText(sourceText);
     final nextTranslatedText = _cleanRealtimeText(translatedText);
@@ -88,7 +89,8 @@ extension RealtimeControllerSegments on RealtimeController {
       timing: canReviseRecognition ? timing : null,
       vadContext: canReviseRecognition ? vadContext : null,
       languageProfile: canReviseRecognition ? languageProfile : null,
-      clearTranslation: isNewerRecognitionRevision,
+      clearTranslation: isNewerRecognitionRevision ||
+          (canReviseRecognition && clearTranslation),
     );
     _replaceSegmentsFromDrafts();
   }
@@ -106,6 +108,7 @@ extension RealtimeControllerSegments on RealtimeController {
     _segments
       ..clear()
       ..addAll(ordered);
+    _scheduleLocalCheckpoint();
     _notify();
   }
 }

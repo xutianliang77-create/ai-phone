@@ -51,12 +51,12 @@ class VoiceIdentityApiClient implements VoiceIdentityClient {
   VoiceIdentityApiClient({
     required Uri baseUrl,
     http.Client? client,
-    AccountSessionStore accountSessionStore = const FileAccountSessionStore(),
+    AccountSessionStore? accountSessionStore,
     Duration requestTimeout = _defaultRequestTimeout,
     Duration enrollmentTimeout = _defaultEnrollmentTimeout,
   })  : _baseUrl = baseUrl,
         _client = client ?? http.Client(),
-        _accountSessionStore = accountSessionStore,
+        _accountSessionStore = accountSessionStore ?? accountStoreForDeployment(baseUrl),
         _requestTimeout = requestTimeout,
         _enrollmentTimeout = enrollmentTimeout;
 

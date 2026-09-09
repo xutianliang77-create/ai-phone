@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -8,13 +9,26 @@ import '../../../shared/domain/speaker_attribution.dart';
 import 'local_session_export.dart';
 import 'session_history_models.dart';
 
+part 'local_session_checkpoint.dart';
+part 'local_session_checkpoint_storage.dart';
+part 'local_session_checkpoint_history.dart';
+
 class LocalSessionStore {
-  LocalSessionStore({File? file, DateTime Function()? now})
+  LocalSessionStore(
+      {File? file,
+      DateTime Function()? now,
+      Future<void> Function()? checkpointBeforeReplace})
       : _file = file,
+        _checkpointBeforeReplace = checkpointBeforeReplace,
         _now = now ?? DateTime.now;
 
   final File? _file;
+  // Failure injection for the flush -> atomic replace boundary in file tests.
+  final Future<void> Function()? _checkpointBeforeReplace;
   final DateTime Function() _now;
+
+  Future<bool> putCheckpoint(LocalSessionCheckpoint record) =>
+      _putCheckpoint(record);
 
   Future<List<SessionListItem>> listSessions({String query = ''}) async {
     final sessions = await _loadSessions();
@@ -49,7 +63,7 @@ class LocalSessionStore {
     required List<SubtitleSegment> segments,
   }) async {
     final file = await _storageFile();
-    final sessions = await _loadSessions();
+    final sessions = await _loadLegacySessions();
     final endedAt = _now();
     final saved = SessionDetail(
       sessionId: sessionId,
@@ -63,26 +77,7 @@ class LocalSessionStore {
           .where((segment) =>
               segment.sourceText.trim().isNotEmpty ||
               segment.translatedText.trim().isNotEmpty)
-          .map((segment) => SessionSegment(
-                id: segment.id,
-                turnId: segment.turnId,
-                revision: segment.revision,
-                sourceText: segment.sourceText,
-                translatedText: segment.translatedText,
-                rawText: segment.rawText,
-                optimizedText: segment.optimizedText,
-                sourceLanguage: segment.sourceLanguage,
-                targetLanguage: segment.targetLanguage,
-                confidence: segment.confidence,
-                stage: segment.stage,
-                provider: segment.provider,
-                model: segment.model,
-                latencyMs: segment.latencyMs,
-                languageProfile: segment.languageProfile,
-                speaker: segment.speaker,
-                timing: segment.timing,
-                vadContext: segment.vadContext,
-              ))
+          .map(SessionSegment.fromSubtitle)
           .toList(),
     );
     final next = <SessionDetail>[
@@ -108,8 +103,9 @@ class LocalSessionStore {
   }
 
   Future<void> deleteSession(String sessionId) async {
+    if (await _deleteCheckpointHistory(sessionId)) return;
     final file = await _storageFile();
-    final sessions = await _loadSessions();
+    final sessions = await _loadLegacySessions();
     await file.writeAsString(jsonEncode({
       'sessions': sessions
           .where((session) => session.sessionId != sessionId)
@@ -123,22 +119,28 @@ class LocalSessionStore {
     String speakerId,
     String displayName,
   ) async {
+    SessionDetail edit(SessionDetail current) {
+      return current.copyWithSegments(current.segments.map((segment) {
+        final speaker = segment.speaker;
+        if (speaker?.speakerId != speakerId) return segment;
+        return segment.copyWithSpeaker(SpeakerAttribution(
+          speakerId: speaker!.speakerId,
+          role: speaker.role,
+          source: speaker.source,
+          displayName: displayName,
+          confidence: speaker.confidence,
+        ));
+      }).toList());
+    }
+
+    final checkpoint = await _editCheckpointHistory(sessionId, edit);
+    if (checkpoint != null) return checkpoint;
     final file = await _storageFile();
-    final sessions = await _loadSessions();
+    final sessions = await _loadLegacySessions();
     final index = sessions.indexWhere((item) => item.sessionId == sessionId);
     if (index < 0) throw LocalSessionNotFoundException(sessionId);
     final current = sessions[index];
-    final updated = current.copyWithSegments(current.segments.map((segment) {
-      final speaker = segment.speaker;
-      if (speaker?.speakerId != speakerId) return segment;
-      return segment.copyWithSpeaker(SpeakerAttribution(
-        speakerId: speaker!.speakerId,
-        role: speaker.role,
-        source: speaker.source,
-        displayName: displayName,
-        confidence: speaker.confidence,
-      ));
-    }).toList());
+    final updated = edit(current);
     sessions[index] = updated;
     await file.writeAsString(jsonEncode({
       'sessions': sessions.map(_detailToJson).toList(),
@@ -151,23 +153,29 @@ class LocalSessionStore {
     int actionIndex,
     bool completed,
   ) async {
+    SessionDetail edit(SessionDetail current) {
+      final review = current.reviewJson;
+      final actionItems = (review?['actionItems'] as List<dynamic>? ?? const [])
+          .map((item) => Map<String, Object?>.from(item as Map))
+          .toList();
+      if (actionIndex < 0 || actionIndex >= actionItems.length) {
+        throw StateError('Action item not found');
+      }
+      actionItems[actionIndex]['completed'] = completed;
+      return current.copyWithReview(<String, Object?>{
+        ...review!,
+        'actionItems': actionItems,
+      });
+    }
+
+    final checkpoint = await _editCheckpointHistory(sessionId, edit);
+    if (checkpoint != null) return checkpoint;
     final file = await _storageFile();
-    final sessions = await _loadSessions();
+    final sessions = await _loadLegacySessions();
     final index = sessions.indexWhere((item) => item.sessionId == sessionId);
     if (index < 0) throw LocalSessionNotFoundException(sessionId);
     final current = sessions[index];
-    final review = current.reviewJson;
-    final actionItems = (review?['actionItems'] as List<dynamic>? ?? const [])
-        .map((item) => Map<String, Object?>.from(item as Map))
-        .toList();
-    if (actionIndex < 0 || actionIndex >= actionItems.length) {
-      throw StateError('Action item not found');
-    }
-    actionItems[actionIndex]['completed'] = completed;
-    final updated = current.copyWithReview(<String, Object?>{
-      ...review!,
-      'actionItems': actionItems,
-    });
+    final updated = edit(current);
     sessions[index] = updated;
     await file.writeAsString(jsonEncode({
       'sessions': sessions.map(_detailToJson).toList(),
@@ -182,7 +190,7 @@ class LocalSessionStore {
     return File('${directory.path}/translation-local-sessions.json');
   }
 
-  Future<List<SessionDetail>> _loadSessions() async {
+  Future<List<SessionDetail>> _loadLegacySessions() async {
     final file = await _storageFile();
     if (!await file.exists()) return <SessionDetail>[];
     final decoded =
@@ -291,6 +299,7 @@ Map<String, Object?> _detailToJson(SessionDetail detail) {
         if (segment.provider != null) 'provider': segment.provider,
         if (segment.model != null) 'model': segment.model,
         if (segment.latencyMs != null) 'latencyMs': segment.latencyMs,
+        if (segment.refinement != null) 'refinement': segment.refinement,
         if (segment.languageProfile != null)
           ...segment.languageProfile!.toJson(),
         if (segment.speaker != null) 'speaker': segment.speaker!.toJson(),

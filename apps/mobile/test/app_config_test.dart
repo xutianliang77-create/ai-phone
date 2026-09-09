@@ -3,6 +3,32 @@ import 'package:translation_mobile/src/app/app_config.dart';
 import 'package:translation_mobile/src/app/region_edition_config.dart';
 
 void main() {
+  test(
+      'Apple ASR defaults and explicit duration overrides survive config copies',
+      () {
+    AppConfig apple({int? chunk, int? minSpeech, int? silence}) => AppConfig(
+          apiBaseUrl: Uri.parse('http://127.0.0.1:3100'),
+          useMockAudio: false,
+          useDeviceAsr: true,
+          deviceAsrProvider: 'apple_speech_transcriber',
+          deviceAsrLanguage: 'fr',
+          deviceAsrAutoDownloadModel: false,
+          deviceAsrModelChunkMs: 2240,
+          serverOwnedHistory: false,
+          deviceAsrChunkDurationMs: chunk,
+          deviceAsrEndpointMinSpeechMs: minSpeech,
+          deviceAsrEndpointSilenceMs: silence,
+        );
+    final defaults = apple();
+    expect(defaults.deviceAsrChunkDurationMs, 32);
+    expect(defaults.deviceAsrEndpointMinSpeechMs, 96);
+    expect(defaults.deviceAsrEndpointSilenceMs, 640);
+    final custom = apple(chunk: 48, minSpeech: 512, silence: 768)
+        .copyWith(sourceLanguage: 'ja');
+    expect(custom.deviceAsrChunkDurationMs, 48);
+    expect(custom.deviceAsrEndpointMinSpeechMs, 512);
+    expect(custom.deviceAsrEndpointSilenceMs, 768);
+  });
   test('normalizes realtime session language config', () {
     final config = AppConfig(
       apiBaseUrl: Uri.parse('http://127.0.0.1:3100'),

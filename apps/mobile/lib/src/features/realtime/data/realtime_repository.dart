@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import '../../../app/app_config.dart';
 import '../../../platform/audio/audio_frame.dart';
@@ -10,6 +11,12 @@ import 'finalization/realtime_finalization_outbox.dart';
 import 'finalization/realtime_finalization_task.dart';
 import 'gateway/gateway_realtime_event.dart';
 import 'gateway/realtime_gateway_client.dart';
+import '../../history/data/local_session_store.dart';
+import '../../history/data/session_history_models.dart';
+import 'finalization/result_sync_receipt.dart';
+
+part 'realtime_result_sync.dart';
+part 'realtime_public_lifecycle.dart';
 
 class RealtimeRepository {
   RealtimeRepository({
@@ -18,12 +25,14 @@ class RealtimeRepository {
     RealtimeFinalizationOutbox? finalizationOutbox,
     DateTime Function()? now,
     String targetLanguage = 'zh',
+    LocalSessionStore? resultSyncStore,
   })  : _apiClient = apiClient,
         _gatewayClient = gatewayClient,
         _finalizationOutbox =
             finalizationOutbox ?? MemoryRealtimeFinalizationOutbox(),
         _now = now ?? DateTime.now,
-        _targetLanguage = targetLanguage;
+        _targetLanguage = targetLanguage,
+        _resultSyncStore = resultSyncStore ?? LocalSessionStore();
 
   factory RealtimeRepository.fromConfig(AppConfig config) {
     final autoReverseTargetLanguage = shouldAutoReverseRealtimeSession(config);
@@ -49,17 +58,32 @@ class RealtimeRepository {
   final RealtimeFinalizationOutbox _finalizationOutbox;
   final DateTime Function() _now;
   final String _targetLanguage;
+  final LocalSessionStore _resultSyncStore;
+  final _ResultSyncState _resultSync = _ResultSyncState();
   final Map<String, Future<void>> _finalizations = {};
   Future<void>? _replayInFlight;
   bool _disposeRequested = false;
 
   Stream<GatewayRealtimeEvent> get events => _gatewayClient.events;
 
+  bool get supportsLocalCheckpoints => false;
+  Future<void> checkpoint(
+    String sessionId,
+    List<SubtitleSegment> segments, {
+    required String mode,
+    required String status,
+    required String sourceLanguage,
+    required String targetLanguage,
+    required int activeSeconds,
+  }) async {}
+
   Future<RealtimeSession> startSession() async {
+    invalidateResultSync();
     unawaited(recoverPendingFinalizations().catchError((Object _) {}));
     final session = await _apiClient.createSession();
     try {
       await _gatewayClient.connect(session);
+      _resultSync.session = session;
       return session;
     } catch (_) {
       unawaited(
@@ -71,6 +95,9 @@ class RealtimeRepository {
   bool sendAudio(String sessionId, AudioFrame frame) {
     return _gatewayClient.sendAudio(sessionId, frame);
   }
+
+  Future<bool> commitAudioBoundary(String sessionId) =>
+      _gatewayClient.commitAudioBoundaryAndWait(sessionId);
 
   bool sendTextSegment(String sessionId, AsrTextSegment segment) {
     return _gatewayClient.sendTextSegment(
@@ -93,6 +120,9 @@ class RealtimeRepository {
   }
 
   Future<bool> resumeAndWait(String sessionId) {
+    if (_apiClient.publicDeploymentId.isNotEmpty) {
+      return resumePublicSession(sessionId, reconnect: false);
+    }
     return _gatewayClient.resumeAndWait(sessionId);
   }
 
@@ -109,10 +139,18 @@ class RealtimeRepository {
   }
 
   Future<bool> resumeAfterLifecycle(String sessionId) {
+    if (_apiClient.publicDeploymentId.isNotEmpty) {
+      return resumePublicSession(sessionId);
+    }
     return _gatewayClient.reconnectAndResume(sessionId);
   }
 
   Future<void> end(String sessionId, List<SubtitleSegment> segments) {
+    invalidateResultSync();
+    if (_apiClient.publicDeploymentId.isNotEmpty) {
+      return Future.error(
+          const RealtimeApiException('公有会话可信结算尚未就绪', statusCode: 503));
+    }
     return _finalizations.putIfAbsent(
       sessionId,
       () => _endOnce(sessionId, segments),
@@ -144,6 +182,9 @@ class RealtimeRepository {
     List<SubtitleSegment> segments, {
     int? billableSeconds,
   }) async {
+    if (_apiClient.publicDeploymentId.isNotEmpty) {
+      throw const RealtimeApiException('公有会话可信结算尚未就绪', statusCode: 503);
+    }
     await _finalizationOutbox.upsert(RealtimeFinalizationTask(
       sessionId: sessionId,
       idempotencyKey: 'finalize:$sessionId',
@@ -154,6 +195,7 @@ class RealtimeRepository {
   }
 
   Future<void> recoverPendingFinalizations() async {
+    if (_apiClient.publicDeploymentId.isNotEmpty) return;
     final running = _replayInFlight;
     if (running != null) return running;
     final replay = _replayAll();
@@ -208,6 +250,7 @@ class RealtimeRepository {
   }
 
   void dispose() {
+    invalidateResultSync();
     if (_disposeRequested) return;
     _disposeRequested = true;
     final pending = _finalizations.values.toList(growable: false);

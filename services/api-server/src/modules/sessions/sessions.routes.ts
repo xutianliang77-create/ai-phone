@@ -5,7 +5,7 @@ import type {
   SaveTextTranslationSessionRequest,
   SaveTypeToSpeakSessionRequest,
 } from "@translation/contracts";
-import { isSupportedLanguage } from "@translation/contracts";
+import { isSupportedLanguage, matchesRealtimeResultOperation } from "@translation/contracts";
 import { sendError } from "../../infrastructure/http/errors.js";
 import { requireAccount } from "../account/account-auth.js";
 import { getUsageBalance } from "../usage/usage-hold-runtime.service.js";
@@ -30,8 +30,10 @@ import { registerSessionSpeakerRoutes } from "./session-speakers.routes.js";
 import { registerSessionReviewActionRoutes } from "./session-review-actions.routes.js";
 import { withSessionWriteLock } from "./session-write-coordinator.js";
 import { buildSessionQualityReport } from "./session-quality-report.js";
+import { handleResultSync, registerResultSyncConsentRoute } from "./session-result-sync.routes.js";
 
 export async function registerSessionsRoutes(app: FastifyInstance) {
+  registerResultSyncConsentRoute(app);
   registerSessionSpeakerRoutes(app);
   registerSessionReviewActionRoutes(app);
   app.get("/sessions", async (request, reply) => {
@@ -118,6 +120,13 @@ export async function registerSessionsRoutes(app: FastifyInstance) {
     if (!account) return;
     const params = request.params as { sessionId: string };
     const body = request.body as Partial<SaveSessionSegmentsRequest>;
+    if (!matchesRealtimeResultOperation(body, "sync")) {
+      return sendError(reply, 409, "realtime_operation_mismatch",
+        "Finalization payloads cannot use the result synchronization endpoint");
+    }
+    if (body.sync !== undefined || body.operation === "sync") {
+      return handleResultSync(reply, params.sessionId, account.id, body);
+    }
     if (!Array.isArray(body.segments)) {
       return sendError(
         reply,
@@ -131,6 +140,8 @@ export async function registerSessionsRoutes(app: FastifyInstance) {
       if (!existing)
         return sendError(reply, 404, "session_not_found", "Session not found");
       if (existing.userId !== account.id) return forbidden(reply);
+      if (existing.processingAuthorization) return sendError(reply, 409,
+        "versioned_result_sync_required", "Versioned sessions require authorized result synchronization");
       const session = await saveSegments(params.sessionId, body.segments!);
       return toSessionDetail(session ?? existing);
     });

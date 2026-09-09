@@ -49,6 +49,7 @@ export interface TextSegmentInput {
 }
 
 export interface RealtimeProvider {
+  setEventListener?(sessionId:string,listener:(event:ServerRealtimeEvent)=>void):()=>void;
   name: string;
   createSession(session: RealtimeProviderSession): Promise<void>;
   sendAudio(frame: AudioFrame): AsyncGenerator<ServerRealtimeEvent>;

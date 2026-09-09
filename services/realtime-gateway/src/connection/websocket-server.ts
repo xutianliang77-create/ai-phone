@@ -1,3 +1,4 @@
+import { configureRealtimeProvider, reportProviderSetupFailure } from "./realtime-provider-setup.js";
 import type { SessionEndReason } from "@translation/contracts";
 import { AudioFrameBatcher } from "./audio-frame-batcher.js";
 import { clearAudioFrameLog, logAudioFrameReceived } from "../metrics/audio-frame-logger.js";
@@ -7,25 +8,21 @@ import { parseIncomingEvent } from "../protocol/incoming-event-parser.js";
 import { buildError } from "../protocol/outgoing-event-builder.js";
 import { ProviderRouter } from "../providers/provider-router.js";
 import type { RealtimeProvider } from "../providers/realtime-provider.js";
-import { asrCorrectionTermsForPacks, asrHotwordsForTerminology } from "../domain/domain-lexicon.js";
-import { domainLexiconPacksForSession, loadTerminologyForSession } from "../sessions/session-domain-terminology.js";
-import { confirmSessionConnection, deleteSession, getSession, sessionBillableSeconds, transitionStatus } from "../sessions/session-manager.js";
+import { confirmSessionConnection, getSession, sessionBillableSeconds, transitionStatus } from "../sessions/session-manager.js";
 import { createUsageTickDecision } from "../usage/usage-ticker.js";
 import { createRealtimeTtsOutputQueue } from "../tts/realtime-tts-output-factory.js";
 import { handleControlEvent } from "./session-control-handler.js";
+import {handleAudioBoundary} from "./audio-boundary-control.js";
 import { RealtimeSessionFinalizer } from "./realtime-session-finalizer.js";
 import { RealtimeConnectionCleanup } from "./realtime-connection-cleanup.js";
 import { RealtimeEventDispatcher } from "./realtime-event-dispatcher.js";
 import { RealtimeFlushTracker } from "./realtime-flush-tracker.js";
-import { logSpeakerAttributionConfigured, resolveSpeakerAttribution } from "./speaker-attribution-config.js";
 import { handleTextSegment } from "./client-text-segment-handler.js";
-import { endpointModeForRealtimeMode } from "./realtime-endpoint-mode.js";
 import { admitRealtimeConnection, sendRealtimeEvent } from "./realtime-connection-admission.js";
 import { createRealtimeServerRuntime, listenRealtimeServerRuntime } from "./realtime-server-runtime.js";
 import { coreDependencyFailureStage } from "./gateway-dependency-readiness.js";
 const router = new ProviderRouter();
 export { normalizeClientTextLanguage } from "../protocol/client-text-language.js";
-
 export function startWebSocketServer() {
   const runtime = createRealtimeServerRuntime();
   const {
@@ -53,51 +50,16 @@ export function startWebSocketServer() {
         providerFailureStage = dependencyFailure;
         throw new Error(`Realtime ${dependencyFailure} dependency is unavailable`);
       }
-      provider = router.selectProvider(env);
-      const domainLexiconPacks = domainLexiconPacksForSession(session, env);
-      const terminology = await loadTerminologyForSession(session, env);
-      const asrCorrections = asrCorrectionTermsForPacks(domainLexiconPacks);
-      const asrHotwords = asrHotwordsForTerminology(terminology, asrCorrections);
-      const speakerAttribution = resolveSpeakerAttribution(session.claims);
-      await provider.createSession({
-        sessionId: session.id,
-        userId: session.userId,
-        asrEndpointMode: session.claims.asrEndpointMode ??
-          endpointModeForRealtimeMode(session.claims.mode),
-        sourceLanguage: session.claims.sourceLanguage,
-        targetLanguage: session.claims.targetLanguage,
-        autoReverseTargetLanguage: session.claims.autoReverseTargetLanguage,
-        voiceOutput: session.voiceOutputEnabled ?? session.claims.voiceOutput,
-        speakerAttribution,
-        terminology,
-        asrHotwords,
-        asrCorrections,
-      });
-      logSpeakerAttributionConfigured(env, session, speakerAttribution);
+      provider = router.selectProvider(env, session.claims);
+      await configureRealtimeProvider(provider, env, session);
     } catch {
-      const current = getSession(session.id);
-      if (current === session && current.connectionGeneration === generation) {
-        transitionStatus(session.id, "failed");
-        await sessionEventSink.record({
-          type: "session.ended",
-          sessionId: session.id,
-          reason: "connection_error",
-          billableSeconds: sessionBillableSeconds(session),
-        }).catch(() => undefined);
-        deleteSession(session.id, session);
-      }
-      sendRealtimeEvent(ws, buildError("provider_unavailable", "Realtime provider is unavailable", {
-        sessionId: session.id,
-        stage: providerFailureStage,
-        provider: env.provider,
-        retryable: true,
-      }));
-      ws.close();
+      await reportProviderSetupFailure(runtime, ws, session, generation, providerFailureStage);
       return;
     }
 
     const flushTracker = new RealtimeFlushTracker();
     const ttsOutputQueue = createRealtimeTtsOutputQueue(env, session);
+    let outputSuppressed=false;
     const eventDispatcher = new RealtimeEventDispatcher({
       sendClient: (event) => sendRealtimeEvent(ws, event),
       eventSink: sessionEventSink,
@@ -107,14 +69,19 @@ export function startWebSocketServer() {
           sessionId: "sessionId" in event ? event.sessionId : session.id,
           eventType: event.type,
         }, "Realtime session event sync failed");
+        failPublicConnection();
       },
       afterSend: (event) => {
         flushTracker.record(event);
-        if (event.type === "session.paused") ttsOutputQueue.cancelPending();
-        else ttsOutputQueue.enqueue(event, eventDispatcher.send);
+        if (event.type === "session.paused") {if(sessionEventSink.requiresConfirmation)outputSuppressed=true;ttsOutputQueue.cancelPending();}
+        else {if(event.type==="session.resumed")outputSuppressed=false;if(!outputSuppressed)ttsOutputQueue.enqueue(event, eventDispatcher.send);}
       },
     });
     const sendRealtime = eventDispatcher.send;
+    const unsubscribeProvider=provider.setEventListener?.(session.id,event=>{
+      if(ws.readyState===1&&!outputSuppressed&&getSession(session.id)?.connectionGeneration===generation&&getSession(session.id)?.status==="active")sendRealtime(event);
+    })??(()=>{});
+    const confirmAudio=()=>sessionEventSink.confirmAudio?.()??Promise.reject(Error("public_audio_confirmation_required"));
 
     const startedEvent = { type: "session.started", sessionId: session.id } as const;
     if (resumed) sendRealtimeEvent(ws, startedEvent);
@@ -124,6 +91,8 @@ export function startWebSocketServer() {
     const audioBatcher = new AudioFrameBatcher({
       sessionId: session.id,
       provider,
+      acceptFrame: sessionEventSink.acceptAudio?.bind(sessionEventSink),
+      beforeSend:sessionEventSink.requiresConfirmation?()=>confirmAudio():undefined,
       send: sendRealtime,
       onError: (error) => {
         realtimeLogger.error({ error: loggableError(error),
@@ -134,6 +103,7 @@ export function startWebSocketServer() {
           provider: provider.name,
           retryable: true,
         }));
+        failPublicConnection();
       },
       maxPendingAudioMs: env.maxPendingAudioMs,
     });
@@ -143,6 +113,8 @@ export function startWebSocketServer() {
       audioBatcher,
       send: sendRealtime,
       drainSessionSync: () => eventDispatcher.drain(),
+      confirmed:sessionEventSink.requiresConfirmation?{beforeFlush:confirmAudio}:undefined,
+      ttsOutput:sessionEventSink.requiresConfirmation?ttsOutputQueue:undefined,
       flushTracker,
       onError: (stage, error) => {
         realtimeLogger.warn({ error, stage, sessionId: session.id },
@@ -154,11 +126,25 @@ export function startWebSocketServer() {
       reason: SessionEndReason,
       remainingSeconds?: number,
     ) => {
-      await finalizer.finalize(reason, remainingSeconds);
+      if(sessionEventSink.requiresConfirmation){outputSuppressed=true;ttsOutputQueue.suspend();audioBatcher.stopAccepting();}
+      try{await finalizer.finalize(reason, remainingSeconds);}finally{if(sessionEventSink.requiresConfirmation&&ws.readyState===1)ws.close();}
       if (ws.readyState === 1) ws.close();
     };
+    function failPublicConnection(){
+      if(!sessionEventSink.requiresConfirmation)return;
+      outputSuppressed=true;ttsOutputQueue.suspend();audioBatcher.stopAccepting();
+      if(ws.readyState===1)ws.close(1011,"public_pipeline_unconfirmed");
+    }
+
+    let confirmationInFlight=false;
+    const confirmationInterval=sessionEventSink.requiresConfirmation?setInterval(()=>{
+      if(confirmationInFlight||ws.readyState!==1||!["active","paused","ending"].includes(session.status))return;
+      confirmationInFlight=true;void confirmAudio().catch(error=>{realtimeLogger.warn({error,sessionId:session.id},"Public runtime confirmation failed");failPublicConnection();})
+        .finally(()=>{confirmationInFlight=false;});
+    },1000):undefined;
 
     const usageInterval = setInterval(() => {
+      if(sessionEventSink.requiresConfirmation&&ws.readyState!==1)return;
       if (session.status === "active" || session.status === "paused") {
         void sessionEventSink.touch(session.id, session.status).catch((error) => {
           realtimeLogger.warn({ error, sessionId: session.id },
@@ -225,6 +211,7 @@ export function startWebSocketServer() {
         }));
         return;
       }
+      if(sessionEventSink.requiresConfirmation&&getSession(session.id)?.connectionGeneration!==generation)return;
 
       if (event.sessionId === session.id &&
           confirmSessionConnection(session.id, generation)) {
@@ -266,6 +253,16 @@ export function startWebSocketServer() {
         return;
       }
 
+      if(event.type==="audio.boundary"){
+        if(pendingControlEvents>=env.maxPendingControlEvents){closeForControlBackpressure();return;}
+        const boundary=handleAudioBoundary(event,{sessionId:session.id,confirmed:!!sessionEventSink.requiresConfirmation,batcher:audioBatcher,provider,
+          beforeFlush:confirmAudio,drain:()=>eventDispatcher.drain(),send:sendRealtime,onFailure:failPublicConnection});
+        enqueueControl(()=>boundary,()=>{});return;
+      }
+      if(sessionEventSink.requiresConfirmation&&event.sessionId===session.id&&(event.type==="session.pause"||event.type==="session.end")){
+        outputSuppressed=true;ttsOutputQueue.suspend();audioBatcher.pauseAccepting();
+      }
+
       if (!enqueueControl(
         () =>
           handleControlEvent(
@@ -275,6 +272,7 @@ export function startWebSocketServer() {
             audioBatcher,
             sendRealtime,
             endRealtimeSession, ttsOutputQueue,
+            sessionEventSink.requiresConfirmation?{beforeFlush:confirmAudio,drain:()=>eventDispatcher.drain()}:undefined,
           ),
         (error) => {
           realtimeLogger.error({ error, sessionId: session.id }, "Realtime event processing failed");
@@ -284,6 +282,7 @@ export function startWebSocketServer() {
             provider: provider.name,
             retryable: true,
           }));
+          failPublicConnection();
         },
       )) closeForControlBackpressure();
 
@@ -326,6 +325,7 @@ export function startWebSocketServer() {
       connectionCleanup.scheduleDeferredFinalization("connection_closed");
     }
     const cleanupConnection = async () => {
+      unsubscribeProvider();if(confirmationInterval)clearInterval(confirmationInterval);
       clearInterval(usageInterval);
       clearInterval(heartbeatInterval);
       clearAudioFrameLog(session.id);

@@ -14,7 +14,7 @@ import {
 import { completeSessionWithUsage } from "../sessions/session-completion.js";
 import { withSessionWriteLock } from "../sessions/session-write-coordinator.js";
 import { validateCreateRealtimeSessionRequest } from "./create-session-request.js";
-import { createRealtimeSession } from "./realtime.service.js";
+import { createRealtimeSession, realtimeCreationBlocker } from "./realtime.service.js";
 import { parseRealtimeDiagnostics } from "./realtime-diagnostics.js";
 import { registerRealtimeFinalizationRoute } from "./realtime-finalization.routes.js";
 import {
@@ -33,6 +33,8 @@ export async function registerRealtimeRoutes(app: FastifyInstance) {
     if (!parsed.ok) {
       return sendError(reply, 400, parsed.error.code, parsed.error.message);
     }
+    const blocker = realtimeCreationBlocker(parsed.value);
+    if (blocker) return sendError(reply, blocker.status, blocker.code, blocker.message);
 
     const result = await createRealtimeSession(account.id, parsed.value);
     if (!result) {
@@ -70,6 +72,8 @@ export async function registerRealtimeRoutes(app: FastifyInstance) {
       if (!existing)
         return sendError(reply, 404, "session_not_found", "Session not found");
       if (existing.userId !== account.id) return forbidden(reply);
+      if (existing.processingAuthorization) return sendError(reply, 503,
+        "versioned_finalization_not_ready", "Public session finalization is not available yet");
       const session = await completeSessionWithUsage(params.sessionId);
       if (!session)
         return sendError(reply, 404, "session_not_found", "Session not found");
@@ -93,6 +97,10 @@ export async function registerRealtimeRoutes(app: FastifyInstance) {
     }
 
     return withSessionWriteLock(body.sessionId, async () => {
+      const current=await findSession(body.sessionId);
+      if(current?.processingAuthorization&&current.publicRuntime?.stoppedAt) {
+        return sendError(reply,409,"public_stop_watermark_sealed","Stopped public output is sealed");
+      }
       const session = await upsertSegment(body.sessionId, {
       segmentId: body.segmentId,
       speechId: body.speechId,
@@ -151,6 +159,8 @@ export async function registerRealtimeRoutes(app: FastifyInstance) {
       }
       const requestedStatus = body.status;
       return withSessionWriteLock(params.sessionId, async () => {
+        const current=await findSession(params.sessionId);
+        if(current?.processingAuthorization)return sendError(reply,503,"public_runtime_required","Use verified public runtime events");
         const result = await transitionSessionState(params.sessionId, requestedStatus);
         if (!result) {
           return sendError(reply, 404, "session_not_found", "Session not found");
@@ -200,6 +210,8 @@ export async function registerRealtimeRoutes(app: FastifyInstance) {
         );
       }
       return withSessionWriteLock(params.sessionId, async () => {
+        const current=await findSession(params.sessionId);
+        if(current?.processingAuthorization)return sendError(reply,503,"public_runtime_required","Use verified public runtime finalization");
         const session = await completeSessionWithUsage(params.sessionId, {
           ...(typeof billableSeconds === "number" ? { billableSeconds } : {}),
           ...(diagnostics ? { diagnostics } : {}),

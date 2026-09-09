@@ -14,6 +14,7 @@ import type {
   SpeechPipelineTimingDto,
 } from "../realtime/diagnostics.js";
 import type { SessionReviewResponse } from "./realtime-review.js";
+import type { RealtimeSegmentSyncMetadata, RealtimeStopWatermark } from "../realtime/processing-contract.js";
 import type {
   SessionQualityIngestDto,
   SessionQualityModelFingerprintDto,
@@ -44,6 +45,8 @@ export interface SessionStatusResponse {
 }
 
 export interface FinalizeRealtimeSessionRequest {
+  operation?: "finalize";
+  stopWatermark?: RealtimeStopWatermark;
   sessionId: string;
   idempotencyKey: string;
   billableSeconds: number;
@@ -117,6 +120,8 @@ export interface SessionSegmentRefinementDto {
 }
 
 export interface SaveSessionSegmentsRequest {
+  operation?: "sync";
+  sync?: RealtimeSegmentSyncMetadata;
   segments: SessionSegmentDto[];
 }
 

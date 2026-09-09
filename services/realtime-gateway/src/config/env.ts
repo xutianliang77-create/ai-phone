@@ -37,6 +37,8 @@ export type {
 } from "./env-parsers.js";
 
 export interface RealtimeEnv extends SpeakerRevisionEnv {
+  /** Same explicit deployment identity used by the S3 API; unset is legacy. */
+  publicDeploymentId?: string;
   host: string;
   port: number;
   allowedHosts: string[];
@@ -134,6 +136,7 @@ export function loadEnv(): RealtimeEnv {
     env.PUBLIC_RATE_LIMIT_PROVIDER,
   );
   return {
+    publicDeploymentId: env.API_RESULT_SYNC_DEPLOYMENT_ID || undefined,
     host: env.REALTIME_BIND_HOST?.trim() || "0.0.0.0",
     port: Number(env.REALTIME_PORT ?? 3001),
     allowedHosts: commaSeparated(env.REALTIME_ALLOWED_HOSTS),

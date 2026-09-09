@@ -2,6 +2,7 @@ import {
   endSession as endLegacySession,
   saveSessionDiagnostics as saveLegacySessionDiagnostics,
   updateConsumedSeconds as updateLegacyConsumedSeconds,
+  findSession as findLegacySession,
 } from "./sessions.repository.js";
 import {
   participantTrackSpeaker,
@@ -31,6 +32,7 @@ import type { SessionRecord } from "./session-record.js";
 export interface CompleteSessionWithUsageOptions {
   billableSeconds?: number;
   diagnostics?: RealtimeSessionDiagnosticsDto;
+  endedAt?: Date;
 }
 
 export async function completeSessionWithUsage(
@@ -41,17 +43,18 @@ export async function completeSessionWithUsage(
   if (runtime.driver === "postgres") {
     return completePostgresSessionWithUsage(sessionId, options);
   }
+  if(findLegacySession(sessionId)?.processingAuthorization) throw new Error("Public sessions require verified runtime finalization");
   return runStoreTransaction(() => completeSessionWithUsageTransaction(
     sessionId,
     options,
   ));
 }
 
-function completeSessionWithUsageTransaction(
+export function completeSessionWithUsageTransaction(
   sessionId: string,
   options: CompleteSessionWithUsageOptions,
 ) {
-  const result = endLegacySession(sessionId);
+  const result = endLegacySession(sessionId,options.endedAt);
   if (!result) return null;
   interruptActiveCallPlaybacks(
     sessionId,
@@ -94,6 +97,7 @@ function completePostgresSessionWithUsage(
       for (let attempt = 0; attempt < 2; attempt += 1) {
         const current = await runtime.postgres.sessions.find(sessionId);
         if (!current) return null;
+        if(current.processingAuthorization) throw new Error("Public sessions require verified runtime finalization");
         if (current.status === "ended") return current;
         const transition = transitionRealtimeSessionState(current.status, "ended");
         if (!transition.accepted) return null;

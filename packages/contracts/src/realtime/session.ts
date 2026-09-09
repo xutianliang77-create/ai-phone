@@ -4,6 +4,7 @@ import type {
 } from "../shared/languages.js";
 import type { SpeakerAttributionOptionsDto } from "../shared/speaker.js";
 import type { DomainLexiconPack } from "../shared/domain-lexicon.js";
+import type { RealtimeProcessingAuthorization, RealtimeProcessingRequest } from "./processing-contract.js";
 
 export type RealtimeMode = "conversation" | "meeting" | "classroom" | "business";
 export type AsrEndpointMode =
@@ -28,6 +29,8 @@ export interface RealtimeVoiceConfig {
 }
 
 export interface CreateRealtimeSessionRequest {
+  /** Absent on 1.0 clients; never interpret requested placement as a grant. */
+  processing?: RealtimeProcessingRequest;
   mode: RealtimeMode;
   sourceLanguage: LanguageCode;
   targetLanguage: TranslationLanguageCode;
@@ -40,6 +43,13 @@ export interface CreateRealtimeSessionRequest {
 }
 
 export interface CreateRealtimeSessionResponse {
+  /** Required for public creation; derive from the issued runtime lease, never
+   * client preference. Legacy private clients retain their original default. */
+  captureSampleRate?: 16000 | 24000;
+  processing?: RealtimeProcessingAuthorization;
+  /** Required with public processing; issuer identity is not inferred from a legacy token. */
+  deploymentId?: string;
+  ownerId?: string;
   sessionId: string;
   realtimeToken: string;
   endpoint: string;
@@ -50,6 +60,7 @@ export interface CreateRealtimeSessionResponse {
 }
 
 export interface RealtimeTokenClaims {
+  processing?: RealtimeProcessingAuthorization;
   userId: string;
   sessionId: string;
   mode?: RealtimeMode;

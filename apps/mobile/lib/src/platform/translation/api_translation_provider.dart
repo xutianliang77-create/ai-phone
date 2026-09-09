@@ -10,11 +10,11 @@ class ApiTranslationProvider implements MobileTranslationProvider {
   ApiTranslationProvider({
     required Uri baseUrl,
     http.Client? client,
-    AccountSessionStore accountSessionStore = const FileAccountSessionStore(),
+    AccountSessionStore? accountSessionStore,
     MobileTranslationProvider? fallback,
   })  : _baseUrl = baseUrl,
         _client = client ?? http.Client(),
-        _accountSessionStore = accountSessionStore,
+        _accountSessionStore = accountSessionStore ?? accountStoreForDeployment(baseUrl),
         _fallback = fallback;
 
   final Uri _baseUrl;

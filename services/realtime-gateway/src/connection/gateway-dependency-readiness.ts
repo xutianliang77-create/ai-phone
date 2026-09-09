@@ -1,8 +1,10 @@
 import type { RealtimeEnv } from "../config/env.js";
+import { publicProcessingReadiness } from "./public-processing-readiness.js";
 
 export type GatewayDependencyStatus = "ready" | "degraded" | "not_ready";
 
 export interface GatewayDependencyServiceStatus {
+  execution?: "public";
   name: "asr" | "translation" | "tts" | "speaker";
   requiredForSession: boolean;
   requiredForRelease: boolean;
@@ -13,6 +15,7 @@ export interface GatewayDependencyServiceStatus {
 }
 
 export interface GatewayDependencyReadiness {
+  evidence?: "implementation_gate";
   status: GatewayDependencyStatus;
   sessionReady: boolean;
   releaseReady: boolean;
@@ -67,6 +70,10 @@ export class GatewayDependencyReadinessMonitor {
   }
 
   async refresh() {
+    if (this.env.publicDeploymentId) {
+      this.current = publicProcessingReadiness(this.now());
+      return this.current;
+    }
     const services = await Promise.all(
       dependencyProbes(this.env).map((probe) => probeDependency(
         probe,

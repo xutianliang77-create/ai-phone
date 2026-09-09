@@ -1,5 +1,6 @@
 import '../../../app/app_config.dart';
 import '../../../platform/translation/supported_translation_language.dart';
+import '../../../platform/translation/translation_language_pair.dart';
 import 'voice_preset_catalog.dart';
 import 'domain_lexicon_pack.dart';
 
@@ -15,7 +16,11 @@ bool realtimeModeSupportsVoiceOutput(String realtimeMode) {
 }
 
 AppConfig applyRealtimeModeVoicePolicy(AppConfig config) {
-  if (realtimeModeSupportsVoiceOutput(config.realtimeMode)) return config;
+  if (realtimeModeSupportsVoiceOutput(config.realtimeMode) &&
+      !(config.useLocalSessions &&
+          config.realtimeVoiceOutputMode == 'my_voice')) {
+    return config;
+  }
   return config.copyWith(realtimeVoiceOutputMode: 'off');
 }
 
@@ -27,11 +32,12 @@ class RealtimeRuntimeSettings {
     required this.voiceOutputMode,
     this.voicePresetId = defaultRealtimeVoicePresetId,
     this.domainLexiconPack = defaultDomainLexiconPack,
+    this.automaticLanguagePair,
   });
 
   factory RealtimeRuntimeSettings.fromConfig(AppConfig config) {
     return RealtimeRuntimeSettings(
-      processingMode: config.useLocalSessions || config.useDeviceAsr
+      processingMode: config.useLocalSessions
           ? RealtimeProcessingMode.onDevice
           : RealtimeProcessingMode.online,
       sourceLanguage: config.sourceLanguage,
@@ -43,6 +49,9 @@ class RealtimeRuntimeSettings {
       ),
       voicePresetId: config.realtimeVoicePresetId,
       domainLexiconPack: config.domainLexiconPack,
+      automaticLanguagePair: config.automaticLanguagePair ??
+          TranslationLanguagePair.fromLanguages(
+              config.sourceLanguage, config.targetLanguage),
     ).normalizedForCapabilities();
   }
 
@@ -70,6 +79,8 @@ class RealtimeRuntimeSettings {
       domainLexiconPack: normalizeDomainLexiconPack(
         json['domainLexiconPack'] as String? ?? defaultDomainLexiconPack,
       ),
+      automaticLanguagePair:
+          TranslationLanguagePair.fromJson(json['automaticLanguagePair']),
     ).normalizedForCapabilities();
   }
 
@@ -79,6 +90,27 @@ class RealtimeRuntimeSettings {
   final RealtimeVoiceOutputMode voiceOutputMode;
   final String voicePresetId;
   final String domainLexiconPack;
+  final TranslationLanguagePair? automaticLanguagePair;
+
+  TranslationLanguagePair? get selectedLanguagePair {
+    final fixed =
+        TranslationLanguagePair.fromLanguages(sourceLanguage, targetLanguage);
+    if (fixed != null) return fixed;
+    final saved = automaticLanguagePair;
+    if (saved == null ||
+        TranslationLanguagePair.fromLanguages(saved.source, saved.target) ==
+            null) {
+      return null;
+    }
+    if (sourceLanguage != autoSourceLanguageCode &&
+        saved.opposite(sourceLanguage) == null) {
+      return null;
+    }
+    if (!autoReverseTargetLanguage && saved.opposite(targetLanguage) == null) {
+      return null;
+    }
+    return saved;
+  }
 
   bool get autoSpeakTranslation {
     return voiceOutputMode != RealtimeVoiceOutputMode.off;
@@ -88,14 +120,24 @@ class RealtimeRuntimeSettings {
     return targetLanguage == autoReverseTargetLanguageCode;
   }
 
+  // Mode policy only; this does not assert that a voice resource is installed.
+  bool get allowsSelectedVoiceMode =>
+      processingMode != RealtimeProcessingMode.onDevice ||
+      voiceOutputMode != RealtimeVoiceOutputMode.myVoice;
+
   AppConfig applyTo(AppConfig base) {
+    final pair = selectedLanguagePair;
     final concreteTarget = autoReverseTargetLanguage
-        ? _fallbackAutoReverseTarget(sourceLanguage)
+        ? pair?.opposite(sourceLanguage) ??
+            pair?.target ??
+            _fallbackAutoReverseTarget(sourceLanguage)
         : normalizeTargetLanguageCode(targetLanguage);
     return base.copyWith(
       sourceLanguage: sourceLanguage,
       targetLanguage: concreteTarget,
       autoReverseTargetLanguage: autoReverseTargetLanguage,
+      automaticLanguagePair: pair,
+      clearAutomaticLanguagePair: pair == null,
       useDeviceAsr: processingMode == RealtimeProcessingMode.onDevice,
       useLocalSessions: processingMode == RealtimeProcessingMode.onDevice,
       useOnDeviceTranslation: processingMode == RealtimeProcessingMode.onDevice,
@@ -135,6 +177,7 @@ class RealtimeRuntimeSettings {
       domainLexiconPack: domainLexiconPack == null
           ? this.domainLexiconPack
           : normalizeDomainLexiconPack(domainLexiconPack),
+      automaticLanguagePair: selectedLanguagePair,
     );
   }
 
@@ -149,34 +192,15 @@ class RealtimeRuntimeSettings {
       'voicePresetId': voicePresetId,
       'domainLexiconPack': domainLexiconPack,
       'autoSpeakTranslation': autoSpeakTranslation,
+      if (selectedLanguagePair != null)
+        'automaticLanguagePair': selectedLanguagePair!.toJson(),
     };
   }
 
   RealtimeRuntimeSettings normalizedForCapabilities() {
-    if (processingMode != RealtimeProcessingMode.onDevice) return this;
-    final normalizedSource = sourceLanguage == autoSourceLanguageCode ||
-            onDeviceTranslationLanguageCodes.contains(sourceLanguage)
-        ? sourceLanguage
-        : autoSourceLanguageCode;
-    final normalizedTarget = targetLanguage == autoReverseTargetLanguageCode ||
-            onDeviceTranslationLanguageCodes.contains(targetLanguage)
-        ? targetLanguage
-        : autoReverseTargetLanguageCode;
-    final normalizedVoice = voiceOutputMode == RealtimeVoiceOutputMode.myVoice
-        ? RealtimeVoiceOutputMode.natural
-        : voiceOutputMode;
-    if (normalizedSource == sourceLanguage &&
-        normalizedTarget == targetLanguage &&
-        normalizedVoice == voiceOutputMode &&
-        domainLexiconPack == defaultDomainLexiconPack) {
-      return this;
-    }
-    return copyWith(
-      sourceLanguage: normalizedSource,
-      targetLanguage: normalizedTarget,
-      voiceOutputMode: normalizedVoice,
-      domainLexiconPack: defaultDomainLexiconPack,
-    );
+    // Keep the legacy API without destructively rewriting stored preferences.
+    // Provider preflight determines whether the selected capability can run.
+    return this;
   }
 
   RealtimeVoiceOutputMode _toggleVoiceOutputMode(bool enabled) {

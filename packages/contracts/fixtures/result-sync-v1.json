@@ -1,0 +1,14 @@
+{
+  "segment": {
+    "id": "segment-1",
+    "revision": 4,
+    "sourceText": "会议纪要",
+    "translatedText": "Meeting minutes",
+    "rawText": "会议纪要",
+    "optimizedText": "会议纪要",
+    "sourceLanguage": "zh",
+    "targetLanguage": "en"
+  },
+  "canonical": "{\"id\":\"segment-1\",\"optimizedText\":\"会议纪要\",\"rawText\":\"会议纪要\",\"revision\":4,\"sourceLanguage\":\"zh\",\"sourceText\":\"会议纪要\",\"targetLanguage\":\"en\",\"translatedText\":\"Meeting minutes\"}",
+  "sha256": "4c10a9577cb06cce5705e7d637c1987fe6bcb354cde88a65612a83db0c53fc2f"
+}

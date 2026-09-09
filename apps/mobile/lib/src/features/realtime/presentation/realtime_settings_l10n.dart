@@ -4,6 +4,18 @@ import '../data/voice_preset_catalog.dart';
 import '../data/domain_lexicon_pack.dart';
 
 extension RealtimeSettingsL10n on AppLocalizations {
+  String targetLanguageSettingLabel(String target,
+      {String? pairSource, String? pairTarget}) {
+    final label = languageDisplayName(target);
+    if (target != autoReverseTargetLanguageCode ||
+        pairSource == null ||
+        pairTarget == null) {
+      return label;
+    }
+    return '$label (${languageDisplayName(pairSource)} ↔ '
+        '${languageDisplayName(pairTarget)})';
+  }
+
   String get realtimeSettingsLabel => isChinese ? '同传设置' : 'Realtime settings';
   String get processingModeLabel => isChinese ? '运行模式' : 'Processing mode';
   String get conversationModeGroupLabel => isChinese ? '使用模式' : 'Use mode';
@@ -17,13 +29,17 @@ extension RealtimeSettingsL10n on AppLocalizations {
   String get autoDetectLanguageLabel => isChinese ? '自动识别' : 'Auto detect';
   String get autoReverseTargetLabel => isChinese ? '自动反向' : 'Auto reverse';
   String get onDeviceLanguageCapabilityHint => isChinese
-      ? '端侧当前支持中英互译，开始前会检查系统语言包。'
-      : 'On-device mode currently supports Chinese-English translation and '
-          'checks system language packs before starting.';
+      ? '语言选择会保留；本地可用范围以模型和已安装语言包为准，开始前会检查。'
+      : 'Language choices are retained. Local availability depends on the '
+          'model and installed language packs, checked before starting.';
   String get onDeviceVoiceCapabilityHint => isChinese
-      ? '端侧使用系统自然声音；“我的声音”和行业词库仅在线模式可用。'
-      : 'On-device mode uses the system voice. My Voice and industry terms '
-          'are available online only.';
+      ? '本地使用系统声音；个人声音暂需在线。声音和行业词库选择会保留。'
+      : 'Local mode uses system voices; My Voice requires online support. '
+          'Your voice and industry selections are retained.';
+  String get savedVoiceUnavailableHint => isChinese
+      ? '已保留“我的声音”选择；本地暂不可用，本次不朗读。可改选自然声音或切回在线。'
+      : 'My Voice is retained but unavailable locally, so speech is off for '
+          'this run. Select Natural voice or switch back online.';
   String get autoSpeakTranslationLabel =>
       isChinese ? '自动朗读译文' : 'Speak translation';
   String get voiceOutputSettingLabel => isChinese ? '朗读声音' : 'Spoken voice';

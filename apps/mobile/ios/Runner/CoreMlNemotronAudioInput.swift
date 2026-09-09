@@ -2,7 +2,7 @@ import AVFoundation
 
 final class CoreMlNemotronAudioInput {
   private let audioSessionCoordinator: AudioSessionCoordinator
-  private let audioSessionOwner = "coreml_nemotron_asr"
+  private let audioSessionOwner: String
   private let engine = AVAudioEngine()
   private let queue = DispatchQueue(label: "translation_mobile.coreml_nemotron.audio")
   private var pendingSamples: [Float] = []
@@ -29,8 +29,9 @@ final class CoreMlNemotronAudioInput {
   private var runtimeErrorEmitted = false
   private let targetSampleRate = 16_000.0
 
-  init(audioSessionCoordinator: AudioSessionCoordinator) {
+  init(audioSessionCoordinator: AudioSessionCoordinator, owner: String = "coreml_nemotron_asr") {
     self.audioSessionCoordinator = audioSessionCoordinator
+    self.audioSessionOwner = owner
   }
 
   func start(
@@ -68,7 +69,7 @@ final class CoreMlNemotronAudioInput {
       format: inputFormat
     ) { [weak self] buffer, _ in
       guard let self else { return }
-      let result = self.convert(buffer: buffer, converter: converter, format: targetFormat)
+      let result = Self.convertPcm(buffer: buffer, converter: converter, format: targetFormat)
       let converted = result.buffer
       let samples = Self.floatSamples(from: converted)
       let inputSampleCount = Int(buffer.frameLength)
@@ -269,7 +270,7 @@ final class CoreMlNemotronAudioInput {
     audioSessionError = nil
   }
 
-  private func convert(
+  static func convertPcm(
     buffer: AVAudioPCMBuffer,
     converter: AVAudioConverter?,
     format: AVAudioFormat
@@ -299,7 +300,7 @@ final class CoreMlNemotronAudioInput {
     return (converted, nil)
   }
 
-  private static func floatSamples(from buffer: AVAudioPCMBuffer) -> [Float] {
+  static func floatSamples(from buffer: AVAudioPCMBuffer) -> [Float] {
     guard let channel = buffer.floatChannelData?[0] else { return [] }
     let count = Int(buffer.frameLength)
     return Array(UnsafeBufferPointer(start: channel, count: count))

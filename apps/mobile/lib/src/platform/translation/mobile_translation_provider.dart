@@ -1,3 +1,5 @@
+import 'translation_language_pair.dart';
+
 class MobileTranslationConfig {
   const MobileTranslationConfig({
     required this.sourceLanguage,
@@ -39,6 +41,10 @@ class MobileTranslationAvailability {
   final String? message;
   final Map<String, Object?> details;
 
+  bool matchesLanguagePair(MobileTranslationConfig config) =>
+      translationLanguagesMatch(sourceLanguage, config.sourceLanguage) &&
+      translationLanguagesMatch(targetLanguage, config.targetLanguage);
+
   Map<String, Object?> toJson() {
     return <String, Object?>{
       'available': available,
@@ -66,4 +72,10 @@ abstract class MobileTranslationDiagnostics {
   Future<MobileTranslationAvailability> availability(
     MobileTranslationConfig config,
   );
+}
+
+abstract class MobileTranslationResourcePreparation {
+  Future<void> prepareResources(MobileTranslationConfig config,
+      {required String requestId});
+  Future<void> cancelResourcePreparation(String requestId);
 }

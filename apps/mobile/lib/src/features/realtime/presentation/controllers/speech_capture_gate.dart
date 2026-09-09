@@ -33,6 +33,7 @@ class SpeechCaptureGate {
   bool shouldDropDeviceAsr({
     required String text,
     required String language,
+    bool languageIsHint = false,
   }) {
     if (!blocksCapture) return false;
     final playbackText = _playbackText;
@@ -40,6 +41,16 @@ class SpeechCaptureGate {
     final playbackLanguage = _normalizedSpeechLanguage(
       _playbackLanguage ?? '',
     );
+    // A selected locale is not detected audio language. Use text only to
+    // compare possible playback echo, never to choose the ASR/MT language.
+    // A borrowed word in an opposite-language utterance is not sufficient.
+    if (languageIsHint &&
+        (_normalizedEchoText(playbackText) == _normalizedEchoText(text) ||
+            (playbackLanguage != null &&
+                _dominantSpeechTextLanguage(text) == playbackLanguage)) &&
+        _isLikelySpeechEcho(playbackText, text)) {
+      return true;
+    }
     final candidateLanguage = _normalizedSpeechLanguage(language) ??
         _dominantSpeechTextLanguage(text);
     if (playbackLanguage != null &&

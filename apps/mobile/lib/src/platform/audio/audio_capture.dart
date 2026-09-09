@@ -18,6 +18,8 @@ class AudioCaptureConfig {
     this.echoCancel = true,
     this.noiseSuppress = true,
     this.managePlatformAudioSession = true,
+    this.publicEndpointing = false,
+    this.endpointOptions = const <String, Object?>{},
   });
 
   final int sampleRate;
@@ -25,4 +27,6 @@ class AudioCaptureConfig {
   final bool echoCancel;
   final bool noiseSuppress;
   final bool managePlatformAudioSession;
+  final bool publicEndpointing;
+  final Map<String, Object?> endpointOptions;
 }

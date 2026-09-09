@@ -18,6 +18,8 @@ import {
 } from "@translation/contracts";
 import { cleanRealtimeText } from "../protocol/realtime-text.js";
 import type { TranscriptResult } from "./asr-provider.js";
+import {abortable} from "../providers/abortable.js";
+import {transcribeCompletedAudio,type CompletedAsrAudio,type CompletedAsrOptions} from "./public-asr-completed-audio.js";
 
 export interface HttpAsrClientOptions {
   endpoint: string;
@@ -29,6 +31,7 @@ export interface HttpAsrClientOptions {
 }
 
 export interface HttpAsrRequest {
+  acceptedAudioRange?:{startSample:number;endSample:number};
   sessionId: string;
   sequence: number;
   timestampMs: number;
@@ -76,12 +79,17 @@ export class HttpAsrClient {
     this.fetchFn = options.fetchFn ?? fetch;
   }
 
-  async transcribe(request: HttpAsrRequest): Promise<TranscriptResult | null> {
-    const response = await this.fetchWithTimeout(this.options.endpoint, {
+  transcribeCompletedAudio(input:CompletedAsrAudio,options:CompletedAsrOptions,signal?:AbortSignal){
+    return transcribeCompletedAudio(input,options,this.options.endpoint,this.options.timeoutMs,this.fetchWithTimeout.bind(this),signal);
+  }
+
+  async transcribe(request: HttpAsrRequest,signal?:AbortSignal): Promise<TranscriptResult | null> {
+    const {acceptedAudioRange:_internal,...payload}=request;
+    return this.fetchWithTimeout(this.options.endpoint, {
       method: "POST",
       headers: this.headers(),
-      body: JSON.stringify(request),
-    });
+      body: JSON.stringify(payload),
+    },async response=>{
     if (response.status === 204) return null;
     if (!response.ok)
       throw new Error(`HTTP ASR returned HTTP ${response.status}`);
@@ -90,10 +98,11 @@ export class HttpAsrClient {
       (await response.json()) as HttpAsrResponse,
       `asr_seg_${request.sequence}`,
     );
+    },signal);
   }
 
-  async flush(request: HttpAsrFlushRequest): Promise<TranscriptResult | null> {
-    const response = await this.fetchWithTimeout(
+  async flush(request: HttpAsrFlushRequest,signal?:AbortSignal): Promise<TranscriptResult | null> {
+    return this.fetchWithTimeout(
       this.flushUrl(request.sessionId),
       {
         method: "POST",
@@ -106,7 +115,7 @@ export class HttpAsrClient {
           corrections: request.corrections ?? [],
         }),
       },
-    );
+      async response=>{
     if (response.status === 204) return null;
     if (!response.ok)
       throw new Error(`HTTP ASR flush returned HTTP ${response.status}`);
@@ -115,12 +124,14 @@ export class HttpAsrClient {
       (await response.json()) as HttpAsrResponse,
       "asr_flush",
     );
+      },signal);
   }
 
   async commitBoundary(
     request: HttpAsrBoundaryRequest,
+    signal?:AbortSignal,
   ): Promise<TranscriptResult | null> {
-    const response = await this.fetchWithTimeout(
+    return this.fetchWithTimeout(
       this.sessionUrl(request.sessionId) + "/boundary",
       {
         method: "POST",
@@ -134,7 +145,7 @@ export class HttpAsrClient {
           corrections: request.corrections ?? [],
         }),
       },
-    );
+      async response=>{
     if (response.status === 204) return null;
     if (!response.ok) {
       throw new Error(`HTTP ASR boundary returned HTTP ${response.status}`);
@@ -143,51 +154,59 @@ export class HttpAsrClient {
       (await response.json()) as HttpAsrResponse,
       "asr_boundary",
     );
+      },signal);
   }
 
   async closeSession(sessionId: string): Promise<void> {
-    const response = await this.fetchWithTimeout(this.sessionUrl(sessionId), {
+    await this.fetchWithTimeout(this.sessionUrl(sessionId), {
       method: "DELETE",
       headers: this.headers(),
-    });
+    },async response=>{
     if (!response.ok)
       throw new Error(`HTTP ASR close returned HTTP ${response.status}`);
+    });
   }
 
-  async diagnostics(sessionId: string): Promise<RealtimeVadDiagnosticsDto> {
-    const response = await this.fetchWithTimeout(
+  async diagnostics(sessionId: string,signal?:AbortSignal): Promise<RealtimeVadDiagnosticsDto> {
+    return this.fetchWithTimeout(
       this.sessionUrl(sessionId) + "/diagnostics",
       { method: "GET", headers: this.headers() },
-    );
+      async response=>{
     if (!response.ok) {
       throw new Error(`HTTP ASR diagnostics returned HTTP ${response.status}`);
     }
     return (await response.json()) as RealtimeVadDiagnosticsDto;
+      },signal);
   }
 
   async healthCheck() {
     if (!this.options.healthUrl) return true;
     try {
-      const response = await this.fetchWithTimeout(this.options.healthUrl, {
+      return await this.fetchWithTimeout(this.options.healthUrl, {
         method: "GET",
         headers: this.headers(),
-      });
-      return response.ok;
+      },async response=>response.ok);
     } catch {
       return false;
     }
   }
 
-  private async fetchWithTimeout(url: string, init: RequestInit) {
+  private async fetchWithTimeout<T>(url: string, init: RequestInit,consume:(response:Response)=>Promise<T>,signal?:AbortSignal) {
+    if(signal?.aborted)throw new DOMException("Aborted","AbortError");
     const controller = new AbortController();
+    const cancel=()=>controller.abort();signal?.addEventListener("abort",cancel,{once:true});
     const timer = setTimeout(() => controller.abort(), this.options.timeoutMs);
+    let response:Response|undefined;
     try {
-      return await this.fetchFn(url, {
+      response=await abortable(this.fetchFn(url, {
         ...init,
         signal: controller.signal,
-      });
+      }),controller.signal);
+      return await abortable(consume(response),controller.signal);
     } finally {
       clearTimeout(timer);
+      signal?.removeEventListener("abort",cancel);
+      void response?.body?.cancel().catch(()=>{});
     }
   }
 

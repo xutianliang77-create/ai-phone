@@ -1,6 +1,7 @@
 import '../../../shared/domain/speaker_attribution.dart';
 import '../../../shared/domain/segment_timeline_order.dart';
 import '../../../shared/domain/turn_language_profile.dart';
+import '../../realtime/domain/entities/subtitle_segment.dart';
 
 class SessionListItem {
   const SessionListItem({
@@ -53,6 +54,27 @@ class SessionListItem {
 }
 
 class SessionSegment {
+  factory SessionSegment.fromSubtitle(SubtitleSegment segment) =>
+      SessionSegment(
+          id: segment.id,
+          turnId: segment.turnId,
+          revision: segment.revision,
+          sourceText: segment.sourceText,
+          translatedText: segment.translatedText,
+          rawText: segment.rawText,
+          optimizedText: segment.optimizedText,
+          sourceLanguage: segment.sourceLanguage,
+          targetLanguage: segment.targetLanguage,
+          confidence: segment.confidence,
+          stage: segment.stage,
+          provider: segment.provider,
+          model: segment.model,
+          latencyMs: segment.latencyMs,
+          refinement: segment.refinement,
+          languageProfile: segment.languageProfile,
+          speaker: segment.speaker,
+          timing: segment.timing,
+          vadContext: segment.vadContext);
   const SessionSegment({
     required this.id,
     required this.sourceText,

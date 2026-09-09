@@ -19,6 +19,7 @@ class RealtimeSettingsSheet extends StatelessWidget {
     this.onEndRequested,
     this.voicePresets = const <VoicePreset>[],
     this.voicePresetsLoading = false,
+    this.resourceSection,
     super.key,
   });
 
@@ -32,6 +33,7 @@ class RealtimeSettingsSheet extends StatelessWidget {
   final VoidCallback? onEndRequested;
   final List<VoicePreset> voicePresets;
   final bool voicePresetsLoading;
+  final Widget? resourceSection;
 
   @override
   Widget build(BuildContext context) {
@@ -75,6 +77,9 @@ class RealtimeSettingsSheet extends StatelessWidget {
             onEndRequested: onEndRequested,
             padding: EdgeInsets.zero,
           ),
+          if (settings.processingMode == RealtimeProcessingMode.onDevice &&
+              resourceSection != null)
+            resourceSection!,
         ],
       ),
     );

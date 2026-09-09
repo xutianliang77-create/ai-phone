@@ -5,6 +5,8 @@ import type {
 } from "@translation/contracts";
 import type { RealtimeEnv } from "../config/env.js";
 import { realtimeLogger } from "../metrics/realtime-metrics.js";
+import {createHash} from "node:crypto";
+import {publicSpeechPcm,validatePublicSpeech,PublicSpeechError,type PublicSpeechOptions} from "./public-speech.js";
 
 interface TtsResponse {
   audio?: {
@@ -25,9 +27,16 @@ export class HttpTtsSynthesizer {
   private readonly sequenceBySession = new Map<string, number>();
   private readonly requestsBySession = new Map<string, Set<AbortController>>();
 
-  constructor(private readonly env: RealtimeEnv) {}
+  private readonly publicSpeech?:PublicSpeechOptions;
+  private publicClosed=false;
+  private readonly publicSegments=new Map<string,string>();
+  constructor(private readonly env: Pick<RealtimeEnv,"ttsHttpEndpoint"|"ttsHttpStreamEndpoint"|"ttsHttpApiKey"|"ttsHttpTimeoutMs"|"ttsStreamPrefillMs">,
+    publicSpeech?:PublicSpeechOptions) {
+    if(publicSpeech){validatePublicSpeech(publicSpeech);this.publicSpeech={...publicSpeech};}
+  }
 
   get enabled() {
+    if(this.publicSpeech)return !this.publicClosed;
     return Boolean(this.env.ttsHttpEndpoint || this.env.ttsHttpStreamEndpoint);
   }
 
@@ -35,6 +44,7 @@ export class HttpTtsSynthesizer {
     event: TranslationEvent,
     voice?: RealtimeVoiceConfig,
   ): Promise<AudioOutput | null> {
+    if(this.publicSpeech)throw new PublicSpeechError("public_tts_stream_required","not_sent");
     const endpoint = this.env.ttsHttpEndpoint;
     if (!endpoint || event.type !== "translation.final") return null;
     const text = event.text.trim();
@@ -72,6 +82,24 @@ export class HttpTtsSynthesizer {
     event: TranslationEvent,
     voice?: RealtimeVoiceConfig,
   ): AsyncIterable<AudioOutput> {
+    if(this.publicSpeech){
+      if(this.publicClosed)throw new PublicSpeechError("public_tts_closed","not_sent");
+      if(event.type!=="translation.final")return;
+      if(event.sessionId!==this.publicSpeech.sessionId)throw new PublicSpeechError("public_tts_input_scope","not_sent");
+      const owned=structuredClone(event),ownedVoice=voice?structuredClone(voice):undefined;
+      const key=JSON.stringify([owned.segmentId,owned.revision]);
+      const fingerprint=createHash("sha256").update(JSON.stringify([owned.text,owned.language,ownedVoice??null])).digest("hex");
+      const previous=this.publicSegments.get(key);
+      if(previous){if(previous!==fingerprint)throw new PublicSpeechError("public_tts_revision_conflict","not_sent");return;}
+      if(this.publicSegments.size>=1024)throw new PublicSpeechError("public_tts_capacity","not_sent");
+      this.publicSegments.set(key,fingerprint);
+      const request=this.beginRequest(owned.sessionId);
+      try{for await(const pcm of publicSpeechPcm(this.publicSpeech,owned,ownedVoice,request.controller.signal)){
+        if(request.controller.signal.aborted||this.publicClosed)return;
+        yield this.audioOutput(owned,this.publicSpeech.sampleRate??24000,pcm.toString("base64"));
+      }}finally{request.done();}
+      return;
+    }
     const endpoint = this.env.ttsHttpStreamEndpoint;
     if (!endpoint) {
       const audio = await this.synthesize(event, voice);
@@ -153,6 +181,8 @@ export class HttpTtsSynthesizer {
   }
 
   closeSession(sessionId: string) {
+    if(this.publicSpeech&&sessionId!==this.publicSpeech.sessionId)return;
+    if(this.publicSpeech)this.publicClosed=true;
     this.cancelSession(sessionId);
     this.sequenceBySession.delete(sessionId);
   }
@@ -169,7 +199,7 @@ export class HttpTtsSynthesizer {
     const requests = this.requestsBySession.get(sessionId) ?? new Set<AbortController>();
     requests.add(controller);
     this.requestsBySession.set(sessionId, requests);
-    const timer = setTimeout(() => controller.abort(), this.env.ttsHttpTimeoutMs);
+    const timer = setTimeout(() => controller.abort(), this.publicSpeech?.timeoutMs ?? this.env.ttsHttpTimeoutMs);
     return {
       controller,
       done: () => {

@@ -1,6 +1,44 @@
 part of 'realtime_gateway_client.dart';
 
 extension RealtimeGatewayControl on RealtimeGatewayClient {
+  Future<bool> _commitAudioBoundary(String sessionId, Duration timeout) async {
+    if (_session?.sessionId != sessionId ||
+        _session?.syncBinding == null ||
+        !_transportReady ||
+        _lastAudioSequence < 0) {
+      return false;
+    }
+    final generation = _connectionGeneration;
+    final sequence = _lastAudioSequence;
+    final response = Completer<GatewayRealtimeEvent>();
+    final subscription = events.listen((event) {
+      if (event.sessionId == sessionId &&
+          event.sequence == sequence &&
+          (event.type == 'audio.boundary.committed' ||
+              event.type == 'audio.boundary.rejected') &&
+          !response.isCompleted) {
+        response.complete(event);
+      }
+    });
+    try {
+      if (!_send({
+        'type': 'audio.boundary',
+        'sessionId': sessionId,
+        'sequence': sequence
+      })) {
+        return false;
+      }
+      final ack = await response.future.timeout(timeout);
+      return generation == _connectionGeneration &&
+          _session?.sessionId == sessionId &&
+          ack.type == 'audio.boundary.committed';
+    } catch (_) {
+      return false;
+    } finally {
+      await subscription.cancel();
+    }
+  }
+
   Future<void> _setVoiceOutput(String sessionId, bool enabled,
       {String? presetId}) async {
     if (_session?.sessionId != sessionId || !_transportReady) {

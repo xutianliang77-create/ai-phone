@@ -38,7 +38,7 @@ export class RecentPcmAudioBuffer {
     const pcm = Buffer.concat(compatible.map((frame) => frame.pcm));
     const durationMs = pcm.length / 2 / sampleRate * 1000;
     if (durationMs < 1_500) return null;
-    return wav(pcm, sampleRate).toString("base64");
+    return pcm16Wav(pcm, sampleRate).toString("base64");
   }
 
   framesBetween(input: {
@@ -114,7 +114,7 @@ function trailing(frames: BufferedFrame[], maxDurationMs: number) {
   return selected;
 }
 
-function wav(pcm: Buffer, sampleRate: number) {
+export function pcm16Wav(pcm: Buffer, sampleRate: number) {
   const header = Buffer.alloc(44);
   header.write("RIFF", 0);
   header.writeUInt32LE(36 + pcm.length, 4);

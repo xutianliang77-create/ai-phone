@@ -34,6 +34,8 @@ class SessionDetailOverview extends StatelessWidget {
                 ],
                 Text(
                   <String>[
+                    if (detail.status == 'checkpoint')
+                      chinese ? '未结束 · 已保存快照' : 'Unfinished · Saved snapshot',
                     _direction(chinese),
                     _duration(detail.consumedSeconds, chinese),
                     if (detail.speakerCount > 0)

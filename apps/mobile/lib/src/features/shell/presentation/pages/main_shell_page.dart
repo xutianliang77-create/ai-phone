@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../../app/app_config.dart';
 import '../../../../app/localization/app_localizations.dart';
+import '../../../history/data/session_history_repository.dart';
 import '../../../history/presentation/pages/session_history_page.dart';
 import '../../../realtime/presentation/pages/realtime_page.dart';
 import '../../../scan/presentation/pages/scan_translation_page.dart';
@@ -9,14 +10,19 @@ import 'call_home_page.dart';
 import 'settings_home_page.dart';
 
 class MainShellPage extends StatefulWidget {
-  const MainShellPage({super.key});
+  const MainShellPage(
+      {super.key, this.config, this.realtimePage, this.historyRepository});
+
+  final AppConfig? config;
+  final RealtimePage? realtimePage;
+  final SessionHistoryRepository? historyRepository;
 
   @override
   State<MainShellPage> createState() => _MainShellPageState();
 }
 
 class _MainShellPageState extends State<MainShellPage> {
-  late final AppConfig _config = AppConfig.fromEnvironment();
+  late final AppConfig _config = widget.config ?? AppConfig.fromEnvironment();
   int _selectedIndex = 0;
   final Set<int> _builtTabs = <int>{0};
 
@@ -65,10 +71,10 @@ class _MainShellPageState extends State<MainShellPage> {
   Widget _buildTab(int index) {
     if (!_builtTabs.contains(index)) return const SizedBox.shrink();
     return switch (index) {
-      0 => const RealtimePage(),
+      0 => widget.realtimePage ?? RealtimePage(config: _config),
       1 => const CallHomePage(),
       2 => const ScanTranslationPage(),
-      3 => const SessionHistoryPage(),
+      3 => SessionHistoryPage(repository: widget.historyRepository),
       _ => SettingsHomePage(config: _config),
     };
   }

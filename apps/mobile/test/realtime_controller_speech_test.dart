@@ -16,11 +16,22 @@ import 'package:translation_mobile/src/platform/audio/audio_frame.dart';
 import 'package:translation_mobile/src/platform/speech/pcm_audio_output_player.dart';
 import 'package:translation_mobile/src/platform/speech/speech_output_provider.dart';
 import 'package:translation_mobile/src/platform/translation/mobile_translation_provider.dart';
+import 'package:translation_mobile/src/platform/translation/translation_language_pair.dart';
 
 import 'helpers/fake_pcm_audio_output_player.dart';
 import 'helpers/fake_speech_output_provider.dart';
 
+part 'helpers/realtime_speech_fakes.dart';
+part 'helpers/realtime_speech_stop_case.dart';
+part 'helpers/realtime_device_revision_cases.dart';
+part 'helpers/realtime_voice_route_cases.dart';
+part 'helpers/realtime_speech_queue_cases.dart';
+
 void main() {
+  registerVoiceRouteCases();
+  registerSpeechQueueCases();
+  registerSpeechStopDrainTest();
+  registerDeviceRevisionCases();
   test('speaks final translated text when auto speech is enabled', () async {
     final repository = _FakeRealtimeRepository();
     final asr = _FakeMobileAsrProvider();
@@ -103,6 +114,12 @@ void main() {
       id: 'echo_1',
       text: '第一句',
       language: 'zh',
+    ));
+    asr.emit(const AsrTextSegment(
+      id: 'echo_fixed_hint',
+      text: '第一句',
+      language: 'en',
+      languageEvidence: AsrLanguageEvidence.userSelected,
     ));
     await pumpEventQueue();
 
@@ -304,32 +321,3 @@ class _FrameAudioCapture implements AudioCapture {
     ));
   }
 }
-
-class _NoopAudioCapture implements AudioCapture {
-  @override
-  Stream<AudioFrame> get frames => const Stream<AudioFrame>.empty();
-
-  @override
-  Future<void> requestPermission() async {}
-
-  @override
-  Future<void> start(AudioCaptureConfig config) async {}
-
-  @override
-  Future<void> pause() async {}
-
-  @override
-  Future<void> resume() async {}
-
-  @override
-  Future<void> stop() async {}
-
-  @override
-  Future<void> dispose() async {}
-}
-
-class _NoopRealtimeApiClient extends RealtimeApiClient {
-  _NoopRealtimeApiClient() : super(baseUrl: Uri.parse('http://127.0.0.1:3100'));
-}
-
-class _NoopRealtimeGatewayClient extends RealtimeGatewayClient {}

@@ -10,6 +10,8 @@
     "test": "vitest run src"
   },
   "dependencies": {
+    "@google-cloud/speech": "8.1.0",
+    "@grpc/grpc-js": "1.14.4",
     "@translation/contracts": "file:../../packages/contracts",
     "@translation/llm": "file:../../packages/llm",
     "@translation/platform-security": "file:../../packages/platform-security",

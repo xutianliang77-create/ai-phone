@@ -5,7 +5,38 @@ import 'package:translation_mobile/src/features/realtime/presentation/controller
 import 'helpers/realtime_controller_test_helpers.dart';
 
 void main() {
-  test('replaces cumulative revised partials without duplicating text', () async {
+  test(
+      'public cumulative drafts at revision zero are replaced by final revision one',
+      () async {
+    final repository = FakeRealtimeRepository();
+    final controller =
+        realtimeControllerForTest(repository, FakeAudioCapture());
+    addTearDown(controller.dispose);
+    await controller.start();
+    for (final text in ['Bon', 'Bonjour']) {
+      repository.emit(GatewayRealtimeEvent(
+          type: 'transcript.partial',
+          sessionId: 'sess_1',
+          segmentId: 'public-turn',
+          revision: 0,
+          text: text,
+          language: 'fr'));
+    }
+    await pumpEventQueue();
+    expect(controller.segments.single.sourceText, 'Bonjour');
+    repository.emit(const GatewayRealtimeEvent(
+        type: 'transcript.final',
+        sessionId: 'sess_1',
+        segmentId: 'public-turn',
+        revision: 1,
+        text: 'Bonjour tout le monde',
+        language: 'fr'));
+    await pumpEventQueue();
+    expect(controller.segments.single.sourceText, 'Bonjour tout le monde');
+    expect(controller.segments.single.revision, 1);
+  });
+  test('replaces cumulative revised partials without duplicating text',
+      () async {
     final repository = FakeRealtimeRepository();
     final controller =
         realtimeControllerForTest(repository, FakeAudioCapture());

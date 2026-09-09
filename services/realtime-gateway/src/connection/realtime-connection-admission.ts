@@ -34,6 +34,18 @@ export function admitRealtimeConnection(
     return null;
   }
 
+  // Signature authenticity is not public model qualification. Until S4 wires
+  // admission grants, runtime leases and component providers, do not attach a
+  // public session to the legacy global provider/TTS/usage chain.
+  if (claims.processing !== undefined || env.publicDeploymentId) {
+    sendRealtimeEvent(ws, buildError("provider_unavailable",
+      "Public processing admission is not ready; legacy fallback is forbidden", {
+        sessionId: claims.sessionId, stage: "provider", retryable: false,
+      }));
+    ws.close(1008, "public_processing_not_ready");
+    return null;
+  }
+
   if (!getSession(claims.sessionId) && activeSessionCount() >= env.maxSessions) {
     sendRealtimeEvent(ws, buildError("provider_unavailable", "Realtime session capacity reached", {
       sessionId: claims.sessionId,

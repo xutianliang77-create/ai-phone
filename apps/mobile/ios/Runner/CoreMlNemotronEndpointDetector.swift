@@ -7,6 +7,8 @@ struct CoreMlNemotronEndpointState {
   let speechStarted: Bool
   let shouldFinalize: Bool
   let endpointReason: String?
+  let confirmedSpeechSamples: Int
+  let trailingSilenceSamples: Int
 }
 
 final class CoreMlNemotronEndpointDetector {
@@ -155,6 +157,8 @@ final class CoreMlNemotronEndpointDetector {
 
     let shouldFinalize =
       hasOpenSpeech && silenceSamples >= endpointSilenceSamples
+    let confirmedSpeechSamples = speechSamples
+    let trailingSilenceSamples = silenceSamples
     if shouldFinalize {
       finalizedSegments += 1
       lastEndpointReason = endpointReason
@@ -167,7 +171,9 @@ final class CoreMlNemotronEndpointDetector {
       hasSpeech: isSpeechOn || (hasOpenSpeech && !isSpeechOff),
       speechStarted: speechStarted,
       shouldFinalize: shouldFinalize,
-      endpointReason: shouldFinalize ? endpointReason : nil
+      endpointReason: shouldFinalize ? endpointReason : nil,
+      confirmedSpeechSamples: confirmedSpeechSamples,
+      trailingSilenceSamples: trailingSilenceSamples
     )
   }
 

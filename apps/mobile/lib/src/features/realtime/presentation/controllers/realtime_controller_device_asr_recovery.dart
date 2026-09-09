@@ -18,11 +18,15 @@ extension RealtimeControllerDeviceAsrRecovery on RealtimeController {
   }
 
   Future<void> _startMobileAsrProvider() async {
+    _deviceAsrRecovery.beginCapture(
+        _session?.sessionId ?? 'pending', _deviceLanguagePolicyKey);
     await _audioSessionCoordinator.beginCapture();
     try {
       await _mobileAsrProvider?.start(createDeviceAsrConfig(
         _config,
         diagnosticSessionId: _session?.sessionId,
+        captureId: _deviceAsrRecovery.captureId,
+        languagePolicyKey: _deviceLanguagePolicyKey,
       ));
       _deviceAsrRecovery.markStarted();
       await _recordDeviceAsrDiagnosticEvent(
@@ -49,9 +53,20 @@ extension RealtimeControllerDeviceAsrRecovery on RealtimeController {
         (_status != RealtimeStatus.active && !_stopInFlight)) {
       return;
     }
+    if (!_deviceAsrRecovery.accept(segment)) return;
+    if (segment.isRetraction) {
+      _localPartialFlush.clearIfSameId(segment.id);
+      _speechEchoSegmentIds.remove(segment.id);
+      if (_asrDraftIds.remove(segment.id)) {
+        _removeSegment(segment.id);
+      }
+      return;
+    }
     final isPlaybackEcho = _speechCaptureGate.shouldDropDeviceAsr(
       text: segment.text,
       language: segment.language,
+      languageIsHint:
+          segment.languageEvidence == AsrLanguageEvidence.userSelected,
     );
     if (isPlaybackEcho) _speechEchoSegmentIds.add(segment.id);
     final segmentWasMarkedAsEcho = _speechEchoSegmentIds.contains(segment.id);
@@ -66,20 +81,17 @@ extension RealtimeControllerDeviceAsrRecovery on RealtimeController {
       },
     ));
     if (segmentWasMarkedAsEcho) return;
+    if (segment.revision != null) _displayAsrSource(segment);
     if (_speechCaptureGate.playbackActive) {
       unawaited(_stopSpeaking());
     }
-    final sessionId = session.sessionId;
     final queued = _asrTextChain.then((_) async {
-      final currentSession = _session;
-      if (currentSession?.sessionId != sessionId ||
-          (_status != RealtimeStatus.active && !_stopInFlight)) {
-        return;
-      }
-      await _handleAsrTextSegment(sessionId, segment);
+      if (!_canCommitDeviceAsr(session, segment)) return;
+      await _handleAsrTextSegment(session, segment);
     });
     _asrTextChain = queued.catchError((Object error) async {
-      await _failWithRealtimeError(error);
+      final message = await _failureMessage(error);
+      if (_canCommitDeviceAsr(session, segment)) _fail(message);
     });
   }
 
@@ -168,6 +180,12 @@ extension RealtimeControllerDeviceAsrRecovery on RealtimeController {
       _notify();
     }
   }
+
+  String get _deviceLanguagePolicyKey =>
+      '${_config.sourceLanguage}|${_config.targetLanguage}|'
+      '${_config.autoReverseTargetLanguage}|${_config.realtimeMode}|'
+      '${_config.domainLexiconPack}|${_config.automaticLanguagePair?.source}|'
+      '${_config.automaticLanguagePair?.target}';
 }
 
 class _DeviceAsrRecovery {
@@ -175,6 +193,11 @@ class _DeviceAsrRecovery {
   bool _restartUsed = false;
   bool _restartInFlight = false;
   bool _startupRetryUsed = false;
+  int _captureSerial = 0;
+  String? captureId, languagePolicyKey;
+  final _latest = <String, AsrTextSegment>{};
+  final _revisions = <String, int>{};
+  final speechStartedSegments = <String>{};
 
   bool get canRestart => !_restartUsed && !_restartInFlight;
   bool get canRetryStartup => !_startupRetryUsed;
@@ -184,7 +207,63 @@ class _DeviceAsrRecovery {
     _restartUsed = false;
     _restartInFlight = false;
     _startupRetryUsed = false;
+    captureId = languagePolicyKey = null;
+    _latest.clear();
+    _revisions.clear();
+    speechStartedSegments.clear();
   }
+
+  void beginCapture(String sessionId, String policyKey) {
+    captureId = '$sessionId:${DateTime.now().microsecondsSinceEpoch}:'
+        '${++_captureSerial}';
+    languagePolicyKey = policyKey;
+    _latest.clear();
+    _revisions.clear();
+  }
+
+  bool accept(AsrTextSegment segment) {
+    if (segment.captureId != null &&
+        (segment.captureId != captureId ||
+            segment.languagePolicyKey != languagePolicyKey)) {
+      return false;
+    }
+    final previous = _latest[segment.id];
+    final revision = segment.revision;
+    if (revision != null) {
+      final highest = _revisions[segment.id];
+      if (revision < 0 || (highest != null && revision <= highest)) {
+        return false;
+      }
+      _revisions[segment.id] = revision;
+    }
+    if (previous != null) {
+      if (previous.isFinal && !segment.isFinal) return false;
+      if (_sameContent(previous, segment) &&
+          previous.isFinal == segment.isFinal) {
+        return false;
+      }
+    }
+    _latest[segment.id] = segment;
+    return true;
+  }
+
+  bool isCurrent(AsrTextSegment segment) {
+    if (segment.captureId != null &&
+        (segment.captureId != captureId ||
+            segment.languagePolicyKey != languagePolicyKey)) {
+      return false;
+    }
+    final latest = _latest[segment.id];
+    return latest != null &&
+        latest.revision == segment.revision &&
+        _sameContent(latest, segment);
+  }
+
+  bool _sameContent(AsrTextSegment a, AsrTextSegment b) =>
+      _cleanRealtimeText(a.text) == _cleanRealtimeText(b.text) &&
+      a.language == b.language &&
+      a.isRetraction == b.isRetraction &&
+      a.languageEvidence == b.languageEvidence;
 
   void markStarted() {
     _startedAt = DateTime.now();

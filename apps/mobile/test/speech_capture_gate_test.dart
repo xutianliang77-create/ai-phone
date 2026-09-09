@@ -86,4 +86,36 @@ void main() {
       isFalse,
     );
   });
+  test(
+      'matching echo is still echo when ASR reports a fixed source-locale hint',
+      () {
+    final gate = SpeechCaptureGate();
+    gate.beginPlayback(
+        text: 'Please turn off Wi-Fi and open the app.', language: 'en');
+    expect(
+        gate.shouldDropDeviceAsr(
+            text: 'Please turn off Wi-Fi and open the app',
+            language: 'zh',
+            languageIsHint: true),
+        true);
+    expect(gate.shouldDropDeviceAsr(text: '下一步开始测试', language: 'zh'), false);
+    gate.updateRoute(AudioOutputRoute.bluetooth);
+    expect(
+        gate.shouldDropDeviceAsr(
+            text: 'Please turn off Wi-Fi and open the app',
+            language: 'zh',
+            languageIsHint: true),
+        false);
+  });
+  test(
+      'a quoted word in opposite-language playback does not swallow user speech',
+      () {
+    final gate = SpeechCaptureGate();
+    gate.beginPlayback(text: '译文 first', language: 'zh');
+    gate.endPlayback();
+    expect(
+        gate.shouldDropDeviceAsr(
+            text: 'first', language: 'en', languageIsHint: true),
+        false);
+  });
 }

@@ -1,5 +1,7 @@
 # Wujie AI 1.1 development line
 
+Current development checkpoint (2026-09-09): see [S4 checkpoint and remaining gates](../release/public/1.1.0/S4_DEVELOPMENT_CHECKPOINT.md). The sections below describe the original V11-01 baseline; they are not a claim that subsequent S1–S4 work is absent. The user has now authorized pushing this development branch, not merging or deploying it.
+
 V11-01 establishes an isolated local development line and dual-version CI. It does not implement the public-cloud runtime, change the application identity, call a provider, import private 1.0 data, deploy a service, or publish a branch.
 
 ## Lineage

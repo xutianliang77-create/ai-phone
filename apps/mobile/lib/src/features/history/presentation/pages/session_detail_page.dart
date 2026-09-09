@@ -137,7 +137,7 @@ class _SessionDetailPageState extends State<SessionDetailPage> {
             children: <Widget>[
               SessionDetailOverview(
                 detail: detail,
-                onManageSpeakers: detail.speakerCount == 0
+                onManageSpeakers: detail.speakerCount == 0 || detail.status == 'checkpoint'
                     ? null
                     : () => _showSpeakers(detail),
               ),

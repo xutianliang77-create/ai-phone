@@ -23,7 +23,9 @@ extension RealtimeControllerLifecycle on RealtimeController {
     }
   }
 
-  Future<void> disposeAsync() async {
+  Future<void> disposeAsync() => _disposeFuture??=_disposeOnce();
+  Future<void> _disposeOnce() async {
+    await cancelLocalResourcePreparation();
     if (!isTerminalRealtimeStatus(_status)) await stop();
     await _failureCleanup?.catchError((Object _) {});
     await ignoreCleanupError(() async => _eventSubscription?.cancel());

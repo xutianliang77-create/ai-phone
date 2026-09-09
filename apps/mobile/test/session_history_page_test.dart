@@ -8,6 +8,14 @@ import 'package:translation_mobile/src/features/history/presentation/pages/sessi
 import 'package:translation_mobile/src/platform/sharing/file_share_service.dart';
 
 void main() {
+  testWidgets('saved unfinished snapshot is visible in default history filter', (tester) async {
+    await tester.pumpWidget(_TestApp(child: SessionHistoryPage(
+      repository: _CheckpointHistoryRepository())));
+    await tester.pumpAndSettle();
+    expect(find.text('保存的中断记录'), findsOneWidget);
+    expect(find.textContaining('未结束 · 已保存快照'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
   testWidgets('opens meeting notes from records list',
       (WidgetTester tester) async {
     final repository = _FakeSessionHistoryRepository();
@@ -181,6 +189,15 @@ class _TestApp extends StatelessWidget {
       home: child,
     );
   }
+}
+
+class _CheckpointHistoryRepository extends _FakeSessionHistoryRepository {
+  @override
+  Future<List<SessionListItem>> listSessions({String query = ''}) async => [
+    SessionListItem(sessionId: 'checkpoint-1', mode: 'meeting', status: 'checkpoint',
+      consumedSeconds: 12, createdAt: DateTime.utc(2026, 9, 8), segmentCount: 1,
+      title: '保存的中断记录', sourceLanguage: 'zh', targetLanguage: 'en'),
+  ];
 }
 
 class _FakeSessionHistoryRepository extends SessionHistoryRepository {

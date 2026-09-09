@@ -6,18 +6,18 @@ final class SpeechOutputBridge: NSObject, AVSpeechSynthesizerDelegate {
     private let audioSessionCoordinator: AudioSessionCoordinator
     private let audioSessionOwner = "system_tts"
     private let methodChannelName = "translation_mobile/speech_output"
-    private let synthesizer = AVSpeechSynthesizer()
+    private var synthesizer: AVSpeechSynthesizer?
     private var pendingResult: FlutterResult?
-    private var pendingResponse: [String: String]?
+    private var pendingResponse: [String: Any]?
     private var pendingUtteranceId: UUID?
     private var pendingUtterance: AVSpeechUtterance?
     private var watchdogTimer: Timer?
+    private var requestedAt: TimeInterval?
+    private var startedAt: TimeInterval?
 
     init(audioSessionCoordinator: AudioSessionCoordinator) {
         self.audioSessionCoordinator = audioSessionCoordinator
         super.init()
-        synthesizer.delegate = self
-        synthesizer.usesApplicationAudioSession = true
     }
 
     func register(messenger: FlutterBinaryMessenger) {
@@ -32,11 +32,15 @@ final class SpeechOutputBridge: NSObject, AVSpeechSynthesizerDelegate {
 
     private func handle(call: FlutterMethodCall, result: @escaping FlutterResult) {
         switch call.method {
+        case "isAvailable":
+            let language = stringArgument("language", from: call) ?? ""
+            result(SystemSpeechVoiceCatalog.payload(language: language,
+                voice: SystemSpeechVoiceCatalog.resolve(language: language)))
         case "speak":
             speak(call: call, result: result)
         case "stop":
             finishPendingSpeech(error: speechError("speech_cancelled", "Speech playback was cancelled."))
-            synthesizer.stopSpeaking(at: .immediate)
+            synthesizer?.stopSpeaking(at: .immediate)
             result(nil)
         default:
             result(FlutterMethodNotImplemented)
@@ -44,6 +48,7 @@ final class SpeechOutputBridge: NSObject, AVSpeechSynthesizerDelegate {
     }
 
     private func speak(call: FlutterMethodCall, result: @escaping FlutterResult) {
+        let requestTime = ProcessInfo.processInfo.systemUptime
         guard let text = stringArgument("text", from: call)?.trimmingCharacters(
             in: .whitespacesAndNewlines
         ), !text.isEmpty else {
@@ -56,11 +61,17 @@ final class SpeechOutputBridge: NSObject, AVSpeechSynthesizerDelegate {
         }
 
         finishPendingSpeech(error: speechError("speech_cancelled", "Speech playback was replaced."))
+        synthesizer?.stopSpeaking(at: .immediate)
         let language = (stringArgument("language", from: call) ?? "")
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .replacingOccurrences(of: "_", with: "-")
-        guard !language.isEmpty, let voice = AVSpeechSynthesisVoice(language: language) else {
-            result(speechError("speech_language_unavailable", "No system voice is available for \(language)."))
+        if let args = call.arguments as? [String: Any],
+           let identifier = args["voiceIdentifier"], !(identifier is String) {
+            result(speechError("speech_voice_unavailable", "Invalid voice identifier.")); return
+        }
+        guard let voice = SystemSpeechVoiceCatalog.resolve(language: language,
+            identifier: stringArgument("voiceIdentifier", from: call)) else {
+            result(speechError("speech_voice_unavailable", "No eligible on-device system voice matches \(language)."))
             return
         }
         do {
@@ -73,8 +84,13 @@ final class SpeechOutputBridge: NSObject, AVSpeechSynthesizerDelegate {
             ))
             return
         }
-        if synthesizer.isSpeaking || synthesizer.isPaused {
-            synthesizer.stopSpeaking(at: .immediate)
+        let synthesizer: AVSpeechSynthesizer
+        if let current = self.synthesizer { synthesizer = current }
+        else {
+            synthesizer = AVSpeechSynthesizer()
+            synthesizer.delegate = self
+            synthesizer.usesApplicationAudioSession = true
+            self.synthesizer = synthesizer
         }
         let utterance = AVSpeechUtterance(string: text)
         let utteranceId = UUID()
@@ -83,13 +99,17 @@ final class SpeechOutputBridge: NSObject, AVSpeechSynthesizerDelegate {
         pendingUtteranceId = utteranceId
         pendingUtterance = utterance
         pendingResult = result
-        pendingResponse = [
-            "provider": "ios_system_tts",
-            "language": language,
-            "voiceLanguage": voice.language,
-        ]
+        pendingResponse = SystemSpeechVoiceCatalog.payload(language: language, voice: voice)
+        pendingResponse?["completion"] = "finished"
+        requestedAt = requestTime
+        startedAt = nil
         scheduleWatchdog(for: utteranceId, text: text)
         synthesizer.speak(utterance)
+    }
+
+    func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didStart utterance: AVSpeechUtterance) {
+        guard pendingUtterance === utterance else { return }
+        startedAt = ProcessInfo.processInfo.systemUptime
     }
 
     func speechSynthesizer(
@@ -124,11 +144,21 @@ final class SpeechOutputBridge: NSObject, AVSpeechSynthesizerDelegate {
                 return
             }
             self.finishPendingSpeech(error: speechError("speech_timeout", "Speech playback timed out."))
-            self.synthesizer.stopSpeaking(at: .immediate)
+            self.synthesizer?.stopSpeaking(at: .immediate)
         }
     }
 
     private func finishPendingSpeech(error: FlutterError? = nil) {
+        if let requestedAt {
+            let now = ProcessInfo.processInfo.systemUptime
+            var timing = ["nativeTotalMs": (now - requestedAt) * 1000]
+            if let startedAt {
+                timing["nativeRequestToStartMs"] = (startedAt - requestedAt) * 1000
+                timing["nativeSpeakingMs"] = (now - startedAt) * 1000
+            }
+            pendingResponse?["timing"] = timing
+        }
+        requestedAt = nil; startedAt = nil
         watchdogTimer?.invalidate()
         watchdogTimer = nil
         pendingUtteranceId = nil
@@ -138,7 +168,8 @@ final class SpeechOutputBridge: NSObject, AVSpeechSynthesizerDelegate {
         let response = pendingResponse
         pendingResult = nil
         pendingResponse = nil
-        if let error { result(error) }
+        if let error { result(FlutterError(code: error.code, message: error.message,
+            details: ["timing": response?["timing"] ?? [:]])) }
         else { result(response) }
     }
 }

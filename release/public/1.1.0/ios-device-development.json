@@ -1,0 +1,9 @@
+{
+  "USE_DEVICE_ASR": "true",
+  "DEVICE_ASR_PROVIDER": "apple_speech_transcriber",
+  "USE_ON_DEVICE_TRANSLATION": "true",
+  "ON_DEVICE_TRANSLATION_PROVIDER": "ios_system",
+  "ON_DEVICE_TRANSLATION_REQUIRED": "true",
+  "USE_LOCAL_SESSIONS": "true",
+  "SERVER_OWNED_HISTORY": "false"
+}

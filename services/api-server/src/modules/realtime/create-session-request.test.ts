@@ -96,6 +96,43 @@ describe("create realtime session request", () => {
       domainLexiconPacks: ["cultivation"],
     }).ok).toBe(false);
   });
+
+  it("preserves legacy parsing without new processing fields", () => {
+    const result = validateCreateRealtimeSessionRequest(payload("conversation"));
+    if (!result.ok) throw Error("expected legacy request");
+    expect(result.value).not.toHaveProperty("processing");
+  });
+
+  it("validates additive processing metadata and binds original settings", () => {
+    const base = payload("meeting");
+    const processing = {
+      contractVersion: 1, processingMode: "online", modelPolicyRevision: "test-policy",
+      languagePolicy: { source: "auto", target: "en", autoReverse: false, pair: ["zh", "en"], revision: 1 },
+      executionPlan: { asr: { execution: "public", scopeKey: "asr/zh-en", reason: "online_selected" },
+        translation: { execution: "public", scopeKey: "mt/zh-en", reason: "online_selected" }, tts: { execution: "disabled" } },
+      syncRequested: true,
+    };
+    const result = validateCreateRealtimeSessionRequest({ ...base, processing });
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value.processing).toEqual(processing);
+    const { pair: _pair, ...withoutPair } = processing.languagePolicy;
+    expect(validateCreateRealtimeSessionRequest({ ...base,
+      processing: { ...processing, languagePolicy: withoutPair } }).ok).toBe(true);
+    for (const patch of [{ targetLanguage: "ja" }, { sourceLanguage: "fr" },
+      { voiceOutput: true }, { autoReverseTargetLanguage: true }]) {
+      expect(validateCreateRealtimeSessionRequest({ ...base, ...patch, processing }).ok).toBe(false);
+    }
+    expect(validateCreateRealtimeSessionRequest({ ...base, processing: { ...processing, publicGrantRef: "client-forged" } }).ok).toBe(false);
+  });
+
+  it("does not silently discard incomplete or misplaced 1.1 intent", () => {
+    for (const processing of [null, {}, { contractVersion: 2 }]) {
+      expect(validateCreateRealtimeSessionRequest({ ...payload("conversation"), processing }).ok).toBe(false);
+    }
+    for (const key of ["processingMode", "executionPlan", "modelPolicyRevision", "publicAccess"]) {
+      expect(validateCreateRealtimeSessionRequest({ ...payload("conversation"), [key]: "online" }).ok).toBe(false);
+    }
+  });
 });
 
 function payload(mode: string) {

@@ -13,6 +13,7 @@ import '../../../../platform/speech/pcm_audio_output_player.dart';
 import '../../../../platform/speech/speech_output_provider.dart';
 import '../../../../platform/speech/speech_text_normalizer.dart';
 import '../../../../platform/translation/mobile_translation_provider.dart';
+import '../../../../platform/translation/translation_language_pair.dart';
 import '../../../../platform/translation/supported_translation_language.dart';
 import '../../../../shared/domain/speaker_attribution.dart';
 import '../../../../shared/domain/segment_timeline_order.dart';
@@ -26,26 +27,38 @@ import 'device_asr_failure_message.dart';
 import 'error_display_message.dart';
 import 'realtime_active_time_clock.dart';
 import 'realtime_gateway_diagnostic.dart';
+import 'realtime_local_resource.dart';
 import 'realtime_runtime_factories.dart';
 import 'realtime_session_state.dart';
 import 'segment_draft.dart';
 import 'speech_capture_gate.dart';
 import 'translation_text_protection.dart';
+import 'asr_local_rules.dart';
 
 export 'realtime_session_state.dart';
 
+part 'realtime_controller_audio_input.dart';
 part 'realtime_controller_gateway_events.dart';
 part 'realtime_controller_audio_session.dart';
 part 'realtime_controller_device_asr_recovery.dart';
 part 'realtime_controller_local_translation.dart';
 part 'realtime_controller_translation_preflight.dart';
+part 'realtime_controller_resources.dart';
+part 'realtime_controller_voice_resources.dart';
 part 'realtime_controller_lifecycle.dart';
 part 'realtime_controller_segments.dart';
 part 'realtime_controller_speech.dart';
 part 'realtime_controller_start.dart';
 part 'realtime_controller_stop.dart';
+part 'realtime_controller_checkpoints.dart';
+part 'realtime_controller_result_sync.dart';
+part 'realtime_controller_public_lifecycle.dart';
 
 class RealtimeController extends ChangeNotifier {
+  bool _drainingPublicAudio = false;
+  int _endpointEpoch = 0, _pendingEndpoints = 0;
+  int _endpointStartGeneration = -1, _publicTurnSamples = 0;
+  bool _publicEndpointRequested = false;
   static const Duration _deviceAsrStopDrain = Duration(milliseconds: 120);
   RealtimeController({
     RealtimeRepository? repository,
@@ -101,6 +114,10 @@ class RealtimeController extends ChangeNotifier {
   final Set<String> _speechEchoSegmentIds = <String>{};
   RealtimeStatus _status = RealtimeStatus.idle;
   final List<SubtitleSegment> _segments = <SubtitleSegment>[];
+  final _asrDraftIds = <String>{};
+  List<SubtitleSegment> get _finalizationSegments => _config.useLocalSessions
+      ? _segments.where((s) => !_asrDraftIds.contains(s.id)).toList()
+      : _segments;
   final Map<String, SegmentDraft> _drafts = <String, SegmentDraft>{};
   StreamSubscription<GatewayRealtimeEvent>? _eventSubscription;
   StreamSubscription<dynamic>? _audioSubscription;
@@ -109,6 +126,10 @@ class RealtimeController extends ChangeNotifier {
   RealtimeSession? _session;
   Timer? _sessionTimeoutTimer;
   String? _message;
+  String? _checkpointWarning;
+  Future<void>? _checkpointFuture;
+  bool _localTailClosed = false;
+  final _resultSyncView = _ResultSyncView();
   int? _remainingSeconds;
   bool _lowBalance = false;
   RealtimeGatewayDiagnostic? _gatewayDiagnostic;
@@ -119,13 +140,15 @@ class RealtimeController extends ChangeNotifier {
   bool _captureInvalidated = false;
   int _startGeneration = 0;
   Future<void>? _failureCleanup;
+  Future<void>? _stopFuture, _disposeFuture;
   final _localPartialFlush = _LocalPartialTranslationFlush();
   final _deviceAsrRecovery = _DeviceAsrRecovery();
   final _activeTimeClock = RealtimeActiveTimeClock();
+  final _localResources = _LocalResourceState();
 
   RealtimeStatus get status => _status;
   List<SubtitleSegment> get segments => List.unmodifiable(_segments);
-  String? get message => _message;
+  String? get message => _message ?? _checkpointWarning;
   int? get remainingSeconds => _remainingSeconds;
   bool get lowBalance => _lowBalance;
   RealtimeGatewayDiagnostic? get gatewayDiagnostic => _gatewayDiagnostic;
@@ -149,7 +172,9 @@ class RealtimeController extends ChangeNotifier {
       if (!await _repository.pauseAndWait(session.sessionId)) {
         throw StateError('Realtime connection lost');
       }
+      if (session.syncBinding != null) _resetPublicEndpoints();
       _setStatus(RealtimeStatus.paused);
+      await _awaitLocalCheckpoint();
     } catch (error) {
       _fail(await _failureMessage(error));
     }
@@ -206,75 +231,13 @@ class RealtimeController extends ChangeNotifier {
     return deviceAsrFailureMessage(_mobileAsrProvider, error);
   }
 
-  Future<void> _startAudioCapture() async {
-    await _audioCapture.requestPermission();
-    await _audioSubscription?.cancel();
-    final voiceProcessing = _config.realtimeMode == 'conversation';
-    await _audioSessionCoordinator.beginCapture(
-      voiceProcessing: voiceProcessing,
-    );
-    try {
-      _audioSubscription = _audioCapture.frames.listen(_sendAudioFrame);
-      await _audioCapture.start(AudioCaptureConfig(
-        echoCancel: voiceProcessing,
-        noiseSuppress: voiceProcessing,
-        managePlatformAudioSession:
-            !_audioSessionCoordinator.managesPlatformAudioSession,
-      ));
-    } catch (_) {
-      await _audioSubscription?.cancel();
-      _audioSubscription = null;
-      await ignoreCleanupError(_audioSessionCoordinator.endCapture);
-      rethrow;
-    }
-  }
-
-  Future<void> _prepareDeviceAsr() async {
-    final provider = _mobileAsrProvider;
-    if (provider == null) {
-      throw UnsupportedError('Device ASR provider is not configured');
-    }
-    final diagnostics = provider is MobileAsrDiagnostics
-        ? provider as MobileAsrDiagnostics
-        : null;
-    if (diagnostics == null) return;
-    final availability = await diagnostics.availability(
-      createDeviceAsrConfig(_config),
-    );
-    if (!availability.canStart) {
-      throw UnsupportedError(availability.message);
-    }
-    final preparation = provider is MobileAsrPreparation
-        ? provider as MobileAsrPreparation
-        : null;
-    if (preparation == null) return;
-    _message = availability.reason == 'ready'
-        ? 'Preparing device ASR model'
-        : availability.message;
-    _notify();
-    await preparation.prepare(createDeviceAsrConfig(_config));
-    _message = _config.useLocalSessions
-        ? 'Device ASR model ready. Starting local session'
-        : 'Device ASR model ready. Connecting realtime session';
-    _notify();
-  }
-
-  void _sendAudioFrame(AudioFrame frame) {
-    final session = _session;
-    final active = _status == RealtimeStatus.active;
-    final reconnecting = _status == RealtimeStatus.connecting &&
-        _statusBeforeReconnect == RealtimeStatus.active;
-    if (session == null || (!active && !reconnecting)) return;
-    if (_speechCaptureGate.blocksCapture) return;
-    _repository.sendAudio(session.sessionId, frame);
-  }
-
   bool _setStatus(RealtimeStatus status) {
     final transition = transitionRealtimeStatus(_status, status);
     if (!transition.accepted) return false;
     if (!transition.changed) return true;
     _activeTimeClock.transition(_status, status);
     _status = transition.current;
+    _scheduleLocalCheckpoint();
     if (status == RealtimeStatus.active && _captureInvalidated) {
       unawaited(_recoverCaptureAfterAudioChange(rebuildOnly: true));
     }
@@ -292,6 +255,7 @@ class RealtimeController extends ChangeNotifier {
   }
 
   void _fail(String message) {
+    _repository.invalidateResultSync();
     final failedSession = _session;
     _message = message;
     _setStatus(RealtimeStatus.failed);
@@ -316,16 +280,20 @@ class RealtimeController extends ChangeNotifier {
     await ignoreCleanupError(() async => _asrSubscription?.cancel());
     _audioSubscription = null;
     _asrSubscription = null;
+    if (failedSession != null && _usesLocalCheckpoints) {
+      await _saveFailedLocalCheckpoint(failedSession);
+      return;
+    }
     if (failedSession != null) {
       await ignoreCleanupError(() {
         return _repository.prepareFinalization(
           failedSession.sessionId,
-          _segments,
+          _finalizationSegments,
           billableSeconds: _activeTimeClock.billableSeconds,
         );
       });
       await ignoreCleanupError(() {
-        return _repository.end(failedSession.sessionId, _segments);
+        return _repository.end(failedSession.sessionId, _finalizationSegments);
       });
     }
     await ignoreCleanupError(_repository.closeRealtime);

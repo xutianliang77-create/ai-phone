@@ -26,7 +26,7 @@ class AccountConsentAuditUploader implements ConsentAuditUploader {
       accountApiClient: AccountApiClient(
         baseUrl: AppConfig.fromEnvironment().apiBaseUrl,
       ),
-      accountSessionStore: const FileAccountSessionStore(),
+      accountSessionStore: accountStoreForDeployment(AppConfig.fromEnvironment().apiBaseUrl),
     );
   }
 
@@ -44,6 +44,7 @@ class AccountConsentAuditUploader implements ConsentAuditUploader {
     try {
       final session = await _accountSessionStore.load();
       if (session == null) return;
+      if(!_accountApiClient.sessionMatches(session)) return;
       await _accountApiClient.recordConsent(
         token: session.token,
         consentType: consentType,

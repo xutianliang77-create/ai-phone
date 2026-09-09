@@ -1,6 +1,7 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { RealtimeEnv } from "../config/env.js";
 import type { GatewayDependencyReadiness } from "./gateway-dependency-readiness.js";
+import { publicProcessingReadiness } from "./public-processing-readiness.js";
 import {
   gatewayRuntimeIdentity,
   gatewayRuntimeIdentityIssues,
@@ -8,6 +9,8 @@ import {
 } from "./gateway-runtime-identity.js";
 
 export interface GatewayHealthPayload {
+  processingProfile?: "public_unqualified";
+  legacyProviderIgnored?: boolean;
   status: "ok" | "degraded" | "unavailable";
   service: "realtime-gateway";
   version: "0.1.0";
@@ -52,7 +55,10 @@ export function gatewayHealthPayload(
   dependencies?: GatewayDependencyReadiness,
 ): GatewayHealthPayload {
   const runtimeIdentity = gatewayRuntimeIdentity(env);
+  if (env.publicDeploymentId) dependencies = publicProcessingReadiness();
   return {
+    ...(env.publicDeploymentId ? { processingProfile: "public_unqualified" as const,
+      legacyProviderIgnored: true } : {}),
     status: dependencies?.status === "not_ready"
       ? "unavailable"
       : dependencies?.status === "degraded" ? "degraded" : "ok",
@@ -66,12 +72,12 @@ export function gatewayHealthPayload(
     complianceProfile: env.complianceProfile,
     asrProvider: env.asrProvider,
     speakerProvider: env.speakerProvider,
-    speakerEndpoint: env.speakerHttpBaseUrl,
+    speakerEndpoint: env.publicDeploymentId ? undefined : env.speakerHttpBaseUrl,
     speakerTimeoutMs: env.speakerHttpTimeoutMs,
-    asrEndpoint: env.asrHttpEndpoint,
-    asrHealthUrl: env.asrHttpHealthUrl,
-    translationEndpoint: translationEndpoint(env),
-    translationModel: translationModel(env),
+    asrEndpoint: env.publicDeploymentId ? undefined : env.asrHttpEndpoint,
+    asrHealthUrl: env.publicDeploymentId ? undefined : env.asrHttpHealthUrl,
+    translationEndpoint: env.publicDeploymentId ? undefined : translationEndpoint(env),
+    translationModel: env.publicDeploymentId ? undefined : translationModel(env),
     sessionEventSink: env.sessionEventSink,
     tokenTransport: env.allowQueryToken
       ? "subprotocol_with_legacy_query"
@@ -116,11 +122,15 @@ function gatewayReleaseReadinessIssues(
   dependencies?: GatewayDependencyReadiness,
 ) {
   const issues: string[] = [];
-  if (env.regionEdition === "domestic") appendDomesticProviderIssues(env, issues);
-  if (env.provider === "tencent_trtc" || env.resolvedProvider === "unsupported") {
-    issues.push("REALTIME_PROVIDER=tencent_trtc is not implemented for release");
+  if (env.publicDeploymentId) {
+    dependencies = publicProcessingReadiness();
+  } else {
+    if (env.regionEdition === "domestic") appendDomesticProviderIssues(env, issues);
+    if (env.provider === "tencent_trtc" || env.resolvedProvider === "unsupported") {
+      issues.push("REALTIME_PROVIDER=tencent_trtc is not implemented for release");
+    }
+    appendAsrIssues(env, issues);
   }
-  appendAsrIssues(env, issues);
   appendSessionSinkIssues(env, issues);
   if (env.allowQueryToken) {
     issues.push("Release requires REALTIME_ALLOW_QUERY_TOKEN=false");

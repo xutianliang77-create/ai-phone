@@ -10,6 +10,13 @@ extension RealtimeControllerSpeech on RealtimeController {
                 ? 'natural'
                 : _config.realtimeVoiceOutputMode))
         : 'off';
+    if (enabled && _config.useLocalSessions && mode == 'my_voice') {
+      _reportSpeechFailure(
+        StateError('本地模式暂不支持所选个人声音，请选择自然声音或切换在线'),
+        '所选声音暂不可用',
+      );
+      return false;
+    }
     if (_autoSpeakTranslation == enabled &&
         _config.realtimeVoiceOutputMode == mode) {
       return true;
@@ -25,7 +32,7 @@ extension RealtimeControllerSpeech on RealtimeController {
         await _stopSpeaking();
         _notify();
       }
-      if (session != null && !_usesDeviceAsr) {
+      if (session != null && !_config.useLocalSessions) {
         if (mode == 'my_voice' && _config.realtimeVoiceOutputMode != mode) {
           throw StateError('请结束当前会话后切换我的声音');
         }
@@ -66,29 +73,47 @@ extension RealtimeControllerSpeech on RealtimeController {
     _notify();
   }
 
-  void _speakTranslationIfNeeded(String text, String targetLanguage) {
+  void _speakTranslationIfNeeded(String text, String targetLanguage,
+      {String? segmentId, bool Function()? isCurrent}) {
     final speaker = _speechOutputProvider;
     final speechText = text.trim();
-    if (_status != RealtimeStatus.active ||
+    if (!_config.useLocalSessions ||
+        _status != RealtimeStatus.active ||
         !_autoSpeakTranslation ||
         speaker == null ||
         speechText.isEmpty) {
       return;
     }
+    if (_config.realtimeVoiceOutputMode == 'my_voice') {
+      _reportSpeechFailure(
+        StateError('个人声音需要对应在线语音能力，不能使用系统声音替代'),
+        '所选声音暂不可用',
+      );
+      return;
+    }
     final normalizedText =
         normalizeSpeechOutputText(speechText, targetLanguage);
     final generation = _speechGeneration;
+    final queued = Stopwatch()..start();
     _speechChain = _speechChain.catchError((Object _) {}).then((_) {
-      if (generation != _speechGeneration) return null;
-      return _speakWithTimeout(speaker, normalizedText, targetLanguage);
+      if (generation != _speechGeneration || isCurrent?.call() == false) {
+        return null;
+      }
+      return _speakWithTimeout(speaker, normalizedText, targetLanguage,
+          segmentId: segmentId,
+          isCurrent: isCurrent,
+          queueWaitMs: queued.elapsedMicroseconds / 1000);
     }).then<void>((_) {});
   }
 
   Future<void> _speakWithTimeout(
     SpeechOutputProvider speaker,
     String text,
-    String language,
-  ) async {
+    String language, {
+    String? segmentId,
+    bool Function()? isCurrent,
+    double queueWaitMs = 0,
+  }) async {
     final generation = _speechGeneration;
     await _recordDeviceAsrDiagnosticEvent(
       'tts.begin',
@@ -100,16 +125,57 @@ extension RealtimeControllerSpeech on RealtimeController {
             _speechCaptureGate.requiresAcousticEchoSuppression,
       },
     );
+    if (generation != _speechGeneration ||
+        _status != RealtimeStatus.active ||
+        isCurrent?.call() == false) {
+      return;
+    }
+    if (segmentId != null &&
+        !_deviceAsrRecovery.speechStartedSegments.add(segmentId)) {
+      return;
+    }
     _speechCaptureGate.beginPlayback(text: text, language: language);
     _setSpeechOutputActive(true);
     try {
-      await speaker.speak(text: text, language: language).timeout(
-            _speechTimeoutFor(text),
-          );
+      final result =
+          await speaker.speak(text: text, language: language).timeout(
+                _speechTimeoutFor(text),
+              );
+      if (generation == _speechGeneration &&
+          isCurrent?.call() != false &&
+          segmentId != null) {
+        final current = _drafts[segmentId];
+        if (current != null) {
+          _upsertSegment(segmentId, refinement: {
+            ...?current.refinement,
+            'speechTiming': {
+              'status': 'finished',
+              'queueWaitMs': queueWaitMs,
+              ...result.timings,
+              if (result.voice != null)
+                'voiceIdentifier': result.voice!.identifier,
+              if (result.voice != null) 'voiceLanguage': result.voice!.language,
+              if (result.voice != null) 'voiceQuality': result.voice!.quality,
+            },
+          });
+        }
+      }
+      if (generation == _speechGeneration &&
+          isCurrent?.call() != false &&
+          result.voice != null) {
+        await _recordDeviceAsrDiagnosticEvent('tts.completed', payload: {
+          'language': language,
+          'voiceIdentifier': result.voice!.identifier,
+          'voiceLanguage': result.voice!.language,
+          'voiceQuality': result.voice!.quality,
+        });
+      }
     } on TimeoutException catch (error) {
-      await ignoreCleanupError(speaker.stop);
       if (generation == _speechGeneration) {
-        _reportSpeechFailure(error, '语音播放超时');
+        await ignoreCleanupError(speaker.stop);
+        if (generation == _speechGeneration) {
+          _reportSpeechFailure(error, '语音播放超时');
+        }
       }
     } on Object catch (error) {
       if (generation == _speechGeneration) {
@@ -142,24 +208,29 @@ extension RealtimeControllerSpeech on RealtimeController {
 
   Future<void> _stopSpeaking() async {
     _speechGeneration += 1;
-    await _recordDeviceAsrDiagnosticEvent(
+    unawaited(_recordDeviceAsrDiagnosticEvent(
       'tts.stop_requested',
       payload: <String, Object?>{
         'requiresAcousticEchoSuppression':
             _speechCaptureGate.requiresAcousticEchoSuppression,
       },
-    );
+    ));
     _speechCaptureGate.reset();
     _setSpeechOutputActive(false);
-    await Future.wait<void>([
+    final stopping = Future.wait<void>([
       if (_speechOutputProvider != null) _speechOutputProvider.stop(),
       if (_pcmAudioOutputPlayer != null) _pcmAudioOutputPlayer.stop(),
-    ]);
+    ]).then<void>((_) {});
+    // New speech waits for stop acknowledgement, never for a cancelled speak
+    // future that a platform may leave unresolved until its old timeout.
+    _speechChain = stopping.catchError((Object _) {});
+    await stopping;
   }
 
   void _playAudioOutputIfNeeded(GatewayRealtimeEvent event) {
     final player = _pcmAudioOutputPlayer;
-    if (!_autoSpeakTranslation ||
+    if (_config.useLocalSessions ||
+        !_autoSpeakTranslation ||
         player == null ||
         event.format != 'pcm16' ||
         event.data == null ||
@@ -192,6 +263,9 @@ extension RealtimeControllerSpeech on RealtimeController {
             _speechCaptureGate.requiresAcousticEchoSuppression,
       },
     );
+    if (generation != _speechGeneration || _status != RealtimeStatus.active) {
+      return;
+    }
     _speechCaptureGate.beginPlayback();
     _setSpeechOutputActive(true);
     try {
@@ -202,9 +276,11 @@ extension RealtimeControllerSpeech on RealtimeController {
           )
           .timeout(const Duration(seconds: 30));
     } on TimeoutException catch (error) {
-      await ignoreCleanupError(player.stop);
       if (generation == _speechGeneration) {
-        _reportSpeechFailure(error, '语音播放超时');
+        await ignoreCleanupError(player.stop);
+        if (generation == _speechGeneration) {
+          _reportSpeechFailure(error, '语音播放超时');
+        }
       }
     } on Object catch (error) {
       if (generation == _speechGeneration) {

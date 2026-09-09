@@ -4,6 +4,7 @@ import UIKit
 @main
 @objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate {
   private let audioSessionCoordinator = AudioSessionCoordinator()
+  private lazy var appleSpeechAsrBridge = AppleSpeechAsrBridge(coordinator: audioSessionCoordinator)
   private lazy var coreMlNemotronAsrBridge = CoreMlNemotronAsrBridge(
     audioSessionCoordinator: audioSessionCoordinator
   )
@@ -26,6 +27,9 @@ import UIKit
 
   func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
     GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
+    if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "AppleSpeechAsrBridge") {
+      appleSpeechAsrBridge.register(messenger: registrar.messenger())
+    }
     if let registrar = engineBridge.pluginRegistry.registrar(
       forPlugin: "AudioSessionCoordinator"
     ) {
@@ -39,7 +43,8 @@ import UIKit
     if let registrar = engineBridge.pluginRegistry.registrar(
       forPlugin: "OnDeviceTranslationBridge"
     ) {
-      onDeviceTranslationBridge.register(messenger: registrar.messenger())
+      onDeviceTranslationBridge.register(messenger: registrar.messenger(),
+          presenter: { registrar.viewController })
     }
     if let registrar = engineBridge.pluginRegistry.registrar(
       forPlugin: "SpeechOutputBridge"

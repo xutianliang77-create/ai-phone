@@ -120,7 +120,8 @@ class _SessionHistoryPageState extends State<SessionHistoryPage> {
                 final sessions = snapshot.data!
                     .where((session) => session.kind == _kind.name)
                     .where(
-                        (session) => !_endedOnly || session.status == 'ended')
+                        (session) => !_endedOnly || session.status == 'ended' ||
+                          session.status == 'checkpoint')
                     .toList(growable: false);
                 if (sessions.isEmpty) {
                   return SessionHistoryEmptyState(kind: _kind);

@@ -2,6 +2,7 @@ part of 'realtime_controller.dart';
 
 extension RealtimeControllerStart on RealtimeController {
   Future<void> start() async {
+    if (_disposed || resourceOperationRunning || _resultSyncView.busy) return;
     _listenForAudioSessionEvents();
     if (_stopInFlight) return;
     if (_status == RealtimeStatus.paused) {
@@ -33,11 +34,16 @@ extension RealtimeControllerStart on RealtimeController {
     _captureInvalidated = false;
     _activeTimeClock.reset();
     _session = null;
+    _resultSyncView.epoch++;_resultSyncView.busy=false;
+    _checkpointWarning = null;
+    _checkpointFuture = null;
+    _localTailClosed = false;
     _remainingSeconds = null;
     _lowBalance = false;
     _gatewayDiagnostic = null;
     _statusBeforeReconnect = null;
     _segments.clear();
+    _asrDraftIds.clear();
     _drafts.clear();
     _speechEchoSegmentIds.clear();
     _asrTextChain = Future<void>.value();

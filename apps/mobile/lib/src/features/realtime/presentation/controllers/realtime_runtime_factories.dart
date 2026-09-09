@@ -3,6 +3,7 @@ import '../../../../platform/audio/audio_capture.dart';
 import '../../../../platform/audio/mock_audio_capture.dart';
 import '../../../../platform/audio/record_audio_capture.dart';
 import '../../../../platform/asr/android_system_asr_provider.dart';
+import '../../../../platform/asr/apple_speech_asr_provider.dart';
 import '../../../../platform/asr/core_ml_nemotron_asr_provider.dart';
 import '../../../../platform/asr/mobile_asr_provider.dart';
 import '../../../../platform/asr/unavailable_system_asr_provider.dart';
@@ -10,6 +11,7 @@ import '../../../../platform/translation/ios_system_translation_provider.dart';
 import '../../../../platform/translation/mobile_translation_provider.dart';
 import '../../../../platform/translation/phrasebook_translation_provider.dart';
 import '../../../../platform/translation/supported_translation_language.dart';
+import '../../../../platform/translation/translation_language_pair.dart';
 import '../../../../platform/translation/unavailable_translation_provider.dart';
 import '../../../history/data/local_session_store.dart';
 import '../../data/local_realtime_repository.dart';
@@ -29,6 +31,9 @@ RealtimeRepository createDefaultRealtimeRepository(AppConfig config) {
 
 MobileAsrProvider? createDefaultMobileAsrProvider(AppConfig config) {
   if (!config.useDeviceAsr) return null;
+  if (config.deviceAsrProvider == 'apple_speech_transcriber') {
+    return AppleSpeechAsrProvider();
+  }
   if (config.deviceAsrProvider == 'coreml_nemotron') {
     return CoreMlNemotronAsrProvider();
   }
@@ -66,6 +71,37 @@ MobileTranslationConfig createMobileTranslationConfig(AppConfig config) {
 List<MobileTranslationConfig> createOnDeviceTranslationPreflightConfigs(
   AppConfig config,
 ) {
+  if (config.deviceAsrProvider == 'apple_speech_transcriber') {
+    if (config.autoReverseTargetLanguage) {
+      final pair = explicitRealtimeLanguagePair(config);
+      return pair == null
+          ? const []
+          : [
+              MobileTranslationConfig(
+                  sourceLanguage: pair.source, targetLanguage: pair.target),
+              MobileTranslationConfig(
+                  sourceLanguage: pair.target, targetLanguage: pair.source),
+            ];
+    }
+    final source = canonicalTranslationLanguageCode(config.sourceLanguage);
+    final target = canonicalTranslationLanguageCode(config.targetLanguage);
+    // Automatic source with a fixed target is checked per actual final segment.
+    return source == null || target == null || source == target
+        ? const []
+        : [
+            MobileTranslationConfig(
+                sourceLanguage: source, targetLanguage: target)
+          ];
+  }
+  final pair = config.automaticLanguagePair;
+  if (config.autoReverseTargetLanguage && pair != null) {
+    return [
+      MobileTranslationConfig(
+          sourceLanguage: pair.source, targetLanguage: pair.target),
+      MobileTranslationConfig(
+          sourceLanguage: pair.target, targetLanguage: pair.source),
+    ];
+  }
   if (config.autoReverseTargetLanguage &&
       config.sourceLanguage == autoSourceLanguageCode) {
     return const <MobileTranslationConfig>[
@@ -86,15 +122,37 @@ List<MobileTranslationConfig> createOnDeviceTranslationPreflightConfigs(
   return <MobileTranslationConfig>[createMobileTranslationConfig(config)];
 }
 
+/// Reuse the user's stored pair or two explicit fields, never an implicit zh/en pair.
+TranslationLanguagePair? explicitRealtimeLanguagePair(AppConfig config) {
+  final saved = config.automaticLanguagePair;
+  if (saved != null) {
+    final valid =
+        TranslationLanguagePair.fromLanguages(saved.source, saved.target);
+    if (valid == null ||
+        valid.opposite(config.targetLanguage) == null ||
+        (config.sourceLanguage != autoSourceLanguageCode &&
+            valid.opposite(config.sourceLanguage) == null)) {
+      return null;
+    }
+    return valid;
+  }
+  return TranslationLanguagePair.fromLanguages(
+      config.sourceLanguage, config.targetLanguage);
+}
+
 MobileAsrConfig createDeviceAsrConfig(
   AppConfig config, {
+  bool? autoDownloadModel,
   String? diagnosticSessionId,
+  String? captureId,
+  String? languagePolicyKey,
 }) {
+  final appleSpeech = config.deviceAsrProvider == 'apple_speech_transcriber';
   return MobileAsrConfig(
-    language: config.deviceAsrLanguage,
+    language: appleSpeech ? config.sourceLanguage : config.deviceAsrLanguage,
     chunkDurationMs: config.deviceAsrChunkDurationMs,
     modelChunkMs: config.deviceAsrModelChunkMs,
-    autoDownloadModel: config.deviceAsrAutoDownloadModel,
+    autoDownloadModel: autoDownloadModel ?? config.deviceAsrAutoDownloadModel,
     endpointMinSpeechMs: config.deviceAsrEndpointMinSpeechMs,
     endpointSilenceMs: config.deviceAsrEndpointSilenceMs,
     endpointSpeechThresholdRms: config.deviceAsrEndpointSpeechThresholdRms,
@@ -106,5 +164,7 @@ MobileAsrConfig createDeviceAsrConfig(
         config.realtimeMode == 'conversation' ? 'alternate' : 'sticky',
     diagnosticCaptureEnabled: config.deviceAsrDiagnosticCaptureEnabled,
     diagnosticSessionId: diagnosticSessionId,
+    captureId: captureId,
+    languagePolicyKey: languagePolicyKey,
   );
 }

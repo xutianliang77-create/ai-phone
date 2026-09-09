@@ -3,6 +3,7 @@ import type {
   FinalizeRealtimeSessionRequest,
   SessionSegmentDto,
 } from "@translation/contracts";
+import { matchesRealtimeResultOperation } from "@translation/contracts";
 import { sendError } from "../../infrastructure/http/errors.js";
 import { requireAccount } from "../account/account-auth.js";
 import { completeSessionWithUsage } from "../sessions/session-completion.js";
@@ -12,13 +13,23 @@ import {
   saveSegments,
 } from "../sessions/sessions-runtime.repository.js";
 import { withSessionWriteLock } from "../sessions/session-write-coordinator.js";
+import {handlePublicFinalization,registerPublicLifecycleRoutes} from "./public-session-lifecycle.routes.js";
 
 export function registerRealtimeFinalizationRoute(app: FastifyInstance) {
+  registerPublicLifecycleRoutes(app);
   app.post("/realtime/sessions/:sessionId/finalize", async (request, reply) => {
     const account = await requireAccount(request, reply);
     if (!account) return;
     const params = request.params as { sessionId: string };
     const body = request.body as Partial<FinalizeRealtimeSessionRequest>;
+    if (!matchesRealtimeResultOperation(body, "finalize")) {
+      return sendError(reply, 409, "realtime_operation_mismatch",
+        "Result synchronization cannot finalize a session");
+    }
+    if (body.stopWatermark !== undefined || (body as Record<string,unknown>).contractVersion!==undefined ||
+        (body as Record<string,unknown>).deploymentId!==undefined) {
+      return handlePublicFinalization(reply,params.sessionId,account.id,body);
+    }
     const idempotencyKey = `finalize:${params.sessionId}`;
     if (body.sessionId !== params.sessionId ||
         body.idempotencyKey !== idempotencyKey) {
@@ -46,6 +57,10 @@ export function registerRealtimeFinalizationRoute(app: FastifyInstance) {
       }
       if (existing.finalizationIdempotencyKey === idempotencyKey) {
         return response(existing, idempotencyKey);
+      }
+      if (existing.processingAuthorization) {
+        return sendError(reply, 503, "versioned_finalization_not_ready",
+          "Public session metering and stop-watermark finalization are not available yet");
       }
       if (existing.finalizationIdempotencyKey) {
         return sendError(reply, 409, "session_already_finalized",

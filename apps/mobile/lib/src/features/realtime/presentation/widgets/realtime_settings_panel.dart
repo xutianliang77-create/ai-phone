@@ -75,17 +75,18 @@ class RealtimeSettingsPanel extends StatelessWidget {
               ),
               _LanguageButton(
                 label: l10n.targetLanguageLabel,
-                value: l10n.languageDisplayName(settings.targetLanguage),
+                value: l10n.targetLanguageSettingLabel(settings.targetLanguage,
+                    pairSource: settings.selectedLanguagePair?.source,
+                    pairTarget: settings.selectedLanguagePair?.target),
                 enabled: enabled,
                 onPressed: () =>
                     _pickLanguage(context, LanguagePickerKind.target),
               ),
-              if (settings.processingMode == RealtimeProcessingMode.online)
-                DomainLexiconButton(
-                  settings: settings,
-                  enabled: enabled,
-                  onChanged: onChanged,
-                ),
+              DomainLexiconButton(
+                settings: settings,
+                enabled: enabled,
+                onChanged: onChanged,
+              ),
             ],
           ),
           if (settings.processingMode == RealtimeProcessingMode.onDevice) ...[
@@ -110,7 +111,9 @@ class RealtimeSettingsPanel extends StatelessWidget {
           if (settings.processingMode == RealtimeProcessingMode.onDevice) ...[
             const SizedBox(height: 8),
             Text(
-              l10n.onDeviceVoiceCapabilityHint,
+              settings.allowsSelectedVoiceMode
+                  ? l10n.onDeviceVoiceCapabilityHint
+                  : l10n.savedVoiceUnavailableHint,
               style: theme.textTheme.bodySmall?.copyWith(
                 color: theme.colorScheme.onSurfaceVariant,
               ),
@@ -162,9 +165,8 @@ class RealtimeSettingsPanel extends StatelessWidget {
       selectedCode: kind == LanguagePickerKind.source
           ? settings.sourceLanguage
           : settings.targetLanguage,
-      supportedCodes: settings.processingMode == RealtimeProcessingMode.onDevice
-          ? onDeviceTranslationLanguageCodes
-          : null,
+      // Preserve the full existing language chooser. Availability is checked
+      // for the selected pair before starting, without overwriting this value.
     );
     if (selected == null) return;
     onChanged(kind == LanguagePickerKind.source
@@ -202,12 +204,8 @@ class _VoiceOutputSelector extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
-    final selected = !enabled
-        ? RealtimeVoiceOutputMode.off
-        : settings.processingMode == RealtimeProcessingMode.onDevice &&
-                settings.voiceOutputMode == RealtimeVoiceOutputMode.myVoice
-            ? RealtimeVoiceOutputMode.natural
-            : settings.voiceOutputMode;
+    final selected =
+        !enabled ? RealtimeVoiceOutputMode.off : settings.voiceOutputMode;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
@@ -230,12 +228,12 @@ class _VoiceOutputSelector extends StatelessWidget {
               icon: const Icon(Icons.record_voice_over_outlined),
               label: Text(l10n.voiceOutputNaturalLabel),
             ),
-            if (settings.processingMode == RealtimeProcessingMode.online)
-              ButtonSegment<RealtimeVoiceOutputMode>(
-                value: RealtimeVoiceOutputMode.myVoice,
-                icon: const Icon(Icons.graphic_eq_outlined),
-                label: Text(l10n.voiceOutputMyVoiceLabel),
-              ),
+            ButtonSegment<RealtimeVoiceOutputMode>(
+              value: RealtimeVoiceOutputMode.myVoice,
+              enabled: settings.processingMode == RealtimeProcessingMode.online,
+              icon: const Icon(Icons.graphic_eq_outlined),
+              label: Text(l10n.voiceOutputMyVoiceLabel),
+            ),
           ],
           selected: <RealtimeVoiceOutputMode>{selected},
           onSelectionChanged: enabled

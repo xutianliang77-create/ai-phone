@@ -3,8 +3,13 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 import '../../../account/data/account_auth_headers.dart';
+import '../../../account/data/account_api_client.dart'
+    show verifyAccountDeployment;
 import '../../../account/data/account_session_store.dart';
 import 'realtime_session.dart';
+
+part 'realtime_result_sync_api.dart';
+part 'realtime_public_lifecycle_api.dart';
 
 class RealtimeApiClient {
   static const Duration _defaultRequestTimeout = Duration(seconds: 8);
@@ -21,7 +26,8 @@ class RealtimeApiClient {
     String termbaseId = 'default',
     String domainLexiconPack = 'product',
     Duration requestTimeout = _defaultRequestTimeout,
-    AccountSessionStore accountSessionStore = const FileAccountSessionStore(),
+    AccountSessionStore? accountSessionStore,
+    this.publicDeploymentId = configuredPublicDeploymentId,
   })  : _baseUrl = baseUrl,
         _client = client ?? http.Client(),
         _mode = mode,
@@ -33,7 +39,9 @@ class RealtimeApiClient {
         _termbaseId = termbaseId,
         _domainLexiconPack = domainLexiconPack,
         _requestTimeout = requestTimeout,
-        _accountSessionStore = accountSessionStore;
+        _accountSessionStore = accountSessionStore ??
+            accountStoreForDeployment(baseUrl,
+                deploymentId: publicDeploymentId);
 
   final Uri _baseUrl;
   final http.Client _client;
@@ -47,10 +55,16 @@ class RealtimeApiClient {
   final String _domainLexiconPack;
   final Duration _requestTimeout;
   final AccountSessionStore _accountSessionStore;
+  final String publicDeploymentId;
 
   void setVoiceOutputMode(String mode) => _voiceOutputMode = mode;
 
   Future<RealtimeSession> createSession() async {
+    if (publicDeploymentId.isNotEmpty) {
+      // S4 must wire the actual public creation contract; never send the old
+      // private create request or reuse its credentials as a fallback.
+      throw const RealtimeApiException('公有在线会话创建尚未就绪', statusCode: 503);
+    }
     final voice = await _voiceConfigForSession();
     final response = await _client
         .post(
@@ -86,6 +100,9 @@ class RealtimeApiClient {
     String sessionId,
     List<Map<String, Object?>> segments,
   ) async {
+    if (publicDeploymentId.isNotEmpty) {
+      throw const RealtimeApiException('公有结果必须使用授权同步');
+    }
     final response = await _client
         .post(
           _baseUrl.resolve('/sessions/$sessionId/segments'),
@@ -99,6 +116,9 @@ class RealtimeApiClient {
   }
 
   Future<void> endSession(String sessionId) async {
+    if (publicDeploymentId.isNotEmpty) {
+      throw const RealtimeApiException('公有结算尚未就绪', statusCode: 503);
+    }
     final response = await _client
         .post(
           _baseUrl.resolve('/realtime/sessions/$sessionId/end'),
@@ -120,6 +140,9 @@ class RealtimeApiClient {
     required int billableSeconds,
     required String idempotencyKey,
   }) async {
+    if (publicDeploymentId.isNotEmpty) {
+      throw const RealtimeApiException('公有结算尚未就绪', statusCode: 503);
+    }
     final response = await _client
         .post(
           _baseUrl.resolve('/realtime/sessions/$sessionId/finalize'),

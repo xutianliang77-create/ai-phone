@@ -1,4 +1,5 @@
 import type { RealtimeEnv } from "../config/env.js";
+import type { RealtimeTokenClaims } from "@translation/contracts";
 import { createLlmProvider, type LlmConfig } from "@translation/llm";
 import { HttpAsrProvider } from "../asr/http-asr-provider.js";
 import { MockAsrProvider } from "../asr/mock-asr-provider.js";
@@ -14,9 +15,24 @@ import type { RealtimeProvider } from "./realtime-provider.js";
 import { LmStudioRealtimeProvider } from "./lmstudio/lmstudio-realtime-provider.js";
 import { MockRealtimeProvider } from "./mock-realtime-provider.js";
 import { OpenAiRealtimeProvider } from "./openai/openai-realtime-provider.js";
+import {configuredPublicTranslation,type ConfiguredPublicTranslationOptions} from "./lmstudio/configured-public-translation.js";
+import {configuredPublicAsr,configuredStreamingAsr,type ConfiguredPublicAsrOptions,type ConfiguredStreamingAsrOptions} from "../asr/configured-public-asr.js";
+import {configuredPublicSession,configuredPublicSessionComponents,type ConfiguredPublicSessionOptions} from "./configured-public-session.js";
 
 export class ProviderRouter {
-  selectProvider(env?: RealtimeEnv): RealtimeProvider {
+  createConfiguredPublicSessionComponents(options:ConfiguredPublicSessionOptions){return configuredPublicSessionComponents(options);}
+  createConfiguredPublicSessionProvider(options:ConfiguredPublicSessionOptions){return configuredPublicSession(options);}
+  createConfiguredAsrClient(options:ConfiguredPublicAsrOptions){return configuredPublicAsr(options);}
+  createConfiguredStreamingAsrProvider(options:ConfiguredStreamingAsrOptions){return configuredStreamingAsr(options);}
+  /** Internal component factory; the public session entry remains gated below. */
+  createConfiguredTranslationClient(options:ConfiguredPublicTranslationOptions){
+    return configuredPublicTranslation(options);
+  }
+
+  selectProvider(env?: RealtimeEnv, claims?: RealtimeTokenClaims): RealtimeProvider {
+    if (env?.publicDeploymentId || claims?.processing !== undefined) {
+      throw new Error("public_processing_not_ready");
+    }
     if (env?.provider === "tencent_trtc") {
       throw new Error("REALTIME_PROVIDER=tencent_trtc is not implemented yet");
     }

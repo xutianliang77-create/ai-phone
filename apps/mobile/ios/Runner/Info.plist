@@ -49,6 +49,8 @@
 	<string>拍照翻译需要使用相机拍摄菜单、截图、合同和表格。</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>无界AI需要使用麦克风识别语音并翻译。</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>无界AI使用系统语音识别，将您选择的语音转为字幕并翻译。</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>拍照翻译需要读取相册图片以进行 OCR 识别和翻译。</string>
 	<key>UIApplicationSceneManifest</key>

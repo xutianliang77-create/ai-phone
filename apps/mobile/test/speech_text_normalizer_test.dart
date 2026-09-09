@@ -2,6 +2,21 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:translation_mobile/src/platform/speech/speech_text_normalizer.dart';
 
 void main() {
+  test('non-English languages retain their own money, code and number text',
+      () {
+    for (final language in ['fr', 'ja', 'de', 'ar', 'yue', 'zh-Hant']) {
+      expect(
+          normalizeSpeechOutputText('A-120  \$31.50 138-0013-8000', language),
+          'A-120 \$31.50 138-0013-8000');
+    }
+  });
+  test('regional Chinese and English keep their existing normalization rules',
+      () {
+    expect(normalizeSpeechOutputText('A-120 \$31.50', 'en-GB'),
+        normalizeSpeechOutputText('A-120 \$31.50', 'en'));
+    expect(normalizeSpeechOutputText('A-120 ¥31.50', 'zh-CN'),
+        normalizeSpeechOutputText('A-120 ¥31.50', 'zh'));
+  });
   test('normalizes Chinese speech text for codes, money and phone numbers', () {
     expect(
       normalizeSpeechOutputText('订单 A-120 金额 ¥31.50，电话 138-0013-8000。', 'zh'),

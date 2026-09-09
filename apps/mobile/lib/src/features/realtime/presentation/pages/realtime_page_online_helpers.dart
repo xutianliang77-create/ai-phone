@@ -1,6 +1,13 @@
 part of 'realtime_page.dart';
 
 Future<bool> _ensureRealtimeStartAllowed(_RealtimePageState state) async {
+  if (state.controller.resourceOperationRunning) {
+    ScaffoldMessenger.of(state.context).showSnackBar(SnackBar(
+        content: Text(state.context.l10n.isChinese
+            ? '资源准备中，请在同传设置中完成或取消。'
+            : 'Finish or cancel resource preparation in realtime settings.')));
+    return false;
+  }
   if (state._settings.processingMode != RealtimeProcessingMode.online) {
     return true;
   }
@@ -36,8 +43,11 @@ RealtimeController _createRealtimePageController(
   AppConfig config,
 ) {
   final effectiveConfig = applyRealtimeModeVoicePolicy(config);
-  final autoSpeakTranslation =
-      state._realtimeAutoSpeakSupported && state._settings.autoSpeakTranslation;
+  final factory = state.widget.controllerFactory;
+  if (factory != null) return factory(effectiveConfig);
+  final autoSpeakTranslation = state._realtimeAutoSpeakSupported &&
+      state._settings.autoSpeakTranslation &&
+      effectiveConfig.realtimeVoiceOutputMode != 'off';
   return RealtimeController(
     config: effectiveConfig,
     autoSpeakTranslation: autoSpeakTranslation,

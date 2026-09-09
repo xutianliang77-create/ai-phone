@@ -123,7 +123,8 @@ void main() {
     expect(changed?.domainLexiconPack, 'medical');
   });
 
-  testWidgets('shows only truthful on-device languages and voice features',
+  testWidgets(
+      'keeps language and feature choices visible with local capability hints',
       (tester) async {
     await tester.pumpWidget(_TestApp(
       child: RealtimeSettingsPanel(
@@ -138,19 +139,19 @@ void main() {
       ),
     ));
 
-    expect(find.text('行业词库'), findsNothing);
-    expect(find.text('我的声音'), findsNothing);
-    expect(find.textContaining('端侧当前支持中英互译'), findsOneWidget);
-    expect(find.textContaining('端侧使用系统自然声音'), findsOneWidget);
+    expect(find.text('行业词库'), findsOneWidget);
+    expect(find.text('我的声音'), findsOneWidget);
+    expect(find.textContaining('语言选择会保留'), findsOneWidget);
+    expect(find.textContaining('本地使用系统声音'), findsOneWidget);
 
     await tester.tap(find.text('自动识别'));
     await tester.pumpAndSettle();
     expect(find.text('中文'), findsOneWidget);
     expect(find.text('英语'), findsOneWidget);
-    expect(find.text('法语'), findsNothing);
+    expect(find.text('法语'), findsOneWidget);
   });
 
-  testWidgets('normalizes online-only settings when switching on-device',
+  testWidgets('preserves online preferences when switching to local mode',
       (tester) async {
     RealtimeRuntimeSettings? changed;
     await tester.pumpWidget(_TestApp(
@@ -170,10 +171,40 @@ void main() {
     await tester.tap(find.text('端侧'));
     await tester.pump();
 
-    expect(changed?.sourceLanguage, autoSourceLanguageCode);
-    expect(changed?.targetLanguage, autoReverseTargetLanguageCode);
-    expect(changed?.voiceOutputMode, RealtimeVoiceOutputMode.natural);
-    expect(changed?.domainLexiconPack, 'product');
+    expect(changed?.sourceLanguage, 'fr');
+    expect(changed?.targetLanguage, 'ja');
+    expect(changed?.voiceOutputMode, RealtimeVoiceOutputMode.myVoice);
+    expect(changed?.domainLexiconPack, 'medical');
+  });
+
+  testWidgets(
+      'shows the saved personal voice as selected but unavailable locally',
+      (tester) async {
+    await tester.pumpWidget(_TestApp(
+      child: RealtimeSettingsPanel(
+        settings: const RealtimeRuntimeSettings(
+          processingMode: RealtimeProcessingMode.onDevice,
+          sourceLanguage: 'fr',
+          targetLanguage: 'ja',
+          voiceOutputMode: RealtimeVoiceOutputMode.myVoice,
+          domainLexiconPack: 'medical',
+        ),
+        enabled: true,
+        onChanged: (_) {},
+      ),
+    ));
+    final selector = tester.widget<SegmentedButton<RealtimeVoiceOutputMode>>(
+      find.byType(SegmentedButton<RealtimeVoiceOutputMode>),
+    );
+    expect(selector.selected, {RealtimeVoiceOutputMode.myVoice});
+    expect(
+        selector.segments
+            .singleWhere(
+                (item) => item.value == RealtimeVoiceOutputMode.myVoice)
+            .enabled,
+        false);
+    expect(find.textContaining('已保留“我的声音”选择'), findsOneWidget);
+    expect(find.text('医疗'), findsOneWidget);
   });
 
   testWidgets('groups settings and offers an end action while locked',

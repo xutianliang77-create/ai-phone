@@ -1,9 +1,13 @@
 import 'package:flutter/services.dart';
 
 import 'mobile_translation_provider.dart';
+import 'translation_language_pair.dart';
 
 class IosSystemTranslationProvider
-    implements MobileTranslationProvider, MobileTranslationDiagnostics {
+    implements
+        MobileTranslationProvider,
+        MobileTranslationDiagnostics,
+        MobileTranslationResourcePreparation {
   IosSystemTranslationProvider({
     MethodChannel? channel,
     MobileTranslationProvider? fallback,
@@ -37,30 +41,59 @@ class IosSystemTranslationProvider
     String text,
     MobileTranslationConfig config,
   ) async {
+    Map<String, Object?>? result;
     try {
-      final result = await _channel.invokeMapMethod<String, Object?>(
+      result = await _channel.invokeMapMethod<String, Object?>(
         'translate',
         <String, Object?>{'text': text, ..._languageArguments(config)},
       );
-      final translatedText = result?['text'] as String?;
-      if (translatedText == null || translatedText.trim().isEmpty) {
-        return _fallback?.translate(text, config);
-      }
-      return MobileTranslationResult(
-        text: translatedText.trim(),
-        provider: result?['provider'] as String? ?? 'ios_system',
-      );
     } on MissingPluginException {
-      return _fallback?.translate(text, config);
+      if (_fallback == null) rethrow;
+      return _fallback.translate(text, config);
     } on PlatformException {
-      return _fallback?.translate(text, config);
+      if (_fallback == null) rethrow;
+      return _fallback.translate(text, config);
     }
+    if (!_matchesRequestedPair(result, config)) {
+      throw PlatformException(
+          code: 'translation_language_mismatch',
+          message:
+              'System translation returned a different or missing language pair.',
+          details: result);
+    }
+    final translatedText = result?['text'] as String?;
+    if (translatedText == null || translatedText.trim().isEmpty) {
+      if (_fallback != null) return _fallback.translate(text, config);
+      throw PlatformException(
+          code: 'empty_translation',
+          message: 'System translation returned no translated text.');
+    }
+    return MobileTranslationResult(
+        text: translatedText.trim(),
+        provider: result?['provider'] as String? ?? 'ios_system');
   }
 
   @override
   Future<void> dispose() async {
     await _fallback?.dispose();
   }
+
+  @override
+  Future<void> prepareResources(MobileTranslationConfig config,
+      {required String requestId}) {
+    if (requestId.isEmpty) {
+      throw ArgumentError('A resource request identity is required');
+    }
+    return _channel.invokeMethod<void>('prepare', {
+      ..._languageArguments(config),
+      'requestId': requestId,
+      'downloadAuthorized': true,
+    });
+  }
+
+  @override
+  Future<void> cancelResourcePreparation(String requestId) => _channel
+      .invokeMethod<void>('cancelPreparation', {'requestId': requestId});
 
   Map<String, Object?> _languageArguments(MobileTranslationConfig config) {
     return <String, Object?>{
@@ -73,6 +106,19 @@ class IosSystemTranslationProvider
     Map<String, Object?>? result,
     MobileTranslationConfig config,
   ) {
+    if (result?['available'] == true &&
+        !_matchesRequestedPair(result, config)) {
+      return MobileTranslationAvailability(
+          available: false,
+          provider: 'ios_system',
+          sourceLanguage: config.sourceLanguage,
+          targetLanguage: config.targetLanguage,
+          status: 'unavailable',
+          reason: 'translation_language_mismatch',
+          message:
+              'Installed translation resources do not match the requested language pair.',
+          details: result ?? const {});
+    }
     final available = result?['available'] == true;
     return MobileTranslationAvailability(
       available: available,
@@ -88,6 +134,16 @@ class IosSystemTranslationProvider
       message: result?['message'] as String?,
       details: result ?? const <String, Object?>{},
     );
+  }
+
+  bool _matchesRequestedPair(
+      Map<String, Object?>? result, MobileTranslationConfig config) {
+    return result?['sourceLanguage'] is String &&
+        result?['targetLanguage'] is String &&
+        translationLanguagesMatch(
+            result!['sourceLanguage'] as String, config.sourceLanguage) &&
+        translationLanguagesMatch(
+            result['targetLanguage'] as String, config.targetLanguage);
   }
 
   Future<MobileTranslationAvailability> _unavailable(

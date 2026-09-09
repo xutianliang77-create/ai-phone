@@ -157,12 +157,14 @@ export interface SessionVoiceOutputUpdatedEvent {
 export type ClientRealtimeEvent =
   | AudioFrame
   | ClientTextSegmentEvent
+  | { type: "audio.boundary"; sessionId: string; sequence: number }
   | { type: "session.pause"; sessionId: string }
   | { type: "session.resume"; sessionId: string }
   | { type: "session.voice_output"; sessionId: string; enabled: boolean; presetId?: string }
   | { type: "session.end"; sessionId: string };
 
 export type ServerRealtimeEvent =
+  | {type:"audio.boundary.committed"|"audio.boundary.rejected";sessionId:string;sequence:number;code?:string}
   | SessionStartedEvent
   | TranscriptEvent
   | TranslationEvent

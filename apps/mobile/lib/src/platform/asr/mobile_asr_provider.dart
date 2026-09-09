@@ -22,6 +22,13 @@ abstract class MobileAsrPreparation {
   Future<void> prepare(MobileAsrConfig config);
 }
 
+/// Explicit user resource preparation, separate from capture prewarming.
+abstract class MobileAsrResourcePreparation {
+  Future<void> prepareResources(MobileAsrConfig config,
+      {required String requestId});
+  Future<void> cancelResourcePreparation(String requestId);
+}
+
 abstract class MobileAsrModelInspector {
   Future<Map<String, Object?>> inspectModel();
 }
@@ -53,6 +60,8 @@ class MobileAsrConfig {
     this.turnRoutingPolicy = 'alternate',
     this.diagnosticCaptureEnabled = false,
     this.diagnosticSessionId,
+    this.captureId,
+    this.languagePolicyKey,
   });
 
   final String language;
@@ -69,6 +78,8 @@ class MobileAsrConfig {
   final String turnRoutingPolicy;
   final bool diagnosticCaptureEnabled;
   final String? diagnosticSessionId;
+  final String? captureId;
+  final String? languagePolicyKey;
 }
 
 class MobileAsrAvailability {

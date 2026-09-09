@@ -14,6 +14,7 @@ import 'realtime_gateway_transport.dart';
 
 export 'realtime_gateway_transport.dart'
     show realtimeGatewayEndpoint, realtimeGatewayProtocols;
+part 'realtime_gateway_transport_events.dart';
 part 'realtime_gateway_control.dart';
 
 class RealtimeGatewayClient {
@@ -46,6 +47,7 @@ class RealtimeGatewayClient {
   bool _transportReady = false;
   int _reconnectAttempts = 0;
   int _connectionGeneration = 0;
+  int _lastAudioSequence = -1;
   RealtimeReconnectAudioDrain _lastReconnectAudioDrain =
       RealtimeReconnectAudioDrain.empty;
 
@@ -63,6 +65,7 @@ class RealtimeGatewayClient {
 
   Future<void> _open(RealtimeSession session) async {
     _transportReady = false;
+    _lastAudioSequence = -1;
     final generation = ++_connectionGeneration;
     final channel = WebSocketChannel.connect(
       realtimeGatewayEndpoint(session),
@@ -120,7 +123,7 @@ class RealtimeGatewayClient {
   }
 
   bool _sendAudioFrame(String sessionId, AudioFrame frame) {
-    return _send({
+    final sent = _send({
       'type': 'audio.frame',
       'sessionId': sessionId,
       'sequence': frame.sequence,
@@ -129,7 +132,15 @@ class RealtimeGatewayClient {
       'sampleRate': frame.sampleRate,
       'data': base64Encode(frame.bytes),
     });
+    if (sent && _session?.sessionId == sessionId) {
+      _lastAudioSequence = frame.sequence;
+    }
+    return sent;
   }
+
+  Future<bool> commitAudioBoundaryAndWait(String sessionId,
+          {Duration timeout = _controlTimeout}) =>
+      _commitAudioBoundary(sessionId, timeout);
 
   bool sendTextSegment(
     String sessionId,
@@ -199,15 +210,27 @@ class RealtimeGatewayClient {
   Future<bool> endAndWait(
     String sessionId, {
     Duration timeout = _endTimeout,
-  }) {
-    final completed = events
-        .firstWhere((event) =>
-            event.type == 'session.ended' && event.sessionId == sessionId)
-        .timeout(timeout)
-        .then((event) => event.flush?.isSuccessful == true)
-        .catchError((Object _) => false);
-    if (!end(sessionId)) return Future<bool>.value(false);
-    return completed;
+  }) async {
+    final completed = Completer<bool>();
+    final subscription = events.listen((event) {
+      if (event.type == 'session.ended' &&
+          event.sessionId == sessionId &&
+          !completed.isCompleted) {
+        completed.complete(event.flush?.isSuccessful == true);
+      }
+    }, onError: (Object _) {
+      if (!completed.isCompleted) completed.complete(false);
+    }, onDone: () {
+      if (!completed.isCompleted) completed.complete(false);
+    });
+    try {
+      if (!end(sessionId)) return false;
+      return await completed.future.timeout(timeout);
+    } catch (_) {
+      return false;
+    } finally {
+      await subscription.cancel();
+    }
   }
 
   Future<void> close() async {
@@ -229,68 +252,6 @@ class RealtimeGatewayClient {
     if (channel == null) return false;
     channel.sink.add(jsonEncode(payload));
     return true;
-  }
-
-  void _handleMessage(int generation, dynamic message) {
-    if (generation != _connectionGeneration) return;
-    if (message is! String) return;
-    final json = jsonDecode(message) as Map<String, Object?>;
-    final event = GatewayRealtimeEvent.fromJson(json);
-    if (event.type == 'session.ended') {
-      _manualClose = true;
-      _reconnectTimer?.cancel();
-      _stableConnectionTimer?.cancel();
-      _reconnectAudioBuffer.clear();
-    }
-    _events.add(event);
-  }
-
-  void _handleDisconnect(int generation, [Object? error]) {
-    if (generation != _connectionGeneration) return;
-    final subscription = _subscription;
-    final channel = _channel;
-    _transportReady = false;
-    _channel = null;
-    _subscription = null;
-    unawaited(subscription?.cancel());
-    unawaited(channel?.sink.close());
-    _stableConnectionTimer?.cancel();
-    if (_manualClose || _suspended) return;
-    if (_reconnectTimer?.isActive ?? false) return;
-    if (_reconnectAttempts >= _reconnectBackoff.maxAttempts) {
-      _events.add(const GatewayRealtimeEvent.connection(
-        type: 'connection.closed',
-        message: 'Realtime connection lost',
-      ));
-      return;
-    }
-
-    _reconnectAttempts += 1;
-    _events.add(GatewayRealtimeEvent.connection(
-      type: 'connection.reconnecting',
-      message:
-          'Reconnecting ($_reconnectAttempts/${_reconnectBackoff.maxAttempts})',
-    ));
-    _reconnectTimer?.cancel();
-    final delay = _reconnectBackoff.delayForAttempt(
-      _reconnectAttempts,
-      jitterUnit: _reconnectJitterUnit(),
-    );
-    _reconnectTimer = Timer(delay, () async {
-      final session = _session;
-      if (session == null || _manualClose || _suspended) return;
-      try {
-        await _open(session);
-        _events.add(GatewayRealtimeEvent.connection(
-          type: 'connection.reconnected',
-          message: 'Realtime connection restored',
-          replayedAudioMs: _lastReconnectAudioDrain.replayedAudioMs,
-          droppedAudioMs: _lastReconnectAudioDrain.droppedAudioMs,
-        ));
-      } catch (_) {
-        _handleDisconnect(_connectionGeneration);
-      }
-    });
   }
 
   void _scheduleStableConnectionReset(int generation) {

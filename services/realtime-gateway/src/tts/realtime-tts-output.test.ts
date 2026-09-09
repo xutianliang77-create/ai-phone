@@ -1,8 +1,42 @@
 import { describe, expect, it } from "vitest";
 import type { AudioOutput, ServerRealtimeEvent, TranslationEvent } from "@translation/contracts";
 import { RealtimeTtsOutputQueue } from "./realtime-tts-output.js";
+import {createSession,deleteSession,transitionStatus} from "../sessions/session-manager.js";
+import {handleControlEvent} from "../connection/session-control-handler.js";
+import type {RealtimeProvider} from "../providers/realtime-provider.js";
+import type {AudioFrameBatcher} from "../connection/audio-frame-batcher.js";
 
 describe("realtime tts output queue", () => {
+  it("does not re-enable the queue before the public resume acknowledgement is persisted",async()=>{
+    createSession({sessionId:"sess_1",userId:"user",sourceLanguage:"zh",targetLanguage:"en",voiceOutput:true,planCode:"free",maxDurationSeconds:60,issuedAt:0,expiresAt:9999999999});
+    transitionStatus("sess_1","paused");const synth=new FakeTtsSynthesizer(async e=>audioFor(e,1)),queue=createQueue(synth);
+    queue.suspend();const ack=deferred<void>();let inputResumed=false;
+    const resume=handleControlEvent({type:"session.resume",sessionId:"sess_1"},"sess_1",{} as RealtimeProvider,
+      {resumeAccepting(){inputResumed=true;}} as AudioFrameBatcher,()=>{},async()=>{},queue,{beforeFlush:async()=>{},drain:()=>ack.promise});
+    try{queue.enqueue(translation(1),()=>{});await queue.drain();expect(synth.started).toEqual([]);expect(inputResumed).toBe(false);
+      ack.resolve();await resume;queue.enqueue(translation(2),()=>{});await queue.drain();expect(synth.started).toEqual(["seg_2"]);expect(inputResumed).toBe(true);
+    }finally{ack.resolve();await resume;queue.close();deleteSession("sess_1");}
+  });
+  it("suspends tail translations until confirmed resume and drains cancelled in-flight work",async()=>{
+    const first=deferred<AudioOutput|null>(),synthesizer=new FakeTtsSynthesizer(e=>e.segmentId==="seg_1"?first.promise:Promise.resolve(audioFor(e,2)));
+    const queue=createQueue(synthesizer),sent:ServerRealtimeEvent[]=[];queue.enqueue(translation(1),e=>sent.push(e));await waitFor(()=>synthesizer.started.length===1);
+    queue.suspend();queue.enqueue(translation(2),e=>sent.push(e));let drained=false;const drain=queue.drainInFlight().then(()=>drained=true);
+    await Promise.resolve();expect(drained).toBe(false);first.resolve(audioFor(translation(1),1));await drain;expect(sent).toEqual([]);
+    queue.resume();queue.enqueue(translation(3),e=>sent.push(e));await queue.drain();expect(synthesizer.started).toEqual(["seg_1","seg_3"]);
+    queue.close();queue.resume();queue.enqueue(translation(4),e=>sent.push(e));await queue.drainInFlight();expect(sent).toHaveLength(1);
+  });
+  it("cancels active synthesis when voice output or preset changes",async()=>{
+    const first=deferred<AudioOutput|null>(),synthesizer=new FakeTtsSynthesizer(()=>first.promise),queue=createQueue(synthesizer);
+    const sent:ServerRealtimeEvent[]=[];queue.enqueue(translation(1),e=>sent.push(e));await waitFor(()=>synthesizer.started.length===1);
+    expect(queue.setVoiceOutput(false)).toBe(true);expect(synthesizer.canceled).toEqual(["sess_1"]);
+    expect(queue.setVoiceOutput(false)).toBe(true);expect(synthesizer.canceled).toHaveLength(1);
+    expect(queue.setVoiceOutput(true,"voice2")).toBe(true);expect(synthesizer.canceled).toHaveLength(2);
+    first.resolve(audioFor(translation(1),1));await Promise.resolve();expect(sent).toEqual([]);queue.close();
+  });
+  it("does not synthesize another session's event",async()=>{
+    const synthesizer=new FakeTtsSynthesizer(async e=>audioFor(e,1)),queue=createQueue(synthesizer);
+    queue.enqueue({...translation(1),sessionId:"other"},()=>{});await queue.drain();expect(synthesizer.started).toEqual([]);queue.close();
+  });
   it("keeps 20 mixed-duration outputs in caption order", async () => {
     const synthesizer = new FakeTtsSynthesizer(async (event) => {
       const index = Number(event.segmentId.slice(4));
