@@ -28,7 +28,7 @@ export function observePublicRuntime(sessionId:string,value:unknown,now=new Date
     if(b.phase==="active"&&!admissionValid)throw new ResultSyncError("public_inference_admission_required",403);
     const hash=resultSyncHash(b);
     if(old && old.sequence===b.sequence && old.eventHash===hash) return {next:null,result:old};
-    if(current.status==="ended"||old?.stoppedAt) throw new ResultSyncError("public_runtime_terminal");
+    if(current.status==="ended"||current.status==="failed"||old?.stoppedAt) throw new ResultSyncError("public_runtime_terminal");
     if(Number(b.sequence)!==(old?.sequence??0)+1 || (!old&&(b.phase!=="active"||b.finalRevision!==0||b.lastAcceptedSample!==0)) ||
         Number(b.finalRevision)<(old?.finalRevision??0) || Number(b.lastAcceptedSample)<(old?.lastAcceptedSample??0)) {
       throw new ResultSyncError("public_runtime_sequence_conflict");

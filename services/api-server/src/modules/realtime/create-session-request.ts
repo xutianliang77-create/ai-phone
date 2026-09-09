@@ -95,7 +95,7 @@ export function validateCreateRealtimeSessionRequest(
   }
   if (["processingMode", "processingContractVersion", "executionPlan",
     "modelPolicyRevision", "languagePolicy", "syncPermission", "publicGrantRef",
-    "publicAccess"].some((key) => key in input)) {
+    "publicAccess", "publicRuntime", "captureSampleRate"].some((key) => key in input)) {
     return invalid("Processing fields must use the versioned processing contract");
   }
   const processing = parseRealtimeProcessingRequest(input.processing);

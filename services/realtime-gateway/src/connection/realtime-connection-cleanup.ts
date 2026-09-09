@@ -1,4 +1,4 @@
-import type { SessionEndReason } from "@translation/contracts";
+import type { SessionEndReason,PublicAdmissionReceipt } from "@translation/contracts";
 import type { RealtimeProvider } from "../providers/realtime-provider.js";
 import type { RealtimeSession } from "../sessions/realtime-session.js";
 import type { DisconnectFinalizerRegistry } from "../sessions/disconnect-finalizer-registry.js";
@@ -6,11 +6,14 @@ import {
   deleteSession,
   getSession,
   transitionStatus,
+  recordPublicDisconnectCheckpoint,
 } from "../sessions/session-manager.js";
 import type { SessionSyncTracker } from "../sessions/session-sync-tracker.js";
 import type { RealtimeSessionFinalizer } from "./realtime-session-finalizer.js";
 
 interface RealtimeConnectionCleanupOptions {
+  publicImmediateFinalization?:boolean;
+  checkpointDisconnect?:()=>Promise<PublicAdmissionReceipt>;
   session: RealtimeSession;
   generation: number;
   finalizer: Pick<RealtimeSessionFinalizer, "flush" | "finalize">;
@@ -38,6 +41,29 @@ export class RealtimeConnectionCleanup {
     const current = getSession(session.id);
     const isCurrent = current === session &&
       current.connectionGeneration === generation;
+    if(this.options.publicImmediateFinalization){
+      const owns=()=>getSession(session.id)===session&&session.connectionGeneration===generation;
+      try{if(owns()&&session.status!=="ended"){
+        if(this.options.checkpointDisconnect){
+          await this.options.finalizer.flush();
+          if(!owns()){this.options.closeClient();return;}
+          try{
+            const receipt=await this.options.checkpointDisconnect();
+            if(!owns()){this.options.closeClient();return;}
+            if(!recordPublicDisconnectCheckpoint(session.id,generation,receipt))throw Error("public_disconnect_checkpoint_not_confirmed");
+          }catch(error){this.options.onError("sync",error);}
+          // No remaining resume allowance is not a reason to skip the original
+          // stop/settlement attempt. Its own durable confirmation still applies.
+        }
+        // Retention/new-WebSocket assembly remains gated. A checkpoint alone
+        // must not leave a model session running indefinitely after disconnect.
+        if(owns())await this.options.finalizer.finalize(reason);
+      }}
+      catch(error){this.options.onError("sync",error);}
+      if(owns())await this.bestEffort("provider",()=>this.options.provider.closeSession(session.id));
+      await this.bestEffort("sync",()=>this.options.sessionSync.drain());
+      if(owns())deleteSession(session.id,session);this.options.closeClient();return;
+    }
     if (isCurrent && current.status !== "ended") {
       if (current.status === "active" || current.status === "paused") {
         current.reconnectStatus = current.status;

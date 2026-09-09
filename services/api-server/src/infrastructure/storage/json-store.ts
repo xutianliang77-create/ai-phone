@@ -131,8 +131,13 @@ function readJsonSnapshot(): AppStoreSnapshot {
   const file = dataFile();
   if (!file || !existsSync(file)) return createEmptyStoreSnapshot();
   try {
-    return normalizeStoreSnapshot(JSON.parse(readFileSync(file, "utf8")));
+    const raw:unknown=JSON.parse(readFileSync(file, "utf8"));
+    if(process.env.API_RESULT_SYNC_DEPLOYMENT_ID&&(!raw||typeof raw!=="object"||Array.isArray(raw)))throw new Error("Invalid public snapshot");
+    return normalizeStoreSnapshot(raw);
   } catch {
+    // Public request tombstones and holds must survive restart. A corrupt or
+    // unreadable existing store is not evidence that no prior creation exists.
+    if(process.env.API_RESULT_SYNC_DEPLOYMENT_ID)throw new Error("Public store snapshot could not be read; refusing empty-store recovery");
     return createEmptyStoreSnapshot();
   }
 }

@@ -1,4 +1,6 @@
 import 'dart:convert';
+import 'dart:async';
+import 'dart:math';
 
 import 'package:http/http.dart' as http;
 
@@ -7,9 +9,14 @@ import '../../../account/data/account_api_client.dart'
     show verifyAccountDeployment;
 import '../../../account/data/account_session_store.dart';
 import 'realtime_session.dart';
+import 'public_creation_request_store.dart';
+import 'public_creation_contract.dart';
+import 'public_creation_resolution.dart';
 
 part 'realtime_result_sync_api.dart';
 part 'realtime_public_lifecycle_api.dart';
+part 'realtime_public_creation_api.dart';
+part 'realtime_public_creation_resolution_api.dart';
 
 class RealtimeApiClient {
   static const Duration _defaultRequestTimeout = Duration(seconds: 8);
@@ -28,7 +35,10 @@ class RealtimeApiClient {
     Duration requestTimeout = _defaultRequestTimeout,
     AccountSessionStore? accountSessionStore,
     this.publicDeploymentId = configuredPublicDeploymentId,
-  })  : _baseUrl = baseUrl,
+    PublicCreationRequestStore? publicCreationRequestStore,
+  })  : _publicCreationStore =
+            publicCreationRequestStore ?? PublicCreationRequestStore(),
+        _baseUrl = baseUrl,
         _client = client ?? http.Client(),
         _mode = mode,
         _sourceLanguage = sourceLanguage,
@@ -56,14 +66,37 @@ class RealtimeApiClient {
   final Duration _requestTimeout;
   final AccountSessionStore _accountSessionStore;
   final String publicDeploymentId;
+  final PublicCreationRequestStore _publicCreationStore;
+  Future<RealtimeSession>? _publicCreating;
+  bool _publicResolving = false;
+  Completer<void>? _publicCreationAbort;
+  int _publicCreationEpoch = 0;
+  bool _publicCreationClosed = false;
+  ({
+    String scope,
+    String key,
+    String sessionId,
+    int accountEpoch,
+    int creationEpoch
+  })? _publicIssued;
 
-  void setVoiceOutputMode(String mode) => _voiceOutputMode = mode;
+  void setVoiceOutputMode(String mode) {
+    if (mode != _voiceOutputMode) cancelPublicCreationWait();
+    _voiceOutputMode = mode;
+  }
 
   Future<RealtimeSession> createSession() async {
     if (publicDeploymentId.isNotEmpty) {
-      // S4 must wire the actual public creation contract; never send the old
-      // private create request or reuse its credentials as a fallback.
-      throw const RealtimeApiException('公有在线会话创建尚未就绪', statusCode: 503);
+      if (_publicResolving) throw const RealtimeApiException('未决创建处置进行中');
+      final running = _publicCreating;
+      if (running != null) return running;
+      final future = _createPublicSession();
+      _publicCreating = future;
+      try {
+        return await future;
+      } finally {
+        if (identical(_publicCreating, future)) _publicCreating = null;
+      }
     }
     final voice = await _voiceConfigForSession();
     final response = await _client
@@ -131,6 +164,8 @@ class RealtimeApiClient {
   }
 
   void close() {
+    _publicCreationClosed = true;
+    cancelPublicCreationWait();
     _client.close();
   }
 

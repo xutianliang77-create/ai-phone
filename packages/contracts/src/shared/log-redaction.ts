@@ -1,6 +1,9 @@
 const redacted = "[REDACTED]";
 
 const sensitiveKeys = new Set([
+  "xwujiegatewaycredential",
+  "secretid",
+  "secretkey",
   "accesstoken",
   "apikey",
   "authorization",

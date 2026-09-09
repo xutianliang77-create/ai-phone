@@ -5,6 +5,7 @@ import type {
 import type { SpeakerAttributionOptionsDto } from "../shared/speaker.js";
 import type { DomainLexiconPack } from "../shared/domain-lexicon.js";
 import type { RealtimeProcessingAuthorization, RealtimeProcessingRequest } from "./processing-contract.js";
+import type {PublicRuntimeTokenBinding} from "./public-runtime-token.js";
 
 export type RealtimeMode = "conversation" | "meeting" | "classroom" | "business";
 export type AsrEndpointMode =
@@ -60,6 +61,7 @@ export interface CreateRealtimeSessionResponse {
 }
 
 export interface RealtimeTokenClaims {
+  publicRuntime?:PublicRuntimeTokenBinding;
   processing?: RealtimeProcessingAuthorization;
   userId: string;
   sessionId: string;

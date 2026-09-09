@@ -17,6 +17,10 @@ Future<(RealtimeGatewayClient, List<Map<String, dynamic>>)> fixture(
     final socket = await WebSocketTransformer.upgrade(request,
         protocolSelector: (values) => values.first);
     connected.complete(socket);
+    if (public) {
+      socket.add(jsonEncode(
+          {'type': 'session.started', 'sessionId': 'boundary-session'}));
+    }
     socket.listen((raw) {
       final event = jsonDecode(raw as String) as Map<String, dynamic>;
       received.add(event);

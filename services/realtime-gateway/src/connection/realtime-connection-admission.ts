@@ -37,7 +37,7 @@ export function admitRealtimeConnection(
   // Signature authenticity is not public model qualification. Until S4 wires
   // admission grants, runtime leases and component providers, do not attach a
   // public session to the legacy global provider/TTS/usage chain.
-  if (claims.processing !== undefined || env.publicDeploymentId) {
+  if (claims.processing !== undefined || claims.publicRuntime !== undefined || env.publicDeploymentId) {
     sendRealtimeEvent(ws, buildError("provider_unavailable",
       "Public processing admission is not ready; legacy fallback is forbidden", {
         sessionId: claims.sessionId, stage: "provider", retryable: false,

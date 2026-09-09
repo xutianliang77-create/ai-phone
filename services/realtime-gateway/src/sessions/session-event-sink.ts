@@ -5,13 +5,18 @@ import type {
   PublicRuntimeAck,
   AudioFrame,
   PublicModelAttemptEvent,PublicModelAttemptAck,
+  PublicAdmissionQuery,PublicAdmissionReceipt,
 } from "@translation/contracts";
-import {modelAttemptKey} from "@translation/contracts";
+import {modelAttemptKey,matchesPublicAdmissionReceipt} from "@translation/contracts";
+import {abortable,readPublicJson} from "../providers/lmstudio/lmstudio-public-protocol.js";
 import { PublicSessionEventSink, type PublicSessionBinding } from "./public-session-event-sink.js";
 import type { RealtimeEnv } from "../config/env.js";
 import { cleanRealtimeText } from "../protocol/realtime-text.js";
 
 export interface SessionEventSink {
+  configuration?(query:PublicAdmissionQuery,signal?:AbortSignal):Promise<unknown>;
+  credentials?(query:PublicAdmissionQuery,component:"asr"|"translation"|"tts",gatewayCredential:string,signal?:AbortSignal):Promise<unknown>;
+  admission?(query:PublicAdmissionQuery):Promise<PublicAdmissionReceipt>;
   modelAttempt?(event:PublicModelAttemptEvent):Promise<void>;
   requiresConfirmation?: true;
   acceptAudio?(frame:AudioFrame):void;
@@ -50,6 +55,25 @@ class ApiSessionEventSink implements SessionEventSink {
     timeoutMs: number;
     fetchFn?:typeof fetch;
   }) {}
+
+  private requirePublicTransport(){
+    const base=new URL(this.options.baseUrl),secret=this.options.internalApiSecret;
+    if(base.protocol!=="https:"||base.username||base.password||base.search||base.hash||
+      !secret||secret.length<16||secret.length>4096||secret.trim()!==secret||/[\u0000-\u001f\u007f]/u.test(secret)||!Number.isSafeInteger(this.options.timeoutMs)||this.options.timeoutMs<1||this.options.timeoutMs>30000)throw Error("public_admission_transport_required");
+  }
+  async configuration(query:PublicAdmissionQuery,signal?:AbortSignal){
+    this.requirePublicTransport();return this.post(`/internal/realtime/sessions/${encodeURIComponent(query.sessionId)}/configuration`,structuredClone(query),1,true,true,signal);
+  }
+  async credentials(query:PublicAdmissionQuery,component:"asr"|"translation"|"tts",gatewayCredential:string,signal?:AbortSignal){
+    this.requirePublicTransport();if(typeof gatewayCredential!=="string"||gatewayCredential.length<32||gatewayCredential.length>4096||gatewayCredential.trim()!==gatewayCredential||/[\u0000-\u001f\u007f]/u.test(gatewayCredential))throw Error("public_credential_access_required");
+    return this.post(`/internal/realtime/sessions/${encodeURIComponent(query.sessionId)}/credentials`,{query:structuredClone(query),component},1,true,true,signal,gatewayCredential);
+  }
+  async admission(query:PublicAdmissionQuery){
+    this.requirePublicTransport();const snapshot=structuredClone(query);
+    const receipt=await this.post(`/internal/realtime/sessions/${encodeURIComponent(snapshot.sessionId)}/admission`,snapshot,1,true,true);
+    if(!matchesPublicAdmissionReceipt(receipt,snapshot))throw Error("public_admission_ack_mismatch");
+    return receipt;
+  }
 
   async modelAttempt(event:PublicModelAttemptEvent){
     if((this.options.internalApiSecret?.trim().length??0)<16)throw Error("public_attempt_auth_required");
@@ -188,23 +212,26 @@ class ApiSessionEventSink implements SessionEventSink {
     await this.post("/internal/realtime/segments", body);
   }
 
-  private async post(path: string, body: unknown, attempts = 1, readReceipt = false) {
+  private async post(path: string, body: unknown, attempts = 1, readReceipt = false, bounded = false,signal?:AbortSignal,gatewayCredential?:string) {
     for (let attempt = 1; attempt <= attempts; attempt += 1) {
       try {
-        return await this.postOnce(path, body, readReceipt);
+        return await this.postOnce(path, body, readReceipt, bounded,signal,gatewayCredential);
       } catch (error) {
         if (attempt === attempts) throw error;
       }
     }
   }
 
-  private async postOnce(path: string, body: unknown, readReceipt = false) {
+  private async postOnce(path: string, body: unknown, readReceipt = false, bounded = false,signal?:AbortSignal,gatewayCredential?:string) {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), this.options.timeoutMs);
+    const cancel=()=>controller.abort();signal?.addEventListener("abort",cancel,{once:true});if(signal?.aborted)cancel();
     try {
-      const response = await (this.options.fetchFn??fetch)(`${this.normalizedBaseUrl()}${path}`, {
+      if(controller.signal.aborted)throw Error("public_runtime_material_cancelled");
+      const pending = (this.options.fetchFn??fetch)(`${this.normalizedBaseUrl()}${path}`, {
         method: "POST",
         headers: {
+          ...(gatewayCredential?{"x-wujie-gateway-credential":gatewayCredential}:{}),
           "content-type": "application/json",
           ...(this.options.internalApiSecret
             ? { authorization: `Bearer ${this.options.internalApiSecret}` }
@@ -214,11 +241,13 @@ class ApiSessionEventSink implements SessionEventSink {
         signal: controller.signal,
         ...(readReceipt ? {redirect:"error" as const} : {}),
       });
+      const response=await (bounded?abortable(pending,controller.signal):pending);
       if (!response.ok) {
         throw new Error(`API session sync failed with HTTP ${response.status}`);
       }
-      if(readReceipt)return await response.json();
+      if(readReceipt)return bounded?await readPublicJson(response,controller.signal):await response.json();
     } finally {
+      signal?.removeEventListener("abort",cancel);
       clearTimeout(timer);
     }
   }

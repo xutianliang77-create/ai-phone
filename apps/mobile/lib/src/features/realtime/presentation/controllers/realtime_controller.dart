@@ -21,6 +21,7 @@ import '../../../../shared/domain/turn_language_profile.dart';
 import '../../data/api/realtime_session.dart';
 import '../../data/gateway/gateway_realtime_event.dart';
 import '../../data/realtime_repository.dart';
+import '../../data/api/public_creation_resolution.dart';
 import '../../../realtime/domain/entities/subtitle_segment.dart';
 import 'cleanup_guard.dart';
 import 'device_asr_failure_message.dart';
@@ -55,6 +56,8 @@ part 'realtime_controller_result_sync.dart';
 part 'realtime_controller_public_lifecycle.dart';
 
 class RealtimeController extends ChangeNotifier {
+  bool _publicCreationResolving = false;
+  int _publicCreationResolutionEpoch = 0;
   bool _drainingPublicAudio = false;
   int _endpointEpoch = 0, _pendingEndpoints = 0;
   int _endpointStartGeneration = -1, _publicTurnSamples = 0;

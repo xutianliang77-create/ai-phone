@@ -6,6 +6,8 @@ import type {
   SessionSegmentDto,
   RealtimeSessionDiagnosticsDto,
   RealtimeProcessingAuthorization,
+  CreateRealtimeSessionRequest,
+  RealtimeTokenClaims,
 } from "@translation/contracts";
 import type {
   CallLegRecord,
@@ -49,6 +51,9 @@ export interface SessionRecord {
   publicInferenceEvidence?: PublicInferenceEvidence[];
   publicModelAttempts?:PublicModelAttemptRecord[];
   publicModelConfiguration?:PublicModelRuntimeSnapshot;
+  publicCreationRequest?:{requestHash:string;request:CreateRealtimeSessionRequest};
+  /** No signed token or signing/provider secret is stored in the session. */
+  publicRealtimeIssuance?:{requestHash:string;endpoint:string;claims:RealtimeTokenClaims;holdId:string};
   publicRuntime?: PublicRuntimeEvidence;
   publicFinalization?: PublicFinalizationRecord;
 }

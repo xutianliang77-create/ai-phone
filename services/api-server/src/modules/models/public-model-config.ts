@@ -1,3 +1,4 @@
+import {publicProtocolCapability,publicProtocolSampleRateSupported,type PublicModelProtocolCapability} from "@translation/contracts";
 export const modelComponents=["asr","translation","tts"] as const;
 export type ModelComponent=typeof modelComponents[number];
 export type Vendor="qwen"|"tencent"|"openai"|"google";
@@ -11,8 +12,12 @@ export interface PublicModelProfile {
 export type Credentials=Partial<Record<"apiKey"|"secretId"|"secretKey"|"serviceAccountJson",string>>;
 export interface PublicModelConfiguration {schemaVersion:1;deploymentId:string;revision:number;updatedAt:string;
   components:Record<ModelComponent,PublicModelProfile>;credentials:Record<ModelComponent,Credentials>;}
-interface Protocol {id:string;label:string;vendor:Vendor;component:ModelComponent;scheme:"https:"|"wss:";auth:AuthKind[];modelRequired:boolean;fields:string[];}
-const p=(id:string,label:string,vendor:Vendor,component:ModelComponent,scheme:"https:"|"wss:",auth:AuthKind[],modelRequired=true,fields:string[]=[]):Protocol=>({id,label,vendor,component,scheme,auth,modelRequired,fields});
+interface Protocol {id:string;label:string;vendor:Vendor;component:ModelComponent;scheme:"https:"|"wss:";auth:AuthKind[];modelRequired:boolean;fields:string[];capability:Readonly<PublicModelProtocolCapability>;}
+const p=(id:string,label:string,vendor:Vendor,component:ModelComponent,scheme:"https:"|"wss:",auth:AuthKind[],modelRequired=true,fields:string[]=[]):Protocol=>{
+  const capability=publicProtocolCapability(id);
+  if(!capability||capability.vendor!==vendor||capability.component!==component)throw Error("public_catalog_capability_mismatch");
+  return {id,label,vendor,component,scheme,auth,modelRequired,fields,capability};
+};
 export const publicModelCatalog={
   vendors:[{id:"qwen",label:"Qwen / 阿里云百炼"},{id:"tencent",label:"腾讯云 / 混元"},{id:"openai",label:"OpenAI"},{id:"google",label:"Google"}],
   protocols:[
@@ -39,7 +44,7 @@ export class PublicConfigError extends Error{constructor(readonly code:string,re
 export function emptyConfiguration(deploymentId:string):PublicModelConfiguration{
   return {schemaVersion:1,deploymentId,revision:0,updatedAt:"",components:Object.fromEntries(modelComponents.map(component=>{
     const protocol=publicModelCatalog.protocols.find(p=>p.vendor==="qwen"&&p.component===component)!;
-    return [component,{enabled:false,vendor:"qwen",protocol:protocol.id,endpoint:"",modelId:"",authKind:"api_key",region:"",appId:"",projectId:"",location:"",recognizer:"",voice:"",timeoutMs:15000,maxTokens:512,sampleRate:16000}];
+    return [component,{enabled:false,vendor:"qwen",protocol:protocol.id,endpoint:"",modelId:"",authKind:"api_key",region:"",appId:"",projectId:"",location:"",recognizer:"",voice:"",timeoutMs:15000,maxTokens:512,sampleRate:protocol.capability.sampleRates[0]??16000}];
   })) as Record<ModelComponent,PublicModelProfile>,credentials:{asr:{},translation:{},tts:{}}};
 }
 const profileKeys=["enabled","vendor","protocol","endpoint","modelId","authKind","region","appId","projectId","location","recognizer","voice","timeoutMs","maxTokens","sampleRate"];
@@ -57,6 +62,7 @@ export function validateProfile(component:ModelComponent,value:unknown):PublicMo
   if(v.endpoint){let url:URL;try{url=new URL(v.endpoint);}catch{throw new PublicConfigError(`${component}:invalid_endpoint`);}
     if(url.protocol!==protocol.scheme||url.username||url.password||url.search||url.hash)throw new PublicConfigError(`${component}:endpoint_requires_${protocol.scheme.replace(":","")}_without_credentials_or_query`);}
   if(!Number.isSafeInteger(v.timeoutMs)||v.timeoutMs<250||v.timeoutMs>120000||!Number.isSafeInteger(v.maxTokens)||v.maxTokens<1||v.maxTokens>16384||![16000,24000].includes(v.sampleRate))throw new PublicConfigError(`${component}:invalid_limits`);
+  if(v.enabled&&component!=="translation"&&!publicProtocolSampleRateSupported(v.protocol,v.sampleRate))throw new PublicConfigError(`${component}:unsupported_sample_rate`);
   return structuredClone(v);
 }
 export function mergeConfiguration(current:PublicModelConfiguration,body:unknown){
@@ -94,6 +100,7 @@ export function publicConfiguration(config:PublicModelConfiguration){
     const v=config.components[c],p=publicModelCatalog.protocols.find(p=>p.id===v.protocol)!;
     const missing:string[]=[];
     if(v.enabled){if(!v.endpoint)missing.push("endpoint");if(p.modelRequired&&!v.modelId)missing.push("modelId");
+      if(c!=="translation"&&!publicProtocolSampleRateSupported(v.protocol,v.sampleRate))missing.push("sampleRate");
       for(const f of p.fields)if(!v[f as keyof PublicModelProfile]||f==="languageLocales"&&!Object.keys(v.languageLocales??{}).length)missing.push(f);
       for(const key of publicModelCatalog.credentialFields[v.authKind])if(!config.credentials[c][key as keyof Credentials])missing.push(key);}
     return [c,{state:!v.enabled?"disabled":missing.length?"incomplete":"configured_not_verified",missing,

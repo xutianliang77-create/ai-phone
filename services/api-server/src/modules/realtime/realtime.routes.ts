@@ -23,8 +23,14 @@ import {
   parseBillableSeconds,
 } from "./realtime-route-validation.js";
 import { isValidSegmentPatch } from "./realtime-segment-validation.js";
+import type {PublicRealtimeCoordinator} from "./public-realtime-coordinator.js";
+import {handlePublicRealtimeCreation} from "./public-realtime-http.js";
+import {registerPublicCreationContextRoute} from "./public-creation-context.routes.js";
+import {registerPublicCreationResolutionRoutes} from "./public-creation-resolution.routes.js";
 
-export async function registerRealtimeRoutes(app: FastifyInstance) {
+export async function registerRealtimeRoutes(app: FastifyInstance,publicCoordinator?:PublicRealtimeCoordinator) {
+  registerPublicCreationContextRoute(app,!!publicCoordinator);
+  registerPublicCreationResolutionRoutes(app,!!publicCoordinator);
   registerRealtimeFinalizationRoute(app);
   app.post("/realtime/sessions", async (request, reply) => {
     const account = await requireAccount(request, reply);
@@ -33,6 +39,7 @@ export async function registerRealtimeRoutes(app: FastifyInstance) {
     if (!parsed.ok) {
       return sendError(reply, 400, parsed.error.code, parsed.error.message);
     }
+    if(parsed.value.processing?.processingMode==="online"&&publicCoordinator)return handlePublicRealtimeCreation(request,reply,account.id,publicCoordinator);
     const blocker = realtimeCreationBlocker(parsed.value);
     if (blocker) return sendError(reply, blocker.status, blocker.code, blocker.message);
 

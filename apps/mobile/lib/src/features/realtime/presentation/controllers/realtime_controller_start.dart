@@ -2,7 +2,7 @@ part of 'realtime_controller.dart';
 
 extension RealtimeControllerStart on RealtimeController {
   Future<void> start() async {
-    if (_disposed || resourceOperationRunning || _resultSyncView.busy) return;
+    if (_disposed || resourceOperationRunning || _resultSyncView.busy || _publicCreationResolving) return;
     _listenForAudioSessionEvents();
     if (_stopInFlight) return;
     if (_status == RealtimeStatus.paused) {

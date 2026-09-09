@@ -1,7 +1,11 @@
 import {
   transitionRealtimeSessionState,
   type RealtimeTokenClaims,
+  type PublicAdmissionReceipt,
+  publicRuntimeTokenBinding,
+  matchesPublicAdmissionReceipt,
 } from "@translation/contracts";
+import {isDeepStrictEqual} from "node:util";
 import type { RealtimeSession } from "./realtime-session.js";
 
 const sessions = new Map<string, RealtimeSession>();
@@ -23,21 +27,56 @@ export function createSession(claims: RealtimeTokenClaims): RealtimeSession {
   return session;
 }
 
-export function attachSession(claims: RealtimeTokenClaims) {
+export function attachSession(claims: RealtimeTokenClaims,
+    recovery?:{expectedGeneration:number;receipt:PublicAdmissionReceipt}) {
   const existing = getSession(claims.sessionId);
   if (!existing) {
+    if(recovery)return null; // Recovery must never allocate a replacement session.
     const session = createSession(claims);
     return { session, generation: session.connectionGeneration, resumed: false };
   }
   if (existing.userId !== claims.userId || existing.status !== "connecting") {
     return null;
   }
+  if(existing.claims.publicRuntime){
+    const saved=existing.publicDisconnect;
+    if(!recovery||!saved||!Number.isSafeInteger(existing.connectionGeneration+1)||existing.connectionGeneration<1||existing.connectionGeneration!==recovery.expectedGeneration||saved.generation!==recovery.expectedGeneration||
+      !isDeepStrictEqual(existing.claims,claims)||!recoveryReceiptMatches(claims,recovery.receipt)||
+      !isDeepStrictEqual(saved.receipt.recovery,recovery.receipt.recovery)||
+      claims.expiresAt<=Math.floor(Date.now()/1000))return null;
+    // Same-process compare-and-set, after a fresh API checkpoint comparison.
+    // No ownership guarantee across Gateways and no audio/provider resumption.
+    existing.reconnectStatus="paused";existing.publicDisconnect=undefined;
+  }else if(recovery)return null;
   existing.connectionGeneration += 1;
   return {
     session: existing,
     generation: existing.connectionGeneration,
     resumed: true,
   };
+}
+
+function recoveryReceiptMatches(claims:RealtimeTokenClaims,receipt:PublicAdmissionReceipt){
+  const binding=publicRuntimeTokenBinding(claims,claims.publicRuntime?.deploymentId??"");
+  if(!binding||!receipt)return false;
+  return matchesPublicAdmissionReceipt(receipt,{...binding,contractVersion:1,requestId:receipt.requestId,
+    sessionId:claims.sessionId,ownerId:claims.userId,modelPolicyRevision:claims.processing!.modelPolicyRevision,
+    grantRef:claims.processing!.publicGrantRef!,purpose:"recovery"});
+}
+
+/** Install only after the original pipeline drains and the trusted API confirms
+ * disconnected. The existing session remains non-active; no timer/window reset. */
+export function recordPublicDisconnectCheckpoint(sessionId:string,generation:number,receipt:PublicAdmissionReceipt){
+  const session=getSession(sessionId);
+  if(!session||session.connectionGeneration!==generation||!recoveryReceiptMatches(session.claims,receipt))return false;
+  if(session.publicDisconnect)return session.status==="connecting"&&session.publicDisconnect.generation===generation&&
+    isDeepStrictEqual(session.publicDisconnect.receipt.recovery,receipt.recovery);
+  if(session.status!=="active"&&session.status!=="paused")return false;
+  if(!transitionStatus(sessionId,"connecting")?.transition.accepted)return false;
+  session.reconnectStatus="paused";
+  session.disconnectDeadlineAt=Date.parse(receipt.recovery!.recoveryUntil);
+  session.publicDisconnect={generation,receipt:structuredClone(receipt)};
+  return true;
 }
 
 export function confirmSessionConnection(

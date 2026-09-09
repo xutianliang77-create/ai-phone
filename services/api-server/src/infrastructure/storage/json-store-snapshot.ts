@@ -50,6 +50,8 @@ import type { PostgresProjectionEventRecord } from
   "./postgres-projection-record.js";
 
 export interface AppStoreSnapshot {
+  /** Minimal retired request identities; no text, token, credential or raw request key. */
+  publicCreationBindings?:Record<string,string>;
   sessions: SessionRecord[];
   usageBalances: Record<string, number>;
   accounts: AccountRecord[];
@@ -131,7 +133,10 @@ export function normalizeStoreSnapshot(value: unknown): AppStoreSnapshot {
   const raw = value && typeof value === "object"
     ? value as Partial<AppStoreSnapshot>
     : {};
+  if(raw.publicCreationBindings!==undefined&&(!raw.publicCreationBindings||typeof raw.publicCreationBindings!=="object"||Array.isArray(raw.publicCreationBindings)||
+    Object.entries(raw.publicCreationBindings).some(([id,hash])=>!/^public-[a-f0-9]{64}$/.test(id)||typeof hash!=="string"||!/^(?:(?:cancelled|expired):)?[a-f0-9]{64}$/.test(hash))))throw Error("Invalid public creation bindings");
   return {
+    ...(raw.publicCreationBindings!==undefined?{publicCreationBindings:{...raw.publicCreationBindings}}:{}),
     sessions: Array.isArray(raw.sessions) ? raw.sessions : [],
     usageBalances: raw.usageBalances ?? {},
     accounts: Array.isArray(raw.accounts) ? raw.accounts : [],

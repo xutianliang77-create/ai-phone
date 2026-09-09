@@ -2,6 +2,7 @@ import type {
   RealtimeSessionState,
   RealtimeTokenClaims,
   RealtimeVoiceConfig,
+  PublicAdmissionReceipt,
 } from "@translation/contracts";
 
 export type RealtimeSessionStatus = Extract<
@@ -23,4 +24,5 @@ export interface RealtimeSession {
   billableSeconds: number;
   reconnectStatus?: Extract<RealtimeSessionStatus, "active" | "paused">;
   disconnectDeadlineAt?: number;
+  publicDisconnect?:{generation:number;receipt:PublicAdmissionReceipt};
 }

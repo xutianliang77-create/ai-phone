@@ -1,4 +1,5 @@
 import {isDeepStrictEqual} from "node:util";
+import {publicProtocolSampleRateSupported} from "@translation/contracts";
 import {parseRealtimeProcessingRequest,type RealtimeExecutionPlan,type RealtimeProcessingAuthorization} from "@translation/contracts";
 import {HttpTtsSynthesizer} from "./http-tts-synthesizer.js";
 import {PublicSpeechError,type PublicSpeechOptions} from "./public-speech.js";
@@ -20,7 +21,7 @@ export function configuredPublicTts(options:ConfiguredPublicTtsOptions) {
     authorization.executionPlan.tts.execution!=="public"||!profile?.enabled||
     !(profile.vendor==="openai"&&profile.protocol==="openai_speech"||profile.vendor==="qwen"&&profile.protocol==="qwen_tts_realtime"||profile.vendor==="tencent"&&profile.protocol==="tencent_tts_ws"||profile.vendor==="google"&&profile.protocol==="google_cloud_tts")||
     (profile.vendor==="google"?!["google_service_account","google_adc"].includes(profile.authKind):profile.authKind!==(profile.vendor==="tencent"?"tencent_secret":"api_key"))||
-    (["tencent","google"].includes(profile.vendor)?![16000,24000].includes(profile.sampleRate):profile.sampleRate!==24000))throw new PublicSpeechError("public_tts_configuration_not_supported","not_sent");
+    !publicProtocolSampleRateSupported(profile.protocol,profile.sampleRate))throw new PublicSpeechError("public_tts_configuration_not_supported","not_sent");
   if(authorization.languagePolicy.autoReverse||authorization.languagePolicy.source==="auto")throw new PublicSpeechError("public_tts_dynamic_language_not_implemented","not_sent");
   const speech:PublicSpeechOptions={sessionId:options.sessionId,leaseId:options.leaseId,endpoint:profile.endpoint,modelId:profile.modelId,voice:profile.voice,
     timeoutMs:profile.timeoutMs,prefillMs:options.prefillMs,targetLanguage:authorization.languagePolicy.target,

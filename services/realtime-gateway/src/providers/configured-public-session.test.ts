@@ -34,6 +34,11 @@ const frame=():AudioFrame=>{const f:AudioFrame={type:"audio.frame",sessionId:"se
   markAcceptedAudioRange(f,{startSample:0,endSample:4800});return f;};
 afterEach(async()=>{for(const p of active.splice(0))await p.closeSession("session");vi.restoreAllMocks();vi.useRealTimers();});
 describe("original Router assembles one bound public audio session",()=>{
+  it.each(["openai_transcriptions","qwen_asr_compatible"])("rejects %s as a continuous session before any credential or network callback",protocol=>{
+    const s=setup();Object.assign(s.options.snapshot.components.asr!,{protocol,vendor:protocol.startsWith("qwen")?"qwen":"openai"});
+    expect(s.create).toThrow("requires_continuous_input");
+    expect(s.resolveAsrCredentials).not.toHaveBeenCalled();expect(s.authorizeConnection).not.toHaveBeenCalled();expect(s.socketFactory).not.toHaveBeenCalled();expect(s.fetchFn).not.toHaveBeenCalled();
+  });
   it("atomically assembles the original ASR/MT Provider and bound TTS queue",async()=>{
     const s=setup();s.options.session.voiceOutput=true;
     const plan={...s.options.authorization.executionPlan,tts:{execution:"public" as const,scopeKey:"tts",reason:"online_selected" as const}};

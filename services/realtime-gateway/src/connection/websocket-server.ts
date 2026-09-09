@@ -1,4 +1,5 @@
-import { configureRealtimeProvider, reportProviderSetupFailure } from "./realtime-provider-setup.js";
+import {setupRealtimeConnection} from "./realtime-connection-setup.js";
+import type {PublicGatewayRuntimeOptions} from "./configured-public-connection.js";
 import type { SessionEndReason } from "@translation/contracts";
 import { AudioFrameBatcher } from "./audio-frame-batcher.js";
 import { clearAudioFrameLog, logAudioFrameReceived } from "../metrics/audio-frame-logger.js";
@@ -6,11 +7,8 @@ import { loggableError, realtimeLogger } from "../metrics/realtime-metrics.js";
 import { clearTextSegmentLog } from "../metrics/text-segment-logger.js";
 import { parseIncomingEvent } from "../protocol/incoming-event-parser.js";
 import { buildError } from "../protocol/outgoing-event-builder.js";
-import { ProviderRouter } from "../providers/provider-router.js";
-import type { RealtimeProvider } from "../providers/realtime-provider.js";
-import { confirmSessionConnection, getSession, sessionBillableSeconds, transitionStatus } from "../sessions/session-manager.js";
+import { confirmSessionConnection, getSession } from "../sessions/session-manager.js";
 import { createUsageTickDecision } from "../usage/usage-ticker.js";
-import { createRealtimeTtsOutputQueue } from "../tts/realtime-tts-output-factory.js";
 import { handleControlEvent } from "./session-control-handler.js";
 import {handleAudioBoundary} from "./audio-boundary-control.js";
 import { RealtimeSessionFinalizer } from "./realtime-session-finalizer.js";
@@ -18,47 +16,25 @@ import { RealtimeConnectionCleanup } from "./realtime-connection-cleanup.js";
 import { RealtimeEventDispatcher } from "./realtime-event-dispatcher.js";
 import { RealtimeFlushTracker } from "./realtime-flush-tracker.js";
 import { handleTextSegment } from "./client-text-segment-handler.js";
-import { admitRealtimeConnection, sendRealtimeEvent } from "./realtime-connection-admission.js";
+import { sendRealtimeEvent } from "./realtime-connection-admission.js";
 import { createRealtimeServerRuntime, listenRealtimeServerRuntime } from "./realtime-server-runtime.js";
-import { coreDependencyFailureStage } from "./gateway-dependency-readiness.js";
-const router = new ProviderRouter();
 export { normalizeClientTextLanguage } from "../protocol/client-text-language.js";
-export function startWebSocketServer() {
+export function startWebSocketServer(options:{publicRuntime?:PublicGatewayRuntimeOptions}={}) {
   const runtime = createRealtimeServerRuntime();
+  const publicRuntime=options.publicRuntime?{...options.publicRuntime}:undefined;
   const {
     env,
     protection,
-    dependencyReadiness,
-    httpServer,
     server,
-    sessionEventSink,
     usageBalanceClient,
     disconnectFinalizers,
   } = runtime;
 
   server.on("connection", async (ws, request) => {
-    const attachment = admitRealtimeConnection(ws, request, env);
-    if (!attachment) return;
-    const { session, generation, resumed } = attachment;
-    let provider: RealtimeProvider;
-    let providerFailureStage: "provider" | "asr" | "translation" = "provider";
-    try {
-      const dependencyFailure = coreDependencyFailureStage(
-        dependencyReadiness.readiness(),
-      );
-      if (dependencyFailure) {
-        providerFailureStage = dependencyFailure;
-        throw new Error(`Realtime ${dependencyFailure} dependency is unavailable`);
-      }
-      provider = router.selectProvider(env, session.claims);
-      await configureRealtimeProvider(provider, env, session);
-    } catch {
-      await reportProviderSetupFailure(runtime, ws, session, generation, providerFailureStage);
-      return;
-    }
-
+    const configured=await setupRealtimeConnection(runtime,ws,request,publicRuntime);
+    if(!configured)return;
+    const {session,generation,resumed,provider,sessionEventSink,ttsOutputQueue}=configured;
     const flushTracker = new RealtimeFlushTracker();
-    const ttsOutputQueue = createRealtimeTtsOutputQueue(env, session);
     let outputSuppressed=false;
     const eventDispatcher = new RealtimeEventDispatcher({
       sendClient: (event) => sendRealtimeEvent(ws, event),
@@ -72,6 +48,7 @@ export function startWebSocketServer() {
         failPublicConnection();
       },
       afterSend: (event) => {
+        if(event.type==="session.started")configured.markStarted();
         flushTracker.record(event);
         if (event.type === "session.paused") {if(sessionEventSink.requiresConfirmation)outputSuppressed=true;ttsOutputQueue.cancelPending();}
         else {if(event.type==="session.resumed")outputSuppressed=false;if(!outputSuppressed)ttsOutputQueue.enqueue(event, eventDispatcher.send);}
@@ -238,6 +215,7 @@ export function startWebSocketServer() {
       }
 
       if (event.type === "client.text.segment") {
+        if(configured.publicConnection){sendRealtime(buildError("bad_event","This public session requires audio input",{sessionId:session.id,retryable:false}));failPublicConnection();return;}
         if (!enqueueControl(
           () => handleTextSegment(event, session.id, provider, sendRealtime),
           (error) => {
@@ -314,6 +292,8 @@ export function startWebSocketServer() {
       finalizer,
       provider,
       sessionSync: eventDispatcher,
+      publicImmediateFinalization:configured.publicConnection,
+      checkpointDisconnect:configured.checkpointDisconnect,
       disconnectFinalizers,
       closeClient: () => { if (ws.readyState === 1) ws.close(); },
       onError: (stage, error) => realtimeLogger.warn(
@@ -325,6 +305,7 @@ export function startWebSocketServer() {
       connectionCleanup.scheduleDeferredFinalization("connection_closed");
     }
     const cleanupConnection = async () => {
+      if(configured.publicConnection){outputSuppressed=true;audioBatcher.stopAccepting();ttsOutputQueue.suspend();}
       unsubscribeProvider();if(confirmationInterval)clearInterval(confirmationInterval);
       clearInterval(usageInterval);
       clearInterval(heartbeatInterval);

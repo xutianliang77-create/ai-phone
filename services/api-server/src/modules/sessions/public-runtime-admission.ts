@@ -55,8 +55,12 @@ export function issuePublicRuntimeLease(sessionId:string,ownerId:string,now=new 
       throw new ResultSyncError("public_runtime_terminal");
     }
     if(current.publicRuntimePolicy){
-      if(current.publicRuntimePolicy.admissionHash!==admissionHash||
-          Date.parse(current.publicRuntimePolicy.expiresAt)<=now.getTime())throw new ResultSyncError("public_runtime_lease_conflict");
+      const existing=current.publicRuntimePolicy;
+      const deadline=Math.min(...[admission.expiresAt,admission.budgetExpiresAt,admission.qualificationExpiresAt].map(Date.parse));
+      if(existing.admissionHash!==admissionHash||![existing.leaseId,existing.captureId].every(syncKey)||
+          existing.languagePolicyKey!==`language:${resultSyncHash(current.processingAuthorization!.languagePolicy)}`||
+          existing.sampleRate!==admission.sampleRate||!Number.isSafeInteger(existing.maxActiveSeconds)||existing.maxActiveSeconds<1||existing.maxActiveSeconds>admission.maxActiveSeconds||
+          existing.expiresAt!==new Date(deadline).toISOString()||Date.parse(existing.expiresAt)<=now.getTime())throw new ResultSyncError("public_runtime_lease_conflict");
       return {next:null,result:structuredClone(current.publicRuntimePolicy)};
     }
     if(current.status!=="created"||current.publicRuntime)throw new ResultSyncError("public_runtime_lease_conflict");

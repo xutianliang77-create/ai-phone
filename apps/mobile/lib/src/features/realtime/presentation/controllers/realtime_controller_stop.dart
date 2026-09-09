@@ -11,6 +11,10 @@ extension RealtimeControllerStop on RealtimeController {
   }
 
   Future<void> _stopOnce() async {
+    if (_publicCreationResolving) {
+      cancelPublicCreationResolutionWait();
+      if (_status == RealtimeStatus.idle || isTerminalRealtimeStatus(_status)) return;
+    }
     if (resourceOperationRunning) {
       await cancelLocalResourcePreparation();
       if (_status == RealtimeStatus.idle || isTerminalRealtimeStatus(_status)) {
@@ -23,6 +27,7 @@ extension RealtimeControllerStop on RealtimeController {
     _resultSyncView.busy = false;
     _repository.invalidateResultSync();
     _startGeneration += 1;
+    _repository.cancelPendingStart();
     if (!_setStatus(RealtimeStatus.ending)) {
       _stopInFlight = false;
       return;

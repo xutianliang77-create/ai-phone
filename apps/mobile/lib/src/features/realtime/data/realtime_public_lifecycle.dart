@@ -1,6 +1,20 @@
 part of 'realtime_repository.dart';
 
 extension RealtimePublicLifecycle on RealtimeRepository {
+  Future<bool> resumeRetainedPublicSession(String sessionId) async {
+    if (!_gatewayClient.canResumePublicTransport(sessionId)) return false;
+    // This is the original paused connection, not a new handshake. Recheck
+    // current server permission; a genuinely lost socket remains unsupported.
+    return resumePublicSession(sessionId, reconnect: false);
+  }
+  int get publicCreationAccountGeneration => _apiClient.accountGeneration;
+  Future<PublicCreationResolution?> resolvePendingPublicCreation(
+      {String action = 'query', PublicCreationResolution? expected}) {
+    if (_disposeRequested || _publicStart != null || _resultSync.session != null) {
+      throw StateError('Cannot resolve creation while session is running');
+    }
+    return _apiClient.resolvePendingPublicCreation(action: action, expected: expected);
+  }
   bool get publicLifecycleConfigured =>
       _apiClient.publicDeploymentId.isNotEmpty;
   Future<bool> resumePublicSession(String sessionId,
@@ -9,7 +23,7 @@ extension RealtimePublicLifecycle on RealtimeRepository {
     if (session == null ||
         session.sessionId != sessionId ||
         session.syncBinding == null ||
-        !session.expiresAt.isAfter(_now())) {
+        (reconnect && !session.expiresAt.isAfter(_now()))) {
       return false;
     }
     final epoch = _resultSync.epoch,

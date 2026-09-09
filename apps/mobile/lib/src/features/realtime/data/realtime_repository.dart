@@ -1,12 +1,12 @@
 import 'dart:async';
 import 'dart:convert';
-
 import '../../../app/app_config.dart';
 import '../../../platform/audio/audio_frame.dart';
 import '../../../platform/asr/asr_text_segment.dart';
 import '../domain/entities/subtitle_segment.dart';
 import 'api/realtime_api_client.dart';
 import 'api/realtime_session.dart';
+import 'api/public_creation_resolution.dart';
 import 'finalization/realtime_finalization_outbox.dart';
 import 'finalization/realtime_finalization_task.dart';
 import 'gateway/gateway_realtime_event.dart';
@@ -16,6 +16,7 @@ import '../../history/data/session_history_models.dart';
 import 'finalization/result_sync_receipt.dart';
 
 part 'realtime_result_sync.dart';
+part 'realtime_repository_start.dart';
 part 'realtime_public_lifecycle.dart';
 
 class RealtimeRepository {
@@ -63,7 +64,8 @@ class RealtimeRepository {
   final Map<String, Future<void>> _finalizations = {};
   Future<void>? _replayInFlight;
   bool _disposeRequested = false;
-
+  int _startEpoch = 0;
+  Future<RealtimeSession>? _publicStart;
   Stream<GatewayRealtimeEvent> get events => _gatewayClient.events;
 
   bool get supportsLocalCheckpoints => false;
@@ -78,18 +80,19 @@ class RealtimeRepository {
   }) async {}
 
   Future<RealtimeSession> startSession() async {
-    invalidateResultSync();
-    unawaited(recoverPendingFinalizations().catchError((Object _) {}));
-    final session = await _apiClient.createSession();
-    try {
-      await _gatewayClient.connect(session);
-      _resultSync.session = session;
-      return session;
-    } catch (_) {
-      unawaited(
-          _apiClient.endSession(session.sessionId).catchError((Object _) {}));
-      rethrow;
+    if (_disposeRequested) throw StateError('Realtime repository disposed');
+    if (publicLifecycleConfigured) {
+      final running = _publicStart;
+      if (running != null) return running;
+      final future = _startSessionOnce(++_startEpoch);
+      _publicStart = future;
+      try {
+        return await future;
+      } finally {
+        if (identical(_publicStart, future)) _publicStart = null;
+      }
     }
+    return _startSessionOnce(++_startEpoch);
   }
 
   bool sendAudio(String sessionId, AudioFrame frame) {
@@ -140,7 +143,7 @@ class RealtimeRepository {
 
   Future<bool> resumeAfterLifecycle(String sessionId) {
     if (_apiClient.publicDeploymentId.isNotEmpty) {
-      return resumePublicSession(sessionId);
+      return resumeRetainedPublicSession(sessionId);
     }
     return _gatewayClient.reconnectAndResume(sessionId);
   }
@@ -246,10 +249,18 @@ class RealtimeRepository {
   }
 
   Future<void> closeRealtime() async {
+    cancelPendingStart();
     await _gatewayClient.close();
   }
 
+  void cancelPendingStart() {
+    _startEpoch++;
+    _apiClient.cancelPublicCreationWait();
+    if (_publicStart != null) unawaited(_gatewayClient.close());
+  }
+
   void dispose() {
+    cancelPendingStart();
     invalidateResultSync();
     if (_disposeRequested) return;
     _disposeRequested = true;

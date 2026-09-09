@@ -164,7 +164,7 @@ describe("manual configuration binding on the original session aggregate",()=>{
     const update=body(1),component=p.component;
     Object.assign(update.components[component],{vendor:p.vendor,protocol:p.id,authKind:p.auth[0],
       endpoint:`${p.scheme}//configured.invalid/path`,modelId:p.modelRequired?"chosen-model":"",appId:"10001",
-      projectId:"synthetic-project",location:"global",recognizer:"_",voice:"chosen-voice",timeoutMs:2300,maxTokens:900,sampleRate:24000});
+      projectId:"synthetic-project",location:"global",recognizer:"_",voice:"chosen-voice",timeoutMs:2300,maxTokens:900,sampleRate:p.capability.sampleRates[0]??24000});
     const values={apiKey:secret,secretId:"SYNTHETIC_ID",secretKey:secret,serviceAccountJson:JSON.stringify({
       type:"service_account",project_id:"synthetic-project",client_email:"synthetic@invalid.test",private_key:"-----BEGIN PRIVATE KEY-----SYNTHETIC_ONLY"})};
     const credentials=Object.fromEntries(publicModelCatalog.credentialFields[p.auth[0]].map(key=>[key,values[key as keyof typeof values]]));

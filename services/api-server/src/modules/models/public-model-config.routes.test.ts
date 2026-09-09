@@ -14,6 +14,7 @@ const secrets={apiKey:"SYNTHETIC_API_SECRET",secretId:"SYNTHETIC_SECRET_ID",secr
 function payload(protocol=publicModelCatalog.protocols[0],revision=0){
   const config=emptyConfiguration("public-config-test"),c=protocol.component;
   Object.assign(config.components[c],{enabled:true,vendor:protocol.vendor,protocol:protocol.id,authKind:protocol.auth[0],endpoint:`${protocol.scheme}//synthetic-provider.test/base`,modelId:"manual-model-id",appId:"100001",projectId:"synthetic-project",location:"global",recognizer:"_",voice:"manual-voice"});
+  config.components[c].sampleRate=(protocol.capability.sampleRates[0]??16000) as 16000|24000;
   if(protocol.id==="google_speech_v2")config.components[c].languageLocales={zh:"cmn-Hans-CN",en:"en-US"};
   return {expectedRevision:revision,components:config.components,credentials:{[c]:Object.fromEntries(publicModelCatalog.credentialFields[protocol.auth[0]].map(k=>[k,secrets[k as keyof typeof secrets]]))}};
 }

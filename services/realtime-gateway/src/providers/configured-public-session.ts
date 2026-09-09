@@ -1,4 +1,6 @@
-import type {PublicModelAttemptEvent} from "@translation/contracts";
+import type {PublicModelAttemptEvent,RealtimeTokenClaims} from "@translation/contracts";
+import {publicProtocolCapability,publicProtocolSampleRateSupported,publicRuntimeTokenBinding} from "@translation/contracts";
+import {isDeepStrictEqual} from "node:util";
 import {configuredStreamingAsr, type ConfiguredStreamingAsrOptions} from "../asr/configured-public-asr.js";
 import type {PublicSessionBinding} from "../sessions/public-session-event-sink.js";
 import {configuredPublicTranslation, type ConfiguredPublicTranslationOptions} from "./lmstudio/configured-public-translation.js";
@@ -39,6 +41,22 @@ export function configuredPublicSessionComponents(options:ConfiguredPublicSessio
   return assemblePublicSession(options,true);
 }
 
+/** Call only after signature verification and authoritative lease/grant lookup.
+ * A signed projection is checked against server-resolved options, never used to
+ * manufacture those options. The public socket entry remains independently gated. */
+export function configuredPublicSessionFromVerifiedClaims(options:ConfiguredPublicSessionOptions,claims:RealtimeTokenClaims){
+  const token=publicRuntimeTokenBinding(claims,options.binding.deploymentId),b=options.binding;
+  if(!token||claims.userId!==b.ownerId||claims.sessionId!==b.sessionId||
+    !isDeepStrictEqual(claims.processing,options.authorization)||claims.sourceLanguage!==options.session.sourceLanguage||
+    claims.targetLanguage!==options.session.targetLanguage||claims.voiceOutput!==options.session.voiceOutput||
+    options.session.asrEndpointMode!==undefined&&claims.asrEndpointMode!==options.session.asrEndpointMode||
+    ["leaseId","captureId","languagePolicyKey","sampleRate"].some(k=>token[k as keyof typeof token]!==b[k as keyof typeof b])||
+    token.configurationHash!==options.snapshot.configurationHash||token.configurationRevision!==options.snapshot.configurationRevision||
+    claims.voiceOutput&&(!claims.voice||claims.voice.mode!=="preset"||claims.voice.presetId!==options.snapshot.components.tts?.voice||Object.keys(claims.voice).some(k=>!["mode","presetId"].includes(k)))||
+    !claims.voiceOutput&&claims.voice!==undefined)throw Error("public_session_token_binding_mismatch");
+  return configuredPublicSessionComponents(options);
+}
+
 function assemblePublicSession(options:ConfiguredPublicSessionOptions,withOutput:boolean) {
   const snapshot = structuredClone(options.snapshot), authorization = structuredClone(options.authorization);
   const binding = structuredClone(options.binding), session = structuredClone(options.session);
@@ -50,9 +68,10 @@ function assemblePublicSession(options:ConfiguredPublicSessionOptions,withOutput
         binding.captureId, binding.languagePolicyKey, binding.modelPolicyRevision, authorization.publicGrantRef].every(key) ||
       session.sessionId !== binding.sessionId || session.userId !== binding.ownerId ||
       snapshot.deploymentId !== binding.deploymentId || snapshot.modelPolicyRevision !== binding.modelPolicyRevision ||
-      binding.sampleRate !== (snapshot.components.asr?.protocol==="google_speech_v2"?snapshot.components.asr.sampleRate:["qwen_asr_realtime","tencent_asr_ws"].includes(snapshot.components.asr?.protocol??"")?16000:24000) || snapshot.components.asr?.sampleRate !== binding.sampleRate) {
+      !publicProtocolSampleRateSupported(snapshot.components.asr?.protocol??"",binding.sampleRate) || snapshot.components.asr?.sampleRate !== binding.sampleRate) {
     fail("public_session_binding_invalid");
   }
+  if(publicProtocolCapability(snapshot.components.asr!.protocol)?.input!=="continuous_pcm")fail("public_session_asr_requires_continuous_input");
   if (session.voiceOutput === true) {
     if(!withOutput||!options.output||typeof options.output.isSessionActive!=="function"||
       authorization.executionPlan.tts.execution!=="public"||snapshot.executionPlan.tts.execution!=="public")fail("public_session_output_required");

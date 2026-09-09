@@ -17,9 +17,10 @@ import { MockRealtimeProvider } from "./mock-realtime-provider.js";
 import { OpenAiRealtimeProvider } from "./openai/openai-realtime-provider.js";
 import {configuredPublicTranslation,type ConfiguredPublicTranslationOptions} from "./lmstudio/configured-public-translation.js";
 import {configuredPublicAsr,configuredStreamingAsr,type ConfiguredPublicAsrOptions,type ConfiguredStreamingAsrOptions} from "../asr/configured-public-asr.js";
-import {configuredPublicSession,configuredPublicSessionComponents,type ConfiguredPublicSessionOptions} from "./configured-public-session.js";
+import {configuredPublicSession,configuredPublicSessionComponents,configuredPublicSessionFromVerifiedClaims,type ConfiguredPublicSessionOptions} from "./configured-public-session.js";
 
 export class ProviderRouter {
+  createConfiguredPublicSessionFromVerifiedClaims(options:ConfiguredPublicSessionOptions,claims:RealtimeTokenClaims){return configuredPublicSessionFromVerifiedClaims(options,claims);}
   createConfiguredPublicSessionComponents(options:ConfiguredPublicSessionOptions){return configuredPublicSessionComponents(options);}
   createConfiguredPublicSessionProvider(options:ConfiguredPublicSessionOptions){return configuredPublicSession(options);}
   createConfiguredAsrClient(options:ConfiguredPublicAsrOptions){return configuredPublicAsr(options);}
@@ -30,7 +31,7 @@ export class ProviderRouter {
   }
 
   selectProvider(env?: RealtimeEnv, claims?: RealtimeTokenClaims): RealtimeProvider {
-    if (env?.publicDeploymentId || claims?.processing !== undefined) {
+    if (env?.publicDeploymentId || claims?.processing !== undefined || claims?.publicRuntime !== undefined) {
       throw new Error("public_processing_not_ready");
     }
     if (env?.provider === "tencent_trtc") {

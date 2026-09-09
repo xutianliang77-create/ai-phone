@@ -8,8 +8,19 @@ import {finalizePublicSession,serverFinalizationRequest} from "../sessions/publi
 import {findSession} from "../sessions/sessions-runtime.repository.js";
 import {isInternalAuthorized} from "./realtime-route-validation.js";
 import {recordPublicModelAttempt} from "../sessions/public-model-attempt.service.js";
+import {queryPublicAdmission} from "./public-admission-query.service.js";
+import {PublicConfigError} from "../models/public-model-config.js";
 
 export function registerPublicLifecycleRoutes(app:FastifyInstance){
+  app.post("/internal/realtime/sessions/:sessionId/admission",{bodyLimit:4096},async(request,reply)=>{
+    reply.header("cache-control","no-store");
+    if(!isInternalAuthorized(request.headers.authorization))return sendError(reply,401,"internal_error","Unauthorized internal request");
+    if(request.protocol!=="https"&&!["127.0.0.1","::1","::ffff:127.0.0.1"].includes(request.ip))return sendError(reply,403,"public_admission_secure_transport_required","Secure transport required");
+    const {sessionId}=request.params as {sessionId:string};
+    try{return await queryPublicAdmission(sessionId,request.body);}
+    catch(error){const known=error instanceof ResultSyncError||error instanceof PublicConfigError;
+      return sendError(reply,known?error.status:503,known?error.code:"public_admission_unavailable","Current public admission could not be confirmed");}
+  });
   app.post("/internal/realtime/sessions/:sessionId/model-attempts",{bodyLimit:4096},async(request,reply)=>{
     if(!isInternalAuthorized(request.headers.authorization))return sendError(reply,401,"internal_error","Unauthorized internal request");
     const {sessionId}=request.params as {sessionId:string};

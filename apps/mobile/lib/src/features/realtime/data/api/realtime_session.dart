@@ -8,6 +8,7 @@ class RealtimeSession {
     this.domainLexiconPacks = const <String>[],
     this.domainLexiconVersion,
     this.syncBinding,
+    this.publicScopeNotice,
   });
 
   final String sessionId;
@@ -18,6 +19,7 @@ class RealtimeSession {
   final List<String> domainLexiconPacks;
   final String? domainLexiconVersion;
   final ResultSyncBinding? syncBinding;
+  final String? publicScopeNotice;
 
   factory RealtimeSession.fromJson(Map<String, Object?> json) {
     return RealtimeSession(
@@ -34,6 +36,7 @@ class RealtimeSession {
       syncBinding: json.containsKey('processing')
           ? ResultSyncBinding.fromJson(json)
           : null,
+      publicScopeNotice: json['publicScopeNotice'] as String?,
     );
   }
 }

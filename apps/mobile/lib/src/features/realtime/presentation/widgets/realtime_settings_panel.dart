@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'public_creation_scope_notice.dart';
 
 import '../../../../app/localization/app_localizations.dart';
 import '../../data/realtime_runtime_settings.dart';
@@ -59,6 +60,7 @@ class RealtimeSettingsPanel extends StatelessWidget {
             onSelectionChanged: enabled ? _changeProcessingMode : null,
           ),
           const SizedBox(height: 16),
+          PublicCreationScopeNotice(mode: settings.processingMode),
           _SectionLabel(l10n.languageSettingsGroupLabel),
           const SizedBox(height: 6),
           Wrap(

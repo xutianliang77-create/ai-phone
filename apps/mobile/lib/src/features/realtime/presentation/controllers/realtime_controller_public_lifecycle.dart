@@ -1,6 +1,31 @@
 part of 'realtime_controller.dart';
 
 extension RealtimeControllerPublicLifecycle on RealtimeController {
+  bool get publicCreationResolutionBusy => _publicCreationResolving;
+  int get publicCreationAccountGeneration => _repository.publicCreationAccountGeneration;
+  bool get publicCreationResolutionAvailable => !_disposed &&
+      publicFinalizationAvailable && !_stopInFlight && !_resultSyncView.busy;
+  Future<PublicCreationResolution?> resolvePendingPublicCreation(
+      {String action = 'query', PublicCreationResolution? expected}) async {
+    if (!publicCreationResolutionAvailable || _publicCreationResolving) {
+      throw StateError('Public creation resolution unavailable');
+    }
+    _publicCreationResolving = true;
+    final epoch = ++_publicCreationResolutionEpoch;
+    _notify();
+    try {
+      await _failureCleanup?.catchError((Object _) {});
+      if (!publicCreationResolutionAvailable || epoch != _publicCreationResolutionEpoch) throw StateError('Resolution cancelled');
+      return await _repository.resolvePendingPublicCreation(action: action, expected: expected);
+    } finally {
+      _publicCreationResolving = false;
+      _notify();
+    }
+  }
+  void cancelPublicCreationResolutionWait() {
+    _publicCreationResolutionEpoch++;
+    _repository.cancelPendingStart();
+  }
   bool get publicFinalizationAvailable =>
       !_config.useLocalSessions &&
       _repository.publicLifecycleConfigured &&
@@ -24,7 +49,7 @@ extension RealtimeControllerPublicLifecycle on RealtimeController {
   }
 
   Future<void> confirmPendingPublicFinalizations() async {
-    if (!publicFinalizationAvailable || _resultSyncView.busy) return;
+    if (!publicFinalizationAvailable || _resultSyncView.busy || _publicCreationResolving) return;
     final epoch = ++_resultSyncView.epoch;
     _resultSyncView.busy = true;
     _notify();

@@ -44,6 +44,7 @@ export function evidence():PublicInferenceEvidence[]{
 
 export function installConfigurationFixture(){
 beforeEach(async()=>{
+  storage.getStoreSnapshot().publicCreationBindings={};
   dir=mkdtempSync(join(tmpdir(),"wujie-runtime-config-test-"));
   vi.stubEnv("PUBLIC_MODEL_CONFIG_FILE",join(dir,"public.enc"));vi.stubEnv("PUBLIC_MODEL_CONFIG_KEY","ab".repeat(32));
   vi.stubEnv("API_RESULT_SYNC_DEPLOYMENT_ID","runtime-test");vi.stubEnv("PRIVATE_MODEL_CONFIG_FILE",join(dir,"unread-private.enc"));

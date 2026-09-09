@@ -105,6 +105,16 @@ void main() {
     expect(h.gateway.resumes, 1);
     expect(h.gateway.connects, 1);
     expect(h.posts, isEmpty);
+    h.gateway.retained = false;
+    expect(await h.repo.resumeAfterLifecycle('public-s'), isFalse);
+    expect(h.gateway.resumes, 1);
+  });
+  test('same-connection resume uses current server permission, not handshake token expiry', () async {
+    final h = Harness();addTearDown(h.close);
+    h.api.returnedSession = RealtimeSession(sessionId: session.sessionId, realtimeToken: session.realtimeToken,
+      endpoint: session.endpoint, expiresAt: DateTime.now().subtract(const Duration(seconds: 1)), maxDurationSeconds: session.maxDurationSeconds, syncBinding: session.syncBinding);
+    await h.repo.startSession();h.resume = true;
+    expect(await h.repo.resumeAndWait('public-s'), isTrue);expect(h.gateway.resumes, 1);
   });
   test('text-sync revocation preserves a pending finalization operation',
       () async {
@@ -183,6 +193,7 @@ Map<String, Object?> ack() => {
     };
 
 class Api extends RealtimeApiClient {
+  RealtimeSession returnedSession = session;
   Api(http.Client client, AccountSessionStore accounts)
       : super(
             baseUrl: Uri.parse('https://public.test'),
@@ -190,11 +201,16 @@ class Api extends RealtimeApiClient {
             client: client,
             accountSessionStore: accounts);
   @override
-  Future<RealtimeSession> createSession() async => session;
+  Future<RealtimeSession> createSession() async => returnedSession;
 }
 
 class Gateway extends RealtimeGatewayClient {
   int connects = 0, ends = 0, resumes = 0;
+  bool retained = true;
+  @override
+  bool canResumePublicTransport(String id) => retained && id == 'public-s';
+  @override
+  Future<bool> resumeAndWait(String id, {Duration timeout = const Duration(seconds: 12)}) async { resumes++;return true; }
   @override
   Future<void> connect(RealtimeSession session) async {
     connects++;

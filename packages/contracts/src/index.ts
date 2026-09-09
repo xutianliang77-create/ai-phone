@@ -1,4 +1,7 @@
 export * from "./api/auth.js";
+export * from "./realtime/public-model-capabilities.js";
+export * from "./realtime/public-runtime-token.js";
+export * from "./realtime/public-admission-query.js";
 export * from "./api/agent-calls.js";
 export * from "./api/call-links.js";
 export * from "./api/model-routing.js";

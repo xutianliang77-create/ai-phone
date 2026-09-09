@@ -27,6 +27,11 @@ function connect(value:unknown,publicDeploymentId?:string) {
 }
 afterEach(()=>{deleteSession(id);vi.unstubAllEnvs();});
 describe("public processing must never attach to the legacy Gateway chain",()=>{
+  it("does not treat a runtime-only token as legacy private processing",()=>{
+    const value={...claims(),publicRuntime:{deploymentId:"public-test"}};
+    const {ws,result}=connect(value);expect(result).toBeNull();expect(getSession(id)).toBeNull();expect(ws.close).toHaveBeenCalled();
+    expect(()=>new ProviderRouter().selectProvider(undefined,value as any)).toThrow("public_processing_not_ready");
+  });
   it.each([{},null,{contractVersion:1,processingMode:"online"},{contractVersion:2},false])(
     "rejects every unqualified versioned token before state mutation (%j)",processing=>{
       const before=activeSessionCount();

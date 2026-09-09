@@ -23,11 +23,13 @@ class RealtimeGatewayClient {
   static const Duration _endTimeout = Duration(seconds: 12);
 
   RealtimeGatewayClient({
+    Duration publicStartTimeout = const Duration(seconds: 30),
     RealtimeReconnectBackoff reconnectBackoff =
         const RealtimeReconnectBackoff(),
     double Function()? reconnectJitterUnit,
     RealtimeReconnectAudioBuffer? reconnectAudioBuffer,
-  })  : _reconnectBackoff = reconnectBackoff,
+  })  : _publicStartTimeout = publicStartTimeout,
+        _reconnectBackoff = reconnectBackoff,
         _reconnectJitterUnit = reconnectJitterUnit ?? Random().nextDouble,
         _reconnectAudioBuffer =
             reconnectAudioBuffer ?? RealtimeReconnectAudioBuffer();
@@ -35,6 +37,7 @@ class RealtimeGatewayClient {
   final StreamController<GatewayRealtimeEvent> _events =
       StreamController<GatewayRealtimeEvent>.broadcast();
   final RealtimeReconnectBackoff _reconnectBackoff;
+  final Duration _publicStartTimeout;
   final double Function() _reconnectJitterUnit;
   final RealtimeReconnectAudioBuffer _reconnectAudioBuffer;
   WebSocketChannel? _channel;
@@ -45,6 +48,8 @@ class RealtimeGatewayClient {
   bool _manualClose = false;
   bool _suspended = false;
   bool _transportReady = false;
+  bool _publicPaused = false;
+  Completer<void>? _publicStarted;
   int _reconnectAttempts = 0;
   int _connectionGeneration = 0;
   int _lastAudioSequence = -1;
@@ -55,6 +60,7 @@ class RealtimeGatewayClient {
 
   Future<void> connect(RealtimeSession session) async {
     _session = session;
+    _publicPaused = false;
     _manualClose = false;
     _suspended = false;
     _reconnectAttempts = 0;
@@ -67,6 +73,12 @@ class RealtimeGatewayClient {
     _transportReady = false;
     _lastAudioSequence = -1;
     final generation = ++_connectionGeneration;
+    if (session.syncBinding != null) {
+      _publicStarted = Completer<void>();
+      unawaited(_publicStarted!.future.catchError((Object _) {}));
+    } else {
+      _publicStarted = null;
+    }
     final channel = WebSocketChannel.connect(
       realtimeGatewayEndpoint(session),
       protocols: realtimeGatewayProtocols(session),
@@ -77,7 +89,18 @@ class RealtimeGatewayClient {
       onError: (Object error) => _handleDisconnect(generation, error),
       onDone: () => _handleDisconnect(generation),
     );
-    await channel.ready.timeout(_connectTimeout);
+    try {
+      await channel.ready.timeout(_connectTimeout);
+      if (session.syncBinding != null) {
+        await _publicStarted!.future.timeout(_publicStartTimeout);
+      }
+    } catch (_) {
+      if (session.syncBinding != null) {
+        _manualClose = true;
+        await _closeTransport();
+      }
+      rethrow;
+    }
     if (generation != _connectionGeneration || !identical(_channel, channel)) {
       throw StateError('Realtime connection closed before becoming ready');
     }
@@ -90,8 +113,15 @@ class RealtimeGatewayClient {
     _suspended = true;
     _reconnectTimer?.cancel();
     _reconnectAudioBuffer.clear();
+    // Only a confirmed pause may retain its live public socket. Physical capture
+    // already stopped in the original Controller; do not turn pause into end.
+    if (canResumePublicTransport(_session?.sessionId ?? '')) return;
     await _closeTransport();
   }
+
+  bool canResumePublicTransport(String sessionId) =>
+      _session?.syncBinding != null && _session?.sessionId == sessionId &&
+      _publicPaused && _transportReady && _channel != null && !_manualClose;
 
   Future<bool> reconnectAndResume(
     String sessionId, {
@@ -99,6 +129,7 @@ class RealtimeGatewayClient {
   }) async {
     final session = _session;
     if (session == null || session.sessionId != sessionId) return false;
+    if (session.syncBinding != null) return false; // Server-side public reconnect is not implemented yet.
     _reconnectTimer?.cancel();
     await _closeTransport();
     _manualClose = false;
@@ -112,6 +143,7 @@ class RealtimeGatewayClient {
   }
 
   bool sendAudio(String sessionId, AudioFrame frame) {
+    if (_session?.syncBinding != null && (_suspended || _publicPaused)) return false;
     if (!_transportReady || _channel == null) {
       if (_shouldBufferReconnectAudio(sessionId)) {
         _reconnectAudioBuffer.add(frame);
@@ -271,6 +303,11 @@ class RealtimeGatewayClient {
   }
 
   Future<void> _closeTransport() async {
+    final started = _publicStarted;
+    if (started != null && !started.isCompleted) {
+      started.completeError(
+          StateError('Public connection closed before session start'));
+    }
     _connectionGeneration += 1;
     _stableConnectionTimer?.cancel();
     _transportReady = false;
@@ -283,7 +320,8 @@ class RealtimeGatewayClient {
   }
 
   bool _shouldBufferReconnectAudio(String sessionId) {
-    return _reconnectAttempts > 0 &&
+    return _session?.syncBinding == null &&
+        _reconnectAttempts > 0 &&
         _session?.sessionId == sessionId &&
         !_manualClose &&
         !_suspended;

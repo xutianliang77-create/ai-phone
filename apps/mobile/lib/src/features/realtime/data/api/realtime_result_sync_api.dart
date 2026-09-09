@@ -35,8 +35,7 @@ extension RealtimeResultSyncApi on RealtimeApiClient {
     if (binding == null ||
         publicDeploymentId.isEmpty ||
         binding.deploymentId != publicDeploymentId ||
-        accountGeneration < 0 ||
-        DateTime.now().isAfter(session.expiresAt)) {
+        accountGeneration < 0) {
       throw const RealtimeApiException('同步会话已失效');
     }
     final epoch = accountGeneration;

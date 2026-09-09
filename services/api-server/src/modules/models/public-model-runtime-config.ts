@@ -16,7 +16,11 @@ function capture(config:PublicModelConfiguration,voiceOutput:boolean):PublicMode
   if(typeof voiceOutput!=="boolean"||config.revision<1)throw new PublicConfigError("public_runtime_config_required",503);
   // Revalidate decrypted data with the editor's exact schema, including credentials.
   let validated:PublicModelConfiguration;
-  try{validated=mergeConfiguration(config,{expectedRevision:config.revision,components:config.components,
+  const requestedComponents=structuredClone(config.components);
+  // A session with reading disabled does not depend on an unused TTS rate.
+  // Do not migrate the stored profile or change its revision/credentials.
+  if(!voiceOutput)requestedComponents.tts.enabled=false;
+  try{validated=mergeConfiguration(config,{expectedRevision:config.revision,components:requestedComponents,
     credentials:config.credentials,clearCredentials:[...modelComponents]});}
   catch{throw new PublicConfigError("public_runtime_config_invalid",503);}
   const status=publicConfiguration(validated).status;

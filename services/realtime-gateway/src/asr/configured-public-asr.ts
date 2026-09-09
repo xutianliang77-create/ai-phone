@@ -1,4 +1,5 @@
 import {isDeepStrictEqual} from "node:util";
+import {publicProtocolSampleRateSupported} from "@translation/contracts";
 import {parseRealtimeProcessingRequest,type RealtimeExecutionPlan,type RealtimeProcessingAuthorization} from "@translation/contracts";
 import {HttpAsrClient} from "./http-asr-client.js";
 import {PublicAsrError,type CompletedAsrAudio,type CompletedAsrOptions} from "./public-asr-completed-audio.js";
@@ -18,6 +19,7 @@ export function configuredPublicAsr(options:ConfiguredPublicAsrOptions){
   const protocol=options.snapshot.components.asr?.protocol==="qwen_asr_compatible"?"qwen_asr_compatible":"openai_transcriptions";
   const {authorization,profile}=validateConfiguredAsr(options,protocol);
   if(protocol==="qwen_asr_compatible")qwenAsrLanguage(authorization.languagePolicy.source);
+  if(!publicProtocolSampleRateSupported(protocol,profile.sampleRate))throw new PublicAsrError("public_asr_configuration_not_supported","not_sent");
   const client=new HttpAsrClient({endpoint:profile.endpoint,timeoutMs:profile.timeoutMs,fetchFn:options.fetchFn});
   const binding:CompletedAsrOptions={sessionId:options.sessionId,leaseId:options.leaseId,model:profile.modelId,sampleRate:profile.sampleRate,wireProfile:protocol,resolveCredentials:options.resolveCredentials,record:options.record};
   return {healthCheck:async()=>false,async transcribeCompletedAudio(input:CompletedAsrAudio,signal?:AbortSignal){
@@ -44,7 +46,7 @@ export function configuredStreamingAsr(options:ConfiguredStreamingAsrOptions){
   if(qwen)qwenAsrLanguage(authorization.languagePolicy.source);
   if(tencent)validateTencentAsr({endpoint:profile.endpoint,model:profile.modelId,appId:profile.appId,language:authorization.languagePolicy.source as StreamingAsrOptions["language"]});
   let url:URL;try{url=new URL(profile.endpoint);}catch{throw new PublicAsrError("public_asr_stream_configuration","not_sent");}
-  if(url.protocol!==(google?"https:":"wss:")||url.username||url.password||url.search||url.hash||(google?![16000,24000].includes(profile.sampleRate):profile.sampleRate!==(qwen||tencent?16000:24000))||
+  if(url.protocol!==(google?"https:":"wss:")||url.username||url.password||url.search||url.hash||!publicProtocolSampleRateSupported(protocol,profile.sampleRate)||
     !google&&!tencent&&!(qwen?/^[a-z]{2,3}$/:/^[a-z]{2}$/).test(authorization.languagePolicy.source)||!Number.isSafeInteger(profile.timeoutMs)||profile.timeoutMs<250||profile.timeoutMs>120000||
     ![options.sessionId,options.leaseId,profile.modelId].every(v=>typeof v==="string"&&v.trim()===v&&v.length>0&&v.length<=240)||typeof options.authorizeConnection!=="function"){
     throw new PublicAsrError("public_asr_stream_configuration","not_sent");

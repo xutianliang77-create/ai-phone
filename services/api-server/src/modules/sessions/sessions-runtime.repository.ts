@@ -20,6 +20,7 @@ import { getRepositoryRuntime } from
 import type { CallLegRecord } from "../call-links/call-link-record.js";
 import * as legacy from "./sessions.repository.js";
 import type { SessionRecord } from "./session-record.js";
+import {createPreparedSessionWithBinding} from "../realtime/public-creation-binding.js";
 import {
   applySessionSegmentPatch,
   createSessionSegment,
@@ -35,10 +36,11 @@ import {
 
 export type { SessionRecord } from "./session-record.js";
 export { SessionVersionConflictError } from "./sessions.repository.js";
-
 export async function createSession(record: SessionRecord) {
   const runtime = getRepositoryRuntime();
-  if (runtime.driver !== "postgres") return legacy.createSession(record);
+  if (runtime.driver !== "postgres") return record.publicCreationRequest
+    ? createPreparedSessionWithBinding(record,legacy.createSession)
+    : legacy.createSession(record);
   const routing = assertNewSessionPlacementAllowed();
   const requested: SessionRecord = {
     ...structuredClone(record),
