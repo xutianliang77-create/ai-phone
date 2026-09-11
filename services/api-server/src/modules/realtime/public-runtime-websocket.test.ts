@@ -12,7 +12,7 @@ import {savePublicModelConfiguration} from "../models/public-model-config-store.
 import {capturePublicModelRuntimeConfiguration} from "../models/public-model-runtime-config.js";
 import {revokePublicInferenceEvidence} from "../sessions/public-inference-admission.service.js";
 import {startWebSocketServer} from "../../../../realtime-gateway/src/connection/websocket-server.js";
-import {getSession} from "../../../../realtime-gateway/src/sessions/session-manager.js";
+import {getSession,deleteSession} from "../../../../realtime-gateway/src/sessions/session-manager.js";
 import {ProviderRouter} from "../../../../realtime-gateway/src/providers/provider-router.js";
 import {SyntheticAsrSocket} from "../../../../realtime-gateway/src/asr/streaming-asr.test-support.js";
 import {SyntheticQwenAsrSocket} from "../../../../realtime-gateway/src/asr/qwen-streaming-asr.test-support.js";
@@ -38,7 +38,8 @@ afterEach(async()=>{
   await app.close();vi.useRealTimers();
 });
 async function waitFor(test:()=>boolean,timeout=5000){const until=performance.now()+timeout;while(!test()){if(performance.now()>until)throw Error("Synthetic WebSocket condition timed out: "+messages.map(e=>e.type+":"+(e.code??"")).join(","));await new Promise(r=>setTimeout(r,10));}}
-async function setup(vendor="qwen",voice=false,overrideAccess=access,afterApiReply?:(path:string,body:any)=>void){
+function nextSocketEvent(socket:WebSocket,test:(event:any)=>boolean){return new Promise<any>(resolve=>{const receive=(data:any)=>{const event=JSON.parse(data.toString());if(test(event)){socket.off("message",receive);resolve(event);}};socket.on("message",receive);});}
+async function setup(vendor="qwen",voice=false,overrideAccess=access,afterApiReply?:(path:string,body:any)=>void,recoverySocketAssembly=false){
   const update=body(1);if(vendor==="openai")Object.assign(update.components.asr,{vendor,protocol:"openai_realtime_asr",sampleRate:24000});
   Object.assign(update.components.tts,{vendor:"openai",protocol:"openai_speech",endpoint:"https://model.synthetic.invalid/v1",modelId:"manual-tts",sampleRate:24000,voice:"coral"});
   await savePublicModelConfiguration(update);const configuration=capturePublicModelRuntimeConfiguration(voice);
@@ -51,7 +52,7 @@ async function setup(vendor="qwen",voice=false,overrideAccess=access,afterApiRep
   const modelFetchFn=vi.fn(async(url:any)=>String(url).endsWith("/audio/speech")?new Response(Buffer.alloc(4800),{headers:{"content-type":"audio/pcm"}}):new Response(JSON.stringify({choices:[{finish_reason:"stop",message:{content:"Today we test public speech translation."}}]})));
   const asrSocketFactory=vi.fn(()=>{const peer=vendor==="qwen"?new SyntheticQwenAsrSocket():new SyntheticAsrSocket();peer.transcript="今天我们测试公共语音翻译。";return peer.asWebSocket();});
   const privateSelect=vi.spyOn(ProviderRouter.prototype,"selectProvider");
-  server=startWebSocketServer({publicRuntime:{credentialAccessSecret:overrideAccess,apiFetchFn,modelFetchFn,asrSocketFactory}});await once(server,"listening");
+  server=startWebSocketServer({publicRuntime:{credentialAccessSecret:overrideAccess,apiFetchFn,modelFetchFn,asrSocketFactory,recoverySocketAssembly}});await once(server,"listening");
   const address=server.address();if(!address||typeof address==="string")throw Error("No loopback socket");
   ws=new WebSocket(`ws://127.0.0.1:${address.port}/realtime`,["ai-phone.realtime.v1",`ai-phone.token.${issued.realtimeToken}`],{headers:{host:"127.0.0.1"}});
   ws.on("message",data=>messages.push(JSON.parse(data.toString())));await once(ws,"open");
@@ -118,6 +119,61 @@ describe("original Gateway loopback WebSocket with session-scoped API materials"
     expect(current().status).toBe("ended");expect(current().consumedSeconds).toBe(60);
     expect(getStoreSnapshot().billingLedger.filter(e=>e.idempotencyKey===`settle:${s.issued.sessionId}`)).toHaveLength(1);
     expect(s.modelFetchFn).not.toHaveBeenCalled();
+  });
+  it("retains the original provider/sink/output only when explicit recovery assembly is enabled",async()=>{
+    const s=await setup("qwen",false,access,undefined,true);await waitFor(()=>messages.some(e=>e.type==="session.started"));
+    ws!.terminate();await once(ws!,"close").catch(()=>{});await waitFor(()=>getSession(s.issued.sessionId)?.publicRecoveryRuntime!==undefined);
+    const retained=getSession(s.issued.sessionId)!;
+    expect(retained.status).toBe("connecting");expect(retained.publicDisconnect?.generation).toBe(1);
+    expect(retained.publicRecoveryRuntime?.generation).toBe(1);expect(current().status).toBe("paused");
+    expect(getStoreSnapshot().billingLedger).toHaveLength(0);expect(s.asrSocketFactory).toHaveBeenCalledTimes(1);
+    deleteSession(s.issued.sessionId,retained);
+    await waitFor(()=>getSession(s.issued.sessionId)===null);
+  });
+  it("explicitly assembles a recovery socket from retained state, rechecks authority, and blocks audio until phone sequencing exists",async()=>{
+    const s=await setup("qwen",false,access,undefined,true);await waitFor(()=>messages.some(e=>e.type==="session.started"));
+    ws!.send(JSON.stringify({type:"audio.frame",sessionId:s.issued.sessionId,sequence:1,timestampMs:0,format:"pcm16",sampleRate:16000,data:Buffer.alloc(3200).toString("base64")}));
+    ws!.send(JSON.stringify({type:"audio.boundary",sessionId:s.issued.sessionId,sequence:1}));await waitFor(()=>messages.some(e=>e.type==="translation.final"));
+    const beforeCalls=s.calls.length,beforeModel=s.modelFetchFn.mock.calls.length;ws!.terminate();await once(ws!,"close").catch(()=>{});
+    await waitFor(()=>getSession(s.issued.sessionId)?.publicRecoveryRuntime!==undefined);
+    const address=server!.address() as {port:number},recoveredEvents:any[]=[];
+    const recovered=new WebSocket(`ws://127.0.0.1:${address.port}/realtime`,["ai-phone.realtime.v1",`ai-phone.token.${s.issued.realtimeToken}`],{headers:{host:"127.0.0.1"}}),
+      started=nextSocketEvent(recovered,event=>event.type==="session.started"),ready=nextSocketEvent(recovered,event=>event.type==="session.recovery.ready");
+    recovered.on("message",data=>recoveredEvents.push(JSON.parse(data.toString())));await once(recovered,"open");ws=recovered;
+    await Promise.all([started,ready]);
+    expect(s.asrSocketFactory).toHaveBeenCalledTimes(1);expect(s.modelFetchFn).toHaveBeenCalledTimes(beforeModel);
+    const recoveryChecks=s.calls.slice(beforeCalls).filter(c=>c.path.endsWith("/admission"));
+    expect(recoveryChecks.map(c=>c.body.purpose)).toEqual(["recovery","recovery"]);
+    expect(recoveryChecks[0].body.requestId).not.toBe(recoveryChecks[1].body.requestId);
+    expect(s.calls.slice(beforeCalls).some(c=>c.path.endsWith("/credentials")||c.path.endsWith("/configuration"))).toBe(false);
+    const bridge=recoveredEvents.find(e=>e.type==="session.recovery.ready");expect(bridge).toMatchObject({lastAcceptedSample:1600,nextSequence:2});
+    const wrongResume=nextSocketEvent(recovered,event=>event.type==="error"&&event.stage==="session");
+    recovered.send(JSON.stringify({type:"session.resume",sessionId:s.issued.sessionId,recovery:{lastAcceptedSample:1600,nextSequence:1}}));
+    await expect(wrongResume).resolves.toMatchObject({code:"bad_event"});
+    const resumed=nextSocketEvent(recovered,event=>event.type==="session.resumed");
+    recovered.send(JSON.stringify({type:"session.resume",sessionId:s.issued.sessionId,recovery:{lastAcceptedSample:bridge.lastAcceptedSample,nextSequence:bridge.nextSequence}}));
+    await resumed;
+    const wrongFirstFrame=nextSocketEvent(recovered,event=>event.type==="error"&&event.stage==="asr");
+    recovered.send(JSON.stringify({type:"audio.frame",sessionId:s.issued.sessionId,sequence:bridge.nextSequence+1,timestampMs:200,format:"pcm16",sampleRate:16000,data:Buffer.alloc(3200).toString("base64")}));
+    await expect(wrongFirstFrame).resolves.toMatchObject({code:"bad_event"});
+    expect(s.modelFetchFn).toHaveBeenCalledTimes(beforeModel);expect(s.asrSocketFactory).toHaveBeenCalledTimes(1);
+    const boundaryCommitted=nextSocketEvent(recovered,event=>event.type==="audio.boundary.committed");
+    recovered.send(JSON.stringify({type:"audio.frame",sessionId:s.issued.sessionId,sequence:bridge.nextSequence,timestampMs:240,format:"pcm16",sampleRate:16000,data:Buffer.alloc(3200).toString("base64")}));
+    recovered.send(JSON.stringify({type:"audio.boundary",sessionId:s.issued.sessionId,sequence:bridge.nextSequence}));
+    await expect(boundaryCommitted).resolves.toMatchObject({sequence:bridge.nextSequence});
+    expect(s.modelFetchFn).toHaveBeenCalledTimes(beforeModel);expect(s.asrSocketFactory).toHaveBeenCalledTimes(1);
+    deleteSession(s.issued.sessionId,getSession(s.issued.sessionId)!);recovered.terminate();await once(recovered,"close");
+  });
+  it("rejects a recovery socket after current authority is revoked without consuming retained state or opening another model",async()=>{
+    const s=await setup("qwen",false,access,undefined,true);await waitFor(()=>messages.some(e=>e.type==="session.started"));
+    ws!.terminate();await once(ws!,"close").catch(()=>{});await waitFor(()=>getSession(s.issued.sessionId)?.publicRecoveryRuntime!==undefined);
+    const beforeCalls=s.calls.length;await revokePublicInferenceEvidence(s.issued.sessionId,current().userId,"consent",new Date());
+    const address=server!.address() as {port:number},retry=new WebSocket(`ws://127.0.0.1:${address.port}/realtime`,["ai-phone.realtime.v1",`ai-phone.token.${s.issued.realtimeToken}`],{headers:{host:"127.0.0.1"}});
+    await once(retry,"close");expect(getSession(s.issued.sessionId)?.publicRecoveryRuntime).toBeDefined();
+    expect(s.asrSocketFactory).toHaveBeenCalledTimes(1);expect(s.modelFetchFn).not.toHaveBeenCalled();
+    expect(s.calls.slice(beforeCalls).filter(c=>c.path.endsWith("/admission")).map(c=>c.body.purpose)).toEqual(["recovery"]);
+    expect(s.calls.slice(beforeCalls).some(c=>c.path.endsWith("/credentials")||c.path.endsWith("/configuration"))).toBe(false);
+    deleteSession(s.issued.sessionId,getSession(s.issued.sessionId)!);
   });
   it("rejects a duplicate live connection before a second model socket is opened",async()=>{
     const s=await setup();await waitFor(()=>messages.some(e=>e.type==="session.started"));const address=server!.address() as {port:number};

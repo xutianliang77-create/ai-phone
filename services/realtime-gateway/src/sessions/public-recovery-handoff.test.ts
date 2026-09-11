@@ -1,7 +1,7 @@
 import {afterEach,beforeEach,describe,it,expect,vi} from "vitest";
 import type {RealtimeTokenClaims,PublicAdmissionReceipt} from "@translation/contracts";
 import {publicRuntimeTokenBinding} from "@translation/contracts";
-import {attachSession,createSession,deleteSession,getSession,confirmSessionConnection,recordPublicDisconnectCheckpoint} from "./session-manager.js";
+import {attachSession,createSession,deleteSession,getSession,confirmSessionConnection,recordPublicDisconnectCheckpoint,retainPublicRecoveryRuntime,takePublicRecoveryRuntime,releasePublicRecoveryRuntime} from "./session-manager.js";
 import {RealtimeConnectionCleanup} from "../connection/realtime-connection-cleanup.js";
 import {DisconnectFinalizerRegistry} from "./disconnect-finalizer-registry.js";
 const epoch=1000000;
@@ -45,6 +45,22 @@ describe("same-process original session generation handoff",()=>{
     expect(recordPublicDisconnectCheckpoint(s.id,1,r)).toBe(true);const before=structuredClone(s);
     expect(recordPublicDisconnectCheckpoint(s.id,1,{...r,requestId:"repeat"})).toBe(true);expect(s).toEqual(before);
   });
+  it("retains only the checkpointed original components and transfers them once to the new generation",()=>{
+    const s=createSession(claims()),r=receipt(),release=vi.fn(),runtime={generation:1,provider:{} as any,ttsOutputQueue:{} as any,sessionEventSink:{} as any,release};
+    expect(retainPublicRecoveryRuntime(s.id,1,runtime)).toBe(false);
+    expect(recordPublicDisconnectCheckpoint(s.id,1,r)).toBe(true);
+    expect(retainPublicRecoveryRuntime(s.id,1,runtime)).toBe(true);
+    expect(retainPublicRecoveryRuntime(s.id,1,runtime)).toBe(false);
+    const attached=attachSession(claims(),{expectedGeneration:1,receipt:{...r,requestId:"fresh"}})!;
+    expect(takePublicRecoveryRuntime(s.id,attached.generation)).toBe(runtime);
+    expect(takePublicRecoveryRuntime(s.id,attached.generation)).toBeNull();
+    expect(release).not.toHaveBeenCalled();
+  });
+  it("releases retained runtime exactly once when the original aggregate is removed",()=>{
+    const s=createSession(claims()),r=receipt(),release=vi.fn(),runtime={generation:1,provider:{} as any,ttsOutputQueue:{} as any,sessionEventSink:{} as any,release};
+    expect(recordPublicDisconnectCheckpoint(s.id,1,r)).toBe(true);expect(retainPublicRecoveryRuntime(s.id,1,runtime)).toBe(true);
+    expect(releasePublicRecoveryRuntime(s.id,2)).toBe(false);expect(deleteSession(s.id,s)).toBe(true);expect(release).toHaveBeenCalledTimes(1);
+  });
 });
 describe("public disconnect cleanup checkpoint ordering",()=>{
   it("drains, confirms disconnected, then retains the existing immediate-finalization policy",async()=>{
@@ -67,5 +83,14 @@ describe("public disconnect cleanup checkpoint ordering",()=>{
     const cleanup=new RealtimeConnectionCleanup({session:s,generation:1,publicImmediateFinalization:true,
       finalizer:{flush:async()=>({} as any),finalize},checkpointDisconnect:async()=>{s.connectionGeneration=2;return receipt();},provider:{closeSession:close},sessionSync:{drain:async()=>{}},disconnectFinalizers:registry,closeClient:()=>{},onError:()=>{}});
     await cleanup.run("connection_closed");expect(getSession(s.id)).toBe(s);expect(close).not.toHaveBeenCalled();expect(finalize).not.toHaveBeenCalled();registry.close();
+  });
+  it("explicit recovery assembly retains only until the original recovery deadline, then finalizes and releases",async()=>{
+    vi.useFakeTimers();vi.setSystemTime(epoch);
+    const s=createSession(claims()),registry=new DisconnectFinalizerRegistry(30000,()=>{}),finalize=vi.fn(async()=>{}),close=vi.fn(),release=vi.fn();
+    const cleanup=new RealtimeConnectionCleanup({session:s,generation:1,publicImmediateFinalization:true,
+      finalizer:{flush:async()=>({} as any),finalize},checkpointDisconnect:async()=>receipt(),retainPublicRecovery:()=>true,releaseRetainedRecovery:release,
+      provider:{closeSession:close},sessionSync:{drain:async()=>{}},disconnectFinalizers:registry,closeClient:()=>{},onError:()=>{throw Error("unexpected");}});
+    await cleanup.run("connection_closed");expect(cleanup.retainedPublicRecovery).toBe(true);expect(finalize).not.toHaveBeenCalled();expect(close).not.toHaveBeenCalled();expect(s.status).toBe("connecting");
+    await vi.advanceTimersByTimeAsync(60000);expect(finalize).toHaveBeenCalledWith("connection_closed");expect(release).toHaveBeenCalledTimes(1);expect(getSession(s.id)).toBeNull();registry.close();
   });
 });

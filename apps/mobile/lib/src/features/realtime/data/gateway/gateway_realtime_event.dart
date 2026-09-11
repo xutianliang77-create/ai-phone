@@ -38,6 +38,8 @@ class GatewayRealtimeEvent {
     this.languageProfile,
     this.voiceOutputEnabled,
     this.voiceOutputAccepted,
+    this.recoveryLastAcceptedSample,
+    this.recoveryNextSequence,
   });
 
   final String type;
@@ -75,6 +77,8 @@ class GatewayRealtimeEvent {
   final TurnLanguageProfile? languageProfile;
   final bool? voiceOutputEnabled;
   final bool? voiceOutputAccepted;
+  final int? recoveryLastAcceptedSample;
+  final int? recoveryNextSequence;
 
   const GatewayRealtimeEvent.connection({
     required this.type,
@@ -111,9 +115,19 @@ class GatewayRealtimeEvent {
         vadContext = null,
         languageProfile = null,
         voiceOutputEnabled = null,
-        voiceOutputAccepted = null;
+        voiceOutputAccepted = null,
+        recoveryLastAcceptedSample = null,
+        recoveryNextSequence = null;
 
   factory GatewayRealtimeEvent.fromJson(Map<String, Object?> json) {
+    if (json['type'] == 'session.recovery.ready' &&
+        (json['sessionId'] is! String ||
+            json['lastAcceptedSample'] is! int ||
+            json['nextSequence'] is! int ||
+            (json['lastAcceptedSample'] as int) < 0 ||
+            (json['nextSequence'] as int) < 0)) {
+      throw const FormatException('Invalid public recovery bridge');
+    }
     if ((json['type'] == 'audio.boundary.committed' ||
             json['type'] == 'audio.boundary.rejected') &&
         json['sequence'] is! int) {
@@ -156,6 +170,8 @@ class GatewayRealtimeEvent {
       data: json['data'] as String?,
       voiceOutputEnabled: json['enabled'] as bool?,
       voiceOutputAccepted: json['accepted'] as bool?,
+      recoveryLastAcceptedSample: json['lastAcceptedSample'] as int?,
+      recoveryNextSequence: json['nextSequence'] as int?,
       replayedAudioMs: (json['replayedAudioMs'] as num?)?.toInt(),
       droppedAudioMs: (json['droppedAudioMs'] as num?)?.toInt(),
       flush: flushJson is Map

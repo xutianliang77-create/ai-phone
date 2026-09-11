@@ -14,6 +14,8 @@ import type { RealtimeSessionFinalizer } from "./realtime-session-finalizer.js";
 interface RealtimeConnectionCleanupOptions {
   publicImmediateFinalization?:boolean;
   checkpointDisconnect?:()=>Promise<PublicAdmissionReceipt>;
+  retainPublicRecovery?:()=>boolean;
+  releaseRetainedRecovery?:()=>void;
   session: RealtimeSession;
   generation: number;
   finalizer: Pick<RealtimeSessionFinalizer, "flush" | "finalize">;
@@ -26,6 +28,7 @@ interface RealtimeConnectionCleanupOptions {
 
 export class RealtimeConnectionCleanup {
   private cleanupPromise?: Promise<void>;
+  private retained=false;
 
   constructor(private readonly options: RealtimeConnectionCleanupOptions) {}
 
@@ -33,6 +36,8 @@ export class RealtimeConnectionCleanup {
     this.cleanupPromise ??= this.runOnce(reason);
     return this.cleanupPromise;
   }
+
+  get retainedPublicRecovery() { return this.retained; }
 
   private async runOnce(
     reason: Extract<SessionEndReason, "connection_closed" | "connection_error">,
@@ -51,6 +56,13 @@ export class RealtimeConnectionCleanup {
             const receipt=await this.options.checkpointDisconnect();
             if(!owns()){this.options.closeClient();return;}
             if(!recordPublicDisconnectCheckpoint(session.id,generation,receipt))throw Error("public_disconnect_checkpoint_not_confirmed");
+            if(this.options.retainPublicRecovery?.()){
+              this.retained=true;
+              this.scheduleDeferredFinalization(reason);
+              await this.options.sessionSync.drain();
+              this.options.closeClient();
+              return;
+            }
           }catch(error){this.options.onError("sync",error);}
           // No remaining resume allowance is not a reason to skip the original
           // stop/settlement attempt. Its own durable confirmation still applies.
@@ -95,6 +107,7 @@ export class RealtimeConnectionCleanup {
         pending.disconnectDeadlineAt !== deadlineAt
       ) return;
       await this.options.finalizer.finalize(reason);
+      this.options.releaseRetainedRecovery?.();
       deleteSession(session.id, session);
       this.options.closeClient();
     }, deadlineAt);

@@ -6,7 +6,7 @@ import {
   matchesPublicAdmissionReceipt,
 } from "@translation/contracts";
 import {isDeepStrictEqual} from "node:util";
-import type { RealtimeSession } from "./realtime-session.js";
+import type { PublicRecoveryRuntime, RealtimeSession } from "./realtime-session.js";
 
 const sessions = new Map<string, RealtimeSession>();
 
@@ -79,6 +79,34 @@ export function recordPublicDisconnectCheckpoint(sessionId:string,generation:num
   return true;
 }
 
+/** Stores only already-built in-process components after the original runtime
+ * watermark was durably confirmed. It is an opt-in assembly primitive; callers
+ * still need a fresh recovery receipt and generation compare-and-set to claim it. */
+export function retainPublicRecoveryRuntime(sessionId:string,generation:number,runtime:PublicRecoveryRuntime){
+  const session=getSession(sessionId);
+  if(!session||session.connectionGeneration!==generation||session.status!=="connecting"||
+    session.publicDisconnect?.generation!==generation||runtime.generation!==generation||session.publicRecoveryRuntime)return false;
+  session.publicRecoveryRuntime=runtime;
+  return true;
+}
+
+/** Remove only the exact retained generation. Caller owns the returned object
+ * and must either reattach it or release it. No fallback session is created. */
+export function takePublicRecoveryRuntime(sessionId:string,generation:number){
+  const session=getSession(sessionId),runtime=session?.publicRecoveryRuntime;
+  if(!session||session.connectionGeneration!==generation||!runtime||runtime.generation+1!==generation)return null;
+  session.publicRecoveryRuntime=undefined;
+  return runtime;
+}
+
+export function releasePublicRecoveryRuntime(sessionId:string,generation:number){
+  const session=getSession(sessionId),runtime=session?.publicRecoveryRuntime;
+  if(!runtime||runtime.generation!==generation)return false;
+  session!.publicRecoveryRuntime=undefined;
+  runtime.release();
+  return true;
+}
+
 export function confirmSessionConnection(
   sessionId: string,
   generation: number,
@@ -139,5 +167,7 @@ export function sessionBillableSeconds(
 export function deleteSession(sessionId: string, expectedSession?: RealtimeSession) {
   const session = getSession(sessionId);
   if (!session || (expectedSession && session !== expectedSession)) return false;
+  session.publicRecoveryRuntime?.release();
+  session.publicRecoveryRuntime=undefined;
   return sessions.delete(sessionId);
 }

@@ -1,5 +1,11 @@
 # 公有／私有模型配置页交付与操作说明
 
+第90批补[原恢复Socket音频序号与首帧水位桥接](PUBLIC_RECOVERY_AUDIO_BRIDGE.md)：仅显式同进程测试装配下，手机必须原样回显服务端可信水位；公共sink持久确认resume后才接受精确下一序号首帧。默认生产仍关闭，不重放PCM、不建第二模型会话，也不能据此宣称真实断网连续翻译已验收。
+
+第89批补[原恢复Socket受限装配](PUBLIC_RECOVERY_SOCKET_ASSEMBLY.md)：同JWT、同进程及新恢复授权回执下复用原Provider/sink/TTS控制面；不重新取凭据或建第二模型连接。恢复音频仍明确拒绝，默认生产开关关闭，不能据此启用真实断网恢复。
+
+第88批补[原Gateway受限恢复状态复用](PUBLIC_RECOVERY_STATE_REUSE.md)：仅显式测试装配下保留已确认断开的原Provider/sink/TTS引用，原截止后释放；默认仍立即结束。新Socket装配未开放，不能作为真实断网恢复或生产启用依据。
+
 第87批接入[安全断开水位及同进程代际接管基础](PUBLIC_DISCONNECT_HANDOFF.md)：原Gateway先排空/写入可信disconnected，再按默认策略结束；原session-manager拒绝旧代际/重复或不同水位接管。新WebSocket恢复装配未开放，不代表端到端续接通过。
 
 第86批补[原内部恢复前置查询](PUBLIC_RECOVERY_CHECKPOINT.md)：只读核验原会话授权/窗口并返回可信接收水位，不更新Token/预占/计量，且不能取得模型配置或凭据。实际断开状态保存与连接代际接管仍未完成，不能据此开启重连。

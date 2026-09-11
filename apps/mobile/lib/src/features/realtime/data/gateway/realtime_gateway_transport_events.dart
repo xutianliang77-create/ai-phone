@@ -26,6 +26,12 @@ extension _RealtimeGatewayTransportEvents on RealtimeGatewayClient {
         _publicPaused = false;
         _suspended = false;
       }
+      if (event.type == 'session.recovery.ready') {
+        _publicRecovery.receive(
+          event.recoveryLastAcceptedSample,
+          event.recoveryNextSequence,
+        );
+      }
       if (event.type == 'audio.output' && (_suspended || _publicPaused)) return;
       if (event.type == 'error' ||
           event.type == 'session.ended' && started?.isCompleted == false) {

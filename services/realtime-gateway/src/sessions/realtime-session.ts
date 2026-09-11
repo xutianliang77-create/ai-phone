@@ -4,11 +4,25 @@ import type {
   RealtimeVoiceConfig,
   PublicAdmissionReceipt,
 } from "@translation/contracts";
+import type { RealtimeProvider } from "../providers/realtime-provider.js";
+import type { RealtimeTtsOutputQueue } from "../tts/realtime-tts-output.js";
+import type { PublicSessionEventSink } from "./public-session-event-sink.js";
 
 export type RealtimeSessionStatus = Extract<
   RealtimeSessionState,
   "connecting" | "active" | "paused" | "ending" | "ended" | "failed"
 >;
+
+/** Same-process object references only. They are never serialized, shared
+ * between Gateways, or exposed to a client. Their lifetime is bounded by the
+ * original disconnect deadline. */
+export interface PublicRecoveryRuntime {
+  generation: number;
+  provider: RealtimeProvider;
+  ttsOutputQueue: RealtimeTtsOutputQueue;
+  sessionEventSink: PublicSessionEventSink;
+  release(): void;
+}
 
 export interface RealtimeSession {
   id: string;
@@ -25,4 +39,5 @@ export interface RealtimeSession {
   reconnectStatus?: Extract<RealtimeSessionStatus, "active" | "paused">;
   disconnectDeadlineAt?: number;
   publicDisconnect?:{generation:number;receipt:PublicAdmissionReceipt};
+  publicRecoveryRuntime?: PublicRecoveryRuntime;
 }

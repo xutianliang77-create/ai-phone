@@ -146,6 +146,15 @@ export interface SessionResumedEvent {
   sessionId: string;
 }
 
+/** One-time, no-audio bridge emitted only for an explicit public recovery
+ * socket. A client must echo it before its first post-recovery PCM frame. */
+export interface SessionRecoveryReadyEvent {
+  type: "session.recovery.ready";
+  sessionId: string;
+  lastAcceptedSample: number;
+  nextSequence: number;
+}
+
 export interface SessionVoiceOutputUpdatedEvent {
   type: "session.voice_output.updated";
   sessionId: string;
@@ -159,7 +168,7 @@ export type ClientRealtimeEvent =
   | ClientTextSegmentEvent
   | { type: "audio.boundary"; sessionId: string; sequence: number }
   | { type: "session.pause"; sessionId: string }
-  | { type: "session.resume"; sessionId: string }
+  | { type: "session.resume"; sessionId: string; recovery?: {lastAcceptedSample:number;nextSequence:number} }
   | { type: "session.voice_output"; sessionId: string; enabled: boolean; presetId?: string }
   | { type: "session.end"; sessionId: string };
 
@@ -174,6 +183,7 @@ export type ServerRealtimeEvent =
   | UsageTickEvent
   | SessionPausedEvent
   | SessionResumedEvent
+  | SessionRecoveryReadyEvent
   | SessionVoiceOutputUpdatedEvent
   | SessionEndedEvent
   | RealtimeError;

@@ -15,6 +15,7 @@ export async function setupRealtimeConnection(runtime:ReturnType<typeof createRe
     const failure=coreDependencyFailureStage(runtime.dependencyReadiness.readiness());if(failure){stage=failure;throw Error("dependency");}
     const provider=new ProviderRouter().selectProvider(runtime.env,session.claims);await configureRealtimeProvider(provider,runtime.env,session);
     return {...attachment,provider,ttsOutputQueue:createRealtimeTtsOutputQueue(runtime.env,session),sessionEventSink:runtime.sessionEventSink,
-      markStarted:()=>{},publicConnection:false,checkpointDisconnect:undefined};
+      markStarted:()=>{},publicConnection:false,checkpointDisconnect:undefined,
+      retainPublicRecovery:undefined,releaseRetainedRecovery:undefined,publicRecoveryConnection:false,recoveryBridge:undefined};
   }catch{await reportProviderSetupFailure(runtime,ws,session,generation,stage);return null;}
 }

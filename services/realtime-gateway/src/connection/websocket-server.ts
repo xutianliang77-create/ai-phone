@@ -29,13 +29,13 @@ export function startWebSocketServer(options:{publicRuntime?:PublicGatewayRuntim
     usageBalanceClient,
     disconnectFinalizers,
   } = runtime;
-
   server.on("connection", async (ws, request) => {
     const configured=await setupRealtimeConnection(runtime,ws,request,publicRuntime);
     if(!configured)return;
     const {session,generation,resumed,provider,sessionEventSink,ttsOutputQueue}=configured;
     const flushTracker = new RealtimeFlushTracker();
-    let outputSuppressed=false;
+    let outputSuppressed=false,recoveryResumeMatched=!configured.publicRecoveryConnection,recoveryResumeConfirmed=!configured.publicRecoveryConnection,
+      recoveryFirstAudioAccepted=!configured.publicRecoveryConnection;
     const eventDispatcher = new RealtimeEventDispatcher({
       sendClient: (event) => sendRealtimeEvent(ws, event),
       eventSink: sessionEventSink,
@@ -51,7 +51,7 @@ export function startWebSocketServer(options:{publicRuntime?:PublicGatewayRuntim
         if(event.type==="session.started")configured.markStarted();
         flushTracker.record(event);
         if (event.type === "session.paused") {if(sessionEventSink.requiresConfirmation)outputSuppressed=true;ttsOutputQueue.cancelPending();}
-        else {if(event.type==="session.resumed")outputSuppressed=false;if(!outputSuppressed)ttsOutputQueue.enqueue(event, eventDispatcher.send);}
+        else {if(event.type==="session.resumed"){outputSuppressed=false;if(configured.publicRecoveryConnection&&recoveryResumeMatched)recoveryResumeConfirmed=true;}if(!outputSuppressed)ttsOutputQueue.enqueue(event, eventDispatcher.send);}
       },
     });
     const sendRealtime = eventDispatcher.send;
@@ -59,10 +59,12 @@ export function startWebSocketServer(options:{publicRuntime?:PublicGatewayRuntim
       if(ws.readyState===1&&!outputSuppressed&&getSession(session.id)?.connectionGeneration===generation&&getSession(session.id)?.status==="active")sendRealtime(event);
     })??(()=>{});
     const confirmAudio=()=>sessionEventSink.confirmAudio?.()??Promise.reject(Error("public_audio_confirmation_required"));
-
     const startedEvent = { type: "session.started", sessionId: session.id } as const;
     if (resumed) sendRealtimeEvent(ws, startedEvent);
     else sendRealtime(startedEvent);
+    if(configured.publicRecoveryConnection&&configured.recoveryBridge){
+      sendRealtimeEvent(ws,{type:"session.recovery.ready",sessionId:session.id,...configured.recoveryBridge});
+    }
     let controlQueue = Promise.resolve();
     let usageTickInFlight = false;
     const audioBatcher = new AudioFrameBatcher({
@@ -119,7 +121,6 @@ export function startWebSocketServer(options:{publicRuntime?:PublicGatewayRuntim
       confirmationInFlight=true;void confirmAudio().catch(error=>{realtimeLogger.warn({error,sessionId:session.id},"Public runtime confirmation failed");failPublicConnection();})
         .finally(()=>{confirmationInFlight=false;});
     },1000):undefined;
-
     const usageInterval = setInterval(() => {
       if(sessionEventSink.requiresConfirmation&&ws.readyState!==1)return;
       if (session.status === "active" || session.status === "paused") {
@@ -149,7 +150,6 @@ export function startWebSocketServer(options:{publicRuntime?:PublicGatewayRuntim
           usageTickInFlight = false;
         });
     }, 30_000);
-
     const messageRateGuard = protection.createMessageGuard();
     let rateLimited = false;
     let pendingControlEvents = 0;
@@ -190,7 +190,23 @@ export function startWebSocketServer(options:{publicRuntime?:PublicGatewayRuntim
       }
       if(sessionEventSink.requiresConfirmation&&getSession(session.id)?.connectionGeneration!==generation)return;
 
-      if (event.sessionId === session.id &&
+      if(configured.publicRecoveryConnection){
+        const bridge=configured.recoveryBridge;
+        if(!bridge){sendRealtime(buildError("bad_event","Public recovery bridge is unavailable",{sessionId:session.id,stage:"session",retryable:false}));return;}
+        if(event.type==="session.resume"){
+          if(event.recovery?.lastAcceptedSample!==bridge.lastAcceptedSample||event.recovery?.nextSequence!==bridge.nextSequence){
+            sendRealtime(buildError("bad_event","Public recovery resume bridge does not match the trusted watermark",{sessionId:session.id,stage:"session",retryable:false}));
+            return;
+          }
+          recoveryResumeMatched=true;
+        }
+        if(event.type==="audio.frame"&&(!recoveryResumeConfirmed||(!recoveryFirstAudioAccepted&&event.sequence!==bridge.nextSequence))){
+          sendRealtime(buildError("bad_event","Public recovery audio sequence does not match the trusted watermark",{sessionId:session.id,stage:"asr",retryable:false}));
+          return;
+        }
+      }
+
+      if (event.sessionId === session.id && (!configured.publicRecoveryConnection||event.type==="session.resume") &&
           confirmSessionConnection(session.id, generation)) {
         disconnectFinalizers.cancel(session.id);
       }
@@ -210,6 +226,7 @@ export function startWebSocketServer(options:{publicRuntime?:PublicGatewayRuntim
         if (activeSession?.status === "active") {
           logAudioFrameReceived(event);
           audioBatcher.enqueue(event);
+          if(configured.publicRecoveryConnection)recoveryFirstAudioAccepted=true;
         }
         return;
       }
@@ -294,6 +311,8 @@ export function startWebSocketServer(options:{publicRuntime?:PublicGatewayRuntim
       sessionSync: eventDispatcher,
       publicImmediateFinalization:configured.publicConnection,
       checkpointDisconnect:configured.checkpointDisconnect,
+      retainPublicRecovery:configured.retainPublicRecovery,
+      releaseRetainedRecovery:configured.releaseRetainedRecovery,
       disconnectFinalizers,
       closeClient: () => { if (ws.readyState === 1) ws.close(); },
       onError: (stage, error) => realtimeLogger.warn(
@@ -311,12 +330,12 @@ export function startWebSocketServer(options:{publicRuntime?:PublicGatewayRuntim
       clearInterval(heartbeatInterval);
       clearAudioFrameLog(session.id);
       clearTextSegmentLog(session.id);
-      ttsOutputQueue.close();
       await controlQueue.catch(() => undefined);
       const reason: SessionEndReason = connectionError
         ? "connection_error"
         : "connection_closed";
       await connectionCleanup.run(reason);
+      if(!connectionCleanup.retainedPublicRecovery)ttsOutputQueue.close();
     };
     ws.on("error", (error) => {
       connectionError = true;
