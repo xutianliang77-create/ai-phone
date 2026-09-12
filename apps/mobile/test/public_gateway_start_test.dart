@@ -87,6 +87,20 @@ void main() {
     second.add(jsonEncode({'type':'session.started','sessionId':'session'}));
     expect(await recovery,false);expect(h.client.sendAudio('session',frame),false);expect(h.frames.where((f)=>f['type']=='session.resume'),isEmpty);
   });
+  test('recovery rejection closes immediately and does not send another audio frame', () async {
+    final h=Wire();await h.setup(recoverySocketAssembly:true);addTearDown(h.close);final events=<String>[];
+    final subscription=h.client.events.listen((event)=>events.add(event.type));addTearDown(subscription.cancel);
+    final connect=h.client.connect(h.session()),first=await h.peer.future;first.add(jsonEncode({'type':'session.started','sessionId':'session'}));await connect;
+    await first.close();await Future<void>.delayed(const Duration(milliseconds:20));
+    final next=h.nextPeer(),recovery=h.client.reconnectAndResume('session'),second=await next;
+    second.add(jsonEncode({'type':'session.started','sessionId':'session'}));
+    second.add(jsonEncode({'type':'session.recovery.ready','sessionId':'session','lastAcceptedSample':1600,'nextSequence':5}));
+    await _waitFor(() => h.frames.any((f) => f['type']=='session.resume'));
+    second.add(jsonEncode({'type':'error','sessionId':'session','code':'bad_event','stage':'session','retryable':false}));
+    expect(await recovery,false);await Future<void>.delayed(const Duration(milliseconds:20));
+    expect(events,containsAllInOrder(['error','connection.closed']));expect(h.client.sendAudio('session',frame),false);
+    expect(h.frames.where((f)=>f['type']=='audio.frame'),isEmpty);expect(h.connections,2);
+  });
   test('legacy private connect keeps its transport-only handshake', () async {
     final h = Wire();await h.setup(public: false);addTearDown(h.close);
     await h.client.connect(h.session(public: false));expect(h.client.sendAudio('session', frame), isTrue);

@@ -39,6 +39,7 @@ afterEach(async()=>{
 });
 async function waitFor(test:()=>boolean,timeout=5000){const until=performance.now()+timeout;while(!test()){if(performance.now()>until)throw Error("Synthetic WebSocket condition timed out: "+messages.map(e=>e.type+":"+(e.code??"")).join(","));await new Promise(r=>setTimeout(r,10));}}
 function nextSocketEvent(socket:WebSocket,test:(event:any)=>boolean){return new Promise<any>(resolve=>{const receive=(data:any)=>{const event=JSON.parse(data.toString());if(test(event)){socket.off("message",receive);resolve(event);}};socket.on("message",receive);});}
+function within<T>(value:Promise<T>,label:string,events:any[]){return Promise.race([value,new Promise<T>((_,reject)=>setTimeout(()=>reject(Error(`${label}: ${JSON.stringify(events)}`)),1000))]);}
 async function setup(vendor="qwen",voice=false,overrideAccess=access,afterApiReply?:(path:string,body:any)=>void,recoverySocketAssembly=false,recoveryOwnerId?:string){
   const update=body(1);if(vendor==="openai")Object.assign(update.components.asr,{vendor,protocol:"openai_realtime_asr",sampleRate:24000});
   Object.assign(update.components.tts,{vendor:"openai",protocol:"openai_speech",endpoint:"https://model.synthetic.invalid/v1",modelId:"manual-tts",sampleRate:24000,voice:"coral"});
@@ -131,17 +132,17 @@ describe("original Gateway loopback WebSocket with session-scoped API materials"
     deleteSession(s.issued.sessionId,retained);
     await waitFor(()=>getSession(s.issued.sessionId)===null);
   });
-  it("explicitly assembles a recovery socket from retained state, rechecks authority, and blocks audio until phone sequencing exists",async()=>{
-    const s=await setup("qwen",false,access,undefined,true,"gateway-owner-a");await waitFor(()=>messages.some(e=>e.type==="session.started"));
+  it("recovers the original stream with a new transcript, translation, output, and one normal settlement",async()=>{
+    const s=await setup("qwen",true,access,undefined,true,"gateway-owner-a");await waitFor(()=>messages.some(e=>e.type==="session.started"));
     ws!.send(JSON.stringify({type:"audio.frame",sessionId:s.issued.sessionId,sequence:1,timestampMs:0,format:"pcm16",sampleRate:16000,data:Buffer.alloc(3200).toString("base64")}));
-    ws!.send(JSON.stringify({type:"audio.boundary",sessionId:s.issued.sessionId,sequence:1}));await waitFor(()=>messages.some(e=>e.type==="translation.final"));
+    ws!.send(JSON.stringify({type:"audio.boundary",sessionId:s.issued.sessionId,sequence:1}));await waitFor(()=>messages.some(e=>e.type==="translation.final"));await waitFor(()=>messages.some(e=>e.type==="audio.output"));
     const beforeCalls=s.calls.length,beforeModel=s.modelFetchFn.mock.calls.length;ws!.terminate();await once(ws!,"close").catch(()=>{});
     await waitFor(()=>getSession(s.issued.sessionId)?.publicRecoveryRuntime!==undefined);
     const address=server!.address() as {port:number},recoveredEvents:any[]=[];
     const recovered=new WebSocket(`ws://127.0.0.1:${address.port}/realtime`,["ai-phone.realtime.v1",`ai-phone.token.${s.issued.realtimeToken}`],{headers:{host:"127.0.0.1"}}),
       started=nextSocketEvent(recovered,event=>event.type==="session.started"),ready=nextSocketEvent(recovered,event=>event.type==="session.recovery.ready");
     recovered.on("message",data=>recoveredEvents.push(JSON.parse(data.toString())));await once(recovered,"open");ws=recovered;
-    await Promise.all([started,ready]);
+    await within(Promise.all([started,ready]),"recovery ready",recoveredEvents);
     expect(s.asrSocketFactory).toHaveBeenCalledTimes(1);expect(s.modelFetchFn).toHaveBeenCalledTimes(beforeModel);
     const recoveryChecks=s.calls.slice(beforeCalls).filter(c=>c.path.endsWith("/admission"));
     expect(recoveryChecks.map(c=>c.body.purpose)).toEqual(["recovery","recovery"]);
@@ -154,17 +155,43 @@ describe("original Gateway loopback WebSocket with session-scoped API materials"
     await expect(wrongResume).resolves.toMatchObject({code:"bad_event"});
     const resumed=nextSocketEvent(recovered,event=>event.type==="session.resumed");
     recovered.send(JSON.stringify({type:"session.resume",sessionId:s.issued.sessionId,recovery:{lastAcceptedSample:bridge.lastAcceptedSample,nextSequence:bridge.nextSequence}}));
-    await resumed;
+    await within(resumed,"recovery resumed",recoveredEvents);
     const wrongFirstFrame=nextSocketEvent(recovered,event=>event.type==="error"&&event.stage==="asr");
     recovered.send(JSON.stringify({type:"audio.frame",sessionId:s.issued.sessionId,sequence:bridge.nextSequence+1,timestampMs:200,format:"pcm16",sampleRate:16000,data:Buffer.alloc(3200).toString("base64")}));
     await expect(wrongFirstFrame).resolves.toMatchObject({code:"bad_event"});
     expect(s.modelFetchFn).toHaveBeenCalledTimes(beforeModel);expect(s.asrSocketFactory).toHaveBeenCalledTimes(1);
-    const boundaryCommitted=nextSocketEvent(recovered,event=>event.type==="audio.boundary.committed");
+    (s.asrSocketFactory.mock.results[0]!.value as any).transcript="恢复后的新句子。";
+    const boundaryCommitted=nextSocketEvent(recovered,event=>event.type==="audio.boundary.committed"),
+      transcript=nextSocketEvent(recovered,event=>event.type==="transcript.final"),
+      translation=nextSocketEvent(recovered,event=>event.type==="translation.final"),
+      output=nextSocketEvent(recovered,event=>event.type==="audio.output");
     recovered.send(JSON.stringify({type:"audio.frame",sessionId:s.issued.sessionId,sequence:bridge.nextSequence,timestampMs:240,format:"pcm16",sampleRate:16000,data:Buffer.alloc(3200).toString("base64")}));
     recovered.send(JSON.stringify({type:"audio.boundary",sessionId:s.issued.sessionId,sequence:bridge.nextSequence}));
-    await expect(boundaryCommitted).resolves.toMatchObject({sequence:bridge.nextSequence});
-    expect(s.modelFetchFn).toHaveBeenCalledTimes(beforeModel);expect(s.asrSocketFactory).toHaveBeenCalledTimes(1);
-    deleteSession(s.issued.sessionId,getSession(s.issued.sessionId)!);recovered.terminate();await once(recovered,"close");
+    await expect(within(boundaryCommitted,"recovery boundary",recoveredEvents)).resolves.toMatchObject({sequence:bridge.nextSequence});
+    await expect(within(transcript,"recovery transcript",recoveredEvents)).resolves.toMatchObject({sessionId:s.issued.sessionId});
+    await expect(within(translation,"recovery translation",recoveredEvents)).resolves.toMatchObject({sessionId:s.issued.sessionId});
+    await expect(within(output,"recovery output",recoveredEvents)).resolves.toMatchObject({sessionId:s.issued.sessionId});
+    expect(s.modelFetchFn.mock.calls.length).toBeGreaterThan(beforeModel);expect(s.asrSocketFactory).toHaveBeenCalledTimes(1);
+    vi.setSystemTime(now.getTime()+2000);const ended=nextSocketEvent(recovered,event=>event.type==="session.ended");
+    recovered.send(JSON.stringify({type:"session.end",sessionId:s.issued.sessionId}));await within(ended,"recovery ended",recoveredEvents);
+    await waitFor(()=>getSession(s.issued.sessionId)===null);await waitFor(()=>getStoreSnapshot().billingLedger.filter(e=>e.idempotencyKey===`settle:${s.issued.sessionId}`).length===1);expect(current()).toMatchObject({status:"ended",consumedSeconds:2});
+    expect(getStoreSnapshot().billingLedger.filter(e=>e.idempotencyKey===`settle:${s.issued.sessionId}`)).toHaveLength(1);
+  });
+  it("rejects a second same-owner recovery socket after the first takes the original runtime",async()=>{
+    const s=await setup("qwen",false,access,undefined,true,"gateway-owner-a");await waitFor(()=>messages.some(e=>e.type==="session.started"));
+    ws!.send(JSON.stringify({type:"audio.frame",sessionId:s.issued.sessionId,sequence:1,timestampMs:0,format:"pcm16",sampleRate:16000,data:Buffer.alloc(3200).toString("base64")}));
+    ws!.send(JSON.stringify({type:"audio.boundary",sessionId:s.issued.sessionId,sequence:1}));await waitFor(()=>messages.some(e=>e.type==="translation.final"));
+    const before=s.calls.length;ws!.terminate();await once(ws!,"close").catch(()=>{});await waitFor(()=>getSession(s.issued.sessionId)?.publicRecoveryRuntime!==undefined);
+    const address=server!.address() as {port:number},firstEvents:any[]=[];
+    const first=new WebSocket(`ws://127.0.0.1:${address.port}/realtime`,["ai-phone.realtime.v1",`ai-phone.token.${s.issued.realtimeToken}`],{headers:{host:"127.0.0.1"}});
+    first.on("message",data=>firstEvents.push(JSON.parse(data.toString())));await once(first,"open");await waitFor(()=>firstEvents.some(event=>event.type==="session.recovery.ready"));
+    const second=new WebSocket(`ws://127.0.0.1:${address.port}/realtime`,["ai-phone.realtime.v1",`ai-phone.token.${s.issued.realtimeToken}`],{headers:{host:"127.0.0.1"}});
+    await once(second,"close");expect(s.asrSocketFactory).toHaveBeenCalledTimes(1);
+    expect(s.calls.slice(before).filter(call=>call.path.endsWith("/recovery-ownership"))).toHaveLength(1);
+    const bridge=firstEvents.find(event=>event.type==="session.recovery.ready"),resumed=nextSocketEvent(first,event=>event.type==="session.resumed");
+    first.send(JSON.stringify({type:"session.resume",sessionId:s.issued.sessionId,recovery:{lastAcceptedSample:bridge.lastAcceptedSample,nextSequence:bridge.nextSequence}}));await resumed;
+    const ended=nextSocketEvent(first,event=>event.type==="session.ended");first.send(JSON.stringify({type:"session.end",sessionId:s.issued.sessionId}));await ended;
+    await waitFor(()=>getSession(s.issued.sessionId)===null);ws=first;
   });
   it("fails closed on a simulated new Gateway process without the original runtime",async()=>{
     const s=await setup("qwen",false,access,undefined,true,"gateway-owner-a");await waitFor(()=>messages.some(e=>e.type==="session.started"));

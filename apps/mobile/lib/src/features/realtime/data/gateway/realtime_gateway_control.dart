@@ -77,13 +77,22 @@ extension RealtimeGatewayControl on RealtimeGatewayClient {
     String sessionId,
     Duration timeout,
   ) {
-    return events
-        .where((event) =>
-            event.type == type &&
-            (event.sessionId == null || event.sessionId == sessionId))
-        .timeout(timeout)
-        .first
-        .then((_) => true)
-        .catchError((Object _) => false);
+    final response = Completer<bool>();
+    late final StreamSubscription<GatewayRealtimeEvent> subscription;
+    subscription = events.listen((event) {
+      final sessionMatches = event.sessionId == null || event.sessionId == sessionId;
+      if (!sessionMatches || response.isCompleted) return;
+      if (event.type == type) response.complete(true);
+      if (event.type == 'error' || event.type == 'connection.closed') {
+        response.complete(false);
+      }
+    }, onError: (Object _) {
+      if (!response.isCompleted) response.complete(false);
+    }, onDone: () {
+      if (!response.isCompleted) response.complete(false);
+    });
+    return response.future.timeout(timeout, onTimeout: () => false).whenComplete(
+          subscription.cancel,
+        );
   }
 }
