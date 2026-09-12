@@ -54,6 +54,8 @@ export function observePublicRuntime(sessionId:string,value:unknown,now=new Date
       evidence.finalRevisions=Object.fromEntries(current.segments.map(s=>[s.id,s.revision??0]));
     }
     const next=structuredClone(current);next.publicRuntime=evidence;next.lastActivityAt=now.toISOString();
+    if(next.publicRecoveryOwnership&&(evidence.phase!=="disconnected"||
+      next.publicRecoveryOwnership.runtimeSequence!==evidence.sequence))next.publicRecoveryOwnership=undefined;
     if(b.phase==="active")next.status="active";
     if(b.phase==="paused"||b.phase==="disconnected")next.status="paused";
     return {next,result:evidence};

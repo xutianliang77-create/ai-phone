@@ -10,6 +10,7 @@ import {isInternalAuthorized} from "./realtime-route-validation.js";
 import {recordPublicModelAttempt} from "../sessions/public-model-attempt.service.js";
 import {queryPublicAdmission} from "./public-admission-query.service.js";
 import {PublicConfigError} from "../models/public-model-config.js";
+import {claimPublicRecoveryOwnership} from "../sessions/public-recovery-ownership.service.js";
 
 export function registerPublicLifecycleRoutes(app:FastifyInstance){
   app.post("/internal/realtime/sessions/:sessionId/admission",{bodyLimit:4096},async(request,reply)=>{
@@ -48,6 +49,15 @@ export function registerPublicLifecycleRoutes(app:FastifyInstance){
         sequence:evidence.sequence,phase:evidence.phase,finalRevision:evidence.finalRevision,
         lastAcceptedSample:evidence.lastAcceptedSample,meterStatus:evidence.uncertain?"uncertain":"verified"};
     }));
+  });
+  app.post("/internal/realtime/sessions/:sessionId/recovery-ownership",{bodyLimit:1024},async(request,reply)=>{
+    if(!isInternalAuthorized(request.headers.authorization))return sendError(reply,401,"internal_error","Unauthorized internal request");
+    if(request.protocol!=="https"&&!["127.0.0.1","::1","::ffff:127.0.0.1"].includes(request.ip))return sendError(reply,403,"public_recovery_secure_transport_required","Secure transport required");
+    const {sessionId}=request.params as {sessionId:string};
+    return lifecycleResponse(reply,async()=>{
+      const ownership=await claimPublicRecoveryOwnership(sessionId,request.body);
+      return {sessionId,...ownership};
+    });
   });
 }
 export function handlePublicFinalization(reply:FastifyReply,sessionId:string,ownerId:string,body:unknown){

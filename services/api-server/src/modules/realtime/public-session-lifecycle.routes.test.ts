@@ -85,6 +85,32 @@ it('cannot renew a disconnected recovery window through intermediate paused obse
   clock(311);await publish(5,'paused');const before=state();
   expect((await publish(6,'active')).statusCode).toBe(409);expect(state()).toEqual(before);
 });
+it('persists one recovery owner only for the exact current disconnected watermark',async()=>{
+  await publish(1,'active');clock(10);await publish(2,'disconnected');
+  const claim=(ownerId='gateway-owner-a',runtimeSequence=2)=>app.inject({method:'POST',
+    url:'/internal/realtime/sessions/public-s/recovery-ownership',headers:{authorization:'Bearer internal-test-secret-123'},payload:{ownerId,runtimeSequence}});
+  const first=await claim();expect(first.statusCode).toBe(200);expect(first.json()).toMatchObject({sessionId:'public-s',ownerId:'gateway-owner-a',runtimeSequence:2,
+    expiresAt:current().publicRuntime!.recoveryUntil});
+  const saved=state();expect((await claim()).json()).toEqual(first.json());expect(state()).toEqual(saved);
+  expect((await claim('gateway-owner-b')).statusCode).toBe(409);expect((await claim('gateway-owner-a',3)).statusCode).toBe(409);
+  expect(current().publicRecoveryOwnership).toMatchObject({ownerId:'gateway-owner-a',runtimeSequence:2});
+});
+it('clears a recovery owner when the durable runtime watermark advances',async()=>{
+  await publish(1,'active');clock(10);await publish(2,'disconnected');
+  const headers={authorization:'Bearer internal-test-secret-123'};
+  await app.inject({method:'POST',url:'/internal/realtime/sessions/public-s/recovery-ownership',headers,payload:{ownerId:'gateway-owner-a',runtimeSequence:2}});
+  expect(current().publicRecoveryOwnership).toBeDefined();
+  await publish(3,'paused');expect(current().publicRecoveryOwnership).toBeUndefined();
+});
+it('fails closed when a recovery ownership claim is unauthenticated, premature, or expired',async()=>{
+  const claim=(body:unknown,headers?:Record<string,string>)=>app.inject({method:'POST',url:'/internal/realtime/sessions/public-s/recovery-ownership',headers,payload:body as object});
+  expect((await claim({ownerId:'gateway-owner-a',runtimeSequence:1})).statusCode).toBe(401);
+  expect((await claim({ownerId:'gateway-owner-a',runtimeSequence:1},{authorization:'Bearer internal-test-secret-123'})).statusCode).toBe(409);
+  expect((await claim({ownerId:1,runtimeSequence:1},{authorization:'Bearer internal-test-secret-123'})).statusCode).toBe(400);
+  await publish(1,'active');clock(10);await publish(2,'disconnected');clock(311);
+  expect((await claim({ownerId:'gateway-owner-a',runtimeSequence:2},{authorization:'Bearer internal-test-secret-123'})).statusCode).toBe(409);
+  expect(current().publicRecoveryOwnership).toBeUndefined();
+});
 it('rejects cross-account/deployment finalization and deleted-session resurrection',async()=>{
   await publish(1,'active');clock(12);await observePublicRuntime('public-s',event(2,'stopped'));
   const request=serverFinalizationRequest(current()),before=state();

@@ -14,7 +14,7 @@ import type {
   CallLinkMetadata,
 } from "../call-links/call-link-record.js";
 import type { ResultSyncState } from "./session-result-sync-contract.js";
-import type { PublicRuntimePolicy, PublicRuntimeEvidence, PublicFinalizationRecord } from "./public-session-lifecycle.js";
+import type { PublicRuntimePolicy, PublicRuntimeEvidence, PublicFinalizationRecord, PublicRecoveryOwnership } from "./public-session-lifecycle.js";
 import type { PublicInferenceAdmission } from "./public-runtime-admission.js";
 import type { PublicInferenceEvidence } from "./public-inference-evidence.js";
 import type {PublicModelAttemptRecord} from "./public-model-attempt.service.js";
@@ -55,5 +55,6 @@ export interface SessionRecord {
   /** No signed token or signing/provider secret is stored in the session. */
   publicRealtimeIssuance?:{requestHash:string;endpoint:string;claims:RealtimeTokenClaims;holdId:string};
   publicRuntime?: PublicRuntimeEvidence;
+  publicRecoveryOwnership?: PublicRecoveryOwnership;
   publicFinalization?: PublicFinalizationRecord;
 }

@@ -20,6 +20,11 @@ export interface PublicRuntimeEvidence {
   recoveryUntil?: string; stoppedAt?: string;
   finalRevisions?: Record<string, number>;
 }
+/** Durable API aggregate claim for a future Gateway recovery handoff. This is
+ * not a serialized Provider or a permission to create a replacement stream. */
+export interface PublicRecoveryOwnership {
+  ownerId:string; runtimeSequence:number; claimedAt:string; expiresAt:string;
+}
 export interface PublicFinalizationRecord { requestHash: string; ack: PublicFinalizeAck; }
 export function runtimePolicy(session: SessionRecord) {
   const p=session.publicRuntimePolicy;
