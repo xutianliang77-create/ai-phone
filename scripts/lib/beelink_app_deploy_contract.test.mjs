@@ -110,6 +110,7 @@ describe("Beelink app deployment contract", () => {
     expect(script).toContain("sync|deploy|start|status");
     expect(script).toContain("ai-phone-image-tag");
     expect(script).toContain('TTS_READINESS_URL="${TTS_READINESS_URL:-http://$TTS_SERVICE_HOST:8002/health}"');
+    expect(script).toContain("run --rm --no-deps wujie-ai node services/api-server/dist/infrastructure/storage/postgres-admin.js startup-check"); expect(script).not.toContain("run --rm --no-deps wujie-ai npm run postgres:startup-check");
     expect(script).toContain('if [[ \"$MODE\" == \"start\" ]]; then');
     expect(script).toContain("remote_compose 'up -d --no-build --remove-orphans'");
     expect(script).not.toContain('remote_compose \"build\"\n  wait_for_translation_agent_stability');

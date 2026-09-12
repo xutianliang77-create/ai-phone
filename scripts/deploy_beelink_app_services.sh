@@ -209,7 +209,7 @@ postgres_startup_preflight() {
   [[ "$storage_driver" == "postgres" ]] || return 0
   echo "Checking PostgreSQL primary startup admission before container replacement"
   remote_compose \
-    "run --rm --no-deps wujie-ai npm run postgres:startup-check"
+    "run --rm --no-deps wujie-ai node services/api-server/dist/infrastructure/storage/postgres-admin.js startup-check"
 }
 
 production_env_preflight() {
