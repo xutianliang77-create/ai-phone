@@ -39,7 +39,7 @@ afterEach(async()=>{
 });
 async function waitFor(test:()=>boolean,timeout=5000){const until=performance.now()+timeout;while(!test()){if(performance.now()>until)throw Error("Synthetic WebSocket condition timed out: "+messages.map(e=>e.type+":"+(e.code??"")).join(","));await new Promise(r=>setTimeout(r,10));}}
 function nextSocketEvent(socket:WebSocket,test:(event:any)=>boolean){return new Promise<any>(resolve=>{const receive=(data:any)=>{const event=JSON.parse(data.toString());if(test(event)){socket.off("message",receive);resolve(event);}};socket.on("message",receive);});}
-async function setup(vendor="qwen",voice=false,overrideAccess=access,afterApiReply?:(path:string,body:any)=>void,recoverySocketAssembly=false){
+async function setup(vendor="qwen",voice=false,overrideAccess=access,afterApiReply?:(path:string,body:any)=>void,recoverySocketAssembly=false,recoveryOwnerId?:string){
   const update=body(1);if(vendor==="openai")Object.assign(update.components.asr,{vendor,protocol:"openai_realtime_asr",sampleRate:24000});
   Object.assign(update.components.tts,{vendor:"openai",protocol:"openai_speech",endpoint:"https://model.synthetic.invalid/v1",modelId:"manual-tts",sampleRate:24000,voice:"coral"});
   await savePublicModelConfiguration(update);const configuration=capturePublicModelRuntimeConfiguration(voice);
@@ -52,7 +52,8 @@ async function setup(vendor="qwen",voice=false,overrideAccess=access,afterApiRep
   const modelFetchFn=vi.fn(async(url:any)=>String(url).endsWith("/audio/speech")?new Response(Buffer.alloc(4800),{headers:{"content-type":"audio/pcm"}}):new Response(JSON.stringify({choices:[{finish_reason:"stop",message:{content:"Today we test public speech translation."}}]})));
   const asrSocketFactory=vi.fn(()=>{const peer=vendor==="qwen"?new SyntheticQwenAsrSocket():new SyntheticAsrSocket();peer.transcript="今天我们测试公共语音翻译。";return peer.asWebSocket();});
   const privateSelect=vi.spyOn(ProviderRouter.prototype,"selectProvider");
-  server=startWebSocketServer({publicRuntime:{credentialAccessSecret:overrideAccess,apiFetchFn,modelFetchFn,asrSocketFactory,recoverySocketAssembly}});await once(server,"listening");
+  server=startWebSocketServer({publicRuntime:{credentialAccessSecret:overrideAccess,apiFetchFn,modelFetchFn,asrSocketFactory,recoverySocketAssembly,
+    ...(recoveryOwnerId?{recoveryOwnership:{ownerId:recoveryOwnerId}}:{})}});await once(server,"listening");
   const address=server.address();if(!address||typeof address==="string")throw Error("No loopback socket");
   ws=new WebSocket(`ws://127.0.0.1:${address.port}/realtime`,["ai-phone.realtime.v1",`ai-phone.token.${issued.realtimeToken}`],{headers:{host:"127.0.0.1"}});
   ws.on("message",data=>messages.push(JSON.parse(data.toString())));await once(ws,"open");
@@ -121,7 +122,7 @@ describe("original Gateway loopback WebSocket with session-scoped API materials"
     expect(s.modelFetchFn).not.toHaveBeenCalled();
   });
   it("retains the original provider/sink/output only when explicit recovery assembly is enabled",async()=>{
-    const s=await setup("qwen",false,access,undefined,true);await waitFor(()=>messages.some(e=>e.type==="session.started"));
+    const s=await setup("qwen",false,access,undefined,true,"gateway-owner-a");await waitFor(()=>messages.some(e=>e.type==="session.started"));
     ws!.terminate();await once(ws!,"close").catch(()=>{});await waitFor(()=>getSession(s.issued.sessionId)?.publicRecoveryRuntime!==undefined);
     const retained=getSession(s.issued.sessionId)!;
     expect(retained.status).toBe("connecting");expect(retained.publicDisconnect?.generation).toBe(1);
@@ -131,7 +132,7 @@ describe("original Gateway loopback WebSocket with session-scoped API materials"
     await waitFor(()=>getSession(s.issued.sessionId)===null);
   });
   it("explicitly assembles a recovery socket from retained state, rechecks authority, and blocks audio until phone sequencing exists",async()=>{
-    const s=await setup("qwen",false,access,undefined,true);await waitFor(()=>messages.some(e=>e.type==="session.started"));
+    const s=await setup("qwen",false,access,undefined,true,"gateway-owner-a");await waitFor(()=>messages.some(e=>e.type==="session.started"));
     ws!.send(JSON.stringify({type:"audio.frame",sessionId:s.issued.sessionId,sequence:1,timestampMs:0,format:"pcm16",sampleRate:16000,data:Buffer.alloc(3200).toString("base64")}));
     ws!.send(JSON.stringify({type:"audio.boundary",sessionId:s.issued.sessionId,sequence:1}));await waitFor(()=>messages.some(e=>e.type==="translation.final"));
     const beforeCalls=s.calls.length,beforeModel=s.modelFetchFn.mock.calls.length;ws!.terminate();await once(ws!,"close").catch(()=>{});
@@ -145,6 +146,7 @@ describe("original Gateway loopback WebSocket with session-scoped API materials"
     const recoveryChecks=s.calls.slice(beforeCalls).filter(c=>c.path.endsWith("/admission"));
     expect(recoveryChecks.map(c=>c.body.purpose)).toEqual(["recovery","recovery"]);
     expect(recoveryChecks[0].body.requestId).not.toBe(recoveryChecks[1].body.requestId);
+    expect(s.calls.slice(beforeCalls).filter(c=>c.path.endsWith("/recovery-ownership")).map(c=>c.body)).toEqual([{ownerId:"gateway-owner-a",runtimeSequence:current().publicRuntime!.sequence}]);
     expect(s.calls.slice(beforeCalls).some(c=>c.path.endsWith("/credentials")||c.path.endsWith("/configuration"))).toBe(false);
     const bridge=recoveredEvents.find(e=>e.type==="session.recovery.ready");expect(bridge).toMatchObject({lastAcceptedSample:1600,nextSequence:2});
     const wrongResume=nextSocketEvent(recovered,event=>event.type==="error"&&event.stage==="session");
@@ -163,6 +165,18 @@ describe("original Gateway loopback WebSocket with session-scoped API materials"
     await expect(boundaryCommitted).resolves.toMatchObject({sequence:bridge.nextSequence});
     expect(s.modelFetchFn).toHaveBeenCalledTimes(beforeModel);expect(s.asrSocketFactory).toHaveBeenCalledTimes(1);
     deleteSession(s.issued.sessionId,getSession(s.issued.sessionId)!);recovered.terminate();await once(recovered,"close");
+  });
+  it("fails closed on a simulated new Gateway process without the original runtime",async()=>{
+    const s=await setup("qwen",false,access,undefined,true,"gateway-owner-a");await waitFor(()=>messages.some(e=>e.type==="session.started"));
+    ws!.terminate();await once(ws!,"close").catch(()=>{});const retained=await waitFor(()=>getSession(s.issued.sessionId)?.publicRecoveryRuntime!==undefined).then(()=>getSession(s.issued.sessionId)!);
+    deleteSession(s.issued.sessionId,retained);await new Promise<void>(resolve=>server!.close(()=>resolve()));
+    server=startWebSocketServer({publicRuntime:{credentialAccessSecret:access,apiFetchFn:s.apiFetchFn,modelFetchFn:s.modelFetchFn,asrSocketFactory:s.asrSocketFactory,
+      recoverySocketAssembly:true,recoveryOwnership:{ownerId:"gateway-owner-b",rejectMissingRuntime:true}}});await once(server,"listening");
+    const before=s.calls.length,address=server.address() as {port:number};
+    const retry=new WebSocket(`ws://127.0.0.1:${address.port}/realtime`,["ai-phone.realtime.v1",`ai-phone.token.${s.issued.realtimeToken}`],{headers:{host:"127.0.0.1"}});
+    await once(retry,"close");expect(s.asrSocketFactory).toHaveBeenCalledTimes(1);expect(s.modelFetchFn).not.toHaveBeenCalled();
+    expect(s.calls.slice(before).filter(c=>c.path.endsWith("/admission")).map(c=>c.body.purpose)).toEqual(["recovery"]);
+    expect(s.calls.slice(before).some(c=>c.path.endsWith("/configuration")||c.path.endsWith("/credentials")||c.path.endsWith("/recovery-ownership"))).toBe(false);
   });
   it("rejects a recovery socket after current authority is revoked without consuming retained state or opening another model",async()=>{
     const s=await setup("qwen",false,access,undefined,true);await waitFor(()=>messages.some(e=>e.type==="session.started"));

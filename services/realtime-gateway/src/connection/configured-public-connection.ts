@@ -23,6 +23,9 @@ export interface PublicGatewayRuntimeOptions {
   /** Test-only assembly gate. Default production behavior still finalizes a
    * disconnected public session immediately. */
   recoverySocketAssembly?:boolean;
+  /** Explicit test owner. A recovery receipt without the original in-process
+   * runtime is rejected; this never enables replacement model streams. */
+  recoveryOwnership?:{ownerId:string;rejectMissingRuntime?:boolean};
 }
 const pending=new Set<string>();
 /** Explicit boot-time path using original Provider, queue, sink and session map.
@@ -41,7 +44,11 @@ export async function openConfiguredPublicConnection(env:RealtimeEnv,ws:WebSocke
   try{
     if(!options.credentialAccessSecret||options.credentialAccessSecret.length<32||options.credentialAccessSecret===env.internalApiSecret||options.credentialAccessSecret===env.realtimeTokenSecret)throw Error("public_credential_access_required");
     const sink=createSessionEventSink(env,options.apiFetchFn),admission=createPublicAdmissionClient(sink,claims,env.publicDeploymentId!);
-    if(recoveryCandidate)return await reopenConfiguredPublicConnection(claims,ws,stop,admission);
+    if(recoveryCandidate)return await reopenConfiguredPublicConnection(claims,ws,stop,admission,sink,options.recoveryOwnership);
+    if(options.recoveryOwnership?.rejectMissingRuntime){
+      await abortable(admission.inspectRecovery(),stop.signal);
+      throw Error("public_cross_process_recovery_not_supported");
+    }
     await abortable(admission.authorize("connect"),stop.signal);
     const material=createPublicRuntimeMaterialClient(sink,claims,env.publicDeploymentId!,options.credentialAccessSecret);
     const {snapshot,authorization}=await material.configuration(stop.signal);
@@ -85,12 +92,16 @@ export async function openConfiguredPublicConnection(env:RealtimeEnv,ws:WebSocke
  * authority before the compare-and-set, consumes no credentials, and deliberately
  * leaves audio input blocked until the phone sequence bridge is implemented. */
 async function reopenConfiguredPublicConnection(claims:NonNullable<ReturnType<typeof verifyRealtimeToken>>,ws:WebSocket,stop:AbortController,
-    admission:ReturnType<typeof createPublicAdmissionClient>){
+    admission:ReturnType<typeof createPublicAdmissionClient>,sink:ReturnType<typeof createSessionEventSink>,ownership?:{ownerId:string}){
   const current=getSession(claims.sessionId);
   if(!current||!Number.isSafeInteger(current.connectionGeneration)||current.connectionGeneration<1||!current.publicRecoveryRuntime||!current.publicDisconnect)throw Error("public_recovery_runtime_missing");
   const expected=current.connectionGeneration;
   const receipt=await abortable(admission.inspectRecovery(),stop.signal);
   if(stop.signal.aborted||ws.readyState!==1)throw Error("public_recovery_cancelled");
+  if(ownership){
+    if(!/^[A-Za-z0-9._:-]{8,160}$/.test(ownership.ownerId)||!receipt.recovery||!sink.recoveryOwnership)throw Error("public_recovery_ownership_required");
+    await abortable(sink.recoveryOwnership(claims.sessionId,{ownerId:ownership.ownerId,runtimeSequence:receipt.recovery.runtimeSequence}),stop.signal);
+  }
   const attachment=attachSession(claims,{expectedGeneration:expected,receipt});
   if(!attachment||!attachment.resumed)throw Error("public_recovery_handoff_denied");
   const runtime=takePublicRecoveryRuntime(claims.sessionId,attachment.generation);

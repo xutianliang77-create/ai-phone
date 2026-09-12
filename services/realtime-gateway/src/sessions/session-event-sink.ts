@@ -25,6 +25,7 @@ export interface SessionEventSink {
   record(event: ServerRealtimeEvent): Promise<void>;
   touch(sessionId: string, status: "active" | "paused"): Promise<void>;
   runtime?(sessionId:string,event:PublicRuntimeObservation):Promise<PublicRuntimeAck>;
+  recoveryOwnership?(sessionId:string,input:{ownerId:string;runtimeSequence:number}):Promise<{ownerId:string;runtimeSequence:number;expiresAt:string}>;
 }
 
 /** Binding must come from authenticated server admission, never a client event.
@@ -91,6 +92,15 @@ class ApiSessionEventSink implements SessionEventSink {
         ![receipt.deploymentId,receipt.ownerId,receipt.modelPolicyRevision].every(v=>typeof v==="string"&&v.length>0) ||
         !["verified","uncertain"].includes(receipt.meterStatus))throw new Error("public_runtime_ack_mismatch");
     return receipt;
+  }
+
+  async recoveryOwnership(sessionId:string,input:{ownerId:string;runtimeSequence:number}){
+    if((this.options.internalApiSecret?.trim().length??0)<16||typeof input.ownerId!=="string"||
+      !Number.isSafeInteger(input.runtimeSequence)||input.runtimeSequence<1)throw Error("public_recovery_ownership_invalid");
+    const snapshot=structuredClone(input),receipt=await this.post(`/internal/realtime/sessions/${encodeURIComponent(sessionId)}/recovery-ownership`,snapshot,1,true,true) as Record<string,unknown>;
+    if(receipt.sessionId!==sessionId||receipt.ownerId!==snapshot.ownerId||receipt.runtimeSequence!==snapshot.runtimeSequence||
+      typeof receipt.expiresAt!=="string"||!Number.isFinite(Date.parse(receipt.expiresAt)))throw Error("public_recovery_ownership_ack_mismatch");
+    return {ownerId:snapshot.ownerId,runtimeSequence:snapshot.runtimeSequence,expiresAt:receipt.expiresAt};
   }
 
   async record(event: ServerRealtimeEvent) {
