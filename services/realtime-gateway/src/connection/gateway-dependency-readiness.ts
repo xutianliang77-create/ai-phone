@@ -15,7 +15,7 @@ export interface GatewayDependencyServiceStatus {
 }
 
 export interface GatewayDependencyReadiness {
-  evidence?: "implementation_gate";
+  evidence?: "implementation_gate" | "signed_live_qualification";
   status: GatewayDependencyStatus;
   sessionReady: boolean;
   releaseReady: boolean;

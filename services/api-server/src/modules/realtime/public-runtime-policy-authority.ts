@@ -2,11 +2,12 @@ import {createHmac,timingSafeEqual} from "node:crypto";
 import {lstatSync,readFileSync} from "node:fs";
 import {isAbsolute,resolve} from "node:path";
 import {isSupportedLanguage,isTranslationLanguage,publicModelComponents} from "@translation/contracts";
+import { inspectPublicRuntimeLiveQualification } from "@translation/platform-security";
 import {canonicalSyncJson,syncKey} from "../sessions/session-result-sync-contract.js";
 import type {PublicInferenceEvidence} from "../sessions/public-inference-evidence.js";
 import type {PublicRealtimeAuthority} from "./public-realtime-coordinator.js";
 
-type RuntimeEnv=Partial<Pick<NodeJS.ProcessEnv,"PUBLIC_RUNTIME_ENABLED"|"PUBLIC_RUNTIME_ADMISSION_POLICY_FILE"|"PUBLIC_RUNTIME_ADMISSION_POLICY_KEY"|"API_RESULT_SYNC_DEPLOYMENT_ID">>;
+type RuntimeEnv=Partial<Pick<NodeJS.ProcessEnv,"PUBLIC_RUNTIME_ENABLED"|"PUBLIC_RUNTIME_ADMISSION_POLICY_FILE"|"PUBLIC_RUNTIME_ADMISSION_POLICY_KEY"|"API_RESULT_SYNC_DEPLOYMENT_ID"|"PUBLIC_RUNTIME_REQUIRE_LIVE_QUALIFICATION"|"PUBLIC_RUNTIME_LIVE_QUALIFICATION_FILE"|"PUBLIC_RUNTIME_LIVE_QUALIFICATION_KEY">>;
 type ProviderAvailability={providerId:string;state:"available"|"unavailable"};
 type QualifiedLanguagePair={source:string;target:string};
 type Policy={schemaVersion:1;policyId:string;deploymentId:string;configurationHash:string;modelPolicyRevision:string;region:string;
@@ -34,7 +35,17 @@ export function publicRealtimeAuthorityFromEnvironment(env:RuntimeEnv=process.en
   if(!enabled(env.PUBLIC_RUNTIME_ENABLED))return undefined;
   const file=env.PUBLIC_RUNTIME_ADMISSION_POLICY_FILE,key=env.PUBLIC_RUNTIME_ADMISSION_POLICY_KEY,deployment=env.API_RESULT_SYNC_DEPLOYMENT_ID;
   if(typeof file!=="string"||!isAbsolute(file)||!hex(key,64)||!syncKey(deployment))throw Error("public_runtime_admission_policy_not_configured");
-  return {timeoutMs:5000,resolveVerifiedEvidence:async context=>resolvePolicy(file,key!,deployment!,context)};
+  const required=enabled(env.PUBLIC_RUNTIME_REQUIRE_LIVE_QUALIFICATION),liveFile=env.PUBLIC_RUNTIME_LIVE_QUALIFICATION_FILE,liveKey=env.PUBLIC_RUNTIME_LIVE_QUALIFICATION_KEY;
+  if(required&&(!isAbsolute(liveFile??"")||!hex(liveKey,64)))throw Error("public_runtime_live_qualification_not_configured");
+  return {timeoutMs:5000,resolveVerifiedEvidence:async context=>{
+    if(required){
+      const live=inspectPublicRuntimeLiveQualification({file:liveFile,signingKey:liveKey,
+        expectation:{deploymentId:context.deploymentId,configurationHash:context.configuration.configurationHash,
+          modelPolicyRevision:context.configuration.modelPolicyRevision,components:publicModelComponents(context.configuration.executionPlan)}});
+      if(live.status!=="ready")throw Error(live.issue);
+    }
+    return resolvePolicy(file,key!,deployment!,context);
+  }};
 }
 
 function resolvePolicy(file:string,key:string,deployment:string,context:Parameters<PublicRealtimeAuthority["resolveVerifiedEvidence"]>[0]){

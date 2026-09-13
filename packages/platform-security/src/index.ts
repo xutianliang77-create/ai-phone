@@ -1,6 +1,8 @@
 import { createHmac } from "node:crypto";
 import { createClient } from "@redis/client";
 
+export * from "./public-runtime-live-qualification.js";
+
 export type RateLimitProvider = "memory" | "redis";
 
 export interface FixedWindowRateLimiterOptions {

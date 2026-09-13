@@ -43,6 +43,12 @@ export interface RealtimeEnv extends SpeakerRevisionEnv {
   publicRuntimeEnabled: boolean;
   /** Separate API-to-Gateway credential-material access secret; never a model key. */
   publicCredentialAccessSecret?: string;
+  /** Independent, time-bounded real-provider observation for public readiness. */
+  publicLiveQualificationFile?: string;
+  publicLiveQualificationKey?: string;
+  publicConfigurationHash?: string;
+  publicModelPolicyRevision?: string;
+  publicActiveComponents?: string[];
   host: string;
   port: number;
   allowedHosts: string[];
@@ -143,6 +149,11 @@ export function loadEnv(): RealtimeEnv {
     publicDeploymentId: env.API_RESULT_SYNC_DEPLOYMENT_ID || undefined,
     publicRuntimeEnabled: parseBoolean(env.PUBLIC_RUNTIME_ENABLED, false),
     publicCredentialAccessSecret: env.PUBLIC_GATEWAY_CREDENTIAL_ACCESS_SECRET,
+    publicLiveQualificationFile: env.PUBLIC_RUNTIME_LIVE_QUALIFICATION_FILE,
+    publicLiveQualificationKey: env.PUBLIC_RUNTIME_LIVE_QUALIFICATION_KEY,
+    publicConfigurationHash: env.PUBLIC_RUNTIME_CONFIGURATION_HASH,
+    publicModelPolicyRevision: env.PUBLIC_RUNTIME_MODEL_POLICY_REVISION,
+    publicActiveComponents: commaSeparated(env.PUBLIC_RUNTIME_ACTIVE_COMPONENTS),
     host: env.REALTIME_BIND_HOST?.trim() || "0.0.0.0",
     port: Number(env.REALTIME_PORT ?? 3001),
     allowedHosts: commaSeparated(env.REALTIME_ALLOWED_HOSTS),
