@@ -7,11 +7,14 @@ import type {PublicInferenceEvidence} from "../sessions/public-inference-evidenc
 import type {PublicRealtimeAuthority} from "./public-realtime-coordinator.js";
 
 type RuntimeEnv=Partial<Pick<NodeJS.ProcessEnv,"PUBLIC_RUNTIME_ENABLED"|"PUBLIC_RUNTIME_ADMISSION_POLICY_FILE"|"PUBLIC_RUNTIME_ADMISSION_POLICY_KEY"|"API_RESULT_SYNC_DEPLOYMENT_ID">>;
+type ProviderAvailability={providerId:string;state:"available"|"unavailable"};
 type Policy={schemaVersion:1;policyId:string;deploymentId:string;configurationHash:string;modelPolicyRevision:string;region:string;
-  issuedAt:string;expiresAt:string;maxActiveSeconds?:number;currency:string;reservedMicros:number;qualifiedComponents:Array<"asr"|"translation"|"tts">;signature:string;};
+  issuedAt:string;expiresAt:string;maxActiveSeconds?:number;currency:string;reservedMicros:number;qualifiedComponents:Array<"asr"|"translation"|"tts">;
+  /** Server-global provider snapshot. It is never a user balance or a client field. */
+  providerAvailability:ProviderAvailability[];signature:string;};
 const enabled=(value:unknown)=>typeof value==="string"&&value.trim().toLowerCase()==="true";
 const hex=(value:unknown,length:number)=>typeof value==="string"&&new RegExp(`^[a-f0-9]{${length}}$`,"i").test(value);
-const policyFields=["schemaVersion","policyId","deploymentId","configurationHash","modelPolicyRevision","region","issuedAt","expiresAt","maxActiveSeconds","currency","reservedMicros","qualifiedComponents","signature"];
+const policyFields=["schemaVersion","policyId","deploymentId","configurationHash","modelPolicyRevision","region","issuedAt","expiresAt","maxActiveSeconds","currency","reservedMicros","qualifiedComponents","providerAvailability","signature"];
 const body=(policy:Policy)=>Object.fromEntries(Object.entries(policy).filter(([key])=>key!=="signature"));
 
 /** Signs the operator policy body; callers own storage and never receive model credentials. */
@@ -20,7 +23,9 @@ export function signPublicRuntimeAdmissionPolicy(policy:Omit<Policy,"signature">
   return createHmac("sha256",key).update(canonicalSyncJson(policy)).digest("hex");
 }
 
-/** Default deny. A signed policy can authorize only configuration-bound free or paid budget metadata; it never probes a provider. */
+/** Default deny. A signed policy binds configuration-qualified components to a
+ * server-global provider-availability snapshot. It never probes a provider,
+ * turns a provider quota into a user balance, or exposes that snapshot. */
 export function publicRealtimeAuthorityFromEnvironment(env:RuntimeEnv=process.env):PublicRealtimeAuthority|undefined{
   if(!enabled(env.PUBLIC_RUNTIME_ENABLED))return undefined;
   const file=env.PUBLIC_RUNTIME_ADMISSION_POLICY_FILE,key=env.PUBLIC_RUNTIME_ADMISSION_POLICY_KEY,deployment=env.API_RESULT_SYNC_DEPLOYMENT_ID;
@@ -32,6 +37,10 @@ function resolvePolicy(file:string,key:string,deployment:string,context:Paramete
   const policy=readPolicy(file,key,new Date()),config=context.configuration,components=publicModelComponents(config.executionPlan);
   if(policy.deploymentId!==deployment||policy.deploymentId!==context.deploymentId||policy.configurationHash!==config.configurationHash||policy.modelPolicyRevision!==config.modelPolicyRevision||
     policy.modelPolicyRevision!==context.configuration.modelPolicyRevision||policy.qualifiedComponents.length!==components.length||components.some(component=>!policy.qualifiedComponents.includes(component)))throw Error("public_runtime_admission_policy_scope_mismatch");
+  const providerIds=[...new Set(components.map(component=>config.components[component]!.vendor))].sort();
+  const availability=[...policy.providerAvailability].sort((a,b)=>a.providerId.localeCompare(b.providerId));
+  if(availability.length!==providerIds.length||availability.some((entry,index)=>entry.providerId!==providerIds[index]))throw Error("public_runtime_admission_policy_scope_mismatch");
+  if(availability.some(entry=>entry.state!=="available"))throw Error("public_provider_unavailable");
   const common={sessionId:context.sessionId,ownerId:context.ownerId,deploymentId:context.deploymentId,processingHash:context.processingHash,region:policy.region,
     providerPolicyRevision:config.modelPolicyRevision,sourceReceiptId:policy.policyId,issuedAt:policy.issuedAt,expiresAt:policy.expiresAt};
   const budget:PublicInferenceEvidence={...common,id:`${policy.policyId}:budget`,kind:"provider_budget",state:"reserved",currency:policy.currency,
@@ -51,7 +60,10 @@ function readPolicy(file:string,key:string,now:Date):Policy{
     typeof policy.issuedAt!=="string"||typeof policy.expiresAt!=="string"||!Number.isFinite(Date.parse(policy.issuedAt))||!Number.isFinite(Date.parse(policy.expiresAt))||
     Date.parse(policy.issuedAt)>now.getTime()||Date.parse(policy.expiresAt)<=now.getTime()||(policy.maxActiveSeconds!==undefined&&(!Number.isSafeInteger(policy.maxActiveSeconds)||policy.maxActiveSeconds<1||policy.maxActiveSeconds>86400))||
     typeof policy.currency!=="string"||!/^[A-Z]{3}$/.test(policy.currency)||!Number.isSafeInteger(policy.reservedMicros)||policy.reservedMicros<0||!Array.isArray(policy.qualifiedComponents)||
-    new Set(policy.qualifiedComponents).size!==policy.qualifiedComponents.length||policy.qualifiedComponents.some(component=>!["asr","translation","tts"].includes(component)))throw Error("public_runtime_admission_policy_invalid");
+    new Set(policy.qualifiedComponents).size!==policy.qualifiedComponents.length||policy.qualifiedComponents.some(component=>!["asr","translation","tts"].includes(component))||
+    !Array.isArray(policy.providerAvailability)||policy.providerAvailability.length<1||policy.providerAvailability.length>3||
+    new Set(policy.providerAvailability.map(entry=>entry?.providerId)).size!==policy.providerAvailability.length||policy.providerAvailability.some(entry=>!entry||typeof entry!=="object"||Array.isArray(entry)||
+      Object.keys(entry).some(field=>!["providerId","state"].includes(field))||!syncKey(entry.providerId)||!["available","unavailable"].includes(entry.state)))throw Error("public_runtime_admission_policy_invalid");
   const expected=signPublicRuntimeAdmissionPolicy(body(policy) as Omit<Policy,"signature">,key);
   if(!timingSafeEqual(Buffer.from(expected),Buffer.from(policy.signature)))throw Error("public_runtime_admission_policy_signature_invalid");
   return policy;
