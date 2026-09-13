@@ -218,6 +218,14 @@ void main() {
     expect(controller.segments.map((segment) => segment.id),
         <String>['asr_1', 'asr_2']);
     expect(speaker.stopCount, greaterThanOrEqualTo(1));
+    expect(
+      (controller.segments
+          .singleWhere((segment) => segment.id == 'asr_1')
+          .refinement?['speechTiming'] as Map<String, Object?>?)?['status'],
+      'cancelled',
+      reason:
+          'a real non-echo ASR barge-in deliberately interrupts the old TTS',
+    );
     playback.complete(const SpeechOutputResult(
       provider: 'fake',
       language: 'zh',
