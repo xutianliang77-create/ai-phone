@@ -30,7 +30,8 @@ RealtimeRepository createDefaultRealtimeRepository(AppConfig config) {
 }
 
 MobileAsrProvider? createDefaultMobileAsrProvider(AppConfig config) {
-  if (!config.useDeviceAsr) return null;
+  // r6.1: the mode, not a stale legacy flag, decides model placement.
+  if (!config.useLocalSessions || !config.useDeviceAsr) return null;
   if (config.deviceAsrProvider == 'apple_speech_transcriber') {
     return AppleSpeechAsrProvider();
   }
@@ -47,7 +48,7 @@ MobileAsrProvider? createDefaultMobileAsrProvider(AppConfig config) {
 MobileTranslationProvider? createDefaultMobileTranslationProvider(
   AppConfig config,
 ) {
-  if (!config.useOnDeviceTranslation) return null;
+  if (!config.useLocalSessions || !config.useOnDeviceTranslation) return null;
   if (config.onDeviceTranslationProvider == 'phrasebook') {
     return PhrasebookTranslationProvider();
   }

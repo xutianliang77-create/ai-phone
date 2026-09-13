@@ -323,7 +323,9 @@ class RealtimeController extends ChangeNotifier {
     );
   }
 
-  bool get _usesDeviceAsr => _config.useDeviceAsr;
+  // The user's selected mode is authoritative. A stale `USE_DEVICE_ASR` flag
+  // must never make an online session run device ASR in parallel.
+  bool get _usesDeviceAsr => _config.useLocalSessions && _config.useDeviceAsr;
 
   Future<void> recoverPendingFinalizations() async {
     await ignoreCleanupError(_repository.recoverPendingFinalizations);

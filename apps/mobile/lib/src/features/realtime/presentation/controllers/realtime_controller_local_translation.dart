@@ -5,6 +5,9 @@ extension RealtimeControllerLocalTranslation on RealtimeController {
     RealtimeSession session,
     AsrTextSegment segment,
   ) async {
+    // Device ASR events are a local-mode input only. Do not turn a stale
+    // callback or legacy preference into an online local translation path.
+    if (!_config.useLocalSessions) return;
     if (!_canCommitDeviceAsr(session, segment)) return;
     final cleanText = _cleanRealtimeText(segment.text);
     if (cleanText == null) return;
@@ -110,7 +113,7 @@ extension RealtimeControllerLocalTranslation on RealtimeController {
     // Versioned Apple results are committed only by the native SDK watermark
     // or its successful EOF drain, never by a Dart-side stop assumption.
     if (segment.languageEvidence != AsrLanguageEvidence.legacy) return;
-    if (!_config.useLocalSessions && !_config.useOnDeviceTranslation) return;
+    if (!_config.useLocalSessions) return;
     await _handleAsrTextSegment(session!, segment.copyWith(isFinal: true));
   }
 
@@ -173,7 +176,8 @@ extension RealtimeControllerLocalTranslation on RealtimeController {
   }
 
   bool _canTranslateOnDevice(AsrTextSegment segment) {
-    return _config.useOnDeviceTranslation &&
+    return _config.useLocalSessions &&
+        _config.useOnDeviceTranslation &&
         segment.isFinal &&
         !_isIgnorableRealtimeText(segment.text) &&
         _mobileTranslationProvider != null;

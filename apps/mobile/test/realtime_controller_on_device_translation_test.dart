@@ -54,7 +54,7 @@ void main() {
     await controller.stop();
     expect(repository.endedSegments.single.translatedText, '你好');
   });
-  test('falls back to Gateway when local translation has no result', () async {
+  test('keeps source locally when local translation has no result', () async {
     final repository = _FakeRealtimeRepository();
     final asr = _FakeMobileAsrProvider();
     final controller = _controller(
@@ -72,8 +72,9 @@ void main() {
     ));
     await pumpEventQueue();
 
-    expect(repository.sentTextSegments.single.text, 'unmapped');
-    expect(controller.segments, isEmpty);
+    expect(repository.sentTextSegments, isEmpty);
+    expect(controller.segments.single.sourceText, 'unmapped');
+    expect(controller.segments.single.translatedText, isEmpty);
   });
   test('keeps source text locally when local translation has no result',
       () async {
@@ -177,34 +178,21 @@ void main() {
     expect(repository.endedSegments.single.translatedText, '你好');
   });
 
-  test('switches online automatic direction from ASR text language', () async {
+  test('online mode ignores an injected stale device-ASR callback', () async {
     final repository = _FakeRealtimeRepository();
     final asr = _FakeMobileAsrProvider();
     final translator = _FakeTranslationProvider('translated');
-    final controller = _controller(repository, asr, translator,
-        sourceLanguage: 'auto', autoReverseTargetLanguage: true);
+    final controller =
+        _controller(repository, asr, translator, useLocalSessions: false);
     addTearDown(controller.dispose);
     await controller.start();
     asr.emit(const AsrTextSegment(
-      id: 'asr_zh',
-      text: '今天测试',
-      language: 'auto',
-    ));
-    asr.emit(const AsrTextSegment(
-      id: 'asr_en',
-      text: 'hello',
-      language: 'auto',
-    ));
-    asr.emit(const AsrTextSegment(
-      id: 'asr_mix',
-      text: 'hello 你好',
-      language: 'auto',
-    ));
+        id: 'stale_device_asr', text: 'hello', language: 'en'));
     await pumpEventQueue();
 
-    expect(translator.configs.map((config) {
-      return '${config.sourceLanguage}->${config.targetLanguage}';
-    }), <String>['zh->en', 'en->zh', 'en->zh']);
+    expect(translator.configs, isEmpty);
+    expect(repository.sentTextSegments, isEmpty);
+    expect(controller.segments, isEmpty);
   });
 }
 
@@ -212,7 +200,7 @@ RealtimeController _controller(
   _FakeRealtimeRepository repository,
   _FakeMobileAsrProvider asr,
   MobileTranslationProvider translator, {
-  bool useLocalSessions = false,
+  bool useLocalSessions = true,
   String sourceLanguage = 'en',
   String targetLanguage = 'zh',
   bool autoReverseTargetLanguage = false,

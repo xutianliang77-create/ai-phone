@@ -298,10 +298,10 @@ class RealtimeFinalizationException implements Exception {
 }
 
 bool shouldAutoReverseRealtimeSession(AppConfig config) {
-  if (config.autoReverseTargetLanguage) return true;
-  if (config.realtimeMode != 'conversation') return false;
-  return (config.sourceLanguage == 'zh' && config.targetLanguage == 'en') ||
-      (config.sourceLanguage == 'en' && config.targetLanguage == 'zh');
+  // Never infer automatic reversal from a convenient default language pair.
+  // Public automatic routing remains explicitly unqualified, and local mode
+  // already rejects the saved automatic preference before startup.
+  return config.autoReverseTargetLanguage;
 }
 
 Map<String, Object?> _segmentToJson(SubtitleSegment segment) {

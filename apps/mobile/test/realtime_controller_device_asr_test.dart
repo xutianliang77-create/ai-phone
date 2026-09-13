@@ -15,7 +15,8 @@ import 'package:translation_mobile/src/platform/audio/audio_capture.dart';
 import 'package:translation_mobile/src/platform/audio/audio_frame.dart';
 
 void main() {
-  test('starts device ASR and sends ASR text segments to Gateway', () async {
+  test('starts device ASR and keeps its final text on the local path',
+      () async {
     final repository = _FakeRealtimeRepository();
     final provider = _FakeMobileAsrProvider();
     final controller = _controller(repository, provider);
@@ -39,8 +40,8 @@ void main() {
       'start',
     ]);
     expect(repository.startedSessionIds, <String>['sess_1']);
-    expect(repository.sentTextSegments.single.sessionId, 'sess_1');
-    expect(repository.sentTextSegments.single.segment.text, 'hello');
+    expect(repository.sentTextSegments, isEmpty);
+    expect(controller.segments.single.sourceText, 'hello');
   });
 
   test('pauses and resumes device ASR without new session', () async {
@@ -58,7 +59,8 @@ void main() {
 
     await controller.start();
     await controller.pause();
-    expect(repository.sentTextSegments.single.segment.id, 'pause_tail_1');
+    expect(repository.sentTextSegments, isEmpty);
+    expect(controller.segments.single.sourceText, 'pause tail');
     await controller.start();
 
     expect(controller.status, RealtimeStatus.active);
@@ -125,7 +127,8 @@ void main() {
     await controller.stop();
 
     expect(controller.status, RealtimeStatus.ended);
-    expect(repository.sentTextSegments.single.segment.id, 'tail_1');
+    expect(repository.sentTextSegments, isEmpty);
+    expect(controller.segments.single.sourceText, 'final tail');
     expect(repository.endedSessionIds, <String>['sess_1']);
   });
 
@@ -146,12 +149,27 @@ void main() {
     expect(provider.startCalls, 2);
     expect(provider.stopCalls, 2);
   });
+
+  test('online mode ignores a stale device-ASR flag and starts no device model',
+      () async {
+    final repository = _FakeRealtimeRepository();
+    final provider = _FakeMobileAsrProvider();
+    final controller = _controller(repository, provider, local: false);
+    addTearDown(controller.dispose);
+
+    await controller.start();
+
+    expect(controller.status, RealtimeStatus.active);
+    expect(provider.calls, isEmpty);
+    expect(repository.startedSessionIds, <String>['sess_1']);
+  });
 }
 
 RealtimeController _controller(
   _FakeRealtimeRepository repository,
-  _FakeMobileAsrProvider provider,
-) {
+  _FakeMobileAsrProvider provider, {
+  bool local = true,
+}) {
   return RealtimeController(
     repository: repository,
     audioCapture: _NoopAudioCapture(),
@@ -160,10 +178,14 @@ RealtimeController _controller(
       apiBaseUrl: Uri.parse('http://127.0.0.1:3100'),
       useMockAudio: false,
       useDeviceAsr: true,
+      useLocalSessions: local,
       deviceAsrProvider: 'coreml_nemotron',
-      deviceAsrLanguage: 'auto',
+      deviceAsrLanguage: 'en',
       deviceAsrAutoDownloadModel: false,
       deviceAsrModelChunkMs: 2240,
+      sourceLanguage: 'en',
+      targetLanguage: 'zh',
+      autoReverseTargetLanguage: false,
       serverOwnedHistory: true,
     ),
   );
@@ -206,6 +228,7 @@ class _FakeRealtimeRepository extends RealtimeRepository {
       maxDurationSeconds: 60,
     );
   }
+
   @override
   bool sendTextSegment(String sessionId, AsrTextSegment segment) {
     sentTextSegments.add(_SentTextSegment(sessionId, segment));
@@ -225,6 +248,7 @@ class _FakeRealtimeRepository extends RealtimeRepository {
     resumedSessionIds.add(sessionId);
     return true;
   }
+
   @override
   Future<bool> resumeAndWait(String sessionId) async => resume(sessionId);
 

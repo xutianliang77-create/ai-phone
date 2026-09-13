@@ -37,13 +37,29 @@ void main() {
 
     expect(provider, isA<UnavailableSystemAsrProvider>());
   });
+
+  test('does not create a mobile ASR provider for online mode', () {
+    expect(
+        createDefaultMobileAsrProvider(
+            _config(deviceAsrProvider: 'coreml_nemotron', local: false)),
+        isNull);
+  });
+
+  test('does not create a mobile translation provider for online mode', () {
+    expect(
+        createDefaultMobileTranslationProvider(
+            _config(deviceAsrProvider: 'coreml_nemotron', local: false)
+                .copyWith(useOnDeviceTranslation: true)),
+        isNull);
+  });
 }
 
-AppConfig _config({required String deviceAsrProvider}) {
+AppConfig _config({required String deviceAsrProvider, bool local = true}) {
   return AppConfig(
     apiBaseUrl: Uri.parse('http://127.0.0.1:3100'),
     useMockAudio: true,
     useDeviceAsr: true,
+    useLocalSessions: local,
     deviceAsrProvider: deviceAsrProvider,
     deviceAsrLanguage: 'auto',
     deviceAsrAutoDownloadModel: false,

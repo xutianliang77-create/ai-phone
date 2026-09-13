@@ -1,7 +1,7 @@
 part of '../realtime_controller_on_device_translation_test.dart';
 
 void deviceLanguageCases() {
-  for (final local in [true, false]) {
+  for (final local in [true]) {
     test('fixed French hint stays French on device, local=$local', () async {
       final repository = _FakeRealtimeRepository();
       final asr = _FakeMobileAsrProvider();
@@ -19,7 +19,7 @@ void deviceLanguageCases() {
       expect(repository.sentTextSegments, isEmpty);
     });
 
-    for (final selected in local ? ['ja'] : ['auto', 'ja']) {
+    for (final selected in ['ja']) {
       test('hint cannot stand in for detected language, $selected/$local',
           () async {
         final repository = _FakeRealtimeRepository();
@@ -66,46 +66,6 @@ void deviceLanguageCases() {
         expect(repository.endedSegments.single.sourceText, 'bonjour 你好');
         expect(repository.endedSegments.single.translatedText, isEmpty);
         expect(repository.endedSegments.single.sourceLanguage, 'auto');
-      });
-    }
-
-    if (!local) {
-      test('qualified metadata uses existing configured pair A/A/B', () async {
-        final repository = _FakeRealtimeRepository();
-        final asr = _FakeMobileAsrProvider();
-        final translator = _FakeTranslationProvider('訳文');
-        final controller = _languageController(repository, asr, translator,
-            local: false, autoReverse: true);
-        addTearDown(controller.dispose);
-        await controller.start();
-        for (final row in ['fr-FR', 'fr-CA', 'ja-JP', 'de-DE'].indexed) {
-          asr.emit(_languageSegment(row.$2,
-              id: '${row.$1}', evidence: AsrLanguageEvidence.detected));
-        }
-        await pumpEventQueue();
-        expect(_directions(translator), ['fr->ja', 'fr->ja', 'ja->fr']);
-        expect(controller.segments.last.sourceLanguage, 'de');
-        expect(controller.segments.last.translatedText, isEmpty);
-        expect(repository.sentTextSegments, isEmpty);
-      });
-    }
-
-    if (!local) {
-      test('unknown detection never defaults to opposite language, $local',
-          () async {
-        final repository = _FakeRealtimeRepository();
-        final asr = _FakeMobileAsrProvider();
-        final translator = _FakeTranslationProvider('wrong');
-        final controller = _languageController(repository, asr, translator,
-            local: local, source: 'auto');
-        addTearDown(controller.dispose);
-        await controller.start();
-        asr.emit(
-            _languageSegment('auto', evidence: AsrLanguageEvidence.detected));
-        await pumpEventQueue();
-        expect(translator.configs, isEmpty);
-        expect(repository.sentTextSegments, isEmpty);
-        expect(controller.segments.single.sourceLanguage, 'auto');
       });
     }
 
@@ -167,67 +127,6 @@ void deviceLanguageCases() {
     }
   }
 
-  for (final nativeFinal in [true, false]) {
-    test('online device partial stays local, nativeFinal=$nativeFinal',
-        () async {
-      final repository = _FakeRealtimeRepository();
-      final asr = _FakeMobileAsrProvider();
-      final translator = _FakeTranslationProvider('訳文');
-      final controller = _languageController(repository, asr, translator);
-      addTearDown(controller.dispose);
-      await controller.start();
-      asr.emit(_languageSegment('fr-FR', isFinal: false));
-      await pumpEventQueue();
-      expect(controller.segments.single.sourceText, 'bonjour');
-      expect(translator.configs, isEmpty);
-      expect(repository.sentTextSegments, isEmpty);
-      if (nativeFinal) {
-        asr.emit(_languageSegment('fr-FR', text: 'bonjour ici'));
-        await pumpEventQueue();
-      }
-      await controller.stop();
-      expect(_directions(translator), nativeFinal ? ['fr->ja'] : isEmpty);
-      expect(repository.sentTextSegments, isEmpty);
-      expect(repository.endedSegments.single.translatedText,
-          nativeFinal ? '訳文' : '');
-    });
-  }
-
-  test('automatic reverse uses configured French/Japanese pair, not zh/en',
-      () async {
-    final repository = _FakeRealtimeRepository();
-    final asr = _FakeMobileAsrProvider();
-    final translator = _FakeTranslationProvider('訳文');
-    final controller =
-        _languageController(repository, asr, translator, autoReverse: true);
-    addTearDown(controller.dispose);
-    await controller.start();
-    for (final row in ['fr-FR', 'fr-CA', 'ja-JP'].indexed) {
-      asr.emit(_languageSegment(row.$2,
-          id: '${row.$1}', evidence: AsrLanguageEvidence.detected));
-    }
-    await pumpEventQueue();
-    expect(_directions(translator), ['fr->ja', 'fr->ja', 'ja->fr']);
-    expect(repository.sentTextSegments, isEmpty);
-  });
-
-  test('new auto input never fabricates missing reverse side of a pair',
-      () async {
-    final repository = _FakeRealtimeRepository();
-    final asr = _FakeMobileAsrProvider();
-    final translator = _FakeTranslationProvider('wrong');
-    final controller = _languageController(repository, asr, translator,
-        source: 'auto', autoReverse: true);
-    addTearDown(controller.dispose);
-    await controller.start();
-    asr.emit(_languageSegment('ja-JP', evidence: AsrLanguageEvidence.detected));
-    await pumpEventQueue();
-    expect(translator.configs, isEmpty);
-    expect(repository.sentTextSegments, isEmpty);
-    expect(controller.segments.single.sourceLanguage, 'ja');
-    expect(controller.segments.single.translatedText, isEmpty);
-  });
-
   test('fixed non-English final fallback preserves language and provenance',
       () async {
     final repository = _FakeRealtimeRepository();
@@ -239,9 +138,9 @@ void deviceLanguageCases() {
     asr.emit(_languageSegment('fr-FR'));
     await pumpEventQueue();
     expect(_directions(translator), ['fr->ja']);
-    final sent = repository.sentTextSegments.single;
-    expect(sent.language, 'fr');
-    expect(sent.languageEvidence, AsrLanguageEvidence.userSelected);
+    expect(repository.sentTextSegments, isEmpty);
+    expect(controller.segments.single.sourceLanguage, 'fr');
+    expect(controller.segments.single.translatedText, isEmpty);
   });
 }
 
@@ -266,7 +165,7 @@ List<String> _directions(_FakeTranslationProvider translator) =>
 
 RealtimeController _languageController(_FakeRealtimeRepository repository,
         _FakeMobileAsrProvider asr, MobileTranslationProvider translator,
-        {bool local = false, String source = 'fr', bool autoReverse = false}) =>
+        {bool local = true, String source = 'fr', bool autoReverse = false}) =>
     RealtimeController(
         repository: repository,
         audioCapture: _NoopAudioCapture(),

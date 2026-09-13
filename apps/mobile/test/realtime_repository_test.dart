@@ -173,31 +173,23 @@ void main() {
     expect(gateway.sentTextLanguage, 'zh');
   });
 
-  test('auto reverses online realtime sessions only for Chinese English talk',
-      () {
+  test('does not infer automatic reversal from a fixed language pair', () {
     expect(
       shouldAutoReverseRealtimeSession(_config(
         realtimeMode: 'conversation',
         sourceLanguage: 'zh',
         targetLanguage: 'en',
+      )),
+      isFalse,
+    );
+    expect(
+      shouldAutoReverseRealtimeSession(_config(
+        realtimeMode: 'conversation',
+        sourceLanguage: 'zh',
+        targetLanguage: 'en',
+        autoReverseTargetLanguage: true,
       )),
       isTrue,
-    );
-    expect(
-      shouldAutoReverseRealtimeSession(_config(
-        realtimeMode: 'meeting',
-        sourceLanguage: 'zh',
-        targetLanguage: 'en',
-      )),
-      isFalse,
-    );
-    expect(
-      shouldAutoReverseRealtimeSession(_config(
-        realtimeMode: 'conversation',
-        sourceLanguage: 'fr',
-        targetLanguage: 'en',
-      )),
-      isFalse,
     );
   });
 }
@@ -238,6 +230,7 @@ AppConfig _config({
   required String realtimeMode,
   required String sourceLanguage,
   required String targetLanguage,
+  bool autoReverseTargetLanguage = false,
 }) {
   return AppConfig(
     apiBaseUrl: Uri.parse('http://localhost'),
@@ -246,7 +239,7 @@ AppConfig _config({
     realtimeMode: realtimeMode,
     sourceLanguage: sourceLanguage,
     targetLanguage: targetLanguage,
-    autoReverseTargetLanguage: false,
+    autoReverseTargetLanguage: autoReverseTargetLanguage,
     deviceAsrProvider: 'coreml_nemotron',
     deviceAsrLanguage: 'auto',
     deviceAsrAutoDownloadModel: false,
