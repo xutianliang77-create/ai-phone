@@ -55,6 +55,7 @@ import {
   startTranslationControlRecovery,
 } from
   "./modules/call-links/translation-call-control-outbox.js";
+import {publicGatewayCredentialAccessFromEnvironment} from "./modules/realtime/public-runtime-bootstrap.js";
 
 const env = loadEnv();
 assertAgentWorkRunnerConfiguration(env);
@@ -65,7 +66,7 @@ assertPlatformScaleStartup();
 const recovery = await recoverStaleRealtimeSessions({
   graceSeconds: env.realtimeStaleSessionGraceSeconds,
 });
-const app = await buildApp();
+const app = await buildApp({publicGatewayCredentialAccess:publicGatewayCredentialAccessFromEnvironment()});
 const outboxRecovery = await recoverPendingCallRoomOutbox();
 const translationControlRecovery = await recoverPendingTranslationControls();
 const voiceIdentityRecovery = await recoverPendingVoiceIdentityDeletions();

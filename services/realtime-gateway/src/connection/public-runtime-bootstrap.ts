@@ -12,7 +12,7 @@ export function publicGatewayRuntimeBootstrapIssue(env:Pick<RealtimeEnv,
   if(!env.publicRuntimeEnabled)return "public_runtime_disabled";
   const secret=env.publicCredentialAccessSecret;
   if(typeof secret!=="string"||secret.length<32||secret.trim()!==secret||/[\u0000-\u001f\u007f]/u.test(secret))return "public_credential_access_required";
-  if(secret===env.internalApiSecret||secret===env.realtimeTokenSecret)return "public_credential_access_must_be_independent";
+  if(secret===env.internalApiSecret?.trim()||secret===env.realtimeTokenSecret?.trim())return "public_credential_access_must_be_independent";
   return undefined;
 }
 
