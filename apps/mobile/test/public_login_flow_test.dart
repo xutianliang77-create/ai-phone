@@ -112,9 +112,15 @@ void main() {
     await store.save(session('b'));
     expect((await store.load())!.ownerId, 'b');
     expect(store.generation, greaterThan(epoch));
+    final ownerB = AccountRequestScope(
+            deploymentId: 'public-test', ownerId: 'b', apiBaseUrl: Uri.parse('https://login.test'))
+        .storageKey;
+    final ownerBFile = File('${directory.path}/account_session_v11_$ownerB.json');
+    expect(await ownerBFile.exists(), isTrue);
     final cleared = store.clear();
     expect(await store.load(), isNull);
     await cleared;
+    expect(await ownerBFile.exists(), isFalse);
     expect(await File('${directory.path}/account_session.json').readAsBytes(),
         original);
     final save = store.save(session('a'));

@@ -171,7 +171,7 @@ describe("manual configuration binding on the original session aggregate",()=>{
     if(p.id==="google_speech_v2")update.components[component].languageLocales={zh:"cmn-Hans-CN",en:"en-US"};
     await savePublicModelConfiguration({...update,credentials:{[component]:credentials}});
     const s=capturePublicModelRuntimeConfiguration(true);
-    expect(s.components[component]).toEqual(["tencent_tts_ws","google_cloud_tts"].includes(p.id)?{...update.components[component],modelId:`service:${p.id}`}:update.components[component]);
+    expect(s.components[component]).toEqual(p.modelRequired?update.components[component]:{...update.components[component],modelId:`service:${p.id}`});
     expect(s.executionPlan[component]).toMatchObject({execution:"public",reason:"online_selected"});
     expect(resolvePublicModelRuntimeCredentials(s,component)).toEqual(credentials);
     expect(JSON.stringify(s)).not.toContain(secret);
