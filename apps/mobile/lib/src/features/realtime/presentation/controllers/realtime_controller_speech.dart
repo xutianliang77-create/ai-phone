@@ -94,9 +94,15 @@ extension RealtimeControllerSpeech on RealtimeController {
     final normalizedText =
         normalizeSpeechOutputText(speechText, targetLanguage);
     final generation = _speechGeneration;
+    if (segmentId != null &&
+        _deviceAsrRecovery.speechStartedSegments.contains(segmentId)) {
+      return;
+    }
     final queued = Stopwatch()..start();
+    _queueSpeechTiming(segmentId, generation);
     _speechChain = _speechChain.catchError((Object _) {}).then((_) {
       if (generation != _speechGeneration || isCurrent?.call() == false) {
+        _markSpeechTerminal(segmentId, generation, 'superseded');
         return null;
       }
       return _speakWithTimeout(speaker, normalizedText, targetLanguage,
@@ -128,12 +134,15 @@ extension RealtimeControllerSpeech on RealtimeController {
     if (generation != _speechGeneration ||
         _status != RealtimeStatus.active ||
         isCurrent?.call() == false) {
+      _markSpeechTerminal(segmentId, generation, 'superseded');
       return;
     }
     if (segmentId != null &&
         !_deviceAsrRecovery.speechStartedSegments.add(segmentId)) {
+      _markSpeechTerminal(segmentId, generation, 'superseded');
       return;
     }
+    _markSpeechStarted(segmentId, generation, queueWaitMs);
     _speechCaptureGate.beginPlayback(text: text, language: language);
     _setSpeechOutputActive(true);
     try {
@@ -144,21 +153,7 @@ extension RealtimeControllerSpeech on RealtimeController {
       if (generation == _speechGeneration &&
           isCurrent?.call() != false &&
           segmentId != null) {
-        final current = _drafts[segmentId];
-        if (current != null) {
-          _upsertSegment(segmentId, refinement: {
-            ...?current.refinement,
-            'speechTiming': {
-              'status': 'finished',
-              'queueWaitMs': queueWaitMs,
-              ...result.timings,
-              if (result.voice != null)
-                'voiceIdentifier': result.voice!.identifier,
-              if (result.voice != null) 'voiceLanguage': result.voice!.language,
-              if (result.voice != null) 'voiceQuality': result.voice!.quality,
-            },
-          });
-        }
+        _markSpeechFinished(segmentId, generation, queueWaitMs, result);
       }
       if (generation == _speechGeneration &&
           isCurrent?.call() != false &&
@@ -172,6 +167,7 @@ extension RealtimeControllerSpeech on RealtimeController {
       }
     } on TimeoutException catch (error) {
       if (generation == _speechGeneration) {
+        _markSpeechTerminal(segmentId, generation, 'timed_out');
         await ignoreCleanupError(speaker.stop);
         if (generation == _speechGeneration) {
           _reportSpeechFailure(error, '语音播放超时');
@@ -179,9 +175,11 @@ extension RealtimeControllerSpeech on RealtimeController {
       }
     } on Object catch (error) {
       if (generation == _speechGeneration) {
+        _markSpeechTerminal(segmentId, generation, 'failed');
         _reportSpeechFailure(error, '语音播放失败');
       }
     } finally {
+      _clearActiveSpeech(segmentId, generation);
       if (generation == _speechGeneration) {
         _speechCaptureGate.endPlayback();
         _setSpeechOutputActive(false);
@@ -207,6 +205,22 @@ extension RealtimeControllerSpeech on RealtimeController {
   }
 
   Future<void> _stopSpeaking() async {
+    final generation = _speechGeneration;
+    final activeSegmentId =
+        _activeSpeechGeneration == generation ? _activeSpeechSegmentId : null;
+    final queued = Map<String, double>.from(
+      _speechQueuedSegments.remove(generation) ?? const <String, double>{},
+    );
+    for (final segmentId in queued.keys) {
+      _writeSpeechTiming(segmentId, {
+        'status': segmentId == activeSegmentId ? 'cancelled' : 'superseded',
+        if (queued[segmentId] != null) 'queueWaitMs': queued[segmentId],
+      });
+    }
+    if (_activeSpeechGeneration == generation) {
+      _activeSpeechGeneration = null;
+      _activeSpeechSegmentId = null;
+    }
     _speechGeneration += 1;
     unawaited(_recordDeviceAsrDiagnosticEvent(
       'tts.stop_requested',
@@ -225,6 +239,73 @@ extension RealtimeControllerSpeech on RealtimeController {
     // future that a platform may leave unresolved until its old timeout.
     _speechChain = stopping.catchError((Object _) {});
     await stopping;
+  }
+
+  void _queueSpeechTiming(String? segmentId, int generation) {
+    if (segmentId == null) return;
+    _speechQueuedSegments.putIfAbsent(
+        generation, () => <String, double>{})[segmentId] = 0;
+    _writeSpeechTiming(segmentId, const <String, Object?>{'status': 'queued'});
+  }
+
+  void _markSpeechStarted(
+      String? segmentId, int generation, double queueWaitMs) {
+    if (segmentId == null) return;
+    _activeSpeechSegmentId = segmentId;
+    _activeSpeechGeneration = generation;
+    _speechQueuedSegments[generation]?[segmentId] = queueWaitMs;
+    _writeSpeechTiming(segmentId, {
+      'status': 'started',
+      'queueWaitMs': queueWaitMs,
+    });
+  }
+
+  void _markSpeechFinished(String segmentId, int generation, double queueWaitMs,
+      SpeechOutputResult result) {
+    _removeQueuedSpeech(segmentId, generation);
+    _writeSpeechTiming(segmentId, {
+      'status': 'finished',
+      'queueWaitMs': queueWaitMs,
+      ...result.timings,
+      if (result.voice != null) 'voiceIdentifier': result.voice!.identifier,
+      if (result.voice != null) 'voiceLanguage': result.voice!.language,
+      if (result.voice != null) 'voiceQuality': result.voice!.quality,
+    });
+  }
+
+  void _markSpeechTerminal(String? segmentId, int generation, String status) {
+    if (segmentId == null) return;
+    final queueWaitMs = _removeQueuedSpeech(segmentId, generation);
+    _writeSpeechTiming(segmentId, {
+      'status': status,
+      if (queueWaitMs != null) 'queueWaitMs': queueWaitMs,
+    });
+  }
+
+  double? _removeQueuedSpeech(String segmentId, int generation) {
+    final queued = _speechQueuedSegments[generation];
+    final queueWaitMs = queued?.remove(segmentId);
+    if (queued?.isEmpty ?? false) _speechQueuedSegments.remove(generation);
+    return queueWaitMs;
+  }
+
+  void _clearActiveSpeech(String? segmentId, int generation) {
+    if (segmentId == null ||
+        _activeSpeechGeneration != generation ||
+        _activeSpeechSegmentId != segmentId) {
+      return;
+    }
+    _activeSpeechGeneration = null;
+    _activeSpeechSegmentId = null;
+  }
+
+  void _writeSpeechTiming(String segmentId, Map<String, Object?> speechTiming) {
+    final current = _drafts[segmentId];
+    if (current == null) return;
+    _upsertSegment(segmentId, refinement: {
+      ...?current.refinement,
+      'speechTiming': speechTiming,
+    });
   }
 
   void _playAudioOutputIfNeeded(GatewayRealtimeEvent event) {

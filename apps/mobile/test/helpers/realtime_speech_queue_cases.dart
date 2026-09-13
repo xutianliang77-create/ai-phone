@@ -1,10 +1,14 @@
 part of '../realtime_controller_speech_test.dart';
 
 void registerSpeechQueueCases() {
-  test('v1.0 correction keeps native identity for translation and speech commit', () async {
-    final h = _RevisionHarness(config: _config().copyWith(
-        sourceLanguage: 'zh', targetLanguage: 'en',
-        autoReverseTargetLanguage: false));
+  test(
+      'v1.0 correction keeps native identity for translation and speech commit',
+      () async {
+    final h = _RevisionHarness(
+        config: _config().copyWith(
+            sourceLanguage: 'zh',
+            targetLanguage: 'en',
+            autoReverseTargetLanguage: false));
     addTearDown(h.controller.dispose);
     await h.controller.start();
     h.asr.emitVersion('rules', '请把会议既要发给李明确认', 1, language: 'zh');
@@ -37,10 +41,22 @@ void registerSpeechQueueCases() {
     asr.emit(const AsrTextSegment(id: 'old', text: 'first', language: 'en'));
     await pumpEventQueue();
     await controller.setAutoSpeakTranslation(false);
+    expect(
+      (controller.segments
+          .singleWhere((segment) => segment.id == 'old')
+          .refinement?['speechTiming'] as Map<String, Object?>?)?['status'],
+      'cancelled',
+    );
     await controller.setAutoSpeakTranslation(true);
     asr.emit(const AsrTextSegment(id: 'new', text: 'second', language: 'en'));
     await pumpEventQueue();
     expect(speaker.spoken.map((s) => s.$1), ['第一句', '第二句']);
+    expect(
+      (controller.segments
+          .singleWhere((segment) => segment.id == 'new')
+          .refinement?['speechTiming'] as Map<String, Object?>?)?['status'],
+      'finished',
+    );
     final stops = speaker.stopCount;
     await Future<void>.delayed(const Duration(milliseconds: 650));
     expect(speaker.stopCount, stops,

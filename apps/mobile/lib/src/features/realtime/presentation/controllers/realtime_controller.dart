@@ -112,6 +112,10 @@ class RealtimeController extends ChangeNotifier {
   Future<void> _speechChain = Future<void>.value();
   Future<void> _asrTextChain = Future<void>.value();
   int _speechGeneration = 0;
+  final Map<int, Map<String, double>> _speechQueuedSegments =
+      <int, Map<String, double>>{};
+  String? _activeSpeechSegmentId;
+  int? _activeSpeechGeneration;
   bool _speechOutputActive = false;
   final SpeechCaptureGate _speechCaptureGate;
   final Set<String> _speechEchoSegmentIds = <String>{};

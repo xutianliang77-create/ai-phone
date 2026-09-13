@@ -85,6 +85,18 @@ void main() {
     await pumpEventQueue();
 
     expect(speaker.spoken, <(String, String)>[('第一句', 'zh'), ('第二句', 'zh')]);
+    expect(
+      (controller.segments
+          .singleWhere((segment) => segment.id == 'asr_1')
+          .refinement?['speechTiming'] as Map<String, Object?>?)?['status'],
+      'timed_out',
+    );
+    expect(
+      (controller.segments
+          .singleWhere((segment) => segment.id == 'asr_2')
+          .refinement?['speechTiming'] as Map<String, Object?>?)?['status'],
+      'finished',
+    );
     expect(speaker.stopCount, greaterThanOrEqualTo(1));
   });
 
