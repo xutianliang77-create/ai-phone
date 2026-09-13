@@ -1,6 +1,6 @@
 import type {PublicGatewayCredentialAccess} from "./public-runtime-material.routes.js";
 
-type RuntimeEnv=Pick<NodeJS.ProcessEnv,"API_RESULT_SYNC_DEPLOYMENT_ID"|"PUBLIC_RUNTIME_ENABLED"|"PUBLIC_GATEWAY_CREDENTIAL_ACCESS_SECRET"|"INTERNAL_API_SECRET"|"REALTIME_TOKEN_SECRET">;
+type RuntimeEnv=Partial<Pick<NodeJS.ProcessEnv,"API_RESULT_SYNC_DEPLOYMENT_ID"|"PUBLIC_RUNTIME_ENABLED"|"PUBLIC_GATEWAY_CREDENTIAL_ACCESS_SECRET"|"INTERNAL_API_SECRET"|"REALTIME_TOKEN_SECRET">>;
 const deployment=(value:unknown)=>typeof value==="string"&&/^[A-Za-z0-9._-]{1,120}$/.test(value);
 const enabled=(value:unknown)=>typeof value==="string"&&value.trim().toLowerCase()==="true";
 

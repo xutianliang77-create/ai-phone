@@ -57,6 +57,13 @@ describe("original HTTP public creation with an explicitly installed trusted aut
     await app.close();app=await buildApp({publicRealtimeAuthority:authority});expect((await post()).json()).toEqual(a.json());expect(resolve).toHaveBeenCalledTimes(1);
     expect(JSON.stringify(current())).not.toContain(a.json().realtimeToken);expect(getStoreSnapshot().billingLedger).toHaveLength(0);
   });
+  it("treats the authenticated online-mode selection as the session consent, not an authority-provided consent record",async()=>{
+    const source=resolve.getMockImplementation()!;resolve.mockImplementation(async(context,signal)=>{const value=await source(context,signal);
+      return {...value,records:value.records.filter(e=>e.kind!=="inference_consent"),refs:{...value.refs,consentReceiptId:"ignored-authority-consent"}};});
+    expect((await post()).statusCode).toBe(200);const consent=current().publicInferenceEvidence!.find(e=>e.kind==="inference_consent")!;
+    expect(consent).toMatchObject({id:"consent",sourceReceiptId:"account-online-selection",ownerId:"guest-user",components:["asr","translation"]});
+    expect(current().publicInferenceAdmission!.consentReceiptId).toBe("consent");
+  });
   it("does not select another session when the same idempotency key changes its language",async()=>{
     expect((await post()).statusCode).toBe(200);const changed=input();changed.sourceLanguage="fr";changed.processing.languagePolicy.source="fr";
     expect((await post(changed)).statusCode).toBe(409);expect(getStoreSnapshot().sessions).toHaveLength(1);expect(resolve).toHaveBeenCalledTimes(1);

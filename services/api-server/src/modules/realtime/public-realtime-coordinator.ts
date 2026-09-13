@@ -1,3 +1,4 @@
+import {publicModelComponents} from "@translation/contracts";
 import {preparePublicRealtimeSession,publicCreationInput,preparedPublicSession} from "./public-realtime-preparation.js";
 import {issuePublicRealtimeSession} from "./public-realtime-issuer.js";
 import {findSession} from "../sessions/sessions-runtime.repository.js";
@@ -12,9 +13,11 @@ import {getRepositoryRuntime} from "../../infrastructure/storage/repository-runt
 
 /** Trusted boot-time integration only. Production must resolve durable, independently
  * verified receipts idempotently for sessionId; neither HTTP body nor config can
- * supply this implementation. No real supplier/consent/budget source is installed by default. */
+ * supply this implementation. No real supplier, qualification, or budget source is installed by default. */
 export interface PublicRealtimeAuthority {
   timeoutMs:number;
+  /** Consent is generated from the authenticated online-mode selection. The
+   * authority supplies only independently verifiable budget and qualifications. */
   resolveVerifiedEvidence(context:{sessionId:string;ownerId:string;deploymentId:string;processingHash:string;configuration:PublicModelRuntimeSnapshot},
     signal:AbortSignal):Promise<{records:PublicInferenceEvidence[];refs:InferenceEvidenceRefs}>;
 }
@@ -48,9 +51,11 @@ export function createPublicRealtimeCoordinator(authority:PublicRealtimeAuthorit
         catch{check();throw new ResultSyncError("public_creation_authority_unavailable",503);}
         check();current=(await findSession(sessionId))!;check();preparedPublicSession(current,ownerId);
         if(!resolved||!Array.isArray(resolved.records)||resolved.records.length>32||new Set(resolved.records.map(r=>r?.id)).size!==resolved.records.length)throw new ResultSyncError("public_evidence_invalid",403);
-        const records=structuredClone(resolved.records),refs=structuredClone(resolved.refs),now=new Date();
+        const authorityRecords=structuredClone(resolved.records).filter(e=>e.kind!=="inference_consent"),now=new Date();
         // Validate the complete selection BEFORE partially persisting it.
-        for(const record of records)validateInferenceEvidence(current,record,now);
+        for(const record of authorityRecords)validateInferenceEvidence(current,record,now);
+        const consent=onlineSelectionConsent(current,authorityRecords,now),records=[consent,...authorityRecords],refs={...structuredClone(resolved.refs),consentReceiptId:consent.id};
+        if(new Set(records.map(r=>r.id)).size!==records.length)throw new ResultSyncError("public_evidence_conflict",409);
         const prospective=structuredClone(current);prospective.publicInferenceEvidence=[...(current.publicInferenceEvidence??[])];
         for(const record of records){const old=prospective.publicInferenceEvidence.find(e=>e.id===record.id);
           if(old&&resultSyncHash(old)!==resultSyncHash(record))throw new ResultSyncError("public_evidence_conflict");if(!old)prospective.publicInferenceEvidence.push(record);}
@@ -62,4 +67,16 @@ export function createPublicRealtimeCoordinator(authority:PublicRealtimeAuthorit
       check();const response=await issuePublicRealtimeSession(sessionId,ownerId);check();return response;
     }),stop.signal);}finally{clearTimeout(timer);signal?.removeEventListener("abort",cancel);}
   };
+}
+
+/** The authenticated request selecting online mode is the consent action for this
+ * exact session. Budget and qualification remain separately server-resolved. */
+function onlineSelectionConsent(current:Awaited<ReturnType<typeof findSession>>,records:PublicInferenceEvidence[],now:Date):PublicInferenceEvidence{
+  if(!current||current.processingAuthorization?.processingMode!=="online"||!current.publicModelConfiguration)throw new ResultSyncError("public_inference_admission_required",503);
+  const budget=records.find((e):e is Extract<PublicInferenceEvidence,{kind:"provider_budget"}>=>e.kind==="provider_budget");
+  if(!budget)throw new ResultSyncError("public_budget_evidence_required",503);
+  const createdAt=Date.parse(current.createdAt),issuedAt=Number.isFinite(createdAt)&&createdAt<=now.getTime()?current.createdAt:now.toISOString();
+  return {id:"consent",kind:"inference_consent",version:"public-inference-v1",components:publicModelComponents(current.processingAuthorization.executionPlan),
+    sessionId:current.id,ownerId:current.userId,deploymentId:current.processingDeploymentId!,processingHash:inferenceProcessingHash(current),
+    region:budget.region,providerPolicyRevision:current.publicModelConfiguration.modelPolicyRevision,sourceReceiptId:"account-online-selection",issuedAt,expiresAt:budget.expiresAt};
 }
