@@ -30,22 +30,23 @@ void main() {
         await f.close();
       });
     }
-    test(
-        'explicit A/A/B reversal never maps the third language to a default, local=$local',
-        () async {
-      final f = _Fixture(resourceConfig()
-          .copyWith(useLocalSessions: local, autoReverseTargetLanguage: true));
-      await f.c.start();
-      f.emit(['fr', 'fr-CA', 'ja', 'de']);
-      await pumpEventQueue();
-      expect(f.mt.translations, 3);
-      expect(
-          f.c.segments.map((s) => s.targetLanguage), ['ja', 'ja', 'fr', null]);
-      expect(f.c.segments.last.sourceLanguage, 'de');
-      await f.c.stop();
-      expect(f.repo.saved.last.translatedText, isEmpty);
-      await f.close();
-    });
+    if (!local) {
+      test('explicit A/A/B reversal never maps the third language to a default',
+          () async {
+        final f = _Fixture(resourceConfig().copyWith(
+            useLocalSessions: false, autoReverseTargetLanguage: true));
+        await f.c.start();
+        f.emit(['fr', 'fr-CA', 'ja', 'de']);
+        await pumpEventQueue();
+        expect(f.mt.translations, 3);
+        expect(f.c.segments.map((s) => s.targetLanguage),
+            ['ja', 'ja', 'fr', null]);
+        expect(f.c.segments.last.sourceLanguage, 'de');
+        await f.c.stop();
+        expect(f.repo.saved.last.translatedText, isEmpty);
+        await f.close();
+      });
+    }
   }
   test(
       'blocks local automatic source before checking resources or creating a session',
@@ -53,7 +54,20 @@ void main() {
     final f = _Fixture(resourceConfig(source: 'auto'));
     await f.c.start();
     expect(f.c.status, RealtimeStatus.failed);
-    expect(f.c.message, contains('Automatic source language is unavailable'));
+    expect(f.c.message, contains('Automatic language and reverse direction'));
+    expect(f.repo.starts, 0);
+    expect(f.asr.checks, isEmpty);
+    expect(f.mt.checks, isEmpty);
+    await f.close();
+  });
+  test(
+      'blocks local automatic reverse before checking resources or creating a session',
+      () async {
+    final f =
+        _Fixture(resourceConfig().copyWith(autoReverseTargetLanguage: true));
+    await f.c.start();
+    expect(f.c.status, RealtimeStatus.failed);
+    expect(f.c.message, contains('Automatic language and reverse direction'));
     expect(f.repo.starts, 0);
     expect(f.asr.checks, isEmpty);
     expect(f.mt.checks, isEmpty);

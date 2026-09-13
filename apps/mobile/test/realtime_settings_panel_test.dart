@@ -124,7 +124,7 @@ void main() {
   });
 
   testWidgets(
-      'disables automatic language locally while leaving fixed languages selectable',
+      'disables automatic language and reverse locally while leaving fixed languages selectable',
       (tester) async {
     RealtimeRuntimeSettings? changed;
     await tester.pumpWidget(_TestApp(
@@ -143,7 +143,7 @@ void main() {
     expect(find.text('行业词库'), findsOneWidget);
     expect(find.text('我的声音'), findsOneWidget);
     expect(find.textContaining('语言选择会保留'), findsOneWidget);
-    expect(find.textContaining('端侧模式暂不提供自动语言'), findsOneWidget);
+    expect(find.textContaining('端侧模式暂不提供自动识别或自动反向'), findsOneWidget);
     expect(find.textContaining('本地使用系统声音'), findsOneWidget);
 
     await tester.tap(find.text('自动识别'));
@@ -158,6 +158,30 @@ void main() {
     await tester.tap(find.text('中文'));
     await tester.pumpAndSettle();
     expect(changed?.sourceLanguage, 'zh');
+  });
+
+  testWidgets('disables automatic reverse in the on-device target picker',
+      (tester) async {
+    await tester.pumpWidget(_TestApp(
+      child: RealtimeSettingsPanel(
+        settings: const RealtimeRuntimeSettings(
+          processingMode: RealtimeProcessingMode.onDevice,
+          sourceLanguage: 'zh',
+          targetLanguage: autoReverseTargetLanguageCode,
+          voiceOutputMode: RealtimeVoiceOutputMode.off,
+        ),
+        enabled: true,
+        onChanged: (_) {},
+      ),
+    ));
+
+    await tester.tap(find.text('自动反向'));
+    await tester.pumpAndSettle();
+    final automaticReverse = tester.widget<ListTile>(
+        find.byKey(const ValueKey('translation-language-choice-auto_reverse')));
+    expect(automaticReverse.enabled, isFalse);
+    expect(automaticReverse.onTap, isNull);
+    expect(find.text('英语'), findsOneWidget);
   });
 
   testWidgets('preserves online preferences when switching to local mode',

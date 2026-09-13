@@ -39,7 +39,8 @@ extension RealtimeControllerStart on RealtimeController {
     _captureInvalidated = false;
     _activeTimeClock.reset();
     _session = null;
-    _resultSyncView.epoch++;_resultSyncView.busy=false;
+    _resultSyncView.epoch++;
+    _resultSyncView.busy = false;
     _checkpointWarning = null;
     _checkpointFuture = null;
     _localTailClosed = false;
@@ -54,9 +55,10 @@ extension RealtimeControllerStart on RealtimeController {
     _asrTextChain = Future<void>.value();
     _deviceAsrRecovery.reset();
     if (_config.useLocalSessions &&
-        _config.sourceLanguage == autoSourceLanguageCode) {
+        (_config.sourceLanguage == autoSourceLanguageCode ||
+            _config.autoReverseTargetLanguage)) {
       throw UnsupportedError(
-          'Automatic source language is unavailable in on-device mode');
+          'Automatic language and reverse direction are unavailable in on-device mode');
     }
     if (_usesDeviceAsr) {
       await _prepareDeviceAsr();

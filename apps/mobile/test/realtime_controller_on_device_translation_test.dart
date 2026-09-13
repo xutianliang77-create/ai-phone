@@ -177,12 +177,12 @@ void main() {
     expect(repository.endedSegments.single.translatedText, '你好');
   });
 
-  test('switches local direction from ASR text language', () async {
+  test('switches online automatic direction from ASR text language', () async {
     final repository = _FakeRealtimeRepository();
     final asr = _FakeMobileAsrProvider();
     final translator = _FakeTranslationProvider('translated');
-    final controller =
-        _controller(repository, asr, translator, useLocalSessions: true);
+    final controller = _controller(repository, asr, translator,
+        sourceLanguage: 'auto', autoReverseTargetLanguage: true);
     addTearDown(controller.dispose);
     await controller.start();
     asr.emit(const AsrTextSegment(
@@ -215,6 +215,7 @@ RealtimeController _controller(
   bool useLocalSessions = false,
   String sourceLanguage = 'en',
   String targetLanguage = 'zh',
+  bool autoReverseTargetLanguage = false,
 }) {
   return RealtimeController(
     repository: repository,
@@ -233,7 +234,7 @@ RealtimeController _controller(
       deviceAsrLanguage: sourceLanguage,
       deviceAsrAutoDownloadModel: false,
       deviceAsrModelChunkMs: 2240,
-      autoReverseTargetLanguage: true,
+      autoReverseTargetLanguage: autoReverseTargetLanguage,
       serverOwnedHistory: true,
     ),
   );

@@ -100,7 +100,8 @@ class RealtimeSettingsPanel extends StatelessWidget {
                 color: theme.colorScheme.onSurfaceVariant,
               ),
             ),
-            if (settings.sourceLanguage == autoSourceLanguageCode) ...[
+            if (settings.sourceLanguage == autoSourceLanguageCode ||
+                settings.targetLanguage == autoReverseTargetLanguageCode) ...[
               const SizedBox(height: 4),
               Text(
                 l10n.onDeviceAutomaticLanguageUnavailableHint,
@@ -171,16 +172,19 @@ class RealtimeSettingsPanel extends StatelessWidget {
     LanguagePickerKind kind,
   ) async {
     if (!enabled) return;
+    final disabledCodes =
+        settings.processingMode != RealtimeProcessingMode.onDevice
+            ? const <String>{}
+            : kind == LanguagePickerKind.source
+                ? const <String>{autoSourceLanguageCode}
+                : const <String>{autoReverseTargetLanguageCode};
     final selected = await showTranslationLanguagePicker(
       context: context,
       kind: kind,
       selectedCode: kind == LanguagePickerKind.source
           ? settings.sourceLanguage
           : settings.targetLanguage,
-      disabledCodes: kind == LanguagePickerKind.source &&
-              settings.processingMode == RealtimeProcessingMode.onDevice
-          ? const <String>{autoSourceLanguageCode}
-          : const <String>{},
+      disabledCodes: disabledCodes,
       // Preserve the full existing language chooser. Availability is checked
       // for the selected pair before starting, without overwriting this value.
     );

@@ -69,25 +69,26 @@ void deviceLanguageCases() {
       });
     }
 
-    test('qualified metadata uses existing configured pair A/A/B, $local',
-        () async {
-      final repository = _FakeRealtimeRepository();
-      final asr = _FakeMobileAsrProvider();
-      final translator = _FakeTranslationProvider('訳文');
-      final controller = _languageController(repository, asr, translator,
-          local: local, autoReverse: true);
-      addTearDown(controller.dispose);
-      await controller.start();
-      for (final row in ['fr-FR', 'fr-CA', 'ja-JP', 'de-DE'].indexed) {
-        asr.emit(_languageSegment(row.$2,
-            id: '${row.$1}', evidence: AsrLanguageEvidence.detected));
-      }
-      await pumpEventQueue();
-      expect(_directions(translator), ['fr->ja', 'fr->ja', 'ja->fr']);
-      expect(controller.segments.last.sourceLanguage, 'de');
-      expect(controller.segments.last.translatedText, isEmpty);
-      expect(repository.sentTextSegments, isEmpty);
-    });
+    if (!local) {
+      test('qualified metadata uses existing configured pair A/A/B', () async {
+        final repository = _FakeRealtimeRepository();
+        final asr = _FakeMobileAsrProvider();
+        final translator = _FakeTranslationProvider('訳文');
+        final controller = _languageController(repository, asr, translator,
+            local: false, autoReverse: true);
+        addTearDown(controller.dispose);
+        await controller.start();
+        for (final row in ['fr-FR', 'fr-CA', 'ja-JP', 'de-DE'].indexed) {
+          asr.emit(_languageSegment(row.$2,
+              id: '${row.$1}', evidence: AsrLanguageEvidence.detected));
+        }
+        await pumpEventQueue();
+        expect(_directions(translator), ['fr->ja', 'fr->ja', 'ja->fr']);
+        expect(controller.segments.last.sourceLanguage, 'de');
+        expect(controller.segments.last.translatedText, isEmpty);
+        expect(repository.sentTextSegments, isEmpty);
+      });
+    }
 
     if (!local) {
       test('unknown detection never defaults to opposite language, $local',

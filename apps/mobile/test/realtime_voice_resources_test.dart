@@ -31,7 +31,7 @@ void main() {
     await c.disposeAsync();
   });
   test(
-      'fixed source with automatic reversal checks both explicit targets, unknown auto source checks no voices',
+      'automatic reverse and unknown auto source both disable local voice checks',
       () async {
     final f = ResourceFixture();
     final c = f.controller(
@@ -39,7 +39,9 @@ void main() {
             autoReverseTargetLanguage: true,
             automaticLanguagePair: const TranslationLanguagePair('fr', 'ja')));
     await c.checkLocalResources();
-    expect(f.voice.checks, ['fr', 'ja']);
+    expect(c.onDeviceAutomaticRoutingUnsupported, isTrue);
+    expect(c.canCheckLocalResources, isFalse);
+    expect(f.voice.checks, isEmpty);
     c.dispose();
     await c.disposeAsync();
     final unknown = ResourceFixture();
@@ -47,6 +49,8 @@ void main() {
         config: resourceConfig(source: 'auto')
             .copyWith(autoReverseTargetLanguage: true));
     await u.checkLocalResources();
+    expect(u.onDeviceAutomaticRoutingUnsupported, isTrue);
+    expect(u.canCheckLocalResources, isFalse);
     expect(unknown.voice.checks, isEmpty);
     u.dispose();
     await u.disposeAsync();

@@ -14,11 +14,9 @@ import 'package:translation_mobile/src/platform/asr/mobile_asr_provider.dart';
 import 'package:translation_mobile/src/platform/audio/audio_capture.dart';
 import 'package:translation_mobile/src/platform/audio/audio_frame.dart';
 import 'package:translation_mobile/src/platform/translation/mobile_translation_provider.dart';
-import 'package:translation_mobile/src/platform/translation/translation_language_pair.dart';
 
 void main() {
-  test('checks both local language packs before starting auto reverse',
-      () async {
+  test('checks the fixed local language pack before starting', () async {
     final repository = _Repository();
     final translator = _DiagnosticTranslationProvider(available: true);
     final controller = _controller(repository, _AsrProvider(), translator);
@@ -31,7 +29,7 @@ void main() {
       translator.availabilityConfigs.map((config) {
         return '${config.sourceLanguage}->${config.targetLanguage}';
       }),
-      <String>['en->zh', 'zh->en'],
+      <String>['en->zh'],
     );
   });
 
@@ -133,12 +131,11 @@ RealtimeController _controller(
       useOnDeviceTranslation: true,
       sourceLanguage: 'en',
       targetLanguage: 'zh',
-      automaticLanguagePair: const TranslationLanguagePair('en', 'zh'),
       deviceAsrProvider: 'coreml_nemotron',
       deviceAsrLanguage: 'en',
       deviceAsrAutoDownloadModel: false,
       deviceAsrModelChunkMs: 2240,
-      autoReverseTargetLanguage: true,
+      autoReverseTargetLanguage: false,
       serverOwnedHistory: false,
     ),
   );
