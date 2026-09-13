@@ -2,7 +2,12 @@ part of 'realtime_controller.dart';
 
 extension RealtimeControllerStart on RealtimeController {
   Future<void> start() async {
-    if (_disposed || resourceOperationRunning || _resultSyncView.busy || _publicCreationResolving) return;
+    if (_disposed ||
+        resourceOperationRunning ||
+        _resultSyncView.busy ||
+        _publicCreationResolving) {
+      return;
+    }
     _listenForAudioSessionEvents();
     if (_stopInFlight) return;
     if (_status == RealtimeStatus.paused) {
@@ -48,6 +53,11 @@ extension RealtimeControllerStart on RealtimeController {
     _speechEchoSegmentIds.clear();
     _asrTextChain = Future<void>.value();
     _deviceAsrRecovery.reset();
+    if (_config.useLocalSessions &&
+        _config.sourceLanguage == autoSourceLanguageCode) {
+      throw UnsupportedError(
+          'Automatic source language is unavailable in on-device mode');
+    }
     if (_usesDeviceAsr) {
       await _prepareDeviceAsr();
       if (!_isCurrentStart(generation)) return;

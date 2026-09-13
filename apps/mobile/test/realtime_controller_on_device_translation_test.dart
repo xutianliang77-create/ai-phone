@@ -213,7 +213,7 @@ RealtimeController _controller(
   _FakeMobileAsrProvider asr,
   MobileTranslationProvider translator, {
   bool useLocalSessions = false,
-  String sourceLanguage = 'auto',
+  String sourceLanguage = 'en',
   String targetLanguage = 'zh',
 }) {
   return RealtimeController(
@@ -230,7 +230,7 @@ RealtimeController _controller(
       sourceLanguage: sourceLanguage,
       targetLanguage: targetLanguage,
       deviceAsrProvider: 'coreml_nemotron',
-      deviceAsrLanguage: 'auto',
+      deviceAsrLanguage: sourceLanguage,
       deviceAsrAutoDownloadModel: false,
       deviceAsrModelChunkMs: 2240,
       autoReverseTargetLanguage: true,

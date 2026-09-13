@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'public_creation_scope_notice.dart';
 
 import '../../../../app/localization/app_localizations.dart';
+import '../../../../platform/translation/supported_translation_language.dart';
 import '../../data/realtime_runtime_settings.dart';
 import '../../data/voice_preset_catalog.dart';
 import '../realtime_settings_l10n.dart';
@@ -99,6 +100,15 @@ class RealtimeSettingsPanel extends StatelessWidget {
                 color: theme.colorScheme.onSurfaceVariant,
               ),
             ),
+            if (settings.sourceLanguage == autoSourceLanguageCode) ...[
+              const SizedBox(height: 4),
+              Text(
+                l10n.onDeviceAutomaticLanguageUnavailableHint,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.error,
+                ),
+              ),
+            ],
           ],
           const SizedBox(height: 16),
           _SectionLabel(l10n.voiceSettingsGroupLabel),
@@ -167,6 +177,10 @@ class RealtimeSettingsPanel extends StatelessWidget {
       selectedCode: kind == LanguagePickerKind.source
           ? settings.sourceLanguage
           : settings.targetLanguage,
+      disabledCodes: kind == LanguagePickerKind.source &&
+              settings.processingMode == RealtimeProcessingMode.onDevice
+          ? const <String>{autoSourceLanguageCode}
+          : const <String>{},
       // Preserve the full existing language chooser. Availability is checked
       // for the selected pair before starting, without overwriting this value.
     );

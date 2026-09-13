@@ -96,7 +96,7 @@ void registerDeviceRevisionCases() {
     expect(h.repository.saved.single.translatedText, '译文first');
   });
 
-  test('qualified detected input follows saved non-Chinese automatic pair',
+  test('local automatic source is rejected even with a saved language pair',
       () async {
     final h = _RevisionHarness(
         config: _config().copyWith(
@@ -105,16 +105,9 @@ void registerDeviceRevisionCases() {
             automaticLanguagePair: const TranslationLanguagePair('fr', 'ja')));
     addTearDown(h.controller.dispose);
     await h.controller.start();
-    for (final row in ['fr', 'fr', 'ja'].indexed) {
-      h.asr.emitVersion('${row.$1}', 'sentence ${row.$1}', row.$1 + 1,
-          language: row.$2);
-    }
-    await pumpEventQueue();
-    expect(
-        h.translator.configs
-            .map((c) => '${c.sourceLanguage}->${c.targetLanguage}'),
-        ['fr->ja', 'fr->ja', 'ja->fr']);
-    expect(h.asr.current!.languagePolicyKey, contains('|fr|ja'));
+    expect(h.controller.status, RealtimeStatus.failed);
+    expect(h.asr.current, isNull);
+    expect(h.translator.configs, isEmpty);
   });
 }
 

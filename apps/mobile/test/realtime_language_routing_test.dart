@@ -14,7 +14,7 @@ import 'helpers/realtime_resource_fakes.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   for (final local in [true, false]) {
-    for (final source in ['fr', 'auto']) {
+    for (final source in local ? ['fr'] : ['fr', 'auto']) {
       test('fixed target is not reversal; source=$source local=$local',
           () async {
         final f = _Fixture(
@@ -47,6 +47,18 @@ void main() {
       await f.close();
     });
   }
+  test(
+      'blocks local automatic source before checking resources or creating a session',
+      () async {
+    final f = _Fixture(resourceConfig(source: 'auto'));
+    await f.c.start();
+    expect(f.c.status, RealtimeStatus.failed);
+    expect(f.c.message, contains('Automatic source language is unavailable'));
+    expect(f.repo.starts, 0);
+    expect(f.asr.checks, isEmpty);
+    expect(f.mt.checks, isEmpty);
+    await f.close();
+  });
   test('Apple preflight uses explicit pair and never infers an unknown source',
       () {
     expect(
@@ -82,26 +94,13 @@ void main() {
     expect(f.mt.checks, isEmpty);
     await f.close();
   });
-  test('unknown/mixed/text inference and malformed tags never drive MT',
-      () async {
+  test('local automatic source cannot enter text routing', () async {
     final f = _Fixture(resourceConfig(source: 'auto'));
     await f.c.start();
-    for (final row in [
-      AsrLanguageEvidence.unknown,
-      AsrLanguageEvidence.mixed,
-      AsrLanguageEvidence.textInferred
-    ].indexed) {
-      f.asr.events.add(AsrTextSegment(
-          id: '${row.$1}',
-          text: 'Bonjour 你好',
-          language: 'fr',
-          languageEvidence: row.$2));
-    }
-    f.emit(['fr--FR']);
-    await pumpEventQueue();
+    expect(f.c.status, RealtimeStatus.failed);
     expect(f.mt.translations, 0);
     expect(f.mt.checks, isEmpty);
-    expect(f.c.segments.every((s) => s.translatedText.isEmpty), true);
+    expect(f.c.segments, isEmpty);
     await f.close();
   });
 }

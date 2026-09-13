@@ -31,11 +31,11 @@ void main() {
     await c.disposeAsync();
   });
   test(
-      'automatic reversal checks both explicit targets, unknown pair does not guess voices',
+      'fixed source with automatic reversal checks both explicit targets, unknown auto source checks no voices',
       () async {
     final f = ResourceFixture();
     final c = f.controller(
-        config: resourceConfig(source: 'auto').copyWith(
+        config: resourceConfig(source: 'fr').copyWith(
             autoReverseTargetLanguage: true,
             automaticLanguagePair: const TranslationLanguagePair('fr', 'ja')));
     await c.checkLocalResources();

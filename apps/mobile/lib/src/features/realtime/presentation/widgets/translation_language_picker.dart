@@ -11,6 +11,7 @@ Future<String?> showTranslationLanguagePicker({
   required LanguagePickerKind kind,
   required String selectedCode,
   Set<String>? supportedCodes,
+  Set<String> disabledCodes = const <String>{},
 }) {
   return showModalBottomSheet<String>(
     context: context,
@@ -21,6 +22,7 @@ Future<String?> showTranslationLanguagePicker({
         kind: kind,
         selectedCode: selectedCode,
         supportedCodes: supportedCodes,
+        disabledCodes: disabledCodes,
       );
     },
   );
@@ -31,11 +33,13 @@ class _TranslationLanguagePicker extends StatefulWidget {
     required this.kind,
     required this.selectedCode,
     this.supportedCodes,
+    this.disabledCodes = const <String>{},
   });
 
   final LanguagePickerKind kind;
   final String selectedCode;
   final Set<String>? supportedCodes;
+  final Set<String> disabledCodes;
 
   @override
   State<_TranslationLanguagePicker> createState() {
@@ -96,11 +100,17 @@ class _TranslationLanguagePickerState
                   itemBuilder: (context, index) {
                     final choice = choices[index];
                     final selected = choice.code == widget.selectedCode;
+                    final disabled = widget.disabledCodes.contains(choice.code);
                     return ListTile(
+                      key: ValueKey(
+                          'translation-language-choice-${choice.code}'),
+                      enabled: !disabled,
                       leading: selected ? const Icon(Icons.check) : null,
                       title: Text(choice.label),
                       subtitle: Text(choice.code),
-                      onTap: () => Navigator.of(context).pop(choice.code),
+                      onTap: disabled
+                          ? null
+                          : () => Navigator.of(context).pop(choice.code),
                     );
                   },
                 ),

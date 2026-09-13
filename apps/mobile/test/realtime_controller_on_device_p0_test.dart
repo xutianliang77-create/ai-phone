@@ -14,6 +14,7 @@ import 'package:translation_mobile/src/platform/asr/mobile_asr_provider.dart';
 import 'package:translation_mobile/src/platform/audio/audio_capture.dart';
 import 'package:translation_mobile/src/platform/audio/audio_frame.dart';
 import 'package:translation_mobile/src/platform/translation/mobile_translation_provider.dart';
+import 'package:translation_mobile/src/platform/translation/translation_language_pair.dart';
 
 void main() {
   test('checks both local language packs before starting auto reverse',
@@ -130,8 +131,11 @@ RealtimeController _controller(
       useDeviceAsr: true,
       useLocalSessions: true,
       useOnDeviceTranslation: true,
+      sourceLanguage: 'en',
+      targetLanguage: 'zh',
+      automaticLanguagePair: const TranslationLanguagePair('en', 'zh'),
       deviceAsrProvider: 'coreml_nemotron',
-      deviceAsrLanguage: 'auto',
+      deviceAsrLanguage: 'en',
       deviceAsrAutoDownloadModel: false,
       deviceAsrModelChunkMs: 2240,
       autoReverseTargetLanguage: true,

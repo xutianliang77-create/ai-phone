@@ -16,9 +16,13 @@ extension RealtimeControllerResources on RealtimeController {
   bool get resourceOperationRunning => _localResources.busy;
   List<RealtimeLocalResource> get localResources =>
       List.unmodifiable(_localResources.items);
+  bool get onDeviceAutomaticLanguageUnsupported =>
+      _config.useLocalSessions &&
+      _config.sourceLanguage == autoSourceLanguageCode;
   bool get canCheckLocalResources =>
       !_disposed &&
       !resourceOperationRunning &&
+      !onDeviceAutomaticLanguageUnsupported &&
       _config.useLocalSessions &&
       _config.deviceAsrProvider == 'apple_speech_transcriber' &&
       _config.useDeviceAsr &&

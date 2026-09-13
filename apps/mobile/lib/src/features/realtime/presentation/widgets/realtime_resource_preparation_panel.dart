@@ -54,8 +54,12 @@ class RealtimeResourcePreparationPanel extends StatelessWidget {
                     if (busy) const LinearProgressIndicator(),
                     if (!busy && !controller.canCheckLocalResources)
                       Text(zh
-                          ? '需结束当前会话，并使用已选 iOS 本地系统链。在线模式无需准备本地资源。'
-                          : 'End the session and use the selected iOS local system chain. Online mode does not require local resources.'),
+                          ? (controller.onDeviceAutomaticLanguageUnsupported
+                              ? '端侧模式不提供自动语言。请选择固定源语言后再检查或准备资源。'
+                              : '需结束当前会话，并使用已选 iOS 本地系统链。在线模式无需准备本地资源。')
+                          : (controller.onDeviceAutomaticLanguageUnsupported
+                              ? 'Automatic language is unavailable on device. Choose a fixed source language before checking or preparing resources.'
+                              : 'End the session and use the selected iOS local system chain. Online mode does not require local resources.')),
                   ],
                 )));
       });

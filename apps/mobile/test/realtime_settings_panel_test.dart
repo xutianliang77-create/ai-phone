@@ -124,8 +124,9 @@ void main() {
   });
 
   testWidgets(
-      'keeps language and feature choices visible with local capability hints',
+      'disables automatic language locally while leaving fixed languages selectable',
       (tester) async {
+    RealtimeRuntimeSettings? changed;
     await tester.pumpWidget(_TestApp(
       child: RealtimeSettingsPanel(
         settings: const RealtimeRuntimeSettings(
@@ -135,20 +136,28 @@ void main() {
           voiceOutputMode: RealtimeVoiceOutputMode.natural,
         ),
         enabled: true,
-        onChanged: (_) {},
+        onChanged: (settings) => changed = settings,
       ),
     ));
 
     expect(find.text('行业词库'), findsOneWidget);
     expect(find.text('我的声音'), findsOneWidget);
     expect(find.textContaining('语言选择会保留'), findsOneWidget);
+    expect(find.textContaining('端侧模式暂不提供自动语言'), findsOneWidget);
     expect(find.textContaining('本地使用系统声音'), findsOneWidget);
 
     await tester.tap(find.text('自动识别'));
     await tester.pumpAndSettle();
+    final automatic = tester.widget<ListTile>(
+        find.byKey(const ValueKey('translation-language-choice-auto')));
+    expect(automatic.enabled, isFalse);
+    expect(automatic.onTap, isNull);
     expect(find.text('中文'), findsOneWidget);
     expect(find.text('英语'), findsOneWidget);
     expect(find.text('法语'), findsOneWidget);
+    await tester.tap(find.text('中文'));
+    await tester.pumpAndSettle();
+    expect(changed?.sourceLanguage, 'zh');
   });
 
   testWidgets('preserves online preferences when switching to local mode',

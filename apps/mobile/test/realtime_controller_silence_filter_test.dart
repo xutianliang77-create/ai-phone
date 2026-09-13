@@ -109,11 +109,13 @@ AppConfig _config({
     useDeviceAsr: true,
     useLocalSessions: useLocalSessions,
     useOnDeviceTranslation: useOnDeviceTranslation,
+    sourceLanguage: 'en',
+    targetLanguage: 'zh',
+    autoReverseTargetLanguage: false,
     deviceAsrProvider: 'coreml_nemotron',
-    deviceAsrLanguage: 'auto',
+    deviceAsrLanguage: 'en',
     deviceAsrAutoDownloadModel: false,
     deviceAsrModelChunkMs: 2240,
-    autoReverseTargetLanguage: true,
     serverOwnedHistory: true,
   );
 }

@@ -19,7 +19,7 @@ void deviceLanguageCases() {
       expect(repository.sentTextSegments, isEmpty);
     });
 
-    for (final selected in ['auto', 'ja']) {
+    for (final selected in local ? ['ja'] : ['auto', 'ja']) {
       test('hint cannot stand in for detected language, $selected/$local',
           () async {
         final repository = _FakeRealtimeRepository();
@@ -44,7 +44,8 @@ void deviceLanguageCases() {
       AsrLanguageEvidence.mixed,
       AsrLanguageEvidence.textInferred
     ]) {
-      test('keeps confirmed unresolved source across clean/stop, $evidence/$local',
+      test(
+          'keeps confirmed unresolved source across clean/stop, $evidence/$local',
           () async {
         final repository = _FakeRealtimeRepository();
         final asr = _FakeMobileAsrProvider();
@@ -88,22 +89,24 @@ void deviceLanguageCases() {
       expect(repository.sentTextSegments, isEmpty);
     });
 
-    test('unknown detection never defaults to opposite language, $local',
-        () async {
-      final repository = _FakeRealtimeRepository();
-      final asr = _FakeMobileAsrProvider();
-      final translator = _FakeTranslationProvider('wrong');
-      final controller = _languageController(repository, asr, translator,
-          local: local, source: 'auto');
-      addTearDown(controller.dispose);
-      await controller.start();
-      asr.emit(
-          _languageSegment('auto', evidence: AsrLanguageEvidence.detected));
-      await pumpEventQueue();
-      expect(translator.configs, isEmpty);
-      expect(repository.sentTextSegments, isEmpty);
-      expect(controller.segments.single.sourceLanguage, 'auto');
-    });
+    if (!local) {
+      test('unknown detection never defaults to opposite language, $local',
+          () async {
+        final repository = _FakeRealtimeRepository();
+        final asr = _FakeMobileAsrProvider();
+        final translator = _FakeTranslationProvider('wrong');
+        final controller = _languageController(repository, asr, translator,
+            local: local, source: 'auto');
+        addTearDown(controller.dispose);
+        await controller.start();
+        asr.emit(
+            _languageSegment('auto', evidence: AsrLanguageEvidence.detected));
+        await pumpEventQueue();
+        expect(translator.configs, isEmpty);
+        expect(repository.sentTextSegments, isEmpty);
+        expect(controller.segments.single.sourceLanguage, 'auto');
+      });
+    }
 
     test('unresolved replacement clears obsolete translation, local=$local',
         () async {

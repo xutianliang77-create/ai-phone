@@ -234,31 +234,28 @@ void main() {
     expect(f.asr.preparations, isEmpty);
     expect(f.mt.preparations, isEmpty);
   });
-  test(
-      'automatic source without explicit pair never guesses a download language',
-      () async {
+  test('automatic source disables local resource checks', () async {
     controller.dispose();
     controller = f.controller(config: resourceConfig(source: 'auto'));
     await controller.checkLocalResources();
-    expect(_modelResources(controller).single.reason,
-        'fixed_language_pair_required');
+    expect(controller.onDeviceAutomaticLanguageUnsupported, isTrue);
+    expect(controller.canCheckLocalResources, isFalse);
+    expect(_modelResources(controller), isEmpty);
     expect(f.asr.checks, isEmpty);
     expect(f.mt.checks, isEmpty);
   });
-  test(
-      'explicit automatic pair checks both directions but does not qualify automatic ASR',
-      () async {
+  test('automatic pair also disables local resource checks', () async {
     controller.dispose();
     controller = f.controller(
         config: resourceConfig(source: 'auto').copyWith(
             autoReverseTargetLanguage: true,
             automaticLanguagePair: const TranslationLanguagePair('fr', 'ja')));
     await controller.checkLocalResources();
-    expect(f.asr.checks.map((c) => c.language), ['fr', 'ja']);
-    expect(f.mt.checks.map((c) => '${c.sourceLanguage}-${c.targetLanguage}'),
-        ['fr-ja', 'ja-fr']);
-    expect(_modelResources(controller).first.reason,
-        'automaticLanguageNotQualified');
+    expect(controller.onDeviceAutomaticLanguageUnsupported, isTrue);
+    expect(controller.canCheckLocalResources, isFalse);
+    expect(_modelResources(controller), isEmpty);
+    expect(f.asr.checks, isEmpty);
+    expect(f.mt.checks, isEmpty);
   });
   test(
       'wrong native locale, missing VAD and unsupported resources cannot be prepared as language packs',

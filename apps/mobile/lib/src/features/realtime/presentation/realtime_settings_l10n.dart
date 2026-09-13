@@ -32,6 +32,9 @@ extension RealtimeSettingsL10n on AppLocalizations {
       ? '语言选择会保留；本地可用范围以模型和已安装语言包为准，开始前会检查。'
       : 'Language choices are retained. Local availability depends on the '
           'model and installed language packs, checked before starting.';
+  String get onDeviceAutomaticLanguageUnavailableHint => isChinese
+      ? '端侧模式暂不提供自动语言，请选择固定源语言。'
+      : 'Automatic language is unavailable on device. Choose a fixed source language.';
   String get onDeviceVoiceCapabilityHint => isChinese
       ? '本地使用系统声音；个人声音暂需在线。声音和行业词库选择会保留。'
       : 'Local mode uses system voices; My Voice requires online support. '
