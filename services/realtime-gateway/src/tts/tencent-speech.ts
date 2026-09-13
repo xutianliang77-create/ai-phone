@@ -56,7 +56,10 @@ export async function* tencentSpeechPcm(options:PublicSpeechOptions,text:string,
             seen.has(e.message_id)||seen.size>=4096||![0,1].includes(e.final)||![0,1].includes(e.ready??0)||![0,1].includes(e.heartbeat??0)||
             (e.ready??0)+(e.heartbeat??0)+e.final>1||requestId&&requestId!==e.request_id||finished)throw Error();
           requestId=e.request_id;seen.add(e.message_id);
-          if(e.code!==0){fail("tencent_tts_provider_error");return;}
+          // Preserve only the provider's numeric code. The textual provider
+          // message can contain deployment details and must never cross the
+          // attempt/error boundary.
+          if(e.code!==0){fail(`tencent_tts_provider_${e.code}`);return;}
           if(e.ready===1){if(ready||submitted)throw Error();ready=true;}
           if(e.final===1){if(!completing||!submitted||totalBytes<2||totalBytes%2)throw Error();finished=true;metadata.requestId=requestId;}
         }

@@ -66,7 +66,7 @@ describe("Tencent signed TTS wire on original public lifecycle",()=>{
       if(kind==="overflow")s.audio=()=>{s.emit("message",Buffer.alloc(200000),true);s.emit("message",Buffer.alloc(200000),true);};
       queueMicrotask(()=>kind==="early_audio"?s.audio():s.control({ready:1}));
     });
-    await expect(collect(t.create())).rejects.toThrow(/tencent_tts/);expect(JSON.stringify(t.record.mock.calls)).not.toContain("SECRET_PROVIDER");
+    await expect(collect(t.create())).rejects.toThrow(kind==="error"?"tencent_tts_provider_20000":/tencent_tts/);expect(JSON.stringify(t.record.mock.calls)).not.toContain("SECRET_PROVIDER");
   });
   it("supports binary boundaries splitting a PCM sample",async()=>{
     const t=setup(s=>s.audio=()=>{s.emit("message",Buffer.alloc(3),true);s.emit("message",Buffer.alloc(1917),true);});
