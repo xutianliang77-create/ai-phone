@@ -24,17 +24,17 @@ export async function queryPublicAdmission(sessionId:string,value:unknown,now=ne
     inferenceProcessingHash({...session,processingAuthorization:issued.claims.processing})!==inferenceProcessingHash(session)||
     policy.admissionHash!==resultSyncHash(admission)||policy.sampleRate!==q.sampleRate||policy.leaseId!==q.leaseId||policy.captureId!==q.captureId||policy.languagePolicyKey!==q.languagePolicyKey||
     policy.languagePolicyKey!==`language:${resultSyncHash(session.processingAuthorization!.languagePolicy)}`||
-    !Number.isSafeInteger(policy.maxActiveSeconds)||policy.maxActiveSeconds<1||policy.maxActiveSeconds>admission.maxActiveSeconds||
+    policy.maxActiveSeconds!==admission.maxActiveSeconds||
     Date.parse(policy.expiresAt)!==Math.min(...[admission.expiresAt,admission.budgetExpiresAt,admission.qualificationExpiresAt].map(Date.parse))||Date.parse(policy.expiresAt)<=now.getTime())throw new ResultSyncError("public_admission_binding_mismatch",403);
   selectCurrentPublicModelConfiguration(config,()=>undefined); // Never return raw credentials.
   if(q.purpose==="recovery"){
     const r=session.publicRuntime,observed=r?Date.parse(r.observedAt):NaN,until=r?Date.parse(r.recoveryUntil??""):NaN;
     if(session.status!=="paused"||r?.phase!=="disconnected"||r.uncertain||!Number.isFinite(observed)||observed>now.getTime()||
       !Number.isFinite(until)||until<=now.getTime()||until>observed+PUBLIC_RECOVERY_MS||
-      ![r.sequence,r.lastAcceptedSample,r.finalRevision,r.activeMs].every(v=>Number.isSafeInteger(v)&&v>=0)||r.sequence<1||r.activeMs>=policy.maxActiveSeconds*1000) {
+      ![r.sequence,r.lastAcceptedSample,r.finalRevision,r.activeMs].every(v=>Number.isSafeInteger(v)&&v>=0)||r.sequence<1||policy.maxActiveSeconds!==undefined&&r.activeMs>=policy.maxActiveSeconds*1000) {
       throw new ResultSyncError("public_recovery_checkpoint_denied",403);
     }
-    return {...q,allowed:true,checkedAt:now.toISOString(),expiresAt:policy.expiresAt,maxActiveSeconds:policy.maxActiveSeconds,status:"paused",
+    return {...q,allowed:true,checkedAt:now.toISOString(),expiresAt:policy.expiresAt,...(policy.maxActiveSeconds!==undefined?{maxActiveSeconds:policy.maxActiveSeconds}:{}),status:"paused",
       recovery:{runtimeSequence:r.sequence,lastAcceptedSample:r.lastAcceptedSample,finalRevision:r.finalRevision,activeMs:r.activeMs,
         recoveryUntil:new Date(Math.min(until,Date.parse(policy.expiresAt))).toISOString()}};
   }
@@ -43,7 +43,7 @@ export async function queryPublicAdmission(sessionId:string,value:unknown,now=ne
   }else{
     const r=session.publicRuntime,timestamp=r?Date.parse(r.observedAt):NaN;
     if(session.status!=="active"||r?.phase!=="active"||r.uncertain||!Number.isFinite(timestamp)||timestamp>now.getTime()||
-      now.getTime()-timestamp>PUBLIC_EVIDENCE_GAP_MS||r.activeMs+now.getTime()-timestamp>=policy.maxActiveSeconds*1000)throw new ResultSyncError("public_admission_dispatch_denied",403);
+      now.getTime()-timestamp>PUBLIC_EVIDENCE_GAP_MS||policy.maxActiveSeconds!==undefined&&r.activeMs+now.getTime()-timestamp>=policy.maxActiveSeconds*1000)throw new ResultSyncError("public_admission_dispatch_denied",403);
   }
-  return {...q,allowed:true,checkedAt:now.toISOString(),expiresAt:policy.expiresAt,maxActiveSeconds:policy.maxActiveSeconds,status:q.purpose==="connect"?"created":"active"};
+  return {...q,allowed:true,checkedAt:now.toISOString(),expiresAt:policy.expiresAt,...(policy.maxActiveSeconds!==undefined?{maxActiveSeconds:policy.maxActiveSeconds}:{}),status:q.purpose==="connect"?"created":"active"};
 }

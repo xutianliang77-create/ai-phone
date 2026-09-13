@@ -35,7 +35,7 @@ export function writePublicInferenceAdmission(sessionId:string,ownerId:string,re
       processingHash:inferenceProcessingHash(current),evidenceHash:resolved.evidenceHash,issuedAt:now.toISOString(),
       expiresAt:resolved.consent.expiresAt,budgetExpiresAt:resolved.budget.expiresAt,
       qualificationExpiresAt:new Date(Math.min(...resolved.qualifications.map(q=>Date.parse(q.expiresAt)))).toISOString(),
-      maxActiveSeconds:resolved.budget.maxActiveSeconds,sampleRate:resolved.budget.sampleRate};
+      ...(resolved.budget.maxActiveSeconds!==undefined?{maxActiveSeconds:resolved.budget.maxActiveSeconds}:{}),sampleRate:resolved.budget.sampleRate};
     const next=structuredClone(current);next.publicInferenceAdmission=a;next.processingAuthorization!.publicGrantRef=a.grantRef;
     return {next,result:structuredClone(a)};
   });

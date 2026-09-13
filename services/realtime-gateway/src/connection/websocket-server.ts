@@ -136,7 +136,9 @@ export function startWebSocketServer(options:{publicRuntime?:PublicGatewayRuntim
         .then(async () => {
           const balance = await usageBalanceClient.getBalance(session.userId);
           const decision = createUsageTickDecision(session, balance);
-          sendRealtime(decision.event);
+          // Public online budget is server-owned: clients receive neither a
+          // remaining-free-quota counter nor a client-side time limit.
+          if(!sessionEventSink.requiresConfirmation)sendRealtime(decision.event);
           if (decision.shouldEnd) {
             await endRealtimeSession(
               decision.endReason ?? "time_limit",

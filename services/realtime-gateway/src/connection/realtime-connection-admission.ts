@@ -74,7 +74,7 @@ function canResumeExpiredToken(claims: RealtimeTokenClaims) {
     session.claims.issuedAt === claims.issuedAt &&
     session.claims.expiresAt === claims.expiresAt &&
     (session.disconnectDeadlineAt ?? 0) > Date.now() &&
-    sessionBillableSeconds(session) < session.claims.maxDurationSeconds;
+    (session.claims.maxDurationSeconds===undefined||sessionBillableSeconds(session) < session.claims.maxDurationSeconds);
 }
 
 export function sendRealtimeEvent(ws: WebSocket, event: ServerRealtimeEvent) {

@@ -8,7 +8,7 @@ import type {PublicRealtimeAuthority} from "./public-realtime-coordinator.js";
 
 type RuntimeEnv=Partial<Pick<NodeJS.ProcessEnv,"PUBLIC_RUNTIME_ENABLED"|"PUBLIC_RUNTIME_ADMISSION_POLICY_FILE"|"PUBLIC_RUNTIME_ADMISSION_POLICY_KEY"|"API_RESULT_SYNC_DEPLOYMENT_ID">>;
 type Policy={schemaVersion:1;policyId:string;deploymentId:string;configurationHash:string;modelPolicyRevision:string;region:string;
-  issuedAt:string;expiresAt:string;maxActiveSeconds:number;currency:string;reservedMicros:number;qualifiedComponents:Array<"asr"|"translation"|"tts">;signature:string;};
+  issuedAt:string;expiresAt:string;maxActiveSeconds?:number;currency:string;reservedMicros:number;qualifiedComponents:Array<"asr"|"translation"|"tts">;signature:string;};
 const enabled=(value:unknown)=>typeof value==="string"&&value.trim().toLowerCase()==="true";
 const hex=(value:unknown,length:number)=>typeof value==="string"&&new RegExp(`^[a-f0-9]{${length}}$`,"i").test(value);
 const policyFields=["schemaVersion","policyId","deploymentId","configurationHash","modelPolicyRevision","region","issuedAt","expiresAt","maxActiveSeconds","currency","reservedMicros","qualifiedComponents","signature"];
@@ -35,7 +35,7 @@ function resolvePolicy(file:string,key:string,deployment:string,context:Paramete
   const common={sessionId:context.sessionId,ownerId:context.ownerId,deploymentId:context.deploymentId,processingHash:context.processingHash,region:policy.region,
     providerPolicyRevision:config.modelPolicyRevision,sourceReceiptId:policy.policyId,issuedAt:policy.issuedAt,expiresAt:policy.expiresAt};
   const budget:PublicInferenceEvidence={...common,id:`${policy.policyId}:budget`,kind:"provider_budget",state:"reserved",currency:policy.currency,
-    reservedMicros:policy.reservedMicros,maxActiveSeconds:policy.maxActiveSeconds,sampleRate:config.components.asr!.sampleRate};
+    reservedMicros:policy.reservedMicros,...(policy.maxActiveSeconds!==undefined?{maxActiveSeconds:policy.maxActiveSeconds}:{}),sampleRate:config.components.asr!.sampleRate};
   const qualifications=components.map(component=>{const profile=config.components[component]!,execution=config.executionPlan[component];
     if(execution.execution!=="public")throw Error("public_runtime_admission_policy_scope_mismatch");return {...common,id:`${policy.policyId}:qualification:${component}`,
       kind:"model_qualification" as const,state:"qualified" as const,component,scopeKey:execution.scopeKey,providerId:profile.vendor,modelId:profile.modelId||execution.scopeKey};});
@@ -49,7 +49,7 @@ function readPolicy(file:string,key:string,now:Date):Policy{
   if(!policy||typeof policy!=="object"||Array.isArray(policy)||Object.keys(policy).some(field=>!policyFields.includes(field))||policy.schemaVersion!==1||
     ![policy.policyId,policy.deploymentId,policy.modelPolicyRevision,policy.region].every(syncKey)||!hex(policy.configurationHash,64)||!hex(policy.signature,64)||
     typeof policy.issuedAt!=="string"||typeof policy.expiresAt!=="string"||!Number.isFinite(Date.parse(policy.issuedAt))||!Number.isFinite(Date.parse(policy.expiresAt))||
-    Date.parse(policy.issuedAt)>now.getTime()||Date.parse(policy.expiresAt)<=now.getTime()||!Number.isSafeInteger(policy.maxActiveSeconds)||policy.maxActiveSeconds<1||policy.maxActiveSeconds>86400||
+    Date.parse(policy.issuedAt)>now.getTime()||Date.parse(policy.expiresAt)<=now.getTime()||(policy.maxActiveSeconds!==undefined&&(!Number.isSafeInteger(policy.maxActiveSeconds)||policy.maxActiveSeconds<1||policy.maxActiveSeconds>86400))||
     typeof policy.currency!=="string"||!/^[A-Z]{3}$/.test(policy.currency)||!Number.isSafeInteger(policy.reservedMicros)||policy.reservedMicros<0||!Array.isArray(policy.qualifiedComponents)||
     new Set(policy.qualifiedComponents).size!==policy.qualifiedComponents.length||policy.qualifiedComponents.some(component=>!["asr","translation","tts"].includes(component)))throw Error("public_runtime_admission_policy_invalid");
   const expected=signPublicRuntimeAdmissionPolicy(body(policy) as Omit<Policy,"signature">,key);

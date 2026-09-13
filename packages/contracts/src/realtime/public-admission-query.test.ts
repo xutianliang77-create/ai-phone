@@ -4,7 +4,11 @@ const query=():PublicAdmissionQuery=>({contractVersion:1,requestId:"nonce",sessi
   leaseId:"lease",captureId:"capture",languagePolicyKey:"language",sampleRate:16000,configurationRevision:1,configurationHash:"a".repeat(64)});
 describe("read-only admission query contract",()=>{
   it("accepts only an exact scoped query and nonce-matched receipt",()=>{
-    const q=query();expect(isPublicAdmissionQuery(q)).toBe(true);expect(matchesPublicAdmissionReceipt({...q,allowed:true,checkedAt:new Date(1000).toISOString(),expiresAt:new Date(10000).toISOString(),maxActiveSeconds:60,status:"created"},q,1000)).toBe(true);
+  const q=query();expect(isPublicAdmissionQuery(q)).toBe(true);expect(matchesPublicAdmissionReceipt({...q,allowed:true,checkedAt:new Date(1000).toISOString(),expiresAt:new Date(10000).toISOString(),maxActiveSeconds:60,status:"created"},q,1000)).toBe(true);
+  });
+  it("accepts a public receipt without a product session-duration cap",()=>{
+    const q=query(),r:any={...q,allowed:true,checkedAt:new Date(1000).toISOString(),expiresAt:new Date(10000).toISOString(),status:"created"};
+    expect(matchesPublicAdmissionReceipt(r,q,1000)).toBe(true);
   });
   it.each([null,[],{},"query",{...query(),contractVersion:2},{...query(),apiKey:"forged"},{...query(),requestId:""},{...query(),ownerId:"bad\nowner"},
     {...query(),sampleRate:48000},{...query(),configurationRevision:0},{...query(),configurationHash:"bad"},{...query(),purpose:"resume"}])("rejects malformed query %j",value=>expect(isPublicAdmissionQuery(value)).toBe(false));

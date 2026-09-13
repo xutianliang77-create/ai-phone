@@ -6,7 +6,7 @@ export interface PublicRecoveryCheckpoint {
   runtimeSequence:number;lastAcceptedSample:number;finalRevision:number;activeMs:number;recoveryUntil:string;
 }
 export interface PublicAdmissionReceipt extends PublicAdmissionQuery {
-  allowed:true;checkedAt:string;expiresAt:string;maxActiveSeconds:number;status:"created"|"active"|"paused";
+  allowed:true;checkedAt:string;expiresAt:string;maxActiveSeconds?:number;status:"created"|"active"|"paused";
   /** Read-only observation, never an ownership/transport or inference grant. */
   recovery?:PublicRecoveryCheckpoint;
 }
@@ -27,17 +27,17 @@ export function matchesPublicAdmissionReceipt(value:unknown,query:PublicAdmissio
   if(!value||typeof value!=="object"||Array.isArray(value)||!isPublicAdmissionQuery(query))return false;
   const r=value as PublicAdmissionReceipt;
   const recovery=query.purpose==="recovery";
-  return Object.keys(r).length===queryKeys.length+(recovery?6:5)&&Object.keys(r).every(k=>queryKeys.includes(k)||["allowed","checkedAt","expiresAt","maxActiveSeconds","status",...(recovery?["recovery"]:[])].includes(k))&&
+  return Object.keys(r).length>=queryKeys.length+(recovery?5:4)&&Object.keys(r).every(k=>queryKeys.includes(k)||["allowed","checkedAt","expiresAt","maxActiveSeconds","status",...(recovery?["recovery"]:[])].includes(k))&&
     queryKeys.every(k=>r[k as keyof PublicAdmissionQuery]===query[k as keyof PublicAdmissionQuery])&&r.allowed===true&&
     r.status===(recovery?"paused":query.purpose==="connect"?"created":"active")&&typeof r.checkedAt==="string"&&typeof r.expiresAt==="string"&&
     Number.isFinite(now)&&Math.abs(now-Date.parse(r.checkedAt))<=30000&&Date.parse(r.expiresAt)>now&&
-    Number.isSafeInteger(r.maxActiveSeconds)&&r.maxActiveSeconds>0&&r.maxActiveSeconds<=86400&&
+    (r.maxActiveSeconds===undefined||Number.isSafeInteger(r.maxActiveSeconds)&&r.maxActiveSeconds>0&&r.maxActiveSeconds<=86400)&&
     (!recovery||validCheckpoint(r.recovery,r.maxActiveSeconds,now,Date.parse(r.expiresAt)));
 }
-function validCheckpoint(value:unknown,maxSeconds:number,now:number,expiry:number):value is PublicRecoveryCheckpoint {
+function validCheckpoint(value:unknown,maxSeconds:number|undefined,now:number,expiry:number):value is PublicRecoveryCheckpoint {
   if(!value||typeof value!=="object"||Array.isArray(value))return false;
   const r=value as PublicRecoveryCheckpoint;
   return Object.keys(r).length===5&&Object.keys(r).every(k=>["runtimeSequence","lastAcceptedSample","finalRevision","activeMs","recoveryUntil"].includes(k))&&
     [r.runtimeSequence,r.lastAcceptedSample,r.finalRevision,r.activeMs].every(v=>Number.isSafeInteger(v)&&v>=0)&&r.runtimeSequence>0&&
-    r.activeMs<maxSeconds*1000&&typeof r.recoveryUntil==="string"&&Date.parse(r.recoveryUntil)>now&&Date.parse(r.recoveryUntil)<=expiry;
+    (maxSeconds===undefined||r.activeMs<maxSeconds*1000)&&typeof r.recoveryUntil==="string"&&Date.parse(r.recoveryUntil)>now&&Date.parse(r.recoveryUntil)<=expiry;
 }

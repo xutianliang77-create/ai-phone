@@ -59,10 +59,15 @@ describe("usage ticker", () => {
     });
     expect(decision.shouldEnd).toBe(true);
   });
+  it("does not impose a time-limit decision when an online public token omits duration",()=>{
+    const session=createTestSession({});session.claims.publicRuntime={deploymentId:"public",leaseId:"lease",captureId:"capture",languagePolicyKey:"language",sampleRate:16000,configurationRevision:1,configurationHash:"a".repeat(64)};
+    (session.claims as any).processing={processingMode:"online"};const decision=createUsageTickDecision(session,null);
+    expect(decision.shouldEnd).toBe(false);expect(decision.endReason).toBeUndefined();
+  });
 });
 
 function createTestSession(options: {
-  maxDurationSeconds: number;
+  maxDurationSeconds?: number;
   billableSeconds?: number;
   holdSeconds?: number;
 }): RealtimeSession {
@@ -76,7 +81,7 @@ function createTestSession(options: {
       targetLanguage: "zh",
       voiceOutput: false,
       planCode: "free",
-      maxDurationSeconds: options.maxDurationSeconds,
+      ...(options.maxDurationSeconds!==undefined?{maxDurationSeconds:options.maxDurationSeconds}:{}),
       ...(options.holdSeconds ? { holdSeconds: options.holdSeconds } : {}),
       issuedAt: 1,
       expiresAt: 9999999999,

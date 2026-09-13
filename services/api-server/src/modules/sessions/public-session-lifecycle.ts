@@ -11,7 +11,7 @@ export interface PublicRuntimePolicy {
   admissionHash?: string;
   sampleRate?: 16000|24000;
   leaseId: string; captureId: string; languagePolicyKey: string;
-  expiresAt: string; maxActiveSeconds: number;
+  expiresAt: string; maxActiveSeconds?: number;
 }
 export interface PublicRuntimeEvidence {
   sequence: number; eventHash: string; phase: "active" | "paused" | "disconnected" | "stopped";
@@ -29,8 +29,8 @@ export interface PublicFinalizationRecord { requestHash: string; ack: PublicFina
 export function runtimePolicy(session: SessionRecord) {
   const p=session.publicRuntimePolicy;
   if(!p || ![p.leaseId,p.captureId,p.languagePolicyKey].every(syncKey) ||
-      !Number.isFinite(Date.parse(p.expiresAt)) || !Number.isSafeInteger(p.maxActiveSeconds) ||
-      p.maxActiveSeconds<1 || p.maxActiveSeconds>86400) throw new ResultSyncError("public_runtime_not_ready",503);
+      !Number.isFinite(Date.parse(p.expiresAt)) || p.maxActiveSeconds!==undefined&&(!Number.isSafeInteger(p.maxActiveSeconds) ||
+      p.maxActiveSeconds<1 || p.maxActiveSeconds>86400)) throw new ResultSyncError("public_runtime_not_ready",503);
   return p;
 }
 export function stopWatermark(session: SessionRecord): RealtimeStopWatermark {

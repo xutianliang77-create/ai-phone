@@ -69,6 +69,13 @@ describe("original public session preparation and issuance phases",()=>{
     expect(storage.getStoreSnapshot().billingLedger).toHaveLength(0);
     const stored=JSON.stringify(current());expect(stored).not.toContain(first.realtimeToken);expect(stored).not.toContain(signing);expect(stored).not.toContain("SYNTHETIC_RUNTIME_SECRET");
   });
+  it("omits a public client duration while retaining server-side quota reservation",async()=>{
+    await prepared();for(const value of evidence()){if(value.kind==="provider_budget")delete (value as any).maxActiveSeconds;await recordPublicInferenceEvidence(id,owner,value,new Date());}
+    await writePublicInferenceAdmission(id,owner,{consentReceiptId:"consent",budgetReservationId:"budget",qualificationReceiptIds:{asr:"asr",translation:"translation"}},new Date());
+    const response=await issuePublicRealtimeSession(id,owner),claims=verifyRealtimeToken(response.realtimeToken,signing)!;
+    expect(response).not.toHaveProperty("maxDurationSeconds");expect(claims.maxDurationSeconds).toBeUndefined();expect(current().publicRuntimePolicy).not.toHaveProperty("maxActiveSeconds");
+    expect(storage.getStoreSnapshot().usageHolds).toHaveLength(1);
+  });
   it("binds configured speech voice when enabled without selecting a private voice",async()=>{
     await prepared("qwen",true);await grant();const response=await issuePublicRealtimeSession(id,owner),claims=verifyRealtimeToken(response.realtimeToken,signing)!;
     expect(claims.voice).toEqual({mode:"preset",presetId:"manual-voice"});expect(claims.processing!.executionPlan.tts.execution).toBe("public");

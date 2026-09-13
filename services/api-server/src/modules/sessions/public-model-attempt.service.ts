@@ -34,7 +34,7 @@ export function recordPublicModelAttempt(sessionId:string,value:unknown,now=new 
       if(!p.admissionHash||!publicRuntimeAdmissionValid(current,now)||current.status!=="active"||r?.phase!=="active"||
         r.uncertain||!Number.isFinite(Date.parse(r.observedAt))||Date.parse(r.observedAt)>now.getTime()||
         now.getTime()-Date.parse(r.observedAt)>PUBLIC_EVIDENCE_GAP_MS||Date.parse(p.expiresAt)<=now.getTime()||
-        r.activeMs+now.getTime()-Date.parse(r.observedAt)>p.maxActiveSeconds*1000)throw new ResultSyncError("model_attempt_runtime_unavailable",403);
+        p.maxActiveSeconds!==undefined&&r.activeMs+now.getTime()-Date.parse(r.observedAt)>p.maxActiveSeconds*1000)throw new ResultSyncError("model_attempt_runtime_unavailable",403);
       if(e.component==="asr"){
         if(e.audioSampleRate!==p.sampleRate||e.audioEndSample!>r.lastAcceptedSample)throw new ResultSyncError("model_attempt_audio_unconfirmed",403);
         if(records.some(a=>a.event.attemptId!==e.attemptId&&a.event.component==="asr"&&a.event.state!=="not_sent"&&

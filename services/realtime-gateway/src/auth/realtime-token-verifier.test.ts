@@ -39,4 +39,8 @@ describe("realtime token verifier", () => {
 
     expect(verifyRealtimeToken(token, "secret")?.sessionId).toBe("sess_1");
   });
+  it("accepts an online public token without a client duration claim",()=>{
+    const token=signed(JSON.stringify({...valid(),maxDurationSeconds:undefined,processing:{processingMode:"online"},publicRuntime:{deploymentId:"public",leaseId:"lease",captureId:"capture",languagePolicyKey:"language",sampleRate:16000,configurationRevision:1,configurationHash:"a".repeat(64)}}));
+    expect(verifyRealtimeToken(token,"secret")?.maxDurationSeconds).toBeUndefined();
+  });
 });

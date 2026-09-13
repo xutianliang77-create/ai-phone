@@ -34,7 +34,7 @@ export function createUsageTickDecision(
       : Math.min(nextBillableSeconds, balanceSeconds);
   session.billableSeconds = billableSeconds;
 
-  const remainingByDuration = Math.max(
+  const remainingByDuration = session.claims.maxDurationSeconds===undefined?Infinity:Math.max(
     0,
     session.claims.maxDurationSeconds - billableSeconds,
   );
@@ -42,7 +42,7 @@ export function createUsageTickDecision(
     balanceSeconds === null ? remainingByDuration : Math.max(0, balanceSeconds - billableSeconds);
   const remainingSeconds = Math.min(remainingByDuration, remainingByBalance);
   const quotaExhausted = balanceSeconds !== null && remainingByBalance <= 0;
-  const timeLimitReached = remainingByDuration <= 0;
+  const timeLimitReached = Number.isFinite(remainingByDuration) && remainingByDuration <= 0;
 
   return {
     event: {

@@ -16,7 +16,7 @@ export interface PublicInferenceAdmission {
   consentReceiptId:string; budgetReservationId:string;
   qualificationReceiptIds:Partial<Record<"asr"|"translation"|"tts",string>>;
   issuedAt:string; expiresAt:string; budgetExpiresAt:string; qualificationExpiresAt:string;
-  maxActiveSeconds:number; sampleRate:16000|24000;
+  maxActiveSeconds?:number; sampleRate:16000|24000;
   revokedAt?:string;
 }
 
@@ -30,7 +30,7 @@ export function verifiedPublicAdmission(session:SessionRecord,ownerId:string,now
       session.processingAuthorization!.publicGrantRef!==a.grantRef ||
       ![a.grantRef,a.consentReceiptId,a.budgetReservationId].every(syncKey)||
       a.processingHash!==publicProcessingHash(session)||a.revokedAt!==undefined ||
-      !Number.isSafeInteger(a.maxActiveSeconds)||a.maxActiveSeconds<1||a.maxActiveSeconds>86400||
+      a.maxActiveSeconds!==undefined&&(!Number.isSafeInteger(a.maxActiveSeconds)||a.maxActiveSeconds<1||a.maxActiveSeconds>86400)||
       ![16000,24000].includes(a.sampleRate))throw new ResultSyncError("public_inference_admission_required",503);
   const times=[a.issuedAt,a.expiresAt,a.budgetExpiresAt,a.qualificationExpiresAt];
   if(times.some(t=>typeof t!=="string"))throw new ResultSyncError("public_inference_admission_expired",403);
@@ -59,17 +59,19 @@ export function issuePublicRuntimeLease(sessionId:string,ownerId:string,now=new 
       const deadline=Math.min(...[admission.expiresAt,admission.budgetExpiresAt,admission.qualificationExpiresAt].map(Date.parse));
       if(existing.admissionHash!==admissionHash||![existing.leaseId,existing.captureId].every(syncKey)||
           existing.languagePolicyKey!==`language:${resultSyncHash(current.processingAuthorization!.languagePolicy)}`||
-          existing.sampleRate!==admission.sampleRate||!Number.isSafeInteger(existing.maxActiveSeconds)||existing.maxActiveSeconds<1||existing.maxActiveSeconds>admission.maxActiveSeconds||
+          existing.sampleRate!==admission.sampleRate||existing.maxActiveSeconds!==admission.maxActiveSeconds||
           existing.expiresAt!==new Date(deadline).toISOString()||Date.parse(existing.expiresAt)<=now.getTime())throw new ResultSyncError("public_runtime_lease_conflict");
       return {next:null,result:structuredClone(current.publicRuntimePolicy)};
     }
     if(current.status!=="created"||current.publicRuntime)throw new ResultSyncError("public_runtime_lease_conflict");
     const deadline=Math.min(...[admission.expiresAt,admission.budgetExpiresAt,admission.qualificationExpiresAt].map(Date.parse));
-    const maxActiveSeconds=Math.min(admission.maxActiveSeconds,Math.floor((deadline-now.getTime())/1000));
-    if(maxActiveSeconds<1)throw new ResultSyncError("public_inference_admission_expired",403);
+    const remaining=Math.floor((deadline-now.getTime())/1000);
+    if(remaining<1)throw new ResultSyncError("public_inference_admission_expired",403);
+    const maxActiveSeconds=admission.maxActiveSeconds===undefined?undefined:Math.min(admission.maxActiveSeconds,remaining);
+    if(maxActiveSeconds!==undefined&&maxActiveSeconds<1)throw new ResultSyncError("public_inference_admission_expired",403);
     const policy:PublicRuntimePolicy={leaseId:randomUUID(),captureId:randomUUID(),
       languagePolicyKey:`language:${resultSyncHash(current.processingAuthorization!.languagePolicy)}`,
-      admissionHash,sampleRate:admission.sampleRate,expiresAt:new Date(deadline).toISOString(),maxActiveSeconds};
+      admissionHash,sampleRate:admission.sampleRate,expiresAt:new Date(deadline).toISOString(),...(maxActiveSeconds!==undefined?{maxActiveSeconds}:{})};
     const next=structuredClone(current);next.publicRuntimePolicy=policy;
     return {next,result:structuredClone(policy)};
   });

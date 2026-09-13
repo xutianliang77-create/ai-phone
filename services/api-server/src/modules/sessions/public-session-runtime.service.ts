@@ -42,7 +42,7 @@ export function observePublicRuntime(sessionId:string,value:unknown,now=new Date
     const gap=timestamp-last;
     const activeMs=(old?.activeMs??0)+(old?.phase==="active"&&gap<=PUBLIC_EVIDENCE_GAP_MS?gap:0);
     const uncertain=!admissionValid || !!old?.uncertain || old?.phase==="active"&&gap>PUBLIC_EVIDENCE_GAP_MS ||
-      activeMs>p.maxActiveSeconds*1000 || old?.phase==="active"&&timestamp>Date.parse(p.expiresAt);
+      p.maxActiveSeconds!==undefined&&activeMs>p.maxActiveSeconds*1000 || old?.phase==="active"&&timestamp>Date.parse(p.expiresAt);
     const evidence:PublicRuntimeEvidence={sequence:Number(b.sequence),eventHash:hash,
       phase:b.phase as PublicRuntimeEvidence['phase'],observedAt:now.toISOString(),activeMs,
       uncertain:!!uncertain,finalRevision:Number(b.finalRevision),lastAcceptedSample:Number(b.lastAcceptedSample)};

@@ -27,12 +27,12 @@ Map<String, Object?> response(http.Request request, String owner) {
   final expiry = DateTime.now().toUtc().add(const Duration(minutes: 5)).millisecondsSinceEpoch ~/ 1000;
   final id = 'public-${request.headers['idempotency-key']}';
   final claims = {'sessionId': id, 'userId': owner, 'mode': body['mode'], 'sourceLanguage': body['sourceLanguage'], 'targetLanguage': body['targetLanguage'],
-    'voiceOutput': body['voiceOutput'], if (body['voice'] != null) 'voice': body['voice'], 'processing': p, 'maxDurationSeconds': 60,
+    'voiceOutput': body['voiceOutput'], if (body['voice'] != null) 'voice': body['voice'], 'processing': p,
     'issuedAt': expiry - 300, 'expiresAt': expiry, 'publicRuntime': {'deploymentId': 'public', 'leaseId': 'lease', 'captureId': 'capture',
       'languagePolicyKey': 'language', 'sampleRate': 16000, 'configurationRevision': 1, 'configurationHash': 'a' * 64}};
   return {'sessionId': id, 'realtimeToken': '${base64Url.encode(utf8.encode(jsonEncode(claims))).replaceAll('=', '')}.c3ludGhldGlj',
     'endpoint': 'wss://gateway.synthetic.invalid/realtime', 'expiresAt': DateTime.fromMillisecondsSinceEpoch(expiry * 1000, isUtc: true).toIso8601String(),
-    'maxDurationSeconds': 60, 'ownerId': owner, 'deploymentId': 'public', 'captureSampleRate': 16000, 'processing': p};
+    'ownerId': owner, 'deploymentId': 'public', 'captureSampleRate': 16000, 'processing': p};
 }
 class Harness {
   final directory = Directory.systemTemp.createTempSync('wujie-public-create-');

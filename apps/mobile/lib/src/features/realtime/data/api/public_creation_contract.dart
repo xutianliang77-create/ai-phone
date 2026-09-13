@@ -108,9 +108,10 @@ RealtimeSession publicCreationResponse(
       json['endpoint'] != record['endpoint'] ||
       json['captureSampleRate'] is! int ||
       !const [16000, 24000].contains(json['captureSampleRate']) ||
-      json['maxDurationSeconds'] is! int ||
-      (json['maxDurationSeconds'] as int) < 1 ||
-      (json['maxDurationSeconds'] as int) > 14400) {
+      (json['maxDurationSeconds'] != null &&
+          (json['maxDurationSeconds'] is! int ||
+              (json['maxDurationSeconds'] as int) < 1 ||
+              (json['maxDurationSeconds'] as int) > 14400))) {
     throw const FormatException('Public creation response binding mismatch');
   }
   _endpoint(json['endpoint']);
@@ -142,7 +143,9 @@ RealtimeSession publicCreationResponse(
       publicCreationCanonical(claims['processing']) !=
           publicCreationCanonical(p) ||
       claims['expiresAt'] != expiry.millisecondsSinceEpoch ~/ 1000 ||
-      claims['maxDurationSeconds'] != json['maxDurationSeconds'] ||
+      (json['maxDurationSeconds'] == null
+          ? claims.containsKey('maxDurationSeconds')
+          : claims['maxDurationSeconds'] != json['maxDurationSeconds']) ||
       runtime['deploymentId'] != deploymentId ||
       runtime['sampleRate'] != json['captureSampleRate'] ||
       ![runtime['leaseId'], runtime['captureId'], runtime['languagePolicyKey']]

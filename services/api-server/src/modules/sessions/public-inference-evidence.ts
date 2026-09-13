@@ -10,7 +10,7 @@ interface EvidenceIdentity {
 }
 export type PublicInferenceEvidence = EvidenceIdentity & (
   | {kind:"inference_consent";version:"public-inference-v1";components:ModelComponent[]}
-  | {kind:"provider_budget";state:"reserved";currency:string;reservedMicros:number;maxActiveSeconds:number;sampleRate:16000|24000}
+  | {kind:"provider_budget";state:"reserved";currency:string;reservedMicros:number;maxActiveSeconds?:number;sampleRate:16000|24000}
   | {kind:"model_qualification";state:"qualified";component:ModelComponent;scopeKey:string;providerId:string;modelId:string}
 );
 export interface InferenceEvidenceRefs {
@@ -40,8 +40,8 @@ export function validateInferenceEvidence(session:SessionRecord,e:PublicInferenc
       new Set(e.components).size!==e.components.length||e.components.some(c=>!["asr","translation","tts"].includes(c)))throw new ResultSyncError("public_evidence_invalid",403);
   }else if(e.kind==="provider_budget"){
     if(e.state!=="reserved"||typeof e.currency!=="string"||!/^[A-Z]{3}$/.test(e.currency)||
-      !Number.isSafeInteger(e.reservedMicros)||e.reservedMicros<0||!Number.isSafeInteger(e.maxActiveSeconds)||
-      e.maxActiveSeconds<1||e.maxActiveSeconds>86400||![16000,24000].includes(e.sampleRate))throw new ResultSyncError("public_evidence_invalid",403);
+      !Number.isSafeInteger(e.reservedMicros)||e.reservedMicros<0||(e.maxActiveSeconds!==undefined&&(!Number.isSafeInteger(e.maxActiveSeconds)||
+      e.maxActiveSeconds<1||e.maxActiveSeconds>86400))||![16000,24000].includes(e.sampleRate))throw new ResultSyncError("public_evidence_invalid",403);
   }else if(e.kind==="model_qualification"){
     const component=session.processingAuthorization?.executionPlan[e.component];
     if(e.state!=="qualified"||![e.scopeKey,e.providerId,e.modelId].every(syncKey)||

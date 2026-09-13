@@ -55,7 +55,8 @@ export interface CreateRealtimeSessionResponse {
   realtimeToken: string;
   endpoint: string;
   expiresAt: string;
-  maxDurationSeconds: number;
+  /** Legacy/local sessions may expose a client duration. Public online sessions omit it. */
+  maxDurationSeconds?: number;
   domainLexiconPacks?: DomainLexiconPack[];
   domainLexiconVersion?: string;
 }
@@ -76,7 +77,7 @@ export interface RealtimeTokenClaims {
   termbaseId?: string;
   domainLexiconPacks?: DomainLexiconPack[];
   speakerAttribution?: SpeakerAttributionOptionsDto;
-  maxDurationSeconds: number;
+  maxDurationSeconds?: number;
   holdSeconds?: number;
   issuedAt: number;
   expiresAt: number;

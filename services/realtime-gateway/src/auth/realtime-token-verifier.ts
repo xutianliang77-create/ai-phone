@@ -26,7 +26,8 @@ export function verifyRealtimeToken(
         value => typeof value === "string" && value.length > 0 && value.length <= 240 && value.trim() === value,
       ) || !Number.isSafeInteger(claims.issuedAt) || claims.issuedAt < 0 ||
       !Number.isSafeInteger(claims.expiresAt) || claims.expiresAt <= claims.issuedAt ||
-      !Number.isSafeInteger(claims.maxDurationSeconds) || claims.maxDurationSeconds <= 0) return null;
+      (claims.maxDurationSeconds===undefined?!(claims.publicRuntime&&claims.processing?.processingMode==="online"):
+        !Number.isSafeInteger(claims.maxDurationSeconds)||claims.maxDurationSeconds<=0)) return null;
   if (claims.expiresAt <= Math.floor(Date.now() / 1000) &&
       canResumeExpired?.(claims) !== true) return null;
   return claims;

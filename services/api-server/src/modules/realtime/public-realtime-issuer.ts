@@ -31,7 +31,9 @@ export async function issuePublicRealtimeSession(sessionId:string,ownerId:string
     preparedPublicSession(before,ownerId);verifiedPublicAdmission(before,ownerId,new Date());
     const lease=await issuePublicRuntimeLease(sessionId,ownerId),remaining=Math.floor((Date.parse(lease.expiresAt)-Date.now())/1000);
     if(remaining<1)throw new ResultSyncError("public_inference_admission_expired",403);
-    const holdSeconds=Math.min(30,lease.maxActiveSeconds,realtimeMaxSessionSeconds());
+    // Server-side account accounting may reserve a short start hold, but it is
+    // never exposed as a public-session duration or client-side quota contract.
+    const holdSeconds=Math.min(30,lease.maxActiveSeconds??30,realtimeMaxSessionSeconds());
     const hold=await createUsageHold(ownerId,holdSeconds,{sessionId,idempotencyKey:`hold:${sessionId}`,note:"realtime_session_hold",ttlSeconds:remaining});
     // The legacy idempotent API can return a released/settled hold as 'held'.
     if(hold.status!=="held")throw new ResultSyncError("quota_not_enough",402);
@@ -44,11 +46,11 @@ export async function issuePublicRealtimeSession(sessionId:string,ownerId:string
       const old=current.publicRealtimeIssuance,issuedAt=old?.claims.issuedAt??Math.floor(Date.now()/1000);
       const expiresAt=Math.min(issuedAt+300,Math.floor(Date.parse(lease.expiresAt)/1000));
       if(expiresAt<=Math.floor(Date.now()/1000))throw new ResultSyncError("public_issuer_expired",403);
-      const maxDurationSeconds=Math.min(realtimeMaxSessionSeconds(),lease.maxActiveSeconds,Math.floor(Date.parse(lease.expiresAt)/1000)-issuedAt);
+      const maxDurationSeconds=lease.maxActiveSeconds===undefined?undefined:Math.min(realtimeMaxSessionSeconds(),lease.maxActiveSeconds,Math.floor(Date.parse(lease.expiresAt)/1000)-issuedAt);
       const claims:RealtimeTokenClaims={userId:ownerId,sessionId,mode:input.mode,asrEndpointMode:["meeting","classroom"].includes(input.mode)?"listening":"conversation",
         sourceLanguage:input.sourceLanguage,targetLanguage:input.targetLanguage,voiceOutput:input.voiceOutput,
         ...(input.voiceOutput?{voice:{mode:"preset",presetId:config.components.tts!.voice}}:{}),planCode:hold.balance.planCode,
-        maxDurationSeconds,holdSeconds,issuedAt,expiresAt,processing:structuredClone(current.processingAuthorization!),
+        ...(maxDurationSeconds!==undefined?{maxDurationSeconds}:{}),issuedAt,expiresAt,processing:structuredClone(current.processingAuthorization!),
         publicRuntime:{deploymentId:settings.deploymentId,leaseId:lease.leaseId,captureId:lease.captureId,languagePolicyKey:lease.languagePolicyKey,
           sampleRate:lease.sampleRate!,configurationRevision:config.configurationRevision,configurationHash:config.configurationHash}};
       if(!publicRuntimeTokenBinding(claims,settings.deploymentId)||createRealtimeToken(claims,settings.secret).length>4096)throw new ResultSyncError("public_issuer_token_invalid",503);
@@ -62,7 +64,7 @@ export async function issuePublicRealtimeSession(sessionId:string,ownerId:string
     if(claims.expiresAt<=Math.floor(Date.now()/1000))throw new ResultSyncError("public_issuer_expired",403);
     if(resultSyncHash(issuerSettings())!==resultSyncHash(settings))throw new ResultSyncError("public_issuer_binding_changed");
     return {sessionId,realtimeToken:createRealtimeToken(claims,settings.secret),endpoint:issuance.endpoint,
-      expiresAt:new Date(claims.expiresAt*1000).toISOString(),maxDurationSeconds:claims.maxDurationSeconds,
+      expiresAt:new Date(claims.expiresAt*1000).toISOString(),...(claims.maxDurationSeconds!==undefined?{maxDurationSeconds:claims.maxDurationSeconds}:{}),
       captureSampleRate:claims.publicRuntime!.sampleRate,deploymentId:claims.publicRuntime!.deploymentId,ownerId,
       processing:structuredClone(claims.processing!)};
   });

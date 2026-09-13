@@ -308,8 +308,14 @@ class RealtimeController extends ChangeNotifier {
 
   void _startSessionTimeout(RealtimeSession session) {
     _sessionTimeoutTimer?.cancel();
+    // Online public sessions are governed by server budget/availability. The
+    // client must not enforce or expose a free-quota-derived duration cap.
+    if (session.syncBinding != null || session.maxDurationSeconds == null) {
+      _sessionTimeoutTimer = null;
+      return;
+    }
     _sessionTimeoutTimer = Timer(
-      Duration(seconds: session.maxDurationSeconds),
+      Duration(seconds: session.maxDurationSeconds!),
       () async {
         _message = 'Session time limit reached';
         await stop();
