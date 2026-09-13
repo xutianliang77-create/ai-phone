@@ -1,5 +1,6 @@
 import {
   chmodSync,
+  mkdirSync,
   mkdtempSync,
   rmSync,
   writeFileSync,
@@ -82,29 +83,48 @@ describe("public runtime candidate deployment contract", () => {
       "candidate ports must be unique and outside reserved services",
     ]));
   });
+
+  test("supports only an explicit bounded host mapping for container material files", () => {
+    const fixture = createFixture(directories, {}, {}, {
+      materialSubdirectory: "runtime-data",
+      containerMaterialRoot: "/data/ai-phone",
+    });
+
+    expect(checkPublicRuntimeCandidateDeploy({
+      ...fixture,
+      containerMaterialRoot: undefined,
+      materialRoot: undefined,
+    }).status).toBe("not_ready");
+    expect(checkPublicRuntimeCandidateDeploy(fixture).status).toBe(
+      "ready_for_runtime_validation",
+    );
+  });
 });
 
 function createFixture(directories, apiPatch = {}, gatewayPatch = {}, options = {}) {
   const root = mkdtempSync(path.join(os.tmpdir(), "wujie-public-candidate-"));
   directories.push(root);
-  const publicConfig = path.join(root, "public.enc");
-  const policy = path.join(root, "policy.json");
-  const live = path.join(root, "live.json");
+  const materialRoot = path.join(root, options.materialSubdirectory ?? "");
+  mkdirSync(materialRoot, { recursive: true });
+  const publicConfig = path.join(materialRoot, "public.enc");
+  const policy = path.join(materialRoot, "policy.json");
+  const live = path.join(materialRoot, "live.json");
   for (const file of [publicConfig, policy, live]) {
     writeFileSync(file, "{}", { mode: 0o600 });
   }
+  const configuredMaterialRoot = options.containerMaterialRoot ?? materialRoot;
   const base = {
     PUBLIC_RUNTIME_ENABLED: "true",
     API_RESULT_SYNC_DEPLOYMENT_ID: "public-candidate-test",
     PUBLIC_GATEWAY_CREDENTIAL_ACCESS_SECRET: "gateway-material-secret-".padEnd(32, "x"),
     INTERNAL_API_SECRET: "internal-api-secret-".padEnd(32, "i"),
     REALTIME_TOKEN_SECRET: "realtime-token-secret-".padEnd(32, "r"),
-    PUBLIC_MODEL_CONFIG_FILE: publicConfig,
+    PUBLIC_MODEL_CONFIG_FILE: path.join(configuredMaterialRoot, "public.enc"),
     PUBLIC_MODEL_CONFIG_KEY: "a".repeat(64),
-    PUBLIC_RUNTIME_ADMISSION_POLICY_FILE: policy,
+    PUBLIC_RUNTIME_ADMISSION_POLICY_FILE: path.join(configuredMaterialRoot, "policy.json"),
     PUBLIC_RUNTIME_ADMISSION_POLICY_KEY: "c".repeat(64),
     PUBLIC_RUNTIME_REQUIRE_LIVE_QUALIFICATION: "true",
-    PUBLIC_RUNTIME_LIVE_QUALIFICATION_FILE: live,
+    PUBLIC_RUNTIME_LIVE_QUALIFICATION_FILE: path.join(configuredMaterialRoot, "live.json"),
     PUBLIC_RUNTIME_LIVE_QUALIFICATION_KEY: "d".repeat(64),
     PUBLIC_RUNTIME_CONFIGURATION_HASH: "e".repeat(64),
     PUBLIC_RUNTIME_MODEL_POLICY_REVISION: "public-config-7",
@@ -119,7 +139,15 @@ function createFixture(directories, apiPatch = {}, gatewayPatch = {}, options = 
   const gatewayEnvFile = path.join(root, "public-gateway.env");
   rewriteEnv(apiEnvFile, api);
   rewriteEnv(gatewayEnvFile, gateway);
-  return { root, apiEnvFile, gatewayEnvFile, api, ...options };
+  return {
+    root,
+    apiEnvFile,
+    gatewayEnvFile,
+    api,
+    materialRoot: options.containerMaterialRoot ? materialRoot : undefined,
+    containerMaterialRoot: options.containerMaterialRoot,
+    ...options,
+  };
 }
 
 function rewriteEnv(file, env) {

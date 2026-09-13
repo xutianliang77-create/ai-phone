@@ -10,11 +10,14 @@ if (args.includes("--help")) {
     --compose-project wujie-v11-public-candidate \\
     --container-prefix wujie-v11-public-candidate \\
     --remote-root /data/models/ai-phone-server-candidates/wujie-v11-public \\
-    --api-port 13110 --gateway-port 13111 --internal-tls-port 13112
+    --api-port 13110 --gateway-port 13111 --internal-tls-port 13112 \\
+    --material-root /isolated/runtime/data \\
+    --container-material-root /data/ai-phone
 
 This is offline-only. A passing result means the candidate surface is ready
 for runtime validation; it does not start containers, load credentials, call
-providers, or claim Gateway readiness.`);
+providers, or claim Gateway readiness. The material-root mapping is optional
+and exists only for a host-side preflight of a known container bind mount.`);
   process.exit(0);
 }
 
@@ -28,6 +31,8 @@ const result = checkPublicRuntimeCandidateDeploy({
   apiPort: value("--api-port") ?? process.env.API_PORT,
   gatewayPort: value("--gateway-port") ?? process.env.REALTIME_PORT,
   internalTlsPort: value("--internal-tls-port") ?? process.env.INTERNAL_TLS_PORT,
+  materialRoot: value("--material-root") ?? process.env.PUBLIC_RUNTIME_MATERIAL_ROOT,
+  containerMaterialRoot: value("--container-material-root") ?? process.env.PUBLIC_RUNTIME_CONTAINER_MATERIAL_ROOT,
 });
 
 if (args.includes("--json")) {

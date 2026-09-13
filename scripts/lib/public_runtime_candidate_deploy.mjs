@@ -41,11 +41,12 @@ export function checkPublicRuntimeCandidateDeploy(options = {}) {
     checks,
     issues,
   );
+  const materialFile = materialFileResolver(options);
 
   requireCandidateIdentity(options, checks, issues);
   requirePublicRuntime(api, gateway, checks, issues);
-  requireApiMaterialFiles(api, checks, issues);
-  requireLiveQualification(api, gateway, checks, issues);
+  requireApiMaterialFiles(api, materialFile, checks, issues);
+  requireLiveQualification(api, gateway, materialFile, checks, issues);
   requireNoPrivateFallback(api, gateway, checks, issues);
 
   return {
@@ -130,6 +131,25 @@ function candidatePorts(options) {
   };
 }
 
+function materialFileResolver(options) {
+  const hostRoot = options.materialRoot;
+  const containerRoot = options.containerMaterialRoot;
+  if (hostRoot === undefined && containerRoot === undefined) return (value) => value;
+  if (!path.isAbsolute(hostRoot ?? "") || !path.isAbsolute(containerRoot ?? "")) {
+    return () => "";
+  }
+  const normalizedContainerRoot = path.resolve(containerRoot);
+  const normalizedHostRoot = path.resolve(hostRoot);
+  return (value) => {
+    if (!path.isAbsolute(value ?? "")) return "";
+    const relative = path.relative(normalizedContainerRoot, path.resolve(value));
+    if (!relative || relative === "" || relative.startsWith("..") || path.isAbsolute(relative)) {
+      return "";
+    }
+    return path.resolve(normalizedHostRoot, relative);
+  };
+}
+
 function number(value) {
   return typeof value === "number" ? value : Number(value);
 }
@@ -159,9 +179,9 @@ function requirePublicRuntime(api, gateway, checks, issues) {
   }
 }
 
-function requireApiMaterialFiles(api, checks, issues) {
+function requireApiMaterialFiles(api, materialFile, checks, issues) {
   const configurationFile = api.PUBLIC_MODEL_CONFIG_FILE ?? "";
-  const configurationFileOk = absoluteProtectedFile(configurationFile);
+  const configurationFileOk = absoluteProtectedFile(materialFile(configurationFile));
   record(checks, "public_model_configuration_file", configurationFileOk, { configured: Boolean(configurationFile) });
   if (!configurationFileOk) issues.push("public model configuration file must be an absolute regular 0600 file");
   const configurationKeyOk = hexKey(api.PUBLIC_MODEL_CONFIG_KEY);
@@ -169,7 +189,7 @@ function requireApiMaterialFiles(api, checks, issues) {
   if (!configurationKeyOk) issues.push("public model configuration key must be a 64-character hexadecimal key");
 
   const policyFile = api.PUBLIC_RUNTIME_ADMISSION_POLICY_FILE ?? "";
-  const policyFileOk = absoluteProtectedFile(policyFile);
+  const policyFileOk = absoluteProtectedFile(materialFile(policyFile));
   record(checks, "public_admission_policy_file", policyFileOk, { configured: Boolean(policyFile) });
   if (!policyFileOk) issues.push("public admission policy file must be an absolute regular 0600 file");
   const policyKeyOk = hexKey(api.PUBLIC_RUNTIME_ADMISSION_POLICY_KEY);
@@ -182,14 +202,14 @@ function requireApiMaterialFiles(api, checks, issues) {
   if (!noCollision) issues.push("public and private model configuration files must differ");
 }
 
-function requireLiveQualification(api, gateway, checks, issues) {
+function requireLiveQualification(api, gateway, materialFile, checks, issues) {
   const required = api.PUBLIC_RUNTIME_REQUIRE_LIVE_QUALIFICATION === "true";
   record(checks, "api_live_qualification_required", required, { configured: required });
   if (!required) issues.push("public API candidate must require signed live qualification");
 
   const apiFile = api.PUBLIC_RUNTIME_LIVE_QUALIFICATION_FILE ?? "";
   const gatewayFile = gateway.PUBLIC_RUNTIME_LIVE_QUALIFICATION_FILE ?? "";
-  const liveFileOk = absoluteProtectedFile(apiFile) && apiFile === gatewayFile;
+  const liveFileOk = absoluteProtectedFile(materialFile(apiFile)) && apiFile === gatewayFile;
   record(checks, "live_qualification_file_binding", liveFileOk, { configured: Boolean(apiFile) });
   if (!liveFileOk) issues.push("API and Gateway must share an absolute regular live qualification file");
 
