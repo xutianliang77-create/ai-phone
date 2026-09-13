@@ -136,9 +136,10 @@ export function startWebSocketServer(options:{publicRuntime?:PublicGatewayRuntim
         .then(async () => {
           const balance = await usageBalanceClient.getBalance(session.userId);
           const decision = createUsageTickDecision(session, balance);
-          // Public online budget is server-owned: clients receive neither a
-          // remaining-free-quota counter nor a client-side time limit.
-          if(!sessionEventSink.requiresConfirmation)sendRealtime(decision.event);
+          // This is the authenticated Wujie account's server-side balance, not
+          // a supplier free-package balance. Provider availability stays hidden
+          // behind public admission and never changes the client balance.
+          sendRealtime(decision.event);
           if (decision.shouldEnd) {
             await endRealtimeSession(
               decision.endReason ?? "time_limit",
