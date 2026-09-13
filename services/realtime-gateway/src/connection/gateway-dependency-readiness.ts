@@ -71,7 +71,7 @@ export class GatewayDependencyReadinessMonitor {
 
   async refresh() {
     if (this.env.publicDeploymentId) {
-      this.current = publicProcessingReadiness(this.now());
+      this.current = publicProcessingReadiness(this.env,this.now());
       return this.current;
     }
     const services = await Promise.all(

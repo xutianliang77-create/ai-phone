@@ -39,6 +39,10 @@ export type {
 export interface RealtimeEnv extends SpeakerRevisionEnv {
   /** Same explicit deployment identity used by the S3 API; unset is legacy. */
   publicDeploymentId?: string;
+  /** Public runtime remains off until an operator explicitly enables it. */
+  publicRuntimeEnabled: boolean;
+  /** Separate API-to-Gateway credential-material access secret; never a model key. */
+  publicCredentialAccessSecret?: string;
   host: string;
   port: number;
   allowedHosts: string[];
@@ -137,6 +141,8 @@ export function loadEnv(): RealtimeEnv {
   );
   return {
     publicDeploymentId: env.API_RESULT_SYNC_DEPLOYMENT_ID || undefined,
+    publicRuntimeEnabled: parseBoolean(env.PUBLIC_RUNTIME_ENABLED, false),
+    publicCredentialAccessSecret: env.PUBLIC_GATEWAY_CREDENTIAL_ACCESS_SECRET,
     host: env.REALTIME_BIND_HOST?.trim() || "0.0.0.0",
     port: Number(env.REALTIME_PORT ?? 3001),
     allowedHosts: commaSeparated(env.REALTIME_ALLOWED_HOSTS),

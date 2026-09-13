@@ -18,10 +18,11 @@ import { RealtimeFlushTracker } from "./realtime-flush-tracker.js";
 import { handleTextSegment } from "./client-text-segment-handler.js";
 import { sendRealtimeEvent } from "./realtime-connection-admission.js";
 import { createRealtimeServerRuntime, listenRealtimeServerRuntime } from "./realtime-server-runtime.js";
+import {publicGatewayRuntimeOptions} from "./public-runtime-bootstrap.js";
 export { normalizeClientTextLanguage } from "../protocol/client-text-language.js";
 export function startWebSocketServer(options:{publicRuntime?:PublicGatewayRuntimeOptions}={}) {
   const runtime = createRealtimeServerRuntime();
-  const publicRuntime=options.publicRuntime?{...options.publicRuntime}:undefined;
+  const publicRuntime=options.publicRuntime?{...options.publicRuntime}:publicGatewayRuntimeOptions(runtime.env);
   const {
     env,
     protection,

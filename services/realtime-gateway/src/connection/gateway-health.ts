@@ -55,7 +55,7 @@ export function gatewayHealthPayload(
   dependencies?: GatewayDependencyReadiness,
 ): GatewayHealthPayload {
   const runtimeIdentity = gatewayRuntimeIdentity(env);
-  if (env.publicDeploymentId) dependencies = publicProcessingReadiness();
+  if (env.publicDeploymentId) dependencies = publicProcessingReadiness(env);
   return {
     ...(env.publicDeploymentId ? { processingProfile: "public_unqualified" as const,
       legacyProviderIgnored: true } : {}),
@@ -123,7 +123,7 @@ function gatewayReleaseReadinessIssues(
 ) {
   const issues: string[] = [];
   if (env.publicDeploymentId) {
-    dependencies = publicProcessingReadiness();
+    dependencies = publicProcessingReadiness(env);
   } else {
     if (env.regionEdition === "domestic") appendDomesticProviderIssues(env, issues);
     if (env.provider === "tencent_trtc" || env.resolvedProvider === "unsupported") {

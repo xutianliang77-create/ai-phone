@@ -77,6 +77,18 @@ describe("original Gateway loopback WebSocket with session-scoped API materials"
     expect(messages.some(e=>e.type==="audio.output")).toBe(voice);expect(JSON.stringify(messages)).not.toMatch(/SYNTHETIC|apiKey|secretKey|accessToken/);
     expect(s.calls.some(c=>c.path.endsWith("/credentials")&&c.headers["x-wujie-gateway-credential"]===access)).toBe(true);
   });
+  it("keeps the committed public caption when the configured public TTS fails, without private fallback",async()=>{
+    const s=await setup("qwen",true);
+    s.modelFetchFn.mockImplementation(async(url:any)=>String(url).endsWith("/audio/speech")?
+      new Response("provider unavailable",{status:503}):new Response(JSON.stringify({choices:[{finish_reason:"stop",message:{content:"Today we test public speech translation."}}]})));
+    await waitFor(()=>messages.some(e=>e.type==="session.started"));vi.setSystemTime(now.getTime()+1000);
+    ws!.send(JSON.stringify({type:"audio.frame",sessionId:s.issued.sessionId,sequence:1,timestampMs:0,format:"pcm16",sampleRate:16000,data:Buffer.alloc(3200).toString("base64")}));
+    ws!.send(JSON.stringify({type:"audio.boundary",sessionId:s.issued.sessionId,sequence:1}));
+    await waitFor(()=>messages.some(e=>e.type==="translation.final"));await waitFor(()=>messages.some(e=>e.type==="error"&&e.stage==="tts"));
+    expect(messages.some(e=>e.type==="audio.output")).toBe(false);expect(s.privateSelect).not.toHaveBeenCalled();
+    expect(current().segments[0]).toMatchObject({sourceText:"今天我们测试公共语音翻译。",translatedText:"Today we test public speech translation."});
+    ws!.send(JSON.stringify({type:"session.end",sessionId:s.issued.sessionId}));await waitFor(()=>getSession(s.issued.sessionId)===null);
+  });
   it("rejects an incorrect credential access secret before opening a model or starting activity",async()=>{
     const s=await setup("qwen",false,"WRONG_SYNTHETIC_CREDENTIAL_ACCESS_SECRET");await waitFor(()=>ws!.readyState===WebSocket.CLOSED);
     expect(s.asrSocketFactory).not.toHaveBeenCalled();expect(current().status).toBe("created");expect(current().publicRuntime).toBeUndefined();expect(getSession(s.issued.sessionId)).toBeNull();
