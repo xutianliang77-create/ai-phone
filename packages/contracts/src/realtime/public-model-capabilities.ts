@@ -29,6 +29,7 @@ const protocols:Record<string,PublicModelProtocolCapability>={
   qwen_tts_realtime:tts("qwen","websocket",[24000],"明确目标语种：zh/en/de/it/pt/es/ja/ko/fr/ru；Voice资格另验"),
   tencent_asr_ws:asr("tencent","websocket",[16000],"源语言必须匹配已实现的16k引擎类型"),
   tencent_hunyuan_chat:mt("tencent"),
+  tencent_tmt:mt("tencent"),
   tencent_tts_ws:tts("tencent","websocket",[16000,24000],"明确zh/en；VoiceType资格另验，不支持SSML/复刻"),
   openai_transcriptions:asr("openai","https",[16000,24000],"明确两字母产品源语言；模型资格另验",true),
   openai_realtime_asr:asr("openai","websocket",[24000],"明确两字母产品源语言；精确配置ACK"),

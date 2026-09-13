@@ -29,6 +29,22 @@ describe("original router configured compatible MT component",()=>{
     expect((s.record.mock.calls[1] as any)[0]).toMatchObject({providerId:v,modelId:"chosen-model",metadata:{usage:{totalTokens:7}}});
     expect(JSON.stringify(s.record.mock.calls)).not.toContain("SYNTHETIC_ONLY");
   });
+  it("uses Tencent TMT TextTranslate with TC3 credentials without treating it as Hunyuan",async()=>{
+    const s=setup("tencent","tencent_tmt"),profile=s.options.snapshot.components.translation!;
+    Object.assign(profile,{authKind:"tencent_secret",endpoint:"https://tmt.tencentcloudapi.com",modelId:"",region:"ap-guangzhou"});
+    s.options.resolveCredentials=vi.fn(async()=>({secretId:"SYNTHETIC_ID",secretKey:"SYNTHETIC_TMT_KEY"}));
+    s.fetchFn.mockResolvedValue(new Response(JSON.stringify({Response:{TargetText:"こんにちは",RequestId:"tmt-request"}}),{headers:{"x-tc-requestid":"tmt-request"}}));
+    const result=await s.create().translate(input);
+    expect(result).toBe("こんにちは");
+    const [url,init]=s.fetchFn.mock.calls[0] as unknown as [string,RequestInit];
+    expect(url).toBe("https://tmt.tencentcloudapi.com/");
+    expect(init.headers).toMatchObject({"x-tc-action":"TextTranslate","x-tc-version":"2018-03-21","x-tc-region":"ap-guangzhou"});
+    expect(String((init.headers as Record<string,string>).authorization)).toContain("Credential=SYNTHETIC_ID/");
+    expect(JSON.stringify(init)).not.toContain("SYNTHETIC_TMT_KEY");
+    expect(JSON.parse(String(init.body))).toEqual({SourceText:"Bonjour",Source:"fr",Target:"ja",ProjectId:0});
+    expect(s.record.mock.calls.map(c=>(c as any)[0].state)).toEqual(["dispatching","confirmed"]);
+    expect((s.record.mock.calls[1] as any)[0]).toMatchObject({providerId:"tencent",modelId:"service:tencent_tmt",metadata:{requestId:"tmt-request"}});
+  });
   it.each([["https://synthetic.invalid","https://synthetic.invalid/v1/chat/completions"],
     ["https://synthetic.invalid/v1/","https://synthetic.invalid/v1/chat/completions"],
     ["https://synthetic.invalid/api/v3","https://synthetic.invalid/api/v3/chat/completions"],

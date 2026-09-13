@@ -27,6 +27,7 @@ export const publicModelCatalog={
     p("qwen_tts_realtime","Qwen TTS · Realtime WebSocket","qwen","tts","wss:",["api_key"],true,["voice"]),
     p("tencent_asr_ws","腾讯语音识别 · WebSocket","tencent","asr","wss:",["tencent_secret"],true,["appId"]),
     p("tencent_hunyuan_chat","腾讯混元 · OpenAI兼容","tencent","translation","https:",["api_key"]),
+    p("tencent_tmt","腾讯机器翻译 TMT","tencent","translation","https:",["tencent_secret"],false,["region"]),
     p("tencent_tts_ws","腾讯实时语音合成 · WebSocket","tencent","tts","wss:",["tencent_secret"],false,["appId","voice"]),
     p("openai_transcriptions","OpenAI · Audio Transcriptions","openai","asr","https:",["api_key"]),
     p("openai_realtime_asr","OpenAI · Realtime Transcription","openai","asr","wss:",["api_key"]),
