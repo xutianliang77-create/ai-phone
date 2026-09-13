@@ -1,20 +1,23 @@
 import {createHmac,timingSafeEqual} from "node:crypto";
 import {lstatSync,readFileSync} from "node:fs";
 import {isAbsolute,resolve} from "node:path";
-import {publicModelComponents} from "@translation/contracts";
+import {isSupportedLanguage,isTranslationLanguage,publicModelComponents} from "@translation/contracts";
 import {canonicalSyncJson,syncKey} from "../sessions/session-result-sync-contract.js";
 import type {PublicInferenceEvidence} from "../sessions/public-inference-evidence.js";
 import type {PublicRealtimeAuthority} from "./public-realtime-coordinator.js";
 
 type RuntimeEnv=Partial<Pick<NodeJS.ProcessEnv,"PUBLIC_RUNTIME_ENABLED"|"PUBLIC_RUNTIME_ADMISSION_POLICY_FILE"|"PUBLIC_RUNTIME_ADMISSION_POLICY_KEY"|"API_RESULT_SYNC_DEPLOYMENT_ID">>;
 type ProviderAvailability={providerId:string;state:"available"|"unavailable"};
+type QualifiedLanguagePair={source:string;target:string};
 type Policy={schemaVersion:1;policyId:string;deploymentId:string;configurationHash:string;modelPolicyRevision:string;region:string;
   issuedAt:string;expiresAt:string;maxActiveSeconds?:number;currency:string;reservedMicros:number;qualifiedComponents:Array<"asr"|"translation"|"tts">;
   /** Server-global provider snapshot. It is never a user balance or a client field. */
-  providerAvailability:ProviderAvailability[];signature:string;};
+  providerAvailability:ProviderAvailability[];
+  /** Explicit fixed language pairs qualified for this exact configuration. */
+  qualifiedLanguagePairs:QualifiedLanguagePair[];signature:string;};
 const enabled=(value:unknown)=>typeof value==="string"&&value.trim().toLowerCase()==="true";
 const hex=(value:unknown,length:number)=>typeof value==="string"&&new RegExp(`^[a-f0-9]{${length}}$`,"i").test(value);
-const policyFields=["schemaVersion","policyId","deploymentId","configurationHash","modelPolicyRevision","region","issuedAt","expiresAt","maxActiveSeconds","currency","reservedMicros","qualifiedComponents","providerAvailability","signature"];
+const policyFields=["schemaVersion","policyId","deploymentId","configurationHash","modelPolicyRevision","region","issuedAt","expiresAt","maxActiveSeconds","currency","reservedMicros","qualifiedComponents","providerAvailability","qualifiedLanguagePairs","signature"];
 const body=(policy:Policy)=>Object.fromEntries(Object.entries(policy).filter(([key])=>key!=="signature"));
 
 /** Signs the operator policy body; callers own storage and never receive model credentials. */
@@ -23,9 +26,10 @@ export function signPublicRuntimeAdmissionPolicy(policy:Omit<Policy,"signature">
   return createHmac("sha256",key).update(canonicalSyncJson(policy)).digest("hex");
 }
 
-/** Default deny. A signed policy binds configuration-qualified components to a
- * server-global provider-availability snapshot. It never probes a provider,
- * turns a provider quota into a user balance, or exposes that snapshot. */
+/** Default deny. A signed policy binds configuration-qualified components and
+ * fixed language pairs to a server-global provider-availability snapshot. It
+ * never probes a provider, turns a provider quota into a user balance, or
+ * exposes either internal qualification input. */
 export function publicRealtimeAuthorityFromEnvironment(env:RuntimeEnv=process.env):PublicRealtimeAuthority|undefined{
   if(!enabled(env.PUBLIC_RUNTIME_ENABLED))return undefined;
   const file=env.PUBLIC_RUNTIME_ADMISSION_POLICY_FILE,key=env.PUBLIC_RUNTIME_ADMISSION_POLICY_KEY,deployment=env.API_RESULT_SYNC_DEPLOYMENT_ID;
@@ -41,6 +45,10 @@ function resolvePolicy(file:string,key:string,deployment:string,context:Paramete
   const availability=[...policy.providerAvailability].sort((a,b)=>a.providerId.localeCompare(b.providerId));
   if(availability.length!==providerIds.length||availability.some((entry,index)=>entry.providerId!==providerIds[index]))throw Error("public_runtime_admission_policy_scope_mismatch");
   if(availability.some(entry=>entry.state!=="available"))throw Error("public_provider_unavailable");
+  const language=context.languagePolicy;
+  if(language.source==="auto"||language.autoReverse||!policy.qualifiedLanguagePairs.some(pair=>pair.source===language.source&&pair.target===language.target)){
+    throw Error("public_runtime_admission_policy_language_not_qualified");
+  }
   const common={sessionId:context.sessionId,ownerId:context.ownerId,deploymentId:context.deploymentId,processingHash:context.processingHash,region:policy.region,
     providerPolicyRevision:config.modelPolicyRevision,sourceReceiptId:policy.policyId,issuedAt:policy.issuedAt,expiresAt:policy.expiresAt};
   const budget:PublicInferenceEvidence={...common,id:`${policy.policyId}:budget`,kind:"provider_budget",state:"reserved",currency:policy.currency,
@@ -64,6 +72,10 @@ function readPolicy(file:string,key:string,now:Date):Policy{
     !Array.isArray(policy.providerAvailability)||policy.providerAvailability.length<1||policy.providerAvailability.length>3||
     new Set(policy.providerAvailability.map(entry=>entry?.providerId)).size!==policy.providerAvailability.length||policy.providerAvailability.some(entry=>!entry||typeof entry!=="object"||Array.isArray(entry)||
       Object.keys(entry).some(field=>!["providerId","state"].includes(field))||!syncKey(entry.providerId)||!["available","unavailable"].includes(entry.state)))throw Error("public_runtime_admission_policy_invalid");
+  if(!Array.isArray(policy.qualifiedLanguagePairs)||policy.qualifiedLanguagePairs.length<1||policy.qualifiedLanguagePairs.length>256||
+    new Set(policy.qualifiedLanguagePairs.map(pair=>pair&&`${pair.source}\u0000${pair.target}`)).size!==policy.qualifiedLanguagePairs.length||
+    policy.qualifiedLanguagePairs.some(pair=>!pair||typeof pair!=="object"||Array.isArray(pair)||Object.keys(pair).some(field=>!['source','target'].includes(field))||
+      !isSupportedLanguage(pair.source)||pair.source==="auto"||!isTranslationLanguage(pair.target)||pair.source===pair.target))throw Error("public_runtime_admission_policy_invalid");
   const expected=signPublicRuntimeAdmissionPolicy(body(policy) as Omit<Policy,"signature">,key);
   if(!timingSafeEqual(Buffer.from(expected),Buffer.from(policy.signature)))throw Error("public_runtime_admission_policy_signature_invalid");
   return policy;

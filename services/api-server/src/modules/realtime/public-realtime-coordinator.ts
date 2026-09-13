@@ -18,7 +18,8 @@ export interface PublicRealtimeAuthority {
   timeoutMs:number;
   /** Consent is generated from the authenticated online-mode selection. The
    * authority supplies only independently verifiable budget and qualifications. */
-  resolveVerifiedEvidence(context:{sessionId:string;ownerId:string;deploymentId:string;processingHash:string;configuration:PublicModelRuntimeSnapshot},
+  resolveVerifiedEvidence(context:{sessionId:string;ownerId:string;deploymentId:string;processingHash:string;configuration:PublicModelRuntimeSnapshot;
+    languagePolicy:{source:string;target:string;autoReverse:boolean;pair?:readonly [string,string];revision:number}},
     signal:AbortSignal):Promise<{records:PublicInferenceEvidence[];refs:InferenceEvidenceRefs}>;
 }
 export type PublicRealtimeCoordinator=ReturnType<typeof createPublicRealtimeCoordinator>;
@@ -45,7 +46,8 @@ export function createPublicRealtimeCoordinator(authority:PublicRealtimeAuthorit
       let current=(await findSession(sessionId))!;check();
       if(!current.publicInferenceAdmission){
         const {config}=preparedPublicSession(current,ownerId);
-        const context={sessionId,ownerId,deploymentId,processingHash:inferenceProcessingHash(current),configuration:config};
+        const context={sessionId,ownerId,deploymentId,processingHash:inferenceProcessingHash(current),configuration:config,
+          languagePolicy:structuredClone(current.processingAuthorization!.languagePolicy)};
         let resolved:Awaited<ReturnType<PublicRealtimeAuthority["resolveVerifiedEvidence"]>>;
         try{resolved=await bounded(Promise.resolve().then(()=>{check();return resolveVerifiedEvidence(structuredClone(context),stop.signal);}),stop.signal);}
         catch{check();throw new ResultSyncError("public_creation_authority_unavailable",503);}
