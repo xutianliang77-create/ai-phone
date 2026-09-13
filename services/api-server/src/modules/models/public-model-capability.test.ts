@@ -20,6 +20,16 @@ describe("manual configuration uses actual wire constraints",()=>{
     expect(()=>capturePublicModelRuntimeConfiguration(true)).toThrow("public_runtime_config_invalid");
     expect(config.components.tts).toMatchObject({enabled:true,sampleRate:16000});expect(config.revision).toBe(1);
   });
+  it("gives an optional-model public service a stable runtime identity without rewriting the editor value",()=>{
+    const config=emptyConfiguration("test");config.revision=1;
+    Object.assign(config.components.asr,{enabled:true,vendor:"tencent",protocol:"tencent_asr_ws",endpoint:"wss://asr.cloud.tencent.com/asr/v2/10001",modelId:"16k_en",authKind:"tencent_secret",appId:"10001",timeoutMs:1000,sampleRate:16000});
+    Object.assign(config.components.translation,{enabled:true,vendor:"tencent",protocol:"tencent_tmt",endpoint:"https://tmt.tencentcloudapi.com",modelId:"",authKind:"tencent_secret",region:"ap-guangzhou",timeoutMs:1000});
+    config.credentials.asr={secretId:"SYNTHETIC_ID",secretKey:"SYNTHETIC_KEY"};config.credentials.translation={secretId:"SYNTHETIC_ID",secretKey:"SYNTHETIC_KEY"};
+    vi.spyOn(store,"selectPublicModelConfigurationInternal").mockImplementation(select=>select(config));
+    const snapshot=capturePublicModelRuntimeConfiguration(false);
+    expect(snapshot.components.translation).toMatchObject({modelId:"service:tencent_tmt"});
+    expect(config.components.translation.modelId).toBe("");
+  });
   it("keeps the editor catalogue in sync with every implemented protocol",()=>{
     expect(publicModelCatalog.protocols.map(p=>p.id).sort()).toEqual(Object.keys(publicModelProtocolCapabilities).sort());
     for(const p of publicModelCatalog.protocols)expect(p.capability).toBe(publicModelProtocolCapabilities[p.id]);

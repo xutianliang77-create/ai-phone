@@ -29,10 +29,10 @@ function capture(config:PublicModelConfiguration,voiceOutput:boolean):PublicMode
     if(component==="tts"&&!voiceOutput)continue;
     if(status[component].state!=="configured_not_verified")throw new PublicConfigError(`public_runtime_${component}_not_configured`,503);
     components[component]=validated.components[component];
-    // These services select a named voice, not a model-name parameter. Keep
-    // the editor value empty; give only its runtime/journal identity a label.
-    if(component==="tts"&&["tencent_tts_ws","google_cloud_tts"].includes(components.tts!.protocol)&&!components.tts!.modelId){
-      components.tts={...components.tts!,modelId:`service:${components.tts!.protocol}`};
+    // Some service protocols select no model-name parameter. Keep the editor
+    // value empty, but give the runtime/journal a stable non-secret identity.
+    if(!components[component]!.modelId){
+      components[component]={...components[component]!,modelId:`service:${components[component]!.protocol}`};
     }
   }
   const identity={schemaVersion:1 as const,deploymentId:config.deploymentId,configurationRevision:config.revision,components};
