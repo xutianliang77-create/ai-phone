@@ -121,7 +121,8 @@ const stopVoiceIdentityRecovery = startVoiceIdentityDeletionRecovery({
 });
 const stopAccountDeletionRecovery = startPublicAccountDeletionRecovery({
   onResult: (result) => {
-    if (result.contentErasedCount > 0 || result.pendingSessionCount > 0) {
+    if (result.contentErasedCount > 0 || result.pendingSessionCount > 0 ||
+      result.retentionPurgedCount > 0 || result.retentionBlockedCount > 0) {
       app.log.info({ accountDeletion: result }, "Processed public account deletion requests");
     }
   },
@@ -250,7 +251,9 @@ if (voiceIdentityRecovery.deletedCount > 0) {
   );
 }
 if (accountDeletionRecovery.contentErasedCount > 0 ||
-  accountDeletionRecovery.pendingSessionCount > 0) {
+  accountDeletionRecovery.pendingSessionCount > 0 ||
+  accountDeletionRecovery.retentionPurgedCount > 0 ||
+  accountDeletionRecovery.retentionBlockedCount > 0) {
   app.log.info(
     { accountDeletionRecovery },
     "Processed public account deletion requests",

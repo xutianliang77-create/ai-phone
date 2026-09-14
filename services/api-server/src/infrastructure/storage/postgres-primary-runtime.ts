@@ -65,6 +65,8 @@ import { PostgresPrimaryCommandRetention } from
   "./postgres-primary-command-retention.js";
 import { PostgresProductRecordsRepository } from
   "./postgres-product-records.repository.js";
+import { PostgresAccountRetentionRepository } from
+  "../../modules/account/postgres-account-retention.repository.js";
 import { buildPostgresPrimaryPoolConfig } from "./postgres-projection-config.js";
 import { PostgresReliableInboxRepository } from
   "./postgres-reliable-inbox.repository.js";
@@ -82,6 +84,7 @@ export function createPostgresPrimaryRuntime() {
     reliableInbox,
     reliableOutbox,
     productRecords: new PostgresProductRecordsRepository(pool),
+    accountRetention: new PostgresAccountRetentionRepository(pool),
     sessions: new PostgresSessionsRepository(pool),
     sessionCompletion: new PostgresSessionCompletionRepository(pool),
     usageHolds: new PostgresUsageHoldsRepository(pool),

@@ -17,6 +17,7 @@ import {
 } from "./account-runtime.service.js";
 import type { AccountRecord, SmsOtpChallengeRecord } from
   "./account-record.js";
+import { accountDeletionRetentionExpired } from "./account-deletion-policy.js";
 import {
   deleteSession,
   listSessions,
@@ -66,12 +67,54 @@ export async function recoverPendingPublicAccountDeletions() {
   const results = await Promise.all(accounts.map((account) =>
     processPublicAccountDeletion(account.id),
   ));
+  const retention = await purgeExpiredPublicAccountDeletions();
   return {
     inspectedCount: accounts.length,
     contentErasedCount: results.filter((result) => result.status === "content_erased").length,
     pendingSessionCount: results.reduce((count, result) => count +
       (result.status === "awaiting_safe_terminal" ? result.pendingSessionIds.length : 0), 0),
+    retentionPurgedCount: retention.purgedCount,
+    retentionBlockedCount: retention.blockedCount,
   };
+}
+
+export async function purgeExpiredPublicAccountDeletions(now = new Date()) {
+  const runtime = getRepositoryRuntime();
+  const accounts = runtime.driver !== "postgres"
+    ? getStoreSnapshot().accounts.filter((account) => account.status === "deleted")
+    : await runtime.postgres.productRecords.query<AccountRecord>({
+      namespace: "accounts", status: "deleted", limit: 500,
+    });
+  const due = accounts.filter((account) => accountDeletionRetentionExpired(
+    account.deletionRetentionUntil,
+    now,
+  ));
+  let purgedCount = 0;
+  let blockedCount = 0;
+  for (const account of due) {
+    if (runtime.driver !== "postgres") {
+      if (legacyRetentionPurgeBlocked(account.id)) {
+        blockedCount += 1;
+        continue;
+      }
+      purgeLegacyRetention(account.id);
+      purgedCount += 1;
+      continue;
+    }
+    const providerData = await runtime.postgres.productRecords.query<{ id: string }>({
+      namespace: "voiceIdentities", ownerId: account.id, limit: 1,
+    });
+    const voiceProfiles = await runtime.postgres.productRecords.query<{ id: string }>({
+      namespace: "voiceProfiles", ownerId: account.id, limit: 1,
+    });
+    if (providerData.length || voiceProfiles.length) {
+      blockedCount += 1;
+      continue;
+    }
+    const result = await runtime.postgres.accountRetention.purgeExpiredAccount(account.id, now);
+    if (result.status === "purged") purgedCount += 1;
+  }
+  return { inspectedCount: due.length, purgedCount, blockedCount };
 }
 
 export function startPublicAccountDeletionRecovery(options: {
@@ -91,6 +134,45 @@ export function startPublicAccountDeletionRecovery(options: {
   const timer = setInterval(run, Math.max(1_000, options.intervalMs ?? 60_000));
   timer.unref();
   return () => clearInterval(timer);
+}
+
+function legacyRetentionPurgeBlocked(accountId: string) {
+  const store = getStoreSnapshot();
+  return store.voiceIdentities.some((record) => record.userId === accountId) ||
+    store.voiceProfiles.some((record) => record.userId === accountId);
+}
+
+function purgeLegacyRetention(accountId: string) {
+  const store = getStoreSnapshot();
+  const orderIds = new Set(store.paymentOrders
+    .filter((order) => order.userId === accountId)
+    .map((order) => order.id));
+  const sessionIds = new Set(store.sessions
+    .filter((session) => session.userId === accountId)
+    .map((session) => session.id));
+  store.accounts = store.accounts.filter((account) => account.id !== accountId);
+  store.authSessions = store.authSessions.filter((session) => session.userId !== accountId);
+  store.accountConsentRecords = store.accountConsentRecords.filter((record) =>
+    record.userId !== accountId,
+  );
+  store.sessions = store.sessions.filter((session) => session.userId !== accountId);
+  store.termbaseTerms = store.termbaseTerms.filter((term) => term.userId !== accountId);
+  store.usageHolds = store.usageHolds.filter((hold) => hold.userId !== accountId);
+  store.billingLedger = store.billingLedger.filter((entry) => entry.userId !== accountId);
+  store.paymentOrders = store.paymentOrders.filter((order) => order.userId !== accountId);
+  store.appleServerNotifications = store.appleServerNotifications.filter((notice) =>
+    !orderIds.has(notice.orderId ?? ""),
+  );
+  store.providerOperations = store.providerOperations.filter((operation) =>
+    !sessionIds.has(operation.sessionId),
+  );
+  store.inboxEvents = store.inboxEvents.filter((event) => !sessionIds.has(event.sessionId));
+  store.outboxEvents = store.outboxEvents.filter((event) => !sessionIds.has(event.sessionId));
+  delete store.usageBalances[accountId];
+  delete store.usagePlanCodes[accountId];
+  delete store.entitlementPlanCodes[accountId];
+  delete store.entitlementOrderIds[accountId];
+  persistStoreSnapshot();
 }
 
 function safeToErase(session: SessionRecord) {
