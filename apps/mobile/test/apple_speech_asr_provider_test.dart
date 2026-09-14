@@ -41,9 +41,7 @@ void main() {
     messenger.setMockMethodCallHandler(channel, null);
     messenger.setMockMethodCallHandler(const MethodChannel(events), null);
   });
-  test(
-      'existing app factory selects Apple without changing repository preference',
-      () {
+  test('factory selects Apple only for the local processing mode', () {
     final config = AppConfig(
       apiBaseUrl: Uri.parse('http://localhost:3100'),
       useMockAudio: false,
@@ -56,8 +54,13 @@ void main() {
       sourceLanguage: 'ja',
       useLocalSessions: false,
     );
+    expect(createDefaultMobileAsrProvider(config), isNull);
     expect(
-        createDefaultMobileAsrProvider(config), isA<AppleSpeechAsrProvider>());
+      createDefaultMobileAsrProvider(
+        config.copyWith(useLocalSessions: true, useDeviceAsr: true),
+      ),
+      isA<AppleSpeechAsrProvider>(),
+    );
     final native = createDeviceAsrConfig(config);
     expect(native.language, 'ja');
     expect(native.chunkDurationMs, 32);

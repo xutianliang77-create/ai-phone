@@ -71,7 +71,7 @@ void main() {
     expect(controller.segments.single.translatedText, 'ignored');
   });
 
-  test('strips ASR silence markers before sending online text segment',
+  test('online mode ignores stale device ASR events instead of forwarding text',
       () async {
     final repository = _FakeRealtimeRepository();
     final asr = _FakeMobileAsrProvider();
@@ -95,7 +95,7 @@ void main() {
     ));
     await pumpEventQueue();
 
-    expect(repository.sentTextSegments.single.text, '你好 测试');
+    expect(repository.sentTextSegments, isEmpty);
   });
 }
 
