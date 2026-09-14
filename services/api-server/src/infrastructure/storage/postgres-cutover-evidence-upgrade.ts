@@ -95,7 +95,27 @@ const migrationValidators: Record<string, (
   "039_agent_voice_turn_scope": validateAgentVoiceTurnScope,
   "040_voice_client_ownership": validateVoiceClientOwnership,
   "041_agent_voice_delivery": validateAgentVoiceDelivery,
+  "042_account_deletion_product_records": validateAccountDeletionProductRecords,
 };
+
+async function validateAccountDeletionProductRecords(pool: Pick<Pool, "query">) {
+  const functionDefinition = await pool.query<{ definition: string | null }>(`
+    SELECT pg_get_functiondef(
+      'ai_phone.apply_product_record_projection_event(text,text,text,text,jsonb)'::regprocedure
+    ) AS definition
+  `);
+  const definition = functionDefinition.rows[0]?.definition ?? "";
+  const hasDelete = definition.includes("event_operation NOT IN ('upsert', 'delete')") &&
+    definition.includes("DELETE FROM ai_phone.product_records") &&
+    definition.includes("event_operation = 'delete'");
+  if (!hasDelete) {
+    throw new Error("PostgreSQL account deletion product-record validation failed");
+  }
+  return {
+    migration: "042_account_deletion_product_records",
+    details: { explicitDeleteProjection: true },
+  };
+}
 
 async function validateAgentVoiceTurnScope(pool: Pick<Pool, "query">) {
   const objects = await pool.query<{

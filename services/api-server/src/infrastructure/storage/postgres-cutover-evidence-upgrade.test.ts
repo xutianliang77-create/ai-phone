@@ -45,6 +45,7 @@ describe("PostgreSQL cutover evidence upgrade", () => {
         "039_agent_voice_turn_scope",
         "040_voice_client_ownership",
         "041_agent_voice_delivery",
+        "042_account_deletion_product_records",
       ],
     });
     const upgraded = readVerifiedPostgresCutoverEvidence();
@@ -57,6 +58,7 @@ describe("PostgreSQL cutover evidence upgrade", () => {
         "039_agent_voice_turn_scope",
         "040_voice_client_ownership",
         "041_agent_voice_delivery",
+        "042_account_deletion_product_records",
       ],
     });
     expect(upgraded.evidenceUpgrade?.validations).toEqual(expect.arrayContaining([
@@ -69,6 +71,10 @@ describe("PostgreSQL cutover evidence upgrade", () => {
         migration: "041_agent_voice_delivery",
         details: expect.objectContaining({ attemptsReady: true,
           invalidAttempts: 0, invalidClientEvents: 0, incompletePlayback: 0 }),
+      }),
+      expect.objectContaining({
+        migration: "042_account_deletion_product_records",
+        details: { explicitDeleteProjection: true },
       }),
     ]));
   });
@@ -103,7 +109,7 @@ describe("PostgreSQL cutover evidence upgrade", () => {
 });
 
 function previousMigrations() {
-  return [...expectedPostgresMigrations].slice(0, -5);
+  return [...expectedPostgresMigrations].slice(0, -6);
 }
 
 function writeEvidence(migrations: string[]) {
@@ -176,6 +182,13 @@ function validPool(overrides: Partial<{
         return { rows: [{ attempts_ready: true, receipts_ready: true,
           client_events_ready: true, claim_function_ready: true,
           active_index_ready: true, constraints_validated: true }] };
+      }
+      if (sql.includes("apply_product_record_projection_event")) {
+        return { rows: [{ definition: [
+          "event_operation NOT IN ('upsert', 'delete')",
+          "DELETE FROM ai_phone.product_records",
+          "event_operation = 'delete'",
+        ].join(" ") }] };
       }
       if (sql.includes("AS incomplete_playback")) {
         return { rows: [{ invalid_attempts: "0", invalid_client_events: "0",
