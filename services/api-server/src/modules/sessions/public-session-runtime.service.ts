@@ -5,6 +5,7 @@ import { publicDeploymentId, assertPublicSession, mutatePublicSession } from "./
 import { ResultSyncError, resultSyncHash } from "./session-result-sync-contract.js";
 import { PUBLIC_EVIDENCE_GAP_MS, PUBLIC_RECOVERY_MS, runtimePolicy, stopWatermark,
   type PublicRuntimeEvidence } from "./public-session-lifecycle.js";
+import { hasPublicProviderReconciliation } from "./public-provider-reconciliation.js";
 
 /** Called only from the existing internal authenticated server boundary.
  * No client timestamps, duration or providerUsage are accepted. */
@@ -72,7 +73,7 @@ export async function publicRecoveryStatus(sessionId:string,ownerId:string,now=n
   return {contractVersion:1,sessionId,deploymentId,ownerId,
     modelPolicyRevision:session.processingAuthorization!.modelPolicyRevision,
     canResume:within&&!r?.uncertain&&!r?.stoppedAt&&["active","paused"].includes(session.status),
-    canFinalize:!!session.publicFinalization || !!r?.stoppedAt&&!r.uncertain&&now.getTime()<=Date.parse(r.recoveryUntil!),
+    canFinalize:!!session.publicFinalization || !!r?.stoppedAt&&(!r.uncertain||hasPublicProviderReconciliation(session))&&now.getTime()<=Date.parse(r.recoveryUntil!),
     recoveryUntil,meterStatus:!r?"missing":r.uncertain?"uncertain":"verified",
     ...(r?.stoppedAt?{stopWatermark:stopWatermark(session)}:{}),
     ...(session.publicFinalization?{finalization:session.publicFinalization.ack}:{})};

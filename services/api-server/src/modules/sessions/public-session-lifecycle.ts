@@ -1,6 +1,7 @@
 import type { PublicFinalizeAck, PublicFinalizeRequest, RealtimeStopWatermark } from "@translation/contracts";
 import type { SessionRecord } from "./session-record.js";
 import { resultSyncHash, ResultSyncError, syncKey } from "./session-result-sync-contract.js";
+import { hasPublicProviderReconciliation } from "./public-provider-reconciliation.js";
 
 export const PUBLIC_RECOVERY_MS = 300_000;
 // Two existing 30-second Gateway usage ticks, allowing bounded delivery jitter.
@@ -57,9 +58,11 @@ export function validatePublicStop(session: SessionRecord, request: PublicFinali
   if(resultSyncHash(stopWatermark(session))!==resultSyncHash(request.stopWatermark)) {
     throw new ResultSyncError("public_stop_watermark_conflict");
   }
-  if(session.publicRuntime!.uncertain) throw new ResultSyncError("public_meter_uncertain",503);
+  if(session.publicRuntime!.uncertain && !hasPublicProviderReconciliation(session)) {
+    throw new ResultSyncError("public_meter_uncertain",503);
+  }
 }
 export function withinPublicTailWindow(session:SessionRecord,now:Date) {
   const r=session.publicRuntime;
-  return !!r?.stoppedAt && !r.uncertain && now.getTime()<=Date.parse(r.recoveryUntil??"");
+  return !!r?.stoppedAt && (!r.uncertain || hasPublicProviderReconciliation(session)) && now.getTime()<=Date.parse(r.recoveryUntil??"");
 }

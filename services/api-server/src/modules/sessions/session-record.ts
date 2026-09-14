@@ -19,6 +19,7 @@ import type { PublicInferenceAdmission } from "./public-runtime-admission.js";
 import type { PublicInferenceEvidence } from "./public-inference-evidence.js";
 import type {PublicModelAttemptRecord} from "./public-model-attempt.service.js";
 import type {PublicModelRuntimeSnapshot} from "../models/public-model-runtime-config.js";
+import type {PublicProviderReconciliationRecord} from "./public-provider-reconciliation.js";
 
 export type SessionMode = RealtimeMode | "call_link";
 
@@ -50,6 +51,7 @@ export interface SessionRecord {
   publicInferenceAdmission?: PublicInferenceAdmission;
   publicInferenceEvidence?: PublicInferenceEvidence[];
   publicModelAttempts?:PublicModelAttemptRecord[];
+  publicProviderReconciliation?:PublicProviderReconciliationRecord;
   publicModelConfiguration?:PublicModelRuntimeSnapshot;
   publicCreationRequest?:{requestHash:string;request:CreateRealtimeSessionRequest};
   /** No signed token or signing/provider secret is stored in the session. */

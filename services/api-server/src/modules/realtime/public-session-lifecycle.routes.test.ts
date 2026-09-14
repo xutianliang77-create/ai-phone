@@ -9,6 +9,7 @@ import {completeSessionWithUsage} from "../sessions/session-completion.js";
 import {recoverStaleRealtimeSessions} from "../sessions/stale-session-recovery.js";
 import {resultSyncHash} from "../sessions/session-result-sync-contract.js";
 import type {SessionRecord} from "../sessions/session-record.js";
+import {signPublicProviderReconciliation} from "../sessions/public-provider-reconciliation.js";
 
 const start=Date.parse('2026-09-08T00:00:00Z');
 let app:FastifyInstance;
@@ -24,6 +25,8 @@ beforeEach(async()=>{
   vi.useFakeTimers({toFake:['Date']});clock(0);
   vi.stubEnv('API_RESULT_SYNC_DEPLOYMENT_ID','public-test');vi.stubEnv('INTERNAL_API_SECRET','internal-test-secret-123');
   vi.stubEnv('API_TEST_AUTO_ACCOUNT','true');
+  vi.stubEnv('PUBLIC_RUNTIME_RECONCILIATION_ENABLED','true');vi.stubEnv('PUBLIC_RUNTIME_RECONCILIATION_ALLOW_ISOLATED_DAILY_AGGREGATE','true');
+  vi.stubEnv('PUBLIC_RUNTIME_RECONCILIATION_KEY','c'.repeat(64));vi.stubEnv('NODE_ENV','development');
   const s=storage.getStoreSnapshot();s.sessions=[session()];s.billingLedger=[];s.usageHolds=[];s.usageBalances={};s.usagePlanCodes={};
   createUsageHold('guest-user',120,undefined,{sessionId:'public-s',idempotencyKey:'hold:public-s'});
   app=await buildApp();
@@ -153,6 +156,26 @@ it('legacy completion and stale recovery cannot bypass missing public evidence',
   expect(storage.getStoreSnapshot().usageHolds[0].status).toBe('active');
   expect((await app.inject({method:'POST',url:'/internal/realtime/sessions/public-s/end',headers:{authorization:'Bearer internal-test-secret-123'},payload:{billableSeconds:0}})).statusCode).toBe(503);
 });
+it('reconciles an exact uncertain candidate attempt once and settles only server-observed active time',async()=>{
+  uncertainStopped();current().publicModelAttempts=[uncertainAttempt()];clock(31);
+  const body=reconciliation();const route=(payload:unknown=body)=>app.inject({method:'POST',url:'/internal/realtime/sessions/public-s/provider-reconciliation',
+    headers:{authorization:'Bearer internal-test-secret-123'},payload:payload as object});
+  const first=await route();expect(first.statusCode).toBe(200);expect(first.json()).toMatchObject({reconciliationId:'provider-reconcile-1',providerId:'tencent',providerUsageSeconds:29,consumedSeconds:30});
+  expect(current().status).toBe('ended');expect(current().publicRuntime!.uncertain).toBe(true);expect(current().publicProviderReconciliation).toMatchObject({evidenceScope:'isolated_candidate_day',providerUsageSeconds:29,uncertainAttemptIds:['attempt-asr-1']});
+  expect(storage.getStoreSnapshot().billingLedger.filter(l=>l.idempotencyKey==='settle:public-s')).toHaveLength(1);expect(storage.getStoreSnapshot().usageHolds[0].status).toBe('settled');
+  const saved=state();expect((await route()).json()).toEqual(first.json());expect(state()).toEqual(saved);
+  expect((await route(reconciliation({reconciliationId:'provider-reconcile-2'}))).statusCode).toBe(409);expect(state()).toEqual(saved);
+});
+it('rejects forged, mismatched, disabled, and production aggregate reconciliation before settlement',async()=>{
+  uncertainStopped();current().publicModelAttempts=[uncertainAttempt()];clock(31);
+  const route=(payload:unknown)=>app.inject({method:'POST',url:'/internal/realtime/sessions/public-s/provider-reconciliation',headers:{authorization:'Bearer internal-test-secret-123'},payload:payload as object});
+  const before=state();expect((await route({...reconciliation(),signature:'0'.repeat(64)})).statusCode).toBe(403);expect(state()).toEqual(before);
+  expect((await route(reconciliation({attempts:[{attemptId:'wrong',component:'asr',modelId:'16k_en'}]}))).statusCode).toBe(409);expect(state()).toEqual(before);
+  expect((await route(reconciliation({evidenceScope:'attempt'}))).statusCode).toBe(400);expect(state()).toEqual(before);
+  expect((await route(reconciliation({providerUsageCount:2}))).statusCode).toBe(409);expect(state()).toEqual(before);
+  vi.stubEnv('PUBLIC_RUNTIME_RECONCILIATION_ENABLED','false');expect((await route(reconciliation())).statusCode).toBe(503);expect(state()).toEqual(before);
+  vi.stubEnv('PUBLIC_RUNTIME_RECONCILIATION_ENABLED','true');vi.stubEnv('NODE_ENV','production');expect((await route(reconciliation())).statusCode).toBe(403);expect(state()).toEqual(before);
+});
 function session():SessionRecord{return {id:'public-s',userId:'guest-user',mode:'conversation',status:'active',consumedSeconds:0,
   createdAt:new Date(start).toISOString(),lastActivityAt:new Date(start).toISOString(),version:1,
   segments:[{id:'seg',revision:4,sourceText:'你好',translatedText:'Hello',sourceLanguage:'zh',targetLanguage:'en'}],
@@ -160,3 +183,6 @@ function session():SessionRecord{return {id:'public-s',userId:'guest-user',mode:
     languagePolicy:{source:'zh',target:'en',autoReverse:false,revision:1},syncPermission:{allowed:false},executionPlan:{
       asr:{execution:'public',scopeKey:'asr',reason:'online_selected'},translation:{execution:'public',scopeKey:'mt',reason:'online_selected'},tts:{execution:'disabled'}}},
   publicRuntimePolicy:{leaseId:'server-lease',captureId:'capture-1',languagePolicyKey:'policy:1',expiresAt:new Date(start+3600000).toISOString(),maxActiveSeconds:120}};}
+function uncertainAttempt(){return {ownerId:'guest-user',deploymentId:'public-test',createdAt:new Date(start).toISOString(),updatedAt:new Date(start+30000).toISOString(),event:{sessionId:'public-s',leaseId:'server-lease',attemptId:'attempt-asr-1',segmentId:'seg',revision:0,component:'asr',providerId:'tencent',modelId:'16k_en',state:'uncertain',failureCode:'public_asr_stream_interrupted',audioStartSample:0,audioEndSample:480000,audioSampleRate:16000}} as any;}
+function uncertainStopped(){const s=current();s.publicRuntime={sequence:2,eventHash:'runtime-uncertain',phase:'stopped',observedAt:new Date(start+30000).toISOString(),activeMs:30000,uncertain:true,finalRevision:4,lastAcceptedSample:480000,stoppedAt:new Date(start+30000).toISOString(),recoveryUntil:new Date(start+330000).toISOString(),finalRevisions:{seg:4}};s.lastActivityAt=s.publicRuntime.stoppedAt;}
+function reconciliation(patch:any={}){const value:any={schemaVersion:1,reconciliationId:'provider-reconcile-1',sessionId:'public-s',ownerId:'guest-user',deploymentId:'public-test',providerId:'tencent',evidenceScope:'isolated_candidate_day',providerUsageCount:1,providerUsageSeconds:29,providerEvidenceHash:'a'.repeat(64),observedAt:new Date(start+31000).toISOString(),attempts:[{attemptId:'attempt-asr-1',component:'asr',modelId:'16k_en'}],...patch};return {...value,signature:signPublicProviderReconciliation(value,'c'.repeat(64))};}

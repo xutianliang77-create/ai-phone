@@ -9,6 +9,7 @@ import { listStaleSessionCandidates } from
   "./sessions-recovery.repository.js";
 import { withSessionWriteLock } from "./session-write-coordinator.js";
 import {finalizePublicSession,serverFinalizationRequest} from "./public-session-finalization.service.js";
+import { hasPublicProviderReconciliation } from "./public-provider-reconciliation.js";
 
 export interface StaleSessionRecoveryResult {
   inspectedCount: number;
@@ -36,7 +37,7 @@ export async function recoverStaleRealtimeSessions(options: {
       const session = await findSession(sessionId);
       if (!session || isTerminalRealtimeSessionState(session.status)) return;
       if(session.processingAuthorization){
-        if(session.publicRuntime?.stoppedAt&&!session.publicRuntime.uncertain){
+        if(session.publicRuntime?.stoppedAt&&(!session.publicRuntime.uncertain||hasPublicProviderReconciliation(session))){
           await finalizePublicSession(session.id,session.userId,serverFinalizationRequest(session),{now,serverRecovery:true});
           recoveredCount++;
         }

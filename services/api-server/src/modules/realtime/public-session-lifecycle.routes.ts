@@ -11,6 +11,7 @@ import {recordPublicModelAttempt} from "../sessions/public-model-attempt.service
 import {queryPublicAdmission} from "./public-admission-query.service.js";
 import {PublicConfigError} from "../models/public-model-config.js";
 import {claimPublicRecoveryOwnership} from "../sessions/public-recovery-ownership.service.js";
+import {reconcilePublicProviderUsage} from "../sessions/public-provider-reconciliation.js";
 
 export function registerPublicLifecycleRoutes(app:FastifyInstance){
   app.post("/internal/realtime/sessions/:sessionId/admission",{bodyLimit:4096},async(request,reply)=>{
@@ -26,6 +27,19 @@ export function registerPublicLifecycleRoutes(app:FastifyInstance){
     if(!isInternalAuthorized(request.headers.authorization))return sendError(reply,401,"internal_error","Unauthorized internal request");
     const {sessionId}=request.params as {sessionId:string};
     return lifecycleResponse(reply,()=>withSessionWriteLock(sessionId,()=>recordPublicModelAttempt(sessionId,request.body)));
+  });
+  app.post("/internal/realtime/sessions/:sessionId/provider-reconciliation",{bodyLimit:4096},async(request,reply)=>{
+    if(!isInternalAuthorized(request.headers.authorization))return sendError(reply,401,"internal_error","Unauthorized internal request");
+    const {sessionId}=request.params as {sessionId:string};
+    return lifecycleResponse(reply,()=>withSessionWriteLock(sessionId,async()=>{
+      const reconciliation=await reconcilePublicProviderUsage(sessionId,request.body);
+      const session=await findSession(sessionId);
+      if(!session)throw new ResultSyncError("session_not_found",404);
+      const finalization=await finalizePublicSession(sessionId,session.userId,serverFinalizationRequest(session),{serverRecovery:true});
+      return {sessionId,reconciliationId:reconciliation.reconciliationId,providerId:reconciliation.providerId,
+        providerUsageSeconds:reconciliation.providerUsageSeconds,consumedSeconds:finalization.consumedSeconds,
+        finalizationIdempotencyKey:finalization.idempotencyKey};
+    }));
   });
   app.get("/realtime/sessions/:sessionId/recovery",async(request,reply)=>{
     const account=await requireAccount(request,reply);if(!account)return;
