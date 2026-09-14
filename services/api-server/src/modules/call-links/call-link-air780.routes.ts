@@ -9,6 +9,8 @@ import { withSessionWriteLock } from "../sessions/session-write-coordinator.js";
 import type { ProviderOperationRecord } from
   "../provider-operations/provider-operation-record.js";
 import { getCallLinkWorkerSupervisor } from "./call-link-worker-supervisor.js";
+import { callLinkModelRuntimeAdmission } from
+  "./call-link-model-runtime-policy.js";
 import {
   findCallLink,
   persistedCallRoomHumanPresence,
@@ -113,6 +115,17 @@ export function registerCallLinkAir780Routes(app: FastifyInstance) {
     const room = await ensureCallRoom(validation.record);
     if (!room.ok) {
       return sendError(reply, 503, "call_room_start_failed", "Call room could not be created");
+    }
+    const modelAdmission = await callLinkModelRuntimeAdmission(
+      validation.record.sessionId,
+    );
+    if (!modelAdmission.ok) {
+      return sendError(
+        reply,
+        503,
+        modelAdmission.code,
+        "Call room public model runtime is not ready",
+      );
     }
     try {
       await getCallLinkWorkerSupervisor().ensure(validation.record.callId);

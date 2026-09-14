@@ -130,6 +130,49 @@ describe("call room entry routes", () => {
     );
   });
 
+  it("does not start a legacy private Worker for a public call room", async () => {
+    configureCallRoomEnv();
+    process.env.API_RESULT_SYNC_DEPLOYMENT_ID = "public-test";
+    setCallRoomDataPublisherForTests({
+      async ensureRoom() {},
+      async publish() {},
+    } satisfies CallRoomDataPublisher);
+    const app = await buildApp();
+    const created = await app.inject({ method: "POST", url: "/call-links" });
+    const callId = created.json().callId as string;
+    const hostToken = (await app.inject({
+      method: "POST",
+      url: `/call-links/${callId}/room-token`,
+      payload: { participantRole: "host", participantName: "Host" },
+    })).json();
+    const guestToken = (await app.inject({
+      method: "POST",
+      url: `/call-links/${callId}/room-token`,
+      payload: {
+        participantRole: "guest",
+        participantName: "Guest",
+        guestTicket: guestTicketFrom(created),
+      },
+    })).json();
+    await app.inject({
+      method: "POST",
+      url: `/call-links/${callId}/room-connected`,
+      payload: connectionConfirmation(hostToken),
+    });
+    const response = await app.inject({
+      method: "POST",
+      url: `/call-links/${callId}/room-connected`,
+      payload: connectionConfirmation(guestToken),
+    });
+    await app.close();
+
+    expect(response.statusCode).toBe(503);
+    expect(response.json().error.code).toBe(
+      "call_link_public_model_authorization_required",
+    );
+    expect(workerRuntime.ensuredCallIds).toEqual([]);
+  });
+
   it("allows the Worker to register its leg while participant entry is pending", async () => {
     configureCallRoomEnv();
     setCallRoomDataPublisherForTests({
@@ -283,6 +326,7 @@ const envKeys = [
   "CALL_ROOM_TOKEN_TTL_SECONDS",
   "INTERNAL_API_SECRET",
   "CALL_FULL_DUPLEX_ENABLED",
+  "API_RESULT_SYNC_DEPLOYMENT_ID",
 ];
 
 function captureEnv() {

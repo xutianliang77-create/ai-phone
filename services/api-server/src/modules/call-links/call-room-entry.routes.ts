@@ -11,6 +11,8 @@ import {
   removeCallRoomParticipant,
 } from "./call-room-worker.js";
 import { getCallLinkWorkerSupervisor } from "./call-link-worker-supervisor.js";
+import { callLinkModelRuntimeAdmission } from
+  "./call-link-model-runtime-policy.js";
 import {
   type CallLinkRecord,
   findCallLink,
@@ -244,6 +246,17 @@ export function registerCallRoomEntryRoute(app: FastifyInstance) {
     }
 
     if (committed.ready && !committed.workerPresent) {
+      const modelAdmission = await callLinkModelRuntimeAdmission(
+        committed.record.sessionId,
+      );
+      if (!modelAdmission.ok) {
+        return sendError(
+          reply,
+          503,
+          modelAdmission.code,
+          "Call room public model runtime is not ready",
+        );
+      }
       try {
         // Worker startup requests its own room token and writes this session.
         // Keep it outside the callId write lock to avoid lock inversion.
