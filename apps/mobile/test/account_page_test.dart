@@ -30,12 +30,7 @@ void main() {
 
   testWidgets('exports account data and logs out', (tester) async {
     final client = _FakeAccountApiClient();
-    final store = MemoryAccountSessionStore(
-      const AccountSession(
-        token: 'token_1',
-        expiresAtIso: '2026-08-01T00:00:00.000Z',
-      ),
-    );
+    final store = MemoryAccountSessionStore(_storedSession());
     await tester.pumpWidget(_TestApp(
       child: AccountPage(client: client, sessionStore: store),
     ));
@@ -59,12 +54,7 @@ void main() {
   testWidgets('clears the local session when remote logout fails',
       (tester) async {
     final client = _FakeAccountApiClient()..failLogout = true;
-    final store = MemoryAccountSessionStore(
-      const AccountSession(
-        token: 'token_1',
-        expiresAtIso: '2026-08-01T00:00:00.000Z',
-      ),
-    );
+    final store = MemoryAccountSessionStore(_storedSession());
     await tester.pumpWidget(_TestApp(
       child: AccountPage(client: client, sessionStore: store),
     ));
@@ -80,12 +70,7 @@ void main() {
 
   testWidgets('requests account deletion after confirmation', (tester) async {
     final client = _FakeAccountApiClient();
-    final store = MemoryAccountSessionStore(
-      const AccountSession(
-        token: 'token_1',
-        expiresAtIso: '2026-08-01T00:00:00.000Z',
-      ),
-    );
+    final store = MemoryAccountSessionStore(_storedSession());
     await tester.pumpWidget(_TestApp(
       child: AccountPage(client: client, sessionStore: store),
     ));
@@ -101,6 +86,17 @@ void main() {
     expect(find.text('注销请求已提交，账号已退出'), findsOneWidget);
   });
 }
+
+AccountSession _storedSession() => AccountSession(
+      token: 'token_1',
+      expiresAtIso: '2099-08-01T00:00:00.000Z',
+      deploymentId: configuredPublicDeploymentId.isEmpty
+          ? null
+          : configuredPublicDeploymentId,
+      ownerId: configuredPublicDeploymentId.isEmpty ? null : 'user_1',
+      issuerOrigin:
+          configuredPublicDeploymentId.isEmpty ? null : 'http://localhost',
+    );
 
 class _TestApp extends StatelessWidget {
   const _TestApp({required this.child});
