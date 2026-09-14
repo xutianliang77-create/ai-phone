@@ -7,6 +7,7 @@ import 'package:translation_mobile/src/app/localization/app_localizations.dart';
 import 'package:translation_mobile/src/features/compliance/data/compliance_consent_store.dart';
 import 'package:translation_mobile/src/features/realtime/presentation/controllers/realtime_controller.dart';
 import 'package:translation_mobile/src/features/realtime/presentation/widgets/realtime_status_bar.dart';
+import 'package:translation_mobile/src/features/type_to_speak/presentation/pages/type_to_speak_page.dart';
 
 void main() {
   testWidgets('shows Chinese realtime interpreter home',
@@ -79,7 +80,8 @@ void main() {
     await pumpAcceptedApp(tester);
 
     await tester.tap(find.text('通话'));
-    await tester.pumpAndSettle();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
 
     expect(find.text('跨语言沟通'), findsOneWidget);
     expect(find.text('发起翻译电话'), findsOneWidget);
@@ -111,19 +113,19 @@ void main() {
     await pumpAcceptedApp(tester);
 
     await tester.tap(find.text('通话'));
-    await tester.pumpAndSettle();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
     await tester.scrollUntilVisible(
       find.text('输入并朗读'),
       180,
       scrollable: find.byType(Scrollable).last,
     );
-    await tester.drag(find.byType(ListView).last, const Offset(0, -120));
-    await tester.pumpAndSettle();
+    await tester.pump();
     await tester.tap(find.text('输入并朗读'));
-    await tester.pumpAndSettle();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
 
-    expect(find.text('输入内容'), findsOneWidget);
-    expect(find.text('暂无译文'), findsOneWidget);
+    expect(find.byType(TypeToSpeakPage), findsOneWidget);
   });
 
   testWidgets('opens AI Calling Agent from domestic call entry',

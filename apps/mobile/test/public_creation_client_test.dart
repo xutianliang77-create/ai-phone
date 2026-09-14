@@ -8,6 +8,7 @@ import 'package:translation_mobile/src/features/account/data/account_session_sto
 import 'package:translation_mobile/src/features/realtime/data/api/realtime_api_client.dart';
 import 'package:translation_mobile/src/features/realtime/data/api/realtime_session.dart';
 import 'package:translation_mobile/src/features/realtime/data/api/public_creation_request_store.dart';
+import 'package:translation_mobile/src/features/realtime/data/api/public_creation_contract.dart';
 import 'package:translation_mobile/src/features/realtime/data/realtime_repository.dart';
 import 'package:translation_mobile/src/features/realtime/data/gateway/realtime_gateway_client.dart';
 
@@ -34,6 +35,7 @@ Map<String, Object?> response(http.Request request, String owner) {
     'endpoint': 'wss://gateway.synthetic.invalid/realtime', 'expiresAt': DateTime.fromMillisecondsSinceEpoch(expiry * 1000, isUtc: true).toIso8601String(),
     'ownerId': owner, 'deploymentId': 'public', 'captureSampleRate': 16000, 'processing': p};
 }
+
 class Harness {
   final directory = Directory.systemTemp.createTempSync('wujie-public-create-');
   final accounts = MemoryAccountSessionStore(account());
@@ -64,6 +66,22 @@ class Gateway extends RealtimeGatewayClient {
   @override void dispose() {}
 }
 void main() {
+  test('emits the shared public creation v1 request fixture', () {
+    final fixture = jsonDecode(File(
+            '../../packages/contracts/fixtures/public-creation-v1.json')
+        .readAsStringSync()) as Map;
+    final offer = (fixture['offer'] as Map).cast<String, Object?>();
+    final request = publicCreationBody(
+      offer,
+      deploymentId: offer['deploymentId']! as String,
+      ownerId: offer['ownerId']! as String,
+      mode: 'conversation',
+      source: 'fr',
+      target: 'ja',
+      voice: false,
+    );
+    expect(request, (fixture['request'] as Map).cast<String, Object?>());
+  });
   test('persists request before POST, deduplicates concurrent create and consumes only after connection confirmation', () async {
     final h = Harness();addTearDown(h.close);final api = h.create();
     final values = await Future.wait([api.createSession(), api.createSession()]);

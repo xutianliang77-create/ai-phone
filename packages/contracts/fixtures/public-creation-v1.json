@@ -1,0 +1,64 @@
+{
+  "offer": {
+    "contractVersion": 1,
+    "deploymentId": "public-fixture",
+    "ownerId": "fixture-owner",
+    "configurationRevision": 7,
+    "modelPolicyRevision": "models-v1:fixture",
+    "captureSampleRate": 16000,
+    "voiceOutput": false,
+    "endpoint": "wss://gateway.fixture.invalid/realtime",
+    "status": "configured_not_verified",
+    "executionPlan": {
+      "asr": {
+        "execution": "public",
+        "scopeKey": "asr:fixture",
+        "reason": "online_selected"
+      },
+      "translation": {
+        "execution": "public",
+        "scopeKey": "translation:fixture",
+        "reason": "online_selected"
+      },
+      "tts": {
+        "execution": "disabled"
+      }
+    }
+  },
+  "request": {
+    "mode": "conversation",
+    "sourceLanguage": "fr",
+    "targetLanguage": "ja",
+    "voiceOutput": false,
+    "speakerAttribution": {
+      "mode": "off"
+    },
+    "processing": {
+      "contractVersion": 1,
+      "processingMode": "online",
+      "modelPolicyRevision": "models-v1:fixture",
+      "executionPlan": {
+        "asr": {
+          "execution": "public",
+          "scopeKey": "asr:fixture",
+          "reason": "online_selected"
+        },
+        "translation": {
+          "execution": "public",
+          "scopeKey": "translation:fixture",
+          "reason": "online_selected"
+        },
+        "tts": {
+          "execution": "disabled"
+        }
+      },
+      "languagePolicy": {
+        "source": "fr",
+        "target": "ja",
+        "autoReverse": false,
+        "revision": 1
+      },
+      "syncRequested": false
+    }
+  }
+}

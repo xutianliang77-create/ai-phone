@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { validateCreateRealtimeSessionRequest } from "./create-session-request.js";
 
@@ -132,6 +133,15 @@ describe("create realtime session request", () => {
     for (const key of ["processingMode", "executionPlan", "modelPolicyRevision", "publicAccess"]) {
       expect(validateCreateRealtimeSessionRequest({ ...payload("conversation"), [key]: "online" }).ok).toBe(false);
     }
+  });
+
+  it("accepts the shared public creation v1 request fixture", () => {
+    const fixture = JSON.parse(readFileSync(
+      new URL("../../../../../packages/contracts/fixtures/public-creation-v1.json", import.meta.url),
+      "utf8",
+    )) as { request: unknown };
+    const result = validateCreateRealtimeSessionRequest(fixture.request);
+    expect(result).toEqual({ ok: true, value: fixture.request });
   });
 });
 
