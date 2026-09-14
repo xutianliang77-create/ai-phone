@@ -22,6 +22,13 @@ void main() {
         await f.c.start();
         f.emit(['fr', 'ja', 'de']);
         await pumpEventQueue();
+        if (!local) {
+          expect(f.mt.checks, isEmpty);
+          expect(f.mt.translations, 0);
+          expect(f.c.segments, isEmpty);
+          await f.close();
+          return;
+        }
         expect(f.mt.checks.map(_direction),
             source == 'auto' ? ['fr->ja', 'de->ja'] : ['fr->ja']);
         expect(f.c.segments.map((s) => s.sourceLanguage), ['fr', 'ja', 'de']);
@@ -31,19 +38,16 @@ void main() {
       });
     }
     if (!local) {
-      test('explicit A/A/B reversal never maps the third language to a default',
-          () async {
+      test('online reversal does not create a device language route', () async {
         final f = _Fixture(resourceConfig().copyWith(
             useLocalSessions: false, autoReverseTargetLanguage: true));
         await f.c.start();
         f.emit(['fr', 'fr-CA', 'ja', 'de']);
         await pumpEventQueue();
-        expect(f.mt.translations, 3);
-        expect(f.c.segments.map((s) => s.targetLanguage),
-            ['ja', 'ja', 'fr', null]);
-        expect(f.c.segments.last.sourceLanguage, 'de');
+        expect(f.mt.checks, isEmpty);
+        expect(f.mt.translations, 0);
+        expect(f.c.segments, isEmpty);
         await f.c.stop();
-        expect(f.repo.saved.last.translatedText, isEmpty);
         await f.close();
       });
     }
