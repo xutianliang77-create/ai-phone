@@ -92,8 +92,13 @@ export async function buildApp(options: BuildAppOptions = {}) {
   await registerSessionsRoutes(app);
   await registerTermsRoutes(app);
   await registerTextTranslationRoutes(app);
-  await registerVoiceProfileRoutes(app);
-  await registerVoiceIdentityRoutes(app);
+  // Public 1.1 uses qualified provider preset voices only. Do not expose the
+  // private reference-audio / identity APIs and accidentally create provider
+  // held biometric or voice-profile data without a deletion contract.
+  if (!process.env.API_RESULT_SYNC_DEPLOYMENT_ID) {
+    await registerVoiceProfileRoutes(app);
+    await registerVoiceIdentityRoutes(app);
+  }
   return app;
 }
 
