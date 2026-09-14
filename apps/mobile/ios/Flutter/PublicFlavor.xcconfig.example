@@ -1,0 +1,18 @@
+// Public 1.1 flavor template. It is deliberately NOT included by Debug.xcconfig
+// or Release.xcconfig and cannot create a signed/installed app by itself.
+//
+// Before an authorized RC build, copy this to a local, untracked public identity
+// file and replace the placeholder with the approved Apple bundle identifier.
+// Do not reuse the private 1.0 bundle id, signing identity, App Group, keychain
+// access group, iCloud container, account file, history, token or balance.
+
+#include "Release.xcconfig"
+
+TRANSLATION_IOS_BUNDLE_ID=com.yourcompany.wujieai.public
+WUJIE_PRODUCT_PROFILE=full
+
+// The public build also requires these explicit Flutter dart-defines at build
+// time; keep their real values out of source control:
+//   PUBLIC_DEPLOYMENT_ID=<approved-public-deployment>
+//   API_BASE_URL=https://<approved-public-origin>
+//   WUJIE_PRODUCT_PROFILE=full
