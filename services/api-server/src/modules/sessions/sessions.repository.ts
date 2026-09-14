@@ -152,6 +152,17 @@ export function deleteSession(sessionId: string) {
   return true;
 }
 
+export function markSessionForAccountDeletion(
+  sessionId: string,
+  requestedAt: string,
+) {
+  const session = findSession(sessionId);
+  if (!session || session.accountDeletionRequestedAt) return session;
+  session.accountDeletionRequestedAt = requestedAt;
+  persistSessionMutation(session);
+  return session;
+}
+
 export function saveSegments(sessionId: string, segments: SessionSegmentDto[]) {
   const session = findSession(sessionId);
   if (!session) return null;

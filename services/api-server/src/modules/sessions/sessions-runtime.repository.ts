@@ -120,6 +120,17 @@ export async function deleteSession(sessionId: string) {
   );
 }
 
+export function markSessionForAccountDeletion(
+  sessionId: string,
+  requestedAt: string,
+) {
+  return updateSession(sessionId, "account-deletion-request", { requestedAt }, (next) => {
+    if (!next.accountDeletionRequestedAt) {
+      next.accountDeletionRequestedAt = requestedAt;
+    }
+  }, () => legacy.markSessionForAccountDeletion(sessionId, requestedAt));
+}
+
 export function upsertCallLeg(sessionId: string, callLeg: CallLegRecord) {
   return mutateSessionRecord(sessionId, "call-leg-upsert", callLeg, (current) => {
     if (current.mode !== "call_link") return { next: null, result: null };

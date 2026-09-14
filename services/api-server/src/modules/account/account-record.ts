@@ -9,6 +9,10 @@ export interface AccountRecord {
   updatedAt: string;
   lastLoginAt?: string;
   deletionRequestedAt?: string;
+  /** Public account content is erased only after all in-flight sessions are safe. */
+  deletionContentErasedAt?: string;
+  /** Calendar retention boundary for the minimal non-content deletion record. */
+  deletionRetentionUntil?: string;
 }
 
 export interface AuthSessionRecord {

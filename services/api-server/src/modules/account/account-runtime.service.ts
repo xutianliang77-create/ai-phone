@@ -19,6 +19,7 @@ import {
   isLoginChallengeLocked,
 } from "./sms-otp-limits.js";
 import { sendPhoneLoginCode, shouldExposeDebugCode } from "./sms-provider.js";
+import { publicAccountDeletionRetentionUntil } from "./account-deletion-policy.js";
 import * as legacy from "./account.service.js";
 
 const otpTtlMs = 5 * 60 * 1_000;
@@ -171,14 +172,20 @@ export async function logout(authorization: string | undefined) {
   return Boolean(result.record);
 }
 
-export async function requestAccountDeletion(account: AccountRecord) {
+export async function requestAccountDeletion(
+  account: AccountRecord,
+  options: { now?: Date } = {},
+) {
   const runtime = getRepositoryRuntime();
-  if (runtime.driver !== "postgres") return legacy.requestAccountDeletion(account);
-  const now = new Date().toISOString();
+  if (runtime.driver !== "postgres") return legacy.requestAccountDeletion(account, options);
+  const timestamp = options.now ?? new Date();
+  const now = timestamp.toISOString();
   const result = await mutateProduct("accounts", account.id, "account", account.id,
     "delete-request", {}, (current: AccountRecord | null) => current ? {
       ...current, status: "deletion_requested" as const,
-      deletionRequestedAt: now, updatedAt: now,
+      deletionRequestedAt: now,
+      deletionRetentionUntil: publicAccountDeletionRetentionUntil(timestamp),
+      updatedAt: now,
     } : null);
   const sessions = await runtime.postgres.productRecords.query<AuthSessionPrimary>({
     namespace: "authSessions", ownerId: account.id, status: "active", limit: 500,
@@ -189,6 +196,38 @@ export async function requestAccountDeletion(account: AccountRecord) {
         current ? { ...current, revokedAt: now } : null);
   }
   return toAccountDto((result.record as AccountRecord | null) ?? account);
+}
+
+export async function findAccountById(accountId: string) {
+  const runtime = getRepositoryRuntime();
+  if (runtime.driver !== "postgres") {
+    return legacy.findAccountById(accountId);
+  }
+  return runtime.postgres.productRecords.find<AccountRecord>("accounts", accountId);
+}
+
+export async function markAccountContentErased(
+  accountId: string,
+  erasedAt: Date = new Date(),
+) {
+  const runtime = getRepositoryRuntime();
+  if (runtime.driver !== "postgres") {
+    return legacy.markAccountContentErased(accountId, erasedAt);
+  }
+  const now = erasedAt.toISOString();
+  const result = await mutateProduct("accounts", accountId, "account", accountId,
+    "content-erased", { erasedAt: now }, (current: AccountRecord | null) => {
+      if (!current || current.status === "active") return null;
+      return {
+        ...current,
+        status: "deleted" as const,
+        phoneHash: retiredPhoneHash(current),
+        phoneMasked: "已删除",
+        deletionContentErasedAt: now,
+        updatedAt: now,
+      };
+    });
+  return result.record as AccountRecord | null;
 }
 
 export async function ensureTestAccount() {
@@ -297,6 +336,14 @@ function configuredTestLoginMatches(phone: string, code: string) {
 function maskPhone(phone: string) { return `${phone.slice(0, 3)}****${phone.slice(7)}`; }
 function hashPhone(phone: string) {
   return createHash("sha256").update(`phone:${phone}`).digest("hex");
+}
+
+function retiredPhoneHash(account: AccountRecord) {
+  return `deleted:${createHash("sha256").update([
+    account.id,
+    account.deletionRequestedAt ?? account.createdAt,
+  ].join(":"))
+    .digest("hex")}`;
 }
 function hashCode(phone: string, code: string) {
   const secret = process.env.AUTH_OTP_SECRET ?? "local-dev-otp-secret";

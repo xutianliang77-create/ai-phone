@@ -13,6 +13,7 @@ import {
   toAccountDto,
 } from "./account-runtime.service.js";
 import { exportAccountData } from "./account-export-runtime.service.js";
+import { processPublicAccountDeletion } from "./account-deletion-runtime.service.js";
 
 export async function registerAccountRoutes(app: FastifyInstance) {
   app.get("/auth/deployment",async(_request,reply)=>{
@@ -92,8 +93,22 @@ export async function registerAccountRoutes(app: FastifyInstance) {
   app.post("/account/delete", async (request, reply) => {
     const account = await requireAccount(request);
     if (!account) return unauthorized(reply);
-    return { account: await requestAccountDeletion(account) };
+    await requestAccountDeletion(account);
+    const deletion = await processPublicAccountDeletion(account.id);
+    return {
+      account: toAccountDto(deletion.status === "not_found" ? account : deletion.account),
+      deletion: toDeletionDto(deletion),
+    };
   });
+}
+
+function toDeletionDto(result: Awaited<ReturnType<typeof processPublicAccountDeletion>>) {
+  return {
+    status: result.status,
+    ...(result.status === "awaiting_safe_terminal" ? {
+      pendingSessionCount: result.pendingSessionIds.length,
+    } : {}),
+  };
 }
 
 function matchesDeployment(body: unknown, reply: Parameters<typeof sendError>[0]) {

@@ -40,6 +40,7 @@ export const expectedPostgresMigrations = [
   "039_agent_voice_turn_scope",
   "040_voice_client_ownership",
   "041_agent_voice_delivery",
+  "042_account_deletion_product_records",
 ] as const;
 
 export function comparePostgresMigrations(applied: string[]) {

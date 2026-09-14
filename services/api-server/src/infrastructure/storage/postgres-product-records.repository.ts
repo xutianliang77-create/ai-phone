@@ -69,6 +69,47 @@ export class PostgresProductRecordsRepository {
     });
   }
 
+  async remove(input: {
+    namespace: string;
+    recordKey: string;
+    commandId: string;
+    commandType: string;
+    requestHash: string;
+    eventType: string;
+    fence: PostgresAggregateFence;
+  }) {
+    const command = domainCommand(input.fence, input);
+    return this.primary.withAggregateTransaction(input.fence, async (transaction) => {
+      const replay = await transaction.readCommandResult<ProductCommandResult>(command);
+      if (replay) return { status: replay.status, removed: replay.status === "deleted" };
+      const current = await transaction.read<unknown>(input.namespace, input.recordKey);
+      if (!current) {
+        await recordDomainCommand(transaction, command, {
+          status: "not_found", recordKey: input.recordKey,
+        });
+        return { status: "not_found" as const, removed: false };
+      }
+      const eventId = domainEventId(input.commandId, `${input.namespace}:delete`);
+      await transaction.mutate({
+        eventId,
+        namespace: input.namespace,
+        recordKey: input.recordKey,
+        operation: "delete",
+        expectedRecordVersion: current.recordVersion,
+      });
+      await enqueueDomainEvent(transaction, {
+        eventId,
+        eventType: input.eventType,
+        aggregateVersion: current.recordVersion + 1,
+        payload: { recordKey: input.recordKey },
+      });
+      await recordDomainCommand(transaction, command, {
+        status: "deleted", recordKey: input.recordKey,
+      });
+      return { status: "deleted" as const, removed: true };
+    });
+  }
+
   find<T>(namespace: string, recordKey: string) {
     return this.primary.read<T>(namespace, recordKey)
       .then((record) => record?.payload ?? null);
@@ -130,7 +171,7 @@ function boundedLimit(value: number | undefined) {
 }
 
 interface ProductCommandResult {
-  status: "created" | "updated" | "noop" | "not_found";
+  status: "created" | "updated" | "noop" | "not_found" | "deleted";
   recordKey: string;
 }
 

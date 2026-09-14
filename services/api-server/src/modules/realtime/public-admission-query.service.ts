@@ -15,6 +15,7 @@ export async function queryPublicAdmission(sessionId:string,value:unknown,now=ne
   if(q.deploymentId!==deployment)throw new ResultSyncError("public_admission_scope_mismatch",403);
   const session=await findSession(sessionId);if(!session)throw new ResultSyncError("session_not_found",404);
   assertPublicSession(session,q.ownerId,deployment);
+  if(session.accountDeletionRequestedAt)throw new ResultSyncError("account_deletion_pending",403);
   const admission=verifiedPublicAdmission(session,q.ownerId,now),policy=session.publicRuntimePolicy,issued=session.publicRealtimeIssuance,config=session.publicModelConfiguration;
   if(!policy||!issued||!config||session.finalizedAt||session.publicFinalization||session.finalizationIdempotencyKey||session.publicRuntime?.stoppedAt)throw new ResultSyncError("public_admission_not_issued",403);
   const binding=publicRuntimeTokenBinding(issued.claims,deployment);

@@ -80,6 +80,13 @@ describe("original HTTP public creation with an explicitly installed trusted aut
     expect((await post()).statusCode).toBe(410);expect(getStoreSnapshot().sessions).toHaveLength(0);expect(resolve).toHaveBeenCalledTimes(1);
     expect(JSON.stringify(restored.publicCreationBindings)).not.toMatch(/sourceLanguage|Token|request-0001|SYNTHETIC/);
   });
+  it("fails closed at the original admission boundary once account deletion is pending",async()=>{
+    const response=(await post()).json();
+    current().accountDeletionRequestedAt="2026-09-14T00:00:00.000Z";
+    const denied=await lookup(queryFor(response.realtimeToken));
+    expect(denied.statusCode).toBe(403);
+    expect(denied.json().error.code).toBe("account_deletion_pending");
+  });
   it("rolls back both the request binding and session when their transaction fails",async()=>{
     const persist=storage.persistStoreSnapshot;let fail=true;
     vi.spyOn(storage,"persistStoreSnapshot").mockImplementation(()=>{if(fail&&Object.keys(getStoreSnapshot().publicCreationBindings??{}).length){fail=false;throw Error("synthetic binding persistence failure");}return persist();});

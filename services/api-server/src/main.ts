@@ -57,6 +57,10 @@ import {
   "./modules/call-links/translation-call-control-outbox.js";
 import {publicGatewayCredentialAccessFromEnvironment} from "./modules/realtime/public-runtime-bootstrap.js";
 import {publicRealtimeAuthorityFromEnvironment} from "./modules/realtime/public-runtime-policy-authority.js";
+import {
+  recoverPendingPublicAccountDeletions,
+  startPublicAccountDeletionRecovery,
+} from "./modules/account/account-deletion-runtime.service.js";
 
 const env = loadEnv();
 assertAgentWorkRunnerConfiguration(env);
@@ -72,6 +76,7 @@ const app = await buildApp({publicGatewayCredentialAccess:publicGatewayCredentia
 const outboxRecovery = await recoverPendingCallRoomOutbox();
 const translationControlRecovery = await recoverPendingTranslationControls();
 const voiceIdentityRecovery = await recoverPendingVoiceIdentityDeletions();
+const accountDeletionRecovery = await recoverPendingPublicAccountDeletions();
 const sipReconciliation = await recoverPendingLiveKitSipCompletions({
   graceSeconds: env.livekitSipReconciliationGraceSeconds,
 });
@@ -112,6 +117,17 @@ const stopVoiceIdentityRecovery = startVoiceIdentityDeletionRecovery({
   onError: (error) => app.log.error(
     { error },
     "Voice identity deletion recovery failed",
+  ),
+});
+const stopAccountDeletionRecovery = startPublicAccountDeletionRecovery({
+  onResult: (result) => {
+    if (result.contentErasedCount > 0 || result.pendingSessionCount > 0) {
+      app.log.info({ accountDeletion: result }, "Processed public account deletion requests");
+    }
+  },
+  onError: (error) => app.log.error(
+    { error },
+    "Public account deletion recovery failed",
   ),
 });
 const stopSipReconciliation = startLiveKitSipReconciliationRecovery({
@@ -185,6 +201,7 @@ app.addHook("onClose", async () => {
   stopOutboxRecovery();
   stopTranslationControlRecovery();
   stopVoiceIdentityRecovery();
+  stopAccountDeletionRecovery();
   stopSipReconciliation();
   stopWorkerDispatchRecovery();
   stopRecordingRecovery();
@@ -230,6 +247,13 @@ if (voiceIdentityRecovery.deletedCount > 0) {
   app.log.warn(
     { voiceIdentityRecovery },
     "Recovered pending voice identity deletions",
+  );
+}
+if (accountDeletionRecovery.contentErasedCount > 0 ||
+  accountDeletionRecovery.pendingSessionCount > 0) {
+  app.log.info(
+    { accountDeletionRecovery },
+    "Processed public account deletion requests",
   );
 }
 if (sipReconciliation.recoveredCount > 0) {

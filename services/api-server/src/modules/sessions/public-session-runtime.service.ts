@@ -21,6 +21,7 @@ export function observePublicRuntime(sessionId:string,value:unknown,now=new Date
   }
   return mutatePublicSession(sessionId,"public-runtime",b,current=>{
     assertPublicSession(current,current.userId,deployment);
+    if(current.accountDeletionRequestedAt)throw new ResultSyncError("account_deletion_pending",403);
     const p=runtimePolicy(current),old=current.publicRuntime;
     if(b.leaseId!==p.leaseId||b.captureId!==p.captureId||b.languagePolicyKey!==p.languagePolicyKey) {
       throw new ResultSyncError("public_runtime_lease_mismatch",403);

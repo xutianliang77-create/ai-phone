@@ -14,6 +14,7 @@ import {
   supersedeActivePhoneChallenges,
 } from "./sms-otp-limits.js";
 import { sendPhoneLoginCode, shouldExposeDebugCode } from "./sms-provider.js";
+import { publicAccountDeletionRetentionUntil } from "./account-deletion-policy.js";
 
 const otpTtlMs = 5 * 60 * 1000;
 const sessionTtlMs = 30 * 24 * 60 * 60 * 1000;
@@ -209,10 +210,15 @@ export function exportAccountData(account: AccountRecord) {
   };
 }
 
-export function requestAccountDeletion(account: AccountRecord) {
-  const now = new Date().toISOString();
+export function requestAccountDeletion(
+  account: AccountRecord,
+  options: { now?: Date } = {},
+) {
+  const timestamp = options.now ?? new Date();
+  const now = timestamp.toISOString();
   account.status = "deletion_requested";
   account.deletionRequestedAt = now;
+  account.deletionRetentionUntil = publicAccountDeletionRetentionUntil(timestamp);
   account.updatedAt = now;
   for (const session of getStoreSnapshot().authSessions) {
     if (session.userId === account.id && !session.revokedAt) {
@@ -221,6 +227,30 @@ export function requestAccountDeletion(account: AccountRecord) {
   }
   persistStoreSnapshot();
   return toAccountDto(account);
+}
+
+export function findAccountById(accountId: string) {
+  return getStoreSnapshot().accounts.find((account) => account.id === accountId) ?? null;
+}
+
+export function markAccountContentErased(
+  accountId: string,
+  erasedAt: Date = new Date(),
+) {
+  const account = findAccountById(accountId);
+  if (!account || account.status === "active") return null;
+  const now = erasedAt.toISOString();
+  account.status = "deleted";
+  account.phoneHash = `deleted:${createHash("sha256").update([
+    account.id,
+    account.deletionRequestedAt ?? account.createdAt,
+  ].join(":"))
+    .digest("hex")}`;
+  account.phoneMasked = "已删除";
+  account.deletionContentErasedAt = now;
+  account.updatedAt = now;
+  persistStoreSnapshot();
+  return account;
 }
 
 export function toAccountDto(account: AccountRecord) {
@@ -232,6 +262,8 @@ export function toAccountDto(account: AccountRecord) {
     updatedAt: account.updatedAt,
     lastLoginAt: account.lastLoginAt,
     deletionRequestedAt: account.deletionRequestedAt,
+    deletionContentErasedAt: account.deletionContentErasedAt,
+    deletionRetentionUntil: account.deletionRetentionUntil,
   };
 }
 

@@ -59,4 +59,10 @@ export interface SessionRecord {
   publicRuntime?: PublicRuntimeEvidence;
   publicRecoveryOwnership?: PublicRecoveryOwnership;
   publicFinalization?: PublicFinalizationRecord;
+  /**
+   * Set only by the account-deletion workflow. It is a fail-closed runtime
+   * boundary, not a session terminal state: verified finalization must still
+   * complete exactly once before the content can be erased.
+   */
+  accountDeletionRequestedAt?: string;
 }

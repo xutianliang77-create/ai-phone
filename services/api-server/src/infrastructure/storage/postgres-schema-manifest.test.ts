@@ -7,9 +7,9 @@ import {
 
 describe("PostgreSQL schema manifest", () => {
   it("pins the complete ordered migration set", () => {
-    expect(expectedPostgresMigrations).toHaveLength(41);
+    expect(expectedPostgresMigrations).toHaveLength(42);
     expect(expectedPostgresMigrations.at(-1)).toBe(
-      "041_agent_voice_delivery",
+      "042_account_deletion_product_records",
     );
     expect(comparePostgresMigrations([...expectedPostgresMigrations])).toEqual({
       missing: [],
@@ -22,9 +22,19 @@ describe("PostgreSQL schema manifest", () => {
       ...expectedPostgresMigrations.slice(0, -1),
       "999_unknown",
     ])).toEqual({
-      missing: ["041_agent_voice_delivery"],
+      missing: ["042_account_deletion_product_records"],
       extra: ["999_unknown"],
     });
+  });
+
+  it("allows only explicit product-record erasure events", () => {
+    const sql = readFileSync(new URL(
+      "../../../../../infra/postgres/migrations/042_account_deletion_product_records.sql",
+      import.meta.url,
+    ), "utf8");
+    expect(sql).toContain("event_operation NOT IN ('upsert', 'delete')");
+    expect(sql).toContain("DELETE FROM ai_phone.product_records");
+    expect(sql).toContain("event_operation = 'delete'");
   });
 
   it("keeps Agent task call references synchronized on projection updates", () => {
