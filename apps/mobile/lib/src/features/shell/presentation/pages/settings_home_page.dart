@@ -67,14 +67,15 @@ class SettingsHomePage extends StatelessWidget {
                 const RealtimePreferencesPage(title: '朗读声音'),
               ),
             ),
-            _SettingsAction(
-              icon: Icons.graphic_eq_outlined,
-              title: l10n.myVoiceTitle,
-              onTap: () => _open(
-                context,
-                MyVoicePage(apiBaseUrl: config.apiBaseUrl),
+            if (profile.showVoiceProfile)
+              _SettingsAction(
+                icon: Icons.graphic_eq_outlined,
+                title: l10n.myVoiceTitle,
+                onTap: () => _open(
+                  context,
+                  MyVoicePage(apiBaseUrl: config.apiBaseUrl),
+                ),
               ),
-            ),
             if (profile.showVoiceIdentity)
               _SettingsAction(
                 icon: Icons.fingerprint,

@@ -11,6 +11,7 @@ void main() {
     expect(profile.showAiCallingAgent, isFalse);
     expect(profile.showBilling, isFalse);
     expect(profile.showVoiceIdentity, isFalse);
+    expect(profile.showVoiceProfile, isFalse);
   });
 
   test('unknown profile names preserve the existing full development surface',

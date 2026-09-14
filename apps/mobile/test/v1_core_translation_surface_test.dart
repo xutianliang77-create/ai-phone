@@ -35,7 +35,7 @@ void main() {
 
     expect(find.text('同传设置'), findsOneWidget);
     expect(find.text('朗读声音'), findsOneWidget);
-    expect(find.text('我的声音'), findsOneWidget);
+    expect(find.text('我的声音'), findsNothing);
     expect(find.text('隐私与安全'), findsOneWidget);
     expect(find.text('声音身份'), findsNothing);
     expect(find.text('订阅与用量'), findsNothing);

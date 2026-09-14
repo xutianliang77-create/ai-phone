@@ -5,6 +5,7 @@ class ProductCapabilityProfile {
     required this.showAiCallingAgent,
     required this.showBilling,
     required this.showVoiceIdentity,
+    required this.showVoiceProfile,
   });
 
   static const full = ProductCapabilityProfile._(
@@ -13,6 +14,7 @@ class ProductCapabilityProfile {
     showAiCallingAgent: true,
     showBilling: true,
     showVoiceIdentity: true,
+    showVoiceProfile: true,
   );
 
   static const coreTranslation = ProductCapabilityProfile._(
@@ -21,6 +23,10 @@ class ProductCapabilityProfile {
     showAiCallingAgent: false,
     showBilling: false,
     showVoiceIdentity: false,
+    // Public core uses provider-managed Tencent preset TTS only. Personal
+    // reference-audio profiles are not a public capability until their
+    // provider deletion contract is independently qualified.
+    showVoiceProfile: false,
   );
 
   static const _configuredName = String.fromEnvironment(
@@ -41,4 +47,5 @@ class ProductCapabilityProfile {
   final bool showAiCallingAgent;
   final bool showBilling;
   final bool showVoiceIdentity;
+  final bool showVoiceProfile;
 }
