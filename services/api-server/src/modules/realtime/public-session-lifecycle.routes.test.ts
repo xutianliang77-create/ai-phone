@@ -176,6 +176,11 @@ it('rejects forged, mismatched, disabled, and production aggregate reconciliatio
   vi.stubEnv('PUBLIC_RUNTIME_RECONCILIATION_ENABLED','false');expect((await route(reconciliation())).statusCode).toBe(503);expect(state()).toEqual(before);
   vi.stubEnv('PUBLIC_RUNTIME_RECONCILIATION_ENABLED','true');vi.stubEnv('NODE_ENV','production');expect((await route(reconciliation())).statusCode).toBe(403);expect(state()).toEqual(before);
 });
+it('returns read-only processing diagnostics only to the owning account',async()=>{
+  const before=state();const owned=await app.inject({url:'/realtime/sessions/public-s/processing-diagnostics'});
+  expect(owned.statusCode).toBe(200);expect(owned.json()).toMatchObject({sessionId:'public-s',status:'active',finalization:{serverConsumedSeconds:0,finalizationPersisted:false}});
+  expect(state()).toEqual(before);current().userId='other';expect((await app.inject({url:'/realtime/sessions/public-s/processing-diagnostics'})).statusCode).toBe(403);
+});
 function session():SessionRecord{return {id:'public-s',userId:'guest-user',mode:'conversation',status:'active',consumedSeconds:0,
   createdAt:new Date(start).toISOString(),lastActivityAt:new Date(start).toISOString(),version:1,
   segments:[{id:'seg',revision:4,sourceText:'你好',translatedText:'Hello',sourceLanguage:'zh',targetLanguage:'en'}],

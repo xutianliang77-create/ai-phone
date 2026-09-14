@@ -12,6 +12,7 @@ import {queryPublicAdmission} from "./public-admission-query.service.js";
 import {PublicConfigError} from "../models/public-model-config.js";
 import {claimPublicRecoveryOwnership} from "../sessions/public-recovery-ownership.service.js";
 import {reconcilePublicProviderUsage} from "../sessions/public-provider-reconciliation.js";
+import {publicProcessingDiagnostics} from "../sessions/public-processing-diagnostics.js";
 
 export function registerPublicLifecycleRoutes(app:FastifyInstance){
   app.post("/internal/realtime/sessions/:sessionId/admission",{bodyLimit:4096},async(request,reply)=>{
@@ -45,6 +46,14 @@ export function registerPublicLifecycleRoutes(app:FastifyInstance){
     const account=await requireAccount(request,reply);if(!account)return;
     const {sessionId}=request.params as {sessionId:string};
     return lifecycleResponse(reply,()=>publicRecoveryStatus(sessionId,account.id));
+  });
+  app.get("/realtime/sessions/:sessionId/processing-diagnostics",async(request,reply)=>{
+    const account=await requireAccount(request,reply);if(!account)return;
+    const {sessionId}=request.params as {sessionId:string};
+    const session=await findSession(sessionId);
+    if(!session)return sendError(reply,404,"session_not_found","Session not found");
+    if(session.userId!==account.id)return sendError(reply,403,"account_forbidden","Account cannot access this session");
+    return publicProcessingDiagnostics(session);
   });
   app.post("/internal/realtime/sessions/:sessionId/runtime",{bodyLimit:4096},async(request,reply)=>{
     if(!isInternalAuthorized(request.headers.authorization))return sendError(reply,401,"internal_error","Unauthorized internal request");
