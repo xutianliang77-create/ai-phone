@@ -23,7 +23,7 @@ function configuration(input:CreateRealtimeSessionRequest) {
   if(config.deploymentId!==publicDeploymentId()||config.modelPolicyRevision!==p.modelPolicyRevision||
     resultSyncHash(config.executionPlan)!==resultSyncHash(p.executionPlan))throw new ResultSyncError("public_creation_configuration_changed");
   if(publicProtocolCapability(asr.protocol)?.input!=="continuous_pcm"||!publicProtocolSampleRateSupported(asr.protocol,asr.sampleRate))throw new ResultSyncError("public_creation_asr_not_continuous",503);
-  if(input.voice&&(!input.voiceOutput||input.voice.presetId!==config.components.tts?.voice||Object.keys(input.voice).some(k=>!["mode","presetId"].includes(k))))throw new ResultSyncError("public_creation_voice_mismatch",400);
+  if(input.voice&&(!input.voiceOutput||input.voice.mode!=="preset"||input.voice.presetId!==config.components.tts?.voice||input.voice.quality!=="standard"||Object.keys(input.voice).some(k=>!["mode","presetId","quality"].includes(k))))throw new ResultSyncError("public_creation_voice_mismatch",400);
   return config;
 }
 export function preparedPublicSession(current:SessionRecord,ownerId:string) {

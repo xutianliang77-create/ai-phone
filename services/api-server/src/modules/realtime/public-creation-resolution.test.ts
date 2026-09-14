@@ -33,6 +33,16 @@ beforeEach(async()=>{
 afterEach(async()=>{await app.close();vi.useRealTimers();});
 
 describe("public creation explicit query, cancellation and expiry",()=>{
+  it("accepts the normalized standard preset returned by the public creation context",async()=>{
+    const config=capturePublicModelRuntimeConfiguration(true);
+    const value={mode:"conversation" as const,sourceLanguage:"zh" as const,targetLanguage:"en" as const,voiceOutput:true,
+      voice:{mode:"preset" as const,presetId:config.components.tts!.voice},speakerAttribution:{mode:"off" as const},
+      processing:{contractVersion:1 as const,processingMode:"online" as const,modelPolicyRevision:config.modelPolicyRevision,
+        executionPlan:config.executionPlan,languagePolicy:{source:"zh" as const,target:"en" as const,autoReverse:false,revision:1},syncRequested:false}};
+    await expect(preparePublicRealtimeSession("normalized-preset",owner,value,now)).resolves.toMatchObject({
+      sessionId:"normalized-preset",status:"prepared_not_admitted",
+    });
+  });
   it("query is read-only and not-found alone never permits a fresh key",async()=>{
     const before=JSON.stringify(store()),r=await route("query");expect(r.statusCode).toBe(200);
     expect(r.json()).toMatchObject({state:"not_found",safeToReplace:false,canRetire:true,ownerId:owner,deploymentId:"runtime-test",nonce:"resolution-0001"});
