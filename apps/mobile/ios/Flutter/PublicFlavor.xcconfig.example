@@ -9,10 +9,10 @@
 #include "Release.xcconfig"
 
 TRANSLATION_IOS_BUNDLE_ID=com.yourcompany.wujieai.public
-WUJIE_PRODUCT_PROFILE=full
+WUJIE_PRODUCT_PROFILE=core_translation
 
 // The public build also requires these explicit Flutter dart-defines at build
 // time; keep their real values out of source control:
 //   PUBLIC_DEPLOYMENT_ID=<approved-public-deployment>
 //   API_BASE_URL=https://<approved-public-origin>
-//   WUJIE_PRODUCT_PROFILE=full
+//   WUJIE_PRODUCT_PROFILE=core_translation
