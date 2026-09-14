@@ -2,8 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:translation_mobile/src/app/localization/app_localizations.dart';
+import 'package:translation_mobile/src/app/app_config.dart';
 import 'package:translation_mobile/src/features/history/data/session_history_models.dart';
 import 'package:translation_mobile/src/features/history/data/session_history_repository.dart';
+import 'package:translation_mobile/src/features/realtime/data/realtime_runtime_settings.dart';
+import 'package:translation_mobile/src/features/realtime/data/realtime_settings_store.dart';
 import 'package:translation_mobile/src/features/type_to_speak/presentation/pages/type_to_speak_page.dart';
 import 'package:translation_mobile/src/platform/sharing/file_share_service.dart';
 import 'package:translation_mobile/src/platform/speech/speech_output_provider.dart';
@@ -90,7 +93,68 @@ void main() {
     expect(history.savedTargetLanguage, 'en');
     expect(find.text('已保存到记录'), findsOneWidget);
   });
+
+  testWidgets('uses the saved online mode without device translation',
+      (WidgetTester tester) async {
+    await tester.pumpWidget(_TestApp(
+      child: TypeToSpeakPage(
+        config: _typeConfig(),
+        settingsStore:
+            MemoryRealtimeSettingsStore(const RealtimeRuntimeSettings(
+          processingMode: RealtimeProcessingMode.online,
+          sourceLanguage: 'zh',
+          targetLanguage: 'en',
+          voiceOutputMode: RealtimeVoiceOutputMode.off,
+        )),
+        speechOutputProvider: _FakeSpeechOutputProvider(),
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.byType(TextField), '你好');
+    await tester.tap(find.text('翻译'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('翻译暂不可用，请稍后重试'), findsOneWidget);
+  });
+
+  testWidgets('keeps an explicit fixed language pair for typed text',
+      (WidgetTester tester) async {
+    final translator = _FakeTranslationProvider();
+    await tester.pumpWidget(_TestApp(
+      child: TypeToSpeakPage(
+        config: _typeConfig(source: 'fr', target: 'ja'),
+        translationProvider: translator,
+        speechOutputProvider: _FakeSpeechOutputProvider(),
+        historyRepository: _FakeSessionHistoryRepository(),
+      ),
+    ));
+
+    await tester.enterText(find.byType(TextField), 'bonjour');
+    await tester.tap(find.text('翻译'));
+    await tester.pumpAndSettle();
+
+    expect(translator.lastSourceLanguage, 'fr');
+    expect(translator.lastTargetLanguage, 'ja');
+  });
 }
+
+AppConfig _typeConfig({String source = 'zh', String target = 'en'}) =>
+    AppConfig(
+      apiBaseUrl: Uri.parse('https://api.example.cn'),
+      useMockAudio: false,
+      useDeviceAsr: true,
+      deviceAsrProvider: 'apple_speech_transcriber',
+      deviceAsrLanguage: source,
+      deviceAsrAutoDownloadModel: false,
+      deviceAsrModelChunkMs: 32,
+      serverOwnedHistory: false,
+      useLocalSessions: true,
+      useOnDeviceTranslation: true,
+      autoReverseTargetLanguage: false,
+      sourceLanguage: source,
+      targetLanguage: target,
+    );
 
 class _TestApp extends StatelessWidget {
   const _TestApp({required this.child});

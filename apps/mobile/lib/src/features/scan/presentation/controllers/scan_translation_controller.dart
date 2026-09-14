@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import '../../../history/data/session_history_repository.dart';
 import '../../../../platform/ocr/mobile_ocr_provider.dart';
 import '../../../../platform/translation/mobile_translation_provider.dart';
+import '../../../../platform/translation/supported_translation_language.dart';
 import '../../../../platform/translation/text_language_detector.dart';
 import '../../domain/scan_translation_entity_protector.dart';
 
@@ -50,15 +51,22 @@ class ScanTranslationController extends ChangeNotifier {
     required MobileTranslationProvider translationProvider,
     required ScanImagePicker pickImagePath,
     required SessionHistoryRepository historyRepository,
+    String initialSourceLanguage = 'auto',
+    String initialTargetLanguage = 'en',
   })  : _ocrProvider = ocrProvider,
         _translationProvider = translationProvider,
         _pickImagePath = pickImagePath,
-        _historyRepository = historyRepository;
+        _historyRepository = historyRepository,
+        _configuredSourceLanguage = normalizeSourceLanguageCode(
+          initialSourceLanguage,
+        ),
+        targetLanguage = normalizeTargetLanguageCode(initialTargetLanguage);
 
   final MobileOcrProvider _ocrProvider;
   final MobileTranslationProvider _translationProvider;
   final ScanImagePicker _pickImagePath;
   final SessionHistoryRepository _historyRepository;
+  final String _configuredSourceLanguage;
 
   ScanTranslationStatus status = ScanTranslationStatus.idle;
   String imagePath = '';
@@ -69,7 +77,7 @@ class ScanTranslationController extends ChangeNotifier {
   List<MobileOcrBlock> recognizedBlocks = const <MobileOcrBlock>[];
   List<ScanTranslatedBlock> translatedBlocks = const <ScanTranslatedBlock>[];
   String sourceLanguage = 'auto';
-  String targetLanguage = 'en';
+  String targetLanguage;
   String? message;
   String? savedSessionId;
 
@@ -86,7 +94,7 @@ class ScanTranslationController extends ChangeNotifier {
 
   void setTargetLanguage(String language) {
     if (isBusy ||
-        (language != 'zh' && language != 'en') ||
+        !isSupportedHyMtLanguageCode(language) ||
         language == targetLanguage) {
       return;
     }
@@ -195,7 +203,9 @@ class ScanTranslationController extends ChangeNotifier {
       return;
     }
 
-    sourceLanguage = detectTextLanguage(text);
+    sourceLanguage = _configuredSourceLanguage == autoSourceLanguageCode
+        ? detectTextLanguage(text)
+        : _configuredSourceLanguage;
     status = ScanTranslationStatus.translating;
     savedSessionId = null;
     message = null;

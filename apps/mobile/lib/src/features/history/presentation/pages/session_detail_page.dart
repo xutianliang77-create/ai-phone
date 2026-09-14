@@ -133,18 +133,23 @@ class _SessionDetailPageState extends State<SessionDetailPage> {
             );
           }
           final detail = _currentDetail ?? snapshot.data!;
+          final confirmedTermIds = <String, String>{
+            ...confirmedTermIdsForSession(detail),
+            ..._confirmedTermIds,
+          };
           return Column(
             children: <Widget>[
               SessionDetailOverview(
                 detail: detail,
-                onManageSpeakers: detail.speakerCount == 0 || detail.status == 'checkpoint'
-                    ? null
-                    : () => _showSpeakers(detail),
+                onManageSpeakers:
+                    detail.speakerCount == 0 || detail.status == 'checkpoint'
+                        ? null
+                        : () => _showSpeakers(detail),
               ),
               Expanded(
                 child: SessionDetailTabs(
                   detail: detail,
-                  confirmedTermIds: _confirmedTermIds,
+                  confirmedTermIds: confirmedTermIds,
                   pendingTermKeys: _pendingTermKeys,
                   pendingActionIndexes: _pendingActionIndexes,
                   onConfirmTerm: _confirmTerm,

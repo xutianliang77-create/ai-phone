@@ -7,12 +7,13 @@ import 'package:share_plus/share_plus.dart';
 import '../../../../app/app_config.dart';
 import '../../../../app/localization/app_localizations.dart';
 import '../../../history/data/session_history_repository.dart';
+import '../../../realtime/data/realtime_settings_store.dart';
+import '../../../realtime/presentation/controllers/realtime_runtime_factories.dart';
 import '../../../../platform/ocr/mobile_ocr_provider.dart';
 import '../../../../platform/ocr/platform_ocr_provider.dart';
-import '../../../../platform/translation/api_translation_provider.dart';
-import '../../../../platform/translation/ios_system_translation_provider.dart';
 import '../../../../platform/translation/mobile_translation_provider.dart';
-import '../../../../platform/translation/phrasebook_translation_provider.dart';
+import '../../../../platform/translation/supported_translation_language.dart';
+import '../../../../platform/translation/unavailable_translation_provider.dart';
 import '../controllers/scan_translation_controller.dart';
 import '../widgets/scan_image_translation_view.dart';
 import '../widgets/scan_text_comparison_view.dart';
@@ -24,6 +25,8 @@ class ScanTranslationPage extends StatefulWidget {
     this.historyRepository,
     this.pickImagePath,
     this.shareText,
+    this.config,
+    this.settingsStore,
     super.key,
   });
 
@@ -32,27 +35,71 @@ class ScanTranslationPage extends StatefulWidget {
   final SessionHistoryRepository? historyRepository;
   final ScanImagePicker? pickImagePath;
   final Future<void> Function(String text)? shareText;
+  final AppConfig? config;
+  final RealtimeSettingsStore? settingsStore;
 
   @override
   State<ScanTranslationPage> createState() => _ScanTranslationPageState();
 }
 
 class _ScanTranslationPageState extends State<ScanTranslationPage> {
-  late final SessionHistoryRepository _historyRepository =
-      widget.historyRepository ??
-          SessionHistoryRepository.fromConfig(AppConfig.fromEnvironment());
-  late final ScanTranslationController _controller = ScanTranslationController(
-    ocrProvider: widget.ocrProvider ?? PlatformOcrProvider(),
-    translationProvider: widget.translationProvider ?? _defaultTranslator(),
-    pickImagePath: widget.pickImagePath ?? _pickImagePath,
-    historyRepository: _historyRepository,
-  );
+  late final AppConfig _baseConfig =
+      widget.config ?? AppConfig.fromEnvironment();
+  late final RealtimeSettingsStore _settingsStore =
+      widget.settingsStore ?? const FileRealtimeSettingsStore();
+  late final SessionHistoryRepository _historyRepository;
+  late final ScanTranslationController _controller;
   final ImagePicker _picker = ImagePicker();
+  bool _ready = false;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.translationProvider != null &&
+        widget.historyRepository != null) {
+      _initializeWithConfig(_baseConfig);
+    } else {
+      _initialize();
+    }
+  }
+
+  Future<void> _initialize() async {
+    final config =
+        await resolveRealtimeSettingsConfig(_baseConfig, _settingsStore);
+    _initializeWithConfig(config);
+  }
+
+  void _initializeWithConfig(AppConfig config) {
+    final useInjectedLegacyDefaults = widget.config == null &&
+        widget.translationProvider != null &&
+        widget.historyRepository != null;
+    final historyRepository =
+        widget.historyRepository ?? SessionHistoryRepository.fromConfig(config);
+    final controller = ScanTranslationController(
+      ocrProvider: widget.ocrProvider ?? PlatformOcrProvider(),
+      translationProvider:
+          widget.translationProvider ?? _defaultTranslator(config),
+      pickImagePath: widget.pickImagePath ?? _pickImagePath,
+      historyRepository: historyRepository,
+      initialSourceLanguage:
+          useInjectedLegacyDefaults ? 'auto' : config.sourceLanguage,
+      initialTargetLanguage:
+          useInjectedLegacyDefaults ? 'en' : config.targetLanguage,
+    );
+    if (!mounted) {
+      controller.dispose();
+      if (widget.historyRepository == null) historyRepository.dispose();
+      return;
+    }
+    _historyRepository = historyRepository;
+    _controller = controller;
+    setState(() => _ready = true);
+  }
 
   @override
   void dispose() {
-    _controller.dispose();
-    if (widget.historyRepository == null) {
+    if (_ready) _controller.dispose();
+    if (_ready && widget.historyRepository == null) {
       _historyRepository.dispose();
     }
     super.dispose();
@@ -61,6 +108,12 @@ class _ScanTranslationPageState extends State<ScanTranslationPage> {
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
+    if (!_ready) {
+      return Scaffold(
+        appBar: AppBar(title: Text(l10n.scanTitle)),
+        body: const Center(child: CircularProgressIndicator()),
+      );
+    }
     return Scaffold(
       appBar: AppBar(title: Text(l10n.scanTitle)),
       body: SafeArea(
@@ -201,11 +254,14 @@ class _ScanTranslationPageState extends State<ScanTranslationPage> {
   }
 
   bool get _canTranslate {
-    return !_controller.isBusy && _controller.recognizedText.trim().isNotEmpty;
+    return _ready &&
+        !_controller.isBusy &&
+        _controller.recognizedText.trim().isNotEmpty;
   }
 
   bool get _canSave {
-    return !_controller.isBusy &&
+    return _ready &&
+        !_controller.isBusy &&
         _controller.recognizedText.trim().isNotEmpty &&
         _controller.savedSessionId == null;
   }
@@ -218,14 +274,9 @@ class _ScanTranslationPageState extends State<ScanTranslationPage> {
     return colorScheme.error;
   }
 
-  MobileTranslationProvider _defaultTranslator() {
-    final config = AppConfig.fromEnvironment();
-    return IosSystemTranslationProvider(
-      fallback: ApiTranslationProvider(
-        baseUrl: config.apiBaseUrl,
-        fallback: PhrasebookTranslationProvider(),
-      ),
-    );
+  MobileTranslationProvider _defaultTranslator(AppConfig config) {
+    return createDefaultMobileTranslationProvider(config) ??
+        UnavailableTranslationProvider();
   }
 
   Future<PickedScanImage?> _pickImagePath(ScanImageSource source) async {
@@ -291,13 +342,10 @@ class _StatusLine extends StatelessWidget {
       ScanTranslationStatus.saved => l10n.scanStatusMessage('scan_saved'),
       ScanTranslationStatus.failed => l10n.warning,
     };
-    final source = switch (controller.sourceLanguage) {
-      'zh' => l10n.chinese,
-      'en' => l10n.english,
-      _ => l10n.isChinese ? '自动识别' : 'Auto detect',
-    };
-    final target =
-        controller.targetLanguage == 'zh' ? l10n.chinese : l10n.english;
+    final source = controller.sourceLanguage == 'auto'
+        ? (l10n.isChinese ? '自动识别' : 'Auto detect')
+        : _languageName(l10n, controller.sourceLanguage);
+    final target = _languageName(l10n, controller.targetLanguage);
     final direction = '$source -> $target';
     return Text('${l10n.statusLine(status)} · $direction');
   }
@@ -336,7 +384,7 @@ class _LanguageDirectionBar extends StatelessWidget {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: <Widget>[
-              Text(controller.targetLanguage == 'zh' ? '中文' : 'English'),
+              Text(_menuTargetName(context.l10n, controller.targetLanguage)),
               const Icon(Icons.arrow_drop_down),
             ],
           ),
@@ -344,4 +392,20 @@ class _LanguageDirectionBar extends StatelessWidget {
       ],
     );
   }
+}
+
+String _languageName(AppLocalizations l10n, String code) {
+  return switch (code) {
+    'zh' => l10n.chinese,
+    'en' => l10n.english,
+    _ => translationLanguageName(code, chinese: l10n.isChinese),
+  };
+}
+
+String _menuTargetName(AppLocalizations l10n, String code) {
+  return switch (code) {
+    'zh' => '中文',
+    'en' => 'English',
+    _ => _languageName(l10n, code),
+  };
 }

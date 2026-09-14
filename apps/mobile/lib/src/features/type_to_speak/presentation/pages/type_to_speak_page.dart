@@ -3,10 +3,12 @@ import 'package:flutter/material.dart';
 import '../../../../app/app_config.dart';
 import '../../../../app/localization/app_localizations.dart';
 import '../../../history/data/session_history_repository.dart';
+import '../../../realtime/data/realtime_settings_store.dart';
+import '../../../realtime/presentation/controllers/realtime_runtime_factories.dart';
 import '../../../../platform/speech/speech_output_provider.dart';
-import '../../../../platform/translation/ios_system_translation_provider.dart';
 import '../../../../platform/translation/mobile_translation_provider.dart';
-import '../../../../platform/translation/phrasebook_translation_provider.dart';
+import '../../../../platform/translation/supported_translation_language.dart';
+import '../../../../platform/translation/unavailable_translation_provider.dart';
 import '../controllers/type_to_speak_controller.dart';
 
 class TypeToSpeakPage extends StatefulWidget {
@@ -14,12 +16,16 @@ class TypeToSpeakPage extends StatefulWidget {
     this.translationProvider,
     this.speechOutputProvider,
     this.historyRepository,
+    this.config,
+    this.settingsStore,
     super.key,
   });
 
   final MobileTranslationProvider? translationProvider;
   final SpeechOutputProvider? speechOutputProvider;
   final SessionHistoryRepository? historyRepository;
+  final AppConfig? config;
+  final RealtimeSettingsStore? settingsStore;
 
   @override
   State<TypeToSpeakPage> createState() => _TypeToSpeakPageState();
@@ -27,21 +33,60 @@ class TypeToSpeakPage extends StatefulWidget {
 
 class _TypeToSpeakPageState extends State<TypeToSpeakPage> {
   final _textController = TextEditingController();
-  late final SessionHistoryRepository _historyRepository =
-      widget.historyRepository ??
-          SessionHistoryRepository.fromConfig(AppConfig.fromEnvironment());
-  late final TypeToSpeakController _controller = TypeToSpeakController(
-    translationProvider: widget.translationProvider ?? _defaultTranslator(),
-    speechOutputProvider:
-        widget.speechOutputProvider ?? SystemSpeechOutputProvider(),
-    historyRepository: _historyRepository,
-  );
+  late final AppConfig _baseConfig =
+      widget.config ?? AppConfig.fromEnvironment();
+  late final RealtimeSettingsStore _settingsStore =
+      widget.settingsStore ?? const FileRealtimeSettingsStore();
+  late final SessionHistoryRepository _historyRepository;
+  late final TypeToSpeakController _controller;
+  bool _ready = false;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.translationProvider != null &&
+        widget.speechOutputProvider != null &&
+        widget.historyRepository != null) {
+      _initializeWithConfig(_baseConfig);
+    } else {
+      _initialize();
+    }
+  }
+
+  Future<void> _initialize() async {
+    final config =
+        await resolveRealtimeSettingsConfig(_baseConfig, _settingsStore);
+    _initializeWithConfig(config);
+  }
+
+  void _initializeWithConfig(AppConfig config) {
+    final historyRepository =
+        widget.historyRepository ?? SessionHistoryRepository.fromConfig(config);
+    final controller = TypeToSpeakController(
+      translationProvider:
+          widget.translationProvider ?? _defaultTranslator(config),
+      speechOutputProvider:
+          widget.speechOutputProvider ?? SystemSpeechOutputProvider(),
+      historyRepository: historyRepository,
+      initialSourceLanguage: config.sourceLanguage,
+      initialTargetLanguage: config.targetLanguage,
+      autoReverseTargetLanguage: config.autoReverseTargetLanguage,
+    );
+    if (!mounted) {
+      controller.dispose();
+      if (widget.historyRepository == null) historyRepository.dispose();
+      return;
+    }
+    _historyRepository = historyRepository;
+    _controller = controller;
+    setState(() => _ready = true);
+  }
 
   @override
   void dispose() {
     _textController.dispose();
-    _controller.dispose();
-    if (widget.historyRepository == null) {
+    if (_ready) _controller.dispose();
+    if (_ready && widget.historyRepository == null) {
       _historyRepository.dispose();
     }
     super.dispose();
@@ -50,6 +95,12 @@ class _TypeToSpeakPageState extends State<TypeToSpeakPage> {
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
+    if (!_ready) {
+      return Scaffold(
+        appBar: AppBar(title: Text(l10n.typeToSpeak)),
+        body: const Center(child: CircularProgressIndicator()),
+      );
+    }
     return Scaffold(
       appBar: AppBar(title: Text(l10n.typeToSpeak)),
       body: SafeArea(
@@ -154,10 +205,9 @@ class _TypeToSpeakPageState extends State<TypeToSpeakPage> {
     return colorScheme.error;
   }
 
-  MobileTranslationProvider _defaultTranslator() {
-    return IosSystemTranslationProvider(
-      fallback: PhrasebookTranslationProvider(),
-    );
+  MobileTranslationProvider _defaultTranslator(AppConfig config) {
+    return createDefaultMobileTranslationProvider(config) ??
+        UnavailableTranslationProvider();
   }
 }
 
@@ -169,13 +219,16 @@ class _DirectionLine extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
-    final source = controller.sourceLanguage == 'zh'
-        ? l10n.chinese
-        : controller.sourceLanguage == 'en'
-            ? l10n.english
-            : l10n.unknown;
-    final target =
-        controller.targetLanguage == 'en' ? l10n.english : l10n.chinese;
+    final source = controller.sourceLanguage == 'auto'
+        ? l10n.unknown
+        : translationLanguageName(
+            controller.sourceLanguage,
+            chinese: l10n.isChinese,
+          );
+    final target = translationLanguageName(
+      controller.targetLanguage,
+      chinese: l10n.isChinese,
+    );
     return Text('${l10n.translationDirection}: $source -> $target');
   }
 }

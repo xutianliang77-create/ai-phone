@@ -143,15 +143,13 @@ class SessionHistoryRepository {
     required String sourceText,
     required String translatedText,
   }) {
-    if (_localStore != null) {
-      return Future.value(TermbaseTerm(
-        id: 'local_${sourceText.hashCode}_${translatedText.hashCode}',
+    final localStore = _localStore;
+    if (localStore != null) {
+      return localStore.confirmTerm(
+        sessionId: sessionId,
         sourceText: sourceText,
         translatedText: translatedText,
-        sourceLanguage: _detectLanguage(sourceText),
-        targetLanguage: _detectLanguage(translatedText),
-        status: 'active',
-      ));
+      );
     }
     return _apiClient!.confirmTerm(
       sessionId: sessionId,
@@ -161,16 +159,8 @@ class SessionHistoryRepository {
   }
 
   Future<TermbaseTerm> revokeTerm(String termId) {
-    if (_localStore != null) {
-      return Future.value(TermbaseTerm(
-        id: termId,
-        sourceText: '',
-        translatedText: '',
-        sourceLanguage: 'zh',
-        targetLanguage: 'en',
-        status: 'revoked',
-      ));
-    }
+    final localStore = _localStore;
+    if (localStore != null) return localStore.revokeTerm(termId);
     return _apiClient!.revokeTerm(termId);
   }
 
@@ -198,10 +188,6 @@ class SessionHistoryRepository {
   void dispose() {
     _apiClient?.close();
   }
-}
-
-String _detectLanguage(String text) {
-  return RegExp(r'[\u4e00-\u9fff]').hasMatch(text) ? 'zh' : 'en';
 }
 
 String _sessionPrefix(String sourceKind) {

@@ -4,10 +4,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:translation_mobile/src/app/localization/app_localizations.dart';
+import 'package:translation_mobile/src/app/app_config.dart';
 import 'package:translation_mobile/src/features/history/data/session_history_models.dart';
 import 'package:translation_mobile/src/features/history/data/session_history_repository.dart';
 import 'package:translation_mobile/src/features/scan/presentation/pages/scan_translation_page.dart';
 import 'package:translation_mobile/src/features/scan/presentation/controllers/scan_translation_controller.dart';
+import 'package:translation_mobile/src/features/realtime/data/realtime_runtime_settings.dart';
+import 'package:translation_mobile/src/features/realtime/data/realtime_settings_store.dart';
 import 'package:translation_mobile/src/platform/ocr/mobile_ocr_provider.dart';
 import 'package:translation_mobile/src/platform/sharing/file_share_service.dart';
 import 'package:translation_mobile/src/platform/translation/mobile_translation_provider.dart';
@@ -183,7 +186,55 @@ void main() {
     expect(find.text('你好'), findsOneWidget);
     expect(find.text('翻译暂不可用，已保留识别文字'), findsOneWidget);
   });
+
+  testWidgets('uses the saved online mode without old private fallback',
+      (WidgetTester tester) async {
+    await tester.pumpWidget(_TestApp(
+      child: ScanTranslationPage(
+        config: _localConfig(),
+        settingsStore:
+            MemoryRealtimeSettingsStore(const RealtimeRuntimeSettings(
+          processingMode: RealtimeProcessingMode.online,
+          sourceLanguage: 'zh',
+          targetLanguage: 'en',
+          voiceOutputMode: RealtimeVoiceOutputMode.off,
+        )),
+        ocrProvider: const _FakeOcrProvider('你好'),
+        pickImagePath: (_) async => _picked('/tmp/online.jpg'),
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('相册'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('识别文字'));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.text('翻译'),
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.tap(find.text('翻译'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('翻译暂不可用，已保留识别文字'), findsOneWidget);
+  });
 }
+
+AppConfig _localConfig() => AppConfig(
+      apiBaseUrl: Uri.parse('https://api.example.cn'),
+      useMockAudio: false,
+      useDeviceAsr: true,
+      deviceAsrProvider: 'apple_speech_transcriber',
+      deviceAsrLanguage: 'zh',
+      deviceAsrAutoDownloadModel: false,
+      deviceAsrModelChunkMs: 32,
+      serverOwnedHistory: false,
+      useLocalSessions: true,
+      useOnDeviceTranslation: true,
+      sourceLanguage: 'zh',
+      targetLanguage: 'en',
+    );
 
 PickedScanImage _picked(String path) {
   return PickedScanImage(

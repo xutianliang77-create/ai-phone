@@ -78,6 +78,5 @@ class _TermActionButton extends StatelessWidget {
 }
 
 String sessionTermKey(SessionTermSuggestion term) {
-  return '${term.sourceText.trim().toLowerCase()}\n'
-      '${term.translatedText.trim().toLowerCase()}';
+  return sessionReviewTermKey(term.sourceText, term.translatedText);
 }

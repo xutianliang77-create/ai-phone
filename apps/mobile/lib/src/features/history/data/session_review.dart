@@ -144,6 +144,31 @@ bool isCurrentDeviceRuleReview(SessionDetail detail) {
       review?['sourceFingerprint'] == deviceRuleReviewSourceFingerprint(detail);
 }
 
+Map<String, String> confirmedTermIdsForSession(SessionDetail detail) {
+  final values = detail.reviewJson?['confirmedTerms'] as List<dynamic>? ??
+      const <dynamic>[];
+  final result = <String, String>{};
+  for (final value in values) {
+    if (value is! Map) continue;
+    final id = value['id'] as String?;
+    final source = value['sourceText'] as String?;
+    final translated = value['translatedText'] as String?;
+    if (id == null ||
+        source == null ||
+        translated == null ||
+        value['status'] != 'active') {
+      continue;
+    }
+    result[sessionReviewTermKey(source, translated)] = id;
+  }
+  return result;
+}
+
+String sessionReviewTermKey(String sourceText, String translatedText) {
+  return '${sourceText.trim().toLowerCase()}\n'
+      '${translatedText.trim().toLowerCase()}';
+}
+
 String deviceRuleReviewSourceFingerprint(SessionDetail detail) {
   final source = _textPairs(detail)
       .map((segment) => <String, Object?>{
@@ -262,7 +287,9 @@ String? _title(List<SessionSegment> segments) {
     final text = segment.sourceText.trim().isNotEmpty
         ? segment.sourceText.trim()
         : segment.translatedText.trim();
-    if (text.isNotEmpty) return text.length <= 40 ? text : text.substring(0, 40);
+    if (text.isNotEmpty) {
+      return text.length <= 40 ? text : text.substring(0, 40);
+    }
   }
   return null;
 }
@@ -270,38 +297,41 @@ String? _title(List<SessionSegment> segments) {
 List<SessionActionItem> _actionItems(
   List<SessionSegment> segments,
   List<SessionHighlight> highlights,
-) => highlights
-    .where((item) => item.type == 'todo')
-    .map((item) => SessionActionItem(
-          text: item.text,
-          evidenceSegmentIds: _evidenceForText(segments, item.text),
-        ))
-    .where((item) => item.evidenceSegmentIds.isNotEmpty)
-    .toList(growable: false);
+) =>
+    highlights
+        .where((item) => item.type == 'todo')
+        .map((item) => SessionActionItem(
+              text: item.text,
+              evidenceSegmentIds: _evidenceForText(segments, item.text),
+            ))
+        .where((item) => item.evidenceSegmentIds.isNotEmpty)
+        .toList(growable: false);
 
 List<SessionKeyFact> _keyFacts(
   List<SessionSegment> segments,
   List<SessionHighlight> highlights,
-) => highlights
-    .where((item) => item.type != 'todo' && item.type != 'custom')
-    .map((item) => SessionKeyFact(
-          type: item.type,
-          text: item.text,
-          evidenceSegmentIds: _evidenceForText(segments, item.text),
-        ))
-    .where((item) => item.evidenceSegmentIds.isNotEmpty)
-    .toList(growable: false);
+) =>
+    highlights
+        .where((item) => item.type != 'todo' && item.type != 'custom')
+        .map((item) => SessionKeyFact(
+              type: item.type,
+              text: item.text,
+              evidenceSegmentIds: _evidenceForText(segments, item.text),
+            ))
+        .where((item) => item.evidenceSegmentIds.isNotEmpty)
+        .toList(growable: false);
 
-List<String> _evidenceForText(List<SessionSegment> segments, String text) => segments
-    .where((segment) {
-      final source = segment.sourceText.trim();
-      final translated = segment.translatedText.trim();
-      return (source.isNotEmpty && text.contains(source)) ||
-          (translated.isNotEmpty && text.contains(translated));
-    })
-    .map((segment) => segment.id)
-    .take(3)
-    .toList(growable: false);
+List<String> _evidenceForText(List<SessionSegment> segments, String text) =>
+    segments
+        .where((segment) {
+          final source = segment.sourceText.trim();
+          final translated = segment.translatedText.trim();
+          return (source.isNotEmpty && text.contains(source)) ||
+              (translated.isNotEmpty && text.contains(translated));
+        })
+        .map((segment) => segment.id)
+        .take(3)
+        .toList(growable: false);
 
 List<String> _stringList(Object? value) {
   return (value as List<dynamic>? ?? const [])

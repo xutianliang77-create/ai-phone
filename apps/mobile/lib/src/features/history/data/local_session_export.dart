@@ -27,7 +27,7 @@ SessionExport formatLocalSessionExport(
 }
 
 String _plainText(SessionDetail detail) {
-  return detail.segments.map((segment) {
+  final segments = detail.segments.map((segment) {
     return <String>[
       if (segment.speaker != null)
         'Speaker: ${segment.speaker!.label(isChinese: true)}',
@@ -36,6 +36,8 @@ String _plainText(SessionDetail detail) {
       'Translation: ${segment.translatedText}',
     ].join('\n');
   }).join('\n\n');
+  final review = _plainTextReview(detail.reviewJson);
+  return review.isEmpty ? segments : '$review\n\n$segments';
 }
 
 String _markdown(SessionDetail detail) {
@@ -46,6 +48,7 @@ String _markdown(SessionDetail detail) {
     ..writeln('- Created: ${detail.createdAt.toIso8601String()}')
     ..writeln('- Status: ${detail.status}')
     ..writeln();
+  _writeReviewMarkdown(buffer, detail.reviewJson);
   for (final segment in detail.segments) {
     buffer
       ..writeln('## ${segment.id}')
@@ -72,6 +75,103 @@ String _markdown(SessionDetail detail) {
   }
   return buffer.toString();
 }
+
+String _plainTextReview(Map<String, Object?>? review) {
+  if (review == null) return '';
+  final lines = <String>[];
+  final title = _reviewText(review['title']);
+  if (title.isNotEmpty) lines.add('Title: $title');
+  final summary = _reviewText(review['summary']);
+  if (summary.isNotEmpty) lines.add('Summary:\n$summary');
+  _appendReviewList(lines, 'Actions', review['actionItems']);
+  _appendReviewList(lines, 'Terms', review['terms'], term: true);
+  _appendReviewList(
+    lines,
+    'Confirmed terms',
+    review['confirmedTerms'],
+    term: true,
+    activeOnly: true,
+  );
+  return lines.join('\n\n');
+}
+
+void _writeReviewMarkdown(StringBuffer buffer, Map<String, Object?>? review) {
+  if (review == null) return;
+  final title = _reviewText(review['title']);
+  if (title.isNotEmpty) {
+    buffer
+      ..writeln('## Title')
+      ..writeln()
+      ..writeln(title)
+      ..writeln();
+  }
+  final summary = _reviewText(review['summary']);
+  if (summary.isNotEmpty) {
+    buffer
+      ..writeln('## Summary')
+      ..writeln()
+      ..writeln(summary)
+      ..writeln();
+  }
+  _writeReviewMarkdownList(buffer, 'Actions', review['actionItems']);
+  _writeReviewMarkdownList(buffer, 'Terms', review['terms'], term: true);
+  _writeReviewMarkdownList(
+    buffer,
+    'Confirmed Terms',
+    review['confirmedTerms'],
+    term: true,
+    activeOnly: true,
+  );
+}
+
+void _appendReviewList(
+  List<String> lines,
+  String title,
+  Object? value, {
+  bool term = false,
+  bool activeOnly = false,
+}) {
+  final entries = _reviewEntries(value, term: term, activeOnly: activeOnly);
+  if (entries.isEmpty) return;
+  lines.add('$title:\n${entries.map((entry) => '- $entry').join('\n')}');
+}
+
+void _writeReviewMarkdownList(
+  StringBuffer buffer,
+  String title,
+  Object? value, {
+  bool term = false,
+  bool activeOnly = false,
+}) {
+  final entries = _reviewEntries(value, term: term, activeOnly: activeOnly);
+  if (entries.isEmpty) return;
+  buffer
+    ..writeln('## $title')
+    ..writeln();
+  for (final entry in entries) {
+    buffer.writeln('- $entry');
+  }
+  buffer.writeln();
+}
+
+List<String> _reviewEntries(
+  Object? value, {
+  required bool term,
+  bool activeOnly = false,
+}) {
+  final entries = <String>[];
+  for (final item in value as List<dynamic>? ?? const <dynamic>[]) {
+    if (item is! Map) continue;
+    if (activeOnly && item['status'] != 'active') continue;
+    final text = term
+        ? '${_reviewText(item['sourceText'])}: ${_reviewText(item['translatedText'])}'
+        : _reviewText(item['text']);
+    if (text.trim().isNotEmpty && !text.endsWith(': ')) entries.add(text);
+  }
+  return entries;
+}
+
+String _reviewText(Object? value) => value is String ? value.trim() : '';
 
 String _csv(SessionDetail detail) {
   final rows = <List<String>>[

@@ -4,6 +4,7 @@ import '../../../history/data/session_history_repository.dart';
 import '../../../../platform/speech/speech_output_provider.dart';
 import '../../../../platform/speech/speech_text_normalizer.dart';
 import '../../../../platform/translation/mobile_translation_provider.dart';
+import '../../../../platform/translation/supported_translation_language.dart';
 import '../../../../platform/translation/text_language_detector.dart';
 
 enum TypeToSpeakStatus {
@@ -21,13 +22,26 @@ class TypeToSpeakController extends ChangeNotifier {
     required MobileTranslationProvider translationProvider,
     required SpeechOutputProvider speechOutputProvider,
     required SessionHistoryRepository historyRepository,
+    String initialSourceLanguage = 'auto',
+    String initialTargetLanguage = 'zh',
+    bool autoReverseTargetLanguage = false,
   })  : _translationProvider = translationProvider,
         _speechOutputProvider = speechOutputProvider,
-        _historyRepository = historyRepository;
+        _historyRepository = historyRepository,
+        _configuredSourceLanguage = normalizeSourceLanguageCode(
+          initialSourceLanguage,
+        ),
+        _configuredTargetLanguage = normalizeTargetLanguageCode(
+          initialTargetLanguage,
+        ),
+        _autoReverseTargetLanguage = autoReverseTargetLanguage;
 
   final MobileTranslationProvider _translationProvider;
   final SpeechOutputProvider _speechOutputProvider;
   final SessionHistoryRepository _historyRepository;
+  final String _configuredSourceLanguage;
+  final String _configuredTargetLanguage;
+  final bool _autoReverseTargetLanguage;
 
   TypeToSpeakStatus status = TypeToSpeakStatus.idle;
   String sourceText = '';
@@ -51,8 +65,12 @@ class TypeToSpeakController extends ChangeNotifier {
     }
 
     final detectedLanguage = detectTextLanguage(trimmed);
-    sourceLanguage = detectedLanguage;
-    targetLanguage = detectedLanguage == 'zh' ? 'en' : 'zh';
+    sourceLanguage = _configuredSourceLanguage == autoSourceLanguageCode
+        ? detectedLanguage
+        : _configuredSourceLanguage;
+    targetLanguage = _autoReverseTargetLanguage
+        ? oppositeTargetLanguageCode(sourceLanguage)
+        : _configuredTargetLanguage;
     status = TypeToSpeakStatus.translating;
     notifyListeners();
 

@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:path_provider/path_provider.dart';
 
+import '../../../app/app_config.dart';
 import 'realtime_runtime_settings.dart';
 
 abstract class RealtimeSettingsStore {
@@ -51,4 +52,14 @@ class MemoryRealtimeSettingsStore implements RealtimeSettingsStore {
   Future<void> save(RealtimeRuntimeSettings settings) async {
     _settings = settings;
   }
+}
+
+/// Reuses the live-translation setting snapshot for other original entry
+/// points, without rewriting their own saved language or voice preferences.
+Future<AppConfig> resolveRealtimeSettingsConfig(
+  AppConfig base,
+  RealtimeSettingsStore store,
+) async {
+  final saved = await store.load();
+  return saved?.applyTo(base) ?? base;
 }

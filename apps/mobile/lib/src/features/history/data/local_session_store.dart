@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:crypto/crypto.dart';
 import 'package:path_provider/path_provider.dart';
 
 import '../../realtime/domain/entities/subtitle_segment.dart';
@@ -187,7 +188,15 @@ class LocalSessionStore {
     String sessionId,
     Map<String, Object?> review,
   ) async {
-    SessionDetail edit(SessionDetail current) => current.copyWithReview(review);
+    SessionDetail edit(SessionDetail current) {
+      final previousTerms = current.reviewJson?['confirmedTerms'];
+      return current.copyWithReview(<String, Object?>{
+        ...review,
+        if (previousTerms is List && !review.containsKey('confirmedTerms'))
+          'confirmedTerms': previousTerms,
+      });
+    }
+
     final checkpoint = await _editCheckpointHistory(sessionId, edit);
     if (checkpoint != null) return checkpoint;
     final file = await _storageFile();
@@ -200,6 +209,105 @@ class LocalSessionStore {
       'sessions': sessions.map(_detailToJson).toList(),
     }));
     return updated;
+  }
+
+  Future<TermbaseTerm> confirmTerm({
+    required String sessionId,
+    required String sourceText,
+    required String translatedText,
+  }) async {
+    final source = sourceText.trim();
+    final translated = translatedText.trim();
+    if (source.isEmpty || translated.isEmpty) {
+      throw ArgumentError('A source and translated term are required');
+    }
+    final termId = _localTermId(sessionId, source, translated);
+    final timestamp = _now().toUtc().toIso8601String();
+    late final TermbaseTerm result;
+    SessionDetail edit(SessionDetail current) {
+      final review = Map<String, Object?>.from(
+        current.reviewJson ?? const <String, Object?>{},
+      );
+      final confirmed = _confirmedTerms(review['confirmedTerms']);
+      final index = confirmed.indexWhere((term) => term['id'] == termId);
+      final term = <String, Object?>{
+        'id': termId,
+        'sourceText': source,
+        'translatedText': translated,
+        'sourceLanguage': _termLanguage(source),
+        'targetLanguage': _termLanguage(translated),
+        'status': 'active',
+        'sessionId': sessionId,
+        'createdAt': index < 0 ? timestamp : confirmed[index]['createdAt'],
+        'updatedAt': timestamp,
+      };
+      if (index < 0) {
+        confirmed.add(term);
+      } else {
+        confirmed[index] = term;
+      }
+      result = _toTermbaseTerm(term);
+      return current.copyWithReview(<String, Object?>{
+        ...review,
+        'confirmedTerms': confirmed,
+      });
+    }
+
+    final checkpoint = await _editCheckpointHistory(sessionId, edit);
+    if (checkpoint != null) return result;
+    final file = await _storageFile();
+    final sessions = await _loadLegacySessions();
+    final index = sessions.indexWhere((item) => item.sessionId == sessionId);
+    if (index < 0) throw LocalSessionNotFoundException(sessionId);
+    sessions[index] = edit(sessions[index]);
+    await file.writeAsString(jsonEncode({
+      'sessions': sessions.map(_detailToJson).toList(),
+    }));
+    return result;
+  }
+
+  Future<TermbaseTerm> revokeTerm(String termId) async {
+    for (final detail in await _loadSessions()) {
+      final terms = _confirmedTerms(detail.reviewJson?['confirmedTerms']);
+      final index = terms.indexWhere((term) => term['id'] == termId);
+      if (index < 0) continue;
+      late final TermbaseTerm result;
+      SessionDetail edit(SessionDetail current) {
+        final review = Map<String, Object?>.from(
+          current.reviewJson ?? const <String, Object?>{},
+        );
+        final confirmed = _confirmedTerms(review['confirmedTerms']);
+        final currentIndex =
+            confirmed.indexWhere((term) => term['id'] == termId);
+        if (currentIndex < 0) throw StateError('Local term not found');
+        final revoked = <String, Object?>{
+          ...confirmed[currentIndex],
+          'status': 'revoked',
+          'updatedAt': _now().toUtc().toIso8601String(),
+        };
+        confirmed[currentIndex] = revoked;
+        result = _toTermbaseTerm(revoked);
+        return current.copyWithReview(<String, Object?>{
+          ...review,
+          'confirmedTerms': confirmed,
+        });
+      }
+
+      final checkpoint = await _editCheckpointHistory(detail.sessionId, edit);
+      if (checkpoint != null) return result;
+      final file = await _storageFile();
+      final sessions = await _loadLegacySessions();
+      final legacyIndex = sessions.indexWhere(
+        (item) => item.sessionId == detail.sessionId,
+      );
+      if (legacyIndex < 0) continue;
+      sessions[legacyIndex] = edit(sessions[legacyIndex]);
+      await file.writeAsString(jsonEncode({
+        'sessions': sessions.map(_detailToJson).toList(),
+      }));
+      return result;
+    }
+    throw StateError('Local term not found');
   }
 
   Future<File> _storageFile() async {
@@ -336,4 +444,29 @@ class LocalSessionNotFoundException implements Exception {
 
   @override
   String toString() => 'Local session not found: $sessionId';
+}
+
+List<Map<String, Object?>> _confirmedTerms(Object? value) =>
+    (value as List<dynamic>? ?? const <dynamic>[])
+        .whereType<Map>()
+        .map((term) => Map<String, Object?>.from(term))
+        .toList(growable: true);
+
+TermbaseTerm _toTermbaseTerm(Map<String, Object?> value) => TermbaseTerm(
+      id: value['id']! as String,
+      sourceText: value['sourceText']! as String,
+      translatedText: value['translatedText']! as String,
+      sourceLanguage: value['sourceLanguage']! as String,
+      targetLanguage: value['targetLanguage']! as String,
+      status: value['status']! as String,
+    );
+
+String _localTermId(String sessionId, String source, String translated) {
+  final digest =
+      sha256.convert(utf8.encode('$sessionId\n$source\n$translated'));
+  return 'local_term_${digest.toString().substring(0, 32)}';
+}
+
+String _termLanguage(String value) {
+  return RegExp(r'[\u4e00-\u9fff]').hasMatch(value) ? 'zh' : 'en';
 }

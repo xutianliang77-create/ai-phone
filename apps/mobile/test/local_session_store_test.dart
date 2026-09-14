@@ -314,8 +314,8 @@ void main() {
     );
 
     expect(saved.reviewJson!['generationKind'], 'device_rules');
-    final persisted = await LocalSessionStore(file: storeFile)
-        .getSession('device_review');
+    final persisted =
+        await LocalSessionStore(file: storeFile).getSession('device_review');
     expect(isCurrentDeviceRuleReview(persisted), isTrue);
     expect(
       ((persisted.reviewJson!['actionItems'] as List<Object?>).single
@@ -326,8 +326,8 @@ void main() {
 
   test('repository reuses a matching persisted device-rule review', () async {
     var clockTicks = 0;
-    DateTime now() => DateTime.utc(2026, 9, 14, 9)
-        .add(Duration(seconds: clockTicks++));
+    DateTime now() =>
+        DateTime.utc(2026, 9, 14, 9).add(Duration(seconds: clockTicks++));
     final store = LocalSessionStore(file: storeFile, now: now);
     await store.saveEndedSession(
       sessionId: 'device_review_cache',
@@ -353,11 +353,56 @@ void main() {
     expect(second.reviewJson!['generatedAt'], first.reviewJson!['generatedAt']);
     expect(clockTicks, 2);
   });
+
+  test(
+      'persists local term confirmations through review regeneration and export',
+      () async {
+    final store = LocalSessionStore(
+      file: storeFile,
+      now: () => DateTime.utc(2026, 9, 14, 9),
+    );
+    await store.saveEndedSession(
+      sessionId: 'term_history',
+      createdAt: DateTime.utc(2026, 9, 14, 8, 59),
+      segments: const <SubtitleSegment>[
+        SubtitleSegment(
+          id: 'term_1',
+          sourceText: '无界AI',
+          translatedText: 'Wujie AI',
+        ),
+      ],
+    );
+
+    final confirmed = await store.confirmTerm(
+      sessionId: 'term_history',
+      sourceText: '无界AI',
+      translatedText: 'Wujie AI',
+    );
+    final source = await store.getSession('term_history');
+    await store.saveSessionReview(
+      'term_history',
+      buildDeviceRuleReviewJson(source, DateTime.utc(2026, 9, 14, 9)),
+    );
+    final saved =
+        await LocalSessionStore(file: storeFile).getSession('term_history');
+    expect(confirmedTermIdsForSession(saved), isNotEmpty);
+    expect(confirmedTermIdsForSession(saved).values, contains(confirmed.id));
+    final markdown = await store.exportSession('term_history');
+    expect(markdown.content, contains('Confirmed Terms'));
+    expect(markdown.content, contains('无界AI: Wujie AI'));
+
+    final revoked = await store.revokeTerm(confirmed.id);
+    expect(revoked.status, 'revoked');
+    final reopened =
+        await LocalSessionStore(file: storeFile).getSession('term_history');
+    expect(confirmedTermIdsForSession(reopened), isEmpty);
+  });
 }
 
 class _NoopFileShareService implements FileShareService {
   @override
-  Future<String> saveExportFile(List<int> bytes, String filename) async => filename;
+  Future<String> saveExportFile(List<int> bytes, String filename) async =>
+      filename;
 
   @override
   Future<void> shareFile(String path, {String? mimeType}) async {}

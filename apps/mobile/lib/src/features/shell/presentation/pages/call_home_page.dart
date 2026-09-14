@@ -111,7 +111,7 @@ class CallHomePage extends StatelessWidget {
               subtitle: l10n.isChinese
                   ? '重要信息准确传达'
                   : 'Speak important details accurately',
-              onTap: () => _open(context, const TypeToSpeakPage()),
+              onTap: () => _open(context, TypeToSpeakPage(config: appConfig)),
             ),
             const SizedBox(height: 8),
             ListTile(

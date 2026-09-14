@@ -73,7 +73,7 @@ class _MainShellPageState extends State<MainShellPage> {
     return switch (index) {
       0 => widget.realtimePage ?? RealtimePage(config: _config),
       1 => const CallHomePage(),
-      2 => const ScanTranslationPage(),
+      2 => ScanTranslationPage(config: _config),
       3 => SessionHistoryPage(repository: widget.historyRepository),
       _ => SettingsHomePage(config: _config),
     };
