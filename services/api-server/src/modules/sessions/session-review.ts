@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import {
   createLlmProvider,
   loadLlmConfig,
@@ -29,6 +30,13 @@ export interface SessionReviewOptions {
   fetchFn?: typeof fetch;
 }
 
+export class PublicSemanticReviewUnavailableError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "PublicSemanticReviewUnavailableError";
+  }
+}
+
 export async function generateSessionReview(
   session: SessionRecord,
   options: SessionReviewOptions = {},
@@ -57,6 +65,65 @@ export async function generateSessionReview(
     }
   }
   return localSessionReview(session, options.now);
+}
+
+/**
+ * Public semantic review is deliberately separate from the legacy/local
+ * fallback path. An explicit request must never silently become a server-side
+ * rules pass when public capability is unavailable.
+ */
+export async function generatePublicSemanticReview(
+  session: SessionRecord,
+  options: SessionReviewOptions = {},
+): Promise<SessionReviewResponse> {
+  const config = loadLlmConfig();
+  if (!config.reviewEnabled || config.provider === "off") {
+    throw new PublicSemanticReviewUnavailableError(
+      "Public semantic review is not enabled",
+    );
+  }
+  const provider = createLlmProvider(config, options.fetchFn);
+  const health = await provider.healthCheck();
+  if (health.status !== "ready") {
+    const reason = health.issues.join("; ") || "LLM review provider unavailable";
+    recordRemoteReviewFailure(config, reason, options.now);
+    throw new PublicSemanticReviewUnavailableError(reason);
+  }
+  try {
+    const review = await provider.generateReview({
+      sessionId: session.id,
+      segments: remoteReviewSegments(session),
+    });
+    recordRemoteReviewSuccess(config, options.now);
+    return bindPublicSemanticReviewToSource(
+      toSessionReviewResponse(review, options.now),
+      session,
+    );
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error);
+    recordRemoteReviewFailure(config, reason, options.now);
+    if (error instanceof PublicSemanticReviewUnavailableError) throw error;
+    throw new PublicSemanticReviewUnavailableError(reason);
+  }
+}
+
+/** The fingerprint is server-derived; caller input never decides cache reuse. */
+export function sessionReviewSourceFingerprint(session: SessionRecord) {
+  const source = orderSessionSegmentsChronologically(session.segments).map((segment) => ({
+    id: segment.id,
+    turnId: segment.turnId,
+    revision: segment.revision,
+    rawText: segment.rawText,
+    optimizedText: segment.optimizedText,
+    sourceText: segment.sourceText,
+    translatedText: segment.translatedText,
+    sourceLanguage: segment.sourceLanguage,
+    targetLanguage: segment.targetLanguage,
+    speakerId: segment.speaker?.speakerId,
+    startMs: segment.timing?.startMs,
+    endMs: segment.timing?.endMs,
+  }));
+  return createHash("sha256").update(JSON.stringify(source)).digest("hex");
 }
 
 function remoteReviewSegments(session: SessionRecord) {
@@ -125,6 +192,52 @@ export function localSessionReview(
     terms: terms(segments),
     evidenceSegmentIds: segments.slice(0, 5).map((segment) => segment.id),
   };
+}
+
+function bindPublicSemanticReviewToSource(
+  review: SessionReviewResponse,
+  session: SessionRecord,
+): SessionReviewResponse {
+  const validIds = new Set(session.segments.map((segment) => segment.id));
+  const evidence = validEvidenceIds(review.evidenceSegmentIds, validIds);
+  const actionItems = (review.actionItems ?? [])
+    .map((item) => ({
+      ...item,
+      evidenceSegmentIds: validEvidenceIds(item.evidenceSegmentIds, validIds),
+    }))
+    .filter((item) => item.evidenceSegmentIds.length > 0);
+  const keyFacts = (review.keyFacts ?? [])
+    .map((item) => ({
+      ...item,
+      evidenceSegmentIds: validEvidenceIds(item.evidenceSegmentIds, validIds),
+    }))
+    .filter((item) => item.evidenceSegmentIds.length > 0);
+  const boundEvidence = uniqueIds([
+    ...evidence,
+    ...actionItems.flatMap((item) => item.evidenceSegmentIds),
+    ...keyFacts.flatMap((item) => item.evidenceSegmentIds),
+  ]);
+  if (boundEvidence.length === 0) {
+    throw new PublicSemanticReviewUnavailableError(
+      "Public semantic review did not cite an existing source segment",
+    );
+  }
+  return {
+    ...review,
+    actionItems,
+    keyFacts,
+    evidenceSegmentIds: boundEvidence,
+    generationKind: "public_semantic_enhancement",
+    sourceFingerprint: sessionReviewSourceFingerprint(session),
+  };
+}
+
+function validEvidenceIds(value: string[] | undefined, validIds: Set<string>) {
+  return uniqueIds((value ?? []).filter((id) => validIds.has(id)));
+}
+
+function uniqueIds(values: string[]) {
+  return [...new Set(values)];
 }
 
 function localSessionReviewFallback(

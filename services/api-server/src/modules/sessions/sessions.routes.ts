@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { FastifyInstance } from "fastify";
 import type {
+  GenerateSessionReviewRequest,
   SaveSessionSegmentsRequest,
   SaveTextTranslationSessionRequest,
   SaveTypeToSpeakSessionRequest,
@@ -23,7 +24,10 @@ import {
   toSessionListItem,
 } from "./session-mappers.js";
 import {
+  generatePublicSemanticReview,
   generateSessionReview,
+  PublicSemanticReviewUnavailableError,
+  sessionReviewSourceFingerprint,
 } from "./session-review.js";
 import { refundSessionUsage } from "./session-usage-refund.js";
 import { registerSessionSpeakerRoutes } from "./session-speakers.routes.js";
@@ -155,17 +159,33 @@ export async function registerSessionsRoutes(app: FastifyInstance) {
     if (!session)
       return sendError(reply, 404, "session_not_found", "Session not found");
     if (session.userId !== account.id) return forbidden(reply);
+    const body = request.body as Partial<GenerateSessionReviewRequest> | undefined;
+    const generationKind = body?.generationKind;
+    if (generationKind !== undefined && generationKind !== "public_semantic_enhancement") {
+      return sendError(reply, 400, "invalid_session_review_request",
+        "generationKind must be public_semantic_enhancement");
+    }
     try {
-      const review = await generateSessionReview(session);
-      return withSessionWriteLock(session.id, async () => {
+      return await withSessionWriteLock(session.id, async () => {
         const current = await findSession(session.id);
         if (!current)
           return sendError(reply, 404, "session_not_found", "Session not found");
         if (current.userId !== account.id) return forbidden(reply);
+        if (generationKind === "public_semantic_enhancement" &&
+            current.review?.generationKind === "public_semantic_enhancement" &&
+            current.review.sourceFingerprint === sessionReviewSourceFingerprint(current)) {
+          return toSessionDetail(current);
+        }
+        const review = generationKind === "public_semantic_enhancement"
+          ? await generatePublicSemanticReview(current)
+          : await generateSessionReview(current);
         const updated = await saveSessionReview(current.id, review);
         return toSessionDetail(updated ?? current);
       });
     } catch (error) {
+      if (error instanceof PublicSemanticReviewUnavailableError) {
+        return sendError(reply, 409, "public_semantic_review_unavailable", error.message);
+      }
       return sendError(
         reply,
         502,

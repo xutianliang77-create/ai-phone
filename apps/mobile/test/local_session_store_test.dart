@@ -3,7 +3,10 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:translation_mobile/src/features/history/data/local_session_store.dart';
+import 'package:translation_mobile/src/features/history/data/session_history_repository.dart';
+import 'package:translation_mobile/src/features/history/data/session_review.dart';
 import 'package:translation_mobile/src/features/realtime/domain/entities/subtitle_segment.dart';
+import 'package:translation_mobile/src/platform/sharing/file_share_service.dart';
 import 'package:translation_mobile/src/shared/domain/speaker_attribution.dart';
 import 'package:translation_mobile/src/shared/domain/turn_language_profile.dart';
 
@@ -287,4 +290,75 @@ void main() {
       isTrue,
     );
   });
+
+  test('persists device-rule reviews without a server request', () async {
+    final store = LocalSessionStore(
+      file: storeFile,
+      now: () => DateTime.utc(2026, 9, 14, 9),
+    );
+    await store.saveEndedSession(
+      sessionId: 'device_review',
+      createdAt: DateTime.utc(2026, 9, 14, 8, 59),
+      segments: const <SubtitleSegment>[
+        SubtitleSegment(
+          id: 'todo_1',
+          sourceText: '请发送会议纪要',
+          translatedText: 'Please send the meeting notes',
+        ),
+      ],
+    );
+    final source = await store.getSession('device_review');
+    final saved = await store.saveSessionReview(
+      'device_review',
+      buildDeviceRuleReviewJson(source, DateTime.utc(2026, 9, 14, 9)),
+    );
+
+    expect(saved.reviewJson!['generationKind'], 'device_rules');
+    final persisted = await LocalSessionStore(file: storeFile)
+        .getSession('device_review');
+    expect(isCurrentDeviceRuleReview(persisted), isTrue);
+    expect(
+      ((persisted.reviewJson!['actionItems'] as List<Object?>).single
+          as Map<String, Object?>)['evidenceSegmentIds'],
+      <String>['todo_1'],
+    );
+  });
+
+  test('repository reuses a matching persisted device-rule review', () async {
+    var clockTicks = 0;
+    DateTime now() => DateTime.utc(2026, 9, 14, 9)
+        .add(Duration(seconds: clockTicks++));
+    final store = LocalSessionStore(file: storeFile, now: now);
+    await store.saveEndedSession(
+      sessionId: 'device_review_cache',
+      createdAt: DateTime.utc(2026, 9, 14, 8, 59),
+      segments: const <SubtitleSegment>[
+        SubtitleSegment(
+          id: 'todo_1',
+          sourceText: '请发送会议纪要',
+          translatedText: 'Please send the meeting notes',
+        ),
+      ],
+    );
+    final repository = SessionHistoryRepository(
+      localStore: store,
+      shareService: _NoopFileShareService(),
+      now: now,
+    );
+
+    final first = await repository.generateReview('device_review_cache');
+    final second = await repository.generateReview('device_review_cache');
+
+    expect(first.reviewJson!['generationKind'], 'device_rules');
+    expect(second.reviewJson!['generatedAt'], first.reviewJson!['generatedAt']);
+    expect(clockTicks, 2);
+  });
+}
+
+class _NoopFileShareService implements FileShareService {
+  @override
+  Future<String> saveExportFile(List<int> bytes, String filename) async => filename;
+
+  @override
+  Future<void> shareFile(String path, {String? mimeType}) async {}
 }

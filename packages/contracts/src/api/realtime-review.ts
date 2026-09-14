@@ -24,6 +24,18 @@ export interface SessionReviewKeyFactDto {
   evidenceSegmentIds: string[];
 }
 
+/**
+ * Device rules are generated from the history already stored on the phone.
+ * Public semantic enhancement is intentionally an explicit user action.
+ */
+export type SessionReviewGenerationKind =
+  | "device_rules"
+  | "public_semantic_enhancement";
+
+export interface GenerateSessionReviewRequest {
+  generationKind: "public_semantic_enhancement";
+}
+
 export interface TermbaseTermDto {
   id: string;
   sourceText: string;
@@ -68,4 +80,8 @@ export interface SessionReviewResponse {
   highlights: SessionReviewHighlightDto[];
   terms: SessionReviewTermDto[];
   evidenceSegmentIds?: string[];
+  /** Indicates whether this persisted result is local rules or public semantics. */
+  generationKind?: SessionReviewGenerationKind;
+  /** SHA-256 of the ordered, source-bearing segment revisions used for this review. */
+  sourceFingerprint?: string;
 }

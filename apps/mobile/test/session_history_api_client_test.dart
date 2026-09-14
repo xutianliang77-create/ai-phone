@@ -7,6 +7,31 @@ import 'package:translation_mobile/src/features/account/data/account_session_sto
 import 'package:translation_mobile/src/features/history/data/session_history_api_client.dart';
 
 void main() {
+  test('requests public semantic review explicitly', () async {
+    final client = SessionHistoryApiClient(
+      baseUrl: Uri.parse('https://api.example.cn'),
+      accountSessionStore: _sessionStore(),
+      client: MockClient((request) async {
+        expect(request.method, 'POST');
+        expect(request.url.path, '/sessions/session_1/review');
+        expect(request.headers['authorization'], 'Bearer account-token');
+        expect(request.headers['content-type'], contains('application/json'));
+        expect(jsonDecode(request.body), <String, Object?>{
+          'generationKind': 'public_semantic_enhancement',
+        });
+        return http.Response(
+          jsonEncode(_detailJson(completed: false)),
+          200,
+          headers: const {'content-type': 'application/json; charset=utf-8'},
+        );
+      }),
+    );
+
+    final detail = await client.generateReview('session_1');
+
+    expect(detail.sessionId, 'session_1');
+  });
+
   test('patches an account-owned action item and parses persisted state',
       () async {
     final client = SessionHistoryApiClient(

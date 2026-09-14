@@ -59,7 +59,7 @@ class SessionDetailTabs extends StatelessWidget {
                 ),
                 SessionMinutesTab(
                   review: review,
-                  hasServerReview: detail.reviewJson != null,
+                  hasGeneratedReview: detail.reviewJson != null,
                   onGenerateReview: onGenerateReview,
                   generatingReview: generatingReview,
                 ),
@@ -72,7 +72,7 @@ class SessionDetailTabs extends StatelessWidget {
                 ),
                 SessionActionItemsTab(
                   items: review.actionItems,
-                  hasServerReview: detail.reviewJson != null,
+                  hasGeneratedReview: detail.reviewJson != null,
                   pendingIndexes: pendingActionIndexes,
                   onChanged: onUpdateActionItem,
                   onGenerateReview: onGenerateReview,

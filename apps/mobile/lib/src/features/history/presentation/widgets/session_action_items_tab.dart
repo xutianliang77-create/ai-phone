@@ -11,7 +11,7 @@ typedef UpdateSessionActionItem = Future<void> Function(
 class SessionActionItemsTab extends StatelessWidget {
   const SessionActionItemsTab({
     required this.items,
-    required this.hasServerReview,
+    required this.hasGeneratedReview,
     required this.pendingIndexes,
     required this.onChanged,
     required this.onGenerateReview,
@@ -19,7 +19,7 @@ class SessionActionItemsTab extends StatelessWidget {
   });
 
   final List<SessionActionItem> items;
-  final bool hasServerReview;
+  final bool hasGeneratedReview;
   final Set<int> pendingIndexes;
   final UpdateSessionActionItem onChanged;
   final VoidCallback onGenerateReview;
@@ -27,7 +27,7 @@ class SessionActionItemsTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final chinese = context.l10n.isChinese;
-    if (!hasServerReview) {
+    if (!hasGeneratedReview) {
       return _GenerateReviewEmptyState(onGenerateReview: onGenerateReview);
     }
     if (items.isEmpty) {

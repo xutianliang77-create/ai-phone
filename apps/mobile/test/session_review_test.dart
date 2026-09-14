@@ -38,6 +38,45 @@ void main() {
           term.sourceText == '字幕' && term.translatedText == 'subtitles'),
       isTrue,
     );
+    expect(
+      review.keyFacts
+          .firstWhere((item) => item.type == 'time')
+          .evidenceSegmentIds,
+      <String>['1'],
+    );
+  });
+
+  test('serializes a device rule review with stable source evidence', () {
+    final detail = SessionDetail(
+      sessionId: 's1',
+      mode: 'meeting',
+      status: 'ended',
+      consumedSeconds: 60,
+      createdAt: DateTime.utc(2026, 9, 14),
+      segmentCount: 1,
+      segments: const <SessionSegment>[
+        SessionSegment(
+          id: 'todo_1',
+          sourceText: '请发送会议纪要',
+          translatedText: 'Please send the meeting notes',
+        ),
+      ],
+    );
+
+    final review = buildDeviceRuleReviewJson(
+      detail,
+      DateTime.utc(2026, 9, 14, 8),
+    );
+
+    expect(review['generationKind'], 'device_rules');
+    expect(review['sourceFingerprint'], matches(RegExp(r'^[a-f0-9]{64}$')));
+    expect(review['evidenceSegmentIds'], <String>['todo_1']);
+    final persisted = detail.copyWithReview(review);
+    expect(isCurrentDeviceRuleReview(persisted), isTrue);
+    expect(
+      (review['actionItems'] as List<Object?>).single,
+      containsPair('evidenceSegmentIds', <String>['todo_1']),
+    );
   });
 
   test('prefers server generated review when available', () {

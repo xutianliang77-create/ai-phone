@@ -183,6 +183,25 @@ class LocalSessionStore {
     return updated;
   }
 
+  Future<SessionDetail> saveSessionReview(
+    String sessionId,
+    Map<String, Object?> review,
+  ) async {
+    SessionDetail edit(SessionDetail current) => current.copyWithReview(review);
+    final checkpoint = await _editCheckpointHistory(sessionId, edit);
+    if (checkpoint != null) return checkpoint;
+    final file = await _storageFile();
+    final sessions = await _loadLegacySessions();
+    final index = sessions.indexWhere((item) => item.sessionId == sessionId);
+    if (index < 0) throw LocalSessionNotFoundException(sessionId);
+    final updated = edit(sessions[index]);
+    sessions[index] = updated;
+    await file.writeAsString(jsonEncode({
+      'sessions': sessions.map(_detailToJson).toList(),
+    }));
+    return updated;
+  }
+
   Future<File> _storageFile() async {
     final file = _file;
     if (file != null) return file;

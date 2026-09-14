@@ -6,14 +6,14 @@ import '../../data/session_review.dart';
 class SessionMinutesTab extends StatelessWidget {
   const SessionMinutesTab({
     required this.review,
-    required this.hasServerReview,
+    required this.hasGeneratedReview,
     required this.onGenerateReview,
     required this.generatingReview,
     super.key,
   });
 
   final SessionReview review;
-  final bool hasServerReview;
+  final bool hasGeneratedReview;
   final VoidCallback onGenerateReview;
   final bool generatingReview;
 
@@ -33,7 +33,7 @@ class SessionMinutesTab extends StatelessWidget {
             ),
             IconButton(
               onPressed: generatingReview ? null : onGenerateReview,
-              tooltip: hasServerReview
+              tooltip: hasGeneratedReview
                   ? (chinese ? '重新生成' : 'Regenerate')
                   : (chinese ? '生成会议纪要' : 'Generate notes'),
               icon: generatingReview

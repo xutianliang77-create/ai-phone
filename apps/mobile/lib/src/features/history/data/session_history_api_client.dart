@@ -97,7 +97,10 @@ class SessionHistoryApiClient {
   Future<SessionDetail> generateReview(String sessionId) async {
     final response = await _client.post(
       _baseUrl.resolve('/sessions/$sessionId/review'),
-      headers: await _authHeaders(),
+      headers: await _authHeaders(json: true),
+      body: jsonEncode(const <String, Object?>{
+        'generationKind': 'public_semantic_enhancement',
+      }),
     );
     _ensureOk(response);
     return SessionDetail.fromJson(

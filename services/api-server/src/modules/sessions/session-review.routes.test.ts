@@ -78,6 +78,102 @@ describe("session review routes", () => {
     expect(exported.json().content).toContain("## Terms");
   });
 
+  it("requires an explicit public request and reuses its unchanged source result", async () => {
+    const previousProvider = process.env.LLM_PROVIDER;
+    const previousEnabled = process.env.LLM_REVIEW_ENABLED;
+    process.env.LLM_PROVIDER = "mock";
+    process.env.LLM_REVIEW_ENABLED = "true";
+    try {
+      const app = await buildApp();
+      const created = await app.inject({
+        method: "POST",
+        url: "/realtime/sessions",
+        payload: {
+          mode: "meeting",
+          sourceLanguage: "zh",
+          targetLanguage: "en",
+          voiceOutput: false,
+        },
+      });
+      const sessionId = created.json().sessionId as string;
+      await app.inject({
+        method: "POST",
+        url: `/sessions/${sessionId}/segments`,
+        payload: {
+          segments: [{
+            id: "source_1",
+            sourceText: "请发送会议纪要",
+            translatedText: "Please send the meeting notes",
+          }],
+        },
+      });
+
+      const invalid = await app.inject({
+        method: "POST",
+        url: `/sessions/${sessionId}/review`,
+        payload: { generationKind: "device_rules" },
+      });
+      const first = await app.inject({
+        method: "POST",
+        url: `/sessions/${sessionId}/review`,
+        payload: { generationKind: "public_semantic_enhancement" },
+      });
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      const second = await app.inject({
+        method: "POST",
+        url: `/sessions/${sessionId}/review`,
+        payload: { generationKind: "public_semantic_enhancement" },
+      });
+      await app.close();
+
+      expect(invalid.statusCode).toBe(400);
+      expect(first.statusCode).toBe(200);
+      expect(first.json().review).toMatchObject({
+        generationKind: "public_semantic_enhancement",
+        evidenceSegmentIds: ["source_1"],
+        sourceFingerprint: expect.stringMatching(/^[a-f0-9]{64}$/),
+      });
+      expect(second.statusCode).toBe(200);
+      expect(second.json().review.generatedAt)
+        .toBe(first.json().review.generatedAt);
+    } finally {
+      if (previousProvider === undefined) {
+        delete process.env.LLM_PROVIDER;
+      } else {
+        process.env.LLM_PROVIDER = previousProvider;
+      }
+      if (previousEnabled === undefined) {
+        delete process.env.LLM_REVIEW_ENABLED;
+      } else {
+        process.env.LLM_REVIEW_ENABLED = previousEnabled;
+      }
+    }
+  });
+
+  it("does not replace an explicit public request with local server rules", async () => {
+    const app = await buildApp();
+    const created = await app.inject({
+      method: "POST",
+      url: "/realtime/sessions",
+      payload: {
+        mode: "meeting",
+        sourceLanguage: "zh",
+        targetLanguage: "en",
+        voiceOutput: false,
+      },
+    });
+    const sessionId = created.json().sessionId as string;
+    const response = await app.inject({
+      method: "POST",
+      url: `/sessions/${sessionId}/review`,
+      payload: { generationKind: "public_semantic_enhancement" },
+    });
+    await app.close();
+
+    expect(response.statusCode).toBe(409);
+    expect(response.json().error.code).toBe("public_semantic_review_unavailable");
+  });
+
   it("updates and persists a generated action item", async () => {
     const app = await buildApp();
     const created = await app.inject({

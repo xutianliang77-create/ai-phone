@@ -7,6 +7,7 @@ import '../../realtime/domain/entities/subtitle_segment.dart';
 import 'local_session_store.dart';
 import 'session_history_api_client.dart';
 import 'session_history_models.dart';
+import 'session_review.dart';
 
 class SessionHistoryRepository {
   SessionHistoryRepository({
@@ -102,10 +103,15 @@ class SessionHistoryRepository {
     return localStore.getSession(sessionId);
   }
 
-  Future<SessionDetail> generateReview(String sessionId) {
+  Future<SessionDetail> generateReview(String sessionId) async {
     final localStore = _localStore;
-    if (localStore != null) return localStore.getSession(sessionId);
-    return _apiClient!.generateReview(sessionId);
+    if (localStore == null) return _apiClient!.generateReview(sessionId);
+    final current = await localStore.getSession(sessionId);
+    if (isCurrentDeviceRuleReview(current)) return current;
+    return localStore.saveSessionReview(
+      sessionId,
+      buildDeviceRuleReviewJson(current, _now()),
+    );
   }
 
   Future<SessionDetail> updateActionItem(

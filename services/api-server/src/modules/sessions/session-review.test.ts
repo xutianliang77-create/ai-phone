@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import {
+  generatePublicSemanticReview,
   generateSessionReview,
   localSessionReview,
   resetSessionReviewProviderRuntimeStatusForTest,
@@ -159,6 +160,46 @@ describe("session review", () => {
       status: "degraded",
       issues: [expect.stringContaining("fetch failed")],
       lastCheckedAt: "2026-07-03T00:00:00.000Z",
+    });
+  });
+
+  it("rejects an unavailable explicit public review instead of falling back", async () => {
+    await expect(generatePublicSemanticReview(session())).rejects.toMatchObject({
+      name: "PublicSemanticReviewUnavailableError",
+    });
+  });
+
+  it("keeps only public evidence that points to an existing source segment", async () => {
+    process.env.LLM_PROVIDER = "openai_compatible";
+    process.env.LLM_REVIEW_ENABLED = "true";
+    process.env.LLM_BASE_URL = "http://127.0.0.1:1234/v1";
+    process.env.LLM_REVIEW_MODEL = "qwen";
+
+    const review = await generatePublicSemanticReview(session(), {
+      now: new Date("2026-09-14T08:00:00.000Z"),
+      fetchFn: async (url) => {
+        if (String(url).endsWith("/models")) {
+          return new Response(JSON.stringify({ data: [{ id: "qwen" }] }), {
+            status: 200,
+          });
+        }
+        return new Response(JSON.stringify({
+          choices: [{ message: { content: JSON.stringify({
+            summary: "会议时间和预算待确认。",
+            actionItems: [{ text: "伪造待办", evidenceSegmentIds: ["missing"] }],
+            keyFacts: [{ type: "time", text: "下午三点", evidenceSegmentIds: ["1"] }],
+            evidenceSegmentIds: ["missing"],
+          }) } }],
+        }), { status: 200 });
+      },
+    });
+
+    expect(review).toMatchObject({
+      generationKind: "public_semantic_enhancement",
+      evidenceSegmentIds: ["1"],
+      actionItems: [],
+      keyFacts: [{ type: "time", evidenceSegmentIds: ["1"] }],
+      sourceFingerprint: expect.stringMatching(/^[a-f0-9]{64}$/),
     });
   });
 });

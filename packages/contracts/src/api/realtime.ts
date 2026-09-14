@@ -22,8 +22,10 @@ import type {
 } from "./session-quality.js";
 
 export type {
+  GenerateSessionReviewRequest,
   SaveTermbaseTermRequest,
   SessionReviewActionItemDto,
+  SessionReviewGenerationKind,
   SessionReviewHighlightDto,
   SessionReviewKeyFactDto,
   SessionReviewResponse,
