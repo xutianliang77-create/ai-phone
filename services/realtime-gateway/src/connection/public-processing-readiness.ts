@@ -9,9 +9,20 @@ import { inspectPublicRuntimeLiveQualification,
  * pass provider initialization at connection time. Private URLs never qualify it.
  */
 export function publicProcessingReadiness(env:Pick<RealtimeEnv,
-  "publicDeploymentId"|"publicRuntimeEnabled"|"publicCredentialAccessSecret"|"internalApiSecret"|"realtimeTokenSecret"|
+  "nodeEnv"|"publicQualificationBootstrap"|"publicDeploymentId"|"publicRuntimeEnabled"|"publicCredentialAccessSecret"|"internalApiSecret"|"realtimeTokenSecret"|
   "publicLiveQualificationFile"|"publicLiveQualificationKey"|"publicConfigurationHash"|"publicModelPolicyRevision"|"publicActiveComponents">,now = new Date()): GatewayDependencyReadiness {
   const bootstrapIssue=publicGatewayRuntimeBootstrapIssue(env);
+  if(env.publicQualificationBootstrap){
+    const scopeReady=Boolean(env.publicConfigurationHash&&env.publicModelPolicyRevision&&env.publicActiveComponents?.length);
+    const allowed=!bootstrapIssue&&scopeReady&&env.nodeEnv==="development";
+    const issue=bootstrapIssue??(!scopeReady?"public_runtime_qualification_bootstrap_scope_missing":env.nodeEnv!=="development"?"public_runtime_qualification_bootstrap_not_permitted":undefined);
+    if(allowed){
+      return {status:"ready",sessionReady:true,releaseReady:false,checkedAt:now.toISOString(),
+        evidence:"isolated_qualification_bootstrap",issues:["public_runtime_qualification_bootstrap_active"],warnings:[],
+        services:(env.publicActiveComponents??[]).map(name=>({name:name as "asr"|"translation"|"tts",requiredForSession:true,requiredForRelease:true,status:"ready" as const,url:"",execution:"public" as const,identity:{bootstrap:true}}))};
+    }
+    return {status:"not_ready",sessionReady:false,releaseReady:false,checkedAt:now.toISOString(),evidence:"implementation_gate",issues:[issue!],warnings:[],services:[]};
+  }
   const live=bootstrapIssue?undefined:liveQualification(env,now);
   const issue=bootstrapIssue??(live?.status==="not_ready"?live.issue:undefined)??"public_provider_live_qualification_required";
   if(live?.status==="ready"){

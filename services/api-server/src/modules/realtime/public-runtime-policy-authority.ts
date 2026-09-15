@@ -8,7 +8,7 @@ import type {PublicInferenceEvidence} from "../sessions/public-inference-evidenc
 import type {PublicModelRuntimeSnapshot} from "../models/public-model-runtime-config.js";
 import type {PublicRealtimeAuthority,PublicRealtimeConfigurationCapability} from "./public-realtime-coordinator.js";
 
-type RuntimeEnv=Partial<Pick<NodeJS.ProcessEnv,"PUBLIC_RUNTIME_ENABLED"|"PUBLIC_RUNTIME_ADMISSION_POLICY_FILE"|"PUBLIC_RUNTIME_ADMISSION_POLICY_KEY"|"API_RESULT_SYNC_DEPLOYMENT_ID"|"PUBLIC_RUNTIME_REQUIRE_LIVE_QUALIFICATION"|"PUBLIC_RUNTIME_LIVE_QUALIFICATION_FILE"|"PUBLIC_RUNTIME_LIVE_QUALIFICATION_KEY">>;
+type RuntimeEnv=Partial<Pick<NodeJS.ProcessEnv,"NODE_ENV"|"PUBLIC_RUNTIME_ENABLED"|"PUBLIC_RUNTIME_ADMISSION_POLICY_FILE"|"PUBLIC_RUNTIME_ADMISSION_POLICY_KEY"|"API_RESULT_SYNC_DEPLOYMENT_ID"|"PUBLIC_RUNTIME_REQUIRE_LIVE_QUALIFICATION"|"PUBLIC_RUNTIME_QUALIFICATION_BOOTSTRAP"|"PUBLIC_RUNTIME_LIVE_QUALIFICATION_FILE"|"PUBLIC_RUNTIME_LIVE_QUALIFICATION_KEY">>;
 type ProviderAvailability={providerId:string;state:"available"|"unavailable"};
 type QualifiedLanguagePair={source:string;target:string};
 type Policy={schemaVersion:1;policyId:string;deploymentId:string;configurationHash:string;modelPolicyRevision:string;region:string;
@@ -40,7 +40,9 @@ export function publicRealtimeAuthorityFromEnvironment(env:RuntimeEnv=process.en
   if(!enabled(env.PUBLIC_RUNTIME_ENABLED))return undefined;
   const file=env.PUBLIC_RUNTIME_ADMISSION_POLICY_FILE,key=env.PUBLIC_RUNTIME_ADMISSION_POLICY_KEY,deployment=env.API_RESULT_SYNC_DEPLOYMENT_ID;
   if(typeof file!=="string"||!isAbsolute(file)||!hex(key,64)||!syncKey(deployment))throw Error("public_runtime_admission_policy_not_configured");
-  const required=enabled(env.PUBLIC_RUNTIME_REQUIRE_LIVE_QUALIFICATION),liveFile=env.PUBLIC_RUNTIME_LIVE_QUALIFICATION_FILE,liveKey=env.PUBLIC_RUNTIME_LIVE_QUALIFICATION_KEY;
+  const bootstrap=enabled(env.PUBLIC_RUNTIME_QUALIFICATION_BOOTSTRAP);
+  if(bootstrap&&env.NODE_ENV!=="development")throw Error("public_runtime_qualification_bootstrap_not_permitted");
+  const required=enabled(env.PUBLIC_RUNTIME_REQUIRE_LIVE_QUALIFICATION)&&!bootstrap,liveFile=env.PUBLIC_RUNTIME_LIVE_QUALIFICATION_FILE,liveKey=env.PUBLIC_RUNTIME_LIVE_QUALIFICATION_KEY;
   if(required&&(!isAbsolute(liveFile??"")||!hex(liveKey,64)))throw Error("public_runtime_live_qualification_not_configured");
   return {timeoutMs:5000,configurationCapability:configuration=>configurationCapability(env,configuration),resolveVerifiedEvidence:async context=>{
     const live=required?requiredLiveQualification(env,context.configuration):undefined;
@@ -55,7 +57,9 @@ function configurationCapability(env:RuntimeEnv,configuration:PublicModelRuntime
   try{
     const file=env.PUBLIC_RUNTIME_ADMISSION_POLICY_FILE,key=env.PUBLIC_RUNTIME_ADMISSION_POLICY_KEY,deployment=env.API_RESULT_SYNC_DEPLOYMENT_ID;
     if(!enabled(env.PUBLIC_RUNTIME_ENABLED)||typeof file!=="string"||!isAbsolute(file)||!hex(key,64)||!syncKey(deployment))throw Error();
-    const live=enabled(env.PUBLIC_RUNTIME_REQUIRE_LIVE_QUALIFICATION)?requiredLiveQualification(env,configuration):undefined;
+    const bootstrap=enabled(env.PUBLIC_RUNTIME_QUALIFICATION_BOOTSTRAP);
+    if(bootstrap&&env.NODE_ENV!=="development")throw Error();
+    const live=enabled(env.PUBLIC_RUNTIME_REQUIRE_LIVE_QUALIFICATION)&&!bootstrap?requiredLiveQualification(env,configuration):undefined;
     const policy=readPolicy(file,key!,new Date(),configuration);
     if(!policyMatchesConfiguration(policy,deployment!,configuration))throw Error();
     const qualifiedLanguagePairs=qualifiedPairs(policy,live);

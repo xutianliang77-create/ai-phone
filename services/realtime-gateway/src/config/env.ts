@@ -37,6 +37,9 @@ export type {
 } from "./env-parsers.js";
 
 export interface RealtimeEnv extends SpeakerRevisionEnv {
+  /** Qualification bootstrap is restricted to an isolated development candidate. */
+  publicQualificationBootstrap: boolean;
+  nodeEnv: string;
   /** Same explicit deployment identity used by the S3 API; unset is legacy. */
   publicDeploymentId?: string;
   /** Public runtime remains off until an operator explicitly enables it. */
@@ -146,6 +149,11 @@ export function loadEnv(): RealtimeEnv {
     env.PUBLIC_RATE_LIMIT_PROVIDER,
   );
   return {
+    publicQualificationBootstrap: parseBoolean(
+      env.PUBLIC_RUNTIME_QUALIFICATION_BOOTSTRAP,
+      false,
+    ),
+    nodeEnv: env.NODE_ENV?.trim() || "development",
     publicDeploymentId: env.API_RESULT_SYNC_DEPLOYMENT_ID || undefined,
     publicRuntimeEnabled: parseBoolean(env.PUBLIC_RUNTIME_ENABLED, false),
     publicCredentialAccessSecret: env.PUBLIC_GATEWAY_CREDENTIAL_ACCESS_SECRET,

@@ -78,6 +78,12 @@ describe("signed public runtime admission policy",()=>{
     const authority=publicRealtimeAuthorityFromEnvironment(environment(file,{PUBLIC_RUNTIME_REQUIRE_LIVE_QUALIFICATION:"true",PUBLIC_RUNTIME_LIVE_QUALIFICATION_FILE:live,PUBLIC_RUNTIME_LIVE_QUALIFICATION_KEY:key}));await expect(authority!.resolveVerifiedEvidence(context(),new AbortController().signal)).resolves.toBeTruthy();
     const expired=liveQualification({expiresAt:new Date(now.getTime()-1).toISOString()});writeFileSync(live,JSON.stringify(expired),{mode:0o600});await expect(authority!.resolveVerifiedEvidence(context(),new AbortController().signal)).rejects.toThrow("public_runtime_live_qualification_expired");
   });
+  it("permits a signed-policy qualification bootstrap only in development",async()=>{dir=mkdtempSync(join(tmpdir(),"wujie-public-policy-"));const file=join(dir,"policy.json");writeFileSync(file,JSON.stringify(policy()),{mode:0o600});
+    const authority=publicRealtimeAuthorityFromEnvironment(environment(file,{NODE_ENV:"development",PUBLIC_RUNTIME_REQUIRE_LIVE_QUALIFICATION:"true",PUBLIC_RUNTIME_QUALIFICATION_BOOTSTRAP:"true"}));
+    await expect(authority!.resolveVerifiedEvidence(context(),new AbortController().signal)).resolves.toBeTruthy();
+    expect(authority!.configurationCapability!(configuration).status).toBe("qualified");
+    expect(()=>publicRealtimeAuthorityFromEnvironment(environment(file,{NODE_ENV:"production",PUBLIC_RUNTIME_QUALIFICATION_BOOTSTRAP:"true"}))).toThrow("public_runtime_qualification_bootstrap_not_permitted");
+  });
   it.each([{configurationHash:"c".repeat(64)},{qualifiedComponents:["asr","translation"]},{providerAvailability:[]},{qualifiedLanguagePairs:[]},{signature:"0".repeat(64)}])("rejects mismatched or unsigned policy %j",async patch=>{dir=mkdtempSync(join(tmpdir(),"wujie-public-policy-"));const file=join(dir,"policy.json");writeFileSync(file,JSON.stringify(policy(patch)),{mode:0o600});
     await expect(publicRealtimeAuthorityFromEnvironment(environment(file))!.resolveVerifiedEvidence(context(),new AbortController().signal)).rejects.toThrow();
   });

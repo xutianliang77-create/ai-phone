@@ -9,7 +9,7 @@ import {
 } from "./gateway-runtime-identity.js";
 
 export interface GatewayHealthPayload {
-  processingProfile?: "public_unqualified";
+  processingProfile?: "public_qualified" | "public_qualification_bootstrap" | "public_unqualified";
   legacyProviderIgnored?: boolean;
   status: "ok" | "degraded" | "unavailable";
   service: "realtime-gateway";
@@ -56,8 +56,15 @@ export function gatewayHealthPayload(
 ): GatewayHealthPayload {
   const runtimeIdentity = gatewayRuntimeIdentity(env);
   if (env.publicDeploymentId) dependencies = publicProcessingReadiness(env);
+  const processingProfile = !env.publicDeploymentId
+    ? undefined
+    : dependencies?.evidence === "signed_live_qualification"
+      ? "public_qualified" as const
+      : dependencies?.evidence === "isolated_qualification_bootstrap"
+        ? "public_qualification_bootstrap" as const
+        : "public_unqualified" as const;
   return {
-    ...(env.publicDeploymentId ? { processingProfile: "public_unqualified" as const,
+    ...(processingProfile ? { processingProfile,
       legacyProviderIgnored: true } : {}),
     status: dependencies?.status === "not_ready"
       ? "unavailable"
