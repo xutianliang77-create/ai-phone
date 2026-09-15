@@ -9,7 +9,7 @@ if (!source) throw new Error('Usage: node scripts/stage_public_ios_silero.mjs /a
 if (!path.isAbsolute(source)) throw new Error('Source must be an absolute path');
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const target = path.join(root, 'apps/mobile/ios/Runner/Models/vad/silero-vad-unified-256ms-v6.0.0.mlmodelc');
-const native = readFileSync(path.join(root, 'apps/mobile/ios/Runner/AppleSpeechResources.swift'), 'utf8');
+const native = readFileSync(path.join(root, 'apps/mobile/ios/Runner/AppleSpeechInputQueue.swift'), 'utf8');
 const files = [...native.matchAll(/"([a-z/._]+)": "([a-f0-9]{64})"/g)].map(([, name, sha256]) => ({ name, sha256 }));
 if (files.length !== 5) throw new Error('Pinned native manifest must have exactly five files');
 const hash = (file) => createHash('sha256').update(readFileSync(file)).digest('hex');
