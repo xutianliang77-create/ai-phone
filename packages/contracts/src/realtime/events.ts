@@ -98,6 +98,7 @@ export type SessionEndReason =
   | "client_request"
   | "quota_exhausted"
   | "time_limit"
+  | "inactivity_timeout"
   | "connection_closed"
   | "connection_error";
 

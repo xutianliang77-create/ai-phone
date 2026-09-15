@@ -76,11 +76,12 @@ describe("public creation explicit query, cancellation and expiry",()=>{
     const before=JSON.stringify(store());expect((await route("query")).json()).toMatchObject({state:"expired_pending",safeToReplace:false});expect(JSON.stringify(store())).toBe(before);
     expect((await route("expire")).json()).toMatchObject({state:"expired",safeToReplace:true});expect(store().usageHolds[0].status).toBe("released");expect(store().billingLedger).toHaveLength(0);
   });
-  it("expires prepared-only requests after five server minutes, but not an absent request",async()=>{
+  it("does not impose a five-minute expiry on prepared-only requests; they require explicit cancellation",async()=>{
     expect((await route("expire")).statusCode).toBe(409);
     const id=publicCreationIdentity(owner,key).sessionId;await preparePublicRealtimeSession(id,owner,input(),now);
     expect((await route("query")).json().state).toBe("prepared");vi.setSystemTime(new Date(now.getTime()+300000));
-    expect((await route("expire")).json().state).toBe("expired");expect(store().usageHolds).toHaveLength(0);
+    expect((await route("query")).json().state).toBe("prepared");expect((await route("expire")).statusCode).toBe(409);
+    expect((await route("cancel")).json().state).toBe("cancelled");expect(store().usageHolds).toHaveLength(0);
   });
   it("old pending request can be cancelled after model configuration rotates",async()=>{
     const old=request();await issue();await savePublicModelConfiguration(body(1));

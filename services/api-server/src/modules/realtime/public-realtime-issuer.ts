@@ -52,7 +52,13 @@ export async function issuePublicRealtimeSession(sessionId:string,ownerId:string
         verifiedPublicAdmission(current,ownerId,new Date());
         if(resultSyncHash(current.publicRuntimePolicy)!==resultSyncHash(lease)||resultSyncHash(issuerSettings())!==resultSyncHash(settings))throw new ResultSyncError("public_issuer_binding_changed");
         const old=current.publicRealtimeIssuance,issuedAt=old?.claims.issuedAt??Math.floor(Date.now()/1000);
-        const expiresAt=Math.min(issuedAt+300,Math.floor(Date.parse(lease.expiresAt)/1000));
+        // A public session is created by the user's Start action.  Do not
+        // impose a second, arbitrary five-minute "first connect" deadline:
+        // an interrupted foreground launch must be able to use its original,
+        // immutable session binding until the server-issued lease itself ends.
+        // The active-session speech-inactivity finalizer owns the user-visible
+        // five-minute automatic end rule after connection is confirmed.
+        const expiresAt=Math.floor(Date.parse(lease.expiresAt)/1000);
         if(expiresAt<=Math.floor(Date.now()/1000))throw new ResultSyncError("public_issuer_expired",403);
         const maxDurationSeconds=lease.maxActiveSeconds===undefined?undefined:Math.min(realtimeMaxSessionSeconds(),lease.maxActiveSeconds,Math.floor(Date.parse(lease.expiresAt)/1000)-issuedAt);
         const claims:RealtimeTokenClaims={userId:ownerId,sessionId,mode:input.mode,asrEndpointMode:["meeting","classroom"].includes(input.mode)?"listening":"conversation",

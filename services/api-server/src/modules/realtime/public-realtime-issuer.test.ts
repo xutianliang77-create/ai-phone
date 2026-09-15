@@ -130,10 +130,12 @@ describe("original public session preparation and issuance phases",()=>{
     await expect(issuePublicRealtimeSession(id,owner)).rejects.toThrow();expect(current()).not.toHaveProperty("publicRealtimeIssuance");
     expect(storage.getStoreSnapshot().usageHolds).toHaveLength(1);expect(Date.parse(storage.getStoreSnapshot().usageHolds[0].expiresAt)).toBeLessThanOrEqual(Date.parse(current().publicRuntimePolicy!.expiresAt));
   });
-  it("does not extend token expiry, renew the lease or reserve again after the issue window",async()=>{
-    await prepared();await grant();await issuePublicRealtimeSession(id,owner);const lease=structuredClone(current().publicRuntimePolicy);
-    vi.setSystemTime(now.getTime()+301000);await expect(issuePublicRealtimeSession(id,owner)).rejects.toThrow("expired");
+  it("keeps the original connection token usable beyond five minutes until its server lease expires",async()=>{
+    await prepared();await grant();const first=await issuePublicRealtimeSession(id,owner),lease=structuredClone(current().publicRuntimePolicy);
+    vi.setSystemTime(now.getTime()+301000);expect(await issuePublicRealtimeSession(id,owner)).toEqual(first);
     expect(current().publicRuntimePolicy).toEqual(lease);expect(storage.getStoreSnapshot().usageHolds).toHaveLength(1);
+    vi.setSystemTime(new Date(Date.parse(lease!.expiresAt)));
+    await expect(issuePublicRealtimeSession(id,owner)).rejects.toThrow("expired");
   });
   it.each(["qwen","openai"])("passes signed %s claims into original Gateway assembly and rejects a changed capture binding",async vendor=>{
     await prepared(vendor);await grant();const response=await issuePublicRealtimeSession(id,owner),claims=verifyRealtimeToken(response.realtimeToken,signing)!;

@@ -286,6 +286,27 @@ void main() {
     expect(repository.sentFrameSequences, <int>[1]);
   });
 
+  test('explains a server-confirmed five-minute speech inactivity end',
+      () async {
+    final repository = FakeRealtimeRepository();
+    final audio = FakeAudioCapture();
+    final controller = realtimeControllerForTest(repository, audio);
+    addTearDown(controller.dispose);
+
+    await controller.start();
+    repository.emit(const GatewayRealtimeEvent(
+      type: 'session.ended',
+      sessionId: 'sess_1',
+      reason: 'inactivity_timeout',
+    ));
+    await pumpEventQueue();
+
+    expect(controller.status, RealtimeStatus.ended);
+    expect(controller.message, contains('连续 5 分钟没有新的语音'));
+    expect(repository.endedSessionIds, isEmpty);
+    expect(audio.stopCalls, 1);
+  });
+
   test('shows low balance usage ticks without stopping online realtime',
       () async {
     final repository = FakeRealtimeRepository();

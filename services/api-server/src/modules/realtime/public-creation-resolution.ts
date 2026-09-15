@@ -46,7 +46,12 @@ export async function resolvePublicCreation(ownerId:string,key:unknown,value:unk
       if(action!=="query")throw new ResultSyncError("public_creation_runtime_reconciliation_required",409);
       return {...responseBinding,state:"reconciliation_required",safeToReplace:false,canRetire:false};
     }
-    const expiry=current?current.publicRealtimeIssuance?current.publicRealtimeIssuance.claims.expiresAt*1000:Date.parse(current.createdAt)+300000:null;
+    // A prepared but never-issued request has no arbitrary five-minute
+    // retirement deadline.  It can only be explicitly cancelled; an issued
+    // request retires when its server lease-backed connection token expires.
+    const expiry=current?.publicRealtimeIssuance
+      ?current.publicRealtimeIssuance.claims.expiresAt*1000
+      :null;
     if(expiry!==null&&!Number.isFinite(expiry))throw new ResultSyncError("public_creation_expiry_invalid",409);
     const expired=expiry!==null&&now.getTime()>=expiry;
     if(action==="query")return {...responseBinding,state:!current?"not_found":expired?"expired_pending":current.publicRealtimeIssuance?"issued":"prepared",

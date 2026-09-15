@@ -19,6 +19,7 @@ import { handleTextSegment } from "./client-text-segment-handler.js";
 import { sendRealtimeEvent } from "./realtime-connection-admission.js";
 import { createRealtimeServerRuntime, listenRealtimeServerRuntime } from "./realtime-server-runtime.js";
 import {publicGatewayRuntimeOptions} from "./public-runtime-bootstrap.js";
+import {PublicSpeechInactivityWatchdog} from "./public-speech-inactivity-watchdog.js";
 export { normalizeClientTextLanguage } from "../protocol/client-text-language.js";
 export function startWebSocketServer(options:{publicRuntime?:PublicGatewayRuntimeOptions}={}) {
   const runtime = createRealtimeServerRuntime();
@@ -40,7 +41,8 @@ export function startWebSocketServer(options:{publicRuntime?:PublicGatewayRuntim
     const {session,generation,resumed,provider,sessionEventSink,ttsOutputQueue}=configured;
     const flushTracker = new RealtimeFlushTracker();
     let outputSuppressed=false,recoveryResumeMatched=!configured.publicRecoveryConnection,recoveryResumeConfirmed=!configured.publicRecoveryConnection,
-      recoveryFirstAudioAccepted=!configured.publicRecoveryConnection;
+      recoveryFirstAudioAccepted=!configured.publicRecoveryConnection,publicSessionStarted=false;
+    let speechInactivity:PublicSpeechInactivityWatchdog|undefined;
     const eventDispatcher = new RealtimeEventDispatcher({
       sendClient: (event) => sendRealtimeEvent(ws, event),
       eventSink: sessionEventSink,
@@ -53,10 +55,30 @@ export function startWebSocketServer(options:{publicRuntime?:PublicGatewayRuntim
         failPublicConnection();
       },
       afterSend: (event) => {
-        if(event.type==="session.started")configured.markStarted();
+        if(event.type==="session.started"){
+          configured.markStarted();
+          publicSessionStarted=true;
+          speechInactivity?.start();
+        }
+        if ((event.type==="transcript.partial"||event.type==="transcript.final") &&
+            typeof event.text==="string"&&event.text.trim()) {
+          // Public PCM is continuous, including silence.  Only a confirmed
+          // non-empty ASR result represents the user's new speech activity.
+          speechInactivity?.observeSpeech();
+        }
         flushTracker.record(event);
-        if (event.type === "session.paused") {if(sessionEventSink.requiresConfirmation)outputSuppressed=true;ttsOutputQueue.cancelPending();}
-        else {if(event.type==="session.resumed"){outputSuppressed=false;if(configured.publicRecoveryConnection&&recoveryResumeMatched)recoveryResumeConfirmed=true;}if(!outputSuppressed)ttsOutputQueue.enqueue(event, eventDispatcher.send);}
+        if (event.type === "session.paused") {
+          if(sessionEventSink.requiresConfirmation)outputSuppressed=true;
+          speechInactivity?.pause();
+          ttsOutputQueue.cancelPending();
+        } else {
+          if(event.type==="session.resumed"){
+            outputSuppressed=false;
+            speechInactivity?.resume();
+            if(configured.publicRecoveryConnection&&recoveryResumeMatched)recoveryResumeConfirmed=true;
+          }
+          if(!outputSuppressed)ttsOutputQueue.enqueue(event, eventDispatcher.send);
+        }
       },
     });
     const sendRealtime = eventDispatcher.send;
@@ -110,10 +132,21 @@ export function startWebSocketServer(options:{publicRuntime?:PublicGatewayRuntim
       reason: SessionEndReason,
       remainingSeconds?: number,
     ) => {
+      speechInactivity?.close();
       if(sessionEventSink.requiresConfirmation){outputSuppressed=true;ttsOutputQueue.suspend();audioBatcher.stopAccepting();}
       try{await finalizer.finalize(reason, remainingSeconds);}finally{if(sessionEventSink.requiresConfirmation&&ws.readyState===1)ws.close();}
       if (ws.readyState === 1) ws.close();
     };
+    if(configured.publicConnection){
+      speechInactivity=new PublicSpeechInactivityWatchdog(async()=>{
+        try { await endRealtimeSession("inactivity_timeout"); }
+        catch(error){
+          realtimeLogger.warn({error:loggableError(error),sessionId:session.id},
+            "Public speech inactivity finalization failed");
+        }
+      });
+      if(publicSessionStarted)speechInactivity.start();
+    }
     function failPublicConnection(){
       if(!sessionEventSink.requiresConfirmation)return;
       outputSuppressed=true;ttsOutputQueue.suspend();audioBatcher.stopAccepting();
@@ -332,6 +365,7 @@ export function startWebSocketServer(options:{publicRuntime?:PublicGatewayRuntim
       connectionCleanup.scheduleDeferredFinalization("connection_closed");
     }
     const cleanupConnection = async () => {
+      speechInactivity?.close();
       if(configured.publicConnection){outputSuppressed=true;audioBatcher.stopAccepting();ttsOutputQueue.suspend();}
       unsubscribeProvider();if(confirmationInterval)clearInterval(confirmationInterval);
       clearInterval(usageInterval);

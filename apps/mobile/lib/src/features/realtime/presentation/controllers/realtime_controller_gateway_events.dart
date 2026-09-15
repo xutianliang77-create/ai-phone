@@ -274,6 +274,8 @@ extension RealtimeControllerGatewayEvents on RealtimeController {
         return '剩余分钟已用完，已自动结束同传';
       case 'time_limit':
         return '本次同传已达到最长时长';
+      case 'inactivity_timeout':
+        return '连续 5 分钟没有新的语音，已自动结束同传';
       default:
         return '同传已结束';
     }
