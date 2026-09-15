@@ -1,4 +1,5 @@
-import 'package:flutter/foundation.dart' show TargetPlatform, defaultTargetPlatform;
+import 'package:flutter/foundation.dart'
+    show TargetPlatform, defaultTargetPlatform;
 
 import 'region_edition_config.dart';
 import '../platform/translation/supported_translation_language.dart';
@@ -152,21 +153,28 @@ class AppConfig {
     );
     final deviceAsrChunkDurationMs = configuredDeviceAsrChunkDurationMs > 0
         ? configuredDeviceAsrChunkDurationMs
-        : deviceAsrProvider == 'apple_speech_transcriber' ? 32 : 320;
+        : deviceAsrProvider == 'apple_speech_transcriber'
+            ? 32
+            : 320;
     const configuredDeviceAsrEndpointMinSpeechMs = int.fromEnvironment(
       'DEVICE_ASR_ENDPOINT_MIN_SPEECH_MS',
       defaultValue: 0,
     );
-    final deviceAsrEndpointMinSpeechMs = configuredDeviceAsrEndpointMinSpeechMs > 0
-        ? configuredDeviceAsrEndpointMinSpeechMs
-        : deviceAsrProvider == 'apple_speech_transcriber' ? 96 : 600;
+    final deviceAsrEndpointMinSpeechMs =
+        configuredDeviceAsrEndpointMinSpeechMs > 0
+            ? configuredDeviceAsrEndpointMinSpeechMs
+            : deviceAsrProvider == 'apple_speech_transcriber'
+                ? 96
+                : 600;
     const configuredDeviceAsrEndpointSilenceMs = int.fromEnvironment(
       'DEVICE_ASR_ENDPOINT_SILENCE_MS',
       defaultValue: 0,
     );
     final deviceAsrEndpointSilenceMs = configuredDeviceAsrEndpointSilenceMs > 0
         ? configuredDeviceAsrEndpointSilenceMs
-        : deviceAsrProvider == 'apple_speech_transcriber' ? 640 : 900;
+        : deviceAsrProvider == 'apple_speech_transcriber'
+            ? 640
+            : 900;
     const deviceAsrEndpointSpeechThresholdRmsRaw = String.fromEnvironment(
       'DEVICE_ASR_ENDPOINT_SPEECH_THRESHOLD_RMS',
       defaultValue: '0.006',
@@ -202,10 +210,10 @@ class AppConfig {
     const configuredOnDeviceTranslationProvider = String.fromEnvironment(
       'ON_DEVICE_TRANSLATION_PROVIDER',
     );
-    final onDeviceTranslationProvider = configuredOnDeviceTranslationProvider
-            .isEmpty
-        ? _platformDefaultTranslationProvider()
-        : configuredOnDeviceTranslationProvider;
+    final onDeviceTranslationProvider =
+        configuredOnDeviceTranslationProvider.isEmpty
+            ? _platformDefaultTranslationProvider()
+            : configuredOnDeviceTranslationProvider;
     const onDeviceTranslationRequired =
         bool.fromEnvironment('ON_DEVICE_TRANSLATION_REQUIRED');
     const serverOwnedHistory = bool.fromEnvironment('SERVER_OWNED_HISTORY');
@@ -381,7 +389,9 @@ String _normalizeRealtimeMode(String value) {
 String _platformDefaultDeviceAsrProvider() =>
     defaultTargetPlatform == TargetPlatform.android
         ? 'android_system'
-        : 'coreml_nemotron';
+        : defaultTargetPlatform == TargetPlatform.iOS
+            ? 'apple_speech_transcriber'
+            : 'coreml_nemotron';
 
 String _platformDefaultTranslationProvider() =>
     defaultTargetPlatform == TargetPlatform.android

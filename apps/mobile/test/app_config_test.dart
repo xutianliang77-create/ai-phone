@@ -1,8 +1,20 @@
+import 'package:flutter/foundation.dart'
+    show TargetPlatform, debugDefaultTargetPlatformOverride;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:translation_mobile/src/app/app_config.dart';
 import 'package:translation_mobile/src/app/region_edition_config.dart';
 
 void main() {
+  test('iOS environment defaults to Apple SpeechTranscriber', () {
+    debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+    addTearDown(() => debugDefaultTargetPlatformOverride = null);
+
+    expect(
+      AppConfig.fromEnvironment().deviceAsrProvider,
+      'apple_speech_transcriber',
+    );
+  });
+
   test(
       'Apple ASR defaults and explicit duration overrides survive config copies',
       () {

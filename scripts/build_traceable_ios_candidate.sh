@@ -11,6 +11,7 @@ BUILD_NUMBER="${BUILD_NUMBER:-$(date '+%Y%m%d01')}"
 PUBLIC_IOS_BUNDLE_ID="${PUBLIC_IOS_BUNDLE_ID:-}"
 PUBLIC_IOS_DEVELOPMENT_TEAM="${PUBLIC_IOS_DEVELOPMENT_TEAM:-}"
 PUBLIC_DEPLOYMENT_ID="${PUBLIC_DEPLOYMENT_ID:-}"
+IOS_LOCAL_PROFILE="$ROOT_DIR/release/public/1.1.0/ios-device-development.json"
 SOURCE_LANGUAGE="${SOURCE_LANGUAGE:-auto}"
 TARGET_LANGUAGE="${TARGET_LANGUAGE:-zh}"
 AUTO_REVERSE_TARGET_LANGUAGE="${AUTO_REVERSE_TARGET_LANGUAGE:-true}"
@@ -49,6 +50,27 @@ if [[ ! "$PUBLIC_DEPLOYMENT_ID" =~ ^[A-Za-z0-9._-]{1,96}$ ]]; then
   echo "PUBLIC_DEPLOYMENT_ID must be an approved public deployment identifier" >&2
   exit 2
 fi
+if [[ ! -f "$IOS_LOCAL_PROFILE" ]]; then
+  echo "iOS local profile is required: $IOS_LOCAL_PROFILE" >&2
+  exit 2
+fi
+IOS_LOCAL_PROFILE="$IOS_LOCAL_PROFILE" node -e '
+const fs = require("fs");
+const profile = JSON.parse(fs.readFileSync(process.env.IOS_LOCAL_PROFILE, "utf8"));
+const expected = {
+  USE_DEVICE_ASR: "true",
+  DEVICE_ASR_PROVIDER: "apple_speech_transcriber",
+  USE_ON_DEVICE_TRANSLATION: "true",
+  ON_DEVICE_TRANSLATION_PROVIDER: "ios_system",
+  ON_DEVICE_TRANSLATION_REQUIRED: "true",
+  USE_LOCAL_SESSIONS: "true",
+  SERVER_OWNED_HISTORY: "false",
+};
+for (const [key, value] of Object.entries(expected)) {
+  if (profile[key] !== value) throw new Error(`iOS local profile ${key} must be ${value}`);
+}
+' || exit 2
+IOS_LOCAL_PROFILE_SHA256="$(shasum -a 256 "$IOS_LOCAL_PROFILE" | awk '{print $1}')"
 private_bundle_id="$(awk -F= '/^TRANSLATION_IOS_BUNDLE_ID=/{print $2; exit}' "$MOBILE_DIR/ios/Flutter/Release.xcconfig")"
 if [[ -n "$private_bundle_id" && "$PUBLIC_IOS_BUNDLE_ID" == "$private_bundle_id" ]]; then
   echo "PUBLIC_IOS_BUNDLE_ID must not reuse the private 1.0 bundle identifier" >&2
@@ -125,6 +147,7 @@ WUJIE_PRODUCT_PROFILE="$PRODUCT_PROFILE" \
 node "$ROOT_DIR/scripts/lib/write_ios_build_identity_xcconfig.mjs" \
   "$MOBILE_DIR/ios/Flutter/LocalIdentity.xcconfig"
 flutter build ios "--$BUILD_MODE" \
+  --dart-define-from-file="$IOS_LOCAL_PROFILE" \
   --build-name="$APP_VERSION" \
   --build-number="$BUILD_NUMBER" \
   --dart-define="APP_VERSION=$APP_VERSION" \
@@ -140,7 +163,6 @@ flutter build ios "--$BUILD_MODE" \
   --dart-define="SOURCE_TREE=$SOURCE_TREE" \
   --dart-define="SOURCE_STATE=clean" \
   --dart-define="WUJIE_PRODUCT_PROFILE=$PRODUCT_PROFILE" \
-  --dart-define="SERVER_OWNED_HISTORY=true" \
   --dart-define="USE_MOCK_AUDIO=false"
 
 if ! git -C "$ROOT_DIR" diff --quiet ||
@@ -201,6 +223,7 @@ APP_VERSION="$ACTUAL_VERSION" BUILD_NUMBER="$ACTUAL_BUILD" \
 BUILD_MODE="$BUILD_MODE" SERVER_BASE_URL="$SERVER_BASE_URL" \
 PRODUCT_PROFILE="$PRODUCT_PROFILE" \
 PUBLIC_DEPLOYMENT_ID="$PUBLIC_DEPLOYMENT_ID" \
+IOS_LOCAL_PROFILE_SHA256="$IOS_LOCAL_PROFILE_SHA256" \
 SOURCE_LANGUAGE="$SOURCE_LANGUAGE" TARGET_LANGUAGE="$TARGET_LANGUAGE" \
 AUTO_REVERSE_TARGET_LANGUAGE="$AUTO_REVERSE_TARGET_LANGUAGE" \
 AUTOMATIC_LANGUAGE_PAIR="$AUTOMATIC_LANGUAGE_PAIR" \

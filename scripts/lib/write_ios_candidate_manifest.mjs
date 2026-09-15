@@ -21,6 +21,7 @@ const manifest = {
   buildMode: required("BUILD_MODE"),
   productProfile: required("PRODUCT_PROFILE"),
   publicDeploymentId: required("PUBLIC_DEPLOYMENT_ID"),
+  iosLocalProfileSha256: required("IOS_LOCAL_PROFILE_SHA256"),
   serverBaseUrl: required("SERVER_BASE_URL"),
   language: {
     source: required("SOURCE_LANGUAGE"),
