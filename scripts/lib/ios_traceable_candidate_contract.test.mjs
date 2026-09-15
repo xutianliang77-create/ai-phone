@@ -31,6 +31,7 @@ describe("traceable iOS candidate contract", () => {
     expect(script).toContain("status --porcelain=v1 --untracked-files=all");
     expect(script).toContain('git -C "$ROOT_DIR" diff --quiet');
     expect(script).toContain('PUBLIC_IOS_BUNDLE_ID="${PUBLIC_IOS_BUNDLE_ID:-}"');
+    expect(script).toContain('PUBLIC_DEPLOYMENT_ID="${PUBLIC_DEPLOYMENT_ID:-}"');
     expect(script).toContain("PUBLIC_IOS_BUNDLE_ID must not reuse the private 1.0 bundle identifier");
     expect(script).toContain('TRANSLATION_IOS_BUNDLE_ID="$PUBLIC_IOS_BUNDLE_ID"');
     expect(script).toContain('TRANSLATION_IOS_DEVELOPMENT_TEAM="$PUBLIC_IOS_DEVELOPMENT_TEAM"');
@@ -39,6 +40,7 @@ describe("traceable iOS candidate contract", () => {
     expect(script).toContain('--dart-define="SOURCE_TREE=$SOURCE_TREE"');
     expect(script).toContain('--dart-define="SOURCE_STATE=clean"');
     expect(script).toContain('--dart-define="WUJIE_PRODUCT_PROFILE=$PRODUCT_PROFILE"');
+    expect(script).toContain('--dart-define="PUBLIC_DEPLOYMENT_ID=$PUBLIC_DEPLOYMENT_ID"');
     expect(script).toContain('--dart-define="AUTOMATIC_LANGUAGE_PAIR=$AUTOMATIC_LANGUAGE_PAIR"');
     expect(identity).toContain("RegExp(r'^[a-f0-9]{40}$')");
   });
@@ -58,6 +60,7 @@ describe("traceable iOS candidate contract", () => {
     expect(xcconfigWriter).toContain("TRANSLATION_IOS_BUNDLE_ID=${bundleId}");
     expect(xcconfigWriter).toContain("TRANSLATION_IOS_DEVELOPMENT_TEAM=${developmentTeam}");
     expect(writer).toContain("appAggregateSha256: required(\"APP_SHA256\")");
+    expect(writer).toContain('publicDeploymentId: required("PUBLIC_DEPLOYMENT_ID")');
     expect(writer).toContain("automaticPair: process.env.AUTOMATIC_LANGUAGE_PAIR || null");
     expect(script).not.toContain("devicectl device install app");
     expect(script).not.toContain("devicectl device process launch");

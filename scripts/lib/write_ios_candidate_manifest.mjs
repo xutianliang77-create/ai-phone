@@ -20,6 +20,7 @@ const manifest = {
   buildNumber: required("BUILD_NUMBER"),
   buildMode: required("BUILD_MODE"),
   productProfile: required("PRODUCT_PROFILE"),
+  publicDeploymentId: required("PUBLIC_DEPLOYMENT_ID"),
   serverBaseUrl: required("SERVER_BASE_URL"),
   language: {
     source: required("SOURCE_LANGUAGE"),
