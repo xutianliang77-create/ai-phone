@@ -3,7 +3,11 @@ import {createHmac,randomBytes,randomInt} from "node:crypto";
 import {PublicAsrError} from "./public-asr-completed-audio.js";
 import {abortable} from "../providers/abortable.js";
 import type {StreamingAsrOptions} from "./openai-streaming-asr-client.js";
-const engines:Record<string,string>={"16k_zh":"zh","16k_zh_large":"zh","16k_yue":"yue","16k_zh-TW":"zh-Hant","16k_en":"en","16k_ar":"ar","16k_ko":"ko","16k_ja":"ja","16k_th":"th","16k_id":"id","16k_ms":"ms"};
+const engines:Record<string,string>={"16k_zh":"zh","16k_zh_large":"zh","16k_yue":"yue","16k_zh-TW":"zh-Hant","16k_en":"en","16k_ar":"ar","16k_ko":"ko","16k_ja":"ja","16k_th":"th","16k_id":"id","16k_ms":"ms",
+  // Tencent realtime ASR V2 bilingual engine. Its transcript is routed only
+  // through the separately signed zh/en automatic-language policy; it never
+  // changes the meaning of any fixed-language Tencent engine.
+  "16k_zh_en_2.0":"auto"};
 export function validateTencentAsr(options:Pick<StreamingAsrOptions,"endpoint"|"appId"|"model"|"language">){
   const url=new URL(options.endpoint);
   if(!options.appId||!/^[1-9][0-9]{0,15}$/.test(options.appId)||!Number.isSafeInteger(Number(options.appId))||url.protocol!=="wss:"||

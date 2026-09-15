@@ -31,7 +31,7 @@ const protocols:Record<string,PublicModelProtocolCapability>={
   qwen_asr_compatible:asr("qwen","https",[16000,24000],"明确源语言；已实现21种产品语言交集；非Filetrans异步接口",true),
   qwen_chat:mt("qwen"),
   qwen_tts_realtime:tts("qwen","websocket",[24000],"明确目标语种：zh/en/de/it/pt/es/ja/ko/fr/ru；Voice资格另验"),
-  tencent_asr_ws:asr("tencent","websocket",[16000],"源语言必须匹配已实现的16k引擎类型"),
+  tencent_asr_ws:asr("tencent","websocket",[16000],"默认须匹配16k引擎；仅16k_zh_en_2.0可作中英自动路由，仍须逐配置资格化"),
   tencent_hunyuan_chat:mt("tencent"),
   tencent_tmt:mt("tencent"),
   tencent_tts_ws:tts("tencent","websocket",[16000,24000],"明确zh/en；VoiceType资格另验，不支持SSML/复刻"),
@@ -62,6 +62,14 @@ export function publicProtocolAutomaticLanguageSupported(protocol:string){
     publicProtocolCapability(protocol)?.automaticLanguage === true;
 }
 
+/** Tencent's wire protocol covers both fixed-locale engines and the separate
+ * 16k_zh_en_2.0 bilingual engine.  The protocol alone must not turn a fixed
+ * `16k_en` or `16k_zh` configuration into automatic language recognition. */
+export function publicAsrModelAutomaticLanguageSupported(protocol:string,modelId:string){
+  return publicProtocolAutomaticLanguageSupported(protocol) ||
+    protocol === "tencent_asr_ws" && modelId === "16k_zh_en_2.0";
+}
+
 /** The existing inherited text-language router has only been implemented for
  * the Chinese/English pair. This is an adapter limit, not a rewrite of the
  * selected language parameters: callers still pass and sign the exact pair. */
@@ -71,4 +79,16 @@ export function publicProtocolAutomaticLanguagePairSupported(
 ){
   return publicProtocolAutomaticLanguageSupported(protocol)&&pair?.length===2&&
     new Set(pair).size===2&&pair.includes("zh")&&pair.includes("en");
+}
+
+/** The inherited router is deliberately bounded to the Chinese/English pair.
+ * Model support is only an implementation capability; signed policy and live
+ * qualification still decide whether a configured public deployment may use it. */
+export function publicAsrModelAutomaticLanguagePairSupported(
+  protocol:string,
+  modelId:string,
+  pair:readonly string[]|undefined,
+){
+  return publicAsrModelAutomaticLanguageSupported(protocol,modelId)&&
+    pair?.length===2&&new Set(pair).size===2&&pair.includes("zh")&&pair.includes("en");
 }

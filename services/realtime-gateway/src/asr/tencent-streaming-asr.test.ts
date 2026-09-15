@@ -45,6 +45,13 @@ describe("Tencent ASR wire on shared lifecycle",()=>{
     const p=t.create();await p.createSession({...session,sourceLanguage:language as any});await p.transcribe(frame());
     expect(new URL(t.socketFactory.mock.calls[0][0]).searchParams.get("engine_model_type")).toBe(model);
   });
+  it("admits automatic zh/en only through Tencent's bilingual V2 engine",async()=>{
+    const t=setup();t.options.snapshot.components.asr!.modelId="16k_zh_en_2.0";
+    t.options.authorization.languagePolicy={source:"auto",target:"zh",autoReverse:true,pair:["zh","en"],revision:2};
+    const p=t.create(),automaticSession={...session,sourceLanguage:"auto" as const,targetLanguage:"zh" as const,autoReverseTargetLanguage:true,languagePair:["zh","en"] as ["zh","en"]};
+    await p.createSession(automaticSession);await p.transcribe(frame());
+    expect(new URL(t.socketFactory.mock.calls[0][0]).searchParams.get("engine_model_type")).toBe("16k_zh_en_2.0");
+  });
   it.each(["engine","language","appid","rate","auth"])("refuses unsupported %s before any credentials/socket",kind=>{
     const t=setup(),p=t.options.snapshot.components.asr!;if(kind==="engine")p.modelId="8k_en";if(kind==="language")t.options.authorization.languagePolicy.source="fr";
     if(kind==="appid")p.appId="999";if(kind==="rate")p.sampleRate=24000;if(kind==="auth")p.authKind="api_key";

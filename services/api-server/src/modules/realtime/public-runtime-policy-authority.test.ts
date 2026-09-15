@@ -35,10 +35,10 @@ describe("signed public runtime admission policy",()=>{
   it("admits inherited automatic Chinese/English routing only when adapter, policy and live evidence agree",async()=>{
     dir=mkdtempSync(join(tmpdir(),"wujie-public-policy-"));const file=join(dir,"policy.json"),live=join(dir,"live.json");
     const automaticConfiguration:any={...configuration,components:{...configuration.components,
-      asr:{...configuration.components.asr,protocol:"openai_realtime_asr"}}};
+      asr:{...configuration.components.asr,protocol:"tencent_asr_ws",modelId:"16k_zh_en_2.0"}}};
     const pairs=[{source:"zh",target:"en"},{source:"en",target:"zh"}];
     writeFileSync(file,JSON.stringify(policy({qualifiedLanguagePairs:pairs,automaticLanguage:true,automaticReverse:true})),{mode:0o600});
-    writeFileSync(live,JSON.stringify(liveQualification({qualifiedLanguagePairs:pairs,automaticLanguage:true,automaticReverse:true})),{mode:0o600});
+    writeFileSync(live,JSON.stringify(liveQualification({providers:[{component:"asr",providerId:"tencent",modelId:"16k_zh_en_2.0"},{component:"translation",providerId:"tencent",modelId:"service:tencent_tmt"},{component:"tts",providerId:"tencent",modelId:"service:tencent_tts_ws"}],qualifiedLanguagePairs:pairs,automaticLanguage:true,automaticReverse:true})),{mode:0o600});
     const authority=publicRealtimeAuthorityFromEnvironment(environment(file,{PUBLIC_RUNTIME_REQUIRE_LIVE_QUALIFICATION:"true",PUBLIC_RUNTIME_LIVE_QUALIFICATION_FILE:live,PUBLIC_RUNTIME_LIVE_QUALIFICATION_KEY:key}))!;
     expect(authority.configurationCapability!(automaticConfiguration)).toMatchObject({status:"qualified",automaticLanguage:true,automaticReverse:true,qualifiedLanguagePairs:pairs});
     await expect(authority.resolveVerifiedEvidence(context({configuration:automaticConfiguration,

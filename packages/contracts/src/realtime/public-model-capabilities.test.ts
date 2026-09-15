@@ -1,5 +1,5 @@
 import {describe,it,expect} from "vitest";
-import {publicModelProtocolCapabilities,publicProtocolCapability,publicProtocolSampleRateSupported} from "./public-model-capabilities.js";
+import {publicAsrModelAutomaticLanguagePairSupported,publicAsrModelAutomaticLanguageSupported,publicModelProtocolCapabilities,publicProtocolCapability,publicProtocolSampleRateSupported} from "./public-model-capabilities.js";
 describe("implemented public wire capabilities",()=>{
   it("covers four vendors and three components without granting readiness",()=>{
     const values=Object.values(publicModelProtocolCapabilities);expect(values).toHaveLength(16);
@@ -19,5 +19,12 @@ describe("implemented public wire capabilities",()=>{
   it("distinguishes Google complete TTS from chunked PCM and does not treat MT as audio",()=>{
     expect(publicProtocolCapability("google_cloud_tts")).toMatchObject({output:"completed_pcm",maxTextUtf8Bytes:5000});
     expect(publicProtocolSampleRateSupported("qwen_chat",16000)).toBe(false);
+  });
+  it("makes Tencent automatic routing model-scoped rather than enabling a fixed engine",()=>{
+    expect(publicAsrModelAutomaticLanguageSupported("tencent_asr_ws","16k_en")).toBe(false);
+    expect(publicAsrModelAutomaticLanguagePairSupported("tencent_asr_ws","16k_en",["zh","en"])).toBe(false);
+    expect(publicAsrModelAutomaticLanguageSupported("tencent_asr_ws","16k_zh_en_2.0")).toBe(true);
+    expect(publicAsrModelAutomaticLanguagePairSupported("tencent_asr_ws","16k_zh_en_2.0",["zh","en"])).toBe(true);
+    expect(publicAsrModelAutomaticLanguagePairSupported("tencent_asr_ws","16k_zh_en_2.0",["zh","ja"])).toBe(false);
   });
 });

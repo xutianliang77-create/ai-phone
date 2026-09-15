@@ -1,7 +1,7 @@
 import {createHmac,timingSafeEqual} from "node:crypto";
 import {lstatSync,readFileSync} from "node:fs";
 import {isAbsolute,resolve} from "node:path";
-import {isSupportedLanguage,isTranslationLanguage,publicModelComponents,publicProtocolAutomaticLanguageSupported} from "@translation/contracts";
+import {isSupportedLanguage,isTranslationLanguage,publicModelComponents,publicAsrModelAutomaticLanguageSupported} from "@translation/contracts";
 import { inspectPublicRuntimeLiveQualification } from "@translation/platform-security";
 import {canonicalSyncJson,syncKey} from "../sessions/session-result-sync-contract.js";
 import type {PublicInferenceEvidence} from "../sessions/public-inference-evidence.js";
@@ -102,7 +102,7 @@ function qualifiedPairs(policy:Policy,live?:ReturnType<typeof requiredLiveQualif
 }
 
 function automaticRoutingCapability(policy:Policy,configuration:PublicModelRuntimeSnapshot,live?:ReturnType<typeof requiredLiveQualification>){
-  const adapter=publicProtocolAutomaticLanguageSupported(configuration.components.asr?.protocol??"");
+  const adapter=publicAsrModelAutomaticLanguageSupported(configuration.components.asr?.protocol??"",configuration.components.asr?.modelId??"");
   const language=adapter&&policy.automaticLanguage===true&&(!live||live.automaticLanguage===true);
   return {language,reverse:language&&policy.automaticReverse===true&&(!live||live.automaticReverse===true)};
 }

@@ -1,5 +1,5 @@
 import {isDeepStrictEqual} from "node:util";
-import {publicProtocolAutomaticLanguagePairSupported,publicProtocolSampleRateSupported} from "@translation/contracts";
+import {publicAsrModelAutomaticLanguagePairSupported,publicProtocolSampleRateSupported} from "@translation/contracts";
 import {parseRealtimeProcessingRequest,type RealtimeExecutionPlan,type RealtimeProcessingAuthorization} from "@translation/contracts";
 import {HttpAsrClient} from "./http-asr-client.js";
 import {PublicAsrError,type CompletedAsrAudio,type CompletedAsrOptions} from "./public-asr-completed-audio.js";
@@ -38,7 +38,7 @@ function validateConfiguredAsr(options:ConfiguredPublicAsrOptions,protocol:strin
   const automatic=authorization.languagePolicy.source==="auto";
   const pair=authorization.languagePolicy.pair;
   if((automatic||authorization.languagePolicy.autoReverse)&&
-    (!automatic||!publicProtocolAutomaticLanguagePairSupported(profile.protocol,pair)||
+    (!automatic||!publicAsrModelAutomaticLanguagePairSupported(profile.protocol,profile.modelId,pair)||
       !pair?.includes(authorization.languagePolicy.target))) {
     throw new PublicAsrError("public_asr_language_detection_not_implemented","not_sent");
   }
