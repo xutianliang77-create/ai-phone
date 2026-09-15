@@ -39,6 +39,16 @@ describe("original Router assembles one bound public audio session",()=>{
     expect(s.create).toThrow("requires_continuous_input");
     expect(s.resolveAsrCredentials).not.toHaveBeenCalled();expect(s.authorizeConnection).not.toHaveBeenCalled();expect(s.socketFactory).not.toHaveBeenCalled();expect(s.fetchFn).not.toHaveBeenCalled();
   });
+  it("assembles the inherited auto-to-auto-reverse route only through an automatic ASR adapter",async()=>{
+    const s=setup();s.options.session={...s.options.session,sourceLanguage:"auto",targetLanguage:"en",autoReverseTargetLanguage:true,languagePair:["zh","en"]};
+    s.options.authorization={...s.options.authorization,languagePolicy:{source:"auto",target:"en",autoReverse:true,pair:["zh","en"],revision:2}};
+    const p=s.create();await p.createSession(s.options.session);
+    expect(s.sockets[0]!.sent[0]!.session.audio.input.transcription).toEqual({model:"manual-asr"});
+    for await(const _ of p.sendAudio(frame())){}
+    const events:any[]=[];for await(const event of p.flushSession("session"))events.push(event);
+    expect(events).toContainEqual(expect.objectContaining({type:"transcript.final",language:"en"}));
+    expect(events).toContainEqual(expect.objectContaining({type:"translation.final",language:"zh"}));
+  });
   it("atomically assembles the original ASR/MT Provider and bound TTS queue",async()=>{
     const s=setup();s.options.session.voiceOutput=true;
     const plan={...s.options.authorization.executionPlan,tts:{execution:"public" as const,scopeKey:"tts",reason:"online_selected" as const}};

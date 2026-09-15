@@ -29,6 +29,7 @@ class GatewayRealtimeEvent {
     this.sampleRate,
     this.sequence,
     this.data,
+    this.isFinal,
     this.replayedAudioMs,
     this.droppedAudioMs,
     this.flush,
@@ -68,6 +69,7 @@ class GatewayRealtimeEvent {
   final int? sampleRate;
   final int? sequence;
   final String? data;
+  final bool? isFinal;
   final int? replayedAudioMs;
   final int? droppedAudioMs;
   final GatewayRealtimeFlushSummary? flush;
@@ -109,6 +111,7 @@ class GatewayRealtimeEvent {
         sampleRate = null,
         sequence = null,
         data = null,
+        isFinal = null,
         flush = null,
         speaker = null,
         timing = null,
@@ -168,6 +171,7 @@ class GatewayRealtimeEvent {
       sampleRate: (json['sampleRate'] as num?)?.toInt(),
       sequence: (json['sequence'] as num?)?.toInt(),
       data: json['data'] as String?,
+      isFinal: json['isFinal'] as bool?,
       voiceOutputEnabled: json['enabled'] as bool?,
       voiceOutputAccepted: json['accepted'] as bool?,
       recoveryLastAcceptedSample: json['lastAcceptedSample'] as int?,

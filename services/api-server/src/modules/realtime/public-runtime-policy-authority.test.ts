@@ -26,6 +26,35 @@ describe("signed public runtime admission policy",()=>{
     expect(result.records.map(value=>value.kind)).toEqual(["provider_budget","model_qualification","model_qualification","model_qualification"]);
     expect(result.records.every(value=>value.kind!=="inference_consent")).toBe(true);expect(result.records.filter(value=>value.kind==="model_qualification").map(value=>(value as any).providerId)).toEqual(["tencent","tencent","tencent"]);
   });
+  it("projects fixed pairs only for the exact qualified effective component scope",()=>{dir=mkdtempSync(join(tmpdir(),"wujie-public-policy-"));const file=join(dir,"policy.json");writeFileSync(file,JSON.stringify(policy()),{mode:0o600});
+    const capability=publicRealtimeAuthorityFromEnvironment(environment(file))!.configurationCapability!;
+    expect(capability(configuration)).toEqual({status:"qualified",qualifiedLanguagePairs:[{source:"zh",target:"en"}],automaticLanguage:false,automaticReverse:false});
+    const withoutTts={...configuration,executionPlan:{...configuration.executionPlan,tts:{execution:"disabled" as const}}};
+    expect(capability(withoutTts)).toEqual({status:"not_qualified",qualifiedLanguagePairs:[],automaticLanguage:false,automaticReverse:false});
+  });
+  it("admits inherited automatic Chinese/English routing only when adapter, policy and live evidence agree",async()=>{
+    dir=mkdtempSync(join(tmpdir(),"wujie-public-policy-"));const file=join(dir,"policy.json"),live=join(dir,"live.json");
+    const automaticConfiguration:any={...configuration,components:{...configuration.components,
+      asr:{...configuration.components.asr,protocol:"openai_realtime_asr"}}};
+    const pairs=[{source:"zh",target:"en"},{source:"en",target:"zh"}];
+    writeFileSync(file,JSON.stringify(policy({qualifiedLanguagePairs:pairs,automaticLanguage:true,automaticReverse:true})),{mode:0o600});
+    writeFileSync(live,JSON.stringify(liveQualification({qualifiedLanguagePairs:pairs,automaticLanguage:true,automaticReverse:true})),{mode:0o600});
+    const authority=publicRealtimeAuthorityFromEnvironment(environment(file,{PUBLIC_RUNTIME_REQUIRE_LIVE_QUALIFICATION:"true",PUBLIC_RUNTIME_LIVE_QUALIFICATION_FILE:live,PUBLIC_RUNTIME_LIVE_QUALIFICATION_KEY:key}))!;
+    expect(authority.configurationCapability!(automaticConfiguration)).toMatchObject({status:"qualified",automaticLanguage:true,automaticReverse:true,qualifiedLanguagePairs:pairs});
+    await expect(authority.resolveVerifiedEvidence(context({configuration:automaticConfiguration,
+      languagePolicy:{source:"auto",target:"en",autoReverse:true,pair:["zh","en"],revision:2}}),new AbortController().signal)).resolves.toBeTruthy();
+    writeFileSync(live,JSON.stringify(liveQualification({qualifiedLanguagePairs:pairs})),{mode:0o600});
+    await expect(authority.resolveVerifiedEvidence(context({configuration:automaticConfiguration,
+      languagePolicy:{source:"auto",target:"en",autoReverse:true,pair:["zh","en"],revision:2}}),new AbortController().signal)).rejects.toThrow();
+  });
+  it("selects separately signed policies for silent and spoken effective configurations",async()=>{dir=mkdtempSync(join(tmpdir(),"wujie-public-policy-"));const file=join(dir,"policy.json");
+    const silent={...configuration,configurationHash:"c".repeat(64),executionPlan:{...configuration.executionPlan,tts:{execution:"disabled" as const}}};
+    const spoken=policy(),silentPolicy=policy({policyId:"policy-silent",configurationHash:silent.configurationHash,qualifiedComponents:["asr","translation"]});
+    writeFileSync(file,JSON.stringify({schemaVersion:2,policies:[spoken,silentPolicy]}),{mode:0o600});
+    const authority=publicRealtimeAuthorityFromEnvironment(environment(file))!,capability=authority.configurationCapability!;
+    expect(capability(configuration).status).toBe("qualified");expect(capability(silent).status).toBe("qualified");
+    await expect(authority.resolveVerifiedEvidence(context({configuration:silent}),new AbortController().signal)).resolves.toMatchObject({records:expect.arrayContaining([expect.objectContaining({component:"asr"}),expect.objectContaining({component:"translation"})])});
+  });
   it.each([
     {providerAvailability:[{providerId:"tencent",state:"unavailable"}]},
     {providerAvailability:[{providerId:"qwen",state:"available"}]},

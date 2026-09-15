@@ -8,7 +8,6 @@ import '../../../realtime/presentation/controllers/realtime_runtime_factories.da
 import '../../../../platform/speech/speech_output_provider.dart';
 import '../../../../platform/translation/mobile_translation_provider.dart';
 import '../../../../platform/translation/supported_translation_language.dart';
-import '../../../../platform/translation/unavailable_translation_provider.dart';
 import '../controllers/type_to_speak_controller.dart';
 
 class TypeToSpeakPage extends StatefulWidget {
@@ -206,8 +205,7 @@ class _TypeToSpeakPageState extends State<TypeToSpeakPage> {
   }
 
   MobileTranslationProvider _defaultTranslator(AppConfig config) {
-    return createDefaultMobileTranslationProvider(config) ??
-        UnavailableTranslationProvider();
+    return createDefaultAuxiliaryMobileTranslationProvider(config);
   }
 }
 

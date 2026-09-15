@@ -29,6 +29,10 @@ export class RealtimeTtsOutputQueue {
   private pendingOutputs = 0;
   private droppedOutputs = 0;
   private suspended = false;
+  /** Last accepted translation revision for each segment.  This belongs to
+   * the inherited output queue, so a later correction cannot speak an older
+   * translation while the session remains active. */
+  private readonly revisionBySegment = new Map<string, number>();
   private readonly operations = new Set<Promise<void>>();
 
   constructor(private readonly options: RealtimeTtsOutputQueueOptions) {}
@@ -51,11 +55,29 @@ export class RealtimeTtsOutputQueue {
       || !this.options.voiceOutput
       || !this.options.synthesizer.enabled
       || this.closed || this.suspended) return;
-    if (this.pendingOutputs >= (this.options.maxPendingOutputs ?? 32)) {
+    const revision = Number.isSafeInteger(event.revision) && event.revision! >= 0
+      ? event.revision
+      : undefined;
+    const prior = revision === undefined
+      ? undefined
+      : this.revisionBySegment.get(event.segmentId);
+    if (prior !== undefined && revision! <= prior) return;
+    // A new segment can be dropped under backpressure, but a corrected
+    // revision must first suppress its older generation so it never loses the
+    // only valid utterance merely because the old tail filled the queue.
+    if (prior === undefined &&
+        this.pendingOutputs >= (this.options.maxPendingOutputs ?? 32)) {
       this.droppedOutputs += 1;
       this.options.onDrop?.(event);
       return;
     }
+    if (prior !== undefined) {
+      // The synthesizer owns session-scoped provider cancellation.  It is
+      // safer to stop the serialized tail than to emit old audio after a
+      // corrected transcript; the newer final is enqueued below.
+      this.cancelPending();
+    }
+    if (revision !== undefined) this.revisionBySegment.set(event.segmentId, revision);
     this.pendingOutputs += 1;
     const generation = this.generation;
     this.tail = this.tail.then(async () => {
@@ -90,6 +112,7 @@ export class RealtimeTtsOutputQueue {
     this.closed = true;
     this.resetGeneration();
     this.options.synthesizer.closeSession(this.options.sessionId);
+    this.revisionBySegment.clear();
   }
 
   cancelPending() {
@@ -107,6 +130,9 @@ export class RealtimeTtsOutputQueue {
   private resetGeneration() {
     this.generation += 1;
     this.tail = Promise.resolve();
+    // Existing operations still settle their finally blocks, which clamp this
+    // value at zero. They belong to the cancelled generation and cannot emit.
+    this.pendingOutputs = 0;
   }
 
   async drain() {

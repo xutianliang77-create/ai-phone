@@ -6,12 +6,12 @@ import {ResultSyncError,resultSyncHash,syncKey} from "../sessions/session-result
 import {releaseUsageHold} from "../usage/usage.service.js";
 import {publicCreationIdentity} from "./public-creation-binding.js";
 import {publicCreationInput} from "./public-realtime-preparation.js";
+import {resolvePostgresPublicCreation} from "./postgres-public-creation.repository.js";
 
 /** Same original snapshot and user quota hold; never settles usage, clears model
  * attempts, refunds supplier costs or revokes an external budget reservation.
  * Only a creation with no runtime/output/accounting evidence can be retired. */
 export async function resolvePublicCreation(ownerId:string,key:unknown,value:unknown,action:"query"|"cancel"|"expire",now=new Date()) {
-  if(getRepositoryRuntime().driver==="postgres")throw new ResultSyncError("public_creation_postgres_idempotency_not_ready",503);
   const b=value as {request?:unknown;nonce?:unknown}|null;
   if(!b||Array.isArray(b)||Object.keys(b).some(k=>!["request","nonce"].includes(k))||!syncKey(b.nonce)||!Number.isFinite(now.getTime()))throw new ResultSyncError("public_creation_resolution_invalid",400);
   const {deploymentId,sessionId}=publicCreationIdentity(ownerId,key);
@@ -19,6 +19,10 @@ export async function resolvePublicCreation(ownerId:string,key:unknown,value:unk
   // rotated or disabled configuration must not strand an older pending request.
   const requestHash=resultSyncHash(publicCreationInput(b.request));
   const responseBinding={contractVersion:1,sessionId,ownerId,deploymentId,nonce:b.nonce,requestHash:resultSyncHash(b.request)};
+  if(getRepositoryRuntime().driver==="postgres"){
+    const result=await resolvePostgresPublicCreation({sessionId,ownerId,deploymentId,requestHash,nonce:b.nonce,action,now});
+    return {...responseBinding,...result};
+  }
   return withSessionWriteLock(`public-create:${sessionId}`,()=>withSessionWriteLock(sessionId,()=>runStoreTransaction(()=>{
     const store=getStoreSnapshot(),binding=store.publicCreationBindings?.[sessionId],current=store.sessions.find(s=>s.id===sessionId);
     if(binding&&binding.replace(/^(cancelled|expired):/,"")!==requestHash)throw new ResultSyncError("public_creation_request_conflict",409);

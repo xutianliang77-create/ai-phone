@@ -132,7 +132,8 @@ export function syncSessionResults(sessionId: string, ownerId: string, body: unk
         throw new ResultSyncError("public_tail_outside_stop_watermark");
       }
       const language = processing.languagePolicy;
-      const validDirection = language.autoReverse ? language.pair?.some(code => code === segment.sourceLanguage) &&
+      const validDirection = language.autoReverse ? segment.sourceLanguage !== segment.targetLanguage &&
+        language.pair?.some(code => code === segment.sourceLanguage) &&
         language.pair.some(code => code === segment.targetLanguage) : segment.targetLanguage === language.target &&
         (language.source === "auto" || segment.sourceLanguage === language.source);
       if (!validDirection) throw new ResultSyncError("result_sync_language_mismatch");

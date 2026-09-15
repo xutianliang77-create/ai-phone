@@ -7,19 +7,23 @@ void main() {
       'type': 'audio.output',
       'sessionId': 'sess_1',
       'segmentId': 'seg_1',
+      'revision': 2,
       'format': 'pcm16',
       'sampleRate': 24000,
       'sequence': 1,
       'data': 'AA==',
+      'isFinal': true,
     });
 
     expect(event.type, 'audio.output');
     expect(event.sessionId, 'sess_1');
     expect(event.segmentId, 'seg_1');
+    expect(event.revision, 2);
     expect(event.format, 'pcm16');
     expect(event.sampleRate, 24000);
     expect(event.sequence, 1);
     expect(event.data, 'AA==');
+    expect(event.isFinal, isTrue);
   });
 
   test('parses speaker attribution and shared timing', () {

@@ -1,5 +1,5 @@
 import {isDeepStrictEqual} from "node:util";
-import {publicProtocolSampleRateSupported} from "@translation/contracts";
+import {publicProtocolAutomaticLanguagePairSupported,publicProtocolSampleRateSupported} from "@translation/contracts";
 import {parseRealtimeProcessingRequest,type RealtimeExecutionPlan,type RealtimeProcessingAuthorization} from "@translation/contracts";
 import {HttpAsrClient} from "./http-asr-client.js";
 import {PublicAsrError,type CompletedAsrAudio,type CompletedAsrOptions} from "./public-asr-completed-audio.js";
@@ -35,7 +35,13 @@ function validateConfiguredAsr(options:ConfiguredPublicAsrOptions,protocol:strin
     snapshot.modelPolicyRevision!==authorization.modelPolicyRevision||!isDeepStrictEqual(snapshot.executionPlan,authorization.executionPlan)||!profile?.enabled||
     profile.vendor!==(protocol==="qwen_asr_realtime"||protocol==="qwen_asr_compatible"?"qwen":protocol==="tencent_asr_ws"?"tencent":protocol==="google_speech_v2"?"google":"openai")||profile.protocol!==protocol||
     (protocol==="google_speech_v2"?!["google_service_account","google_adc"].includes(profile.authKind):profile.authKind!==(protocol==="tencent_asr_ws"?"tencent_secret":"api_key"))||typeof options.record!=="function"||typeof options.resolveCredentials!=="function")throw new PublicAsrError("public_asr_configuration_not_supported","not_sent");
-  if(authorization.languagePolicy.source==="auto"||authorization.languagePolicy.autoReverse)throw new PublicAsrError("public_asr_language_detection_not_implemented","not_sent");
+  const automatic=authorization.languagePolicy.source==="auto";
+  const pair=authorization.languagePolicy.pair;
+  if((automatic||authorization.languagePolicy.autoReverse)&&
+    (!automatic||!publicProtocolAutomaticLanguagePairSupported(profile.protocol,pair)||
+      !pair?.includes(authorization.languagePolicy.target))) {
+    throw new PublicAsrError("public_asr_language_detection_not_implemented","not_sent");
+  }
   return {snapshot,authorization,profile};
 }
 export type ConfiguredStreamingAsrOptions=ConfiguredPublicAsrOptions&Pick<StreamingAsrOptions,"authorizeConnection"|"socketFactory"|"googleStreamFactory">;
@@ -43,18 +49,22 @@ export function configuredStreamingAsr(options:ConfiguredStreamingAsrOptions){
   const configured=options.snapshot.components.asr?.protocol;
   const protocol=configured==="google_speech_v2"?"google_speech_v2":configured==="qwen_asr_realtime"?"qwen_asr_realtime":configured==="tencent_asr_ws"?"tencent_asr_ws":"openai_realtime_asr";
   const {profile,authorization}=validateConfiguredAsr(options,protocol),qwen=protocol==="qwen_asr_realtime",tencent=protocol==="tencent_asr_ws",google=protocol==="google_speech_v2";
-  if(qwen)qwenAsrLanguage(authorization.languagePolicy.source);
+  if(qwen&&authorization.languagePolicy.source!=="auto")qwenAsrLanguage(authorization.languagePolicy.source);
   if(tencent)validateTencentAsr({endpoint:profile.endpoint,model:profile.modelId,appId:profile.appId,language:authorization.languagePolicy.source as StreamingAsrOptions["language"]});
   let url:URL;try{url=new URL(profile.endpoint);}catch{throw new PublicAsrError("public_asr_stream_configuration","not_sent");}
   if(url.protocol!==(google?"https:":"wss:")||url.username||url.password||url.search||url.hash||!publicProtocolSampleRateSupported(protocol,profile.sampleRate)||
-    !google&&!tencent&&!(qwen?/^[a-z]{2,3}$/:/^[a-z]{2}$/).test(authorization.languagePolicy.source)||!Number.isSafeInteger(profile.timeoutMs)||profile.timeoutMs<250||profile.timeoutMs>120000||
+    !google&&!tencent&&authorization.languagePolicy.source!=="auto"&&!(qwen?/^[a-z]{2,3}$/:/^[a-z]{2}$/).test(authorization.languagePolicy.source)||!Number.isSafeInteger(profile.timeoutMs)||profile.timeoutMs<250||profile.timeoutMs>120000||
     ![options.sessionId,options.leaseId,profile.modelId].every(v=>typeof v==="string"&&v.trim()===v&&v.length>0&&v.length<=240)||typeof options.authorizeConnection!=="function"){
     throw new PublicAsrError("public_asr_stream_configuration","not_sent");
   }
+  const automaticFallback=authorization.languagePolicy.source==="auto"
+    ? authorization.languagePolicy.pair!.find(language=>language!==authorization.languagePolicy.target)!
+    : authorization.languagePolicy.source;
   const clientOptions:StreamingAsrOptions={sessionId:options.sessionId,leaseId:options.leaseId,
     endpoint:profile.endpoint,model:profile.modelId,language:authorization.languagePolicy.source as StreamingAsrOptions["language"],timeoutMs:profile.timeoutMs,wireProfile:protocol,appId:profile.appId,
     authorizeConnection:options.authorizeConnection,resolveCredentials:options.resolveCredentials,record:options.record,socketFactory:options.socketFactory,
-    projectId:profile.projectId,location:profile.location,recognizer:profile.recognizer,languageLocales:profile.languageLocales,sampleRate:profile.sampleRate,googleStreamFactory:options.googleStreamFactory};
+    projectId:profile.projectId,location:profile.location,recognizer:profile.recognizer,languageLocales:profile.languageLocales,sampleRate:profile.sampleRate,
+    detectedLanguageFallback:automaticFallback,googleStreamFactory:options.googleStreamFactory};
   if(google)googleAsrConfiguration(clientOptions);
   return new HttpAsrProvider({endpoint:profile.endpoint,timeoutMs:profile.timeoutMs,client:new OpenAiStreamingAsrClient(clientOptions)});
 }

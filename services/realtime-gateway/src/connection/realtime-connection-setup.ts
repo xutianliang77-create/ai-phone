@@ -7,8 +7,12 @@ import {coreDependencyFailureStage} from "./gateway-dependency-readiness.js";
 import {ProviderRouter} from "../providers/provider-router.js";
 import {createRealtimeTtsOutputQueue} from "../tts/realtime-tts-output-factory.js";
 import {openConfiguredPublicConnection,type PublicGatewayRuntimeOptions} from "./configured-public-connection.js";
-export async function setupRealtimeConnection(runtime:ReturnType<typeof createRealtimeServerRuntime>,ws:WebSocket,request:IncomingMessage,publicRuntime?:PublicGatewayRuntimeOptions){
-  if(runtime.env.publicDeploymentId&&publicRuntime)return openConfiguredPublicConnection(runtime.env,ws,request,publicRuntime);
+
+export async function setupRealtimeConnection(runtime:ReturnType<typeof createRealtimeServerRuntime>,ws:WebSocket,request:IncomingMessage,publicRuntime?:PublicGatewayRuntimeOptions,enforcePublicReadiness=true){
+  // The public opener authenticates the token first, then consumes this
+  // readiness snapshot before it asks the API for material or initializes a
+  // provider.  Invalid credentials must not be masked as dependency state.
+  if(runtime.env.publicDeploymentId&&publicRuntime)return openConfiguredPublicConnection(runtime.env,ws,request,publicRuntime,enforcePublicReadiness?runtime.dependencyReadiness.readiness():undefined);
   const attachment=admitRealtimeConnection(ws,request,runtime.env);if(!attachment)return null;
   const {session,generation}=attachment;let stage:"provider"|"asr"|"translation"="provider";
   try{

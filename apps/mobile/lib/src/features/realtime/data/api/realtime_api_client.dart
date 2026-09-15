@@ -28,6 +28,7 @@ class RealtimeApiClient {
     String sourceLanguage = 'auto',
     String targetLanguage = 'zh',
     bool autoReverseTargetLanguage = false,
+    (String, String)? automaticLanguagePair,
     String voiceOutputMode = 'natural',
     String voicePresetId = 'zh_female_natural',
     String termbaseId = 'default',
@@ -44,6 +45,7 @@ class RealtimeApiClient {
         _sourceLanguage = sourceLanguage,
         _targetLanguage = targetLanguage,
         _autoReverseTargetLanguage = autoReverseTargetLanguage,
+        _automaticLanguagePair = automaticLanguagePair,
         _voiceOutputMode = voiceOutputMode,
         _voicePresetId = voicePresetId,
         _termbaseId = termbaseId,
@@ -59,6 +61,7 @@ class RealtimeApiClient {
   final String _sourceLanguage;
   final String _targetLanguage;
   final bool _autoReverseTargetLanguage;
+  final (String, String)? _automaticLanguagePair;
   String _voiceOutputMode;
   final String _voicePresetId;
   final String _termbaseId;

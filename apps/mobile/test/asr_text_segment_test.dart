@@ -63,6 +63,29 @@ void main() {
       expect(AsrTextSegment.tryFromJson(bad), isNull);
     }
   });
+
+  test('keeps only explicitly sourced, monotonic capture timing', () {
+    final data = <String, Object?>{
+      'id': 'c:timed',
+      'text': 'hello',
+      'language': 'en',
+      'startMs': 120,
+      'endMs': 860,
+      'timingSource': 'client',
+    };
+    final segment = AsrTextSegment.fromJson(data).copyWith(text: 'hello!');
+    expect(segment.startMs, 120);
+    expect(segment.endMs, 860);
+    expect(segment.timingSource, 'client');
+    for (final bad in [
+      {...data, 'endMs': 119},
+      {...data, 'startMs': -1},
+      {...data, 'timingSource': 'wall_clock'},
+      {...data}..remove('timingSource'),
+    ]) {
+      expect(AsrTextSegment.tryFromJson(bad), isNull);
+    }
+  });
   test('preserves every existing product language and regional ASR tag', () {
     for (final language in supportedHyMtLanguages) {
       expect(normalizeAsrLanguage(language.code), language.code);

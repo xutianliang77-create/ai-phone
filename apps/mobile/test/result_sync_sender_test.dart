@@ -6,6 +6,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+import 'package:translation_mobile/src/features/account/data/account_api_client.dart';
 import 'package:translation_mobile/src/features/account/data/account_session_store.dart';
 import 'package:translation_mobile/src/features/realtime/data/api/realtime_api_client.dart';
 import 'package:translation_mobile/src/features/realtime/data/api/realtime_session.dart';
@@ -146,7 +147,7 @@ void main() {
         }));
     addTearDown(api.close);
     await expectLater(
-        api.createSession(), throwsA(isA<RealtimeApiException>()));
+        api.createSession(), throwsA(isA<AccountApiException>()));
     await expectLater(
         api.saveSegments('s', []), throwsA(isA<RealtimeApiException>()));
     await expectLater(
@@ -158,7 +159,9 @@ void main() {
             billableSeconds: 0,
             idempotencyKey: 'finalize:s'),
         throwsA(isA<RealtimeApiException>()));
-    expect(calls, 0);
+    // Public creation may verify the deployment identity, but it must not
+    // continue into any private create/save/end/finalize fallback.
+    expect(calls, 1);
   });
 }
 

@@ -1,5 +1,5 @@
 import type {PublicModelAttemptEvent,RealtimeTokenClaims} from "@translation/contracts";
-import {publicProtocolCapability,publicProtocolSampleRateSupported,publicRuntimeTokenBinding} from "@translation/contracts";
+import {publicProtocolAutomaticLanguagePairSupported,publicProtocolCapability,publicProtocolSampleRateSupported,publicRuntimeTokenBinding} from "@translation/contracts";
 import {isDeepStrictEqual} from "node:util";
 import {configuredStreamingAsr, type ConfiguredStreamingAsrOptions} from "../asr/configured-public-asr.js";
 import type {PublicSessionBinding} from "../sessions/public-session-event-sink.js";
@@ -48,7 +48,9 @@ export function configuredPublicSessionFromVerifiedClaims(options:ConfiguredPubl
   const token=publicRuntimeTokenBinding(claims,options.binding.deploymentId),b=options.binding;
   if(!token||claims.userId!==b.ownerId||claims.sessionId!==b.sessionId||
     !isDeepStrictEqual(claims.processing,options.authorization)||claims.sourceLanguage!==options.session.sourceLanguage||
-    claims.targetLanguage!==options.session.targetLanguage||claims.voiceOutput!==options.session.voiceOutput||
+    claims.targetLanguage!==options.session.targetLanguage||
+    (claims.autoReverseTargetLanguage===true)!==(options.session.autoReverseTargetLanguage===true)||claims.voiceOutput!==options.session.voiceOutput||
+    !isDeepStrictEqual(claims.processing?.languagePolicy.pair,options.session.languagePair)||
     options.session.asrEndpointMode!==undefined&&claims.asrEndpointMode!==options.session.asrEndpointMode||
     ["leaseId","captureId","languagePolicyKey","sampleRate"].some(k=>token[k as keyof typeof token]!==b[k as keyof typeof b])||
     token.configurationHash!==options.snapshot.configurationHash||token.configurationRevision!==options.snapshot.configurationRevision||
@@ -80,8 +82,21 @@ function assemblePublicSession(options:ConfiguredPublicSessionOptions,withOutput
     fail("public_session_tts_binding_invalid");
   }
   const language = authorization.languagePolicy;
-  if (language.source === "auto" || language.autoReverse || session.autoReverseTargetLanguage === true ||
-      session.sourceLanguage !== language.source || session.targetLanguage !== language.target) {
+  const automaticLanguage=language.source === "auto";
+  const automaticPair=publicProtocolAutomaticLanguagePairSupported(snapshot.components.asr!.protocol,language.pair)&&
+    language.pair!.includes(language.target);
+  // The signed token omits the optional flag when reverse routing is off.
+  // Normalize that transport representation to false before comparing it to
+  // the sealed policy; otherwise every fixed-language public session is
+  // rejected merely because it did not serialize an explicit false.
+  if ((session.autoReverseTargetLanguage === true) !== language.autoReverse ||
+      session.sourceLanguage !== language.source || session.targetLanguage !== language.target ||
+      !isDeepStrictEqual(session.languagePair,language.pair) ||
+      (automaticLanguage&&!automaticPair) ||
+      // Do not reinterpret a fixed-engine ASR locale as automatic language
+      // detection. The signed admission policy/live evidence binds the exact
+      // selected pair before this one original Provider is assembled.
+      (language.autoReverse&&(!automaticLanguage||!automaticPair))) {
     fail("public_session_language_not_supported");
   }
   if (session.asrHotwords?.length || session.asrCorrections?.length) fail("public_session_asr_hints_not_implemented");

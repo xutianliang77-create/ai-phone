@@ -19,7 +19,8 @@ extension RealtimePublicCreationApi on RealtimeApiClient {
     }
     await resultSyncAccount(session.syncBinding!);
     if (issued.accountEpoch != accountGeneration ||
-        issued.creationEpoch != _publicCreationEpoch || _publicIssued != issued) {
+        issued.creationEpoch != _publicCreationEpoch ||
+        _publicIssued != issued) {
       throw const RealtimeApiException('创建确认已取消');
     }
     await _publicCreationStore.connected(
@@ -47,10 +48,8 @@ extension RealtimePublicCreationApi on RealtimeApiClient {
         _baseUrl.hasFragment) {
       throw const RealtimeApiException('公有创建需要HTTPS');
     }
-    if (_sourceLanguage == 'auto' ||
-        _autoReverseTargetLanguage ||
-        _sourceLanguage == _targetLanguage) {
-      throw const RealtimeApiException('公有自动语种/反向尚未验收，请选择固定语言对');
+    if (_sourceLanguage == _targetLanguage) {
+      throw const RealtimeApiException('源语言和目标语言不能相同');
     }
     if (!const ['natural', 'off'].contains(_voiceOutputMode)) {
       throw const RealtimeApiException('公有创建暂不支持个人声音');
@@ -81,7 +80,8 @@ extension RealtimePublicCreationApi on RealtimeApiClient {
       check();
       final current = await _creationWait(publicLifecycleAccount(), epoch);
       check();
-      if (current.token != account.token || current.ownerId != account.ownerId) {
+      if (current.token != account.token ||
+          current.ownerId != account.ownerId) {
         throw const AccountAuthRequiredException();
       }
     }
@@ -92,8 +92,24 @@ extension RealtimePublicCreationApi on RealtimeApiClient {
       _sourceLanguage,
       _targetLanguage,
       _autoReverseTargetLanguage,
+      _automaticLanguagePair?.$1,
+      _automaticLanguagePair?.$2,
       _voiceOutputMode
     ]);
+    await verifyAccount();
+    final offer = await _publicCreateHttp(
+        'GET',
+        '/realtime/sessions/configuration?voiceOutput=$voice',
+        account.token,
+        epoch);
+    check();
+    await verifyAccount();
+    final blocker = publicCreationCapabilityBlocker(offer,
+        source: _sourceLanguage,
+        target: _targetLanguage,
+        autoReverse: _autoReverseTargetLanguage,
+        automaticLanguagePair: _automaticLanguagePair);
+    if (blocker != null) throw RealtimeApiException(blocker);
     var record = await _creationWait(
         _publicCreationStore.pending(scope.storageKey), epoch);
     check();
@@ -101,20 +117,14 @@ extension RealtimePublicCreationApi on RealtimeApiClient {
       throw const RealtimeApiException('仍有未确认创建，请恢复原设置重试；未自动新建会话');
     }
     if (record == null) {
-      await verifyAccount();
-      final offer = await _publicCreateHttp(
-          'GET',
-          '/realtime/sessions/configuration?voiceOutput=$voice',
-          account.token,
-          epoch);
-      check();
-      await verifyAccount();
       final body = publicCreationBody(offer,
           deploymentId: publicDeploymentId,
           ownerId: account.ownerId!,
           mode: _mode,
           source: _sourceLanguage,
           target: _targetLanguage,
+          autoReverse: _autoReverseTargetLanguage,
+          automaticLanguagePair: _automaticLanguagePair,
           voice: voice);
       record = await _creationWait(
           _publicCreationStore.acquire(

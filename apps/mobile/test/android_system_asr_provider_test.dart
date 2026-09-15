@@ -20,7 +20,7 @@ void main() {
         .setMockMethodCallHandler(channel, null);
   });
 
-  test('allows start when Android system recognition is available', () async {
+  test('allows start when Android on-device recognition is available', () async {
     _mockAvailability(channel, available: true);
 
     final availability = await provider.availability(
@@ -29,7 +29,7 @@ void main() {
 
     expect(availability.canStart, isTrue);
     expect(availability.reason, 'ready');
-    expect(availability.message, 'Android system ASR ready');
+    expect(availability.message, 'Android on-device ASR ready');
   });
 
   test('blocks start when microphone permission was denied', () async {
@@ -48,7 +48,7 @@ void main() {
     expect(availability.message, 'Microphone permission was denied');
   });
 
-  test('blocks start when Android recognition service is unavailable',
+  test('blocks start when Android on-device recognition is unavailable',
       () async {
     _mockAvailability(channel, available: false);
 
@@ -57,8 +57,9 @@ void main() {
     );
 
     expect(availability.canStart, isFalse);
-    expect(availability.reason, 'system_asr_unavailable');
-    expect(availability.message, contains('speech recognition is unavailable'));
+    expect(availability.reason, 'on_device_recognizer_unavailable');
+    expect(availability.message,
+        contains('on-device speech recognition is unavailable'));
   });
 
   test('passes language to native start', () async {
@@ -146,7 +147,7 @@ void _mockAvailability(
     return <String, Object?>{
       'provider': 'android_system_asr',
       'available': available,
-      'reason': available ? 'ready' : 'system_asr_unavailable',
+      'reason': available ? 'on_device_recognizer_available' : 'on_device_recognizer_unavailable',
       'microphone': <String, Object?>{
         'permission': microphonePermission,
       },

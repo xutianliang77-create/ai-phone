@@ -221,6 +221,17 @@ extension RealtimeControllerSpeech on RealtimeController {
       _activeSpeechGeneration = null;
       _activeSpeechSegmentId = null;
     }
+    final activePublicSegment = _activePublicAudioSegmentId;
+    final activePublicRevision = _activePublicAudioRevision;
+    if (activePublicSegment != null && activePublicRevision != null) {
+      _writeSpeechTiming(activePublicSegment, <String, Object?>{
+        'status': 'cancelled',
+        'provider': 'server_pcm_tts',
+        'revision': activePublicRevision,
+      });
+    }
+    _activePublicAudioSegmentId = null;
+    _activePublicAudioRevision = null;
     _speechGeneration += 1;
     unawaited(_recordDeviceAsrDiagnosticEvent(
       'tts.stop_requested',
@@ -313,17 +324,49 @@ extension RealtimeControllerSpeech on RealtimeController {
     if (_config.useLocalSessions ||
         !_autoSpeakTranslation ||
         player == null ||
+        event.segmentId == null ||
+        event.revision == null ||
+        event.revision! < 0 ||
+        event.sequence == null ||
+        event.sequence! < 0 ||
         event.format != 'pcm16' ||
         event.data == null ||
         event.sampleRate == null) {
       return;
     }
+    final segmentId = event.segmentId!;
+    final revision = event.revision!;
+    final draft = _drafts[segmentId];
+    // Public TTS belongs only to a current translated revision.  A delayed
+    // audio frame must not revive a superseded subtitle or play after a newer
+    // ASR/MT correction has cleared its translation.
+    if (draft == null ||
+        draft.revision != revision ||
+        draft.translatedText.trim().isEmpty) {
+      return;
+    }
+    final previousRevision = _publicAudioRevisionBySegment[segmentId];
+    final previousSequence = _publicAudioSequenceBySegment[segmentId];
+    if ((previousRevision != null && revision < previousRevision) ||
+        (previousRevision == revision &&
+            previousSequence != null && event.sequence! <= previousSequence)) {
+      return;
+    }
+    _publicAudioRevisionBySegment[segmentId] = revision;
+    _publicAudioSequenceBySegment[segmentId] = event.sequence!;
     final data = event.data!;
     final sampleRate = event.sampleRate!;
     final generation = _speechGeneration;
     _speechChain = _speechChain.catchError((Object _) {}).then((_) {
       if (generation != _speechGeneration) return null;
-      return _playPcmWithTimeout(player, data, sampleRate);
+      return _playPcmWithTimeout(
+        player,
+        data,
+        sampleRate,
+        segmentId: segmentId,
+        revision: revision,
+        isFinal: event.isFinal == true,
+      );
     }).then<void>((_) {});
   }
 
@@ -331,6 +374,11 @@ extension RealtimeControllerSpeech on RealtimeController {
     PcmAudioOutputPlayer player,
     String data,
     int sampleRate,
+    {
+      required String segmentId,
+      required int revision,
+      required bool isFinal,
+    }
   ) async {
     final generation = _speechGeneration;
     await _recordDeviceAsrDiagnosticEvent(
@@ -347,17 +395,39 @@ extension RealtimeControllerSpeech on RealtimeController {
     if (generation != _speechGeneration || _status != RealtimeStatus.active) {
       return;
     }
+    _activePublicAudioSegmentId = segmentId;
+    _activePublicAudioRevision = revision;
+    _writeSpeechTiming(segmentId, <String, Object?>{
+      'status': 'started',
+      'provider': 'server_pcm_tts',
+      'sampleRate': sampleRate,
+      'revision': revision,
+    });
     _speechCaptureGate.beginPlayback();
     _setSpeechOutputActive(true);
     try {
-      await player
+      final result = await player
           .play(
             data: data,
             sampleRate: sampleRate,
           )
           .timeout(const Duration(seconds: 30));
+      if (isFinal && generation == _speechGeneration) {
+        _writeSpeechTiming(segmentId, <String, Object?>{
+          'status': 'finished',
+          'provider': result.provider,
+          'sampleRate': result.sampleRate,
+          'revision': revision,
+        });
+      }
     } on TimeoutException catch (error) {
       if (generation == _speechGeneration) {
+        _writeSpeechTiming(segmentId, <String, Object?>{
+          'status': 'timed_out',
+          'provider': 'server_pcm_tts',
+          'sampleRate': sampleRate,
+          'revision': revision,
+        });
         await ignoreCleanupError(player.stop);
         if (generation == _speechGeneration) {
           _reportSpeechFailure(error, '语音播放超时');
@@ -365,9 +435,20 @@ extension RealtimeControllerSpeech on RealtimeController {
       }
     } on Object catch (error) {
       if (generation == _speechGeneration) {
+        _writeSpeechTiming(segmentId, <String, Object?>{
+          'status': 'failed',
+          'provider': 'server_pcm_tts',
+          'sampleRate': sampleRate,
+          'revision': revision,
+        });
         _reportSpeechFailure(error, '语音播放失败');
       }
     } finally {
+      if (_activePublicAudioSegmentId == segmentId &&
+          _activePublicAudioRevision == revision) {
+        _activePublicAudioSegmentId = null;
+        _activePublicAudioRevision = null;
+      }
       if (generation == _speechGeneration) {
         _speechCaptureGate.endPlayback();
         _setSpeechOutputActive(false);
@@ -382,6 +463,22 @@ extension RealtimeControllerSpeech on RealtimeController {
           },
         );
       }
+    }
+  }
+
+  void _cancelPublicAudioForRevision(String segmentId, int revision) {
+    final activeSegment = _activePublicAudioSegmentId;
+    final activeRevision = _activePublicAudioRevision;
+    final queuedRevision = _publicAudioRevisionBySegment[segmentId];
+    // `_speechChain` serializes PCM frames.  It can therefore contain an old
+    // frame which is not the active player invocation yet.  Treat that queued
+    // frame exactly like active audio: advance the generation so neither it
+    // nor the active frame can resume after a newer subtitle revision.
+    if ((activeSegment == segmentId &&
+            activeRevision != null &&
+            activeRevision <= revision) ||
+        (queuedRevision != null && queuedRevision <= revision)) {
+      unawaited(_stopSpeaking());
     }
   }
 }

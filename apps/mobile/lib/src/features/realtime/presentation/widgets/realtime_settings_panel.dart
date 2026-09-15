@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'public_creation_scope_notice.dart';
 
 import '../../../../app/localization/app_localizations.dart';
+import '../../../account/data/account_session_store.dart'
+    show configuredPublicDeploymentId;
 import '../../../../platform/translation/supported_translation_language.dart';
 import '../../data/realtime_runtime_settings.dart';
 import '../../data/voice_preset_catalog.dart';
@@ -36,6 +38,13 @@ class RealtimeSettingsPanel extends StatelessWidget {
   Widget build(BuildContext context) {
     final l10n = context.l10n;
     final theme = Theme.of(context);
+    // Local mode keeps its existing resource-bound limitation. Online mode
+    // preserves the inherited automatic-language choices and asks the public
+    // server for the exact configuration qualification only at session start.
+    final automaticRoutingUnavailable =
+        settings.processingMode == RealtimeProcessingMode.onDevice;
+    final publicOnline = configuredPublicDeploymentId.isNotEmpty &&
+        settings.processingMode == RealtimeProcessingMode.online;
     return Padding(
       padding: padding,
       child: Column(
@@ -73,8 +82,8 @@ class RealtimeSettingsPanel extends StatelessWidget {
                 label: l10n.sourceLanguageLabel,
                 value: l10n.languageDisplayName(settings.sourceLanguage),
                 enabled: enabled,
-                onPressed: () =>
-                    _pickLanguage(context, LanguagePickerKind.source),
+                onPressed: () => _pickLanguage(context,
+                    LanguagePickerKind.source, automaticRoutingUnavailable),
               ),
               _LanguageButton(
                 label: l10n.targetLanguageLabel,
@@ -82,12 +91,12 @@ class RealtimeSettingsPanel extends StatelessWidget {
                     pairSource: settings.selectedLanguagePair?.source,
                     pairTarget: settings.selectedLanguagePair?.target),
                 enabled: enabled,
-                onPressed: () =>
-                    _pickLanguage(context, LanguagePickerKind.target),
+                onPressed: () => _pickLanguage(context,
+                    LanguagePickerKind.target, automaticRoutingUnavailable),
               ),
               DomainLexiconButton(
                 settings: settings,
-                enabled: enabled,
+                enabled: enabled && !publicOnline,
                 onChanged: onChanged,
               ),
             ],
@@ -117,6 +126,7 @@ class RealtimeSettingsPanel extends StatelessWidget {
           _VoiceOutputSelector(
             settings: settings,
             enabled: enabled && autoSpeakSupported,
+            publicOnline: publicOnline,
             onChanged: onChanged,
             voicePresets: voicePresets,
             voicePresetsLoading: voicePresetsLoading,
@@ -170,14 +180,14 @@ class RealtimeSettingsPanel extends StatelessWidget {
   Future<void> _pickLanguage(
     BuildContext context,
     LanguagePickerKind kind,
+    bool automaticRoutingUnavailable,
   ) async {
     if (!enabled) return;
-    final disabledCodes =
-        settings.processingMode != RealtimeProcessingMode.onDevice
-            ? const <String>{}
-            : kind == LanguagePickerKind.source
-                ? const <String>{autoSourceLanguageCode}
-                : const <String>{autoReverseTargetLanguageCode};
+    final disabledCodes = !automaticRoutingUnavailable
+        ? const <String>{}
+        : kind == LanguagePickerKind.source
+            ? const <String>{autoSourceLanguageCode}
+            : const <String>{autoReverseTargetLanguageCode};
     final selected = await showTranslationLanguagePicker(
       context: context,
       kind: kind,
@@ -210,6 +220,7 @@ class _VoiceOutputSelector extends StatelessWidget {
   const _VoiceOutputSelector({
     required this.settings,
     required this.enabled,
+    required this.publicOnline,
     required this.onChanged,
     required this.voicePresets,
     required this.voicePresetsLoading,
@@ -217,6 +228,7 @@ class _VoiceOutputSelector extends StatelessWidget {
 
   final RealtimeRuntimeSettings settings;
   final bool enabled;
+  final bool publicOnline;
   final ValueChanged<RealtimeRuntimeSettings> onChanged;
   final List<VoicePreset> voicePresets;
   final bool voicePresetsLoading;
@@ -250,7 +262,8 @@ class _VoiceOutputSelector extends StatelessWidget {
             ),
             ButtonSegment<RealtimeVoiceOutputMode>(
               value: RealtimeVoiceOutputMode.myVoice,
-              enabled: settings.processingMode == RealtimeProcessingMode.online,
+              enabled: settings.processingMode == RealtimeProcessingMode.online &&
+                  !publicOnline,
               icon: const Icon(Icons.graphic_eq_outlined),
               label: Text(l10n.voiceOutputMyVoiceLabel),
             ),
@@ -269,7 +282,7 @@ class _VoiceOutputSelector extends StatelessWidget {
             settings: settings,
             presets: voicePresets,
             loading: voicePresetsLoading,
-            enabled: enabled,
+            enabled: enabled && !publicOnline,
             onChanged: onChanged,
           ),
         ],

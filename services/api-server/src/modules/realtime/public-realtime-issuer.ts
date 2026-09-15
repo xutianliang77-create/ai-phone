@@ -4,7 +4,7 @@ import {withSessionWriteLock} from "../sessions/session-write-coordinator.js";
 import {publicDeploymentId,mutatePublicSession} from "../sessions/session-result-sync.service.js";
 import {ResultSyncError,resultSyncHash,syncKey} from "../sessions/session-result-sync-contract.js";
 import {verifiedPublicAdmission,issuePublicRuntimeLease} from "../sessions/public-runtime-admission.js";
-import {createUsageHold} from "../usage/usage-hold-runtime.service.js";
+import {createUsageHold,releaseUsageHold} from "../usage/usage-hold-runtime.service.js";
 import {preparedPublicSession} from "./public-realtime-preparation.js";
 import {createRealtimeToken} from "./realtime-token.js";
 import {realtimeMaxSessionSeconds} from "./realtime-session-duration.js";
@@ -39,31 +39,48 @@ export async function issuePublicRealtimeSession(sessionId:string,ownerId:string
     if(hold.status!=="held")throw new ResultSyncError("quota_not_enough",402);
     if(hold.hold.status!=="active"||hold.hold.userId!==ownerId||hold.hold.sessionId!==sessionId||hold.hold.seconds!==holdSeconds||
       Date.parse(hold.hold.expiresAt)<=Date.now()||!Number.isFinite(Date.parse(hold.hold.expiresAt)))throw new ResultSyncError("public_issuer_hold_invalid",409);
-    const issuance=await mutatePublicSession(sessionId,"public-realtime-issue",{ownerId},current=>{
-      const {input,config}=preparedPublicSession(current,ownerId);
-      verifiedPublicAdmission(current,ownerId,new Date());
-      if(resultSyncHash(current.publicRuntimePolicy)!==resultSyncHash(lease)||resultSyncHash(issuerSettings())!==resultSyncHash(settings))throw new ResultSyncError("public_issuer_binding_changed");
-      const old=current.publicRealtimeIssuance,issuedAt=old?.claims.issuedAt??Math.floor(Date.now()/1000);
-      const expiresAt=Math.min(issuedAt+300,Math.floor(Date.parse(lease.expiresAt)/1000));
-      if(expiresAt<=Math.floor(Date.now()/1000))throw new ResultSyncError("public_issuer_expired",403);
-      const maxDurationSeconds=lease.maxActiveSeconds===undefined?undefined:Math.min(realtimeMaxSessionSeconds(),lease.maxActiveSeconds,Math.floor(Date.parse(lease.expiresAt)/1000)-issuedAt);
-      const claims:RealtimeTokenClaims={userId:ownerId,sessionId,mode:input.mode,asrEndpointMode:["meeting","classroom"].includes(input.mode)?"listening":"conversation",
-        sourceLanguage:input.sourceLanguage,targetLanguage:input.targetLanguage,voiceOutput:input.voiceOutput,
-        ...(input.voiceOutput?{voice:{mode:"preset",presetId:config.components.tts!.voice}}:{}),planCode:hold.balance.planCode,
-        ...(maxDurationSeconds!==undefined?{maxDurationSeconds}:{}),issuedAt,expiresAt,processing:structuredClone(current.processingAuthorization!),
-        publicRuntime:{deploymentId:settings.deploymentId,leaseId:lease.leaseId,captureId:lease.captureId,languagePolicyKey:lease.languagePolicyKey,
-          sampleRate:lease.sampleRate!,configurationRevision:config.configurationRevision,configurationHash:config.configurationHash}};
-      if(!publicRuntimeTokenBinding(claims,settings.deploymentId)||createRealtimeToken(claims,settings.secret).length>4096)throw new ResultSyncError("public_issuer_token_invalid",503);
-      const record={requestHash:current.publicCreationRequest!.requestHash,endpoint:settings.endpoint,claims,holdId:hold.hold.id};
-      if(old){if(resultSyncHash(old)!==resultSyncHash(record))throw new ResultSyncError("public_issuer_retry_conflict");return {next:null,result:structuredClone(old)};}
-      const next=structuredClone(current);next.publicRealtimeIssuance=record;
-      return {next,result:record};
-    });
+    let issuance:{requestHash:string;endpoint:string;claims:RealtimeTokenClaims;holdId:string};
+    try{
+      // The hold is created in its own durable aggregate. Re-read the public
+      // session before recording issuance so a concurrent cancellation cannot
+      // leave a newly reserved hold attached to a retired creation request.
+      const beforeIssuance=await findSession(sessionId);
+      if(!beforeIssuance)throw new ResultSyncError("session_not_found",404);
+      preparedPublicSession(beforeIssuance,ownerId);
+      issuance=await mutatePublicSession(sessionId,"public-realtime-issue",{ownerId},current=>{
+        const {input,config}=preparedPublicSession(current,ownerId);
+        verifiedPublicAdmission(current,ownerId,new Date());
+        if(resultSyncHash(current.publicRuntimePolicy)!==resultSyncHash(lease)||resultSyncHash(issuerSettings())!==resultSyncHash(settings))throw new ResultSyncError("public_issuer_binding_changed");
+        const old=current.publicRealtimeIssuance,issuedAt=old?.claims.issuedAt??Math.floor(Date.now()/1000);
+        const expiresAt=Math.min(issuedAt+300,Math.floor(Date.parse(lease.expiresAt)/1000));
+        if(expiresAt<=Math.floor(Date.now()/1000))throw new ResultSyncError("public_issuer_expired",403);
+        const maxDurationSeconds=lease.maxActiveSeconds===undefined?undefined:Math.min(realtimeMaxSessionSeconds(),lease.maxActiveSeconds,Math.floor(Date.parse(lease.expiresAt)/1000)-issuedAt);
+        const claims:RealtimeTokenClaims={userId:ownerId,sessionId,mode:input.mode,asrEndpointMode:["meeting","classroom"].includes(input.mode)?"listening":"conversation",
+          sourceLanguage:input.sourceLanguage,targetLanguage:input.targetLanguage,voiceOutput:input.voiceOutput,
+          ...(input.autoReverseTargetLanguage?{autoReverseTargetLanguage:true}:{}),
+          ...(input.voiceOutput?{voice:{mode:"preset",presetId:config.components.tts!.voice}}:{}),planCode:hold.balance.planCode,
+          ...(maxDurationSeconds!==undefined?{maxDurationSeconds}:{}),issuedAt,expiresAt,processing:structuredClone(current.processingAuthorization!),
+          publicRuntime:{deploymentId:settings.deploymentId,leaseId:lease.leaseId,captureId:lease.captureId,languagePolicyKey:lease.languagePolicyKey,
+            sampleRate:lease.sampleRate!,configurationRevision:config.configurationRevision,configurationHash:config.configurationHash}};
+        if(!publicRuntimeTokenBinding(claims,settings.deploymentId)||createRealtimeToken(claims,settings.secret).length>4096)throw new ResultSyncError("public_issuer_token_invalid",503);
+        const record={requestHash:current.publicCreationRequest!.requestHash,endpoint:settings.endpoint,claims,holdId:hold.hold.id};
+        if(old){if(resultSyncHash(old)!==resultSyncHash(record))throw new ResultSyncError("public_issuer_retry_conflict");return {next:null,result:structuredClone(old)};}
+        const next=structuredClone(current);next.publicRealtimeIssuance=record;
+        return {next,result:record};
+      });
+    }catch(error){
+      const current=await findSession(sessionId);
+      if(current?.publicCreationRetirement&&current.userId===ownerId){
+        try{await releaseUsageHold(ownerId,sessionId);}catch{throw new ResultSyncError("public_creation_hold_reconciliation_required",409);}
+      }
+      throw error;
+    }
     // Sign only the committed projection; token bytes are never persisted.
-    const claims=issuance.claims;
+    const committedIssuance=issuance!;
+    const claims=committedIssuance.claims;
     if(claims.expiresAt<=Math.floor(Date.now()/1000))throw new ResultSyncError("public_issuer_expired",403);
     if(resultSyncHash(issuerSettings())!==resultSyncHash(settings))throw new ResultSyncError("public_issuer_binding_changed");
-    return {sessionId,realtimeToken:createRealtimeToken(claims,settings.secret),endpoint:issuance.endpoint,
+    return {sessionId,realtimeToken:createRealtimeToken(claims,settings.secret),endpoint:committedIssuance.endpoint,
       expiresAt:new Date(claims.expiresAt*1000).toISOString(),...(claims.maxDurationSeconds!==undefined?{maxDurationSeconds:claims.maxDurationSeconds}:{}),
       captureSampleRate:claims.publicRuntime!.sampleRate,deploymentId:claims.publicRuntime!.deploymentId,ownerId,
       processing:structuredClone(claims.processing!)};

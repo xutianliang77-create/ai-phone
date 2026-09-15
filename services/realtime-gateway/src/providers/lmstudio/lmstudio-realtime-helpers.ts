@@ -57,6 +57,13 @@ export function targetLanguageForTranscript(
   sourceLanguage: string,
 ): TranslationLanguageCode {
   if (!session.autoReverseTargetLanguage) return session.targetLanguage;
+  const pair = session.languagePair;
+  if (pair?.includes(sourceLanguage as TranslationLanguageCode)) {
+    return pair[0] === sourceLanguage ? pair[1] : pair[0];
+  }
+  // Preserve the frozen private/legacy behavior when an old session has no
+  // versioned pair. Public sessions must carry languagePair and are checked
+  // before reaching this fallback.
   return isChineseFamilyLanguage(sourceLanguage) ? "en" : "zh";
 }
 

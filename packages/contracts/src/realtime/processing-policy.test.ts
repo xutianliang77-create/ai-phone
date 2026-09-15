@@ -112,11 +112,11 @@ describe("language direction contract", () => {
     expect(resolveTranslationDirection(selection, { kind: "mixed", languages: ["zh", "en"] })).toEqual({ status: "unresolved", reason: "source_mixed" });
   });
   it("reverses according to the configured pair, including non-Chinese languages", () => {
-    expect(resolveTranslationDirection({ ...selection, pair: ["fr", "ja"] }, detected("ja"))).toEqual({ status: "ready", source: "ja", target: "fr", revision: 3 });
+    expect(resolveTranslationDirection({ ...selection, target: "fr", pair: ["fr", "ja"] }, detected("ja"))).toEqual({ status: "ready", source: "ja", target: "fr", revision: 3 });
     expect(resolveTranslationDirection(selection, detected("en"))).toMatchObject({ source: "en", target: "zh" });
   });
   it("preserves the explicit source/target without replacing user settings", () => {
-    const fixed = { ...selection, source: "zh-Hant" as const, target: "en" as const, autoReverse: false };
+    const fixed = { ...selection, source: "zh-Hant" as const, target: "en" as const, autoReverse: false, pair: undefined };
     expect(resolveTranslationDirection(fixed, { kind: "unknown" })).toEqual({ status: "ready", source: "zh-Hant", target: "en", revision: 3 });
     expect(fixed.source).toBe("zh-Hant");
   });
@@ -124,7 +124,7 @@ describe("language direction contract", () => {
     expect(resolveTranslationDirection({ ...selection, revision: NaN }, { kind: "unknown" })).toMatchObject({ reason: "invalid_revision" });
     expect(resolveTranslationDirection({ ...selection, pair: ["en", "en"] }, detected("en"))).toMatchObject({ reason: "invalid_pair" });
     expect(resolveTranslationDirection(selection, detected("fr"))).toMatchObject({ reason: "outside_pair" });
-    expect(resolveTranslationDirection({ ...selection, source: "en", autoReverse: false }, { kind: "unknown" })).toMatchObject({ reason: "same_language" });
+    expect(resolveTranslationDirection({ ...selection, source: "en", autoReverse: false, pair: undefined }, { kind: "unknown" })).toMatchObject({ reason: "same_language" });
   });
   it("requires qualified text evidence and never treats a user hint as detection", () => {
     expect(resolveTranslationDirection(selection, { kind: "user_selected", language: "en" })).toMatchObject({ reason: "source_unknown" });

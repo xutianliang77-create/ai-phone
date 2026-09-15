@@ -93,10 +93,26 @@ class RealtimeRuntimeSettings {
   final TranslationLanguagePair? automaticLanguagePair;
 
   TranslationLanguagePair? get selectedLanguagePair {
-    final fixed =
-        TranslationLanguagePair.fromLanguages(sourceLanguage, targetLanguage);
+    return _selectedLanguagePairFor(
+      sourceLanguage: sourceLanguage,
+      targetLanguage: targetLanguage,
+      savedPair: automaticLanguagePair,
+      autoReverse: autoReverseTargetLanguage,
+    );
+  }
+
+  static TranslationLanguagePair? _selectedLanguagePairFor({
+    required String sourceLanguage,
+    required String targetLanguage,
+    required TranslationLanguagePair? savedPair,
+    required bool autoReverse,
+  }) {
+    final fixed = TranslationLanguagePair.fromLanguages(
+      sourceLanguage,
+      targetLanguage,
+    );
     if (fixed != null) return fixed;
-    final saved = automaticLanguagePair;
+    final saved = savedPair;
     if (saved == null ||
         TranslationLanguagePair.fromLanguages(saved.source, saved.target) ==
             null) {
@@ -106,7 +122,7 @@ class RealtimeRuntimeSettings {
         saved.opposite(sourceLanguage) == null) {
       return null;
     }
-    if (!autoReverseTargetLanguage && saved.opposite(targetLanguage) == null) {
+    if (!autoReverse && saved.opposite(targetLanguage) == null) {
       return null;
     }
     return saved;
@@ -130,7 +146,11 @@ class RealtimeRuntimeSettings {
     final concreteTarget = autoReverseTargetLanguage
         ? pair?.opposite(sourceLanguage) ??
             pair?.target ??
-            _fallbackAutoReverseTarget(sourceLanguage)
+            // Do not fabricate zh/en or an opposite language when an old
+            // automatic setting has lost its pair.  Preserve the last concrete
+            // target solely for display/storage; preflight rejects the missing
+            // pair before any model/resource operation can start.
+            normalizeTargetLanguageCode(base.targetLanguage)
         : normalizeTargetLanguageCode(targetLanguage);
     return base.copyWith(
       sourceLanguage: sourceLanguage,
@@ -162,14 +182,25 @@ class RealtimeRuntimeSettings {
         (autoSpeakTranslation == null
             ? this.voiceOutputMode
             : _toggleVoiceOutputMode(autoSpeakTranslation));
+    final nextSourceLanguage = sourceLanguage == null
+        ? this.sourceLanguage
+        : normalizeSourceLanguageCode(sourceLanguage);
+    final nextTargetLanguage = targetLanguage == null
+        ? this.targetLanguage
+        : normalizeTargetSettingCode(targetLanguage);
+    // A user may turn an existing fixed A→B choice into automatic routing in
+    // either order. Preserve that exact pair as the automatic candidate, then
+    // let the existing validation clear it if either new setting no longer
+    // belongs to the pair. This never manufactures a default language pair.
+    final savedPair = automaticLanguagePair ??
+        TranslationLanguagePair.fromLanguages(
+          this.sourceLanguage,
+          this.targetLanguage,
+        );
     return RealtimeRuntimeSettings(
       processingMode: processingMode ?? this.processingMode,
-      sourceLanguage: sourceLanguage == null
-          ? this.sourceLanguage
-          : normalizeSourceLanguageCode(sourceLanguage),
-      targetLanguage: targetLanguage == null
-          ? this.targetLanguage
-          : normalizeTargetSettingCode(targetLanguage),
+      sourceLanguage: nextSourceLanguage,
+      targetLanguage: nextTargetLanguage,
       voiceOutputMode: nextVoiceOutputMode,
       voicePresetId: voicePresetId == null
           ? this.voicePresetId
@@ -177,7 +208,13 @@ class RealtimeRuntimeSettings {
       domainLexiconPack: domainLexiconPack == null
           ? this.domainLexiconPack
           : normalizeDomainLexiconPack(domainLexiconPack),
-      automaticLanguagePair: selectedLanguagePair,
+      automaticLanguagePair: _selectedLanguagePairFor(
+        sourceLanguage: nextSourceLanguage,
+        targetLanguage: nextTargetLanguage,
+        savedPair: savedPair,
+        autoReverse:
+            nextTargetLanguage == autoReverseTargetLanguageCode,
+      ),
     );
   }
 
@@ -245,9 +282,4 @@ String normalizeTargetSettingCode(String value) {
     return autoReverseTargetLanguageCode;
   }
   return normalizeTargetLanguageCode(value);
-}
-
-String _fallbackAutoReverseTarget(String sourceLanguage) {
-  if (sourceLanguage == autoSourceLanguageCode) return 'zh';
-  return oppositeTargetLanguageCode(sourceLanguage);
 }

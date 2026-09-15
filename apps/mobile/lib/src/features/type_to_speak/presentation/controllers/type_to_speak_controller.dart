@@ -74,13 +74,25 @@ class TypeToSpeakController extends ChangeNotifier {
     status = TypeToSpeakStatus.translating;
     notifyListeners();
 
-    final result = await _translationProvider.translate(
-      trimmed,
-      MobileTranslationConfig(
-        sourceLanguage: sourceLanguage,
-        targetLanguage: targetLanguage,
-      ),
-    );
+    MobileTranslationResult? result;
+    try {
+      result = await _translationProvider.translate(
+        trimmed,
+        MobileTranslationConfig(
+          sourceLanguage: sourceLanguage,
+          targetLanguage: targetLanguage,
+        ),
+      );
+    } on Object {
+      // Device translation availability is independent from the selected
+      // realtime mode. Preserve the user's typed source and report the same
+      // recoverable state as an empty provider result; never fall through to
+      // a private/server translator.
+      status = TypeToSpeakStatus.failed;
+      message = 'type_to_speak_translation_unavailable';
+      notifyListeners();
+      return;
+    }
     if (result == null || result.text.trim().isEmpty) {
       status = TypeToSpeakStatus.failed;
       message = 'type_to_speak_translation_unavailable';

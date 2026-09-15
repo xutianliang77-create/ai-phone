@@ -33,10 +33,16 @@ void main() {
     await tester.tap(find.text('生成会议纪要'));
     await tester.pumpAndSettle();
 
-    expect(repository.generatedReview, isTrue);
+    expect(repository.generatedReview, isFalse);
     expect(find.text('会话详情'), findsOneWidget);
     await tester.tap(find.widgetWithText(Tab, '纪要'));
     await tester.pumpAndSettle();
+
+    expect(find.byTooltip('生成会议纪要'), findsNWidgets(2));
+    await tester.tap(find.byTooltip('生成会议纪要').last);
+    await tester.pumpAndSettle();
+
+    expect(repository.generatedReview, isTrue);
     expect(find.textContaining('服务端摘要', findRichText: true), findsOneWidget);
   });
 

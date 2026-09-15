@@ -174,6 +174,44 @@ describe("session review routes", () => {
     expect(response.json().error.code).toBe("public_semantic_review_unavailable");
   });
 
+  it("never selects the legacy review provider for a versioned public session", async () => {
+    const previousProvider = process.env.LLM_PROVIDER;
+    const previousEnabled = process.env.LLM_REVIEW_ENABLED;
+    process.env.LLM_PROVIDER = "mock";
+    process.env.LLM_REVIEW_ENABLED = "true";
+    try {
+      const app = await buildApp();
+      const created = await app.inject({
+        method: "POST",
+        url: "/realtime/sessions",
+        payload: {
+          mode: "meeting",
+          sourceLanguage: "zh",
+          targetLanguage: "en",
+          voiceOutput: false,
+        },
+      });
+      const sessionId = created.json().sessionId as string;
+      const record = getStoreSnapshot().sessions.find((item) => item.id === sessionId)!;
+      record.processingAuthorization = {} as typeof record.processingAuthorization;
+
+      const response = await app.inject({
+        method: "POST",
+        url: `/sessions/${sessionId}/review`,
+        payload: { generationKind: "public_semantic_enhancement" },
+      });
+      await app.close();
+
+      expect(response.statusCode).toBe(409);
+      expect(response.json().error.code).toBe("public_semantic_review_not_configured");
+    } finally {
+      if (previousProvider === undefined) delete process.env.LLM_PROVIDER;
+      else process.env.LLM_PROVIDER = previousProvider;
+      if (previousEnabled === undefined) delete process.env.LLM_REVIEW_ENABLED;
+      else process.env.LLM_REVIEW_ENABLED = previousEnabled;
+    }
+  });
+
   it("updates and persists a generated action item", async () => {
     const app = await buildApp();
     const created = await app.inject({

@@ -174,17 +174,12 @@ CallRoomCaption _captionFromPayload(
   final sourceText = _cleanText(_string(payload['sourceText']));
   final translatedText = _cleanText(_string(payload['translatedText']));
   final speakerJson = payload['speaker'];
-  final speakerRole = _string(payload['speakerRole']) ?? 'guest';
+  final speakerRole = _string(payload['speakerRole']);
   final speaker = speakerJson is Map
       ? SpeakerAttribution.fromJson(
           Map<String, Object?>.from(speakerJson),
         )
-      : SpeakerAttribution(
-          speakerId: speakerRole,
-          role: speakerRole,
-          source: 'participant_track',
-          confidence: 1,
-        );
+      : _participantSpeakerOrUnknown(speakerRole);
   return CallRoomCaption(
     segmentId: _string(payload['segmentId']) ?? '${payload['timestampMs']}',
     speaker: speaker,
@@ -212,6 +207,24 @@ CallRoomCaption _captionFromPayload(
     playbackState: _playbackState(type),
     playbackId: _string(payload['playbackId']),
     generation: _int(payload['generation']),
+  );
+}
+
+SpeakerAttribution _participantSpeakerOrUnknown(String? role) {
+  if (role == 'host' || role == 'guest') {
+    return SpeakerAttribution(
+      speakerId: role!,
+      role: role,
+      source: 'participant_track',
+      confidence: 1,
+    );
+  }
+  // A missing role is not evidence that a caption belongs to the remote party.
+  // Keep the original text and timing, but preserve anonymous attribution.
+  return const SpeakerAttribution(
+    speakerId: 'unknown',
+    role: 'unknown',
+    source: 'unknown',
   );
 }
 

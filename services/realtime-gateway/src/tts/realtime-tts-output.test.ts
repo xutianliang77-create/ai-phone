@@ -121,6 +121,33 @@ describe("realtime tts output queue", () => {
     expect(sent.map((event) => event.segmentId)).toEqual(["seg_3"]);
   });
 
+  it("cancels a stale synthesis when the same segment receives a newer revision", async () => {
+    const first = deferred<AudioOutput | null>();
+    const synthesizer = new FakeTtsSynthesizer((event) =>
+      event.revision === 1 ? first.promise : Promise.resolve(audioFor(event, 2)),
+    );
+    const queue = createQueue(synthesizer);
+    const sent: ServerRealtimeEvent[] = [];
+    const original = { ...translation(1), revision: 1 };
+    const corrected = { ...original, revision: 2, text: "corrected" };
+
+    queue.enqueue(original, (event) => sent.push(event));
+    await waitFor(() => synthesizer.started.length === 1);
+    queue.enqueue(corrected, (event) => sent.push(event));
+    await queue.drain();
+    first.resolve(audioFor(original, 1));
+    await Promise.resolve();
+
+    expect(synthesizer.started).toEqual(["seg_1", "seg_1"]);
+    expect(synthesizer.canceled).toEqual(["sess_1"]);
+    expect(sent).toHaveLength(1);
+    expect(sent[0]).toMatchObject({
+      type: "audio.output",
+      segmentId: "seg_1",
+      revision: 2,
+    });
+  });
+
   it("drops new outputs when the TTS queue reaches its bound", async () => {
     const first = deferred<AudioOutput | null>();
     const synthesizer = new FakeTtsSynthesizer((event) => (
@@ -204,6 +231,7 @@ function audioFor(event: TranslationEvent, sequence: number): AudioOutput {
     type: "audio.output",
     sessionId: event.sessionId,
     segmentId: event.segmentId,
+    ...(event.revision === undefined ? {} : { revision: event.revision }),
     format: "pcm16",
     sampleRate: 24000,
     sequence,

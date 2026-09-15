@@ -61,7 +61,8 @@ describe("Qwen wire inside original public TTS lifecycle",()=>{
   });
   it("cancels generation after a prefix without confirming or reconnecting",async()=>{
     const s=setup(ws=>ws.autoFinish=false),synth=s.create(),iterator=synth.synthesizeStream(event())[Symbol.asyncIterator]();
-    expect((await iterator.next()).done).toBe(false);synth.cancelSession("tts-session");await iterator.return?.();expect(s.sockets[0].readyState).toBe(3);expect(s.record.mock.calls.at(-1)![0].state).toBe("uncertain");
+    const pending=iterator.next();await vi.waitFor(()=>expect(s.sockets).toHaveLength(1));synth.cancelSession("tts-session");
+    expect((await pending).done).toBe(true);await iterator.return?.();expect(s.sockets[0].readyState).toBe(3);expect(s.record.mock.calls.at(-1)![0].state).toBe("uncertain");
     expect(await collect(synth)).toEqual([]);expect(s.socketFactory).toHaveBeenCalledTimes(1);
   });
 });

@@ -8,6 +8,9 @@ const restartAttempts = new Map();
 let stopping = false;
 const supervisorStateFile = resolveSupervisorStateFile();
 
+validateCallLinkCompatibilityEnvironment();
+validatePublicDeploymentWorkerBoundary();
+
 const components = [
   {
     name: "api",
@@ -23,7 +26,13 @@ const components = [
   },
   {
     name: "translation-agent",
-    enabled: () => flag("WUJIE_AI_TRANSLATION_AGENT_ENABLED", true),
+    // The ordinary 1.1 public runtime consists only of API and Gateway.  The
+    // inherited LiveKit translation agent belongs exclusively to the explicit
+    // call_link_only compatibility lane; it must never consume private worker
+    // configuration or capacity merely because an old default was true.
+    enabled: () => publicCallLinkCompatibilityEnabled()
+      ? flag("WUJIE_AI_TRANSLATION_AGENT_ENABLED", true)
+      : !isPublicDeployment() && flag("WUJIE_AI_TRANSLATION_AGENT_ENABLED", true),
     args: [
       "services/translation-worker/dist/livekit-agent/translation-agent-server.js",
       "start",
@@ -198,6 +207,68 @@ function waitForExit(child) {
 function flag(name, fallback) {
   const value = process.env[name];
   return value === undefined ? fallback : value === "true";
+}
+
+/**
+ * Reusing the 1.0 Call Link Worker is allowed only in the explicitly isolated
+ * 1.1 compatibility deployment.  Refuse a half-configured process before it
+ * can expose any API or Worker entry point.  Host data-directory/secret
+ * isolation is enforced by the deployment profile; this validates the
+ * in-container identity and the feature switches that could widen scope.
+ */
+function validateCallLinkCompatibilityEnvironment(env = process.env) {
+  if (env.CALL_LINK_1_0_COMPATIBILITY_ENABLED !== "true") return;
+  const deploymentId = env.API_RESULT_SYNC_DEPLOYMENT_ID;
+  if (!validDeploymentId(deploymentId) ||
+      env.CALL_LINK_1_0_COMPATIBILITY_DEPLOYMENT_ID !== deploymentId ||
+      env.CALL_LINK_1_0_COMPATIBILITY_PROFILE !== "call_link_only" ||
+      env.CALL_PROVIDER_POLICY !== "call_link_only") {
+    throw new Error("invalid Call Link 1.1 compatibility deployment identity");
+  }
+  const forbidden = [
+    "WUJIE_AI_AGENT_CALL_WORKER_ENABLED",
+    "WUJIE_AI_VOICE_AGENT_ENABLED",
+    "WUJIE_AI_AIR_DEVICE_GATEWAY_ENABLED",
+    "WUJIE_AI_SRT_INGRESS_ENABLED",
+  ].filter((name) => env[name] === "true");
+  if (forbidden.length > 0) {
+    throw new Error(`Call Link 1.1 compatibility forbids: ${forbidden.join(", ")}`);
+  }
+}
+
+/** A public 1.1 deployment is deliberately a minimal API/Gateway runtime.
+ * Legacy agents may only appear in the separately identity-bound Call Link
+ * compatibility lane.  Reject explicit requests rather than silently running
+ * them, so a typo or inherited environment produces a safe stop. */
+function validatePublicDeploymentWorkerBoundary(env = process.env) {
+  if (!isPublicDeployment(env)) return;
+  const compatibility = env.CALL_LINK_1_0_COMPATIBILITY_ENABLED === "true";
+  const forbidden = [
+    "WUJIE_AI_AGENT_CALL_WORKER_ENABLED",
+    "AGENT_CALL_WORKER_ENABLED",
+    "WUJIE_AI_VOICE_AGENT_ENABLED",
+    "WUJIE_AI_AIR_DEVICE_GATEWAY_ENABLED",
+    "WUJIE_AI_SRT_INGRESS_ENABLED",
+  ].filter((name) => env[name] === "true");
+  if (forbidden.length > 0) {
+    throw new Error(`public 1.1 deployment forbids workers: ${forbidden.join(", ")}`);
+  }
+  if (!compatibility && env.WUJIE_AI_TRANSLATION_AGENT_ENABLED === "true") {
+    throw new Error("public 1.1 translation agent requires call_link_only compatibility");
+  }
+}
+
+function publicCallLinkCompatibilityEnabled(env = process.env) {
+  return isPublicDeployment(env) &&
+    env.CALL_LINK_1_0_COMPATIBILITY_ENABLED === "true";
+}
+
+function isPublicDeployment(env = process.env) {
+  return validDeploymentId(env.API_RESULT_SYNC_DEPLOYMENT_ID);
+}
+
+function validDeploymentId(value) {
+  return typeof value === "string" && /^[A-Za-z0-9_-]{1,128}$/.test(value);
 }
 
 function nonCriticalRestartInitialMs() {

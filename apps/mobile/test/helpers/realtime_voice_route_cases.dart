@@ -47,10 +47,14 @@ void registerVoiceRouteCases() {
     repo.emit(const GatewayRealtimeEvent(
         type: 'translation.final',
         segmentId: 'online',
+        revision: 1,
         text: '你好',
         language: 'zh'));
     repo.emit(const GatewayRealtimeEvent(
         type: 'audio.output',
+        segmentId: 'online',
+        revision: 1,
+        sequence: 1,
         format: 'pcm16',
         data: 'AA==',
         sampleRate: 24000));

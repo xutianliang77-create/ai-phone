@@ -1,4 +1,5 @@
 import type WebSocket from "ws";
+import type { TranslationLanguageCode } from "@translation/contracts";
 import type { createRealtimeServerRuntime } from "./realtime-server-runtime.js";
 import { getSession, transitionStatus, sessionBillableSeconds, deleteSession } from "../sessions/session-manager.js";
 import { sendRealtimeEvent } from "./realtime-connection-admission.js";
@@ -25,6 +26,9 @@ export async function configureRealtimeProvider(provider: RealtimeProvider,
     sourceLanguage: session.claims.sourceLanguage,
     targetLanguage: session.claims.targetLanguage,
     autoReverseTargetLanguage: session.claims.autoReverseTargetLanguage,
+    ...(session.claims.processing?.languagePolicy.pair
+      ? {languagePair: [...session.claims.processing.languagePolicy.pair] as [TranslationLanguageCode,TranslationLanguageCode]}
+      : {}),
     voiceOutput: session.voiceOutputEnabled ?? session.claims.voiceOutput,
     speakerAttribution,
     terminology,

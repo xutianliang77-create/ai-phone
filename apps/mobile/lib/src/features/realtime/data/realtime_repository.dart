@@ -44,6 +44,10 @@ class RealtimeRepository {
         sourceLanguage: config.sourceLanguage,
         targetLanguage: config.targetLanguage,
         autoReverseTargetLanguage: autoReverseTargetLanguage,
+        automaticLanguagePair: config.automaticLanguagePair == null
+            ? null
+            : (config.automaticLanguagePair!.source,
+                config.automaticLanguagePair!.target),
         voiceOutputMode: config.realtimeVoiceOutputMode,
         voicePresetId: config.realtimeVoicePresetId,
         domainLexiconPack: config.domainLexiconPack,

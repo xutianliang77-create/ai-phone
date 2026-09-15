@@ -61,10 +61,14 @@ TranslationSession(installedSource: pair.source, target: pair.target)
 installedSource: pair.source
 try await session.prepareTranslation()
 try await session.translate(text)
-Locale.Language(identifier: sourceCode)
-Locale.Language(identifier: targetCode)
+OnDeviceTranslationLanguage.resolve(sourceCode, supported: supported)
+OnDeviceTranslationLanguage.resolve(targetCode, supported: supported)
 "ios_translation_requires_ios_26"
 "language_pair_not_installed"
+`);
+  write(root, "apps/mobile/ios/Runner/OnDeviceTranslationLanguage.swift", `
+!["auto", "und"].contains(value)
+supported.first { matches($0, code: requested) }
 `);
   write(root, "apps/mobile/ios/Runner/AppDelegate.swift", `
 OnDeviceTranslationBridge()

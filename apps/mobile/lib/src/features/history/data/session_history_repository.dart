@@ -97,6 +97,11 @@ class SessionHistoryRepository {
           sourceLanguage: sourceLanguage,
           targetLanguage: targetLanguage,
           stage: 'translation',
+          // Preserve the originating 1.0 entry point in the locally saved
+          // record.  The history classifier already knows these stable values;
+          // omitting them made scan/type-to-speak sessions indistinguishable
+          // from a generic realtime record after reopening the app.
+          provider: sourceKind,
         ),
       ],
     );

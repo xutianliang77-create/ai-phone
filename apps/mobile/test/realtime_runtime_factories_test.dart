@@ -4,6 +4,8 @@ import 'package:translation_mobile/src/features/realtime/presentation/controller
 import 'package:translation_mobile/src/platform/asr/android_system_asr_provider.dart';
 import 'package:translation_mobile/src/platform/asr/core_ml_nemotron_asr_provider.dart';
 import 'package:translation_mobile/src/platform/asr/unavailable_system_asr_provider.dart';
+import 'package:translation_mobile/src/platform/translation/android_on_device_translation_provider.dart';
+import 'package:translation_mobile/src/platform/translation/ios_system_translation_provider.dart';
 
 void main() {
   test('selects Core ML Nemotron ASR by default provider name', () {
@@ -51,6 +53,25 @@ void main() {
             _config(deviceAsrProvider: 'coreml_nemotron', local: false)
                 .copyWith(useOnDeviceTranslation: true)),
         isNull);
+  });
+
+  test('selects Android ML Kit translation by explicit provider name', () {
+    final provider = createDefaultMobileTranslationProvider(
+      _config(deviceAsrProvider: 'android_system').copyWith(
+        useOnDeviceTranslation: true,
+        onDeviceTranslationProvider: 'android_mlkit',
+      ),
+    );
+
+    expect(provider, isA<AndroidOnDeviceTranslationProvider>());
+  });
+
+  test('keeps auxiliary translation on device outside the realtime mode', () {
+    final provider = createDefaultAuxiliaryMobileTranslationProvider(
+      _config(deviceAsrProvider: 'coreml_nemotron', local: false),
+    );
+
+    expect(provider, isA<IosSystemTranslationProvider>());
   });
 }
 

@@ -31,6 +31,13 @@ describe("configured public Speech on original synthesizer and queue",()=>{
     expect(t.record.mock.calls.map(c=>c[0].state)).toEqual(["dispatching","confirmed"]);expect(t.record.mock.calls[1][0]).toMatchObject({component:"tts",metadata:{requestId:"synthetic-request"}});
     expect(t.record.mock.calls[1][0].metadata?.usage).toBeUndefined();expect(JSON.stringify(t.record.mock.calls)).not.toContain("こんにちは");
   });
+  it("marks only the confirmed final public PCM frame as final",async()=>{
+    const t=setup();t.fetchFn.mockResolvedValue(response(3840));
+    const audio=await collect(t.create());
+    expect(audio).not.toHaveLength(0);
+    expect(audio.slice(0,-1).every(item=>item.isFinal===false)).toBe(true);
+    expect(audio.at(-1)).toMatchObject({revision:1,isFinal:true});
+  });
   it.each([["https://synthetic.invalid","https://synthetic.invalid/v1/audio/speech"],["https://synthetic.invalid/custom/v2","https://synthetic.invalid/custom/v2/audio/speech"],
     ["https://synthetic.invalid/custom/audio/speech/","https://synthetic.invalid/custom/audio/speech"]])("preserves manual endpoint prefix %s",async(url,expected)=>{
     const t=setup();t.options.snapshot.components.tts!.endpoint=url;await collect(t.create());expect(t.fetchFn.mock.calls[0][0]).toBe(expected);
@@ -75,9 +82,9 @@ describe("configured public Speech on original synthesizer and queue",()=>{
     const check=expect(collect(t.create())).rejects.toThrow("cancelled");await vi.advanceTimersByTimeAsync(501);await check;
     expect(t.fetchFn.mock.calls[0][1]?.signal?.aborted).toBe(true);expect(t.record.mock.calls.at(-1)![0].state).toBe("uncertain");
   });
-  it("stops a consumer after a prefix without declaring full synthesis confirmed",async()=>{
+  it("stops a consumer after an already confirmed synthesis without reclassifying the attempt",async()=>{
     const t=setup(),s=t.create(),iterator=s.synthesizeStream(event())[Symbol.asyncIterator]();expect((await iterator.next()).done).toBe(false);
-    await iterator.return?.();expect(t.record.mock.calls.at(-1)![0].state).toBe("uncertain");
+    await iterator.return?.();expect(t.record.mock.calls.at(-1)![0].state).toBe("confirmed");
   });
   it("bounds stalled credentials before intent or network",async()=>{
     vi.useFakeTimers();const t=setup();t.resolveCredentials.mockImplementation(()=>new Promise(()=>{}));

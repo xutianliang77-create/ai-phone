@@ -21,6 +21,9 @@ class AsrTextSegment {
     this.captureId,
     this.languagePolicyKey,
     this.revision,
+    this.startMs,
+    this.endMs,
+    this.timingSource,
     this.isRetraction = false,
   });
 
@@ -33,6 +36,12 @@ class AsrTextSegment {
   final String? captureId;
   final String? languagePolicyKey;
   final int? revision;
+  /// Elapsed capture timing is optional.  It is deliberately separate from
+  /// provider/model timing: a platform bridge may only report what it
+  /// observed at capture time.
+  final int? startMs;
+  final int? endMs;
+  final String? timingSource;
   final bool isRetraction;
 
   AsrTextSegment copyWith({String? text, String? language, bool? isFinal}) =>
@@ -46,6 +55,9 @@ class AsrTextSegment {
         captureId: captureId,
         languagePolicyKey: languagePolicyKey,
         revision: revision,
+        startMs: startMs,
+        endMs: endMs,
+        timingSource: timingSource,
         isRetraction: isRetraction,
       );
 
@@ -78,6 +90,24 @@ class AsrTextSegment {
             (json['revision'] as int) < 0)) {
       return null;
     }
+    final hasTiming = ['startMs', 'endMs', 'timingSource']
+        .any(json.containsKey);
+    final startMs = (json['startMs'] as num?)?.toInt();
+    final endMs = (json['endMs'] as num?)?.toInt();
+    final timingSource = json['timingSource'] as String?;
+    if (hasTiming &&
+        (startMs == null ||
+            endMs == null ||
+            startMs < 0 ||
+            endMs < startMs ||
+            !const <String>{
+              'model',
+              'client',
+              'participant_track',
+              'estimated',
+            }.contains(timingSource))) {
+      return null;
+    }
     return AsrTextSegment(
       id: id is String && id.trim().isNotEmpty
           ? id
@@ -90,6 +120,9 @@ class AsrTextSegment {
       captureId: json['captureId'] as String?,
       languagePolicyKey: json['languagePolicyKey'] as String?,
       revision: json['revision'] as int?,
+      startMs: startMs,
+      endMs: endMs,
+      timingSource: timingSource,
       isRetraction: retracted,
       languageEvidence: !json.containsKey('languageEvidence')
           ? (hasVersion

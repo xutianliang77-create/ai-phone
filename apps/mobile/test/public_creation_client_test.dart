@@ -42,6 +42,7 @@ class Harness {
   final requests = <http.Request>[];
   final clients = <RealtimeApiClient>[];
   Future<http.Response> Function(http.Request)? post;
+  Map<String, Object?>? context;
   int contexts = 0;
   late final store = PublicCreationRequestStore(directory: directory);
   RealtimeApiClient create({String source = 'zh', String voice = 'off', Duration timeout = const Duration(seconds: 1)}) {
@@ -51,7 +52,7 @@ class Harness {
         requests.add(request);expect(request.followRedirects, isFalse);
         if (request.url.path == '/auth/deployment') { expect(request.headers['authorization'], isNull); return http.Response('{"deploymentId":"public"}', 200); }
         expect(request.headers['authorization'], 'Bearer ${accounts.session!.token}');
-        if (request.method == 'GET') { contexts++;return http.Response(jsonEncode(offer(accounts.session!.ownerId!, request.url.queryParameters['voiceOutput'] == 'true')), 200); }
+        if (request.method == 'GET') { contexts++;return http.Response(jsonEncode(context ?? offer(accounts.session!.ownerId!, request.url.queryParameters['voiceOutput'] == 'true')), 200); }
         final record = directory.listSync().whereType<File>().single.readAsStringSync();
         expect(record, contains(request.headers['idempotency-key']!));expect(record, isNot(contains(accounts.session!.token)));
         return post?.call(request) ?? http.Response(jsonEncode(response(request, accounts.session!.ownerId!)), 200);
@@ -78,9 +79,47 @@ void main() {
       mode: 'conversation',
       source: 'fr',
       target: 'ja',
+      autoReverse: false,
+      automaticLanguagePair: null,
       voice: false,
     );
     expect(request, (fixture['request'] as Map).cast<String, Object?>());
+  });
+  test('preserves the inherited online auto-to-auto-reverse language contract',
+      () {
+    final fixture = jsonDecode(File(
+            '../../packages/contracts/fixtures/public-creation-v1.json')
+        .readAsStringSync()) as Map;
+    final offer = {
+      ...(fixture['offer'] as Map).cast<String, Object?>(),
+      'status': 'qualified',
+      'capability': {
+        'status': 'qualified',
+        'qualifiedLanguagePairs': const [
+          {'source': 'zh', 'target': 'en'},
+          {'source': 'en', 'target': 'zh'},
+        ],
+        'automaticLanguage': true,
+        'automaticReverse': true,
+      },
+    };
+    final request = publicCreationBody(offer,
+        deploymentId: offer['deploymentId']! as String,
+        ownerId: offer['ownerId']! as String,
+        mode: 'conversation',
+        source: 'auto',
+        target: 'en',
+        autoReverse: true,
+        automaticLanguagePair: ('zh', 'en'),
+        voice: false);
+    expect(request['autoReverseTargetLanguage'], true);
+    expect((request['processing'] as Map)['languagePolicy'], {
+      'source': 'auto',
+      'target': 'en',
+      'autoReverse': true,
+      'pair': ['zh', 'en'],
+      'revision': 1,
+    });
   });
   test('persists request before POST, deduplicates concurrent create and consumes only after connection confirmation', () async {
     final h = Harness();addTearDown(h.close);final api = h.create();
@@ -95,7 +134,9 @@ void main() {
     final api = h.create(timeout: const Duration(milliseconds: 40));await expectLater(api.createSession(), throwsA(isA<TimeoutException>()));
     final first = h.requests.last;expect(h.requests.where((r) => r.method == 'POST'), hasLength(1));api.close();h.post = null;
     final restarted = h.create();await restarted.createSession();final second = h.requests.last;
-    expect(second.headers['idempotency-key'], first.headers['idempotency-key']);expect(second.body, first.body);expect(h.contexts, 1);
+    // A resumed durable request keeps its original POST payload and key, but
+    // re-reads the current capability contract before it retries.
+    expect(second.headers['idempotency-key'], first.headers['idempotency-key']);expect(second.body, first.body);expect(h.contexts, 2);
     delayed.complete(http.Response(jsonEncode(response(first, 'owner')), 200));await Future<void>.delayed(Duration.zero);
   });
   test('does not replace an unresolved key when language settings change', () async {
@@ -103,6 +144,18 @@ void main() {
     await expectLater(h.create().createSession(), throwsA(isA<RealtimeApiException>()));
     final count = h.requests.where((r) => r.method == 'POST').length;
     await expectLater(h.create(source: 'fr').createSession(), throwsA(isA<RealtimeApiException>()));expect(h.requests.where((r) => r.method == 'POST').length, count);
+  });
+  test('qualified-pair preflight rejects an unqualified language before persistence or POST', () async {
+    final h = Harness();addTearDown(h.close);
+    h.context = {...offer('owner', false), 'capability': {'status': 'qualified', 'qualifiedLanguagePairs': [{'source': 'en', 'target': 'zh'}], 'automaticLanguage': false, 'automaticReverse': false}};
+    await expectLater(h.create().createSession(), throwsA(isA<RealtimeApiException>()));
+    expect(h.requests.where((r) => r.method == 'POST'), isEmpty);expect(h.directory.listSync(), isEmpty);
+  });
+  test('unqualified effective components reject before persistence or POST', () async {
+    final h = Harness();addTearDown(h.close);
+    h.context = {...offer('owner', false), 'status': 'not_qualified', 'capability': {'status': 'not_qualified', 'qualifiedLanguagePairs': [], 'automaticLanguage': false, 'automaticReverse': false}};
+    await expectLater(h.create().createSession(), throwsA(isA<RealtimeApiException>()));
+    expect(h.requests.where((r) => r.method == 'POST'), isEmpty);expect(h.directory.listSync(), isEmpty);
   });
   test('account switch invalidates a delayed result', () async {
     final h = Harness();addTearDown(h.close);final delayed = Completer<http.Response>();h.post = (_) => delayed.future;

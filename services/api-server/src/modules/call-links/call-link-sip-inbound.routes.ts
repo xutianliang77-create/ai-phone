@@ -49,6 +49,7 @@ export function registerCallLinkSipInboundRoutes(app: FastifyInstance) {
     if (!room.ok) return sendError(reply, 503, "call_room_start_failed", "Room failed");
     const modelAdmission = await callLinkModelRuntimeAdmission(
       initial.record.sessionId,
+      "sip_inbound",
     );
     if (!modelAdmission.ok) {
       return sendError(reply, 503, modelAdmission.code,

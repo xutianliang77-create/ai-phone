@@ -94,10 +94,26 @@ export class HttpTtsSynthesizer {
       if(this.publicSegments.size>=1024)throw new PublicSpeechError("public_tts_capacity","not_sent");
       this.publicSegments.set(key,fingerprint);
       const request=this.beginRequest(owned.sessionId);
-      try{for await(const pcm of publicSpeechPcm(this.publicSpeech,owned,ownedVoice,request.controller.signal)){
-        if(request.controller.signal.aborted||this.publicClosed)return;
-        yield this.audioOutput(owned,this.publicSpeech.sampleRate??24000,pcm.toString("base64"));
-      }}finally{request.done();}
+      try{
+        // Keep one PCM frame buffered so `isFinal` means the provider reached
+        // EOF and the durable attempt confirmation completed.  Never label a
+        // speculative network prefix as a completed utterance.
+        let pending:Buffer|undefined;
+        for await(const pcm of publicSpeechPcm(this.publicSpeech,owned,ownedVoice,request.controller.signal)){
+          if(request.controller.signal.aborted||this.publicClosed)return;
+          if(pending)yield this.audioOutput(owned,this.publicSpeech.sampleRate??24000,pending.toString("base64"),false);
+          pending=pcm;
+        }
+        if(pending&&!request.controller.signal.aborted&&!this.publicClosed){
+          yield this.audioOutput(owned,this.publicSpeech.sampleRate??24000,pending.toString("base64"),true);
+        }
+      }catch(error){
+        // Queue/session cancellation is an expected terminal consumer action.
+        // The underlying publicSpeechPcm path has already recorded the known
+        // attempt as uncertain; do not turn iterator.return() into a second
+        // playback/provider failure.
+        if(request.controller.signal.reason!=="cancelled"&&!this.publicClosed)throw error;
+      }finally{request.done();}
       return;
     }
     const endpoint = this.env.ttsHttpStreamEndpoint;
@@ -189,7 +205,7 @@ export class HttpTtsSynthesizer {
 
   cancelSession(sessionId: string) {
     for (const controller of this.requestsBySession.get(sessionId) ?? []) {
-      controller.abort();
+      controller.abort("cancelled");
     }
     this.requestsBySession.delete(sessionId);
   }
@@ -199,7 +215,7 @@ export class HttpTtsSynthesizer {
     const requests = this.requestsBySession.get(sessionId) ?? new Set<AbortController>();
     requests.add(controller);
     this.requestsBySession.set(sessionId, requests);
-    const timer = setTimeout(() => controller.abort(), this.publicSpeech?.timeoutMs ?? this.env.ttsHttpTimeoutMs);
+    const timer = setTimeout(() => controller.abort("timeout"), this.publicSpeech?.timeoutMs ?? this.env.ttsHttpTimeoutMs);
     return {
       controller,
       done: () => {
@@ -234,11 +250,16 @@ export class HttpTtsSynthesizer {
     event: TranslationEvent,
     sampleRate: 16000 | 24000,
     data: string,
+    isFinal?: boolean,
   ): AudioOutput {
     return {
       type: "audio.output",
       sessionId: event.sessionId,
       segmentId: event.segmentId,
+      ...(Number.isSafeInteger(event.revision) && event.revision! >= 0
+        ? { revision: event.revision }
+        : {}),
+      ...(isFinal === undefined ? {} : { isFinal }),
       format: "pcm16",
       sampleRate,
       sequence: this.nextSequence(event.sessionId),

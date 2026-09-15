@@ -30,7 +30,8 @@ String _plainText(SessionDetail detail) {
   final segments = detail.segments.map((segment) {
     return <String>[
       if (segment.speaker != null)
-        'Speaker: ${segment.speaker!.label(isChinese: true)}',
+        'Speaker: ${_speakerDescription(segment)}',
+      if (segment.timing != null) 'Timeline: ${_timelineDescription(segment)}',
       'Raw: ${_rawText(segment)}',
       'Optimized: ${_optimizedText(segment)}',
       'Translation: ${segment.translatedText}',
@@ -55,7 +56,12 @@ String _markdown(SessionDetail detail) {
       ..writeln();
     if (segment.speaker != null) {
       buffer
-        ..writeln('Speaker: ${segment.speaker!.label(isChinese: true)}')
+        ..writeln('Speaker: ${_speakerDescription(segment)}')
+        ..writeln();
+    }
+    if (segment.timing != null) {
+      buffer
+        ..writeln('Timeline: ${_timelineDescription(segment)}')
         ..writeln();
     }
     buffer
@@ -181,6 +187,14 @@ String _csv(SessionDetail detail) {
       'rawText',
       'optimizedText',
       'translatedText',
+      'turnId',
+      'speakerId',
+      'speakerRole',
+      'speakerSource',
+      'timelineStartMs',
+      'timelineEndMs',
+      'timelineSource',
+      'timelineOverlap',
     ],
     ...detail.segments.map((segment) => <String>[
           segment.id,
@@ -188,6 +202,14 @@ String _csv(SessionDetail detail) {
           segment.rawText ?? '',
           segment.optimizedText ?? '',
           segment.translatedText,
+          segment.turnId ?? '',
+          segment.speaker?.speakerId ?? '',
+          segment.speaker?.role ?? '',
+          segment.speaker?.source ?? '',
+          segment.timing?.startMs.toString() ?? '',
+          segment.timing?.endMs.toString() ?? '',
+          segment.timing?.source ?? '',
+          segment.timing?.overlap == true ? 'true' : 'false',
         ]),
   ];
   return rows.map((row) => row.map(_csvCell).join(',')).join('\n');
@@ -217,6 +239,7 @@ void _writeSegmentDiagnostics(StringBuffer buffer, SessionSegment segment) {
     if (segment.confidence != null) 'Confidence: ${segment.confidence}',
     if (segment.stage != null) 'Stage: ${segment.stage}',
     if (segment.latencyMs != null) 'Latency: ${segment.latencyMs}ms',
+    if (segment.timing != null) 'Timeline: ${_timelineDescription(segment)}',
   ];
   if (diagnostics.isEmpty) return;
   buffer
@@ -226,4 +249,15 @@ void _writeSegmentDiagnostics(StringBuffer buffer, SessionSegment segment) {
     buffer.writeln('- $item');
   }
   buffer.writeln();
+}
+
+String _speakerDescription(SessionSegment segment) {
+  final speaker = segment.speaker!;
+  return '${speaker.label(isChinese: true)} (${speaker.sourceLabel(isChinese: true)})';
+}
+
+String _timelineDescription(SessionSegment segment) {
+  final timing = segment.timing!;
+  final overlap = timing.overlap ? ', overlap' : '';
+  return '${timing.startMs}–${timing.endMs}ms (${timing.source}$overlap)';
 }

@@ -27,10 +27,10 @@ extension RealtimeControllerResources on RealtimeController {
       !resourceOperationRunning &&
       !onDeviceAutomaticRoutingUnsupported &&
       _config.useLocalSessions &&
-      _config.deviceAsrProvider == 'apple_speech_transcriber' &&
       _config.useDeviceAsr &&
       _config.useOnDeviceTranslation &&
-      _config.onDeviceTranslationProvider == 'ios_system' &&
+      _mobileAsrProvider is MobileAsrDiagnostics &&
+      _mobileTranslationProvider is MobileTranslationDiagnostics &&
       (_status == RealtimeStatus.idle || isTerminalRealtimeStatus(_status));
 
   List<RealtimeLocalResource> _resourceTargets() {

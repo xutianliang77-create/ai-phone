@@ -77,6 +77,9 @@ void main() {
     await tester.pumpWidget(diagnosticsTestApp(
       provider: provider,
       shareService: shareService,
+      config: diagnosticsConfig(
+        apiBaseUrl: Uri.parse('http://127.0.0.1:3100'),
+      ),
     ));
     await tester.pumpAndSettle();
 

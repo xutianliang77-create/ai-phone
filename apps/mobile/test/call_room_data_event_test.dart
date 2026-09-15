@@ -37,6 +37,23 @@ void main() {
     expect(payload.caption?.translatedText, isNull);
   });
 
+  test('keeps a caption anonymous when no participant role is supplied', () {
+    final payload = parseCallRoomData(utf8.encode(jsonEncode({
+      'type': 'transcript.final',
+      'callId': 'call_1',
+      'roomName': 'call_call_1',
+      'segmentId': 'unbound-1',
+      'sourceLanguage': 'en',
+      'targetLanguage': 'zh',
+      'text': 'unbound caption',
+      'timestampMs': 1,
+    })));
+
+    expect(payload.caption?.speaker.speakerId, 'unknown');
+    expect(payload.caption?.speaker.role, 'unknown');
+    expect(payload.caption?.speaker.source, 'unknown');
+  });
+
   test('parses translation final events as translated captions', () {
     final payload = parseCallRoomData(utf8.encode(jsonEncode({
       'type': 'translation.final',

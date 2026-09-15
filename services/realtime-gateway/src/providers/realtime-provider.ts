@@ -21,6 +21,9 @@ export interface RealtimeProviderSession {
   sourceLanguage: LanguageCode;
   targetLanguage: TranslationLanguageCode;
   autoReverseTargetLanguage?: boolean;
+  /** Exact automatic pair from the versioned processing contract. Optional
+   * only for legacy/private sessions that retain their existing fallback. */
+  languagePair?: readonly [TranslationLanguageCode, TranslationLanguageCode];
   voiceOutput: boolean;
   terminology?: TermbaseTermDto[];
   asrHotwords?: string[];

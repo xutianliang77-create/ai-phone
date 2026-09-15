@@ -16,11 +16,22 @@ import {getRepositoryRuntime} from "../../infrastructure/storage/repository-runt
  * supply this implementation. No real supplier, qualification, or budget source is installed by default. */
 export interface PublicRealtimeAuthority {
   timeoutMs:number;
+  /** Non-authorizing capability projection for the authenticated mobile
+   * creation context. It never creates a provider request or a usage hold. */
+  configurationCapability?: (configuration:PublicModelRuntimeSnapshot)=>PublicRealtimeConfigurationCapability;
   /** Consent is generated from the authenticated online-mode selection. The
    * authority supplies only independently verifiable budget and qualifications. */
   resolveVerifiedEvidence(context:{sessionId:string;ownerId:string;deploymentId:string;processingHash:string;configuration:PublicModelRuntimeSnapshot;
     languagePolicy:{source:string;target:string;autoReverse:boolean;pair?:readonly [string,string];revision:number}},
     signal:AbortSignal):Promise<{records:PublicInferenceEvidence[];refs:InferenceEvidenceRefs}>;
+}
+export interface PublicRealtimeConfigurationCapability {
+  status:"qualified"|"not_qualified";
+  qualifiedLanguagePairs:ReadonlyArray<{source:string;target:string}>;
+  /** Projected only after the adapter, signed policy and required live
+   * observation all agree for this exact configuration. */
+  automaticLanguage:boolean;
+  automaticReverse:boolean;
 }
 export type PublicRealtimeCoordinator=ReturnType<typeof createPublicRealtimeCoordinator>;
 async function bounded<T>(work:Promise<T>,signal:AbortSignal):Promise<T>{
@@ -32,7 +43,6 @@ export function createPublicRealtimeCoordinator(authority:PublicRealtimeAuthorit
   const {timeoutMs,resolveVerifiedEvidence}=authority;
   if(!Number.isSafeInteger(timeoutMs)||timeoutMs<250||timeoutMs>30000||typeof resolveVerifiedEvidence!=="function")throw Error("public_authority_configuration_invalid");
   return async(ownerId:string,idempotencyKey:unknown,value:unknown,signal?:AbortSignal)=>{
-    if(getRepositoryRuntime().driver==="postgres")throw new ResultSyncError("public_creation_postgres_idempotency_not_ready",503);
     const {deploymentId,sessionId}=publicCreationIdentity(ownerId,idempotencyKey),input=publicCreationInput(value);
     // Stable across restarts/signing-key rotation, scoped by deployment AND account.
     // Knowing this ID does not grant access; all original owner checks remain.
@@ -41,7 +51,7 @@ export function createPublicRealtimeCoordinator(authority:PublicRealtimeAuthorit
     const check=()=>{if(stop.signal.aborted)throw new ResultSyncError("public_creation_cancelled",503);};
     try{return await bounded(withSessionWriteLock(`public-create:${sessionId}`,async()=>{
       check();
-      if(/^(cancelled|expired):/.test(getStoreSnapshot().publicCreationBindings?.[sessionId]??""))throw new ResultSyncError("public_creation_request_retired",410);
+      if(getRepositoryRuntime().driver!=="postgres"&&/^(cancelled|expired):/.test(getStoreSnapshot().publicCreationBindings?.[sessionId]??""))throw new ResultSyncError("public_creation_request_retired",410);
       await preparePublicRealtimeSession(sessionId,ownerId,input);check();
       let current=(await findSession(sessionId))!;check();
       if(!current.publicInferenceAdmission){

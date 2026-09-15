@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart' show TargetPlatform, defaultTargetPlatform;
+
 import 'region_edition_config.dart';
 import '../platform/translation/supported_translation_language.dart';
 import '../platform/translation/translation_language_pair.dart';
@@ -124,10 +126,15 @@ class AppConfig {
       'AUTO_REVERSE_TARGET_LANGUAGE',
       defaultValue: true,
     );
-    const deviceAsrProvider = String.fromEnvironment(
-      'DEVICE_ASR_PROVIDER',
-      defaultValue: 'coreml_nemotron',
+    const automaticLanguagePair = String.fromEnvironment(
+      'AUTOMATIC_LANGUAGE_PAIR',
     );
+    const configuredDeviceAsrProvider = String.fromEnvironment(
+      'DEVICE_ASR_PROVIDER',
+    );
+    final deviceAsrProvider = configuredDeviceAsrProvider.isEmpty
+        ? _platformDefaultDeviceAsrProvider()
+        : configuredDeviceAsrProvider;
     const deviceAsrLanguage = String.fromEnvironment(
       'DEVICE_ASR_LANGUAGE',
       defaultValue: 'auto',
@@ -139,18 +146,27 @@ class AppConfig {
       'DEVICE_ASR_MODEL_CHUNK_MS',
       defaultValue: 2240,
     );
-    const deviceAsrChunkDurationMs = int.fromEnvironment(
+    const configuredDeviceAsrChunkDurationMs = int.fromEnvironment(
       'DEVICE_ASR_CHUNK_DURATION_MS',
-      defaultValue: deviceAsrProvider == 'apple_speech_transcriber' ? 32 : 320,
+      defaultValue: 0,
     );
-    const deviceAsrEndpointMinSpeechMs = int.fromEnvironment(
+    final deviceAsrChunkDurationMs = configuredDeviceAsrChunkDurationMs > 0
+        ? configuredDeviceAsrChunkDurationMs
+        : deviceAsrProvider == 'apple_speech_transcriber' ? 32 : 320;
+    const configuredDeviceAsrEndpointMinSpeechMs = int.fromEnvironment(
       'DEVICE_ASR_ENDPOINT_MIN_SPEECH_MS',
-      defaultValue: deviceAsrProvider == 'apple_speech_transcriber' ? 96 : 600,
+      defaultValue: 0,
     );
-    const deviceAsrEndpointSilenceMs = int.fromEnvironment(
+    final deviceAsrEndpointMinSpeechMs = configuredDeviceAsrEndpointMinSpeechMs > 0
+        ? configuredDeviceAsrEndpointMinSpeechMs
+        : deviceAsrProvider == 'apple_speech_transcriber' ? 96 : 600;
+    const configuredDeviceAsrEndpointSilenceMs = int.fromEnvironment(
       'DEVICE_ASR_ENDPOINT_SILENCE_MS',
-      defaultValue: deviceAsrProvider == 'apple_speech_transcriber' ? 640 : 900,
+      defaultValue: 0,
     );
+    final deviceAsrEndpointSilenceMs = configuredDeviceAsrEndpointSilenceMs > 0
+        ? configuredDeviceAsrEndpointSilenceMs
+        : deviceAsrProvider == 'apple_speech_transcriber' ? 640 : 900;
     const deviceAsrEndpointSpeechThresholdRmsRaw = String.fromEnvironment(
       'DEVICE_ASR_ENDPOINT_SPEECH_THRESHOLD_RMS',
       defaultValue: '0.006',
@@ -183,10 +199,13 @@ class AppConfig {
     const useOnDeviceTranslation =
         bool.fromEnvironment('USE_ON_DEVICE_TRANSLATION');
     const useLocalSessions = bool.fromEnvironment('USE_LOCAL_SESSIONS');
-    const onDeviceTranslationProvider = String.fromEnvironment(
+    const configuredOnDeviceTranslationProvider = String.fromEnvironment(
       'ON_DEVICE_TRANSLATION_PROVIDER',
-      defaultValue: 'ios_system',
     );
+    final onDeviceTranslationProvider = configuredOnDeviceTranslationProvider
+            .isEmpty
+        ? _platformDefaultTranslationProvider()
+        : configuredOnDeviceTranslationProvider;
     const onDeviceTranslationRequired =
         bool.fromEnvironment('ON_DEVICE_TRANSLATION_REQUIRED');
     const serverOwnedHistory = bool.fromEnvironment('SERVER_OWNED_HISTORY');
@@ -249,6 +268,8 @@ class AppConfig {
       onDeviceTranslationRequired: onDeviceTranslationRequired,
       autoReverseTargetLanguage: autoReverseTargetLanguage ||
           targetLanguage == autoReverseTargetLanguageCode,
+      automaticLanguagePair:
+          _automaticLanguagePairFromEnvironment(automaticLanguagePair),
       realtimeVoiceOutputMode: realtimeVoiceOutputMode,
       realtimeVoicePresetId: realtimeVoicePresetId,
       domainLexiconPack: domainLexiconPack,
@@ -271,6 +292,7 @@ class AppConfig {
     bool? useDeviceAsr,
     bool? useLocalSessions,
     bool? useOnDeviceTranslation,
+    String? onDeviceTranslationProvider,
     bool? autoReverseTargetLanguage,
     TranslationLanguagePair? automaticLanguagePair,
     bool clearAutomaticLanguagePair = false,
@@ -303,7 +325,8 @@ class AppConfig {
           useOnDeviceTranslation ?? this.useOnDeviceTranslation,
       preferDeviceAsrOnline: preferDeviceAsrOnline,
       preferOnDeviceTranslationOnline: preferOnDeviceTranslationOnline,
-      onDeviceTranslationProvider: onDeviceTranslationProvider,
+      onDeviceTranslationProvider:
+          onDeviceTranslationProvider ?? this.onDeviceTranslationProvider,
       onDeviceTranslationRequired: onDeviceTranslationRequired,
       autoReverseTargetLanguage:
           autoReverseTargetLanguage ?? this.autoReverseTargetLanguage,
@@ -328,6 +351,12 @@ class AppConfig {
   }
 }
 
+TranslationLanguagePair? _automaticLanguagePairFromEnvironment(String raw) {
+  final values = raw.split(',').map((value) => value.trim()).toList();
+  if (values.length != 2) return null;
+  return TranslationLanguagePair.fromLanguages(values[0], values[1]);
+}
+
 String _normalizeVoicePresetId(String value) {
   final cleaned = value.trim();
   return RegExp(r'^[A-Za-z0-9_-]{1,80}$').hasMatch(cleaned)
@@ -348,3 +377,13 @@ String _normalizeRealtimeMode(String value) {
   }
   return 'conversation';
 }
+
+String _platformDefaultDeviceAsrProvider() =>
+    defaultTargetPlatform == TargetPlatform.android
+        ? 'android_system'
+        : 'coreml_nemotron';
+
+String _platformDefaultTranslationProvider() =>
+    defaultTargetPlatform == TargetPlatform.android
+        ? 'android_mlkit'
+        : 'ios_system';

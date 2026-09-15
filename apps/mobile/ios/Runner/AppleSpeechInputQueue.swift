@@ -53,7 +53,13 @@ struct AppleSpeechHypothesis {
      "language": language, "languageEvidence": "user_selected", "isFinal": final,
      "isRetraction": retracted, "sessionId": sessionId, "captureId": captureId,
      "languagePolicyKey": policy, "revision": revision,
-     "rangeStartSample": start, "rangeEndSample": end]
+     // These are the speech engine's offsets into the original 16 kHz capture,
+     // not wall-clock guesses.  Keep the sample offsets for diagnostics and
+     // project their millisecond equivalents into the shared segment timeline.
+     "rangeStartSample": start, "rangeEndSample": end,
+     "startMs": start * 1000 / AppleSpeechConfiguration.sampleRate,
+     "endMs": end * 1000 / AppleSpeechConfiguration.sampleRate,
+     "timingSource": "model"]
   }
 }
 

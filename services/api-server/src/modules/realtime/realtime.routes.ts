@@ -23,13 +23,13 @@ import {
   parseBillableSeconds,
 } from "./realtime-route-validation.js";
 import { isValidSegmentPatch } from "./realtime-segment-validation.js";
-import type {PublicRealtimeCoordinator} from "./public-realtime-coordinator.js";
+import type {PublicRealtimeCoordinator,PublicRealtimeAuthority} from "./public-realtime-coordinator.js";
 import {handlePublicRealtimeCreation} from "./public-realtime-http.js";
 import {registerPublicCreationContextRoute} from "./public-creation-context.routes.js";
 import {registerPublicCreationResolutionRoutes} from "./public-creation-resolution.routes.js";
 
-export async function registerRealtimeRoutes(app: FastifyInstance,publicCoordinator?:PublicRealtimeCoordinator) {
-  registerPublicCreationContextRoute(app,!!publicCoordinator);
+export async function registerRealtimeRoutes(app: FastifyInstance,publicCoordinator?:PublicRealtimeCoordinator,publicCapability?:PublicRealtimeAuthority["configurationCapability"]) {
+  registerPublicCreationContextRoute(app,!!publicCoordinator,publicCapability);
   registerPublicCreationResolutionRoutes(app,!!publicCoordinator);
   registerRealtimeFinalizationRoute(app);
   app.post("/realtime/sessions", async (request, reply) => {

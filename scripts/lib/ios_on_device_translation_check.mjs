@@ -22,10 +22,20 @@ export function checkIosOnDeviceTranslation(root) {
     ["installedSource: pair.source", "Swift requires installed source language"],
     ["try await session.prepareTranslation()", "Swift prepares translation"],
     ["try await session.translate(text)", "Swift translates text"],
-    ["Locale.Language(identifier: sourceCode)", "Swift maps source language"],
-    ["Locale.Language(identifier: targetCode)", "Swift maps target language"],
+    [
+      "OnDeviceTranslationLanguage.resolve(sourceCode, supported: supported)",
+      "Swift resolves source from the system-supported language list",
+    ],
+    [
+      "OnDeviceTranslationLanguage.resolve(targetCode, supported: supported)",
+      "Swift resolves target from the system-supported language list",
+    ],
     ["ios_translation_requires_ios_26", "Swift reports iOS version requirement"],
     ["language_pair_not_installed", "Swift reports missing language pair"],
+  ]);
+  requireContains(checks, root, "apps/mobile/ios/Runner/OnDeviceTranslationLanguage.swift", [
+    ['![' + '"auto", "und"' + '].contains(value)', "Language helper rejects automatic or unknown values"],
+    ["supported.first { matches($0, code: requested) }", "Language helper only resolves Apple-supported languages"],
   ]);
   requireContains(checks, root, "apps/mobile/ios/Runner/AppDelegate.swift", [
     ["OnDeviceTranslationBridge()", "AppDelegate creates translation bridge"],

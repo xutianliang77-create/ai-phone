@@ -110,11 +110,13 @@ class _SubtitleEntry extends StatelessWidget {
     final pending = _isTranslationPending(segment);
     final speaker = segment.speaker;
     final speakerLabel = speaker?.label(isChinese: context.l10n.isChinese);
+    final timelineLabel = _formatTimeline(segment.timing);
     final overlap = segment.timing?.overlap == true;
     final mixedLanguage = segment.languageProfile?.mixedLanguage == true;
     final entryLabel = [
       if (isCurrent) context.l10n.currentSubtitle,
       if (speakerLabel != null) speakerLabel,
+      if (timelineLabel != null) timelineLabel,
       if (overlap) context.l10n.overlappingSpeech,
       if (mixedLanguage) context.l10n.mixedLanguage,
       segment.sourceText,
@@ -150,9 +152,13 @@ class _SubtitleEntry extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: <Widget>[
-                        if (speaker != null || overlap || mixedLanguage) ...[
+                        if (speaker != null ||
+                            timelineLabel != null ||
+                            overlap ||
+                            mixedLanguage) ...[
                           _SegmentMetadata(
                             speaker: speaker,
+                            timing: segment.timing,
                             overlap: overlap,
                             mixedLanguage: mixedLanguage,
                           ),
@@ -205,11 +211,13 @@ class _SubtitleEntry extends StatelessWidget {
 class _SegmentMetadata extends StatelessWidget {
   const _SegmentMetadata({
     required this.speaker,
+    required this.timing,
     required this.overlap,
     required this.mixedLanguage,
   });
 
   final SpeakerAttribution? speaker;
+  final SegmentTiming? timing;
   final bool overlap;
   final bool mixedLanguage;
 
@@ -217,6 +225,7 @@ class _SegmentMetadata extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final speaker = this.speaker;
+    final timelineLabel = _formatTimeline(timing);
     final color = _speakerColor(
       theme.colorScheme,
       speaker?.speakerId ?? 'unknown',
@@ -235,6 +244,12 @@ class _SegmentMetadata extends StatelessWidget {
                 color: color,
               ),
             ),
+          if (timelineLabel != null)
+            _MetadataItem(
+              icon: Icons.schedule_outlined,
+              label: timelineLabel,
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
           if (overlap)
             _MetadataItem(
               icon: Icons.groups_outlined,
@@ -251,6 +266,25 @@ class _SegmentMetadata extends StatelessWidget {
       ),
     );
   }
+}
+
+String? _formatTimeline(SegmentTiming? timing) {
+  if (timing == null ||
+      timing.startMs < 0 ||
+      timing.endMs < timing.startMs) {
+    return null;
+  }
+  String clock(int milliseconds) {
+    final seconds = milliseconds ~/ 1000;
+    final minutes = seconds ~/ 60;
+    final remainderSeconds = seconds % 60;
+    final remainderMs = milliseconds % 1000;
+    return '${minutes.toString().padLeft(2, '0')}:'
+        '${remainderSeconds.toString().padLeft(2, '0')}.'
+        '${remainderMs.toString().padLeft(3, '0')}';
+  }
+
+  return '${clock(timing.startMs)}–${clock(timing.endMs)}';
 }
 
 class _MetadataItem extends StatelessWidget {

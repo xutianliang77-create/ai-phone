@@ -4,10 +4,11 @@ import {capturePublicModelRuntimeConfiguration} from "../models/public-model-run
 import {publicDeploymentId} from "../sessions/session-result-sync.service.js";
 import {PublicConfigError} from "../models/public-model-config.js";
 import {publicProtocolCapability} from "@translation/contracts";
+import type {PublicRealtimeAuthority} from "./public-realtime-coordinator.js";
 
 /** Authenticated mobile request context, not the administrator model catalogue.
  * No model URLs, keys, grant, provider budget or inference are exposed/created. */
-export function registerPublicCreationContextRoute(app:FastifyInstance,available:boolean){
+export function registerPublicCreationContextRoute(app:FastifyInstance,available:boolean,capability?:PublicRealtimeAuthority["configurationCapability"]){
   app.get("/realtime/sessions/configuration",async(request,reply)=>{
     reply.header("cache-control","no-store");
     const account=await requireAccount(request,reply);if(!account)return;
@@ -20,10 +21,17 @@ export function registerPublicCreationContextRoute(app:FastifyInstance,available
       if(publicProtocolCapability(configuration.components.asr!.protocol)?.input!=="continuous_pcm")throw new PublicConfigError("public_creation_asr_not_continuous",503);
       const endpoint=new URL(process.env.REALTIME_WS_ENDPOINT??"");
       if(endpoint.protocol!=="wss:"||endpoint.username||endpoint.password||endpoint.search||endpoint.hash)throw Error("endpoint");
+      const qualified=capability?.(configuration);
       return {contractVersion:1,deploymentId,ownerId:account.id,configurationRevision:configuration.configurationRevision,
         modelPolicyRevision:configuration.modelPolicyRevision,executionPlan:configuration.executionPlan,captureSampleRate:configuration.components.asr!.sampleRate,
         endpoint:endpoint.toString(),voiceOutput,...(voiceOutput?{voicePresetId:configuration.components.tts!.voice}:{}),
-        status:"configured_not_verified",limitations:["fixed_language_only","configured_voice_only","speaker_and_termbase_not_supported","reconnect_not_supported"]};
+        status:qualified?.status==="not_qualified"?"not_qualified":"configured_not_verified",
+        ...(qualified?{capability:{status:qualified.status,qualifiedLanguagePairs:qualified.qualifiedLanguagePairs,
+          automaticLanguage:qualified.automaticLanguage,automaticReverse:qualified.automaticReverse}}:{}),
+        limitations:["configured_voice_only","speaker_and_termbase_not_supported","lost_socket_safe_stop_only",
+          ...(qualified?.automaticLanguage===true?[]:["automatic_language_not_qualified"]),
+          ...(qualified?.automaticReverse===true?[]:["automatic_reverse_not_qualified"]),
+          ...(qualified?.status==="not_qualified"?["configuration_not_qualified"]:[])]};
     }catch(error){return reply.code(error instanceof PublicConfigError?error.status:503).send({error:{code:error instanceof PublicConfigError?error.code:"public_creation_context_unavailable"}});}
   });
 }

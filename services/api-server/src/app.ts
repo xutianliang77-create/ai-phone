@@ -87,7 +87,8 @@ export async function buildApp(options: BuildAppOptions = {}) {
   await registerCallLinkRoutes(app);
   await registerDiagnosticsRoutes(app);
   await registerPlansRoutes(app);
-  await registerRealtimeRoutes(app,options.publicRealtimeAuthority?createPublicRealtimeCoordinator(options.publicRealtimeAuthority):undefined);
+  await registerRealtimeRoutes(app,options.publicRealtimeAuthority?createPublicRealtimeCoordinator(options.publicRealtimeAuthority):undefined,
+    options.publicRealtimeAuthority?.configurationCapability);
   registerPublicRuntimeMaterialRoutes(app,options.publicGatewayCredentialAccess);
   await registerSessionsRoutes(app);
   await registerTermsRoutes(app);

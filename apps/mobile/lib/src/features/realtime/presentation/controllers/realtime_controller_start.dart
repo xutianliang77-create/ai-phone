@@ -52,6 +52,10 @@ extension RealtimeControllerStart on RealtimeController {
     _asrDraftIds.clear();
     _drafts.clear();
     _speechEchoSegmentIds.clear();
+    _publicAudioRevisionBySegment.clear();
+    _publicAudioSequenceBySegment.clear();
+    _activePublicAudioSegmentId = null;
+    _activePublicAudioRevision = null;
     _asrTextChain = Future<void>.value();
     _deviceAsrRecovery.reset();
     if (_config.useLocalSessions &&

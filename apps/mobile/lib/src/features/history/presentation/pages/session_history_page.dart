@@ -187,7 +187,11 @@ class _SessionHistoryPageState extends State<SessionHistoryPage> {
       builder: (_) => SessionDetailPage(
         sessionId: sessionId,
         repository: _repository,
-        autoGenerateReview: true,
+        // Opening a record is not permission to send its transcript to a
+        // public semantic model. The detail page can render the inherited
+        // device-rule review immediately; any public enhancement remains the
+        // separate, visible Generate action.
+        autoGenerateReview: false,
       ),
     ));
     if (mounted) _reload();

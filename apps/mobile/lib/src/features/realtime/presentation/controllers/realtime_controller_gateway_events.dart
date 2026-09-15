@@ -24,6 +24,20 @@ extension RealtimeControllerGatewayEvents on RealtimeController {
       return;
     }
     if (event.type == 'translation.failed' && event.segmentId != null) {
+      if (event.revision != null && event.revision! >= 0) {
+        // Keep the source subtitle, but a failed current revision must not
+        // leave an earlier translation visible or playable.
+        _upsertSegment(
+          event.segmentId!,
+          turnId: event.turnId,
+          revision: event.revision,
+          targetLanguage: event.language,
+          stage: 'translation',
+          provider: event.provider,
+          clearTranslation: true,
+        );
+        _cancelPublicAudioForRevision(event.segmentId!, event.revision!);
+      }
       _gatewayDiagnostic = RealtimeGatewayDiagnostic.fromEvent(
         event,
         displayMessage: _gatewayErrorMessage(event),

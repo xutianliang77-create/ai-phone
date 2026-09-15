@@ -70,7 +70,8 @@ void main() {
         pcmAudioOutputPlayer: player, autoSpeakTranslation: true);
     addTearDown(controller.dispose);
     await controller.start();
-    repository.emit(audioOutput(1));
+    _emitPublicAudio(repository, 1,
+        segmentId: 'caption', text: 'initial caption');
     await pumpEventQueue();
     first.completeError(PlatformException(
         code: 'pcm_audio_decode_failed', message: 'decode failed'));
@@ -85,14 +86,8 @@ void main() {
       code: 'provider_unavailable',
       message: 'TTS request failed',
     ));
-    repository.emit(const GatewayRealtimeEvent(
-      type: 'translation.final',
-      sessionId: 'sess_1',
-      segmentId: 'caption',
-      text: 'caption survived',
-      language: 'en',
-    ));
-    repository.emit(audioOutput(2));
+    _emitPublicAudio(repository, 2,
+        segmentId: 'caption', text: 'caption survived', revision: 2);
     await pumpEventQueue();
     expect(controller.status, RealtimeStatus.active);
     expect(controller.segments.single.translatedText, 'caption survived');
@@ -112,7 +107,7 @@ void main() {
     await controller.start();
 
     for (var index = 1; index <= 20; index += 1) {
-      repository.emit(audioOutput(index));
+      _emitPublicAudio(repository, index);
     }
     await pumpEventQueue(times: 40);
 
@@ -134,9 +129,9 @@ void main() {
     );
     addTearDown(controller.dispose);
     await controller.start();
-    repository.emit(audioOutput(1));
-    repository.emit(audioOutput(2));
-    repository.emit(audioOutput(3));
+    _emitPublicAudio(repository, 1);
+    _emitPublicAudio(repository, 2);
+    _emitPublicAudio(repository, 3);
     await pumpEventQueue();
 
     await controller.pause();
@@ -162,8 +157,8 @@ void main() {
     );
     addTearDown(controller.dispose);
     await controller.start();
-    repository.emit(audioOutput(1));
-    repository.emit(audioOutput(2));
+    _emitPublicAudio(repository, 1);
+    _emitPublicAudio(repository, 2);
     await pumpEventQueue();
 
     await controller.stop();
@@ -236,14 +231,30 @@ class _VoiceGateway extends NoopRealtimeGatewayClient {
       true;
 }
 
-GatewayRealtimeEvent audioOutput(int sequence) {
+GatewayRealtimeEvent audioOutput(int sequence,
+    {String? segmentId, int revision = 1}) {
   return GatewayRealtimeEvent(
     type: 'audio.output',
     sessionId: 'sess_1',
-    segmentId: 'seg_$sequence',
+    segmentId: segmentId ?? 'seg_$sequence',
+    revision: revision,
     format: 'pcm16',
     sampleRate: 24000,
     sequence: sequence,
     data: 'audio_$sequence',
   );
+}
+
+void _emitPublicAudio(FakeRealtimeRepository repository, int sequence,
+    {String? segmentId, String? text, int revision = 1}) {
+  final id = segmentId ?? 'seg_$sequence';
+  repository.emit(GatewayRealtimeEvent(
+    type: 'translation.final',
+    sessionId: 'sess_1',
+    segmentId: id,
+    revision: revision,
+    text: text ?? 'caption_$sequence',
+    language: 'en',
+  ));
+  repository.emit(audioOutput(sequence, segmentId: id, revision: revision));
 }

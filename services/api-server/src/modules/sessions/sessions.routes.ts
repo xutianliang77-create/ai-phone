@@ -171,6 +171,15 @@ export async function registerSessionsRoutes(app: FastifyInstance) {
         if (!current)
           return sendError(reply, 404, "session_not_found", "Session not found");
         if (current.userId !== account.id) return forbidden(reply);
+        // Versioned sessions are the 1.1 public processing path.  Its model
+        // configuration deliberately covers ASR/MT/TTS only; a generic LLM
+        // review provider could therefore be a private legacy configuration.
+        // Keep the phone-side rule review available, but fail closed until a
+        // separately qualified public semantic-review configuration exists.
+        if (current.processingAuthorization) {
+          return sendError(reply, 409, "public_semantic_review_not_configured",
+            "Public semantic review requires a separately qualified public model");
+        }
         if (generationKind === "public_semantic_enhancement" &&
             current.review?.generationKind === "public_semantic_enhancement" &&
             current.review.sourceFingerprint === sessionReviewSourceFingerprint(current)) {

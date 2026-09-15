@@ -97,6 +97,20 @@ describe("lmstudio realtime provider text input", () => {
     ]);
   });
 
+  it("keeps a mixed automatic transcript but refuses to guess one translation direction", async () => {
+    const translateInputs: unknown[] = [];
+    const provider = new LmStudioRealtimeProvider({
+      baseUrl: "http://127.0.0.1:1234/v1", model: "hymt2", timeoutMs: 100,
+      translationClient: { translate: async (input) => { translateInputs.push(input); return "unused"; }, healthCheck: async () => true },
+    });
+    await provider.createSession({sessionId:"sess_mixed",sourceLanguage:"auto",targetLanguage:"zh",autoReverseTargetLanguage:true,voiceOutput:false});
+    const events=[];
+    for await(const event of provider.sendText({sessionId:"sess_mixed",segmentId:"mixed_1",text:"Please speak 中文 now",language:"en",isFinal:true}))events.push(event);
+    expect(events).toContainEqual(expect.objectContaining({type:"transcript.final",mixedLanguage:true}));
+    expect(events).toContainEqual(expect.objectContaining({type:"translation.failed",retryable:false}));
+    expect(translateInputs).toEqual([]);
+  });
+
   it("preserves short spelled identifiers instead of treating them as failed English translation", async () => {
     const translateInputs: unknown[] = [];
     const provider = new LmStudioRealtimeProvider({

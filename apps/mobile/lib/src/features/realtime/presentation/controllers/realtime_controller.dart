@@ -119,6 +119,10 @@ class RealtimeController extends ChangeNotifier {
   bool _speechOutputActive = false;
   final SpeechCaptureGate _speechCaptureGate;
   final Set<String> _speechEchoSegmentIds = <String>{};
+  final Map<String, int> _publicAudioRevisionBySegment = <String, int>{};
+  final Map<String, int> _publicAudioSequenceBySegment = <String, int>{};
+  String? _activePublicAudioSegmentId;
+  int? _activePublicAudioRevision;
   RealtimeStatus _status = RealtimeStatus.idle;
   final List<SubtitleSegment> _segments = <SubtitleSegment>[];
   final _asrDraftIds = <String>{};
@@ -289,6 +293,18 @@ class RealtimeController extends ChangeNotifier {
     _asrSubscription = null;
     if (failedSession != null && _usesLocalCheckpoints) {
       await _saveFailedLocalCheckpoint(failedSession);
+      return;
+    }
+    if (failedSession?.syncBinding != null) {
+      // A genuinely lost public socket is never auto-reconnected or replayed.
+      // Preserve the local ending checkpoint, ask the server for its trusted
+      // stop/finalization state, and leave any unconfirmed tail pending rather
+      // than attempting a replacement chargeable public session.
+      await ignoreCleanupError(() => _repository.finishPublicSession(
+            failedSession!,
+            _finalizationSegments,
+            mode: _config.realtimeMode,
+          ));
       return;
     }
     if (failedSession != null) {

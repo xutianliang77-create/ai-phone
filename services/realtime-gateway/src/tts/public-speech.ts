@@ -11,6 +11,9 @@ export interface PublicSpeechCredentials {apiKey?:string;secretId?:string;secret
 
 export interface PublicSpeechOptions {
   sessionId:string; leaseId:string; endpoint:string; modelId:string; voice:string; targetLanguage:string;
+  /** Present only for a qualified automatic language pair. Each output event
+   * is rebound to its final translation language before protocol validation. */
+  allowedTargetLanguages?:readonly string[];
   timeoutMs:number; prefillMs:number;
   resolveCredentials:(signal?:AbortSignal)=>Promise<PublicSpeechCredentials>|PublicSpeechCredentials;
   record:(event:PublicModelAttemptEvent)=>Promise<void>;
@@ -32,6 +35,17 @@ export function validatePublicSpeech(options:PublicSpeechOptions) {
     (options.sampleRate!==undefined&&![16000,24000].includes(options.sampleRate))||
     (!["tencent_tts_ws","google_cloud_tts"].includes(options.protocol??"")&&options.sampleRate!==undefined&&options.sampleRate!==24000)||
     typeof options.record!=="function"||typeof options.resolveCredentials!=="function")throw new PublicSpeechError("public_tts_configuration","not_sent");
+  if(options.targetLanguage==="dynamic"){
+    const targets=options.allowedTargetLanguages;
+    if(!Array.isArray(targets)||targets.length!==2||new Set(targets).size!==targets.length||
+      targets.some(language=>typeof language!=="string"||!/^[a-z]{2,3}(?:-Hant)?$/.test(language))||
+      options.protocol==="google_cloud_tts")throw new PublicSpeechError("public_tts_dynamic_language_not_supported","not_sent");
+    if(options.protocol==="qwen_tts_realtime")for(const language of targets)qwenSpeechLanguage(language);
+    if(options.protocol==="tencent_tts_ws"&&targets.some(language=>!["zh","en"].includes(language)))throw new PublicSpeechError("public_tts_dynamic_language_not_supported","not_sent");
+    if(["qwen_tts_realtime","tencent_tts_ws"].includes(options.protocol??""))return url.toString();
+    const base=url.pathname.replace(/\/+$/,"");url.pathname=base.endsWith("/audio/speech")?base:`${base||"/v1"}/audio/speech`;
+    return url.toString();
+  }
   if(options.protocol==="qwen_tts_realtime"){qwenSpeechLanguage(options.targetLanguage);return url.toString();}
   if(options.protocol==="tencent_tts_ws"){validateTencentSpeech(options);return url.toString();}
   if(options.protocol==="google_cloud_tts")return googleSpeechConfiguration(options).url;
@@ -41,8 +55,9 @@ export function validatePublicSpeech(options:PublicSpeechOptions) {
 
 /** Binary wire adapter consumed by the original HttpTtsSynthesizer. No retry,
  * resampling, voice cloning, private defaults or fabricated provider usage. */
-export async function* publicSpeechPcm(options:PublicSpeechOptions,event:TranslationEvent,voice:RealtimeVoiceConfig|undefined,
+export async function* publicSpeechPcm(input:PublicSpeechOptions,event:TranslationEvent,voice:RealtimeVoiceConfig|undefined,
   signal:AbortSignal):AsyncIterable<Buffer> {
+  const options=eventScopedSpeechOptions(input,event);
   const endpoint=validatePublicSpeech(options),text=event.text.trim();
   if(event.type!=="translation.final"||event.sessionId!==options.sessionId||event.language!==options.targetLanguage||
     !text||[...text].length>4096||options.protocol==="tencent_tts_ws"&&/<\/?[A-Za-z][^>]*>/.test(text)||!Number.isSafeInteger(event.revision)||event.revision!<0||
@@ -117,4 +132,12 @@ export async function* publicSpeechPcm(options:PublicSpeechOptions,event:Transla
     // Async iterator return (stop during a yield) is not successful completion.
     if(prepared&&!terminal)await record({...attempt,state:sent?"uncertain":"not_sent",failureCode:"public_tts_consumer_stopped",...(metadata?{metadata}:{})});
   }
+}
+
+function eventScopedSpeechOptions(options:PublicSpeechOptions,event:TranslationEvent):PublicSpeechOptions {
+  if(options.targetLanguage!=="dynamic")return options;
+  if(event.type!=="translation.final"||!options.allowedTargetLanguages?.includes(event.language)) {
+    throw new PublicSpeechError("public_tts_dynamic_language_scope","not_sent");
+  }
+  return {...options,targetLanguage:event.language};
 }

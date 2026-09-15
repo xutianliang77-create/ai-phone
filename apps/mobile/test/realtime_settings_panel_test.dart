@@ -184,6 +184,30 @@ void main() {
     expect(find.text('英语'), findsOneWidget);
   });
 
+  testWidgets('keeps automatic language choices visible online for server preflight',
+      (tester) async {
+    await tester.pumpWidget(_TestApp(
+      child: RealtimeSettingsPanel(
+        settings: const RealtimeRuntimeSettings(
+          processingMode: RealtimeProcessingMode.online,
+          sourceLanguage: autoSourceLanguageCode,
+          targetLanguage: autoReverseTargetLanguageCode,
+          voiceOutputMode: RealtimeVoiceOutputMode.off,
+        ),
+        enabled: true,
+        onChanged: (_) {},
+      ),
+    ));
+
+    await tester.tap(find.text('自动识别'));
+    await tester.pumpAndSettle();
+    final automatic = tester.widget<ListTile>(
+        find.byKey(const ValueKey('translation-language-choice-auto')));
+    expect(automatic.enabled, isTrue);
+    expect(automatic.onTap, isNotNull);
+    expect(find.text('英语'), findsOneWidget);
+  });
+
   testWidgets('preserves online preferences when switching to local mode',
       (tester) async {
     RealtimeRuntimeSettings? changed;

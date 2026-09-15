@@ -3,7 +3,7 @@ import type WebSocket from "ws";
 import type {RealtimeEnv} from "../config/env.js";
 import {extractRealtimeConnectionToken} from "../auth/realtime-connection-token.js";
 import {verifyRealtimeToken} from "../auth/realtime-token-verifier.js";
-import {publicRuntimeTokenBinding} from "@translation/contracts";
+import {publicRuntimeTokenBinding,type TranslationLanguageCode} from "@translation/contracts";
 import {createSessionEventSink,bindPublicSessionEventSink} from "../sessions/session-event-sink.js";
 import {createPublicAdmissionClient} from "../sessions/public-admission-client.js";
 import {createPublicRuntimeMaterialClient} from "../sessions/public-runtime-material-client.js";
@@ -14,6 +14,7 @@ import {RealtimeTtsOutputQueue} from "../tts/realtime-tts-output.js";
 import {abortable} from "../providers/abortable.js";
 import {sendRealtimeEvent} from "./realtime-connection-admission.js";
 import {buildError} from "../protocol/outgoing-event-builder.js";
+import type {GatewayDependencyReadiness} from "./gateway-dependency-readiness.js";
 
 export interface PublicGatewayRuntimeOptions {
   credentialAccessSecret:string;apiFetchFn?:typeof fetch;modelFetchFn?:typeof fetch;
@@ -31,10 +32,18 @@ const pending=new Set<string>();
 /** Explicit boot-time path using original Provider, queue, sink and session map.
  * No automatic reconnect: current API admission only permits a fresh created lease.
  * Multi-Gateway exclusive ownership is a separate production gate. */
-export async function openConfiguredPublicConnection(env:RealtimeEnv,ws:WebSocket,request:IncomingMessage,options:PublicGatewayRuntimeOptions){
+export async function openConfiguredPublicConnection(env:RealtimeEnv,ws:WebSocket,request:IncomingMessage,options:PublicGatewayRuntimeOptions,readiness?:GatewayDependencyReadiness){
   const token=extractRealtimeConnectionToken(request,false),claims=token?verifyRealtimeToken(token,env.realtimeTokenSecret):null;
   const binding=claims&&env.publicDeploymentId?publicRuntimeTokenBinding(claims,env.publicDeploymentId):null;
   if(!claims||!binding){sendRealtimeEvent(ws,buildError("invalid_token","Invalid public runtime token",{stage:"connection",retryable:false}));ws.close(1008,"invalid_public_token");return null;}
+  // Health is a hard connection gate, but only after token verification.  It
+  // must prevent credential/material access while retaining the correct
+  // invalid-token response for unauthenticated clients.
+  if(readiness&&!readiness.sessionReady){
+    sendRealtimeEvent(ws,buildError("provider_unavailable","Public runtime dependency is not ready",{sessionId:claims.sessionId,stage:"provider",retryable:false}));
+    ws.close(1008,"public_runtime_not_ready");
+    return null;
+  }
   const retained=getSession(claims.sessionId),recoveryCandidate=options.recoverySocketAssembly===true&&
     retained?.status==="connecting"&&retained.publicDisconnect&&retained.publicRecoveryRuntime;
   if(pending.has(claims.sessionId)||(!recoveryCandidate&&getSession(claims.sessionId))||(!recoveryCandidate&&activeSessionCount()+pending.size>=env.maxSessions)){ws.close(1008,"public_session_already_attached_or_capacity");return null;}
@@ -56,7 +65,8 @@ export async function openConfiguredPublicConnection(env:RealtimeEnv,ws:WebSocke
     const scoped={sessionId:claims.sessionId,ownerId:claims.userId,deploymentId:binding.deploymentId,modelPolicyRevision:claims.processing!.modelPolicyRevision,
       leaseId:binding.leaseId,captureId:binding.captureId,languagePolicyKey:binding.languagePolicyKey,sampleRate:binding.sampleRate};
     const sessionInput={sessionId:claims.sessionId,userId:claims.userId,sourceLanguage:claims.sourceLanguage,targetLanguage:claims.targetLanguage,
-      voiceOutput:claims.voiceOutput,asrEndpointMode:claims.asrEndpointMode};
+      ...(claims.autoReverseTargetLanguage?{autoReverseTargetLanguage:true}:{}),voiceOutput:claims.voiceOutput,asrEndpointMode:claims.asrEndpointMode,
+      ...(claims.processing!.languagePolicy.pair?{languagePair:[...claims.processing!.languagePolicy.pair] as [TranslationLanguageCode,TranslationLanguageCode]}:{})};
     built=new ProviderRouter().createConfiguredPublicSessionFromVerifiedClaims({snapshot,authorization,binding:scoped,session:sessionInput,
       authorizeConnection:async()=>{await admission.authorize(purpose());},resolveAsrCredentials:signal=>material.credentials("asr",purpose(),signal),
       resolveTranslationCredentials:signal=>material.credentials("translation","dispatch",signal),recordAttempt:event=>sink.modelAttempt!(event),

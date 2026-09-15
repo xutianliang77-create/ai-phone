@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { transcriptVariantsForTranslation } from "./transcript-chunks.js";
 
 describe("transcript chunks", () => {
-  it("keeps a mixed turn whole and uses its dominant language", () => {
+  it("keeps a mixed turn whole while retaining the selected language", () => {
     const variants = transcriptVariantsForTranslation(
       {
         segmentId: "seg_1",
@@ -17,7 +17,7 @@ describe("transcript chunks", () => {
       {
         segmentId: "seg_1",
         text: "What's your name? 你叫什么名字呀",
-        language: "en",
+        language: "zh",
         dominantLanguage: "en",
         detectedLanguages: ["zh", "en"],
         mixedLanguage: true,

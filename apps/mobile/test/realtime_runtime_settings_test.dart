@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:translation_mobile/src/app/app_config.dart';
 import 'package:translation_mobile/src/features/realtime/data/realtime_runtime_settings.dart';
 import 'package:translation_mobile/src/platform/translation/supported_translation_language.dart';
+import 'package:translation_mobile/src/platform/translation/translation_language_pair.dart';
 import 'package:translation_mobile/src/features/realtime/data/local_realtime_repository.dart';
 import 'package:translation_mobile/src/features/realtime/presentation/controllers/realtime_runtime_factories.dart';
 
@@ -25,6 +26,40 @@ void main() {
     expect(config.sourceLanguage, 'auto');
     expect(config.targetLanguage, 'zh');
     expect(config.autoReverseTargetLanguage, isTrue);
+    expect(config.automaticLanguagePair, isNull);
+  });
+
+  test('does not manufacture an automatic pair when a saved pair is missing',
+      () {
+    const settings = RealtimeRuntimeSettings(
+      processingMode: RealtimeProcessingMode.online,
+      sourceLanguage: autoSourceLanguageCode,
+      targetLanguage: autoReverseTargetLanguageCode,
+      voiceOutputMode: RealtimeVoiceOutputMode.off,
+    );
+    final config = settings.applyTo(_baseConfig().copyWith(
+      targetLanguage: 'ja',
+    ));
+
+    expect(config.sourceLanguage, autoSourceLanguageCode);
+    expect(config.targetLanguage, 'ja');
+    expect(config.autoReverseTargetLanguage, isTrue);
+    expect(config.automaticLanguagePair, isNull);
+  });
+
+  test('drops a stale automatic pair when the user changes language', () {
+    const settings = RealtimeRuntimeSettings(
+      processingMode: RealtimeProcessingMode.online,
+      sourceLanguage: autoSourceLanguageCode,
+      targetLanguage: autoReverseTargetLanguageCode,
+      voiceOutputMode: RealtimeVoiceOutputMode.off,
+      automaticLanguagePair: TranslationLanguagePair('zh', 'en'),
+    );
+
+    final changed = settings.copyWith(sourceLanguage: 'fr');
+
+    expect(changed.selectedLanguagePair, isNull);
+    expect(changed.automaticLanguagePair, isNull);
   });
 
   test('applies online fixed target settings to app config', () {

@@ -60,13 +60,23 @@ extension RealtimeControllerSegments on RealtimeController {
         revision != null &&
         current.recognitionRevision != null &&
         revision > current.recognitionRevision!;
+    final isNewerEventRevision = revision != null &&
+        current.revision != null &&
+        revision > current.revision!;
+    if (isNewerRecognitionRevision || isNewerEventRevision) {
+      _cancelPublicAudioForRevision(id, revision);
+    }
     final nextRevision = revision == null
         ? current.revision
         : current.revision == null || revision > current.revision!
             ? revision
             : current.revision;
     _drafts[id] = current.copyWith(
-      turnId: current.turnId ?? turnId,
+      // A corrected current revision may be reassigned to a different turn.
+      // Preserve an old turn only when this event itself is stale.
+      turnId: canReviseRecognition || canApplyEventRevision
+          ? turnId ?? current.turnId
+          : current.turnId,
       revision: nextRevision,
       recognitionRevision:
           nextSourceText != null && canReviseRecognition ? revision : null,

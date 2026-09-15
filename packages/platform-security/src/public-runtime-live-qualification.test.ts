@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { inspectPublicRuntimeLiveQualification, signPublicRuntimeLiveQualification,
-  type PublicRuntimeLiveQualification } from "./public-runtime-live-qualification.js";
+  type PublicRuntimeLiveQualification, type PublicRuntimeLiveQualificationExpectation } from "./public-runtime-live-qualification.js";
 
 let directory = "";
 const signingKey = "a".repeat(64), now = new Date("2026-09-13T15:15:00.000Z");
@@ -22,21 +22,38 @@ function evidence(patch: Partial<PublicRuntimeLiveQualification> = {}) {
   };
   return { ...value, signature: signPublicRuntimeLiveQualification(value, signingKey) };
 }
-function inspect(value: unknown) {
+function inspect(value: unknown, scope: PublicRuntimeLiveQualificationExpectation = expectation) {
   directory = mkdtempSync(join(tmpdir(), "wujie-live-qualification-"));
   const file = join(directory, "evidence.json"); writeFileSync(file, JSON.stringify(value), { mode: 0o600 });
-  return inspectPublicRuntimeLiveQualification({ file, signingKey, expectation, now });
+  return inspectPublicRuntimeLiveQualification({ file, signingKey, expectation: scope, now });
 }
 afterEach(() => { if (directory) rmSync(directory, { recursive: true, force: true }); directory = ""; });
 describe("signed public runtime live qualification", () => {
   it("accepts an exact, fresh provider observation", () => {
     expect(inspect(evidence())).toMatchObject({ status: "ready", evidence: { evidenceId: "live-test" } });
   });
+  it("retains an independently signed automatic routing qualification", () => {
+    expect(inspect(evidence({ automaticLanguage: true, automaticReverse: true }))).toMatchObject({
+      status: "ready", evidence: { automaticLanguage: true, automaticReverse: true },
+    });
+  });
+  it("selects one exact entry from a bounded independently signed bundle", () => {
+    const alternateScope = { ...expectation, configurationHash: "f".repeat(64), components: ["asr", "translation", "tts"] as const };
+    const alternate = evidence({ evidenceId: "live-tts", configurationHash: alternateScope.configurationHash,
+      components: [...alternateScope.components], providers: [...alternateScope.components].map((component) => ({ component, providerId: "tencent", modelId: `model-${component}` })) });
+    expect(inspect({ schemaVersion: 2, qualifications: [evidence(), alternate] })).toMatchObject({ status: "ready", evidence: { evidenceId: "live-test" } });
+    expect(inspect({ schemaVersion: 2, qualifications: [evidence(), alternate] }, alternateScope)).toMatchObject({ status: "ready", evidence: { evidenceId: "live-tts" } });
+  });
+  it("fails closed for an ambiguous bundled configuration", () => {
+    const duplicate = evidence({ evidenceId: "live-duplicate" });
+    expect(inspect({ schemaVersion: 2, qualifications: [evidence(), duplicate] })).toMatchObject({ status: "not_ready", issue: "public_runtime_live_qualification_invalid" });
+  });
   it("fails closed for mismatched, expired, revoked, or incomplete evidence", () => {
     const invalid: Array<Partial<PublicRuntimeLiveQualification>> = [
       { configurationHash: "f".repeat(64) },
       { expiresAt: new Date(now.getTime() - 1).toISOString() },
       { revokedAt: now.toISOString() },
+      { automaticReverse: true },
       { providers: [{ component: "asr", providerId: "tencent", modelId: "16k_en" }] },
     ];
     for (const patch of invalid) {

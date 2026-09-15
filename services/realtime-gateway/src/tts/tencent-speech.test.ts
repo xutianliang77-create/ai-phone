@@ -51,6 +51,12 @@ describe("Tencent signed TTS wire on original public lifecycle",()=>{
     const t=setup();t.options.authorization.languagePolicy={source:"en",target:"zh",autoReverse:false,revision:2};await collect(t.create(),{...event(),language:"zh",text:"原文保持不变。"});
     expect(t.sockets[0].sent[0].data).toBe("原文保持不变。");const u=setup();await expect(collect(u.create(),{...event(),text:"<speak>Hello</speak>"})).rejects.toThrow("input_scope");expect(u.socketFactory).not.toHaveBeenCalled();
   });
+  it("uses each final translation language for a qualified automatic pair",async()=>{
+    const t=setup();t.options.authorization.languagePolicy={source:"auto",target:"en",autoReverse:true,pair:["zh","en"],revision:2};
+    await collect(t.create(),event());expect(t.sockets[0].sent[0].data).toBe("Hello world.");
+    const second=setup();second.options.authorization.languagePolicy={source:"auto",target:"en",autoReverse:true,pair:["zh","en"],revision:2};
+    await collect(second.create(),{...event(),language:"zh",text:"你好。"});expect(second.sockets[0].sent[0].data).toBe("你好。");
+  });
   it.each(["no_ready","no_final","closed"])("bounds %s without retry",async kind=>{
     vi.useFakeTimers();const t=setup(s=>{if(kind==="no_ready")s.autoReady=false;if(kind==="no_final")s.autoFinal=false;
       if(kind==="closed"){s.autoAudio=false;s.autoFinal=false;s.onSend=()=>queueMicrotask(()=>s.terminate());}});

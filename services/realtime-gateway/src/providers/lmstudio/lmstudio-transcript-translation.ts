@@ -20,6 +20,23 @@ export async function* translateSingleTranscript(
     emitTranscript = true,
   ): AsyncGenerator<ServerRealtimeEvent> {
     if(!context.isCurrent(session))return;
+    if(session.sourceLanguage === "auto" &&
+      transcript.automaticLanguageStatus !== undefined &&
+      transcript.automaticLanguageStatus !== "detected") {
+      if(emitTranscript) {
+        yield {type:"transcript.final",sessionId:session.sessionId,segmentId:transcript.segmentId,
+          turnId:transcript.turnId,revision:transcript.revision,text:transcript.text,rawText:transcript.text,
+          language:transcript.language,...turnLanguageEventFields(transcript),confidence:transcript.confidence,
+          speaker:transcript.speaker,timing:transcript.timing,tokenTimings:transcript.tokenTimings,
+          rawTokenTimings:transcript.tokenTimings,vadContext:transcript.vadContext};
+      }
+      yield {type:"translation.failed",sessionId:session.sessionId,segmentId:transcript.segmentId,
+        turnId:transcript.turnId,revision:transcript.revision,
+        message:session.targetLanguage === "zh" ? "自动语言无法确认，未发送翻译请求" : "Automatic language could not be confirmed; translation was not sent",
+        language:session.targetLanguage,...turnLanguageEventFields(transcript),stage:"translation",
+        provider:context.name,retryable:false};
+      return;
+    }
     const refinement = await context.transcriptRefiner.refine(
       session,
       transcript,
@@ -37,6 +54,10 @@ export async function* translateSingleTranscript(
         session,
         transcript.language,
       );
+      // In automatic-source/fixed-target mode the recognized turn can already
+      // be in the selected target language. Preserve its transcript without
+      // fabricating a same-language translation or opening an MT request.
+      if (targetLanguage === transcript.language) return;
       if (shouldPreserveSpelledIdentifier(text, transcript.language, targetLanguage)) {
         yield {
           type: "translation.final",

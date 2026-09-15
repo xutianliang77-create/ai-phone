@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:translation_mobile/src/app/localization/app_localizations.dart';
@@ -96,6 +97,26 @@ void main() {
 
   testWidgets('uses the saved online mode without device translation',
       (WidgetTester tester) async {
+    const translationChannel =
+        MethodChannel('translation_mobile/on_device_translation');
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      translationChannel,
+      (call) async {
+        if (call.method == 'translate') {
+          throw PlatformException(
+            code: 'local_translation_unavailable',
+            message: 'Synthetic on-device translation unavailable',
+          );
+        }
+        return <String, Object?>{};
+      },
+    );
+    addTearDown(() {
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        translationChannel,
+        null,
+      );
+    });
     await tester.pumpWidget(_TestApp(
       child: TypeToSpeakPage(
         config: _typeConfig(),

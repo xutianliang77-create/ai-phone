@@ -5,7 +5,7 @@ import { getStoreSnapshot } from "../../infrastructure/storage/json-store.js";
 const payload = () => ({ mode: "conversation", sourceLanguage: "zh", targetLanguage: "en", voiceOutput: false });
 const processing = () => ({
   contractVersion: 1, processingMode: "online", modelPolicyRevision: "test-policy-r6",
-  languagePolicy: { source: "zh", target: "en", autoReverse: false, pair: ["zh", "en"], revision: 1 },
+  languagePolicy: { source: "zh", target: "en", autoReverse: false, revision: 1 },
   executionPlan: { asr: { execution: "public", scopeKey: "public/asr/zh", reason: "online_selected" },
     translation: { execution: "public", scopeKey: "public/mt/zh-en", reason: "online_selected" }, tts: { execution: "disabled" } },
   syncRequested: true,

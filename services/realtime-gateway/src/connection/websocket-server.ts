@@ -22,6 +22,10 @@ import {publicGatewayRuntimeOptions} from "./public-runtime-bootstrap.js";
 export { normalizeClientTextLanguage } from "../protocol/client-text-language.js";
 export function startWebSocketServer(options:{publicRuntime?:PublicGatewayRuntimeOptions}={}) {
   const runtime = createRealtimeServerRuntime();
+  // Explicit material/factory injection exists only for isolated in-process
+  // tests. The executable production entry calls this function without
+  // options, so it always consumes the current signed readiness gate.
+  const injectedPublicRuntime=options.publicRuntime!==undefined;
   const publicRuntime=options.publicRuntime?{...options.publicRuntime}:publicGatewayRuntimeOptions(runtime.env);
   const {
     env,
@@ -31,7 +35,7 @@ export function startWebSocketServer(options:{publicRuntime?:PublicGatewayRuntim
     disconnectFinalizers,
   } = runtime;
   server.on("connection", async (ws, request) => {
-    const configured=await setupRealtimeConnection(runtime,ws,request,publicRuntime);
+    const configured=await setupRealtimeConnection(runtime,ws,request,publicRuntime,!injectedPublicRuntime);
     if(!configured)return;
     const {session,generation,resumed,provider,sessionEventSink,ttsOutputQueue}=configured;
     const flushTracker = new RealtimeFlushTracker();

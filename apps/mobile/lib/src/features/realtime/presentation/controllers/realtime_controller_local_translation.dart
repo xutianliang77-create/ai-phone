@@ -102,8 +102,28 @@ extension RealtimeControllerLocalTranslation on RealtimeController {
       confidence: segment.confidence,
       revision: segment.revision,
       stage: 'asr',
+      timing: _timingForAsr(segment),
       clearTranslation: true,
     );
+  }
+
+  SegmentTiming? _timingForAsr(AsrTextSegment segment) {
+    final startMs = segment.startMs;
+    final endMs = segment.endMs;
+    final source = segment.timingSource;
+    if (startMs == null ||
+        endMs == null ||
+        startMs < 0 ||
+        endMs < startMs ||
+        !const <String>{
+          'model',
+          'client',
+          'participant_track',
+          'estimated',
+        }.contains(source)) {
+      return null;
+    }
+    return SegmentTiming(startMs: startMs, endMs: endMs, source: source!);
   }
 
   Future<void> _flushPendingLocalPartialTranslation() async {

@@ -21,6 +21,12 @@ const manifest = {
   buildMode: required("BUILD_MODE"),
   productProfile: required("PRODUCT_PROFILE"),
   serverBaseUrl: required("SERVER_BASE_URL"),
+  language: {
+    source: required("SOURCE_LANGUAGE"),
+    target: required("TARGET_LANGUAGE"),
+    autoReverse: required("AUTO_REVERSE_TARGET_LANGUAGE") === "true",
+    automaticPair: process.env.AUTOMATIC_LANGUAGE_PAIR || null,
+  },
   appAggregateSha256: required("APP_SHA256"),
   signingIdentity: required("SIGNING_IDENTITY"),
   compatible: true,

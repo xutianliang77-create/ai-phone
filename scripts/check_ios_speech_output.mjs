@@ -43,15 +43,35 @@ checkFile(
     ["Swift handles stop", 'case "stop"'],
     ["Swift validates text", 'guard let text'],
     ["Swift creates utterance", "AVSpeechUtterance(string: text)"],
-    ["Swift selects voice", "AVSpeechSynthesisVoice(language:"],
-    ["Swift returns iOS system TTS provider", "ios_system_tts"],
+    [
+      "Swift resolves an eligible system voice",
+      "SystemSpeechVoiceCatalog.resolve(language: language,",
+    ],
+    ["Swift assigns the selected voice", "utterance.voice = voice"],
+    [
+      "Swift returns catalog-confirmed voice metadata",
+      "SystemSpeechVoiceCatalog.payload(language: language, voice: voice)",
+    ],
+  ],
+);
+
+checkFile(
+  "apps/mobile/ios/Runner/SystemSpeechVoiceCatalog.swift",
+  [
+    ["Catalog resolves Apple voices", "AVSpeechSynthesisVoice(language: normalized)"],
+    ["Catalog rejects stale voice identifiers", "A stale/mismatched pinned voice never falls back."],
+    ["Catalog identifies iOS system TTS", '"provider": "ios_system_tts"'],
   ],
 );
 
 checkFile(
   "apps/mobile/ios/Runner/AppDelegate.swift",
   [
-    ["AppDelegate creates speech bridge", "SpeechOutputBridge()"],
+    ["AppDelegate creates speech bridge", "SpeechOutputBridge("],
+    [
+      "AppDelegate shares audio-session coordination with speech",
+      "audioSessionCoordinator: audioSessionCoordinator",
+    ],
     ["AppDelegate registers speech bridge", 'forPlugin: "SpeechOutputBridge"'],
   ],
 );

@@ -118,6 +118,7 @@ export function registerCallLinkAir780Routes(app: FastifyInstance) {
     }
     const modelAdmission = await callLinkModelRuntimeAdmission(
       validation.record.sessionId,
+      "air780",
     );
     if (!modelAdmission.ok) {
       return sendError(

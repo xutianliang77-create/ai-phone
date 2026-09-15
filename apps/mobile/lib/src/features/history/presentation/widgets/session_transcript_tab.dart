@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../../app/localization/app_history_localizations.dart';
 import '../../../../app/localization/app_localizations.dart';
 import '../../../../app/localization/app_realtime_timeline_localizations.dart';
+import '../../../../shared/domain/speaker_attribution.dart';
 import '../../data/session_history_models.dart';
 
 class SessionTranscriptTab extends StatefulWidget {
@@ -133,9 +134,11 @@ class _SessionTranscriptTabState extends State<SessionTranscriptTab> {
     final optimized = _preferredSourceText(segment);
     final hasOptimization = _hasOptimization(segment);
     final rawExpanded = _expandedRawSegmentIds.contains(segment.id);
+    final timelineLabel = _formatTranscriptTimeline(segment.timing);
     final metadata = <String>[
       if (segment.speaker != null)
         segment.speaker!.label(isChinese: context.l10n.isChinese),
+      if (timelineLabel != null) timelineLabel,
       if (segment.timing?.overlap == true) context.l10n.overlappingSpeech,
       if (segment.languageProfile?.mixedLanguage == true)
         context.l10n.mixedLanguage,
@@ -246,6 +249,21 @@ class _SessionTranscriptTabState extends State<SessionTranscriptTab> {
       }
     });
   }
+}
+
+String? _formatTranscriptTimeline(SegmentTiming? timing) {
+  if (timing == null ||
+      timing.startMs < 0 ||
+      timing.endMs < timing.startMs) {
+    return null;
+  }
+  String clock(int milliseconds) {
+    final seconds = milliseconds ~/ 1000;
+    return '${(seconds ~/ 60).toString().padLeft(2, '0')}:'
+        '${(seconds % 60).toString().padLeft(2, '0')}.'
+        '${(milliseconds % 1000).toString().padLeft(3, '0')}';
+  }
+  return '${clock(timing.startMs)}–${clock(timing.endMs)}';
 }
 
 class _NoTranscriptMatches extends StatelessWidget {

@@ -8,6 +8,7 @@ import '../../../../platform/asr/core_ml_nemotron_asr_provider.dart';
 import '../../../../platform/asr/mobile_asr_provider.dart';
 import '../../../../platform/asr/unavailable_system_asr_provider.dart';
 import '../../../../platform/translation/ios_system_translation_provider.dart';
+import '../../../../platform/translation/android_on_device_translation_provider.dart';
 import '../../../../platform/translation/mobile_translation_provider.dart';
 import '../../../../platform/translation/phrasebook_translation_provider.dart';
 import '../../../../platform/translation/supported_translation_language.dart';
@@ -49,14 +50,28 @@ MobileTranslationProvider? createDefaultMobileTranslationProvider(
   AppConfig config,
 ) {
   if (!config.useLocalSessions || !config.useOnDeviceTranslation) return null;
+  return createDefaultAuxiliaryMobileTranslationProvider(config);
+}
+
+/// OCR and type-to-speak are inherited phone-side tools, not realtime cloud
+/// inference.  They keep their device OCR/MT/TTS path even in the public app;
+/// saving the already-produced result may still use the normal 1.1 history
+/// repository, but this factory never selects a server translation provider.
+MobileTranslationProvider createDefaultAuxiliaryMobileTranslationProvider(
+  AppConfig config,
+) {
   if (config.onDeviceTranslationProvider == 'phrasebook') {
     return PhrasebookTranslationProvider();
   }
+  if (config.onDeviceTranslationProvider == 'android_mlkit') {
+    return AndroidOnDeviceTranslationProvider();
+  }
   if (config.onDeviceTranslationProvider == 'ios_system') {
     return IosSystemTranslationProvider(
-      fallback: config.useLocalSessions || config.onDeviceTranslationRequired
-          ? null
-          : PhrasebookTranslationProvider(),
+      // Auxiliary entry points must not silently substitute a phrasebook for
+      // the selected system model.  If the local language pair is absent, the
+      // existing resource/error path explains that state to the user.
+      fallback: null,
     );
   }
   return UnavailableTranslationProvider();
@@ -105,20 +120,13 @@ List<MobileTranslationConfig> createOnDeviceTranslationPreflightConfigs(
   }
   if (config.autoReverseTargetLanguage &&
       config.sourceLanguage == autoSourceLanguageCode) {
-    return const <MobileTranslationConfig>[
-      MobileTranslationConfig(sourceLanguage: 'en', targetLanguage: 'zh'),
-      MobileTranslationConfig(sourceLanguage: 'zh', targetLanguage: 'en'),
-    ];
+    // An automatic setting without the user's saved A/B pair is not a
+    // license to silently substitute a Chinese/English route. The caller
+    // keeps the preference and reports the missing resource/qualification.
+    return const <MobileTranslationConfig>[];
   }
   if (config.sourceLanguage == autoSourceLanguageCode) {
-    final sourceLanguage =
-        isChineseFamilyLanguage(config.targetLanguage) ? 'en' : 'zh';
-    return <MobileTranslationConfig>[
-      MobileTranslationConfig(
-        sourceLanguage: sourceLanguage,
-        targetLanguage: config.targetLanguage,
-      ),
-    ];
+    return const <MobileTranslationConfig>[];
   }
   return <MobileTranslationConfig>[createMobileTranslationConfig(config)];
 }
@@ -149,8 +157,15 @@ MobileAsrConfig createDeviceAsrConfig(
   String? languagePolicyKey,
 }) {
   final appleSpeech = config.deviceAsrProvider == 'apple_speech_transcriber';
+  final androidSystem = config.deviceAsrProvider == 'android_system' ||
+      config.deviceAsrProvider == 'system';
   return MobileAsrConfig(
-    language: appleSpeech ? config.sourceLanguage : config.deviceAsrLanguage,
+    // Both system recognizers receive the language the user actually selected.
+    // `DEVICE_ASR_LANGUAGE` remains only for an explicitly configured custom
+    // model; it must not leave Android at `auto` after a fixed local setting.
+    language: appleSpeech || androidSystem
+        ? config.sourceLanguage
+        : config.deviceAsrLanguage,
     chunkDurationMs: config.deviceAsrChunkDurationMs,
     modelChunkMs: config.deviceAsrModelChunkMs,
     autoDownloadModel: autoDownloadModel ?? config.deviceAsrAutoDownloadModel,

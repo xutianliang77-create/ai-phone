@@ -127,7 +127,13 @@ export function isLanguageSelection(value: unknown): value is LanguageSelection 
       ? v.autoReverse === false
       : Array.isArray(v.pair) && v.pair.length === 2 &&
         v.pair.every((language) => typeof language === "string" && isTranslationLanguage(language)) &&
-        v.pair[0] !== v.pair[1]);
+        v.pair[0] !== v.pair[1] &&
+        // An automatic source needs a bounded candidate pair even when the
+        // translation direction remains fixed. This is a language scope, not
+        // a client claim that the ASR actually detected either language.
+        (v.autoReverse
+          ? v.pair.includes(v.target as TranslationLanguageCode)
+          : v.source === "auto"));
 }
 
 /** A configured ASR locale is a hint, not SourceLanguageEvidence. */

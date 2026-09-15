@@ -96,10 +96,10 @@ describe("original HTTP public creation with an explicitly installed trusted aut
   it("does not discard an invalid request binding while loading a snapshot",()=>{
     expect(()=>normalizeStoreSnapshot({...getStoreSnapshot(),publicCreationBindings:{invalid:"bad"}})).toThrow("Invalid public creation bindings");
   });
-  it("does not pretend the new HTTP idempotency guard is wired to PostgreSQL",async()=>{
+  it("fails closed when a PostgreSQL runtime is not actually initialized",async()=>{
     const coordinate=createPublicRealtimeCoordinator(authority),value=input();
     vi.spyOn(repositoryRuntime,"getRepositoryRuntime").mockReturnValue({driver:"postgres"} as any);
-    await expect(coordinate("owner","postgres-0001",value)).rejects.toThrow("postgres_idempotency_not_ready");expect(resolve).not.toHaveBeenCalled();
+    await expect(coordinate("owner","postgres-0001",value)).rejects.toThrow();expect(resolve).not.toHaveBeenCalled();
   });
   it.each(["missing_key","forged_evidence","not_logged_in","insecure_transport"])("rejects %s before preparing or asking an authority",async reason=>{
     const payload:any=input();if(reason==="forged_evidence")payload.records=[{kind:"model_qualification",state:"qualified"}];

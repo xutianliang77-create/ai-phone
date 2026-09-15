@@ -13,7 +13,6 @@ import '../../../../platform/ocr/mobile_ocr_provider.dart';
 import '../../../../platform/ocr/platform_ocr_provider.dart';
 import '../../../../platform/translation/mobile_translation_provider.dart';
 import '../../../../platform/translation/supported_translation_language.dart';
-import '../../../../platform/translation/unavailable_translation_provider.dart';
 import '../controllers/scan_translation_controller.dart';
 import '../widgets/scan_image_translation_view.dart';
 import '../widgets/scan_text_comparison_view.dart';
@@ -275,8 +274,7 @@ class _ScanTranslationPageState extends State<ScanTranslationPage> {
   }
 
   MobileTranslationProvider _defaultTranslator(AppConfig config) {
-    return createDefaultMobileTranslationProvider(config) ??
-        UnavailableTranslationProvider();
+    return createDefaultAuxiliaryMobileTranslationProvider(config);
   }
 
   Future<PickedScanImage?> _pickImagePath(ScanImageSource source) async {

@@ -35,18 +35,22 @@ class AndroidSystemAsrProvider
   }
 
   @override
-  Future<Map<String, Object?>> nativeAvailability() async {
+  Future<Map<String, Object?>> nativeAvailability() => _availability();
+
+  Future<Map<String, Object?>> _availability({String? language}) async {
     final result = await _methodChannel.invokeMapMethod<String, Object?>(
       'isAvailable',
+      language == null ? null : <String, Object?>{'language': language},
     );
     return result ?? <String, Object?>{};
   }
 
   @override
   Future<MobileAsrAvailability> availability(MobileAsrConfig config) async {
-    final payload = await nativeAvailability();
+    final payload = await _availability(language: config.language);
     final available = payload['available'] == true;
-    final reason = payload['reason'] as String? ?? 'system_asr_unavailable';
+    final reason =
+        payload['reason'] as String? ?? 'on_device_recognizer_unavailable';
     final microphonePermission =
         ((payload['microphone'] as Map?)?['permission']) as String?;
 
@@ -62,14 +66,14 @@ class AndroidSystemAsrProvider
       return MobileAsrAvailability(
         canStart: true,
         reason: 'ready',
-        message: 'Android system ASR ready',
+        message: 'Android on-device ASR ready',
         details: payload,
       );
     }
     return MobileAsrAvailability(
       canStart: false,
       reason: reason,
-      message: 'Android system speech recognition is unavailable',
+      message: 'Android on-device speech recognition is unavailable',
       details: payload,
     );
   }
@@ -83,6 +87,9 @@ class AndroidSystemAsrProvider
   Future<void> start(MobileAsrConfig config) async {
     await _methodChannel.invokeMethod<void>('start', <String, Object?>{
       'language': config.language,
+      if (config.captureId != null) 'captureId': config.captureId,
+      if (config.languagePolicyKey != null)
+        'languagePolicyKey': config.languagePolicyKey,
     });
   }
 

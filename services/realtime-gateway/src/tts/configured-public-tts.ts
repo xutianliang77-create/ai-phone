@@ -22,9 +22,15 @@ export function configuredPublicTts(options:ConfiguredPublicTtsOptions) {
     !(profile.vendor==="openai"&&profile.protocol==="openai_speech"||profile.vendor==="qwen"&&profile.protocol==="qwen_tts_realtime"||profile.vendor==="tencent"&&profile.protocol==="tencent_tts_ws"||profile.vendor==="google"&&profile.protocol==="google_cloud_tts")||
     (profile.vendor==="google"?!["google_service_account","google_adc"].includes(profile.authKind):profile.authKind!==(profile.vendor==="tencent"?"tencent_secret":"api_key"))||
     !publicProtocolSampleRateSupported(profile.protocol,profile.sampleRate))throw new PublicSpeechError("public_tts_configuration_not_supported","not_sent");
-  if(authorization.languagePolicy.autoReverse||authorization.languagePolicy.source==="auto")throw new PublicSpeechError("public_tts_dynamic_language_not_implemented","not_sent");
+  const dynamicLanguage=authorization.languagePolicy.autoReverse||authorization.languagePolicy.source==="auto";
+  const languagePair=authorization.languagePolicy.pair;
+  if(dynamicLanguage&&(!languagePair||languagePair.length!==2||new Set(languagePair).size!==2||
+    !languagePair.includes(authorization.languagePolicy.target)||profile.protocol==="google_cloud_tts")) {
+    throw new PublicSpeechError("public_tts_dynamic_language_not_supported","not_sent");
+  }
   const speech:PublicSpeechOptions={sessionId:options.sessionId,leaseId:options.leaseId,endpoint:profile.endpoint,modelId:profile.modelId,voice:profile.voice,
-    timeoutMs:profile.timeoutMs,prefillMs:options.prefillMs,targetLanguage:authorization.languagePolicy.target,
+    timeoutMs:profile.timeoutMs,prefillMs:options.prefillMs,targetLanguage:dynamicLanguage?"dynamic":authorization.languagePolicy.target,
+    ...(dynamicLanguage?{allowedTargetLanguages:[...languagePair!]}:{}),
     resolveCredentials:options.resolveCredentials,record:options.record,fetchFn:options.fetchFn,
     protocol:profile.protocol as PublicSpeechOptions["protocol"],socketFactory:options.socketFactory,appId:profile.appId,projectId:profile.projectId,sampleRate:profile.sampleRate};
   return new HttpTtsSynthesizer({ttsHttpTimeoutMs:profile.timeoutMs,ttsStreamPrefillMs:options.prefillMs},speech);

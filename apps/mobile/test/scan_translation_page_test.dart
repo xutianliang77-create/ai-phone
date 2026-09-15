@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:translation_mobile/src/app/localization/app_localizations.dart';
@@ -189,6 +190,26 @@ void main() {
 
   testWidgets('uses the saved online mode without old private fallback',
       (WidgetTester tester) async {
+    const translationChannel =
+        MethodChannel('translation_mobile/on_device_translation');
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      translationChannel,
+      (call) async {
+        if (call.method == 'translate') {
+          throw PlatformException(
+            code: 'local_translation_unavailable',
+            message: 'Synthetic on-device translation unavailable',
+          );
+        }
+        return <String, Object?>{};
+      },
+    );
+    addTearDown(() {
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        translationChannel,
+        null,
+      );
+    });
     await tester.pumpWidget(_TestApp(
       child: ScanTranslationPage(
         config: _localConfig(),
@@ -217,7 +238,10 @@ void main() {
     await tester.tap(find.text('翻译'));
     await tester.pumpAndSettle();
 
-    expect(find.text('翻译暂不可用，已保留识别文字'), findsOneWidget);
+    expect(
+      find.text('翻译暂不可用，已保留识别文字', skipOffstage: false),
+      findsOneWidget,
+    );
   });
 }
 

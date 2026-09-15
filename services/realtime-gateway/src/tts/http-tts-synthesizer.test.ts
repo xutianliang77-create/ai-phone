@@ -150,6 +150,23 @@ describe("http tts synthesizer", () => {
     synthesizer.closeSession("sess_sequence");
     expect((await synthesizer.synthesize(translation("seg_3")))?.sequence).toBe(1);
   });
+
+  it("echoes a revision-aware translation into its audio output", async () => {
+    const synthesizer = new HttpTtsSynthesizer({
+      ...baseEnv(),
+      ttsHttpEndpoint: "http://models.local:8002/tts/synthesize",
+    });
+    vi.stubGlobal("fetch", async () => new Response(JSON.stringify({
+      audio: { format: "pcm16", sampleRate: 24000, data: "AA==" },
+    })));
+
+    const audio = await synthesizer.synthesize({
+      ...translation("seg_revision"),
+      revision: 3,
+    });
+
+    expect(audio?.revision).toBe(3);
+  });
 });
 
 function translation(segmentId: string) {

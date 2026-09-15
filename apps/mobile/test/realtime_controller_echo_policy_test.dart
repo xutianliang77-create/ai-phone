@@ -38,7 +38,7 @@ void main() {
       type: AudioSessionEventType.routeChanged,
       route: AudioOutputRoute.headphones,
     ));
-    repository.emit(_audioOutput(1));
+    _emitPublicAudio(repository, 1);
     await pumpEventQueue();
     capture.emitFrame(1);
     await pumpEventQueue();
@@ -75,7 +75,7 @@ void main() {
     await controller.start();
 
     for (var sequence = 1; sequence <= 20; sequence += 1) {
-      repository.emit(_audioOutput(sequence));
+      _emitPublicAudio(repository, sequence);
       await pumpEventQueue();
       capture.emitFrame(sequence * 2 - 1);
       await pumpEventQueue();
@@ -238,11 +238,24 @@ GatewayRealtimeEvent _audioOutput(int sequence) {
     type: 'audio.output',
     sessionId: 'sess_1',
     segmentId: 'seg_$sequence',
+    revision: 1,
     format: 'pcm16',
     sampleRate: 24000,
     sequence: sequence,
     data: 'audio_$sequence',
   );
+}
+
+void _emitPublicAudio(FakeRealtimeRepository repository, int sequence) {
+  repository.emit(GatewayRealtimeEvent(
+    type: 'translation.final',
+    sessionId: 'sess_1',
+    segmentId: 'seg_$sequence',
+    revision: 1,
+    text: 'translation_$sequence',
+    language: 'en',
+  ));
+  repository.emit(_audioOutput(sequence));
 }
 
 AppConfig _deviceConfig() {

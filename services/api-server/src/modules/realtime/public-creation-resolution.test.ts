@@ -116,10 +116,10 @@ describe("public creation explicit query, cancellation and expiry",()=>{
     await createUsageHold(owner,30,{sessionId:id,idempotencyKey:`hold:${id}`});expect((await route("cancel")).json().safeToReplace).toBe(true);
     expect(store().usageHolds[0].status).toBe("released");expect(store().billingLedger).toHaveLength(0);
   });
-  it("fails closed for corrupt retirement index and PostgreSQL",async()=>{
+  it("fails closed for a corrupt legacy retirement index or an uninitialized PostgreSQL runtime",async()=>{
     expect(()=>normalizeStoreSnapshot({...store(),publicCreationBindings:{[publicCreationIdentity(owner,key).sessionId]:"cancelled:bad"}})).toThrow("Invalid public creation bindings");
     vi.spyOn(runtime,"getRepositoryRuntime").mockReturnValue({driver:"postgres"} as any);
-    await expect(resolvePublicCreation(owner,key,request(),"query")).rejects.toMatchObject({status:503,code:"public_creation_postgres_idempotency_not_ready"});
+    await expect(resolvePublicCreation(owner,key,request(),"query")).rejects.toThrow();
   });
   it.each(["no_account","insecure","no_key","extra_body","no_nonce","disabled"])("retains %s boundary",async reason=>{
     const payload:any=request();if(reason==="extra_body")payload.ownerId="other";if(reason==="no_nonce")delete payload.nonce;

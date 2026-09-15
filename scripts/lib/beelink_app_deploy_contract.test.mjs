@@ -227,6 +227,11 @@ describe("Beelink app deployment contract", () => {
     expect(compose).toContain("container-healthcheck.mjs");
     expect(dockerfile).toContain("container-healthcheck.mjs");
     expect(appEntrypoint).toContain('services/translation-worker/dist/agent-calls/main.js');
+    expect(appEntrypoint).toContain("validatePublicDeploymentWorkerBoundary");
+    expect(appEntrypoint).toContain("publicCallLinkCompatibilityEnabled");
+    expect(appEntrypoint).toContain(
+      "public 1.1 translation agent requires call_link_only compatibility",
+    );
     expect(compose).not.toContain(
       "container_name: ${AI_PHONE_CONTAINER_PREFIX:-ai-phone}-api",
     );

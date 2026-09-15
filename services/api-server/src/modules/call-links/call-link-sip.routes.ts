@@ -69,6 +69,7 @@ export function registerCallLinkSipRoutes(app: FastifyInstance) {
     }
     const modelAdmission = await callLinkModelRuntimeAdmission(
       initial.record.sessionId,
+      "sip_outbound",
     );
     if (!modelAdmission.ok) {
       return sendError(
