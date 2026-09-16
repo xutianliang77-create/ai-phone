@@ -27,4 +27,8 @@ describe("implemented public wire capabilities",()=>{
     expect(publicAsrModelAutomaticLanguagePairSupported("tencent_asr_ws","16k_zh_en_2.0",["zh","en"])).toBe(true);
     expect(publicAsrModelAutomaticLanguagePairSupported("tencent_asr_ws","16k_zh_en_2.0",["zh","ja"])).toBe(false);
   });
+  it("permits the implemented Qwen realtime automatic zh/en pair",()=>{
+    expect(publicAsrModelAutomaticLanguagePairSupported("qwen_asr_realtime","manual-asr",["zh","en"])).toBe(true);
+    expect(publicAsrModelAutomaticLanguagePairSupported("qwen_asr_realtime","manual-asr",["zh","ja"])).toBe(false);
+  });
 });
