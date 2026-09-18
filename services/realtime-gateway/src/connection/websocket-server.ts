@@ -60,10 +60,10 @@ export function startWebSocketServer(options:{publicRuntime?:PublicGatewayRuntim
           publicSessionStarted=true;
           speechInactivity?.start();
         }
-        if ((event.type==="transcript.partial"||event.type==="transcript.final") &&
-            typeof event.text==="string"&&event.text.trim()) {
-          // Public PCM is continuous, including silence.  Only a confirmed
-          // non-empty ASR result represents the user's new speech activity.
+        if (event.type==="transcript.final"&&typeof event.text==="string"&&event.text.trim()) {
+          // Public PCM is continuous and provider partials may be unstable or
+          // acoustic playback echo. Only a confirmed final ASR turn represents
+          // the user's new speech activity and may extend the five-minute run.
           speechInactivity?.observeSpeech();
         }
         flushTracker.record(event);
