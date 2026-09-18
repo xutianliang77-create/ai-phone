@@ -255,7 +255,8 @@ describe("manual configuration binding on the original session aggregate",()=>{
       authorizeConnection:async()=>{verifiedPublicAdmission(current(),"owner",tick);},
       resolveAsrCredentials:createPublicModelCredentialResolver(snapshot,"asr"),resolveTranslationCredentials:createPublicModelCredentialResolver(snapshot,"translation"),
       recordAttempt:async e=>{await recordPublicModelAttempt(current().id,e,tick);},fetchFn:mtFetch,
-      socketFactory:url=>{peer=vendor==="tencent"?new SyntheticTencentAsrSocket(new URL(url).searchParams.get("voice_id")!):vendor==="qwen"?new SyntheticQwenAsrSocket():new SyntheticAsrSocket();peer.transcript="你好，今天测试流式识别。";return peer.asWebSocket();}});
+      socketFactory:url=>{peer=vendor==="tencent"?new SyntheticTencentAsrSocket(new URL(url).searchParams.get("voice_id")!):vendor==="qwen"?new SyntheticQwenAsrSocket():new SyntheticAsrSocket();
+        if(peer instanceof SyntheticQwenAsrSocket)peer.autoComplete=false;peer.transcript="你好，今天测试流式识别。";return peer.asWebSocket();}});
     expect(provider).toBeInstanceOf(LmStudioRealtimeProvider);
     await provider.createSession(providerSession);
     for(let n=1;n<=2;n++){
@@ -267,11 +268,20 @@ describe("manual configuration binding on the original session aggregate",()=>{
     await expect(recordPublicModelAttempt(current().id,{...intent,audioEndSample:step},tick)).rejects.toThrow("conflict");
     await expect(recordPublicModelAttempt(current().id,{...intent,audioStartSample:1},tick)).rejects.toThrow("conflict");
     await expect(recordPublicModelAttempt(current().id,{...intent,audioEndSample:step*3},tick)).rejects.toThrow("audio_unconfirmed");
+    if(peer! instanceof SyntheticQwenAsrSocket)peer.complete();
     const output=[];for await(const event of provider.flushSession(current().id))output.push(event);
     expect(output.some(e=>e.type==="transcript.final")).toBe(true);expect(mtFetch).toHaveBeenCalledTimes(1);
     expect(current().publicModelAttempts!.map(a=>[a.event.component,a.event.state])).toEqual([["asr","confirmed"],["translation","confirmed"]]);
     tick=new Date(now.getTime()+300);await observePublicRuntime(current().id,{...runtime,sequence:4,lastAcceptedSample:step*3},tick);
     await expect(recordPublicModelAttempt(current().id,{...intent,audioEndSample:step*3},tick)).rejects.toThrow("conflict");
+    if(vendor==="qwen"){
+      const start=step*3,end=start+31*sampleRate;tick=new Date(now.getTime()+400);
+      await observePublicRuntime(current().id,{...runtime,sequence:5,lastAcceptedSample:end},tick);
+      const long={...intent,attemptId:"qwen-long-attempt",segmentId:"qwen-long-segment",state:"dispatching" as const,metadata:undefined,
+        audioStartSample:start,audioEndSample:end};
+      await expect(recordPublicModelAttempt(current().id,long,tick)).resolves.toMatchObject({event:{audioEndSample:end}});
+      await expect(recordPublicModelAttempt(current().id,{...long,state:"confirmed",metadata:{}},tick)).resolves.toMatchObject({event:{state:"confirmed"}});
+    }
     await provider.closeSession(current().id);expect(peer!.readyState).toBe(3);
   });
 });

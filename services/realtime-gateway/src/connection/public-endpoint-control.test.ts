@@ -12,12 +12,12 @@ const claims=():RealtimeTokenClaims=>({sessionId:"control",userId:"owner",source
 function gate<T=void>(){let resolve!:(value:T)=>void;const promise=new Promise<T>(r=>resolve=r);return {promise,resolve};}
 const batchers:AudioFrameBatcher[]=[];
 function fixture(){
-  createSession(claims());const order:string[]=[],events:ServerRealtimeEvent[]=[],onError=vi.fn();
+  createSession(claims());const order:string[]=[],events:ServerRealtimeEvent[]=[],onError=vi.fn(),flushOptions:Array<{finishSession?:boolean}|undefined>=[];
   const provider:RealtimeProvider={name:"synthetic",createSession:async()=>{},closeSession:vi.fn(async()=>{}),healthCheck:async()=>false,
-    async *sendAudio(f){order.push(`audio:${f.sequence}`);},async *flushSession(){order.push("commit");yield {type:"transcript.final",sessionId:"control",segmentId:"s",text:"Bonjour",language:"fr"};}};
+    async *sendAudio(f){order.push(`audio:${f.sequence}`);},async *flushSession(_id,options){flushOptions.push(options);order.push("commit");yield {type:"transcript.final",sessionId:"control",segmentId:"s",text:"Bonjour",language:"fr"};}};
   const batcher=new AudioFrameBatcher({sessionId:"control",provider,send:e=>events.push(e),onError,batchDelayMs:10000});batchers.push(batcher);
   const options={sessionId:"control",confirmed:true,batcher,provider,beforeFlush:async()=>{order.push("confirm");},drain:async()=>{order.push("drain");},send:(e:ServerRealtimeEvent)=>events.push(e)};
-  return {provider,batcher,order,events,options,onError};
+  return {provider,batcher,order,events,options,onError,flushOptions};
 }
 afterEach(async()=>{for(const b of batchers.splice(0)){b.stopAccepting();try{await b.flush();}catch{}}deleteSession("control");vi.restoreAllMocks();});
 describe("public endpoint ordering on original control and batching",()=>{
@@ -25,6 +25,7 @@ describe("public endpoint ordering on original control and batching",()=>{
     const f=fixture();f.batcher.enqueue(frame());f.batcher.enqueue(frame(2));
     const boundary=handleAudioBoundary({type:"audio.boundary",sessionId:"control",sequence:2},f.options);f.batcher.enqueue(frame(3));
     await f.batcher.flush();await boundary;expect(f.order).toEqual(["audio:2","confirm","commit","drain","audio:3"]);
+    expect(f.flushOptions).toEqual([{finishSession:undefined}]);
     expect(f.events.at(-1)).toMatchObject({type:"audio.boundary.committed",sequence:2});
   });
   it("does not let an already-running force drain steal audio after the boundary",async()=>{

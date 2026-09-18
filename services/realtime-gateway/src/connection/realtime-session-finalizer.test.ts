@@ -145,6 +145,18 @@ describe("realtime session finalizer", () => {
     });
   });
 
+  it("marks only finalization drains as supplier-session finish", async () => {
+    const session = createSession(claims());
+    const options:Array<{finishSession?:boolean}|undefined>=[];
+    const provider=providerWithoutTail();
+    provider.flushSession=async function*(_sessionId,value){options.push(value);};
+    const finalizer=new RealtimeSessionFinalizer({sessionId:session.id,provider,
+      audioBatcher:{stopAccepting:vi.fn(),flush:vi.fn(async()=>undefined)},send:()=>{},
+      drainSessionSync:async()=>undefined,flushTracker:new RealtimeFlushTracker(),onError:vi.fn()});
+    await finalizer.finalize("client_request");
+    expect(options).toEqual([{finishSession:true}]);
+  });
+
   it("closes provider capacity before announcing session ended", async () => {
     const session = createSession(claims());
     const order: string[] = [];

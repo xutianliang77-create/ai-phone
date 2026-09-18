@@ -29,6 +29,7 @@ export interface LmStudioRealtimeProviderOptions {
   reasoningEffort?: string | null;
   extraBody?: Record<string, unknown>;
   asrProvider?: AsrProvider;
+  maxInputBatchAudioMs?: number;
   translationClient?: TranslationClient;
   asrRefinementProvider?: LlmProvider;
   asrRefinementEnabled?: boolean;

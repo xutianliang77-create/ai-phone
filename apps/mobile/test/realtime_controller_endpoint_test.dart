@@ -151,7 +151,7 @@ void main() {
     await pumpEventQueue();
     expect(controller.status.name, 'ended');
   });
-  test('playback-only VAD endings do not create a future empty boundary',
+  test('public playback VAD keeps PCM and commits the barge-in boundary once',
       () async {
     var now = DateTime.utc(2026, 9, 9);
     final speechGate = SpeechCaptureGate(now: () => now);
@@ -163,11 +163,12 @@ void main() {
     speechGate.beginPlayback(text: 'voice', language: 'en');
     capture.emit(1, endpoint: true);
     await pumpEventQueue();
-    expect(repo.order, isEmpty);
+    expect(repo.order, ['frame:1', 'boundary']);
+    expect(speechGate.playbackActive, isFalse);
     speechGate.endPlayback();
     now = now.add(const Duration(seconds: 1));
     capture.emit(2);
     await pumpEventQueue();
-    expect(repo.order, ['frame:2']);
+    expect(repo.order, ['frame:1', 'boundary', 'frame:2']);
   });
 }

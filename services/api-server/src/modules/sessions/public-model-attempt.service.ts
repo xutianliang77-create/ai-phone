@@ -14,7 +14,7 @@ function parse(value:unknown,sessionId:string):PublicModelAttemptEvent{
     e.failureCode!==undefined&&!syncKey(e.failureCode))throw new ResultSyncError("invalid_model_attempt",400);
   const m=e.metadata,u=m?.usage;
   if(e.component==="asr"?(!Number.isSafeInteger(e.audioStartSample)||e.audioStartSample!<0||!Number.isSafeInteger(e.audioEndSample)||e.audioEndSample!<=e.audioStartSample!||
-    ![16000,24000].includes(e.audioSampleRate!)||e.audioEndSample!-e.audioStartSample!>30*e.audioSampleRate!):
+    ![16000,24000].includes(e.audioSampleRate!)||e.audioEndSample!-e.audioStartSample!>3600*e.audioSampleRate!):
     [e.audioStartSample,e.audioEndSample,e.audioSampleRate].some(v=>v!==undefined))throw new ResultSyncError("invalid_model_attempt",400);
   if(m!==undefined&&(!m||typeof m!=="object"||Array.isArray(m)||Object.keys(m).some(k=>!["requestId","reportedModel","usage"].includes(k))||
     [m.requestId,m.reportedModel].some(v=>v!==undefined&&!syncKey(v))))throw new ResultSyncError("invalid_model_attempt",400);
@@ -36,6 +36,8 @@ export function recordPublicModelAttempt(sessionId:string,value:unknown,now=new 
         now.getTime()-Date.parse(r.observedAt)>PUBLIC_EVIDENCE_GAP_MS||Date.parse(p.expiresAt)<=now.getTime()||
         p.maxActiveSeconds!==undefined&&r.activeMs+now.getTime()-Date.parse(r.observedAt)>p.maxActiveSeconds*1000)throw new ResultSyncError("model_attempt_runtime_unavailable",403);
       if(e.component==="asr"){
+        const protocol=current.publicModelConfiguration?.components.asr?.protocol;
+        if(protocol!=="qwen_asr_realtime"&&e.audioEndSample!-e.audioStartSample!>30*e.audioSampleRate!)throw new ResultSyncError("invalid_model_attempt",400);
         if(e.audioSampleRate!==p.sampleRate||e.audioEndSample!>r.lastAcceptedSample)throw new ResultSyncError("model_attempt_audio_unconfirmed",403);
         if(records.some(a=>a.event.attemptId!==e.attemptId&&a.event.component==="asr"&&a.event.state!=="not_sent"&&
           a.event.audioStartSample!<e.audioEndSample!&&e.audioStartSample!<a.event.audioEndSample!))throw new ResultSyncError("model_attempt_audio_overlap",409);

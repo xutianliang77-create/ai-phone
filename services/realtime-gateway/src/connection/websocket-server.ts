@@ -111,6 +111,7 @@ export function startWebSocketServer(options:{publicRuntime?:PublicGatewayRuntim
         }));
         failPublicConnection();
       },
+      maxBatchAudioMs: provider.maxInputBatchAudioMs,
       maxPendingAudioMs: env.maxPendingAudioMs,
     });
     const finalizer = new RealtimeSessionFinalizer({

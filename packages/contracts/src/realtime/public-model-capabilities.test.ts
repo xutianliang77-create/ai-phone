@@ -30,5 +30,6 @@ describe("implemented public wire capabilities",()=>{
   it("permits the implemented Qwen realtime automatic zh/en pair",()=>{
     expect(publicAsrModelAutomaticLanguagePairSupported("qwen_asr_realtime","manual-asr",["zh","en"])).toBe(true);
     expect(publicAsrModelAutomaticLanguagePairSupported("qwen_asr_realtime","manual-asr",["zh","ja"])).toBe(false);
+    expect(publicProtocolCapability("qwen_asr_realtime")).toMatchObject({input:"continuous_pcm",maxAudioSeconds:3600});
   });
 });

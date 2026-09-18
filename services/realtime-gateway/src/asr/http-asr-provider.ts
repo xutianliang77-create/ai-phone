@@ -1,10 +1,16 @@
 import type { AudioFrame } from "@translation/contracts";
-import type { AsrProvider, AsrSession, TranscriptResult } from "./asr-provider.js";
+import type { AsrProvider, AsrProviderResult, AsrSession, TranscriptResult } from "./asr-provider.js";
 import { HttpAsrClient } from "./http-asr-client.js";
 import {acceptedAudioRange} from "../connection/accepted-audio-range.js";
 
 export interface HttpAsrProviderOptions {
-  client?:Pick<HttpAsrClient,"transcribe"|"flush"|"commitBoundary"|"closeSession"|"diagnostics"|"healthCheck">&Pick<AsrProvider,"setPartialListener">&{createSession?:(session:AsrSession,signal:AbortSignal)=>Promise<void>};
+  client?:Omit<Pick<HttpAsrClient,"transcribe"|"flush"|"commitBoundary"|"closeSession"|"diagnostics"|"healthCheck">,
+    "transcribe"|"flush"|"commitBoundary">&Pick<AsrProvider,"setPartialListener">&{
+      transcribe:(...args:Parameters<HttpAsrClient["transcribe"]>)=>Promise<AsrProviderResult>;
+      flush:(...args:Parameters<HttpAsrClient["flush"]>)=>Promise<AsrProviderResult>;
+      commitBoundary:(...args:Parameters<HttpAsrClient["commitBoundary"]>)=>Promise<AsrProviderResult>;
+      createSession?:(session:AsrSession,signal:AbortSignal)=>Promise<void>;
+    };
   fetchFn?:typeof fetch;
   endpoint: string;
   flushEndpoint?: string;
@@ -32,7 +38,7 @@ export class HttpAsrProvider implements AsrProvider {
   }
   setPartialListener(sessionId:string,listener:(result:TranscriptResult)=>void){return this.client.setPartialListener?.(sessionId,listener)??(()=>{});}
 
-  async transcribe(frame: AudioFrame): Promise<TranscriptResult | null> {
+  async transcribe(frame: AudioFrame): Promise<AsrProviderResult> {
     const session = this.sessions.get(frame.sessionId);
     if (!session) throw new Error("ASR session was not found");
     return this.client.transcribe({
@@ -51,11 +57,12 @@ export class HttpAsrProvider implements AsrProvider {
     },this.requests.get(frame.sessionId)!.signal);
   }
 
-  async flush(sessionId: string): Promise<TranscriptResult | null> {
+  async flush(sessionId: string, options?: { finishSession?: boolean }): Promise<AsrProviderResult> {
     const session = this.sessions.get(sessionId);
     if (!session) throw new Error("ASR session was not found");
     return this.client.flush({
       sessionId,
+      finishSession: options?.finishSession,
       sourceLanguage: session.sourceLanguage,
       targetLanguage: session.targetLanguage,
       mode: session.asrEndpointMode ?? "conversation",

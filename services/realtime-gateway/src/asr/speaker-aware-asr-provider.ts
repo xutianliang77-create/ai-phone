@@ -173,9 +173,9 @@ export class SpeakerAwareAsrProvider implements AsrProvider {
     this.boundaryTranscripts.applyWitnessResolutions(frame.sessionId);
     return providerResult(await this.applyVoiceIdentities(frame.sessionId, reassigned));
   }
-  async flush(sessionId: string) {
+  async flush(sessionId: string, options?: { finishSession?: boolean }) {
     const [transcripts, nextSpans] = await Promise.all([
-      this.asrRequests.run(sessionId, () => this.asr.flush(sessionId)),
+      this.asrRequests.run(sessionId, () => this.asr.flush(sessionId, options)),
       this.enabledSessions.has(sessionId)
         ? this.safeFlush(sessionId)
         : Promise.resolve([]),

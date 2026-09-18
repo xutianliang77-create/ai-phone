@@ -58,7 +58,7 @@ export class RealtimeSessionFinalizer {
       this.options.provider,
       this.options.sessionId,
       this.options.send,
-      !!this.options.confirmed,
+      {failOnError:!!this.options.confirmed,finishSession:true},
     ));
     this.sessionDiagnostics ??= await this.collectDiagnostics();
     await this.options.drainSessionSync();

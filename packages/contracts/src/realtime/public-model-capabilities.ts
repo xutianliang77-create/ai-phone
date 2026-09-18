@@ -27,7 +27,7 @@ const tts=(vendor:PublicModelProtocolCapability["vendor"],transport:PublicModelP
   output:completed?"completed_pcm":"streamed_pcm",sampleRates,languageConstraint,automaticLanguage:false,maxTextCodepoints:4096,
   ...(vendor==="google"?{maxTextUtf8Bytes:5000}:{})});
 const protocols:Record<string,PublicModelProtocolCapability>={
-  qwen_asr_realtime:asr("qwen","websocket",[16000],"源语言可省略以自动识别；自动路由当前限中英对且须逐配置资格化",false,true),
+  qwen_asr_realtime:{...asr("qwen","websocket",[16000],"服务端VAD连续音频；源语言可省略以自动识别；自动路由当前限中英对且须逐配置资格化",false,true),maxAudioSeconds:3600},
   qwen_asr_compatible:asr("qwen","https",[16000,24000],"明确源语言；已实现21种产品语言交集；非Filetrans异步接口",true),
   qwen_chat:mt("qwen"),
   qwen_tts_realtime:tts("qwen","websocket",[24000],"明确目标语种：zh/en/de/it/pt/es/ja/ko/fr/ru；Voice资格另验"),

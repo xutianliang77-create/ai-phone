@@ -12,7 +12,7 @@ export function handleAudioBoundary(event:Extract<ClientRealtimeEvent,{type:"aud
   if(!options.confirmed||event.sessionId!==options.sessionId||getSession(options.sessionId)?.status!=="active"||
     !Number.isSafeInteger(event.sequence)||event.sequence<0||Object.keys(event).some(k=>!["type","sessionId","sequence"].includes(k))){reject();return Promise.resolve();}
   try{return options.batcher.boundaryThrough(event.sequence,async()=>{
-    await options.beforeFlush();await flushProviderSession(options.provider,options.sessionId,options.send,true);await options.drain();
+    await options.beforeFlush();await flushProviderSession(options.provider,options.sessionId,options.send,{failOnError:true});await options.drain();
   }).then(()=>{options.send({type:"audio.boundary.committed",sessionId:options.sessionId,sequence:event.sequence});},()=>{reject("audio_boundary_commit_failed");options.onFailure?.();});}
   catch{reject();return Promise.resolve();}
 }

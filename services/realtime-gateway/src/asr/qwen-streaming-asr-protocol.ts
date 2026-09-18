@@ -8,7 +8,13 @@ export function qwenAsrLanguage(language:string){
 }
 export function qwenAsrSessionConfiguration(language:string){
   const inputAudioTranscription=language==="auto"?{}:{language:qwenAsrLanguage(language)};
-  return {input_audio_format:"pcm",sample_rate:16000,input_audio_transcription:inputAudioTranscription,turn_detection:null};
+  return {input_audio_format:"pcm",sample_rate:16000,input_audio_transcription:inputAudioTranscription,
+    // Qwen documents Manual mode for short, explicitly submitted voice
+    // messages and recommends no more than 60 seconds of cumulative audio.
+    // Public Wujie sessions are continuous conversations, so supplier-side VAD
+    // owns ASR segmentation. The phone VAD remains independent and continues
+    // to own local barge-in/playback/UI behavior.
+    turn_detection:{type:"server_vad",threshold:0,silence_duration_ms:400}};
 }
 export function assertQwenAsrConfiguration(session:Record<string,any>|undefined,model:string,language:string){
   const transcription=session?.input_audio_transcription;
@@ -17,7 +23,9 @@ export function assertQwenAsrConfiguration(session:Record<string,any>|undefined,
     : fixedTranscription(transcription,model,qwenAsrLanguage(language));
   if(!session||typeof session.id!=="string"||!session.id||session.id.length>240||session.model!==model||
     JSON.stringify(session.modalities)!=='["text"]'||!["pcm","pcm16"].includes(session.input_audio_format)||session.sample_rate!==16000||
-    !transcriptionOk||![undefined,null].includes(session.turn_detection))throw new PublicAsrError("qwen_asr_setup_mismatch","not_sent");
+    !transcriptionOk||session.turn_detection?.type!=="server_vad"||session.turn_detection.threshold!==0||
+    session.turn_detection.silence_duration_ms!==400||Object.keys(session.turn_detection).some(key=>
+      !["type","threshold","silence_duration_ms"].includes(key)))throw new PublicAsrError("qwen_asr_setup_mismatch","not_sent");
 }
 /** Qwen omits optional fields in a source=auto acknowledgement, but it must
  * never echo a fixed language or a different transcription model. */

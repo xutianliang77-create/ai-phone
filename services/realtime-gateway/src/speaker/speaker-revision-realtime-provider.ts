@@ -117,9 +117,12 @@ export class SpeakerRevisionRealtimeProvider implements RealtimeProvider {
     }
   }
 
-  async *flushSession(sessionId: string): AsyncGenerator<ServerRealtimeEvent> {
+  async *flushSession(
+    sessionId: string,
+    options?: { finishSession?: boolean },
+  ): AsyncGenerator<ServerRealtimeEvent> {
     if (this.base.flushSession) {
-      for await (const event of this.base.flushSession(sessionId)) {
+      for await (const event of this.base.flushSession(sessionId, options)) {
         this.record(event);
         yield event;
       }

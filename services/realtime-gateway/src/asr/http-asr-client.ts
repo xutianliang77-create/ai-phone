@@ -47,6 +47,9 @@ export interface HttpAsrRequest {
 
 export interface HttpAsrFlushRequest {
   sessionId: string;
+  /** Ends the supplier session only during product-session finalization. Normal
+   * phone VAD boundaries and pause drains must leave server-VAD streams open. */
+  finishSession?: boolean;
   sourceLanguage: LanguageCode;
   targetLanguage: TranslationLanguageCode;
   mode?: AsrEndpointMode;

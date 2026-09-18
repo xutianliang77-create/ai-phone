@@ -54,10 +54,16 @@ export interface TextSegmentInput {
 export interface RealtimeProvider {
   setEventListener?(sessionId:string,listener:(event:ServerRealtimeEvent)=>void):()=>void;
   name: string;
+  /** Supplier transport batch limit. This does not change the phone capture
+   * frame or any local/on-device VAD behavior. */
+  maxInputBatchAudioMs?: number;
   createSession(session: RealtimeProviderSession): Promise<void>;
   sendAudio(frame: AudioFrame): AsyncGenerator<ServerRealtimeEvent>;
   sendText?(segment: TextSegmentInput): AsyncGenerator<ServerRealtimeEvent>;
-  flushSession?(sessionId: string): AsyncGenerator<ServerRealtimeEvent>;
+  flushSession?(
+    sessionId: string,
+    options?: { finishSession?: boolean },
+  ): AsyncGenerator<ServerRealtimeEvent>;
   diagnostics?(
     sessionId: string,
   ): Promise<Partial<RealtimeSessionDiagnosticsDto>>;

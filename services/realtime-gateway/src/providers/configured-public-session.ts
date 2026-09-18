@@ -140,6 +140,9 @@ function assemblePublicSession(options:ConfiguredPublicSessionOptions,withOutput
     resolveCredentials:options.output.resolveCredentials,fetchFn:options.output.fetchFn,socketFactory:options.output.socketFactory},options.output.isSessionActive,options.output.maxPendingOutputs):undefined;
   const provider=new LmStudioRealtimeProvider({providerName: `public:${mt!.vendor}`, baseUrl: mt!.endpoint, model: mt!.modelId,
     timeoutMs: mt!.timeoutMs, maxTokens: mt!.maxTokens, asrProvider, translationClient, publicSession: session,
+    // Keep one transport batch below Qwen's 400ms server-VAD silence window,
+    // so a durable attempt cannot straddle two supplier-owned speech turns.
+    ...(snapshot.components.asr?.protocol==="qwen_asr_realtime"?{maxInputBatchAudioMs:100}:{}),
     listeningMaxContinuationBufferMs: options.listeningMaxContinuationBufferMs});
   return {provider,ttsOutput};
 }

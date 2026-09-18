@@ -74,7 +74,7 @@ export async function handleControlEvent(
       ttsOutput?.suspend?.();
       audioBatcher.pauseAccepting();
       if(session.status==="active"){
-        try{await audioBatcher.flush();await confirmed.beforeFlush();await flushProviderSession(provider,session.id,sendEvent,true);await confirmed.drain();}
+        try{await audioBatcher.flush();await confirmed.beforeFlush();await flushProviderSession(provider,session.id,sendEvent,{failOnError:true});await confirmed.drain();}
         catch(error){failedPublicPauses.add(session);transitionStatus(session.id,"paused");ttsOutput?.close?.();await provider.closeSession(session.id);throw error;}
         transitionStatus(session.id,"paused");
       }
@@ -119,12 +119,14 @@ export async function flushProviderSession(
   provider: RealtimeProvider,
   sessionId: string,
   sendEvent: (event: ServerRealtimeEvent) => void,
-  failOnError=false,
+  options: { failOnError?: boolean; finishSession?: boolean } = {},
 ) {
   if (!provider.flushSession) return;
-  for await (const outgoing of provider.flushSession(sessionId)) {
+  for await (const outgoing of provider.flushSession(sessionId, {
+    finishSession: options.finishSession,
+  })) {
     sendEvent(outgoing);
-    if(failOnError&&(outgoing.type==="error"||outgoing.type==="translation.failed"))throw Error("public_provider_flush_failed");
+    if(options.failOnError&&(outgoing.type==="error"||outgoing.type==="translation.failed"))throw Error("public_provider_flush_failed");
   }
 }
 

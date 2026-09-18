@@ -49,6 +49,11 @@ describe("original Router assembles one bound public audio session",()=>{
     expect(events).toContainEqual(expect.objectContaining({type:"transcript.final",language:"en"}));
     expect(events).toContainEqual(expect.objectContaining({type:"translation.final",language:"zh"}));
   });
+  it("constrains only Qwen online transport batches below its server-VAD silence window",()=>{
+    const s=setup();Object.assign(s.options.snapshot.components.asr!,{vendor:"qwen",protocol:"qwen_asr_realtime",sampleRate:16000});
+    s.options.binding.sampleRate=16000;const provider=s.create();expect(provider.maxInputBatchAudioMs).toBe(100);
+    const ordinary=setup().create();expect(ordinary.maxInputBatchAudioMs).toBeUndefined();
+  });
   it("atomically assembles the original ASR/MT Provider and bound TTS queue",async()=>{
     const s=setup();s.options.session.voiceOutput=true;
     const plan={...s.options.authorization.executionPlan,tts:{execution:"public" as const,scopeKey:"tts",reason:"online_selected" as const}};

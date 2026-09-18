@@ -27,6 +27,7 @@ import { PostAssemblySpeakerRepairCoordinator } from "./lmstudio-post-assembly-s
 
 export class LmStudioRealtimeProvider implements RealtimeProvider {
   readonly name: string;
+  readonly maxInputBatchAudioMs?: number;
   private readonly client: TranslationClient;
   private readonly asrProvider: AsrProvider;
   private readonly transcriptRefiner: RealtimeTranscriptRefiner;
@@ -42,6 +43,7 @@ export class LmStudioRealtimeProvider implements RealtimeProvider {
   constructor(options: LmStudioRealtimeProviderOptions) {
     this.publicSession = options.publicSession ? structuredClone(options.publicSession) : undefined;
     this.name = options.providerName ?? "lmstudio";
+    this.maxInputBatchAudioMs = options.maxInputBatchAudioMs;
     this.model = options.model;
     this.client = options.translationClient ?? new LmStudioClient(options);
     this.asrProvider = options.asrProvider ?? new MockAsrProvider();
@@ -158,7 +160,10 @@ export class LmStudioRealtimeProvider implements RealtimeProvider {
     yield* this.processTranscript(session, transcript);
   }
 
-  async *flushSession(sessionId: string): AsyncGenerator<ServerRealtimeEvent> {
+  async *flushSession(
+    sessionId: string,
+    options?: { finishSession?: boolean },
+  ): AsyncGenerator<ServerRealtimeEvent> {
     const session = this.sessions.get(sessionId);
     if (!session) {
       yield providerError(sessionId, "LM Studio session was not found", {
@@ -172,7 +177,7 @@ export class LmStudioRealtimeProvider implements RealtimeProvider {
     let transcripts;
     try {
       transcripts = orderedTurnTranscripts(
-        asrResults(await this.asrProvider.flush(sessionId)),
+        asrResults(await this.asrProvider.flush(sessionId, options)),
       );
     } catch (error) {
       if(!this.isCurrent(session))return;

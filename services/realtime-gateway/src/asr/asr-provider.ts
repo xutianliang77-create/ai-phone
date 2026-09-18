@@ -110,7 +110,7 @@ export interface AsrProvider {
   setPartialListener?(sessionId:string,listener:(result:TranscriptResult)=>void):()=>void;
   createSession(session: AsrSession): Promise<void>;
   transcribe(frame: AudioFrame): Promise<AsrProviderResult>;
-  flush(sessionId: string): Promise<AsrProviderResult>;
+  flush(sessionId: string, options?: { finishSession?: boolean }): Promise<AsrProviderResult>;
   commitBoundary?(boundary: AsrTurnBoundary): Promise<AsrProviderResult>;
   speakerBoundaryEvidence?(
     sessionId: string,
