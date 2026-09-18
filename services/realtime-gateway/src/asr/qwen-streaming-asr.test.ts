@@ -25,6 +25,16 @@ describe("Qwen ASR wire on original shared streaming lifecycle",()=>{
     await p.createSession(automaticSession);
     expect(t.sockets[0]!.sent[0]!.session.input_audio_transcription).toEqual({});
   });
+  it("accepts Qwen's documented omitted optional fields for an automatic acknowledgement",async()=>{
+    const t=setup(s=>{s.autoSetup=false;s.onSend=e=>{if(e.type==="session.update")queueMicrotask(()=>s.receive({type:"session.updated",session:{id:"qwen-session",model:s.model,modalities:["text"],input_audio_format:"pcm",sample_rate:16000}}));};});
+    t.options.authorization.languagePolicy={source:"auto",target:"zh",autoReverse:true,pair:["zh","en"],revision:2};
+    const p=t.create(),automaticSession={...session,sourceLanguage:"auto" as const,targetLanguage:"zh" as const,autoReverseTargetLanguage:true,languagePair:["zh","en"] as ["zh","en"]};
+    await expect(p.createSession(automaticSession)).resolves.toBeUndefined();
+  });
+  it("accepts Qwen's documented model echo with an omitted Manual VAD field",async()=>{
+    const t=setup(s=>{s.autoSetup=false;s.onSend=e=>{if(e.type==="session.update")queueMicrotask(()=>s.receive({type:"session.updated",session:{id:"qwen-session",model:s.model,modalities:["text"],input_audio_format:"pcm",sample_rate:16000,input_audio_transcription:{model:s.model,language:"fr"}}}));};});
+    await expect(t.create().createSession(session)).resolves.toBeUndefined();
+  });
   it("accepts Qwen's provider-confirmed automatic language only within the qualified pair",async()=>{
     const t=setup(s=>{s.detectedLanguage="zh";});t.options.authorization.languagePolicy={source:"auto",target:"zh",autoReverse:true,pair:["zh","en"],revision:2};
     const p=t.create(),automaticSession={...session,sourceLanguage:"auto" as const,targetLanguage:"zh" as const,autoReverseTargetLanguage:true,languagePair:["zh","en"] as ["zh","en"]};

@@ -11,8 +11,23 @@ export function qwenAsrSessionConfiguration(language:string){
   return {input_audio_format:"pcm",sample_rate:16000,input_audio_transcription:inputAudioTranscription,turn_detection:null};
 }
 export function assertQwenAsrConfiguration(session:Record<string,any>|undefined,model:string,language:string){
-  const expected=language==="auto"?{}:{language:qwenAsrLanguage(language)};
+  const transcription=session?.input_audio_transcription;
+  const transcriptionOk=language==="auto"
+    ? transcription===undefined||autoTranscription(transcription,model)
+    : fixedTranscription(transcription,model,qwenAsrLanguage(language));
   if(!session||typeof session.id!=="string"||!session.id||session.id.length>240||session.model!==model||
     JSON.stringify(session.modalities)!=='["text"]'||!["pcm","pcm16"].includes(session.input_audio_format)||session.sample_rate!==16000||
-    JSON.stringify(session.input_audio_transcription)!==JSON.stringify(expected)||session.turn_detection!==null)throw new PublicAsrError("qwen_asr_setup_mismatch","not_sent");
+    !transcriptionOk||![undefined,null].includes(session.turn_detection))throw new PublicAsrError("qwen_asr_setup_mismatch","not_sent");
+}
+/** Qwen omits optional fields in a source=auto acknowledgement, but it must
+ * never echo a fixed language or a different transcription model. */
+function autoTranscription(value:unknown,model:string){
+  if(!value||typeof value!=="object"||Array.isArray(value)||Object.keys(value).some(key=>!["model","language"].includes(key)))return false;
+  const item=value as Record<string,unknown>;
+  return (item.model===undefined||item.model===model)&&item.language===undefined;
+}
+function fixedTranscription(value:unknown,model:string,language:string){
+  if(!value||typeof value!=="object"||Array.isArray(value)||Object.keys(value).some(key=>!["model","language"].includes(key)))return false;
+  const item=value as Record<string,unknown>;
+  return item.language===language&&(item.model===undefined||item.model===model);
 }
