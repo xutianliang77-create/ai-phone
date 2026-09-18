@@ -12,7 +12,7 @@ import {GoogleAsrWire,type GoogleAsrStreamFactory} from "./google-streaming-asr.
 type Result=ReturnType<typeof parseOpenAiAsr>;
 function deferred<T>(){let resolve!:(value:T)=>void,reject!:(error:unknown)=>void;const promise=new Promise<T>((r,j)=>{resolve=r;reject=j;});void promise.catch(()=>{});return {promise,resolve,reject};}
 type Turn={event:PublicModelAttemptEvent;prepared:boolean;sent:boolean;terminal:boolean;committing:boolean;ack:boolean;itemId?:string;previousItem?:string;
-  partial:string;confirmedPrefix?:string;detectedLanguage?:TranslationLanguageCode;result?:Result;done:ReturnType<typeof deferred<Result>>;finalizing?:Promise<void>};
+  providerItemId?:string;partial:string;confirmedPrefix?:string;detectedLanguage?:TranslationLanguageCode;result?:Result;done:ReturnType<typeof deferred<Result>>;finalizing?:Promise<void>};
 type State={ws?:WebSocket;stop:AbortController;ready:ReturnType<typeof deferred<void>>;configured:boolean;failure?:PublicAsrError;cursor:number;sequence:number;
   turn?:Turn;lastItem?:string;seen:Set<string>;busy:boolean;removeAbort:()=>void;wireSessionId?:string;wireEvents?:Set<string>;tencentWire?:TencentAsrWire|GoogleAsrWire};
 export interface StreamingAsrOptions {sessionId:string;leaseId:string;endpoint:string;model:string;language:LanguageCode;timeoutMs:number;
@@ -184,13 +184,18 @@ export class OpenAiStreamingAsrClient {
         if(s.wireSessionId&&s.wireSessionId!==e.session.id)throw Error();s.wireSessionId=e.session.id;s.configured=true;s.ready.resolve();return;
       }
       if(e.type==="conversation.item.created"){
-        const turn=s.turn;if(!turn?.committing||!turn.itemId||e.item?.id!==turn.itemId||e.item.role!=="user"||e.item.type!=="message"||
-          (e.previous_item_id||undefined)!==turn.previousItem||e.item.content?.length!==1||e.item.content[0].type!=="input_audio")throw Error();return;
+        // Qwen ASR's current Manual wire omits a stable item ID and reports
+        // this informational item as `assistant`; it is not a turn identity.
+        if(!s.turn?.committing||!s.turn.sent)throw Error();return;
       }
-      if(e.type==="input_audio_buffer.committed")e={...e,previous_item_id:e.previous_item_id||undefined};
+      if(e.type==="input_audio_buffer.committed"){
+        const turn=s.turn;if(!turn?.committing||!turn.sent)throw Error();
+        e={...e,item_id:this.qwenTurnItemId(turn,e.item_id),previous_item_id:this.qwenPreviousItem(turn,e.previous_item_id)};
+      }
       else if(["conversation.item.input_audio_transcription.text","conversation.item.input_audio_transcription.completed"].includes(e.type)){
         const turn=s.turn;if(!turn?.sent||turn.terminal)throw Error();
         this.qwenTranscriptLanguage(turn,e.language);
+        e={...e,item_id:this.qwenTurnItemId(turn,e.item_id)};
       }else throw Error();
     }
     if(e.type==="session.created")return;
@@ -208,7 +213,7 @@ export class OpenAiStreamingAsrClient {
     const turn=s.turn;if(!turn?.sent||turn.terminal)throw Error();
     if(turn.itemId&&turn.itemId!==e.item_id)throw Error();turn.itemId=e.item_id;
     if(e.type==="input_audio_buffer.committed"){
-      if(!turn.committing||(e.previous_item_id??undefined)!==turn.previousItem)throw Error();turn.ack=true;s.lastItem=e.item_id;
+      if(!turn.committing||(e.previous_item_id??undefined)!==turn.previousItem)throw Error();turn.ack=true;s.lastItem=this.qwen?turn.providerItemId??e.item_id:e.item_id;
     }else{
       if(e.content_index!==0)throw Error();
       if(this.qwen&&e.type.endsWith(".text")){
@@ -217,9 +222,21 @@ export class OpenAiStreamingAsrClient {
         const text=cleanRealtimeText(turn.partial);if(text)this.partialListener?.({segmentId:turn.event.segmentId,revision:0,isFinal:false,text,language:this.transcriptLanguage(turn)});
       }else if(e.type.endsWith(".delta")){if(typeof e.delta!=="string"||turn.partial.length+e.delta.length>16000)throw Error();turn.partial+=e.delta;
         const text=cleanRealtimeText(turn.partial);if(text)this.partialListener?.({segmentId:turn.event.segmentId,revision:0,isFinal:false,text,language:this.transcriptLanguage()});}
-      else {if(!turn.committing)throw Error();const result=parseOpenAiAsr({text:e.transcript,...(!this.qwen&&e.usage!==undefined?{usage:e.usage}:{})},e.item_id);
+      else {if(!turn.committing)throw Error();const result=parseOpenAiAsr({text:e.transcript,...(!this.qwen&&e.usage!==undefined?{usage:e.usage}:{})},this.qwen?turn.providerItemId??null:e.item_id);
         if(turn.result&&JSON.stringify(turn.result)!==JSON.stringify(result))throw Error();turn.result=result;}
     }
     if(turn.ack&&turn.result)turn.done.resolve(turn.result);
+  }
+  private qwenTurnItemId(turn:Turn,value:unknown){
+    if(value!==undefined){
+      if(typeof value!=="string"||!value||value.length>240||turn.providerItemId&&turn.providerItemId!==value)throw Error();
+      turn.providerItemId=value;
+    }
+    return turn.itemId??turn.event.attemptId;
+  }
+  private qwenPreviousItem(turn:Turn,value:unknown){
+    if(value==="")value=undefined;
+    if(value!==undefined&&value!==turn.previousItem)throw Error();
+    return turn.previousItem;
   }
 }
