@@ -185,8 +185,9 @@ export class OpenAiStreamingAsrClient {
       }
       if(e.type==="conversation.item.created"){
         // Qwen ASR's current Manual wire omits a stable item ID and reports
-        // this informational item as `assistant`; it is not a turn identity.
-        if(!s.turn?.committing||!s.turn.sent)throw Error();return;
+        // this informational item as `assistant`; it can arrive before the
+        // client-controlled commit and is not a turn identity.
+        if(!s.turn?.sent||s.turn.terminal)throw Error();return;
       }
       if(e.type==="input_audio_buffer.committed"){
         const turn=s.turn;if(!turn?.committing||!turn.sent)throw Error();

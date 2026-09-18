@@ -41,10 +41,9 @@ describe("Qwen ASR wire on original shared streaming lifecycle",()=>{
     await p.createSession(automaticSession);await p.transcribe(frame());
     await expect(p.flush(automaticSession.sessionId)).resolves.toMatchObject({language:"zh",text:"Bonjour tout le monde."});
   });
-  it("accepts Qwen Manual events without a provider item identity",async()=>{
-    const t=setup(s=>{s.autoSetup=false;s.autoComplete=false;s.detectedLanguage="zh";s.onSend=e=>{if(e.type==="session.update")queueMicrotask(()=>s.receive({type:"session.updated",session:{id:"qwen-session",model:s.model,modalities:["text"],input_audio_format:"pcm",sample_rate:16000}}));if(e.type==="input_audio_buffer.commit")queueMicrotask(()=>{
-      s.receive({type:"input_audio_buffer.committed"});s.receive({type:"conversation.item.created",item:{type:"message",role:"assistant",content:[{type:"input_audio"}]}});
-      s.receive({type:"conversation.item.input_audio_transcription.text",content_index:0,language:"zh",text:"",stash:"你好"});s.receive({type:"conversation.item.input_audio_transcription.completed",content_index:0,language:"zh",transcript:"你好世界"});});};});
+  it("accepts Qwen Manual events without a provider item identity before the client commit",async()=>{
+    const t=setup(s=>{let partialSent=false;s.autoSetup=false;s.autoComplete=false;s.detectedLanguage="zh";s.onSend=e=>{if(e.type==="session.update")queueMicrotask(()=>s.receive({type:"session.updated",session:{id:"qwen-session",model:s.model,modalities:["text"],input_audio_format:"pcm",sample_rate:16000}}));if(e.type==="input_audio_buffer.append"&&!partialSent){partialSent=true;queueMicrotask(()=>{s.receive({type:"conversation.item.created",item:{type:"message",role:"assistant",content:[{type:"input_audio"}]}});s.receive({type:"conversation.item.input_audio_transcription.text",content_index:0,language:"zh",text:"",stash:"你好"});});}if(e.type==="input_audio_buffer.commit")queueMicrotask(()=>{
+      s.receive({type:"input_audio_buffer.committed"});s.receive({type:"conversation.item.input_audio_transcription.completed",content_index:0,language:"zh",transcript:"你好世界"});});};});
     t.options.authorization.languagePolicy={source:"auto",target:"zh",autoReverse:true,pair:["zh","en"],revision:2};
     const p=t.create(),automaticSession={...session,sourceLanguage:"auto" as const,targetLanguage:"zh" as const,autoReverseTargetLanguage:true,languagePair:["zh","en"] as ["zh","en"]};
     await p.createSession(automaticSession);await p.transcribe(frame());await expect(p.flush(automaticSession.sessionId)).resolves.toMatchObject({language:"zh",text:"你好世界"});
