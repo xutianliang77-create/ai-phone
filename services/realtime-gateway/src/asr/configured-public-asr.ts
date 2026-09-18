@@ -64,7 +64,9 @@ export function configuredStreamingAsr(options:ConfiguredStreamingAsrOptions){
     endpoint:profile.endpoint,model:profile.modelId,language:authorization.languagePolicy.source as StreamingAsrOptions["language"],timeoutMs:profile.timeoutMs,wireProfile:protocol,appId:profile.appId,
     authorizeConnection:options.authorizeConnection,resolveCredentials:options.resolveCredentials,record:options.record,socketFactory:options.socketFactory,
     projectId:profile.projectId,location:profile.location,recognizer:profile.recognizer,languageLocales:profile.languageLocales,sampleRate:profile.sampleRate,
-    detectedLanguageFallback:automaticFallback,googleStreamFactory:options.googleStreamFactory};
+    detectedLanguageFallback:automaticFallback,
+    ...(authorization.languagePolicy.source==="auto"?{automaticLanguagePair:authorization.languagePolicy.pair}:{}),
+    googleStreamFactory:options.googleStreamFactory};
   if(google)googleAsrConfiguration(clientOptions);
   return new HttpAsrProvider({endpoint:profile.endpoint,timeoutMs:profile.timeoutMs,client:new OpenAiStreamingAsrClient(clientOptions)});
 }

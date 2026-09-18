@@ -12,7 +12,7 @@ import {GoogleAsrWire,type GoogleAsrStreamFactory} from "./google-streaming-asr.
 type Result=ReturnType<typeof parseOpenAiAsr>;
 function deferred<T>(){let resolve!:(value:T)=>void,reject!:(error:unknown)=>void;const promise=new Promise<T>((r,j)=>{resolve=r;reject=j;});void promise.catch(()=>{});return {promise,resolve,reject};}
 type Turn={event:PublicModelAttemptEvent;prepared:boolean;sent:boolean;terminal:boolean;committing:boolean;ack:boolean;itemId?:string;previousItem?:string;
-  partial:string;confirmedPrefix?:string;result?:Result;done:ReturnType<typeof deferred<Result>>;finalizing?:Promise<void>};
+  partial:string;confirmedPrefix?:string;detectedLanguage?:TranslationLanguageCode;result?:Result;done:ReturnType<typeof deferred<Result>>;finalizing?:Promise<void>};
 type State={ws?:WebSocket;stop:AbortController;ready:ReturnType<typeof deferred<void>>;configured:boolean;failure?:PublicAsrError;cursor:number;sequence:number;
   turn?:Turn;lastItem?:string;seen:Set<string>;busy:boolean;removeAbort:()=>void;wireSessionId?:string;wireEvents?:Set<string>;tencentWire?:TencentAsrWire|GoogleAsrWire};
 export interface StreamingAsrOptions {sessionId:string;leaseId:string;endpoint:string;model:string;language:LanguageCode;timeoutMs:number;
@@ -21,7 +21,10 @@ export interface StreamingAsrOptions {sessionId:string;leaseId:string;endpoint:s
   /** Used only when the configured provider accepts source=auto. It is the
    * conservative fallback for an unknown/mixed textual language profile, not
    * a substitute for provider or qualified text language evidence. */
-  detectedLanguageFallback?:TranslationLanguageCode;googleStreamFactory?:GoogleAsrStreamFactory;
+  detectedLanguageFallback?:TranslationLanguageCode;
+  /** The only provider-confirmed language scope accepted for source=auto. */
+  automaticLanguagePair?:readonly [TranslationLanguageCode,TranslationLanguageCode];
+  googleStreamFactory?:GoogleAsrStreamFactory;
   authorizeConnection:()=>Promise<void>;resolveCredentials:(signal?:AbortSignal)=>Promise<{apiKey?:string;secretId?:string;secretKey?:string;accessToken?:string;accessTokenExpiresAt?:number;quotaProjectId?:string}>|{apiKey?:string;secretId?:string;secretKey?:string;accessToken?:string;accessTokenExpiresAt?:number;quotaProjectId?:string};
   record:(event:PublicModelAttemptEvent)=>Promise<void>;socketFactory?:(url:string,options:WebSocket.ClientOptions)=>WebSocket;}
 
@@ -71,10 +74,22 @@ export class OpenAiStreamingAsrClient {
     if(this.options.language==="auto")return {model:this.options.model};
     return {model:this.options.model,...(this.options.model.startsWith("gpt-live-transcribe")?{languages:[this.options.language]}:{language:this.options.language})};
   }
-  private transcriptLanguage():TranslationLanguageCode{
+  private transcriptLanguage(turn?:Turn):TranslationLanguageCode{
     return this.options.language==="auto"
-      ? this.options.detectedLanguageFallback??"zh"
+      ? turn?.detectedLanguage??this.options.detectedLanguageFallback??"zh"
       : this.options.language;
+  }
+  private qwenTranscriptLanguage(turn:Turn,language:unknown):TranslationLanguageCode{
+    if(typeof language!=="string"||!/^[a-z]{2,3}$/.test(language))throw Error();
+    if(this.options.language!=="auto"){
+      if(language!==this.options.language)throw Error();
+      return language as TranslationLanguageCode;
+    }
+    const pair=this.options.automaticLanguagePair;
+    if(!pair||!pair.includes(language as TranslationLanguageCode)||
+      turn.detectedLanguage!==undefined&&turn.detectedLanguage!==language)throw Error();
+    turn.detectedLanguage=language as TranslationLanguageCode;
+    return turn.detectedLanguage;
   }
   async transcribe(request:HttpAsrRequest,signal?:AbortSignal):Promise<TranscriptResult|null>{
     const s=this.current(request.sessionId);if(s.busy)throw new PublicAsrError("public_asr_stream_busy","not_sent");
@@ -133,7 +148,7 @@ export class OpenAiStreamingAsrClient {
       turn.terminal=true;turn.finalizing=this.record({...turn.event,state:"confirmed",metadata:result.metadata});await turn.finalizing;this.assert(s);
       s.seen.add(turn.itemId!);if(s.seen.size>1024)throw Error();s.turn=undefined;
       if(this.perTurn){s.tencentWire?.close();s.tencentWire=undefined;}
-      return result.text?{segmentId:turn.event.segmentId,revision:1,isFinal:true,text:result.text,language:this.transcriptLanguage(),
+      return result.text?{segmentId:turn.event.segmentId,revision:1,isFinal:true,text:result.text,language:this.transcriptLanguage(turn),
         timing:{startMs:turn.event.audioStartSample!/(this.rate/1000),endMs:turn.event.audioEndSample!/(this.rate/1000),source:"estimated"}}:null;
     }catch{this.fail(s,"public_asr_stream_commit_failed");try{await this.finish(turn);}catch{}throw s.failure!;}finally{s.busy=false;clearTimeout(timer);signal?.removeEventListener("abort",cancelled);}
   }
@@ -174,7 +189,8 @@ export class OpenAiStreamingAsrClient {
       }
       if(e.type==="input_audio_buffer.committed")e={...e,previous_item_id:e.previous_item_id||undefined};
       else if(["conversation.item.input_audio_transcription.text","conversation.item.input_audio_transcription.completed"].includes(e.type)){
-        if(e.language!==this.options.language)throw Error();
+        const turn=s.turn;if(!turn?.sent||turn.terminal)throw Error();
+        this.qwenTranscriptLanguage(turn,e.language);
       }else throw Error();
     }
     if(e.type==="session.created")return;
@@ -198,7 +214,7 @@ export class OpenAiStreamingAsrClient {
       if(this.qwen&&e.type.endsWith(".text")){
         if(typeof e.text!=="string"||typeof e.stash!=="string"||e.text.length+e.stash.length>16000||!e.text.startsWith(turn.confirmedPrefix??""))throw Error();
         turn.confirmedPrefix=e.text;turn.partial=e.text+e.stash;
-        const text=cleanRealtimeText(turn.partial);if(text)this.partialListener?.({segmentId:turn.event.segmentId,revision:0,isFinal:false,text,language:this.transcriptLanguage()});
+        const text=cleanRealtimeText(turn.partial);if(text)this.partialListener?.({segmentId:turn.event.segmentId,revision:0,isFinal:false,text,language:this.transcriptLanguage(turn)});
       }else if(e.type.endsWith(".delta")){if(typeof e.delta!=="string"||turn.partial.length+e.delta.length>16000)throw Error();turn.partial+=e.delta;
         const text=cleanRealtimeText(turn.partial);if(text)this.partialListener?.({segmentId:turn.event.segmentId,revision:0,isFinal:false,text,language:this.transcriptLanguage()});}
       else {if(!turn.committing)throw Error();const result=parseOpenAiAsr({text:e.transcript,...(!this.qwen&&e.usage!==undefined?{usage:e.usage}:{})},e.item_id);

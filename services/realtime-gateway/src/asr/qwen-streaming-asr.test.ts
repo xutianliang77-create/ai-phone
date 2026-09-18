@@ -25,6 +25,18 @@ describe("Qwen ASR wire on original shared streaming lifecycle",()=>{
     await p.createSession(automaticSession);
     expect(t.sockets[0]!.sent[0]!.session.input_audio_transcription).toEqual({});
   });
+  it("accepts Qwen's provider-confirmed automatic language only within the qualified pair",async()=>{
+    const t=setup(s=>{s.detectedLanguage="zh";});t.options.authorization.languagePolicy={source:"auto",target:"zh",autoReverse:true,pair:["zh","en"],revision:2};
+    const p=t.create(),automaticSession={...session,sourceLanguage:"auto" as const,targetLanguage:"zh" as const,autoReverseTargetLanguage:true,languagePair:["zh","en"] as ["zh","en"]};
+    await p.createSession(automaticSession);await p.transcribe(frame());
+    await expect(p.flush(automaticSession.sessionId)).resolves.toMatchObject({language:"zh",text:"Bonjour tout le monde."});
+  });
+  it("rejects a Qwen automatic language outside the signed pair",async()=>{
+    const t=setup(s=>{s.detectedLanguage="ja";});t.options.authorization.languagePolicy={source:"auto",target:"zh",autoReverse:true,pair:["zh","en"],revision:2};
+    const p=t.create(),automaticSession={...session,sourceLanguage:"auto" as const,targetLanguage:"zh" as const,autoReverseTargetLanguage:true,languagePair:["zh","en"] as ["zh","en"]};
+    await p.createSession(automaticSession);await p.transcribe(frame());
+    await expect(p.flush(automaticSession.sessionId)).rejects.toThrow("public_asr_stream_protocol");
+  });
   it("configures 16k manual endpoints and replaces cumulative drafts before final",async()=>{
     const t=setup(),p=t.create();await p.createSession(session);const partial:string[]=[];p.setPartialListener(session.sessionId,e=>partial.push(e.text));
     expect(t.sockets[0].sent[0].session).toEqual({input_audio_format:"pcm",sample_rate:16000,input_audio_transcription:{language:"fr"},turn_detection:null});
