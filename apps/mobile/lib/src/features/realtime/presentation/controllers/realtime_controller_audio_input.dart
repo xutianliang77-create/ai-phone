@@ -54,7 +54,10 @@ extension _RealtimeControllerAudioInput on RealtimeController {
             !(_drainingPublicAudio && _status == RealtimeStatus.ending))) {
       return;
     }
-    if (_speechCaptureGate.blocksCapture) {
+    // Public online sessions keep the physical PCM stream continuous while
+    // TTS plays. iOS voice processing handles echo; VAD endpoint confirmation
+    // below is the safe barge-in point, rather than dropping user speech.
+    if (_speechCaptureGate.blocksCapture && session.syncBinding == null) {
       if (session.syncBinding != null && frame.endsSegment && active) {
         _requestPublicEndpoint(session, frame.sampleRate);
       }
@@ -71,6 +74,9 @@ extension _RealtimeControllerAudioInput on RealtimeController {
     if (frame.endsSegment ||
         _publicTurnSamples >= frame.sampleRate * 28 ||
         _publicEndpointRequested) {
+      if (frame.endsSegment && _speechCaptureGate.playbackActive) {
+        unawaited(_stopSpeaking());
+      }
       _requestPublicEndpoint(session, frame.sampleRate);
     }
   }

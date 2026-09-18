@@ -19,7 +19,7 @@ export function tencentSpeechUrl(options:PublicSpeechOptions,credentials:{secret
     credentials.secretKey.trim()!==credentials.secretKey||/[\u0000-\u001f\u007f]/u.test(credentials.secretKey)||!key(wireId)||!Number.isFinite(now)||now<0)throw new PublicSpeechError("tencent_tts_credentials_unavailable","not_sent");
   const url=new URL(options.endpoint),timestamp=Math.floor(now/1000);
   const params:Record<string,string>={Action:"TextToStreamAudioWSv2",AppId:options.appId!,Codec:"pcm",Expired:String(timestamp+Math.ceil(options.timeoutMs/1000)+30),
-    SampleRate:String(options.sampleRate??24000),SecretId:credentials.secretId!,SessionId:wireId,Timestamp:String(timestamp),VoiceType:options.voice};
+    SampleRate:String(options.sampleRate??24000),SecretId:credentials.secretId!,SessionId:wireId,Timestamp:String(timestamp),VoiceType:options.voice,Volume:String(options.volume??0)};
   const entries=Object.entries(params).sort(([a],[b])=>a<b?-1:a>b?1:0);
   const canonical=entries.map(([k,v])=>`${k}=${v}`).join("&");
   const signature=createHmac("sha1",credentials.secretKey!).update(`GET${url.host}${url.pathname}?${canonical}`).digest("base64");

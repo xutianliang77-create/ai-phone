@@ -6,7 +6,7 @@ import {PublicSpeechError,type PublicSpeechOptions} from "./public-speech.js";
 export interface ConfiguredPublicTtsOptions {
   deploymentId:string;sessionId:string;leaseId:string;authorization:RealtimeProcessingAuthorization;
   snapshot:{deploymentId:string;configurationRevision:number;configurationHash:string;modelPolicyRevision:string;executionPlan:RealtimeExecutionPlan;
-    components:{tts?:{enabled:boolean;vendor:string;protocol:string;authKind:string;endpoint:string;modelId:string;voice:string;timeoutMs:number;sampleRate:16000|24000;appId?:string;projectId?:string}}};
+    components:{tts?:{enabled:boolean;vendor:string;protocol:string;authKind:string;endpoint:string;modelId:string;voice:string;volume?:number;timeoutMs:number;sampleRate:16000|24000;appId?:string;projectId?:string}}};
   prefillMs:number;resolveCredentials:PublicSpeechOptions["resolveCredentials"];record:PublicSpeechOptions["record"];fetchFn?:typeof fetch;socketFactory?:PublicSpeechOptions["socketFactory"];
 }
 /** Internal component only; exact snapshot credentials and recorded TTS qualification
@@ -29,7 +29,7 @@ export function configuredPublicTts(options:ConfiguredPublicTtsOptions) {
     throw new PublicSpeechError("public_tts_dynamic_language_not_supported","not_sent");
   }
   const speech:PublicSpeechOptions={sessionId:options.sessionId,leaseId:options.leaseId,endpoint:profile.endpoint,modelId:profile.modelId,voice:profile.voice,
-    timeoutMs:profile.timeoutMs,prefillMs:options.prefillMs,targetLanguage:dynamicLanguage?"dynamic":authorization.languagePolicy.target,
+    timeoutMs:profile.timeoutMs,prefillMs:options.prefillMs,volume:profile.volume??0,targetLanguage:dynamicLanguage?"dynamic":authorization.languagePolicy.target,
     ...(dynamicLanguage?{allowedTargetLanguages:[...languagePair!]}:{}),
     resolveCredentials:options.resolveCredentials,record:options.record,fetchFn:options.fetchFn,
     protocol:profile.protocol as PublicSpeechOptions["protocol"],socketFactory:options.socketFactory,appId:profile.appId,projectId:profile.projectId,sampleRate:profile.sampleRate};

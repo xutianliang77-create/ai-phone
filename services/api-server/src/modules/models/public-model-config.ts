@@ -6,7 +6,7 @@ export type AuthKind="api_key"|"tencent_secret"|"google_service_account"|"google
 export interface PublicModelProfile {
   languageLocales?:Record<string,string>;
   enabled:boolean;vendor:Vendor;protocol:string;endpoint:string;modelId:string;authKind:AuthKind;
-  region:string;appId:string;projectId:string;location:string;recognizer:string;voice:string;
+  region:string;appId:string;projectId:string;location:string;recognizer:string;voice:string;volume:number;
   timeoutMs:number;maxTokens:number;sampleRate:16000|24000;
 }
 export type Credentials=Partial<Record<"apiKey"|"secretId"|"secretKey"|"serviceAccountJson",string>>;
@@ -45,14 +45,14 @@ export class PublicConfigError extends Error{constructor(readonly code:string,re
 export function emptyConfiguration(deploymentId:string):PublicModelConfiguration{
   return {schemaVersion:1,deploymentId,revision:0,updatedAt:"",components:Object.fromEntries(modelComponents.map(component=>{
     const protocol=publicModelCatalog.protocols.find(p=>p.vendor==="qwen"&&p.component===component)!;
-    return [component,{enabled:false,vendor:"qwen",protocol:protocol.id,endpoint:"",modelId:"",authKind:"api_key",region:"",appId:"",projectId:"",location:"",recognizer:"",voice:"",timeoutMs:15000,maxTokens:512,sampleRate:protocol.capability.sampleRates[0]??16000}];
+    return [component,{enabled:false,vendor:"qwen",protocol:protocol.id,endpoint:"",modelId:"",authKind:"api_key",region:"",appId:"",projectId:"",location:"",recognizer:"",voice:"",volume:0,timeoutMs:15000,maxTokens:512,sampleRate:protocol.capability.sampleRates[0]??16000}];
   })) as Record<ModelComponent,PublicModelProfile>,credentials:{asr:{},translation:{},tts:{}}};
 }
-const profileKeys=["enabled","vendor","protocol","endpoint","modelId","authKind","region","appId","projectId","location","recognizer","voice","timeoutMs","maxTokens","sampleRate"];
+const profileKeys=["enabled","vendor","protocol","endpoint","modelId","authKind","region","appId","projectId","location","recognizer","voice","volume","timeoutMs","maxTokens","sampleRate"];
 function object(v:unknown):v is Record<string,unknown>{return !!v&&typeof v==="object"&&!Array.isArray(v);}
 export function validateProfile(component:ModelComponent,value:unknown):PublicModelProfile{
-  if(!object(value)||Object.keys(value).some(k=>!profileKeys.includes(k)&&k!=="languageLocales")||profileKeys.some(k=>!(k in value)))throw new PublicConfigError(`${component}:invalid_fields`);
-  const v=value as unknown as PublicModelProfile;
+  if(!object(value)||Object.keys(value).some(k=>!profileKeys.includes(k)&&k!=="languageLocales")||profileKeys.filter(k=>k!=="volume").some(k=>!(k in value)))throw new PublicConfigError(`${component}:invalid_fields`);
+  const v={...value,volume:value.volume??0} as unknown as PublicModelProfile;
   const protocol=publicModelCatalog.protocols.find(p=>p.id===v.protocol&&p.vendor===v.vendor&&p.component===component);
   if(!protocol||!protocol.auth.includes(v.authKind)||typeof v.enabled!=="boolean")throw new PublicConfigError(`${component}:invalid_protocol_or_auth`);
   if(v.languageLocales!==undefined&&(!object(v.languageLocales)||Object.keys(v.languageLocales).length>40||Object.entries(v.languageLocales).some(([k,s])=>
@@ -63,6 +63,7 @@ export function validateProfile(component:ModelComponent,value:unknown):PublicMo
   if(v.endpoint){let url:URL;try{url=new URL(v.endpoint);}catch{throw new PublicConfigError(`${component}:invalid_endpoint`);}
     if(url.protocol!==protocol.scheme||url.username||url.password||url.search||url.hash)throw new PublicConfigError(`${component}:endpoint_requires_${protocol.scheme.replace(":","")}_without_credentials_or_query`);}
   if(!Number.isSafeInteger(v.timeoutMs)||v.timeoutMs<250||v.timeoutMs>120000||!Number.isSafeInteger(v.maxTokens)||v.maxTokens<1||v.maxTokens>16384||![16000,24000].includes(v.sampleRate))throw new PublicConfigError(`${component}:invalid_limits`);
+  if(!Number.isFinite(v.volume)||v.volume < -10||v.volume > 10)throw new PublicConfigError(`${component}:invalid_volume`);
   if(v.enabled&&component!=="translation"&&!publicProtocolSampleRateSupported(v.protocol,v.sampleRate))throw new PublicConfigError(`${component}:unsupported_sample_rate`);
   return structuredClone(v);
 }
@@ -97,8 +98,9 @@ export function mergeConfiguration(current:PublicModelConfiguration,body:unknown
   next.revision++;next.updatedAt=new Date().toISOString();return next;
 }
 export function publicConfiguration(config:PublicModelConfiguration){
+  const components=Object.fromEntries(modelComponents.map(c=>[c,{...config.components[c],volume:config.components[c].volume??0}])) as Record<ModelComponent,PublicModelProfile>;
   const status=Object.fromEntries(modelComponents.map(c=>{
-    const v=config.components[c],p=publicModelCatalog.protocols.find(p=>p.id===v.protocol)!;
+    const v=components[c],p=publicModelCatalog.protocols.find(p=>p.id===v.protocol)!;
     const missing:string[]=[];
     if(v.enabled){if(!v.endpoint)missing.push("endpoint");if(p.modelRequired&&!v.modelId)missing.push("modelId");
       if(c!=="translation"&&!publicProtocolSampleRateSupported(v.protocol,v.sampleRate))missing.push("sampleRate");
@@ -108,5 +110,5 @@ export function publicConfiguration(config:PublicModelConfiguration){
       credentialsPresent:Object.fromEntries(publicModelCatalog.credentialFields[v.authKind].map(k=>[k,Boolean(config.credentials[c][k as keyof Credentials])]))}];
   }));
   return {schemaVersion:1,deploymentId:config.deploymentId,revision:config.revision,updatedAt:config.updatedAt,
-    components:structuredClone(config.components),status,runtimeActivated:false,saveTriggersModelCalls:false};
+    components:structuredClone(components),status,runtimeActivated:false,saveTriggersModelCalls:false};
 }

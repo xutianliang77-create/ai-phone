@@ -14,7 +14,7 @@ export interface PublicSpeechOptions {
   /** Present only for a qualified automatic language pair. Each output event
    * is rebound to its final translation language before protocol validation. */
   allowedTargetLanguages?:readonly string[];
-  timeoutMs:number; prefillMs:number;
+  timeoutMs:number; prefillMs:number;volume?:number;
   resolveCredentials:(signal?:AbortSignal)=>Promise<PublicSpeechCredentials>|PublicSpeechCredentials;
   record:(event:PublicModelAttemptEvent)=>Promise<void>;
   fetchFn?:typeof fetch;
@@ -32,6 +32,7 @@ export function validatePublicSpeech(options:PublicSpeechOptions) {
     ![options.sessionId,options.leaseId,options.modelId,options.voice].every(key)||
     !Number.isSafeInteger(options.timeoutMs)||options.timeoutMs<250||options.timeoutMs>120000||
     !Number.isSafeInteger(options.prefillMs)||options.prefillMs<20||options.prefillMs>1000||
+    (options.volume!==undefined&&(!Number.isFinite(options.volume)||options.volume < -10||options.volume > 10))||
     (options.sampleRate!==undefined&&![16000,24000].includes(options.sampleRate))||
     (!["tencent_tts_ws","google_cloud_tts"].includes(options.protocol??"")&&options.sampleRate!==undefined&&options.sampleRate!==24000)||
     typeof options.record!=="function"||typeof options.resolveCredentials!=="function")throw new PublicSpeechError("public_tts_configuration","not_sent");

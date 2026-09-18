@@ -23,8 +23,13 @@ describe("Tencent signed TTS wire on original public lifecycle",()=>{
   it("matches a fixed canonical HMAC-SHA1 vector without text or SecretKey in the URL",()=>{
     const url=tencentSpeechUrl({sessionId:"s",leaseId:"l",endpoint:"wss://tts.cloud.tencent.com/stream_wsv2",appId:"10001",voice:"101001",modelId:"service:tencent_tts_ws",targetLanguage:"en",
       sampleRate:16000,timeoutMs:500,prefillMs:20,resolveCredentials:()=>({}),record:async()=>{}},{secretId:"SYNTHETIC_ID",secretKey:"SYNTHETIC_KEY"},"wire",1700000000000);
-    expect(new URL(url).searchParams.get("Signature")).toBe("0TYAJKOVIDs2cho0ystlVJn1xI0=");expect(url).toContain("%3D");
+    expect(new URL(url).searchParams.get("Signature")).toBe("xtJ5E0y7Wj5zYQUxH4HXycDz0wk=");expect(new URL(url).searchParams.get("Volume")).toBe("0");expect(url).toContain("%3D");
     expect(url).not.toContain("SYNTHETIC_KEY");expect(url).not.toContain("Text=");
+  });
+  it("forwards a bounded configured volume without changing the voice identity",()=>{
+    const url=tencentSpeechUrl({sessionId:"s",leaseId:"l",endpoint:"wss://tts.cloud.tencent.com/stream_wsv2",appId:"10001",voice:"101001",modelId:"service:tencent_tts_ws",targetLanguage:"en",
+      sampleRate:16000,timeoutMs:500,prefillMs:20,volume:4,resolveCredentials:()=>({}),record:async()=>{}},{secretId:"SYNTHETIC_ID",secretKey:"SYNTHETIC_KEY"},"wire",1700000000000);
+    expect(new URL(url).searchParams.get("Volume")).toBe("4");expect(new URL(url).searchParams.get("VoiceType")).toBe("101001");
   });
   it.each([16000,24000] as const)("keeps declared %i PCM rate and journals before text, confirming only final",async rate=>{
     const t=setup(s=>s.onSend=e=>{if(e.action==="ACTION_SYNTHESIS")expect(t.record.mock.calls[0][0].state).toBe("dispatching");});t.options.snapshot.components.tts!.sampleRate=rate;
