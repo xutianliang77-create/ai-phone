@@ -1,25 +1,19 @@
 BEGIN;
 
--- PostgreSQL public creation persists the deterministic HTTP binding and the
--- first session record in one aggregate fence.  The generic projection record
--- is sufficient for this bounded metadata: it has no separate normalized
--- table, but must be admitted by the projection function before its durable
--- record can be written.
+-- 043 admitted the durable binding namespace.  This repair is intentionally
+-- separate so databases that already applied its earlier form receive the two
+-- no-op CASE branches as well.  Bindings have no normalized table; their
+-- projection_records row is the durable state, so both paths must do nothing
+-- before the generic record write/delete below the CASE statements.
 DO $repair$
 DECLARE
   definition text;
-  expected_fragment constant text := E'    ''agentCallDrafts''\n  ) THEN';
-  replacement_fragment constant text :=
-    E'    ''agentCallDrafts'', ''publicCreationBindings''\n  ) THEN';
 BEGIN
   SELECT pg_get_functiondef(
     'ai_phone.apply_projection_event(text,text,text,text,jsonb)'::regprocedure
   ) INTO definition;
   IF position('''publicCreationBindings''' IN definition) = 0 THEN
-    IF position(expected_fragment IN definition) = 0 THEN
-      RAISE EXCEPTION 'Public creation binding projection function shape is unavailable';
-    END IF;
-    definition := replace(definition, expected_fragment, replacement_fragment);
+    RAISE EXCEPTION 'Public creation binding projection namespace is unavailable';
   END IF;
   IF position(E'      WHEN ''publicCreationBindings'' THEN NULL;\n    END CASE;' IN definition) = 0 THEN
     IF position(E'      WHEN ''agentCallDrafts'' THEN DELETE FROM ai_phone.agent_tasks WHERE id = record_key;\n    END CASE;' IN definition) = 0 THEN
@@ -46,7 +40,7 @@ END;
 $repair$;
 
 INSERT INTO ai_phone.schema_migrations(version)
-VALUES ('043_public_creation_bindings')
+VALUES ('044_public_creation_binding_noop_projection')
 ON CONFLICT (version) DO NOTHING;
 
 COMMIT;

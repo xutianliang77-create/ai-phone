@@ -96,10 +96,16 @@ const migrationValidators: Record<string, (
   "040_voice_client_ownership": validateVoiceClientOwnership,
   "041_agent_voice_delivery": validateAgentVoiceDelivery,
   "042_account_deletion_product_records": validateAccountDeletionProductRecords,
-  "043_public_creation_bindings": validatePublicCreationBindings,
+  "043_public_creation_bindings": (pool) =>
+    validatePublicCreationBindings(pool, "043_public_creation_bindings"),
+  "044_public_creation_binding_noop_projection": (pool) =>
+    validatePublicCreationBindings(pool, "044_public_creation_binding_noop_projection"),
 };
 
-async function validatePublicCreationBindings(pool: Pick<Pool, "query">) {
+async function validatePublicCreationBindings(
+  pool: Pick<Pool, "query">,
+  migration: "043_public_creation_bindings" | "044_public_creation_binding_noop_projection",
+) {
   const definition = await pool.query<{ definition: string | null }>(`
     SELECT pg_get_functiondef(
       'ai_phone.apply_projection_event(text,text,text,text,jsonb)'::regprocedure
@@ -116,15 +122,18 @@ async function validatePublicCreationBindings(pool: Pick<Pool, "query">) {
     ))::text AS invalid_bindings
     FROM ai_phone.projection_records
   `);
-  const projectionFunctionAdmitsBinding =
-    definition.rows[0]?.definition?.includes("'publicCreationBindings'") === true;
+  const functionSource = definition.rows[0]?.definition ?? "";
+  const projectionFunctionAdmitsBinding = functionSource.includes("'publicCreationBindings'");
+  const bindingNoOpBranches = (functionSource.match(
+    /WHEN 'publicCreationBindings' THEN NULL;/gu,
+  ) ?? []).length === 2;
   const invalidBindings = Number(invalid.rows[0]?.invalid_bindings ?? -1);
-  if (!projectionFunctionAdmitsBinding || invalidBindings !== 0) {
+  if (!projectionFunctionAdmitsBinding || !bindingNoOpBranches || invalidBindings !== 0) {
     throw new Error("PostgreSQL public creation binding validation failed");
   }
   return {
-    migration: "043_public_creation_bindings",
-    details: { projectionFunctionAdmitsBinding, invalidBindings },
+    migration,
+    details: { projectionFunctionAdmitsBinding, bindingNoOpBranches, invalidBindings },
   };
 }
 

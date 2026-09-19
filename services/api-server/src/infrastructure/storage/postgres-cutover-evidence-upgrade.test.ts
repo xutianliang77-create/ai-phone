@@ -47,6 +47,7 @@ describe("PostgreSQL cutover evidence upgrade", () => {
         "041_agent_voice_delivery",
         "042_account_deletion_product_records",
         "043_public_creation_bindings",
+        "044_public_creation_binding_noop_projection",
       ],
     });
     const upgraded = readVerifiedPostgresCutoverEvidence();
@@ -61,6 +62,7 @@ describe("PostgreSQL cutover evidence upgrade", () => {
         "041_agent_voice_delivery",
         "042_account_deletion_product_records",
         "043_public_creation_bindings",
+        "044_public_creation_binding_noop_projection",
       ],
     });
     expect(upgraded.evidenceUpgrade?.validations).toEqual(expect.arrayContaining([
@@ -80,7 +82,11 @@ describe("PostgreSQL cutover evidence upgrade", () => {
       }),
       expect.objectContaining({
         migration: "043_public_creation_bindings",
-        details: { projectionFunctionAdmitsBinding: true, invalidBindings: 0 },
+        details: { projectionFunctionAdmitsBinding: true, bindingNoOpBranches: true, invalidBindings: 0 },
+      }),
+      expect.objectContaining({
+        migration: "044_public_creation_binding_noop_projection",
+        details: { projectionFunctionAdmitsBinding: true, bindingNoOpBranches: true, invalidBindings: 0 },
       }),
     ]));
   });
@@ -115,7 +121,7 @@ describe("PostgreSQL cutover evidence upgrade", () => {
 });
 
 function previousMigrations() {
-  return [...expectedPostgresMigrations].slice(0, -7);
+  return [...expectedPostgresMigrations].slice(0, -8);
 }
 
 function writeEvidence(migrations: string[]) {
@@ -197,7 +203,11 @@ function validPool(overrides: Partial<{
         ].join(" ") }] };
       }
       if (sql.includes("apply_projection_event(text,text,text,text,jsonb)")) {
-        return { rows: [{ definition: "'publicCreationBindings'" }] };
+        return { rows: [{ definition: [
+          "'publicCreationBindings'",
+          "WHEN 'publicCreationBindings' THEN NULL;",
+          "WHEN 'publicCreationBindings' THEN NULL;",
+        ].join(" ") }] };
       }
       if (sql.includes("AS invalid_bindings")) {
         return { rows: [{ invalid_bindings: "0" }] };

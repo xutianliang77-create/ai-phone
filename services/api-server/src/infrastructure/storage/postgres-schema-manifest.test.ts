@@ -7,9 +7,9 @@ import {
 
 describe("PostgreSQL schema manifest", () => {
   it("pins the complete ordered migration set", () => {
-    expect(expectedPostgresMigrations).toHaveLength(43);
+    expect(expectedPostgresMigrations).toHaveLength(44);
     expect(expectedPostgresMigrations.at(-1)).toBe(
-      "043_public_creation_bindings",
+      "044_public_creation_binding_noop_projection",
     );
     expect(comparePostgresMigrations([...expectedPostgresMigrations])).toEqual({
       missing: [],
@@ -22,7 +22,7 @@ describe("PostgreSQL schema manifest", () => {
       ...expectedPostgresMigrations.slice(0, -1),
       "999_unknown",
     ])).toEqual({
-      missing: ["043_public_creation_bindings"],
+      missing: ["044_public_creation_binding_noop_projection"],
       extra: ["999_unknown"],
     });
   });
@@ -45,6 +45,17 @@ describe("PostgreSQL schema manifest", () => {
     expect(sql).toContain("pg_get_functiondef");
     expect(sql).toContain("publicCreationBindings");
     expect(sql).toContain("Public creation binding projection function shape is unavailable");
+    expect(sql).toContain("WHEN ''publicCreationBindings'' THEN NULL;");
+  });
+
+  it("repairs both public creation binding CASE branches for existing databases", () => {
+    const sql = readFileSync(new URL(
+      "../../../../../infra/postgres/migrations/044_public_creation_binding_noop_projection.sql",
+      import.meta.url,
+    ), "utf8");
+    expect(sql).toContain("pg_get_functiondef");
+    expect(sql).toContain("Public creation binding delete projection shape is unavailable");
+    expect(sql).toContain("Public creation binding upsert projection shape is unavailable");
   });
 
   it("keeps Agent task call references synchronized on projection updates", () => {

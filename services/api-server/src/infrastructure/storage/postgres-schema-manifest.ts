@@ -42,6 +42,7 @@ export const expectedPostgresMigrations = [
   "041_agent_voice_delivery",
   "042_account_deletion_product_records",
   "043_public_creation_bindings",
+  "044_public_creation_binding_noop_projection",
 ] as const;
 
 export function comparePostgresMigrations(applied: string[]) {
