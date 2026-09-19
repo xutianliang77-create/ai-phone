@@ -4,7 +4,7 @@ import type WebSocket from "ws";
 /** Synthetic Qwen server-VAD peer. It never opens a network connection. */
 export class SyntheticQwenAsrSocket extends EventEmitter {
   readyState=0;bufferedAmount=0;sent:Array<Record<string,any>>=[];model="manual-asr";language="fr";detectedLanguage?:string;
-  autoSetup=true;autoComplete=true;autoFinish=true;tailOnFinish=false;previous:string|undefined;turns=0;eventId=0;transcript="Bonjour tout le monde.";
+  autoSetup=true;autoComplete=true;autoFinish=true;tailOnFinish=false;completePendingOnFinish=true;nextEndMs?:number;previous:string|undefined;turns=0;eventId=0;transcript="Bonjour tout le monde.";
   onSend?:(event:Record<string,any>)=>void;
   private cursorMs=0;private speechStartMs:number|undefined;private completionQueued=false;
   constructor(){super();queueMicrotask(()=>{if(this.readyState!==0)return;this.readyState=1;this.emit("open");});}
@@ -18,9 +18,9 @@ export class SyntheticQwenAsrSocket extends EventEmitter {
       this.cursorMs+=bytes.length/2/16000*1000;
       if(this.autoComplete&&!this.completionQueued){this.completionQueued=true;queueMicrotask(()=>{this.completionQueued=false;this.complete();});}
     }
-    if(e.type==="session.finish"&&this.autoFinish)queueMicrotask(()=>{if(this.speechStartMs!==undefined)this.complete();if(this.tailOnFinish)this.completeClosingTail();this.receive({type:"session.finished"});});
+    if(e.type==="session.finish"&&this.autoFinish)queueMicrotask(()=>{if(this.completePendingOnFinish&&this.speechStartMs!==undefined)this.complete();if(this.tailOnFinish)this.completeClosingTail();this.receive({type:"session.finished"});});
   }
-  complete(){if(this.speechStartMs===undefined)return;const item=`item-${++this.turns}`,start=this.speechStartMs,end=this.cursorMs;this.speechStartMs=undefined;
+  complete(){if(this.speechStartMs===undefined)return;const item=`item-${++this.turns}`,start=this.speechStartMs,end=this.nextEndMs??this.cursorMs;this.nextEndMs=undefined;this.speechStartMs=undefined;
     this.receive({type:"input_audio_buffer.speech_started",audio_start_ms:start,item_id:item});
     this.receive({type:"input_audio_buffer.speech_stopped",audio_end_ms:end,item_id:item});
     this.receive({type:"input_audio_buffer.committed",item_id:item,previous_item_id:this.previous??""});

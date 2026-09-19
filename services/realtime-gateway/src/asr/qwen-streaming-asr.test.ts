@@ -94,12 +94,14 @@ describe("Qwen ASR server-VAD wire on original shared streaming lifecycle",()=>{
   });
 
   it("persists a server-VAD tail emitted after the first final and before session.finished",async()=>{
-    const t=setup(s=>s.tailOnFinish=true),p=t.create();await p.createSession(session);
-    await expect(p.transcribe(frame(1,0,200))).resolves.toMatchObject({text:"Bonjour tout le monde.",timing:{startMs:0,endMs:200}});
+    const t=setup(s=>{s.autoComplete=false;s.tailOnFinish=true;s.completePendingOnFinish=false;s.onSend=e=>{if(e.type==="input_audio_buffer.append"&&s.turns===0){s.nextEndMs=100;queueMicrotask(()=>s.complete());}};}),p=t.create();await p.createSession(session);
+    await expect(p.transcribe(frame(1,0,200))).resolves.toMatchObject({text:"Bonjour tout le monde.",timing:{startMs:0,endMs:100}});
+    await expect(p.transcribe(frame(2,3200,80))).resolves.toBeNull();
     const tail=await p.flush(session.sessionId,{finishSession:true});
-    expect(tail).toMatchObject({text:"Bonjour tout le monde.",timing:{startMs:100,endMs:200}});
+    expect(tail).toMatchObject({text:"Bonjour tout le monde.",timing:{startMs:180,endMs:280}});
     const events=t.record.mock.calls.map(call=>call[0]);
-    expect(events.filter(event=>event.state==="dispatching")).toHaveLength(2);
+    expect(new Set(events.map(event=>event.attemptId)).size).toBe(2);
+    expect(events.filter(event=>event.state==="dispatching")).toHaveLength(4);
     expect(events.filter(event=>event.state==="confirmed")).toHaveLength(2);
     expect(events.every(event=>event.state!=="uncertain")).toBe(true);
   });

@@ -16,7 +16,7 @@ type Turn={event:PublicModelAttemptEvent;prepared:boolean;sent:boolean;terminal:
   providerItemId?:string;providerCreated?:boolean;providerStartSample?:number;providerEndSample?:number;partial:string;confirmedPrefix?:string;
   detectedLanguage?:TranslationLanguageCode;result?:Result;done:ReturnType<typeof deferred<Result>>;finalizing?:Promise<void>};
 type State={ws?:WebSocket;stop:AbortController;ready:ReturnType<typeof deferred<void>>;configured:boolean;failure?:PublicAsrError;cursor:number;sequence:number;
-  turn?:Turn;lastItem?:string;seen:Set<string>;busy:boolean;removeAbort:()=>void;wireSessionId?:string;wireEvents?:Set<string>;
+  turn?:Turn;lastItem?:string;lastProviderEndSample?:number;seen:Set<string>;busy:boolean;removeAbort:()=>void;wireSessionId?:string;wireEvents?:Set<string>;
   pendingWireEvents:Record<string,any>[];completed:TranscriptResult[];finalization:Promise<void>;finishing:boolean;providerFinished:boolean;
   finished:ReturnType<typeof deferred<void>>;tencentWire?:TencentAsrWire|GoogleAsrWire};
 export interface StreamingAsrOptions {sessionId:string;leaseId:string;endpoint:string;model:string;language:LanguageCode;timeoutMs:number;
@@ -200,8 +200,8 @@ export class OpenAiStreamingAsrClient {
     if(turn.finalizing||turn.terminal||!turn.ack||!turn.result)return;
     turn.terminal=true;const result=turn.result,item=turn.providerItemId!;
     const start=turn.providerStartSample??turn.event.audioStartSample!,end=turn.providerEndSample??turn.event.audioEndSample!;
-    turn.finalizing=this.record({...turn.event,state:"confirmed",metadata:result.metadata}).then(()=>{
-      if(this.state!==s||s.failure)return;s.seen.add(item);if(s.seen.size>1024)s.seen.delete(s.seen.values().next().value!);s.lastItem=item;
+    turn.event={...turn.event,audioStartSample:start,audioEndSample:end};turn.finalizing=this.record({...turn.event,state:"confirmed",metadata:result.metadata}).then(()=>{
+      if(this.state!==s||s.failure)return;s.seen.add(item);if(s.seen.size>1024)s.seen.delete(s.seen.values().next().value!);s.lastItem=item;s.lastProviderEndSample=end;
       if(result.text)s.completed.push({segmentId:turn.event.segmentId,revision:1,isFinal:true,text:result.text,language:this.transcriptLanguage(turn),
         timing:{startMs:start/(this.rate/1000),endMs:end/(this.rate/1000),source:"estimated"}});
       if(s.turn===turn)s.turn=undefined;
@@ -243,7 +243,12 @@ export class OpenAiStreamingAsrClient {
     const sample=event.type==="input_audio_buffer.speech_started"?event.audio_start_ms:event.type==="input_audio_buffer.speech_stopped"?event.audio_end_ms:undefined;
     if(sample===undefined)return;
     const point=Math.round(sample*this.rate/1000),bounded=Math.min(point,s.cursor);
-    if(!Number.isSafeInteger(sample)||sample<0||point<turn.event.audioStartSample!||point>s.cursor+this.rate/25||bounded<turn.event.audioStartSample!)throw Error();
+    if(!Number.isSafeInteger(sample)||sample<0||point>s.cursor+this.rate/25)throw Error();
+    if(point<turn.event.audioStartSample!){
+      if(event.type!=="input_audio_buffer.speech_started"||point<(s.lastProviderEndSample??turn.event.audioStartSample!)||point>s.cursor)throw Error();
+      turn.event={...turn.event,audioStartSample:point};await abortable(this.record(turn.event),s.stop.signal);this.assert(s);return;
+    }
+    if(bounded<turn.event.audioStartSample!)throw Error();
     if(bounded<=turn.event.audioEndSample!)return;
     turn.event={...turn.event,audioEndSample:bounded};await abortable(this.record(turn.event),s.stop.signal);this.assert(s);
   }
