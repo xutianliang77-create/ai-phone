@@ -10,6 +10,7 @@ const supervisorStateFile = resolveSupervisorStateFile();
 
 validateCallLinkCompatibilityEnvironment();
 validatePublicDeploymentWorkerBoundary();
+validateCallLinkPublicTtsEnvironment();
 
 const components = [
   {
@@ -255,6 +256,25 @@ function validatePublicDeploymentWorkerBoundary(env = process.env) {
   }
   if (!compatibility && env.WUJIE_AI_TRANSLATION_AGENT_ENABLED === "true") {
     throw new Error("public 1.1 translation agent requires call_link_only compatibility");
+  }
+}
+
+/** Public Tencent TTS for the inherited Call Link Worker is only allowed in
+ * the explicit compatibility lane. The material secret is an internal access
+ * capability, not a Tencent credential, and must never alias broader secrets. */
+function validateCallLinkPublicTtsEnvironment(env = process.env) {
+  if (env.CALL_LINK_PUBLIC_TTS_ENABLED !== "true") return;
+  const deploymentId = env.API_RESULT_SYNC_DEPLOYMENT_ID;
+  const secret = env.CALL_LINK_WORKER_TTS_CREDENTIAL_ACCESS_SECRET;
+  if (!publicCallLinkCompatibilityEnabled(env) ||
+      env.WUJIE_AI_TRANSLATION_AGENT_ENABLED !== "true" ||
+      typeof secret !== "string" || secret.length < 32 || secret.length > 4096 ||
+      secret.trim() !== secret || /[\u0000-\u001f\u007f]/u.test(secret) ||
+      secret === env.INTERNAL_API_SECRET?.trim() ||
+      secret === env.REALTIME_TOKEN_SECRET?.trim() ||
+      secret === env.PUBLIC_GATEWAY_CREDENTIAL_ACCESS_SECRET?.trim() ||
+      !validDeploymentId(deploymentId)) {
+    throw new Error("invalid Call Link public TTS material environment");
   }
 }
 

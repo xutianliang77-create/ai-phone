@@ -5,6 +5,7 @@ type TtsPrewarmEnv = Pick<
   TranslationWorkerEnv,
   | "ttsHttpEndpoint"
   | "ttsHttpApiKey"
+  | "callLinkPublicTtsEnabled"
   | "ttsAgentPrewarmTimeoutMs"
   | "ttsWarmupEndpoint"
   | "ttsWarmupMaxMs"
@@ -15,6 +16,7 @@ type TtsPrewarmEnv = Pick<
 
 export type TranslationAgentTtsPrewarmResult =
   | { status: "skipped"; reason: "tts_unconfigured" }
+  | { status: "skipped"; reason: "session_bound_public_tts" }
   | {
     status: "ready";
     cached: boolean;
@@ -30,6 +32,11 @@ export async function prewarmTranslationAgentTts(
   env: TtsPrewarmEnv,
   options: { fetchFn?: typeof fetch } = {},
 ): Promise<TranslationAgentTtsPrewarmResult> {
+  if (env.callLinkPublicTtsEnabled) {
+    // Tencent credentials are per-call material. A node-level warmup would
+    // have no session grant and could create an unaccounted provider call.
+    return { status: "skipped", reason: "session_bound_public_tts" };
+  }
   if (!env.ttsHttpEndpoint) {
     return { status: "skipped", reason: "tts_unconfigured" };
   }

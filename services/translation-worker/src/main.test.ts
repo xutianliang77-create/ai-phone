@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
-import { isTranslationWorkerEntrypoint } from "./main.js";
+import { afterEach, describe, expect, it } from "vitest";
+import { buildDefaultWorker, isTranslationWorkerEntrypoint } from "./main.js";
 
 describe("isTranslationWorkerEntrypoint", () => {
   it("detects tsx source entrypoint", () => {
@@ -23,5 +23,21 @@ describe("isTranslationWorkerEntrypoint", () => {
       "/repo/node_modules/.bin/vitest",
       "run",
     ])).toBe(false);
+  });
+});
+
+describe("public Call Link TTS provider selection", () => {
+  const previous = process.env.CALL_LINK_PUBLIC_TTS_ENABLED;
+
+  afterEach(() => {
+    if (previous === undefined) delete process.env.CALL_LINK_PUBLIC_TTS_ENABLED;
+    else process.env.CALL_LINK_PUBLIC_TTS_ENABLED = previous;
+  });
+
+  it("fails closed rather than falling back to a global private TTS provider", () => {
+    process.env.CALL_LINK_PUBLIC_TTS_ENABLED = "true";
+    expect(() => buildDefaultWorker()).toThrow(
+      "requires session-bound Worker material",
+    );
   });
 });

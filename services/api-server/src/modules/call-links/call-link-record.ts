@@ -1,3 +1,6 @@
+import type { CallLinkPublicTtsAttemptEvent } from "@translation/contracts";
+import type { PublicModelRuntimeSnapshot } from "../models/public-model-runtime-config.js";
+
 export type CallLinkStatus = "created" | "active" | "ended";
 
 export interface CallLinkMetadata {
@@ -10,6 +13,22 @@ export interface CallLinkMetadata {
   guestTicket?: CallGuestTicketRecord;
   translationControl?: CallLinkTranslationControlState;
   diagnosticMarkers?: CallLinkDiagnosticMarker[];
+  /** Credential-free public Tencent TTS snapshot. Present only when the
+   * explicit compatibility lane is enabled and server qualification succeeds. */
+  publicTts?: CallLinkPublicTtsBinding;
+  publicTtsAttempts?: CallLinkPublicTtsAttemptRecord[];
+}
+
+export interface CallLinkPublicTtsBinding {
+  schemaVersion: 1;
+  boundAt: string;
+  configuration: PublicModelRuntimeSnapshot;
+}
+
+export interface CallLinkPublicTtsAttemptRecord {
+  createdAt: string;
+  updatedAt: string;
+  event: CallLinkPublicTtsAttemptEvent;
 }
 
 export type CallLinkDiagnosticCategory =

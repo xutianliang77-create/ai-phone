@@ -34,11 +34,14 @@ import type { PublicEntryRateLimiter } from
   "./infrastructure/security/public-entry-protection.js";
 import {createPublicRealtimeCoordinator,type PublicRealtimeAuthority} from "./modules/realtime/public-realtime-coordinator.js";
 import {registerPublicRuntimeMaterialRoutes,type PublicGatewayCredentialAccess} from "./modules/realtime/public-runtime-material.routes.js";
+import type { CallLinkWorkerTtsCredentialAccess } from
+  "./modules/call-links/worker-dispatch-runtime.routes.js";
 
 export interface BuildAppOptions {
   publicEntryRateLimiter?: PublicEntryRateLimiter;
   publicRealtimeAuthority?:PublicRealtimeAuthority;
   publicGatewayCredentialAccess?:PublicGatewayCredentialAccess;
+  callLinkWorkerTtsCredentialAccess?:CallLinkWorkerTtsCredentialAccess;
 }
 
 export async function buildApp(options: BuildAppOptions = {}) {
@@ -84,7 +87,10 @@ export async function buildApp(options: BuildAppOptions = {}) {
   registerIngressRoutes(app);
   await registerModelRoutes(app);
   await registerBillingRoutes(app);
-  await registerCallLinkRoutes(app);
+  await registerCallLinkRoutes(app, {
+    publicTtsCapability: options.publicRealtimeAuthority?.configurationCapability,
+    workerTtsCredentialAccess: options.callLinkWorkerTtsCredentialAccess,
+  });
   await registerDiagnosticsRoutes(app);
   await registerPlansRoutes(app);
   await registerRealtimeRoutes(app,options.publicRealtimeAuthority?createPublicRealtimeCoordinator(options.publicRealtimeAuthority):undefined,

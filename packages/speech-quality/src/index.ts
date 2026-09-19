@@ -30,3 +30,12 @@ export {
   domainTermPacks,
 } from "./domain-lexicon-packs.js";
 export type { SpeechTranscript } from "./speech-transcript.js";
+export {
+  TencentTtsWireError,
+  createTencentTtsWireUrl,
+  streamTencentTtsPcm,
+  validateTencentTtsWire,
+  type TencentTtsWireCredentials,
+  type TencentTtsWireMetadata,
+  type TencentTtsWireOptions,
+} from "./tencent-tts-wire.js";

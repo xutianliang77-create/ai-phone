@@ -11,6 +11,7 @@ describe("Call Link model runtime policy", () => {
     compatibilityDeployment: process.env.CALL_LINK_1_0_COMPATIBILITY_DEPLOYMENT_ID,
     profile: process.env.CALL_LINK_1_0_COMPATIBILITY_PROFILE,
     policy: process.env.CALL_PROVIDER_POLICY,
+    publicTts: process.env.CALL_LINK_PUBLIC_TTS_ENABLED,
   };
 
   afterEach(() => {
@@ -19,6 +20,7 @@ describe("Call Link model runtime policy", () => {
     restore("CALL_LINK_1_0_COMPATIBILITY_DEPLOYMENT_ID", previous.compatibilityDeployment);
     restore("CALL_LINK_1_0_COMPATIBILITY_PROFILE", previous.profile);
     restore("CALL_PROVIDER_POLICY", previous.policy);
+    restore("CALL_LINK_PUBLIC_TTS_ENABLED", previous.publicTts);
   });
 
   it("keeps legacy private Call Link behavior outside a public deployment", () => {
@@ -86,6 +88,19 @@ describe("Call Link model runtime policy", () => {
             code: "call_link_public_model_authorization_required",
           });
     }
+  });
+
+  it("does not start a compatibility Worker with public TTS enabled but no sealed TTS material", () => {
+    process.env.API_RESULT_SYNC_DEPLOYMENT_ID = "public-test";
+    process.env.CALL_LINK_1_0_COMPATIBILITY_ENABLED = "true";
+    process.env.CALL_LINK_1_0_COMPATIBILITY_DEPLOYMENT_ID = "public-test";
+    process.env.CALL_LINK_1_0_COMPATIBILITY_PROFILE = "call_link_only";
+    process.env.CALL_PROVIDER_POLICY = "call_link_only";
+    process.env.CALL_LINK_PUBLIC_TTS_ENABLED = "true";
+    expect(callLinkModelRuntimeAdmissionForSession({})).toEqual({
+      ok: false,
+      code: "call_link_public_model_runtime_unavailable",
+    });
   });
 });
 

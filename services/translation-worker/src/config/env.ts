@@ -28,6 +28,8 @@ export interface TranslationWorkerEnv {
   apiTimeoutMs: number;
   callId?: string;
   participantName: string;
+  callLinkPublicTtsEnabled: boolean;
+  callLinkWorkerTtsCredentialAccessSecret?: string;
   audioSampleRate: 16000 | 24000;
   audioFrameSizeMs: number;
   audioIngestMaxFrames: number;
@@ -96,6 +98,9 @@ export function loadEnv(): TranslationWorkerEnv {
     callId: env.TRANSLATION_WORKER_CALL_ID,
     participantName: env.TRANSLATION_WORKER_PARTICIPANT_NAME ??
       "translation-worker",
+    callLinkPublicTtsEnabled: parseBoolean(env.CALL_LINK_PUBLIC_TTS_ENABLED),
+    callLinkWorkerTtsCredentialAccessSecret:
+      env.CALL_LINK_WORKER_TTS_CREDENTIAL_ACCESS_SECRET?.trim() || undefined,
     audioSampleRate: parseAudioSampleRate(env.TRANSLATION_WORKER_AUDIO_SAMPLE_RATE),
     audioFrameSizeMs: Number(env.TRANSLATION_WORKER_AUDIO_FRAME_SIZE_MS ?? 100),
     audioIngestMaxFrames: boundedInteger(

@@ -16,6 +16,7 @@
     "test": "vitest run src"
   },
   "dependencies": {
-    "@translation/contracts": "file:../contracts"
+    "@translation/contracts": "file:../contracts",
+    "ws": "^8.18.3"
   }
 }

@@ -2,6 +2,7 @@ const redacted = "[REDACTED]";
 
 const sensitiveKeys = new Set([
   "xwujiegatewaycredential",
+  "xwujieworkerttscredential",
   "secretid",
   "secretkey",
   "accesstoken",
@@ -30,6 +31,7 @@ const sensitiveKeys = new Set([
 
 export const logRedactionPaths = [
   "req.headers.authorization",
+  "req.headers.x-wujie-worker-tts-credential",
   "*.accessToken",
   "*.apiKey",
   "*.authorization",

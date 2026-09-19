@@ -1,6 +1,6 @@
 import pino from "pino";
 import type { AsrEndpointMode } from "@translation/contracts";
-import { createLlmProvider } from "@translation/llm";
+import { createLlmProvider, OffLlmProvider } from "@translation/llm";
 import {
   asrCorrectionTermsForPacks,
   asrHotwordsForTerminology,
@@ -31,12 +31,16 @@ import type { ProviderFallbackTransition } from
 import type {
   CallSpeechPipeline,
   CallTranslationControlPipeline,
+  CallTtsProvider,
   SpeechToSpeechProvider,
 } from "./worker/types.js";
 
 const logger = pino({ name: "translation-worker" });
 
-export function buildDefaultWorker(endpointMode: AsrEndpointMode = "call_link") {
+export function buildDefaultWorker(
+  endpointMode: AsrEndpointMode = "call_link",
+  options: { ttsProvider?: CallTtsProvider } = {},
+) {
   const env = loadEnv();
   const terminology = domainTerminologyForPacks(env.domainLexiconPacks);
   const corrections = asrCorrectionTermsForPacks(env.domainLexiconPacks);
@@ -68,6 +72,7 @@ export function buildDefaultWorker(endpointMode: AsrEndpointMode = "call_link") 
     endpointMode,
     hotwords: asrHotwordsForTerminology(terminology, corrections),
     corrections,
+    ...(options.ttsProvider ? { ttsProvider: options.ttsProvider } : {}),
     onTransition: reportTransition,
   });
   return new CallTranslationWorker({
@@ -82,8 +87,10 @@ export function buildDefaultWorker(endpointMode: AsrEndpointMode = "call_link") 
       : undefined,
     eventSink,
     transcriptRefiner: new CallTranscriptRefiner({
-      provider: createLlmProvider(env.llmConfig),
-      enabled: env.llmConfig.refinementEnabled,
+      provider: env.callLinkPublicTtsEnabled
+        ? new OffLlmProvider()
+        : createLlmProvider(env.llmConfig),
+      enabled: !env.callLinkPublicTtsEnabled && env.llmConfig.refinementEnabled,
       minConfidence: env.llmConfig.minConfidence,
       terminology,
       fallbackCooldownMs: env.llmFallbackCooldownMs,
@@ -105,11 +112,12 @@ function providerStageName(stage: ProviderFallbackTransition["stage"]) {
 export function buildDefaultSpeechPipeline(
   endpointMode: AsrEndpointMode = "call_link",
   native?: SpeechToSpeechProvider,
+  options: { ttsProvider?: CallTtsProvider } = {},
 ): CallSpeechPipeline & CallTranslationControlPipeline {
   const env = loadEnv();
   return new SpeechPipelineRouter({
     mode: env.speechPipelineMode,
-    cascade: buildDefaultWorker(endpointMode),
+    cascade: buildDefaultWorker(endpointMode, options),
     ...(native ? { native } : {}),
     onShadowError: (error) => {
       logger.warn({ err: error }, "Native speech shadow pipeline failed");

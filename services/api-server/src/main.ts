@@ -55,7 +55,10 @@ import {
   startTranslationControlRecovery,
 } from
   "./modules/call-links/translation-call-control-outbox.js";
-import {publicGatewayCredentialAccessFromEnvironment} from "./modules/realtime/public-runtime-bootstrap.js";
+import {
+  callLinkWorkerTtsCredentialAccessFromEnvironment,
+  publicGatewayCredentialAccessFromEnvironment,
+} from "./modules/realtime/public-runtime-bootstrap.js";
 import {publicRealtimeAuthorityFromEnvironment} from "./modules/realtime/public-runtime-policy-authority.js";
 import {
   recoverPendingPublicAccountDeletions,
@@ -72,7 +75,12 @@ const recovery = await recoverStaleRealtimeSessions({
   graceSeconds: env.realtimeStaleSessionGraceSeconds,
 });
 const publicRealtimeAuthority=publicRealtimeAuthorityFromEnvironment();
-const app = await buildApp({publicGatewayCredentialAccess:publicGatewayCredentialAccessFromEnvironment(),...(publicRealtimeAuthority?{publicRealtimeAuthority}:{})});
+const app = await buildApp({
+  publicGatewayCredentialAccess: publicGatewayCredentialAccessFromEnvironment(),
+  callLinkWorkerTtsCredentialAccess:
+    callLinkWorkerTtsCredentialAccessFromEnvironment(),
+  ...(publicRealtimeAuthority ? { publicRealtimeAuthority } : {}),
+});
 const outboxRecovery = await recoverPendingCallRoomOutbox();
 const translationControlRecovery = await recoverPendingTranslationControls();
 const voiceIdentityRecovery = await recoverPendingVoiceIdentityDeletions();

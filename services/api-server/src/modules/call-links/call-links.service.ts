@@ -16,6 +16,7 @@ import { replaceCallGuestTicket } from "./call-guest-ticket-runtime.js";
 import type {
   CallJoinType,
   CallLegRecord,
+  CallLinkPublicTtsBinding,
   CallLinkStatus,
   CallParticipantRole,
 } from "./call-link-record.js";
@@ -43,6 +44,7 @@ const callLinkStartHoldSeconds = 60;
 export async function createCallLink(options: {
   userId: string;
   publicBaseUrl: string;
+  publicTts?: CallLinkPublicTtsBinding;
   ttlSeconds?: number;
   guestTicketTtlSeconds?: number;
   now?: Date;
@@ -104,6 +106,9 @@ export async function createCallLink(options: {
       expiresAt: record.expiresAt,
       purpose: record.purpose,
       guestTicket: guestTicket.record,
+      ...(options.publicTts
+        ? { publicTts: structuredClone(options.publicTts) }
+        : {}),
     },
   });
   return record;

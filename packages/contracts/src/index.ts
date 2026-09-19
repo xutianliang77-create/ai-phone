@@ -19,6 +19,7 @@ export * from "./communication/telephony.js";
 export * from "./communication/sip-controls.js";
 export * from "./communication/translation-call-controls.js";
 export * from "./communication/worker-dispatch.js";
+export * from "./communication/call-link-public-tts.js";
 export * from "./communication/voice-agent-runtime.js";
 export * from "./communication/voice-work.js";
 export * from "./communication/client-playback-receipts.js";

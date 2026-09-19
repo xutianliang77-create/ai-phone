@@ -12,6 +12,18 @@ describe("prewarmTranslationAgentLlm", () => {
     });
   });
 
+  it("does not prewarm a private LLM in the public Call Link TTS lane", async () => {
+    const fetchFn = vi.fn<typeof fetch>();
+    await expect(prewarmTranslationAgentLlm({
+      ...prewarmEnv(),
+      callLinkPublicTtsEnabled: true,
+    }, { fetchFn })).resolves.toEqual({
+      status: "skipped",
+      reason: "session_bound_public_tts",
+    });
+    expect(fetchFn).not.toHaveBeenCalled();
+  });
+
   it("requires health and a real JSON refinement before readiness", async () => {
     const fetchFn = vi.fn<typeof fetch>(async (url) => {
       if (String(url).endsWith("/models")) {
@@ -64,12 +76,14 @@ describe("prewarmTranslationAgentLlm", () => {
     await expect(prewarmTranslationAgentLlm({
       llmConfig: config({ correctionTimeoutMs: 1 }),
       llmPrewarmTimeoutMs: 100,
+      callLinkPublicTtsEnabled: false,
     }, { fetchFn })).resolves.toMatchObject({ status: "ready" });
   });
 });
 
 function prewarmEnv(overrides: Partial<LlmConfig> = {}) {
   return {
+    callLinkPublicTtsEnabled: false,
     llmConfig: config(overrides),
     llmPrewarmTimeoutMs: 100,
   };

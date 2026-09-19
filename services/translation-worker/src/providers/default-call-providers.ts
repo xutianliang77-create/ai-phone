@@ -22,12 +22,13 @@ export function createDefaultCallProviders(input: {
   endpointMode: AsrEndpointMode;
   hotwords: string[];
   corrections: Array<{ fromText: string; toText: string }>;
+  ttsProvider?: CallTtsProvider;
   onTransition: (transition: ProviderFallbackTransition) => Promise<void> | void;
 }) {
   return {
     asrProvider: createAsrProvider(input),
     translationProvider: createTranslationProvider(input),
-    ttsProvider: createTtsProvider(input),
+    ttsProvider: input.ttsProvider ?? createTtsProvider(input),
   };
 }
 
@@ -108,6 +109,9 @@ function createTranslationProvider(
 function createTtsProvider(
   input: Parameters<typeof createDefaultCallProviders>[0],
 ): CallTtsProvider | undefined {
+  if (input.env.callLinkPublicTtsEnabled) {
+    throw new Error("Call Link public TTS requires session-bound Worker material");
+  }
   if (!input.env.ttsHttpEndpoint) return undefined;
   const primary = new HttpTtsProvider({
     endpoint: input.env.ttsHttpEndpoint,

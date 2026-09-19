@@ -6,11 +6,12 @@ import type { TranslationWorkerEnv } from "../config/env.js";
 
 type LlmPrewarmEnv = Pick<
   TranslationWorkerEnv,
-  "llmConfig" | "llmPrewarmTimeoutMs"
+  "llmConfig" | "llmPrewarmTimeoutMs" | "callLinkPublicTtsEnabled"
 >;
 
 export type TranslationAgentLlmPrewarmResult =
   | { status: "skipped"; reason: "refinement_disabled" }
+  | { status: "skipped"; reason: "session_bound_public_tts" }
   | {
     status: "ready";
     elapsedMs: number;
@@ -23,6 +24,11 @@ export async function prewarmTranslationAgentLlm(
   env: LlmPrewarmEnv,
   options: { fetchFn?: typeof fetch } = {},
 ): Promise<TranslationAgentLlmPrewarmResult> {
+  if (env.callLinkPublicTtsEnabled) {
+    // The compatibility Worker has no session-bound public LLM material.
+    // Keep original local rules but never prewarm or call a private refiner.
+    return { status: "skipped", reason: "session_bound_public_tts" };
+  }
   if (!env.llmConfig.refinementEnabled) {
     return { status: "skipped", reason: "refinement_disabled" };
   }

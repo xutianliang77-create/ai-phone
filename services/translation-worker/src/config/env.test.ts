@@ -50,6 +50,18 @@ describe("translation worker env", () => {
     expect(loadEnv().ttsModel).toBe("override-tts");
   });
 
+  it("keeps public Call Link TTS opt-in and its material access capability separate from provider keys", () => {
+    process.env = {
+      CALL_LINK_PUBLIC_TTS_ENABLED: "true",
+      CALL_LINK_WORKER_TTS_CREDENTIAL_ACCESS_SECRET: "worker-material-secret",
+    };
+
+    expect(loadEnv()).toMatchObject({
+      callLinkPublicTtsEnabled: true,
+      callLinkWorkerTtsCredentialAccessSecret: "worker-material-secret",
+    });
+  });
+
   it("parses optional TTS voice simulation settings", () => {
     process.env = {
       TTS_VOICE_MODE: "personal_clone",

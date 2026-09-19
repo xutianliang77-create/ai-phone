@@ -1,6 +1,10 @@
 import type {RealtimeProcessingAuthorization} from "@translation/contracts";
 import type { SessionRecord } from "../sessions/session-record.js";
 import { findSession } from "../sessions/sessions-runtime.repository.js";
+import {
+  callLinkPublicTtsEnabled,
+  callLinkPublicTtsProfile,
+} from "./call-link-public-tts.js";
 
 export type CallLinkModelRuntimeAdmission =
   | { ok: true; mode: "legacy_private" }
@@ -28,7 +32,7 @@ export type CallLinkRuntimeEntryKind =
 export function callLinkModelRuntimeAdmissionForSession(
   session: Pick<
     SessionRecord,
-    "processingDeploymentId" | "processingAuthorization"
+    "processingDeploymentId" | "processingAuthorization" | "callLink"
   >,
   publicDeploymentId = process.env.API_RESULT_SYNC_DEPLOYMENT_ID,
   entryKind: CallLinkRuntimeEntryKind = "room",
@@ -38,6 +42,10 @@ export function callLinkModelRuntimeAdmissionForSession(
   }
   if (entryKind === "room" &&
       isIsolatedOneZeroCompatibilityDeployment(publicDeploymentId)) {
+    if (callLinkPublicTtsEnabled() &&
+        !callLinkPublicTtsProfile(session.callLink?.publicTts)) {
+      return { ok: false, code: "call_link_public_model_runtime_unavailable" };
+    }
     return { ok: true, mode: "isolated_1_0_compatibility" };
   }
   if (session.processingDeploymentId !== publicDeploymentId ||

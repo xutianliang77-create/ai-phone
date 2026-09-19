@@ -11,6 +11,17 @@ describe("prewarmTranslationAgentTts", () => {
     });
   });
 
+  it("does not prewarm session-bound public Call Link TTS", async () => {
+    const fetchFn = vi.fn<typeof fetch>();
+    await expect(prewarmTranslationAgentTts(baseEnv({
+      callLinkPublicTtsEnabled: true,
+    }), { fetchFn })).resolves.toEqual({
+      status: "skipped",
+      reason: "session_bound_public_tts",
+    });
+    expect(fetchFn).not.toHaveBeenCalled();
+  });
+
   it("requires a real playable synthesis before reporting ready", async () => {
     const fetchFn = vi.fn<typeof fetch>(async (_url, init) => {
       expect(JSON.parse(String(init?.body))).toMatchObject({
@@ -100,6 +111,7 @@ describe("prewarmTranslationAgentTts", () => {
 
 function baseEnv(overrides: Record<string, unknown> = {}) {
   return {
+    callLinkPublicTtsEnabled: false,
     ttsHttpEndpoint: "https://tts.example.com/synthesize",
     ttsHttpApiKey: "tts-secret",
     ttsAgentPrewarmTimeoutMs: 60000,

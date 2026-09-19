@@ -30,8 +30,20 @@ import {
   parseCallRoomParticipantName,
   parseCallRoomParticipantRole,
 } from "./call-room-entry-validation.js";
+import {
+  assertCallLinkPublicTtsBinding,
+  callLinkPublicTtsEnabled,
+  type CallLinkPublicTtsCapability,
+} from "./call-link-public-tts.js";
 
-export function registerCallRoomEntryRoute(app: FastifyInstance) {
+export interface CallRoomEntryRouteOptions {
+  publicTtsCapability?: CallLinkPublicTtsCapability;
+}
+
+export function registerCallRoomEntryRoute(
+  app: FastifyInstance,
+  options: CallRoomEntryRouteOptions = {},
+) {
   app.post("/call-links/:callId/room-token", async (request, reply) => {
     const params = request.params as { callId: string };
     const body = (request.body ?? {}) as Partial<{
@@ -90,6 +102,17 @@ export function registerCallRoomEntryRoute(app: FastifyInstance) {
           reply,
           503,
           modelAdmission.code,
+          "Call room public model runtime is not ready",
+        );
+      }
+      if (!await publicTtsRuntimeReady(
+        initial.record.sessionId,
+        options.publicTtsCapability,
+      )) {
+        return sendError(
+          reply,
+          503,
+          "call_link_public_model_runtime_unavailable",
           "Call room public model runtime is not ready",
         );
       }
@@ -269,6 +292,17 @@ export function registerCallRoomEntryRoute(app: FastifyInstance) {
           "Call room public model runtime is not ready",
         );
       }
+      if (!await publicTtsRuntimeReady(
+        committed.record.sessionId,
+        options.publicTtsCapability,
+      )) {
+        return sendError(
+          reply,
+          503,
+          "call_link_public_model_runtime_unavailable",
+          "Call room public model runtime is not ready",
+        );
+      }
       try {
         // Worker startup requests its own room token and writes this session.
         // Keep it outside the callId write lock to avoid lock inversion.
@@ -296,6 +330,20 @@ export function registerCallRoomEntryRoute(app: FastifyInstance) {
       workerReady: committed.ready,
     };
   });
+}
+
+async function publicTtsRuntimeReady(
+  sessionId: string,
+  capability: CallLinkPublicTtsCapability | undefined,
+) {
+  if (!callLinkPublicTtsEnabled()) return true;
+  const session = await findSession(sessionId);
+  try {
+    assertCallLinkPublicTtsBinding(session?.callLink?.publicTts, capability);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 type EntryValidation =

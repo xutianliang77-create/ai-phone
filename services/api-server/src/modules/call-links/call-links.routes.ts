@@ -47,12 +47,29 @@ import { registerCallLinkInputTrackAccessRoutes } from
   "./call-link-input-track-access.routes.js";
 import { registerWorkerDispatchRuntimeRoutes } from "./worker-dispatch-runtime.routes.js";
 import { registerRecordingRoutes } from "../recordings/recording.routes.js";
+import {
+  prepareCallLinkPublicTtsBinding,
+  type CallLinkPublicTtsCapability,
+} from "./call-link-public-tts.js";
+import { ResultSyncError } from "../sessions/session-result-sync-contract.js";
+import type { CallLinkWorkerTtsCredentialAccess } from
+  "./worker-dispatch-runtime.routes.js";
 
-export async function registerCallLinkRoutes(app: FastifyInstance) {
+export interface CallLinkRoutesOptions {
+  publicTtsCapability?: CallLinkPublicTtsCapability;
+  workerTtsCredentialAccess?: CallLinkWorkerTtsCredentialAccess;
+}
+
+export async function registerCallLinkRoutes(
+  app: FastifyInstance,
+  options: CallLinkRoutesOptions = {},
+) {
   app.addHook("onClose", async () => {
     await getCallLinkWorkerSupervisor().shutdown();
   });
-  registerCallRoomEntryRoute(app);
+  registerCallRoomEntryRoute(app, {
+    publicTtsCapability: options.publicTtsCapability,
+  });
   registerCallLinkInternalRoutes(app);
   registerCallLinkSipRoutes(app);
   registerCallLinkAir780Routes(app);
@@ -65,7 +82,10 @@ export async function registerCallLinkRoutes(app: FastifyInstance) {
   registerLiveKitSipWebhookRoutes(app);
   registerCallLinkTtsTrackAccessRoutes(app);
   registerCallLinkInputTrackAccessRoutes(app);
-  registerWorkerDispatchRuntimeRoutes(app);
+  registerWorkerDispatchRuntimeRoutes(app, {
+    publicTtsCapability: options.publicTtsCapability,
+    workerTtsCredentialAccess: options.workerTtsCredentialAccess,
+  });
   registerRecordingRoutes(app);
 
   app.get("/join/:callId", async (request, reply) => {
@@ -98,9 +118,21 @@ export async function registerCallLinkRoutes(app: FastifyInstance) {
     if (!account) return;
     const env = loadEnv();
     const limits = getCallRoomResourceLimits();
+    let publicTts;
+    try {
+      publicTts = prepareCallLinkPublicTtsBinding({
+        capability: options.publicTtsCapability,
+      });
+    } catch (error) {
+      if (error instanceof ResultSyncError) {
+        return sendError(reply, error.status, error.code, error.message);
+      }
+      throw error;
+    }
     const callLink = await createCallLink({
       userId: account.id,
       publicBaseUrl: env.publicCallBaseUrl,
+      ...(publicTts ? { publicTts } : {}),
       ttlSeconds: limits.maxSessionSeconds,
       guestTicketTtlSeconds: limits.guestTicketTtlSeconds,
     });

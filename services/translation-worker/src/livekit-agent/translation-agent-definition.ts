@@ -27,6 +27,8 @@ import { attachTranslationCallControlHandler } from
   "./translation-call-control-handler.js";
 import { HttpTranslationCallControlClient } from
   "../worker/translation-call-control-client.js";
+import { CallLinkTencentTtsProvider } from
+  "../providers/call-link-tencent-tts-provider.js";
 
 const logger = pino({ name: "translation-livekit-agent" });
 
@@ -67,7 +69,31 @@ export default defineAgent<TranslationAgentProcessData>({
       snapshot.generation !== ticket.generation) {
       throw new Error("Worker runtime snapshot binding failed");
     }
-    const worker = buildDefaultSpeechPipeline();
+    if (snapshot.publicTts && !env.callLinkPublicTtsEnabled) {
+      throw new Error("Call Link public TTS material was not enabled for this Worker");
+    }
+    if (env.callLinkPublicTtsEnabled && !snapshot.publicTts) {
+      throw new Error("Call Link public TTS material is missing from the Worker snapshot");
+    }
+    if (env.callLinkPublicTtsEnabled &&
+      !env.callLinkWorkerTtsCredentialAccessSecret) {
+      throw new Error("Call Link public TTS Worker credential access is missing");
+    }
+    const worker = buildDefaultSpeechPipeline(
+      "call_link",
+      undefined,
+      snapshot.publicTts ? {
+        ttsProvider: new CallLinkTencentTtsProvider({
+          client: runtimeClient,
+          ticket,
+          participantIdentity,
+          workerId: ctx.workerId,
+          jobId: ctx.job.id,
+          credentialAccessSecret: env.callLinkWorkerTtsCredentialAccessSecret!,
+          profile: snapshot.publicTts,
+        }),
+      } : {},
+    );
     const translationControl = snapshot.translationControl ?? {
       sourceLanguage: "zh" as const,
       targetLanguage: "en" as const,
