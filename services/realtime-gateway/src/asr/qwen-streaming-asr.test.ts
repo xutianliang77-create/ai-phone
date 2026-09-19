@@ -81,6 +81,17 @@ describe("Qwen ASR server-VAD wire on original shared streaming lifecycle",()=>{
     await p.closeSession(session.sessionId);expect(t.record.mock.calls.at(-1)![0].state).toBe("confirmed");
   });
 
+  it("persists a server-VAD tail emitted after the first final and before session.finished",async()=>{
+    const t=setup(s=>s.tailOnFinish=true),p=t.create();await p.createSession(session);
+    await expect(p.transcribe(frame(1,0,200))).resolves.toMatchObject({text:"Bonjour tout le monde.",timing:{startMs:0,endMs:200}});
+    const tail=await p.flush(session.sessionId,{finishSession:true});
+    expect(tail).toMatchObject({text:"Bonjour tout le monde.",timing:{startMs:100,endMs:200}});
+    const events=t.record.mock.calls.map(call=>call[0]);
+    expect(events.filter(event=>event.state==="dispatching")).toHaveLength(2);
+    expect(events.filter(event=>event.state==="confirmed")).toHaveLength(2);
+    expect(events.every(event=>event.state!=="uncertain")).toBe(true);
+  });
+
   it("continues for 100 seconds across server-VAD turns on one product session",async()=>{
     const t=setup(s=>s.autoComplete=false),p=t.create();await p.createSession(session);let start=0;const finals:any[]=[];
     for(let n=1;n<=5;n++){const value=await p.transcribe(frame(n,start,20000));if(value)finals.push(...(Array.isArray(value)?value:[value]));start+=320000;t.sockets[0].complete();}
