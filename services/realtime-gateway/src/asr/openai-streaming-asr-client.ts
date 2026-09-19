@@ -256,8 +256,13 @@ export class OpenAiStreamingAsrClient {
       }
       if(e.type==="input_audio_buffer.speech_stopped"){
         if(!turn?.sent||turn.terminal||e.item_id!==turn.providerItemId||turn.providerEndSample!==undefined||!Number.isSafeInteger(e.audio_end_ms)||e.audio_end_ms<0)throw Error();
-        const end=Math.round(e.audio_end_ms*this.rate/1000);
-        if(end<=(turn.providerStartSample??turn.event.audioStartSample!)||end>turn.event.audioEndSample!)throw Error();
+        const reportedEnd=Math.round(e.audio_end_ms*this.rate/1000),end=Math.min(reportedEnd,turn.event.audioEndSample!);
+        // Qwen reports server-VAD boundaries in 100ms steps. A final 40ms
+        // phone packet can therefore legitimately end just before the
+        // supplier's rounded watermark. Keep the durable attempt immutable:
+        // accept only that bounded rounding window and clamp the displayed
+        // timing to bytes already accepted by this process.
+        if(end<=(turn.providerStartSample??turn.event.audioStartSample!)||reportedEnd>turn.event.audioEndSample!+this.rate/25)throw Error();
         turn.providerEndSample=end;return;
       }
       if(e.type==="conversation.item.created"){
