@@ -24,7 +24,7 @@ export class SyntheticQwenAsrSocket extends EventEmitter {
     this.receive({type:"input_audio_buffer.speech_started",audio_start_ms:start,item_id:item});
     this.receive({type:"input_audio_buffer.speech_stopped",audio_end_ms:end,item_id:item});
     this.receive({type:"input_audio_buffer.committed",item_id:item,previous_item_id:this.previous??""});
-    this.receive({type:"conversation.item.created",previous_item_id:this.previous??"",item:{id:item,type:"message",role:"user",content:[{type:"input_audio",transcript:null}]}});
+    this.receive({type:"conversation.item.created",...(this.previous?{previous_item_id:this.previous}:{}),item:{id:item,object:"realtime.item",status:"in_progress",type:"message",role:"assistant",content:[{type:"input_audio"}]}});
     this.partial(item,"","Bonjur");this.partial(item,"Bon","jour tout le monde.");
     this.receive({type:"conversation.item.input_audio_transcription.completed",item_id:item,content_index:0,language:this.language,transcript:this.transcript});this.previous=item;
   }
