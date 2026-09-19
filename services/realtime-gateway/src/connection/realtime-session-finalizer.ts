@@ -30,6 +30,8 @@ interface RealtimeSessionFinalizerOptions {
 
 export class RealtimeSessionFinalizer {
   private flushPromise?: Promise<RealtimeFlushSummary>;
+  private recoveryDrainPromise?: Promise<void>;
+  private recoveryDrainConfirmed = false;
   private finalizePromise?: Promise<void>;
   private sessionDiagnostics?: RealtimeSessionDiagnosticsDto;
 
@@ -38,6 +40,15 @@ export class RealtimeSessionFinalizer {
   flush() {
     this.flushPromise ??= this.flushOnce();
     return this.flushPromise;
+  }
+
+  /** Drains accepted PCM before a same-process recovery checkpoint without
+   * ending the supplier session. Finalization retains its separate cached
+   * close path, so a successful recovery drain cannot consume session.finish. */
+  drainForRecovery() {
+    if (this.flushPromise) return this.flushPromise.then(() => undefined);
+    this.recoveryDrainPromise ??= this.drainForRecoveryOnce();
+    return this.recoveryDrainPromise;
   }
 
   finalize(reason: SessionEndReason, remainingSeconds?: number) {
@@ -53,7 +64,7 @@ export class RealtimeSessionFinalizer {
       "audio",
       () => this.options.audioBatcher.flush(),
     );
-    if(this.options.confirmed)await this.options.confirmed.beforeFlush();
+    if(this.options.confirmed&&!this.recoveryDrainConfirmed)await this.options.confirmed.beforeFlush();
     const providerFlushed = await this.runStep("provider", () => flushProviderSession(
       this.options.provider,
       this.options.sessionId,
@@ -67,6 +78,26 @@ export class RealtimeSessionFinalizer {
       audioFlushed,
       providerFlushed,
     });
+  }
+
+  private async drainForRecoveryOnce() {
+    this.options.audioBatcher.stopAccepting();
+    const audioFlushed = await this.runStep(
+      "audio",
+      () => this.options.audioBatcher.flush(),
+    );
+    if (this.options.confirmed) await this.options.confirmed.beforeFlush();
+    const providerFlushed = await this.runStep("provider", () => flushProviderSession(
+      this.options.provider,
+      this.options.sessionId,
+      this.options.send,
+      { failOnError: !!this.options.confirmed, finishSession: false },
+    ));
+    await this.options.drainSessionSync();
+    if (this.options.confirmed && (!audioFlushed || !providerFlushed)) {
+      throw Error("public_recovery_drain_unconfirmed");
+    }
+    this.recoveryDrainConfirmed = true;
   }
 
   private async finalizeOnce(

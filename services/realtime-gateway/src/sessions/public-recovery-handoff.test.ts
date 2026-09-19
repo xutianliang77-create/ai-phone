@@ -66,29 +66,29 @@ describe("public disconnect cleanup checkpoint ordering",()=>{
   it("drains, confirms disconnected, then retains the existing immediate-finalization policy",async()=>{
     const s=createSession(claims()),order:string[]=[],registry=new DisconnectFinalizerRegistry(30000,()=>{});
     const cleanup=new RealtimeConnectionCleanup({session:s,generation:1,publicImmediateFinalization:true,
-      finalizer:{flush:async()=>{order.push("flush");return {} as any;},finalize:async()=>{expect(s.publicDisconnect?.receipt.recovery?.lastAcceptedSample).toBe(16000);order.push("finalize");}},
+      finalizer:{flush:async()=>({} as any),drainForRecovery:async()=>{order.push("drain");},finalize:async()=>{expect(s.publicDisconnect?.receipt.recovery?.lastAcceptedSample).toBe(16000);order.push("finalize");}},
       checkpointDisconnect:async()=>{order.push("checkpoint");return receipt();},provider:{closeSession:async()=>{order.push("close");}},sessionSync:{drain:async()=>{}},disconnectFinalizers:registry,closeClient:()=>{},onError:()=>{throw Error("unexpected");}});
     await Promise.all([cleanup.run("connection_closed"),cleanup.run("connection_error")]);
-    expect(order).toEqual(["flush","checkpoint","finalize","close"]);expect(getSession(s.id)).toBeNull();registry.close();
+    expect(order).toEqual(["drain","checkpoint","finalize","close"]);expect(getSession(s.id)).toBeNull();registry.close();
   });
-  it.each(["flush","checkpoint"])("failed %s never marks a recoverable checkpoint; safe drain still permits the original end attempt",async stage=>{
+  it.each(["drain","checkpoint"])("failed %s never marks a recoverable checkpoint; safe drain still permits the original end attempt",async stage=>{
     const s=createSession(claims()),registry=new DisconnectFinalizerRegistry(30000,()=>{}),finalize=vi.fn(),close=vi.fn(),onError=vi.fn();
     const cleanup=new RealtimeConnectionCleanup({session:s,generation:1,publicImmediateFinalization:true,
-      finalizer:{flush:async()=>{if(stage==="flush")throw Error("synthetic flush failure");return {} as any;},finalize},
+      finalizer:{flush:async()=>({} as any),drainForRecovery:async()=>{if(stage==="drain")throw Error("synthetic drain failure");},finalize},
       checkpointDisconnect:async()=>{throw Error("synthetic checkpoint failure");},provider:{closeSession:close},sessionSync:{drain:async()=>{}},disconnectFinalizers:registry,closeClient:()=>{},onError});
-    await cleanup.run("connection_closed");expect(finalize).toHaveBeenCalledTimes(stage==="flush"?0:1);expect(s.publicDisconnect).toBeUndefined();expect(close).toHaveBeenCalledTimes(1);expect(onError).toHaveBeenCalledTimes(1);registry.close();
+    await cleanup.run("connection_closed");expect(finalize).toHaveBeenCalledTimes(stage==="drain"?0:1);expect(s.publicDisconnect).toBeUndefined();expect(close).toHaveBeenCalledTimes(1);expect(onError).toHaveBeenCalledTimes(1);registry.close();
   });
   it("old cleanup completion cannot close or delete a newer connection generation",async()=>{
     const s=createSession(claims()),registry=new DisconnectFinalizerRegistry(30000,()=>{}),close=vi.fn(),finalize=vi.fn();
     const cleanup=new RealtimeConnectionCleanup({session:s,generation:1,publicImmediateFinalization:true,
-      finalizer:{flush:async()=>({} as any),finalize},checkpointDisconnect:async()=>{s.connectionGeneration=2;return receipt();},provider:{closeSession:close},sessionSync:{drain:async()=>{}},disconnectFinalizers:registry,closeClient:()=>{},onError:()=>{}});
+      finalizer:{flush:async()=>({} as any),drainForRecovery:async()=>{},finalize},checkpointDisconnect:async()=>{s.connectionGeneration=2;return receipt();},provider:{closeSession:close},sessionSync:{drain:async()=>{}},disconnectFinalizers:registry,closeClient:()=>{},onError:()=>{}});
     await cleanup.run("connection_closed");expect(getSession(s.id)).toBe(s);expect(close).not.toHaveBeenCalled();expect(finalize).not.toHaveBeenCalled();registry.close();
   });
   it("explicit recovery assembly retains only until the original recovery deadline, then finalizes and releases",async()=>{
     vi.useFakeTimers();vi.setSystemTime(epoch);
     const s=createSession(claims()),registry=new DisconnectFinalizerRegistry(30000,()=>{}),finalize=vi.fn(async()=>{}),close=vi.fn(),release=vi.fn();
     const cleanup=new RealtimeConnectionCleanup({session:s,generation:1,publicImmediateFinalization:true,
-      finalizer:{flush:async()=>({} as any),finalize},checkpointDisconnect:async()=>receipt(),retainPublicRecovery:()=>true,releaseRetainedRecovery:release,
+      finalizer:{flush:async()=>({} as any),drainForRecovery:async()=>{},finalize},checkpointDisconnect:async()=>receipt(),retainPublicRecovery:()=>true,releaseRetainedRecovery:release,
       provider:{closeSession:close},sessionSync:{drain:async()=>{}},disconnectFinalizers:registry,closeClient:()=>{},onError:()=>{throw Error("unexpected");}});
     await cleanup.run("connection_closed");expect(cleanup.retainedPublicRecovery).toBe(true);expect(finalize).not.toHaveBeenCalled();expect(close).not.toHaveBeenCalled();expect(s.status).toBe("connecting");
     await vi.advanceTimersByTimeAsync(60000);expect(finalize).toHaveBeenCalledWith("connection_closed");expect(release).toHaveBeenCalledTimes(1);expect(getSession(s.id)).toBeNull();registry.close();

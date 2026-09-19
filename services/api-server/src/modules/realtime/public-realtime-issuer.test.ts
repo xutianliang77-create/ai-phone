@@ -164,7 +164,7 @@ describe("original public session preparation and issuance phases",()=>{
     markAcceptedAudioRange(frame,{startSample:0,endSample:samples});
     const events=[];try{
       for await(const event of built.provider.sendAudio(frame))events.push(event);
-      for await(const event of built.provider.flushSession(id))events.push(event);
+      for await(const event of built.provider.flushSession(id,vendor==="qwen"?{finishSession:true}:undefined))events.push(event);
       expect(events).toContainEqual(expect.objectContaining({type:"transcript.final",language:"zh"}));
       expect(events).toContainEqual(expect.objectContaining({type:"translation.final",language:"en"}));
       expect(current().publicModelAttempts!.map(a=>[a.event.component,a.event.state])).toEqual([["asr","confirmed"],["translation","confirmed"]]);

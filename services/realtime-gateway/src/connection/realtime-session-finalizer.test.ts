@@ -233,6 +233,24 @@ describe("realtime session finalizer", () => {
     expect(options).toEqual([{finishSession:true}]);
   });
 
+  it("drains for recovery without finishing the supplier, then closes exactly once on finalization", async () => {
+    const session = createSession(claims());
+    const options:Array<{finishSession?:boolean}|undefined>=[];
+    const provider=providerWithoutTail();
+    provider.flushSession=async function*(_sessionId,value){options.push(value);};
+    const beforeFlush=vi.fn(async()=>undefined);
+    const finalizer=new RealtimeSessionFinalizer({sessionId:session.id,provider,
+      audioBatcher:{stopAccepting:vi.fn(),flush:vi.fn(async()=>undefined)},send:()=>{},
+      drainSessionSync:async()=>undefined,flushTracker:new RealtimeFlushTracker(),onError:vi.fn(),
+      confirmed:{beforeFlush}});
+
+    await Promise.all([finalizer.drainForRecovery(),finalizer.drainForRecovery()]);
+    expect(options).toEqual([{finishSession:false}]);
+    await finalizer.finalize("connection_closed");
+    expect(options).toEqual([{finishSession:false},{finishSession:true}]);
+    expect(beforeFlush).toHaveBeenCalledOnce();
+  });
+
   it("closes provider capacity before announcing session ended", async () => {
     const session = createSession(claims());
     const order: string[] = [];

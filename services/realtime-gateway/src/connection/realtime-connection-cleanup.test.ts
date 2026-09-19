@@ -17,6 +17,7 @@ describe("realtime connection cleanup", () => {
     const session = createSession(claims());
     const finalizer = {
       flush: vi.fn(async () => undefined),
+      drainForRecovery: vi.fn(async () => undefined),
       finalize: vi.fn(async () => undefined),
     };
     const registry = new DisconnectFinalizerRegistry(30_000, vi.fn());
@@ -48,6 +49,7 @@ describe("realtime connection cleanup", () => {
     const session = createSession(claims());
     const finalizer = {
       flush: vi.fn(async () => undefined),
+      drainForRecovery: vi.fn(async () => undefined),
       finalize: vi.fn(async () => undefined),
     };
     const registry = new DisconnectFinalizerRegistry(30_000, vi.fn());
@@ -76,6 +78,7 @@ describe("realtime connection cleanup", () => {
     const session = createSession(claims());
     const finalizer = {
       flush: vi.fn(async () => undefined),
+      drainForRecovery: vi.fn(async () => undefined),
       finalize: vi.fn(async () => undefined),
     };
     const registry = new DisconnectFinalizerRegistry(30_000, vi.fn());
@@ -108,6 +111,7 @@ describe("realtime connection cleanup", () => {
       generation: session.connectionGeneration,
       finalizer: {
         flush: vi.fn(() => flushGate),
+        drainForRecovery: vi.fn(async () => undefined),
         finalize: vi.fn(async () => undefined),
       },
       provider: { closeSession: vi.fn(async () => undefined) },

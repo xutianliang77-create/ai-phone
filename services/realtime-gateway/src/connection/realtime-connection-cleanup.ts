@@ -18,7 +18,7 @@ interface RealtimeConnectionCleanupOptions {
   releaseRetainedRecovery?:()=>void;
   session: RealtimeSession;
   generation: number;
-  finalizer: Pick<RealtimeSessionFinalizer, "flush" | "finalize">;
+  finalizer: Pick<RealtimeSessionFinalizer, "flush" | "drainForRecovery" | "finalize">;
   provider: Pick<RealtimeProvider, "closeSession">;
   sessionSync: Pick<SessionSyncTracker, "drain">;
   disconnectFinalizers: DisconnectFinalizerRegistry;
@@ -50,7 +50,7 @@ export class RealtimeConnectionCleanup {
       const owns=()=>getSession(session.id)===session&&session.connectionGeneration===generation;
       try{if(owns()&&session.status!=="ended"){
         if(this.options.checkpointDisconnect){
-          await this.options.finalizer.flush();
+          await this.options.finalizer.drainForRecovery();
           if(!owns()){this.options.closeClient();return;}
           try{
             const receipt=await this.options.checkpointDisconnect();
