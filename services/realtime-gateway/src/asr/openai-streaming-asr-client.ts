@@ -72,7 +72,7 @@ export class OpenAiStreamingAsrClient {
       s.ws.on("error",()=>this.fail(s,"public_asr_stream_transport"));s.ws.on("close",()=>{if(!s.providerFinished)this.fail(s,"public_asr_stream_closed");});
       s.ws.on("message",(data,isBinary)=>{if(this.state!==s||s.failure)return;try{if(isBinary||Buffer.byteLength(data.toString())>262144)throw Error();
         const event=JSON.parse(data.toString());const deferQwen=this.qwen&&s.configured&&event?.type!=="session.finished"&&
-          ((!s.finishing&&(s.busy||s.turn?.finalizing||!s.turn))||(s.finishing&&!s.turn));if(deferQwen){if(s.pendingWireEvents.length>=4096)throw Error();s.pendingWireEvents.push(event);}
+          (s.finishing||s.busy||s.turn?.finalizing||!s.turn);if(deferQwen){if(s.pendingWireEvents.length>=4096)throw Error();s.pendingWireEvents.push(event);}
         else this.receive(s,event);}catch{this.fail(s,"public_asr_stream_protocol");}});
       s.ws.once("open",()=>{void this.send(s,{type:"session.update",session:this.qwen?qwenAsrSessionConfiguration(this.options.language):{type:"transcription",audio:{input:{format:{type:"audio/pcm",rate:24000},
         transcription:this.transcription(),turn_detection:null}}}}).catch(()=>this.fail(s,"public_asr_stream_setup"));});
@@ -223,18 +223,28 @@ export class OpenAiStreamingAsrClient {
   private async drainQwenWireEvents(s:State){
     while(s.pendingWireEvents.length){
       const event=s.pendingWireEvents.shift()!;
-      await this.prepareQwenClosingTail(s,event);
+      await this.prepareQwenClosingEvent(s,event);
       this.assert(s);this.receive(s,event);
     }
   }
-  private async prepareQwenClosingTail(s:State,event:Record<string,any>){
-    if(!s.finishing||s.turn||event.type!=="input_audio_buffer.speech_started")return;
-    const start=Math.round(event.audio_start_ms*this.rate/1000);
-    if(!key(event.item_id)||!Number.isSafeInteger(event.audio_start_ms)||event.audio_start_ms<0||start<0||start>=s.cursor)throw Error();
-    const turn:Turn={event:{sessionId:this.options.sessionId,leaseId:this.options.leaseId,attemptId:randomUUID(),segmentId:randomUUID(),revision:1,
-      component:"asr",providerId:"qwen",modelId:this.options.model,state:"dispatching",audioStartSample:start,audioEndSample:s.cursor,audioSampleRate:this.rate},
-      prepared:false,sent:true,terminal:false,committing:false,ack:false,partial:"",done:deferred<Result>()};
-    s.turn=turn;await abortable(this.record(turn.event),s.stop.signal);turn.prepared=true;this.assert(s);
+  private async prepareQwenClosingEvent(s:State,event:Record<string,any>){
+    if(!s.finishing)return;
+    if(!s.turn){
+      if(event.type!=="input_audio_buffer.speech_started")throw Error();
+      const start=Math.round(event.audio_start_ms*this.rate/1000);
+      if(!key(event.item_id)||!Number.isSafeInteger(event.audio_start_ms)||event.audio_start_ms<0||start<0||start>=s.cursor)throw Error();
+      const turn:Turn={event:{sessionId:this.options.sessionId,leaseId:this.options.leaseId,attemptId:randomUUID(),segmentId:randomUUID(),revision:1,
+        component:"asr",providerId:"qwen",modelId:this.options.model,state:"dispatching",audioStartSample:start,audioEndSample:s.cursor,audioSampleRate:this.rate},
+        prepared:false,sent:true,terminal:false,committing:false,ack:false,partial:"",done:deferred<Result>()};
+      s.turn=turn;await abortable(this.record(turn.event),s.stop.signal);turn.prepared=true;this.assert(s);return;
+    }
+    const turn=s.turn;
+    const sample=event.type==="input_audio_buffer.speech_started"?event.audio_start_ms:event.type==="input_audio_buffer.speech_stopped"?event.audio_end_ms:undefined;
+    if(sample===undefined)return;
+    const point=Math.round(sample*this.rate/1000),bounded=Math.min(point,s.cursor);
+    if(!Number.isSafeInteger(sample)||sample<0||point<turn.event.audioStartSample!||point>s.cursor+this.rate/25||bounded<turn.event.audioStartSample!)throw Error();
+    if(bounded<=turn.event.audioEndSample!)return;
+    turn.event={...turn.event,audioEndSample:bounded};await abortable(this.record(turn.event),s.stop.signal);this.assert(s);
   }
   private takeCompleted(s:State):AsrProviderResult{const values=s.completed.splice(0);return values.length===0?null:values.length===1?values[0]:values;}
   async closeSession(sessionId:string){const s=this.state;if(!s||sessionId!==this.options.sessionId)return;this.partialListener=undefined;
@@ -279,8 +289,12 @@ export class OpenAiStreamingAsrClient {
       }
       if(e.type==="input_audio_buffer.speech_stopped"){
         if(!turn?.sent||turn.terminal||e.item_id!==turn.providerItemId||turn.providerEndSample!==undefined||!Number.isSafeInteger(e.audio_end_ms)||e.audio_end_ms<0)throw Error();
-        const end=Math.round(e.audio_end_ms*this.rate/1000);
-        if(end<=(turn.providerStartSample??turn.event.audioStartSample!)||end>turn.event.audioEndSample!)throw Error();
+        const reportedEnd=Math.round(e.audio_end_ms*this.rate/1000),end=Math.min(reportedEnd,turn.event.audioEndSample!);
+        // Qwen reports VAD boundaries at 100ms granularity while the phone
+        // transport may end its last accepted packet 20–40ms earlier. Accept
+        // only that bounded rounding window and never extend the durable/audio
+        // watermark beyond bytes already accepted by this process.
+        if(end<=(turn.providerStartSample??turn.event.audioStartSample!)||reportedEnd>turn.event.audioEndSample!+(this.qwen?this.rate/25:0))throw Error();
         turn.providerEndSample=end;return;
       }
       if(e.type==="conversation.item.created"){
