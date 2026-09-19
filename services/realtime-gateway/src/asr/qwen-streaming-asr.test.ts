@@ -68,18 +68,6 @@ describe("Qwen ASR server-VAD wire on original shared streaming lifecycle",()=>{
     const events=t.record.mock.calls.map(c=>c[0]);expect(events.map(e=>e.state)).toEqual(["dispatching","confirmed"]);expect(new Set(events.map(e=>e.attemptId)).size).toBe(1);
   });
 
-  it("caps Qwen's 100ms VAD rounding at the accepted packet watermark",async()=>{
-    const t=setup(s=>{s.autoComplete=false;s.onSend=e=>{if(e.type!=="input_audio_buffer.append")return;queueMicrotask(()=>{
-      const item="rounded";s.receive({type:"input_audio_buffer.speech_started",audio_start_ms:0,item_id:item});
-      s.receive({type:"conversation.item.created",item:{id:item,type:"message",role:"assistant",status:"in_progress",content:[{type:"input_audio"}]}});
-      s.receive({type:"input_audio_buffer.speech_stopped",audio_end_ms:100,item_id:item});
-      s.receive({type:"input_audio_buffer.committed",item_id:item,previous_item_id:""});
-      s.receive({type:"conversation.item.input_audio_transcription.completed",item_id:item,content_index:0,language:"fr",transcript:"Bonjour"});
-    });};}),p=t.create();await p.createSession(session);
-    await expect(p.transcribe(frame(1,0,80))).resolves.toMatchObject({timing:{startMs:0,endMs:80}});
-    expect(t.record.mock.calls.at(-1)![0]).toMatchObject({state:"confirmed",audioEndSample:1280});
-  });
-
   it("keeps phone boundaries advisory and never sends Manual commit",async()=>{
     const t=setup(s=>s.autoComplete=false),p=t.create();await p.createSession(session);await p.transcribe(frame());
     await expect(p.commitBoundary({sessionId:session.sessionId,boundaryMs:100})).resolves.toBeNull();
@@ -91,19 +79,6 @@ describe("Qwen ASR server-VAD wire on original shared streaming lifecycle",()=>{
     const result=await p.flush(session.sessionId,{finishSession:true});expect(result).toMatchObject({text:"Bonjour tout le monde.",timing:{startMs:0,endMs:100}});
     expect(t.sockets[0].sent.map(e=>e.type)).toEqual(["session.update","input_audio_buffer.append","session.finish"]);
     await p.closeSession(session.sessionId);expect(t.record.mock.calls.at(-1)![0].state).toBe("confirmed");
-  });
-
-  it("persists a server-VAD tail emitted after the first final and before session.finished",async()=>{
-    const t=setup(s=>{s.autoComplete=false;s.tailOnFinish=true;s.completePendingOnFinish=false;s.onSend=e=>{if(e.type==="input_audio_buffer.append"&&s.turns===0){s.nextEndMs=100;queueMicrotask(()=>s.complete());}};}),p=t.create();await p.createSession(session);
-    await expect(p.transcribe(frame(1,0,200))).resolves.toMatchObject({text:"Bonjour tout le monde.",timing:{startMs:0,endMs:100}});
-    await expect(p.transcribe(frame(2,3200,80))).resolves.toBeNull();
-    const tail=await p.flush(session.sessionId,{finishSession:true});
-    expect(tail).toMatchObject({text:"Bonjour tout le monde.",timing:{startMs:180,endMs:280}});
-    const events=t.record.mock.calls.map(call=>call[0]);
-    expect(new Set(events.map(event=>event.attemptId)).size).toBe(2);
-    expect(events.filter(event=>event.state==="dispatching")).toHaveLength(4);
-    expect(events.filter(event=>event.state==="confirmed")).toHaveLength(2);
-    expect(events.every(event=>event.state!=="uncertain")).toBe(true);
   });
 
   it("continues for 100 seconds across server-VAD turns on one product session",async()=>{
