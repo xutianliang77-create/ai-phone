@@ -283,9 +283,10 @@ export class OpenAiStreamingAsrClient {
       }
       const turn=s.turn;
       if(e.type==="input_audio_buffer.speech_started"){
-        if(!turn?.sent||turn.terminal||turn.providerItemId||!key(e.item_id)||!Number.isSafeInteger(e.audio_start_ms)||e.audio_start_ms<0)throw Error();
+        if(!turn?.sent||turn.terminal||turn.providerItemId)throw new PublicAsrError("public_asr_stream_vad_start_state_invalid","uncertain");
+        if(!key(e.item_id)||!Number.isSafeInteger(e.audio_start_ms)||e.audio_start_ms<0)throw new PublicAsrError("public_asr_stream_vad_start_identity_invalid","uncertain");
         const start=Math.round(e.audio_start_ms*this.rate/1000);
-        if(start<turn.event.audioStartSample!||start>turn.event.audioEndSample!)throw Error();
+        if(start<turn.event.audioStartSample!||start>turn.event.audioEndSample!)throw new PublicAsrError("public_asr_stream_vad_start_range_invalid","uncertain");
         turn.providerItemId=e.item_id;turn.itemId=e.item_id;turn.previousItem=s.lastItem;turn.providerStartSample=start;return;
       }
       if(e.type==="input_audio_buffer.speech_stopped"){
