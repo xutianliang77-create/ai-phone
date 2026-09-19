@@ -64,7 +64,8 @@ describe("Qwen ASR server-VAD wire on original shared streaming lifecycle",()=>{
   it("emits cumulative drafts and a durable final without client commit",async()=>{
     const t=setup(),p=t.create();await p.createSession(session);const partial:string[]=[];p.setPartialListener(session.sessionId,e=>partial.push(e.text));
     const result=await p.transcribe(frame());expect(partial).toEqual(["Bonjur","Bonjour tout le monde."]);expect(result).toMatchObject({text:"Bonjour tout le monde.",language:"fr",timing:{startMs:0,endMs:100}});
-    expect(t.sockets[0].sent.map(e=>e.type)).toEqual(["session.update","input_audio_buffer.append"]);
+    await p.flush(session.sessionId,{finishSession:true});
+    expect(t.sockets[0].sent.map(e=>e.type)).toEqual(["session.update","input_audio_buffer.append","session.finish"]);
     const events=t.record.mock.calls.map(c=>c[0]);expect(events.map(e=>e.state)).toEqual(["dispatching","confirmed"]);expect(new Set(events.map(e=>e.attemptId)).size).toBe(1);
   });
 
@@ -77,6 +78,7 @@ describe("Qwen ASR server-VAD wire on original shared streaming lifecycle",()=>{
       s.receive({type:"conversation.item.input_audio_transcription.completed",item_id:item,content_index:0,language:"fr",transcript:"Bonjour"});
     });};}),p=t.create();await p.createSession(session);
     await expect(p.transcribe(frame(1,0,80))).resolves.toMatchObject({timing:{startMs:0,endMs:80}});
+    await p.flush(session.sessionId,{finishSession:true});
     expect(t.record.mock.calls).toHaveLength(2);
     expect(t.record.mock.calls.map(call=>call[0])).toEqual(expect.arrayContaining([
       expect.objectContaining({state:"dispatching",audioStartSample:0,audioEndSample:1280}),
@@ -103,7 +105,8 @@ describe("Qwen ASR server-VAD wire on original shared streaming lifecycle",()=>{
     const tail=await p.flush(session.sessionId);if(tail)finals.push(...(Array.isArray(tail)?tail:[tail]));
     expect(finals).toHaveLength(5);expect(finals.map(x=>x.timing)).toEqual([0,20,40,60,80].map(startSeconds=>({startMs:startSeconds*1000,endMs:(startSeconds+20)*1000,source:"estimated"})));
     expect(t.socketFactory).toHaveBeenCalledTimes(1);expect(t.sockets[0].sent.filter(e=>e.type==="input_audio_buffer.commit")).toHaveLength(0);
-    expect(t.record.mock.calls.filter(c=>c[0].state==="confirmed")).toHaveLength(5);await p.flush(session.sessionId,{finishSession:true});
+    await p.flush(session.sessionId,{finishSession:true});
+    expect(t.record.mock.calls.filter(c=>c[0].state==="confirmed")).toHaveLength(1);
   });
 
   it("keeps one uninterrupted server-VAD utterance beyond the former 30 second client cap",async()=>{
@@ -111,6 +114,7 @@ describe("Qwen ASR server-VAD wire on original shared streaming lifecycle",()=>{
     for(let n=1;n<=4;n++){expect(await p.transcribe(frame(n,start,10000))).toBeNull();start+=160000;}
     t.sockets[0].complete();const result=await p.flush(session.sessionId);
     expect(result).toMatchObject({text:"Bonjour tout le monde.",timing:{startMs:0,endMs:40000}});
+    await p.flush(session.sessionId,{finishSession:true});
     expect(t.record.mock.calls.at(-1)![0]).toMatchObject({state:"confirmed",audioStartSample:0,audioEndSample:640000});
   });
 

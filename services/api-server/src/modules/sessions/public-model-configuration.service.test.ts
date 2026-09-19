@@ -237,7 +237,7 @@ describe("manual configuration binding on the original session aggregate",()=>{
     expect(current().publicModelAttempts!.map(a=>a.event.component)).toEqual(["asr","translation"]);expect(mtFetch).toHaveBeenCalledTimes(1);
     expect(JSON.stringify(current().publicModelAttempts)).not.toContain("你好");expect(JSON.stringify(current().publicModelAttempts)).not.toContain(secret);
   });
-  it.each(["openai","qwen","tencent"])("extends one %s streaming intent per confirmed prefix into original MT",async vendor=>{
+  it.each(["openai","qwen","tencent"])("extends one %s streaming intent into original MT",async vendor=>{
     const sampleRate=vendor!=="openai"?16000:24000,step=sampleRate/10;
     const update=body(1);Object.assign(update.components.asr,{vendor,protocol:vendor==="tencent"?"tencent_asr_ws":vendor==="qwen"?"qwen_asr_realtime":"openai_realtime_asr",endpoint:"wss://synthetic.invalid/v1/realtime",sampleRate});
     if(vendor==="tencent"){Object.assign(update.components.asr,{endpoint:"wss://asr.cloud.tencent.com/asr/v2/10001",appId:"10001",modelId:"16k_zh",authKind:"tencent_secret"});Object.assign(update.credentials.asr,{secretId:"SYNTHETIC_ID",secretKey:secret});delete (update.credentials.asr as any).apiKey;}
@@ -269,7 +269,7 @@ describe("manual configuration binding on the original session aggregate",()=>{
     await expect(recordPublicModelAttempt(current().id,{...intent,audioStartSample:1},tick)).rejects.toThrow("conflict");
     await expect(recordPublicModelAttempt(current().id,{...intent,audioEndSample:step*3},tick)).rejects.toThrow("audio_unconfirmed");
     if(peer! instanceof SyntheticQwenAsrSocket)peer.complete();
-    const output=[];for await(const event of provider.flushSession(current().id))output.push(event);
+    const output=[];for await(const event of provider.flushSession(current().id,vendor==="qwen"?{finishSession:true}:undefined))output.push(event);
     expect(output.some(e=>e.type==="transcript.final")).toBe(true);expect(mtFetch).toHaveBeenCalledTimes(1);
     expect(current().publicModelAttempts!.map(a=>[a.event.component,a.event.state])).toEqual([["asr","confirmed"],["translation","confirmed"]]);
     tick=new Date(now.getTime()+300);await observePublicRuntime(current().id,{...runtime,sequence:4,lastAcceptedSample:step*3},tick);
