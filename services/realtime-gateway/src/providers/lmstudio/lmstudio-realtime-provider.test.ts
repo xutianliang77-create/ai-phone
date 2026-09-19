@@ -1,6 +1,8 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { AsrProvider } from "../../asr/asr-provider.js";
 import { LmStudioRealtimeProvider } from "./lmstudio-realtime-provider.js";
+import { PublicTranslationError } from "./lmstudio-public-protocol.js";
+import { realtimeLogger } from "../../metrics/realtime-metrics.js";
 
 describe("lmstudio realtime provider", () => {
   it("translates transcripts emitted by the asr provider", async () => {
@@ -252,6 +254,49 @@ describe("lmstudio realtime provider", () => {
       stage: "translation",
       retryable: true,
     });
+  });
+
+  it("records a safe public failure classification before yielding translation.failed", async () => {
+    const warn = vi.spyOn(realtimeLogger, "warn").mockImplementation(() => realtimeLogger);
+    try {
+      const provider = new LmStudioRealtimeProvider({
+        baseUrl: "http://127.0.0.1:1234/v1",
+        model: "service:tencent_tmt",
+        timeoutMs: 100,
+        asrProvider: fixedAsrProvider(),
+        translationClient: {
+          translate: async () => {
+            throw new PublicTranslationError(
+              "public_translation_http_error",
+              "uncertain",
+              503,
+              { requestId: "request-42" },
+            );
+          },
+          healthCheck: async () => true,
+        },
+      });
+      await provider.createSession({
+        sessionId: "sess_1", sourceLanguage: "en", targetLanguage: "zh", voiceOutput: false,
+      });
+
+      const iterator = provider.sendAudio(audioFrame(8));
+      expect((await iterator.next()).value).toMatchObject({ type: "transcript.final" });
+      expect((await iterator.next()).value).toMatchObject({ type: "translation.failed" });
+      expect(warn).toHaveBeenCalledWith(expect.objectContaining({
+        sessionId: "sess_1",
+        segmentId: "asr_seg_8",
+        failure: {
+          class: "public_translation",
+          code: "public_translation_http_error",
+          outcome: "uncertain",
+          httpStatus: 503,
+          requestId: "request-42",
+        },
+      }), "Realtime translation failed");
+    } finally {
+      warn.mockRestore();
+    }
   });
 
   it("marks ASR provider errors with diagnostic stage metadata", async () => {

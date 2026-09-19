@@ -3,7 +3,7 @@ import type { RealtimeTokenClaims, ServerRealtimeEvent } from "@translation/cont
 import type { RealtimeProvider } from "../providers/realtime-provider.js";
 import { createSession, deleteSession } from "../sessions/session-manager.js";
 import type { AudioFrameBatcher } from "./audio-frame-batcher.js";
-import { handleControlEvent } from "./session-control-handler.js";
+import { flushProviderSession, handleControlEvent } from "./session-control-handler.js";
 import { RealtimeTtsOutputQueue } from "../tts/realtime-tts-output.js";
 
 const sessionId = "session-control-test";
@@ -80,6 +80,31 @@ describe("realtime session control", () => {
     expect(tts.setVoiceOutput).not.toHaveBeenCalled();
     expect(session.voiceOutputEnabled).toBeUndefined();
     expect(events[0]).toMatchObject({ accepted: false, enabled: false });
+  });
+
+  it("keeps a persisted translation failure non-fatal to a confirmed flush", async () => {
+    const events: ServerRealtimeEvent[] = [];
+    const testProvider: RealtimeProvider = {
+      ...provider(),
+      flushSession: async function* () {
+        yield {
+          type: "translation.failed" as const,
+          sessionId,
+          segmentId: "segment-1",
+          message: "Translation unavailable",
+          language: "en" as const,
+          stage: "translation" as const,
+        };
+      },
+    };
+
+    await expect(flushProviderSession(
+      testProvider,
+      sessionId,
+      (event) => events.push(event),
+      { failOnError: true, finishSession: true },
+    )).resolves.toBeUndefined();
+    expect(events).toEqual([expect.objectContaining({ type: "translation.failed" })]);
   });
 });
 

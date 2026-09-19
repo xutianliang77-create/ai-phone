@@ -8,6 +8,7 @@ import type { RealtimeProviderSession } from "../realtime-provider.js";
 import { realtimeLogger } from "../../metrics/realtime-metrics.js";
 import type { TranscriptResult } from "../../asr/asr-provider.js";
 import type { RefinedTranscript } from "./lmstudio-asr-refinement.js";
+import { PublicTranslationError } from "./lmstudio-public-protocol.js";
 import { turnLanguageEventFields } from
   "../../segments/turn-language-profile.js";
 
@@ -128,14 +129,58 @@ export function realtimeLogTranslationFailure(
     {
       sessionId,
       segmentId,
-      error: errorMessage(error, "LM Studio translation failed"),
+      failure: translationFailureDiagnostic(error),
     },
-    "LM Studio translation failed",
+    "Realtime translation failed",
   );
+}
+
+/** Safe observability payload: it deliberately omits source text, translated
+ * text, supplier response bodies, authorization headers, and error messages. */
+export function translationFailureDiagnostic(error: unknown) {
+  if (error instanceof PublicTranslationError) {
+    return {
+      class: "public_translation",
+      code: safeCode(error.code, "public_translation_unclassified"),
+      outcome: error.outcome,
+      ...(validStatus(error.status) ? { httpStatus: error.status } : {}),
+      ...(safeIdentifier(error.metadata?.requestId)
+        ? { requestId: error.metadata?.requestId }
+        : {}),
+      ...(safeIdentifier(error.metadata?.reportedModel)
+        ? { reportedModel: error.metadata?.reportedModel }
+        : {}),
+    };
+  }
+  return {
+    class: "translation_client",
+    code: "translation_client_error",
+    ...(safeErrorName(error) ? { errorName: safeErrorName(error) } : {}),
+  };
 }
 
 export function errorMessage(error: unknown, fallback: string) {
   return error instanceof Error ? error.message : fallback;
+}
+
+function safeCode(value: unknown, fallback: string) {
+  return typeof value === "string" && /^[a-z0-9_]{1,120}$/u.test(value)
+    ? value
+    : fallback;
+}
+
+function safeIdentifier(value: unknown): value is string {
+  return typeof value === "string" && /^[A-Za-z0-9_.:/-]{1,240}$/u.test(value);
+}
+
+function validStatus(value: unknown): value is number {
+  return typeof value === "number" && Number.isInteger(value) && value >= 100 && value <= 599;
+}
+
+function safeErrorName(error: unknown) {
+  return error instanceof Error && /^[A-Za-z][A-Za-z0-9]{0,79}$/u.test(error.name)
+    ? error.name
+    : undefined;
 }
 
 function isChineseFamilyLanguage(language: string) {

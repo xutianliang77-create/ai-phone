@@ -112,6 +112,82 @@ describe("realtime session finalizer", () => {
     expect(getSession(session.id)?.status).toBe("ended");
   });
 
+  it("ends a confirmed public session once when a flushed segment has translation.failed", async () => {
+    const session = createSession(claims());
+    const events: ServerRealtimeEvent[] = [];
+    const close = vi.fn(async () => undefined);
+    const flushTracker = new RealtimeFlushTracker();
+    const finalizer = new RealtimeSessionFinalizer({
+      sessionId: session.id,
+      provider: {
+        ...providerWithoutTail(),
+        closeSession: close,
+        flushSession: async function* () {
+          yield {
+            type: "transcript.final" as const,
+            sessionId: session.id,
+            segmentId: "failed-tail",
+            text: "source text",
+            language: "en" as const,
+          };
+          yield {
+            type: "translation.failed" as const,
+            sessionId: session.id,
+            segmentId: "failed-tail",
+            message: "Translation unavailable",
+            language: "zh" as const,
+            stage: "translation" as const,
+          };
+        },
+      },
+      audioBatcher: { stopAccepting: vi.fn(), flush: vi.fn(async () => undefined) },
+      send: (event) => { flushTracker.record(event); events.push(event); },
+      drainSessionSync: vi.fn(async () => undefined),
+      flushTracker,
+      onError: vi.fn(),
+      confirmed: { beforeFlush: vi.fn(async () => undefined) },
+    });
+
+    await Promise.all([
+      finalizer.finalize("client_request"),
+      finalizer.finalize("connection_closed"),
+    ]);
+
+    const ended = events.filter((event) => event.type === "session.ended");
+    expect(ended).toHaveLength(1);
+    expect(ended[0]).toMatchObject({
+      reason: "client_request",
+      flush: {
+        status: "degraded",
+        translationFailedCount: 1,
+        unresolvedSegmentCount: 0,
+        audioFlushed: true,
+        providerFlushed: true,
+      },
+    });
+    expect(close).toHaveBeenCalledOnce();
+    expect(getSession(session.id)?.status).toBe("ended");
+  });
+
+  it("does not replay an uncertain confirmed-provider flush after it fails", async () => {
+    const session = createSession(claims());
+    const flush = vi.fn(async function* () { throw new Error("provider uncertain"); });
+    const finalizer = new RealtimeSessionFinalizer({
+      sessionId: session.id,
+      provider: { ...providerWithoutTail(), flushSession: flush },
+      audioBatcher: { stopAccepting: vi.fn(), flush: vi.fn(async () => undefined) },
+      send: () => undefined,
+      drainSessionSync: async () => undefined,
+      flushTracker: new RealtimeFlushTracker(),
+      onError: vi.fn(),
+      confirmed: { beforeFlush: async () => undefined },
+    });
+
+    await expect(finalizer.finalize("client_request")).rejects.toThrow("public_final_flush_unconfirmed");
+    await expect(finalizer.finalize("connection_closed")).rejects.toThrow("public_final_flush_unconfirmed");
+    expect(flush).toHaveBeenCalledOnce();
+  });
+
   it("reports an empty successful flush when no tail audio remains", async () => {
     const session = createSession(claims());
     const events: ServerRealtimeEvent[] = [];

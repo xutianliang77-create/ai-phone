@@ -126,7 +126,11 @@ export async function flushProviderSession(
     finishSession: options.finishSession,
   })) {
     sendEvent(outgoing);
-    if(options.failOnError&&(outgoing.type==="error"||outgoing.type==="translation.failed"))throw Error("public_provider_flush_failed");
+    // A translation.failed event is a persisted terminal result for one
+    // segment. It may make the final summary degraded, but it must not turn a
+    // user-requested stop into an unbounded active session. Transport/ASR
+    // errors remain fail-closed because their provider state can be unknown.
+    if(options.failOnError&&outgoing.type==="error")throw Error("public_provider_flush_failed");
   }
 }
 

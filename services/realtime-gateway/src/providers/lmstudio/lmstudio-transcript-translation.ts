@@ -4,7 +4,7 @@ import type { RealtimeProviderSession } from "../realtime-provider.js";
 import type { TranslationClient } from "./lmstudio-realtime-provider-options.js";
 import type { RealtimeTranscriptRefiner } from "./lmstudio-asr-refinement.js";
 import { cleanRealtimeText } from "../../protocol/realtime-text.js";
-import { abortable } from "./lmstudio-public-protocol.js";
+import { abortable, PublicTranslationError } from "./lmstudio-public-protocol.js";
 import { isUsableTranslation, providerUsage } from "./lmstudio-translation-output.js";
 import { realtimeLogTranslationFailure, targetLanguageForTranscript, terminologyFor, transcriptFinalEvent, translationFailed } from "./lmstudio-realtime-helpers.js";
 import { turnLanguageEventFields } from "../../segments/turn-language-profile.js";
@@ -102,15 +102,17 @@ export async function* translateSingleTranscript(
       }),signal));
       if(!context.isCurrent(session))return;
       if (!isUsableTranslation(translated)) {
+        // This must be recorded before yielding. A confirmed public finalizer
+        // may stop consuming immediately after the terminal segment event.
+        realtimeLogTranslationFailure(
+          session.sessionId,
+          transcript.segmentId,
+          new PublicTranslationError("public_translation_unusable_output", "uncertain"),
+        );
         yield translationFailed(session, transcript, targetLanguage, {
           provider: context.name,
           retryable: true,
         });
-        realtimeLogTranslationFailure(
-          session.sessionId,
-          transcript.segmentId,
-          new Error("LM Studio returned empty or non-translation output"),
-        );
         return;
       }
       const latencyMs = Date.now() - startedAt;
@@ -140,6 +142,13 @@ export async function* translateSingleTranscript(
       });
     } catch (error) {
       if(!context.isCurrent(session))return;
+      // Preserve a bounded, credential-free failure classification before the
+      // terminal event can be consumed by an ending public session.
+      realtimeLogTranslationFailure(
+        session.sessionId,
+        transcript.segmentId,
+        error,
+      );
       yield translationFailed(
         session,
         transcript,
@@ -148,11 +157,6 @@ export async function* translateSingleTranscript(
           provider: context.name,
           retryable: true,
         },
-      );
-      realtimeLogTranslationFailure(
-        session.sessionId,
-        transcript.segmentId,
-        error,
       );
     }
   }

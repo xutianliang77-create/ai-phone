@@ -44,6 +44,24 @@ describe("public confirmation in the original Gateway pipeline",()=>{
     dispatcher.send(started);dispatcher.send(ended);hold.resolve();await dispatcher.drain();
     expect(sendClient.mock.calls.map(c=>c[0].type)).toEqual(["session.ended"]);
   });
+  it("persists a failed translation segment before confirming a degraded public end",async()=>{
+    const {base,dispatcher,sendClient}=setup();
+    dispatcher.send(started);await dispatcher.drain();sendClient.mockClear();
+    dispatcher.send({type:"transcript.final",sessionId:binding.sessionId,segmentId:"failed-tail",revision:2,text:"source",language:"en"});
+    dispatcher.send({type:"translation.failed",sessionId:binding.sessionId,segmentId:"failed-tail",revision:2,
+      message:"Translation unavailable",language:"zh",stage:"translation",provider:"public:tencent",retryable:true});
+    dispatcher.send(ended);await dispatcher.drain();
+
+    expect(base.record.mock.calls.map(call=>call[0].type)).toEqual([
+      "transcript.final", "translation.failed",
+    ]);
+    expect(base.runtime.mock.calls.at(-1)![1]).toMatchObject({
+      phase:"stopped",finalRevision:2,lastAcceptedSample:0,
+    });
+    expect(sendClient.mock.calls.map(call=>call[0].type)).toEqual([
+      "transcript.final", "translation.failed", "session.ended",
+    ]);
+  });
   it("keeps private best-effort notification and drain semantics unchanged",async()=>{
     const sendClient=vi.fn(),errors=vi.fn();const dispatcher=new RealtimeEventDispatcher({
       eventSink:{record:async()=>{throw Error("private sync failure");}},sendClient,afterSend:vi.fn(),onSyncError:errors});
@@ -82,5 +100,28 @@ describe("public confirmation in the original Gateway pipeline",()=>{
     await expect(finalizer.finalize("client_request")).rejects.toThrow();
     expect(stop).toHaveBeenCalledOnce();expect(close).toHaveBeenCalledOnce();
     expect(sendClient.mock.calls.some(c=>c[0].type==="session.ended")).toBe(false);
+  });
+  it("persists a failed public translation then ends once with a degraded flush",async()=>{
+    const {base,sink,dispatcher,sendClient}=setup();
+    dispatcher.send(started);await dispatcher.drain();sendClient.mockClear();
+    const session=createSession({sessionId:binding.sessionId,userId:"owner",sourceLanguage:"en",targetLanguage:"zh",voiceOutput:false,
+      planCode:"free",maxDurationSeconds:120,issuedAt:1,expiresAt:9999999999});
+    const close=vi.fn(async()=>{}),tracker=new RealtimeFlushTracker();
+    const provider:RealtimeProvider={name:"synthetic",closeSession:close,healthCheck:async()=>true,async *sendAudio(){},async *flushSession(){
+      yield {type:"transcript.final" as const,sessionId:binding.sessionId,segmentId:"failed-tail",revision:1,text:"source",language:"en" as const};
+      yield {type:"translation.failed" as const,sessionId:binding.sessionId,segmentId:"failed-tail",revision:1,
+        message:"Translation unavailable",language:"zh" as const,stage:"translation" as const,provider:"public:tencent",retryable:true};
+    }};
+    const finalizer=new RealtimeSessionFinalizer({sessionId:session.id,provider,
+      audioBatcher:{stopAccepting:vi.fn(),flush:async()=>{}},send:event=>{tracker.record(event);dispatcher.send(event);},drainSessionSync:()=>dispatcher.drain(),
+      flushTracker:tracker,onError:vi.fn(),confirmed:{beforeFlush:()=>sink.confirmAudio()}});
+
+    await Promise.all([finalizer.finalize("client_request"),finalizer.finalize("connection_closed")]);
+
+    expect(base.record.mock.calls.map(call=>call[0].type)).toEqual(["transcript.final","translation.failed"]);
+    expect(base.runtime.mock.calls.at(-1)![1]).toMatchObject({phase:"stopped",finalRevision:1});
+    const ended=sendClient.mock.calls.map(call=>call[0]).filter(event=>event.type==="session.ended");
+    expect(ended).toHaveLength(1);expect(ended[0]).toMatchObject({flush:{status:"degraded",translationFailedCount:1}});
+    expect(close).toHaveBeenCalledOnce();
   });
 });
