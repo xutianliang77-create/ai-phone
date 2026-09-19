@@ -124,7 +124,7 @@ export function startWebSocketServer(options:{publicRuntime?:PublicGatewayRuntim
       ttsOutput:sessionEventSink.requiresConfirmation?ttsOutputQueue:undefined,
       flushTracker,
       onError: (stage, error) => {
-        realtimeLogger.warn({ error, stage, sessionId: session.id },
+        realtimeLogger.warn({ error:loggableError(error), stage, sessionId: session.id },
           "Realtime pipeline flush failed during finalization");
       },
     });

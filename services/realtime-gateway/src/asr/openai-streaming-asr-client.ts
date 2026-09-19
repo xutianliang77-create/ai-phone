@@ -73,7 +73,7 @@ export class OpenAiStreamingAsrClient {
       s.ws.on("message",(data,isBinary)=>{if(this.state!==s||s.failure)return;try{if(isBinary||Buffer.byteLength(data.toString())>262144)throw Error();
         const event=JSON.parse(data.toString());const deferQwen=this.qwen&&s.configured&&event?.type!=="session.finished"&&
           (s.finishing||s.busy||s.turn?.finalizing||!s.turn);if(deferQwen){if(s.pendingWireEvents.length>=4096)throw Error();s.pendingWireEvents.push(event);}
-        else this.receive(s,event);}catch{this.fail(s,"public_asr_stream_protocol");}});
+        else this.receive(s,event);}catch(error){this.fail(s,error instanceof PublicAsrError?error.code:"public_asr_stream_protocol");}});
       s.ws.once("open",()=>{void this.send(s,{type:"session.update",session:this.qwen?qwenAsrSessionConfiguration(this.options.language):{type:"transcription",audio:{input:{format:{type:"audio/pcm",rate:24000},
         transcription:this.transcription(),turn_detection:null}}}}).catch(()=>this.fail(s,"public_asr_stream_setup"));});
       await abortable(s.ready.promise,s.stop.signal);this.assert(s);
@@ -294,7 +294,7 @@ export class OpenAiStreamingAsrClient {
         // transport may end its last accepted packet 20–40ms earlier. Accept
         // only that bounded rounding window and never extend the durable/audio
         // watermark beyond bytes already accepted by this process.
-        if(end<=(turn.providerStartSample??turn.event.audioStartSample!)||reportedEnd>turn.event.audioEndSample!+(this.qwen?this.rate/25:0))throw Error();
+        if(end<=(turn.providerStartSample??turn.event.audioStartSample!)||reportedEnd>turn.event.audioEndSample!+(this.qwen?this.rate/25:0))throw new PublicAsrError("public_asr_stream_vad_stop_invalid","uncertain");
         turn.providerEndSample=end;return;
       }
       if(e.type==="conversation.item.created"){
