@@ -46,6 +46,7 @@ describe("PostgreSQL cutover evidence upgrade", () => {
         "040_voice_client_ownership",
         "041_agent_voice_delivery",
         "042_account_deletion_product_records",
+        "043_public_creation_bindings",
       ],
     });
     const upgraded = readVerifiedPostgresCutoverEvidence();
@@ -59,6 +60,7 @@ describe("PostgreSQL cutover evidence upgrade", () => {
         "040_voice_client_ownership",
         "041_agent_voice_delivery",
         "042_account_deletion_product_records",
+        "043_public_creation_bindings",
       ],
     });
     expect(upgraded.evidenceUpgrade?.validations).toEqual(expect.arrayContaining([
@@ -75,6 +77,10 @@ describe("PostgreSQL cutover evidence upgrade", () => {
       expect.objectContaining({
         migration: "042_account_deletion_product_records",
         details: { explicitDeleteProjection: true },
+      }),
+      expect.objectContaining({
+        migration: "043_public_creation_bindings",
+        details: { projectionFunctionAdmitsBinding: true, invalidBindings: 0 },
       }),
     ]));
   });
@@ -109,7 +115,7 @@ describe("PostgreSQL cutover evidence upgrade", () => {
 });
 
 function previousMigrations() {
-  return [...expectedPostgresMigrations].slice(0, -6);
+  return [...expectedPostgresMigrations].slice(0, -7);
 }
 
 function writeEvidence(migrations: string[]) {
@@ -189,6 +195,12 @@ function validPool(overrides: Partial<{
           "DELETE FROM ai_phone.product_records",
           "event_operation = 'delete'",
         ].join(" ") }] };
+      }
+      if (sql.includes("apply_projection_event(text,text,text,text,jsonb)")) {
+        return { rows: [{ definition: "'publicCreationBindings'" }] };
+      }
+      if (sql.includes("AS invalid_bindings")) {
+        return { rows: [{ invalid_bindings: "0" }] };
       }
       if (sql.includes("AS incomplete_playback")) {
         return { rows: [{ invalid_attempts: "0", invalid_client_events: "0",

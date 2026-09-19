@@ -84,4 +84,16 @@ describe("applyPostgresProjectionEvent", () => {
     });
     expect(query.mock.calls[0]?.[0]).toContain(functionName);
   });
+
+  it("keeps a public creation binding in the generic durable projection", async () => {
+    const query = vi.fn().mockResolvedValue({ rows: [{ applied: false }] });
+    await applyPostgresProjectionEvent({ query } as never, {
+      id: "event_public_binding",
+      namespace: "publicCreationBindings",
+      recordKey: "public-" + "a".repeat(64),
+      operation: "upsert",
+      payload: { schemaVersion: 1, state: "active" },
+    });
+    expect(query.mock.calls[0]?.[0]).toContain("ai_phone.apply_projection_event");
+  });
 });

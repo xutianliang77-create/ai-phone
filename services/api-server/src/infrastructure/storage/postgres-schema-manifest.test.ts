@@ -7,9 +7,9 @@ import {
 
 describe("PostgreSQL schema manifest", () => {
   it("pins the complete ordered migration set", () => {
-    expect(expectedPostgresMigrations).toHaveLength(42);
+    expect(expectedPostgresMigrations).toHaveLength(43);
     expect(expectedPostgresMigrations.at(-1)).toBe(
-      "042_account_deletion_product_records",
+      "043_public_creation_bindings",
     );
     expect(comparePostgresMigrations([...expectedPostgresMigrations])).toEqual({
       missing: [],
@@ -22,7 +22,7 @@ describe("PostgreSQL schema manifest", () => {
       ...expectedPostgresMigrations.slice(0, -1),
       "999_unknown",
     ])).toEqual({
-      missing: ["042_account_deletion_product_records"],
+      missing: ["043_public_creation_bindings"],
       extra: ["999_unknown"],
     });
   });
@@ -35,6 +35,16 @@ describe("PostgreSQL schema manifest", () => {
     expect(sql).toContain("event_operation NOT IN ('upsert', 'delete')");
     expect(sql).toContain("DELETE FROM ai_phone.product_records");
     expect(sql).toContain("event_operation = 'delete'");
+  });
+
+  it("allows public creation bindings through the durable primary projection", () => {
+    const sql = readFileSync(new URL(
+      "../../../../../infra/postgres/migrations/043_public_creation_bindings.sql",
+      import.meta.url,
+    ), "utf8");
+    expect(sql).toContain("pg_get_functiondef");
+    expect(sql).toContain("publicCreationBindings");
+    expect(sql).toContain("Public creation binding projection function shape is unavailable");
   });
 
   it("keeps Agent task call references synchronized on projection updates", () => {

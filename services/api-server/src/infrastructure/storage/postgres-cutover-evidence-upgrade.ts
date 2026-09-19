@@ -96,7 +96,37 @@ const migrationValidators: Record<string, (
   "040_voice_client_ownership": validateVoiceClientOwnership,
   "041_agent_voice_delivery": validateAgentVoiceDelivery,
   "042_account_deletion_product_records": validateAccountDeletionProductRecords,
+  "043_public_creation_bindings": validatePublicCreationBindings,
 };
+
+async function validatePublicCreationBindings(pool: Pick<Pool, "query">) {
+  const definition = await pool.query<{ definition: string | null }>(`
+    SELECT pg_get_functiondef(
+      'ai_phone.apply_projection_event(text,text,text,text,jsonb)'::regprocedure
+    ) AS definition
+  `);
+  const invalid = await pool.query<{ invalid_bindings: string }>(`
+    SELECT count(*) FILTER (WHERE namespace = 'publicCreationBindings' AND (
+      COALESCE(payload->>'schemaVersion', '') <> '1' OR
+      COALESCE(payload->>'sessionId', '') <> record_key OR
+      payload->>'ownerId' IS NULL OR payload->>'ownerId' = '' OR
+      payload->>'deploymentId' IS NULL OR payload->>'deploymentId' = '' OR
+      COALESCE(payload->>'requestHash', '') !~ '^[a-f0-9]{64}$' OR
+      COALESCE(payload->>'state', '') NOT IN ('active', 'cancelled', 'expired')
+    ))::text AS invalid_bindings
+    FROM ai_phone.projection_records
+  `);
+  const projectionFunctionAdmitsBinding =
+    definition.rows[0]?.definition?.includes("'publicCreationBindings'") === true;
+  const invalidBindings = Number(invalid.rows[0]?.invalid_bindings ?? -1);
+  if (!projectionFunctionAdmitsBinding || invalidBindings !== 0) {
+    throw new Error("PostgreSQL public creation binding validation failed");
+  }
+  return {
+    migration: "043_public_creation_bindings",
+    details: { projectionFunctionAdmitsBinding, invalidBindings },
+  };
+}
 
 async function validateAccountDeletionProductRecords(pool: Pick<Pool, "query">) {
   const functionDefinition = await pool.query<{ definition: string | null }>(`

@@ -1,5 +1,6 @@
 export type PostgresProjectionNamespace =
   | "sessions"
+  | "publicCreationBindings"
   | "providerOperations"
   | "workerDispatches"
   | "workerCapacityReservations"
