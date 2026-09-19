@@ -43,6 +43,12 @@ describe("Qwen ASR server-VAD wire on original shared streaming lifecycle",()=>{
     await expect(t.create().createSession(session)).resolves.toBeUndefined();
   });
 
+  it("accepts Qwen's server-returned VAD response flags without weakening requested thresholds",async()=>{
+    const t=setup(s=>{s.autoSetup=false;s.onSend=e=>{if(e.type==="session.update")queueMicrotask(()=>s.receive({type:"session.updated",session:{id:"qwen-session",model:s.model,modalities:["text"],...e.session,
+      turn_detection:{...serverVad,create_response:true,interrupt_response:true}}}));};});
+    await expect(t.create().createSession(session)).resolves.toBeUndefined();
+  });
+
   it("uses provider-confirmed automatic language only within the qualified pair",async()=>{
     const t=setup(s=>{s.detectedLanguage="zh";});t.options.authorization.languagePolicy={source:"auto",target:"zh",autoReverse:true,pair:["zh","en"],revision:2};
     const p=t.create(),automatic={...session,sourceLanguage:"auto" as const,targetLanguage:"zh" as const,autoReverseTargetLanguage:true,languagePair:["zh","en"] as ["zh","en"]};

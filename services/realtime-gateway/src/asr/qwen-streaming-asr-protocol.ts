@@ -25,7 +25,8 @@ export function assertQwenAsrConfiguration(session:Record<string,any>|undefined,
     JSON.stringify(session.modalities)!=='["text"]'||!["pcm","pcm16"].includes(session.input_audio_format)||session.sample_rate!==16000||
     !transcriptionOk||session.turn_detection?.type!=="server_vad"||session.turn_detection.threshold!==0||
     session.turn_detection.silence_duration_ms!==400||Object.keys(session.turn_detection).some(key=>
-      !["type","threshold","silence_duration_ms"].includes(key)))throw new PublicAsrError("qwen_asr_setup_mismatch","not_sent");
+      !["type","threshold","silence_duration_ms","create_response","interrupt_response"].includes(key))||
+    ["create_response","interrupt_response"].some(key=>session.turn_detection[key]!==undefined&&typeof session.turn_detection[key]!=="boolean"))throw new PublicAsrError("qwen_asr_setup_mismatch","not_sent");
 }
 /** Qwen omits optional fields in a source=auto acknowledgement, but it must
  * never echo a fixed language or a different transcription model. */
