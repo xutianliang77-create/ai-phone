@@ -139,7 +139,7 @@ class AndroidOnDeviceTranslationBridge {
             translator(pair).translate(text)
                 .addOnSuccessListener { translated ->
                     val normalized = translated.trim()
-                    if (normalized.isEmpty) {
+                    if (normalized.isEmpty()) {
                         result.error("empty_translation", "Android ML Kit returned empty text.", pair.payload())
                     } else {
                         result.success(pair.payload() + mapOf(
