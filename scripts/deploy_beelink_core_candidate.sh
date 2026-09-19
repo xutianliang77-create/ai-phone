@@ -3,6 +3,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 MODE="${1:-preflight}"
+CANDIDATE_DEPLOYMENT_PROFILE="${CANDIDATE_DEPLOYMENT_PROFILE:-core_translation}"
 CANDIDATE_ENV_FILE="${CANDIDATE_ENV_FILE:-$ROOT_DIR/release/domestic/release.env}"
 REMOTE_HOST="${REMOTE_HOST:-beelink@100.110.127.117}"
 REMOTE_ROOT="${REMOTE_ROOT:-/data/models/ai-phone-server-candidates/core-translation}"
@@ -26,6 +27,10 @@ AGENT_STATUS_URL="http://$PUBLIC_HOST:$LIVEKIT_AGENT_PORT/worker"
 case "$MODE" in
   preflight|deploy|status|down) ;;
   *) echo "Usage: $0 [preflight|deploy|status|down]" >&2; exit 2 ;;
+esac
+case "$CANDIDATE_DEPLOYMENT_PROFILE" in
+  core_translation|call_link_tts_idle_test) ;;
+  *) echo "Unsupported CANDIDATE_DEPLOYMENT_PROFILE: $CANDIDATE_DEPLOYMENT_PROFILE" >&2; exit 2 ;;
 esac
 
 [[ "$PUBLIC_HOST" =~ ^[A-Za-z0-9.:-]+$ ]] || {
@@ -78,6 +83,17 @@ done
 }
 
 preflight() {
+  if [[ "$CANDIDATE_DEPLOYMENT_PROFILE" == "call_link_tts_idle_test" ]]; then
+    node "$ROOT_DIR/scripts/check_call_link_tts_idle_candidate_deploy.mjs" \
+      --env-file "$CANDIDATE_ENV_FILE" \
+      --compose-project "$COMPOSE_PROJECT_NAME" \
+      --container-prefix "$AI_PHONE_CONTAINER_PREFIX" \
+      --remote-root "$REMOTE_ROOT" \
+      --api-port "$API_PORT" \
+      --realtime-port "$REALTIME_PORT" \
+      --translation-agent-port "$LIVEKIT_AGENT_PORT"
+    return
+  fi
   node "$ROOT_DIR/scripts/check_core_translation_candidate_deploy.mjs" \
     --env-file "$CANDIDATE_ENV_FILE" \
     --compose-project "$COMPOSE_PROJECT_NAME" \
@@ -146,7 +162,7 @@ fi
 REMOTE
 }
 
-status() {
+status_core() {
   require_remote_resource_isolation
   remote_compose "ps"
   local api_health gateway_health agent_health runtime_manifest
@@ -168,6 +184,7 @@ if (gateway.status !== "ok") throw new Error("candidate Gateway is not healthy")
 if (api.realtimeWsEndpoint !== process.env.EXPECTED_REALTIME_ENDPOINT) {
   throw new Error("candidate API advertises an unexpected realtime endpoint");
 }
+
 if (!gateway.publicEntryProtection?.allowedHosts?.includes(
   process.env.EXPECTED_REALTIME_HOST,
 )) {
@@ -203,6 +220,86 @@ NODE
   echo "Core candidate ready on $PUBLIC_HOST:$API_PORT/$REALTIME_PORT/$LIVEKIT_AGENT_PORT"
 }
 
+status_idle_test() {
+  remote_compose "ps"
+  local api_health gateway_health agent_health runtime_manifest
+  api_health="$(curl -fsS --max-time 5 "$API_STATUS_URL")"
+  gateway_health="$(curl -fsS --max-time 5 "$GATEWAY_STATUS_URL")"
+  agent_health="$(curl -fsS --max-time 5 "$AGENT_STATUS_URL")"
+  runtime_manifest="$(ssh "$REMOTE_HOST" \
+    "cat '$REMOTE_RUNTIME/candidate-manifest.json'")"
+  API_HEALTH="$api_health" GATEWAY_HEALTH="$gateway_health" \
+    AGENT_HEALTH="$agent_health" RUNTIME_MANIFEST="$runtime_manifest" \
+    API_STATUS_URL="$API_STATUS_URL" \
+    EXPECTED_REALTIME_ENDPOINT="ws://$PUBLIC_HOST:$REALTIME_PORT/realtime" \
+    EXPECTED_REALTIME_HOST="$PUBLIC_HOST:$REALTIME_PORT" node <<'NODE'
+const api = JSON.parse(process.env.API_HEALTH);
+const gateway = JSON.parse(process.env.GATEWAY_HEALTH);
+const agent = JSON.parse(process.env.AGENT_HEALTH);
+const manifest = JSON.parse(process.env.RUNTIME_MANIFEST);
+if (api.status !== "ok") throw new Error("idle candidate API is not healthy");
+if (gateway.status !== "ok") throw new Error("idle candidate Gateway is not healthy");
+if (api.realtimeWsEndpoint !== process.env.EXPECTED_REALTIME_ENDPOINT) {
+  throw new Error("idle candidate API advertises an unexpected realtime endpoint");
+}
+if (!gateway.publicEntryProtection?.allowedHosts?.includes(
+  process.env.EXPECTED_REALTIME_HOST,
+)) {
+  throw new Error("idle candidate Gateway does not allow its advertised realtime host");
+}
+if (!String(agent.agent_name ?? "").includes("translation-runtime-")) {
+  throw new Error("idle candidate Translation Agent identity is not isolated");
+}
+const dependencies = gateway.dependencyReadiness;
+if (dependencies?.sessionReady !== false ||
+    !dependencies.issues?.includes("public_runtime_disabled")) {
+  throw new Error("idle candidate must keep public runtime intentionally unqualified");
+}
+const runtime = gateway.runtimeIdentity;
+if (runtime?.traceable !== true) {
+  throw new Error("idle candidate Gateway runtime identity is not traceable");
+}
+for (const [runtimeKey, manifestKey] of [
+  ["candidateId", "candidateId"],
+  ["sourceCommit", "sourceCommit"],
+  ["sourceTree", "sourceTree"],
+  ["imageId", "imageId"],
+  ["configSha256", "configSha256"],
+]) {
+  if (runtime[runtimeKey] !== manifest[manifestKey]) {
+    throw new Error(`idle candidate runtime ${runtimeKey} does not match manifest`);
+  }
+}
+const response = await fetch(`${process.env.API_STATUS_URL.replace(/\/health$/, "")}/call-links`, {
+  method: "POST",
+});
+const body = await response.json().catch(() => null);
+if (response.status !== 503 || body?.error?.code !== "call_link_public_tts_not_qualified") {
+  throw new Error("idle candidate Call Link is not safely blocked before provider use");
+}
+NODE
+  echo "Call Link Tencent TTS idle candidate is running without model/provider admission on $PUBLIC_HOST:$API_PORT/$REALTIME_PORT/$LIVEKIT_AGENT_PORT"
+}
+
+status() {
+  if [[ "$CANDIDATE_DEPLOYMENT_PROFILE" == "call_link_tts_idle_test" ]]; then
+    status_idle_test
+  else
+    status_core
+  fi
+}
+
+require_remote_deployment_safety() {
+  if [[ "$CANDIDATE_DEPLOYMENT_PROFILE" == "core_translation" ]]; then
+    require_remote_resource_isolation
+    return
+  fi
+  ssh "$REMOTE_HOST" \
+    "if docker ps -a --format '{{.Names}}' | grep -Fxq '$AI_PHONE_CONTAINER_PREFIX-wujie-ai'; then \
+       echo 'Idle candidate container name already exists' >&2; exit 2; \
+     fi"
+}
+
 if [[ "$MODE" == "preflight" ]]; then
   preflight
   exit 0
@@ -213,13 +310,13 @@ if [[ "$MODE" == "status" ]]; then
 fi
 if [[ "$MODE" == "down" ]]; then
   remote_compose "down"
-  echo "Core candidate stopped; image, private env, and isolated data retained."
+  echo "Candidate stopped; image, private env, and isolated data retained."
   exit 0
 fi
 
 preflight
 require_clean_source
-require_remote_resource_isolation
+require_remote_deployment_safety
 npm --prefix "$ROOT_DIR" run check:source-build -- --json
 require_clean_source
 require_remote_ports_free
@@ -248,6 +345,7 @@ ssh "$REMOTE_HOST" \
   "REMOTE_RUNTIME='$REMOTE_RUNTIME' \
    COMPOSE_PROJECT_NAME='$COMPOSE_PROJECT_NAME' \
    RUNTIME_CANDIDATE_ID='$RUNTIME_CANDIDATE_ID' \
+   CANDIDATE_DEPLOYMENT_PROFILE='$CANDIDATE_DEPLOYMENT_PROFILE' \
    SOURCE_COMMIT='$SOURCE_COMMIT' SOURCE_TREE='$SOURCE_TREE' \
    PUBLIC_HOST='$PUBLIC_HOST' API_PORT='$API_PORT' \
    REALTIME_PORT='$REALTIME_PORT' LIVEKIT_AGENT_PORT='$LIVEKIT_AGENT_PORT' \
@@ -268,6 +366,10 @@ set_env() {
     printf '%s=%s\n' "$key" "$value" >>"$next"
   fi
 }
+unset_env() {
+  sed -i "/^$1=/d" "$next"
+}
+if [[ "$CANDIDATE_DEPLOYMENT_PROFILE" == "core_translation" ]]; then
 set_env NODE_ENV production
 set_env DOMESTIC_RELEASE_CAPABILITY_PROFILE core_translation
 set_env API_TEST_AUTO_ACCOUNT false
@@ -307,6 +409,80 @@ set_env WUJIE_REQUIRE_TRACEABLE_RUNTIME true
 set_env WUJIE_RUNTIME_CANDIDATE_ID "$RUNTIME_CANDIDATE_ID"
 set_env WUJIE_RUNTIME_SOURCE_COMMIT "$SOURCE_COMMIT"
 set_env WUJIE_RUNTIME_SOURCE_TREE "$SOURCE_TREE"
+else
+set_env CANDIDATE_DEPLOYMENT_PROFILE call_link_tts_idle_test
+set_env NODE_ENV development
+set_env DOMESTIC_RELEASE_CAPABILITY_PROFILE call_link_tts_idle_test
+set_env API_TEST_AUTO_ACCOUNT true
+set_env AUTH_DEBUG_OTP true
+set_env CALL_PROVIDER_POLICY call_link_only
+set_env CALL_LINK_DEPLOYMENT_TEST_MODE true
+set_env CALL_LINK_PUBLIC_TTS_ENABLED true
+set_env API_RESULT_SYNC_DEPLOYMENT_ID "$RUNTIME_CANDIDATE_ID"
+set_env CALL_LINK_1_0_COMPATIBILITY_ENABLED true
+set_env CALL_LINK_1_0_COMPATIBILITY_DEPLOYMENT_ID "$RUNTIME_CANDIDATE_ID"
+set_env CALL_LINK_1_0_COMPATIBILITY_PROFILE call_link_only
+set_env PUBLIC_RUNTIME_ENABLED false
+set_env PUBLIC_RUNTIME_QUALIFICATION_BOOTSTRAP false
+set_env PUBLIC_RUNTIME_REQUIRE_LIVE_QUALIFICATION false
+set_env WUJIE_AI_TRANSLATION_AGENT_ENABLED true
+set_env WUJIE_AI_AGENT_CALL_WORKER_ENABLED false
+set_env WUJIE_AI_VOICE_AGENT_ENABLED false
+set_env WUJIE_AI_AIR_DEVICE_GATEWAY_ENABLED false
+set_env WUJIE_AI_SRT_INGRESS_ENABLED false
+set_env AGENT_CALL_WORKER_ENABLED false
+set_env LIVEKIT_EGRESS_ENABLED false
+set_env LIVEKIT_EGRESS_ARTIFACT_WORKER_ENABLED false
+set_env API_BIND_HOST 0.0.0.0
+set_env API_PORT "$API_PORT"
+set_env REALTIME_BIND_HOST 0.0.0.0
+set_env REALTIME_PORT "$REALTIME_PORT"
+set_env LIVEKIT_AGENT_BIND_HOST 0.0.0.0
+set_env LIVEKIT_AGENT_PORT "$LIVEKIT_AGENT_PORT"
+set_env API_BASE_URL "http://127.0.0.1:$API_PORT"
+set_env API_HEALTH_URL "http://127.0.0.1:$API_PORT/health"
+set_env REALTIME_WS_ENDPOINT "ws://$PUBLIC_HOST:$REALTIME_PORT/realtime"
+set_env REALTIME_ALLOWED_HOSTS "$PUBLIC_HOST:$REALTIME_PORT"
+set_env REALTIME_ALLOW_NON_BROWSER_CLIENTS_WITHOUT_ORIGIN true
+set_env GATEWAY_HEALTH_URL "http://127.0.0.1:$REALTIME_PORT/health"
+set_env TRANSLATION_AGENT_HEALTH_URL \
+  "http://127.0.0.1:$LIVEKIT_AGENT_PORT/worker"
+set_env LIVEKIT_TRANSLATION_AGENT_NAME \
+  "translation-runtime-$RUNTIME_CANDIDATE_ID"
+set_env API_STORAGE_DRIVER json
+set_env API_DATA_FILE /data/ai-phone/api-store.json
+set_env API_SQLITE_FILE /data/ai-phone/api-store.sqlite
+set_env VOICE_PROFILE_REFERENCE_DIR /data/ai-phone/voice-references
+set_env PUBLIC_RATE_LIMIT_PROVIDER memory
+set_env PUBLIC_RATE_LIMIT_KEY_PREFIX \
+  "wujie:candidate:$COMPOSE_PROJECT_NAME:idle"
+set_env REALTIME_PROVIDER mock
+set_env ASR_PROVIDER mock
+set_env SPEAKER_PROVIDER off
+set_env CALL_ROOM_PROVIDER livekit
+set_env TRANSLATION_WORKER_RUNTIME_PROVIDER local_process
+set_env LLM_PROVIDER off
+set_env LLM_REFINEMENT_ENABLED false
+set_env LLM_REVIEW_ENABLED false
+set_env DEPLOYMENT_ENVIRONMENT call-link-tts-idle-test
+set_env WUJIE_REQUIRE_TRACEABLE_RUNTIME true
+set_env WUJIE_RUNTIME_CANDIDATE_ID "$RUNTIME_CANDIDATE_ID"
+set_env WUJIE_RUNTIME_SOURCE_COMMIT "$SOURCE_COMMIT"
+set_env WUJIE_RUNTIME_SOURCE_TREE "$SOURCE_TREE"
+for key in \
+  ASR_HTTP_ENDPOINT ASR_HTTP_FLUSH_ENDPOINT ASR_STREAM_ENDPOINT ASR_HTTP_HEALTH_URL \
+  TRANSLATION_BASE_URL TRANSLATION_API_KEY TRANSLATION_SERVICE_API_KEY \
+  TTS_HTTP_ENDPOINT TTS_STREAM_ENDPOINT TTS_WARMUP_ENDPOINT TTS_HTTP_API_KEY \
+  TTS_SERVICE_API_KEY LLM_BASE_URL LLM_API_KEY QWEN_BASE_URL QWEN_API_KEY \
+  MODEL_ROUTING_FILE MODEL_ROUTING_PROFILE PRIVATE_MODEL_CONFIG_FILE \
+  PUBLIC_MODEL_CONFIG_FILE PUBLIC_MODEL_CONFIG_KEY \
+  PUBLIC_RUNTIME_ADMISSION_POLICY_FILE PUBLIC_RUNTIME_ADMISSION_POLICY_KEY \
+  PUBLIC_RUNTIME_LIVE_QUALIFICATION_FILE PUBLIC_RUNTIME_LIVE_QUALIFICATION_KEY \
+  PUBLIC_RUNTIME_CONFIGURATION_HASH PUBLIC_RUNTIME_MODEL_POLICY_REVISION \
+  PUBLIC_RUNTIME_ACTIVE_COMPONENTS; do
+  unset_env "$key"
+done
+fi
 sed -i '/^WUJIE_RUNTIME_IMAGE_ID=/d;/^WUJIE_RUNTIME_CONFIG_SHA256=/d' "$next"
 chmod 600 "$next"
 if [[ -f "$target" ]]; then

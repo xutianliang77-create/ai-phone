@@ -12,6 +12,7 @@ describe("Call Link model runtime policy", () => {
     profile: process.env.CALL_LINK_1_0_COMPATIBILITY_PROFILE,
     policy: process.env.CALL_PROVIDER_POLICY,
     publicTts: process.env.CALL_LINK_PUBLIC_TTS_ENABLED,
+    deploymentTest: process.env.CALL_LINK_DEPLOYMENT_TEST_MODE,
   };
 
   afterEach(() => {
@@ -21,6 +22,7 @@ describe("Call Link model runtime policy", () => {
     restore("CALL_LINK_1_0_COMPATIBILITY_PROFILE", previous.profile);
     restore("CALL_PROVIDER_POLICY", previous.policy);
     restore("CALL_LINK_PUBLIC_TTS_ENABLED", previous.publicTts);
+    restore("CALL_LINK_DEPLOYMENT_TEST_MODE", previous.deploymentTest);
   });
 
   it("keeps legacy private Call Link behavior outside a public deployment", () => {
@@ -97,6 +99,19 @@ describe("Call Link model runtime policy", () => {
     process.env.CALL_LINK_1_0_COMPATIBILITY_PROFILE = "call_link_only";
     process.env.CALL_PROVIDER_POLICY = "call_link_only";
     process.env.CALL_LINK_PUBLIC_TTS_ENABLED = "true";
+    expect(callLinkModelRuntimeAdmissionForSession({})).toEqual({
+      ok: false,
+      code: "call_link_public_model_runtime_unavailable",
+    });
+  });
+
+  it("keeps the shared-host deployment smoke profile unable to open a Call Link", () => {
+    process.env.API_RESULT_SYNC_DEPLOYMENT_ID = "public-test";
+    process.env.CALL_LINK_1_0_COMPATIBILITY_ENABLED = "true";
+    process.env.CALL_LINK_1_0_COMPATIBILITY_DEPLOYMENT_ID = "public-test";
+    process.env.CALL_LINK_1_0_COMPATIBILITY_PROFILE = "call_link_only";
+    process.env.CALL_PROVIDER_POLICY = "call_link_only";
+    process.env.CALL_LINK_DEPLOYMENT_TEST_MODE = "true";
     expect(callLinkModelRuntimeAdmissionForSession({})).toEqual({
       ok: false,
       code: "call_link_public_model_runtime_unavailable",
