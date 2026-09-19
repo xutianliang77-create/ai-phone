@@ -7,13 +7,19 @@ export function transcriptVariantsForTranslation(
   allowTextLanguageOverride: boolean,
 ): TranscriptResult[] {
   const profile = analyzeTurnLanguage(transcript.text, transcript.language);
-  const automaticLanguageStatus = allowTextLanguageOverride
-    ? automaticLanguageStatusForText(transcript.text, profile)
-    : undefined;
+  // Qwen's automatic source result has already passed its signed language-pair
+  // check.  Keep that supplier-confirmed language rather than letting a
+  // transcript script heuristic reclassify a mixed utterance and suppress MT.
+  const providerConfirmedLanguage = transcript.automaticLanguageStatus === "detected";
+  const automaticLanguageStatus = providerConfirmedLanguage
+    ? "detected" as const
+    : allowTextLanguageOverride
+      ? automaticLanguageStatusForText(transcript.text, profile)
+      : undefined;
   return [{
     ...transcript,
     ...profile,
-    language: allowTextLanguageOverride && automaticLanguageStatus === "detected"
+    language: !providerConfirmedLanguage && allowTextLanguageOverride && automaticLanguageStatus === "detected"
       ? profile.dominantLanguage
       : transcript.language,
     ...(automaticLanguageStatus ? { automaticLanguageStatus } : {}),

@@ -37,8 +37,8 @@ export interface TranscriptResult {
   detectedLanguages?: TranslationLanguageCode[];
   mixedLanguage?: boolean;
   /** Present only when a source=auto route evaluated the final transcript.
-   * It records a bounded text-language decision, never an invented acoustic
-   * language result. */
+   * `detected` may retain a provider-confirmed language or a bounded
+   * text-language decision; it never invents an acoustic language result. */
   automaticLanguageStatus?: "detected" | "mixed" | "unknown";
   confidence?: number;
   speaker?: SpeakerAttributionDto;

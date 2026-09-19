@@ -41,6 +41,27 @@ describe("transcript chunks", () => {
     ]);
   });
 
+  it("keeps a provider-confirmed automatic language when text looks mixed", () => {
+    const variants = transcriptVariantsForTranslation(
+      {
+        segmentId: "seg_qwen_auto_1",
+        text: "我们正在测试 Qwen ASR 的自动语言路由。",
+        language: "zh",
+        automaticLanguageStatus: "detected",
+      },
+      true,
+      true,
+    );
+
+    expect(variants).toMatchObject([
+      {
+        segmentId: "seg_qwen_auto_1",
+        language: "zh",
+        automaticLanguageStatus: "detected",
+      },
+    ]);
+  });
+
   it("keeps fixed source language even when terms contain English letters", () => {
     const variants = transcriptVariantsForTranslation(
       {

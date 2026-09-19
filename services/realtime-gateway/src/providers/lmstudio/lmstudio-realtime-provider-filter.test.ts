@@ -84,6 +84,59 @@ describe("lmstudio realtime provider transcript filter", () => {
     expect(translateInputs).toEqual([]);
   });
 
+  it("translates a provider-confirmed automatic Qwen language despite mixed transcript text", async () => {
+    const translateInputs: unknown[] = [];
+    const provider = providerWith({
+      asrProvider: {
+        createSession: async () => undefined,
+        transcribe: async () => ({
+          segmentId: "qwen_auto_1",
+          text: "我们正在测试 Qwen ASR 的自动语言路由。",
+          language: "zh",
+          automaticLanguageStatus: "detected",
+          isFinal: true,
+        }),
+        flush: async () => null,
+        closeSession: async () => undefined,
+        healthCheck: async () => true,
+      },
+      translate: async (input) => {
+        translateInputs.push(input);
+        return "We are testing Qwen ASR automatic language routing.";
+      },
+    });
+
+    await provider.createSession({
+      sessionId: "sess_qwen_auto",
+      sourceLanguage: "auto",
+      targetLanguage: "zh",
+      autoReverseTargetLanguage: true,
+      voiceOutput: false,
+    });
+
+    const events = [];
+    for await (const event of provider.sendAudio({
+      type: "audio.frame",
+      sessionId: "sess_qwen_auto",
+      sequence: 1,
+      timestampMs: 1,
+      format: "pcm16",
+      sampleRate: 24000,
+      data: "AA==",
+    })) {
+      events.push(event);
+    }
+
+    expect(events.map((event) => event.type)).toEqual([
+      "transcript.final",
+      "translation.final",
+    ]);
+    expect(events[0]).toMatchObject({ language: "zh" });
+    expect(translateInputs).toEqual([
+      expect.objectContaining({ sourceLanguage: "zh", targetLanguage: "en" }),
+    ]);
+  });
+
   it("drops silence marker translation output", async () => {
     const provider = providerWith({
       translate: async () => "<sil>",

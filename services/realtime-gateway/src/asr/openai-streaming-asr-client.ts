@@ -230,6 +230,7 @@ export class OpenAiStreamingAsrClient {
       const transport=s.qwenTransport;if(!transport?.sent||transport.terminal)throw Error();
       s.seen.add(item);if(s.seen.size>1024)s.seen.delete(s.seen.values().next().value!);s.lastItem=item;
       if(result.text)s.completed.push({segmentId:turn.event.segmentId,revision:1,isFinal:true,text:result.text,language:this.transcriptLanguage(turn),
+        ...(this.options.language==="auto"&&turn.detectedLanguage!==undefined?{automaticLanguageStatus:"detected" as const}:{}),
         timing:{startMs:start/(this.rate/1000),endMs:end/(this.rate/1000),source:"estimated"}});
       if(s.turn===turn)s.turn=undefined;return;
     }
