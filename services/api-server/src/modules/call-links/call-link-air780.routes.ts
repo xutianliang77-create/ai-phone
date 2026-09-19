@@ -112,10 +112,6 @@ export function registerCallLinkAir780Routes(app: FastifyInstance) {
         runtime.issues.join("; "),
       );
     }
-    const room = await ensureCallRoom(validation.record);
-    if (!room.ok) {
-      return sendError(reply, 503, "call_room_start_failed", "Call room could not be created");
-    }
     const modelAdmission = await callLinkModelRuntimeAdmission(
       validation.record.sessionId,
       "air780",
@@ -127,6 +123,10 @@ export function registerCallLinkAir780Routes(app: FastifyInstance) {
         modelAdmission.code,
         "Call room public model runtime is not ready",
       );
+    }
+    const room = await ensureCallRoom(validation.record);
+    if (!room.ok) {
+      return sendError(reply, 503, "call_room_start_failed", "Call room could not be created");
     }
     try {
       await getCallLinkWorkerSupervisor().ensure(validation.record.callId);

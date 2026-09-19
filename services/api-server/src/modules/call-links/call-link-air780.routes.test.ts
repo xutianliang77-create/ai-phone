@@ -32,6 +32,7 @@ describe("Call Link Air780 translation routes", () => {
   let previousEnv: Record<string, string | undefined>;
   let placePhoneCall: ReturnType<typeof vi.fn>;
   let hangupPhoneCall: ReturnType<typeof vi.fn<TelephonyProvider["hangupPhoneCall"]>>;
+  let ensureRoomCall: ReturnType<typeof vi.fn>;
   let carrierState: AirDeviceCallDto["carrierState"] = "dialing";
 
   beforeEach(() => {
@@ -56,7 +57,8 @@ describe("Call Link Air780 translation routes", () => {
       placePhoneCall,
       hangupPhoneCall,
     }));
-    setCallRoomDataPublisherForTests({ async ensureRoom() {} });
+    ensureRoomCall = vi.fn(async (_roomName: string) => {});
+    setCallRoomDataPublisherForTests({ ensureRoom: ensureRoomCall });
     setAirDeviceCarrierEventProcessorForTests({
       async processCarrierEvent(event) {
         return carrierCall(event);
@@ -116,6 +118,26 @@ describe("Call Link Air780 translation routes", () => {
     expect(response.json()).toMatchObject({
       error: { code: "air780_initial_dtmf_unsupported" },
     });
+    expect(placePhoneCall).not.toHaveBeenCalled();
+  });
+
+  it("rejects an unbound public call before creating a room or placing a call", async () => {
+    process.env.API_RESULT_SYNC_DEPLOYMENT_ID = "public-test";
+    const app = await buildApp();
+    const callId = await createHostReadyCall(app);
+
+    const response = await app.inject({
+      method: "POST",
+      url: `/call-links/${callId}/air780-outbound`,
+      payload: dialPayload(),
+    });
+    await app.close();
+
+    expect(response.statusCode).toBe(503);
+    expect(response.json().error.code).toBe(
+      "call_link_public_model_authorization_required",
+    );
+    expect(ensureRoomCall).not.toHaveBeenCalled();
     expect(placePhoneCall).not.toHaveBeenCalled();
   });
 

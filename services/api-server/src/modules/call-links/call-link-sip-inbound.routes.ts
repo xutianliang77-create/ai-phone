@@ -45,8 +45,6 @@ export function registerCallLinkSipInboundRoutes(app: FastifyInstance) {
     const inboundConfig = config.config.inbound;
     const initial = await validateOpen(params.callId, account.id);
     if (!initial.ok) return validationError(reply, initial);
-    const room = await ensureCallRoom(initial.record);
-    if (!room.ok) return sendError(reply, 503, "call_room_start_failed", "Room failed");
     const modelAdmission = await callLinkModelRuntimeAdmission(
       initial.record.sessionId,
       "sip_inbound",
@@ -55,6 +53,8 @@ export function registerCallLinkSipInboundRoutes(app: FastifyInstance) {
       return sendError(reply, 503, modelAdmission.code,
         "Call room public model runtime is not ready");
     }
+    const room = await ensureCallRoom(initial.record);
+    if (!room.ok) return sendError(reply, 503, "call_room_start_failed", "Room failed");
     try {
       await getCallLinkWorkerSupervisor().ensure(initial.record.callId);
     } catch {

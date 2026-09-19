@@ -13,17 +13,19 @@ import { registerCallLeg } from "./call-links.service.js";
 describe("Call Link SIP outbound routes", () => {
   let previousEnv: Record<string, string | undefined>;
   let providerCall: ReturnType<typeof vi.fn>;
+  let ensureRoomCall: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
     previousEnv = captureEnv();
     configureEnv();
     resetStore();
     providerCall = vi.fn(async () => providerSuccess());
+    ensureRoomCall = vi.fn(async (_roomName: string) => {});
     setLiveKitSipProviderFactoryForTests(() => ({
       createParticipant: providerCall,
     }));
     setCallRoomDataPublisherForTests({
-      async ensureRoom() {},
+      ensureRoom: ensureRoomCall,
       async publish() {},
     });
     setCallLinkWorkerSupervisorForTests(new ReadyWorker());
@@ -45,6 +47,22 @@ describe("Call Link SIP outbound routes", () => {
 
     expect(response.statusCode).toBe(409);
     expect(response.json().error.code).toBe("sip_host_not_connected");
+    expect(providerCall).not.toHaveBeenCalled();
+  });
+
+  it("rejects an unbound public call before creating a room or dialing", async () => {
+    process.env.API_RESULT_SYNC_DEPLOYMENT_ID = "public-test";
+    const app = await buildApp();
+    const callId = await createHostReadyCall(app);
+
+    const response = await dial(app, callId);
+    await app.close();
+
+    expect(response.statusCode).toBe(503);
+    expect(response.json().error.code).toBe(
+      "call_link_public_model_authorization_required",
+    );
+    expect(ensureRoomCall).not.toHaveBeenCalled();
     expect(providerCall).not.toHaveBeenCalled();
   });
 
@@ -193,6 +211,7 @@ const envKeys = [
   "PSTN_PROVIDER",
   "PSTN_RECORDING_DISCLOSURE_ENABLED",
   "PUBLIC_CALL_BASE_URL",
+  "API_RESULT_SYNC_DEPLOYMENT_ID",
 ];
 
 function configureEnv() {

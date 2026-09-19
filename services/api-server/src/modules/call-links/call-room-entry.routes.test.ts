@@ -130,39 +130,23 @@ describe("call room entry routes", () => {
     );
   });
 
-  it("does not start a legacy private Worker for a public call room", async () => {
+  it("rejects an unbound public Call Link before creating a room", async () => {
     configureCallRoomEnv();
     process.env.API_RESULT_SYNC_DEPLOYMENT_ID = "public-test";
+    const ensuredRooms: string[] = [];
     setCallRoomDataPublisherForTests({
-      async ensureRoom() {},
+      async ensureRoom(roomName) {
+        ensuredRooms.push(roomName);
+      },
       async publish() {},
     } satisfies CallRoomDataPublisher);
     const app = await buildApp();
     const created = await app.inject({ method: "POST", url: "/call-links" });
     const callId = created.json().callId as string;
-    const hostToken = (await app.inject({
+    const response = await app.inject({
       method: "POST",
       url: `/call-links/${callId}/room-token`,
       payload: { participantRole: "host", participantName: "Host" },
-    })).json();
-    const guestToken = (await app.inject({
-      method: "POST",
-      url: `/call-links/${callId}/room-token`,
-      payload: {
-        participantRole: "guest",
-        participantName: "Guest",
-        guestTicket: guestTicketFrom(created),
-      },
-    })).json();
-    await app.inject({
-      method: "POST",
-      url: `/call-links/${callId}/room-connected`,
-      payload: connectionConfirmation(hostToken),
-    });
-    const response = await app.inject({
-      method: "POST",
-      url: `/call-links/${callId}/room-connected`,
-      payload: connectionConfirmation(guestToken),
     });
     await app.close();
 
@@ -170,6 +154,7 @@ describe("call room entry routes", () => {
     expect(response.json().error.code).toBe(
       "call_link_public_model_authorization_required",
     );
+    expect(ensuredRooms).toEqual([]);
     expect(workerRuntime.ensuredCallIds).toEqual([]);
   });
 

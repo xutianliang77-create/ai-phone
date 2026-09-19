@@ -82,6 +82,18 @@ export function registerCallRoomEntryRoute(app: FastifyInstance) {
         if (!inspected.ok) return sendGuestTicketError(reply, inspected.code);
       }
 
+      const modelAdmission = await callLinkModelRuntimeAdmission(
+        initial.record.sessionId,
+      );
+      if (!modelAdmission.ok) {
+        return sendError(
+          reply,
+          503,
+          modelAdmission.code,
+          "Call room public model runtime is not ready",
+        );
+      }
+
       const token = await createCallRoomToken({
         callId: initial.record.callId,
         roomName: initial.record.roomName,

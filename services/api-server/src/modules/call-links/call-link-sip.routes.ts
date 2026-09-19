@@ -63,10 +63,6 @@ export function registerCallLinkSipRoutes(app: FastifyInstance) {
     const initial = await withSessionWriteLock(params.callId, () =>
       validateDial(params.callId, account.id));
     if (!initial.ok) return sendValidationError(reply, initial);
-    const room = await ensureCallRoom(initial.record);
-    if (!room.ok) {
-      return sendError(reply, 503, "call_room_start_failed", "Call room could not be created");
-    }
     const modelAdmission = await callLinkModelRuntimeAdmission(
       initial.record.sessionId,
       "sip_outbound",
@@ -78,6 +74,10 @@ export function registerCallLinkSipRoutes(app: FastifyInstance) {
         modelAdmission.code,
         "Call room public model runtime is not ready",
       );
+    }
+    const room = await ensureCallRoom(initial.record);
+    if (!room.ok) {
+      return sendError(reply, 503, "call_room_start_failed", "Call room could not be created");
     }
     try {
       await getCallLinkWorkerSupervisor().ensure(initial.record.callId);
