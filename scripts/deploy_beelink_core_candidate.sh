@@ -238,7 +238,9 @@ const gateway = JSON.parse(process.env.GATEWAY_HEALTH);
 const agent = JSON.parse(process.env.AGENT_HEALTH);
 const manifest = JSON.parse(process.env.RUNTIME_MANIFEST);
 if (api.status !== "ok") throw new Error("idle candidate API is not healthy");
-if (gateway.status !== "ok") throw new Error("idle candidate Gateway is not healthy");
+if (gateway.status !== "unavailable") {
+  throw new Error("idle candidate Gateway must remain public-unavailable");
+}
 if (api.realtimeWsEndpoint !== process.env.EXPECTED_REALTIME_ENDPOINT) {
   throw new Error("idle candidate API advertises an unexpected realtime endpoint");
 }
@@ -295,8 +297,12 @@ require_remote_deployment_safety() {
     return
   fi
   ssh "$REMOTE_HOST" \
-    "if docker ps -a --format '{{.Names}}' | grep -Fxq '$AI_PHONE_CONTAINER_PREFIX-wujie-ai'; then \
-       echo 'Idle candidate container name already exists' >&2; exit 2; \
+    "name='$AI_PHONE_CONTAINER_PREFIX-wujie-ai'; \
+     if docker ps -a --format '{{.Names}}' | grep -Fxq \"\$name\"; then \
+       project=\$(docker inspect -f '{{ index .Config.Labels \"com.docker.compose.project\" }}' \"\$name\"); \
+       test \"\$project\" = '$COMPOSE_PROJECT_NAME' || { \
+         echo 'Idle candidate container name belongs to another Compose project' >&2; exit 2; \
+       }; \
      fi"
 }
 
