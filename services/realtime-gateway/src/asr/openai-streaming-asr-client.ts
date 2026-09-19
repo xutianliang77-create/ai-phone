@@ -70,10 +70,11 @@ export class OpenAiStreamingAsrClient {
       s.ws=(this.options.socketFactory??((url,opts)=>new WebSocket(url,opts)))(url.toString(),{headers:{Authorization:`Bearer ${credentials.apiKey}`},
         handshakeTimeout:this.options.timeoutMs,maxPayload:262144,perMessageDeflate:false,followRedirects:false});
       s.ws.on("error",()=>this.fail(s,"public_asr_stream_transport"));s.ws.on("close",()=>{if(!s.providerFinished)this.fail(s,"public_asr_stream_closed");});
-      s.ws.on("message",(data,isBinary)=>{if(this.state!==s||s.failure)return;try{if(isBinary||Buffer.byteLength(data.toString())>262144)throw Error();
-        const event=JSON.parse(data.toString());const deferQwen=this.qwen&&s.configured&&event?.type!=="session.finished"&&
+      s.ws.on("message",(data,isBinary)=>{if(this.state!==s||s.failure)return;let event:Record<string,any>|undefined;try{if(isBinary||Buffer.byteLength(data.toString())>262144)throw Error();
+        const parsed=JSON.parse(data.toString());if(!parsed||typeof parsed!=="object"||Array.isArray(parsed))throw Error();event=parsed as Record<string,any>;const deferQwen=this.qwen&&s.configured&&event.type!=="session.finished"&&
           (s.finishing||s.busy||s.turn?.finalizing||!s.turn);if(deferQwen){if(s.pendingWireEvents.length>=4096)throw Error();s.pendingWireEvents.push(event);}
-        else this.receive(s,event);}catch(error){this.fail(s,error instanceof PublicAsrError?error.code:"public_asr_stream_protocol");}});
+        else this.receive(s,event);}catch(error){const type=typeof event?.type==="string"&&/^[a-z0-9._-]{1,80}$/.test(event.type)?event.type.replaceAll(".","_").replaceAll("-","_"):"unknown";
+          this.fail(s,error instanceof PublicAsrError?error.code:this.qwen?`public_asr_stream_protocol_${type}`:"public_asr_stream_protocol");}});
       s.ws.once("open",()=>{void this.send(s,{type:"session.update",session:this.qwen?qwenAsrSessionConfiguration(this.options.language):{type:"transcription",audio:{input:{format:{type:"audio/pcm",rate:24000},
         transcription:this.transcription(),turn_detection:null}}}}).catch(()=>this.fail(s,"public_asr_stream_setup"));});
       await abortable(s.ready.promise,s.stop.signal);this.assert(s);
