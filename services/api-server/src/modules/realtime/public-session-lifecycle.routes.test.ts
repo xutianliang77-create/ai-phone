@@ -67,6 +67,7 @@ it('rejects runtime events without internal authority or with wrong lease/sequen
   const unauth=await app.inject({method:'POST',url:'/internal/realtime/sessions/public-s/runtime',payload:event(1,'active')});
   expect(unauth.statusCode).toBe(401);
   expect((await publish(1,'active',{leaseId:'wrong'})).statusCode).toBe(403);
+  expect((await publish(1,'active',{uncertain:true})).statusCode).toBe(400);
   expect((await publish(1,'active',{billableSeconds:0})).statusCode).toBe(400);
   expect((await publish(1,'active',{lastAcceptedSample:100})).statusCode).toBe(409);
   await publish(1,'active');const before=state();clock(2);await publish(1,'active');expect(state()).toEqual(before);
@@ -80,6 +81,15 @@ it('recovery reads and duplicate events never extend the disconnect window or cr
   const recovery=await publicRecoveryStatus('public-s','guest-user');expect(recovery.canResume).toBe(false);
   expect((await publish(4,'active')).statusCode).toBe(409);expect(state()).toEqual(before);
   expect(storage.getStoreSnapshot().sessions).toHaveLength(1);
+});
+it('persists an internal provider-uncertain stop without automatic settlement',async()=>{
+  await publish(1,'active');clock(10);
+  const stopped=await publish(2,'stopped',{uncertain:true});
+  expect(stopped.statusCode).toBe(200);expect(stopped.json()).toMatchObject({phase:'stopped',uncertain:true,meterStatus:'uncertain'});
+  expect(current().publicRuntime).toMatchObject({phase:'stopped',uncertain:true,stoppedAt:new Date(start+10000).toISOString()});
+  expect(current().publicFinalization).toBeUndefined();
+  expect(storage.getStoreSnapshot().billingLedger).toEqual([]);expect(storage.getStoreSnapshot().usageHolds[0].status).toBe('active');
+  expect((await finalize(serverFinalizationRequest(current()))).statusCode).toBe(503);
 });
 it('cannot renew a disconnected recovery window through intermediate paused observations',async()=>{
   await publish(1,'active');clock(10);await publish(2,'disconnected');const until=current().publicRuntime!.recoveryUntil;

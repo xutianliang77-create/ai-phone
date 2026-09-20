@@ -98,6 +98,17 @@ export class PublicSessionEventSink implements SessionEventSink {
       await this.observe(this.phase,samples);
     });
   }
+  /**
+   * A Provider error during final flush is not a normal session end. The
+   * accepted-audio watermark is durable, but the supplier outcome must be
+   * reconciled before the API can settle this session.
+   */
+  stopUncertain() {
+    if(this.stopPromise)return this.stopPromise;
+    const samples=this.samples;
+    this.stopPromise=this.enqueue(()=>this.observe("stopped",samples,false,true));
+    return this.stopPromise;
+  }
   async modelAttempt(event:PublicModelAttemptEvent){
     this.assertSession(event.sessionId);
     if(event.leaseId!==this.binding.leaseId||!this.sink.modelAttempt)throw Error("public_model_attempt_binding_required");
@@ -124,16 +135,18 @@ export class PublicSessionEventSink implements SessionEventSink {
     this.queue=task.catch(()=>{this.failure??=Error("public_runtime_unconfirmed");}).finally(()=>{this.pending--;});
     return task;
   }
-  private async observe(phase:PublicRuntimeObservation["phase"],samples:number,starting=false) {
+  private async observe(phase:PublicRuntimeObservation["phase"],samples:number,starting=false,uncertain=false) {
     if(starting?this.phase!==undefined:!this.phase||this.phase==="stopped")throw Error("public_runtime_phase_conflict");
+    if(uncertain&&phase!=="stopped")throw Error("public_runtime_uncertain_phase");
     if(phase==="paused"&&this.phase!=="active"&&this.phase!=="paused")throw Error("public_runtime_phase_conflict");
     const event:PublicRuntimeObservation={leaseId:this.binding.leaseId,captureId:this.binding.captureId,
       languagePolicyKey:this.binding.languagePolicyKey,sequence:this.sequence+1,phase,
-      finalRevision:this.revision,lastAcceptedSample:samples};
+      finalRevision:this.revision,lastAcceptedSample:samples,...(uncertain?{uncertain:true as const}:{})};
     const ack=await this.sink.runtime!(this.binding.sessionId,event);
     if(ack.sessionId!==this.binding.sessionId||ack.deploymentId!==this.binding.deploymentId||
       ack.ownerId!==this.binding.ownerId||ack.modelPolicyRevision!==this.binding.modelPolicyRevision||
-      Object.entries(event).some(([key,value])=>ack[key as keyof typeof ack]!==value)||ack.meterStatus!=="verified") {
+      Object.entries(event).some(([key,value])=>ack[key as keyof typeof ack]!==value)||
+      ack.meterStatus!==(uncertain?"uncertain":"verified")) {
       throw Error("public_runtime_unconfirmed");
     }
     this.sequence=event.sequence;this.phase=phase;

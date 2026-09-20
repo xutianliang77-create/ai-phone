@@ -5,6 +5,12 @@ export interface PublicRuntimeObservation extends RealtimeStopWatermark {
   leaseId: string;
   sequence: number;
   phase: "active" | "paused" | "disconnected" | "stopped";
+  /**
+   * Internal Gateway-only marker for a stopped stream whose supplier outcome
+   * cannot be confirmed. It is never a mobile command and is invalid for an
+   * active, paused, or disconnected observation.
+   */
+  uncertain?: true;
 }
 
 /** Internal receipt: a successful HTTP status alone does not confirm a watermark. */

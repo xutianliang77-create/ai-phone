@@ -12,11 +12,12 @@ import { hasPublicProviderReconciliation } from "./public-provider-reconciliatio
 export function observePublicRuntime(sessionId:string,value:unknown,now=new Date()) {
   const deployment=publicDeploymentId(),b=value as Record<string,unknown>|null;
   if(!b || Array.isArray(b) || Object.keys(b).some(k=>!["leaseId","captureId","languagePolicyKey",
-    "sequence","phase","finalRevision","lastAcceptedSample"].includes(k)) ||
+    "sequence","phase","finalRevision","lastAcceptedSample","uncertain"].includes(k)) ||
     !["active","paused","disconnected","stopped"].includes(String(b.phase)) ||
     !Number.isSafeInteger(b.sequence)||Number(b.sequence)<1 ||
     !Number.isSafeInteger(b.finalRevision)||Number(b.finalRevision)<0 ||
-    !Number.isSafeInteger(b.lastAcceptedSample)||Number(b.lastAcceptedSample)<0) {
+    !Number.isSafeInteger(b.lastAcceptedSample)||Number(b.lastAcceptedSample)<0 ||
+    (b.uncertain!==undefined&&(b.uncertain!==true||b.phase!=="stopped"))) {
     throw new ResultSyncError("invalid_public_runtime_event",400);
   }
   return mutatePublicSession(sessionId,"public-runtime",b,current=>{
@@ -43,7 +44,7 @@ export function observePublicRuntime(sessionId:string,value:unknown,now=new Date
     }
     const gap=timestamp-last;
     const activeMs=(old?.activeMs??0)+(old?.phase==="active"&&gap<=PUBLIC_EVIDENCE_GAP_MS?gap:0);
-    const uncertain=!admissionValid || !!old?.uncertain || old?.phase==="active"&&gap>PUBLIC_EVIDENCE_GAP_MS ||
+    const uncertain=b.uncertain===true || !admissionValid || !!old?.uncertain || old?.phase==="active"&&gap>PUBLIC_EVIDENCE_GAP_MS ||
       p.maxActiveSeconds!==undefined&&activeMs>p.maxActiveSeconds*1000 || old?.phase==="active"&&timestamp>Date.parse(p.expiresAt);
     const evidence:PublicRuntimeEvidence={sequence:Number(b.sequence),eventHash:hash,
       phase:b.phase as PublicRuntimeEvidence['phase'],observedAt:now.toISOString(),activeMs,

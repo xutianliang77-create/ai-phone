@@ -24,7 +24,7 @@ interface RealtimeSessionFinalizerOptions {
   drainSessionSync: () => Promise<void>;
   flushTracker: RealtimeFlushTracker;
   onError: (stage: "audio" | "provider", error: unknown) => void;
-  confirmed?:{beforeFlush:()=>Promise<void>};
+  confirmed?:{beforeFlush:()=>Promise<void>;stopUncertain?:()=>Promise<void>};
   ttsOutput?:Pick<RealtimeTtsOutputQueue,"suspend"|"close"|"drainInFlight">;
 }
 
@@ -34,6 +34,7 @@ export class RealtimeSessionFinalizer {
   private recoveryDrainConfirmed = false;
   private finalizePromise?: Promise<void>;
   private sessionDiagnostics?: RealtimeSessionDiagnosticsDto;
+  private providerFlushFailed = false;
 
   constructor(private readonly options: RealtimeSessionFinalizerOptions) {}
 
@@ -71,6 +72,7 @@ export class RealtimeSessionFinalizer {
       this.options.send,
       {failOnError:!!this.options.confirmed,finishSession:true},
     ));
+    if(!providerFlushed)this.providerFlushFailed=true;
     this.sessionDiagnostics ??= await this.collectDiagnostics();
     await this.options.drainSessionSync();
     if(this.options.confirmed&&(!audioFlushed||!providerFlushed))throw Error("public_final_flush_unconfirmed");
@@ -112,6 +114,13 @@ export class RealtimeSessionFinalizer {
       // A failed durable drain cannot confirm session.ended, but must not keep
       // a model session alive after the user's physical stop.
       await this.runStep("provider",()=>this.options.provider.closeSession(this.options.sessionId));
+      // Keep a durable stopped watermark for a Provider-originated failure,
+      // while deliberately withholding session.ended and settlement until the
+      // API's existing reconciliation evidence is present.
+      if(this.providerFlushFailed&&this.options.confirmed?.stopUncertain){
+        try{await this.options.confirmed.stopUncertain();}
+        catch(stopError){this.options.onError("provider",stopError);}
+      }
       throw error;
     }
 

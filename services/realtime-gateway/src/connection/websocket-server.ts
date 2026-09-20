@@ -120,7 +120,8 @@ export function startWebSocketServer(options:{publicRuntime?:PublicGatewayRuntim
       audioBatcher,
       send: sendRealtime,
       drainSessionSync: () => eventDispatcher.drain(),
-      confirmed:sessionEventSink.requiresConfirmation?{beforeFlush:confirmAudio}:undefined,
+      confirmed:sessionEventSink.requiresConfirmation?{beforeFlush:confirmAudio,
+        stopUncertain:()=>sessionEventSink.stopUncertain?.()??Promise.reject(Error("public_uncertain_stop_sink_required"))}:undefined,
       ttsOutput:sessionEventSink.requiresConfirmation?ttsOutputQueue:undefined,
       flushTracker,
       onError: (stage, error) => {

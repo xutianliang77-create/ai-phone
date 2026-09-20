@@ -45,6 +45,15 @@ describe("public branch of original session sink",()=>{
     expect(()=>sink.acceptAudio(frame(2))).toThrow("stopped");
     await expect(sink.record({type:"session.started",sessionId:"s"})).rejects.toThrow("stopped");
   });
+  it("records a provider-uncertain stop without fabricating session.ended",async()=>{
+    const {sink,base,events}=fixture();base.runtime.mockImplementation(async(_id,e)=>{events.push(e);return {...binding,...e,
+      meterStatus:e.uncertain?"uncertain" as const:"verified" as const};});
+    await sink.record({type:"session.started",sessionId:"s"});sink.acceptAudio(frame());
+    await sink.stopUncertain();await sink.drain();
+    expect(events.at(-1)).toMatchObject({phase:"stopped",uncertain:true,lastAcceptedSample:160});
+    expect(base.record).not.toHaveBeenCalled();
+    await expect(sink.record(end)).resolves.toBeUndefined();
+  });
   it("freezes queued text, and waits for persistence before sealing the revision",async()=>{
     const {base,sink}=fixture();await sink.record({type:"session.started",sessionId:"s"});await sink.drain();
     let release!:()=>void;base.record.mockImplementationOnce(()=>new Promise<void>(r=>{release=r;}));

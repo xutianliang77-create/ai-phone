@@ -100,6 +100,25 @@ it("retries the exact stop after lost acknowledgement without extending metering
   expect(getStoreSnapshot().billingLedger).toHaveLength(1);
   const stops=calls.filter(c=>c.body.phase==="stopped");expect(stops).toHaveLength(2);expect(stops[0]).toEqual(stops[1]);
 });
+it("persists a provider-unconfirmed final flush as stopped without settlement",async()=>{
+  const sink=bindPublicSessionEventSink(createSessionEventSink(env),binding),client:ServerRealtimeEvent[]=[];
+  createSession({sessionId:id,userId:"guest-user",sourceLanguage:"zh",targetLanguage:"en",voiceOutput:false,
+    planCode:"free",maxDurationSeconds:120,issuedAt:0,expiresAt:9999999999});
+  const tracker=new RealtimeFlushTracker(),dispatcher=new RealtimeEventDispatcher({eventSink:sink,sendClient:e=>client.push(e),
+    afterSend:e=>tracker.record(e),onSyncError:vi.fn()}),drain=async()=>{await dispatcher.drain();await sink.drain();};
+  dispatcher.send({type:"session.started",sessionId:id});await drain();
+  sink.acceptAudio({type:"audio.frame",sessionId:id,sequence:1,timestampMs:start,format:"pcm16",sampleRate:16000,data:Buffer.alloc(320).toString("base64")});
+  const close=vi.fn(async()=>{}),provider:RealtimeProvider={name:"synthetic-uncertain",closeSession:close,healthCheck:async()=>false,
+    async *sendAudio(){},async *flushSession(){yield {type:"error" as const,sessionId:id,code:"provider_interrupted",message:"synthetic"};}};
+  const finalizer=new RealtimeSessionFinalizer({sessionId:id,provider,audioBatcher:{stopAccepting:vi.fn(),flush:async()=>{}},
+    send:dispatcher.send,drainSessionSync:drain,flushTracker:tracker,onError:vi.fn(),confirmed:{beforeFlush:()=>sink.confirmAudio(),stopUncertain:()=>sink.stopUncertain()}});
+  await expect(finalizer.finalize("client_request")).rejects.toThrow("public_final_flush_unconfirmed");
+  expect(close).toHaveBeenCalledOnce();expect(client.some(event=>event.type==="session.ended")).toBe(false);
+  expect(current().publicRuntime).toMatchObject({phase:"stopped",uncertain:true,lastAcceptedSample:160});
+  expect(current().publicFinalization).toBeUndefined();expect(getStoreSnapshot().billingLedger).toEqual([]);
+  expect(getStoreSnapshot().usageHolds[0].status).toBe("active");
+  expect(calls.filter(call=>call.url.endsWith("/runtime")).at(-1)?.body).toMatchObject({phase:"stopped",uncertain:true});
+});
 function record():SessionRecord{return {id,userId:"guest-user",mode:"conversation",status:"created",consumedSeconds:0,
   createdAt:new Date(start).toISOString(),segments:[],processingDeploymentId:"public-test",
   processingAuthorization:{contractVersion:1,processingMode:"online",modelPolicyRevision:"policy-v1",publicGrantRef:"integration-grant",

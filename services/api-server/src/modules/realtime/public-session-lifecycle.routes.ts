@@ -60,9 +60,13 @@ export function registerPublicLifecycleRoutes(app:FastifyInstance){
     const {sessionId}=request.params as {sessionId:string};
     return lifecycleResponse(reply,()=>withSessionWriteLock(sessionId,async()=>{
       const evidence=await observePublicRuntime(sessionId,request.body);
+      const declaredUncertain=(request.body as Record<string,unknown>|null)?.uncertain===true;
       const session=await findSession(sessionId);
       if(!session)throw new ResultSyncError("session_not_found",404);
-      if(evidence.phase==="stopped"){
+      // A Gateway can durably stop after an ASR transport failure while the
+      // supplier outcome remains unknown. Preserve that watermark, but never
+      // settle customer usage until the existing reconciliation contract does.
+      if(evidence.phase==="stopped"&&!declaredUncertain){
         await finalizePublicSession(sessionId,session.userId,serverFinalizationRequest(session),{serverRecovery:true});
       }
       const policy=session.publicRuntimePolicy!;
@@ -70,7 +74,8 @@ export function registerPublicLifecycleRoutes(app:FastifyInstance){
         modelPolicyRevision:session.processingAuthorization!.modelPolicyRevision,
         leaseId:policy.leaseId,captureId:policy.captureId,languagePolicyKey:policy.languagePolicyKey,
         sequence:evidence.sequence,phase:evidence.phase,finalRevision:evidence.finalRevision,
-        lastAcceptedSample:evidence.lastAcceptedSample,meterStatus:evidence.uncertain?"uncertain":"verified"};
+        lastAcceptedSample:evidence.lastAcceptedSample,...(evidence.uncertain?{uncertain:true as const}:{}),
+        meterStatus:evidence.uncertain?"uncertain":"verified"};
     }));
   });
   app.post("/internal/realtime/sessions/:sessionId/recovery-ownership",{bodyLimit:1024},async(request,reply)=>{

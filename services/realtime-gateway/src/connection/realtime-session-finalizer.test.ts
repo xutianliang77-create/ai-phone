@@ -172,6 +172,7 @@ describe("realtime session finalizer", () => {
   it("does not replay an uncertain confirmed-provider flush after it fails", async () => {
     const session = createSession(claims());
     const flush = vi.fn(async function* () { throw new Error("provider uncertain"); });
+    const stopUncertain=vi.fn(async()=>undefined);
     const finalizer = new RealtimeSessionFinalizer({
       sessionId: session.id,
       provider: { ...providerWithoutTail(), flushSession: flush },
@@ -180,12 +181,13 @@ describe("realtime session finalizer", () => {
       drainSessionSync: async () => undefined,
       flushTracker: new RealtimeFlushTracker(),
       onError: vi.fn(),
-      confirmed: { beforeFlush: async () => undefined },
+      confirmed: { beforeFlush: async () => undefined, stopUncertain },
     });
 
     await expect(finalizer.finalize("client_request")).rejects.toThrow("public_final_flush_unconfirmed");
     await expect(finalizer.finalize("connection_closed")).rejects.toThrow("public_final_flush_unconfirmed");
     expect(flush).toHaveBeenCalledOnce();
+    expect(stopUncertain).toHaveBeenCalledOnce();
   });
 
   it("reports an empty successful flush when no tail audio remains", async () => {

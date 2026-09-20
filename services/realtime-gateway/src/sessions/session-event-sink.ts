@@ -26,6 +26,8 @@ export interface SessionEventSink {
   touch(sessionId: string, status: "active" | "paused"): Promise<void>;
   runtime?(sessionId:string,event:PublicRuntimeObservation):Promise<PublicRuntimeAck>;
   recoveryOwnership?(sessionId:string,input:{ownerId:string;runtimeSequence:number}):Promise<{ownerId:string;runtimeSequence:number;expiresAt:string}>;
+  /** Marks an already closed public provider as stopped but not settleable. */
+  stopUncertain?():Promise<void>;
 }
 
 /** Binding must come from authenticated server admission, never a client event.
