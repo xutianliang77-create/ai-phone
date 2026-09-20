@@ -16,6 +16,30 @@ import {
   settleUsageHold as settleLegacyUsageHold,
 } from "./usage.service.js";
 
+/**
+ * A usage hold is retried by its stable session reservation, not by its
+ * server-derived expiry.  In particular, a public realtime lease's remaining
+ * TTL naturally decreases between an interrupted Start request and its retry.
+ * Including that TTL in the command identity turns an otherwise identical
+ * retry into a false idempotency conflict.
+ */
+export function usageHoldRequestHash(input: {
+  userId: string;
+  seconds: number;
+  sessionId: string;
+  idempotencyKey: string;
+  note?: string;
+  ttlSeconds?: number;
+}) {
+  return repositoryRequestHash({
+    userId: input.userId,
+    seconds: input.seconds,
+    sessionId: input.sessionId,
+    idempotencyKey: input.idempotencyKey,
+    ...(input.note === undefined ? {} : { note: input.note }),
+  });
+}
+
 export async function createUsageHold(
   userId: string,
   seconds: number,
@@ -34,7 +58,7 @@ export async function createUsageHold(
   return withPostgresRepositoryFence(
     { aggregateType: "communication_session", aggregateId: options.sessionId },
     async (fence) => {
-      const requestHash = repositoryRequestHash({ userId, seconds, ...options });
+      const requestHash = usageHoldRequestHash({ userId, seconds, ...options });
       const commandId = repositoryCommandId({
         aggregateId: options.sessionId,
         operation: "usage-hold-create",

@@ -51,6 +51,27 @@ export type PostgresReleaseHoldResult = {
   hold?: VersionedUsageHoldRecord;
 };
 
+/**
+ * The hold request hash is a command/audit identity.  A retry must also accept
+ * a pre-fix record whose hash included a server-derived TTL, provided every
+ * client-visible reservation field is unchanged.  Returning the stored hold
+ * preserves its original expiry; it never renews the reservation.
+ */
+export function sameUsageHoldReservation(
+  hold: VersionedUsageHoldRecord,
+  input: {
+    sessionId: string;
+    seconds: number;
+    idempotencyKey: string;
+    note?: string;
+  },
+) {
+  return hold.sessionId === input.sessionId &&
+    hold.seconds === input.seconds &&
+    hold.idempotencyKey === input.idempotencyKey &&
+    hold.note === input.note;
+}
+
 export class PostgresUsageHoldsRepository {
   private readonly primary: PostgresPrimaryStore;
 
@@ -99,9 +120,12 @@ export class PostgresUsageHoldsRepository {
         const held = await activeHeldSeconds(transaction, input.userId, now);
         const balance = usageBalance(locked.account, held);
         if (existing) {
-          const matches = existing.hold.sessionId === input.sessionId &&
-            existing.hold.seconds === seconds &&
-            existing.hold.requestHash === input.requestHash;
+          const matches = sameUsageHoldReservation(existing.hold, {
+            sessionId: input.sessionId,
+            seconds,
+            idempotencyKey: input.idempotencyKey,
+            note: input.note,
+          });
           return recordUsageCommand(transaction, command, matches ? {
             status: "held",
             replayed: true,
