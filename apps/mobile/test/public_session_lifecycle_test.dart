@@ -32,6 +32,7 @@ void main() {
     expect(saved.snapshot!.mode, 'meeting');
     expect(saved.pending, isEmpty);
     expect(h.gateway.ends, 1);
+    expect(h.gateway.endTimeout, const Duration(seconds: 22));
     expect(h.posts.length, 1);
   });
   test(
@@ -207,6 +208,7 @@ class Api extends RealtimeApiClient {
 class Gateway extends RealtimeGatewayClient {
   int connects = 0, ends = 0, resumes = 0;
   bool retained = true;
+  Duration? endTimeout;
   @override
   bool canResumePublicTransport(String id) => retained && id == 'public-s';
   @override
@@ -220,6 +222,7 @@ class Gateway extends RealtimeGatewayClient {
   Future<bool> endAndWait(String id,
       {Duration timeout = const Duration(seconds: 1)}) async {
     ends++;
+    endTimeout = timeout;
     return true;
   }
 

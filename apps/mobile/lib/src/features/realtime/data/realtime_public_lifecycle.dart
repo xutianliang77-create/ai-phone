@@ -1,5 +1,11 @@
 part of 'realtime_repository.dart';
 
+// Qwen realtime ASR must receive session.finished after session.finish before
+// the client closes its WebSocket. The configured server timeout is 15s and
+// the provider SDK's end-session default is 20s, so the generic 12s control
+// timeout is not safe for a public final flush.
+const _publicGatewayEndTimeout = Duration(seconds: 22);
+
 extension RealtimePublicLifecycle on RealtimeRepository {
   Future<bool> resumeRetainedPublicSession(String sessionId) async {
     if (!_gatewayClient.canResumePublicTransport(sessionId)) return false;
@@ -89,7 +95,10 @@ extension RealtimePublicLifecycle on RealtimeRepository {
         ]);
     await _resultSyncStore.putCheckpoint(record);
     try {
-      await _gatewayClient.endAndWait(session.sessionId);
+      await _gatewayClient.endAndWait(
+        session.sessionId,
+        timeout: _publicGatewayEndTimeout,
+      );
     } catch (_) {}
     await _gatewayClient.close();
     return _confirmPublicRecord(record);

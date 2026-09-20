@@ -36,7 +36,7 @@ extension RealtimeControllerPublicLifecycle on RealtimeController {
     try {
       final confirmed = await _repository
           .finishPublicSession(session, _segments, mode: _config.realtimeMode)
-          .timeout(const Duration(seconds: 25));
+          .timeout(const Duration(seconds: 30));
       _message = confirmed ? '已收到服务端唯一结束回执' : '本机已停止；待结束记录已保留，服务器证据尚未确认';
     } catch (_) {
       _message = '本机已停止；结束尚未确认，请检查记录并重试';
