@@ -57,15 +57,17 @@ async def run():
         "profile": {k: os.environ.get(k) for k in sorted(allowed)}, "networkCalls": 0, "cases": []}
     manifest = json.loads((inputs / "manifest.json").read_text())
     for item in manifest["cases"]:
+        rate = item["sampleRate"]
         pcm = (inputs / (item["id"] + ".pcm")).read_bytes()
-        if hashlib.sha256(pcm).hexdigest() != item["sha256"] or len(pcm) > 16000 * 2 * 300:
+        if rate not in (16000, 24000) or hashlib.sha256(pcm).hexdigest() != item["sha256"] or len(pcm) > rate * 2 * 300:
             raise RuntimeError("Input mismatch or unbounded fixture")
         name = item["id"]
         await engine.create_session(CreateSpeakerSessionRequest(sessionId=name, options={"mode": "diarization", "maxSpeakers": 4, "allowVoiceIdentity": False}))
         spans, started = [], time.monotonic()
-        for index, offset in enumerate(range(0, len(pcm), 2560)):
-            frame = SpeakerAudioFrame(type="audio.frame", sessionId=name, sequence=index+1, timestampMs=offset//32,
-                format="pcm16", sampleRate=16000, data=base64.b64encode(pcm[offset:offset+2560]).decode())
+        chunk_bytes = rate * 2 * 80 // 1000
+        for index, offset in enumerate(range(0, len(pcm), chunk_bytes)):
+            frame = SpeakerAudioFrame(type="audio.frame", sessionId=name, sequence=index+1, timestampMs=offset*1000//(rate*2),
+                format="pcm16", sampleRate=rate, data=base64.b64encode(pcm[offset:offset+chunk_bytes]).decode())
             spans.extend(span.model_dump() for span in await engine.push_audio(frame))
         spans.extend(span.model_dump() for span in await engine.flush(name))
         await engine.close_session(name)

@@ -190,6 +190,7 @@ extension RealtimeControllerGatewayEvents on RealtimeController {
         event.segmentId!,
         turnId: event.turnId,
         revision: event.revision,
+        speakerRevision: event.speakerRevision,
         speaker: event.speaker,
         timing: event.timing,
       );

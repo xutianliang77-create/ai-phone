@@ -50,6 +50,7 @@ actor DeviceSpeakerEngine {
     self.sessionId = sessionId; self.sampleRate = sampleRate
     inputFormat = input; outputFormat = output
     converter = sampleRate == 16000 ? nil : AVAudioConverter(from: input, to: output)
+    guard sampleRate == 16000 || converter != nil else { throw DeviceSpeakerFailure.invalidAudio }
     #if canImport(FluidAudio)
     let config = SortformerConfig.fastV2_1
     let expected: [String: [Int]] = ["chunk": [1, 112, 128], "spkcache": [1, 188, 512], "fifo": [1, 40, 512]]
@@ -78,7 +79,10 @@ actor DeviceSpeakerEngine {
       let samples = pcm.floatChannelData?[0] else { throw DeviceSpeakerFailure.invalidAudio }
     pcm.frameLength = AVAudioFrameCount(count)
     for i in 0..<count { samples[i] = Float(Int16(bitPattern: UInt16(bytes[2*i]) | UInt16(bytes[2*i+1]) << 8)) / 32768 }
-    let converted = CoreMlNemotronAudioInput.convertPcm(buffer: pcm, converter: converter, format: outputFormat)
+    // The inherited converter helper requires a converter; 16k PCM is already
+    // the model rate and must bypass resampling, not pass a nil converter.
+    let converted = sampleRate == 16000 ? (buffer: pcm, error: Optional<String>.none) :
+      CoreMlNemotronAudioInput.convertPcm(buffer: pcm, converter: converter, format: outputFormat)
     guard converted.error == nil else { throw DeviceSpeakerFailure.invalidAudio }
     inputSamples += count
     #if canImport(FluidAudio)

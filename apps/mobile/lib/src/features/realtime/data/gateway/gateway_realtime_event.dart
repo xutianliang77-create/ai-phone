@@ -8,6 +8,7 @@ class GatewayRealtimeEvent {
     this.segmentId,
     this.turnId,
     this.revision,
+    this.speakerRevision,
     this.text,
     this.rawText,
     this.optimizedText,
@@ -48,6 +49,7 @@ class GatewayRealtimeEvent {
   final String? segmentId;
   final String? turnId;
   final int? revision;
+  final int? speakerRevision;
   final String? text;
   final String? rawText;
   final String? optimizedText;
@@ -91,6 +93,7 @@ class GatewayRealtimeEvent {
         segmentId = null,
         turnId = null,
         revision = null,
+        speakerRevision = null,
         text = null,
         rawText = null,
         optimizedText = null,
@@ -146,6 +149,7 @@ class GatewayRealtimeEvent {
       segmentId: json['segmentId'] as String?,
       turnId: json['turnId'] as String?,
       revision: (json['revision'] as num?)?.toInt(),
+      speakerRevision: json['speakerRevision'] as int?,
       text: json['text'] as String?,
       rawText: json['rawText'] as String?,
       optimizedText: json['optimizedText'] as String?,

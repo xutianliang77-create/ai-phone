@@ -10,6 +10,7 @@ class SegmentDraft {
     this.turnId,
     this.revision,
     this.recognitionRevision,
+    this.speakerRevision,
     this.rawText,
     this.optimizedText,
     this.sourceLanguage,
@@ -30,6 +31,7 @@ class SegmentDraft {
   final String? turnId;
   final int? revision;
   final int? recognitionRevision;
+  final int? speakerRevision;
   final String sourceText;
   final String translatedText;
   final String? rawText;
@@ -53,6 +55,8 @@ class SegmentDraft {
     String? turnId,
     int? revision,
     int? recognitionRevision,
+    int? speakerRevision,
+    bool clearSpeakerRevision = false,
     String? rawText,
     String? optimizedText,
     String? sourceLanguage,
@@ -77,6 +81,7 @@ class SegmentDraft {
       turnId: turnId ?? this.turnId,
       revision: revision ?? this.revision,
       recognitionRevision: recognitionRevision ?? this.recognitionRevision,
+      speakerRevision: clearSpeakerRevision ? speakerRevision : speakerRevision ?? this.speakerRevision,
       rawText: rawText ?? this.rawText,
       optimizedText: optimizedText ?? this.optimizedText,
       sourceLanguage: sourceLanguage ?? this.sourceLanguage,

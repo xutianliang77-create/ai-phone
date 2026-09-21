@@ -7,6 +7,7 @@ extension RealtimeControllerSegments on RealtimeController {
     String? translatedText,
     String? turnId,
     int? revision,
+    int? speakerRevision,
     String? rawText,
     String? optimizedText,
     String? appendSourceText,
@@ -63,6 +64,9 @@ extension RealtimeControllerSegments on RealtimeController {
     final isNewerEventRevision = revision != null &&
         current.revision != null &&
         revision > current.revision!;
+    final canReviseSpeaker = canReviseRecognition &&
+        (isNewerRecognitionRevision || current.speakerRevision == null ||
+            speakerRevision != null && speakerRevision >= current.speakerRevision!);
     if (isNewerRecognitionRevision || isNewerEventRevision) {
       _cancelPublicAudioForRevision(id, revision);
     }
@@ -80,6 +84,8 @@ extension RealtimeControllerSegments on RealtimeController {
       revision: nextRevision,
       recognitionRevision:
           nextSourceText != null && canReviseRecognition ? revision : null,
+      clearSpeakerRevision: isNewerRecognitionRevision,
+      speakerRevision: canReviseSpeaker ? speakerRevision : null,
       sourceText: canReviseRecognition
           ? nextSourceText ?? current.sourceText + (nextAppendSourceText ?? '')
           : current.sourceText,
@@ -95,8 +101,8 @@ extension RealtimeControllerSegments on RealtimeController {
       model: model,
       latencyMs: latencyMs,
       refinement: canReviseRecognition ? refinement : null,
-      speaker: canReviseRecognition ? speaker : null,
-      timing: canReviseRecognition ? timing : null,
+      speaker: canReviseSpeaker ? speaker : null,
+      timing: canReviseSpeaker ? timing : null,
       vadContext: canReviseRecognition ? vadContext : null,
       languageProfile: canReviseRecognition ? languageProfile : null,
       clearTranslation: isNewerRecognitionRevision ||

@@ -38,6 +38,7 @@ enum DeviceSpeakerFileProbe {
       let loadStart = ProcessInfo.processInfo.systemUptime
       let model = try DeviceSpeakerModelResources.load()
       result["modelLoadMs"] = (ProcessInfo.processInfo.systemUptime - loadStart) * 1000
+      save()
       var peakMemory = residentBytes()
       var reports: [[String: Any]] = []
       for item in cases {
@@ -48,6 +49,7 @@ enum DeviceSpeakerFileProbe {
         guard !pcm.isEmpty, pcm.count % 2 == 0, pcm.count <= rate * 2 * 300,
           SHA256.hash(data: pcm).map({String(format:"%02x",$0)}).joined() == expected else { throw DeviceSpeakerFailure.invalidAudio }
         let engine = try DeviceSpeakerEngine(sessionId: id, sampleRate: rate, model: model)
+        result["currentCase"] = id; save()
         let started = ProcessInfo.processInfo.systemUptime
         var evidence: [[String: Any]] = [], calls: [Double] = []
         let chunk = rate / 50 * 2 // same 20ms PCM granularity as the mobile input
@@ -74,6 +76,7 @@ enum DeviceSpeakerFileProbe {
         result["cases"] = reports; save()
       }
       result["status"] = "completed"
+      result.removeValue(forKey: "currentCase")
     } catch {
       result["status"] = "failed"
       result["error"] = String(describing: error)
