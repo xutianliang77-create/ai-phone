@@ -2,6 +2,7 @@ import 'dart:convert';
 import '../../../../platform/audio/device_speaker_diarizer.dart';
 import 'public_creation_request_store.dart';
 import 'realtime_session.dart';
+import 'public_automatic_language_scope.dart';
 
 const publicCreationScopeNotice =
     '公有在线会在开始前按当前服务端资格核对语种、自动识别/反向与朗读声音；个人声音、说话人和术语包仍未在公有链路启用。丢失连接时安全结束并保留已确认记录，不自动重连或重放音频。';
@@ -112,6 +113,11 @@ String? publicCreationCapabilityBlocker(Map<String, Object?> offer,
       source: source,
       target: target,
       automaticLanguagePair: automaticLanguagePair);
+  if (source == 'auto' && offer['automaticSourceLanguages'] != null) {
+    if (autoReverse && automaticPair == null) return '自动反向需要保留有效的主语言和互译语言';
+    final sources = publicAutomaticSources(offer, target: target, reverse: autoReverse, pair: automaticPair)!;
+    return sources.isEmpty ? '当前配置尚无可用的自动识别翻译方向' : null;
+  }
   if (source == 'auto' || autoReverse) {
     if (source != 'auto' || automaticPair == null) {
       return '公有自动语言需要保留一个有效语言对，请重新选择源语言和目标语言';
@@ -187,6 +193,8 @@ Map<String, Object?> publicCreationBody(Map<String, Object?> offer,
         'target': target,
         'autoReverse': autoReverse,
         if (automaticPair != null) 'pair': [automaticPair.$1, automaticPair.$2],
+        if (source == 'auto' && offer['automaticSourceLanguages'] != null)
+          'sourceLanguages': publicAutomaticSources(offer, target: target, reverse: autoReverse, pair: automaticPair),
         'revision': 1
       },
       'syncRequested': false

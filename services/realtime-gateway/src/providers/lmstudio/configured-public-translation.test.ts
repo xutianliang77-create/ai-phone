@@ -112,4 +112,13 @@ describe("original router configured compatible MT component",()=>{
     await s.create().translate({...input,sourceLanguage:"ja",targetLanguage:"fr"});
     const b=JSON.parse(String((s.fetchFn.mock.calls[0] as any)[1].body));expect(b.messages[0].content).toContain("Source language: Japanese");expect(b.messages[0].content).toContain("into French");
   });
+  it('translates an authorized third language to the primary language without widening the target',async()=>{
+    const s=setup();s.options.authorization.languagePolicy={source:'auto',target:'en',autoReverse:true,
+      pair:['fr','en'],sourceLanguages:['fr','en','ja'],revision:3};
+    await s.create().translate({...input,sourceLanguage:'ja',targetLanguage:'fr'});
+    expect(s.fetchFn).toHaveBeenCalledTimes(1);
+    await expect(s.create().translate({...input,sourceLanguage:'ja',targetLanguage:'en'})).rejects.toMatchObject({code:'public_translation_language_scope_mismatch'});
+    await expect(s.create().translate({...input,sourceLanguage:'ko',targetLanguage:'fr'})).rejects.toMatchObject({code:'public_translation_language_scope_mismatch'});
+    expect(s.fetchFn).toHaveBeenCalledTimes(1);
+  });
 });

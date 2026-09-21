@@ -4,6 +4,7 @@ import {capturePublicModelRuntimeConfiguration} from "../models/public-model-run
 import {publicDeploymentId} from "../sessions/session-result-sync.service.js";
 import {PublicConfigError} from "../models/public-model-config.js";
 import {publicProtocolCapability} from "@translation/contracts";
+import {publicAsrAutomaticSourceLanguages} from '@translation/contracts';
 import type {PublicRealtimeAuthority} from "./public-realtime-coordinator.js";
 import { publicDeviceSpeakerCapability, publicDeviceSpeakerEnabled } from "./public-device-speaker-policy.js";
 
@@ -27,6 +28,7 @@ export function registerPublicCreationContextRoute(app:FastifyInstance,available
         modelPolicyRevision:configuration.modelPolicyRevision,executionPlan:configuration.executionPlan,captureSampleRate:configuration.components.asr!.sampleRate,
         endpoint:endpoint.toString(),voiceOutput,...(voiceOutput?{voicePresetId:configuration.components.tts!.voice}:{}),
         onDeviceSpeaker: publicDeviceSpeakerCapability(),
+        automaticSourceLanguages:publicAsrAutomaticSourceLanguages(configuration.components.asr!.protocol,configuration.components.asr!.modelId),
         status:qualified?.status==="not_qualified"?"not_qualified":"configured_not_verified",
         ...(qualified?{capability:{status:qualified.status,qualifiedLanguagePairs:qualified.qualifiedLanguagePairs,
           automaticLanguage:qualified.automaticLanguage,automaticReverse:qualified.automaticReverse}}:{}),

@@ -1,17 +1,18 @@
 import {PublicAsrError} from "./public-asr-completed-audio.js";
 import type {TranslationLanguageCode} from "@translation/contracts";
+import {QWEN_ASR_PRODUCT_LANGUAGES,automaticSourceAllowed} from '@translation/contracts';
 /** Intersection of the documented Qwen language codes and the existing product
  * language contract. `auto` deliberately omits the optional Qwen hint; it is
  * not coerced to a default language or an unqualified language pair. */
-const supported=new Set(["zh","yue","en","ja","de","ko","ru","fr","pt","ar","it","es","hi","id","th","tr","uk","vi","cs","ms","pl"]);
+const supported:ReadonlySet<string>=new Set(QWEN_ASR_PRODUCT_LANGUAGES);
 export function qwenAsrLanguage(language:string){
   if(!supported.has(language))throw new PublicAsrError("qwen_asr_language_not_supported","not_sent");return language;
 }
-export function qwenTranscriptLanguage(language:unknown,source:string,pair?:readonly TranslationLanguageCode[]):TranslationLanguageCode{
+export function qwenTranscriptLanguage(language:unknown,source:string,_pair?:readonly TranslationLanguageCode[],_sourceLanguages?:readonly TranslationLanguageCode[]):TranslationLanguageCode{
   if(typeof language!=="string"||!/^[a-z]{2,3}$/.test(language))throw new PublicAsrError("qwen_asr_language_invalid","uncertain");
   if(source!=="auto"){
     if(language!==source)throw new PublicAsrError("qwen_asr_language_mismatch","uncertain");
-  }else if(!pair?.includes(language as TranslationLanguageCode))throw new PublicAsrError("qwen_asr_language_out_of_scope","uncertain");
+  }else if(!supported.has(language))throw new PublicAsrError("qwen_asr_language_not_supported","uncertain");
   // Partial language is provisional, just like stash. Qwen may revise en -> zh
   // within one item; only completed supplies the language routed to MT.
   return language as TranslationLanguageCode;
@@ -19,10 +20,13 @@ export function qwenTranscriptLanguage(language:unknown,source:string,pair?:read
 /** A draft is not a final language decision. Suppress an out-of-scope preview,
  * but keep accepting its audio and await completed. Never coerce it into the
  * signed pair or weaken final-result, item or payload validation. */
-export function qwenDraftTranscriptLanguage(language:unknown,source:string,pair?:readonly TranslationLanguageCode[]){
-  try{return qwenTranscriptLanguage(language,source,pair);}
+export function qwenDraftTranscriptLanguage(language:unknown,source:string,pair?:readonly TranslationLanguageCode[],sourceLanguages?:readonly TranslationLanguageCode[]){
+  try{
+    const detected=qwenTranscriptLanguage(language,source,pair,sourceLanguages);
+    return source==='auto'&&!automaticSourceAllowed({pair,sourceLanguages},detected)?undefined:detected;
+  }
   catch(error){
-    if(error instanceof PublicAsrError&&["qwen_asr_language_out_of_scope","qwen_asr_language_mismatch"].includes(error.code))return undefined;
+    if(error instanceof PublicAsrError&&["qwen_asr_language_not_supported","qwen_asr_language_mismatch"].includes(error.code))return undefined;
     throw error;
   }
 }

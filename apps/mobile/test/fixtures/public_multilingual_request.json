@@ -1,0 +1,23 @@
+{
+  "mode": "conversation",
+  "sourceLanguage": "auto",
+  "targetLanguage": "en",
+  "autoReverseTargetLanguage": true,
+  "voiceOutput": false,
+  "speakerAttribution": {"mode": "off"},
+  "processing": {
+    "contractVersion": 1,
+    "processingMode": "online",
+    "modelPolicyRevision": "models-v1:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "executionPlan": {
+      "asr": {"execution": "public", "scopeKey": "asr", "reason": "online_selected"},
+      "translation": {"execution": "public", "scopeKey": "mt", "reason": "online_selected"},
+      "tts": {"execution": "disabled"}
+    },
+    "languagePolicy": {
+      "source": "auto", "target": "en", "autoReverse": true,
+      "pair": ["zh", "en"], "sourceLanguages": ["zh", "en", "ja", "fr"], "revision": 1
+    },
+    "syncRequested": false
+  }
+}

@@ -67,7 +67,8 @@ export async function openConfiguredPublicConnection(env:RealtimeEnv,ws:WebSocke
     const sessionInput={sessionId:claims.sessionId,userId:claims.userId,sourceLanguage:claims.sourceLanguage,targetLanguage:claims.targetLanguage,
       ...(claims.speakerAttribution?{speakerAttribution:structuredClone(claims.speakerAttribution)}:{}),
       ...(claims.autoReverseTargetLanguage?{autoReverseTargetLanguage:true}:{}),voiceOutput:claims.voiceOutput,asrEndpointMode:claims.asrEndpointMode,
-      ...(claims.processing!.languagePolicy.pair?{languagePair:[...claims.processing!.languagePolicy.pair] as [TranslationLanguageCode,TranslationLanguageCode]}:{})};
+      ...(claims.processing!.languagePolicy.pair?{languagePair:[...claims.processing!.languagePolicy.pair] as [TranslationLanguageCode,TranslationLanguageCode]}:{}),
+      ...(claims.processing!.languagePolicy.sourceLanguages?{automaticSourceLanguages:[...claims.processing!.languagePolicy.sourceLanguages]}:{})};
     built=new ProviderRouter().createConfiguredPublicSessionFromVerifiedClaims({snapshot,authorization,binding:scoped,session:sessionInput,
       deviceSpeakerEnabled: env.publicDeviceSpeakerEnabled === true,
       authorizeConnection:async()=>{await admission.authorize(purpose());},resolveAsrCredentials:signal=>material.credentials("asr",purpose(),signal),

@@ -1,5 +1,6 @@
 import { isSupportedLanguage, isTranslationLanguage } from "../shared/languages.js";
 import type { LanguageCode, TranslationLanguageCode } from "../shared/languages.js";
+import {automaticSourceAllowed,automaticTranslationTarget,validAutomaticSources} from './automatic-language-routing.js';
 
 /** User choice is authoritative: local uses device models; online uses public models. */
 export type ProcessingMode = "local" | "online";
@@ -109,6 +110,8 @@ export interface LanguageSelection {
   target: TranslationLanguageCode;
   autoReverse: boolean;
   pair?: readonly [TranslationLanguageCode, TranslationLanguageCode];
+  /** Explicit source scope, independent from the two-way output pair. */
+  sourceLanguages?: readonly TranslationLanguageCode[];
   revision: number;
 }
 
@@ -120,6 +123,8 @@ export type TranslationDirectionDecision =
 export function isLanguageSelection(value: unknown): value is LanguageSelection {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   const v = value as Record<string, unknown>;
+  if(v.sourceLanguages!==undefined&&(v.source!=='auto'||!validAutomaticSources(v.sourceLanguages)||
+    v.autoReverse===true&&(!Array.isArray(v.pair)||!v.pair.every(code=>(v.sourceLanguages as string[]).includes(code)))))return false;
   return typeof v.source === "string" && isSupportedLanguage(v.source) &&
     typeof v.target === "string" && isTranslationLanguage(v.target) &&
     typeof v.autoReverse === "boolean" && Number.isSafeInteger(v.revision) &&
@@ -128,9 +133,8 @@ export function isLanguageSelection(value: unknown): value is LanguageSelection 
       : Array.isArray(v.pair) && v.pair.length === 2 &&
         v.pair.every((language) => typeof language === "string" && isTranslationLanguage(language)) &&
         v.pair[0] !== v.pair[1] &&
-        // An automatic source needs a bounded candidate pair even when the
-        // translation direction remains fixed. This is a language scope, not
-        // a client claim that the ASR actually detected either language.
+        // Legacy requests use this pair as a source bound. New requests may
+        // bind sourceLanguages independently; neither is a detection claim.
         (v.autoReverse
           ? v.pair.includes(v.target as TranslationLanguageCode)
           : v.source === "auto"));
@@ -163,12 +167,13 @@ export function resolveTranslationDirection(
     return { status: "unresolved", reason: "invalid_language" };
   }
   let target = selection.target;
+  if(selection.source==='auto'&&selection.sourceLanguages&&!automaticSourceAllowed(selection,source))return {status:'unresolved',reason:'outside_pair'};
   if (selection.autoReverse) {
     if (!selection.pair) return { status: "unresolved", reason: "invalid_pair" };
     const [first, second] = selection.pair;
     if (first === second) return { status: "unresolved", reason: "invalid_pair" };
-    if (source !== first && source !== second) return { status: "unresolved", reason: "outside_pair" };
-    target = source === first ? second : first;
+    if (!automaticSourceAllowed(selection,source)) return { status: "unresolved", reason: "outside_pair" };
+    target = automaticTranslationTarget(source,selection.target,true,selection.pair);
   }
   if (source === target) return { status: "unresolved", reason: "same_language" };
   return { status: "ready", source, target, revision: selection.revision };

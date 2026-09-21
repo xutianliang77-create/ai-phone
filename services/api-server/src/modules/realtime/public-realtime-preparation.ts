@@ -1,4 +1,4 @@
-import {publicProtocolAutomaticLanguagePairSupported,publicProtocolCapability,publicProtocolSampleRateSupported,type CreateRealtimeSessionRequest} from "@translation/contracts";
+import {publicAutomaticLanguageScopeSupported,publicProtocolCapability,publicProtocolSampleRateSupported,type CreateRealtimeSessionRequest} from "@translation/contracts";
 import {capturePublicModelRuntimeConfiguration} from "../models/public-model-runtime-config.js";
 import {createSession,findSession} from "../sessions/sessions-runtime.repository.js";
 import {assertPublicSession,publicDeploymentId} from "../sessions/session-result-sync.service.js";
@@ -27,12 +27,10 @@ function configuration(input:CreateRealtimeSessionRequest) {
     resultSyncHash(config.executionPlan)!==resultSyncHash(p.executionPlan))throw new ResultSyncError("public_creation_configuration_changed");
   if(publicProtocolCapability(asr.protocol)?.input!=="continuous_pcm"||!publicProtocolSampleRateSupported(asr.protocol,asr.sampleRate))throw new ResultSyncError("public_creation_asr_not_continuous",503);
   const automatic=p.languagePolicy.source==="auto"||p.languagePolicy.autoReverse;
-  const pair=p.languagePolicy.pair;
-  // The selected pair is part of the original settings contract. The adapter
-  // may expose automatic language only when this exact pair has separately
-  // passed signed policy/live qualification; fixed-engine ASR stays rejected.
-  if(automatic&&(!publicProtocolAutomaticLanguagePairSupported(asr.protocol,pair)||p.languagePolicy.source!=="auto"||
-    !pair||!pair.includes(p.languagePolicy.target))) {
+  // Output pair and automatic source scope are separate. The authority checks
+  // each actual route against signed policy/live evidence; fixed ASR engines
+  // must not acquire automatic capability merely from a requested scope.
+  if(automatic&&!publicAutomaticLanguageScopeSupported(asr.protocol,asr.modelId,p.languagePolicy)) {
     throw new ResultSyncError("public_creation_automatic_language_not_supported",503);
   }
   if(input.voice&&(!input.voiceOutput||input.voice.mode!=="preset"||input.voice.presetId!==config.components.tts?.voice||input.voice.quality!=="standard"||Object.keys(input.voice).some(k=>!["mode","presetId","quality"].includes(k))))throw new ResultSyncError("public_creation_voice_mismatch",400);

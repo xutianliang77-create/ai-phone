@@ -20,6 +20,18 @@ function setup(){
 async function collect(s:HttpTtsSynthesizer,e=event(),voice?:Parameters<HttpTtsSynthesizer["synthesizeStream"]>[1]){const audio=[];for await(const a of s.synthesizeStream(e,voice))audio.push(a);return audio;}
 afterEach(()=>{for(const s of active.splice(0))s.closeSession("tts-session");vi.useRealTimers();vi.restoreAllMocks();});
 describe("configured public Speech on original synthesizer and queue",()=>{
+  it('keeps fixed-target TTS fixed when the ASR source is automatic without a reverse pair',async()=>{
+    const t=setup();t.options.authorization.languagePolicy={source:'auto',target:'ja',autoReverse:false,sourceLanguages:['fr','en','ja'],revision:2};
+    const s=t.create();expect(await collect(s)).not.toHaveLength(0);
+    await expect(collect(s,{...event(),segmentId:'wrong-output',language:'fr'})).rejects.toThrow();
+    expect(t.fetchFn).toHaveBeenCalledTimes(1);
+  });
+  it('third input languages do not expand the set of reverse TTS output languages',async()=>{
+    const t=setup();t.options.authorization.languagePolicy={source:'auto',target:'en',autoReverse:true,pair:['zh','en'],sourceLanguages:['zh','en','fr','ja'],revision:2};
+    const s=t.create();expect(await collect(s,{...event(),language:'zh'})).not.toHaveLength(0);
+    await expect(collect(s,{...event(),segmentId:'source-is-not-output',language:'fr'})).rejects.toThrow();
+    expect(t.fetchFn).toHaveBeenCalledTimes(1);
+  });
   it("uses manual model/voice, exact target text and PCM, journaling before HTTP and after EOF",async()=>{
     const t=setup(),s=t.create();expect(s).toBeInstanceOf(HttpTtsSynthesizer);expect(t.resolveCredentials).not.toHaveBeenCalled();
     t.fetchFn.mockImplementation(async()=>{expect(t.record.mock.calls[0][0].state).toBe("dispatching");return response();});

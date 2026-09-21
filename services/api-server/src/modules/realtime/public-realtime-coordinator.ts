@@ -22,7 +22,7 @@ export interface PublicRealtimeAuthority {
   /** Consent is generated from the authenticated online-mode selection. The
    * authority supplies only independently verifiable budget and qualifications. */
   resolveVerifiedEvidence(context:{sessionId:string;ownerId:string;deploymentId:string;processingHash:string;configuration:PublicModelRuntimeSnapshot;
-    languagePolicy:{source:string;target:string;autoReverse:boolean;pair?:readonly [string,string];revision:number}},
+    languagePolicy:{source:string;target:string;autoReverse:boolean;pair?:readonly [string,string];sourceLanguages?:readonly import('@translation/contracts').TranslationLanguageCode[];revision:number}},
     signal:AbortSignal):Promise<{records:PublicInferenceEvidence[];refs:InferenceEvidenceRefs}>;
 }
 export interface PublicRealtimeConfigurationCapability {

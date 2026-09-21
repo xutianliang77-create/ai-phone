@@ -2,6 +2,7 @@ import {createHmac,timingSafeEqual} from "node:crypto";
 import {lstatSync,readFileSync} from "node:fs";
 import {isAbsolute,resolve} from "node:path";
 import {isSupportedLanguage,isTranslationLanguage,publicModelComponents,publicAsrModelAutomaticLanguageSupported} from "@translation/contracts";
+import {automaticTranslationTarget,validAutomaticSources,type TranslationLanguageCode} from '@translation/contracts';
 import { inspectPublicRuntimeLiveQualification } from "@translation/platform-security";
 import {canonicalSyncJson,syncKey} from "../sessions/session-result-sync-contract.js";
 import type {PublicInferenceEvidence} from "../sessions/public-inference-evidence.js";
@@ -107,10 +108,18 @@ function automaticRoutingCapability(policy:Policy,configuration:PublicModelRunti
   return {language,reverse:language&&policy.automaticReverse===true&&(!live||live.automaticReverse===true)};
 }
 
-function languageScopeQualified(language:{source:string;target:string;autoReverse:boolean;pair?:readonly [string,string]},pairs:QualifiedLanguagePair[],automatic:{language:boolean;reverse:boolean}){
+function languageScopeQualified(language:{source:string;target:string;autoReverse:boolean;pair?:readonly [string,string];sourceLanguages?:readonly TranslationLanguageCode[]},pairs:QualifiedLanguagePair[],automatic:{language:boolean;reverse:boolean}){
   const has=(source:string,target:string)=>pairs.some(pair=>pair.source===source&&pair.target===target);
   if(language.source!=="auto")return !language.autoReverse&&has(language.source,language.target);
   const pair=language.pair;
+  if(language.sourceLanguages!==undefined){
+    if(!automatic.language||!validAutomaticSources(language.sourceLanguages)||
+      language.autoReverse&&(!automatic.reverse||!pair||!pair.includes(language.target)||!has(pair[0],pair[1])||!has(pair[1],pair[0])))return false;
+    return language.sourceLanguages.every(source=>{
+      const target=automaticTranslationTarget(source,language.target as TranslationLanguageCode,language.autoReverse,pair as readonly [TranslationLanguageCode,TranslationLanguageCode]|undefined);
+      return source===target||has(source,target);
+    });
+  }
   if(!automatic.language||!pair||pair.length!==2||!pair.includes(language.target))return false;
   if(language.autoReverse){
     return automatic.reverse&&has(pair[0],pair[1])&&has(pair[1],pair[0]);

@@ -34,6 +34,7 @@ export interface StreamingAsrOptions {sessionId:string;leaseId:string;endpoint:s
   detectedLanguageFallback?:TranslationLanguageCode;
   /** The only provider-confirmed language scope accepted for source=auto. */
   automaticLanguagePair?:readonly [TranslationLanguageCode,TranslationLanguageCode];
+  automaticSourceLanguages?:readonly TranslationLanguageCode[];
   googleStreamFactory?:GoogleAsrStreamFactory;
   authorizeConnection:()=>Promise<void>;resolveCredentials:(signal?:AbortSignal)=>Promise<{apiKey?:string;secretId?:string;secretKey?:string;accessToken?:string;accessTokenExpiresAt?:number;quotaProjectId?:string}>|{apiKey?:string;secretId?:string;secretKey?:string;accessToken?:string;accessTokenExpiresAt?:number;quotaProjectId?:string};
   record:(event:PublicModelAttemptEvent)=>Promise<void>;socketFactory?:(url:string,options:WebSocket.ClientOptions)=>WebSocket;}
@@ -303,7 +304,7 @@ export class OpenAiStreamingAsrClient {
       }
       else if(["conversation.item.input_audio_transcription.text","conversation.item.input_audio_transcription.completed"].includes(e.type)){
         if(!turn?.sent||turn.terminal)throw Error();
-        turn.detectedLanguage=(e.type.endsWith(".text")?qwenDraftTranscriptLanguage:qwenTranscriptLanguage)(e.language,this.options.language,this.options.automaticLanguagePair);
+        turn.detectedLanguage=(e.type.endsWith(".text")?qwenDraftTranscriptLanguage:qwenTranscriptLanguage)(e.language,this.options.language,this.options.automaticLanguagePair,this.options.automaticSourceLanguages);
         e={...e,item_id:this.qwenTurnItemId(turn,e.item_id)};
       }else throw Error();
     }

@@ -1,5 +1,5 @@
 import type {PublicModelAttemptEvent,RealtimeTokenClaims} from "@translation/contracts";
-import {isDeviceSpeakerSelection,publicAsrModelAutomaticLanguagePairSupported,publicProtocolCapability,publicProtocolSampleRateSupported,publicRuntimeTokenBinding} from "@translation/contracts";
+import {isDeviceSpeakerSelection,publicAutomaticLanguageScopeSupported,publicProtocolCapability,publicProtocolSampleRateSupported,publicRuntimeTokenBinding} from "@translation/contracts";
 import {isDeepStrictEqual} from "node:util";
 import {configuredStreamingAsr, type ConfiguredStreamingAsrOptions} from "../asr/configured-public-asr.js";
 import type {PublicSessionBinding} from "../sessions/public-session-event-sink.js";
@@ -88,8 +88,7 @@ function assemblePublicSession(options:ConfiguredPublicSessionOptions,withOutput
   }
   const language = authorization.languagePolicy;
   const automaticLanguage=language.source === "auto";
-  const automaticPair=publicAsrModelAutomaticLanguagePairSupported(snapshot.components.asr!.protocol,snapshot.components.asr!.modelId,language.pair)&&
-    language.pair!.includes(language.target);
+  const automaticPair=publicAutomaticLanguageScopeSupported(snapshot.components.asr!.protocol,snapshot.components.asr!.modelId,language);
   // The signed token omits the optional flag when reverse routing is off.
   // Normalize that transport representation to false before comparing it to
   // the sealed policy; otherwise every fixed-language public session is
@@ -97,6 +96,7 @@ function assemblePublicSession(options:ConfiguredPublicSessionOptions,withOutput
   if ((session.autoReverseTargetLanguage === true) !== language.autoReverse ||
       session.sourceLanguage !== language.source || session.targetLanguage !== language.target ||
       !isDeepStrictEqual(session.languagePair,language.pair) ||
+      !isDeepStrictEqual(session.automaticSourceLanguages,language.sourceLanguages) ||
       (automaticLanguage&&!automaticPair) ||
       // Do not reinterpret a fixed-engine ASR locale as automatic language
       // detection. The signed admission policy/live evidence binds the exact

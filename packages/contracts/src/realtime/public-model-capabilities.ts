@@ -1,3 +1,5 @@
+import {validAutomaticSources} from './automatic-language-routing.js';
+import type {TranslationLanguageCode} from '../shared/languages.js';
 /** Constraints of the implemented adapters, not a supplier/model qualification
  * catalogue. A matching entry never grants network access or production readiness. */
 export interface PublicModelProtocolCapability {
@@ -27,7 +29,7 @@ const tts=(vendor:PublicModelProtocolCapability["vendor"],transport:PublicModelP
   output:completed?"completed_pcm":"streamed_pcm",sampleRates,languageConstraint,automaticLanguage:false,maxTextCodepoints:4096,
   ...(vendor==="google"?{maxTextUtf8Bytes:5000}:{})});
 const protocols:Record<string,PublicModelProtocolCapability>={
-  qwen_asr_realtime:{...asr("qwen","websocket",[16000],"服务端VAD连续音频；源语言可省略以自动识别；自动路由当前限中英对且须逐配置资格化",false,true),maxAudioSeconds:3600},
+  qwen_asr_realtime:{...asr("qwen","websocket",[16000],"服务端VAD连续音频；支持已接入语种自动识别；自动来源范围与输出语言对分离，须逐配置资格化",false,true),maxAudioSeconds:3600},
   qwen_asr_compatible:asr("qwen","https",[16000,24000],"明确源语言；已实现21种产品语言交集；非Filetrans异步接口",true),
   qwen_chat:mt("qwen"),
   qwen_tts_realtime:tts("qwen","websocket",[24000],"明确目标语种：zh/en/de/it/pt/es/ja/ko/fr/ru；Voice资格另验"),
@@ -70,25 +72,39 @@ export function publicAsrModelAutomaticLanguageSupported(protocol:string,modelId
     protocol === "tencent_asr_ws" && modelId === "16k_zh_en_2.0";
 }
 
-/** The existing inherited text-language router has only been implemented for
- * the Chinese/English pair. This is an adapter limit, not a rewrite of the
- * selected language parameters: callers still pass and sign the exact pair. */
+export const QWEN_ASR_PRODUCT_LANGUAGES:readonly TranslationLanguageCode[]=Object.freeze(
+  ["zh","yue","en","ja","de","ko","ru","fr","pt","ar","it","es","hi","id","th","tr","uk","vi","cs","ms","pl"]);
+/** Actual adapter support, not a grant. OpenAI's inherited text-language
+ * inference remains zh/en; a multilingual model is not proof of a wired LID. */
+export function publicAsrAutomaticSourceLanguages(protocol:string,modelId:string):readonly TranslationLanguageCode[]{
+  if(!publicAsrModelAutomaticLanguageSupported(protocol,modelId))return [];
+  return protocol==='qwen_asr_realtime'?QWEN_ASR_PRODUCT_LANGUAGES:['zh','en'];
+}
 export function publicProtocolAutomaticLanguagePairSupported(
   protocol:string,
   pair:readonly string[]|undefined,
 ){
-  return publicProtocolAutomaticLanguageSupported(protocol)&&pair?.length===2&&
-    new Set(pair).size===2&&pair.includes("zh")&&pair.includes("en");
+  return publicProtocolAutomaticLanguageSupported(protocol)&&publicAsrModelAutomaticLanguagePairSupported(protocol,'',pair);
 }
 
-/** The inherited router is deliberately bounded to the Chinese/English pair.
- * Model support is only an implementation capability; signed policy and live
+/** Model support is only an implementation capability; signed policy and live
  * qualification still decide whether a configured public deployment may use it. */
 export function publicAsrModelAutomaticLanguagePairSupported(
   protocol:string,
   modelId:string,
   pair:readonly string[]|undefined,
 ){
-  return publicAsrModelAutomaticLanguageSupported(protocol,modelId)&&
-    pair?.length===2&&new Set(pair).size===2&&pair.includes("zh")&&pair.includes("en");
+  const sources=publicAsrAutomaticSourceLanguages(protocol,modelId);
+  return pair?.length===2&&new Set(pair).size===2&&pair.every(code=>sources.includes(code as TranslationLanguageCode));
+}
+
+export function publicAutomaticLanguageScopeSupported(protocol:string,modelId:string,language:{source:string;target:string;
+  autoReverse:boolean;pair?:readonly string[];sourceLanguages?:readonly TranslationLanguageCode[]}){
+  if(language.source!=='auto'||!publicAsrModelAutomaticLanguageSupported(protocol,modelId))return false;
+  const pair=language.pair;
+  if(language.autoReverse&&(!publicAsrModelAutomaticLanguagePairSupported(protocol,modelId,pair)||!pair?.includes(language.target)))return false;
+  if(language.sourceLanguages===undefined)return publicAsrModelAutomaticLanguagePairSupported(protocol,modelId,pair)&&pair!.includes(language.target);
+  const sources=publicAsrAutomaticSourceLanguages(protocol,modelId);
+  return validAutomaticSources(language.sourceLanguages)&&language.sourceLanguages.every(code=>sources.includes(code))&&
+    (!language.autoReverse||pair!.every(code=>language.sourceLanguages!.includes(code as TranslationLanguageCode)));
 }

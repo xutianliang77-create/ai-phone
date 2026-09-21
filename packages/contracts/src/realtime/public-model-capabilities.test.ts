@@ -27,9 +27,11 @@ describe("implemented public wire capabilities",()=>{
     expect(publicAsrModelAutomaticLanguagePairSupported("tencent_asr_ws","16k_zh_en_2.0",["zh","en"])).toBe(true);
     expect(publicAsrModelAutomaticLanguagePairSupported("tencent_asr_ws","16k_zh_en_2.0",["zh","ja"])).toBe(false);
   });
-  it("permits the implemented Qwen realtime automatic zh/en pair",()=>{
+  it("allows supported Qwen automatic pairs without pretending other adapters have multilingual LID",()=>{
     expect(publicAsrModelAutomaticLanguagePairSupported("qwen_asr_realtime","manual-asr",["zh","en"])).toBe(true);
-    expect(publicAsrModelAutomaticLanguagePairSupported("qwen_asr_realtime","manual-asr",["zh","ja"])).toBe(false);
+    expect(publicAsrModelAutomaticLanguagePairSupported("qwen_asr_realtime","manual-asr",["zh","ja"])).toBe(true);
+    expect(publicAsrModelAutomaticLanguagePairSupported("qwen_asr_realtime","manual-asr",["fr","ja"])).toBe(true);
+    expect(publicAsrModelAutomaticLanguagePairSupported("openai_realtime_asr","manual-asr",["fr","ja"])).toBe(false);
     expect(publicProtocolCapability("qwen_asr_realtime")).toMatchObject({input:"continuous_pcm",maxAudioSeconds:3600});
   });
 });

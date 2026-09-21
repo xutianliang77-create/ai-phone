@@ -7,8 +7,8 @@ export function transcriptVariantsForTranslation(
   allowTextLanguageOverride: boolean,
 ): TranscriptResult[] {
   const profile = analyzeTurnLanguage(transcript.text, transcript.language);
-  // Qwen's automatic source result has already passed its signed language-pair
-  // check.  Keep that supplier-confirmed language rather than letting a
+  // Qwen's final language is an ASR fact; MT enforces its signed source scope
+  // separately. Keep that supplier-confirmed language rather than letting a
   // transcript script heuristic reclassify a mixed utterance and suppress MT.
   const providerConfirmedLanguage = transcript.automaticLanguageStatus === "detected";
   const automaticLanguageStatus = transcript.automaticLanguageStatus ?? (allowTextLanguageOverride

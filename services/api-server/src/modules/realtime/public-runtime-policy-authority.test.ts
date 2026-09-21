@@ -20,6 +20,22 @@ function liveQualification(patch:any={}){const value:any={schemaVersion:1,eviden
   qualifiedLanguagePairs:[{source:"zh",target:"en"}],observedAt:new Date(now.getTime()-1000).toISOString(),expiresAt,sessionHash:"c".repeat(64),attemptHash:"d".repeat(64),finalizationHash:"e".repeat(64),...patch};return {...value,signature:signPublicRuntimeLiveQualification(value,key)};}
 afterEach(()=>{if(dir)rmSync(dir,{recursive:true,force:true});dir="";});
 describe("signed public runtime admission policy",()=>{
+  it('admits third-language return routes only when the complete source scope has real signed coverage',async()=>{
+    dir=mkdtempSync(join(tmpdir(),'wujie-public-policy-'));const file=join(dir,'policy.json'),live=join(dir,'live.json');
+    const pairs=[{source:'zh',target:'en'},{source:'en',target:'zh'},{source:'ja',target:'zh'},{source:'fr',target:'zh'}];
+    const config:any={...configuration,components:{...configuration.components,asr:{...configuration.components.asr,vendor:'qwen',protocol:'qwen_asr_realtime',modelId:'qwen3-asr-flash-realtime'}}};
+    const providers=[{component:'asr',providerId:'qwen',modelId:'qwen3-asr-flash-realtime'},
+      {component:'translation',providerId:'tencent',modelId:'service:tencent_tmt'},{component:'tts',providerId:'tencent',modelId:'service:tencent_tts_ws'}];
+    writeFileSync(file,JSON.stringify(policy({qualifiedLanguagePairs:pairs,automaticLanguage:true,automaticReverse:true,
+      providerAvailability:[{providerId:'qwen',state:'available'},{providerId:'tencent',state:'available'}]})),{mode:0o600});
+    writeFileSync(live,JSON.stringify(liveQualification({providers,qualifiedLanguagePairs:pairs,automaticLanguage:true,automaticReverse:true})),{mode:0o600});
+    const authority=publicRealtimeAuthorityFromEnvironment(environment(file,{PUBLIC_RUNTIME_REQUIRE_LIVE_QUALIFICATION:'true',PUBLIC_RUNTIME_LIVE_QUALIFICATION_FILE:live,PUBLIC_RUNTIME_LIVE_QUALIFICATION_KEY:key}))!;
+    const languagePolicy={source:'auto',target:'en',autoReverse:true,pair:['zh','en'],sourceLanguages:['zh','en','ja','fr'],revision:2};
+    await expect(authority.resolveVerifiedEvidence(context({configuration:config,languagePolicy}),new AbortController().signal)).resolves.toHaveProperty('records');
+    // Adding an operator assertion alone cannot fake a Japanese/French live pass.
+    writeFileSync(live,JSON.stringify(liveQualification({providers,qualifiedLanguagePairs:pairs.slice(0,2),automaticLanguage:true,automaticReverse:true})),{mode:0o600});
+    await expect(authority.resolveVerifiedEvidence(context({configuration:config,languagePolicy}),new AbortController().signal)).rejects.toThrow('language_not_qualified');
+  });
   it("is absent while the explicit public runtime is disabled",()=>expect(publicRealtimeAuthorityFromEnvironment({PUBLIC_RUNTIME_ENABLED:"false"})).toBeUndefined());
   it("admits exactly the available configured providers and emits only server evidence",async()=>{dir=mkdtempSync(join(tmpdir(),"wujie-public-policy-"));const file=join(dir,"policy.json");writeFileSync(file,JSON.stringify(policy()),{mode:0o600});
     const result=await publicRealtimeAuthorityFromEnvironment(environment(file))!.resolveVerifiedEvidence(context(),new AbortController().signal);

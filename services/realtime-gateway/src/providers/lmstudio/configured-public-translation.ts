@@ -1,5 +1,6 @@
 import {createHash,createHmac,randomUUID} from "node:crypto";
 import {isDeepStrictEqual} from "node:util";
+import {automaticSourceAllowed,automaticTranslationTarget} from '@translation/contracts';
 import type {PublicModelAttemptEvent,RealtimeExecutionPlan,RealtimeProcessingAuthorization} from "@translation/contracts";
 import {parseRealtimeProcessingRequest} from "@translation/contracts";
 import {LmStudioClient,type LmStudioClientOptions} from "./lmstudio-client.js";
@@ -95,9 +96,8 @@ export function configuredPublicTranslation(options:ConfiguredPublicTranslationO
     async translate(input){
       if(input.signal?.aborted)throw new PublicTranslationError("public_translation_cancelled","not_sent");
       const language=authorization.languagePolicy;
-      const pairMatches=language.autoReverse?language.pair?.some(code=>code===input.sourceLanguage)&&language.pair.some(code=>code===input.targetLanguage)&&input.sourceLanguage!==input.targetLanguage:
-        language.source==="auto"?language.pair?.some(code=>code===input.sourceLanguage)&&
-          language.pair.some(code=>code===input.targetLanguage)&&input.sourceLanguage!==input.targetLanguage:
+      const pairMatches=language.source==="auto"?automaticSourceAllowed(language,input.sourceLanguage)&&
+          automaticTranslationTarget(input.sourceLanguage,language.target,language.autoReverse,language.pair)===input.targetLanguage&&input.sourceLanguage!==input.targetLanguage:
           language.source===input.sourceLanguage&&language.target===input.targetLanguage;
       if(!pairMatches)throw new PublicTranslationError("public_translation_language_scope_mismatch","not_sent");
       const controller=new AbortController(),cancel=()=>controller.abort();

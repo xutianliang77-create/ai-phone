@@ -84,7 +84,7 @@ export function parseRealtimeProcessingRequest(value: unknown): ProcessingContra
     return invalid("invalid_processing_policy");
   }
   if (!isLanguageSelection(value.languagePolicy) ||
-      !hasOnlyKeys(value.languagePolicy, ["source", "target", "autoReverse", "pair", "revision"])) {
+      !hasOnlyKeys(value.languagePolicy, ["source", "target", "autoReverse", "pair", "sourceLanguages", "revision"])) {
     return invalid("invalid_language_policy");
   }
   const language = value.languagePolicy;
@@ -116,7 +116,8 @@ export function parseRealtimeProcessingRequest(value: unknown): ProcessingContra
       processingMode: value.processingMode,
       modelPolicyRevision: value.modelPolicyRevision,
       syncRequested: value.syncRequested,
-      languagePolicy: { ...language, ...(language.pair ? { pair: [...language.pair] } : {}) },
+      languagePolicy: { ...language, ...(language.pair ? { pair: [...language.pair] } : {}),
+        ...(language.sourceLanguages?{sourceLanguages:[...language.sourceLanguages]}:{}) },
       executionPlan: { asr: { ...executionPlan.asr },
         translation: { ...executionPlan.translation }, tts: { ...executionPlan.tts } },
     },

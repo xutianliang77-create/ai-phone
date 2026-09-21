@@ -1,5 +1,5 @@
 import {isDeepStrictEqual} from "node:util";
-import {publicAsrModelAutomaticLanguagePairSupported,publicProtocolSampleRateSupported} from "@translation/contracts";
+import {publicAutomaticLanguageScopeSupported,publicProtocolSampleRateSupported} from "@translation/contracts";
 import {parseRealtimeProcessingRequest,type RealtimeExecutionPlan,type RealtimeProcessingAuthorization} from "@translation/contracts";
 import {HttpAsrClient} from "./http-asr-client.js";
 import {PublicAsrError,type CompletedAsrAudio,type CompletedAsrOptions} from "./public-asr-completed-audio.js";
@@ -36,10 +36,8 @@ function validateConfiguredAsr(options:ConfiguredPublicAsrOptions,protocol:strin
     profile.vendor!==(protocol==="qwen_asr_realtime"||protocol==="qwen_asr_compatible"?"qwen":protocol==="tencent_asr_ws"?"tencent":protocol==="google_speech_v2"?"google":"openai")||profile.protocol!==protocol||
     (protocol==="google_speech_v2"?!["google_service_account","google_adc"].includes(profile.authKind):profile.authKind!==(protocol==="tencent_asr_ws"?"tencent_secret":"api_key"))||typeof options.record!=="function"||typeof options.resolveCredentials!=="function")throw new PublicAsrError("public_asr_configuration_not_supported","not_sent");
   const automatic=authorization.languagePolicy.source==="auto";
-  const pair=authorization.languagePolicy.pair;
   if((automatic||authorization.languagePolicy.autoReverse)&&
-    (!automatic||!publicAsrModelAutomaticLanguagePairSupported(profile.protocol,profile.modelId,pair)||
-      !pair?.includes(authorization.languagePolicy.target))) {
+    !publicAutomaticLanguageScopeSupported(profile.protocol,profile.modelId,authorization.languagePolicy)) {
     throw new PublicAsrError("public_asr_language_detection_not_implemented","not_sent");
   }
   return {snapshot,authorization,profile};
@@ -58,7 +56,7 @@ export function configuredStreamingAsr(options:ConfiguredStreamingAsrOptions){
     throw new PublicAsrError("public_asr_stream_configuration","not_sent");
   }
   const automaticFallback=authorization.languagePolicy.source==="auto"
-    ? authorization.languagePolicy.pair!.find(language=>language!==authorization.languagePolicy.target)!
+    ? (authorization.languagePolicy.sourceLanguages??authorization.languagePolicy.pair)!.find(language=>language!==authorization.languagePolicy.target)??authorization.languagePolicy.target
     : authorization.languagePolicy.source;
   const clientOptions:StreamingAsrOptions={sessionId:options.sessionId,leaseId:options.leaseId,
     endpoint:profile.endpoint,model:profile.modelId,language:authorization.languagePolicy.source as StreamingAsrOptions["language"],timeoutMs:profile.timeoutMs,wireProfile:protocol,appId:profile.appId,
@@ -66,6 +64,7 @@ export function configuredStreamingAsr(options:ConfiguredStreamingAsrOptions){
     projectId:profile.projectId,location:profile.location,recognizer:profile.recognizer,languageLocales:profile.languageLocales,sampleRate:profile.sampleRate,
     detectedLanguageFallback:automaticFallback,
     ...(authorization.languagePolicy.source==="auto"?{automaticLanguagePair:authorization.languagePolicy.pair}:{}),
+    ...(authorization.languagePolicy.sourceLanguages?{automaticSourceLanguages:[...authorization.languagePolicy.sourceLanguages]}:{}),
     googleStreamFactory:options.googleStreamFactory};
   if(google)googleAsrConfiguration(clientOptions);
   return new HttpAsrProvider({endpoint:profile.endpoint,timeoutMs:profile.timeoutMs,client:new OpenAiStreamingAsrClient(clientOptions)});

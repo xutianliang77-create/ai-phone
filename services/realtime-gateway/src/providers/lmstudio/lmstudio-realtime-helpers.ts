@@ -4,6 +4,7 @@ import type {
   TermbaseTermDto,
   TranslationLanguageCode,
 } from "@translation/contracts";
+import {automaticTranslationTarget} from '@translation/contracts';
 import type { RealtimeProviderSession } from "../realtime-provider.js";
 import { realtimeLogger } from "../../metrics/realtime-metrics.js";
 import type { TranscriptResult } from "../../asr/asr-provider.js";
@@ -59,9 +60,7 @@ export function targetLanguageForTranscript(
 ): TranslationLanguageCode {
   if (!session.autoReverseTargetLanguage) return session.targetLanguage;
   const pair = session.languagePair;
-  if (pair?.includes(sourceLanguage as TranslationLanguageCode)) {
-    return pair[0] === sourceLanguage ? pair[1] : pair[0];
-  }
+  if (pair) return automaticTranslationTarget(sourceLanguage as TranslationLanguageCode,session.targetLanguage,true,pair);
   // Preserve the frozen private/legacy behavior when an old session has no
   // versioned pair. Public sessions must carry languagePair and are checked
   // before reaching this fallback.

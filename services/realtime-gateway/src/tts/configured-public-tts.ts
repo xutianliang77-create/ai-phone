@@ -22,7 +22,9 @@ export function configuredPublicTts(options:ConfiguredPublicTtsOptions) {
     !(profile.vendor==="openai"&&profile.protocol==="openai_speech"||profile.vendor==="qwen"&&profile.protocol==="qwen_tts_realtime"||profile.vendor==="tencent"&&profile.protocol==="tencent_tts_ws"||profile.vendor==="google"&&profile.protocol==="google_cloud_tts")||
     (profile.vendor==="google"?!["google_service_account","google_adc"].includes(profile.authKind):profile.authKind!==(profile.vendor==="tencent"?"tencent_secret":"api_key"))||
     !publicProtocolSampleRateSupported(profile.protocol,profile.sampleRate))throw new PublicSpeechError("public_tts_configuration_not_supported","not_sent");
-  const dynamicLanguage=authorization.languagePolicy.autoReverse||authorization.languagePolicy.source==="auto";
+  // Auto detection changes the input, not a fixed output language. Only
+  // reverse routing needs a voice capable of both selected target languages.
+  const dynamicLanguage=authorization.languagePolicy.autoReverse;
   const languagePair=authorization.languagePolicy.pair;
   if(dynamicLanguage&&(!languagePair||languagePair.length!==2||new Set(languagePair).size!==2||
     !languagePair.includes(authorization.languagePolicy.target)||profile.protocol==="google_cloud_tts")) {

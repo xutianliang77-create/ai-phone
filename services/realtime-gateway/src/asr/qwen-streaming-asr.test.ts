@@ -63,10 +63,28 @@ describe("Qwen ASR server-VAD wire on original shared streaming lifecycle",()=>{
     await p.createSession(automatic);await expect(p.transcribe(frame())).resolves.toMatchObject({language:"zh",automaticLanguageStatus:"detected",text:"Bonjour tout le monde."});
   });
 
-  it("rejects a Qwen automatic language outside the signed pair",async()=>{
+  it("preserves a supported third-language final instead of failing ASR; MT authorization remains separate",async()=>{
     const t=setup(s=>{s.detectedLanguage="ja";});t.options.authorization.languagePolicy={source:"auto",target:"zh",autoReverse:true,pair:["zh","en"],revision:2};
     const p=t.create(),automatic={...session,sourceLanguage:"auto" as const,targetLanguage:"zh" as const,autoReverseTargetLanguage:true,languagePair:["zh","en"] as ["zh","en"]};
-    await p.createSession(automatic);await expect(p.transcribe(frame())).rejects.toThrow();
+    await p.createSession(automatic);await expect(p.transcribe(frame())).resolves.toMatchObject({language:'ja',automaticLanguageStatus:'detected'});
+    await expect(p.flush(session.sessionId,{finishSession:true})).resolves.toBeDefined();
+  });
+  it("accepts third-language drafts and finals in the explicit automatic source scope",async()=>{
+    const t=setup(s=>{s.detectedLanguage='fr';});t.options.authorization.languagePolicy={source:'auto',target:'en',autoReverse:true,
+      pair:['zh','en'],sourceLanguages:['zh','en','ja','fr'],revision:2};
+    const p=t.create();await p.createSession({...session,sourceLanguage:'auto'});
+    const partials=vi.fn();p.setPartialListener(session.sessionId,partials);
+    await expect(p.transcribe(frame())).resolves.toMatchObject({language:'fr',automaticLanguageStatus:'detected'});
+    expect(partials).toHaveBeenCalled();
+  });
+  it('retains the earlier draft-language safeguard while waiting for a valid final',async()=>{
+    const t=setup(s=>{
+      s.detectedLanguage='en';const partial=s.partial.bind(s);
+      s.partial=(id,text,stash)=>{const original=s.language;s.language='xx';partial(id,text,stash);s.language=original;};
+    });
+    t.options.authorization.languagePolicy={source:'auto',target:'zh',autoReverse:true,pair:['zh','en'],sourceLanguages:['zh','en','ja'],revision:2};
+    const p=t.create();await p.createSession({...session,sourceLanguage:'auto'});
+    await expect(p.transcribe(frame())).resolves.toMatchObject({language:'en',isFinal:true});
   });
 
   it.each(["partial","final"])("accepts an in-pair %s language revision and routes only the final language",async revision=>{
