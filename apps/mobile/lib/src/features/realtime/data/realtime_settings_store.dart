@@ -31,7 +31,7 @@ class FileRealtimeSettingsStore implements RealtimeSettingsStore {
   Future<void> save(RealtimeRuntimeSettings settings) async {
     final file = await _settingsFile();
     await file.parent.create(recursive: true);
-    await file.writeAsString(jsonEncode(settings.toJson()));
+    await file.writeAsString(jsonEncode(settings.toStorageJson()));
   }
 
   Future<File> _settingsFile() async {
@@ -61,5 +61,5 @@ Future<AppConfig> resolveRealtimeSettingsConfig(
   RealtimeSettingsStore store,
 ) async {
   final saved = await store.load();
-  return saved?.applyTo(base) ?? base;
+  return resolveRealtimeRuntimeSettings(base, saved).applyTo(base);
 }

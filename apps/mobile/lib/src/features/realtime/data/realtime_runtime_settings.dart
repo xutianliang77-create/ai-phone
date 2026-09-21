@@ -33,6 +33,7 @@ class RealtimeRuntimeSettings {
     this.voicePresetId = defaultRealtimeVoicePresetId,
     this.domainLexiconPack = defaultDomainLexiconPack,
     this.automaticLanguagePair,
+    this.automaticLanguagePairPersisted = true,
   });
 
   factory RealtimeRuntimeSettings.fromConfig(AppConfig config) {
@@ -81,6 +82,7 @@ class RealtimeRuntimeSettings {
       ),
       automaticLanguagePair:
           TranslationLanguagePair.fromJson(json['automaticLanguagePair']),
+      automaticLanguagePairPersisted: json.containsKey('automaticLanguagePair'),
     ).normalizedForCapabilities();
   }
 
@@ -91,6 +93,9 @@ class RealtimeRuntimeSettings {
   final String voicePresetId;
   final String domainLexiconPack;
   final TranslationLanguagePair? automaticLanguagePair;
+  // A missing field denotes a pre-public-routing settings file. New saves
+  // persist an explicit null so an intentional absence is never overwritten.
+  final bool automaticLanguagePairPersisted;
 
   TranslationLanguagePair? get selectedLanguagePair {
     return _selectedLanguagePairFor(
@@ -134,6 +139,37 @@ class RealtimeRuntimeSettings {
 
   bool get autoReverseTargetLanguage {
     return targetLanguage == autoReverseTargetLanguageCode;
+  }
+
+  /// Restores only the public build's explicit default pair into legacy
+  /// settings. It never infers a pair from a target language, and leaves an
+  /// explicit current-version null unchanged.
+  RealtimeRuntimeSettings restoreLegacyAutomaticLanguagePair(AppConfig base) {
+    if (automaticLanguagePairPersisted ||
+        automaticLanguagePair != null ||
+        processingMode != RealtimeProcessingMode.online ||
+        (sourceLanguage != autoSourceLanguageCode &&
+            !autoReverseTargetLanguage)) {
+      return this;
+    }
+    final configuredPair = base.automaticLanguagePair;
+    if (configuredPair == null) return this;
+    final pair = _selectedLanguagePairFor(
+      sourceLanguage: sourceLanguage,
+      targetLanguage: targetLanguage,
+      savedPair: configuredPair,
+      autoReverse: autoReverseTargetLanguage,
+    );
+    if (pair == null) return this;
+    return RealtimeRuntimeSettings(
+      processingMode: processingMode,
+      sourceLanguage: sourceLanguage,
+      targetLanguage: targetLanguage,
+      voiceOutputMode: voiceOutputMode,
+      voicePresetId: voicePresetId,
+      domainLexiconPack: domainLexiconPack,
+      automaticLanguagePair: pair,
+    );
   }
 
   // Mode policy only; this does not assert that a voice resource is installed.
@@ -212,8 +248,7 @@ class RealtimeRuntimeSettings {
         sourceLanguage: nextSourceLanguage,
         targetLanguage: nextTargetLanguage,
         savedPair: savedPair,
-        autoReverse:
-            nextTargetLanguage == autoReverseTargetLanguageCode,
+        autoReverse: nextTargetLanguage == autoReverseTargetLanguageCode,
       ),
     );
   }
@@ -234,6 +269,13 @@ class RealtimeRuntimeSettings {
     };
   }
 
+  Map<String, Object?> toStorageJson() {
+    return <String, Object?>{
+      ...toJson(),
+      'automaticLanguagePair': selectedLanguagePair?.toJson(),
+    };
+  }
+
   RealtimeRuntimeSettings normalizedForCapabilities() {
     // Keep the legacy API without destructively rewriting stored preferences.
     // Provider preflight determines whether the selected capability can run.
@@ -246,6 +288,14 @@ class RealtimeRuntimeSettings {
         ? RealtimeVoiceOutputMode.natural
         : voiceOutputMode;
   }
+}
+
+RealtimeRuntimeSettings resolveRealtimeRuntimeSettings(
+  AppConfig base,
+  RealtimeRuntimeSettings? saved,
+) {
+  return (saved ?? RealtimeRuntimeSettings.fromConfig(base))
+      .restoreLegacyAutomaticLanguagePair(base);
 }
 
 String normalizeVoicePresetId(String value) {

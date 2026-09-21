@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:translation_mobile/src/app/app_config.dart';
 import 'package:translation_mobile/src/features/realtime/data/realtime_runtime_settings.dart';
+import 'package:translation_mobile/src/features/realtime/data/realtime_settings_store.dart';
 import 'package:translation_mobile/src/platform/translation/supported_translation_language.dart';
 import 'package:translation_mobile/src/platform/translation/translation_language_pair.dart';
 import 'package:translation_mobile/src/features/realtime/data/local_realtime_repository.dart';
@@ -45,6 +46,76 @@ void main() {
     expect(config.targetLanguage, 'ja');
     expect(config.autoReverseTargetLanguage, isTrue);
     expect(config.automaticLanguagePair, isNull);
+  });
+
+  test(
+      'restores only the explicit public build pair into legacy online auto settings',
+      () {
+    final base = _baseConfig().copyWith(
+      sourceLanguage: autoSourceLanguageCode,
+      targetLanguage: 'en',
+      autoReverseTargetLanguage: true,
+      automaticLanguagePair: const TranslationLanguagePair('zh', 'en'),
+    );
+    final legacy = RealtimeRuntimeSettings.fromJson(const {
+      'processingMode': 'online',
+      'sourceLanguage': 'auto',
+      'targetLanguage': 'auto_reverse',
+      'voiceOutputMode': 'off',
+    });
+
+    final restored = resolveRealtimeRuntimeSettings(base, legacy);
+
+    expect(restored.selectedLanguagePair?.toJson(),
+        {'source': 'zh', 'target': 'en'});
+    expect(restored.toStorageJson()['automaticLanguagePair'],
+        {'source': 'zh', 'target': 'en'});
+    expect(restored.applyTo(base).automaticLanguagePair?.toJson(),
+        {'source': 'zh', 'target': 'en'});
+  });
+
+  test('does not overwrite an explicit current-version empty automatic pair',
+      () {
+    final base = _baseConfig().copyWith(
+      sourceLanguage: autoSourceLanguageCode,
+      targetLanguage: 'en',
+      autoReverseTargetLanguage: true,
+      automaticLanguagePair: const TranslationLanguagePair('zh', 'en'),
+    );
+    final current = RealtimeRuntimeSettings.fromJson(const {
+      'processingMode': 'online',
+      'sourceLanguage': 'auto',
+      'targetLanguage': 'auto_reverse',
+      'voiceOutputMode': 'off',
+      'automaticLanguagePair': null,
+    });
+
+    expect(identical(resolveRealtimeRuntimeSettings(base, current), current),
+        isTrue);
+  });
+
+  test('uses the same legacy pair recovery for shared settings consumers',
+      () async {
+    final base = _baseConfig().copyWith(
+      sourceLanguage: autoSourceLanguageCode,
+      targetLanguage: 'en',
+      autoReverseTargetLanguage: true,
+      automaticLanguagePair: const TranslationLanguagePair('zh', 'en'),
+    );
+    final legacy = RealtimeRuntimeSettings.fromJson(const {
+      'processingMode': 'online',
+      'sourceLanguage': 'auto',
+      'targetLanguage': 'auto_reverse',
+      'voiceOutputMode': 'off',
+    });
+
+    final config = await resolveRealtimeSettingsConfig(
+      base,
+      MemoryRealtimeSettingsStore(legacy),
+    );
+
+    expect(config.automaticLanguagePair?.toJson(),
+        {'source': 'zh', 'target': 'en'});
   });
 
   test('drops a stale automatic pair when the user changes language', () {

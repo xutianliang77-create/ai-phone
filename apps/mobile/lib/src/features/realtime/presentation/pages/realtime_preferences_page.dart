@@ -82,9 +82,17 @@ class _RealtimePreferencesPageState extends State<RealtimePreferencesPage> {
   Future<void> _load() async {
     final config = AppConfig.fromEnvironment();
     final saved = await _store.load();
+    final settings = resolveRealtimeRuntimeSettings(config, saved);
+    if (saved != null && !identical(saved, settings)) {
+      try {
+        await _store.save(settings);
+      } catch (_) {
+        // Keep the exact recovered pair for this page even if the file cannot
+        // be updated until a later explicit settings save.
+      }
+    }
     if (!mounted) return;
-    setState(
-        () => _settings = saved ?? RealtimeRuntimeSettings.fromConfig(config));
+    setState(() => _settings = settings);
     try {
       final catalog = await _voiceClient.load();
       if (!mounted) return;

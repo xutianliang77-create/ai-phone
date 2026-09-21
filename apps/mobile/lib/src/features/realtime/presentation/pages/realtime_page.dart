@@ -271,7 +271,17 @@ class _RealtimePageState extends State<RealtimePage>
     final savedSettings = await _settingsStore.load();
     if (!mounted || savedSettings == null) return;
     if (!_canChangeSettings) return;
-    _replaceSettings(savedSettings);
+    final settings = resolveRealtimeRuntimeSettings(_config, savedSettings);
+    if (!identical(settings, savedSettings)) {
+      try {
+        await _settingsStore.save(settings);
+      } catch (_) {
+        // The recovered in-memory pair still keeps this launch safe; a later
+        // save can retry persistence without discarding the user's settings.
+      }
+    }
+    if (!mounted) return;
+    _replaceSettings(settings);
   }
 
   Future<void> _loadVoicePresets() async {
