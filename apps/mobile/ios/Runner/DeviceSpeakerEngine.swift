@@ -39,7 +39,7 @@ actor DeviceSpeakerEngine {
   private let outputFormat: AVAudioFormat
   private let converter: AVAudioConverter?
   #if canImport(FluidAudio)
-  private let diarizer: SortformerDiarizer
+  private let diarizer: DeviceSpeakerStreamingRuntime
   #endif
 
   init(sessionId: String, sampleRate: Int, model: MLModel) throws {
@@ -52,17 +52,13 @@ actor DeviceSpeakerEngine {
     converter = sampleRate == 16000 ? nil : AVAudioConverter(from: input, to: output)
     guard sampleRate == 16000 || converter != nil else { throw DeviceSpeakerFailure.invalidAudio }
     #if canImport(FluidAudio)
-    let config = SortformerConfig.fastV2_1
     let expected: [String: [Int]] = ["chunk": [1, 112, 128], "spkcache": [1, 188, 512], "fifo": [1, 40, 512]]
     for (name, shape) in expected {
       guard model.modelDescription.inputDescriptionsByName[name]?.multiArrayConstraint?.shape.map(\.intValue) == shape else {
         throw DeviceSpeakerFailure.resourcesInvalid
       }
     }
-    var timeline = DiarizerTimelineConfig.sortformerDefault
-    timeline.maxStoredFrames = 750; timeline.storeSegments = false
-    diarizer = SortformerDiarizer(config: config, timelineConfig: timeline)
-    diarizer.initialize(models: try SortformerModels(config: config, main: model))
+    diarizer = try DeviceSpeakerStreamingRuntime(model:model)
     #else
     throw DeviceSpeakerFailure.unsupported
     #endif
@@ -99,7 +95,14 @@ actor DeviceSpeakerEngine {
     defer { let ms = (ProcessInfo.processInfo.systemUptime-started)*1000
       totalProcessingMs += ms; maximumProcessingMs = max(maximumProcessingMs,ms) }
     #if canImport(FluidAudio)
-    let result = try observations(diarizer.finalizeSession())
+    var result = try observations(diarizer.finalizeSession())
+    // Like 1.0, sub-80ms tails have no complete model frame. Confirm their
+    // watermark without inventing a speaker label for padded audio.
+    if through < inputSamples {
+      through = inputSamples; sequence += 1
+      result.append(DeviceSpeakerObservation(sessionId:sessionId,sequence:sequence,sampleRate:sampleRate,
+        throughSample:through,spans:[]))
+    }
     cancelled = true; diarizer.cleanup(); converter?.reset()
     return result
     #else
@@ -120,8 +123,8 @@ actor DeviceSpeakerEngine {
   }
 
   #if canImport(FluidAudio)
-  private func observations(_ update: DiarizerTimelineUpdate?) throws -> [DeviceSpeakerObservation] {
-    guard let chunk = update?.chunkResult else { return [] }
+  private func observations(_ update: DiarizerChunkResult?) throws -> [DeviceSpeakerObservation] {
+    guard let chunk = update else { return [] }
     var output: [DeviceSpeakerObservation] = []
     // The pinned model has 80ms frames. Use integer sample arithmetic, not a
     // rounded wall clock. Only finalized predictions can leave this device.

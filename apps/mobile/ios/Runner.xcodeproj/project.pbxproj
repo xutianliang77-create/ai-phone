@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		D52100010000000000000005 /* DeviceSpeakerStreamingRuntime.swift in Sources */ = {isa = PBXBuildFile; fileRef = D52100020000000000000005; };
 		D52100010000000000000004 /* DeviceSpeakerFileProbe.swift in Sources */ = {isa = PBXBuildFile; fileRef = D52100020000000000000004; };
 		D52100010000000000000001 /* DeviceSpeakerBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = D52100020000000000000001; };
 		D52100010000000000000002 /* DeviceSpeakerEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = D52100020000000000000002; };
@@ -78,6 +79,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		D52100020000000000000005 /* DeviceSpeakerStreamingRuntime.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceSpeakerStreamingRuntime.swift; sourceTree = "<group>"; };
 		D52100020000000000000004 /* DeviceSpeakerFileProbe.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceSpeakerFileProbe.swift; sourceTree = "<group>"; };
 		D52100020000000000000001 /* DeviceSpeakerBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceSpeakerBridge.swift; sourceTree = "<group>"; };
 		D52100020000000000000002 /* DeviceSpeakerEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceSpeakerEngine.swift; sourceTree = "<group>"; };
@@ -241,6 +243,7 @@
 				D52100020000000000000002 /* DeviceSpeakerEngine.swift */,
 				D52100020000000000000003 /* DeviceSpeakerModelResources.swift */,
 				D52100020000000000000004 /* DeviceSpeakerFileProbe.swift */,
+				D52100020000000000000005 /* DeviceSpeakerStreamingRuntime.swift */,
 				A100001B00000000000001B /* AudioSessionCoordinator.swift */,
 				A10000040000000000000004 /* CoreMlNemotronAsrBridge.swift */,
 				F11000020000000000000001,
@@ -502,6 +505,7 @@
 				D52100010000000000000002 /* DeviceSpeakerEngine.swift in Sources */,
 				D52100010000000000000003 /* DeviceSpeakerModelResources.swift in Sources */,
 				D52100010000000000000004 /* DeviceSpeakerFileProbe.swift in Sources */,
+				D52100010000000000000005 /* DeviceSpeakerStreamingRuntime.swift in Sources */,
 				A10000010000000000000001 /* CoreMlNemotronAsrBridge.swift in Sources */,
 				F11000010000000000000001,
 				F11000010000000000000002,
