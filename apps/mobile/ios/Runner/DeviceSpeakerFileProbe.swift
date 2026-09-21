@@ -12,14 +12,24 @@ enum DeviceSpeakerFileProbe {
     Task.detached(priority: .userInitiated) { await run() }
   }
   private static func run() async {
-    let root = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0].appendingPathComponent("speaker-qa")
-    let output = root.appendingPathComponent("result.json")
+    let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+    let root = documents.appendingPathComponent("speaker-qa")
+    // CoreDevice may copy an input directory as uid 0. Never try to create the
+    // receipt inside that directory; Documents remains owned by the App.
+    let output = documents.appendingPathComponent("wujie-speaker-qa-result.json")
+    let wasIdleDisabled = await MainActor.run { let previous=UIApplication.shared.isIdleTimerDisabled
+      UIApplication.shared.isIdleTimerDisabled=true; return previous }
+    defer { Task { @MainActor in UIApplication.shared.isIdleTimerDisabled=wasIdleDisabled } }
     var result: [String: Any] = ["status": "running", "modelRevision": DeviceSpeakerModelResources.revision,
       "profile": DeviceSpeakerModelResources.profile, "system": ProcessInfo.processInfo.operatingSystemVersionString,
       "sourceCommit": Bundle.main.object(forInfoDictionaryKey: "WujieSourceCommit") ?? "unknown",
       "candidateId": Bundle.main.object(forInfoDictionaryKey: "WujieCandidateId") ?? "unknown",
       "networkModelCalls": 0, "microphoneOpened": false]
-    func save() { if let data = try? JSONSerialization.data(withJSONObject: result, options: [.prettyPrinted, .sortedKeys]) { try? data.write(to: output, options: .atomic) } }
+    func save() {
+      do { let data = try JSONSerialization.data(withJSONObject: result, options: [.prettyPrinted, .sortedKeys])
+        try data.write(to: output, options: .atomic)
+      } catch { NSLog("Wujie speaker QA receipt write failed: %@", String(describing:error)) }
+    }
     save()
     do {
       let data = try Data(contentsOf: root.appendingPathComponent("manifest.json"))
@@ -46,14 +56,14 @@ enum DeviceSpeakerFileProbe {
           let values = try await engine.accept(pcm.subdata(in: offset..<end), startSample: offset / 2)
           calls.append((ProcessInfo.processInfo.systemUptime - before) * 1000)
           peakMemory = max(peakMemory, residentBytes())
-          evidence.append(contentsOf: values.map(\.json))
+          evidence.append(contentsOf: values.map { $0.json.merging(["observedInputSamples":end/2]) { _,new in new } })
           if item["realtime"] as? Bool == true {
             let target = started + Double(end / 2) / Double(rate)
             let remaining = target - ProcessInfo.processInfo.systemUptime
             if remaining > 0 { try await Task.sleep(nanoseconds: UInt64(remaining * 1_000_000_000)) }
           }
         }
-        evidence.append(contentsOf: try await engine.finish().map(\.json))
+        evidence.append(contentsOf: try await engine.finish().map { $0.json.merging(["observedInputSamples":pcm.count/2]) { _,new in new } })
         let diagnostics = await engine.diagnostics(), ordered = calls.sorted()
         reports.append(["id": id, "sha256": expected, "sampleRate": rate, "inputSamples": pcm.count / 2,
           "wallMs": (ProcessInfo.processInfo.systemUptime - started) * 1000,
