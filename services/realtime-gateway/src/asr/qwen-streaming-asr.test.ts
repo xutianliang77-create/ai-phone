@@ -61,6 +61,27 @@ describe("Qwen ASR server-VAD wire on original shared streaming lifecycle",()=>{
     await p.createSession(automatic);await expect(p.transcribe(frame())).rejects.toThrow();
   });
 
+  it.each(["partial","final"])("accepts an in-pair %s language revision and routes only the final language",async revision=>{
+    const t=setup(s=>{s.autoComplete=false;s.onSend=e=>{if(e.type!=="input_audio_buffer.append")return;queueMicrotask(()=>{
+      const item="revised-language";
+      s.receive({type:"input_audio_buffer.speech_started",audio_start_ms:0,item_id:item});
+      s.partial(item,"","So.");
+      if(revision==="partial"){s.language="zh";s.partial(item,"","说话测试");}
+      s.receive({type:"input_audio_buffer.speech_stopped",audio_end_ms:100,item_id:item});
+      s.receive({type:"input_audio_buffer.committed",item_id:item,previous_item_id:""});
+      s.receive({type:"conversation.item.input_audio_transcription.completed",item_id:item,content_index:0,language:"zh",transcript:"说话测试。"});
+    });};s.detectedLanguage="en";});
+    t.options.authorization.languagePolicy={source:"auto",target:"en",autoReverse:true,pair:["zh","en"],revision:2};
+    const p=t.create(),partials:unknown[]=[];
+    await p.createSession({...session,sourceLanguage:"auto",targetLanguage:"en",autoReverseTargetLanguage:true,languagePair:["zh","en"]});
+    p.setPartialListener(session.sessionId,r=>partials.push(r));
+    await expect(p.transcribe(frame())).resolves.toMatchObject({language:"zh",automaticLanguageStatus:"detected",text:"说话测试。",isFinal:true});
+    expect(partials[0]).toMatchObject({language:"en",isFinal:false});
+    await p.flush(session.sessionId,{finishSession:true});
+    expect(t.record.mock.calls.at(-1)![0].state).toBe("confirmed");
+    expect(t.socketFactory).toHaveBeenCalledTimes(1);
+  });
+
   it("emits cumulative drafts and a durable final without client commit",async()=>{
     const t=setup(),p=t.create();await p.createSession(session);const partial:string[]=[];p.setPartialListener(session.sessionId,e=>partial.push(e.text));
     const result=await p.transcribe(frame());expect(partial).toEqual(["Bonjur","Bonjour tout le monde."]);expect(result).toMatchObject({text:"Bonjour tout le monde.",language:"fr",timing:{startMs:0,endMs:100}});

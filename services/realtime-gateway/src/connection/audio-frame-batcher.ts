@@ -195,7 +195,14 @@ export class AudioFrameBatcher {
       return;
     }
 
-    await this.sendNextBatch(false);
+    // Public ASR may cap each batch below the 120ms collection delay. Drain
+    // the already queued batches without another delay per batch, otherwise
+    // 100ms PCM / 120ms tick accumulates a backlog even with a fast provider.
+    // Keep bounded batches and the synchronous boundary epoch barrier.
+    do {
+      await this.sendNextBatch(false);
+    } while (this.options.beforeSend && epoch===this.queueEpoch &&
+      this.pending.length>0 && this.accepting);
     if (epoch===this.queueEpoch&&this.pending.length > 0 && this.accepting) this.scheduleProcessing();
   }
 

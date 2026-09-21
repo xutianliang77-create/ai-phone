@@ -1,10 +1,20 @@
 import {PublicAsrError} from "./public-asr-completed-audio.js";
+import type {TranslationLanguageCode} from "@translation/contracts";
 /** Intersection of the documented Qwen language codes and the existing product
  * language contract. `auto` deliberately omits the optional Qwen hint; it is
  * not coerced to a default language or an unqualified language pair. */
 const supported=new Set(["zh","yue","en","ja","de","ko","ru","fr","pt","ar","it","es","hi","id","th","tr","uk","vi","cs","ms","pl"]);
 export function qwenAsrLanguage(language:string){
   if(!supported.has(language))throw new PublicAsrError("qwen_asr_language_not_supported","not_sent");return language;
+}
+export function qwenTranscriptLanguage(language:unknown,source:string,pair?:readonly TranslationLanguageCode[]):TranslationLanguageCode{
+  if(typeof language!=="string"||!/^[a-z]{2,3}$/.test(language))throw new PublicAsrError("qwen_asr_language_invalid","uncertain");
+  if(source!=="auto"){
+    if(language!==source)throw new PublicAsrError("qwen_asr_language_mismatch","uncertain");
+  }else if(!pair?.includes(language as TranslationLanguageCode))throw new PublicAsrError("qwen_asr_language_out_of_scope","uncertain");
+  // Partial language is provisional, just like stash. Qwen may revise en -> zh
+  // within one item; only completed supplies the language routed to MT.
+  return language as TranslationLanguageCode;
 }
 export function qwenAsrSessionConfiguration(language:string){
   const inputAudioTranscription=language==="auto"?{}:{language:qwenAsrLanguage(language)};

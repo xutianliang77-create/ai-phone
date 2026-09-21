@@ -4,6 +4,27 @@ import type { RealtimeProvider, RealtimeProviderSession } from "../providers/rea
 import { AudioFrameBatcher } from "./audio-frame-batcher.js";
 
 describe("audio frame batcher", () => {
+  it("keeps capped public uploads at realtime pace including a translation stall",async()=>{
+    vi.useFakeTimers();
+    try {
+      const sent:AudioFrame[]=[],errors:unknown[]=[];
+      const provider=providerSpy(sent,async()=>{
+        if(sent.length===10)await new Promise(resolve=>setTimeout(resolve,450));
+      });
+      const batcher=new AudioFrameBatcher({sessionId:"sess_1",provider,send:()=>{},onError:e=>errors.push(e),
+        beforeSend:async()=>{},maxBatchAudioMs:100});
+      for(let sequence=1;sequence<=300;sequence++){
+        batcher.enqueue({...frame(sequence),data:Buffer.alloc(4800).toString("base64")});
+        await vi.advanceTimersByTimeAsync(100);
+      }
+      // The final flush must not conceal an upload backlog during capture.
+      expect(sent.at(-1)!.sequence).toBeGreaterThanOrEqual(298);
+      expect(batcher.diagnostics().droppedFrameCount).toBe(0);
+      expect(errors).toEqual([]);
+      await batcher.close();
+    }finally{vi.useRealTimers();}
+  });
+
   it("merges short realtime audio frames before sending them to the provider", async () => {
     vi.useFakeTimers();
     const sentFrames: AudioFrame[] = [];
