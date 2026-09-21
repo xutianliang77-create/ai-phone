@@ -11,6 +11,8 @@ enum RealtimeProcessingMode { onDevice, online }
 
 enum RealtimeVoiceOutputMode { off, natural, myVoice }
 
+const _realtimeSettingsStorageSchemaVersion = 2;
+
 bool realtimeModeSupportsVoiceOutput(String realtimeMode) {
   return realtimeMode == 'conversation' || realtimeMode == 'meeting';
 }
@@ -33,7 +35,8 @@ class RealtimeRuntimeSettings {
     this.voicePresetId = defaultRealtimeVoicePresetId,
     this.domainLexiconPack = defaultDomainLexiconPack,
     this.automaticLanguagePair,
-    this.automaticLanguagePairPersisted = true,
+    this.settingsStorageSchemaVersion =
+        _realtimeSettingsStorageSchemaVersion,
   });
 
   factory RealtimeRuntimeSettings.fromConfig(AppConfig config) {
@@ -82,7 +85,9 @@ class RealtimeRuntimeSettings {
       ),
       automaticLanguagePair:
           TranslationLanguagePair.fromJson(json['automaticLanguagePair']),
-      automaticLanguagePairPersisted: json.containsKey('automaticLanguagePair'),
+      settingsStorageSchemaVersion: json['settingsSchemaVersion'] is int
+          ? json['settingsSchemaVersion'] as int
+          : null,
     ).normalizedForCapabilities();
   }
 
@@ -93,9 +98,9 @@ class RealtimeRuntimeSettings {
   final String voicePresetId;
   final String domainLexiconPack;
   final TranslationLanguagePair? automaticLanguagePair;
-  // A missing field denotes a pre-public-routing settings file. New saves
-  // persist an explicit null so an intentional absence is never overwritten.
-  final bool automaticLanguagePairPersisted;
+  // A missing version denotes a pre-public-routing settings file. New saves
+  // persist both the version and an explicit null when no pair is selected.
+  final int? settingsStorageSchemaVersion;
 
   TranslationLanguagePair? get selectedLanguagePair {
     return _selectedLanguagePairFor(
@@ -145,8 +150,7 @@ class RealtimeRuntimeSettings {
   /// settings. It never infers a pair from a target language, and leaves an
   /// explicit current-version null unchanged.
   RealtimeRuntimeSettings restoreLegacyAutomaticLanguagePair(AppConfig base) {
-    if (automaticLanguagePairPersisted ||
-        automaticLanguagePair != null ||
+    if (settingsStorageSchemaVersion != null ||
         processingMode != RealtimeProcessingMode.online ||
         (sourceLanguage != autoSourceLanguageCode &&
             !autoReverseTargetLanguage)) {
@@ -161,9 +165,15 @@ class RealtimeRuntimeSettings {
       autoReverse: autoReverseTargetLanguage,
     );
     if (pair == null) return this;
+    final restoreAutomaticSource = autoReverseTargetLanguage &&
+        sourceLanguage != autoSourceLanguageCode &&
+        base.sourceLanguage == autoSourceLanguageCode &&
+        base.autoReverseTargetLanguage &&
+        pair.opposite(sourceLanguage) != null;
     return RealtimeRuntimeSettings(
       processingMode: processingMode,
-      sourceLanguage: sourceLanguage,
+      sourceLanguage:
+          restoreAutomaticSource ? autoSourceLanguageCode : sourceLanguage,
       targetLanguage: targetLanguage,
       voiceOutputMode: voiceOutputMode,
       voicePresetId: voicePresetId,
@@ -272,6 +282,7 @@ class RealtimeRuntimeSettings {
   Map<String, Object?> toStorageJson() {
     return <String, Object?>{
       ...toJson(),
+      'settingsSchemaVersion': _realtimeSettingsStorageSchemaVersion,
       'automaticLanguagePair': selectedLanguagePair?.toJson(),
     };
   }
