@@ -1,3 +1,4 @@
+import { expectInOrder } from "./beelink_app_deploy_test_support.mjs";
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
@@ -94,7 +95,7 @@ describe("Beelink app deployment contract", () => {
   });
 
   it("builds before freezing writes and migrates before enabling SQLite", () => {
-    expectInOrder([
+    expectInOrder(script, [
       'remote_compose "build"',
       'remote_compose "stop wujie-ai"',
       "api-store.json.backup-$backup_stamp",
@@ -344,12 +345,3 @@ describe("Beelink app deployment contract", () => {
     );
   });
 });
-
-function expectInOrder(markers) {
-  let previous = -1;
-  for (const marker of markers) {
-    const index = script.indexOf(marker);
-    expect(index, marker).toBeGreaterThan(previous);
-    previous = index;
-  }
-}

@@ -1,14 +1,12 @@
-import { createHash, randomBytes, randomInt, randomUUID } from "node:crypto";
-import { stableDomainId } from
-  "../../infrastructure/storage/postgres-domain-record-uow.js";
-import { withPostgresRepositoryFence } from
-  "../../infrastructure/storage/postgres-repository-fence.js";
+import { normalizePhone, normalizeCode, configuredTestLoginMatches, maskPhone, hashPhone, retiredPhoneHash, hashCode, hashClientKey, tokenHash, parseBearerToken } from "./account-runtime-identifiers.js";
+import { randomBytes, randomInt, randomUUID } from "node:crypto";
+import { stableDomainId } from "../../infrastructure/storage/postgres-domain-record-uow.js";
+import { withPostgresRepositoryFence } from "../../infrastructure/storage/postgres-repository-fence.js";
 import {
   repositoryCommandId,
   repositoryRequestHash,
 } from "../../infrastructure/storage/repository-command-identity.js";
-import { getRepositoryRuntime } from
-  "../../infrastructure/storage/repository-runtime.js";
+import { getRepositoryRuntime } from "../../infrastructure/storage/repository-runtime.js";
 import type {
   AccountRecord,
   SmsOtpChallengeRecord,
@@ -317,46 +315,4 @@ async function mutateProduct<T>(
       commandType: `${namespace}.${operation}`, requestHash,
       eventType: `${namespace}.${operation}`, fence, mutate,
     }));
-}
-
-function normalizePhone(value: string) {
-  const digits = value.replace(/[^\d+]/g, "");
-  const withoutCountry = digits.startsWith("+86") ? digits.slice(3) : digits;
-  return /^1[3-9]\d{9}$/.test(withoutCountry) ? withoutCountry : null;
-}
-function normalizeCode(value: string) {
-  const code = value.trim();
-  return /^\d{6}$/.test(code) ? code : null;
-}
-function configuredTestLoginMatches(phone: string, code: string) {
-  if (process.env.NODE_ENV === "production") return false;
-  return normalizePhone(process.env.AUTH_TEST_PHONE ?? "") === phone &&
-    normalizeCode(process.env.AUTH_TEST_CODE ?? "") === code;
-}
-function maskPhone(phone: string) { return `${phone.slice(0, 3)}****${phone.slice(7)}`; }
-function hashPhone(phone: string) {
-  return createHash("sha256").update(`phone:${phone}`).digest("hex");
-}
-
-function retiredPhoneHash(account: AccountRecord) {
-  return `deleted:${createHash("sha256").update([
-    account.id,
-    account.deletionRequestedAt ?? account.createdAt,
-  ].join(":"))
-    .digest("hex")}`;
-}
-function hashCode(phone: string, code: string) {
-  const secret = process.env.AUTH_OTP_SECRET ?? "local-dev-otp-secret";
-  return createHash("sha256").update(`${secret}:${hashPhone(phone)}:${code}`).digest("hex");
-}
-function hashClientKey(value: string | undefined) {
-  return value?.trim()
-    ? createHash("sha256").update(`client:${value.trim()}`).digest("hex") : undefined;
-}
-function tokenHash(token: string) {
-  return createHash("sha256").update(`auth-token:${token}`).digest("hex");
-}
-function parseBearerToken(authorization: string | undefined) {
-  return authorization?.startsWith("Bearer ")
-    ? authorization.slice("Bearer ".length).trim() || null : null;
 }

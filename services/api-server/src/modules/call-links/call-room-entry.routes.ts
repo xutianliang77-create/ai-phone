@@ -1,3 +1,4 @@
+import { publicTtsRuntimeReady, validateEntry, sendEntryError, sendGuestTicketError } from "./call-room-entry-route-helpers.js";
 import type { FastifyInstance } from "fastify";
 import { sendError } from "../../infrastructure/http/errors.js";
 import { requireAccount } from "../account/account-auth.js";
@@ -11,19 +12,13 @@ import {
   removeCallRoomParticipant,
 } from "./call-room-worker.js";
 import { getCallLinkWorkerSupervisor } from "./call-link-worker-supervisor.js";
-import { callLinkModelRuntimeAdmission } from
-  "./call-link-model-runtime-policy.js";
-import {
-  type CallLinkRecord,
-  findCallLink,
-} from "./call-links.service.js";
+import { callLinkModelRuntimeAdmission } from "./call-link-model-runtime-policy.js";
 import { admitCallRoomRole } from "./call-room-role-admission.js";
 import { withSessionWriteLock } from "../sessions/session-write-coordinator.js";
 import { loadEnv } from "../../config/env.js";
 import { findSession } from "../sessions/sessions-runtime.repository.js";
 import {
-  inspectCallGuestTicket,
-  type GuestTicketFailure,
+  inspectCallGuestTicket
 } from "./call-guest-ticket.js";
 import { consumeCallGuestTicket } from "./call-guest-ticket-runtime.js";
 import {
@@ -31,9 +26,7 @@ import {
   parseCallRoomParticipantRole,
 } from "./call-room-entry-validation.js";
 import {
-  assertCallLinkPublicTtsBinding,
-  callLinkPublicTtsEnabled,
-  type CallLinkPublicTtsCapability,
+  type CallLinkPublicTtsCapability
 } from "./call-link-public-tts.js";
 
 export interface CallRoomEntryRouteOptions {
@@ -330,88 +323,4 @@ export function registerCallRoomEntryRoute(
       workerReady: committed.ready,
     };
   });
-}
-
-async function publicTtsRuntimeReady(
-  sessionId: string,
-  capability: CallLinkPublicTtsCapability | undefined,
-) {
-  if (!callLinkPublicTtsEnabled()) return true;
-  const session = await findSession(sessionId);
-  try {
-    assertCallLinkPublicTtsBinding(session?.callLink?.publicTts, capability);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-type EntryValidation =
-  | { ok: true; record: CallLinkRecord }
-  | {
-    ok: false;
-    status: 403 | 404 | 410;
-    code: "account_forbidden" | "call_link_not_found" | "call_link_expired";
-    message: string;
-  };
-
-async function validateEntry(
-  callId: string,
-  participantRole: "host" | "guest",
-  accountId?: string,
-): Promise<EntryValidation> {
-  const record = await findCallLink(callId);
-  if (!record) {
-    return {
-      ok: false,
-      status: 404,
-      code: "call_link_not_found",
-      message: "Call link not found",
-    };
-  }
-  if (record.status === "ended" || Date.now() > Date.parse(record.expiresAt)) {
-    return {
-      ok: false,
-      status: 410,
-      code: "call_link_expired",
-      message: "Call link expired",
-    };
-  }
-  if (participantRole === "host" && record.userId !== accountId) {
-    return {
-      ok: false,
-      status: 403,
-      code: "account_forbidden",
-      message: "Account cannot access this resource",
-    };
-  }
-  if (participantRole === "guest" && record.purpose === "voice_agent") {
-    return {
-      ok: false,
-      status: 404,
-      code: "call_link_not_found",
-      message: "Call link not found",
-    };
-  }
-  return { ok: true, record };
-}
-
-function sendEntryError(
-  reply: Parameters<typeof sendError>[0],
-  result: Exclude<EntryValidation, { ok: true }>,
-) {
-  return sendError(reply, result.status, result.code, result.message);
-}
-
-function sendGuestTicketError(
-  reply: Parameters<typeof sendError>[0],
-  code: GuestTicketFailure,
-) {
-  if (code === "guest_ticket_expired") {
-    return sendError(reply, 410, code, "Guest ticket expired");
-  }
-  if (code === "guest_ticket_already_used") {
-    return sendError(reply, 409, code, "Guest ticket was already used");
-  }
-  return sendError(reply, 403, code, "Guest ticket is invalid");
 }

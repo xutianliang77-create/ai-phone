@@ -1,6 +1,23 @@
 part of 'realtime_controller.dart';
 
 extension RealtimeControllerLifecycle on RealtimeController {
+  void _startSessionTimeout(RealtimeSession session) {
+    _sessionTimeoutTimer?.cancel();
+    // Online public sessions are governed by server budget/availability. The
+    // client must not enforce or expose a free-quota-derived duration cap.
+    if (session.syncBinding != null || session.maxDurationSeconds == null) {
+      _sessionTimeoutTimer = null;
+      return;
+    }
+    _sessionTimeoutTimer = Timer(
+      Duration(seconds: session.maxDurationSeconds!),
+      () async {
+        _message = 'Session time limit reached';
+        await stop();
+      },
+    );
+  }
+
   Future<void> handleLifecycleState(AppLifecycleState state) async {
     if (state == AppLifecycleState.detached) {
       _resumeAfterLifecyclePause = false;

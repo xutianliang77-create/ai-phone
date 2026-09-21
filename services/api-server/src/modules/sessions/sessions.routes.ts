@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { parseExportFormat, createTextTranslationSession, isValidTextTranslationBody, isInternalAuthorized, forbidden } from "./sessions-route-helpers.js";
 import type { FastifyInstance } from "fastify";
 import type {
   GenerateSessionReviewRequest,
@@ -6,17 +6,16 @@ import type {
   SaveTextTranslationSessionRequest,
   SaveTypeToSpeakSessionRequest,
 } from "@translation/contracts";
-import { isSupportedLanguage, matchesRealtimeResultOperation } from "@translation/contracts";
+import { matchesRealtimeResultOperation } from "@translation/contracts";
 import { sendError } from "../../infrastructure/http/errors.js";
 import { requireAccount } from "../account/account-auth.js";
 import { getUsageBalance } from "../usage/usage-hold-runtime.service.js";
 import {
-  createSession,
   deleteSession,
   findSession,
   listSessions,
   saveSessionReview,
-  saveSegments,
+  saveSegments
 } from "./sessions-runtime.repository.js";
 import {
   toSessionDetail,
@@ -280,93 +279,4 @@ export async function registerSessionsRoutes(app: FastifyInstance) {
       };
     });
   });
-}
-
-function parseExportFormat(format: string | undefined) {
-  if (format === "txt" || format === "json" || format === "csv") return format;
-  return "markdown";
-}
-
-function createTextTranslationSession(
-  userId: string,
-  body: SaveTextTranslationSessionRequest,
-  sourceKind: "type_to_speak" | "scan" | "text",
-) {
-  const sourceText = body.sourceText.trim();
-  const translatedText = body.translatedText?.trim() ?? "";
-  const now = new Date().toISOString();
-  return createSession({
-    id: randomUUID(),
-    userId,
-    mode: "conversation",
-    status: "ended",
-    consumedSeconds: 0,
-    createdAt: now,
-    endedAt: now,
-    segments: [
-      {
-        id: `${sourceKind}_1`,
-        sourceText,
-        translatedText,
-        sourceLanguage: body.sourceLanguage ?? "auto",
-        targetLanguage: body.targetLanguage ?? "auto",
-        stage: "translation",
-        provider: sourceKind,
-        model: `${body.sourceLanguage ?? "auto"}->${body.targetLanguage ?? "auto"}`,
-        providerUsage: {
-          provider: sourceKind,
-          model: `${body.sourceLanguage ?? "auto"}->${body.targetLanguage ?? "auto"}`,
-          inputCharacters: sourceText.length,
-          outputCharacters: translatedText.length,
-        },
-      },
-    ],
-  });
-}
-
-function isValidTextTranslationBody(
-  body: Partial<SaveTextTranslationSessionRequest>,
-  requireTranslation: boolean,
-): body is SaveTextTranslationSessionRequest {
-  return (
-    typeof body.sourceText === "string" &&
-    body.sourceText.trim().length > 0 &&
-    isOptionalText(body.translatedText) &&
-    (!requireTranslation || (body.translatedText?.trim().length ?? 0) > 0) &&
-    isOptionalLanguage(body.sourceLanguage) &&
-    isOptionalLanguage(body.targetLanguage) &&
-    isOptionalSourceKind(body.sourceKind)
-  );
-}
-
-function isOptionalText(value: unknown) {
-  return value === undefined || typeof value === "string";
-}
-
-function isOptionalSourceKind(value: unknown) {
-  return (
-    value === undefined ||
-    value === "type_to_speak" ||
-    value === "scan" ||
-    value === "text"
-  );
-}
-
-function isOptionalLanguage(value: unknown) {
-  return value === undefined || (typeof value === "string" && isSupportedLanguage(value));
-}
-
-function isInternalAuthorized(authorization: string | undefined) {
-  const secret = process.env.INTERNAL_API_SECRET?.trim();
-  if (!secret || secret.length < 16) return false;
-  return authorization === `Bearer ${secret}`;
-}
-
-function forbidden(reply: Parameters<typeof sendError>[0]) {
-  return sendError(
-    reply,
-    403,
-    "account_forbidden",
-    "Account cannot access this resource",
-  );
 }

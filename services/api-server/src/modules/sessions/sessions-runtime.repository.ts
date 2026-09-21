@@ -1,3 +1,4 @@
+import { resolveResult, commandId, type MutationPlan } from "./sessions-runtime-command-helpers.js";
 import type {
   RealtimeSessionDiagnosticsDto,
   SessionReviewResponse,
@@ -7,28 +8,23 @@ import {
   transitionRealtimeSessionState,
   type PersistedRealtimeSessionState,
 } from "@translation/contracts";
-import { assertNewSessionPlacementAllowed } from
-  "../../infrastructure/platform/platform-session-routing.js";
-import { withPostgresRepositoryFence } from
-  "../../infrastructure/storage/postgres-repository-fence.js";
+import { assertNewSessionPlacementAllowed } from "../../infrastructure/platform/platform-session-routing.js";
+import { withPostgresRepositoryFence } from "../../infrastructure/storage/postgres-repository-fence.js";
 import {
-  repositoryCommandId,
-  repositoryRequestHash,
+  repositoryRequestHash
 } from "../../infrastructure/storage/repository-command-identity.js";
-import { getRepositoryRuntime } from
-  "../../infrastructure/storage/repository-runtime.js";
+import { getRepositoryRuntime } from "../../infrastructure/storage/repository-runtime.js";
 import type { CallLegRecord } from "../call-links/call-link-record.js";
 import * as legacy from "./sessions.repository.js";
 import type { SessionRecord } from "./session-record.js";
-import {createPreparedSessionWithBinding} from "../realtime/public-creation-binding.js";
+import { createPreparedSessionWithBinding } from "../realtime/public-creation-binding.js";
 import {
   applySessionSegmentPatch,
   createSessionSegment,
   mergeSessionSegments,
   type SessionSegmentPatch,
 } from "./session-segment-merge.js";
-import { orderSessionSegmentsChronologically } from
-  "./session-segment-order.js";
+import { orderSessionSegmentsChronologically } from "./session-segment-order.js";
 import {
   sessionMatchesQuery,
   sessionSpeakerSummary,
@@ -339,23 +335,4 @@ export async function mutateSessionRecord<T>(
       );
     },
   );
-}
-
-function resolveResult<T>(value: T | ((saved: SessionRecord) => T), saved: SessionRecord) {
-  return typeof value === "function"
-    ? (value as (session: SessionRecord) => T)(saved) : value;
-}
-
-function commandId(sessionId: string, operation: string, version: number, hash: string) {
-  return repositoryCommandId({
-    aggregateId: sessionId,
-    operation,
-    version,
-    requestHash: hash,
-  });
-}
-
-interface MutationPlan<T> {
-  next: SessionRecord | null;
-  result: T | ((saved: SessionRecord) => T);
 }

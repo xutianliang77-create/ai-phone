@@ -1,5 +1,5 @@
-import {setupRealtimeConnection} from "./realtime-connection-setup.js";
-import type {PublicGatewayRuntimeOptions} from "./configured-public-connection.js";
+import { setupRealtimeConnection } from "./realtime-connection-setup.js";
+import type { PublicGatewayRuntimeOptions } from "./configured-public-connection.js";
 import type { SessionEndReason } from "@translation/contracts";
 import { AudioFrameBatcher } from "./audio-frame-batcher.js";
 import { clearAudioFrameLog, logAudioFrameReceived } from "../metrics/audio-frame-logger.js";
@@ -8,9 +8,9 @@ import { clearTextSegmentLog } from "../metrics/text-segment-logger.js";
 import { parseIncomingEvent } from "../protocol/incoming-event-parser.js";
 import { buildError } from "../protocol/outgoing-event-builder.js";
 import { confirmSessionConnection, getSession } from "../sessions/session-manager.js";
-import { createUsageTickDecision } from "../usage/usage-ticker.js";
+import { startRealtimeConnectionTimers } from "./realtime-connection-timers.js";
 import { handleControlEvent } from "./session-control-handler.js";
-import {handleAudioBoundary} from "./audio-boundary-control.js";
+import { handleAudioBoundary } from "./audio-boundary-control.js";
 import { RealtimeSessionFinalizer } from "./realtime-session-finalizer.js";
 import { RealtimeConnectionCleanup } from "./realtime-connection-cleanup.js";
 import { RealtimeEventDispatcher } from "./realtime-event-dispatcher.js";
@@ -18,8 +18,8 @@ import { RealtimeFlushTracker } from "./realtime-flush-tracker.js";
 import { handleTextSegment } from "./client-text-segment-handler.js";
 import { sendRealtimeEvent } from "./realtime-connection-admission.js";
 import { createRealtimeServerRuntime, listenRealtimeServerRuntime } from "./realtime-server-runtime.js";
-import {publicGatewayRuntimeOptions} from "./public-runtime-bootstrap.js";
-import {PublicSpeechInactivityWatchdog} from "./public-speech-inactivity-watchdog.js";
+import { publicGatewayRuntimeOptions } from "./public-runtime-bootstrap.js";
+import { PublicSpeechInactivityWatchdog } from "./public-speech-inactivity-watchdog.js";
 export { normalizeClientTextLanguage } from "../protocol/client-text-language.js";
 export function startWebSocketServer(options:{publicRuntime?:PublicGatewayRuntimeOptions}={}) {
   const runtime = createRealtimeServerRuntime();
@@ -93,7 +93,6 @@ export function startWebSocketServer(options:{publicRuntime?:PublicGatewayRuntim
       sendRealtimeEvent(ws,{type:"session.recovery.ready",sessionId:session.id,...configured.recoveryBridge});
     }
     let controlQueue = Promise.resolve();
-    let usageTickInFlight = false;
     const audioBatcher = new AudioFrameBatcher({
       sessionId: session.id,
       provider,
@@ -155,44 +154,12 @@ export function startWebSocketServer(options:{publicRuntime?:PublicGatewayRuntim
       if(ws.readyState===1)ws.close(1011,"public_pipeline_unconfirmed");
     }
 
-    let confirmationInFlight=false;
-    const confirmationInterval=sessionEventSink.requiresConfirmation?setInterval(()=>{
-      if(confirmationInFlight||ws.readyState!==1||!["active","paused","ending"].includes(session.status))return;
-      confirmationInFlight=true;void confirmAudio().catch(error=>{realtimeLogger.warn({error,sessionId:session.id},"Public runtime confirmation failed");failPublicConnection();})
-        .finally(()=>{confirmationInFlight=false;});
-    },1000):undefined;
-    const usageInterval = setInterval(() => {
-      if(sessionEventSink.requiresConfirmation&&ws.readyState!==1)return;
-      if (session.status === "active" || session.status === "paused") {
-        void sessionEventSink.touch(session.id, session.status).catch((error) => {
-          realtimeLogger.warn({ error, sessionId: session.id },
-            "Realtime session heartbeat sync failed");
-        });
-      }
-      if (session.status !== "active" || usageTickInFlight) return;
-      usageTickInFlight = true;
-      controlQueue = controlQueue
-        .then(async () => {
-          const balance = await usageBalanceClient.getBalance(session.userId);
-          const decision = createUsageTickDecision(session, balance);
-          // This is the authenticated Wujie account's server-side balance, not
-          // a supplier free-package balance. Provider availability stays hidden
-          // behind public admission and never changes the client balance.
-          sendRealtime(decision.event);
-          if (decision.shouldEnd) {
-            await endRealtimeSession(
-              decision.endReason ?? "time_limit",
-              decision.event.remainingSeconds,
-            );
-          }
-        })
-        .catch((error) => {
-          realtimeLogger.warn({ error, sessionId: session.id }, "Realtime usage tick failed");
-        })
-        .finally(() => {
-          usageTickInFlight = false;
-        });
-    }, 30_000);
+    const stopConnectionTimers = startRealtimeConnectionTimers({
+      ws, session, sessionEventSink, usageBalanceClient,
+      heartbeatIntervalMs: env.heartbeatIntervalMs,
+      confirmAudio, failPublicConnection, sendRealtime, endRealtimeSession,
+      enqueueUsage: chain => { controlQueue = chain(controlQueue); },
+    });
     const messageRateGuard = protection.createMessageGuard();
     let rateLimited = false;
     let pendingControlEvents = 0;
@@ -336,16 +303,6 @@ export function startWebSocketServer(options:{publicRuntime?:PublicGatewayRuntim
     });
 
     let connectionError = false;
-    let heartbeatAlive = true;
-    ws.on("pong", () => { heartbeatAlive = true; });
-    const heartbeatInterval = setInterval(() => {
-      if (!heartbeatAlive) {
-        ws.terminate();
-        return;
-      }
-      heartbeatAlive = false;
-      ws.ping();
-    }, env.heartbeatIntervalMs);
     const connectionCleanup = new RealtimeConnectionCleanup({
       session,
       generation,
@@ -369,9 +326,8 @@ export function startWebSocketServer(options:{publicRuntime?:PublicGatewayRuntim
     const cleanupConnection = async () => {
       speechInactivity?.close();
       if(configured.publicConnection){outputSuppressed=true;audioBatcher.stopAccepting();ttsOutputQueue.suspend();}
-      unsubscribeProvider();if(confirmationInterval)clearInterval(confirmationInterval);
-      clearInterval(usageInterval);
-      clearInterval(heartbeatInterval);
+      unsubscribeProvider();
+      stopConnectionTimers();
       clearAudioFrameLog(session.id);
       clearTextSegmentLog(session.id);
       await controlQueue.catch(() => undefined);

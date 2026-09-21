@@ -1,3 +1,4 @@
+import { RecordingWorkerRuntime, captureEnv, clearEnv, restoreEnv, configureCallRoomEnv, resetStore, decodeJwtPayload, connectionConfirmation, guestTicketFrom } from "./call-room-entry.routes.test-support.js";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { buildApp } from "../../app.js";
 import { getStoreSnapshot } from "../../infrastructure/storage/json-store.js";
@@ -6,8 +7,7 @@ import {
   type CallRoomDataPublisher,
 } from "./call-room-worker.js";
 import {
-  setCallLinkWorkerSupervisorForTests,
-  type CallLinkWorkerRuntime,
+  setCallLinkWorkerSupervisorForTests
 } from "./call-link-worker-supervisor.js";
 
 describe("call room entry routes", () => {
@@ -288,80 +288,3 @@ describe("call room entry routes", () => {
     expect(response.json().error.code).toBe("invalid_call_room_participant");
   });
 });
-
-class RecordingWorkerRuntime implements CallLinkWorkerRuntime {
-  readonly ensuredCallIds: string[] = [];
-  constructor(
-    private readonly onEnsure?: (callId: string) => Promise<void>,
-  ) {}
-  async ensure(callId: string) {
-    this.ensuredCallIds.push(callId);
-    await this.onEnsure?.(callId);
-  }
-  markReady() {}
-  stop() {}
-  shutdown() {}
-}
-
-const envKeys = [
-  "CALL_ROOM_PROVIDER",
-  "LIVEKIT_URL",
-  "LIVEKIT_API_KEY",
-  "LIVEKIT_API_SECRET",
-  "CALL_ROOM_TOKEN_TTL_SECONDS",
-  "INTERNAL_API_SECRET",
-  "CALL_FULL_DUPLEX_ENABLED",
-  "API_RESULT_SYNC_DEPLOYMENT_ID",
-];
-
-function captureEnv() {
-  return Object.fromEntries(envKeys.map((key) => [key, process.env[key]]));
-}
-
-function clearEnv() {
-  for (const key of envKeys) delete process.env[key];
-}
-
-function restoreEnv(values: Record<string, string | undefined>) {
-  for (const key of envKeys) {
-    const value = values[key];
-    if (value === undefined) delete process.env[key];
-    else process.env[key] = value;
-  }
-}
-
-function configureCallRoomEnv() {
-  process.env.CALL_ROOM_PROVIDER = "livekit";
-  process.env.LIVEKIT_URL = "wss://livekit.example.cn";
-  process.env.LIVEKIT_API_KEY = "lk_key";
-  process.env.LIVEKIT_API_SECRET = "lk_secret";
-  process.env.CALL_ROOM_TOKEN_TTL_SECONDS = "120";
-  process.env.INTERNAL_API_SECRET = "internal-secret-123";
-  process.env.CALL_FULL_DUPLEX_ENABLED = "true";
-}
-
-function resetStore() {
-  const store = getStoreSnapshot();
-  store.sessions = [];
-  store.usageBalances = {};
-  store.usageHolds = [];
-  store.billingLedger = [];
-}
-
-function decodeJwtPayload(token: string) {
-  const payload = token.split(".")[1] ?? "";
-  return JSON.parse(Buffer.from(payload, "base64url").toString("utf8"));
-}
-
-function connectionConfirmation(token: Record<string, string>) {
-  return {
-    participantIdentity: token.participantIdentity,
-    participantRole: token.participantRole,
-    token: token.token,
-  };
-}
-
-function guestTicketFrom(response: { json(): Record<string, unknown> }) {
-  const joinUrl = String(response.json().joinUrl ?? "");
-  return new URL(joinUrl).searchParams.get("ticket") ?? "";
-}

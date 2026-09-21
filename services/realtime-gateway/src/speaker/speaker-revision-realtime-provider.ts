@@ -1,3 +1,4 @@
+import { type SpeakerRevisionMode, type RevisionSessionState } from "./speaker-revision-session-state.js";
 import type {
   AudioFrame,
   ServerRealtimeEvent,
@@ -15,45 +16,14 @@ import {
   reconcileSpeakerRevision,
 } from "./speaker-revision-reconciler.js";
 import {
-  type StoredTranscriptFinal,
-} from "./speaker-high-context-token-split.js";
-import {
   planSpeakerFirstSegmentation,
 } from "./speaker-first-segmentation.js";
 import {
   assertCompleteSplitDelivery,
   protectedTermsFor,
 } from "./speaker-high-context-delivery.js";
-import { recordSkippedParentDiagnostics } from
-  "./speaker-revision-skip-diagnostics.js";
-export type SpeakerRevisionMode = "shadow" | "apply";
-
-interface RevisionSessionState {
-  generation: number;
-  enabled: boolean;
-  audio: SpeakerRevisionAudioBuffer;
-  segments: Map<string, RevisionTranscriptRecord>;
-  protectedTerms: string[];
-  diagnostics: {
-    requestCount: number;
-    completedCount: number;
-    acceptedCount: number;
-    emittedUpdateCount: number;
-    errorCount: number;
-    staleResultCount: number;
-    splitParentCount: number;
-    splitChildCount: number;
-    splitRejectedCount: number;
-    splitSkippedParentCount: number;
-    splitSkippedReasonCounts: Record<string, number>;
-    cardinalityMismatchCount: number;
-    lastLatencyMs?: number;
-  };
-}
-
-type RevisionTranscriptRecord = StoredTranscriptFinal & {
-  speakerRevision?: number;
-};
+import { recordSkippedParentDiagnostics } from "./speaker-revision-skip-diagnostics.js";
+export { type SpeakerRevisionMode } from "./speaker-revision-session-state.js";
 
 export class SpeakerRevisionRealtimeProvider implements RealtimeProvider {
   readonly name: string;

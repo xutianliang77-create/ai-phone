@@ -29,7 +29,13 @@ void main() {
     final c=controller(h,api);addTearDown(() async {await c.disposeAsync();c.dispose();h.close();});
     h.post=(r)async=>http.Response(jsonEncode(data.receipt(r,r.url.path.endsWith('/query')?'issued':'cancelled')),200);
     await tester.pumpWidget(app(c));expect(find.text('撤销未开始请求'),findsNothing);
-    await tester.runAsync(() async {await tester.tap(find.text('查看未决创建'));await Future<void>.delayed(const Duration(milliseconds:60));});
+    await tester.runAsync(() async {
+      await tester.tap(find.text('查看未决创建'));
+      for (var i=0;i<100&&c.publicCreationResolutionBusy;i++) {
+        await Future<void>.delayed(const Duration(milliseconds:10));
+      }
+    });
+    expect(c.publicCreationResolutionBusy,false,reason:'query did not complete');
     await tester.pumpAndSettle();expect(find.text('撤销未开始请求'),findsOneWidget);
     await tester.tap(find.text('撤销未开始请求'));await tester.pumpAndSettle();
     expect(find.text('确认处置未开始请求？'),findsOneWidget);
