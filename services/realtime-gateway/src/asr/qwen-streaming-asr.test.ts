@@ -26,6 +26,14 @@ afterEach(async()=>{for(const p of active.splice(0))await p.closeSession(session
 const serverVad={type:"server_vad",threshold:0.2,silence_duration_ms:400};
 
 describe("Qwen ASR server-VAD wire on original shared streaming lifecycle",()=>{
+  it("delivers an empty completed result so its already displayed draft can be cleared",async()=>{
+    const t=setup(s=>{s.transcript="";}),p=t.create(),partials=vi.fn();
+    await p.createSession(session);p.setPartialListener(session.sessionId,partials);
+    await expect(p.transcribe(frame())).resolves.toMatchObject({text:"",isFinal:true,revision:1});
+    expect(partials).toHaveBeenCalled();
+    await p.flush(session.sessionId,{finishSession:true});
+    expect(t.record.mock.calls.at(-1)![0].state).toBe("confirmed");
+  });
   it("uses server VAD and omits the language hint for a qualified automatic zh/en route",async()=>{
     const t=setup();t.options.authorization.languagePolicy={source:"auto",target:"zh",autoReverse:true,pair:["zh","en"],revision:2};
     const p=t.create(),automatic={...session,sourceLanguage:"auto" as const,targetLanguage:"zh" as const,autoReverseTargetLanguage:true,languagePair:["zh","en"] as ["zh","en"]};

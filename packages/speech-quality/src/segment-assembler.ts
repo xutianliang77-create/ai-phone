@@ -92,7 +92,8 @@ export class SegmentAssembler {
           : {}),
       };
     }
-    if (this.isAlreadyEmitted(state, transcript, nowMs)) return { ready: [] };
+    if (this.isAlreadyEmitted(state, transcript, nowMs)) return { ready: [],
+      ...(!state.consumedRevisions.has(transcript.segmentId) ? { supersededSegmentIds: [transcript.segmentId] } : {}) };
     const pending = state.pending;
     if (!pending) return this.acceptNew(state, transcript, nowMs);
 
@@ -107,32 +108,42 @@ export class SegmentAssembler {
     if (this.mustSplit(pending, transcript, nowMs)) {
       const ready = this.releasePending(state, nowMs);
       const current = this.acceptNew(state, transcript, nowMs);
-      return { ready: [...ready, ...current.ready], ...(current.partial ? { partial: current.partial } : {}) };
+      const replaced = [...(ready.supersededSegmentIds ?? []), ...(current.supersededSegmentIds ?? [])];
+      return { ready: [...ready.ready, ...current.ready], ...(current.partial ? { partial: current.partial } : {}),
+        ...(replaced.length ? { supersededSegmentIds: replaced } : {}) };
     }
 
     if (isPendingDuplicate(pending, transcript)) {
-      return { ready: [] };
+      return { ready: [], supersededSegmentIds: [transcript.segmentId] };
     } else {
       pending.parts.push(transcript);
     }
 
     const merged = mergeTranscriptParts(pending.parts);
-    if (this.shouldRelease(pending, merged, nowMs)) return { ready: this.releasePending(state, nowMs) };
+    if (this.shouldRelease(pending, merged, nowMs)) return this.releasePending(state, nowMs);
     return { ready: [], partial: merged };
   }
 
   drainExpired(sessionId: string, nowMs = Date.now()) {
+    return this.drainExpiredWithReplacements(sessionId, nowMs).ready;
+  }
+
+  drainExpiredWithReplacements(sessionId: string, nowMs = Date.now()): SegmentPushResult {
     this.continuationRevisions.expire(sessionId, nowMs);
     const state = this.sessions.get(sessionId);
     if (!state?.pending ||
-        nowMs - state.pending.createdAtMs < this.bufferMs(state.pending)) return [];
+        nowMs - state.pending.createdAtMs < this.bufferMs(state.pending)) return { ready: [] };
     return this.releasePending(state, nowMs);
   }
 
   flush(sessionId: string, nowMs = Date.now()) {
+    return this.flushWithReplacements(sessionId, nowMs).ready;
+  }
+
+  flushWithReplacements(sessionId: string, nowMs = Date.now()): SegmentPushResult {
     this.continuationRevisions.clear(sessionId);
     const state = this.sessions.get(sessionId);
-    return state?.pending ? this.releasePending(state, nowMs) : [];
+    return state?.pending ? this.releasePending(state, nowMs) : { ready: [] };
   }
 
   clear(sessionId: string) {
@@ -171,6 +182,7 @@ export class SegmentAssembler {
     const previous = pending.parts.at(-1);
     return isProtectedSpeakerBoundary(previous) ||
       isProtectedSpeakerBoundary(transcript) ||
+      previous?.automaticLanguageStatus === "detected" && transcript.automaticLanguageStatus === "detected" && previous.language !== transcript.language ||
       speakerKey(previous) !== speakerKey(transcript) ||
       turnKey(previous) !== turnKey(transcript) ||
       nowMs - pending.createdAtMs >= this.bufferMs(pending);
@@ -194,7 +206,7 @@ export class SegmentAssembler {
     pending.parts[index] = transcript;
     const merged = mergeTranscriptParts(pending.parts);
     if (this.shouldRelease(pending, merged, nowMs)) {
-      return { ready: this.releasePending(state, nowMs) };
+      return this.releasePending(state, nowMs);
     }
     return { ready: [], partial: merged };
   }
@@ -216,13 +228,15 @@ export class SegmentAssembler {
       : this.maxBufferMs;
   }
 
-  private releasePending(state: SessionAssemblyState, nowMs: number) {
+  private releasePending(state: SessionAssemblyState, nowMs: number): SegmentPushResult {
     const pending = state.pending;
-    if (!pending) return [];
+    if (!pending) return { ready: [] };
     state.pending = undefined;
     const transcript = mergeTranscriptParts(pending.parts);
     this.remember(state, transcript, pending.parts.map((part) => part.segmentId), nowMs);
-    return [transcript];
+    const supersededSegmentIds = [...new Set(pending.parts.map(part => part.segmentId))]
+      .filter(id => id !== transcript.segmentId);
+    return { ready: [transcript], ...(supersededSegmentIds.length ? { supersededSegmentIds } : {}) };
   }
 
   private remember(

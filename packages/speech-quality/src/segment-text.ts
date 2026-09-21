@@ -5,6 +5,7 @@ import {
 import type { SpeechTranscript } from "./speech-transcript.js";
 import { shouldHoldForNextSegment } from "./segment-boundary.js";
 import { analyzeTurnLanguage } from "./turn-language-profile.js";
+import { mergedLanguageEvidence } from "./segment-language-evidence.js";
 
 export interface MergeTranscriptPartsOptions {
   allowSingleCharacterCjkOverlap?: boolean;
@@ -30,6 +31,7 @@ export function mergeTranscriptParts(
     text,
     language: first.language,
     ...languageProfile,
+    ...mergedLanguageEvidence(parts),
     confidence: mergedConfidence(parts) ?? last.confidence,
     ...(last.endpointReason ? { endpointReason: last.endpointReason } : {}),
     ...(last.vadContext ? { vadContext: last.vadContext } : {}),

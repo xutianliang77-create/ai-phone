@@ -11,11 +11,9 @@ export function transcriptVariantsForTranslation(
   // check.  Keep that supplier-confirmed language rather than letting a
   // transcript script heuristic reclassify a mixed utterance and suppress MT.
   const providerConfirmedLanguage = transcript.automaticLanguageStatus === "detected";
-  const automaticLanguageStatus = providerConfirmedLanguage
-    ? "detected" as const
-    : allowTextLanguageOverride
+  const automaticLanguageStatus = transcript.automaticLanguageStatus ?? (allowTextLanguageOverride
       ? automaticLanguageStatusForText(transcript.text, profile)
-      : undefined;
+      : undefined);
   return [{
     ...transcript,
     ...profile,

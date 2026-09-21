@@ -149,9 +149,13 @@ describe("lmstudio realtime provider", () => {
 
     expect(secondEvents.map((event) => event.type)).toEqual([
       "transcript.final",
+      "transcript.final",
       "translation.final",
     ]);
     expect(secondEvents[0]).toMatchObject({
+      segmentId: "asr_seg_2", text: "",
+    });
+    expect(secondEvents[1]).toMatchObject({
       segmentId: "asr_seg_1",
       text: "今天下午三点我们在会议讨论产品计划之后我会整理会议记录发给大家",
       confidence: 0.87,

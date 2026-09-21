@@ -35,9 +35,13 @@ describe("lmstudio realtime provider continuation", () => {
     expect(first.map((event) => event.type)).toEqual(["transcript.partial"]);
     expect(second.map((event) => event.type)).toEqual([
       "transcript.final",
+      "transcript.final",
       "translation.final",
     ]);
     expect(second[0]).toMatchObject({
+      segmentId: "qwen3_seg_857", text: "",
+    });
+    expect(second[1]).toMatchObject({
       segmentId: "qwen3_seg_800",
       rawText:
         "今天下午三点我们讨论产品计划，确认负责人和截止日期，然后发送给所有参会人员。",

@@ -232,7 +232,10 @@ export class LmStudioRealtimeProvider implements RealtimeProvider {
   ): AsyncGenerator<ServerRealtimeEvent> {
     if(!this.isCurrent(session))return;
     const text = cleanRealtimeText(transcript.text);
-    if (!text) return;
+    if (!text) {
+      if (transcript.isFinal === true) yield* continuationTombstones(session, transcript, [transcript.segmentId]);
+      return;
+    }
     const assembled = this.semanticSegmentsFor(session).push(session.sessionId, {
       ...transcript,
       text,
@@ -246,7 +249,7 @@ export class LmStudioRealtimeProvider implements RealtimeProvider {
       };
     }
     if(!this.isCurrent(session))return;
-    for (const event of continuationTombstones(session, transcript, assembled.supersededSegmentIds)) {
+    for (const event of continuationTombstones(session, assembled.ready[0] ?? transcript, assembled.supersededSegmentIds)) {
       if(!this.isCurrent(session))return;yield event;
     }
     if(!this.isCurrent(session))return;
@@ -260,14 +263,18 @@ export class LmStudioRealtimeProvider implements RealtimeProvider {
     emitTranscript = true,
   ): AsyncGenerator<ServerRealtimeEvent> {
     if(!this.isCurrent(session))return;
-    for (const transcript of this.speakerBoundaryRepair.repairReady(session, this.semanticSegmentsFor(session).flush(session.sessionId))) {
+    const assembled = this.semanticSegmentsFor(session).flushWithReplacements(session.sessionId);
+    if (assembled.ready[0]) yield* continuationTombstones(session, assembled.ready[0], assembled.supersededSegmentIds);
+    for (const transcript of this.speakerBoundaryRepair.repairReady(session, assembled.ready)) {
       yield* this.translateTranscript(session, transcript, emitTranscript);
     }
   }
 
   private async *flushExpiredSemanticSegments(session: RealtimeProviderSession) {
     if(!this.isCurrent(session))return;
-    for (const transcript of this.speakerBoundaryRepair.repairReady(session, this.semanticSegmentsFor(session).drainExpired(session.sessionId))) {
+    const assembled = this.semanticSegmentsFor(session).drainExpiredWithReplacements(session.sessionId);
+    if (assembled.ready[0]) yield* continuationTombstones(session, assembled.ready[0], assembled.supersededSegmentIds);
+    for (const transcript of this.speakerBoundaryRepair.repairReady(session, assembled.ready)) {
       yield* this.translateTranscript(session, transcript);
     }
     if(!this.isCurrent(session))return;

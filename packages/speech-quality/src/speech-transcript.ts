@@ -19,6 +19,8 @@ export interface SpeechTranscript {
   dominantLanguage?: TranslationLanguageCode;
   detectedLanguages?: TranslationLanguageCode[];
   mixedLanguage?: boolean;
+  /** Explicit ASR language evidence must survive buffering and assembly. */
+  automaticLanguageStatus?: "detected" | "mixed" | "unknown";
   confidence?: number;
   speaker?: SpeakerAttributionDto;
   timing?: SegmentTimingDto;
