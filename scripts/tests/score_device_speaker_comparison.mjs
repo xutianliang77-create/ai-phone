@@ -27,14 +27,16 @@ for(const item of manifest.cases){
   const frozen=score(oldSpans),candidate=score(newSpans);
   compare.push({id:item.id,samePcmSha256:item.sha256,durationMs,clockPassed:through===item.inputSamples,
     frozenV1:frozen,deviceV11:candidate,deviceSpeakerCount:new Set(spans.map(s=>s.speakerId)).size,
+    expectedSpeakerCount:new Set(item.reference.map(s=>s.speakerId)).size,
+    frozenSpeakerCount:new Set(oldSpans.map(s=>s.speakerId)).size,
     inferenceRtf:current.diagnostics.totalProcessingMs/durationMs,maximumProcessingMs:current.diagnostics.maximumProcessingMs,
     peakAppResidentBytes:current.peakAppResidentBytes,thermalState:current.thermalState,
-    qualityGate:candidate.diarizationErrorRate<=.20?'PASS':'FAIL'});
+    derGate:candidate.diarizationErrorRate<=.20?'PASS':'FAIL'});
 }
 const report={schemaVersion:1,status:'REAL_DEVICE_COMPARISON_COMPLETED',candidateId:device.candidateId,
   modelRevision:device.modelRevision,modelLoadMs:device.modelLoadMs,sourceCommit:device.sourceCommit,
   sameInputVerified:true,scorer:'unchanged frozen 1.0 speaker_eval_metrics.mjs; 20ms, no collar, overlap included',
-  caveat:'Component/model evaluation, not public ASR/MT/TTS end-to-end or identity recognition; thresholds not relaxed.',cases:compare};
+  caveat:'DER gate only, not full speaker stability, public ASR/MT/TTS end-to-end or identity recognition. Inspect extra labels and confusion separately; thresholds not relaxed.',cases:compare};
 writeFileSync(join(root,'comparison.json'),JSON.stringify(report,null,2));
 for(const [name,value] of Object.entries(predictions))writeFileSync(join(root,`${name}-predictions.json`),JSON.stringify(value,null,2));
 writeFileSync(join(root,'scoring-suite.json'),JSON.stringify({cases:manifest.cases.map(c=>({id:c.id,durationMs:c.inputSamples/c.sampleRate*1000,reference:c.reference}))},null,2));

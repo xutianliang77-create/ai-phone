@@ -34,6 +34,7 @@ actor DeviceSpeakerEngine {
   let sampleRate: Int
   private var inputSamples = 0, sequence = 0, through = 0
   private var cancelled = false
+  private var activity = DeviceSpeakerActivityDecoder()
   private var totalProcessingMs = 0.0, maximumProcessingMs = 0.0
   private let inputFormat: AVAudioFormat
   private let outputFormat: AVAudioFormat
@@ -83,7 +84,7 @@ actor DeviceSpeakerEngine {
     inputSamples += count
     #if canImport(FluidAudio)
     diarizer.addAudio(CoreMlNemotronAudioInput.floatSamples(from: converted.buffer))
-    return try observations(diarizer.process())
+    return try processedObservations(diarizer.process())
     #else
     throw DeviceSpeakerFailure.unsupported
     #endif
@@ -95,7 +96,10 @@ actor DeviceSpeakerEngine {
     defer { let ms = (ProcessInfo.processInfo.systemUptime-started)*1000
       totalProcessingMs += ms; maximumProcessingMs = max(maximumProcessingMs,ms) }
     #if canImport(FluidAudio)
-    var result = try observations(diarizer.finalizeSession())
+    var result = try processedObservations(diarizer.finalizeSession())
+    let tail = activity.flush()
+    result += try observations(DiarizerChunkResult(startFrame:tail.startFrame,
+      finalizedPredictions:tail.probabilities,finalizedFrameCount:tail.probabilities.count/4))
     // Like 1.0, sub-80ms tails have no complete model frame. Confirm their
     // watermark without inventing a speaker label for padded audio.
     if through < inputSamples {
@@ -123,6 +127,12 @@ actor DeviceSpeakerEngine {
   }
 
   #if canImport(FluidAudio)
+  private func processedObservations(_ chunk: DiarizerChunkResult?) throws -> [DeviceSpeakerObservation] {
+    guard let chunk else { return [] }
+    let value = try activity.consume(chunk.finalizedPredictions,startFrame:chunk.startFrame)
+    return try observations(DiarizerChunkResult(startFrame:value.startFrame,finalizedPredictions:value.probabilities,
+      finalizedFrameCount:value.probabilities.count/4))
+  }
   private func observations(_ update: DiarizerChunkResult?) throws -> [DeviceSpeakerObservation] {
     guard let chunk = update else { return [] }
     var output: [DeviceSpeakerObservation] = []
