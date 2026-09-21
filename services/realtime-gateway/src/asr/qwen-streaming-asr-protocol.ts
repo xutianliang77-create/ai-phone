@@ -16,6 +16,16 @@ export function qwenTranscriptLanguage(language:unknown,source:string,pair?:read
   // within one item; only completed supplies the language routed to MT.
   return language as TranslationLanguageCode;
 }
+/** A draft is not a final language decision. Suppress an out-of-scope preview,
+ * but keep accepting its audio and await completed. Never coerce it into the
+ * signed pair or weaken final-result, item or payload validation. */
+export function qwenDraftTranscriptLanguage(language:unknown,source:string,pair?:readonly TranslationLanguageCode[]){
+  try{return qwenTranscriptLanguage(language,source,pair);}
+  catch(error){
+    if(error instanceof PublicAsrError&&["qwen_asr_language_out_of_scope","qwen_asr_language_mismatch"].includes(error.code))return undefined;
+    throw error;
+  }
+}
 export function qwenAsrSessionConfiguration(language:string){
   const inputAudioTranscription=language==="auto"?{}:{language:qwenAsrLanguage(language)};
   return {input_audio_format:"pcm",sample_rate:16000,input_audio_transcription:inputAudioTranscription,

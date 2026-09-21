@@ -8,10 +8,11 @@ const wireTypes=new Set([
   "conversation.item.input_audio_transcription.completed",
   "conversation.item.input_audio_transcription.failed",
 ]);
-export function streamingAsrFailureDiagnostic(code:string,eventType:unknown,uploadedSamples:number){
+export function streamingAsrFailureDiagnostic(code:string,eventType:unknown,uploadedSamples:number,language?:unknown){
   return {
     code:/^[a-z0-9_]{1,120}$/.test(code)?code:"public_asr_stream_unclassified",
     eventType:typeof eventType==="string"&&wireTypes.has(eventType)?eventType:"unknown",
     uploadedSamples:Number.isSafeInteger(uploadedSamples)&&uploadedSamples>=0?uploadedSamples:0,
+    ...(typeof language==="string"&&/^[a-z]{2,3}$/.test(language)?{language}:{}),
   };
 }

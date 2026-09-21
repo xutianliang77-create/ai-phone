@@ -90,6 +90,30 @@ describe("Qwen ASR server-VAD wire on original shared streaming lifecycle",()=>{
     const events=t.record.mock.calls.map(c=>c[0]);expect(events.map(e=>e.state)).toEqual(["dispatching","confirmed"]);expect(new Set(events.map(e=>e.attemptId)).size).toBe(1);
   });
 
+  it.each(["ja","yue","ko","fr","es"])("waits for the final language after an out-of-pair %s draft without closing or translating it",async draftLanguage=>{
+    const t=setup(s=>{s.autoComplete=false;s.autoFinish=false;s.onSend=e=>{
+      if(e.type==="session.finish"){queueMicrotask(()=>s.receive({type:"session.finished"}));return;}
+      if(e.type!=="input_audio_buffer.append")return;
+      queueMicrotask(()=>{
+        s.receive({type:"input_audio_buffer.speech_started",audio_start_ms:0,item_id:"draft-revision"});
+        s.receive({type:"conversation.item.input_audio_transcription.text",item_id:"draft-revision",content_index:0,language:draftLanguage,text:"",stash:"临时草稿"});
+        s.receive({type:"input_audio_buffer.speech_stopped",audio_end_ms:100,item_id:"draft-revision"});
+        s.receive({type:"input_audio_buffer.committed",item_id:"draft-revision",previous_item_id:""});
+        s.receive({type:"conversation.item.input_audio_transcription.completed",item_id:"draft-revision",content_index:0,language:"zh",transcript:"这是最终中文。"});
+      });
+    };});
+    t.options.authorization.languagePolicy={source:"auto",target:"en",autoReverse:true,pair:["zh","en"],revision:2};
+    const p=t.create(),partial=vi.fn();
+    await p.createSession({...session,sourceLanguage:"auto",targetLanguage:"en",autoReverseTargetLanguage:true,languagePair:["zh","en"]});
+    p.setPartialListener(session.sessionId,partial);
+    await expect(p.transcribe(frame())).resolves.toMatchObject({language:"zh",text:"这是最终中文。",automaticLanguageStatus:"detected",isFinal:true});
+    expect(partial).not.toHaveBeenCalled();
+    expect(t.sockets[0].readyState).toBe(1);
+    await p.flush(session.sessionId,{finishSession:true});
+    expect(t.record.mock.calls.at(-1)![0]).toMatchObject({state:"confirmed",audioEndSample:1600});
+    expect(t.socketFactory).toHaveBeenCalledTimes(1);
+  });
+
   it("clamps Qwen's bounded server-VAD rounding without mutating the durable attempt",async()=>{
     const t=setup(s=>{s.autoComplete=false;s.onSend=e=>{if(e.type!=="input_audio_buffer.append")return;queueMicrotask(()=>{
       const item="rounded";s.receive({type:"input_audio_buffer.speech_started",audio_start_ms:0,item_id:item});

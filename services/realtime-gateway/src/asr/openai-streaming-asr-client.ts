@@ -6,7 +6,7 @@ import type {HttpAsrRequest,HttpAsrFlushRequest,HttpAsrBoundaryRequest} from "./
 import {PublicAsrError,parseOpenAiAsr} from "./public-asr-completed-audio.js";
 import {abortable} from "../providers/abortable.js";
 import {cleanRealtimeText} from "../protocol/realtime-text.js";
-import {qwenAsrSessionConfiguration,assertQwenAsrConfiguration,qwenTranscriptLanguage} from "./qwen-streaming-asr-protocol.js";
+import {qwenAsrSessionConfiguration,assertQwenAsrConfiguration,qwenTranscriptLanguage,qwenDraftTranscriptLanguage} from "./qwen-streaming-asr-protocol.js";
 import {TencentAsrWire} from "./tencent-streaming-asr.js";
 import {GoogleAsrWire,type GoogleAsrStreamFactory} from "./google-streaming-asr.js";
 import {realtimeLogger} from "../metrics/realtime-metrics.js";
@@ -24,7 +24,7 @@ type QwenTransport={event:PublicModelAttemptEvent;prepared:boolean;sent:boolean;
 type State={ws?:WebSocket;stop:AbortController;ready:ReturnType<typeof deferred<void>>;configured:boolean;failure?:PublicAsrError;cursor:number;sequence:number;
   turn?:Turn;qwenTransport?:QwenTransport;lastItem?:string;seen:Set<string>;busy:boolean;removeAbort:()=>void;wireSessionId?:string;wireEvents?:Set<string>;
   pendingWireEvents:Record<string,any>[];completed:TranscriptResult[];finalization:Promise<void>;finishing:boolean;providerFinished:boolean;
-  finished:ReturnType<typeof deferred<void>>;tencentWire?:TencentAsrWire|GoogleAsrWire;lastWireType?:unknown};
+  finished:ReturnType<typeof deferred<void>>;tencentWire?:TencentAsrWire|GoogleAsrWire;lastWireType?:unknown;lastWireLanguage?:unknown};
 export interface StreamingAsrOptions {sessionId:string;leaseId:string;endpoint:string;model:string;language:LanguageCode;timeoutMs:number;
   wireProfile?:"openai_realtime_asr"|"qwen_asr_realtime"|"tencent_asr_ws"|"google_speech_v2";appId?:string;
   projectId?:string;location?:string;recognizer?:string;languageLocales?:Record<string,string>;sampleRate?:16000|24000;
@@ -224,7 +224,7 @@ export class OpenAiStreamingAsrClient {
   }
   private drainQwenWireEvents(s:State){while(s.pendingWireEvents.length){this.assert(s);this.receiveWireEvent(s,s.pendingWireEvents.shift()!);}}
   private receiveWireEvent(s:State,e:Record<string,any>){
-    s.lastWireType=e?.type;
+    s.lastWireType=e?.type;s.lastWireLanguage=e?.language;
     try{this.receive(s,e);}catch(error){this.fail(s,error instanceof PublicAsrError?error.code:"public_asr_stream_protocol");throw s.failure!;}
   }
   private takeCompleted(s:State):AsrProviderResult{const values=s.completed.splice(0);return values.length===0?null:values.length===1?values[0]:values;}
@@ -247,7 +247,7 @@ export class OpenAiStreamingAsrClient {
   }
   private fail(s:State,code:string){if(s.failure)return;s.failure=new PublicAsrError(code,this.qwen?s.qwenTransport?.sent?"uncertain":"not_sent":s.turn?.sent?"uncertain":"not_sent");
     const attempt=this.qwen?s.qwenTransport:s.turn;
-    if(attempt?.sent&&!attempt.terminal)realtimeLogger.warn({sessionId:this.options.sessionId,...streamingAsrFailureDiagnostic(code,s.lastWireType,s.cursor)},"Public ASR stream failed");
+    if(attempt?.sent&&!attempt.terminal)realtimeLogger.warn({sessionId:this.options.sessionId,...streamingAsrFailureDiagnostic(code,s.lastWireType,s.cursor,s.lastWireLanguage)},"Public ASR stream failed");
     s.stop.abort();s.ready.reject(s.failure);s.finished.reject(s.failure);s.turn?.done.reject(s.failure);s.ws?.terminate();s.tencentWire?.close();void (this.qwen?this.finishQwenTransport(s):this.finish(s.turn)).catch(()=>{});}
   private async send(s:State,event:unknown){this.assert(s);if(s.ws?.readyState!==WebSocket.OPEN||s.ws.bufferedAmount>1048576)throw Error("socket not writable");
     await abortable(new Promise<void>((resolve,reject)=>s.ws!.send(JSON.stringify(this.qwen?{...(event as object),event_id:randomUUID()}:event),error=>error?reject(Error("send failed")):resolve())),s.stop.signal);}
@@ -303,7 +303,7 @@ export class OpenAiStreamingAsrClient {
       }
       else if(["conversation.item.input_audio_transcription.text","conversation.item.input_audio_transcription.completed"].includes(e.type)){
         if(!turn?.sent||turn.terminal)throw Error();
-        turn.detectedLanguage=qwenTranscriptLanguage(e.language,this.options.language,this.options.automaticLanguagePair);
+        turn.detectedLanguage=(e.type.endsWith(".text")?qwenDraftTranscriptLanguage:qwenTranscriptLanguage)(e.language,this.options.language,this.options.automaticLanguagePair);
         e={...e,item_id:this.qwenTurnItemId(turn,e.item_id)};
       }else throw Error();
     }
@@ -329,7 +329,7 @@ export class OpenAiStreamingAsrClient {
       if(this.qwen&&e.type.endsWith(".text")){
         if(typeof e.text!=="string"||typeof e.stash!=="string"||e.text.length+e.stash.length>16000||!e.text.startsWith(turn.confirmedPrefix??""))throw Error();
         turn.confirmedPrefix=e.text;turn.partial=e.text+e.stash;
-        const text=cleanRealtimeText(turn.partial);if(text)this.partialListener?.({segmentId:turn.event.segmentId,revision:0,isFinal:false,text,language:this.transcriptLanguage(turn)});
+        const text=cleanRealtimeText(turn.partial);if(text&&turn.detectedLanguage!==undefined)this.partialListener?.({segmentId:turn.event.segmentId,revision:0,isFinal:false,text,language:this.transcriptLanguage(turn)});
       }else if(e.type.endsWith(".delta")){if(typeof e.delta!=="string"||turn.partial.length+e.delta.length>16000)throw Error();turn.partial+=e.delta;
         const text=cleanRealtimeText(turn.partial);if(text)this.partialListener?.({segmentId:turn.event.segmentId,revision:0,isFinal:false,text,language:this.transcriptLanguage()});}
       else {if(!this.qwen&&!turn.committing)throw Error();const result=parseOpenAiAsr({text:e.transcript,...(!this.qwen&&e.usage!==undefined?{usage:e.usage}:{})},this.qwen?turn.providerItemId??null:e.item_id);
