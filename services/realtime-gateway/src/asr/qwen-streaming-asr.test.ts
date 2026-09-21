@@ -157,6 +157,6 @@ describe("Qwen ASR server-VAD wire on original shared streaming lifecycle",()=>{
 
   it("closing without product finalization never invents a final result",async()=>{
     const t=setup(s=>s.autoComplete=false),p=t.create();await p.createSession(session);await p.transcribe(frame());await p.closeSession(session.sessionId);
-    expect(t.sockets[0].sent.map(e=>e.type)).not.toContain("session.finish");expect(t.record.mock.calls.at(-1)![0]).toMatchObject({state:"uncertain",failureCode:"public_asr_stream_interrupted"});
+    expect(t.sockets[0].sent.map(e=>e.type)).not.toContain("session.finish");expect(t.record.mock.calls.at(-1)![0]).toMatchObject({state:"uncertain",failureCode:"public_asr_stream_closed"});
   });
 });

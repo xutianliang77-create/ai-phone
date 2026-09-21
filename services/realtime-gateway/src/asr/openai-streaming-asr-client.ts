@@ -269,7 +269,8 @@ export class OpenAiStreamingAsrClient {
     turn.finalizing=this.record({...turn.event,state:turn.sent?"uncertain":"not_sent",failureCode:"public_asr_stream_interrupted"}).catch(()=>{/* durable intent remains unresolved */});return turn.finalizing;}
   private async finishQwenTransport(s:State){
     const transport=s.qwenTransport;if(!transport?.prepared||transport.terminal)return transport?.finalizing;
-    transport.terminal=true;transport.finalizing=this.record({...transport.event,state:transport.sent?"uncertain":"not_sent",failureCode:"public_asr_stream_interrupted"}).catch(()=>{/* durable intent remains unresolved */});
+    const failureCode=s.failure?.code??"public_asr_stream_interrupted";
+    transport.terminal=true;transport.finalizing=this.record({...transport.event,state:transport.sent?"uncertain":"not_sent",failureCode}).catch(()=>{/* durable intent remains unresolved */});
     s.finalization=transport.finalizing;void s.finalization.catch(()=>{});return transport.finalizing;
   }
   private fail(s:State,code:string){if(s.failure)return;s.failure=new PublicAsrError(code,this.qwen?s.qwenTransport?.sent?"uncertain":"not_sent":s.turn?.sent?"uncertain":"not_sent");s.stop.abort();s.ready.reject(s.failure);s.finished.reject(s.failure);s.turn?.done.reject(s.failure);s.ws?.terminate();s.tencentWire?.close();void (this.qwen?this.finishQwenTransport(s):this.finish(s.turn)).catch(()=>{});}
