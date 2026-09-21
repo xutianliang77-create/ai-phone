@@ -23,7 +23,7 @@ function setup(configure?:(s:SyntheticQwenAsrSocket)=>void){
 }
 const active:HttpAsrProvider[]=[];
 afterEach(async()=>{for(const p of active.splice(0))await p.closeSession(session.sessionId);vi.useRealTimers();vi.restoreAllMocks();});
-const serverVad={type:"server_vad",threshold:0,silence_duration_ms:400};
+const serverVad={type:"server_vad",threshold:0.2,silence_duration_ms:400};
 
 describe("Qwen ASR server-VAD wire on original shared streaming lifecycle",()=>{
   it("uses server VAD and omits the language hint for a qualified automatic zh/en route",async()=>{

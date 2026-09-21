@@ -14,7 +14,7 @@ export function qwenAsrSessionConfiguration(language:string){
     // Public Wujie sessions are continuous conversations, so supplier-side VAD
     // owns ASR segmentation. The phone VAD remains independent and continues
     // to own local barge-in/playback/UI behavior.
-    turn_detection:{type:"server_vad",threshold:0,silence_duration_ms:400}};
+    turn_detection:{type:"server_vad",threshold:0.2,silence_duration_ms:400}};
 }
 export function assertQwenAsrConfiguration(session:Record<string,any>|undefined,model:string,language:string){
   const transcription=session?.input_audio_transcription;
@@ -23,7 +23,7 @@ export function assertQwenAsrConfiguration(session:Record<string,any>|undefined,
     : fixedTranscription(transcription,model,qwenAsrLanguage(language));
   if(!session||typeof session.id!=="string"||!session.id||session.id.length>240||session.model!==model||
     JSON.stringify(session.modalities)!=='["text"]'||!["pcm","pcm16"].includes(session.input_audio_format)||session.sample_rate!==16000||
-    !transcriptionOk||session.turn_detection?.type!=="server_vad"||session.turn_detection.threshold!==0||
+    !transcriptionOk||session.turn_detection?.type!=="server_vad"||session.turn_detection.threshold!==0.2||
     session.turn_detection.silence_duration_ms!==400||Object.keys(session.turn_detection).some(key=>
       !["type","threshold","silence_duration_ms","create_response","interrupt_response"].includes(key))||
     ["create_response","interrupt_response"].some(key=>session.turn_detection[key]!==undefined&&typeof session.turn_detection[key]!=="boolean"))throw new PublicAsrError("qwen_asr_setup_mismatch","not_sent");
