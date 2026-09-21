@@ -1,4 +1,5 @@
 import { validateAirDeviceMediaPolicy } from "./postgres-cutover-media-validation.js";
+import { validateFractionalTranscriptTiming } from "./postgres-cutover-timing-validation.js";
 import { createHash } from "node:crypto";
 import { readFileSync, renameSync, writeFileSync } from "node:fs";
 import type { Pool } from "pg";
@@ -101,6 +102,7 @@ const migrationValidators: Record<string, (
     validatePublicCreationBindings(pool, "043_public_creation_bindings"),
   "044_public_creation_binding_noop_projection": (pool) =>
     validatePublicCreationBindings(pool, "044_public_creation_binding_noop_projection"),
+  "045_fractional_transcript_timing": validateFractionalTranscriptTiming,
 };
 
 async function validatePublicCreationBindings(

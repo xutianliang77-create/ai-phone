@@ -7,9 +7,9 @@ import {
 
 describe("PostgreSQL schema manifest", () => {
   it("pins the complete ordered migration set", () => {
-    expect(expectedPostgresMigrations).toHaveLength(44);
+    expect(expectedPostgresMigrations).toHaveLength(45);
     expect(expectedPostgresMigrations.at(-1)).toBe(
-      "044_public_creation_binding_noop_projection",
+      "045_fractional_transcript_timing",
     );
     expect(comparePostgresMigrations([...expectedPostgresMigrations])).toEqual({
       missing: [],
@@ -22,7 +22,7 @@ describe("PostgreSQL schema manifest", () => {
       ...expectedPostgresMigrations.slice(0, -1),
       "999_unknown",
     ])).toEqual({
-      missing: ["044_public_creation_binding_noop_projection"],
+      missing: ["045_fractional_transcript_timing"],
       extra: ["999_unknown"],
     });
   });
@@ -35,6 +35,20 @@ describe("PostgreSQL schema manifest", () => {
     expect(sql).toContain("event_operation NOT IN ('upsert', 'delete')");
     expect(sql).toContain("DELETE FROM ai_phone.product_records");
     expect(sql).toContain("event_operation = 'delete'");
+  });
+
+  it("preserves fractional segment timing and latency without rounding trusted samples", () => {
+    const sql = readFileSync(new URL(
+      "../../../../../infra/postgres/migrations/045_fractional_transcript_timing.sql",
+      import.meta.url,
+    ), "utf8");
+    for (const name of ["start_ms", "end_ms", "latency_ms"]) {
+      expect(sql).toContain(`ALTER COLUMN ${name} TYPE numeric USING ${name}::numeric`);
+    }
+    expect(sql).toContain("pg_get_functiondef");
+    expect(sql).toContain("Transcript timing projection shape is unavailable");
+    expect(sql).not.toMatch(/\b(round|floor|ceil|truncate)\s*\(/i);
+    expect(sql).not.toContain("lastAcceptedSample");
   });
 
   it("allows public creation bindings through the durable primary projection", () => {

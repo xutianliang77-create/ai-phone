@@ -48,6 +48,7 @@ describe("PostgreSQL cutover evidence upgrade", () => {
         "042_account_deletion_product_records",
         "043_public_creation_bindings",
         "044_public_creation_binding_noop_projection",
+        "045_fractional_transcript_timing",
       ],
     });
     const upgraded = readVerifiedPostgresCutoverEvidence();
@@ -63,6 +64,7 @@ describe("PostgreSQL cutover evidence upgrade", () => {
         "042_account_deletion_product_records",
         "043_public_creation_bindings",
         "044_public_creation_binding_noop_projection",
+        "045_fractional_transcript_timing",
       ],
     });
     expect(upgraded.evidenceUpgrade?.validations).toEqual(expect.arrayContaining([
@@ -121,7 +123,7 @@ describe("PostgreSQL cutover evidence upgrade", () => {
 });
 
 function previousMigrations() {
-  return [...expectedPostgresMigrations].slice(0, -8);
+  return [...expectedPostgresMigrations].slice(0, 36);
 }
 
 function writeEvidence(migrations: string[]) {
@@ -206,11 +208,20 @@ function validPool(overrides: Partial<{
         return { rows: [{ definition: [
           "'publicCreationBindings'",
           "WHEN 'publicCreationBindings' THEN NULL;",
+          "NULLIF(segment#>>'{timing,startMs}', '')::numeric",
+          "NULLIF(segment#>>'{timing,endMs}', '')::numeric",
+          "NULLIF(segment->>'latencyMs', '')::numeric",
           "WHEN 'publicCreationBindings' THEN NULL;",
         ].join(" ") }] };
       }
       if (sql.includes("AS invalid_bindings")) {
         return { rows: [{ invalid_bindings: "0" }] };
+      }
+      if (sql.includes("FROM information_schema.columns")) {
+        return { rows: ["start_ms", "end_ms", "latency_ms"].map(column_name => ({ column_name, data_type: "numeric" })) };
+      }
+      if (sql.includes("AS timing_mismatches")) {
+        return { rows: [{ timing_mismatches: "0" }] };
       }
       if (sql.includes("AS incomplete_playback")) {
         return { rows: [{ invalid_attempts: "0", invalid_client_events: "0",
