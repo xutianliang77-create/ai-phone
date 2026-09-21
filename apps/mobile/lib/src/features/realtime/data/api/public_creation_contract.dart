@@ -1,4 +1,5 @@
 import 'dart:convert';
+import '../../../../platform/audio/device_speaker_diarizer.dart';
 import 'public_creation_request_store.dart';
 import 'realtime_session.dart';
 
@@ -141,7 +142,7 @@ Map<String, Object?> publicCreationBody(Map<String, Object?> offer,
     required String target,
     required bool autoReverse,
     required (String, String)? automaticLanguagePair,
-    required bool voice}) {
+    required bool voice, bool deviceSpeakerReady = false}) {
   final blocker = publicCreationCapabilityBlocker(offer,
       source: source,
       target: target,
@@ -173,7 +174,8 @@ Map<String, Object?> publicCreationBody(Map<String, Object?> offer,
     'targetLanguage': target,
     if (autoReverse) 'autoReverseTargetLanguage': true,
     'voiceOutput': voice,
-    'speakerAttribution': {'mode': 'off'},
+    'speakerAttribution': deviceSpeakerReady && deviceSpeakerOffered(offer['onDeviceSpeaker'])
+        ? deviceSpeakerSelection : {'mode': 'off'},
     if (voice) 'voice': {'mode': 'preset', 'presetId': offer['voicePresetId']},
     'processing': {
       'contractVersion': 1,
@@ -199,6 +201,11 @@ RealtimeSession publicCreationResponse(
   final body = record['body'] as Map<String, Object?>,
       expected = body['processing'],
       p = json['processing'];
+  final expectedSpeaker = (body['speakerAttribution'] as Map?)?['deviceProfile'] == null
+      ? null : body['speakerAttribution'];
+  if (publicCreationCanonical(expectedSpeaker) != publicCreationCanonical(json['speakerAttribution'])) {
+    throw const FormatException('Public device speaker response mismatch');
+  }
   if (expected is! Map ||
       p is! Map ||
       p['contractVersion'] != 1 ||
@@ -248,6 +255,7 @@ RealtimeSession publicCreationResponse(
       (claims['autoReverseTargetLanguage'] == true) !=
           (body['autoReverseTargetLanguage'] == true) ||
       claims['voiceOutput'] != body['voiceOutput'] ||
+      publicCreationCanonical(claims['speakerAttribution']) != publicCreationCanonical(expectedSpeaker) ||
       publicCreationCanonical(claims['voice']) !=
           publicCreationCanonical(body['voice']) ||
       publicCreationCanonical(claims['processing']) !=
@@ -267,5 +275,6 @@ RealtimeSession publicCreationResponse(
     throw const FormatException('Public token and response differ');
   }
   return RealtimeSession.fromJson(
-      {...json, 'publicScopeNotice': publicCreationScopeNotice});
+      {...json, 'publicScopeNotice': expectedSpeaker == null ? publicCreationScopeNotice :
+        '说话人由手机本地模型匿名区分，最多4位；不识别真实身份，不保留跨会话声纹。缺少证据时显示未知，ASR／翻译／朗读仍沿用当前在线组合。'});
 }

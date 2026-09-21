@@ -16,6 +16,7 @@ SOURCE_LANGUAGE="${SOURCE_LANGUAGE:-auto}"
 TARGET_LANGUAGE="${TARGET_LANGUAGE:-zh}"
 AUTO_REVERSE_TARGET_LANGUAGE="${AUTO_REVERSE_TARGET_LANGUAGE:-true}"
 AUTOMATIC_LANGUAGE_PAIR="${AUTOMATIC_LANGUAGE_PAIR:-}"
+ENABLE_DEVICE_SPEAKER="${ENABLE_DEVICE_SPEAKER:-false}"
 SOURCE_COMMIT="$(git -C "$ROOT_DIR" rev-parse HEAD)"
 SOURCE_TREE="$(git -C "$ROOT_DIR" rev-parse 'HEAD^{tree}')"
 CANDIDATE_ID="${CANDIDATE_ID:-wujie-ios-${SOURCE_COMMIT:0:7}-$BUILD_NUMBER}"
@@ -135,6 +136,16 @@ verify_vad_resource() {
   done
 }
 verify_vad_resource "$VAD_ROOT"
+if [[ "$ENABLE_DEVICE_SPEAKER" != true && "$ENABLE_DEVICE_SPEAKER" != false ]]; then
+  echo "ENABLE_DEVICE_SPEAKER must be true or false" >&2; exit 2
+fi
+verify_speaker_resource() {
+  [[ "$ENABLE_DEVICE_SPEAKER" == true ]] || return 0
+  node "$ROOT_DIR/scripts/lib/verify_ios_speaker_model.mjs" \
+    "$ROOT_DIR/release/public/1.1.0/ios-speaker-model-candidate.json" "$1/Models/Speaker/Sortformer_v2.1.mlmodelc"
+  cmp "$ROOT_DIR/release/public/1.1.0/SORTFORMER_NOTICE.txt" "$1/Models/Speaker/NOTICE.txt"
+}
+verify_speaker_resource "$MOBILE_DIR/ios/Runner"
 
 cd "$MOBILE_DIR"
 TRANSLATION_IOS_BUNDLE_ID="$PUBLIC_IOS_BUNDLE_ID" \
@@ -163,6 +174,7 @@ flutter build ios "--$BUILD_MODE" \
   --dart-define="SOURCE_TREE=$SOURCE_TREE" \
   --dart-define="SOURCE_STATE=clean" \
   --dart-define="WUJIE_PRODUCT_PROFILE=$PRODUCT_PROFILE" \
+  --dart-define="ENABLE_DEVICE_SPEAKER=$ENABLE_DEVICE_SPEAKER" \
   --dart-define="USE_MOCK_AUDIO=false"
 
 if ! git -C "$ROOT_DIR" diff --quiet ||
@@ -177,6 +189,7 @@ if [[ ! -d "$APP_PATH" ]]; then
   exit 1
 fi
 verify_vad_resource "$APP_PATH/Models/vad/silero-vad-unified-256ms-v6.0.0.mlmodelc"
+verify_speaker_resource "$APP_PATH"
 if find "$APP_PATH" -name 'Runner.debug.dylib' -print -quit | grep -q .; then
   echo "Traceable candidate cannot contain a Debug Flutter artifact" >&2
   exit 1
@@ -213,6 +226,7 @@ fi
 ditto "$APP_PATH" "$ARCHIVED_APP"
 codesign --verify --deep --strict "$ARCHIVED_APP"
 verify_vad_resource "$ARCHIVED_APP/Models/vad/silero-vad-unified-256ms-v6.0.0.mlmodelc"
+verify_speaker_resource "$ARCHIVED_APP"
 
 APP_SHA256="$(find "$ARCHIVED_APP" -type f -print0 | sort -z | xargs -0 shasum -a 256 | shasum -a 256 | awk '{print $1}')"
 SIGNING_DETAILS="$(codesign -dv --verbose=4 "$APP_PATH" 2>&1)"
@@ -224,6 +238,7 @@ BUILD_MODE="$BUILD_MODE" SERVER_BASE_URL="$SERVER_BASE_URL" \
 PRODUCT_PROFILE="$PRODUCT_PROFILE" \
 PUBLIC_DEPLOYMENT_ID="$PUBLIC_DEPLOYMENT_ID" \
 IOS_LOCAL_PROFILE_SHA256="$IOS_LOCAL_PROFILE_SHA256" \
+ENABLE_DEVICE_SPEAKER="$ENABLE_DEVICE_SPEAKER" \
 SOURCE_LANGUAGE="$SOURCE_LANGUAGE" TARGET_LANGUAGE="$TARGET_LANGUAGE" \
 AUTO_REVERSE_TARGET_LANGUAGE="$AUTO_REVERSE_TARGET_LANGUAGE" \
 AUTOMATIC_LANGUAGE_PAIR="$AUTOMATIC_LANGUAGE_PAIR" \

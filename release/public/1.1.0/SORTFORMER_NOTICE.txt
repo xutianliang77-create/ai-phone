@@ -1,0 +1,11 @@
+Sortformer v2.1 CoreML candidate for anonymous, session-local speaker diarization.
+Conversion publisher: FluidInference
+Source: https://huggingface.co/FluidInference/diar-streaming-sortformer-coreml
+Revision: ae9a27ab45dc0aa3abede7d2d6bad2b7a69aa6d1
+Original model: NVIDIA streaming Sortformer v2.1
+https://huggingface.co/nvidia/diar_streaming_sortformer_4spk-v2.1
+Publisher-declared license: Creative Commons Attribution 4.0 International
+https://creativecommons.org/licenses/by/4.0/
+Weights are unmodified. Wujie AI adds local resource hash validation, uploaded-PCM
+sample-clock mapping, bounded queues, and existing anonymous/overlap protections.
+This candidate is not a voiceprint enrollment or cross-session identity system.

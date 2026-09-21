@@ -20,6 +20,7 @@ export interface RealtimeEnv extends SpeakerRevisionEnv {
   nodeEnv: string;
   /** Same explicit deployment identity used by the S3 API; unset is legacy. */
   publicDeploymentId?: string;
+  publicDeviceSpeakerEnabled?: boolean;
   /** Public runtime remains off until an operator explicitly enables it. */
   publicRuntimeEnabled: boolean;
   /** Separate API-to-Gateway credential-material access secret; never a model key. */

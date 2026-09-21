@@ -54,6 +54,8 @@ export type SpeakerAttributionMode =
 
 export interface SpeakerAttributionOptionsDto {
   mode: SpeakerAttributionMode;
+  /** Explicit anonymous on-device profile, never a server voice-identity grant. */
+  deviceProfile?: string;
   maxSpeakers?: 2 | 3 | 4;
   allowVoiceIdentity?: boolean;
 }

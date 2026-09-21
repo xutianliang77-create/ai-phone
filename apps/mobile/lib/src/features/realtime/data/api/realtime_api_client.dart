@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:async';
 import 'dart:math';
+import '../../../../platform/audio/device_speaker_diarizer.dart';
 
 import 'package:http/http.dart' as http;
 
@@ -22,6 +23,7 @@ class RealtimeApiClient {
   static const Duration _defaultRequestTimeout = Duration(seconds: 8);
 
   RealtimeApiClient({
+    this.prepareDeviceSpeaker,
     required Uri baseUrl,
     http.Client? client,
     String mode = 'conversation',
@@ -69,6 +71,7 @@ class RealtimeApiClient {
   final Duration _requestTimeout;
   final AccountSessionStore _accountSessionStore;
   final String publicDeploymentId;
+  final Future<bool> Function()? prepareDeviceSpeaker;
   final PublicCreationRequestStore _publicCreationStore;
   Future<RealtimeSession>? _publicCreating;
   bool _publicResolving = false;

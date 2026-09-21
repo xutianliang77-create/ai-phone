@@ -87,7 +87,7 @@ extension RealtimePublicCreationApi on RealtimeApiClient {
     }
 
     final voice = _voiceOutputMode == 'natural';
-    final settings = publicCreationHash([
+    var settings = publicCreationHash([
       _mode,
       _sourceLanguage,
       _targetLanguage,
@@ -110,6 +110,10 @@ extension RealtimePublicCreationApi on RealtimeApiClient {
         autoReverse: _autoReverseTargetLanguage,
         automaticLanguagePair: _automaticLanguagePair);
     if (blocker != null) throw RealtimeApiException(blocker);
+    final speakerReady = deviceSpeakerOffered(offer['onDeviceSpeaker']) &&
+        prepareDeviceSpeaker != null && await prepareDeviceSpeaker!();
+    check();
+    if (speakerReady) settings = publicCreationHash([settings, deviceSpeakerProfile]);
     var record = await _creationWait(
         _publicCreationStore.pending(scope.storageKey), epoch);
     check();
@@ -125,7 +129,7 @@ extension RealtimePublicCreationApi on RealtimeApiClient {
           target: _targetLanguage,
           autoReverse: _autoReverseTargetLanguage,
           automaticLanguagePair: _automaticLanguagePair,
-          voice: voice);
+          voice: voice, deviceSpeakerReady: speakerReady);
       record = await _creationWait(
           _publicCreationStore.acquire(
               scope.storageKey, settings, body, offer['endpoint']! as String),

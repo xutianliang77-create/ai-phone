@@ -8,6 +8,7 @@ import type {SessionRecord} from "../sessions/session-record.js";
 import {validateCreateRealtimeSessionRequest} from "./create-session-request.js";
 import { getRepositoryRuntime } from "../../infrastructure/storage/repository-runtime.js";
 import { preparePostgresPublicCreation } from "./postgres-public-creation.repository.js";
+import { publicSpeakerSelectionAllowed } from "./public-device-speaker-policy.js";
 
 export function publicCreationInput(value:unknown) {
   if(!value||typeof value!=="object"||Array.isArray(value)||Object.keys(value).some(k=>!["processing","mode","sourceLanguage","targetLanguage",
@@ -16,7 +17,7 @@ export function publicCreationInput(value:unknown) {
   if(!parsed.ok)throw new ResultSyncError("public_creation_invalid",400);
   const input=parsed.value,p=input.processing;
   if(!p||p.processingMode!=="online"||
-    input.termbaseId||input.domainLexiconPacks?.length||input.speakerAttribution?.mode!=="off"||input.speakerAttribution?.allowVoiceIdentity||
+    input.termbaseId||input.domainLexiconPacks?.length||!publicSpeakerSelectionAllowed(input.speakerAttribution)||
     input.voice&&input.voice.mode!=="preset")throw new ResultSyncError("public_creation_capability_not_supported",503);
   return input;
 }

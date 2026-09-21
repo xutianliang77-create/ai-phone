@@ -98,6 +98,7 @@ export class PublicSessionEventSink implements SessionEventSink {
       await this.observe(this.phase,samples);
     });
   }
+  acceptedSamples() { return this.samples; }
   /**
    * A Provider error during final flush is not a normal session end. The
    * accepted-audio watermark is durable, but the supplier outcome must be

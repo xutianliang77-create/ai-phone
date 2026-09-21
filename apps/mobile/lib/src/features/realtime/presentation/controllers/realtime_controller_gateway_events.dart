@@ -9,6 +9,11 @@ extension RealtimeControllerGatewayEvents on RealtimeController {
         event.sessionId != activeSessionId) {
       return;
     }
+    if (event.type == 'speaker.unavailable') {
+      _message = event.message;
+      _notify();
+      return;
+    }
     if (event.type == 'error') {
       final message = _gatewayErrorMessage(event);
       if (event.stage == 'tts') {

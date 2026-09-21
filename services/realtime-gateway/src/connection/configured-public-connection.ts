@@ -65,9 +65,11 @@ export async function openConfiguredPublicConnection(env:RealtimeEnv,ws:WebSocke
     const scoped={sessionId:claims.sessionId,ownerId:claims.userId,deploymentId:binding.deploymentId,modelPolicyRevision:claims.processing!.modelPolicyRevision,
       leaseId:binding.leaseId,captureId:binding.captureId,languagePolicyKey:binding.languagePolicyKey,sampleRate:binding.sampleRate};
     const sessionInput={sessionId:claims.sessionId,userId:claims.userId,sourceLanguage:claims.sourceLanguage,targetLanguage:claims.targetLanguage,
+      ...(claims.speakerAttribution?{speakerAttribution:structuredClone(claims.speakerAttribution)}:{}),
       ...(claims.autoReverseTargetLanguage?{autoReverseTargetLanguage:true}:{}),voiceOutput:claims.voiceOutput,asrEndpointMode:claims.asrEndpointMode,
       ...(claims.processing!.languagePolicy.pair?{languagePair:[...claims.processing!.languagePolicy.pair] as [TranslationLanguageCode,TranslationLanguageCode]}:{})};
     built=new ProviderRouter().createConfiguredPublicSessionFromVerifiedClaims({snapshot,authorization,binding:scoped,session:sessionInput,
+      deviceSpeakerEnabled: env.publicDeviceSpeakerEnabled === true,
       authorizeConnection:async()=>{await admission.authorize(purpose());},resolveAsrCredentials:signal=>material.credentials("asr",purpose(),signal),
       resolveTranslationCredentials:signal=>material.credentials("translation","dispatch",signal),recordAttempt:event=>sink.modelAttempt!(event),
       fetchFn:options.modelFetchFn,socketFactory:options.asrSocketFactory,googleStreamFactory:options.googleStreamFactory,

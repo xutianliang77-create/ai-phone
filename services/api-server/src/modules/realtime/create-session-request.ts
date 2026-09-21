@@ -4,6 +4,7 @@ import {
   isTranslationLanguage,
   parseRealtimeProcessingRequest,
   processingMatchesSession,
+  isDeviceSpeakerSelection,
 } from "@translation/contracts";
 import type {
   CreateRealtimeSessionRequest,
@@ -159,6 +160,9 @@ function parseSpeakerAttribution(
   if (value === undefined) return null;
   if (!isRecord(value) || !speakerModes.has(value.mode as SpeakerAttributionMode)) {
     return false;
+  }
+  if (value.deviceProfile !== undefined) {
+    return isDeviceSpeakerSelection(value) ? { ...value } : false;
   }
   const maxSpeakers = value.maxSpeakers;
   if (maxSpeakers !== undefined &&

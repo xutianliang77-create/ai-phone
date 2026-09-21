@@ -1,5 +1,5 @@
 import { translateSingleTranscript } from "./lmstudio-transcript-translation.js";
-import type { AudioFrame, ServerRealtimeEvent } from "@translation/contracts";
+import type { AudioFrame, DeviceSpeakerEvidenceEvent, ServerRealtimeEvent } from "@translation/contracts";
 import { isDeepStrictEqual } from "node:util";
 import { OffLlmProvider } from "@translation/llm";
 import { MockAsrProvider } from "../../asr/mock-asr-provider.js";
@@ -39,8 +39,10 @@ export class LmStudioRealtimeProvider implements RealtimeProvider {
   private readonly speakerBoundaryRepair: PostAssemblySpeakerRepairCoordinator;
   private readonly publicSession?: RealtimeProviderSession;
   private publicSessionClaimed = false;
+  private readonly deviceSpeakerReceiver?: LmStudioRealtimeProviderOptions["deviceSpeakerReceiver"];
 
   constructor(options: LmStudioRealtimeProviderOptions) {
+    this.deviceSpeakerReceiver = options.deviceSpeakerReceiver;
     this.publicSession = options.publicSession ? structuredClone(options.publicSession) : undefined;
     this.name = options.providerName ?? "lmstudio";
     this.maxInputBatchAudioMs = options.maxInputBatchAudioMs;
@@ -84,6 +86,10 @@ export class LmStudioRealtimeProvider implements RealtimeProvider {
       if(!this.isCurrent(owned)||result.isFinal!==false)return;const text=cleanRealtimeText(result.text);if(!text)return;
       listener({type:"transcript.partial",sessionId,segmentId:result.segmentId,text,language:result.language,revision:0});
     })??(()=>{});
+  }
+  acceptDeviceSpeakerEvidence(event: DeviceSpeakerEvidenceEvent, acceptedSamples: number) {
+    const session = this.sessions.get(event.sessionId);
+    return !!session && this.isCurrent(session) && !!this.deviceSpeakerReceiver?.(event, acceptedSamples);
   }
 
   async *sendAudio(frame: AudioFrame): AsyncGenerator<ServerRealtimeEvent> {

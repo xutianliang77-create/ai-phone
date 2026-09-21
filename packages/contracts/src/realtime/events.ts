@@ -1,4 +1,5 @@
 import type { AudioFrame, AudioOutput } from "./audio.js";
+import type { DeviceSpeakerEvidenceEvent } from "./device-speaker.js";
 import type {
   RealtimeSessionDiagnosticsDto,
   SegmentVadContextDto,
@@ -166,6 +167,7 @@ export interface SessionVoiceOutputUpdatedEvent {
 
 export type ClientRealtimeEvent =
   | AudioFrame
+  | DeviceSpeakerEvidenceEvent
   | ClientTextSegmentEvent
   | { type: "audio.boundary"; sessionId: string; sequence: number }
   | { type: "session.pause"; sessionId: string }

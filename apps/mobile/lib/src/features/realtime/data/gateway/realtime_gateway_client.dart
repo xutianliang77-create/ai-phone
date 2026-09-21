@@ -5,6 +5,7 @@ import 'dart:math';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
 import '../../../../platform/audio/audio_frame.dart';
+import '../../../../platform/audio/device_speaker_diarizer.dart';
 import '../../../../platform/asr/asr_text_segment.dart';
 import '../api/realtime_session.dart';
 import 'gateway_realtime_event.dart';
@@ -18,6 +19,7 @@ part 'realtime_gateway_transport_events.dart';
 part 'realtime_gateway_control.dart';
 part 'realtime_gateway_public_recovery.dart';
 part 'realtime_gateway_reconnect_audio.dart';
+part 'realtime_gateway_device_speaker.dart';
 
 class RealtimeGatewayClient {
   static const Duration _connectTimeout = Duration(seconds: 8);
@@ -25,6 +27,7 @@ class RealtimeGatewayClient {
   static const Duration _endTimeout = Duration(seconds: 12);
 
   RealtimeGatewayClient({
+    this.deviceSpeaker,
     Duration publicStartTimeout = const Duration(seconds: 30),
     this.publicRecoverySocketAssembly = false,
     RealtimeReconnectBackoff reconnectBackoff =
@@ -41,6 +44,8 @@ class RealtimeGatewayClient {
       StreamController<GatewayRealtimeEvent>.broadcast();
   final RealtimeReconnectBackoff _reconnectBackoff;
   final Duration _publicStartTimeout;
+  final DeviceSpeakerDiarizer? deviceSpeaker;
+  final _speaker = _DeviceSpeakerState();
   /// Explicit host-test gate; the product default never auto-reconnects a
   /// public socket after transport loss.
   final bool publicRecoverySocketAssembly;
@@ -75,6 +80,7 @@ class RealtimeGatewayClient {
     _reconnectAudioBuffer.clear();
     _lastReconnectAudioDrain = RealtimeReconnectAudioDrain.empty;
     await _open(session);
+    await _startDeviceSpeaker(session);
   }
 
   Future<void> _open(RealtimeSession session, {bool expectPublicRecovery = false}) async {
@@ -185,6 +191,7 @@ class RealtimeGatewayClient {
     });
     if (sent && _session?.sessionId == sessionId) {
       _lastAudioSequence = frame.sequence;
+      _acceptSpeakerAudio(sessionId, frame);
     }
     return sent;
   }
@@ -255,13 +262,7 @@ class RealtimeGatewayClient {
           {String? presetId}) =>
       _setVoiceOutput(sessionId, enabled, presetId: presetId);
 
-  bool end(String sessionId) {
-    _manualClose = true;
-    _reconnectTimer?.cancel();
-    _stableConnectionTimer?.cancel();
-    _reconnectAudioBuffer.clear();
-    return _send({'type': 'session.end', 'sessionId': sessionId});
-  }
+  bool end(String sessionId) => _endSession(sessionId);
 
   Future<bool> endAndWait(
     String sessionId, {
@@ -280,6 +281,7 @@ class RealtimeGatewayClient {
       if (!completed.isCompleted) completed.complete(false);
     });
     try {
+      await _finishDeviceSpeaker(sessionId);
       if (!end(sessionId)) return false;
       return await completed.future.timeout(timeout);
     } catch (_) {
@@ -327,6 +329,7 @@ class RealtimeGatewayClient {
   }
 
   Future<void> _closeTransport() async {
+    unawaited(_cancelDeviceSpeaker());
     final started = _publicStarted;
     if (started != null && !started.isCompleted) {
       started.completeError(

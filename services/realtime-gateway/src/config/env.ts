@@ -43,6 +43,7 @@ export function loadEnv(): RealtimeEnv {
     ),
     nodeEnv: env.NODE_ENV?.trim() || "development",
     publicDeploymentId: env.API_RESULT_SYNC_DEPLOYMENT_ID || undefined,
+    publicDeviceSpeakerEnabled: parseBoolean(env.PUBLIC_DEVICE_SPEAKER_ENABLED, false),
     publicRuntimeEnabled: parseBoolean(env.PUBLIC_RUNTIME_ENABLED, false),
     publicCredentialAccessSecret: env.PUBLIC_GATEWAY_CREDENTIAL_ACCESS_SECRET,
     publicLiveQualificationFile: env.PUBLIC_RUNTIME_LIVE_QUALIFICATION_FILE,

@@ -20,6 +20,7 @@ export interface SessionEventSink {
   modelAttempt?(event:PublicModelAttemptEvent):Promise<void>;
   requiresConfirmation?: true;
   acceptAudio?(frame:AudioFrame):void;
+  acceptedSamples?(): number;
   confirmAudio?():Promise<void>;
   drain?():Promise<void>;
   record(event: ServerRealtimeEvent): Promise<void>;

@@ -12,6 +12,7 @@ import type {
   TermbaseTermDto,
   SpeakerAttributionOptionsDto,
   RealtimeSessionDiagnosticsDto,
+  DeviceSpeakerEvidenceEvent,
 } from "@translation/contracts";
 
 export interface RealtimeProviderSession {
@@ -52,6 +53,7 @@ export interface TextSegmentInput {
 }
 
 export interface RealtimeProvider {
+  acceptDeviceSpeakerEvidence?(event: DeviceSpeakerEvidenceEvent, acceptedSamples: number): boolean;
   setEventListener?(sessionId:string,listener:(event:ServerRealtimeEvent)=>void):()=>void;
   name: string;
   /** Supplier transport batch limit. This does not change the phone capture

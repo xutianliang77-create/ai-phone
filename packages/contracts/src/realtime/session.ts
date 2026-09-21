@@ -44,6 +44,8 @@ export interface CreateRealtimeSessionRequest {
 }
 
 export interface CreateRealtimeSessionResponse {
+  /** Optional signed selection for an explicitly enabled phone-local model. */
+  speakerAttribution?: SpeakerAttributionOptionsDto;
   /** Required for public creation; derive from the issued runtime lease, never
    * client preference. Legacy private clients retain their original default. */
   captureSampleRate?: 16000 | 24000;

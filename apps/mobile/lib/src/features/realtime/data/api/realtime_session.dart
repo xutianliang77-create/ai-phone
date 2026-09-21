@@ -9,6 +9,7 @@ class RealtimeSession {
     this.domainLexiconVersion,
     this.syncBinding,
     this.publicScopeNotice,
+    this.deviceSpeakerProfile,
   });
 
   final String sessionId;
@@ -20,6 +21,7 @@ class RealtimeSession {
   final String? domainLexiconVersion;
   final ResultSyncBinding? syncBinding;
   final String? publicScopeNotice;
+  final String? deviceSpeakerProfile;
 
   factory RealtimeSession.fromJson(Map<String, Object?> json) {
     return RealtimeSession(
@@ -37,6 +39,7 @@ class RealtimeSession {
           ? ResultSyncBinding.fromJson(json)
           : null,
       publicScopeNotice: json['publicScopeNotice'] as String?,
+      deviceSpeakerProfile: (json['speakerAttribution'] as Map?)?['deviceProfile'] as String?,
     );
   }
 }

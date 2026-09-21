@@ -39,6 +39,7 @@ const MIN_OVERLAP_EVIDENCE_MS = 160;
 export function reconcileSpeakerRevision(
   revision: SpeakerRevisionResult,
   segments: RevisableSpeakerSegment[],
+  stableSessionLabels?: Record<string, string>,
 ): SpeakerRevisionReconcileResult {
   const validation = validateSpeakerRevision(revision);
   if (validation) return rejected(validation);
@@ -49,9 +50,15 @@ export function reconcileSpeakerRevision(
   if (eligible.length === 0) return rejected("no_timed_segments");
 
   const spans = absoluteRevisionSpans(revision);
-  const labelMapping = mapRevisionLabels(spans, eligible);
+  // A streaming model already owns stable, anonymous slots within one session.
+  // Do not re-map those slots from an earlier (possibly unknown) ASR caption.
+  if (stableSessionLabels && spans.some(span =>
+    !/^device-speaker-[1-4]$/.test(span.speakerId) || stableSessionLabels[span.speakerId] !== span.speakerId)) {
+    return rejected("invalid_stable_session_labels");
+  }
+  const labelMapping = stableSessionLabels ?? mapRevisionLabels(spans, eligible);
   const updates = eligible.flatMap((segment) =>
-    updateForSegment(segment, spans, labelMapping)
+    updateForSegment(segment, spans, labelMapping, stableSessionLabels !== undefined)
   );
   return { accepted: true, updates, labelMapping };
 }
@@ -60,6 +67,7 @@ function updateForSegment(
   segment: RevisableSpeakerSegment,
   spans: SpeakerRevisionSpan[],
   labelMapping: Record<string, string>,
+  stableSessionLabels = false,
 ): SpeakerUpdatedEvent[] {
   const timing = segment.timing!;
   if (timing.overlap === true) return [];
@@ -102,9 +110,9 @@ function updateForSegment(
   const hasExplicitOverlap = overlapIds.length >= 2;
   const ambiguous = crossesBoundary || dominant.share < DOMINANT_SHARE;
   const existingKnownSpeaker = knownSpeaker(segment.speaker);
-  if (ambiguous && existingKnownSpeaker && !hasExplicitOverlap) return [];
+  if (ambiguous && existingKnownSpeaker && !hasExplicitOverlap && !stableSessionLabels) return [];
   const revisedSpeaker = ambiguous
-    ? existingKnownSpeaker ?? unknownSpeaker()
+    ? (stableSessionLabels ? unknownSpeaker() : existingKnownSpeaker ?? unknownSpeaker())
     : diarizedSpeaker(dominant.speakerId);
   const activeSpeakerIds = hasExplicitOverlap
     ? overlapIds

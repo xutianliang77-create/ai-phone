@@ -34,6 +34,16 @@ const frame=():AudioFrame=>{const f:AudioFrame={type:"audio.frame",sessionId:"se
   markAcceptedAudioRange(f,{startSample:0,endSample:4800});return f;};
 afterEach(async()=>{for(const p of active.splice(0))await p.closeSession("session");vi.restoreAllMocks();vi.useRealTimers();});
 describe("original Router assembles one bound public audio session",()=>{
+  it("phone speaker attribution is gated and reuses exactly one original ASR connection",async()=>{
+    const s=setup();s.options.session.speakerAttribution={mode:"diarization",maxSpeakers:4,allowVoiceIdentity:false,deviceProfile:"sortformer_v2_1_fastest"};
+    expect(s.create).toThrow();expect(s.socketFactory).not.toHaveBeenCalled();s.options.deviceSpeakerEnabled=true;
+    const provider=s.create();await provider.createSession(s.options.session);expect(s.socketFactory).toHaveBeenCalledTimes(1);
+    const partials:unknown[]=[];provider.setEventListener("session",e=>partials.push(e));
+    for await(const _ of provider.sendAudio(frame())){}
+    const events=[];for await(const e of provider.flushSession("session"))events.push(e);
+    expect(events.some(e=>e.type==="translation.final")).toBe(true);expect(s.socketFactory).toHaveBeenCalledTimes(1);
+    expect(s.recordAttempt.mock.calls.filter(c=>c[0].component==="asr"&&c[0].state==="confirmed")).toHaveLength(1);
+  });
   it.each(["openai_transcriptions","qwen_asr_compatible"])("rejects %s as a continuous session before any credential or network callback",protocol=>{
     const s=setup();Object.assign(s.options.snapshot.components.asr!,{protocol,vendor:protocol.startsWith("qwen")?"qwen":"openai"});
     expect(s.create).toThrow("requires_continuous_input");

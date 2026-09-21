@@ -1,4 +1,5 @@
 import { setupRealtimeConnection } from "./realtime-connection-setup.js";
+import { handleDeviceSpeakerEvidence, rejectRealtimeControlBackpressure } from "./realtime-connection-input-helpers.js";
 import type { PublicGatewayRuntimeOptions } from "./configured-public-connection.js";
 import type { SessionEndReason } from "@translation/contracts";
 import { AudioFrameBatcher } from "./audio-frame-batcher.js";
@@ -20,6 +21,7 @@ import { sendRealtimeEvent } from "./realtime-connection-admission.js";
 import { createRealtimeServerRuntime, listenRealtimeServerRuntime } from "./realtime-server-runtime.js";
 import { publicGatewayRuntimeOptions } from "./public-runtime-bootstrap.js";
 import { PublicSpeechInactivityWatchdog } from "./public-speech-inactivity-watchdog.js";
+import { DeviceSpeakerTimeline } from "../speaker/device-speaker-timeline.js";
 export { normalizeClientTextLanguage } from "../protocol/client-text-language.js";
 export function startWebSocketServer(options:{publicRuntime?:PublicGatewayRuntimeOptions}={}) {
   const runtime = createRealtimeServerRuntime();
@@ -42,7 +44,7 @@ export function startWebSocketServer(options:{publicRuntime?:PublicGatewayRuntim
     const flushTracker = new RealtimeFlushTracker();
     let outputSuppressed=false,recoveryResumeMatched=!configured.publicRecoveryConnection,recoveryResumeConfirmed=!configured.publicRecoveryConnection,
       recoveryFirstAudioAccepted=!configured.publicRecoveryConnection,publicSessionStarted=false;
-    let speechInactivity:PublicSpeechInactivityWatchdog|undefined;
+    let speechInactivity:PublicSpeechInactivityWatchdog|undefined, deviceSpeakerTimeline:DeviceSpeakerTimeline|undefined;
     const eventDispatcher = new RealtimeEventDispatcher({
       sendClient: (event) => sendRealtimeEvent(ws, event),
       eventSink: sessionEventSink,
@@ -55,6 +57,7 @@ export function startWebSocketServer(options:{publicRuntime?:PublicGatewayRuntim
         failPublicConnection();
       },
       afterSend: (event) => {
+        deviceSpeakerTimeline?.observe(event);
         if(event.type==="session.started"){
           configured.markStarted();
           publicSessionStarted=true;
@@ -82,6 +85,7 @@ export function startWebSocketServer(options:{publicRuntime?:PublicGatewayRuntim
       },
     });
     const sendRealtime = eventDispatcher.send;
+    if (configured.publicConnection && env.publicDeviceSpeakerEnabled) deviceSpeakerTimeline = new DeviceSpeakerTimeline(session.id,sendRealtime);
     const unsubscribeProvider=provider.setEventListener?.(session.id,event=>{
       if(ws.readyState===1&&!outputSuppressed&&getSession(session.id)?.connectionGeneration===generation&&getSession(session.id)?.status==="active")sendRealtime(event);
     })??(()=>{});
@@ -200,6 +204,7 @@ export function startWebSocketServer(options:{publicRuntime?:PublicGatewayRuntim
       }
       if(sessionEventSink.requiresConfirmation&&getSession(session.id)?.connectionGeneration!==generation)return;
 
+      if (handleDeviceSpeakerEvidence(event, session, sessionEventSink, provider, deviceSpeakerTimeline)) return;
       if(configured.publicRecoveryConnection){
         const bridge=configured.recoveryBridge;
         if(!bridge){sendRealtime(buildError("bad_event","Public recovery bridge is unavailable",{sessionId:session.id,stage:"session",retryable:false}));return;}
@@ -293,12 +298,7 @@ export function startWebSocketServer(options:{publicRuntime?:PublicGatewayRuntim
 
       function closeForControlBackpressure() {
         rateLimited = true;
-        sendRealtime(buildError("provider_unavailable", "Realtime control queue capacity reached", {
-          sessionId: session.id,
-          stage: "connection",
-          retryable: true,
-        }));
-        ws.close(1013, "control_queue_capacity_reached");
+        rejectRealtimeControlBackpressure(ws, sendRealtime, session.id);
       }
     });
 

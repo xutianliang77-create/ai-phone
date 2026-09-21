@@ -52,6 +52,7 @@ extension _RealtimeGatewayTransportEvents on RealtimeGatewayClient {
       }
     }
     if (event.type == 'session.ended') {
+      unawaited(_cancelDeviceSpeaker());
       _manualClose = true;
       _reconnectTimer?.cancel();
       _stableConnectionTimer?.cancel();
@@ -62,6 +63,7 @@ extension _RealtimeGatewayTransportEvents on RealtimeGatewayClient {
 
   void _handleDisconnect(int generation, [Object? error]) {
     if (generation != _connectionGeneration) return;
+    unawaited(_cancelDeviceSpeaker());
     final subscription = _subscription;
     final channel = _channel;
     _transportReady = false;

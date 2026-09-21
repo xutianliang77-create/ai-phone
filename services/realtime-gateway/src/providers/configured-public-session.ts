@@ -1,5 +1,5 @@
 import type {PublicModelAttemptEvent,RealtimeTokenClaims} from "@translation/contracts";
-import {publicAsrModelAutomaticLanguagePairSupported,publicProtocolCapability,publicProtocolSampleRateSupported,publicRuntimeTokenBinding} from "@translation/contracts";
+import {isDeviceSpeakerSelection,publicAsrModelAutomaticLanguagePairSupported,publicProtocolCapability,publicProtocolSampleRateSupported,publicRuntimeTokenBinding} from "@translation/contracts";
 import {isDeepStrictEqual} from "node:util";
 import {configuredStreamingAsr, type ConfiguredStreamingAsrOptions} from "../asr/configured-public-asr.js";
 import type {PublicSessionBinding} from "../sessions/public-session-event-sink.js";
@@ -8,8 +8,11 @@ import {LmStudioRealtimeProvider} from "./lmstudio/lmstudio-realtime-provider.js
 import type {RealtimeProviderSession} from "./realtime-provider.js";
 import {createConfiguredPublicTtsOutputQueue} from "../tts/realtime-tts-output-factory.js";
 import type {ConfiguredPublicTtsOptions} from "../tts/configured-public-tts.js";
+import { SpeakerAwareAsrProvider } from "../asr/speaker-aware-asr-provider.js";
+import { DeviceSpeakerAttributionProvider } from "../speaker/device-speaker-attribution-provider.js";
 
 export interface ConfiguredPublicSessionOptions {
+  deviceSpeakerEnabled?: boolean;
   snapshot: ConfiguredStreamingAsrOptions["snapshot"] & ConfiguredPublicTranslationOptions["snapshot"] & ConfiguredPublicTtsOptions["snapshot"];
   authorization: ConfiguredStreamingAsrOptions["authorization"];
   binding: PublicSessionBinding;
@@ -47,6 +50,8 @@ export function configuredPublicSessionComponents(options:ConfiguredPublicSessio
 export function configuredPublicSessionFromVerifiedClaims(options:ConfiguredPublicSessionOptions,claims:RealtimeTokenClaims){
   const token=publicRuntimeTokenBinding(claims,options.binding.deploymentId),b=options.binding;
   if(!token||claims.userId!==b.ownerId||claims.sessionId!==b.sessionId||
+    !isDeepStrictEqual(claims.speakerAttribution?.mode==="off"?undefined:claims.speakerAttribution,
+      options.session.speakerAttribution?.mode==="off"?undefined:options.session.speakerAttribution)||
     !isDeepStrictEqual(claims.processing,options.authorization)||claims.sourceLanguage!==options.session.sourceLanguage||
     claims.targetLanguage!==options.session.targetLanguage||
     (claims.autoReverseTargetLanguage===true)!==(options.session.autoReverseTargetLanguage===true)||claims.voiceOutput!==options.session.voiceOutput||
@@ -100,7 +105,8 @@ function assemblePublicSession(options:ConfiguredPublicSessionOptions,withOutput
     fail("public_session_language_not_supported");
   }
   if (session.asrHotwords?.length || session.asrCorrections?.length) fail("public_session_asr_hints_not_implemented");
-  if (session.speakerAttribution && session.speakerAttribution.mode !== "off") fail("public_session_speaker_not_implemented");
+  const deviceSpeaker = options.deviceSpeakerEnabled === true && isDeviceSpeakerSelection(session.speakerAttribution);
+  if (session.speakerAttribution && session.speakerAttribution.mode !== "off" && !deviceSpeaker) fail("public_session_speaker_not_implemented");
   if (session.speakerAttribution?.allowVoiceIdentity) fail("public_session_speaker_not_implemented");
   if (session.asrEndpointMode !== undefined && !["conversation", "listening"].includes(session.asrEndpointMode)) {
     fail("public_session_endpoint_mode_not_supported");
@@ -132,14 +138,18 @@ function assemblePublicSession(options:ConfiguredPublicSessionOptions,withOutput
   const translationClient = configuredPublicTranslation({snapshot, authorization, deploymentId: binding.deploymentId,
     resolveCredentials: options.resolveTranslationCredentials, fetchFn: options.fetchFn,
     attemptRecorder: {sessionId: binding.sessionId, leaseId: binding.leaseId, providerId: mt!.vendor, record}});
-  const asrProvider = configuredStreamingAsr({snapshot, authorization, deploymentId: binding.deploymentId,
+  const baseAsr = configuredStreamingAsr({snapshot, authorization, deploymentId: binding.deploymentId,
     sessionId: binding.sessionId, leaseId: binding.leaseId, record,
     authorizeConnection: options.authorizeConnection, resolveCredentials: options.resolveAsrCredentials, socketFactory: options.socketFactory,googleStreamFactory:options.googleStreamFactory});
+  const phoneSpeaker = deviceSpeaker ? new DeviceSpeakerAttributionProvider(binding.sessionId, binding.sampleRate) : undefined;
+  const asrProvider = phoneSpeaker ? new SpeakerAwareAsrProvider(baseAsr, phoneSpeaker, undefined, undefined,
+    {enabled:false,maxSessions:0,maxDurationMs:0,maxRecords:0}) : baseAsr;
   const ttsOutput=options.output?createConfiguredPublicTtsOutputQueue({snapshot,authorization,deploymentId:binding.deploymentId,
     sessionId:binding.sessionId,leaseId:binding.leaseId,record,prefillMs:options.output.prefillMs,
     resolveCredentials:options.output.resolveCredentials,fetchFn:options.output.fetchFn,socketFactory:options.output.socketFactory},options.output.isSessionActive,options.output.maxPendingOutputs):undefined;
   const provider=new LmStudioRealtimeProvider({providerName: `public:${mt!.vendor}`, baseUrl: mt!.endpoint, model: mt!.modelId,
     timeoutMs: mt!.timeoutMs, maxTokens: mt!.maxTokens, asrProvider, translationClient, publicSession: session,
+    ...(phoneSpeaker?{deviceSpeakerReceiver:phoneSpeaker.accept.bind(phoneSpeaker)}:{}),
     // Keep one transport batch below Qwen's 400ms server-VAD silence window,
     // so a durable attempt cannot straddle two supplier-owned speech turns.
     ...(snapshot.components.asr?.protocol==="qwen_asr_realtime"?{maxInputBatchAudioMs:100}:{}),

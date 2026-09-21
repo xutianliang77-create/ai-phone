@@ -17,6 +17,7 @@ import UIKit
   )
   private let ocrBridge = OcrBridge()
   private let storeKitBridge = StoreKitBridge()
+  private let deviceSpeakerBridge = DeviceSpeakerBridge()
 
   override func application(
     _ application: UIApplication,
@@ -27,6 +28,10 @@ import UIKit
 
   func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
     GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
+    if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "DeviceSpeakerBridge") {
+      deviceSpeakerBridge.register(messenger: registrar.messenger())
+    }
+    DeviceSpeakerFileProbe.startIfRequested()
     if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "AppleSpeechAsrBridge") {
       appleSpeechAsrBridge.register(messenger: registrar.messenger())
     }

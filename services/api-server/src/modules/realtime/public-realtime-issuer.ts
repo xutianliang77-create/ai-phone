@@ -64,6 +64,7 @@ export async function issuePublicRealtimeSession(sessionId:string,ownerId:string
         const claims:RealtimeTokenClaims={userId:ownerId,sessionId,mode:input.mode,asrEndpointMode:["meeting","classroom"].includes(input.mode)?"listening":"conversation",
           sourceLanguage:input.sourceLanguage,targetLanguage:input.targetLanguage,voiceOutput:input.voiceOutput,
           ...(input.autoReverseTargetLanguage?{autoReverseTargetLanguage:true}:{}),
+          ...(input.speakerAttribution?.deviceProfile?{speakerAttribution:structuredClone(input.speakerAttribution)}:{}),
           ...(input.voiceOutput?{voice:{mode:"preset",presetId:config.components.tts!.voice}}:{}),planCode:hold.balance.planCode,
           ...(maxDurationSeconds!==undefined?{maxDurationSeconds}:{}),issuedAt,expiresAt,processing:structuredClone(current.processingAuthorization!),
           publicRuntime:{deploymentId:settings.deploymentId,leaseId:lease.leaseId,captureId:lease.captureId,languagePolicyKey:lease.languagePolicyKey,
@@ -89,6 +90,7 @@ export async function issuePublicRealtimeSession(sessionId:string,ownerId:string
     return {sessionId,realtimeToken:createRealtimeToken(claims,settings.secret),endpoint:committedIssuance.endpoint,
       expiresAt:new Date(claims.expiresAt*1000).toISOString(),...(claims.maxDurationSeconds!==undefined?{maxDurationSeconds:claims.maxDurationSeconds}:{}),
       captureSampleRate:claims.publicRuntime!.sampleRate,deploymentId:claims.publicRuntime!.deploymentId,ownerId,
+      ...(claims.speakerAttribution?.deviceProfile?{speakerAttribution:structuredClone(claims.speakerAttribution)}:{}),
       processing:structuredClone(claims.processing!)};
   });
 }

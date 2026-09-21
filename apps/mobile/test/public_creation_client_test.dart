@@ -11,6 +11,7 @@ import 'package:translation_mobile/src/features/realtime/data/api/public_creatio
 import 'package:translation_mobile/src/features/realtime/data/api/public_creation_contract.dart';
 import 'package:translation_mobile/src/features/realtime/data/realtime_repository.dart';
 import 'package:translation_mobile/src/features/realtime/data/gateway/realtime_gateway_client.dart';
+import 'package:translation_mobile/src/platform/audio/device_speaker_diarizer.dart';
 
 const origin = 'https://public.synthetic.invalid';
 AccountSession account([String owner = 'owner']) => AccountSession(token: 'SYNTHETIC_LOGIN_$owner', expiresAtIso: '2099-01-01T00:00:00Z', deploymentId: 'public', ownerId: owner, issuerOrigin: origin);
@@ -28,10 +29,12 @@ Map<String, Object?> response(http.Request request, String owner) {
   final expiry = DateTime.now().toUtc().add(const Duration(minutes: 5)).millisecondsSinceEpoch ~/ 1000;
   final id = 'public-${request.headers['idempotency-key']}';
   final claims = {'sessionId': id, 'userId': owner, 'mode': body['mode'], 'sourceLanguage': body['sourceLanguage'], 'targetLanguage': body['targetLanguage'],
+    if ((body['speakerAttribution'] as Map?)?['deviceProfile'] != null) 'speakerAttribution': body['speakerAttribution'],
     'voiceOutput': body['voiceOutput'], if (body['voice'] != null) 'voice': body['voice'], 'processing': p,
     'issuedAt': expiry - 300, 'expiresAt': expiry, 'publicRuntime': {'deploymentId': 'public', 'leaseId': 'lease', 'captureId': 'capture',
       'languagePolicyKey': 'language', 'sampleRate': 16000, 'configurationRevision': 1, 'configurationHash': 'a' * 64}};
   return {'sessionId': id, 'realtimeToken': '${base64Url.encode(utf8.encode(jsonEncode(claims))).replaceAll('=', '')}.c3ludGhldGlj',
+    if (claims['speakerAttribution'] != null) 'speakerAttribution': claims['speakerAttribution'],
     'endpoint': 'wss://gateway.synthetic.invalid/realtime', 'expiresAt': DateTime.fromMillisecondsSinceEpoch(expiry * 1000, isUtc: true).toIso8601String(),
     'ownerId': owner, 'deploymentId': 'public', 'captureSampleRate': 16000, 'processing': p};
 }
@@ -45,8 +48,9 @@ class Harness {
   Map<String, Object?>? context;
   int contexts = 0;
   late final store = PublicCreationRequestStore(directory: directory);
-  RealtimeApiClient create({String source = 'zh', String voice = 'off', Duration timeout = const Duration(seconds: 1)}) {
+  RealtimeApiClient create({String source = 'zh', String voice = 'off', Duration timeout = const Duration(seconds: 1), Future<bool> Function()? prepareSpeaker}) {
     final client = RealtimeApiClient(baseUrl: Uri.parse(origin), publicDeploymentId: 'public', sourceLanguage: source, targetLanguage: 'en',
+      prepareDeviceSpeaker: prepareSpeaker,
       voiceOutputMode: voice, accountSessionStore: accounts, publicCreationRequestStore: store, requestTimeout: timeout,
       client: MockClient((request) async {
         requests.add(request);expect(request.followRedirects, isFalse);
@@ -67,6 +71,32 @@ class Gateway extends RealtimeGatewayClient {
   @override void dispose() {}
 }
 void main() {
+  const speakerOffer = {'available':true,'id':deviceSpeakerProfile,'revision':deviceSpeakerRevision,
+    'maxSpeakers':4,'execution':'on_device','anonymousOnly':true,'requiresLocalReadiness':true};
+  test('speaker preparation completes before creation and exact selection returns in signed response', () async {
+    final h=Harness();addTearDown(h.close);h.context={...offer('owner',false),'onDeviceSpeaker':speakerOffer};
+    final prepared=Completer<bool>(),client=h.create(prepareSpeaker:()=>prepared.future);
+    final future=client.createSession();await Future<void>.delayed(const Duration(milliseconds:20));
+    expect(h.requests.where((r)=>r.method=='POST'),isEmpty);prepared.complete(true);
+    final session=await future;expect(session.deviceSpeakerProfile,deviceSpeakerProfile);
+    final body=jsonDecode(h.requests.singleWhere((r)=>r.method=='POST').body);
+    expect(body['speakerAttribution'],deviceSpeakerSelection);
+  });
+  test('missing local resource keeps cloud ASR/MT usable with speaker off', () async {
+    final h=Harness();addTearDown(h.close);h.context={...offer('owner',false),'onDeviceSpeaker':speakerOffer};
+    final session=await h.create(prepareSpeaker:() async=>false).createSession();
+    expect(session.deviceSpeakerProfile,isNull);
+    expect(jsonDecode(h.requests.singleWhere((r)=>r.method=='POST').body)['speakerAttribution'],{'mode':'off'});
+  });
+  test('server off gate never loads the speaker model', () async {
+    final h=Harness();addTearDown(h.close);int preparations=0;
+    await h.create(prepareSpeaker:() async {preparations++;return true;}).createSession();expect(preparations,0);
+  });
+  test('stripped speaker selection in response fails exact binding check', () async {
+    final h=Harness();addTearDown(h.close);h.context={...offer('owner',false),'onDeviceSpeaker':speakerOffer};
+    h.post=(r) async {final value=response(r,'owner')..remove('speakerAttribution');return http.Response(jsonEncode(value),200);};
+    await expectLater(h.create(prepareSpeaker:() async=>true).createSession(),throwsA(isA<FormatException>()));
+  });
   test('emits the shared public creation v1 request fixture', () {
     final fixture = jsonDecode(File(
             '../../packages/contracts/fixtures/public-creation-v1.json')

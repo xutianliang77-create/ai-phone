@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import '../../../app/app_config.dart';
 import '../../../platform/audio/audio_frame.dart';
+import '../../../platform/audio/device_speaker_diarizer.dart';
 import '../../../platform/asr/asr_text_segment.dart';
 import '../domain/entities/subtitle_segment.dart';
 import 'api/realtime_api_client.dart';
@@ -39,8 +40,10 @@ class RealtimeRepository {
 
   factory RealtimeRepository.fromConfig(AppConfig config) {
     final autoReverseTargetLanguage = shouldAutoReverseRealtimeSession(config);
+    final gateway = RealtimeGatewayClient(deviceSpeaker: createDeviceSpeakerDiarizer());
     return RealtimeRepository(
       apiClient: RealtimeApiClient(
+        prepareDeviceSpeaker: gateway.prepareDeviceSpeaker,
         baseUrl: config.apiBaseUrl,
         mode: config.realtimeMode,
         sourceLanguage: config.sourceLanguage,
@@ -54,7 +57,7 @@ class RealtimeRepository {
         voicePresetId: config.realtimeVoicePresetId,
         domainLexiconPack: config.domainLexiconPack,
       ),
-      gatewayClient: RealtimeGatewayClient(),
+      gatewayClient: gateway,
       finalizationOutbox: FileRealtimeFinalizationOutbox(),
       targetLanguage: config.targetLanguage,
     );

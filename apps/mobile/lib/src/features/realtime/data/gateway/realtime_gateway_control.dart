@@ -1,6 +1,13 @@
 part of 'realtime_gateway_client.dart';
 
 extension RealtimeGatewayControl on RealtimeGatewayClient {
+  bool _endSession(String sessionId) {
+    _manualClose = true;
+    _reconnectTimer?.cancel();
+    _stableConnectionTimer?.cancel();
+    _reconnectAudioBuffer.clear();
+    return _send({'type': 'session.end', 'sessionId': sessionId});
+  }
   Future<bool> _commitAudioBoundary(String sessionId, Duration timeout) async {
     if (_session?.sessionId != sessionId ||
         _session?.syncBinding == null ||

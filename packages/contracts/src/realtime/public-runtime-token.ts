@@ -1,5 +1,6 @@
 import type {RealtimeTokenClaims} from "./session.js";
 import {parseRealtimeProcessingRequest,processingMatchesSession} from "./processing-contract.js";
+import { isDeviceSpeakerSelection } from "./device-speaker.js";
 
 /** Signed projection of an existing server lease, not a new grant or credential. */
 export interface PublicRuntimeTokenBinding {
@@ -11,6 +12,9 @@ const key=(v:unknown):v is string=>typeof v==="string"&&v.length>0&&v.length<=24
 /** Use only AFTER verifying the token signature and expiration. This verifies
  * binding syntax/consistency; stored grant/lease/revocation checks remain mandatory. */
 export function publicRuntimeTokenBinding(claims:RealtimeTokenClaims,deploymentId:string):PublicRuntimeTokenBinding|null {
+  const speaker=claims?.speakerAttribution;
+  if(speaker&&!isDeviceSpeakerSelection(speaker)&&
+    (speaker.mode!=="off"||speaker.allowVoiceIdentity||speaker.deviceProfile!==undefined))return null;
   const p=claims?.processing,b=claims?.publicRuntime;
   if(!key(deploymentId)||!p||!b||typeof b!=="object"||Array.isArray(b)||
     Object.keys(p).some(k=>!["contractVersion","processingMode","modelPolicyRevision","languagePolicy","executionPlan","syncPermission","publicGrantRef"].includes(k))||

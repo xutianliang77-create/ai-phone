@@ -5,6 +5,7 @@ import {publicDeploymentId} from "../sessions/session-result-sync.service.js";
 import {PublicConfigError} from "../models/public-model-config.js";
 import {publicProtocolCapability} from "@translation/contracts";
 import type {PublicRealtimeAuthority} from "./public-realtime-coordinator.js";
+import { publicDeviceSpeakerCapability, publicDeviceSpeakerEnabled } from "./public-device-speaker-policy.js";
 
 /** Authenticated mobile request context, not the administrator model catalogue.
  * No model URLs, keys, grant, provider budget or inference are exposed/created. */
@@ -25,10 +26,11 @@ export function registerPublicCreationContextRoute(app:FastifyInstance,available
       return {contractVersion:1,deploymentId,ownerId:account.id,configurationRevision:configuration.configurationRevision,
         modelPolicyRevision:configuration.modelPolicyRevision,executionPlan:configuration.executionPlan,captureSampleRate:configuration.components.asr!.sampleRate,
         endpoint:endpoint.toString(),voiceOutput,...(voiceOutput?{voicePresetId:configuration.components.tts!.voice}:{}),
+        onDeviceSpeaker: publicDeviceSpeakerCapability(),
         status:qualified?.status==="not_qualified"?"not_qualified":"configured_not_verified",
         ...(qualified?{capability:{status:qualified.status,qualifiedLanguagePairs:qualified.qualifiedLanguagePairs,
           automaticLanguage:qualified.automaticLanguage,automaticReverse:qualified.automaticReverse}}:{}),
-        limitations:["configured_voice_only","speaker_and_termbase_not_supported","lost_socket_safe_stop_only",
+        limitations:["configured_voice_only",...(publicDeviceSpeakerEnabled()?["termbase_not_supported","speaker_requires_local_model"]:["speaker_and_termbase_not_supported"]),"lost_socket_safe_stop_only",
           ...(qualified?.automaticLanguage===true?[]:["automatic_language_not_qualified"]),
           ...(qualified?.automaticReverse===true?[]:["automatic_reverse_not_qualified"]),
           ...(qualified?.status==="not_qualified"?["configuration_not_qualified"]:[])]};
