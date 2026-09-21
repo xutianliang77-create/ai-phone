@@ -32,23 +32,36 @@ DeviceSpeakerDiarizer? createDeviceSpeakerDiarizer() =>
 /// Same uploaded PCM, no microphone or model-download API. A failed candidate
 /// remains an anonymous-speaker session; cloud ASR/MT selection never changes.
 class NativeDeviceSpeakerDiarizer implements DeviceSpeakerDiarizer {
-  NativeDeviceSpeakerDiarizer({MethodChannel? channel, Stream<dynamic>? stream})
+  NativeDeviceSpeakerDiarizer({MethodChannel? channel, Stream<dynamic>? stream,
+      this.readinessWait = const Duration(milliseconds: 1500)})
       : _channel = channel ?? const MethodChannel('translation_mobile/device_speaker'),
         _stream = stream ?? const EventChannel('translation_mobile/device_speaker/events').receiveBroadcastStream();
   final MethodChannel _channel;
   final Stream<dynamic> _stream;
+  final Duration readinessWait;
+  Future<bool>? _preparation;
   int _request = 0;
   @override
   Stream<Map<String, Object?>> get events => _stream.map((e) => Map<String, Object?>.from(e as Map));
   @override
   Future<bool> prepare() async {
+    // First CoreML/ANE preparation can be slow. Never make cloud ASR wait for
+    // it: the current session stays anonymous, and a later start rechecks the
+    // same completed local preparation. There is no mid-session model switch.
+    final loading = _preparation ??= _prepareOnce();
+    return loading.timeout(readinessWait, onTimeout: () => false);
+  }
+  Future<bool> _prepareOnce() async {
     final id = 'speaker-${DateTime.now().microsecondsSinceEpoch}-${++_request}';
     try {
       final result = await _channel.invokeMapMethod<String, Object?>('prepare', {'requestId': id})
-          .timeout(const Duration(seconds: 45));
-      return result?['ready'] == true && result?['profile'] == deviceSpeakerProfile &&
+          .timeout(const Duration(minutes: 3));
+      final ready = result?['ready'] == true && result?['profile'] == deviceSpeakerProfile &&
           result?['modelRevision'] == deviceSpeakerRevision && result?['maxSpeakers'] == 4;
+      if (!ready) _preparation = null;
+      return ready;
     } catch (_) {
+      _preparation = null;
       unawaited(_channel.invokeMethod<void>('cancelPreparation', {'requestId': id}).catchError((Object _) {}));
       return false;
     }
