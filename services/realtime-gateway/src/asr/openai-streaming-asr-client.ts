@@ -10,21 +10,10 @@ import {qwenAsrSessionConfiguration,assertQwenAsrConfiguration,qwenTranscriptLan
 import {TencentAsrWire} from "./tencent-streaming-asr.js";
 import {GoogleAsrWire,type GoogleAsrStreamFactory} from "./google-streaming-asr.js";
 import {realtimeLogger} from "../metrics/realtime-metrics.js";
-import {streamingAsrFailureDiagnostic} from "./streaming-asr-diagnostics.js";
-type Result=ReturnType<typeof parseOpenAiAsr>;
+import {streamingAsrFailureDiagnostic,streamingAsrCancellationContext,streamingAsrCloseContext,streamingAsrTransportContext,
+  isStreamingAsrFailureEvent,streamingAsrProviderContext,type StreamingAsrFailureContext} from "./streaming-asr-diagnostics.js";
+import {deferred,type State,type Turn,type Result} from "./streaming-asr-state.js";
 const key=(value:unknown):value is string=>typeof value==="string"&&/^[A-Za-z0-9_.:/-]{1,240}$/.test(value);
-function deferred<T>(){let resolve!:(value:T)=>void,reject!:(error:unknown)=>void;const promise=new Promise<T>((r,j)=>{resolve=r;reject=j;});void promise.catch(()=>{});return {promise,resolve,reject};}
-type Turn={event:PublicModelAttemptEvent;prepared:boolean;sent:boolean;terminal:boolean;committing:boolean;ack:boolean;itemId?:string;previousItem?:string;
-  providerItemId?:string;providerCreated?:boolean;providerStartSample?:number;providerEndSample?:number;partial:string;confirmedPrefix?:string;
-  detectedLanguage?:TranslationLanguageCode;result?:Result;done:ReturnType<typeof deferred<Result>>;finalizing?:Promise<void>};
-/** Qwen server-VAD may emit many semantic items inside one continuous supplier
- * socket. This is the one durable input attempt for that socket; individual
- * VAD items are display/translation segments, not overlapping ASR charges. */
-type QwenTransport={event:PublicModelAttemptEvent;prepared:boolean;sent:boolean;terminal:boolean;finalizing?:Promise<void>};
-type State={ws?:WebSocket;stop:AbortController;ready:ReturnType<typeof deferred<void>>;configured:boolean;failure?:PublicAsrError;cursor:number;sequence:number;
-  turn?:Turn;qwenTransport?:QwenTransport;lastItem?:string;seen:Set<string>;busy:boolean;removeAbort:()=>void;wireSessionId?:string;wireEvents?:Set<string>;
-  pendingWireEvents:Record<string,any>[];completed:TranscriptResult[];finalization:Promise<void>;finishing:boolean;providerFinished:boolean;
-  finished:ReturnType<typeof deferred<void>>;tencentWire?:TencentAsrWire|GoogleAsrWire;lastWireType?:unknown;lastWireLanguage?:unknown};
 export interface StreamingAsrOptions {sessionId:string;leaseId:string;endpoint:string;model:string;language:LanguageCode;timeoutMs:number;
   wireProfile?:"openai_realtime_asr"|"qwen_asr_realtime"|"tencent_asr_ws"|"google_speech_v2";appId?:string;
   projectId?:string;location?:string;recognizer?:string;languageLocales?:Record<string,string>;sampleRate?:16000|24000;
@@ -63,7 +52,7 @@ export class OpenAiStreamingAsrClient {
     await this.closeSession(session.sessionId);
     const s:State={stop:new AbortController(),ready:deferred<void>(),configured:false,cursor:0,sequence:-1,seen:new Set(),busy:false,removeAbort:()=>{},
       pendingWireEvents:[],completed:[],finalization:Promise.resolve(),finishing:false,providerFinished:false,finished:deferred<void>()};this.state=s;
-    const cancel=()=>this.fail(s,"public_asr_stream_closed");signal.addEventListener("abort",cancel,{once:true});s.removeAbort=()=>signal.removeEventListener("abort",cancel);
+    const cancel=()=>{if(!s.providerFinished)this.fail(s,"public_asr_stream_closed",streamingAsrCancellationContext(signal));};signal.addEventListener("abort",cancel,{once:true});s.removeAbort=()=>signal.removeEventListener("abort",cancel);
     if(signal.aborted)cancel();
     const timer=setTimeout(()=>this.fail(s,"public_asr_stream_setup_timeout"),this.options.timeoutMs);
     try{
@@ -76,10 +65,15 @@ export class OpenAiStreamingAsrClient {
       const url=new URL(this.options.endpoint);url.searchParams.set("model",this.options.model);
       s.ws=(this.options.socketFactory??((url,opts)=>new WebSocket(url,opts)))(url.toString(),{headers:{Authorization:`Bearer ${credentials.apiKey}`},
         handshakeTimeout:this.options.timeoutMs,maxPayload:262144,perMessageDeflate:false,followRedirects:false});
-      s.ws.on("error",()=>this.fail(s,"public_asr_stream_transport"));s.ws.on("close",()=>{if(!s.providerFinished)this.fail(s,"public_asr_stream_closed");});
+      s.ws.on("error",error=>this.fail(s,"public_asr_stream_transport",streamingAsrTransportContext(error)));
+      s.ws.on("close",(code,reason)=>{if(!s.providerFinished)this.fail(s,"public_asr_stream_closed",streamingAsrCloseContext(code,reason));});
       s.ws.on("message",(data,isBinary)=>{if(this.state!==s||s.failure)return;try{if(isBinary||Buffer.byteLength(data.toString())>262144)throw Error();
-        const event=JSON.parse(data.toString());if(this.qwen&&s.configured&&!s.finishing&&(s.busy||s.turn?.finalizing||!s.turn)){if(s.pendingWireEvents.length>=4096)throw Error();s.pendingWireEvents.push(event);}
-        else this.receiveWireEvent(s,event);}catch{this.fail(s,"public_asr_stream_protocol");}});
+        const event=JSON.parse(data.toString());
+        // Fatal/control events do not depend on a pending audio turn. Preserve
+        // the first cause before a following socket close can hide it.
+        if(isStreamingAsrFailureEvent(event)){s.lastWireType=event.type;this.fail(s,"public_asr_stream_provider_error",streamingAsrProviderContext(event));return;}
+        if(this.qwen&&event?.type!=="session.finished"&&s.configured&&!s.finishing&&(s.busy||s.turn?.finalizing||!s.turn)){if(s.pendingWireEvents.length>=4096)throw Error();s.pendingWireEvents.push(event);}
+        else this.receiveWireEvent(s,event);}catch{this.fail(s,"public_asr_stream_protocol",{origin:"protocol"});}});
       s.ws.once("open",()=>{void this.send(s,{type:"session.update",session:this.qwen?qwenAsrSessionConfiguration(this.options.language):{type:"transcription",audio:{input:{format:{type:"audio/pcm",rate:24000},
         transcription:this.transcription(),turn_detection:null}}}}).catch(()=>this.fail(s,"public_asr_stream_setup"));});
       await abortable(s.ready.promise,s.stop.signal);this.assert(s);
@@ -105,7 +99,7 @@ export class OpenAiStreamingAsrClient {
       s.turn?.committing||(s.turn?.event.audioEndSample??s.cursor)-(s.turn?.event.audioStartSample??s.cursor)+pcm.length/2>this.rate*(this.qwen?3600:30)){
       this.fail(s,"public_asr_stream_audio_invalid");throw s.failure!;
     }
-    s.busy=true;const cancelled=()=>this.fail(s,"public_asr_stream_cancelled");signal?.addEventListener("abort",cancelled,{once:true});
+    s.busy=true;const cancelled=()=>this.fail(s,"public_asr_stream_cancelled",streamingAsrCancellationContext(signal));signal?.addEventListener("abort",cancelled,{once:true});
     const timer=setTimeout(()=>this.fail(s,"public_asr_stream_append_timeout"),this.options.timeoutMs);
     try{
       if(signal?.aborted)throw Error("aborted");
@@ -144,7 +138,7 @@ export class OpenAiStreamingAsrClient {
       pcm.toString("base64")!==request.data||!Number.isSafeInteger(request.sequence)||request.sequence<=s.sequence||!Number.isFinite(request.timestampMs)||request.timestampMs<0||
       !request.acceptedAudioRange||request.acceptedAudioRange.startSample!==s.cursor||request.acceptedAudioRange.endSample!==s.cursor+pcm.length/2||
       reservedEnd-reservedStart+pcm.length/2>this.rate*3600){this.fail(s,"public_asr_stream_audio_invalid");throw s.failure!;}
-    s.busy=true;const cancelled=()=>this.fail(s,"public_asr_stream_cancelled");signal?.addEventListener("abort",cancelled,{once:true});
+    s.busy=true;const cancelled=()=>this.fail(s,"public_asr_stream_cancelled",streamingAsrCancellationContext(signal));signal?.addEventListener("abort",cancelled,{once:true});
     const timer=setTimeout(()=>this.fail(s,"public_asr_stream_append_timeout"),this.options.timeoutMs);
     try{
       if(signal?.aborted)throw Error("aborted");
@@ -163,7 +157,7 @@ export class OpenAiStreamingAsrClient {
     if(this.qwen)return this.flushQwenServerVad(s,request.finishSession===true,signal);
     const turn=s.turn;if(!turn)return null;
     if(turn.event.audioEndSample!-turn.event.audioStartSample!<this.rate/10){this.fail(s,"public_asr_stream_turn_too_short");await this.finish(turn);throw s.failure!;}
-    s.busy=true;const cancelled=()=>this.fail(s,"public_asr_stream_cancelled");signal?.addEventListener("abort",cancelled,{once:true});
+    s.busy=true;const cancelled=()=>this.fail(s,"public_asr_stream_cancelled",streamingAsrCancellationContext(signal));signal?.addEventListener("abort",cancelled,{once:true});
     const timer=setTimeout(()=>this.fail(s,"public_asr_stream_commit_timeout"),this.options.timeoutMs);
     try{
       if(signal?.aborted)throw Error();
@@ -188,7 +182,7 @@ export class OpenAiStreamingAsrClient {
   private async flushQwenServerVad(s:State,finishSession:boolean,signal?:AbortSignal):Promise<AsrProviderResult>{
     this.drainQwenWireEvents(s);await abortable(s.finalization,s.stop.signal);this.assert(s);
     if(!finishSession)return this.takeCompleted(s);
-    s.busy=true;const cancelled=()=>this.fail(s,"public_asr_stream_cancelled");signal?.addEventListener("abort",cancelled,{once:true});
+    s.busy=true;const cancelled=()=>this.fail(s,"public_asr_stream_cancelled",streamingAsrCancellationContext(signal));signal?.addEventListener("abort",cancelled,{once:true});
     const timer=setTimeout(()=>this.fail(s,"public_asr_stream_finish_timeout"),this.options.timeoutMs);
     try{
       if(signal?.aborted)throw Error();
@@ -226,11 +220,11 @@ export class OpenAiStreamingAsrClient {
   private drainQwenWireEvents(s:State){while(s.pendingWireEvents.length){this.assert(s);this.receiveWireEvent(s,s.pendingWireEvents.shift()!);}}
   private receiveWireEvent(s:State,e:Record<string,any>){
     s.lastWireType=e?.type;s.lastWireLanguage=e?.language;
-    try{this.receive(s,e);}catch(error){this.fail(s,error instanceof PublicAsrError?error.code:"public_asr_stream_protocol");throw s.failure!;}
+    try{this.receive(s,e);}catch(error){this.fail(s,error instanceof PublicAsrError?error.code:"public_asr_stream_protocol",{origin:"protocol"});throw s.failure!;}
   }
   private takeCompleted(s:State):AsrProviderResult{const values=s.completed.splice(0);return values.length===0?null:values.length===1?values[0]:values;}
   async closeSession(sessionId:string){const s=this.state;if(!s||sessionId!==this.options.sessionId)return;this.partialListener=undefined;
-    if(s.providerFinished){s.ws?.terminate();await s.finalization.catch(()=>{});}else{this.fail(s,"public_asr_stream_closed");await (this.qwen?this.finishQwenTransport(s):this.finish(s.turn));}
+    if(s.providerFinished){s.ws?.terminate();await s.finalization.catch(()=>{});}else{this.fail(s,"public_asr_stream_closed",{origin:"explicit_close"});await (this.qwen?this.finishQwenTransport(s):this.finish(s.turn));}
     s.removeAbort();if(this.state===s)this.state=undefined;}
   async diagnostics():Promise<never>{throw new Error("public_asr_stream_diagnostics_not_qualified");}
   async healthCheck(){return false;}
@@ -246,9 +240,10 @@ export class OpenAiStreamingAsrClient {
     transport.terminal=true;transport.finalizing=this.record({...transport.event,state:transport.sent?"uncertain":"not_sent",failureCode}).catch(()=>{/* durable intent remains unresolved */});
     s.finalization=transport.finalizing;void s.finalization.catch(()=>{});return transport.finalizing;
   }
-  private fail(s:State,code:string){if(s.failure)return;s.failure=new PublicAsrError(code,this.qwen?s.qwenTransport?.sent?"uncertain":"not_sent":s.turn?.sent?"uncertain":"not_sent");
+  private fail(s:State,code:string,context:StreamingAsrFailureContext={origin:"operation"}){if(s.failure)return;s.failure=new PublicAsrError(code,this.qwen?s.qwenTransport?.sent?"uncertain":"not_sent":s.turn?.sent?"uncertain":"not_sent");
     const attempt=this.qwen?s.qwenTransport:s.turn;
-    if(attempt?.sent&&!attempt.terminal)realtimeLogger.warn({sessionId:this.options.sessionId,...streamingAsrFailureDiagnostic(code,s.lastWireType,s.cursor,s.lastWireLanguage)},"Public ASR stream failed");
+    if(attempt?.sent&&!attempt.terminal||context.origin!=="explicit_close"&&!s.providerFinished)realtimeLogger.warn({sessionId:this.options.sessionId,
+      ...streamingAsrFailureDiagnostic(code,s.lastWireType,s.cursor,s.lastWireLanguage,context),outcome:s.failure.outcome},"Public ASR stream failed");
     s.stop.abort();s.ready.reject(s.failure);s.finished.reject(s.failure);s.turn?.done.reject(s.failure);s.ws?.terminate();s.tencentWire?.close();void (this.qwen?this.finishQwenTransport(s):this.finish(s.turn)).catch(()=>{});}
   private async send(s:State,event:unknown){this.assert(s);if(s.ws?.readyState!==WebSocket.OPEN||s.ws.bufferedAmount>1048576)throw Error("socket not writable");
     await abortable(new Promise<void>((resolve,reject)=>s.ws!.send(JSON.stringify(this.qwen?{...(event as object),event_id:randomUUID()}:event),error=>error?reject(Error("send failed")):resolve())),s.stop.signal);}

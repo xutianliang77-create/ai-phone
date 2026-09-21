@@ -2,6 +2,7 @@ import type { AudioFrame } from "@translation/contracts";
 import type { AsrProvider, AsrProviderResult, AsrSession, TranscriptResult } from "./asr-provider.js";
 import { HttpAsrClient } from "./http-asr-client.js";
 import {acceptedAudioRange} from "../connection/accepted-audio-range.js";
+import {explicitAsrCloseReason} from "./streaming-asr-diagnostics.js";
 
 export interface HttpAsrProviderOptions {
   client?:Omit<Pick<HttpAsrClient,"transcribe"|"flush"|"commitBoundary"|"closeSession"|"diagnostics"|"healthCheck">,
@@ -85,7 +86,7 @@ export class HttpAsrProvider implements AsrProvider {
   }
 
   async closeSession(sessionId: string) {
-    this.requests.get(sessionId)?.abort();
+    this.requests.get(sessionId)?.abort(explicitAsrCloseReason);
     this.requests.delete(sessionId);
     this.sessions.delete(sessionId);
     try {

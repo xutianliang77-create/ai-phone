@@ -105,7 +105,8 @@ describe("streaming ASR transport injected into original Provider",()=>{
       if(kind==="error"){ws.receive({type:"error",error:{message:"SECRET_PROVIDER_ERROR"}});return;}
       ws.receive({type:"input_audio_buffer.committed",item_id:"expected",previous_item_id:kind==="previous"?"wrong":null});
       if(kind==="item")ws.receive({type:"conversation.item.input_audio_transcription.completed",item_id:"wrong",content_index:0,transcript:"wrong"});
-    });};}),p=s.create();await p.createSession(session);await p.transcribe(frame());await expect(p.flush("stream")).rejects.toMatchObject({code:"public_asr_stream_protocol",outcome:"uncertain"});
+    });};}),p=s.create();await p.createSession(session);await p.transcribe(frame());await expect(p.flush("stream")).rejects.toMatchObject({
+      code:kind==="error"?"public_asr_stream_provider_error":"public_asr_stream_protocol",outcome:"uncertain"});
     expect(JSON.stringify(s.record.mock.calls)).not.toContain("SECRET_PROVIDER_ERROR");
   });
   it("accepts a completed event before its commit ACK, but never without the ACK",async()=>{
