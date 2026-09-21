@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { LuaFactory } from "wasmoon";
+import { createLuaTestFactory } from "./lua-factory.test-support.js";
 import { describe, expect, it } from "vitest";
 
 const source = new URL(
@@ -24,7 +24,7 @@ describe("Air780 production Lua microphone guard", () => {
   });
 
   it("proves the ES8311 control path before muting the ADC output", async () => {
-    const factory = new LuaFactory();
+    const factory = createLuaTestFactory();
     await factory.mountFile("/firmware/vuart_v1_mic_guard.lua", readFileSync(source));
     const lua = await factory.createEngine();
     try {
@@ -56,7 +56,7 @@ describe("Air780 production Lua microphone guard", () => {
   });
 
   it("fails closed on a missing API, write failure, or invalid readback", async () => {
-    const factory = new LuaFactory();
+    const factory = createLuaTestFactory();
     await factory.mountFile("/firmware/vuart_v1_mic_guard.lua", readFileSync(source));
     const lua = await factory.createEngine();
     try {

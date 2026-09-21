@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { LuaFactory } from "wasmoon";
+import { createLuaTestFactory } from "./lua-factory.test-support.js";
 import { describe, expect, it } from "vitest";
 
 const ccSource = new URL(
@@ -13,7 +13,7 @@ const uplinkSource = new URL(
 
 describe("Air780 production Lua external-source safety", () => {
   it("hangs up and permanently closes admission on memory pressure", async () => {
-    const factory = new LuaFactory();
+    const factory = createLuaTestFactory();
     await factory.mountFile("/firmware/vuart_v1_cc.lua", readFileSync(ccSource));
     const lua = await factory.createEngine();
     try {
@@ -59,7 +59,7 @@ describe("Air780 production Lua external-source safety", () => {
   });
 
   it("quarantines AUDIO_START when record setup or quality validation fails", async () => {
-    const factory = new LuaFactory();
+    const factory = createLuaTestFactory();
     await factory.mountFile("/firmware/vuart_v1_cc.lua", readFileSync(ccSource));
     const lua = await factory.createEngine();
     try {
@@ -134,7 +134,7 @@ describe("Air780 production Lua external-source safety", () => {
   });
 
   it("fails closed when an active TTS source completes before call termination", async () => {
-    const factory = new LuaFactory();
+    const factory = createLuaTestFactory();
     await factory.mountFile("/firmware/vuart_v1_cc.lua", readFileSync(ccSource));
     await factory.mountFile(
       "/firmware/vuart_v1_uplink.lua",
@@ -203,7 +203,7 @@ describe("Air780 production Lua external-source safety", () => {
   });
 
   it("fails closed during AUDIO_START if the silent external source cannot start", async () => {
-    const factory = new LuaFactory();
+    const factory = createLuaTestFactory();
     await factory.mountFile("/firmware/vuart_v1_cc.lua", readFileSync(ccSource));
     await factory.mountFile(
       "/firmware/vuart_v1_uplink.lua",
@@ -271,7 +271,7 @@ describe("Air780 production Lua external-source safety", () => {
   });
 
   it("fails closed during AUDIO_START when the first silent input faults", async () => {
-    const factory = new LuaFactory();
+    const factory = createLuaTestFactory();
     await factory.mountFile("/firmware/vuart_v1_cc.lua", readFileSync(ccSource));
     await factory.mountFile(
       "/firmware/vuart_v1_uplink.lua",

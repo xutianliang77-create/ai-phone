@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { LuaFactory } from "wasmoon";
+import { createLuaTestFactory } from "./lua-factory.test-support.js";
 import { describe, expect, it } from "vitest";
 
 const firmwareUrl = new URL(
@@ -17,7 +17,7 @@ const sources = [
 
 describe("Air780 VUART link acknowledgement", () => {
   it("accepts correlated HELLO/HEARTBEAT ACKs without carrier side effects", async () => {
-    const factory = new LuaFactory();
+    const factory = createLuaTestFactory();
     for (const source of sources) {
       await factory.mountFile(
         `/firmware/${source}`,

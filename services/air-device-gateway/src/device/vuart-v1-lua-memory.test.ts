@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { LuaFactory } from "wasmoon";
+import { createLuaTestFactory } from "./lua-factory.test-support.js";
 import { describe, expect, it } from "vitest";
 
 const memorySource = new URL(
@@ -9,7 +9,7 @@ const memorySource = new URL(
 
 describe("Air780 LuatOS memory monitor", () => {
   it("tracks Lua/sys watermarks and fails closed once on low memory", async () => {
-    const factory = new LuaFactory();
+    const factory = createLuaTestFactory();
     await factory.mountFile(
       "/firmware/vuart_v1_memory.lua",
       readFileSync(memorySource),
@@ -63,7 +63,7 @@ describe("Air780 LuatOS memory monitor", () => {
   });
 
   it("fails closed when rtos.meminfo returns an invalid contract", async () => {
-    const factory = new LuaFactory();
+    const factory = createLuaTestFactory();
     await factory.mountFile(
       "/firmware/vuart_v1_memory.lua",
       readFileSync(memorySource),

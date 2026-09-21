@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
-import { LuaFactory } from "wasmoon";
+import { createLuaTestFactory } from "./lua-factory.test-support.js";
 import { describe, expect, it } from "vitest";
 
 const firmwareUrl = new URL(
@@ -59,7 +59,7 @@ describe("Air780 Gate 0B V2048 RAW stream PoC", () => {
   });
 
   it("streams losslessly with partial writes, backpressure, and one final DONE", async () => {
-    const factory = new LuaFactory();
+    const factory = createLuaTestFactory();
     await factory.mountFile(
       "/firmware/g0b_raw.lua",
       readFirmware("gate0b/g0b_raw.lua"),
@@ -158,7 +158,7 @@ describe("Air780 Gate 0B V2048 RAW stream PoC", () => {
   });
 
   it("fails closed without cc.input or with a nonzero RAW codec", async () => {
-    const factory = new LuaFactory();
+    const factory = createLuaTestFactory();
     await factory.mountFile(
       "/firmware/g0b_raw.lua",
       readFirmware("gate0b/g0b_raw.lua"),
@@ -192,7 +192,7 @@ describe("Air780 Gate 0B V2048 RAW stream PoC", () => {
   });
 
   it("boots idle, dials once, and injects only after explicit START", async () => {
-    const factory = new LuaFactory();
+    const factory = createLuaTestFactory();
     for (const [source] of pocSources) {
       await factory.mountFile(`/firmware/${source}`, readFirmware(source));
     }

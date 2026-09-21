@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { LuaFactory } from "wasmoon";
+import { createLuaTestFactory } from "./lua-factory.test-support.js";
 import { describe, expect, it } from "vitest";
 
 const ccSource = new URL(
@@ -13,7 +13,7 @@ const uplinkSource = new URL(
 
 describe("Air780 production Lua hangup safety", () => {
   it("reports unknown and blocks repeat hangups when source failure cannot request hangup", async () => {
-    const factory = new LuaFactory();
+    const factory = createLuaTestFactory();
     await factory.mountFile("/firmware/vuart_v1_cc.lua", readFileSync(ccSource));
     await factory.mountFile(
       "/firmware/vuart_v1_uplink.lua",
@@ -76,7 +76,7 @@ describe("Air780 production Lua hangup safety", () => {
   });
 
   it("rejects an explicit hangup when the carrier API reports false", async () => {
-    const factory = new LuaFactory();
+    const factory = createLuaTestFactory();
     await factory.mountFile("/firmware/vuart_v1_cc.lua", readFileSync(ccSource));
     const lua = await factory.createEngine();
     try {

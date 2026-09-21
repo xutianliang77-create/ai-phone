@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { LuaFactory } from "wasmoon";
+import { createLuaTestFactory } from "./lua-factory.test-support.js";
 import { describe, expect, it } from "vitest";
 
 const source = new URL(
@@ -9,7 +9,7 @@ const source = new URL(
 
 describe("Air780 production Lua TTS uplink", () => {
   it("holds carrier uplink silent before and between translated or AI audio", async () => {
-    const factory = new LuaFactory();
+    const factory = createLuaTestFactory();
     await factory.mountFile("/firmware/vuart_v1_uplink.lua", readFileSync(source));
     const lua = await factory.createEngine();
     try {
@@ -76,7 +76,7 @@ describe("Air780 production Lua TTS uplink", () => {
   });
 
   it("handles 8k conversion, partial writes, backpressure, and stale generations", async () => {
-    const factory = new LuaFactory();
+    const factory = createLuaTestFactory();
     await factory.mountFile("/firmware/vuart_v1_uplink.lua", readFileSync(source));
     const lua = await factory.createEngine();
     try {

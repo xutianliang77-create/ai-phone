@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
-import { LuaFactory } from "wasmoon";
+import { createLuaTestFactory } from "./lua-factory.test-support.js";
 import { describe, expect, it } from "vitest";
 
 const firmwareUrl = new URL(
@@ -55,7 +55,7 @@ describe("Air780 production Lua VUART v1 runtime", () => {
   });
 
   it("executes fragmentation, CRC, replay, fence, generation, and capacity tests", async () => {
-    const factory = new LuaFactory();
+    const factory = createLuaTestFactory();
     for (const file of runtimeFiles) {
       await factory.mountFile(
         `/firmware/${file}`,

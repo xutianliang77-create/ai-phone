@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
-import { LuaFactory } from "wasmoon";
+import { createLuaTestFactory } from "./lua-factory.test-support.js";
 import { describe, expect, it } from "vitest";
 
 const firmwareUrl = new URL(
@@ -77,7 +77,7 @@ describe("Air780 LuatOS production entry", () => {
   });
 
   it("executes bounded UART and cc adapter behavior in Lua", async () => {
-    const factory = new LuaFactory();
+    const factory = createLuaTestFactory();
     for (const file of behaviorFiles) {
       await factory.mountFile(
         `/firmware/${file}`,
@@ -101,7 +101,7 @@ describe("Air780 LuatOS production entry", () => {
   });
 
   it("boots the real production main with LuatOS API-compatible mocks", async () => {
-    const factory = new LuaFactory();
+    const factory = createLuaTestFactory();
     for (const [source, target] of productionSources) {
       await factory.mountFile(
         `/firmware/${target === "vuart_v1_profile.lua" ? target : source}`,

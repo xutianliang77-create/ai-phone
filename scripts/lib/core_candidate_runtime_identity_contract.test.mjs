@@ -56,13 +56,19 @@ describe("core candidate runtime identity deployment contract", () => {
     expect(script).toContain("running Maruko process found");
     expect(script).toContain("Maruko listener found");
     const deployStart = script.lastIndexOf("preflight\nrequire_clean_source");
-    const isolation = script.indexOf(
-      "require_remote_resource_isolation",
-      deployStart,
-    );
+    const isolation = script.indexOf("require_remote_deployment_safety", deployStart);
     const sourceBuild = script.indexOf("run check:source-build", isolation);
     expect(isolation).toBeGreaterThan(deployStart);
     expect(sourceBuild).toBeGreaterThan(isolation);
+    const guard=script.match(/require_remote_deployment_safety\(\) \{([\s\S]*?)\n\}/);
+    expect(guard).not.toBeNull();
+    const probe=spawnSync("bash",["-s"],{encoding:"utf8",input:[
+      "set -e", "CANDIDATE_DEPLOYMENT_PROFILE=core_translation",
+      "require_remote_resource_isolation() { return 23; }",
+      `require_remote_deployment_safety() {${guard[1]}\n}`,
+      "require_remote_deployment_safety",
+    ].join("\n")});
+    expect(probe.status,probe.stderr).toBe(23);
   });
 
   test("keeps the remote resource-isolation heredoc valid bash", () => {

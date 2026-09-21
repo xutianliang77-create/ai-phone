@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { LuaFactory } from "wasmoon";
+import { createLuaTestFactory } from "./lua-factory.test-support.js";
 import { describe, expect, it } from "vitest";
 
 const firmwareUrl = new URL(
@@ -23,7 +23,7 @@ const productionSources = [
 
 describe("Air780 LuatOS production core guard", () => {
   it("fails closed before opening VUART without the V2048 stream API", async () => {
-    const factory = new LuaFactory();
+    const factory = createLuaTestFactory();
     for (const source of productionSources) {
       await factory.mountFile(
         source === "production/uart1_profile.lua"
