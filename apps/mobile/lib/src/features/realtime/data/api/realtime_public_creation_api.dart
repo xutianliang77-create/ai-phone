@@ -87,7 +87,7 @@ extension RealtimePublicCreationApi on RealtimeApiClient {
     }
 
     final voice = _voiceOutputMode == 'natural';
-    var settings = publicCreationHash([
+    final settings = publicCreationHash([
       _mode,
       _sourceLanguage,
       _targetLanguage,
@@ -110,15 +110,26 @@ extension RealtimePublicCreationApi on RealtimeApiClient {
         autoReverse: _autoReverseTargetLanguage,
         automaticLanguagePair: _automaticLanguagePair);
     if (blocker != null) throw RealtimeApiException(blocker);
-    final speakerReady = deviceSpeakerOffered(offer['onDeviceSpeaker']) &&
-        prepareDeviceSpeaker != null && await prepareDeviceSpeaker!();
-    check();
-    if (speakerReady) settings = publicCreationHash([settings, deviceSpeakerProfile]);
     var record = await _creationWait(
         _publicCreationStore.pending(scope.storageKey), epoch);
     check();
-    if (record != null && record['settings'] != settings) {
+    final pendingSpeaker = (record?['body'] as Map?)?['speakerAttribution'];
+    final needsSpeaker = pendingSpeaker is Map &&
+        pendingSpeaker['deviceProfile'] == deviceSpeakerProfile;
+    // Older records included an optional model in the settings hash. Preserve
+    // their exact body/key; readiness changing is not a user setting change.
+    final legacySettings = needsSpeaker
+        ? publicCreationHash([settings, deviceSpeakerProfile]) : settings;
+    if (record != null && record['settings'] != settings &&
+        record['settings'] != legacySettings) {
       throw const RealtimeApiException('仍有未确认创建，请恢复原设置重试；未自动新建会话');
+    }
+    final speakerReady = (record == null || needsSpeaker) &&
+        deviceSpeakerOffered(offer['onDeviceSpeaker']) &&
+        prepareDeviceSpeaker != null && await prepareDeviceSpeaker!();
+    check();
+    if (record != null && needsSpeaker && !speakerReady) {
+      throw const RealtimeApiException('原创建请求需要本机说话人资源，请等待就绪或查询、撤销原请求；未更换会话');
     }
     if (record == null) {
       final body = publicCreationBody(offer,

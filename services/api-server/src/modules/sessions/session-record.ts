@@ -52,6 +52,7 @@ export interface SessionRecord {
   publicInferenceEvidence?: PublicInferenceEvidence[];
   publicModelAttempts?:PublicModelAttemptRecord[];
   publicProviderReconciliation?:PublicProviderReconciliationRecord;
+  publicProviderReconciliations?:PublicProviderReconciliationRecord[];
   publicModelConfiguration?:PublicModelRuntimeSnapshot;
   publicCreationRequest?:{requestHash:string;request:CreateRealtimeSessionRequest};
   /** Durable tombstone for a cancelled/expired public HTTP creation identity.

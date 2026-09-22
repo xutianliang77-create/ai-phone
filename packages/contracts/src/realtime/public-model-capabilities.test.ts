@@ -32,6 +32,9 @@ describe("implemented public wire capabilities",()=>{
     expect(publicAsrModelAutomaticLanguagePairSupported("qwen_asr_realtime","manual-asr",["zh","ja"])).toBe(true);
     expect(publicAsrModelAutomaticLanguagePairSupported("qwen_asr_realtime","manual-asr",["fr","ja"])).toBe(true);
     expect(publicAsrModelAutomaticLanguagePairSupported("openai_realtime_asr","manual-asr",["fr","ja"])).toBe(false);
-    expect(publicProtocolCapability("qwen_asr_realtime")).toMatchObject({input:"continuous_pcm",maxAudioSeconds:3600});
+    expect(publicProtocolCapability("qwen_asr_realtime")).toMatchObject({input:"continuous_pcm"});
+    expect(publicProtocolCapability("qwen_asr_realtime")).not.toHaveProperty("maxAudioSeconds");
+    for(const protocol of ["openai_realtime_asr","tencent_asr_ws","google_speech_v2"])
+      expect(publicProtocolCapability(protocol)?.maxAudioSeconds).toBe(30);
   });
 });

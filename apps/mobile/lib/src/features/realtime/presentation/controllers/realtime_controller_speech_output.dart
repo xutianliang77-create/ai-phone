@@ -85,6 +85,7 @@ extension _RealtimeControllerSpeechOutput on RealtimeController {
     }
     final segmentId = event.segmentId!;
     final revision = event.revision!;
+    if (revision <= (_cancelledPublicAudioRevisions[segmentId] ?? -1)) return;
     final draft = _drafts[segmentId];
     // Public TTS belongs only to a current translated revision.  A delayed
     // audio frame must not revive a superseded subtitle or play after a newer

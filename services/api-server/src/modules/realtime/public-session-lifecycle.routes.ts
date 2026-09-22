@@ -11,7 +11,7 @@ import {recordPublicModelAttempt} from "../sessions/public-model-attempt.service
 import {queryPublicAdmission} from "./public-admission-query.service.js";
 import {PublicConfigError} from "../models/public-model-config.js";
 import {claimPublicRecoveryOwnership} from "../sessions/public-recovery-ownership.service.js";
-import {reconcilePublicProviderUsage} from "../sessions/public-provider-reconciliation.js";
+import {reconcilePublicProviderUsage,hasPublicProviderReconciliation} from "../sessions/public-provider-reconciliation.js";
 import {publicProcessingDiagnostics} from "../sessions/public-processing-diagnostics.js";
 
 export function registerPublicLifecycleRoutes(app:FastifyInstance){
@@ -36,10 +36,12 @@ export function registerPublicLifecycleRoutes(app:FastifyInstance){
       const reconciliation=await reconcilePublicProviderUsage(sessionId,request.body);
       const session=await findSession(sessionId);
       if(!session)throw new ResultSyncError("session_not_found",404);
+      if(!hasPublicProviderReconciliation(session))return {sessionId,reconciliationId:reconciliation.reconciliationId,
+        providerId:reconciliation.providerId,providerUsageSeconds:reconciliation.providerUsageSeconds,reconciliationComplete:false};
       const finalization=await finalizePublicSession(sessionId,session.userId,serverFinalizationRequest(session),{serverRecovery:true});
       return {sessionId,reconciliationId:reconciliation.reconciliationId,providerId:reconciliation.providerId,
         providerUsageSeconds:reconciliation.providerUsageSeconds,consumedSeconds:finalization.consumedSeconds,
-        finalizationIdempotencyKey:finalization.idempotencyKey};
+        finalizationIdempotencyKey:finalization.idempotencyKey,reconciliationComplete:true};
     }));
   });
   app.get("/realtime/sessions/:sessionId/recovery",async(request,reply)=>{

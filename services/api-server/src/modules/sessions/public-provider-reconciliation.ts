@@ -1,7 +1,7 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import type { SessionRecord } from "./session-record.js";
 import { assertPublicSession, mutatePublicSession, publicDeploymentId } from "./session-result-sync.service.js";
-import { canonicalSyncJson, ResultSyncError, resultSyncHash, syncKey } from "./session-result-sync-contract.js";
+import { canonicalSyncJson, ResultSyncError, resultSyncHash } from "./session-result-sync-contract.js";
 
 type Component = "asr" | "translation" | "tts";
 type EvidenceScope = "attempt" | "isolated_candidate_day";
@@ -56,10 +56,11 @@ export function signPublicProviderReconciliation(
   return createHmac("sha256", signingKey).update(canonicalSyncJson(value)).digest("hex");
 }
 
-export function hasPublicProviderReconciliation(session: SessionRecord) {
-  const record = session.publicProviderReconciliation;
-  if (!record || !session.publicRuntime?.uncertain || !session.publicRuntime.stoppedAt ||
-      !key(record.reconciliationId) || !hash(record.evidenceHash) || !key(record.providerId) ||
+export function publicProviderReconciliations(session: SessionRecord): PublicProviderReconciliationRecord[] {
+  return session.publicProviderReconciliations ?? (session.publicProviderReconciliation ? [session.publicProviderReconciliation] : []);
+}
+function validRecord(record: PublicProviderReconciliationRecord) {
+  if (!record || !key(record.reconciliationId) || !hash(record.evidenceHash) || !key(record.providerId) ||
       !["attempt", "isolated_candidate_day"].includes(record.evidenceScope) ||
       !Number.isSafeInteger(record.providerUsageCount) || record.providerUsageCount < 1 ||
       !Number.isFinite(record.providerUsageSeconds) || record.providerUsageSeconds < 0 ||
@@ -67,10 +68,22 @@ export function hasPublicProviderReconciliation(session: SessionRecord) {
       !validTime(record.observedAt) || !validTime(record.reconciledAt) ||
       !Array.isArray(record.uncertainAttemptIds) || record.uncertainAttemptIds.length < 1 ||
       new Set(record.uncertainAttemptIds).size !== record.uncertainAttemptIds.length ||
-      record.uncertainAttemptIds.some((id) => !key(id))) return false;
+      record.uncertainAttemptIds.some((id) => !key(id)) ||
+      record.providerUsageCount !== record.uncertainAttemptIds.length) return false;
+  return true;
+}
+export function hasPublicProviderReconciliation(session: SessionRecord) {
+  if (!session.publicRuntime?.uncertain || !session.publicRuntime.stoppedAt) return false;
+  if (session.publicModelAttempts?.some(item => item.event.state === "dispatching")) return false;
+  const records = publicProviderReconciliations(session);
+  if (!Array.isArray(records) || records.length === 0 || records.some(record => !validRecord(record))) return false;
   const attempts = session.publicModelAttempts?.filter((item) => item.event.state === "uncertain") ?? [];
-  return attempts.length === record.uncertainAttemptIds.length &&
-    attempts.every((item) => record.uncertainAttemptIds.includes(item.event.attemptId));
+  const covered = new Set<string>();
+  for (const record of records) for (const id of record.uncertainAttemptIds) {
+    if (covered.has(id) || !attempts.some(item => item.event.attemptId === id && item.event.providerId === record.providerId)) return false;
+    covered.add(id);
+  }
+  return attempts.length > 0 && attempts.length === covered.size;
 }
 
 /** Reconciliation never modifies runtime watermarks or the original uncertain
@@ -102,11 +115,15 @@ export function reconcilePublicProviderUsage(
       assertPublicSession(current, evidence.ownerId, deploymentId);
       const runtime = current.publicRuntime;
       const evidenceHash = resultSyncHash(body);
-      if (current.publicProviderReconciliation) {
-        if (current.publicProviderReconciliation.evidenceHash !== evidenceHash) {
-          throw new ResultSyncError("public_provider_reconciliation_conflict", 409);
-        }
-        return { next: null, result: structuredClone(current.publicProviderReconciliation) };
+      const records = publicProviderReconciliations(current);
+      if (!Array.isArray(records) || records.some(record => !validRecord(record))) {
+        throw new ResultSyncError("public_provider_reconciliation_conflict", 409);
+      }
+      const previous = records.find(record => record.evidenceHash === evidenceHash);
+      if (previous) return { next: null, result: structuredClone(previous) };
+      if (records.length >= 1024 || records.some(record => record.reconciliationId === evidence.reconciliationId ||
+          record.uncertainAttemptIds.some(id => evidence.attempts.some(attempt => attempt.attemptId === id)))) {
+        throw new ResultSyncError("public_provider_reconciliation_conflict", 409);
       }
       if (!runtime?.stoppedAt || !runtime.uncertain || current.publicFinalization ||
           current.finalizationIdempotencyKey || current.status === "ended" || current.status === "failed") {
@@ -117,7 +134,8 @@ export function reconcilePublicProviderUsage(
         throw new ResultSyncError("public_provider_reconciliation_before_stop", 409);
       }
       const uncertain = current.publicModelAttempts?.filter((item) => item.event.state === "uncertain") ?? [];
-      if (uncertain.length === 0 || evidence.providerUsageCount !== uncertain.length || !sameUncertainAttempts(uncertain, evidence)) {
+      const selected = uncertain.filter(item => evidence.attempts.some(attempt => attempt.attemptId === item.event.attemptId));
+      if (selected.length === 0 || evidence.providerUsageCount !== selected.length || !sameUncertainAttempts(selected, evidence)) {
         throw new ResultSyncError("public_provider_reconciliation_attempt_mismatch", 409);
       }
       if (evidence.evidenceScope === "attempt" && !evidence.providerRequestIdHash) {
@@ -139,10 +157,13 @@ export function reconcilePublicProviderUsage(
         ...(evidence.providerRequestIdHash ? { providerRequestIdHash: evidence.providerRequestIdHash } : {}),
         observedAt: evidence.observedAt,
         reconciledAt: now.toISOString(),
-        uncertainAttemptIds: uncertain.map((item) => item.event.attemptId),
+        uncertainAttemptIds: selected.map((item) => item.event.attemptId),
       };
       const next = structuredClone(current);
-      next.publicProviderReconciliation = record;
+      // Keep the first legacy receipt readable; the collection is authoritative
+      // for complete coverage across providers. No attempt or meter is rewritten.
+      next.publicProviderReconciliation ??= record;
+      next.publicProviderReconciliations = [...records, record];
       return { next, result: structuredClone(record) };
     },
   );

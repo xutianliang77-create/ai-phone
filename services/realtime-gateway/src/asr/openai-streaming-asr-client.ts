@@ -11,7 +11,7 @@ import {TencentAsrWire} from "./tencent-streaming-asr.js";
 import {GoogleAsrWire,type GoogleAsrStreamFactory} from "./google-streaming-asr.js";
 import {realtimeLogger} from "../metrics/realtime-metrics.js";
 import {streamingAsrFailureDiagnostic,streamingAsrCancellationContext,streamingAsrCloseContext,streamingAsrTransportContext,
-  isStreamingAsrFailureEvent,streamingAsrProviderContext,type StreamingAsrFailureContext} from "./streaming-asr-diagnostics.js";
+  isStreamingAsrFailureEvent,streamingAsrProviderContext,streamingAsrProtocolContext,type StreamingAsrFailureContext} from "./streaming-asr-diagnostics.js";
 import {deferred,type State,type Turn,type Result} from "./streaming-asr-state.js";
 const key=(value:unknown):value is string=>typeof value==="string"&&/^[A-Za-z0-9_.:/-]{1,240}$/.test(value);
 export interface StreamingAsrOptions {sessionId:string;leaseId:string;endpoint:string;model:string;language:LanguageCode;timeoutMs:number;
@@ -96,7 +96,7 @@ export class OpenAiStreamingAsrClient {
       pcm.toString("base64")!==request.data||!Number.isSafeInteger(request.sequence)||request.sequence<=s.sequence||
       !Number.isFinite(request.timestampMs)||request.timestampMs<0||!request.acceptedAudioRange||request.acceptedAudioRange.startSample!==s.cursor||
       request.acceptedAudioRange.endSample!==s.cursor+pcm.length/2||
-      s.turn?.committing||(s.turn?.event.audioEndSample??s.cursor)-(s.turn?.event.audioStartSample??s.cursor)+pcm.length/2>this.rate*(this.qwen?3600:30)){
+      s.turn?.committing||(s.turn?.event.audioEndSample??s.cursor)-(s.turn?.event.audioStartSample??s.cursor)+pcm.length/2>this.rate*30){
       this.fail(s,"public_asr_stream_audio_invalid");throw s.failure!;
     }
     s.busy=true;const cancelled=()=>this.fail(s,"public_asr_stream_cancelled",streamingAsrCancellationContext(signal));signal?.addEventListener("abort",cancelled,{once:true});
@@ -132,12 +132,11 @@ export class OpenAiStreamingAsrClient {
   }
   private async transcribeQwenServerVad(s:State,request:HttpAsrRequest,signal?:AbortSignal):Promise<AsrProviderResult>{
     this.drainQwenWireEvents(s);this.assert(s);
-    const pcm=Buffer.from(request.data,"base64"),transport=s.qwenTransport;
-    const reservedStart=transport?.event.audioStartSample??s.cursor,reservedEnd=transport?.event.audioEndSample??s.cursor;
+    const pcm=Buffer.from(request.data,"base64");
     if(request.sourceLanguage!==this.options.language||request.format!=="pcm16"||request.sampleRate!==this.rate||!pcm.length||pcm.length%2||pcm.length>this.rate*60||
       pcm.toString("base64")!==request.data||!Number.isSafeInteger(request.sequence)||request.sequence<=s.sequence||!Number.isFinite(request.timestampMs)||request.timestampMs<0||
-      !request.acceptedAudioRange||request.acceptedAudioRange.startSample!==s.cursor||request.acceptedAudioRange.endSample!==s.cursor+pcm.length/2||
-      reservedEnd-reservedStart+pcm.length/2>this.rate*3600){this.fail(s,"public_asr_stream_audio_invalid");throw s.failure!;}
+      !request.acceptedAudioRange||request.acceptedAudioRange.startSample!==s.cursor||!Number.isSafeInteger(request.acceptedAudioRange.endSample)||
+      request.acceptedAudioRange.endSample!==s.cursor+pcm.length/2){this.fail(s,"public_asr_stream_audio_invalid");throw s.failure!;}
     s.busy=true;const cancelled=()=>this.fail(s,"public_asr_stream_cancelled",streamingAsrCancellationContext(signal));signal?.addEventListener("abort",cancelled,{once:true});
     const timer=setTimeout(()=>this.fail(s,"public_asr_stream_append_timeout"),this.options.timeoutMs);
     try{
@@ -220,7 +219,7 @@ export class OpenAiStreamingAsrClient {
   private drainQwenWireEvents(s:State){while(s.pendingWireEvents.length){this.assert(s);this.receiveWireEvent(s,s.pendingWireEvents.shift()!);}}
   private receiveWireEvent(s:State,e:Record<string,any>){
     s.lastWireType=e?.type;s.lastWireLanguage=e?.language;
-    try{this.receive(s,e);}catch(error){this.fail(s,error instanceof PublicAsrError?error.code:"public_asr_stream_protocol",{origin:"protocol"});throw s.failure!;}
+    try{this.receive(s,e);}catch(error){this.fail(s,error instanceof PublicAsrError?error.code:"public_asr_stream_protocol",streamingAsrProtocolContext(e));throw s.failure!;}
   }
   private takeCompleted(s:State):AsrProviderResult{const values=s.completed.splice(0);return values.length===0?null:values.length===1?values[0]:values;}
   async closeSession(sessionId:string){const s=this.state;if(!s||sessionId!==this.options.sessionId)return;this.partialListener=undefined;
@@ -299,7 +298,10 @@ export class OpenAiStreamingAsrClient {
       }
       else if(["conversation.item.input_audio_transcription.text","conversation.item.input_audio_transcription.completed"].includes(e.type)){
         if(!turn?.sent||turn.terminal)throw Error();
-        turn.detectedLanguage=(e.type.endsWith(".text")?qwenDraftTranscriptLanguage:qwenTranscriptLanguage)(e.language,this.options.language,this.options.automaticLanguagePair,this.options.automaticSourceLanguages);
+        // Empty finals withdraw the existing draft; they need no language
+        // routing. Validate text/item structure below before completing them.
+        turn.detectedLanguage=e.type.endsWith(".completed")&&typeof e.transcript==="string"&&!cleanRealtimeText(e.transcript)
+          ? undefined : (e.type.endsWith(".text")?qwenDraftTranscriptLanguage:qwenTranscriptLanguage)(e.language,this.options.language,this.options.automaticLanguagePair,this.options.automaticSourceLanguages);
         e={...e,item_id:this.qwenTurnItemId(turn,e.item_id)};
       }else throw Error();
     }

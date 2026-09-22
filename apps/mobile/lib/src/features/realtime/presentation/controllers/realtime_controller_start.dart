@@ -54,6 +54,7 @@ extension RealtimeControllerStart on RealtimeController {
     _speechEchoSegmentIds.clear();
     _publicAudioRevisionBySegment.clear();
     _publicAudioSequenceBySegment.clear();
+    _cancelledPublicAudioRevisions.clear();
     _activePublicAudioSegmentId = null;
     _activePublicAudioRevision = null;
     _asrTextChain = Future<void>.value();

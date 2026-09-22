@@ -14,14 +14,16 @@ export interface PublicModelProtocolCapability {
    * separately signed policy and live qualification for the exact model
    * configuration; it never enables automatic routing on its own. */
   automaticLanguage:boolean;
+  /** Per-attempt limit, never a product-session timeout. Absent for continuous
+   * protocols with no cumulative-audio limit; packet/range checks still apply. */
   maxAudioSeconds?:number;
   maxTextCodepoints?:number;
   maxTextUtf8Bytes?:number;
 }
 const asr=(vendor:PublicModelProtocolCapability["vendor"],transport:PublicModelProtocolCapability["transport"],
-  sampleRates:number[],languageConstraint:string,completed=false,automaticLanguage=false):PublicModelProtocolCapability=>({vendor,component:"asr",transport,
+  sampleRates:number[],languageConstraint:string,completed=false,automaticLanguage=false,maxAudioSeconds:number|null=30):PublicModelProtocolCapability=>({vendor,component:"asr",transport,
   input:completed?"completed_pcm":"continuous_pcm",output:completed?"completed_transcript":"transcript_events",
-  sampleRates,languageConstraint,automaticLanguage,maxAudioSeconds:30});
+  sampleRates,languageConstraint,automaticLanguage,...(maxAudioSeconds===null?{}:{maxAudioSeconds})});
 const mt=(vendor:PublicModelProtocolCapability["vendor"]):PublicModelProtocolCapability=>({vendor,component:"translation",transport:"https",
   input:"text",output:"text",sampleRates:[],languageConstraint:"明确产品语言对；具体模型/地域资格另验",automaticLanguage:false,maxTextUtf8Bytes:65536});
 const tts=(vendor:PublicModelProtocolCapability["vendor"],transport:PublicModelProtocolCapability["transport"],sampleRates:number[],
@@ -29,7 +31,9 @@ const tts=(vendor:PublicModelProtocolCapability["vendor"],transport:PublicModelP
   output:completed?"completed_pcm":"streamed_pcm",sampleRates,languageConstraint,automaticLanguage:false,maxTextCodepoints:4096,
   ...(vendor==="google"?{maxTextUtf8Bytes:5000}:{})});
 const protocols:Record<string,PublicModelProtocolCapability>={
-  qwen_asr_realtime:{...asr("qwen","websocket",[16000],"服务端VAD连续音频；支持已接入语种自动识别；自动来源范围与输出语言对分离，须逐配置资格化",false,true),maxAudioSeconds:3600},
+  // Qwen's documented realtime/VAD audio duration is unlimited. Manual/file
+  // constraints must not be applied to this persistent server-VAD attempt.
+  qwen_asr_realtime:asr("qwen","websocket",[16000],"服务端VAD连续音频，无累计时长上限；支持已接入语种自动识别；自动来源范围与输出语言对分离，须逐配置资格化",false,true,null),
   qwen_asr_compatible:asr("qwen","https",[16000,24000],"明确源语言；已实现21种产品语言交集；非Filetrans异步接口",true),
   qwen_chat:mt("qwen"),
   qwen_tts_realtime:tts("qwen","websocket",[24000],"明确目标语种：zh/en/de/it/pt/es/ja/ko/fr/ru；Voice资格另验"),

@@ -7,6 +7,7 @@ export interface StreamingAsrFailureContext {
   origin:StreamingAsrFailureOrigin;
   closeCode?:unknown;closeReason?:unknown;closeReasonBytes?:unknown;
   providerErrorCode?:unknown;providerErrorType?:unknown;providerErrorParam?:unknown;transportErrorCode?:unknown;
+  languageValueClass?:unknown;transcriptEmpty?:unknown;
 }
 const origins=new Set<unknown>(["caller_abort","explicit_close","transport_close","transport_error","provider_error","protocol","operation"]);
 const providerCodes=new Set<unknown>([
@@ -60,6 +61,14 @@ const wireTypes=new Set([
   "conversation.item.input_audio_transcription.completed",
   "conversation.item.input_audio_transcription.failed",
 ]);
+const languageClasses=new Set<unknown>(["missing","null","code","other_string","non_string"]);
+export function streamingAsrProtocolContext(event:Record<string,unknown>):StreamingAsrFailureContext {
+  if(!["conversation.item.input_audio_transcription.text","conversation.item.input_audio_transcription.completed"].includes(String(event?.type)))return {origin:"protocol"};
+  const language=event.language;
+  return {origin:"protocol",languageValueClass:language===undefined?"missing":language===null?"null":
+    typeof language==="string"?(/^[a-z]{2,3}$/.test(language)?"code":"other_string"):"non_string",
+    ...(typeof event.transcript==="string"?{transcriptEmpty:event.transcript.trim().length===0}:{})};
+}
 export function streamingAsrFailureDiagnostic(code:string,eventType:unknown,uploadedSamples:number,language?:unknown,context?:StreamingAsrFailureContext){
   return {
     code:/^[a-z0-9_]{1,120}$/.test(code)?code:"public_asr_stream_unclassified",
@@ -75,5 +84,7 @@ export function streamingAsrFailureDiagnostic(code:string,eventType:unknown,uplo
     ...(context?.providerErrorType!==undefined?{providerErrorType:safe(providerTypes,context.providerErrorType)}:{}),
     ...(context?.providerErrorParam!==undefined?{providerErrorParam:safe(providerParams,context.providerErrorParam)}:{}),
     ...(context?.transportErrorCode!==undefined?{transportErrorCode:safe(transportCodes,context.transportErrorCode)}:{}),
+    ...(context?.languageValueClass!==undefined?{languageValueClass:safe(languageClasses,context.languageValueClass)}:{}),
+    ...(typeof context?.transcriptEmpty==="boolean"?{transcriptEmpty:context.transcriptEmpty}:{}),
   };
 }

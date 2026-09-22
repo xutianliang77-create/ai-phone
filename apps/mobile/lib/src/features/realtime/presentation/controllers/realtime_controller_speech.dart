@@ -205,6 +205,9 @@ extension RealtimeControllerSpeech on RealtimeController {
   }
 
   Future<void> _stopSpeaking() async {
+    // A later PCM chunk belongs to its original utterance, not the new local
+    // queue generation. Do not let cancelled revisions restart on arrival.
+    _cancelledPublicAudioRevisions.addAll(_publicAudioRevisionBySegment);
     final generation = _speechGeneration;
     final activeSegmentId =
         _activeSpeechGeneration == generation ? _activeSpeechSegmentId : null;
@@ -249,6 +252,12 @@ extension RealtimeControllerSpeech on RealtimeController {
     // New speech waits for stop acknowledgement, never for a cancelled speak
     // future that a platform may leave unresolved until its old timeout.
     _speechChain = stopping.catchError((Object _) {});
-    await stopping;
+    try {
+      await stopping.timeout(const Duration(seconds: 2));
+    } catch (error) {
+      // Keep the raw stop acknowledgement as the playback barrier, but never
+      // make microphone shutdown/finalization wait forever for a platform.
+      _reportSpeechFailure(error, '停止朗读未确认');
+    }
   }
 }

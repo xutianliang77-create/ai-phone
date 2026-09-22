@@ -1,6 +1,15 @@
 import {it,expect} from "vitest";
 import {streamingAsrFailureDiagnostic,streamingAsrCloseContext,streamingAsrProviderContext,streamingAsrTransportContext,
-  streamingAsrCancellationContext,explicitAsrCloseReason,isStreamingAsrFailureEvent} from "./streaming-asr-diagnostics.js";
+  streamingAsrCancellationContext,explicitAsrCloseReason,isStreamingAsrFailureEvent,streamingAsrProtocolContext} from "./streaming-asr-diagnostics.js";
+it("classifies missing/invalid language and empty text without storing user payload",()=>{
+  for(const [language,label] of [[undefined,"missing"],[null,"null"],["en","code"],["SECRET_LANGUAGE","other_string"],[{key:"SECRET_KEY"},"non_string"]]){
+    const event={type:"conversation.item.input_audio_transcription.completed",language,transcript:"SECRET_USER_TEXT"};
+    const value=streamingAsrFailureDiagnostic("qwen_asr_language_invalid",event.type,1600,language,streamingAsrProtocolContext(event));
+    expect(value).toMatchObject({languageValueClass:label,transcriptEmpty:false});
+    expect(JSON.stringify(value)).not.toContain("SECRET");
+  }
+  expect(streamingAsrProtocolContext({type:"conversation.item.input_audio_transcription.completed",transcript:"  "})).toMatchObject({transcriptEmpty:true});
+});
 it("exposes only bounded error codes, known event types and numeric watermarks",()=>{
   expect(streamingAsrFailureDiagnostic("qwen_asr_language_mismatch","conversation.item.input_audio_transcription.text",1600))
     .toEqual({code:"qwen_asr_language_mismatch",eventType:"conversation.item.input_audio_transcription.text",uploadedSamples:1600});

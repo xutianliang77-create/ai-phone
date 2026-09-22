@@ -186,6 +186,52 @@ it('rejects forged, mismatched, disabled, and production aggregate reconciliatio
   vi.stubEnv('PUBLIC_RUNTIME_RECONCILIATION_ENABLED','false');expect((await route(reconciliation())).statusCode).toBe(503);expect(state()).toEqual(before);
   vi.stubEnv('PUBLIC_RUNTIME_RECONCILIATION_ENABLED','true');vi.stubEnv('NODE_ENV','production');expect((await route(reconciliation())).statusCode).toBe(403);expect(state()).toEqual(before);
 });
+it.each([false,true])('collects mixed-provider receipts, preserves partial holds and settles once (reverse=%s)',async reverse=>{
+  uncertainStopped();clock(31);
+  const asr=uncertainAttempt();Object.assign(asr.event,{providerId:'qwen',modelId:'qwen3-asr-flash-realtime'});
+  const tts=uncertainAttempt();Object.assign(tts.event,{attemptId:'attempt-tts-1',component:'tts',modelId:'101001',revision:4});
+  for(const key of ['audioStartSample','audioEndSample','audioSampleRate'])delete tts.event[key];
+  current().processingAuthorization!.executionPlan.tts={execution:'public',scopeKey:'tts',reason:'online_selected'};
+  current().publicModelAttempts=[asr,tts];
+  const receipts=[asr,tts].map(({event:e})=>reconciliation({reconciliationId:`receipt-${e.providerId}`,providerId:e.providerId,
+    evidenceScope:'attempt',providerRequestIdHash:'b'.repeat(64),attempts:[{attemptId:e.attemptId,component:e.component,modelId:e.modelId}]}));
+  if(reverse)receipts.reverse();
+  const route=(body:unknown)=>app.inject({method:'POST',url:'/internal/realtime/sessions/public-s/provider-reconciliation',
+    headers:{authorization:'Bearer internal-test-secret-123'},payload:body as object});
+  const first=await route(receipts[0]);expect(first.statusCode).toBe(200);expect(first.json().reconciliationComplete).toBe(false);
+  expect(current().publicFinalization).toBeUndefined();expect(storage.getStoreSnapshot().billingLedger).toEqual([]);
+  expect(storage.getStoreSnapshot().usageHolds[0].status).toBe('active');
+  const partial=state();expect((await route(receipts[0])).json()).toEqual(first.json());expect(state()).toEqual(partial);
+  const diagnostics=await app.inject({url:'/realtime/sessions/public-s/processing-diagnostics'});
+  expect(diagnostics.json().providerUsage).toMatchObject({reconciliationComplete:false});
+  expect(diagnostics.json().providerUsage.reconciliations).toHaveLength(1);
+  const replies=await Promise.all(Array.from({length:4},()=>route(receipts[1])));
+  expect(replies.every(r=>r.statusCode===200&&r.json().reconciliationComplete===true)).toBe(true);
+  expect(current().status).toBe('ended');expect(current().publicProviderReconciliations).toHaveLength(2);
+  expect(current().publicModelAttempts!.every(item=>item.event.state==='uncertain')).toBe(true);
+  expect(current().publicRuntime!.lastAcceptedSample).toBe(480000);
+  expect(storage.getStoreSnapshot().billingLedger.filter(item=>item.idempotencyKey==='settle:public-s')).toHaveLength(1);
+  expect(storage.getStoreSnapshot().usageHolds[0].status).toBe('settled');
+  const ended=state();expect((await route(receipts[0])).statusCode).toBe(200);expect(state()).toEqual(ended);
+});
+it('keeps a legacy singular receipt valid without rewriting it or charging twice',async()=>{
+  uncertainStopped();current().publicModelAttempts=[uncertainAttempt()];clock(31);
+  const route=(payload:unknown)=>app.inject({method:'POST',url:'/internal/realtime/sessions/public-s/provider-reconciliation',
+    headers:{authorization:'Bearer internal-test-secret-123'},payload:payload as object});
+  const body=reconciliation();expect((await route(body)).statusCode).toBe(200);
+  delete current().publicProviderReconciliations;
+  const saved=state();expect((await route(body)).statusCode).toBe(200);expect(state()).toEqual(saved);
+  expect(storage.getStoreSnapshot().billingLedger).toHaveLength(1);
+});
+it('does not finalize while another prepared provider call remains unresolved',async()=>{
+  uncertainStopped();clock(31);const uncertain=uncertainAttempt(),prepared=uncertainAttempt();
+  Object.assign(prepared.event,{attemptId:'unresolved-intent',state:'dispatching'});
+  current().publicModelAttempts=[uncertain,prepared];
+  const reply=await app.inject({method:'POST',url:'/internal/realtime/sessions/public-s/provider-reconciliation',
+    headers:{authorization:'Bearer internal-test-secret-123'},payload:reconciliation({evidenceScope:'attempt',providerRequestIdHash:'b'.repeat(64)})});
+  expect(reply.statusCode).toBe(200);expect(reply.json().reconciliationComplete).toBe(false);
+  expect(current().publicFinalization).toBeUndefined();expect(storage.getStoreSnapshot().billingLedger).toEqual([]);
+});
 it('returns read-only processing diagnostics only to the owning account',async()=>{
   const before=state();const owned=await app.inject({url:'/realtime/sessions/public-s/processing-diagnostics'});
   expect(owned.statusCode).toBe(200);expect(owned.json()).toMatchObject({sessionId:'public-s',status:'active',finalization:{serverConsumedSeconds:0,finalizationPersisted:false}});

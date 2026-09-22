@@ -275,7 +275,7 @@ describe("manual configuration binding on the original session aggregate",()=>{
     tick=new Date(now.getTime()+300);await observePublicRuntime(current().id,{...runtime,sequence:4,lastAcceptedSample:step*3},tick);
     await expect(recordPublicModelAttempt(current().id,{...intent,audioEndSample:step*3},tick)).rejects.toThrow("conflict");
     if(vendor==="qwen"){
-      const start=step*3,end=start+31*sampleRate;tick=new Date(now.getTime()+400);
+      const start=step*3,end=start+3601*sampleRate;tick=new Date(now.getTime()+400);
       await observePublicRuntime(current().id,{...runtime,sequence:5,lastAcceptedSample:end},tick);
       const long={...intent,attemptId:"qwen-long-attempt",segmentId:"qwen-long-segment",state:"dispatching" as const,metadata:undefined,
         audioStartSample:start,audioEndSample:end};

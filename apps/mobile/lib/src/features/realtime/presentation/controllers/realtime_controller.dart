@@ -123,6 +123,7 @@ class RealtimeController extends ChangeNotifier {
   final Set<String> _speechEchoSegmentIds = <String>{};
   final Map<String, int> _publicAudioRevisionBySegment = <String, int>{};
   final Map<String, int> _publicAudioSequenceBySegment = <String, int>{};
+  final Map<String, int> _cancelledPublicAudioRevisions = <String, int>{};
   String? _activePublicAudioSegmentId;
   int? _activePublicAudioRevision;
   RealtimeStatus _status = RealtimeStatus.idle;

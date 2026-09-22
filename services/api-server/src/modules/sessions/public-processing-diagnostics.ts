@@ -1,4 +1,5 @@
 import type { SessionRecord } from "./session-record.js";
+import {hasPublicProviderReconciliation} from "./public-provider-reconciliation.js";
 
 const components = ["asr", "translation", "tts"] as const;
 type Component = typeof components[number];
@@ -36,6 +37,8 @@ export interface PublicProcessingDiagnostics {
       providerUsageCount: number;
       providerUsageSeconds: number;
     };
+    reconciliations?: Array<{providerId:string;evidenceScope:string;providerUsageCount:number;providerUsageSeconds:number}>;
+    reconciliationComplete?: boolean;
     moneyCostStatus: "unknown" | "not_applicable";
   };
   finalization: {
@@ -91,6 +94,11 @@ export function publicProcessingDiagnostics(session: SessionRecord): PublicProce
           providerUsageCount: reconciliation.providerUsageCount,
           providerUsageSeconds: reconciliation.providerUsageSeconds,
         },
+      } : {}),
+      ...(session.publicProviderReconciliations ? {
+        reconciliations: session.publicProviderReconciliations.map(record => ({providerId:record.providerId,
+          evidenceScope:record.evidenceScope,providerUsageCount:record.providerUsageCount,providerUsageSeconds:record.providerUsageSeconds})),
+        reconciliationComplete: hasPublicProviderReconciliation(session),
       } : {}),
       moneyCostStatus: publicAttempts.length > 0 ? "unknown" : "not_applicable",
     },

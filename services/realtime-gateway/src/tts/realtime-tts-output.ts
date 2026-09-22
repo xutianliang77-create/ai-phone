@@ -21,12 +21,19 @@ interface RealtimeTtsOutputQueueOptions {
   onDrop?: (event: TranslationEvent) => void;
   acceptVoice?: (enabled:boolean,presetId?:string)=>boolean;
 }
+interface PendingOutput {
+  event: TranslationEvent;
+  send: (event: ServerRealtimeEvent) => void;
+  generation: number;
+  started: boolean;
+}
 
 export class RealtimeTtsOutputQueue {
   private tail: Promise<void> = Promise.resolve();
   private generation = 0;
   private closed = false;
-  private pendingOutputs = 0;
+  private readonly pending = new Set<PendingOutput>();
+  private active?: PendingOutput;
   private droppedOutputs = 0;
   private suspended = false;
   /** Last accepted translation revision for each segment.  This belongs to
@@ -62,45 +69,61 @@ export class RealtimeTtsOutputQueue {
       ? undefined
       : this.revisionBySegment.get(event.segmentId);
     if (prior !== undefined && revision! <= prior) return;
-    // A new segment can be dropped under backpressure, but a corrected
-    // revision must first suppress its older generation so it never loses the
-    // only valid utterance merely because the old tail filled the queue.
-    if (prior === undefined &&
-        this.pendingOutputs >= (this.options.maxPendingOutputs ?? 32)) {
+    const queued = prior === undefined ? undefined : [...this.pending].find(item => !item.started && item.event.segmentId === event.segmentId);
+    const replacesActive = prior !== undefined && this.active?.event.segmentId === event.segmentId;
+    if (!queued && !replacesActive &&
+        this.pending.size >= (this.options.maxPendingOutputs ?? 32)) {
       this.droppedOutputs += 1;
       this.options.onDrop?.(event);
       return;
     }
-    if (prior !== undefined) {
-      // The synthesizer owns session-scoped provider cancellation.  It is
-      // safer to stop the serialized tail than to emit old audio after a
-      // corrected transcript; the newer final is enqueued below.
-      this.cancelPending();
-    }
     if (revision !== undefined) this.revisionBySegment.set(event.segmentId, revision);
-    this.pendingOutputs += 1;
-    const generation = this.generation;
+    if (queued && !replacesActive) {
+      queued.event = event;
+      queued.send = send;
+      return;
+    }
+    if (replacesActive) {
+      // Only this segment's active synthesis needs cancellation. Retain all
+      // unrelated, not-yet-dispatched work without issuing duplicate calls.
+      const retained = [...this.pending].filter(item => !item.started &&
+        item.event.segmentId !== event.segmentId && this.isCurrentRevision(item.event));
+      this.cancelPending();
+      this.schedule(event, send);
+      for (const item of retained) this.schedule(item.event, item.send);
+      return;
+    }
+    this.schedule(event, send);
+  }
+
+  private schedule(event: TranslationEvent, send: (event: ServerRealtimeEvent) => void) {
+    const item: PendingOutput = { event, send, generation: this.generation, started: false };
+    this.pending.add(item);
     this.tail = this.tail.then(async () => {
-      if (!this.canEmit(generation)) return;
+      if (!this.canEmit(item.generation) || !this.isCurrentRevision(item.event)) return;
+      item.started = true;
+      this.active = item;
       try {
         for await (const audio of this.options.synthesizer.synthesizeStream(
-          event,
+          item.event,
           this.options.voice,
         )) {
-          if (!this.canEmit(generation)) return;
-          send(audio);
+          if (!this.canEmit(item.generation) || !this.isCurrentRevision(item.event)) return;
+          item.send(audio);
         }
       } catch (error) {
-        if (this.canEmit(generation)) {
-          logRealtimeTtsFailure(event.sessionId, event.segmentId, error);
+        if (this.canEmit(item.generation) && this.isCurrentRevision(item.event)) {
+          logRealtimeTtsFailure(item.event.sessionId, item.event.segmentId, error);
           const reason = error instanceof Error ? error.message : "TTS provider failed";
-          send(buildError("provider_unavailable", `语音合成失败：${reason}。字幕已保留`, {
-            sessionId: event.sessionId, stage: "tts", retryable: !(error instanceof PublicSpeechError),
+          item.send(buildError("provider_unavailable", `语音合成失败：${reason}。字幕已保留`, {
+            sessionId: item.event.sessionId, stage: "tts", retryable: !(error instanceof PublicSpeechError),
           }));
         }
       }
     }).finally(() => {
-      this.pendingOutputs = Math.max(0, this.pendingOutputs - 1);
+      // An old generation can release only its own identity, never a new slot.
+      this.pending.delete(item);
+      if (this.active === item) this.active = undefined;
     });
     const operation=this.tail;
     this.operations.add(operation);
@@ -130,9 +153,8 @@ export class RealtimeTtsOutputQueue {
   private resetGeneration() {
     this.generation += 1;
     this.tail = Promise.resolve();
-    // Existing operations still settle their finally blocks, which clamp this
-    // value at zero. They belong to the cancelled generation and cannot emit.
-    this.pendingOutputs = 0;
+    this.pending.clear();
+    this.active = undefined;
   }
 
   async drain() {
@@ -141,9 +163,13 @@ export class RealtimeTtsOutputQueue {
 
   diagnostics() {
     return {
-      pendingOutputs: this.pendingOutputs,
+      pendingOutputs: this.pending.size,
       droppedOutputs: this.droppedOutputs,
     };
+  }
+
+  private isCurrentRevision(event: TranslationEvent) {
+    return event.revision === undefined || this.revisionBySegment.get(event.segmentId) === event.revision;
   }
 
   private canEmit(generation: number) {

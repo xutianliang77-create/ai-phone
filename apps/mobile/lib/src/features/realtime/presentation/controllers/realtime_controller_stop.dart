@@ -34,8 +34,9 @@ extension RealtimeControllerStop on RealtimeController {
     }
     try {
       final session = _session;
-      // User stop must silence playback before waiting for ASR's bounded tail.
-      await ignoreCleanupError(_stopSpeaking);
+      // Invalidate/request playback stop immediately, independently of physical
+      // capture shutdown. A stalled playback ACK must not keep the mic open.
+      final playbackStopping = ignoreCleanupError(_stopSpeaking);
       if (session?.syncBinding != null && !_usesDeviceAsr) {
         _drainingPublicAudio = true;
         try {
@@ -51,6 +52,7 @@ extension RealtimeControllerStop on RealtimeController {
       }
       if (_status == RealtimeStatus.failed) return;
       await ignoreCleanupError(_audioSessionCoordinator.endCapture);
+      await playbackStopping;
       await ignoreCleanupError(() async => _audioSubscription?.cancel());
       await _recordDeviceAsrDiagnosticEvent('controller.stop_requested');
       await ignoreCleanupError(() async => _mobileAsrProvider?.stop());
