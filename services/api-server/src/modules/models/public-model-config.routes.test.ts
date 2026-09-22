@@ -26,6 +26,13 @@ beforeEach(async()=>{
 });
 afterEach(async()=>{await app.close();vi.unstubAllEnvs();vi.restoreAllMocks();rmSync(dir,{recursive:true,force:true});});
 describe("original model domain manual public configuration",()=>{
+  it("round-trips optional cloud VAD through the encrypted editor without model calls",async()=>{
+    const fetch=vi.spyOn(globalThis,"fetch").mockRejectedValue(Error("No model calls allowed"));
+    const body=payload();body.components.asr.serverVad={threshold:0,silenceDurationMs:800};
+    expect((await save(body)).statusCode).toBe(200);
+    expect((await app.inject({url:uri,headers:auth})).json().components.asr.serverVad).toEqual(body.components.asr.serverVad);
+    expect(fetch).not.toHaveBeenCalled();
+  });
   it("round-trips Google language locale maps without calling models and rejects malformed maps",async()=>{
     const body=payload(publicModelCatalog.protocols.find(p=>p.id==="google_speech_v2")!);expect((await save(body)).statusCode).toBe(200);
     const result=await app.inject({method:"GET",url:uri,headers:auth});expect(result.json().components.asr.languageLocales).toEqual({zh:"cmn-Hans-CN",en:"en-US"});

@@ -1,9 +1,10 @@
-import {publicProtocolCapability,publicProtocolSampleRateSupported,type PublicModelProtocolCapability} from "@translation/contracts";
+import {publicProtocolCapability,publicProtocolSampleRateSupported,publicAsrServerVadCapability,resolvePublicAsrServerVad,type PublicAsrServerVad,type PublicModelProtocolCapability} from "@translation/contracts";
 export const modelComponents=["asr","translation","tts"] as const;
 export type ModelComponent=typeof modelComponents[number];
 export type Vendor="qwen"|"tencent"|"openai"|"google";
 export type AuthKind="api_key"|"tencent_secret"|"google_service_account"|"google_adc";
 export interface PublicModelProfile {
+  serverVad?:PublicAsrServerVad;
   languageLocales?:Record<string,string>;
   enabled:boolean;vendor:Vendor;protocol:string;endpoint:string;modelId:string;authKind:AuthKind;
   region:string;appId:string;projectId:string;location:string;recognizer:string;voice:string;volume:number;
@@ -12,11 +13,11 @@ export interface PublicModelProfile {
 export type Credentials=Partial<Record<"apiKey"|"secretId"|"secretKey"|"serviceAccountJson",string>>;
 export interface PublicModelConfiguration {schemaVersion:1;deploymentId:string;revision:number;updatedAt:string;
   components:Record<ModelComponent,PublicModelProfile>;credentials:Record<ModelComponent,Credentials>;}
-interface Protocol {id:string;label:string;vendor:Vendor;component:ModelComponent;scheme:"https:"|"wss:";auth:AuthKind[];modelRequired:boolean;fields:string[];capability:Readonly<PublicModelProtocolCapability>;}
+interface Protocol {id:string;label:string;vendor:Vendor;component:ModelComponent;scheme:"https:"|"wss:";auth:AuthKind[];modelRequired:boolean;fields:string[];capability:Readonly<PublicModelProtocolCapability>;serverVad?:ReturnType<typeof publicAsrServerVadCapability>;}
 const p=(id:string,label:string,vendor:Vendor,component:ModelComponent,scheme:"https:"|"wss:",auth:AuthKind[],modelRequired=true,fields:string[]=[]):Protocol=>{
   const capability=publicProtocolCapability(id);
   if(!capability||capability.vendor!==vendor||capability.component!==component)throw Error("public_catalog_capability_mismatch");
-  return {id,label,vendor,component,scheme,auth,modelRequired,fields,capability};
+  return {id,label,vendor,component,scheme,auth,modelRequired,fields,capability,...(publicAsrServerVadCapability(id)?{serverVad:publicAsrServerVadCapability(id)}:{})};
 };
 export const publicModelCatalog={
   vendors:[{id:"qwen",label:"Qwen / 阿里云百炼"},{id:"tencent",label:"腾讯云 / 混元"},{id:"openai",label:"OpenAI"},{id:"google",label:"Google"}],
@@ -51,10 +52,14 @@ export function emptyConfiguration(deploymentId:string):PublicModelConfiguration
 const profileKeys=["enabled","vendor","protocol","endpoint","modelId","authKind","region","appId","projectId","location","recognizer","voice","volume","timeoutMs","maxTokens","sampleRate"];
 function object(v:unknown):v is Record<string,unknown>{return !!v&&typeof v==="object"&&!Array.isArray(v);}
 export function validateProfile(component:ModelComponent,value:unknown):PublicModelProfile{
-  if(!object(value)||Object.keys(value).some(k=>!profileKeys.includes(k)&&k!=="languageLocales")||profileKeys.filter(k=>k!=="volume").some(k=>!(k in value)))throw new PublicConfigError(`${component}:invalid_fields`);
+  if(!object(value)||Object.keys(value).some(k=>!profileKeys.includes(k)&&!["languageLocales","serverVad"].includes(k))||profileKeys.filter(k=>k!=="volume").some(k=>!(k in value)))throw new PublicConfigError(`${component}:invalid_fields`);
   const v={...value,volume:value.volume??0} as unknown as PublicModelProfile;
   const protocol=publicModelCatalog.protocols.find(p=>p.id===v.protocol&&p.vendor===v.vendor&&p.component===component);
   if(!protocol||!protocol.auth.includes(v.authKind)||typeof v.enabled!=="boolean")throw new PublicConfigError(`${component}:invalid_protocol_or_auth`);
+  if(Object.hasOwn(value,"serverVad")){
+    try{if(component!=="asr"||value.serverVad===undefined)throw Error();v.serverVad=resolvePublicAsrServerVad(v.protocol,value.serverVad);}
+    catch{throw new PublicConfigError(`${component}:invalid_server_vad`);}
+  }
   if(v.languageLocales!==undefined&&(!object(v.languageLocales)||Object.keys(v.languageLocales).length>40||Object.entries(v.languageLocales).some(([k,s])=>
     !/^[a-z]{2,3}(?:-Hant)?$/.test(k)||k==="auto"||typeof s!=="string"||!/^[a-z]{2,3}(?:-[A-Za-z0-9]{2,8}){0,2}$/.test(s))))throw new PublicConfigError(`${component}:invalid_language_locales`);
   for(const key of ["endpoint","modelId","region","appId","projectId","location","recognizer","voice"] as const){

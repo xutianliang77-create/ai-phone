@@ -105,8 +105,12 @@ export interface AsrSpeakerBoundaryEvidence {
 }
 
 export type AsrProviderResult = TranscriptResult | TranscriptResult[] | null;
+/** Supplier-valid language outside the product's supported scope. No invented
+ * source language/transcript enters MT, TTS or history through this notice. */
+export interface AsrLanguageNotice {segmentId:string;revision:number;language:string;previewLanguage?:TranslationLanguageCode;}
 
 export interface AsrProvider {
+  takeLanguageNotices?(sessionId:string):AsrLanguageNotice[];
   setPartialListener?(sessionId:string,listener:(result:TranscriptResult)=>void):()=>void;
   createSession(session: AsrSession): Promise<void>;
   transcribe(frame: AudioFrame): Promise<AsrProviderResult>;

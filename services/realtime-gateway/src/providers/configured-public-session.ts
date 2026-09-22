@@ -150,7 +150,7 @@ function assemblePublicSession(options:ConfiguredPublicSessionOptions,withOutput
   const provider=new LmStudioRealtimeProvider({providerName: `public:${mt!.vendor}`, baseUrl: mt!.endpoint, model: mt!.modelId,
     timeoutMs: mt!.timeoutMs, maxTokens: mt!.maxTokens, asrProvider, translationClient, publicSession: session,
     ...(phoneSpeaker?{deviceSpeakerReceiver:phoneSpeaker.accept.bind(phoneSpeaker)}:{}),
-    // Keep one transport batch below Qwen's 400ms server-VAD silence window,
+    // Keep one transport batch below Qwen's minimum configurable 200ms silence window,
     // so a durable attempt cannot straddle two supplier-owned speech turns.
     ...(snapshot.components.asr?.protocol==="qwen_asr_realtime"?{maxInputBatchAudioMs:100}:{}),
     listeningMaxContinuationBufferMs: options.listeningMaxContinuationBufferMs});

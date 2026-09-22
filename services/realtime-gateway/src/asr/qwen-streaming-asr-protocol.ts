@@ -1,18 +1,21 @@
 import {PublicAsrError} from "./public-asr-completed-audio.js";
-import type {TranslationLanguageCode} from "@translation/contracts";
-import {QWEN_ASR_PRODUCT_LANGUAGES,automaticSourceAllowed} from '@translation/contracts';
+import type {TranslationLanguageCode,PublicAsrServerVad} from "@translation/contracts";
+import {QWEN_ASR_PRODUCT_LANGUAGES,automaticSourceAllowed,resolvePublicAsrServerVad} from '@translation/contracts';
 /** Intersection of the documented Qwen language codes and the existing product
  * language contract. `auto` deliberately omits the optional Qwen hint; it is
  * not coerced to a default language or an unqualified language pair. */
 const supported:ReadonlySet<string>=new Set(QWEN_ASR_PRODUCT_LANGUAGES);
+// Valid supplier evidence is not an authorization to translate a new language.
+const supplierOnly=new Set(["da","fil","fi","is","no","sv"]);
 export function qwenAsrLanguage(language:string){
   if(!supported.has(language))throw new PublicAsrError("qwen_asr_language_not_supported","not_sent");return language;
 }
-export function qwenTranscriptLanguage(language:unknown,source:string,_pair?:readonly TranslationLanguageCode[],_sourceLanguages?:readonly TranslationLanguageCode[]):TranslationLanguageCode{
+export function qwenTranscriptLanguage(language:unknown,source:string,_pair?:readonly TranslationLanguageCode[],_sourceLanguages?:readonly TranslationLanguageCode[]):TranslationLanguageCode|undefined{
   if(typeof language!=="string"||!/^[a-z]{2,3}$/.test(language))throw new PublicAsrError("qwen_asr_language_invalid","uncertain");
   if(source!=="auto"){
     if(language!==source)throw new PublicAsrError("qwen_asr_language_mismatch","uncertain");
-  }else if(!supported.has(language))throw new PublicAsrError("qwen_asr_language_not_supported","uncertain");
+  }else if(supplierOnly.has(language))return undefined;
+  else if(!supported.has(language))throw new PublicAsrError("qwen_asr_language_not_supported","uncertain");
   // Partial language is provisional, just like stash. Qwen may revise en -> zh
   // within one item; only completed supplies the language routed to MT.
   return language as TranslationLanguageCode;
@@ -23,14 +26,15 @@ export function qwenTranscriptLanguage(language:unknown,source:string,_pair?:rea
 export function qwenDraftTranscriptLanguage(language:unknown,source:string,pair?:readonly TranslationLanguageCode[],sourceLanguages?:readonly TranslationLanguageCode[]){
   try{
     const detected=qwenTranscriptLanguage(language,source,pair,sourceLanguages);
-    return source==='auto'&&!automaticSourceAllowed({pair,sourceLanguages},detected)?undefined:detected;
+    return detected===undefined||source==='auto'&&!automaticSourceAllowed({pair,sourceLanguages},detected)?undefined:detected;
   }
   catch(error){
     if(error instanceof PublicAsrError&&["qwen_asr_language_not_supported","qwen_asr_language_mismatch"].includes(error.code))return undefined;
     throw error;
   }
 }
-export function qwenAsrSessionConfiguration(language:string){
+export function qwenAsrSessionConfiguration(language:string,serverVad?:PublicAsrServerVad){
+  const vad=resolvePublicAsrServerVad("qwen_asr_realtime",serverVad)!;
   const inputAudioTranscription=language==="auto"?{}:{language:qwenAsrLanguage(language)};
   return {input_audio_format:"pcm",sample_rate:16000,input_audio_transcription:inputAudioTranscription,
     // Qwen documents Manual mode for short, explicitly submitted voice
@@ -38,17 +42,18 @@ export function qwenAsrSessionConfiguration(language:string){
     // Public Wujie sessions are continuous conversations, so supplier-side VAD
     // owns ASR segmentation. The phone VAD remains independent and continues
     // to own local barge-in/playback/UI behavior.
-    turn_detection:{type:"server_vad",threshold:0.2,silence_duration_ms:400}};
+    turn_detection:{type:"server_vad",threshold:vad.threshold,silence_duration_ms:vad.silenceDurationMs}};
 }
-export function assertQwenAsrConfiguration(session:Record<string,any>|undefined,model:string,language:string){
+export function assertQwenAsrConfiguration(session:Record<string,any>|undefined,model:string,language:string,serverVad?:PublicAsrServerVad){
+  const vad=resolvePublicAsrServerVad("qwen_asr_realtime",serverVad)!;
   const transcription=session?.input_audio_transcription;
   const transcriptionOk=language==="auto"
     ? transcription===undefined||autoTranscription(transcription,model)
     : fixedTranscription(transcription,model,qwenAsrLanguage(language));
   if(!session||typeof session.id!=="string"||!session.id||session.id.length>240||session.model!==model||
     JSON.stringify(session.modalities)!=='["text"]'||!["pcm","pcm16"].includes(session.input_audio_format)||session.sample_rate!==16000||
-    !transcriptionOk||session.turn_detection?.type!=="server_vad"||session.turn_detection.threshold!==0.2||
-    session.turn_detection.silence_duration_ms!==400||Object.keys(session.turn_detection).some(key=>
+    !transcriptionOk||session.turn_detection?.type!=="server_vad"||session.turn_detection.threshold!==vad.threshold||
+    session.turn_detection.silence_duration_ms!==vad.silenceDurationMs||Object.keys(session.turn_detection).some(key=>
       !["type","threshold","silence_duration_ms","create_response","interrupt_response"].includes(key))||
     ["create_response","interrupt_response"].some(key=>session.turn_detection[key]!==undefined&&typeof session.turn_detection[key]!=="boolean"))throw new PublicAsrError("qwen_asr_setup_mismatch","not_sent");
 }

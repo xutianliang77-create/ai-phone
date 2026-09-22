@@ -1,4 +1,5 @@
 import { translateSingleTranscript } from "./lmstudio-transcript-translation.js";
+import { asrLanguageNotices } from "./asr-language-notices.js";
 import type { AudioFrame, DeviceSpeakerEvidenceEvent, ServerRealtimeEvent } from "@translation/contracts";
 import { isDeepStrictEqual } from "node:util";
 import { OffLlmProvider } from "@translation/llm";
@@ -119,6 +120,7 @@ export class LmStudioRealtimeProvider implements RealtimeProvider {
     }
     if(!this.isCurrent(session))return;
     if (transcripts.length === 0) {
+      yield* asrLanguageNotices(this.asrProvider,session,this.name);
       yield* this.flushExpiredSemanticSegments(session);
       return;
     }
@@ -126,6 +128,7 @@ export class LmStudioRealtimeProvider implements RealtimeProvider {
       if(!this.isCurrent(session))return;
       yield* routeAsrTranscript(session, transcript, (item) => this.processTranscript(session, item), (item) => this.semanticSegmentsFor(session).previewContinuation(session.sessionId, item) ?? item);
     }
+    if(this.isCurrent(session))yield* asrLanguageNotices(this.asrProvider,session,this.name);
   }
 
   async *sendText(
@@ -196,6 +199,7 @@ export class LmStudioRealtimeProvider implements RealtimeProvider {
     }
     if(!this.isCurrent(session))return;
     for (const transcript of transcripts) yield* this.processTranscript(session, transcript);
+    if(this.isCurrent(session))yield* asrLanguageNotices(this.asrProvider,session,this.name);
     yield* this.flushSemanticSegments(session);
     if(this.isCurrent(session))this.speakerBoundaryRepair.finalizeEndpointNoops(session);
   }

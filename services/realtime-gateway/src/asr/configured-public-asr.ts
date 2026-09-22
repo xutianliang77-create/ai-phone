@@ -1,5 +1,5 @@
 import {isDeepStrictEqual} from "node:util";
-import {publicAutomaticLanguageScopeSupported,publicProtocolSampleRateSupported} from "@translation/contracts";
+import {publicAutomaticLanguageScopeSupported,publicProtocolSampleRateSupported,resolvePublicAsrServerVad,type PublicAsrServerVad} from "@translation/contracts";
 import {parseRealtimeProcessingRequest,type RealtimeExecutionPlan,type RealtimeProcessingAuthorization} from "@translation/contracts";
 import {HttpAsrClient} from "./http-asr-client.js";
 import {PublicAsrError,type CompletedAsrAudio,type CompletedAsrOptions} from "./public-asr-completed-audio.js";
@@ -11,7 +11,7 @@ import {googleAsrConfiguration} from "./google-streaming-asr.js";
 export interface ConfiguredPublicAsrOptions {
   deploymentId:string;authorization:RealtimeProcessingAuthorization;
   snapshot:{deploymentId:string;configurationRevision:number;modelPolicyRevision:string;executionPlan:RealtimeExecutionPlan;components:{asr?:{
-    enabled:boolean;vendor:string;protocol:string;authKind:string;endpoint:string;modelId:string;timeoutMs:number;sampleRate:16000|24000;appId?:string;projectId?:string;location?:string;recognizer?:string;languageLocales?:Record<string,string>}}};
+    enabled:boolean;vendor:string;protocol:string;authKind:string;endpoint:string;modelId:string;timeoutMs:number;sampleRate:16000|24000;serverVad?:PublicAsrServerVad;appId?:string;projectId?:string;location?:string;recognizer?:string;languageLocales?:Record<string,string>}}};
   sessionId:string;leaseId:string;resolveCredentials:StreamingAsrOptions["resolveCredentials"];record:CompletedAsrOptions["record"];fetchFn?:typeof fetch;
 }
 /** Explicit finalized-turn API, NOT a replacement for streaming AsrProvider.transcribe(frame). */
@@ -47,6 +47,7 @@ export function configuredStreamingAsr(options:ConfiguredStreamingAsrOptions){
   const configured=options.snapshot.components.asr?.protocol;
   const protocol=configured==="google_speech_v2"?"google_speech_v2":configured==="qwen_asr_realtime"?"qwen_asr_realtime":configured==="tencent_asr_ws"?"tencent_asr_ws":"openai_realtime_asr";
   const {profile,authorization}=validateConfiguredAsr(options,protocol),qwen=protocol==="qwen_asr_realtime",tencent=protocol==="tencent_asr_ws",google=protocol==="google_speech_v2";
+  try{resolvePublicAsrServerVad(protocol,profile.serverVad);}catch{throw new PublicAsrError("public_asr_configuration_not_supported","not_sent");}
   if(qwen&&authorization.languagePolicy.source!=="auto")qwenAsrLanguage(authorization.languagePolicy.source);
   if(tencent)validateTencentAsr({endpoint:profile.endpoint,model:profile.modelId,appId:profile.appId,language:authorization.languagePolicy.source as StreamingAsrOptions["language"]});
   let url:URL;try{url=new URL(profile.endpoint);}catch{throw new PublicAsrError("public_asr_stream_configuration","not_sent");}
@@ -62,6 +63,7 @@ export function configuredStreamingAsr(options:ConfiguredStreamingAsrOptions){
     endpoint:profile.endpoint,model:profile.modelId,language:authorization.languagePolicy.source as StreamingAsrOptions["language"],timeoutMs:profile.timeoutMs,wireProfile:protocol,appId:profile.appId,
     authorizeConnection:options.authorizeConnection,resolveCredentials:options.resolveCredentials,record:options.record,socketFactory:options.socketFactory,
     projectId:profile.projectId,location:profile.location,recognizer:profile.recognizer,languageLocales:profile.languageLocales,sampleRate:profile.sampleRate,
+    ...(profile.serverVad?{serverVad:structuredClone(profile.serverVad)}:{}),
     detectedLanguageFallback:automaticFallback,
     ...(authorization.languagePolicy.source==="auto"?{automaticLanguagePair:authorization.languagePolicy.pair}:{}),
     ...(authorization.languagePolicy.sourceLanguages?{automaticSourceLanguages:[...authorization.languagePolicy.sourceLanguages]}:{}),

@@ -1,6 +1,6 @@
 import WebSocket from "ws";
 import {randomUUID} from "node:crypto";
-import type {LanguageCode,PublicModelAttemptEvent,TranslationLanguageCode} from "@translation/contracts";
+import type {LanguageCode,PublicModelAttemptEvent,TranslationLanguageCode,PublicAsrServerVad} from "@translation/contracts";
 import type {AsrProviderResult,AsrSession,TranscriptResult} from "./asr-provider.js";
 import type {HttpAsrRequest,HttpAsrFlushRequest,HttpAsrBoundaryRequest} from "./http-asr-client.js";
 import {PublicAsrError,parseOpenAiAsr} from "./public-asr-completed-audio.js";
@@ -14,8 +14,10 @@ import {streamingAsrFailureDiagnostic,streamingAsrCancellationContext,streamingA
   isStreamingAsrFailureEvent,streamingAsrProviderContext,streamingAsrProtocolContext,type StreamingAsrFailureContext} from "./streaming-asr-diagnostics.js";
 import {deferred,type State,type Turn,type Result} from "./streaming-asr-state.js";
 import {sendStreamingAsrWireEvent,streamingAsrSendDiagnostic} from "./streaming-asr-wire-send.js";
+import {completeQwenTurn} from "./qwen-streaming-asr-results.js";
 const key=(value:unknown):value is string=>typeof value==="string"&&/^[A-Za-z0-9_.:/-]{1,240}$/.test(value);
 export interface StreamingAsrOptions {sessionId:string;leaseId:string;endpoint:string;model:string;language:LanguageCode;timeoutMs:number;
+  serverVad?:PublicAsrServerVad;
   wireProfile?:"openai_realtime_asr"|"qwen_asr_realtime"|"tencent_asr_ws"|"google_speech_v2";appId?:string;
   projectId?:string;location?:string;recognizer?:string;languageLocales?:Record<string,string>;sampleRate?:16000|24000;
   /** Used only when the configured provider accepts source=auto. It is the
@@ -75,7 +77,7 @@ export class OpenAiStreamingAsrClient {
         if(isStreamingAsrFailureEvent(event)){s.lastWireType=event.type;this.fail(s,"public_asr_stream_provider_error",streamingAsrProviderContext(event));return;}
         if(this.qwen&&event?.type!=="session.finished"&&s.configured&&!s.finishing&&(s.busy||s.turn?.finalizing||!s.turn)){if(s.pendingWireEvents.length>=4096)throw Error();s.pendingWireEvents.push(event);}
         else this.receiveWireEvent(s,event);}catch{this.fail(s,"public_asr_stream_protocol",{origin:"protocol"});}});
-      s.ws.once("open",()=>{void this.send(s,{type:"session.update",session:this.qwen?qwenAsrSessionConfiguration(this.options.language):{type:"transcription",audio:{input:{format:{type:"audio/pcm",rate:24000},
+      s.ws.once("open",()=>{void this.send(s,{type:"session.update",session:this.qwen?qwenAsrSessionConfiguration(this.options.language,this.options.serverVad):{type:"transcription",audio:{input:{format:{type:"audio/pcm",rate:24000},
         transcription:this.transcription(),turn_detection:null}}}}).catch(()=>this.fail(s,"public_asr_stream_setup"));});
       await abortable(s.ready.promise,s.stop.signal);this.assert(s);
     }catch{this.fail(s,"public_asr_stream_setup");s.removeAbort();if(this.state===s)this.state=undefined;throw s.failure!;}finally{clearTimeout(timer);}
@@ -200,17 +202,7 @@ export class OpenAiStreamingAsrClient {
     }catch{this.fail(s,"public_asr_stream_finish_failed");await this.finishQwenTransport(s);throw s.failure!;}
     finally{s.busy=false;clearTimeout(timer);signal?.removeEventListener("abort",cancelled);}
   }
-  private completeQwenTurn(s:State,turn:Turn){
-    if(turn.finalizing||turn.terminal||!turn.ack||!turn.result)return;
-    turn.terminal=true;const result=turn.result,item=turn.providerItemId!;
-    const start=turn.providerStartSample??turn.event.audioStartSample!,end=turn.providerEndSample??turn.event.audioEndSample!;
-      const transport=s.qwenTransport;if(!transport?.sent||transport.terminal)throw Error();
-      s.seen.add(item);if(s.seen.size>1024)s.seen.delete(s.seen.values().next().value!);s.lastItem=item;
-      s.completed.push({segmentId:turn.event.segmentId,revision:1,isFinal:true,text:result.text,language:this.transcriptLanguage(turn),
-        ...(this.options.language==="auto"&&turn.detectedLanguage!==undefined?{automaticLanguageStatus:"detected" as const}:{}),
-        timing:{startMs:start/(this.rate/1000),endMs:end/(this.rate/1000),source:"estimated"}});
-      if(s.turn===turn)s.turn=undefined;
-  }
+  takeLanguageNotices(sessionId:string){return this.current(sessionId).languageNotices?.splice(0)??[];}
   private async confirmQwenTransport(s:State){
     const transport=s.qwenTransport;if(!transport||transport.finalizing||transport.terminal)return;
     transport.terminal=true;transport.finalizing=this.record({...transport.event,state:"confirmed",metadata:{}}).catch(()=>{
@@ -259,7 +251,7 @@ export class OpenAiStreamingAsrClient {
         if(s.wireSessionId||typeof e.session?.id!=="string"||!e.session.id||e.session.id.length>240||e.session.model!==this.options.model)throw Error();s.wireSessionId=e.session.id;return;
       }
       if(e.type==="session.updated"){
-        if(s.configured)throw Error();assertQwenAsrConfiguration(e.session,this.options.model,this.options.language);
+        if(s.configured)throw Error();assertQwenAsrConfiguration(e.session,this.options.model,this.options.language,this.options.serverVad);
         if(s.wireSessionId&&s.wireSessionId!==e.session.id)throw Error();s.wireSessionId=e.session.id;s.configured=true;s.ready.resolve();return;
       }
       if(e.type==="session.finished"){
@@ -302,6 +294,7 @@ export class OpenAiStreamingAsrClient {
         // routing. Validate text/item structure below before completing them.
         turn.detectedLanguage=e.type.endsWith(".completed")&&typeof e.transcript==="string"&&!cleanRealtimeText(e.transcript)
           ? undefined : (e.type.endsWith(".text")?qwenDraftTranscriptLanguage:qwenTranscriptLanguage)(e.language,this.options.language,this.options.automaticLanguagePair,this.options.automaticSourceLanguages);
+        if(e.type.endsWith(".completed")&&typeof e.transcript==="string"&&cleanRealtimeText(e.transcript)&&turn.detectedLanguage===undefined)turn.unsupportedLanguage=e.language;
         e={...e,item_id:this.qwenTurnItemId(turn,e.item_id)};
       }else throw Error();
     }
@@ -327,13 +320,13 @@ export class OpenAiStreamingAsrClient {
       if(this.qwen&&e.type.endsWith(".text")){
         if(typeof e.text!=="string"||typeof e.stash!=="string"||e.text.length+e.stash.length>16000||!e.text.startsWith(turn.confirmedPrefix??""))throw Error();
         turn.confirmedPrefix=e.text;turn.partial=e.text+e.stash;
-        const text=cleanRealtimeText(turn.partial);if(text&&turn.detectedLanguage!==undefined)this.partialListener?.({segmentId:turn.event.segmentId,revision:0,isFinal:false,text,language:this.transcriptLanguage(turn)});
+        const text=cleanRealtimeText(turn.partial);if(text&&turn.detectedLanguage!==undefined){turn.previewLanguage=turn.detectedLanguage;this.partialListener?.({segmentId:turn.event.segmentId,revision:0,isFinal:false,text,language:this.transcriptLanguage(turn)});}
       }else if(e.type.endsWith(".delta")){if(typeof e.delta!=="string"||turn.partial.length+e.delta.length>16000)throw Error();turn.partial+=e.delta;
         const text=cleanRealtimeText(turn.partial);if(text)this.partialListener?.({segmentId:turn.event.segmentId,revision:0,isFinal:false,text,language:this.transcriptLanguage()});}
       else {if(!this.qwen&&!turn.committing)throw Error();const result=parseOpenAiAsr({text:e.transcript,...(!this.qwen&&e.usage!==undefined?{usage:e.usage}:{})},this.qwen?turn.providerItemId??null:e.item_id);
         if(turn.result&&JSON.stringify(turn.result)!==JSON.stringify(result))throw Error();turn.result=result;}
     }
-    if(turn.ack&&turn.result){if(this.qwen)this.completeQwenTurn(s,turn);else turn.done.resolve(turn.result);}
+    if(turn.ack&&turn.result){if(this.qwen)completeQwenTurn(s,turn,this.transcriptLanguage(turn),this.options.language==="auto",this.rate);else turn.done.resolve(turn.result);}
   }
   private qwenTurnItemId(turn:Turn,value:unknown){
     if(typeof value!=="string"||!value||value.length>240||turn.providerItemId!==value)throw Error();return value;

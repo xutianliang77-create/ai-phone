@@ -45,3 +45,4 @@ export * from "./shared/log-redaction.js";
 export * from "./shared/domain-lexicon.js";
 export * from "./shared/languages.js";
 export * from "./shared/speaker.js";
+export * from "./realtime/public-asr-settings.js";

@@ -26,6 +26,20 @@ afterEach(async()=>{for(const p of active.splice(0))await p.closeSession(session
 const serverVad={type:"server_vad",threshold:0.2,silence_duration_ms:400};
 
 describe("Qwen ASR server-VAD wire on original shared streaming lifecycle",()=>{
+  it("passes explicit signed VAD through the original factory and validates the exact acknowledgement",async()=>{
+    const t=setup();t.options.snapshot.components.asr!.serverVad={threshold:0,silenceDurationMs:800};
+    const p=t.create();await p.createSession(session);
+    expect(t.sockets[0].sent[0].session.turn_detection).toEqual({type:"server_vad",threshold:0,silence_duration_ms:800});
+    await p.transcribe(frame());await p.flush(session.sessionId,{finishSession:true});
+    expect(t.record.mock.calls.at(-1)![0].state).toBe("confirmed");
+  });
+  it("does not accept a different VAD acknowledgement or invalid config before dispatch",async()=>{
+    const t=setup(s=>{s.autoSetup=false;s.onSend=e=>{if(e.type==="session.update")queueMicrotask(()=>s.receive({type:"session.updated",session:{id:"qwen-session",model:s.model,modalities:["text"],...e.session,turn_detection:serverVad}}));};});
+    t.options.snapshot.components.asr!.serverVad={threshold:0,silenceDurationMs:800};
+    await expect(t.create().createSession(session)).rejects.toMatchObject({code:"qwen_asr_setup_mismatch"});
+    const invalid=setup();invalid.options.snapshot.components.asr!.serverVad={threshold:0,silenceDurationMs:10};
+    expect(invalid.create).toThrow("public_asr_configuration_not_supported");expect(invalid.socketFactory).not.toHaveBeenCalled();expect(invalid.resolveCredentials).not.toHaveBeenCalled();
+  });
   it("delivers an empty completed result so its already displayed draft can be cleared",async()=>{
     const t=setup(s=>{s.transcript="";}),p=t.create(),partials=vi.fn();
     await p.createSession(session);p.setPartialListener(session.sessionId,partials);
