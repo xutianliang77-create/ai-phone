@@ -4,15 +4,27 @@ import 'package:flutter/material.dart';
 
 import '../../../../app/app_config.dart';
 import '../../../../app/localization/app_localizations.dart';
+import '../../../realtime/data/realtime_settings_store.dart';
 import '../../data/session_history_models.dart';
 import '../../data/session_history_repository.dart';
 import '../widgets/session_history_sections.dart';
 import 'session_detail_page.dart';
 
 class SessionHistoryPage extends StatefulWidget {
-  const SessionHistoryPage({this.repository, super.key});
+  const SessionHistoryPage({
+    this.repository,
+    this.config,
+    this.settingsStore,
+    this.repositoryFactory,
+    this.active = true,
+    super.key,
+  });
 
   final SessionHistoryRepository? repository;
+  final AppConfig? config;
+  final RealtimeSettingsStore? settingsStore;
+  final SessionHistoryRepository Function(AppConfig)? repositoryFactory;
+  final bool active;
 
   @override
   State<SessionHistoryPage> createState() => _SessionHistoryPageState();
@@ -21,21 +33,69 @@ class SessionHistoryPage extends StatefulWidget {
 class _SessionHistoryPageState extends State<SessionHistoryPage> {
   static const _searchDebounceDuration = Duration(milliseconds: 300);
 
-  late final SessionHistoryRepository _repository = widget.repository ??
-      SessionHistoryRepository.fromConfig(AppConfig.fromEnvironment());
-  late final bool _ownsRepository = widget.repository == null;
+  SessionHistoryRepository? _resolvedRepository;
+  SessionHistoryRepository get _repository => _resolvedRepository!;
+  int _loadEpoch = 0;
   final TextEditingController _searchController = TextEditingController();
   Timer? _searchDebounceTimer;
-  late Future<List<SessionListItem>> _sessions = _repository.listSessions();
+  late Future<List<SessionListItem>> _sessions;
   SessionHistoryKind _kind = SessionHistoryKind.realtime;
   bool _showSearch = false;
   bool _endedOnly = true;
 
   @override
+  void initState() {
+    super.initState();
+    _sessions = _readSessions();
+  }
+
+  @override
+  void didUpdateWidget(covariant SessionHistoryPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.active != widget.active ||
+        oldWidget.config != widget.config ||
+        oldWidget.settingsStore != widget.settingsStore ||
+        oldWidget.repository != widget.repository ||
+        oldWidget.repositoryFactory != widget.repositoryFactory) {
+      _searchDebounceTimer?.cancel();
+      _sessions = _readSessions();
+    }
+  }
+
+  Future<List<SessionListItem>> _readSessions() async {
+    final epoch = ++_loadEpoch;
+    bool current() => mounted && widget.active && epoch == _loadEpoch;
+    if (!widget.active) return [];
+    final injected = widget.repository;
+    final config = injected == null
+        ? await resolveRealtimeSettingsConfig(
+            widget.config ?? AppConfig.fromEnvironment(),
+            widget.settingsStore ?? const FileRealtimeSettingsStore())
+        : null;
+    // A tab/mode change while reading settings must not dispatch a stale cloud GET.
+    if (!current()) return [];
+    final repository = injected ??
+        (widget.repositoryFactory ??
+            SessionHistoryRepository.fromConfig)(config!);
+    final previous = _resolvedRepository;
+    _resolvedRepository = repository;
+    if (!identical(previous, repository) && _ownsResolvedRepository) {
+      previous?.dispose();
+    }
+    _ownsResolvedRepository = injected == null;
+    final records =
+        await repository.listSessions(query: _searchController.text);
+    return current() ? records : [];
+  }
+
+  bool _ownsResolvedRepository = false;
+
+  @override
   void dispose() {
+    _loadEpoch++;
     _searchDebounceTimer?.cancel();
     _searchController.dispose();
-    if (_ownsRepository) _repository.dispose();
+    if (_ownsResolvedRepository) _resolvedRepository?.dispose();
     super.dispose();
   }
 
@@ -119,9 +179,10 @@ class _SessionHistoryPageState extends State<SessionHistoryPage> {
                 }
                 final sessions = snapshot.data!
                     .where((session) => session.kind == _kind.name)
-                    .where(
-                        (session) => !_endedOnly || session.status == 'ended' ||
-                          session.status == 'checkpoint')
+                    .where((session) =>
+                        !_endedOnly ||
+                        session.status == 'ended' ||
+                        session.status == 'checkpoint')
                     .toList(growable: false);
                 if (sessions.isEmpty) {
                   return SessionHistoryEmptyState(kind: _kind);
@@ -146,7 +207,7 @@ class _SessionHistoryPageState extends State<SessionHistoryPage> {
     _searchDebounceTimer?.cancel();
     _searchDebounceTimer = null;
     setState(() {
-      _sessions = _repository.listSessions(query: _searchController.text);
+      _sessions = _readSessions();
     });
   }
 
@@ -167,7 +228,7 @@ class _SessionHistoryPageState extends State<SessionHistoryPage> {
     }
     setState(() {
       _showSearch = !closing;
-      if (closing) _sessions = _repository.listSessions();
+      if (closing) _sessions = _readSessions();
     });
   }
 

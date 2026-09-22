@@ -74,7 +74,11 @@ class _MainShellPageState extends State<MainShellPage> {
       0 => widget.realtimePage ?? RealtimePage(config: _config),
       1 => const CallHomePage(),
       2 => ScanTranslationPage(config: _config),
-      3 => SessionHistoryPage(repository: widget.historyRepository),
+      3 => SessionHistoryPage(
+          repository: widget.historyRepository,
+          config: _config,
+          active: _selectedIndex == 3,
+        ),
       _ => SettingsHomePage(config: _config),
     };
   }
