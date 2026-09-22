@@ -26,6 +26,15 @@ function setup() {
 afterEach(async()=>{for(const c of active.splice(0))await c.closeSession(session.sessionId);vi.restoreAllMocks();});
 
 describe("streaming ASR preserves the first failure without leaking provider bodies",()=>{
+  it("includes local audio-send observations with a remote 1011 without changing its outcome",async()=>{
+    const t=setup();await t.create();await t.client.transcribe(request);
+    t.socket.emit("close",1011,Buffer.from("internal audio error SECRET_BODY"));
+    await t.client.closeSession(session.sessionId);
+    expect(t.warn.mock.calls[0][0]).toMatchObject({origin:"transport_close",closeCode:1011,closeReasonSignals:["internal","audio"],
+      audioSend:{appendStarted:1,appendCompleted:1,appendFailed:0,maxPacketAudioMs:85,pendingAudioMs:0}});
+    expect(t.record.mock.calls.at(-1)![0]).toMatchObject({state:"uncertain",failureCode:"public_asr_stream_closed"});
+    expect(JSON.stringify(t.warn.mock.calls)).not.toContain("SECRET");
+  });
   it.each(["error","conversation.item.input_audio_transcription.failed"])("handles %s immediately even before any PCM/turn",async type=>{
     const t=setup();await t.create();
     t.socket.receive({type,error:{code:"invalid_value",type:"invalid_request_error",message:"SECRET_BODY",param:"SECRET_PARAM"}});

@@ -32,6 +32,15 @@ it("retains only safe close codes and known reason categories",()=>{
     expect(d.closeReason).toBe("unrecognized");expect(JSON.stringify(d)).not.toContain("SECRET");
   }
 });
+it("retains only allowlisted reason signals, never unknown close prose",()=>{
+  const reason="internal audio error: SECRET_IDENTIFIER";
+  const value=streamingAsrFailureDiagnostic("closed","session.updated",1600,undefined,streamingAsrCloseContext(1011,reason));
+  expect(value).toMatchObject({closeReason:"unrecognized",closeReasonSignals:["internal","audio"]});
+  expect(JSON.stringify(value)).not.toContain("SECRET");expect(JSON.stringify(value)).not.toContain(reason);
+  const context={origin:"transport_close" as const,closeReasonSignals:["quota","SECRET","quota",{key:"SECRET"},8]};
+  expect(streamingAsrFailureDiagnostic("closed","error",0,undefined,context).closeReasonSignals).toEqual(["quota"]);
+  expect(streamingAsrCloseContext(1011,Buffer.alloc(200,65))).not.toHaveProperty("closeReasonSignals");
+});
 
 it("allowlists provider fields even when malicious values look like identifiers",()=>{
   const known=streamingAsrFailureDiagnostic("failed","error",0,undefined,

@@ -13,6 +13,7 @@ import {realtimeLogger} from "../metrics/realtime-metrics.js";
 import {streamingAsrFailureDiagnostic,streamingAsrCancellationContext,streamingAsrCloseContext,streamingAsrTransportContext,
   isStreamingAsrFailureEvent,streamingAsrProviderContext,streamingAsrProtocolContext,type StreamingAsrFailureContext} from "./streaming-asr-diagnostics.js";
 import {deferred,type State,type Turn,type Result} from "./streaming-asr-state.js";
+import {sendStreamingAsrWireEvent,streamingAsrSendDiagnostic} from "./streaming-asr-wire-send.js";
 const key=(value:unknown):value is string=>typeof value==="string"&&/^[A-Za-z0-9_.:/-]{1,240}$/.test(value);
 export interface StreamingAsrOptions {sessionId:string;leaseId:string;endpoint:string;model:string;language:LanguageCode;timeoutMs:number;
   wireProfile?:"openai_realtime_asr"|"qwen_asr_realtime"|"tencent_asr_ws"|"google_speech_v2";appId?:string;
@@ -242,10 +243,9 @@ export class OpenAiStreamingAsrClient {
   private fail(s:State,code:string,context:StreamingAsrFailureContext={origin:"operation"}){if(s.failure)return;s.failure=new PublicAsrError(code,this.qwen?s.qwenTransport?.sent?"uncertain":"not_sent":s.turn?.sent?"uncertain":"not_sent");
     const attempt=this.qwen?s.qwenTransport:s.turn;
     if(attempt?.sent&&!attempt.terminal||context.origin!=="explicit_close"&&!s.providerFinished)realtimeLogger.warn({sessionId:this.options.sessionId,
-      ...streamingAsrFailureDiagnostic(code,s.lastWireType,s.cursor,s.lastWireLanguage,context),outcome:s.failure.outcome},"Public ASR stream failed");
+      ...streamingAsrFailureDiagnostic(code,s.lastWireType,s.cursor,s.lastWireLanguage,context),...streamingAsrSendDiagnostic(s.audioSend),outcome:s.failure.outcome},"Public ASR stream failed");
     s.stop.abort();s.ready.reject(s.failure);s.finished.reject(s.failure);s.turn?.done.reject(s.failure);s.ws?.terminate();s.tencentWire?.close();void (this.qwen?this.finishQwenTransport(s):this.finish(s.turn)).catch(()=>{});}
-  private async send(s:State,event:unknown){this.assert(s);if(s.ws?.readyState!==WebSocket.OPEN||s.ws.bufferedAmount>1048576)throw Error("socket not writable");
-    await abortable(new Promise<void>((resolve,reject)=>s.ws!.send(JSON.stringify(this.qwen?{...(event as object),event_id:randomUUID()}:event),error=>error?reject(Error("send failed")):resolve())),s.stop.signal);}
+  private async send(s:State,event:unknown){this.assert(s);await sendStreamingAsrWireEvent(s,event,this.qwen,this.rate);}
   private receive(s:State,e:Record<string,any>){
     if(!e||typeof e!=="object"||Array.isArray(e)||typeof e.type!=="string")throw Error();
     if(this.qwen){

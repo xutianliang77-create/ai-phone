@@ -8,6 +8,7 @@ export interface StreamingAsrFailureContext {
   closeCode?:unknown;closeReason?:unknown;closeReasonBytes?:unknown;
   providerErrorCode?:unknown;providerErrorType?:unknown;providerErrorParam?:unknown;transportErrorCode?:unknown;
   languageValueClass?:unknown;transcriptEmpty?:unknown;
+  closeReasonSignals?:unknown;
 }
 const origins=new Set<unknown>(["caller_abort","explicit_close","transport_close","transport_error","provider_error","protocol","operation"]);
 const providerCodes=new Set<unknown>([
@@ -29,6 +30,15 @@ const closeReasons:Readonly<Record<string,string>>={"":"empty","normal closure":
   "session finished":"session_finished","model not found":"model_not_found","idle timeout":"idle_timeout",
   "connection timeout":"connection_timeout","rate limit exceeded":"rate_limit_exceeded","invalid audio":"invalid_audio"};
 const closeLabels=new Set<unknown>([...Object.values(closeReasons),"unrecognized"]);
+// Signals are allowlisted vocabulary hints, NOT a diagnosis or raw reason.
+const reasonSignals:ReadonlyArray<readonly [string,RegExp]>=[
+  ["timeout",/time[ _-]?out|timed out|超时/i],["idle",/\bidle\b|空闲/i],
+  ["rate_limit",/rate[ _-]?limit|throttl|限流/i],["quota",/\bquota\b|配额|额度/i],
+  ["internal",/\binternal\b|内部/i],["overload",/overload|过载/i],
+  ["audio",/\baudio\b|音频/i],["protocol",/\bprotocol\b|协议/i],
+  ["authentication",/authenticat|unauthori[sz]ed|鉴权/i],["permission",/permission|forbidden|权限/i],
+];
+const signalLabels=new Set(reasonSignals.map(([label])=>label));
 const object=(v:unknown):v is Record<string,unknown>=>!!v&&typeof v==="object"&&!Array.isArray(v);
 const safe=(values:ReadonlySet<unknown>,v:unknown)=>values.has(v)?v as string:"unrecognized";
 
@@ -39,7 +49,8 @@ export function streamingAsrCloseContext(code:unknown,reason:unknown):StreamingA
   const bytes=typeof reason==="string"?Buffer.from(reason):Buffer.isBuffer(reason)?reason:undefined;
   const value=bytes&&bytes.length<=123?bytes.toString("utf8").trim().toLowerCase():undefined;
   return {origin:"transport_close",closeCode:code,closeReason:value!==undefined&&Object.hasOwn(closeReasons,value)?closeReasons[value]:"unrecognized",
-    ...(bytes&&bytes.length<=123?{closeReasonBytes:bytes.length}:{})};
+    ...(bytes&&bytes.length<=123?{closeReasonBytes:bytes.length}:{}),
+    ...(value?{closeReasonSignals:reasonSignals.filter(([,pattern])=>pattern.test(value)).map(([label])=>label)}:{})};
 }
 export function streamingAsrTransportContext(error:unknown):StreamingAsrFailureContext {
   return {origin:"transport_error",transportErrorCode:object(error)?error.code:undefined};
@@ -86,5 +97,6 @@ export function streamingAsrFailureDiagnostic(code:string,eventType:unknown,uplo
     ...(context?.transportErrorCode!==undefined?{transportErrorCode:safe(transportCodes,context.transportErrorCode)}:{}),
     ...(context?.languageValueClass!==undefined?{languageValueClass:safe(languageClasses,context.languageValueClass)}:{}),
     ...(typeof context?.transcriptEmpty==="boolean"?{transcriptEmpty:context.transcriptEmpty}:{}),
+    ...(Array.isArray(context?.closeReasonSignals)?{closeReasonSignals:[...new Set(context.closeReasonSignals.filter(v=>typeof v==="string"&&signalLabels.has(v)))]}:{}),
   };
 }
