@@ -25,6 +25,7 @@ import {
 import { continuationTombstones } from "./lmstudio-continuation-events.js";
 import { transcriptFromTextSegment } from "./lmstudio-text-segment-input.js";
 import { PostAssemblySpeakerRepairCoordinator } from "./lmstudio-post-assembly-speaker-repair.js";
+const PUBLIC_CONTINUATION_BUFFER_MS=3000;
 
 export class LmStudioRealtimeProvider implements RealtimeProvider {
   readonly name: string;
@@ -35,7 +36,7 @@ export class LmStudioRealtimeProvider implements RealtimeProvider {
   private readonly model: string;
   private sessions = new Map<string, RealtimeProviderSession>();
   private readonly translationAborts=new WeakMap<RealtimeProviderSession,AbortController>();
-  private semanticSegments = new SegmentAssembler();
+  private readonly semanticSegments:SegmentAssembler;
   private readonly listeningSemanticSegments: SegmentAssembler;
   private readonly speakerBoundaryRepair: PostAssemblySpeakerRepairCoordinator;
   private readonly publicSession?: RealtimeProviderSession;
@@ -45,6 +46,9 @@ export class LmStudioRealtimeProvider implements RealtimeProvider {
   constructor(options: LmStudioRealtimeProviderOptions) {
     this.deviceSpeakerReceiver = options.deviceSpeakerReceiver;
     this.publicSession = options.publicSession ? structuredClone(options.publicSession) : undefined;
+    this.semanticSegments = new SegmentAssembler({
+      maxBufferMs:this.publicSession?PUBLIC_CONTINUATION_BUFFER_MS:undefined,
+    });
     this.name = options.providerName ?? "lmstudio";
     this.maxInputBatchAudioMs = options.maxInputBatchAudioMs;
     this.model = options.model;
@@ -52,6 +56,7 @@ export class LmStudioRealtimeProvider implements RealtimeProvider {
     this.asrProvider = options.asrProvider ?? new MockAsrProvider();
     this.speakerBoundaryRepair = new PostAssemblySpeakerRepairCoordinator(this.asrProvider);
     this.listeningSemanticSegments = new SegmentAssembler({
+      maxBufferMs:this.publicSession?PUBLIC_CONTINUATION_BUFFER_MS:undefined,
       maxContinuationBufferMs: options.listeningMaxContinuationBufferMs,
       emitMaxDurationRevisions: true,
     });
