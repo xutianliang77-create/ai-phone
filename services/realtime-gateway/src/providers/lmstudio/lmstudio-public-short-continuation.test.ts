@@ -51,4 +51,12 @@ describe("public short continuation in the original provider",()=>{
     const second=c.push("c",{...source("second","继续中文。"),automaticLanguageStatus:"detected"},2600);
     expect([...first.ready,...second.ready].map(x=>x.language)).toEqual(["en","zh"]);
   });
+  it("keeps both completed English fixture phrases when ASR supplies both finals",()=>{
+    const assembler=new SegmentAssembler({maxBufferMs:3000});
+    const first=assembler.push("fixture",source("first","The meeting starts at three.","same","en"),0);
+    expect(first.ready.map(x=>x.text)).toEqual(["The meeting starts at three."]);
+    expect(assembler.drainExpired("fixture",3000)).toEqual([]);
+    const second=assembler.push("fixture",source("second","And please bring the project report.","same","en"),3600);
+    expect(second.ready.map(x=>x.text)).toEqual(["And please bring the project report."]);
+  });
 });
