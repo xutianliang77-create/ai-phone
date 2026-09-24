@@ -23,4 +23,15 @@ describe("signed runtime binding structural projection",()=>{
     else if(kind==="sync")(c.processing as any).syncPermission={allowed:true};else (c.processing as any).allowAll=true;
     expect(publicRuntimeTokenBinding(c,"deployment")).toBeNull();
   });
+  it("accepts only a bounded signed QA deadline on the public session",()=>{
+    const c=claims();c.maxDurationSeconds=40;c.qaOneShot={authorizationId:"qa-authorization",hardDeadlineAt:41};
+    expect(publicRuntimeTokenBinding(c,"deployment")).toEqual(c.publicRuntime);
+    c.maxDurationSeconds=20;expect(publicRuntimeTokenBinding(c,"deployment")).toBeNull();c.maxDurationSeconds=40;
+    for(const qa of [{authorizationId:"qa-authorization",hardDeadlineAt:47},
+      {authorizationId:"qa-authorization",hardDeadlineAt:1},
+      {authorizationId:"qa-authorization",hardDeadlineAt:41,extra:true},
+      {authorizationId:"",hardDeadlineAt:41}]){
+      c.qaOneShot=qa as any;expect(publicRuntimeTokenBinding(c,"deployment")).toBeNull();
+    }
+  });
 });

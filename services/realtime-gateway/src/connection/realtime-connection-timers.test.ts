@@ -13,27 +13,34 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-function setup(confirmed = true, previous = Promise.resolve()) {
+function setup(confirmed = true, previous = Promise.resolve(), qaWallSeconds?:number) {
   const socket = Object.assign(new EventEmitter(), {
     readyState: 1, ping: vi.fn(), terminate: vi.fn(),
   });
-  const session = createSession(claims());
+  const token=claims();
+  if(qaWallSeconds!==undefined){
+    token.issuedAt=Math.floor(Date.now()/1000);
+    token.maxDurationSeconds=qaWallSeconds;
+    token.qaOneShot={authorizationId:"qa-timer-test",hardDeadlineAt:token.issuedAt+qaWallSeconds};
+    token.publicRuntime={deploymentId:"public-qa",leaseId:"lease",captureId:"capture",languagePolicyKey:"language",sampleRate:16000,configurationRevision:1,configurationHash:"a".repeat(64)};
+  }
+  const session = createSession(token);
   const record = vi.fn(async () => {}), touch = vi.fn(async () => {});
   const confirmAudio = vi.fn(async () => {});
   const getBalance = vi.fn(async () => ({ remainingSeconds: 300 }));
-  const sendRealtime = vi.fn(), failPublicConnection = vi.fn();
+  const sendRealtime = vi.fn(), failPublicConnection = vi.fn(), forceQaSupplierStop=vi.fn(async()=>{});
   const endRealtimeSession = vi.fn(async () => {});
   let queue = previous;
   const stop = startRealtimeConnectionTimers({
     ws: socket as unknown as WebSocket, session,
     sessionEventSink: { record, touch, ...(confirmed ? { requiresConfirmation: true as const } : {}) },
     usageBalanceClient: { getBalance }, heartbeatIntervalMs: 120_000,
-    confirmAudio, failPublicConnection, sendRealtime, endRealtimeSession,
+    confirmAudio, failPublicConnection, forceQaSupplierStop, sendRealtime, endRealtimeSession,
     enqueueUsage: chain => { queue = chain(queue); },
   });
   stops.push(stop);
   return { socket, session, touch, confirmAudio, getBalance, sendRealtime,
-    failPublicConnection, endRealtimeSession, stop, drain: () => queue };
+    failPublicConnection, forceQaSupplierStop, endRealtimeSession, stop, drain: () => queue };
 }
 
 describe("connection timer extraction", () => {
@@ -78,6 +85,42 @@ describe("connection timer extraction", () => {
     const t = setup(); t.confirmAudio.mockRejectedValueOnce(Error("confirmation_failed"));
     await vi.advanceTimersByTimeAsync(1000);
     expect(t.failPublicConnection).toHaveBeenCalledOnce();
+  });
+
+  it("cuts off a signed public QA session at its wall deadline even while paused",async()=>{
+    const t=setup(true,Promise.resolve(),40);t.session.status="paused";
+    const remaining=t.session.claims.qaOneShot!.hardDeadlineAt*1000-Date.now();
+    await vi.advanceTimersByTimeAsync(remaining-1);
+    expect(t.endRealtimeSession).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1);
+    expect(t.endRealtimeSession).toHaveBeenCalledWith("time_limit",0);
+    t.session.status="ended";
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(t.socket.terminate).not.toHaveBeenCalled();
+  });
+  it("terminates the QA socket if finalization hangs past the safety reserve",async()=>{
+    const t=setup(true,Promise.resolve(),40);
+    t.endRealtimeSession.mockImplementation(()=>new Promise<void>(()=>{}));
+    const remaining=t.session.claims.qaOneShot!.hardDeadlineAt*1000-Date.now();
+    await vi.advanceTimersByTimeAsync(remaining+5_000);
+    expect(t.endRealtimeSession).toHaveBeenCalledWith("time_limit",0);
+    expect(t.failPublicConnection).toHaveBeenCalledOnce();
+    expect(t.forceQaSupplierStop).toHaveBeenCalledOnce();
+    expect(t.socket.terminate).toHaveBeenCalledOnce();
+  });
+  it("closes the QA supplier immediately when deadline finalization rejects",async()=>{
+    const t=setup(true,Promise.resolve(),40);
+    t.endRealtimeSession.mockRejectedValueOnce(Error("synthetic_finalization_failure"));
+    const remaining=t.session.claims.qaOneShot!.hardDeadlineAt*1000-Date.now();
+    await vi.advanceTimersByTimeAsync(remaining);
+    expect(t.forceQaSupplierStop).toHaveBeenCalledOnce();
+    expect(t.failPublicConnection).toHaveBeenCalledOnce();
+    expect(t.socket.terminate).toHaveBeenCalledOnce();
+  });
+  it("does not impose the QA wall timer on an ordinary public connection",async()=>{
+    const t=setup(true);
+    await vi.advanceTimersByTimeAsync(45_000);
+    expect(t.endRealtimeSession).not.toHaveBeenCalled();
   });
 
   it("retains ping/pong liveness and cancels every timer during cleanup", async () => {

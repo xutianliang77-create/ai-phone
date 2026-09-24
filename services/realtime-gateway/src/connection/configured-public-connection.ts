@@ -36,6 +36,9 @@ export async function openConfiguredPublicConnection(env:RealtimeEnv,ws:WebSocke
   const token=extractRealtimeConnectionToken(request,false),claims=token?verifyRealtimeToken(token,env.realtimeTokenSecret):null;
   const binding=claims&&env.publicDeploymentId?publicRuntimeTokenBinding(claims,env.publicDeploymentId):null;
   if(!claims||!binding){sendRealtimeEvent(ws,buildError("invalid_token","Invalid public runtime token",{stage:"connection",retryable:false}));ws.close(1008,"invalid_public_token");return null;}
+  if(claims.qaOneShot&&claims.qaOneShot.hardDeadlineAt*1000<=Date.now()+1000){
+    ws.close(1008,"public_qa_deadline_elapsed");return null;
+  }
   // Health is a hard connection gate, but only after token verification.  It
   // must prevent credential/material access while retaining the correct
   // invalid-token response for unauthenticated clients.
@@ -69,6 +72,7 @@ export async function openConfiguredPublicConnection(env:RealtimeEnv,ws:WebSocke
       ...(claims.autoReverseTargetLanguage?{autoReverseTargetLanguage:true}:{}),voiceOutput:claims.voiceOutput,asrEndpointMode:claims.asrEndpointMode,
       ...(claims.processing!.languagePolicy.pair?{languagePair:[...claims.processing!.languagePolicy.pair] as [TranslationLanguageCode,TranslationLanguageCode]}:{}),
       ...(claims.processing!.languagePolicy.sourceLanguages?{automaticSourceLanguages:[...claims.processing!.languagePolicy.sourceLanguages]}:{})};
+    if(claims.qaOneShot&&claims.qaOneShot.hardDeadlineAt*1000<=Date.now()+1000)throw Error("public_qa_deadline_elapsed");
     built=new ProviderRouter().createConfiguredPublicSessionFromVerifiedClaims({snapshot,authorization,binding:scoped,session:sessionInput,
       deviceSpeakerEnabled: env.publicDeviceSpeakerEnabled === true,
       authorizeConnection:async()=>{await admission.authorize(purpose());},resolveAsrCredentials:signal=>material.credentials("asr",purpose(),signal),
@@ -77,6 +81,7 @@ export async function openConfiguredPublicConnection(env:RealtimeEnv,ws:WebSocke
       ...(claims.voiceOutput?{output:{resolveCredentials:(signal?:AbortSignal)=>material.credentials("tts","dispatch",signal),fetchFn:options.modelFetchFn,
         socketFactory:options.ttsSocketFactory,prefillMs:env.ttsStreamPrefillMs,maxPendingOutputs:env.maxPendingTtsOutputs,isSessionActive:()=>getSession(claims.sessionId)?.status==="active"}}:{})},claims);
     await abortable(built.provider.createSession(sessionInput),stop.signal);
+    if(claims.qaOneShot&&claims.qaOneShot.hardDeadlineAt*1000<=Date.now()+1000)throw Error("public_qa_deadline_elapsed");
     await abortable(admission.authorize("connect"),stop.signal);
     if(stop.signal.aborted||ws.readyState!==1||getSession(claims.sessionId))throw Error("public_connection_cancelled");
     const attachment=attachSession(claims);if(!attachment||attachment.resumed)throw Error("public_connection_attach_failed");

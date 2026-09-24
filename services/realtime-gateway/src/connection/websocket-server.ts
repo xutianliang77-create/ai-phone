@@ -157,11 +157,12 @@ export function startWebSocketServer(options:{publicRuntime?:PublicGatewayRuntim
       outputSuppressed=true;ttsOutputQueue.suspend();audioBatcher.stopAccepting();
       if(ws.readyState===1)ws.close(1011,"public_pipeline_unconfirmed");
     }
-
     const stopConnectionTimers = startRealtimeConnectionTimers({
       ws, session, sessionEventSink, usageBalanceClient,
       heartbeatIntervalMs: env.heartbeatIntervalMs,
       confirmAudio, failPublicConnection, sendRealtime, endRealtimeSession,
+      forceQaSupplierStop:async()=>{outputSuppressed=true;audioBatcher.stopAccepting();ttsOutputQueue.close();
+        await provider.closeSession(session.id);},
       enqueueUsage: chain => { controlQueue = chain(controlQueue); },
     });
     const messageRateGuard = protection.createMessageGuard();
@@ -345,6 +346,5 @@ export function startWebSocketServer(options:{publicRuntime?:PublicGatewayRuntim
     });
     ws.on("close", () => { void cleanupConnection(); });
   });
-
   return listenRealtimeServerRuntime(runtime);
 }

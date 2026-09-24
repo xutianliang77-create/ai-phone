@@ -14,6 +14,7 @@ interface ConnectionTimerOptions {
   heartbeatIntervalMs: number;
   confirmAudio(): Promise<void>;
   failPublicConnection(): void;
+  forceQaSupplierStop(): Promise<void>;
   sendRealtime(event: ServerRealtimeEvent): void;
   endRealtimeSession(reason: SessionEndReason, remainingSeconds?: number): Promise<void>;
   enqueueUsage(chain: (previous: Promise<void>) => Promise<void>): void;
@@ -23,6 +24,26 @@ interface ConnectionTimerOptions {
  * lifetime, but retain the same serial control queue and failure handling. */
 export function startRealtimeConnectionTimers(options: ConnectionTimerOptions) {
   const { ws, session, sessionEventSink, usageBalanceClient } = options;
+  // A signed QA marker is a wall-clock supplier cutoff, not the ordinary
+  // customer's optional active-time limit or 30-second account usage tick.
+  const qaDeadline = sessionEventSink.requiresConfirmation && session.claims.publicRuntime
+    ? session.claims.qaOneShot?.hardDeadlineAt : undefined;
+  const qaDelayMs = qaDeadline === undefined ? undefined : Math.max(0, qaDeadline * 1000 - Date.now());
+  const forceQaStop = () => {
+    // This must not wait behind a hung finalization or control queue. The
+    // original Provider closes its supplier socket before awaiting receipts.
+    void options.forceQaSupplierStop().catch(() => undefined);
+    options.failPublicConnection();
+    ws.terminate();
+  };
+  const qaCutoff = qaDelayMs === undefined ? undefined : setTimeout(() => {
+    if (session.status === "ended" || session.status === "failed") return;
+    void options.endRealtimeSession("time_limit", 0).catch(forceQaStop);
+  }, qaDelayMs);
+  const qaFallback = qaDelayMs === undefined ? undefined : setTimeout(() => {
+    if (session.status === "ended" || session.status === "failed") return;
+    forceQaStop();
+  }, qaDelayMs + 5_000);
   let confirmationInFlight = false;
   const confirmationInterval = sessionEventSink.requiresConfirmation ? setInterval(() => {
     if (confirmationInFlight || ws.readyState !== 1 || !["active", "paused", "ending"].includes(session.status)) return;
@@ -65,6 +86,8 @@ export function startRealtimeConnectionTimers(options: ConnectionTimerOptions) {
     ws.ping();
   }, options.heartbeatIntervalMs);
   return () => {
+    if (qaCutoff) clearTimeout(qaCutoff);
+    if (qaFallback) clearTimeout(qaFallback);
     if (confirmationInterval) clearInterval(confirmationInterval);
     clearInterval(usageInterval);
     clearInterval(heartbeatInterval);

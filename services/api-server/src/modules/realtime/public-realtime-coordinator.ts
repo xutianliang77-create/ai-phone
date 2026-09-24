@@ -10,12 +10,15 @@ import {inferenceProcessingHash,validateInferenceEvidence,resolveInferenceEviden
 import {recordPublicInferenceEvidence,writePublicInferenceAdmission} from "../sessions/public-inference-admission.service.js";
 import type {PublicModelRuntimeSnapshot} from "../models/public-model-runtime-config.js";
 import {getRepositoryRuntime} from "../../infrastructure/storage/repository-runtime.js";
+import type {PublicQaOneShotGuard} from "./public-qa-one-shot-guard.js";
 
 /** Trusted boot-time integration only. Production must resolve durable, independently
  * verified receipts idempotently for sessionId; neither HTTP body nor config can
  * supply this implementation. No real supplier, qualification, or budget source is installed by default. */
 export interface PublicRealtimeAuthority {
   timeoutMs:number;
+  /** Dedicated QA candidate only; never installed for ordinary accounts. */
+  qaOneShotGuard?:PublicQaOneShotGuard;
   /** Non-authorizing capability projection for the authenticated mobile
    * creation context. It never creates a provider request or a usage hold. */
   configurationCapability?: (configuration:PublicModelRuntimeSnapshot)=>PublicRealtimeConfigurationCapability;
@@ -40,7 +43,7 @@ async function bounded<T>(work:Promise<T>,signal:AbortSignal):Promise<T>{
   try{return await Promise.race([work,aborted]);}finally{signal.removeEventListener("abort",cancel);}
 }
 export function createPublicRealtimeCoordinator(authority:PublicRealtimeAuthority){
-  const {timeoutMs,resolveVerifiedEvidence}=authority;
+  const {timeoutMs,resolveVerifiedEvidence,qaOneShotGuard}=authority;
   if(!Number.isSafeInteger(timeoutMs)||timeoutMs<250||timeoutMs>30000||typeof resolveVerifiedEvidence!=="function")throw Error("public_authority_configuration_invalid");
   return async(ownerId:string,idempotencyKey:unknown,value:unknown,signal?:AbortSignal)=>{
     const {deploymentId,sessionId}=publicCreationIdentity(ownerId,idempotencyKey),input=publicCreationInput(value);
@@ -51,6 +54,7 @@ export function createPublicRealtimeCoordinator(authority:PublicRealtimeAuthorit
     const check=()=>{if(stop.signal.aborted)throw new ResultSyncError("public_creation_cancelled",503);};
     try{return await bounded(withSessionWriteLock(`public-create:${sessionId}`,async()=>{
       check();
+      if(qaOneShotGuard){await qaOneShotGuard.reserve(sessionId,ownerId,deploymentId);check();}
       if(getRepositoryRuntime().driver!=="postgres"&&/^(cancelled|expired):/.test(getStoreSnapshot().publicCreationBindings?.[sessionId]??""))throw new ResultSyncError("public_creation_request_retired",410);
       await preparePublicRealtimeSession(sessionId,ownerId,input);check();
       let current=(await findSession(sessionId))!;check();
@@ -63,6 +67,7 @@ export function createPublicRealtimeCoordinator(authority:PublicRealtimeAuthorit
         catch{check();throw new ResultSyncError("public_creation_authority_unavailable",503);}
         check();current=(await findSession(sessionId))!;check();preparedPublicSession(current,ownerId);
         if(!resolved||!Array.isArray(resolved.records)||resolved.records.length>32||new Set(resolved.records.map(r=>r?.id)).size!==resolved.records.length)throw new ResultSyncError("public_evidence_invalid",403);
+        if(qaOneShotGuard)resolved=narrowQaBudget(resolved,qaOneShotGuard);
         const authorityRecords=structuredClone(resolved.records).filter(e=>e.kind!=="inference_consent"),now=new Date();
         // Validate the complete selection BEFORE partially persisting it.
         for(const record of authorityRecords)validateInferenceEvidence(current,record,now);
@@ -76,9 +81,20 @@ export function createPublicRealtimeCoordinator(authority:PublicRealtimeAuthorit
         for(const record of records){check();await recordPublicInferenceEvidence(sessionId,ownerId,record);}
         check();await writePublicInferenceAdmission(sessionId,ownerId,refs);
       }
-      check();const response=await issuePublicRealtimeSession(sessionId,ownerId);check();return response;
+      check();const response=await issuePublicRealtimeSession(sessionId,ownerId,qaOneShotGuard);check();return response;
     }),stop.signal);}finally{clearTimeout(timer);signal?.removeEventListener("abort",cancel);}
   };
+}
+
+function narrowQaBudget(resolved:Awaited<ReturnType<PublicRealtimeAuthority["resolveVerifiedEvidence"]>>,guard:PublicQaOneShotGuard){
+  const copy=structuredClone(resolved),budgets=copy.records.filter(record=>record.kind==="provider_budget");
+  if(budgets.length!==1||copy.refs.budgetReservationId!==budgets[0].id)throw new ResultSyncError("public_qa_budget_invalid",403);
+  const budget=budgets[0] as Extract<PublicInferenceEvidence,{kind:"provider_budget"}>;
+  budget.maxActiveSeconds=Math.min(budget.maxActiveSeconds??guard.maxWallSeconds,guard.maxWallSeconds);
+  budget.expiresAt=new Date(Math.min(Date.parse(budget.expiresAt),Date.parse(guard.expiresAt))).toISOString();
+  budget.id=`qa-budget-${resultSyncHash({sourceId:budget.id,authorizationId:guard.authorizationId})}`;
+  copy.refs.budgetReservationId=budget.id;
+  return copy;
 }
 
 /** The authenticated request selecting online mode is the consent action for this

@@ -57,7 +57,8 @@ export interface CreateRealtimeSessionResponse {
   realtimeToken: string;
   endpoint: string;
   expiresAt: string;
-  /** Legacy/local sessions may expose a client duration. Public online sessions omit it. */
+  /** Legacy/local sessions may expose a duration. Ordinary public online
+   * sessions omit it; a dedicated one-shot QA session may expose its cutoff. */
   maxDurationSeconds?: number;
   domainLexiconPacks?: DomainLexiconPack[];
   domainLexiconVersion?: string;
@@ -65,6 +66,8 @@ export interface CreateRealtimeSessionResponse {
 
 export interface RealtimeTokenClaims {
   publicRuntime?:PublicRuntimeTokenBinding;
+  /** Signed, server-issued cutoff for one dedicated public QA authorization. */
+  qaOneShot?: { authorizationId: string; hardDeadlineAt: number };
   processing?: RealtimeProcessingAuthorization;
   userId: string;
   sessionId: string;

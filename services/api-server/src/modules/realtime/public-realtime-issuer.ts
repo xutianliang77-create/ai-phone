@@ -8,6 +8,7 @@ import {createUsageHold,releaseUsageHold} from "../usage/usage-hold-runtime.serv
 import {preparedPublicSession} from "./public-realtime-preparation.js";
 import {createRealtimeToken} from "./realtime-token.js";
 import {realtimeMaxSessionSeconds} from "./realtime-session-duration.js";
+import type {PublicQaOneShotGuard} from "./public-qa-one-shot-guard.js";
 
 function issuerSettings(){
   const secret=process.env.REALTIME_TOKEN_SECRET,endpoint=process.env.REALTIME_WS_ENDPOINT;
@@ -22,9 +23,10 @@ function issuerSettings(){
  * Original usage hold and signing are reused; this function never creates grants.
  * Uncertain failures retain the same bounded hold/lease for retry, never release
  * another issuer's reservation or silently create a fresh chargeable session. */
-export async function issuePublicRealtimeSession(sessionId:string,ownerId:string):Promise<CreateRealtimeSessionResponse> {
+export async function issuePublicRealtimeSession(sessionId:string,ownerId:string,qaOneShotGuard?:PublicQaOneShotGuard):Promise<CreateRealtimeSessionResponse> {
   if(![sessionId,ownerId].every(syncKey))throw new ResultSyncError("public_creation_invalid",400);
   const settings=issuerSettings();
+  if(qaOneShotGuard)await qaOneShotGuard.assertReserved(sessionId,ownerId,settings.deploymentId);
   return withSessionWriteLock(sessionId,async()=>{
     const before=await findSession(sessionId);
     if(!before)throw new ResultSyncError("session_not_found",404);
@@ -60,13 +62,18 @@ export async function issuePublicRealtimeSession(sessionId:string,ownerId:string
         // five-minute automatic end rule after connection is confirmed.
         const expiresAt=Math.floor(Date.parse(lease.expiresAt)/1000);
         if(expiresAt<=Math.floor(Date.now()/1000))throw new ResultSyncError("public_issuer_expired",403);
-        const maxDurationSeconds=lease.maxActiveSeconds===undefined?undefined:Math.min(realtimeMaxSessionSeconds(),lease.maxActiveSeconds,Math.floor(Date.parse(lease.expiresAt)/1000)-issuedAt);
+        const leaseDuration=lease.maxActiveSeconds===undefined?undefined:Math.min(realtimeMaxSessionSeconds(),lease.maxActiveSeconds,Math.floor(Date.parse(lease.expiresAt)/1000)-issuedAt);
+        const maxDurationSeconds=qaOneShotGuard?Math.min(leaseDuration??Infinity,qaOneShotGuard.maxWallSeconds,
+          Math.floor(Date.parse(qaOneShotGuard.expiresAt)/1000)-issuedAt):leaseDuration;
+        const qaDeadlineAt=qaOneShotGuard?issuedAt+maxDurationSeconds!:undefined;
+        if(qaDeadlineAt!==undefined&&(qaDeadlineAt<=Math.floor(Date.now()/1000)||!Number.isSafeInteger(maxDurationSeconds)||maxDurationSeconds!<1))throw new ResultSyncError("public_qa_one_shot_expired",403);
         const claims:RealtimeTokenClaims={userId:ownerId,sessionId,mode:input.mode,asrEndpointMode:["meeting","classroom"].includes(input.mode)?"listening":"conversation",
           sourceLanguage:input.sourceLanguage,targetLanguage:input.targetLanguage,voiceOutput:input.voiceOutput,
           ...(input.autoReverseTargetLanguage?{autoReverseTargetLanguage:true}:{}),
           ...(input.speakerAttribution?.deviceProfile?{speakerAttribution:structuredClone(input.speakerAttribution)}:{}),
           ...(input.voiceOutput?{voice:{mode:"preset",presetId:config.components.tts!.voice}}:{}),planCode:hold.balance.planCode,
           ...(maxDurationSeconds!==undefined?{maxDurationSeconds}:{}),issuedAt,expiresAt,processing:structuredClone(current.processingAuthorization!),
+          ...(qaOneShotGuard?{qaOneShot:{authorizationId:qaOneShotGuard.authorizationId,hardDeadlineAt:qaDeadlineAt!}}:{}),
           publicRuntime:{deploymentId:settings.deploymentId,leaseId:lease.leaseId,captureId:lease.captureId,languagePolicyKey:lease.languagePolicyKey,
             sampleRate:lease.sampleRate!,configurationRevision:config.configurationRevision,configurationHash:config.configurationHash}};
         if(!publicRuntimeTokenBinding(claims,settings.deploymentId)||createRealtimeToken(claims,settings.secret).length>4096)throw new ResultSyncError("public_issuer_token_invalid",503);

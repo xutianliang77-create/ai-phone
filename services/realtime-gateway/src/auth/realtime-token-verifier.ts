@@ -1,5 +1,5 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
-import type { RealtimeTokenClaims } from "@translation/contracts";
+import {validQaOneShotClaim,type RealtimeTokenClaims} from "@translation/contracts";
 
 function signPayload(payload: string, secret: string) {
   return createHmac("sha256", secret).update(payload).digest("base64url");
@@ -27,7 +27,8 @@ export function verifyRealtimeToken(
       ) || !Number.isSafeInteger(claims.issuedAt) || claims.issuedAt < 0 ||
       !Number.isSafeInteger(claims.expiresAt) || claims.expiresAt <= claims.issuedAt ||
       (claims.maxDurationSeconds===undefined?!(claims.publicRuntime&&claims.processing?.processingMode==="online"):
-        !Number.isSafeInteger(claims.maxDurationSeconds)||claims.maxDurationSeconds<=0)) return null;
+        !Number.isSafeInteger(claims.maxDurationSeconds)||claims.maxDurationSeconds<=0)||
+      !validQaOneShotClaim(claims)||claims.qaOneShot!==undefined&&claims.qaOneShot.hardDeadlineAt<=Math.floor(Date.now()/1000)) return null;
   if (claims.expiresAt <= Math.floor(Date.now() / 1000) &&
       canResumeExpired?.(claims) !== true) return null;
   return claims;

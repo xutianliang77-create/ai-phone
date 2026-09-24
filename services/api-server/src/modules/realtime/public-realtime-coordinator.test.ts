@@ -14,6 +14,7 @@ import {createPublicRealtimeCoordinator,type PublicRealtimeAuthority} from "./pu
 import type {PublicInferenceEvidence} from "../sessions/public-inference-evidence.js";
 import {revokePublicInferenceEvidence} from "../sessions/public-inference-admission.service.js";
 import {observePublicRuntime} from "../sessions/public-session-runtime.service.js";
+import {ResultSyncError} from "../sessions/session-result-sync-contract.js";
 import {verifyRealtimeToken} from "../../../../realtime-gateway/src/auth/realtime-token-verifier.js";
 import {createSessionEventSink} from "../../../../realtime-gateway/src/sessions/session-event-sink.js";
 import {createPublicAdmissionClient} from "../../../../realtime-gateway/src/sessions/public-admission-client.js";
@@ -50,6 +51,64 @@ const queryFor=(token:string,purpose:PublicAdmissionQuery["purpose"]="connect"):
 };
 const lookup=(query:PublicAdmissionQuery,headers:Record<string,string>={authorization:`Bearer ${internal}`})=>app.inject({method:"POST",url:`/internal/realtime/sessions/${query.sessionId}/admission`,headers,payload:query});
 describe("original HTTP public creation with an explicitly installed trusted authority",()=>{
+  it("uses a single dedicated QA authorization and narrows only its public budget",async()=>{
+    await app.close();
+    let reserved:string|undefined;
+    authority={...authority,qaOneShotGuard:{authorizationId:"qa-20260924",expiresAt:new Date(now.getTime()+120000).toISOString(),maxWallSeconds:40,
+      assertScope(owner,deployment){if(owner!=="guest-user"||deployment!=="runtime-test")throw Error("qa_scope");},
+      async reserve(sessionId,owner,deployment){this.assertScope(owner,deployment);if(reserved&&reserved!==sessionId)throw new ResultSyncError("public_qa_one_shot_consumed",409);reserved=sessionId;},
+      async assertReserved(sessionId,owner,deployment){this.assertScope(owner,deployment);if(reserved!==sessionId)throw Error("qa_unreserved");}}};
+    app=await buildApp({publicRealtimeAuthority:authority});
+    const first=await post();expect(first.statusCode).toBe(200);
+    const claims=verifyRealtimeToken(first.json().realtimeToken,signer)!;
+    expect(claims).toMatchObject({maxDurationSeconds:40,qaOneShot:{authorizationId:"qa-20260924",hardDeadlineAt:Math.floor(now.getTime()/1000)+40}});
+    expect(current().publicInferenceAdmission?.maxActiveSeconds).toBe(40);
+    expect(current().publicInferenceAdmission?.budgetExpiresAt).toBe(new Date(now.getTime()+120000).toISOString());
+    expect((await post()).json()).toEqual(first.json());
+    const second=await post(input(),"request-0002");expect(second.statusCode).toBe(409);
+    expect(second.json().error.code).toBe("public_qa_one_shot_consumed");
+    expect(getStoreSnapshot().sessions).toHaveLength(1);
+    expect(getStoreSnapshot().usageHolds).toHaveLength(1);
+  });
+  it("does not recycle a QA authorization after a failed first creation",async()=>{
+    await app.close();
+    let reserved:string|undefined;
+    authority={...authority,qaOneShotGuard:{authorizationId:"qa-failure",expiresAt:new Date(now.getTime()+600000).toISOString(),maxWallSeconds:40,
+      assertScope(){},async reserve(sessionId){if(reserved&&reserved!==sessionId)throw new ResultSyncError("public_qa_one_shot_consumed",409);reserved=sessionId;},
+      async assertReserved(sessionId){if(reserved!==sessionId)throw Error("qa_unreserved");}}};
+    resolve.mockRejectedValueOnce(Error("synthetic_authority_failure"));
+    app=await buildApp({publicRealtimeAuthority:authority});
+    expect((await post()).statusCode).toBe(503);
+    expect((await post(input(),"request-0002")).statusCode).toBe(409);
+    expect(getStoreSnapshot().usageHolds).toHaveLength(0);
+  });
+  it("uses a shorter signed budget as the QA wall deadline",async()=>{
+    await app.close();
+    const original=resolve.getMockImplementation()!;
+    resolve.mockImplementation(async(context,signal)=>{
+      const result=await original(context,signal);
+      const budget=result.records.find(record=>record.kind==="provider_budget") as Extract<PublicInferenceEvidence,{kind:"provider_budget"}>;
+      budget.maxActiveSeconds=12;return result;
+    });
+    authority={...authority,qaOneShotGuard:{authorizationId:"qa-short-budget",expiresAt:new Date(now.getTime()+600000).toISOString(),maxWallSeconds:40,
+      assertScope(){},async reserve(){},async assertReserved(){}}};
+    app=await buildApp({publicRealtimeAuthority:authority});
+    const response=await post();expect(response.statusCode).toBe(200);
+    expect(verifyRealtimeToken(response.json().realtimeToken,signer)).toMatchObject({
+      maxDurationSeconds:12,qaOneShot:{hardDeadlineAt:Math.floor(now.getTime()/1000)+12},
+    });
+  });
+  it("admits at most one of two concurrent QA start keys",async()=>{
+    await app.close();let reserved:string|undefined;
+    authority={...authority,qaOneShotGuard:{authorizationId:"qa-concurrent",expiresAt:new Date(now.getTime()+600000).toISOString(),maxWallSeconds:40,
+      assertScope(){},async reserve(sessionId){if(reserved&&reserved!==sessionId)throw new ResultSyncError("public_qa_one_shot_consumed",409);reserved=sessionId;},
+      async assertReserved(sessionId){if(reserved!==sessionId)throw Error("qa_unreserved");}}};
+    app=await buildApp({publicRealtimeAuthority:authority});
+    const [first,second]=await Promise.all([post(input(),"request-0001"),post(input(),"request-0002")]);
+    expect([first.statusCode,second.statusCode].sort()).toEqual([200,409]);
+    expect(getStoreSnapshot().sessions).toHaveLength(1);
+    expect(getStoreSnapshot().usageHolds).toHaveLength(1);
+  });
   it("issues through the original route and survives concurrent and post-rebuild retries with one session/hold/source resolution",async()=>{
     const [a,b]=await Promise.all([post(),post()]);expect(a.statusCode).toBe(200);expect(b.json()).toEqual(a.json());expect(a.headers["cache-control"]).toBe("no-store");
     expect(a.json()).toMatchObject({ownerId:"guest-user",deploymentId:"runtime-test",captureSampleRate:16000});

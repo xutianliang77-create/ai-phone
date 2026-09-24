@@ -8,8 +8,9 @@ import {canonicalSyncJson,syncKey} from "../sessions/session-result-sync-contrac
 import type {PublicInferenceEvidence} from "../sessions/public-inference-evidence.js";
 import type {PublicModelRuntimeSnapshot} from "../models/public-model-runtime-config.js";
 import type {PublicRealtimeAuthority,PublicRealtimeConfigurationCapability} from "./public-realtime-coordinator.js";
+import {publicQaOneShotGuardFromEnvironment} from "./public-qa-one-shot-guard.js";
 
-type RuntimeEnv=Partial<Pick<NodeJS.ProcessEnv,"NODE_ENV"|"PUBLIC_RUNTIME_ENABLED"|"PUBLIC_RUNTIME_ADMISSION_POLICY_FILE"|"PUBLIC_RUNTIME_ADMISSION_POLICY_KEY"|"API_RESULT_SYNC_DEPLOYMENT_ID"|"PUBLIC_RUNTIME_REQUIRE_LIVE_QUALIFICATION"|"PUBLIC_RUNTIME_QUALIFICATION_BOOTSTRAP"|"PUBLIC_RUNTIME_LIVE_QUALIFICATION_FILE"|"PUBLIC_RUNTIME_LIVE_QUALIFICATION_KEY">>;
+type RuntimeEnv=Partial<Pick<NodeJS.ProcessEnv,"NODE_ENV"|"PUBLIC_RUNTIME_ENABLED"|"PUBLIC_RUNTIME_ADMISSION_POLICY_FILE"|"PUBLIC_RUNTIME_ADMISSION_POLICY_KEY"|"API_RESULT_SYNC_DEPLOYMENT_ID"|"PUBLIC_RUNTIME_REQUIRE_LIVE_QUALIFICATION"|"PUBLIC_RUNTIME_QUALIFICATION_BOOTSTRAP"|"PUBLIC_RUNTIME_LIVE_QUALIFICATION_FILE"|"PUBLIC_RUNTIME_LIVE_QUALIFICATION_KEY"|"PUBLIC_QA_ONE_SHOT_ENABLED"|"PUBLIC_QA_ONE_SHOT_AUTHORIZATION_ID"|"PUBLIC_QA_ONE_SHOT_OWNER_ID"|"PUBLIC_QA_ONE_SHOT_DEPLOYMENT_ID"|"PUBLIC_QA_ONE_SHOT_EXPIRES_AT"|"PUBLIC_QA_ONE_SHOT_MAX_WALL_SECONDS">>;
 type ProviderAvailability={providerId:string;state:"available"|"unavailable"};
 type QualifiedLanguagePair={source:string;target:string};
 type Policy={schemaVersion:1;policyId:string;deploymentId:string;configurationHash:string;modelPolicyRevision:string;region:string;
@@ -45,7 +46,8 @@ export function publicRealtimeAuthorityFromEnvironment(env:RuntimeEnv=process.en
   if(bootstrap&&env.NODE_ENV!=="development")throw Error("public_runtime_qualification_bootstrap_not_permitted");
   const required=enabled(env.PUBLIC_RUNTIME_REQUIRE_LIVE_QUALIFICATION)&&!bootstrap,liveFile=env.PUBLIC_RUNTIME_LIVE_QUALIFICATION_FILE,liveKey=env.PUBLIC_RUNTIME_LIVE_QUALIFICATION_KEY;
   if(required&&(!isAbsolute(liveFile??"")||!hex(liveKey,64)))throw Error("public_runtime_live_qualification_not_configured");
-  return {timeoutMs:5000,configurationCapability:configuration=>configurationCapability(env,configuration),resolveVerifiedEvidence:async context=>{
+  const qaOneShotGuard=publicQaOneShotGuardFromEnvironment(env);
+  return {timeoutMs:5000,...(qaOneShotGuard?{qaOneShotGuard}:{}),configurationCapability:configuration=>configurationCapability(env,configuration),resolveVerifiedEvidence:async context=>{
     const live=required?requiredLiveQualification(env,context.configuration):undefined;
     return resolvePolicy(file,key!,deployment!,context,live);
   }};

@@ -43,4 +43,15 @@ describe("realtime token verifier", () => {
     const token=signed(JSON.stringify({...valid(),maxDurationSeconds:undefined,processing:{processingMode:"online"},publicRuntime:{deploymentId:"public",leaseId:"lease",captureId:"capture",languagePolicyKey:"language",sampleRate:16000,configurationRevision:1,configurationHash:"a".repeat(64)}}));
     expect(verifyRealtimeToken(token,"secret")?.maxDurationSeconds).toBeUndefined();
   });
+  it("rejects an elapsed or malformed signed QA one-shot deadline before provider setup",()=>{
+    const issuedAt=Math.floor(Date.now()/1000);
+    const base={...valid(),issuedAt,maxDurationSeconds:40,processing:{processingMode:"online"},
+      publicRuntime:{deploymentId:"public-qa"}};
+    const token=(hardDeadlineAt:number)=>signed(JSON.stringify({...base,qaOneShot:{authorizationId:"qa-authorization",hardDeadlineAt}}));
+    expect(verifyRealtimeToken(token(issuedAt+40),"secret")?.qaOneShot?.hardDeadlineAt).toBe(issuedAt+40);
+    expect(verifyRealtimeToken(token(issuedAt),"secret")).toBeNull();
+    expect(verifyRealtimeToken(token(issuedAt+46),"secret")).toBeNull();
+    const expired=signed(JSON.stringify({...base,issuedAt:issuedAt-60,qaOneShot:{authorizationId:"qa-authorization",hardDeadlineAt:issuedAt-20}}));
+    expect(verifyRealtimeToken(expired,"secret")).toBeNull();
+  });
 });

@@ -9,6 +9,18 @@ export interface PublicRuntimeTokenBinding {
 }
 const key=(v:unknown):v is string=>typeof v==="string"&&v.length>0&&v.length<=240&&v.trim()===v&&
   !/[\u0000-\u001f\u007f]/u.test(v)&&!["__proto__","constructor","prototype"].includes(v);
+export function validQaOneShotClaim(claims:RealtimeTokenClaims){
+  const qa=claims.qaOneShot;
+  if(qa===undefined)return true;
+  return !!qa&&typeof qa==="object"&&!Array.isArray(qa)&&
+    Object.keys(qa).length===2&&Object.keys(qa).every(field=>["authorizationId","hardDeadlineAt"].includes(field))&&
+    key(qa.authorizationId)&&Number.isSafeInteger(qa.hardDeadlineAt)&&
+    qa.hardDeadlineAt>claims.issuedAt&&qa.hardDeadlineAt<=claims.issuedAt+45&&
+    qa.hardDeadlineAt<=claims.expiresAt&&
+    claims.publicRuntime!==undefined&&claims.processing?.processingMode==="online"&&
+    Number.isSafeInteger(claims.maxDurationSeconds)&&claims.maxDurationSeconds!>0&&
+    claims.maxDurationSeconds===qa.hardDeadlineAt-claims.issuedAt;
+}
 /** Use only AFTER verifying the token signature and expiration. This verifies
  * binding syntax/consistency; stored grant/lease/revocation checks remain mandatory. */
 export function publicRuntimeTokenBinding(claims:RealtimeTokenClaims,deploymentId:string):PublicRuntimeTokenBinding|null {
@@ -16,7 +28,7 @@ export function publicRuntimeTokenBinding(claims:RealtimeTokenClaims,deploymentI
   if(speaker&&!isDeviceSpeakerSelection(speaker)&&
     (speaker.mode!=="off"||speaker.allowVoiceIdentity||speaker.deviceProfile!==undefined))return null;
   const p=claims?.processing,b=claims?.publicRuntime;
-  if(!key(deploymentId)||!p||!b||typeof b!=="object"||Array.isArray(b)||
+  if(!key(deploymentId)||!validQaOneShotClaim(claims)||!p||!b||typeof b!=="object"||Array.isArray(b)||
     Object.keys(p).some(k=>!["contractVersion","processingMode","modelPolicyRevision","languagePolicy","executionPlan","syncPermission","publicGrantRef"].includes(k))||
     Object.keys(b).length!==7||Object.keys(b).some(k=>!["deploymentId","leaseId","captureId","languagePolicyKey","sampleRate","configurationRevision","configurationHash"].includes(k))||
     b.deploymentId!==deploymentId||![b.leaseId,b.captureId,b.languagePolicyKey,p.publicGrantRef,claims.sessionId,claims.userId].every(key)||
