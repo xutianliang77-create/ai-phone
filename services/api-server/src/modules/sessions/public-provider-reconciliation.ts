@@ -73,7 +73,9 @@ function validRecord(record: PublicProviderReconciliationRecord) {
   return true;
 }
 export function hasPublicProviderReconciliation(session: SessionRecord) {
-  if (!session.publicRuntime?.uncertain || !session.publicRuntime.stoppedAt) return false;
+  if (!session.publicRuntime?.uncertain || !session.publicRuntime.stoppedAt ||
+      session.publicRuntime.meterUncertain !== false ||
+      session.publicRuntime.providerUncertain !== true) return false;
   if (session.publicModelAttempts?.some(item => item.event.state === "dispatching")) return false;
   const records = publicProviderReconciliations(session);
   if (!Array.isArray(records) || records.length === 0 || records.some(record => !validRecord(record))) return false;
@@ -125,7 +127,8 @@ export function reconcilePublicProviderUsage(
           record.uncertainAttemptIds.some(id => evidence.attempts.some(attempt => attempt.attemptId === id)))) {
         throw new ResultSyncError("public_provider_reconciliation_conflict", 409);
       }
-      if (!runtime?.stoppedAt || !runtime.uncertain || current.publicFinalization ||
+      if (!runtime?.stoppedAt || !runtime.uncertain || runtime.meterUncertain !== false ||
+          runtime.providerUncertain !== true || current.publicFinalization ||
           current.finalizationIdempotencyKey || current.status === "ended" || current.status === "failed") {
         throw new ResultSyncError("public_provider_reconciliation_not_required", 409);
       }

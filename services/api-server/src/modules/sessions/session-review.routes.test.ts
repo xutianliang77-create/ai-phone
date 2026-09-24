@@ -212,6 +212,46 @@ describe("session review routes", () => {
     }
   });
 
+  it("persists account-owned phone rules for an ended public session without inference or another charge", async () => {
+    const app=await buildApp();
+    const created=await app.inject({method:"POST",url:"/realtime/sessions",
+      payload:{mode:"meeting",sourceLanguage:"zh",targetLanguage:"en",voiceOutput:false}});
+    const sessionId=created.json().sessionId as string;
+    const record=getStoreSnapshot().sessions.find(item=>item.id===sessionId)!;
+    record.processingAuthorization={} as typeof record.processingAuthorization;
+    record.status="ended";record.endedAt=new Date().toISOString();
+    record.segments=[{id:"source_1",sourceText:"请发送会议纪要",translatedText:"Please send the meeting notes"}];
+    const ledgerBefore=getStoreSnapshot().billingLedger.length;
+    const attemptsBefore=record.publicModelAttempts?.length??0;
+    const review={provider:"local",promptVersion:"session_review_device_rules_v1",generationKind:"device_rules",
+      generatedAt:"2026-09-25T00:00:00Z",sourceFingerprint:"a".repeat(64),summary:"Please send the meeting notes",
+      decisions:[],risks:[],openQuestions:[],evidenceSegmentIds:["source_1"],
+      actionItems:[{text:"发送会议纪要",completed:false,evidenceSegmentIds:["source_1"]}],
+      keyFacts:[],highlights:[{type:"todo",text:"请发送会议纪要"}],terms:[]};
+    const request={generationKind:"device_rules",review};
+    try{
+      const first=await app.inject({method:"POST",url:`/sessions/${sessionId}/review`,payload:request});
+      const replay=await app.inject({method:"POST",url:`/sessions/${sessionId}/review`,payload:request});
+      const detail=await app.inject({url:`/sessions/${sessionId}`});
+      expect(first.statusCode).toBe(200);expect(replay.statusCode).toBe(200);
+      expect(first.json().review).toMatchObject({provider:"local",generationKind:"device_rules",
+        sourceFingerprint:expect.stringMatching(/^[a-f0-9]{64}$/)});
+      expect(first.json().review.sourceFingerprint).not.toBe(review.sourceFingerprint);
+      expect(replay.json().review.generatedAt).toBe(first.json().review.generatedAt);
+      expect(detail.json().review.actionItems[0].text).toBe("发送会议纪要");
+      const changed=await app.inject({method:"PATCH",url:`/sessions/${sessionId}/action-items/0`,payload:{completed:true}});
+      expect(changed.statusCode).toBe(200);expect(changed.json().review.actionItems[0].completed).toBe(true);
+      expect(getStoreSnapshot().billingLedger).toHaveLength(ledgerBefore);
+      expect(getStoreSnapshot().sessions.find(item=>item.id===sessionId)?.publicModelAttempts??[]).toHaveLength(attemptsBefore);
+      const foreign=await app.inject({method:"POST",url:`/sessions/${sessionId}/review`,
+        payload:{generationKind:"device_rules",review:{...review,evidenceSegmentIds:["foreign"]}}});
+      expect(foreign.statusCode).toBe(400);
+      const semantic=await app.inject({method:"POST",url:`/sessions/${sessionId}/review`,
+        payload:{generationKind:"public_semantic_enhancement"}});
+      expect(semantic.statusCode).toBe(409);
+    }finally{await app.close();}
+  });
+
   it("updates and persists a generated action item", async () => {
     const app = await buildApp();
     const created = await app.inject({

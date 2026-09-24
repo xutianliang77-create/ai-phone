@@ -37,8 +37,11 @@ export function callLinkModelRuntimeAdmissionForSession(
   publicDeploymentId = process.env.API_RESULT_SYNC_DEPLOYMENT_ID,
   entryKind: CallLinkRuntimeEntryKind = "room",
 ): CallLinkModelRuntimeAdmission {
-  if (!isDeploymentId(publicDeploymentId)) {
+  if (!publicDeploymentId && process.env.PUBLIC_RUNTIME_ENABLED !== "true") {
     return { ok: true, mode: "legacy_private" };
+  }
+  if (!isDeploymentId(publicDeploymentId)) {
+    return { ok: false, code: "call_link_public_model_runtime_unavailable" };
   }
   // A deliberately isolated deployment smoke candidate may start the API,
   // Gateway and idle Agent process on a shared host, but it must never create

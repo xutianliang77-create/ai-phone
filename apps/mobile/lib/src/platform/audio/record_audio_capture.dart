@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart'
+    show TargetPlatform, defaultTargetPlatform;
 import 'package:record/record.dart';
 
 import 'audio_capture.dart';
@@ -9,7 +11,8 @@ import 'online_audio_endpoint.dart';
 
 class RecordAudioCapture implements AudioCapture {
   RecordAudioCapture({AudioEndpointDetector? endpointDetector})
-      : _endpointDetector = endpointDetector ?? IosAudioEndpointDetector();
+      : _endpointDetector = endpointDetector ??
+            platformAudioEndpointDetector(defaultTargetPlatform);
   final AudioEndpointDetector _endpointDetector;
   OnlineAudioEndpointProcessor? _endpoint;
   int _generation = 0;
@@ -133,6 +136,11 @@ class RecordAudioCapture implements AudioCapture {
     return config.sampleRate * config.frameDurationMs ~/ 500;
   }
 }
+
+AudioEndpointDetector platformAudioEndpointDetector(TargetPlatform platform) =>
+    platform == TargetPlatform.android
+        ? AndroidAudioEndpointDetector()
+        : IosAudioEndpointDetector();
 
 class AudioCaptureException implements Exception {
   const AudioCaptureException(this.message);

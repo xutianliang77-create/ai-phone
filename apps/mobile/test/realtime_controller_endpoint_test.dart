@@ -4,6 +4,7 @@ import 'package:translation_mobile/src/features/realtime/data/api/realtime_sessi
 import 'package:translation_mobile/src/features/realtime/presentation/controllers/realtime_controller.dart';
 import 'package:translation_mobile/src/features/realtime/presentation/controllers/speech_capture_gate.dart';
 import 'package:translation_mobile/src/platform/audio/audio_frame.dart';
+import 'package:translation_mobile/src/platform/audio/audio_session_coordinator.dart';
 import 'helpers/realtime_controller_test_helpers.dart';
 
 class PublicRepository extends FakeRealtimeRepository {
@@ -170,5 +171,22 @@ void main() {
     capture.emit(2);
     await pumpEventQueue();
     expect(repo.order, ['frame:1', 'boundary', 'frame:2']);
+  });
+  test('Bluetooth speech interrupts public playback without treating it as speaker echo',
+      () async {
+    final speechGate = SpeechCaptureGate()
+      ..updateRoute(AudioOutputRoute.bluetooth);
+    final repo = PublicRepository(), capture = Capture();
+    final controller =
+        realtimeControllerForTest(repo, capture, speechCaptureGate: speechGate);
+    addTearDown(controller.disposeAsync);
+    await controller.start();
+    speechGate.beginPlayback(text: 'voice', language: 'en');
+    expect(speechGate.playbackActive, isFalse);
+    expect(speechGate.isPlaying, isTrue);
+    capture.emit(1, endpoint: true);
+    await pumpEventQueue();
+    expect(repo.order, ['frame:1', 'boundary']);
+    expect(speechGate.isPlaying, isFalse);
   });
 }

@@ -6,6 +6,7 @@ import {
   workerRuntimeProvider,
 } from "../worker-dispatches/livekit-dispatch-readiness.js";
 import type { WorkerDispatchTicketPayload } from "../worker-dispatches/worker-dispatch-ticket.js";
+import { callLinkModelRuntimeAdmission } from "./call-link-model-runtime-policy.js";
 
 export interface WorkerRuntimeClaim {
   generation: number;
@@ -125,18 +126,50 @@ export class CallLinkWorkerSupervisor implements CallLinkWorkerRuntime {
   }
 }
 
+class AdmissionGuardedCallLinkWorkerRuntime implements CallLinkWorkerRuntime {
+  constructor(private readonly runtime: CallLinkWorkerRuntime) {}
+
+  async ensure(callId: string) {
+    const admission = await callLinkModelRuntimeAdmission(callId);
+    if (!admission.ok) throw new Error(admission.code);
+    await this.runtime.ensure(callId);
+  }
+
+  markReady(callId: string, claim?: WorkerRuntimeClaim) {
+    return this.runtime.markReady(callId, claim);
+  }
+  heartbeat(callId: string, claim: WorkerRuntimeClaim) {
+    return this.runtime.heartbeat?.(callId, claim);
+  }
+  reportFailure(callId: string, claim: WorkerRuntimeClaim, errorClass?: string) {
+    return this.runtime.reportFailure?.(callId, claim, errorClass);
+  }
+  verifyTicket(ticket: string) {
+    return this.runtime.verifyTicket?.(ticket) ?? null;
+  }
+  stop(callId: string) {
+    return this.runtime.stop(callId);
+  }
+  shutdown() {
+    return this.runtime.shutdown();
+  }
+}
+
 const defaultSupervisor = new CallLinkWorkerSupervisor();
+const guardedLocalSupervisor = new AdmissionGuardedCallLinkWorkerRuntime(defaultSupervisor);
 let defaultDispatchRuntime: CallLinkWorkerDispatchRuntime | null = null;
+let guardedDispatchRuntime: CallLinkWorkerRuntime | null = null;
 let testSupervisor: CallLinkWorkerRuntime | null = null;
 
 export function getCallLinkWorkerSupervisor(): CallLinkWorkerRuntime {
   if (testSupervisor) return testSupervisor;
-  if (workerRuntimeProvider() === "local_process") return defaultSupervisor;
-  if (defaultDispatchRuntime) return defaultDispatchRuntime;
+  if (workerRuntimeProvider() === "local_process") return guardedLocalSupervisor;
+  if (guardedDispatchRuntime) return guardedDispatchRuntime;
   const config = getLiveKitDispatchConfig();
   if (!config.ok) return new UnavailableCallLinkWorkerRuntime(config.issues);
   defaultDispatchRuntime = new CallLinkWorkerDispatchRuntime(config.config);
-  return defaultDispatchRuntime;
+  guardedDispatchRuntime = new AdmissionGuardedCallLinkWorkerRuntime(defaultDispatchRuntime);
+  return guardedDispatchRuntime;
 }
 
 class UnavailableCallLinkWorkerRuntime implements CallLinkWorkerRuntime {

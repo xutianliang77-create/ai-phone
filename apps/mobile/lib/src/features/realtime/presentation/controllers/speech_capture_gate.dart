@@ -16,6 +16,7 @@ class SpeechCaptureGate {
 
   bool get requiresAcousticEchoSuppression =>
       _route.requiresAcousticEchoSuppression;
+  bool get isPlaying => _playbackActive;
   bool get playbackActive => requiresAcousticEchoSuppression && _playbackActive;
 
   bool get blocksCapture {

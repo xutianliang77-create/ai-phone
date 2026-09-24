@@ -1,7 +1,7 @@
 import {createHmac,timingSafeEqual} from "node:crypto";
 import {lstatSync,readFileSync} from "node:fs";
 import {isAbsolute,resolve} from "node:path";
-import {isSupportedLanguage,isTranslationLanguage,publicModelComponents,publicAsrModelAutomaticLanguageSupported} from "@translation/contracts";
+import {isSupportedLanguage,isTranslationLanguage,publicModelComponents,publicAsrModelAutomaticLanguageSupported,publicTranslationDirectionImplemented,publicTtsTargetImplemented} from "@translation/contracts";
 import {automaticTranslationTarget,validAutomaticSources,type TranslationLanguageCode} from '@translation/contracts';
 import { inspectPublicRuntimeLiveQualification } from "@translation/platform-security";
 import {canonicalSyncJson,syncKey} from "../sessions/session-result-sync-contract.js";
@@ -65,7 +65,7 @@ function configurationCapability(env:RuntimeEnv,configuration:PublicModelRuntime
     const live=enabled(env.PUBLIC_RUNTIME_REQUIRE_LIVE_QUALIFICATION)&&!bootstrap?requiredLiveQualification(env,configuration):undefined;
     const policy=readPolicy(file,key!,new Date(),configuration);
     if(!policyMatchesConfiguration(policy,deployment!,configuration))throw Error();
-    const qualifiedLanguagePairs=qualifiedPairs(policy,live);
+    const qualifiedLanguagePairs=qualifiedPairs(policy,configuration,live);
     if(!qualifiedLanguagePairs.length)throw Error();
     const automatic=automaticRoutingCapability(policy,configuration,live);
     return {status:"qualified",qualifiedLanguagePairs,automaticLanguage:automatic.language,automaticReverse:automatic.reverse};
@@ -76,7 +76,7 @@ function resolvePolicy(file:string,key:string,deployment:string,context:Paramete
   const config=context.configuration,policy=readPolicy(file,key,new Date(),config),components=publicModelComponents(config.executionPlan);
   if(!policyMatchesConfiguration(policy,deployment,config)||policy.deploymentId!==context.deploymentId)throw Error("public_runtime_admission_policy_scope_mismatch");
   const language=context.languagePolicy;
-  if(!languageScopeQualified(language,qualifiedPairs(policy,live),automaticRoutingCapability(policy,config,live))){
+  if(!languageScopeQualified(language,qualifiedPairs(policy,config,live),automaticRoutingCapability(policy,config,live))){
     throw Error("public_runtime_admission_policy_language_not_qualified");
   }
   const common={sessionId:context.sessionId,ownerId:context.ownerId,deploymentId:context.deploymentId,processingHash:context.processingHash,region:policy.region,
@@ -98,16 +98,22 @@ function requiredLiveQualification(env:RuntimeEnv,configuration:PublicModelRunti
   return live.evidence;
 }
 
-function qualifiedPairs(policy:Policy,live?:ReturnType<typeof requiredLiveQualification>){
+function qualifiedPairs(policy:Policy,configuration:PublicModelRuntimeSnapshot,live?:ReturnType<typeof requiredLiveQualification>){
+  const translation=configuration.components.translation?.protocol??"";
+  const speech=configuration.executionPlan.tts.execution==="public"?configuration.components.tts?.protocol:undefined;
   const pairs=policy.qualifiedLanguagePairs.filter(pair=>!live||live.qualifiedLanguagePairs.some(candidate=>
-    candidate.source===pair.source&&candidate.target===pair.target));
+    candidate.source===pair.source&&candidate.target===pair.target)).filter(pair=>
+      publicTranslationDirectionImplemented(translation,pair.source,pair.target)&&
+      (!speech||publicTtsTargetImplemented(speech,pair.target)));
   return pairs.map(pair=>({...pair}));
 }
 
 function automaticRoutingCapability(policy:Policy,configuration:PublicModelRuntimeSnapshot,live?:ReturnType<typeof requiredLiveQualification>){
   const adapter=publicAsrModelAutomaticLanguageSupported(configuration.components.asr?.protocol??"",configuration.components.asr?.modelId??"");
   const language=adapter&&policy.automaticLanguage===true&&(!live||live.automaticLanguage===true);
-  return {language,reverse:language&&policy.automaticReverse===true&&(!live||live.automaticReverse===true)};
+  return {language,reverse:language&&(configuration.executionPlan.tts.execution!=="public"||
+    configuration.components.tts?.protocol!=="google_cloud_tts")&&
+    policy.automaticReverse===true&&(!live||live.automaticReverse===true)};
 }
 
 function languageScopeQualified(language:{source:string;target:string;autoReverse:boolean;pair?:readonly [string,string];sourceLanguages?:readonly TranslationLanguageCode[]},pairs:QualifiedLanguagePair[],automatic:{language:boolean;reverse:boolean}){

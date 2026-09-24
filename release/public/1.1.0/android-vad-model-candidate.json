@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "status": "host_candidate_device_unverified",
+  "provider": "silero_onnx",
+  "model": {
+    "repo": "snakers4/silero-vad",
+    "tag": "v6.2.3",
+    "commit": "5cd7945676eb32225748052e2e6a0580e4686a08",
+    "sourcePath": "src/silero_vad/data/silero_vad.onnx",
+    "assetPath": "apps/mobile/android/app/src/main/assets/models/silero_vad_v6.2.3.onnx",
+    "sha256": "1a153a22f4509e292a94e67d6f9b85e8deb25b4988682b7e174c65279d8788e3",
+    "bytes": 2327524,
+    "license": "MIT",
+    "modelSampleRate": 16000,
+    "inferenceBlockSamples": 512
+  },
+  "runtime": {
+    "coordinate": "com.microsoft.onnxruntime:onnxruntime-android:1.29.0",
+    "executionProvider": "CPU",
+    "threads": 1
+  },
+  "capture": {
+    "acceptedSampleRates": [16000, 24000],
+    "resampleSideAnalysisOnly": true,
+    "uploadPcmUnchanged": true,
+    "secondMicrophone": false
+  }
+}

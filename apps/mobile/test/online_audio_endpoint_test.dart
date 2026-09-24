@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:translation_mobile/src/platform/audio/audio_frame.dart';
 import 'package:translation_mobile/src/platform/audio/online_audio_endpoint.dart';
+import 'package:translation_mobile/src/platform/audio/record_audio_capture.dart';
 
 class Detector implements AudioEndpointDetector {
   final inputs = <int>[];
@@ -31,9 +32,58 @@ AudioFrame frame(int n, {int samples = 960}) => AudioFrame(
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   const channel = MethodChannel('translation_mobile/apple_speech_asr');
+  const androidChannel = MethodChannel('translation_mobile/android_audio_endpoint');
+  test('the ordinary capture factory selects the Android endpoint only on Android', () {
+    expect(platformAudioEndpointDetector(TargetPlatform.android),
+        isA<AndroidAudioEndpointDetector>());
+    expect(platformAudioEndpointDetector(TargetPlatform.iOS),
+        isA<IosAudioEndpointDetector>());
+  });
   tearDown(() => TestDefaultBinaryMessengerBinding
       .instance.defaultBinaryMessenger
       .setMockMethodCallHandler(channel, null));
+  tearDown(() => TestDefaultBinaryMessengerBinding
+      .instance.defaultBinaryMessenger
+      .setMockMethodCallHandler(androidChannel, null));
+  test('Android uses its own model endpoint channel and never accepts RMS', () async {
+    final calls = <MethodCall>[];
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(androidChannel, (call) async {
+      calls.add(call);
+      final args = call.arguments as Map;
+      if (call.method == 'endpoint.start') {
+        return {
+          'requestId': args['requestId'],
+          'ready': true,
+          'provider': 'silero_onnx'
+        };
+      }
+      if (call.method == 'endpoint.process') {
+        return {
+          'requestId': args['requestId'],
+          'sequence': args['sequence'],
+          'boundary': false
+        };
+      }
+      return null;
+    });
+    final detector = AndroidAudioEndpointDetector();
+    await detector.start(24000, options: {'endpointSilenceMs': 640});
+    expect(await detector.accept(frame(1)), isFalse);
+    await detector.stop();
+    expect(calls.map((call) => call.method),
+        ['endpoint.start', 'endpoint.process', 'endpoint.stop']);
+    expect((calls.first.arguments as Map)['sampleRate'], 24000);
+
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(androidChannel, (call) async {
+      final args = call.arguments as Map;
+      return call.method == 'endpoint.start'
+          ? {'requestId': args['requestId'], 'ready': true, 'provider': 'rms'}
+          : null;
+    });
+    await expectLater(AndroidAudioEndpointDetector().start(24000), throwsStateError);
+  });
   test(
       'native VAD uses existing channel only, preserves options and validates frame ACK',
       () async {

@@ -8,7 +8,7 @@ import {signPublicRuntimeLiveQualification} from "@translation/platform-security
 let dir="";const key="a".repeat(64),now=new Date(),expiresAt=new Date(now.getTime()+600000).toISOString();
 const configuration={deploymentId:"public-test",configurationRevision:1,configurationHash:"b".repeat(64),modelPolicyRevision:"models-v1:test",
   executionPlan:{asr:{execution:"public",scopeKey:"asr:scope",reason:"online_selected"},translation:{execution:"public",scopeKey:"translation:scope",reason:"online_selected"},tts:{execution:"public",scopeKey:"tts:scope",reason:"online_selected"}},
-  components:{asr:{vendor:"tencent",modelId:"16k_zh",sampleRate:16000},translation:{vendor:"tencent",modelId:"service:tencent_tmt"},tts:{vendor:"tencent",modelId:"service:tencent_tts_ws"}}};
+  components:{asr:{vendor:"tencent",protocol:"tencent_asr_ws",modelId:"16k_zh",sampleRate:16000},translation:{vendor:"tencent",protocol:"tencent_tmt",modelId:"service:tencent_tmt"},tts:{vendor:"tencent",protocol:"tencent_tts_ws",modelId:"service:tencent_tts_ws"}}};
 function policy(patch:any={}){const value:any={schemaVersion:1,policyId:"policy-test",deploymentId:"public-test",configurationHash:configuration.configurationHash,
   modelPolicyRevision:configuration.modelPolicyRevision,region:"cn",issuedAt:now.toISOString(),expiresAt,maxActiveSeconds:60,currency:"CNY",reservedMicros:0,
   qualifiedComponents:["asr","translation","tts"],providerAvailability:[{providerId:"tencent",state:"available"}],qualifiedLanguagePairs:[{source:"zh",target:"en"}],...patch};if(Object.hasOwn(patch,"maxActiveSeconds")&&patch.maxActiveSeconds===undefined)delete value.maxActiveSeconds;return {...value,signature:signPublicRuntimeAdmissionPolicy(value,key)};}
@@ -47,6 +47,39 @@ describe("signed public runtime admission policy",()=>{
     expect(capability(configuration)).toEqual({status:"qualified",qualifiedLanguagePairs:[{source:"zh",target:"en"}],automaticLanguage:false,automaticReverse:false});
     const withoutTts={...configuration,executionPlan:{...configuration.executionPlan,tts:{execution:"disabled" as const}}};
     expect(capability(withoutTts)).toEqual({status:"not_qualified",qualifiedLanguagePairs:[],automaticLanguage:false,automaticReverse:false});
+  });
+  it("does not offer signed directions rejected by the selected TMT or TTS wire",async()=>{
+    dir=mkdtempSync(join(tmpdir(),"wujie-public-policy-"));const file=join(dir,"policy.json");
+    const pairs=[{source:"ar",target:"zh"},{source:"zh",target:"ja"},{source:"en",target:"zh"}];
+    writeFileSync(file,JSON.stringify(policy({qualifiedLanguagePairs:pairs})),{mode:0o600});
+    const authority=publicRealtimeAuthorityFromEnvironment(environment(file))!;
+    expect(authority.configurationCapability!(configuration)).toMatchObject({
+      status:"qualified",qualifiedLanguagePairs:[{source:"en",target:"zh"}],
+    });
+    for(const languagePolicy of [{source:"ar",target:"zh",autoReverse:false,revision:1},{source:"zh",target:"ja",autoReverse:false,revision:1}]){
+      await expect(authority.resolveVerifiedEvidence(context({languagePolicy}),new AbortController().signal)).rejects.toThrow("language_not_qualified");
+    }
+  });
+  it("does not offer reverse output when a spoken Google TTS combination cannot switch language",async()=>{
+    dir=mkdtempSync(join(tmpdir(),"wujie-public-policy-"));const file=join(dir,"policy.json");
+    const config:any={...configuration,components:{...configuration.components,
+      asr:{...configuration.components.asr,modelId:"16k_zh_en_2.0"},
+      tts:{vendor:"google",protocol:"google_cloud_tts",modelId:"service:google_cloud_tts"}}};
+    const spoken=policy({automaticLanguage:true,automaticReverse:true,
+      qualifiedLanguagePairs:[{source:"zh",target:"en"},{source:"en",target:"zh"}],
+      providerAvailability:[{providerId:"tencent",state:"available"},{providerId:"google",state:"available"}]});
+    const silent={...config,configurationHash:"c".repeat(64),
+      executionPlan:{...config.executionPlan,tts:{execution:"disabled" as const}}};
+    const silentPolicy=policy({policyId:"policy-silent",configurationHash:silent.configurationHash,
+      qualifiedComponents:["asr","translation"],automaticLanguage:true,automaticReverse:true,
+      qualifiedLanguagePairs:[{source:"zh",target:"en"},{source:"en",target:"zh"}]});
+    writeFileSync(file,JSON.stringify({schemaVersion:2,policies:[spoken,silentPolicy]}),{mode:0o600});
+    const authority=publicRealtimeAuthorityFromEnvironment(environment(file))!;
+    expect(authority.configurationCapability!(config)).toMatchObject({status:"qualified",automaticLanguage:true,automaticReverse:false});
+    expect(authority.configurationCapability!(silent)).toMatchObject({status:"qualified",automaticLanguage:true,automaticReverse:true});
+    await expect(authority.resolveVerifiedEvidence(context({configuration:config,
+      languagePolicy:{source:"auto",target:"en",autoReverse:true,pair:["zh","en"],revision:2}}),new AbortController().signal))
+      .rejects.toThrow("language_not_qualified");
   });
   it("admits inherited automatic Chinese/English routing only when adapter, policy and live evidence agree",async()=>{
     dir=mkdtempSync(join(tmpdir(),"wujie-public-policy-"));const file=join(dir,"policy.json"),live=join(dir,"live.json");

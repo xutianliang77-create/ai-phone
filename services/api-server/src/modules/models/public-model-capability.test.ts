@@ -65,4 +65,28 @@ describe("manual configuration uses actual wire constraints",()=>{
       expect(h.capabilityText(p)).toContain("不能代实时采音");expect(h.capabilityText(p)).toContain("不代表模型已验证");}
     expect(h.capabilityText({})).toBe("");
   });
+  it("exposes Tencent provider gain without carrying it to another TTS protocol",()=>{
+    const config=emptyConfiguration("test"),tencent=publicModelCatalog.protocols.find(p=>p.id==="tencent_tts_ws")!;
+    const profile={...config.components.tts,enabled:true,vendor:"tencent" as const,protocol:tencent.id,authKind:"tencent_secret" as const,sampleRate:16000 as const,volume:4};
+    expect(tencent.providerVolume).toBe(true);
+    expect(validateProfile("tts",profile).volume).toBe(4);
+    const qwen={...profile,vendor:"qwen" as const,protocol:"qwen_tts_realtime",authKind:"api_key" as const};
+    expect(()=>validateProfile("tts",qwen)).toThrow("unsupported_provider_volume");
+    const stored={...config,components:{...config.components,tts:qwen}};
+    expect(publicConfiguration(stored).status.tts).toMatchObject({state:"incomplete",missing:expect.arrayContaining(["volume"])});
+    const nodes:Record<string,any>={message:{}},created:any[]=[];
+    const document={body:{dataset:{configRoot:"/models/public-config",configKind:"public"}},getElementById:(id:string)=>nodes[id],
+      createTextNode:(text:string)=>({textContent:text}),createElement:(tag:string)=>{
+        const node:any={tag,children:[],dataset:{},append(...children:any[]){this.children.push(...children);},replaceWith(){}};
+        Object.defineProperty(node,"id",{set(id:string){nodes[id]=node;},get(){return Object.keys(nodes).find(key=>nodes[key]===node);}});
+        created.push(node);return node;
+      }};
+    const draft={tts:profile},prefix=publicModelConfigScript.split("$('load').onclick=load;")[0];
+    new Function("document","initial","cat",prefix+";draft=initial;catalog=cat;card('tts');")(document,draft,publicModelCatalog);
+    expect(nodes["tts-volume"]).toBeDefined();
+    const beforeSwitch=created.length;
+    nodes["tts-vendor"].value="qwen";nodes["tts-vendor"].onchange();
+    expect(draft.tts).toMatchObject({vendor:"qwen",sampleRate:24000,volume:0});
+    expect(created.slice(beforeSwitch).some(node=>node.id==="tts-volume")).toBe(false);
+  });
 });

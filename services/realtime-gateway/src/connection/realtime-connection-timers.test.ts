@@ -13,33 +13,39 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-function setup(confirmed = true, previous = Promise.resolve(), qaWallSeconds?:number) {
+function setup(confirmed = true, previous = Promise.resolve(), qaWallSeconds?:number,ordinaryPublic=false) {
   const socket = Object.assign(new EventEmitter(), {
     readyState: 1, ping: vi.fn(), terminate: vi.fn(),
   });
   const token=claims();
-  if(qaWallSeconds!==undefined){
+  if(qaWallSeconds!==undefined||ordinaryPublic){
     token.issuedAt=Math.floor(Date.now()/1000);
-    token.maxDurationSeconds=qaWallSeconds;
-    token.qaOneShot={authorizationId:"qa-timer-test",hardDeadlineAt:token.issuedAt+qaWallSeconds};
+    token.holdSeconds=30;
+    if(qaWallSeconds!==undefined){
+      token.maxDurationSeconds=qaWallSeconds;
+      token.qaOneShot={authorizationId:"qa-timer-test",hardDeadlineAt:token.issuedAt+qaWallSeconds};
+    }else delete token.maxDurationSeconds;
     token.publicRuntime={deploymentId:"public-qa",leaseId:"lease",captureId:"capture",languagePolicyKey:"language",sampleRate:16000,configurationRevision:1,configurationHash:"a".repeat(64)};
   }
   const session = createSession(token);
   const record = vi.fn(async () => {}), touch = vi.fn(async () => {});
   const confirmAudio = vi.fn(async () => {});
   const getBalance = vi.fn(async () => ({ remainingSeconds: 300 }));
+  const reserveAllowance=vi.fn(async(_sessionId:string,target:number)=>({
+    remainingSeconds:300,availableSeconds:Math.max(0,300-target),authorizedSeconds:target,
+  }));
   const sendRealtime = vi.fn(), failPublicConnection = vi.fn(), forceQaSupplierStop=vi.fn(async()=>{});
   const endRealtimeSession = vi.fn(async () => {});
   let queue = previous;
   const stop = startRealtimeConnectionTimers({
     ws: socket as unknown as WebSocket, session,
     sessionEventSink: { record, touch, ...(confirmed ? { requiresConfirmation: true as const } : {}) },
-    usageBalanceClient: { getBalance }, heartbeatIntervalMs: 120_000,
+    usageBalanceClient: { getBalance,reserveAllowance }, heartbeatIntervalMs: 120_000,
     confirmAudio, failPublicConnection, forceQaSupplierStop, sendRealtime, endRealtimeSession,
     enqueueUsage: chain => { queue = chain(queue); },
   });
   stops.push(stop);
-  return { socket, session, touch, confirmAudio, getBalance, sendRealtime,
+  return { socket, session, touch, confirmAudio, getBalance,reserveAllowance,sendRealtime,
     failPublicConnection, forceQaSupplierStop, endRealtimeSession, stop, drain: () => queue };
 }
 
@@ -121,6 +127,28 @@ describe("connection timer extraction", () => {
     const t=setup(true);
     await vi.advanceTimersByTimeAsync(45_000);
     expect(t.endRealtimeSession).not.toHaveBeenCalled();
+  });
+  it("renews the same public account allowance and reports measured active time",async()=>{
+    const t=setup(true,Promise.resolve(),undefined,true);
+    await vi.advanceTimersByTimeAsync(30_000);await t.drain();
+    expect(t.reserveAllowance.mock.calls.map(call=>call[1])).toEqual([40,50,60]);
+    expect(t.getBalance).not.toHaveBeenCalled();
+    expect(t.sendRealtime).toHaveBeenCalledWith(expect.objectContaining({
+      type:"usage.tick",billableSeconds:30,remainingSeconds:30,
+    }));
+    expect(t.endRealtimeSession).not.toHaveBeenCalled();
+  });
+  it("ends a public session at its held quota and fails closed if allowance cannot be read",async()=>{
+    const quota=setup(true,Promise.resolve(),undefined,true);
+    quota.reserveAllowance.mockImplementation(async()=>({remainingSeconds:30,availableSeconds:0,authorizedSeconds:30}));
+    await vi.advanceTimersByTimeAsync(30_000);await quota.drain();
+    expect(quota.endRealtimeSession).toHaveBeenCalledWith("quota_exhausted",0);
+    quota.stop();
+    const unknown=setup(true,Promise.resolve(),undefined,true);
+    unknown.reserveAllowance.mockResolvedValue(null as never);
+    await vi.advanceTimersByTimeAsync(10_000);await unknown.drain();
+    expect(unknown.endRealtimeSession).toHaveBeenCalledWith("connection_error",0);
+    expect(unknown.sendRealtime).not.toHaveBeenCalled();
   });
 
   it("retains ping/pong liveness and cancels every timer during cleanup", async () => {

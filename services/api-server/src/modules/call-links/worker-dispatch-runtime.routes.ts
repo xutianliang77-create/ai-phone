@@ -13,6 +13,7 @@ import { getCallLinkTtsVoice } from "./call-link-tts-voice.js";
 import { findCallLinkTranslationState } from "./call-link-translation-state.repository.js";
 import { findCallLink, registerCallLeg } from "./call-links.service.js";
 import { getCallLinkWorkerSupervisor } from "./call-link-worker-supervisor.js";
+import { callLinkModelRuntimeAdmission } from "./call-link-model-runtime-policy.js";
 import {
   callLinkPublicTtsProfile,
   parseCallLinkPublicTtsAttempt, resolveCallLinkPublicTtsMaterial,
@@ -84,6 +85,10 @@ export function registerWorkerDispatchRuntimeRoutes(
       claim.sessionId !== call.sessionId || claim.roomName !== call.roomName) {
       return sendError(reply, 403, "worker_runtime_binding_conflict", "Worker binding failed");
     }
+    const admission = await callLinkModelRuntimeAdmission(call.sessionId, "room");
+    if (!admission.ok) {
+      return sendError(reply, 503, admission.code, "Call Link Worker model runtime is unavailable");
+    }
     const dispatch = await findWorkerDispatch(call.sessionId);
     if (!dispatch || dispatch.generation !== claim.generation) {
       return sendError(reply, 409, "worker_dispatch_generation_conflict", "Dispatch is stale");
@@ -153,6 +158,10 @@ export function registerWorkerDispatchRuntimeRoutes(
     }
     const callId = (request.params as { callId: string }).callId;
     return withSessionWriteLock(callId, async () => {
+      const admission = await callLinkModelRuntimeAdmission(callId, "room");
+      if (!admission.ok) {
+        return sendError(reply, 503, admission.code, "Call Link Worker model runtime is unavailable");
+      }
       const bound = await verifyBoundWorker(callId, body);
       if (!bound.ok) return sendError(reply, bound.status, bound.code, bound.message);
       try {

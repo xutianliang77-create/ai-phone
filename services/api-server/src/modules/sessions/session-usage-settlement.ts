@@ -1,6 +1,8 @@
-import { consumeSeconds, settleUsageHold } from "../usage/usage.service.js";
+import { consumeSeconds, getUsageBalance, settleUsageHold } from "../usage/usage.service.js";
 import { findBillingLedgerEntryByIdempotencyKey } from "../billing/billing-ledger.service.js";
+import { getStoreSnapshot } from "../../infrastructure/storage/json-store.js";
 import type { SessionRecord } from "./session-record.js";
+import { ResultSyncError } from "./session-result-sync-contract.js";
 
 export const MIN_BILLABLE_SESSION_SECONDS = 6;
 
@@ -45,6 +47,15 @@ export function settleSessionUsage(
       note,
       idempotencyKey,
     };
+  }
+
+  if (session.processingAuthorization?.processingMode === "online") {
+    const hold = getStoreSnapshot().usageHolds.find(record => record.userId === session.userId &&
+      record.sessionId === session.id && record.status === "active");
+    if (!hold || hold.seconds < billableSeconds ||
+      getUsageBalance(session.userId).remainingSeconds < billableSeconds) {
+      throw new ResultSyncError("public_settlement_coverage_unconfirmed", 503);
+    }
   }
 
   if (billableSeconds > 0) {

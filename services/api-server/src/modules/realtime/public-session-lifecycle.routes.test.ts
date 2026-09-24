@@ -59,7 +59,7 @@ it('missing or gapped runtime evidence cannot become a zero settlement',async()=
     sessionId:'public-s',idempotencyKey:'finalize:public-s',stopWatermark:{captureId:'capture-1',languagePolicyKey:'policy:1',finalRevision:0,lastAcceptedSample:0}};
   expect((await finalize(request)).statusCode).toBe(503);
   await publish(1,'active');clock(61);expect((await publish(2,'stopped')).statusCode).toBe(503);
-  expect(current().publicRuntime!.uncertain).toBe(true);
+  expect(current().publicRuntime).toMatchObject({uncertain:true,meterUncertain:true,providerUncertain:false});
   const saved=state();clock(100);expect((await publish(2,'stopped')).statusCode).toBe(503);
   expect(state()).toEqual(saved);expect(storage.getStoreSnapshot().billingLedger).toEqual([]);
 });
@@ -86,7 +86,8 @@ it('persists an internal provider-uncertain stop without automatic settlement',a
   await publish(1,'active');clock(10);
   const stopped=await publish(2,'stopped',{uncertain:true});
   expect(stopped.statusCode).toBe(200);expect(stopped.json()).toMatchObject({phase:'stopped',uncertain:true,meterStatus:'uncertain'});
-  expect(current().publicRuntime).toMatchObject({phase:'stopped',uncertain:true,stoppedAt:new Date(start+10000).toISOString()});
+  expect(current().publicRuntime).toMatchObject({phase:'stopped',uncertain:true,meterUncertain:false,
+    providerUncertain:true,stoppedAt:new Date(start+10000).toISOString()});
   expect(current().publicFinalization).toBeUndefined();
   expect(storage.getStoreSnapshot().billingLedger).toEqual([]);expect(storage.getStoreSnapshot().usageHolds[0].status).toBe('active');
   expect((await finalize(serverFinalizationRequest(current()))).statusCode).toBe(503);
@@ -140,6 +141,19 @@ it('atomically rolls back ledger, hold, ended state and receipt on persistence f
   expect((await finalize(request)).statusCode).toBe(200);
   expect(storage.getStoreSnapshot().billingLedger.filter(l=>l.idempotencyKey==='settle:public-s')).toHaveLength(1);
 });
+it.each(['balance','hold'])('does not report settlement when public %s covers fewer seconds than the trusted meter',async kind=>{
+  await publish(1,'active');clock(31);
+  if(kind==='balance')storage.getStoreSnapshot().usageBalances['guest-user']=10;
+  else storage.getStoreSnapshot().usageHolds[0].seconds=10;
+  const stopped=await publish(2,'stopped');
+  expect(stopped.statusCode).toBe(503);
+  expect(stopped.json()).toMatchObject({error:{code:'public_settlement_coverage_unconfirmed'}});
+  expect(current().publicRuntime).toMatchObject({phase:'stopped',activeMs:31000});
+  expect(current().status).not.toBe('ended');
+  expect(current().publicFinalization).toBeUndefined();
+  expect(storage.getStoreSnapshot().billingLedger).toEqual([]);
+  expect(storage.getStoreSnapshot().usageHolds[0].status).toBe('active');
+});
 it('cannot relabel an existing unmatched settlement as a verified public receipt',async()=>{
   await publish(1,'active');clock(12);await observePublicRuntime('public-s',event(2,'stopped'));
   consumeSeconds('guest-user',5,undefined,{sessionId:'public-s',idempotencyKey:'settle:public-s'});
@@ -175,6 +189,19 @@ it('reconciles an exact uncertain candidate attempt once and settles only server
   expect(storage.getStoreSnapshot().billingLedger.filter(l=>l.idempotencyKey==='settle:public-s')).toHaveLength(1);expect(storage.getStoreSnapshot().usageHolds[0].status).toBe('settled');
   const saved=state();expect((await route()).json()).toEqual(first.json());expect(state()).toEqual(saved);
   expect((await route(reconciliation({reconciliationId:'provider-reconcile-2'}))).statusCode).toBe(409);expect(state()).toEqual(saved);
+});
+it('never substitutes supplier usage evidence for an uncertain meter or an unclassified older stop',async()=>{
+  uncertainStopped();current().publicModelAttempts=[uncertainAttempt()];clock(31);
+  const route=()=>app.inject({method:'POST',url:'/internal/realtime/sessions/public-s/provider-reconciliation',
+    headers:{authorization:'Bearer internal-test-secret-123'},payload:reconciliation()});
+  current().publicRuntime!.meterUncertain=true;
+  expect((await route()).statusCode).toBe(409);
+  expect(storage.getStoreSnapshot().billingLedger).toEqual([]);
+  delete current().publicRuntime!.meterUncertain;
+  delete current().publicRuntime!.providerUncertain;
+  expect((await route()).statusCode).toBe(409);
+  expect(storage.getStoreSnapshot().billingLedger).toEqual([]);
+  expect(current().status).not.toBe('ended');
 });
 it('rejects forged, mismatched, disabled, and production aggregate reconciliation before settlement',async()=>{
   uncertainStopped();current().publicModelAttempts=[uncertainAttempt()];clock(31);
@@ -245,5 +272,5 @@ function session():SessionRecord{return {id:'public-s',userId:'guest-user',mode:
       asr:{execution:'public',scopeKey:'asr',reason:'online_selected'},translation:{execution:'public',scopeKey:'mt',reason:'online_selected'},tts:{execution:'disabled'}}},
   publicRuntimePolicy:{leaseId:'server-lease',captureId:'capture-1',languagePolicyKey:'policy:1',expiresAt:new Date(start+3600000).toISOString(),maxActiveSeconds:120}};}
 function uncertainAttempt(){return {ownerId:'guest-user',deploymentId:'public-test',createdAt:new Date(start).toISOString(),updatedAt:new Date(start+30000).toISOString(),event:{sessionId:'public-s',leaseId:'server-lease',attemptId:'attempt-asr-1',segmentId:'seg',revision:0,component:'asr',providerId:'tencent',modelId:'16k_en',state:'uncertain',failureCode:'public_asr_stream_interrupted',audioStartSample:0,audioEndSample:480000,audioSampleRate:16000}} as any;}
-function uncertainStopped(){const s=current();s.publicRuntime={sequence:2,eventHash:'runtime-uncertain',phase:'stopped',observedAt:new Date(start+30000).toISOString(),activeMs:30000,uncertain:true,finalRevision:4,lastAcceptedSample:480000,stoppedAt:new Date(start+30000).toISOString(),recoveryUntil:new Date(start+330000).toISOString(),finalRevisions:{seg:4}};s.lastActivityAt=s.publicRuntime.stoppedAt;}
+function uncertainStopped(){const s=current();s.publicRuntime={sequence:2,eventHash:'runtime-uncertain',phase:'stopped',observedAt:new Date(start+30000).toISOString(),activeMs:30000,uncertain:true,meterUncertain:false,providerUncertain:true,finalRevision:4,lastAcceptedSample:480000,stoppedAt:new Date(start+30000).toISOString(),recoveryUntil:new Date(start+330000).toISOString(),finalRevisions:{seg:4}};s.lastActivityAt=s.publicRuntime.stoppedAt;}
 function reconciliation(patch:any={}){const value:any={schemaVersion:1,reconciliationId:'provider-reconcile-1',sessionId:'public-s',ownerId:'guest-user',deploymentId:'public-test',providerId:'tencent',evidenceScope:'isolated_candidate_day',providerUsageCount:1,providerUsageSeconds:29,providerEvidenceHash:'a'.repeat(64),observedAt:new Date(start+31000).toISOString(),attempts:[{attemptId:'attempt-asr-1',component:'asr',modelId:'16k_en'}],...patch};return {...value,signature:signPublicProviderReconciliation(value,'c'.repeat(64))};}

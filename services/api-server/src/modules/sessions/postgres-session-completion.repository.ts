@@ -24,6 +24,7 @@ import {
   usageBalance,
 } from "../usage/postgres-usage-uow.js";
 import type { SessionRecord } from "./session-record.js";
+import { ResultSyncError } from "./session-result-sync-contract.js";
 import {
   assertSessionFence,
   enqueueSessionChanged,
@@ -140,6 +141,17 @@ export class PostgresSessionCompletionRepository {
             });
           }
 
+          const activeHold = await findUsageHold(transaction, {
+            userId: input.userId,
+            sessionId: input.sessionId,
+          });
+          if (next.processingAuthorization?.processingMode === "online" &&
+            (!activeHold || activeHold.hold.status !== "active" ||
+              activeHold.hold.seconds < requestedSeconds ||
+              accountState.account.remainingSeconds < requestedSeconds)) {
+            throw new ResultSyncError("public_settlement_coverage_unconfirmed", 503);
+          }
+
           const remainingSeconds = Math.max(
             0,
             accountState.account.remainingSeconds - requestedSeconds,
@@ -176,10 +188,6 @@ export class PostgresSessionCompletionRepository {
             },
             commandId: input.commandId,
             aggregateVersion: savedAccount.account.version,
-          });
-          const activeHold = await findUsageHold(transaction, {
-            userId: input.userId,
-            sessionId: input.sessionId,
           });
           const hold = activeHold
             ? await transitionUsageHold(transaction, {

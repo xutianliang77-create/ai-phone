@@ -211,3 +211,8 @@ String _platformDefaultTranslationProvider() =>
     defaultTargetPlatform == TargetPlatform.android
         ? 'android_mlkit'
         : 'ios_system';
+
+String _platformDefaultVadProvider() =>
+    defaultTargetPlatform == TargetPlatform.android
+        ? 'silero_onnx'
+        : 'fluidaudio_silero';

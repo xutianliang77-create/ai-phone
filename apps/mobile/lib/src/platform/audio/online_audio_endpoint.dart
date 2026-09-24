@@ -8,8 +8,23 @@ abstract interface class AudioEndpointDetector {
   Future<void> stop();
 }
 
-class IosAudioEndpointDetector implements AudioEndpointDetector {
-  static const _channel = MethodChannel('translation_mobile/apple_speech_asr');
+class IosAudioEndpointDetector extends MethodChannelAudioEndpointDetector {
+  IosAudioEndpointDetector()
+      : super(const MethodChannel('translation_mobile/apple_speech_asr'),
+            'fluidaudio_silero');
+}
+
+class AndroidAudioEndpointDetector extends MethodChannelAudioEndpointDetector {
+  AndroidAudioEndpointDetector()
+      : super(const MethodChannel('translation_mobile/android_audio_endpoint'),
+            'silero_onnx');
+}
+
+class MethodChannelAudioEndpointDetector implements AudioEndpointDetector {
+  MethodChannelAudioEndpointDetector(this._channel, this._expectedProvider);
+
+  final MethodChannel _channel;
+  final String _expectedProvider;
   static int _counter = 0;
   String? _id;
   int _sampleRate = 0;
@@ -31,7 +46,7 @@ class IosAudioEndpointDetector implements AudioEndpointDetector {
       if (_id != id ||
           value?['requestId'] != id ||
           value?['ready'] != true ||
-          value?['provider'] != 'fluidaudio_silero') {
+          value?['provider'] != _expectedProvider) {
         throw StateError('手机端点资源未确认');
       }
     } catch (_) {

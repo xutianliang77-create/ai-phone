@@ -201,7 +201,8 @@ it("saves known late completion metadata after stop without extending or rebilli
 });
 it("rolls back failed attempt persistence atomically",async()=>{
   const {client}=await modelClient(async()=>mtResponse());await client.translate(mtInput);
-  const event={...current().publicModelAttempts![0].event,attemptId:"rollback-attempt",state:"dispatching",metadata:undefined};
+  const event={...current().publicModelAttempts![0].event,attemptId:"rollback-attempt",
+    segmentId:"rollback-segment",state:"dispatching",metadata:undefined};
   const before=structuredClone(getStoreSnapshot());
   vi.spyOn(storage,"persistStoreSnapshot").mockImplementationOnce(()=>{throw Error("disk failure");});
   await expect(recordPublicModelAttempt(id,event)).rejects.toThrow("disk failure");expect(getStoreSnapshot()).toEqual(before);

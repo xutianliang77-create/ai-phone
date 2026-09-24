@@ -62,6 +62,7 @@ describe("original public session preparation and issuance phases",()=>{
     expect(second).toEqual(first);vi.setSystemTime(now.getTime()+5000);expect(await issuePublicRealtimeSession(id,owner)).toEqual(first);
     expect(first).toMatchObject({captureSampleRate:vendor==="qwen"?16000:24000,ownerId:owner,deploymentId:"runtime-test",maxDurationSeconds:60});
     const claims=verifyRealtimeToken(first.realtimeToken,signing)!;expect(claims).not.toBeNull();
+    expect(claims.holdSeconds).toBe(30);expect(first).not.toHaveProperty("holdSeconds");
     expect(publicRuntimeTokenBinding(claims,"runtime-test")).toMatchObject({sampleRate:first.captureSampleRate,leaseId:current().publicRuntimePolicy!.leaseId,
       captureId:current().publicRuntimePolicy!.captureId,configurationHash:current().publicModelConfiguration!.configurationHash});
     expect(claims.asrEndpointMode).toBe("listening");expect(claims.processing!.syncPermission).toEqual({allowed:false});
@@ -75,6 +76,15 @@ describe("original public session preparation and issuance phases",()=>{
     const response=await issuePublicRealtimeSession(id,owner),claims=verifyRealtimeToken(response.realtimeToken,signing)!;
     expect(response).not.toHaveProperty("maxDurationSeconds");expect(claims.maxDurationSeconds).toBeUndefined();expect(current().publicRuntimePolicy).not.toHaveProperty("maxActiveSeconds");
     expect(storage.getStoreSnapshot().usageHolds).toHaveLength(1);
+  });
+  it("replays the same signed public session after its original hold grows",async()=>{
+    await prepared();await grant();
+    const original=await issuePublicRealtimeSession(id,owner);
+    expect((await holds.renewUsageHold(owner,id,60)).status).toBe("held");
+    const replay=await issuePublicRealtimeSession(id,owner);
+    expect(replay).toEqual(original);
+    expect(storage.getStoreSnapshot().usageHolds).toHaveLength(1);
+    expect(storage.getStoreSnapshot().usageHolds[0].seconds).toBe(60);
   });
   it("binds configured speech voice when enabled without selecting a private voice",async()=>{
     await prepared("qwen",true);await grant();const response=await issuePublicRealtimeSession(id,owner),claims=verifyRealtimeToken(response.realtimeToken,signing)!;

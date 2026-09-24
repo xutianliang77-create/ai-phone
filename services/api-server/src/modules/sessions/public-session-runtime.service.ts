@@ -44,11 +44,16 @@ export function observePublicRuntime(sessionId:string,value:unknown,now=new Date
     }
     const gap=timestamp-last;
     const activeMs=(old?.activeMs??0)+(old?.phase==="active"&&gap<=PUBLIC_EVIDENCE_GAP_MS?gap:0);
-    const uncertain=b.uncertain===true || !admissionValid || !!old?.uncertain || old?.phase==="active"&&gap>PUBLIC_EVIDENCE_GAP_MS ||
+    const meterUncertain=!admissionValid || !!old?.meterUncertain ||
+      !!old?.uncertain&&old.meterUncertain===undefined ||
+      old?.phase==="active"&&gap>PUBLIC_EVIDENCE_GAP_MS ||
       p.maxActiveSeconds!==undefined&&activeMs>p.maxActiveSeconds*1000 || old?.phase==="active"&&timestamp>Date.parse(p.expiresAt);
+    const providerUncertain=b.uncertain===true || !!old?.providerUncertain;
     const evidence:PublicRuntimeEvidence={sequence:Number(b.sequence),eventHash:hash,
       phase:b.phase as PublicRuntimeEvidence['phase'],observedAt:now.toISOString(),activeMs,
-      uncertain:!!uncertain,finalRevision:Number(b.finalRevision),lastAcceptedSample:Number(b.lastAcceptedSample)};
+      uncertain:!!(meterUncertain||providerUncertain),meterUncertain:!!meterUncertain,
+      providerUncertain:!!providerUncertain,
+      finalRevision:Number(b.finalRevision),lastAcceptedSample:Number(b.lastAcceptedSample)};
     if(b.phase==="paused"&&old?.recoveryUntil)evidence.recoveryUntil=old.recoveryUntil;
     if(b.phase==="disconnected") evidence.recoveryUntil=old?.recoveryUntil??
       new Date(timestamp+PUBLIC_RECOVERY_MS).toISOString();

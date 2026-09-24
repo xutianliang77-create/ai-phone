@@ -67,6 +67,7 @@ export function preparePublicRealtimeSession(sessionId:string,ownerId:string,val
     const p=input.processing!;
     const record={id:sessionId,userId:ownerId,mode:input.mode,status:"created" as const,createdAt:now.toISOString(),consumedSeconds:0,segments:[],
       processingDeploymentId:config.deploymentId,publicModelConfiguration:config,publicCreationRequest:{requestHash,request:input},
+      ...(getRepositoryRuntime().driver==="postgres"?{publicAttemptStorageVersion:2 as const}:{}),
       processingAuthorization:{contractVersion:1,processingMode:"online",modelPolicyRevision:p.modelPolicyRevision,languagePolicy:p.languagePolicy,
         executionPlan:p.executionPlan,syncPermission:{allowed:false}}} satisfies SessionRecord;
     if(getRepositoryRuntime().driver==="postgres")await preparePostgresPublicCreation(record);

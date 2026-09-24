@@ -54,6 +54,12 @@ export async function lockUsageAccount(
   },
 ) {
   validatePlan(input.userId, input.plan);
+  // A row lock cannot serialize two first-time sessions when the account row
+  // does not exist yet. Keep the lock in this transaction, before reading or
+  // creating either the normalized account or its primary projection.
+  await transaction.queryRead(`
+    SELECT pg_advisory_xact_lock(hashtextextended($1, 0)) AS locked
+  `, [`usage_account:${input.userId}`]);
   const rows = await transaction.queryRead<UserRow>(`
     SELECT user_id FROM ai_phone.usage_accounts
     WHERE user_id = $1 FOR UPDATE

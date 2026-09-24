@@ -14,6 +14,7 @@ import java.util.Locale
 class MainActivity : FlutterActivity() {
     private val audioSessionCoordinator = AudioSessionCoordinator(this)
     private val systemAsrBridge = AndroidSystemAsrBridge(this, audioSessionCoordinator)
+    private val audioEndpointBridge = AndroidAudioEndpointBridge(this)
     private val onDeviceTranslationBridge = AndroidOnDeviceTranslationBridge()
     private val pcmAudioOutputBridge = PcmAudioOutputBridge(this, audioSessionCoordinator)
     private val speechOutputBridge = AndroidSpeechOutputBridge(this, audioSessionCoordinator)
@@ -22,6 +23,7 @@ class MainActivity : FlutterActivity() {
         super.configureFlutterEngine(flutterEngine)
         audioSessionCoordinator.register(flutterEngine.dartExecutor.binaryMessenger)
         systemAsrBridge.register(flutterEngine.dartExecutor.binaryMessenger)
+        audioEndpointBridge.register(flutterEngine.dartExecutor.binaryMessenger)
         onDeviceTranslationBridge.register(flutterEngine.dartExecutor.binaryMessenger)
         pcmAudioOutputBridge.register(flutterEngine.dartExecutor.binaryMessenger)
         speechOutputBridge.register(flutterEngine.dartExecutor.binaryMessenger)
@@ -51,6 +53,7 @@ class MainActivity : FlutterActivity() {
 
     override fun onDestroy() {
         systemAsrBridge.destroy()
+        audioEndpointBridge.destroy()
         onDeviceTranslationBridge.destroy()
         pcmAudioOutputBridge.destroy()
         speechOutputBridge.destroy()

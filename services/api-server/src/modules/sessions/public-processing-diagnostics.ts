@@ -52,19 +52,21 @@ export interface PublicProcessingDiagnostics {
  * credentials, raw provider IDs, or turns provider usage into a money value. */
 export function publicProcessingDiagnostics(session: SessionRecord): PublicProcessingDiagnostics {
   const attempts = session.publicModelAttempts ?? [];
+  const summary=session.publicAttemptStorageVersion===2?session.publicAttemptSummary:undefined;
   const ownership = components.map((component) => {
     const execution = executionFor(session, component);
     const owner = ownerFor(execution);
     const matching = attempts.filter((attempt) => attempt.event.component === component);
+    const counted=summary?.components[component];
     return {
       component,
       execution,
       owner,
-      publicAttemptCount: matching.length,
-      confirmedAttemptCount: matching.filter((attempt) => attempt.event.state === "confirmed").length,
-      uncertainAttemptCount: matching.filter((attempt) => attempt.event.state === "uncertain").length,
-      providerIds: unique(matching.map((attempt) => attempt.event.providerId)),
-      modelIds: unique(matching.map((attempt) => attempt.event.modelId)),
+      publicAttemptCount: counted?.total??matching.length,
+      confirmedAttemptCount: counted?.confirmed??matching.filter((attempt) => attempt.event.state === "confirmed").length,
+      uncertainAttemptCount: counted?.uncertain??matching.filter((attempt) => attempt.event.state === "uncertain").length,
+      providerIds: counted?.providerIds??unique(matching.map((attempt) => attempt.event.providerId)),
+      modelIds: counted?.modelIds??unique(matching.map((attempt) => attempt.event.modelId)),
     };
   });
   const publicAttempts = attempts.filter((attempt) => ownerFor(executionFor(session, attempt.event.component as Component)) === "public");
@@ -79,14 +81,14 @@ export function publicProcessingDiagnostics(session: SessionRecord): PublicProce
       deviceComponentCount: ownership.filter((item) => item.owner === "device").length,
       publicComponentCount: ownership.filter((item) => item.owner === "public").length,
       disabledComponentCount: ownership.filter((item) => item.owner === "disabled").length,
-      publicAttemptCount: publicAttempts.length,
-      confirmedPublicAttemptCount: publicAttempts.filter((attempt) => attempt.event.state === "confirmed").length,
-      uncertainPublicAttemptCount: publicAttempts.filter((attempt) => attempt.event.state === "uncertain").length,
+      publicAttemptCount: summary?.total??publicAttempts.length,
+      confirmedPublicAttemptCount: summary?.states.confirmed??publicAttempts.filter((attempt) => attempt.event.state === "confirmed").length,
+      uncertainPublicAttemptCount: summary?.states.uncertain??publicAttempts.filter((attempt) => attempt.event.state === "uncertain").length,
       unexpectedPublicAttemptCount: unexpected.length,
-      duplicateConfirmedComputeCount: duplicateConfirmed(publicAttempts),
+      duplicateConfirmedComputeCount: summary?0:duplicateConfirmed(publicAttempts),
     },
     providerUsage: {
-      reported: aggregateUsage(publicAttempts),
+      reported: summary?structuredClone(summary.reportedUsage):aggregateUsage(publicAttempts),
       ...(reconciliation ? {
         reconciliation: {
           providerId: reconciliation.providerId,
@@ -100,7 +102,7 @@ export function publicProcessingDiagnostics(session: SessionRecord): PublicProce
           evidenceScope:record.evidenceScope,providerUsageCount:record.providerUsageCount,providerUsageSeconds:record.providerUsageSeconds})),
         reconciliationComplete: hasPublicProviderReconciliation(session),
       } : {}),
-      moneyCostStatus: publicAttempts.length > 0 ? "unknown" : "not_applicable",
+      moneyCostStatus: (summary?.total??publicAttempts.length)>0 ? "unknown" : "not_applicable",
     },
     finalization: {
       serverConsumedSeconds: session.consumedSeconds,

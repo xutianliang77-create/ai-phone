@@ -49,6 +49,8 @@ describe("PostgreSQL cutover evidence upgrade", () => {
         "043_public_creation_bindings",
         "044_public_creation_binding_noop_projection",
         "045_fractional_transcript_timing",
+        "046_renewable_usage_holds",
+        "047_public_model_attempt_records",
       ],
     });
     const upgraded = readVerifiedPostgresCutoverEvidence();
@@ -65,6 +67,8 @@ describe("PostgreSQL cutover evidence upgrade", () => {
         "043_public_creation_bindings",
         "044_public_creation_binding_noop_projection",
         "045_fractional_transcript_timing",
+        "046_renewable_usage_holds",
+        "047_public_model_attempt_records",
       ],
     });
     expect(upgraded.evidenceUpgrade?.validations).toEqual(expect.arrayContaining([
@@ -90,7 +94,25 @@ describe("PostgreSQL cutover evidence upgrade", () => {
         migration: "044_public_creation_binding_noop_projection",
         details: { projectionFunctionAdmitsBinding: true, bindingNoOpBranches: true, invalidBindings: 0 },
       }),
+      expect.objectContaining({
+        migration: "046_renewable_usage_holds",
+        details: {monotonic:true,invalidHolds:0},
+      }),
+      expect.objectContaining({
+        migration: "047_public_model_attempt_records",
+        details: {attemptsReady:true,indexReady:true,deletionReady:true,projectionReady:true,invalidAttempts:0},
+      }),
     ]));
+  });
+
+  it("upgrades the compatible hold and attempt migrations from schema-45 evidence",async()=>{
+    writeEvidence([...expectedPostgresMigrations].slice(0,-2));
+    const upgraded=await upgradePostgresCutoverEvidence(validPool());
+    expect(upgraded).toMatchObject({status:"upgraded",
+      migrations:["046_renewable_usage_holds","047_public_model_attempt_records"],
+      validations:[{migration:"046_renewable_usage_holds",details:{monotonic:true,invalidHolds:0}},
+        {migration:"047_public_model_attempt_records",details:{invalidAttempts:0}}]});
+    expect(readVerifiedPostgresCutoverEvidence().schema.applied).toEqual([...expectedPostgresMigrations]);
   });
 
   it("rejects a tampered previous evidence signature", async () => {
@@ -204,10 +226,30 @@ function validPool(overrides: Partial<{
           "event_operation = 'delete'",
         ].join(" ") }] };
       }
+      if (sql.includes("apply_usage_projection_event(text,text,text,text,jsonb)")) {
+        return {rows:[{definition:[
+          "seconds = EXCLUDED.seconds",
+          "expires_at = EXCLUDED.expires_at",
+          "EXCLUDED.seconds >= ai_phone.usage_holds.seconds",
+          "EXCLUDED.version = ai_phone.usage_holds.version + 1",
+        ].join(" ")}]};
+      }
+      if (sql.includes("to_regclass('ai_phone.public_model_attempts')")) {
+        return {rows:[{attempts_ready:true,index_ready:true,deletion_ready:true}]};
+      }
+      if (sql.includes("FROM ai_phone.public_model_attempts AS attempt")&&sql.includes("AS invalid_attempts")) {
+        return {rows:[{invalid_attempts:"0"}]};
+      }
+      if (sql.includes("AS invalid_holds")) {
+        return {rows:[{invalid_holds:"0"}]};
+      }
       if (sql.includes("apply_projection_event(text,text,text,text,jsonb)")) {
         return { rows: [{ definition: [
           "'publicCreationBindings'",
           "WHEN 'publicCreationBindings' THEN NULL;",
+          "'publicModelAttempts'",
+          "INSERT INTO ai_phone.public_model_attempts",
+          "EXCLUDED.version=ai_phone.public_model_attempts.version+1",
           "NULLIF(segment#>>'{timing,startMs}', '')::numeric",
           "NULLIF(segment#>>'{timing,endMs}', '')::numeric",
           "NULLIF(segment->>'latencyMs', '')::numeric",

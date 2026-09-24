@@ -11,6 +11,7 @@ import { SessionVersionConflictError } from "../sessions/sessions-runtime.reposi
 import { withSessionWriteLock } from "../sessions/session-write-coordinator.js";
 import { getCallLinkTtsVoice } from "./call-link-tts-voice.js";
 import { getCallLinkWorkerSupervisor } from "./call-link-worker-supervisor.js";
+import { callLinkModelRuntimeAdmission } from "./call-link-model-runtime-policy.js";
 import {
   type CallLinkRecord,
   findCallLink,
@@ -146,6 +147,10 @@ export function registerCallLinkInternalRoutes(app: FastifyInstance) {
         }
         if (!matchesOptionalCallBinding(request.body, record)) {
           return bindingConflict(reply);
+        }
+        const admission = await callLinkModelRuntimeAdmission(record.sessionId, "room");
+        if (!admission.ok) {
+          return sendError(reply, 503, admission.code, "Call Link Worker model runtime is unavailable");
         }
         const body = (request.body ?? {}) as Partial<{ participantName: string }>;
         const token = await createCallRoomToken({

@@ -17,6 +17,11 @@ export interface PublicRuntimePolicy {
 export interface PublicRuntimeEvidence {
   sequence: number; eventHash: string; phase: "active" | "paused" | "disconnected" | "stopped";
   observedAt: string; activeMs: number; uncertain: boolean;
+  /** An admission, timer, or watermark gap cannot be repaired by a supplier
+   * usage receipt. Missing classification on an older record fails closed. */
+  meterUncertain?: boolean;
+  /** Explicit Provider-originated stop uncertainty, separate from metering. */
+  providerUncertain?: boolean;
   lastAcceptedSample: number; finalRevision: number;
   recoveryUntil?: string; stoppedAt?: string;
   finalRevisions?: Record<string, number>;

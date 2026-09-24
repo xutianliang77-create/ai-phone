@@ -4,7 +4,9 @@ import { realtimeLogger } from "../metrics/realtime-metrics.js";
 import type { RealtimeSession } from "../sessions/realtime-session.js";
 import type { SessionEventSink } from "../sessions/session-event-sink.js";
 import type { UsageBalanceClient } from "../usage/usage-balance-client.js";
+import type {UsageBalanceSnapshot} from "../usage/usage-ticker.js";
 import { createUsageTickDecision } from "../usage/usage-ticker.js";
+import {sessionBillableSeconds} from "../sessions/session-manager.js";
 
 interface ConnectionTimerOptions {
   ws: WebSocket;
@@ -53,6 +55,45 @@ export function startRealtimeConnectionTimers(options: ConnectionTimerOptions) {
       options.failPublicConnection();
     }).finally(() => { confirmationInFlight = false; });
   }, 1000) : undefined;
+  const publicUsage=sessionEventSink.requiresConfirmation&&session.claims.publicRuntime!==undefined;
+  const initialHold=session.claims.holdSeconds;
+  let publicAllowance:UsageBalanceSnapshot|null=publicUsage&&Number.isSafeInteger(initialHold)&&initialHold!>0
+    ? {authorizedSeconds:initialHold!,remainingSeconds:initialHold!,availableSeconds:0}:null;
+  let accountStopStarted=false,allowanceInFlight=false;
+  const stopForAccount=async(reason:SessionEndReason,remainingSeconds=0)=>{
+    if(accountStopStarted)return;
+    accountStopStarted=true;
+    let timeout:ReturnType<typeof setTimeout>|undefined;
+    try{
+      await Promise.race([options.endRealtimeSession(reason,remainingSeconds),
+        new Promise<never>((_,reject)=>{timeout=setTimeout(()=>reject(Error("account_stop_timeout")),5000);})]);
+    }catch(error){
+      realtimeLogger.warn({error,sessionId:session.id},"Public account stop was not confirmed");
+      options.failPublicConnection();
+    }finally{if(timeout)clearTimeout(timeout);}
+  };
+  const allowanceInterval=publicUsage?setInterval(()=>{
+    if(ws.readyState!==1||session.status!=="active"||allowanceInFlight||accountStopStarted||
+      qaDeadline!==undefined&&Date.now()>=qaDeadline*1000)return;
+    allowanceInFlight=true;
+    options.enqueueUsage(previous=>previous.then(async()=>{
+      if(ws.readyState!==1||session.status!=="active"||accountStopStarted)return;
+      const observed=sessionBillableSeconds(session),current=publicAllowance?.authorizedSeconds??0;
+      if(current>0&&observed>current){await stopForAccount("connection_error");return;}
+      const target=Math.min(session.claims.maxDurationSeconds??Infinity,observed+30,current+30);
+      const next=await usageBalanceClient.reserveAllowance?.(session.id,target)??null;
+      if(!next||!Number.isSafeInteger(next.authorizedSeconds)||next.authorizedSeconds!<1||
+        !Number.isSafeInteger(next.remainingSeconds)||next.remainingSeconds<0||
+        next.authorizedSeconds!<observed){await stopForAccount("connection_error");return;}
+      publicAllowance=next;
+      if(next.remainingSeconds===0||observed>=next.authorizedSeconds!){
+        await stopForAccount("quota_exhausted",0);
+      }
+    }).catch(error=>{
+      realtimeLogger.warn({error,sessionId:session.id},"Public allowance check failed");
+      options.failPublicConnection();
+    }).finally(()=>{allowanceInFlight=false;}));
+  },10_000):undefined;
   let usageTickInFlight = false;
   const usageInterval = setInterval(() => {
     if (sessionEventSink.requiresConfirmation && ws.readyState !== 1) return;
@@ -64,15 +105,18 @@ export function startRealtimeConnectionTimers(options: ConnectionTimerOptions) {
     if (session.status !== "active" || usageTickInFlight) return;
     usageTickInFlight = true;
     options.enqueueUsage(previous => previous.then(async () => {
-      const balance = await usageBalanceClient.getBalance(session.userId);
+      if(session.status!=="active"||accountStopStarted)return;
+      const balance = publicUsage?publicAllowance:await usageBalanceClient.getBalance(session.userId);
       const decision = createUsageTickDecision(session, balance);
       // Wujie account balance, never a supplier free-package balance.
       options.sendRealtime(decision.event);
       if (decision.shouldEnd) {
-        await options.endRealtimeSession(decision.endReason ?? "time_limit", decision.event.remainingSeconds);
+        if(publicUsage)await stopForAccount(decision.endReason??"connection_error",decision.event.remainingSeconds);
+        else await options.endRealtimeSession(decision.endReason ?? "time_limit", decision.event.remainingSeconds);
       }
     }).catch(error => {
       realtimeLogger.warn({ error, sessionId: session.id }, "Realtime usage tick failed");
+      if(publicUsage)options.failPublicConnection();
     }).finally(() => { usageTickInFlight = false; }));
   }, 30_000);
   let heartbeatAlive = true;
@@ -89,6 +133,7 @@ export function startRealtimeConnectionTimers(options: ConnectionTimerOptions) {
     if (qaCutoff) clearTimeout(qaCutoff);
     if (qaFallback) clearTimeout(qaFallback);
     if (confirmationInterval) clearInterval(confirmationInterval);
+    if (allowanceInterval) clearInterval(allowanceInterval);
     clearInterval(usageInterval);
     clearInterval(heartbeatInterval);
   };

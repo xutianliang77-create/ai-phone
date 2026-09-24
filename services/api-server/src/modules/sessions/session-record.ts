@@ -51,6 +51,15 @@ export interface SessionRecord {
   publicInferenceAdmission?: PublicInferenceAdmission;
   publicInferenceEvidence?: PublicInferenceEvidence[];
   publicModelAttempts?:PublicModelAttemptRecord[];
+  publicAttemptStorageVersion?:2;
+  publicAttemptSummary?:{
+    total:number;
+    states:Record<"dispatching"|"confirmed"|"rejected"|"not_sent"|"uncertain",number>;
+    components:Record<"asr"|"translation"|"tts",{
+      total:number;confirmed:number;uncertain:number;providerIds:string[];modelIds:string[];
+    }>;
+    reportedUsage:Record<string,number>;
+  };
   publicProviderReconciliation?:PublicProviderReconciliationRecord;
   publicProviderReconciliations?:PublicProviderReconciliationRecord[];
   publicModelConfiguration?:PublicModelRuntimeSnapshot;

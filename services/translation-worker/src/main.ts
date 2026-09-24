@@ -7,6 +7,7 @@ import {
   domainTerminologyForPacks,
 } from "@translation/speech-quality";
 import { loadEnv } from "./config/env.js";
+import { assertLegacyCallWorkerDeployment } from "./config/call-worker-deployment-policy.js";
 import { createDefaultCallProviders } from "./providers/default-call-providers.js";
 import { HttpTtsAudioSink } from "./providers/http-tts-audio-sink.js";
 import { HttpCallRoomEventClient } from "./worker/call-room-event-client.js";
@@ -41,6 +42,7 @@ export function buildDefaultWorker(
   endpointMode: AsrEndpointMode = "call_link",
   options: { ttsProvider?: CallTtsProvider } = {},
 ) {
+  assertLegacyCallWorkerDeployment();
   const env = loadEnv();
   const terminology = domainTerminologyForPacks(env.domainLexiconPacks);
   const corrections = asrCorrectionTermsForPacks(env.domainLexiconPacks);
@@ -131,6 +133,7 @@ async function main() {
     logger.info("Translation Worker core is ready; set TRANSLATION_WORKER_CALL_ID.");
     return;
   }
+  assertLegacyCallWorkerDeployment();
 
   const diagnostics = new CallDiagnosticsReporter({
     env,

@@ -1,5 +1,6 @@
 import type { SessionEndReason, UsageTickEvent } from "@translation/contracts";
 import type { RealtimeSession } from "../sessions/realtime-session.js";
+import {sessionBillableSeconds} from "../sessions/session-manager.js";
 
 export const USAGE_TICK_SECONDS = 30;
 export const LOW_BALANCE_WARNING_SECONDS = 30;
@@ -7,6 +8,7 @@ export const LOW_BALANCE_WARNING_SECONDS = 30;
 export interface UsageBalanceSnapshot {
   remainingSeconds: number;
   availableSeconds?: number;
+  authorizedSeconds?: number;
 }
 
 export interface UsageTickDecision {
@@ -26,8 +28,14 @@ export function createUsageTickDecision(
   session: RealtimeSession,
   balance?: UsageBalanceSnapshot | null,
 ): UsageTickDecision {
-  const nextBillableSeconds = session.billableSeconds + USAGE_TICK_SECONDS;
+  const nextBillableSeconds = session.claims.publicRuntime
+    ? sessionBillableSeconds(session)
+    : session.billableSeconds + USAGE_TICK_SECONDS;
   const balanceSeconds = effectiveBalanceSeconds(session, balance);
+  if(session.claims.publicRuntime&&balanceSeconds===null){
+    return {event:{type:"usage.tick",sessionId:session.id,billableSeconds:nextBillableSeconds,remainingSeconds:0},
+      shouldEnd:true,endReason:"connection_error"};
+  }
   const billableSeconds =
     balanceSeconds === null
       ? nextBillableSeconds
@@ -64,8 +72,8 @@ export function createUsageTickDecision(
 }
 
 function normalizeBalanceSeconds(value: unknown) {
-  return typeof value === "number" && Number.isFinite(value)
-    ? Math.max(0, Math.floor(value))
+  return typeof value === "number" && Number.isSafeInteger(value) && value>=0
+    ? value
     : null;
 }
 
@@ -73,6 +81,8 @@ function effectiveBalanceSeconds(
   session: RealtimeSession,
   balance?: UsageBalanceSnapshot | null,
 ) {
+  const authorizedSeconds=normalizeBalanceSeconds(balance?.authorizedSeconds);
+  if(authorizedSeconds!==null)return authorizedSeconds;
   const availableSeconds = normalizeBalanceSeconds(balance?.availableSeconds);
   if (availableSeconds !== null) {
     return availableSeconds +

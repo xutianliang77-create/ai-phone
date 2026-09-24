@@ -148,14 +148,23 @@ describe("call room entry routes", () => {
       url: `/call-links/${callId}/room-token`,
       payload: { participantRole: "host", participantName: "Host" },
     });
+    const directWorkerToken = await app.inject({
+      method: "POST",
+      url: `/internal/call-links/${callId}/worker-room-token`,
+      headers: { authorization: "Bearer internal-secret-123" },
+      payload: { callId },
+    });
     await app.close();
 
     expect(response.statusCode).toBe(503);
     expect(response.json().error.code).toBe(
       "call_link_public_model_authorization_required",
     );
+    expect(directWorkerToken.statusCode).toBe(503);
+    expect(directWorkerToken.json().error.code).toBe("call_link_public_model_authorization_required");
     expect(ensuredRooms).toEqual([]);
     expect(workerRuntime.ensuredCallIds).toEqual([]);
+    expect(getStoreSnapshot().sessions[0]?.callLegs).toEqual([]);
   });
 
   it("allows the Worker to register its leg while participant entry is pending", async () => {

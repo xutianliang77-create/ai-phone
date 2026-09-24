@@ -78,10 +78,12 @@ AppConfig _appConfigFromEnvironment() {
   );
   final deviceAsrEndpointSpeechThresholdRms =
       double.tryParse(deviceAsrEndpointSpeechThresholdRmsRaw) ?? 0.006;
-  const deviceAsrVadProvider = String.fromEnvironment(
+  const configuredDeviceAsrVadProvider = String.fromEnvironment(
     'DEVICE_ASR_VAD_PROVIDER',
-    defaultValue: 'fluidaudio_silero',
   );
+  final deviceAsrVadProvider = configuredDeviceAsrVadProvider.isEmpty
+      ? _platformDefaultVadProvider()
+      : configuredDeviceAsrVadProvider;
   const deviceAsrVadThresholdRaw = String.fromEnvironment(
     'DEVICE_ASR_VAD_THRESHOLD',
     defaultValue: '0.6',

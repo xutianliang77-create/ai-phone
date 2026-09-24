@@ -7,9 +7,9 @@ import {
 
 describe("PostgreSQL schema manifest", () => {
   it("pins the complete ordered migration set", () => {
-    expect(expectedPostgresMigrations).toHaveLength(45);
+    expect(expectedPostgresMigrations).toHaveLength(47);
     expect(expectedPostgresMigrations.at(-1)).toBe(
-      "045_fractional_transcript_timing",
+      "047_public_model_attempt_records",
     );
     expect(comparePostgresMigrations([...expectedPostgresMigrations])).toEqual({
       missing: [],
@@ -22,7 +22,7 @@ describe("PostgreSQL schema manifest", () => {
       ...expectedPostgresMigrations.slice(0, -1),
       "999_unknown",
     ])).toEqual({
-      missing: ["045_fractional_transcript_timing"],
+      missing: ["047_public_model_attempt_records"],
       extra: ["999_unknown"],
     });
   });

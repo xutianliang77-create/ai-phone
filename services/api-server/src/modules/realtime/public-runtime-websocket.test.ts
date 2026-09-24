@@ -129,6 +129,12 @@ describe("original Gateway loopback WebSocket with session-scoped API materials"
   });
   it("an exhausted resume allowance does not prevent normal disconnect settlement",async()=>{
     const s=await setup();await waitFor(()=>messages.some(e=>e.type==="session.started"));
+    // Synthetic Date jumps do not run the normal Gateway usage ticks. Reserve
+    // the same 60 seconds they would have durably renewed before disconnect.
+    const allowance=await app.inject({method:"POST",url:`/internal/usage/allowance/${s.issued.sessionId}`,
+      headers:{authorization:`Bearer ${internal}`},payload:{targetSeconds:60}});
+    expect(allowance.statusCode).toBe(200);
+    expect(allowance.json().authorizedSeconds).toBe(60);
     vi.setSystemTime(now.getTime()+60000);ws!.terminate();await waitFor(()=>getSession(s.issued.sessionId)===null);
     expect(current().status).toBe("ended");expect(current().consumedSeconds).toBe(60);
     expect(getStoreSnapshot().billingLedger.filter(e=>e.idempotencyKey===`settle:${s.issued.sessionId}`)).toHaveLength(1);

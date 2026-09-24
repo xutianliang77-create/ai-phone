@@ -1,5 +1,5 @@
 import {validAutomaticSources} from './automatic-language-routing.js';
-import type {TranslationLanguageCode} from '../shared/languages.js';
+import {isTranslationLanguage,type TranslationLanguageCode} from '../shared/languages.js';
 /** Constraints of the implemented adapters, not a supplier/model qualification
  * catalogue. A matching entry never grants network access or production readiness. */
 export interface PublicModelProtocolCapability {
@@ -59,6 +59,25 @@ export function publicProtocolCapability(protocol:string){
 export function publicProtocolSampleRateSupported(protocol:string,sampleRate:number){
   const capability=publicProtocolCapability(protocol);
   return capability?.component!=="translation"&&capability?.sampleRates.includes(sampleRate)===true;
+}
+
+/** Implemented wire-level language scope. Signed policy and live qualification
+ * must still approve the exact direction; these checks only reject directions
+ * that the selected adapter would reject after a session has already started. */
+export const TENCENT_TMT_LANGUAGE_CODES:readonly TranslationLanguageCode[]=Object.freeze(
+  ["zh","en","ja","ko","de","fr","es","it","pt","ru","vi","id","ms","th","tr"]);
+const tmtLanguages:ReadonlySet<string>=new Set(TENCENT_TMT_LANGUAGE_CODES);
+const qwenTtsLanguages:ReadonlySet<string>=new Set(["zh","en","de","it","pt","es","ja","ko","fr","ru"]);
+export function publicTranslationDirectionImplemented(protocol:string,source:string,target:string){
+  if(source===target||!isTranslationLanguage(source)||!isTranslationLanguage(target))return false;
+  if(protocol==="tencent_tmt")return tmtLanguages.has(source)&&tmtLanguages.has(target);
+  return ["qwen_chat","tencent_hunyuan_chat","openai_chat","google_gemini","google_vertex_gemini"].includes(protocol);
+}
+export function publicTtsTargetImplemented(protocol:string,target:string){
+  if(!isTranslationLanguage(target))return false;
+  if(protocol==="tencent_tts_ws")return target==="zh"||target==="en";
+  if(protocol==="qwen_tts_realtime")return qwenTtsLanguages.has(target);
+  return protocol==="openai_speech"||protocol==="google_cloud_tts";
 }
 
 /** Adapter capability only. Callers must combine this with the exact signed

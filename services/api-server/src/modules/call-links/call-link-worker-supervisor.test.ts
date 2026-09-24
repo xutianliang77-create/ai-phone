@@ -1,10 +1,22 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   CallLinkWorkerSupervisor,
+  getCallLinkWorkerSupervisor,
   type ManagedCallLinkWorkerProcess,
 } from "./call-link-worker-supervisor.js";
 
 describe("CallLinkWorkerSupervisor", () => {
+  it("rejects a public recovery or scheduler ensure before launching a Worker", async () => {
+    vi.stubEnv("API_RESULT_SYNC_DEPLOYMENT_ID", "public-test");
+    vi.stubEnv("TRANSLATION_WORKER_RUNTIME_PROVIDER", "local_process");
+    try {
+      await expect(getCallLinkWorkerSupervisor().ensure("missing-public-call"))
+        .rejects.toThrow("call_link_public_model_authorization_required");
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
   it("launches one worker for concurrent entry requests", async () => {
     const process = new FakeWorkerProcess();
     const launch = vi.fn(() => process);

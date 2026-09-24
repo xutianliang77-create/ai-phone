@@ -32,5 +32,7 @@ describe("PostgreSQL usage hold idempotency", () => {
       ...reservation,
       seconds: 31,
     })).toBe(false);
+    expect(sameUsageHoldReservation({...stored,version:2,seconds:60},reservation)).toBe(true);
+    expect(sameUsageHoldReservation({...stored,version:1,seconds:60},reservation)).toBe(false);
   });
 });

@@ -6,6 +6,7 @@ import {
   ensureQuota,
   getUsageBalance,
   refundSeconds,
+  renewUsageHold,
   settleUsageHold,
 } from "./usage.service.js";
 import { listBillingLedger } from "../billing/billing-ledger.service.js";
@@ -66,6 +67,19 @@ describe("usage service", () => {
     expect(balance.availableSeconds).toBe(240);
     expect(ensureQuota("guest-user", 241)).toBe(false);
     expect(ensureQuota("guest-user", 240)).toBe(true);
+  });
+  it("renews only the same session hold while protecting another session's reserved seconds",()=>{
+    getStoreSnapshot().usageBalances["guest-user"]=90;
+    for(const sessionId of ["first","second"]){
+      expect(createUsageHold("guest-user",30,undefined,{sessionId,idempotencyKey:`hold:${sessionId}`}).status).toBe("held");
+    }
+    const first=renewUsageHold("guest-user","first",60);
+    expect(first).toMatchObject({status:"held",hold:{seconds:60},balance:{remainingSeconds:90,availableSeconds:0}});
+    expect(renewUsageHold("guest-user","first",60)).toMatchObject({status:"held",hold:{seconds:60}});
+    expect(renewUsageHold("guest-user","second",60)).toMatchObject({status:"insufficient",hold:{seconds:30}});
+    expect(getStoreSnapshot().usageHolds).toHaveLength(2);
+    expect(getStoreSnapshot().billingLedger).toHaveLength(0);
+    expect(()=>renewUsageHold("guest-user","first",91)).toThrow("one interval");
   });
 
   it("settles usage holds after final consumption", () => {

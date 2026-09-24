@@ -9,7 +9,7 @@ import type {
 import { matchesRealtimeResultOperation } from "@translation/contracts";
 import { sendError } from "../../infrastructure/http/errors.js";
 import { requireAccount } from "../account/account-auth.js";
-import { getUsageBalance } from "../usage/usage-hold-runtime.service.js";
+import { getUsageBalance,renewUsageHold } from "../usage/usage-hold-runtime.service.js";
 import {
   deleteSession,
   findSession,
@@ -31,6 +31,8 @@ import {
 import { refundSessionUsage } from "./session-usage-refund.js";
 import { registerSessionSpeakerRoutes } from "./session-speakers.routes.js";
 import { registerSessionReviewActionRoutes } from "./session-review-actions.routes.js";
+import {parseDeviceRulesReview} from "./session-device-rules-review.js";
+import {listPublicModelAttempts} from "./public-model-attempt-list.js";
 import { withSessionWriteLock } from "./session-write-coordinator.js";
 import { buildSessionQualityReport } from "./session-quality-report.js";
 import { handleResultSync, registerResultSyncConsentRoute } from "./session-result-sync.routes.js";
@@ -160,9 +162,9 @@ export async function registerSessionsRoutes(app: FastifyInstance) {
     if (session.userId !== account.id) return forbidden(reply);
     const body = request.body as Partial<GenerateSessionReviewRequest> | undefined;
     const generationKind = body?.generationKind;
-    if (generationKind !== undefined && generationKind !== "public_semantic_enhancement") {
+    if (generationKind !== undefined && generationKind !== "public_semantic_enhancement" && generationKind !== "device_rules") {
       return sendError(reply, 400, "invalid_session_review_request",
-        "generationKind must be public_semantic_enhancement");
+        "Unsupported review generation kind");
     }
     try {
       return await withSessionWriteLock(session.id, async () => {
@@ -170,6 +172,19 @@ export async function registerSessionsRoutes(app: FastifyInstance) {
         if (!current)
           return sendError(reply, 404, "session_not_found", "Session not found");
         if (current.userId !== account.id) return forbidden(reply);
+        if(generationKind==="device_rules"){
+          if(!current.processingAuthorization||!body||Object.keys(body).some(key=>!["generationKind","review"].includes(key))) {
+            return sendError(reply,400,"invalid_device_rules_review","Device rules require a versioned session and explicit review");
+          }
+          const deviceReview=parseDeviceRulesReview("review" in body?body.review:undefined,current);
+          if(!deviceReview)return sendError(reply,400,"invalid_device_rules_review","Device rule evidence does not match an ended session");
+          if(current.review?.generationKind==="public_semantic_enhancement"||
+            current.review?.generationKind==="device_rules"&&current.review.sourceFingerprint===deviceReview.sourceFingerprint){
+            return toSessionDetail(current);
+          }
+          const updated=await saveSessionReview(current.id,deviceReview);
+          return toSessionDetail(updated??current);
+        }
         // Versioned sessions are the 1.1 public processing path.  Its model
         // configuration deliberately covers ASR/MT/TTS only; a generic LLM
         // review provider could therefore be a private legacy configuration.
@@ -250,6 +265,51 @@ export async function registerSessionsRoutes(app: FastifyInstance) {
     }
     const params = request.params as { userId: string };
     return { ...(await getUsageBalance(params.userId)) };
+  });
+
+  app.post("/internal/usage/allowance/:sessionId", async(request,reply)=>{
+    if(!isInternalAuthorized(request.headers.authorization)){
+      return sendError(reply,401,"internal_error","Unauthorized internal request");
+    }
+    const sessionId=(request.params as {sessionId:string}).sessionId,body=request.body;
+    if(!body||typeof body!=="object"||Array.isArray(body)||
+      Object.keys(body).length!==1||!Object.hasOwn(body,"targetSeconds")||
+      !Number.isSafeInteger((body as {targetSeconds?:unknown}).targetSeconds)||
+      (body as {targetSeconds:number}).targetSeconds<1||
+      (body as {targetSeconds:number}).targetSeconds>2_147_483_647){
+      return sendError(reply,400,"invalid_usage_allowance","targetSeconds is required");
+    }
+    const session=await findSession(sessionId);
+    if(!session||session.processingAuthorization?.processingMode!=="online"||
+      !session.publicRealtimeIssuance||!session.publicRuntime||session.publicRuntime.stoppedAt||
+      !["active","paused"].includes(session.status)){
+      return sendError(reply,409,"public_usage_session_not_active","No active public session");
+    }
+    const result=await renewUsageHold(session.userId,sessionId,(body as {targetSeconds:number}).targetSeconds);
+    if(!result.hold)return sendError(reply,409,"public_usage_hold_not_active","No active account reservation");
+    return {status:result.status,authorizedSeconds:result.hold.seconds,
+      remainingSeconds:result.balance.remainingSeconds,availableSeconds:result.balance.availableSeconds};
+  });
+
+  app.get("/internal/sessions/:sessionId/model-attempts", async (request, reply) => {
+    if (!isInternalAuthorized(request.headers.authorization)) {
+      return sendError(reply, 401, "internal_error", "Unauthorized internal request");
+    }
+    const { sessionId } = request.params as { sessionId: string };
+    const session = await findSession(sessionId);
+    if (!session) return sendError(reply, 404, "session_not_found", "Session not found");
+    const query = request.query as { cursor?: string; limit?: string };
+    try {
+      return await listPublicModelAttempts(session, {
+        cursor: query.cursor,
+        limit: query.limit === undefined ? undefined : Number(query.limit),
+      });
+    } catch (error) {
+      if (error instanceof Error && error.message.startsWith("invalid_model_attempt_")) {
+        return sendError(reply, 400, error.message, "Invalid model attempt cursor or limit");
+      }
+      throw error;
+    }
   });
 
   app.post("/internal/sessions/:sessionId/refund", async (request, reply) => {

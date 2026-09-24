@@ -114,6 +114,30 @@ export function createUsageHold(
   };
 }
 
+export function renewUsageHold(
+  userId:string,
+  sessionId:string,
+  targetSeconds:number,
+  plan=activePlanForUser(userId),
+){
+  if(!Number.isSafeInteger(targetSeconds)||targetSeconds<1||targetSeconds>2_147_483_647){
+    throw Error("Invalid usage hold target");
+  }
+  const now=new Date(),hold=findActiveUsageHoldBySessionId(userId,sessionId);
+  const balance=getUsageBalance(userId,plan);
+  if(!hold||Date.parse(hold.expiresAt)<=now.getTime())return {status:"not_found" as const,balance};
+  const increase=targetSeconds-hold.seconds;
+  if(increase>30)throw Error("Usage hold renewal exceeds one interval");
+  if(increase>balance.availableSeconds)return {status:"insufficient" as const,hold,balance};
+  const expiry=new Date(Math.max(Date.parse(hold.expiresAt),now.getTime()+300_000)).toISOString();
+  if(increase>0||expiry!==hold.expiresAt){
+    hold.seconds=Math.max(hold.seconds,targetSeconds);
+    hold.expiresAt=expiry;
+    persistStoreSnapshot();
+  }
+  return {status:"held" as const,hold,balance:getUsageBalance(userId,plan)};
+}
+
 export function settleUsageHold(
   userId: string,
   sessionId: string,

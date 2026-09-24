@@ -13,6 +13,7 @@ import {
   getUsageBalance as getLegacyUsageBalance,
   refundSeconds as refundLegacySeconds,
   releaseUsageHold as releaseLegacyUsageHold,
+  renewUsageHold as renewLegacyUsageHold,
   settleUsageHold as settleLegacyUsageHold,
 } from "./usage.service.js";
 
@@ -109,6 +110,17 @@ export async function releaseUsageHold(userId: string, sessionId: string) {
       return result.status === "released" ? result.hold ?? null : null;
     },
   );
+}
+
+export async function renewUsageHold(userId:string,sessionId:string,targetSeconds:number){
+  const runtime=getRepositoryRuntime(),plan=await activePlanForUser(userId);
+  if(runtime.driver!=="postgres")return renewLegacyUsageHold(userId,sessionId,targetSeconds,plan);
+  return withPostgresRepositoryFence({aggregateType:"communication_session",aggregateId:sessionId},async fence=>{
+    const requestHash=repositoryRequestHash({userId,sessionId,targetSeconds});
+    return runtime.postgres.usageHolds.renew({sessionId,userId,plan,targetSeconds,
+      commandId:repositoryCommandId({aggregateId:sessionId,operation:"usage-hold-renew",
+        version:targetSeconds,requestHash}),commandType:"usage_hold.renew",requestHash,fence});
+  });
 }
 
 export async function settleUsageHold(

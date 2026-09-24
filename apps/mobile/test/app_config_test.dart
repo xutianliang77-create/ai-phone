@@ -13,6 +13,15 @@ void main() {
       AppConfig.fromEnvironment().deviceAsrProvider,
       'apple_speech_transcriber',
     );
+    expect(AppConfig.fromEnvironment().deviceAsrVadProvider,
+        'fluidaudio_silero');
+  });
+
+  test('Android environment selects the packaged online model VAD', () {
+    debugDefaultTargetPlatformOverride = TargetPlatform.android;
+    addTearDown(() => debugDefaultTargetPlatformOverride = null);
+    expect(AppConfig.fromEnvironment().deviceAsrProvider, 'android_system');
+    expect(AppConfig.fromEnvironment().deviceAsrVadProvider, 'silero_onnx');
   });
 
   test(

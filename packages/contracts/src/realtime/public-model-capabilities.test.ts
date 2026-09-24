@@ -1,5 +1,5 @@
 import {describe,it,expect} from "vitest";
-import {publicAsrModelAutomaticLanguagePairSupported,publicAsrModelAutomaticLanguageSupported,publicModelProtocolCapabilities,publicProtocolCapability,publicProtocolSampleRateSupported} from "./public-model-capabilities.js";
+import {publicAsrModelAutomaticLanguagePairSupported,publicAsrModelAutomaticLanguageSupported,publicModelProtocolCapabilities,publicProtocolCapability,publicProtocolSampleRateSupported,publicTranslationDirectionImplemented,publicTtsTargetImplemented} from "./public-model-capabilities.js";
 describe("implemented public wire capabilities",()=>{
   it("covers four vendors and three components without granting readiness",()=>{
     const values=Object.values(publicModelProtocolCapabilities);expect(values).toHaveLength(16);
@@ -36,5 +36,16 @@ describe("implemented public wire capabilities",()=>{
     expect(publicProtocolCapability("qwen_asr_realtime")).not.toHaveProperty("maxAudioSeconds");
     for(const protocol of ["openai_realtime_asr","tencent_asr_ws","google_speech_v2"])
       expect(publicProtocolCapability(protocol)?.maxAudioSeconds).toBe(30);
+  });
+  it("applies the selected translation and speech wire language scope before admission",()=>{
+    expect(publicTranslationDirectionImplemented("tencent_tmt","ja","zh")).toBe(true);
+    expect(publicTranslationDirectionImplemented("tencent_tmt","ar","zh")).toBe(false);
+    expect(publicTranslationDirectionImplemented("qwen_chat","ar","zh")).toBe(true);
+    expect(publicTranslationDirectionImplemented("unknown","zh","en")).toBe(false);
+    expect(publicTranslationDirectionImplemented("tencent_tmt","zh","zh")).toBe(false);
+    expect(publicTtsTargetImplemented("tencent_tts_ws","en")).toBe(true);
+    expect(publicTtsTargetImplemented("tencent_tts_ws","ja")).toBe(false);
+    expect(publicTtsTargetImplemented("qwen_tts_realtime","ja")).toBe(true);
+    expect(publicTtsTargetImplemented("qwen_tts_realtime","yue")).toBe(false);
   });
 });

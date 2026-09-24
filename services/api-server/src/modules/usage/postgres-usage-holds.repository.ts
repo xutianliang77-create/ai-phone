@@ -21,8 +21,9 @@ import {
   usageCommand,
   usageEventId,
 } from "./postgres-usage-uow.js";
+import {renewPostgresUsageHold,type PostgresRenewHoldResult} from "./postgres-usage-hold-renewal.js";
 
-interface HoldCommandInput {
+export interface HoldCommandInput {
   sessionId: string;
   userId: string;
   plan: PostgresUsagePlan;
@@ -67,7 +68,8 @@ export function sameUsageHoldReservation(
   },
 ) {
   return hold.sessionId === input.sessionId &&
-    hold.seconds === input.seconds &&
+    (hold.seconds === input.seconds ||
+      hold.status === "active" && hold.version > 1 && hold.seconds > input.seconds) &&
     hold.idempotencyKey === input.idempotencyKey &&
     hold.note === input.note;
 }
@@ -296,6 +298,10 @@ export class PostgresUsageHoldsRepository {
         });
       },
     );
+  }
+
+  async renew(input:HoldCommandInput & {targetSeconds:number}):Promise<PostgresRenewHoldResult>{
+    return renewPostgresUsageHold(this.primary,input);
   }
 }
 

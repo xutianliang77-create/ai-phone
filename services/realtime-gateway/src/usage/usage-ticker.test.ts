@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { RealtimeSession } from "../sessions/realtime-session.js";
 import { createUsageTickDecision } from "./usage-ticker.js";
 
@@ -59,10 +59,24 @@ describe("usage ticker", () => {
     });
     expect(decision.shouldEnd).toBe(true);
   });
-  it("does not impose a time-limit decision when an online public token omits duration",()=>{
+  it("fails closed on an unknown public balance without treating it as a session time limit",()=>{
     const session=createTestSession({});session.claims.publicRuntime={deploymentId:"public",leaseId:"lease",captureId:"capture",languagePolicyKey:"language",sampleRate:16000,configurationRevision:1,configurationHash:"a".repeat(64)};
     (session.claims as any).processing={processingMode:"online"};const decision=createUsageTickDecision(session,null);
-    expect(decision.shouldEnd).toBe(false);expect(decision.endReason).toBeUndefined();
+    expect(decision.shouldEnd).toBe(true);expect(decision.endReason).toBe("connection_error");
+    expect(decision.event.remainingSeconds).toBe(0);
+    expect(Number.isFinite(decision.event.billableSeconds)).toBe(true);
+  });
+  it("uses confirmed active time and the session's renewed reservation for public usage",()=>{
+    vi.useFakeTimers();
+    try{
+      vi.setSystemTime(100_000);
+      const session=createTestSession({holdSeconds:30});
+      session.claims.publicRuntime={deploymentId:"public",leaseId:"lease",captureId:"capture",languagePolicyKey:"language",sampleRate:16000,configurationRevision:1,configurationHash:"a".repeat(64)};
+      session.activeStartedAt=88_000;
+      const decision=createUsageTickDecision(session,{remainingSeconds:60,availableSeconds:0,authorizedSeconds:50});
+      expect(decision.event).toMatchObject({billableSeconds:12,remainingSeconds:38});
+      expect(decision.shouldEnd).toBe(false);
+    }finally{vi.useRealTimers();}
   });
 });
 

@@ -107,6 +107,21 @@ class SessionHistoryApiClient {
         jsonDecode(response.body) as Map<String, Object?>);
   }
 
+  Future<SessionDetail> saveDeviceRuleReview(
+      String sessionId, Map<String, Object?> review) async {
+    final response = await _client.post(
+      _baseUrl.resolve('/sessions/$sessionId/review'),
+      headers: await _authHeaders(json: true),
+      body: jsonEncode({
+        'generationKind': 'device_rules',
+        'review': review,
+      }),
+    );
+    _ensureOk(response);
+    return SessionDetail.fromJson(
+        jsonDecode(response.body) as Map<String, Object?>);
+  }
+
   Future<SessionDetail> updateActionItem(
     String sessionId,
     int actionIndex,

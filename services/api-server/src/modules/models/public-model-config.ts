@@ -13,11 +13,11 @@ export interface PublicModelProfile {
 export type Credentials=Partial<Record<"apiKey"|"secretId"|"secretKey"|"serviceAccountJson",string>>;
 export interface PublicModelConfiguration {schemaVersion:1;deploymentId:string;revision:number;updatedAt:string;
   components:Record<ModelComponent,PublicModelProfile>;credentials:Record<ModelComponent,Credentials>;}
-interface Protocol {id:string;label:string;vendor:Vendor;component:ModelComponent;scheme:"https:"|"wss:";auth:AuthKind[];modelRequired:boolean;fields:string[];capability:Readonly<PublicModelProtocolCapability>;serverVad?:ReturnType<typeof publicAsrServerVadCapability>;}
+interface Protocol {id:string;label:string;vendor:Vendor;component:ModelComponent;scheme:"https:"|"wss:";auth:AuthKind[];modelRequired:boolean;fields:string[];capability:Readonly<PublicModelProtocolCapability>;providerVolume:boolean;serverVad?:ReturnType<typeof publicAsrServerVadCapability>;}
 const p=(id:string,label:string,vendor:Vendor,component:ModelComponent,scheme:"https:"|"wss:",auth:AuthKind[],modelRequired=true,fields:string[]=[]):Protocol=>{
   const capability=publicProtocolCapability(id);
   if(!capability||capability.vendor!==vendor||capability.component!==component)throw Error("public_catalog_capability_mismatch");
-  return {id,label,vendor,component,scheme,auth,modelRequired,fields,capability,...(publicAsrServerVadCapability(id)?{serverVad:publicAsrServerVadCapability(id)}:{})};
+  return {id,label,vendor,component,scheme,auth,modelRequired,fields,capability,providerVolume:id==="tencent_tts_ws",...(publicAsrServerVadCapability(id)?{serverVad:publicAsrServerVadCapability(id)}:{})};
 };
 export const publicModelCatalog={
   vendors:[{id:"qwen",label:"Qwen / 阿里云百炼"},{id:"tencent",label:"腾讯云 / 混元"},{id:"openai",label:"OpenAI"},{id:"google",label:"Google"}],
@@ -69,6 +69,7 @@ export function validateProfile(component:ModelComponent,value:unknown):PublicMo
     if(url.protocol!==protocol.scheme||url.username||url.password||url.search||url.hash)throw new PublicConfigError(`${component}:endpoint_requires_${protocol.scheme.replace(":","")}_without_credentials_or_query`);}
   if(!Number.isSafeInteger(v.timeoutMs)||v.timeoutMs<250||v.timeoutMs>120000||!Number.isSafeInteger(v.maxTokens)||v.maxTokens<1||v.maxTokens>16384||![16000,24000].includes(v.sampleRate))throw new PublicConfigError(`${component}:invalid_limits`);
   if(!Number.isFinite(v.volume)||v.volume < -10||v.volume > 10)throw new PublicConfigError(`${component}:invalid_volume`);
+  if(component==="tts"&&v.enabled&&!protocol.providerVolume&&v.volume!==0)throw new PublicConfigError("tts:unsupported_provider_volume");
   if(v.enabled&&component!=="translation"&&!publicProtocolSampleRateSupported(v.protocol,v.sampleRate))throw new PublicConfigError(`${component}:unsupported_sample_rate`);
   return structuredClone(v);
 }
@@ -83,7 +84,7 @@ export function mergeConfiguration(current:PublicModelConfiguration,body:unknown
   for(const c of modelComponents){
     const v=validateProfile(c,body.components[c]),previous=current.components[c];
     const origin=(s:string)=>s?new URL(s).origin:"";
-    const changed=v.vendor!==previous.vendor||v.authKind!==previous.authKind||origin(v.endpoint)!==origin(previous.endpoint);
+    const changed=v.vendor!==previous.vendor||v.protocol!==previous.protocol||v.authKind!==previous.authKind||origin(v.endpoint)!==origin(previous.endpoint);
     next.components[c]=v;
     const credentials:Credentials=changed||clear.includes(c)?{}:{...current.credentials[c]};
     const update=updates[c]??{};if(!object(update))throw new PublicConfigError(`${c}:invalid_credentials`);
@@ -109,9 +110,11 @@ export function publicConfiguration(config:PublicModelConfiguration){
     const missing:string[]=[];
     if(v.enabled){if(!v.endpoint)missing.push("endpoint");if(p.modelRequired&&!v.modelId)missing.push("modelId");
       if(c!=="translation"&&!publicProtocolSampleRateSupported(v.protocol,v.sampleRate))missing.push("sampleRate");
+      if(c==="tts"&&!p.providerVolume&&v.volume!==0)missing.push("volume");
       for(const f of p.fields)if(!v[f as keyof PublicModelProfile]||f==="languageLocales"&&!Object.keys(v.languageLocales??{}).length)missing.push(f);
       for(const key of publicModelCatalog.credentialFields[v.authKind])if(!config.credentials[c][key as keyof Credentials])missing.push(key);}
     return [c,{state:!v.enabled?"disabled":missing.length?"incomplete":"configured_not_verified",missing,
+      realtimeSupported:c!=="asr"||p.capability.input==="continuous_pcm",
       credentialsPresent:Object.fromEntries(publicModelCatalog.credentialFields[v.authKind].map(k=>[k,Boolean(config.credentials[c][k as keyof Credentials])]))}];
   }));
   return {schemaVersion:1,deploymentId:config.deploymentId,revision:config.revision,updatedAt:config.updatedAt,

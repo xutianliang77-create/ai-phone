@@ -32,9 +32,9 @@ export type SessionReviewGenerationKind =
   | "device_rules"
   | "public_semantic_enhancement";
 
-export interface GenerateSessionReviewRequest {
-  generationKind: "public_semantic_enhancement";
-}
+export type GenerateSessionReviewRequest =
+  | {generationKind:"public_semantic_enhancement"}
+  | {generationKind:"device_rules";review:SessionReviewResponse};
 
 export interface TermbaseTermDto {
   id: string;

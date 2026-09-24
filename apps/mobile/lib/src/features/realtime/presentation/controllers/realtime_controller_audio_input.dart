@@ -58,9 +58,6 @@ extension _RealtimeControllerAudioInput on RealtimeController {
     // TTS plays. iOS voice processing handles echo; VAD endpoint confirmation
     // below is the safe barge-in point, rather than dropping user speech.
     if (_speechCaptureGate.blocksCapture && session.syncBinding == null) {
-      if (session.syncBinding != null && frame.endsSegment && active) {
-        _requestPublicEndpoint(session, frame.sampleRate);
-      }
       return;
     }
     final sent = _repository.sendAudio(session.sessionId, frame);
@@ -74,7 +71,7 @@ extension _RealtimeControllerAudioInput on RealtimeController {
     if (frame.endsSegment ||
         _publicTurnSamples >= frame.sampleRate * 28 ||
         _publicEndpointRequested) {
-      if (frame.endsSegment && _speechCaptureGate.playbackActive) {
+      if (frame.endsSegment && _speechCaptureGate.isPlaying) {
         unawaited(_stopSpeaking());
       }
       _requestPublicEndpoint(session, frame.sampleRate);

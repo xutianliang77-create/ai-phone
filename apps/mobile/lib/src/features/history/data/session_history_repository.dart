@@ -110,7 +110,20 @@ class SessionHistoryRepository {
 
   Future<SessionDetail> generateReview(String sessionId) async {
     final localStore = _localStore;
-    if (localStore == null) return _apiClient!.generateReview(sessionId);
+    if (localStore == null) {
+      final detail = await _apiClient!.getSession(sessionId);
+      if (detail.reviewJson?['generationKind'] ==
+          'public_semantic_enhancement') {
+        return detail;
+      }
+      if (detail.status != 'ended') {
+        throw StateError('请结束会话后保存规则纪要');
+      }
+      return _apiClient.saveDeviceRuleReview(
+        sessionId,
+        buildDeviceRuleReviewJson(detail, _now()),
+      );
+    }
     final current = await localStore.getSession(sessionId);
     if (isCurrentDeviceRuleReview(current)) return current;
     return localStore.saveSessionReview(

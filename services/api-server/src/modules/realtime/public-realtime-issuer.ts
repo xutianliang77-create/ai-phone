@@ -33,13 +33,13 @@ export async function issuePublicRealtimeSession(sessionId:string,ownerId:string
     preparedPublicSession(before,ownerId);verifiedPublicAdmission(before,ownerId,new Date());
     const lease=await issuePublicRuntimeLease(sessionId,ownerId),remaining=Math.floor((Date.parse(lease.expiresAt)-Date.now())/1000);
     if(remaining<1)throw new ResultSyncError("public_inference_admission_expired",403);
-    // Server-side account accounting may reserve a short start hold, but it is
-    // never exposed as a public-session duration or client-side quota contract.
+    // The signed Gateway-only hold is an initial allowance, not a product
+    // session duration or a client-side quota setting.
     const holdSeconds=Math.min(30,lease.maxActiveSeconds??30,realtimeMaxSessionSeconds());
     const hold=await createUsageHold(ownerId,holdSeconds,{sessionId,idempotencyKey:`hold:${sessionId}`,note:"realtime_session_hold",ttlSeconds:remaining});
     // The legacy idempotent API can return a released/settled hold as 'held'.
     if(hold.status!=="held")throw new ResultSyncError("quota_not_enough",402);
-    if(hold.hold.status!=="active"||hold.hold.userId!==ownerId||hold.hold.sessionId!==sessionId||hold.hold.seconds!==holdSeconds||
+    if(hold.hold.status!=="active"||hold.hold.userId!==ownerId||hold.hold.sessionId!==sessionId||hold.hold.seconds<holdSeconds||
       Date.parse(hold.hold.expiresAt)<=Date.now()||!Number.isFinite(Date.parse(hold.hold.expiresAt)))throw new ResultSyncError("public_issuer_hold_invalid",409);
     let issuance:{requestHash:string;endpoint:string;claims:RealtimeTokenClaims;holdId:string};
     try{
@@ -72,6 +72,7 @@ export async function issuePublicRealtimeSession(sessionId:string,ownerId:string
           ...(input.autoReverseTargetLanguage?{autoReverseTargetLanguage:true}:{}),
           ...(input.speakerAttribution?.deviceProfile?{speakerAttribution:structuredClone(input.speakerAttribution)}:{}),
           ...(input.voiceOutput?{voice:{mode:"preset",presetId:config.components.tts!.voice}}:{}),planCode:hold.balance.planCode,
+          ...(old?.claims.holdSeconds===undefined?(old?{}:{holdSeconds}):{holdSeconds:old.claims.holdSeconds}),
           ...(maxDurationSeconds!==undefined?{maxDurationSeconds}:{}),issuedAt,expiresAt,processing:structuredClone(current.processingAuthorization!),
           ...(qaOneShotGuard?{qaOneShot:{authorizationId:qaOneShotGuard.authorizationId,hardDeadlineAt:qaDeadlineAt!}}:{}),
           publicRuntime:{deploymentId:settings.deploymentId,leaseId:lease.leaseId,captureId:lease.captureId,languagePolicyKey:lease.languagePolicyKey,

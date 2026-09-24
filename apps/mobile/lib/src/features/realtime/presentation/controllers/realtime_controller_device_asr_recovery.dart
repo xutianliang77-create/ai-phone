@@ -76,13 +76,13 @@ extension RealtimeControllerDeviceAsrRecovery on RealtimeController {
       payload: <String, Object?>{
         'segmentId': segment.id,
         'isFinal': segment.isFinal,
-        'playbackActive': _speechCaptureGate.playbackActive,
+        'playbackActive': _speechCaptureGate.isPlaying,
         'droppedAsEcho': segmentWasMarkedAsEcho,
       },
     ));
     if (segmentWasMarkedAsEcho) return;
     if (segment.revision != null) _displayAsrSource(segment);
-    if (_speechCaptureGate.playbackActive) {
+    if (_speechCaptureGate.isPlaying) {
       unawaited(_stopSpeaking());
     }
     final queued = _asrTextChain.then((_) async {

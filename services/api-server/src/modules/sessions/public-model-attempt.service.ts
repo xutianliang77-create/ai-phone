@@ -3,6 +3,10 @@ import {assertPublicSession,publicDeploymentId,mutatePublicSession} from "./sess
 import {ResultSyncError,syncKey} from "./session-result-sync-contract.js";
 import {verifiedPublicAdmission,publicRuntimeAdmissionValid} from "./public-runtime-admission.js";
 import {PUBLIC_EVIDENCE_GAP_MS} from "./public-session-lifecycle.js";
+import {getRepositoryRuntime} from "../../infrastructure/storage/repository-runtime.js";
+import {findSession} from "./sessions-runtime.repository.js";
+import {recordPostgresPublicAttempt} from "./public-model-attempt-postgres.js";
+import type {SessionRecord} from "./session-record.js";
 export interface PublicModelAttemptRecord {ownerId:string;deploymentId:string;createdAt:string;updatedAt:string;event:PublicModelAttemptEvent;}
 
 function parse(value:unknown,sessionId:string):PublicModelAttemptEvent{
@@ -25,10 +29,12 @@ function parse(value:unknown,sessionId:string):PublicModelAttemptEvent{
 }
 export function recordPublicModelAttempt(sessionId:string,value:unknown,now=new Date()){
   const e=parse(value,sessionId),deployment=publicDeploymentId();
-  return mutatePublicSession<PublicModelAttemptAck>(sessionId,"public-model-attempt",e,current=>{
+  const plan=(current:SessionRecord,related:PublicModelAttemptRecord[]=[])=>{
     assertPublicSession(current,current.userId,deployment);
     if(!Number.isFinite(now.getTime())||current.publicRuntimePolicy?.leaseId!==e.leaseId)throw new ResultSyncError("model_attempt_lease_mismatch",403);
-    const records=current.publicModelAttempts??[],old=records.find(r=>r.event.attemptId===e.attemptId);
+    const primary=current.publicModelAttempts??[],seen=new Set(primary.map(item=>item.event.attemptId));
+    const records=[...primary,...related.filter(item=>!seen.has(item.event.attemptId))];
+    const old=records.find(r=>r.event.attemptId===e.attemptId);
     if(e.state==="dispatching"){
       const admission=verifiedPublicAdmission(current,current.userId,now),p=current.publicRuntimePolicy,r=current.publicRuntime;
       if(!p.admissionHash||!publicRuntimeAdmissionValid(current,now)||current.status!=="active"||r?.phase!=="active"||
@@ -49,6 +55,8 @@ export function recordPublicModelAttempt(sessionId:string,value:unknown,now=new 
       if(qualification?.kind!=="model_qualification"||qualification.providerId!==e.providerId||qualification.modelId!==e.modelId)throw new ResultSyncError("model_attempt_model_mismatch",403);
       if(e.component==="tts"&&records.some(a=>a.event.attemptId!==e.attemptId&&a.event.component==="tts"&&a.event.segmentId===e.segmentId&&
         a.event.revision===e.revision&&a.event.state!=="not_sent"))throw new ResultSyncError("model_attempt_tts_duplicate",409);
+      if(e.component==="translation"&&records.some(a=>a.event.attemptId!==e.attemptId&&a.event.component==="translation"&&a.event.segmentId===e.segmentId&&
+        a.event.revision===e.revision&&a.event.state!=="not_sent"))throw new ResultSyncError("model_attempt_translation_duplicate",409);
     }
     const ack=(r:PublicModelAttemptRecord):PublicModelAttemptAck=>({event:structuredClone(r.event),recordedAt:r.updatedAt,costStatus:"unknown"});
     if(old){
@@ -75,5 +83,11 @@ export function recordPublicModelAttempt(sessionId:string,value:unknown,now=new 
     if(records.length>=1024)throw new ResultSyncError("model_attempt_capacity");
     const r:PublicModelAttemptRecord={ownerId:current.userId,deploymentId:deployment,createdAt:now.toISOString(),updatedAt:now.toISOString(),event:e};
     const next=structuredClone(current);next.publicModelAttempts=[...records,r];return {next,result:ack(r)};
-  });
+  };
+  if(getRepositoryRuntime().driver==="postgres"){
+    return findSession(sessionId).then(current=>current?.publicAttemptStorageVersion===2
+      ? recordPostgresPublicAttempt(sessionId,e,plan)
+      : mutatePublicSession<PublicModelAttemptAck>(sessionId,"public-model-attempt",e,value=>plan(value)));
+  }
+  return mutatePublicSession<PublicModelAttemptAck>(sessionId,"public-model-attempt",e,current=>plan(current));
 }

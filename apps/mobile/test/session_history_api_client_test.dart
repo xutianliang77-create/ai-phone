@@ -5,6 +5,8 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:translation_mobile/src/features/account/data/account_session_store.dart';
 import 'package:translation_mobile/src/features/history/data/session_history_api_client.dart';
+import 'package:translation_mobile/src/features/history/data/session_history_repository.dart';
+import 'package:translation_mobile/src/platform/sharing/local_file_share_service.dart';
 
 void main() {
   test('requests public semantic review explicitly', () async {
@@ -30,6 +32,43 @@ void main() {
     final detail = await client.generateReview('session_1');
 
     expect(detail.sessionId, 'session_1');
+  });
+
+  test('online history saves phone rule notes and actions without a semantic model request',
+      () async {
+    final requests = <String>[];
+    final client = SessionHistoryApiClient(
+      baseUrl: Uri.parse('https://api.example.cn'),
+      accountSessionStore: _sessionStore(),
+      client: MockClient((request) async {
+        requests.add('${request.method} ${request.url.path}');
+        expect(request.headers['authorization'], 'Bearer account-token');
+        if (request.method == 'GET') {
+          final detail = _detailJson(completed: false)..remove('review');
+          return http.Response(jsonEncode(detail), 200,
+              headers: const {'content-type': 'application/json; charset=utf-8'});
+        }
+        final body = jsonDecode(request.body) as Map<String, Object?>;
+        expect(body['generationKind'], 'device_rules');
+        final review = body['review']! as Map<String, Object?>;
+        expect(review['provider'], 'local');
+        expect(review['evidenceSegmentIds'], <String>['segment_1']);
+        final detail = _detailJson(completed: false)..['review'] = review;
+        return http.Response(jsonEncode(detail), 200,
+            headers: const {'content-type': 'application/json; charset=utf-8'});
+      }),
+    );
+    final repository = SessionHistoryRepository(
+      apiClient: client,
+      shareService: LocalFileShareService(),
+      now: () => DateTime.utc(2026, 9, 25),
+    );
+    addTearDown(repository.dispose);
+
+    final detail = await repository.generateReview('session_1');
+
+    expect(detail.reviewJson?['generationKind'], 'device_rules');
+    expect(requests, ['GET /sessions/session_1', 'POST /sessions/session_1/review']);
   });
 
   test('patches an account-owned action item and parses persisted state',

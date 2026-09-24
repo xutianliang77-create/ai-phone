@@ -2,9 +2,11 @@ import {beforeEach,afterEach,describe,it,expect,vi} from "vitest";
 import {mkdtempSync,readFileSync,writeFileSync,statSync,existsSync,rmSync} from "node:fs";
 import {tmpdir} from "node:os";import {join} from "node:path";
 import type {FastifyInstance} from "fastify";
+import Fastify from "fastify";
 import {buildApp} from "../../app.js";
 import {emptyConfiguration,publicModelCatalog,type ModelComponent} from "./public-model-config.js";
 import {publicModelConfigScript} from "./public-model-config-page.js";
+import {registerPublicModelConfigurationRoutes} from "./public-model-config.routes.js";
 let app:FastifyInstance,dir:string,file:string;
 const auth={authorization:"Bearer synthetic-config-admin-secret"};
 const uri="/models/public-config/data";
@@ -68,15 +70,54 @@ describe("original model domain manual public configuration",()=>{
     expect(r.json()).toMatchObject({revision:1,runtimeActivated:false,saveTriggersModelCalls:false});
     expect(r.json().components[p.component]).toMatchObject({vendor:p.vendor,protocol:p.id,modelId:"manual-model-id"});
     expect(r.json().status[p.component].state).toBe("configured_not_verified");
+    expect(r.json().status[p.component].realtimeSupported).toBe(p.component!=="asr"||p.capability.input==="continuous_pcm");
     const get=await app.inject({url:uri,headers:auth});expect(get.json()).toEqual(r.json());
     for(const secret of Object.values(secrets)){expect(get.body).not.toContain(secret);expect(readFileSync(file,"utf8")).not.toContain(secret);}
     expect(readFileSync(file,"utf8")).not.toContain("manual-model-id");expect(statSync(file).mode&0o777).toBe(0o600);expect(fetch).not.toHaveBeenCalled();
+  });
+  it("rejects public model changes while the public runtime is enabled",async()=>{
+    vi.stubEnv("PUBLIC_RUNTIME_ENABLED","true");
+    const r=await save(payload());
+    expect(r.statusCode).toBe(409);
+    expect(r.json()).toEqual({error:{code:"public_config_maintenance_required"}});
+    expect(existsSync(file)).toBe(false);
+    expect((await app.inject({url:uri,headers:auth})).statusCode).toBe(200);
+  });
+  it("separately reports silent and spoken qualification without model calls or secrets",async()=>{
+    const body=payload();
+    for(const component of ["translation","tts"] as const){
+      Object.assign(body.components[component],{enabled:true,endpoint:component==="tts"?"wss://synthetic-provider.test/realtime":"https://synthetic-provider.test/v1",
+        modelId:"selected-model",voice:"selected-voice",sampleRate:component==="tts"?24000:16000});
+    }
+    body.credentials={asr:{apiKey:secrets.apiKey},translation:{apiKey:secrets.apiKey},tts:{apiKey:secrets.apiKey}};
+    expect((await save(body)).statusCode).toBe(200);
+    expect((await app.inject({url:"/models/public-config/status"})).statusCode).toBe(401);
+    const unqualified=(await app.inject({url:"/models/public-config/status",headers:auth})).json();
+    expect(unqualified).toMatchObject({configurationRevision:1,silent:{status:"not_qualified"},spoken:{status:"not_qualified"}});
+    expect(unqualified.silent.configurationHash).not.toBe(unqualified.spoken.configurationHash);
+    const capability=vi.fn(()=>({status:"qualified" as const,qualifiedLanguagePairs:[{source:"zh",target:"en"}],automaticLanguage:false,automaticReverse:false}));
+    const isolated=Fastify();registerPublicModelConfigurationRoutes(isolated,capability);
+    try{
+      const qualified=(await isolated.inject({url:"/models/public-config/status",headers:auth})).json();
+      expect(qualified).toMatchObject({silent:{status:"qualified"},spoken:{status:"qualified"}});
+      expect(capability).toHaveBeenCalledTimes(2);
+      expect(JSON.stringify(qualified)).not.toContain(secrets.apiKey);
+    }finally{await isolated.close();}
   });
   it("preserves blank credentials but clears them on vendor or service-origin changes",async()=>{
     const body=payload();await save(body);const preserve={...body,expectedRevision:1,credentials:{asr:{apiKey:""}}};
     expect((await save(preserve)).json().status.asr.credentialsPresent.apiKey).toBe(true);
     const changed={...preserve,expectedRevision:2,components:structuredClone(body.components)};changed.components.asr.endpoint="wss://different.test/base";
     const r=await save(changed);expect(r.json().status.asr.credentialsPresent.apiKey).toBe(false);expect(r.json().status.asr.state).toBe("incomplete");
+  });
+  it("does not carry an ASR key across realtime and completed-audio protocols",async()=>{
+    const body=payload();expect((await save(body)).statusCode).toBe(200);
+    const changed={...body,expectedRevision:1,components:structuredClone(body.components),credentials:{}};
+    changed.components.asr.protocol="qwen_asr_compatible";
+    changed.components.asr.endpoint="https://synthetic-provider.test/base";
+    const r=await save(changed);
+    expect(r.statusCode).toBe(200);
+    expect(r.json().status.asr).toMatchObject({state:"incomplete",realtimeSupported:false,credentialsPresent:{apiKey:false}});
   });
   it("clears only explicitly selected component credentials",async()=>{
     const body=payload();await save(body);const r=await save({...body,expectedRevision:1,credentials:{},clearCredentials:["asr"]});

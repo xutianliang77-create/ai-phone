@@ -13,6 +13,7 @@ describe("Call Link model runtime policy", () => {
     policy: process.env.CALL_PROVIDER_POLICY,
     publicTts: process.env.CALL_LINK_PUBLIC_TTS_ENABLED,
     deploymentTest: process.env.CALL_LINK_DEPLOYMENT_TEST_MODE,
+    publicRuntime: process.env.PUBLIC_RUNTIME_ENABLED,
   };
 
   afterEach(() => {
@@ -23,13 +24,27 @@ describe("Call Link model runtime policy", () => {
     restore("CALL_PROVIDER_POLICY", previous.policy);
     restore("CALL_LINK_PUBLIC_TTS_ENABLED", previous.publicTts);
     restore("CALL_LINK_DEPLOYMENT_TEST_MODE", previous.deploymentTest);
+    restore("PUBLIC_RUNTIME_ENABLED", previous.publicRuntime);
   });
 
   it("keeps legacy private Call Link behavior outside a public deployment", () => {
     delete process.env.API_RESULT_SYNC_DEPLOYMENT_ID;
+    delete process.env.PUBLIC_RUNTIME_ENABLED;
     expect(callLinkModelRuntimeAdmissionForSession({})).toEqual({
       ok: true,
       mode: "legacy_private",
+    });
+  });
+
+  it("does not turn a missing or malformed public deployment ID into private permission", () => {
+    process.env.PUBLIC_RUNTIME_ENABLED = "true";
+    delete process.env.API_RESULT_SYNC_DEPLOYMENT_ID;
+    expect(callLinkModelRuntimeAdmissionForSession({})).toEqual({
+      ok: false, code: "call_link_public_model_runtime_unavailable",
+    });
+    process.env.API_RESULT_SYNC_DEPLOYMENT_ID = "bad/id";
+    expect(callLinkModelRuntimeAdmissionForSession({})).toEqual({
+      ok: false, code: "call_link_public_model_runtime_unavailable",
     });
   });
 

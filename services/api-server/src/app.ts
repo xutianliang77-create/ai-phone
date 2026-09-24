@@ -85,7 +85,7 @@ export async function buildApp(options: BuildAppOptions = {}) {
   registerAirDeviceTrackAdmissionRoutes(app);
   await registerHealthRoutes(app);
   registerIngressRoutes(app);
-  await registerModelRoutes(app);
+  await registerModelRoutes(app,options.publicRealtimeAuthority?.configurationCapability);
   await registerBillingRoutes(app);
   await registerCallLinkRoutes(app, {
     publicTtsCapability: options.publicRealtimeAuthority?.configurationCapability,

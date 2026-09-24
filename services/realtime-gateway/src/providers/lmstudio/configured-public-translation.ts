@@ -1,6 +1,6 @@
 import {createHash,createHmac,randomUUID} from "node:crypto";
 import {isDeepStrictEqual} from "node:util";
-import {automaticSourceAllowed,automaticTranslationTarget} from '@translation/contracts';
+import {TENCENT_TMT_LANGUAGE_CODES,automaticSourceAllowed,automaticTranslationTarget} from '@translation/contracts';
 import type {PublicModelAttemptEvent,RealtimeExecutionPlan,RealtimeProcessingAuthorization} from "@translation/contracts";
 import {parseRealtimeProcessingRequest} from "@translation/contracts";
 import {LmStudioClient,type LmStudioClientOptions} from "./lmstudio-client.js";
@@ -21,7 +21,7 @@ export interface ConfiguredPublicTranslationOptions {
 }
 export interface TranslationCredentials {apiKey?:string;secretId?:string;secretKey?:string;accessToken?:string;accessTokenExpiresAt?:number;quotaProjectId?:string;}
 const protocols:Record<string,string>={qwen:"qwen_chat",tencent:"tencent_hunyuan_chat",openai:"openai_chat"};
-const tmtLanguages=new Set(["zh","en","ja","ko","de","fr","es","it","pt","ru","vi","id","ms","th","tr"]);
+const tmtLanguages:ReadonlySet<string>=new Set(TENCENT_TMT_LANGUAGE_CODES);
 const hash=(value:string)=>createHash("sha256").update(value).digest("hex");
 const hmac=(key:string|Buffer,value:string)=>createHmac("sha256",key).update(value).digest();
 const secretId=(value:unknown):value is string=>typeof value==="string"&&/^[A-Za-z0-9_-]{1,240}$/.test(value);
