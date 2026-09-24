@@ -25,6 +25,12 @@ export type RepositoryRuntime = {
 };
 
 let activeRuntime: RepositoryRuntime | undefined;
+let storageProbe: { checkedAt: number; ready: boolean } = {
+  checkedAt: 0,
+  ready: false,
+};
+let pendingStorageProbe: Promise<boolean> | undefined;
+const storageProbeIntervalMs = 1_000;
 
 export async function initializeRepositoryRuntime(): Promise<RepositoryRuntime> {
   const driver = repositoryStorageDriver();
@@ -38,8 +44,16 @@ export async function initializeRepositoryRuntime(): Promise<RepositoryRuntime> 
     );
   }
   const postgres = createPostgresPrimaryRuntime();
+  postgres.pool.on("error", (error) => {
+    storageProbe = { checkedAt: 0, ready: false };
+    const code = (error as { code?: unknown }).code;
+    console.error("[postgres-primary] idle_connection_error",
+      typeof code === "string" && /^[A-Z0-9]{5}$/.test(code)
+        ? code : "unknown");
+  });
   try {
     await assertPostgresPrimaryStartup(postgres.pool);
+    storageProbe = { checkedAt: Date.now(), ready: true };
     activeRuntime = { driver, postgres, close: postgres.close };
     return activeRuntime;
   } catch (error) {
@@ -48,12 +62,27 @@ export async function initializeRepositoryRuntime(): Promise<RepositoryRuntime> 
   }
 }
 
-export function getRepositoryStorageStatus() {
+export async function getRepositoryStorageStatus() {
   const driver = repositoryStorageDriver();
   if (driver !== "postgres") return getLegacyStorageStatus();
+  const runtime = activeRuntime;
+  if (runtime?.driver === "postgres") {
+    if (!pendingStorageProbe &&
+      Date.now() - storageProbe.checkedAt >= storageProbeIntervalMs) {
+      pendingStorageProbe = runtime.postgres.pool.query("SELECT 1")
+        .then(() => true, () => false)
+        .then((ready) => {
+          storageProbe = { checkedAt: Date.now(), ready };
+          return ready;
+        })
+        .finally(() => { pendingStorageProbe = undefined; });
+    }
+    if (pendingStorageProbe) await pendingStorageProbe;
+  }
   return {
     driver,
-    status: activeRuntime?.driver === "postgres" ? "ready" : "not_ready",
+    status: runtime?.driver === "postgres" && storageProbe.ready
+      ? "ready" : "not_ready",
     primaryCutoverAuthorized: postgresPrimaryCutoverAuthorization.authorized,
   };
 }

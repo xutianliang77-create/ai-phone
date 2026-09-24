@@ -34,7 +34,13 @@ import { getReleaseCapabilityProfileReadiness } from
   "./release-capability-profile.js";
 
 export async function registerHealthRoutes(app: FastifyInstance) {
-  app.get("/health", async () => {
+  app.get("/health", async (_request, reply) => {
+    const storage = await getRepositoryStorageStatus();
+    if (storage.driver === "postgres" && storage.status !== "ready") {
+      return reply.status(503).send({
+        status: "unavailable", service: "api-server", storage,
+      });
+    }
     const env = loadEnv();
     const accountReadiness = getAccountDeploymentReadiness();
     const paymentReadiness = getPaymentDeploymentReadiness();
@@ -58,7 +64,7 @@ export async function registerHealthRoutes(app: FastifyInstance) {
     const publicEntryProtectionReadiness = getPublicEntryProtectionReadiness();
     const capabilityProfileReadiness = getReleaseCapabilityProfileReadiness();
     const agentCallExecutionReadiness = getAgentCallExecutionReadiness();
-    return {
+    return reply.status(200).send({
       status: "ok",
       service: "api-server",
       version: "0.1.0",
@@ -67,7 +73,7 @@ export async function registerHealthRoutes(app: FastifyInstance) {
       dataRegion: env.dataRegion,
       callProviderPolicy: env.callProviderPolicy,
       complianceProfile: env.complianceProfile,
-      storage: getRepositoryStorageStatus(),
+      storage,
       diagnostics: {
         appErrorReporting: "enabled",
         appErrorEndpoint: "/diagnostics/app-errors",
@@ -104,7 +110,7 @@ export async function registerHealthRoutes(app: FastifyInstance) {
       agentCallExecutionReadiness,
       diagnosticsReadiness,
       releaseMaterialsReadiness,
-    };
+    });
   });
 
   app.get("/health/ready", async (_request, reply) => {

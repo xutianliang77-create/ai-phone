@@ -31,6 +31,9 @@ export async function startPostgresProjectionWorker(
 
   updatePostgresProjectionRuntime({ state: "starting" });
   const pool = new Pool(buildPostgresPoolConfig(config));
+  pool.on("error", (error) => {
+    recordPostgresProjectionFailure(error);
+  });
   let stopped = false;
   let timer: NodeJS.Timeout | undefined;
   let running: Promise<void> | undefined;
