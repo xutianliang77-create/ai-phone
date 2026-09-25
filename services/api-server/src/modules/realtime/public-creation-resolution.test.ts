@@ -13,6 +13,7 @@ import {publicCreationIdentity} from "./public-creation-binding.js";
 import {preparePublicRealtimeSession} from "./public-realtime-preparation.js";
 import {observePublicRuntime} from "../sessions/public-session-runtime.service.js";
 import {createUsageHold} from "../usage/usage-hold-runtime.service.js";
+import {issuanceExpiry} from "./postgres-public-creation-helpers.js";
 
 installConfigurationFixture();
 let app:FastifyInstance,authority:PublicRealtimeAuthority,source:ReturnType<typeof vi.fn>;
@@ -79,9 +80,24 @@ describe("public creation explicit query, cancellation and expiry",()=>{
   it("does not impose a five-minute expiry on prepared-only requests; they require explicit cancellation",async()=>{
     expect((await route("expire")).statusCode).toBe(409);
     const id=publicCreationIdentity(owner,key).sessionId;await preparePublicRealtimeSession(id,owner,input(),now);
+    expect(issuanceExpiry(current())).toBeUndefined();
     expect((await route("query")).json().state).toBe("prepared");vi.setSystemTime(new Date(now.getTime()+300000));
     expect((await route("query")).json().state).toBe("prepared");expect((await route("expire")).statusCode).toBe(409);
     expect((await route("cancel")).json().state).toBe("cancelled");expect(store().usageHolds).toHaveLength(0);
+  });
+  it("uses only an issued token deadline for PostgreSQL expiry and rejects corrupt issuance",async()=>{
+    await issue();const deadline=current().publicRealtimeIssuance!.claims.expiresAt;
+    expect(issuanceExpiry(current())).toBe(new Date(deadline*1000).toISOString());
+    current().publicRealtimeIssuance!.claims.expiresAt=0;
+    expect(()=>issuanceExpiry(current())).toThrow("public_creation_expiry_invalid");
+  });
+  it("can query and cancel a prepared request while new public issuance is disabled",async()=>{
+    const id=publicCreationIdentity(owner,key).sessionId;await preparePublicRealtimeSession(id,owner,input(),now);
+    await app.close();app=await buildApp();
+    expect((await route("query")).json()).toMatchObject({state:"prepared",canRetire:true,safeToReplace:false});
+    expect((await app.inject({method:"POST",url:"/realtime/sessions",payload:input()})).statusCode).toBe(503);
+    expect((await route("cancel")).json()).toMatchObject({state:"cancelled",safeToReplace:true});
+    expect(current().status).toBe("failed");expect(store().usageHolds).toHaveLength(0);expect(store().billingLedger).toHaveLength(0);
   });
   it("old pending request can be cancelled after model configuration rotates",async()=>{
     const old=request();await issue();await savePublicModelConfiguration(body(1));
@@ -122,12 +138,12 @@ describe("public creation explicit query, cancellation and expiry",()=>{
     vi.spyOn(runtime,"getRepositoryRuntime").mockReturnValue({driver:"postgres"} as any);
     await expect(resolvePublicCreation(owner,key,request(),"query")).rejects.toThrow();
   });
-  it.each(["no_account","insecure","no_key","extra_body","no_nonce","disabled"])("retains %s boundary",async reason=>{
+  it.each(["no_account","insecure","no_key","extra_body","no_nonce","private_deployment"])("retains %s boundary",async reason=>{
     const payload:any=request();if(reason==="extra_body")payload.ownerId="other";if(reason==="no_nonce")delete payload.nonce;
     if(reason==="no_account")vi.stubEnv("API_TEST_AUTO_ACCOUNT","false");
-    if(reason==="disabled"){await app.close();app=await buildApp();}
+    if(reason==="private_deployment"){await app.close();vi.stubEnv("API_RESULT_SYNC_DEPLOYMENT_ID","");app=await buildApp();}
     const r=await app.inject({method:"POST",url:"/realtime/creation-requests/cancel",payload,headers:reason==="no_key"?{}:{"idempotency-key":key},...(reason==="insecure"?{remoteAddress:"203.0.113.5"}:{})});
-    expect(r.statusCode).toBe(reason==="no_account"?401:reason==="insecure"?403:reason==="disabled"?503:400);expect(store().publicCreationBindings).toEqual({});expect(source).not.toHaveBeenCalled();
+    expect(r.statusCode).toBe(reason==="no_account"?401:reason==="insecure"?403:reason==="private_deployment"?503:400);expect(store().publicCreationBindings).toEqual({});expect(source).not.toHaveBeenCalled();
   });
   it("an authority that resolves after timeout cannot resurrect a cancelled preparation",async()=>{
     let finish!:(value:any)=>void;

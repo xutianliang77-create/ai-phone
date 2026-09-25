@@ -13,6 +13,7 @@ import {
 } from "../sessions/sessions-runtime.repository.js";
 import { completeSessionWithUsage } from "../sessions/session-completion.js";
 import { withSessionWriteLock } from "../sessions/session-write-coordinator.js";
+import {syncKey} from "../sessions/session-result-sync-contract.js";
 import { validateCreateRealtimeSessionRequest } from "./create-session-request.js";
 import { createRealtimeSession, realtimeCreationBlocker } from "./realtime.service.js";
 import { parseRealtimeDiagnostics } from "./realtime-diagnostics.js";
@@ -30,7 +31,9 @@ import {registerPublicCreationResolutionRoutes} from "./public-creation-resoluti
 
 export async function registerRealtimeRoutes(app: FastifyInstance,publicCoordinator?:PublicRealtimeCoordinator,publicCapability?:PublicRealtimeAuthority["configurationCapability"]) {
   registerPublicCreationContextRoute(app,!!publicCoordinator,publicCapability);
-  registerPublicCreationResolutionRoutes(app,!!publicCoordinator);
+  // An authenticated owner must still be able to inspect or retire an old
+  // request while new public issuance is fail-closed for maintenance.
+  registerPublicCreationResolutionRoutes(app,!!publicCoordinator||syncKey(process.env.API_RESULT_SYNC_DEPLOYMENT_ID));
   registerRealtimeFinalizationRoute(app);
   app.post("/realtime/sessions", async (request, reply) => {
     const account = await requireAccount(request, reply);

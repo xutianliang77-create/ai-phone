@@ -103,11 +103,12 @@ export function hasPublicRuntimeEvidence(session: SessionRecord) {
 
 
 export function issuanceExpiry(session: SessionRecord | undefined) {
+  if (!session?.publicRealtimeIssuance) return undefined;
   const expiry = session?.publicRealtimeIssuance?.claims.expiresAt;
-  if (expiry !== undefined && Number.isSafeInteger(expiry) && expiry > 0) {
-    return new Date(expiry * 1_000).toISOString();
+  if (!Number.isSafeInteger(expiry) || expiry <= 0) {
+    throw new ResultSyncError("public_creation_expiry_invalid", 409);
   }
-  return session ? new Date(Date.parse(session.createdAt) + 300_000).toISOString() : undefined;
+  return new Date(expiry * 1_000).toISOString();
 }
 
 
