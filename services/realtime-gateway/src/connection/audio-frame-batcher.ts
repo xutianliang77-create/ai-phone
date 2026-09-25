@@ -52,17 +52,20 @@ export class AudioFrameBatcher {
 
   enqueue(frame: AudioFrame) {
     if (!this.accepting || this.closed) return;
-    if (!this.canAppend(frame)) return;
+    if (!this.canAppend(frame)) {
+      if(this.options.acceptFrame)this.failPublicAudio("public_audio_format_mismatch");
+      return;
+    }
     const snapshot={...frame};
     try {this.options.acceptFrame?.(snapshot);}catch(error){
-      this.options.onError(error);
+      this.failPublicAudio("public_audio_acceptance_failed",error);
       return;
     }
     this.receivedFrameCount += 1;
     this.lastAcceptedSequence=frame.sequence;
     this.pending.push(snapshot);
     this.trimPendingAudio();
-    this.scheduleProcessing();
+    if(this.accepting)this.scheduleProcessing();
   }
 
   pauseAccepting() {
@@ -71,7 +74,7 @@ export class AudioFrameBatcher {
   }
 
   resumeAccepting() {
-    if (!this.closed) this.accepting = true;
+    if (!this.closed && !this.processingFailure) this.accepting = true;
   }
 
   stopAccepting() {
@@ -122,13 +125,19 @@ export class AudioFrameBatcher {
       realtimeLogger.warn({
         sessionId: this.options.sessionId,
         sequence: frame.sequence,
-      }, "Dropped incompatible realtime audio frame");
+      }, this.options.acceptFrame?"Rejected incompatible public audio frame":"Dropped incompatible realtime audio frame");
     }
     return canAppend;
   }
 
   private trimPendingAudio() {
     let pendingMs = totalDurationMs(this.pending);
+    // Public acceptance already advanced the trusted sample watermark. Dropping
+    // those frames would make it disagree with what reaches ASR.
+    if(this.options.acceptFrame&&pendingMs>this.maxPendingAudioMs){
+      this.failPublicAudio("public_audio_backpressure");
+      return;
+    }
     let dropped = 0;
     while (pendingMs > this.maxPendingAudioMs && this.pending.length > 1) {
       const frame = this.pending.shift();
@@ -139,6 +148,14 @@ export class AudioFrameBatcher {
     if (dropped > 0) {
       this.warnDroppedFrames(dropped, pendingMs);
     }
+  }
+
+  private failPublicAudio(code:string,cause?:unknown){
+    if(this.processingFailure)return;
+    this.processingFailure=Error(code);
+    this.accepting=false;
+    this.clearTimer();
+    this.options.onError(cause??this.processingFailure);
   }
 
   private warnDroppedFrames(dropped: number, pendingMs: number) {
@@ -168,6 +185,7 @@ export class AudioFrameBatcher {
   }
 
   private queueProcessing(force: boolean) {
+    if(this.processingFailure)return this.processing;
     this.forceNextProcess = this.forceNextProcess || force;
     if (this.processQueued) return this.processing;
 

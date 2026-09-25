@@ -1,6 +1,8 @@
-import {describe,it,expect,vi} from "vitest";
+import {afterEach,describe,it,expect,vi} from "vitest";
 import type {AudioFrame,PublicRuntimeObservation,ServerRealtimeEvent} from "@translation/contracts";
 import {bindPublicSessionEventSink} from "./session-event-sink.js";
+import {realtimeLogger} from "../metrics/realtime-metrics.js";
+afterEach(()=>{vi.unstubAllEnvs();vi.restoreAllMocks();});
 const binding={sessionId:"s",ownerId:"owner",deploymentId:"public-test",modelPolicyRevision:"policy-v1",
   leaseId:"lease",captureId:"capture",languagePolicyKey:"policy:1",sampleRate:16000 as const};
 const frame=(sequence=0):AudioFrame=>({type:"audio.frame",sessionId:"s",format:"pcm16",sampleRate:16000,
@@ -15,6 +17,15 @@ function fixture(){
   return {base,events,sink:bindPublicSessionEventSink(base,binding)};
 }
 describe("public branch of original session sink",()=>{
+  it("logs exact accepted sequence and sample range only under the one-shot QA gates",async()=>{
+    const info=vi.spyOn(realtimeLogger,"info").mockImplementation(()=>{}),{sink}=fixture();
+    await sink.record({type:"session.started",sessionId:"s"});sink.acceptAudio(frame());
+    expect(info.mock.calls.some(call=>call[1]==="Public ASR QA boundary")).toBe(false);
+    vi.stubEnv("PUBLIC_ASR_BOUNDARY_TRACE_ENABLED","true");vi.stubEnv("PUBLIC_QA_ONE_SHOT_ENABLED","true");
+    sink.acceptAudio(frame(1));
+    expect(info.mock.calls.filter(call=>call[1]==="Public ASR QA boundary").map(call=>call[0]))
+      .toEqual([{sessionId:"s",stage:"accepted",sequence:1,startSample:160,endSample:320,acceptedSamples:320}]);
+  });
   it("confirms the phase at queue execution, not the stale phase before a pending pause",async()=>{
     const {sink,events}=fixture();await sink.record({type:"session.started",sessionId:"s"});sink.acceptAudio(frame());
     const pause=sink.record({type:"session.paused",sessionId:"s"});const confirm=sink.confirmAudio();await Promise.all([pause,confirm]);

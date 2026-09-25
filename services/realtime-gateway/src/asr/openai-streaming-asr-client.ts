@@ -10,6 +10,7 @@ import {qwenAsrSessionConfiguration,assertQwenAsrConfiguration,qwenTranscriptLan
 import {TencentAsrWire} from "./tencent-streaming-asr.js";
 import {GoogleAsrWire,type GoogleAsrStreamFactory} from "./google-streaming-asr.js";
 import {realtimeLogger} from "../metrics/realtime-metrics.js";
+import {logPublicAsrBoundary} from "../metrics/public-asr-boundary-trace.js";
 import {streamingAsrFailureDiagnostic,streamingAsrCancellationContext,streamingAsrCloseContext,streamingAsrTransportContext,
   isStreamingAsrFailureEvent,streamingAsrProviderContext,streamingAsrProtocolContext,type StreamingAsrFailureContext} from "./streaming-asr-diagnostics.js";
 import {deferred,type State,type Turn,type Result} from "./streaming-asr-state.js";
@@ -144,13 +145,16 @@ export class OpenAiStreamingAsrClient {
     const timer=setTimeout(()=>this.fail(s,"public_asr_stream_append_timeout"),this.options.timeoutMs);
     try{
       if(signal?.aborted)throw Error("aborted");
-      const end=s.cursor+pcm.length/2;
+      const start=s.cursor,end=start+pcm.length/2;
       const current=s.qwenTransport??{event:{sessionId:this.options.sessionId,leaseId:this.options.leaseId,attemptId:randomUUID(),segmentId:randomUUID(),revision:1,
         component:"asr" as const,providerId:"qwen",modelId:this.options.model,state:"dispatching" as const,audioStartSample:s.cursor,audioEndSample:end,audioSampleRate:this.rate},prepared:false,sent:false,terminal:false};
       s.qwenTransport=current;current.event={...current.event,audioEndSample:end};
       await abortable(this.record(current.event),s.stop.signal);current.prepared=true;this.assert(s);
       for(let offset=0;offset<pcm.length;offset+=this.rate*2){current.sent=true;await this.send(s,{type:"input_audio_buffer.append",audio:pcm.subarray(offset,offset+this.rate*2).toString("base64")});this.assert(s);}
-      s.cursor=end;s.sequence=request.sequence;this.drainQwenWireEvents(s);this.assert(s);return this.takeCompleted(s);
+      s.cursor=end;s.sequence=request.sequence;
+      logPublicAsrBoundary({sessionId:this.options.sessionId,stage:"provider_audio",sequence:request.sequence,
+        startSample:start,endSample:end,acceptedSamples:end});
+      this.drainQwenWireEvents(s);this.assert(s);return this.takeCompleted(s);
     }catch{this.fail(s,"public_asr_stream_append_failed");await this.finishQwenTransport(s);throw s.failure!;}
     finally{s.busy=false;clearTimeout(timer);signal?.removeEventListener("abort",cancelled);}
   }
@@ -265,7 +269,9 @@ export class OpenAiStreamingAsrClient {
         if(start<transport.event.audioStartSample!||start>transport.event.audioEndSample!)throw Error();
         turn={event:{...transport.event,segmentId:randomUUID(),audioStartSample:start,audioEndSample:transport.event.audioEndSample},
           prepared:true,sent:true,terminal:false,committing:false,ack:false,partial:"",done:deferred<Result>()};s.turn=turn;
-        turn.providerItemId=e.item_id;turn.itemId=e.item_id;turn.previousItem=s.lastItem;turn.providerStartSample=start;return;
+        turn.providerItemId=e.item_id;turn.itemId=e.item_id;turn.previousItem=s.lastItem;turn.providerStartSample=start;
+        logPublicAsrBoundary({sessionId:this.options.sessionId,stage:"speech_start",itemId:e.item_id,
+          segmentId:turn.event.segmentId,startSample:start,acceptedSamples:s.cursor});return;
       }
       if(e.type==="input_audio_buffer.speech_stopped"){
         if(!turn?.sent||turn.terminal||e.item_id!==turn.providerItemId||turn.providerEndSample!==undefined||!Number.isSafeInteger(e.audio_end_ms)||e.audio_end_ms<0)throw Error();
@@ -277,7 +283,9 @@ export class OpenAiStreamingAsrClient {
         // accept only that bounded rounding window and clamp the displayed
         // timing to bytes already accepted by this process.
         if(end<=(turn.providerStartSample??turn.event.audioStartSample!)||reportedEnd>transport.event.audioEndSample!+this.rate/25)throw Error();
-        turn.providerEndSample=end;return;
+        turn.providerEndSample=end;
+        logPublicAsrBoundary({sessionId:this.options.sessionId,stage:"speech_stop",itemId:e.item_id,
+          segmentId:turn.event.segmentId,startSample:turn.providerStartSample,endSample:end,acceptedSamples:s.cursor});return;
       }
       if(e.type==="conversation.item.created"){
         const item=e.item;if(!turn?.sent||turn.terminal||turn.providerCreated||item?.id!==turn.providerItemId||item.type!=="message"||
@@ -324,9 +332,16 @@ export class OpenAiStreamingAsrClient {
       }else if(e.type.endsWith(".delta")){if(typeof e.delta!=="string"||turn.partial.length+e.delta.length>16000)throw Error();turn.partial+=e.delta;
         const text=cleanRealtimeText(turn.partial);if(text)this.partialListener?.({segmentId:turn.event.segmentId,revision:0,isFinal:false,text,language:this.transcriptLanguage()});}
       else {if(!this.qwen&&!turn.committing)throw Error();const result=parseOpenAiAsr({text:e.transcript,...(!this.qwen&&e.usage!==undefined?{usage:e.usage}:{})},this.qwen?turn.providerItemId??null:e.item_id);
-        if(turn.result&&JSON.stringify(turn.result)!==JSON.stringify(result))throw Error();turn.result=result;}
+        if(turn.result&&JSON.stringify(turn.result)!==JSON.stringify(result))throw Error();turn.result=result;
+        if(this.qwen)logPublicAsrBoundary({sessionId:this.options.sessionId,stage:"completed",itemId:turn.providerItemId,
+          segmentId:turn.event.segmentId,startSample:turn.providerStartSample,endSample:turn.providerEndSample,
+          acceptedSamples:s.cursor,textCharCount:result.text.length,language:turn.detectedLanguage});}
     }
-    if(turn.ack&&turn.result){if(this.qwen)completeQwenTurn(s,turn,this.transcriptLanguage(turn),this.options.language==="auto",this.rate);else turn.done.resolve(turn.result);}
+    if(turn.ack&&turn.result){if(this.qwen){completeQwenTurn(s,turn,this.transcriptLanguage(turn),this.options.language==="auto",this.rate);
+      if(!turn.unsupportedLanguage)logPublicAsrBoundary({sessionId:this.options.sessionId,stage:"emitted",itemId:turn.providerItemId,
+        segmentId:turn.event.segmentId,startSample:turn.providerStartSample,endSample:turn.providerEndSample,
+        acceptedSamples:s.cursor,textCharCount:turn.result.text.length,language:turn.detectedLanguage});
+    }else turn.done.resolve(turn.result);}
   }
   private qwenTurnItemId(turn:Turn,value:unknown){
     if(typeof value!=="string"||!value||value.length>240||turn.providerItemId!==value)throw Error();return value;

@@ -2,6 +2,7 @@ import type { AudioFrame, PublicRuntimeObservation, ServerRealtimeEvent,PublicMo
 import type { SessionEventSink } from "./session-event-sink.js";
 import { cleanRealtimeText } from "../protocol/realtime-text.js";
 import {markAcceptedAudioRange} from "../connection/accepted-audio-range.js";
+import {logPublicAsrBoundary} from "../metrics/public-asr-boundary-trace.js";
 
 export interface PublicSessionBinding {
   sessionId:string; deploymentId:string; ownerId:string; modelPolicyRevision:string;
@@ -45,8 +46,11 @@ export class PublicSessionEventSink implements SessionEventSink {
     const pcm=Buffer.from(frame.data,"base64");
     if(!pcm.length||pcm.length%2!==0||pcm.toString("base64")!==frame.data||
         !Number.isSafeInteger(this.samples+pcm.length/2))throw Error("invalid_public_audio_frame");
-    markAcceptedAudioRange(frame,{startSample:this.samples,endSample:this.samples+pcm.length/2});
-    this.samples+=pcm.length/2;this.frameSequence=frame.sequence;
+    const startSample=this.samples,endSample=startSample+pcm.length/2;
+    markAcceptedAudioRange(frame,{startSample,endSample});
+    this.samples=endSample;this.frameSequence=frame.sequence;
+    logPublicAsrBoundary({sessionId:this.binding.sessionId,stage:"accepted",sequence:frame.sequence,
+      startSample,endSample,acceptedSamples:endSample});
   }
 
   record(event:ServerRealtimeEvent):Promise<void> {
@@ -78,6 +82,9 @@ export class PublicSessionEventSink implements SessionEventSink {
       if(!Number.isSafeInteger(revision)||Number(revision)<0)throw Error("invalid_public_revision");
       if((snapshot.type==="transcript.final"||snapshot.type==="translation.final")&&!cleanRealtimeText(snapshot.text))return;
       await this.sink.record(snapshot);
+      if(snapshot.type==="transcript.final")logPublicAsrBoundary({sessionId:this.binding.sessionId,stage:"persisted",
+        segmentId:snapshot.segmentId,revision:Number(revision),acceptedSamples:samples,
+        textCharCount:snapshot.text.length,language:snapshot.language});
       this.revision=Math.max(this.revision,Number(revision));
     });
   }

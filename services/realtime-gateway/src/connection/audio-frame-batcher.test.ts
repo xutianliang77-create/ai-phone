@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { AudioFrame, ServerRealtimeEvent } from "@translation/contracts";
 import type { RealtimeProvider, RealtimeProviderSession } from "../providers/realtime-provider.js";
 import { AudioFrameBatcher } from "./audio-frame-batcher.js";
+import {markAcceptedAudioRange} from "./accepted-audio-range.js";
 
 describe("audio frame batcher", () => {
   it("keeps capped public uploads at realtime pace including a translation stall",async()=>{
@@ -90,6 +91,31 @@ describe("audio frame batcher", () => {
     expect(Buffer.byteLength(sentFrames[1].data, "base64")).toBeLessThanOrEqual(1920 * 2);
     expect(batcher.diagnostics().droppedFrameCount).toBeGreaterThan(0);
     vi.useRealTimers();
+  });
+
+  it("fails closed instead of dropping public audio after its watermark was accepted",async()=>{
+    const sent:AudioFrame[]=[],errors:unknown[]=[];let acceptedSamples=0;
+    const batcher=new AudioFrameBatcher({sessionId:"sess_1",provider:providerSpy(sent),send:()=>{},onError:e=>errors.push(e),
+      acceptFrame:f=>{const samples=Buffer.byteLength(f.data,"base64")/2;markAcceptedAudioRange(f,{startSample:acceptedSamples,endSample:acceptedSamples+samples});acceptedSamples+=samples;},
+      beforeSend:async()=>{},batchDelayMs:1000,maxPendingAudioMs:80});
+    batcher.enqueue(frame(1));batcher.enqueue(frame(2));batcher.enqueue(frame(3));
+    expect(acceptedSamples).toBe(2880);
+    expect(errors).toContainEqual(expect.objectContaining({message:"public_audio_backpressure"}));
+    expect(batcher.diagnostics()).toMatchObject({receivedFrameCount:3,droppedFrameCount:0});
+    await expect(batcher.flush()).rejects.toThrow("public_audio_backpressure");
+    expect(errors).toHaveLength(1);
+    batcher.resumeAccepting();batcher.enqueue(frame(4));
+    expect(acceptedSamples).toBe(2880);expect(sent).toHaveLength(0);
+  });
+
+  it("fails closed on an incompatible public frame instead of silently ignoring it",async()=>{
+    const errors:unknown[]=[],accepted:number[]=[];
+    const batcher=new AudioFrameBatcher({sessionId:"sess_1",provider:providerSpy([]),send:()=>{},onError:e=>errors.push(e),
+      acceptFrame:f=>accepted.push(f.sequence),beforeSend:async()=>{},batchDelayMs:1000});
+    batcher.enqueue(frame(1));batcher.enqueue({...frame(2),sampleRate:16000});
+    expect(accepted).toEqual([1]);expect(errors).toContainEqual(expect.objectContaining({message:"public_audio_format_mismatch"}));
+    await expect(batcher.flush()).rejects.toThrow("public_audio_format_mismatch");
+    expect(errors).toHaveLength(1);
   });
 });
 

@@ -67,25 +67,38 @@ describe("public confirmation in the original Gateway pipeline",()=>{
       eventSink:{record:async()=>{throw Error("private sync failure");}},sendClient,afterSend:vi.fn(),onSyncError:errors});
     dispatcher.send(started);expect(sendClient).toHaveBeenCalledWith(started);await dispatcher.drain();expect(errors).toHaveBeenCalled();
   });
-  it("gates actual AudioFrameBatcher input on confirmed runtime and keeps rejected frames out of the provider",async()=>{
+  it("fails closed when public audio arrives before the runtime start is confirmed",async()=>{
     const {base,sink,dispatcher}=setup();const hold=deferred();
     base.runtime.mockImplementationOnce(async(_id,e)=>{await hold.promise;return {...binding,...e,meterStatus:"verified"};});
     const audio:AudioFrame[]=[],errors:unknown[]=[];
     const provider={async *sendAudio(frame:AudioFrame){audio.push(frame);}} as RealtimeProvider;
     const batcher=new AudioFrameBatcher({sessionId:binding.sessionId,provider,send:dispatcher.send,
-      acceptFrame:sink.acceptAudio.bind(sink),onError:e=>errors.push(e),batchDelayMs:60000});
+      acceptFrame:sink.acceptAudio.bind(sink),beforeSend:()=>sink.confirmAudio(),onError:e=>errors.push(e),batchDelayMs:60000});
     const frame=(sequence:number):AudioFrame=>({type:"audio.frame",sessionId:binding.sessionId,sequence,timestampMs:999999,
       sampleRate:16000,format:"pcm16",data:Buffer.alloc(320).toString("base64")});
     try {
-      dispatcher.send(started);batcher.enqueue(frame(1));await batcher.flush();expect(audio).toEqual([]);
-      hold.resolve();await dispatcher.drain();
-      const accepted=frame(1);batcher.enqueue(accepted);accepted.data="mutated";
-      batcher.enqueue(frame(1));batcher.enqueue({...frame(2),sessionId:"other"});await batcher.flush();
+      dispatcher.send(started);batcher.enqueue(frame(1));
+      await expect(batcher.flush()).rejects.toThrow("public_audio_acceptance_failed");
+      expect(audio).toEqual([]);expect(errors).toHaveLength(1);
+    }finally{hold.resolve();await dispatcher.drain();await batcher.close().catch(()=>{});}
+  });
+  it("keeps confirmed public PCM immutable and fails closed on a duplicate",async()=>{
+    const {base,sink,dispatcher}=setup(),audio:AudioFrame[]=[],errors:unknown[]=[];
+    const provider={async *sendAudio(frame:AudioFrame){audio.push(frame);}} as RealtimeProvider;
+    const batcher=new AudioFrameBatcher({sessionId:binding.sessionId,provider,send:dispatcher.send,
+      acceptFrame:sink.acceptAudio.bind(sink),beforeSend:()=>sink.confirmAudio(),onError:e=>errors.push(e),batchDelayMs:60000});
+    const frame=(sequence:number):AudioFrame=>({type:"audio.frame",sessionId:binding.sessionId,sequence,timestampMs:999999,
+      sampleRate:16000,format:"pcm16",data:Buffer.alloc(320).toString("base64")});
+    try {
+      dispatcher.send(started);await dispatcher.drain();
+      const accepted=frame(1);batcher.enqueue(accepted);accepted.data="mutated";await batcher.flush();
       expect(audio).toHaveLength(1);expect(audio[0].data).toBe(frame(1).data);
-      expect(batcher.diagnostics().receivedFrameCount).toBe(1);expect(errors).toHaveLength(2);
-      dispatcher.send(ended);await dispatcher.drain();batcher.enqueue(frame(2));await batcher.flush();expect(audio).toHaveLength(1);
+      batcher.enqueue(frame(1));batcher.enqueue({...frame(2),sessionId:"other"});
+      await expect(batcher.flush()).rejects.toThrow("public_audio_acceptance_failed");
+      expect(batcher.diagnostics().receivedFrameCount).toBe(1);expect(errors).toHaveLength(1);
+      batcher.enqueue(frame(2));expect(audio).toHaveLength(1);
       expect(base.runtime.mock.calls.at(-1)![1].lastAcceptedSample).toBe(160);
-    }finally{await batcher.close();}
+    }finally{await batcher.close().catch(()=>{});}
   });
   it("closes the original provider if durable drain fails during final flush",async()=>{
     const {base,dispatcher,sendClient}=setup();dispatcher.send(started);await dispatcher.drain();sendClient.mockClear();

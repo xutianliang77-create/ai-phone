@@ -5,6 +5,7 @@ import type {ConfiguredStreamingAsrOptions} from "./configured-public-asr.js";
 import type {HttpAsrProvider} from "./http-asr-provider.js";
 import {markAcceptedAudioRange} from "../connection/accepted-audio-range.js";
 import {SyntheticQwenAsrSocket} from "./qwen-streaming-asr.test-support.js";
+import {realtimeLogger} from "../metrics/realtime-metrics.js";
 
 const session={sessionId:"qwen-asr",sourceLanguage:"fr" as const,targetLanguage:"en" as const};
 function frame(sequence=1,startSample=(sequence-1)*1600,durationMs=100):AudioFrame{
@@ -26,6 +27,17 @@ afterEach(async()=>{for(const p of active.splice(0))await p.closeSession(session
 const serverVad={type:"server_vad",threshold:0.2,silence_duration_ms:400};
 
 describe("Qwen ASR server-VAD wire on original shared streaming lifecycle",()=>{
+  it("emits only bounded QA boundary metadata for a confirmed supplier item",async()=>{
+    vi.stubEnv("PUBLIC_ASR_BOUNDARY_TRACE_ENABLED","true");vi.stubEnv("PUBLIC_QA_ONE_SHOT_ENABLED","true");
+    const info=vi.spyOn(realtimeLogger,"info").mockImplementation(()=>{}),t=setup(),p=t.create();
+    try{
+      await p.createSession(session);await p.transcribe(frame());await p.flush(session.sessionId,{finishSession:true});
+      const traces=info.mock.calls.filter(call=>call[1]==="Public ASR QA boundary").map(call=>call[0] as {stage:string});
+      expect(traces.map(value=>value.stage)).toEqual(expect.arrayContaining(["provider_audio","speech_start","speech_stop","completed","emitted"]));
+      expect(traces.find(value=>value.stage==="provider_audio")).toMatchObject({sequence:1,startSample:0,endSample:1600});
+      expect(JSON.stringify(traces)).not.toContain(t.sockets[0].transcript);
+    }finally{await p.closeSession(session.sessionId);vi.unstubAllEnvs();}
+  });
   it("passes explicit signed VAD through the original factory and validates the exact acknowledgement",async()=>{
     const t=setup();t.options.snapshot.components.asr!.serverVad={threshold:0,silenceDurationMs:800};
     const p=t.create();await p.createSession(session);
