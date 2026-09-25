@@ -2,6 +2,7 @@ import { getRepositoryRuntime } from "../../infrastructure/storage/repository-ru
 import { PostgresPrimaryStore } from "../../infrastructure/storage/postgres-primary-store.js";
 import { withPostgresRepositoryFence } from "../../infrastructure/storage/postgres-repository-fence.js";
 import { ResultSyncError, resultSyncHash, syncKey } from "../sessions/session-result-sync-contract.js";
+import {minimumPostgresUsageHoldTtlSeconds} from "../usage/postgres-usage-holds.repository.js";
 
 const aggregateType = "qa_public_one_shot";
 const commandType = "reserve";
@@ -28,6 +29,15 @@ type QaEnv = Partial<Pick<NodeJS.ProcessEnv,
   "PUBLIC_QA_ONE_SHOT_OWNER_ID" | "PUBLIC_QA_ONE_SHOT_DEPLOYMENT_ID" |
   "PUBLIC_QA_ONE_SHOT_EXPIRES_AT" | "PUBLIC_QA_ONE_SHOT_MAX_WALL_SECONDS" |
   "API_RESULT_SYNC_DEPLOYMENT_ID">>;
+
+/** Require enough time for the QA wall limit and the PostgreSQL hold's
+ * minimum TTL, plus a small issuance/finalization margin. */
+export function qaOneShotStartWindowReady(expiresAt:unknown,maxWallSeconds:unknown,nowMs=Date.now()){
+  const expires=typeof expiresAt==="string"?Date.parse(expiresAt):NaN;
+  return Number.isFinite(expires)&&Number.isSafeInteger(maxWallSeconds)&&
+    (maxWallSeconds as number)>=1&&(maxWallSeconds as number)<=45&&
+    expires-nowMs>=(Math.max(maxWallSeconds as number,minimumPostgresUsageHoldTtlSeconds)+5)*1000;
+}
 
 /** Explicitly installed only on a dedicated public QA candidate. Reuse the
  * original durable command inbox rather than adding a schema or a second
@@ -77,6 +87,9 @@ export function publicQaOneShotGuardFromEnvironment(env: QaEnv = process.env): P
           if (current) {
             if (!matches(current, sessionId)) throw new ResultSyncError("public_qa_one_shot_consumed", 409);
             return;
+          }
+          if(!qaOneShotStartWindowReady(expiresAt,maxWallSeconds)){
+            throw new ResultSyncError("public_qa_one_shot_window_too_short",403);
           }
           await transaction.recordCommandResult<Reservation>({
             ...command,result:{...expected(sessionId),reservedAt:new Date().toISOString()},

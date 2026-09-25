@@ -119,6 +119,14 @@ describe("original public session preparation and issuance phases",()=>{
     await expect(issuePublicRealtimeSession(id,owner)).rejects.toThrow("quota_not_enough");expect(current()).not.toHaveProperty("publicRealtimeIssuance");
     expect(storage.getStoreSnapshot().usageHolds).toHaveLength(0);
   });
+  it("rejects a lease shorter than the PostgreSQL hold minimum before reserving quota",async()=>{
+    await prepared();await grant();vi.setSystemTime(now.getTime()+575_000);
+    await expect(issuePublicRealtimeSession(id,owner)).rejects.toMatchObject({
+      code:"public_inference_admission_expiring",status:403,
+    });
+    expect(current()).not.toHaveProperty("publicRealtimeIssuance");
+    expect(storage.getStoreSnapshot().usageHolds).toHaveLength(0);
+  });
   it.each([{sampleRate:24000},{languagePolicyKey:"other"},{maxActiveSeconds:999},{captureId:""},{expiresAt:"2099-01-01T00:00:00.000Z"}])("refuses an altered existing lease before quota %j",async patch=>{
     await prepared();await grant();await issuePublicRuntimeLease(id,owner,new Date());Object.assign(current().publicRuntimePolicy!,patch);
     await expect(issuePublicRealtimeSession(id,owner)).rejects.toThrow("lease_conflict");expect(storage.getStoreSnapshot().usageHolds).toHaveLength(0);

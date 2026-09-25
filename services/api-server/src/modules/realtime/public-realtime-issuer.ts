@@ -5,6 +5,7 @@ import {publicDeploymentId,mutatePublicSession} from "../sessions/session-result
 import {ResultSyncError,resultSyncHash,syncKey} from "../sessions/session-result-sync-contract.js";
 import {verifiedPublicAdmission,issuePublicRuntimeLease} from "../sessions/public-runtime-admission.js";
 import {createUsageHold,releaseUsageHold} from "../usage/usage-hold-runtime.service.js";
+import {minimumPostgresUsageHoldTtlSeconds} from "../usage/postgres-usage-holds.repository.js";
 import {preparedPublicSession} from "./public-realtime-preparation.js";
 import {createRealtimeToken} from "./realtime-token.js";
 import {realtimeMaxSessionSeconds} from "./realtime-session-duration.js";
@@ -33,6 +34,7 @@ export async function issuePublicRealtimeSession(sessionId:string,ownerId:string
     preparedPublicSession(before,ownerId);verifiedPublicAdmission(before,ownerId,new Date());
     const lease=await issuePublicRuntimeLease(sessionId,ownerId),remaining=Math.floor((Date.parse(lease.expiresAt)-Date.now())/1000);
     if(remaining<1)throw new ResultSyncError("public_inference_admission_expired",403);
+    if(remaining<minimumPostgresUsageHoldTtlSeconds)throw new ResultSyncError("public_inference_admission_expiring",403);
     // The signed Gateway-only hold is an initial allowance, not a product
     // session duration or a client-side quota setting.
     const holdSeconds=Math.min(30,lease.maxActiveSeconds??30,realtimeMaxSessionSeconds());

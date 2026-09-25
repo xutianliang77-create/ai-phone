@@ -23,6 +23,8 @@ import {
 } from "./postgres-usage-uow.js";
 import {renewPostgresUsageHold,type PostgresRenewHoldResult} from "./postgres-usage-hold-renewal.js";
 
+export const minimumPostgresUsageHoldTtlSeconds = 30;
+
 export interface HoldCommandInput {
   sessionId: string;
   userId: string;
@@ -91,7 +93,7 @@ export class PostgresUsageHoldsRepository {
     const seconds = normalizedPositiveSeconds(input.seconds);
     const ttlSeconds = input.ttlSeconds ?? 2 * 60 * 60;
     if (!seconds || !bounded(input.idempotencyKey, 200) ||
-      !Number.isInteger(ttlSeconds) || ttlSeconds < 30 || ttlSeconds > 86_400) {
+      !Number.isInteger(ttlSeconds) || ttlSeconds < minimumPostgresUsageHoldTtlSeconds || ttlSeconds > 86_400) {
       throw new Error("Invalid PostgreSQL usage hold request");
     }
     const command = usageCommand({

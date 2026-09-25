@@ -66,6 +66,20 @@ describe("dedicated public QA one-shot reservation",()=>{
     vi.setSystemTime(now+3_600_001);
     await expect(guard.reserve(first,"qa-owner","qa-candidate")).rejects.toMatchObject({status:403});
   });
+  it("rejects a late Start before reserving an unusably short PostgreSQL hold",async()=>{
+    const short=env();short.PUBLIC_QA_ONE_SHOT_EXPIRES_AT=new Date(now+44_000).toISOString();
+    const guard=publicQaOneShotGuardFromEnvironment(short)!;
+    await expect(guard.reserve(first,"qa-owner","qa-candidate")).rejects.toMatchObject({
+      code:"public_qa_one_shot_window_too_short",status:403,
+    });
+    expect(fake.records.size).toBe(0);
+    vi.setSystemTime(now-1_000);
+    await guard.reserve(first,"qa-owner","qa-candidate");
+    expect(fake.records.size).toBe(1);
+    vi.setSystemTime(now);
+    await expect(guard.reserve(first,"qa-owner","qa-candidate")).resolves.toBeUndefined();
+    expect(fake.records.size).toBe(1);
+  });
   it("rejects a tampered durable command binding",async()=>{
     const guard=publicQaOneShotGuardFromEnvironment(env())!;
     await guard.reserve(first,"qa-owner","qa-candidate");

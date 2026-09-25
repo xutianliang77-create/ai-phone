@@ -1,9 +1,13 @@
-import {afterEach,describe,expect,it} from "vitest";
+import {afterEach,describe,expect,it,vi} from "vitest";
 import {mkdtempSync,rmSync,writeFileSync} from "node:fs";
 import {tmpdir} from "node:os";
 import {join} from "node:path";
 import {publicRealtimeAuthorityFromEnvironment,signPublicRuntimeAdmissionPolicy} from "./public-runtime-policy-authority.js";
 import {signPublicRuntimeLiveQualification} from "@translation/platform-security";
+
+vi.mock("../../infrastructure/storage/repository-runtime.js",()=>({
+  getRepositoryRuntime:()=>({driver:"postgres"}),
+}));
 
 let dir="";const key="a".repeat(64),now=new Date(),expiresAt=new Date(now.getTime()+600000).toISOString();
 const configuration={deploymentId:"public-test",configurationRevision:1,configurationHash:"b".repeat(64),modelPolicyRevision:"models-v1:test",
@@ -47,6 +51,16 @@ describe("signed public runtime admission policy",()=>{
     expect(capability(configuration)).toEqual({status:"qualified",qualifiedLanguagePairs:[{source:"zh",target:"en"}],automaticLanguage:false,automaticReverse:false});
     const withoutTts={...configuration,executionPlan:{...configuration.executionPlan,tts:{execution:"disabled" as const}}};
     expect(capability(withoutTts)).toEqual({status:"not_qualified",qualifiedLanguagePairs:[],automaticLanguage:false,automaticReverse:false});
+  });
+  it("does not offer a QA configuration once its one-shot start window is too short",()=>{
+    dir=mkdtempSync(join(tmpdir(),"wujie-public-policy-"));const file=join(dir,"policy.json");
+    writeFileSync(file,JSON.stringify(policy()),{mode:0o600});
+    const qa=(remainingMs:number)=>environment(file,{NODE_ENV:"development",PUBLIC_RUNTIME_QUALIFICATION_BOOTSTRAP:"true",
+      PUBLIC_QA_ONE_SHOT_ENABLED:"true",PUBLIC_QA_ONE_SHOT_AUTHORIZATION_ID:"qa-authorization-1",
+      PUBLIC_QA_ONE_SHOT_OWNER_ID:"owner",PUBLIC_QA_ONE_SHOT_DEPLOYMENT_ID:"public-test",
+      PUBLIC_QA_ONE_SHOT_MAX_WALL_SECONDS:"40",PUBLIC_QA_ONE_SHOT_EXPIRES_AT:new Date(Date.now()+remainingMs).toISOString()});
+    expect(publicRealtimeAuthorityFromEnvironment(qa(44_000))!.configurationCapability!(configuration).status).toBe("not_qualified");
+    expect(publicRealtimeAuthorityFromEnvironment(qa(60_000))!.configurationCapability!(configuration).status).toBe("qualified");
   });
   it("does not offer signed directions rejected by the selected TMT or TTS wire",async()=>{
     dir=mkdtempSync(join(tmpdir(),"wujie-public-policy-"));const file=join(dir,"policy.json");
