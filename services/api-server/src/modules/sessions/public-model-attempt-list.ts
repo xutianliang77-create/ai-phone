@@ -45,10 +45,13 @@ export async function listPublicModelAttempts(
   if (runtime.driver === "postgres" && session.publicAttemptStorageVersion === 2) {
     const rows = await runtime.postgres.pool.query<{
       record_key: string;
-      created_at: Date;
+      created_at_cursor: string;
       payload: PublicModelAttemptRecord;
     }>(`
-      SELECT record_key, created_at, payload
+      SELECT record_key,
+        to_char(created_at AT TIME ZONE 'UTC',
+          'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS created_at_cursor,
+        payload
       FROM ai_phone.public_model_attempts
       WHERE session_id = $1
         AND ($2::timestamptz IS NULL OR (created_at, record_key) > ($2::timestamptz, $3))
@@ -57,7 +60,7 @@ export async function listPublicModelAttempts(
     `, [session.id, cursor?.createdAt ?? null, cursor?.recordKey ?? "", limit + 1]);
     records = rows.rows.map(row => ({
       recordKey: row.record_key,
-      createdAt: row.created_at.toISOString(),
+      createdAt: row.created_at_cursor,
       payload: row.payload,
     }));
   } else {
