@@ -55,6 +55,11 @@ if [[ ! -f "$IOS_LOCAL_PROFILE" ]]; then
   echo "iOS local profile is required: $IOS_LOCAL_PROFILE" >&2
   exit 2
 fi
+RELEASE_VERSION="$(basename "$(dirname "$IOS_LOCAL_PROFILE")")"
+if [[ "$APP_VERSION" != "$RELEASE_VERSION" ]]; then
+  echo "APP_VERSION must match the public release profile version: $RELEASE_VERSION" >&2
+  exit 2
+fi
 IOS_LOCAL_PROFILE="$IOS_LOCAL_PROFILE" node -e '
 const fs = require("fs");
 const profile = JSON.parse(fs.readFileSync(process.env.IOS_LOCAL_PROFILE, "utf8"));
