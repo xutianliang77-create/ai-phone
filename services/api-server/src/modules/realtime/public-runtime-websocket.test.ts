@@ -269,6 +269,28 @@ describe("original Gateway loopback WebSocket with session-scoped API materials"
     expect(getStoreSnapshot().billingLedger.filter(e=>e.idempotencyKey===`settle:${s.issued.sessionId}`)).toHaveLength(1);
     expect(s.modelFetchFn).toHaveBeenCalledTimes(modelCalls);expect(s.asrSocketFactory).toHaveBeenCalledTimes(1);
   });
+  it("keeps one live Gateway provider and one customer settlement after an API handler rebuild",async()=>{
+    const s=await setup("qwen",false);await waitFor(()=>messages.some(e=>e.type==="session.started"));
+    const originalHold=getStoreSnapshot().usageHolds[0];
+    expect(originalHold).toMatchObject({sessionId:s.issued.sessionId,status:"active",seconds:30});
+    await within(app.close(),"api handler close",messages);
+    Object.assign(getStoreSnapshot(),normalizeStoreSnapshot(JSON.parse(JSON.stringify(getStoreSnapshot()))));
+    app=await buildApp({publicGatewayCredentialAccess:{secret:access}});
+    vi.setSystemTime(now.getTime()+1000);
+    ws!.send(JSON.stringify({type:"audio.frame",sessionId:s.issued.sessionId,sequence:1,timestampMs:0,format:"pcm16",
+      sampleRate:16000,data:Buffer.alloc(3200).toString("base64")}));
+    ws!.send(JSON.stringify({type:"audio.boundary",sessionId:s.issued.sessionId,sequence:1}));
+    await within(waitFor(()=>messages.some(e=>e.type==="translation.final")),"translation after api rebuild",messages);
+    ws!.send(JSON.stringify({type:"session.end",sessionId:s.issued.sessionId}));
+    await within(waitFor(()=>messages.some(e=>e.type==="session.ended")),"end after api rebuild",messages);
+    await within(waitFor(()=>getSession(s.issued.sessionId)===null),"gateway release after api rebuild",messages);
+    expect(s.asrSocketFactory).toHaveBeenCalledTimes(1);
+    expect(current()).toMatchObject({status:"ended",consumedSeconds:1});
+    expect(current().segments[0]).toMatchObject({sourceText:"今天我们测试公共语音翻译。",
+      translatedText:"Today we test public speech translation."});
+    expect(getStoreSnapshot().usageHolds).toEqual([expect.objectContaining({sessionId:s.issued.sessionId,status:"settled",seconds:30})]);
+    expect(getStoreSnapshot().billingLedger.filter(e=>e.idempotencyKey===`settle:${s.issued.sessionId}`)).toHaveLength(1);
+  });
   it("original stale recovery finishes a confirmed stop whose settlement temporarily failed, after the client window",async()=>{
     const s=await setup();await waitFor(()=>messages.some(e=>e.type==="session.started"));vi.setSystemTime(now.getTime()+1000);
     const blocked=vi.spyOn(finalization,"finalizePublicSession").mockRejectedValue(Error("Synthetic settlement unavailable"));
