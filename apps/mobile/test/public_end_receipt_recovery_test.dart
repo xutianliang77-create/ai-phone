@@ -47,7 +47,7 @@ class RecoveryApi extends fixture.Api {
 }
 
 void main() {
-  test('lost final ACK keeps durable tail; rebuilt client confirms original receipt without another POST or connection', () async {
+  test('lost final ACK is confirmed by background recovery without another POST or connection', () async {
     final h = LossHarness();addTearDown(h.close);
     await h.repo.startSession();
     await expectLater(h.repo.finishPublicSession(fixture.session, fixture.segments,
@@ -57,8 +57,7 @@ void main() {
     expect(before.snapshot!.segments.single.sourceText, '原文');
     expect(before.snapshot!.segments.single.translatedText, 'Translation');
     final api = h.rebuild();final calls = h.posts.length;
-    final result = await h.repo.confirmPendingPublicFinalizations();
-    expect(result, (confirmed: 1, pending: 0));
+    await h.repo.recoverPendingFinalizations();
     final saved = (await h.records()).single;
     expect(saved.sessionId, before.sessionId);expect(saved.snapshot!.mode, 'meeting');
     expect(saved.snapshot!.segments.single.sourceText, '原文');
@@ -69,15 +68,16 @@ void main() {
     expect(h.posts, hasLength(1));expect(h.gateway.connects, 1);expect(h.gateway.resumes, 0);
     expect(h.rebuiltGateway!.connects, 0);expect(h.rebuiltGateway!.resumes, 0);expect(h.rebuiltGateway!.ends, 0);
   });
-  test('recovery HTTP loss leaves the exact pending checkpoint and retries only after explicit request', () async {
+  test('recovery HTTP loss retains the checkpoint until the next background retry', () async {
     final h = LossHarness();addTearDown(h.close);await h.repo.startSession();
     await expectLater(h.repo.finishPublicSession(fixture.session, fixture.segments,
         mode: 'conversation'), throwsA(anything));
     h.rebuild();final before=(await h.records()).single.toJson();h.loseRecoveryReply=true;
-    expect(await h.repo.confirmPendingPublicFinalizations(),(confirmed:0,pending:1));
+    await h.repo.recoverPendingFinalizations();
     expect((await h.records()).single.toJson(),before);expect(h.posts,hasLength(1));
     h.loseRecoveryReply=false;
-    expect(await h.repo.confirmPendingPublicFinalizations(),(confirmed:1,pending:0));expect(h.posts,hasLength(1));
+    await h.repo.recoverPendingFinalizations();
+    expect(await h.repo.confirmPendingPublicFinalizations(),(confirmed:0,pending:0));expect(h.posts,hasLength(1));
   });
   test('another account cannot recover the original pending end; original owner can return and confirm', () async {
     final h=LossHarness();addTearDown(h.close);await h.repo.startSession();

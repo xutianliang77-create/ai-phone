@@ -19,7 +19,6 @@ import '../controllers/realtime_controller.dart';
 import '../realtime_online_recovery_policy.dart';
 import '../realtime_settings_l10n.dart';
 import '../widgets/realtime_controls.dart';
-import '../widgets/public_creation_resolution_actions.dart';
 import '../widgets/realtime_resource_preparation_panel.dart';
 import '../widgets/realtime_language_menu.dart';
 import '../widgets/realtime_online_recovery_actions.dart';
@@ -185,10 +184,6 @@ class _RealtimePageState extends State<RealtimePage>
                   ),
                 ),
                 if(controller.resultSyncAvailable) _resultSyncActions(this),
-                PublicCreationResolutionActions(controller: controller),
-                if(controller.publicFinalizationAvailable)
-                  TextButton(onPressed:controller.resultSyncBusy?null:controller.confirmPendingPublicFinalizations,
-                    child:Text(l10n.isChinese?'确认待结束会话':'Confirm pending session ends')),
                 RealtimeControls(
                   status: controller.status,
                   onStart: controller.start,

@@ -38,6 +38,19 @@ Map<String, Object?> response(http.Request request, String owner) {
     'endpoint': 'wss://gateway.synthetic.invalid/realtime', 'expiresAt': DateTime.fromMillisecondsSinceEpoch(expiry * 1000, isUtc: true).toIso8601String(),
     'ownerId': owner, 'deploymentId': 'public', 'captureSampleRate': 16000, 'processing': p};
 }
+Map<String, Object?> resolutionResponse(http.Request request, String state) {
+  final body = jsonDecode(request.body) as Map<String, dynamic>;
+  final key = request.headers['idempotency-key'];
+  return {
+    'contractVersion': 1,
+    'sessionId': 'public-${publicCreationHash({
+      'deploymentId': 'public', 'ownerId': 'owner', 'idempotencyKey': key})}',
+    'ownerId': 'owner', 'deploymentId': 'public', 'nonce': body['nonce'],
+    'requestHash': publicCreationHash(body['request']), 'state': state,
+    'safeToReplace': ['cancelled', 'expired'].contains(state),
+    'canRetire': ['not_found', 'prepared', 'issued', 'expired_pending'].contains(state),
+  };
+}
 
 class Harness {
   final directory = Directory.systemTemp.createTempSync('wujie-public-create-');
@@ -170,11 +183,41 @@ void main() {
     expect(second.headers['idempotency-key'], first.headers['idempotency-key']);expect(second.body, first.body);expect(h.contexts, 2);
     delayed.complete(http.Response(jsonEncode(response(first, 'owner')), 200));await Future<void>.delayed(Duration.zero);
   });
-  test('does not replace an unresolved key when language settings change', () async {
+  test('changed language retires only a server-confirmed unused key behind Start', () async {
     final h = Harness();addTearDown(h.close);h.post = (_) async => http.Response('{}', 503);
     await expectLater(h.create().createSession(), throwsA(isA<RealtimeApiException>()));
-    final count = h.requests.where((r) => r.method == 'POST').length;
-    await expectLater(h.create(source: 'fr').createSession(), throwsA(isA<RealtimeApiException>()));expect(h.requests.where((r) => r.method == 'POST').length, count);
+    final oldKey = h.requests.last.headers['idempotency-key'];
+    h.post = (r) async => r.url.path == '/realtime/creation-requests/query'
+        ? http.Response(jsonEncode(resolutionResponse(r, 'prepared')), 200)
+        : r.url.path == '/realtime/creation-requests/cancel'
+            ? http.Response(jsonEncode(resolutionResponse(r, 'cancelled')), 200)
+            : http.Response(jsonEncode(response(r, 'owner')), 200);
+    await h.create(source: 'fr').createSession();
+    final posts = h.requests.where((r) => r.method == 'POST').toList();
+    expect(posts.map((r) => r.url.path), [
+      '/realtime/sessions', '/realtime/creation-requests/query',
+      '/realtime/creation-requests/cancel', '/realtime/sessions'
+    ]);
+    expect(posts.last.headers['idempotency-key'], isNot(oldKey));
+    expect(jsonDecode(posts.last.body)['sourceLanguage'], 'fr');
+  });
+  test('a used QA grant stops after one safe replacement without a retry loop', () async {
+    final h = Harness();addTearDown(h.close);var creates = 0;
+    h.post = (r) async {
+      if (r.url.path == '/realtime/creation-requests/query') {
+        return http.Response(jsonEncode(resolutionResponse(r, 'prepared')), 200);
+      }
+      if (r.url.path == '/realtime/creation-requests/cancel') {
+        return http.Response(jsonEncode(resolutionResponse(r, 'cancelled')), 200);
+      }
+      return http.Response('{"error":{"code":"public_qa_one_shot_consumed"}}',
+          creates++ == 0 ? 403 : 409);
+    };
+    await expectLater(h.create().createSession(), throwsA(isA<RealtimeApiException>()));
+    expect(creates, 2);
+    expect(h.requests.where((r) => r.url.path == '/realtime/creation-requests/cancel'), hasLength(1));
+    final stored = jsonDecode(h.directory.listSync().whereType<File>().single.readAsStringSync()) as Map;
+    expect(stored['state'], 'pending');
   });
   test('unavailable configuration reports no session created and never posts', () async {
     final h = Harness();addTearDown(h.close);
@@ -189,9 +232,64 @@ void main() {
     final h = Harness();addTearDown(h.close);
     h.post = (_) async => http.Response('{"error":{"code":"public_creation_not_ready"}}', 503);
     await expectLater(h.create().createSession(), throwsA(isA<RealtimeApiException>()
-        .having((e) => e.message, 'message', contains('请查询原请求'))));
+        .having((e) => e.message, 'message', contains('请稍后再点开始'))));
     expect(h.requests.where((r) => r.method == 'POST'), hasLength(1));
     expect(h.directory.listSync().whereType<File>(), hasLength(1));
+  });
+  for (final state in ['not_found', 'prepared', 'issued', 'expired_pending']) {
+    test('one Start safely retires a $state 403 replay before a fresh session', () async {
+      final h = Harness();addTearDown(h.close);var creates = 0;
+      h.post = (r) async {
+        if (r.url.path == '/realtime/creation-requests/query') {
+          return http.Response(jsonEncode(resolutionResponse(r, state)), 200);
+        }
+        if (r.url.path == '/realtime/creation-requests/cancel' ||
+            r.url.path == '/realtime/creation-requests/expire') {
+          expect(r.url.path, state == 'expired_pending'
+              ? '/realtime/creation-requests/expire'
+              : '/realtime/creation-requests/cancel');
+          return http.Response(jsonEncode(resolutionResponse(r,
+              state == 'expired_pending' ? 'expired' : 'cancelled')), 200);
+        }
+        if (creates++ == 0) {
+          return http.Response('{"error":{"code":"public_inference_admission_expired"}}', 403);
+        }
+        return http.Response(jsonEncode(response(r, 'owner')), 200);
+      };
+      final session = await h.create().createSession();
+      expect(session.sessionId, isNotEmpty);
+      final posts = h.requests.where((r) => r.method == 'POST').toList();
+      expect(posts.map((r) => r.url.path), [
+        '/realtime/sessions', '/realtime/creation-requests/query',
+        state == 'expired_pending' ? '/realtime/creation-requests/expire'
+            : '/realtime/creation-requests/cancel', '/realtime/sessions'
+      ]);
+      expect(posts.first.headers['idempotency-key'],
+          isNot(posts.last.headers['idempotency-key']));
+      expect(creates, 2);
+    });
+  }
+  test('uncertain prior activity blocks a second charged session behind Start', () async {
+    final h = Harness();addTearDown(h.close);
+    h.post = (r) async => r.url.path == '/realtime/sessions'
+        ? http.Response('{"error":{"code":"public_admission_binding_mismatch"}}', 403)
+        : http.Response(jsonEncode(resolutionResponse(r, 'reconciliation_required')), 200);
+    await expectLater(h.create().createSession(), throwsA(isA<RealtimeApiException>()
+        .having((e) => e.message, 'message', contains('状态尚未确认'))));
+    expect(h.requests.where((r) => r.url.path == '/realtime/sessions'), hasLength(1));
+    expect(h.requests.where((r) => r.url.path.endsWith('/cancel')), isEmpty);
+    final stored = jsonDecode(h.directory.listSync().whereType<File>().single.readAsStringSync()) as Map;
+    expect(stored['state'], 'pending');
+  });
+  test('invalid retirement proof cannot replace the original key', () async {
+    final h = Harness();addTearDown(h.close);
+    h.post = (r) async => r.url.path == '/realtime/sessions'
+        ? http.Response('{"error":{"code":"public_inference_admission_expired"}}', 403)
+        : http.Response('{}', 200);
+    await expectLater(h.create().createSession(), throwsA(isA<FormatException>()));
+    expect(h.requests.where((r) => r.url.path == '/realtime/sessions'), hasLength(1));
+    final stored = jsonDecode(h.directory.listSync().whereType<File>().single.readAsStringSync()) as Map;
+    expect(stored['state'], 'pending');
   });
   test('qualified-pair preflight rejects an unqualified language before persistence or POST', () async {
     final h = Harness();addTearDown(h.close);

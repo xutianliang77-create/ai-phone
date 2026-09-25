@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:translation_mobile/src/features/realtime/data/gateway/gateway_realtime_event.dart';
+import 'package:translation_mobile/src/features/realtime/data/api/realtime_api_client.dart';
 import 'package:translation_mobile/src/features/realtime/data/api/public_creation_request_store.dart';
 import 'package:translation_mobile/src/features/realtime/presentation/controllers/realtime_controller.dart';
 import 'package:translation_mobile/src/platform/audio/device_speaker_diarizer.dart';
@@ -242,7 +243,14 @@ void main() {
         record.remove('hash');
         record['hash'] = publicCreationHash(record);
         file.writeAsStringSync(jsonEncode(record));
-        h.post = null;
+        h.post = (r) async {
+          if (r.url.path == '/realtime/creation-requests/query') {
+            return currentReady
+                ? http.Response(jsonEncode(creation.resolutionResponse(r, 'issued')), 200)
+                : http.Response('{}', 503);
+          }
+          return http.Response(jsonEncode(creation.response(r, 'owner')), 200);
+        };
         final client = h.create(prepareSpeaker: () async => currentReady);
         if (currentReady) {
           await client.createSession();
@@ -253,9 +261,9 @@ void main() {
         } else {
           await expectLater(
               client.createSession(),
-              throwsA(
-                  predicate((e) => e.toString().contains('原创建请求需要本机说话人资源'))));
-          expect(h.requests.where((r) => r.method == 'POST'), hasLength(1));
+              throwsA(isA<RealtimeApiException>()));
+          expect(h.requests.where((r) => r.url.path == '/realtime/sessions'),
+              hasLength(1));
           expect(jsonDecode(file.readAsStringSync())['key'],
               first.headers['idempotency-key']);
         }

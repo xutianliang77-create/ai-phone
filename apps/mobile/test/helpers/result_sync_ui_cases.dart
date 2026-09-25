@@ -69,14 +69,8 @@ void resultSyncUiCases() {
     expect(find.text('撤销同步'), findsOneWidget);
     await _drainSyncUi(tester,controller.stop());
     await _pumpSyncUi(tester);
-    expect(find.text('确认待结束会话'),findsOneWidget);
-    await tester.tap(find.text('确认待结束会话'));
-    for(var i=0;i<60&&controller.resultSyncBusy;i++){
-      await tester.runAsync(()=>Future<void>.delayed(const Duration(milliseconds:10)));
-      await tester.pump(const Duration(milliseconds:100));
-    }
-    expect(controller.resultSyncBusy,isFalse);
-    expect(find.textContaining('仍保留 1 项待确认'),findsOneWidget);
+    expect(find.text('确认待结束会话'),findsNothing);
+    expect(find.text('查看未决创建'),findsNothing);
     await tester.pumpWidget(const SizedBox.shrink());
     await _drainSyncUi(tester,controller.disposeAsync());
     voices.close();

@@ -2,9 +2,21 @@ part of 'realtime_api_client.dart';
 
 extension RealtimePublicCreationResolutionApi on RealtimeApiClient {
   Future<PublicCreationResolution?> resolvePendingPublicCreation(
-      {String action = 'query', PublicCreationResolution? expected}) async {
+      {String action = 'query', PublicCreationResolution? expected}) =>
+      _resolvePendingPublicCreation(action: action, expected: expected,
+          fromStart: false);
+
+  Future<PublicCreationResolution?> _resolvePendingPublicCreationForStart(
+      {String action = 'query', PublicCreationResolution? expected}) =>
+      _resolvePendingPublicCreation(action: action, expected: expected,
+          fromStart: true);
+
+  Future<PublicCreationResolution?> _resolvePendingPublicCreation(
+      {required String action, PublicCreationResolution? expected,
+      required bool fromStart}) async {
     if (_publicCreationClosed || publicDeploymentId.isEmpty ||
-        _publicCreating != null || _publicIssued != null || _publicResolving ||
+        (_publicCreating != null && !fromStart) ||
+        _publicIssued != null || _publicResolving ||
         _baseUrl.scheme != 'https' || _baseUrl.userInfo.isNotEmpty ||
         _baseUrl.hasQuery || _baseUrl.hasFragment ||
         !const ['query', 'cancel', 'expire'].contains(action) ||

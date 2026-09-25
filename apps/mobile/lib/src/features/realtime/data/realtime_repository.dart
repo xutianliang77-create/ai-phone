@@ -207,10 +207,15 @@ class RealtimeRepository {
   }
 
   Future<void> recoverPendingFinalizations() async {
-    if (_apiClient.publicDeploymentId.isNotEmpty) return;
     final running = _replayInFlight;
     if (running != null) return running;
-    final replay = _replayAll();
+    if (_apiClient.publicDeploymentId.isNotEmpty &&
+        (_disposeRequested || _publicStart != null || _resultSync.session != null)) {
+      return;
+    }
+    final replay = _apiClient.publicDeploymentId.isNotEmpty
+        ? confirmPendingPublicFinalizations().then<void>((_) {})
+        : _replayAll();
     _replayInFlight = replay;
     try {
       await replay;

@@ -93,9 +93,9 @@ class RealtimeApiClient {
 
   Future<RealtimeSession> createSession() async {
     if (publicDeploymentId.isNotEmpty) {
-      if (_publicResolving) throw const RealtimeApiException('未决创建处置进行中');
       final running = _publicCreating;
       if (running != null) return running;
+      if (_publicResolving) throw const RealtimeApiException('在线状态正在确认，请稍后再点开始');
       final future = _createPublicSession();
       _publicCreating = future;
       try {

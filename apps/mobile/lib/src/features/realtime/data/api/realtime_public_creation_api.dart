@@ -41,6 +41,40 @@ extension RealtimePublicCreationApi on RealtimeApiClient {
   }
 
   Future<RealtimeSession> _createPublicSession() async {
+    // A rejected replay may belong to an old, never-started request. Only an
+    // owner-bound server receipt can retire it; never infer safety from HTTP
+    // status alone or silently create a second billable session.
+    for (var attempt = 0; attempt < 2; attempt++) {
+      try {
+        return await _createPublicSessionAttempt();
+      } on RealtimeApiException catch (error) {
+        if (attempt != 0 ||
+            !const {403, 409, 410}.contains(error.statusCode)) {
+          rethrow;
+        }
+        final queried = await _resolvePendingPublicCreationForStart();
+        if (queried == null) {
+          rethrow;
+        }
+        if (!queried.terminal) {
+          if (!queried.canRetire) {
+            throw const RealtimeApiException(
+                '上次在线会话状态尚未确认，请稍后再点开始');
+          }
+          final retired = await _resolvePendingPublicCreationForStart(
+              action: queried.state == 'expired_pending' ? 'expire' : 'cancel',
+              expected: queried);
+          if (retired?.terminal != true) {
+            throw const RealtimeApiException(
+                '上次在线会话状态尚未确认，请稍后再点开始');
+          }
+        }
+      }
+    }
+    throw const RealtimeApiException('在线服务暂不可用，请稍后再点开始');
+  }
+
+  Future<RealtimeSession> _createPublicSessionAttempt() async {
     if (_publicCreationClosed) throw const RealtimeApiException('公有客户端已关闭');
     if (_baseUrl.scheme != 'https' ||
         _baseUrl.userInfo.isNotEmpty ||
@@ -124,7 +158,8 @@ extension RealtimePublicCreationApi on RealtimeApiClient {
     if (record != null &&
         record['settings'] != settings &&
         record['settings'] != legacySettings) {
-      throw const RealtimeApiException('仍有未确认创建，请恢复原设置重试；未自动新建会话');
+      throw const RealtimeApiException('在线设置已变化，正在核对上次会话',
+          statusCode: 409);
     }
     final speakerReady = (record == null || needsSpeaker) &&
         deviceSpeakerOffered(offer['onDeviceSpeaker']) &&
@@ -132,7 +167,8 @@ extension RealtimePublicCreationApi on RealtimeApiClient {
         await prepareDeviceSpeaker!();
     check();
     if (record != null && needsSpeaker && !speakerReady) {
-      throw const RealtimeApiException('原创建请求需要本机说话人资源，请等待就绪或查询、撤销原请求；未更换会话');
+      throw const RealtimeApiException('本机说话人资源尚未就绪，正在核对上次会话',
+          statusCode: 409);
     }
     if (record == null) {
       final body = publicCreationBody(offer,
@@ -213,12 +249,12 @@ extension RealtimePublicCreationApi on RealtimeApiClient {
           // Malformed server errors still fail closed with the HTTP status.
         }
         final message = code == 'public_creation_not_ready'
-            ? '在线服务暂未开放：HTTP ${response.statusCode}；未创建会话'
-            : '在线配置获取失败：HTTP ${response.statusCode}；未创建会话';
+            ? '在线服务暂未开放，请稍后重试'
+            : '在线服务暂不可用，请稍后重试';
         throw RealtimeApiException(message, statusCode: response.statusCode);
       }
       throw RealtimeApiException(
-          '公有创建未完成：HTTP ${response.statusCode}；请查询原请求，未自动重试',
+          '在线连接暂未完成，请稍后再点开始',
           statusCode: response.statusCode);
     }
     final value = jsonDecode(utf8.decode(bytes));
