@@ -119,14 +119,17 @@ extension RealtimePublicCreationApi on RealtimeApiClient {
     // Older records included an optional model in the settings hash. Preserve
     // their exact body/key; readiness changing is not a user setting change.
     final legacySettings = needsSpeaker
-        ? publicCreationHash([settings, deviceSpeakerProfile]) : settings;
-    if (record != null && record['settings'] != settings &&
+        ? publicCreationHash([settings, deviceSpeakerProfile])
+        : settings;
+    if (record != null &&
+        record['settings'] != settings &&
         record['settings'] != legacySettings) {
       throw const RealtimeApiException('仍有未确认创建，请恢复原设置重试；未自动新建会话');
     }
     final speakerReady = (record == null || needsSpeaker) &&
         deviceSpeakerOffered(offer['onDeviceSpeaker']) &&
-        prepareDeviceSpeaker != null && await prepareDeviceSpeaker!();
+        prepareDeviceSpeaker != null &&
+        await prepareDeviceSpeaker!();
     check();
     if (record != null && needsSpeaker && !speakerReady) {
       throw const RealtimeApiException('原创建请求需要本机说话人资源，请等待就绪或查询、撤销原请求；未更换会话');
@@ -140,7 +143,8 @@ extension RealtimePublicCreationApi on RealtimeApiClient {
           target: _targetLanguage,
           autoReverse: _autoReverseTargetLanguage,
           automaticLanguagePair: _automaticLanguagePair,
-          voice: voice, deviceSpeakerReady: speakerReady);
+          voice: voice,
+          deviceSpeakerReady: speakerReady);
       record = await _creationWait(
           _publicCreationStore.acquire(
               scope.storageKey, settings, body, offer['endpoint']! as String),
@@ -192,7 +196,29 @@ extension RealtimePublicCreationApi on RealtimeApiClient {
       }
     }(), epoch);
     if (response.statusCode != 200) {
-      throw RealtimeApiException('公有创建未完成：HTTP ${response.statusCode}；未自动重试',
+      // Configuration is only a preflight GET: no creation POST has occurred.
+      // Keep POST errors conservative because the server may have accepted an
+      // idempotent request even when the response was lost.
+      if (method == 'GET') {
+        String? code;
+        try {
+          final value = jsonDecode(utf8.decode(bytes));
+          if (value is Map) {
+            final error = value['error'];
+            if (error is Map && error['code'] is String) {
+              code = error['code'] as String;
+            }
+          }
+        } on FormatException {
+          // Malformed server errors still fail closed with the HTTP status.
+        }
+        final message = code == 'public_creation_not_ready'
+            ? '在线服务暂未开放：HTTP ${response.statusCode}；未创建会话'
+            : '在线配置获取失败：HTTP ${response.statusCode}；未创建会话';
+        throw RealtimeApiException(message, statusCode: response.statusCode);
+      }
+      throw RealtimeApiException(
+          '公有创建未完成：HTTP ${response.statusCode}；请查询原请求，未自动重试',
           statusCode: response.statusCode);
     }
     final value = jsonDecode(utf8.decode(bytes));

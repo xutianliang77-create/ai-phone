@@ -45,6 +45,7 @@ class Harness {
   final requests = <http.Request>[];
   final clients = <RealtimeApiClient>[];
   Future<http.Response> Function(http.Request)? post;
+  http.Response? getResponse;
   Map<String, Object?>? context;
   int contexts = 0;
   late final store = PublicCreationRequestStore(directory: directory);
@@ -56,7 +57,7 @@ class Harness {
         requests.add(request);expect(request.followRedirects, isFalse);
         if (request.url.path == '/auth/deployment') { expect(request.headers['authorization'], isNull); return http.Response('{"deploymentId":"public"}', 200); }
         expect(request.headers['authorization'], 'Bearer ${accounts.session!.token}');
-        if (request.method == 'GET') { contexts++;return http.Response(jsonEncode(context ?? offer(accounts.session!.ownerId!, request.url.queryParameters['voiceOutput'] == 'true')), 200); }
+        if (request.method == 'GET') { contexts++;return getResponse ?? http.Response(jsonEncode(context ?? offer(accounts.session!.ownerId!, request.url.queryParameters['voiceOutput'] == 'true')), 200); }
         final record = directory.listSync().whereType<File>().single.readAsStringSync();
         expect(record, contains(request.headers['idempotency-key']!));expect(record, isNot(contains(accounts.session!.token)));
         return post?.call(request) ?? http.Response(jsonEncode(response(request, accounts.session!.ownerId!)), 200);
@@ -174,6 +175,23 @@ void main() {
     await expectLater(h.create().createSession(), throwsA(isA<RealtimeApiException>()));
     final count = h.requests.where((r) => r.method == 'POST').length;
     await expectLater(h.create(source: 'fr').createSession(), throwsA(isA<RealtimeApiException>()));expect(h.requests.where((r) => r.method == 'POST').length, count);
+  });
+  test('unavailable configuration reports no session created and never posts', () async {
+    final h = Harness();addTearDown(h.close);
+    h.getResponse = http.Response('{"error":{"code":"public_creation_not_ready"}}', 503);
+    await expectLater(h.create().createSession(), throwsA(isA<RealtimeApiException>()
+        .having((e) => e.message, 'message', contains('在线服务暂未开放'))
+        .having((e) => e.statusCode, 'statusCode', 503)));
+    expect(h.requests.where((r) => r.method == 'POST'), isEmpty);
+    expect(h.directory.listSync(), isEmpty);
+  });
+  test('creation POST failure remains unresolved and is not retried automatically', () async {
+    final h = Harness();addTearDown(h.close);
+    h.post = (_) async => http.Response('{"error":{"code":"public_creation_not_ready"}}', 503);
+    await expectLater(h.create().createSession(), throwsA(isA<RealtimeApiException>()
+        .having((e) => e.message, 'message', contains('请查询原请求'))));
+    expect(h.requests.where((r) => r.method == 'POST'), hasLength(1));
+    expect(h.directory.listSync().whereType<File>(), hasLength(1));
   });
   test('qualified-pair preflight rejects an unqualified language before persistence or POST', () async {
     final h = Harness();addTearDown(h.close);
