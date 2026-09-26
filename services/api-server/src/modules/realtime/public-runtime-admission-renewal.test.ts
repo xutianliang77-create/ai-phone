@@ -18,7 +18,7 @@ let app:FastifyInstance,authority:PublicRealtimeAuthority,resolve:ReturnType<typ
 installConfigurationFixture();
 beforeEach(async()=>{
   vi.useFakeTimers({toFake:["Date"]});vi.setSystemTime(now);
-  vi.stubEnv("API_TEST_AUTO_ACCOUNT","true");vi.stubEnv("REALTIME_TOKEN_SECRET","SYNTHETIC_RENEWAL_SIGNER");
+  vi.stubEnv("API_TEST_AUTO_ACCOUNT","true");vi.stubEnv("REALTIME_TOKEN_SECRET","SYNTHETIC_RENEWAL_SIGNER_NOT_A_REAL_SECRET");
   vi.stubEnv("REALTIME_WS_ENDPOINT","wss://gateway.synthetic.invalid/realtime");vi.stubEnv("INTERNAL_API_SECRET",internal);
   const store=getStoreSnapshot();store.sessions=[];store.usageHolds=[];store.billingLedger=[];store.usageBalances={};store.usagePlanCodes={};
   resolve=vi.fn(async context=>{

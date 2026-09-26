@@ -21,9 +21,8 @@ export interface StreamingAsrOptions {sessionId:string;leaseId:string;endpoint:s
   serverVad?:PublicAsrServerVad;
   wireProfile?:"openai_realtime_asr"|"qwen_asr_realtime"|"tencent_asr_ws"|"google_speech_v2";appId?:string;
   projectId?:string;location?:string;recognizer?:string;languageLocales?:Record<string,string>;sampleRate?:16000|24000;
-  /** Used only when the configured provider accepts source=auto. It is the
-   * conservative fallback for an unknown/mixed textual language profile, not
-   * a substitute for provider or qualified text language evidence. */
+  /** source=auto only: conservative fallback for unknown/mixed text,
+   * not a substitute for provider or qualified text language evidence. */
   detectedLanguageFallback?:TranslationLanguageCode;
   /** The only provider-confirmed language scope accepted for source=auto. */
   automaticLanguagePair?:readonly [TranslationLanguageCode,TranslationLanguageCode];
@@ -31,10 +30,8 @@ export interface StreamingAsrOptions {sessionId:string;leaseId:string;endpoint:s
   googleStreamFactory?:GoogleAsrStreamFactory;
   authorizeConnection:()=>Promise<void>;resolveCredentials:(signal?:AbortSignal)=>Promise<{apiKey?:string;secretId?:string;secretKey?:string;accessToken?:string;accessTokenExpiresAt?:number;quotaProjectId?:string}>|{apiKey?:string;secretId?:string;secretKey?:string;accessToken?:string;accessTokenExpiresAt?:number;quotaProjectId?:string};
   record:(event:PublicModelAttemptEvent)=>Promise<void>;socketFactory?:(url:string,options:WebSocket.ClientOptions)=>WebSocket;}
-
-/** Wire transport injected into the ORIGINAL HttpAsrProvider, not another realtime
- * business controller. One bound session; no client-invented reconnect or resampling.
- * Qwen server VAD, when selected by its protocol adapter, owns supplier commits. */
+/** Original HttpAsrProvider transport: one session, no new controller/reconnect/resampling.
+ * The selected Qwen server VAD owns supplier commits. */
 export class OpenAiStreamingAsrClient {
   // Historical public export retained; the same lifecycle supports explicit wire profiles.
   private get qwen(){return this.options.wireProfile==="qwen_asr_realtime";}
@@ -245,8 +242,7 @@ export class OpenAiStreamingAsrClient {
   private receive(s:State,e:Record<string,any>){
     if(!e||typeof e!=="object"||Array.isArray(e)||typeof e.type!=="string")throw Error();
     if(this.qwen){
-      // Failure events may omit event_id in the documented payload. No provider
-      // error body is forwarded. Other messages must have bounded unique IDs.
+      // Failure events may omit event_id; no error body is forwarded. Others need bounded unique IDs.
       if(e.type==="error"||e.type==="conversation.item.input_audio_transcription.failed")throw Error();
       if(typeof e.event_id!=="string"||!e.event_id||e.event_id.length>240)throw Error();
       s.wireEvents??=new Set();if(s.wireEvents.has(e.event_id))throw Error();s.wireEvents.add(e.event_id);
