@@ -236,10 +236,25 @@ if [[ -e "$ARCHIVED_APP" ]]; then
   echo "Candidate archive already exists: $ARCHIVED_APP" >&2
   exit 2
 fi
+# Do not leave a stale success manifest visible if this attempt fails later.
+if [[ -e "$OUTPUT_ROOT/candidate-manifest.json" || -e "$OUTPUT_ROOT/Symbols" ]]; then
+  echo "Candidate metadata or symbols already exist: $OUTPUT_ROOT" >&2
+  exit 2
+fi
 ditto "$APP_PATH" "$ARCHIVED_APP"
 codesign --verify --deep --strict "$ARCHIVED_APP"
 verify_vad_resource "$ARCHIVED_APP/Models/vad/silero-vad-unified-256ms-v6.0.0.mlmodelc"
 verify_speaker_resource "$ARCHIVED_APP"
+
+# Preserve and verify the exact Runner/Dart binary symbols before reporting an
+# archived candidate. A later rebuild can have a different native UUID.
+if [[ "$BUILD_MODE" == profile ]]; then
+  SYMBOLS_SOURCE="$MOBILE_DIR/build/ios/Profile-iphoneos"
+else
+  SYMBOLS_SOURCE="$MOBILE_DIR/build/ios/Release-iphoneos"
+fi
+node "$ROOT_DIR/scripts/lib/archive_ios_candidate_symbols.mjs" \
+  "$ARCHIVED_APP" "$SYMBOLS_SOURCE" "$OUTPUT_ROOT/Symbols"
 
 # Relative names keep the regular-file aggregate stable after a verified copy.
 # Codesign remains the separate signed-bundle integrity check.

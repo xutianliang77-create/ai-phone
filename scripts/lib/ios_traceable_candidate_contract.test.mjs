@@ -83,6 +83,17 @@ describe("traceable iOS candidate contract", () => {
     expect(script).toContain("SERVER_BASE_URL must be reachable from the iPhone");
   });
 
+  it("archives exact symbols before publishing a candidate manifest", () => {
+    const archive = script.indexOf('node "$ROOT_DIR/scripts/lib/archive_ios_candidate_symbols.mjs"');
+    expect(archive).toBeGreaterThan(script.indexOf('codesign --verify --deep --strict "$ARCHIVED_APP"'));
+    expect(archive).toBeLessThan(script.indexOf('node "$ROOT_DIR/scripts/lib/write_ios_candidate_manifest.mjs"'));
+    expect(script).toContain('SYMBOLS_SOURCE="$MOBILE_DIR/build/ios/Profile-iphoneos"');
+    expect(script).toContain('SYMBOLS_SOURCE="$MOBILE_DIR/build/ios/Release-iphoneos"');
+    expect(script).toContain('"$ARCHIVED_APP" "$SYMBOLS_SOURCE" "$OUTPUT_ROOT/Symbols"');
+    expect(writer).toContain("symbols: verifyIosSymbolArchive(");
+    expect(writer).toContain('flag: "wx"');
+  });
+
   it("keeps the declared file aggregate stable across archive locations but detects changed bytes", () => {
     const directory = mkdtempSync(path.join(tmpdir(), "wujie-ios-hash-"));
     const first = path.join(directory, "first", "Runner.app");

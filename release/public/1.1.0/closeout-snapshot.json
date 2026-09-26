@@ -13,7 +13,11 @@
       "originalRunnerSymbolsAvailable": false,
       "sameSourceRebuildRunnerUuidDiffers": true,
       "rebuiltAppInstalled": false,
-      "formalRcSymbolGateClosed": false
+      "formalRcSymbolGateClosed": false,
+      "archiveGuardImplementation": "host_and_existing_artifact_checks_passed",
+      "archiveGuardTestsPassed": 28,
+      "archiveGuardRejectsOriginalWithRebuiltRunnerSymbols": true,
+      "archiveGuardNewCandidateBuiltOrInstalled": false
     },
     "configurationRevision": 2,
     "tmtTermRepositories": {
