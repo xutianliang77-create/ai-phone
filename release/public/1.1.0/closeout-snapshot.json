@@ -6,9 +6,11 @@
   "remainingWork20260926": {
     "order": "non_test_source_and_handoff_then_concentrated_validation",
     "baseCommit": "7d7b5812037c8fd978809ea7e9bf76731f6673bc",
-    "sourceChanges": ["same-session admission renewal", "earliest live qualification expiry", "QA-only finalization reason trace", "Android fully-qualified launcher", "portable iOS regular-file aggregate hash"],
+    "sourceChanges": ["same-session admission renewal", "earliest live qualification expiry", "QA-only finalization reason trace", "Android fully-qualified launcher", "portable iOS regular-file aggregate hash", "bounded ASR completed-item cache instead of a 1024-turn session limit"],
     "sourceTypechecks": "passed",
-    "newRegressionsExecuted": false,
+    "newRegressionsExecuted": true,
+    "hostResults": {"apiPassed":1264,"apiSkipped":5,"gatewayPassed":1037,"workerPassed":251,"candidateScriptsPassed":31,"dualVersionChecksPassed":40},
+    "asrLongFixture": {"turns":10000,"supplierConnections":1,"recentItemCache":1024,"evictedReplayFailsClosed":true,"realModelCalls":0},
     "newCandidateBuilt": false,
     "deployed": false,
     "private10Changed": false
@@ -47,8 +49,8 @@
   },
   "isReleaseManifest": false,
   "testing": {
-    "execution": "deferred_until_non_test_work_complete",
-    "newTestsExecuted": false,
+    "execution": "concentrated_host_complete_external_gates_pending",
+    "newTestsExecuted": true,
     "newModelCalls": 0,
     "newInstallations": 0,
     "acceptanceWaived": false

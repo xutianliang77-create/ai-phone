@@ -172,7 +172,7 @@ export class OpenAiStreamingAsrClient {
       else{await this.send(s,{type:"input_audio_buffer.commit"});result=await abortable(turn.done.promise,s.stop.signal);}
       this.assert(s);
       turn.terminal=true;turn.finalizing=this.record({...turn.event,state:"confirmed",metadata:result.metadata});await turn.finalizing;this.assert(s);
-      s.seen.add(turn.itemId!);if(s.seen.size>1024)throw Error();s.turn=undefined;
+      s.seen.add(turn.itemId!);if(s.seen.size>1024)s.seen.delete(s.seen.values().next().value!);s.turn=undefined;
       if(this.perTurn){s.tencentWire?.close();s.tencentWire=undefined;}
       return result.text?{segmentId:turn.event.segmentId,revision:1,isFinal:true,text:result.text,language:this.transcriptLanguage(turn),
         timing:{startMs:turn.event.audioStartSample!/(this.rate/1000),endMs:turn.event.audioEndSample!/(this.rate/1000),source:"estimated"}}:null;

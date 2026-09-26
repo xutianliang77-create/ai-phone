@@ -87,6 +87,31 @@ describe("streaming ASR transport injected into original Provider",()=>{
     const second=await p.flush("stream");expect(second?.segmentId).not.toBe(first?.segmentId);expect(second?.text).toBe("Bonjour");
     expect((s.record.mock.calls.at(-1) as any)[0]).toMatchObject({audioStartSample:2400,audioEndSample:4800});
   });
+  it("keeps one stream beyond 1024 completed turns without dropping the latest replay protection",async()=>{
+    const s=setup(),p=s.create();await p.createSession(session);
+    for(let n=1;n<=10000;n++){
+      await p.transcribe(frame(n));
+      if(n>1)s.sockets[0].receive({type:"conversation.item.input_audio_transcription.completed",item_id:`item-${n-1}`,content_index:0,transcript:"OLD"});
+      const result=await p.flush("stream");
+      expect(result).toMatchObject({text:"Bonjour",timing:{startMs:(n-1)*100,endMs:n*100}});
+    }
+    expect(s.socketFactory).toHaveBeenCalledTimes(1);
+    const confirmed=s.record.mock.calls.map(c=>(c as any)[0]).filter(event=>event.state==="confirmed");
+    expect(confirmed).toHaveLength(10000);expect(new Set(confirmed.map(event=>event.attemptId)).size).toBe(10000);
+    expect(s.sockets[0].sent.filter(event=>event.type==="input_audio_buffer.commit")).toHaveLength(10000);
+    expect(s.sockets[0].readyState).toBe(1);
+    const seen=(p as unknown as {client:{state:{seen:Set<string>}}}).client.state.seen;
+    expect(seen.size).toBe(1024);expect(seen.has("item-1")).toBe(false);expect(seen.has("item-10000")).toBe(true);
+    // Eviction must not turn a very old final into the new turn's result.
+    await p.transcribe(frame(10001));const ws=s.sockets[0];ws.autoComplete=false;
+    ws.onSend=e=>{if(e.type==="input_audio_buffer.commit")queueMicrotask(()=>{
+      ws.receive({type:"conversation.item.input_audio_transcription.completed",item_id:"item-1",content_index:0,transcript:"OLD"});
+      ws.receive({type:"input_audio_buffer.committed",item_id:"item-10001",previous_item_id:"item-10000"});
+    });};
+    await expect(p.flush("stream")).rejects.toMatchObject({code:"public_asr_stream_protocol"});
+    expect(s.record.mock.calls.filter(c=>(c as any)[0].state==="confirmed")).toHaveLength(10000);
+    expect(s.socketFactory).toHaveBeenCalledTimes(1);
+  },30000);
   it("requires an endpoint at the uploaded audio boundary",async()=>{
     const s=setup(),p=s.create();await p.createSession(session);await p.transcribe(frame());await expect(p.commitBoundary({sessionId:"stream",boundaryMs:50})).rejects.toThrow("boundary_mismatch");
     expect(s.sockets[0].sent).toHaveLength(2);
