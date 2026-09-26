@@ -1,5 +1,19 @@
 # 无界 AI 1.1 非测试收尾与交付说明
 
+## 当前修复候选与质量复核（2026-09-26晚，优先于下方历史）
+
+功能源码c8acd6734d1d77e863c6d55213e1ee80af23c4a2/tree2f9cda667236dd0f3b028224517471ae77c2c55f，iOS2026092605/profile/full已安装；服务端同源镜像fd042608ff11b8e7888434e5cb01a4f379824a41ab43d307bcdda262b2759522已部署原隔离QA。App摘要8f57224c7d5fdc7213fa22ad1d5bba987d33b07997c147c0fc6fe4722cbb8c93。原16b失败回执保留，不当作当前通过。
+
+修复公有结束flush后不补存最新字幕的问题，复用1.0双快照方式并保留账号/代际/删除保护；同时只补Qwen协议拒绝原因及数值状态诊断，不放宽校验。原尾句失败复现现通过，Flutter885、Gateway1063、定向19/85（有交集）、同SDK Dart分析与双版本40/40通过。原Flutter分析LSP异常退出255和错误测试夹具的失败记录均保留。
+
+同源静音/朗读真实资格各8组原译文/唯一29秒，静音TTS0、朗读26块545600字节。随后两轮手机/服务器14对14、19对19原译文一致，各唯一78/272秒；第二条含用户提前开始后的等待，非70秒固定音时长。第一轮有其他声源，排除质量签收。第二轮用户仍报告问题，独立检查确认：关键编号/模型术语误识别，正确人名/界面词被MT误译，长句分段，speaker实际请求off。包资源与ENABLE_DEVICE_SPEAKER=true均正确，不能把off解释成已进行模型分人或时间轴验收。
+
+公有创建未投递原domainLexiconPacks/termbaseId，TMT适配器没有消费terminology，本次refinement.provider=off；相关1.0优化代码仍在，但不能说这条公有链完整生效。后续回CO11-03/04/06/07处理原缺口，再走CO11-15，不另建App、不换模型或按本次答案硬编码。旧ASR协议错误在3次隔离探针和2次手机短测均未再现，根因仍开，不能声称修复。
+
+当前QA已回维护，config dc67838b611835f1686fbb18e8e3648833e7267e10a1f8c5cfe2f252a6605455，手机保留新包；旧16b回退app-pre-c8acd67保留。未push/合并，未改旧失败账本/历史14笔，未动私有1.0、丸子。CO11-15完整质量/长测/系统与正式发布均未通过。
+
+外层证据：artifacts/closeout-regression/20260926-tail-asr-fix/RESULT.md、QUALITY_REVIEW.md、phone-comparison.json。候选和匹配符号在artifacts/releases/wujie-co11-qa-c8acd67-2026092605/。本段为交接，功能构建仍绑定c8提交，不把后续文档提交当构建源。
+
 ## 最终同源QA检查点（2026-09-26，优先于下方历史）
 
 当前功能源码`16b4872425f092d6e141ebfb69051d3f6eb42d70`／tree `e75078460acead6cc93674fd99f945d9696571ee`，镜像`sha256:627163eccb862937fda8cadbc096cdf3f39be45605c0724badf88063309cfaef`。iOS2026092604/profile/full/独立public Bundle已签名并归档；App SHA `351addb61d7e83c7d41a9f995750a2d195138a452c12c14f7f7a8a6eb873dc38`，源码、模型资源、相对路径摘要及符号UUID一致。新App尚未安装。
