@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 import { mkdirSync, renameSync, writeFileSync } from "node:fs";
 import { dirname, isAbsolute, resolve } from "node:path";
+import { stopApplicationChildren } from "./ordered-shutdown.mjs";
 
 const children = new Map();
 const restartTimers = new Map();
@@ -163,17 +164,8 @@ async function stop(code) {
   writeSupervisorState();
   for (const timer of restartTimers.values()) clearTimeout(timer);
   restartTimers.clear();
-  for (const child of children.values()) child.kill("SIGTERM");
-  await Promise.race([
-    Promise.all([...children.values()].map(waitForExit)),
-    new Promise((resolve) => setTimeout(resolve, 15_000)),
-  ]);
-  for (const child of children.values()) {
-    if (child.exitCode === null && child.signalCode === null) {
-      child.kill("SIGKILL");
-    }
-  }
-  process.exit(code);
+  const result = await stopApplicationChildren(children);
+  process.exit(code || (result.forced || result.failed ? 1 : 0));
 }
 
 function resolveSupervisorStateFile() {
@@ -193,16 +185,6 @@ function writeSupervisorState() {
     components: Object.fromEntries(componentStates),
   }), { encoding: "utf8", mode: 0o600 });
   renameSync(temporary, supervisorStateFile);
-}
-
-function waitForExit(child) {
-  return new Promise((resolve) => {
-    if (child.exitCode !== null || child.signalCode !== null) {
-      resolve();
-      return;
-    }
-    child.once("exit", resolve);
-  });
 }
 
 function flag(name, fallback) {

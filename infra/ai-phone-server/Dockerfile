@@ -19,6 +19,7 @@ COPY release/domestic/model-routing.json ./release/domestic/model-routing.json
 COPY infra/postgres ./infra/postgres
 COPY infra/ai-phone-server/app-container-entrypoint.mjs \
   infra/ai-phone-server/container-healthcheck.mjs \
+  infra/ai-phone-server/ordered-shutdown.mjs \
   ./infra/ai-phone-server/
 
 RUN npm ci --no-audit && \

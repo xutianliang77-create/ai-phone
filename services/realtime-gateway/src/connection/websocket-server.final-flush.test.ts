@@ -73,6 +73,30 @@ describe("websocket final flush", () => {
 
     await new Promise<void>((resolve) => server.close(() => resolve()));
   });
+
+  it("gracefully stops an active connection without a client end request", async () => {
+    setEnv("REALTIME_PORT","0");setEnv("REALTIME_TOKEN_SECRET",secret);
+    setEnv("REALTIME_PROVIDER","mock");setEnv("ASR_PROVIDER","mock");setEnv("SESSION_EVENT_SINK","noop");
+    setEnv("REALTIME_ALLOWED_HOSTS","127.0.0.1");setEnv("REALTIME_ALLOW_NON_BROWSER_CLIENTS_WITHOUT_ORIGIN","true");
+    const server=startWebSocketServer();
+    await new Promise<void>(resolve=>server.once("listening",resolve));
+    const address=server.address();if(!address||typeof address==="string")throw Error("missing_port");
+    const ws=new WebSocket(`ws://127.0.0.1:${address.port}/realtime`,[realtimeProtocol,realtimeTokenProtocol(token())],
+      {headers:{host:"127.0.0.1"}});
+    await waitForEvent(ws,"session.started");
+    const finalEvents=collectUntilEnded(ws);
+    for(let sequence=1;sequence<=8;sequence++)ws.send(JSON.stringify(audioFrame(sequence)));
+    ws.send(JSON.stringify({type:"session.pause",sessionId}));
+    await waitForEvent(ws,"session.paused");
+    ws.send(JSON.stringify({type:"session.resume",sessionId}));
+    await waitForEvent(ws,"session.resumed");
+    expect(await server.shutdown()).toBe(true);
+    const events=await finalEvents;
+    expect(events.at(-1)).toMatchObject({type:"session.ended",reason:"connection_closed"});
+    expect(events.filter(event=>event.type==="session.ended")).toHaveLength(1);
+    expect(events.some(event=>event.type==="transcript.final")).toBe(true);
+    expect(events.some(event=>event.type==="translation.final")).toBe(true);
+  });
 });
 
 function setEnv(key: string, value: string) {

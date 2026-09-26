@@ -1,7 +1,7 @@
 import { createServer } from "node:http";
 import { loadEnv } from "../config/env.js";
 import { handleGatewayHttpRequest } from "./gateway-health.js";
-import { realtimeLogger } from "../metrics/realtime-metrics.js";
+import { loggableError, realtimeLogger } from "../metrics/realtime-metrics.js";
 import { createSessionEventSink } from "../sessions/session-event-sink.js";
 import { createUsageBalanceClient } from "../usage/usage-balance-client.js";
 import { DisconnectFinalizerRegistry } from
@@ -10,6 +10,7 @@ import { RealtimeGatewayProtection } from
   "../security/realtime-gateway-protection.js";
 import { createProtectedWebSocketEntry } from "./realtime-websocket-entry.js";
 import { GatewayDependencyReadinessMonitor } from "./gateway-dependency-readiness.js";
+import { RealtimeGatewayShutdown } from "./realtime-gateway-shutdown.js";
 
 export function createRealtimeServerRuntime() {
   const env = loadEnv();
@@ -54,12 +55,29 @@ export function createRealtimeServerRuntime() {
       "Deferred session finalization failed",
     ),
   );
+  const shutdown = new RealtimeGatewayShutdown({
+    clients: () => server.clients,
+    stopAccepting: () => { server.close(); },
+    closeTransport: async () => {
+      // Finalization has already persisted the receipt. Give queued frames and
+      // the close handshake a bounded chance to leave before forcing sockets.
+      await new Promise<void>(resolve => setTimeout(resolve, 250));
+      for (const client of server.clients) client.terminate();
+      httpServer.closeAllConnections();
+      httpServer.close();
+      dependencyReadiness.close();
+      disconnectFinalizers.close();
+      await protection.close();
+    },
+    onError: error => realtimeLogger.warn({error:loggableError(error)}, "Realtime shutdown was not confirmed"),
+  });
   return {
     env,
     protection,
     dependencyReadiness,
     httpServer,
     server,
+    shutdown,
     sessionEventSink: createSessionEventSink(env),
     usageBalanceClient: createUsageBalanceClient(env),
     disconnectFinalizers,
@@ -81,5 +99,5 @@ export function listenRealtimeServerRuntime(
     disconnectFinalizers.close();
     server.close();
   });
-  return httpServer;
+  return Object.assign(httpServer, { shutdown: () => runtime.shutdown.stop() });
 }

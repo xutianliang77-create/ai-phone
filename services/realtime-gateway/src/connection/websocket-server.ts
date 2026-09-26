@@ -22,12 +22,11 @@ import { createRealtimeServerRuntime, listenRealtimeServerRuntime } from "./real
 import { publicGatewayRuntimeOptions } from "./public-runtime-bootstrap.js";
 import { PublicSpeechInactivityWatchdog } from "./public-speech-inactivity-watchdog.js";
 import { DeviceSpeakerTimeline } from "../speaker/device-speaker-timeline.js";
+import { registerRealtimeShutdown } from "./realtime-gateway-shutdown.js";
 export { normalizeClientTextLanguage } from "../protocol/client-text-language.js";
 export function startWebSocketServer(options:{publicRuntime?:PublicGatewayRuntimeOptions}={}) {
   const runtime = createRealtimeServerRuntime();
-  // Explicit material/factory injection exists only for isolated in-process
-  // tests. The executable production entry calls this function without
-  // options, so it always consumes the current signed readiness gate.
+  // Factory injection is test-only; production always uses signed readiness.
   const injectedPublicRuntime=options.publicRuntime!==undefined;
   const publicRuntime=options.publicRuntime?{...options.publicRuntime}:publicGatewayRuntimeOptions(runtime.env);
   const {
@@ -37,7 +36,7 @@ export function startWebSocketServer(options:{publicRuntime?:PublicGatewayRuntim
     usageBalanceClient,
     disconnectFinalizers,
   } = runtime;
-  server.on("connection", async (ws, request) => {
+  server.on("connection", (ws, request) => runtime.shutdown.track(ws, (async () => {
     const configured=await setupRealtimeConnection(runtime,ws,request,publicRuntime,!injectedPublicRuntime);
     if(!configured)return;
     const {session,generation,resumed,provider,sessionEventSink,ttsOutputQueue}=configured;
@@ -182,7 +181,7 @@ export function startWebSocketServer(options:{publicRuntime?:PublicGatewayRuntim
         });
       return true;
     };
-    ws.on("message", (data) => {
+    ws.on("message", (data) => { if(runtime.shutdown.isStopping)return;
       if (rateLimited) return;
       if (!messageRateGuard.consume("message")) {
         rateLimited = true;
@@ -302,7 +301,6 @@ export function startWebSocketServer(options:{publicRuntime?:PublicGatewayRuntim
         rejectRealtimeControlBackpressure(ws, sendRealtime, session.id);
       }
     });
-
     let connectionError = false;
     const connectionCleanup = new RealtimeConnectionCleanup({
       session,
@@ -336,8 +334,10 @@ export function startWebSocketServer(options:{publicRuntime?:PublicGatewayRuntim
         ? "connection_error"
         : "connection_closed";
       await connectionCleanup.run(reason);
-      if(!connectionCleanup.retainedPublicRecovery)ttsOutputQueue.close();
+      if(!connectionCleanup.retainedPublicRecovery){ttsOutputQueue.close();runtime.shutdown.remove(ws);}
     };
+    registerRealtimeShutdown(runtime.shutdown,ws,{session,generation,provider,endRealtimeSession,cleanupConnection,
+      beforeStop:()=>{outputSuppressed=true;audioBatcher.stopAccepting();ttsOutputQueue.close();return controlQueue.catch(()=>undefined);}});
     ws.on("error", (error) => {
       connectionError = true;
       realtimeLogger.warn({ error, sessionId: session.id },
@@ -345,6 +345,6 @@ export function startWebSocketServer(options:{publicRuntime?:PublicGatewayRuntim
       void cleanupConnection();
     });
     ws.on("close", () => { void cleanupConnection(); });
-  });
+  })()));
   return listenRealtimeServerRuntime(runtime);
 }
