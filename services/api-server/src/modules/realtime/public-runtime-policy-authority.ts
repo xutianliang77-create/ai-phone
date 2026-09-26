@@ -87,6 +87,9 @@ function resolvePolicy(file:string,key:string,deployment:string,context:Paramete
     reservedMicros:policy.reservedMicros,...(policy.maxActiveSeconds!==undefined?{maxActiveSeconds:policy.maxActiveSeconds}:{}),sampleRate:config.components.asr!.sampleRate};
   const qualifications=components.map(component=>{const profile=config.components[component]!,execution=config.executionPlan[component];
     if(execution.execution!=="public")throw Error("public_runtime_admission_policy_scope_mismatch");return {...common,id:`${policy.policyId}:qualification:${component}`,
+      // A longer operator policy cannot extend the independently signed live
+      // observation. Renewal must obtain a still-current proof for both.
+      ...(live?{expiresAt:new Date(Math.min(Date.parse(common.expiresAt),Date.parse(live.expiresAt))).toISOString()}:{}),
       kind:"model_qualification" as const,state:"qualified" as const,component,scopeKey:execution.scopeKey,providerId:profile.vendor,modelId:profile.modelId||execution.scopeKey};});
   return {records:[budget,...qualifications],refs:{consentReceiptId:"consent",budgetReservationId:budget.id,
     qualificationReceiptIds:Object.fromEntries(qualifications.map(value=>[value.component,value.id]))}};

@@ -233,7 +233,9 @@ codesign --verify --deep --strict "$ARCHIVED_APP"
 verify_vad_resource "$ARCHIVED_APP/Models/vad/silero-vad-unified-256ms-v6.0.0.mlmodelc"
 verify_speaker_resource "$ARCHIVED_APP"
 
-APP_SHA256="$(find "$ARCHIVED_APP" -type f -print0 | sort -z | xargs -0 shasum -a 256 | shasum -a 256 | awk '{print $1}')"
+# Relative names keep the regular-file aggregate stable after a verified copy.
+# Codesign remains the separate signed-bundle integrity check.
+APP_SHA256="$(cd "$ARCHIVED_APP" && find . -type f -print0 | LC_ALL=C sort -z | xargs -0 shasum -a 256 | shasum -a 256 | awk '{print $1}')"
 SIGNING_DETAILS="$(codesign -dv --verbose=4 "$APP_PATH" 2>&1)"
 SIGNING_IDENTITY="$(awk -F= '/^Authority=/{if (!found) {print $2; found=1}}' <<< "$SIGNING_DETAILS")"
 CANDIDATE_ID="$CANDIDATE_ID" SOURCE_COMMIT="$SOURCE_COMMIT" \
@@ -247,7 +249,8 @@ ENABLE_DEVICE_SPEAKER="$ENABLE_DEVICE_SPEAKER" \
 SOURCE_LANGUAGE="$SOURCE_LANGUAGE" TARGET_LANGUAGE="$TARGET_LANGUAGE" \
 AUTO_REVERSE_TARGET_LANGUAGE="$AUTO_REVERSE_TARGET_LANGUAGE" \
 AUTOMATIC_LANGUAGE_PAIR="$AUTOMATIC_LANGUAGE_PAIR" \
-APP_SHA256="$APP_SHA256" SIGNING_IDENTITY="$SIGNING_IDENTITY" \
+APP_SHA256="$APP_SHA256" APP_HASH_ALGORITHM=sha256-relative-regular-files-v1 \
+SIGNING_IDENTITY="$SIGNING_IDENTITY" \
 node "$ROOT_DIR/scripts/lib/write_ios_candidate_manifest.mjs" \
   "$OUTPUT_ROOT/candidate-manifest.json"
 chmod 600 "$OUTPUT_ROOT/candidate-manifest.json"

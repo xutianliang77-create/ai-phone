@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -74,6 +74,31 @@ describe("traceable iOS candidate contract", () => {
   it("keeps the server address configurable and rejects loopback", () => {
     expect(script).toContain('SERVER_BASE_URL="${SERVER_BASE_URL:-}"');
     expect(script).toContain("SERVER_BASE_URL must be reachable from the iPhone");
+  });
+
+  it("keeps the declared file aggregate stable across archive locations but detects changed bytes", () => {
+    const directory = mkdtempSync(path.join(tmpdir(), "wujie-ios-hash-"));
+    const first = path.join(directory, "first", "Runner.app");
+    const second = path.join(directory, "moved", "Runner.app");
+    const assignment = script.split("\n").find(line => line.startsWith("APP_SHA256="));
+    expect(assignment).toContain('cd "$ARCHIVED_APP"');
+    expect(assignment).toContain("LC_ALL=C sort -z");
+    expect(script).toContain("APP_HASH_ALGORITHM=sha256-relative-regular-files-v1");
+    expect(writer).toContain("appAggregateHashAlgorithm");
+    const hash = root => execFileSync("bash", ["-c",
+      'set -euo pipefail\nARCHIVED_APP="$1"\n' + assignment + '\nprintf "%s" "$APP_SHA256"',
+      "ios-hash-test", root], { encoding: "utf8" }).trim();
+    try {
+      mkdirSync(first, { recursive: true });
+      writeFileSync(path.join(first, "Runner"), "synthetic executable");
+      writeFileSync(path.join(first, "resource with space"), "synthetic resource");
+      cpSync(first, second, { recursive: true });
+      const original = hash(first);
+      expect(original).toMatch(/^[a-f0-9]{64}$/);
+      expect(hash(second)).toBe(original);
+      writeFileSync(path.join(second, "Runner"), "changed executable");
+      expect(hash(second)).not.toBe(original);
+    } finally { rmSync(directory, { recursive: true, force: true }); }
   });
 
   it("writes an explicit public signing identity into the candidate xcconfig", () => {

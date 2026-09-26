@@ -33,6 +33,7 @@ import { registerPublicEntryProtection } from
 import type { PublicEntryRateLimiter } from
   "./infrastructure/security/public-entry-protection.js";
 import {createPublicRealtimeCoordinator,type PublicRealtimeAuthority} from "./modules/realtime/public-realtime-coordinator.js";
+import {createPublicRuntimeAdmissionRenewer} from "./modules/realtime/public-runtime-admission-renewal.js";
 import {registerPublicRuntimeMaterialRoutes,type PublicGatewayCredentialAccess} from "./modules/realtime/public-runtime-material.routes.js";
 import type { CallLinkWorkerTtsCredentialAccess } from
   "./modules/call-links/worker-dispatch-runtime.routes.js";
@@ -94,7 +95,8 @@ export async function buildApp(options: BuildAppOptions = {}) {
   await registerDiagnosticsRoutes(app);
   await registerPlansRoutes(app);
   await registerRealtimeRoutes(app,options.publicRealtimeAuthority?createPublicRealtimeCoordinator(options.publicRealtimeAuthority):undefined,
-    options.publicRealtimeAuthority?.configurationCapability);
+    options.publicRealtimeAuthority?.configurationCapability,
+    options.publicRealtimeAuthority?createPublicRuntimeAdmissionRenewer(options.publicRealtimeAuthority):undefined);
   registerPublicRuntimeMaterialRoutes(app,options.publicGatewayCredentialAccess);
   await registerSessionsRoutes(app);
   await registerTermsRoutes(app);

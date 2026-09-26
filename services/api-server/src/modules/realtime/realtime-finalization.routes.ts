@@ -14,9 +14,10 @@ import {
 } from "../sessions/sessions-runtime.repository.js";
 import { withSessionWriteLock } from "../sessions/session-write-coordinator.js";
 import {handlePublicFinalization,registerPublicLifecycleRoutes} from "./public-session-lifecycle.routes.js";
+import type {PublicRuntimeAdmissionRenewer} from "./public-runtime-admission-renewal.js";
 
-export function registerRealtimeFinalizationRoute(app: FastifyInstance) {
-  registerPublicLifecycleRoutes(app);
+export function registerRealtimeFinalizationRoute(app: FastifyInstance,renewAdmission?:PublicRuntimeAdmissionRenewer) {
+  registerPublicLifecycleRoutes(app,renewAdmission);
   app.post("/realtime/sessions/:sessionId/finalize", async (request, reply) => {
     const account = await requireAccount(request, reply);
     if (!account) return;

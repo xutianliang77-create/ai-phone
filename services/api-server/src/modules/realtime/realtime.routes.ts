@@ -28,13 +28,14 @@ import type {PublicRealtimeCoordinator,PublicRealtimeAuthority} from "./public-r
 import {handlePublicRealtimeCreation} from "./public-realtime-http.js";
 import {registerPublicCreationContextRoute} from "./public-creation-context.routes.js";
 import {registerPublicCreationResolutionRoutes} from "./public-creation-resolution.routes.js";
+import type {PublicRuntimeAdmissionRenewer} from "./public-runtime-admission-renewal.js";
 
-export async function registerRealtimeRoutes(app: FastifyInstance,publicCoordinator?:PublicRealtimeCoordinator,publicCapability?:PublicRealtimeAuthority["configurationCapability"]) {
+export async function registerRealtimeRoutes(app: FastifyInstance,publicCoordinator?:PublicRealtimeCoordinator,publicCapability?:PublicRealtimeAuthority["configurationCapability"],renewAdmission?:PublicRuntimeAdmissionRenewer) {
   registerPublicCreationContextRoute(app,!!publicCoordinator,publicCapability);
   // An authenticated owner must still be able to inspect or retire an old
   // request while new public issuance is fail-closed for maintenance.
   registerPublicCreationResolutionRoutes(app,!!publicCoordinator||syncKey(process.env.API_RESULT_SYNC_DEPLOYMENT_ID));
-  registerRealtimeFinalizationRoute(app);
+  registerRealtimeFinalizationRoute(app,renewAdmission);
   app.post("/realtime/sessions", async (request, reply) => {
     const account = await requireAccount(request, reply);
     if (!account) return;

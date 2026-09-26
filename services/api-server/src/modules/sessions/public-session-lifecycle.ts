@@ -13,6 +13,9 @@ export interface PublicRuntimePolicy {
   sampleRate?: 16000|24000;
   leaseId: string; captureId: string; languagePolicyKey: string;
   expiresAt: string; maxActiveSeconds?: number;
+  /** Latest same-lease renewal. Prior aggregate snapshots remain in the
+   * original PostgreSQL command/outbox history; no unbounded receipt array. */
+  renewal?: {revision:number;renewedAt:string;previousAdmissionHash:string;chainHash:string};
 }
 export interface PublicRuntimeEvidence {
   sequence: number; eventHash: string; phase: "active" | "paused" | "disconnected" | "stopped";

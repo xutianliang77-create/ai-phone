@@ -99,7 +99,7 @@ function narrowQaBudget(resolved:Awaited<ReturnType<PublicRealtimeAuthority["res
 
 /** The authenticated request selecting online mode is the consent action for this
  * exact session. Budget and qualification remain separately server-resolved. */
-function onlineSelectionConsent(current:Awaited<ReturnType<typeof findSession>>,records:PublicInferenceEvidence[],now:Date):PublicInferenceEvidence{
+export function onlineSelectionConsent(current:Awaited<ReturnType<typeof findSession>>,records:PublicInferenceEvidence[],now:Date):PublicInferenceEvidence{
   if(!current||current.processingAuthorization?.processingMode!=="online"||!current.publicModelConfiguration)throw new ResultSyncError("public_inference_admission_required",503);
   const budget=records.find((e):e is Extract<PublicInferenceEvidence,{kind:"provider_budget"}>=>e.kind==="provider_budget");
   if(!budget)throw new ResultSyncError("public_budget_evidence_required",503);

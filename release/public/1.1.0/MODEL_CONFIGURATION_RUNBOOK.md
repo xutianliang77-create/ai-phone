@@ -1,5 +1,52 @@
 # 公有／私有模型配置页交付与操作说明
 
+## 现行操作入口（2026-09-26，优先于下方历史批次）
+
+当前部署参考源码为`e951519`，后续收口修复尚未部署。交付定位仍是隔离LAN QA，不是正式RC；最新指令要求先完成非测试工作，再集中验证，未更改线上配置或开关。当前候选/资格/未完成项见 [交付说明](CLOSEOUT_HANDOFF.md) 与 [现场清单](closeout-snapshot.json)。
+
+### 配置能力与真实生效
+
+原 `/models/public-config` 支持Qwen、腾讯、OpenAI、Google的ASR/翻译/TTS独立选择，现行源码目录为16个协议。具体型号、服务端点、Voice及厂商专属字段手填；不是只允许当前Qwen＋腾讯组合。私有配置仍在 `/models/private-config`，凭据和文件与公有隔离。
+
+| 组件 | 当前原实现 | 配置时必须区分 |
+| --- | --- | --- |
+| 实时ASR | `qwen_asr_realtime`、`tencent_asr_ws`、`openai_realtime_asr`、`google_speech_v2` | 分别按协议采样率/语种/地域配置，不把完整片段HTTP接口当连续实时流 |
+| 完整片段ASR | `qwen_asr_compatible`、`openai_transcriptions` | 可保存不等于可用于当前公有实时同传入口 |
+| MT | `qwen_chat`、`tencent_hunyuan_chat`、`tencent_tmt`、`openai_chat`、`google_gemini`、`google_vertex_gemini` | 腾讯TMT与混元不是一个协议；Google原生接口不是Chat Completions |
+| TTS | `qwen_tts_realtime`、`tencent_tts_ws`、`openai_speech`、`google_cloud_tts` | Voice、输出格式/采样率和语种约束分别绑定；不静默套用别家的音量参数 |
+
+Qwen实时ASR现行代码使用`turn_detection.type=server_vad`，阈值与静默时长来自快照`serverVad`并核验setup回显；**不要按下方早期记录配置为Manual或`turn_detection=null`**。本地模式继续原手机VAD，不随公共Qwen切换。实际自动来源语言范围与中英反向输出pair分开；第三语言只有当前ASR、MT/TTS方向和签名资格共同允许才可执行，不以模型介绍代替已接入能力。
+
+腾讯TTS的Volume默认+4，只有腾讯协议显示/接收该字段；换服务商/协议后清除不适用字段并重新选择对应参数。朗读关闭的配置快照和资格只包含ASR＋MT，不依赖TTS声音或密钥可用；朗读开启使用另一个完整快照。Google命名Voice等不能支持动态方向的组合，应在开始前拒绝而非播错语言。
+
+### 管理员受控切换顺序
+
+1. 使用独立1.1管理凭据，经HTTPS或真实loopback加载原配置页。读取deployment、revision与无密钥字段；不在URL/终端日志中传密钥。
+2. 先停止**新会话准入**，保留正在结束的会话处理能力；核对活动会话、hold、输出和调用终态。不要靠突然关整个容器处理账务不明的会话。
+3. 在无活动会话且完成维护准备后关闭公共运行时，再保存配置。`PUBLIC_RUNTIME_ENABLED=true`时PUT返回409 `public_config_maintenance_required`；不得绕过此保护热换唯一凭据。
+4. 保存按原revision/CAS处理。换vendor/protocol/auth/origin时重新核对凭据与不适用字段；密钥不回显，无密钥导出不是完整凭据备份。
+5. 读管理鉴权下的`GET /models/public-config/status`，分别看`silent`、`spoken`的hash与状态；保存和此只读查询不调用模型。`configured_not_verified`或`not_qualified`不能写成真实可用。
+6. 真实资格必须来自目标deployment、精确配置hash、语言/Voice和实际Adapter的对应证据；改变配置不能复用旧组合的资格。资格过期不是客户单会话时长规则，也不能仅延长时间戳假装重新验证。此步属于后置验证阶段。
+7. 仅在准入条件满足并具备对应操作范围时启用目标实例；同时核对API、严格TLS、Gateway及客户配置GET。进程健康200不等于sessionReady，更不等于releaseReady。
+
+### 同一活动会话跨资格有效期（收口源码，尚未部署）
+
+原runtime确认写入口在普通无时长cap会话距准入到期不足120秒时，读取当前服务端权威凭证。只有旧授权仍有效、配置/语言/地区/采样率未变，且新凭证确实覆盖更晚时间，才在原session fence/CAS内更新当前证据集与准入hash。原grant、lease、JWT、capture、水位、Provider和客户hold/账本均不改变；续验链摘要与原PostgreSQL命令/outbox快照留痕，不无限累加会话内凭证数组。
+
+live qualification的到期时间与运营策略取较早值。早期刷新未取得新凭证时，仍只使用原有效凭证；过期后继续失败关闭，绝不伪造续期。已撤销/已终止/断连、QA硬截止及带显式cap会话不续验；这不是JWT续签或跨进程Provider恢复。只读`admission`查询没有写入副作用。新资格仍由管理员按原实测/签名流程提供，本路径不自动发起模型探测或费用。
+
+### 在线入口的用户规则
+
+普通产品按用户开始/结束、账户可用量与原300秒无新语音策略运行，无人为单会话时长上限。一次性QA资格、45秒诊断录音和准备窗口是测试工具约束，不是客户功能。
+
+当前隔离QA已按用户停止测试的要求保持`PUBLIC_RUNTIME_ENABLED=false`、`PLATFORM_ACCEPT_NEW_SESSIONS=false`；App配置GET会返回`503 public_creation_not_ready`并显示“在线服务暂未开放”。这不是ASR/MT/TTS或余额检查的失败证据。不让用户通过重复点击、清沙箱或换模型来解决服务开关问题。
+
+以后恢复QA时应分别声明服务开放状态、一次会话许可与录音数据范围，避免短准备窗口误导客户；现有回退脚本尚会关闭整个测试入口，本文没有将其改成常开，更没有取消生产准入/余额校验。
+
+## 历史实现记录（截至第90批；仅追溯，不作为现行配置操作）
+
+下方“未实现/下一批/默认Manual”等描述属于各批当时状态。凡与上面的现行源码说明冲突，按现行入口及具体版本回执处理，不能据旧段落恢复旧模型模式或重复开发已实现功能。
+
 第90批补[原恢复Socket音频序号与首帧水位桥接](PUBLIC_RECOVERY_AUDIO_BRIDGE.md)：仅显式同进程测试装配下，手机必须原样回显服务端可信水位；公共sink持久确认resume后才接受精确下一序号首帧。默认生产仍关闭，不重放PCM、不建第二模型会话，也不能据此宣称真实断网连续翻译已验收。
 
 第89批补[原恢复Socket受限装配](PUBLIC_RECOVERY_SOCKET_ASSEMBLY.md)：同JWT、同进程及新恢复授权回执下复用原Provider/sink/TTS控制面；不重新取凭据或建第二模型连接。恢复音频仍明确拒绝，默认生产开关关闭，不能据此启用真实断网恢复。

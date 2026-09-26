@@ -14,6 +14,7 @@ import type { AudioFrameBatcher } from "./audio-frame-batcher.js";
 import { flushProviderSession } from "./session-control-handler.js";
 import { RealtimeFlushTracker } from "./realtime-flush-tracker.js";
 import type {RealtimeTtsOutputQueue} from "../tts/realtime-tts-output.js";
+import {logPublicSessionEnd} from "../metrics/public-asr-boundary-trace.js";
 
 interface RealtimeSessionFinalizerOptions {
   sessionId: string;
@@ -108,9 +109,11 @@ export class RealtimeSessionFinalizer {
   ) {
     const ending = transitionStatus(this.options.sessionId, "ending");
     if (!ending?.transition.accepted) return;
+    if(this.options.confirmed)logPublicSessionEnd({sessionId:this.options.sessionId,reason,stage:"requested"});
     if(this.options.confirmed)this.options.ttsOutput?.close();
     let flush:RealtimeFlushSummary;
     try {flush = await this.flush();}catch(error){
+      if(this.options.confirmed)logPublicSessionEnd({sessionId:this.options.sessionId,reason,stage:"flush_unconfirmed"});
       // A failed durable drain cannot confirm session.ended, but must not keep
       // a model session alive after the user's physical stop.
       await this.runStep("provider",()=>this.options.provider.closeSession(this.options.sessionId));
@@ -139,7 +142,11 @@ export class RealtimeSessionFinalizer {
       diagnostics: this.sessionDiagnostics ?? await this.collectDiagnostics(),
       ...(typeof remainingSeconds === "number" ? { remainingSeconds } : {}),
     });
-    await this.options.drainSessionSync();
+    try {await this.options.drainSessionSync();}catch(error){
+      if(this.options.confirmed)logPublicSessionEnd({sessionId:session.id,reason,stage:"sync_unconfirmed"});
+      throw error;
+    }
+    if(this.options.confirmed)logPublicSessionEnd({sessionId:session.id,reason,stage:"sync_drained"});
     // Cancel immediately, but persist the authoritative stop BEFORE waiting for
     // cancelled TTS metadata. Late known-attempt writes must not extend metering.
     if(this.options.confirmed)await this.options.ttsOutput?.drainInFlight();

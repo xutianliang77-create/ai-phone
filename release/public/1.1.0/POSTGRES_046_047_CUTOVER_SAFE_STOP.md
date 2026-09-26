@@ -2,6 +2,8 @@
 
 Status: development runbook only. The current public database has not been migrated by this work, and this is not a deployment authorization.
 
+2026-09-26 clarification: "current public database" below means the original public RC database last evidenced at schema 045, **not** the separate `wujie-co11-qa-54026e7` QA database already running schema 047. The QA currently runs source `e951519` with public runtime and new-session admission disabled. This documentation batch does not restart, migrate, restore or test either database. See [the current handoff](CLOSEOUT_HANDOFF.md).
+
 ## Boundary
 
 The existing deployed image expects schema 045. The new source expects 047: migration 046 changes the usage-hold projection's monotonic renewal rule; 047 adds indexed public model-attempt records and their session-delete cleanup. The old image must not simply be restarted after 046/047 because its exact schema manifest and data contract differ. Frozen private 1.0 is not a public data rollback target.
@@ -23,4 +25,6 @@ The existing deployed image expects schema 045. The new source expects 047: migr
 
 ## Current evidence and missing proof
 
-Migrations 046/047 and attempt/settlement UOW have passed on task-owned isolated databases; production remains on 045. No live restore rehearsal, schema-047-compatible prior image, public iOS/Android device acceptance or real supplier qualification exists for this source. Therefore live cutover and release remain blocked.
+Migrations 046/047, attempt/settlement UOW, 10,000-attempt pagination and API-process persistence/unique settlement have prior evidence on task-owned isolated databases. The selected QA has schema-047 images retained for an isolated rollback, and e951519 has a time-bounded real silent ASR+MT qualification receipt. These are no longer "missing source/qualification everywhere".
+
+Still missing for formal cutover: an approved and demonstrated restore preserving newly written history/ledger, a precisely chosen compatible rollback target, the complete active Gateway/Provider restart path, exact spoken-combination qualification, and formal same-RC iOS/Android acceptance. The original public RC's latest migration evidence remains 045; it was not reprobed or changed by this documentation batch. Therefore live cutover and release remain blocked, without discarding the existing isolated evidence.

@@ -13,6 +13,15 @@ afterEach(() => {
 });
 
 describe("configureMobileReleaseIdentity", () => {
+  test("keeps the Android launcher bound to the real Kotlin class when namespace changes", () => {
+    const manifest = readFileSync(new URL("../../apps/mobile/android/app/src/main/AndroidManifest.xml", import.meta.url), "utf8");
+    const activity = readFileSync(new URL("../../apps/mobile/android/app/src/main/kotlin/com/example/translation_mobile/MainActivity.kt", import.meta.url), "utf8");
+    const kotlinPackage = activity.match(/^package ([A-Za-z0-9_.]+)/m)?.[1];
+    const launcher = manifest.match(/<activity\s+android:name="([^"]+)"/)?.[1];
+    expect(launcher).toBe(`${kotlinPackage}.MainActivity`);
+    expect(launcher).not.toMatch(/^\./);
+  });
+
   test("writes iOS and Android release identity files", () => {
     tempDir = makeRoot();
 

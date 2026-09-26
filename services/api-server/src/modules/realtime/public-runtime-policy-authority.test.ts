@@ -4,15 +4,18 @@ import {tmpdir} from "node:os";
 import {join} from "node:path";
 import {publicRealtimeAuthorityFromEnvironment,signPublicRuntimeAdmissionPolicy} from "./public-runtime-policy-authority.js";
 import {signPublicRuntimeLiveQualification} from "@translation/platform-security";
+import {emptyConfiguration} from "../models/public-model-config.js";
+import type {PublicModelRuntimeSnapshot} from "../models/public-model-runtime-config.js";
 
 vi.mock("../../infrastructure/storage/repository-runtime.js",()=>({
   getRepositoryRuntime:()=>({driver:"postgres"}),
 }));
 
 let dir="";const key="a".repeat(64),now=new Date(),expiresAt=new Date(now.getTime()+600000).toISOString();
-const configuration={deploymentId:"public-test",configurationRevision:1,configurationHash:"b".repeat(64),modelPolicyRevision:"models-v1:test",
+const profiles=emptyConfiguration("public-test").components;
+const configuration={schemaVersion:1,deploymentId:"public-test",configurationRevision:1,configurationHash:"b".repeat(64),modelPolicyRevision:"models-v1:test",
   executionPlan:{asr:{execution:"public",scopeKey:"asr:scope",reason:"online_selected"},translation:{execution:"public",scopeKey:"translation:scope",reason:"online_selected"},tts:{execution:"public",scopeKey:"tts:scope",reason:"online_selected"}},
-  components:{asr:{vendor:"tencent",protocol:"tencent_asr_ws",modelId:"16k_zh",sampleRate:16000},translation:{vendor:"tencent",protocol:"tencent_tmt",modelId:"service:tencent_tmt"},tts:{vendor:"tencent",protocol:"tencent_tts_ws",modelId:"service:tencent_tts_ws"}}};
+  components:{asr:{...profiles.asr,vendor:"tencent",protocol:"tencent_asr_ws",modelId:"16k_zh",sampleRate:16000},translation:{...profiles.translation,vendor:"tencent",protocol:"tencent_tmt",modelId:"service:tencent_tmt"},tts:{...profiles.tts,vendor:"tencent",protocol:"tencent_tts_ws",modelId:"service:tencent_tts_ws"}}} satisfies PublicModelRuntimeSnapshot;
 function policy(patch:any={}){const value:any={schemaVersion:1,policyId:"policy-test",deploymentId:"public-test",configurationHash:configuration.configurationHash,
   modelPolicyRevision:configuration.modelPolicyRevision,region:"cn",issuedAt:now.toISOString(),expiresAt,maxActiveSeconds:60,currency:"CNY",reservedMicros:0,
   qualifiedComponents:["asr","translation","tts"],providerAvailability:[{providerId:"tencent",state:"available"}],qualifiedLanguagePairs:[{source:"zh",target:"en"}],...patch};if(Object.hasOwn(patch,"maxActiveSeconds")&&patch.maxActiveSeconds===undefined)delete value.maxActiveSeconds;return {...value,signature:signPublicRuntimeAdmissionPolicy(value,key)};}
@@ -140,6 +143,15 @@ describe("signed public runtime admission policy",()=>{
   it("requires a current matching live qualification only when explicitly enabled",async()=>{dir=mkdtempSync(join(tmpdir(),"wujie-public-policy-"));const file=join(dir,"policy.json"),live=join(dir,"live.json");writeFileSync(file,JSON.stringify(policy()),{mode:0o600});writeFileSync(live,JSON.stringify(liveQualification()),{mode:0o600});
     const authority=publicRealtimeAuthorityFromEnvironment(environment(file,{PUBLIC_RUNTIME_REQUIRE_LIVE_QUALIFICATION:"true",PUBLIC_RUNTIME_LIVE_QUALIFICATION_FILE:live,PUBLIC_RUNTIME_LIVE_QUALIFICATION_KEY:key}));await expect(authority!.resolveVerifiedEvidence(context(),new AbortController().signal)).resolves.toBeTruthy();
     const expired=liveQualification({expiresAt:new Date(now.getTime()-1).toISOString()});writeFileSync(live,JSON.stringify(expired),{mode:0o600});await expect(authority!.resolveVerifiedEvidence(context(),new AbortController().signal)).rejects.toThrow("public_runtime_live_qualification_expired");
+  });
+  it("seals the earlier live-proof expiry instead of inheriting a longer operator policy",async()=>{
+    dir=mkdtempSync(join(tmpdir(),"wujie-public-policy-"));const file=join(dir,"policy.json"),live=join(dir,"live.json");
+    const earlier=new Date(now.getTime()+120000).toISOString();
+    writeFileSync(file,JSON.stringify(policy()),{mode:0o600});writeFileSync(live,JSON.stringify(liveQualification({expiresAt:earlier})),{mode:0o600});
+    const authority=publicRealtimeAuthorityFromEnvironment(environment(file,{PUBLIC_RUNTIME_REQUIRE_LIVE_QUALIFICATION:"true",PUBLIC_RUNTIME_LIVE_QUALIFICATION_FILE:live,PUBLIC_RUNTIME_LIVE_QUALIFICATION_KEY:key}))!;
+    const result=await authority.resolveVerifiedEvidence(context(),new AbortController().signal);
+    expect(result.records.filter(record=>record.kind==="model_qualification").map(record=>record.expiresAt)).toEqual([earlier,earlier,earlier]);
+    expect(result.records.find(record=>record.kind==="provider_budget")!.expiresAt).toBe(expiresAt);
   });
   it("permits a signed-policy qualification bootstrap only in development",async()=>{dir=mkdtempSync(join(tmpdir(),"wujie-public-policy-"));const file=join(dir,"policy.json");writeFileSync(file,JSON.stringify(policy()),{mode:0o600});
     const authority=publicRealtimeAuthorityFromEnvironment(environment(file,{NODE_ENV:"development",PUBLIC_RUNTIME_REQUIRE_LIVE_QUALIFICATION:"true",PUBLIC_RUNTIME_QUALIFICATION_BOOTSTRAP:"true"}));

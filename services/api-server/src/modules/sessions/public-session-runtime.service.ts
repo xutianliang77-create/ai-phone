@@ -1,4 +1,4 @@
-import type { PublicRecoveryStatus } from "@translation/contracts";
+import type { PublicRecoveryStatus, PublicRuntimeObservation } from "@translation/contracts";
 import {publicRuntimeAdmissionValid} from "./public-runtime-admission.js";
 import { findSession } from "./sessions-runtime.repository.js";
 import { publicDeploymentId, assertPublicSession, mutatePublicSession } from "./session-result-sync.service.js";
@@ -9,8 +9,8 @@ import { hasPublicProviderReconciliation } from "./public-provider-reconciliatio
 
 /** Called only from the existing internal authenticated server boundary.
  * No client timestamps, duration or providerUsage are accepted. */
-export function observePublicRuntime(sessionId:string,value:unknown,now=new Date()) {
-  const deployment=publicDeploymentId(),b=value as Record<string,unknown>|null;
+export function parsePublicRuntimeObservation(value:unknown):PublicRuntimeObservation {
+  const b=value as Record<string,unknown>|null;
   if(!b || Array.isArray(b) || Object.keys(b).some(k=>!["leaseId","captureId","languagePolicyKey",
     "sequence","phase","finalRevision","lastAcceptedSample","uncertain"].includes(k)) ||
     !["active","paused","disconnected","stopped"].includes(String(b.phase)) ||
@@ -20,6 +20,10 @@ export function observePublicRuntime(sessionId:string,value:unknown,now=new Date
     (b.uncertain!==undefined&&(b.uncertain!==true||b.phase!=="stopped"))) {
     throw new ResultSyncError("invalid_public_runtime_event",400);
   }
+  return structuredClone(b) as unknown as PublicRuntimeObservation;
+}
+export function observePublicRuntime(sessionId:string,value:unknown,now=new Date()) {
+  const deployment=publicDeploymentId(),b=parsePublicRuntimeObservation(value);
   return mutatePublicSession(sessionId,"public-runtime",b,current=>{
     assertPublicSession(current,current.userId,deployment);
     if(current.accountDeletionRequestedAt)throw new ResultSyncError("account_deletion_pending",403);

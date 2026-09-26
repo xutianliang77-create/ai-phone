@@ -3,7 +3,7 @@ import {requireAccount} from "../account/account-auth.js";
 import {sendError} from "../../infrastructure/http/errors.js";
 import {withSessionWriteLock} from "../sessions/session-write-coordinator.js";
 import {ResultSyncError} from "../sessions/session-result-sync-contract.js";
-import {observePublicRuntime,publicRecoveryStatus} from "../sessions/public-session-runtime.service.js";
+import {observePublicRuntime,publicRecoveryStatus,parsePublicRuntimeObservation} from "../sessions/public-session-runtime.service.js";
 import {finalizePublicSession,serverFinalizationRequest} from "../sessions/public-session-finalization.service.js";
 import {findSession} from "../sessions/sessions-runtime.repository.js";
 import {isInternalAuthorized} from "./realtime-route-validation.js";
@@ -13,8 +13,9 @@ import {PublicConfigError} from "../models/public-model-config.js";
 import {claimPublicRecoveryOwnership} from "../sessions/public-recovery-ownership.service.js";
 import {reconcilePublicProviderUsage,hasPublicProviderReconciliation} from "../sessions/public-provider-reconciliation.js";
 import {publicProcessingDiagnostics} from "../sessions/public-processing-diagnostics.js";
+import type {PublicRuntimeAdmissionRenewer} from "./public-runtime-admission-renewal.js";
 
-export function registerPublicLifecycleRoutes(app:FastifyInstance){
+export function registerPublicLifecycleRoutes(app:FastifyInstance,renewAdmission?:PublicRuntimeAdmissionRenewer){
   app.post("/internal/realtime/sessions/:sessionId/admission",{bodyLimit:4096},async(request,reply)=>{
     reply.header("cache-control","no-store");
     if(!isInternalAuthorized(request.headers.authorization))return sendError(reply,401,"internal_error","Unauthorized internal request");
@@ -61,7 +62,9 @@ export function registerPublicLifecycleRoutes(app:FastifyInstance){
     if(!isInternalAuthorized(request.headers.authorization))return sendError(reply,401,"internal_error","Unauthorized internal request");
     const {sessionId}=request.params as {sessionId:string};
     return lifecycleResponse(reply,()=>withSessionWriteLock(sessionId,async()=>{
-      const evidence=await observePublicRuntime(sessionId,request.body);
+      const observation=parsePublicRuntimeObservation(request.body);
+      await renewAdmission?.(sessionId,observation);
+      const evidence=await observePublicRuntime(sessionId,observation);
       const declaredUncertain=(request.body as Record<string,unknown>|null)?.uncertain===true;
       const session=await findSession(sessionId);
       if(!session)throw new ResultSyncError("session_not_found",404);

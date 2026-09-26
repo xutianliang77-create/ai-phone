@@ -1,7 +1,7 @@
 import {afterEach,expect,it,vi} from "vitest";
 import {createHash} from "node:crypto";
 import {realtimeLogger} from "./realtime-metrics.js";
-import {logPublicAsrBoundary,publicAsrBoundaryTracePayload} from "./public-asr-boundary-trace.js";
+import {logPublicAsrBoundary,publicAsrBoundaryTracePayload,logPublicSessionEnd,publicSessionEndTracePayload} from "./public-asr-boundary-trace.js";
 
 afterEach(()=>{vi.unstubAllEnvs();vi.restoreAllMocks();});
 
@@ -24,4 +24,24 @@ it("emits nothing unless both explicit QA trace and one-shot gates are enabled",
   vi.stubEnv("PUBLIC_ASR_BOUNDARY_TRACE_ENABLED","true");logPublicAsrBoundary(value);expect(info).not.toHaveBeenCalled();
   vi.stubEnv("PUBLIC_QA_ONE_SHOT_ENABLED","true");logPublicAsrBoundary(value);
   expect(info).toHaveBeenCalledOnce();expect(info.mock.calls[0]![0]).toMatchObject({stage:"provider_audio",startSample:0,endSample:1600});
+});
+
+it("retains only the allowlisted lifecycle reason, without user content or close-message text",()=>{
+  const input={sessionId:"public-session",reason:"client_request" as const,stage:"requested" as const,
+    transcript:"DO_NOT_LOG",closeMessage:"DO_NOT_LOG",apiKey:"DO_NOT_LOG"};
+  expect(publicSessionEndTracePayload(input)).toEqual({sessionId:"public-session",reason:"client_request",stage:"requested"});
+  expect(publicSessionEndTracePayload({...input,reason:"DO_NOT_LOG" as never})).toBeUndefined();
+  expect(publicSessionEndTracePayload({...input,stage:"DO_NOT_LOG" as never})).toBeUndefined();
+});
+
+it("gates lifecycle metadata and never lets a logger failure block shutdown",()=>{
+  const info=vi.spyOn(realtimeLogger,"info").mockImplementation(()=>{throw Error("synthetic_log_failure");});
+  const event={sessionId:"public-session",reason:"connection_closed" as const,stage:"requested" as const};
+  vi.stubEnv("PUBLIC_ASR_BOUNDARY_TRACE_ENABLED",undefined);
+  vi.stubEnv("PUBLIC_QA_ONE_SHOT_ENABLED",undefined);
+  logPublicSessionEnd(event);expect(info).not.toHaveBeenCalled();
+  vi.stubEnv("PUBLIC_ASR_BOUNDARY_TRACE_ENABLED","true");
+  logPublicSessionEnd(event);expect(info).not.toHaveBeenCalled();
+  vi.stubEnv("PUBLIC_QA_ONE_SHOT_ENABLED","true");
+  expect(()=>logPublicSessionEnd(event)).not.toThrow();expect(info).toHaveBeenCalledOnce();
 });

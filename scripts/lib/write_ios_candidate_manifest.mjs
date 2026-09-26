@@ -34,6 +34,7 @@ const manifest = {
     automaticPair: process.env.AUTOMATIC_LANGUAGE_PAIR || null,
   },
   appAggregateSha256: required("APP_SHA256"),
+  appAggregateHashAlgorithm: process.env.APP_HASH_ALGORITHM || "legacy-absolute-file-list",
   signingIdentity: required("SIGNING_IDENTITY"),
   compatible: true,
   traceableSource: true,
