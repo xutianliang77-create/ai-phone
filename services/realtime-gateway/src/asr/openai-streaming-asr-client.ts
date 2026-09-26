@@ -16,7 +16,7 @@ import {streamingAsrFailureDiagnostic,streamingAsrCancellationContext,streamingA
 import {deferred,type State,type Turn,type Result} from "./streaming-asr-state.js";
 import {sendStreamingAsrWireEvent,streamingAsrSendDiagnostic} from "./streaming-asr-wire-send.js";
 import {completeQwenTurn} from "./qwen-streaming-asr-results.js";
-const key=(value:unknown):value is string=>typeof value==="string"&&/^[A-Za-z0-9_.:/-]{1,240}$/.test(value);
+import {qwenSpeechStartSample,qwenSpeechStopSample,qwenProtocolDiagnostic,rejectQwenWire} from "./qwen-streaming-asr-validation.js";
 export interface StreamingAsrOptions {sessionId:string;leaseId:string;endpoint:string;model:string;language:LanguageCode;timeoutMs:number;
   serverVad?:PublicAsrServerVad;
   wireProfile?:"openai_realtime_asr"|"qwen_asr_realtime"|"tencent_asr_ws"|"google_speech_v2";appId?:string;
@@ -213,7 +213,8 @@ export class OpenAiStreamingAsrClient {
   private drainQwenWireEvents(s:State){while(s.pendingWireEvents.length){this.assert(s);this.receiveWireEvent(s,s.pendingWireEvents.shift()!);}}
   private receiveWireEvent(s:State,e:Record<string,any>){
     s.lastWireType=e?.type;s.lastWireLanguage=e?.language;
-    try{this.receive(s,e);}catch(error){this.fail(s,error instanceof PublicAsrError?error.code:"public_asr_stream_protocol",streamingAsrProtocolContext(e));throw s.failure!;}
+    try{this.receive(s,e);}catch(error){this.fail(s,error instanceof PublicAsrError?error.code:"public_asr_stream_protocol",
+      {...streamingAsrProtocolContext(e),...(this.qwen?{protocol:qwenProtocolDiagnostic(s,e,error)}:{})});throw s.failure!;}
   }
   private takeCompleted(s:State):AsrProviderResult{const values=s.completed.splice(0);return values.length===0?null:values.length===1?values[0]:values;}
   async closeSession(sessionId:string){const s=this.state;if(!s||sessionId!==this.options.sessionId)return;this.partialListener=undefined;
@@ -244,8 +245,8 @@ export class OpenAiStreamingAsrClient {
     if(this.qwen){
       // Failure events may omit event_id; no error body is forwarded. Others need bounded unique IDs.
       if(e.type==="error"||e.type==="conversation.item.input_audio_transcription.failed")throw Error();
-      if(typeof e.event_id!=="string"||!e.event_id||e.event_id.length>240)throw Error();
-      s.wireEvents??=new Set();if(s.wireEvents.has(e.event_id))throw Error();s.wireEvents.add(e.event_id);
+      if(typeof e.event_id!=="string"||!e.event_id||e.event_id.length>240)rejectQwenWire("event_id_invalid");
+      s.wireEvents??=new Set();if(s.wireEvents.has(e.event_id))rejectQwenWire("event_id_duplicate");s.wireEvents.add(e.event_id);
       if(s.wireEvents.size>4096)s.wireEvents.delete(s.wireEvents.values().next().value!);
       if(e.type==="session.created"){
         if(s.wireSessionId||typeof e.session?.id!=="string"||!e.session.id||e.session.id.length>240||e.session.model!==this.options.model)throw Error();s.wireSessionId=e.session.id;return;
@@ -259,10 +260,7 @@ export class OpenAiStreamingAsrClient {
       }
       let turn=s.turn;
       if(e.type==="input_audio_buffer.speech_started"){
-        const transport=s.qwenTransport;
-        if(!transport?.sent||transport.terminal||turn||!key(e.item_id)||!Number.isSafeInteger(e.audio_start_ms)||e.audio_start_ms<0)throw Error();
-        const start=Math.round(e.audio_start_ms*this.rate/1000);
-        if(start<transport.event.audioStartSample!||start>transport.event.audioEndSample!)throw Error();
+        const start=qwenSpeechStartSample(s,e,this.rate),transport=s.qwenTransport!;
         turn={event:{...transport.event,segmentId:randomUUID(),audioStartSample:start,audioEndSample:transport.event.audioEndSample},
           prepared:true,sent:true,terminal:false,committing:false,ack:false,partial:"",done:deferred<Result>()};s.turn=turn;
         turn.providerItemId=e.item_id;turn.itemId=e.item_id;turn.previousItem=s.lastItem;turn.providerStartSample=start;
@@ -270,15 +268,7 @@ export class OpenAiStreamingAsrClient {
           segmentId:turn.event.segmentId,startSample:start,acceptedSamples:s.cursor});return;
       }
       if(e.type==="input_audio_buffer.speech_stopped"){
-        if(!turn?.sent||turn.terminal||e.item_id!==turn.providerItemId||turn.providerEndSample!==undefined||!Number.isSafeInteger(e.audio_end_ms)||e.audio_end_ms<0)throw Error();
-        const transport=s.qwenTransport;if(!transport?.sent||transport.terminal)throw Error();
-        const reportedEnd=Math.round(e.audio_end_ms*this.rate/1000),end=Math.min(reportedEnd,transport.event.audioEndSample!);
-        // Qwen reports server-VAD boundaries in 100ms steps. A final 40ms
-        // phone packet can therefore legitimately end just before the
-        // supplier's rounded watermark. Keep the durable attempt immutable:
-        // accept only that bounded rounding window and clamp the displayed
-        // timing to bytes already accepted by this process.
-        if(end<=(turn.providerStartSample??turn.event.audioStartSample!)||reportedEnd>transport.event.audioEndSample!+this.rate/25)throw Error();
+        const end=qwenSpeechStopSample(s,e,this.rate);turn=s.turn!;
         turn.providerEndSample=end;
         logPublicAsrBoundary({sessionId:this.options.sessionId,stage:"speech_stop",itemId:e.item_id,
           segmentId:turn.event.segmentId,startSample:turn.providerStartSample,endSample:end,acceptedSamples:s.cursor});return;

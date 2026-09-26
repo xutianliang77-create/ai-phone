@@ -35,7 +35,13 @@ extension RealtimeControllerPublicLifecycle on RealtimeController {
   Future<void> _finishPublicLifecycle(RealtimeSession session) async {
     try {
       final confirmed = await _repository
-          .finishPublicSession(session, _segments, mode: _config.realtimeMode)
+          .finishPublicSession(session, _segments, mode: _config.realtimeMode,
+              currentSegments: () {
+                if (_disposed || !identical(_session, session)) {
+                  throw StateError('Public ending session changed');
+                }
+                return _segments;
+              })
           .timeout(const Duration(seconds: 30));
       _message = confirmed ? '已收到服务端唯一结束回执' : '本机已停止；待结束记录已保留，服务器证据尚未确认';
     } catch (_) {

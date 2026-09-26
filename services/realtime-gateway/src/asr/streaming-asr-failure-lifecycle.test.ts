@@ -26,6 +26,26 @@ function setup() {
 afterEach(async()=>{for(const c of active.splice(0))await c.closeSession(session.sessionId);vi.restoreAllMocks();});
 
 describe("streaming ASR preserves the first failure without leaking provider bodies",()=>{
+  it("distinguishes a new speech item while the previous turn is pending",async()=>{
+    const t=setup();await t.create();await t.client.transcribe(request);
+    t.socket.receive({type:"input_audio_buffer.speech_started",audio_start_ms:0,item_id:"first"});
+    await t.client.flush(session);
+    t.socket.receive({type:"input_audio_buffer.speech_started",audio_start_ms:40,item_id:"second"});
+    await expect(t.client.flush(session)).rejects.toMatchObject({code:"public_asr_stream_protocol"});
+    expect(t.warn.mock.calls[0][0]).toMatchObject({eventType:"input_audio_buffer.speech_started",
+      protocol:{reason:"start_previous_turn_pending",turnPresent:true,turnAck:false,turnHasResult:false,
+        itemMatchesTurn:false,uploadedSamples:1354,audioStartMs:40,transportEndSample:1354}});
+    expect(JSON.stringify(t.warn.mock.calls)).not.toContain('"first"');
+    expect(JSON.stringify(t.warn.mock.calls)).not.toContain('"second"');
+  });
+  it("distinguishes a future speech timestamp without clamping or retrying it",async()=>{
+    const t=setup();await t.create();await t.client.transcribe(request);
+    t.socket.receive({type:"input_audio_buffer.speech_started",audio_start_ms:200,item_id:"new-item"});
+    await expect(t.client.flush(session)).rejects.toMatchObject({code:"public_asr_stream_protocol"});
+    expect(t.warn.mock.calls[0][0]).toMatchObject({protocol:{reason:"start_after_transport",audioStartMs:200,
+      turnPresent:false,transportEndSample:1354,uploadedSamples:1354}});
+    expect(t.socket.sent.filter(e=>e.type==="session.finish")).toHaveLength(0);
+  });
   it("includes local audio-send observations with a remote 1011 without changing its outcome",async()=>{
     const t=setup();await t.create();await t.client.transcribe(request);
     t.socket.emit("close",1011,Buffer.from("internal audio error SECRET_BODY"));

@@ -1,6 +1,7 @@
 /** Logs protocol state only. Never serialize supplier bodies, text or audio.
  * Provider fields follow the Qwen/OpenAI error envelope. Values, including
  * close reasons, are allowlisted: even a short identifier can contain a key. */
+import {sanitizeQwenProtocolDiagnostic} from "./qwen-streaming-asr-validation.js";
 export const explicitAsrCloseReason=Symbol("explicit_asr_close");
 export type StreamingAsrFailureOrigin="caller_abort"|"explicit_close"|"transport_close"|"transport_error"|"provider_error"|"protocol"|"operation";
 export interface StreamingAsrFailureContext {
@@ -9,6 +10,7 @@ export interface StreamingAsrFailureContext {
   providerErrorCode?:unknown;providerErrorType?:unknown;providerErrorParam?:unknown;transportErrorCode?:unknown;
   languageValueClass?:unknown;transcriptEmpty?:unknown;
   closeReasonSignals?:unknown;
+  protocol?:unknown;
 }
 const origins=new Set<unknown>(["caller_abort","explicit_close","transport_close","transport_error","provider_error","protocol","operation"]);
 const providerCodes=new Set<unknown>([
@@ -97,6 +99,7 @@ export function streamingAsrFailureDiagnostic(code:string,eventType:unknown,uplo
     ...(context?.transportErrorCode!==undefined?{transportErrorCode:safe(transportCodes,context.transportErrorCode)}:{}),
     ...(context?.languageValueClass!==undefined?{languageValueClass:safe(languageClasses,context.languageValueClass)}:{}),
     ...(typeof context?.transcriptEmpty==="boolean"?{transcriptEmpty:context.transcriptEmpty}:{}),
+    ...(context?.protocol?{protocol:sanitizeQwenProtocolDiagnostic(context.protocol)}:{}),
     ...(Array.isArray(context?.closeReasonSignals)?{closeReasonSignals:[...new Set(context.closeReasonSignals.filter(v=>typeof v==="string"&&signalLabels.has(v)))]}:{}),
   };
 }

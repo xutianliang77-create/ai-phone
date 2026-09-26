@@ -69,3 +69,18 @@ it("never serializes transport error messages, stacks or arbitrary abort reasons
   expect(isStreamingAsrFailureEvent({type:"conversation.item.input_audio_transcription.failed"})).toBe(true);
   for(const value of [null,[],"error",{type:"session.updated"}])expect(isStreamingAsrFailureEvent(value)).toBe(false);
 });
+
+it("only exposes allowlisted protocol reasons and bounded numeric/boolean state",()=>{
+  const value=streamingAsrFailureDiagnostic("public_asr_stream_protocol","input_audio_buffer.speech_started",1129354,
+    undefined,{origin:"protocol",protocol:{reason:"start_previous_turn_pending",turnPresent:true,turnAck:true,
+      audioStartMs:70000,transportEndSample:1129354,pendingEvents:0,
+      transcript:"SECRET_TEXT",item_id:"SECRET_ID",apiKey:"SECRET_KEY",rawEvent:{token:"SECRET_TOKEN"}}});
+  expect(value.protocol).toEqual({reason:"start_previous_turn_pending",turnPresent:true,turnAck:true,
+    audioStartMs:70000,transportEndSample:1129354,pendingEvents:0});
+  expect(JSON.stringify(value)).not.toContain("SECRET");
+  expect(streamingAsrFailureDiagnostic("bad","input_audio_buffer.speech_started",0,undefined,
+    {origin:"protocol",protocol:{reason:"SECRET_REASON",busy:"SECRET",audioStartMs:Infinity,turnEndSample:-1,pendingEvents:5000}}).protocol)
+    .toEqual({reason:"other"});
+  expect(JSON.stringify(streamingAsrFailureDiagnostic("bad","input_audio_buffer.speech_started",0,undefined,
+    {origin:"protocol",protocol:{reason:{toString:()=>"other",key:"SECRET_KEY"}}}))).not.toContain("SECRET");
+});

@@ -56,12 +56,17 @@ extension RealtimePublicLifecycle on RealtimeRepository {
 
   Future<bool> finishPublicSession(
       RealtimeSession session, List<SubtitleSegment> segments,
-      {required String mode}) async {
+      {required String mode,
+      List<SubtitleSegment> Function()? currentSegments}) async {
     final binding = session.syncBinding;
     if (binding == null ||
         binding.deploymentId != _apiClient.publicDeploymentId) {
       throw const RealtimeApiException('公有结束身份无效');
     }
+    final epoch = _resultSync.epoch,
+        accountEpoch = _apiClient.accountGeneration;
+    bool current() => epoch == _resultSync.epoch &&
+        accountEpoch == _apiClient.accountGeneration && !_disposeRequested;
     final records = await _resultSyncStore.loadCheckpoints(
         deploymentId: binding.deploymentId, ownerId: binding.ownerId);
     LocalSessionCheckpoint? old;
@@ -72,7 +77,7 @@ extension RealtimePublicLifecycle on RealtimeRepository {
     if (old?.snapshot?.status == 'ended') return _confirmPublicRecord(old!);
     final revision = (old?.revision ?? 0) + 1;
     final complete = segments.map(SessionSegment.fromSubtitle).toList();
-    final record = LocalSessionCheckpoint(
+    var record = LocalSessionCheckpoint(
         deploymentId: binding.deploymentId,
         ownerId: binding.ownerId,
         revision: revision,
@@ -93,14 +98,30 @@ extension RealtimePublicLifecycle on RealtimeRepository {
               revision: revision,
               kind: CheckpointOperationKind.finalize)
         ]);
-    await _resultSyncStore.putCheckpoint(record);
+    await _resultSyncStore.putAuthorizedCheckpoint(record, current);
+    if (!current()) return false;
     try {
       await _gatewayClient.endAndWait(
         session.sessionId,
         timeout: _publicGatewayEndTimeout,
       );
     } catch (_) {}
+    if (!current()) return false;
     await _gatewayClient.close();
+    if (!current()) return false;
+    // As in v1.0, persist again after the final flush. The controller replaces
+    // its subtitle list on each event, so take a fresh, same-session view.
+    final tail = (currentSegments?.call() ?? segments)
+        .map(SessionSegment.fromSubtitle).toList();
+    record = LocalSessionCheckpoint(
+        deploymentId: record.deploymentId, ownerId: record.ownerId,
+        revision: record.revision + 1,
+        snapshot: record.snapshot!.copyWithSegments(tail),
+        lifecycle: {'modelPolicyRevision': binding.modelPolicyRevision},
+        pending: [CheckpointOperation(opId: 'finalize:${session.sessionId}',
+            revision: record.revision + 1, kind: CheckpointOperationKind.finalize)]);
+    await _resultSyncStore.putAuthorizedCheckpoint(record, current);
+    if (!current()) return false;
     return _confirmPublicRecord(record);
   }
 
