@@ -1,50 +1,57 @@
 {
   "schemaVersion": 1,
-  "kind": "non_test_closeout_evidence_snapshot",
+  "kind": "closeout_evidence_snapshot",
   "observedAt": "2026-09-26T02:43:31Z",
-  "status": "documentation_handoff_ready_release_blocked",
+  "status": "independent_delivery_ready_device_and_release_pending",
   "remainingWork20260926": {
     "order": "non_test_source_and_handoff_then_concentrated_validation",
     "baseCommit": "7d7b5812037c8fd978809ea7e9bf76731f6673bc",
-    "sourceChanges": ["same-session admission renewal", "earliest live qualification expiry", "QA-only finalization reason trace", "Android fully-qualified launcher", "portable iOS regular-file aggregate hash", "bounded ASR completed-item cache instead of a 1024-turn session limit"],
+    "sourceChanges": [
+      "same-session admission renewal",
+      "earliest live qualification expiry",
+      "QA-only finalization reason trace",
+      "Android fully-qualified launcher",
+      "portable iOS regular-file aggregate hash",
+      "bounded ASR completed-item cache instead of a 1024-turn session limit"
+    ],
     "sourceTypechecks": "passed",
     "newRegressionsExecuted": true,
-    "hostResults": {"apiPassed":1264,"apiSkipped":5,"gatewayPassed":1037,"workerPassed":251,"candidateScriptsPassed":31,"dualVersionChecksPassed":40},
-    "asrLongFixture": {"turns":10000,"supplierConnections":1,"recentItemCache":1024,"evictedReplayFailsClosed":true,"realModelCalls":0},
-    "newCandidateBuilt": false,
+    "hostResults": {
+      "apiPassed": 1264,
+      "apiSkipped": 5,
+      "gatewayPassed": 1037,
+      "workerPassed": 251,
+      "candidateScriptsPassed": 31,
+      "dualVersionChecksPassed": 40
+    },
+    "asrLongFixture": {
+      "turns": 10000,
+      "supplierConnections": 1,
+      "recentItemCache": 1024,
+      "evictedReplayFailsClosed": true,
+      "realModelCalls": 0
+    },
+    "newCandidateBuilt": true,
     "deployed": false,
-    "private10Changed": false
-  },
-  "pendingSourceUpdate": {
-    "date": "2026-09-26",
-    "taskId": "CO11-11",
-    "baselineCommit": "e95151984c014a4a3170c61895f48e841b7c1b77",
-    "runtimeFilesChanged": 5,
-    "staticTypecheck": "api_and_worker_pass",
-    "regressionFilesTypechecked": 7,
-    "newRegressionCasesAuthored": 26,
-    "regressionsExecuted": false,
-    "candidateRebuilt": false,
-    "deployed": false,
-    "committed": true,
-    "protectionCommit": "7d7b5812037c8fd978809ea7e9bf76731f6673bc",
-    "protectionTree": "28d56d31cdcdc917ef1db8e612818681473d4bb4",
-    "pushed": true,
-    "remoteBranch": "wip/r6-s4-batch90-audio-bridge",
-    "includedInBaselineSnapshotBelow": false,
-    "handoff": "CALL_LINK_COMPATIBILITY.md"
+    "private10Changed": false,
+    "finalCandidateSourceCommit": "9bdee68daa2aa392b23069e6ea8f94e333133146",
+    "finalCandidateSourceTree": "3e186d3a35210bae42bee0eb4c2819204a32c9b6",
+    "currentDeviceDecision": "temporarily_unavailable_continue_independent_deliverables"
   },
   "nextCandidatePreparation": {
-    "status": "prepared_not_built_not_deployed",
-    "proposedSourceCommit": "7d7b5812037c8fd978809ea7e9bf76731f6673bc",
-    "proposedSourceTree": "28d56d31cdcdc917ef1db8e612818681473d4bb4",
+    "status": "same_source_qa_built_not_deployed_not_formal_rc",
+    "proposedSourceCommit": "9bdee68daa2aa392b23069e6ea8f94e333133146",
+    "proposedSourceTree": "3e186d3a35210bae42bee0eb4c2819204a32c9b6",
     "finalRcSourceFrozen": false,
-    "newIosBuildNumber": null,
-    "newAppAggregateSha256": null,
-    "newServerImageDigest": null,
+    "newIosBuildNumber": "2026092601",
+    "newAppAggregateSha256": "3d75b8f3c96204e0799843b767d06fbbc4aaff91dc047cf5bb10f7ddea25d10a",
+    "newServerImageDigest": "sha256:dbb04dcbd4dfda49e69d282920887dd95b8dbfee59d3f818b8c75819ae214859",
     "regressionFilesPlanned": 24,
-    "regressionsExecuted": false,
-    "plans": ["CO11_13_CONCENTRATED_HOST_GATE_20260925.md", "CO11_14_RC_PREFLIGHT_20260925.md"],
+    "regressionsExecuted": true,
+    "plans": [
+      "CO11_13_CONCENTRATED_HOST_GATE_20260925.md",
+      "CO11_14_RC_PREFLIGHT_20260925.md"
+    ],
     "planLocation": "outer workspace plans/wujie-1.0-1.1; not part of the source push"
   },
   "isReleaseManifest": false,
@@ -56,15 +63,76 @@
     "acceptanceWaived": false
   },
   "source": {
-    "functionalBaselineCommit": "e95151984c014a4a3170c61895f48e841b7c1b77",
-    "functionalBaselineTree": "aa435afed9d57c246808c5314bb0ea24952a0344",
+    "functionalBaselineCommit": "9bdee68daa2aa392b23069e6ea8f94e333133146",
+    "functionalBaselineTree": "3e186d3a35210bae42bee0eb4c2819204a32c9b6",
     "worktreeIsClean": false,
     "userChangesPreserved": true,
-    "thisBatchRuntimeCodeChanged": false,
+    "thisBatchRuntimeCodeChanged": true,
     "frozenPrivate10Commit": "898ee517e7aac00b03bc79ff2d0597dd00fdbf56",
-    "frozenPrivate10Tree": "5c564f99489f7bd62eae28ef75157f6e77a2c369"
+    "frozenPrivate10Tree": "5c564f99489f7bd62eae28ef75157f6e77a2c369",
+    "buildWorktreeWasClean": true
   },
-  "iosQa": {
+  "modelConfiguration": {
+    "revisionFromPriorEvidence": 1,
+    "silentHash": "c2e409775f697f862f7931e211092418bf779d3fb9a6fae922787f6871c08335",
+    "spokenHash": "fb93c85476d7e6281d993c60b14771d21074e59de8fb7022b4d4c61dd428fba6",
+    "silentComponents": [
+      "qwen_asr_realtime",
+      "tencent_tmt"
+    ],
+    "spokenAdditionalComponent": "tencent_tts_ws",
+    "silentQualificationEvidence": "prior_live_qualified_sample",
+    "silentQualificationExpiresAt": "2026-09-26T15:21:17.794Z",
+    "silentQualifiedPairsFromReceipt": [
+      "zh:en",
+      "en:zh",
+      "ja:zh",
+      "fr:zh"
+    ],
+    "spokenQualificationEvidence": "pending_for_exact_qa_configuration",
+    "qualificationRenewedThisBatch": false,
+    "credentialValuesIncluded": false
+  },
+  "diagnosticCandidate": {
+    "sourceCommit": "32828a5124158a042aed87ed002bc83ae3ba735b",
+    "classification": "isolated_pcm_diagnostic_not_release",
+    "running": false,
+    "includedInFormalRc": false
+  },
+  "release": {
+    "decision": "blocked",
+    "grayPercent": 0,
+    "observation72hStarted": false,
+    "historicalHoldsDisposition": "14_test_debt_records_explicitly_accepted_without_ledger_changes",
+    "historicalHoldsResolved": false,
+    "historicalHoldsReferenceListSha256": "9af3714db17981eac54ed6e3deb5bd74b9994a92fa169f059c4b4acc1937b723",
+    "androidIdentityAndSigning": "pending",
+    "formalDistributionChannel": "pending",
+    "testPauseIsAcceptanceWaiver": false,
+    "pushPerformedThisBatch": false,
+    "rollbackPolicy": "schema_compatible_verified_candidate_or_safe_stop_no_private10_fallback"
+  },
+  "updatedAt": "2026-09-26T05:28:08.840Z",
+  "completedCallLinkSource": {
+    "date": "2026-09-26",
+    "taskId": "CO11-11",
+    "baselineCommit": "e95151984c014a4a3170c61895f48e841b7c1b77",
+    "runtimeFilesChanged": 5,
+    "staticTypecheck": "api_and_worker_pass",
+    "regressionFilesTypechecked": 7,
+    "newRegressionCasesAuthored": 26,
+    "regressionsExecuted": true,
+    "candidateRebuilt": true,
+    "deployed": false,
+    "committed": true,
+    "protectionCommit": "7d7b5812037c8fd978809ea7e9bf76731f6673bc",
+    "protectionTree": "28d56d31cdcdc917ef1db8e612818681473d4bb4",
+    "pushed": true,
+    "remoteBranch": "wip/r6-s4-batch90-audio-bridge",
+    "includedInBaselineSnapshotBelow": true,
+    "handoff": "CALL_LINK_COMPATIBILITY.md"
+  },
+  "previouslyInstalledIosQa": {
     "candidateId": "wujie-co11-qa-e951519-2026092510",
     "sourceCommit": "e95151984c014a4a3170c61895f48e841b7c1b77",
     "sourceTree": "aa435afed9d57c246808c5314bb0ea24952a0344",
@@ -83,7 +151,7 @@
     "formalDeviceAcceptance": "pending",
     "stableArtifactArchive": "pending_selected_candidate_currently_in_temporary_worktree"
   },
-  "serverQa": {
+  "previouslyRunningServerQa": {
     "deploymentId": "wujie-co11-qa-54026e7",
     "sourceCommit": "e95151984c014a4a3170c61895f48e841b7c1b77",
     "sourceTree": "aa435afed9d57c246808c5314bb0ea24952a0344",
@@ -97,26 +165,50 @@
     "deploymentClass": "isolated_lan_qa",
     "productionDeploymentPerformedThisBatch": false
   },
-  "modelConfiguration": {
-    "revisionFromPriorEvidence": 1,
-    "silentHash": "c2e409775f697f862f7931e211092418bf779d3fb9a6fae922787f6871c08335",
-    "spokenHash": "fb93c85476d7e6281d993c60b14771d21074e59de8fb7022b4d4c61dd428fba6",
-    "silentComponents": ["qwen_asr_realtime", "tencent_tmt"],
-    "spokenAdditionalComponent": "tencent_tts_ws",
-    "silentQualificationEvidence": "prior_live_qualified_sample",
-    "silentQualificationExpiresAt": "2026-09-26T15:21:17.794Z",
-    "silentQualifiedPairsFromReceipt": ["zh:en", "en:zh", "ja:zh", "fr:zh"],
-    "spokenQualificationEvidence": "pending_for_exact_qa_configuration",
-    "qualificationRenewedThisBatch": false,
-    "credentialValuesIncluded": false
+  "builtIosQa": {
+    "candidateId": "wujie-co11-qa-9bdee68-2026092601",
+    "sourceCommit": "9bdee68daa2aa392b23069e6ea8f94e333133146",
+    "sourceTree": "3e186d3a35210bae42bee0eb4c2819204a32c9b6",
+    "bundleId": "cn.qkxy.wujieai.public",
+    "version": "1.1.0",
+    "buildNumber": "2026092601",
+    "buildMode": "profile",
+    "productProfile": "full",
+    "publicDeploymentId": "wujie-co11-qa-54026e7",
+    "iosLocalProfileSha256": "517bd9a9e8c88a56c2580d7917d7d264ec3a2935fe497f54f19e620a6efa278c",
+    "deviceSpeaker": {
+      "enabledInCandidate": true,
+      "requiresServerRollout": true,
+      "anonymousOnly": true,
+      "maxSpeakers": 4,
+      "profile": "sortformer_v2_1_fastest",
+      "revision": "ae9a27ab45dc0aa3abede7d2d6bad2b7a69aa6d1"
+    },
+    "serverBaseUrl": "https://192.168.1.146:13522",
+    "language": {
+      "source": "auto",
+      "target": "zh",
+      "autoReverse": true,
+      "automaticPair": "zh,en"
+    },
+    "appAggregateSha256": "3d75b8f3c96204e0799843b767d06fbbc4aaff91dc047cf5bb10f7ddea25d10a",
+    "appAggregateHashAlgorithm": "sha256-relative-regular-files-v1",
+    "signingClass": "apple_development",
+    "signatureVerified": true,
+    "actualSevenLocalDefinesMatched": true,
+    "matchingRunnerAndAppSymbolsArchived": true,
+    "stableArtifactArchive": "artifacts/releases/wujie-co11-qa-9bdee68-2026092601",
+    "installed": false
   },
-  "diagnosticCandidate": {
-    "sourceCommit": "32828a5124158a042aed87ed002bc83ae3ba735b",
-    "classification": "isolated_pcm_diagnostic_not_release",
-    "running": false,
-    "includedInFormalRc": false
+  "builtServerQa": {
+    "sourceCommit": "9bdee68daa2aa392b23069e6ea8f94e333133146",
+    "sourceTree": "3e186d3a35210bae42bee0eb4c2819204a32c9b6",
+    "image": "ai-phone-server:wujie-co11-qa-9bdee68",
+    "imageId": "sha256:dbb04dcbd4dfda49e69d282920887dd95b8dbfee59d3f818b8c75819ae214859",
+    "keyCompiledFilesMatchHost": 6,
+    "deployed": false
   },
-  "staticDocumentValidation": {
+  "previousStaticDocumentValidation": {
     "co11TaskCount": 18,
     "originalTaskCount": 43,
     "dependenciesAcyclic": true,
@@ -128,17 +220,13 @@
     "runtimeSourceDiffs": 0,
     "newTestsRun": 0
   },
-  "release": {
-    "decision": "blocked",
-    "grayPercent": 0,
-    "observation72hStarted": false,
-    "historicalHoldsDisposition": "14_test_debt_records_explicitly_accepted_without_ledger_changes",
-    "historicalHoldsResolved": false,
-    "historicalHoldsReferenceListSha256": "9af3714db17981eac54ed6e3deb5bd74b9994a92fa169f059c4b4acc1937b723",
-    "androidIdentityAndSigning": "pending",
-    "formalDistributionChannel": "pending",
-    "testPauseIsAcceptanceWaiver": false,
-    "pushPerformedThisBatch": false,
-    "rollbackPolicy": "schema_compatible_verified_candidate_or_safe_stop_no_private10_fallback"
-  }
+  "remainingAcceptanceGates": [
+    "uncontaminated acoustic sentence/silence evidence",
+    "two-speaker device quality",
+    "active Gateway/Provider restart and safe-stop evidence",
+    "exact same-candidate silent/spoken qualification",
+    "iOS then Android full device acceptance",
+    "Android public identity/signing input",
+    "formal release/gray scope and 72-hour observation"
+  ]
 }

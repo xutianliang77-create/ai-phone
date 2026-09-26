@@ -1,6 +1,6 @@
 # CO11-11：原 Call Link 白名单兼容交付说明
 
-更新：2026-09-26。当前状态：`SOURCE_FIXES / STATIC_TYPECHECK / REGRESSION_PAUSED / NOT_DEPLOYED`。本轮不执行测试、模型调用、建房、部署或设备操作，不能将本文件解释为整项验收完成。
+更新：2026-09-26。当前状态：`SOURCE_FIXES_HOST_PASS / REAL_DUPLEX_PENDING / NOT_DEPLOYED`。后置集中API与Worker回归已覆盖本批26个新增病例及原受影响分支；Worker全量58文件251项通过，API全量1264项通过/5个实库条件用例跳过。新同源镜像已构建，但没有模型调用、建房、部署或设备操作，不能将本文件解释为双端整项验收完成。下方静态批次说明保留为历史。
 
 ## 范围与复用
 
