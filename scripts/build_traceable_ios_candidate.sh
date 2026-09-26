@@ -153,6 +153,13 @@ verify_speaker_resource() {
 verify_speaker_resource "$MOBILE_DIR/ios/Runner"
 
 cd "$MOBILE_DIR"
+# Resolve only the committed dependency set. The build must not silently move
+# package versions or hosted sources when invoked from an isolated runner.
+flutter pub get --offline --enforce-lockfile
+if ! git -C "$ROOT_DIR" diff --quiet -- apps/mobile/pubspec.lock; then
+  echo "Locked iOS dependency resolution changed pubspec.lock" >&2
+  exit 1
+fi
 TRANSLATION_IOS_BUNDLE_ID="$PUBLIC_IOS_BUNDLE_ID" \
 TRANSLATION_IOS_DEVELOPMENT_TEAM="$PUBLIC_IOS_DEVELOPMENT_TEAM" \
 WUJIE_CANDIDATE_ID="$CANDIDATE_ID" \
@@ -163,6 +170,7 @@ WUJIE_PRODUCT_PROFILE="$PRODUCT_PROFILE" \
 node "$ROOT_DIR/scripts/lib/write_ios_build_identity_xcconfig.mjs" \
   "$MOBILE_DIR/ios/Flutter/LocalIdentity.xcconfig"
 flutter build ios "--$BUILD_MODE" \
+  --no-pub \
   --dart-define-from-file="$IOS_LOCAL_PROFILE" \
   --build-name="$APP_VERSION" \
   --build-number="$BUILD_NUMBER" \

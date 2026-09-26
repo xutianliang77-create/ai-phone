@@ -27,6 +27,13 @@ const infoPlist = readFileSync(
 );
 
 describe("traceable iOS candidate contract", () => {
+  it("enforces the committed package lock before building without a second resolution", () => {
+    expect(script).toContain("flutter pub get --offline --enforce-lockfile");
+    expect(script).toContain('diff --quiet -- apps/mobile/pubspec.lock');
+    expect(script.indexOf("flutter pub get --offline --enforce-lockfile"))
+      .toBeLessThan(script.indexOf('flutter build ios "--$BUILD_MODE"'));
+    expect(script).toContain("  --no-pub \\");
+  });
   it("requires clean full source identity and embeds every field", () => {
     expect(script).toContain("status --porcelain=v1 --untracked-files=all");
     expect(script).toContain('git -C "$ROOT_DIR" diff --quiet');
