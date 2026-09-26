@@ -121,6 +121,22 @@ describe("signed public runtime admission policy",()=>{
     expect(capability(configuration).status).toBe("qualified");expect(capability(silent).status).toBe("qualified");
     await expect(authority.resolveVerifiedEvidence(context({configuration:silent}),new AbortController().signal)).resolves.toMatchObject({records:expect.arrayContaining([expect.objectContaining({component:"asr"}),expect.objectContaining({component:"translation"})])});
   });
+  it.each(["operator_expired","live_expired","live_revoked"])("keeps silent mode independent when spoken %s",async kind=>{
+    dir=mkdtempSync(join(tmpdir(),"wujie-public-policy-"));const file=join(dir,"policy.json"),live=join(dir,"live.json");
+    const silent={...configuration,configurationHash:"c".repeat(64),executionPlan:{...configuration.executionPlan,tts:{execution:"disabled" as const}}};
+    const past={issuedAt:new Date(now.getTime()-20000).toISOString(),expiresAt:new Date(now.getTime()-10000).toISOString()};
+    const spoken=policy(kind==="operator_expired"?past:{});
+    const silentPolicy=policy({policyId:"silent",configurationHash:silent.configurationHash,qualifiedComponents:["asr","translation"]});
+    const spokenLive=liveQualification(kind==="live_expired"?{observedAt:past.issuedAt,expiresAt:past.expiresAt}:kind==="live_revoked"?{revokedAt:now.toISOString()}:{});
+    const silentLive=liveQualification({evidenceId:"silent",configurationHash:silent.configurationHash,components:["asr","translation"],providers:liveQualification().providers.filter(p=>p.component!=="tts")});
+    writeFileSync(file,JSON.stringify({schemaVersion:2,policies:[spoken,silentPolicy]}),{mode:0o600});
+    writeFileSync(live,JSON.stringify({schemaVersion:2,qualifications:[spokenLive,silentLive]}),{mode:0o600});
+    const authority=publicRealtimeAuthorityFromEnvironment(environment(file,{PUBLIC_RUNTIME_REQUIRE_LIVE_QUALIFICATION:"true",PUBLIC_RUNTIME_LIVE_QUALIFICATION_FILE:live,PUBLIC_RUNTIME_LIVE_QUALIFICATION_KEY:key}))!;
+    expect(authority.configurationCapability!(silent).status).toBe("qualified");
+    expect(authority.configurationCapability!(configuration).status).toBe("not_qualified");
+    const resolved=await authority.resolveVerifiedEvidence(context({configuration:silent}),new AbortController().signal);
+    expect(resolved.records.some(record=>record.kind==="model_qualification"&&record.component==="tts")).toBe(false);
+  });
   it.each([
     {providerAvailability:[{providerId:"tencent",state:"unavailable"}]},
     {providerAvailability:[{providerId:"qwen",state:"available"}]},

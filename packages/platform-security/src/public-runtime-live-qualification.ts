@@ -111,7 +111,9 @@ export function inspectPublicRuntimeLiveQualification(input: {
   const qualifications = qualificationsFrom(value);
   if (!qualifications) return { status: "not_ready", issue: "public_runtime_live_qualification_invalid" };
   for (const evidence of qualifications) {
-    const invalid = validate(evidence, now);
+    // Authenticate every entry, but apply expiry/revocation only to the
+    // selected effective snapshot. A TTS lifecycle change cannot revoke ASR+MT.
+    const invalid = validate(evidence, now, false);
     if (invalid) return { status: "not_ready", issue: invalid };
     const expected = signPublicRuntimeLiveQualification(withoutSignature(evidence), input.signingKey!);
     if (!timingSafeEqual(Buffer.from(expected), Buffer.from(evidence.signature))) {
@@ -127,6 +129,8 @@ export function inspectPublicRuntimeLiveQualification(input: {
     return { status: "not_ready", issue: "public_runtime_live_qualification_scope_mismatch" };
   }
   const evidence = matches[0]!;
+  const currentIssue = validate(evidence, now);
+  if (currentIssue) return { status: "not_ready", issue: currentIssue };
   return {
     status: "ready",
     evidence: {
@@ -158,7 +162,7 @@ function qualificationsFrom(value: unknown): PublicRuntimeLiveQualification[] | 
   return bundle.qualifications as PublicRuntimeLiveQualification[];
 }
 
-function validate(evidence: PublicRuntimeLiveQualification, now: Date) {
+function validate(evidence: PublicRuntimeLiveQualification, now: Date, requireCurrent = true) {
   if (!evidence || typeof evidence !== "object" || Array.isArray(evidence) ||
       Object.keys(evidence).some((field) => !fields.includes(field)) ||
       evidence.schemaVersion !== 1 || ![evidence.evidenceId, evidence.deploymentId,
@@ -188,13 +192,13 @@ function validate(evidence: PublicRuntimeLiveQualification, now: Date) {
     return "public_runtime_live_qualification_invalid";
   }
   const observed = Date.parse(evidence.observedAt), expires = Date.parse(evidence.expiresAt);
-  if (observed > now.getTime() || expires <= now.getTime() || expires - observed > 86_400_000) {
+  if (expires <= observed || expires - observed > 86_400_000 ||
+      requireCurrent && (observed > now.getTime() || expires <= now.getTime())) {
     return "public_runtime_live_qualification_expired";
   }
   if (evidence.revokedAt !== undefined) {
-    return time(evidence.revokedAt)
-      ? "public_runtime_live_qualification_revoked"
-      : "public_runtime_live_qualification_invalid";
+    if (!time(evidence.revokedAt)) return "public_runtime_live_qualification_invalid";
+    if (requireCurrent) return "public_runtime_live_qualification_revoked";
   }
   return undefined;
 }

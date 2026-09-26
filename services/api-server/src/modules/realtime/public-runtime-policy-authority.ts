@@ -154,12 +154,14 @@ function readPolicy(file:string,key:string,now:Date,configuration?:PublicModelRu
   let raw:string;try{const info=lstatSync(file);if(!info.isFile()||info.size<2||info.size>65536)throw Error();raw=readFileSync(file,"utf8");}catch{throw Error("public_runtime_admission_policy_unavailable");}
   let value:unknown;try{value=JSON.parse(raw);}catch{throw Error("public_runtime_admission_policy_invalid");}
   const entries=policiesFrom(value);if(!entries)throw Error("public_runtime_admission_policy_invalid");
-  const policies=entries.map(policy=>validatePolicy(policy,key,now));
-  if(!configuration){if(policies.length!==1)throw Error("public_runtime_admission_policy_scope_mismatch");return policies[0]!;}
+  // The bundle's structure and signatures are global integrity checks;
+  // lifecycle validity belongs only to the exact selected configuration.
+  const policies=entries.map(policy=>validatePolicy(policy,key,now,false));
+  if(!configuration){if(policies.length!==1)throw Error("public_runtime_admission_policy_scope_mismatch");return validatePolicy(policies[0]!,key,now);}
   const components=publicModelComponents(configuration.executionPlan),matches=policies.filter(policy=>policy.deploymentId===configuration.deploymentId&&
     policy.configurationHash===configuration.configurationHash&&policy.modelPolicyRevision===configuration.modelPolicyRevision&&
     policy.qualifiedComponents.length===components.length&&components.every(component=>policy.qualifiedComponents.includes(component)));
-  if(matches.length!==1)throw Error("public_runtime_admission_policy_scope_mismatch");return matches[0]!;
+  if(matches.length!==1)throw Error("public_runtime_admission_policy_scope_mismatch");return validatePolicy(matches[0]!,key,now);
 }
 
 function policiesFrom(value:unknown):Policy[]|undefined{
@@ -171,11 +173,11 @@ function policiesFrom(value:unknown):Policy[]|undefined{
   return identities.some(identity=>identity.length===0)||new Set(identities).size!==identities.length?undefined:bundle.policies as Policy[];
 }
 
-function validatePolicy(policy:Policy,key:string,now:Date):Policy{
+function validatePolicy(policy:Policy,key:string,now:Date,requireCurrent=true):Policy{
   if(!policy||typeof policy!=="object"||Array.isArray(policy)||Object.keys(policy).some(field=>!policyFields.includes(field))||policy.schemaVersion!==1||
     ![policy.policyId,policy.deploymentId,policy.modelPolicyRevision,policy.region].every(syncKey)||!hex(policy.configurationHash,64)||!hex(policy.signature,64)||
     typeof policy.issuedAt!=="string"||typeof policy.expiresAt!=="string"||!Number.isFinite(Date.parse(policy.issuedAt))||!Number.isFinite(Date.parse(policy.expiresAt))||
-    Date.parse(policy.issuedAt)>now.getTime()||Date.parse(policy.expiresAt)<=now.getTime()||(policy.maxActiveSeconds!==undefined&&(!Number.isSafeInteger(policy.maxActiveSeconds)||policy.maxActiveSeconds<1||policy.maxActiveSeconds>86400))||
+    Date.parse(policy.expiresAt)<=Date.parse(policy.issuedAt)||requireCurrent&&(Date.parse(policy.issuedAt)>now.getTime()||Date.parse(policy.expiresAt)<=now.getTime())||(policy.maxActiveSeconds!==undefined&&(!Number.isSafeInteger(policy.maxActiveSeconds)||policy.maxActiveSeconds<1||policy.maxActiveSeconds>86400))||
     typeof policy.currency!=="string"||!/^[A-Z]{3}$/.test(policy.currency)||!Number.isSafeInteger(policy.reservedMicros)||policy.reservedMicros<0||
     (policy.automaticLanguage!==undefined&&typeof policy.automaticLanguage!=="boolean")||
     (policy.automaticReverse!==undefined&&typeof policy.automaticReverse!=="boolean")||

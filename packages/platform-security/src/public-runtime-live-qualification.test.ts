@@ -23,7 +23,7 @@ function evidence(patch: Partial<PublicRuntimeLiveQualification> = {}) {
   return { ...value, signature: signPublicRuntimeLiveQualification(value, signingKey) };
 }
 function inspect(value: unknown, scope: PublicRuntimeLiveQualificationExpectation = expectation) {
-  directory = mkdtempSync(join(tmpdir(), "wujie-live-qualification-"));
+  directory ||= mkdtempSync(join(tmpdir(), "wujie-live-qualification-"));
   const file = join(directory, "evidence.json"); writeFileSync(file, JSON.stringify(value), { mode: 0o600 });
   return inspectPublicRuntimeLiveQualification({ file, signingKey, expectation: scope, now });
 }
@@ -47,6 +47,25 @@ describe("signed public runtime live qualification", () => {
   it("fails closed for an ambiguous bundled configuration", () => {
     const duplicate = evidence({ evidenceId: "live-duplicate" });
     expect(inspect({ schemaVersion: 2, qualifications: [evidence(), duplicate] })).toMatchObject({ status: "not_ready", issue: "public_runtime_live_qualification_invalid" });
+  });
+  it.each([
+    {expiresAt:new Date(now.getTime()-1).toISOString()},
+    {revokedAt:now.toISOString()},
+    {observedAt:new Date(now.getTime()+1000).toISOString()},
+  ])("does not let an unrelated spoken lifecycle state poison valid silent evidence %j", patch => {
+    const scope={...expectation,configurationHash:"f".repeat(64),components:["asr","translation","tts"] as const};
+    const spoken=evidence({...patch,evidenceId:"spoken",configurationHash:scope.configurationHash,components:[...scope.components],
+      providers:scope.components.map(component=>({component,providerId:"tencent",modelId:`model-${component}`}))});
+    const bundle={schemaVersion:2,qualifications:[evidence(),spoken]};
+    expect(inspect(bundle)).toMatchObject({status:"ready",evidence:{evidenceId:"live-test"}});
+    expect(inspect(bundle,scope)).toMatchObject({status:"not_ready"});
+  });
+  it("still rejects a corrupt signature or invalid interval in an unrelated bundle entry",()=>{
+    const other=evidence({configurationHash:"f".repeat(64),expiresAt:new Date(now.getTime()-1).toISOString()});
+    other.signature="0".repeat(64);
+    expect(inspect({schemaVersion:2,qualifications:[evidence(),other]})).toMatchObject({status:"not_ready",issue:"public_runtime_live_qualification_signature_invalid"});
+    const inverted=evidence({configurationHash:"f".repeat(64),expiresAt:new Date(now.getTime()-2000).toISOString()});
+    expect(inspect({schemaVersion:2,qualifications:[evidence(),inverted]})).toMatchObject({status:"not_ready"});
   });
   it("fails closed for mismatched, expired, revoked, or incomplete evidence", () => {
     const invalid: Array<Partial<PublicRuntimeLiveQualification>> = [
