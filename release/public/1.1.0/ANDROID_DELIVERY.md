@@ -1,5 +1,9 @@
 # CO11-12 Android 公有版交付准备
 
+## 2026-09-26 集中验证追加结果
+
+当前工程候选16b4872：Android候选合同26项、原生Kotlin编译及显式rerun的3项Kotlin测试通过。离线缓存缺依赖的首轮失败保留，后续沿原版本补齐；未生成正式public签名APK，未安装/执行Android设备验收。正式applicationId、已有keystore/alias与可信证书指纹仍待提供。下文“未运行”为开发准备时的历史状态，不覆盖本段结果；完整同源iOS/服务端与来源对应见CLOSEOUT_HANDOFF.md及外层集中SUMMARY.json。
+
 2026-09-26：`DEVELOPMENT_PREPARATION_COMPLETE / IDENTITY_AND_SIGNING_INPUT_PENDING / NOT_VALIDATED`。
 
 本轮只编写源代码、候选流程和后置用例。没有执行Gradle/Flutter、静态检查、测试、APK分析、证书检查或设备操作；没有生成密钥、下载模型、构建/签名/安装APK。下述命令仅供全部开发完成后的统一阶段使用，不是已发生的交付回执。
