@@ -1,9 +1,11 @@
 import {publicProtocolCapability,publicProtocolSampleRateSupported,publicAsrServerVadCapability,resolvePublicAsrServerVad,type PublicAsrServerVad,type PublicModelProtocolCapability} from "@translation/contracts";
+import {validTranslationTermRepositories,type TranslationTermRepositories} from "@translation/contracts";
 export const modelComponents=["asr","translation","tts"] as const;
 export type ModelComponent=typeof modelComponents[number];
 export type Vendor="qwen"|"tencent"|"openai"|"google";
 export type AuthKind="api_key"|"tencent_secret"|"google_service_account"|"google_adc";
 export interface PublicModelProfile {
+  termRepositories?:TranslationTermRepositories;
   serverVad?:PublicAsrServerVad;
   languageLocales?:Record<string,string>;
   enabled:boolean;vendor:Vendor;protocol:string;endpoint:string;modelId:string;authKind:AuthKind;
@@ -46,16 +48,18 @@ export class PublicConfigError extends Error{constructor(readonly code:string,re
 export function emptyConfiguration(deploymentId:string):PublicModelConfiguration{
   return {schemaVersion:1,deploymentId,revision:0,updatedAt:"",components:Object.fromEntries(modelComponents.map(component=>{
     const protocol=publicModelCatalog.protocols.find(p=>p.vendor==="qwen"&&p.component===component)!;
-    return [component,{enabled:false,vendor:"qwen",protocol:protocol.id,endpoint:"",modelId:"",authKind:"api_key",region:"",appId:"",projectId:"",location:"",recognizer:"",voice:"",volume:0,timeoutMs:15000,maxTokens:512,sampleRate:protocol.capability.sampleRates[0]??16000}];
+    return [component,{enabled:true,vendor:"qwen",protocol:protocol.id,endpoint:"",modelId:"",authKind:"api_key",region:"",appId:"",projectId:"",location:"",recognizer:"",voice:"",volume:0,timeoutMs:15000,maxTokens:512,sampleRate:protocol.capability.sampleRates[0]??16000}];
   })) as Record<ModelComponent,PublicModelProfile>,credentials:{asr:{},translation:{},tts:{}}};
 }
 const profileKeys=["enabled","vendor","protocol","endpoint","modelId","authKind","region","appId","projectId","location","recognizer","voice","volume","timeoutMs","maxTokens","sampleRate"];
 function object(v:unknown):v is Record<string,unknown>{return !!v&&typeof v==="object"&&!Array.isArray(v);}
 export function validateProfile(component:ModelComponent,value:unknown):PublicModelProfile{
-  if(!object(value)||Object.keys(value).some(k=>!profileKeys.includes(k)&&!["languageLocales","serverVad"].includes(k))||profileKeys.filter(k=>k!=="volume").some(k=>!(k in value)))throw new PublicConfigError(`${component}:invalid_fields`);
+  if(!object(value)||Object.keys(value).some(k=>!profileKeys.includes(k)&&!["languageLocales","serverVad","termRepositories"].includes(k))||profileKeys.filter(k=>k!=="volume").some(k=>!(k in value)))throw new PublicConfigError(`${component}:invalid_fields`);
   const v={...value,volume:value.volume??0} as unknown as PublicModelProfile;
   const protocol=publicModelCatalog.protocols.find(p=>p.id===v.protocol&&p.vendor===v.vendor&&p.component===component);
   if(!protocol||!protocol.auth.includes(v.authKind)||typeof v.enabled!=="boolean")throw new PublicConfigError(`${component}:invalid_protocol_or_auth`);
+  if(v.termRepositories!==undefined&&(component!=="translation"||v.protocol!=="tencent_tmt"||!validTranslationTermRepositories(v.termRepositories)))
+    throw new PublicConfigError(`${component}:invalid_term_repositories`);
   if(Object.hasOwn(value,"serverVad")){
     try{if(component!=="asr"||value.serverVad===undefined)throw Error();v.serverVad=resolvePublicAsrServerVad(v.protocol,value.serverVad);}
     catch{throw new PublicConfigError(`${component}:invalid_server_vad`);}

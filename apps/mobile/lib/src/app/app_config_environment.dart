@@ -131,7 +131,7 @@ AppConfig _appConfigFromEnvironment() {
   );
   const realtimeVoiceOutputMode = String.fromEnvironment(
     'REALTIME_VOICE_OUTPUT_MODE',
-    defaultValue: 'off',
+    defaultValue: 'natural',
   );
   const realtimeVoicePresetId = String.fromEnvironment(
     'REALTIME_VOICE_PRESET_ID',

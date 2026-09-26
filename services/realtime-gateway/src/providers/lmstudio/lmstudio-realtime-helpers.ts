@@ -47,11 +47,23 @@ export function terminologyFor(
   session: RealtimeProviderSession,
   sourceLanguage: string,
   targetLanguage: string,
+  currentText?:string,
 ): TermbaseTermDto[] {
   return (session.terminology ?? [])
     .filter((term) => term.targetLanguage === targetLanguage)
     .filter((term) => term.sourceLanguage === sourceLanguage)
+    .filter((term) => currentText===undefined||sourceTermAppears(currentText,term.sourceText))
     .slice(0, 40);
+}
+
+function sourceTermAppears(text:string,term:string) {
+  const source=text.toLowerCase(),word=term.toLowerCase();
+  if(!word)return false;
+  for(let at=source.indexOf(word);at>=0;at=source.indexOf(word,at+1)) {
+    if((!/[a-z0-9_]/.test(word[0])||!/[a-z0-9_]/.test(source[at-1]??""))&&
+      (!/[a-z0-9_]/.test(word.at(-1)!)||!/[a-z0-9_]/.test(source[at+word.length]??"")))return true;
+  }
+  return false;
 }
 
 export function targetLanguageForTranscript(

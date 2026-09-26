@@ -20,11 +20,11 @@ import type {RealtimeEnv} from "../../../../realtime-gateway/src/config/env.js";
 const signer="SYNTHETIC_MATERIAL_SIGNER_NOT_REAL",internal="SYNTHETIC_INTERNAL_MATERIAL_SECRET",access="SYNTHETIC_SEPARATE_CREDENTIAL_ACCESS";
 let app:FastifyInstance,q:PublicAdmissionQuery,issued:Awaited<ReturnType<typeof issuePublicRealtimeSession>>;
 installConfigurationFixture();
-async function issue(){
+async function issue(extra:Record<string,unknown>={}){
   const config=capturePublicModelRuntimeConfiguration(false);
   getStoreSnapshot().sessions=[];
   await preparePublicRealtimeSession("material-session","owner",{mode:"conversation",sourceLanguage:"zh",targetLanguage:"en",voiceOutput:false,speakerAttribution:{mode:"off"},
-    processing:{contractVersion:1,processingMode:"online",modelPolicyRevision:config.modelPolicyRevision,executionPlan:config.executionPlan,languagePolicy:{source:"zh",target:"en",autoReverse:false,revision:1},syncRequested:false}},new Date());
+    processing:{contractVersion:1,processingMode:"online",modelPolicyRevision:config.modelPolicyRevision,executionPlan:config.executionPlan,languagePolicy:{source:"zh",target:"en",autoReverse:false,revision:1},syncRequested:false},...extra},new Date());
   for(const e of evidence())await recordPublicInferenceEvidence(current().id,current().userId,e,new Date());
   await writePublicInferenceAdmission(current().id,current().userId,{consentReceiptId:"consent",budgetReservationId:"budget",qualificationReceiptIds:{asr:"asr",translation:"translation"}},new Date());
   issued=await issuePublicRealtimeSession(current().id,current().userId);
@@ -41,6 +41,23 @@ const headers={authorization:`Bearer ${internal}`,"x-wujie-gateway-credential":a
 const request=(kind:"configuration"|"credentials",payload:unknown=kind==="configuration"?q:{query:q,component:"asr"},auth:Record<string,string>=headers)=>
   app.inject({method:"POST",url:`/internal/realtime/sessions/${q.sessionId}/${kind}`,headers:auth,payload:payload as any});
 describe("session-scoped server runtime materials",()=>{
+  it("carries the supported 500-term snapshot through the actual bounded API sink",async()=>{
+    getStoreSnapshot().termbaseTerms=Array.from({length:500},(_,i)=>({id:`term-${i}`,userId:"owner",termbaseId:"default",
+      sourceText:"甲".repeat(80),translatedText:"乙".repeat(120),sourceLanguage:"zh" as const,targetLanguage:"en" as const,
+      status:"active" as const,createdAt:now.toISOString(),updatedAt:now.toISOString()}));
+    await issue({termbaseId:"default"});
+    const fetchFn=vi.fn(async(url:any,init:any)=>{const r=await app.inject({method:"POST",url:new URL(String(url)).pathname,headers:init.headers,payload:JSON.parse(init.body)});return new Response(r.body,{status:r.statusCode});});
+    const sink=createSessionEventSink({sessionEventSink:"api",apiBaseUrl:"https://api.synthetic.invalid",internalApiSecret:internal,sessionSyncTimeoutMs:1000} as RealtimeEnv,fetchFn);
+    const value=await createPublicRuntimeMaterialClient(sink,verifyRealtimeToken(issued.realtimeToken,signer)!,"runtime-test",access).configuration();
+    expect(value.terminology!.terms).toHaveLength(500);expect(value.terminology!.terms.at(-1)!.id).toBe("term-499");
+  });
+  it("returns immutable default public terminology and refuses storage tampering",async()=>{
+    const r=await request("configuration");expect(r.statusCode).toBe(200);
+    expect(r.json().terminology).toMatchObject({version:1,domainLexiconPacks:["product"],terms:[]});
+    expect(verifyRealtimeToken(issued.realtimeToken,signer)!.publicTerminologyHash).toMatch(/^[a-f0-9]{64}$/);
+    current().publicTerminology!.domainLexiconPacks=["medical"];
+    expect((await request("configuration")).statusCode).toBe(403);
+  });
   async function disconnected(){
     const p=current().publicRuntimePolicy!,base={leaseId:p.leaseId,captureId:p.captureId,languagePolicyKey:p.languagePolicyKey};
     await observePublicRuntime(q.sessionId,{...base,sequence:1,phase:"active",finalRevision:0,lastAcceptedSample:0},now);

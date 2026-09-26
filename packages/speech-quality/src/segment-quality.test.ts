@@ -2,6 +2,14 @@ import { describe, expect, it } from "vitest";
 import { SegmentAssembler } from "./segment-assembler.js";
 
 describe("shared speech quality", () => {
+  it("holds a missing predicate, but not a complete short answer, without changing the flush limit",()=>{
+    const assembler=new SegmentAssembler({maxBufferMs:1800});
+    expect(assembler.push("s",{segmentId:"first",language:"zh",text:"刚好把我们。",endpointReason:"silence"},0).ready).toEqual([]);
+    expect(assembler.push("s",{segmentId:"second",language:"zh",text:"送到会场。",endpointReason:"silence"},500).ready[0].text).toBe("刚好把我们送到会场。");
+    expect(assembler.push("other",{segmentId:"answer",language:"en",text:"Okay.",endpointReason:"silence"},0).ready[0].text).toBe("Okay.");
+    assembler.push("tail",{segmentId:"unfinished",language:"zh",text:"我会将它。",endpointReason:"silence"},0);
+    expect(assembler.flush("tail")[0].text).toBe("我会将它。");
+  });
   it("merges a raw max-duration segment with its continuation", () => {
     const assembler = new SegmentAssembler();
     expect(assembler.push("session", {

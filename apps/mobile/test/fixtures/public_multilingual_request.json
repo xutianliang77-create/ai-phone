@@ -4,6 +4,8 @@
   "targetLanguage": "en",
   "autoReverseTargetLanguage": true,
   "voiceOutput": false,
+  "termbaseId": "default",
+  "domainLexiconPacks": ["product"],
   "speakerAttribution": {"mode": "off"},
   "processing": {
     "contractVersion": 1,

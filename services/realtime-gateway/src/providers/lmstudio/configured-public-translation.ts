@@ -1,18 +1,20 @@
 import {createHash,createHmac,randomUUID} from "node:crypto";
 import {isDeepStrictEqual} from "node:util";
 import {TENCENT_TMT_LANGUAGE_CODES,automaticSourceAllowed,automaticTranslationTarget} from '@translation/contracts';
+import {validTranslationTermRepositories,type TranslationTermRepositories} from '@translation/contracts';
 import type {PublicModelAttemptEvent,RealtimeExecutionPlan,RealtimeProcessingAuthorization} from "@translation/contracts";
 import {parseRealtimeProcessingRequest} from "@translation/contracts";
 import {LmStudioClient,type LmStudioClientOptions} from "./lmstudio-client.js";
-import {PublicTranslationError,abortable} from "./lmstudio-public-protocol.js";
+import {PublicTranslationError,abortable,readPublicJson} from "./lmstudio-public-protocol.js";
 import type {TranslationClient} from "./lmstudio-realtime-provider-options.js";
+import {realtimeLogger} from "../../metrics/realtime-metrics.js";
 
 /** Structural projection of the API's credential-free session snapshot. This is
  * internal wiring, not a new public HTTP contract or authority to run models. */
 export interface ConfiguredPublicTranslationOptions {
   snapshot:{deploymentId:string;configurationRevision:number;configurationHash:string;modelPolicyRevision:string;
     executionPlan:RealtimeExecutionPlan;components:{translation?:{enabled:boolean;vendor:string;protocol:string;authKind:string;
-      endpoint:string;modelId:string;timeoutMs:number;maxTokens:number;region?:string;projectId?:string;location?:string}}};
+      endpoint:string;modelId:string;timeoutMs:number;maxTokens:number;region?:string;projectId?:string;location?:string;termRepositories?:TranslationTermRepositories}}};
   deploymentId:string;authorization:RealtimeProcessingAuthorization;
   attemptRecorder:NonNullable<LmStudioClientOptions["attemptRecorder"]>;
   // Must resolve the exact bound snapshot afresh, never a global/private key.
@@ -33,7 +35,9 @@ function tmtRequest(profile:NonNullable<ConfiguredPublicTranslationOptions["snap
     typeof region!=="string"||!/^[a-z]{2}(?:-[a-z]+)?$/.test(region)||!Number.isFinite(timestamp))throw new PublicTranslationError("tencent_tmt_configuration","not_sent");
   let url:URL;try{url=new URL(profile.endpoint);}catch{throw new PublicTranslationError("tencent_tmt_configuration","not_sent");}
   if(url.protocol!=="https:"||url.username||url.password||url.search||url.hash||url.pathname!=="/")throw new PublicTranslationError("tencent_tmt_configuration","not_sent");
-  const body=JSON.stringify({SourceText:input.text,Source:input.sourceLanguage,Target:input.targetLanguage,ProjectId:0});
+  const repositories=profile.termRepositories?.[`${input.sourceLanguage}:${input.targetLanguage}`];
+  const body=JSON.stringify({SourceText:input.text,Source:input.sourceLanguage,Target:input.targetLanguage,ProjectId:0,
+    ...(repositories?.length?{TermRepoIDList:[...repositories]}:{})});
   const action="TextTranslate",version="2018-03-21",service="tmt",date=new Date(timestamp*1000).toISOString().slice(0,10),payloadHash=hash(body);
   const headers:{[key:string]:string}={"content-type":"application/json; charset=utf-8",host:url.host,"x-tc-action":action.toLowerCase(),"x-tc-region":region,"x-tc-timestamp":String(timestamp),"x-tc-version":version};
   const names=Object.keys(headers).sort(),canonicalHeaders=names.map(name=>`${name}:${headers[name]}\n`).join(""),signedHeaders=names.join(";");
@@ -45,20 +49,31 @@ function tmtRequest(profile:NonNullable<ConfiguredPublicTranslationOptions["snap
 async function tmtTranslate(profile:NonNullable<ConfiguredPublicTranslationOptions["snapshot"]["components"]["translation"]>,credentials:TranslationCredentials,input:Parameters<TranslationClient["translate"]>[0],journal:ConfiguredPublicTranslationOptions["attemptRecorder"],fetchFn:typeof fetch|undefined,signal:AbortSignal){
   if(!input.attemptContext||!journal)throw new PublicTranslationError("public_attempt_configuration","not_sent");
   const request=tmtRequest(profile,credentials,input,Math.floor(Date.now()/1000));
+  realtimeLogger.info({sessionId:journal.sessionId,segmentId:input.attemptContext.segmentId,
+    source:input.sourceLanguage,target:input.targetLanguage,
+    terminologyDelivery:profile.termRepositories?.[`${input.sourceLanguage}:${input.targetLanguage}`]?.length?"repository_configured":"repository_not_configured"},
+    "Public TMT terminology dispatch configuration");
   const attempt:PublicModelAttemptEvent={sessionId:journal.sessionId,leaseId:journal.leaseId,providerId:"tencent",modelId:"service:tencent_tmt",attemptId:randomUUID(),segmentId:input.attemptContext.segmentId,revision:input.attemptContext.revision,component:"translation",state:"dispatching"};
-  const record=async(event:PublicModelAttemptEvent)=>{try{await abortable(journal.record(structuredClone(event)),signal);}catch{throw new PublicTranslationError("public_attempt_record_failed","not_sent");}};
+  const record=async(event:PublicModelAttemptEvent)=>{
+    const stop=new AbortController(),timer=setTimeout(()=>stop.abort(),5000);
+    try{await abortable(journal.record(structuredClone(event)),stop.signal);}
+    catch{throw new PublicTranslationError("public_attempt_record_failed",event.state==="dispatching"?"not_sent":"uncertain");}
+    finally{clearTimeout(timer);}
+  };
   let prepared=false,terminal=false,sent=false;
   try{
     await record(attempt);prepared=true;
-    const response=await abortable((fetchFn??fetch)(request.url,{method:"POST",redirect:"error",signal,headers:request.headers,body:request.body}),signal);sent=true;
+    if(signal.aborted)throw new PublicTranslationError("public_translation_cancelled","not_sent");
+    sent=true;
+    const response=await abortable((fetchFn??fetch)(request.url,{method:"POST",redirect:"error",signal,headers:request.headers,body:request.body}),signal);
     const metadata={requestId:response.headers.get("x-tc-requestid")??undefined};
     if(!response.ok)throw new PublicTranslationError(response.status===429?"public_translation_rate_limited":"public_translation_http_error",response.status>=500||response.status===408?"uncertain":"rejected",response.status,metadata);
-    const value=await response.json() as {Response?:{TargetText?:unknown;RequestId?:unknown;Error?:{Code?:unknown}}};
+    const value=await readPublicJson(response,signal) as {Response?:{TargetText?:unknown;RequestId?:unknown;Error?:{Code?:unknown}}};
     const responseBody=value?.Response,requestId=typeof responseBody?.RequestId==="string"&&/^[A-Za-z0-9_.:/-]{1,240}$/.test(responseBody.RequestId)?responseBody.RequestId:metadata.requestId;
     if(responseBody?.Error||typeof responseBody?.TargetText!=="string"||!responseBody.TargetText.trim())throw new PublicTranslationError("tencent_tmt_invalid_response","uncertain",undefined,{requestId});
     terminal=true;await record({...attempt,state:"confirmed",metadata:{requestId}});return responseBody.TargetText.trim();
   }catch(error){
-    const failure=error instanceof PublicTranslationError?error:new PublicTranslationError(signal.aborted?"public_translation_cancelled":"public_translation_transport_or_payload_error",sent?"uncertain":"not_sent");
+    const failure=error instanceof PublicTranslationError?error:new PublicTranslationError(signal.aborted?(input.signal?.aborted?"public_translation_cancelled":"public_translation_timeout"):"public_translation_transport_or_payload_error",sent?"uncertain":"not_sent");
     if(prepared&&!terminal){terminal=true;await record({...attempt,state:failure.outcome,failureCode:failure.code,...(failure.metadata?{metadata:failure.metadata}:{})});}
     throw failure;
   }
@@ -85,6 +100,8 @@ export function configuredPublicTranslation(options:ConfiguredPublicTranslationO
   if(!google&&!tmt&&(!Object.hasOwn(protocols,profile.vendor)||protocols[profile.vendor]!==profile.protocol)){
     throw new PublicTranslationError("public_translation_protocol_not_implemented","not_sent");
   }
+  if(profile.termRepositories!==undefined&&(!tmt||!validTranslationTermRepositories(profile.termRepositories)))
+    throw new PublicTranslationError("tencent_tmt_term_repositories_invalid","not_sent");
   if(!recorder||recorder.providerId!==profile.vendor||typeof recorder.record!=="function"||
     ![recorder.sessionId,recorder.leaseId].every(v=>typeof v==="string"&&v.trim()===v&&v.length>0&&v.length<=240)||
     typeof options.resolveCredentials!=="function"||!Number.isSafeInteger(profile.timeoutMs)||profile.timeoutMs<250||profile.timeoutMs>120000){
@@ -92,7 +109,7 @@ export function configuredPublicTranslation(options:ConfiguredPublicTranslationO
   }
   // Copy IDs/functions: mutation of an options object must not switch sessions.
   const journal={...recorder},resolve=options.resolveCredentials,fetchFn=options.fetchFn;
-  return {supportsAbort:true,supportsAttemptContext:true,healthCheck:async()=>false,
+  return {supportsAbort:true,supportsAttemptContext:true,...(!tmt?{supportsContext:true as const}:{}),healthCheck:async()=>false,
     async translate(input){
       if(input.signal?.aborted)throw new PublicTranslationError("public_translation_cancelled","not_sent");
       const language=authorization.languagePolicy;
@@ -109,7 +126,7 @@ export function configuredPublicTranslation(options:ConfiguredPublicTranslationO
         catch{throw new PublicTranslationError(controller.signal.aborted?(input.signal?.aborted?"public_translation_cancelled":"public_translation_timeout"):
           "public_translation_credentials_unavailable","not_sent");}
         if(controller.signal.aborted)throw new PublicTranslationError("public_translation_cancelled","not_sent");
-        if(tmt){clearTimeout(timer);return await tmtTranslate(profile,credentials,input,journal,fetchFn,controller.signal);}
+        if(tmt)return await tmtTranslate(profile,credentials,input,journal,fetchFn,controller.signal);
         const token=vertex?credentials?.accessToken:credentials?.apiKey;
         if(typeof token!=="string"||!token.trim()||token.trim()!==token||/[\r\n]/.test(token)||
           vertex&&(!Number.isFinite(credentials.accessTokenExpiresAt)||Number(credentials.accessTokenExpiresAt)<=deadline)){

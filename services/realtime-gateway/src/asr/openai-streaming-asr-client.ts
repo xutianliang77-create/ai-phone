@@ -6,7 +6,7 @@ import type {HttpAsrRequest,HttpAsrFlushRequest,HttpAsrBoundaryRequest} from "./
 import {PublicAsrError,parseOpenAiAsr} from "./public-asr-completed-audio.js";
 import {abortable} from "../providers/abortable.js";
 import {cleanRealtimeText} from "../protocol/realtime-text.js";
-import {qwenAsrSessionConfiguration,assertQwenAsrConfiguration,qwenTranscriptLanguage,qwenDraftTranscriptLanguage} from "./qwen-streaming-asr-protocol.js";
+import {qwenAsrCorpus,qwenAsrSessionConfiguration,assertQwenAsrConfiguration,qwenTranscriptLanguage,qwenDraftTranscriptLanguage} from "./qwen-streaming-asr-protocol.js";
 import {TencentAsrWire} from "./tencent-streaming-asr.js";
 import {GoogleAsrWire,type GoogleAsrStreamFactory} from "./google-streaming-asr.js";
 import {realtimeLogger} from "../metrics/realtime-metrics.js";
@@ -49,10 +49,12 @@ export class OpenAiStreamingAsrClient {
   }
   async createSession(session:AsrSession,signal:AbortSignal){
     if(session.sessionId!==this.options.sessionId||session.sourceLanguage!==this.options.language)throw new PublicAsrError("public_asr_stream_scope","not_sent");
-    if(session.asrHotwords?.length||session.asrCorrections?.length)throw new PublicAsrError("public_asr_stream_hints_not_implemented","not_sent");
+    if(session.asrCorrections?.length||session.asrHotwords?.length&&!this.qwen)throw new PublicAsrError("public_asr_stream_hints_not_implemented","not_sent");
+    const corpus=this.qwen?qwenAsrCorpus(session.asrHotwords):undefined;
+    if(corpus)realtimeLogger.info({sessionId:session.sessionId,protocol:"qwen_asr_realtime",hintBytes:Buffer.byteLength(corpus)},"Public ASR terminology prepared");
     await this.closeSession(session.sessionId);
     const s:State={stop:new AbortController(),ready:deferred<void>(),configured:false,cursor:0,sequence:-1,seen:new Set(),busy:false,removeAbort:()=>{},
-      pendingWireEvents:[],completed:[],finalization:Promise.resolve(),finishing:false,providerFinished:false,finished:deferred<void>()};this.state=s;
+      pendingWireEvents:[],completed:[],finalization:Promise.resolve(),finishing:false,providerFinished:false,finished:deferred<void>(),qwenCorpus:corpus};this.state=s;
     const cancel=()=>{if(!s.providerFinished)this.fail(s,"public_asr_stream_closed",streamingAsrCancellationContext(signal));};signal.addEventListener("abort",cancel,{once:true});s.removeAbort=()=>signal.removeEventListener("abort",cancel);
     if(signal.aborted)cancel();
     const timer=setTimeout(()=>this.fail(s,"public_asr_stream_setup_timeout"),this.options.timeoutMs);
@@ -75,7 +77,7 @@ export class OpenAiStreamingAsrClient {
         if(isStreamingAsrFailureEvent(event)){s.lastWireType=event.type;this.fail(s,"public_asr_stream_provider_error",streamingAsrProviderContext(event));return;}
         if(this.qwen&&event?.type!=="session.finished"&&s.configured&&!s.finishing&&(s.busy||s.turn?.finalizing||!s.turn)){if(s.pendingWireEvents.length>=4096)throw Error();s.pendingWireEvents.push(event);}
         else this.receiveWireEvent(s,event);}catch{this.fail(s,"public_asr_stream_protocol",{origin:"protocol"});}});
-      s.ws.once("open",()=>{void this.send(s,{type:"session.update",session:this.qwen?qwenAsrSessionConfiguration(this.options.language,this.options.serverVad):{type:"transcription",audio:{input:{format:{type:"audio/pcm",rate:24000},
+      s.ws.once("open",()=>{void this.send(s,{type:"session.update",session:this.qwen?qwenAsrSessionConfiguration(this.options.language,this.options.serverVad,s.qwenCorpus):{type:"transcription",audio:{input:{format:{type:"audio/pcm",rate:24000},
         transcription:this.transcription(),turn_detection:null}}}}).catch(()=>this.fail(s,"public_asr_stream_setup"));});
       await abortable(s.ready.promise,s.stop.signal);this.assert(s);
     }catch{this.fail(s,"public_asr_stream_setup");s.removeAbort();if(this.state===s)this.state=undefined;throw s.failure!;}finally{clearTimeout(timer);}
@@ -252,7 +254,7 @@ export class OpenAiStreamingAsrClient {
         if(s.wireSessionId||typeof e.session?.id!=="string"||!e.session.id||e.session.id.length>240||e.session.model!==this.options.model)throw Error();s.wireSessionId=e.session.id;return;
       }
       if(e.type==="session.updated"){
-        if(s.configured)throw Error();assertQwenAsrConfiguration(e.session,this.options.model,this.options.language,this.options.serverVad);
+        if(s.configured)throw Error();assertQwenAsrConfiguration(e.session,this.options.model,this.options.language,this.options.serverVad,s.qwenCorpus);
         if(s.wireSessionId&&s.wireSessionId!==e.session.id)throw Error();s.wireSessionId=e.session.id;s.configured=true;s.ready.resolve();return;
       }
       if(e.type==="session.finished"){

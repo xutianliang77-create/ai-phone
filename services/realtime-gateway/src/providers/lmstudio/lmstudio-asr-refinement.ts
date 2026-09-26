@@ -16,6 +16,13 @@ import {
 } from "./asr-refinement-policy.js";
 
 export interface RecentAsrSegment {
+  segmentId?:string;
+  sourceLanguage?:TranslationLanguageCode;
+  targetLanguage?:TranslationLanguageCode;
+  turnId?:string;
+  speakerId?:string;
+  endMs?:number;
+  rememberedAt?:number;
   rawText?: string;
   optimizedText?: string;
   translatedText?: string;
@@ -56,6 +63,26 @@ export class RealtimeTranscriptRefiner {
       sessionId,
       appendRecentAsrSegment(this.recentSegments.get(sessionId), segment),
     );
+  }
+
+  translationContext(session:RealtimeProviderSession,transcript:TranscriptResult,target:TranslationLanguageCode) {
+    const rows=this.recentSegments.get(session.sessionId)??[],selected:Array<{sourceText:string;translatedText:string}>=[];
+    let end=transcript.timing?.startMs;
+    for(const row of [...rows].reverse()) {
+      if(row.segmentId===transcript.segmentId)continue; // A revision cannot use its stale translation.
+      const sameSpeaker=!!row.speakerId&&row.speakerId!=="unknown"&&row.speakerId===transcript.speaker?.speakerId;
+      const sameTurn=!!row.turnId&&row.turnId===transcript.turnId&&
+        (row.speakerId??"unknown")===(transcript.speaker?.speakerId??"unknown");
+      if(row.sourceLanguage!==transcript.language||row.targetLanguage!==target||(!sameSpeaker&&!sameTurn)||
+        end===undefined||row.endMs===undefined||end<row.endMs||end-row.endMs>5000||
+        row.rememberedAt===undefined||Date.now()-row.rememberedAt>30000)break;
+      const source=row.optimizedText||row.rawText;
+      if(!source||!row.translatedText||source.length>300||row.translatedText.length>300)break;
+      selected.unshift({sourceText:source,translatedText:row.translatedText});
+      if(selected.length===2)break;
+      end=row.endMs;
+    }
+    return selected;
   }
 
   clear(sessionId: string) {
@@ -121,7 +148,7 @@ export function appendRecentAsrSegment(
   previous: RecentAsrSegment[] | undefined,
   segment: RecentAsrSegment,
 ) {
-  return [...(previous ?? []), segment].slice(-6);
+  return [...(previous ?? []).filter(row=>!segment.segmentId||row.segmentId!==segment.segmentId), segment].slice(-6);
 }
 
 function protectedTermsFor(session: RealtimeProviderSession) {

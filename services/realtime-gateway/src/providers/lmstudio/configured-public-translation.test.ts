@@ -18,6 +18,30 @@ function setup(vendor="qwen",protocol="qwen_chat"){
 }
 afterEach(()=>{vi.restoreAllMocks();vi.useRealTimers();});
 describe("original router configured compatible MT component",()=>{
+  function tmt(){
+    const s=setup("tencent","tencent_tmt");Object.assign(s.options.snapshot.components.translation!,{authKind:"tencent_secret",endpoint:"https://tmt.tencentcloudapi.com",region:"ap-guangzhou",
+      termRepositories:{"fr:ja":["repo-forward"],"ja:fr":["repo-reverse"]}});
+    s.options.resolveCredentials=async()=>({secretId:"SYNTHETIC_ID",secretKey:"SYNTHETIC_KEY"});
+    s.fetchFn.mockImplementation(async()=>new Response(JSON.stringify({Response:{TargetText:"こんにちは"}})));
+    return s;
+  }
+  it("delivers only the exact directional TMT repository IDs and no invented inline glossary or context fields",async()=>{
+    const s=tmt();s.options.authorization.languagePolicy={source:"auto",target:"ja",autoReverse:true,pair:["fr","ja"],revision:2};
+    const client=s.create();expect(client.supportsContext).toBeUndefined();
+    await client.translate(input);await client.translate({...input,sourceLanguage:"ja",targetLanguage:"fr"});
+    expect(s.fetchFn.mock.calls.map(c=>JSON.parse(String((c as unknown as [string,RequestInit])[1].body)).TermRepoIDList)).toEqual([["repo-forward"],["repo-reverse"]]);
+    expect(s.record.mock.calls.map(c=>(c as any)[0].state)).toEqual(["dispatching","confirmed","dispatching","confirmed"]);
+  });
+  it("does not apply a TMT dictionary to another protocol before credentials or billing",()=>{
+    const s=setup();s.options.snapshot.components.translation!.termRepositories={"fr:ja":["repo"]};
+    expect(s.create).toThrow("term_repositories_invalid");expect(s.resolveCredentials).not.toHaveBeenCalled();expect(s.record).not.toHaveBeenCalled();
+  });
+  it("keeps the TMT timeout active after credentials and records an uncertain dispatched request without retry",async()=>{
+    vi.useFakeTimers();const s=tmt();s.fetchFn.mockImplementation(()=>new Promise(()=>{}));
+    const pending=s.create().translate(input),check=expect(pending).rejects.toMatchObject({code:"public_translation_timeout",outcome:"uncertain"});
+    await vi.advanceTimersByTimeAsync(1001);await check;
+    expect(s.fetchFn).toHaveBeenCalledTimes(1);expect((s.record.mock.calls.at(-1) as any)[0].state).toBe("uncertain");
+  });
   it.each([["qwen","qwen_chat"],["tencent","tencent_hunyuan_chat"],["openai","openai_chat"]])("maps %s/%s without a fixed model, preserving language and attempt metadata",async(v,p)=>{
     const s=setup(v,p);const client=s.create();expect(await client.healthCheck()).toBe(false);expect(s.fetchFn).not.toHaveBeenCalled();
     expect(await client.translate(input)).toBe("こんにちは");const [url,init]=(s.fetchFn.mock.calls[0] as unknown as [string,RequestInit]);

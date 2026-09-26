@@ -18,6 +18,7 @@ export type Turn={event:PublicModelAttemptEvent;prepared:boolean;sent:boolean;te
 /** One durable attempt per Qwen server-VAD socket, not per semantic item. */
 type QwenTransport={event:PublicModelAttemptEvent;prepared:boolean;sent:boolean;terminal:boolean;finalizing?:Promise<void>};
 export type State={ws?:WebSocket;stop:AbortController;ready:ReturnType<typeof deferred<void>>;configured:boolean;failure?:PublicAsrError;cursor:number;sequence:number;
+  qwenCorpus?:string;
   turn?:Turn;qwenTransport?:QwenTransport;lastItem?:string;seen:Set<string>;busy:boolean;removeAbort:()=>void;wireSessionId?:string;wireEvents?:Set<string>;
   pendingWireEvents:Record<string,any>[];completed:TranscriptResult[];finalization:Promise<void>;finishing:boolean;providerFinished:boolean;
   finished:ReturnType<typeof deferred<void>>;tencentWire?:TencentAsrWire|GoogleAsrWire;lastWireType?:unknown;lastWireLanguage?:unknown;audioSend?:AudioSendObservations;languageNotices?:AsrLanguageNotice[]};

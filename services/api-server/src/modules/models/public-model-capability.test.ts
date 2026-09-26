@@ -52,6 +52,7 @@ describe("manual configuration uses actual wire constraints",()=>{
   });
   it("allows disabled drafts but uses a valid default for newly configured Qwen TTS",()=>{
     const config=emptyConfiguration("test");expect(config.components.tts.sampleRate).toBe(24000);
+    expect(config.components.tts.enabled).toBe(true);config.components.tts.enabled=false;
     config.components.tts.sampleRate=16000;expect(validateProfile("tts",config.components.tts).sampleRate).toBe(16000);
   });
   it("shows an incompatible saved value explicitly rather than silently changing it",()=>{

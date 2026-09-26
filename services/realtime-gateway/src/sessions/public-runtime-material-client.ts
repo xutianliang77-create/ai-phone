@@ -3,6 +3,7 @@ import {isDeepStrictEqual} from "node:util";
 import {publicRuntimeTokenBinding,matchesPublicAdmissionReceipt,type PublicAdmissionQuery,type RealtimeTokenClaims} from "@translation/contracts";
 import type {ConfiguredPublicSessionOptions} from "../providers/configured-public-session.js";
 import type {SessionEventSink} from "./session-event-sink.js";
+import {verifyPublicTerminology} from "./public-session-terminology.js";
 type Snapshot=ConfiguredPublicSessionOptions["snapshot"];
 const object=(v:unknown):v is Record<string,any>=>!!v&&typeof v==="object"&&!Array.isArray(v);
 function canonical(v:any):string{if(Array.isArray(v))return `[${v.map(canonical).join(",")}]`;if(object(v))return `{${Object.keys(v).sort().map(k=>`${JSON.stringify(k)}:${canonical(v[k])}`).join(",")}}`;return JSON.stringify(v);}
@@ -17,14 +18,15 @@ export function createPublicRuntimeMaterialClient(sink:SessionEventSink,claims:R
   return {
     async configuration(signal?:AbortSignal){
       const q=query("connect"),value=await configuration(q,signal);
-      if(!object(value)||Object.keys(value).length!==3||!matchesPublicAdmissionReceipt(value.receipt,q)||!object(value.configuration)||
+      if(!object(value)||Object.keys(value).some(k=>!["receipt","configuration","authorization","terminology"].includes(k))||!matchesPublicAdmissionReceipt(value.receipt,q)||!object(value.configuration)||
         !isDeepStrictEqual(value.authorization,token.processing))throw Error("public_runtime_configuration_mismatch");
       const c=value.configuration;
       if(Object.keys(c).length!==7||c.schemaVersion!==1||c.deploymentId!==deploymentId||c.configurationRevision!==binding.configurationRevision||
         c.configurationHash!==binding.configurationHash||c.modelPolicyRevision!==token.processing!.modelPolicyRevision||
         !isDeepStrictEqual(c.executionPlan,token.processing!.executionPlan)||!object(c.components)||
         hash({schemaVersion:c.schemaVersion,deploymentId:c.deploymentId,configurationRevision:c.configurationRevision,components:c.components})!==binding.configurationHash)throw Error("public_runtime_configuration_mismatch");
-      snapshot=structuredClone(c) as Snapshot;return {snapshot:structuredClone(snapshot),authorization:structuredClone(token.processing!)};
+      const terminology=verifyPublicTerminology(value.terminology,token);
+      snapshot=structuredClone(c) as Snapshot;return {snapshot:structuredClone(snapshot),authorization:structuredClone(token.processing!),terminology};
     },
     async credentials(component:"asr"|"translation"|"tts",purpose:"connect"|"dispatch",signal?:AbortSignal){
       if(!["connect","dispatch"].includes(purpose))throw Error("public_recovery_material_denied");

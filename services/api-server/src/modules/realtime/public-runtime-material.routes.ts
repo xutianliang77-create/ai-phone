@@ -6,7 +6,7 @@ import {queryPublicAdmission} from "./public-admission-query.service.js";
 import {findSession} from "../sessions/sessions-runtime.repository.js";
 import {createPublicModelCredentialResolver} from "../models/public-model-credential-resolver.js";
 import {selectCurrentPublicModelConfiguration} from "../models/public-model-runtime-config.js";
-import {ResultSyncError} from "../sessions/session-result-sync-contract.js";
+import {ResultSyncError,resultSyncHash} from "../sessions/session-result-sync-contract.js";
 import {PublicConfigError,type ModelComponent} from "../models/public-model-config.js";
 
 /** Trusted boot-time capability. Never accepted from HTTP or the configuration UI.
@@ -32,7 +32,10 @@ export function registerPublicRuntimeMaterialRoutes(app:FastifyInstance,access?:
       const {sessionId}=request.params as {sessionId:string},receipt=await queryPublicAdmission(sessionId,request.body),session=await findSession(sessionId);
       if(!session?.publicModelConfiguration||!session.publicRealtimeIssuance)throw new ResultSyncError("public_runtime_not_issued",403);
       selectCurrentPublicModelConfiguration(session.publicModelConfiguration,()=>undefined);
-      return {receipt,configuration:structuredClone(session.publicModelConfiguration),authorization:structuredClone(session.publicRealtimeIssuance.claims.processing)};
+      const hash=session.publicRealtimeIssuance.claims.publicTerminologyHash;
+      if(hash!==undefined&&(!session.publicTerminology||resultSyncHash(session.publicTerminology)!==hash))throw new ResultSyncError("public_terminology_binding_changed",403);
+      return {receipt,configuration:structuredClone(session.publicModelConfiguration),authorization:structuredClone(session.publicRealtimeIssuance.claims.processing),
+        ...(hash?{terminology:structuredClone(session.publicTerminology)}:{})};
     }catch(error){return failed(reply,error);}
   });
   app.post("/internal/realtime/sessions/:sessionId/credentials",{bodyLimit:4096},async(request,reply)=>{

@@ -19,6 +19,7 @@ import {SyntheticAsrSocket} from "../../../../realtime-gateway/src/asr/streaming
 import {SyntheticQwenAsrSocket} from "../../../../realtime-gateway/src/asr/qwen-streaming-asr.test-support.js";
 import {createPublicModelCredentialResolver} from "../models/public-model-credential-resolver.js";
 import {buildApp} from "../../app.js";
+import {publicTerminologySessionFields,verifyPublicTerminology} from "../../../../realtime-gateway/src/sessions/public-session-terminology.js";
 
 const id="configured-session",owner="owner",signing="SYNTHETIC_ISSUER_SIGNING_SECRET_NOT_REAL";
 installConfigurationFixture();
@@ -42,6 +43,26 @@ async function grant(){
 }
 async function prepared(vendor="qwen",voice=false){const input=await request(vendor,voice);await preparePublicRealtimeSession(id,owner,input,new Date());return input;}
 describe("original public session preparation and issuance phases",()=>{
+  it("freezes only the selected owner's terms, filters direction and reuses the same snapshot on retry",async()=>{
+    const input={...await request(),termbaseId:"default",domainLexiconPacks:["product"] as const};
+    const term={id:"mine",termbaseId:"default",userId:owner,sourceText:"产品甲",translatedText:"Product Alpha",
+      sourceLanguage:"zh" as const,targetLanguage:"en" as const,status:"active" as const,createdAt:now.toISOString(),updatedAt:now.toISOString()};
+    storage.getStoreSnapshot().termbaseTerms=[term,{...term,id:"other",userId:"other",translatedText:"PRIVATE"},
+      {...term,id:"wrong-direction",sourceLanguage:"en",targetLanguage:"zh"},{...term,id:"revoked",status:"revoked"}];
+    await preparePublicRealtimeSession(id,owner,{...input,domainLexiconPacks:[...input.domainLexiconPacks]},now);
+    const snapshot=structuredClone(current().publicTerminology);expect(snapshot!.terms.map(t=>t.id)).toEqual(["mine"]);
+    expect(JSON.stringify(snapshot)).not.toMatch(/PRIVATE|userId|sessionId/);
+    storage.getStoreSnapshot().termbaseTerms[0].translatedText="Changed later";
+    await preparePublicRealtimeSession(id,owner,{...input,domainLexiconPacks:[...input.domainLexiconPacks]},now);
+    expect(current().publicTerminology).toEqual(snapshot);
+    await grant();const issued=await issuePublicRealtimeSession(id,owner),claims=verifyRealtimeToken(issued.realtimeToken,signing)!;
+    expect(verifyPublicTerminology(snapshot,claims)).toEqual(snapshot);
+    expect(()=>verifyPublicTerminology({...snapshot,terms:[]},claims)).toThrow("binding_mismatch");
+    const qwen=publicTerminologySessionFields(snapshot,"qwen_asr_realtime",input.processing.languagePolicy);
+    expect(qwen.asrHotwords).toContain("产品甲");expect(qwen.asrHotwords).toContain("Product Alpha");
+    expect(publicTerminologySessionFields(snapshot,"google_speech_v2",input.processing.languagePolicy).asrHotwords).toBeUndefined();
+    expect(publicTerminologySessionFields(snapshot,"google_speech_v2",input.processing.languagePolicy).terminology).toEqual(qwen.terminology);
+  });
   it("prepares one original aggregate without a token, grant, inference or quota hold",async()=>{
     const input=await request();const [a,b]=await Promise.all([preparePublicRealtimeSession(id,owner,input,new Date()),preparePublicRealtimeSession(id,owner,input,new Date())]);
     expect(a).toEqual(b);expect(a.status).toBe("prepared_not_admitted");expect(a).not.toHaveProperty("realtimeToken");
@@ -162,9 +183,10 @@ describe("original public session preparation and issuance phases",()=>{
     const recordAttempt=vi.fn(async(event:PublicModelAttemptEvent)=>{await recordPublicModelAttempt(id,event,new Date());});
     const socketFactory=vi.fn(()=>{const socket=vendor==="qwen"?new SyntheticQwenAsrSocket():new SyntheticAsrSocket();socket.transcript="今天我们测试在线语音翻译。";return socket.asWebSocket();});
     const fetchFn=vi.fn(async()=>new Response(JSON.stringify({choices:[{finish_reason:"stop",message:{content:"Today we test online speech translation."}}]})));
-    const options={snapshot,authorization:current().processingAuthorization!,binding:{sessionId:id,ownerId:owner,deploymentId:"runtime-test",modelPolicyRevision:snapshot.modelPolicyRevision,
+    const options={snapshot,terminology:current().publicTerminology,authorization:current().processingAuthorization!,binding:{sessionId:id,ownerId:owner,deploymentId:"runtime-test",modelPolicyRevision:snapshot.modelPolicyRevision,
       leaseId:lease.leaseId,captureId:lease.captureId,languagePolicyKey:lease.languagePolicyKey,sampleRate:response.captureSampleRate!},
-      session:{sessionId:id,userId:owner,sourceLanguage:"zh" as const,targetLanguage:"en" as const,voiceOutput:false,asrEndpointMode:"listening" as const},
+      session:{sessionId:id,userId:owner,sourceLanguage:"zh" as const,targetLanguage:"en" as const,voiceOutput:false,asrEndpointMode:"listening" as const,
+        ...publicTerminologySessionFields(current().publicTerminology,snapshot.components.asr!.protocol,claims.processing!.languagePolicy)},
       authorizeConnection,recordAttempt,socketFactory,fetchFn,resolveAsrCredentials:createPublicModelCredentialResolver(snapshot,"asr"),
       resolveTranslationCredentials:createPublicModelCredentialResolver(snapshot,"translation")};
     const router=new ProviderRouter(),built=router.createConfiguredPublicSessionFromVerifiedClaims(options,claims);

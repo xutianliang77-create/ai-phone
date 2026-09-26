@@ -71,6 +71,8 @@ export async function issuePublicRealtimeSession(sessionId:string,ownerId:string
         if(qaDeadlineAt!==undefined&&(qaDeadlineAt<=Math.floor(Date.now()/1000)||!Number.isSafeInteger(maxDurationSeconds)||maxDurationSeconds!<1))throw new ResultSyncError("public_qa_one_shot_expired",403);
         const claims:RealtimeTokenClaims={userId:ownerId,sessionId,mode:input.mode,asrEndpointMode:["meeting","classroom"].includes(input.mode)?"listening":"conversation",
           sourceLanguage:input.sourceLanguage,targetLanguage:input.targetLanguage,voiceOutput:input.voiceOutput,
+          ...(current.publicTerminology?{publicTerminologyHash:resultSyncHash(current.publicTerminology),
+            ...(current.publicTerminology.termbaseId?{termbaseId:current.publicTerminology.termbaseId}:{}),domainLexiconPacks:[...current.publicTerminology.domainLexiconPacks]}:{}),
           ...(input.autoReverseTargetLanguage?{autoReverseTargetLanguage:true}:{}),
           ...(input.speakerAttribution?.deviceProfile?{speakerAttribution:structuredClone(input.speakerAttribution)}:{}),
           ...(input.voiceOutput?{voice:{mode:"preset",presetId:config.components.tts!.voice}}:{}),planCode:hold.balance.planCode,
@@ -100,6 +102,7 @@ export async function issuePublicRealtimeSession(sessionId:string,ownerId:string
     return {sessionId,realtimeToken:createRealtimeToken(claims,settings.secret),endpoint:committedIssuance.endpoint,
       expiresAt:new Date(claims.expiresAt*1000).toISOString(),...(claims.maxDurationSeconds!==undefined?{maxDurationSeconds:claims.maxDurationSeconds}:{}),
       captureSampleRate:claims.publicRuntime!.sampleRate,deploymentId:claims.publicRuntime!.deploymentId,ownerId,
+      ...(claims.domainLexiconPacks?{domainLexiconPacks:claims.domainLexiconPacks}:{}),
       ...(claims.speakerAttribution?.deviceProfile?{speakerAttribution:structuredClone(claims.speakerAttribution)}:{}),
       processing:structuredClone(claims.processing!)};
   });

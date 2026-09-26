@@ -1,4 +1,5 @@
-import type {PublicModelAttemptEvent,RealtimeTokenClaims} from "@translation/contracts";
+import type {PublicModelAttemptEvent,RealtimeTokenClaims,PublicSessionTerminology} from "@translation/contracts";
+import {verifyPublicTerminology,publicTerminologySessionFields} from "../sessions/public-session-terminology.js";
 import {isDeviceSpeakerSelection,publicAutomaticLanguageScopeSupported,publicProtocolCapability,publicProtocolSampleRateSupported,publicRuntimeTokenBinding} from "@translation/contracts";
 import {isDeepStrictEqual} from "node:util";
 import {configuredStreamingAsr, type ConfiguredStreamingAsrOptions} from "../asr/configured-public-asr.js";
@@ -12,6 +13,7 @@ import { SpeakerAwareAsrProvider } from "../asr/speaker-aware-asr-provider.js";
 import { DeviceSpeakerAttributionProvider } from "../speaker/device-speaker-attribution-provider.js";
 
 export interface ConfiguredPublicSessionOptions {
+  terminology?:PublicSessionTerminology;
   deviceSpeakerEnabled?: boolean;
   snapshot: ConfiguredStreamingAsrOptions["snapshot"] & ConfiguredPublicTranslationOptions["snapshot"] & ConfiguredPublicTtsOptions["snapshot"];
   authorization: ConfiguredStreamingAsrOptions["authorization"];
@@ -48,6 +50,9 @@ export function configuredPublicSessionComponents(options:ConfiguredPublicSessio
  * A signed projection is checked against server-resolved options, never used to
  * manufacture those options. The public socket entry remains independently gated. */
 export function configuredPublicSessionFromVerifiedClaims(options:ConfiguredPublicSessionOptions,claims:RealtimeTokenClaims){
+  const terms=publicTerminologySessionFields(verifyPublicTerminology(options.terminology,claims),options.snapshot.components.asr?.protocol??"",options.authorization.languagePolicy);
+  if(!isDeepStrictEqual(terms.terminology,options.session.terminology)||!isDeepStrictEqual(terms.asrHotwords,options.session.asrHotwords)||options.session.asrCorrections?.length)
+    throw Error("public_terminology_binding_mismatch");
   const token=publicRuntimeTokenBinding(claims,options.binding.deploymentId),b=options.binding;
   if(!token||claims.userId!==b.ownerId||claims.sessionId!==b.sessionId||
     !isDeepStrictEqual(claims.speakerAttribution?.mode==="off"?undefined:claims.speakerAttribution,
@@ -104,7 +109,7 @@ function assemblePublicSession(options:ConfiguredPublicSessionOptions,withOutput
       (language.autoReverse&&(!automaticLanguage||!automaticPair))) {
     fail("public_session_language_not_supported");
   }
-  if (session.asrHotwords?.length || session.asrCorrections?.length) fail("public_session_asr_hints_not_implemented");
+  if (session.asrCorrections?.length || session.asrHotwords?.length && snapshot.components.asr?.protocol!=="qwen_asr_realtime") fail("public_session_asr_hints_not_implemented");
   const deviceSpeaker = options.deviceSpeakerEnabled === true && isDeviceSpeakerSelection(session.speakerAttribution);
   if (session.speakerAttribution && session.speakerAttribution.mode !== "off" && !deviceSpeaker) fail("public_session_speaker_not_implemented");
   if (session.speakerAttribution?.allowVoiceIdentity) fail("public_session_speaker_not_implemented");

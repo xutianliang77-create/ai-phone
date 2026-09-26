@@ -34,6 +34,7 @@ export * from "./realtime/diagnostics.js";
 export * from "./realtime/errors.js";
 export * from "./realtime/events.js";
 export * from "./realtime/session.js";
+export * from "./realtime/public-terminology.js";
 export * from "./realtime/processing-policy.js";
 export * from "./realtime/automatic-language-routing.js";
 export * from "./realtime/processing-contract.js";

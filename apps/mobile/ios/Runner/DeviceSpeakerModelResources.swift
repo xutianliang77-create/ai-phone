@@ -42,10 +42,14 @@ enum DeviceSpeakerModelResources {
   }
 
   static func load() throws -> MLModel {
+    let url: URL
+    do { url = try modelURL() }
+    catch let failure as DeviceSpeakerFailure { throw failure }
+    catch { throw DeviceSpeakerFailure.resourcesInvalid }
     let configuration = MLModelConfiguration()
     configuration.computeUnits = .cpuAndNeuralEngine
     // Compiled, verified local model only. No SDK download or remote fallback.
-    return try MLModel(contentsOf: modelURL(), configuration: configuration)
+    return try MLModel(contentsOf: url, configuration: configuration)
   }
 
   private static func sha256(_ url: URL) throws -> String {
@@ -70,4 +74,31 @@ enum DeviceSpeakerFailure: String, Error {
   case cancelled = "device_speaker_cancelled"
   case busy = "device_speaker_busy"
   case backpressure = "device_speaker_backpressure"
+}
+
+/// Account-independent, immutable model resources. Concurrent readiness calls
+/// share one load; a failed load is retryable and never cached as ready.
+final class DeviceSpeakerPreparationCache<Value> {
+  @MainActor private var value: Value?
+  @MainActor private var loading: Task<Value, Error>?
+  @MainActor private var generation = UUID()
+
+  @MainActor
+  func prepare(load: @escaping @Sendable () throws -> Value) async throws -> Value {
+    if let value { return value }
+    if loading == nil {
+      generation = UUID()
+      loading = Task.detached(priority: .userInitiated) { try load() }
+    }
+    let current = generation
+    do {
+      let loaded = try await loading!.value
+      value = loaded
+      if generation == current { loading = nil }
+      return loaded
+    } catch {
+      if generation == current { loading = nil }
+      throw error
+    }
+  }
 }

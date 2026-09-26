@@ -7,6 +7,7 @@ import {publicRuntimeTokenBinding,type TranslationLanguageCode} from "@translati
 import {createSessionEventSink,bindPublicSessionEventSink} from "../sessions/session-event-sink.js";
 import {createPublicAdmissionClient} from "../sessions/public-admission-client.js";
 import {createPublicRuntimeMaterialClient} from "../sessions/public-runtime-material-client.js";
+import {publicTerminologySessionFields} from "../sessions/public-session-terminology.js";
 import {attachSession,getSession,activeSessionCount,retainPublicRecoveryRuntime,releasePublicRecoveryRuntime,takePublicRecoveryRuntime} from "../sessions/session-manager.js";
 import {ProviderRouter} from "../providers/provider-router.js";
 import type {ConfiguredPublicSessionOptions} from "../providers/configured-public-session.js";
@@ -65,17 +66,18 @@ export async function openConfiguredPublicConnection(env:RealtimeEnv,ws:WebSocke
     }
     await abortable(admission.authorize("connect"),stop.signal);
     const material=createPublicRuntimeMaterialClient(sink,claims,env.publicDeploymentId!,options.credentialAccessSecret);
-    const {snapshot,authorization}=await material.configuration(stop.signal);
+    const {snapshot,authorization,terminology}=await material.configuration(stop.signal);
     let started=false;const purpose=()=>started?"dispatch" as const:"connect" as const;
     const scoped={sessionId:claims.sessionId,ownerId:claims.userId,deploymentId:binding.deploymentId,modelPolicyRevision:claims.processing!.modelPolicyRevision,
       leaseId:binding.leaseId,captureId:binding.captureId,languagePolicyKey:binding.languagePolicyKey,sampleRate:binding.sampleRate};
     const sessionInput={sessionId:claims.sessionId,userId:claims.userId,sourceLanguage:claims.sourceLanguage,targetLanguage:claims.targetLanguage,
+      ...publicTerminologySessionFields(terminology,snapshot.components.asr!.protocol,authorization.languagePolicy),
       ...(claims.speakerAttribution?{speakerAttribution:structuredClone(claims.speakerAttribution)}:{}),
       ...(claims.autoReverseTargetLanguage?{autoReverseTargetLanguage:true}:{}),voiceOutput:claims.voiceOutput,asrEndpointMode:claims.asrEndpointMode,
       ...(claims.processing!.languagePolicy.pair?{languagePair:[...claims.processing!.languagePolicy.pair] as [TranslationLanguageCode,TranslationLanguageCode]}:{}),
       ...(claims.processing!.languagePolicy.sourceLanguages?{automaticSourceLanguages:[...claims.processing!.languagePolicy.sourceLanguages]}:{})};
     if(claims.qaOneShot&&claims.qaOneShot.hardDeadlineAt*1000<=Date.now()+1000)throw Error("public_qa_deadline_elapsed");
-    built=new ProviderRouter().createConfiguredPublicSessionFromVerifiedClaims({snapshot,authorization,binding:scoped,session:sessionInput,
+    built=new ProviderRouter().createConfiguredPublicSessionFromVerifiedClaims({snapshot,authorization,terminology,binding:scoped,session:sessionInput,
       deviceSpeakerEnabled: env.publicDeviceSpeakerEnabled === true,
       authorizeConnection:async()=>{await admission.authorize(purpose());},resolveAsrCredentials:signal=>material.credentials("asr",purpose(),signal),
       resolveTranslationCredentials:signal=>material.credentials("translation","dispatch",signal),recordAttempt:event=>sink.modelAttempt!(event),

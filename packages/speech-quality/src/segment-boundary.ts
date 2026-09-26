@@ -23,6 +23,9 @@ export function shouldHoldForNextSegment(text: string, language: string) {
   const trimmed = text.trim();
   if (!trimmed || /[！？!?]$/u.test(trimmed)) return false;
   if (isStructuredFieldPrefix(trimmed, language)) return true;
+  // A supplier full stop after 把/让/将 + object is not a finished predicate.
+  // Reuse the bounded assembler; do not hold complete short answers or change VAD.
+  if(language==="zh"&&/(?:把|将|让)(?:我|你|您|他|她|它|我们|你们|他们|她们|它们|这个|那个)[。.]?$/u.test(trimmed))return true;
   if (/[,，、;；:：]$/u.test(trimmed)) return true;
 
   const normalized = trimmed.replace(/[.。]+$/u, "");

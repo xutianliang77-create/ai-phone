@@ -5,7 +5,7 @@ import 'realtime_session.dart';
 import 'public_automatic_language_scope.dart';
 
 const publicCreationScopeNotice =
-    '公有在线会在开始前按当前服务端资格核对语种、自动识别/反向与朗读声音；个人声音、说话人和术语包仍未在公有链路启用。丢失连接时安全结束并保留已确认记录，不自动重连或重放音频。';
+    '公有在线会在开始前按当前服务端资格核对语种、自动识别/反向与朗读声音；公共术语默认启用，个人词库按账号隔离。说话人须本机资源就绪，个人声音暂不支持。丢失连接时安全结束并保留已确认记录，不自动重连或重放音频。';
 bool _key(Object? value) =>
     value is String &&
     value.isNotEmpty &&
@@ -148,7 +148,9 @@ Map<String, Object?> publicCreationBody(Map<String, Object?> offer,
     required String target,
     required bool autoReverse,
     required (String, String)? automaticLanguagePair,
-    required bool voice, bool deviceSpeakerReady = false}) {
+    required bool voice, bool deviceSpeakerReady = false,
+    String termbaseId = 'default',
+    List<String> domainLexiconPacks = const ['product']}) {
   final blocker = publicCreationCapabilityBlocker(offer,
       source: source,
       target: target,
@@ -180,6 +182,8 @@ Map<String, Object?> publicCreationBody(Map<String, Object?> offer,
     'targetLanguage': target,
     if (autoReverse) 'autoReverseTargetLanguage': true,
     'voiceOutput': voice,
+    if (termbaseId.isNotEmpty) 'termbaseId': termbaseId,
+    'domainLexiconPacks': List<String>.of(domainLexiconPacks),
     'speakerAttribution': deviceSpeakerReady && deviceSpeakerOffered(offer['onDeviceSpeaker'])
         ? deviceSpeakerSelection : {'mode': 'off'},
     if (voice) 'voice': {'mode': 'preset', 'presetId': offer['voicePresetId']},
@@ -264,6 +268,11 @@ RealtimeSession publicCreationResponse(
           (body['autoReverseTargetLanguage'] == true) ||
       claims['voiceOutput'] != body['voiceOutput'] ||
       publicCreationCanonical(claims['speakerAttribution']) != publicCreationCanonical(expectedSpeaker) ||
+      ((body.containsKey('termbaseId') || body.containsKey('domainLexiconPacks')) &&
+          (claims['termbaseId'] != body['termbaseId'] ||
+          publicCreationCanonical(claims['domainLexiconPacks']) != publicCreationCanonical(body['domainLexiconPacks']) ||
+          claims['publicTerminologyHash'] is! String ||
+          !RegExp(r'^[a-f0-9]{64}$').hasMatch(claims['publicTerminologyHash'] as String))) ||
       publicCreationCanonical(claims['voice']) !=
           publicCreationCanonical(body['voice']) ||
       publicCreationCanonical(claims['processing']) !=

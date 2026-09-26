@@ -79,6 +79,8 @@ export async function* translateSingleTranscript(
           vadContext: transcript.vadContext,
         };
         if(context.isCurrent(session))context.transcriptRefiner.remember(session.sessionId, {
+          segmentId:transcript.segmentId,sourceLanguage:transcript.language,targetLanguage,turnId:transcript.turnId,
+          speakerId:transcript.speaker?.speakerId,endMs:transcript.timing?.endMs,rememberedAt:Date.now(),
           rawText: refinement.rawText,
           optimizedText: refinement.optimizedText,
           translatedText: text,
@@ -89,6 +91,7 @@ export async function* translateSingleTranscript(
         session,
         transcript.language,
         targetLanguage,
+        context.client.supportsAttemptContext?text:undefined,
       );
       const startedAt = Date.now();
       const signal=context.translationAborts.get(session)!.signal;
@@ -97,6 +100,7 @@ export async function* translateSingleTranscript(
         sourceLanguage: transcript.language,
         targetLanguage,
         ...(terminology.length > 0 ? { terminology } : {}),
+        ...(context.client.supportsContext?{context:context.transcriptRefiner.translationContext(session,transcript,targetLanguage)}:{}),
         ...(context.client.supportsAbort?{signal}:{}),
         ...(context.client.supportsAttemptContext?{attemptContext:{segmentId:transcript.segmentId,revision:transcript.revision??0}}:{}),
       }),signal));
@@ -136,6 +140,8 @@ export async function* translateSingleTranscript(
         vadContext: transcript.vadContext,
       };
       if(context.isCurrent(session))context.transcriptRefiner.remember(session.sessionId, {
+        segmentId:transcript.segmentId,sourceLanguage:transcript.language,targetLanguage,turnId:transcript.turnId,
+        speakerId:transcript.speaker?.speakerId,endMs:transcript.timing?.endMs,rememberedAt:Date.now(),
         rawText: refinement.rawText,
         optimizedText: refinement.optimizedText,
         translatedText: translated,

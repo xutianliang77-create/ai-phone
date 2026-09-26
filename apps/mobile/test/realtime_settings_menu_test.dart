@@ -34,25 +34,25 @@ void main() {
     expect(find.text('聆听'), findsOneWidget);
   });
 
-  testWidgets('toggles auto speak from realtime home shortcut', (tester) async {
+  testWidgets('starts with reading on and can turn it off from realtime home shortcut', (tester) async {
     await pumpAcceptedApp(tester);
 
     var shortcut = tester.widget<IconButton>(
-      find.widgetWithIcon(IconButton, Icons.voice_over_off_outlined),
+      find.widgetWithIcon(IconButton, Icons.record_voice_over),
     );
     expect(shortcut.onPressed, isNotNull);
     expect(
       (shortcut.icon as Icon).icon,
-      Icons.voice_over_off_outlined,
+      Icons.record_voice_over,
     );
 
     await tester.tap(find.byTooltip('自动朗读译文'));
     await tester.pumpAndSettle();
 
     shortcut = tester.widget<IconButton>(
-      find.widgetWithIcon(IconButton, Icons.record_voice_over),
+      find.widgetWithIcon(IconButton, Icons.voice_over_off_outlined),
     );
-    expect((shortcut.icon as Icon).icon, Icons.record_voice_over);
+    expect((shortcut.icon as Icon).icon, Icons.voice_over_off_outlined);
   });
 
   testWidgets('localizes realtime settings menu in English', (tester) async {
@@ -72,8 +72,7 @@ void main() {
   testWidgets('defaults Listening silent without losing the Talk voice setting',
       (tester) async {
     await pumpAcceptedApp(tester);
-    await tester.tap(find.byTooltip('自动朗读译文'));
-    await tester.pumpAndSettle();
+    expect(find.widgetWithIcon(IconButton, Icons.record_voice_over), findsOneWidget);
     await tester.tap(find.byTooltip('语言'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('同传设置'));

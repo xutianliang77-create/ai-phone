@@ -24,10 +24,33 @@ abstract class DeviceSpeakerDiarizer {
   Future<void> cancel(String sessionId);
 }
 
-DeviceSpeakerDiarizer? createDeviceSpeakerDiarizer() =>
-    const bool.fromEnvironment('ENABLE_DEVICE_SPEAKER') &&
-        !kIsWeb && defaultTargetPlatform == TargetPlatform.iOS
-    ? NativeDeviceSpeakerDiarizer() : null;
+DeviceSpeakerDiarizer? createDeviceSpeakerDiarizer() {
+  if (!const bool.fromEnvironment('ENABLE_DEVICE_SPEAKER', defaultValue: true) ||
+      kIsWeb || defaultTargetPlatform != TargetPlatform.iOS) {
+    return null;
+  }
+  final model = NativeDeviceSpeakerDiarizer();
+  // Prepare before Start, without opening a microphone, downloading, or
+  // changing the current session. Native preparation is shared across rebuilds.
+  if (const String.fromEnvironment('PUBLIC_DEPLOYMENT_ID').isNotEmpty) {
+    unawaited(model.prepare());
+  }
+  return model;
+}
+
+enum DeviceSpeakerReadiness {
+  notRequested, loading, ready, waitTimedOut, loadTimedOut, pluginMissing,
+  modelMissing, modelInvalid, busy, cancelled, profileMismatch, loadFailed,
+}
+
+Future<void> recordDeviceSpeakerSelection(String reason) async {
+  if(kIsWeb||defaultTargetPlatform!=TargetPlatform.iOS)return;
+  try {
+    await const MethodChannel('translation_mobile/device_speaker')
+        .invokeMethod<void>('recordPreparationDecision', {'reason':reason})
+        .timeout(const Duration(milliseconds:250));
+  } catch (_) { /* Diagnostic only; never blocks the online session. */ }
+}
 
 /// Same uploaded PCM, no microphone or model-download API. A failed candidate
 /// remains an anonymous-speaker session; cloud ASR/MT selection never changes.
@@ -40,7 +63,8 @@ class NativeDeviceSpeakerDiarizer implements DeviceSpeakerDiarizer {
   final Stream<dynamic> _stream;
   final Duration readinessWait;
   Future<bool>? _preparation;
-  int _request = 0;
+  DeviceSpeakerReadiness readiness = DeviceSpeakerReadiness.notRequested;
+  static int _request = 0;
   @override
   Stream<Map<String, Object?>> get events => _stream.map((e) => Map<String, Object?>.from(e as Map));
   @override
@@ -49,18 +73,35 @@ class NativeDeviceSpeakerDiarizer implements DeviceSpeakerDiarizer {
     // it: the current session stays anonymous, and a later start rechecks the
     // same completed local preparation. There is no mid-session model switch.
     final loading = _preparation ??= _prepareOnce();
-    return loading.timeout(readinessWait, onTimeout: () => false);
+    final wait = Stopwatch()..start();
+    return loading.timeout(readinessWait, onTimeout: () {
+      readiness = DeviceSpeakerReadiness.waitTimedOut;
+      unawaited(_channel.invokeMethod<void>('recordPreparationDecision',
+          {'reason': readiness.name, 'elapsedMs': wait.elapsedMilliseconds}).catchError((Object _) {}));
+      return false;
+    });
   }
   Future<bool> _prepareOnce() async {
     final id = 'speaker-${DateTime.now().microsecondsSinceEpoch}-${++_request}';
+    readiness = DeviceSpeakerReadiness.loading;
     try {
       final result = await _channel.invokeMapMethod<String, Object?>('prepare', {'requestId': id})
           .timeout(const Duration(minutes: 3));
       final ready = result?['ready'] == true && result?['profile'] == deviceSpeakerProfile &&
           result?['modelRevision'] == deviceSpeakerRevision && result?['maxSpeakers'] == 4;
+      readiness = ready ? DeviceSpeakerReadiness.ready : DeviceSpeakerReadiness.profileMismatch;
       if (!ready) _preparation = null;
       return ready;
-    } catch (_) {
+    } catch (error) {
+      readiness = switch (error) {
+        TimeoutException() => DeviceSpeakerReadiness.loadTimedOut,
+        MissingPluginException() => DeviceSpeakerReadiness.pluginMissing,
+        PlatformException(code: 'device_speaker_model_missing') => DeviceSpeakerReadiness.modelMissing,
+        PlatformException(code: 'device_speaker_model_invalid') => DeviceSpeakerReadiness.modelInvalid,
+        PlatformException(code: 'device_speaker_busy') => DeviceSpeakerReadiness.busy,
+        PlatformException(code: 'device_speaker_cancelled') => DeviceSpeakerReadiness.cancelled,
+        _ => DeviceSpeakerReadiness.loadFailed,
+      };
       _preparation = null;
       unawaited(_channel.invokeMethod<void>('cancelPreparation', {'requestId': id}).catchError((Object _) {}));
       return false;

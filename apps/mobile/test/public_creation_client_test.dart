@@ -29,6 +29,9 @@ Map<String, Object?> response(http.Request request, String owner) {
   final expiry = DateTime.now().toUtc().add(const Duration(minutes: 5)).millisecondsSinceEpoch ~/ 1000;
   final id = 'public-${request.headers['idempotency-key']}';
   final claims = {'sessionId': id, 'userId': owner, 'mode': body['mode'], 'sourceLanguage': body['sourceLanguage'], 'targetLanguage': body['targetLanguage'],
+    if(body.containsKey('termbaseId')) 'termbaseId':body['termbaseId'],
+    if(body.containsKey('domainLexiconPacks')) 'domainLexiconPacks':body['domainLexiconPacks'],
+    if(body.containsKey('termbaseId')||body.containsKey('domainLexiconPacks')) 'publicTerminologyHash':'b'*64,
     if ((body['speakerAttribution'] as Map?)?['deviceProfile'] != null) 'speakerAttribution': body['speakerAttribution'],
     'voiceOutput': body['voiceOutput'], if (body['voice'] != null) 'voice': body['voice'], 'processing': p,
     'issuedAt': expiry - 300, 'expiresAt': expiry, 'publicRuntime': {'deploymentId': 'public', 'leaseId': 'lease', 'captureId': 'capture',

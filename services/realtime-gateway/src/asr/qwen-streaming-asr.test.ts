@@ -27,6 +27,18 @@ afterEach(async()=>{for(const p of active.splice(0))await p.closeSession(session
 const serverVad={type:"server_vad",threshold:0.2,silence_duration_ms:400};
 
 describe("Qwen ASR server-VAD wire on original shared streaming lifecycle",()=>{
+  it("actually sends selected terminology as corpus.text without fixing the automatic language or VAD",async()=>{
+    const t=setup();t.options.authorization.languagePolicy={source:"auto",target:"zh",autoReverse:true,pair:["zh","en"],revision:2};
+    const p=t.create();await p.createSession({...session,sourceLanguage:"auto",targetLanguage:"zh",asrHotwords:["Device Alpha","产品乙","Device Alpha"]});
+    expect(t.sockets[0].sent[0].session.input_audio_transcription).toEqual({corpus:{text:"Device Alpha\n产品乙"}});
+    expect(t.sockets[0].sent[0].session.turn_detection).toEqual(serverVad);
+    expect(t.socketFactory).toHaveBeenCalledTimes(1);
+  });
+  it("refuses an altered corpus echo without a replacement socket",async()=>{
+    const t=setup(s=>{s.autoSetup=false;s.onSend=e=>{if(e.type==="session.update")queueMicrotask(()=>s.receive({type:"session.updated",session:{id:"qwen-session",model:s.model,modalities:["text"],...e.session,input_audio_transcription:{language:"fr",corpus:{text:"other"}}}}));};});
+    await expect(t.create().createSession({...session,asrHotwords:["Device Alpha"]})).rejects.toMatchObject({code:"qwen_asr_setup_mismatch"});
+    expect(t.socketFactory).toHaveBeenCalledTimes(1);
+  });
   it("emits only bounded QA boundary metadata for a confirmed supplier item",async()=>{
     vi.stubEnv("PUBLIC_ASR_BOUNDARY_TRACE_ENABLED","true");vi.stubEnv("PUBLIC_QA_ONE_SHOT_ENABLED","true");
     const info=vi.spyOn(realtimeLogger,"info").mockImplementation(()=>{}),t=setup(),p=t.create();

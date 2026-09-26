@@ -9,6 +9,7 @@ import {validateCreateRealtimeSessionRequest} from "./create-session-request.js"
 import { getRepositoryRuntime } from "../../infrastructure/storage/repository-runtime.js";
 import { preparePostgresPublicCreation } from "./postgres-public-creation.repository.js";
 import { publicSpeakerSelectionAllowed } from "./public-device-speaker-policy.js";
+import {capturePublicTerminology} from "./public-session-terminology.js";
 
 export function publicCreationInput(value:unknown) {
   if(!value||typeof value!=="object"||Array.isArray(value)||Object.keys(value).some(k=>!["processing","mode","sourceLanguage","targetLanguage",
@@ -17,7 +18,7 @@ export function publicCreationInput(value:unknown) {
   if(!parsed.ok)throw new ResultSyncError("public_creation_invalid",400);
   const input=parsed.value,p=input.processing;
   if(!p||p.processingMode!=="online"||
-    input.termbaseId||input.domainLexiconPacks?.length||!publicSpeakerSelectionAllowed(input.speakerAttribution)||
+    !publicSpeakerSelectionAllowed(input.speakerAttribution)||
     input.voice&&input.voice.mode!=="preset")throw new ResultSyncError("public_creation_capability_not_supported",503);
   return input;
 }
@@ -62,11 +63,13 @@ export function preparePublicRealtimeSession(sessionId:string,ownerId:string,val
       if(existing.publicCreationRequest!.requestHash!==requestHash)throw new ResultSyncError("public_creation_request_conflict");
       return {sessionId,status:"prepared_not_admitted" as const,configuration:prepared.config};
     }
-    // Configuration may rotate while repository reads await; do not bind a stale snapshot.
+    const terminology=await capturePublicTerminology(ownerId,input);
+    // Configuration may rotate while repository/terminology reads await; do not bind a stale snapshot.
     if(resultSyncHash(configuration(input))!==resultSyncHash(config))throw new ResultSyncError("public_creation_configuration_changed");
     const p=input.processing!;
     const record={id:sessionId,userId:ownerId,mode:input.mode,status:"created" as const,createdAt:now.toISOString(),consumedSeconds:0,segments:[],
       processingDeploymentId:config.deploymentId,publicModelConfiguration:config,publicCreationRequest:{requestHash,request:input},
+      ...(terminology?{publicTerminology:terminology}:{}),
       ...(getRepositoryRuntime().driver==="postgres"?{publicAttemptStorageVersion:2 as const}:{}),
       processingAuthorization:{contractVersion:1,processingMode:"online",modelPolicyRevision:p.modelPolicyRevision,languagePolicy:p.languagePolicy,
         executionPlan:p.executionPlan,syncPermission:{allowed:false}}} satisfies SessionRecord;

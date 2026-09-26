@@ -26,8 +26,9 @@ function capabilityText(p){const c=p.capability;if(!c)return '';const input={con
 function control(label,id,value,wide=false){const wrap=document.createElement('label');wrap.textContent=label;if(wide)wrap.className='wide';const input=document.createElement('input');input.id=id;input.value=value;wrap.append(input);return {wrap,input};}
 function select(label,id,items,value,wide=false){const r=control(label,id,'',wide),s=document.createElement('select');s.id=id;for(const x of items){const o=document.createElement('option');o.value=x.id;o.textContent=x.label;s.append(o);}s.value=value;r.input.replaceWith(s);return {wrap:r.wrap,input:s};}
 function capture(c){const card=$('card-'+c);if(!card)return;const locales=$(c+'-languageLocales');let mapping;if(locales){try{mapping=JSON.parse(locales.value||'{}');}catch{throw Error('Google ASR 语言区域映射必须是JSON对象');}}
+ const repositories=$(c+'-termRepositories');let terms;if(repositories){try{terms=JSON.parse(repositories.value||'{}');if(!terms||Array.isArray(terms)||typeof terms!=='object')throw Error();}catch{throw Error('腾讯术语库方向映射必须是JSON对象');}}
  const override=$(c+'-serverVad-override');let vad;if(override?.checked){const threshold=$(c+'-serverVad-threshold').value.trim(),silence=$(c+'-serverVad-silenceDurationMs').value.trim();vad={threshold:Number(threshold),silenceDurationMs:Number(silence)};const bounds=selected(c).serverVad;if(!threshold||!silence||!bounds||!Number.isFinite(vad.threshold)||vad.threshold<bounds.threshold.min||vad.threshold>bounds.threshold.max||!Number.isSafeInteger(vad.silenceDurationMs)||vad.silenceDurationMs<bounds.silenceDurationMs.min||vad.silenceDurationMs>bounds.silenceDurationMs.max)throw Error('云端 VAD 参数超出此协议范围');}
- for(const k of Object.keys(draft[c])){if(['languageLocales','serverVad'].includes(k))continue;const el=$(c+'-'+k);if(el)draft[c][k]=k==='enabled'?el.checked:['timeoutMs','maxTokens','sampleRate','volume'].includes(k)?Number(el.value):el.value.trim();}if(locales)draft[c].languageLocales=mapping;if(override){if(vad)draft[c].serverVad=vad;else delete draft[c].serverVad;}}
+ for(const k of Object.keys(draft[c])){if(['languageLocales','serverVad','termRepositories'].includes(k))continue;const el=$(c+'-'+k);if(el)draft[c][k]=k==='enabled'?el.checked:['timeoutMs','maxTokens','sampleRate','volume'].includes(k)?Number(el.value):el.value.trim();}if(locales)draft[c].languageLocales=mapping;if(repositories)draft[c].termRepositories=terms;if(override){if(vad)draft[c].serverVad=vad;else delete draft[c].serverVad;}}
 function serverVadControls(c,v,p,form){if(c!=='asr'||!p.serverVad)return;const box=document.createElement('input'),label=document.createElement('label');box.type='checkbox';box.id=c+'-serverVad-override';box.checked=!!v.serverVad;label.className='wide';label.append(box,document.createTextNode('自定义云端 VAD（不改变手机端 VAD）'));form.append(label);const inputs=[];
  for(const [key,text]of [['threshold','云端 VAD 灵敏度阈值'],['silenceDurationMs','云端断句静音时长（毫秒）']]){const bounds=p.serverVad[key],r=control(text,c+'-serverVad-'+key,v.serverVad?.[key]??bounds.default);r.input.type='number';r.input.min=String(bounds.min);r.input.max=String(bounds.max);r.input.step=key==='threshold'?'any':'1';r.input.disabled=!box.checked;inputs.push(r.input);form.append(r.wrap);}box.onchange=()=>{for(const input of inputs)input.disabled=!box.checked;};const hint=document.createElement('small');hint.className='wide';hint.textContent='不勾选时保留兼容默认值；较长静音阈值减少停顿处断句但增加延迟。修改会生成新配置版本，需重新完成资格核验。';form.append(hint);}
 function card(c){const v=draft[c],p=selected(c);const root=document.createElement('article');root.className='card';root.id='card-'+c;
@@ -43,6 +44,7 @@ function card(c){const v=draft[c],p=selected(c);const root=document.createElemen
    if(key==='modelId')r.input.placeholder=p.modelPlaceholder||(p.modelRequired?'手动输入模型 ID，不预设固定模型':'可选；该接口可由音色/VoiceType决定');form.append(r.wrap);
  }
  serverVadControls(c,v,p,form);
+ if(p.id==='tencent_tmt'){const wrap=document.createElement('label');wrap.className='wide';wrap.textContent='腾讯公共术语库 ID（JSON 按实际方向映射，默认应用于所有账号的新会话）';const area=document.createElement('textarea');area.id=c+'-termRepositories';area.value=JSON.stringify(v.termRepositories||{},null,2);area.placeholder='{"zh:en":["腾讯术语库ID"],"en:zh":["反向术语库ID"]}';wrap.append(area);const hint=document.createElement('small');hint.textContent='请填已在腾讯创建并核对过的术语库 ID。空映射表示未配置，不代表腾讯已使用本地词表；保存只保存配置，不上传个人词库、不调用模型。';wrap.append(hint);form.append(wrap);}
  if(p.fields.includes('languageLocales')){const wrap=document.createElement('label');wrap.className='wide';wrap.textContent='Google ASR 语言区域映射（JSON，随会话源语言取值）';const area=document.createElement('textarea');area.id=c+'-languageLocales';area.value=JSON.stringify(v.languageLocales||{},null,2);area.placeholder='{"zh":"cmn-Hans-CN","en":"en-US"}';wrap.append(area);form.append(wrap);}
  root.append(form);if(p.capability){const hint=document.createElement('small');hint.className='protocol-capability';hint.textContent=capabilityText(p);root.append(hint);}const creds=document.createElement('div');creds.className='secrets';
  for(const key of catalog.credentialFields[v.authKind]){const r=control(secretNames[key],c+'-secret-'+key,'');r.input.type='password';r.input.autocomplete='new-password';r.input.dataset.secret='true';r.input.placeholder=status[c]?.credentialsPresent?.[key]?'已配置；留空保留（换供应商/域名需重填）':'尚未配置';
@@ -55,14 +57,14 @@ function card(c){const v=draft[c],p=selected(c);const root=document.createElemen
    const newVendor=vendor.input.value,np=catalog.protocols.find(x=>x.vendor===newVendor&&x.component===c);
    Object.assign(draft[c],{vendor:newVendor,protocol:np.id,authKind:np.auth[0]});
    if(configKind==='public'){draft[c].sampleRate=np.capability.sampleRates[0]??draft[c].sampleRate;draft[c].volume=0;}
-   delete draft[c].languageLocales;delete draft[c].serverVad;
+   delete draft[c].languageLocales;delete draft[c].serverVad;delete draft[c].termRepositories;
    const clear=['endpoint','modelId','appId','projectId','location','recognizer','voice','healthUrl','flushEndpoint','streamEndpoint',...(configKind==='public'?['region']:[])];
    for(const key of clear)if(key in draft[c])draft[c][key]='';
    status[c]={};root.replaceWith(card(c));message('模型服务已更改，请重新填写地址、模型及凭据。');
  };
  protocol.input.onchange=()=>{
    try{capture(c);}catch(e){protocol.input.value=v.protocol;message(e.message,true);return;}
-   const np=selected(c);if(!np.fields.includes('languageLocales'))delete draft[c].languageLocales;if(!np.serverVad)delete draft[c].serverVad;
+   const np=selected(c);if(!np.fields.includes('languageLocales'))delete draft[c].languageLocales;if(!np.serverVad)delete draft[c].serverVad;if(np.id!=='tencent_tmt')delete draft[c].termRepositories;
    draft[c].authKind=np.auth[0];draft[c].endpoint='';
    if(configKind==='public'){
      draft[c].sampleRate=np.capability.sampleRates[0]??draft[c].sampleRate;draft[c].volume=0;

@@ -25,12 +25,12 @@ export function validatePublicTranslation(options:LmStudioClientOptions,input:{t
     throw new PublicTranslationError("public_translation_invalid_input","not_sent");
   }
 }
-export async function readPublicJson(response:Response,signal:AbortSignal):Promise<unknown>{
+export async function readPublicJson(response:Response,signal:AbortSignal,maxBytes=262144):Promise<unknown>{
   if(!response.body)throw new PublicTranslationError("public_translation_invalid_response","uncertain");
   const reader=response.body.getReader(),chunks:Buffer[]=[];let bytes=0;
   try{
     while(true){const chunk=await abortable(reader.read(),signal);if(chunk.done)break;
-      bytes+=chunk.value.byteLength;if(bytes>262144)throw new PublicTranslationError("public_translation_response_too_large","uncertain");
+      bytes+=chunk.value.byteLength;if(bytes>maxBytes)throw new PublicTranslationError("public_translation_response_too_large","uncertain");
       chunks.push(Buffer.from(chunk.value));}
     return JSON.parse(Buffer.concat(chunks).toString("utf8"));
   }finally{void reader.cancel().catch(()=>{});reader.releaseLock();}

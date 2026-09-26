@@ -128,7 +128,9 @@ extension RealtimePublicCreationApi on RealtimeApiClient {
       _autoReverseTargetLanguage,
       _automaticLanguagePair?.$1,
       _automaticLanguagePair?.$2,
-      _voiceOutputMode
+      _voiceOutputMode,
+      _termbaseId,
+      _domainLexiconPack,
     ]);
     await verifyAccount();
     final offer = await _publicCreateHttp(
@@ -165,6 +167,10 @@ extension RealtimePublicCreationApi on RealtimeApiClient {
         deviceSpeakerOffered(offer['onDeviceSpeaker']) &&
         prepareDeviceSpeaker != null &&
         await prepareDeviceSpeaker!();
+    unawaited(recordDeviceSpeakerSelection(speakerReady ? 'selected' :
+        !deviceSpeakerOffered(offer['onDeviceSpeaker']) ? 'server_not_offered' :
+        prepareDeviceSpeaker == null ? 'client_not_available' :
+        record != null && !needsSpeaker ? 'pending_selection_off' : 'local_not_ready'));
     check();
     if (record != null && needsSpeaker && !speakerReady) {
       throw const RealtimeApiException('本机说话人资源尚未就绪，正在核对上次会话',
@@ -180,6 +186,8 @@ extension RealtimePublicCreationApi on RealtimeApiClient {
           autoReverse: _autoReverseTargetLanguage,
           automaticLanguagePair: _automaticLanguagePair,
           voice: voice,
+          termbaseId: _termbaseId,
+          domainLexiconPacks: [_domainLexiconPack],
           deviceSpeakerReady: speakerReady);
       record = await _creationWait(
           _publicCreationStore.acquire(

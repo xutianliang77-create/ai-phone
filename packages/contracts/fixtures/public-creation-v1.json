@@ -26,6 +26,8 @@
     }
   },
   "request": {
+    "termbaseId": "default",
+    "domainLexiconPacks": ["product"],
     "mode": "conversation",
     "sourceLanguage": "fr",
     "targetLanguage": "ja",

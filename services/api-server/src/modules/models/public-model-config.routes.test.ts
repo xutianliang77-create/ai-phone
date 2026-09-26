@@ -28,6 +28,18 @@ beforeEach(async()=>{
 });
 afterEach(async()=>{await app.close();vi.unstubAllEnvs();vi.restoreAllMocks();rmSync(dir,{recursive:true,force:true});});
 describe("original model domain manual public configuration",()=>{
+  it("defaults all model components on but leaves incomplete credentials visibly unconfigured",()=>{
+    expect(Object.values(emptyConfiguration("public").components).every(p=>p.enabled)).toBe(true);
+  });
+  it("stores directional TMT repository IDs without uploading terms or calling a provider",async()=>{
+    const network=vi.spyOn(globalThis,"fetch").mockRejectedValue(Error("No network"));
+    const body=payload(publicModelCatalog.protocols.find(p=>p.id==="tencent_tmt")!);
+    body.components.translation.termRepositories={"zh:en":["repo-forward"],"en:zh":["repo-reverse"]};
+    expect((await save(body)).statusCode).toBe(200);
+    expect((await app.inject({url:uri,headers:auth})).json().components.translation.termRepositories).toEqual(body.components.translation.termRepositories);
+    body.expectedRevision=1;body.components.translation.termRepositories={"auto:en":["wrong"]};
+    expect((await save(body)).statusCode).toBe(400);expect(network).not.toHaveBeenCalled();
+  });
   it("round-trips optional cloud VAD through the encrypted editor without model calls",async()=>{
     const fetch=vi.spyOn(globalThis,"fetch").mockRejectedValue(Error("No model calls allowed"));
     const body=payload();body.components.asr.serverVad={threshold:0,silenceDurationMs:800};

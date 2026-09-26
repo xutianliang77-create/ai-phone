@@ -258,7 +258,9 @@ class ApiSessionEventSink implements SessionEventSink {
       if (!response.ok) {
         throw new Error(`API session sync failed with HTTP ${response.status}`);
       }
-      if(readReceipt)return bounded?await readPublicJson(response,controller.signal):await response.json();
+      // The authenticated configuration may include up to 500 bounded terms.
+      // Keep provider responses/credentials at their original smaller limit.
+      if(readReceipt)return bounded?await readPublicJson(response,controller.signal,path.endsWith("/configuration")?1048576:262144):await response.json();
     } finally {
       signal?.removeEventListener("abort",cancel);
       clearTimeout(timer);

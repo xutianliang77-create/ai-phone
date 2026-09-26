@@ -4,6 +4,7 @@ import type { AsrProvider } from "../../asr/asr-provider.js";
 import type { RealtimeProviderSession } from "../realtime-provider.js";
 
 export interface TranslationClient {
+  supportsContext?:true;
   supportsAbort?:true;
   supportsAttemptContext?:true;
   translate(input: {
@@ -11,6 +12,7 @@ export interface TranslationClient {
     sourceLanguage: string;
     targetLanguage: string;
     terminology?: TermbaseTermDto[];
+    context?: Array<{sourceText:string;translatedText:string}>;
     signal?:AbortSignal;
     attemptContext?:{segmentId:string;revision:number};
   }): Promise<string>;

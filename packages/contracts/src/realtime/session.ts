@@ -65,6 +65,8 @@ export interface CreateRealtimeSessionResponse {
 }
 
 export interface RealtimeTokenClaims {
+  /** Hash of account-scoped, immutable terminology returned by authorized material. */
+  publicTerminologyHash?: string;
   publicRuntime?:PublicRuntimeTokenBinding;
   /** Signed, server-issued cutoff for one dedicated public QA authorization. */
   qaOneShot?: { authorizationId: string; hardDeadlineAt: number };

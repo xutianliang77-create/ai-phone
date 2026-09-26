@@ -8,6 +8,7 @@ import type {
   RealtimeProcessingAuthorization,
   CreateRealtimeSessionRequest,
   RealtimeTokenClaims,
+  PublicSessionTerminology,
 } from "@translation/contracts";
 import type {
   CallLegRecord,
@@ -63,6 +64,7 @@ export interface SessionRecord {
   publicProviderReconciliation?:PublicProviderReconciliationRecord;
   publicProviderReconciliations?:PublicProviderReconciliationRecord[];
   publicModelConfiguration?:PublicModelRuntimeSnapshot;
+  publicTerminology?:PublicSessionTerminology;
   publicCreationRequest?:{requestHash:string;request:CreateRealtimeSessionRequest};
   /** Durable tombstone for a cancelled/expired public HTTP creation identity.
    * It prevents a late replay from reopening the deterministic session id. */
