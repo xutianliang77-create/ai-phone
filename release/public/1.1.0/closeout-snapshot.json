@@ -1,5 +1,48 @@
 {
   "schemaVersion": 1,
+  "latestTermsAndReadiness20260927": {
+    "status": "two_prerequisites_verified_not_quality_acceptance",
+    "functionalSourceCommit": "54337a274bae004b863817233dc212058aaa41f0",
+    "sourceTree": "3fab904588c50dcee3116f51f3c001cc8f6e71fb",
+    "imageId": "sha256:3400233d2f7c3fe56bfde3e4e433eab55f735fa5cdb3718a9cdb6bc69addc42b",
+    "iosBuild": "2026092701",
+    "iosInstalled": true,
+    "iosAppSha256": "0bd1d302f76f592ec4a32ab6273494a6f4dd5ceeb0ddfe2cbe7849592c769cdf",
+    "symbolArchive": {
+      "originalAppFrameworkUuidMatched": true,
+      "originalRunnerSymbolsAvailable": false,
+      "sameSourceRebuildRunnerUuidDiffers": true,
+      "rebuiltAppInstalled": false,
+      "formalRcSymbolGateClosed": false
+    },
+    "configurationRevision": 2,
+    "tmtTermRepositories": {
+      "zh:en": ["3e6af67cb9d411f18bb32f3360e0816a"],
+      "en:zh": ["36daf82eb9d511f18bb32f3360e0816a"]
+    },
+    "publicTermPairsReadBack": 19,
+    "personalTermsUploaded": false,
+    "realTmtABVerified": true,
+    "tmtManagementPolicyId": "287794915",
+    "tmtPolicyPrincipal": "key77",
+    "sameSourceSilentAndSpokenQualified": true,
+    "qualificationSessionsSettledOnce": true,
+    "qualificationConsumedSeconds": [29, 29],
+    "gatewayDependenciesReady": true,
+    "deviceSpeakerPreparationObserved": true,
+    "devicePreparationWaitTimeoutMs": 1502,
+    "deviceModelReadyMs": 92220,
+    "deviceObservationTrigger": "ordinary_app_startup_prewarm_without_microphone",
+    "deviceSpeakerClaimAndAcousticQualityVerified": false,
+    "qaDeviceSpeakerRolloutEnabled": true,
+    "qaNewSessionsEnabled": false,
+    "qaConfigSha256": "20aa84be67af97b1562c8b9c92df8cd2ac1adea3bd912dd84166ab0498049ff7",
+    "rollbackContainer": "wujie-co11-qa-54026e7-app-pre-54337a2",
+    "longRun": false,
+    "releaseAccepted": false,
+    "pushed": false,
+    "externalReport": "outer artifacts/closeout-regression/20260927-terms-speaker/RESULT.json"
+  },
   "latestRepairAndDeviceReview20260926": {
     "functionalSourceCommit": "c8acd6734d1d77e863c6d55213e1ee80af23c4a2",
     "sourceTree": "2f9cda667236dd0f3b028224517471ae77c2c55f",

@@ -1,5 +1,20 @@
 # 无界 AI 1.1 非测试收尾与交付说明
 
+## 两项前置真实收口（2026-09-27，现役检查点）
+
+用户要求完成真实腾讯词库绑定/投递及手机说话人就绪，并另授权key77最小术语管理权限。本节覆盖下方源码阶段“尚未配置/部署”的旧状态，但不替代CO11-15质量验收。
+
+- 主账号100017495461确认后创建独立CAM策略`WujieAITmtTermsMinimal20260927`/287794915，仅关联key77，增加4项查看和2项创建/新增术语操作，不改原策略，不加删除/付款/密钥管理。原API明确UnauthorizedOperation，关联后同凭据查询成功。
+- 公共product词库两份：zh→en `3e6af67cb9d411f18bb32f3360e0816a`（10条），en→zh `36daf82eb9d511f18bb32f3360e0816a`（9条）。19对逐项回读与原目录相等，未上传个人词库。真实4次TextTranslate A/B证明词库效果：自动反向从automatic reverse改为auto reverse translation；simultaneous interpretation从同声传译改为同传。库在发布使用后不就地覆盖；更新应换ID、配置revision与资格。
+- 手机同Bundle升级为2026092701/profile/full，源54337a274bae004b863817233dc212058aaa41f0/tree3fab904588c50dcee3116f51f3c001cc8f6e71fb；完整profile逐项核对，App摘要0bd1d302f76f592ec4a32ab6273494a6f4dd5ceeb0ddfe2cbe7849592c769cdf。初次启动被Locked拒绝，解锁后启动成功，PID28695末次仍在。不开麦的普通App预热日志记录1502ms等待超时，92220ms后模型ready，确认冷加载/就绪等待预算不匹配这一失败路径，不是模型文件缺失。记录名start_wait_timed_out也由预热调用触发，不能据此虚构本轮点击开始或已发diarization会话。预热/缓存修复已装机；新会话签名speaker选择和声学分人仍归后续质量项。
+- 同源服务端镜像3400233d2f7c3fe56bfde3e4e433eab55f735fa5cdb3718a9cdb6bc69addc42b部署原隔离QA。独立密文配置revision2只新增上述TMT方向映射，原配置/凭据/TTS Volume+4不改。新静音/朗读资格均实跑8组原译文、零错误、各唯一29秒结算；静音TTS0，朗读26块545600字节。原Gateway日志确认两条链Qwen热词253字节、中英投递词库、日法不错误套用中英库。
+- 当前Gateway signed_live_qualification ready，source/App/server一致；configSHA20aa84be67af97b1562c8b9c92df8cd2ac1adea3bd912dd84166ab0498049ff7，speaker capability available=true、连接0。新会话入口仍维护关闭；测试45秒保护仅用于内部资格探针，生产策略无会话时长上限。旧c8容器app-pre-54337a2和原密文配置保留回退。
+- 手机没有执行采音、朗读/听音、双人分人、质量或长测。本轮只完成这两个前置门禁，不关闭整项CO11-06/15或正式发布。未push、未动私有1.0、其他项目服务或旧未决账务。临时资格容器已停止，两份临时Bearer已删除；本轮1GiB可重建iOS build已清理，签名App/模型/符号/完整日志保留。
+
+证据：外层`artifacts/closeout-regression/20260927-terms-speaker/RESULT.json`、`verification.json`、`readiness-final.json`、`terminology-dispatch.json`及原记录器`terms-speaker-*`日志。双资格有效至2026-09-27T18:25/18:28Z，仅覆盖原四方向；到期需按原规则刷新，不改写为永久资格。
+
+归档更正：本轮清理build前遗漏单独归档新包dSYM，不能把上文“符号保留”读成新包原生符号完整。已按同源/同参数重建：App.framework UUID8228BCF3-F2A6-6EBA-A30D-B0EB3A16F414一致并补档；Runner原UUID AB73E3B1-D65F-3119-B146-A369DCD02192与重建BDE0E6F0-278D-3DB7-8A4F-463671F4FA29不同，代码段摘要也不同，未强制改UUID或拿重建符号替原包。原包/运行实例未替换；完整重建物及配套符号另存为诊断证据，不冒充原设备验收包。此为CO11-14最终RC归档材料待办，不抹掉上述两项前置实证，也不宣称正式RC材料齐全。详见外层本轮symbols.json。
+
 ## CO11-03/04/06/07 源码回收口（2026-09-27，优先于下方历史）
 
 按用户新决定：公共术语对所有账号的新会话默认启用，个人词库仍按账号隔离；本批业务配置默认开，明确保存的关闭值仍保留，身份、预算、资源就绪、供应商资格和维护门禁不绕过。
