@@ -150,7 +150,7 @@ export class OpenAiStreamingAsrClient {
       for(let offset=0;offset<pcm.length;offset+=this.rate*2){current.sent=true;await this.send(s,{type:"input_audio_buffer.append",audio:pcm.subarray(offset,offset+this.rate*2).toString("base64")});this.assert(s);}
       s.cursor=end;s.sequence=request.sequence;
       logPublicAsrBoundary({sessionId:this.options.sessionId,stage:"provider_audio",sequence:request.sequence,
-        startSample:start,endSample:end,acceptedSamples:end});
+        startSample:start,endSample:end,acceptedSamples:end},pcm);
       this.drainQwenWireEvents(s);this.assert(s);return this.takeCompleted(s);
     }catch{this.fail(s,"public_asr_stream_append_failed");await this.finishQwenTransport(s);throw s.failure!;}
     finally{s.busy=false;clearTimeout(timer);signal?.removeEventListener("abort",cancelled);}

@@ -3,6 +3,20 @@ import type { RealtimeSession } from "../sessions/realtime-session.js";
 import { createUsageTickDecision } from "./usage-ticker.js";
 
 describe("usage ticker", () => {
+  it.each([undefined, NaN, Infinity, -1, 1.5])(
+    "cannot substitute account balance for an invalid public reservation (%s)",
+    authorizedSeconds => {
+      const session = createTestSession({holdSeconds:30});
+      session.claims.publicRuntime = {deploymentId:"public",leaseId:"lease",captureId:"capture",
+        languagePolicyKey:"language",sampleRate:16000,configurationRevision:1,configurationHash:"a".repeat(64)};
+      const decision = createUsageTickDecision(session, {
+        remainingSeconds:99999,availableSeconds:99999,authorizedSeconds,
+      });
+      expect(decision).toMatchObject({shouldEnd:true,endReason:"connection_error",
+        event:{remainingSeconds:0}});
+      expect(Number.isFinite(decision.event.billableSeconds)).toBe(true);
+    },
+  );
   it("falls back to token max duration when API balance is unavailable", () => {
     const session = createTestSession({ maxDurationSeconds: 90 });
     const decision = createUsageTickDecision(session, null);

@@ -1,0 +1,14 @@
+{
+  "USE_DEVICE_ASR": "true",
+  "DEVICE_ASR_PROVIDER": "android_system",
+  "USE_ON_DEVICE_TRANSLATION": "true",
+  "ON_DEVICE_TRANSLATION_PROVIDER": "android_mlkit",
+  "ON_DEVICE_TRANSLATION_REQUIRED": "true",
+  "USE_LOCAL_SESSIONS": "true",
+  "SERVER_OWNED_HISTORY": "false",
+  "DEVICE_ASR_VAD_PROVIDER": "silero_onnx",
+  "DEVICE_ASR_AUTO_DOWNLOAD_MODEL": "false",
+  "DEVICE_ASR_DIAGNOSTIC_CAPTURE": "false",
+  "ENABLE_DEVICE_SPEAKER": "false",
+  "USE_MOCK_AUDIO": "false"
+}

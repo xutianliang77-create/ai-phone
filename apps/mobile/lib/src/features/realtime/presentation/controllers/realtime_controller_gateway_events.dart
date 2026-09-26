@@ -134,7 +134,7 @@ extension RealtimeControllerGatewayEvents on RealtimeController {
     if (event.type == 'transcript.final' && event.segmentId != null) {
       final text = _cleanRealtimeText(event.text);
       if (text == null) {
-        _removeSegment(event.segmentId!);
+        _upsertSegment(event.segmentId!, revision: event.revision, sourceText: '');
       } else {
         _upsertSegment(
           event.segmentId!,
@@ -186,6 +186,9 @@ extension RealtimeControllerGatewayEvents on RealtimeController {
       }
     }
     if (event.type == 'speaker.updated' && event.segmentId != null) {
+      // A delayed metadata event cannot recreate a caption already absorbed
+      // by the segment assembler. The original text event owns its lifetime.
+      if (!_drafts.containsKey(event.segmentId)) return;
       _upsertSegment(
         event.segmentId!,
         turnId: event.turnId,

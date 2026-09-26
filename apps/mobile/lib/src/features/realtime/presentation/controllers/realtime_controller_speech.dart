@@ -54,7 +54,8 @@ extension RealtimeControllerSpeech on RealtimeController {
     }
   }
 
-  void _reportSpeechFailure(Object error, String action) {
+  void _reportSpeechFailure(Object error, String action,
+      {String? segmentId, int? revision}) {
     final detail = error is PlatformException
         ? error.message ?? error.code
         : displayRealtimeErrorMessage(error);
@@ -62,6 +63,8 @@ extension RealtimeControllerSpeech on RealtimeController {
     unawaited(_recordDeviceAsrDiagnosticEvent('tts.failed', payload: {
       'message': detail,
       'action': action,
+      if (segmentId != null) 'segmentId': segmentId,
+      if (revision != null) 'revision': revision,
       if (error is PlatformException) 'code': error.code,
     }));
     _notify();

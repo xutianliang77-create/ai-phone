@@ -25,6 +25,7 @@ import {
 import { continuationTombstones } from "./lmstudio-continuation-events.js";
 import { transcriptFromTextSegment } from "./lmstudio-text-segment-input.js";
 import { PostAssemblySpeakerRepairCoordinator } from "./lmstudio-post-assembly-speaker-repair.js";
+import {logPublicAsrAssembly} from "../../metrics/public-asr-boundary-trace.js";
 const PUBLIC_CONTINUATION_BUFFER_MS=3000;
 
 export class LmStudioRealtimeProvider implements RealtimeProvider {
@@ -256,6 +257,7 @@ export class LmStudioRealtimeProvider implements RealtimeProvider {
       text,
       ...analyzeTurnLanguage(text, transcript.language),
     });
+    if(this.publicSession)logPublicAsrAssembly(session.sessionId,"push",assembled,transcript);
     if (assembled.partial && emitTranscript) {
       yield {
         type: "transcript.partial",
@@ -279,6 +281,7 @@ export class LmStudioRealtimeProvider implements RealtimeProvider {
   ): AsyncGenerator<ServerRealtimeEvent> {
     if(!this.isCurrent(session))return;
     const assembled = this.semanticSegmentsFor(session).flushWithReplacements(session.sessionId);
+    if(this.publicSession)logPublicAsrAssembly(session.sessionId,"end",assembled);
     if (assembled.ready[0]) yield* continuationTombstones(session, assembled.ready[0], assembled.supersededSegmentIds);
     for (const transcript of this.speakerBoundaryRepair.repairReady(session, assembled.ready)) {
       yield* this.translateTranscript(session, transcript, emitTranscript);
@@ -288,6 +291,7 @@ export class LmStudioRealtimeProvider implements RealtimeProvider {
   private async *flushExpiredSemanticSegments(session: RealtimeProviderSession) {
     if(!this.isCurrent(session))return;
     const assembled = this.semanticSegmentsFor(session).drainExpiredWithReplacements(session.sessionId);
+    if(this.publicSession)logPublicAsrAssembly(session.sessionId,"timeout",assembled);
     if (assembled.ready[0]) yield* continuationTombstones(session, assembled.ready[0], assembled.supersededSegmentIds);
     for (const transcript of this.speakerBoundaryRepair.repairReady(session, assembled.ready)) {
       yield* this.translateTranscript(session, transcript);

@@ -31,6 +31,12 @@ extension RealtimeControllerSegments on RealtimeController {
     final nextAppendSourceText = _cleanRealtimeText(appendSourceText);
     final nextAppendTranslatedText = _cleanRealtimeText(appendTranslatedText);
     if (sourceText != null && nextSourceText == null) {
+      final currentRevision = _drafts[id]?.revision;
+      if (currentRevision != null &&
+          (revision == null || revision < currentRevision)) {
+        return;
+      }
+      _cancelPublicAudioForRevision(id, revision ?? 0);
       _removeSegment(id);
       return;
     }

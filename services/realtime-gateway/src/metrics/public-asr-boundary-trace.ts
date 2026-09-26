@@ -1,5 +1,6 @@
 import {createHash} from "node:crypto";
 import type {SessionEndReason} from "@translation/contracts";
+import type {SegmentPushResult} from "@translation/speech-quality";
 import {realtimeLogger} from "./realtime-metrics.js";
 
 type Stage="accepted"|"provider_audio"|"speech_start"|"speech_stop"|"completed"|"emitted"|"persisted";
@@ -26,10 +27,56 @@ export function publicAsrBoundaryTracePayload(value:Boundary){
   };
 }
 
-export function logPublicAsrBoundary(value:Boundary){
+/** Level statistics distinguish digital zero from nonzero input, not speech
+ * from room noise. No threshold, VAD decision or filtering is derived here. */
+export function publicPcm16Level(pcm:Buffer){
+  if(!pcm.length||pcm.length%2!==0)return undefined;
+  let peakAbs=0,zeroSamples=0,sumSquares=0;
+  for(let offset=0;offset<pcm.length;offset+=2){
+    const sample=pcm.readInt16LE(offset);if(sample===0)zeroSamples++;
+    peakAbs=Math.max(peakAbs,Math.abs(sample));sumSquares+=sample*sample;
+  }
+  const sampleCount=pcm.length/2;
+  return {sampleCount,zeroSamples,peakAbs,rms:Math.round(Math.sqrt(sumSquares/sampleCount)*1000)/1000};
+}
+
+export function logPublicAsrBoundary(value:Boundary,pcm?:Buffer){
   if(process.env.PUBLIC_ASR_BOUNDARY_TRACE_ENABLED!=="true"||
     process.env.PUBLIC_QA_ONE_SHOT_ENABLED!=="true")return;
-  realtimeLogger.info(publicAsrBoundaryTracePayload(value),"Public ASR QA boundary");
+  try{
+    const audioLevel=pcm&&(value.stage==="accepted"||value.stage==="provider_audio")?publicPcm16Level(pcm):undefined;
+    realtimeLogger.info({...publicAsrBoundaryTracePayload(value),...(audioLevel?{audioLevel}:{})},"Public ASR QA boundary");
+  }catch{/* QA diagnostics must not advance a watermark then abort the audio path. */}
+}
+
+type AssemblyTrigger="push"|"timeout"|"end";
+type AssemblyInput={segmentId:string;text:string;revision?:number};
+const traceId=(v:unknown):v is string=>typeof v==="string"&&/^[A-Za-z0-9_.:-]{1,200}$/.test(v);
+
+/** Distinguish held/merged/superseded finals from lost data without persisting
+ * their text. Array bounds limit diagnostic output, never business results. */
+export function publicAsrAssemblyTracePayload(sessionId:string,trigger:AssemblyTrigger,result:SegmentPushResult,input?:AssemblyInput){
+  if(!traceId(sessionId)||!["push","timeout","end"].includes(trigger))return undefined;
+  const item=(value:SegmentPushResult["ready"][number])=>({
+    ...(traceId(value.segmentId)?{segmentId:value.segmentId}:{}),
+    ...(Number.isSafeInteger(value.revision)&&value.revision!>=0?{revision:value.revision}:{}),
+    textCharCount:value.text.length,
+    ...(Number.isFinite(value.timing?.startMs)&&value.timing!.startMs>=0?{startMs:value.timing!.startMs}:{}),
+    ...(Number.isFinite(value.timing?.endMs)&&value.timing!.endMs>=0?{endMs:value.timing!.endMs}:{}),
+  });
+  return {sessionId,stage:"assembly",trigger,
+    ...(input&&traceId(input.segmentId)?{inputSegmentId:input.segmentId,inputTextCharCount:input.text.length}:{}),
+    readyCount:result.ready.length,ready:result.ready.slice(0,16).map(item),
+    ...(result.partial?{held:item(result.partial)}:{}),
+    supersededSegmentIds:(result.supersededSegmentIds??[]).filter(traceId).slice(0,16)};
+}
+
+export function logPublicAsrAssembly(sessionId:string,trigger:AssemblyTrigger,result:SegmentPushResult,input?:AssemblyInput){
+  if(process.env.PUBLIC_ASR_BOUNDARY_TRACE_ENABLED!=="true"||process.env.PUBLIC_QA_ONE_SHOT_ENABLED!=="true")return;
+  if(!input&&!result.ready.length&&!result.partial&&!result.supersededSegmentIds?.length)return;
+  try{const payload=publicAsrAssemblyTracePayload(sessionId,trigger,result,input);
+    if(payload)realtimeLogger.info(payload,"Public ASR QA boundary");
+  }catch{/* Diagnostic failures do not change assembly, translation or stop. */}
 }
 
 type EndStage="requested"|"flush_unconfirmed"|"sync_unconfirmed"|"sync_drained";

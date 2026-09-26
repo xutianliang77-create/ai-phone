@@ -41,6 +41,11 @@ export async function listPublicModelAttempts(
   }
   const cursor = decodeCursor(options.cursor, session.id);
   const runtime = getRepositoryRuntime();
+  if (session.publicAttemptStorageVersion === 2 && runtime.driver !== "postgres") {
+    // The array on v2 is only the unresolved projection, not the ledger.
+    // Rollback/misconfiguration must not present it as an empty/full history.
+    throw new Error("model_attempt_storage_unavailable");
+  }
   let records: Array<{ recordKey: string; createdAt: string; payload: PublicModelAttemptRecord }>;
   if (runtime.driver === "postgres" && session.publicAttemptStorageVersion === 2) {
     const rows = await runtime.postgres.pool.query<{
@@ -68,8 +73,8 @@ export async function listPublicModelAttempts(
       recordKey: record.event.attemptId,
       createdAt: record.createdAt,
       payload: record,
-    })).sort((left, right) => left.createdAt.localeCompare(right.createdAt) ||
-      left.recordKey.localeCompare(right.recordKey));
+    })).sort((left, right) => compareKey(left.createdAt, right.createdAt) ||
+      compareKey(left.recordKey, right.recordKey));
     if (cursor) records = records.filter(record => record.createdAt > cursor.createdAt ||
       record.createdAt === cursor.createdAt && record.recordKey > cursor.recordKey);
     records = records.slice(0, limit + 1);
@@ -84,4 +89,10 @@ export async function listPublicModelAttempts(
       recordKey: last.recordKey,
     }) : null,
   };
+}
+
+// Use the same ordering as the legacy keyset predicate, independent of host
+// locale. localeCompare can order mixed-case IDs differently from `>`.
+function compareKey(left: string, right: string) {
+  return left < right ? -1 : left > right ? 1 : 0;
 }

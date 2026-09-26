@@ -140,11 +140,72 @@ describe("CallLinkTencentTtsProvider", () => {
     expect(client.recordTtsAttempt.mock.calls.map((call) => call[0].event.state))
       .toEqual(["dispatching", "uncertain"]);
   });
+
+  it("does not acquire material or prepare an attempt for cancelled input", async () => {
+    const client = fakeClient();
+    const socketFactory = vi.fn();
+    const provider = providerFor(client, socketFactory);
+    const controller = new AbortController();
+    controller.abort();
+    const stream = provider.synthesizeStream(synthesisInput(controller.signal))[Symbol.asyncIterator]();
+    await expect(stream.next()).rejects.toThrow("call_link_tencent_tts_cancelled");
+    expect(client.ttsMaterial).not.toHaveBeenCalled();
+    expect(client.recordTtsAttempt).not.toHaveBeenCalled();
+    expect(socketFactory).not.toHaveBeenCalled();
+  });
+
+  it("releases the abort listener even if a consumer-stop receipt cannot persist", async () => {
+    const client = fakeClient();
+    client.recordTtsAttempt.mockImplementation(async (request: {event:CallLinkPublicTtsAttemptEvent}) => {
+      if (request.event.state !== "dispatching") throw Error("receipt_unavailable");
+      return {event:request.event,recordedAt:"2026-09-20T00:00:00.000Z",costStatus:"unknown"};
+    });
+    const socketFactory = vi.fn();
+    const provider = providerFor(client, socketFactory);
+    const controller = new AbortController();
+    const remove = vi.spyOn(controller.signal, "removeEventListener");
+    const stream = provider.synthesizeStream(synthesisInput(controller.signal))[Symbol.asyncIterator]();
+    expect((await stream.next()).value).toMatchObject({type:"metadata"});
+    await expect(stream.return!()).rejects.toThrow("receipt_unavailable");
+    expect(remove).toHaveBeenCalledWith("abort", expect.any(Function));
+    expect(socketFactory).not.toHaveBeenCalled();
+    expect(client.recordTtsAttempt.mock.calls.map(call => call[0].event.state))
+      .toEqual(["dispatching","not_sent","not_sent"]);
+  });
+
+  it.each([false, true])("retries the exact confirmed receipt without resynthesis (persistent failure %s)", async persistent => {
+    const socket = new SyntheticTencentSpeechSocket("placeholder");
+    const client = fakeClient();
+    let confirmedCalls = 0;
+    client.recordTtsAttempt.mockImplementation(async (request: {event:CallLinkPublicTtsAttemptEvent}) => {
+      if (request.event.state === "confirmed" && (++confirmedCalls === 1 || persistent)) {
+        throw Error("confirmed_ack_lost");
+      }
+      return {event:request.event,recordedAt:"2026-09-20T00:00:00.000Z",costStatus:"unknown"};
+    });
+    const provider = providerFor(client, url => {
+      socket.wireId = new URL(url).searchParams.get("SessionId")!;
+      socket.start();
+      return socket.asWebSocket();
+    });
+    if (persistent) await expect(collect(provider)).rejects.toThrow("confirmed_ack_lost");
+    else expect((await collect(provider)).at(-1)).toMatchObject({type:"final"});
+    const events = client.recordTtsAttempt.mock.calls.map(call => call[0].event);
+    expect(events.map(event => event.state)).toEqual(["dispatching","confirmed","confirmed"]);
+    expect(events[1]).toEqual(events[2]);
+    expect(socket.sent.filter(event => event.action === "ACTION_SYNTHESIS")).toHaveLength(1);
+    expect(socket.readyState).toBe(3);
+  });
 });
 
 async function collect(provider: CallLinkTencentTtsProvider) {
   const events = [];
-  for await (const event of provider.synthesizeStream!({
+  for await (const event of provider.synthesizeStream!(synthesisInput())) events.push(event);
+  return events;
+}
+
+function synthesisInput(signal = new AbortController().signal): Parameters<CallLinkTencentTtsProvider["synthesize"]>[0] {
+  return {
     callId: "call-1",
     text: "Hello world.",
     language: "en",
@@ -155,9 +216,15 @@ async function collect(provider: CallLinkTencentTtsProvider) {
     revision: 1,
     pipelineGeneration: 1,
     voice: { mode: "preset", presetId: "101001", quality: "standard" },
-    signal: new AbortController().signal,
-  })) events.push(event);
-  return events;
+    signal,
+  };
+}
+
+function providerFor(client: WorkerDispatchRuntimeClient,
+    socketFactory: NonNullable<ConstructorParameters<typeof CallLinkTencentTtsProvider>[0]["socketFactory"]>) {
+  return new CallLinkTencentTtsProvider({client,ticket,profile,socketFactory,
+    participantIdentity:"call-1:worker:one",workerId:"worker-1",jobId:"job-1",
+    credentialAccessSecret:"x".repeat(32)});
 }
 
 function material(): CallLinkPublicTtsMaterial {

@@ -5,6 +5,7 @@ import {
 } from "./segment-boundary.js";
 import { canonicalSegmentText, mergeTranscriptParts } from "./segment-text.js";
 import { MaxDurationContinuationRevisionCoordinator } from "./max-duration-continuation-revision.js";
+import {transcriptDuplicateScope,mayBeSameRecognizedSpeech,type TranscriptDuplicateScope} from "./segment-duplicate-scope.js";
 
 interface PendingSegment {
   parts: SpeechTranscript[];
@@ -14,6 +15,7 @@ interface PendingSegment {
 interface EmittedSegment {
   fingerprint: string;
   emittedAtMs: number;
+  scope: TranscriptDuplicateScope;
 }
 
 interface SessionAssemblyState {
@@ -248,6 +250,7 @@ export class SegmentAssembler {
     state.emitted.push({
       fingerprint: canonicalSegmentText(transcript.text),
       emittedAtMs,
+      scope: transcriptDuplicateScope(transcript),
     });
     for (const segmentId of consumedIds) {
       state.consumedRevisions.set(
@@ -280,9 +283,11 @@ export class SegmentAssembler {
     if (consumedRevision !== undefined) {
       return consumedRevision >= (transcript.revision ?? 0);
     }
+    const scope=transcriptDuplicateScope(transcript);
     return state.emitted.some((emitted) =>
         fingerprint.length > 0 &&
         emitted.fingerprint === fingerprint &&
+        mayBeSameRecognizedSpeech(emitted.scope,scope) &&
         nowMs - emitted.emittedAtMs <= this.duplicateTextWindowMs);
   }
 }

@@ -166,6 +166,15 @@ export class RealtimeSessionFinalizer {
   }
 
   private async collectDiagnostics(): Promise<RealtimeSessionDiagnosticsDto> {
+    let providerDiagnostics: Partial<RealtimeSessionDiagnosticsDto> = {};
+    try {
+      providerDiagnostics = await this.options.provider.diagnostics?.(this.options.sessionId) ?? {};
+    } catch (error) {
+      // Diagnostics are optional observations, not durable transcript/stop
+      // acknowledgements. Their failure must not skip drainSessionSync or the
+      // original unique-settlement path after a successful flush.
+      this.options.onError("provider", error);
+    }
     return {
       version: 1,
       audio: this.options.audioBatcher.diagnostics?.() ?? {
@@ -173,7 +182,7 @@ export class RealtimeSessionFinalizer {
         processedBatchCount: 0,
         droppedFrameCount: 0,
       },
-      ...(await this.options.provider.diagnostics?.(this.options.sessionId) ?? {}),
+      ...providerDiagnostics,
     };
   }
 }

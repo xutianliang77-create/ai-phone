@@ -308,6 +308,9 @@ export async function registerSessionsRoutes(app: FastifyInstance) {
       if (error instanceof Error && error.message.startsWith("invalid_model_attempt_")) {
         return sendError(reply, 400, error.message, "Invalid model attempt cursor or limit");
       }
+      if (error instanceof Error && error.message === "model_attempt_storage_unavailable") {
+        return sendError(reply, 503, error.message, "Model attempt ledger is unavailable");
+      }
       throw error;
     }
   });

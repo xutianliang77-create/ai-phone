@@ -1,5 +1,13 @@
 # CO11-11：原 Call Link 白名单兼容交付说明
 
+## 当前开发更新（2026-09-26，未验证）
+
+b367d89后只在已有腾讯兼容Adapter补取消/回执清理：取消或关闭先拒绝取材料，材料await后再核取消；已知confirmed终态固定后只做一次相同事件的回执重试，不因ACK丢失改成uncertain或重发TTS；consumer return的记账失败也不能跳过abort监听/材料清理。持续持久失败向上抛错、不发final、不伪造入库。对应原Provider用例仅编写，全部未执行。
+
+原Worker核心、白名单及7d7b581入口/结束修复复用；没有新建全公共Worker、放开隐藏通话、变更模型/费用或运行实例。当前为`DEVELOPMENT_COMPLETE / UNIFIED_VALIDATION_PENDING`，下方历史HOST不能覆盖这次修改。旧可选腾讯TTS记录1024条保护仍是已知限制；未声称获得同传10000条容量，不擅自追加存储重构或数据迁移。
+
+## 历史交付与适用边界
+
 更新：2026-09-26。当前状态：`SOURCE_FIXES_HOST_PASS / REAL_DUPLEX_PENDING / NOT_DEPLOYED`。后置集中API与Worker回归已覆盖本批26个新增病例及原受影响分支；Worker全量58文件251项通过，API全量1264项通过/5个实库条件用例跳过。新同源镜像已构建，但没有模型调用、建房、部署或设备操作，不能将本文件解释为双端整项验收完成。下方静态批次说明保留为历史。
 
 ## 范围与复用

@@ -50,7 +50,7 @@ export class PublicSessionEventSink implements SessionEventSink {
     markAcceptedAudioRange(frame,{startSample,endSample});
     this.samples=endSample;this.frameSequence=frame.sequence;
     logPublicAsrBoundary({sessionId:this.binding.sessionId,stage:"accepted",sequence:frame.sequence,
-      startSample,endSample,acceptedSamples:endSample});
+      startSample,endSample,acceptedSamples:endSample},pcm);
   }
 
   record(event:ServerRealtimeEvent):Promise<void> {

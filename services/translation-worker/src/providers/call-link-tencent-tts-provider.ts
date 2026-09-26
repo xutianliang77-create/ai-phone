@@ -85,6 +85,7 @@ export class CallLinkTencentTtsProvider implements CallTtsProvider {
     let totalBytes = 0;
     let sequence = 1;
     try {
+      this.throwIfClosed(input.callId, controller.signal);
       material = await this.options.client.ttsMaterial({
         ticket: this.options.ticket,
         participantIdentity: this.options.participantIdentity,
@@ -95,6 +96,7 @@ export class CallLinkTencentTtsProvider implements CallTtsProvider {
       if (!sameProfile(material.profile, this.options.profile)) {
         throw new Error("Call Link Tencent TTS material profile changed");
       }
+      this.throwIfClosed(input.callId, controller.signal);
       attempt = {
         callId: input.callId,
         sessionId: this.options.ticket.sessionId,
@@ -149,7 +151,11 @@ export class CallLinkTencentTtsProvider implements CallTtsProvider {
         1,
         Math.round(totalBytes / 2 / material.profile.sampleRate * 1000),
       );
-      await this.record({
+      // Freeze the known provider outcome before awaiting persistence. A lost
+      // ACK must not rewrite a possibly committed confirmed record as uncertain.
+      // Failure still propagates: no final audio receipt is claimed here.
+      terminal = true;
+      await this.recordTerminalEvent({
         ...attempt,
         state: "confirmed",
         metadata: {
@@ -157,7 +163,6 @@ export class CallLinkTencentTtsProvider implements CallTtsProvider {
           usage: { billedCharacters: [...input.text].length },
         },
       });
-      terminal = true;
       yield { type: "final", audioDurationMs };
     } catch (error) {
       if (prepared && !terminal && attempt) {
@@ -166,16 +171,22 @@ export class CallLinkTencentTtsProvider implements CallTtsProvider {
       }
       throw error;
     } finally {
-      if (prepared && !terminal && attempt) {
-        terminal = true;
-        await this.recordTerminal(
-          attempt,
-          new Error("call_link_tts_consumer_stopped"),
-          sent,
-        );
+      try {
+        if (prepared && !terminal && attempt) {
+          terminal = true;
+          await this.recordTerminal(
+            attempt,
+            new Error("call_link_tts_consumer_stopped"),
+            sent,
+          );
+        }
+      } finally {
+        // Release cancellation listeners and material even if a terminal
+        // receipt cannot be persisted. Never keep the model lifetime tied to
+        // successful bookkeeping.
+        this.releaseAbort(input.callId, controller);
+        material = undefined;
       }
-      this.releaseAbort(input.callId, controller);
-      material = undefined;
     }
   }
 
@@ -207,7 +218,17 @@ export class CallLinkTencentTtsProvider implements CallTtsProvider {
       ? error.code : error instanceof Error &&
         /^[A-Za-z0-9_.:-]{1,240}$/.test(error.message)
         ? error.message : "call_link_tencent_tts_failed";
-    await this.record({ ...attempt, state: outcome, failureCode });
+    await this.recordTerminalEvent({ ...attempt, state: outcome, failureCode });
+  }
+
+  private async recordTerminalEvent(event: CallLinkPublicTtsAttemptEvent) {
+    // One bounded retry of the identical idempotent receipt, never another
+    // synthesis. A lost HTTP response may follow a committed terminal record.
+    try {
+      await this.record(event);
+    } catch {
+      await this.record(event);
+    }
   }
 
   private validateInput(

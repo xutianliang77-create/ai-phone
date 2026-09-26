@@ -6,6 +6,22 @@ import {
 } from "./session-segment-merge.js";
 
 describe("session segment revision merge", () => {
+  it("does not borrow a higher speaker revision from an older transcript", () => {
+    const current = createSessionSegment({segmentId:"seg_1", revision:2,
+      sourceText:"current", pipelineGeneration:2, speakerRevision:1, speaker:speaker("speaker_2"),
+      timing:timing(1000,2000)});
+    const stale = {segmentId:"seg_1", revision:1, pipelineGeneration:99, speakerRevision:99,
+      speaker:speaker("speaker_1"), timing:timing(0,1000)};
+    applySessionSegmentPatch(current, stale);
+    expect(current).toMatchObject({revision:2, pipelineGeneration:2, speakerRevision:1,
+      speaker:{speakerId:"speaker_2"}, timing:{startMs:1000,endMs:2000}});
+    const [merged] = mergeSessionSegments([current], [{id:"seg_1", revision:1,
+      sourceText:"old", translatedText:"old translation", speakerRevision:100,
+      speaker:speaker("speaker_1"), timing:timing(0,1000)}]);
+    expect(merged).toMatchObject({revision:2, pipelineGeneration:2, speakerRevision:1,
+      sourceText:"current", translatedText:"",
+      speaker:{speakerId:"speaker_2"}, timing:{startMs:1000,endMs:2000}});
+  });
   it("rejects a late translation from an older transcript revision", () => {
     const segment = createSessionSegment({
       segmentId: "seg_1",

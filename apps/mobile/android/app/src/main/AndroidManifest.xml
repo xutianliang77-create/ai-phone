@@ -36,6 +36,13 @@
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
+        <meta-data android:name="WujieCandidateId" android:value="${wujieCandidateId}" />
+        <meta-data android:name="WujieSourceCommit" android:value="${wujieSourceCommit}" />
+        <meta-data android:name="WujieSourceTree" android:value="${wujieSourceTree}" />
+        <meta-data android:name="WujieSourceState" android:value="${wujieSourceState}" />
+        <meta-data android:name="WujieProductProfile" android:value="${wujieProductProfile}" />
+        <meta-data android:name="WujieDeploymentId" android:value="${wujieDeploymentId}" />
+        <meta-data android:name="WujieLocalProfileSha256" android:value="${wujieLocalProfileSha256}" />
     </application>
     <!-- Required to query activities that can process text, see:
          https://developer.android.com/training/package-visibility and

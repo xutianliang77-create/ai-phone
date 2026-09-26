@@ -102,7 +102,7 @@ export function applySessionSegmentPatch(
   if (segment.revision !== undefined || patch.revision !== undefined) {
     segment.revision = Math.max(currentRevision, incomingRevision);
   }
-  if (patch.pipelineGeneration !== undefined) {
+  if (patch.pipelineGeneration !== undefined && incomingRevision >= currentRevision) {
     segment.pipelineGeneration = isNewerRevision
       ? patch.pipelineGeneration
       : Math.max(currentGeneration, patch.pipelineGeneration);
@@ -139,6 +139,8 @@ function mergeCompleteSegment(
 ): SessionSegmentDto {
   const existingRevision = existing.revision ?? 0;
   const incomingRevision = incoming.revision ?? 0;
+  // Older full snapshots cannot refill cleared MT, move timing, or raise the current generation.
+  if (incomingRevision < existingRevision) return { ...existing };
   const existingGeneration = existing.pipelineGeneration ?? 0;
   const incomingGeneration = incoming.pipelineGeneration ?? 0;
   const incomingIsNewer = incomingRevision > existingRevision ||
@@ -168,10 +170,7 @@ function mergeCompleteSegment(
     revision: existing.revision === undefined && incoming.revision === undefined
       ? undefined
       : Math.max(existingRevision, incomingRevision),
-    speakerRevision: maximumOptional(
-      existing.speakerRevision,
-      incoming.speakerRevision,
-    ),
+    speakerRevision: maximumOptional(existing.speakerRevision, incoming.speakerRevision),
     pipelineGeneration:
       existing.pipelineGeneration === undefined &&
         incoming.pipelineGeneration === undefined
@@ -271,6 +270,9 @@ function applySpeakerPatch(
   incomingTranscriptRevision: number,
 ) {
   if (!patch.speaker && !patch.timing) return;
+  // Keep 1.0's unversioned metadata-only update, but an explicitly bound
+  // speaker revision may never overwrite a newer recognition revision.
+  if (patch.revision !== undefined && incomingTranscriptRevision < currentTranscriptRevision) return;
   const explicitRevision = patch.speakerRevision;
   if (explicitRevision === undefined) {
     if (

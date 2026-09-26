@@ -15,6 +15,7 @@ import {abortable} from "../providers/abortable.js";
 import {sendRealtimeEvent} from "./realtime-connection-admission.js";
 import {buildError} from "../protocol/outgoing-event-builder.js";
 import type {GatewayDependencyReadiness} from "./gateway-dependency-readiness.js";
+import {publicSessionReadinessForVerifiedClaims} from "./public-session-readiness.js";
 
 export interface PublicGatewayRuntimeOptions {
   credentialAccessSecret:string;apiFetchFn?:typeof fetch;modelFetchFn?:typeof fetch;
@@ -39,10 +40,11 @@ export async function openConfiguredPublicConnection(env:RealtimeEnv,ws:WebSocke
   if(claims.qaOneShot&&claims.qaOneShot.hardDeadlineAt*1000<=Date.now()+1000){
     ws.close(1008,"public_qa_deadline_elapsed");return null;
   }
-  // Health is a hard connection gate, but only after token verification.  It
-  // must prevent credential/material access while retaining the correct
-  // invalid-token response for unauthenticated clients.
-  if(readiness&&!readiness.sessionReady){
+  // Check the exact signed session scope before reading material/credentials.
+  // A deployment's spoken health snapshot must not gate a valid silent lease,
+  // nor may a ready silent snapshot authorize an unqualified spoken lease.
+  const sessionReadiness=publicSessionReadinessForVerifiedClaims(env,claims,readiness);
+  if(sessionReadiness&&!sessionReadiness.sessionReady){
     sendRealtimeEvent(ws,buildError("provider_unavailable","Public runtime dependency is not ready",{sessionId:claims.sessionId,stage:"provider",retryable:false}));
     ws.close(1008,"public_runtime_not_ready");
     return null;

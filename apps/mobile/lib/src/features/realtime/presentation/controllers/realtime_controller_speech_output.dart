@@ -108,7 +108,10 @@ extension _RealtimeControllerSpeechOutput on RealtimeController {
     final sampleRate = event.sampleRate!;
     final generation = _speechGeneration;
     _speechChain = _speechChain.catchError((Object _) {}).then((_) {
-      if (generation != _speechGeneration) return null;
+      if (generation != _speechGeneration ||
+          !_canPlayPublicAudioRevision(segmentId, revision)) {
+        return null;
+      }
       return _playPcmWithTimeout(
         player,
         data,
@@ -142,7 +145,8 @@ extension _RealtimeControllerSpeechOutput on RealtimeController {
             _speechCaptureGate.requiresAcousticEchoSuppression,
       },
     );
-    if (generation != _speechGeneration || _status != RealtimeStatus.active) {
+    if (generation != _speechGeneration ||
+        !_canPlayPublicAudioRevision(segmentId, revision)) {
       return;
     }
     _activePublicAudioSegmentId = segmentId;
@@ -172,6 +176,7 @@ extension _RealtimeControllerSpeechOutput on RealtimeController {
       }
     } on TimeoutException catch (error) {
       if (generation == _speechGeneration) {
+        _cancelledPublicAudioRevisions[segmentId] = revision;
         _writeSpeechTiming(segmentId, <String, Object?>{
           'status': 'timed_out',
           'provider': 'server_pcm_tts',
@@ -180,18 +185,24 @@ extension _RealtimeControllerSpeechOutput on RealtimeController {
         });
         await ignoreCleanupError(player.stop);
         if (generation == _speechGeneration) {
-          _reportSpeechFailure(error, '语音播放超时');
+          _reportSpeechFailure(error, '语音播放超时',
+              segmentId: segmentId, revision: revision);
         }
       }
     } on Object catch (error) {
       if (generation == _speechGeneration) {
+        // Queued chunks of this utterance must not turn a partial playback
+        // failure into a later "finished" receipt. A newer revision or a
+        // different segment remains independently playable.
+        _cancelledPublicAudioRevisions[segmentId] = revision;
         _writeSpeechTiming(segmentId, <String, Object?>{
           'status': 'failed',
           'provider': 'server_pcm_tts',
           'sampleRate': sampleRate,
           'revision': revision,
         });
-        _reportSpeechFailure(error, '语音播放失败');
+        _reportSpeechFailure(error, '语音播放失败',
+            segmentId: segmentId, revision: revision);
       }
     } finally {
       if (_activePublicAudioSegmentId == segmentId &&
@@ -214,6 +225,15 @@ extension _RealtimeControllerSpeechOutput on RealtimeController {
         );
       }
     }
+  }
+
+  bool _canPlayPublicAudioRevision(String segmentId, int revision) {
+    final draft = _drafts[segmentId];
+    return _status == RealtimeStatus.active &&
+        _autoSpeakTranslation &&
+        revision > (_cancelledPublicAudioRevisions[segmentId] ?? -1) &&
+        draft?.revision == revision &&
+        draft!.translatedText.trim().isNotEmpty;
   }
 
   void _cancelPublicAudioForRevision(String segmentId, int revision) {

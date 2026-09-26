@@ -117,6 +117,57 @@ void main() {
     );
   });
 
+  test('a failed PCM chunk blocks queued and late chunks of only that revision',
+      () async {
+    final first = Completer<PcmAudioOutputResult>();
+    final repository = FakeRealtimeRepository();
+    final player = FakePcmAudioOutputPlayer(firstPlayCompleter: first);
+    final controller = realtimeControllerForTest(repository, FakeAudioCapture(),
+        pcmAudioOutputPlayer: player, autoSpeakTranslation: true);
+    addTearDown(controller.dispose);
+    await controller.start();
+    _emitPublicAudio(repository, 1, segmentId: 'broken');
+    repository.emit(audioOutput(2, segmentId: 'broken', isFinal: true));
+    _emitPublicAudio(repository, 3, segmentId: 'next');
+    await pumpEventQueue();
+    first.completeError(PlatformException(code: 'pcm_failed'));
+    await pumpEventQueue();
+    repository.emit(audioOutput(4, segmentId: 'broken', isFinal: true));
+    await pumpEventQueue();
+
+    expect(player.played.map((entry) => entry.$1), ['audio_1', 'audio_3']);
+    final failed = controller.segments.singleWhere((s) => s.id == 'broken');
+    expect((failed.refinement?['speechTiming'] as Map)['status'], 'failed');
+    expect(controller.status, RealtimeStatus.active);
+    _emitPublicAudio(repository, 5, segmentId: 'broken', revision: 2);
+    await pumpEventQueue();
+    expect(player.played.last.$1, 'audio_5');
+  });
+
+  test('an absorbed caption cancels playback and cannot play queued PCM',
+      () async {
+    final first = Completer<PcmAudioOutputResult>();
+    final repository = FakeRealtimeRepository();
+    final player = FakePcmAudioOutputPlayer(firstPlayCompleter: first);
+    final controller = realtimeControllerForTest(repository, FakeAudioCapture(),
+        pcmAudioOutputPlayer: player, autoSpeakTranslation: true);
+    addTearDown(controller.dispose);
+    await controller.start();
+    _emitPublicAudio(repository, 1, segmentId: 'absorbed');
+    repository.emit(audioOutput(2, segmentId: 'absorbed'));
+    await pumpEventQueue();
+    repository.emit(const GatewayRealtimeEvent(
+      type: 'transcript.final', sessionId: 'sess_1', segmentId: 'absorbed',
+      revision: 1, text: '', language: 'en',
+    ));
+    await pumpEventQueue();
+    first.complete(const PcmAudioOutputResult(provider: 'fake', sampleRate: 24000));
+    await pumpEventQueue();
+    expect(controller.segments, isEmpty);
+    expect(player.stopCount, greaterThanOrEqualTo(1));
+    expect(player.played.map((entry) => entry.$1), ['audio_1']);
+  });
+
   test('pause cancels current playback and drops queued outputs', () async {
     final firstPlayback = Completer<PcmAudioOutputResult>();
     final repository = FakeRealtimeRepository();
@@ -232,12 +283,13 @@ class _VoiceGateway extends NoopRealtimeGatewayClient {
 }
 
 GatewayRealtimeEvent audioOutput(int sequence,
-    {String? segmentId, int revision = 1}) {
+    {String? segmentId, int revision = 1, bool isFinal = false}) {
   return GatewayRealtimeEvent(
     type: 'audio.output',
     sessionId: 'sess_1',
     segmentId: segmentId ?? 'seg_$sequence',
     revision: revision,
+    isFinal: isFinal,
     format: 'pcm16',
     sampleRate: 24000,
     sequence: sequence,

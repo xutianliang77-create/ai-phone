@@ -13,6 +13,7 @@ release/public/1.1.0/runtime.env
 release/public/1.1.0/private/
 release/public/1.1.0/data/
 apps/mobile/android/key.properties
+apps/mobile/android/public-key.properties
 apps/mobile/android/release/*.jks
 apps/mobile/android/release/*.keystore
 .DS_Store

@@ -10,6 +10,30 @@ GatewayRealtimeEvent event(String type, String speaker, {int revision=1, int? sp
   'language':'en','speaker':{'speakerId':speaker,'role':speaker=='unknown'?'unknown':'speaker',
     'source':speaker=='unknown'?'unknown':'diarization'},'timing':{'startMs':0,'endMs':1000,'source':'model'}});
 void main(){
+  test('stale absorbed text cannot delete a newer caption or speaker', () async {
+    final r = FakeRealtimeRepository();
+    final c = realtimeControllerForTest(r, FakeAudioCapture());
+    addTearDown(c.dispose);
+    await c.start();
+    r.emit(event('transcript.final', 'device-speaker-2', revision: 2));
+    r.emit(const GatewayRealtimeEvent(type: 'transcript.final',
+        sessionId: 'sess_1', segmentId: 'segment', revision: 1, text: ''));
+    await pumpEventQueue();
+    expect(c.segments.single.sourceText, 'Source stays unchanged.');
+    expect(c.segments.single.speaker?.speakerId, 'device-speaker-2');
+  });
+  test('speaker metadata cannot recreate an absorbed caption', () async {
+    final r = FakeRealtimeRepository();
+    final c = realtimeControllerForTest(r, FakeAudioCapture());
+    addTearDown(c.dispose);
+    await c.start();
+    r.emit(event('transcript.final', 'unknown'));
+    r.emit(const GatewayRealtimeEvent(type: 'transcript.final',
+        sessionId: 'sess_1', segmentId: 'segment', revision: 1, text: ''));
+    r.emit(event('speaker.updated', 'device-speaker-2', speakerRevision: 2));
+    await pumpEventQueue();
+    expect(c.segments, isEmpty);
+  });
   test('later MT cannot undo a confirmed speaker metadata revision',() async {
     final r=FakeRealtimeRepository();
     final controller=realtimeControllerForTest(r,FakeAudioCapture());addTearDown(controller.dispose);await controller.start();

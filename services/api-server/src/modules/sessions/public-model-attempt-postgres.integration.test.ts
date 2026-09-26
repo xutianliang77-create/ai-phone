@@ -7,6 +7,7 @@ import { PostgresPrimaryStore } from "../../infrastructure/storage/postgres-prim
 import { recordPostgresPublicAttempt } from "./public-model-attempt-postgres.js";
 import type { PublicModelAttemptRecord } from "./public-model-attempt.service.js";
 import type { SessionRecord } from "./session-record.js";
+import { listPublicModelAttempts } from "./public-model-attempt-list.js";
 
 const testRuntime = vi.hoisted(() => ({ value: null as unknown }));
 vi.mock("../../infrastructure/storage/repository-runtime.js", () => ({
@@ -23,6 +24,7 @@ describe.skipIf(!isolated)("isolated real PostgreSQL attempt transaction", () =>
   let primary: PostgresPrimaryStore;
   let leases: PostgresAggregateLeaseRepository;
   const sessionId = `co11-attempt-${randomUUID()}`;
+  const capacitySessionId = `co11-capacity-${randomUUID()}`;
   const ownerId = "co11-isolated-test";
 
   beforeAll(async () => {
@@ -49,15 +51,17 @@ describe.skipIf(!isolated)("isolated real PostgreSQL attempt transaction", () =>
   afterAll(async () => {
     if (!pool) return;
     try {
-      const lease = await leases.acquire({ aggregateType: "communication_session", aggregateId: sessionId,
-        ownerId, leaseSeconds: 60 });
-      if (lease) await primary.withAggregateTransaction({ ...lease }, async transaction => {
-        const current = await transaction.read<SessionRecord>("sessions", sessionId);
-        if (current) await transaction.mutate({ eventId: randomUUID(), namespace: "sessions",
-          recordKey: sessionId, operation: "delete", expectedRecordVersion: current.recordVersion });
-      });
-      await pool.query("DELETE FROM ai_phone.aggregate_writer_leases WHERE aggregate_type=$1 AND aggregate_id=$2 AND owner_id=$3",
-        ["communication_session", sessionId, ownerId]);
+      for (const id of [sessionId, capacitySessionId]) {
+        const lease = await leases.acquire({ aggregateType: "communication_session", aggregateId: id,
+          ownerId, leaseSeconds: 60 });
+        if (lease) await primary.withAggregateTransaction({ ...lease }, async transaction => {
+          const current = await transaction.read<SessionRecord>("sessions", id);
+          if (current) await transaction.mutate({ eventId: randomUUID(), namespace: "sessions",
+            recordKey: id, operation: "delete", expectedRecordVersion: current.recordVersion });
+        });
+        await pool.query("DELETE FROM ai_phone.aggregate_writer_leases WHERE aggregate_type=$1 AND aggregate_id=$2 AND owner_id=$3",
+          ["communication_session", id, ownerId]);
+      }
     } finally {
       await pool.end();
       delete process.env.PLATFORM_INSTANCE_ID;
@@ -100,4 +104,46 @@ describe.skipIf(!isolated)("isolated real PostgreSQL attempt transaction", () =>
       "SELECT state,version FROM ai_phone.public_model_attempts WHERE session_id=$1", [sessionId]);
     expect(stored.rows).toMatchObject([{ state: "confirmed", version: "2" }]);
   });
+
+  it("reads 10000 seeded records through the current bounded microsecond keyset without duplicates", async () => {
+    const lease = await leases.acquire({aggregateType:"communication_session",aggregateId:capacitySessionId,
+      ownerId,leaseSeconds:60});
+    if (!lease) throw Error("isolated_capacity_fence_unavailable");
+    const session = {id:capacitySessionId,userId:ownerId,mode:"conversation",status:"active",
+      consumedSeconds:0,version:1,createdAt:new Date().toISOString(),segments:[],
+      publicAttemptStorageVersion:2,publicModelAttempts:[]} as SessionRecord;
+    await primary.withAggregateTransaction(lease, async transaction => {
+      await transaction.mutate({eventId:randomUUID(),namespace:"sessions",recordKey:capacitySessionId,
+        operation:"upsert",payload:session,expectedRecordVersion:null});
+    });
+    // This seeds capacity fixtures, not provider calls. Dispatch/terminal UOW
+    // atomicity is exercised separately above; no costs are invented here.
+    const inserted = await pool.query(`
+      INSERT INTO ai_phone.public_model_attempts
+        (record_key,session_id,attempt_id,user_id,deployment_id,component,provider_id,model_id,
+         segment_id,revision,state,version,created_at,updated_at,payload)
+      SELECT $1::text||':'||n,$1::text,'capacity-'||n,$2::text,'isolated','translation','synthetic','synthetic',
+        'segment-'||n,0,'confirmed',1,at,at,
+        jsonb_build_object('ownerId',$2::text,'deploymentId','isolated','version',1,'createdAt',at,'updatedAt',at,
+          'event',jsonb_build_object('sessionId',$1::text,'leaseId','synthetic','attemptId','capacity-'||n,
+            'segmentId','segment-'||n,'revision',0,'component','translation','providerId','synthetic',
+            'modelId','synthetic','state','confirmed'))
+      FROM (SELECT n,timestamptz '2026-09-26 00:00:00+00'+n*interval '1 microsecond' AS at
+        FROM generate_series(1,10000) AS n) AS fixture
+    `,[capacitySessionId,ownerId]);
+    expect(inserted.rowCount).toBe(10000);
+    let cursor: string | undefined, count = 0, pages = 0;
+    do {
+      const page = await listPublicModelAttempts(session,{limit:100,cursor});
+      expect(page.attempts.length).toBe(100);
+      for (const record of page.attempts) expect(record.event.attemptId).toBe(`capacity-${++count}`);
+      cursor = page.nextCursor ?? undefined;
+      expect(++pages).toBeLessThanOrEqual(100);
+    } while (cursor);
+    expect(count).toBe(10000);
+    expect(pages).toBe(100);
+    const stored = await primary.read<SessionRecord>("sessions",capacitySessionId);
+    expect(stored?.payload.publicModelAttempts).toEqual([]);
+    expect(Buffer.byteLength(JSON.stringify(stored?.payload))).toBeLessThan(1400);
+  },30000);
 });

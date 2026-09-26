@@ -16,9 +16,9 @@ export class DeviceSpeakerTimeline {
     if (!("sessionId" in event) || event.sessionId !== this.sessionId) return;
     if (event.type === "session.ended") { this.segments.clear(); this.spans = []; return; }
     if (event.type !== "transcript.final") return;
-    if (!event.text.trim()) { this.segments.delete(event.segmentId); return; }
     const old = this.segments.get(event.segmentId);
     if (old && (old.revision ?? 0) > (event.revision ?? 0)) return;
+    if (!event.text.trim()) { this.segments.delete(event.segmentId); return; }
     this.segments.set(event.segmentId, {sessionId:this.sessionId, segmentId:event.segmentId,
       revision:event.revision, turnId:event.turnId, timing:event.timing, speaker:event.speaker,
       speakerRevision:old?.speakerRevision});

@@ -82,6 +82,10 @@ function effectiveBalanceSeconds(
   balance?: UsageBalanceSnapshot | null,
 ) {
   const authorizedSeconds=normalizeBalanceSeconds(balance?.authorizedSeconds);
+  // Public permission comes from this session's confirmed reservation, never
+  // from account-wide free balance which another session may reserve next.
+  // Keep the inherited private ticker's balance/hold fallback unchanged.
+  if (session.claims.publicRuntime) return authorizedSeconds;
   if(authorizedSeconds!==null)return authorizedSeconds;
   const availableSeconds = normalizeBalanceSeconds(balance?.availableSeconds);
   if (availableSeconds !== null) {

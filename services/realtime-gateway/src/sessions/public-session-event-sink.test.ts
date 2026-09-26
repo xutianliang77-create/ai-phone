@@ -24,7 +24,8 @@ describe("public branch of original session sink",()=>{
     vi.stubEnv("PUBLIC_ASR_BOUNDARY_TRACE_ENABLED","true");vi.stubEnv("PUBLIC_QA_ONE_SHOT_ENABLED","true");
     sink.acceptAudio(frame(1));
     expect(info.mock.calls.filter(call=>call[1]==="Public ASR QA boundary").map(call=>call[0]))
-      .toEqual([{sessionId:"s",stage:"accepted",sequence:1,startSample:160,endSample:320,acceptedSamples:320}]);
+      .toEqual([{sessionId:"s",stage:"accepted",sequence:1,startSample:160,endSample:320,acceptedSamples:320,
+        audioLevel:{sampleCount:160,zeroSamples:160,peakAbs:0,rms:0}}]);
   });
   it("confirms the phase at queue execution, not the stale phase before a pending pause",async()=>{
     const {sink,events}=fixture();await sink.record({type:"session.started",sessionId:"s"});sink.acceptAudio(frame());

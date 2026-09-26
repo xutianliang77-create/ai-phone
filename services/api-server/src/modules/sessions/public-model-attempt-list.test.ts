@@ -64,6 +64,25 @@ describe("bounded model attempt ledger", () => {
     expect(fake.query.mock.calls[1][1]).toEqual(["session-1", postgresAt, "b", 3]);
   });
 
+  it("refuses an unresolved v2 projection when the indexed ledger is unavailable", async () => {
+    const session = {id:"session-1",publicAttemptStorageVersion:2,
+      publicModelAttempts:[]} as unknown as SessionRecord;
+    await expect(listPublicModelAttempts(session)).rejects.toThrow("model_attempt_storage_unavailable");
+    expect(fake.query).not.toHaveBeenCalled();
+  });
+
+  it("uses one legacy ordering for mixed-case IDs and the next-page cursor", async () => {
+    const records = ["a", "Z", "_", "A"].map(id => ({...attempts[0],
+      event:{...attempts[0].event,attemptId:id,segmentId:id}}));
+    const session = {id:"session-1",publicModelAttempts:records} as SessionRecord;
+    const first = await listPublicModelAttempts(session, {limit:2});
+    const second = await listPublicModelAttempts(session, {limit:2,cursor:first.nextCursor!});
+    expect(first.attempts.map(record => record.event.attemptId)).toEqual(["A","Z"]);
+    expect(second.attempts.map(record => record.event.attemptId)).toEqual(["_","a"]);
+    expect(second.nextCursor).toBeNull();
+    expect(session.publicModelAttempts).toEqual(records);
+  });
+
   it("preserves PostgreSQL microseconds so adjacent pages do not repeat", async () => {
     fake.driver = "postgres";
     fake.rows = attempts.map((record, index) => ({

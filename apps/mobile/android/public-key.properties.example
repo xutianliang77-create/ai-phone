@@ -1,0 +1,8 @@
+# Copy to an ignored/private file only after an existing public signing key is chosen.
+# This file is separate from the private 1.0 key.properties. Do not put secrets in Git.
+# PUBLIC_ANDROID_APPLICATION_ID is supplied explicitly by the candidate command.
+# Relative storeFile paths resolve against apps/mobile/android, not the app module.
+storeFile=/absolute/path/to/approved-public-keystore.jks
+storePassword=replace-with-local-store-password
+keyAlias=replace-with-approved-alias
+keyPassword=replace-with-local-key-password
